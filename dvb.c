@@ -1007,6 +1007,7 @@ get_signal (int fd, fe_status_t * status, uint32_t * ber, uint16_t * strength,
   if (ioctl (fd, FE_READ_STATUS, status) < 0)
     {
       LOG ("ioctl FE_READ_STATUS failed (%s)", strerror (errno));
+	  *status = -1;
       return;
     }
   *status = (*status & FE_HAS_LOCK) ? 1 : 0;
