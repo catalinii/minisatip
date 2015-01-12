@@ -310,7 +310,7 @@ update_pids (int aid)
   int i,
     j;
   adapter *ad = &a[aid];
-
+  if(opts.log==2)dump_pids (aid);
   for (i = 0; i < MAX_PIDS; i++)
     if (a[aid].pids[i].flags == 3)
       {

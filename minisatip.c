@@ -95,94 +95,88 @@ set_options (int argc, char *argv[])
 	{
 	    case FOREGROUND_OPT:
 	      {
-		opts.daemon = 0;
-		break;
+			opts.daemon = 0;
+			break;
 	      }
 	    case MAC_OPT:
 	      {
-		strncpy (opts.mac, optarg, 12);
-		opts.mac[12] = 0;
-		break;
+			strncpy (opts.mac, optarg, 12);
+			opts.mac[12] = 0;
+			break;
 	      }
 	    case RRTP_OPT:
 	      {
-		opts.rrtp = optarg;
-		break;
+			opts.rrtp = optarg;
+			break;
 	      }
 
 	    case DISCOVERYIP_OPT:
 	      {
-		opts.daemon = 1;
-		break;
+			opts.daemon = 1;
+			break;
 	      }
 
 	    case HTTPSERVER_OPT:
 	      {
 //                              int i=0;
-		opts.http_host = optarg;
-		sethost = 1;
-/*				for(i=0;i<strlen(opts.remote_host);i++)
-					if(opts.remote_host[i]==':'){
-						opts.remote_host[i]=0;
-						opts.remote_port=&optarg[i+1];
-					}
-				settings.remote_host = 1;
-*/ break;
+			opts.http_host = optarg;
+			sethost = 1;
+			break;
 	      }
 
 	    case PUBLICIP_OPT:
 	      {
-		opts.pub_host = optarg;
-		break;
+			opts.pub_host = optarg;
+			break;
 	      }
 
 	    case LOG_OPT:
 	      {
-		opts.log = 1;
-		break;
+			opts.log++;
+			break;
 	      }
 
 
 	    case HELP_OPT:
 	      {
-		usage ();
-		exit (0);
+			usage ();
+			exit (0);
 	      }
 
 	    case HTTPPORT_OPT:
 	      {
-		opts.http_port = atoi (optarg);
-		break;
+			opts.http_port = atoi (optarg);
+			break;
 	      }
 
 	    case BW_OPT:
 	      {
-		opts.bw = atoi (optarg) * 1024;
-		break;
+			opts.bw = atoi (optarg) * 1024;
+			break;
 	      }
 
 	    case DVRBUFFER_OPT:
 	      {
-		opts.dvr = atoi (optarg) * 1024;
-		break;
+			opts.dvr = atoi (optarg) * 1024;
+			break;
 	      }
 
 	    case DVBS2_ADAPTERS_OPT:
 	      {
-		opts.force_sadapter = atoi (optarg);
-		break;
+			opts.force_sadapter = atoi (optarg);
+			break;
 	      }
 
 	    case DVBT2_ADAPTERS_OPT:
 	      {
-		opts.force_tadapter = atoi (optarg);
-		break;
+			opts.force_tadapter = atoi (optarg);
+			break;
 	      }
 
 	    case RTPPORT_OPT:
 	      {
-		opts.start_rtp = atoi (optarg);
-		break;
+			opts.start_rtp = atoi (optarg);
+			break;
 	      }
 
 	}

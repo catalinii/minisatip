@@ -423,7 +423,7 @@ read_dmx (sockets * s)
   s->rlen = 0;
   if (cnt > 0 && cnt % 100 == 0)
     LOG ("Reading max size for the last %d buffers", cnt);
-  if (ad->sid_cnt == 1 && ad->master_sid >= 0)	// we have just 1 stream, do not check the pids, send everything to the destination
+  if (ad->sid_cnt == 1 && ad->master_sid >= 0 && opts.log!=2)	// we have just 1 stream, do not check the pids, send everything to the destination
     {
       sid = &st[ad->master_sid];
       if (sid->enabled != 1)
@@ -432,7 +432,7 @@ read_dmx (sockets * s)
 	  return -1;
 	}
       if (sid->len > 0)
-	flush_streamb (sid, sid->buf, sid->len, s->rtime);
+			flush_streamb (sid, sid->buf, sid->len, s->rtime);
       flush_streamb (sid, s->buf, rlen, s->rtime);
 
     }
