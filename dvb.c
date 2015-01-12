@@ -1,6 +1,5 @@
 /*
 
-  
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License
    as published by the Free Software Foundation; either version 2
@@ -41,163 +40,424 @@ extern struct struct_opts opts;
 
 struct diseqc_cmd
 {
-  struct dvb_diseqc_master_cmd cmd;
-  uint32_t wait;
+	struct dvb_diseqc_master_cmd cmd;
+	uint32_t wait;
 };
 
-static const char *fe_pilot_tab[] = {
-  "PILOT_ON",
-  "PILOT_OFF",
-  "PILOT_AUTO",
+static const char *fe_pilot_tab[] =
+{
+	"PILOT_ON",
+	"PILOT_OFF",
+	"PILOT_AUTO",
 };
 
-static const char *fe_rolloff_tab[] = {
-  "ROLLOFF_35",
-  "ROLLOFF_20",
-  "ROLLOFF_25",
-  "ROLLOFF_AUTO"
+static const char *fe_rolloff_tab[] =
+{
+	"ROLLOFF_35",
+	"ROLLOFF_20",
+	"ROLLOFF_25",
+	"ROLLOFF_AUTO"
 };
 
-
-static const char *fe_delivery_system_tab[] = {
-  "SYS_UNDEFINED",
-  "SYS_DVBC_ANNEX_AC",
-  "SYS_DVBC_ANNEX_B",
-  "SYS_DVBT",
-  "SYS_DSS",
-  "SYS_DVBS",
-  "SYS_DVBS2",
-  "SYS_DVBH",
-  "SYS_ISDBT",
-  "SYS_ISDBS",
-  "SYS_ISDBC",
-  "SYS_ATSC",
-  "SYS_ATSCMH",
-  "SYS_DMBTH",
-  "SYS_CMMB",
-  "SYS_DAB",
-  "SYS_DVBT2",
-  "SYS_TURBO"
+static const char *fe_delivery_system_tab[] =
+{
+	"SYS_UNDEFINED",
+	"SYS_DVBC_ANNEX_AC",
+	"SYS_DVBC_ANNEX_B",
+	"SYS_DVBT",
+	"SYS_DSS",
+	"SYS_DVBS",
+	"SYS_DVBS2",
+	"SYS_DVBH",
+	"SYS_ISDBT",
+	"SYS_ISDBS",
+	"SYS_ISDBC",
+	"SYS_ATSC",
+	"SYS_ATSCMH",
+	"SYS_DMBTH",
+	"SYS_CMMB",
+	"SYS_DAB",
+	"SYS_DVBT2",
+	"SYS_TURBO"
 };
 
-
-static const char *fe_spectral_inversion_tab[] = {
-  "INVERSION_OFF",
-  "INVERSION_ON",
-  "INVERSION_AUTO"
+static const char *fe_spectral_inversion_tab[] =
+{
+	"INVERSION_OFF",
+	"INVERSION_ON",
+	"INVERSION_AUTO"
 };
 
-
-static const char *fe_code_rate_tab[] = {
-  "FEC_NONE",
-  "FEC_1_2",
-  "FEC_2_3",
-  "FEC_3_4",
-  "FEC_4_5",
-  "FEC_5_6",
-  "FEC_6_7",
-  "FEC_7_8",
-  "FEC_8_9",
-  "FEC_AUTO",
-  "FEC_3_5",
-  "FEC_9_10",
+static const char *fe_code_rate_tab[] =
+{
+	"FEC_NONE",
+	"FEC_1_2",
+	"FEC_2_3",
+	"FEC_3_4",
+	"FEC_4_5",
+	"FEC_5_6",
+	"FEC_6_7",
+	"FEC_7_8",
+	"FEC_8_9",
+	"FEC_AUTO",
+	"FEC_3_5",
+	"FEC_9_10",
 };
 
-
-static const char *fe_modulation_tab[] = {
-  "QPSK",
-  "QAM_16",
-  "QAM_32",
-  "QAM_64",
-  "QAM_128",
-  "QAM_256",
-  "QAM_AUTO",
-  "VSB_8",
-  "VSB_16",
-  "PSK_8",
-  "APSK_16",
-  "APSK_32",
-  "DQPSK"
+static const char *fe_modulation_tab[] =
+{
+	"QPSK",
+	"QAM_16",
+	"QAM_32",
+	"QAM_64",
+	"QAM_128",
+	"QAM_256",
+	"QAM_AUTO",
+	"VSB_8",
+	"VSB_16",
+	"PSK_8",
+	"APSK_16",
+	"APSK_32",
+	"DQPSK"
 };
 
-static const char *fe_transmit_mode_tab[] = {
-  "TRANSMISSION_MODE_2K",
-  "TRANSMISSION_MODE_8K",
-  "TRANSMISSION_MODE_AUTO",
-  "TRANSMISSION_MODE_4K",
-  "TRANSMISSION_MODE_1K",
-  "TRANSMISSION_MODE_16K",
-  "TRANSMISSION_MODE_32K"
+static const char *fe_transmit_mode_tab[] =
+{
+	"TRANSMISSION_MODE_2K",
+	"TRANSMISSION_MODE_8K",
+	"TRANSMISSION_MODE_AUTO",
+	"TRANSMISSION_MODE_4K",
+	"TRANSMISSION_MODE_1K",
+	"TRANSMISSION_MODE_16K",
+	"TRANSMISSION_MODE_32K"
 };
 
-static const char *fe_bandwidth_tab[] = {
-  "BANDWIDTH_8_MHZ",
-  "BANDWIDTH_7_MHZ",
-  "BANDWIDTH_6_MHZ",
-  "BANDWIDTH_AUTO",
-  "BANDWIDTH_5_MHZ",
-  "BANDWIDTH_10_MHZ",
-  "BANDWIDTH_1_712_MHZ",
+static const char *fe_bandwidth_tab[] =
+{
+	"BANDWIDTH_8_MHZ",
+	"BANDWIDTH_7_MHZ",
+	"BANDWIDTH_6_MHZ",
+	"BANDWIDTH_AUTO",
+	"BANDWIDTH_5_MHZ",
+	"BANDWIDTH_10_MHZ",
+	"BANDWIDTH_1_712_MHZ",
 };
 
-
-static const char *fe_guard_interval_tab[] = {
-  "GUARD_INTERVAL_1_32",
-  "GUARD_INTERVAL_1_16",
-  "GUARD_INTERVAL_1_8",
-  "GUARD_INTERVAL_1_4",
-  "GUARD_INTERVAL_AUTO",
-  "GUARD_INTERVAL_1_128",
-  "GUARD_INTERVAL_19_128",
-  "GUARD_INTERVAL_19_256"
+static const char *fe_guard_interval_tab[] =
+{
+	"GUARD_INTERVAL_1_32",
+	"GUARD_INTERVAL_1_16",
+	"GUARD_INTERVAL_1_8",
+	"GUARD_INTERVAL_1_4",
+	"GUARD_INTERVAL_AUTO",
+	"GUARD_INTERVAL_1_128",
+	"GUARD_INTERVAL_19_128",
+	"GUARD_INTERVAL_19_256"
 };
 
-
-static const char *fe_hierarchy_tab[] = {
-  "HIERARCHY_NONE",
-  "HIERARCHY_1",
-  "HIERARCHY_2",
-  "HIERARCHY_4",
-  "HIERARCHY_AUTO"
+static const char *fe_hierarchy_tab[] =
+{
+	"HIERARCHY_NONE",
+	"HIERARCHY_1",
+	"HIERARCHY_2",
+	"HIERARCHY_4",
+	"HIERARCHY_AUTO"
 };
 
-
-struct diseqc_cmd committed_switch_cmds[] = {
-  {{{0xe0, 0x10, 0x38, 0xf0, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x38, 0xf2, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x38, 0xf1, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x38, 0xf3, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x38, 0xf4, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x38, 0xf6, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x38, 0xf5, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x38, 0xf7, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x38, 0xf8, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x38, 0xfa, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x38, 0xf9, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x38, 0xfb, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x38, 0xfc, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x38, 0xfe, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x38, 0xfd, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x38, 0xff, 0x00, 0x00}, 4}, 20}
+struct diseqc_cmd committed_switch_cmds[] =
+{
+	{
+		{
+			{
+				0xe0, 0x10, 0x38, 0xf0, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x38, 0xf2, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x38, 0xf1, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x38, 0xf3, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x38, 0xf4, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x38, 0xf6, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x38, 0xf5, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x38, 0xf7, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x38, 0xf8, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x38, 0xfa, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x38, 0xf9, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x38, 0xfb, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x38, 0xfc, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x38, 0xfe, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x38, 0xfd, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x38, 0xff, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	}
 };
 
-struct diseqc_cmd uncommitted_switch_cmds[] = {
-  {{{0xe0, 0x10, 0x39, 0xf0, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x39, 0xf1, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x39, 0xf2, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x39, 0xf3, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x39, 0xf4, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x39, 0xf5, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x39, 0xf6, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x39, 0xf7, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x39, 0xf8, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x39, 0xf9, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x39, 0xfa, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x39, 0xfb, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x39, 0xfc, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x39, 0xfd, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x39, 0xfe, 0x00, 0x00}, 4}, 20},
-  {{{0xe0, 0x10, 0x39, 0xff, 0x00, 0x00}, 4}, 20}
+struct diseqc_cmd uncommitted_switch_cmds[] =
+{
+	{
+		{
+			{
+				0xe0, 0x10, 0x39, 0xf0, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x39, 0xf1, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x39, 0xf2, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x39, 0xf3, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x39, 0xf4, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x39, 0xf5, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x39, 0xf6, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x39, 0xf7, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x39, 0xf8, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x39, 0xf9, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x39, 0xfa, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x39, 0xfb, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x39, 0xfc, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x39, 0xfd, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x39, 0xfe, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	},
+	{
+		{
+			{
+				0xe0, 0x10, 0x39, 0xff, 0x00, 0x00
+			}
+			, 4
+		}
+		, 20
+	}
 };
 
 /*--------------------------------------------------------------------------*/
@@ -205,562 +465,646 @@ struct diseqc_cmd uncommitted_switch_cmds[] = {
 static inline void
 msleep (uint32_t msec)
 {
-  struct timespec req = { msec / 1000, 1000000 * (msec % 1000) };
+	struct timespec req = { msec / 1000, 1000000 * (msec % 1000) };
 
-  while (nanosleep (&req, &req))
-    ;
+	while (nanosleep (&req, &req))
+		;
 }
+
 
 #if 0
 #define DISEQC_X 2
 int
 rotor_command (int frontend_fd, int cmd, int n1, int n2, int n3)
 {
-  int err;
+	int err;
 
-  struct dvb_diseqc_master_cmd cmds[] = {
-    {{0xe0, 0x31, 0x60, 0x00, 0x00, 0x00}, 3},	//0 Stop Positioner movement
-    {{0xe0, 0x31, 0x63, 0x00, 0x00, 0x00}, 3},	//1 Disable Limits
-    {{0xe0, 0x31, 0x66, 0x00, 0x00, 0x00}, 3},	//2 Set East Limit
-    {{0xe0, 0x31, 0x67, 0x00, 0x00, 0x00}, 3},	//3 Set West Limit
-    {{0xe0, 0x31, 0x68, 0x00, 0x00, 0x00}, 4},	//4 Drive Motor East continously
-    {{0xe0, 0x31, 0x68, 256 - n1, 0x00, 0x00}, 4},	//5 Drive Motor East nn steps
-    {{0xe0, 0x31, 0x69, 256 - n1, 0x00, 0x00}, 4},	//6 Drive Motor West nn steps
-    {{0xe0, 0x31, 0x69, 0x00, 0x00, 0x00}, 4},	//7 Drive Motor West continously
-    {{0xe0, 0x31, 0x6a, n1, 0x00, 0x00}, 4},	//8 Store nn
-    {{0xe0, 0x31, 0x6b, n1, 0x00, 0x00}, 4},	//9 Goto nn
-    {{0xe0, 0x31, 0x6f, n1, n2, n3}, 4},	//10 Recalculate Position
-    {{0xe0, 0x31, 0x6a, 0x00, 0x00, 0x00}, 4},	//11 Enable Limits
-    {{0xe0, 0x31, 0x6e, n1, n2, 0x00}, 5},	//12 Gotoxx
-    {{0xe0, 0x10, 0x38, 0xF4, 0x00, 0x00}, 4}	//13 User
-  };
-  int i;
+	struct dvb_diseqc_master_cmd cmds[] =
+	{
+		{						 //0 Stop Positioner movement
+			{
+				0xe0, 0x31, 0x60, 0x00, 0x00, 0x00
+			}
+			, 3
+		},
+		{						 //1 Disable Limits
+			{
+				0xe0, 0x31, 0x63, 0x00, 0x00, 0x00
+			}
+			, 3
+		},
+		{						 //2 Set East Limit
+			{
+				0xe0, 0x31, 0x66, 0x00, 0x00, 0x00
+			}
+			, 3
+		},
+		{						 //3 Set West Limit
+			{
+				0xe0, 0x31, 0x67, 0x00, 0x00, 0x00
+			}
+			, 3
+		},
+		{						 //4 Drive Motor East continously
+			{
+				0xe0, 0x31, 0x68, 0x00, 0x00, 0x00
+			}
+			, 4
+		},
+		{						 //5 Drive Motor East nn steps
+			{
+				0xe0, 0x31, 0x68, 256 - n1, 0x00, 0x00
+			}
+			, 4
+		},
+		{						 //6 Drive Motor West nn steps
+			{
+				0xe0, 0x31, 0x69, 256 - n1, 0x00, 0x00
+			}
+			, 4
+		},
+		{						 //7 Drive Motor West continously
+			{
+				0xe0, 0x31, 0x69, 0x00, 0x00, 0x00
+			}
+			, 4
+		},
+		{						 //8 Store nn
+			{
+				0xe0, 0x31, 0x6a, n1, 0x00, 0x00
+			}
+			, 4
+		},
+		{						 //9 Goto nn
+			{
+				0xe0, 0x31, 0x6b, n1, 0x00, 0x00
+			}
+			, 4
+		},
+		{						 //10 Recalculate Position
+			{
+				0xe0, 0x31, 0x6f, n1, n2, n3
+			}
+			, 4
+		},
+		{						 //11 Enable Limits
+			{
+				0xe0, 0x31, 0x6a, 0x00, 0x00, 0x00
+			}
+			, 4
+		},
+		{						 //12 Gotoxx
+			{
+				0xe0, 0x31, 0x6e, n1, n2, 0x00
+			}
+			, 5
+		},
+		{						 //13 User
+			{
+				0xe0, 0x10, 0x38, 0xF4, 0x00, 0x00
+			}
+			, 4
+		}
+	};
+	int i;
 
-  for (i = 0; i < DISEQC_X; ++i)
-    {
-      usleep (15 * 1000);
-      if (err = ioctl (frontend_fd, FE_DISEQC_SEND_MASTER_CMD, &cmds[cmd]))
-	error ("rotor_command: FE_DISEQC_SEND_MASTER_CMD failed, err=%i\n",
-	       err);
-    }
-  return err;
+	for (i = 0; i < DISEQC_X; ++i)
+	{
+		usleep (15 * 1000);
+		if (err = ioctl (frontend_fd, FE_DISEQC_SEND_MASTER_CMD, &cmds[cmd]))
+			error ("rotor_command: FE_DISEQC_SEND_MASTER_CMD failed, err=%i\n",
+				err);
+	}
+	return err;
 }
+
 
 int
 rotate_rotor (int frontend_fd, int from_rotor_pos, int to_rotor_pos,
-	      int voltage_18, int hiband)
+int voltage_18, int hiband)
 {
-  /* Rotate a DiSEqC 1.2 rotor from position from_rotor_pos to position to_rotor_pos */
-  /* Uses Goto nn (command 9) */
-  float rotor_wait_time;	//seconds
-  int err = 0;
-  float speed_13V = 1.5;	//degrees per second
-  float speed_18V = 2.4;	//degrees per second
-  float degreesmoved,
-    a1,
-    a2;
+	/* Rotate a DiSEqC 1.2 rotor from position from_rotor_pos to position to_rotor_pos */
+	/* Uses Goto nn (command 9) */
+	float rotor_wait_time;		 //seconds
+	int err = 0;
+	float speed_13V = 1.5;		 //degrees per second
+	float speed_18V = 2.4;		 //degrees per second
+	float degreesmoved,
+		a1,
+		a2;
 
-  if (to_rotor_pos != 0)
-    {
-      if (from_rotor_pos != to_rotor_pos)
+	if (to_rotor_pos != 0)
 	{
-	  info ("Moving rotor from position %i to position %i\n",
-		from_rotor_pos, to_rotor_pos);
-	  if (from_rotor_pos == 0)
-	    {
-	      rotor_wait_time = 15;	// starting from unknown position
-	    }
-	  else
-	    {
-	      a1 = rotor_angle (to_rotor_pos);
-	      a2 = rotor_angle (from_rotor_pos);
-	      degreesmoved = abs (a1 - a2);
-	      if (degreesmoved > 180)
-		degreesmoved = 360 - degreesmoved;
-	      rotor_wait_time = degreesmoved / speed_18V;
-	    }
-	  //switch tone off
-	  if (err = ioctl (frontend_fd, FE_SET_TONE, SEC_TONE_OFF))
-	    return err;
-	  msleep (15);
-	  // high voltage for high speed rotation
-	  if (err = ioctl (frontend_fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18))
-	    return err;
-	  msleep (15);
-	  err = rotor_command (frontend_fd, 9, to_rotor_pos, 0, 0);
-	  if (err)
-	    {
-	      info ("Rotor move error!\n");
-	    }
-	  else
-	    {
-	      int i;
-
-	      info ("Rotating");
-	      for (i = 0; i < 10; i++)
+		if (from_rotor_pos != to_rotor_pos)
 		{
-		  usleep (rotor_wait_time * 100000);
-		  info (".");
+			info ("Moving rotor from position %i to position %i\n",
+				from_rotor_pos, to_rotor_pos);
+			if (from_rotor_pos == 0)
+			{
+								 // starting from unknown position
+				rotor_wait_time = 15;
+			}
+			else
+			{
+				a1 = rotor_angle (to_rotor_pos);
+				a2 = rotor_angle (from_rotor_pos);
+				degreesmoved = abs (a1 - a2);
+				if (degreesmoved > 180)
+					degreesmoved = 360 - degreesmoved;
+				rotor_wait_time = degreesmoved / speed_18V;
+			}
+			//switch tone off
+			if (err = ioctl (frontend_fd, FE_SET_TONE, SEC_TONE_OFF))
+				return err;
+			msleep (15);
+			// high voltage for high speed rotation
+			if (err = ioctl (frontend_fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18))
+				return err;
+			msleep (15);
+			err = rotor_command (frontend_fd, 9, to_rotor_pos, 0, 0);
+			if (err)
+			{
+				info ("Rotor move error!\n");
+			}
+			else
+			{
+				int i;
+
+				info ("Rotating");
+				for (i = 0; i < 10; i++)
+				{
+					usleep (rotor_wait_time * 100000);
+					info (".");
+				}
+				info ("completed.\n");
+			}
 		}
-	      info ("completed.\n");
-	    }
+		else
+		{
+			info ("Rotor already at position %i\n", from_rotor_pos);
+		}
+		// correct tone and voltage
+		if (err =
+			ioctl (frontend_fd, FE_SET_TONE,
+			hiband ? SEC_TONE_ON : SEC_TONE_OFF))
+			return err;
+		msleep (15);
+		if (err = ioctl (frontend_fd, FE_SET_VOLTAGE, voltage_18))
+			return err;
+		msleep (15);
 	}
-      else
-	{
-	  info ("Rotor already at position %i\n", from_rotor_pos);
-	}
-      // correct tone and voltage
-      if (err =
-	  ioctl (frontend_fd, FE_SET_TONE,
-		 hiband ? SEC_TONE_ON : SEC_TONE_OFF))
 	return err;
-      msleep (15);
-      if (err = ioctl (frontend_fd, FE_SET_VOLTAGE, voltage_18))
-	return err;
-      msleep (15);
-    }
-  return err;
 }
 #endif
 
-
 int
 diseqc_send_msg (int fd, fe_sec_voltage_t v, struct diseqc_cmd **cmd,
-		 fe_sec_tone_mode_t t, fe_sec_mini_cmd_t b)
+fe_sec_tone_mode_t t, fe_sec_mini_cmd_t b)
 {
-  int err;
+	int err;
 
-  if ((err = ioctl (fd, FE_SET_TONE, SEC_TONE_OFF)))
-    return err;
+	if ((err = ioctl (fd, FE_SET_TONE, SEC_TONE_OFF)))
+		return err;
 
-  if ((err = ioctl (fd, FE_SET_VOLTAGE, v)))
-    return err;
+	if ((err = ioctl (fd, FE_SET_VOLTAGE, v)))
+		return err;
 
-  msleep (15);
+	msleep (15);
 
-  while (*cmd)
-    {
-      //            fprintf(stderr,"DiSEqC: %02x %02x %02x %02x %02x %02x\n",
-      //                    (*cmd)->cmd.msg[0], (*cmd)->cmd.msg[1],
-      //                    (*cmd)->cmd.msg[2], (*cmd)->cmd.msg[3],
-      //                    (*cmd)->cmd.msg[4], (*cmd)->cmd.msg[5]);
+	while (*cmd)
+	{
+		//            fprintf(stderr,"DiSEqC: %02x %02x %02x %02x %02x %02x\n",
+		//                    (*cmd)->cmd.msg[0], (*cmd)->cmd.msg[1],
+		//                    (*cmd)->cmd.msg[2], (*cmd)->cmd.msg[3],
+		//                    (*cmd)->cmd.msg[4], (*cmd)->cmd.msg[5]);
 
-      if ((err = ioctl (fd, FE_DISEQC_SEND_MASTER_CMD, &(*cmd)->cmd)))
+		if ((err = ioctl (fd, FE_DISEQC_SEND_MASTER_CMD, &(*cmd)->cmd)))
+			return err;
+
+		//              msleep((*cmd)->wait);
+		cmd++;
+	}
+
+	//fprintf(stderr," %s ", v == SEC_VOLTAGE_13 ? "SEC_VOLTAGE_13" :
+	//    v == SEC_VOLTAGE_18 ? "SEC_VOLTAGE_18" : "???");
+
+	//fprintf(stderr," %s ", b == SEC_MINI_A ? "SEC_MINI_A" :
+	//    b == SEC_MINI_B ? "SEC_MINI_B" : "???");
+
+	//fprintf(stderr," %s\n", t == SEC_TONE_ON ? "SEC_TONE_ON" :
+	//    t == SEC_TONE_OFF ? "SEC_TONE_OFF" : "???");
+
+	msleep (15);
+
+	if ((err = ioctl (fd, FE_DISEQC_SEND_BURST, b)))
+		return err;
+
+	msleep (15);
+
+	err = ioctl (fd, FE_SET_TONE, t);
+
+	msleep (15);
+
 	return err;
-
-      //              msleep((*cmd)->wait);
-      cmd++;
-    }
-
-  //fprintf(stderr," %s ", v == SEC_VOLTAGE_13 ? "SEC_VOLTAGE_13" :
-  //    v == SEC_VOLTAGE_18 ? "SEC_VOLTAGE_18" : "???");
-
-  //fprintf(stderr," %s ", b == SEC_MINI_A ? "SEC_MINI_A" :
-  //    b == SEC_MINI_B ? "SEC_MINI_B" : "???");
-
-  //fprintf(stderr," %s\n", t == SEC_TONE_ON ? "SEC_TONE_ON" :
-  //    t == SEC_TONE_OFF ? "SEC_TONE_OFF" : "???");
-
-  msleep (15);
-
-  if ((err = ioctl (fd, FE_DISEQC_SEND_BURST, b)))
-    return err;
-
-  msleep (15);
-
-  err = ioctl (fd, FE_SET_TONE, t);
-
-  msleep (15);
-
-  return err;
 }
+
 
 int
 setup_switch (int frontend_fd, int switch_pos, int voltage_18, int hiband,
-	      int uncommitted_switch_pos)
+int uncommitted_switch_pos)
 {
-  int i;
-  int err;
-  struct diseqc_cmd *cmd[2] = { NULL, NULL };
+	int i;
+	int err;
+	struct diseqc_cmd *cmd[2] = { NULL, NULL };
 
-  i = uncommitted_switch_pos;
+	i = uncommitted_switch_pos;
 
-  //      fprintf(stderr,"DiSEqC: uncommitted switch pos %i\n", uncommitted_switch_pos);
-  if (i < 0
-      || i >=
-      (int) (sizeof (uncommitted_switch_cmds) / sizeof (struct diseqc_cmd)))
-    return -EINVAL;
+	//      fprintf(stderr,"DiSEqC: uncommitted switch pos %i\n", uncommitted_switch_pos);
+	if (i < 0
+		|| i >=
+		(int) (sizeof (uncommitted_switch_cmds) / sizeof (struct diseqc_cmd)))
+		return -EINVAL;
 
-  cmd[0] = &uncommitted_switch_cmds[i];
+	cmd[0] = &uncommitted_switch_cmds[i];
 
-  diseqc_send_msg (frontend_fd,
-		   voltage_18 ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13,
-		   cmd,
-		   hiband ? SEC_TONE_ON : SEC_TONE_OFF,
-		   switch_pos % 2 ? SEC_MINI_B : SEC_MINI_A);
+	diseqc_send_msg (frontend_fd,
+		voltage_18 ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13,
+		cmd,
+		hiband ? SEC_TONE_ON : SEC_TONE_OFF,
+		switch_pos % 2 ? SEC_MINI_B : SEC_MINI_A);
 
-  i = 4 * switch_pos + 2 * hiband + (voltage_18 ? 1 : 0);
+	i = 4 * switch_pos + 2 * hiband + (voltage_18 ? 1 : 0);
 
-  //      fprintf(stderr,"DiSEqC: switch pos %i, %sV, %sband (index %d)\n",
-  //              switch_pos, voltage_18 ? "18" : "13", hiband ? "hi" : "lo", i);
+	//      fprintf(stderr,"DiSEqC: switch pos %i, %sV, %sband (index %d)\n",
+	//              switch_pos, voltage_18 ? "18" : "13", hiband ? "hi" : "lo", i);
 
-  if (i < 0
-      || i >=
-      (int) (sizeof (committed_switch_cmds) / sizeof (struct diseqc_cmd)))
-    return -EINVAL;
+	if (i < 0
+		|| i >=
+		(int) (sizeof (committed_switch_cmds) / sizeof (struct diseqc_cmd)))
+		return -EINVAL;
 
-  cmd[0] = &committed_switch_cmds[i];
+	cmd[0] = &committed_switch_cmds[i];
 
-  err = diseqc_send_msg (frontend_fd,
-			 voltage_18 ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13,
-			 cmd,
-			 hiband ? SEC_TONE_ON : SEC_TONE_OFF,
-			 switch_pos % 2 ? SEC_MINI_B : SEC_MINI_A);
+	err = diseqc_send_msg (frontend_fd,
+		voltage_18 ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13,
+		cmd,
+		hiband ? SEC_TONE_ON : SEC_TONE_OFF,
+		switch_pos % 2 ? SEC_MINI_B : SEC_MINI_A);
 
-  return err;
+	return err;
 }
 
 
 int
 tune_it_s2 (int fd_frontend, transponder * tp)
 {
-  int rc;
-  int i;
-  fe_status_t s;
+	int rc;
+	int i;
+	fe_status_t s;
 
-  uint32_t if_freq = 0;
-  uint32_t bandwidth_hz = 0;
-  int hiband = 0;
-  int res;
+	uint32_t if_freq = 0;
+	uint32_t bandwidth_hz = 0;
+	int hiband = 0;
+	int res;
 
-  static int uncommitted_switch_pos = 0;
-  struct dvb_frontend_event event;
-  struct dvb_frontend_info fe_info;
-  int freq = tp->freq;
-  int pol = tp->pol;
-  int diseqc = (tp->diseqc == -1) ? 1 : tp->diseqc;
-  struct dtv_properties *p;
-  struct dvb_frontend_event ev;
+	static int uncommitted_switch_pos = 0;
+	struct dvb_frontend_event event;
+	struct dvb_frontend_info fe_info;
+	int freq = tp->freq;
+	int pol = tp->pol;
+	int diseqc = (tp->diseqc == -1) ? 1 : tp->diseqc;
+	struct dtv_properties *p;
+	struct dvb_frontend_event ev;
 
-  struct dtv_property p_clear[] = {
-    {.cmd = DTV_CLEAR},
-  };
+	struct dtv_property p_clear[] =
+	{
+		{.cmd = DTV_CLEAR},
+	};
 
-  struct dtv_properties cmdseq_clear = {
-    .num = 1,
-    .props = p_clear
-  };
-#ifndef DTV_STREAM_ID
-#define DTV_STREAM_ID           42
-#endif
-  static struct dtv_property dvbs2_cmdargs[] = {
-    {.cmd = DTV_DELIVERY_SYSTEM,.u.data = 0},
-    {.cmd = DTV_FREQUENCY,.u.data = 0},
-    {.cmd = DTV_MODULATION,.u.data = 0},
-    {.cmd = DTV_INVERSION,.u.data = 0},
-    {.cmd = DTV_SYMBOL_RATE,.u.data = 0},
-    {.cmd = DTV_INNER_FEC,.u.data = 0},
-    {.cmd = DTV_PILOT,.u.data = 0},
-    {.cmd = DTV_ROLLOFF,.u.data = 0},
-    {.cmd = DTV_STREAM_ID,.u.data = 0},
-    {.cmd = DTV_TUNE},
-  };
-  static struct dtv_properties dvbs2_cmdseq = {
-    .num = sizeof (dvbs2_cmdargs) / sizeof (struct dtv_property),
-    .props = dvbs2_cmdargs
-  };
+	struct dtv_properties cmdseq_clear =
+	{
+		.num = 1,
+		.props = p_clear
+	};
+	#ifndef DTV_STREAM_ID
+	#define DTV_STREAM_ID           42
+	#endif
+	static struct dtv_property dvbs2_cmdargs[] =
+	{
+		{.cmd = DTV_DELIVERY_SYSTEM,.u.data = 0},
+		{.cmd = DTV_FREQUENCY,.u.data = 0},
+		{.cmd = DTV_MODULATION,.u.data = 0},
+		{.cmd = DTV_INVERSION,.u.data = 0},
+		{.cmd = DTV_SYMBOL_RATE,.u.data = 0},
+		{.cmd = DTV_INNER_FEC,.u.data = 0},
+		{.cmd = DTV_PILOT,.u.data = 0},
+		{.cmd = DTV_ROLLOFF,.u.data = 0},
+		{.cmd = DTV_STREAM_ID,.u.data = 0},
+		{.cmd = DTV_TUNE},
+	};
+	static struct dtv_properties dvbs2_cmdseq =
+	{
+		.num = sizeof (dvbs2_cmdargs) / sizeof (struct dtv_property),
+		.props = dvbs2_cmdargs
+	};
 
-  static struct dtv_property dvbt_cmdargs[] = {
-    {.cmd = DTV_DELIVERY_SYSTEM,.u.data = 0},
-    {.cmd = DTV_FREQUENCY,.u.data = 0},
-    {.cmd = DTV_MODULATION,.u.data = 0},
-    {.cmd = DTV_INVERSION,.u.data = 0},
-    {.cmd = DTV_BANDWIDTH_HZ,.u.data = 0},
-    {.cmd = DTV_CODE_RATE_HP,.u.data = 0},
-    {.cmd = DTV_CODE_RATE_LP,.u.data = 0},
-    {.cmd = DTV_GUARD_INTERVAL,.u.data = 0},
-    {.cmd = DTV_TRANSMISSION_MODE,.u.data = 0},
-    {.cmd = DTV_HIERARCHY,.u.data = HIERARCHY_AUTO},
-    {.cmd = DTV_TUNE},
-  };
-  static struct dtv_properties dvbt_cmdseq = {
-    .num = sizeof (dvbt_cmdargs) / sizeof (struct dtv_property),
-    .props = dvbt_cmdargs
-  };
-  //    while(1)  {
-  //      if (ioctl(fd_frontend, FE_GET_EVENT, &event) < 0)       //EMPTY THE EVENT QUEUE
-  //        break;
-  //    }
-  time_t tt = time (NULL);
+	static struct dtv_property dvbt_cmdargs[] =
+	{
+		{.cmd = DTV_DELIVERY_SYSTEM,.u.data = 0},
+		{.cmd = DTV_FREQUENCY,.u.data = 0},
+		{.cmd = DTV_MODULATION,.u.data = 0},
+		{.cmd = DTV_INVERSION,.u.data = 0},
+		{.cmd = DTV_BANDWIDTH_HZ,.u.data = 0},
+		{.cmd = DTV_CODE_RATE_HP,.u.data = 0},
+		{.cmd = DTV_CODE_RATE_LP,.u.data = 0},
+		{.cmd = DTV_GUARD_INTERVAL,.u.data = 0},
+		{.cmd = DTV_TRANSMISSION_MODE,.u.data = 0},
+		{.cmd = DTV_HIERARCHY,.u.data = HIERARCHY_AUTO},
+		{.cmd = DTV_TUNE},
+	};
+	static struct dtv_properties dvbt_cmdseq =
+	{
+		.num = sizeof (dvbt_cmdargs) / sizeof (struct dtv_property),
+		.props = dvbt_cmdargs
+	};
+	//    while(1)  {
+	//      if (ioctl(fd_frontend, FE_GET_EVENT, &event) < 0)       //EMPTY THE EVENT QUEUE
+	//        break;
+	//    }
+	time_t tt = time (NULL);
 
-  if ((ioctl (fd_frontend, FE_SET_PROPERTY, &cmdseq_clear)) == -1)
-    {
-      perror ("FE_SET_PROPERTY DTV_CLEAR failed");
-      //        return -1;
-    }
+	if ((ioctl (fd_frontend, FE_SET_PROPERTY, &cmdseq_clear)) == -1)
+	{
+		perror ("FE_SET_PROPERTY DTV_CLEAR failed");
+		//        return -1;
+	}
 
-  if ((res = ioctl (fd_frontend, FE_GET_INFO, &fe_info) < 0))
-    {
-      perror ("FE_GET_INFO: ");
-      //       return -1;
-    }
+	if ((res = ioctl (fd_frontend, FE_GET_INFO, &fe_info) < 0))
+	{
+		perror ("FE_GET_INFO: ");
+		//       return -1;
+	}
 
-  if ((tp->sys == SYS_DVBS2) && (!(fe_info.caps & FE_CAN_2G_MODULATION)))
-    {
-      fprintf (stderr, "ERROR: Card does not support DVB-S2\n");
-      return -1;
-    }
-#define DELSYS 0
-#define FREQUENCY 1
-#define MODULATION 2
-#define INVERSION 3
-#define SYMBOL_RATE 4
-#define BANDWIDTH 4
-#define FEC_INNER 5
-#define FEC_LP 6
-#define GUARD 7
-#define PILOT 7
-#define TRANSMISSION 8
-#define ROLLOFF 8
-#define MIS 9
-#define HIERARCHY 9
+	if ((tp->sys == SYS_DVBS2) && (!(fe_info.caps & FE_CAN_2G_MODULATION)))
+	{
+		fprintf (stderr, "ERROR: Card does not support DVB-S2\n");
+		return -1;
+	}
+	#define DELSYS 0
+	#define FREQUENCY 1
+	#define MODULATION 2
+	#define INVERSION 3
+	#define SYMBOL_RATE 4
+	#define BANDWIDTH 4
+	#define FEC_INNER 5
+	#define FEC_LP 6
+	#define GUARD 7
+	#define PILOT 7
+	#define TRANSMISSION 8
+	#define ROLLOFF 8
+	#define MIS 9
+	#define HIERARCHY 9
 
-  switch (tp->sys)
-    {
-	case SYS_DVBS:
-	case SYS_DVBS2:
-	  /* Voltage-controlled switch */
-	  hiband = 0;
+	switch (tp->sys)
+	{
+		case SYS_DVBS:
+		case SYS_DVBS2:
+			/* Voltage-controlled switch */
+			hiband = 0;
 
-	  if (freq < SLOF)
-	    {
-	      if_freq = (freq - LOF1);
-	      hiband = 0;
-	    }
-	  else
-	    {
-	      if_freq = (freq - LOF2);
-	      hiband = 1;
-	    }
-	  if (tp->sys == SYS_DVBS2 && tp->mtype == 0)
-	    tp->mtype = PSK_8;
-	  if (tp->sys == SYS_DVBS && tp->mtype == 0)
-	    tp->mtype = QPSK;
-//              LOG("Polarity=%c, diseqc=%d,hiband=%d",pol,diseqc,hiband);
-	  setup_switch (fd_frontend,
-			diseqc - 1,
-			(toupper (pol) == 'V' ? 0 : 1),
-			hiband, uncommitted_switch_pos);
-	  p = &dvbs2_cmdseq;
-	  p->props[DELSYS].u.data = tp->sys;
-	  p->props[MODULATION].u.data = tp->mtype;
-//              p->props[PILOT].u.data=PILOT_AUTO;
-	  p->props[PILOT].u.data = tp->plts;
-	  p->props[ROLLOFF].u.data = ROLLOFF_AUTO;
-	  p->props[ROLLOFF].u.data = tp->ro;
-//        p->props[MIS].u.data = 0;
-	  p->props[INVERSION].u.data = tp->inversion;
-	  p->props[SYMBOL_RATE].u.data = tp->sr;
-	  p->props[FEC_INNER].u.data = tp->fec;
-	  p->props[FREQUENCY].u.data = if_freq;
-	  usleep (50000);
-	  break;
+			if (freq < SLOF)
+			{
+				if_freq = (freq - LOF1);
+				hiband = 0;
+			}
+			else
+			{
+				if_freq = (freq - LOF2);
+				hiband = 1;
+			}
+			if (tp->sys == SYS_DVBS2 && tp->mtype == 0)
+				tp->mtype = PSK_8;
+			if (tp->sys == SYS_DVBS && tp->mtype == 0)
+				tp->mtype = QPSK;
+			//              LOG("Polarity=%c, diseqc=%d,hiband=%d",pol,diseqc,hiband);
+			setup_switch (fd_frontend,
+				diseqc - 1,
+				(toupper (pol) == 'V' ? 0 : 1),
+				hiband, uncommitted_switch_pos);
+			p = &dvbs2_cmdseq;
+			p->props[DELSYS].u.data = tp->sys;
+			p->props[MODULATION].u.data = tp->mtype;
+			//              p->props[PILOT].u.data=PILOT_AUTO;
+			p->props[PILOT].u.data = tp->plts;
+			p->props[ROLLOFF].u.data = ROLLOFF_AUTO;
+			p->props[ROLLOFF].u.data = tp->ro;
+			//        p->props[MIS].u.data = 0;
+			p->props[INVERSION].u.data = tp->inversion;
+			p->props[SYMBOL_RATE].u.data = tp->sr;
+			p->props[FEC_INNER].u.data = tp->fec;
+			p->props[FREQUENCY].u.data = if_freq;
+			usleep (50000);
+			break;
 
-	case SYS_DVBT:
-	case SYS_DVBT2:
-	  if (tp->sys == SYS_DVBT && tp->mtype == 0)
-	    tp->mtype = QAM_AUTO;
-	  if (tp->sys == SYS_DVBT2 && tp->mtype == 0)
-	    tp->mtype = QAM_AUTO;
-	  if_freq = freq;
-	  p = &dvbt_cmdseq;
-	  p->props[DELSYS].u.data = tp->sys;
-	  p->props[FREQUENCY].u.data = if_freq * 1000;
-	  p->props[INVERSION].u.data = tp->inversion;
-	  p->props[MODULATION].u.data = tp->mtype;
-	  p->props[BANDWIDTH].u.data = tp->bw;
-	  p->props[FEC_INNER].u.data = tp->fec;
-	  p->props[FEC_LP].u.data = tp->fec;
-	  p->props[GUARD].u.data = tp->gi;
-	  p->props[TRANSMISSION].u.data = tp->tmode;
-	  p->props[HIERARCHY].u.data = HIERARCHY_AUTO;
-	  break;
+		case SYS_DVBT:
+		case SYS_DVBT2:
+			if (tp->sys == SYS_DVBT && tp->mtype == 0)
+				tp->mtype = QAM_AUTO;
+			if (tp->sys == SYS_DVBT2 && tp->mtype == 0)
+				tp->mtype = QAM_AUTO;
+			if_freq = freq;
+			p = &dvbt_cmdseq;
+			p->props[DELSYS].u.data = tp->sys;
+			p->props[FREQUENCY].u.data = if_freq * 1000;
+			p->props[INVERSION].u.data = tp->inversion;
+			p->props[MODULATION].u.data = tp->mtype;
+			p->props[BANDWIDTH].u.data = tp->bw;
+			p->props[FEC_INNER].u.data = tp->fec;
+			p->props[FEC_LP].u.data = tp->fec;
+			p->props[GUARD].u.data = tp->gi;
+			p->props[TRANSMISSION].u.data = tp->tmode;
+			p->props[HIERARCHY].u.data = HIERARCHY_AUTO;
+			break;
 
-    }
+	}
 
+	/* discard stale QPSK events */
+	while (1)
+	{
+		if (ioctl (fd_frontend, FE_GET_EVENT, &ev) == -1)
+			break;
+	}
+	if (tp->sys == SYS_DVBS || tp->sys == SYS_DVBS2)
+		LOG
+			("tunning to %d(%d) sr:%d fec:%s delsys:%s mod:%s rolloff:%s pilot:%s",
+			tp->freq, if_freq, tp->sr, fe_code_rate_tab[tp->fec],
+			fe_delivery_system_tab[tp->sys], fe_modulation_tab[tp->mtype],
+			fe_rolloff_tab[tp->ro], fe_pilot_tab[tp->plts])
+			else
+		if (tp->sys == SYS_DVBT || tp->sys == SYS_DVBT2)
+			LOG
+					("tunning to %d delsys: %s bw:%d inversion:%s mod:%s fec:%s fec_lp:%s guard:%s transmission: %s",
+					p->props[FREQUENCY].u.data,
+					fe_delivery_system_tab[p->props[DELSYS].u.data],
+					p->props[BANDWIDTH].u.data,
+					fe_spectral_inversion_tab[p->props[INVERSION].u.data],
+					fe_modulation_tab[p->props[MODULATION].u.data],
+					fe_code_rate_tab[p->props[FEC_INNER].u.data],
+					fe_code_rate_tab[p->props[FEC_LP].u.data],
+					fe_guard_interval_tab[p->props[GUARD].u.data],
+					fe_transmit_mode_tab[p->props[TRANSMISSION].u.data]);
+	//      LOG("Tunning parameters: %d %d %d %d %d %d %d %d %d",p->props[0].u.data,p->props[1].u.data,p->props[2].u.data,p->props[3].u.data,p->props[4].u.data,p->props[5].u.data,p->props[6].u.data,p->props[7].u.data,p->props[8].u.data);
+	if ((ioctl (fd_frontend, FE_SET_PROPERTY, p)) == -1)
+		if (ioctl (fd_frontend, FE_SET_PROPERTY, p) == -1)
+	{
+		perror ("FE_SET_PROPERTY TUNE failed");
+		LOG ("set property failed");
+		return -1;
+	}
+	// wait for zero status indicating start of tunning
+	//    do {
+	//        ioctl(fd_frontend, FE_GET_EVENT, &ev);
+	//    }
+	//    while(ev.status != 0);
+	// Wait for tunning
+	return 0;
+	for (i = 0; i < 10; i++)
+	{
+		usleep (200000);
 
-  /* discard stale QPSK events */
-  while (1)
-    {
-      if (ioctl (fd_frontend, FE_GET_EVENT, &ev) == -1)
-	break;
-    }
-  if (tp->sys == SYS_DVBS || tp->sys == SYS_DVBS2)
-    LOG
-      ("tunning to %d(%d) sr:%d fec:%s delsys:%s mod:%s rolloff:%s pilot:%s",
-       tp->freq, if_freq, tp->sr, fe_code_rate_tab[tp->fec],
-       fe_delivery_system_tab[tp->sys], fe_modulation_tab[tp->mtype],
-       fe_rolloff_tab[tp->ro], fe_pilot_tab[tp->plts])
-    else
-  if (tp->sys == SYS_DVBT || tp->sys == SYS_DVBT2)
-    LOG
-      ("tunning to %d delsys: %s bw:%d inversion:%s mod:%s fec:%s fec_lp:%s guard:%s transmission: %s",
-       p->props[FREQUENCY].u.data,
-       fe_delivery_system_tab[p->props[DELSYS].u.data],
-       p->props[BANDWIDTH].u.data,
-       fe_spectral_inversion_tab[p->props[INVERSION].u.data],
-       fe_modulation_tab[p->props[MODULATION].u.data],
-       fe_code_rate_tab[p->props[FEC_INNER].u.data],
-       fe_code_rate_tab[p->props[FEC_LP].u.data],
-       fe_guard_interval_tab[p->props[GUARD].u.data],
-       fe_transmit_mode_tab[p->props[TRANSMISSION].u.data]);
-//      LOG("Tunning parameters: %d %d %d %d %d %d %d %d %d",p->props[0].u.data,p->props[1].u.data,p->props[2].u.data,p->props[3].u.data,p->props[4].u.data,p->props[5].u.data,p->props[6].u.data,p->props[7].u.data,p->props[8].u.data);
-  if ((ioctl (fd_frontend, FE_SET_PROPERTY, p)) == -1)
-    if (ioctl (fd_frontend, FE_SET_PROPERTY, p) == -1)
-      {
-	perror ("FE_SET_PROPERTY TUNE failed");
-	LOG ("set property failed");
+		if (ioctl (fd_frontend, FE_GET_EVENT, &ev) == -1)
+		{
+			// no answer, consider it as not locked situation
+			ev.status = 0;
+		}
+
+		// Tuning succeed
+		if (ev.status & FE_HAS_LOCK)
+		{
+			struct dtv_property p[] =
+			{
+				{.cmd = DTV_DELIVERY_SYSTEM},
+				{.cmd = DTV_MODULATION},
+				{.cmd = DTV_INNER_FEC},
+				{.cmd = DTV_INVERSION},
+				{.cmd = DTV_ROLLOFF},
+			};
+
+			struct dtv_properties cmdseq =
+			{
+				.num = 5,
+				.props = p
+			};
+
+			// get the actual parameters from the driver for that channel
+			if ((ioctl (fd_frontend, FE_GET_PROPERTY, &cmdseq)) == -1)
+			{
+				perror ("FE_GET_PROPERTY failed");
+				//                return -1;
+			}
+			LOG ("%ld fe has lock", time (NULL) - tt);
+			#if 0
+			t->delivery_system = p[0].u.data;
+			t->modulation = p[1].u.data;
+			t->fec = p[2].u.data;
+			t->inversion = p[3].u.data;
+			t->rolloff = p[4].u.data;
+			#endif
+
+			return 0;
+		}
+	}
+
+	LOG (">>> tuning failed!!!\n");
 	return -1;
-      }
-  // wait for zero status indicating start of tunning
-//    do {
-//        ioctl(fd_frontend, FE_GET_EVENT, &ev);
-//    }
-//    while(ev.status != 0);
-  // Wait for tunning
-  return 0;
-  for (i = 0; i < 10; i++)
-    {
-      usleep (200000);
-
-      if (ioctl (fd_frontend, FE_GET_EVENT, &ev) == -1)
-	{
-	  // no answer, consider it as not locked situation
-	  ev.status = 0;
-	}
-
-      // Tuning succeed
-      if (ev.status & FE_HAS_LOCK)
-	{
-	  struct dtv_property p[] = {
-	    {.cmd = DTV_DELIVERY_SYSTEM},
-	    {.cmd = DTV_MODULATION},
-	    {.cmd = DTV_INNER_FEC},
-	    {.cmd = DTV_INVERSION},
-	    {.cmd = DTV_ROLLOFF},
-	  };
-
-	  struct dtv_properties cmdseq = {
-	    .num = 5,
-	    .props = p
-	  };
-
-	  // get the actual parameters from the driver for that channel
-	  if ((ioctl (fd_frontend, FE_GET_PROPERTY, &cmdseq)) == -1)
-	    {
-	      perror ("FE_GET_PROPERTY failed");
-//                return -1;
-	    }
-	  LOG ("%ld fe has lock", time (NULL) - tt);
-#if 0
-	  t->delivery_system = p[0].u.data;
-	  t->modulation = p[1].u.data;
-	  t->fec = p[2].u.data;
-	  t->inversion = p[3].u.data;
-	  t->rolloff = p[4].u.data;
-#endif
-
-	  return 0;
-	}
-    }
-
-  LOG (">>> tuning failed!!!\n");
-  return -1;
 }
+
 
 int
 set_pid (int hw, int ad, uint16_t i_pid)
 {
-  char buf[100];
-  int fd;
+	char buf[100];
+	int fd;
 
-  sprintf (buf, "/dev/dvb/adapter%d/demux%d", hw, ad);
-  if ((fd = open (buf, O_RDWR | O_NONBLOCK)) < 0)
-    {
-      perror ("Could not set pid filter ");
-      return -1;
-    }
+	sprintf (buf, "/dev/dvb/adapter%d/demux%d", hw, ad);
+	if ((fd = open (buf, O_RDWR | O_NONBLOCK)) < 0)
+	{
+		perror ("Could not set pid filter ");
+		return -1;
+	}
 
-  struct dmx_pes_filter_params s_filter_params;
+	struct dmx_pes_filter_params s_filter_params;
 
-  s_filter_params.pid = i_pid;
-  s_filter_params.input = DMX_IN_FRONTEND;
-  s_filter_params.output = DMX_OUT_TS_TAP;
-  s_filter_params.flags = DMX_IMMEDIATE_START;
-  s_filter_params.pes_type = DMX_PES_OTHER;
+	s_filter_params.pid = i_pid;
+	s_filter_params.input = DMX_IN_FRONTEND;
+	s_filter_params.output = DMX_OUT_TS_TAP;
+	s_filter_params.flags = DMX_IMMEDIATE_START;
+	s_filter_params.pes_type = DMX_PES_OTHER;
 
-  if (ioctl (fd, DMX_SET_PES_FILTER, &s_filter_params) < 0)
-    {
-      LOG ("failed setting filter on %d (%s)", i_pid, strerror (errno));
-      return -1;
-    }
+	if (ioctl (fd, DMX_SET_PES_FILTER, &s_filter_params) < 0)
+	{
+		LOG ("failed setting filter on %d (%s)", i_pid, strerror (errno));
+		return -1;
+	}
 
-  LOG ("setting filter on PID %d for fd %d", i_pid, fd);
+	LOG ("setting filter on PID %d for fd %d", i_pid, fd);
 
-  return fd;
+	return fd;
 }
+
 
 void
 del_filters (int fd, int pid)
 {
-  if (ioctl (fd, DMX_STOP) < 0)
-    perror ("DMX_STOP failed");
-  else
-    LOG ("clearing filters on PID %d FD %d", pid, fd);
-  close (fd);
+	if (ioctl (fd, DMX_STOP) < 0)
+		perror ("DMX_STOP failed");
+	else
+		LOG ("clearing filters on PID %d FD %d", pid, fd);
+	close (fd);
 }
-
 
 
 fe_delivery_system_t
 dvb_delsys (int fd)
 {
-  int ds[100],
-    i;
+	int ds[100],
+		i;
 
-  static struct dtv_property enum_cmdargs[] = {
-    {.cmd = DTV_ENUM_DELSYS,.u.data = 0},
-  };
-  static struct dtv_properties enum_cmdseq = {
-    .num = sizeof (enum_cmdargs) / sizeof (struct dtv_property),
-    .props = enum_cmdargs
-  };
-  if (ioctl (fd, FE_GET_PROPERTY, &enum_cmdseq) < 0)
-    {
-      LOG ("unable to query frontend");
-      return 0;
-    }
-  int nsys = enum_cmdargs[0].u.buffer.len;
+	static struct dtv_property enum_cmdargs[] =
+	{
+		{.cmd = DTV_ENUM_DELSYS,.u.data = 0},
+	};
+	static struct dtv_properties enum_cmdseq =
+	{
+		.num = sizeof (enum_cmdargs) / sizeof (struct dtv_property),
+		.props = enum_cmdargs
+	};
+	if (ioctl (fd, FE_GET_PROPERTY, &enum_cmdseq) < 0)
+	{
+		LOG ("unable to query frontend");
+		return 0;
+	}
+	int nsys = enum_cmdargs[0].u.buffer.len;
 
-  if (nsys < 1)
-    {
-      LOG ("no available delivery system");
-      return 0;
-    }
-  for (i = 0; i < nsys; i++)
-    {
-      if (enum_cmdargs[0].u.buffer.data[i] == SYS_DVBS2)
-	return SYS_DVBS2;
-      if (enum_cmdargs[0].u.buffer.data[i] == SYS_DVBT2)
-	return SYS_DVBT2;
-    }
-  int rv = enum_cmdargs[0].u.buffer.data[0];
+	if (nsys < 1)
+	{
+		LOG ("no available delivery system");
+		return 0;
+	}
+	for (i = 0; i < nsys; i++)
+	{
+		if (enum_cmdargs[0].u.buffer.data[i] == SYS_DVBS2)
+			return SYS_DVBS2;
+		if (enum_cmdargs[0].u.buffer.data[i] == SYS_DVBT2)
+			return SYS_DVBT2;
+	}
+	int rv = enum_cmdargs[0].u.buffer.data[0];
 
-  LOG ("returning default from dvb_delsys => %d (count %d)", rv, nsys);
-  return (fe_delivery_system_t) rv;
-
+	LOG ("returning default from dvb_delsys => %d (count %d)", rv, nsys);
+	return (fe_delivery_system_t) rv;
 
 }
+
 
 #define INVALID_URL(a) {LOG(a);return 0;}
 char def_pids[100];
@@ -770,259 +1114,288 @@ char def_pids[100];
 int
 detect_dvb_parameters (char *s, transponder * tp)
 {
-  char *arg[20];
-  int la,
-    i;
+	char *arg[20];
+	int la,
+		i;
 
-  while (*s > 0 && *s != '?')
-    s++;
-  if (*s == 0)
-    LOG_AND_RETURN (0, "no ? found in URL");
-  *s++;
-  LOG ("detect_dvb_parameters (S)-> %s", s);
-  la = split (arg, s, 20, '&');
-  tp->sys = -1;
-  tp->freq = -1;
-  tp->inversion = -1;
-  tp->mod = -1;
-  tp->hprate = -1;
-  tp->tmode = -1;
-  tp->gi = -1;
-  tp->bw = -1;
-  tp->sm = -1;
-  tp->t2id = -1;
-  tp->fe = -1;
-  tp->ro = -1;
-  tp->mtype = -1;
-  tp->plts = -1;
-  tp->fec = -1;
-  tp->sr = -1;
-  tp->pol = -1;
-  tp->diseqc = -1;
+	while (*s > 0 && *s != '?')
+		s++;
+	if (*s == 0)
+		LOG_AND_RETURN (0, "no ? found in URL");
+	*s++;
+	LOG ("detect_dvb_parameters (S)-> %s", s);
+	la = split (arg, s, 20, '&');
+	tp->sys = -1;
+	tp->freq = -1;
+	tp->inversion = -1;
+	tp->mod = -1;
+	tp->hprate = -1;
+	tp->tmode = -1;
+	tp->gi = -1;
+	tp->bw = -1;
+	tp->sm = -1;
+	tp->t2id = -1;
+	tp->fe = -1;
+	tp->ro = -1;
+	tp->mtype = -1;
+	tp->plts = -1;
+	tp->fec = -1;
+	tp->sr = -1;
+	tp->pol = -1;
+	tp->diseqc = -1;
 
-  tp->pids = tp->apids = tp->dpids = NULL;
+	tp->pids = tp->apids = tp->dpids = NULL;
 
-  pchar_int mod[] = { {"dvbs2", SYS_DVBS2}
-  , {"dvbs", SYS_DVBS}
-  , {"dvbt2", SYS_DVBT2}
-  , {"dvbt", SYS_DVBT}
-  , {NULL, 0}
-  };
-  pchar_int ro[] = { {"0.35", ROLLOFF_35}
-  , {"0.25", ROLLOFF_25}
-  , {"0.20", ROLLOFF_20}
-  , {NULL, 0}
-  };
-  pchar_int mtype[] = { {"qpsk", QPSK}
-  , {"8psk", PSK_8}
-  , {"16qam", QAM_16}
-  , {"32qam", QAM_32}
-  , {"64qam", QAM_64}
-  , {"256qam", QAM_256}
-  , {NULL, 0}
-  };
-  pchar_int fec[] = { {"12", FEC_1_2}
-  , {"23", FEC_2_3}
-  , {"34", FEC_3_4}
-  , {"45", FEC_4_5}
-  , {"56", FEC_5_6}
-  , {"67", FEC_6_7}
-  , {"78", FEC_7_8}
-  , {"89", FEC_8_9}
-  , {"35", FEC_3_5}
-  , {"910", FEC_9_10}
-  , {NULL, 0}
-  };
-  pchar_int plts[] = { {"on", PILOT_ON}
-  , {"off", PILOT_OFF}
-  , {NULL, 0}
-  };
-  pchar_int gi[] = { {"14", GUARD_INTERVAL_1_4}
-  , {"18", GUARD_INTERVAL_1_8}
-  , {"116", GUARD_INTERVAL_1_16}
-  , {"132", GUARD_INTERVAL_1_32}
-  , {"1128", GUARD_INTERVAL_1_128}
-  , {"19128", GUARD_INTERVAL_19_128}
-  , {"19256", GUARD_INTERVAL_19_256}
-  , {NULL, 0}
-  };
-  pchar_int tmode[] = { {"2k", TRANSMISSION_MODE_2K}
-  , {"4k", TRANSMISSION_MODE_4K}
-  , {"8k", TRANSMISSION_MODE_8K}
-  , {"1k", TRANSMISSION_MODE_1K}
-  , {"16k", TRANSMISSION_MODE_16K}
-  , {"32k", TRANSMISSION_MODE_32K}
-  , {NULL, 0}
-  };
-//      pchar_int bw[]={{"5",BANDWIDTH_5_MHZ},{"6",BANDWIDTH_6_MHZ},{"7",BANDWIDTH_7_MHZ},{"8",BANDWIDTH_8_MHZ},{"10",BANDWIDTH_10_MHZ},{"1.712",BANDWIDTH_1_712_MHZ},{NULL,0}};
-  for (i = 0; i < la; i++)
-    {
-      if (strncmp ("msys=", arg[i], 5) == 0)
-	tp->sys = map_int (arg[i] + 5, mod);
-      if (strncmp ("freq=", arg[i], 5) == 0)
-	tp->freq = map_float (arg[i] + 5, 1000);
-      if (strncmp ("pol=", arg[i], 4) == 0)
-	tp->pol = toupper (arg[i][4]);
-      if (strncmp ("sr=", arg[i], 3) == 0)
-	tp->sr = map_int (arg[i] + 3, NULL) * 1000;
-      if (strncmp ("fe=", arg[i], 3) == 0)
-	tp->fe = map_int (arg[i] + 3, NULL);
-      if (strncmp ("src=", arg[i], 4) == 0)
-	tp->diseqc = map_int (arg[i] + 4, NULL);
-      if (strncmp ("ro=", arg[i], 3) == 0)
-	tp->ro = map_int (arg[i] + 3, ro);
-      if (strncmp ("mtype=", arg[i], 6) == 0)
-	tp->mtype = map_int (arg[i] + 6, mtype);
-      if (strncmp ("fec=", arg[i], 4) == 0)
-	tp->fec = map_int (arg[i] + 4, fec);
-      if (strncmp ("plts=", arg[i], 5) == 0)
-	tp->plts = map_int (arg[i] + 5, plts);
-      if (strncmp ("gi=", arg[i], 3) == 0)
-	tp->gi = map_int (arg[i] + 3, gi);
-      if (strncmp ("tmode=", arg[i], 6) == 0)
-	tp->tmode = map_int (arg[i] + 6, tmode);
-      if (strncmp ("bw=", arg[i], 3) == 0)
-	tp->bw = map_float (arg[i] + 3, 1000000);
-      if (strncmp ("pids=", arg[i], 5) == 0)
-	tp->pids = arg[i] + 5;
-      if (strncmp ("addpids=", arg[i], 6) == 0)
-	tp->apids = arg[i] + 8;
-      if (strncmp ("delpids=", arg[i], 6) == 0)
-	tp->dpids = arg[i] + 8;
+	pchar_int mod[] =
+	{
+		{
+			"dvbs2", SYS_DVBS2
+		}
+		, {"dvbs", SYS_DVBS}
+		, {"dvbt2", SYS_DVBT2}
+		, {"dvbt", SYS_DVBT}
+		, {NULL, 0}
+	};
+	pchar_int ro[] =
+	{
+		{
+			"0.35", ROLLOFF_35
+		}
+		, {"0.25", ROLLOFF_25}
+		, {"0.20", ROLLOFF_20}
+		, {NULL, 0}
+	};
+	pchar_int mtype[] =
+	{
+		{
+			"qpsk", QPSK
+		}
+		, {"8psk", PSK_8}
+		, {"16qam", QAM_16}
+		, {"32qam", QAM_32}
+		, {"64qam", QAM_64}
+		, {"256qam", QAM_256}
+		, {NULL, 0}
+	};
+	pchar_int fec[] =
+	{
+		{
+			"12", FEC_1_2
+		}
+		, {"23", FEC_2_3}
+		, {"34", FEC_3_4}
+		, {"45", FEC_4_5}
+		, {"56", FEC_5_6}
+		, {"67", FEC_6_7}
+		, {"78", FEC_7_8}
+		, {"89", FEC_8_9}
+		, {"35", FEC_3_5}
+		, {"910", FEC_9_10}
+		, {NULL, 0}
+	};
+	pchar_int plts[] =
+	{
+		{
+			"on", PILOT_ON
+		}
+		, {"off", PILOT_OFF}
+		, {NULL, 0}
+	};
+	pchar_int gi[] =
+	{
+		{
+			"14", GUARD_INTERVAL_1_4
+		}
+		, {"18", GUARD_INTERVAL_1_8}
+		, {"116", GUARD_INTERVAL_1_16}
+		, {"132", GUARD_INTERVAL_1_32}
+		, {"1128", GUARD_INTERVAL_1_128}
+		, {"19128", GUARD_INTERVAL_19_128}
+		, {"19256", GUARD_INTERVAL_19_256}
+		, {NULL, 0}
+	};
+	pchar_int tmode[] =
+	{
+		{
+			"2k", TRANSMISSION_MODE_2K
+		}
+		, {"4k", TRANSMISSION_MODE_4K}
+		, {"8k", TRANSMISSION_MODE_8K}
+		, {"1k", TRANSMISSION_MODE_1K}
+		, {"16k", TRANSMISSION_MODE_16K}
+		, {"32k", TRANSMISSION_MODE_32K}
+		, {NULL, 0}
+	};
+	//      pchar_int bw[]={{"5",BANDWIDTH_5_MHZ},{"6",BANDWIDTH_6_MHZ},{"7",BANDWIDTH_7_MHZ},{"8",BANDWIDTH_8_MHZ},{"10",BANDWIDTH_10_MHZ},{"1.712",BANDWIDTH_1_712_MHZ},{NULL,0}};
+	for (i = 0; i < la; i++)
+	{
+		if (strncmp ("msys=", arg[i], 5) == 0)
+			tp->sys = map_int (arg[i] + 5, mod);
+		if (strncmp ("freq=", arg[i], 5) == 0)
+			tp->freq = map_float (arg[i] + 5, 1000);
+		if (strncmp ("pol=", arg[i], 4) == 0)
+			tp->pol = toupper (arg[i][4]);
+		if (strncmp ("sr=", arg[i], 3) == 0)
+			tp->sr = map_int (arg[i] + 3, NULL) * 1000;
+		if (strncmp ("fe=", arg[i], 3) == 0)
+			tp->fe = map_int (arg[i] + 3, NULL);
+		if (strncmp ("src=", arg[i], 4) == 0)
+			tp->diseqc = map_int (arg[i] + 4, NULL);
+		if (strncmp ("ro=", arg[i], 3) == 0)
+			tp->ro = map_int (arg[i] + 3, ro);
+		if (strncmp ("mtype=", arg[i], 6) == 0)
+			tp->mtype = map_int (arg[i] + 6, mtype);
+		if (strncmp ("fec=", arg[i], 4) == 0)
+			tp->fec = map_int (arg[i] + 4, fec);
+		if (strncmp ("plts=", arg[i], 5) == 0)
+			tp->plts = map_int (arg[i] + 5, plts);
+		if (strncmp ("gi=", arg[i], 3) == 0)
+			tp->gi = map_int (arg[i] + 3, gi);
+		if (strncmp ("tmode=", arg[i], 6) == 0)
+			tp->tmode = map_int (arg[i] + 6, tmode);
+		if (strncmp ("bw=", arg[i], 3) == 0)
+			tp->bw = map_float (arg[i] + 3, 1000000);
+		if (strncmp ("pids=", arg[i], 5) == 0)
+			tp->pids = arg[i] + 5;
+		if (strncmp ("addpids=", arg[i], 6) == 0)
+			tp->apids = arg[i] + 8;
+		if (strncmp ("delpids=", arg[i], 6) == 0)
+			tp->dpids = arg[i] + 8;
 
-    }
+	}
 
-  if (tp->pids && strncmp (tp->pids, "all", 3) == 0)
-    {
-      strcpy (def_pids, default_pids);
-      tp->pids = (char *) def_pids;	// map pids=all to essential pids
-    }
-//      if(!msys)INVALID_URL("no msys= found in URL");
-//      if(freq<10)INVALID_URL("no freq= found in URL or frequency invalid");
-//      if((msys==SYS_DVBS || msys==SYS_DVBS2) && (pol!='H' && pol!='V'))INVALID_URL("no pol= found in URL or pol is not H or V");              
-  LOG
-    ("detect_dvb_parameters (E) -> src=%d, fe=%d, freq=%d, sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, pltf=%d, bw=%d, inv=%d, pids=%s - apids=%s - dpids=%s",
-     tp->diseqc, tp->fe, tp->freq, tp->sr, tp->pol, tp->ro, tp->sys,
-     tp->mtype, tp->plts, tp->bw, tp->inversion, tp->pids ? tp->pids : "NULL",
-     tp->apids ? tp->apids : "NULL", tp->dpids ? tp->dpids : "NULL");
-  return 0;
+	if (tp->pids && strncmp (tp->pids, "all", 3) == 0)
+	{
+		strcpy (def_pids, default_pids);
+								 // map pids=all to essential pids
+		tp->pids = (char *) def_pids;
+	}
+	//      if(!msys)INVALID_URL("no msys= found in URL");
+	//      if(freq<10)INVALID_URL("no freq= found in URL or frequency invalid");
+	//      if((msys==SYS_DVBS || msys==SYS_DVBS2) && (pol!='H' && pol!='V'))INVALID_URL("no pol= found in URL or pol is not H or V");
+	LOG
+		("detect_dvb_parameters (E) -> src=%d, fe=%d, freq=%d, sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, pltf=%d, bw=%d, inv=%d, pids=%s - apids=%s - dpids=%s",
+		tp->diseqc, tp->fe, tp->freq, tp->sr, tp->pol, tp->ro, tp->sys,
+		tp->mtype, tp->plts, tp->bw, tp->inversion, tp->pids ? tp->pids : "NULL",
+		tp->apids ? tp->apids : "NULL", tp->dpids ? tp->dpids : "NULL");
+	return 0;
 }
-
 
 
 void
 init_dvb_parameters (transponder * tp)
 {
-  tp->sys = 0;
-  tp->freq = 0;
-  tp->inversion = INVERSION_AUTO;
-  tp->mod = 0;
-  tp->hprate = FEC_AUTO;
-  tp->tmode = TRANSMISSION_MODE_AUTO;
-  tp->gi = GUARD_INTERVAL_AUTO;
-  tp->bw = 8000000;
-  tp->sm = 0;
-  tp->t2id = 0;
-  tp->fe = 0;
-  tp->ro = ROLLOFF_AUTO;
-  tp->mtype = QPSK;
-  tp->plts = PILOT_AUTO;
-  tp->fec = FEC_AUTO;
-  tp->sr = 0;
-  tp->pol = 0;
-  tp->diseqc = 0;
+	tp->sys = 0;
+	tp->freq = 0;
+	tp->inversion = INVERSION_AUTO;
+	tp->mod = 0;
+	tp->hprate = FEC_AUTO;
+	tp->tmode = TRANSMISSION_MODE_AUTO;
+	tp->gi = GUARD_INTERVAL_AUTO;
+	tp->bw = 8000000;
+	tp->sm = 0;
+	tp->t2id = 0;
+	tp->fe = 0;
+	tp->ro = ROLLOFF_AUTO;
+	tp->mtype = QPSK;
+	tp->plts = PILOT_AUTO;
+	tp->fec = FEC_AUTO;
+	tp->sr = 0;
+	tp->pol = 0;
+	tp->diseqc = 0;
 
-  tp->pids = tp->apids = tp->dpids = NULL;
+	tp->pids = tp->apids = tp->dpids = NULL;
 }
+
 
 void
 copy_dvb_parameters (transponder * s, transponder * d)
 {
-  LOG
-    ("copy_dvb_param start -> src=%d, fe=%d, freq=%d, sr=%d, pol=%c, ro=%d, msys=%d, mtype=%d, pltf=%d, bw=%d, inv=%d, pids=%s, apids=%s, dpids=%s",
-     d->diseqc, d->fe, d->freq, d->sr, d->pol, d->ro, d->sys, d->mtype,
-     d->plts, d->bw, d->inversion, d->pids ? d->pids : "NULL",
-     d->apids ? d->apids : "NULL", d->dpids ? d->dpids : "NULL");
-  if (s->sys != -1)
-    d->sys = s->sys;
-  if (s->freq != -1)
-    d->freq = s->freq;
-  if (s->inversion != -1)
-    d->inversion = s->inversion;
-  if (s->mod != -1)
-    d->mod = s->mod;
-  if (s->hprate != -1)
-    d->hprate = s->hprate;
-  if (s->tmode != -1)
-    d->tmode = s->tmode;
-  if (s->gi != -1)
-    d->gi = s->gi;
-  if (s->bw != -1)
-    d->bw = s->bw;
-  if (s->sm != -1)
-    d->sm = s->sm;
-  if (s->t2id != -1)
-    d->t2id = s->t2id;
-  if (s->fe != -1)
-    d->fe = s->fe;
-  if (s->ro != -1)
-    d->ro = s->ro;
-  if (s->mtype != -1)
-    d->mtype = s->mtype;
-  if (s->plts != -1)
-    d->plts = s->plts;
-  if (s->fec != -1)
-    d->fec = s->fec;
-  if (s->sr != -1)
-    d->sr = s->sr;
-  if (s->pol != -1)
-    d->pol = s->pol;
-  if (s->diseqc != -1)
-    d->diseqc = s->diseqc;
+	LOG
+		("copy_dvb_param start -> src=%d, fe=%d, freq=%d, sr=%d, pol=%c, ro=%d, msys=%d, mtype=%d, pltf=%d, bw=%d, inv=%d, pids=%s, apids=%s, dpids=%s",
+		d->diseqc, d->fe, d->freq, d->sr, d->pol, d->ro, d->sys, d->mtype,
+		d->plts, d->bw, d->inversion, d->pids ? d->pids : "NULL",
+		d->apids ? d->apids : "NULL", d->dpids ? d->dpids : "NULL");
+	if (s->sys != -1)
+		d->sys = s->sys;
+	if (s->freq != -1)
+		d->freq = s->freq;
+	if (s->inversion != -1)
+		d->inversion = s->inversion;
+	if (s->mod != -1)
+		d->mod = s->mod;
+	if (s->hprate != -1)
+		d->hprate = s->hprate;
+	if (s->tmode != -1)
+		d->tmode = s->tmode;
+	if (s->gi != -1)
+		d->gi = s->gi;
+	if (s->bw != -1)
+		d->bw = s->bw;
+	if (s->sm != -1)
+		d->sm = s->sm;
+	if (s->t2id != -1)
+		d->t2id = s->t2id;
+	if (s->fe != -1)
+		d->fe = s->fe;
+	if (s->ro != -1)
+		d->ro = s->ro;
+	if (s->mtype != -1)
+		d->mtype = s->mtype;
+	if (s->plts != -1)
+		d->plts = s->plts;
+	if (s->fec != -1)
+		d->fec = s->fec;
+	if (s->sr != -1)
+		d->sr = s->sr;
+	if (s->pol != -1)
+		d->pol = s->pol;
+	if (s->diseqc != -1)
+		d->diseqc = s->diseqc;
 
-//      if(s->apids)
-  d->apids = s->apids;
-//      if(s->pids)
-  d->pids = s->pids;
-//      if(s->dpids)
-  d->dpids = s->dpids;
+	//      if(s->apids)
+	d->apids = s->apids;
+	//      if(s->pids)
+	d->pids = s->pids;
+	//      if(s->dpids)
+	d->dpids = s->dpids;
 
-  LOG
-    ("copy_dvb_parameters -> src=%d, fe=%d, freq=%d, sr=%d, pol=%c, ro=%d, msys=%d, mtype=%d, pltf=%d, bw=%d, inv=%d, pids=%s, apids=%s, dpids=%s",
-     d->diseqc, d->fe, d->freq, d->sr, d->pol, d->ro, d->sys, d->mtype,
-     d->plts, d->bw, d->inversion, d->pids ? d->pids : "NULL",
-     d->apids ? d->apids : "NULL", d->dpids ? d->dpids : "NULL");
+	LOG
+		("copy_dvb_parameters -> src=%d, fe=%d, freq=%d, sr=%d, pol=%c, ro=%d, msys=%d, mtype=%d, pltf=%d, bw=%d, inv=%d, pids=%s, apids=%s, dpids=%s",
+		d->diseqc, d->fe, d->freq, d->sr, d->pol, d->ro, d->sys, d->mtype,
+		d->plts, d->bw, d->inversion, d->pids ? d->pids : "NULL",
+		d->apids ? d->apids : "NULL", d->dpids ? d->dpids : "NULL");
 }
 
 
 void
 get_signal (int fd, fe_status_t * status, uint32_t * ber, uint16_t * strength,
-	    uint16_t * snr)
+uint16_t * snr)
 {
-  float f = 240 / 1450;		// transform the 0..1450 in range in 0..240 - guess based on the data from my DVBS tunner
+	float f = 240 / 1450;		 // transform the 0..1450 in range in 0..240 - guess based on the data from my DVBS tunner
 
-  *status = *ber = *snr = *strength = 0;
-  struct dvb_frontend_event ev;
+	*status = *ber = *snr = *strength = 0;
+	struct dvb_frontend_event ev;
 
-  if (ioctl (fd, FE_READ_STATUS, status) < 0)
-    {
-      LOG ("ioctl FE_READ_STATUS failed (%s)", strerror (errno));
-	  *status = -1;
-      return;
-    }
-  *status = (*status & FE_HAS_LOCK) ? 1 : 0;
-  if (*status)
-    {
-      if (ioctl (fd, FE_READ_BER, ber) < 0)
-	LOG ("ioctl FE_READ_BER failed (%s)", strerror (errno));
+	if (ioctl (fd, FE_READ_STATUS, status) < 0)
+	{
+		LOG ("ioctl FE_READ_STATUS failed (%s)", strerror (errno));
+		*status = -1;
+		return;
+	}
+	*status = (*status & FE_HAS_LOCK) ? 1 : 0;
+	if (*status)
+	{
+		if (ioctl (fd, FE_READ_BER, ber) < 0)
+			LOG ("ioctl FE_READ_BER failed (%s)", strerror (errno));
 
-      if (ioctl (fd, FE_READ_SIGNAL_STRENGTH, strength) < 0)
-	LOG ("ioctl FE_READ_SIGNAL_STRENGTH failed (%s)", strerror (errno));
+		if (ioctl (fd, FE_READ_SIGNAL_STRENGTH, strength) < 0)
+			LOG ("ioctl FE_READ_SIGNAL_STRENGTH failed (%s)", strerror (errno));
 
-      if (ioctl (fd, FE_READ_SNR, snr) < 0)
-	LOG ("ioctl FE_READ_SNR failed (%s)", strerror (errno));
-    }
-//      *ber = (uint16_t )(*ber * f); 
-  *strength = (uint16_t) (*strength * f);
-//      *snr = (uint16_t )(*snr * f); 
+		if (ioctl (fd, FE_READ_SNR, snr) < 0)
+			LOG ("ioctl FE_READ_SNR failed (%s)", strerror (errno));
+	}
+	//      *ber = (uint16_t )(*ber * f);
+	*strength = (uint16_t) (*strength * f);
+	//      *snr = (uint16_t )(*snr * f);
 }

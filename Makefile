@@ -19,7 +19,4 @@ dvb.o: dvb.c dvb.h
 adapter.o: adapter.c adapter.h
 	$(CC) $(CFLAGS) -c -o adapter.o adapter.c
 
-ssh:	minisatip	
-	scp *c *h root@16.179.162.52:/jail/Users/cata/scripts/minisatip/
-	ssh root@16.179.162.52 "(cd /jail/Users/cata/scripts/minisatip/;export STAGING_DIR=.;make all)"
 all: minisatip
