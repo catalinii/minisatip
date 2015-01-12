@@ -41,5 +41,5 @@ Example of Usage:
 	
 	minisatip -m 001122334455 
 	
-	- As long as you want to use the channels on the same frequency, you can use -a or -t parameter to tell the satipclient to report multiple tunners so you can record multiple channels from the same frequency (using tvheadend for example)
+	- As long as you want to use the channels on the same frequency, you can use -a or -t parameter to report multiple tunners to the client so you can watch/record multiple channels from the same frequency (using tvheadend for example)
    	
