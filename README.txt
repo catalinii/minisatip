@@ -20,6 +20,7 @@ minisatip [-f] [-r remote_rtp_host] [-d discovery_host] [-w http_server[:port]] 
 		-m xx: simulate xx as local mac address, generates UUID based on mac
 		-c X: bandwidth capping for the output to the network (default: unlimited)
 		-b X: set the DVR buffer to X KB (default: XX KB)
+		-l increases the verbosity (you can use multiple -l), logging to stdout in foreground mode or in /tmp/log when a daemon
 
 Example of Usage:
 

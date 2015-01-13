@@ -59,6 +59,7 @@ usage ()
 		-m xx: simulate xx as local mac address, generates UUID based on mac\n\
 		-c X: bandwidth capping for the output to the network (default: unlimited)\n\
 		-b X: set the DVR buffer to X KB (default: %dKB)\n\
+		-l increases the verbosity (you can use multiple -l), logging to stdout in foreground mode or in /tmp/log when a daemon\n\
 		",
 		DVR_BUFFER / 1024);
 	exit (1);
