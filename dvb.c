@@ -1029,7 +1029,7 @@ set_pid (int hw, int ad, uint16_t i_pid)
 	sprintf (buf, "/dev/dvb/adapter%d/demux%d", hw, ad);
 	if ((fd = open (buf, O_RDWR | O_NONBLOCK)) < 0)
 	{
-		perror ("Could not set pid filter ");
+		LOG("Could not open demux device /dev/dvb/adapter%d/demux%d: %s ",hw, ad, strerror (errno));
 		return -1;
 	}
 
@@ -1057,7 +1057,7 @@ void
 del_filters (int fd, int pid)
 {
 	if (ioctl (fd, DMX_STOP) < 0)
-		perror ("DMX_STOP failed");
+		LOG ("DMX_STOP failed on PID %d FD %d: %s", pid, fd, strerror (errno))
 	else
 		LOG ("clearing filters on PID %d FD %d", pid, fd);
 	close (fd);

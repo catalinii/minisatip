@@ -340,8 +340,8 @@ update_pids (int aid)
 		if(dp && opts.log==2)dump_pids (aid);
 		dp = 0;
 		a[aid].pids[i].flags = 1;
-		a[aid].pids[i].fd =
-			set_pid (a[aid].pa, a[aid].fn, a[aid].pids[i].pid);
+		if (a[aid].pids[i].fd <= 0)
+			a[aid].pids[i].fd = set_pid (a[aid].pa, a[aid].fn, a[aid].pids[i].pid);
 		a[aid].pids[i].cnt = 0;
 	}
 	return 0;
