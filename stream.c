@@ -117,6 +117,7 @@ set_stream_parameters (int s_id, transponder * t)
 	copy_dvb_parameters (t, &sid->tp);
 }
 
+
 rtp_prop * pp;
 
 streams *
@@ -309,7 +310,7 @@ close_stream (int i)
 	  if(st[i].buf)free(st[i].buf);
 	  st[i].pids = st[i].apids = st[i].dpids = st[i].buf = NULL;
 	*/
-	LOG ("closed stream %d", i); 
+	LOG ("closed stream %d", i);
 }
 
 

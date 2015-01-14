@@ -85,7 +85,7 @@ getlocalip ()
 		LOG ("getlocalip: Error getting localip : %d . Error message : %s",
 			errno, strerror (errno));
 	}
-//	else LOG ("getlocalip: %s", localip);
+	//	else LOG ("getlocalip: %s", localip);
 
 	close (sock);
 	return localip;
@@ -553,7 +553,7 @@ get_current_timestamp (void)
 {
 	static char date_str[200];
 	time_t date;
- 	struct tm *t;		
+	struct tm *t;
 	char *day[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
 	char *month[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 	time (&date);

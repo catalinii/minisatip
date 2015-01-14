@@ -1058,8 +1058,8 @@ del_filters (int fd, int pid)
 {
 	if (ioctl (fd, DMX_STOP) < 0)
 		LOG ("DMX_STOP failed on PID %d FD %d: %s", pid, fd, strerror (errno))
-	else
-		LOG ("clearing filters on PID %d FD %d", pid, fd);
+			else
+			LOG ("clearing filters on PID %d FD %d", pid, fd);
 	close (fd);
 }
 
