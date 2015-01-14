@@ -3,6 +3,11 @@
 #include "stream.h"
 #include "socketworks.h"
 
+
+#define VERSION_BUILD "1"
+#define CC(a,b,c) #a b #c
+#define VERSION CC(0.1.,VERSION_BUILD,)
+
 void set_options (int argc, char *argv[]);
 
 #define RRTP_OPT 'r'
@@ -45,8 +50,8 @@ typedef struct struct_pchar_int
 	int v;
 } pchar_int;
 
-#define CC(a,b,c) #a b #c
-#define LOG(a,...) {opts.last_log=a;if(opts.log){int x=getTick();printf(CC([%d.%03d]: ,a,\n),x/1000,x%1000,##__VA_ARGS__);fflush(stdout);};}
+//#define LOG(a,...) {opts.last_log=a;if(opts.log){int x=getTick();printf(CC([%d.%03d]: ,a,\n),x/1000,x%1000,##__VA_ARGS__);fflush(stdout);};}
+#define LOG(a,...) {opts.last_log=a;if(opts.log){printf(CC([%s]:\x20,a,\n),get_current_timestamp(),##__VA_ARGS__);fflush(stdout);};}
 #define FAIL(a,...) {printf(a,##__VA_ARGS__);printf("\n");fflush(stdout);exit(1);}
 #define LOG_AND_RETURN(rc,a,...) {LOG(a,##__VA_ARGS__);return rc;}
 int ssdp_discovery (sockets * s);

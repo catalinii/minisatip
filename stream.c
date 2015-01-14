@@ -24,11 +24,10 @@
 #include "adapter.h"
 
 extern struct struct_opts opts;
-extern int rtp,
-rtpc;
+extern int rtp, rtpc;
 streams st[MAX_STREAMS];
+unsigned init_tick;
 
-int init_tick;
 uint32_t
 getTick ()
 {								 //ms
@@ -118,6 +117,7 @@ set_stream_parameters (int s_id, transponder * t)
 	copy_dvb_parameters (t, &sid->tp);
 }
 
+rtp_prop * pp;
 
 streams *
 setup_stream (char **str, sockets * s, rtp_prop * p)
@@ -127,7 +127,7 @@ setup_stream (char **str, sockets * s, rtp_prop * p)
 	int i,
 		stype;
 	transponder t;
-
+	pp = p;
 	init_hw ();
 	detect_dvb_parameters (str[1], &t);
 	LOG ("Setup stream %d parameters, sock_id %d, handle %d", s->sid,
@@ -142,7 +142,7 @@ setup_stream (char **str, sockets * s, rtp_prop * p)
 		if (s->type == TYPE_HTTP)
 			stype = s->sock;
 		if ((s_id = streams_add (-1, p, stype)) < 0)
-			return NULL;
+			LOG_AND_RETURN ( NULL, "Could not add a new stream");
 		init_dvb_parameters (&st[s_id].tp);
 		set_stream_parameters (s_id, &t);
 		s->sid = s_id;
@@ -243,7 +243,9 @@ streams_add (int a_id, rtp_prop * p, int https)
 		LOG ("The stream could not be added - most likely no free stream");
 		return -1;
 	}
-	st[i].rtp = udp_connect (p->dest, p->port, &st[i].sa);
+	if(p)
+		st[i].rtp = udp_connect (p->dest, p->port, &st[i].sa);
+	else LOG_AND_RETURN (-1,"rtp_prop is NULL");
 	if (st[i].rtp == -1)
 		LOG_AND_RETURN (-1,
 			"Streams_add failed for stream %d: UDP connection to %s:%d failed",
@@ -254,6 +256,7 @@ streams_add (int a_id, rtp_prop * p, int https)
 	st[i].https = https;
 	st[i].do_play = 0;
 	st[i].iiov = 0;
+	st[i].len = 0;
 	st[i].wtime = st[i].rtcp_wtime = getTick ();
 								 // max 7 packets
 	st[i].total_len = 7 * DVB_FRAME;
@@ -269,13 +272,13 @@ streams_add (int a_id, rtp_prop * p, int https)
 	{
 		LOG ("memory allocation failed for stream %d\n", i);
 		if (st[i].pids)
-			free (st[i].pids);
+			free1 (st[i].pids);
 		if (st[i].apids)
-			free (st[i].apids);
+			free1 (st[i].apids);
 		if (st[i].dpids)
-			free (st[i].dpids);
+			free1 (st[i].dpids);
 		if (st[i].buf)
-			free (st[i].buf);
+			free1 (st[i].buf);
 		st[i].pids = st[i].apids = st[i].dpids = st[i].buf = NULL;
 		return -1;
 	}
@@ -294,7 +297,7 @@ close_stream (int i)
 	st[i].enabled = 0;
 	ad = st[i].adapter;
 	st[i].adapter = -1;
-	close (st[i].rtp);
+	if ( st[i].rtp > 0) close (st[i].rtp);
 	st[i].rtp = -1;
 	st[i].https = -1;
 	if (ad >= 0)
@@ -344,6 +347,7 @@ send_rtp (int sock, struct iovec *iov, int liov)
 {
 	struct iovec io[MAX_PACK + 2];
 
+	memset (&io, 0, sizeof(io));
 	rtp_h[3]++;
 	if (rtp_h[3] == 0)
 		rtp_h[2]++;
@@ -394,10 +398,10 @@ flush_streami (streams * sid, int ctime)
 		writev (sid->https, sid->iov, sid->iiov);
 	else
 		send_rtp (sid->rtp, sid->iov, sid->iiov);
+	bw += (sid->rtp >= 0) * 12 + sid->iiov * DVB_FRAME;
 	sid->iiov = 0;
 	sid->wtime = ctime;
 	sid->len = 0;
-	bw += (sid->rtp >= 0) * 12 + DVB_FRAME * 7;
 }
 
 
@@ -441,7 +445,7 @@ read_dmx (sockets * s)
 	if (cnt > 0 && cnt % 100 == 0)
 		LOG ("Reading max size for the last %d buffers", cnt);
 								 // we have just 1 stream, do not check the pids, send everything to the destination
-	if (ad->sid_cnt == 1 && ad->master_sid >= 0 && opts.log!=2)
+	if (ad->sid_cnt == 1 && ad->master_sid >= 0 && opts.log < 2)
 	{
 		sid = &st[ad->master_sid];
 		if (sid->enabled != 1)
@@ -477,7 +481,9 @@ read_dmx (sockets * s)
 							p[i].cnt++;
 							sid->iov[sid->iiov].iov_base = b;
 							sid->iov[sid->iiov++].iov_len = DVB_FRAME;
-							if (sid->iiov == 7)
+							if (sid->iiov > 7)
+								LOG ("ERROR: possible writing outside of allocated space iiov > 7 for SID %d PID %d", s_id, pid);
+							if (sid->iiov >= 7)
 								flush_streami (sid, s->rtime);
 						}
 						else
@@ -495,6 +501,11 @@ read_dmx (sockets * s)
 			for (j = 0; j < sid->iiov; j++)
 				if (sid->iov[j].iov_base >= min && sid->iov[j].iov_base <= max)
 			{
+				if (sid->len + DVB_FRAME > STREAMS_BUFFER)
+				{
+					LOG ("ERROR: requested to write outside of stream's buffer for sid %d len %d iiov %d - flushing stream's buffer", i, sid->len, sid->iiov);
+					flush_streamb (sid, sid->buf, sid->len, s->rtime);
+				}
 				memcpy (&sid->buf[sid->len], sid->iov[j].iov_base,
 					DVB_FRAME);
 				sid->iov[j].iov_base = &sid->buf[sid->len];

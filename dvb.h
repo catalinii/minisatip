@@ -7,9 +7,6 @@
 #define LOF2 (10600*1000UL)
 #define LP_CODERATE_DEFAULT (0)
 
-#define SYSTEM_DVBS 1
-#define SYSTEM_DVBS2 2
-#define SYSTEM_DVBT 3
 typedef struct struct_transponder
 {
 	fe_delivery_system_t sys;

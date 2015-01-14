@@ -607,7 +607,7 @@ describe_adapter (int aid)
 	ad = &a[aid];
 	memset (dad, 0, sizeof (dad));
 	x = 0;
-	if (ad->status == 0 && ad->status_cnt++>2)
+	if (ad->status == 0 && ad->status_cnt++<8 && ad->status_cnt++>4)  // do just max 3 signal check 1s after tune
 	{
 		ts = getTick ();
 		get_signal (ad->fe, &ad->status, &ad->ber, &ad->strength, &ad->snr);

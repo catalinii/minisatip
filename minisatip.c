@@ -627,16 +627,12 @@ int becomeDaemon ();
 int
 main (int argc, char *argv[])
 {
-	int rtsp,
-		http,
-		si,
-		si1,
-		ssdp1;
-
+	int rtsp, http, si, si1, ssdp1;
 	set_signal_handler ();
 	set_options (argc, argv);
 	if (opts.daemon)
 		becomeDaemon ();
+	printf("Starting minisatip version %s\n",VERSION);
 	if ((ssdp = udp_bind (NULL, 1900)) < 1)
 		FAIL ("SSDP: Could not bind on udp port 1900");
 	if ((ssdp1 = udp_bind ("239.255.255.250", 1900)) < 1)
@@ -778,9 +774,7 @@ becomeDaemon ()
 void *
 mymalloc (int a, char *f, int l)
 {
-	void *x;
-
-	x = malloc (a);
+	void *x = malloc (a);
 	printf ("%s:%d allocation_wrapper malloc returns %X\n", f, l,
 		(unsigned int) x);
 	fflush (stdout);
