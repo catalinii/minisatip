@@ -259,7 +259,9 @@ set_signal_handler ()
 	sig_action.sa_flags = SA_SIGINFO | SA_ONSTACK;
 
 	//    if (sigaction(SIGBUS, &sig_action, NULL) != 0) { err(1, "sigaction"); }
+	#ifndef __mips__
 	if (sigaction(SIGSEGV, &sig_action, NULL) != 0) { err(1, "sigaction"); }
+	#endif
 	//    if (sigaction(SIGFPE,  &sig_action, NULL) != 0) { err(1, "sigaction"); }
 	if (sigaction (SIGINT, &sig_action, NULL) != 0)
 	{
@@ -715,7 +717,7 @@ extern int run_loop;
 void
 posix_signal_handler (int sig, siginfo_t * siginfo, ucontext_t * ctx)
 {
-	int sp, ip;
+	int sp = 0, ip = 0;
 
 	if (sig == SIGINT)
 	{
@@ -725,12 +727,13 @@ posix_signal_handler (int sig, siginfo_t * siginfo, ucontext_t * ctx)
 	#ifdef __mips__
 	sp = ctx->uc_mcontext.gregs[29];
 	ip = ctx->uc_mcontext.pc;
-
+	#endif
 	printf
 		("RECEIVED SIGNAL %d - SP=%lX IP=%lX main=%lX read_dmx=%lX clock_gettime=%lX\n",
 		sig, (long unsigned int) sp, (long unsigned int) ip,
 		(long unsigned int) main, (long unsigned int) read_dmx,
 		(long unsigned int) clock_gettime);
+	#ifdef __mips__
 	hexDump ("Stack dump: ", (void *)sp, 128);
 	#endif
 	print_trace();
