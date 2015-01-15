@@ -196,6 +196,8 @@ set_options (int argc, char *argv[])
 }
 
 
+#ifdef __mips__
+
 void
 hexDump (char *desc, void *addr, int len)
 {
@@ -243,7 +245,7 @@ hexDump (char *desc, void *addr, int len)
 	// And print the final ASCII bit.
 	printf ("  %s\n", buff);
 }
-
+#endif
 
 void posix_signal_handler (int sig, siginfo_t * siginfo, ucontext_t * ctx);
 void
@@ -257,7 +259,7 @@ set_signal_handler ()
 	sig_action.sa_flags = SA_SIGINFO | SA_ONSTACK;
 
 	//    if (sigaction(SIGBUS, &sig_action, NULL) != 0) { err(1, "sigaction"); }
-	//    if (sigaction(SIGSEGV, &sig_action, NULL) != 0) { err(1, "sigaction"); }
+	if (sigaction(SIGSEGV, &sig_action, NULL) != 0) { err(1, "sigaction"); }
 	//    if (sigaction(SIGFPE,  &sig_action, NULL) != 0) { err(1, "sigaction"); }
 	if (sigaction (SIGINT, &sig_action, NULL) != 0)
 	{
@@ -431,15 +433,15 @@ read_rtsp (sockets * s)
 		ra = inet_ntoa (sid->sa.sin_addr);
 		if (atoi (ra) < 239)
 			sprintf (buf,
-				"Transport: RTP/AVP;unicast;client_port=%d-%d;source=%s;server_port=%d-%d\r\nSession:%08x;timeout=%d\r\ncom.ses.streamID: %d",
+				"Transport: RTP/AVP;unicast;client_port=%d-%d;source=%s;server_port=%d-%d\r\nSession:%p;timeout=%d\r\ncom.ses.streamID: %d",
 				ntohs (sid->sa.sin_port), ntohs (sid->sa.sin_port) + 1,
-				opts.pub_host, opts.start_rtp, opts.start_rtp + 1, (int) sid,
+				opts.pub_host, opts.start_rtp, opts.start_rtp + 1, sid,
 				opts.timeout_sec / 1000, sid->sid + 1);
 		else
 			sprintf (buf,
-				"Transport: RTP/AVP;multicast;destination=%s;port=%d-%d\r\nSession:%08x;timeout=%d\r\ncom.ses.streamID: %d",
+				"Transport: RTP/AVP;multicast;destination=%s;port=%d-%d\r\nSession:%p;timeout=%d\r\ncom.ses.streamID: %d",
 				ra, ntohs (sid->sa.sin_port), ntohs (sid->sa.sin_port) + 1,
-				(int) sid, opts.timeout_sec / 1000, sid->sid + 1);
+				sid, opts.timeout_sec / 1000, sid->sid + 1);
 
 		http_response (s->sock, "RTSP", 200, buf, NULL, cseq);
 	}
@@ -624,11 +626,13 @@ new_http (sockets * s)
 
 
 int becomeDaemon ();
+char pn[200];
 
 int
 main (int argc, char *argv[])
 {
 	int rtsp, http, si, si1, ssdp1;
+	strncpy(pn,argv[0],sizeof(pn));
 	set_signal_handler ();
 	set_options (argc, argv);
 	if (opts.daemon)
@@ -673,45 +677,63 @@ main (int argc, char *argv[])
 }
 
 
-#ifdef __mips__
-#endif
+int addr2line(char const * const program_name, void const * const addr)
+{
+	char addr2line_cmd[512] = {0};
+
+	sprintf(addr2line_cmd,"addr2line -f -p -e %.256s %p", program_name, addr);
+	return system(addr2line_cmd);
+}
+
+
+void
+print_trace (void)
+{
+	void *array[10];
+	size_t size;
+	char **strings;
+	size_t i;
+	#ifndef __mips__
+
+	size = backtrace (array, 10);
+
+	printf ("Obtained %zd stack frames.\n", size);
+
+	for (i = 0; i < size; i++)
+	{
+		printf("%p : ", array[i]);
+		fflush(stdout);
+		if(addr2line(pn, array[i])) printf("\n");
+	}
+	#else
+	printf( " No backtrace defined\n");
+	#endif
+}
+
+
 extern int run_loop;
 void
 posix_signal_handler (int sig, siginfo_t * siginfo, ucontext_t * ctx)
 {
-	char *sp,
-		*ip;
+	int sp, ip;
 
 	if (sig == SIGINT)
 	{
 		run_loop = 0;
 		return;
 	}
-	#ifdef REG_RSP
-	sp = (char *) ctx->uc_mcontext.gregs[REG_RSP];
-	ip = (char *) ctx->uc_mcontext.gregs[REG_RIP];
-	#elif REG_ESP
-	sp = (char *) ctx->uc_mcontext.gregs[REG_ESP];
-	ip = (char *) ctx->uc_mcontext.gregs[REG_EIP];
-	#elif __mips__
-	sp = (char *) ctx->uc_mcontext.gregs[29];
-	ip = (char *) ctx->uc_mcontext.pc;
-
-	#elif __arm__
-	sp = (char *) ctx->uc_mcontext.arm_sp;
-	ip = (char *) ctx->uc_mcontext.arm_pc;
-	#else
-	#warning No arch defined
-	printf ("\nRECEIVED SIGNAL %d\n", sig);
-	exit (1);
-	#endif
+	#ifdef __mips__
+	sp = ctx->uc_mcontext.gregs[29];
+	ip = ctx->uc_mcontext.pc;
 
 	printf
 		("RECEIVED SIGNAL %d - SP=%lX IP=%lX main=%lX read_dmx=%lX clock_gettime=%lX\n",
 		sig, (long unsigned int) sp, (long unsigned int) ip,
 		(long unsigned int) main, (long unsigned int) read_dmx,
 		(long unsigned int) clock_gettime);
-	hexDump ("Stack dump: ", sp, 128);
+	hexDump ("Stack dump: ", (void *)sp, 128);
+	#endif
+	print_trace();
 	exit (1);
 }
 
@@ -755,13 +777,13 @@ becomeDaemon ()
 		close (fd);
 
 	close (STDIN_FILENO);		 /* Reopen standard fd's to /dev/null */
-	chdir ("/tmp");				 /* Change to root directory */
+	//	chdir ("/tmp");				 /* Change to root directory */
 
 	fd = open ("/dev/null", O_RDWR);
 
 	if (fd != STDIN_FILENO)		 /* 'fd' should be 0 */
 		return -1;
-	fd = open ("log", O_RDWR | O_CREAT);
+	fd = open ("/tmp/log", O_RDWR | O_CREAT);
 
 	if (fd != STDOUT_FILENO)	 /* 'fd' should be 1 */
 		return -1;

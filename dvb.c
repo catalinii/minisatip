@@ -513,13 +513,13 @@ rotor_command (int frontend_fd, int cmd, int n1, int n2, int n3)
 		},
 		{						 //5 Drive Motor East nn steps
 			{
-				0xe0, 0x31, 0x68, 256 - n1, 0x00, 0x00
+				0xe0, 0x31, 0x68,256-n1,0x00, 0x00
 			}
 			, 4
 		},
 		{						 //6 Drive Motor West nn steps
 			{
-				0xe0, 0x31, 0x69, 256 - n1, 0x00, 0x00
+				0xe0, 0x31, 0x69,256-n1,0x00, 0x00
 			}
 			, 4
 		},
@@ -566,6 +566,7 @@ rotor_command (int frontend_fd, int cmd, int n1, int n2, int n3)
 			, 4
 		}
 	};
+
 	int i;
 
 	for (i = 0; i < DISEQC_X; ++i)
