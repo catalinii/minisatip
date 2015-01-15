@@ -1118,13 +1118,6 @@ detect_dvb_parameters (char *s, transponder * tp)
 	int la,
 		i;
 
-	while (*s > 0 && *s != '?')
-		s++;
-	if (*s == 0)
-		LOG_AND_RETURN (0, "no ? found in URL");
-	*s++;
-	LOG ("detect_dvb_parameters (S)-> %s", s);
-	la = split (arg, s, 20, '&');
 	tp->sys = -1;
 	tp->freq = -1;
 	tp->inversion = -1;
@@ -1143,14 +1136,21 @@ detect_dvb_parameters (char *s, transponder * tp)
 	tp->sr = -1;
 	tp->pol = -1;
 	tp->diseqc = -1;
-
 	tp->pids = tp->apids = tp->dpids = NULL;
+
+	while (*s > 0 && *s != '?')
+		s++;
+
+	if (*s == 0)
+		LOG_AND_RETURN (0, "no ? found in URL");
+
+	*s++;
+	LOG ("detect_dvb_parameters (S)-> %s", s);
+	la = split (arg, s, 20, '&');
 
 	pchar_int mod[] =
 	{
-		{
-			"dvbs2", SYS_DVBS2
-		}
+		{"dvbs2", SYS_DVBS2}
 		, {"dvbs", SYS_DVBS}
 		, {"dvbt2", SYS_DVBT2}
 		, {"dvbt", SYS_DVBT}
@@ -1158,18 +1158,14 @@ detect_dvb_parameters (char *s, transponder * tp)
 	};
 	pchar_int ro[] =
 	{
-		{
-			"0.35", ROLLOFF_35
-		}
+		{"0.35", ROLLOFF_35}
 		, {"0.25", ROLLOFF_25}
 		, {"0.20", ROLLOFF_20}
 		, {NULL, 0}
 	};
 	pchar_int mtype[] =
 	{
-		{
-			"qpsk", QPSK
-		}
+		{"qpsk", QPSK}
 		, {"8psk", PSK_8}
 		, {"16qam", QAM_16}
 		, {"32qam", QAM_32}
@@ -1179,9 +1175,7 @@ detect_dvb_parameters (char *s, transponder * tp)
 	};
 	pchar_int fec[] =
 	{
-		{
-			"12", FEC_1_2
-		}
+		{"12", FEC_1_2}
 		, {"23", FEC_2_3}
 		, {"34", FEC_3_4}
 		, {"45", FEC_4_5}
@@ -1195,17 +1189,13 @@ detect_dvb_parameters (char *s, transponder * tp)
 	};
 	pchar_int plts[] =
 	{
-		{
-			"on", PILOT_ON
-		}
+		{"on", PILOT_ON}
 		, {"off", PILOT_OFF}
 		, {NULL, 0}
 	};
 	pchar_int gi[] =
 	{
-		{
-			"14", GUARD_INTERVAL_1_4
-		}
+		{"14", GUARD_INTERVAL_1_4}
 		, {"18", GUARD_INTERVAL_1_8}
 		, {"116", GUARD_INTERVAL_1_16}
 		, {"132", GUARD_INTERVAL_1_32}
@@ -1216,9 +1206,7 @@ detect_dvb_parameters (char *s, transponder * tp)
 	};
 	pchar_int tmode[] =
 	{
-		{
-			"2k", TRANSMISSION_MODE_2K
-		}
+		{"2k", TRANSMISSION_MODE_2K}
 		, {"4k", TRANSMISSION_MODE_4K}
 		, {"8k", TRANSMISSION_MODE_8K}
 		, {"1k", TRANSMISSION_MODE_1K}

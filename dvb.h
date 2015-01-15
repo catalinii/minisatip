@@ -1,6 +1,17 @@
 #ifndef DVB_H
 #define DVB_H
 #include <linux/dvb/frontend.h>
+#include <linux/dvb/version.h>
+
+#define DVBAPIVERSION (DVB_API_VERSION << 8 | DVB_API_VERSION_MINOR)
+#if DVBAPIVERSION < 0x0500
+#error minisatip requires Linux DVB driver API version 5.0 or higher!
+#endif
+
+#if DVBAPIVERSION < 0x0505
+#define DTV_ENUM_DELSYS 44
+#endif
+
 
 #define SLOF (11700*1000UL)
 #define LOF1 (9750*1000UL)

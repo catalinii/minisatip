@@ -37,6 +37,7 @@
 #include "socketworks.h"
 #include "stream.h"
 #include "adapter.h"
+#include "dvb.h"
 
 struct struct_opts opts;
 int rtp,
@@ -632,7 +633,7 @@ main (int argc, char *argv[])
 	set_options (argc, argv);
 	if (opts.daemon)
 		becomeDaemon ();
-	printf("Starting minisatip version %s\n",VERSION);
+	printf("Starting minisatip version %s, dvbapi version: %04X\n",VERSION, DVBAPIVERSION);
 	if ((ssdp = udp_bind (NULL, 1900)) < 1)
 		FAIL ("SSDP: Could not bind on udp port 1900");
 	if ((ssdp1 = udp_bind ("239.255.255.250", 1900)) < 1)

@@ -118,8 +118,6 @@ set_stream_parameters (int s_id, transponder * t)
 }
 
 
-rtp_prop * pp;
-
 streams *
 setup_stream (char **str, sockets * s, rtp_prop * p)
 {
@@ -128,7 +126,6 @@ setup_stream (char **str, sockets * s, rtp_prop * p)
 	int i,
 		stype;
 	transponder t;
-	pp = p;
 	init_hw ();
 	detect_dvb_parameters (str[1], &t);
 	LOG ("Setup stream %d parameters, sock_id %d, handle %d", s->sid,
