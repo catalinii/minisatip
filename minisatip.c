@@ -798,8 +798,7 @@ void *
 mymalloc (int a, char *f, int l)
 {
 	void *x = malloc (a);
-	printf ("%s:%d allocation_wrapper malloc returns %X\n", f, l,
-		(unsigned int) x);
+	printf ("%s:%d allocation_wrapper malloc returns %p\n", f, l, x);
 	fflush (stdout);
 	return x;
 }
@@ -808,8 +807,7 @@ mymalloc (int a, char *f, int l)
 void
 myfree (void *x, char *f, int l)
 {
-	printf ("%s:%d allocation_wrapper free called with argument %X", f, l,
-		(unsigned int) x);
+	printf ("%s:%d allocation_wrapper free called with argument %p", f, l, x);
 	fflush (stdout);
 	free (x);
 	puts (" - done free");
