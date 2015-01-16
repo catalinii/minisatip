@@ -20,10 +20,10 @@ typedef struct struct_pid
 typedef struct struct_adapter
 {
 	int enabled;
-	int fe,
-		dvr;
-	int pa,
-		fn;						 // physical adapter, physical frontend number
+	int fe,	dvr;
+	int pa, fn;		
+		// physical adapter, physical frontend number
+	fe_delivery_system_t card_sys; 
 	transponder tp;
 	pid pids[MAX_PIDS];
 	int master_sid;				 // first SID, the one that controls the tunning

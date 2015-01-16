@@ -119,7 +119,7 @@ init_hw ()
 		init_dvb_parameters (&a[i].tp);
 		mark_pids_deleted (i, -1, NULL);
 		update_pids (i);
-		a[i].tp.sys = dvb_delsys (a[i].fe);
+		a[i].card_sys = a[i].tp.sys = dvb_delsys (a[i].fe);
 		a[i].master_sid = -1;
 		a[i].sid_cnt = 0;
 		a[i].sock =

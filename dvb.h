@@ -10,6 +10,7 @@
 
 #if DVBAPIVERSION < 0x0505
 #define DTV_ENUM_DELSYS 44
+#define SYS_DVBC_ANNEX_A       SYS_DVBC_ANNEX_AC
 #endif
 
 

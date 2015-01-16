@@ -62,7 +62,7 @@ static const char *fe_rolloff_tab[] =
 static const char *fe_delivery_system_tab[] =
 {
 	"SYS_UNDEFINED",
-	"SYS_DVBC_ANNEX_AC",
+	"SYS_DVBC_ANNEX_A",
 	"SYS_DVBC_ANNEX_B",
 	"SYS_DVBT",
 	"SYS_DSS",
@@ -78,7 +78,10 @@ static const char *fe_delivery_system_tab[] =
 	"SYS_CMMB",
 	"SYS_DAB",
 	"SYS_DVBT2",
-	"SYS_TURBO"
+	"SYS_TURBO",
+	"SYS_DVBC_ANNEX_C",
+	"UNKNOWN",
+	"UNKNOWN"
 };
 
 static const char *fe_spectral_inversion_tab[] =
@@ -497,6 +500,20 @@ tune_it_s2 (int fd_frontend, transponder * tp)
 		.num = sizeof (dvbt_cmdargs) / sizeof (struct dtv_property),
 		.props = dvbt_cmdargs
 	};
+	
+	static struct dtv_property dvbc_cmdargs[] = {
+    { .cmd = DTV_DELIVERY_SYSTEM, .u.data = SYS_DVBC_ANNEX_A },
+    { .cmd = DTV_FREQUENCY,       .u.data = 0 },
+    { .cmd = DTV_MODULATION,      .u.data = QAM_AUTO },
+    { .cmd = DTV_INVERSION,       .u.data = INVERSION_AUTO },
+    { .cmd = DTV_SYMBOL_RATE,     .u.data = 0 },
+    { .cmd = DTV_TUNE },
+	};
+	
+	static struct dtv_properties dvbc_cmdseq = {
+    .num = sizeof(dvbc_cmdargs)/sizeof(struct dtv_property),
+    .props = dvbc_cmdargs
+	};
 	//    while(1)  {
 	//      if (ioctl(fd_frontend, FE_GET_EVENT, &event) < 0)       //EMPTY THE EVENT QUEUE
 	//        break;
@@ -582,10 +599,9 @@ tune_it_s2 (int fd_frontend, transponder * tp)
 				tp->mtype = QAM_AUTO;
 			if (tp->sys == SYS_DVBT2 && tp->mtype == 0)
 				tp->mtype = QAM_AUTO;
-			if_freq = freq;
 			p = &dvbt_cmdseq;
 			p->props[DELSYS].u.data = tp->sys;
-			p->props[FREQUENCY].u.data = if_freq * 1000;
+			p->props[FREQUENCY].u.data = freq * 1000;
 			p->props[INVERSION].u.data = tp->inversion;
 			p->props[MODULATION].u.data = tp->mtype;
 			p->props[BANDWIDTH].u.data = tp->bw;
@@ -594,6 +610,17 @@ tune_it_s2 (int fd_frontend, transponder * tp)
 			p->props[GUARD].u.data = tp->gi;
 			p->props[TRANSMISSION].u.data = tp->tmode;
 			p->props[HIERARCHY].u.data = HIERARCHY_AUTO;
+			break;
+		case SYS_DVBC_ANNEX_A:
+			p = &dvbc_cmdseq;
+			if(tp->mtype == 0)
+				tp->mtype = QAM_AUTO;
+			p->props[DELSYS].u.data = tp->sys;
+			p->props[FREQUENCY].u.data = freq * 1000;
+			p->props[INVERSION].u.data = tp->inversion;
+			p->props[SYMBOL_RATE].u.data = tp->sr;
+			p->props[MODULATION].u.data = tp->mtype;
+			
 			break;
 
 	}
@@ -610,10 +637,8 @@ tune_it_s2 (int fd_frontend, transponder * tp)
 			tp->freq, if_freq, tp->sr, fe_code_rate_tab[tp->fec],
 			fe_delivery_system_tab[tp->sys], fe_modulation_tab[tp->mtype],
 			fe_rolloff_tab[tp->ro], fe_pilot_tab[tp->plts])
-			else
-		if (tp->sys == SYS_DVBT || tp->sys == SYS_DVBT2)
-			LOG
-					("tunning to %d delsys: %s bw:%d inversion:%s mod:%s fec:%s fec_lp:%s guard:%s transmission: %s",
+	else if (tp->sys == SYS_DVBT || tp->sys == SYS_DVBT2)
+			LOG ("tunning to %d delsys: %s bw:%d inversion:%s mod:%s fec:%s fec_lp:%s guard:%s transmission: %s",
 					p->props[FREQUENCY].u.data,
 					fe_delivery_system_tab[p->props[DELSYS].u.data],
 					p->props[BANDWIDTH].u.data,
@@ -622,71 +647,19 @@ tune_it_s2 (int fd_frontend, transponder * tp)
 					fe_code_rate_tab[p->props[FEC_INNER].u.data],
 					fe_code_rate_tab[p->props[FEC_LP].u.data],
 					fe_guard_interval_tab[p->props[GUARD].u.data],
-					fe_transmit_mode_tab[p->props[TRANSMISSION].u.data]);
-	//      LOG("Tunning parameters: %d %d %d %d %d %d %d %d %d",p->props[0].u.data,p->props[1].u.data,p->props[2].u.data,p->props[3].u.data,p->props[4].u.data,p->props[5].u.data,p->props[6].u.data,p->props[7].u.data,p->props[8].u.data);
+					fe_transmit_mode_tab[p->props[TRANSMISSION].u.data])
+	else if (tp->sys == SYS_DVBC_ANNEX_A) 
+			LOG("tunning to %d sr:%d specinv:%s delsys:%s mod:%s", p->props[FREQUENCY].u.data, tp->sr, fe_spectral_inversion_tab[p->props[INVERSION].u.data], fe_delivery_system_tab[p->props[DELSYS].u.data], fe_modulation_tab[p->props[MODULATION].u.data]);
+
 	if ((ioctl (fd_frontend, FE_SET_PROPERTY, p)) == -1)
 		if (ioctl (fd_frontend, FE_SET_PROPERTY, p) == -1)
-	{
-		perror ("FE_SET_PROPERTY TUNE failed");
-		LOG ("set property failed");
-		return -1;
-	}
-	// wait for zero status indicating start of tunning
-	//    do {
-	//        ioctl(fd_frontend, FE_GET_EVENT, &ev);
-	//    }
-	//    while(ev.status != 0);
-	// Wait for tunning
+		{
+			perror ("FE_SET_PROPERTY TUNE failed");
+			LOG ("set property failed");
+			return -1;
+		}
+
 	return 0;
-	for (i = 0; i < 10; i++)
-	{
-		usleep (200000);
-
-		if (ioctl (fd_frontend, FE_GET_EVENT, &ev) == -1)
-		{
-			// no answer, consider it as not locked situation
-			ev.status = 0;
-		}
-
-		// Tuning succeed
-		if (ev.status & FE_HAS_LOCK)
-		{
-			struct dtv_property p[] =
-			{
-				{.cmd = DTV_DELIVERY_SYSTEM},
-				{.cmd = DTV_MODULATION},
-				{.cmd = DTV_INNER_FEC},
-				{.cmd = DTV_INVERSION},
-				{.cmd = DTV_ROLLOFF},
-			};
-
-			struct dtv_properties cmdseq =
-			{
-				.num = 5,
-				.props = p
-			};
-
-			// get the actual parameters from the driver for that channel
-			if ((ioctl (fd_frontend, FE_GET_PROPERTY, &cmdseq)) == -1)
-			{
-				perror ("FE_GET_PROPERTY failed");
-				//                return -1;
-			}
-			LOG ("%ld fe has lock", time (NULL) - tt);
-			#if 0
-			t->delivery_system = p[0].u.data;
-			t->modulation = p[1].u.data;
-			t->fec = p[2].u.data;
-			t->inversion = p[3].u.data;
-			t->rolloff = p[4].u.data;
-			#endif
-
-			return 0;
-		}
-	}
-
-	LOG (">>> tuning failed!!!\n");
-	return -1;
 }
 
 
@@ -749,6 +722,7 @@ dvb_delsys (int fd)
 		.num = sizeof (enum_cmdargs) / sizeof (struct dtv_property),
 		.props = enum_cmdargs
 	};
+	
 	if (ioctl (fd, FE_GET_PROPERTY, &enum_cmdseq) < 0)
 	{
 		LOG ("unable to query frontend");
@@ -767,10 +741,13 @@ dvb_delsys (int fd)
 			return SYS_DVBS2;
 		if (enum_cmdargs[0].u.buffer.data[i] == SYS_DVBT2)
 			return SYS_DVBT2;
+		if (enum_cmdargs[0].u.buffer.data[i] == SYS_DVBC_ANNEX_A)
+			return SYS_DVBC_ANNEX_A;
+			
 	}
 	int rv = enum_cmdargs[0].u.buffer.data[0];
 
-	LOG ("returning default from dvb_delsys => %d (count %d)", rv, nsys);
+	LOG ("returning default from dvb_delsys => %s (count %d)", fe_delivery_system_tab[rv], nsys);
 	return (fe_delivery_system_t) rv;
 
 }
@@ -824,6 +801,7 @@ detect_dvb_parameters (char *s, transponder * tp)
 		, {"dvbs", SYS_DVBS}
 		, {"dvbt2", SYS_DVBT2}
 		, {"dvbt", SYS_DVBT}
+		, {"dvbc", SYS_DVBC_ANNEX_A}
 		, {NULL, 0}
 	};
 	pchar_int ro[] =
@@ -840,6 +818,7 @@ detect_dvb_parameters (char *s, transponder * tp)
 		, {"16qam", QAM_16}
 		, {"32qam", QAM_32}
 		, {"64qam", QAM_64}
+		, {"128qam", QAM_128}
 		, {"256qam", QAM_256}
 		, {NULL, 0}
 	};
@@ -913,6 +892,8 @@ detect_dvb_parameters (char *s, transponder * tp)
 			tp->tmode = map_int (arg[i] + 6, tmode);
 		if (strncmp ("bw=", arg[i], 3) == 0)
 			tp->bw = map_float (arg[i] + 3, 1000000);
+		if (strncmp ("specinv=", arg[i], 8) == 0)
+			tp->inversion = map_int (arg[i] + 8, NULL);
 		if (strncmp ("pids=", arg[i], 5) == 0)
 			tp->pids = arg[i] + 5;
 		if (strncmp ("addpids=", arg[i], 6) == 0)
