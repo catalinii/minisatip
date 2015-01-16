@@ -721,9 +721,9 @@ main (int argc, char *argv[])
 		(socket_action) ssdp_discovery);
 	if (si < 0 || si1 < 0)
 		FAIL ("sockets_add failed for ssdp");
-	s[si].rtime = 0;
-	s[si].close_sec = 1800 * 1000;
 
+	s[si].close_sec = 1800 * 1000;
+	s[si].rtime = -s[si].close_sec;
 	if (0 >
 		sockets_add (rtsp, NULL, -1, TYPE_SERVER, (socket_action) new_rtsp,
 		NULL, (socket_action) close_http))
