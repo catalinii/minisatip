@@ -468,6 +468,7 @@ read_rtsp (sockets * s)
 	return 0;
 }
 
+#define REPLY_AND_RETURN(c) {http_response (s->sock, "HTTP", c, NULL, NULL, 0, 0);return 0;}
 
 char uuid[100];
 int bootid, uuidi;
@@ -541,10 +542,7 @@ read_http (sockets * s)
 	la = split (arg, s->buf, 50, ' ');
 	//      LOG("args: %s -> %s -> %s",arg[0],arg[1],arg[2]);
 	if (strncmp (arg[0], "GET", 3) != 0)
-	{
-		http_response (s->sock, "HTTP", 503, NULL, NULL, 0, 0);
-		return 0;
-	}
+		REPLY_AND_RETURN(503);
 	if (uuidi == 0)
 		ssdp_discovery (s);
 
@@ -563,15 +561,15 @@ read_http (sockets * s)
 	if (strncmp (arg[1], "/icons/", 7) == 0)
 	{
 		char *ctype = NULL;
-		int nl = sizeof(buf);		
+		int nl = sizeof(buf);
+		if(strlen (arg[1]) != 13 )
+			REPLY_AND_RETURN(404);		
 		if( arg[1][strlen(arg[1])-2] == 'n' )
 			ctype = "Content-type: image/png";
 		else if (arg[1][strlen(arg[1])-2] == 'p')			
 			ctype = "Content-type: image/jpeg";
-		else {
-			http_response (s->sock, "HTTP", 503, NULL, NULL, 0, 0);
-			return 0;
-		}
+		else REPLY_AND_RETURN(404); 
+		
 		readfile(arg[1], buf, &nl);
 		if(nl == 0)
 			http_response (s->sock, "HTTP", 404, NULL, NULL, 0, 0);
@@ -910,6 +908,7 @@ int readfile(char *fn,char *buf,int *len)
 	{
 		strcpy(ffn, path[i]);
 		strncat(ffn, fn, sizeof(ffn)-strlen(path[i])-1);
+		ffn[sizeof(ffn)-1] = 0;
 		if((fd = open(ffn,O_RDONLY))<0)
 			continue;
 		
