@@ -402,8 +402,10 @@ select_and_execute ()
 						char *err_str;
 						char *types[] =
 							{ "udp", "tcp", "server", "http", "rtsp", "dvr" };
-						if (rlen == 0)
+						if (rlen == 0){
+							err = 0;
 							err_str = "Success";
+						}
 						else if (err == EOVERFLOW)
 							err_str = "EOVERFLOW";
 						else
@@ -412,10 +414,10 @@ select_and_execute ()
 							("select_and_execute[%d]: %s on socket %d (sid:%d) from %s:%d - type %s failure %d:%s",
 							i, rlen < 0 ? "Error" : "Close", ss->sock, ss->sid,
 							inet_ntoa (ss->sa.sin_addr), ntohs (ss->sa.sin_port),
-							types[ss->type], rlen == 0 ? rlen : err, err_str);
+							types[ss->type], err, err_str);
 						if (err == EOVERFLOW)
 							continue;
-						if (rlen < 0 && err == EAGAIN)
+						if (err == EAGAIN)
 						{
 							ss->err++;
 							if (ss->err < 10)
@@ -425,6 +427,7 @@ select_and_execute ()
 						LOG ("Delete socket %d done: sid %d", i, ss->sid);
 						continue;
 					}
+					
 					ss->err = 0;
 					ss->rtime = c_time;
 					if (ss->type == TYPE_SERVER)
