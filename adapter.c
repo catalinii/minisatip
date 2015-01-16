@@ -198,6 +198,20 @@ getTAdapters ()
 	return t;
 }
 
+int
+getCAdapters ()
+{
+	int i, c = 0;
+
+	if (opts.force_cadapter)
+		return opts.force_cadapter;
+	init_hw ();
+	for (i = 0; i < MAX_ADAPTERS; i++)
+		if (a[i].enabled && (a[i].tp.sys == SYS_DVBC_ANNEX_A))
+			c++;
+	return c;
+}
+
 
 void
 dump_adapters ()

@@ -55,8 +55,7 @@ usage ()
 		-p public_host: specify the host where this device listens for RTSP or HTTP\n \
 		-x port: port for listening on http\n\
 		-s port: start port for rtp connections\n\
-		-a x: simulate x DVB-S2 adapters on this box\n\
-		-t x: simulate x DVB-T2 adapters on this box\n\
+		-a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means autodetect)\n\
 		-m xx: simulate xx as local mac address, generates UUID based on mac\n\
 		-c X: bandwidth capping for the output to the network (default: unlimited)\n\
 		-b X: set the DVR buffer to X KB (default: %dKB)\n\
@@ -86,6 +85,7 @@ set_options (int argc, char *argv[])
 	opts.timeout_sec = 30000;
 	opts.force_sadapter = 0;
 	opts.force_tadapter = 0;
+	opts.force_cadapter = 0;
 	opts.mac[0] = 0;
 	opts.daemon = 1;
 	opts.bw = 0;
@@ -164,7 +164,7 @@ set_options (int argc, char *argv[])
 
 			case DVBS2_ADAPTERS_OPT:
 			{
-				opts.force_sadapter = atoi (optarg);
+				sscanf(optarg,"%d:%d:%d", &opts.force_sadapter, &opts.force_tadapter, &opts.force_cadapter) ;
 				break;
 			}
 
@@ -343,13 +343,13 @@ map_float (char *s, int mul)
 
 
 char *
-http_response (int sock, char *proto, int rc, char *ah, char *desc, int cseq)
+http_response (int sock, char *proto, int rc, char *ah, char *desc, int cseq, int lr)
 {
 	char *reply =
 		"%s/1.0 %d %s\r\nCseq: %d\r\n%s\r\nContent-Length: %d\r\n\r\n%s\r\n\r\n";
 	char *reply0 = "%s/1.0 %d %s\r\nCseq: %d\r\n%s\r\n\r\n";
 	char *d;
-	int lr;
+	
 
 	if (!ah)
 		ah = "Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN";
@@ -370,13 +370,13 @@ http_response (int sock, char *proto, int rc, char *ah, char *desc, int cseq)
 	else
 		d = "Service Unavailable";
 	static char resp[5000];
-
-	lr = strlen (desc);
+	if(!lr)
+		lr = strlen (desc);
 	if (lr)
 		sprintf (resp, reply, proto, rc, d, cseq, ah, lr, desc);
 	else
 		sprintf (resp, reply0, proto, rc, d, cseq, ah);
-	LOG ("reply -> %d:\n%s", sock, resp);
+	LOG ("reply -> %d (CL:%d) :\n%s", sock, lr, resp);
 	send (sock, resp, strlen (resp), MSG_NOSIGNAL);
 	return resp;
 }
@@ -422,14 +422,14 @@ read_rtsp (sockets * s)
 
 		if (!sid)
 		{
-			http_response (s->sock, "RTSP", 503, NULL, NULL, cseq);
+			http_response (s->sock, "RTSP", 503, NULL, NULL, cseq, 0);
 			return 0;
 		}
 
 		if (arg[0][0] == 'P')
 			if (start_play (sid, s) < 0)
 		{
-			http_response (s->sock, "RTSP", 404, NULL, NULL, cseq);
+			http_response (s->sock, "RTSP", 404, NULL, NULL, cseq, 0);
 			return 0;
 		}
 		ra = inet_ntoa (sid->sa.sin_addr);
@@ -445,12 +445,12 @@ read_rtsp (sockets * s)
 				ra, ntohs (sid->sa.sin_port), ntohs (sid->sa.sin_port) + 1,
 				sid, opts.timeout_sec / 1000, sid->sid + 1);
 
-		http_response (s->sock, "RTSP", 200, buf, NULL, cseq);
+		http_response (s->sock, "RTSP", 200, buf, NULL, cseq, 0);
 	}
 	else if (strncmp (arg[0], "TEARDOWN", 8) == 0)
 	{
 		close_stream (s->sid);
-		http_response (s->sock, "RTSP", 200, NULL, NULL, cseq);
+		http_response (s->sock, "RTSP", 200, NULL, NULL, cseq, 0);
 	}
 	else
 	{
@@ -461,17 +461,16 @@ read_rtsp (sockets * s)
 			start_play (sid, s); // we have a valid SID, purpose is to set master_sid>=0 (if master_sid == -1)
 		if (strncmp (arg[0], "DESCRIBE", 8) == 0)
 			http_response (s->sock, "RTSP", 200, NULL, describe_streams (s->sid),
-				cseq);
+				cseq, 0);
 		else if (strncmp (arg[0], "OPTIONS", 8) == 0)
-			http_response (s->sock, "RTSP", 200, NULL, NULL, cseq);
+			http_response (s->sock, "RTSP", 200, NULL, NULL, cseq, 0);
 	}
 	return 0;
 }
 
 
 char uuid[100];
-int cnt,
-uuidi;
+int bootid, uuidi;
 struct sockaddr_in ssdp_sa;
 
 int
@@ -481,17 +480,57 @@ read_http (sockets * s)
 	char *arg[50];
 	int la;
 	char *xml =
-		"<?xml version=\"1.0\"?><root xmlns=\"urn:schemas-upnp-org:device-1-0\" configId=\"0\">\r\n"
-		"<specVersion><major>1</major><minor>1</minor> </specVersion><device>\r\n"
-		"<deviceType>urn:ses-com:device:SatIPServer:1</deviceType><friendlyName>minisatip</friendlyName>\r\n"
-		"<manufacturer>cata</manufacturer><manufacturerURL>http://github.com/catalinii/minisatip</manufacturerURL>\r\n"
-		"<modelDescription>long user-friendly title</modelDescription> <modelName>minisatip</modelName><modelNumber>0100</modelNumber>\r\n"
-		"<modelURL>http://github.com/catalinii/minisatip</modelURL> <serialNumber>0100</serialNumber>\r\n"
-		"<UDN>uuid:%s</UDN><UPC>Universal Product Code</UPC><iconList><icon> <mimetype>image/format</mimetype>\r\n"
-		"<width>horizontal pixels</width> <height>vertical pixels</height><depth>color depth</depth><url>URL to icon</url> </icon> </iconList>\r\n"
+		"<?xml version=\"1.0\"?>\n"
+		"<root xmlns=\"urn:schemas-upnp-org:device-1-0\" configId=\"0\">\r\n"
+		"<specVersion>\r\n"
+		"<major>0</major>\r\n"
+		"<minor>1</minor>\r\n"
+		"</specVersion>\r\n"
+		"<device>\r\n"
+		"<deviceType>urn:ses-com:device:SatIPServer:1</deviceType>\r\n"
+		"<friendlyName>minisatip</friendlyName>\r\n"
+		"<manufacturer>cata</manufacturer>\r\n"
+		"<manufacturerURL>http://github.com/catalinii/minisatip</manufacturerURL>\r\n"
+		"<modelDescription>minisatip for Linux</modelDescription>\r\n"
+		"<modelName>minisatip</modelName><modelNumber>0001</modelNumber>\r\n"
+		"<modelURL>http://github.com/catalinii/minisatip</modelURL>\r\n"
+		"<serialNumber>0001</serialNumber>\r\n"
+		"<UDN>uuid:%s</UDN>\r\n"
+		"<UPC>Universal Product Code</UPC>\r\n"
+		"<iconList>\r\n"
+ 		"<icon>\r\n"
+ 		"<mimetype>image/png</mimetype>\r\n"
+ 		"<width>48</width>\r\n"
+ 		"<height>48</height>\r\n"
+ 		"<depth>24</depth>\r\n"
+ 		"<url>/icons/sm.png</url>\r\n"
+ 		"</icon><icon>\r\n"
+ 		"<mimetype>image/png</mimetype>\r\n"
+ 		"<width>120</width>\r\n"
+ 		"<height>120</height>\r\n"
+ 		"<depth>24</depth>\r\n"
+ 		"<url>/icons/lr.png</url>\r\n"
+ 		"</icon>\r\n"
+ 		"<icon>\r\n"
+ 		"<mimetype>image/jpeg</mimetype>\r\n"
+ 		"<width>48</width>\r\n"
+ 		"<height>48</height>\r\n"
+ 		"<depth>24</depth>\r\n"
+ 		"<url>/icons/sm.jpg</url>\r\n"
+ 		"</icon>\r\n"
+ 		"<icon>\r\n"
+ 		"<mimetype>image/jpeg</mimetype>\r\n"
+ 		"<width>120</width>\r\n"
+ 		"<height>120</height>\r\n"
+ 		"<depth>24</depth>\r\n"
+ 		"<url>/icons/lr.jpg</url>\r\n"
+ 		"</icon>\r\n"
+ 		"</iconList>\r\n"
 		"<presentationURL>http://github.com/catalinii/minisatip</presentationURL>\r\n"
-		"<satip:X_SATIPCAP xmlns:satip=\"urn:ses-com:satip\">DVBS2-%d,DVBT-%d</satip:X_SATIPCAP>\r\n"
-		"</device></root>\r\n";
+		"<satip:X_SATIPCAP xmlns:satip=\"urn:ses-com:satip\">DVBS2-%d,DVBT2-%d,DVBC-%d</satip:X_SATIPCAP>\r\n"
+		"</device>\r\n"
+		"</root>\r\n";
+
 	LOG ("read HTTP from %d sid: %d: %s", s->sock, s->sid, s->buf);
 	if (s->rlen < 5
 		|| (htonl (*(uint32_t *) & s->buf[s->rlen - 4]) != 0x0D0A0D0A))
@@ -503,24 +542,45 @@ read_http (sockets * s)
 	//      LOG("args: %s -> %s -> %s",arg[0],arg[1],arg[2]);
 	if (strncmp (arg[0], "GET", 3) != 0)
 	{
-		http_response (s->sock, "HTTP", 503, NULL, NULL, 0);
+		http_response (s->sock, "HTTP", 503, NULL, NULL, 0, 0);
 		return 0;
 	}
 	if (uuidi == 0)
 		ssdp_discovery (s);
 
-	if (strncmp (arg[1], "/desc.xml", 0) == 0)
+	if (strncmp (arg[1], "/desc.xml", 9) == 0)
 	{
-		int tuner_s2,
-			tuner_t;
+		int tuner_s2, tuner_t, tuner_c;
 
 		tuner_s2 = getS2Adapters ();
 		tuner_t = getTAdapters ();
-		sprintf (buf, xml, uuid, tuner_s2, tuner_t);
-		http_response (s->sock, "HTTP", 200, "Content-type: text/xml", buf, 0);
+		tuner_c = getCAdapters ();
+		sprintf (buf, xml, uuid, tuner_s2, tuner_t, tuner_c);
+		http_response (s->sock, "HTTP", 200, "Content-type: text/xml", buf, 0, 0);
 		return 0;
 	}
-	http_response (s->sock, "HTTP", 404, NULL, NULL, 0);
+
+	if (strncmp (arg[1], "/icons/", 7) == 0)
+	{
+		char *ctype = NULL;
+		int nl = sizeof(buf);		
+		if( arg[1][strlen(arg[1])-2] == 'n' )
+			ctype = "Content-type: image/png";
+		else if (arg[1][strlen(arg[1])-2] == 'p')			
+			ctype = "Content-type: image/jpeg";
+		else {
+			http_response (s->sock, "HTTP", 503, NULL, NULL, 0, 0);
+			return 0;
+		}
+		readfile(arg[1], buf, &nl);
+		if(nl == 0)
+			http_response (s->sock, "HTTP", 404, NULL, NULL, 0, 0);
+		else
+			http_response (s->sock, "HTTP", 200, ctype, buf, 0, nl);
+		return 0;
+	}	
+	
+	http_response (s->sock, "HTTP", 404, NULL, NULL, 0, 0);
 	return 0;
 }
 
@@ -560,13 +620,14 @@ ssdp_discovery (sockets * s)
 		sprintf (uuid, "%s-%s", uuid1, mac);
 		fill_sockaddr (&ssdp_sa, opts.disc_host, 1900);
 	}
-	sprintf (buf, reply, opts.http_host, uuid, cnt);
+
+	if(s->type != TYPE_UDP) return 0;
+	sprintf (buf, reply, opts.http_host, uuid, bootid);
 	salen = sizeof (ssdp_sa);
-	LOG ("ssdp_discovery -> %s", buf);
+	LOG ("ssdp_discovery fd: %d -> %s", s->sock, buf);
 	for (i = 0; i < 3; i++)
 		sendto (s->sock, buf, strlen (buf), MSG_NOSIGNAL,
 			(const struct sockaddr *) &ssdp_sa, salen);
-	cnt++;
 	s->rtime = getTick ();
 	return 0;
 }
@@ -597,12 +658,11 @@ ssdp_reply (sockets * s)
 		ssdp_discovery (s);
 	char buf[500];
 
-	sprintf (buf, reply, get_current_timestamp (), opts.http_host, uuid, cnt);
+	sprintf (buf, reply, get_current_timestamp (), opts.http_host, uuid, bootid);
 	salen = sizeof (s->sa);
-	LOG ("ssdp_reply -> %s\n%s", inet_ntoa (s->sa.sin_addr), buf);
+	LOG ("ssdp_reply fd: %d -> %s\n%s", ssdp, inet_ntoa (s->sa.sin_addr), buf);
 								 //use ssdp (unicast) even if received to multicast address
 	sendto (ssdp, buf, strlen (buf), MSG_NOSIGNAL, (const struct sockaddr *) &s->sa, salen);
-	cnt++;
 	return 0;
 }
 
@@ -627,7 +687,6 @@ new_http (sockets * s)
 }
 
 
-int becomeDaemon ();
 char pn[200];
 
 int
@@ -639,6 +698,7 @@ main (int argc, char *argv[])
 	set_options (argc, argv);
 	if (opts.daemon)
 		becomeDaemon ();
+	bootid = readBootID();
 	printf("Starting minisatip version %s, dvbapi version: %04X\n",VERSION, DVBAPIVERSION);
 	if ((ssdp = udp_bind (NULL, 1900)) < 1)
 		FAIL ("SSDP: Could not bind on udp port 1900");
@@ -815,4 +875,50 @@ myfree (void *x, char *f, int l)
 	free (x);
 	puts (" - done free");
 	fflush (stdout);
+}
+
+
+int readBootID()
+{
+	int bid=0;
+	char buf[20];
+	FILE *f=fopen("bootid","rt");
+	if(f)
+	{
+		fgets(buf,sizeof(buf),f);
+		fclose(f);
+		buf[sizeof(f)-1]=0;
+		bid = map_int(buf,NULL);
+	}
+	bid++;
+	f=fopen("bootid","wt");
+	if(f)
+	{
+		fprintf(f,"%d",bid);
+		fclose(f);
+	}
+	return bid;
+}
+
+
+int readfile(char *fn,char *buf,int *len)
+{
+	char ffn[500];
+	char *path[]={".","/usr/share/minisatip",NULL};
+	int fd,i,nl=0;
+	for( i=0; path[i]; i++)
+	{
+		strcpy(ffn, path[i]);
+		strncat(ffn, fn, sizeof(ffn)-strlen(path[i])-1);
+		if((fd = open(ffn,O_RDONLY))<0)
+			continue;
+		
+		nl = read(fd, buf, *len);
+		close(fd);
+		LOG("opened %s fd %d and read %d bytes from it", ffn, fd, nl);
+	}
+	*len = nl;
+	buf[nl] = 0;
+	
+	return nl;
 }

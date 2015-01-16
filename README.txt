@@ -1,6 +1,6 @@
 Welcome to Minisatip
 
-Minisatip is a single threaded satip server version 1.1 that runs under Linux and it was tested with DVB-S, DVB-S2 and DVB-T DVB cards.
+Minisatip is a single threaded satip server version 1.1 that runs under Linux and it was tested with DVB-S, DVB-S2, DVB-T, DVB-T2 and DVB-C DVB cards.
 The protocol specification can be found at: http://www.satip.info/sites/satip/files/resource/satip_specification_version_1_2_1.pdf
 It is very lightweight (designed for embedded systems with memory and processing constrains), does not need any additional libraries and can be used by existing satip clients like: Tvheadend, DVBViewer.
 The application is designed to stream the requested data even to multiple clients (even with one dvb card) in the same time and has few additional features, like capping the bandwidth or forcing the application to send the rtp streams to a specified address. 
@@ -15,8 +15,7 @@ minisatip [-f] [-r remote_rtp_host] [-d discovery_host] [-w http_server[:port]] 
 		-p public_host: specify the host where this device listens for RTSP or HTTP
 		-x port: port for listening on http
 		-s port: start port for rtp connections
-		-a x: simulate x DVB-S2 adapters on this box
-		-t x: simulate x DVB-T2 adapters on this box
+		-a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means autodetect)
 		-m xx: simulate xx as local mac address, generates UUID based on mac
 		-c X: bandwidth capping for the output to the network (default: unlimited)
 		-b X: set the DVR buffer to X KB (default: XX KB)

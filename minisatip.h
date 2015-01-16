@@ -36,9 +36,8 @@ struct struct_opts
 		start_rtp,
 		http_port;
 	int timeout_sec;
-	int force_sadapter,
-		force_tadapter,
-		daemon;
+	int force_sadapter, force_tadapter, force_cadapter;
+	int daemon;
 	int bw;
 	int dvr;
 	char *last_log;
@@ -60,6 +59,8 @@ int map_int (char *s, pchar_int * v);
 
 void *mymalloc (int a, char *f, int l);
 void myfree (void *x, char *f, int l);
+int becomeDaemon ();
+int readBootID();
 
 #define malloc1(a) mymalloc(a,__FILE__,__LINE__)
 #define free1(a) myfree(a,__FILE__,__LINE__)
