@@ -604,19 +604,16 @@ get_adapter (int aid)
 	return &a[aid];
 }
 
-
 char dad[1000];
 char *
-describe_adapter (int aid)
+describe_adapter (int sid, int aid)
 {
-	int i = 0,
-		x,
-		ts;
+	int i = 0, x, ts, j;
 	transponder *t;
 	adapter *ad;
 
-	if (aid < 0 || aid > MAX_ADAPTERS)
-		return NULL;
+	if (aid < 0 || aid > MAX_ADAPTERS || a[aid].enabled==0)
+		return "";
 	t = &a[aid].tp;
 	ad = &a[aid];
 	memset (dad, 0, sizeof (dad));
@@ -626,25 +623,31 @@ describe_adapter (int aid)
 	{
 		ts = getTick ();
 		get_signal (ad->fe, &ad->status, &ad->ber, &ad->strength, &ad->snr);
-		LOG
-			("get_signal took %d ms for adapter %d handle %d (status: %d, ber: %d, strength:%d, snr: %d)",
+		if (ad->max_strength <= ad->strength) ad->max_strength = (ad->strength>0)?ad->strength:1;
+		if (ad->max_snr <= ad->snr) ad->max_snr = (ad->snr>0)?ad->snr:1;
+		LOG ("get_signal took %d ms for adapter %d handle %d (status: %d, ber: %d, strength:%d, snr: %d, max_strength: %d, max_snr: %d)",
 			getTick () - ts, aid, ad->fe, ad->status, ad->ber, ad->strength,
-			ad->snr);
+			ad->snr, ad->max_strength, ad->max_snr);
+		ad->strength = ad->strength * 255 / ad->max_strength;
+		ad->snr = ad->snr * 15 / ad->max_snr;
 	}
 	if (t->sys == SYS_DVBS || t->sys == SYS_DVBS2)
-		sprintf (dad, "ver=1.1;src=%d;tuner=%d,%d,%d,%d,%d,%c,dvbs,,,,%d,;pids=",
+		sprintf (dad, "ver=1.0;src=%d;tuner=%d,%d,%d,%d,%d,%c,dvbs,,,,%d,;pids=",
 			t->diseqc + 1, aid, ad->strength, ad->status, ad->snr,
 			t->freq / 1000, t->pol, t->sr / 1000);
-	else
-		sprintf (dad, "ver=1.1;src=%d;tuner=%d,%d,%d,%d,%d,,dvbt,,,,,;pids=",
-			t->diseqc + 1, aid, ad->strength, ad->status, ad->snr, t->freq);
-
+	else if (t->sys == SYS_DVBT || t->sys == SYS_DVBT2)
+		sprintf (dad, "ver=1.1;src=%d;tuner=%d,%d,%d,%d,%.2f,,dvbt,,,,,;pids=",
+			t->diseqc + 1, aid, ad->strength, ad->status, ad->snr, (double) t->freq/1000);
+	else  sprintf (dad, "ver=1.2;src=%d;tuner=%d,%d,%d,%d,%.2f,8,dvbc,%s,%d,,,;pids=",
+                        t->diseqc + 1, aid, ad->strength, ad->status, ad->snr, (double )t->freq/1000, modulation_string(t->mtype), t->sr);
 	for (i = 0; i < MAX_PIDS; i++)
 		if (ad->pids[i].flags == 1)
-	{
-		x = 1;
-		sprintf (dad + strlen (dad), "%d,", ad->pids[i].pid);
-	}
+			for(j=0; j< MAX_STREAMS_PER_PID; j++)
+				if ( ad->pids[i].sid[j] == sid )
+				{
+					x = 1;
+					sprintf (dad + strlen (dad), "%d,", ad->pids[i].pid);
+				}
 	if (x)
 								 // cut the last comma
 		dad[strlen (dad) - 1] = 0;

@@ -36,7 +36,7 @@ typedef struct struct_adapter
 	int status_cnt;
 	fe_status_t status;
 	uint32_t ber;
-	uint16_t strength, snr;
+	uint16_t strength, snr, max_strength, max_snr;
 } adapter;
 int init_hw ();
 int getS2Adapters ();
@@ -51,7 +51,7 @@ void mark_pids_deleted (int aid, int sid, char *pids);
 int mark_pids_add (int sid, int aid, char *pids);
 int update_pids (int aid);
 adapter * get_adapter (int aid);
-char *describe_adapter (int aid);
+char *describe_adapter (int sid, int aid);
 void dump_pids (int aid);
 void sort_pids (int aid);
 #endif							 /*  */

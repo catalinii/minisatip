@@ -43,18 +43,20 @@ getTick ()
 }
 
 
-char str_desc[10];
-char *
-describe_streams (int sid)
+
+char *describe_streams (int sid,char *sbuf,int size)
 {
 	char *str;
-
-	str = describe_adapter (st[sid].adapter);
-	str_desc[0] = 0;
-	if (str == NULL)
-		return str_desc;
-
-	return str;
+	int i;
+	snprintf(sbuf,size-1,"v=0\r\no=-%d %d IN IPV4 %s\r\ns=SatIPServer:1 %d %d %d\r\nt=0 0\r\n", sid, sid, getlocalip(), getS2Adapters(), getTAdapters(), getCAdapters() );
+	for( i=0; i<MAX_STREAMS; i++)
+		if(st[i].enabled)
+		{
+			int slen=strlen(sbuf);
+			snprintf(sbuf + slen, size - slen - 1, "m=video %d RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\na=sendonly", ntohs (st[i].sa.sin_port), i, describe_adapter(i, st[i].adapter));
+			if( size - slen < 10)LOG_AND_RETURN(sbuf, "DESCRIBE BUFFER is full");
+		}
+	return sbuf;
 }
 
 
@@ -64,7 +66,7 @@ send_rtcp (int s_id, int ctime)
 	int tmp_port;
 	streams *sid = &st[s_id];
 	uint32_t buf[400];
-	char *a = describe_streams (s_id);
+	char *a = describe_adapter (s_id, st[s_id].adapter);
 	int la = strlen (a);
 
 	//      LOG("send_rtcp (sid: %d)-> %s",s_id,a);

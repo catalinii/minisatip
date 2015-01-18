@@ -4,7 +4,7 @@
 #include "socketworks.h"
 
 
-#define VERSION_BUILD "1"
+#define VERSION_BUILD "3"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.1.,VERSION_BUILD,)
 
@@ -38,6 +38,7 @@ struct struct_opts
 	int timeout_sec;
 	int force_sadapter, force_tadapter, force_cadapter;
 	int daemon;
+	int device_id;
 	int bw;
 	int dvr;
 	char *last_log;

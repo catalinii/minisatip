@@ -107,21 +107,21 @@ static const char *fe_code_rate_tab[] =
 	"FEC_9_10",
 };
 
-static const char *fe_modulation_tab[] =
+static char *fe_modulation_tab[] =
 {
-	"QPSK",
-	"QAM_16",
-	"QAM_32",
-	"QAM_64",
-	"QAM_128",
-	"QAM_256",
-	"QAM_AUTO",
-	"VSB_8",
-	"VSB_16",
-	"PSK_8",
-	"APSK_16",
-	"APSK_32",
-	"DQPSK"
+	"qpsk",
+	"16qam",
+	"32qam",
+	"64qam",
+	"128qam",
+	"256qam",
+	"auto_qam",
+	"8vsb",
+	"16vsb",
+	"8psk",
+	"16apsk",
+	"32apsk",
+	"dqpsk"
 };
 
 static const char *fe_transmit_mode_tab[] =
@@ -1011,8 +1011,6 @@ void
 get_signal (int fd, fe_status_t * status, uint32_t * ber, uint16_t * strength,
 uint16_t * snr)
 {
-	float f = 240 / 1450;		 // transform the 0..1450 in range in 0..240 - guess based on the data from my DVBS tunner
-
 	*status = *ber = *snr = *strength = 0;
 	struct dvb_frontend_event ev;
 
@@ -1034,7 +1032,11 @@ uint16_t * snr)
 		if (ioctl (fd, FE_READ_SNR, snr) < 0)
 			LOG ("ioctl FE_READ_SNR failed (%s)", strerror (errno));
 	}
-	//      *ber = (uint16_t )(*ber * f);
-	*strength = (uint16_t) (*strength * f);
-	//      *snr = (uint16_t )(*snr * f);
+}
+
+char *modulation_string(int mtype)
+{
+	if(mtype>=0 && mtype < sizeof(fe_modulation_tab) )
+		return fe_modulation_tab[mtype];
+	return "none";
 }

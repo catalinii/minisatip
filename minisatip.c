@@ -89,6 +89,7 @@ set_options (int argc, char *argv[])
 	opts.mac[0] = 0;
 	opts.daemon = 1;
 	opts.bw = 0;
+	opts.device_id = 1;
 	opts.dvr = DVR_BUFFER;
 	while ((opt = getopt (argc, argv, "flr:a:t:d:w:p:s:hc:b:m:")) != -1)
 	{
@@ -460,8 +461,12 @@ read_rtsp (sockets * s)
 		if (sid && sid->adapter >= 0)
 			start_play (sid, s); // we have a valid SID, purpose is to set master_sid>=0 (if master_sid == -1)
 		if (strncmp (arg[0], "DESCRIBE", 8) == 0)
-			http_response (s->sock, "RTSP", 200, NULL, describe_streams (s->sid),
-				cseq, 0);
+		{
+			char sbuf[1000];
+			describe_streams(s->sid, sbuf, sizeof(sbuf));
+			http_response (s->sock, "RTSP", 200, NULL, sbuf, cseq, 0);
+				
+		}
 		else if (strncmp (arg[0], "OPTIONS", 8) == 0)
 			http_response (s->sock, "RTSP", 200, NULL, NULL, cseq, 0);
 	}
@@ -604,7 +609,7 @@ ssdp_discovery (sockets * s)
 		"SERVER: Linux/1.0 UPnP/1.1 IDL4K/1.2\r\n"
 		"USN: uuid:%s::upnp:rootdevice\r\n"
 		"BOOTID.UPNP.ORG: %d\r\n"
-		"CONFIGID.UPNP.ORG: 0\r\n" "DEVICEID.SES.COM: 1\r\n\r\n\0";
+		"CONFIGID.UPNP.ORG: 0\r\n" "DEVICEID.SES.COM: %d\r\n\r\n\0";
 	char buf[500],
 		mac[15] = "00000000000000";
 	char uuid1[] = "11223344-9999-0000-b7ae";
@@ -620,7 +625,7 @@ ssdp_discovery (sockets * s)
 	}
 
 	if(s->type != TYPE_UDP) return 0;
-	sprintf (buf, reply, opts.http_host, uuid, bootid);
+	sprintf (buf, reply, opts.http_host, uuid, bootid, opts.device_id);
 	salen = sizeof (ssdp_sa);
 	LOG ("ssdp_discovery fd: %d -> %s", s->sock, buf);
 	for (i = 0; i < 3; i++)
@@ -644,7 +649,7 @@ ssdp_reply (sockets * s)
 		"ST: urn:ses-com:device:SatIPServer:1\r\n"
 		"USN: uuid:%s::urn:ses-com:device:SatIPServer:1\r\n"
 		"BOOTID.UPNP.ORG: %d\r\n"
-		"CONFIGID.UPNP.ORG: 0\r\n" "DEVICEID.SES.COM: 1\r\n\0";
+		"CONFIGID.UPNP.ORG: 0\r\n" "DEVICEID.SES.COM: %d\r\n\0";
 	socklen_t salen;
 
 	if (strncmp (s->buf, "M-SEARCH", 8) != 0)
@@ -656,7 +661,7 @@ ssdp_reply (sockets * s)
 		ssdp_discovery (s);
 	char buf[500];
 
-	sprintf (buf, reply, get_current_timestamp (), opts.http_host, uuid, bootid);
+	sprintf (buf, reply, get_current_timestamp (), opts.http_host, uuid, bootid, opts.device_id);
 	salen = sizeof (s->sa);
 	LOG ("ssdp_reply fd: %d -> %s\n%s", ssdp, inet_ntoa (s->sa.sin_addr), buf);
 								 //use ssdp (unicast) even if received to multicast address
