@@ -21,6 +21,7 @@ typedef struct struct_sockets
 	int close_sec;
 	int sock_id;				 // socket id
 	int err;
+	int flags; // 1 - buf is allocated dynamically
 } sockets;
 
 #define TYPE_UDP 0
@@ -35,6 +36,8 @@ typedef struct struct_sockets
 char *setlocalip ();
 char *getlocalip ();
 int udp_connect (char *addr, int port, struct sockaddr_in *serv);
+char *get_sock_host(int fd);
+int get_sock_port(int fd);
 int sockets_add (int sock, struct sockaddr_in *sa, int sid, int type,
 socket_action a, socket_action c, socket_action t);
 int sockets_del (int sock);
@@ -47,4 +50,5 @@ char *get_current_timestamp ();
 void set_socket_buffer (int sid, unsigned char *buf, int len);
 void sockets_timeout (int i, int t);
 void free_all ();
+
 #endif

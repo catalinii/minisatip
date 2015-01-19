@@ -34,7 +34,7 @@ fill_sockaddr (struct sockaddr_in *serv, char *host, int port)
 		h = gethostbyname (host);
 		if (h == NULL)
 		{
-			LOG ("fill_sockaddr: gethostbyname(): %s", strerror (errno));
+			LOG ("fill_sockaddr: gethostbyname(%s): %s", host, strerror (errno));
 			return 0;
 		}
 	}
@@ -43,7 +43,7 @@ fill_sockaddr (struct sockaddr_in *serv, char *host, int port)
 	if (host)
 		memcpy (&serv->sin_addr.s_addr, h->h_addr, h->h_length);
 	else
-		serv->sin_addr.s_addr = INADDR_ANY;
+		serv->sin_addr.s_addr = htonl(INADDR_ANY);
 	serv->sin_port = htons (port);
 	return 1;
 }
@@ -55,7 +55,7 @@ getlocalip ()
 {
 	//      if(localip[0]!=0)return localip;
 
-	const char *dest = opts.disc_host;
+	const char *dest = opts.disc_host, *h;
 	int port = 1900;
 
 	struct sockaddr_in serv;
@@ -71,22 +71,10 @@ getlocalip ()
 
 	fill_sockaddr (&serv, (char *) dest, port);
 	int err = connect (sock, (const struct sockaddr *) &serv, sizeof (serv));
-
-	struct sockaddr_in name;
-	socklen_t namelen = sizeof (name);
-
-	err = getsockname (sock, (struct sockaddr *) &name, &namelen);
-
-	char buffer[100];
-	const char *p = inet_ntop (AF_INET, &name.sin_addr, localip, 100);
-
-	if (p == NULL)
-	{
-		LOG ("getlocalip: Error getting localip : %d . Error message : %s",
-			errno, strerror (errno));
-	}
-	//	else LOG ("getlocalip: %s", localip);
-
+	
+	h = get_sock_host(sock);
+	if (h) strcpy(localip, h);
+	
 	close (sock);
 	return localip;
 
@@ -100,7 +88,8 @@ udp_bind (char *addr, int port)
 	int sock,
 		optval = 1;
 
-	fill_sockaddr (&serv, addr, port);
+	if (! fill_sockaddr (&serv, addr, port))
+		return -1;
 	sock = socket (AF_INET, SOCK_DGRAM, 0);
 	if (sock < 0)
 	{
@@ -148,7 +137,8 @@ udp_connect (char *addr, int port, struct sockaddr_in *serv)
 
 	if (serv == NULL)
 		serv = &sv;
-	fill_sockaddr (serv, addr, port);
+	if ( !fill_sockaddr (serv, addr, port))
+		return -1;
 	sock = socket (AF_INET, SOCK_DGRAM, 0);
 	if (sock < 0)
 	{
@@ -182,7 +172,9 @@ tcp_listen (char *addr, int port)
 	int sock,
 		optval = 1;
 
-	fill_sockaddr (&serv, addr, port);
+	if( !fill_sockaddr (&serv, addr, port))
+		return -1;
+		
 	sock = socket (AF_INET, SOCK_STREAM, 0);
 	if (sock < 0)
 	{
@@ -208,6 +200,22 @@ tcp_listen (char *addr, int port)
 		return -1;
 	}
 	return sock;
+}
+
+char *get_sock_host(int fd)
+{
+	struct sockaddr_in sin;
+	socklen_t len = sizeof(sin);
+	getsockname(fd, (struct sockaddr *)&sin, &len);
+	return inet_ntoa (sin.sin_addr);
+}
+
+int get_sock_port(int fd)
+{
+	struct sockaddr_in sin;
+	socklen_t len = sizeof(sin);
+	getsockname(fd, (struct sockaddr *)&sin, &len);
+	return ntohs(sin.sin_port);	
 }
 
 
@@ -345,10 +353,7 @@ select_and_execute ()
 					if (!ss->buf || ss->buf == buf)
 					{
 						ss->buf = buf;
-						if (ss->type == TYPE_DVR)
-							ss->lbuf = 188;
-						else
-							ss->lbuf = sizeof (buf) - 1;
+						ss->lbuf = sizeof (buf) - 1;
 						ss->rlen = 0;
 					}
 					if (ss->rlen >= ss->lbuf)

@@ -12,9 +12,8 @@ minisatip [-f] [-r remote_rtp_host] [-d discovery_host] [-w http_server[:port]] 
 		-r remote_rtp_host: send remote rtp to remote_rtp_host
 		-d send multicast annoucement to discovery_host instead
 		-w http_server[:port]: specify the host and the port where the xml file can be downloaded from
-		-p public_host: specify the host where this device listens for RTSP or HTTP
 		-x port: port for listening on http
-		-s port: start port for rtp connections
+		-s force to get signal from the DVB hardware every 200ms (use with care, onle when needed)
 		-a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means autodetect)
 		-m xx: simulate xx as local mac address, generates UUID based on mac
 		-c X: bandwidth capping for the output to the network (default: unlimited)

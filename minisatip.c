@@ -52,9 +52,8 @@ usage ()
 		-r remote_rtp_host: send remote rtp to remote_rtp_host\n \
 		-d send multicast annoucement to discovery_host instead\n \
 		-w http_server[:port]: specify the host and the port where the xml file can be downloaded from \n\
-		-p public_host: specify the host where this device listens for RTSP or HTTP\n \
 		-x port: port for listening on http\n\
-		-s port: start port for rtp connections\n\
+		-s force to get signal from the DVB hardware every 200ms (use with care, onle when needed)\n\
 		-a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means autodetect)\n\
 		-m xx: simulate xx as local mac address, generates UUID based on mac\n\
 		-c X: bandwidth capping for the output to the network (default: unlimited)\n\
@@ -80,7 +79,6 @@ set_options (int argc, char *argv[])
 	opts.start_rtp = 5500;
 	opts.http_port = 8080;
 	opts.http_host = NULL;
-	opts.pub_host = NULL;
 	opts.log = 0;
 	opts.timeout_sec = 30000;
 	opts.force_sadapter = 0;
@@ -90,8 +88,10 @@ set_options (int argc, char *argv[])
 	opts.daemon = 1;
 	opts.bw = 0;
 	opts.device_id = 1;
+	opts.force_scan = 0;
 	opts.dvr = DVR_BUFFER;
-	while ((opt = getopt (argc, argv, "flr:a:t:d:w:p:s:hc:b:m:")) != -1)
+	
+	while ((opt = getopt (argc, argv, "flr:a:t:d:w:p:shc:b:m:")) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
 		switch (opt)
@@ -124,12 +124,6 @@ set_options (int argc, char *argv[])
 				//                              int i=0;
 				opts.http_host = optarg;
 				sethost = 1;
-				break;
-			}
-
-			case PUBLICIP_OPT:
-			{
-				opts.pub_host = optarg;
 				break;
 			}
 
@@ -174,25 +168,18 @@ set_options (int argc, char *argv[])
 				opts.force_tadapter = atoi (optarg);
 				break;
 			}
-
-			case RTPPORT_OPT:
-			{
-				opts.start_rtp = atoi (optarg);
+			
+			case SCAN_OPT:
+				opts.force_scan = 1;
 				break;
-			}
-
 		}
 	}
+	
 	lip = getlocalip ();
 	if (!opts.http_host)
 	{
 		opts.http_host = (char *) malloc (MAX_HOST);
 		sprintf (opts.http_host, "%s:%d", lip, opts.http_port);
-	}
-	if (!opts.pub_host)
-	{
-		opts.pub_host = (char *) malloc (MAX_HOST);
-		strncpy (opts.pub_host, lip, MAX_HOST);
 	}
 }
 
@@ -382,71 +369,90 @@ http_response (int sock, char *proto, int rc, char *ah, char *desc, int cseq, in
 	return resp;
 }
 
+#define RBUF 4000
 
 int
 read_rtsp (sockets * s)
 {
 	char *arg[50];
-	int cseq,
-		la,
-		i;
+	int cseq, la, i, rlen;
+	char *proto;
 	rtp_prop p;
+	
 
-	LOG ("read RTSP (from handle %d sock_id %d): %s", s->sock, s->sock_id,
-		s->buf);
+	LOG ("read RTSP (from handle %d sock_id %d):\n%s", s->sock, s->sock_id, s->buf);
 	if (s->rlen < 5
 		|| (htonl (*(uint32_t *) & s->buf[s->rlen - 4]) != 0x0D0A0D0A))
 	{
-		printf
-			("Not a complete request RTSP_request read_bytes=%d ends with: %08X\n",
-			s->rlen, htonl (*(uint32_t *) & s->buf[s->rlen - 4]));
+		if( s->rlen > RBUF - 10 )
+		{
+			LOG("Discarding %d bytes from the socket buffer, request > %d, consider increasing  RBUF", s->rlen, RBUF);
+			s->rlen = 0;
+		}
+		if ( s->flags & 1 ) 
+			return 0;		
+		unsigned char *new_alloc = malloc1 (RBUF);
+		memcpy(new_alloc, s->buf, s->rlen);
+		s->buf = new_alloc;
+		s->flags = s->flags | 1;
 		return 0;
 	}
+
+	rlen = s->rlen;
+	s->rlen = 0;
+
 	la = split (arg, s->buf, 50, ' ');
-	//      LOG("args: %s -> %s -> %s",arg[0],arg[1],arg[2]);
+	cseq = 0;
+	memset((void *)&p, 0, sizeof(p));
+	
 	for (i = 0; i < la; i++)
 		if (strncasecmp ("CSeq:", arg[i], 5) == 0)
 			cseq = atoi (arg[i + 1]);
 	else if (strncasecmp ("Transport:", arg[i], 5) == 0)
 		decode_transport (s, &p, arg[i + 1], opts.rrtp, opts.start_rtp);
 	//      LOG("read RTSP (CSeq %d): %s from %d",cseq,s->buf,s->sock);
-
-	if ((strncmp (arg[0], "SETUP", 3) == 0)
-		|| (strncmp (arg[0], "PLAY", 3) == 0))
+	
+	if ((strncasecmp (arg[0], "SETUP", 3) == 0) || (strncasecmp (arg[0], "PLAY", 3) == 0) 
+		|| (s->type == TYPE_HTTP && strncasecmp (arg[0], "GET", 3) == 0))
 	{
 		char buf[200];
 		streams *sid;
 
 		char *ra;
-
+		if (s->type == TYPE_HTTP)
+			proto = "HTTP";
+		else 
+			proto = "RTSP";
+			
 		sid = (streams *) setup_stream (arg, s, &p);
-
+		
 		if (!sid)
 		{
-			http_response (s->sock, "RTSP", 503, NULL, NULL, cseq, 0);
+			http_response (s->sock, proto, 503, NULL, NULL, cseq, 0);
 			return 0;
 		}
 
-		if (arg[0][0] == 'P')
+		if (arg[0][0] == 'P' || arg[0][0] == 'G')
 			if (start_play (sid, s) < 0)
 		{
-			http_response (s->sock, "RTSP", 404, NULL, NULL, cseq, 0);
+			http_response (s->sock, proto, 404, NULL, NULL, cseq, 0);
 			return 0;
 		}
 		ra = inet_ntoa (sid->sa.sin_addr);
-		if (atoi (ra) < 239)
-			sprintf (buf,
-				"Transport: RTP/AVP;unicast;client_port=%d-%d;source=%s;server_port=%d-%d\r\nSession:%p;timeout=%d\r\ncom.ses.streamID: %d",
-				ntohs (sid->sa.sin_port), ntohs (sid->sa.sin_port) + 1,
-				opts.pub_host, opts.start_rtp, opts.start_rtp + 1, sid,
-				opts.timeout_sec / 1000, sid->sid + 1);
-		else
-			sprintf (buf,
-				"Transport: RTP/AVP;multicast;destination=%s;port=%d-%d\r\nSession:%p;timeout=%d\r\ncom.ses.streamID: %d",
-				ra, ntohs (sid->sa.sin_port), ntohs (sid->sa.sin_port) + 1,
-				sid, opts.timeout_sec / 1000, sid->sid + 1);
+		if(sid->rtp >-1)
+			if (atoi (ra) < 239)
+				sprintf (buf,
+					"Transport: RTP/AVP;unicast;client_port=%d-%d;source=%s;server_port=%d-%d\r\nSession:%p;timeout=%d\r\ncom.ses.streamID: %d",
+					ntohs (sid->sa.sin_port), ntohs (sid->sa.sin_port) + 1,
+					get_sock_host (sid->rtp), get_sock_port (sid->rtp), get_sock_port (sid->rtp) + 1, sid,
+					opts.timeout_sec / 1000, sid->sid + 1);
+			else
+				sprintf (buf,
+					"Transport: RTP/AVP;multicast;destination=%s;port=%d-%d\r\nSession:%p;timeout=%d\r\ncom.ses.streamID: %d",
+					ra, ntohs (sid->sa.sin_port), ntohs (sid->sa.sin_port) + 1,
+					sid, opts.timeout_sec / 1000, sid->sid + 1);
 
-		http_response (s->sock, "RTSP", 200, buf, NULL, cseq, 0);
+		http_response (s->sock, proto, 200, buf, NULL, cseq, 0);
 	}
 	else if (strncmp (arg[0], "TEARDOWN", 8) == 0)
 	{
@@ -464,7 +470,7 @@ read_rtsp (sockets * s)
 		{
 			char sbuf[1000];
 			describe_streams(s->sid, sbuf, sizeof(sbuf));
-			http_response (s->sock, "RTSP", 200, NULL, sbuf, cseq, 0);
+			http_response (s->sock, "RTSP", 200, "Content-type: application/sdp", sbuf, cseq, 0);
 				
 		}
 		else if (strncmp (arg[0], "OPTIONS", 8) == 0)
@@ -484,7 +490,7 @@ read_http (sockets * s)
 {
 	char buf[2000];
 	char *arg[50];
-	int la;
+	int la, rlen;
 	char *xml =
 		"<?xml version=\"1.0\"?>\n"
 		"<root xmlns=\"urn:schemas-upnp-org:device-1-0\" configId=\"0\">\r\n"
@@ -537,13 +543,34 @@ read_http (sockets * s)
 		"</device>\r\n"
 		"</root>\r\n";
 
-	LOG ("read HTTP from %d sid: %d: %s", s->sock, s->sid, s->buf);
 	if (s->rlen < 5
 		|| (htonl (*(uint32_t *) & s->buf[s->rlen - 4]) != 0x0D0A0D0A))
 	{
-		printf ("Not a complete request RTSP_request read_bytes=%d", s->rlen);
+		if( s->rlen > RBUF - 10 )
+		{
+			LOG("Discarding %d bytes from the socket buffer, request > %d, consider increasing  RBUF", s->rlen, RBUF);
+			s->rlen = 0;
+		}
+		if ( s->flags & 1 ) 
+			return 0;		
+		unsigned char *new_alloc = malloc1 (RBUF);
+		memcpy(new_alloc, s->buf, s->rlen);
+		s->buf = new_alloc;
+		s->flags = s->flags | 1;
 		return 0;
 	}
+
+	if (strncasecmp(s->buf,"GET ",4)==0 && strstr(s->buf, "/?" ))
+	{
+		read_rtsp(s);
+		return 0;
+	}
+
+	rlen = s->rlen;
+	s->rlen = 0;
+	
+	LOG ("read HTTP from %d sid: %d: %s", s->sock, s->sid, s->buf);
+	
 	la = split (arg, s->buf, 50, ' ');
 	//      LOG("args: %s -> %s -> %s",arg[0],arg[1],arg[2]);
 	if (strncmp (arg[0], "GET", 3) != 0)
@@ -591,6 +618,10 @@ read_http (sockets * s)
 int
 close_http (sockets * s)
 {
+	if (s->flags & 1  && s->buf)
+		free1 (s->buf);
+	s->flags = 0;
+	s->buf = NULL;
 	LOG ("Closing stream %d", s->sid);
 	close_stream (s->sid);
 	return 0;
@@ -864,7 +895,7 @@ void *
 mymalloc (int a, char *f, int l)
 {
 	void *x = malloc (a);
-	printf ("%s:%d allocation_wrapper malloc returns %p\n", f, l, x);
+	printf ("%s:%d allocation_wrapper malloc allocated %d bytes at %p\n", f, l, a, x);
 	fflush (stdout);
 	return x;
 }

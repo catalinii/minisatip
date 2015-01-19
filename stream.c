@@ -47,15 +47,27 @@ getTick ()
 char *describe_streams (int sid,char *sbuf,int size)
 {
 	char *str;
-	int i;
-	snprintf(sbuf,size-1,"v=0\r\no=-%d %d IN IPV4 %s\r\ns=SatIPServer:1 %d %d %d\r\nt=0 0\r\n", sid, sid, getlocalip(), getS2Adapters(), getTAdapters(), getCAdapters() );
+	int i, sidf, streams_enabled;
+
+	streams_enabled = 0;
+	sidf = sid;
+	if( sidf == -1) 
+		sidf = 0;
+		
+	snprintf(sbuf,size-1,"v=0\r\no=-%d %d IN IP4 %s\r\ns=SatIPServer:1 %d %d %d\r\nt=0 0\r\n", sidf, sidf, getlocalip(), getS2Adapters(), getTAdapters(), getCAdapters() );
 	for( i=0; i<MAX_STREAMS; i++)
 		if(st[i].enabled)
 		{
 			int slen=strlen(sbuf);
+			streams_enabled ++;
 			snprintf(sbuf + slen, size - slen - 1, "m=video %d RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\na=sendonly", ntohs (st[i].sa.sin_port), i, describe_adapter(i, st[i].adapter));
 			if( size - slen < 10)LOG_AND_RETURN(sbuf, "DESCRIBE BUFFER is full");
 		}
+	if (!streams_enabled)
+	{
+		int slen = strlen(sbuf);
+		snprintf(sbuf + slen, size - slen - 1, "m=video 0 RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=0\r\na=fmtp:33 %s\r\na=sendonly",describe_adapter(0, 0));
+	}
 	return sbuf;
 }
 
@@ -138,9 +150,10 @@ setup_stream (char **str, sockets * s, rtp_prop * p)
 			s_id = 0;
 		char pol;
 
-		stype = -1;
+		stype = -1;	
 		if (s->type == TYPE_HTTP)
 			stype = s->sock;
+			
 		if ((s_id = streams_add (-1, p, stype)) < 0)
 			LOG_AND_RETURN ( NULL, "Could not add a new stream");
 		init_dvb_parameters (&st[s_id].tp);
@@ -243,10 +256,10 @@ streams_add (int a_id, rtp_prop * p, int https)
 		LOG ("The stream could not be added - most likely no free stream");
 		return -1;
 	}
-	if(p)
-		st[i].rtp = udp_connect (p->dest, p->port, &st[i].sa);
-	else LOG_AND_RETURN (-1,"rtp_prop is NULL");
-	if (st[i].rtp == -1)
+	
+	st[i].rtp = -1;
+	if(https == -1)
+		if((st[i].rtp = udp_connect (p->dest, p->port, &st[i].sa)) == -1)
 		LOG_AND_RETURN (-1,
 			"Streams_add failed for stream %d: UDP connection to %s:%d failed",
 			i, p->dest, p->port);

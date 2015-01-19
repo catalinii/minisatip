@@ -4,7 +4,7 @@
 #include "socketworks.h"
 
 
-#define VERSION_BUILD "3"
+#define VERSION_BUILD "4"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.1.,VERSION_BUILD,)
 
@@ -12,12 +12,11 @@ void set_options (int argc, char *argv[]);
 
 #define RRTP_OPT 'r'
 #define DISCOVERYIP_OPT 'd'
-#define PUBLICIP_OPT 'p'
 #define HTTPSERVER_OPT 'w'
 #define HTTPPORT_OPT 'x'
 #define LOG_OPT 'l'
 #define HELP_OPT 'h'
-#define RTPPORT_OPT 's'
+#define SCAN_OPT 's'
 #define DVBS2_ADAPTERS_OPT 'a'
 #define DVBT2_ADAPTERS_OPT 't'
 #define MAC_OPT 'm'
@@ -25,11 +24,11 @@ void set_options (int argc, char *argv[]);
 #define BW_OPT 'c'
 #define DVRBUFFER_OPT 'b'
 
+
 struct struct_opts
 {
 	char *rrtp;
 	char *http_host;			 //http-server host
-	char *pub_host;				 //public host
 	char *disc_host;			 //discover host
 	char mac[13];
 	unsigned int log,
@@ -41,7 +40,8 @@ struct struct_opts
 	int device_id;
 	int bw;
 	int dvr;
-	char *last_log;
+	int force_scan;
+	char *last_log;	
 };
 
 typedef struct struct_pchar_int
