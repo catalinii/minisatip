@@ -500,7 +500,7 @@ read_http (sockets * s)
 	char *arg[50];
 	int la, rlen;
 	char *xml =
-		"<?xml version=\"1.0\"?>\n"
+		"<?xml version=\"1.0\"?>\r\n"
 		"<root xmlns=\"urn:schemas-upnp-org:device-1-0\" configId=\"0\">\r\n"
 		"<specVersion>\r\n"
 		"<major>0</major>\r\n"

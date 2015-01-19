@@ -60,13 +60,13 @@ char *describe_streams (int sid,char *sbuf,int size)
 		{
 			int slen=strlen(sbuf);
 			streams_enabled ++;
-			snprintf(sbuf + slen, size - slen - 1, "m=video %d RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\na=sendonly", ntohs (st[i].sa.sin_port), i, describe_adapter(i, st[i].adapter));
+			snprintf(sbuf + slen, size - slen - 1, "m=video %d RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\na=sendonly\r\n", ntohs (st[i].sa.sin_port), i, describe_adapter(i, st[i].adapter));
 			if( size - slen < 10)LOG_AND_RETURN(sbuf, "DESCRIBE BUFFER is full");
 		}
 	if (!streams_enabled)
 	{
 		int slen = strlen(sbuf);
-		snprintf(sbuf + slen, size - slen - 1, "m=video 0 RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=0\r\na=fmtp:33 %s\r\na=sendonly",describe_adapter(0, 0));
+		snprintf(sbuf + slen, size - slen - 1, "m=video 0 RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=0\r\na=fmtp:33 %s\r\na=sendonly\r\n",describe_adapter(0, 0));
 	}
 	return sbuf;
 }
