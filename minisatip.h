@@ -4,7 +4,7 @@
 #include "socketworks.h"
 
 
-#define VERSION_BUILD "5"
+#define VERSION_BUILD "6"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.1.,VERSION_BUILD,)
 
@@ -17,6 +17,7 @@ void set_options (int argc, char *argv[]);
 #define LOG_OPT 'l'
 #define HELP_OPT 'h'
 #define SCAN_OPT 's'
+#define PLAYLIST_OPT 'p'
 #define DVBS2_ADAPTERS_OPT 'a'
 #define DVBT2_ADAPTERS_OPT 't'
 #define MAC_OPT 'm'
@@ -42,6 +43,7 @@ struct struct_opts
 	int dvr;
 	int force_scan;
 	char *last_log;	
+	char playlist[200];
 };
 
 typedef struct struct_pchar_int

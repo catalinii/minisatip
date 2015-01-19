@@ -59,6 +59,7 @@ usage ()
 		-c X: bandwidth capping for the output to the network (default: unlimited)\n\
 		-b X: set the DVR buffer to X KB (default: %dKB)\n\
 		-l increases the verbosity (you can use multiple -l), logging to stdout in foreground mode or in /tmp/log when a daemon\n\
+		-p url: specify playlist url using X_SATIPM3U header \n\
 		",
 		DVR_BUFFER / 1024);
 	exit (1);
@@ -90,8 +91,9 @@ set_options (int argc, char *argv[])
 	opts.device_id = 1;
 	opts.force_scan = 0;
 	opts.dvr = DVR_BUFFER;
+	memset(opts.playlist, sizeof(opts.playlist), 0);
 	
-	while ((opt = getopt (argc, argv, "flr:a:t:d:w:p:shc:b:m:")) != -1)
+	while ((opt = getopt (argc, argv, "flr:a:t:d:w:p:shc:b:m:p:")) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
 		switch (opt)
@@ -170,7 +172,13 @@ set_options (int argc, char *argv[])
 			}
 			
 			case SCAN_OPT:
+			{
 				opts.force_scan = 1;
+				break;
+			}
+
+			case PLAYLIST_OPT:
+				snprintf(opts.playlist, sizeof(opts.playlist), "<satip:X_SATIPM3U xmlns:satip=\"urn:ses-com:satip\">%s</satip:X_SATIPM3U>\r\n",optarg);
 				break;
 		}
 	}
@@ -540,6 +548,7 @@ read_http (sockets * s)
  		"</iconList>\r\n"
 		"<presentationURL>http://github.com/catalinii/minisatip</presentationURL>\r\n"
 		"<satip:X_SATIPCAP xmlns:satip=\"urn:ses-com:satip\">DVBS2-%d,DVBT2-%d,DVBC-%d</satip:X_SATIPCAP>\r\n"
+		"%s"
 		"</device>\r\n"
 		"</root>\r\n";
 
@@ -585,7 +594,7 @@ read_http (sockets * s)
 		tuner_s2 = getS2Adapters ();
 		tuner_t = getTAdapters ();
 		tuner_c = getCAdapters ();
-		sprintf (buf, xml, uuid, tuner_s2, tuner_t, tuner_c);
+		sprintf (buf, xml, uuid, tuner_s2, tuner_t, tuner_c, opts.playlist);
 		http_response (s->sock, "HTTP", 200, "Content-type: text/xml", buf, 0, 0);
 		return 0;
 	}
