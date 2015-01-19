@@ -880,7 +880,7 @@ becomeDaemon ()
 
 	if (fd != STDIN_FILENO)		 /* 'fd' should be 0 */
 		return -1;
-	fd = open ("/tmp/log", O_RDWR | O_CREAT);
+	fd = open ("/tmp/log", O_RDWR | O_CREAT, 0666);
 
 	if (fd != STDOUT_FILENO)	 /* 'fd' should be 1 */
 		return -1;
