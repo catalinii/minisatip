@@ -634,9 +634,9 @@ tune_it_s2 (int fd_frontend, transponder * tp)
 	if (tp->sys == SYS_DVBS || tp->sys == SYS_DVBS2)
 		LOG
 			("tunning to %d(%d) sr:%d fec:%s delsys:%s mod:%s rolloff:%s pilot:%s",
-			tp->freq, if_freq, tp->sr, fe_code_rate_tab[tp->fec],
-			fe_delivery_system_tab[tp->sys], fe_modulation_tab[tp->mtype],
-			fe_rolloff_tab[tp->ro], fe_pilot_tab[tp->plts])
+			tp->freq, p->props[FREQUENCY].u.data, p->props[SYMBOL_RATE].u.data, fe_code_rate_tab[p->props[FEC_INNER].u.data],
+			fe_delivery_system_tab[p->props[DELSYS].u.data], fe_modulation_tab[p->props[MODULATION].u.data],
+			fe_rolloff_tab[p->props[ROLLOFF].u.data], fe_pilot_tab[p->props[PILOT].u.data])
 	else if (tp->sys == SYS_DVBT || tp->sys == SYS_DVBT2)
 			LOG ("tunning to %d delsys: %s bw:%d inversion:%s mod:%s fec:%s fec_lp:%s guard:%s transmission: %s",
 					p->props[FREQUENCY].u.data,
@@ -902,7 +902,20 @@ detect_dvb_parameters (char *s, transponder * tp)
 			tp->dpids = arg[i] + 8;
 
 	}
-
+	
+	if((tp->sys > 0) && (tp->freq > 0))  // avoid using mtype from previous tunes
+	{
+		transponder tmp;
+		init_dvb_parameters(&tmp);
+		LOG("New frequency and delivery system detected, defaulting all other not specified parameters");
+		tmp.apids = tp->apids;
+		tmp.dpids = tp->dpids;
+		tmp.pids = tp->dpids;
+		copy_dvb_parameters(tp, &tmp);
+		copy_dvb_parameters(&tmp, tp);
+		
+	}
+	
 	if (tp->pids && strncmp (tp->pids, "all", 3) == 0)
 	{
 		strcpy (def_pids, default_pids);
