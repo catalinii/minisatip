@@ -342,7 +342,7 @@ char *
 http_response (int sock, char *proto, int rc, char *ah, char *desc, int cseq, int lr)
 {
 	char *reply =
-		"%s/1.0 %d %s\r\nCseq: %d\r\n%s\r\nContent-Length: %d\r\n\r\n%s\r\n\r\n";
+		"%s/1.0 %d %s\r\nCSeq: %d\r\n%s\r\nContent-Length: %d\r\n\r\n%s\r\n\r\n";
 	char *reply0 = "%s/1.0 %d %s\r\nCseq: %d\r\n%s\r\n\r\n";
 	char *d;
 	
