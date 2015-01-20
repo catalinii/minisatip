@@ -647,7 +647,7 @@ ssdp_discovery (sockets * s)
 		"LOCATION: http://%s/desc.xml\r\n"
 		"NT: upnp:rootdevice\r\n"
 		"NTS: ssdp:alive \r\n"
-		"SERVER: Linux/1.0 UPnP/1.1 IDL4K/1.2\r\n"
+		"SERVER: Linux/1.0 UPnP/1.1 minisatip/%s\r\n"
 		"USN: uuid:%s::upnp:rootdevice\r\n"
 		"BOOTID.UPNP.ORG: %d\r\n"
 		"CONFIGID.UPNP.ORG: 0\r\n" "DEVICEID.SES.COM: %d\r\n\r\n\0";
@@ -666,7 +666,7 @@ ssdp_discovery (sockets * s)
 	}
 
 	if(s->type != TYPE_UDP) return 0;
-	sprintf (buf, reply, opts.disc_host, opts.http_host, uuid, bootid, opts.device_id);
+	sprintf (buf, reply, opts.disc_host, opts.http_host, VERSION, uuid, bootid, opts.device_id);
 	salen = sizeof (ssdp_sa);
 	LOG ("ssdp_discovery fd: %d -> %s", s->sock, buf);
 	for (i = 0; i < 3; i++)
@@ -686,7 +686,7 @@ ssdp_reply (sockets * s)
 		"DATE: %s\r\n"
 		"EXT:\r\n"
 		"LOCATION: http://%s/desc.xml\r\n"
-		"SERVER: Linux/1.0 UPnP/1.1 IDL4K/1.2\r\n"
+		"SERVER: Linux/1.0 UPnP/1.1 minisatip/%s\r\n"
 		"ST: urn:ses-com:device:SatIPServer:1\r\n"
 		"USN: uuid:%s::urn:ses-com:device:SatIPServer:1\r\n"
 		"BOOTID.UPNP.ORG: %d\r\n"
@@ -702,7 +702,7 @@ ssdp_reply (sockets * s)
 		ssdp_discovery (s);
 	char buf[500];
 
-	sprintf (buf, reply, get_current_timestamp (), opts.http_host, uuid, bootid, opts.device_id);
+	sprintf (buf, reply, get_current_timestamp (), opts.http_host, VERSION, uuid, bootid, opts.device_id);
 	salen = sizeof (s->sa);
 	LOG ("ssdp_reply fd: %d -> %s\n%s", ssdp, inet_ntoa (s->sa.sin_addr), buf);
 								 //use ssdp (unicast) even if received to multicast address
