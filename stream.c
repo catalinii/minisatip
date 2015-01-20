@@ -235,7 +235,7 @@ int start_rtp)
 	if (p->dest[0] == 0 && p->type == TYPE_UNICAST)
 		strncpy (p->dest, inet_ntoa (s->sa.sin_addr), sizeof (p->dest));
 	if (p->dest[0] == 0)
-		strcpy (p->dest, "239.255.255.250");
+		strcpy (p->dest, opts.disc_host);
 	if (p->port == 0)
 		p->port = start_rtp;
 	LOG ("p->%d %d %d %s", p->type, p->ttl, p->port, p->dest);

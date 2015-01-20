@@ -47,10 +47,10 @@ extern sockets s[MAX_SOCKS];
 void
 usage ()
 {
-	printf ("minisatip [-f] [-r remote_rtp_host] [-d discovery_host] [-w http_server[:port]] [-p public_host] [-s rtp_port] [-a no] [-m mac] [-l]\n \
+	printf ("minisatip [-f] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] [-p public_host] [-s rtp_port] [-a no] [-m mac] [-l] [-a X:Y:Z]\n \
 		-f foreground, otherwise run in background\n\
 		-r remote_rtp_host: send remote rtp to remote_rtp_host\n \
-		-d send multicast annoucement to discovery_host instead\n \
+		-d specify the device id (in case there are multiple SAT>IP servers in the network)\n \
 		-w http_server[:port]: specify the host and the port where the xml file can be downloaded from \n\
 		-x port: port for listening on http\n\
 		-s force to get signal from the DVB hardware every 200ms (use with care, onle when needed)\n\
@@ -115,9 +115,9 @@ set_options (int argc, char *argv[])
 				break;
 			}
 
-			case DISCOVERYIP_OPT:
+			case DEVICEID_OPT:
 			{
-				opts.daemon = 1;
+				opts.device_id = atoi (optarg);
 				break;
 			}
 
@@ -642,7 +642,7 @@ int
 ssdp_discovery (sockets * s)
 {
 	char *reply = "NOTIFY * HTTP/1.1\r\n"
-		"HOST: 239.255.255.250:1900\r\n"
+		"HOST: %s:1900\r\n"
 		"CACHE-CONTROL: max-age=1800\r\n"
 		"LOCATION: http://%s/desc.xml\r\n"
 		"NT: upnp:rootdevice\r\n"
@@ -666,7 +666,7 @@ ssdp_discovery (sockets * s)
 	}
 
 	if(s->type != TYPE_UDP) return 0;
-	sprintf (buf, reply, opts.http_host, uuid, bootid, opts.device_id);
+	sprintf (buf, reply, opts.disc_host, opts.http_host, uuid, bootid, opts.device_id);
 	salen = sizeof (ssdp_sa);
 	LOG ("ssdp_discovery fd: %d -> %s", s->sock, buf);
 	for (i = 0; i < 3; i++)
@@ -746,8 +746,8 @@ main (int argc, char *argv[])
 	printf("Starting minisatip version %s, dvbapi version: %04X\n",VERSION, DVBAPIVERSION);
 	if ((ssdp = udp_bind (NULL, 1900)) < 1)
 		FAIL ("SSDP: Could not bind on udp port 1900");
-	if ((ssdp1 = udp_bind ("239.255.255.250", 1900)) < 1)
-		FAIL ("SSDP: Could not bind on 239.255.255.250 udp port 1900");
+	if ((ssdp1 = udp_bind (opts.disc_host, 1900)) < 1)
+		FAIL ("SSDP: Could not bind on %s udp port 1900", opts.disc_host);
 	if ((rtsp = tcp_listen (NULL, 554)) < 1)
 		FAIL ("RTSP: Could not listen on port 554");
 	if ((http = tcp_listen (NULL, opts.http_port)) < 1)

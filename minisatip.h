@@ -4,14 +4,14 @@
 #include "socketworks.h"
 
 
-#define VERSION_BUILD "8"
+#define VERSION_BUILD "9"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.1.,VERSION_BUILD,)
 
 void set_options (int argc, char *argv[]);
 
 #define RRTP_OPT 'r'
-#define DISCOVERYIP_OPT 'd'
+#define DEVICEID_OPT 'd'
 #define HTTPSERVER_OPT 'w'
 #define HTTPPORT_OPT 'x'
 #define LOG_OPT 'l'
