@@ -66,7 +66,7 @@ char *describe_streams (int sid,char *sbuf,int size)
 	if (!streams_enabled)
 	{
 		int slen = strlen(sbuf);
-		snprintf(sbuf + slen, size - slen - 1, "m=video 0 RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=0\r\na=fmtp:33 %s\r\na=sendonly\r\n",describe_adapter(0, 0));
+		snprintf(sbuf + slen, size - slen - 1, "m=video 0 RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=0\r\na=fmtp:33 %s\r\na=inactive\r\n",describe_adapter(0, 0));
 	}
 	return sbuf;
 }
