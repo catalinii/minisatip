@@ -386,7 +386,7 @@ read_rtsp (sockets * s)
 	int cseq, la, i, rlen;
 	char *proto;
 	rtp_prop p;
-	
+	char buf[200];
 
 	LOG ("read RTSP (from handle %d sock_id %d):\n%s", s->sock, s->sock_id, s->buf);
 	if (s->rlen < 5
@@ -423,7 +423,6 @@ read_rtsp (sockets * s)
 	if ((strncasecmp (arg[0], "SETUP", 3) == 0) || (strncasecmp (arg[0], "PLAY", 3) == 0) 
 		|| (s->type == TYPE_HTTP && strncasecmp (arg[0], "GET", 3) == 0))
 	{
-		char buf[200];
 		streams *sid;
 
 		char *ra;
@@ -459,7 +458,7 @@ read_rtsp (sockets * s)
 					"Transport: RTP/AVP;multicast;destination=%s;port=%d-%d\r\nSession:%p;timeout=%d\r\ncom.ses.streamID: %d",
 					ra, ntohs (sid->sa.sin_port), ntohs (sid->sa.sin_port) + 1,
 					sid, opts.timeout_sec / 1000, sid->sid + 1);
-
+		else sprintf(buf, "Content-Type: video/mp2t\r\n");
 		http_response (s->sock, proto, 200, buf, NULL, cseq, 0);
 	}
 	else if (strncmp (arg[0], "TEARDOWN", 8) == 0)
@@ -470,7 +469,7 @@ read_rtsp (sockets * s)
 	else
 	{
 		streams *sid;
-
+		
 		sid = get_sid (s->sid);
 		if (sid && sid->adapter >= 0)
 			start_play (sid, s); // we have a valid SID, purpose is to set master_sid>=0 (if master_sid == -1)
@@ -478,7 +477,8 @@ read_rtsp (sockets * s)
 		{
 			char sbuf[1000];
 			describe_streams(s->sid, sbuf, sizeof(sbuf));
-			http_response (s->sock, "RTSP", 200, "Content-type: application/sdp", sbuf, cseq, 0);
+			sprintf(buf, "Content-type: application/sdp\r\nContent-Base: rtsp://%s/", get_sock_host(s->sock));
+			http_response (s->sock, "RTSP", 200, buf, sbuf, cseq, 0);
 				
 		}
 		else if (strncmp (arg[0], "OPTIONS", 8) == 0)
@@ -596,7 +596,7 @@ read_http (sockets * s)
 		tuner_t = getTAdapters ();
 		tuner_c = getCAdapters ();
 		sprintf (buf, xml, uuid, tuner_s2, tuner_t, tuner_c, opts.playlist);
-		http_response (s->sock, "HTTP", 200, "Content-type: text/xml", buf, 0, 0);
+		http_response (s->sock, "HTTP", 200, "Content-type: text/xml\r\nConnection: close", buf, 0, 0);
 		return 0;
 	}
 
@@ -607,9 +607,9 @@ read_http (sockets * s)
 		if(strlen (arg[1]) != 13 )
 			REPLY_AND_RETURN(404);		
 		if( arg[1][strlen(arg[1])-2] == 'n' )
-			ctype = "Content-type: image/png";
+			ctype = "Content-type: image/png\r\nConnection: close";
 		else if (arg[1][strlen(arg[1])-2] == 'p')			
-			ctype = "Content-type: image/jpeg";
+			ctype = "Content-type: image/jpeg\r\nConnection: close";
 		else REPLY_AND_RETURN(404); 
 		
 		readfile(arg[1], buf, &nl);

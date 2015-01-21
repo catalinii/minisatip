@@ -54,7 +54,7 @@ char *describe_streams (int sid,char *sbuf,int size)
 	if( sidf == -1) 
 		sidf = 0;
 		
-	snprintf(sbuf,size-1,"v=0\r\no=-%d %d IN IP4 %s\r\ns=SatIPServer:1 %d %d %d\r\nt=0 0\r\n", sidf, sidf, getlocalip(), getS2Adapters(), getTAdapters(), getCAdapters() );
+	snprintf(sbuf,size-1,"v=0\r\no=- %d %d IN IP4 %s\r\ns=SatIPServer:1 %d %d %d\r\nt=0 0\r\n", sidf, sidf, getlocalip(), getS2Adapters(), getTAdapters(), getCAdapters() );
 	for( i=0; i<MAX_STREAMS; i++)
 		if(st[i].enabled)
 		{
