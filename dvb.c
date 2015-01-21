@@ -792,6 +792,9 @@ detect_dvb_parameters (char *s, transponder * tp)
 		LOG_AND_RETURN (0, "no ? found in URL");
 
 	*s++;
+	if (strstr(s, "freq="))
+			init_dvb_parameters(tp);
+
 	LOG ("detect_dvb_parameters (S)-> %s", s);
 	la = split (arg, s, 20, '&');
 
@@ -902,26 +905,17 @@ detect_dvb_parameters (char *s, transponder * tp)
 			tp->dpids = arg[i] + 8;
 
 	}
-	
-	if((tp->sys > 0) && (tp->freq > 0))  // avoid using mtype from previous tunes
-	{
-		transponder tmp;
-		init_dvb_parameters(&tmp);
-		LOG("New frequency and delivery system detected, defaulting all other not specified parameters");
-		tmp.apids = tp->apids;
-		tmp.dpids = tp->dpids;
-		tmp.pids = tp->dpids;
-		copy_dvb_parameters(tp, &tmp);
-		copy_dvb_parameters(&tmp, tp);
 		
-	}
-	
 	if (tp->pids && strncmp (tp->pids, "all", 3) == 0)
 	{
 		strcpy (def_pids, default_pids);
 								 // map pids=all to essential pids
 		tp->pids = (char *) def_pids;
 	}
+	
+	if (tp->pids && strncmp (tp->pids, "none", 3) == 0)
+		tp->pids = NULL;
+
 	//      if(!msys)INVALID_URL("no msys= found in URL");
 	//      if(freq<10)INVALID_URL("no freq= found in URL or frequency invalid");
 	//      if((msys==SYS_DVBS || msys==SYS_DVBS2) && (pol!='H' && pol!='V'))INVALID_URL("no pol= found in URL or pol is not H or V");

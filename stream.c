@@ -150,6 +150,9 @@ setup_stream (char **str, sockets * s, rtp_prop * p)
 			s_id = 0;
 		char pol;
 
+		if (p->type == 0 && s->type == TYPE_RTSP)
+			LOG_AND_RETURN (NULL, "Error: No transport specified in the RTSP header, probably the client expects RTSP over TCP");
+		
 		stype = -1;	
 		if (s->type == TYPE_HTTP)
 			stype = s->sock;
@@ -552,8 +555,8 @@ stream_timeout (sockets * s)
 		rttime = sid->rtcp_wtime,
 		rtime = sid->wtime;
 
+	if (sid->https >= 0)return 0;
 	ctime = getTick ();
-
 	//LOG("stream timeouts called for sid %d c:%d r:%d rt:%d",s->sid,ctime,rtime,rttime);
 	if (ctime - rtime > 1000)
 	{
