@@ -59,29 +59,27 @@ static const char *fe_rolloff_tab[] =
 	"ROLLOFF_AUTO"
 };
 
-static const char *fe_delivery_system_tab[] =
+static char *fe_delivery_system_tab[] =
 {
-	"SYS_UNDEFINED",
-	"SYS_DVBC_ANNEX_A",
+	"undefined",
+	"dvbc",
 	"SYS_DVBC_ANNEX_B",
-	"SYS_DVBT",
-	"SYS_DSS",
-	"SYS_DVBS",
-	"SYS_DVBS2",
-	"SYS_DVBH",
-	"SYS_ISDBT",
-	"SYS_ISDBS",
-	"SYS_ISDBC",
-	"SYS_ATSC",
-	"SYS_ATSCMH",
-	"SYS_DMBTH",
-	"SYS_CMMB",
-	"SYS_DAB",
-	"SYS_DVBT2",
-	"SYS_TURBO",
-	"SYS_DVBC_ANNEX_C",
-	"UNKNOWN",
-	"UNKNOWN"
+	"dvbt",
+	"dss",
+	"dvbs",
+	"dvbs2",
+	"dvbh",
+	"isdbt",
+	"isdbs",
+	"isdbc",
+	"atsc",
+	"atscmh",
+	"dmbth",
+	"cmmb",
+	"dab",
+	"dvbt2",
+	"turbo",
+	"dvbc_annex_c"
 };
 
 static const char *fe_spectral_inversion_tab[] =
@@ -1045,5 +1043,13 @@ char *modulation_string(int mtype)
 {
 	if(mtype>=0 && mtype < sizeof(fe_modulation_tab) )
 		return fe_modulation_tab[mtype];
+	return "none";
+}
+
+
+char *delsys_string(int delsys)
+{
+	if(delsys>=0 && delsys < sizeof(fe_delivery_system_tab) )
+		return fe_delivery_system_tab[delsys];
 	return "none";
 }

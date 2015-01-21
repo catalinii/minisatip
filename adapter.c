@@ -632,14 +632,14 @@ describe_adapter (int sid, int aid)
 		ad->snr = ad->snr * 15 / ad->max_snr;
 	}
 	if (t->sys == SYS_DVBS || t->sys == SYS_DVBS2)
-		sprintf (dad, "ver=1.0;src=%d;tuner=%d,%d,%d,%d,%d,%c,dvbs,,,,%d,;pids=",
+		sprintf (dad, "ver=1.0;src=%d;tuner=%d,%d,%d,%d,%d,%c,%s,,,,%d,;pids=",
 			t->diseqc + 1, aid, ad->strength, ad->status, ad->snr,
-			t->freq / 1000, t->pol, t->sr / 1000);
+			t->freq / 1000, t->pol, delsys_string(t->sys), t->sr / 1000);
 	else if (t->sys == SYS_DVBT || t->sys == SYS_DVBT2)
-		sprintf (dad, "ver=1.1;src=%d;tuner=%d,%d,%d,%d,%.2f,,dvbt,,,,,;pids=",
-			t->diseqc + 1, aid, ad->strength, ad->status, ad->snr, (double) t->freq/1000);
-	else  sprintf (dad, "ver=1.2;src=%d;tuner=%d,%d,%d,%d,%.2f,8,dvbc,%s,%d,,,;pids=",
-                        t->diseqc + 1, aid, ad->strength, ad->status, ad->snr, (double )t->freq/1000, modulation_string(t->mtype), t->sr);
+		sprintf (dad, "ver=1.1;src=%d;tuner=%d,%d,%d,%d,%.2f,,%s,,,,,;pids=",
+			t->diseqc + 1, aid, ad->strength, ad->status, ad->snr, (double) t->freq/1000, delsys_string(t->sys));
+	else  sprintf (dad, "ver=1.2;src=%d;tuner=%d,%d,%d,%d,%.2f,8,%s,%s,%d,,,;pids=",
+                        t->diseqc + 1, aid, ad->strength, ad->status, ad->snr, (double )t->freq/1000, delsys_string(t->sys), modulation_string(t->mtype), t->sr);
 	for (i = 0; i < MAX_PIDS; i++)
 		if (ad->pids[i].flags == 1)
 			for(j=0; j< MAX_STREAMS_PER_PID; j++)
