@@ -56,4 +56,5 @@ int stream_timeout (sockets * s);
 int close_streams_for_adapter (int ad, int except);
 void dump_streams ();
 streams *get_sid (int sid);
+int get_session_id( int i);
 #endif

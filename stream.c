@@ -76,21 +76,24 @@ int
 send_rtcp (int s_id, int ctime)
 {
 	int tmp_port;
+	int len;
 	streams *sid = &st[s_id];
 	uint32_t buf[400];
 	char *a = describe_adapter (s_id, st[s_id].adapter);
 	int la = strlen (a);
+	len = la + 16;
+	if (len % 4 > 0)len = len - (len % 4) +4;
 
 	//      LOG("send_rtcp (sid: %d)-> %s",s_id,a);
 								 // rtp header
-	buf[0] = htonl (0x82CC << 16 | la + 16);
+	buf[0] = htonl (0x82CC << 16 | len);
 	buf[1] = htonl (ctime);
 	buf[2] = htonl (0x53455331);
-	buf[3] = htonl (la << 16);
+	buf[3] = htonl (len - 16);
 	strcpy ((char *) &buf[4], a);
 	tmp_port = sid->sa.sin_port;
 	sid->sa.sin_port = htons (ntohs (sid->sa.sin_port) + 1);
-	sendto (rtpc, buf, la + 16, MSG_NOSIGNAL,
+	sendto (rtpc, buf, len , MSG_NOSIGNAL,
 		(const struct sockaddr *) &sid->sa, sizeof (sid->sa));
 	sid->sa.sin_port = tmp_port;
 	sid->rtcp_wtime = ctime;
@@ -615,4 +618,12 @@ get_sid (int sid)
 	if (sid < 0 || sid > MAX_STREAMS || st[sid].enabled == 0)
 		return NULL;
 	return &st[sid];
+}
+
+
+int get_session_id( int i)
+{
+	if (i<0 || i>MAX_STREAMS || st[i].enabled==0)
+		return 0;
+	return i*0x100;
 }
