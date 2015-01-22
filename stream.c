@@ -50,9 +50,7 @@ char *describe_streams (int sid,char *sbuf,int size)
 	int i, sidf, streams_enabled;
 
 	streams_enabled = 0;
-	sidf = sid;
-	if( sidf == -1) 
-		sidf = 0;
+	sidf = get_session_id(sid);
 		
 	snprintf(sbuf,size-1,"v=0\r\no=- %d %d IN IP4 %s\r\ns=SatIPServer:1 %d %d %d\r\nt=0 0\r\n", sidf, sidf, getlocalip(), getS2Adapters(), getTAdapters(), getCAdapters() );
 	for( i=0; i<MAX_STREAMS; i++)
@@ -60,13 +58,13 @@ char *describe_streams (int sid,char *sbuf,int size)
 		{
 			int slen=strlen(sbuf);
 			streams_enabled ++;
-			snprintf(sbuf + slen, size - slen - 1, "m=video %d RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\na=sendonly\r\n", ntohs (st[i].sa.sin_port), i, describe_adapter(i, st[i].adapter));
+			snprintf(sbuf + slen, size - slen - 1, "m=video %d RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\na=sendonly\r\n", ntohs (st[i].sa.sin_port), get_session_id (i), describe_adapter(i, st[i].adapter));
 			if( size - slen < 10)LOG_AND_RETURN(sbuf, "DESCRIBE BUFFER is full");
 		}
 	if (!streams_enabled)
 	{
 		int slen = strlen(sbuf);
-		snprintf(sbuf + slen, size - slen - 1, "m=video 0 RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=0\r\na=fmtp:33 %s\r\na=inactive\r\n",describe_adapter(0, 0));
+		snprintf(sbuf + slen, size - slen - 1, "m=video 0 RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\na=inactive\r\n",get_session_id (sid), describe_adapter(0, 0));
 	}
 	return sbuf;
 }
