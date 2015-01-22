@@ -20,3 +20,6 @@ adapter.o: adapter.c adapter.h
 	$(CC) $(CFLAGS) -c -o adapter.o adapter.c
 
 all: minisatip
+
+clean:
+	rm *.o minisatip
