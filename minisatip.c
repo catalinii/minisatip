@@ -468,6 +468,8 @@ read_rtsp (sockets * s)
 					ra, ntohs (sid->sa.sin_port), ntohs (sid->sa.sin_port) + 1,
 					sid, opts.timeout_sec / 1000, sid->sid + 1);
 		else sprintf(buf, "Content-Type: video/mp2t\r\n");
+		if (arg[0][0] == 'P')
+			sprintf(buf + strlen(buf), "\r\nRTP-Info: url=%s", arg[1]);
 		http_response (s->sock, proto, 200, buf, NULL, cseq, 0);
 	}
 	else if (strncmp (arg[0], "TEARDOWN", 8) == 0)
