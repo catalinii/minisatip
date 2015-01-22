@@ -20,6 +20,7 @@ typedef struct struct_pid
 typedef struct struct_adapter
 {
 	int enabled;
+	int force_disable;
 	int fe,	dvr;
 	int pa, fn;		
 		// physical adapter, physical frontend number
@@ -54,4 +55,5 @@ adapter * get_adapter (int aid);
 char *describe_adapter (int sid, int aid);
 void dump_pids (int aid);
 void sort_pids (int aid);
+void enable_adapters(char *o);
 #endif							 /*  */

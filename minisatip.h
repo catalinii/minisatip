@@ -4,7 +4,7 @@
 #include "socketworks.h"
 
 
-#define VERSION_BUILD "16"
+#define VERSION_BUILD "17"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.1.,VERSION_BUILD,)
 
@@ -24,6 +24,7 @@ void set_options (int argc, char *argv[]);
 #define FOREGROUND_OPT 'f'
 #define BW_OPT 'c'
 #define DVRBUFFER_OPT 'b'
+#define ENABLE_ADAPTERS_OPT 'e'
 
 
 struct struct_opts
@@ -59,7 +60,7 @@ typedef struct struct_pchar_int
 int ssdp_discovery (sockets * s);
 int split (char **rv, char *s, int lrv, char sep);
 int map_int (char *s, pchar_int * v);
-
+int map_float (char *s, int mul);
 void *mymalloc (int a, char *f, int l);
 void myfree (void *x, char *f, int l);
 int becomeDaemon ();

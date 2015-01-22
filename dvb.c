@@ -33,6 +33,7 @@
 #include <linux/dvb/frontend.h>
 #include <linux/dvb/dmx.h>
 #include <fcntl.h>
+#include <ctype.h>
 #include "dvb.h"
 #include "minisatip.h"
 
@@ -429,12 +430,7 @@ int uncommitted_switch_pos)
 int
 tune_it_s2 (int fd_frontend, transponder * tp)
 {
-	int rc;
-	int i;
-	fe_status_t s;
-
 	uint32_t if_freq = 0;
-	uint32_t bandwidth_hz = 0;
 	int hiband = 0;
 	int res;
 
@@ -516,7 +512,6 @@ tune_it_s2 (int fd_frontend, transponder * tp)
 	//      if (ioctl(fd_frontend, FE_GET_EVENT, &event) < 0)       //EMPTY THE EVENT QUEUE
 	//        break;
 	//    }
-	time_t tt = time (NULL);
 
 	if ((ioctl (fd_frontend, FE_SET_PROPERTY, &cmdseq_clear)) == -1)
 	{
@@ -708,8 +703,7 @@ del_filters (int fd, int pid)
 fe_delivery_system_t
 dvb_delsys (int fd)
 {
-	int ds[100],
-		i;
+	int i;
 
 	static struct dtv_property enum_cmdargs[] =
 	{
@@ -760,8 +754,7 @@ int
 detect_dvb_parameters (char *s, transponder * tp)
 {
 	char *arg[20];
-	int la,
-		i;
+	int la, i;
 
 	tp->sys = -1;
 	tp->freq = -1;
@@ -1017,7 +1010,6 @@ get_signal (int fd, fe_status_t * status, uint32_t * ber, uint16_t * strength,
 uint16_t * snr)
 {
 	*status = *ber = *snr = *strength = 0;
-	struct dvb_frontend_event ev;
 
 	if (ioctl (fd, FE_READ_STATUS, status) < 0)
 	{

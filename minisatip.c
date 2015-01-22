@@ -47,7 +47,7 @@ extern sockets s[MAX_SOCKS];
 void
 usage ()
 {
-	printf ("minisatip [-f] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] [-p public_host] [-s rtp_port] [-a no] [-m mac] [-l] [-a X:Y:Z]\n \
+	printf ("minisatip [-f] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] [-p public_host] [-s rtp_port] [-a no] [-m mac] [-l] [-a X:Y:Z] [-e X-Y,Z]\n \
 		-f foreground, otherwise run in background\n\
 		-r remote_rtp_host: send remote rtp to remote_rtp_host\n \
 		-d specify the device id (in case there are multiple SAT>IP servers in the network)\n \
@@ -56,6 +56,7 @@ usage ()
 		-s force to get signal from the DVB hardware every 200ms (use with care, onle when needed)\n\
 		-a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means autodetect)\n\
 		-m xx: simulate xx as local mac address, generates UUID based on mac\n\
+		-e list_of_enabled adapters: enable only specified adapters, example 0-2,5,7 (no spaces between parameters)\n\
 		-c X: bandwidth capping for the output to the network (default: unlimited)\n\
 		-b X: set the DVR buffer to X KB (default: %dKB)\n\
 		-l increases the verbosity (you can use multiple -l), logging to stdout in foreground mode or in /tmp/log when a daemon\n\
@@ -93,7 +94,7 @@ set_options (int argc, char *argv[])
 	opts.dvr = DVR_BUFFER;
 	memset(opts.playlist, sizeof(opts.playlist), 0);
 	
-	while ((opt = getopt (argc, argv, "flr:a:t:d:w:p:shc:b:m:p:")) != -1)
+	while ((opt = getopt (argc, argv, "flr:a:t:d:w:p:shc:b:m:p:e:")) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
 		switch (opt)
@@ -178,8 +179,16 @@ set_options (int argc, char *argv[])
 			}
 
 			case PLAYLIST_OPT:
+			{
 				snprintf(opts.playlist, sizeof(opts.playlist), "<satip:X_SATIPM3U xmlns:satip=\"urn:ses-com:satip\">%s</satip:X_SATIPM3U>\r\n",optarg);
 				break;
+			}
+			
+			case ENABLE_ADAPTERS_OPT:
+			{
+				enable_adapters(optarg);
+				break;
+			}
 		}
 	}
 	

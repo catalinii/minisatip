@@ -77,7 +77,7 @@ init_hw ()
 		if ((!a[i].enabled || a[i].fe <= 0) && (a[i].pa >= 0 && a[i].fn >= 0))
 	{
 		int k;
-
+		if (a[i].force_disable)continue;
 		a[i].sock = -1;
 		if (a[i].pa <= 0 && a[i].fn <= 0)
 			find_adapters ();
@@ -619,7 +619,7 @@ describe_adapter (int sid, int aid)
 	memset (dad, 0, sizeof (dad));
 	x = 0;
 								 // do just max 3 signal check 1s after tune
-	if ((ad->status == 0 && ad->status_cnt++<8 && ad->status_cnt++>4) || opts.force_scan)
+	if ((ad->status == 0 && ad->status_cnt<8 && ad->status_cnt++>4) || opts.force_scan)
 	{
 		ts = getTick ();
 		get_signal (ad->fe, &ad->status, &ad->ber, &ad->strength, &ad->snr);
@@ -691,4 +691,38 @@ free_all_adapters ()
 		if (a[i].buf)
 			free1 (a[i].buf);
 
+}
+
+void set_disable(int ad, int v)
+{
+	if(ad>=0 && ad<MAX_ADAPTERS)
+		a[ad].force_disable = v;
+}
+
+void enable_adapters(char *o)
+{
+	int i, la, st, end, j;
+	char buf[100], *arg[20], *sep;
+	for (i=0;i<MAX_ADAPTERS;i++)
+		set_disable (i, 1);
+	strncpy(buf, o, sizeof(buf));
+	
+	la = split(arg, buf, sizeof(arg), ',');
+	for (i=0; i<la; i++)
+	{
+		sep = strchr(arg[i], '-');
+		if(sep == NULL)
+		{
+			st = map_int(arg[i], NULL);
+			set_disable (st, 0);
+		}else {
+			st = map_int(arg[i], NULL);
+			end = map_int(sep+1, NULL);
+			for (j=st; j<=end;j++)
+				set_disable (j, 0);
+		}
+	}
+	
+		
+	
 }
