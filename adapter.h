@@ -51,9 +51,11 @@ int set_adapter_parameters (int aid, int sid, transponder * tp);
 void mark_pids_deleted (int aid, int sid, char *pids);
 int mark_pids_add (int sid, int aid, char *pids);
 int update_pids (int aid);
-adapter * get_adapter (int aid);
+adapter * get_adapter1 (int aid, char *file, int line);
 char *describe_adapter (int sid, int aid);
 void dump_pids (int aid);
 void sort_pids (int aid);
 void enable_adapters(char *o);
+
+#define get_adapter(a) get_adapter1(a, __FILE__, __LINE__)
 #endif							 /*  */

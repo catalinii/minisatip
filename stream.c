@@ -77,8 +77,8 @@ set_stream_parameters (int s_id, transponder * t)
 {
 	streams *sid;
 
-	sid = &st[s_id];
-	if (!sid->enabled)
+	sid = get_sid(s_id);
+	if (!sid || !sid->enabled)
 		return;
 	if (t->apids && t->apids[0] >= '0' && t->apids[0] <= '9')
 	{
@@ -133,7 +133,8 @@ setup_stream (char **str, sockets * s, rtp_prop * p)
 		if (s->type == TYPE_HTTP)
 			stype = s->sock;
 			
-		if ((s_id = streams_add (-1, p, stype)) < 0)
+		s_id = streams_add (-1, p, stype);
+		if(!get_sid(s_id))
 			LOG_AND_RETURN ( NULL, "Could not add a new stream");
 		init_dvb_parameters (&st[s_id].tp);
 		set_stream_parameters (s_id, &t);
@@ -142,14 +143,14 @@ setup_stream (char **str, sockets * s, rtp_prop * p)
 		s->timeout = (socket_action) stream_timeout;
 		LOG ("Setup stream done: sid: %d (e:%d) for sock %d handle %d", s_id,
 			st[s_id].enabled, s->sock_id, s->sock);
-		return &st[s_id];
+		return get_sid(s_id);
 	}
 	else
 		set_stream_parameters (s->sid, &t);
-	if (s->sid < 0 || st[s->sid].enabled == 0)
+	if (! get_sid(s->sid))
 		LOG_AND_RETURN (NULL, "Stream %d not enabled for sock_id %d handle %d",
 			s->sid, s->sock_id, s->sock);
-	return &st[s->sid];
+	return get_sid(s->sid);
 }
 
 
@@ -371,7 +372,9 @@ send_rtcp (int s_id, int ctime)
 {
 	int tmp_port;
 	int len;
-	streams *sid = &st[s_id];
+	streams *sid = get_sid(s_id);
+	if(!sid)
+		LOG_AND_RETURN (0, "Sid is null for s_id %d", s_id);
 	char *a = describe_adapter (s_id, st[s_id].adapter);
 	int la = strlen (a);
 	if ( la > sizeof(rtcp)) 
@@ -527,7 +530,7 @@ read_dmx (sockets * s)
 								 // we have just 1 stream, do not check the pids, send everything to the destination
 	if (ad->sid_cnt == 1 && ad->master_sid >= 0 && opts.log < 2)
 	{
-		sid = &st[ad->master_sid];
+		sid = get_sid(ad->master_sid);
 		if (sid->enabled != 1)
 		{
 			LOG ("Master SID %d not enabled ", ad->master_sid);
@@ -557,7 +560,7 @@ read_dmx (sockets * s)
 
 						if (s_id >= 0 && s_id < MAX_STREAMS && st[s_id].enabled)
 						{
-							sid = &st[s_id];
+							sid = get_sid(s_id);
 							p[i].cnt++;
 							sid->iov[sid->iiov].iov_base = b;
 							sid->iov[sid->iiov++].iov_len = DVB_FRAME;
@@ -577,7 +580,7 @@ read_dmx (sockets * s)
 								 //move all dvb packets that were not sent out of the s->buf
 			if (st[i].enabled && st[i].adapter == s->sid)
 		{
-			sid = &st[i];
+			sid = get_sid(i);
 			for (j = 0; j < sid->iiov; j++)
 				if (sid->iov[j].iov_base >= min && sid->iov[j].iov_base <= max)
 			{
@@ -614,7 +617,7 @@ stream_timeout (sockets * s)
 	if (s->sid < 0 || s->sid > MAX_STREAMS || st[s->sid].enabled == 0
 		|| st[s->sid].do_play == 0)
 		return;
-	streams *sid = &st[s->sid];
+	streams *sid = get_sid(s->sid);
 	int ctime,
 		rttime = sid->rtcp_wtime,
 		rtime = sid->wtime;
@@ -674,10 +677,10 @@ free_all_streams ()
 
 
 streams *
-get_sid (int sid)
+get_sid1 (int sid,char *file, int line)
 {
 	if (sid < 0 || sid > MAX_STREAMS || st[sid].enabled == 0)
-		return NULL;
+		LOG_AND_RETURN(NULL, "%s:%d get_sid returns NULL for s_id = %d", file, line, sid);
 	return &st[sid];
 }
 
@@ -686,5 +689,5 @@ int get_session_id( int i)
 {
 	if (i<0 || i>MAX_STREAMS || st[i].enabled==0)
 		return 0;
-	return i*0x100;
+	return i + 1000000;
 }

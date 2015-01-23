@@ -346,6 +346,7 @@ map_float (char *s, int mul)
 
 }
 
+char public[] = "Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN";
 
 char *
 http_response (int sock, char *proto, int rc, char *ah, char *desc, int cseq, int lr)
@@ -355,9 +356,8 @@ http_response (int sock, char *proto, int rc, char *ah, char *desc, int cseq, in
 	char *reply0 = "%s/1.0 %d %s\r\nCseq: %d\r\nDate: %s\r\n%s\r\n\r\n";
 	char *d;
 	
-
 	if (!ah)
-		ah = "Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN";
+		ah = public;
 	if (!desc)
 		desc = "";
 	if (rc == 200)
@@ -494,7 +494,7 @@ read_rtsp (sockets * s)
 		}
 		else if (strncmp (arg[0], "OPTIONS", 8) == 0)
 		{		
-			sprintf(buf, "Session:%x", get_session_id(s->sid));
+			sprintf(buf, "Session:%010d\r\n%s", get_session_id(s->sid), public);
 			http_response (s->sock, "RTSP", 200, buf, NULL, cseq, 0);
 		}
 	}

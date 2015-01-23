@@ -386,12 +386,18 @@ select_and_execute ()
 						continue;
 
 					}
-					if (ss->type == 0)//udp
+					
+					if (ss->lbuf - ss->rlen < 1)
+					{
+						LOG("Socket buffer full, handle %d, sock_id %d, type %d, lbuf %d, rlen %d, ss->buf = %p, buf %p", ss->sock, i, ss->type, ss->lbuf, ss->rlen, ss->buf, buf);
+						rlen = ss->rlen;  //Avoid Socket Close
+						ss->rlen = 0;
+					}
+					else if (ss->type == 0)//udp
 						rlen =
 							recvfrom (ss->sock, &ss->buf[ss->rlen], ss->lbuf - ss->rlen,
 							0, (struct sockaddr *) &ss->sa, &slen);
 					else if (ss->type != 2)
-								 // not an server socket
 						rlen = read (ss->sock, &ss->buf[ss->rlen], ss->lbuf - ss->rlen);
 
 					ss->rlen += rlen;

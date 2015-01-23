@@ -56,6 +56,8 @@ int read_dmx (sockets * s);
 int stream_timeout (sockets * s);
 int close_streams_for_adapter (int ad, int except);
 void dump_streams ();
-streams *get_sid (int sid);
+streams *get_sid1 (int sid, char *file, int line);
 int get_session_id( int i);
+
+#define get_sid(a) get_sid1(a, __FILE__, __LINE__)
 #endif

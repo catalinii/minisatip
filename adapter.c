@@ -237,8 +237,9 @@ dump_pids (int aid)
 
 	if (!opts.log)
 		return;
-	adapter *p = &a[aid];
-
+	adapter *p = get_adapter(aid);
+	if( !p) 
+		return ;
 	for (i = 0; i < MAX_PIDS; i++)
 		if (p->pids[i].flags > 0)
 	{
@@ -302,11 +303,13 @@ get_free_adapter (int freq, int pol, int msys, int src)
 int
 set_adapter_for_stream (int sid, int aid)
 {
+	if (!get_adapter (aid))
+		return -1;
 	if (a[aid].master_sid == -1)
 		a[aid].master_sid = sid;
 	a[aid].sid_cnt++;
-	LOG ("set adapter %d for stream %d m:%d s:%d", aid, sid, a[aid].master_sid,
-		a[aid].sid_cnt);
+	LOG ("set adapter %d for stream %d m:%d s:%d", aid, sid, a[aid].master_sid, a[aid].sid_cnt);
+	return 0;
 }
 
 
@@ -314,7 +317,7 @@ int
 close_adapter_for_stream (int sid, int aid)
 {
 
-	if (aid < 0 || aid >= MAX_ADAPTERS || !a[aid].enabled)
+	if (! get_adapter(aid))
 		return;
 	if (a[aid].master_sid == sid)
 		a[aid].master_sid = -1;
@@ -334,29 +337,33 @@ int
 update_pids (int aid)
 {
 	int i, j, dp=1;
-	adapter *ad = &a[aid];
+	adapter *ad;
+	if (aid<0 || aid>=MAX_ADAPTERS)
+		return 0;
+	ad = &a[aid];
+	
 	for (i = 0; i < MAX_PIDS; i++)
-		if (a[aid].pids[i].flags == 3)
+		if (ad->pids[i].flags == 3)
 	{
 		if(dp && opts.log==2)dump_pids (aid);
 		dp = 0;
-		a[aid].pids[i].flags = 0;
-		if (a[aid].pids[i].fd > 0)
-			del_filters (a[aid].pids[i].fd, a[aid].pids[i].pid);
-		a[aid].pids[i].fd = 0;
-		a[aid].pids[i].cnt = 0;
+		ad->pids[i].flags = 0;
+		if (ad->pids[i].fd > 0)
+			del_filters (ad->pids[i].fd, ad->pids[i].pid);
+		ad->pids[i].fd = 0;
+		ad->pids[i].cnt = 0;
 
 	}
 
 	for (i = 0; i < MAX_PIDS; i++)
-		if (a[aid].pids[i].flags == 2)
+		if (ad->pids[i].flags == 2)
 	{
 		if(dp && opts.log==2)dump_pids (aid);
 		dp = 0;
-		a[aid].pids[i].flags = 1;
-		if (a[aid].pids[i].fd <= 0)
-			a[aid].pids[i].fd = set_pid (a[aid].pa, a[aid].fn, a[aid].pids[i].pid);
-		a[aid].pids[i].cnt = 0;
+		ad->pids[i].flags = 1;
+		if (ad->pids[i].fd <= 0)
+			ad->pids[i].fd = set_pid (ad->pa, ad->fn, ad->pids[i].pid);
+		ad->pids[i].cnt = 0;
 	}
 	return 0;
 }
@@ -365,10 +372,10 @@ update_pids (int aid)
 int
 tune (int aid, int sid)
 {
-	adapter *ad = &a[aid];
-	int i,
-		rv = 0;
-
+	adapter *ad = get_adapter(aid);
+	int i, rv = 0;
+	
+	if(!ad) return -1;
 	ad->last_sort = getTick ();
 	if (sid == ad->master_sid && ad->do_tune)
 	{
@@ -413,6 +420,8 @@ mark_pids_deleted (int aid, int sid, char *pids)
 			p[i] = map_int (arg[i], NULL);
 	}
 
+	if (aid<0 || aid>=MAX_ADAPTERS)
+		return;
 	ad = &a[aid];
 
 	for (i = 0; i < MAX_PIDS; i++)
@@ -490,7 +499,11 @@ mark_pids_add (int sid, int aid, char *pids)
 		for (i = 0; i < la; i++)
 			p[i] = map_int (arg[i], NULL);
 	}
-	ad = &a[aid];
+	
+	ad = get_adapter(aid);
+	if(!ad)
+		return;
+		
 	for (j = 0; j < la; j++)
 	{
 		found = 0;
@@ -545,60 +558,64 @@ int
 set_adapter_parameters (int aid, int sid, transponder * tp)
 {
 	int i;
-
+	adapter *ad = get_adapter (aid);
+	
+	if(!ad)
+		return -1;
+		
 	LOG ("setting DVB parameters for adapter %d - master_sid %d sid %d old f:%d", aid,
-		a[aid].master_sid, sid, a[aid].tp.freq);
-	if (a[aid].master_sid == -1)
-		a[aid].master_sid = sid; // master sid was closed
-	if ((sid != a[aid].master_sid) && (tp->freq != a[aid].tp.freq))
+		ad->master_sid, sid, ad->tp.freq);
+	if (ad->master_sid == -1)
+		ad->master_sid = sid; // master sid was closed
+	if ((sid != ad->master_sid) && (tp->freq != ad->tp.freq))
 		return -1;				 // slave sid requesting to tune to a different frequency
-	a[aid].do_tune = 0;
-	if (tp->freq != a[aid].tp.freq
-		|| (tp->pol != -1 && tp->pol != a[aid].tp.pol))
+	ad->do_tune = 0;
+	if (tp->freq != ad->tp.freq
+		|| (tp->pol != -1 && tp->pol != ad->tp.pol))
 	{
 		mark_pids_deleted (aid, -1, NULL);
 		update_pids (aid);
-		a[aid].do_tune = 1;
+		ad->do_tune = 1;
 	}
 								 // just 1 stream per adapter and pids= specified
-	if (a[aid].sid_cnt == 1 && tp->pids)
+	if (ad->sid_cnt == 1 && tp->pids)
 	{
 		mark_pids_deleted (aid, -1, NULL);
 	}
-	copy_dvb_parameters (tp, &a[aid].tp);
+	copy_dvb_parameters (tp, &ad->tp);
 
-	if (a[aid].tp.pids)			 // pids can be specified in SETUP and then followed by a delpids in PLAY, make sure the behaviour is right
+	if (ad->tp.pids)			 // pids can be specified in SETUP and then followed by a delpids in PLAY, make sure the behaviour is right
 	{
 		if (mark_pids_add
-			(sid, aid, a[aid].tp.apids ? a[aid].tp.apids : a[aid].tp.pids) < 0)
+			(sid, aid, ad->tp.apids ? ad->tp.apids : ad->tp.pids) < 0)
 			return -1;
 	}
 
-	if (a[aid].tp.dpids)
+	if (ad->tp.dpids)
 	{
 		char *arg[MAX_PIDS];
 
-		mark_pids_deleted (aid, sid, a[aid].tp.dpids);
+		mark_pids_deleted (aid, sid, ad->tp.dpids);
 
 	}
-	if (a[aid].tp.apids)
+	if (ad->tp.apids)
 	{
 		if (mark_pids_add
-			(sid, aid, a[aid].tp.apids ? a[aid].tp.apids : a[aid].tp.pids) < 0)
+			(sid, aid, ad->tp.apids ? ad->tp.apids : ad->tp.pids) < 0)
 			return -1;
 	}
-	if (0 && (a[aid].tp.apids || a[aid].tp.pids || a[aid].tp.dpids))
+	if (0 && (ad->tp.apids || ad->tp.pids || ad->tp.dpids))
 		dump_pids (aid);
 	return 0;
 }
 
 
 adapter *
-get_adapter (int aid)
+get_adapter1 (int aid,char *file, int line)
 {
 	if (aid < 0 || aid >= MAX_ADAPTERS || !a[aid].enabled)
 	{
-		LOG ("Invalid adapter_id %d or not enabled", aid);
+		LOG ("%s:%d: get_adapter returns NULL for adapter_id %d", file, line, aid);
 		return NULL;
 	}
 	return &a[aid];
@@ -612,10 +629,9 @@ describe_adapter (int sid, int aid)
 	transponder *t;
 	adapter *ad;
 
-	if (aid < 0 || aid > MAX_ADAPTERS || a[aid].enabled==0)
+	if (!(ad = get_adapter(aid)))
 		return "";
-	t = &a[aid].tp;
-	ad = &a[aid];
+	t = &ad->tp;
 	memset (dad, 0, sizeof (dad));
 	x = 0;
 								 // do just max 3 signal check 1s after tune
@@ -664,7 +680,9 @@ sort_pids (int aid)
 	int b, i, j, t;
 	pid pp;
 	pid *p;
-
+	
+	if(!get_adapter(aid))
+		return;
 	p = a[aid].pids;
 	b = 1;
 	while (b)
