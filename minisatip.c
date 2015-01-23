@@ -494,8 +494,11 @@ read_rtsp (sockets * s)
 		}
 		else if (strncmp (arg[0], "OPTIONS", 8) == 0)
 		{		
-			sprintf(buf, "Session:%010d\r\n%s", get_session_id(s->sid), public);
-			http_response (s->sock, "RTSP", 200, buf, NULL, cseq, 0);
+			if(s->sid>-1)
+			{
+				sprintf(buf, "Session:%010d\r\n%s", get_session_id(s->sid), public);
+				http_response (s->sock, "RTSP", 200, buf, NULL, cseq, 0);
+			} else http_response (s->sock, "RTSP", 200, public, NULL, csrq, 0);
 		}
 	}
 	return 0;
