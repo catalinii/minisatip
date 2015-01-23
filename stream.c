@@ -52,51 +52,23 @@ char *describe_streams (int sid,char *sbuf,int size)
 	streams_enabled = 0;
 	sidf = get_session_id(sid);
 		
-	snprintf(sbuf,size-1,"v=0\r\no=- %d %d IN IP4 %s\r\ns=SatIPServer:1 %d %d %d\r\nt=0 0\r\n", sidf, sidf, getlocalip(), getS2Adapters(), getTAdapters(), getCAdapters() );
+	snprintf(sbuf,size-1,"v=0\r\no=- %010d %010d IN IP4 %s\r\ns=SatIPServer:1 %d %d %d\r\nt=0 0\r\n", sidf, sidf, getlocalip(), getS2Adapters(), getTAdapters(), getCAdapters() );
 	for( i=0; i<MAX_STREAMS; i++)
 		if(st[i].enabled)
 		{
 			int slen=strlen(sbuf);
 			streams_enabled ++;
-			snprintf(sbuf + slen, size - slen - 1, "m=video %d RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\na=sendonly\r\n", ntohs (st[i].sa.sin_port), get_session_id (i), describe_adapter(i, st[i].adapter));
+			snprintf(sbuf + slen, size - slen - 1, "m=video %d RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%010d\r\na=fmtp:33 %s\r\na=sendonly\r\n", ntohs (st[i].sa.sin_port), get_session_id (i), describe_adapter(i, st[i].adapter));
 			if( size - slen < 10)LOG_AND_RETURN(sbuf, "DESCRIBE BUFFER is full");
 		}
 	if (!streams_enabled)
 	{
 		int slen = strlen(sbuf);
-		snprintf(sbuf + slen, size - slen - 1, "m=video 0 RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\na=inactive\r\n",get_session_id (sid), describe_adapter(0, 0));
+		snprintf(sbuf + slen, size - slen - 1, "m=video 0 RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%010d\r\na=fmtp:33 %s\r\na=inactive\r\n",get_session_id (sid), describe_adapter(0, 0));
 	}
 	return sbuf;
 }
 
-
-int
-send_rtcp (int s_id, int ctime)
-{
-	int tmp_port;
-	int len;
-	streams *sid = &st[s_id];
-	uint32_t buf[400];
-	char *a = describe_adapter (s_id, st[s_id].adapter);
-	int la = strlen (a);
-	len = la + 16;
-	if (len % 4 > 0)len = len - (len % 4) +4;
-
-	//      LOG("send_rtcp (sid: %d)-> %s",s_id,a);
-								 // rtp header
-	buf[0] = htonl (0x82CC << 16 | len);
-	buf[1] = htonl (ctime);
-	buf[2] = htonl (0x53455331);
-	buf[3] = htonl (len - 16);
-	strcpy ((char *) &buf[4], a);
-	tmp_port = sid->sa.sin_port;
-	sid->sa.sin_port = htons (ntohs (sid->sa.sin_port) + 1);
-	sendto (rtpc, buf, len , MSG_NOSIGNAL,
-		(const struct sockaddr *) &sid->sa, sizeof (sid->sa));
-	sid->sa.sin_port = tmp_port;
-	sid->rtcp_wtime = ctime;
-
-}
 
 
 // we need to keep the pids from SETUP and PLAY into sid->tp
@@ -152,8 +124,11 @@ setup_stream (char **str, sockets * s, rtp_prop * p)
 		char pol;
 
 		if (p->type == 0 && s->type == TYPE_RTSP)
-			LOG_AND_RETURN (NULL, "Error: No transport specified in the RTSP header, probably the client expects RTSP over TCP");
-		
+		{
+			LOG("Error: No transport specified in the RTSP header, probably the client expects RTSP over TCP, filling the default values");
+			decode_transport(s, p, "", opts.rrtp, opts.start_rtp);		
+			
+		}
 		stype = -1;	
 		if (s->type == TYPE_HTTP)
 			stype = s->sock;
@@ -236,13 +211,11 @@ int start_rtp)
 	}
 	if (default_rtp)
 		strncpy (p->dest, default_rtp, sizeof (p->dest));
-	if (p->dest[0] == 0 && p->type == TYPE_UNICAST)
-		strncpy (p->dest, inet_ntoa (s->sa.sin_addr), sizeof (p->dest));
 	if (p->dest[0] == 0)
-		strcpy (p->dest, opts.disc_host);
+		strcpy (p->dest, get_sock_host(s->sock));
 	if (p->port == 0)
 		p->port = start_rtp;
-	LOG ("p->%d %d %d %s", p->type, p->ttl, p->port, p->dest);
+	LOG ("decode_transport ->%d %d %d %s", p->type, p->ttl, p->port, p->dest);
 }
 
 
@@ -262,6 +235,7 @@ streams_add (int a_id, rtp_prop * p, int https)
 	}
 	
 	st[i].rtp = -1;
+	
 	if(https == -1)
 		if((st[i].rtp = udp_connect (p->dest, p->port, &st[i].sa)) == -1)
 		LOG_AND_RETURN (-1,
@@ -389,6 +363,91 @@ send_rtp (int sock, struct iovec *iov, int liov)
 	return writev (sock, (const struct iovec *) io, liov + 1);
 }
 
+unsigned char rtcp[400];
+
+
+int
+send_rtcp (int s_id, int ctime)
+{
+	int tmp_port;
+	int len;
+	streams *sid = &st[s_id];
+	char *a = describe_adapter (s_id, st[s_id].adapter);
+	int la = strlen (a);
+	if ( la > sizeof(rtcp)) 
+		la = sizeof(rtcp)-4;
+	len = la + 16;
+	if (len % 4 > 0)len = len - (len % 4) +4;
+
+	//      LOG("send_rtcp (sid: %d)-> %s",s_id,a);
+								 // rtp header
+	rtcp[0] = 0x80; // Begin Sender Report
+	rtcp[1] = 0xC8;
+	rtcp[2] = 0;
+	rtcp[3] = 6;
+	*(uint32_t *)&rtcp[4] = *(uint32_t *)&rtp_h[8];
+	rtcp[8] = 0;
+	rtcp[9] = 0;
+	rtcp[10] = 0;
+	rtcp[11] = 0;
+	rtcp[12] = (ctime >> 24) & 0xFF;
+	rtcp[13] = (ctime >> 16) & 0xFF;
+	rtcp[14] = (ctime >> 8) & 0xFF;
+	rtcp[15] = ctime & 0xFF;
+	*(uint32_t *)&rtcp[16] = *(uint32_t *)&rtp_h[4];
+	rtcp[20] = (sid->sp >> 24) & 0xFF;
+	rtcp[21] = (sid->sp >> 16) & 0xFF;
+	rtcp[22] = (sid->sp >> 8) & 0xFF;
+	rtcp[23] = sid->sp & 0xFF;
+	rtcp[24] = (sid->sb >> 24) & 0xFF;
+	rtcp[25] = (sid->sb >> 16) & 0xFF;
+	rtcp[26] = (sid->sb >> 8) & 0xFF;
+	rtcp[27] = sid->sb & 0xFF;
+	rtcp[28] = 0x81; // Begin Source Description
+	rtcp[29] = 0xCA;
+	rtcp[30] = 0;
+	rtcp[31] = 5;
+	*(uint32_t *)&rtcp[32] = *(uint32_t *)&rtp_h[8];
+	rtcp[36] = 1;
+	rtcp[37] = 10;
+	rtcp[38] = 'm';
+	rtcp[39] = 'i';
+	rtcp[40] = 'n';
+	rtcp[41] = 'i';
+	rtcp[42] = 's';
+	rtcp[43] = 'a';
+	rtcp[44] = 't';
+	rtcp[45] = 'i';
+	rtcp[46] = 'p';
+	rtcp[47] = 0;
+	rtcp[48] = 0;
+	rtcp[49] = 0;
+	rtcp[50] = 0;
+	rtcp[51] = 0;
+	rtcp[52] = 0x80;
+	rtcp[53] = 0xCC;
+	rtcp[54] = 0;
+	rtcp[55] = (la + 16) / 4;
+	*(uint32_t *)&rtcp[56] = *(uint32_t *)&rtcp[12];
+	rtcp[60] = 'S';
+	rtcp[61] = 'E';
+	rtcp[62] = 'S';
+	rtcp[63] = '1';
+	rtcp[64] = 0;
+	rtcp[65] = 0;
+	rtcp[66] = 0;
+	rtcp[67] = la;
+	memcpy (rtcp+68, a, la+4);
+	tmp_port = sid->sa.sin_port;
+	sid->sa.sin_port = htons (ntohs (sid->sa.sin_port) + 1);
+	sendto (rtpc, rtcp, len + 52, MSG_NOSIGNAL,
+		(const struct sockaddr *) &sid->sa, sizeof (sid->sa));
+	sid->sa.sin_port = tmp_port;
+	sid->rtcp_wtime = ctime;
+	sid->sp = 0;
+	sid->sb = 0;
+}
+
 
 extern int bw;
 void
@@ -404,6 +463,8 @@ flush_streamb (streams * sid, char *buf, int rlen, int ctime)
 	sid->iiov = 0;
 	sid->wtime = ctime;
 	sid->len = 0;
+	sid->sp ++;
+	sid->sb += (sid->rtp >= 0) * 12 + rlen;
 	bw += (sid->rtp >= 0) * 12 + rlen;
 }
 
@@ -416,6 +477,8 @@ flush_streami (streams * sid, int ctime)
 	else
 		send_rtp (sid->rtp, sid->iov, sid->iiov);
 	bw += (sid->rtp >= 0) * 12 + sid->iiov * DVB_FRAME;
+	sid->sp ++;
+	sid->sb += (sid->rtp >= 0) * 12 + sid->iiov * DVB_FRAME; 
 	sid->iiov = 0;
 	sid->wtime = ctime;
 	sid->len = 0;

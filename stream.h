@@ -30,6 +30,7 @@ typedef struct struct_streams
 		*pids;
 	struct iovec iov[7];
 	int iiov;
+	int sp,sb;
 
 } streams;
 

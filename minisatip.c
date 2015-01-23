@@ -458,13 +458,13 @@ read_rtsp (sockets * s)
 		if(sid->rtp >-1)
 			if (atoi (ra) < 239)
 				sprintf (buf,
-					"Transport: RTP/AVP;unicast;client_port=%d-%d;source=%s;server_port=%d-%d\r\nSession:%x;timeout=%d\r\ncom.ses.streamID: %d",
+					"Transport: RTP/AVP;unicast;client_port=%d-%d;source=%s;server_port=%d-%d\r\nSession:%010d;timeout=%d\r\ncom.ses.streamID: %d",
 					ntohs (sid->sa.sin_port), ntohs (sid->sa.sin_port) + 1,
 					get_sock_host (sid->rtp), get_sock_port (sid->rtp), get_sock_port (sid->rtp) + 1, get_session_id (s->sid),
 					opts.timeout_sec / 1000, sid->sid + 1);
 			else
 				sprintf (buf,
-					"Transport: RTP/AVP;multicast;destination=%s;port=%d-%d\r\nSession:%x;timeout=%d\r\ncom.ses.streamID: %d",
+					"Transport: RTP/AVP;multicast;destination=%s;port=%d-%d\r\nSession:%010d;timeout=%d\r\ncom.ses.streamID: %d",
 					ra, ntohs (sid->sa.sin_port), ntohs (sid->sa.sin_port) + 1,
 					get_session_id (s->sid), opts.timeout_sec / 1000, sid->sid + 1);
 		else sprintf(buf, "Content-Type: video/mp2t\r\n");
