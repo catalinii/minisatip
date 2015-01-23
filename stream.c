@@ -213,7 +213,7 @@ int start_rtp)
 	if (default_rtp)
 		strncpy (p->dest, default_rtp, sizeof (p->dest));
 	if (p->dest[0] == 0)
-		strcpy (p->dest, get_sock_host(s->sock));
+		strncpy (p->dest, inet_ntoa (s->sa.sin_addr), sizeof (p->dest));
 	if (p->port == 0)
 		p->port = start_rtp;
 	LOG ("decode_transport ->%d %d %d %s", p->type, p->ttl, p->port, p->dest);
