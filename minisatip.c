@@ -865,9 +865,9 @@ posix_signal_handler (int sig, siginfo_t * siginfo, ucontext_t * ctx)
 int								 /* Returns 0 on success, -1 on error */
 becomeDaemon ()
 {
-	int maxfd,
-		fd;
-
+	int maxfd, fd;
+	struct stat sb;
+	
 	switch (fork ())
 	{							 /* Become background process */
 		case -1:
@@ -902,13 +902,15 @@ becomeDaemon ()
 
 	close (STDIN_FILENO);		 /* Reopen standard fd's to /dev/null */
 	//	chdir ("/tmp");				 /* Change to root directory */
-
+	
 	fd = open ("/dev/null", O_RDWR);
 
 	if (fd != STDIN_FILENO)		 /* 'fd' should be 0 */
 		return -1;
-	fd = open ("/tmp/log", O_RDWR | O_CREAT, 0666);
-
+	if ( stat ("/tmp/log", &sb ) == -1)
+		fd = open ("/tmp/log", O_RDWR | O_CREAT, 0666);
+	else
+		fd = open ("/tmp/log", O_RDWR | O_APPEND);
 	if (fd != STDOUT_FILENO)	 /* 'fd' should be 1 */
 		return -1;
 	if (dup2 (STDOUT_FILENO, STDERR_FILENO) != STDERR_FILENO)
