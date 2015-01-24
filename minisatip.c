@@ -94,7 +94,7 @@ set_options (int argc, char *argv[])
 	opts.dvr = DVR_BUFFER;
 	memset(opts.playlist, sizeof(opts.playlist), 0);
 	
-	while ((opt = getopt (argc, argv, "flr:a:t:d:w:p:shc:b:m:p:e:")) != -1)
+	while ((opt = getopt (argc, argv, "flr:a:t:d:w:p:shc:b:m:p:e:x:")) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
 		switch (opt)
@@ -495,10 +495,10 @@ read_rtsp (sockets * s)
 		else if (strncmp (arg[0], "OPTIONS", 8) == 0)
 		{		
 			if(s->sid>-1)
-			{
 				sprintf(buf, "Session:%010d\r\n%s", get_session_id(s->sid), public);
-				http_response (s->sock, "RTSP", 200, buf, NULL, cseq, 0);
-			} else http_response (s->sock, "RTSP", 200, public, NULL, cseq, 0);
+			else 
+				sprintf(buf, "%s", public);
+			http_response (s->sock, "RTSP", 200, buf, NULL, cseq, 0);
 		}
 	}
 	return 0;

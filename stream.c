@@ -42,7 +42,14 @@ getTick ()
 	return theTick - init_tick;
 }
 
-
+int get_next_free_stream()
+{
+	int i;
+	for(i=0;i<MAX_STREAMS;i++)
+		if(!st[i].enabled)
+			return i;
+	return -1;
+}
 
 char *describe_streams (int sid,char *sbuf,int size)
 {
@@ -53,18 +60,19 @@ char *describe_streams (int sid,char *sbuf,int size)
 	sidf = get_session_id(sid);
 		
 	snprintf(sbuf,size-1,"v=0\r\no=- %010d %010d IN IP4 %s\r\ns=SatIPServer:1 %d %d %d\r\nt=0 0\r\n", sidf, sidf, getlocalip(), getS2Adapters(), getTAdapters(), getCAdapters() );
-	for( i=0; i<MAX_STREAMS; i++)
-		if(st[i].enabled)
-		{
-			int slen=strlen(sbuf);
-			streams_enabled ++;
-			snprintf(sbuf + slen, size - slen - 1, "m=video %d RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%010d\r\na=fmtp:33 %s\r\na=sendonly\r\n", ntohs (st[i].sa.sin_port), get_session_id (i), describe_adapter(i, st[i].adapter));
-			if( size - slen < 10)LOG_AND_RETURN(sbuf, "DESCRIBE BUFFER is full");
-		}
-	if (!streams_enabled)
+	if(sid >=0)
 	{
+		for( i=0; i<MAX_STREAMS; i++)
+			if(st[i].enabled)
+			{
+				int slen=strlen(sbuf);
+				streams_enabled ++;
+				snprintf(sbuf + slen, size - slen - 1, "m=video %d RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\na=sendonly\r\n", ntohs (st[i].sa.sin_port), i, describe_adapter(i, st[i].adapter));
+				if( size - slen < 10)LOG_AND_RETURN(sbuf, "DESCRIBE BUFFER is full");
+			}
+	}else{
 		int slen = strlen(sbuf);
-		snprintf(sbuf + slen, size - slen - 1, "m=video 0 RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%010d\r\na=fmtp:33 %s\r\na=inactive\r\n",get_session_id (sid), describe_adapter(0, 0));
+		snprintf(sbuf + slen, size - slen - 1, "m=video 0 RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\na=inactive\r\n", get_next_free_stream()+1, describe_adapter(0, 0));
 	}
 	return sbuf;
 }
@@ -228,10 +236,8 @@ streams_add (int a_id, rtp_prop * p, int https)
 	int i;
 	char *ra;
 
-	for (i = 0; i < MAX_STREAMS; i++)
-		if (!st[i].enabled)
-			break;
-	if (i == MAX_STREAMS)
+	i = get_next_free_stream();
+	if (i == -1)
 	{
 		LOG ("The stream could not be added - most likely no free stream");
 		return -1;
