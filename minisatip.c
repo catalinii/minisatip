@@ -529,7 +529,7 @@ read_http (sockets * s)
 		"<manufacturer>cata</manufacturer>\r\n"
 		"<manufacturerURL>http://github.com/catalinii/minisatip</manufacturerURL>\r\n"
 		"<modelDescription>minisatip for Linux</modelDescription>\r\n"
-		"<modelName>minisatip</modelName>\n\r"
+		"<modelName>minisatip</modelName>\r\n"
 		"<modelNumber>0001</modelNumber>\r\n"
 		"<modelURL>http://github.com/catalinii/minisatip</modelURL>\r\n"
 		"<serialNumber>0001</serialNumber>\r\n"
