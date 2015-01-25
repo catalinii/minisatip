@@ -16,9 +16,9 @@ typedef struct struct_streams
 	int https;					 // http socket -where to write data
 
 	unsigned char *buf;
-	int len,
-		total_len;
-	uint16_t fid;				 //frame id
+	int len, total_len;
+	uint16_t seq;  //rtp seq id
+	int ssrc; // rtp seq id			 
 	int wtime;
 	int rtcp_wtime;
 	int do_play;

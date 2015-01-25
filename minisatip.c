@@ -33,6 +33,7 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <fcntl.h>
+#include <sys/stat.h>
 #include "minisatip.h"
 #include "socketworks.h"
 #include "stream.h"

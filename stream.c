@@ -26,13 +26,12 @@
 extern struct struct_opts opts;
 extern int rtp, rtpc;
 streams st[MAX_STREAMS];
-unsigned init_tick;
+unsigned init_tick, theTick;
 
 uint32_t
 getTick ()
 {								 //ms
 	struct timespec ts;
-	unsigned theTick = 0U;
 
 	clock_gettime (CLOCK_REALTIME, &ts);
 	theTick = ts.tv_nsec / 1000000;
@@ -257,6 +256,7 @@ streams_add (int a_id, rtp_prop * p, int https)
 	st[i].do_play = 0;
 	st[i].iiov = 0;
 	st[i].len = 0;
+  st[i].ssrc = random();
 	st[i].wtime = st[i].rtcp_wtime = getTick ();
 								 // max 7 packets
 	st[i].total_len = 7 * DVB_FRAME;
@@ -331,45 +331,37 @@ close_streams_for_adapter (int ad, int except)
 unsigned char rtp_h[12] = { 0x80, 0x21, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 int
-send_rtpb (int sock, unsigned char *b, int len)
+send_rtpb (streams * sid, unsigned char *b, int len)
 {
 	struct iovec iov[2];
 
 	iov[0].iov_base = b;
 	iov[0].iov_len = len;
 	//      LOG("called send_rtpb %X %d",b,len);
-	return send_rtp (sock, (const struct iovec *) iov, 1);
+	return send_rtp (sid, (const struct iovec *) iov, 1);
 }
 
+#define copy32(a,i,v) { a[i] = ((v)>>24) & 0xFF;\
+			a[i+1] = ((v)>>16) & 0xFF;\
+			a[i+2] = ((v)>>8) & 0xFF;\
+			a[i+3] = (v) & 0xFF; }
+#define copy16(a,i,v) { a[i] = ((v)>>8) & 0xFF; a[i+1] = (v) & 0xFF; }
 
 int
-send_rtp (int sock, struct iovec *iov, int liov)
+send_rtp (streams * sid, struct iovec *iov, int liov)
 {
 	struct iovec io[MAX_PACK + 2];
-
 	memset (&io, 0, sizeof(io));
-	rtp_h[3]++;
-	if (rtp_h[3] == 0)
-		rtp_h[2]++;
-	rtp_h[11]++;
-	if (rtp_h[11] == 0)
-		rtp_h[10]++;
-	rtp_h[7]++;
-	if (rtp_h[7] == 0)
-	{
-		rtp_h[6]++;
-		if (rtp_h[6] == 0)
-		{
-			rtp_h[5]++;
-			if (rtp_h[5] == 0)
-				rtp_h[4]++;
-		}
-	}
+ 	 sid->seq ++;
+  copy16 (rtp_h, 0, 0x8021 );
+	copy16 ( rtp_h, 2, sid->seq);
+	copy32 ( rtp_h, 4, sid->wtime);
+	copy32 ( rtp_h, 8, sid->ssrc);
 	io[0].iov_base = &rtp_h;
 	io[0].iov_len = sizeof (rtp_h);
 	memcpy (&io[1], iov, liov * sizeof (struct iovec));
 	//      LOG("write to %d (len:%d)-> %X, %d, %X, %d ",sock,liov*sizeof(iov),io[0].iov_base,io[0].iov_len,io[1].iov_base,io[1].iov_len);
-	return writev (sock, (const struct iovec *) io, liov + 1);
+	return writev (sid->rtp, (const struct iovec *) io, liov + 1);
 }
 
 unsigned char rtcp[400];
@@ -396,29 +388,17 @@ send_rtcp (int s_id, int ctime)
 	rtcp[1] = 0xC8;
 	rtcp[2] = 0;
 	rtcp[3] = 6;
-	*(uint32_t *)&rtcp[4] = *(uint32_t *)&rtp_h[8];
-	rtcp[8] = 0;
-	rtcp[9] = 0;
-	rtcp[10] = 0;
-	rtcp[11] = 0;
-	rtcp[12] = (ctime >> 24) & 0xFF;
-	rtcp[13] = (ctime >> 16) & 0xFF;
-	rtcp[14] = (ctime >> 8) & 0xFF;
-	rtcp[15] = ctime & 0xFF;
-	*(uint32_t *)&rtcp[16] = *(uint32_t *)&rtp_h[4];
-	rtcp[20] = (sid->sp >> 24) & 0xFF;
-	rtcp[21] = (sid->sp >> 16) & 0xFF;
-	rtcp[22] = (sid->sp >> 8) & 0xFF;
-	rtcp[23] = sid->sp & 0xFF;
-	rtcp[24] = (sid->sb >> 24) & 0xFF;
-	rtcp[25] = (sid->sb >> 16) & 0xFF;
-	rtcp[26] = (sid->sb >> 8) & 0xFF;
-	rtcp[27] = sid->sb & 0xFF;
+	copy32( rtcp, 4, sid->ssrc);
+	copy32( rtcp, 8,  0);
+	copy32( rtcp, 12,  (theTick - init_tick)/1000);
+	copy32( rtcp, 16, sid->wtime);
+	copy32( rtcp, 20, sid->sp);
+	copy32( rtcp, 24, sid->sb);  
 	rtcp[28] = 0x81; // Begin Source Description
 	rtcp[29] = 0xCA;
 	rtcp[30] = 0;
 	rtcp[31] = 5;
-	*(uint32_t *)&rtcp[32] = *(uint32_t *)&rtp_h[8];
+	copy32( rtcp, 32, sid->ssrc);  
 	rtcp[36] = 1;
 	rtcp[37] = 10;
 	rtcp[38] = 'm';
@@ -430,24 +410,19 @@ send_rtcp (int s_id, int ctime)
 	rtcp[44] = 't';
 	rtcp[45] = 'i';
 	rtcp[46] = 'p';
-	rtcp[47] = 0;
-	rtcp[48] = 0;
-	rtcp[49] = 0;
-	rtcp[50] = 0;
+	copy32( rtcp, 47, 0);  
 	rtcp[51] = 0;
 	rtcp[52] = 0x80;
 	rtcp[53] = 0xCC;
-	rtcp[54] = 0;
-	rtcp[55] = (la + 16) / 4;
-	*(uint32_t *)&rtcp[56] = *(uint32_t *)&rtcp[12];
+	copy16( rtcp, 54, (la + 16) / 4);
+	copy32( rtcp, 56, sid->ssrc);  
 	rtcp[60] = 'S';
 	rtcp[61] = 'E';
 	rtcp[62] = 'S';
 	rtcp[63] = '1';
 	rtcp[64] = 0;
 	rtcp[65] = 0;
-	rtcp[66] = 0;
-	rtcp[67] = la;
+	copy16( rtcp, 66, la);
 	memcpy (rtcp+68, a, la+4);
 	tmp_port = sid->sa.sin_port;
 	sid->sa.sin_port = htons (ntohs (sid->sa.sin_port) + 1);
@@ -470,7 +445,7 @@ flush_streamb (streams * sid, char *buf, int rlen, int ctime)
 		send (sid->https, buf, rlen, MSG_NOSIGNAL);
 	else
 		for (i = 0; i < rlen; i += DVB_FRAME * 7)
-			send_rtpb (sid->rtp, &buf[i], DVB_FRAME * 7);
+			send_rtpb (sid, &buf[i], DVB_FRAME * 7);
 	sid->iiov = 0;
 	sid->wtime = ctime;
 	sid->len = 0;
@@ -486,7 +461,7 @@ flush_streami (streams * sid, int ctime)
 	if (sid->https > -1)
 		writev (sid->https, sid->iov, sid->iiov);
 	else
-		send_rtp (sid->rtp, sid->iov, sid->iiov);
+		send_rtp (sid, sid->iov, sid->iiov);
 	bw += (sid->rtp >= 0) * 12 + sid->iiov * DVB_FRAME;
 	sid->sp ++;
 	sid->sb += (sid->rtp >= 0) * 12 + sid->iiov * DVB_FRAME; 
@@ -637,7 +612,7 @@ stream_timeout (sockets * s)
 	{
 		LOG ("no data sent for more than 1s sid: %d for %s:%d", s->sid,
 			inet_ntoa (sid->sa.sin_addr), ntohs (sid->sa.sin_port));
-		send_rtpb (sid->rtp, s->buf , 0);
+		send_rtpb (sid, s->buf , 0);
 		sid->wtime = ctime;
 	}
 	if (ctime - rttime > 200)
