@@ -320,7 +320,10 @@ close_adapter_for_stream (int sid, int aid)
 	if (! get_adapter(aid))
 		return;
 	if (a[aid].master_sid == sid)
+	{
 		a[aid].master_sid = -1;
+		fix_master_sid(aid);
+	}
 	if (a[aid].sid_cnt > 0)
 		a[aid].sid_cnt--;
 	LOG ("closed adapter %d for stream %d m:%d s:%d", aid, sid,

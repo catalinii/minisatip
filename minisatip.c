@@ -350,13 +350,19 @@ map_float (char *s, int mul)
 char public[] = "Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN";
 
 char *
-http_response (int sock, char *proto, int rc, char *ah, char *desc, int cseq, int lr)
+http_response (sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 {
 	char *reply =
 		"%s/1.0 %d %s\r\nCSeq: %d\r\nDate: %s\r\n%s\r\nContent-Length: %d\r\n\r\n%s\r\n\r\n";
 	char *reply0 = "%s/1.0 %d %s\r\nCseq: %d\r\nDate: %s\r\n%s\r\n\r\n";
 	char *d;
+	char *proto;
 	
+	if( s->type == TYPE_HTTP)
+		proto = "HTTP";
+	else 
+		proto = "RTSP";
+		
 	if (!ah)
 		ah = public;
 	if (!desc)
@@ -382,8 +388,8 @@ http_response (int sock, char *proto, int rc, char *ah, char *desc, int cseq, in
 		sprintf (resp, reply, proto, rc, d, cseq, get_current_timestamp (), ah, lr, desc);
 	else
 		sprintf (resp, reply0, proto, rc, d, cseq, get_current_timestamp (), ah);
-	LOG ("reply -> %d (CL:%d) :\n%s", sock, lr, resp);
-	send (sock, resp, strlen (resp), MSG_NOSIGNAL);
+	LOG ("reply -> %d (%s:%d) CL:%d :\n%s", s->sock, inet_ntoa(s->sa.sin_addr), ntohs(s->sa.sin_port), lr, resp);
+	send (s->sock, resp, strlen (resp), MSG_NOSIGNAL);
 	return resp;
 }
 
@@ -395,8 +401,8 @@ read_rtsp (sockets * s)
 	char *arg[50];
 	int cseq, la, i, rlen;
 	char *proto;
-	rtp_prop p;
 	char buf[200];
+	streams *sid;
 
 	LOG ("read RTSP (from handle %d sock_id %d):\n%s", s->sock, s->sock_id, s->buf);
 	if (s->rlen < 5
@@ -419,78 +425,90 @@ read_rtsp (sockets * s)
 	rlen = s->rlen;
 	s->rlen = 0;
 
+	if( (s->type != TYPE_HTTP ) && (strncasecmp(s->buf, "GET", 3) == 0))
+	{
+		http_response (s , 404, NULL, NULL, 0, 0);
+		return 0;
+	}
+	
 	la = split (arg, s->buf, 50, ' ');
-	cseq = 0;
-	memset((void *)&p, 0, sizeof(p));
+	cseq = 0;	
+	
+	if(strstr(arg[1], "freq") || strstr(arg[1], "pids"))
+		sid = (streams *) setup_stream (arg, s);
 	
 	for (i = 0; i < la; i++)
 		if (strncasecmp ("CSeq:", arg[i], 5) == 0)
 			cseq = atoi (arg[i + 1]);
-	else if (strncasecmp ("Transport:", arg[i], 5) == 0)
-		decode_transport (s, &p, arg[i + 1], opts.rrtp, opts.start_rtp);
+	else if (strncasecmp ("Transport:", arg[i], 9) == 0){
+		char *rtp_avp = strstr(arg[i], "RTP/AVP");
+		int rv;
+		if(!rtp_avp)
+			rtp_avp = strstr(arg[i+1], "RTP/AVP");
+		if(!rtp_avp)
+			rtp_avp = strstr(arg[i+2], "RTP/AVP");		
+		if(rtp_avp)
+			rv = decode_transport (s, rtp_avp, opts.rrtp, opts.start_rtp);
+		
+		if(rv == -1)
+		{
+			http_response (s, 400, NULL, NULL, cseq, 0);
+			return 0;
+		}
+	}
 	//      LOG("read RTSP (CSeq %d): %s from %d",cseq,s->buf,s->sock);
 	
-	if ((strncasecmp (arg[0], "SETUP", 3) == 0) || (strncasecmp (arg[0], "PLAY", 3) == 0) 
-		|| (s->type == TYPE_HTTP && strncasecmp (arg[0], "GET", 3) == 0))
+	if((strncasecmp (arg[0], "PLAY", 4) == 0) || (strncasecmp (arg[0], "GET", 3) == 0) || (strncasecmp (arg[0], "SETUP", 5) == 0)) 
 	{
-		streams *sid;
-
 		char *ra;
-		if (s->type == TYPE_HTTP)
-			proto = "HTTP";
-		else 
-			proto = "RTSP";
 			
-		sid = (streams *) setup_stream (arg, s, &p);
-		
-		if (!sid)
+		if (!( sid = get_sid(s->sid)))
 		{
-			http_response (s->sock, proto, 503, NULL, NULL, cseq, 0);
+			http_response (s, 503, NULL, NULL, cseq, 0);
 			return 0;
 		}
 
-		if (arg[0][0] == 'P' || arg[0][0] == 'G')
+		if ((strncasecmp (arg[0], "PLAY", 3) == 0) || (strncasecmp (arg[0], "GET", 3) == 0))
 			if (start_play (sid, s) < 0)
-		{
-			http_response (s->sock, proto, 404, NULL, NULL, cseq, 0);
-			return 0;
-		}
+			{
+				http_response (s, 404, NULL, NULL, cseq, 0);
+				return 0;
+			}
 		ra = inet_ntoa (sid->sa.sin_addr);
-		if(sid->rtp >-1)
+		if(sid->type == STREAM_RTSP_UDP)
 			if (atoi (ra) < 239)
 				sprintf (buf,
 					"Transport: RTP/AVP;unicast;client_port=%d-%d;source=%s;server_port=%d-%d\r\nSession:%010d;timeout=%d\r\ncom.ses.streamID: %d",
 					ntohs (sid->sa.sin_port), ntohs (sid->sa.sin_port) + 1,
-					get_sock_host (sid->rtp), get_sock_port (sid->rtp), get_sock_port (sid->rtp) + 1, get_session_id (s->sid),
+					get_sock_host (sid->rsock), get_sock_port (sid->rsock), get_sock_port (sid->rsock) + 1, get_session_id (s->sid),
 					opts.timeout_sec / 1000, sid->sid + 1);
 			else
 				sprintf (buf,
 					"Transport: RTP/AVP;multicast;destination=%s;port=%d-%d\r\nSession:%010d;timeout=%d\r\ncom.ses.streamID: %d",
 					ra, ntohs (sid->sa.sin_port), ntohs (sid->sa.sin_port) + 1,
 					get_session_id (s->sid), opts.timeout_sec / 1000, sid->sid + 1);
-		else sprintf(buf, "Content-Type: video/mp2t\r\n");
-		if (arg[0][0] == 'P')
+		else if(sid->type == STREAM_HTTP)
+			sprintf(buf, "Content-Type: video/mp2t\r\n");
+		else 
+			sprintf(buf, "Transport: RTP/AVP/TCP;interleaved=0-1\r\nSession:%010d;timeout=%d\r\ncom.ses.streamID: %d", get_session_id (s->sid), opts.timeout_sec / 1000, sid->sid + 1);
+
+		if (strncasecmp(arg[0], "PLAY", 4) == 0)
 			sprintf(buf + strlen(buf), "\r\nRTP-Info: url=%s", arg[1]);
-		http_response (s->sock, proto, 200, buf, NULL, cseq, 0);
+		http_response (s, 200, buf, NULL, cseq, 0);
 	}
 	else if (strncmp (arg[0], "TEARDOWN", 8) == 0)
 	{
 		close_stream (s->sid);
-		http_response (s->sock, "RTSP", 200, NULL, NULL, cseq, 0);
+		http_response (s, 200, NULL, NULL, cseq, 0);
 	}
 	else
 	{
-		streams *sid;
-		
-		sid = get_sid (s->sid);
-		if (sid && sid->adapter >= 0)
-			start_play (sid, s); // we have a valid SID, purpose is to set master_sid>=0 (if master_sid == -1)
 		if (strncmp (arg[0], "DESCRIBE", 8) == 0)
 		{
 			char sbuf[1000];
-			describe_streams(s->sid, sbuf, sizeof(sbuf));
+			describe_streams(s, arg[1], sbuf, sizeof(sbuf));
 			sprintf(buf, "Content-type: application/sdp\r\nContent-Base: rtsp://%s/", get_sock_host(s->sock));
-			http_response (s->sock, "RTSP", 200, buf, sbuf, cseq, 0);
+			http_response (s, 200, buf, sbuf, cseq, 0);
 				
 		}
 		else if (strncmp (arg[0], "OPTIONS", 8) == 0)
@@ -499,13 +517,13 @@ read_rtsp (sockets * s)
 				sprintf(buf, "Session:%010d\r\n%s", get_session_id(s->sid), public);
 			else 
 				sprintf(buf, "%s", public);
-			http_response (s->sock, "RTSP", 200, buf, NULL, cseq, 0);
+			http_response (s, 200, buf, NULL, cseq, 0);
 		}
 	}
 	return 0;
 }
 
-#define REPLY_AND_RETURN(c) {http_response (s->sock, "HTTP", c, NULL, NULL, 0, 0);return 0;}
+#define REPLY_AND_RETURN(c) {http_response (s, c, NULL, NULL, 0, 0);return 0;}
 
 char uuid[100];
 int bootid, uuidi;
@@ -614,7 +632,7 @@ read_http (sockets * s)
 		tuner_t = getTAdapters ();
 		tuner_c = getCAdapters ();
 		sprintf (buf, xml, uuid, tuner_s2, tuner_t, tuner_c, opts.playlist);
-		http_response (s->sock, "HTTP", 200, "Content-type: text/xml\r\nConnection: close", buf, 0, 0);
+		http_response (s, 200, "Content-type: text/xml\r\nConnection: close", buf, 0, 0);
 		return 0;
 	}
 
@@ -632,13 +650,13 @@ read_http (sockets * s)
 		
 		readfile(arg[1], buf, &nl);
 		if(nl == 0)
-			http_response (s->sock, "HTTP", 404, NULL, NULL, 0, 0);
+			http_response (s, 404, NULL, NULL, 0, 0);
 		else
-			http_response (s->sock, "HTTP", 200, ctype, buf, 0, nl);
+			http_response (s, 200, ctype, buf, 0, nl);
 		return 0;
 	}	
 	
-	http_response (s->sock, "HTTP", 404, NULL, NULL, 0, 0);
+	http_response (s, 404, NULL, NULL, 0, 0);
 	return 0;
 }
 

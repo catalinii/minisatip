@@ -50,28 +50,29 @@ int get_next_free_stream()
 	return -1;
 }
 
-char *describe_streams (int sid,char *sbuf,int size)
+char *describe_streams (sockets *s, char *req, char *sbuf, int size)
 {
 	char *str;
-	int i, sidf, streams_enabled;
+	int i, sidf, sid, streams_enabled;
 
+	sid = s->sid;
 	streams_enabled = 0;
 	sidf = get_session_id(sid);
 		
-	snprintf(sbuf,size-1,"v=0\r\no=- %010d %010d IN IP4 %s\r\ns=SatIPServer:1 %d %d %d\r\nt=0 0\r\n", sidf, sidf, getlocalip(), getS2Adapters(), getTAdapters(), getCAdapters() );
-	if(sid >=0)
+	snprintf(sbuf,size-1,"v=0\r\no=- %010d %010d IN IP4 %s\r\ns=SatIPServer:1 %d %d %d\r\nt=0 0\r\n", sidf, sidf, inet_ntoa(s->sa.sin_addr), getS2Adapters(), getTAdapters(), getCAdapters() );
+	if(!strchr(req, '?'))
 	{
 		for( i=0; i<MAX_STREAMS; i++)
 			if(st[i].enabled)
 			{
 				int slen=strlen(sbuf);
 				streams_enabled ++;
-				snprintf(sbuf + slen, size - slen - 1, "m=video %d RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\na=sendonly\r\n", ntohs (st[i].sa.sin_port), i, describe_adapter(i, st[i].adapter));
+				snprintf(sbuf + slen, size - slen - 1, "m=video %d RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\na=sendonly\r\n", ntohs (st[i].sa.sin_port), i+1, describe_adapter(i, st[i].adapter));
 				if( size - slen < 10)LOG_AND_RETURN(sbuf, "DESCRIBE BUFFER is full");
 			}
 	}else{
 		int slen = strlen(sbuf);
-		snprintf(sbuf + slen, size - slen - 1, "m=video 0 RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\na=inactive\r\n", get_next_free_stream()+1, describe_adapter(0, 0));
+		snprintf(sbuf + slen, size - slen - 1, "m=video 0 RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\na=inactive\r\n", sid+1, describe_adapter(0, 0));
 	}
 	return sbuf;
 }
@@ -113,12 +114,12 @@ set_stream_parameters (int s_id, transponder * t)
 
 
 streams *
-setup_stream (char **str, sockets * s, rtp_prop * p)
+setup_stream (char **str, sockets * s)
 {
-	char *arg[20],
-		pol;
-	int i,
-		stype;
+	char *arg[20], pol;
+	streams *sid;
+
+	int i;
 	transponder t;
 	init_hw ();
 	detect_dvb_parameters (str[1], &t);
@@ -130,34 +131,22 @@ setup_stream (char **str, sockets * s, rtp_prop * p)
 			s_id = 0;
 		char pol;
 
-		if (p->type == 0 && s->type == TYPE_RTSP)
-		{
-			LOG("Error: No transport specified in the RTSP header, probably the client expects RTSP over TCP, filling the default values");
-			decode_transport(s, p, "", opts.rrtp, opts.start_rtp);		
-			
-		}
-		stype = -1;	
-		if (s->type == TYPE_HTTP)
-			stype = s->sock;
-			
-		s_id = streams_add (-1, p, stype);
-		if(!get_sid(s_id))
+		s_id = streams_add ();
+		if(!(sid = get_sid(s_id)))
 			LOG_AND_RETURN ( NULL, "Could not add a new stream");
-		init_dvb_parameters (&st[s_id].tp);
-		set_stream_parameters (s_id, &t);
+
 		s->sid = s_id;
 		s->close_sec = 200;
 		s->timeout = (socket_action) stream_timeout;
 		LOG ("Setup stream done: sid: %d (e:%d) for sock %d handle %d", s_id,
 			st[s_id].enabled, s->sock_id, s->sock);
-		return get_sid(s_id);
 	}
-	else
-		set_stream_parameters (s->sid, &t);
-	if (! get_sid(s->sid))
+	if (!( sid = get_sid(s->sid)))
 		LOG_AND_RETURN (NULL, "Stream %d not enabled for sock_id %d handle %d",
 			s->sid, s->sock_id, s->sock);
-	return get_sid(s->sid);
+	
+	set_stream_parameters (s->sid, &t);
+	return sid;
 }
 
 
@@ -166,8 +155,22 @@ start_play (streams * sid, sockets * s)
 {
 	int a_id;
 
-	LOG ("Play for stream %d, adapter %d, sock_id %d handle %d", s->sid,
+	if (sid->type == 0 && s->type == TYPE_HTTP)
+		{
+			sid->type = STREAM_HTTP;
+			sid->rsock = s->sock;
+		}
+
+	if(sid->type == 0)
+	{
+			LOG("Assuming RTSP over TCP for stream %d, most likely transport was not specified", sid->sid);
+			sid->type = STREAM_RTSP_TCP;
+			sid->rsock = s->sock;
+	}
+	
+	LOG ("Play for stream %d, type %d, rsock %d, adapter %d, sock_id %d handle %d", s->sid, sid->type, sid->rsock,
 		sid->adapter, s->sock_id, s->sock);
+
 	if (sid->adapter == -1)		 // associate the adapter only at play (not at setup)
 	{
 		a_id =
@@ -189,48 +192,77 @@ start_play (streams * sid, sockets * s)
 }
 
 
-void
-decode_transport (sockets * s, rtp_prop * p, char *arg, char *default_rtp,
-int start_rtp)
+int decode_transport (sockets * s, char *arg, char *default_rtp, int start_rtp)
 {
 	char *arg2[10];
 	int l;
-
-	l = split (arg2, arg, 10, ';');
+	rtp_prop p;
+	streams *sid = get_sid(s->sid);
+	if (! sid)
+	{
+		LOG("Error: No stream to set transport to, sock_id %d, arg %s ",s->sock_id, arg);
+		return -1;
+	}
+	l = 0;
+	if ( arg )
+	{
+		if (strstr(arg, "RTP/AVP/TCP"))
+		{
+			LOG("Assuming RTSP over TCP for stream %d, arg %s", sid->sid, arg);
+			sid->type = STREAM_RTSP_TCP;
+			sid->rsock = s->sock;
+			return 0;
+		}
+		
+		l = split (arg2, arg, 10, ';');
+	
+	}
 	//      LOG("arg2 %s %s %s",arg2[0],arg2[1],arg2[2]);
-	memset (p->dest, 0, sizeof (p->dest));
-	p->type = 0;
-	p->port = p->ttl = 0;
+	memset (&p, 0, sizeof (p));
 	while (l > 0)
 	{
 		l--;
 		if (strcmp ("multicast", arg2[l]) == 0)
-			p->type = TYPE_MCAST;
+			p.type = TYPE_MCAST;
 		if (strcmp ("unicast", arg2[l]) == 0)
-			p->type = TYPE_UNICAST;
+			p.type = TYPE_UNICAST;
 		if (strncmp ("ttl=", arg2[l], 4) == 0)
-			p->ttl = atoi (arg2[l] + 4);
+			p.ttl = atoi (arg2[l] + 4);
 		if (strncmp ("client_port=", arg2[l], 12) == 0)
-			p->port = atoi (arg2[l] + 12);
+			p.port = atoi (arg2[l] + 12);
 		if (strncmp ("port=", arg2[l], 5) == 0)
-			p->port = atoi (arg2[l] + 5);
+			p.port = atoi (arg2[l] + 5);
 		if (strncmp ("destination=", arg2[l], 12) == 0)
-			strncpy (p->dest, arg2[l] + 12, sizeof (p->dest));
+			strncpy (p.dest, arg2[l] + 12, sizeof (p.dest));
 	}
 	if (default_rtp)
-		strncpy (p->dest, default_rtp, sizeof (p->dest));
-	if (p->dest[0] == 0 && p->type == TYPE_UNICAST)
-		strncpy (p->dest, inet_ntoa (s->sa.sin_addr), sizeof (p->dest));
-	if (p->dest[0] == 0)
-		strcpy (p->dest, opts.disc_host);
-	if (p->port == 0)
-		p->port = start_rtp;
-	LOG ("decode_transport ->%d %d %d %s", p->type, p->ttl, p->port, p->dest);
+		strncpy (p.dest, default_rtp, sizeof (p.dest));
+	if (p.dest[0] == 0 && p.type == TYPE_UNICAST)
+		strncpy (p.dest, inet_ntoa (s->sa.sin_addr), sizeof (p.dest));
+	if (p.dest[0] == 0)
+		strcpy (p.dest, opts.disc_host);
+	if (p.port == 0)
+		p.port = start_rtp;
+	LOG ("decode_transport ->%d %d %d %s", p.type, p.ttl, p.port, p.dest);
+	if( sid->type != 0)
+	{
+		LOG("Stream has already a transport header associated with it - sid = %d type = %d, closing %d", sid->sid, sid->type, sid->rsock);
+		if(sid->type == STREAM_RTSP_UDP && sid->rsock >= 0)
+		{
+			close(sid->rsock);
+			sid->rsock = -1;
+		}
+	}
+	
+	sid->type = STREAM_RTSP_UDP;
+	if((sid->rsock = udp_connect (p.dest, p.port, &sid->sa)) < 0)
+		LOG_AND_RETURN (-1, "decode_transport failed: UDP connection to %s:%d failed", p.dest, p.port);
+	return 0;
 }
 
 
 int
-streams_add (int a_id, rtp_prop * p, int https)
+streams_add ()
 {
 	int i;
 	char *ra;
@@ -242,17 +274,11 @@ streams_add (int a_id, rtp_prop * p, int https)
 		return -1;
 	}
 	
-	st[i].rtp = -1;
-	
-	if(https == -1)
-		if((st[i].rtp = udp_connect (p->dest, p->port, &st[i].sa)) == -1)
-		LOG_AND_RETURN (-1,
-			"Streams_add failed for stream %d: UDP connection to %s:%d failed",
-			i, p->dest, p->port);
 	st[i].enabled = 1;
-	st[i].adapter = a_id;
+	st[i].adapter = -1;
 	st[i].sid = i;
-	st[i].https = https;
+	st[i].rsock = -1;
+	st[i].type = 0;
 	st[i].do_play = 0;
 	st[i].iiov = 0;
 	st[i].len = 0;
@@ -291,24 +317,24 @@ int
 close_stream (int i)
 {
 	int ad;
-
+	streams *sid;
 	if (i < 0 || i >= MAX_STREAMS || st[i].enabled == 0)
-		return;
+		return;		
 	LOG ("closing stream %d", i);
-	st[i].enabled = 0;
-	ad = st[i].adapter;
-	st[i].adapter = -1;
-	if ( st[i].rtp > 0) close (st[i].rtp);
-	st[i].rtp = -1;
-	st[i].https = -1;
+	sid = &st[i];
+	sid->enabled = 0;
+	ad = sid->adapter;
+	sid->adapter = -1;
+	if ( sid->type == STREAM_RTSP_UDP && sid->rsock > 0) close (sid->rsock);
+	sid->rsock = -1;
 	if (ad >= 0)
 		close_adapter_for_stream (i, ad);
 	sockets_del_for_sid (i);
-	/*  if(st[i].pids)free(st[i].pids);
-	  if(st[i].apids)free(st[i].apids);
-	  if(st[i].dpids)free(st[i].dpids);
-	  if(st[i].buf)free(st[i].buf);
-	  st[i].pids = st[i].apids = st[i].dpids = st[i].buf = NULL;
+	/*  if(sid->pids)free(sid->pids);
+	  if(sid->apids)free(sid->apids);
+	  if(sid->dpids)free(sid->dpids);
+	  if(sid->buf)free(sid->buf);
+	  sid->pids = sid->apids = sid->dpids = sid->buf = NULL;
 	*/
 	LOG ("closed stream %d", i);
 }
@@ -329,7 +355,7 @@ close_streams_for_adapter (int ad, int except)
 }
 
 
-unsigned char rtp_h[12] = { 0x80, 0x21, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+unsigned char rtp_buf[16];
 
 int
 send_rtpb (streams * sid, unsigned char *b, int len)
@@ -352,27 +378,46 @@ int
 send_rtp (streams * sid, struct iovec *iov, int liov)
 {
 	struct iovec io[MAX_PACK + 2];
+	int i,total_len;
+	unsigned char *rtp_h;
+
+	rtp_h = rtp_buf + 4;
+	
+	for(i = 0;i < liov; i ++)
+		total_len += iov[i].iov_len;
+
 	memset (&io, 0, sizeof(io));
-    copy16 (rtp_h, 0, 0x8021 );
+	rtp_buf[0] = 0x24;
+	rtp_buf[1] = 0;
+	copy16 (rtp_buf, 2, total_len + 16); 
+	copy16 (rtp_h, 0, 0x8021 );
 	copy16 ( rtp_h, 2, sid->seq);
 	copy32 ( rtp_h, 4, sid->wtime);
 	copy32 ( rtp_h, 8, sid->ssrc);
     sid->seq ++;
-	io[0].iov_base = &rtp_h;
-	io[0].iov_len = sizeof (rtp_h);
+	if ( sid->type == STREAM_RTSP_UDP)
+	{
+		io[0].iov_base = rtp_h;
+		io[0].iov_len = 12;
+	}else{  // RTSP over TCP
+		io[0].iov_base = rtp_buf;
+		io[0].iov_len = 16;		
+
+	}
 	memcpy (&io[1], iov, liov * sizeof (struct iovec));
 	//      LOG("write to %d (len:%d)-> %X, %d, %X, %d ",sock,liov*sizeof(iov),io[0].iov_base,io[0].iov_len,io[1].iov_base,io[1].iov_len);
-	return writev (sid->rtp, (const struct iovec *) io, liov + 1);
+	return writev (sid->rsock, (const struct iovec *) io, liov + 1);
 }
 
-unsigned char rtcp[400];
+unsigned char rtcp_buf[1600];
 
 
 int
 send_rtcp (int s_id, int ctime)
 {
 	int tmp_port;
-	int len;
+	int len, rv = 0;
+	char *rtcp = rtcp_buf + 4;
 	streams *sid = get_sid(s_id);
 	if(!sid)
 		LOG_AND_RETURN (0, "Sid is null for s_id %d", s_id);
@@ -427,12 +472,22 @@ send_rtcp (int s_id, int ctime)
 	memcpy (rtcp+68, a, la+4);
 	tmp_port = sid->sa.sin_port;
 	sid->sa.sin_port = htons (ntohs (sid->sa.sin_port) + 1);
-	sendto (rtpc, rtcp, len + 52, MSG_NOSIGNAL,
-		(const struct sockaddr *) &sid->sa, sizeof (sid->sa));
+	if ( sid->type == STREAM_RTSP_UDP)
+		rv = sendto (rtpc, rtcp, len + 52, MSG_NOSIGNAL,
+			(const struct sockaddr *) &sid->sa, sizeof (sid->sa));
+	else 
+	{
+		rtcp_buf[0] = 0x24;
+		rtcp_buf[1] = 1; 
+		copy16(rtcp_buf, 2, len + 52 + 4);
+		rv = sendto (sid->rsock, rtcp_buf, len + 52 + 4, MSG_NOSIGNAL,
+			(const struct sockaddr *) &sid->sa, sizeof (sid->sa));
+	}
 	sid->sa.sin_port = tmp_port;
 	sid->rtcp_wtime = ctime;
 	sid->sp = 0;
 	sid->sb = 0;
+	return rv;
 }
 
 
@@ -440,32 +495,33 @@ extern int bw;
 void
 flush_streamb (streams * sid, char *buf, int rlen, int ctime)
 {
-	int i;
-
-	if (sid->https > -1)
-		send (sid->https, buf, rlen, MSG_NOSIGNAL);
+	int i, rv = 0;
+	
+	if (sid->type == STREAM_HTTP)
+		rv = send (sid->rsock, buf, rlen, MSG_NOSIGNAL);
 	else
 		for (i = 0; i < rlen; i += DVB_FRAME * 7)
-			send_rtpb (sid, &buf[i], DVB_FRAME * 7);
+			rv += send_rtpb (sid, &buf[i], DVB_FRAME * 7);
 	sid->iiov = 0;
 	sid->wtime = ctime;
 	sid->len = 0;
 	sid->sp ++;
-	sid->sb += (sid->rtp >= 0) * 12 + rlen;
-	bw += (sid->rtp >= 0) * 12 + rlen;
+	sid->sb += rv;
+	bw += rv;
 }
 
 
 void
 flush_streami (streams * sid, int ctime)
 {
-	if (sid->https > -1)
-		writev (sid->https, sid->iov, sid->iiov);
+	int rv;
+	if (sid->type == STREAM_HTTP)
+		rv = writev (sid->rsock, sid->iov, sid->iiov);
 	else
-		send_rtp (sid, sid->iov, sid->iiov);
-	bw += (sid->rtp >= 0) * 12 + sid->iiov * DVB_FRAME;
+		rv = send_rtp (sid, sid->iov, sid->iiov);
+	bw += rv;
 	sid->sp ++;
-	sid->sb += (sid->rtp >= 0) * 12 + sid->iiov * DVB_FRAME; 
+	sid->sb += rv; 
 	sid->iiov = 0;
 	sid->wtime = ctime;
 	sid->len = 0;
@@ -589,7 +645,7 @@ read_dmx (sockets * s)
 	//      if(!found)LOG("pid not found = %d -> 1:%d 2:%d 1&1f=%d",pid,s->buf[1],s->buf[2],s->buf[1]&0x1f);
 	//      LOG("done send stream");
 	for (i = 0; i < MAX_STREAMS; i++)
-		if (st[i].enabled && st[i].https == -1 && st[i].do_play
+		if (st[i].enabled && st[i].type != STREAM_HTTP && st[i].do_play
 		&& s->rtime > st[i].rtcp_wtime + 200)
 			stream_timeout (s);
 }
@@ -606,7 +662,7 @@ stream_timeout (sockets * s)
 		rttime = sid->rtcp_wtime,
 		rtime = sid->wtime;
 
-	if (sid->https >= 0)return 0;
+	if (sid->type == STREAM_HTTP)return 0;
 	ctime = getTick ();
 	//LOG("stream timeouts called for sid %d c:%d r:%d rt:%d",s->sid,ctime,rtime,rttime);
 	if (ctime - rtime > 1000)
@@ -635,8 +691,8 @@ dump_streams ()
 	LOG ("Dumping streams:");
 	for (i = 0; i < MAX_STREAMS; i++)
 		if (st[i].enabled)
-			LOG ("%d|  a:%d play:%d h:%d remote:%s:%d", i, st[i].adapter,
-				st[i].https, st[i].do_play, inet_ntoa (st[i].sa.sin_addr),
+			LOG ("%d|  a:%d rsock:%d type:%d play:%d remote:%s:%d", i, st[i].adapter,
+				st[i].rsock, st[i].type, st[i].do_play, inet_ntoa (st[i].sa.sin_addr),
 				ntohs (st[i].sa.sin_port));
 }
 
@@ -673,5 +729,25 @@ int get_session_id( int i)
 {
 	if (i<0 || i>MAX_STREAMS || st[i].enabled==0)
 		return 0;
-	return i + 1000000;
+	return st[i].ssrc;
+}
+
+
+int fix_master_sid(int a_id)
+{
+	int i;
+	adapter *ad;
+	ad = get_adapter(a_id);
+	
+	if(!ad || ad->master_sid!=-1)
+		return 0;
+	if(ad->sid_cnt<1)
+		return 0;
+	for(i=0;i<MAX_STREAMS;i++)
+		if(st[i].enabled && st[i].adapter == a_id)
+		{
+				LOG("Setting master_sid to %d for adapter %d", st[i].sid, a_id);
+				ad->master_sid = i;
+		}
+	return 0;
 }
