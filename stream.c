@@ -256,7 +256,8 @@ streams_add (int a_id, rtp_prop * p, int https)
 	st[i].do_play = 0;
 	st[i].iiov = 0;
 	st[i].len = 0;
-  st[i].ssrc = random();
+	st[i].seq = 0; // set the sequence to 0 for testing purposes - it should be random 
+    st[i].ssrc = random();
 	st[i].wtime = st[i].rtcp_wtime = getTick ();
 								 // max 7 packets
 	st[i].total_len = 7 * DVB_FRAME;
@@ -352,11 +353,11 @@ send_rtp (streams * sid, struct iovec *iov, int liov)
 {
 	struct iovec io[MAX_PACK + 2];
 	memset (&io, 0, sizeof(io));
- 	 sid->seq ++;
-  copy16 (rtp_h, 0, 0x8021 );
+    copy16 (rtp_h, 0, 0x8021 );
 	copy16 ( rtp_h, 2, sid->seq);
 	copy32 ( rtp_h, 4, sid->wtime);
 	copy32 ( rtp_h, 8, sid->ssrc);
+    sid->seq ++;
 	io[0].iov_base = &rtp_h;
 	io[0].iov_len = sizeof (rtp_h);
 	memcpy (&io[1], iov, liov * sizeof (struct iovec));
