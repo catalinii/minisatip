@@ -585,7 +585,7 @@ read_http (sockets * s)
  		"</icon>\r\n"
  		"</iconList>\r\n"
 		"<presentationURL>http://github.com/catalinii/minisatip</presentationURL>\r\n"
-		"<satip:X_SATIPCAP xmlns:satip=\"urn:ses-com:satip\">DVBS2-%d,DVBT2-%d,DVBC-%d</satip:X_SATIPCAP>\r\n"
+		"<satip:X_SATIPCAP xmlns:satip=\"urn:ses-com:satip\">%s</satip:X_SATIPCAP>\r\n"
 		"%s"
 		"</device>\r\n"
 		"</root>\r\n";
@@ -628,11 +628,19 @@ read_http (sockets * s)
 	if (strncmp (arg[1], "/desc.xml", 9) == 0)
 	{
 		int tuner_s2, tuner_t, tuner_c;
-
+		char adapters[50];
 		tuner_s2 = getS2Adapters ();
 		tuner_t = getTAdapters ();
 		tuner_c = getCAdapters ();
-		sprintf (buf, xml, uuid, tuner_s2, tuner_t, tuner_c, opts.playlist);
+		
+		memset(adapters, 0, sizeof(adapters));
+		if(tuner_s2)sprintf(adapters, "DVBS2-%d,", tuner_s2);
+		if(tuner_t)sprintf(adapters + strlen(adapters), "DVBT2-%d,", tuner_t);
+		if(tuner_c)sprintf(adapters + strlen(adapters), "DVBC-%d,", tuner_c);
+		if(tuner_s2 + tuner_t + tuner_c == 0)
+			strcpy(adapters,"DVBS2-0,");
+		adapters[strlen(adapters)-1] = 0;
+		sprintf (buf, xml, uuid, adapters, opts.playlist);
 		http_response (s, 200, "Content-type: text/xml\r\nConnection: close", buf, 0, 0);
 		return 0;
 	}
