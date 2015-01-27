@@ -24,7 +24,7 @@ typedef struct struct_adapter
 	int fe,	dvr;
 	int pa, fn;		
 		// physical adapter, physical frontend number
-	fe_delivery_system_t card_sys; 
+	fe_delivery_system_t sys[10]; 
 	transponder tp;
 	pid pids[MAX_PIDS];
 	int master_sid;				 // first SID, the one that controls the tunning
@@ -56,6 +56,8 @@ char *describe_adapter (int sid, int aid);
 void dump_pids (int aid);
 void sort_pids (int aid);
 void enable_adapters(char *o);
+
+int delsys_match(adapter *ad, int del_sys);
 
 #define get_adapter(a) get_adapter1(a, __FILE__, __LINE__)
 #endif							 /*  */

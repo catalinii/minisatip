@@ -119,7 +119,7 @@ init_hw ()
 		init_dvb_parameters (&a[i].tp);
 		mark_pids_deleted (i, -1, NULL);
 		update_pids (i);
-		a[i].card_sys = a[i].tp.sys = dvb_delsys (a[i].fe);
+		a[i].tp.sys = dvb_delsys (i, a[i].fe, a[i].sys);
 		a[i].master_sid = -1;
 		a[i].sid_cnt = 0;
 		a[i].sock =
@@ -176,7 +176,7 @@ getS2Adapters ()
 			opts.force_sadapter);
 	init_hw ();
 	for (i = 0; i < MAX_ADAPTERS; i++)
-		if (a[i].enabled && (a[i].tp.sys == SYS_DVBS || a[i].tp.sys == SYS_DVBS2))
+		if (a[i].enabled && (delsys_match(&a[i], SYS_DVBS) || delsys_match(&a[i], SYS_DVBS2)))
 			s2++;
 	//      return 1;
 	return s2;
@@ -193,7 +193,7 @@ getTAdapters ()
 		return opts.force_tadapter;
 	init_hw ();
 	for (i = 0; i < MAX_ADAPTERS; i++)
-		if (a[i].enabled && (a[i].tp.sys == SYS_DVBT || a[i].tp.sys == SYS_DVBT2))
+		if (a[i].enabled && (delsys_match(&a[i], SYS_DVBT) || delsys_match(&a[i], SYS_DVBT2)))
 			t++;
 	return t;
 }
@@ -207,7 +207,7 @@ getCAdapters ()
 		return opts.force_cadapter;
 	init_hw ();
 	for (i = 0; i < MAX_ADAPTERS; i++)
-		if (a[i].enabled && (a[i].tp.sys == SYS_DVBC_ANNEX_A))
+		if (a[i].enabled && (delsys_match(&a[i], SYS_DVBC_ANNEX_A)))
 			c++;
 	return c;
 }
@@ -271,29 +271,23 @@ get_free_adapter (int freq, int pol, int msys, int src)
 		{
 			if (a[src].sid_cnt == 0)
 				return src;
-			if (a[src].tp.freq == freq)
+			if (a[src].tp.freq == freq && delsys_match(&a[src], msys))
 				return src;
 		}
 	}
 	for (i = 0; i < MAX_ADAPTERS; i++)
-								 //first free1 adapter that has the same msys
-		if (a[i].enabled && a[i].sid_cnt == 0 && a[i].tp.sys == msys)
+								 //first free adapter that has the same msys
+		if (a[i].enabled && a[i].sid_cnt == 0 && delsys_match(&a[i], msys))
 			return i;
-	if (msys == SYS_DVBS)
-		msys = SYS_DVBS2;
-	if (msys == SYS_DVBT)
-		msys = SYS_DVBT2;
+
 	for (i = 0; i < MAX_ADAPTERS; i++)
-								 //first free1 adapter that supports also msys (for example: DVBS2 will match DVBS streams)
-		if (a[i].enabled && a[i].sid_cnt == 0 && a[i].tp.sys == msys)
-			return i;
-	for (i = 0; i < MAX_ADAPTERS; i++)
-		if (a[i].enabled && a[i].tp.freq == freq
-		&& (a[i].tp.sys == msys || a[i].tp.sys == omsys))
-			if (msys == SYS_DVBS2 && a[i].tp.pol == pol)
+		if (a[i].enabled && a[i].tp.freq == freq && delsys_match(&a[i], msys))
+		{
+			if ((msys == SYS_DVBS2 || msys == SYS_DVBS) && a[i].tp.pol == pol)
 				return i;
-	else
-		return i;
+			else
+				return i;
+		}
 	LOG ("no adapter found for %d %c %d", freq, pol, msys);
 	dump_adapters ();
 	return -1;
@@ -331,8 +325,8 @@ close_adapter_for_stream (int sid, int aid)
 								 // delete the attached PIDs as well
 	mark_pids_deleted (aid, sid, NULL);
 	update_pids (aid);
-	if (a[aid].sid_cnt == 0)
-		close_adapter (aid);
+//	if (a[aid].sid_cnt == 0) 
+//		close_adapter (aid);
 }
 
 
@@ -746,4 +740,21 @@ void enable_adapters(char *o)
 	
 		
 	
+}
+
+
+int delsys_match(adapter *ad, int del_sys)
+{
+	int i;
+	if(!ad)
+		LOG_AND_RETURN(0, "delsys_match: adapter is NULL, delsys %d", del_sys);
+	
+	if(del_sys == 0)
+		LOG_AND_RETURN(0, "delsys_match: delsys is 0 for adapter handle %d", ad->fe);
+		
+	for(i = 0; i < 10; i++) 
+		if(ad->sys[i] == del_sys)
+			return 1;
+	return 0;
+		
 }

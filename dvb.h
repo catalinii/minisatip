@@ -53,8 +53,8 @@ typedef struct struct_transponder
 //int tune_it(int fd_frontend, unsigned int freq, unsigned int srate, char pol, int tone, fe_spectral_inversion_t specInv, unsigned char diseqc,fe_modulation_t modulation,fe_code_rate_t HP_CodeRate,fe_transmit_mode_t TransmissionMode,fe_guard_interval_t guardInterval, fe_bandwidth_t bandwidth);
 int tune_it_s2 (int fd_frontend, transponder * tp);
 int set_pid (int hw, int ad, uint16_t i_pid);
-void del_filters (int fd, int pid);
-fe_delivery_system_t dvb_delsys (int fd);
+int del_filters (int fd, int pid);
+fe_delivery_system_t dvb_delsys (int aid, int fd, fe_delivery_system_t *sys);
 int detect_dvb_parameters (char *s, transponder * tp);
 void init_dvb_parameters (transponder * tp);
 void copy_dvb_parameters (transponder * s, transponder * d);

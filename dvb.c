@@ -436,7 +436,7 @@ tune_it_s2 (int fd_frontend, transponder * tp)
 
 	static int uncommitted_switch_pos = 0;
 	struct dvb_frontend_event event;
-	struct dvb_frontend_info fe_info;
+	
 	int freq = tp->freq;
 	int pol = tp->pol;
 	int diseqc = (tp->diseqc == -1) ? 1 : tp->diseqc;
@@ -515,21 +515,10 @@ tune_it_s2 (int fd_frontend, transponder * tp)
 
 	if ((ioctl (fd_frontend, FE_SET_PROPERTY, &cmdseq_clear)) == -1)
 	{
-		perror ("FE_SET_PROPERTY DTV_CLEAR failed");
+		LOG ("FE_SET_PROPERTY DTV_CLEAR failed for fd %d: %s", fd_frontend, strerror(errno));
 		//        return -1;
 	}
 
-	if ((res = ioctl (fd_frontend, FE_GET_INFO, &fe_info) < 0))
-	{
-		perror ("FE_GET_INFO: ");
-		//       return -1;
-	}
-
-	if ((tp->sys == SYS_DVBS2) && (!(fe_info.caps & FE_CAN_2G_MODULATION)))
-	{
-		fprintf (stderr, "ERROR: Card does not support DVB-S2\n");
-		return -1;
-	}
 	#define DELSYS 0
 	#define FREQUENCY 1
 	#define MODULATION 2
@@ -663,7 +652,7 @@ set_pid (int hw, int ad, uint16_t i_pid)
 	int fd;
 
 	if ( i_pid > 8191 )
-		LOG_AND_RETURN(-1, "pid %d > 8191 for "/dev/dvb/adapter%d/demux%d", i_pid, hw, ad);
+		LOG_AND_RETURN(-1, "pid %d > 8191 for /dev/dvb/adapter%d/demux%d", i_pid, hw, ad);
 		
 	sprintf (buf, "/dev/dvb/adapter%d/demux%d", hw, ad);
 	if ((fd = open (buf, O_RDWR | O_NONBLOCK)) < 0)
@@ -692,8 +681,7 @@ set_pid (int hw, int ad, uint16_t i_pid)
 }
 
 
-void
-del_filters (int fd, int pid)
+int del_filters (int fd, int pid)
 {
 	if (fd < 0)
 		LOG_AND_RETURN(0, "DMX_STOP on an invalid handle %d, pid %d", fd, pid);
@@ -702,13 +690,15 @@ del_filters (int fd, int pid)
 			else
 			LOG ("clearing filters on PID %d FD %d", pid, fd);
 	close (fd);
+	return 0;
 }
 
 
 fe_delivery_system_t
-dvb_delsys (int fd)
+dvb_delsys (int aid, int fd, fe_delivery_system_t *sys)
 {
-	int i;
+	int i, res;
+	struct dvb_frontend_info fe_info;
 
 	static struct dtv_property enum_cmdargs[] =
 	{
@@ -720,11 +710,23 @@ dvb_delsys (int fd)
 		.props = enum_cmdargs
 	};
 	
+	for(i = 0 ; i < 10 ; i ++)
+		sys[i] = 0;
+	
 	if (ioctl (fd, FE_GET_PROPERTY, &enum_cmdseq) < 0)
 	{
 		LOG ("unable to query frontend");
 		return 0;
 	}
+
+	if ((res = ioctl (fd, FE_GET_INFO, &fe_info) < 0))
+	{
+		LOG ("FE_GET_INFO failed for adapter %d, fd %d: %s ", aid, fd, strerror(errno));
+		//       return -1;
+	}
+	
+	LOG("Detected Adapter %d handle %d DVB Card Name: %s", aid, fd, fe_info.name); 
+
 	int nsys = enum_cmdargs[0].u.buffer.len;
 
 	if (nsys < 1)
@@ -732,19 +734,15 @@ dvb_delsys (int fd)
 		LOG ("no available delivery system");
 		return 0;
 	}
+	
 	for (i = 0; i < nsys; i++)
 	{
-		if (enum_cmdargs[0].u.buffer.data[i] == SYS_DVBS2)
-			return SYS_DVBS2;
-		if (enum_cmdargs[0].u.buffer.data[i] == SYS_DVBT2)
-			return SYS_DVBT2;
-		if (enum_cmdargs[0].u.buffer.data[i] == SYS_DVBC_ANNEX_A)
-			return SYS_DVBC_ANNEX_A;
-			
+		sys[i] = enum_cmdargs[0].u.buffer.data[i];
+		LOG("Detected del_sys[%d] for adapter %d: %s", i, aid, fe_delivery_system_tab[sys[i]]);
 	}
 	int rv = enum_cmdargs[0].u.buffer.data[0];
 
-	LOG ("returning default from dvb_delsys => %s (count %d)", fe_delivery_system_tab[rv], nsys);
+	LOG ("returning default from dvb_delsys => %s (count %d)", fe_delivery_system_tab[rv] , nsys);
 	return (fe_delivery_system_t) rv;
 
 }

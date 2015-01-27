@@ -261,6 +261,7 @@ int decode_transport (sockets * s, char *arg, char *default_rtp, int start_rtp)
 	sid->type = STREAM_RTSP_UDP;
 	if((sid->rsock = udp_connect (p.dest, p.port, &sid->sa)) < 0)
 		LOG_AND_RETURN (-1, "decode_transport failed: UDP connection to %s:%d failed", p.dest, p.port);
+	
 	return 0;
 }
 
@@ -427,11 +428,10 @@ send_rtcp (int s_id, int ctime)
 		LOG_AND_RETURN (0, "Sid is null for s_id %d", s_id);
 	char *a = describe_adapter (s_id, st[s_id].adapter);
 	int la = strlen (a);
-	if ( la > sizeof(rtcp)) 
-		la = sizeof(rtcp)-4;
+	if ( la > sizeof(rtcp_buf) - 68) 
+		la = sizeof(rtcp_buf)-70;
 	len = la + 16;
 	if (len % 4 > 0)len = len - (len % 4) +4;
-
 	//      LOG("send_rtcp (sid: %d)-> %s",s_id,a);
 								 // rtp header
 	rtcp[0] = 0x80; // Begin Sender Report
@@ -484,8 +484,7 @@ send_rtcp (int s_id, int ctime)
 		rtcp_buf[0] = 0x24;
 		rtcp_buf[1] = 1; 
 		copy16(rtcp_buf, 2, len + 52 + 4);
-		rv = sendto (sid->rsock, rtcp_buf, len + 52 + 4, MSG_NOSIGNAL,
-			(const struct sockaddr *) &sid->sa, sizeof (sid->sa));
+		rv = send (sid->rsock, rtcp_buf, len + 52 + 4, MSG_NOSIGNAL);
 	}
 	sid->sa.sin_port = tmp_port;
 	sid->rtcp_wtime = ctime;
@@ -603,22 +602,20 @@ read_dmx (sockets * s)
 				if (p[i].pid == pid && p[i].flags == 1)
 					for (j = 0; p[i].sid[j] > -1 && j < MAX_STREAMS_PER_PID; j++)
 					{
-						int s_id = p[i].sid[j];
-
-						if (s_id >= 0 && s_id < MAX_STREAMS && st[s_id].enabled)
+						if ((sid = get_sid(p[i].sid[j])))
 						{
-							sid = get_sid(s_id);
+							
 							p[i].cnt++;
 							sid->iov[sid->iiov].iov_base = b;
 							sid->iov[sid->iiov++].iov_len = DVB_FRAME;
 							if (sid->iiov > 7)
-								LOG ("ERROR: possible writing outside of allocated space iiov > 7 for SID %d PID %d", s_id, pid);
+								LOG ("ERROR: possible writing outside of allocated space iiov > 7 for SID %d PID %d", sid->sid, pid);
 							if (sid->iiov >= 7)
 								flush_streami (sid, s->rtime);
 						}
 						else
-							LOG ("could not find a valid sid %d e:%d for pid:%d",
-								s_id, st[s_id].enabled, pid);
+							LOG ("could not find a valid sid %d for pid:%d",
+								p[i].sid[j], pid);
 					}
 		}
 		min = s->buf;
@@ -626,21 +623,23 @@ read_dmx (sockets * s)
 		for (i = 0; i < MAX_STREAMS; i++)
 								 //move all dvb packets that were not sent out of the s->buf
 			if (st[i].enabled && st[i].adapter == s->sid)
-		{
-			sid = get_sid(i);
-			for (j = 0; j < sid->iiov; j++)
-				if (sid->iov[j].iov_base >= min && sid->iov[j].iov_base <= max)
 			{
-				if (sid->len + DVB_FRAME > STREAMS_BUFFER)
-				{
-					LOG ("ERROR: requested to write outside of stream's buffer for sid %d len %d iiov %d - flushing stream's buffer", i, sid->len, sid->iiov);
-					flush_streamb (sid, sid->buf, sid->len, s->rtime);
+				sid = get_sid(i);
+				if(!sid)
+					continue;
+				for (j = 0; j < sid->iiov; j++)
+					if (sid->iov[j].iov_base >= min && sid->iov[j].iov_base <= max)
+					{
+						if (sid->len + DVB_FRAME >= STREAMS_BUFFER)
+						{
+							LOG ("ERROR: requested to write outside of stream's buffer for sid %d len %d iiov %d - flushing stream's buffer", i, sid->len, sid->iiov);
+							flush_streamb (sid, sid->buf, sid->len, s->rtime);
+						}
+					memcpy (&sid->buf[sid->len], sid->iov[j].iov_base,
+						DVB_FRAME);
+					sid->iov[j].iov_base = &sid->buf[sid->len];
+					sid->len += DVB_FRAME;
 				}
-				memcpy (&sid->buf[sid->len], sid->iov[j].iov_base,
-					DVB_FRAME);
-				sid->iov[j].iov_base = &sid->buf[sid->len];
-				sid->len += DVB_FRAME;
-			}
 		}
 		if (s->rtime - ad->last_sort > 2000)
 		{
@@ -753,7 +752,7 @@ int fix_master_sid(int a_id)
 	for(i=0;i<MAX_STREAMS;i++)
 		if(st[i].enabled && st[i].adapter == a_id)
 		{
-				LOG("Setting master_sid to %d for adapter %d", st[i].sid, a_id);
+				LOG("fix master_sid to %d for adapter %d", st[i].sid, a_id);
 				ad->master_sid = i;
 		}
 	return 0;

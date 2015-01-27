@@ -353,7 +353,7 @@ char *
 http_response (sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 {
 	char *reply =
-		"%s/1.0 %d %s\r\nCSeq: %d\r\nDate: %s\r\n%s\r\nContent-Length: %d\r\n\r\n%s\r\n\r\n";
+		"%s/1.0 %d %s\r\nCSeq: %d\r\nDate: %s\r\n%s\r\nContent-Length: %d\r\n\r\n%s\r\n";
 	char *reply0 = 
 		"%s/1.0 %d %s\r\nCseq: %d\r\nDate: %s\r\n%s\r\n\r\n";
 	char *d;
@@ -461,7 +461,7 @@ read_rtsp (sockets * s)
 	
 	if((strncasecmp (arg[0], "PLAY", 4) == 0) || (strncasecmp (arg[0], "GET", 3) == 0) || (strncasecmp (arg[0], "SETUP", 5) == 0)) 
 	{
-		char *ra;
+		char ra[100];
 			
 		if (!( sid = get_sid(s->sid)))
 		{
@@ -475,13 +475,13 @@ read_rtsp (sockets * s)
 				http_response (s, 404, NULL, NULL, cseq, 0);
 				return 0;
 			}
-		ra = inet_ntoa (sid->sa.sin_addr);
+		strcpy(ra, inet_ntoa (sid->sa.sin_addr));
 		if(sid->type == STREAM_RTSP_UDP)
 			if (atoi (ra) < 239)
 				sprintf (buf,
-					"Transport: RTP/AVP;unicast;client_port=%d-%d;source=%s;server_port=%d-%d\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d",
-					ntohs (sid->sa.sin_port), ntohs (sid->sa.sin_port) + 1,
-					get_sock_host (sid->rsock), get_sock_port (sid->rsock), get_sock_port (sid->rsock) + 1, get_session_id (s->sid),
+					"Transport: RTP/AVP;unicast;source=%s;client_port=%d-%d;server_port=%d-%d\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d",
+					get_sock_host (s->sock), ntohs (sid->sa.sin_port), ntohs (sid->sa.sin_port) + 1,
+					get_sock_port (sid->rsock), get_sock_port (sid->rsock) + 1, get_session_id (s->sid),
 					opts.timeout_sec / 1000, sid->sid + 1);
 			else
 				sprintf (buf,
@@ -491,8 +491,7 @@ read_rtsp (sockets * s)
 		else if(sid->type == STREAM_HTTP)
 			sprintf(buf, "Content-Type: video/mp2t\r\n");
 		else 
-//			sprintf(buf, "Transport: RTP/AVP/TCP;interleaved=0-1\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d", get_session_id (s->sid), opts.timeout_sec / 1000, sid->sid + 1);
-			sprintf(buf, "Session: %010d;timeout=%d\r\ncom.ses.streamID: %d", get_session_id (s->sid), opts.timeout_sec / 1000, sid->sid + 1);
+			sprintf(buf, "Transport: RTP/AVP/TCP;interleaved=0-1\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d", get_session_id (s->sid), opts.timeout_sec / 1000, sid->sid + 1);
 
 		if (strncasecmp(arg[0], "PLAY", 4) == 0)
 			sprintf(buf + strlen(buf), "\r\nRTP-Info: url=%s;seq=%d", arg[1], s->rtime);
