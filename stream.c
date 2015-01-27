@@ -286,6 +286,7 @@ streams_add ()
 	st[i].type = 0;
 	st[i].do_play = 0;
 	st[i].iiov = 0;
+	memset (st[i].iov, 0 , sizeof(st[i].iiov));
 	st[i].len = 0;
 	st[i].seq = 0; // set the sequence to 0 for testing purposes - it should be random 
     st[i].ssrc = random();
@@ -382,7 +383,7 @@ send_rtpb (streams * sid, unsigned char *b, int len)
 int
 send_rtp (streams * sid, struct iovec *iov, int liov)
 {
-	struct iovec io[MAX_PACK + 2];
+	struct iovec io[MAX_PACK + 3];
 	int i,total_len;
 	unsigned char *rtp_h;
 
@@ -606,10 +607,13 @@ read_dmx (sockets * s)
 						{
 							
 							p[i].cnt++;
+							if (sid->iiov > 7)
+							{
+								LOG ("ERROR: possible writing outside of allocated space iiov > 7 for SID %d PID %d", sid->sid, pid);
+								sid->iiov = 6;
+							}
 							sid->iov[sid->iiov].iov_base = b;
 							sid->iov[sid->iiov++].iov_len = DVB_FRAME;
-							if (sid->iiov > 7)
-								LOG ("ERROR: possible writing outside of allocated space iiov > 7 for SID %d PID %d", sid->sid, pid);
 							if (sid->iiov >= 7)
 								flush_streami (sid, s->rtime);
 						}

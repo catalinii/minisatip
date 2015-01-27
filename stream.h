@@ -11,6 +11,7 @@
 #define STREAM_HTTP 1
 #define STREAM_RTSP_UDP 2
 #define STREAM_RTSP_TCP 3
+#define MAX_PACK 7				 // maximum rtp packets to buffer
 
 typedef struct struct_streams
 {
@@ -32,7 +33,7 @@ typedef struct struct_streams
 	char *apids,
 		*dpids,
 		*pids;
-	struct iovec iov[7];
+	struct iovec iov[MAX_PACK + 2];
 	int iiov;
 	int sp,sb;
 
@@ -40,7 +41,7 @@ typedef struct struct_streams
 
 #define TYPE_MCAST 1
 #define TYPE_UNICAST 2
-#define MAX_PACK 7				 // maximum rtp packets to buffer
+
 typedef struct struct_rtp_prop
 {
 	int type;
