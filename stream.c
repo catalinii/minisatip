@@ -55,7 +55,11 @@ char *describe_streams (sockets *s, char *req, char *sbuf, int size)
 	char *str;
 	int i, sidf, sid, streams_enabled;
 
+	if (s->sid == -1)
+		setup_stream(req, s);
+
 	sid = s->sid;
+		
 	streams_enabled = 0;
 	sidf = get_session_id(sid);
 		
@@ -114,7 +118,7 @@ set_stream_parameters (int s_id, transponder * t)
 
 
 streams *
-setup_stream (char **str, sockets * s)
+setup_stream (char *str, sockets * s)
 {
 	char *arg[20], pol;
 	streams *sid;
@@ -122,7 +126,7 @@ setup_stream (char **str, sockets * s)
 	int i;
 	transponder t;
 	init_hw ();
-	detect_dvb_parameters (str[1], &t);
+	detect_dvb_parameters (str, &t);
 	LOG ("Setup stream %d parameters, sock_id %d, handle %d", s->sid,
 		s->sock_id, s->sock);
 	if (s->sid < 0)				 // create the stream
@@ -568,6 +572,9 @@ read_dmx (sockets * s)
 	if (cnt > 0 && cnt % 100 == 0)
 		LOG ("Reading max size for the last %d buffers", cnt);
 								 // we have just 1 stream, do not check the pids, send everything to the destination
+	if ( s->rtime - ad->rtime >= 500)
+		LOG("Adapter %d, No write for more than 500ms, flushing DMX buffer (rlen %d)", s->sid, rlen);
+
 	if (ad->sid_cnt == 1 && ad->master_sid >= 0 && opts.log < 2)
 	{
 		sid = get_sid(ad->master_sid);

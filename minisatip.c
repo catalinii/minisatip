@@ -264,18 +264,18 @@ set_signal_handler ()
 
 	sig_action.sa_flags = SA_SIGINFO | SA_ONSTACK;
 
-	//    if (sigaction(SIGBUS, &sig_action, NULL) != 0) { err(1, "sigaction"); }
 	#ifndef __mips__
+    if (sigaction(SIGBUS, &sig_action, NULL) != 0) { err(1, "sigaction"); }
 	if (sigaction(SIGSEGV, &sig_action, NULL) != 0) { err(1, "sigaction"); }
+    if (sigaction(SIGABRT, &sig_action, NULL) != 0) { err(1, "sigaction"); }
+    if (sigaction(SIGFPE,  &sig_action, NULL) != 0) { err(1, "sigaction"); }
+    if (sigaction(SIGILL,  &sig_action, NULL) != 0) { err(1, "sigaction"); }
 	#endif
-	//    if (sigaction(SIGFPE,  &sig_action, NULL) != 0) { err(1, "sigaction"); }
 	if (sigaction (SIGINT, &sig_action, NULL) != 0)
 	{
 		err (1, "sigaction");
 	}
-	//    if (sigaction(SIGILL,  &sig_action, NULL) != 0) { err(1, "sigaction"); }
 	//    if (sigaction(SIGTERM, &sig_action, NULL) != 0) { err(1, "sigaction"); }
-	//    if (sigaction(SIGABRT, &sig_action, NULL) != 0) { err(1, "sigaction"); }
 	if (signal (SIGHUP, SIG_IGN) != 0)
 	{
 		err ("sigaction SIGHUP");
@@ -435,7 +435,7 @@ read_rtsp (sockets * s)
 	cseq = 0;	
 	
 	if(strstr(arg[1], "freq") || strstr(arg[1], "pids"))
-		sid = (streams *) setup_stream (arg, s);
+		sid = (streams *) setup_stream (arg[1], s);
 	
 	for (i = 0; i < la; i++)
 		if (strncasecmp ("CSeq:", arg[i], 5) == 0)

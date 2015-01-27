@@ -51,7 +51,7 @@ typedef struct struct_rtp_prop
 
 uint32_t getTick ();
 char *describe_streams (sockets *s, char *req, char *sbuf,int size);
-streams *setup_stream (char **str, sockets * s);
+streams *setup_stream (char *str, sockets * s);
 int start_play (streams * sid, sockets * s);
 int decode_transport (sockets * s, char *arg, char *default_rtp, int start_rtp);
 int streams_add ();
