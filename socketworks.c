@@ -583,12 +583,10 @@ get_current_timestamp_log (void)
 	static char date_str[200];
 	time_t date;
 	struct tm *t;
-	char *day[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
-	char *month[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 	time (&date);
 	t = localtime (&date);
 	if(!t) return "01/01 00:00:20";
-	snprintf (date_str, sizeof (date_str), "%02d/%02d %02d:%02d:%02d.%03d",t->tm_mday, t->tm_mon, t->tm_hour, t->tm_min, t->tm_sec, getTick() % 1000);
+	snprintf (date_str, sizeof (date_str), "%02d/%02d %02d:%02d:%02d.%03d",t->tm_mday, t->tm_mon + 1, t->tm_hour, t->tm_min, t->tm_sec, getTick() % 1000);
 	return date_str;
 }
 
