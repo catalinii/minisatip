@@ -662,6 +662,9 @@ set_pid (int hw, int ad, uint16_t i_pid)
 	char buf[100];
 	int fd;
 
+	if ( i_pid > 8191 )
+		LOG_AND_RETURN(-1, "pid %d > 8191 for "/dev/dvb/adapter%d/demux%d", i_pid, hw, ad);
+		
 	sprintf (buf, "/dev/dvb/adapter%d/demux%d", hw, ad);
 	if ((fd = open (buf, O_RDWR | O_NONBLOCK)) < 0)
 	{
@@ -692,6 +695,8 @@ set_pid (int hw, int ad, uint16_t i_pid)
 void
 del_filters (int fd, int pid)
 {
+	if (fd < 0)
+		LOG_AND_RETURN(0, "DMX_STOP on an invalid handle %d, pid %d", fd, pid);
 	if (ioctl (fd, DMX_STOP) < 0)
 		LOG ("DMX_STOP failed on PID %d FD %d: %s", pid, fd, strerror (errno))
 			else
