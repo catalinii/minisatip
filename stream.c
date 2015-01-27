@@ -63,7 +63,7 @@ char *describe_streams (sockets *s, char *req, char *sbuf, int size)
 	streams_enabled = 0;
 	sidf = get_session_id(sid);
 		
-	snprintf(sbuf,size-1,"v=0\r\no=- %010d %010d IN IP4 %s\r\ns=SatIPServer:1 %d %d %d\r\nt=0 0\r\n", sidf, sidf, inet_ntoa(s->sa.sin_addr), getS2Adapters(), getTAdapters(), getCAdapters() );
+	snprintf(sbuf,size-1,"v=0\r\no=- %010d %010d IN IP4 %s\r\ns=SatIPServer:1 %d %d %d\r\nt=0 0\r\n", sidf, sidf, get_sock_host(s->sock), getS2Adapters(), getTAdapters(), getCAdapters() );
 	if(!strchr(req, '?'))
 	{
 		for( i=0; i<MAX_STREAMS; i++)
@@ -76,7 +76,7 @@ char *describe_streams (sockets *s, char *req, char *sbuf, int size)
 			}
 	}else{
 		int slen = strlen(sbuf);
-		snprintf(sbuf + slen, size - slen - 1, "m=video 0 RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\na=inactive\r\n", sid+1, describe_adapter(0, 0));
+		snprintf(sbuf + slen, size - slen - 1, "m=video 0 RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\nb=AS:5000\r\na=inactive\r\n", sid+1, describe_adapter(0, 0));
 	}
 	return sbuf;
 }
