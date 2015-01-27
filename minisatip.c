@@ -489,7 +489,7 @@ read_rtsp (sockets * s)
 					ra, ntohs (sid->sa.sin_port), ntohs (sid->sa.sin_port) + 1,
 					get_session_id (s->sid), opts.timeout_sec / 1000, sid->sid + 1);
 		else if(sid->type == STREAM_HTTP)
-			sprintf(buf, "Content-Type: video/mp2t\r\n");
+			sprintf(buf, "Content-Type: video/mp2t");
 		else 
 			sprintf(buf, "Transport: RTP/AVP/TCP;interleaved=0-1\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d", get_session_id (s->sid), opts.timeout_sec / 1000, sid->sid + 1);
 
