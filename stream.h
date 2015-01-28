@@ -36,6 +36,7 @@ typedef struct struct_streams
 	struct iovec iov[MAX_PACK + 2];
 	int iiov;
 	int sp,sb;
+	int timeout;
 
 } streams;
 

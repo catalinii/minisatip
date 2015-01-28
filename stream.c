@@ -291,6 +291,7 @@ streams_add ()
 	st[i].len = 0;
 	st[i].seq = 0; // set the sequence to 0 for testing purposes - it should be random 
     st[i].ssrc = random();
+	st[i].timeout = opts.timeout_sec;
 	st[i].wtime = st[i].rtcp_wtime = getTick ();
 								 // max 7 packets
 	st[i].total_len = 7 * DVB_FRAME;
@@ -697,7 +698,7 @@ stream_timeout (sockets * s)
 	if (ctime - rttime > 200)
 		send_rtcp (s->sid, ctime);
 	//LOG("done stream timeouts called for sid %d c:%d r:%d rt:%d",s->sid,ctime,rtime,rttime);
-	if (ctime - s->rtime > opts.timeout_sec)
+	if (sid->timeout > 0 && ctime - s->rtime > sid->timeout)
 		return 1;				 //most likely called from timeout from sockets, return 1 to close the socket and stream
 	return 0;
 }
