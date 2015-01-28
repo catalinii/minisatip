@@ -372,7 +372,7 @@ tune (int aid, int sid)
 	adapter *ad = get_adapter(aid);
 	int i, rv = 0;
 	
-	if(!ad) return -1;
+	if(!ad) return -400;
 	ad->last_sort = getTick ();
 	if (sid == ad->master_sid && ad->do_tune)
 	{
@@ -388,7 +388,7 @@ tune (int aid, int sid)
 	else
 		LOG ("not tunning for SID %d (do_tune=%d, master_sid=%d)", sid,
 			a[aid].do_tune, a[aid].master_sid);
-	if (rv == -1)
+	if (rv < 0)
 		mark_pids_deleted (aid, sid, NULL);
 	update_pids (aid);
 	return rv;

@@ -265,21 +265,17 @@ set_signal_handler ()
 	sig_action.sa_flags = SA_SIGINFO | SA_ONSTACK;
 
 	#ifndef __mips__
-    if (sigaction(SIGBUS, &sig_action, NULL) != 0) { err(1, "sigaction"); }
-	if (sigaction(SIGSEGV, &sig_action, NULL) != 0) { err(1, "sigaction"); }
-    if (sigaction(SIGABRT, &sig_action, NULL) != 0) { err(1, "sigaction"); }
-    if (sigaction(SIGFPE,  &sig_action, NULL) != 0) { err(1, "sigaction"); }
-    if (sigaction(SIGILL,  &sig_action, NULL) != 0) { err(1, "sigaction"); }
+    if (sigaction(SIGBUS, &sig_action, NULL) != 0) { LOG("Could not set signal SIGBUS"); }
+	if (sigaction(SIGSEGV, &sig_action, NULL) != 0) { LOG("Could not set signal SIGSEGV"); }
+    if (sigaction(SIGABRT, &sig_action, NULL) != 0) { LOG("Could not set signal SIGABRT"); }
+    if (sigaction(SIGFPE,  &sig_action, NULL) != 0) { LOG("Could not set signal SIGFPE"); }
+    if (sigaction(SIGILL,  &sig_action, NULL) != 0) { LOG("Could not set signal SIGILL"); }
 	#endif
-	if (sigaction (SIGINT, &sig_action, NULL) != 0)
-	{
-		err (1, "sigaction");
-	}
+	if (sigaction (SIGINT, &sig_action, NULL) != 0) { LOG("Could not set signal SIGINT");}
+	
 	//    if (sigaction(SIGTERM, &sig_action, NULL) != 0) { err(1, "sigaction"); }
-	if (signal (SIGHUP, SIG_IGN) != 0)
-	{
-		err ("sigaction SIGHUP");
-	}
+	if (signal (SIGHUP, SIG_IGN) != 0) { LOG("Could not ignore signal SIGHUP"); }
+	if (signal (SIGPIPE, SIG_IGN) != 0) { LOG("Could not ignore signal SIGPIPE"); }
 }
 
 
@@ -380,8 +376,13 @@ http_response (sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 		d = "Internal Server Error";
 	else if (rc == 501)
 		d = "Not Implemented";
-	else
+	else if (rc == 405)
+		d = "Method Not Allowed";
+	else 
+	{
 		d = "Service Unavailable";
+		rc = 503;
+	}
 	static char resp[5000];
 	if(!lr)
 		lr = strlen (desc);
@@ -405,7 +406,7 @@ read_rtsp (sockets * s)
 	char buf[2000];
 	streams *sid;
 
-	LOG ("read RTSP (from handle %d sock_id %d):\n%s", s->sock, s->sock_id, s->buf);
+	LOG ("read RTSP (from handle %d sock_id %d, ts: %d):\n%s", s->sock, s->sock_id, s->rtime, s->buf);
 	if (s->rlen < 5
 		|| (htonl (*(uint32_t *) & s->buf[s->rlen - 4]) != 0x0D0A0D0A))
 	{
@@ -462,6 +463,7 @@ read_rtsp (sockets * s)
 	if((strncasecmp (arg[0], "PLAY", 4) == 0) || (strncasecmp (arg[0], "GET", 3) == 0) || (strncasecmp (arg[0], "SETUP", 5) == 0)) 
 	{
 		char ra[100];
+		int rv;
 			
 		if (!( sid = get_sid(s->sid)))
 		{
@@ -470,9 +472,9 @@ read_rtsp (sockets * s)
 		}
 
 		if ((strncasecmp (arg[0], "PLAY", 3) == 0) || (strncasecmp (arg[0], "GET", 3) == 0))
-			if (start_play (sid, s) < 0)
+			if ((rv = start_play (sid, s)) < 0)
 			{
-				http_response (s, 404, NULL, NULL, cseq, 0);
+				http_response (s, -rv , NULL, NULL, cseq, 0);
 				return 0;
 			}
 		strcpy(ra, inet_ntoa (sid->sa.sin_addr));
@@ -886,6 +888,7 @@ posix_signal_handler (int sig, siginfo_t * siginfo, ucontext_t * ctx)
 		sig, (long unsigned int) sp, (long unsigned int) ip,
 		(long unsigned int) main, (long unsigned int) read_dmx,
 		(long unsigned int) clock_gettime);
+	fflush(stdout);
 	#ifdef __mips__
 	hexDump ("Stack dump: ", (void *)sp, 128);
 	#endif

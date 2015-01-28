@@ -422,8 +422,8 @@ select_and_execute ()
 						else
 							err_str = strerror (err);
 						LOG
-							("select_and_execute[%d]: %s on socket %d (sid:%d) from %s:%d - type %s failure %d:%s",
-							i, rlen < 0 ? "Error" : "Close", ss->sock, ss->sid,
+							("select_and_execute[%d]: %s on socket %d (sid:%d, ts: %d) from %s:%d - type %s failure %d:%s",
+							i, rlen < 0 ? "Error" : "Close", ss->sock, ss->sid, c_time,
 							inet_ntoa (ss->sa.sin_addr), ntohs (ss->sa.sin_port),
 							types[ss->type], err, err_str);
 						if (err == EOVERFLOW)
@@ -485,6 +485,7 @@ select_and_execute ()
 
 		}
 	}
+	LOG("The main loop ended, run_loop = %d", run_loop);
 }
 
 

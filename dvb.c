@@ -638,7 +638,7 @@ tune_it_s2 (int fd_frontend, transponder * tp)
 		{
 			perror ("FE_SET_PROPERTY TUNE failed");
 			LOG ("set property failed");
-			return -1;
+			return -404;
 		}
 
 	return 0;

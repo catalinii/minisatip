@@ -167,9 +167,10 @@ start_play (streams * sid, sockets * s)
 
 	if(sid->type == 0)
 	{
-			LOG("Assuming RTSP over TCP for stream %d, most likely transport was not specified", sid->sid);
-			sid->type = STREAM_RTSP_TCP;
-			sid->rsock = s->sock;
+//			LOG("Assuming RTSP over TCP for stream %d, most likely transport was not specified", sid->sid);
+//			sid->type = STREAM_RTSP_TCP;
+//			sid->rsock = s->sock;
+			LOG_AND_RETURN(-405, "No Transport header was specified, for sid %d", sid->sid);
 	}
 	
 	LOG ("Play for stream %d, type %d, rsock %d, adapter %d, sock_id %d handle %d", s->sid, sid->type, sid->rsock,
@@ -182,13 +183,13 @@ start_play (streams * sid, sockets * s)
 			sid->tp.fe - 1);
 		LOG ("Got adapter %d on socket %d", a_id, s->sock_id);
 		if (a_id < 0)
-			return -1;
+			return -404;
 		sid->adapter = a_id;
 		set_adapter_for_stream (sid->sid, a_id);
 
 	}
 	if (set_adapter_parameters (sid->adapter, s->sid, &sid->tp) < 0)
-		return -1;
+		return -404;
 	sid->do_play = 1;
 	sid->start_streaming = 0;
 	sid->tp.apids = sid->tp.dpids = sid->tp.pids = NULL;
@@ -506,6 +507,11 @@ flush_streamb (streams * sid, char *buf, int rlen, int ctime)
 	else
 		for (i = 0; i < rlen; i += DVB_FRAME * 7)
 			rv += send_rtpb (sid, &buf[i], DVB_FRAME * 7);
+	if(rv<0)
+	{
+		LOG("write to handle %d failed: %d, %s", sid->rsock, rv, strerror(errno));
+		rv = -1;
+	}
 	sid->iiov = 0;
 	sid->wtime = ctime;
 	sid->len = 0;
@@ -523,6 +529,11 @@ flush_streami (streams * sid, int ctime)
 		rv = writev (sid->rsock, sid->iov, sid->iiov);
 	else
 		rv = send_rtp (sid, sid->iov, sid->iiov);
+	if(rv<0)
+	{
+		LOG("write to handle %d failed: %d, %s", sid->rsock, rv, strerror(errno));
+		rv = -1;
+	}
 	bw += rv;
 	sid->sp ++;
 	sid->sb += rv; 
@@ -672,7 +683,8 @@ stream_timeout (sockets * s)
 		rttime = sid->rtcp_wtime,
 		rtime = sid->wtime;
 
-	if (sid->type == STREAM_HTTP)return 0;
+	if (sid->type == STREAM_HTTP)
+		return 0;
 	ctime = getTick ();
 	//LOG("stream timeouts called for sid %d c:%d r:%d rt:%d",s->sid,ctime,rtime,rttime);
 	if (ctime - rtime > 1000)
