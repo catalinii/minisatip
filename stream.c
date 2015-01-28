@@ -742,6 +742,14 @@ int get_session_id( int i)
 	return st[i].ssrc;
 }
 
+void set_session_id(int i, int id)
+{
+	if (i<0 || i>MAX_STREAMS || st[i].enabled==0)
+		return;
+	st[i].ssrc = id;
+	
+}
+
 
 int fix_master_sid(int a_id)
 {
@@ -761,3 +769,5 @@ int fix_master_sid(int a_id)
 		}
 	return 0;
 }
+
+

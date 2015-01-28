@@ -402,7 +402,7 @@ read_rtsp (sockets * s)
 	char *arg[50];
 	int cseq, la, i, rlen;
 	char *proto;
-	char buf[200];
+	char buf[2000];
 	streams *sid;
 
 	LOG ("read RTSP (from handle %d sock_id %d):\n%s", s->sock, s->sock_id, s->buf);
@@ -435,8 +435,8 @@ read_rtsp (sockets * s)
 	la = split (arg, s->buf, 50, ' ');
 	cseq = 0;	
 	
-	if(strstr(arg[1], "freq") || strstr(arg[1], "pids"))
-		sid = (streams *) setup_stream (arg[1], s);
+//	if(strstr(arg[1], "freq") || strstr(arg[1], "pids"))
+	sid = (streams *) setup_stream (arg[1], s);
 	
 	for (i = 0; i < la; i++)
 		if (strncasecmp ("CSeq:", arg[i], 5) == 0)
@@ -478,23 +478,23 @@ read_rtsp (sockets * s)
 		strcpy(ra, inet_ntoa (sid->sa.sin_addr));
 		if(sid->type == STREAM_RTSP_UDP)
 			if (atoi (ra) < 239)
-				sprintf (buf,
+				snprintf (buf, sizeof(buf),
 					"Transport: RTP/AVP;unicast;source=%s;client_port=%d-%d;server_port=%d-%d\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d",
 					get_sock_host (s->sock), ntohs (sid->sa.sin_port), ntohs (sid->sa.sin_port) + 1,
 					get_sock_port (sid->rsock), get_sock_port (sid->rsock) + 1, get_session_id (s->sid),
 					opts.timeout_sec / 1000, sid->sid + 1);
 			else
-				sprintf (buf,
+				snprintf (buf, sizeof(buf),
 					"Transport: RTP/AVP;multicast;destination=%s;port=%d-%d\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d",
 					ra, ntohs (sid->sa.sin_port), ntohs (sid->sa.sin_port) + 1,
 					get_session_id (s->sid), opts.timeout_sec / 1000, sid->sid + 1);
 		else if(sid->type == STREAM_HTTP)
-			sprintf(buf, "Content-Type: video/mp2t");
+			snprintf(buf, sizeof(buf), "Content-Type: video/mp2t");
 		else 
-			sprintf(buf, "Transport: RTP/AVP/TCP;interleaved=0-1\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d", get_session_id (s->sid), opts.timeout_sec / 1000, sid->sid + 1);
+			snprintf(buf, sizeof(buf), "Transport: RTP/AVP/TCP;interleaved=0-1\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d", get_session_id (s->sid), opts.timeout_sec / 1000, sid->sid + 1);
 
 		if (strncasecmp(arg[0], "PLAY", 4) == 0)
-			sprintf(buf + strlen(buf), "\r\nRTP-Info: url=%s;seq=%d", arg[1], s->rtime);
+			snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf) - 1,  "\r\nRTP-Info: url=%s;seq=%d", arg[1], 0);
 		http_response (s, 200, buf, NULL, cseq, 0);
 	}
 	else if (strncmp (arg[0], "TEARDOWN", 8) == 0)
@@ -508,16 +508,20 @@ read_rtsp (sockets * s)
 		{
 			char sbuf[1000];
 			describe_streams(s, arg[1], sbuf, sizeof(sbuf));
-			sprintf(buf, "Content-type: application/sdp\r\nContent-Base: rtsp://%s/", get_sock_host(s->sock));
+			snprintf(buf, sizeof(buf), "Content-type: application/sdp\r\nContent-Base: rtsp://%s/", get_sock_host(s->sock));
 			http_response (s, 200, buf, sbuf, cseq, 0);
 				
 		}
 		else if (strncmp (arg[0], "OPTIONS", 8) == 0)
 		{		
-			if(s->sid>-1)
-				sprintf(buf, "Session:%010d\r\n%s", get_session_id(s->sid), public);
-			else 
-				sprintf(buf, "%s", public);
+			if(cseq<3)         // fix for tivizen
+			{
+				for (i = 0; i < la; i++)
+					if (strncasecmp ("Session:", arg[i], 5) == 0)      
+						set_session_id(sid->sid, map_int(arg[i+1], NULL));
+						
+			}
+			snprintf(buf, sizeof(buf), "Session:%010d\r\n%s", get_session_id(s->sid), public);
 			http_response (s, 200, buf, NULL, cseq, 0);
 		}
 	}

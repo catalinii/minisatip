@@ -62,6 +62,8 @@ int close_streams_for_adapter (int ad, int except);
 void dump_streams ();
 streams *get_sid1 (int sid, char *file, int line);
 int get_session_id( int i);
+void set_session_id(int i, int id);
 int fix_master_sid(int adapter);
+
 #define get_sid(a) get_sid1(a, __FILE__, __LINE__)
 #endif
