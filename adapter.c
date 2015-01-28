@@ -189,7 +189,8 @@ getTAdapters ()
 	int i,
 		t = 0;
 
-	LOG_AND_RETURN (opts.force_tadapter, "Returning %d DVB-T adapters as requested",
+	 if (opts.force_tadapter) 
+		LOG_AND_RETURN (opts.force_tadapter, "Returning %d DVB-T adapters as requested",
                         opts.force_tadapter);
 	init_hw ();
 	for (i = 0; i < MAX_ADAPTERS; i++)
@@ -203,7 +204,8 @@ getCAdapters ()
 {
 	int i, c = 0;
 
-	LOG_AND_RETURN (opts.force_cadapter, "Returning %d DVB-C adapters as requested",
+	 if (opts.force_cadapter) 
+		LOG_AND_RETURN (opts.force_cadapter, "Returning %d DVB-C adapters as requested",
                         opts.force_cadapter);
 	init_hw ();
 	for (i = 0; i < MAX_ADAPTERS; i++)
