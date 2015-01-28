@@ -19,6 +19,26 @@
 #define LOF2 (10600*1000UL)
 #define LP_CODERATE_DEFAULT (0)
 
+#define DELSYS 0
+#define FREQUENCY 1
+#define MODULATION 2
+#define INVERSION 3
+#define SYMBOL_RATE 4
+#define BANDWIDTH 4
+#define FEC_INNER 5
+#define FEC_LP 6
+#define GUARD 7
+#define PILOT 7
+#define TRANSMISSION 8
+#define ROLLOFF 8
+#define MIS 9
+#define HIERARCHY 9
+
+#ifndef DTV_STREAM_ID
+#define DTV_STREAM_ID           42
+#endif
+
+
 typedef struct struct_transponder
 {
 	fe_delivery_system_t sys;

@@ -453,9 +453,7 @@ tune_it_s2 (int fd_frontend, transponder * tp)
 		.num = 1,
 		.props = p_clear
 	};
-	#ifndef DTV_STREAM_ID
-	#define DTV_STREAM_ID           42
-	#endif
+
 	static struct dtv_property dvbs2_cmdargs[] =
 	{
 		{.cmd = DTV_DELIVERY_SYSTEM,.u.data = 0},
@@ -518,21 +516,6 @@ tune_it_s2 (int fd_frontend, transponder * tp)
 		LOG ("FE_SET_PROPERTY DTV_CLEAR failed for fd %d: %s", fd_frontend, strerror(errno));
 		//        return -1;
 	}
-
-	#define DELSYS 0
-	#define FREQUENCY 1
-	#define MODULATION 2
-	#define INVERSION 3
-	#define SYMBOL_RATE 4
-	#define BANDWIDTH 4
-	#define FEC_INNER 5
-	#define FEC_LP 6
-	#define GUARD 7
-	#define PILOT 7
-	#define TRANSMISSION 8
-	#define ROLLOFF 8
-	#define MIS 9
-	#define HIERARCHY 9
 
 	switch (tp->sys)
 	{
