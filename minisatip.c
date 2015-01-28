@@ -457,9 +457,12 @@ read_rtsp (sockets * s)
 			http_response (s, 400, NULL, NULL, cseq, 0);
 			return 0;
 		}
-	}else if (strncasecmp ("LIVE555", arg[i], 9) == 0)
+	}else if (strstr (arg[i], "LIVE555"))
 		if(sid)
+		{
+			LOG("VLC detected, setting stream timeout to unlimited for sid %d", sid->sid);
 			sid->timeout = 0; // ignore timeout for VLC
+		}
 	
 	if((strncasecmp (arg[0], "PLAY", 4) == 0) || (strncasecmp (arg[0], "GET", 3) == 0) || (strncasecmp (arg[0], "SETUP", 5) == 0)) 
 	{
@@ -485,16 +488,16 @@ read_rtsp (sockets * s)
 					"Transport: RTP/AVP;unicast;source=%s;client_port=%d-%d;server_port=%d-%d\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d",
 					get_sock_host (s->sock), ntohs (sid->sa.sin_port), ntohs (sid->sa.sin_port) + 1,
 					get_sock_port (sid->rsock), get_sock_port (sid->rsock) + 1, get_session_id (s->sid),
-					sid->timeout / 1000, sid->sid + 1);
+					sid->timeout?sid->timeout / 1000:opts.timeout_sec / 1000, sid->sid + 1);
 			else
 				snprintf (buf, sizeof(buf),
 					"Transport: RTP/AVP;multicast;destination=%s;port=%d-%d\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d",
 					ra, ntohs (sid->sa.sin_port), ntohs (sid->sa.sin_port) + 1,
-					get_session_id (s->sid), sid->timeout / 1000, sid->sid + 1);
+					get_session_id (s->sid), sid->timeout?sid->timeout / 1000:opts.timeout_sec / 1000 , sid->sid + 1);
 		else if(sid->type == STREAM_HTTP)
 			snprintf(buf, sizeof(buf), "Content-Type: video/mp2t");
 		else 
-			snprintf(buf, sizeof(buf), "Transport: RTP/AVP/TCP;interleaved=0-1\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d", get_session_id (s->sid), sid->timeout / 1000, sid->sid + 1);
+			snprintf(buf, sizeof(buf), "Transport: RTP/AVP/TCP;interleaved=0-1\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d", get_session_id (s->sid), sid->timeout?sid->timeout / 1000:opts.timeout_sec / 1000, sid->sid + 1);
 
 		if (strncasecmp(arg[0], "PLAY", 4) == 0)
 			snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf) - 1,  "\r\nRTP-Info: url=%s;seq=%d", arg[1], 0);
