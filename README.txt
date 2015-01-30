@@ -6,7 +6,7 @@ It is very lightweight (designed for embedded systems with memory and processing
 The application is designed to stream the requested data even to multiple clients (even with one dvb card) in the same time and has few additional features, like capping the bandwidth or forcing the application to send the rtp streams to a specified address.
 It is tested on x86_64, x86, ARM and MIPS platforms and it requires DVBAPI 5. 
 
-Please use https://toda.ro for issues or features requests.
+Please use https://toda.ro/projects/minisatip/issues/new for features requests.
 
 Usage:
 
