@@ -1000,10 +1000,10 @@ uint16_t * snr)
 	if (ioctl (fd, FE_READ_STATUS, status) < 0)
 	{
 		LOG ("ioctl FE_READ_STATUS failed (%s)", strerror (errno));
-		*status = -1;
+		*status = 0;
 		return;
 	}
-	*status = (*status & FE_HAS_LOCK) ? 1 : 0;
+//	*status = (*status & FE_HAS_LOCK) ? 1 : 0;
 	if (*status)
 	{
 		if (ioctl (fd, FE_READ_BER, ber) < 0)
@@ -1015,6 +1015,58 @@ uint16_t * snr)
 		if (ioctl (fd, FE_READ_SNR, snr) < 0)
 			LOG ("ioctl FE_READ_SNR failed (%s)", strerror (errno));
 	}
+}
+
+int get_signal_new (int fd, fe_status_t * status, uint32_t * ber,
+	uint16_t * strength, uint16_t * snr)
+{
+#if DVBAPIVERSION >= 0x050A
+	static struct dtv_property enum_cmdargs[] =
+	{
+		{.cmd = DTV_STAT_SIGNAL_STRENGTH,.u.data = 0},
+		{.cmd = DTV_STAT_CNR,.u.data = 0},
+		{.cmd = DTV_STAT_ERROR_BLOCK_COUNT,.u.data = 0},
+	};
+	static struct dtv_properties enum_cmdseq =
+	{
+		.num = sizeof (enum_cmdargs) / sizeof (struct dtv_property),
+		.props = enum_cmdargs
+	};
+	
+	
+	if (ioctl (fd, FE_GET_PROPERTY, &enum_cmdseq) < 0)
+	{
+		LOG ("get_signal_new: unable to query frontend %d: %s", fd, strerror (errno));
+		return -1;
+	}
+	
+	*status = *snr = *ber = *strength = 0;
+	
+	if(enum_cmdargs[0].u.st.stat[0].scale ==  FE_SCALE_RELATIVE)
+		*strength = enum_cmdargs[0].u.st.stat[0].uvalue >> 8;
+	else if(enum_cmdargs[0].u.st.stat[0].scale ==  FE_SCALE_DECIBEL)
+		*strength = enum_cmdargs[0].u.st.stat[0].uvalue >> 8;
+
+	if(enum_cmdargs[1].u.st.stat[0].scale ==  FE_SCALE_RELATIVE)
+		*snr = enum_cmdargs[1].u.st.stat[0].uvalue >> 12;
+	else if(enum_cmdargs[1].u.st.stat[0].scale ==  FE_SCALE_DECIBEL)
+		*snr = enum_cmdargs[1].u.st.stat[0].uvalue >> 12;
+
+	*ber = enum_cmdargs[2].u.st.stat[0].uvalue & 0xFFFF;
+
+	if (ioctl (fd, FE_READ_STATUS, status) < 0)
+	{
+		LOG ("ioctl FE_READ_STATUS failed (%s)", strerror (errno));
+		*status = 0;
+		return -1;
+	}
+	LOG("get_signal_new returned: Status: %d, Signal (%d): %llu, SNR(%d): %llu, BER: %llu ", *status, enum_cmdargs[0].u.st.stat[0].scale, enum_cmdargs[0].u.st.stat[0].uvalue,
+			enum_cmdargs[1].u.st.stat[0].scale, enum_cmdargs[1].u.st.stat[0].uvalue, enum_cmdargs[2].u.st.stat[0].uvalue);
+		
+	return 0;
+#else
+	return -1;
+#endif
 }
 
 char *modulation_string(int mtype)

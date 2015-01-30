@@ -637,15 +637,19 @@ describe_adapter (int sid, int aid)
 								 // do just max 3 signal check 1s after tune
 	if ((ad->status == 0 && ad->status_cnt<8 && ad->status_cnt++>4) || opts.force_scan)
 	{
+		int new_gs;
 		ts = getTick ();
-		get_signal (ad->fe, &ad->status, &ad->ber, &ad->strength, &ad->snr);
+		if((new_gs = get_signal_new (ad->fe, &ad->status, &ad->ber, &ad->strength, &ad->snr)))
+			get_signal (ad->fe, &ad->status, &ad->ber, &ad->strength, &ad->snr);
 		if (ad->max_strength <= ad->strength) ad->max_strength = (ad->strength>0)?ad->strength:1;
 		if (ad->max_snr <= ad->snr) ad->max_snr = (ad->snr>0)?ad->snr:1;
-		LOG ("get_signal took %d ms for adapter %d handle %d (status: %d, ber: %d, strength:%d, snr: %d, max_strength: %d, max_snr: %d)",
-			getTick () - ts, aid, ad->fe, ad->status, ad->ber, ad->strength,
-			ad->snr, ad->max_strength, ad->max_snr);
-		ad->strength = ad->strength * 255 / ad->max_strength;
-		ad->snr = ad->snr * 15 / ad->max_snr;
+		LOG ("get_signal%s took %d ms for adapter %d handle %d (status: %d, ber: %d, strength:%d, snr: %d, max_strength: %d, max_snr: %d)",
+			new_gs?"":"_new", getTick () - ts, aid, ad->fe, ad->status, ad->ber, ad->strength, ad->snr, ad->max_strength, ad->max_snr);
+		if(new_gs)
+		{
+			ad->strength = ad->strength * 255 / ad->max_strength;
+			ad->snr = ad->snr * 15 / ad->max_snr;
+		}
 	}
 	if (t->sys == SYS_DVBS || t->sys == SYS_DVBS2)
 		sprintf (dad, "ver=1.0;src=%d;tuner=%d,%d,%d,%d,%d,%c,%s,,,,%d,;pids=",

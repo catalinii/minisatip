@@ -79,7 +79,10 @@ int detect_dvb_parameters (char *s, transponder * tp);
 void init_dvb_parameters (transponder * tp);
 void copy_dvb_parameters (transponder * s, transponder * d);
 void get_signal (int fd, fe_status_t * status, uint32_t * ber,
-uint16_t * strength, uint16_t * snr);
+	uint16_t * strength, uint16_t * snr);
+int get_signal_new (int fd, fe_status_t * status, uint32_t * ber,
+	uint16_t * strength, uint16_t * snr);
+
 char *modulation_string(int mtype);
 char *delsys_string(int delsys);
 #endif							 /*  */
