@@ -349,7 +349,7 @@ char *
 http_response (sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 {
 	char *reply =
-		"%s/1.0 %d %s\r\nCSeq: %d\r\nDate: %s\r\n%s\r\nContent-Length: %d\r\n\r\n%s\r\n";
+		"%s/1.0 %d %s\r\nCSeq: %d\r\nDate: %s\r\n%s\r\nContent-Length: %d\r\n\r\n%s";
 	char *reply0 = 
 		"%s/1.0 %d %s\r\nCseq: %d\r\nDate: %s\r\n%s\r\n\r\n";
 	char *d;
@@ -406,8 +406,18 @@ read_rtsp (sockets * s)
 	char buf[2000];
 	streams *sid = NULL;
 
-	LOG ("read RTSP (from handle %d sock_id %d, ts: %d):\n%s", s->sock, s->sock_id, s->rtime, s->buf);
-	if (s->rlen < 5
+	if(s->buf[0]==0x24 && s->buf[1]<2)
+	{
+		int rtsp_len = s->buf[2]*256+s->buf[3];
+		LOG("Received RTSP over tcp packet (sock_id %d, stream %d, rlen %d) packet len: %d, type %02X %02X discarding %s...", 
+			s->sock_id, s->sid, s->rlen, rtsp_len , s->buf[4], s->buf[5], (s->rlen == rtsp_len+4)?"complete":"fragment" );		
+		if(s->rlen == rtsp_len+4){ // we did not receive the entire packet
+			s->rlen = 0;			
+			return 0;
+		}
+	}
+	
+	if (s->rlen < 4
 		|| (htonl (*(uint32_t *) & s->buf[s->rlen - 4]) != 0x0D0A0D0A))
 	{
 		if( s->rlen > RBUF - 10 )
@@ -427,6 +437,8 @@ read_rtsp (sockets * s)
 	rlen = s->rlen;
 	s->rlen = 0;
 
+	LOG ("read RTSP (from handle %d sock_id %d, ts: %d, len: %d):\n%s", s->sock, s->sock_id, s->rtime, s->rlen, s->buf);
+
 	if( (s->type != TYPE_HTTP ) && (strncasecmp(s->buf, "GET", 3) == 0))
 	{
 		http_response (s , 404, NULL, NULL, 0, 0);
@@ -435,6 +447,8 @@ read_rtsp (sockets * s)
 	
 	la = split (arg, s->buf, 50, ' ');
 	cseq = 0;	
+	if (la<2)
+		LOG_AND_RETURN(0, "Most likely not an RTSP packet sock_id: %d sid: %d rlen: %d, dropping ....", s->sock_id, s->sid, rlen); 
 	
 //	if(strstr(arg[1], "freq") || strstr(arg[1], "pids"))
 	sid = (streams *) setup_stream (arg[1], s);

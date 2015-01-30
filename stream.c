@@ -53,15 +53,16 @@ int get_next_free_stream()
 char *describe_streams (sockets *s, char *req, char *sbuf, int size)
 {
 	char *str;
-	int i, sidf, sid, streams_enabled;
+	int i, sidf, do_play = 0, streams_enabled = 0;
+	streams *sid;
 
 	if (s->sid == -1)
 		setup_stream(req, s);
 
-	sid = s->sid;
-		
-	streams_enabled = 0;
-	sidf = get_session_id(sid);
+	sidf = get_session_id(s->sid);
+	sid = get_sid(s->sid);
+	if(sid)
+		do_play = sid->do_play;
 		
 	snprintf(sbuf,size-1,"v=0\r\no=- %010d %010d IN IP4 %s\r\ns=SatIPServer:1 %d %d %d\r\nt=0 0\r\n", sidf, sidf, get_sock_host(s->sock), getS2Adapters(), getTAdapters(), getCAdapters() );
 	if(!strchr(req, '?'))
@@ -71,12 +72,14 @@ char *describe_streams (sockets *s, char *req, char *sbuf, int size)
 			{
 				int slen=strlen(sbuf);
 				streams_enabled ++;
-				snprintf(sbuf + slen, size - slen - 1, "m=video %d RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\na=sendonly\r\n", ntohs (st[i].sa.sin_port), i+1, describe_adapter(i, st[i].adapter));
+				snprintf(sbuf + slen, size - slen - 1, "m=video %d RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\na=%s\r\n", 
+					ntohs (st[i].sa.sin_port), i+1, describe_adapter(i, st[i].adapter), st[i].do_play?"sendonly":"inactive");
 				if( size - slen < 10)LOG_AND_RETURN(sbuf, "DESCRIBE BUFFER is full");
 			}
 	}else{
 		int slen = strlen(sbuf);
-		snprintf(sbuf + slen, size - slen - 1, "m=video 0 RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\nb=AS:5000\r\na=inactive\r\n", sid+1, describe_adapter(0, 0));
+		snprintf(sbuf + slen, size - slen - 1, "m=video 0 RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\nb=AS:5000\r\na=%s\r\n", 
+			s->sid + 1, describe_adapter(0, 0), do_play?"sendonly":"inactive");
 	}
 	return sbuf;
 }
@@ -386,7 +389,7 @@ int
 send_rtp (streams * sid, struct iovec *iov, int liov)
 {
 	struct iovec io[MAX_PACK + 3];
-	int i,total_len;
+	int i, total_len = 0;
 	unsigned char *rtp_h;
 
 	rtp_h = rtp_buf + 4;
@@ -397,7 +400,7 @@ send_rtp (streams * sid, struct iovec *iov, int liov)
 	memset (&io, 0, sizeof(io));
 	rtp_buf[0] = 0x24;
 	rtp_buf[1] = 0;
-	copy16 (rtp_buf, 2, total_len + 16); 
+	copy16 (rtp_buf, 2, total_len + 12); 
 	copy16 (rtp_h, 0, 0x8021 );
 	copy16 ( rtp_h, 2, sid->seq);
 	copy32 ( rtp_h, 4, sid->wtime);
@@ -427,6 +430,7 @@ send_rtcp (int s_id, int ctime)
 	int len, rv = 0;
 	char *rtcp = rtcp_buf + 4;
 	streams *sid = get_sid(s_id);
+	
 	if(!sid)
 		LOG_AND_RETURN (0, "Sid is null for s_id %d", s_id);
 	char *a = describe_adapter (s_id, st[s_id].adapter);
@@ -486,7 +490,7 @@ send_rtcp (int s_id, int ctime)
 	{
 		rtcp_buf[0] = 0x24;
 		rtcp_buf[1] = 1; 
-		copy16(rtcp_buf, 2, len + 52 + 4);
+		copy16(rtcp_buf, 2, len + 52);
 		rv = send (sid->rsock, rtcp_buf, len + 52 + 4, MSG_NOSIGNAL);
 	}
 	sid->sa.sin_port = tmp_port;
@@ -613,12 +617,24 @@ read_dmx (sockets * s)
 			p = ad->pids;
 			for (i = 0; i < MAX_PIDS; i++)
 				if (p[i].pid == pid && p[i].flags == 1)
+				{
+					int cc;   // calculate pid continuity
+					p[i].cnt++;
+					cc = b[3] & 0xF;
+					if (p[i].cc == 255)
+						p[i].cc = cc;
+					else if (p[i].cc == 15)
+						p[i].cc = 0;
+					else p[i].cc ++;
+						
+					if(p[i].cc != cc)
+						LOG("PID Continuity error (adapter %d): pid: %03d, Expected CC: %X, Actual CC: %X", s->sid, pid, p[i].cc, cc);
+					p[i].cc = cc;
+
 					for (j = 0; p[i].sid[j] > -1 && j < MAX_STREAMS_PER_PID; j++)
 					{
 						if ((sid = get_sid(p[i].sid[j])))
 						{
-							
-							p[i].cnt++;
 							if (sid->iiov > 7)
 							{
 								LOG ("ERROR: possible writing outside of allocated space iiov > 7 for SID %d PID %d", sid->sid, pid);
@@ -633,6 +649,7 @@ read_dmx (sockets * s)
 							LOG ("could not find a valid sid %d for pid:%d",
 								p[i].sid[j], pid);
 					}
+				}
 		}
 		min = s->buf;
 		max = &s->buf[rlen];

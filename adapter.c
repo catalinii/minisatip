@@ -363,6 +363,7 @@ update_pids (int aid)
 		if (ad->pids[i].fd <= 0)
 			ad->pids[i].fd = set_pid (ad->pa, ad->fn, ad->pids[i].pid);
 		ad->pids[i].cnt = 0;
+		ad->pids[i].cc = 255;
 	}
 	return 0;
 }

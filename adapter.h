@@ -16,6 +16,7 @@ typedef struct struct_pid
 	signed char sid[MAX_STREAMS_PER_PID];
 	char flags;					 // 0 - disabled , 1 enabled, 2 - will be enabled next tune when tune is called, 3 disable when tune is called
 	int cnt;
+	unsigned char cc; // continuity
 } pid;
 typedef struct struct_adapter
 {
