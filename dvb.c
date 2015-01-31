@@ -1062,7 +1062,9 @@ int get_signal_new (int fd, fe_status_t * status, uint32_t * ber,
 	}
 	LOG("get_signal_new returned: Status: %d, Signal (%d): %llu, SNR(%d): %llu, BER: %llu ", *status, enum_cmdargs[0].u.st.stat[0].scale, enum_cmdargs[0].u.st.stat[0].uvalue,
 			enum_cmdargs[1].u.st.stat[0].scale, enum_cmdargs[1].u.st.stat[0].uvalue, enum_cmdargs[2].u.st.stat[0].uvalue);
-		
+	
+	if(*status && !*strength)
+		return -1;	
 	return 0;
 #else
 	return -1;
