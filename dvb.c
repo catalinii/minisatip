@@ -1021,6 +1021,7 @@ int get_signal_new (int fd, fe_status_t * status, uint32_t * ber,
 	uint16_t * strength, uint16_t * snr)
 {
 #if DVBAPIVERSION >= 0x050A
+	int err = 0;
 	static struct dtv_property enum_cmdargs[] =
 	{
 		{.cmd = DTV_STAT_SIGNAL_STRENGTH,.u.data = 0},
@@ -1046,11 +1047,13 @@ int get_signal_new (int fd, fe_status_t * status, uint32_t * ber,
 		*strength = enum_cmdargs[0].u.st.stat[0].uvalue >> 8;
 	else if(enum_cmdargs[0].u.st.stat[0].scale ==  FE_SCALE_DECIBEL)
 		*strength = enum_cmdargs[0].u.st.stat[0].uvalue >> 8;
+	else err = 1;
 
 	if(enum_cmdargs[1].u.st.stat[0].scale ==  FE_SCALE_RELATIVE)
 		*snr = enum_cmdargs[1].u.st.stat[0].uvalue >> 12;
 	else if(enum_cmdargs[1].u.st.stat[0].scale ==  FE_SCALE_DECIBEL)
 		*snr = enum_cmdargs[1].u.st.stat[0].uvalue >> 12;
+	else err = 1;
 
 	*ber = enum_cmdargs[2].u.st.stat[0].uvalue & 0xFFFF;
 
@@ -1063,7 +1066,7 @@ int get_signal_new (int fd, fe_status_t * status, uint32_t * ber,
 	LOG("get_signal_new returned: Status: %d, Signal (%d): %llu, SNR(%d): %llu, BER: %llu ", *status, enum_cmdargs[0].u.st.stat[0].scale, enum_cmdargs[0].u.st.stat[0].uvalue,
 			enum_cmdargs[1].u.st.stat[0].scale, enum_cmdargs[1].u.st.stat[0].uvalue, enum_cmdargs[2].u.st.stat[0].uvalue);
 	
-	if(*status && !*strength)
+	if(err || (*status && !*strength))
 		return -1;	
 	return 0;
 #else
