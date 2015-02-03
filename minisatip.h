@@ -4,7 +4,7 @@
 #include "socketworks.h"
 
 
-#define VERSION_BUILD "55"
+#define VERSION_BUILD "56"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.1.,VERSION_BUILD,)
 
@@ -47,19 +47,13 @@ struct struct_opts
 	char playlist[200];
 };
 
-typedef struct struct_pchar_int
-{
-	char *s;
-	int v;
-} pchar_int;
-
 //#define LOG(a,...) {opts.last_log=a;if(opts.log){int x=getTick();printf(CC([%d.%03d]: ,a,\n),x/1000,x%1000,##__VA_ARGS__);fflush(stdout);};}
 #define LOG(a,...) {opts.last_log=a;if(opts.log){printf(CC([%s]:\x20,a,\n),get_current_timestamp_log(),##__VA_ARGS__);fflush(stdout);};}
 #define FAIL(a,...) {printf(a,##__VA_ARGS__);printf("\n");fflush(stdout);exit(1);}
 #define LOG_AND_RETURN(rc,a,...) {LOG(a,##__VA_ARGS__);return rc;}
 int ssdp_discovery (sockets * s);
 int split (char **rv, char *s, int lrv, char sep);
-int map_int (char *s, pchar_int * v);
+int map_int (char *s, char ** v);
 int map_float (char *s, int mul);
 void *mymalloc (int a, char *f, int l);
 void myfree (void *x, char *f, int l);

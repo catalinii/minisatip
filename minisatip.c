@@ -314,17 +314,16 @@ split (char **rv, char *s, int lrv, char sep)
 
 
 #define LR(s) {LOG("map_int returns %d",s);return s;}
-int
-map_int (char *s, pchar_int * v)
+int map_int (char *s, char ** v)
 {
-	int i;
+	int i, n = 0;
 
 	if (v == NULL)
 		return atoi (s);
-	for (i = 0; v[i].s; i++)
-		if (!strncasecmp (s, v[i].s, strlen (v[i].s)))
-			return v[i].v;
-	return 0;
+	for (i = 0; v[i]; i++)
+		if (!strncasecmp (s, v[i], strlen (v[i])))
+			n = i;
+	return n;
 }
 
 

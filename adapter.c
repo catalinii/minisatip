@@ -225,8 +225,8 @@ dump_adapters ()
 	LOG ("Dumping adapters:");
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		if (a[i].enabled)
-			LOG ("%d|f: %d sid_cnt:%d master_sid:%d", i, a[i].tp.freq, a[i].sid_cnt,
-				a[i].master_sid);
+			LOG ("%d|f: %d sid_cnt:%d master_sid:%d del_sys: %d %d %d", i, a[i].tp.freq, a[i].sid_cnt,
+				a[i].master_sid, a[i].sys[0], a[i].sys[1], a[i].sys[2]);
 	dump_streams ();
 
 }
@@ -265,8 +265,8 @@ get_free_adapter (int freq, int pol, int msys, int src)
 	int omsys = msys;
 
 	i = (src >= 0) ? src : 0;
-	LOG ("get free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d f:%d\n", src, i,
-		a[i].enabled, a[i].master_sid, a[i].sid_cnt, a[i].tp.freq);
+	LOG ("get free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d f:%d pol=%d\n", src, i,
+		a[i].enabled, a[i].master_sid, a[i].sid_cnt, a[i].tp.freq, a[i].tp.pol);
 	if (src >= 0)
 	{
 		if (!a[src].enabled)
@@ -290,7 +290,7 @@ get_free_adapter (int freq, int pol, int msys, int src)
 			else
 				return i;
 		}
-	LOG ("no adapter found for %d %c %d", freq, pol, msys);
+	LOG ("no adapter found for f:%d pol:%d msys:%d", freq, pol, msys);
 	dump_adapters ();
 	return -1;
 }
@@ -571,7 +571,7 @@ set_adapter_parameters (int aid, int sid, transponder * tp)
 		return -1;				 // slave sid requesting to tune to a different frequency
 	ad->do_tune = 0;
 	if (tp->freq != ad->tp.freq
-		|| (tp->pol != -1 && tp->pol != ad->tp.pol))
+		|| (tp->pol > 0 && tp->pol != ad->tp.pol) || (tp->diseqc != ad->tp.diseqc))
 	{
 		mark_pids_deleted (aid, -1, NULL);
 		update_pids (aid);
@@ -654,12 +654,13 @@ describe_adapter (int sid, int aid)
 	if (t->sys == SYS_DVBS || t->sys == SYS_DVBS2)
 		sprintf (dad, "ver=1.0;src=%d;tuner=%d,%d,%d,%d,%d,%c,%s,,,,%d,;pids=",
 			t->diseqc + 1, aid, ad->strength, ad->status, ad->snr,
-			t->freq / 1000, t->pol, delsys_string(t->sys), t->sr / 1000);
+			t->freq / 1000, t->pol, get_delsys(t->sys), t->sr / 1000);
 	else if (t->sys == SYS_DVBT || t->sys == SYS_DVBT2)
 		sprintf (dad, "ver=1.1;src=%d;tuner=%d,%d,%d,%d,%.2f,,%s,,,,,;pids=",
-			t->diseqc + 1, aid, ad->strength, ad->status, ad->snr, (double) t->freq/1000, delsys_string(t->sys));
-	else  sprintf (dad, "ver=1.2;src=%d;tuner=%d,%d,%d,%d,%.2f,8,%s,%s,%d,,,;pids=",
-                        t->diseqc + 1, aid, ad->strength, ad->status, ad->snr, (double )t->freq/1000, delsys_string(t->sys), modulation_string(t->mtype), t->sr);
+			t->diseqc + 1, aid, ad->strength, ad->status, ad->snr, (double) t->freq/1000, get_delsys(t->sys));
+	else  sprintf (dad, "ver=1.2;src=%d;tuner=%d,%d,%d,%d,%.2f,8,%s,%s,%d,%d,%d,%d,%d;pids=",
+                        t->diseqc + 1, aid, ad->strength, ad->status, ad->snr, (double )t->freq/1000, get_delsys(t->sys), get_modulation(t->mtype), t->sr,
+						t->c2tft, t->ds, t->plp, t->inversion);
 	for (i = 0; i < MAX_PIDS; i++)
 		if (ad->pids[i].flags == 1)
 			for(j=0; j< MAX_STREAMS_PER_PID; j++)
@@ -757,7 +758,7 @@ int delsys_match(adapter *ad, int del_sys)
 		LOG_AND_RETURN(0, "delsys_match: adapter is NULL, delsys %d", del_sys);
 	
 	if(del_sys == 0)
-		LOG_AND_RETURN(0, "delsys_match: delsys is 0 for adapter handle %d", ad->fe);
+		LOG_AND_RETURN(0, "delsys_match: requesting delsys is 0 for adapter handle %d", ad->fe);
 		
 	for(i = 0; i < 10; i++) 
 		if(ad->sys[i] == del_sys)

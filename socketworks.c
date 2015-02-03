@@ -370,7 +370,7 @@ select_and_execute ()
 							tbwsd += bw;
 						else
 							tbwot += bw;
-						if (bw > 10000)
+						if (bw > 1000)
 							LOG
 								("bandwidth %dKB/s, total bandwidth: %ld MB, HD: %ld MB, SD: %ld MB, Other: %ld MB, notify: %d",
 								(int) bw / 1024, tbw / 1024576, tbwhd / 1024576,
@@ -402,7 +402,8 @@ select_and_execute ()
 
 					ss->rlen += rlen;
 								 //force 0 at the end of the string
-					ss->buf[ss->rlen] = 0;
+					if(ss->lbuf < ss->rlen)
+						ss->buf[ss->rlen] = 0;
 			//LOG("Read %d (rlen:%d/total:%d) bytes from %d -> %08X - iteration %d action %x",rlen,ss->rlen,ss->lbuf,ss->sock,(unsigned int)ss->buf,it++,(int )ss->action);
 					if (ss->rlen > 0 && ss->action)
 						ss->action (ss);

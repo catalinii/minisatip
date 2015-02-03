@@ -1,6 +1,6 @@
 Welcome to Minisatip
 
-Minisatip is a single threaded satip server version 1.1 that runs under Linux and it was tested with DVB-S, DVB-S2, DVB-T, DVB-T2 and DVB-C DVB cards.
+Minisatip is a single threaded satip server version 1.1 that runs under Linux and it was tested with DVB-S, DVB-S2, DVB-T, DVB-T2, DVB-C, DVB-C2, ATSC DVB cards.
 The protocol specification can be found at: http://www.satip.info/sites/satip/files/resource/satip_specification_version_1_2_1.pdf
 It is very lightweight (designed for embedded systems with memory and processing constrains), does not need any additional libraries and can be used by existing satip clients like: Tvheadend, DVBViewer.
 The application is designed to stream the requested data even to multiple clients (even with one dvb card) in the same time and has few additional features, like capping the bandwidth or forcing the application to send the rtp streams to a specified address.
@@ -46,4 +46,13 @@ Example of Usage:
 	minisatip -m 001122334455 
 	
 	- As long as you want to use the channels on the same frequency, you can use -a or -t parameter to report multiple tunners to the client so you can watch/record multiple channels from the same frequency (using tvheadend for example)
+
+Examples:
+	- In order to listen to a radio on Hotbird 13E, after minisatip is started open the following URL in your favourite media player:
+
+	"http://192.168.100.3:8080/?msys=dvbs&freq=11623&pol=v&sr=27500&pids=0,10750,254"
+	
+	msys can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, atsc, dvbcb ( - DVBC_ANNEX_B )
+	
+
    	

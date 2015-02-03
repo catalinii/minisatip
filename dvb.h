@@ -13,6 +13,9 @@
 #define SYS_DVBC_ANNEX_A       SYS_DVBC_ANNEX_AC
 #endif
 
+#ifndef SYS_DVBC2
+#define SYS_DVBC2 19 // support for DVB-C2 DD 
+#endif
 
 #define SLOF (11700*1000UL)
 #define LOF1 (9750*1000UL)
@@ -31,7 +34,8 @@
 #define PILOT 7
 #define TRANSMISSION 8
 #define ROLLOFF 8
-#define MIS 9
+#define MIS 5
+#define MIS 5
 #define HIERARCHY 9
 
 #ifndef DTV_STREAM_ID
@@ -63,6 +67,12 @@ typedef struct struct_transponder
 	int sr;
 	int pol;
 	int diseqc;
+	
+	// DVB-C2
+	int c2tft;
+	int ds;
+	int plp;
+	
 	char *apids,
 		*pids,
 		*dpids;
@@ -83,6 +93,14 @@ void get_signal (int fd, fe_status_t * status, uint32_t * ber,
 int get_signal_new (int fd, fe_status_t * status, uint32_t * ber,
 	uint16_t * strength, uint16_t * snr);
 
-char *modulation_string(int mtype);
-char *delsys_string(int delsys);
+char *get_pilot(int i);
+char *get_rolloff(int i);
+char *get_delsys(int i);
+char *get_fec(int i);
+char *get_modulation(int i);
+char *get_tmode(int i);
+char *get_gi(int i);
+char *get_specinv(int i);
+char *get_pol(int i);
+
 #endif							 /*  */
