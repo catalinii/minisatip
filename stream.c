@@ -822,7 +822,7 @@ int fix_master_sid(int a_id)
 int find_session_id(int id)
 {
 	int i;
-	
+	LOG ("Trying to find a session id for %d", id);
 	for(i=0;i<MAX_STREAMS;i++)
 		if(st[i].enabled && st[i].ssrc == id)
 		{

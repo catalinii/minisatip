@@ -481,7 +481,6 @@ read_rtsp (sockets * s)
 		sid = (streams *) setup_stream (arg[1], s);
 	
 	sid = get_sid(s->sid);
-	LOG("trying to set sid->rtime from %d to %d, for sid=%p, id=%d", sid?sid->rtime:0, s->rtime, sid, sid?sid->sid:0);
 	if(sid)
 		sid->rtime = s->rtime;
 	
