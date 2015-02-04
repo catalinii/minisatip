@@ -450,7 +450,7 @@ read_rtsp (sockets * s)
 	rlen = s->rlen;
 	s->rlen = 0;
 
-	LOG ("read RTSP (from handle %d sock_id %d, ts: %d, len: %d):\n%s", s->sock, s->sock_id, s->rtime, s->rlen, s->buf);
+	LOG ("read RTSP (from handle %d sock_id %d, len: %d):\n%s", s->sock, s->sock_id, s->rlen, s->buf);
 
 	if( (s->type != TYPE_HTTP ) && (strncasecmp(s->buf, "GET", 3) == 0))
 	{
@@ -481,7 +481,7 @@ read_rtsp (sockets * s)
 		sid = (streams *) setup_stream (arg[1], s);
 	
 	sid = get_sid(s->sid);
-	
+	LOG("trying to set sid->rtime from %d to %d, for sid=%p, id=%d", sid?sid->rtime:0, s->rtime, sid, sid?sid->sid:0);
 	if(sid)
 		sid->rtime = s->rtime;
 	
@@ -709,8 +709,6 @@ read_http (sockets * s)
 	{
 		char *ctype = NULL;
 		int nl = sizeof(buf);
-		if(strlen (arg[1]) != 13 )
-			REPLY_AND_RETURN(404);		
 		if( arg[1][strlen(arg[1])-2] == 'n' )
 			ctype = "Content-type: image/png\r\nConnection: close";
 		else if (arg[1][strlen(arg[1])-2] == 'p')			
@@ -1063,6 +1061,9 @@ int readfile(char *fn,char *buf,int *len)
 	char ffn[500];
 	char *path[]={".","/usr/share/minisatip",NULL};
 	int fd,i,nl=0;
+	
+	if(strstr(fn, ".."))
+		return 0;
 	for( i=0; path[i]; i++)
 	{
 		strcpy(ffn, path[i]);

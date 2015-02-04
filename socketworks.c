@@ -406,6 +406,9 @@ select_and_execute ()
 						ss->buf[ss->rlen] = 0;
 					else LOG("Possible memory corruption sockets_id %d, type %d, rlen %d, total buffer len %d, sid %d", ss->sock_id, ss->type, ss->rlen, ss->lbuf, ss->sid);
 			//LOG("Read %d (rlen:%d/total:%d) bytes from %d -> %08X - iteration %d action %x",rlen,ss->rlen,ss->lbuf,ss->sock,(unsigned int)ss->buf,it++,(int )ss->action);
+					
+					ss->rtime = c_time;
+					
 					if (ss->rlen > 0 && ss->action)
 						ss->action (ss);
 			//              if(s[i].type==TYPE_DVR && (c_time/1000 % 10 == 0))sockets_del(i); // we do this in stream.c in flush_stream*
@@ -424,8 +427,8 @@ select_and_execute ()
 						else
 							err_str = strerror (err);
 						LOG
-							("select_and_execute[%d]: %s on socket %d (sid:%d, ts: %d) from %s:%d - type %s failure %d:%s",
-							i, rlen < 0 ? "Error" : "Close", ss->sock, ss->sid, c_time,
+							("select_and_execute[%d]: %s on socket %d (sid:%d) from %s:%d - type %s failure %d:%s",
+							i, rlen < 0 ? "Error" : "Close", ss->sock, ss->sid, 
 							inet_ntoa (ss->sa.sin_addr), ntohs (ss->sa.sin_port),
 							types[ss->type], err, err_str);
 						if (err == EOVERFLOW)
@@ -441,8 +444,7 @@ select_and_execute ()
 						continue;
 					}
 					
-					ss->err = 0;
-					ss->rtime = c_time;
+					ss->err = 0;					
 					if (ss->type == TYPE_SERVER)
 					{
 						int new_sock,
@@ -589,7 +591,7 @@ get_current_timestamp_log (void)
 	time (&date);
 	t = localtime (&date);
 	if(!t) return "01/01 00:00:20";
-	snprintf (date_str, sizeof (date_str), "%02d/%02d %02d:%02d:%02d.%03d",t->tm_mday, t->tm_mon + 1, t->tm_hour, t->tm_min, t->tm_sec, getTick() % 1000);
+	snprintf (date_str, sizeof (date_str), "%02d/%02d %02d:%02d:%02d.%03d",t->tm_mday, t->tm_mon + 1, t->tm_hour, t->tm_min, t->tm_sec, getTick());
 	return date_str;
 }
 

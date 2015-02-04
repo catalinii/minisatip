@@ -728,8 +728,8 @@ stream_timeouts ()
 			}
 			if (ctime - rttime > 200)
 				send_rtcp (i, ctime);
-
-			if (sid->timeout > 0 && (ctime - sid->rtime > sid->timeout * 2))
+						// check stream timeout, and allow 10s more to respond
+			if (sid->timeout > 0 && (ctime - sid->rtime > sid->timeout + 10000)) 
 			{
 				LOG("Stream timeout %d, closing (ctime %d , sid->rtime %d, sid->timeout %d)", i, ctime, sid->rtime, sid->timeout);
 				close_stream(i);

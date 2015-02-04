@@ -1063,16 +1063,19 @@ int get_signal_new (int fd, fe_status_t * status, uint32_t * ber,
 
 	*ber = enum_cmdargs[2].u.st.stat[0].uvalue & 0xFFFF;
 
+	LOG("get_signal_new returned: Signal (%d): %llu, SNR(%d): %llu, BER: %llu ", enum_cmdargs[0].u.st.stat[0].scale, enum_cmdargs[0].u.st.stat[0].uvalue,
+			enum_cmdargs[1].u.st.stat[0].scale, enum_cmdargs[1].u.st.stat[0].uvalue, enum_cmdargs[2].u.st.stat[0].uvalue);
+	if(err)
+		return -1;
+	
 	if (ioctl (fd, FE_READ_STATUS, status) < 0)
 	{
 		LOG ("ioctl FE_READ_STATUS failed (%s)", strerror (errno));
 		*status = 0;
 		return -1;
 	}
-	LOG("get_signal_new returned: Status: %d, Signal (%d): %llu, SNR(%d): %llu, BER: %llu ", *status, enum_cmdargs[0].u.st.stat[0].scale, enum_cmdargs[0].u.st.stat[0].uvalue,
-			enum_cmdargs[1].u.st.stat[0].scale, enum_cmdargs[1].u.st.stat[0].uvalue, enum_cmdargs[2].u.st.stat[0].uvalue);
 	
-	if(err || (*status && !*strength))
+	if(*status && !*strength)
 		return -1;	
 	return 0;
 #else
