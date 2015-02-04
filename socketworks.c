@@ -402,8 +402,9 @@ select_and_execute ()
 
 					ss->rlen += rlen;
 								 //force 0 at the end of the string
-					if(ss->lbuf < ss->rlen)
+					if(ss->lbuf >= ss->rlen)
 						ss->buf[ss->rlen] = 0;
+					else LOG("Possible memory corruption sockets_id %d, type %d, rlen %d, total buffer len %d, sid %d", ss->sock_id, ss->type, ss->rlen, ss->lbuf, ss->sid);
 			//LOG("Read %d (rlen:%d/total:%d) bytes from %d -> %08X - iteration %d action %x",rlen,ss->rlen,ss->lbuf,ss->sock,(unsigned int)ss->buf,it++,(int )ss->action);
 					if (ss->rlen > 0 && ss->action)
 						ss->action (ss);

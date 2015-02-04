@@ -317,9 +317,15 @@ split (char **rv, char *s, int lrv, char sep)
 int map_int (char *s, char ** v)
 {
 	int i, n = 0;
-
+	
+	if(s==NULL)
+		LOG_AND_RETURN(0,"map_int: s=>NULL, v=%p, %s %s", v, v?v[0]:"NULL", v?v[1]:"NULL");
 	if (v == NULL)
+	{
+		if(s[0]!='+' && s[0]!='-' && (s[0]<'0' || s[0]>'9'))
+			LOG_AND_RETURN(0,"map_int: s not a number: %s, v=%p, %s %s", s, v, v?v[0]:"NULL", v?v[1]:"NULL");
 		return atoi (s);
+	}
 	for (i = 0; v[i]; i++)
 		if (!strncasecmp (s, v[i], strlen (v[i])))
 			n = i;
@@ -333,8 +339,11 @@ map_float (char *s, int mul)
 	float f;
 	int r;
 
-	if (s[0] < '0' || s[0] > '9')
-		return 0;
+	if(s==NULL)
+		LOG_AND_RETURN(0,"map_float: s=>NULL, mul=%d", mul);
+	if(s[0]!='+' && s[0]!='-' && (s[0]<'0' || s[0]>'9'))
+			LOG_AND_RETURN(0,"map_float: s not a number: %s, mul=%d", s, mul);
+		
 	f = atof (s);
 	r = (int) (f * mul);
 	//      LOG("atof returned %.1f, mul = %d, result=%d",f,mul,r);
@@ -454,7 +463,7 @@ read_rtsp (sockets * s)
 	
 	for (i = 0; i < la; i++)
 		if (strncasecmp ("CSeq:", arg[i], 5) == 0)
-			cseq = atoi (arg[i + 1]);
+			cseq = map_int (arg[i + 1], NULL);
 	else if (strncasecmp ("Transport:", arg[i], 9) == 0){
 		char *rtp_avp = strstr(arg[i], "RTP/AVP");
 		int rv;

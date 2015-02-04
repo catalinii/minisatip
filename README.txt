@@ -4,7 +4,7 @@ Minisatip is a single threaded satip server version 1.1 that runs under Linux an
 The protocol specification can be found at: http://www.satip.info/sites/satip/files/resource/satip_specification_version_1_2_1.pdf
 It is very lightweight (designed for embedded systems with memory and processing constrains), does not need any additional libraries and can be used by existing satip clients like: Tvheadend, DVBViewer.
 The application is designed to stream the requested data even to multiple clients (even with one dvb card) in the same time and has few additional features, like capping the bandwidth or forcing the application to send the rtp streams to a specified address.
-It is tested on x86_64, x86, ARM and MIPS platforms and it requires DVBAPI 5. 
+It is tested on x86_64, x86, ARM and MIPS platforms and it requires DVBAPI 5. Supported steaming protocols are rtsp (both tcp and udp) and HTTP (port 8080). 
 
 Please use https://toda.ro/projects/minisatip/issues/new for features requests.
 

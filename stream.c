@@ -56,7 +56,7 @@ char *describe_streams (sockets *s, char *req, char *sbuf, int size)
 	int i, sidf, do_play = 0, streams_enabled = 0;
 	streams *sid;
 
-	if (s->sid == -1)
+	if (s->sid == -1 && strchr(req, '?'))
 		setup_stream(req, s);
 
 	sidf = get_session_id(s->sid);
