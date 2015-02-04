@@ -26,6 +26,7 @@ typedef struct struct_streams
 	uint16_t seq;  //rtp seq id
 	int ssrc; // rtp seq id			 
 	int wtime;
+	int rtime;  // stream timeout
 	int rtcp_wtime;
 	int do_play;
 	int start_streaming;
@@ -58,13 +59,14 @@ int start_play (streams * sid, sockets * s);
 int decode_transport (sockets * s, char *arg, char *default_rtp, int start_rtp);
 int streams_add ();
 int read_dmx (sockets * s);
-int stream_timeout (sockets * s);
+int stream_timeouts ();
 int close_streams_for_adapter (int ad, int except);
 void dump_streams ();
 streams *get_sid1 (int sid, char *file, int line);
 int get_session_id( int i);
 void set_session_id(int i, int id);
 int fix_master_sid(int adapter);
+int rtcp_confirm(sockets *s);
 
 #define get_sid(a) get_sid1(a, __FILE__, __LINE__)
 #endif

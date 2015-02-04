@@ -249,11 +249,10 @@ dump_pids (int aid)
 			LOG ("Dumping pids table for adapter %d : ", aid);
 		dp = 0;
 		LOG
-			("pid = %d, packets = %d, fd = %d, flags = %d, sids: %d %d %d %d %d %d %d %d",
-			p->pids[i].pid, p->pids[i].cnt, p->pids[i].fd, p->pids[i].flags,
-			p->pids[i].sid[0], p->pids[i].sid[1], p->pids[i].sid[2],
-			p->pids[i].sid[3], p->pids[i].sid[4], p->pids[i].sid[5],
-			p->pids[i].sid[6], p->pids[i].sid[7]);
+			("pid = %d, packets = %d, fd = %d, errs = %d, flags = %d, sids: %d %d %d %d %d %d %d %d",
+			p->pids[i].pid, p->pids[i].cnt, p->pids[i].fd, p->pids[i].err, p->pids[i].flags,
+			p->pids[i].sid[0], p->pids[i].sid[1], p->pids[i].sid[2], p->pids[i].sid[3], p->pids[i].sid[4], 
+			p->pids[i].sid[5], p->pids[i].sid[6], p->pids[i].sid[7]);
 	}
 }
 
@@ -350,8 +349,6 @@ update_pids (int aid)
 		if (ad->pids[i].fd > 0)
 			del_filters (ad->pids[i].fd, ad->pids[i].pid);
 		ad->pids[i].fd = 0;
-		ad->pids[i].cnt = 0;
-
 	}
 
 	for (i = 0; i < MAX_PIDS; i++)
@@ -364,6 +361,7 @@ update_pids (int aid)
 			ad->pids[i].fd = set_pid (ad->pa, ad->fn, ad->pids[i].pid);
 		ad->pids[i].cnt = 0;
 		ad->pids[i].cc = 255;
+		ad->pids[i].err = 0;
 	}
 	return 0;
 }

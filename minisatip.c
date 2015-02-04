@@ -386,6 +386,8 @@ http_response (sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 		d = "Not Implemented";
 	else if (rc == 405)
 		d = "Method Not Allowed";
+	else if (rc == 454)
+		d = "Session Not Found";
 	else 
 	{
 		d = "Service Unavailable";
@@ -412,10 +414,13 @@ read_rtsp (sockets * s)
 	int cseq, la, i, rlen;
 	char *proto;
 	char buf[2000];
-	streams *sid = NULL;
+	streams *sid = get_sid(s->sid);
 
 	if(s->buf[0]==0x24 && s->buf[1]<2)
 	{
+		if(sid)
+			sid->rtime = s->rtime;
+
 		int rtsp_len = s->buf[2]*256+s->buf[3];
 		LOG("Received RTSP over tcp packet (sock_id %d, stream %d, rlen %d) packet len: %d, type %02X %02X discarding %s...", 
 			s->sock_id, s->sid, s->rlen, rtsp_len , s->buf[4], s->buf[5], (s->rlen == rtsp_len+4)?"complete":"fragment" );		
@@ -458,8 +463,27 @@ read_rtsp (sockets * s)
 	if (la<2)
 		LOG_AND_RETURN(0, "Most likely not an RTSP packet sock_id: %d sid: %d rlen: %d, dropping ....", s->sock_id, s->sid, rlen); 
 	
-//	if(strstr(arg[1], "freq") || strstr(arg[1], "pids"))
-	sid = (streams *) setup_stream (arg[1], s);
+	if(s->sid<0)
+		for (i = 0; i < la; i++)	
+			if (strncasecmp ("Session:", arg[i], 8) == 0)
+			{
+				char *sess;
+				int s_id;
+				if(strlen(arg[i])>8)
+					sess = arg[i] + 8;
+				else 
+					sess = arg[i+1];
+				s_id = map_int(sess, NULL);
+				s->sid = find_session_id(s_id);		
+			}
+
+	if(strstr(arg[1], "freq") || strstr(arg[1], "pids"))
+		sid = (streams *) setup_stream (arg[1], s);
+	
+	sid = get_sid(s->sid);
+	
+	if(sid)
+		sid->rtime = s->rtime;
 	
 	for (i = 0; i < la; i++)
 		if (strncasecmp ("CSeq:", arg[i], 5) == 0)
@@ -479,12 +503,13 @@ read_rtsp (sockets * s)
 			http_response (s, 400, NULL, NULL, cseq, 0);
 			return 0;
 		}
-	}else if (strstr (arg[i], "LIVE555"))
-		if(sid)
-		{
-			LOG("VLC detected, setting stream timeout to unlimited for sid %d", sid->sid);
-			sid->timeout = 0; // ignore timeout for VLC
-		}
+	}
+//		else if (strstr (arg[i], "LIVE555"))
+//		if(sid)
+//		{
+//			LOG("VLC detected, setting stream timeout to unlimited for sid %d", sid->sid);
+//			sid->timeout = 0; // ignore timeout for VLC
+//		}
 	
 	if((strncasecmp (arg[0], "PLAY", 4) == 0) || (strncasecmp (arg[0], "GET", 3) == 0) || (strncasecmp (arg[0], "SETUP", 5) == 0)) 
 	{
@@ -493,7 +518,7 @@ read_rtsp (sockets * s)
 			
 		if (!( sid = get_sid(s->sid)))
 		{
-			http_response (s, 503, NULL, NULL, cseq, 0);
+			http_response (s, 454, NULL, NULL, cseq, 0);
 			return 0;
 		}
 
@@ -509,7 +534,7 @@ read_rtsp (sockets * s)
 				snprintf (buf, sizeof(buf),
 					"Transport: RTP/AVP;unicast;source=%s;client_port=%d-%d;server_port=%d-%d\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d",
 					get_sock_host (s->sock), ntohs (sid->sa.sin_port), ntohs (sid->sa.sin_port) + 1,
-					get_sock_port (sid->rsock), get_sock_port (sid->rsock) + 1, get_session_id (s->sid),
+					opts.start_rtp, opts.start_rtp + 1, get_session_id (s->sid),
 					sid->timeout?sid->timeout / 1000:opts.timeout_sec / 1000, sid->sid + 1);
 			else
 				snprintf (buf, sizeof(buf),
@@ -535,21 +560,24 @@ read_rtsp (sockets * s)
 		if (strncmp (arg[0], "DESCRIBE", 8) == 0)
 		{
 			char sbuf[1000];
-			describe_streams(s, arg[1], sbuf, sizeof(sbuf));
+			char *rv;
+			rv = describe_streams(s, arg[1], sbuf, sizeof(sbuf));
+			if (! rv)
+			{
+				http_response (s, 404, NULL, NULL, cseq, 0);
+				return 0;
+			}	
 			snprintf(buf, sizeof(buf), "Content-type: application/sdp\r\nContent-Base: rtsp://%s/", get_sock_host(s->sock));
 			http_response (s, 200, buf, sbuf, cseq, 0);
 				
 		}
 		else if (strncmp (arg[0], "OPTIONS", 8) == 0)
-		{		
-			if(cseq<3)         // fix for tivizen
-			{
-				for (i = 0; i < la; i++)
-					if (strncasecmp ("Session:", arg[i], 5) == 0)      
-						set_session_id(sid->sid, map_int(arg[i+1], NULL));
-						
-			}
-			snprintf(buf, sizeof(buf), "Session:%010d\r\n%s", get_session_id(s->sid), public);
+		{
+			sid = get_sid(s->sid);
+			if (sid)
+				snprintf(buf, sizeof(buf), "Session:%010d\r\n%s", get_session_id(s->sid), public);
+			else	
+				snprintf(buf, sizeof(buf), "%s", public);
 			http_response (s, 200, buf, NULL, cseq, 0);
 		}
 	}
@@ -705,10 +733,13 @@ read_http (sockets * s)
 int
 close_http (sockets * s)
 {
+	streams *sid = get_sid(s->sid);
 	if (s->flags & 1  && s->buf)
 		free1 (s->buf);
 	s->flags = 0;
 	s->buf = NULL;
+	if(sid && sid->type == STREAM_RTSP_UDP && sid->timeout != 0) // Do not close rtsp udp as most likely there was no TEARDOWN at this point
+		return 0;
 	LOG ("Closing stream %d", s->sid);
 	close_stream (s->sid);
 	return 0;
@@ -845,14 +876,16 @@ main (int argc, char *argv[])
 
 	s[si].close_sec = 1800 * 1000;
 	s[si].rtime = -s[si].close_sec;
-	if (0 >
-		sockets_add (rtsp, NULL, -1, TYPE_SERVER, (socket_action) new_rtsp,
+	if (0 > sockets_add (rtsp, NULL, -1, TYPE_SERVER, (socket_action) new_rtsp,
 		NULL, (socket_action) close_http))
 		FAIL ("sockets_add failed for rtsp");
-	if (0 >
-		sockets_add (http, NULL, -1, TYPE_SERVER, (socket_action) new_http,
+	if (0 > sockets_add (http, NULL, -1, TYPE_SERVER, (socket_action) new_http,
 		NULL, (socket_action) close_http))
 		FAIL ("sockets_add failed for http");
+		
+	if (0 > sockets_add(rtpc, NULL, -1, TYPE_UDP, (socket_action )rtcp_confirm, NULL, NULL)) // read rtcp
+		LOG("RTCP socket_add failed");
+	
 	printf ("Initializing with %d devices\n", init_hw ());
 	select_and_execute ();
 	free_all ();

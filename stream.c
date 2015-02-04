@@ -16,6 +16,7 @@
 #include <string.h>
 #include <linux/dvb/frontend.h>
 #include <linux/dvb/dmx.h>
+#include <poll.h>
 
 #include "minisatip.h"
 #include "socketworks.h"
@@ -63,6 +64,8 @@ char *describe_streams (sockets *s, char *req, char *sbuf, int size)
 	sid = get_sid(s->sid);
 	if(sid)
 		do_play = sid->do_play;
+	else 
+		LOG_AND_RETURN(NULL, "No session assosicated with sock_id %d", s->sock_id);
 		
 	snprintf(sbuf,size-1,"v=0\r\no=- %010d %010d IN IP4 %s\r\ns=SatIPServer:1 %d %d %d\r\nt=0 0\r\n", sidf, sidf, get_sock_host(s->sock), getS2Adapters(), getTAdapters(), getCAdapters() );
 	if(!strchr(req, '?'))
@@ -143,8 +146,8 @@ setup_stream (char *str, sockets * s)
 			LOG_AND_RETURN ( NULL, "Could not add a new stream");
 
 		s->sid = s_id;
-		s->close_sec = 200;
-		s->timeout = (socket_action) stream_timeout;
+//		s->close_sec = 200;
+//		s->timeout = (socket_action) stream_timeout;
 		LOG ("Setup stream done: sid: %d (e:%d) for sock %d handle %d", s_id,
 			st[s_id].enabled, s->sock_id, s->sock);
 	}
@@ -173,7 +176,7 @@ start_play (streams * sid, sockets * s)
 //			LOG("Assuming RTSP over TCP for stream %d, most likely transport was not specified", sid->sid);
 //			sid->type = STREAM_RTSP_TCP;
 //			sid->rsock = s->sock;
-			LOG_AND_RETURN(-405, "No Transport header was specified, for sid %d", sid->sid);
+			LOG_AND_RETURN(-454, "No Transport header was specified, for sid %d", sid->sid);
 	}
 	
 	LOG ("Play for stream %d, type %d, rsock %d, adapter %d, sock_id %d handle %d", s->sid, sid->type, sid->rsock,
@@ -254,17 +257,25 @@ int decode_transport (sockets * s, char *arg, char *default_rtp, int start_rtp)
 	LOG ("decode_transport ->%d %d %d %s", p.type, p.ttl, p.port, p.dest);
 	if( sid->type != 0)
 	{
-		LOG("Stream has already a transport header associated with it - sid = %d type = %d, closing %d", sid->sid, sid->type, sid->rsock);
-		if(sid->type == STREAM_RTSP_UDP && sid->rsock >= 0)
+		if(sid->type == STREAM_RTSP_UDP && sid->rsock >= 0)			
 		{
-			close(sid->rsock);
-			sid->rsock = -1;
+			if(p.port != ntohs(sid->sa.sin_port) || strcmp(p.dest,inet_ntoa(sid->sa.sin_addr)))
+				LOG("Transport for this connection already setup, leaving as it is: sid = %d, handle %d", sid->sid, sid->rsock)
+			else {
+				LOG("Stream has already a transport header associated with it - sid = %d type = %d, closing %d", sid->sid, sid->type, sid->rsock);
+				close(sid->rsock);
+				sid->rsock = -1;
+				sid->type = 0;
+			}
 		}
 	}
 	
-	sid->type = STREAM_RTSP_UDP;
-	if((sid->rsock = udp_connect (p.dest, p.port, &sid->sa)) < 0)
-		LOG_AND_RETURN (-1, "decode_transport failed: UDP connection to %s:%d failed", p.dest, p.port);
+	if(sid->type == 0)
+	{
+		sid->type = STREAM_RTSP_UDP;
+		if((sid->rsock = udp_connect (p.dest, p.port, &sid->sa)) < 0)
+			LOG_AND_RETURN (-1, "decode_transport failed: UDP connection to %s:%d failed", p.dest, p.port);
+	}
 	
 	return 0;
 }
@@ -629,7 +640,10 @@ read_dmx (sockets * s)
 					else p[i].cc ++;
 						
 					if(p[i].cc != cc)
-						LOG("PID Continuity error (adapter %d): pid: %03d, Expected CC: %X, Actual CC: %X", s->sid, pid, p[i].cc, cc);
+					{	
+//						LOG("PID Continuity error (adapter %d): pid: %03d, Expected CC: %X, Actual CC: %X", s->sid, pid, p[i].cc, cc);
+						p[i].err ++;
+					}
 					p[i].cc = cc;
 
 					for (j = 0; p[i].sid[j] > -1 && j < MAX_STREAMS_PER_PID; j++)
@@ -684,40 +698,44 @@ read_dmx (sockets * s)
 
 	//      if(!found)LOG("pid not found = %d -> 1:%d 2:%d 1&1f=%d",pid,s->buf[1],s->buf[2],s->buf[1]&0x1f);
 	//      LOG("done send stream");
-	for (i = 0; i < MAX_STREAMS; i++)
-		if (st[i].enabled && st[i].type != STREAM_HTTP && st[i].do_play
-		&& s->rtime > st[i].rtcp_wtime + 200)
-			stream_timeout (s);
+	return 0;
 }
 
 
 int
-stream_timeout (sockets * s)
+stream_timeouts ()
 {
-	if (s->sid < 0 || s->sid > MAX_STREAMS || st[s->sid].enabled == 0
-		|| st[s->sid].do_play == 0)
-		return;
-	streams *sid = get_sid(s->sid);
-	int ctime,
-		rttime = sid->rtcp_wtime,
-		rtime = sid->wtime;
-
-	if (sid->type == STREAM_HTTP)
-		return 0;
+	int i;
+	int ctime, rttime, rtime;
+	streams *sid;
+	char buf[2000];
+	
 	ctime = getTick ();
-	//LOG("stream timeouts called for sid %d c:%d r:%d rt:%d",s->sid,ctime,rtime,rttime);
-	if (ctime - rtime > 1000)
-	{
-		LOG ("no data sent for more than 1s sid: %d for %s:%d", s->sid,
-			inet_ntoa (sid->sa.sin_addr), ntohs (sid->sa.sin_port));
-		send_rtpb (sid, s->buf , 0);
-		sid->wtime = ctime;
+	
+	for (i=0; i< MAX_STREAMS; i++)
+		if (st[i].enabled && st[i].do_play && st[i].type != STREAM_HTTP)
+		{
+			sid = get_sid(i);
+			rttime = sid->rtcp_wtime,
+			rtime = sid->wtime;
+	
+			//LOG("stream timeouts called for sid %d c:%d r:%d rt:%d",i,ctime,rtime,rttime);
+			if (ctime - rtime > 1000)
+			{
+				LOG ("no data sent for more than 1s sid: %d for %s:%d", i,
+						inet_ntoa (sid->sa.sin_addr), ntohs (sid->sa.sin_port));
+				send_rtpb (sid, buf , 0);				
+			}
+			if (ctime - rttime > 200)
+				send_rtcp (i, ctime);
+
+			if (sid->timeout > 0 && (ctime - sid->rtime > sid->timeout * 2))
+			{
+				LOG("Stream timeout %d, closing (ctime %d , sid->rtime %d, sid->timeout %d)", i, ctime, sid->rtime, sid->timeout);
+				close_stream(i);
+			}			
+		
 	}
-	if (ctime - rttime > 200)
-		send_rtcp (s->sid, ctime);
-	//LOG("done stream timeouts called for sid %d c:%d r:%d rt:%d",s->sid,ctime,rtime,rttime);
-	if (sid->timeout > 0 && ctime - s->rtime > sid->timeout)
-		return 1;				 //most likely called from timeout from sockets, return 1 to close the socket and stream
 	return 0;
 }
 
@@ -801,4 +819,29 @@ int fix_master_sid(int a_id)
 	return 0;
 }
 
+int find_session_id(int id)
+{
+	int i;
+	
+	for(i=0;i<MAX_STREAMS;i++)
+		if(st[i].enabled && st[i].ssrc == id)
+		{
+			st[i].rtime = getTick();
+			LOG("recovered session id from a closed connection, sid %d , id: %d", i, id);
+			return i;
+		}
+	return -1;
+}
 
+int rtcp_confirm(sockets *s)
+{
+	int i;
+//	LOG("rtcp_confirm called for from %s:%d", inet_ntoa(s->sa.sin_addr), ntohs(s->sa.sin_port));
+		// checking just the ports and the destination
+	for (i=0; i<MAX_STREAMS;i++)
+		if(st[i].enabled && ntohs(s->sa.sin_port) == ntohs(st[i].sa.sin_port)+1 && s->sa.sin_addr.s_addr == st[i].sa.sin_addr.s_addr)
+		{  
+			LOG("Acknowledging stream %d via rtcp packet", i);
+			st[i].rtime = s->rtime;
+		}
+}

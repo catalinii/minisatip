@@ -12,7 +12,8 @@ typedef struct struct_pid
 {
 	int pid;					 // pid for this demux - not used
 	int fd;						 // fd for this demux
-								 // stream id - one more to set it -1
+	int err;
+								// stream id - one more to set it -1
 	signed char sid[MAX_STREAMS_PER_PID];
 	char flags;					 // 0 - disabled , 1 enabled, 2 - will be enabled next tune when tune is called, 3 disable when tune is called
 	int cnt;

@@ -484,7 +484,7 @@ select_and_execute ()
 					sockets_del (i);
 				//            LOG("Done timeout");
 			}
-
+			stream_timeouts();
 		}
 	}
 	LOG("The main loop ended, run_loop = %d", run_loop);
