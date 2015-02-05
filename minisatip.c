@@ -373,6 +373,8 @@ char public[] = "Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN";
 char *
 http_response (sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 {
+	int binary = 0;
+	char *desc1;
 	char *reply =
 		"%s/1.0 %d %s\r\nCSeq: %d\r\nDate: %s\r\n%s\r\nContent-Length: %d\r\n\r\n%s";
 	char *reply0 = 
@@ -411,14 +413,22 @@ http_response (sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 		rc = 503;
 	}
 	static char resp[5000];
+	desc1 = desc;
 	if(!lr)
 		lr = strlen (desc);
+	else 
+	{
+		binary = 1;
+		desc1 = "";
+	}
 	if (lr)
-		sprintf (resp, reply, proto, rc, d, cseq, get_current_timestamp (), ah, lr, desc);
+		sprintf (resp, reply, proto, rc, d, cseq, get_current_timestamp (), ah, lr, desc1);
 	else
 		sprintf (resp, reply0, proto, rc, d, cseq, get_current_timestamp (), ah);
 	LOG ("reply -> %d (%s:%d) CL:%d :\n%s", s->sock, inet_ntoa(s->sa.sin_addr), ntohs(s->sa.sin_port), lr, resp);
 	send (s->sock, resp, strlen (resp), MSG_NOSIGNAL);
+	if(binary)
+		send (s->sock, desc, lr, MSG_NOSIGNAL);
 	return resp;
 }
 
@@ -603,7 +613,7 @@ struct sockaddr_in ssdp_sa;
 int
 read_http (sockets * s)
 {
-	char buf[2000];
+	char buf[20000];
 	char *arg[50];
 	int la, rlen;
 	char *xml =
