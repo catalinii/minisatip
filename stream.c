@@ -724,7 +724,7 @@ stream_timeouts ()
 			{
 				LOG ("no data sent for more than 1s sid: %d for %s:%d", i,
 						inet_ntoa (sid->sa.sin_addr), ntohs (sid->sa.sin_port));
-				send_rtpb (sid, buf , 0);				
+				flush_streamb (sid, buf , 0, ctime);								
 			}
 			if (ctime - rttime > 200)
 				send_rtcp (i, ctime);
@@ -795,8 +795,11 @@ void set_session_id(int i, int id)
 {
 	if (i<0 || i>MAX_STREAMS || st[i].enabled==0)
 		return;
-	st[i].ssrc = id;
-	
+	if(st[i].ssrc != id)
+	{
+		LOG("Forcing session id %d on stream %d", id, i);
+		st[i].ssrc = id;
+	}	
 }
 
 
@@ -822,7 +825,6 @@ int fix_master_sid(int a_id)
 int find_session_id(int id)
 {
 	int i;
-	LOG ("Trying to find a session id for %d", id);
 	for(i=0;i<MAX_STREAMS;i++)
 		if(st[i].enabled && st[i].ssrc == id)
 		{

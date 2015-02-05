@@ -319,7 +319,9 @@ int map_int (char *s, char ** v)
 	int i, n = 0;
 	
 	if(s==NULL)
+	{
 		LOG_AND_RETURN(0,"map_int: s=>NULL, v=%p, %s %s", v, v?v[0]:"NULL", v?v[1]:"NULL");
+	}
 	if (v == NULL)
 	{
 		if(s[0]!='+' && s[0]!='-' && (s[0]<'0' || s[0]>'9'))
@@ -332,6 +334,21 @@ int map_int (char *s, char ** v)
 	return n;
 }
 
+char *header_parameter(char **arg, int i) // get the value of a header parameter 
+{
+	int len = strlen(arg[i]);
+	char *result;
+	
+	if( arg[i][len-1] == ':')
+		return arg[i+1];
+	
+	result = strchr(arg[i], ':');
+	if(result)
+		return result+1;
+		
+	if(strcmp(arg[i+1], ":")==0)
+		return arg[i+2];	
+}
 
 int
 map_float (char *s, int mul)
@@ -413,6 +430,7 @@ read_rtsp (sockets * s)
 	char *arg[50];
 	int cseq, la, i, rlen;
 	char *proto;
+	int sess_id = 0;
 	char buf[2000];
 	streams *sid = get_sid(s->sid);
 
@@ -467,37 +485,30 @@ read_rtsp (sockets * s)
 		for (i = 0; i < la; i++)	
 			if (strncasecmp ("Session:", arg[i], 8) == 0)
 			{
-				char *sess;
-				int s_id;
-				if(strlen(arg[i])>8)
-					sess = arg[i] + 8;
-				else 
-					sess = arg[i+1];
-				s_id = map_int(sess, NULL);
-				s->sid = find_session_id(s_id);		
+				sess_id = map_int(header_parameter(arg, i), NULL);
+				s->sid = find_session_id(sess_id);		
 			}
 
 	if(strstr(arg[1], "freq") || strstr(arg[1], "pids"))
+	{
+		int old_sid = s->sid;
 		sid = (streams *) setup_stream (arg[1], s);
-	
+	}
 	sid = get_sid(s->sid);
 	if(sid)
 		sid->rtime = s->rtime;
+
+	if (sess_id)    
+			set_session_id(s->sid, sess_id);
+		
 	
 	for (i = 0; i < la; i++)
 		if (strncasecmp ("CSeq:", arg[i], 5) == 0)
-			cseq = map_int (arg[i + 1], NULL);
+			cseq = map_int (header_parameter(arg, i), NULL);
 	else if (strncasecmp ("Transport:", arg[i], 9) == 0){
-		char *rtp_avp = strstr(arg[i], "RTP/AVP");
-		int rv;
-		if(!rtp_avp)
-			rtp_avp = strstr(arg[i+1], "RTP/AVP");
-		if(!rtp_avp)
-			rtp_avp = strstr(arg[i+2], "RTP/AVP");		
-		if(rtp_avp)
-			rv = decode_transport (s, rtp_avp, opts.rrtp, opts.start_rtp);
-		
-		if(rv == -1)
+		char *rtp_avp = header_parameter(arg, i);
+
+		if( -1 == decode_transport (s, rtp_avp, opts.rrtp, opts.start_rtp))
 		{
 			http_response (s, 400, NULL, NULL, cseq, 0);
 			return 0;
@@ -735,7 +746,7 @@ close_http (sockets * s)
 		free1 (s->buf);
 	s->flags = 0;
 	s->buf = NULL;
-	if(sid && sid->type == STREAM_RTSP_UDP && sid->timeout != 0) // Do not close rtsp udp as most likely there was no TEARDOWN at this point
+	if(sid && ((sid->type == STREAM_RTSP_UDP && sid->timeout != 0) || sid->type == 0 && sid->timeout != 0)) // Do not close rtsp udp as most likely there was no TEARDOWN at this point
 		return 0;
 	LOG ("Closing stream %d", s->sid);
 	close_stream (s->sid);

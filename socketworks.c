@@ -370,7 +370,7 @@ select_and_execute ()
 							tbwsd += bw;
 						else
 							tbwot += bw;
-						if (bw > 1000)
+						if (bw > 2000)
 							LOG
 								("bandwidth %dKB/s, total bandwidth: %ld MB, HD: %ld MB, SD: %ld MB, Other: %ld MB, notify: %d",
 								(int) bw / 1024, tbw / 1024576, tbwhd / 1024576,
