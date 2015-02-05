@@ -400,11 +400,7 @@ void
 								 //pids==NULL -> delete all pids
 mark_pids_deleted (int aid, int sid, char *pids)
 {
-	int i,
-		j,
-		la,
-		k,
-		cnt;
+	int i, j, la, k, cnt;
 	adapter *ad;
 	char *arg[MAX_PIDS];
 	int p[MAX_PIDS];
@@ -584,8 +580,9 @@ set_adapter_parameters (int aid, int sid, transponder * tp)
 
 	if (ad->tp.pids)			 // pids can be specified in SETUP and then followed by a delpids in PLAY, make sure the behaviour is right
 	{
+		mark_pids_deleted (aid, sid, NULL);  // delete all the pids for this 
 		if (mark_pids_add
-			(sid, aid, ad->tp.apids ? ad->tp.apids : ad->tp.pids) < 0)
+			(sid, aid, ad->tp.pids) < 0)
 			return -1;
 	}
 

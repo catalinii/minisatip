@@ -628,7 +628,7 @@ read_dmx (sockets * s)
 			pid = (b[1] & 0x1f) * 256 + b[2];
 			p = ad->pids;
 			for (i = 0; i < MAX_PIDS; i++)
-				if (p[i].pid == pid && p[i].flags == 1)
+				if (p[i].flags == 1 && (p[i].pid == pid || p[i].pid == 8192))
 				{
 					int cc;   // calculate pid continuity
 					p[i].cnt++;

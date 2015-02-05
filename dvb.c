@@ -690,8 +690,8 @@ set_pid (int hw, int ad, uint16_t i_pid)
 	char buf[100];
 	int fd;
 
-	if ( i_pid > 8191 )
-		LOG_AND_RETURN(-1, "pid %d > 8191 for /dev/dvb/adapter%d/demux%d", i_pid, hw, ad);
+	if ( i_pid > 8192 )
+		LOG_AND_RETURN(-1, "pid %d > 8192 for /dev/dvb/adapter%d/demux%d", i_pid, hw, ad);
 		
 	sprintf (buf, "/dev/dvb/adapter%d/demux%d", hw, ad);
 	if ((fd = open (buf, O_RDWR | O_NONBLOCK)) < 0)
@@ -790,7 +790,8 @@ dvb_delsys (int aid, int fd, fe_delivery_system_t *sys)
 #define INVALID_URL(a) {LOG(a);return 0;}
 char def_pids[100];
 
-#define default_pids "0,1,2,3"
+//#define default_pids "0,1,2,3"
+#define default_pids "8192"
 
 int
 detect_dvb_parameters (char *s, transponder * tp)
@@ -880,7 +881,7 @@ detect_dvb_parameters (char *s, transponder * tp)
 			tp->dpids = arg[i] + 8;
 	}
 	
-	if (tp->pids && strncmp (tp->pids, "all", 3) == 0)
+	if (tp->pids && strstr (tp->pids, "all"))
 	{
 		strcpy (def_pids, default_pids);
 								 // map pids=all to essential pids
