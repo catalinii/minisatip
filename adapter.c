@@ -150,7 +150,7 @@ close_adapter (int na)
 	LOG ("closing adapter %d  -> fe:%d dvr:%d", na, a[na].fe, a[na].dvr);
 	a[na].enabled = 0;
 								 //close all streams attached to this adapter
-	close_streams_for_adapter (na, -1);
+//	close_streams_for_adapter (na, -1);
 	mark_pids_deleted (na, -1, NULL);
 	update_pids (na);
 	//      if(a[na].dmx>0)close(a[na].dmx);
@@ -367,8 +367,7 @@ update_pids (int aid)
 }
 
 
-int
-tune (int aid, int sid)
+int tune (int aid, int sid)
 {
 	adapter *ad = get_adapter(aid);
 	int i, rv = 0;
@@ -565,7 +564,7 @@ set_adapter_parameters (int aid, int sid, transponder * tp)
 		return -1;				 // slave sid requesting to tune to a different frequency
 	ad->do_tune = 0;
 	if (tp->freq != ad->tp.freq
-		|| (tp->pol > 0 && tp->pol != ad->tp.pol) || (tp->diseqc != ad->tp.diseqc))
+		|| (tp->pol > 0 && tp->pol != ad->tp.pol) || (tp->diseqc != ad->tp.diseqc) || (tp->sr>1000 && tp->sr != ad->tp.sr) || (tp->mtype > 0 && tp->mtype != ad->tp.mtype))
 	{
 		mark_pids_deleted (aid, -1, NULL);
 		update_pids (aid);
@@ -640,6 +639,7 @@ describe_adapter (int sid, int aid)
 		if (ad->max_snr <= ad->snr) ad->max_snr = (ad->snr>0)?ad->snr:1;
 		LOG ("get_signal%s took %d ms for adapter %d handle %d (status: %d, ber: %d, strength:%d, snr: %d, max_strength: %d, max_snr: %d)",
 			new_gs?"":"_new", getTick () - ts, aid, ad->fe, ad->status, ad->ber, ad->strength, ad->snr, ad->max_strength, ad->max_snr);
+		ad->status = (ad->status & FE_HAS_LOCK) > 0;
 		if(new_gs)
 		{
 			ad->strength = ad->strength * 255 / ad->max_strength;
@@ -647,12 +647,13 @@ describe_adapter (int sid, int aid)
 		}
 	}
 	if (t->sys == SYS_DVBS || t->sys == SYS_DVBS2)
-		sprintf (dad, "ver=1.0;src=%d;tuner=%d,%d,%d,%d,%d,%c,%s,,,,%d,;pids=",
-			t->diseqc + 1, aid, ad->strength, ad->status, ad->snr,
-			t->freq / 1000, t->pol, get_delsys(t->sys), t->sr / 1000);
+		sprintf (dad, "ver=1.0;src=%d;tuner=%d,%d,%d,%d,%d,%s,%s,%s,%s,%s,%d,%s;pids=",
+			t->diseqc + 1, aid, ad->strength, ad->status, ad->snr, t->freq / 1000, get_pol(t->pol), get_modulation(t->mtype), 
+			get_pilot(t->plts), get_rolloff(t->ro), get_delsys(t->sys), t->sr / 1000, get_fec(t->fec));
 	else if (t->sys == SYS_DVBT || t->sys == SYS_DVBT2)
-		sprintf (dad, "ver=1.1;src=%d;tuner=%d,%d,%d,%d,%.2f,,%s,,,,,;pids=",
-			t->diseqc + 1, aid, ad->strength, ad->status, ad->snr, (double) t->freq/1000, get_delsys(t->sys));
+		sprintf (dad, "ver=1.1;src=%d;tuner=%d,%d,%d,%d,%.2f,%d,%s,%s,%s,%s,%s,%d,%d,%d;pids=",
+			t->diseqc + 1, aid, ad->strength, ad->status, ad->snr, (double) t->freq/1000, t->bw, get_delsys(t->sys), get_tmode(t->tmode), get_modulation(t->mtype), get_gi(t->gi),
+			get_fec(t->fec), t->plp, t->t2id, t->sm);
 	else  sprintf (dad, "ver=1.2;src=%d;tuner=%d,%d,%d,%d,%.2f,8,%s,%s,%d,%d,%d,%d,%d;pids=",
                         t->diseqc + 1, aid, ad->strength, ad->status, ad->snr, (double )t->freq/1000, get_delsys(t->sys), get_modulation(t->mtype), t->sr,
 						t->c2tft, t->ds, t->plp, t->inversion);
@@ -669,6 +670,9 @@ describe_adapter (int sid, int aid)
 		dad[strlen (dad) - 1] = 0;
 	else
 		dad[strlen (dad)] = '0';
+	
+	if(opts.log>5)LOG("describe_adapter: sid %d, aid %d => %s", sid, aid, dad);
+	
 	return dad;
 }
 

@@ -215,6 +215,7 @@ int decode_transport (sockets * s, char *arg, char *default_rtp, int start_rtp)
 		return -1;
 	}
 	l = 0;
+	sid->rsock_err = 0;
 	if ( arg )
 	{
 		if (strstr(arg, "RTP/AVP/TCP"))
@@ -298,6 +299,7 @@ streams_add ()
 	st[i].adapter = -1;
 	st[i].sid = i;
 	st[i].rsock = -1;
+	st[i].rsock_err = 0;
 	st[i].type = 0;
 	st[i].do_play = 0;
 	st[i].iiov = 0;
@@ -401,9 +403,11 @@ int
 send_rtp (streams * sid, struct iovec *iov, int liov)
 {
 	struct iovec io[MAX_PACK + 3];
-	int i, total_len = 0;
+	int i, total_len = 0, rv;
 	unsigned char *rtp_h;
 
+	if(sid->rsock_err > 5)
+		return 0;
 	rtp_h = rtp_buf + 4;
 	
 	for(i = 0;i < liov; i ++)
@@ -429,7 +433,13 @@ send_rtp (streams * sid, struct iovec *iov, int liov)
 	}
 	memcpy (&io[1], iov, liov * sizeof (struct iovec));
 	//      LOG("write to %d (len:%d)-> %X, %d, %X, %d ",sock,liov*sizeof(iov),io[0].iov_base,io[0].iov_len,io[1].iov_base,io[1].iov_len);
-	return writev (sid->rsock, (const struct iovec *) io, liov + 1);
+	rv = writev (sid->rsock, (const struct iovec *) io, liov + 1);
+	if(rv<0)
+	{
+		sid->rsock_err ++;
+		LOG("write to handle %d failed: %d, %s, socket err %d %s", sid->rsock, rv, strerror(errno), sid->rsock_err, sid->rsock_err>5?"socket blacklisted":"");		
+	} else sid->rsock_err = 0;
+	return rv;
 }
 
 unsigned char rtcp_buf[1600];
@@ -445,6 +455,10 @@ send_rtcp (int s_id, int ctime)
 	
 	if(!sid)
 		LOG_AND_RETURN (0, "Sid is null for s_id %d", s_id);
+
+	if(sid->rsock_err > 5)
+		return 0;		
+		
 	char *a = describe_adapter (s_id, st[s_id].adapter);
 	int la = strlen (a);
 	if ( la > sizeof(rtcp_buf) - 68) 
@@ -505,6 +519,10 @@ send_rtcp (int s_id, int ctime)
 		copy16(rtcp_buf, 2, len + 52);
 		rv = send (sid->rsock, rtcp_buf, len + 52 + 4, MSG_NOSIGNAL);
 	}
+	if(rv>0)
+		sid->rsock_err = 0;
+	else	
+		sid->rsock_err ++;
 	sid->sa.sin_port = tmp_port;
 	sid->rtcp_wtime = ctime;
 	sid->sp = 0;
@@ -524,17 +542,14 @@ flush_streamb (streams * sid, char *buf, int rlen, int ctime)
 	else
 		for (i = 0; i < rlen; i += DVB_FRAME * 7)
 			rv += send_rtpb (sid, &buf[i], DVB_FRAME * 7);
-	if(rv<0)
-	{
-		LOG("write to handle %d failed: %d, %s", sid->rsock, rv, strerror(errno));
-		rv = -1;
-	}
+	
+	if(rv > 0) bw += rv;
 	sid->iiov = 0;
 	sid->wtime = ctime;
 	sid->len = 0;
 	sid->sp ++;
 	sid->sb += rv;
-	bw += rv;
+	
 }
 
 
@@ -546,12 +561,7 @@ flush_streami (streams * sid, int ctime)
 		rv = writev (sid->rsock, sid->iov, sid->iiov);
 	else
 		rv = send_rtp (sid, sid->iov, sid->iiov);
-	if(rv<0)
-	{
-		LOG("write to handle %d failed: %d, %s", sid->rsock, rv, strerror(errno));
-		rv = -1;
-	}
-	bw += rv;
+	if(rv > 0) bw += rv;
 	sid->sp ++;
 	sid->sb += rv; 
 	sid->iiov = 0;

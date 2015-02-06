@@ -49,7 +49,7 @@ char *fe_pilot[] =
 {
 	"on",
 	"off",
-	"auto",
+	" ", //auto
 	NULL
 };
 
@@ -58,7 +58,7 @@ char *fe_rolloff[] =
 	"0.35",
 	"0.20",
 	"0.25",
-	"auto",
+	" ", //auto
 	NULL
 };
 
@@ -98,7 +98,7 @@ char *fe_fec[] =
 	"67",
 	"78",
 	"89",
-	"auto",
+	" ", //auto
 	"35",
 	"910",
 	"25",
@@ -113,7 +113,7 @@ char *fe_modulation[] =
 	"64qam",
 	"128qam",
 	"256qam",
-	"auto_qam",
+	" ", // auto
 	"8vsb",
 	"16vsb",
 	"8psk",
@@ -127,7 +127,7 @@ char *fe_tmode[] =
 {
 	"2k",
 	"8k",
-	"auto",
+	" ", //auto
 	"4k",
 	"1k",
 	"16k",
@@ -143,7 +143,7 @@ char *fe_gi[] =
 	"116",
 	"18",
 	"14",
-	"auto",
+	" ", // auto
 	"1128",
 	"19128",
 	"19256",
@@ -167,7 +167,7 @@ char *fe_specinv[] =
 {
 	"off",
 	"on",
-	"auto",
+	" ", // auto
 	NULL
 };
 

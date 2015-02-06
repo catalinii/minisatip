@@ -357,7 +357,10 @@ select_and_execute ()
 						ss->rlen = 0;
 					}
 					if (ss->rlen >= ss->lbuf)
+        {
+           LOG("Socket buffer full, handle %d, sock_id %d, type %d, lbuf %d, rlen %d, ss->buf = %p, buf %p", ss->sock, i, ss->type, ss->lbuf, ss->rlen, ss->buf, buf);
 						ss->rlen = 0;
+         }
 					rlen = 0;
 					slen = sizeof (ss->sa);
 					if (c_time - bwtt > 1000)
@@ -387,27 +390,19 @@ select_and_execute ()
 
 					}
 					
-					if (ss->lbuf - ss->rlen < 1)
-					{
-						LOG("Socket buffer full, handle %d, sock_id %d, type %d, lbuf %d, rlen %d, ss->buf = %p, buf %p", ss->sock, i, ss->type, ss->lbuf, ss->rlen, ss->buf, buf);
-						rlen = ss->rlen;  //Avoid Socket Close
-						ss->rlen = 0;
-					}
-					else if (ss->type == 0)//udp
+					 if (ss->type == 0)//udp
 						rlen =
 							recvfrom (ss->sock, &ss->buf[ss->rlen], ss->lbuf - ss->rlen,
 							0, (struct sockaddr *) &ss->sa, &slen);
 					else if (ss->type != 2)
 						rlen = read (ss->sock, &ss->buf[ss->rlen], ss->lbuf - ss->rlen);
 
-					ss->rlen += rlen;
+        ss->rtime = c_time;
+					if(rlen>0)ss->rlen += rlen;
 								 //force 0 at the end of the string
 					if(ss->lbuf >= ss->rlen)
 						ss->buf[ss->rlen] = 0;
-					else LOG("Possible memory corruption sockets_id %d, type %d, rlen %d, total buffer len %d, sid %d", ss->sock_id, ss->type, ss->rlen, ss->lbuf, ss->sid);
 			//LOG("Read %d (rlen:%d/total:%d) bytes from %d -> %08X - iteration %d action %x",rlen,ss->rlen,ss->lbuf,ss->sock,(unsigned int)ss->buf,it++,(int )ss->action);
-					
-					ss->rtime = c_time;
 					
 					if (ss->rlen > 0 && ss->action)
 						ss->action (ss);
