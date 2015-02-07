@@ -357,10 +357,10 @@ select_and_execute ()
 						ss->rlen = 0;
 					}
 					if (ss->rlen >= ss->lbuf)
-        {
-           LOG("Socket buffer full, handle %d, sock_id %d, type %d, lbuf %d, rlen %d, ss->buf = %p, buf %p", ss->sock, i, ss->type, ss->lbuf, ss->rlen, ss->buf, buf);
+					{
+						LOG("Socket buffer full, handle %d, sock_id %d, type %d, lbuf %d, rlen %d, ss->buf = %p, buf %p", ss->sock, i, ss->type, ss->lbuf, ss->rlen, ss->buf, buf);
 						ss->rlen = 0;
-         }
+					}
 					rlen = 0;
 					slen = sizeof (ss->sa);
 					if (c_time - bwtt > 1000)
@@ -396,9 +396,10 @@ select_and_execute ()
 							0, (struct sockaddr *) &ss->sa, &slen);
 					else if (ss->type != 2)
 						rlen = read (ss->sock, &ss->buf[ss->rlen], ss->lbuf - ss->rlen);
-
-        ss->rtime = c_time;
-					if(rlen>0)ss->rlen += rlen;
+					
+					ss->rtime = c_time;
+					if(rlen>0)
+						ss->rlen += rlen;
 								 //force 0 at the end of the string
 					if(ss->lbuf >= ss->rlen)
 						ss->buf[ss->rlen] = 0;
