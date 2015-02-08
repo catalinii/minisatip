@@ -225,8 +225,8 @@ dump_adapters ()
 	LOG ("Dumping adapters:");
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		if (a[i].enabled)
-			LOG ("%d|f: %d sid_cnt:%d master_sid:%d del_sys: %d %d %d", i, a[i].tp.freq, a[i].sid_cnt,
-				a[i].master_sid, a[i].sys[0], a[i].sys[1], a[i].sys[2]);
+			LOG ("%d|f: %d sid_cnt:%d master_sid:%d del_sys: %s %s %s", i, a[i].tp.freq, a[i].sid_cnt,
+				a[i].master_sid, get_delsys(a[i].sys[0]), get_delsys(a[i].sys[1]), get_delsys(a[i].sys[2]));
 	dump_streams ();
 
 }

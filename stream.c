@@ -273,9 +273,16 @@ int decode_transport (sockets * s, char *arg, char *default_rtp, int start_rtp)
 	
 	if(sid->type == 0)
 	{
+		int i;
 		sid->type = STREAM_RTSP_UDP;
 		if((sid->rsock = udp_connect (p.dest, p.port, &sid->sa)) < 0)
 			LOG_AND_RETURN (-1, "decode_transport failed: UDP connection to %s:%d failed", p.dest, p.port);
+		for(i=0;i<MAX_STREAMS;i++)
+			if(st[i].enabled && i!=sid->sid && st[i].sa.sin_port  == sid->sa.sin_port && st[i].sa.sin_addr.s_addr == sid->sa.sin_addr.s_addr)
+			{
+				LOG("Detected stream with the same destination as sid %d: sid %d -> %s:%d, aid: %d", sid->sid, i, p.dest, p.port, st[i].adapter);
+				close_stream(i);
+			}           
 	}
 	
 	return 0;
