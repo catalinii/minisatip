@@ -53,9 +53,10 @@ int get_next_free_stream()
 
 char *describe_streams (sockets *s, char *req, char *sbuf, int size)
 {
-	char *str;
+	char *str, *stream_id;
 	int i, sidf, do_play = 0, streams_enabled = 0;
 	streams *sid;
+	int do_all = 1;
 
 	if (s->sid == -1 && strchr(req, '?'))
 		setup_stream(req, s);
@@ -68,7 +69,17 @@ char *describe_streams (sockets *s, char *req, char *sbuf, int size)
 		LOG_AND_RETURN(NULL, "No session assosicated with sock_id %d", s->sock_id);
 		
 	snprintf(sbuf,size-1,"v=0\r\no=- %010d %010d IN IP4 %s\r\ns=SatIPServer:1 %d %d %d\r\nt=0 0\r\n", sidf, sidf, get_sock_host(s->sock), getS2Adapters(), getTAdapters(), getCAdapters() );
-	if(!strchr(req, '?'))
+	if(strchr(req, '?'))
+		do_all = 0;
+	if((stream_id = strstr(req, "stream=")))
+	{
+		do_all = 0;
+		sid = get_sid(map_int(stream_id + 7, NULL) - 1);
+		if(sid == NULL)
+			return NULL;		
+	}	
+	
+	if(do_all)
 	{
 		for( i=0; i<MAX_STREAMS; i++)
 			if(st[i].enabled)
@@ -82,7 +93,7 @@ char *describe_streams (sockets *s, char *req, char *sbuf, int size)
 	}else{
 		int slen = strlen(sbuf);
 		snprintf(sbuf + slen, size - slen - 1, "m=video 0 RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\nb=AS:5000\r\na=%s\r\n", 
-			s->sid + 1, describe_adapter(0, 0), do_play?"sendonly":"inactive");
+			sid->sid + 1, describe_adapter(sid->sid, sid->adapter), do_play?"sendonly":"inactive");
 	}
 	return sbuf;
 }
@@ -526,10 +537,10 @@ send_rtcp (int s_id, int ctime)
 		copy16(rtcp_buf, 2, len + 52);
 		rv = send (sid->rsock, rtcp_buf, len + 52 + 4, MSG_NOSIGNAL);
 	}
-	if(rv>0)
-		sid->rsock_err = 0;
-	else	
-		sid->rsock_err ++;
+//	if(rv>0)
+//		sid->rsock_err = 0;
+//	else	
+//		sid->rsock_err ++;
 	sid->sa.sin_port = tmp_port;
 	sid->rtcp_wtime = ctime;
 	sid->sp = 0;
