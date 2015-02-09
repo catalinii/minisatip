@@ -50,7 +50,7 @@ Example of Usage:
 Examples:
 	- In order to listen to a radio on Hotbird 13E, after minisatip is started open the following URL in your favourite media player:
 
-	"http://192.168.100.3:8080/?msys=dvbs&freq=11623&pol=v&sr=27500&pids=0,10750,254"
+	"http://MINISATIP_HOST:8080/?msys=dvbs&freq=11623&pol=v&sr=27500&pids=0,10750,254"
 	
 	msys can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, atsc, dvbcb ( - DVBC_ANNEX_B )
 	
