@@ -41,9 +41,9 @@
 #include "dvb.h"
 
 struct struct_opts opts;
-int rtp,
-rtpc;
+int rtp, rtpc;
 extern sockets s[MAX_SOCKS];
+int rtsp, http, si, si1, ssdp1;
 
 void
 usage ()
@@ -439,7 +439,7 @@ read_rtsp (sockets * s)
 {
 	char *arg[50];
 	int cseq, la, i, rlen;
-	char *proto;
+	char *proto, *transport = NULL;
 	int sess_id = 0;
 	char buf[2000];
 	streams *sid = get_sid(s->sid);
@@ -516,20 +516,16 @@ read_rtsp (sockets * s)
 		if (strncasecmp ("CSeq:", arg[i], 5) == 0)
 			cseq = map_int (header_parameter(arg, i), NULL);
 	else if (strncasecmp ("Transport:", arg[i], 9) == 0){
-		char *rtp_avp = header_parameter(arg, i);
+		transport = header_parameter(arg, i);
 
-		if( -1 == decode_transport (s, rtp_avp, opts.rrtp, opts.start_rtp))
+		if( -1 == decode_transport (s, transport, opts.rrtp, opts.start_rtp))
 		{
 			http_response (s, 400, NULL, NULL, cseq, 0);
 			return 0;
 		}
 	}
-//		else if (strstr (arg[i], "LIVE555"))
-//		if(sid)
-//		{
-//			LOG("VLC detected, setting stream timeout to unlimited for sid %d", sid->sid);
-//			sid->timeout = 0; // ignore timeout for VLC
-//		}
+		else if (strstr (arg[i], "LIVE555"))
+		if(sid) sid->timeout = 0;
 	
 	if((strncasecmp (arg[0], "PLAY", 4) == 0) || (strncasecmp (arg[0], "GET", 3) == 0) || (strncasecmp (arg[0], "SETUP", 5) == 0)) 
 	{
@@ -549,25 +545,43 @@ read_rtsp (sockets * s)
 				return 0;
 			}
 		strcpy(ra, inet_ntoa (sid->sa.sin_addr));
-		if(sid->type == STREAM_RTSP_UDP)
-			if (atoi (ra) < 239)
-				snprintf (buf, sizeof(buf),
-					"Transport: RTP/AVP;unicast;source=%s;client_port=%d-%d;server_port=%d-%d\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d",
-					get_sock_host (s->sock), ntohs (sid->sa.sin_port), ntohs (sid->sa.sin_port) + 1,
-					opts.start_rtp, opts.start_rtp + 1, get_session_id (s->sid),
-					sid->timeout?sid->timeout / 1000:opts.timeout_sec / 1000, sid->sid + 1);
-			else
-				snprintf (buf, sizeof(buf),
-					"Transport: RTP/AVP;multicast;destination=%s;port=%d-%d\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d",
-					ra, ntohs (sid->sa.sin_port), ntohs (sid->sa.sin_port) + 1,
-					get_session_id (s->sid), sid->timeout?sid->timeout / 1000:opts.timeout_sec / 1000 , sid->sid + 1);
-		else if(sid->type == STREAM_HTTP)
-			snprintf(buf, sizeof(buf), "Content-Type: video/mp2t");
-		else 
-			snprintf(buf, sizeof(buf), "Transport: RTP/AVP/TCP;interleaved=0-1\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d", get_session_id (s->sid), sid->timeout?sid->timeout / 1000:opts.timeout_sec / 1000, sid->sid + 1);
-
+		buf[0] = 0;
+		if(transport)
+		{
+			int s_timeout = (sid->timeout ? sid->timeout : opts.timeout_sec) / 1000;
+			switch (sid->type)
+			{
+				case STREAM_RTSP_UDP:
+					if (atoi (ra) < 239)
+						snprintf (buf, sizeof(buf), "Transport: RTP/AVP;unicast;destination=%s;source=%s;client_port=%d-%d;server_port=%d-%d\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d",
+							ra, get_sock_host (s->sock), ntohs (sid->sa.sin_port), ntohs (sid->sa.sin_port) + 1,
+//							opts.start_rtp, opts.start_rtp + 1, 
+							get_sock_port(sid->rsock), get_sock_port(sid->rsock) + 1,
+							get_session_id (s->sid), s_timeout, sid->sid + 1);
+					else
+						snprintf (buf, sizeof(buf), "Transport: RTP/AVP;multicast;destination=%s;port=%d-%d\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d",
+							ra, ntohs (sid->sa.sin_port), ntohs (sid->sa.sin_port) + 1,
+							get_session_id (s->sid), s_timeout , sid->sid + 1);
+					break;
+				case STREAM_HTTP:
+					snprintf(buf, sizeof(buf), "Content-Type: video/mp2t");
+					break;
+				case STREAM_RTSP_TCP:
+					snprintf(buf, sizeof(buf), "Transport: RTP/AVP/TCP;interleaved=0-1\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d", 
+						get_session_id (s->sid), s_timeout, sid->sid + 1);
+					break;
+			}
+		}
+		
 		if (strncasecmp(arg[0], "PLAY", 4) == 0)
-			snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf) - 1,  "\r\nRTP-Info: url=%s;seq=%d", arg[1], 0);
+		{
+			char *qm = strchr(arg[1], '?');
+			if(qm)
+				*qm = 0;
+			if(buf[0])
+				sprintf(buf, "\r\n");
+			snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf) - 1,  "RTP-Info: url=%s;seq=%d", arg[1], 0);
+		}
 		http_response (s, 200, buf, NULL, cseq, 0);
 	}
 	else if (strncmp (arg[0], "TEARDOWN", 8) == 0)
@@ -607,7 +621,7 @@ read_rtsp (sockets * s)
 #define REPLY_AND_RETURN(c) {http_response (s, c, NULL, NULL, 0, 0);return 0;}
 
 char uuid[100];
-int bootid, uuidi;
+int uuidi;
 struct sockaddr_in ssdp_sa;
 
 int
@@ -771,14 +785,15 @@ ssdp_discovery (sockets * s)
 		"HOST: %s:1900\r\n"
 		"CACHE-CONTROL: max-age=1800\r\n"
 		"LOCATION: http://%s/desc.xml\r\n"
-		"NT: upnp:rootdevice\r\n"
+		"NT: %s\r\n"
 		"NTS: ssdp:alive \r\n"
 		"SERVER: Linux/1.0 UPnP/1.1 minisatip/%s\r\n"
-		"USN: uuid:%s::upnp:rootdevice\r\n"
+		"USN: uuid:%s%s\r\n"
 		"BOOTID.UPNP.ORG: %d\r\n"
 		"CONFIGID.UPNP.ORG: 0\r\n" "DEVICEID.SES.COM: %d\r\n\r\n\0";
-	char buf[500],
-		mac[15] = "00000000000000";
+	char buf[500], mac[15] = "00000000000000";
+	char nt[3][50];
+	
 	char uuid1[] = "11223344-9999-0000-b7ae";
 	socklen_t salen;
 	int i;
@@ -790,14 +805,19 @@ ssdp_discovery (sockets * s)
 		sprintf (uuid, "%s-%s", uuid1, mac);
 		fill_sockaddr (&ssdp_sa, opts.disc_host, 1900);
 	}
-
+	strcpy(nt[0], "::upnp:rootdevice");
+	sprintf(nt[1], "::uuid:%s", uuid);
+	strcpy(nt[2], "::urn:ses-com:device:SatIPServer:1");
+	
 	if(s->type != TYPE_UDP) return 0;
-	sprintf (buf, reply, opts.disc_host, opts.http_host, VERSION, uuid, bootid, opts.device_id);
-	salen = sizeof (ssdp_sa);
-	LOG ("ssdp_discovery fd: %d -> %s", s->sock, buf);
-	for (i = 0; i < 3; i++)
+	for(i = 0; i<3; i++)
+	{
+		sprintf (buf, reply, opts.disc_host, opts.http_host, nt[i] + 2, VERSION, uuid, i==1?"":nt[i], opts.bootid, opts.device_id);
+		salen = sizeof (ssdp_sa);	
+		LOG ("ssdp_discovery fd: %d -> %s", s->sock, buf);	
 		sendto (s->sock, buf, strlen (buf), MSG_NOSIGNAL,
 			(const struct sockaddr *) &ssdp_sa, salen);
+	}
 	s->rtime = getTick ();
 	return 0;
 }
@@ -817,19 +837,64 @@ ssdp_reply (sockets * s)
 		"USN: uuid:%s::urn:ses-com:device:SatIPServer:1\r\n"
 		"BOOTID.UPNP.ORG: %d\r\n"
 		"CONFIGID.UPNP.ORG: 0\r\n" "DEVICEID.SES.COM: %d\r\n\0";
+	char *device_id_conflict = "M-SEARCH * HTTP/1.1\r\n"
+		"HOST: %s:1900\r\n"
+		"MAN: \"ssdp:discover\"\r\n"
+		"ST: urn:ses-com:device:SatIPServer:1\r\n"
+		"USER-AGENT: Linux/1.0 UPnP/1.1 minisatip/%s\r\n"
+		"DEVICEID.SES.COM: %d\r\n\0";
 	socklen_t salen;
+	char *man, *man_sd;
+	char buf[500];
+	int la;
 
-	if (strncmp (s->buf, "M-SEARCH", 8) != 0)
-	{
-		//      LOG("not an M-SEARCH, ignoring");
-		return 0;
-	}
 	if (uuidi == 0)
 		ssdp_discovery (s);
-	char buf[500];
 
-	sprintf (buf, reply, get_current_timestamp (), opts.http_host, VERSION, uuid, bootid, opts.device_id);
 	salen = sizeof (s->sa);
+	
+	if (strncmp (s->buf, "NOTIFY", 6) == 0)
+	{
+		char *arg[50];
+		int i, did;
+		
+		la = split (arg, s->buf, 50, ':');
+		
+		for(i=0; i<la;i++)
+			if(strcmp("uuid", arg[i]) == 0)
+				if( strcmp(uuid, arg[i+1]) == 0)
+					return 0;		
+		// not my uuid
+		for(i=0; i<la;i++)
+			if(strcasecmp("DEVICEID.SES.COM", arg[i]) == 0)
+			{
+				did = map_int(arg[i+1], NULL);
+				if(did == opts.device_id)
+				{						
+						snprintf(buf, sizeof(buf), device_id_conflict, getlocalip(), VERSION, opts.device_id);
+						LOG("A new device joined the network with the same Device ID:  %s, sending ->\n%s", inet_ntoa(s->sa.sin_addr), buf);
+						sendto (ssdp, buf, strlen (buf), MSG_NOSIGNAL, (const struct sockaddr *) &s->sa, salen);
+				}
+			}
+				
+			
+		return 0;
+	}
+	
+	
+	man = strstr(s->buf, "MAN");
+	man_sd = strstr(s->buf, "ssdp:discover");
+	
+	if(man && man_sd)  // SSDP Device ID clash
+	{
+			opts.device_id ++;
+			s[si].close_sec = 1800 * 1000;
+			s[si].rtime = - s[si].close_sec;		
+			LOG("Device ID conflict, changing our device id to %d, destination SAT>IP server %s", opts.device_id, inet_ntoa(s->sa.sin_addr));
+	}
+	
+	sprintf (buf, reply, get_current_timestamp (), opts.http_host, VERSION, uuid, opts.bootid, opts.device_id);
+	
 	LOG ("ssdp_reply fd: %d -> %s\n%s", ssdp, inet_ntoa (s->sa.sin_addr), buf);
 								 //use ssdp (unicast) even if received to multicast address
 	sendto (ssdp, buf, strlen (buf), MSG_NOSIGNAL, (const struct sockaddr *) &s->sa, salen);
@@ -862,13 +927,12 @@ char pn[200];
 int
 main (int argc, char *argv[])
 {
-	int rtsp, http, si, si1, ssdp1;
 	strncpy(pn,argv[0],sizeof(pn));
 	set_signal_handler ();
 	set_options (argc, argv);
 	if (opts.daemon)
 		becomeDaemon ();
-	bootid = readBootID();
+	readBootID();
 	printf("Starting minisatip version %s, dvbapi version: %04X\n",VERSION, DVBAPIVERSION);
 	if ((ssdp = udp_bind (NULL, 1900)) < 1)
 		FAIL ("SSDP: Could not bind on udp port 1900");
@@ -1055,24 +1119,29 @@ myfree (void *x, char *f, int l)
 
 int readBootID()
 {
-	int bid=0;
 	char buf[20];
+	int did;
+	opts.bootid = 0;
 	FILE *f=fopen("bootid","rt");
 	if(f)
 	{
 		fgets(buf,sizeof(buf),f);
 		fclose(f);
 		buf[sizeof(f)-1]=0;
-		bid = map_int(buf,NULL);
+		sscanf(buf,"%d %d", &opts.bootid, &did);
+		if(opts.device_id < 1)
+			opts.device_id = did;			
 	}
-	bid++;
+	opts.bootid++;
+	if(opts.device_id < 1)
+		opts.device_id = 1;
 	f=fopen("bootid","wt");
 	if(f)
 	{
-		fprintf(f,"%d",bid);
+		fprintf(f,"%d %d",opts.bootid, opts.device_id);
 		fclose(f);
 	}
-	return bid;
+	return opts.bootid;
 }
 
 

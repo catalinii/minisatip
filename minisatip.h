@@ -4,7 +4,7 @@
 #include "socketworks.h"
 
 
-#define VERSION_BUILD "67"
+#define VERSION_BUILD "68"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.1.,VERSION_BUILD,)
 
@@ -40,6 +40,7 @@ struct struct_opts
 	int force_sadapter, force_tadapter, force_cadapter;
 	int daemon;
 	int device_id;
+	int bootid;
 	int bw;
 	int dvr;
 	int force_scan;
