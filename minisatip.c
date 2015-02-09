@@ -810,11 +810,14 @@ ssdp_discovery (sockets * s)
 	strcpy(nt[2], "::urn:ses-com:device:SatIPServer:1");
 	
 	if(s->type != TYPE_UDP) return 0;
+	
+	LOG ("ssdp_discovery: bootid: %d deviceid: %d http: %s", opts.bootid, opts.device_id, opts.http_host);	
+	
 	for(i = 0; i<3; i++)
 	{
 		sprintf (buf, reply, opts.disc_host, opts.http_host, nt[i] + 2, VERSION, uuid, i==1?"":nt[i], opts.bootid, opts.device_id);
 		salen = sizeof (ssdp_sa);	
-		LOG ("ssdp_discovery fd: %d -> %s", s->sock, buf);	
+		
 		sendto (s->sock, buf, strlen (buf), MSG_NOSIGNAL,
 			(const struct sockaddr *) &ssdp_sa, salen);
 	}
@@ -872,7 +875,7 @@ ssdp_reply (sockets * s)
 				if(did == opts.device_id)
 				{						
 						snprintf(buf, sizeof(buf), device_id_conflict, getlocalip(), VERSION, opts.device_id);
-						LOG("A new device joined the network with the same Device ID:  %s, sending ->\n%s", inet_ntoa(s->sa.sin_addr), buf);
+						LOG("A new device joined the network with the same Device ID:  %s", inet_ntoa(s->sa.sin_addr));
 						sendto (ssdp, buf, strlen (buf), MSG_NOSIGNAL, (const struct sockaddr *) &s->sa, salen);
 				}
 			}
@@ -891,11 +894,12 @@ ssdp_reply (sockets * s)
 			s[si].close_sec = 1800 * 1000;
 			s[si].rtime = - s[si].close_sec;		
 			LOG("Device ID conflict, changing our device id to %d, destination SAT>IP server %s", opts.device_id, inet_ntoa(s->sa.sin_addr));
+			readBootID();
 	}
 	
 	sprintf (buf, reply, get_current_timestamp (), opts.http_host, VERSION, uuid, opts.bootid, opts.device_id);
 	
-	LOG ("ssdp_reply fd: %d -> %s\n%s", ssdp, inet_ntoa (s->sa.sin_addr), buf);
+	LOG ("ssdp_reply fd: %d -> %s, bootid: %d deviceid: %d http: %s", ssdp, inet_ntoa (s->sa.sin_addr), opts.bootid, opts.device_id, opts.http_host);
 								 //use ssdp (unicast) even if received to multicast address
 	sendto (ssdp, buf, strlen (buf), MSG_NOSIGNAL, (const struct sockaddr *) &s->sa, salen);
 	return 0;
