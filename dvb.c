@@ -1045,7 +1045,7 @@ int get_signal_new (int fd, fe_status_t * status, uint32_t * ber,
 	if (ioctl (fd, FE_GET_PROPERTY, &enum_cmdseq) < 0)
 	{
 		LOG ("get_signal_new: unable to query frontend %d: %s", fd, strerror (errno));
-		return -1;
+		err = 100;
 	}
 	
 	*status = *snr = *ber = *strength = 0;
@@ -1054,20 +1054,20 @@ int get_signal_new (int fd, fe_status_t * status, uint32_t * ber,
 		*strength = enum_cmdargs[0].u.st.stat[0].uvalue >> 8;
 	else if(enum_cmdargs[0].u.st.stat[0].scale ==  FE_SCALE_DECIBEL)
 		*strength = enum_cmdargs[0].u.st.stat[0].uvalue >> 8;
-	else err = 1;
+	else err ++;
 
 	if(enum_cmdargs[1].u.st.stat[0].scale ==  FE_SCALE_RELATIVE)
 		*snr = enum_cmdargs[1].u.st.stat[0].uvalue >> 12;
 	else if(enum_cmdargs[1].u.st.stat[0].scale ==  FE_SCALE_DECIBEL)
 		*snr = enum_cmdargs[1].u.st.stat[0].uvalue >> 12;
-	else err = 1;
+	else err ++;
 
 	*ber = enum_cmdargs[2].u.st.stat[0].uvalue & 0xFFFF;
 
-	LOG("get_signal_new returned: Signal (%d): %llu, SNR(%d): %llu, BER: %llu ", enum_cmdargs[0].u.st.stat[0].scale, enum_cmdargs[0].u.st.stat[0].uvalue,
-			enum_cmdargs[1].u.st.stat[0].scale, enum_cmdargs[1].u.st.stat[0].uvalue, enum_cmdargs[2].u.st.stat[0].uvalue);
+	LOG("get_signal_new returned: Signal (%d): %llu, SNR(%d): %llu, BER: %llu, err %d", enum_cmdargs[0].u.st.stat[0].scale, enum_cmdargs[0].u.st.stat[0].uvalue,
+			enum_cmdargs[1].u.st.stat[0].scale, enum_cmdargs[1].u.st.stat[0].uvalue, enum_cmdargs[2].u.st.stat[0].uvalue, err);
 	if(err)
-		return -1;
+		return err;
 	
 	if (ioctl (fd, FE_READ_STATUS, status) < 0)
 	{

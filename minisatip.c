@@ -90,7 +90,8 @@ set_options (int argc, char *argv[])
 	opts.mac[0] = 0;
 	opts.daemon = 1;
 	opts.bw = 0;
-	opts.device_id = 1;
+	opts.device_id = 0;
+	opts.bootid = 0;
 	opts.force_scan = 0;
 	opts.dvr = DVR_BUFFER;
 	memset(opts.playlist, sizeof(opts.playlist), 0);
@@ -312,6 +313,15 @@ split (char **rv, char *s, int lrv, char sep)
 	return j;
 }
 
+char *strip(char *s) // strip spaces from the front of a string 
+{
+	if(s < (char *)1000)
+		return NULL;
+		
+	while (*s && *s == ' ')
+		s++;
+	return s;
+}
 
 #define LR(s) {LOG("map_int returns %d",s);return s;}
 int map_int (char *s, char ** v)
@@ -322,6 +332,12 @@ int map_int (char *s, char ** v)
 	{
 		LOG_AND_RETURN(0,"map_int: s=>NULL, v=%p, %s %s", v, v?v[0]:"NULL", v?v[1]:"NULL");
 	}
+
+	s = strip(s);
+	
+	if(!*s)
+		LOG_AND_RETURN(0,"map_int: s is empty");
+	
 	if (v == NULL)
 	{
 		if(s[0]!='+' && s[0]!='-' && (s[0]<'0' || s[0]>'9'))
@@ -376,11 +392,13 @@ http_response (sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 	int binary = 0;
 	char *desc1;
 	char *reply =
-		"%s/1.0 %d %s\r\nCSeq: %d\r\nDate: %s\r\n%s\r\nContent-Length: %d\r\n\r\n%s";
+		"%s/1.0 %d %s\r\nCSeq: %d\r\nDate: %s%s\r\n%s\r\nContent-Length: %d\r\n\r\n%s";
 	char *reply0 = 
-		"%s/1.0 %d %s\r\nCseq: %d\r\nDate: %s\r\n%s\r\n\r\n";
+		"%s/1.0 %d %s\r\nCseq: %d\r\nDate: %s%s\r\n%s\r\n\r\n";
 	char *d;
 	char *proto;
+	char sess_id[100];
+	
 	
 	if( s->type == TYPE_HTTP)
 		proto = "HTTP";
@@ -421,10 +439,15 @@ http_response (sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 		binary = 1;
 		desc1 = "";
 	}
+	
+	sess_id[0] = 0;
+	if(s->type != TYPE_HTTP && get_sid(s->sid) && ah && !strstr(ah, "Session"))
+		sprintf(sess_id, "\r\nSession: %010d", get_session_id(s->sid));
+	
 	if (lr)
-		sprintf (resp, reply, proto, rc, d, cseq, get_current_timestamp (), ah, lr, desc1);
+		sprintf (resp, reply, proto, rc, d, cseq, get_current_timestamp (), sess_id, ah, lr, desc1);
 	else
-		sprintf (resp, reply0, proto, rc, d, cseq, get_current_timestamp (), ah);
+		sprintf (resp, reply0, proto, rc, d, cseq, get_current_timestamp (), sess_id, ah);
 	LOG ("reply -> %d (%s:%d) CL:%d :\n%s", s->sock, inet_ntoa(s->sa.sin_addr), ntohs(s->sa.sin_port), lr, resp);
 	send (s->sock, resp, strlen (resp), MSG_NOSIGNAL);
 	if(binary)
@@ -586,8 +609,12 @@ read_rtsp (sockets * s)
 	}
 	else if (strncmp (arg[0], "TEARDOWN", 8) == 0)
 	{
-		close_stream (s->sid);
-		http_response (s, 200, NULL, NULL, cseq, 0);
+		streams *sid;
+		buf[0] = 0;
+		if(get_sid(s->sid))
+			sprintf(buf, "Session: %010d", get_session_id(s->sid));
+		close_stream (s->sid);		
+		http_response (s, 200, buf, NULL, cseq, 0);
 	}
 	else
 	{
@@ -607,12 +634,7 @@ read_rtsp (sockets * s)
 		}
 		else if (strncmp (arg[0], "OPTIONS", 8) == 0)
 		{
-			sid = get_sid(s->sid);
-			if (sid)
-				snprintf(buf, sizeof(buf), "Session:%010d\r\n%s", get_session_id(s->sid), public);
-			else	
-				snprintf(buf, sizeof(buf), "%s", public);
-			http_response (s, 200, buf, NULL, cseq, 0);
+			http_response (s, 200, public, NULL, cseq, 0);
 		}
 	}
 	return 0;
@@ -847,59 +869,51 @@ ssdp_reply (sockets * s)
 		"USER-AGENT: Linux/1.0 UPnP/1.1 minisatip/%s\r\n"
 		"DEVICEID.SES.COM: %d\r\n\0";
 	socklen_t salen;
-	char *man, *man_sd;
+	char *man, *man_sd, *didsescom, *ruuid, *rdid;
 	char buf[500];
-	int la;
+	int did = 0;
 
 	if (uuidi == 0)
 		ssdp_discovery (s);
 
 	salen = sizeof (s->sa);
+	ruuid = strstr(s->buf, "uuid:");	
+	if( ruuid && strncmp(uuid, strip(ruuid+5), strlen(uuid)) == 0)
+		return 0;		
+
+	// not my uuid
+	LOG("Received SSDP packet from %s:%d -> handle %d\n%s", inet_ntoa(s->sa.sin_addr), ntohs(s->sa.sin_port), s->sock, s->buf);
 	
 	if (strncmp (s->buf, "NOTIFY", 6) == 0)
 	{
-		char *arg[50];
-		int i, did;
-		
-		la = split (arg, s->buf, 50, ':');
-		
-		for(i=0; i<la;i++)
-			if(strcmp("uuid", arg[i]) == 0)
-				if( strcmp(uuid, arg[i+1]) == 0)
-					return 0;		
-		// not my uuid
-		for(i=0; i<la;i++)
-			if(strcasecmp("DEVICEID.SES.COM", arg[i]) == 0)
-			{
-				did = map_int(arg[i+1], NULL);
-				if(did == opts.device_id)
-				{						
-						snprintf(buf, sizeof(buf), device_id_conflict, getlocalip(), VERSION, opts.device_id);
-						LOG("A new device joined the network with the same Device ID:  %s", inet_ntoa(s->sa.sin_addr));
-						sendto (ssdp, buf, strlen (buf), MSG_NOSIGNAL, (const struct sockaddr *) &s->sa, salen);
-				}
-			}
-				
+		rdid = strstr(s->buf, "DEVICEID.SES.COM:");
+		if(rdid && opts.device_id == map_int(strip(rdid + 17), NULL))
+		{						
+			snprintf(buf, sizeof(buf), device_id_conflict, getlocalip(), VERSION, opts.device_id);
+			LOG("A new device joined the network with the same Device ID:  %s, asking to change DEVICEID.SES.COM", inet_ntoa(s->sa.sin_addr));
+			sendto (ssdp, buf, strlen (buf), MSG_NOSIGNAL, (const struct sockaddr *) &s->sa, salen);
+		}
 			
 		return 0;
-	}
-	
+	}	
 	
 	man = strstr(s->buf, "MAN");
 	man_sd = strstr(s->buf, "ssdp:discover");
+	if(( didsescom = strstr(s->buf, "DEVICEID.SES.COM:") ))
+		did = map_int(didsescom + 17, NULL);		
 	
-	if(man && man_sd)  // SSDP Device ID clash
+	if(man && man_sd && didsescom && (s->rtime < 15000) && did == opts.device_id)  // SSDP Device ID clash, only first 5 seconds after the announcement
 	{
 			opts.device_id ++;
 			s[si].close_sec = 1800 * 1000;
 			s[si].rtime = - s[si].close_sec;		
 			LOG("Device ID conflict, changing our device id to %d, destination SAT>IP server %s", opts.device_id, inet_ntoa(s->sa.sin_addr));
 			readBootID();
-	}
+	} else did = opts.device_id;
 	
-	sprintf (buf, reply, get_current_timestamp (), opts.http_host, VERSION, uuid, opts.bootid, opts.device_id);
+	sprintf (buf, reply, get_current_timestamp (), opts.http_host, VERSION, uuid, opts.bootid, did);
 	
-	LOG ("ssdp_reply fd: %d -> %s, bootid: %d deviceid: %d http: %s", ssdp, inet_ntoa (s->sa.sin_addr), opts.bootid, opts.device_id, opts.http_host);
+	LOG ("ssdp_reply fd: %d -> %s:%d, bootid: %d deviceid: %d http: %s", ssdp, inet_ntoa (s->sa.sin_addr), ntohs(s->sa.sin_port), opts.bootid, did, opts.http_host);
 								 //use ssdp (unicast) even if received to multicast address
 	sendto (ssdp, buf, strlen (buf), MSG_NOSIGNAL, (const struct sockaddr *) &s->sa, salen);
 	return 0;
@@ -936,8 +950,8 @@ main (int argc, char *argv[])
 	set_options (argc, argv);
 	if (opts.daemon)
 		becomeDaemon ();
-	readBootID();
 	printf("Starting minisatip version %s, dvbapi version: %04X\n",VERSION, DVBAPIVERSION);
+	readBootID();
 	if ((ssdp = udp_bind (NULL, 1900)) < 1)
 		FAIL ("SSDP: Could not bind on udp port 1900");
 	if ((ssdp1 = udp_bind (opts.disc_host, 1900)) < 1)
@@ -1123,16 +1137,13 @@ myfree (void *x, char *f, int l)
 
 int readBootID()
 {
-	char buf[20];
-	int did;
+	int did = 0;
 	opts.bootid = 0;
 	FILE *f=fopen("bootid","rt");
 	if(f)
 	{
-		fgets(buf,sizeof(buf),f);
+		fscanf(f,"%d %d", &opts.bootid, &did);
 		fclose(f);
-		buf[sizeof(f)-1]=0;
-		sscanf(buf,"%d %d", &opts.bootid, &did);
 		if(opts.device_id < 1)
 			opts.device_id = did;			
 	}

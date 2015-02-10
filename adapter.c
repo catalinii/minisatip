@@ -122,6 +122,7 @@ init_hw ()
 		a[i].tp.sys = dvb_delsys (i, a[i].fe, a[i].sys);
 		a[i].master_sid = -1;
 		a[i].sid_cnt = 0;
+		a[i].new_gs = 0;
 		a[i].sock =
 			sockets_add (a[i].dvr, NULL, i, TYPE_DVR, (socket_action) read_dmx,
 			(socket_action) close_adapter_for_socket, NULL);
@@ -633,12 +634,18 @@ describe_adapter (int sid, int aid)
 	{
 		int new_gs;
 		ts = getTick ();
-		if((new_gs = get_signal_new (ad->fe, &ad->status, &ad->ber, &ad->strength, &ad->snr)))
+		if(ad->new_gs == 0 && (new_gs = get_signal_new (ad->fe, &ad->status, &ad->ber, &ad->strength, &ad->snr)))
 			get_signal (ad->fe, &ad->status, &ad->ber, &ad->strength, &ad->snr);
+		else 
+			get_signal (ad->fe, &ad->status, &ad->ber, &ad->strength, &ad->snr);
+			
+		if(ad->status > 0 && new_gs != 0)  // we have signal but no new stats, don't try to get them from now on until adapter close
+			ad->new_gs = 1;
+			
 		if (ad->max_strength <= ad->strength) ad->max_strength = (ad->strength>0)?ad->strength:1;
 		if (ad->max_snr <= ad->snr) ad->max_snr = (ad->snr>0)?ad->snr:1;
-		LOG ("get_signal%s took %d ms for adapter %d handle %d (status: %d, ber: %d, strength:%d, snr: %d, max_strength: %d, max_snr: %d)",
-			new_gs?"":"_new", getTick () - ts, aid, ad->fe, ad->status, ad->ber, ad->strength, ad->snr, ad->max_strength, ad->max_snr);
+		LOG ("get_signal%s took %d ms for adapter %d handle %d (status: %d, ber: %d, strength:%d, snr: %d, max_strength: %d, max_snr: %d %d)",
+			new_gs?"":"_new", getTick () - ts, aid, ad->fe, ad->status, ad->ber, ad->strength, ad->snr, ad->max_strength, ad->max_snr, opts.force_scan);
 		ad->status = (ad->status & FE_HAS_LOCK) > 0;
 		if(new_gs)
 		{

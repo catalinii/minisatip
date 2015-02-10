@@ -37,6 +37,7 @@ typedef struct struct_adapter
 	int rlen,rtime;
 	int last_sort;
 	int status_cnt;
+	int new_gs;
 	fe_status_t status;
 	uint32_t ber;
 	uint16_t strength, snr, max_strength, max_snr;
