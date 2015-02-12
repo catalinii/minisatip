@@ -632,12 +632,13 @@ describe_adapter (int sid, int aid)
 								 // do just max 3 signal check 1s after tune
 	if ((ad->status == 0 && ad->status_cnt<8 && ad->status_cnt++>4) || opts.force_scan)
 	{
-		int new_gs;
+		int new_gs = 1;
 		ts = getTick ();
 		if(ad->new_gs == 0 && (new_gs = get_signal_new (ad->fe, &ad->status, &ad->ber, &ad->strength, &ad->snr)))
 			get_signal (ad->fe, &ad->status, &ad->ber, &ad->strength, &ad->snr);
 		else 
-			get_signal (ad->fe, &ad->status, &ad->ber, &ad->strength, &ad->snr);
+			if(new_gs)
+				get_signal (ad->fe, &ad->status, &ad->ber, &ad->strength, &ad->snr);
 			
 		if(ad->status > 0 && new_gs != 0)  // we have signal but no new stats, don't try to get them from now on until adapter close
 			ad->new_gs = 1;

@@ -1,10 +1,13 @@
 #ifndef MINISATIP_H
 #define MINISATIP_H
+
+#define _GNU_SOURCE 
+
 #include "stream.h"
 #include "socketworks.h"
 
 
-#define VERSION_BUILD "70"
+#define VERSION_BUILD "71"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.1.,VERSION_BUILD,)
 

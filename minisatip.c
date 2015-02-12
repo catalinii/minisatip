@@ -18,6 +18,7 @@
  *
  */
 
+#include "minisatip.h"
 #include <errno.h>
 #include <getopt.h>
 #include <signal.h>
@@ -34,7 +35,6 @@
 #include <sys/socket.h>
 #include <fcntl.h>
 #include <sys/stat.h>
-#include "minisatip.h"
 #include "socketworks.h"
 #include "stream.h"
 #include "adapter.h"
@@ -392,12 +392,12 @@ http_response (sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 	int binary = 0;
 	char *desc1;
 	char *reply =
-		"%s/1.0 %d %s\r\nCSeq: %d\r\nDate: %s%s\r\n%s\r\nContent-Length: %d\r\n\r\n%s";
+		"%s/1.0 %d %s\r\nDate: %s%s%s\r\n%s\r\nContent-Length: %d\r\n\r\n%s";
 	char *reply0 = 
-		"%s/1.0 %d %s\r\nCseq: %d\r\nDate: %s%s\r\n%s\r\n\r\n";
+		"%s/1.0 %d %s\r\nDate: %s%s%s\r\n%s\r\n\r\n";
 	char *d;
 	char *proto;
-	char sess_id[100];
+	char sess_id[100], scseq[100];
 	
 	
 	if( s->type == TYPE_HTTP)
@@ -441,13 +441,16 @@ http_response (sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 	}
 	
 	sess_id[0] = 0;
+	scseq[0] = 0;
 	if(s->type != TYPE_HTTP && get_sid(s->sid) && ah && !strstr(ah, "Session"))
 		sprintf(sess_id, "\r\nSession: %010d", get_session_id(s->sid));
+	if(s->type != TYPE_HTTP && cseq > 0)
+			sprintf(scseq, "\r\nCseq: %d", cseq);
 	
 	if (lr)
-		sprintf (resp, reply, proto, rc, d, cseq, get_current_timestamp (), sess_id, ah, lr, desc1);
+		sprintf (resp, reply, proto, rc, d, get_current_timestamp (), sess_id, scseq, ah, lr, desc1);
 	else
-		sprintf (resp, reply0, proto, rc, d, cseq, get_current_timestamp (), sess_id, ah);
+		sprintf (resp, reply0, proto, rc, d, get_current_timestamp (), sess_id, scseq, ah);
 	LOG ("reply -> %d (%s:%d) CL:%d :\n%s", s->sock, inet_ntoa(s->sa.sin_addr), ntohs(s->sa.sin_port), lr, resp);
 	send (s->sock, resp, strlen (resp), MSG_NOSIGNAL);
 	if(binary)
@@ -653,58 +656,52 @@ read_http (sockets * s)
 	char *arg[50];
 	int la, rlen;
 	char *xml =
-		"<?xml version=\"1.0\"?>\r\n"
-		"<root xmlns=\"urn:schemas-upnp-org:device-1-0\" configId=\"0\">\r\n"
-		"<specVersion>\r\n"
-		"<major>0</major>\r\n"
-		"<minor>1</minor>\r\n"
-		"</specVersion>\r\n"
-		"<device>\r\n"
-		"<deviceType>urn:ses-com:device:SatIPServer:1</deviceType>\r\n"
-		"<friendlyName>minisatip</friendlyName>\r\n"
-		"<manufacturer>cata</manufacturer>\r\n"
-		"<manufacturerURL>http://github.com/catalinii/minisatip</manufacturerURL>\r\n"
-		"<modelDescription>minisatip for Linux</modelDescription>\r\n"
-		"<modelName>minisatip</modelName>\r\n"
-		"<modelNumber>0001</modelNumber>\r\n"
-		"<modelURL>http://github.com/catalinii/minisatip</modelURL>\r\n"
-		"<serialNumber>0001</serialNumber>\r\n"
-		"<UDN>uuid:%s</UDN>\r\n"
-		"<UPC>Universal Product Code</UPC>\r\n"
-		"<iconList>\r\n"
- 		"<icon>\r\n"
- 		"<mimetype>image/png</mimetype>\r\n"
- 		"<width>48</width>\r\n"
- 		"<height>48</height>\r\n"
- 		"<depth>24</depth>\r\n"
- 		"<url>/icons/sm.png</url>\r\n"
- 		"</icon><icon>\r\n"
- 		"<mimetype>image/png</mimetype>\r\n"
- 		"<width>120</width>\r\n"
- 		"<height>120</height>\r\n"
- 		"<depth>24</depth>\r\n"
- 		"<url>/icons/lr.png</url>\r\n"
- 		"</icon>\r\n"
- 		"<icon>\r\n"
- 		"<mimetype>image/jpeg</mimetype>\r\n"
- 		"<width>48</width>\r\n"
- 		"<height>48</height>\r\n"
- 		"<depth>24</depth>\r\n"
- 		"<url>/icons/sm.jpg</url>\r\n"
- 		"</icon>\r\n"
- 		"<icon>\r\n"
- 		"<mimetype>image/jpeg</mimetype>\r\n"
- 		"<width>120</width>\r\n"
- 		"<height>120</height>\r\n"
- 		"<depth>24</depth>\r\n"
- 		"<url>/icons/lr.jpg</url>\r\n"
- 		"</icon>\r\n"
- 		"</iconList>\r\n"
-		"<presentationURL>http://github.com/catalinii/minisatip</presentationURL>\r\n"
-		"<satip:X_SATIPCAP xmlns:satip=\"urn:ses-com:satip\">%s</satip:X_SATIPCAP>\r\n"
+		"<?xml version=\"1.0\"?>"
+		"<root xmlns=\"urn:schemas-upnp-org:device-1-0\" configId=\"0\">"
+		"<specVersion>"
+		"<major>1</major>"
+		"<minor>1</minor>"
+		"</specVersion>"
+		"<device>"
+		"<deviceType>urn:ses-com:device:SatIPServer:1</deviceType>"
+		"<friendlyName>minisatip</friendlyName>"
+		"<manufacturer>cata</manufacturer>"
+		"<manufacturerURL>http://github.com/catalinii/minisatip</manufacturerURL>"
+		"<modelDescription>minisatip for Linux</modelDescription>"
+		"<modelName>minisatip</modelName>"
+		"<modelNumber>1.0</modelNumber>"
+		"<modelURL></modelURL>"
+		"<serialNumber>1</serialNumber>"
+		"<UDN>uuid:%s</UDN>"
+		"<iconList><icon>"
+ 		"<mimetype>image/png</mimetype>"
+ 		"<width>48</width>"
+ 		"<height>48</height>"
+ 		"<depth>24</depth>"
+ 		"<url>/icons/sm.png</url>"
+ 		"</icon><icon>"
+ 		"<mimetype>image/png</mimetype>"
+ 		"<width>120</width>"
+ 		"<height>120</height>"
+ 		"<depth>24</depth>"
+ 		"<url>/icons/lr.png</url>"
+ 		"</icon><icon>"
+ 		"<mimetype>image/jpeg</mimetype>"
+ 		"<width>48</width>"
+ 		"<height>48</height>"
+ 		"<depth>24</depth>"
+ 		"<url>/icons/sm.jpg</url>"
+ 		"</icon><icon>"
+ 		"<mimetype>image/jpeg</mimetype>"
+ 		"<width>120</width>"
+ 		"<height>120</height>"
+ 		"<depth>24</depth>"
+ 		"<url>/icons/lr.jpg</url>"
+ 		"</icon></iconList>"
+		"<presentationURL>http://%s/</presentationURL>"
+		"<satip:X_SATIPCAP xmlns:satip=\"urn:ses-com:satip\">%s</satip:X_SATIPCAP>"
 		"%s"
-		"</device>\r\n"
-		"</root>\r\n";
+		"</device></root>";
 
 	if (s->rlen < 5
 		|| (htonl (*(uint32_t *) & s->buf[s->rlen - 4]) != 0x0D0A0D0A))
@@ -756,8 +753,8 @@ read_http (sockets * s)
 		if(tuner_s2 + tuner_t + tuner_c == 0)
 			strcpy(adapters,"DVBS2-0,");
 		adapters[strlen(adapters)-1] = 0;
-		sprintf (buf, xml, uuid, adapters, opts.playlist);
-		http_response (s, 200, "Content-type: text/xml\r\nConnection: close", buf, 0, 0);
+		sprintf (buf, xml, uuid, getlocalip(), adapters, opts.playlist);
+		http_response (s, 200, "CACHE-CONTROL: no-cache\r\nContent-type: text/xml", buf, 0, 0);
 		return 0;
 	}
 
@@ -839,7 +836,7 @@ ssdp_discovery (sockets * s)
 	{
 		sprintf (buf, reply, opts.disc_host, opts.http_host, nt[i] + 2, VERSION, uuid, i==1?"":nt[i], opts.bootid, opts.device_id);
 		salen = sizeof (ssdp_sa);	
-		
+		LOG("Discovery packet %d:\n%s", i+1, buf);
 		sendto (s->sock, buf, strlen (buf), MSG_NOSIGNAL,
 			(const struct sockaddr *) &ssdp_sa, salen);
 	}
@@ -877,16 +874,16 @@ ssdp_reply (sockets * s)
 		ssdp_discovery (s);
 
 	salen = sizeof (s->sa);
-	ruuid = strstr(s->buf, "uuid:");	
+	ruuid = strcasestr(s->buf, "uuid:");	
 	if( ruuid && strncmp(uuid, strip(ruuid+5), strlen(uuid)) == 0)
-		return 0;		
+		LOG_AND_RETURN(0, "Dropping packet from the same UUID as mine (from %s:%d)", inet_ntoa(s->sa.sin_addr), ntohs(s->sa.sin_port));		
 
 	// not my uuid
 	LOG("Received SSDP packet from %s:%d -> handle %d\n%s", inet_ntoa(s->sa.sin_addr), ntohs(s->sa.sin_port), s->sock, s->buf);
 	
-	if (strncmp (s->buf, "NOTIFY", 6) == 0)
+	if (strncasecmp (s->buf, "NOTIFY", 6) == 0)
 	{
-		rdid = strstr(s->buf, "DEVICEID.SES.COM:");
+		rdid = strcasestr(s->buf, "DEVICEID.SES.COM:");
 		if(rdid && opts.device_id == map_int(strip(rdid + 17), NULL))
 		{						
 			snprintf(buf, sizeof(buf), device_id_conflict, getlocalip(), VERSION, opts.device_id);
@@ -897,9 +894,9 @@ ssdp_reply (sockets * s)
 		return 0;
 	}	
 	
-	man = strstr(s->buf, "MAN");
-	man_sd = strstr(s->buf, "ssdp:discover");
-	if(( didsescom = strstr(s->buf, "DEVICEID.SES.COM:") ))
+	man = strcasestr(s->buf, "MAN");
+	man_sd = strcasestr(s->buf, "ssdp:discover");
+	if(( didsescom = strcasestr(s->buf, "DEVICEID.SES.COM:") ))
 		did = map_int(didsescom + 17, NULL);		
 	
 	if(man && man_sd && didsescom && (s->rtime < 15000) && did == opts.device_id)  // SSDP Device ID clash, only first 5 seconds after the announcement
@@ -913,7 +910,7 @@ ssdp_reply (sockets * s)
 	
 	sprintf (buf, reply, get_current_timestamp (), opts.http_host, VERSION, uuid, opts.bootid, did);
 	
-	LOG ("ssdp_reply fd: %d -> %s:%d, bootid: %d deviceid: %d http: %s", ssdp, inet_ntoa (s->sa.sin_addr), ntohs(s->sa.sin_port), opts.bootid, did, opts.http_host);
+	LOG ("ssdp_reply fd: %d -> %s:%d, bootid: %d deviceid: %d http: %s\n%s", ssdp, inet_ntoa (s->sa.sin_addr), ntohs(s->sa.sin_port), opts.bootid, did, opts.http_host, buf);
 								 //use ssdp (unicast) even if received to multicast address
 	sendto (ssdp, buf, strlen (buf), MSG_NOSIGNAL, (const struct sockaddr *) &s->sa, salen);
 	return 0;
@@ -974,7 +971,7 @@ main (int argc, char *argv[])
 	if (si < 0 || si1 < 0)
 		FAIL ("sockets_add failed for ssdp");
 
-	s[si].close_sec = 1800 * 1000;
+	s[si].close_sec = 60 * 1000;
 	s[si].rtime = -s[si].close_sec;
 	if (0 > sockets_add (rtsp, NULL, -1, TYPE_SERVER, (socket_action) new_rtsp,
 		NULL, (socket_action) close_http))
