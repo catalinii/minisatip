@@ -200,45 +200,6 @@ make_func( pol );
 
 
 
-struct diseqc_cmd committed_switch_cmds[] = {
-	{ { { 0xe0, 0x10, 0x38, 0xf0, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x38, 0xf2, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x38, 0xf1, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x38, 0xf3, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x38, 0xf4, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x38, 0xf6, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x38, 0xf5, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x38, 0xf7, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x38, 0xf8, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x38, 0xfa, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x38, 0xf9, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x38, 0xfb, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x38, 0xfc, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x38, 0xfe, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x38, 0xfd, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x38, 0xff, 0x00, 0x00 }, 4 }, 20 }
-};
-
-struct diseqc_cmd uncommitted_switch_cmds[] = {
-	{ { { 0xe0, 0x10, 0x39, 0xf0, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x39, 0xf1, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x39, 0xf2, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x39, 0xf3, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x39, 0xf4, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x39, 0xf5, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x39, 0xf6, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x39, 0xf7, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x39, 0xf8, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x39, 0xf9, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x39, 0xfa, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x39, 0xfb, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x39, 0xfc, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x39, 0xfd, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x39, 0xfe, 0x00, 0x00 }, 4 }, 20 },
-	{ { { 0xe0, 0x10, 0x39, 0xff, 0x00, 0x00 }, 4 }, 20 }
-};
-/*--------------------------------------------------------------------------*/
-
 static inline void
 msleep (uint32_t msec)
 {
@@ -248,216 +209,133 @@ msleep (uint32_t msec)
 		;
 }
 
-
-#if 0
-#define DISEQC_X 2
-int
-rotor_command (int frontend_fd, int cmd, int n1, int n2, int n3)
+int send_diseqc(int fd, int pos, int pol, int hiband, int *no_diseqc)
 {
-	int err;
+	struct dvb_diseqc_master_cmd cmd = {
+		{0xe0, 0x10, 0x38, 0xf0, 0x00, 0x00}, 4
+	};
 
-        struct dvb_diseqc_master_cmd cmds[] = {
-                { { 0xe0, 0x31, 0x60, 0x00, 0x00, 0x00 }, 3 },  //0 Stop Positioner movement
-                { { 0xe0, 0x31, 0x63, 0x00, 0x00, 0x00 }, 3 },  //1 Disable Limits
-                { { 0xe0, 0x31, 0x66, 0x00, 0x00, 0x00 }, 3 },  //2 Set East Limit
-                { { 0xe0, 0x31, 0x67, 0x00, 0x00, 0x00 }, 3 },  //3 Set West Limit
-                { { 0xe0, 0x31, 0x68, 0x00, 0x00, 0x00 }, 4 },  //4 Drive Motor East continously
-                { { 0xe0, 0x31, 0x68,256-n1,0x00, 0x00 }, 4 },  //5 Drive Motor East nn steps
-                { { 0xe0, 0x31, 0x69,256-n1,0x00, 0x00 }, 4 },  //6 Drive Motor West nn steps
-                { { 0xe0, 0x31, 0x69, 0x00, 0x00, 0x00 }, 4 },  //7 Drive Motor West continously
-                { { 0xe0, 0x31, 0x6a, n1, 0x00, 0x00 }, 4 },  //8 Store nn
-                { { 0xe0, 0x31, 0x6b, n1, 0x00, 0x00 }, 4 },   //9 Goto nn
-                { { 0xe0, 0x31, 0x6f, n1, n2, n3 }, 4}, //10 Recalculate Position
-                { { 0xe0, 0x31, 0x6a, 0x00, 0x00, 0x00 }, 4 },  //11 Enable Limits
-                { { 0xe0, 0x31, 0x6e, n1, n2, 0x00 }, 5 },   //12 Gotoxx
-                { { 0xe0, 0x10, 0x38, 0xF4, 0x00, 0x00 }, 4 }    //13 User
-        };
-	int i;
+	cmd.msg[3] = 0xf0 | ( ((pos << 2) & 0x0c) | (hiband ? 1 : 0) | (pol ? 2 : 0));
 
-	for (i = 0; i < DISEQC_X; ++i)
+	LOGL(3, "send_diseqc fd %d, pos = %d, pol = %d, hiband = %d, diseqc => %02x %02x %02x %02x %02x",
+                  fd, pos, pol, hiband, cmd.msg[0], cmd.msg[1], cmd.msg[2], cmd.msg[3], cmd.msg[4]);
+
+	
+	if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
+		LOG("send_diseqc: FE_SET_TONE failed for fd %d: %s", fd, strerror(errno));
+	if (ioctl(fd, FE_SET_VOLTAGE, pol ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13) == -1)
+		LOG("send_diseqc: FE_SET_VOLTAGE failed for fd %d: %s", fd, strerror(errno));
+
+	msleep(15);
+	if(*no_diseqc == 0)
 	{
-		usleep (15 * 1000);
-		if (err = ioctl (frontend_fd, FE_DISEQC_SEND_MASTER_CMD, &cmds[cmd]))
-			error ("rotor_command: FE_DISEQC_SEND_MASTER_CMD failed, err=%i\n",
-				err);
-	}
-	return err;
-}
-
-
-int
-rotate_rotor (int frontend_fd, int from_rotor_pos, int to_rotor_pos,
-int voltage_18, int hiband)
-{
-	/* Rotate a DiSEqC 1.2 rotor from position from_rotor_pos to position to_rotor_pos */
-	/* Uses Goto nn (command 9) */
-	float rotor_wait_time;		 //seconds
-	int err = 0;
-	float speed_13V = 1.5;		 //degrees per second
-	float speed_18V = 2.4;		 //degrees per second
-	float degreesmoved,
-		a1,
-		a2;
-
-	if (to_rotor_pos != 0)
-	{
-		if (from_rotor_pos != to_rotor_pos)
+		if (ioctl(fd, FE_DISEQC_SEND_MASTER_CMD, cmd) == -1)
 		{
-			info ("Moving rotor from position %i to position %i\n",
-				from_rotor_pos, to_rotor_pos);
-			if (from_rotor_pos == 0)
-			{
-								 // starting from unknown position
-				rotor_wait_time = 15;
-			}
-			else
-			{
-				a1 = rotor_angle (to_rotor_pos);
-				a2 = rotor_angle (from_rotor_pos);
-				degreesmoved = abs (a1 - a2);
-				if (degreesmoved > 180)
-					degreesmoved = 360 - degreesmoved;
-				rotor_wait_time = degreesmoved / speed_18V;
-			}
-			//switch tone off
-			if (err = ioctl (frontend_fd, FE_SET_TONE, SEC_TONE_OFF))
-				return err;
-			msleep (15);
-			// high voltage for high speed rotation
-			if (err = ioctl (frontend_fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18))
-				return err;
-			msleep (15);
-			err = rotor_command (frontend_fd, 9, to_rotor_pos, 0, 0);
-			if (err)
-			{
-				info ("Rotor move error!\n");
-			}
-			else
-			{
-				int i;
-
-				info ("Rotating");
-				for (i = 0; i < 10; i++)
-				{
-					usleep (rotor_wait_time * 100000);
-					info (".");
-				}
-				info ("completed.\n");
-			}
+			LOGL(3, "send_diseqc: FE_DISEQC_SEND_MASTER_CMD failed for fd %d: %s", fd, strerror(errno));	
+			*no_diseqc = 1;
 		}
-		else
-		{
-			info ("Rotor already at position %i\n", from_rotor_pos);
-		}
-		// correct tone and voltage
-		if (err =
-			ioctl (frontend_fd, FE_SET_TONE,
-			hiband ? SEC_TONE_ON : SEC_TONE_OFF))
-			return err;
-		msleep (15);
-		if (err = ioctl (frontend_fd, FE_SET_VOLTAGE, voltage_18))
-			return err;
-		msleep (15);
+		msleep(15);
+		if (ioctl(fd, FE_DISEQC_SEND_BURST, (pos & 1)?SEC_MINI_B : SEC_MINI_A ) == -1)
+			LOG("send_diseqc: FE_DISEQC_SEND_BURST failed for fd %d: %s", fd, strerror(errno));
+		msleep(15);
 	}
-	return err;
+	if (ioctl(fd, FE_SET_TONE, hiband ? SEC_TONE_ON : SEC_TONE_OFF) == -1)
+		LOG("send_diseqc: FE_SET_TONE failed for fd %d: %s", fd, strerror(errno));	
+		
+	return 0;
 }
-#endif
 
-int
-diseqc_send_msg (int fd, fe_sec_voltage_t v, struct diseqc_cmd **cmd,
-fe_sec_tone_mode_t t, fe_sec_mini_cmd_t b)
+int send_unicable(int fd, int freq, int pos, int pol, int hiband, int slot, int ufreq)
 {
-	int err;
+	struct dvb_diseqc_master_cmd cmd = {
+		{0xe0, 0x11, 0x5a, 0x00, 0x00}, 5
+	};
+	int t;
 
-	if ((err = ioctl (fd, FE_SET_TONE, SEC_TONE_OFF)))
-		return err;
+	t = (freq + ufreq + 2) / 4 - 350;
 
-	if ((err = ioctl (fd, FE_SET_VOLTAGE, v)))
-		return err;
+	cmd.msg[3] = ((t & 0x0300) >> 8) | 
+		(slot << 5) | (pos ? 0x10 : 0) | (hiband ? 4 : 0) | (pol ? 8 : 0);
+	cmd.msg[4] = t & 0xff;
 
-	msleep (15);
-
-	while (*cmd)
-	{
-		//            fprintf(stderr,"DiSEqC: %02x %02x %02x %02x %02x %02x\n",
-		//                    (*cmd)->cmd.msg[0], (*cmd)->cmd.msg[1],
-		//                    (*cmd)->cmd.msg[2], (*cmd)->cmd.msg[3],
-		//                    (*cmd)->cmd.msg[4], (*cmd)->cmd.msg[5]);
-
-		if ((err = ioctl (fd, FE_DISEQC_SEND_MASTER_CMD, &(*cmd)->cmd)))
-			return err;
-
-		//              msleep((*cmd)->wait);
-		cmd++;
-	}
-
-	//fprintf(stderr," %s ", v == SEC_VOLTAGE_13 ? "SEC_VOLTAGE_13" :
-	//    v == SEC_VOLTAGE_18 ? "SEC_VOLTAGE_18" : "???");
-
-	//fprintf(stderr," %s ", b == SEC_MINI_A ? "SEC_MINI_A" :
-	//    b == SEC_MINI_B ? "SEC_MINI_B" : "???");
-
-	//fprintf(stderr," %s\n", t == SEC_TONE_ON ? "SEC_TONE_ON" :
-	//    t == SEC_TONE_OFF ? "SEC_TONE_OFF" : "???");
-
-	msleep (15);
-
-	if ((err = ioctl (fd, FE_DISEQC_SEND_BURST, b)))
-		return err;
-
-	msleep (15);
-
-	err = ioctl (fd, FE_SET_TONE, t);
-
-	msleep (15);
-
-	return err;
+	if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
+		LOG("send_unicable: FE_SET_TONE failed for fd %d: %s", fd, strerror(errno));
+	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18) == -1)
+		LOG("send_unicable: FE_SET_VOLTAGE failed for fd %d: %s", fd, strerror(errno));
+	msleep(15);
+	if (ioctl(fd, FE_DISEQC_SEND_MASTER_CMD, &cmd) == -1)
+		LOG("send_unicable: FE_DISEQC_SEND_MASTER_CMD failed for fd %d: %s", fd, strerror(errno));
+	msleep(15);
+	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_13) == -1)
+		LOG("send_unicable: FE_SET_VOLTAGE failed for fd %d: %s", fd, strerror(errno));
+	
+	return ufreq * 1000;
 }
 
+int send_jess(int fd, int freq, int pos, int pol, int hiband, int slot, int ufreq)
+{
+	struct dvb_diseqc_master_cmd cmd = {
+		{0x70, 0x00, 0x00, 0x00, 0x00}, 4
+	};
+//	int t = (freq / 1000) - 100;
+	int t = freq - 100;
 
-int
-setup_switch (int frontend_fd, int switch_pos, int voltage_18, int hiband,
-int uncommitted_switch_pos)
+	cmd.msg[1] = slot << 3;
+	cmd.msg[1] |= ((t << 8) & 0x07);
+	cmd.msg[2] = (t & 0xff);
+	cmd.msg[3] = ((pos & 0x3f) << 2) | (pol ? 2 : 0) | (hiband ? 1 : 0);
+
+	if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
+		LOG("send_jess: FE_SET_TONE failed for fd %d: %s", fd, strerror(errno));
+	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18) == -1)
+		LOG("send_jess: FE_SET_VOLTAGE failed for fd %d: %s", fd, strerror(errno));
+	msleep(15);
+	if (ioctl(fd, FE_DISEQC_SEND_MASTER_CMD, &cmd) == -1)
+		LOG("send_jess: FE_DISEQC_SEND_MASTER_CMD failed for fd %d: %s", fd, strerror(errno));
+	msleep(15);
+	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_13) == -1)
+		LOG("send_jess: FE_SET_VOLTAGE failed for fd %d: %s", fd, strerror(errno));
+
+	return ufreq * 1000;	
+}
+
+int setup_switch (int frontend_fd, transponder *tp)
 {
 	int i;
 	int err;
-	struct diseqc_cmd *cmd[2] = { NULL, NULL };
-
-	i = uncommitted_switch_pos;
-
-	//      fprintf(stderr,"DiSEqC: uncommitted switch pos %i\n", uncommitted_switch_pos);
-	if (i < 0
-		|| i >=
-		(int) (sizeof (uncommitted_switch_cmds) / sizeof (struct diseqc_cmd)))
-		return -EINVAL;
-
-	cmd[0] = &uncommitted_switch_cmds[i];
-
-	diseqc_send_msg (frontend_fd,
-		voltage_18 ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13,
-		cmd,
-		hiband ? SEC_TONE_ON : SEC_TONE_OFF,
-		switch_pos % 2 ? SEC_MINI_B : SEC_MINI_A);
-
-	i = 4 * switch_pos + 2 * hiband + (voltage_18 ? 1 : 0);
-
-	//      fprintf(stderr,"DiSEqC: switch pos %i, %sV, %sband (index %d)\n",
-	//              switch_pos, voltage_18 ? "18" : "13", hiband ? "hi" : "lo", i);
-
-	if (i < 0
-		|| i >=
-		(int) (sizeof (committed_switch_cmds) / sizeof (struct diseqc_cmd)))
-		return -EINVAL;
-
-	cmd[0] = &committed_switch_cmds[i];
-
-	err = diseqc_send_msg (frontend_fd,
-		voltage_18 ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13,
-		cmd,
-		hiband ? SEC_TONE_ON : SEC_TONE_OFF,
-		switch_pos % 2 ? SEC_MINI_B : SEC_MINI_A);
-
-	return err;
+	int hiband = 0;
+	int diseqc = (tp->diseqc > 0)? tp->diseqc - 1: 0;
+	int freq = tp->freq;
+	int pol = (tp->pol - 1) & 1;
+	
+	if (freq < SLOF)
+	{
+		freq = (freq - LOF1);
+		hiband = 0;
+	} else {
+		freq = (freq - LOF2);
+		hiband = 1;
+	}
+	
+	if(tp->switch_type == SWITCH_UNICABLE)
+	{
+		freq = send_unicable(frontend_fd, freq / 1000, diseqc, pol, hiband, tp->uslot, tp->ufreq);
+	}else if(tp->switch_type == SWITCH_UNICABLE)
+	{
+		freq = send_unicable(frontend_fd, freq / 1000, diseqc, pol, hiband, tp->uslot, tp->ufreq);
+	}else
+	{
+		if(tp->old_pol != pol || tp->old_hiband != hiband || tp->old_diseqc != diseqc)
+			send_diseqc(frontend_fd, diseqc, pol, hiband, &tp->no_diseqc);
+		else 
+			LOGL(3, "Skip sending diseqc commands since the switch position doesn't need to be changed: pol %d, hiband %d, switch position %d", pol, hiband, diseqc);
+	}
+	
+	tp->old_pol = pol;
+	tp->old_hiband = hiband;
+	tp->old_diseqc = diseqc;
+	
+	return freq;
 }
 
 
@@ -465,15 +343,11 @@ int
 tune_it_s2 (int fd_frontend, transponder * tp)
 {
 	uint32_t if_freq = 0;
-	int hiband = 0;
-	int res;
+	int res, bclear, bpol;
 
-	static int uncommitted_switch_pos = 0;
 	struct dvb_frontend_event event;
 	
 	int freq = tp->freq;
-	int pol = tp->pol - 1;
-	int diseqc = (tp->diseqc == -1) ? 0 : tp->diseqc - 1;
 	struct dtv_properties *p;
 	struct dvb_frontend_event ev;
 
@@ -554,6 +428,7 @@ tune_it_s2 (int fd_frontend, transponder * tp)
 		.props = atsc_cmdargs
 	};
 	
+	bclear = getTick();
 	
 	if ((ioctl (fd_frontend, FE_SET_PROPERTY, &cmdseq_clear)) == -1)
 	{
@@ -561,38 +436,18 @@ tune_it_s2 (int fd_frontend, transponder * tp)
 		//        return -1;
 	}
 
-	/* Voltage-controlled switch */
-	hiband = 0;
-	
-	if (freq < SLOF)
-	{
-		if_freq = (freq - LOF1);
-		hiband = 0;
-	} else {
-		if_freq = (freq - LOF2);
-		hiband = 1;
-	}
-
 	
 	switch (tp->sys)
 	{
 		case SYS_DVBS:
 		case SYS_DVBS2:
-			
-			if(pol<0 || pol>1 )
-			{
-				LOG("polarization is invalid %d for frontend handle %d, setting to V", fd_frontend, pol);
-				pol = 0; // Vertical by default
-			}
-			
+	
 			if (tp->sys == SYS_DVBS2 && tp->mtype == 0)
 				tp->mtype = PSK_8;
 			if (tp->sys == SYS_DVBS && tp->mtype == 0)
 				tp->mtype = QPSK;
-//			LOG("Polarity=%d, diseqc=%d,hiband=%d",pol,diseqc,hiband);
-			setup_switch (fd_frontend,
-				diseqc, pol,
-				hiband, uncommitted_switch_pos);
+			bpol = getTick();
+			if_freq = setup_switch (fd_frontend, tp);
 			p = &dvbs2_cmdseq;
 			p->props[DELSYS].u.data = tp->sys;
 			p->props[MODULATION].u.data = tp->mtype;
@@ -603,10 +458,10 @@ tune_it_s2 (int fd_frontend, transponder * tp)
 			p->props[FEC_INNER].u.data = tp->fec;
 			p->props[FREQUENCY].u.data = if_freq;
 
-			LOG("tunning to %d(%d) pol: %s (%d) sr:%d fec:%s delsys:%s mod:%s rolloff:%s pilot:%s",
-				tp->freq, p->props[FREQUENCY].u.data, get_pol(tp->pol), pol, p->props[SYMBOL_RATE].u.data, fe_fec[p->props[FEC_INNER].u.data],
+			LOG("tunning to %d(%d) pol: %s (%d) sr:%d fec:%s delsys:%s mod:%s rolloff:%s pilot:%s, ts clear=%d, ts pol=%d",
+				tp->freq, p->props[FREQUENCY].u.data, get_pol(tp->pol), tp->pol, p->props[SYMBOL_RATE].u.data, fe_fec[p->props[FEC_INNER].u.data],
 				fe_delsys[p->props[DELSYS].u.data], fe_modulation[p->props[MODULATION].u.data],
-				fe_rolloff[p->props[ROLLOFF].u.data], fe_pilot[p->props[PILOT].u.data]);
+				fe_rolloff[p->props[ROLLOFF].u.data], fe_pilot[p->props[PILOT].u.data], bclear, bpol);
 				
 			break;
 
@@ -628,10 +483,10 @@ tune_it_s2 (int fd_frontend, transponder * tp)
 			p->props[TRANSMISSION].u.data = tp->tmode;
 			p->props[HIERARCHY].u.data = HIERARCHY_AUTO;
 			
-			LOG ("tunning to %d delsys: %s bw:%d inversion:%s mod:%s fec:%s fec_lp:%s guard:%s transmission: %s",
+			LOG ("tunning to %d delsys: %s bw:%d inversion:%s mod:%s fec:%s fec_lp:%s guard:%s transmission: %s, ts clear = %d",
 					p->props[FREQUENCY].u.data, fe_delsys[p->props[DELSYS].u.data], p->props[BANDWIDTH].u.data, fe_specinv[p->props[INVERSION].u.data],
 					fe_modulation[p->props[MODULATION].u.data], fe_fec[p->props[FEC_INNER].u.data], fe_fec[p->props[FEC_LP].u.data], 
-					fe_gi[p->props[GUARD].u.data], fe_tmode[p->props[TRANSMISSION].u.data])
+					fe_gi[p->props[GUARD].u.data], fe_tmode[p->props[TRANSMISSION].u.data], bclear)
 			
 			break;
 		case SYS_DVBC2:
@@ -646,8 +501,8 @@ tune_it_s2 (int fd_frontend, transponder * tp)
 			p->props[MODULATION].u.data = tp->mtype;
 			p->props[MIS].u.data = ( (tp->ds & 0xFF) << 8 ) | ( tp->plp & 0xFF); // valid for DD DVB-C2 devices
 
-			LOG("tunning to %d sr:%d specinv:%s delsys:%s mod:%s", p->props[FREQUENCY].u.data, tp->sr, fe_specinv[p->props[INVERSION].u.data], 
-					fe_delsys[p->props[DELSYS].u.data], fe_modulation[p->props[MODULATION].u.data]);
+			LOG("tunning to %d sr:%d specinv:%s delsys:%s mod:%s ts clear =%d", p->props[FREQUENCY].u.data, tp->sr, fe_specinv[p->props[INVERSION].u.data], 
+					fe_delsys[p->props[DELSYS].u.data], fe_modulation[p->props[MODULATION].u.data], bclear);
 			break;
 		
 		case SYS_ATSC:
@@ -660,8 +515,8 @@ tune_it_s2 (int fd_frontend, transponder * tp)
 			p->props[INVERSION].u.data = tp->inversion;
 			p->props[MODULATION].u.data = tp->mtype;
 
-			LOG("tunning to %d specinv:%s delsys:%s mod:%s", p->props[FREQUENCY].u.data, fe_specinv[p->props[INVERSION].u.data], 
-					fe_delsys[p->props[DELSYS].u.data], fe_modulation[p->props[MODULATION].u.data]);
+			LOG("tunning to %d specinv:%s delsys:%s mod:%s ts clear=%d", p->props[FREQUENCY].u.data, fe_specinv[p->props[INVERSION].u.data], 
+					fe_delsys[p->props[DELSYS].u.data], fe_modulation[p->props[MODULATION].u.data], bclear);
 			break;
 	}
 
@@ -906,29 +761,17 @@ detect_dvb_parameters (char *s, transponder * tp)
 void
 init_dvb_parameters (transponder * tp)
 {
-	tp->sys = 0;
-	tp->freq = 0;
+	memset(tp, 0, sizeof(transponder));
 	tp->inversion = INVERSION_AUTO;
-	tp->mod = 0;
 	tp->hprate = FEC_AUTO;
 	tp->tmode = TRANSMISSION_MODE_AUTO;
 	tp->gi = GUARD_INTERVAL_AUTO;
 	tp->bw = 8000000;
-	tp->sm = 0;
-	tp->t2id = 0;
-	tp->fe = 0;
 	tp->ro = ROLLOFF_AUTO;
 	tp->mtype = QPSK;
 	tp->plts = PILOT_AUTO;
 	tp->fec = FEC_AUTO;
-	tp->sr = 0;
-	tp->pol = 0;
-	tp->diseqc = 0;
-	tp->c2tft = 0;
-	tp->ds = 0;
-	tp->plp = 0;
-
-	tp->pids = tp->apids = tp->dpids = NULL;
+	tp->old_diseqc = tp->old_pol = tp->old_hiband = -1;
 }
 
 

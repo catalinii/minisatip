@@ -377,6 +377,10 @@ int tune (int aid, int sid)
 	ad->last_sort = getTick ();
 	if (sid == ad->master_sid && ad->do_tune)
 	{
+		ad->tp.switch_type = ad->switch_type;
+		ad->tp.uslot = ad->uslot;
+		ad->tp.ufreq = ad->ufreq;
+		
 		rv = tune_it_s2 (ad->fe, &ad->tp);
 		a[aid].status = 0;
 		a[aid].status_cnt = 0;
@@ -572,10 +576,10 @@ set_adapter_parameters (int aid, int sid, transponder * tp)
 		ad->do_tune = 1;
 	}
 								 // just 1 stream per adapter and pids= specified
-	if (ad->sid_cnt == 1 && tp->pids)
-	{
-		mark_pids_deleted (aid, -1, NULL);
-	}
+//	if (ad->sid_cnt == 1 && tp->pids)
+//	{
+//		mark_pids_deleted (aid, -1, NULL);
+//	}
 	copy_dvb_parameters (tp, &ad->tp);
 
 	if (ad->tp.pids)			 // pids can be specified in SETUP and then followed by a delpids in PLAY, make sure the behaviour is right
@@ -755,6 +759,33 @@ void enable_adapters(char *o)
 	
 		
 	
+}
+
+void set_unicable_adapters(char *o, int type)
+{
+	int i, la, a_id, slot, freq;
+	char buf[100], *arg[20], *sep1, *sep2;
+
+	strncpy(buf, o, sizeof(buf));
+	la = split(arg, buf, sizeof(arg), ',');
+	for (i=0; i<la; i++)
+	{
+		a_id=map_intd(arg[i], NULL, -1);
+		if(a_id < 0 || a_id >= MAX_ADAPTERS)
+			continue;
+		sep1 = strchr(arg[i], ':');
+		sep2 = strchr(arg[i], '-');
+		if( !sep1 || !sep2)
+			continue;
+		slot = map_intd(sep1 + 1, NULL, -1);
+		freq = map_intd(sep2 + 1, NULL, -1);
+		if( slot < 0 || freq < 0)
+			continue;
+		a[a_id].uslot = slot;
+		a[a_id].ufreq = freq;
+		a[a_id].switch_type = type;
+		LOG("Setting %s adapter %d slot %d freq %d", type==SWITCH_UNICABLE?"unicable":"jess", a_id, slot, freq);
+	}
 }
 
 

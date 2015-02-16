@@ -30,12 +30,14 @@ typedef struct struct_sockets
 #define TYPE_HTTP 3
 #define TYPE_RTSP 4
 #define TYPE_DVR 5
+#define TYPE_RTCP 6
 
 #define MAX_HOST 50
 
 char *setlocalip ();
 char *getlocalip ();
 int udp_connect (char *addr, int port, struct sockaddr_in *serv);
+int udp_bind_connect(char *src, int sport, char *dest, int dport, struct sockaddr_in *serv);
 char *get_sock_host(int fd);
 int get_sock_port(int fd);
 int sockets_add (int sock, struct sockaddr_in *sa, int sid, int type,

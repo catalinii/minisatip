@@ -25,6 +25,7 @@
 #include <sys/ucontext.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
 #include <sys/types.h>
 #include <time.h>
@@ -41,14 +42,14 @@
 #include "dvb.h"
 
 struct struct_opts opts;
-int rtp, rtpc;
+
 extern sockets s[MAX_SOCKS];
 int rtsp, http, si, si1, ssdp1;
 
 void
 usage ()
 {
-	printf ("minisatip [-f] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] [-p public_host] [-s rtp_port] [-a no] [-m mac] [-l] [-a X:Y:Z] [-e X-Y,Z]\n \
+	LOGL (0, "minisatip [-f] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] [-p public_host] [-s rtp_port] [-a no] [-m mac] [-l] [-a X:Y:Z] [-e X-Y,Z]\n \
 		-f foreground, otherwise run in background\n\
 		-r remote_rtp_host: send remote rtp to remote_rtp_host\n \
 		-d specify the device id (in case there are multiple SAT>IP servers in the network)\n \
@@ -62,6 +63,9 @@ usage ()
 		-b X: set the DVR buffer to X KB (default: %dKB)\n\
 		-l increases the verbosity (you can use multiple -l), logging to stdout in foreground mode or in /tmp/log when a daemon\n\
 		-p url: specify playlist url using X_SATIPM3U header \n\
+		-u unicable_string: defines the unicable adapters (A) and their slot (S) and frequency (F):\n\
+		\tThe format is: A1:S1-F1[,A2:S2-F2[,...]] \n\
+		-j jess_string: same format as unicable_string \n\
 		",
 		DVR_BUFFER / 1024);
 	exit (1);
@@ -94,9 +98,10 @@ set_options (int argc, char *argv[])
 	opts.bootid = 0;
 	opts.force_scan = 0;
 	opts.dvr = DVR_BUFFER;
+	opts.file_line = 0;
 	memset(opts.playlist, sizeof(opts.playlist), 0);
 	
-	while ((opt = getopt (argc, argv, "flr:a:t:d:w:p:shc:b:m:p:e:x:")) != -1)
+	while ((opt = getopt (argc, argv, "flr:a:t:d:w:p:shc:b:m:p:e:x:u:j:")) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
 		switch (opt)
@@ -191,6 +196,19 @@ set_options (int argc, char *argv[])
 				enable_adapters(optarg);
 				break;
 			}
+			
+			case UNICABLE_OPT:
+			{
+				set_unicable_adapters(optarg, SWITCH_UNICABLE);
+				break;
+			}
+
+			case JESS_OPT:
+			{
+				set_unicable_adapters(optarg, SWITCH_JESS);
+				break;
+			}
+
 		}
 	}
 	
@@ -214,7 +232,7 @@ hexDump (char *desc, void *addr, int len)
 
 	// Output description if given.
 	if (desc != NULL)
-		printf ("%s:\n", desc);
+		LOGL (0, "%s:\n", desc);
 
 	// Process every byte in the data.
 	for (i = -len; i < len; i++)
@@ -225,14 +243,14 @@ hexDump (char *desc, void *addr, int len)
 		{
 			// Just don't print ASCII for the zeroth line.
 			if (i != 0)
-				printf ("  %s\n", buff);
+				LOGL (0, "  %s\n", buff);
 
 			// Output the offset.
-			printf ("  %08x ", ((unsigned int) addr) + i);
+			LOGL (0, "  %08x ", ((unsigned int) addr) + i);
 		}
 
 		// Now the hex code for the specific character.
-		printf (" %02x", pc[i]);
+		LOGL (0, " %02x", pc[i]);
 
 		// And store a printable ASCII character for later.
 		if ((pc[i] < 0x20) || (pc[i] > 0x7e))
@@ -245,12 +263,12 @@ hexDump (char *desc, void *addr, int len)
 	// Pad out last line if not exactly 16 characters.
 	while ((i % 16) != 0)
 	{
-		printf ("   ");
+		LOGL (0, "   ");
 		i++;
 	}
 
 	// And print the final ASCII bit.
-	printf ("  %s\n", buff);
+	LOGL (0, "  %s\n", buff);
 }
 #endif
 
@@ -324,24 +342,24 @@ char *strip(char *s) // strip spaces from the front of a string
 }
 
 #define LR(s) {LOG("map_int returns %d",s);return s;}
-int map_int (char *s, char ** v)
+int map_intd (char *s, char ** v, int dv)
 {
 	int i, n = 0;
 	
 	if(s==NULL)
 	{
-		LOG_AND_RETURN(0,"map_int: s=>NULL, v=%p, %s %s", v, v?v[0]:"NULL", v?v[1]:"NULL");
+		LOG_AND_RETURN(dv, "map_int: s=>NULL, v=%p, %s %s", v, v?v[0]:"NULL", v?v[1]:"NULL");
 	}
 
 	s = strip(s);
 	
 	if(!*s)
-		LOG_AND_RETURN(0,"map_int: s is empty");
+		LOG_AND_RETURN(dv, "map_int: s is empty");
 	
 	if (v == NULL)
 	{
 		if(s[0]!='+' && s[0]!='-' && (s[0]<'0' || s[0]>'9'))
-			LOG_AND_RETURN(0,"map_int: s not a number: %s, v=%p, %s %s", s, v, v?v[0]:"NULL", v?v[1]:"NULL");
+			LOG_AND_RETURN(dv, "map_int: s not a number: %s, v=%p, %s %s", s, v, v?v[0]:"NULL", v?v[1]:"NULL");
 		return atoi (s);
 	}
 	for (i = 0; v[i]; i++)
@@ -381,8 +399,13 @@ map_float (char *s, int mul)
 	r = (int) (f * mul);
 	//      LOG("atof returned %.1f, mul = %d, result=%d",f,mul,r);
 	return r;
-
 }
+
+int map_int (char *s, char ** v)
+{
+	return map_intd(s,v,0);
+}
+
 
 char public[] = "Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN";
 
@@ -582,7 +605,7 @@ read_rtsp (sockets * s)
 						snprintf (buf, sizeof(buf), "Transport: RTP/AVP;unicast;destination=%s;source=%s;client_port=%d-%d;server_port=%d-%d\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d",
 							ra, get_sock_host (s->sock), ntohs (sid->sa.sin_port), ntohs (sid->sa.sin_port) + 1,
 //							opts.start_rtp, opts.start_rtp + 1, 
-							get_sock_port(sid->rsock), get_sock_port(sid->rsock) + 1,
+							get_sock_port(sid->rsock), get_sock_port(sid->rtcp),
 							get_session_id (s->sid), s_timeout, sid->sid + 1);
 					else
 						snprintf (buf, sizeof(buf), "Transport: RTP/AVP;multicast;destination=%s;port=%d-%d\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d",
@@ -669,7 +692,7 @@ read_http (sockets * s)
 		"<manufacturerURL>http://github.com/catalinii/minisatip</manufacturerURL>"
 		"<modelDescription>minisatip for Linux</modelDescription>"
 		"<modelName>minisatip</modelName>"
-		"<modelNumber>1.0</modelNumber>"
+		"<modelNumber>1.1</modelNumber>"
 		"<modelURL></modelURL>"
 		"<serialNumber>1</serialNumber>"
 		"<UDN>uuid:%s</UDN>"
@@ -698,7 +721,7 @@ read_http (sockets * s)
  		"<depth>24</depth>"
  		"<url>/icons/lr.jpg</url>"
  		"</icon></iconList>"
-		"<presentationURL>http://%s/</presentationURL>"
+		"<presentationURL>http://%s/</presentationURL>\r\n"
 		"<satip:X_SATIPCAP xmlns:satip=\"urn:ses-com:satip\">%s</satip:X_SATIPCAP>"
 		"%s"
 		"</device></root>";
@@ -836,7 +859,7 @@ ssdp_discovery (sockets * s)
 	{
 		sprintf (buf, reply, opts.disc_host, opts.http_host, nt[i] + 2, VERSION, uuid, i==1?"":nt[i], opts.bootid, opts.device_id);
 		salen = sizeof (ssdp_sa);	
-		LOG("Discovery packet %d:\n%s", i+1, buf);
+		LOGL(3, "Discovery packet %d:\n%s", i+1, buf);
 		sendto (s->sock, buf, strlen (buf), MSG_NOSIGNAL,
 			(const struct sockaddr *) &ssdp_sa, salen);
 	}
@@ -876,10 +899,14 @@ ssdp_reply (sockets * s)
 	salen = sizeof (s->sa);
 	ruuid = strcasestr(s->buf, "uuid:");	
 	if( ruuid && strncmp(uuid, strip(ruuid+5), strlen(uuid)) == 0)
-		LOG_AND_RETURN(0, "Dropping packet from the same UUID as mine (from %s:%d)", inet_ntoa(s->sa.sin_addr), ntohs(s->sa.sin_port));		
+	{
+		LOGL(3, "Dropping packet from the same UUID as mine (from %s:%d)", inet_ntoa(s->sa.sin_addr), ntohs(s->sa.sin_port));		
+		return 0;
+	}
 
 	// not my uuid
-	LOG("Received SSDP packet from %s:%d -> handle %d\n%s", inet_ntoa(s->sa.sin_addr), ntohs(s->sa.sin_port), s->sock, s->buf);
+	LOG("Received SSDP packet from %s:%d -> handle %d", inet_ntoa(s->sa.sin_addr), ntohs(s->sa.sin_port), s->sock);
+	LOGL(3, "%s", s->buf);
 	
 	if (strncasecmp (s->buf, "NOTIFY", 6) == 0)
 	{
@@ -910,8 +937,9 @@ ssdp_reply (sockets * s)
 	
 	sprintf (buf, reply, get_current_timestamp (), opts.http_host, VERSION, uuid, opts.bootid, did);
 	
-	LOG ("ssdp_reply fd: %d -> %s:%d, bootid: %d deviceid: %d http: %s\n%s", ssdp, inet_ntoa (s->sa.sin_addr), ntohs(s->sa.sin_port), opts.bootid, did, opts.http_host, buf);
+	LOG ("ssdp_reply fd: %d -> %s:%d, bootid: %d deviceid: %d http: %s", ssdp, inet_ntoa (s->sa.sin_addr), ntohs(s->sa.sin_port), opts.bootid, did, opts.http_host);
 								 //use ssdp (unicast) even if received to multicast address
+	LOGL (3, "%s", buf);
 	sendto (ssdp, buf, strlen (buf), MSG_NOSIGNAL, (const struct sockaddr *) &s->sa, salen);
 	return 0;
 }
@@ -947,7 +975,7 @@ main (int argc, char *argv[])
 	set_options (argc, argv);
 	if (opts.daemon)
 		becomeDaemon ();
-	printf("Starting minisatip version %s, dvbapi version: %04X\n",VERSION, DVBAPIVERSION);
+	LOGL(0, "Starting minisatip version %s, compiled with dvbapi version: %04X",VERSION, DVBAPIVERSION);
 	readBootID();
 	if ((ssdp = udp_bind (NULL, 1900)) < 1)
 		FAIL ("SSDP: Could not bind on udp port 1900");
@@ -957,10 +985,6 @@ main (int argc, char *argv[])
 		FAIL ("RTSP: Could not listen on port 554");
 	if ((http = tcp_listen (NULL, opts.http_port)) < 1)
 		FAIL ("Could not listen on http port %d", opts.http_port);
-	if ((rtp = udp_bind (NULL, opts.start_rtp)) < 1)
-		FAIL ("SSDP: Could not bind on rtp port %d", opts.start_rtp);
-	if ((rtpc = udp_bind (NULL, opts.start_rtp + 1)) < 1)
-		FAIL ("SSDP: Could not listen on rtpc port %d", opts.start_rtp + 1);
 
 	si =
 		sockets_add (ssdp, NULL, -1, TYPE_UDP, (socket_action) ssdp_reply, NULL,
@@ -979,11 +1003,8 @@ main (int argc, char *argv[])
 	if (0 > sockets_add (http, NULL, -1, TYPE_SERVER, (socket_action) new_http,
 		NULL, (socket_action) close_http))
 		FAIL ("sockets_add failed for http");
-		
-	if (0 > sockets_add(rtpc, NULL, -1, TYPE_UDP, (socket_action )rtcp_confirm, NULL, NULL)) // read rtcp
-		LOG("RTCP socket_add failed");
 	
-	printf ("Initializing with %d devices\n", init_hw ());
+	LOGL (0, "Initializing with %d devices", init_hw ());
 	select_and_execute ();
 	free_all ();
 	return 0;
@@ -1010,16 +1031,15 @@ print_trace (void)
 
 	size = backtrace (array, 10);
 
-	printf ("Obtained %zd stack frames.\n", size);
+	LOGL (0, "Obtained %zd stack frames.\n", size);
 
 	for (i = 0; i < size; i++)
 	{
-		printf("%p : ", array[i]);
-		fflush(stdout);
-		if(addr2line(pn, array[i])) printf("\n");
+		LOGL(0, "%p : ", array[i]);		
+		if(addr2line(pn, array[i])) LOGL(0, "\n");
 	}
 	#else
-	printf( " No backtrace defined\n");
+	LOGL(0, " No backtrace defined\n");
 	#endif
 }
 
@@ -1039,12 +1059,12 @@ posix_signal_handler (int sig, siginfo_t * siginfo, ucontext_t * ctx)
 	sp = ctx->uc_mcontext.gregs[29];
 	ip = ctx->uc_mcontext.pc;
 	#endif
-	printf
-		("RECEIVED SIGNAL %d - SP=%lX IP=%lX main=%lX read_dmx=%lX clock_gettime=%lX\n",
+	LOGL (0,
+		"RECEIVED SIGNAL %d - SP=%lX IP=%lX main=%lX read_dmx=%lX clock_gettime=%lX\n",
 		sig, (long unsigned int) sp, (long unsigned int) ip,
 		(long unsigned int) main, (long unsigned int) read_dmx,
 		(long unsigned int) clock_gettime);
-	fflush(stdout);
+	
 	#ifdef __mips__
 	hexDump ("Stack dump: ", (void *)sp, 128);
 	#endif
@@ -1115,8 +1135,7 @@ void *
 mymalloc (int a, char *f, int l)
 {
 	void *x = malloc (a);
-	printf ("%s:%d allocation_wrapper malloc allocated %d bytes at %p\n", f, l, a, x);
-	fflush (stdout);
+	LOG ("%s:%d allocation_wrapper malloc allocated %d bytes at %p", f, l, a, x);	
 	return x;
 }
 
@@ -1124,11 +1143,8 @@ mymalloc (int a, char *f, int l)
 void
 myfree (void *x, char *f, int l)
 {
-	printf ("%s:%d allocation_wrapper free called with argument %p", f, l, x);
-	fflush (stdout);
-	free (x);
-	puts (" - done free");
-	fflush (stdout);
+	LOG ("%s:%d allocation_wrapper free called with argument %p", f, l, x);
+	free (x);	
 }
 
 
@@ -1181,4 +1197,50 @@ int readfile(char *fn,char *buf,int *len)
 	buf[nl] = 0;
 	
 	return nl;
+}
+
+
+void _log(int level, char * file, int line, const char *fmt, ...) {
+    va_list arg;
+	int len, len1, both;
+	static int idx, times;
+	static char output[2][2000];
+    /* Check if the message should be logged */
+    if (opts.log < level)
+        return;
+	
+	idx = 1 - idx;
+	if(idx > 1)
+		idx = 1;
+	else if ( idx < 0)
+		idx = 0;
+	if(opts.file_line)
+		len1 = snprintf(output[idx], sizeof(output[0]), "[%s] %s:%d: ", get_current_timestamp_log(), file, line);
+	else	
+		len1 = snprintf(output[idx], sizeof(output[0]), "[%s]: ", get_current_timestamp_log());
+    /* Write the error message */
+	len = len1;
+	both = 0;
+    va_start(arg, fmt);
+    len += vsnprintf(output[idx] + len, sizeof(output[0]) - len, fmt, arg);
+    va_end(arg);
+	
+	if(strcmp(output[idx] + len1, output[1 - idx] + len1) == 0)
+		times++;
+	else
+	{
+		if(times>0)
+		{	
+			both = 1;
+			snprintf(output[1 - idx], sizeof(output[0]), "Message repeated %d times", times);
+		}
+		times = 0;
+	}
+	
+	if(both){
+		puts(output[1-idx]);
+		both = 0;
+	}
+	if(times==0)puts(output[idx]);
+	fflush(stdout);
 }

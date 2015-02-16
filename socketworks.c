@@ -127,6 +127,20 @@ udp_bind (char *addr, int port)
 	return sock;
 }
 
+int udp_bind_connect(char *src, int sport, char *dest, int dport, struct sockaddr_in *serv)
+{
+	int sock;
+	sock = udp_bind( src, sport);
+	if(sock<0)
+		return sock;
+	fill_sockaddr(serv, dest, dport);
+	if (connect (sock, (struct sockaddr *) serv, sizeof (*serv)) < 0)
+	{
+		LOG ("udp_bind_connect: failed: bind(): %s", strerror (errno));
+		return -1;
+	}
+	return sock;
+}
 
 int
 udp_connect (char *addr, int port, struct sockaddr_in *serv)
@@ -422,6 +436,10 @@ select_and_execute ()
 							err_str = "EOVERFLOW";
 						else
 							err_str = strerror (err);
+						
+						if(ss->type == TYPE_RTCP)
+							continue; // do not close the RTCP socket, we might get some errors here but ignore them
+						
 						LOG
 							("select_and_execute[%d]: %s on socket %d (sid:%d) from %s:%d - type %s failure %d:%s",
 							i, rlen < 0 ? "Error" : "Close", ss->sock, ss->sid, 

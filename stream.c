@@ -25,7 +25,6 @@
 #include "adapter.h"
 
 extern struct struct_opts opts;
-extern int rtp, rtpc;
 streams st[MAX_STREAMS];
 unsigned init_tick, theTick;
 
@@ -285,9 +284,25 @@ int decode_transport (sockets * s, char *arg, char *default_rtp, int start_rtp)
 	if(sid->type == 0)
 	{
 		int i;
+		struct sockaddr_in sa;
+		
 		sid->type = STREAM_RTSP_UDP;
-		if((sid->rsock = udp_connect (p.dest, p.port, &sid->sa)) < 0)
-			LOG_AND_RETURN (-1, "decode_transport failed: UDP connection to %s:%d failed", p.dest, p.port);
+		if(sid->rtcp_sock > 0 || sid->rtcp)
+		{
+			sockets_del(sid->rtcp_sock);
+			sid->rtcp_sock = -1;
+			sid->rtcp = -1;
+		}			
+	
+		if((sid->rsock = udp_bind_connect (NULL, opts.start_rtp + (sid->sid * 2), p.dest, p.port, &sid->sa)) < 0)
+			LOG_AND_RETURN (-1, "decode_transport failed: UDP connection on rtp port to %s:%d failed", p.dest, p.port);
+			
+		if ((sid->rtcp = udp_bind_connect (NULL, opts.start_rtp + (sid->sid * 2) +1, p.dest, p.port + 1, &sa)) < 1)
+			LOG_AND_RETURN (-1, "decode_transport failed: UDP connection on rtcp port to %s:%d failed", p.dest, p.port+1);
+			
+		if ((sid->rtcp_sock = sockets_add(sid->rtcp, NULL, sid->sid, TYPE_RTCP, (socket_action )rtcp_confirm, NULL, NULL)) < 0) // read rtcp
+			LOG_AND_RETURN(-1, "RTCP socket_add failed");
+		
 		for(i=0;i<MAX_STREAMS;i++)
 			if(st[i].enabled && i!=sid->sid && st[i].sa.sin_port  == sid->sa.sin_port && st[i].sa.sin_addr.s_addr == sid->sa.sin_addr.s_addr)
 			{
@@ -324,7 +339,7 @@ streams_add ()
 	memset (&st[i].iov, 0 , sizeof(st[i].iiov));
 	init_dvb_parameters (&st[i].tp);
 	st[i].len = 0;
-	st[i].seq = 0; // set the sequence to 0 for testing purposes - it should be random 
+//	st[i].seq = 0; // set the sequence to 0 for testing purposes - it should be random 
     st[i].ssrc = random();
 	st[i].timeout = opts.timeout_sec;
 	st[i].wtime = st[i].rtcp_wtime = getTick ();
@@ -370,6 +385,13 @@ close_stream (int i)
 	sid->adapter = -1;
 	if ( sid->type == STREAM_RTSP_UDP && sid->rsock > 0) close (sid->rsock);
 	sid->rsock = -1;
+	if(sid->rtcp_sock > 0 || sid->rtcp > 0 )
+	{
+		sockets_del(sid->rtcp_sock);
+		sid->rtcp_sock = -1;
+		sid->rtcp = -1;
+	}
+
 	if (ad >= 0)
 		close_adapter_for_stream (i, ad);
 	sockets_del_for_sid (i);
@@ -457,6 +479,13 @@ send_rtp (streams * sid, struct iovec *iov, int liov)
 		sid->rsock_err ++;
 		LOG("write to handle %d failed: %d, %s, socket err %d %s", sid->rsock, rv, strerror(errno), sid->rsock_err, sid->rsock_err>5?"socket blacklisted":"");		
 	} else sid->rsock_err = 0;
+	
+	if(total_len > 0 && sid->start_streaming == 0)
+	{
+		sid->start_streaming = 1;
+		LOG("Start streaming for stream %d, len %d to handle %d => %s:%d", sid->sid, total_len, sid->rsock, inet_ntoa(sid->sa.sin_addr), ntohs(sid->sa.sin_port));
+	}
+	
 	return rv;
 }
 
@@ -525,11 +554,8 @@ send_rtcp (int s_id, int ctime)
 	rtcp[65] = 0;
 	copy16( rtcp, 66, la);
 	memcpy (rtcp+68, a, la+4);
-	tmp_port = sid->sa.sin_port;
-	sid->sa.sin_port = htons (ntohs (sid->sa.sin_port) + 1);
 	if ( sid->type == STREAM_RTSP_UDP)
-		rv = sendto (rtpc, rtcp, len + 52, MSG_NOSIGNAL,
-			(const struct sockaddr *) &sid->sa, sizeof (sid->sa));
+		rv = send (sid->rtcp, rtcp, len + 52, MSG_NOSIGNAL);			
 	else 
 	{
 		rtcp_buf[0] = 0x24;
@@ -541,7 +567,6 @@ send_rtcp (int s_id, int ctime)
 //		sid->rsock_err = 0;
 //	else	
 //		sid->rsock_err ++;
-	sid->sa.sin_port = tmp_port;
 	sid->rtcp_wtime = ctime;
 	sid->sp = 0;
 	sid->sb = 0;
@@ -616,8 +641,8 @@ read_dmx (sockets * s)
 		return 0;
 	}
 	//LOG("read_dmx called -> %d bytes read ",s->rlen);
-								 // flush buffers every 500ms
-	if (s->rlen < s->lbuf && s->rtime - ad->rtime < 500)
+								 // flush buffers every 50ms
+	if (s->rlen < s->lbuf && s->rtime - ad->rtime < 50)
 		return 0;				 // the buffer is not full, read more
 	if (s->rlen > s->lbuf)
 		LOG ("Buffer overrun %d %d", s->rlen, s->lbuf);
@@ -628,9 +653,6 @@ read_dmx (sockets * s)
 	if (cnt > 0 && cnt % 100 == 0)
 		LOG ("Reading max size for the last %d buffers", cnt);
 								 // we have just 1 stream, do not check the pids, send everything to the destination
-	if ( s->rtime - ad->rtime >= 500)
-		LOG("Adapter %d, No write for more than 500ms, flushing DMX buffer (rlen %d)", s->sid, rlen);
-
 	if (ad->sid_cnt == 1 && ad->master_sid >= 0 && opts.log < 2)
 	{
 		sid = get_sid(ad->master_sid);
@@ -866,12 +888,14 @@ int find_session_id(int id)
 int rtcp_confirm(sockets *s)
 {
 	int i;
+	streams *sid;
 //	LOG("rtcp_confirm called for from %s:%d", inet_ntoa(s->sa.sin_addr), ntohs(s->sa.sin_port));
 		// checking just the ports and the destination
-	for (i=0; i<MAX_STREAMS;i++)
-		if(st[i].enabled && ntohs(s->sa.sin_port) == ntohs(st[i].sa.sin_port)+1 && s->sa.sin_addr.s_addr == st[i].sa.sin_addr.s_addr)
-		{  
-			LOG("Acknowledging stream %d via rtcp packet", i);
-			st[i].rtime = s->rtime;
-		}
+	sid = get_sid(s->sid);
+	if(sid)
+	{
+		LOG("Acknowledging stream %d via rtcp packet", i);
+		sid->rtime = s->rtime;
+	}
+	return 0;
 }

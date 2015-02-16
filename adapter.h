@@ -19,6 +19,7 @@ typedef struct struct_pid
 	int cnt;
 	unsigned char cc; // continuity
 } pid;
+
 typedef struct struct_adapter
 {
 	int enabled;
@@ -41,7 +42,11 @@ typedef struct struct_adapter
 	fe_status_t status;
 	uint32_t ber;
 	uint16_t strength, snr, max_strength, max_snr;
+	int switch_type;
+	int uslot; // unicable/jess slot
+	int ufreq; // unicable/jess frequency	
 } adapter;
+
 int init_hw ();
 int getS2Adapters ();
 int getTAdapters ();
@@ -59,6 +64,7 @@ char *describe_adapter (int sid, int aid);
 void dump_pids (int aid);
 void sort_pids (int aid);
 void enable_adapters(char *o);
+void set_unicable_adapters(char *o, int type);
 
 int delsys_match(adapter *ad, int del_sys);
 
