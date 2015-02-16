@@ -27,6 +27,7 @@
 extern struct struct_opts opts;
 streams st[MAX_STREAMS];
 unsigned init_tick, theTick;
+uint64_t ntime;
 
 uint32_t
 getTick ()
@@ -36,6 +37,7 @@ getTick ()
 	clock_gettime (CLOCK_REALTIME, &ts);
 	theTick = ts.tv_nsec / 1000000;
 	theTick += ts.tv_sec * 1000;
+	ntime = ts.tv_sec * 1000000 + ts.tv_nsec;
 	if (init_tick == 0)
 		init_tick = theTick;
 	return theTick - init_tick;
@@ -575,6 +577,7 @@ send_rtcp (int s_id, int ctime)
 
 
 extern int bw;
+extern uint32_t nsecs, reads;
 void
 flush_streamb (streams * sid, char *buf, int rlen, int ctime)
 {
@@ -618,15 +621,14 @@ read_dmx (sockets * s)
 {
 	void *min,
 		*max;
-	int i,
-		j,
-		dp;
+	int i,  j, dp;
 	static int cnt;
 	streams *sid;
 	adapter *ad;
 	unsigned char sids;
 	pid *p;
 	int pid;
+	uint64_t stime;
 
 	if (s->rlen % DVB_FRAME != 0)
 		s->rlen = ((int) s->rlen / DVB_FRAME) * DVB_FRAME;
@@ -650,6 +652,9 @@ read_dmx (sockets * s)
 	int rlen = s->rlen;
 	ad->rtime = s->rtime;
 	s->rlen = 0;
+	getTick();
+	stime = ntime;
+	
 	if (cnt > 0 && cnt % 100 == 0)
 		LOG ("Reading max size for the last %d buffers", cnt);
 								 // we have just 1 stream, do not check the pids, send everything to the destination
@@ -745,7 +750,9 @@ read_dmx (sockets * s)
 			sort_pids (s->sid);
 		}
 	}
-
+	getTick();
+	nsecs += ntime - stime;
+	reads ++;
 	//      if(!found)LOG("pid not found = %d -> 1:%d 2:%d 1&1f=%d",pid,s->buf[1],s->buf[2],s->buf[1]&0x1f);
 	//      LOG("done send stream");
 	return 0;
@@ -887,14 +894,13 @@ int find_session_id(int id)
 
 int rtcp_confirm(sockets *s)
 {
-	int i;
 	streams *sid;
 //	LOG("rtcp_confirm called for from %s:%d", inet_ntoa(s->sa.sin_addr), ntohs(s->sa.sin_port));
 		// checking just the ports and the destination
 	sid = get_sid(s->sid);
 	if(sid)
 	{
-		LOG("Acknowledging stream %d via rtcp packet", i);
+		LOG("Acknowledging stream %d via rtcp packet", s->sid);
 		sid->rtime = s->rtime;
 	}
 	return 0;

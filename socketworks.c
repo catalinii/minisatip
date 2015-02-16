@@ -317,16 +317,10 @@ sockets_del (int sock)
 }
 
 
-int run_loop,
-it = 0,
-c_time;
-int bw,
-bwtt,
-bwnotify;
-unsigned long int tbwhd,
-tbwsd,
-tbwot,
-tbw;
+int run_loop, it = 0, c_time;
+int bw, bwtt, bwnotify;
+unsigned long int tbwhd, tbwsd, tbwot, tbw;
+uint32_t nsecs, reads;
 
 int
 select_and_execute ()
@@ -389,11 +383,13 @@ select_and_execute ()
 							tbwot += bw;
 						if (bw > 2000)
 							LOG
-								("bandwidth %dKB/s, total bandwidth: %ld MB, HD: %ld MB, SD: %ld MB, Other: %ld MB, notify: %d",
-								(int) bw / 1024, tbw / 1024576, tbwhd / 1024576,
-								tbwsd / 1024576, tbwot / 1024576, bwnotify);
+								("BW %dKB/s, Total BW: %ld MB, HD: %ld MB, SD: %ld MB, Other: %ld MB, ns/read %d, r: %d, tt: %d ms, n: %d",
+								(int) bw / 1024, tbw / 1024576, tbwhd / 1024576, tbwsd / 1024576, tbwot / 1024576, 
+								nsecs/reads, reads, nsecs / 1000000, bwnotify);
 						bw = 0;
 						bwnotify = 0;
+						nsecs = 0;
+						reads = 0;
 					}
 					if (opts.bw > 0 && bw > opts.bw && ss->type == TYPE_DVR)
 					{
