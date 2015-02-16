@@ -320,9 +320,9 @@ int setup_switch (int frontend_fd, transponder *tp)
 	if(tp->switch_type == SWITCH_UNICABLE)
 	{
 		freq = send_unicable(frontend_fd, freq / 1000, diseqc, pol, hiband, tp->uslot, tp->ufreq);
-	}else if(tp->switch_type == SWITCH_UNICABLE)
+	}else if(tp->switch_type == SWITCH_JESS)
 	{
-		freq = send_unicable(frontend_fd, freq / 1000, diseqc, pol, hiband, tp->uslot, tp->ufreq);
+		freq = send_jess(frontend_fd, freq / 1000, diseqc, pol, hiband, tp->uslot, tp->ufreq);
 	}else
 	{
 		if(tp->old_pol != pol || tp->old_hiband != hiband || tp->old_diseqc != diseqc)
