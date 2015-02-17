@@ -29,14 +29,14 @@
 #define SYMBOL_RATE 4
 #define BANDWIDTH 4
 #define FEC_INNER 5
+#define DSPLPC2 5
 #define FEC_LP 6
 #define GUARD 7
 #define PILOT 7
 #define TRANSMISSION 8
 #define ROLLOFF 8
-#define MIS 5
-#define MIS 5
 #define HIERARCHY 9
+#define DSPLPT2 10
 
 #ifndef DTV_STREAM_ID
 #define DTV_STREAM_ID           42

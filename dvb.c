@@ -394,6 +394,7 @@ tune_it_s2 (int fd_frontend, transponder * tp)
 		{.cmd = DTV_GUARD_INTERVAL,.u.data = 0},
 		{.cmd = DTV_TRANSMISSION_MODE,.u.data = 0},
 		{.cmd = DTV_HIERARCHY,.u.data = HIERARCHY_AUTO},
+		{.cmd = DTV_STREAM_ID,.u.data = 0},
 		{.cmd = DTV_TUNE},
 	};
 	static struct dtv_properties dvbt_cmdseq =
@@ -484,6 +485,7 @@ tune_it_s2 (int fd_frontend, transponder * tp)
 			p->props[GUARD].u.data = tp->gi;
 			p->props[TRANSMISSION].u.data = tp->tmode;
 			p->props[HIERARCHY].u.data = HIERARCHY_AUTO;
+			p->props[DSPLPT2].u.data = ((tp->ds & 0xFF) << 8 ) | ( tp->plp & 0xFF);
 			
 			LOG ("tuning to %d delsys: %s bw:%d inversion:%s mod:%s fec:%s fec_lp:%s guard:%s transmission: %s, ts clear = %d",
 					p->props[FREQUENCY].u.data, fe_delsys[p->props[DELSYS].u.data], p->props[BANDWIDTH].u.data, fe_specinv[p->props[INVERSION].u.data],
@@ -501,7 +503,7 @@ tune_it_s2 (int fd_frontend, transponder * tp)
 			p->props[INVERSION].u.data = tp->inversion;
 			p->props[SYMBOL_RATE].u.data = tp->sr;
 			p->props[MODULATION].u.data = tp->mtype;
-			p->props[MIS].u.data = ( (tp->ds & 0xFF) << 8 ) | ( tp->plp & 0xFF); // valid for DD DVB-C2 devices
+			p->props[DSPLPC2].u.data = ( (tp->ds & 0xFF) << 8 ) | ( tp->plp & 0xFF); // valid for DD DVB-C2 devices
 
 			LOG("tuning to %d sr:%d specinv:%s delsys:%s mod:%s ts clear =%d", p->props[FREQUENCY].u.data, tp->sr, fe_specinv[p->props[INVERSION].u.data], 
 					fe_delsys[p->props[DELSYS].u.data], fe_modulation[p->props[MODULATION].u.data], bclear);
@@ -728,13 +730,13 @@ detect_dvb_parameters (char *s, transponder * tp)
 		if (strncmp ("ds=", arg[i], 3) == 0)
 			tp->ds = map_int (arg[i] + 3, NULL);
 		if (strncmp ("plp=", arg[i], 4) == 0)
-			tp->plp = map_int (arg[i] + 8, NULL);
+			tp->plp = map_int (arg[i] + 4, NULL);
 			
 		if (strncmp ("pids=", arg[i], 5) == 0)
 			tp->pids = arg[i] + 5;
-		if (strncmp ("addpids=", arg[i], 6) == 0)
+		if (strncmp ("addpids=", arg[i], 8) == 0)
 			tp->apids = arg[i] + 8;
-		if (strncmp ("delpids=", arg[i], 6) == 0)
+		if (strncmp ("delpids=", arg[i], 8) == 0)
 			tp->dpids = arg[i] + 8;
 	}
 	

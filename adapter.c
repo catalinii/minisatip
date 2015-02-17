@@ -568,7 +568,7 @@ set_adapter_parameters (int aid, int sid, transponder * tp)
 	if ((sid != ad->master_sid) && (tp->freq != ad->tp.freq))
 		return -1;				 // slave sid requesting to tune to a different frequency
 	ad->do_tune = 0;
-	if (tp->freq != ad->tp.freq
+	if (tp->freq != ad->tp.freq || tp->plp != ad->tp.plp
 		|| (tp->pol > 0 && tp->pol != ad->tp.pol) || (tp->diseqc != ad->tp.diseqc) || (tp->sr>1000 && tp->sr != ad->tp.sr) || (tp->mtype > 0 && tp->mtype != ad->tp.mtype))
 	{
 		mark_pids_deleted (aid, -1, NULL);
