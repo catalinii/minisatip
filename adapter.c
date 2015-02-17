@@ -264,17 +264,17 @@ get_free_adapter (int freq, int pol, int msys, int src)
 	int i;
 	int omsys = msys;
 
-	i = (src >= 0) ? src : 0;
-	LOG ("get free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d f:%d pol=%d\n", src, i,
+	i = (src > 0) ? src - 1 : 0;
+	LOG ("get free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d f:%d pol=%d", src - 1, i,
 		a[i].enabled, a[i].master_sid, a[i].sid_cnt, a[i].tp.freq, a[i].tp.pol);
-	if (src >= 0)
+	if (src > 0)
 	{
-		if (!a[src].enabled)
+		if (a[i].enabled)
 		{
-			if (a[src].sid_cnt == 0)
-				return src;
-			if (a[src].tp.freq == freq && delsys_match(&a[src], msys))
-				return src;
+			if (a[i].sid_cnt == 0 && delsys_match(&a[i], msys))
+				return i;
+			if (a[i].tp.freq == freq && delsys_match(&a[i], msys))
+				return i;
 		}
 	}
 	for (i = 0; i < MAX_ADAPTERS; i++)
@@ -627,14 +627,21 @@ describe_adapter (int sid, int aid)
 	int i = 0, x, ts, j;
 	transponder *t;
 	adapter *ad;
+	streams *ss;
+	int status = 0, strength = 0, snr = 0; 
 
 	if (!(ad = get_adapter(aid)))
-		return "";
-	t = &ad->tp;
+	{
+		aid = 0;
+		ss = get_sid(sid);
+		if(!ss)
+			return "";
+		t = &ss->tp;
+	} else t = &ad->tp;
 	memset (dad, 0, sizeof (dad));
 	x = 0;
 								 // do just max 3 signal check 1s after tune
-	if ((ad->status == 0 && ad->status_cnt<8 && ad->status_cnt++>4) || opts.force_scan)
+	if (ad && ((ad->status == 0 && ad->status_cnt<8 && ad->status_cnt++>4) || opts.force_scan))
 	{
 		int new_gs = 1;
 		ts = getTick ();
@@ -651,39 +658,48 @@ describe_adapter (int sid, int aid)
 		if (ad->max_snr <= ad->snr) ad->max_snr = (ad->snr>0)?ad->snr:1;
 		LOG ("get_signal%s took %d ms for adapter %d handle %d (status: %d, ber: %d, strength:%d, snr: %d, max_strength: %d, max_snr: %d %d)",
 			new_gs?"":"_new", getTick () - ts, aid, ad->fe, ad->status, ad->ber, ad->strength, ad->snr, ad->max_strength, ad->max_snr, opts.force_scan);
-		ad->status = (ad->status & FE_HAS_LOCK) > 0;
+		status = (ad->status & FE_HAS_LOCK) > 0;
 		if(new_gs)
 		{
 			ad->strength = ad->strength * 255 / ad->max_strength;
 			ad->snr = ad->snr * 15 / ad->max_snr;
 		}
+		strength = ad->strength;
+		snr = ad->snr;
 	}
 	if (t->sys == SYS_DVBS || t->sys == SYS_DVBS2)
 		sprintf (dad, "ver=1.0;src=%d;tuner=%d,%d,%d,%d,%d,%s,%s,%s,%s,%s,%d,%s;pids=",
-			t->diseqc, aid, ad->strength, ad->status, ad->snr, t->freq / 1000, get_pol(t->pol), get_modulation(t->mtype), 
+			t->diseqc, aid, strength, status, snr, t->freq / 1000, get_pol(t->pol), get_modulation(t->mtype), 
 			get_pilot(t->plts), get_rolloff(t->ro), get_delsys(t->sys), t->sr / 1000, get_fec(t->fec));
 	else if (t->sys == SYS_DVBT || t->sys == SYS_DVBT2)
 		sprintf (dad, "ver=1.1;src=%d;tuner=%d,%d,%d,%d,%.2f,%d,%s,%s,%s,%s,%s,%d,%d,%d;pids=",
-			t->diseqc, aid, ad->strength, ad->status, ad->snr, (double) t->freq/1000, t->bw, get_delsys(t->sys), get_tmode(t->tmode), get_modulation(t->mtype), get_gi(t->gi),
+			t->diseqc, aid, strength, status, snr, (double) t->freq/1000, t->bw, get_delsys(t->sys), get_tmode(t->tmode), get_modulation(t->mtype), get_gi(t->gi),
 			get_fec(t->fec), t->plp, t->t2id, t->sm);
 	else  sprintf (dad, "ver=1.2;src=%d;tuner=%d,%d,%d,%d,%.2f,8,%s,%s,%d,%d,%d,%d,%d;pids=",
-                        t->diseqc, aid, ad->strength, ad->status, ad->snr, (double )t->freq/1000, get_delsys(t->sys), get_modulation(t->mtype), t->sr,
+                        t->diseqc, aid, strength, status, snr, (double )t->freq/1000, get_delsys(t->sys), get_modulation(t->mtype), t->sr,
 						t->c2tft, t->ds, t->plp, t->inversion);
 	for (i = 0; i < MAX_PIDS; i++)
-		if (ad->pids[i].flags == 1)
+		if (ad && ad->pids[i].flags == 1)
 			for(j=0; j< MAX_STREAMS_PER_PID; j++)
 				if ( ad->pids[i].sid[j] == sid )
 				{
 					x = 1;
 					sprintf (dad + strlen (dad), "%d,", ad->pids[i].pid);
 				}
+	
+	if(!ad && (t->apids || t->pids))
+	{
+		x = 1;
+		sprintf(dad + strlen(dad),"%s,", t->pids ? t->pids:t->apids); 
+	}
+	
 	if (x)
 								 // cut the last comma
 		dad[strlen (dad) - 1] = 0;
 	else
 		dad[strlen (dad)] = '0';
 	
-	if(opts.log>5)LOG("describe_adapter: sid %d, aid %d => %s", sid, aid, dad);
+	LOGL(5, "describe_adapter: sid %d, aid %d => %s", sid, aid, dad);
 	
 	return dad;
 }

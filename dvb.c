@@ -209,7 +209,7 @@ msleep (uint32_t msec)
 		;
 }
 
-int send_diseqc(int fd, int pos, int pol, int hiband, int *no_diseqc)
+int send_diseqc(int fd, int pos, int pol, int hiband)
 {
 	struct dvb_diseqc_master_cmd cmd = {
 		{0xe0, 0x10, 0x38, 0xf0, 0x00, 0x00}, 4
@@ -227,18 +227,14 @@ int send_diseqc(int fd, int pos, int pol, int hiband, int *no_diseqc)
 		LOG("send_diseqc: FE_SET_VOLTAGE failed for fd %d: %s", fd, strerror(errno));
 
 	msleep(15);
-	if(*no_diseqc == 0)
-	{
-		if (ioctl(fd, FE_DISEQC_SEND_MASTER_CMD, cmd) == -1)
-		{
-			LOGL(3, "send_diseqc: FE_DISEQC_SEND_MASTER_CMD failed for fd %d: %s", fd, strerror(errno));	
-			*no_diseqc = 1;
-		}
-		msleep(15);
-		if (ioctl(fd, FE_DISEQC_SEND_BURST, (pos & 1)?SEC_MINI_B : SEC_MINI_A ) == -1)
-			LOG("send_diseqc: FE_DISEQC_SEND_BURST failed for fd %d: %s", fd, strerror(errno));
-		msleep(15);
-	}
+	if (ioctl(fd, FE_DISEQC_SEND_MASTER_CMD, &cmd) == -1)
+		LOG( "send_diseqc: FE_DISEQC_SEND_MASTER_CMD failed for fd %d: %s", fd, strerror(errno));	
+	
+	msleep(15);
+	if (ioctl(fd, FE_DISEQC_SEND_BURST, (pos & 1)?SEC_MINI_B : SEC_MINI_A ) == -1)
+		LOG("send_diseqc: FE_DISEQC_SEND_BURST failed for fd %d: %s", fd, strerror(errno));
+	msleep(15);
+	
 	if (ioctl(fd, FE_SET_TONE, hiband ? SEC_TONE_ON : SEC_TONE_OFF) == -1)
 		LOG("send_diseqc: FE_SET_TONE failed for fd %d: %s", fd, strerror(errno));	
 		
@@ -257,6 +253,9 @@ int send_unicable(int fd, int freq, int pos, int pol, int hiband, int slot, int 
 	cmd.msg[3] = ((t & 0x0300) >> 8) | 
 		(slot << 5) | (pos ? 0x10 : 0) | (hiband ? 4 : 0) | (pol ? 8 : 0);
 	cmd.msg[4] = t & 0xff;
+
+	LOGL(3, "send_unicable fd %d, freq %d, ufreq %d, pos = %d, pol = %d, hiband = %d, slot %d, diseqc => %02x %02x %02x %02x %02x",
+                  fd, freq, ufreq, pos, pol, hiband, slot, cmd.msg[0], cmd.msg[1], cmd.msg[2], cmd.msg[3], cmd.msg[4]);
 
 	if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
 		LOG("send_unicable: FE_SET_TONE failed for fd %d: %s", fd, strerror(errno));
@@ -284,6 +283,9 @@ int send_jess(int fd, int freq, int pos, int pol, int hiband, int slot, int ufre
 	cmd.msg[1] |= ((t << 8) & 0x07);
 	cmd.msg[2] = (t & 0xff);
 	cmd.msg[3] = ((pos & 0x3f) << 2) | (pol ? 2 : 0) | (hiband ? 1 : 0);
+
+	LOGL(3, "send_jess fd %d, freq %d, ufreq %d, pos = %d, pol = %d, hiband = %d, slot %d, diseqc => %02x %02x %02x %02x %02x",
+                  fd, freq, ufreq, pos, pol, hiband, slot, cmd.msg[0], cmd.msg[1], cmd.msg[2], cmd.msg[3], cmd.msg[4]);
 
 	if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
 		LOG("send_jess: FE_SET_TONE failed for fd %d: %s", fd, strerror(errno));
@@ -326,7 +328,7 @@ int setup_switch (int frontend_fd, transponder *tp)
 	}else
 	{
 		if(tp->old_pol != pol || tp->old_hiband != hiband || tp->old_diseqc != diseqc)
-			send_diseqc(frontend_fd, diseqc, pol, hiband, &tp->no_diseqc);
+			send_diseqc(frontend_fd, diseqc, pol, hiband);
 		else 
 			LOGL(3, "Skip sending diseqc commands since the switch position doesn't need to be changed: pol %d, hiband %d, switch position %d", pol, hiband, diseqc);
 	}
@@ -458,7 +460,7 @@ tune_it_s2 (int fd_frontend, transponder * tp)
 			p->props[FEC_INNER].u.data = tp->fec;
 			p->props[FREQUENCY].u.data = if_freq;
 
-			LOG("tunning to %d(%d) pol: %s (%d) sr:%d fec:%s delsys:%s mod:%s rolloff:%s pilot:%s, ts clear=%d, ts pol=%d",
+			LOG("tuning to %d(%d) pol: %s (%d) sr:%d fec:%s delsys:%s mod:%s rolloff:%s pilot:%s, ts clear=%d, ts pol=%d",
 				tp->freq, p->props[FREQUENCY].u.data, get_pol(tp->pol), tp->pol, p->props[SYMBOL_RATE].u.data, fe_fec[p->props[FEC_INNER].u.data],
 				fe_delsys[p->props[DELSYS].u.data], fe_modulation[p->props[MODULATION].u.data],
 				fe_rolloff[p->props[ROLLOFF].u.data], fe_pilot[p->props[PILOT].u.data], bclear, bpol);
@@ -483,7 +485,7 @@ tune_it_s2 (int fd_frontend, transponder * tp)
 			p->props[TRANSMISSION].u.data = tp->tmode;
 			p->props[HIERARCHY].u.data = HIERARCHY_AUTO;
 			
-			LOG ("tunning to %d delsys: %s bw:%d inversion:%s mod:%s fec:%s fec_lp:%s guard:%s transmission: %s, ts clear = %d",
+			LOG ("tuning to %d delsys: %s bw:%d inversion:%s mod:%s fec:%s fec_lp:%s guard:%s transmission: %s, ts clear = %d",
 					p->props[FREQUENCY].u.data, fe_delsys[p->props[DELSYS].u.data], p->props[BANDWIDTH].u.data, fe_specinv[p->props[INVERSION].u.data],
 					fe_modulation[p->props[MODULATION].u.data], fe_fec[p->props[FEC_INNER].u.data], fe_fec[p->props[FEC_LP].u.data], 
 					fe_gi[p->props[GUARD].u.data], fe_tmode[p->props[TRANSMISSION].u.data], bclear)
@@ -501,7 +503,7 @@ tune_it_s2 (int fd_frontend, transponder * tp)
 			p->props[MODULATION].u.data = tp->mtype;
 			p->props[MIS].u.data = ( (tp->ds & 0xFF) << 8 ) | ( tp->plp & 0xFF); // valid for DD DVB-C2 devices
 
-			LOG("tunning to %d sr:%d specinv:%s delsys:%s mod:%s ts clear =%d", p->props[FREQUENCY].u.data, tp->sr, fe_specinv[p->props[INVERSION].u.data], 
+			LOG("tuning to %d sr:%d specinv:%s delsys:%s mod:%s ts clear =%d", p->props[FREQUENCY].u.data, tp->sr, fe_specinv[p->props[INVERSION].u.data], 
 					fe_delsys[p->props[DELSYS].u.data], fe_modulation[p->props[MODULATION].u.data], bclear);
 			break;
 		

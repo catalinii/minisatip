@@ -564,17 +564,17 @@ read_rtsp (sockets * s)
 	for (i = 0; i < la; i++)
 		if (strncasecmp ("CSeq:", arg[i], 5) == 0)
 			cseq = map_int (header_parameter(arg, i), NULL);
-	else if (strncasecmp ("Transport:", arg[i], 9) == 0){
-		transport = header_parameter(arg, i);
+		else if (strncasecmp ("Transport:", arg[i], 9) == 0){
+			transport = header_parameter(arg, i);
 
-		if( -1 == decode_transport (s, transport, opts.rrtp, opts.start_rtp))
-		{
-			http_response (s, 400, NULL, NULL, cseq, 0);
-			return 0;
+			if( -1 == decode_transport (s, transport, opts.rrtp, opts.start_rtp))
+			{
+				http_response (s, 400, NULL, NULL, cseq, 0);
+				return 0;
+			}
 		}
-	}
-		else if (strstr (arg[i], "LIVE555"))
-		if(sid) sid->timeout = 0;
+	else if (strstr (arg[i], "LIVE555"))
+			if(sid) sid->timeout = 0;
 	
 	if((strncasecmp (arg[0], "PLAY", 4) == 0) || (strncasecmp (arg[0], "GET", 3) == 0) || (strncasecmp (arg[0], "SETUP", 5) == 0)) 
 	{

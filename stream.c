@@ -66,12 +66,12 @@ char *describe_streams (sockets *s, char *req, char *sbuf, int size)
 	sid = get_sid(s->sid);
 	if(sid)
 		do_play = sid->do_play;
-	else 
-		LOG_AND_RETURN(NULL, "No session assosicated with sock_id %d", s->sock_id);
+//	else LOG_AND_RETURN(NULL, "No session associated with sock_id %d", s->sock_id);
 		
 	snprintf(sbuf,size-1,"v=0\r\no=- %010d %010d IN IP4 %s\r\ns=SatIPServer:1 %d %d %d\r\nt=0 0\r\n", sidf, sidf, get_sock_host(s->sock), getS2Adapters(), getTAdapters(), getCAdapters() );
 	if(strchr(req, '?'))
 		do_all = 0;
+		
 	if((stream_id = strstr(req, "stream=")))
 	{
 		do_all = 0;
@@ -198,7 +198,7 @@ start_play (streams * sid, sockets * s)
 	{
 		a_id =
 			get_free_adapter (sid->tp.freq, sid->tp.pol, sid->tp.sys,
-			sid->tp.fe - 1);
+			sid->tp.fe);
 		LOG ("Got adapter %d on socket %d", a_id, s->sock_id);
 		if (a_id < 0)
 			return -404;

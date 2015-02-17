@@ -281,6 +281,7 @@ socket_action a, socket_action c, socket_action t)
 	s[i].sock_id = i;
 	pf[i].fd = sock;
 	pf[i].events = POLLIN | POLLPRI;
+	pf[i].revents = 0;
 
 	LOG ("sockets_add: handle %d (type %d) returning socket index %d [%s:%d]",
 		s[i].sock, s[i].type, i, inet_ntoa (s[i].sa.sin_addr),
@@ -400,7 +401,7 @@ select_and_execute ()
 
 					}
 					
-					 if (ss->type == 0)//udp
+					 if (ss->type == TYPE_UDP || ss->type == TYPE_RTCP)//udp
 						rlen =
 							recvfrom (ss->sock, &ss->buf[ss->rlen], ss->lbuf - ss->rlen,
 							0, (struct sockaddr *) &ss->sa, &slen);
