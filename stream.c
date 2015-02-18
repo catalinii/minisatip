@@ -627,7 +627,7 @@ read_dmx (sockets * s)
 	adapter *ad;
 	unsigned char sids;
 	pid *p;
-	int pid;
+	int pid, flush_all = 0;
 	uint64_t stime;
 
 	if (s->rlen % DVB_FRAME != 0)
@@ -642,13 +642,15 @@ read_dmx (sockets * s)
 		s->rlen = 0;
 		return 0;
 	}
-	//LOG("read_dmx called -> %d bytes read ",s->rlen);
-								 // flush buffers every 50ms
-	if (s->rlen < s->lbuf && s->rtime - ad->rtime < 50)
-		return 0;				 // the buffer is not full, read more
+								 
+	if (s->rlen < s->lbuf && s->rtime - ad->rtime < 50) // flush buffers every 50ms
+		return 0;		// the buffer is not full, read more
+	else flush_all = 1; // flush everything that we read so far
 	if (s->rlen > s->lbuf)
 		LOG ("Buffer overrun %d %d", s->rlen, s->lbuf);
 
+//	LOGL(2, "read_dmx called for adapter %d -> %d bytes read ",s->sid, s->rlen);
+		
 	int rlen = s->rlen;
 	ad->rtime = s->rtime;
 	s->rlen = 0;
@@ -712,7 +714,7 @@ read_dmx (sockets * s)
 							}
 							sid->iov[sid->iiov].iov_base = b;
 							sid->iov[sid->iiov++].iov_len = DVB_FRAME;
-							if (sid->iiov >= 7)
+							if (sid->iiov >= 7 || flush_all)
 								flush_streami (sid, s->rtime);
 						}
 						else
@@ -781,7 +783,7 @@ stream_timeouts ()
 			{
 				LOG ("no data sent for more than 1s sid: %d for %s:%d", i,
 						inet_ntoa (sid->sa.sin_addr), ntohs (sid->sa.sin_port));
-				flush_streamb (sid, buf , 0, ctime);								
+				flush_streami (sid, ctime);								
 			}
 			if (ctime - rttime > 200)
 				send_rtcp (i, ctime);

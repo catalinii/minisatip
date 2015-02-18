@@ -55,8 +55,8 @@ usage ()
 		-d specify the device id (in case there are multiple SAT>IP servers in the network)\n \
 		-w http_server[:port]: specify the host and the port where the xml file can be downloaded from \n\
 		-x port: port for listening on http\n\
-		-s force to get signal from the DVB hardware every 200ms (use with care, onle when needed)\n\
-		-a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means autodetect)\n\
+		-s force to get signal from the DVB hardware every 200ms (use with care, only when needed)\n\
+		-a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means auto-detect)\n\
 		-m xx: simulate xx as local mac address, generates UUID based on mac\n\
 		-e list_of_enabled adapters: enable only specified adapters, example 0-2,5,7 (no spaces between parameters)\n\
 		-c X: bandwidth capping for the output to the network (default: unlimited)\n\

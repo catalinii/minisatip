@@ -46,6 +46,25 @@ find_adapters ()
 		a[na].pa = a[na].fn = -1;
 }
 
+// avoid adapter close unless all the adapters can be closed
+int adapter_timeout(sockets *s)
+{
+	int do_close = 1, i, max_close = 0;
+	int rtime = getTick();
+	for (i = 0; i < MAX_ADAPTERS; i++)
+	{
+		if( a[i].enabled && rtime - a[i].rtime < s->close_sec)
+			do_close = 0;
+		if(max_close < a[i].rtime)
+			max_close = a[i].rtime;
+
+	}		
+	LOG("Requested adapter %d close due to timeout, result %d max_rtime %d", s->sid, do_close, max_close);
+	if(!do_close)
+		s->rtime = max_close;
+	
+	return do_close;	
+}
 
 int
 close_adapter_for_socket (sockets * s)
@@ -125,7 +144,7 @@ init_hw ()
 		a[i].new_gs = 0;
 		a[i].sock =
 			sockets_add (a[i].dvr, NULL, i, TYPE_DVR, (socket_action) read_dmx,
-			(socket_action) close_adapter_for_socket, NULL);
+			(socket_action) close_adapter_for_socket, (socket_action ) adapter_timeout);
 		memset (a[i].buf, 0, ADAPTER_BUFFER + 1);
 		set_socket_buffer (a[i].sock, a[i].buf, ADAPTER_BUFFER);
 		sockets_timeout (a[i].sock, 60000);
@@ -247,10 +266,10 @@ dump_pids (int aid)
 		if (p->pids[i].flags > 0)
 	{
 		if(dp)
-			LOG ("Dumping pids table for adapter %d : ", aid);
+			LOGL (2, "Dumping pids table for adapter %d : ", aid);
 		dp = 0;
-		LOG
-			("pid = %d, packets = %d, fd = %d, errs = %d, flags = %d, sids: %d %d %d %d %d %d %d %d",
+		LOGL
+			(2, "pid = %d, packets = %d, fd = %d, errs = %d, flags = %d, sids: %d %d %d %d %d %d %d %d",
 			p->pids[i].pid, p->pids[i].cnt, p->pids[i].fd, p->pids[i].err, p->pids[i].flags,
 			p->pids[i].sid[0], p->pids[i].sid[1], p->pids[i].sid[2], p->pids[i].sid[3], p->pids[i].sid[4], 
 			p->pids[i].sid[5], p->pids[i].sid[6], p->pids[i].sid[7]);
@@ -344,7 +363,7 @@ update_pids (int aid)
 	for (i = 0; i < MAX_PIDS; i++)
 		if (ad->pids[i].flags == 3)
 	{
-		if(dp && opts.log==2)dump_pids (aid);
+		if(dp)dump_pids (aid);
 		dp = 0;
 		ad->pids[i].flags = 0;
 		if (ad->pids[i].fd > 0)
@@ -355,7 +374,7 @@ update_pids (int aid)
 	for (i = 0; i < MAX_PIDS; i++)
 		if (ad->pids[i].flags == 2)
 	{
-		if(dp && opts.log==2)dump_pids (aid);
+		if(dp)dump_pids (aid);
 		dp = 0;
 		ad->pids[i].flags = 1;
 		if (ad->pids[i].fd <= 0)
