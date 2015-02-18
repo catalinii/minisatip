@@ -677,14 +677,17 @@ describe_adapter (int sid, int aid)
 		if (ad->max_snr <= ad->snr) ad->max_snr = (ad->snr>0)?ad->snr:1;
 		LOG ("get_signal%s took %d ms for adapter %d handle %d (status: %d, ber: %d, strength:%d, snr: %d, max_strength: %d, max_snr: %d %d)",
 			new_gs?"":"_new", getTick () - ts, aid, ad->fe, ad->status, ad->ber, ad->strength, ad->snr, ad->max_strength, ad->max_snr, opts.force_scan);
-		status = (ad->status & FE_HAS_LOCK) > 0;
 		if(new_gs)
 		{
 			ad->strength = ad->strength * 255 / ad->max_strength;
 			ad->snr = ad->snr * 15 / ad->max_snr;
 		}
+	}
+	if(ad)
+	{
 		strength = ad->strength;
 		snr = ad->snr;
+		status = (ad->status & FE_HAS_LOCK) > 0;     
 	}
 	if (t->sys == SYS_DVBS || t->sys == SYS_DVBS2)
 		sprintf (dad, "ver=1.0;src=%d;tuner=%d,%d,%d,%d,%d,%s,%s,%s,%s,%s,%d,%s;pids=",
