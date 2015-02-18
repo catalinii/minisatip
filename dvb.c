@@ -200,7 +200,7 @@ make_func( pol );
 
 
 
-static inline void
+void
 msleep (uint32_t msec)
 {
 	struct timespec req = { msec / 1000, 1000000 * (msec % 1000) };
@@ -256,11 +256,13 @@ int send_unicable(int fd, int freq, int pos, int pol, int hiband, int slot, int 
 
 	LOGL(3, "send_unicable fd %d, freq %d, ufreq %d, pos = %d, pol = %d, hiband = %d, slot %d, diseqc => %02x %02x %02x %02x %02x",
                   fd, freq, ufreq, pos, pol, hiband, slot, cmd.msg[0], cmd.msg[1], cmd.msg[2], cmd.msg[3], cmd.msg[4]);
-
+	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_13) == -1)
+		LOG("send_unicable: pre voltage  SEC_VOLTAGE_13 failed for fd %d: %s", fd, strerror(errno));
+	msleep(15);
 	if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
-		LOG("send_unicable: FE_SET_TONE failed for fd %d: %s", fd, strerror(errno));
+		LOG("send_unicable: FE_SET_TONE failed for fd %d: %s", fd, strerror(errno));	
 	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18) == -1)
-		LOG("send_unicable: FE_SET_VOLTAGE failed for fd %d: %s", fd, strerror(errno));
+		LOG("send_unicable: FE_SET_VOLTAGE failed for fd %d: %s", fd, strerror(errno));	
 	msleep(15);
 	if (ioctl(fd, FE_DISEQC_SEND_MASTER_CMD, &cmd) == -1)
 		LOG("send_unicable: FE_DISEQC_SEND_MASTER_CMD failed for fd %d: %s", fd, strerror(errno));
@@ -287,6 +289,9 @@ int send_jess(int fd, int freq, int pos, int pol, int hiband, int slot, int ufre
 	LOGL(3, "send_jess fd %d, freq %d, ufreq %d, pos = %d, pol = %d, hiband = %d, slot %d, diseqc => %02x %02x %02x %02x %02x",
                   fd, freq, ufreq, pos, pol, hiband, slot, cmd.msg[0], cmd.msg[1], cmd.msg[2], cmd.msg[3], cmd.msg[4]);
 
+	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_13) == -1)
+		LOG("send_jess: pre voltage  SEC_VOLTAGE_13 failed for fd %d: %s", fd, strerror(errno));
+	msleep(15);
 	if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
 		LOG("send_jess: FE_SET_TONE failed for fd %d: %s", fd, strerror(errno));
 	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18) == -1)

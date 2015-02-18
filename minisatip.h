@@ -7,7 +7,7 @@
 #include "socketworks.h"
 
 
-#define VERSION_BUILD "76"
+#define VERSION_BUILD "77"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.1.,VERSION_BUILD,)
 
@@ -31,7 +31,7 @@ void set_options (int argc, char *argv[]);
 #define UNICABLE_OPT 'u'
 #define JESS_OPT 'j'
 
-
+#define PID_FILE "/var/run/minisatip.pid"
 struct struct_opts
 {
 	char *rrtp;
@@ -64,7 +64,7 @@ void _log(int level, char * file, int line, const char *fmt, ...);
 #define LOGL(level,a,...) { _log(level,__FILE__,__LINE__,a, ##__VA_ARGS__);}
 
 
-#define FAIL(a,...) {LOGL(0,a,##__VA_ARGS__);exit(1);}
+#define FAIL(a,...) {LOGL(0,a,##__VA_ARGS__);unlink(PID_FILE);exit(1);}
 #define LOG_AND_RETURN(rc,a,...) {LOG(a,##__VA_ARGS__);return rc;}
 int ssdp_discovery (sockets * s);
 int split (char **rv, char *s, int lrv, char sep);

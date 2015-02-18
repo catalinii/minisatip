@@ -965,12 +965,24 @@ new_http (sockets * s)
 }
 
 
-char pn[200];
+char pn[256];
+
+void write_pid_file()
+{
+	FILE *f;
+	if((f = fopen (PID_FILE, "wt")))
+	{
+		fprintf(f, "%d", getpid());
+		fclose(f);
+	}
+}
+
 
 int
 main (int argc, char *argv[])
 {
-	strncpy(pn,argv[0],sizeof(pn));
+	realpath(argv[0], pn);
+		
 	set_signal_handler ();
 	set_options (argc, argv);
 	if (opts.daemon)
@@ -1005,7 +1017,9 @@ main (int argc, char *argv[])
 		FAIL ("sockets_add failed for http");
 	
 	LOGL (0, "Initializing with %d devices", init_hw ());
+	write_pid_file();
 	select_and_execute ();
+	unlink(PID_FILE);
 	free_all ();
 	return 0;
 }
@@ -1076,8 +1090,27 @@ posix_signal_handler (int sig, siginfo_t * siginfo, ucontext_t * ctx)
 int								 /* Returns 0 on success, -1 on error */
 becomeDaemon ()
 {
-	int maxfd, fd;
+	int maxfd, fd, pid;
 	struct stat sb;
+	FILE *f;
+	char path[255];
+	char buf[255];
+	
+	memset(path, 0, sizeof(path));
+	
+	if((f = fopen(PID_FILE, "rt")))
+	{
+		fscanf(f, "%d", &pid);
+		fclose(f);
+		snprintf(buf, sizeof(buf),"/proc/%d/exe", pid);
+		
+		if (0 < readlink(buf, path, sizeof(path)) && 0 == strcmp(pn, path))
+		{
+			LOGL(0, "Found minisatip running with pid %d, killing....", pid);
+			kill(pid, SIGINT);
+			msleep(1000);
+		}
+	}
 	
 	switch (fork ())
 	{							 /* Become background process */
@@ -1092,7 +1125,7 @@ becomeDaemon ()
 	if (setsid () == -1)		 /* Become leader of new session */
 		return -1;
 
-	switch (fork ())
+	switch ((pid = fork ()))
 	{							 /* Ensure we are not session leader */
 		case -1:
 			return -1;

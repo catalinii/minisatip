@@ -16,7 +16,7 @@ minisatip [-f] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] [-p p
 		-d specify the device id (in case there are multiple SAT>IP servers in the network)
 		-w http_server[:port]: specify the host and the port where the xml file can be downloaded from
 		-x port: port for listening on http
-		-s force to get signal from the DVB hardware every 200ms (use with care, onle when needed)
+		-s force to get signal from the DVB hardware every 200ms (use with care, only when needed)
 		-a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means autodetect)
 		-m xx: simulate xx as local mac address, generates UUID based on mac
 		-e list_of_enabled adapters: enable only specified adapters, example 0-2,5,7 (no spaces between parameters)
@@ -24,6 +24,9 @@ minisatip [-f] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] [-p p
 		-b X: set the DVR buffer to X KB (default: XX KB)
 		-l increases the verbosity (you can use multiple -l), logging to stdout in foreground mode or in /tmp/log when a daemon
 		-p url: specify playlist url using X_SATIPM3U header
+		-u unicable_string: defines the unicable adapters (A) and their slot (S) and frequency (F):
+			The format is: A1:S1-F1[,A2:S2-F2[,...]] 
+		-j jess_string: same format as unicable_string 
 
 Example of Usage:
 

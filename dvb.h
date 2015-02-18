@@ -111,5 +111,5 @@ char *get_tmode(int i);
 char *get_gi(int i);
 char *get_specinv(int i);
 char *get_pol(int i);
-
+void msleep(uint32_t a);
 #endif							 /*  */
