@@ -647,7 +647,7 @@ describe_adapter (int sid, int aid)
 	transponder *t;
 	adapter *ad;
 	streams *ss;
-	int status = 0, strength = 0, snr = 0; 
+	int status = 1, strength = 255, snr = 15; 
 
 	if (!(ad = get_adapter(aid)))
 	{
