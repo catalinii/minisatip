@@ -185,7 +185,8 @@ char *fe_pol[] =
 char * get_##a(int i) \
 { \
 	if(i>=0 && i<sizeof(fe_##a)) \
-		return fe_##a[i];  \
+		if(fe_##a[i][0] == 32)return ""; \
+			else return fe_##a[i];  \
 	return "NONE"; \
 } 
 make_func ( pilot );

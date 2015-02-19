@@ -645,7 +645,8 @@ read_dmx (sockets * s)
 								 
 	if (s->rlen < s->lbuf && s->rtime - ad->rtime < 50) // flush buffers every 50ms
 		return 0;		// the buffer is not full, read more
-	else flush_all = 1; // flush everything that we read so far
+	else if(s->rlen < s->lbuf)
+		flush_all = 1; // flush everything that we read so far
 	if (s->rlen > s->lbuf)
 		LOG ("Buffer overrun %d %d", s->rlen, s->lbuf);
 
