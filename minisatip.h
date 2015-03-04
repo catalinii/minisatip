@@ -7,7 +7,7 @@
 #include "socketworks.h"
 
 
-#define VERSION_BUILD "81"
+#define VERSION_BUILD "82"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.1.,VERSION_BUILD,)
 

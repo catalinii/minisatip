@@ -1,19 +1,24 @@
 /*
+ * Copyright (C) 2014-2020 Catalin Toda <catalinii@yahoo.com>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
+ * USA
+ *
+ */
 
-   This program is free software; you can redistribute it and/or
-   modify it under the terms of the GNU General Public License
-   as published by the Free Software Foundation; either version 2
-   of the License, or (at your option) any later version.
-   This program is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
-   You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
-   Or, point your browser to http://www.gnu.org/copyleft/gpl.html
 
-*/
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
@@ -525,7 +530,7 @@ tune_it_s2 (int fd_frontend, transponder * tp)
 			p->props[INVERSION].u.data = tp->inversion;
 			p->props[MODULATION].u.data = tp->mtype;
 
-			LOG("tunning to %d specinv:%s delsys:%s mod:%s ts clear=%d", p->props[FREQUENCY].u.data, fe_specinv[p->props[INVERSION].u.data], 
+			LOG("tuning to %d specinv:%s delsys:%s mod:%s ts clear=%d", p->props[FREQUENCY].u.data, fe_specinv[p->props[INVERSION].u.data], 
 					fe_delsys[p->props[DELSYS].u.data], fe_modulation[p->props[MODULATION].u.data], bclear);
 			break;
 	}

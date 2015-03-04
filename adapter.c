@@ -1,3 +1,23 @@
+/*
+ * Copyright (C) 2014-2020 Catalin Toda <catalinii@yahoo.com>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
+ * USA
+ *
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -108,7 +128,7 @@ init_hw ()
 		a[i].dvr = open (buf, O_RDONLY | O_NONBLOCK);
 		if (a[i].fe < 0 || a[i].dvr < 0)
 		{
-			printf ("Could not open %s in RW mode\n", buf);
+			LOG (0, "Could not open %s in RW mode\n", buf);
 			if (a[i].fe >= 0)
 				close (a[i].fe);
 			if (a[i].dvr >= 0)
@@ -410,7 +430,7 @@ int tune (int aid, int sid)
 		}
 	}
 	else
-		LOG ("not tunning for SID %d (do_tune=%d, master_sid=%d)", sid,
+		LOG ("not tuning for SID %d (do_tune=%d, master_sid=%d)", sid,
 			a[aid].do_tune, a[aid].master_sid);
 	if (rv < 0)
 		mark_pids_deleted (aid, sid, NULL);
@@ -643,24 +663,27 @@ char dad[1000];
 char *
 describe_adapter (int sid, int aid)
 {
-	int i = 0, x, ts, j;
+	int i = 0, x, ts, j, use_ad;
 	transponder *t;
 	adapter *ad;
 	streams *ss;
-	int status = 1, strength = 255, snr = 15; 
+	int status = 1, strength = 255, snr = 15;
 
+	ss = get_sid(sid); 
+	
+	use_ad = 1;
 	if (!(ad = get_adapter(aid)))
 	{
 		aid = 0;
-		ss = get_sid(sid);
-		if(!ss)
-			return "";
+	        if(!ss)
+        	        return "";
 		t = &ss->tp;
+		use_ad = 0;
 	} else t = &ad->tp;
 	memset (dad, 0, sizeof (dad));
 	x = 0;
 								 // do just max 3 signal check 1s after tune
-	if (ad && ((ad->status == 0 && ad->status_cnt<8 && ad->status_cnt++>4) || opts.force_scan))
+	if (use_ad && ((ad->status == 0 && ad->status_cnt<8 && ad->status_cnt++>4) || opts.force_scan))
 	{
 		int new_gs = 1;
 		ts = getTick ();
@@ -683,7 +706,7 @@ describe_adapter (int sid, int aid)
 			ad->snr = ad->snr * 15 / ad->max_snr;
 		}
 	}
-	if(ad)
+	if(use_ad)
 	{
 		strength = ad->strength;
 		snr = ad->snr;
@@ -701,7 +724,7 @@ describe_adapter (int sid, int aid)
                         t->diseqc, aid, strength, status, snr, (double )t->freq/1000, get_delsys(t->sys), get_modulation(t->mtype), t->sr,
 						t->c2tft, t->ds, t->plp, t->inversion);
 	for (i = 0; i < MAX_PIDS; i++)
-		if (ad && ad->pids[i].flags == 1)
+		if (use_ad && ad->pids[i].flags == 1)
 			for(j=0; j< MAX_STREAMS_PER_PID; j++)
 				if ( ad->pids[i].sid[j] == sid )
 				{
@@ -709,7 +732,7 @@ describe_adapter (int sid, int aid)
 					sprintf (dad + strlen (dad), "%d,", ad->pids[i].pid);
 				}
 	
-	if(!ad && (t->apids || t->pids))
+	if(!use_ad && (t->apids || t->pids))
 	{
 		x = 1;
 		sprintf(dad + strlen(dad),"%s,", t->pids ? t->pids:t->apids); 

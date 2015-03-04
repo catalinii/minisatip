@@ -7,6 +7,7 @@ The application is designed to stream the requested data even to multiple client
 It is tested on x86_64, x86, ARM and MIPS platforms and it requires DVBAPI 5. Supported protocols are rtsp (both tcp and udp), HTTP (port 8080) and SSDP (as specified in the SAT>IP documentation).
 
 Please use https://toda.ro/projects/minisatip/issues/new for features requests.
+In order to speed up the investigation of an issue, please provide the full log and a link to the application that is not working.
 
 Usage:
 
@@ -48,7 +49,7 @@ Example of Usage:
 	
 	minisatip -m 001122334455 
 	
-	- As long as you want to use the channels on the same frequency, you can use -a or -t parameter to report multiple tunners to the client so you can watch/record multiple channels from the same frequency (using tvheadend for example)
+	- As long as you want to use the channels on the same frequency, you can use -a or -t parameter to report multiple tuners to the client so you can watch/record multiple channels from the same frequency (using tvheadend for example)
 
 Examples:
 	- In order to listen to a radio on Hotbird 13E, after minisatip is started open the following URL in your favourite media player:

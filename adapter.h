@@ -30,7 +30,7 @@ typedef struct struct_adapter
 	fe_delivery_system_t sys[10]; 
 	transponder tp;
 	pid pids[MAX_PIDS];
-	int master_sid;				 // first SID, the one that controls the tunning
+	int master_sid;				 // first SID, the one that controls the tuning
 	int sid_cnt;				 //number of streams
 	int sock;
 	int do_tune;

@@ -1,3 +1,23 @@
+/*
+ * Copyright (C) 2014-2020 Catalin Toda <catalinii@yahoo.com>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
+ * USA
+ *
+ */
+
 #include <errno.h>
 #include <getopt.h>
 #include <signal.h>
@@ -168,6 +188,7 @@ setup_stream (char *str, sockets * s)
 			s->sid, s->sock_id, s->sock);
 	
 	set_stream_parameters (s->sid, &t);
+	sid->do_play = 0;
 	return sid;
 }
 
@@ -338,11 +359,12 @@ streams_add ()
 	st[i].type = 0;
 	st[i].do_play = 0;
 	st[i].iiov = 0;
+	st[i].sp = st[i].sb = 0;
 	memset (&st[i].iov, 0 , sizeof(st[i].iiov));
 	init_dvb_parameters (&st[i].tp);
 	st[i].len = 0;
 //	st[i].seq = 0; // set the sequence to 0 for testing purposes - it should be random 
-    st[i].ssrc = random();
+	st[i].ssrc = random();
 	st[i].timeout = opts.timeout_sec;
 	st[i].wtime = st[i].rtcp_wtime = getTick ();
 								 // max 7 packets
@@ -463,7 +485,8 @@ send_rtp (streams * sid, struct iovec *iov, int liov)
 	copy16 ( rtp_h, 2, sid->seq);
 	copy32 ( rtp_h, 4, sid->wtime);
 	copy32 ( rtp_h, 8, sid->ssrc);
-    sid->seq ++;
+	sid->seq ++;
+ 
 	if ( sid->type == STREAM_RTSP_UDP)
 	{
 		io[0].iov_base = rtp_h;
@@ -570,8 +593,8 @@ send_rtcp (int s_id, int ctime)
 //	else	
 //		sid->rsock_err ++;
 	sid->rtcp_wtime = ctime;
-	sid->sp = 0;
-	sid->sb = 0;
+//	sid->sp = 0;
+//	sid->sb = 0;
 	return rv;
 }
 
@@ -589,12 +612,16 @@ flush_streamb (streams * sid, char *buf, int rlen, int ctime)
 		for (i = 0; i < rlen; i += DVB_FRAME * 7)
 			rv += send_rtpb (sid, &buf[i], DVB_FRAME * 7);
 	
-	if(rv > 0) bw += rv;
 	sid->iiov = 0;
 	sid->wtime = ctime;
 	sid->len = 0;
-	sid->sp ++;
-	sid->sb += rv;
+
+        if(rv > 0)
+        {
+                bw += rv;
+                sid->sp ++;
+                sid->sb += rv;
+        }
 	
 }
 
@@ -607,12 +634,17 @@ flush_streami (streams * sid, int ctime)
 		rv = writev (sid->rsock, sid->iov, sid->iiov);
 	else
 		rv = send_rtp (sid, sid->iov, sid->iiov);
-	if(rv > 0) bw += rv;
-	sid->sp ++;
-	sid->sb += rv; 
 	sid->iiov = 0;
 	sid->wtime = ctime;
 	sid->len = 0;
+
+        if(rv > 0)
+        {
+                bw += rv;
+                sid->sp ++;
+                sid->sb += rv;
+        }
+
 }
 
 
@@ -715,7 +747,7 @@ read_dmx (sockets * s)
 							}
 							sid->iov[sid->iiov].iov_base = b;
 							sid->iov[sid->iiov++].iov_len = DVB_FRAME;
-							if (sid->iiov >= 7 || flush_all)
+							if (sid->iiov >= 7)
 								flush_streami (sid, s->rtime);
 						}
 						else
@@ -724,29 +756,38 @@ read_dmx (sockets * s)
 					}
 				}
 		}
-		min = s->buf;
-		max = &s->buf[rlen];
-		for (i = 0; i < MAX_STREAMS; i++)
-								 //move all dvb packets that were not sent out of the s->buf
-			if (st[i].enabled && st[i].adapter == s->sid)
-			{
-				sid = get_sid(i);
-				if(!sid)
-					continue;
-				for (j = 0; j < sid->iiov; j++)
-					if (sid->iov[j].iov_base >= min && sid->iov[j].iov_base <= max)
-					{
-						if (sid->len + DVB_FRAME >= STREAMS_BUFFER)
+
+		if(flush_all)   // more than 50ms passed since the last write, so we flush our buffers
+		{
+			for (i = 0; i < MAX_STREAMS; i++)
+                        	if (st[i].enabled && st[i].adapter == s->sid && sid->iiov > 0)
+					flush_streami (sid, s->rtime);
+
+		}else{   //move all dvb packets that were not sent out of the s->buf
+			min = s->buf;
+			max = &s->buf[rlen];
+			for (i = 0; i < MAX_STREAMS; i++)
+				if (st[i].enabled && st[i].adapter == s->sid && sid->iiov > 0)
+				{
+					sid = get_sid(i);
+					if(!sid)
+						continue;
+					for (j = 0; j < sid->iiov; j++)
+						if (sid->iov[j].iov_base >= min && sid->iov[j].iov_base <= max)
 						{
-							LOG ("ERROR: requested to write outside of stream's buffer for sid %d len %d iiov %d - flushing stream's buffer", i, sid->len, sid->iiov);
-							flush_streamb (sid, sid->buf, sid->len, s->rtime);
-						}
-					memcpy (&sid->buf[sid->len], sid->iov[j].iov_base,
-						DVB_FRAME);
-					sid->iov[j].iov_base = &sid->buf[sid->len];
-					sid->len += DVB_FRAME;
-				}
+							if (sid->len + DVB_FRAME >= STREAMS_BUFFER)
+							{
+								LOG ("ERROR: requested to write outside of stream's buffer for sid %d len %d iiov %d - flushing stream's buffer", i, sid->len, sid->iiov);
+								flush_streamb (sid, sid->buf, sid->len, s->rtime);
+							}
+
+							memcpy (&sid->buf[sid->len], sid->iov[j].iov_base, DVB_FRAME);
+							sid->iov[j].iov_base = &sid->buf[sid->len];
+							sid->len += DVB_FRAME;
+					}
+			}
 		}
+
 		if (s->rtime - ad->last_sort > 2000)
 		{
 			ad->last_sort = s->rtime + 60000;
