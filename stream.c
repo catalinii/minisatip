@@ -189,6 +189,14 @@ setup_stream (char *str, sockets * s)
 	
 	set_stream_parameters (s->sid, &t);
 	sid->do_play = 0;
+	
+	if(sid->adapter >= 0 && !strncasecmp( s->buf, "SETUP", 5 )) // SETUP after PLAY
+	{
+		int ad = sid->adapter;
+		sid->adapter = -1;
+		close_adapter_for_stream(sid->sid, ad);
+	}
+	
 	return sid;
 }
 
@@ -288,15 +296,20 @@ int decode_transport (sockets * s, char *arg, char *default_rtp, int start_rtp)
 		strcpy (p.dest, opts.disc_host);
 	if (p.port == 0)
 		p.port = start_rtp;
-	LOG ("decode_transport ->%d %d %d %s", p.type, p.ttl, p.port, p.dest);
+	LOG ("decode_transport ->type %d, ttl %d new socket to: %s:%d", p.type, p.ttl, p.dest, p.port);
 	if( sid->type != 0)
 	{
 		if(sid->type == STREAM_RTSP_UDP && sid->rsock >= 0)			
 		{
-			if(p.port != ntohs(sid->sa.sin_port) || strcmp(p.dest,inet_ntoa(sid->sa.sin_addr)))
-				LOG("Transport for this connection already setup, leaving as it is: sid = %d, handle %d", sid->sid, sid->rsock)
+			int oldport = ntohs(sid->sa.sin_port);
+			char *oldhost = inet_ntoa(sid->sa.sin_addr);
+			
+			if(p.port == oldport && !strcmp(p.dest,oldhost))
+				LOG("Transport for this connection is already setup to %s:%d, leaving as it is: sid = %d, handle %d", 
+					p.dest, p.port, sid->sid, sid->rsock)
 			else {
-				LOG("Stream has already a transport header associated with it - sid = %d type = %d, closing %d", sid->sid, sid->type, sid->rsock);
+				LOG("Stream has already a transport header associated with it to %s:%d - sid = %d type = %d, closing %d", 
+					oldhost, oldport, sid->sid, sid->type, sid->rsock);
 				close(sid->rsock);
 				sid->rsock = -1;
 				sid->type = 0;
@@ -814,20 +827,20 @@ stream_timeouts ()
 	ctime = getTick ();
 	
 	for (i=0; i< MAX_STREAMS; i++)
-		if (st[i].enabled && st[i].do_play && st[i].type != STREAM_HTTP)
+		if (st[i].enabled && st[i].type != STREAM_HTTP)
 		{
 			sid = get_sid(i);
 			rttime = sid->rtcp_wtime,
 			rtime = sid->wtime;
 	
 			//LOG("stream timeouts called for sid %d c:%d r:%d rt:%d",i,ctime,rtime,rttime);
-			if (ctime - rtime > 1000)
+			if (sid->do_play && ctime - rtime > 1000)
 			{
 				LOG ("no data sent for more than 1s sid: %d for %s:%d", i,
 						inet_ntoa (sid->sa.sin_addr), ntohs (sid->sa.sin_port));
 				flush_streami (sid, ctime);								
 			}
-			if (ctime - rttime > 200)
+			if (sid->do_play && ctime - rttime > 200)
 				send_rtcp (i, ctime);
 						// check stream timeout, and allow 10s more to respond
 			if (sid->timeout > 0 && (ctime - sid->rtime > sid->timeout + 10000)) 

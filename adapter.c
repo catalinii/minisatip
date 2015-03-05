@@ -672,18 +672,19 @@ describe_adapter (int sid, int aid)
 	ss = get_sid(sid); 
 	
 	use_ad = 1;
-	if (!(ad = get_adapter(aid)))
+	if (!(ad = get_adapter(aid)) || (ss && !ss->do_play))
 	{
-		aid = 0;
-	        if(!ss)
-        	        return "";
+		if( aid < 0)
+			aid = 0;
+		if(!ss)
+			return "";
 		t = &ss->tp;
 		use_ad = 0;
 	} else t = &ad->tp;
 	memset (dad, 0, sizeof (dad));
 	x = 0;
 								 // do just max 3 signal check 1s after tune
-	if (use_ad && ((ad->status == 0 && ad->status_cnt<8 && ad->status_cnt++>4) || opts.force_scan))
+	if (use_ad && ((ad->status <= 0 && ad->status_cnt<8 && ad->status_cnt++>4) || opts.force_scan))
 	{
 		int new_gs = 1;
 		ts = getTick ();

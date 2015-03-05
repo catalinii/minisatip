@@ -159,6 +159,8 @@ int udp_bind_connect(char *src, int sport, char *dest, int dport, struct sockadd
 		LOG ("udp_bind_connect: failed: bind(): %s", strerror (errno));
 		return -1;
 	}
+	LOG ("New UDP socket %d connected to %s:%d", sock,
+		inet_ntoa (serv->sin_addr), ntohs (serv->sin_port));
 	return sock;
 }
 
