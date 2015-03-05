@@ -606,7 +606,7 @@ int del_filters (int fd, int pid)
 fe_delivery_system_t
 dvb_delsys (int aid, int fd, fe_delivery_system_t *sys)
 {
-	int i, res;
+	int i, res, rv = 0;
 	struct dvb_frontend_info fe_info;
 
 	static struct dtv_property enum_cmdargs[] =
@@ -621,17 +621,16 @@ dvb_delsys (int aid, int fd, fe_delivery_system_t *sys)
 	
 	for(i = 0 ; i < 10 ; i ++)
 		sys[i] = 0;
-	
 	if (ioctl (fd, FE_GET_PROPERTY, &enum_cmdseq) < 0)
 	{
-		LOG ("unable to query frontend");
-		return 0;
+		LOG ("unable to query frontend, perhaps DVB-API < 5.5 ?");
+		//	return 0;
 	}
 
 	if ((res = ioctl (fd, FE_GET_INFO, &fe_info) < 0))
 	{
 		LOG ("FE_GET_INFO failed for adapter %d, fd %d: %s ", aid, fd, strerror(errno));
-		//       return -1;
+		//	return -1;
 	}
 	
 	LOG("Detected Adapter %d handle %d DVB Card Name: %s", aid, fd, fe_info.name); 
@@ -640,16 +639,67 @@ dvb_delsys (int aid, int fd, fe_delivery_system_t *sys)
 
 	if (nsys < 1)
 	{
-		LOG ("no available delivery system");
-		return 0;
+	//	LOG ("no available delivery system");
+	//	return 0;
+		switch ( fe_info.type )
+		{
+		case FE_OFDM:
+			if ( fe_info.caps & FE_CAN_2G_MODULATION )
+			{
+				LOG ("Delivery System DVB-T2");
+				rv=SYS_DVBT2;
+			}
+			else
+			{
+				LOG ("Delivery System DVB-T");
+				rv=SYS_DVBT;
+			}
+			break;
+		case FE_QAM:
+			LOG ("Delivery System DVB-C");
+			rv=SYS_DVBC_ANNEX_AC;
+			break;
+		case FE_QPSK:
+			if ( fe_info.caps & FE_CAN_2G_MODULATION )
+			{
+				LOG ("Delivery System DVB-S2");
+				rv=SYS_DVBS2;
+			}
+			else
+			{
+				LOG ("Delivery System DVB-S");
+				rv=SYS_DVBS;
+			}
+			break;
+		case FE_ATSC:
+			if ( fe_info.caps & (FE_CAN_8VSB | FE_CAN_16VSB) )
+			{
+				LOG ("Delivery System ATSC");
+				rv=SYS_ATSC;
+			}
+			else if ( fe_info.caps & (FE_CAN_QAM_64 | FE_CAN_QAM_256 | FE_CAN_QAM_AUTO) )
+			{
+				LOG ("Delivery System ATSC/DVBC");
+				rv=SYS_DVBC_ANNEX_B;
+			}
+			else return 0;
+			break;
+		default:
+			LOG ("no available delivery system");
+			return 0;
+		}
+		nsys = 1;
+		sys[0] = rv;
 	}
-	
-	for (i = 0; i < nsys; i++)
-	{
-		sys[i] = enum_cmdargs[0].u.buffer.data[i];
-		LOG("Detected del_sys[%d] for adapter %d: %s", i, aid, fe_delsys[sys[i]]);
+	else
+	{	
+		for (i = 0; i < nsys; i++)
+		{
+			sys[i] = enum_cmdargs[0].u.buffer.data[i];
+			LOG("Detected del_sys[%d] for adapter %d: %s", i, aid, fe_delsys[sys[i]]);
+		}
+		rv = enum_cmdargs[0].u.buffer.data[0];
 	}
-	int rv = enum_cmdargs[0].u.buffer.data[0];
 
 	LOG ("returning default from dvb_delsys => %s (count %d)", fe_delsys[rv] , nsys);
 	return (fe_delivery_system_t) rv;
