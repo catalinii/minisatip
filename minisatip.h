@@ -7,9 +7,9 @@
 #include "socketworks.h"
 
 
-#define VERSION_BUILD "84"
+#define VERSION_BUILD "beta1"
 #define CC(a,b,c) #a b #c
-#define VERSION CC(0.1.,VERSION_BUILD,)
+#define VERSION CC(0.2.,VERSION_BUILD,)
 
 void set_options (int argc, char *argv[]);
 
