@@ -30,6 +30,7 @@ void set_options (int argc, char *argv[]);
 #define ENABLE_ADAPTERS_OPT 'e'
 #define UNICABLE_OPT 'u'
 #define JESS_OPT 'j'
+#define SYSLOG_OPT 'g'
 
 #define PID_FILE "/var/run/minisatip.pid"
 struct struct_opts
@@ -39,6 +40,7 @@ struct struct_opts
 	char *disc_host;			 //discover host
 	char mac[13];
 	unsigned int log,
+		slog,
 		start_rtp,
 		http_port;
 	int timeout_sec;

@@ -36,6 +36,7 @@
 #include <sys/socket.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <syslog.h>
 #include "socketworks.h"
 #include "stream.h"
 #include "adapter.h"
@@ -62,6 +63,7 @@ usage ()
 		-c X: bandwidth capping for the output to the network (default: unlimited)\n\
 		-b X: set the DVR buffer to X KB (default: %dKB)\n\
 		-l increases the verbosity (you can use multiple -l), logging to stdout in foreground mode or in /tmp/log when a daemon\n\
+		-g use syslog instead stdout for logging, multiple -g - print to stderr as well\n\
 		-p url: specify playlist url using X_SATIPM3U header \n\
 		-u unicable_string: defines the unicable adapters (A) and their slot (S) and frequency (F):\n\
 		\tThe format is: A1:S1-F1[,A2:S2-F2[,...]] \n\
@@ -101,7 +103,7 @@ set_options (int argc, char *argv[])
 	opts.file_line = 0;
 	memset(opts.playlist, sizeof(opts.playlist), 0);
 	
-	while ((opt = getopt (argc, argv, "flr:a:t:d:w:p:shc:b:m:p:e:x:u:j:")) != -1)
+	while ((opt = getopt (argc, argv, "flr:a:t:d:w:p:shc:b:m:p:e:x:u:j:g")) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
 		switch (opt)
@@ -140,6 +142,12 @@ set_options (int argc, char *argv[])
 			case LOG_OPT:
 			{
 				opts.log++;
+				break;
+			}
+
+			case SYSLOG_OPT:
+			{
+				opts.slog++;
 				break;
 			}
 
@@ -409,6 +417,11 @@ int map_int (char *s, char ** v)
 
 char public[] = "Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN";
 
+static inline end_of_header(char *buf)
+{
+       return buf[0] == 0x0d && buf[1] == 0x0a && buf[2] == 0x0d && buf[3] == 0x0a;
+}
+
 char *
 http_response (sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 {
@@ -507,8 +520,7 @@ read_rtsp (sockets * s)
 		}
 	}
 	
-	if (s->rlen < 4
-		|| (htonl (*(uint32_t *) & s->buf[s->rlen - 4]) != 0x0D0A0D0A))
+	if (s->rlen < 4 || !end_of_header(s->buf + s->rlen - 4))
 	{
 		if( s->rlen > RBUF - 10 )
 		{
@@ -726,8 +738,7 @@ read_http (sockets * s)
 		"%s"
 		"</device></root>";
 
-	if (s->rlen < 5
-		|| (htonl (*(uint32_t *) & s->buf[s->rlen - 4]) != 0x0D0A0D0A))
+	if (s->rlen < 5 || !end_of_header(s->buf + s->rlen - 4))
 	{
 		if( s->rlen > RBUF - 10 )
 		{
@@ -987,6 +998,8 @@ main (int argc, char *argv[])
 	set_options (argc, argv);
 	if (opts.daemon)
 		becomeDaemon ();
+	if (opts.slog)
+		openlog ("minisatip", LOG_NDELAY|LOG_NOWAIT|LOG_PID|(opts.slog>1?LOG_PERROR:0), LOG_DAEMON);
 	LOGL(0, "Starting minisatip version %s, compiled with dvbapi version: %04X",VERSION, DVBAPIVERSION);
 	readBootID();
 	if ((ssdp = udp_bind (NULL, 1900)) < 1)
@@ -1021,7 +1034,9 @@ main (int argc, char *argv[])
 	select_and_execute ();
 	unlink(PID_FILE);
 	free_all ();
-	return 0;
+	if (opts.slog)
+		closelog();
+        return 0;
 }
 
 
@@ -1247,12 +1262,16 @@ void _log(int level, char * file, int line, const char *fmt, ...) {
 		idx = 1;
 	else if ( idx < 0)
 		idx = 0;
-	if(opts.file_line)
+	if(opts.file_line && !opts.slog)
 		len1 = snprintf(output[idx], sizeof(output[0]), "[%s] %s:%d: ", get_current_timestamp_log(), file, line);
-	else	
+	else if (!opts.slog)
 		len1 = snprintf(output[idx], sizeof(output[0]), "[%s]: ", get_current_timestamp_log());
+        else if (opts.file_line) {
+		len1 = 0;
+		output[idx][0] = '\0';
+        }
     /* Write the error message */
-	len = len1;
+	len = len1 = len1 < sizeof(output[0]) ? len1 : sizeof(output[0]) - 1;
 	both = 0;
     va_start(arg, fmt);
     len += vsnprintf(output[idx] + len, sizeof(output[0]) - len, fmt, arg);
@@ -1271,9 +1290,9 @@ void _log(int level, char * file, int line, const char *fmt, ...) {
 	}
 	
 	if(both){
-		puts(output[1-idx]);
+		if(opts.slog)syslog(LOG_NOTICE, "%s", output[1-idx]); else puts(output[1-idx]);
 		both = 0;
 	}
-	if(times==0)puts(output[idx]);
+	if(times==0) if(opts.slog)syslog(LOG_NOTICE, "%s", output[idx]); else puts(output[idx]);
 	fflush(stdout);
 }
