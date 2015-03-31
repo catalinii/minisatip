@@ -417,6 +417,11 @@ int map_int (char *s, char ** v)
 
 char public[] = "Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN";
 
+static inline end_of_header(char *buf)
+{
+       return buf[0] == 0x0d && buf[1] == 0x0a && buf[2] == 0x0d && buf[3] == 0x0a;
+}
+
 char *
 http_response (sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 {
@@ -515,8 +520,7 @@ read_rtsp (sockets * s)
 		}
 	}
 	
-	if (s->rlen < 4
-		|| (htonl (*(uint32_t *) & s->buf[s->rlen - 4]) != 0x0D0A0D0A))
+	if (s->rlen < 4 || !end_of_header(s->buf + s->rlen - 4))
 	{
 		if( s->rlen > RBUF - 10 )
 		{
@@ -734,8 +738,7 @@ read_http (sockets * s)
 		"%s"
 		"</device></root>";
 
-	if (s->rlen < 5
-		|| (htonl (*(uint32_t *) & s->buf[s->rlen - 4]) != 0x0D0A0D0A))
+	if (s->rlen < 5 || !end_of_header(s->buf + s->rlen - 4))
 	{
 		if( s->rlen > RBUF - 10 )
 		{
