@@ -715,14 +715,14 @@ describe_adapter (int sid, int aid)
 	}
 	if (t->sys == SYS_DVBS || t->sys == SYS_DVBS2)
 		sprintf (dad, "ver=1.0;src=%d;tuner=%d,%d,%d,%d,%d,%s,%s,%s,%s,%s,%d,%s;pids=",
-			t->diseqc, aid, strength, status, snr, t->freq / 1000, get_pol(t->pol), get_modulation(t->mtype), 
+			t->diseqc, aid+1, strength, status, snr, t->freq / 1000, get_pol(t->pol), get_modulation(t->mtype),
 			get_pilot(t->plts), get_rolloff(t->ro), get_delsys(t->sys), t->sr / 1000, get_fec(t->fec));
 	else if (t->sys == SYS_DVBT || t->sys == SYS_DVBT2)
 		sprintf (dad, "ver=1.1;src=%d;tuner=%d,%d,%d,%d,%.2f,%d,%s,%s,%s,%s,%s,%d,%d,%d;pids=",
-			t->diseqc, aid, strength, status, snr, (double) t->freq/1000, t->bw, get_delsys(t->sys), get_tmode(t->tmode), get_modulation(t->mtype), get_gi(t->gi),
+			t->diseqc, aid+1, strength, status, snr, (double) t->freq/1000, t->bw, get_delsys(t->sys), get_tmode(t->tmode), get_modulation(t->mtype), get_gi(t->gi),
 			get_fec(t->fec), t->plp, t->t2id, t->sm);
 	else  sprintf (dad, "ver=1.2;src=%d;tuner=%d,%d,%d,%d,%.2f,8,%s,%s,%d,%d,%d,%d,%d;pids=",
-                        t->diseqc, aid, strength, status, snr, (double )t->freq/1000, get_delsys(t->sys), get_modulation(t->mtype), t->sr,
+                        t->diseqc, aid+1, strength, status, snr, (double )t->freq/1000, get_delsys(t->sys), get_modulation(t->mtype), t->sr,
 						t->c2tft, t->ds, t->plp, t->inversion);
 	for (i = 0; i < MAX_PIDS; i++)
 		if (use_ad && ad->pids[i].flags == 1)
