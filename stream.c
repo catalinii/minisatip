@@ -773,14 +773,14 @@ read_dmx (sockets * s)
 		if(flush_all)   // more than 50ms passed since the last write, so we flush our buffers
 		{
 			for (i = 0; i < MAX_STREAMS; i++)
-                        	if (st[i].enabled && st[i].adapter == s->sid && sid->iiov > 0)
-					flush_streami (sid, s->rtime);
+                        	if (st[i].enabled && st[i].adapter == s->sid && st[i].iiov > 0)
+					flush_streami (st + i , s->rtime);
 
 		}else{   //move all dvb packets that were not sent out of the s->buf
 			min = s->buf;
 			max = &s->buf[rlen];
 			for (i = 0; i < MAX_STREAMS; i++)
-				if (st[i].enabled && st[i].adapter == s->sid && sid->iiov > 0)
+				if (st[i].enabled && st[i].adapter == s->sid && st[i].iiov > 0)
 				{
 					sid = get_sid(i);
 					if(!sid)

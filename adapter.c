@@ -46,8 +46,8 @@ find_adapters ()
 	int i = 0,
 		j = 0;
 
-	for (i = 0; i < 8; i++)
-		for (j = 0; j < 8; j++)
+	for (i = 0; i < MAX_ADAPTERS; i++)
+		for (j = 0; j < MAX_ADAPTERS; j++)
 	{
 		sprintf (buf, "/dev/dvb/adapter%d/frontend%d", i, j);
 		fd = open (buf, O_RDONLY | O_NONBLOCK);
@@ -701,10 +701,15 @@ describe_adapter (int sid, int aid)
 		if (ad->max_snr <= ad->snr) ad->max_snr = (ad->snr>0)?ad->snr:1;
 		LOG ("get_signal%s took %d ms for adapter %d handle %d (status: %d, ber: %d, strength:%d, snr: %d, max_strength: %d, max_snr: %d %d)",
 			new_gs?"":"_new", getTick () - ts, aid, ad->fe, ad->status, ad->ber, ad->strength, ad->snr, ad->max_strength, ad->max_snr, opts.force_scan);
+		if(ad->snr > 4096)	
+			new_gs = 0;
 		if(new_gs)
 		{
 			ad->strength = ad->strength * 255 / ad->max_strength;
 			ad->snr = ad->snr * 15 / ad->max_snr;
+		}else {
+			ad->strength = ad->strength >> 8;
+			ad->snr = ad->snr >> 12;
 		}
 	}
 	if(use_ad)

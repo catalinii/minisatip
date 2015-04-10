@@ -961,15 +961,15 @@ int get_signal_new (int fd, fe_status_t * status, uint32_t * ber,
 	
 
 	if(enum_cmdargs[0].u.st.stat[0].scale ==  FE_SCALE_RELATIVE)
-		*strength = enum_cmdargs[0].u.st.stat[0].uvalue >> 8;
+		*strength = enum_cmdargs[0].u.st.stat[0].uvalue;
 	else if(enum_cmdargs[0].u.st.stat[0].scale ==  FE_SCALE_DECIBEL)
-		*strength = enum_cmdargs[0].u.st.stat[0].uvalue >> 8;
+		*strength = enum_cmdargs[0].u.st.stat[0].uvalue;
 	else err ++;
 
 	if(enum_cmdargs[1].u.st.stat[0].scale ==  FE_SCALE_RELATIVE)
-		*snr = enum_cmdargs[1].u.st.stat[0].uvalue >> 12;
+		*snr = enum_cmdargs[1].u.st.stat[0].uvalue;
 	else if(enum_cmdargs[1].u.st.stat[0].scale ==  FE_SCALE_DECIBEL)
-		*snr = enum_cmdargs[1].u.st.stat[0].uvalue >> 12;
+		*snr = enum_cmdargs[1].u.st.stat[0].uvalue;
 	else err ++;
 
 	*ber = enum_cmdargs[2].u.st.stat[0].uvalue & 0xFFFF;
