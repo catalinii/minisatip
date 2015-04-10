@@ -4,7 +4,7 @@
 #include <linux/dvb/frontend.h>
 #include "dvb.h"
 
-#define MAX_ADAPTERS 8
+#define MAX_ADAPTERS 16
 #define DVR_BUFFER 30*1024*188
 #define MAX_STREAMS_PER_PID 8
 #define ADAPTER_BUFFER 7*7*DVB_FRAME
