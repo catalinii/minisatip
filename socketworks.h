@@ -38,6 +38,7 @@ char *setlocalip ();
 char *getlocalip ();
 int udp_connect (char *addr, int port, struct sockaddr_in *serv);
 int udp_bind_connect(char *src, int sport, char *dest, int dport, struct sockaddr_in *serv);
+int tcp_connect (char *addr, int port, struct sockaddr_in *serv);
 char *get_sock_host(int fd);
 int get_sock_port(int fd);
 int sockets_add (int sock, struct sockaddr_in *sa, int sid, int type,

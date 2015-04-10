@@ -36,10 +36,12 @@
 #include <sys/socket.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <syslog.h>
 #include "socketworks.h"
 #include "stream.h"
 #include "adapter.h"
 #include "dvb.h"
+#include "dvbapi.h"
 
 struct struct_opts opts;
 
@@ -60,14 +62,16 @@ usage ()
 		-m xx: simulate xx as local mac address, generates UUID based on mac\n\
 		-e list_of_enabled adapters: enable only specified adapters, example 0-2,5,7 (no spaces between parameters)\n\
 		-c X: bandwidth capping for the output to the network (default: unlimited)\n\
-		-b X: set the DVR buffer to X KB (default: %dKB)\n\
+		-b X:Y : set the app adapter buffer to X Bytes (default: %d) and set the kernel DVB buffer to Y Bytes (default: %d) - both multiple of 188\n\
 		-l increases the verbosity (you can use multiple -l), logging to stdout in foreground mode or in /tmp/log when a daemon\n\
+		-g use syslog instead stdout for logging, multiple -g - print to stderr as well\n\
 		-p url: specify playlist url using X_SATIPM3U header \n\
-		-u unicable_string: defines the unicable adapters (A) and their slot (S) and frequency (F):\n\
-		\tThe format is: A1:S1-F1[,A2:S2-F2[,...]] \n\
+		-u unicable_string: defines the unicable adapters (A) and their slot (S), frequency (F) and optionally the PIN for the switch:\n\
+		\tThe format is: A1:S1-F1[-PIN][,A2:S2-F2[-PIN][,...]] \n\
 		-j jess_string: same format as unicable_string \n\
+		-o host:port: specify the hostname and port for the dvbapi server (oscam) \n\
 		",
-		DVR_BUFFER / 1024);
+		ADAPTER_BUFFER, DVR_BUFFER);
 	exit (1);
 }
 
@@ -97,11 +101,15 @@ set_options (int argc, char *argv[])
 	opts.device_id = 0;
 	opts.bootid = 0;
 	opts.force_scan = 0;
-	opts.dvr = DVR_BUFFER;
+	opts.dvr_buffer = DVR_BUFFER;
+	opts.adapter_buffer = ADAPTER_BUFFER;
 	opts.file_line = 0;
+	opts.dvbapi_port = 0;
+	opts.dvbapi_host = NULL;
+	opts.drop_encrypted = 1;
 	memset(opts.playlist, sizeof(opts.playlist), 0);
 	
-	while ((opt = getopt (argc, argv, "flr:a:t:d:w:p:shc:b:m:p:e:x:u:j:")) != -1)
+	while ((opt = getopt (argc, argv, "flr:a:t:d:w:p:shc:b:m:p:e:x:u:j:o:g")) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
 		switch (opt)
@@ -143,6 +151,12 @@ set_options (int argc, char *argv[])
 				break;
 			}
 
+			case SYSLOG_OPT:
+			{
+				opts.slog++;
+				break;
+			}
+
 			case HELP_OPT:
 			{
 				usage ();
@@ -163,7 +177,13 @@ set_options (int argc, char *argv[])
 
 			case DVRBUFFER_OPT:
 			{
-				opts.dvr = atoi (optarg) * 1024;
+				sscanf(optarg,"%d:%d", &opts.adapter_buffer, &opts.dvr_buffer) ;
+				opts.adapter_buffer = (opts.adapter_buffer/188) * 188;
+				if(opts.adapter_buffer < ADAPTER_BUFFER)
+					opts.adapter_buffer = ADAPTER_BUFFER;
+				if(opts.dvr_buffer == 0 )
+					opts.dvr_buffer = DVR_BUFFER;
+					
 				break;
 			}
 
@@ -208,10 +228,24 @@ set_options (int argc, char *argv[])
 				set_unicable_adapters(optarg, SWITCH_JESS);
 				break;
 			}
+			
+			case DVBAPI_OPT:
+			{
+				char* sep1 = strchr(optarg, ':');
+				if ( sep1 != NULL)
+				{
+					*sep1 = 0;
+					opts.dvbapi_host = optarg;
+					opts.dvbapi_port = map_int(sep1 + 1, NULL );
+				}
+			}
 
 		}
 	}
 	
+	if(opts.bw && (opts.bw < opts.adapter_buffer))
+			opts.adapter_buffer = (opts.bw / 188) * 188;
+			
 	lip = getlocalip ();
 	if (!opts.http_host)
 	{
@@ -221,56 +255,6 @@ set_options (int argc, char *argv[])
 }
 
 
-#ifdef __mips__
-
-void
-hexDump (char *desc, void *addr, int len)
-{
-	int i;
-	unsigned char buff[17];
-	unsigned char *pc = (unsigned char *) addr;
-
-	// Output description if given.
-	if (desc != NULL)
-		LOGL (0, "%s:\n", desc);
-
-	// Process every byte in the data.
-	for (i = -len; i < len; i++)
-	{
-		// Multiple of 16 means new line (with line offset).
-
-		if ((i % 16) == 0)
-		{
-			// Just don't print ASCII for the zeroth line.
-			if (i != 0)
-				LOGL (0, "  %s\n", buff);
-
-			// Output the offset.
-			LOGL (0, "  %08x ", ((unsigned int) addr) + i);
-		}
-
-		// Now the hex code for the specific character.
-		LOGL (0, " %02x", pc[i]);
-
-		// And store a printable ASCII character for later.
-		if ((pc[i] < 0x20) || (pc[i] > 0x7e))
-			buff[i % 16] = '.';
-		else
-			buff[i % 16] = pc[i];
-		buff[(i % 16) + 1] = '\0';
-	}
-
-	// Pad out last line if not exactly 16 characters.
-	while ((i % 16) != 0)
-	{
-		LOGL (0, "   ");
-		i++;
-	}
-
-	// And print the final ASCII bit.
-	LOGL (0, "  %s\n", buff);
-}
-#endif
 
 void posix_signal_handler (int sig, siginfo_t * siginfo, ucontext_t * ctx);
 void
@@ -409,6 +393,11 @@ int map_int (char *s, char ** v)
 
 char public[] = "Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN";
 
+static inline end_of_header(char *buf)
+{
+       return buf[0] == 0x0d && buf[1] == 0x0a && buf[2] == 0x0d && buf[3] == 0x0a;
+}
+
 char *
 http_response (sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 {
@@ -507,8 +496,7 @@ read_rtsp (sockets * s)
 		}
 	}
 	
-	if (s->rlen < 4
-		|| (htonl (*(uint32_t *) & s->buf[s->rlen - 4]) != 0x0D0A0D0A))
+	if (s->rlen < 4 || !end_of_header(s->buf + s->rlen - 4))
 	{
 		if( s->rlen > RBUF - 10 )
 		{
@@ -628,7 +616,8 @@ read_rtsp (sockets * s)
 			if(qm)
 				*qm = 0;
 			if(buf[0])
-				sprintf(buf, "\r\n");
+				strcat(buf, "\r\n");
+			
 			snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf) - 1,  "RTP-Info: url=%s;seq=%d", arg[1], 0);
 		}
 		http_response (s, 200, buf, NULL, cseq, 0);
@@ -726,8 +715,7 @@ read_http (sockets * s)
 		"%s"
 		"</device></root>";
 
-	if (s->rlen < 5
-		|| (htonl (*(uint32_t *) & s->buf[s->rlen - 4]) != 0x0D0A0D0A))
+	if (s->rlen < 5 || !end_of_header(s->buf + s->rlen - 4))
 	{
 		if( s->rlen > RBUF - 10 )
 		{
@@ -987,7 +975,9 @@ main (int argc, char *argv[])
 	set_options (argc, argv);
 	if (opts.daemon)
 		becomeDaemon ();
-	LOGL(0, "Starting minisatip version %s, compiled with dvbapi version: %04X",VERSION, DVBAPIVERSION);
+	if (opts.slog)
+		openlog ("minisatip", LOG_NDELAY|LOG_NOWAIT|LOG_PID|(opts.slog>1?LOG_PERROR:0), LOG_DAEMON);
+	LOGL(0, "Starting minisatip version %s, compiled with s2api version: %04X",VERSION, DVBAPIVERSION);
 	readBootID();
 	if ((ssdp = udp_bind (NULL, 1900)) < 1)
 		FAIL ("SSDP: Could not bind on udp port 1900");
@@ -1018,10 +1008,13 @@ main (int argc, char *argv[])
 	
 	LOGL (0, "Initializing with %d devices", init_hw ());
 	write_pid_file();
+	init_dvbapi();
 	select_and_execute ();
 	unlink(PID_FILE);
 	free_all ();
-	return 0;
+	if (opts.slog)
+		closelog();
+        return 0;
 }
 
 
@@ -1079,9 +1072,6 @@ posix_signal_handler (int sig, siginfo_t * siginfo, ucontext_t * ctx)
 		(long unsigned int) main, (long unsigned int) read_dmx,
 		(long unsigned int) clock_gettime);
 	
-	#ifdef __mips__
-	hexDump ("Stack dump: ", (void *)sp, 128);
-	#endif
 	print_trace();
 	exit (1);
 }
@@ -1108,7 +1098,7 @@ becomeDaemon ()
 		{
 			LOGL(0, "Found minisatip running with pid %d, killing....", pid);
 			kill(pid, SIGINT);
-			msleep(1000);
+			usleep(500);
 		}
 	}
 	
@@ -1247,12 +1237,16 @@ void _log(int level, char * file, int line, const char *fmt, ...) {
 		idx = 1;
 	else if ( idx < 0)
 		idx = 0;
-	if(opts.file_line)
+	if(opts.file_line && !opts.slog)
 		len1 = snprintf(output[idx], sizeof(output[0]), "[%s] %s:%d: ", get_current_timestamp_log(), file, line);
-	else	
+	else if (!opts.slog)
 		len1 = snprintf(output[idx], sizeof(output[0]), "[%s]: ", get_current_timestamp_log());
+        else if (opts.file_line) {
+		len1 = 0;
+		output[idx][0] = '\0';
+        }
     /* Write the error message */
-	len = len1;
+	len = len1 = len1 < sizeof(output[0]) ? len1 : sizeof(output[0]) - 1;
 	both = 0;
     va_start(arg, fmt);
     len += vsnprintf(output[idx] + len, sizeof(output[0]) - len, fmt, arg);
@@ -1271,9 +1265,9 @@ void _log(int level, char * file, int line, const char *fmt, ...) {
 	}
 	
 	if(both){
-		puts(output[1-idx]);
+		if(opts.slog)syslog(LOG_NOTICE, "%s", output[1-idx]); else puts(output[1-idx]);
 		both = 0;
 	}
-	if(times==0)puts(output[idx]);
+	if(times==0) if(opts.slog)syslog(LOG_NOTICE, "%s", output[idx]); else puts(output[idx]);
 	fflush(stdout);
 }

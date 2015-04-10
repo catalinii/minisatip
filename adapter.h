@@ -7,7 +7,11 @@
 #define MAX_ADAPTERS 8
 #define DVR_BUFFER 30*1024*188
 #define MAX_STREAMS_PER_PID 8
-#define ADAPTER_BUFFER 7*7*DVB_FRAME
+#define ADAPTER_BUFFER (128 + 5)*DVB_FRAME
+
+#define TYPE_PMT 1
+#define TYPE_ECM 2
+#define PMT_COMPLETE 4
 typedef struct struct_pid
 {
 	int pid;					 // pid for this demux - not used
@@ -16,9 +20,12 @@ typedef struct struct_pid
 								// stream id - one more to set it -1
 	signed char sid[MAX_STREAMS_PER_PID];
 	char flags;					 // 0 - disabled , 1 enabled, 2 - will be enabled next tune when tune is called, 3 disable when tune is called
+	int type;
+	int csid;  // channel sid if type & TYPE_PMT
 	int cnt;
+	unsigned char key, filter, ecm_parity; // custom data kept in the SPid structure
 	unsigned char cc; // continuity
-} pid;
+} SPid;
 
 typedef struct struct_adapter
 {
@@ -29,7 +36,7 @@ typedef struct struct_adapter
 		// physical adapter, physical frontend number
 	fe_delivery_system_t sys[10]; 
 	transponder tp;
-	pid pids[MAX_PIDS];
+	SPid pids[MAX_PIDS];
 	int master_sid;				 // first SID, the one that controls the tuning
 	int sid_cnt;				 //number of streams
 	int sock;
@@ -45,6 +52,9 @@ typedef struct struct_adapter
 	int switch_type;
 	int uslot; // unicable/jess slot
 	int ufreq; // unicable/jess frequency	
+	int pin;
+	int id;
+	int pat_processed;
 } adapter;
 
 int init_hw ();
@@ -58,7 +68,10 @@ int close_adapter_for_stream (int sid, int aid);
 int set_adapter_parameters (int aid, int sid, transponder * tp);
 void mark_pids_deleted (int aid, int sid, char *pids);
 int mark_pids_add (int sid, int aid, char *pids);
+int mark_pid_add(int sid, int aid, int _pid);
+void mark_pid_deleted(int aid, int sid, int _pid, SPid *p);
 int update_pids (int aid);
+SPid *find_pid(int aid, int p);
 adapter * get_adapter1 (int aid, char *file, int line);
 char *describe_adapter (int sid, int aid);
 void dump_pids (int aid);

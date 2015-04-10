@@ -73,6 +73,7 @@ typedef struct struct_transponder
 	int switch_type; // tuner type 
 	int uslot; // unicable/jess slot
 	int ufreq; // unicable/jess frequency
+	int pin;
 	int old_pol, old_hiband, old_diseqc; // used to cache the diseqc position
 	
 	// DVB-C2
@@ -111,5 +112,5 @@ char *get_tmode(int i);
 char *get_gi(int i);
 char *get_specinv(int i);
 char *get_pol(int i);
-void msleep(uint32_t a);
+
 #endif							 /*  */

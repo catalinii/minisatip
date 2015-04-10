@@ -8,6 +8,7 @@ It is tested on x86_64, x86, ARM and MIPS platforms and it requires DVBAPI 5. Su
 
 Please use https://toda.ro/projects/minisatip/issues/new for features requests.
 In order to speed up the investigation of an issue, please provide the full log and a link to the application that is not working.
+minisatip requires libdvbcsa development files. If you want to compile minisatip without libdvbcsa, remove # from the line #NODVBCSA=-DDISABLE_DVBCSA in Makefile
 
 Usage:
 
@@ -28,6 +29,8 @@ minisatip [-f] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] [-p p
 		-u unicable_string: defines the unicable adapters (A) and their slot (S) and frequency (F):
 			The format is: A1:S1-F1[,A2:S2-F2[,...]] 
 		-j jess_string: same format as unicable_string 
+		-g use syslog instead stdout for logging, multiple -g - print to stderr as well\n\
+		-o host:port: specify the hostname and port for the dvbapi server (oscam) \n\
 
 Example of Usage:
 
@@ -50,7 +53,11 @@ Example of Usage:
 	minisatip -m 001122334455 
 	
 	- As long as you want to use the channels on the same frequency, you can use -a or -t parameter to report multiple tuners to the client so you can watch/record multiple channels from the same frequency (using tvheadend for example)
-
+	
+	- Connect to oscam using the dvbapi protocol
+	
+	minisatip -o 192.168.9.9:9000
+	
 Examples:
 	- In order to listen to a radio on Hotbird 13E, after minisatip is started open the following URL in your favourite media player:
 

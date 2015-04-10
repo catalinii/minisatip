@@ -37,6 +37,7 @@
 #include <linux/dvb/frontend.h>
 #include <linux/dvb/dmx.h>
 #include <poll.h>
+#include <fcntl.h>
 
 #include "minisatip.h"
 #include "socketworks.h"
@@ -44,23 +45,32 @@
 #include "dvb.h"
 #include "adapter.h"
 
+#include "dvbapi.h"
+
 extern struct struct_opts opts;
 streams st[MAX_STREAMS];
 unsigned init_tick, theTick;
-uint64_t ntime;
 
 uint32_t
 getTick ()
 {								 //ms
 	struct timespec ts;
-
 	clock_gettime (CLOCK_REALTIME, &ts);
 	theTick = ts.tv_nsec / 1000000;
 	theTick += ts.tv_sec * 1000;
-	ntime = ts.tv_sec * 1000000 + ts.tv_nsec;
 	if (init_tick == 0)
 		init_tick = theTick;
 	return theTick - init_tick;
+}
+
+uint64_t getTickUs()
+{
+	uint64_t utime;
+	struct timespec ts;
+	clock_gettime (CLOCK_REALTIME, &ts);	
+	utime = ((uint64_t )ts.tv_sec) * 1000000 + ts.tv_nsec / 1000;
+	return utime;
+
 }
 
 int get_next_free_stream()
@@ -379,9 +389,9 @@ streams_add ()
 //	st[i].seq = 0; // set the sequence to 0 for testing purposes - it should be random 
 	st[i].ssrc = random();
 	st[i].timeout = opts.timeout_sec;
-	st[i].wtime = st[i].rtcp_wtime = getTick ();
-								 // max 7 packets
-	st[i].total_len = 7 * DVB_FRAME;
+	st[i].wtime = st[i].rtcp_wtime = getTick ();	
+	
+	st[i].total_len = 7 * DVB_FRAME; // max 7 packets
 	if (!st[i].pids)
 		st[i].pids = malloc1 (MAX_PIDS * 5 + 1);
 	if (!st[i].apids)
@@ -470,11 +480,12 @@ send_rtpb (streams * sid, unsigned char *b, int len)
 	return send_rtp (sid, (const struct iovec *) iov, 1);
 }
 
-#define copy32(a,i,v) { a[i] = ((v)>>24) & 0xFF;\
-			a[i+1] = ((v)>>16) & 0xFF;\
-			a[i+2] = ((v)>>8) & 0xFF;\
-			a[i+3] = (v) & 0xFF; }
-#define copy16(a,i,v) { a[i] = ((v)>>8) & 0xFF; a[i+1] = (v) & 0xFF; }
+extern int bw, sleeping, sleeping_cnt;
+extern uint64_t nsecs;
+extern uint32_t reads;
+
+int slow_down;
+uint64_t last_sd;
 
 int
 send_rtp (streams * sid, struct iovec *iov, int liov)
@@ -512,6 +523,24 @@ send_rtp (streams * sid, struct iovec *iov, int liov)
 	memcpy (&io[1], iov, liov * sizeof (struct iovec));
 	//      LOG("write to %d (len:%d)-> %X, %d, %X, %d ",sock,liov*sizeof(iov),io[0].iov_base,io[0].iov_len,io[1].iov_base,io[1].iov_len);
 	rv = writev (sid->rsock, (const struct iovec *) io, liov + 1);
+	if(opts.bw && (slow_down++ > 20))
+	{
+		uint64_t tn = getTickUs();
+//		int interval = (1328 * 20000 / (opts.bw / 1024)) ;   // For 1328kb/s we have 1000 packets/s, each 20 packets => 20 000 us
+		int interval = opts.bw * 10 / 1024; 
+		int result = tn - last_sd;
+		if((result > 0) && (result < interval))
+		{		
+				usleep(result);		
+				sleeping += result;
+				sleeping_cnt ++;
+		}
+		if(slow_down > 20)
+		{
+			last_sd = tn;
+			slow_down = 0;
+		}
+	}
 	if(rv<0)
 	{
 		sid->rsock_err ++;
@@ -523,6 +552,8 @@ send_rtp (streams * sid, struct iovec *iov, int liov)
 		sid->start_streaming = 1;
 		LOG("Start streaming for stream %d, len %d to handle %d => %s:%d", sid->sid, total_len, sid->rsock, inet_ntoa(sid->sa.sin_addr), ntohs(sid->sa.sin_port));
 	}
+	
+	LOGL(5, "sent %d bytes for stream %d, handle %d => %s:%d",  total_len, sid->sid, sid->rsock, inet_ntoa(sid->sa.sin_addr), ntohs(sid->sa.sin_port));
 	
 	return rv;
 }
@@ -612,10 +643,7 @@ send_rtcp (int s_id, int ctime)
 }
 
 
-extern int bw;
-extern uint32_t nsecs, reads;
-void
-flush_streamb (streams * sid, char *buf, int rlen, int ctime)
+void flush_streamb (streams * sid, char *buf, int rlen, int ctime)
 {
 	int i, rv = 0;
 	
@@ -623,7 +651,7 @@ flush_streamb (streams * sid, char *buf, int rlen, int ctime)
 		rv = send (sid->rsock, buf, rlen, MSG_NOSIGNAL);
 	else
 		for (i = 0; i < rlen; i += DVB_FRAME * 7)
-			rv += send_rtpb (sid, &buf[i], DVB_FRAME * 7);
+			rv += send_rtpb (sid, &buf[i], ((rlen - i) > DVB_FRAME * 7)?DVB_FRAME*7:(rlen - i));
 	
 	sid->iiov = 0;
 	sid->wtime = ctime;
@@ -642,11 +670,23 @@ flush_streamb (streams * sid, char *buf, int rlen, int ctime)
 void
 flush_streami (streams * sid, int ctime)
 {
-	int rv;
+	int rv, i, len;
+	
 	if (sid->type == STREAM_HTTP)
 		rv = writev (sid->rsock, sid->iov, sid->iiov);
 	else
-		rv = send_rtp (sid, sid->iov, sid->iiov);
+		rv = send_rtp (sid, sid->iov, sid->iiov);		
+
+#ifdef DEBUG
+
+	static int fd;
+	if(!fd)
+	{
+		unlink("output.ts");
+		fd = open("output.ts", O_CREAT | O_WRONLY, 0666);
+	}
+	if(fd)writev(fd, sid->iov, sid->iiov);
+#endif		
 	sid->iiov = 0;
 	sid->wtime = ctime;
 	sid->len = 0;
@@ -661,6 +701,59 @@ flush_streami (streams * sid, int ctime)
 }
 
 
+int process_packet(unsigned char *b, adapter *ad)
+{
+	int i, j, cc;
+	SPid *p;
+	int _pid = (b[1] & 0x1f) * 256 + b[2];
+	int de = have_dvbapi();
+	streams *sid;
+	int rtime = ad->rtime;
+	if( _pid == 8191)
+	{
+//		LOGL(2, "process_packet: pid 8191");
+		return 0;	
+	}
+	p = find_pid(ad->id, _pid);
+	if((!p) || ((p->sid[0]==-1) && (p->type==0)))
+	{
+//		LOGL(2, "process_packet: pid %d not found", _pid);
+		return 0;
+	}
+	p->cnt++;
+	cc = b[3] & 0xF;
+	if (p->cc == 255)
+		p->cc = cc;
+	else if (p->cc == 15)
+		p->cc = 0;
+	else p->cc ++;
+				
+	if(p->cc != cc)
+	{	
+//		LOG("PID Continuity error (adapter %d): pid: %03d, Expected CC: %X, Actual CC: %X", s->sid, pid, p->cc, cc);
+		p->err ++;
+	}
+	p->cc = cc;
+
+	for (j = 0; p->sid[j] > -1 && j < MAX_STREAMS_PER_PID; j++)
+	{
+		if ((sid = get_sid(p->sid[j])))
+		{
+			if (sid->iiov > 7)
+			{
+				LOG ("ERROR: possible writing outside of allocated space iiov > 7 for SID %d PID %d", sid->sid, _pid);
+				sid->iiov = 6;
+			}
+			sid->iov[sid->iiov].iov_base = b;
+			sid->iov[sid->iiov++].iov_len = DVB_FRAME;
+			if (sid->iiov >= 7)
+				flush_streami (sid, rtime);
+		}
+	}
+	
+}
+
+
 int
 read_dmx (sockets * s)
 {
@@ -671,8 +764,8 @@ read_dmx (sockets * s)
 	streams *sid;
 	adapter *ad;
 	unsigned char sids;
-	pid *p;
-	int pid, flush_all = 0;
+	SPid *p;
+	int pid, send = 0, flush_all = 0;
 	uint64_t stime;
 
 	if (s->rlen % DVB_FRAME != 0)
@@ -688,25 +781,39 @@ read_dmx (sockets * s)
 		return 0;
 	}
 								 
-	if (s->rlen < s->lbuf && s->rtime - ad->rtime < 50) // flush buffers every 50ms
-		return 0;		// the buffer is not full, read more
-	else if(s->rlen < s->lbuf)
-		flush_all = 1; // flush everything that we read so far
-	if (s->rlen > s->lbuf)
-		LOG ("Buffer overrun %d %d", s->rlen, s->lbuf);
+	if (s->rtime - ad->rtime > 50) // flush buffers every 50ms
+	{
+		flush_all = 1; // flush everything that we've read so far
+		send = 1;
+	}
+	
+	if(flush_all && (s->rlen > 20000))  // if the bw/s > 300kB - waiting for the buffer to fill - most likely watching a TV channel and not scanning
+		send = 0;
+	
+	if(s->rlen == s->lbuf)
+		send = 1;
+	
+	if(s->rtime - ad->rtime > 1000)
+		send = 1;
+	
+	LOGL(6, "read_dmx send=%d, flush_all=%d called for adapter %d -> %d out of %d bytes read, %d ms ago", send, flush_all, s->sid, s->rlen, s->lbuf, s->rtime - ad->rtime);
 
-//	LOGL(2, "read_dmx called for adapter %d -> %d bytes read ",s->sid, s->rlen);
+	if(!send) 
+		return;
 		
 	int rlen = s->rlen;
+	int ms_ago = s->rtime - ad->rtime;
 	ad->rtime = s->rtime;
 	s->rlen = 0;
-	getTick();
-	stime = ntime;
-	
+	stime = getTickUs();
+
+	LOGL(5, "read_dmx start flush_all=%d called for adapter %d -> %d out of %d bytes read, %d ms ago", flush_all, s->sid, rlen, s->lbuf, ms_ago );   	
 	if (cnt > 0 && cnt % 100 == 0)
-		LOG ("Reading max size for the last %d buffers", cnt);
-								 // we have just 1 stream, do not check the pids, send everything to the destination
-	if (ad->sid_cnt == 1 && ad->master_sid >= 0 && opts.log < 2)
+		LOG ("Reading max size for the last %d buffers", cnt);								 
+								 
+	decrypt_stream(ad, rlen);	
+								 
+	if (ad->sid_cnt == 1 && ad->master_sid >= 0 && opts.log < 2) // we have just 1 stream, do not check the pids, send everything to the destination
 	{
 		sid = get_sid(ad->master_sid);
 		if (sid->enabled != 1)
@@ -720,67 +827,22 @@ read_dmx (sockets * s)
 
 	}
 	else
-	{
-		//              LOG("not implemented");
-		//              char used[DVB_FRAME*7*MAX_PACK]; // if the DVB packet is already sent
-		//              return 0;
-		for (dp = 0; dp < rlen; dp += DVB_FRAME)
-		{
-			unsigned char *b = &s->buf[dp];
-
-			pid = (b[1] & 0x1f) * 256 + b[2];
-			p = ad->pids;
-			for (i = 0; i < MAX_PIDS; i++)
-				if (p[i].flags == 1 && (p[i].pid == pid || p[i].pid == 8192))
-				{
-					int cc;   // calculate pid continuity
-					p[i].cnt++;
-					cc = b[3] & 0xF;
-					if (p[i].cc == 255)
-						p[i].cc = cc;
-					else if (p[i].cc == 15)
-						p[i].cc = 0;
-					else p[i].cc ++;
-						
-					if(p[i].cc != cc)
-					{	
-//						LOG("PID Continuity error (adapter %d): pid: %03d, Expected CC: %X, Actual CC: %X", s->sid, pid, p[i].cc, cc);
-						p[i].err ++;
-					}
-					p[i].cc = cc;
-
-					for (j = 0; p[i].sid[j] > -1 && j < MAX_STREAMS_PER_PID; j++)
-					{
-						if ((sid = get_sid(p[i].sid[j])))
-						{
-							if (sid->iiov > 7)
-							{
-								LOG ("ERROR: possible writing outside of allocated space iiov > 7 for SID %d PID %d", sid->sid, pid);
-								sid->iiov = 6;
-							}
-							sid->iov[sid->iiov].iov_base = b;
-							sid->iov[sid->iiov++].iov_len = DVB_FRAME;
-							if (sid->iiov >= 7)
-								flush_streami (sid, s->rtime);
-						}
-						else
-							LOG ("could not find a valid sid %d for pid:%d",
-								p[i].sid[j], pid);
-					}
-				}
-		}
+	{	
+		for (dp = 0; dp < rlen; dp += DVB_FRAME)		
+			process_packet(&s->buf[dp], ad);
 
 		if(flush_all)   // more than 50ms passed since the last write, so we flush our buffers
 		{
 			for (i = 0; i < MAX_STREAMS; i++)
-                        	if (st[i].enabled && st[i].adapter == s->sid && sid->iiov > 0)
-					flush_streami (sid, s->rtime);
+				if (st[i].enabled && st[i].adapter == s->sid && st[i].iiov > 0)
+					flush_streami (&st[i], s->rtime);
 
-		}else{   //move all dvb packets that were not sent out of the s->buf
+		}
+		else{   //move all dvb packets that were not sent out of the s->buf
 			min = s->buf;
 			max = &s->buf[rlen];
 			for (i = 0; i < MAX_STREAMS; i++)
-				if (st[i].enabled && st[i].adapter == s->sid && sid->iiov > 0)
+				if (st[i].enabled && st[i].adapter == s->sid && st[i].iiov > 0)
 				{
 					sid = get_sid(i);
 					if(!sid)
@@ -807,8 +869,8 @@ read_dmx (sockets * s)
 			sort_pids (s->sid);
 		}
 	}
-	getTick();
-	nsecs += ntime - stime;
+	
+	nsecs += getTickUs() - stime;
 	reads ++;
 	//      if(!found)LOG("pid not found = %d -> 1:%d 2:%d 1&1f=%d",pid,s->buf[1],s->buf[2],s->buf[1]&0x1f);
 	//      LOG("done send stream");

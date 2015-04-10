@@ -204,17 +204,6 @@ make_func ( gi );
 make_func( specinv );
 make_func( pol );
 
-
-
-void
-msleep (uint32_t msec)
-{
-	struct timespec req = { msec / 1000, 1000000 * (msec % 1000) };
-
-	while (nanosleep (&req, &req))
-		;
-}
-
 int send_diseqc(int fd, int pos, int pol, int hiband)
 {
 	struct dvb_diseqc_master_cmd cmd = {
@@ -232,14 +221,14 @@ int send_diseqc(int fd, int pos, int pol, int hiband)
 	if (ioctl(fd, FE_SET_VOLTAGE, pol ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13) == -1)
 		LOG("send_diseqc: FE_SET_VOLTAGE failed for fd %d: %s", fd, strerror(errno));
 
-	msleep(15);
+	usleep(15000);
 	if (ioctl(fd, FE_DISEQC_SEND_MASTER_CMD, &cmd) == -1)
 		LOG( "send_diseqc: FE_DISEQC_SEND_MASTER_CMD failed for fd %d: %s", fd, strerror(errno));	
 	
-	msleep(15);
+	usleep(15000);
 	if (ioctl(fd, FE_DISEQC_SEND_BURST, (pos & 1)?SEC_MINI_B : SEC_MINI_A ) == -1)
 		LOG("send_diseqc: FE_DISEQC_SEND_BURST failed for fd %d: %s", fd, strerror(errno));
-	msleep(15);
+	usleep(15000);
 	
 	if (ioctl(fd, FE_SET_TONE, hiband ? SEC_TONE_ON : SEC_TONE_OFF) == -1)
 		LOG("send_diseqc: FE_SET_TONE failed for fd %d: %s", fd, strerror(errno));	
@@ -247,7 +236,7 @@ int send_diseqc(int fd, int pos, int pol, int hiband)
 	return 0;
 }
 
-int send_unicable(int fd, int freq, int pos, int pol, int hiband, int slot, int ufreq)
+int send_unicable(int fd, int freq, int pos, int pol, int hiband, int slot, int ufreq, int pin)
 {
 	struct dvb_diseqc_master_cmd cmd = {
 		{0xe0, 0x11, 0x5a, 0x00, 0x00}, 5
@@ -259,27 +248,34 @@ int send_unicable(int fd, int freq, int pos, int pol, int hiband, int slot, int 
 	cmd.msg[3] = ((t & 0x0300) >> 8) | 
 		(slot << 5) | (pos ? 0x10 : 0) | (hiband ? 4 : 0) | (pol ? 8 : 0);
 	cmd.msg[4] = t & 0xff;
+	
+	if(pin)
+	{
+		cmd.msg_len = 6;
+		cmd.msg[2]  = 0x5C;
+		cmd.msg[5]  = pin;		
+	}
 
 	LOGL(3, "send_unicable fd %d, freq %d, ufreq %d, pos = %d, pol = %d, hiband = %d, slot %d, diseqc => %02x %02x %02x %02x %02x",
                   fd, freq, ufreq, pos, pol, hiband, slot, cmd.msg[0], cmd.msg[1], cmd.msg[2], cmd.msg[3], cmd.msg[4]);
 	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_13) == -1)
 		LOG("send_unicable: pre voltage  SEC_VOLTAGE_13 failed for fd %d: %s", fd, strerror(errno));
-	msleep(15);
+	usleep(15000);
 	if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
 		LOG("send_unicable: FE_SET_TONE failed for fd %d: %s", fd, strerror(errno));	
 	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18) == -1)
 		LOG("send_unicable: FE_SET_VOLTAGE failed for fd %d: %s", fd, strerror(errno));	
-	msleep(15);
+	usleep(15000);
 	if (ioctl(fd, FE_DISEQC_SEND_MASTER_CMD, &cmd) == -1)
 		LOG("send_unicable: FE_DISEQC_SEND_MASTER_CMD failed for fd %d: %s", fd, strerror(errno));
-	msleep(15);
+	usleep(15000);
 	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_13) == -1)
 		LOG("send_unicable: FE_SET_VOLTAGE failed for fd %d: %s", fd, strerror(errno));
 	
 	return ufreq * 1000;
 }
 
-int send_jess(int fd, int freq, int pos, int pol, int hiband, int slot, int ufreq)
+int send_jess(int fd, int freq, int pos, int pol, int hiband, int slot, int ufreq, int pin)
 {
 	struct dvb_diseqc_master_cmd cmd = {
 		{0x70, 0x00, 0x00, 0x00, 0x00}, 4
@@ -291,21 +287,27 @@ int send_jess(int fd, int freq, int pos, int pol, int hiband, int slot, int ufre
 	cmd.msg[1] |= ((t << 8) & 0x07);
 	cmd.msg[2] = (t & 0xff);
 	cmd.msg[3] = ((pos & 0x3f) << 2) | (pol ? 2 : 0) | (hiband ? 1 : 0);
+	if (pin < 256) 
+	{
+     cmd.msg_len = 5;
+     cmd.msg[0]  = 0x71;
+     cmd.msg[4]  = pin;
+     }
 
 	LOGL(3, "send_jess fd %d, freq %d, ufreq %d, pos = %d, pol = %d, hiband = %d, slot %d, diseqc => %02x %02x %02x %02x %02x",
                   fd, freq, ufreq, pos, pol, hiband, slot, cmd.msg[0], cmd.msg[1], cmd.msg[2], cmd.msg[3], cmd.msg[4]);
 
 	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_13) == -1)
 		LOG("send_jess: pre voltage  SEC_VOLTAGE_13 failed for fd %d: %s", fd, strerror(errno));
-	msleep(15);
+	usleep(15000);
 	if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
 		LOG("send_jess: FE_SET_TONE failed for fd %d: %s", fd, strerror(errno));
 	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18) == -1)
 		LOG("send_jess: FE_SET_VOLTAGE failed for fd %d: %s", fd, strerror(errno));
-	msleep(15);
+	usleep(15000);
 	if (ioctl(fd, FE_DISEQC_SEND_MASTER_CMD, &cmd) == -1)
 		LOG("send_jess: FE_DISEQC_SEND_MASTER_CMD failed for fd %d: %s", fd, strerror(errno));
-	msleep(15);
+	usleep(15000);
 	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_13) == -1)
 		LOG("send_jess: FE_SET_VOLTAGE failed for fd %d: %s", fd, strerror(errno));
 
@@ -332,10 +334,10 @@ int setup_switch (int frontend_fd, transponder *tp)
 	
 	if(tp->switch_type == SWITCH_UNICABLE)
 	{
-		freq = send_unicable(frontend_fd, freq / 1000, diseqc, pol, hiband, tp->uslot, tp->ufreq);
+		freq = send_unicable(frontend_fd, freq / 1000, diseqc, pol, hiband, tp->uslot, tp->ufreq, tp->pin);
 	}else if(tp->switch_type == SWITCH_JESS)
 	{
-		freq = send_jess(frontend_fd, freq / 1000, diseqc, pol, hiband, tp->uslot, tp->ufreq);
+		freq = send_jess(frontend_fd, freq / 1000, diseqc, pol, hiband, tp->uslot, tp->ufreq, tp->pin);
 	}else
 	{
 		if(tp->old_pol != pol || tp->old_hiband != hiband || tp->old_diseqc != diseqc)
@@ -961,15 +963,15 @@ int get_signal_new (int fd, fe_status_t * status, uint32_t * ber,
 	
 
 	if(enum_cmdargs[0].u.st.stat[0].scale ==  FE_SCALE_RELATIVE)
-		*strength = enum_cmdargs[0].u.st.stat[0].uvalue >> 8;
+		*strength = enum_cmdargs[0].u.st.stat[0].uvalue;
 	else if(enum_cmdargs[0].u.st.stat[0].scale ==  FE_SCALE_DECIBEL)
-		*strength = enum_cmdargs[0].u.st.stat[0].uvalue >> 8;
+		*strength = enum_cmdargs[0].u.st.stat[0].uvalue;
 	else err ++;
 
 	if(enum_cmdargs[1].u.st.stat[0].scale ==  FE_SCALE_RELATIVE)
-		*snr = enum_cmdargs[1].u.st.stat[0].uvalue >> 12;
+		*snr = enum_cmdargs[1].u.st.stat[0].uvalue;
 	else if(enum_cmdargs[1].u.st.stat[0].scale ==  FE_SCALE_DECIBEL)
-		*snr = enum_cmdargs[1].u.st.stat[0].uvalue >> 12;
+		*snr = enum_cmdargs[1].u.st.stat[0].uvalue;
 	else err ++;
 
 	*ber = enum_cmdargs[2].u.st.stat[0].uvalue & 0xFFFF;

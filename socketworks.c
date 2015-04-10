@@ -113,7 +113,7 @@ udp_bind (char *addr, int port)
 	sock = socket (AF_INET, SOCK_DGRAM, 0);
 	if (sock < 0)
 	{
-		LOG ("udp_bind failed: socket(): %s", strerror (errno));
+		LOGL (0, "udp_bind failed: socket(): %s", strerror (errno));
 		return -1;
 	}
 
@@ -127,22 +127,22 @@ udp_bind (char *addr, int port)
 		if (setsockopt
 			(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof (mreq)) == -1)
 		{
-			LOG ("membership error: %s", strerror (errno));
+			LOGL (0, "membership error: %s", strerror (errno));
 		}
 	}
 	if (setsockopt (sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof (optval)) <
 		0)
 	{
-		LOG ("udp_bind failed: setsockopt(SO_REUSEADDR): %s", strerror (errno));
+		LOGL (0, "udp_bind failed: setsockopt(SO_REUSEADDR): %s", strerror (errno));
 		return -1;
 	}
 
 	if (bind (sock, (struct sockaddr *) &serv, sizeof (serv)) < 0)
 	{
-		LOG ("udp_bind: failed: bind(): %s", strerror (errno));
+		LOGL (0, "udp_bind: failed: bind(): %s", strerror (errno));
 		return -1;
 	}
-	LOG ("New UDP socket %d bound to %s:%d", sock, inet_ntoa (serv.sin_addr),
+	LOGL (0, "New UDP socket %d bound to %s:%d", sock, inet_ntoa (serv.sin_addr),
 		ntohs (serv.sin_port));
 	return sock;
 }
@@ -150,17 +150,27 @@ udp_bind (char *addr, int port)
 int udp_bind_connect(char *src, int sport, char *dest, int dport, struct sockaddr_in *serv)
 {
 	int sock;
+	int optval;
 	sock = udp_bind( src, sport);
 	if(sock<0)
 		return sock;
 	fill_sockaddr(serv, dest, dport);
 	if (connect (sock, (struct sockaddr *) serv, sizeof (*serv)) < 0)
 	{
-		LOG ("udp_bind_connect: failed: bind(): %s", strerror (errno));
+		LOGL (0, "udp_bind_connect: failed: bind(): %s", strerror (errno));
 		return -1;
-	}
+	}	
 	LOG ("New UDP socket %d connected to %s:%d", sock,
 		inet_ntoa (serv->sin_addr), ntohs (serv->sin_port));
+	
+//	optval = 8192*2;
+	
+//	if ((dport % 2 == 0) && (setsockopt (sock, SOL_SOCKET, SO_SNDBUFFORCE, &optval, sizeof (optval)) < 0))
+//	{
+//		LOGL (0, "udp_bind_connect: setsockopt(SO_SNDBUFFORCE) for socket %d: %s",
+//			sock, strerror (errno));
+//		
+//	}
 	return sock;
 }
 
@@ -178,27 +188,64 @@ udp_connect (char *addr, int port, struct sockaddr_in *serv)
 	sock = socket (AF_INET, SOCK_DGRAM, 0);
 	if (sock < 0)
 	{
-		LOG ("udp_connect failed: socket() %s", strerror (errno));
+		LOGL (0, "udp_connect failed: socket() %s", strerror (errno));
 		return -1;
 	}
 
 	if (setsockopt (sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof (optval)) <
 		0)
 	{
-		LOG ("udp_bind connect: setsockopt(SO_REUSEADDR): %s",
+		LOGL (0, "udp_bind: setsockopt(SO_REUSEADDR): %s",
 			strerror (errno));
 		return -1;
 	}
 
 	if (connect (sock, (struct sockaddr *) serv, sizeof (*serv)) < 0)
 	{
-		LOG ("udp_connect: failed: bind(): %s", strerror (errno));
+		LOGL (0, "udp_connect: failed: bind(): %s", strerror (errno));
 		return -1;
 	}
 	LOG ("New UDP socket %d connected to %s:%d", sock,
 		inet_ntoa (serv->sin_addr), ntohs (serv->sin_port));
 	return sock;
 }
+
+int
+tcp_connect (char *addr, int port, struct sockaddr_in *serv)
+{
+	struct sockaddr_in sv;
+	int sock,
+		optval = 1;
+
+	if (serv == NULL)
+		serv = &sv;
+	if ( !fill_sockaddr (serv, addr, port))
+		return -1;
+	sock = socket (AF_INET, SOCK_STREAM, 0);
+	if (sock < 0)
+	{
+		LOGL (0, "tcp_connect failed: socket() %s", strerror (errno));
+		return -1;
+	}
+
+	if (setsockopt (sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof (optval)) <
+		0)
+	{
+		LOGL (0, "tcp_connect: setsockopt(SO_REUSEADDR): %s", strerror (errno));
+		return -1;
+	}
+
+	if (connect (sock, (struct sockaddr *) serv, sizeof (*serv)) < 0)
+	{
+		LOGL (0, "tcp_connect: failed: connect to %s:%d failed: %s", addr, port, strerror (errno));
+		return -1;
+	}
+	LOG ("New TCP socket %d connected to %s:%d", sock,
+		addr, port);
+	return sock;
+}
+
+
 
 
 int
@@ -214,25 +261,25 @@ tcp_listen (char *addr, int port)
 	sock = socket (AF_INET, SOCK_STREAM, 0);
 	if (sock < 0)
 	{
-		LOG ("tcp_listen failed: socket(): %s", strerror (errno));
+		LOGL (0, "tcp_listen failed: socket(): %s", strerror (errno));
 		return -1;
 	}
 	if (setsockopt (sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof (optval)) <
 		0)
 	{
-		LOG ("tcp_listen failed: setsockopt(SO_REUSEADDR): %s",
+		LOGL (0, "tcp_listen failed: setsockopt(SO_REUSEADDR): %s",
 			strerror (errno));
 		return -1;
 	}
 
 	if (bind (sock, (struct sockaddr *) &serv, sizeof (serv)) < 0)
 	{
-		LOG ("tcp_listen: failed: bind(): %s", strerror (errno));
+		LOGL (0, "tcp_listen: failed: bind(): %s", strerror (errno));
 		return -1;
 	}
 	if (listen (sock, 10) < 0)
 	{
-		LOG ("tcp_listen: listen(): %s", strerror (errno));
+		LOGL (0, "tcp_listen: listen(): %s", strerror (errno));
 		return -1;
 	}
 	return sock;
@@ -341,9 +388,10 @@ sockets_del (int sock)
 
 
 int run_loop, it = 0, c_time;
-int bw, bwtt, bwnotify;
-unsigned long int tbwhd, tbwsd, tbwot, tbw;
-uint32_t nsecs, reads;
+int bw, bwtt, bwnotify, sleeping, sleeping_cnt;
+unsigned long int tbw;
+uint32_t reads;
+uint64_t nsecs;
 
 int
 select_and_execute ()
@@ -380,7 +428,7 @@ select_and_execute ()
 				{
 					sockets *ss = &s[i];
 
-			//                      LOG("event on socket index %d handle %d type %d (poll fd:%d, revents=%d)",i,ss->sock,ss->type,pf[i].fd,pf[i].revents);
+					LOGL(6, "event on socket index %d handle %d type %d (poll fd:%d, revents=%d)",i,ss->sock,ss->type,pf[i].fd,pf[i].revents);
 					if (!ss->buf || ss->buf == buf)
 					{
 						ss->buf = buf;
@@ -398,27 +446,24 @@ select_and_execute ()
 					{
 						bwtt = c_time;
 						tbw += bw;
-						if (bw > 800000)
-							tbwhd += bw;
-						else if (bw > 400000)
-							tbwsd += bw;
-						else
-							tbwot += bw;
 						if (bw > 2000)
 							LOG
-								("BW %dKB/s, Total BW: %ld MB, HD: %ld MB, SD: %ld MB, Other: %ld MB, ns/read %d, r: %d, tt: %d ms, n: %d",
-								(int) bw / 1024, tbw / 1024576, tbwhd / 1024576, tbwsd / 1024576, tbwot / 1024576, 
-								nsecs/reads, reads, nsecs / 1000000, bwnotify);
+								("BW %dKB/s, Total BW: %ld MB, ns/read %lld, r: %d, tt: %lld ms, n: %d (s: %d ms, s_cnt %d)",
+								(int) bw / 1024, tbw / 1024576, nsecs/reads, reads, nsecs / 1000, bwnotify, sleeping / 1000, sleeping_cnt);
 						bw = 0;
 						bwnotify = 0;
 						nsecs = 0;
 						reads = 0;
+						sleeping = sleeping_cnt = 0;
 					}
 					if (opts.bw > 0 && bw > opts.bw && ss->type == TYPE_DVR)
 					{
+						int ms = 1000 - c_time + bwtt;
 						if (bwnotify++ == 0)
-							LOG ("capping %d sock %d for the next %d ms", i, ss->sock,
-								1000 - c_time + bwtt);
+							LOG ("capping %d sock %d for the next %d ms, sleeping for the next %d ms", 
+								i, ss->sock, ms, ms/50);
+						if (ms > 50)
+							usleep(ms*20);  
 						continue;
 
 					}
@@ -436,7 +481,7 @@ select_and_execute ()
 								 //force 0 at the end of the string
 					if(ss->lbuf >= ss->rlen)
 						ss->buf[ss->rlen] = 0;
-			//LOG("Read %d (rlen:%d/total:%d) bytes from %d -> %08X - iteration %d action %x",rlen,ss->rlen,ss->lbuf,ss->sock,(unsigned int)ss->buf,it++,(int )ss->action);
+					LOGL(6, "Read %d (rlen:%d/total:%d) bytes from %d -> %08X - iteration %d action %x",rlen,ss->rlen,ss->lbuf,ss->sock,(unsigned int)ss->buf,it++,(int )ss->action);
 					
 					if (ss->rlen > 0 && ss->action)
 						ss->action (ss);

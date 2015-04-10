@@ -33,6 +33,7 @@
 #include "socketworks.h"
 #include "dvb.h"
 #include "adapter.h"
+#include "dvbapi.h"
 
 adapter a[MAX_ADAPTERS];
 extern struct struct_opts opts;
@@ -46,8 +47,8 @@ find_adapters ()
 	int i = 0,
 		j = 0;
 
-	for (i = 0; i < 8; i++)
-		for (j = 0; j < 8; j++)
+	for (i = 0; i < MAX_ADAPTERS; i++)
+		for (j = 0; j < MAX_ADAPTERS; j++)
 	{
 		sprintf (buf, "/dev/dvb/adapter%d/frontend%d", i, j);
 		fd = open (buf, O_RDONLY | O_NONBLOCK);
@@ -138,20 +139,28 @@ init_hw ()
 		}
 
 		a[i].enabled = 1;
+		a[i].id = i;
 		if (!a[i].buf)
-			a[i].buf = malloc1 (ADAPTER_BUFFER + 10);
+			a[i].buf = malloc1 (opts.adapter_buffer + 10);
 		if (!a[i].buf)
 		{
-			LOG ("memory allocation failed for %d bytes failed, adapter %d",
-				ADAPTER_BUFFER, i);
-			close_adapter (i);
+			LOG ("memory allocation failed for %d bytes failed, adapter %d, trying %d bytes",
+				opts.adapter_buffer, i, ADAPTER_BUFFER);
+			opts.adapter_buffer = ADAPTER_BUFFER;
+			a[i].buf = malloc1 (opts.adapter_buffer + 10);
+			if (! a[i].buf)
+			{
+				LOG ("memory allocation failed for %d bytes failed, adapter %d",
+				opts.adapter_buffer, i);
+				close_adapter (i);
+			}
 			continue;
 		}
-		memset (a[i].buf, 0, ADAPTER_BUFFER + 1);
+		memset (a[i].buf, 0, opts.adapter_buffer + 1);
 
 		num_adapters++;
 		LOG ("opened DVB adapter %d fe:%d dvr:%d", i, a[i].fe, a[i].dvr);
-		if (ioctl (a[i].dvr, DMX_SET_BUFFER_SIZE, opts.dvr) < 0)
+		if (ioctl (a[i].dvr, DMX_SET_BUFFER_SIZE, opts.dvr_buffer) < 0)
 			perror ("couldn't set DVR buffer size");
 		else
 			LOG ("Done setting DVR buffer to %d bytes", DVR_BUFFER);
@@ -165,8 +174,8 @@ init_hw ()
 		a[i].sock =
 			sockets_add (a[i].dvr, NULL, i, TYPE_DVR, (socket_action) read_dmx,
 			(socket_action) close_adapter_for_socket, (socket_action ) adapter_timeout);
-		memset (a[i].buf, 0, ADAPTER_BUFFER + 1);
-		set_socket_buffer (a[i].sock, a[i].buf, ADAPTER_BUFFER);
+		memset (a[i].buf, 0, opts.adapter_buffer + 1);
+		set_socket_buffer (a[i].sock, a[i].buf, opts.adapter_buffer);
 		sockets_timeout (a[i].sock, 60000);
 		LOG ("done opening adapter %i fe_sys %d", i, a[i].tp.sys);
 
@@ -289,8 +298,8 @@ dump_pids (int aid)
 			LOGL (2, "Dumping pids table for adapter %d : ", aid);
 		dp = 0;
 		LOGL
-			(2, "pid = %d, packets = %d, fd = %d, errs = %d, flags = %d, sids: %d %d %d %d %d %d %d %d",
-			p->pids[i].pid, p->pids[i].cnt, p->pids[i].fd, p->pids[i].err, p->pids[i].flags,
+			(2, "pid %d, fd %d, type %d packets %d, errs %d, flags %d, key %d, sids: %d %d %d %d %d %d %d %d",
+			p->pids[i].pid, p->pids[i].fd, p->pids[i].type, p->pids[i].cnt, p->pids[i].err, p->pids[i].flags, p->pids[i].key,
 			p->pids[i].sid[0], p->pids[i].sid[1], p->pids[i].sid[2], p->pids[i].sid[3], p->pids[i].sid[4], 
 			p->pids[i].sid[5], p->pids[i].sid[6], p->pids[i].sid[7]);
 	}
@@ -370,7 +379,6 @@ close_adapter_for_stream (int sid, int aid)
 //		close_adapter (aid);
 }
 
-
 int
 update_pids (int aid)
 {
@@ -382,26 +390,38 @@ update_pids (int aid)
 	
 	for (i = 0; i < MAX_PIDS; i++)
 		if (ad->pids[i].flags == 3)
-	{
-		if(dp)dump_pids (aid);
-		dp = 0;
-		ad->pids[i].flags = 0;
-		if (ad->pids[i].fd > 0)
-			del_filters (ad->pids[i].fd, ad->pids[i].pid);
-		ad->pids[i].fd = 0;
-	}
+		{
+			if(dp)dump_pids (aid);
+			dp = 0;
+			ad->pids[i].flags = 0;
+			if (ad->pids[i].fd > 0)
+				del_filters (ad->pids[i].fd, ad->pids[i].pid);
+			ad->pids[i].fd = 0;
+			if(ad->pids[i].type & TYPE_PMT)
+				keys_del(ad->pids[i].key);
+			ad->pids[i].filter = ad->pids[i].key = -1;
+			ad->pids[i].type = 0;
+
+		}
 
 	for (i = 0; i < MAX_PIDS; i++)
 		if (ad->pids[i].flags == 2)
-	{
-		if(dp)dump_pids (aid);
-		dp = 0;
-		ad->pids[i].flags = 1;
-		if (ad->pids[i].fd <= 0)
-			ad->pids[i].fd = set_pid (ad->pa, ad->fn, ad->pids[i].pid);
-		ad->pids[i].cnt = 0;
-		ad->pids[i].cc = 255;
-		ad->pids[i].err = 0;
+		{
+			if(dp)dump_pids (aid);
+			dp = 0;
+			ad->pids[i].flags = 1;
+			if (ad->pids[i].fd <= 0)
+				ad->pids[i].fd = set_pid (ad->pa, ad->fn, ad->pids[i].pid);
+			ad->pids[i].cnt = 0;
+			ad->pids[i].cc = 255;
+			ad->pids[i].err = 0;
+			if(ad->pids[i].type & TYPE_PMT)
+				ad->pids[i].type = TYPE_PMT;
+			else
+				ad->pids[i].type = 0;
+			ad->pids[i].filter = ad->pids[i].key = ad->pids[i].ecm_parity = 255;			
+			if(ad->pids[i].pid==0)
+				ad->pat_processed = 0;
 	}
 	return 0;
 }
@@ -419,6 +439,7 @@ int tune (int aid, int sid)
 		ad->tp.switch_type = ad->switch_type;
 		ad->tp.uslot = ad->uslot;
 		ad->tp.ufreq = ad->ufreq;
+		ad->tp.pin = ad->pin;
 		
 		rv = tune_it_s2 (ad->fe, &ad->tp);
 		a[aid].status = 0;
@@ -438,155 +459,165 @@ int tune (int aid, int sid)
 	return rv;
 }
 
-
-void
-								 //pids==NULL -> delete all pids
-mark_pids_deleted (int aid, int sid, char *pids)
+SPid *find_pid(int aid, int p)
 {
-	int i, j, la, k, cnt;
+	int i;
+	adapter *ad = get_adapter(aid);
+	
+	if(!ad)
+		return NULL;
+	
+	for (i = 0; i < MAX_PIDS; i++)
+		if((ad->pids[i].flags > 0) && (ad->pids[i].pid == p))
+			return &ad->pids[i];
+	return NULL;
+}
+
+void mark_pid_deleted(int aid, int sid, int _pid, SPid *p)
+{
+	int i, j;
+	int cnt = 0, sort = 0;
+	if(!p)
+		p = find_pid(aid, _pid);
+	if(!p)
+		return;
+	if(sid == -1) // delete all sids and the pid
+	{	
+		if(p->flags != 0) 
+			p->flags = 3;
+		for (j = 0; j < MAX_STREAMS_PER_PID; j++)
+			if (sid == -1)  // delete all pids if sid = -1
+				p->sid[j] = -1;
+		return;
+	}	
+	 // sid != -1
+	for (j = 0; j < MAX_STREAMS_PER_PID; j++)
+		if (p->sid[j] == sid)  // delete all pids where .sid == sid
+		{
+			p->sid[j] = -1;
+			if((j + 1 < MAX_PIDS) && (p->sid[j+1] >= 0))
+				sort = 1;
+		}	
+	
+	for (j = 0; j < MAX_STREAMS_PER_PID; j++)
+		if (p->sid[j] >= 0)
+			cnt++;
+	if (cnt == 0 && p->flags != 0)
+		p->flags = 3;
+		
+	if(sort)
+	{
+		for (j = 0; j < MAX_STREAMS_PER_PID - 1; j++)
+			if (p->sid[j + 1] > p->sid[j])
+			{
+				unsigned char t = p->sid[j];
+				p->sid[j] = p->sid[j + 1];
+				p->sid[j + 1] = t;
+			}
+	}
+}
+
+void mark_pids_deleted (int aid, int sid, char *pids)		 //pids==NULL -> delete all pids
+{
+	int i, j, la, k, cnt, pid;
 	adapter *ad;
 	char *arg[MAX_PIDS];
-	int p[MAX_PIDS];
 
+	if (aid<0 || aid>=MAX_ADAPTERS)
+		return;
+	ad = &a[aid];
+	
 	LOG ("deleting pids on adapter %d, sid %d, pids=%s", aid, sid,
 		pids ? pids : "NULL");
 	if (pids)
 	{
 		la = split (arg, pids, MAX_PIDS, ',');
 		for (i = 0; i < la; i++)
-			p[i] = map_int (arg[i], NULL);
-	}
-
-	if (aid<0 || aid>=MAX_ADAPTERS)
+		{
+			pid = map_int (arg[i], NULL);
+			mark_pid_deleted(aid, sid, pid, NULL);
+		}
 		return;
-	ad = &a[aid];
+	}
 
 	for (i = 0; i < MAX_PIDS; i++)
-	{
-		if (pids == NULL)
-		{
-			if (sid == -1 && ad->pids[i].flags != 0) ad->pids[i].flags = 3;
-			for (j = 0; j < MAX_STREAMS_PER_PID; j++)
-				if (sid == -1)
-								 // delete all pids if sid = -1
-					ad->pids[i].sid[j] = -1;
-			else if (ad->pids[i].sid[j] == sid)
-								 // delete all pids where .sid == sid
-				ad->pids[i].sid[j] = -1;
-			if (sid != -1)
-			{
-				int cnt = 0;
-
-				for (j = 0; j < MAX_STREAMS_PER_PID; j++)
-					if (ad->pids[i].sid[j] >= 0)
-						cnt++;
-				if (cnt == 0 && ad->pids[i].flags != 0)
-					ad->pids[i].flags = 3;
-			}
-		}
-		else
-		{
-			for (j = 0; j < la; j++)
-				if (p[j] == ad->pids[i].pid && ad->pids[i].flags > 0)
-			{
-				cnt = 0;
-				for (k = 0; k < MAX_STREAMS_PER_PID; k++)
-				{
-					if (ad->pids[i].sid[k] == sid)
-						ad->pids[i].sid[k] = -1;
-					if (ad->pids[i].sid[k] != -1)
-						cnt++;
-				}
-				if (cnt == 0)
-					ad->pids[i].flags = 3;
-			}
-								 //make sure that -1 will be after all the pids
-			for (j = 0; j < MAX_STREAMS_PER_PID - 1; j++)
-				if (ad->pids[i].sid[j + 1] > ad->pids[i].sid[j])
-			{
-				unsigned char t = ad->pids[i].sid[j];
-
-				ad->pids[i].sid[j] = ad->pids[i].sid[j + 1];
-				ad->pids[i].sid[j + 1] = t;
-			}
-
-		}
-	}
+			mark_pid_deleted(aid, sid, ad->pids[i].pid, &ad->pids[i]);
+	dump_pids (aid);
 
 }
 
+int mark_pid_add(int sid, int aid, int _pid)
+{
+	adapter *ad;
+	int k, i;
+	ad = get_adapter(aid);
+	int found = 0;
+	SPid *p;
+	if(!ad)
+		return 1;
+   // check if the pid already exists, if yes add the sid
+	if((p = find_pid(aid, _pid)))
+	{
+		LOG ("found already existing pid %d flags %d", _pid, p->flags);
+		for (k = 0; k < MAX_STREAMS_PER_PID; k++)
+			if (p->sid[k] == -1 || p->sid[k] == sid)
+			{
+				if (p->flags == 3)
+					p->flags = 2;
+				p->sid[k] = sid;
+				found = 1;
+				break;
+			}
+		if (!found)
+		{
+			LOG ("too many streams for PID %d adapter %d", _pid, aid);
+			return -1;
+			
+		}
+		return 0;
+	}
+	// add the new pid in a new position
+	for (i = 0; i < MAX_PIDS; i++)
+		if (ad->pids[i].flags <= 0)
+		{
+			ad->pids[i].flags = 2;
+			ad->pids[i].pid = _pid;
+			ad->pids[i].sid[0] = sid;
+			return 0;
+		}
+	LOG ("MAX_PIDS (%d) reached for adapter %d in adding PID: %d",
+			MAX_PIDS, aid, _pid);
+	dump_pids (aid);
+	dump_adapters ();
+	return -1;
+	
+}
 
 int
 mark_pids_add (int sid, int aid, char *pids)
 {
-	int i,
-		j,
-		la,
-		k,
-		found;
+	int i, j, la, k, found;
 	adapter *ad;
 	char *arg[MAX_PIDS];
-	int p[MAX_PIDS];
+	int pid;
 
-	if (!pids)
-		return;
-	if (pids)
-	{
-		la = split (arg, pids, MAX_PIDS, ',');
-		for (i = 0; i < la; i++)
-			p[i] = map_int (arg[i], NULL);
-	}
-	
 	ad = get_adapter(aid);
 	if(!ad)
 		return;
+	
+	if (!pids)
+		return;
+	LOG ("adding pids to adapter %d, sid %d, pids=%s", aid, sid,
+		pids ? pids : "NULL");	
 		
-	for (j = 0; j < la; j++)
+	la = split (arg, pids, MAX_PIDS, ',');
+	for (i = 0; i < la; i++)
 	{
-		found = 0;
-		//              LOG("processing pid %d",p[j]);
-								 // check if the pid already exists, if yes add the sid
-		for (i = 0; i < MAX_PIDS; i++)
-			if (ad->pids[i].flags > 0 && ad->pids[i].pid == p[j])
-		{
-			LOG ("found already existing pid %d on pos %i flags %d", p[j], i,
-				ad->pids[i].flags);
-			for (k = 0; k < MAX_STREAMS_PER_PID; k++)
-				if (ad->pids[i].sid[k] == -1 || ad->pids[i].sid[k] == sid)
-			{
-				if (ad->pids[i].flags == 3)
-					ad->pids[i].flags = 2;
-				ad->pids[i].sid[k] = sid;
-				found = 1;
-				break;
-			}
-			if (!found)
-			{
-				LOG ("too many streams for PID %d adapter %d", p[j], aid);
-				return -1;
-			}
-		}
-		if (!found)
-			for (i = 0; i < MAX_PIDS; i++)
-								 // if no mark the pid for add
-				if (ad->pids[i].flags <= 0)
-				{
-					ad->pids[i].flags = 2;
-					ad->pids[i].pid = p[j];
-					ad->pids[i].sid[0] = sid;
-					found = 1;
-					break;
-				}
-		if (!found)
-		{
-			LOG ("MAX_PIDS (%d) reached for adapter %d in adding PID: %d",
-				MAX_PIDS, aid, p[j]);
-			dump_pids (aid);
-			dump_adapters ();
+		pid = map_int (arg[i], NULL);
+		if(mark_pid_add(sid, aid, pid) < 0)
 			return -1;
-		}
 	}
-	//      LOG("Mark_pids_add failed - too ");
+	dump_pids (aid);
 	return 0;
 }
 
@@ -701,10 +732,15 @@ describe_adapter (int sid, int aid)
 		if (ad->max_snr <= ad->snr) ad->max_snr = (ad->snr>0)?ad->snr:1;
 		LOG ("get_signal%s took %d ms for adapter %d handle %d (status: %d, ber: %d, strength:%d, snr: %d, max_strength: %d, max_snr: %d %d)",
 			new_gs?"":"_new", getTick () - ts, aid, ad->fe, ad->status, ad->ber, ad->strength, ad->snr, ad->max_strength, ad->max_snr, opts.force_scan);
+		if(ad->snr > 4096)	
+			new_gs = 0;
 		if(new_gs)
 		{
 			ad->strength = ad->strength * 255 / ad->max_strength;
 			ad->snr = ad->snr * 15 / ad->max_snr;
+		}else {
+			ad->strength = ad->strength >> 8;
+			ad->snr = ad->snr >> 12;
 		}
 	}
 	if(use_ad)
@@ -756,8 +792,8 @@ void
 sort_pids (int aid)
 {
 	int b, i, j, t;
-	pid pp;
-	pid *p;
+	SPid pp;
+	SPid *p;
 	
 	if(!get_adapter(aid))
 		return;
@@ -768,12 +804,12 @@ sort_pids (int aid)
 		b = 0;
 		for (i = 0; i < MAX_PIDS - 1; i++)
 			if (p[i].cnt < p[i + 1].cnt)
-		{
-			b = 1;
-			memcpy (&pp, &p[i], sizeof (pp));
-			memcpy (&p[i], &p[i + 1], sizeof (pp));
-			memcpy (&p[i + 1], &pp, sizeof (pp));
-		}
+			{
+				b = 1;
+				memcpy (&pp, &p[i], sizeof (pp));
+				memcpy (&p[i], &p[i + 1], sizeof (pp));
+				memcpy (&p[i + 1], &pp, sizeof (pp));
+			}
 	}
 }
 
@@ -825,8 +861,8 @@ void enable_adapters(char *o)
 
 void set_unicable_adapters(char *o, int type)
 {
-	int i, la, a_id, slot, freq;
-	char buf[100], *arg[20], *sep1, *sep2;
+	int i, la, a_id, slot, freq, pin;
+	char buf[100], *arg[20], *sep1, *sep2, *sep3;
 
 	strncpy(buf, o, sizeof(buf));
 	la = split(arg, buf, sizeof(arg), ',');
@@ -837,15 +873,19 @@ void set_unicable_adapters(char *o, int type)
 			continue;
 		sep1 = strchr(arg[i], ':');
 		sep2 = strchr(arg[i], '-');
+		
 		if( !sep1 || !sep2)
 			continue;
 		slot = map_intd(sep1 + 1, NULL, -1);
 		freq = map_intd(sep2 + 1, NULL, -1);
 		if( slot < 0 || freq < 0)
 			continue;
+		sep3 = strchr(sep2 + 1, '-');
+		pin = map_intd(sep3, NULL, 0); 
 		a[a_id].uslot = slot;
 		a[a_id].ufreq = freq;
 		a[a_id].switch_type = type;
+		a[a_id].pin = pin;
 		LOG("Setting %s adapter %d slot %d freq %d", type==SWITCH_UNICABLE?"unicable":"jess", a_id, slot, freq);
 	}
 }
