@@ -481,7 +481,7 @@ select_and_execute ()
 								 //force 0 at the end of the string
 					if(ss->lbuf >= ss->rlen)
 						ss->buf[ss->rlen] = 0;
-					LOGL(6, "Read %d (rlen:%d/total:%d) bytes from %d -> %08X - iteration %d action %x",rlen,ss->rlen,ss->lbuf,ss->sock,(unsigned int)ss->buf,it++,(int )ss->action);
+					LOGL(6, "Read %d (rlen:%d/total:%d) bytes from %d -> %p - iteration %d action %p",rlen,ss->rlen,ss->lbuf,ss->sock,ss->buf,it++,ss->action);
 					
 					if (ss->rlen > 0 && ss->action)
 						ss->action (ss);
