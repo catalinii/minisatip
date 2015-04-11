@@ -1,8 +1,9 @@
 
 CC?=gcc
 DVBCSA?=yes
+DVBCA?=yes
 
-CFLAGS=$(NODVBCSA) -ggdb -fPIC 
+CFLAGS=$(NODVBCSA) -ggdb -fPIC
 LDFLAGS=-lpthread -lrt
 
 OBJS=minisatip.o socketworks.o stream.o dvb.o adapter.o
@@ -13,6 +14,14 @@ OBJS+=dvbapi.o
 else
 CFLAGS+=-DDISABLE_DVBCSA
 endif
+
+ifeq ($(DVBCA),yes)
+LDFLAGS+=-ldvben50221 -ldvbapi -lucsi
+OBJS+=ca.o
+else
+CFLAGS+=-DWITH_DVBCA
+endif
+
 
 minisatip: $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LDFLAGS)
@@ -32,8 +41,11 @@ dvb.o: dvb.c dvb.h
 dvbapi.o: dvbapi.c dvbapi.h
 	$(CC) $(CFLAGS) -c -o $@ dvbapi.c
 
-adapter.o: adapter.c adapter.h dvb.h stream.h
+adapter.o: adapter.c adapter.h dvb.h stream.h ca.h
 	$(CC) $(CFLAGS) -c -o $@ adapter.c
+
+ca.o: ca.c adapter.h dvb.h ca.h
+	$(CC) $(CFLAGS) -c -o $@ ca.c
 
 all: minisatip
 

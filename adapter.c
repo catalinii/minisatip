@@ -117,6 +117,7 @@ init_hw ()
 		if ((!a[i].enabled || a[i].fe <= 0) && (a[i].pa >= 0 && a[i].fn >= 0))
 	{
 		int k;
+		int ca;
 		if (a[i].force_disable)continue;
 		a[i].sock = -1;
 		if (a[i].pa <= 0 && a[i].fn <= 0)
@@ -127,6 +128,8 @@ init_hw ()
 		a[i].fe = open (buf, O_RDWR | O_NONBLOCK);
 		sprintf (buf, "/dev/dvb/adapter%d/dvr%d", a[i].pa, a[i].fn);
 		a[i].dvr = open (buf, O_RDONLY | O_NONBLOCK);
+		sprintf (buf, "/dev/dvb/adapter%d/ca0", a[i].pa);
+		ca = open (buf, O_RDWR);
 		if (a[i].fe < 0 || a[i].dvr < 0)
 		{
 			LOG (0, "Could not open %s in RW mode\n", buf);
@@ -137,6 +140,9 @@ init_hw ()
 			a[i].fe = a[i].dvr = -1;
 			continue;
 		}
+
+		if (ca > -1)
+			a[i].ca_device = ca_init(ca);
 
 		a[i].enabled = 1;
 		a[i].id = i;
