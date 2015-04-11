@@ -489,9 +489,8 @@ int process_pat(unsigned char *b, adapter *ad)
 		{
 			p = find_pid(ad->id, pid);
 			if(!p)
-			{
 				mark_pid_add(-1, ad->id, pid);
-			}			
+
 			if((p = find_pid(ad->id, pid)))
 			{
 				p->type = TYPE_PMT;
@@ -526,9 +525,9 @@ unsigned char *find_pi(unsigned char *es, int len, int *pi_len)
 			LOG("PI pos %d caid %04X => pid %04X (%d)", i, caid, capid, capid);
 		}
         }
-	LOG("start_pi: %d %d es[0]-> %d", start_pi, i, es[0]);
 	if(start_pi == -1)
 		return NULL;
+	LOG("start_pi: %d %d es[0]-> %d", start_pi, i, es[0]);
 	*pi_len = i - start_pi;
 	return es + start_pi;
 } 
@@ -593,8 +592,13 @@ int process_pmt(unsigned char *b, adapter *ad)
 		stype = pmt[i];
 		spid = (pmt[i+1] & 0x1F)*256 + pmt[i+2];		
 		LOG("PMT pid %d - stream pid %04X (%d), type %d, es_len = %d", _pid, spid, spid, stype, es_len);
+		if(es_len>384)
+			return -1;
 		if(cp = find_pid(ad->id, spid)) // the pid is already requested by the client
 		{
+			if(cp->key!=255)
+				continue;
+
 			if(!k)
 			{
 				p->key = keys_add(ad->id, program_id, _pid); // we add a new key for this pmt pid
@@ -670,6 +674,8 @@ int send_ecm(unsigned char *b, adapter *ad)
 	len = ((b[1] & 0xF) << 8) + b[2];
 	len += 3;	
 	LOG("Sending DVBAPI_FILTER_DATA key %d for pid %04X (%d), ecm_parity = %d, new parity %d, demux = %d, filter = %d, len = %d", k->id, pid, pid, old_parity, b[0] & 1,demux, filter, len);
+	if(len>559+3)
+		return -1;
 	copy32(buf, 0, DVBAPI_FILTER_DATA);
 	buf[4] = demux;
 	buf[5] = filter;
