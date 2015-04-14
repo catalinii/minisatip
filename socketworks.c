@@ -35,6 +35,7 @@
 #include <net/if.h>
 #include <string.h>
 #include <poll.h>
+#include <fcntl.h>
 
 #include "socketworks.h"
 #include "minisatip.h"
@@ -232,13 +233,21 @@ tcp_connect (char *addr, int port, struct sockaddr_in *serv)
 		0)
 	{
 		LOGL (0, "tcp_connect: setsockopt(SO_REUSEADDR): %s", strerror (errno));
+		close(sock);
 		return -1;
 	}
 
+	int flags = fcntl(sock, F_GETFL, 0);
+    fcntl(sock, F_SETFL, flags | O_NONBLOCK);
+	
 	if (connect (sock, (struct sockaddr *) serv, sizeof (*serv)) < 0)
 	{
 		LOGL (0, "tcp_connect: failed: connect to %s:%d failed: %s", addr, port, strerror (errno));
-		return -1;
+		if(errno != EINPROGRESS) 
+		{
+			close(sock);
+			return -1;
+		}
 	}
 	LOG ("New TCP socket %d connected to %s:%d", sock,
 		addr, port);
@@ -340,7 +349,7 @@ socket_action a, socket_action c, socket_action t)
 	if (t)
 		s[i].timeout = t;
 	s[i].sid = sid;
-	s[i].type = type;
+	s[i].type = type & ~TYPE_CONNECT;
 	s[i].rtime = getTick ();
 	if (max_sock <= i)
 		max_sock = i + 1;
@@ -350,6 +359,8 @@ socket_action a, socket_action c, socket_action t)
 	s[i].sock_id = i;
 	pf[i].fd = sock;
 	pf[i].events = POLLIN | POLLPRI;
+	if(type & TYPE_CONNECT)
+		pf[i].events |=POLLOUT;
 	pf[i].revents = 0;
 
 	LOG ("sockets_add: handle %d (type %d) returning socket index %d [%s:%d]",
@@ -403,7 +414,7 @@ select_and_execute ()
 		rv,
 		rlen;
 	unsigned char buf[2001];
-
+	int err;
 	run_loop = 1;
 	int lt;
 
@@ -429,6 +440,10 @@ select_and_execute ()
 					sockets *ss = &s[i];
 
 					LOGL(6, "event on socket index %d handle %d type %d (poll fd:%d, revents=%d)",i,ss->sock,ss->type,pf[i].fd,pf[i].revents);
+					if(pf[i].revents & POLLOUT)
+					{
+						pf[i].events &= ~POLLOUT;
+					}
 					if (!ss->buf || ss->buf == buf)
 					{
 						ss->buf = buf;
@@ -474,30 +489,35 @@ select_and_execute ()
 							0, (struct sockaddr *) &ss->sa, &slen);
 					else if (ss->type != 2)
 						rlen = read (ss->sock, &ss->buf[ss->rlen], ss->lbuf - ss->rlen);
-					
+					err = 0;
+					if(rlen<0)
+						err = errno;	
 					ss->rtime = c_time;
 					if(rlen>0)
 						ss->rlen += rlen;
+					else 
+						ss->rlen = 0;
 								 //force 0 at the end of the string
 					if(ss->lbuf >= ss->rlen)
 						ss->buf[ss->rlen] = 0;
 					LOGL(6, "Read %d (rlen:%d/total:%d) bytes from %d -> %p - iteration %d action %p",rlen,ss->rlen,ss->lbuf,ss->sock,ss->buf,it++,ss->action);
 					
-					if (ss->rlen > 0 && ss->action)
+					if (((ss->rlen > 0)|| err==EWOULDBLOCK) && ss->action)
 						ss->action (ss);
 			//              if(s[i].type==TYPE_DVR && (c_time/1000 % 10 == 0))sockets_del(i); // we do this in stream.c in flush_stream*
 					if (rlen <= 0 && ss->type != TYPE_SERVER)
 					{
-						int err = errno;
 						char *err_str;
 						char *types[] =
 							{ "udp", "tcp", "server", "http", "rtsp", "dvr" };
 						if (rlen == 0){
 							err = 0;
-							err_str = "Success";
+							err_str = "Close";
 						}
 						else if (err == EOVERFLOW)
 							err_str = "EOVERFLOW";
+						else if (err == EWOULDBLOCK)
+							err_str = "Connected";
 						else
 							err_str = strerror (err);
 						
@@ -505,11 +525,11 @@ select_and_execute ()
 							continue; // do not close the RTCP socket, we might get some errors here but ignore them
 						
 						LOG
-							("select_and_execute[%d]: %s on socket %d (sid:%d) from %s:%d - type %s failure %d:%s",
-							i, rlen < 0 ? "Error" : "Close", ss->sock, ss->sid, 
+							("select_and_execute[%d]: %s on socket %d (sid:%d) from %s:%d - type %s errno %d",
+							i, err_str, ss->sock, ss->sid, 
 							inet_ntoa (ss->sa.sin_addr), ntohs (ss->sa.sin_port),
-							types[ss->type], err, err_str);
-						if (err == EOVERFLOW)
+							types[ss->type], err);
+						if (err == EOVERFLOW || err==EWOULDBLOCK)
 							continue;
 						if (err == EAGAIN)
 						{

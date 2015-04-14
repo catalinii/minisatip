@@ -35,6 +35,7 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <net/if.h>
 #include <linux/dvb/frontend.h>
 #include <linux/dvb/dmx.h>
@@ -50,9 +51,10 @@
 
 extern struct struct_opts opts;
 const int64_t DVBAPI_ITEM = 0x1000000000000;
-int dvbapi_sock;
+int dvbapi_sock = -1;
 int sock;
 int isEnabled = 0;
+int haveDvbapi = 0;
 int batchSize;
 SKey keys[MAX_KEYS];
 unsigned char read_buffer[1500];
@@ -60,6 +62,9 @@ unsigned char read_buffer[1500];
 
 #define MAX_DATA 1500
 #define MAX_SINFO 100
+
+#define TEST_WRITE(a) if((a)<=0){LOG("%s:%d: write to dvbapi socket failed, closing socket %d",__FILE__,__LINE__,sock);sockets_del(dvbapi_sock);sock = 0;dvbapi_sock = -1;isEnabled = 0;}
+
 
 typedef struct tmpinfo
 {
@@ -150,18 +155,12 @@ int delItem(int64_t key)
 
 int have_dvbapi()
 {
-	return isEnabled;
+	return haveDvbapi;
 }
 
 
-int dvbapi_close(sockets * s)
-{
-	sock = 0;
-	isEnabled = 0;
-	return 0;
-}
 
-
+void send_client_info(sockets *s);
 int dvbapi_reply(sockets * s)
 {
 	unsigned char *b = s->buf;
@@ -171,6 +170,11 @@ int dvbapi_reply(sockets * s)
 	int k_id, a_id = 0, s_id, pos = 0;
 	int demux, filter;
 	SPid *p;
+	if(s->rlen == 0)
+	{
+		send_client_info(s);	
+		return 0;
+	}
 	while(pos < s->rlen)
 	{
 		b = s->buf + pos;
@@ -182,7 +186,7 @@ int dvbapi_reply(sockets * s)
 			if(s->rlen < 6)
 				return;
 			copy16r(version, b, 4);
-			LOG("DVBAPI server version %d found, name = %s", version, b+6);
+			LOG("DVBAPI server version %d found, name = %s", version, b+7);
 			pos = 6 + strlen(b+6) + 1;
 			break;
 		
@@ -311,6 +315,17 @@ int decrypt_batch(SKey *k)
 	k->parity = -1;
 	return 0;
 }
+
+void mark_decryption_failed(unsigned char *b, SKey *k)
+{
+	LOGL(4, "NOT DECRYPTING for key %d drop_encrypted=%d parity %d", k?k->id:-1, opts.drop_encrypted, k?k->parity:-1);
+	if(opts.drop_encrypted)
+	{
+		b[1] |= 0x1F;
+		b[2] |= 0xFF; 
+	}
+}
+
 int decrypt_stream(adapter *ad,int rlen)
 {
 	struct iovec *iov;
@@ -325,11 +340,13 @@ int decrypt_stream(adapter *ad,int rlen)
 	int pid;
 	int cp;
 	
+	if(!have_dvbapi())
+		return 0;
 	if(!isEnabled)
 	{
 		init_dvbapi();
-		if(!isEnabled)
-			return 0;
+//		if(!isEnabled)
+//			return 0;
 	}	
 	if(!batchSize)
 		batch_size();
@@ -339,9 +356,9 @@ int decrypt_stream(adapter *ad,int rlen)
 		if(ad->pids[i].flags == 1)
 			if(ad->pids[i].type==0)
 				pid_to_key[ad->pids[i].pid]=ad->pids[i].key;
-			else if (ad->pids[i].type==TYPE_ECM)
+			else if (ad->pids[i].type & TYPE_ECM)
 				pid_to_key[ad->pids[i].pid] = -TYPE_ECM - 1;
-			else if (ad->pids[i].type==TYPE_PMT)
+			else if (ad->pids[i].type & TYPE_PMT)
                                 pid_to_key[ad->pids[i].pid] = -TYPE_PMT - 1;
 	for(i=0;i<rlen;i+=188)
 	{
@@ -357,17 +374,14 @@ int decrypt_stream(adapter *ad,int rlen)
 	for(i=0;i<rlen;i+=188)
 	{
 		b = ad->buf + i;
-//		LOG("--> %02X %02X %02X %02X ", b[0], b[1], b[2], b[3]);
 		if(b[3] & 0x80)
 		{
-			pid = (b[1] & 0x1F)*256 + b[2]; 
-			k = get_key(pid_to_key[pid]);
-			if(!k)
+			pid = (b[1] & 0x1F)*256 + b[2]; 			
+			if((!isEnabled) || (pid_to_key[pid] == 255) || !(k = get_key(pid_to_key[pid])))
 			{
-//				LOGL(4, "stream_decrypt: key is null for pid %d", pid)
+				mark_decryption_failed(b, k);
 				continue;
 			}
-//			LOG("decrypting index %d j = %d", i, j);
 			cp = ((b[3] & 0x40) > 0);			
 			if(k->parity == -1)
 				k->parity = cp;
@@ -385,12 +399,7 @@ int decrypt_stream(adapter *ad,int rlen)
 
 			if(!k->key_ok[cp])
 			{
-				LOGL(4, "NOT DECRYPTING for key %d drop_encrypted=%d parity %d", k->id, opts.drop_encrypted, cp);
-				if(opts.drop_encrypted)
-				{
-					b[1] |= 0x1F;
-					b[2] |= 0xFF; 
-				}
+				mark_decryption_failed(b, k);
 				continue;
 			}
 			
@@ -433,37 +442,73 @@ int dvbapi_send_pi(SKey *k)
 	len = 17  - 6 + k->pi_len + 2;
 	copy16(buf, 4, len);
 	copy16(buf, 10, len - 11);
-	write(sock, buf, len + 6 );
+	TEST_WRITE(write(sock, buf, len + 6 ));
 }
+static int last_retry = -5000;
 
+int dvbapi_close(sockets * s)
+{
+	int i;
+	LOG("requested dvbapi close for sock %d, sock_id %d", sock, dvbapi_sock, s->sock);
+	sock = 0;
+	isEnabled = 0;
+	last_retry = getTick();
+	SKey *k;
+	for(i=0;i<MAX_KEYS;i++)
+		if(keys[i].enabled)
+		{
+			k = get_key(i);
+			if(!k) 
+				continue;
+			reset_pids_type(k->adapter);
+			keys_del(i);
+		}
+	return 0;
+}
+	
 int init_dvbapi()
 {
-	unsigned char buf[1000];
-	unsigned char len;
 	int ctime;
-	static int last_retry = -5000;
-	if(sock>0)
+
+	ctime = getTick();
+	if((sock>0) && isEnabled)  // already connected
 			return sock;
+	
+	if(ctime - last_retry < 5000) // wait 5 seconds before trying again
+		return 0;
+		
 	isEnabled = 0;
+		
+	haveDvbapi = 0;
 	if(!opts.dvbapi_port  || !opts.dvbapi_host)
 		return 0;
-	
-	ctime = getTick();
-	if(ctime - last_retry < 5000) // retry every 5s
+		
+	haveDvbapi = 1;
+
+	if((sock<=0) && (ctime - last_retry < 5000)) // retry every 5s
 		return 0;
-	last_retry = ctime;
-	sock = tcp_connect(opts.dvbapi_host, opts.dvbapi_port, NULL);
-	if(sock < 0)
+		
+	if(sock<= 0)
+	{
+		int err;
+		last_retry = ctime;
+		sock = tcp_connect(opts.dvbapi_host, opts.dvbapi_port, NULL);
+		dvbapi_sock = sockets_add (sock, NULL, -1, TYPE_TCP | TYPE_CONNECT, (socket_action) dvbapi_reply, (socket_action) dvbapi_close, NULL);
+		set_socket_buffer (dvbapi_sock , read_buffer, sizeof(read_buffer));
 		return 0;
-	dvbapi_sock = sockets_add (sock, NULL, -1, TYPE_TCP, (socket_action) dvbapi_reply, (socket_action) dvbapi_close, NULL);
-	set_socket_buffer (dvbapi_sock , read_buffer, sizeof(read_buffer));
-	isEnabled = 1;
-	
+	}
+	return 0;
+}
+void send_client_info(sockets *s)
+{	
+	unsigned char buf[1000];
+	unsigned char len;
 	copy32(buf, 0, DVBAPI_CLIENT_INFO);
 	copy16(buf, 4, DVBAPI_PROTOCOL_VERSION);
 	len = sprintf(buf + 7, "minisatip/%s", VERSION);
 	buf[6] = len;
-	write(sock, buf, len+7);	
+	isEnabled = 1;
+	TEST_WRITE(write(s->sock, buf, len+7));	
 }
 
 int process_pat(unsigned char *b, adapter *ad)
@@ -472,8 +517,12 @@ int process_pat(unsigned char *b, adapter *ad)
 	SPid *p;
 	if(ad->pat_processed)
 		return;
+	if(!isEnabled)
+		return 0;
+
 	if((b[0]!=0x47) || (b[1]!=0x40) || (b[2]!=0) || (b[5]!=0)) // make sure we are dealing with PAT
 		return 0;
+
 	pat_len = ((b[6] & 0xF) << 8) + b[7];
 	tid = b[8] * 256 + b[9];
 //	LOG("tid %d pat_len %d: %02X %02X %02X %02X %02X %02X %02X %02X", tid, pat_len, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]);
@@ -545,17 +594,23 @@ int process_pmt(unsigned char *b, adapter *ad)
 	if((b[0]!=0x47)) // make sure we are dealing with TS
 		return 0;
 	
+	if(!isEnabled)
+		return 0;
+
 	_pid = (b[1] & 0x1F)* 256 + b[2];
 	if(!(p = find_pid(ad->id, _pid)))
 		return -1;
 
 	if(!p || (p->type & PMT_COMPLETE))
 		return 0;
+	
+	if(p && get_key(p->key))
+		LOG_AND_RETURN(0, "Trying to add existing key %d for PMT pid %d", p->key, _pid);
 
 	if((b[5] == 2) && ((b[1] &0x40) == 0x40))
 		pmt_len = ((b[6] & 0xF) << 8) + b[7];
 
-	item_key = DVBAPI_ITEM + (ad->id << 16) + _pid;
+	item_key = DVBAPI_ITEM + (ad->id << 16) + _pid;	
 	
 	if(pmt_len > 183)
 	{
@@ -575,13 +630,17 @@ int process_pmt(unsigned char *b, adapter *ad)
 		
 	}
 
-	program_id = (b[3] & 0x1F)* 256 + b[4];
+	program_id = b[3]* 256 + b[4];
 	pmt_len = ((b[1] & 0xF) << 8) + b[2];
 	pi_len = ((b[10] & 0xF) << 8) + b[11];
-	LOGL(5,"PMT pid: %04X (%d), pmt_len %d, pi_len %d, channel id %d len %d", _pid, _pid, pmt_len, pi_len, program_id, pmt_len);
+	LOG("PMT pid: %04X (%d), pmt_len %d, pi_len %d, channel id %d len %d", _pid, _pid, pmt_len, pi_len, program_id, pmt_len);
 
 	pi = b + 12;	
 	pmt = pi + pi_len;
+	if(pmt_len > 1500)
+		return 0;
+	if(pi_len > pmt_len)
+		pi_len = 0;
 	if(pi_len > 0) 
 		pi=find_pi(pi, pi_len, &pi_len);
 	
@@ -594,9 +653,11 @@ int process_pmt(unsigned char *b, adapter *ad)
 		LOG("PMT pid %d - stream pid %04X (%d), type %d, es_len = %d", _pid, spid, spid, stype, es_len);
 		if(es_len>384)
 			return -1;
+		if(!pi_len)
+			pi = find_pi(pmt + i + 5, es_len, &pi_len);
 		if(cp = find_pid(ad->id, spid)) // the pid is already requested by the client
 		{
-			if(cp->key!=255)
+			if((cp->key != 255) || (pi_len == 0))
 				continue;
 
 			if(!k)
@@ -609,8 +670,6 @@ int process_pmt(unsigned char *b, adapter *ad)
 			cp->key = p->key;
 			enabled_channels ++;
 		}
-		if(!pi_len)
-			pi = find_pi(pmt + i + 5, es_len, &pi_len);
 	}
 	if((pi_len > 0) && enabled_channels)
 	{	
@@ -635,12 +694,17 @@ int send_ecm(unsigned char *b, adapter *ad)
 	int pid, len = 0;
 	int filter, demux;
 	int old_parity;
+	
+	if(!isEnabled)
+		return 0;
+	
 	pid = (b[1] & 0x1F)* 256 + b[2];
 	p = find_pid(ad->id, pid);
 	if(p)
 		k = get_key(p->key);
 	if(!k)
-		LOG_AND_RETURN(0, "key is null pid %d for p->key %d", pid, p?p->key:-1);
+//		LOG_AND_RETURN(0, "key is null pid %d for p->key %d", pid, p?p->key:-1);
+		return 0;
 		
 	demux = k->demux;
 	filter = p->filter;	
@@ -681,7 +745,7 @@ int send_ecm(unsigned char *b, adapter *ad)
 	buf[5] = filter;
 	 // filter id
 	memcpy(buf + 6, b, len + 6);
-	write(sock, buf, len + 6);	
+	TEST_WRITE(write(sock, buf, len + 6));	
 	delItem(item_key);
 
 }
@@ -740,9 +804,9 @@ int keys_del(int i)
 	keys[i].enabled = 0;
 	//buf[7] = keys[i].demux;
 	buf[7] = i;
-	LOG("Stopping DEMUX %d, removing key %d", buf[7], i);
-	if(buf[7] != 255)
-		write(sock, buf, sizeof(buf));
+	LOG("Stopping DEMUX %d, removing key %d, sock %d", buf[7], i, sock);
+	if((buf[7] != 255) && (sock>0))
+		TEST_WRITE(write(sock, buf, sizeof(buf)));
 	keys[i].sid = 0;
 	keys[i].pmt_pid = 0;
 	keys[i].adapter = -1;

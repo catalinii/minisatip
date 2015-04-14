@@ -600,9 +600,6 @@ read_rtsp (sockets * s)
 							ra, ntohs (sid->sa.sin_port), ntohs (sid->sa.sin_port) + 1,
 							get_session_id (s->sid), s_timeout , sid->sid + 1);
 					break;
-				case STREAM_HTTP:
-					snprintf(buf, sizeof(buf), "Content-Type: video/mp2t");
-					break;
 				case STREAM_RTSP_TCP:
 					snprintf(buf, sizeof(buf), "Transport: RTP/AVP/TCP;interleaved=0-1\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d", 
 						get_session_id (s->sid), s_timeout, sid->sid + 1);
@@ -620,6 +617,8 @@ read_rtsp (sockets * s)
 			
 			snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf) - 1,  "RTP-Info: url=%s;seq=%d", arg[1], 0);
 		}
+		if(buf[0]==0 && sid->type == STREAM_HTTP)
+				snprintf(buf, sizeof(buf), "Content-Type: video/mp2t");
 		http_response (s, 200, buf, NULL, cseq, 0);
 	}
 	else if (strncmp (arg[0], "TEARDOWN", 8) == 0)

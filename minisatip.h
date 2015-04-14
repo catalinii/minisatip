@@ -7,7 +7,7 @@
 #include "socketworks.h"
 
 
-#define VERSION_BUILD "3"
+#define VERSION_BUILD "4"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.3.,VERSION_BUILD,)
 
@@ -75,7 +75,7 @@ void _log(int level, char * file, int line, const char *fmt, ...);
 //#define LOG(a,...) {opts.last_log=a;if(opts.log){int x=getTick();printf(CC([%d.%03d]: ,a,\n),x/1000,x%1000,##__VA_ARGS__);fflush(stdout);};}
 //#define LOG(a,...) {opts.last_log=a;if(opts.log){printf(CC([%s]:\x20,a,\n),get_current_timestamp_log(),##__VA_ARGS__);fflush(stdout);};}
 #define LOG(a,...) { _log(1,__FILE__,__LINE__,a, ##__VA_ARGS__);}
-#define LOGL(level,a,...) { _log(level,__FILE__,__LINE__,a, ##__VA_ARGS__);}
+#define LOGL(level,a,...) { if(level<=opts.log)_log(level,__FILE__,__LINE__,a, ##__VA_ARGS__);}
 
 
 #define FAIL(a,...) {LOGL(0,a,##__VA_ARGS__);unlink(PID_FILE);exit(1);}

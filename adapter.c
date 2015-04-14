@@ -370,6 +370,7 @@ close_adapter_for_stream (int sid, int aid)
 	}
 	if (a[aid].sid_cnt > 0)
 		a[aid].sid_cnt--;
+	else mark_pids_deleted(aid, -1, NULL);
 	LOG ("closed adapter %d for stream %d m:%d s:%d", aid, sid,
 		a[aid].master_sid, a[aid].sid_cnt);
 								 // delete the attached PIDs as well
@@ -398,9 +399,12 @@ update_pids (int aid)
 				del_filters (ad->pids[i].fd, ad->pids[i].pid);
 			ad->pids[i].fd = 0;
 			if(ad->pids[i].type & TYPE_PMT)
+			{
 				keys_del(ad->pids[i].key);
+				ad->pids[i].type = TYPE_PMT;
+			} else ad->pids[i].type = 0;
 			ad->pids[i].filter = ad->pids[i].key = -1;
-			ad->pids[i].type = 0;
+			
 
 		}
 
@@ -476,7 +480,7 @@ SPid *find_pid(int aid, int p)
 void mark_pid_deleted(int aid, int sid, int _pid, SPid *p)
 {
 	int i, j;
-	int cnt = 0, sort = 0;
+	int didit = 0, cnt = 0, sort = 0;
 	if(!p)
 		p = find_pid(aid, _pid);
 	if(!p)
@@ -484,7 +488,7 @@ void mark_pid_deleted(int aid, int sid, int _pid, SPid *p)
 	if(sid == -1) // delete all sids and the pid
 	{	
 		if(p->flags != 0) 
-			p->flags = 3;
+			p->flags = 3;		
 		for (j = 0; j < MAX_STREAMS_PER_PID; j++)
 			if (sid == -1)  // delete all pids if sid = -1
 				p->sid[j] = -1;
@@ -495,6 +499,7 @@ void mark_pid_deleted(int aid, int sid, int _pid, SPid *p)
 		if (p->sid[j] == sid)  // delete all pids where .sid == sid
 		{
 			p->sid[j] = -1;
+			didit = 1;
 			if((j + 1 < MAX_PIDS) && (p->sid[j+1] >= 0))
 				sort = 1;
 		}	
@@ -502,7 +507,7 @@ void mark_pid_deleted(int aid, int sid, int _pid, SPid *p)
 	for (j = 0; j < MAX_STREAMS_PER_PID; j++)
 		if (p->sid[j] >= 0)
 			cnt++;
-	if (cnt == 0 && p->flags != 0)
+	if ((cnt == 0) && (p->flags != 0) && didit)
 		p->flags = 3;
 		
 	if(sort)
@@ -542,6 +547,8 @@ void mark_pids_deleted (int aid, int sid, char *pids)		 //pids==NULL -> delete a
 
 	for (i = 0; i < MAX_PIDS; i++)
 			mark_pid_deleted(aid, sid, ad->pids[i].pid, &ad->pids[i]);
+	if(sid == -1)
+		reset_pids_type(aid);
 	dump_pids (aid);
 
 }
@@ -566,6 +573,8 @@ int mark_pid_add(int sid, int aid, int _pid)
 					p->flags = 2;
 				p->sid[k] = sid;
 				found = 1;
+				if(p->type & TYPE_PMT)
+					p->type = TYPE_PMT;
 				break;
 			}
 		if (!found)
@@ -905,4 +914,21 @@ int delsys_match(adapter *ad, int del_sys)
 			return 1;
 	return 0;
 		
+}
+
+void reset_pids_type(int aid)
+{
+	int i;
+	adapter *ad = get_adapter(aid);
+	if(!ad)
+		return;
+	LOG("clearing type and pat processed for adapter %d", aid);
+	for(i=0;i<MAX_PIDS;i++)
+		if(ad->pids[i].flags > 0)
+		{
+			ad->pids[i].type = 0;
+			ad->pids[i].key = 255;
+			ad->pids[i].filter = 255;
+		}
+	ad->pat_processed = 0;
 }
