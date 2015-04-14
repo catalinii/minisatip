@@ -181,8 +181,8 @@ char *fe_pol[] =
 	"none",
 	"v",
 	"h",
-	"l",
 	"r",
+	"l",
 	NULL
 };
 
@@ -323,7 +323,11 @@ int setup_switch (int frontend_fd, transponder *tp)
 	int freq = tp->freq;
 	int pol = (tp->pol - 1) & 1;
 	
-	if (freq < SLOF)
+	if (tp->pol > 2) {
+		freq = (freq - LOF3);
+		hiband = 0;
+	}
+	else if (freq < SLOF)
 	{
 		freq = (freq - LOF1);
 		hiband = 0;

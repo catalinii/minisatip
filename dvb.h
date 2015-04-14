@@ -20,6 +20,7 @@
 #define SLOF (11700*1000UL)
 #define LOF1 (9750*1000UL)
 #define LOF2 (10600*1000UL)
+#define LOF3 (10750*1000UL)
 #define LP_CODERATE_DEFAULT (0)
 
 #define DELSYS 0
