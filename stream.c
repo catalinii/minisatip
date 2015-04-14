@@ -613,7 +613,7 @@ send_rtcp (int s_id, int ctime)
 	rtcp[51] = 0;
 	rtcp[52] = 0x80;
 	rtcp[53] = 0xCC;
-	copy16( rtcp, 54, (la + 16) / 4);
+	copy16( rtcp, 54, ((la + 16 + 3) / 4) - 1);
 	copy32( rtcp, 56, sid->ssrc);  
 	rtcp[60] = 'S';
 	rtcp[61] = 'E';
