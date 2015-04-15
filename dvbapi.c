@@ -60,8 +60,9 @@ SKey keys[MAX_KEYS];
 unsigned char read_buffer[1500];
 
 
-#define MAX_DATA 1500
+#define MAX_DATA 17000 // 16384
 #define MAX_SINFO 100
+
 
 #define TEST_WRITE(a) if((a)<=0){LOG("%s:%d: write to dvbapi socket failed, closing socket %d",__FILE__,__LINE__,sock);sockets_del(dvbapi_sock);sock = 0;dvbapi_sock = -1;isEnabled = 0;}
 
@@ -236,7 +237,7 @@ int dvbapi_reply(sockets * s)
 				break;
 			a_id = k->adapter;
 			copy16r(_pid, b, 7 )
-			LOG("Received from DVBAPI server DMX_STOP for adapter %d, pid %X (%d)", a_id, _pid, _pid);
+			LOG("Received from DVBAPI server DMX_STOP for key %d, adapter %d, pid %X (%d)", k_id, a_id, _pid, _pid);
 			if((p=find_pid(a_id, _pid)))
 				p->type = 0;
 				
@@ -318,7 +319,7 @@ int decrypt_batch(SKey *k)
 
 void mark_decryption_failed(unsigned char *b, SKey *k)
 {
-	LOGL(4, "NOT DECRYPTING for key %d drop_encrypted=%d parity %d", k?k->id:-1, opts.drop_encrypted, k?k->parity:-1);
+	LOGL(4, "NOT DECRYPTING for key %d drop_encrypted=%d parity %d [%02X %02X %02X %02X]", k?k->id:-1, opts.drop_encrypted, k?k->parity:-1, b[0], b[1], b[2],b[3]);
 	if(opts.drop_encrypted)
 	{
 		b[1] |= 0x1F;
@@ -339,6 +340,8 @@ int decrypt_stream(adapter *ad,int rlen)
 	SPid *p;
 	int pid;
 	int cp;
+	int16_t *pids;
+	int64_t pid_key = DVBAPI_ITEM + (ad->id << 24);
 	
 	if(!have_dvbapi())
 		return 0;
@@ -351,15 +354,23 @@ int decrypt_stream(adapter *ad,int rlen)
 	if(!batchSize)
 		batch_size();
 	
+	pids = (int16_t *)getItem(pid_key);
 	memset(pid_to_key, -1, sizeof(pid_to_key));
 	for(i=0;i<MAX_PIDS;i++)
-		if(ad->pids[i].flags == 1)
+	{
+		if(ad->pids[i].flags > 0)
+		{
 			if(ad->pids[i].type==0)
 				pid_to_key[ad->pids[i].pid]=ad->pids[i].key;
 			else if (ad->pids[i].type & TYPE_ECM)
 				pid_to_key[ad->pids[i].pid] = -TYPE_ECM - 1;
-			else if (ad->pids[i].type & TYPE_PMT)
-                                pid_to_key[ad->pids[i].pid] = -TYPE_PMT - 1;
+//			else if (ad->pids[i].type & TYPE_PMT)
+//                                pid_to_key[ad->pids[i].pid] = -TYPE_PMT - 1;
+		}
+		if(pids && pids[ad->pids[i].pid]==-TYPE_PMT)
+			pid_to_key[ad->pids[i].pid] = -TYPE_PMT - 1;
+			
+	}
 	for(i=0;i<rlen;i+=188)
 	{
 		b = ad->buf + i;
@@ -428,7 +439,7 @@ int dvbapi_send_pi(SKey *k)
 	unsigned char buf[1500];
 	int len;
 	
-	LOG("Starting sending pmt for pid %d, Channel ID %d, key %d, using socket %d", k->pmt_pid, k->sid, k->id, sock);
+	LOG("Sending to dvbapi server for pmt pid %d, Channel ID %d, key %d, using socket %d", k->pmt_pid, k->sid, k->id, sock);
 
 
 	copy32(buf, 0, AOT_CA_PMT);
@@ -514,6 +525,9 @@ void send_client_info(sockets *s)
 int process_pat(unsigned char *b, adapter *ad)
 {
 	int pat_len, i, tid, sid, pid, csid = 0;
+	int64_t pid_key = DVBAPI_ITEM + (ad->id << 24);
+	int16_t *pids;
+
 	SPid *p;
 	if(ad->pat_processed)
 		return;
@@ -527,19 +541,19 @@ int process_pat(unsigned char *b, adapter *ad)
 	tid = b[8] * 256 + b[9];
 //	LOG("tid %d pat_len %d: %02X %02X %02X %02X %02X %02X %02X %02X", tid, pat_len, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]);
 	
+	setItem(pid_key, b, 1, 0);
+	pids = (int16_t *)getItem(pid_key);
+	memset(pids, 0, 8192*2);
 	pat_len -= 9;
 	b += 13;
 	for(i=0;i < pat_len; i+=4)
 	{
 		sid = b[i]*256 + b[i + 1];
 		pid = (b[i + 2] & 0x1F)*256 + b[i + 3];
+		pids[pid] = -TYPE_PMT;
 		LOGL(2, "Adapter %d, Transponder ID %d, PMT sid %d, pid %d", ad->id, tid, sid, pid);
 		if(sid>0)
 		{
-			p = find_pid(ad->id, pid);
-			if(!p)
-				mark_pid_add(-1, ad->id, pid);
-
 			if((p = find_pid(ad->id, pid)))
 			{
 				p->type = TYPE_PMT;
@@ -547,7 +561,6 @@ int process_pat(unsigned char *b, adapter *ad)
 			}
 		}
 	}	
-	update_pids(ad->id);
 	ad->pat_processed = 1;
 	return csid;
 }
@@ -587,9 +600,11 @@ int process_pmt(unsigned char *b, adapter *ad)
 	int program_id = 0, enabled_channels = 0;
 	int64_t item_key;
 	unsigned char *pmt, *pi;
-	int caid, capid, spid, stype;
+	int caid, capid, pid, spid, stype;
 	SPid *p, *cp;
 	SKey *k = NULL;
+	int64_t pid_key = DVBAPI_ITEM + (ad->id << 24);
+	int16_t *pids;
 
 	if((b[0]!=0x47)) // make sure we are dealing with TS
 		return 0;
@@ -597,20 +612,28 @@ int process_pmt(unsigned char *b, adapter *ad)
 	if(!isEnabled)
 		return 0;
 
-	_pid = (b[1] & 0x1F)* 256 + b[2];
-	if(!(p = find_pid(ad->id, _pid)))
+	pid = (b[1] & 0x1F)* 256 + b[2];
+	if(!(p = find_pid(ad->id, pid)))
 		return -1;
+	
 
 	if(!p || (p->type & PMT_COMPLETE))
 		return 0;
 	
-	if(p && get_key(p->key))
-		LOG_AND_RETURN(0, "Trying to add existing key %d for PMT pid %d", p->key, _pid);
+	p->type |= TYPE_PMT;
 
 	if((b[5] == 2) && ((b[1] &0x40) == 0x40))
 		pmt_len = ((b[6] & 0xF) << 8) + b[7];
+	
+	if(p && (k = get_key(p->key)))
+	{
+		program_id = b[8]* 256 + b[9];
+		if((pmt_len > 0) && (program_id == k->sid))
+				p->type |= PMT_COMPLETE;
+		LOG_AND_RETURN(0, "Trying to add existing key %d for PMT pid %d sid %d k->sid %d", p->key, pid, program_id, k->sid);
+	}
 
-	item_key = DVBAPI_ITEM + (ad->id << 16) + _pid;	
+	item_key = DVBAPI_ITEM + (ad->id << 16) + pid;	
 	
 	if(pmt_len > 183)
 	{
@@ -633,7 +656,7 @@ int process_pmt(unsigned char *b, adapter *ad)
 	program_id = b[3]* 256 + b[4];
 	pmt_len = ((b[1] & 0xF) << 8) + b[2];
 	pi_len = ((b[10] & 0xF) << 8) + b[11];
-	LOG("PMT pid: %04X (%d), pmt_len %d, pi_len %d, channel id %d len %d", _pid, _pid, pmt_len, pi_len, program_id, pmt_len);
+	LOG("PMT pid: %04X (%d), pmt_len %d, pi_len %d, channel id %d len %d", pid, pid, pmt_len, pi_len, program_id, pmt_len);
 
 	pi = b + 12;	
 	pmt = pi + pi_len;
@@ -644,15 +667,18 @@ int process_pmt(unsigned char *b, adapter *ad)
 	if(pi_len > 0) 
 		pi=find_pi(pi, pi_len, &pi_len);
 	
-	es_len = 0;	
+	es_len = 0;
+	pids = (int16_t *)getItem(pid_key);
 	for(i = 0; i < pmt_len - pi_len - 17; i+= (es_len) + 5) // reading streams
 	{
 		es_len = (pmt[i+3] & 0xF)*256 + pmt[i+4];
 		stype = pmt[i];
 		spid = (pmt[i+1] & 0x1F)*256 + pmt[i+2];		
-		LOG("PMT pid %d - stream pid %04X (%d), type %d, es_len = %d", _pid, spid, spid, stype, es_len);
-		if(es_len>384)
-			return -1;
+		LOG("PMT pid %d - stream pid %04X (%d), type %d, es_len = %d", pid, spid, spid, stype, es_len);
+		if(spid<8192)
+			pids[spid] = pid;
+		if((es_len + i>pmt_len) || (es_len == 0))
+			break;
 		if(!pi_len)
 			pi = find_pi(pmt + i + 5, es_len, &pi_len);
 		if(cp = find_pid(ad->id, spid)) // the pid is already requested by the client
@@ -662,12 +688,13 @@ int process_pmt(unsigned char *b, adapter *ad)
 
 			if(!k)
 			{
-				p->key = keys_add(ad->id, program_id, _pid); // we add a new key for this pmt pid
+				p->key = keys_add(ad->id, program_id, pid); // we add a new key for this pmt pid
 				k = get_key(p->key);
 				if(!k)
 					return 0;
 			}
 			cp->key = p->key;
+			cp->type = 0;
 			enabled_channels ++;
 		}
 	}
@@ -676,7 +703,7 @@ int process_pmt(unsigned char *b, adapter *ad)
 			
 		k->pi_len = pi_len;
 		k->pi = pi;	
-		p = find_pid(ad->id, _pid);
+//		p = find_pid(ad->id, pid);
 		dvbapi_send_pi(k);
 	}	
 	delItem(item_key);
@@ -738,6 +765,10 @@ int send_ecm(unsigned char *b, adapter *ad)
 	len = ((b[1] & 0xF) << 8) + b[2];
 	len += 3;	
 	LOG("Sending DVBAPI_FILTER_DATA key %d for pid %04X (%d), ecm_parity = %d, new parity %d, demux = %d, filter = %d, len = %d", k->id, pid, pid, old_parity, b[0] & 1,demux, filter, len);
+	
+	if(demux<0)
+		return 0;
+	
 	if(len>559+3)
 		return -1;
 	copy32(buf, 0, DVBAPI_FILTER_DATA);
@@ -798,9 +829,11 @@ int keys_add(int adapter, int sid, int pmt_pid)
 
 int keys_del(int i)
 {
+	int aid;
 	unsigned char buf[8]={0x9F,0x80,0x3f,4,0x83,2,0,0};
 	if((i<0) || (i>=MAX_KEYS) || (!keys[i].enabled))
 		return 0;
+	aid = keys[i].adapter;
 	keys[i].enabled = 0;
 	//buf[7] = keys[i].demux;
 	buf[7] = i;
@@ -811,6 +844,7 @@ int keys_del(int i)
 	keys[i].pmt_pid = 0;
 	keys[i].adapter = -1;
 	keys[i].demux = -1;
+	reset_pids_type_for_key(aid, i);
 }
 
 SKey *get_key(int i)

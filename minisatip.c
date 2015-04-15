@@ -563,6 +563,8 @@ read_rtsp (sockets * s)
 		}
 	else if (strstr (arg[i], "LIVE555"))
 			if(sid) sid->timeout = 0;
+	else if (strstr (arg[i], "Lavf"))
+			if(sid) sid->timeout = 0;
 	
 	if((strncasecmp (arg[0], "PLAY", 4) == 0) || (strncasecmp (arg[0], "GET", 3) == 0) || (strncasecmp (arg[0], "SETUP", 5) == 0)) 
 	{
@@ -799,9 +801,10 @@ close_http (sockets * s)
 		free1 (s->buf);
 	s->flags = 0;
 	s->buf = NULL;
-	if(sid && ((sid->type == STREAM_RTSP_UDP && sid->timeout != 0) || sid->type == 0 && sid->timeout != 0)) // Do not close rtsp udp as most likely there was no TEARDOWN at this point
+	LOG ("Requested stream close %d timeout %d type %d", s->sid, sid?sid->timeout:-1, sid?sid->type:-1);
+	if(sid && ((sid->type == STREAM_RTSP_UDP && sid->timeout != 0) || sid->type == 0 && sid->timeout != 0)) 
+			// Do not close rtsp udp as most likely there was no TEARDOWN at this point
 		return 0;
-	LOG ("Closing stream %d", s->sid);
 	close_stream (s->sid);
 	return 0;
 }

@@ -390,7 +390,7 @@ update_pids (int aid)
 	ad = &a[aid];
 	
 	for (i = 0; i < MAX_PIDS; i++)
-		if (ad->pids[i].flags == 3)
+		if ((ad->pids[i].flags == 3))
 		{
 			if(dp)dump_pids (aid);
 			dp = 0;
@@ -399,10 +399,8 @@ update_pids (int aid)
 				del_filters (ad->pids[i].fd, ad->pids[i].pid);
 			ad->pids[i].fd = 0;
 			if(ad->pids[i].type & TYPE_PMT)
-			{
 				keys_del(ad->pids[i].key);
-				ad->pids[i].type = TYPE_PMT;
-			} else ad->pids[i].type = 0;
+			ad->pids[i].type = 0;
 			ad->pids[i].filter = ad->pids[i].key = -1;
 			
 
@@ -419,10 +417,7 @@ update_pids (int aid)
 			ad->pids[i].cnt = 0;
 			ad->pids[i].cc = 255;
 			ad->pids[i].err = 0;
-			if(ad->pids[i].type & TYPE_PMT)
-				ad->pids[i].type = TYPE_PMT;
-			else
-				ad->pids[i].type = 0;
+			ad->pids[i].type = 0;
 			ad->pids[i].filter = ad->pids[i].key = ad->pids[i].ecm_parity = 255;			
 			if(ad->pids[i].pid==0)
 				ad->pat_processed = 0;
@@ -507,7 +502,7 @@ void mark_pid_deleted(int aid, int sid, int _pid, SPid *p)
 	for (j = 0; j < MAX_STREAMS_PER_PID; j++)
 		if (p->sid[j] >= 0)
 			cnt++;
-	if ((cnt == 0) && (p->flags != 0) && didit)
+	if ((cnt == 0) && (p->flags != 0) && (p->type == 0 || didit))
 		p->flags = 3;
 		
 	if(sort)
@@ -931,4 +926,20 @@ void reset_pids_type(int aid)
 			ad->pids[i].filter = 255;
 		}
 	ad->pat_processed = 0;
+}
+
+void reset_pids_type_for_key(int aid, int key)
+{
+	int i;
+	adapter *ad = get_adapter(aid);
+	if(!ad)
+		return;
+	LOG("clearing type for key %d for adapter %d", key, aid);
+	for(i=0;i<MAX_PIDS;i++)
+		if((ad->pids[i].flags > 0)&&(ad->pids[i].key==key))
+		{
+			ad->pids[i].type = 0;
+			ad->pids[i].key = 255;
+			ad->pids[i].filter = 255;
+		}
 }

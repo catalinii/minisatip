@@ -552,7 +552,7 @@ send_rtp (streams * sid, struct iovec *iov, int liov)
 		LOG("Start streaming for stream %d, len %d to handle %d => %s:%d", sid->sid, total_len, sid->rsock, inet_ntoa(sid->sa.sin_addr), ntohs(sid->sa.sin_port));
 	}
 	
-	LOGL(5, "sent %d bytes for stream %d, handle %d => %s:%d",  total_len, sid->sid, sid->rsock, inet_ntoa(sid->sa.sin_addr), ntohs(sid->sa.sin_port));
+	LOGL(5, "sent %d bytes for stream %d, handle %d seq %d => %s:%d",  total_len, sid->sid, sid->rsock, sid->seq - 1, inet_ntoa(sid->sa.sin_addr), ntohs(sid->sa.sin_port));
 	
 	return rv;
 }
