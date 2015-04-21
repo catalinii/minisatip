@@ -3,6 +3,7 @@
 #include "minisatip.h"
 #include <linux/dvb/frontend.h>
 #include "dvb.h"
+#include "ca.h"
 
 #define MAX_ADAPTERS 16
 #define DVR_BUFFER 30*1024*188
@@ -55,6 +56,7 @@ typedef struct struct_adapter
 	int pin;
 	int id;
 	int pat_processed;
+	ca_device_t * ca_device;
 } adapter;
 
 int init_hw ();

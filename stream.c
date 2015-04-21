@@ -818,6 +818,8 @@ read_dmx (sockets * s)
 	if (cnt > 0 && cnt % 100 == 0)
 		LOG ("Reading max size for the last %d buffers", cnt);								 
 								 
+	ca_grab_pmt(ad, rlen);
+	
 	decrypt_stream(ad, rlen);	
 								 
 	if (ad->sid_cnt == 1 && ad->master_sid >= 0 && opts.log < 2) // we have just 1 stream, do not check the pids, send everything to the destination
