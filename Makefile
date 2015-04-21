@@ -1,7 +1,7 @@
 
 CC?=gcc
 DVBCSA?=yes
-DVBCA?=yes
+DVBCA?=no
 
 CFLAGS=$(NODVBCSA) -ggdb -fPIC
 LDFLAGS=-lpthread -lrt
@@ -19,7 +19,7 @@ ifeq ($(DVBCA),yes)
 LDFLAGS+=-ldvben50221 -ldvbapi -lucsi
 OBJS+=ca.o
 else
-CFLAGS+=-DWITH_DVBCA
+CFLAGS+=-DDISABLE_DVBCA
 endif
 
 
