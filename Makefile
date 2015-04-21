@@ -6,7 +6,7 @@ DVBCA?=no
 CFLAGS=$(NODVBCSA) -ggdb -fPIC
 LDFLAGS=-lpthread -lrt
 
-OBJS=minisatip.o socketworks.o stream.o dvb.o adapter.o
+OBJS=minisatip.o socketworks.o stream.o dvb.o adapter.o tables.o
 
 ifeq ($(DVBCSA),yes)
 LDFLAGS+=-ldvbcsa
@@ -46,6 +46,8 @@ adapter.o: adapter.c adapter.h dvb.h stream.h ca.h
 
 ca.o: ca.c adapter.h dvb.h ca.h
 	$(CC) $(CFLAGS) -c -o $@ ca.c
+tables.o: tables.c tables.h
+	$(CC) $(CFLAGS) -c -o $@ tables.c
 
 all: minisatip
 

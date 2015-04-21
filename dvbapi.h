@@ -72,10 +72,6 @@ int decrypt_stream(adapter *ad,int rlen);
 int keys_add(int adapter, int sid, int pmt);
 int keys_del(int i);
 SKey *get_key(int i);
-unsigned char *getItem(int64_t key);
-int getItemLen(int64_t key);
-int setItem(int64_t key, unsigned char *data, int len, int pos);
-int delItem(int64_t key);
 void dvbapi_pid_add(adapter *a,int pid, SPid *cp);
 void dvbapi_pid_del(adapter *a,int pid, SPid *cp);
 #endif
