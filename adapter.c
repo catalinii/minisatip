@@ -34,6 +34,7 @@
 #include "dvb.h"
 #include "adapter.h"
 #include "dvbapi.h"
+#include "ca.h"
 
 adapter a[MAX_ADAPTERS];
 extern struct struct_opts opts;

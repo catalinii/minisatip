@@ -46,6 +46,7 @@
 #include "adapter.h"
 
 #include "dvbapi.h"
+#include "ca.h"
 
 extern struct struct_opts opts;
 streams st[MAX_STREAMS];
