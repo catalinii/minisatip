@@ -73,6 +73,7 @@ typedef struct tmpinfo
 	uint16_t len;
 	int64_t key;
 	uint16_t id;
+	uint16_t max_size;
 	unsigned char *data;
 } STmpinfo;
 STmpinfo sinfo[MAX_SINFO];
@@ -117,6 +118,19 @@ int getItemLen(int64_t key)
 	return s? s->len : 0;
 }
 
+int setItemSize(int64_t key, int max_size)
+{
+	STmpinfo *s = getItemPos(key);
+	if(!s)
+		return -1;
+	s->max_size = max_size + 100;
+	if(s->data)
+		free1(s->data);
+	s->data = malloc1(s->max_size);
+	if(!s->data)
+		return -1;
+	return 0;
+}
 
 int setItem(int64_t key, unsigned char *data, int len, int pos)   // pos = -1 -> append, owerwrite the existing key
 {
@@ -126,16 +140,18 @@ int setItem(int64_t key, unsigned char *data, int len, int pos)   // pos = -1 ->
 	if(!s)
 		return -1;
 	
+	if(s->max_size==0)
+		s->max_size = MAX_DATA;
 	if(!s->data)
-		s->data = malloc1(MAX_DATA);
+		s->data = malloc1(s->max_size);
 	if(!s->data)
 		return -1;
 	s->enabled = 1;
 	s->key = key;	
 	if(pos == -1)
 		pos = s->len;
-	if(pos + len >= MAX_DATA) // make sure we do not overflow the data buffer
-		len = MAX_DATA - pos;
+	if(pos + len >= s->max_size) // make sure we do not overflow the data buffer
+		len = s->max_size - pos;
 		
 	s->len = pos + len;
 	
@@ -223,6 +239,7 @@ int dvbapi_reply(sockets * s)
 				k->demux = demux;
 				p->type = TYPE_ECM;
 				p->key = k_id;
+			
 			} 
 //				else k->parity = -1;
 			break;
@@ -239,7 +256,10 @@ int dvbapi_reply(sockets * s)
 			copy16r(_pid, b, 7 )
 			LOG("Received from DVBAPI server DMX_STOP for key %d, adapter %d, pid %X (%d)", k_id, a_id, _pid, _pid);
 			if((p=find_pid(a_id, _pid)))
+			{
 				p->type = 0;
+				p->key = p->filter = 255;
+			}
 				
 			break;
 		}	
@@ -275,6 +295,34 @@ int dvbapi_reply(sockets * s)
 	return 0;
 }
 
+int get_active_key(int key)
+{
+	SKey *k;
+	if(key==255)
+		return 255;
+	k = get_key(key);
+	if(k==NULL)
+		return 255;
+	while(k && k->enabled)
+	{
+		if(k->key_ok[k->parity])
+			return k->id; 
+		k = k->next_key;
+	}
+	return 255;
+}
+
+void set_next_key(int k1, int k2)
+{
+	SKey *key1, *key2;
+	key1 = get_key(k1);
+	key2 = get_key(k2);
+	if(!key1 || !key2)
+		return;
+	LOG("Next key %d set to key %d", key1->id, key2->id);
+	key1->next_key = key2;
+}
+
 int decrypt_batch(SKey *k)
 {
 	int oldb1 = -1, oldb2 = -1;
@@ -285,41 +333,24 @@ int decrypt_batch(SKey *k)
 	if(k->blen<=0 || (k->parity==-1) || (!k->key_ok[k->parity]))
 		LOG_AND_RETURN(-1, "Unable to decrypt blen = %d, parity = %d, key_ok %d for key %d", 
 			k->blen, k->parity, (k->parity>=0)?k->key_ok[k->parity]:0, k->id);
-	if(opts.log > 4)
-	{
-		b = k->batch[0].data + k->batch[0].len - 188;
-		pid = (b[1] & 0x1F)*256 + b[2];
-		for(i=1;i<k->blen;i++)
-		{
-			b = k->batch[i].data + k->batch[i].len - 188;
-			if(((b[1] & 0x1F)*256 + b[2]) == pid)
-			{
-				if((b[1] & 0x40) && (oldb1>=0))
-					break;
-				oldb1 = b[186];
-				oldb2 = b[187];
-				oldb = b;
-			}
-		}
-		if(i>=k->blen)
-			b = NULL;
-		else b = oldb;
-				
-	}
 		
 	k->batch[k->blen].data = NULL;
 	k->batch[k->blen].len = 0;	
 	dvbcsa_bs_decrypt(k->key[k->parity], k->batch, 184);
-	LOGL(5, "dvbapi: decrypted key %d parity %d at len %d, channel_id %d (pid %d) padding: [%02X %02X] -> [%02X %02X]", 
-		k->id, k->parity, k->blen, k->sid, pid, oldb1, oldb2, b?b[186]:153, b?b[187]:153); //0x99
+	LOGL(5, "dvbapi: decrypted key %d parity %d at len %d, channel_id %d (pid %d) ", 
+		k->id, k->parity, k->blen, k->sid, pid); //0x99
 	k->blen = 0;
 	k->parity = -1;
 	return 0;
 }
 
-void mark_decryption_failed(unsigned char *b, SKey *k)
+void mark_decryption_failed(unsigned char *b, SKey *k, adapter *ad)
 {
-	LOGL(4, "NOT DECRYPTING for key %d drop_encrypted=%d parity %d [%02X %02X %02X %02X]", k?k->id:-1, opts.drop_encrypted, k?k->parity:-1, b[0], b[1], b[2],b[3]);
+	SPid *p;
+	if(!ad)
+		return;
+	LOGL(4, "NOT DECRYPTING for key %d drop_encrypted=%d parity %d pid %d key_ok %d", k?k->id:-1, opts.drop_encrypted, k?k->parity:-1, 
+		(b[1] & 0x1F)*256 + b[2], k?k->key_ok[k->parity]:-1);
 	if(opts.drop_encrypted)
 	{
 		b[1] |= 0x1F;
@@ -341,7 +372,7 @@ int decrypt_stream(adapter *ad,int rlen)
 	int pid;
 	int cp;
 	int16_t *pids;
-	int64_t pid_key = DVBAPI_ITEM + (ad->id << 24);
+	int64_t pid_key = DVBAPI_ITEM + ((1+ ad->id) << 24) + 0;
 	
 	if(!have_dvbapi())
 		return 0;
@@ -361,13 +392,13 @@ int decrypt_stream(adapter *ad,int rlen)
 		if(ad->pids[i].flags > 0)
 		{
 			if(ad->pids[i].type==0)
-				pid_to_key[ad->pids[i].pid]=ad->pids[i].key;
+				pid_to_key[ad->pids[i].pid]=get_active_key(ad->pids[i].key);
 			else if (ad->pids[i].type & TYPE_ECM)
 				pid_to_key[ad->pids[i].pid] = -TYPE_ECM - 1;
 //			else if (ad->pids[i].type & TYPE_PMT)
 //                                pid_to_key[ad->pids[i].pid] = -TYPE_PMT - 1;
 		}
-		if(pids && pids[ad->pids[i].pid]==-TYPE_PMT)
+		if(pids && pids[ad->pids[i].pid] < 0)
 			pid_to_key[ad->pids[i].pid] = -TYPE_PMT - 1;
 			
 	}
@@ -390,7 +421,7 @@ int decrypt_stream(adapter *ad,int rlen)
 			pid = (b[1] & 0x1F)*256 + b[2]; 			
 			if((!isEnabled) || (pid_to_key[pid] == 255) || !(k = get_key(pid_to_key[pid])))
 			{
-				mark_decryption_failed(b, k);
+				mark_decryption_failed(b, k, ad);
 				continue;
 			}
 			cp = ((b[3] & 0x40) > 0);			
@@ -402,15 +433,18 @@ int decrypt_stream(adapter *ad,int rlen)
 				decrypt_batch(k);
 				if(old_parity != cp)
 				{
-					LOGL(2, "Parity change for key %d, old parity %d, new parity %d pid %d [%02X %02X %02X %02X]", k->id, old_parity, cp, pid, b[0], b[1], b[2], b[3]);
-					k->key_ok[old_parity] = 0;
+					int ctime = getTick();
+					LOGL(2, "Parity change for key %d, old parity %d, new parity %d pid %d [%02X %02X %02X %02X], last_parity_change %d", k->id, old_parity, cp, pid, b[0], b[1], b[2], b[3], k->last_parity_change);
+					if(ctime - k->last_parity_change> 1000)
+						k->key_ok[old_parity] = 0;
+					k->last_parity_change = ctime;
 				}
 				k->parity = cp;
 			}
 
 			if(!k->key_ok[cp])
 			{
-				mark_decryption_failed(b, k);
+				mark_decryption_failed(b, k, ad);
 				continue;
 			}
 			
@@ -439,7 +473,7 @@ int dvbapi_send_pi(SKey *k)
 	unsigned char buf[1500];
 	int len;
 	
-	LOG("Sending to dvbapi server for pmt pid %d, Channel ID %d, key %d, using socket %d", k->pmt_pid, k->sid, k->id, sock);
+	LOG("Sending pmt to dvbapi server for pid %d, Channel ID %04X, key %d, using socket %d", k->pmt_pid, k->sid, k->id, sock);
 
 
 	copy32(buf, 0, AOT_CA_PMT);
@@ -524,43 +558,73 @@ void send_client_info(sockets *s)
 
 int process_pat(unsigned char *b, adapter *ad)
 {
-	int pat_len, i, tid, sid, pid, csid = 0;
-	int64_t pid_key = DVBAPI_ITEM + (ad->id << 24);
+	int pat_len = 0, i, tid, sid, pid, csid = 0;
+	int64_t pid_key = DVBAPI_ITEM + ((1+ ad->id) << 24) + 0;
 	int16_t *pids;
+	int64_t item_key = DVBAPI_ITEM + (ad->id << 16) + pid;	
 
 	SPid *p;
 	if(ad->pat_processed)
 		return;
 	if(!isEnabled)
 		return 0;
+	if(((b[1] & 0x1F) != 0) || (b[2]!=0))
+		return 0;
+		
+	if((b[0]==0x47) && (b[1]==0x40) && (b[2]==0) && (b[5]==0)) // make sure we are dealing with PAT
+		pat_len = ((b[6] & 0xF) << 8) + b[7];
 
-	if((b[0]!=0x47) || (b[1]!=0x40) || (b[2]!=0) || (b[5]!=0)) // make sure we are dealing with PAT
+	if(pat_len > 183)
+	{
+		setItem(item_key, b+5, 183, 0);
 		return 0;
 
-	pat_len = ((b[6] & 0xF) << 8) + b[7];
-	tid = b[8] * 256 + b[9];
+	} else if(pat_len > 0)
+	{		
+		b = b + 5;
+	}else // pmt_len == 0 - next part from the pmt
+	{
+		setItem(item_key, b+4, 184, -1);
+		b = getItem(item_key);
+		pat_len = ((b[1] & 0xF) << 8) + b[2];
+		if(getItemLen(item_key) < pat_len)
+			return 0;
+		
+	}
+	
+	pat_len = ((b[1] & 0xF) << 8) + b[2];
+	tid = b[3] * 256 + b[4];
+	
 //	LOG("tid %d pat_len %d: %02X %02X %02X %02X %02X %02X %02X %02X", tid, pat_len, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]);
 	
 	setItem(pid_key, b, 1, 0);
+	setItemSize(pid_key, 8192*sizeof(*pids));
 	pids = (int16_t *)getItem(pid_key);
-	memset(pids, 0, 8192*2);
+	memset(pids, 0, 8192*sizeof(*pids));
 	pat_len -= 9;
-	b += 13;
+	b += 8;	
+	LOGL(2, "PAT Adapter %d, Transponder ID %d, len %d", ad->id, tid, pat_len);
+	if(pat_len>1500)
+		return 0;
 	for(i=0;i < pat_len; i+=4)
 	{
 		sid = b[i]*256 + b[i + 1];
 		pid = (b[i + 2] & 0x1F)*256 + b[i + 3];
-		pids[pid] = -TYPE_PMT;
-		LOGL(2, "Adapter %d, Transponder ID %d, PMT sid %d, pid %d", ad->id, tid, sid, pid);
+		LOGL(2, "Adapter %d, PMT sid %d, pid %d", ad->id, sid, pid);
 		if(sid>0)
 		{
+			pids[pid] = -TYPE_PMT;
+			p = find_pid(ad->id, pid);
+			if(!p)
+				mark_pid_add(-1, ad->id, pid);
 			if((p = find_pid(ad->id, pid)))
 			{
 				p->type = TYPE_PMT;
 				csid = pid;
 			}
 		}
-	}	
+	}
+	update_pids(ad->id);
 	ad->pat_processed = 1;
 	return csid;
 }
@@ -597,14 +661,16 @@ unsigned char *find_pi(unsigned char *es, int len, int *pi_len)
 int process_pmt(unsigned char *b, adapter *ad)
 {
 	int pi_len = 0, pmt_len = 0, i, _pid, es_len;
-	int program_id = 0, enabled_channels = 0;
+	int program_id = 0;
 	int64_t item_key;
+	int prio = 0;
 	unsigned char *pmt, *pi;
 	int caid, capid, pid, spid, stype;
 	SPid *p, *cp;
 	SKey *k = NULL;
-	int64_t pid_key = DVBAPI_ITEM + (ad->id << 24);
+	int64_t pid_key = DVBAPI_ITEM + ((1+ ad->id) << 24) + 0;
 	int16_t *pids;
+	int old_pmt;
 
 	if((b[0]!=0x47)) // make sure we are dealing with TS
 		return 0;
@@ -615,9 +681,11 @@ int process_pmt(unsigned char *b, adapter *ad)
 	pid = (b[1] & 0x1F)* 256 + b[2];
 	if(!(p = find_pid(ad->id, pid)))
 		return -1;
-	
+		
+	if(p->sid[0] != -1) // the PMT pid is requested by the stream
+		prio = 1;
 
-	if(!p || (p->type & PMT_COMPLETE))
+	if(!p || (p->type & PMT_COMPLETE) || (p->type == 0))
 		return 0;
 	
 	p->type |= TYPE_PMT;
@@ -656,7 +724,7 @@ int process_pmt(unsigned char *b, adapter *ad)
 	program_id = b[3]* 256 + b[4];
 	pmt_len = ((b[1] & 0xF) << 8) + b[2];
 	pi_len = ((b[10] & 0xF) << 8) + b[11];
-	LOG("PMT pid: %04X (%d), pmt_len %d, pi_len %d, channel id %d len %d", pid, pid, pmt_len, pi_len, program_id, pmt_len);
+	LOG("PMT pid: %04X (%d), pmt_len %d, pi_len %d, channel id %04X (%d)", pid, pid, pmt_len, pi_len, program_id, program_id);
 
 	pi = b + 12;	
 	pmt = pi + pi_len;
@@ -674,40 +742,55 @@ int process_pmt(unsigned char *b, adapter *ad)
 		es_len = (pmt[i+3] & 0xF)*256 + pmt[i+4];
 		stype = pmt[i];
 		spid = (pmt[i+1] & 0x1F)*256 + pmt[i+2];		
-		LOG("PMT pid %d - stream pid %04X (%d), type %d, es_len = %d", pid, spid, spid, stype, es_len);
-		if(spid<8192)
-			pids[spid] = pid;
+		LOG("PMT pid %d - stream pid %04X (%d), type %d, es_len %d, pos %d, pi_len %d old pmt %d, old pmt for this pid %d", pid, spid, spid, stype, es_len, i, pi_len, pids[pid], pids[spid]);
 		if((es_len + i>pmt_len) || (es_len == 0))
 			break;
 		if(!pi_len)
 			pi = find_pi(pmt + i + 5, es_len, &pi_len);
+		
+		if(pi_len == 0)
+			continue;
+			
+		old_pmt = pids[spid];
+		pids[spid] = pid; 
+		if((old_pmt > 0) && (old_pmt != -pid))  // this pid is associated with another PMT - link this PMT with the old one (if not linked already)
+		{
+			if(pids[pid]==-TYPE_PMT)
+			{
+				pids[pid] = -old_pmt;
+				LOG("Linking PMT pid %d with PMT pid %d for pid %d, adapter %d", pid, old_pmt, spid, ad->id);
+			}
+		}
+		
 		if(cp = find_pid(ad->id, spid)) // the pid is already requested by the client
 		{
-			if((cp->key != 255) || (pi_len == 0))
-				continue;
+			old_pmt = cp->key;
 
 			if(!k)
 			{
 				p->key = keys_add(ad->id, program_id, pid); // we add a new key for this pmt pid
 				k = get_key(p->key);
 				if(!k)
-					return 0;
+					break;				
+				set_next_key(k->id, old_pmt);
 			}
 			cp->key = p->key;
 			cp->type = 0;
-			enabled_channels ++;
+			k->enabled_channels ++;
 		}
 	}
-	if((pi_len > 0) && enabled_channels)
+	
+	if((pi_len > 0) && k && k->enabled_channels)
 	{	
 			
 		k->pi_len = pi_len;
 		k->pi = pi;	
 //		p = find_pid(ad->id, pid);
 		dvbapi_send_pi(k);
-	}	
+		p->type |= PMT_COMPLETE;
+	} else 
+		p->type = 0; // we do not need this pmt pid anymore
 	delItem(item_key);
-	p->type |= PMT_COMPLETE;
 	return 0;
 }
 
@@ -823,7 +906,9 @@ int keys_add(int adapter, int sid, int pmt_pid)
 	keys[i].id = i;
 	keys[i].blen = 0;
 	keys[i].enabled = 1;
-	LOG("returning new key %d for adapter %d, pmt pid %d sid %d", i, adapter, pmt_pid, sid);
+	keys[i].enabled_channels = 0;
+	keys[i].next_key = NULL;
+	LOG("returning new key %d for adapter %d, pmt pid %d sid %04X", i, adapter, pmt_pid, sid);
 	return i;
 }
 
@@ -837,14 +922,18 @@ int keys_del(int i)
 	keys[i].enabled = 0;
 	//buf[7] = keys[i].demux;
 	buf[7] = i;
-	LOG("Stopping DEMUX %d, removing key %d, sock %d", buf[7], i, sock);
+	LOG("Stopping DEMUX %d, removing key %d, sock %d, pmt pid %d", buf[7], i, sock, keys[i].pmt_pid);
 	if((buf[7] != 255) && (sock>0))
 		TEST_WRITE(write(sock, buf, sizeof(buf)));
 	keys[i].sid = 0;
 	keys[i].pmt_pid = 0;
 	keys[i].adapter = -1;
 	keys[i].demux = -1;
+	keys[i].enabled_channels = 0;
 	reset_pids_type_for_key(aid, i);
+	if(keys[i].next_key)
+		keys_del(keys[i].next_key->id);
+	keys[i].next_key = NULL;
 }
 
 SKey *get_key(int i)
@@ -854,5 +943,87 @@ SKey *get_key(int i)
 	return &keys[i];
 }
 
+void dvbapi_pid_add(adapter *ad,int pid, SPid *cp)
+{
+	int64_t pid_key = DVBAPI_ITEM + ((1+ ad->id) << 24) + 0;
+	int16_t *pids = NULL;
+	SKey *k;
+	SPid *p;
+	if(!ad)
+		return;
+	pids = (int16_t *)getItem(pid_key);
+	if(pid==0)
+	{
+		return;
+	}
+	if(pids && pids[pid]<=-TYPE_PMT)
+	{
+		p = find_pid(ad->id, pid);
+		if(p && p->type == 0)
+		{
+			LOG("Adding PMT pid %d to list of pids for adapter %d", pid, ad->id);
+			p->type = TYPE_PMT;
+		}
+		return;
+	}
+		
+	if(pids && (pids[pid]>0))
+	{
+		p = find_pid(ad->id, pids[pid]);
+		LOGL(2, "dvbapi_pid_add: adding pid %d adapter %d, pmt pid %d, pmt pid type %d, pmt pid key %d", pid, ad->id, pids[pid], p?p->type:-1, p?p->key:-1 );
+		if(p && (p->type & PMT_COMPLETE))
+		{
+			cp->key =  p->key;
+			if(k=get_key(cp->key))
+				k->enabled_channels++;
+			return;
+		}	
+		cp->key = 255;
+
+		if(!p || (p->type == 0))
+		{
+			int i, next_pmt;
+			LOG("Detected pid %d adapter %d without the PMT added to the list of pids",pid, ad->id);
+			for(i=pids[pid];i != -TYPE_PMT; )
+			{
+				next_pmt = abs(i);
+				LOG("Adding PMT pid %d to the list of pids, next pid %d", next_pmt, -pids[next_pmt]);
+				mark_pid_add(-1, ad->id, next_pmt);
+				p = find_pid(ad->id, next_pmt);
+				if(!p)
+					continue;
+				p->type |= TYPE_PMT;
+				i=pids[next_pmt];
+				pids[next_pmt] = -TYPE_PMT;
+			}
+		}
+	}
+}
+
+void dvbapi_pid_del(adapter *ad,int pid, SPid *cp)
+{
+	int64_t pid_key = DVBAPI_ITEM + ((1+ ad->id) << 24) + 0;
+	int16_t *pids = NULL;
+	SPid *p;
+	SKey *k;
+	if(!ad)
+		return;
+	pids = (int16_t *)getItem(pid_key);
+	k = get_key(cp->key);
+	if(cp->key != 255)
+		LOGL(2, "Requested delete pid %d adapter %d key %d pids %d enabled_channels %d", pid, ad->id, cp->key, pids?pids[pid]:-1, k?k->enabled_channels:-1);
+	if(cp->type & TYPE_PMT) // if(pids && (pids[pid]< 0))
+	{
+		keys_del(cp->key);
+		return;
+	}
+	if(k)
+	{
+		if(k->enabled_channels>0)
+			k->enabled_channels --;
+		if(k->enabled_channels == 0)
+			keys_del(k->id);
+	}
+}
 
 #endif

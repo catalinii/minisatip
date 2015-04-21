@@ -398,10 +398,9 @@ update_pids (int aid)
 			if (ad->pids[i].fd > 0)
 				del_filters (ad->pids[i].fd, ad->pids[i].pid);
 			ad->pids[i].fd = 0;
-			if(ad->pids[i].type & TYPE_PMT)
-				keys_del(ad->pids[i].key);
+			dvbapi_pid_del(ad, ad->pids[i].pid, &ad->pids[i]);
 			ad->pids[i].type = 0;
-			ad->pids[i].filter = ad->pids[i].key = -1;
+			ad->pids[i].filter = ad->pids[i].key = 255;
 			
 
 		}
@@ -414,13 +413,12 @@ update_pids (int aid)
 			ad->pids[i].flags = 1;
 			if (ad->pids[i].fd <= 0)
 				ad->pids[i].fd = set_pid (ad->pa, ad->fn, ad->pids[i].pid);
-			ad->pids[i].cnt = 0;
-			ad->pids[i].cc = 255;
-			ad->pids[i].err = 0;
-			ad->pids[i].type = 0;
 			ad->pids[i].filter = ad->pids[i].key = ad->pids[i].ecm_parity = 255;			
 			if(ad->pids[i].pid==0)
 				ad->pat_processed = 0;
+			ad->pids[i].cnt = 0;
+			ad->pids[i].cc = 255;
+			ad->pids[i].err = 0;
 	}
 	return 0;
 }
@@ -542,8 +540,8 @@ void mark_pids_deleted (int aid, int sid, char *pids)		 //pids==NULL -> delete a
 
 	for (i = 0; i < MAX_PIDS; i++)
 			mark_pid_deleted(aid, sid, ad->pids[i].pid, &ad->pids[i]);
-	if(sid == -1)
-		reset_pids_type(aid);
+//	if(sid == -1)
+//		reset_pids_type(aid);
 	dump_pids (aid);
 
 }
@@ -568,8 +566,6 @@ int mark_pid_add(int sid, int aid, int _pid)
 					p->flags = 2;
 				p->sid[k] = sid;
 				found = 1;
-				if(p->type & TYPE_PMT)
-					p->type = TYPE_PMT;
 				break;
 			}
 		if (!found)
@@ -587,6 +583,7 @@ int mark_pid_add(int sid, int aid, int _pid)
 			ad->pids[i].flags = 2;
 			ad->pids[i].pid = _pid;
 			ad->pids[i].sid[0] = sid;
+			dvbapi_pid_add(ad, _pid, &ad->pids[i]);
 			return 0;
 		}
 	LOG ("MAX_PIDS (%d) reached for adapter %d in adding PID: %d",

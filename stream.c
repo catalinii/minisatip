@@ -521,7 +521,7 @@ send_rtp (streams * sid, struct iovec *iov, int liov)
 
 	}
 	memcpy (&io[1], iov, liov * sizeof (struct iovec));
-	rv = my_writev (sid->rsock, (const struct iovec *) io, liov + 1);
+	rv = my_writev (sid->rsock, (const struct iovec *) io, liov + 1, sid);
 	if(opts.bw && (slow_down++ > 20))
 	{
 		uint64_t tn = getTickUs();
@@ -665,12 +665,14 @@ void flush_streamb (streams * sid, char *buf, int rlen, int ctime)
 	
 }
 
-int my_writev(int sock, struct iovec *iov, int iiov)
+int my_writev(int sock, struct iovec *iov, int iiov, streams *sid)
 {
 	int rv;
 	LOGL(6,"start writev handle %d, iiov %d", sock, iiov);
 	rv = writev(sock,iov,iiov);
-	LOGL(6,"done writev handle %d, iiov %d", sock, iiov);
+	if(errno < 0 && errno == ECONNREFUSED) // close the stream int the next second
+		sid->timeout = 1000;
+	LOGL(6,"writev returned %d handle %d, iiov %d", rv, sock, iiov);
 	return rv;
 }
 
@@ -680,7 +682,7 @@ flush_streami (streams * sid, int ctime)
 	int rv, i, len;
 	
 	if (sid->type == STREAM_HTTP)
-		rv = my_writev (sid->rsock, sid->iov, sid->iiov);
+		rv = my_writev (sid->rsock, sid->iov, sid->iiov, sid);
 	else
 		rv = send_rtp (sid, sid->iov, sid->iiov);		
 

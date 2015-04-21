@@ -9,7 +9,8 @@
 #define batch_size() 63
 #define decrypt_stream(ad,rlen) 0
 #define keys_del(o) 0
-
+#define dvbapi_pid_add(a,pid,cp) 0
+#define dvbapi_pid_del(a,pid,cp) 0
 #else
 
 #include "adapter.h"
@@ -56,6 +57,9 @@ typedef struct struct_key
 	struct dvbcsa_bs_batch_s batch[129];
 	int parity;
 	int blen;
+	int enabled_channels;
+	int last_parity_change;
+	struct struct_key *next_key;
 } SKey;
 
 int init_dvbapi();
@@ -72,5 +76,7 @@ unsigned char *getItem(int64_t key);
 int getItemLen(int64_t key);
 int setItem(int64_t key, unsigned char *data, int len, int pos);
 int delItem(int64_t key);
+void dvbapi_pid_add(adapter *a,int pid, SPid *cp);
+void dvbapi_pid_del(adapter *a,int pid, SPid *cp);
 #endif
 #endif
