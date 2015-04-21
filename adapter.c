@@ -142,7 +142,7 @@ init_hw ()
 		}
 
 		if (ca > -1)
-			a[i].ca_device = ca_init(ca);
+			a[i].ca_device = (ca_device_t *)ca_init(ca);
 
 		a[i].enabled = 1;
 		a[i].id = i;

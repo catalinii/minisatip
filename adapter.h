@@ -3,7 +3,8 @@
 #include "minisatip.h"
 #include <linux/dvb/frontend.h>
 #include "dvb.h"
-#include "ca.h"
+
+typedef struct ca_device ca_device_t;
 
 #define MAX_ADAPTERS 16
 #define DVR_BUFFER 30*1024*188

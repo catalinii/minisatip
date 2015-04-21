@@ -4,6 +4,7 @@
 #include <sys/socket.h>
 #include "socketworks.h"
 #include "dvb.h"
+//#include "ca.h"
 #define MAX_STREAMS 100
 #define DVB_FRAME 188
 #define STREAMS_BUFFER 7*DVB_FRAME

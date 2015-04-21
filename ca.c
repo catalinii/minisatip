@@ -17,6 +17,9 @@
  * USA
  *
  */
+#ifdef DISABLE_DVBCA 
+
+#else
 
 #include <stdint.h>
 #include <string.h>
@@ -288,7 +291,7 @@ pmt_packet(adapter *a, uint8_t * b)
                 return;
             }
 
-            if ((size = en50221_ca_format_pmt(&b[5], capmt, sizeof(capmt),
+            if ((size = en50221_ca_format_pmt((struct mpeg_pmt_section *)&b[5], capmt, sizeof(capmt),
                                          CA_LIST_MANAGEMENT_ONLY, 0,
                                          CA_PMT_CMD_ID_OK_DESCRAMBLING)) < 0) {
 
@@ -646,3 +649,4 @@ fail:
 	return 0;
 }
 
+#endif
