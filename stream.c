@@ -330,6 +330,7 @@ int decode_transport (sockets * s, char *arg, char *default_rtp, int start_rtp)
 	if(sid->type == 0)
 	{
 		int i;
+		socklen_t sl;
 		struct sockaddr_in sa;
 		
 		sid->type = STREAM_RTSP_UDP;
@@ -342,6 +343,13 @@ int decode_transport (sockets * s, char *arg, char *default_rtp, int start_rtp)
 	
 		if((sid->rsock = udp_bind_connect (NULL, opts.start_rtp + (sid->sid * 2), p.dest, p.port, &sid->sa)) < 0)
 			LOG_AND_RETURN (-1, "decode_transport failed: UDP connection on rtp port to %s:%d failed", p.dest, p.port);
+
+		i = 512*1024;
+		if(setsockopt(sid->rsock, SOL_SOCKET, SO_SNDBUF, &i, sizeof(i)))
+			LOG("unable to set output UDP buffer size to %d", i);
+                sl = sizeof(int);
+		if(!getsockopt(sid->rsock, SOL_SOCKET, SO_SNDBUF, &i, &sl))
+			LOG("output UDP buffer size is %d bytes", i);
 			
 		if ((sid->rtcp = udp_bind_connect (NULL, opts.start_rtp + (sid->sid * 2) +1, p.dest, p.port + 1, &sa)) < 1)
 			LOG_AND_RETURN (-1, "decode_transport failed: UDP connection on rtcp port to %s:%d failed", p.dest, p.port+1);
@@ -820,6 +828,8 @@ read_dmx (sockets * s)
 	if (cnt > 0 && cnt % 100 == 0)
 		LOG ("Reading max size for the last %d buffers", cnt);								 
 								 
+	ca_grab_pmt(ad, rlen);
+	
 	decrypt_stream(ad, rlen);	
 								 
 	if (ad->sid_cnt == 1 && ad->master_sid >= 0 && opts.log < 2) // we have just 1 stream, do not check the pids, send everything to the destination
