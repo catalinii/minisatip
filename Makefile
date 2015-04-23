@@ -6,11 +6,14 @@ DVBCA?=no
 CFLAGS=$(NODVBCSA) -ggdb -fPIC
 LDFLAGS=-lpthread -lrt
 
-OBJS=minisatip.o socketworks.o stream.o dvb.o adapter.o tables.o
+OBJS=minisatip.o socketworks.o stream.o dvb.o adapter.o
+
+TABLES=no
 
 ifeq ($(DVBCSA),yes)
 LDFLAGS+=-ldvbcsa
 OBJS+=dvbapi.o
+TABLES=yes
 else
 CFLAGS+=-DDISABLE_DVBCSA
 endif
@@ -18,8 +21,13 @@ endif
 ifeq ($(DVBCA),yes)
 LDFLAGS+=-ldvben50221 -ldvbapi -lucsi
 OBJS+=ca.o
+TABLES=yes
 else
 CFLAGS+=-DDISABLE_DVBCA
+endif
+
+ifeq ($(TABLES),yes)
+OBJS+=tables.o
 endif
 
 
@@ -52,4 +60,4 @@ tables.o: tables.c tables.h
 all: minisatip
 
 clean:
-	rm *.o minisatip
+	rm *.o minisatip >> /dev/null

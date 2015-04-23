@@ -226,8 +226,8 @@ pat_packet(adapter *a, uint8_t * b)
     }
 }
 
-static void
-pmt_packet(adapter *a, uint8_t * b)
+
+int dvbca_process_pmt(uint8_t *b, adapter *a)
 {
     ca_device_t * d = a->ca_device;
     int len, ver, sid;
@@ -237,18 +237,18 @@ pmt_packet(adapter *a, uint8_t * b)
     pid = (b[1] & 0x1F) * 256 + b[2];
 
     if (!d)
-        return;
+        return -1;
 
     if (b[1] & 0x40) { /* Payload Unit Start Indicator */
 
         if (b[4])   /* pointer field should be 0 */
-            return;
+            return -1;
 
         if (b[5] != 2)   /* table_id should be 2 (PMT) */
-            return;
+            return -1;
 
         if (b[10] & 1 == 0) /* only active PAT */
-            return;
+            return -1;
 
         len = ((b[6] & 0x03) << 8) | b[7];
         ver = (b[10] >> 1) & 0x1f;
@@ -257,7 +257,7 @@ pmt_packet(adapter *a, uint8_t * b)
             ver == d->last_pmt_ver &&
             sid == d->last_pmt_sid &&
             pid == d->last_pmt_pid)
-            return;
+            return -1;
 
         d->last_pmt_pid = pid;
         d->last_pmt_sid = sid;
@@ -276,19 +276,19 @@ pmt_packet(adapter *a, uint8_t * b)
             struct section *section = section_codec((uint8_t*) &b[5], len + 3);
             if (!section){
                 printf("failed to decode section\n");
-                return;
+                return -1;
             }
 
             struct section_ext *result = section_ext_decode(section, 0);
             if (!section){
                 printf("failed to decode ext_section\n");
-                return;
+                return -1;
             }
 
             struct mpeg_pmt_section *pmt = mpeg_pmt_section_codec(result);
             if (!pmt){
                 printf("failed to decode pmt\n");
-                return;
+                return -1;
             }
 
             if ((size = en50221_ca_format_pmt((struct mpeg_pmt_section *)&b[5], capmt, sizeof(capmt),
@@ -306,6 +306,8 @@ pmt_packet(adapter *a, uint8_t * b)
 
 }
 
+
+// not used anymore
 void
 ca_grab_pmt(adapter *a, int rlen)
 {
@@ -338,13 +340,13 @@ ca_grab_pmt(adapter *a, int rlen)
         else if (pid == d->last_pmt_pid)
         {
             //printf("PMT last PID hit %u\n", pid);
-            pmt_packet(a, b);
+            dvbca_process_pmt( b, a);
         }
 
         else for (j=0; j < d->num_pmt_pids; j++) {
                 if (d->pmt_pids[j]==pid) {
                    // printf("PMT hit %u j=%u\n", pid,j);
-                    pmt_packet(a, b);
+                    dvbca_process_pmt(b, a);
                 }
         }
 	}

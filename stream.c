@@ -45,8 +45,8 @@
 #include "dvb.h"
 #include "adapter.h"
 
-#include "dvbapi.h"
-#include "ca.h"
+#include "tables.h"
+
 
 extern struct struct_opts opts;
 streams st[MAX_STREAMS];
@@ -724,7 +724,6 @@ int process_packet(unsigned char *b, adapter *ad)
 	int i, j, cc;
 	SPid *p;
 	int _pid = (b[1] & 0x1f) * 256 + b[2];
-	int de = have_dvbapi();
 	streams *sid;
 	int rtime = ad->rtime;
 	if( _pid == 8191)
@@ -828,11 +827,9 @@ read_dmx (sockets * s)
 	LOGL(5, "read_dmx start flush_all=%d called for adapter %d -> %d out of %d bytes read, %d ms ago", flush_all, s->sid, rlen, s->lbuf, ms_ago );   	
 	if (cnt > 0 && cnt % 100 == 0)
 		LOG ("Reading max size for the last %d buffers", cnt);								 
-								 
-	ca_grab_pmt(ad, rlen);
-	
-	decrypt_stream(ad, rlen);	
-								 
+#ifdef TABLES_H
+	process_stream(ad,rlen);
+#endif								 
 	if (ad->sid_cnt == 1 && ad->master_sid >= 0 && opts.log < 2) // we have just 1 stream, do not check the pids, send everything to the destination
 	{
 		sid = get_sid(ad->master_sid);

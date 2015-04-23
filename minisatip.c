@@ -1010,7 +1010,9 @@ main (int argc, char *argv[])
 	
 	LOGL (0, "Initializing with %d devices", init_hw ());
 	write_pid_file();
+#ifndef DISABLE_DVBCSA	
 	init_dvbapi();
+#endif
 	select_and_execute ();
 	unlink(PID_FILE);
 	free_all ();

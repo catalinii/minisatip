@@ -130,7 +130,6 @@ init_hw ()
 		sprintf (buf, "/dev/dvb/adapter%d/dvr%d", a[i].pa, a[i].fn);
 		a[i].dvr = open (buf, O_RDONLY | O_NONBLOCK);
 		sprintf (buf, "/dev/dvb/adapter%d/ca0", a[i].pa);
-		ca = open (buf, O_RDWR);
 		if (a[i].fe < 0 || a[i].dvr < 0)
 		{
 			LOG (0, "Could not open %s in RW mode\n", buf);
@@ -141,10 +140,14 @@ init_hw ()
 			a[i].fe = a[i].dvr = -1;
 			continue;
 		}
-
+#ifndef DISABLE_DVBCA
+		if(a[i].ca > 0)
+			close(a[i].ca);
+		a[i].ca = open (buf, O_RDWR);
 		if (ca > -1)
 			a[i].ca_device = (ca_device_t *)ca_init(ca);
-
+#endif
+		
 		a[i].enabled = 1;
 		a[i].id = i;
 		if (!a[i].buf)
@@ -214,7 +217,11 @@ close_adapter (int na)
 		close (a[na].fe);
 	if (a[na].sock >= 0)
 		sockets_del (a[na].sock);
+	if(a[na].ca > 0)
+		close(a[na].ca);
+	a[na].ca = 0;
 	a[na].fe = 0;
+	a[na].dvr = 0;
 	//      if(a[na].buf)free1(a[na].buf);a[na].buf=NULL;
 	LOG ("done closing adapter %d", na);
 }
@@ -405,7 +412,9 @@ update_pids (int aid)
 			if (ad->pids[i].fd > 0)
 				del_filters (ad->pids[i].fd, ad->pids[i].pid);
 			ad->pids[i].fd = 0;
+#ifndef DISABLE_DVBCSA	
 			dvbapi_pid_del(ad, ad->pids[i].pid, &ad->pids[i]);
+#endif
 			ad->pids[i].type = 0;
 			ad->pids[i].filter = ad->pids[i].key = 255;
 			
@@ -590,7 +599,9 @@ int mark_pid_add(int sid, int aid, int _pid)
 			ad->pids[i].flags = 2;
 			ad->pids[i].pid = _pid;
 			ad->pids[i].sid[0] = sid;
+#ifndef DISABLE_DVBCSA	
 			dvbapi_pid_add(ad, _pid, &ad->pids[i]);
+#endif
 			return 0;
 		}
 	LOG ("MAX_PIDS (%d) reached for adapter %d in adding PID: %d",

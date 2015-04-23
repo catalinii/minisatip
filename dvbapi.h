@@ -1,17 +1,5 @@
 #ifndef DVBAPI_H
 #define DVBAPI_H
-#ifdef DISABLE_DVBCSA 
-
-#define init_dvbapi() 0
-#define have_dvbapi() 0
-#define create_key() NULL
-#define free_key(key) NULL
-#define batch_size() 63
-#define decrypt_stream(ad,rlen) 0
-#define keys_del(o) 0
-#define dvbapi_pid_add(a,pid,cp) 0
-#define dvbapi_pid_del(a,pid,cp) 0
-#else
 
 #include "adapter.h"
 #include "stream.h"
@@ -64,15 +52,13 @@ typedef struct struct_key
 
 int init_dvbapi();
 int have_dvbapi();
-int process_pat(unsigned char *b, adapter *ad);
-int process_pmt(unsigned char *b, adapter *ad);
 int send_ecm(unsigned char *b, adapter *ad);
 int batch_size();
 int decrypt_stream(adapter *ad,int rlen);
 int keys_add(int adapter, int sid, int pmt);
 int keys_del(int i);
 SKey *get_key(int i);
+int dvbapi_process_pmt(unsigned char *b, adapter *ad);
 void dvbapi_pid_add(adapter *a,int pid, SPid *cp);
 void dvbapi_pid_del(adapter *a,int pid, SPid *cp);
-#endif
 #endif

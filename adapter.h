@@ -14,6 +14,7 @@ typedef struct ca_device ca_device_t;
 #define TYPE_PMT 1
 #define TYPE_ECM 2
 #define PMT_COMPLETE 4
+#define PMTCA_COMPLETE 8
 typedef struct struct_pid
 {
 	int pid;					 // pid for this demux - not used
@@ -33,7 +34,7 @@ typedef struct struct_adapter
 {
 	int enabled;
 	int force_disable;
-	int fe,	dvr;
+	int fe,	dvr, ca;
 	int pa, fn;		
 		// physical adapter, physical frontend number
 	fe_delivery_system_t sys[10]; 
