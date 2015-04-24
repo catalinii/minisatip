@@ -223,6 +223,11 @@ SKey *get_active_key(SPid *p)
 			LOGL(4, "get_active_key: returning key %d for pid %d", k->id, p->pid);
 			return k; 
 		}
+		if(k->next_key<keys || k->next_key>keys+MAX_KEYS)
+		{
+			LOG("get_active_key: invalid next_key for key %d", k->id);
+			k->next_key = NULL;
+		}
 		k = k->next_key;
 		LOGL(4, "get_active_key: trying next key for pid %d, key %d parity %d ok %d %d", p->pid,k?k->id:-1, k?k->parity:-1, k?k->key_ok[0]:-1, k?k->key_ok[1]:-1);
 
