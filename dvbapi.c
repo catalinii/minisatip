@@ -60,11 +60,20 @@ SKey keys[MAX_KEYS];
 unsigned char read_buffer[1500];
 
 
-#define TEST_WRITE(a) if((a)<=0){LOG("%s:%d: write to dvbapi socket failed, closing socket %d",__FILE__,__LINE__,sock);sockets_del(dvbapi_sock);sock = 0;dvbapi_sock = -1;isEnabled = 0;}
-
+#define TEST_WRITE(a) if((a)<=0){LOG("write to dvbapi socket failed, closing socket %d",sock);sockets_del(dvbapi_sock);sock = 0;dvbapi_sock = -1;isEnabled = 0;}
+#define POINTER_TYPE_ECM ((void *)-TYPE_ECM)
+#define POINTER_1 ((void *)1)
 int have_dvbapi()
 {
 	return haveDvbapi;
+}
+
+void invalidate_adapter(int ad)
+{
+	int64_t pk_key = DVBAPI_ITEM + ((1+ ad) << 24) + 1;
+	SKey **pid_to_key = (SKey **)getItem(pk_key);				
+	if(pid_to_key)
+		pid_to_key[0] = POINTER_1; // invalidate the cache
 }
 
 void send_client_info(sockets *s);
@@ -73,7 +82,6 @@ int dvbapi_reply(sockets * s)
 	unsigned char *b = s->buf;
 	SKey *k;
 	unsigned int op, version, _pid;
-	
 	int k_id, a_id = 0, s_id, pos = 0;
 	int demux, filter;
 	SPid *p;
@@ -129,9 +137,10 @@ int dvbapi_reply(sockets * s)
 				k->demux = demux;
 				p->type = TYPE_ECM;
 				p->key = k_id;
+				invalidate_adapter(k->adapter);
 			
 			} 
-//				else k->parity = -1;
+				else k->parity = -1;
 			break;
 		}
 		case DVBAPI_DMX_STOP:
@@ -149,6 +158,7 @@ int dvbapi_reply(sockets * s)
 			{
 				p->type = 0;
 				p->key = p->filter = 255;
+				invalidate_adapter(k->adapter);
 			}
 				
 			break;
@@ -163,8 +173,9 @@ int dvbapi_reply(sockets * s)
 		{
 			int index, parity;
 			SKey *k;
-			SPid *p;
+			SPid *p;			
 			unsigned char *cw;
+
 			pos += 21;
 			copy32r(index, b, 5);
 			copy32r(parity, b, 9);			
@@ -172,9 +183,10 @@ int dvbapi_reply(sockets * s)
 			k = get_key(index);
 			if(k && (parity < 2))
 			{
-				LOG("received DVBAPI_CA_SET_DESCR, key: %d parity: %d, CW: %02X %02X %02X %02X %02X %02X %02X %02X", index, parity, cw[0], cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);			
+				LOG("received DVBAPI_CA_SET_DESCR, key %d parity %d, CW: %02X %02X %02X %02X %02X %02X %02X %02X", index, parity, cw[0], cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);			
 				dvbcsa_bs_key_set(cw, k->key[parity]);
 				k->key_ok[parity] = 1;
+				invalidate_adapter(k->adapter);
 			}
 			break; 
 		}
@@ -185,21 +197,34 @@ int dvbapi_reply(sockets * s)
 	return 0;
 }
 
-int get_active_key(int key)
+
+SKey *get_active_key(SPid *p)
 {
 	SKey *k;
+	int key = p->key;	
 	if(key==255)
-		return 255;
+		return NULL;
+	if(p->type & TYPE_ECM)
+		return POINTER_TYPE_ECM;
+	if(p->type & TYPE_PMT)
+		return NULL;
 	k = get_key(key);
 	if(k==NULL)
-		return 255;
+		return NULL;
+	LOGL(4, "get_active_key: searching key for pid %d, starting key %d parity %d ok %d %d", p->pid, key, k->parity, k->key_ok[0], k->key_ok[1]);
 	while(k && k->enabled)
 	{
-		if(k->key_ok[k->parity])
-			return k->id; 
+		if(k->key_ok[0] || k->key_ok[1])
+		{
+			LOGL(4, "get_active_key: returning key %d for pid %d", k->id, p->pid);
+			return k; 
+		}
 		k = k->next_key;
+		LOGL(4, "get_active_key: trying next key for pid %d, key %d parity %d ok %d %d", p->pid,k?k->id:-1, k?k->parity:-1, k?k->key_ok[0]:-1, k?k->key_ok[1]:-1);
+
 	}
-	return 255;
+	LOGL(4, "get_active_key: returning NULL for pid %d, starting key %d", p->pid, key);
+	return NULL;
 }
 
 void set_next_key(int k1, int k2)
@@ -239,7 +264,7 @@ void mark_decryption_failed(unsigned char *b, SKey *k, adapter *ad)
 	SPid *p;
 	if(!ad)
 		return;
-	LOGL(4, "NOT DECRYPTING for key %d drop_encrypted=%d parity %d pid %d key_ok %d", k?k->id:-1, opts.drop_encrypted, k?k->parity:-1, 
+	LOGL(5, "NOT DECRYPTING for key %d drop_encrypted=%d parity %d pid %d key_ok %d", k?k->id:-1, opts.drop_encrypted, k?k->parity:-1, 
 		(b[1] & 0x1F)*256 + b[2], k?k->key_ok[k->parity]:-1);
 	if(opts.drop_encrypted)
 	{
@@ -248,12 +273,12 @@ void mark_decryption_failed(unsigned char *b, SKey *k, adapter *ad)
 	}
 }
 
+
 int decrypt_stream(adapter *ad,int rlen)
 {
 	struct iovec *iov;
 	SKey *k = NULL;
 	int adapt_len;
-	short pid_to_key[8192];
 	int len;	
 	 // max batch
 	int i = 0, j = 0;
@@ -262,7 +287,10 @@ int decrypt_stream(adapter *ad,int rlen)
 	int pid;
 	int cp;
 	int16_t *pids;
+	SKey **pid_to_key;
 	int64_t pid_key = TABLES_ITEM + ((1+ ad->id) << 24) + 0;
+	int64_t pk_key = DVBAPI_ITEM + ((1+ ad->id) << 24) + 1;
+	
 	
 	if(!have_dvbapi())
 		return 0;
@@ -276,16 +304,17 @@ int decrypt_stream(adapter *ad,int rlen)
 		batch_size();
 	
 	pids = (int16_t *)getItem(pid_key);
-	memset(pid_to_key, -1, sizeof(pid_to_key));
-	for(i=0;i<MAX_PIDS;i++)
+	pid_to_key = (SKey **)getItem(pk_key);
+	if(!pid_to_key || pid_to_key[0]) // cache pid_to_key
 	{
-		if(ad->pids[i].flags > 0)
-		{
-			if(ad->pids[i].type==0)
-				pid_to_key[ad->pids[i].pid]=get_active_key(ad->pids[i].key);
-			else if (ad->pids[i].type & TYPE_ECM)
-				pid_to_key[ad->pids[i].pid] = -TYPE_ECM - 1;
-		}			
+		setItem(pk_key, b, 0, -1);
+		setItemSize(pk_key, 8192*sizeof(void *));
+		pid_to_key = (SKey **)getItem(pk_key);
+		memset(pid_to_key, 0, getItemSize(pk_key));
+	
+		for(i=0;i<MAX_PIDS;i++)
+			if(ad->pids[i].flags == 1)
+				pid_to_key[ad->pids[i].pid]=get_active_key(&ad->pids[i]);
 	}
 
 	for(i=0;i<rlen;i+=188)
@@ -293,12 +322,16 @@ int decrypt_stream(adapter *ad,int rlen)
 		b = ad->buf + i;
 		pid = (b[1] & 0x1F)*256 + b[2]; 			
 		if(b[3] & 0x80)
-		{			
-			if((!isEnabled) || (pid_to_key[pid] == 255) || !(k = get_key(pid_to_key[pid])))
+		{				
+			if(isEnabled && pid_to_key)
+				k = pid_to_key[pid];
+			else k = NULL;
+			if(!k)
 			{
 				mark_decryption_failed(b, k, ad);
 				continue;
-			}
+			} else if(k == POINTER_TYPE_ECM) // it is an ECM - we should get here
+				continue;
 			cp = ((b[3] & 0x40) > 0);			
 			if(k->parity == -1)
 				k->parity = cp;
@@ -313,16 +346,16 @@ int decrypt_stream(adapter *ad,int rlen)
 					if(ctime - k->last_parity_change> 1000)
 						k->key_ok[old_parity] = 0;
 					k->last_parity_change = ctime;
+					invalidate_adapter(ad->id);
 				}
 				k->parity = cp;
 			}
-
+			
 			if(!k->key_ok[cp])
 			{
 				mark_decryption_failed(b, k, ad);
 				continue;
 			}
-			
 			if(b[3] & 0x20)
 			{
 				adapt_len = (b[4]<183)?b[4]+5:0;
@@ -333,7 +366,7 @@ int decrypt_stream(adapter *ad,int rlen)
 			k->batch[k->blen++].len = 188 - adapt_len;
 			b[3] &= 0x3F; // clear the encrypted flags
 		}
-		else if (pid_to_key[pid]==-TYPE_ECM-1)
+		else if (pid_to_key && pid_to_key[pid]==POINTER_TYPE_ECM)
 		{
 			send_ecm(b,ad);
 			continue;
@@ -421,6 +454,7 @@ int init_dvbapi()
 		sock = tcp_connect(opts.dvbapi_host, opts.dvbapi_port, NULL);
 		dvbapi_sock = sockets_add (sock, NULL, -1, TYPE_TCP | TYPE_CONNECT, (socket_action) dvbapi_reply, (socket_action) dvbapi_close, NULL);
 		set_socket_buffer (dvbapi_sock , read_buffer, sizeof(read_buffer));
+		
 		return 0;
 	}
 	return 0;
@@ -529,6 +563,7 @@ int keys_add(int adapter, int sid, int pmt_pid)
 	keys[i].enabled = 1;
 	keys[i].enabled_channels = 0;
 	keys[i].next_key = NULL;
+	invalidate_adapter(adapter);
 	LOG("returning new key %d for adapter %d, pmt pid %d sid %04X", i, adapter, pmt_pid, sid);
 	return i;
 }
@@ -555,6 +590,7 @@ int keys_del(int i)
 	if(keys[i].next_key)
 		keys_del(keys[i].next_key->id);
 	keys[i].next_key = NULL;
+	invalidate_adapter(aid);
 }
 
 SKey *get_key(int i)
@@ -572,6 +608,7 @@ void dvbapi_pid_add(adapter *ad,int pid, SPid *cp)
 	SPid *p;
 	if(!ad)
 		return;
+	invalidate_adapter(ad->id);
 	pids = (int16_t *)getItem(pid_key);
 	if(pid==0)
 	{
@@ -629,6 +666,7 @@ void dvbapi_pid_del(adapter *ad,int pid, SPid *cp)
 	SKey *k;
 	if(!ad)
 		return;
+	invalidate_adapter(ad->id);
 	pids = (int16_t *)getItem(pid_key);
 	k = get_key(cp->key);
 	if(cp->key != 255)

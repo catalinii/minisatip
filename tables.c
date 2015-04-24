@@ -110,15 +110,26 @@ int getItemLen(int64_t key)
 	return s? s->len : 0;
 }
 
+int getItemSize(int64_t key)
+{
+	STmpinfo *s = getItemPos(key);
+	if(!s)
+		return 0;
+	return s->max_size;
+}
+
+
 int setItemSize(int64_t key, int max_size)
 {
 	STmpinfo *s = getItemPos(key);
 	if(!s)
 		return -1;
-	s->max_size = max_size + 100;
+	if(s->max_size == max_size)
+		return 0;
+	s->max_size = max_size;
 	if(s->data)
 		free1(s->data);
-	s->data = malloc1(s->max_size);
+	s->data = malloc1(s->max_size + 100);
 	if(!s->data)
 		return -1;
 	return 0;
