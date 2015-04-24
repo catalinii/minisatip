@@ -140,7 +140,11 @@ int dvbapi_reply(sockets * s)
 				invalidate_adapter(k->adapter);
 			
 			} 
-				else k->parity = -1;
+			if(k)
+			{
+				k->parity = -1;
+				p->key = k->id;
+			}
 			break;
 		}
 		case DVBAPI_DMX_STOP:
@@ -331,6 +335,8 @@ int decrypt_stream(adapter *ad,int rlen)
 				mark_decryption_failed(b, k, ad);
 				continue;
 			} else if(k == POINTER_TYPE_ECM) // it is an ECM - we should get here
+				continue;
+			else if (k == POINTER_1)
 				continue;
 			cp = ((b[3] & 0x40) > 0);			
 			if(k->parity == -1)
