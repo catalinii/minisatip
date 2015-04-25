@@ -737,6 +737,9 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 	int16_t *pids;
 	int old_pmt;
 
+	if(!isEnabled)
+		return 0;
+
 	if((b[0]!=0x47)) // make sure we are dealing with TS
 		return 0;
 	
@@ -792,6 +795,8 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 		LOG("PMT pid %d - stream pid %04X (%d), type %d, es_len %d, pos %d, pi_len %d old pmt %d, old pmt for this pid %d", pid, spid, spid, stype, es_len, i, pi_len, pids[pid], pids[spid]);
 		if((es_len + i>pmt_len) || (es_len == 0))
 			break;
+		if(stype!=2 && stype!=3 && stype!=6 && stype!=27 || spid<64)
+			continue;
 		if(!pi_len)
 			pi = find_pi(pmt + i + 5, es_len, &pi_len);
 		
