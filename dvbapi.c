@@ -139,12 +139,8 @@ int dvbapi_reply(sockets * s)
 				p->key = k_id;
 				invalidate_adapter(k->adapter);
 			
-			} 
-			if(k)
-			{
+			}else  
 				k->parity = -1;
-				p->key = k->id;
-			}
 			break;
 		}
 		case DVBAPI_DMX_STOP:
@@ -191,7 +187,7 @@ int dvbapi_reply(sockets * s)
 				dvbcsa_bs_key_set(cw, k->key[parity]);
 				k->key_ok[parity] = 1;
 				invalidate_adapter(k->adapter);
-			}
+			} else   LOG("invalid DVBAPI_CA_SET_DESCR, key %d parity %d, k %p,CW: %02X %02X %02X %02X %02X %02X %02X %02X", index, parity, k, cw[0], cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);
 			break; 
 		}
 		default: pos = s->rlen;
