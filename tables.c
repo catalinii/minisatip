@@ -61,7 +61,7 @@ typedef struct tmpinfo
 	uint16_t len;
 	int64_t key;
 	uint16_t id;
-	uint16_t max_size;
+	uint32_t max_size;
 	uint32_t timeout;
 	uint32_t last_updated;
 	unsigned char *data;
@@ -119,7 +119,7 @@ int getItemSize(int64_t key)
 }
 
 
-int setItemSize(int64_t key, int max_size)
+int setItemSize(int64_t key, uint32_t max_size)
 {
 	STmpinfo *s = getItemPos(key);
 	if(!s)
