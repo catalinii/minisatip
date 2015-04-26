@@ -679,7 +679,7 @@ int my_writev(int sock, struct iovec *iov, int iiov, streams *sid)
 	int rv;
 	LOGL(6,"start writev handle %d, iiov %d", sock, iiov);
 	rv = writev(sock,iov,iiov);
-	if(errno < 0 && errno == ECONNREFUSED) // close the stream int the next second
+	if(rv < 0 && errno == ECONNREFUSED) // close the stream int the next second
 		sid->timeout = 1000;
 	LOGL(6,"writev returned %d handle %d, iiov %d", rv, sock, iiov);
 	return rv;

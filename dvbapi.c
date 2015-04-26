@@ -317,7 +317,7 @@ int decrypt_stream(adapter *ad,int rlen)
 	if(!pid_to_key || pid_to_key[0]) // cache pid_to_key
 	{
 		setItem(pk_key, b, 0, -1);
-		setItemSize(pk_key, 8192*sizeof(void *));
+		setItemSize(pk_key, 8192*sizeof(*pid_to_key));
 		pid_to_key = (SKey **)getItem(pk_key);
 		memset(pid_to_key, 0, getItemSize(pk_key));
 	
@@ -795,7 +795,7 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 		LOG("PMT pid %d - stream pid %04X (%d), type %d, es_len %d, pos %d, pi_len %d old pmt %d, old pmt for this pid %d", pid, spid, spid, stype, es_len, i, pi_len, pids[pid], pids[spid]);
 		if((es_len + i>pmt_len) || (es_len == 0))
 			break;
-		if(stype!=2 && stype!=3 && stype!=6 && stype!=27 || spid<64)
+		if(stype != 2 && stype != 3 && stype != 6 && stype != 27 || spid < 64)
 			continue;
 		if(!pi_len)
 			pi = find_pi(pmt + i + 5, es_len, &pi_len);
