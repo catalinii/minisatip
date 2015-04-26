@@ -317,7 +317,7 @@ int decrypt_stream(adapter *ad,int rlen)
 	if(!pid_to_key || pid_to_key[0]) // cache pid_to_key
 	{
 		setItem(pk_key, b, 0, -1);
-		setItemSize(pk_key, 8192*sizeof(*pid_to_key));
+		setItemSize(pk_key, 8192*8);
 		pid_to_key = (SKey **)getItem(pk_key);
 		memset(pid_to_key, 0, getItemSize(pk_key));
 	
