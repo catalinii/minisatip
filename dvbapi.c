@@ -171,23 +171,24 @@ int dvbapi_reply(sockets * s)
 		}	
 		case DVBAPI_CA_SET_DESCR:
 		{
-			int index, parity;
+			int index, parity, k_id;
 			SKey *k;
 			SPid *p;			
 			unsigned char *cw;
 
 			pos += 21;
+			k_id = b[4];
 			copy32r(index, b, 5);
 			copy32r(parity, b, 9);			
 			cw = b + 13;			
-			k = get_key(index);
+			k = get_key(k_id);
 			if(k && (parity < 2))
 			{
-				LOG("received DVBAPI_CA_SET_DESCR, key %d parity %d, CW: %02X %02X %02X %02X %02X %02X %02X %02X", index, parity, cw[0], cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);			
+				LOG("received DVBAPI_CA_SET_DESCR, key %d parity %d, index %d, CW: %02X %02X %02X %02X %02X %02X %02X %02X", k_id, parity, index, cw[0], cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);			
 				dvbcsa_bs_key_set(cw, k->key[parity]);
 				k->key_ok[parity] = 1;
 				invalidate_adapter(k->adapter);
-			} else   LOG("invalid DVBAPI_CA_SET_DESCR, key %d parity %d, k %p,CW: %02X %02X %02X %02X %02X %02X %02X %02X", index, parity, k, cw[0], cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);
+			} else   LOG("invalid DVBAPI_CA_SET_DESCR, key %d parity %d, k %p, index %d, CW: %02X %02X %02X %02X %02X %02X %02X %02X", k_id, parity, k, index, cw[0], cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);
 			break; 
 		}
 		default: pos = s->rlen;
@@ -403,6 +404,7 @@ int dvbapi_send_pi(SKey *k)
 	buf[9] = 1;
 	
 	copy32(buf, 12, 0x01820200);
+	buf[15] = k->id;
 	buf[16] = k->id;
 	memcpy(buf + 17, k->pi, k->pi_len + 2);
 	len = 17  - 6 + k->pi_len + 2;
@@ -572,18 +574,19 @@ int keys_add(int adapter, int sid, int pmt_pid)
 	keys[i].next_key = NULL;
 	invalidate_adapter(adapter);
 	LOG("returning new key %d for adapter %d, pmt pid %d sid %04X", i, adapter, pmt_pid, sid);
+	
 	return i;
 }
 
 int keys_del(int i)
 {
-	int aid;
+	int aid, j, ek = 0;
 	unsigned char buf[8]={0x9F,0x80,0x3f,4,0x83,2,0,0};
 	if((i<0) || (i>=MAX_KEYS) || (!keys[i].enabled))
 		return 0;
 	aid = keys[i].adapter;
 	keys[i].enabled = 0;
-	//buf[7] = keys[i].demux;
+//	buf[7] = keys[i].demux;
 	buf[7] = i;
 	LOG("Stopping DEMUX %d, removing key %d, sock %d, pmt pid %d", buf[7], i, sock, keys[i].pmt_pid);
 	if((buf[7] != 255) && (sock>0))
@@ -596,8 +599,7 @@ int keys_del(int i)
 	reset_pids_type_for_key(aid, i);
 	if(keys[i].next_key)
 		keys_del(keys[i].next_key->id);
-	keys[i].next_key = NULL;
-	invalidate_adapter(aid);
+
 }
 
 SKey *get_key(int i)
@@ -791,7 +793,7 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 		LOG("PMT pid %d - stream pid %04X (%d), type %d, es_len %d, pos %d, pi_len %d old pmt %d, old pmt for this pid %d", pid, spid, spid, stype, es_len, i, pi_len, pids[pid], pids[spid]);
 		if((es_len + i>pmt_len) || (es_len == 0))
 			break;
-		if(stype != 2 && stype != 3 && stype != 6 && stype != 27 || spid < 64)
+		if(stype != 2 && stype != 3 && stype != 4 && stype != 6 && stype != 27 || spid < 64)
 			continue;
 		if(!pi_len)
 			pi = find_pi(pmt + i + 5, es_len, &pi_len);
