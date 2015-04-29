@@ -580,7 +580,7 @@ int keys_add(int adapter, int sid, int pmt_pid)
 
 int keys_del(int i)
 {
-	int aid, j, ek = 0;
+	int aid;
 	unsigned char buf[8]={0x9F,0x80,0x3f,4,0x83,2,0,0};
 	if((i<0) || (i>=MAX_KEYS) || (!keys[i].enabled))
 		return 0;
@@ -599,7 +599,8 @@ int keys_del(int i)
 	reset_pids_type_for_key(aid, i);
 	if(keys[i].next_key)
 		keys_del(keys[i].next_key->id);
-
+	keys[i].next_key = NULL;
+	invalidate_adapter(aid);
 }
 
 SKey *get_key(int i)
