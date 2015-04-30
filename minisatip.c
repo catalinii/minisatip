@@ -57,6 +57,7 @@ usage ()
 		-d specify the device id (in case there are multiple SAT>IP servers in the network)\n \
 		-w http_server[:port]: specify the host and the port where the xml file can be downloaded from \n\
 		-x port: port for listening on http\n\
+		-y rtsp_port: port for listening for rtsp requests (default: 445)\n\
 		-s force to get signal from the DVB hardware every 200ms (use with care, only when needed)\n\
 		-a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means auto-detect)\n\
 		-m xx: simulate xx as local mac address, generates UUID based on mac\n\
@@ -107,9 +108,11 @@ set_options (int argc, char *argv[])
 	opts.dvbapi_port = 0;
 	opts.dvbapi_host = NULL;
 	opts.drop_encrypted = 1;
+	opts.rtsp_port = 554;
 	memset(opts.playlist, sizeof(opts.playlist), 0);
 	
-	while ((opt = getopt (argc, argv, "flr:a:t:d:w:p:shc:b:m:p:e:x:u:j:o:g")) != -1)
+	
+	while ((opt = getopt (argc, argv, "flr:a:t:d:w:p:shc:b:m:p:e:x:u:j:o:gy:")) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
 		switch (opt)
@@ -238,6 +241,11 @@ set_options (int argc, char *argv[])
 					opts.dvbapi_host = optarg;
 					opts.dvbapi_port = map_int(sep1 + 1, NULL );
 				}
+				break;
+			
+			case RTSPPORT_OPT:
+				opts.rtsp_port = atoi (optarg);
+				break;
 			}
 
 		}
@@ -754,6 +762,7 @@ read_http (sockets * s)
 	{
 		int tuner_s2, tuner_t, tuner_c;
 		char adapters[50];
+		char headers[500];
 		tuner_s2 = getS2Adapters ();
 		tuner_t = getTAdapters ();
 		tuner_c = getCAdapters ();
@@ -766,7 +775,8 @@ read_http (sockets * s)
 			strcpy(adapters,"DVBS2-0,");
 		adapters[strlen(adapters)-1] = 0;
 		sprintf (buf, xml, uuid, getlocalip(), adapters, opts.playlist);
-		http_response (s, 200, "CACHE-CONTROL: no-cache\r\nContent-type: text/xml", buf, 0, 0);
+		sprintf (headers,  "CACHE-CONTROL: no-cache\r\nContent-type: text/xml\r\nX-SATIP-RTSP-Port: %d", opts.rtsp_port);
+		http_response (s, 200, headers, buf, 0, 0);
 		return 0;
 	}
 
@@ -985,8 +995,8 @@ main (int argc, char *argv[])
 		FAIL ("SSDP: Could not bind on udp port 1900");
 	if ((ssdp1 = udp_bind (opts.disc_host, 1900)) < 1)
 		FAIL ("SSDP: Could not bind on %s udp port 1900", opts.disc_host);
-	if ((rtsp = tcp_listen (NULL, 554)) < 1)
-		FAIL ("RTSP: Could not listen on port 554");
+	if ((rtsp = tcp_listen (NULL, opts.rtsp_port)) < 1)
+		FAIL ("RTSP: Could not listen on port %d", opts.rtsp_port);
 	if ((http = tcp_listen (NULL, opts.http_port)) < 1)
 		FAIL ("Could not listen on http port %d", opts.http_port);
 

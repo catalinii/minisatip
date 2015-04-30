@@ -7,7 +7,7 @@
 #include "socketworks.h"
 
 
-#define VERSION_BUILD "21"
+#define VERSION_BUILD "22"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.3.,VERSION_BUILD,)
 
@@ -32,6 +32,7 @@ void set_options (int argc, char *argv[]);
 #define JESS_OPT 'j'
 #define DVBAPI_OPT 'o'
 #define SYSLOG_OPT 'g'
+#define RTSPPORT_OPT 'y'
 
 #define PID_FILE "/var/run/minisatip.pid"
 
@@ -66,6 +67,7 @@ struct struct_opts
 	char *dvbapi_host;
 	char playlist[200];
 	int drop_encrypted;
+	int rtsp_port;
 };
 
 void _log(int level, char * file, int line, const char *fmt, ...);

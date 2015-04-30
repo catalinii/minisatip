@@ -212,12 +212,12 @@ SKey *get_active_key(SPid *p)
 	k = get_key(key);
 	if(k==NULL)
 		return NULL;
-	LOGL(4, "get_active_key: searching key for pid %d, starting key %d parity %d ok %d %d", p->pid, key, k->parity, k->key_ok[0], k->key_ok[1]);
+	LOGL(3, "get_active_key: searching key for pid %d, starting key %d parity %d ok %d %d", p->pid, key, k->parity, k->key_ok[0], k->key_ok[1]);
 	while(k && k->enabled)
 	{
 		if(k->key_ok[0] || k->key_ok[1])
 		{
-			LOGL(4, "get_active_key: returning key %d for pid %d", k->id, p->pid);
+			LOGL(1, "get_active_key: returning key %d for pid %d", k->id, p->pid);
 			return k; 
 		}
 		if(k->next_key<keys || k->next_key>keys+MAX_KEYS)
@@ -226,10 +226,10 @@ SKey *get_active_key(SPid *p)
 			k->next_key = NULL;
 		}
 		k = k->next_key;
-		LOGL(4, "get_active_key: trying next key for pid %d, key %d parity %d ok %d %d", p->pid,k?k->id:-1, k?k->parity:-1, k?k->key_ok[0]:-1, k?k->key_ok[1]:-1);
+		LOGL(3, "get_active_key: trying next key for pid %d, key %d parity %d ok %d %d", p->pid,k?k->id:-1, k?k->parity:-1, k?k->key_ok[0]:-1, k?k->key_ok[1]:-1);
 
 	}
-	LOGL(4, "get_active_key: returning NULL for pid %d, starting key %d", p->pid, key);
+	LOGL(1, "get_active_key: returning NULL for pid %d, starting key %d", p->pid, key);
 	return NULL;
 }
 
@@ -270,7 +270,7 @@ void mark_decryption_failed(unsigned char *b, SKey *k, adapter *ad)
 	SPid *p;
 	if(!ad)
 		return;
-	LOGL(5, "NOT DECRYPTING for key %d drop_encrypted=%d parity %d pid %d key_ok %d", k?k->id:-1, opts.drop_encrypted, k?k->parity:-1, 
+	LOGL(4, "NOT DECRYPTING for key %d drop_encrypted=%d parity %d pid %d key_ok %d", k?k->id:-1, opts.drop_encrypted, k?k->parity:-1, 
 		(b[1] & 0x1F)*256 + b[2], k?k->key_ok[k->parity]:-1);
 	if(opts.drop_encrypted)
 	{
@@ -580,7 +580,7 @@ int keys_add(int adapter, int sid, int pmt_pid)
 
 int keys_del(int i)
 {
-	int aid;
+	int aid, j, ek;
 	unsigned char buf[8]={0x9F,0x80,0x3f,4,0x83,2,0,0};
 	if((i<0) || (i>=MAX_KEYS) || (!keys[i].enabled))
 		return 0;
@@ -601,6 +601,13 @@ int keys_del(int i)
 		keys_del(keys[i].next_key->id);
 	keys[i].next_key = NULL;
 	invalidate_adapter(aid);
+	ek = 0;
+	buf[7] = 0xFF;
+	for(j = 0;j < MAX_KEYS; j++)
+		if(keys[j].enabled)
+			ek++;
+	if(!ek && sock>0)
+		TEST_WRITE(write(sock, buf, sizeof(buf)));
 }
 
 SKey *get_key(int i)
@@ -686,7 +693,7 @@ void dvbapi_pid_del(adapter *ad,int pid, SPid *cp)
 		keys_del(cp->key);
 		return;
 	}
-	if(k)
+	if(k && (cp->type == 0))
 	{
 		if(k->enabled_channels>0)
 			k->enabled_channels --;

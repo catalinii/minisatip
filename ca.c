@@ -230,79 +230,71 @@ pat_packet(adapter *a, uint8_t * b)
 int dvbca_process_pmt(uint8_t *b, adapter *a)
 {
     ca_device_t * d = a->ca_device;
-    int len, ver, sid;
-    uint16_t pid;
-    static int send_once = 1;
-
-    pid = (b[1] & 0x1F) * 256 + b[2];
+    uint16_t pid, sid, ver;
+	SPid *p;
+	int len;
 
     if (!d)
-        return -1;
+        return -1;    
+	
+    pid = (b[1] & 0x1F) * 256 + b[2];
 
-    if (b[1] & 0x40) { /* Payload Unit Start Indicator */
+	p = find_pid(a->id, pid);
+	if(!p)
+		return 0;
+		
+	if(p->sid[0] == -1) // the pmt is not part of any stream
+		return 0;
+	
+	if(p->type == 0) // mark it as PMT
+		p->type = TYPE_PMT;
+	
+	if(p->type & PMTCA_COMPLETE)
+		return 0;
+	
+	if(!(len = assemble_packet(&b,a)))
+		return 0;
+	
+	len = ((b[1] & 0x03) << 8) | b[2];
+	ver = (b[5] >> 1) & 0x1f;
+	sid = (b[3] << 8) | b[4];
+	
+	LOG("PMT CA pid %u len %u ver %u pid %u\n", pid, len, ver, sid);
+//	hexdump(&b[5], len + 3 );
+	uint8_t capmt[4096];
+	int size;
+	struct section *section = section_codec((uint8_t*) &b[5], len + 3);
+	
+	if (!section){
+		LOG("failed to decode section\n");
+		p->type |= PMTCA_COMPLETE;
+		return -1;
+	}
 
-        if (b[4])   /* pointer field should be 0 */
-            return -1;
+	struct section_ext *result = section_ext_decode(section, 0);
+	if (!section){
+		LOG("failed to decode ext_section\n");
+		p->type |= PMTCA_COMPLETE;
+		return -1;
+	}
 
-        if (b[5] != 2)   /* table_id should be 2 (PMT) */
-            return -1;
+	struct mpeg_pmt_section *pmt = mpeg_pmt_section_codec(result);
+	if (!pmt){
+		LOG("failed to decode pmt\n");
+		p->type |= PMTCA_COMPLETE;
+		return -1;
+	}
 
-        if (b[10] & 1 == 0) /* only active PAT */
-            return -1;
+	if ((size = en50221_ca_format_pmt((struct mpeg_pmt_section *)b, capmt, sizeof(capmt),
+					CA_LIST_MANAGEMENT_ONLY, 0, CA_PMT_CMD_ID_OK_DESCRAMBLING)) < 0) 
+		LOG( "Failed to format CA PMT object\n");
+	if (en50221_app_ca_pmt(d->ca_resource, d->ca_session_number, capmt, size)) 
+	{
+		LOG("Failed to send CA PMT object\n");
+	}
+//	hexdump(&capmt[0], size);
 
-        len = ((b[6] & 0x03) << 8) | b[7];
-        ver = (b[10] >> 1) & 0x1f;
-        sid = (b[8] << 8) | b[9];
-        if (len == d->last_pmt_len &&
-            ver == d->last_pmt_ver &&
-            sid == d->last_pmt_sid &&
-            pid == d->last_pmt_pid)
-            return -1;
-
-        d->last_pmt_pid = pid;
-        d->last_pmt_sid = sid;
-        d->last_pmt_ver = ver;
-        d->last_pmt_len = len;
-
-
-        if (send_once && pid == 560)
-        {
-            printf("PMT pid %u len %u ver %u pid %u\n", pid, len, ver, sid);
-            hexdump(&b[5], len + 3 );
-            send_once = 0;
-
-            uint8_t capmt[4096];
-            int size;
-            struct section *section = section_codec((uint8_t*) &b[5], len + 3);
-            if (!section){
-                printf("failed to decode section\n");
-                return -1;
-            }
-
-            struct section_ext *result = section_ext_decode(section, 0);
-            if (!section){
-                printf("failed to decode ext_section\n");
-                return -1;
-            }
-
-            struct mpeg_pmt_section *pmt = mpeg_pmt_section_codec(result);
-            if (!pmt){
-                printf("failed to decode pmt\n");
-                return -1;
-            }
-
-            if ((size = en50221_ca_format_pmt((struct mpeg_pmt_section *)&b[5], capmt, sizeof(capmt),
-                                         CA_LIST_MANAGEMENT_ONLY, 0,
-                                         CA_PMT_CMD_ID_OK_DESCRAMBLING)) < 0) {
-
-                fprintf(stderr, "Failed to format CA PMT object\n");
-            }
-            if (en50221_app_ca_pmt(d->ca_resource, d->ca_session_number, capmt, size)) {
-                fprintf(stderr, "Failed to send CA PMT object\n");
-            }
-            hexdump(&capmt[0], size);
-        }
-    }
+	p->type |= PMTCA_COMPLETE;
 
 }
 
