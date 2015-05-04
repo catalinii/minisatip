@@ -18,6 +18,7 @@ minisatip [-f] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] [-p p
 		-d specify the device id (in case there are multiple SAT>IP servers in the network)
 		-w http_server[:port]: specify the host and the port where the xml file can be downloaded from
 		-x port: port for listening on http
+		-y rtsp_port: port for listening for rtsp requests (default: 445)
 		-s force to get signal from the DVB hardware every 200ms (use with care, only when needed)
 		-a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means autodetect)
 		-m xx: simulate xx as local mac address, generates UUID based on mac

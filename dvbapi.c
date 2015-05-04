@@ -796,6 +796,7 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 	pi_len = ((b[10] & 0xF) << 8) + b[11];
 	LOG("PMT pid: %04X (%d), pmt_len %d, pi_len %d, channel id %04X (%d)", pid, pid, pmt_len, pi_len, program_id, program_id);
 	pi = b + 12;
+	pmt = pi + pi_len;	
 	
 	if(pmt_len > 1500)
 		return 0;
@@ -806,7 +807,6 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 	if(pi_len > 0) 
 		pi=find_pi(pi, pi_len, &pi_len);
 
-	pmt = pi + pi_len;	
 	es_len = 0;
 	pids = (int16_t *)getItem(pid_key);
 	if(!pids)
