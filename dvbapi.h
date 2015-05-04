@@ -40,6 +40,7 @@ typedef struct struct_key
 	int id;
 	int adapter;
 	int demux;
+	int ver;
 	unsigned char *pi;
 	int pi_len;
 	struct dvbcsa_bs_batch_s batch[129];

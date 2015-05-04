@@ -109,6 +109,7 @@ set_options (int argc, char *argv[])
 	opts.dvbapi_host = NULL;
 	opts.drop_encrypted = 1;
 	opts.rtsp_port = 554;
+	opts.clean_psi = 1;
 	memset(opts.playlist, sizeof(opts.playlist), 0);
 	
 	

@@ -15,6 +15,8 @@ typedef struct ca_device ca_device_t;
 #define TYPE_ECM 2
 #define PMT_COMPLETE 4
 #define PMTCA_COMPLETE 8
+#define CLEAN_PMT 16
+
 typedef struct struct_pid
 {
 	int pid;					 // pid for this demux - not used

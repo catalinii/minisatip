@@ -7,7 +7,7 @@
 #include "socketworks.h"
 
 
-#define VERSION_BUILD "22"
+#define VERSION_BUILD "23"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.3.,VERSION_BUILD,)
 
@@ -61,6 +61,7 @@ struct struct_opts
 	int dvr_buffer;
 	int adapter_buffer;
 	int force_scan;
+	int clean_psi;
 	int file_line;
 	char *last_log;	
 	int dvbapi_port;

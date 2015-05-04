@@ -188,6 +188,10 @@ int dvbapi_reply(sockets * s)
 				dvbcsa_bs_key_set(cw, k->key[parity]);
 				k->key_ok[parity] = 1;
 				invalidate_adapter(k->adapter);
+				p = find_pid(k->adapter, k->pmt_pid);
+				if(p)
+					p->type |= CLEAN_PMT;
+				
 			} else   LOG("invalid DVBAPI_CA_SET_DESCR, key %d parity %d, k %p, index %d, CW: %02X %02X %02X %02X %02X %02X %02X %02X", k_id, parity, k, index, cw[0], cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);
 			break; 
 		}
@@ -571,6 +575,7 @@ int keys_add(int adapter, int sid, int pmt_pid)
 	keys[i].blen = 0;
 	keys[i].enabled = 1;
 	keys[i].enabled_channels = 0;
+	keys[i].ver = -1;
 	keys[i].next_key = NULL;
 	invalidate_adapter(adapter);
 	LOG("returning new key %d for adapter %d, pmt pid %d sid %04X", i, adapter, pmt_pid, sid);
@@ -732,7 +737,7 @@ unsigned char *find_pi(unsigned char *es, int len, int *pi_len)
 
 int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 {
-	int pi_len = 0, pmt_len = 0, i, _pid, es_len, len;
+	int pi_len = 0, ver, pmt_len = 0, i, _pid, es_len, len;
 	int program_id = 0;
 	int prio = 0;
 	unsigned char *pmt, *pi;
@@ -756,6 +761,18 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 	if(p->sid[0] != -1) // the PMT pid is requested by the stream
 		prio = 1;
 
+	k = get_key(p->key);
+	if(k && (b[5]==2))
+	{
+		ver = b[10] & 0x3F;
+		if(k->ver != ver) // pmt version changed
+		{ 
+//			keys_del(p->key); 
+//			p->key = 255;
+//			p->type = TYPE_PMT;
+		}
+	}
+	
 	if(!p || (p->type & PMT_COMPLETE) || (p->type == 0))
 		return 0;
 	
@@ -764,7 +781,7 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 	if((b[5] == 2) && ((b[1] &0x40) == 0x40))
 		pmt_len = ((b[6] & 0xF) << 8) + b[7];
 	
-	if(p && (k = get_key(p->key)))
+	if(p && k)
 	{
 		program_id = b[8]* 256 + b[9];
 		if((pmt_len > 0) && (program_id == k->sid))
@@ -778,16 +795,18 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 	program_id = b[3]* 256 + b[4];
 	pi_len = ((b[10] & 0xF) << 8) + b[11];
 	LOG("PMT pid: %04X (%d), pmt_len %d, pi_len %d, channel id %04X (%d)", pid, pid, pmt_len, pi_len, program_id, program_id);
-
-	pi = b + 12;	
-	pmt = pi + pi_len;
+	pi = b + 12;
+	
 	if(pmt_len > 1500)
 		return 0;
+
 	if(pi_len > pmt_len)
 		pi_len = 0;
+
 	if(pi_len > 0) 
 		pi=find_pi(pi, pi_len, &pi_len);
-	
+
+	pmt = pi + pi_len;	
 	es_len = 0;
 	pids = (int16_t *)getItem(pid_key);
 	if(!pids)
@@ -834,6 +853,7 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 			}
 			cp->key = p->key;
 			cp->type = 0;
+			k->ver = b[5] & 0x3F;
 			k->enabled_channels ++;
 		}
 	}
@@ -848,6 +868,8 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 		p->type |= PMT_COMPLETE;
 	} else 
 		p->type = 0; // we do not need this pmt pid anymore
-	free_assemble_packet(pid, ad);
+//	free_assemble_packet(pid, ad);
 	return 0;
 }
+
+

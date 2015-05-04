@@ -136,94 +136,17 @@ void hexdump(uint8_t buffer[], int len)
 	for(i=0; i < len; i++) {
 		if (!(i%HEXDUMP_LINE_LEN)) {
 			if (s[0])
-				printf("[%s]",s);
-			printf("\n%05x: ", i);
+				LOG("[%s]",s);
+			LOG("\n%05x: ", i);
 			bzero(s, HEXDUMP_LINE_LEN);
 		}
 		s[i%HEXDUMP_LINE_LEN]=isprint(buffer[i])?buffer[i]:'.';
-		printf("%02x ", buffer[i]);
+		LOG("%02x ", buffer[i]);
 	}
 	while(i++%HEXDUMP_LINE_LEN)
-		printf("   ");
+		LOG("   ");
 
-	printf("[%s]\n", s);
-}
-
-static void
-pat_packet(adapter *a, uint8_t * b)
-{
-    ca_device_t * d = a->ca_device;
-    pat_t * pat = &d->pat;
-    int len, ver, tid;
-    int pat_buffer_len;
-    int p;
-
-    if (!d)
-        return;
-
-    if (b[1] & 0x40) { /* Payload Unit Start Indicator */
-
-        if (b[4])   /* pointer field should be 0 */
-            return;
-
-        if (b[5])   /* table_id should be 0 (PAT) */
-            return;
-
-        if (b[10] & 1 == 0) /* only active PAT */
-            return;
-
-        len = ((b[6] & 0x03) << 8) | b[7];
-        ver = (b[10] >> 1) & 0x1f;
-        tid = (b[8] << 8) | b[9];
-
-        if (len > 1021) /* spec says it cannot be bigger */
-            return;
-
-        //printf("first fragment: len %u (%u) ver %u(%u) tid %u(%u)\n",
-        //    len, pat->len, ver, pat->ver, tid, pat->tid);
-
-        /* we already have it */
-        if (len == pat->len && tid == pat->tid && ver == pat->ver)
-            return;
-
-        pat->tid = tid;
-        pat->ver = ver;
-        pat->len = len;
-        pat->missing_fragments = (len + 3) / 184;
-    printf("1 mf %d len %u\n", pat->missing_fragments, pat->len);
-
-        memcpy(&pat->buffer[0], &b[5], 188-5);
-        pat_buffer_len = 188 - 5;
-    } else {
-        if (pat->missing_fragments) {
-            memcpy(&pat->buffer[pat_buffer_len], &b[4], 188 - 4);
-            pat_buffer_len += 188 - 4;
-            pat->missing_fragments--;
-        } else
-            return;
-    }
-
-    if (pat->missing_fragments || pat->len == 0)
-        return;
-
-    len = 3 + (((pat->buffer[1] & 0x03) << 8) | pat->buffer[2]);
-    //hexdump( (char *) &pat->buffer[0], len);
-
-    p = 8;
-    d->num_pmt_pids = 0;
-    while (p < (len - 4)) {
-        int sid, pid;
-        sid = (pat->buffer[p] << 8) | pat->buffer[p+1];
-        pid = 0x1FFF & ((pat->buffer[p+2] << 8) | pat->buffer[p+3]);
-        if (sid) {
-            printf("sid %x (%u) pmt_pid %x (%u)\n",
-                sid,sid,pid,pid);
-
-            if (d->num_pmt_pids < MAX_PIDS)
-                d->pmt_pids[d->num_pmt_pids++] = pid;
-        }
-        p += 4;
-    }
+	LOG("[%s]\n", s);
 }
 
 
@@ -299,51 +222,6 @@ int dvbca_process_pmt(uint8_t *b, adapter *a)
 }
 
 
-// not used anymore
-void
-ca_grab_pmt(adapter *a, int rlen)
-{
-	int i, j;
-	uint8_t * b;
-	uint16_t pid, last_pmt_pid;
-	SPid *p;
-	uint8_t pid_is_pmt[8192];
-    ca_device_t * d = a->ca_device;
-    pat_t * pat = &d->pat;
-
-	if (!a->ca_device)
-		return;
-
-	for(i=0;i<rlen;i+=188)
-	{
-		b = a->buf + i;
-
-		if (b[0] != 0x47)
-			continue;
-
-		if (b[1] & 0x80) /* eror bit set */
-			continue;
-
-		pid = (b[1] & 0x1F)*256 + b[2];
-
-		if (pid == 0)
-			pat_packet(a, b);
-
-        else if (pid == d->last_pmt_pid)
-        {
-            //printf("PMT last PID hit %u\n", pid);
-            dvbca_process_pmt( b, a);
-        }
-
-        else for (j=0; j < d->num_pmt_pids; j++) {
-                if (d->pmt_pids[j]==pid) {
-                   // printf("PMT hit %u j=%u\n", pid,j);
-                    dvbca_process_pmt(b, a);
-                }
-        }
-	}
-}
-
 
 int ca_ai_callback(void *arg, uint8_t slot_id, uint16_t session_number,
                      uint8_t application_type, uint16_t application_manufacturer,
@@ -352,11 +230,11 @@ int ca_ai_callback(void *arg, uint8_t slot_id, uint16_t session_number,
 {
     ca_device_t * d = arg;
 
-    printf("%02x:%s\n", slot_id, __func__);
-    printf("  Application type: %02x\n", application_type);
-    printf("  Application manufacturer: %04x\n", application_manufacturer);
-    printf("  Manufacturer code: %04x\n", manufacturer_code);
-    printf("  Menu string: %.*s\n", menu_string_length, menu_string);
+    LOG("%02x:%s\n", slot_id, __func__);
+    LOG("  Application type: %02x\n", application_type);
+    LOG("  Application manufacturer: %04x\n", application_manufacturer);
+    LOG("  Manufacturer code: %04x\n", manufacturer_code);
+    LOG("  Menu string: %.*s\n", menu_string_length, menu_string);
 
     d->ai_session_number = session_number;
 
@@ -368,13 +246,13 @@ stackthread_func(void* arg) {
 
     ca_device_t * d = arg;
     int lasterror = 0;
-    printf("%s: start\n", __func__);
+    LOG("%s: start\n", __func__);
 
     while(!shutdown_stackthread) {
         int error;
         if ((error = en50221_tl_poll(d->tl)) != 0) {
             if (error != lasterror) {
-                fprintf(stderr, "Error reported by stack slot:%i error:%i\n",
+                LOG("Error reported by stack slot:%i error:%i\n",
                         en50221_tl_get_error_slot(d->tl),
                         en50221_tl_get_error(d->tl));
             }
@@ -394,15 +272,15 @@ ca_session_callback(void *arg,
 	                uint32_t resource_id)
 {
     ca_device_t * d = arg;
-	printf("%s: reason %d slot_id %u session_number %u resource_id %x\n",
+	LOG("%s: reason %d slot_id %u session_number %u resource_id %x\n",
 		__func__, reason, slot_id, session_number, resource_id);
 
 	switch(reason) {
 		case S_SCALLBACK_REASON_CAMCONNECTING:
-			printf("CAM connecting\n");
+			LOG("CAM connecting\n");
 			break;
 		case S_SCALLBACK_REASON_CAMCONNECTED:
-			printf("CAM connected\n");
+			LOG("CAM connected\n");
             if (resource_id == EN50221_APP_RM_RESOURCEID) {
                 en50221_app_rm_enq(d->rm_resource, session_number);
             } else if (resource_id == EN50221_APP_AI_RESOURCEID) {
@@ -426,35 +304,35 @@ ca_lookup_callback(void * arg,
 {
     ca_device_t * d = arg;
 
-	printf("%s: slot_id %u requested_resource_id %x\n", __func__, slot_id, requested_resource_id);
+	LOG("%s: slot_id %u requested_resource_id %x\n", __func__, slot_id, requested_resource_id);
 
     switch (requested_resource_id) {
     	case EN50221_APP_RM_RESOURCEID:
-    		printf("BINGO RM\n");
+    		LOG("BINGO RM\n");
     		*callback_out = (en50221_sl_resource_callback) en50221_app_rm_message;
             *arg_out = d->rm_resource;
     		*connected_resource_id = EN50221_APP_RM_RESOURCEID;
     		break;
     	case EN50221_APP_AI_RESOURCEID:
-    		printf("BINGO AI\n");
+    		LOG("BINGO AI\n");
     		*callback_out = (en50221_sl_resource_callback) en50221_app_ai_message;
             *arg_out = d->ai_resource;
     		*connected_resource_id = EN50221_APP_AI_RESOURCEID;
     		break;
     	case EN50221_APP_CA_RESOURCEID:
-    		printf("BINGO CA\n");
+    		LOG("BINGO CA\n");
     		*callback_out = (en50221_sl_resource_callback) en50221_app_ca_message;
             *arg_out = d->ca_resource;
     		*connected_resource_id = EN50221_APP_CA_RESOURCEID;
     		break;
     	case EN50221_APP_DATETIME_RESOURCEID:
-    		printf("BINGO DATETIME\n");
+    		LOG("BINGO DATETIME\n");
     		*callback_out = (en50221_sl_resource_callback) en50221_app_datetime_message;
             *arg_out = d->dt_resource;
     		*connected_resource_id = EN50221_APP_DATETIME_RESOURCEID;
     		break;
     	default:
-    		printf("unknown resource id");
+    		LOG("unknown resource id");
     		return -1;
     }
     return 0;
@@ -465,10 +343,10 @@ ca_rm_enq_callback(void *arg, uint8_t slot_id, uint16_t session_number)
 {
     ca_device_t * d = arg;
 
-    printf("%02x:%s\n", slot_id, __func__);
+    LOG("%02x:%s\n", slot_id, __func__);
 
     if (en50221_app_rm_reply(d->rm_resource, session_number, resource_ids_count, resource_ids)) {
-        printf("%02x:Failed to send reply to ENQ\n", slot_id);
+        LOG("%02x:Failed to send reply to ENQ\n", slot_id);
     }
 
     return 0;
@@ -478,15 +356,15 @@ static int
 ca_rm_reply_callback(void *arg, uint8_t slot_id, uint16_t session_number, uint32_t resource_id_count, uint32_t *_resource_ids)
 {
     ca_device_t * d = arg;
-    printf("%02x:%s\n", slot_id, __func__);
+    LOG("%02x:%s\n", slot_id, __func__);
 
     uint32_t i;
     for(i=0; i< resource_id_count; i++) {
-        printf("  CAM provided resource id: %08x\n", _resource_ids[i]);
+        LOG("  CAM provided resource id: %08x\n", _resource_ids[i]);
     }
 
     if (en50221_app_rm_changed(d->rm_resource, session_number)) {
-        printf("%02x:Failed to send REPLY\n", slot_id);
+        LOG("%02x:Failed to send REPLY\n", slot_id);
     }
 
     return 0;
@@ -496,10 +374,10 @@ static int
 ca_rm_changed_callback(void *arg, uint8_t slot_id, uint16_t session_number)
 {
     ca_device_t * d = arg;
-    printf("%02x:%s\n", slot_id, __func__);
+    LOG("%02x:%s\n", slot_id, __func__);
 
     if (en50221_app_rm_enq(d->rm_resource, session_number)) {
-        printf("%02x:Failed to send ENQ\n", slot_id);
+        LOG("%02x:Failed to send ENQ\n", slot_id);
     }
 
     return 0;
@@ -511,10 +389,10 @@ ca_ca_info_callback(void *arg, uint8_t slot_id, uint16_t session_number, uint32_
     (void)arg;
     (void)session_number;
 
-    printf("%02x:%s\n", slot_id, __func__);
+    LOG("%02x:%s\n", slot_id, __func__);
     uint32_t i;
     for(i=0; i< ca_id_count; i++) {
-        printf("  Supported CA ID: %04x\n", ca_ids[i]);
+        LOG("  Supported CA ID: %04x\n", ca_ids[i]);
     }
 
     //ca_connected = 1;
@@ -530,7 +408,7 @@ ca_ca_pmt_reply_callback(void *arg, uint8_t slot_id, uint16_t session_number,
     (void)reply;
     (void)reply_size;
 
-    printf("%02x:%s\n", slot_id, __func__);
+    LOG("%02x:%s\n", slot_id, __func__);
 
     return 0;
 }
@@ -541,11 +419,11 @@ ca_dt_enquiry_callback(void *arg, uint8_t slot_id, uint16_t session_number, uint
 {
     ca_device_t * d = arg;
 
-    printf("%02x:%s\n", slot_id, __func__);
-    printf("  response_interval:%i\n", response_interval);
+    LOG("%02x:%s\n", slot_id, __func__);
+    LOG("  response_interval:%i\n", response_interval);
 
     if (en50221_app_datetime_send(d->dt_resource, session_number, time(NULL), -1)) {
-        printf("%02x:Failed to send datetime\n", slot_id);
+        LOG("%02x:Failed to send datetime\n", slot_id);
     }
 
     return 0;
@@ -597,7 +475,7 @@ ca_init(int fd)
         LOG( "slot registration failed");
         goto fail;
     }
-    printf("slotid: %i\n", d->slot_id);
+    LOG("slotid: %i\n", d->slot_id);
 
     // create session layer
     d->sl = en50221_sl_create(d->tl, 256);
@@ -634,7 +512,7 @@ ca_init(int fd)
     en50221_sl_register_session_callback(d->sl, ca_session_callback, d);
 
     d->tc = en50221_tl_new_tc(d->tl, d->slot_id);
-    printf("tcid: %i\n", d->tc);
+    LOG("tcid: %i\n", d->tc);
 
     ca_devices_count++;
 	return d;

@@ -829,7 +829,7 @@ read_dmx (sockets * s)
 		LOG ("Reading max size for the last %d buffers", cnt);								 
 #ifdef TABLES_H
 	process_stream(ad,rlen);
-#endif								 
+#else							 
 	if (ad->sid_cnt == 1 && ad->master_sid >= 0 && opts.log < 2) // we have just 1 stream, do not check the pids, send everything to the destination
 	{
 		sid = get_sid(ad->master_sid);
@@ -844,6 +844,7 @@ read_dmx (sockets * s)
 
 	}
 	else
+#endif
 	{	
 		for (dp = 0; dp < rlen; dp += DVB_FRAME)		
 			process_packet(&s->buf[dp], ad);
