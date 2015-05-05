@@ -2,6 +2,7 @@
 CC?=gcc
 DVBCSA?=yes
 DVBCA?=no
+SATIPCLIENT?=no
 
 CFLAGS=$(NODVBCSA) -ggdb -fPIC
 LDFLAGS=-lpthread -lrt
@@ -30,6 +31,13 @@ ifeq ($(TABLES),yes)
 OBJS+=tables.o
 endif
 
+ifeq ($(SATIPCLIENT),yes)
+OBJS+=satipc.o
+else
+CFLAGS+=-DDISABLE_SATIPCLIENT
+endif
+
+
 
 minisatip: $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LDFLAGS)
@@ -54,8 +62,13 @@ adapter.o: adapter.c adapter.h dvb.h stream.h ca.h
 
 ca.o: ca.c adapter.h dvb.h ca.h
 	$(CC) $(CFLAGS) -c -o $@ ca.c
+
 tables.o: tables.c tables.h
 	$(CC) $(CFLAGS) -c -o $@ tables.c
+
+satipc.o: satipc.c satipc.h
+	$(CC) $(CFLAGS) -c -o $@ satipc.c
+
 
 all: minisatip
 

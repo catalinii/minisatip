@@ -318,6 +318,43 @@ no_action (int s)
 }
 
 
+int sockets_accept(int socket, void *buf, int len, sockets *ss)
+{
+	int new_sock, sas, ni; 
+	struct sockaddr_in sa;
+	sas = sizeof (sa);
+	new_sock = accept (ss->sock, (struct sockaddr *) &sa, &sas);
+	if (new_sock < 0)
+	{
+		if (errno != EINTR)
+		{
+			LOG ("sockets_accept: accept()");
+			return 1;
+		}
+	}
+	ni = sockets_add (new_sock, &sa, -1, TYPE_TCP, NULL, NULL, NULL);
+	if (ss->action != NULL)
+	{
+		ss->action (&s[ni]);
+	}
+	return 1;
+}
+
+
+int sockets_read(int socket, void *buf, int len, sockets *ss)
+{	
+	return read(socket, buf, len); 
+}
+
+int sockets_recv(int socket, void *buf, int len, sockets *ss)
+{	
+	int slen =sizeof(ss->sa);
+	return recvfrom(socket, buf, len, 0,(struct sockaddr *) &ss->sa, &slen); 
+}
+
+
+
+
 int init_sock = 0;
 
 int
@@ -356,16 +393,21 @@ socket_action a, socket_action c, socket_action t)
 	s[i].buf = NULL;
 	s[i].lbuf = 0;
 	s[i].close_sec = 0;
-	s[i].sock_id = i;
+	s[i].id = i;
+	s[i].read = (read_action )sockets_read;
+	if(s[i].type == TYPE_UDP || s[i].type == TYPE_RTCP)
+		s[i].read = (read_action )sockets_recv;
+	else if (s[i].type == TYPE_SERVER)
+		s[i].read = (read_action )sockets_accept;
 	pf[i].fd = sock;
 	pf[i].events = POLLIN | POLLPRI;
 	if(type & TYPE_CONNECT)
 		pf[i].events |=POLLOUT;
-	pf[i].revents = 0;
+	pf[i].revents = 0;	
 
-	LOG ("sockets_add: handle %d (type %d) returning socket index %d [%s:%d]",
+	LOG ("sockets_add: handle %d (type %d) returning socket index %d [%s:%d] read: %p",
 		s[i].sock, s[i].type, i, inet_ntoa (s[i].sa.sin_addr),
-		ntohs (s[i].sa.sin_port));
+		ntohs (s[i].sa.sin_port), s[i].read);
 	return i;
 }
 
@@ -409,10 +451,7 @@ select_and_execute ()
 {
 	fd_set io;
 	struct timeval tv;
-	socklen_t slen;
-	int i,
-		rv,
-		rlen;
+	int i, rv, rlen;
 	unsigned char buf[2001];
 	int err;
 	run_loop = 1;
@@ -456,7 +495,6 @@ select_and_execute ()
 						ss->rlen = 0;
 					}
 					rlen = 0;
-					slen = sizeof (ss->sa);
 					if (c_time - bwtt > 1000)
 					{
 						bwtt = c_time;
@@ -483,12 +521,8 @@ select_and_execute ()
 
 					}
 					
-					 if (ss->type == TYPE_UDP || ss->type == TYPE_RTCP)//udp
-						rlen =
-							recvfrom (ss->sock, &ss->buf[ss->rlen], ss->lbuf - ss->rlen,
-							0, (struct sockaddr *) &ss->sa, &slen);
-					else if (ss->type != 2)
-						rlen = read (ss->sock, &ss->buf[ss->rlen], ss->lbuf - ss->rlen);
+					rlen = ss->read(ss->sock, &ss->buf[ss->rlen], ss->lbuf - ss->rlen, ss);
+
 					err = 0;
 					if(rlen<0)
 						err = errno;	
@@ -502,7 +536,7 @@ select_and_execute ()
 						ss->buf[ss->rlen] = 0;
 					LOGL(6, "Read %d (rlen:%d/total:%d) bytes from %d -> %p - iteration %d action %p",rlen,ss->rlen,ss->lbuf,ss->sock,ss->buf,it++,ss->action);
 					
-					if (((ss->rlen > 0)|| err==EWOULDBLOCK) && ss->action)
+					if (((ss->rlen > 0)|| err==EWOULDBLOCK) && ss->action && (ss->type != TYPE_SERVER))
 						ss->action (ss);
 			//              if(s[i].type==TYPE_DVR && (c_time/1000 % 10 == 0))sockets_del(i); // we do this in stream.c in flush_stream*
 					if (rlen <= 0 && ss->type != TYPE_SERVER)
@@ -542,28 +576,7 @@ select_and_execute ()
 						continue;
 					}
 					
-					ss->err = 0;					
-					if (ss->type == TYPE_SERVER)
-					{
-						int new_sock,
-							sas,
-							ni;
-						struct sockaddr_in sa;
-
-						sas = sizeof (sa);
-						new_sock = accept (ss->sock, (struct sockaddr *) &sa, &sas);
-						if (new_sock < 0)
-						{
-							if (errno != EINTR)
-							{
-								perror ("select_and_action: accept()");
-							}
-						}
-						ni = sockets_add (new_sock, &sa, -1, 1, NULL, NULL, NULL);
-						if (ss->action != NULL)
-							ss->action (&s[ni]);
-						continue;
-					}
+//					ss->err = 0;					
 				}
 								 // checking every 60seconds for idle connections - or if select times out
 		if (rv == 0 || c_time - lt > 200)
@@ -590,6 +603,14 @@ select_and_execute ()
 	LOG("The main loop ended, run_loop = %d", run_loop);
 }
 
+
+void sockets_setread(int i, void *r)
+{
+	if (i < 0 || i >= MAX_SOCKS)
+		return;
+	
+	s[i].read = (read_action )r;
+}
 
 void
 sockets_setbuf (int i, char *buf, int len)

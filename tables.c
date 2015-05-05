@@ -374,9 +374,12 @@ void clean_psi(uint8_t *b, adapter *ad)
 	if(!p || p->sid[0] == -1)  // no need to fix this PMT as it not requested by any stream
 		return ;
 	
+	if(!get_key(p->key)) // no key associated with PMT - most likely the channel is clear
+		return ;
+	
 	if(!(p->type & CLEAN_PMT))
 	{
-		mark_pid_null(b);
+//		mark_pid_null(b);
 		return ;
 	}
 	clean = getItem(clean_key);

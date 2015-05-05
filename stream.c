@@ -177,7 +177,7 @@ setup_stream (char *str, sockets * s)
 	init_hw ();
 	detect_dvb_parameters (str, &t);
 	LOG ("Setup stream %d parameters, sock_id %d, handle %d", s->sid,
-		s->sock_id, s->sock);
+		s->id, s->sock);
 	if (s->sid < 0)				 // create the stream
 	{
 		int a_id = 0,
@@ -192,11 +192,11 @@ setup_stream (char *str, sockets * s)
 //		s->close_sec = 200;
 //		s->timeout = (socket_action) stream_timeout;
 		LOG ("Setup stream done: sid: %d (e:%d) for sock %d handle %d", s_id,
-			st[s_id].enabled, s->sock_id, s->sock);
+			st[s_id].enabled, s->id, s->sock);
 	}
 	if (!( sid = get_sid(s->sid)))
 		LOG_AND_RETURN (NULL, "Stream %d not enabled for sock_id %d handle %d",
-			s->sid, s->sock_id, s->sock);
+			s->sid, s->id, s->sock);
 	
 	set_stream_parameters (s->sid, &t);
 	sid->do_play = 0;
@@ -232,14 +232,14 @@ start_play (streams * sid, sockets * s)
 	}
 	
 	LOG ("Play for stream %d, type %d, rsock %d, adapter %d, sock_id %d handle %d", s->sid, sid->type, sid->rsock,
-		sid->adapter, s->sock_id, s->sock);
+		sid->adapter, s->id, s->sock);
 
 	if (sid->adapter == -1)		 // associate the adapter only at play (not at setup)
 	{
 		a_id =
 			get_free_adapter (sid->tp.freq, sid->tp.pol, sid->tp.sys,
 			sid->tp.fe);
-		LOG ("Got adapter %d on socket %d", a_id, s->sock_id);
+		LOG ("Got adapter %d on socket %d", a_id, s->id);
 		if (a_id < 0)
 			return -404;
 		sid->adapter = a_id;
@@ -263,7 +263,7 @@ int decode_transport (sockets * s, char *arg, char *default_rtp, int start_rtp)
 	streams *sid = get_sid(s->sid);
 	if (! sid)
 	{
-		LOG("Error: No stream to set transport to, sock_id %d, arg %s ",s->sock_id, arg);
+		LOG("Error: No stream to set transport to, sock_id %d, arg %s ",s->id, arg);
 		return -1;
 	}
 	l = 0;

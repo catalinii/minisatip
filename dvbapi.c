@@ -131,16 +131,17 @@ int dvbapi_reply(sockets * s)
 			}	
 			if(!p)
 				break;	
+//			if(k && p->key != k_id)
 			if(p->filter == 255)
 			{
 				p->filter = filter;
 				k->demux = demux;
 				p->type = TYPE_ECM;
 				p->key = k_id;
+				p->ecm_parity = 255;
 				invalidate_adapter(k->adapter);
 			
-			}else  
-				k->parity = -1;
+			};
 			break;
 		}
 		case DVBAPI_DMX_STOP:
@@ -154,7 +155,7 @@ int dvbapi_reply(sockets * s)
 			a_id = k->adapter;
 			copy16r(_pid, b, 7 )
 			LOG("Received from DVBAPI server DMX_STOP for key %d, adapter %d, pid %X (%d)", k_id, a_id, _pid, _pid);
-			if((p=find_pid(a_id, _pid)))
+			if((p=find_pid(a_id, _pid)) && (p->key == k_id))
 			{
 				p->type = 0;
 				p->key = p->filter = 255;
@@ -226,7 +227,7 @@ SKey *get_active_key(SPid *p)
 		}
 		if(k->next_key<keys || k->next_key>keys+MAX_KEYS)
 		{
-			LOG("get_active_key: invalid next_key for key %d", k->id);
+			LOG("get_active_key: invalid next_key for key %d: %p", k->id, k->next_key);
 			k->next_key = NULL;
 		}
 		k = k->next_key;

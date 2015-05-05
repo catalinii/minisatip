@@ -57,7 +57,7 @@ usage ()
 		-d specify the device id (in case there are multiple SAT>IP servers in the network)\n \
 		-w http_server[:port]: specify the host and the port where the xml file can be downloaded from \n\
 		-x port: port for listening on http\n\
-		-y rtsp_port: port for listening for rtsp requests (default: 445)\n\
+		-y rtsp_port: port for listening for rtsp requests (default: 554)\n\
 		-s force to get signal from the DVB hardware every 200ms (use with care, only when needed)\n\
 		-a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means auto-detect)\n\
 		-m xx: simulate xx as local mac address, generates UUID based on mac\n\
@@ -68,7 +68,7 @@ usage ()
 		-g use syslog instead stdout for logging, multiple -g - print to stderr as well\n\
 		-p url: specify playlist url using X_SATIPM3U header \n\
 		-u unicable_string: defines the unicable adapters (A) and their slot (S), frequency (F) and optionally the PIN for the switch:\n\
-		\tThe format is: A1:S1-F1[-PIN][,A2:S2-F2[-PIN][,...]] \n\
+		\tThe format is: A1:S1-F1[-PIN][,A2:S2-F2[-PIN][,...]] example: 2:0-1284[-1111]\n\
 		-j jess_string: same format as unicable_string \n\
 		-o host:port: specify the hostname and port for the dvbapi server (oscam) \n\
 		",
@@ -498,7 +498,7 @@ read_rtsp (sockets * s)
 
 		int rtsp_len = s->buf[2]*256+s->buf[3];
 		LOG("Received RTSP over tcp packet (sock_id %d, stream %d, rlen %d) packet len: %d, type %02X %02X discarding %s...", 
-			s->sock_id, s->sid, s->rlen, rtsp_len , s->buf[4], s->buf[5], (s->rlen == rtsp_len+4)?"complete":"fragment" );		
+			s->id, s->sid, s->rlen, rtsp_len , s->buf[4], s->buf[5], (s->rlen == rtsp_len+4)?"complete":"fragment" );		
 		if(s->rlen == rtsp_len+4){ // we did not receive the entire packet
 			s->rlen = 0;			
 			return 0;
@@ -524,7 +524,7 @@ read_rtsp (sockets * s)
 	rlen = s->rlen;
 	s->rlen = 0;
 
-	LOG ("read RTSP (from handle %d sock_id %d, len: %d):\n%s", s->sock, s->sock_id, s->rlen, s->buf);
+	LOG ("read RTSP (from handle %d sock_id %d, len: %d):\n%s", s->sock, s->id, s->rlen, s->buf);
 
 	if( (s->type != TYPE_HTTP ) && (strncasecmp(s->buf, "GET", 3) == 0))
 	{
@@ -535,7 +535,7 @@ read_rtsp (sockets * s)
 	la = split (arg, s->buf, 50, ' ');
 	cseq = 0;	
 	if (la<2)
-		LOG_AND_RETURN(0, "Most likely not an RTSP packet sock_id: %d sid: %d rlen: %d, dropping ....", s->sock_id, s->sid, rlen); 
+		LOG_AND_RETURN(0, "Most likely not an RTSP packet sock_id: %d sid: %d rlen: %d, dropping ....", s->id, s->sid, rlen); 
 	
 	if(s->sid<0)
 		for (i = 0; i < la; i++)	
@@ -736,7 +736,7 @@ read_http (sockets * s)
 			return 0;		
 		unsigned char *new_alloc = malloc1 (RBUF);
 		memcpy(new_alloc, s->buf, s->rlen);
-		s->buf = new_alloc;
+		set_socket_buffer(s->id, new_alloc, RBUF);
 		s->flags = s->flags | 1;
 		return 0;
 	}

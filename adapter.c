@@ -66,6 +66,9 @@ find_adapters ()
 	}
 	for (na; na < MAX_ADAPTERS; na++)
 		a[na].pa = a[na].fn = -1;
+#ifndef DISABLE_SATIPCLIENT
+	find_satip_adapter(a);
+#endif 
 }
 
 // avoid adapter close unless all the adapters can be closed
@@ -93,7 +96,7 @@ close_adapter_for_socket (sockets * s)
 {
 	int aid = s->sid;
 
-	LOG ("closing DVR socket %d pos %d aid %d", s->sock, s->sock_id, aid);
+	LOG ("closing DVR socket %d pos %d aid %d", s->sock, s->id, aid);
 	if (aid >= 0)
 		close_adapter (aid);
 }

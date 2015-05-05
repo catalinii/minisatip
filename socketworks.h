@@ -4,6 +4,7 @@
 #include <netinet/in.h>
 
 typedef int (*socket_action) (void *s);
+typedef int (*read_action )(int , void *,size_t, void *);
 
 typedef struct struct_sockets
 {
@@ -19,9 +20,10 @@ typedef struct struct_sockets
 	int lbuf;
 	int rlen;
 	int close_sec;
-	int sock_id;				 // socket id
+	int id;				 // socket id
 	int err;
 	int flags; // 1 - buf is allocated dynamically
+	read_action read;
 } sockets;
 
 #define TYPE_UDP 0
@@ -55,5 +57,5 @@ char *get_current_timestamp_log ();
 void set_socket_buffer (int sid, unsigned char *buf, int len);
 void sockets_timeout (int i, int t);
 void free_all ();
-
+void sockets_setread(int i, void *r);
 #endif
