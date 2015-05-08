@@ -32,6 +32,14 @@ typedef struct struct_pid
 	unsigned char cc; // continuity
 } SPid;
 
+typedef int (* Set_pid) (void *ad, uint16_t i_pid);
+typedef int (* Del_filters) (int fd, int pid);
+typedef int (* Adapter_commit)(void *ad);
+typedef int (* Open_device)(void *ad);
+typedef int (* Tune) (int aid, transponder * tp);
+typedef fe_delivery_system_t (* Dvb_delsys) (int aid, int fd, fe_delivery_system_t *sys);
+
+
 typedef struct struct_adapter
 {
 	int enabled;
@@ -44,7 +52,7 @@ typedef struct struct_adapter
 	SPid pids[MAX_PIDS];
 	int master_sid;				 // first SID, the one that controls the tuning
 	int sid_cnt;				 //number of streams
-	int sock;
+	int sock, fe_sock;
 	int do_tune;
 	char *buf;					 // 7 rtp packets = MAX_PACK, 7 frames / packet
 	int rlen,rtime;
@@ -61,7 +69,24 @@ typedef struct struct_adapter
 	int id;
 	int pat_processed;
 	ca_device_t * ca_device;
+// satipc
+	char *sip;
+	int sport;
+	char session[18];
+	int listen_rtp;
+	int rtcp, rtcp_sock, cseq;
+	int err, expect_reply, last_connect;
+	int wp, qp; // written packet, queued packet
+	int want_commit, want_tune; 
+	Set_pid set_pid;
+	Del_filters  del_filters;
+	Adapter_commit commit;
+	Open_device open;
+	Tune tune;
+	Dvb_delsys delsys;
+	Adapter_commit post_init, close;
 } adapter;
+
 
 int init_hw ();
 int getS2Adapters ();

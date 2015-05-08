@@ -3,6 +3,7 @@
 
 #include "adapter.h"
 
-void find_satip_adapter(adapter **a);
+void find_satip_adapter(adapter *a);
+
 
 #endif

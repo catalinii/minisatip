@@ -344,14 +344,9 @@ int decode_transport (sockets * s, char *arg, char *default_rtp, int start_rtp)
 	
 		if((sid->rsock = udp_bind_connect (NULL, opts.start_rtp + (sid->sid * 2), p.dest, p.port, &sid->sa)) < 0)
 			LOG_AND_RETURN (-1, "decode_transport failed: UDP connection on rtp port to %s:%d failed", p.dest, p.port);
-
-		i = 512*1024;
-		if(setsockopt(sid->rsock, SOL_SOCKET, SO_SNDBUF, &i, sizeof(i)))
-			LOG("unable to set output UDP buffer size to %d", i);
-                sl = sizeof(int);
-		if(!getsockopt(sid->rsock, SOL_SOCKET, SO_SNDBUF, &i, &sl))
-			LOG("output UDP buffer size is %d bytes", i);
-			
+		
+		set_socket_send_buffer(sid->rsock, opts.output_buffer);
+		
 		if ((sid->rtcp = udp_bind_connect (NULL, opts.start_rtp + (sid->sid * 2) +1, p.dest, p.port + 1, &sa)) < 1)
 			LOG_AND_RETURN (-1, "decode_transport failed: UDP connection on rtcp port to %s:%d failed", p.dest, p.port+1);
 			
@@ -450,7 +445,7 @@ close_stream (int i)
 
 	if (ad >= 0)
 		close_adapter_for_stream (i, ad);
-	sockets_del_for_sid (i);
+//	sockets_del_for_sid (i);
 	/*  if(sid->pids)free(sid->pids);
 	  if(sid->apids)free(sid->apids);
 	  if(sid->dpids)free(sid->dpids);
@@ -680,7 +675,7 @@ int my_writev(int sock, struct iovec *iov, int iiov, streams *sid)
 	LOGL(6,"start writev handle %d, iiov %d", sock, iiov);
 	rv = writev(sock,iov,iiov);
 	if(rv < 0 && errno == ECONNREFUSED) // close the stream int the next second
-		sid->timeout = 1000;
+		sid->timeout = 1;
 	LOGL(6,"writev returned %d handle %d, iiov %d", rv, sock, iiov);
 	return rv;
 }
@@ -923,7 +918,7 @@ stream_timeouts ()
 			if (sid->do_play && ctime - rttime > 200)
 				send_rtcp (i, ctime);
 						// check stream timeout, and allow 10s more to respond
-			if (sid->timeout > 0 && (ctime - sid->rtime > sid->timeout + 10000)) 
+			if ((sid->timeout > 0 && (ctime - sid->rtime > sid->timeout + 10000)) || (sid->timeout == 1)) 
 			{
 				LOG("Stream timeout %d, closing (ctime %d , sid->rtime %d, sid->timeout %d)", i, ctime, sid->rtime, sid->timeout);
 				close_stream(i);
@@ -1037,7 +1032,7 @@ int rtcp_confirm(sockets *s)
 	sid = get_sid(s->sid);
 	if(sid)
 	{
-		LOG("Acknowledging stream %d via rtcp packet", s->sid);
+		LOGL(4, "Acknowledging stream %d via rtcp packet", s->sid);
 		sid->rtime = s->rtime;
 	}
 	return 0;

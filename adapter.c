@@ -34,38 +34,19 @@
 #include "dvb.h"
 #include "adapter.h"
 #include "dvbapi.h"
-#include "ca.h"
 
 adapter a[MAX_ADAPTERS];
 extern struct struct_opts opts;
 
+
 void
 find_adapters ()
 {
-	int na = 0;
-	char buf[100];
-	int fd;
-	int i = 0,
-		j = 0;
-
-	for (i = 0; i < MAX_ADAPTERS; i++)
-		for (j = 0; j < MAX_ADAPTERS; j++)
-	{
-		sprintf (buf, "/dev/dvb/adapter%d/frontend%d", i, j);
-		fd = open (buf, O_RDONLY | O_NONBLOCK);
-		//LOG("testing device %s -> fd: %d",buf,fd);
-		if (fd >= 0)
-		{
-			a[na].pa = i;
-			a[na].fn = j;
-			close (fd);
-			na++;
-			if (na == MAX_ADAPTERS)
-				return;
-		}
-	}
-	for (na; na < MAX_ADAPTERS; na++)
-		a[na].pa = a[na].fn = -1;
+	static init_find_adapter;
+	if(init_find_adapter == 1)
+		return ;
+	init_find_adapter = 1;
+	find_dvb_adapter(a);
 #ifndef DISABLE_SATIPCLIENT
 	find_satip_adapter(a);
 #endif 
@@ -101,7 +82,6 @@ close_adapter_for_socket (sockets * s)
 		close_adapter (aid);
 }
 
-
 int init_complete = 0;
 int num_adapters = 0;
 int
@@ -118,41 +98,23 @@ init_hw ()
 	num_adapters = 0;
 	init_complete = 1;
 	for (i = 0; i < MAX_ADAPTERS; i++)
-		if ((!a[i].enabled || a[i].fe <= 0) && (a[i].pa >= 0 && a[i].fn >= 0))
+		if ((!a[i].enabled || a[i].fe <= 0) && ((a[i].pa >= 0 && a[i].fn >= 0) || a[i].sip))
 	{
 		int k;
 		int ca;
 		if (a[i].force_disable)continue;
 		a[i].sock = -1;
+		a[i].id = i;
 		if (a[i].pa <= 0 && a[i].fn <= 0)
 			find_adapters ();
-		LOG ("trying to open [%d] adapter %d and frontend %d", i, a[i].pa,
-			a[i].fn);
-		sprintf (buf, "/dev/dvb/adapter%d/frontend%d", a[i].pa, a[i].fn);
-		a[i].fe = open (buf, O_RDWR | O_NONBLOCK);
-		sprintf (buf, "/dev/dvb/adapter%d/dvr%d", a[i].pa, a[i].fn);
-		a[i].dvr = open (buf, O_RDONLY | O_NONBLOCK);
-		sprintf (buf, "/dev/dvb/adapter%d/ca0", a[i].pa);
-		if (a[i].fe < 0 || a[i].dvr < 0)
+		
+		if(a[i].open(&a[i]))
 		{
-			LOG (0, "Could not open %s in RW mode\n", buf);
-			if (a[i].fe >= 0)
-				close (a[i].fe);
-			if (a[i].dvr >= 0)
-				close (a[i].dvr);
-			a[i].fe = a[i].dvr = -1;
+			init_complete = 0;
 			continue;
 		}
-#ifndef DISABLE_DVBCA
-		if(a[i].ca > 0)
-			close(a[i].ca);
-		a[i].ca = open (buf, O_RDWR);
-		if (ca > -1)
-			a[i].ca_device = (ca_device_t *)ca_init(ca);
-#endif
 		
 		a[i].enabled = 1;
-		a[i].id = i;
 		if (!a[i].buf)
 			a[i].buf = malloc1 (opts.adapter_buffer + 10);
 		if (!a[i].buf)
@@ -172,15 +134,10 @@ init_hw ()
 		memset (a[i].buf, 0, opts.adapter_buffer + 1);
 
 		num_adapters++;
-		LOG ("opened DVB adapter %d fe:%d dvr:%d", i, a[i].fe, a[i].dvr);
-		if (ioctl (a[i].dvr, DMX_SET_BUFFER_SIZE, opts.dvr_buffer) < 0)
-			perror ("couldn't set DVR buffer size");
-		else
-			LOG ("Done setting DVR buffer to %d bytes", DVR_BUFFER);
 		init_dvb_parameters (&a[i].tp);
 		mark_pids_deleted (i, -1, NULL);
 		update_pids (i);
-		a[i].tp.sys = dvb_delsys (i, a[i].fe, a[i].sys);
+		a[i].delsys (i, a[i].fe, a[i].sys);
 		a[i].master_sid = -1;
 		a[i].sid_cnt = 0;
 		a[i].new_gs = 0;
@@ -190,7 +147,9 @@ init_hw ()
 		memset (a[i].buf, 0, opts.adapter_buffer + 1);
 		set_socket_buffer (a[i].sock, a[i].buf, opts.adapter_buffer);
 		sockets_timeout (a[i].sock, 60000);
-		LOG ("done opening adapter %i fe_sys %d", i, a[i].tp.sys);
+		if(a[i].post_init)
+			a[i].post_init(&a[i]);
+		LOG ("done opening adapter %i fe_sys %d %d %d %d", i, a[i].sys[0], a[i].sys[1], a[i].sys[2], a[i].sys[3]);
 
 	}
 	else if (a[i].enabled)
@@ -211,6 +170,8 @@ close_adapter (int na)
 		return;
 	LOG ("closing adapter %d  -> fe:%d dvr:%d", na, a[na].fe, a[na].dvr);
 	a[na].enabled = 0;
+	if(a[na].close)
+		a[na].close(&a[na]);
 								 //close all streams attached to this adapter
 //	close_streams_for_adapter (na, -1);
 	mark_pids_deleted (na, -1, NULL);
@@ -222,6 +183,8 @@ close_adapter (int na)
 		sockets_del (a[na].sock);
 	if(a[na].ca > 0)
 		close(a[na].ca);
+	if(a[na].fe_sock>=0)
+		sockets_del(a[na].fe_sock);
 	a[na].ca = 0;
 	a[na].fe = 0;
 	a[na].dvr = 0;
@@ -413,7 +376,7 @@ update_pids (int aid)
 			dp = 0;
 			ad->pids[i].flags = 0;
 			if (ad->pids[i].fd > 0)
-				del_filters (ad->pids[i].fd, ad->pids[i].pid);
+				ad->del_filters (ad->pids[i].fd, ad->pids[i].pid);
 			ad->pids[i].fd = 0;
 #ifndef DISABLE_DVBCSA	
 			dvbapi_pid_del(ad, ad->pids[i].pid, &ad->pids[i]);
@@ -431,7 +394,7 @@ update_pids (int aid)
 			dp = 0;
 			ad->pids[i].flags = 1;
 			if (ad->pids[i].fd <= 0)
-				ad->pids[i].fd = set_pid (ad->pa, ad->fn, ad->pids[i].pid);
+				ad->pids[i].fd = ad->set_pid (ad, ad->pids[i].pid);
 			ad->pids[i].filter = ad->pids[i].key = ad->pids[i].ecm_parity = 255;			
 			if(ad->pids[i].pid==0)
 				ad->pat_processed = 0;
@@ -439,6 +402,9 @@ update_pids (int aid)
 			ad->pids[i].cc = 255;
 			ad->pids[i].err = 0;
 	}
+	
+	ad->commit(ad);
+	
 	return 0;
 }
 
@@ -457,7 +423,7 @@ int tune (int aid, int sid)
 		ad->tp.ufreq = ad->ufreq;
 		ad->tp.pin = ad->pin;
 		
-		rv = tune_it_s2 (ad->fe, &ad->tp);
+		rv = ad->tune (ad->id, &ad->tp);
 		a[aid].status = 0;
 		a[aid].status_cnt = 0;
 		if (a[aid].sid_cnt > 1)	 // the master changed the frequency
@@ -737,7 +703,7 @@ describe_adapter (int sid, int aid)
 	memset (dad, 0, sizeof (dad));
 	x = 0;
 								 // do just max 3 signal check 1s after tune
-	if (use_ad && ((ad->status <= 0 && ad->status_cnt<8 && ad->status_cnt++>4) || opts.force_scan))
+	if (use_ad && (!ad->sip) && ((ad->status <= 0 && ad->status_cnt<8 && ad->status_cnt++>4) || opts.force_scan))
 	{
 		int new_gs = 1;
 		ts = getTick ();

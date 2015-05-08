@@ -48,11 +48,6 @@
 
 extern struct struct_opts opts;
 
-
-#define MAX_DATA 1500 // 16384
-#define MAX_SINFO 100
-
-
 #define TEST_WRITE(a) if((a)<=0){LOG("%s:%d: write to dvbapi socket failed, closing socket %d",__FILE__,__LINE__,sock);sockets_del(dvbapi_sock);sock = 0;dvbapi_sock = -1;isEnabled = 0;}
 
 static uint32_t crc_tab[256] = {
@@ -100,142 +95,6 @@ static uint32_t crc_tab[256] = {
   0x933eb0bb, 0x97ffad0c, 0xafb010b1, 0xab710d06, 0xa6322bdf, 0xa2f33668,
   0xbcb4666d, 0xb8757bda, 0xb5365d03, 0xb1f740b4
 };
-
-
-typedef struct tmpinfo
-{
-	unsigned char enabled;
-	uint16_t len;
-	int64_t key;
-	uint16_t id;
-	uint32_t max_size;
-	uint32_t timeout;
-	uint32_t last_updated;
-	unsigned char *data;
-} STmpinfo;
-STmpinfo sinfo[MAX_SINFO];
-
-STmpinfo *getItemPos(int64_t key)
-{
-	static STmpinfo *last;	
-	int i;
-	if(last && (last->enabled) && (last->key==key))
-	{
-		return last;
-	}
-	for (i=0;i<MAX_SINFO;i++)
-		if(sinfo[i].enabled && sinfo[i].key==key)
-		{
-			last = sinfo + i;
-			return last;
-		}
-	return NULL;
-}
-
-STmpinfo *getFreeItemPos(int64_t key)
-{
-	int i;
-	int tick = getTick();
-	for (i=0;i<MAX_SINFO;i++)
-		if(!sinfo[i].enabled || (sinfo[i].timeout && (tick - sinfo[i].last_updated > sinfo[i].timeout)))
-		{
-			sinfo[i].id = i;
-			sinfo[i].timeout = 0;
-			LOGL(2,"Requested new Item for key %llX, returning %d", key, i);
-			return sinfo + i;
-		}
-	return NULL;
-}
-
-unsigned char *getItem(int64_t key)
-{
-	STmpinfo *s = getItemPos(key);
-	if(s)
-		s->last_updated = getTick();
-	return s?s->data:NULL;
-}
-
-int getItemLen(int64_t key)
-{
-	STmpinfo *s = getItemPos(key);
-	return s? s->len : 0;
-}
-
-int getItemSize(int64_t key)
-{
-	STmpinfo *s = getItemPos(key);
-	if(!s)
-		return 0;
-	return s->max_size;
-}
-
-
-int setItemSize(int64_t key, uint32_t max_size)
-{
-	STmpinfo *s = getItemPos(key);
-	if(!s)
-		return -1;
-	if(s->max_size == max_size)
-		return 0;
-	s->max_size = max_size;
-	if(s->data)
-		free1(s->data);
-	s->data = malloc1(s->max_size + 100);
-	if(!s->data)
-		return -1;
-	return 0;
-}
-
-int setItemTimeout(int64_t key, int tmout)
-{
-	STmpinfo *s = getItemPos(key);
-	if(!s)
-		return -1;
-	s->timeout = tmout;
-	if(!s->data)
-		return -1;
-	return 0;
-}
-
-
-int setItem(int64_t key, unsigned char *data, int len, int pos)   // pos = -1 -> append, owerwrite the existing key
-{
-	STmpinfo *s = getItemPos(key);
-	if(!s)
-		s = getFreeItemPos(key);
-	if(!s)
-		return -1;
-	
-	if(s->max_size==0)
-		s->max_size = MAX_DATA;
-	if(!s->data)
-		s->data = malloc1(s->max_size);
-	if(!s->data)
-		return -1;
-	s->enabled = 1;
-	s->key = key;	
-	s->last_updated = getTick();
-	if(pos == -1)
-		pos = s->len;
-	if(pos + len >= s->max_size) // make sure we do not overflow the data buffer
-		len = s->max_size - pos;
-		
-	s->len = pos + len;
-	
-	memcpy(s->data + pos, data, len);			
-}
-
-int delItem(int64_t key)
-{
-	STmpinfo *s = getItemPos(key);
-	if(!s)
-		return 0;
-	s->enabled = 0;
-	s->len = 0;
-	s->key = 0;
-	LOG("Deleted Item Pos %d", s->id);
-	return 0;
-}
 
 
 int process_pat(unsigned char *b, adapter *ad)
@@ -495,6 +354,7 @@ int process_stream(adapter *ad,int rlen)
 	SPid *p;
 	int i, isPMT, pid;
 	uint8_t *b;
+	int dvbapi_on = 0;
 	
 	int64_t pid_key = TABLES_ITEM + ((1+ ad->id) << 24) + 0;	
 	int16_t *pids = (int16_t *)getItem(pid_key);
@@ -506,7 +366,12 @@ int process_stream(adapter *ad,int rlen)
 		isPMT = 0;
 		if(pid == 0)
 		{
-			process_pat(b, ad);
+			dvbapi_on = 0;
+#ifndef DISABLE_DVBCSA
+			dvbapi_on = dvbapi_enabled();
+#endif			
+			if(dvbapi_on || ad->ca_device)
+				process_pat(b, ad);
 			continue;
 		}
 		

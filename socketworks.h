@@ -41,7 +41,8 @@ char *setlocalip ();
 char *getlocalip ();
 int udp_connect (char *addr, int port, struct sockaddr_in *serv);
 int udp_bind_connect(char *src, int sport, char *dest, int dport, struct sockaddr_in *serv);
-int tcp_connect (char *addr, int port, struct sockaddr_in *serv);
+int udp_bind (char *addr, int port);
+int tcp_connect (char *addr, int port, struct sockaddr_in *serv, int blocking);
 char *get_sock_host(int fd);
 int get_sock_port(int fd);
 int sockets_add (int sock, struct sockaddr_in *sa, int sid, int type,
@@ -58,4 +59,6 @@ void set_socket_buffer (int sid, unsigned char *buf, int len);
 void sockets_timeout (int i, int t);
 void free_all ();
 void sockets_setread(int i, void *r);
+void set_socket_send_buffer(int sock, int len);
+void set_socket_receive_buffer(int sock, int len);
 #endif

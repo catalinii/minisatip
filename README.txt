@@ -18,7 +18,7 @@ minisatip [-f] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] [-p p
 		-d specify the device id (in case there are multiple SAT>IP servers in the network)
 		-w http_server[:port]: specify the host and the port where the xml file can be downloaded from
 		-x port: port for listening on http
-		-y rtsp_port: port for listening for rtsp requests (default: 445)
+		-y rtsp_port: port for listening for rtsp requests (default: 554)
 		-s force to get signal from the DVB hardware every 200ms (use with care, only when needed)
 		-a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means autodetect)
 		-m xx: simulate xx as local mac address, generates UUID based on mac
@@ -27,11 +27,12 @@ minisatip [-f] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] [-p p
 		-b X: set the DVR buffer to X KB (default: XX KB)
 		-l increases the verbosity (you can use multiple -l), logging to stdout in foreground mode or in /tmp/log when a daemon
 		-p url: specify playlist url using X_SATIPM3U header
-		-u unicable_string: defines the unicable adapters (A) and their slot (S) and frequency (F):
-			The format is: A1:S1-F1[,A2:S2-F2[,...]] 
+		-u unicable_string: defines the unicable adapters (A) and their slot (S), frequency (F) and optionally the PIN for the switch:\n\
+			The format is: A1:S1-F1[-PIN][,A2:S2-F2[-PIN][,...]] example: 2:0-1284[-1111]
 		-j jess_string: same format as unicable_string 
 		-g use syslog instead stdout for logging, multiple -g - print to stderr as well\n\
-		-o host:port: specify the hostname and port for the dvbapi server (oscam) \n\
+		-o host:port: specify the hostname and port for the dvbapi server (oscam) 
+		-s DELSYS:host:port - specify the remote satip host and port with delivery system DELSYS: example: dvbs2:192.168.9.9[:554]
 
 Example of Usage:
 

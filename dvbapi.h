@@ -53,6 +53,7 @@ typedef struct struct_key
 
 int init_dvbapi();
 int have_dvbapi();
+int dvbapi_enabled();
 int send_ecm(unsigned char *b, adapter *ad);
 int batch_size();
 int decrypt_stream(adapter *ad,int rlen);
@@ -62,4 +63,5 @@ SKey *get_key(int i);
 int dvbapi_process_pmt(unsigned char *b, adapter *ad);
 void dvbapi_pid_add(adapter *a,int pid, SPid *cp);
 void dvbapi_pid_del(adapter *a,int pid, SPid *cp);
+
 #endif

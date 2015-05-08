@@ -41,6 +41,9 @@
 #include <ctype.h>
 #include "dvb.h"
 #include "minisatip.h"
+#include "adapter.h"
+#include "ca.h"
+
 
 extern struct struct_opts opts;
 
@@ -204,6 +207,42 @@ make_func ( gi );
 make_func( specinv );
 make_func( pol );
 
+
+int dvb_open_device(adapter *ad)
+{
+	char buf[100];
+	LOG ("trying to open [%d] adapter %d and frontend %d", ad->id, ad->pa, ad->fn);
+	sprintf (buf, "/dev/dvb/adapter%d/frontend%d", ad->pa, ad->fn);
+	ad->fe = open (buf, O_RDWR | O_NONBLOCK);
+	sprintf (buf, "/dev/dvb/adapter%d/dvr%d", ad->pa, ad->fn);
+	ad->dvr = open (buf, O_RDONLY | O_NONBLOCK);
+	sprintf (buf, "/dev/dvb/adapter%d/ca0", ad->pa);
+	if (ad->fe < 0 || ad->dvr < 0)
+	{
+		LOG (0, "Could not open %s in RW mode\n", buf);
+		if (ad->fe >= 0)
+			close (ad->fe);
+		if (ad->dvr >= 0)
+			close (ad->dvr);
+		ad->fe = ad->dvr = -1;
+		return 1;
+	}
+#ifndef DISABLE_DVBCA
+	if(ad->ca > 0)
+		close(ad->ca);
+	ad->ca = open (buf, O_RDWR);
+	if (ca > -1)
+		ad->ca_device = (ca_device_t *)ca_init(ca);
+#endif
+	LOG ("opened DVB adapter %d fe:%d dvr:%d", ad->id, ad->fe, ad->dvr);
+	if (ioctl (ad->dvr, DMX_SET_BUFFER_SIZE, opts.dvr_buffer) < 0)
+		perror ("couldn't set DVR buffer size");
+	else
+		LOG ("Done setting DVR buffer to %d bytes", DVR_BUFFER);
+	return 0;
+}
+
+
 int send_diseqc(int fd, int pos, int pol, int hiband)
 {
 	struct dvb_diseqc_master_cmd cmd = {
@@ -358,11 +397,12 @@ int setup_switch (int frontend_fd, transponder *tp)
 }
 
 
-int
-tune_it_s2 (int fd_frontend, transponder * tp)
+int dvb_tune (int aid, transponder * tp)
 {
 	uint32_t if_freq = 0;
 	int res, bclear, bpol;
+	adapter *ad = get_adapter(aid);
+	int fd_frontend = ad->fe;
 
 	struct dvb_frontend_event event;
 	
@@ -561,11 +601,14 @@ tune_it_s2 (int fd_frontend, transponder * tp)
 
 
 int
-set_pid (int hw, int ad, uint16_t i_pid)
+dvb_set_pid (adapter *a, uint16_t i_pid)
 {
 	char buf[100];
 	int fd;
-
+	int hw, ad;
+	
+	hw = a->pa;
+	ad = a->fn;
 	if ( i_pid > 8192 )
 		LOG_AND_RETURN(-1, "pid %d > 8192 for /dev/dvb/adapter%d/demux%d", i_pid, hw, ad);
 		
@@ -596,7 +639,7 @@ set_pid (int hw, int ad, uint16_t i_pid)
 }
 
 
-int del_filters (int fd, int pid)
+int dvb_del_filters (int fd, int pid)
 {
 	if (fd < 0)
 		LOG_AND_RETURN(0, "DMX_STOP on an invalid handle %d, pid %d", fd, pid);
@@ -998,5 +1041,53 @@ int get_signal_new (int fd, fe_status_t * status, uint32_t * ber,
 #else
 	return -1;
 #endif
+}
+
+void dvb_commit(adapter *a)
+{
+	return ;
+}
+
+void find_dvb_adapter (adapter *a)
+{
+	int na = 0;
+	char buf[100];
+	int fd;
+	int i = 0,
+		j = 0;
+
+	for(i = 0; i < MAX_ADAPTERS; i++)
+	{
+		a[i].open = (Open_device )dvb_open_device;
+		a[i].set_pid = (Set_pid ) dvb_set_pid;
+		a[i].del_filters = (Del_filters )dvb_del_filters;
+		a[i].commit = (Adapter_commit )dvb_commit;
+		a[i].tune = (Tune )dvb_tune;
+		a[i].delsys = (Dvb_delsys )dvb_delsys;
+		a[i].post_init = NULL;
+		a[i].close = NULL;
+	}
+		
+	for (i = 0; i < MAX_ADAPTERS; i++)
+		for (j = 0; j < MAX_ADAPTERS; j++)
+	{
+		sprintf (buf, "/dev/dvb/adapter%d/frontend%d", i, j);
+		fd = open (buf, O_RDONLY | O_NONBLOCK);
+		//LOG("testing device %s -> fd: %d",buf,fd);
+		if (fd >= 0)
+		{
+			a[na].pa = i;
+			a[na].fn = j;
+			a[na].sip = NULL;
+			a[na].sport = 0;
+			
+			close (fd);
+			na++;
+			if (na == MAX_ADAPTERS)
+				return;
+		}
+	}
+	for (na; na < MAX_ADAPTERS; na++)
+		a[na].pa = a[na].fn = -1;
 }
 

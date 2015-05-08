@@ -211,8 +211,7 @@ udp_connect (char *addr, int port, struct sockaddr_in *serv)
 	return sock;
 }
 
-int
-tcp_connect (char *addr, int port, struct sockaddr_in *serv)
+int tcp_connect (char *addr, int port, struct sockaddr_in *serv, int blocking)
 {
 	struct sockaddr_in sv;
 	int sock,
@@ -229,16 +228,17 @@ tcp_connect (char *addr, int port, struct sockaddr_in *serv)
 		return -1;
 	}
 
-	if (setsockopt (sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof (optval)) <
-		0)
+	if (setsockopt (sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof (optval)) < 0)
 	{
 		LOGL (0, "tcp_connect: setsockopt(SO_REUSEADDR): %s", strerror (errno));
 		close(sock);
 		return -1;
 	}
-
-	int flags = fcntl(sock, F_GETFL, 0);
-    fcntl(sock, F_SETFL, flags | O_NONBLOCK);
+	if(blocking)
+	{
+		int flags = fcntl(sock, F_GETFL, 0);
+		fcntl(sock, F_SETFL, flags | O_NONBLOCK);
+	}
 	
 	if (connect (sock, (struct sockaddr *) serv, sizeof (*serv)) < 0)
 	{
@@ -752,3 +752,34 @@ free_all ()
 	free_all_streams ();
 	free_all_adapters ();
 }
+
+
+void set_socket_send_buffer(int sock, int len)
+{
+	int sl;
+	if(setsockopt(sock, SOL_SOCKET, SO_SNDBUFFORCE, &len, sizeof(len)))
+		LOGL(3, "unable to set output UDP buffer (force) size to %d", len);
+	
+	if(setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &len, sizeof(len)))
+		LOGL(3, "unable to set output UDP buffer size to %d", len);
+	sl = sizeof(int);
+	if(!getsockopt(sock, SOL_SOCKET, SO_SNDBUF, &len, &sl))
+		LOG("output UDP buffer size is %d bytes", len);
+
+}
+
+void set_socket_receive_buffer(int sock, int len)
+{
+	socklen_t sl;
+	if(setsockopt(sock, SOL_SOCKET, SO_RCVBUFFORCE, &len, sizeof(len)))
+		LOGL(3, "unable to set output UDP buffer (force) size to %d", len);
+	
+	if(setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &len, sizeof(len)))
+		LOGL(3, "unable to set output UDP buffer size to %d", len);
+	sl = sizeof(int);
+	if(!getsockopt(sock, SOL_SOCKET, SO_RCVBUF, &len, &sl))
+		LOG("output UDP buffer size is %d bytes", len);
+
+}
+
+

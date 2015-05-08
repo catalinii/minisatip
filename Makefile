@@ -7,7 +7,7 @@ SATIPCLIENT?=no
 CFLAGS=$(NODVBCSA) -ggdb -fPIC
 LDFLAGS=-lpthread -lrt
 
-OBJS=minisatip.o socketworks.o stream.o dvb.o adapter.o
+OBJS=minisatip.o socketworks.o stream.o dvb.o adapter.o utils.o
 
 TABLES=no
 
@@ -69,6 +69,8 @@ tables.o: tables.c tables.h
 satipc.o: satipc.c satipc.h
 	$(CC) $(CFLAGS) -c -o $@ satipc.c
 
+utils.o: utils.c utils.h
+	$(CC) $(CFLAGS) -c -o $@ utils.c
 
 all: minisatip
 

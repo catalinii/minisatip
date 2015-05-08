@@ -5,9 +5,10 @@
 
 #include "stream.h"
 #include "socketworks.h"
+#include "utils.h"
 
 
-#define VERSION_BUILD "24"
+#define VERSION_BUILD "25"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.3.,VERSION_BUILD,)
 
@@ -19,10 +20,10 @@ void set_options (int argc, char *argv[]);
 #define HTTPPORT_OPT 'x'
 #define LOG_OPT 'l'
 #define HELP_OPT 'h'
-#define SCAN_OPT 's'
+#define SCAN_OPT 'z'
 #define PLAYLIST_OPT 'p'
 #define DVBS2_ADAPTERS_OPT 'a'
-#define DVBT2_ADAPTERS_OPT 't'
+#define CLEANPSI_OPT 't'
 #define MAC_OPT 'm'
 #define FOREGROUND_OPT 'f'
 #define BW_OPT 'c'
@@ -33,6 +34,8 @@ void set_options (int argc, char *argv[]);
 #define DVBAPI_OPT 'o'
 #define SYSLOG_OPT 'g'
 #define RTSPPORT_OPT 'y'
+#define SATIPCLIENT_OPT 's'
+
 
 #define PID_FILE "/var/run/minisatip.pid"
 
@@ -60,40 +63,23 @@ struct struct_opts
 	int bw;	
 	int dvr_buffer;
 	int adapter_buffer;
+	int output_buffer;
 	int force_scan;
 	int clean_psi;
 	int file_line;
 	char *last_log;	
 	int dvbapi_port;
 	char *dvbapi_host;
+	char *satipc;	
 	char playlist[200];
 	int drop_encrypted;
 	int rtsp_port;
 };
 
-void _log(int level, char * file, int line, const char *fmt, ...);
 
-//#define proxy_log(level, fmt, ...) _proxy_log(level, fmt"\n", ##__VA_ARGS__)
-
-//#define LOG(a,...) {opts.last_log=a;if(opts.log){int x=getTick();printf(CC([%d.%03d]: ,a,\n),x/1000,x%1000,##__VA_ARGS__);fflush(stdout);};}
-//#define LOG(a,...) {opts.last_log=a;if(opts.log){printf(CC([%s]:\x20,a,\n),get_current_timestamp_log(),##__VA_ARGS__);fflush(stdout);};}
-#define LOG(a,...) { _log(1,__FILE__,__LINE__,a, ##__VA_ARGS__);}
-#define LOGL(level,a,...) { if(level<=opts.log)_log(level,__FILE__,__LINE__,a, ##__VA_ARGS__);}
-
-
-#define FAIL(a,...) {LOGL(0,a,##__VA_ARGS__);unlink(PID_FILE);exit(1);}
-#define LOG_AND_RETURN(rc,a,...) {LOG(a,##__VA_ARGS__);return rc;}
 int ssdp_discovery (sockets * s);
-int split (char **rv, char *s, int lrv, char sep);
-int map_int (char *s, char ** v);
-int map_intd (char *s, char ** v, int dv);
-int map_float (char *s, int mul);
-void *mymalloc (int a, char *f, int l);
-void myfree (void *x, char *f, int l);
 int becomeDaemon ();
 int readBootID();
-void hexDump (char *desc, void *addr, int len);
+char * http_response (sockets *s, int rc, char *ah, char *desc, int cseq, int lr);
 
-#define malloc1(a) mymalloc(a,__FILE__,__LINE__)
-#define free1(a) myfree(a,__FILE__,__LINE__)
 #endif

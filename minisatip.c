@@ -46,6 +46,7 @@
 struct struct_opts opts;
 
 extern sockets s[MAX_SOCKS];
+char public[] = "Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN";
 int rtsp, http, si, si1, ssdp1;
 
 void
@@ -58,7 +59,7 @@ usage ()
 		-w http_server[:port]: specify the host and the port where the xml file can be downloaded from \n\
 		-x port: port for listening on http\n\
 		-y rtsp_port: port for listening for rtsp requests (default: 554)\n\
-		-s force to get signal from the DVB hardware every 200ms (use with care, only when needed)\n\
+		-z force to get signal from the DVB hardware every 200ms (use with care, only when needed)\n\
 		-a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means auto-detect)\n\
 		-m xx: simulate xx as local mac address, generates UUID based on mac\n\
 		-e list_of_enabled adapters: enable only specified adapters, example 0-2,5,7 (no spaces between parameters)\n\
@@ -69,8 +70,9 @@ usage ()
 		-p url: specify playlist url using X_SATIPM3U header \n\
 		-u unicable_string: defines the unicable adapters (A) and their slot (S), frequency (F) and optionally the PIN for the switch:\n\
 		\tThe format is: A1:S1-F1[-PIN][,A2:S2-F2[-PIN][,...]] example: 2:0-1284[-1111]\n\
-		-j jess_string: same format as unicable_string \n\
-		-o host:port: specify the hostname and port for the dvbapi server (oscam) \n\
+		-j jess_string - same format as unicable_string \n\
+		-o host:port - specify the hostname and port for the dvbapi server (oscam) \n\
+		-s DELSYS:host:port - specify the remote satip host and port with delivery system DELSYS: example: dvbs2:192.168.9.9[:554]\n\
 		",
 		ADAPTER_BUFFER, DVR_BUFFER);
 	exit (1);
@@ -107,13 +109,15 @@ set_options (int argc, char *argv[])
 	opts.file_line = 0;
 	opts.dvbapi_port = 0;
 	opts.dvbapi_host = NULL;
+	opts.satipc = NULL;
 	opts.drop_encrypted = 1;
 	opts.rtsp_port = 554;
-	opts.clean_psi = 1;
+	opts.clean_psi = 0;
+	opts.output_buffer = 512*1024;
 	memset(opts.playlist, sizeof(opts.playlist), 0);
 	
 	
-	while ((opt = getopt (argc, argv, "flr:a:t:d:w:p:shc:b:m:p:e:x:u:j:o:gy:")) != -1)
+	while ((opt = getopt (argc, argv, "flr:a:td:w:p:s:hc:b:m:p:e:x:u:j:o:gy:z")) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
 		switch (opt)
@@ -197,9 +201,9 @@ set_options (int argc, char *argv[])
 				break;
 			}
 
-			case DVBT2_ADAPTERS_OPT:
+			case CLEANPSI_OPT:
 			{
-				opts.force_tadapter = atoi (optarg);
+				opts.clean_psi = 1;
 				break;
 			}
 			
@@ -243,13 +247,20 @@ set_options (int argc, char *argv[])
 					opts.dvbapi_port = map_int(sep1 + 1, NULL );
 				}
 				break;
+			}
 			
 			case RTSPPORT_OPT:
+			{
 				opts.rtsp_port = atoi (optarg);
 				break;
 			}
 
-		}
+			case SATIPCLIENT_OPT:
+				opts.satipc = optarg;
+				break;
+			}
+
+			
 	}
 	
 	if(opts.bw && (opts.bw < opts.adapter_buffer))
@@ -264,220 +275,6 @@ set_options (int argc, char *argv[])
 }
 
 
-
-void posix_signal_handler (int sig, siginfo_t * siginfo, ucontext_t * ctx);
-void
-set_signal_handler ()
-{
-	struct sigaction sig_action = { };
-	sig_action.sa_sigaction =
-		(void (*)(int, siginfo_t *, void *)) posix_signal_handler;
-	sigemptyset (&sig_action.sa_mask);
-
-	sig_action.sa_flags = SA_SIGINFO | SA_ONSTACK;
-
-	#ifndef __mips__
-    if (sigaction(SIGBUS, &sig_action, NULL) != 0) { LOG("Could not set signal SIGBUS"); }
-	if (sigaction(SIGSEGV, &sig_action, NULL) != 0) { LOG("Could not set signal SIGSEGV"); }
-    if (sigaction(SIGABRT, &sig_action, NULL) != 0) { LOG("Could not set signal SIGABRT"); }
-    if (sigaction(SIGFPE,  &sig_action, NULL) != 0) { LOG("Could not set signal SIGFPE"); }
-    if (sigaction(SIGILL,  &sig_action, NULL) != 0) { LOG("Could not set signal SIGILL"); }
-	#endif
-	if (sigaction (SIGINT, &sig_action, NULL) != 0) { LOG("Could not set signal SIGINT");}
-	
-	//    if (sigaction(SIGTERM, &sig_action, NULL) != 0) { err(1, "sigaction"); }
-	if (signal (SIGHUP, SIG_IGN) != 0) { LOG("Could not ignore signal SIGHUP"); }
-	if (signal (SIGPIPE, SIG_IGN) != 0) { LOG("Could not ignore signal SIGPIPE"); }
-}
-
-
-int
-split (char **rv, char *s, int lrv, char sep)
-{
-	int i = 0,
-		j = 0;
-
-	if (!s)
-		return 0;
-	for (i = 0; s[i] && s[i] == sep && s[i] < 32; i++);
-
-	rv[j++] = &s[i];
-	//      LOG("start %d %d\n",i,j);
-	while (j < lrv)
-	{
-		if (s[i] == 0 || s[i + 1] == 0)
-			break;
-		if (s[i] == sep || s[i] < 33)
-		{
-			s[i] = 0;
-			if (s[i + 1] != sep && s[i + 1] > 32)
-				rv[j++] = &s[i + 1];
-		}
-		else if (s[i] < 14)
-			s[i] = 0;
-		//              LOG("i=%d j=%d %d %c \n",i,j,s[i],s[i]);
-		i++;
-	}
-	if (s[i] == sep)
-		s[i] = 0;
-	rv[j] = NULL;
-	return j;
-}
-
-char *strip(char *s) // strip spaces from the front of a string 
-{
-	if(s < (char *)1000)
-		return NULL;
-		
-	while (*s && *s == ' ')
-		s++;
-	return s;
-}
-
-#define LR(s) {LOG("map_int returns %d",s);return s;}
-int map_intd (char *s, char ** v, int dv)
-{
-	int i, n = 0;
-	
-	if(s==NULL)
-	{
-		LOG_AND_RETURN(dv, "map_int: s=>NULL, v=%p, %s %s", v, v?v[0]:"NULL", v?v[1]:"NULL");
-	}
-
-	s = strip(s);
-	
-	if(!*s)
-		LOG_AND_RETURN(dv, "map_int: s is empty");
-	
-	if (v == NULL)
-	{
-		if(s[0]!='+' && s[0]!='-' && (s[0]<'0' || s[0]>'9'))
-			LOG_AND_RETURN(dv, "map_int: s not a number: %s, v=%p, %s %s", s, v, v?v[0]:"NULL", v?v[1]:"NULL");
-		return atoi (s);
-	}
-	for (i = 0; v[i]; i++)
-		if (!strncasecmp (s, v[i], strlen (v[i])))
-			n = i;
-	return n;
-}
-
-char *header_parameter(char **arg, int i) // get the value of a header parameter 
-{
-	int len = strlen(arg[i]);
-	char *result;
-	
-	if( arg[i][len-1] == ':')
-		return arg[i+1];
-	
-	result = strchr(arg[i], ':');
-	if(result)
-		return result+1;
-		
-	if(strcmp(arg[i+1], ":")==0)
-		return arg[i+2];	
-}
-
-int
-map_float (char *s, int mul)
-{
-	float f;
-	int r;
-
-	if(s==NULL)
-		LOG_AND_RETURN(0,"map_float: s=>NULL, mul=%d", mul);
-	if(s[0]!='+' && s[0]!='-' && (s[0]<'0' || s[0]>'9'))
-			LOG_AND_RETURN(0,"map_float: s not a number: %s, mul=%d", s, mul);
-		
-	f = atof (s);
-	r = (int) (f * mul);
-	//      LOG("atof returned %.1f, mul = %d, result=%d",f,mul,r);
-	return r;
-}
-
-int map_int (char *s, char ** v)
-{
-	return map_intd(s,v,0);
-}
-
-
-char public[] = "Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN";
-
-static inline end_of_header(char *buf)
-{
-       return buf[0] == 0x0d && buf[1] == 0x0a && buf[2] == 0x0d && buf[3] == 0x0a;
-}
-
-char *
-http_response (sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
-{
-	int binary = 0;
-	char *desc1;
-	char *reply =
-		"%s/1.0 %d %s\r\nDate: %s%s%s\r\n%s\r\nContent-Length: %d\r\n\r\n%s";
-	char *reply0 = 
-		"%s/1.0 %d %s\r\nDate: %s%s%s\r\n%s\r\n\r\n";
-	char *d;
-	char *proto;
-	char sess_id[100], scseq[100];
-	
-	
-	if( s->type == TYPE_HTTP)
-		proto = "HTTP";
-	else 
-		proto = "RTSP";
-		
-	if (!ah)
-		ah = public;
-	if (!desc)
-		desc = "";
-	if (rc == 200)
-		d = "OK";
-	else if (rc == 400)
-		d = "Bad Request";
-	else if (rc == 403)
-		d = "Forbidden";
-	else if (rc == 404)
-		d = "Not Found";
-	else if (rc == 500)
-		d = "Internal Server Error";
-	else if (rc == 501)
-		d = "Not Implemented";
-	else if (rc == 405)
-		d = "Method Not Allowed";
-	else if (rc == 454)
-		d = "Session Not Found";
-	else 
-	{
-		d = "Service Unavailable";
-		rc = 503;
-	}
-	static char resp[5000];
-	desc1 = desc;
-	if(!lr)
-		lr = strlen (desc);
-	else 
-	{
-		binary = 1;
-		desc1 = "";
-	}
-	
-	sess_id[0] = 0;
-	scseq[0] = 0;
-	if(s->type != TYPE_HTTP && get_sid(s->sid) && ah && !strstr(ah, "Session"))
-		sprintf(sess_id, "\r\nSession: %010d", get_session_id(s->sid));
-	if(s->type != TYPE_HTTP && cseq > 0)
-			sprintf(scseq, "\r\nCseq: %d", cseq);
-	
-	if (lr)
-		sprintf (resp, reply, proto, rc, d, get_current_timestamp (), sess_id, scseq, ah, lr, desc1);
-	else
-		sprintf (resp, reply0, proto, rc, d, get_current_timestamp (), sess_id, scseq, ah);
-	LOG ("reply -> %d (%s:%d) CL:%d :\n%s", s->sock, inet_ntoa(s->sa.sin_addr), ntohs(s->sa.sin_port), lr, resp);
-	send (s->sock, resp, strlen (resp), MSG_NOSIGNAL);
-	if(binary)
-		send (s->sock, desc, lr, MSG_NOSIGNAL);
-	return resp;
-}
 
 #define RBUF 4000
 
@@ -512,6 +309,7 @@ read_rtsp (sockets * s)
 			LOG("Discarding %d bytes from the socket buffer, request > %d, consider increasing  RBUF", s->rlen, RBUF);
 			s->rlen = 0;
 		}
+		LOG("read_rtsp: read %d bytes from handle %d, sock_id %d, flags %d not ending with \\r\\n\\r\\n", s->rlen, s->sock, s->id, s->flags);
 		if ( s->flags & 1 ) 
 			return 0;		
 		unsigned char *new_alloc = malloc1 (RBUF);
@@ -966,7 +764,7 @@ new_http (sockets * s)
 }
 
 
-char pn[256];
+
 
 void write_pid_file()
 {
@@ -978,6 +776,7 @@ void write_pid_file()
 	}
 }
 
+extern char pn[256];
 
 int
 main (int argc, char *argv[])
@@ -1033,159 +832,6 @@ main (int argc, char *argv[])
 }
 
 
-int addr2line(char const * const program_name, void const * const addr)
-{
-	char addr2line_cmd[512] = {0};
-
-	sprintf(addr2line_cmd,"addr2line -f -p -e %.256s %p", program_name, addr);
-	return system(addr2line_cmd);
-}
-
-
-void
-print_trace (void)
-{
-	void *array[10];
-	size_t size;
-	char **strings;
-	size_t i;
-	#ifndef __mips__
-
-	size = backtrace (array, 10);
-
-	LOGL (0, "Obtained %zd stack frames.\n", size);
-
-	for (i = 0; i < size; i++)
-	{
-		LOGL(0, "%p : ", array[i]);		
-		if(addr2line(pn, array[i])) LOGL(0, "\n");
-	}
-	#else
-	LOGL(0, " No backtrace defined\n");
-	#endif
-}
-
-
-extern int run_loop;
-void
-posix_signal_handler (int sig, siginfo_t * siginfo, ucontext_t * ctx)
-{
-	int sp = 0, ip = 0;
-
-	if (sig == SIGINT)
-	{
-		run_loop = 0;
-		return;
-	}
-	#ifdef __mips__
-	sp = ctx->uc_mcontext.gregs[29];
-	ip = ctx->uc_mcontext.pc;
-	#endif
-	LOGL (0,
-		"RECEIVED SIGNAL %d - SP=%lX IP=%lX main=%lX read_dmx=%lX clock_gettime=%lX\n",
-		sig, (long unsigned int) sp, (long unsigned int) ip,
-		(long unsigned int) main, (long unsigned int) read_dmx,
-		(long unsigned int) clock_gettime);
-	
-	print_trace();
-	exit (1);
-}
-
-
-int								 /* Returns 0 on success, -1 on error */
-becomeDaemon ()
-{
-	int maxfd, fd, pid;
-	struct stat sb;
-	FILE *f;
-	char path[255];
-	char buf[255];
-	
-	memset(path, 0, sizeof(path));
-	
-	if((f = fopen(PID_FILE, "rt")))
-	{
-		fscanf(f, "%d", &pid);
-		fclose(f);
-		snprintf(buf, sizeof(buf),"/proc/%d/exe", pid);
-		
-		if (0 < readlink(buf, path, sizeof(path)) && 0 == strcmp(pn, path))
-		{
-			LOGL(0, "Found minisatip running with pid %d, killing....", pid);
-			kill(pid, SIGINT);
-			usleep(500);
-		}
-	}
-	
-	switch (fork ())
-	{							 /* Become background process */
-		case -1:
-			return -1;
-		case 0:
-			break;				 /* Child falls through... */
-		default:
-			_exit (EXIT_SUCCESS);/* while parent terminates */
-	}
-
-	if (setsid () == -1)		 /* Become leader of new session */
-		return -1;
-
-	switch ((pid = fork ()))
-	{							 /* Ensure we are not session leader */
-		case -1:
-			return -1;
-		case 0:
-			break;
-		default:
-			_exit (EXIT_SUCCESS);
-	}
-
-	umask (0);					 /* Clear file mode creation mask */
-
-	maxfd = sysconf (_SC_OPEN_MAX);
-	if (maxfd == -1)			 /* Limit is indeterminate... */
-		maxfd = 1024;			 /* so take a guess */
-
-	for (fd = 0; fd < maxfd; fd++)
-		close (fd);
-
-	close (STDIN_FILENO);		 /* Reopen standard fd's to /dev/null */
-	//	chdir ("/tmp");				 /* Change to root directory */
-	
-	fd = open ("/dev/null", O_RDWR);
-
-	if (fd != STDIN_FILENO)		 /* 'fd' should be 0 */
-		return -1;
-	if ( stat ("/tmp/log", &sb ) == -1)
-		fd = open ("/tmp/log", O_RDWR | O_CREAT, 0666);
-	else
-		fd = open ("/tmp/log", O_RDWR | O_APPEND);
-	if (fd != STDOUT_FILENO)	 /* 'fd' should be 1 */
-		return -1;
-	if (dup2 (STDOUT_FILENO, STDERR_FILENO) != STDERR_FILENO)
-		return -1;
-
-	return 0;
-}
-
-
-void *
-mymalloc (int a, char *f, int l)
-{
-	void *x = malloc (a);
-	LOG ("%s:%d allocation_wrapper malloc allocated %d bytes at %p", f, l, a, x);	
-	return x;
-}
-
-
-void
-myfree (void *x, char *f, int l)
-{
-	LOG ("%s:%d allocation_wrapper free called with argument %p", f, l, x);
-	free (x);	
-}
-
-
 int readBootID()
 {
 	int did = 0;
@@ -1238,51 +884,74 @@ int readfile(char *fn,char *buf,int *len)
 }
 
 
-void _log(int level, char * file, int line, const char *fmt, ...) {
-    va_list arg;
-	int len, len1, both;
-	static int idx, times;
-	static char output[2][2000];
-    /* Check if the message should be logged */
-    if (opts.log < level)
-        return;
+char *
+http_response (sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
+{
+	int binary = 0;
+	char *desc1;
+	char *reply =
+		"%s/1.0 %d %s\r\nDate: %s%s%s\r\n%s\r\nContent-Length: %d\r\n\r\n%s";
+	char *reply0 = 
+		"%s/1.0 %d %s\r\nDate: %s%s%s\r\n%s\r\n\r\n";
+	char *d;
+	char *proto;
+	char sess_id[100], scseq[100];
 	
-	idx = 1 - idx;
-	if(idx > 1)
-		idx = 1;
-	else if ( idx < 0)
-		idx = 0;
-	if(opts.file_line && !opts.slog)
-		len1 = snprintf(output[idx], sizeof(output[0]), "[%s] %s:%d: ", get_current_timestamp_log(), file, line);
-	else if (!opts.slog)
-		len1 = snprintf(output[idx], sizeof(output[0]), "[%s]: ", get_current_timestamp_log());
-        else if (opts.file_line) {
-		len1 = 0;
-		output[idx][0] = '\0';
-        }
-    /* Write the error message */
-	len = len1 = len1 < sizeof(output[0]) ? len1 : sizeof(output[0]) - 1;
-	both = 0;
-    va_start(arg, fmt);
-    len += vsnprintf(output[idx] + len, sizeof(output[0]) - len, fmt, arg);
-    va_end(arg);
 	
-	if(strcmp(output[idx] + len1, output[1 - idx] + len1) == 0)
-		times++;
-	else
+	if( s->type == TYPE_HTTP)
+		proto = "HTTP";
+	else 
+		proto = "RTSP";
+		
+	if (!ah)
+		ah = public;
+	if (!desc)
+		desc = "";
+	if (rc == 200)
+		d = "OK";
+	else if (rc == 400)
+		d = "Bad Request";
+	else if (rc == 403)
+		d = "Forbidden";
+	else if (rc == 404)
+		d = "Not Found";
+	else if (rc == 500)
+		d = "Internal Server Error";
+	else if (rc == 501)
+		d = "Not Implemented";
+	else if (rc == 405)
+		d = "Method Not Allowed";
+	else if (rc == 454)
+		d = "Session Not Found";
+	else 
 	{
-		if(times>0)
-		{	
-			both = 1;
-			snprintf(output[1 - idx], sizeof(output[0]), "Message repeated %d times", times);
-		}
-		times = 0;
+		d = "Service Unavailable";
+		rc = 503;
+	}
+	static char resp[5000];
+	desc1 = desc;
+	if(!lr)
+		lr = strlen (desc);
+	else 
+	{
+		binary = 1;
+		desc1 = "";
 	}
 	
-	if(both){
-		if(opts.slog)syslog(LOG_NOTICE, "%s", output[1-idx]); else puts(output[1-idx]);
-		both = 0;
-	}
-	if(times==0) if(opts.slog)syslog(LOG_NOTICE, "%s", output[idx]); else puts(output[idx]);
-	fflush(stdout);
+	sess_id[0] = 0;
+	scseq[0] = 0;
+	if(s->type != TYPE_HTTP && get_sid(s->sid) && ah && !strstr(ah, "Session"))
+		sprintf(sess_id, "\r\nSession: %010d", get_session_id(s->sid));
+	if(s->type != TYPE_HTTP && cseq > 0)
+			sprintf(scseq, "\r\nCseq: %d", cseq);
+	
+	if (lr)
+		sprintf (resp, reply, proto, rc, d, get_current_timestamp (), sess_id, scseq, ah, lr, desc1);
+	else
+		sprintf (resp, reply0, proto, rc, d, get_current_timestamp (), sess_id, scseq, ah);
+	LOG ("reply -> %d (%s:%d) CL:%d :\n%s", s->sock, inet_ntoa(s->sa.sin_addr), ntohs(s->sa.sin_port), lr, resp);
+	send (s->sock, resp, strlen (resp), MSG_NOSIGNAL);
+	if(binary)
+		send (s->sock, desc, lr, MSG_NOSIGNAL);
+	return resp;
 }

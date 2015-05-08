@@ -53,19 +53,24 @@ extern struct struct_opts opts;
 const int64_t DVBAPI_ITEM = 0x1000000000000;
 int dvbapi_sock = -1;
 int sock;
-int isEnabled = 0;
+int dvbapi_is_enabled = 0;
 int haveDvbapi = 0;
 int batchSize;
 SKey keys[MAX_KEYS];
 unsigned char read_buffer[1500];
 
 
-#define TEST_WRITE(a) if((a)<=0){LOG("write to dvbapi socket failed, closing socket %d",sock);sockets_del(dvbapi_sock);sock = 0;dvbapi_sock = -1;isEnabled = 0;}
+#define TEST_WRITE(a) if((a)<=0){LOG("write to dvbapi socket failed, closing socket %d",sock);sockets_del(dvbapi_sock);sock = 0;dvbapi_sock = -1;dvbapi_is_enabled = 0;}
 #define POINTER_TYPE_ECM ((void *)-TYPE_ECM)
 #define POINTER_1 ((void *)1)
 int have_dvbapi()
 {
 	return haveDvbapi;
+}
+
+int dvbapi_enabled()
+{
+	return dvbapi_is_enabled;
 }
 
 void invalidate_adapter(int ad)
@@ -141,7 +146,9 @@ int dvbapi_reply(sockets * s)
 				p->ecm_parity = 255;
 				invalidate_adapter(k->adapter);
 			
-			};
+			}
+//			else p->ecm_parity = 255;
+			
 			break;
 		}
 		case DVBAPI_DMX_STOP:
@@ -305,10 +312,10 @@ int decrypt_stream(adapter *ad,int rlen)
 	
 	if(!have_dvbapi())
 		return 0;
-	if(!isEnabled)
+	if(!dvbapi_is_enabled)
 	{
 		init_dvbapi();
-//		if(!isEnabled)
+//		if(!dvbapi_is_enabled)
 //			return 0;
 	}	
 	if(!batchSize)
@@ -334,7 +341,7 @@ int decrypt_stream(adapter *ad,int rlen)
 		pid = (b[1] & 0x1F)*256 + b[2]; 			
 		if(b[3] & 0x80)
 		{				
-			if(isEnabled && pid_to_key)
+			if(dvbapi_is_enabled && pid_to_key)
 				k = pid_to_key[pid];
 			else k = NULL;
 			if(!k)
@@ -424,7 +431,7 @@ int dvbapi_close(sockets * s)
 	int i;
 	LOG("requested dvbapi close for sock %d, sock_id %d", sock, dvbapi_sock, s->sock);
 	sock = 0;
-	isEnabled = 0;
+	dvbapi_is_enabled = 0;
 	last_retry = getTick();
 	SKey *k;
 	for(i=0;i<MAX_KEYS;i++)
@@ -444,13 +451,13 @@ int init_dvbapi()
 	int ctime;
 
 	ctime = getTick();
-	if((sock>0) && isEnabled)  // already connected
+	if((sock>0) && dvbapi_is_enabled)  // already connected
 			return sock;
 	
 	if(ctime - last_retry < 5000) // wait 5 seconds before trying again
 		return 0;
 		
-	isEnabled = 0;
+	dvbapi_is_enabled = 0;
 		
 	haveDvbapi = 0;
 	if(!opts.dvbapi_port  || !opts.dvbapi_host)
@@ -465,7 +472,7 @@ int init_dvbapi()
 	{
 		int err;
 		last_retry = ctime;
-		sock = tcp_connect(opts.dvbapi_host, opts.dvbapi_port, NULL);
+		sock = tcp_connect(opts.dvbapi_host, opts.dvbapi_port, NULL, 1);
 		dvbapi_sock = sockets_add (sock, NULL, -1, TYPE_TCP | TYPE_CONNECT, (socket_action) dvbapi_reply, (socket_action) dvbapi_close, NULL);
 		set_socket_buffer (dvbapi_sock , read_buffer, sizeof(read_buffer));
 		
@@ -481,7 +488,7 @@ void send_client_info(sockets *s)
 	copy16(buf, 4, DVBAPI_PROTOCOL_VERSION);
 	len = sprintf(buf + 7, "minisatip/%s", VERSION);
 	buf[6] = len;
-	isEnabled = 1;
+	dvbapi_is_enabled = 1;
 	TEST_WRITE(write(s->sock, buf, len+7));	
 }
 
@@ -494,7 +501,7 @@ int send_ecm(unsigned char *b, adapter *ad)
 	int filter, demux;
 	int old_parity;
 	
-	if(!isEnabled)
+	if(!dvbapi_is_enabled)
 		return 0;
 	
 	pid = (b[1] & 0x1F)* 256 + b[2];
@@ -749,7 +756,7 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 	int16_t *pids;
 	int old_pmt;
 
-	if(!isEnabled)
+	if(!dvbapi_is_enabled)
 		return 0;
 
 	if((b[0]!=0x47)) // make sure we are dealing with TS
@@ -792,7 +799,7 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 
 	if(!(pmt_len = assemble_packet(&b,ad)))
 		return 0;
-	
+
 	program_id = b[3]* 256 + b[4];
 	pi_len = ((b[10] & 0xF) << 8) + b[11];
 	LOG("PMT pid: %04X (%d), pmt_len %d, pi_len %d, channel id %04X (%d)", pid, pid, pmt_len, pi_len, program_id, program_id);
