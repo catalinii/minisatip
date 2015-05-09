@@ -2,7 +2,7 @@
 CC?=gcc
 DVBCSA?=yes
 DVBCA?=no
-SATIPCLIENT?=no
+SATIPCLIENT?=yes
 
 CFLAGS=$(NODVBCSA) -ggdb -fPIC
 LDFLAGS=-lpthread -lrt

@@ -107,7 +107,7 @@ init_hw ()
 		a[i].id = i;
 		if (a[i].pa <= 0 && a[i].fn <= 0)
 			find_adapters ();
-		
+		if(a[i].open)
 		if(a[i].open(&a[i]))
 		{
 			init_complete = 0;

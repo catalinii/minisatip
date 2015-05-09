@@ -33,6 +33,7 @@ minisatip [-f] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] [-p p
 		-g use syslog instead stdout for logging, multiple -g - print to stderr as well\n\
 		-o host:port: specify the hostname and port for the dvbapi server (oscam) 
 		-s DELSYS:host:port - specify the remote satip host and port with delivery system DELSYS: example: dvbs2:192.168.9.9[:554]
+		-t clean the PSI from all CA information, the client will see the channel as clear if decrypted successfully
 
 Example of Usage:
 

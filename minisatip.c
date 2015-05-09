@@ -73,6 +73,7 @@ usage ()
 		-j jess_string - same format as unicable_string \n\
 		-o host:port - specify the hostname and port for the dvbapi server (oscam) \n\
 		-s DELSYS:host:port - specify the remote satip host and port with delivery system DELSYS: example: dvbs2:192.168.9.9[:554]\n\
+		-t clean the PSI from all CA information, the client will see the channel as clear if decrypted successfully\n\
 		",
 		ADAPTER_BUFFER, DVR_BUFFER);
 	exit (1);
