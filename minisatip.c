@@ -735,6 +735,9 @@ ssdp_reply (sockets * s)
 			readBootID();
 	} else did = opts.device_id;
 	
+	if(strncmp(s->buf,"HTTP/1",6)==0)
+		LOG_AND_RETURN(0, "ssdp_reply: the message is a reply, ignoring....");
+	
 	sprintf (buf, reply, get_current_timestamp (), opts.http_host, VERSION, uuid, opts.bootid, did);
 	
 	LOG ("ssdp_reply fd: %d -> %s:%d, bootid: %d deviceid: %d http: %s", ssdp, inet_ntoa (s->sa.sin_addr), ntohs(s->sa.sin_port), opts.bootid, did, opts.http_host);

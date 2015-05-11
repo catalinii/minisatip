@@ -17,6 +17,11 @@
 #define SYS_DVBC2 19 // support for DVB-C2 DD 
 #endif
 
+#ifndef SYS_DVBT2
+#define SYS_DVBT2 16
+#endif
+
+
 #define SLOF (11700*1000UL)
 #define LOF1 (9750*1000UL)
 #define LOF2 (10600*1000UL)

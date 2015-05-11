@@ -692,7 +692,7 @@ flush_streami (streams * sid, int ctime)
 
 #ifdef DEBUG
 
-	static int fd;
+	static int fd;	
 	if(!fd)
 	{
 		unlink("output.ts");

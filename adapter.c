@@ -25,8 +25,6 @@
 #include <time.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <linux/dvb/frontend.h>
-#include <linux/dvb/dmx.h>
 #include <poll.h>
 #include <linux/ioctl.h>
 
@@ -107,7 +105,6 @@ init_hw ()
 		a[i].id = i;
 		if (a[i].pa <= 0 && a[i].fn <= 0)
 			find_adapters ();
-		if(a[i].open)
 		if(a[i].open(&a[i]))
 		{
 			init_complete = 0;
