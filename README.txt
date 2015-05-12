@@ -1,14 +1,26 @@
 Welcome to Minisatip
 
-Minisatip is a single threaded satip server version 1.1 that runs under Linux and it was tested with DVB-S, DVB-S2, DVB-T, DVB-T2, DVB-C, DVB-C2, ATSC DVB cards.
+Minisatip is a single threaded satip server version 1.2 that runs under Linux and it was tested with DVB-S, DVB-S2, DVB-T, DVB-T2, DVB-C, DVB-C2, ATSC DVB cards.
 The protocol specification can be found at: satip.info/sites/satip/files/resource/satip_specification_version_1_2_2.pdf
-It is very lightweight (designed for embedded systems with memory and processing constrains), does not need any additional libraries and can be used by existing satip clients like: Tvheadend, DVBViewer, vdr or Android/iOS applications.
-The application is designed to stream the requested data even to multiple clients (even with one dvb card) in the same time and has few additional features, like capping the bandwidth or forcing the application to send the rtp streams to a specified address.
-It is tested on x86_64, x86, ARM and MIPS platforms and it requires DVBAPI 5. Supported protocols are rtsp (both tcp and udp), HTTP (port 8080) and SSDP (as specified in the SAT>IP documentation).
+It is very lightweight (designed for embedded systems with memory and processing constrains), does not need any additional libraries for basic functionality and can be used by existing satip clients like: Tvheadend, DVBViewer, vdr or Android/iOS applications. minisatip can act as a satip client as well in order to connect to satip servers from different networks.
+The application is designed to stream the requested data to multiple clients (even with one dvb card) in the same time while opening different pids.
+It is tested on x86_64, x86, ARM and MIPS platforms and it requires DVBAPI 5. Supported protocols are rtsp (both tcp and udp), HTTP (port 8080) and SSDP (as specified in the SAT>IP documentation). On top of that, it supports dvbapi protocol implemented by oscam (requires dvbcsa library) to decrypt channels using an official subscription and support dvbca protocol (requires dvben50221 library) for dvb cards with CA hardware. In order to enable/disable features, please edit the Makefile. 
 
-Please use https://toda.ro/projects/minisatip/issues/new for features requests.
+Please use https://toda.ro/forum/ for any questions.
 In order to speed up the investigation of an issue, please provide the full log and a link to the application that is not working.
-minisatip requires libdvbcsa development files. If you want to compile minisatip without libdvbcsa, remove # from the line #NODVBCSA=-DDISABLE_DVBCSA in Makefile
+
+If you like minisatip and you want to support the development of the project please make a donation: 
+
+<form action="https://www.paypal.com/cgi-bin/webscr" method="post" target="_top">
+<input type="hidden" name="cmd" value="_donations">
+<input type="hidden" name="business" value="7UWQ7FXSABUH8">
+<input type="hidden" name="lc" value="AU">
+<input type="hidden" name="item_name" value="minisatip">
+<input type="hidden" name="currency_code" value="EUR">
+<input type="hidden" name="bn" value="PP-DonationsBF:btn_donateCC_LG.gif:NonHostedGuest">
+<input type="image" src="https://www.paypalobjects.com/en_AU/i/btn/btn_donateCC_LG.gif" border="0" name="submit" alt="PayPal — The safer, easier way to pay online.">
+<img alt="" border="0" src="https://www.paypalobjects.com/en_AU/i/scr/pixel.gif" width="1" height="1">
+</form>
 
 Usage:
 
@@ -44,18 +56,6 @@ Example of Usage:
 	minisatip -r xx.xx.xx.xx 
 	
 	- Forces to send the rtp packets to xx.xx.xx.xx instead of the IP that the connection comes from
-	
-	To run the client and server in different networks:
-	
-	- On the box/network with the client (simulates 1 adapter and generates the same uuid on both client and server):
-	
-	minisatip -m 001122334455 -a 1 -w <server_ip>:8080
-	
-	- On the box with the DVB card:
-	
-	minisatip -m 001122334455 
-	
-	- As long as you want to use the channels on the same frequency, you can use -a or -t parameter to report multiple tuners to the client so you can watch/record multiple channels from the same frequency (using tvheadend for example)
 	
 	- Connect to oscam using the dvbapi protocol
 	
