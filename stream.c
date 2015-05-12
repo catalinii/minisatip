@@ -904,18 +904,33 @@ stream_timeouts ()
 	for (i=0; i< MAX_STREAMS; i++)
 		if (st[i].enabled && st[i].type != STREAM_HTTP)
 		{
+			int active_streams = 0;
 			sid = get_sid(i);
 			rttime = sid->rtcp_wtime,
 			rtime = sid->wtime;
 	
+			if(sid->do_play && ctime - rttime > 200)
+			{
+				adapter *ad = get_adapter(st[i].adapter);
+				if(ad)
+				{
+					int j;
+					for(j=0;j<MAX_PIDS;j++)
+						if(ad->pids[j].flags == 1)
+						{
+							active_streams++;
+							break;
+						}					
+				}
+			}
 			//LOG("stream timeouts called for sid %d c:%d r:%d rt:%d",i,ctime,rtime,rttime);
-			if (sid->do_play && ctime - rtime > 1000)
+			if (active_streams && sid->do_play && ctime - rtime > 1000)
 			{
 				LOG ("no data sent for more than 1s sid: %d for %s:%d", i,
 						inet_ntoa (sid->sa.sin_addr), ntohs (sid->sa.sin_port));
 				flush_streami (sid, ctime);								
 			}
-			if (sid->do_play && ctime - rttime > 200)
+			if (active_streams && sid->do_play && ctime - rttime > 200)
 				send_rtcp (i, ctime);
 						// check stream timeout, and allow 10s more to respond
 			if ((sid->timeout > 0 && (ctime - sid->rtime > sid->timeout + 10000)) || (sid->timeout == 1)) 

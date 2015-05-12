@@ -103,6 +103,8 @@ init_hw ()
 		if (a[i].force_disable)continue;
 		a[i].sock = -1;
 		a[i].id = i;
+		a[i].fe_sock = -1;
+		a[i].sock = -1;
 		if (a[i].pa <= 0 && a[i].fn <= 0)
 			find_adapters ();
 		if(a[i].open(&a[i]))
@@ -176,11 +178,11 @@ close_adapter (int na)
 	//      if(a[na].dmx>0)close(a[na].dmx);
 	if (a[na].fe > 0)
 		close (a[na].fe);
-	if (a[na].sock >= 0)
+	if (a[na].sock > 0)
 		sockets_del (a[na].sock);
 	if(a[na].ca > 0)
 		close(a[na].ca);
-	if(a[na].fe_sock>=0)
+	if(a[na].fe_sock>0)
 		sockets_del(a[na].fe_sock);
 	a[na].ca = 0;
 	a[na].fe = 0;
@@ -366,6 +368,12 @@ update_pids (int aid)
 		return 0;
 	ad = &a[aid];
 	
+#ifndef DISABLE_DVBCSA	
+	for (i = 0; i < MAX_PIDS; i++)
+		if ((ad->pids[i].flags == 3))
+			dvbapi_pid_del(ad, ad->pids[i].pid, &ad->pids[i]);
+#endif
+	
 	for (i = 0; i < MAX_PIDS; i++)
 		if ((ad->pids[i].flags == 3))
 		{
@@ -375,13 +383,8 @@ update_pids (int aid)
 			if (ad->pids[i].fd > 0)
 				ad->del_filters (ad->pids[i].fd, ad->pids[i].pid);
 			ad->pids[i].fd = 0;
-#ifndef DISABLE_DVBCSA	
-			dvbapi_pid_del(ad, ad->pids[i].pid, &ad->pids[i]);
-#endif
 			ad->pids[i].type = 0;
 			ad->pids[i].filter = ad->pids[i].key = 255;
-			
-
 		}
 
 	for (i = 0; i < MAX_PIDS; i++)
@@ -905,6 +908,8 @@ void reset_pids_type(int aid)
 			ad->pids[i].type = 0;
 			ad->pids[i].key = 255;
 			ad->pids[i].filter = 255;
+			if(ad->pids[i].sid[0]==-1)
+				ad->pids[i].flags = 3;
 		}
 	ad->pat_processed = 0;
 }
@@ -922,5 +927,7 @@ void reset_pids_type_for_key(int aid, int key)
 			ad->pids[i].type = 0;
 			ad->pids[i].key = 255;
 			ad->pids[i].filter = 255;
+			if(ad->pids[i].sid[0]==-1)
+				ad->pids[i].flags = 3;
 		}
 }

@@ -198,6 +198,7 @@ int satipc_open_device(adapter *ad)
 	ad->err = 0;
 	ad->expect_reply = 0;
 	ad->last_connect = 0;
+	ad->sent_transport = 0;
 	ad->wp = ad->qp = ad->want_commit = 0;
 	return 0;
 
@@ -322,27 +323,26 @@ int http_request (adapter *ad, char *url, char *method)
 	char format[] = "%s rtsp://%s:%d/%s%s RTSP/1.0\r\nCseq: %d\r\n%s\r\n";
 	session[0] = 0;
 	int ctime = getTick();
-	
-	if(ad->cseq == 0)
+
+	if(!method)
+		method = "PLAY";
+	if(ad->sent_transport == 0 && method[0]=='P')
 	{
-		if(!method)
-			method = "PLAY";
+		ad->sent_transport = 1;
 		sprintf(session, "Transport: RTP/AVP;unicast;client_port=%d-%d\r\n", ad->listen_rtp, ad->listen_rtp + 1);
 	}
 	else 
 	{
-		if(!method)
-			method = "PLAY";
 		if(ad->session[0])
 			sprintf(session, "Session: %s\r\n", ad->session);
 		else session[0] = 0;
 	}
 	
 	if(strcmp(method, "OPTIONS") == 0)
-		{
+	{
 			char *public = "Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN";
 			sprintf(session + strlen(session), "%s\r\n", public);
-		}
+	}
 	qm = "?";
 	if(!url)
 		qm = "";
