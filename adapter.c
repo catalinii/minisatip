@@ -754,7 +754,10 @@ describe_adapter (int sid, int aid)
 				if ( ad->pids[i].sid[j] == sid )
 				{
 					x = 1;
-					sprintf (dad + strlen (dad), "%d,", ad->pids[i].pid);
+					if(ad->pids[i].pid==8192)
+						sprintf (dad + strlen (dad), "all");
+					else
+						sprintf (dad + strlen (dad), "%d,", ad->pids[i].pid);
 				}
 	
 	if(!use_ad && (t->apids || t->pids))

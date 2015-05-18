@@ -277,7 +277,8 @@ char *header_parameter(char **arg, int i) // get the value of a header parameter
 		return result+1;
 		
 	if(strcmp(arg[i+1], ":")==0)
-		return arg[i+2];	
+		return arg[i+2];
+	return NULL;	
 }
 
 int

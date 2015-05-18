@@ -1,3 +1,4 @@
+#ifndef DISABLE_DVBCSA
 #ifndef DVBAPI_H
 #define DVBAPI_H
 
@@ -64,4 +65,5 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad);
 void dvbapi_pid_add(adapter *a,int pid, SPid *cp);
 void dvbapi_pid_del(adapter *a,int pid, SPid *cp);
 
+#endif
 #endif

@@ -73,6 +73,7 @@ typedef struct struct_adapter
 	char *sip;
 	int sport;
 	char session[18];
+	int stream_id;
 	int listen_rtp;
 	int rtcp, rtcp_sock, cseq;
 	int err, expect_reply, last_connect;

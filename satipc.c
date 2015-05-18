@@ -65,18 +65,27 @@ int satipc_reply(sockets * s)
 {
 	int rlen = s->rlen;
 	adapter *ad;
-	char *arg[50], *sess, *es;
+	char *arg[50], *sess, *es, *sid;
 	int la, i;
 	s->rlen = 0;
 	LOG("satipc_reply (sock %d) handle %d, adapter %d:\n%s", s->id, s->sock, s->sid, s->buf);
 	if(!(ad = get_adapter(s->sid)))
 		return 0;
 	sess = NULL;
+
 	la = split (arg, s->buf, 50, ' ');
+
+        if(map_int(arg[1], NULL) != 200)
+                ad->err = 1;
+	sid = NULL;
+	
 	for(i = 0; i< la; i++)
-		if(strncasecmp("Session", arg[i], 7) == 0)
+		if(strncasecmp("Session:", arg[i], 8) == 0)
 			sess = header_parameter(arg, i);
-	if(!ad->session[0] && sess)
+		else if(strncasecmp("com.ses.streamID:", arg[i], 17) == 0)
+			sid = header_parameter(arg, i);
+		
+	if(!ad->err && !ad->session[0] && sess)
 	{
 		if(es = strchr(sess, ';'))
 			*es = 0;
@@ -84,8 +93,10 @@ int satipc_reply(sockets * s)
 		ad->session[sizeof(ad->session) - 1 ] = 0;
 		LOG("satipc: session set for adapter %d to %s", ad->id, ad->session);
 	}
-	if(map_int(arg[1], NULL) != 200)
-		ad->err = 1;	
+	
+	if(sid && ad->stream_id==-1)
+		ad->stream_id = map_int(sid, NULL);
+	
 	if(ad->wp >= ad->qp)
 		ad->expect_reply = 0;
 	else 
@@ -173,7 +184,7 @@ int satipc_open_device(adapter *ad)
 	if(ad->fe < 0)
 		return 2;
 	
-	
+	LOG("satipc: connected to SAT>IP server %s port %d, handle %d", ad->sip, ad->sport, ad->fe);
 	ad->listen_rtp = opts.start_rtp + 1000 + ad->id*2;
 	ad->dvr = udp_bind(NULL, ad->listen_rtp);
 	ad->rtcp = udp_bind(NULL, ad->listen_rtp + 1);
@@ -194,11 +205,13 @@ int satipc_open_device(adapter *ad)
 	ad->session[0] = 0;
 	lap[ad->id] = 0;
 	ldp[ad->id] = 0;
-	ad->cseq = 0;
+	ad->cseq = 1;
 	ad->err = 0;
 	ad->expect_reply = 0;
 	ad->last_connect = 0;
 	ad->sent_transport = 0;
+	ad->session[0] = 0;
+	ad->stream_id = -1;
 	ad->wp = ad->qp = ad->want_commit = 0;
 	return 0;
 
@@ -207,6 +220,8 @@ int satipc_open_device(adapter *ad)
 void satip_close_device(adapter *ad)
 {
 	http_request(ad, NULL, "TEARDOWN");
+	ad->session[0] = 0;
+	ad->sent_transport = 0;
 }
 
 int satipc_read(int socket, void *buf, int len, sockets *ss)
@@ -256,7 +271,7 @@ void get_s2_url(adapter *ad, char *url)
 	int len = 0;
 	transponder * tp = &ad->tp;
 	url[0] = 0;
-	FILL("freq=%.1f", tp->freq, 0, tp->freq / 1000.0);
+	FILL("freq=%d", tp->freq, 0, tp->freq / 1000);
 	FILL("&pol=%s", tp->pol, -1, get_pol(tp->pol));
 	FILL("&sr=%d", tp->sr, -1, tp->sr / 1000);
 	FILL("&fec=%s", tp->fec, FEC_AUTO, get_fec(tp->fec));
@@ -318,18 +333,24 @@ int http_request (adapter *ad, char *url, char *method)
 {
 	char session[200];
 	char buf[2048];
+	char sid[40];
 	int lb;
 	char *qm;
-	char format[] = "%s rtsp://%s:%d/%s%s RTSP/1.0\r\nCseq: %d\r\n%s\r\n";
+	char format[] = "%s rtsp://%s:%d/%s%s%s RTSP/1.0\r\nCSeq: %d\r\n%s\r\n\r\n";
 	session[0] = 0;
+	sid[0] = 0;
 	int ctime = getTick();
 
+	if(!method && ad->sent_transport == 0)
+		method = "SETUP";
+		
 	if(!method)
 		method = "PLAY";
-	if(ad->sent_transport == 0 && method[0]=='P')
+		
+	if(ad->sent_transport == 0 && method[0]=='S')
 	{
 		ad->sent_transport = 1;
-		sprintf(session, "Transport: RTP/AVP;unicast;client_port=%d-%d\r\n", ad->listen_rtp, ad->listen_rtp + 1);
+		sprintf(session, "Transport:RTP/AVP;unicast;client_port=%d-%d\r\n", ad->listen_rtp, ad->listen_rtp + 1);
 	}
 	else 
 	{
@@ -350,9 +371,12 @@ int http_request (adapter *ad, char *url, char *method)
 	if(!url)
 		url = "";
 	
-	lb = snprintf(buf, sizeof(buf), format, method, ad->sip, ad->sport, qm, url, ad->cseq++, session);
+	if(ad->stream_id != -1)
+		sprintf(sid, "stream=%d", ad->stream_id);
 	
-	LOG("dvbapi_http_request: sending to handle %d: \n%s\n", ad->fe, buf);
+	lb = snprintf(buf, sizeof(buf), format, method, ad->sip, ad->sport, sid, qm, url, ad->cseq++, session);
+	
+	LOG("dvbapi_http_request: %s to handle %d: \n%s", ad->expect_reply?"queueing":"sending", ad->fe, buf);
 	if(ad->expect_reply)
 	{
 		setItem(MAKE_ITEM(ad->id,ad->qp++), buf, lb + 1, 0);
@@ -380,12 +404,12 @@ void satipc_commit(adapter *ad)
 {
 	char url[400];
 	int len = 0, i;
-	LOG("satipc: commit for adapter %d pids to add %d, pids to delete %d", ad->id, lap[ad->id], ldp[ad->id]);
+	LOG("satipc: commit for adapter %d pids to add %d, pids to delete %d, expect_reply %d", ad->id, lap[ad->id], ldp[ad->id], ad->expect_reply);
 
 	if(lap[ad->id] + ldp[ad->id] == 0)
 		return ;
 	
-	if(ad->wp < ad->qp)
+	if(ad->expect_reply)
 	{
 		ad->want_commit = 1;
 		return ;
@@ -399,7 +423,10 @@ void satipc_commit(adapter *ad)
 	} else if(lap[ad->id] > 0)
 		len += sprintf(url + len, "addpids=");
 	for ( i = 0; i < lap[ad->id]; i++)
-		len += sprintf(url + len, "%d,", apid[ad->id][i]);
+		if(apid[ad->id][i]==8192)
+			len += sprintf(url + len, "all,");
+		else 
+			len += sprintf(url + len, "%d,", apid[ad->id][i]);
 	if(len > 0)
 		url[len - 1] = '&';		
 	
@@ -408,6 +435,9 @@ void satipc_commit(adapter *ad)
 		if(ldp[ad->id] > 0)
 			len += sprintf(url + len, "delpids=");
 		for ( i = 0; i < ldp[ad->id]; i++)
+		if(dpid[ad->id][i]==8192)
+			len += sprintf(url + len, "all,");
+		else 
 			len += sprintf(url + len, "%d,", dpid[ad->id][i]);	
 	}
 	url[len - 1] = 0;
@@ -435,6 +465,14 @@ int satipc_tune (int aid, transponder * tp)
 	ad->want_tune = 1;
 	lap[ad->id] = 0;
 	ldp[ad->id] = 0;
+	if(ad->sent_transport == 0)
+	{
+		tune_url(ad, url);
+		url[strlen(url) - 6] = 0;
+//		sprintf(url + strlen(url), "0");
+		http_request(ad, url, "SETUP");
+		ad->want_tune = 0;
+	}
 	return 0;
 }
 
