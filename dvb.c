@@ -946,6 +946,9 @@ copy_dvb_parameters (transponder * s, transponder * d)
 	d->pids = s->pids;
 	//      if(s->dpids)
 	d->dpids = s->dpids;
+	
+	if(d->diseqc < 1) // force position 1 on the diseqc switch
+		d->diseqc = 1;
 
 	LOG
 		("copy_dvb_parameters -> src=%d, fe=%d, freq=%d, fec=%d sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s, apids=%s, dpids=%s",

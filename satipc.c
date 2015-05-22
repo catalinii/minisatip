@@ -421,7 +421,15 @@ void satipc_commit(adapter *ad)
 		tune_url(ad, url);
 		len = strlen(url);
 	} else if(lap[ad->id] > 0)
-		len += sprintf(url + len, "addpids=");
+	{
+		int ep = get_enabled_pids(ad);
+		if(ep == lap[ad->id])
+		{
+			ldp[ad->id] = 0;
+			len += sprintf(url + len, "pids=");
+		} else 
+			len += sprintf(url + len, "addpids=");
+	}
 	for ( i = 0; i < lap[ad->id]; i++)
 		if(apid[ad->id][i]==8192)
 			len += sprintf(url + len, "all,");

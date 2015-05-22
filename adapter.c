@@ -623,12 +623,16 @@ set_adapter_parameters (int aid, int sid, transponder * tp)
 		ad->master_sid, sid, ad->tp.freq);
 	if (ad->master_sid == -1)
 		ad->master_sid = sid; // master sid was closed
-	if ((sid != ad->master_sid) && (tp->freq != ad->tp.freq))
-		return -1;				 // slave sid requesting to tune to a different frequency
+
 	ad->do_tune = 0;
 	if (tp->freq != ad->tp.freq || tp->plp != ad->tp.plp || tp->diseqc != ad->tp.diseqc
-		|| (tp->pol > 0 && tp->pol != ad->tp.pol) || (tp->diseqc != ad->tp.diseqc) || (tp->sr>1000 && tp->sr != ad->tp.sr) || (tp->mtype > 0 && tp->mtype != ad->tp.mtype))
+		|| (tp->pol > 0 && tp->pol != ad->tp.pol) || (tp->sr>1000 && tp->sr != ad->tp.sr) || 
+		(tp->mtype > 0 && tp->mtype != ad->tp.mtype))
 	{
+		if (sid != ad->master_sid)  			 // slave sid requesting to tune to a different frequency
+			LOG_AND_RETURN(-1, "secondary stream requested tune, not gonna happen\n ad: f:%d sr:%d pol:%d plp:%d src:%d mod %d\n \
+			new: f:%d sr:%d pol:%d plp:%d src:%d mod %d", ad->tp.freq, ad->tp.sr, ad->tp.pol, ad->tp.plp, ad->tp.diseqc, ad->tp.mtype,
+			tp->freq, tp->sr, tp->pol, tp->plp, tp->diseqc, tp->mtype);	
 		mark_pids_deleted (aid, -1, NULL);
 		update_pids (aid);
 		ad->do_tune = 1;
@@ -933,4 +937,13 @@ void reset_pids_type_for_key(int aid, int key)
 			if(ad->pids[i].sid[0]==-1)
 				ad->pids[i].flags = 3;
 		}
+}
+
+int get_enabled_pids(adapter *ad)
+{
+	int ep = 0, i;
+	for(i=0; i < MAX_PIDS; i++)
+		if(ad->pids[i].flags == 1)
+			ep++;
+	return ep;
 }

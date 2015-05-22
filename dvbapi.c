@@ -619,8 +619,8 @@ int keys_del(int i)
 	for(j = 0;j < MAX_KEYS; j++)
 		if(keys[j].enabled)
 			ek++;
-	if(!ek && sock>0)
-		TEST_WRITE(write(sock, buf, sizeof(buf)));
+//	if(!ek && sock>0)
+//		TEST_WRITE(write(sock, buf, sizeof(buf)));
 }
 
 SKey *get_key(int i)
