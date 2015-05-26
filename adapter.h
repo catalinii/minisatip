@@ -93,6 +93,8 @@ int init_hw ();
 int getS2Adapters ();
 int getTAdapters ();
 int getCAdapters ();
+int getT2Adapters ();
+int getC2Adapters ();
 void close_adapter (int na);
 int get_free_adapter (int freq, int pol, int msys, int src);
 int set_adapter_for_stream (int i, int a);

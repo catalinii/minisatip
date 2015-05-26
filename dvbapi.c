@@ -379,7 +379,7 @@ int decrypt_stream(adapter *ad,int rlen)
 			if(b[3] & 0x20)
 			{
 				adapt_len = (b[4]<183)?b[4]+5:0;
-//				LOGL(2, "Adaptation for pid %d, specified len %d, final len %d", pid, b[4], adapt_len);
+				LOGL(2, "Adaptation for pid %d, specified len %d, final len %d", pid, b[4], adapt_len);
 			}	
 			else adapt_len = 4;
 			k->batch[k->blen].data = b + adapt_len;

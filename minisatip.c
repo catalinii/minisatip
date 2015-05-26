@@ -425,7 +425,7 @@ read_rtsp (sockets * s)
 			if(buf[0])
 				strcat(buf, "\r\n");
 			
-			snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf) - 1,  "RTP-Info: url=%s;seq=%d", arg[1], 0);
+			snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf) - 1,  "RTP-Info: url=%s;seq=%d;rtptime=%lld\r\nRange: npt=0.000-", arg[1], getTick(),getTickUs()/1000000);
 		}
 		if(buf[0]==0 && sid->type == STREAM_HTTP)
 				snprintf(buf, sizeof(buf), "Content-Type: video/mp2t");
@@ -560,18 +560,22 @@ read_http (sockets * s)
 
 	if (strncmp (arg[1], "/desc.xml", 9) == 0)
 	{
-		int tuner_s2, tuner_t, tuner_c;
-		char adapters[50];
+		int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
+		char adapters[400];
 		char headers[500];
 		tuner_s2 = getS2Adapters ();
 		tuner_t = getTAdapters ();
 		tuner_c = getCAdapters ();
+		tuner_t2 = getT2Adapters ();
+		tuner_c2 = getC2Adapters ();
 		
 		memset(adapters, 0, sizeof(adapters));
 		if(tuner_s2)sprintf(adapters, "DVBS2-%d,", tuner_s2);
-		if(tuner_t)sprintf(adapters + strlen(adapters), "DVBT2-%d,", tuner_t);
+		if(tuner_t)sprintf(adapters + strlen(adapters), "DVBT-%d,", tuner_t);
 		if(tuner_c)sprintf(adapters + strlen(adapters), "DVBC-%d,", tuner_c);
-		if(tuner_s2 + tuner_t + tuner_c == 0)
+		if(tuner_t2)sprintf(adapters + strlen(adapters), "DVBT2-%d,", tuner_t2);
+		if(tuner_c2)sprintf(adapters + strlen(adapters), "DVBC2-%d,", tuner_c2);
+		if(tuner_s2 + tuner_t + tuner_c + tuner_t2 + tuner_c2 == 0)
 			strcpy(adapters,"DVBS2-0,");
 		adapters[strlen(adapters)-1] = 0;
 		sprintf (buf, xml, uuid, getlocalip(), adapters, opts.playlist);

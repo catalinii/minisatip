@@ -376,7 +376,7 @@ int http_request (adapter *ad, char *url, char *method)
 	
 	lb = snprintf(buf, sizeof(buf), format, method, ad->sip, ad->sport, sid, qm, url, ad->cseq++, session);
 	
-	LOG("dvbapi_http_request: %s to handle %d: \n%s", ad->expect_reply?"queueing":"sending", ad->fe, buf);
+	LOG("satipc_http_request: %s to handle %d: \n%s", ad->expect_reply?"queueing":"sending", ad->fe, buf);
 	if(ad->expect_reply)
 	{
 		setItem(MAKE_ITEM(ad->id,ad->qp++), buf, lb + 1, 0);
@@ -548,7 +548,7 @@ void find_satip_adapter(adapter *a)
 				*sep = 0;
 			}			
 			j++;
-			LOG("Satip device %s port %d delsys %d: %s", a[i].sip, a[i].sport, a[i].sys[0], get_delsys(a[i].sys[0]));
+			LOG("Satip device %s port %d delsys %d: %s %s", a[i].sip, a[i].sport, a[i].sys[0], get_delsys(a[i].sys[0]), get_delsys(a[i].sys[1]));
 		}
 }
 

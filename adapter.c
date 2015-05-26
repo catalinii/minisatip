@@ -211,8 +211,7 @@ getS2Adapters ()
 }
 
 
-int
-getTAdapters ()
+int getTAdapters ()
 {
 	int i,
 		t = 0;
@@ -222,13 +221,12 @@ getTAdapters ()
                         opts.force_tadapter);
 	init_hw ();
 	for (i = 0; i < MAX_ADAPTERS; i++)
-		if (a[i].enabled && (delsys_match(&a[i], SYS_DVBT) || delsys_match(&a[i], SYS_DVBT2)))
+		if (a[i].enabled && delsys_match(&a[i], SYS_DVBT) && !delsys_match(&a[i], SYS_DVBT2))
 			t++;
 	return t;
 }
 
-int
-getCAdapters ()
+int getCAdapters ()
 {
 	int i, c = 0;
 
@@ -237,7 +235,30 @@ getCAdapters ()
                         opts.force_cadapter);
 	init_hw ();
 	for (i = 0; i < MAX_ADAPTERS; i++)
-		if (a[i].enabled && (delsys_match(&a[i], SYS_DVBC_ANNEX_A)))
+		if (a[i].enabled && delsys_match(&a[i], SYS_DVBC_ANNEX_A) && !delsys_match(&a[i], SYS_DVBC2))
+			c++;
+	return c;
+}
+
+int getT2Adapters ()
+{
+	int i,
+		t = 0;
+
+	init_hw ();
+	for (i = 0; i < MAX_ADAPTERS; i++)
+		if (a[i].enabled && delsys_match(&a[i], SYS_DVBT2))
+			t++;
+	return t;
+}
+
+int getC2Adapters ()
+{
+	int i, c = 0;
+
+	init_hw ();
+	for (i = 0; i < MAX_ADAPTERS; i++)
+		if (a[i].enabled && delsys_match(&a[i], SYS_DVBC2))
 			c++;
 	return c;
 }
@@ -559,6 +580,9 @@ int mark_pid_add(int sid, int aid, int _pid)
 			return -1;
 			
 		}
+#ifndef DISABLE_DVBCSA	
+		dvbapi_pid_add(ad, _pid, p);
+#endif
 		return 0;
 	}
 	// add the new pid in a new position
