@@ -490,11 +490,17 @@ void _log(int level, char * file, int line, char *fmt, ...) {
 	int len, len1, both;
 	static int idx, times;
 	static char output[2][2000];
+	char tmp[100];
     /* Check if the message should be logged */
 	opts.last_log = fmt;
-    if (opts.log < level)
+	if (opts.log < level)
         return;	
 	
+	if(!fmt)
+	{
+		printf( "NULL format at %s:%d !!!!!", file, line);
+		return ;
+	}
 	idx = 1 - idx;
 	if(idx > 1)
 		idx = 1;

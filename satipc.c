@@ -471,7 +471,7 @@ int satipc_tune (int aid, transponder * tp)
 {
 	char url[400];
 	adapter *ad = get_adapter(aid);
-	LOG("tuning to freq %d, sys %d for adapter %d", ad->tp.freq/1000, ad->tp.sys, aid);
+	LOG("satipc: tuning to freq %d, sys %d for adapter %d", ad->tp.freq/1000, ad->tp.sys, aid);
 	if(!ad)
 		return 1;
 	ad->err = 0;	

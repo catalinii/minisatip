@@ -219,7 +219,7 @@ int dvb_open_device(adapter *ad)
 	sprintf (buf, "/dev/dvb/adapter%d/ca0", ad->pa);
 	if (ad->fe < 0 || ad->dvr < 0)
 	{
-		LOG (0, "Could not open %s in RW mode\n", buf);
+		LOGL (0, "Could not open %s in RW mode\n", buf);
 		if (ad->fe >= 0)
 			close (ad->fe);
 		if (ad->dvr >= 0)
