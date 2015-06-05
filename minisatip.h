@@ -8,7 +8,7 @@
 #include "utils.h"
 
 
-#define VERSION_BUILD "34"
+#define VERSION_BUILD "35"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.3.,VERSION_BUILD,)
 
@@ -46,7 +46,10 @@ void set_options (int argc, char *argv[]);
 #define copy16(a,i,v) { a[i] = ((v)>>8) & 0xFF; a[i+1] = (v) & 0xFF; }
 
 #define copy16r(v, a, i) { v = ((a[i] & 0xFF) << 8) | a[i+1]; }
+#define copy16rr(v, a, i) { v = ((a[i+1] & 0xFF) << 8) | a[i]; }
+
 #define copy32r(v, a, i) { v = ((a[i] & 0xFF) << 24) | ((a[i+1] & 0xFF) << 16) | ((a[i+2] & 0xFF) << 8)| (a[i+3] & 0xFF);   }
+#define copy32rr(v, a, i) { v = ((a[i+3] & 0xFF) << 24) | ((a[i+2] & 0xFF) << 16) | ((a[i+1] & 0xFF) << 8)| (a[i] & 0xFF);   }
 
 struct struct_opts
 {

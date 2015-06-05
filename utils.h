@@ -13,7 +13,7 @@ int map_float (char *s, int mul);
 void *mymalloc (int a, char *f, int l);
 void myfree (void *x, char *f, int l);
 char *header_parameter(char **arg, int i);
-void _log(int level, char * file, int line, const char *fmt, ...);
+void _log(int level, char * file, int line, char *fmt, ...);
 char *strip(char *s);
 int split (char **rv, char *s, int lrv, char sep);
 void set_signal_handler ();

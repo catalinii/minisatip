@@ -156,12 +156,24 @@ set_stream_parameters (int s_id, transponder * t)
 		strcpy (sid->pids, t->pids);
 		t->pids = sid->pids;
 	}
+	
+	if (t->x_pmt && t->x_pmt[0] >= '0' && t->x_pmt[0] <= '9')
+	{
+		strcpy (sid->x_pmt, t->x_pmt);
+		t->x_pmt = sid->x_pmt;
+	}
+
+	
 	if (!t->apids)
 		t->apids = sid->tp.apids;
 	if (!t->dpids)
 		t->dpids = sid->tp.dpids;
 	if (!t->pids)
 		t->pids = sid->tp.pids;
+	if (!t->x_pmt)
+		t->x_pmt = sid->tp.x_pmt;
+		
+		
 	copy_dvb_parameters (t, &sid->tp);
 }
 
@@ -178,7 +190,7 @@ setup_stream (char *str, sockets * s)
 	detect_dvb_parameters (str, &t);
 	LOG ("Setup stream %d parameters, sock_id %d, handle %d", s->sid,
 		s->id, s->sock);
-	if (s->sid < 0)				 // create the stream
+	if (!get_sid(s->sid))				 // create the stream
 	{
 		int a_id = 0,
 			s_id = 0;
@@ -250,7 +262,7 @@ start_play (streams * sid, sockets * s)
 		return -404;
 	sid->do_play = 1;
 	sid->start_streaming = 0;
-	sid->tp.apids = sid->tp.dpids = sid->tp.pids = NULL;
+	sid->tp.apids = sid->tp.dpids = sid->tp.pids = sid->tp.x_pmt = NULL;
 	return tune (sid->adapter, s->sid);
 }
 
@@ -402,9 +414,13 @@ streams_add ()
 		st[i].apids = malloc1 (MAX_PIDS * 5 + 1);
 	if (!st[i].dpids)
 		st[i].dpids = malloc1 (MAX_PIDS * 5 + 1);
+	if (!st[i].x_pmt)
+		st[i].x_pmt = malloc1 (MAX_PIDS * 5 + 1);
 	if (!st[i].buf)
 		st[i].buf = malloc1 (STREAMS_BUFFER + 10);
-	if (!st[i].pids || !st[i].apids || !st[i].dpids || !st[i].buf)
+		
+		
+	if (!st[i].pids || !st[i].apids || !st[i].dpids || !st[i].buf || !st[i].x_pmt)
 	{
 		LOG ("memory allocation failed for stream %d\n", i);
 		if (st[i].pids)
@@ -415,7 +431,9 @@ streams_add ()
 			free1 (st[i].dpids);
 		if (st[i].buf)
 			free1 (st[i].buf);
-		st[i].pids = st[i].apids = st[i].dpids = st[i].buf = NULL;
+		if (st[i].x_pmt)
+			free1 (st[i].x_pmt);			
+		st[i].pids = st[i].apids = st[i].dpids = st[i].buf = st[i].x_pmt = NULL;
 		return -1;
 	}
 	return i;
@@ -675,7 +693,10 @@ int my_writev(int sock, struct iovec *iov, int iiov, streams *sid)
 	LOGL(6,"start writev handle %d, iiov %d", sock, iiov);
 	rv = writev(sock,iov,iiov);
 	if(rv < 0 && errno == ECONNREFUSED) // close the stream int the next second
+	{	
+		LOGL(0, "Connection REFUSED on stream %d, closing the stream", sid->sid); 
 		sid->timeout = 1;
+	}
 	LOGL(6,"writev returned %d handle %d, iiov %d", rv, sock, iiov);
 	return rv;
 }
@@ -975,6 +996,9 @@ free_all_streams ()
 			free1 (st[i].dpids);
 		if (st[i].buf)
 			free1 (st[i].buf);
+		if (st[i].x_pmt)
+			free1 (st[i].x_pmt);
+			
 	}
 }
 

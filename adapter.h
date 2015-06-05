@@ -67,7 +67,7 @@ typedef struct struct_adapter
 	int ufreq; // unicable/jess frequency	
 	int pin;
 	int id;
-	int pat_processed;
+	int pat_processed, transponder_id, pat_ver;
 	ca_device_t * ca_device;
 // satipc
 	char *sip;

@@ -323,7 +323,7 @@ read_rtsp (sockets * s)
 	rlen = s->rlen;
 	s->rlen = 0;
 
-	LOG ("read RTSP (from handle %d sock_id %d, len: %d):\n%s", s->sock, s->id, s->rlen, s->buf);
+	LOG ("read RTSP (from handle %d sock_id %d, len: %d, sid %d):\n%s", s->sock, s->id, s->rlen, s->sid, s->buf);
 
 	if( (s->type != TYPE_HTTP ) && (strncasecmp(s->buf, "GET", 3) == 0))
 	{
@@ -425,7 +425,7 @@ read_rtsp (sockets * s)
 			if(buf[0])
 				strcat(buf, "\r\n");
 			
-			snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf) - 1,  "RTP-Info: url=%s;seq=%d;rtptime=%lld\r\nRange: npt=0.000-", arg[1], getTick(),getTickUs()/1000000);
+			snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf) - 1,  "RTP-Info: url=%s;seq=%d;rtptime=%lld\r\nRange: npt=0.000-", arg[1], getTick(),(long long int)(getTickUs()/1000000));
 		}
 		if(buf[0]==0 && sid->type == STREAM_HTTP)
 				snprintf(buf, sizeof(buf), "Content-Type: video/mp2t");

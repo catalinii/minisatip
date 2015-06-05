@@ -164,7 +164,7 @@ int setItem(int64_t key, unsigned char *data, int len, int pos)   // pos = -1 ->
 		return -1;
 	
 	if(s->max_size==0)
-		s->max_size = MAX_DATA;
+		s->max_size = MAX_DATA + 10;
 	if(!s->data)
 		s->data = malloc1(s->max_size);
 	if(!s->data)
@@ -485,14 +485,15 @@ myfree (void *x, char *f, int l)
 }
 
 
-void _log(int level, char * file, int line, const char *fmt, ...) {
+void _log(int level, char * file, int line, char *fmt, ...) {
     va_list arg;
 	int len, len1, both;
 	static int idx, times;
 	static char output[2][2000];
     /* Check if the message should be logged */
+	opts.last_log = fmt;
     if (opts.log < level)
-        return;
+        return;	
 	
 	idx = 1 - idx;
 	if(idx > 1)

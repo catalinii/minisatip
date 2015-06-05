@@ -16,7 +16,12 @@
 #define DVBAPI_CA_SET_PID      0x40086f87
 #define DVBAPI_CA_SET_DESCR    0x40106f86
 #define DVBAPI_DMX_STOP        0x00006f2a
-
+#define CA_SET_DESCR_X     0x866f10
+#define CA_SET_DESCR_AES   0x40106f87
+#define CA_SET_DESCR_AES_X 0x876f10
+#define CA_SET_PID_X       0x876f08
+#define DMX_STOP_X         0x2a6f00
+#define DMX_SET_FILTER_X   0x2b6f3c
 
 
 #define AOT_CA_PMT 0x9F803282
@@ -42,9 +47,10 @@ typedef struct struct_key
 	int adapter;
 	int demux;
 	int ver;
+	int program_id;  // pmt sid
 	unsigned char *pi;
 	int pi_len;
-	struct dvbcsa_bs_batch_s batch[129];
+	struct dvbcsa_bs_batch_s batch[130];
 	int parity;
 	int blen;
 	int enabled_channels;

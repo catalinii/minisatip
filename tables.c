@@ -99,34 +99,44 @@ static uint32_t crc_tab[256] = {
 
 int process_pat(unsigned char *b, adapter *ad)
 {
-	int pat_len = 0, i, tid, sid, pid, csid = 0;
+	int pat_len = 0, i, tid = 0, sid, pid, ver, csid = 0;
 	int64_t pid_key = TABLES_ITEM + ((1+ ad->id) << 24) + 0;
 	int16_t *pids;
-
-
 	SPid *p;
+	
+	if(((b[1] & 0x1F) != 0) || (b[2]!=0))
+		return 0;
+
+	if(b[1] & 0x40)
+	{
+		tid = b[8] * 256 + b[9];
+		ver = b[10] & 0x3E;
+		if((ad->transponder_id != tid) || (ad->pat_ver != ver))
+			ad->pat_processed = 0;
+	}
+		
 	if(ad->pat_processed)
 		return;
 
-	if(((b[1] & 0x1F) != 0) || (b[2]!=0))
-		return 0;
 
 	if(!(pat_len = assemble_packet(&b,ad)))
 		return 0;
 
-	tid = b[3] * 256 + b[4];
 	
 //	LOG("tid %d pat_len %d: %02X %02X %02X %02X %02X %02X %02X %02X", tid, pat_len, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]);
-	
+	tid = b[3] * 256 + b[4];
+	ad->pat_ver = b[5] & 0x3E;
 	setItem(pid_key, b, 1, 0);
 	setItemSize(pid_key, 8192*sizeof(*pids));
 	pids = (int16_t *)getItem(pid_key);
 	memset(pids, 0, 8192*sizeof(*pids));
 	pat_len -= 9;
 	b += 8;	
-	LOGL(2, "PAT Adapter %d, Transponder ID %d, len %d", ad->id, tid, pat_len);
+	LOGL(2, "PAT Adapter %d, Transponder ID %d, len %d, version %d", ad->id, tid, pat_len, ad->pat_ver);
 	if(pat_len>1500)
 		return 0;
+		
+	ad->transponder_id = tid;
 	for(i=0;i < pat_len; i+=4)
 	{
 		sid = b[i]*256 + b[i + 1];

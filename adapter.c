@@ -433,6 +433,7 @@ update_pids (int aid)
 int tune (int aid, int sid)
 {
 	adapter *ad = get_adapter(aid);
+	SPid *p;
 	int i, rv = 0;
 	
 	if(!ad) return -400;
@@ -445,13 +446,21 @@ int tune (int aid, int sid)
 		ad->tp.pin = ad->pin;
 		
 		rv = ad->tune (ad->id, &ad->tp);
-		a[aid].status = 0;
-		a[aid].status_cnt = 0;
-		if (a[aid].sid_cnt > 1)	 // the master changed the frequency
+		ad->status = 0;
+		ad->status_cnt = 0;
+		if (ad->sid_cnt > 1)	 // the master changed the frequency
 		{
 			close_streams_for_adapter (aid, sid);
 			update_pids (aid);
 		}
+#ifdef TABLES_H
+		p = find_pid(aid, 0);
+		if(!p || p->flags == 3) // add pid 0 if not explicitly added
+		{
+			LOG("Adding pid 0 to the list of pids as not explicitly added for adapter %d", aid);
+			mark_pid_add(-1, aid, 0); 
+		}
+#endif
 	}
 	else
 		LOG ("not tuning for SID %d (do_tune=%d, master_sid=%d)", sid,
@@ -506,7 +515,8 @@ void mark_pid_deleted(int aid, int sid, int _pid, SPid *p)
 	for (j = 0; j < MAX_STREAMS_PER_PID; j++)
 		if (p->sid[j] >= 0)
 			cnt++;
-	if ((cnt == 0) && (p->flags != 0) && (p->type == 0 || didit))
+//	if ((cnt == 0) && (p->flags != 0) && (p->type == 0 || didit))
+	if((cnt == 0) && (p->flags != 0) && (p->type == 0))
 		p->flags = 3;
 		
 	if(sort)
@@ -689,6 +699,27 @@ set_adapter_parameters (int aid, int sid, transponder * tp)
 			(sid, aid, ad->tp.apids ? ad->tp.apids : ad->tp.pids) < 0)
 			return -1;
 	}
+	
+	if(ad->tp.x_pmt)
+	{
+		char *arg[64];
+		int i, la;
+		la = split (arg, ad->tp.x_pmt, 64, ',');
+		for (i=0;i<la;i++)
+		{
+			int pmt = map_int(arg[i], NULL);
+			if(pmt <= 0)
+				continue;
+			SPid *cp = find_pid(ad->id, pmt);
+			if(!cp)
+				mark_pid_add(-1, aid, pmt);
+			cp = find_pid(ad->id, pmt);
+			if(!cp)
+				continue;
+			cp->type |= TYPE_PMT;
+		}
+	}
+	
 	if (0 && (ad->tp.apids || ad->tp.pids || ad->tp.dpids))
 		dump_pids (aid);
 	return 0;
@@ -943,6 +974,8 @@ void reset_pids_type(int aid)
 				ad->pids[i].flags = 3;
 		}
 	ad->pat_processed = 0;
+	ad->transponder_id = -1;
+	ad->pat_ver = -1;
 }
 
 void reset_pids_type_for_key(int aid, int key)
