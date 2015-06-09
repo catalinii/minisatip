@@ -87,7 +87,7 @@ typedef struct struct_transponder
 	int ds;
 	int plp;
 	
-	char *apids, *pids, *dpids;
+	char *apids, *pids, *dpids, *x_pmt;
 } transponder;
 
 #define MAX_PIDS 64

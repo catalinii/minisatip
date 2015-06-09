@@ -66,7 +66,7 @@ int satipc_reply(sockets * s)
 	int rlen = s->rlen;
 	adapter *ad;
 	char *arg[50], *sess, *es, *sid;
-	int la, i;
+	int la, i, rc;
 	s->rlen = 0;
 	LOG("satipc_reply (sock %d) handle %d, adapter %d:\n%s", s->id, s->sock, s->sid, s->buf);
 	if(!(ad = get_adapter(s->sid)))
@@ -74,9 +74,11 @@ int satipc_reply(sockets * s)
 	sess = NULL;
 
 	la = split (arg, s->buf, 50, ' ');
-
-        if(map_int(arg[1], NULL) != 200)
-                ad->err = 1;
+	rc = map_int(arg[1], NULL);
+	if(rc == 454) 
+		ad->sent_transport = 0;		
+	else if( rc!= 200)
+		ad->err = 1;
 	sid = NULL;
 	
 	for(i = 0; i< la; i++)
@@ -91,11 +93,17 @@ int satipc_reply(sockets * s)
 			*es = 0;
 		strncpy(ad->session, sess, sizeof(ad->session));
 		ad->session[sizeof(ad->session) - 1 ] = 0;
-		LOG("satipc: session set for adapter %d to %s", ad->id, ad->session);
+		LOG("satipc: session set for adapter %d to %s", ad->id, ad->session);		
+
+		if(sid && ad->stream_id==-1)
+			ad->stream_id = map_int(sid, NULL);
+			
+		ad->expect_reply = 0;
+		http_request(ad, NULL, "PLAY");	
+		return;
+
 	}
 	
-	if(sid && ad->stream_id==-1)
-		ad->stream_id = map_int(sid, NULL);
 	
 	if(ad->wp >= ad->qp)
 		ad->expect_reply = 0;
@@ -161,8 +169,9 @@ int satipc_rtcp_reply(sockets * s)
 			{
 				sscanf(signal + 1,"%d,%d,%d", &strength, &status, &snr);
 				ad->strength = strength;
-				ad->status = status;
+				ad->status = status?FE_HAS_LOCK:0;
 				ad->snr = snr;
+				LOGL(5,"satipc: Received signal status from the server for adapter %d, stength=%d status=%d snr=%d", ad->id, ad->strength, ad->status, ad->snr); 
 			}
 		}
 }
@@ -376,7 +385,7 @@ int http_request (adapter *ad, char *url, char *method)
 	
 	lb = snprintf(buf, sizeof(buf), format, method, ad->sip, ad->sport, sid, qm, url, ad->cseq++, session);
 	
-	LOG("dvbapi_http_request: %s to handle %d: \n%s", ad->expect_reply?"queueing":"sending", ad->fe, buf);
+	LOG("satipc_http_request: %s to handle %d: \n%s", ad->expect_reply?"queueing":"sending", ad->fe, buf);
 	if(ad->expect_reply)
 	{
 		setItem(MAKE_ITEM(ad->id,ad->qp++), buf, lb + 1, 0);
@@ -462,7 +471,7 @@ int satipc_tune (int aid, transponder * tp)
 {
 	char url[400];
 	adapter *ad = get_adapter(aid);
-	LOG("called tune for adapter %d, freq %d, sys %d", aid, ad->tp.freq/1000, ad->tp.sys);
+	LOG("satipc: tuning to freq %d, sys %d for adapter %d", ad->tp.freq/1000, ad->tp.sys, aid);
 	if(!ad)
 		return 1;
 	ad->err = 0;	
@@ -473,7 +482,7 @@ int satipc_tune (int aid, transponder * tp)
 	ad->want_tune = 1;
 	lap[ad->id] = 0;
 	ldp[ad->id] = 0;
-	if(ad->sent_transport == 0)
+/*	if(ad->sent_transport == 0)
 	{
 		tune_url(ad, url);
 		url[strlen(url) - 6] = 0;
@@ -481,6 +490,7 @@ int satipc_tune (int aid, transponder * tp)
 		http_request(ad, url, "SETUP");
 		ad->want_tune = 0;
 	}
+*/
 	return 0;
 }
 
@@ -548,7 +558,7 @@ void find_satip_adapter(adapter *a)
 				*sep = 0;
 			}			
 			j++;
-			LOG("Satip device %s port %d delsys %d: %s", a[i].sip, a[i].sport, a[i].sys[0], get_delsys(a[i].sys[0]));
+			LOG("Satip device %s port %d delsys %d: %s %s", a[i].sip, a[i].sport, a[i].sys[0], get_delsys(a[i].sys[0]), get_delsys(a[i].sys[1]));
 		}
 }
 

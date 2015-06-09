@@ -219,7 +219,7 @@ int dvb_open_device(adapter *ad)
 	sprintf (buf, "/dev/dvb/adapter%d/ca0", ad->pa);
 	if (ad->fe < 0 || ad->dvr < 0)
 	{
-		LOG (0, "Could not open %s in RW mode\n", buf);
+		LOGL (0, "Could not open %s in RW mode\n", buf);
 		if (ad->fe >= 0)
 			close (ad->fe);
 		if (ad->dvr >= 0)
@@ -621,6 +621,7 @@ dvb_set_pid (adapter *a, uint16_t i_pid)
 
 	struct dmx_pes_filter_params s_filter_params;
 
+	memset(&s_filter_params, 0, sizeof(s_filter_params));
 	s_filter_params.pid = i_pid;
 	s_filter_params.input = DMX_IN_FRONTEND;
 	s_filter_params.output = DMX_OUT_TS_TAP;
@@ -643,7 +644,7 @@ int dvb_del_filters (int fd, int pid)
 {
 	if (fd < 0)
 		LOG_AND_RETURN(0, "DMX_STOP on an invalid handle %d, pid %d", fd, pid);
-	if (ioctl (fd, DMX_STOP) < 0)
+	if (ioctl (fd, DMX_STOP, NULL) < 0)
 		LOG ("DMX_STOP failed on PID %d FD %d: %s", pid, fd, strerror (errno))
 			else
 			LOG ("clearing filter on PID %d FD %d", pid, fd);
@@ -790,7 +791,7 @@ detect_dvb_parameters (char *s, transponder * tp)
 	tp->ds = -1;
 	tp->plp = -1;
 
-	tp->pids = tp->apids = tp->dpids = NULL;
+	tp->pids = tp->apids = tp->dpids = tp->x_pmt = NULL;
 
 	while (*s > 0 && *s != '?')
 		s++;
@@ -842,6 +843,9 @@ detect_dvb_parameters (char *s, transponder * tp)
 		if (strncmp ("plp=", arg[i], 4) == 0)
 			tp->plp = map_int (arg[i] + 4, NULL);
 			
+			
+		if (strncmp ("x_pmt=", arg[i], 6) == 0)
+			tp->x_pmt = arg[i] + 6;			
 		if (strncmp ("pids=", arg[i], 5) == 0)
 			tp->pids = arg[i] + 5;
 		if (strncmp ("addpids=", arg[i], 8) == 0)
@@ -864,10 +868,10 @@ detect_dvb_parameters (char *s, transponder * tp)
 	//      if(freq<10)INVALID_URL("no freq= found in URL or frequency invalid");
 	//      if((msys==SYS_DVBS || msys==SYS_DVBS2) && (pol!='H' && pol!='V'))INVALID_URL("no pol= found in URL or pol is not H or V");
 	LOG
-		("detect_dvb_parameters (E) -> src=%d, fe=%d, freq=%d, fec=%d, sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s - apids=%s - dpids=%s",
+		("detect_dvb_parameters (E) -> src=%d, fe=%d, freq=%d, fec=%d, sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s - apids=%s - dpids=%s x_pmt=%s",
 		tp->diseqc, tp->fe, tp->freq, tp->fec, tp->sr, tp->pol, tp->ro, tp->sys,
 		tp->mtype, tp->plts, tp->bw, tp->inversion, tp->pids ? tp->pids : "NULL",
-		tp->apids ? tp->apids : "NULL", tp->dpids ? tp->dpids : "NULL");
+		tp->apids ? tp->apids : "NULL", tp->dpids ? tp->dpids : "NULL", tp->x_pmt ? tp->x_pmt: "NULL");
 	return 0;
 }
 
@@ -893,10 +897,10 @@ void
 copy_dvb_parameters (transponder * s, transponder * d)
 {
 	LOG
-		("copy_dvb_param start -> src=%d, fe=%d, freq=%d, fec=%d, sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s, apids=%s, dpids=%s",
+		("copy_dvb_param start -> src=%d, fe=%d, freq=%d, fec=%d, sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s, apids=%s, dpids=%s x_pmt=%s",
 		d->diseqc, d->fe, d->freq, d->fec, d->sr, d->pol, d->ro, d->sys, d->mtype,
 		d->plts, d->bw, d->inversion, d->pids ? d->pids : "NULL",
-		d->apids ? d->apids : "NULL", d->dpids ? d->dpids : "NULL");
+		d->apids ? d->apids : "NULL", d->dpids ? d->dpids : "NULL", d->x_pmt ? d->x_pmt: "NULL");
 	if (s->sys != -1)
 		d->sys = s->sys;
 	if (s->freq != -1)
@@ -940,21 +944,19 @@ copy_dvb_parameters (transponder * s, transponder * d)
 	if (s->plp != -1)
 		d->plp = s->plp;
 	
-	//      if(s->apids)
+	d->x_pmt = s->x_pmt;		
 	d->apids = s->apids;
-	//      if(s->pids)
 	d->pids = s->pids;
-	//      if(s->dpids)
 	d->dpids = s->dpids;
 	
 	if(d->diseqc < 1) // force position 1 on the diseqc switch
 		d->diseqc = 1;
 
 	LOG
-		("copy_dvb_parameters -> src=%d, fe=%d, freq=%d, fec=%d sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s, apids=%s, dpids=%s",
+		("copy_dvb_parameters -> src=%d, fe=%d, freq=%d, fec=%d sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s, apids=%s, dpids=%s x_pmt=%s",
 		d->diseqc, d->fe, d->freq, d->fec, d->sr, d->pol, d->ro, d->sys, d->mtype,
 		d->plts, d->bw, d->inversion, d->pids ? d->pids : "NULL",
-		d->apids ? d->apids : "NULL", d->dpids ? d->dpids : "NULL");
+		d->apids ? d->apids : "NULL", d->dpids ? d->dpids : "NULL", d->x_pmt ? d->x_pmt: "NULL");
 }
 
 

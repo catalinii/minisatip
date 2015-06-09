@@ -81,11 +81,15 @@ void invalidate_adapter(int ad)
 		pid_to_key[0] = POINTER_1; // invalidate the cache
 }
 
+#define dvbapi_copy32r(v, a, i) if(change_endianness)copy32rr(v, a, i) else copy32r(v, a, i)
+#define dvbapi_copy16r(v, a, i) if(change_endianness)copy16rr(v, a, i) else copy16r(v, a, i)
+
 void send_client_info(sockets *s);
 int dvbapi_reply(sockets * s)
 {
 	unsigned char *b = s->buf;
 	SKey *k;
+	int change_endianness = 0;
 	unsigned int op, version, _pid;
 	int k_id, a_id = 0, s_id, pos = 0;
 	int demux, filter;
@@ -97,15 +101,29 @@ int dvbapi_reply(sockets * s)
 	}
 	while(pos < s->rlen)
 	{
+		int op1;
 		b = s->buf + pos;
 		copy32r(op, b, 0);
-		LOGL(3, "dvbapi read from socket %d the following data (%d bytes), pos = %d, op %08X: ", s->sock, s->rlen, pos, op);
+		op1 = op & 0xFFFFFF;
+		change_endianness = 0;
+		if(op1 == CA_SET_DESCR_X || op1 == CA_SET_DESCR_AES_X || op1 == CA_SET_PID_X || op1 == DMX_STOP_X || op1 == DMX_SET_FILTER_X)
+		{ // change endianness
+			op = 0x40000000 | ((op1 & 0xFF) << 16) | (op1 & 0xFF00) | ((op1 & 0xFF0000) >> 16);
+			if(!(op & 0xFF0000 ))
+				op &= 0xFFFFFF;
+			LOG("Changing endianness from %06X to %08X -> %02X %02X %02X %02X %02X %02X %02X %02X %02X", op1, op, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8]);
+			//b ++;
+			//pos ++;
+			change_endianness = 1;
+		} 
+		LOGL(3, "dvbapi read from socket %d the following data (%d bytes), pos = %d, op %08X, adapter %d", s->sock, s->rlen, pos, op, b[4]);
 		switch(op){
+		
 		case DVBAPI_SERVER_INFO:
 		
 			if(s->rlen < 6)
 				return;
-			copy16r(version, b, 4);
+			dvbapi_copy16r(version, b, 4);
 			LOG("DVBAPI server version %d found, name = %s", version, b+7);
 			pos = 6 + strlen(b+6) + 1;
 			break;
@@ -118,7 +136,8 @@ int dvbapi_reply(sockets * s)
 			pos += 65;
 			if(s->rlen < 9)
 				return;
-			copy16r(_pid, b, 7);
+			dvbapi_copy16r(_pid, b, 7);
+			_pid &= 0x1FFF;
 			k_id = b[4];
 			k = get_key(k_id);
 			a_id = -1;
@@ -160,7 +179,8 @@ int dvbapi_reply(sockets * s)
 			if(!k)
 				break;
 			a_id = k->adapter;
-			copy16r(_pid, b, 7 )
+			dvbapi_copy16r(_pid, b, 7 )
+			_pid &= 0x1FFF;
 			LOG("Received from DVBAPI server DMX_STOP for key %d, adapter %d, pid %X (%d)", k_id, a_id, _pid, _pid);
 			if((p=find_pid(a_id, _pid)) && (p->key == k_id))
 			{
@@ -186,8 +206,8 @@ int dvbapi_reply(sockets * s)
 
 			pos += 21;
 			k_id = b[4];
-			copy32r(index, b, 5);
-			copy32r(parity, b, 9);			
+			dvbapi_copy32r(index, b, 5);
+			dvbapi_copy32r(parity, b, 9);			
 			cw = b + 13;			
 			k = get_key(k_id);
 			if(k && (parity < 2))
@@ -266,14 +286,16 @@ int decrypt_batch(SKey *k)
 	if(k->blen<=0 || (k->parity==-1) || (!k->key_ok[k->parity]))
 		LOG_AND_RETURN(-1, "Unable to decrypt blen = %d, parity = %d, key_ok %d for key %d", 
 			k->blen, k->parity, (k->parity>=0)?k->key_ok[k->parity]:0, k->id);
-		
+	b = k->batch[0].data - 4;
+	pid = (b[1] & 0x1F)*256 + b[2];
 	k->batch[k->blen].data = NULL;
 	k->batch[k->blen].len = 0;	
 	dvbcsa_bs_decrypt(k->key[k->parity], k->batch, 184);
-	LOGL(5, "dvbapi: decrypted key %d parity %d at len %d, channel_id %d (pid %d) ", 
-		k->id, k->parity, k->blen, k->sid, pid); //0x99
+	LOGL(5, "dvbapi: decrypted key %d parity %d at len %d, channel_id %d (pid %d) %p", 
+		k->id, k->parity, k->blen, k->sid, pid, k->batch[0].data); //0x99
 	k->blen = 0;
 	k->parity = -1;
+	memset(k->batch, 0, sizeof(int *)*128);
 	return 0;
 }
 
@@ -379,7 +401,7 @@ int decrypt_stream(adapter *ad,int rlen)
 			if(b[3] & 0x20)
 			{
 				adapt_len = (b[4]<183)?b[4]+5:0;
-//				LOGL(2, "Adaptation for pid %d, specified len %d, final len %d", pid, b[4], adapt_len);
+				LOGL(4, "Adaptation for pid %d, specified len %d, final len %d", pid, b[4], adapt_len);
 			}	
 			else adapt_len = 4;
 			k->batch[k->blen].data = b + adapt_len;
@@ -703,7 +725,8 @@ void dvbapi_pid_del(adapter *ad,int pid, SPid *cp)
 		LOGL(2, "Requested delete pid %d adapter %d key %d pids %d enabled_channels %d", pid, ad->id, cp->key, pids?pids[pid]:-1, k?k->enabled_channels:-1);
 	if(cp->type & TYPE_PMT) // if(pids && (pids[pid]< 0))
 	{
-		keys_del(cp->key);
+		if(k && k->enabled_channels == 0)
+			keys_del(cp->key);
 		return;
 	}
 	if(k && (cp->type == 0))
@@ -773,7 +796,8 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 	if(k && (b[5]==2))
 	{
 		ver = b[10] & 0x3F;
-		if(k->ver != ver) // pmt version changed
+		program_id = b[8]* 256 + b[9];
+		if(k->ver != ver || k->program_id != program_id) // pmt version changed
 		{ 
 //			keys_del(p->key); 
 //			p->key = 255;
@@ -802,6 +826,7 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 
 	program_id = b[3]* 256 + b[4];
 	pi_len = ((b[10] & 0xF) << 8) + b[11];
+
 	LOG("PMT pid: %04X (%d), pmt_len %d, pi_len %d, channel id %04X (%d)", pid, pid, pmt_len, pi_len, program_id, program_id);
 	pi = b + 12;
 	pmt = pi + pi_len;	
@@ -838,7 +863,7 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 			
 		old_pmt = pids[spid];
 		pids[spid] = pid; 
-		if((old_pmt > 0) && (old_pmt != -pid))  // this pid is associated with another PMT - link this PMT with the old one (if not linked already)
+		if((old_pmt > 0) && (abs(old_pmt) != abs(pid)))  // this pid is associated with another PMT - link this PMT with the old one (if not linked already)
 		{
 			if(pids[pid]==-TYPE_PMT)
 			{
@@ -862,6 +887,7 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 			cp->key = p->key;
 			cp->type = 0;
 			k->ver = b[5] & 0x3F;
+			k->program_id = program_id;
 			k->enabled_channels ++;
 		}
 	}

@@ -34,9 +34,7 @@ typedef struct struct_streams
 	int do_play;
 	int start_streaming;
 	transponder tp;
-	char *apids,
-		*dpids,
-		*pids;
+	char *apids, *dpids, *pids, *x_pmt;
 	struct iovec iov[MAX_PACK + 2];
 	int iiov;
 	int sp,sb;
