@@ -798,7 +798,8 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 		ver = b[10] & 0x3F;
 		program_id = b[8]* 256 + b[9];
 		if(k->ver != ver || k->program_id != program_id) // pmt version changed
-		{ 
+		{
+			k->enabled_channels = 0;
 //			keys_del(p->key); 
 //			p->key = 255;
 //			p->type = TYPE_PMT;
@@ -817,8 +818,11 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 	{
 		program_id = b[8]* 256 + b[9];
 		if((pmt_len > 0) && (program_id == k->sid))
+		{
 				p->type |= PMT_COMPLETE;
-		LOG_AND_RETURN(0, "Trying to add existing key %d for PMT pid %d sid %d k->sid %d", p->key, pid, program_id, k->sid);
+				LOG_AND_RETURN(0, "Trying to add existing key %d for PMT pid %d sid %d k->sid %d", p->key, pid, program_id, k->sid);
+		}
+		k->enabled_channels = 0;		
 	}
 
 	if(!(pmt_len = assemble_packet(&b,ad)))
@@ -907,3 +911,10 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 }
 
 
+void dvbapi_delete_keys_for_adapter(int aid)
+{
+	int i;
+	for(i = 0; i<MAX_KEYS; i++)
+		if(keys[i].enabled && keys[i].adapter == aid)
+			keys_del(i);
+}

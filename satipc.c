@@ -50,7 +50,7 @@
 extern char *fe_delsys[];
 extern struct struct_opts opts;
 
-char servers[100];
+
 uint16_t apid[MAX_ADAPTERS][MAX_PIDS]; // pids to add 
 uint16_t dpid[MAX_ADAPTERS][MAX_PIDS]; // pids to delete
 
@@ -506,10 +506,9 @@ void find_satip_adapter(adapter *a)
 	int i, la, j, k;
 	char *sep1, *sep2, *sep;
 	char *arg[50];
-	if(!opts.satipc)
+	if(!opts.satip_servers[0])
 		return;
-	strncpy(servers, opts.satipc, sizeof(servers));
-	la = split (arg, servers, 50, ',');
+	la = split (arg, opts.satip_servers, 50, ',');
 	j = 0;
 	for(i=0;i<MAX_ADAPTERS;i++)
 		if(a[i].pa == -1 && a[i].fn == -1 && j<la)
@@ -522,41 +521,54 @@ void find_satip_adapter(adapter *a)
 			a[i].delsys = (Dvb_delsys )satipc_delsys;
 			a[i].post_init = (Adapter_commit )satip_post_init;
 			a[i].close = (Adapter_commit )satip_close_device;
+
+			for(k = 0; k < 10; k++)
+				a[i].sys[k] = 0;
 			
+			sep = NULL;
 			sep1 = NULL;
 			sep2 = NULL;
 			sep1 = strchr(arg[j], ':');
 			if(sep1)
 				sep2 = strchr(sep1 + 1, ':');
-			sep = sep1;
-			a[i].sip = arg[j];
-			for(k = 0; k < 10; k++)
-				a[i].sys[k] = 0;
-			if(sep2)
-			{
-				sep = sep2;
-				a[i].sip = sep1 + 1;
-				a[i].sys[0] = a[i].tp.sys = map_int(arg[j], fe_delsys);
-				if(a[i].sys[0] == SYS_DVBS2)
-					a[i].sys[1] = SYS_DVBS;
-				if(a[i].sys[0] == SYS_DVBT2)
-					a[i].sys[1] = SYS_DVBT;
-				if(a[i].sys[0] == SYS_DVBC2)
-					a[i].sys[1] = SYS_DVBC_ANNEX_A;
-				
-			} else
-			{
-				a[i].sys[0] = SYS_DVBS2;
-				a[i].sys[1] = SYS_DVBS;
+			if(map_intd(arg[j], fe_delsys, -1) != -1)
+				sep = arg[j];			
 			
-			}
-				
-			a[i].sport = 554;
+			if(sep1)
+				*sep1 ++ = 0;
+			if(sep2)
+				*sep2 ++= 0;
+			
 			if(sep)
 			{
-				a[i].sport = map_intd(sep + 1, NULL, 554);
-				*sep = 0;
-			}			
+				if(!sep1)
+				{
+					LOG("Found only the system for satip adapter %s", arg[j]);
+					continue;
+				}
+			}else
+			{
+				if(sep1)
+					sep2 = sep1;
+				sep1 = arg[j];
+				
+			}
+			
+			if(!sep)
+				sep = "dvbs2";
+			if(!sep2)
+				sep2 = "554";
+			
+			a[i].sys[0] = a[i].tp.sys = map_int(sep, fe_delsys);
+			a[i].sip = sep1;
+			a[i].sport = map_int(sep2, NULL);
+			if(a[i].sys[0] == SYS_DVBS2)
+				a[i].sys[1] = SYS_DVBS;
+			if(a[i].sys[0] == SYS_DVBT2)
+				a[i].sys[1] = SYS_DVBT;
+			if(a[i].sys[0] == SYS_DVBC2)
+				a[i].sys[1] = SYS_DVBC_ANNEX_A;
+			
 			j++;
 			LOG("Satip device %s port %d delsys %d: %s %s", a[i].sip, a[i].sport, a[i].sys[0], get_delsys(a[i].sys[0]), get_delsys(a[i].sys[1]));
 		}

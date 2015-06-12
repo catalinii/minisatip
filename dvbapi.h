@@ -70,6 +70,6 @@ SKey *get_key(int i);
 int dvbapi_process_pmt(unsigned char *b, adapter *ad);
 void dvbapi_pid_add(adapter *a,int pid, SPid *cp);
 void dvbapi_pid_del(adapter *a,int pid, SPid *cp);
-
+void dvbapi_delete_keys_for_adapter(int aid);
 #endif
 #endif

@@ -240,7 +240,7 @@ char *strip(char *s) // strip spaces from the front of a string
 #define LR(s) {LOG("map_int returns %d",s);return s;}
 int map_intd (char *s, char ** v, int dv)
 {
-	int i, n = 0;
+	int i, n = dv;
 	
 	if(s==NULL)
 	{

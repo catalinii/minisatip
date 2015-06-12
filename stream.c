@@ -52,8 +52,9 @@ extern struct struct_opts opts;
 streams st[MAX_STREAMS];
 unsigned init_tick, theTick;
 
-uint32_t
-getTick ()
+#define LEN_PIDS (MAX_PIDS * 5 + 1)
+
+uint32_t getTick ()
 {								 //ms
 	struct timespec ts;
 	clock_gettime (CLOCK_REALTIME, &ts);
@@ -143,24 +144,28 @@ set_stream_parameters (int s_id, transponder * t)
 		return;
 	if (t->apids && t->apids[0] >= '0' && t->apids[0] <= '9')
 	{
-		strcpy (sid->apids, t->apids);
+		strncpy (sid->apids, t->apids, LEN_PIDS);
 		t->apids = sid->apids;
+		sid->apids[LEN_PIDS] = 0;
 	}
 	if (t->dpids && t->dpids[0] >= '0' && t->dpids[0] <= '9')
 	{
-		strcpy (sid->dpids, t->dpids);
+		strncpy (sid->dpids, t->dpids, LEN_PIDS);
 		t->dpids = sid->dpids;
+		sid->dpids[LEN_PIDS] = 0;
 	}
 	if (t->pids && t->pids[0] >= '0' && t->pids[0] <= '9')
 	{
-		strcpy (sid->pids, t->pids);
+		strncpy (sid->pids, t->pids, LEN_PIDS);
 		t->pids = sid->pids;
+		sid->pids[LEN_PIDS] = 0;
 	}
 	
 	if (t->x_pmt && t->x_pmt[0] >= '0' && t->x_pmt[0] <= '9')
 	{
-		strcpy (sid->x_pmt, t->x_pmt);
+		strncpy (sid->x_pmt, t->x_pmt, LEN_PIDS);
 		t->x_pmt = sid->x_pmt;
+		sid->x_pmt[LEN_PIDS] = 0;
 	}
 
 	
@@ -409,13 +414,13 @@ streams_add ()
 	
 	st[i].total_len = 7 * DVB_FRAME; // max 7 packets
 	if (!st[i].pids)
-		st[i].pids = malloc1 (MAX_PIDS * 5 + 1);
+		st[i].pids = malloc1 (LEN_PIDS);
 	if (!st[i].apids)
-		st[i].apids = malloc1 (MAX_PIDS * 5 + 1);
+		st[i].apids = malloc1 (LEN_PIDS);
 	if (!st[i].dpids)
-		st[i].dpids = malloc1 (MAX_PIDS * 5 + 1);
+		st[i].dpids = malloc1 (LEN_PIDS);
 	if (!st[i].x_pmt)
-		st[i].x_pmt = malloc1 (MAX_PIDS * 5 + 1);
+		st[i].x_pmt = malloc1 (LEN_PIDS);
 	if (!st[i].buf)
 		st[i].buf = malloc1 (STREAMS_BUFFER + 10);
 		
@@ -748,6 +753,9 @@ int process_packet(unsigned char *b, adapter *ad)
 		return 0;	
 	}
 	p = find_pid(ad->id, _pid);
+	if(!p)
+		p = find_pid(ad->id, 8192);
+
 	if((!p) || ((p->sid[0]==-1) && (p->type==0)))
 	{
 //		LOGL(2, "process_packet: pid %d not found", _pid);

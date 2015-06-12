@@ -996,6 +996,7 @@ void reset_pids_type_for_key(int aid, int key)
 		}
 }
 
+
 int get_enabled_pids(adapter *ad)
 {
 	int ep = 0, i;

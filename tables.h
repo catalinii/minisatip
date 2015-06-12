@@ -11,7 +11,7 @@
 
 int process_pat(unsigned char *b, adapter *ad);
 int assemble_packet(uint8_t **b, adapter *ad);
-
+uint32_t crc32(const uint8_t *data, int datalen);
 
 #endif
 

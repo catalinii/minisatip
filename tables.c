@@ -111,8 +111,11 @@ int process_pat(unsigned char *b, adapter *ad)
 	{
 		tid = b[8] * 256 + b[9];
 		ver = b[10] & 0x3E;
-		if((ad->transponder_id != tid) || (ad->pat_ver != ver))
-			ad->pat_processed = 0;
+		pat_len = (b[6] & 0xF)*256 + b[7];
+		if(((ad->transponder_id != tid) || (ad->pat_ver != ver)) && (pat_len>0) && (pat_len<1500))
+		{
+			ad->pat_processed = 0;			
+		}
 	}
 		
 	if(ad->pat_processed)
@@ -122,7 +125,7 @@ int process_pat(unsigned char *b, adapter *ad)
 	if(!(pat_len = assemble_packet(&b,ad)))
 		return 0;
 
-	
+	dvbapi_delete_keys_for_adapter(ad->id);
 //	LOG("tid %d pat_len %d: %02X %02X %02X %02X %02X %02X %02X %02X", tid, pat_len, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]);
 	tid = b[3] * 256 + b[4];
 	ad->pat_ver = b[5] & 0x3E;
@@ -167,6 +170,7 @@ int process_pat(unsigned char *b, adapter *ad)
 int assemble_packet(uint8_t **b1, adapter *ad)
 {
 	int len = 0, pid;
+	uint32_t crc, current_crc;
 	int64_t item_key;
 	uint8_t *b = *b1;
 	
@@ -202,6 +206,13 @@ int assemble_packet(uint8_t **b1, adapter *ad)
 			return 0;		
 	}	
 	*b1 = b;
+	if(b[0] == 2 || b[0] == 0) // check the crc for PAT and PMT
+	{		
+		crc = crc32(b,len - 1);
+		copy32r(current_crc, b, len - 1)
+		if(crc != current_crc)
+			LOG_AND_RETURN(0, "pid %d (%04X) CRC failed %08X != %08X", pid, pid, crc, current_crc);
+	}
 	return len;
 }
 

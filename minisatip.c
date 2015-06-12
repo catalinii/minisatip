@@ -110,11 +110,11 @@ set_options (int argc, char *argv[])
 	opts.file_line = 0;
 	opts.dvbapi_port = 0;
 	opts.dvbapi_host = NULL;
-	opts.satipc = NULL;
 	opts.drop_encrypted = 1;
 	opts.rtsp_port = 554;
 	opts.clean_psi = 0;
 	opts.output_buffer = 512*1024;
+	opts.satip_servers[0] = 0;
 	memset(opts.playlist, sizeof(opts.playlist), 0);
 	
 	
@@ -257,7 +257,10 @@ set_options (int argc, char *argv[])
 			}
 
 			case SATIPCLIENT_OPT:
-				opts.satipc = optarg;
+				if(opts.satip_servers[0])
+					sprintf(opts.satip_servers + strlen(opts.satip_servers), ",%s", optarg );
+				else 
+					sprintf(opts.satip_servers, "%s", optarg );
 				break;
 			}
 
