@@ -507,7 +507,8 @@ send_rtpb (streams * sid, unsigned char *b, int len)
 	return send_rtp (sid, (const struct iovec *) iov, 1);
 }
 
-extern int bw, sleeping, sleeping_cnt;
+extern int64_t bw;
+extern int sleeping, sleeping_cnt;
 extern uint64_t nsecs;
 extern uint32_t reads;
 
@@ -699,7 +700,7 @@ int my_writev(int sock, struct iovec *iov, int iiov, streams *sid)
 	rv = writev(sock,iov,iiov);
 	if(rv < 0 && errno == ECONNREFUSED) // close the stream int the next second
 	{	
-		LOGL(0, "Connection REFUSED on stream %d, closing the stream", sid->sid); 
+		LOGL(0, "Connection REFUSED on stream %d, closing the stream, remote %s:%d", sid->sid, inet_ntoa (sid->sa.sin_addr), ntohs (sid->sa.sin_port)); 
 		sid->timeout = 1;
 	}
 	LOGL(6,"writev returned %d handle %d, iiov %d", rv, sock, iiov);
@@ -717,14 +718,19 @@ flush_streami (streams * sid, int ctime)
 		rv = send_rtp (sid, sid->iov, sid->iiov);		
 
 #ifdef DEBUG
-
-	static int fd;	
-	if(!fd)
+	static int fd, freq, pid;	
+	unsigned char *b, fn[50];
+	sprintf(fn, "freq=%d.ts", sid->tp.freq/1000);
+	SPid *p;
+	fd = open(fn, O_WRONLY);
+	if(fd < 0)
+		fd = open(fn, O_CREAT | O_WRONLY, 0666);
+	if(fd)
 	{
-		unlink("output.ts");
-		fd = open("output.ts", O_CREAT | O_WRONLY, 0666);
+		lseek(fd, 0 , 2);
+		writev(fd, sid->iov, sid->iiov);
+		close(fd);
 	}
-	if(fd)writev(fd, sid->iov, sid->iiov);
 #endif		
 	sid->iiov = 0;
 	sid->wtime = ctime;

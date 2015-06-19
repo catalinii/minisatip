@@ -164,14 +164,6 @@ int udp_bind_connect(char *src, int sport, char *dest, int dport, struct sockadd
 	LOG ("New UDP socket %d connected to %s:%d", sock,
 		inet_ntoa (serv->sin_addr), ntohs (serv->sin_port));
 	
-//	optval = 8192*2;
-	
-//	if ((dport % 2 == 0) && (setsockopt (sock, SOL_SOCKET, SO_SNDBUFFORCE, &optval, sizeof (optval)) < 0))
-//	{
-//		LOGL (0, "udp_bind_connect: setsockopt(SO_SNDBUFFORCE) for socket %d: %s",
-//			sock, strerror (errno));
-//		
-//	}
 	return sock;
 }
 
@@ -441,7 +433,8 @@ sockets_del (int sock)
 
 
 int run_loop, it = 0, c_time;
-int bw, bwtt, bwnotify, sleeping, sleeping_cnt;
+int64_t bw, bwtt; 
+int bwnotify, sleeping, sleeping_cnt;
 unsigned long int tbw;
 uint32_t reads;
 uint64_t nsecs;
@@ -757,6 +750,8 @@ free_all ()
 void set_socket_send_buffer(int sock, int len)
 {
 	int sl;
+	if( len <= 0)
+		return;
 	if(setsockopt(sock, SOL_SOCKET, SO_SNDBUFFORCE, &len, sizeof(len)))
 		LOGL(3, "unable to set output UDP buffer (force) size to %d", len);
 	
@@ -771,6 +766,9 @@ void set_socket_send_buffer(int sock, int len)
 void set_socket_receive_buffer(int sock, int len)
 {
 	socklen_t sl;
+	if( len <= 0)
+		return;
+
 	if(setsockopt(sock, SOL_SOCKET, SO_RCVBUFFORCE, &len, sizeof(len)))
 		LOGL(3, "unable to set output UDP buffer (force) size to %d", len);
 	

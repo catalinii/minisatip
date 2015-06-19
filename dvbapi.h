@@ -68,7 +68,7 @@ int keys_add(int adapter, int sid, int pmt);
 int keys_del(int i);
 SKey *get_key(int i);
 int dvbapi_process_pmt(unsigned char *b, adapter *ad);
-void dvbapi_pid_add(adapter *a,int pid, SPid *cp);
+void dvbapi_pid_add(adapter *a,int pid, SPid *cp, int existing);
 void dvbapi_pid_del(adapter *a,int pid, SPid *cp);
 void dvbapi_delete_keys_for_adapter(int aid);
 #endif

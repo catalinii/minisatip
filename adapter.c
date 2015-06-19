@@ -591,7 +591,7 @@ int mark_pid_add(int sid, int aid, int _pid)
 			
 		}
 #ifndef DISABLE_DVBCSA	
-		dvbapi_pid_add(ad, _pid, p);
+		dvbapi_pid_add(ad, _pid, p, 1);
 #endif
 		return 0;
 	}
@@ -603,7 +603,7 @@ int mark_pid_add(int sid, int aid, int _pid)
 			ad->pids[i].pid = _pid;
 			ad->pids[i].sid[0] = sid;
 #ifndef DISABLE_DVBCSA	
-			dvbapi_pid_add(ad, _pid, &ad->pids[i]);
+			dvbapi_pid_add(ad, _pid, &ad->pids[i], 0);
 #endif
 			return 0;
 		}

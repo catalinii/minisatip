@@ -257,6 +257,9 @@ set_options (int argc, char *argv[])
 			}
 
 			case SATIPCLIENT_OPT:
+				if(strlen(optarg) + strlen(opts.satip_servers) > sizeof(opts.satip_servers))
+					break;
+					
 				if(opts.satip_servers[0])
 					sprintf(opts.satip_servers + strlen(opts.satip_servers), ",%s", optarg );
 				else 

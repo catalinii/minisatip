@@ -111,12 +111,15 @@ int dvbapi_reply(sockets * s)
 			op = 0x40000000 | ((op1 & 0xFF) << 16) | (op1 & 0xFF00) | ((op1 & 0xFF0000) >> 16);
 			if(!(op & 0xFF0000 ))
 				op &= 0xFFFFFF;
-			LOG("Changing endianness from %06X to %08X -> %02X %02X %02X %02X %02X %02X %02X %02X %02X", op1, op, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8]);
+			LOG("dvbapi: changing endianness from %06X to %08X", op1, op );
 			//b ++;
 			//pos ++;
+			b[4] = b[0];
 			change_endianness = 1;
 		} 
-		LOGL(3, "dvbapi read from socket %d the following data (%d bytes), pos = %d, op %08X, adapter %d", s->sock, s->rlen, pos, op, b[4]);
+		LOGL(3, "dvbapi read from socket %d the following data (%d bytes), pos = %d, op %08X, key %d", s->sock, s->rlen, pos, op, b[4]);
+//		LOGL(3, "dvbapi read from socket %d the following data (%d bytes), pos = %d, op %08X, key %d -> %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X", s->sock, s->rlen, pos, op, b[4], b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10]);
+		
 		switch(op){
 		
 		case DVBAPI_SERVER_INFO:
@@ -133,6 +136,8 @@ int dvbapi_reply(sockets * s)
 			int data;
 			int i = 0, k_id;
 			SKey *k;
+			if(change_endianness)
+				pos +=2;  // for some reason the packet is longer with 2 bytes
 			pos += 65;
 			if(s->rlen < 9)
 				return;
@@ -146,7 +151,7 @@ int dvbapi_reply(sockets * s)
 	
 			demux = b[5];
 			filter = b[6];
-			LOG("DVBAPI requested set filter for pid %04X (%d), key %d, demux %d, filter %d", _pid, _pid, k_id, demux, filter);
+			LOG("dvbapi requested set filter for pid %04X (%d), key %d, demux %d, filter %d", _pid, _pid, k_id, demux, filter);
 			if(!(p = find_pid(a_id, _pid)))
 			{
 				mark_pid_add(-1, a_id, _pid);
@@ -174,6 +179,8 @@ int dvbapi_reply(sockets * s)
 		{
 			int ad;
 			k_id = b[4];
+			demux = b[5];
+			filter = b[6];
 			pos += 9;
 			k = get_key(k_id);
 			if(!k)
@@ -181,7 +188,7 @@ int dvbapi_reply(sockets * s)
 			a_id = k->adapter;
 			dvbapi_copy16r(_pid, b, 7 )
 			_pid &= 0x1FFF;
-			LOG("Received from DVBAPI server DMX_STOP for key %d, adapter %d, pid %X (%d)", k_id, a_id, _pid, _pid);
+			LOG("Received from DVBAPI server DMX_STOP for key %d, adapter %d, demux %d, filter %d, pid %X (%d)", k_id, a_id, demux, filter,  _pid, _pid);
 			if((p=find_pid(a_id, _pid)) && (p->key == k_id))
 			{
 				p->type = 0;
@@ -652,7 +659,7 @@ SKey *get_key(int i)
 	return &keys[i];
 }
 
-void dvbapi_pid_add(adapter *ad,int pid, SPid *cp)
+void dvbapi_pid_add(adapter *ad,int pid, SPid *cp, int existing)
 {
 	int64_t pid_key = TABLES_ITEM + ((1+ ad->id) << 24) + 0;
 	int16_t *pids = NULL;
@@ -684,7 +691,7 @@ void dvbapi_pid_add(adapter *ad,int pid, SPid *cp)
 		if(p && (p->type & PMT_COMPLETE))
 		{
 			cp->key =  p->key;
-			if(k=get_key(cp->key))
+			if((k=get_key(cp->key)) && !existing)
 				k->enabled_channels++;
 			return;
 		}	
@@ -722,7 +729,7 @@ void dvbapi_pid_del(adapter *ad,int pid, SPid *cp)
 	pids = (int16_t *)getItem(pid_key);
 	k = get_key(cp->key);
 	if(cp->key != 255)
-		LOGL(2, "Requested delete pid %d adapter %d key %d pids %d enabled_channels %d", pid, ad->id, cp->key, pids?pids[pid]:-1, k?k->enabled_channels:-1);
+		LOGL(2, "dvbapi_pid_del: pid %d adapter %d key %d pids %d enabled_channels %d", pid, ad->id, cp->key, pids?pids[pid]:-1, k?k->enabled_channels:-1);
 	if(cp->type & TYPE_PMT) // if(pids && (pids[pid]< 0))
 	{
 		if(k && k->enabled_channels == 0)
