@@ -157,6 +157,8 @@ int process_pat(unsigned char *b, adapter *ad)
 			{
 				p->type = TYPE_PMT;
 				csid = pid;
+				if(p->flags == 3)
+					p->flags = 1;
 			}
 		}
 	}
@@ -182,7 +184,7 @@ int assemble_packet(uint8_t **b1, adapter *ad)
 	if((b[1] &0x40) == 0x40)
 		len = ((b[6] & 0xF) << 8) + b[7];
 	
-	if(len > 1500)
+	if(len > 1500 || len < 0)
 		return 0;
 		
 	item_key = TABLES_ITEM + (ad->id << 16) + pid;	
