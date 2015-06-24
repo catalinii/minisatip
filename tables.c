@@ -185,7 +185,7 @@ int assemble_packet(uint8_t **b1, adapter *ad)
 		len = ((b[6] & 0xF) << 8) + b[7];
 	
 	if(len > 1500 || len < 0)
-		return 0;
+		LOG_AND_RETURN(0, "assemble_packet: len %d not valid for pid %d", len, pid);
 		
 	item_key = TABLES_ITEM + (ad->id << 16) + pid;	
 	
@@ -210,6 +210,8 @@ int assemble_packet(uint8_t **b1, adapter *ad)
 	*b1 = b;
 	if(b[0] == 2 || b[0] == 0) // check the crc for PAT and PMT
 	{		
+		if(len < 0 || len> 1500)
+			LOG_AND_RETURN(0, "assemble_packet: len %d not valid for pid %d", len, pid);
 		crc = crc32(b,len - 1);
 		copy32r(current_crc, b, len - 1)
 		if(crc != current_crc)

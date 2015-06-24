@@ -78,7 +78,8 @@ typedef struct struct_adapter
 	int rtcp, rtcp_sock, cseq;
 	int err, expect_reply, last_connect;
 	int wp, qp; // written packet, queued packet
-	int want_commit, want_tune, sent_transport; 
+	int want_commit, want_tune, sent_transport;
+	uint8_t satip_fe;
 	Set_pid set_pid;
 	Del_filters  del_filters;
 	Adapter_commit commit;

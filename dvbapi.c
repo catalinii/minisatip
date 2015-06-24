@@ -63,6 +63,7 @@ unsigned char read_buffer[1500];
 #define TEST_WRITE(a) if((a)<=0){LOG("write to dvbapi socket failed, closing socket %d",sock);sockets_del(dvbapi_sock);sock = 0;dvbapi_sock = -1;dvbapi_is_enabled = 0;}
 #define POINTER_TYPE_ECM ((void *)-TYPE_ECM)
 #define POINTER_1 ((void *)1)
+
 int have_dvbapi()
 {
 	return haveDvbapi;
@@ -127,7 +128,7 @@ int dvbapi_reply(sockets * s)
 			if(s->rlen < 6)
 				return;
 			dvbapi_copy16r(version, b, 4);
-			LOG("DVBAPI server version %d found, name = %s", version, b+7);
+			LOG("dvbapi: server version %d found, name = %s", version, b+7);
 			pos = 6 + strlen(b+6) + 1;
 			break;
 		
@@ -188,7 +189,7 @@ int dvbapi_reply(sockets * s)
 			a_id = k->adapter;
 			dvbapi_copy16r(_pid, b, 7 )
 			_pid &= 0x1FFF;
-			LOG("Received from DVBAPI server DMX_STOP for key %d, adapter %d, demux %d, filter %d, pid %X (%d)", k_id, a_id, demux, filter,  _pid, _pid);
+			LOG("dvbapi: received DMX_STOP for key %d, adapter %d, demux %d, filter %d, pid %X (%d)", k_id, a_id, demux, filter,  _pid, _pid);
 			if((p=find_pid(a_id, _pid)) && (p->key == k_id))
 			{
 				p->type = 0;
@@ -219,7 +220,7 @@ int dvbapi_reply(sockets * s)
 			k = get_key(k_id);
 			if(k && (parity < 2))
 			{
-				LOG("received DVBAPI_CA_SET_DESCR, key %d parity %d, index %d, CW: %02X %02X %02X %02X %02X %02X %02X %02X", k_id, parity, index, cw[0], cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);			
+				LOG("dvbapi: received DVBAPI_CA_SET_DESCR, key %d parity %d, index %d, CW: %02X %02X %02X %02X %02X %02X %02X %02X", k_id, parity, index, cw[0], cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);			
 				dvbcsa_bs_key_set(cw, k->key[parity]);
 				k->key_ok[parity] = 1;
 				invalidate_adapter(k->adapter);
@@ -227,10 +228,15 @@ int dvbapi_reply(sockets * s)
 				if(p)
 					p->type |= CLEAN_PMT;
 				
-			} else   LOG("invalid DVBAPI_CA_SET_DESCR, key %d parity %d, k %p, index %d, CW: %02X %02X %02X %02X %02X %02X %02X %02X", k_id, parity, k, index, cw[0], cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);
+			} else   LOG("dvbapi: invalid DVBAPI_CA_SET_DESCR, key %d parity %d, k %p, index %d, CW: %02X %02X %02X %02X %02X %02X %02X %02X", k_id, parity, k, index, cw[0], cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);
 			break; 
 		}
-		default: pos = s->rlen;
+		default: 
+		{
+			LOG("dvbapi: unknown operation: %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X", b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10]);
+			pos = s->rlen;
+			
+		}
 		}
 	}
 	s->rlen = 0;
@@ -431,7 +437,7 @@ int decrypt_stream(adapter *ad,int rlen)
 
 }
 
-int dvbapi_send_pi(SKey *k)
+int dvbapi_send_pmt(SKey *k)
 {
 	unsigned char buf[1500];
 	int len;
@@ -440,7 +446,7 @@ int dvbapi_send_pi(SKey *k)
 
 
 	copy32(buf, 0, AOT_CA_PMT);
-	buf[6] = CAPMT_LIST_ONLY;
+	buf[6] = CAPMT_LIST_UPDATE;
 	copy16(buf, 7, k->sid);
 	buf[9] = 1;
 	
@@ -554,7 +560,7 @@ int send_ecm(unsigned char *b, adapter *ad)
 
 	len = ((b[1] & 0xF) << 8) + b[2];
 	len += 3;	
-	LOG("Sending DVBAPI_FILTER_DATA key %d for pid %04X (%d), ecm_parity = %d, new parity %d, demux = %d, filter = %d, len = %d [%02X %02X %02X %02X]", k->id, pid, pid, old_parity, b[0] & 1,demux, filter, len, b[0], b[1], b[2], b[3]);
+	LOG("dvbapi: sending DVBAPI_FILTER_DATA key %d for pid %04X (%d), ecm_parity = %d, new parity %d, demux = %d, filter = %d, len = %d [%02X %02X %02X %02X]", k->id, pid, pid, old_parity, b[0] & 1,demux, filter, len, b[0], b[1], b[2], b[3]);
 	
 	if(demux<0)
 		return 0;
@@ -744,41 +750,56 @@ void dvbapi_pid_del(adapter *ad,int pid, SPid *cp)
 			keys_del(k->id);
 	}
 }
-unsigned char *find_pi(unsigned char *es, int len, int *pi_len)
+
+
+
+int pi_exist(int ecapid, int ecaid, unsigned char *es, int len)
+{
+	int es_len,caid, capid;
+	int i;
+	
+	for(i = 0; i < len; i+= es_len) // reading program info
+	{
+		es_len = es[i+1] + 2;
+		caid = es[i+2] * 256 + es[i+3];
+		capid = (es[i+4] & 0x1F) *256 + es[i+5];
+		if(caid == ecaid && capid == ecapid)
+			return 1;
+	}
+	return 0;
+}
+
+void find_pi(unsigned char *es, int len, unsigned char *pi, int *pi_len)
 {
 	
 	int es_len,caid, capid;
 	int i;
-	int start_pi = -1;
-	*pi_len = 0;
 	
         for(i = 0; i < len; i+= es_len) // reading program info
         {
 		es_len = es[i+1] + 2;
-		if((es[i]==9) && (start_pi==-1))
-			start_pi = i;
-		if((es[i]!=9) && (start_pi != -1))
-			break;
-		if(start_pi>=0)
+		if( es[i] != 9 ) 
+			continue;
+		caid = es[i+2] * 256 + es[i+3];
+		capid = (es[i+4] & 0x1F) *256 + es[i+5];
+		if(!pi_exist( capid, caid, pi, *pi_len))
 		{
-			caid = es[i+2] * 256 + es[i+3];
-			capid = (es[i+4] & 0x1F) *256 + es[i+5];
-			LOG("PI pos %d caid %04X => pid %04X (%d)", i, caid, capid, capid);
+			if(*pi_len + es_len > MAX_PI_LEN)
+				return ;
+			LOG("PI pos %d caid %04X => pid %04X (%d)", *pi_len, caid, capid, capid);
+			memcpy(pi + *pi_len, es+i, es_len);
+			*pi_len += es_len;
 		}
         }
-	if(start_pi == -1)
-		return NULL;
-	LOG("start_pi: %d %d es[0]-> %d", start_pi, i, es[0]);
-	*pi_len = i - start_pi;
-	return es + start_pi;
+	return ;
 } 
 
 int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 {
-	int pi_len = 0, ver, pmt_len = 0, i, _pid, es_len, len;
+	int pi_len = 0, ver, pmt_len = 0, i, _pid, es_len, len, init_pi_len;
 	int program_id = 0;
 	int prio = 0;
-	unsigned char *pmt, *pi;
+	unsigned char *pmt, *pi, tmp_pi[MAX_PI_LEN];
 	int caid, capid, pid, spid, stype;
 	SPid *p, *cp;
 	SKey *k = NULL;
@@ -848,15 +869,20 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 	if(pi_len > pmt_len)
 		pi_len = 0;
 
-	if(pi_len > 0) 
-		pi=find_pi(pi, pi_len, &pi_len);
+	init_pi_len = pi_len;
+	pi_len = 0;
+	
+	if(init_pi_len > 0)
+		find_pi( pi, init_pi_len, tmp_pi, &pi_len);
+		
+	pi = tmp_pi;
 
 	es_len = 0;
 	pids = (int16_t *)getItem(pid_key);
 	if(!pids)
 		return 0;
 	pids[pid] = -TYPE_PMT;
-	for(i = 0; i < pmt_len - pi_len - 17; i+= (es_len) + 5) // reading streams
+	for(i = 0; i < pmt_len - init_pi_len - 17; i+= (es_len) + 5) // reading streams
 	{
 		es_len = (pmt[i+3] & 0xF)*256 + pmt[i+4];
 		stype = pmt[i];
@@ -866,8 +892,8 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 			break;
 		if(stype != 2 && stype != 3 && stype != 4 && stype != 6 && stype != 27 || spid < 64)
 			continue;
-		if(!pi_len)
-			pi = find_pi(pmt + i + 5, es_len, &pi_len);
+			
+		find_pi(pmt + i + 5, es_len, pi, &pi_len);
 		
 		if(pi_len == 0)
 			continue;
@@ -901,6 +927,7 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 			k->program_id = program_id;
 			k->enabled_channels ++;
 		}
+		
 	}
 	
 	if((pi_len > 0) && k && k->enabled_channels)
@@ -909,7 +936,7 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 		k->pi_len = pi_len;
 		k->pi = pi;	
 //		p = find_pid(ad->id, pid);
-		dvbapi_send_pi(k);
+		dvbapi_send_pmt(k);
 		p->type |= PMT_COMPLETE;
 	} else 
 		p->type = 0; // we do not need this pmt pid anymore

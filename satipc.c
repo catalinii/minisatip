@@ -284,7 +284,7 @@ void get_s2_url(adapter *ad, char *url)
 	FILL("&pol=%s", tp->pol, -1, get_pol(tp->pol));
 	FILL("&sr=%d", tp->sr, -1, tp->sr / 1000);
 	FILL("&fec=%s", tp->fec, FEC_AUTO, get_fec(tp->fec));
-	FILL("&fe=%d", tp->fe, 0, tp->fe);
+	FILL("&fe=%d", ad->satip_fe, 0, ad->satip_fe);
 	FILL("&src=%d", tp->diseqc, 0, tp->diseqc);
 	FILL("&mtype=%s", tp->mod, 0, get_modulation(tp->mod));
 	FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
@@ -303,6 +303,7 @@ void get_c2_url(adapter *ad, char *url)
 	transponder * tp = &ad->tp;
 	url[0] = 0;
 	FILL("freq=%.1f", tp->freq, 0, tp->freq / 1000.0);
+	FILL("&fe=%d", ad->satip_fe, 0, ad->satip_fe);
 	FILL("&sr=%d", tp->sr, -1, tp->sr / 1000);
 	FILL("&bw=%d", tp->bw, BANDWIDTH_AUTO, tp->bw/1000000);
 	FILL("&gi=%s", tp->gi, GUARD_INTERVAL_AUTO, get_gi(tp->gi));
@@ -324,6 +325,7 @@ void get_t2_url(adapter *ad, char *url)
 	transponder * tp = &ad->tp;
 	url[0] = 0;
 	FILL("freq=%.1f", tp->freq, 0, tp->freq / 1000.0);
+	FILL("&fe=%d", ad->satip_fe, 0, ad->satip_fe);
 	FILL("&bw=%d", tp->bw, BANDWIDTH_AUTO, tp->bw/1000000);
 	FILL("&gi=%s", tp->gi, GUARD_INTERVAL_AUTO, get_gi(tp->gi));
 	FILL("&tmode=%s", tp->tmode, TRANSMISSION_MODE_AUTO, get_tmode(tp->tmode));
@@ -401,12 +403,22 @@ int http_request (adapter *ad, char *url, char *method)
 
 void tune_url(adapter *ad, char *url)
 {
-	if(ad->sys[0] == SYS_DVBS2 || ad->sys[0] == SYS_DVBS)
+	switch(ad->sys[0])
+	{
+	case SYS_DVBS2:
+	case SYS_DVBS:
 		get_s2_url(ad, url);
-	else if(ad->sys[0] == SYS_DVBC2 || ad->sys[0] == SYS_DVBC_ANNEX_A)
+		break;
+	case  SYS_DVBC2:
+	case SYS_DVBC_ANNEX_A:	
 		get_c2_url(ad, url);
-	else if(	ad->sys[0] == SYS_DVBT2 || ad->sys[0] == SYS_DVBT)
+		break;
+	case SYS_DVBT2:
+	case SYS_DVBT:
+	case SYS_ISDBT:
 		get_t2_url(ad, url);
+		break;
+	}
 }
 
 void satipc_commit(adapter *ad)
@@ -499,6 +511,18 @@ fe_delivery_system_t satipc_delsys (int aid, int fd, fe_delivery_system_t *sys)
 {
 }
 
+uint8_t determine_fe(adapter *a, int pos, char *sip, int sport)
+{
+	int i = pos -1;	
+	while (i >= 0)
+	{
+		if(sport == a[i].sport && !strcmp(a[i].sip, sip))
+			return a[i].satip_fe + 1;
+		i--;
+	}
+	return 1;
+	
+}
 
 
 void find_satip_adapter(adapter *a)
@@ -568,6 +592,8 @@ void find_satip_adapter(adapter *a)
 				a[i].sys[1] = SYS_DVBT;
 			if(a[i].sys[0] == SYS_DVBC2)
 				a[i].sys[1] = SYS_DVBC_ANNEX_A;
+			
+			a[i].satip_fe = determine_fe(a, i, a[i].sip, a[i].sport);
 			
 			j++;
 			LOG("Satip device %s port %d delsys %d: %s %s", a[i].sip, a[i].sport, a[i].sys[0], get_delsys(a[i].sys[0]), get_delsys(a[i].sys[1]));

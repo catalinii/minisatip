@@ -15,44 +15,78 @@ https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item
 
 Usage:
 
-minisatip [-f] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] [-p public_host] [-s rtp_port] [-a no] [-m mac] [-l] [-a X:Y:Z] [-e X-Y,Z]
-		-f foreground, otherwise run in background
-		-r remote_rtp_host: send remote rtp to remote_rtp_host
-		-d specify the device id (in case there are multiple SAT>IP servers in the network)
-		-w http_server[:port]: specify the host and the port where the xml file can be downloaded from
-		-x port: port for listening on http
-		-y rtsp_port: port for listening for rtsp requests (default: 554)
-		-s force to get signal from the DVB hardware every 200ms (use with care, only when needed)
-		-a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means autodetect)
-		-m xx: simulate xx as local mac address, generates UUID based on mac
-		-e list_of_enabled adapters: enable only specified adapters, example 0-2,5,7 (no spaces between parameters)
-		-c X: bandwidth capping for the output to the network (default: unlimited)
-		-b X: set the DVR buffer to X KB (default: XX KB)
-		-l increases the verbosity (you can use multiple -l), logging to stdout in foreground mode or in /tmp/log when a daemon
-		-p url: specify playlist url using X_SATIPM3U header
-		-u unicable_string: defines the unicable adapters (A) and their slot (S), frequency (F) and optionally the PIN for the switch:\n\
-			The format is: A1:S1-F1[-PIN][,A2:S2-F2[-PIN][,...]] example: 2:0-1284[-1111]
-		-j jess_string: same format as unicable_string 
-		-g use syslog instead stdout for logging, multiple -g - print to stderr as well\n\
-		-o host:port: specify the hostname and port for the dvbapi server (oscam) 
-		-s DELSYS:host:port - specify the remote satip host and port with delivery system DELSYS: example: dvbs2:192.168.9.9[:554]
-		-t clean the PSI from all CA information, the client will see the channel as clear if decrypted successfully
+minisatip [-[flzg]] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] [-p public_host] [-s rtp_port] [-a x:y:z] [-m mac] [-l] [-a X:Y:Z] [-e X-Y,Z] [-o oscam_host:dvbapi_port] [-c X] [-b X:Y] [-u A1:S1-F1[-PIN]] [-j A1:S1-F1[-PIN]] [-x http_port] [-y rtsp_port]
 
-Example of Usage:
+                -f foreground, otherwise run in background
 
-	minisatip 
+                -r remote_rtp_host: send the rtp stream to remote_rtp_host instead of the ip the connection comes from
+                        eg: -r 192.168.7.9
 
-	- Will act as a daemon and listen for connections on port 1900 (udp), 554 (rtsp) and 8080 (http) and will be able to serve satip clients connected to the LAN
-	
-	minisatip -r xx.xx.xx.xx 
-	
-	- Forces to send the rtp packets to xx.xx.xx.xx instead of the IP that the connection comes from
-	
-	- Connect to oscam using the dvbapi protocol
-	
-	minisatip -o 192.168.9.9:9000
-	
-Examples:
+                -d specify the device id (in case there are multiple SAT>IP servers in the network)
+                        eg: -d 4
+
+                -w http_server[:port]: specify the host and the port where the xml file can be downloaded from [default: default_local_ip_address:8080]
+                        eg: -w 192.168.1.1:8080
+
+                -x http_port: port for listening on http [default: 8080]
+                        eg: -x 9090
+
+                -y rtsp_port: port for listening for rtsp requests [default: 554]
+                        eg: -y 5544
+                        - changing this to a port > 1024 removes the requirement for minisatip to run as root
+
+                -z force to get signal from the DVB hardware every 200ms (use with care, only when needed)
+                        - retrieving signal could take sometimes more than 200ms which could impact the rtp stream, using it only when you need to adjust your dish
+
+                -a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means auto-detect)
+                        eg: -a 1:2:3
+                        - it will report 1 dvb-s2 device, 2 dvb-t2 devices and 3 dvb-c devices
+
+                -m xx: simulate xx as local mac address, generates UUID based on mac
+                        -m 00:11:22:33:44:55
+
+                -e list_of_enabled adapters: enable only specified adapters
+                        eg: -e 0-2,5,7 (no spaces between parameters)
+                        - keep in mind that the first adapters are the local ones starting with 0 after that are the satip adapters
+                        if you have 3 local dvb cards 0-2 will be the local adapters, 3,4, ... will be the satip servers specified with argument -s
+
+                -c X: bandwidth capping for the output to the network [default: unlimited]
+                        eg: -c 2048  (does not allow minisatip to send more than 2048KB/s to all remote servers)
+
+                -b X:Y : set the app adapter buffer to X Bytes (default: 25004) and set the kernel DVB buffer to Y Bytes (default: 5775360) - both multiple of 188
+                        eg: -b 18800:18988
+
+                -l increases the verbosity (you can use multiple -l), logging to stdout in foreground mode or in /tmp/log when a daemon
+                        eg: -l -l -l
+
+                -g use syslog instead stdout for logging, multiple -g - print to stderr as well
+
+                -p url: specify playlist url using X_SATIPM3U header
+                        eg: -p http://192.168.2.3:8080/playlist
+                        - this will add X_SATIPM3U tag into the satip description xml
+
+                -u unicable_string: defines the unicable adapters (A) and their slot (S), frequency (F) and optionally the PIN for the switch:
+                        The format is: A1:S1-F1[-PIN][,A2:S2-F2[-PIN][,...]]
+                        eg: 2:0-1284[-1111]
+
+                -j jess_string - same format as -u
+
+                -o host:port - specify the hostname and port for the dvbapi server (oscam)
+                        eg: -o 192.168.9.9:9000
+                        192.168.9.9 is the host where oscam is running and 9000 is the port configured in dvbapi section in oscam.conf
+
+                -s DELSYS:host:port - specify the remote satip host and port with delivery system DELSYS, it is possible to use multiple -s
+                        DELSYS - can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, atsc, dvbcb ( - DVBC_ANNEX_B ) [default: dvbs2]
+                        host - the server of the satip server
+                        port - rtsp port for the satip server [default: 554]
+                        eg: -s 192.168.1.2 -s dvbt:192.168.1.3:554 -s dvbc:192.168.1.4
+                        - specifies 1 dvbs2 (and dvbs)satip server with address 192.168.1.2:554
+                        - specifies 1 dvbt satip server  with address 192.168.1.3:554
+                        - specifies 1 dvbc satip server  with address 192.168.1.4:554
+
+                -t clean the PSI from all CA information, the client will see the channel as clear if decrypted successfully
+
+Streaming examples:
 	- In order to listen to a radio on Hotbird 13E, after minisatip is started open the following URL in your favourite media player:
 
 	"http://MINISATIP_HOST:8080/?msys=dvbs&freq=11623&pol=v&sr=27500&pids=0,10750,254"

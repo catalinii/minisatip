@@ -489,6 +489,22 @@ int dvb_tune (int aid, transponder * tp)
 		.props = atsc_cmdargs
 	};
 	
+	static struct dtv_property isdbt_cmdargs[] = {
+	    { .cmd = DTV_DELIVERY_SYSTEM, .u.data = SYS_ISDBT },
+	    { .cmd = DTV_FREQUENCY, .u.data = 0 }, 
+	    { .cmd = DTV_ISDBT_PARTIAL_RECEPTION, .u.data = 1}, 
+	    { .cmd = DTV_INVERSION, .u.data = INVERSION_AUTO}, 
+	    { .cmd = DTV_BANDWIDTH_HZ, .u.data = 0}, 
+	    { .cmd = DTV_ISDBT_LAYERA_SEGMENT_COUNT, .u.data = 1},  
+	    { .cmd = DTV_ISDBT_LAYER_ENABLED, .u.data = 1 }, 
+	    { .cmd = DTV_TUNE }, 
+	};
+
+	static struct dtv_properties isdbt_cmdseq = {
+		.num = sizeof(isdbt_cmdargs)/sizeof(struct dtv_property),
+		.props = isdbt_cmdargs
+	};
+	
 	bclear = getTick();
 	
 	if ((ioctl (fd_frontend, FE_SET_PROPERTY, &cmdseq_clear)) == -1)
@@ -580,7 +596,20 @@ int dvb_tune (int aid, transponder * tp)
 			LOG("tuning to %d specinv:%s delsys:%s mod:%s ts clear=%d", p->props[FREQUENCY].u.data, fe_specinv[p->props[INVERSION].u.data], 
 					fe_delsys[p->props[DELSYS].u.data], fe_modulation[p->props[MODULATION].u.data], bclear);
 			break;
-	}
+
+		case SYS_ISDBT:
+			p = &isdbt_cmdseq;
+			p->props[DELSYS].u.data = tp->sys;
+			p->props[FREQUENCY].u.data = freq * 1000;
+			p->props[INVERSION].u.data = tp->inversion;
+			p->props[BANDWIDTH].u.data = tp->bw;
+			
+			LOG ("tuning to %d delsys: %s bw:%d inversion:%s , ts clear = %d",
+					p->props[FREQUENCY].u.data, fe_delsys[p->props[DELSYS].u.data], p->props[BANDWIDTH].u.data, fe_specinv[p->props[INVERSION].u.data], bclear);
+			
+			break;
+
+}
 
 	/* discard stale QPSK events */
 	while (1)
