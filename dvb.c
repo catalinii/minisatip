@@ -495,8 +495,8 @@ int dvb_tune (int aid, transponder * tp)
 	    { .cmd = DTV_ISDBT_PARTIAL_RECEPTION, .u.data = 1}, 
 	    { .cmd = DTV_INVERSION, .u.data = INVERSION_AUTO}, 
 	    { .cmd = DTV_BANDWIDTH_HZ, .u.data = 0}, 
-	    { .cmd = DTV_ISDBT_LAYERA_SEGMENT_COUNT, .u.data = 1},  
-	    { .cmd = DTV_ISDBT_LAYER_ENABLED, .u.data = 1 }, 
+//	    { .cmd = DTV_ISDBT_LAYERA_SEGMENT_COUNT, .u.data = 1},  
+//	    { .cmd = DTV_ISDBT_LAYER_ENABLED, .u.data = 1 }, 
 	    { .cmd = DTV_TUNE }, 
 	};
 
