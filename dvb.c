@@ -492,7 +492,7 @@ int dvb_tune (int aid, transponder * tp)
 	static struct dtv_property isdbt_cmdargs[] = {
 	    { .cmd = DTV_DELIVERY_SYSTEM, .u.data = SYS_ISDBT },
 	    { .cmd = DTV_FREQUENCY, .u.data = 0 }, 
-	    { .cmd = DTV_ISDBT_PARTIAL_RECEPTION, .u.data = 1}, 
+	    { .cmd = DTV_ISDBT_PARTIAL_RECEPTION, .u.data = 0}, 
 	    { .cmd = DTV_INVERSION, .u.data = INVERSION_AUTO}, 
 	    { .cmd = DTV_BANDWIDTH_HZ, .u.data = 0}, 
 //	    { .cmd = DTV_ISDBT_LAYERA_SEGMENT_COUNT, .u.data = 1},  
