@@ -15,7 +15,7 @@ https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item
 
 Usage:
 
-minisatip [-[flzg]] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] [-p public_host] [-s rtp_port] [-a x:y:z] [-m mac] [-l] [-a X:Y:Z] [-e X-Y,Z] [-o oscam_host:dvbapi_port] [-c X] [-b X:Y] [-u A1:S1-F1[-PIN]] [-j A1:S1-F1[-PIN]] [-x http_port] [-y rtsp_port]   
+minisatip [-[flzg]] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] [-p public_host] [-s [DELSYS:]host[:port] [-a x:y:z] [-m mac] [-a X:Y:Z] [-e X-Y,Z] [-o oscam_host:dvbapi_port] [-c X] [-b X:Y] [-u A1:S1-F1[-PIN]] [-j A1:S1-F1[-PIN]] [-x http_port] [-y rtsp_port]   
 
  -f foreground, otherwise run in background
 
@@ -76,7 +76,7 @@ minisatip [-[flzg]] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] 
 	192.168.9.9 is the host where oscam is running and 9000 is the port configured in dvbapi section in oscam.conf
 
 -s DELSYS:host:port - specify the remote satip host and port with delivery system DELSYS, it is possible to use multiple -s 
-	DELSYS - can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, atsc, dvbcb ( - DVBC_ANNEX_B ) [default: dvbs2]
+	DELSYS - can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, isdbt, atsc, dvbcb ( - DVBC_ANNEX_B ) [default: dvbs2]
 	host - the server of the satip server
 	port - rtsp port for the satip server [default: 554]
 	eg: -s 192.168.1.2 -s dvbt:192.168.1.3:554 -s dvbc:192.168.1.4
@@ -87,11 +87,15 @@ minisatip [-[flzg]] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] 
 -t clean the PSI from all CA information, the client will see the channel as clear if decrypted successfully
 
 Streaming examples:
-	- In order to listen to a radio on Hotbird 13E, after minisatip is started open the following URL in your favourite media player:
+- In order to listen to a radio on Hotbird 13E, after minisatip is started open the following URL in your favourite media player:
 
-	"http://MINISATIP_HOST:8080/?msys=dvbs&freq=11623&pol=v&sr=27500&pids=0,10750,254"
-	
-	msys can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, atsc, dvbcb ( - DVBC_ANNEX_B )
+"http://MINISATIP_HOST:8080/?msys=dvbs&freq=11623&pol=v&sr=27500&pids=0,10750,254"
+
+- In order to listen to a radio on Astra 19.2E, after minisatip is started open the following URL in your favourite media player:
+
+"http://MINISATIP_HOST:8080/?msys=dvbs&freq=12266&pol=h&sr=27500&pids=0,851"	
+
+- msys can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, atsc, isdbt, dvbcb ( - DVBC_ANNEX_B )
 	
 
    	
