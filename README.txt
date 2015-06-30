@@ -15,7 +15,7 @@ https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item
 
 Usage:
 
-minisatip [-[flzg]] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] [-p public_host] [-s [DELSYS:]host[:port] [-a x:y:z] [-m mac] [-a X:Y:Z] [-e X-Y,Z] [-o oscam_host:dvbapi_port] [-c X] [-b X:Y] [-u A1:S1-F1[-PIN]] [-j A1:S1-F1[-PIN]] [-x http_port] [-y rtsp_port]   
+minisatip [-[flzg]] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] [-p public_host] [-s [DELSYS:]host[:port] [-a x:y:z] [-m mac] [-e X-Y,Z] [-o oscam_host:dvbapi_port] [-c X] [-b X:Y] [-u A1:S1-F1[-PIN]] [-j A1:S1-F1[-PIN]] [-x http_port] [-y rtsp_port]   
 
  -f foreground, otherwise run in background
 
@@ -87,6 +87,7 @@ minisatip [-[flzg]] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] 
 -t clean the PSI from all CA information, the client will see the channel as clear if decrypted successfully
 
 Streaming examples:
+
 - In order to listen to a radio on Hotbird 13E, after minisatip is started open the following URL in your favourite media player:
 
 "http://MINISATIP_HOST:8080/?msys=dvbs&freq=11623&pol=v&sr=27500&pids=0,10750,254"
