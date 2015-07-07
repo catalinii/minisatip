@@ -175,7 +175,7 @@ int dvbca_process_pmt(uint8_t *b, adapter *a)
 	if(p->type & PMTCA_COMPLETE)
 		return 0;
 	
-	if(!(len = assemble_packet(&b,a)))
+	if(!(len = assemble_packet(&b,a,1)))
 		return 0;
 	
 	len = ((b[1] & 0x03) << 8) | b[2];

@@ -247,6 +247,7 @@ int dvbapi_reply(sockets * s)
 SKey *get_active_key(SPid *p)
 {
 	SKey *k;
+	adapter *ad;
 	int key = p->key;	
 	if(key==255)
 		return NULL;
@@ -257,12 +258,19 @@ SKey *get_active_key(SPid *p)
 	k = get_key(key);
 	if(k==NULL)
 		return NULL;
+	ad = get_adapter(k->adapter);
+	
 	LOGL(3, "get_active_key: searching key for pid %d, starting key %d parity %d ok %d %d", p->pid, key, k->parity, k->key_ok[0], k->key_ok[1]);
 	while(k && k->enabled)
 	{
 		if(k->key_ok[0] || k->key_ok[1])
 		{
-			LOGL(1, "get_active_key: returning key %d for pid %d", k->id, p->pid);
+			char buf[200];
+			buf[0] = 0;
+			if(p->cnt == 0)
+				sprintf(buf,", decrypt errs %d errs %d, adapter pid errs %d", p->dec_err, p->err, ad?ad->pid_err:-1);
+			LOGL(1, "get_active_key: returning key %d for pid %d%s", k->id, p->pid, buf);			
+				
 			return k; 
 		}
 		if(k->next_key<keys || k->next_key>keys+MAX_KEYS)
@@ -315,10 +323,17 @@ int decrypt_batch(SKey *k)
 void mark_decryption_failed(unsigned char *b, SKey *k, adapter *ad)
 {
 	SPid *p;
+	int pid;
 	if(!ad)
 		return;
+	pid = (b[1] & 0x1F)*256 + b[2];
 	LOGL(4, "NOT DECRYPTING for key %d drop_encrypted=%d parity %d pid %d key_ok %d", k?k->id:-1, opts.drop_encrypted, k?k->parity:-1, 
-		(b[1] & 0x1F)*256 + b[2], k?k->key_ok[k->parity]:-1);
+		pid, k?k->key_ok[k->parity]:-1);
+	ad->dec_err ++;
+	p = find_pid(ad->id, pid);
+	if(p)
+		p->dec_err ++;
+	
 	if(opts.drop_encrypted)
 	{
 		b[1] |= 0x1F;
@@ -550,7 +565,7 @@ int send_ecm(unsigned char *b, adapter *ad)
 	demux = k->demux;
 	filter = p->filter;	
 	
-	if(!(len = assemble_packet(&b,ad)))
+	if(!(len = assemble_packet(&b,ad,0)))
 		return 0;
 	
 	if((b[0] & 1) == p->ecm_parity)
@@ -618,7 +633,7 @@ int keys_add(int adapter, int sid, int pmt_pid)
 	keys[i].blen = 0;
 	keys[i].enabled = 1;
 	keys[i].enabled_channels = 0;
-	keys[i].ver = -1;
+	keys[i].ver = -1;	
 	keys[i].next_key = NULL;
 	invalidate_adapter(adapter);
 	LOG("returning new key %d for adapter %d, pmt pid %d sid %04X", i, adapter, pmt_pid, sid);
@@ -853,7 +868,7 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 		k->enabled_channels = 0;		
 	}
 
-	if(!(pmt_len = assemble_packet(&b,ad)))
+	if(!(pmt_len = assemble_packet(&b,ad,1)))
 		return 0;
 
 	program_id = b[3]* 256 + b[4];

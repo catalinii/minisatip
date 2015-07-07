@@ -753,18 +753,18 @@ int process_packet(unsigned char *b, adapter *ad)
 	int _pid = (b[1] & 0x1f) * 256 + b[2];
 	streams *sid;
 	int rtime = ad->rtime;
-	if( _pid == 8191)
-	{
-//		LOGL(2, "process_packet: pid 8191");
-		return 0;	
-	}
+//	if( _pid == 8191)
+//	{
+//		return 0;	
+//	}
 	p = find_pid(ad->id, _pid);
 	if(!p)
 		p = find_pid(ad->id, 8192);
 
-	if((!p) || ((p->sid[0]==-1) && (p->type==0)))
+	if((!p))
 	{
-//		LOGL(2, "process_packet: pid %d not found", _pid);
+		LOGL(4, "process_packet: pid %d not found", _pid);
+		ad->pid_err ++;
 		return 0;
 	}
 	p->cnt++;
@@ -777,11 +777,14 @@ int process_packet(unsigned char *b, adapter *ad)
 				
 	if(p->cc != cc)
 	{	
-//		LOG("PID Continuity error (adapter %d): pid: %03d, Expected CC: %X, Actual CC: %X", s->sid, pid, p->cc, cc);
+		LOGL(4, "PID Continuity error (adapter %d): pid: %03d, Expected CC: %X, Actual CC: %X", ad->id, _pid, p->cc, cc);
 		p->err ++;
 	}
 	p->cc = cc;
 
+	if(p->sid[0] == -1)
+		return 0;
+		
 	for (j = 0; p->sid[j] > -1 && j < MAX_STREAMS_PER_PID; j++)
 	{
 		if ((sid = get_sid(p->sid[j])))

@@ -48,6 +48,12 @@
 #define DTV_STREAM_ID           42
 #endif
 
+#define MIN_FRQ_DVBT  174000
+#define MAX_FRQ_DVBT  858000
+#define MIN_FRQ_DVBC   51000
+#define MAX_FRQ_DVBC  860000
+#define MIN_FRQ_DVBS  950000
+#define MAX_FRQ_DVBS 2150000
 
 typedef struct struct_transponder
 {

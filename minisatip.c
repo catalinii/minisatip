@@ -52,7 +52,7 @@ int rtsp, http, si, si1, ssdp1;
 void
 usage ()
 {
-	printf("minisatip [-[flzg]] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] [-p public_host] [-s [DELSYS:]host[:port] [-a x:y:z] [-m mac] [-a X:Y:Z] [-e X-Y,Z] [-o oscam_host:dvbapi_port] [-c X] [-b X:Y] [-u A1:S1-F1[-PIN]] [-j A1:S1-F1[-PIN]] [-x http_port] [-y rtsp_port]   \n\n \
+	printf("minisatip [-[flzg]] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] [-p public_host] [-s [DELSYS:]host[:port] [-a x:y:z] [-m mac] [-e X-Y,Z] [-o oscam_host:dvbapi_port] [-c X] [-b X:Y] [-u A1:S1-F1[-PIN]] [-j A1:S1-F1[-PIN]] [-x http_port] [-y rtsp_port]   \n\n \
 -f foreground, otherwise run in background\n\
 \n\
 -r remote_rtp_host: send the rtp stream to remote_rtp_host instead of the ip the connection comes from\n \

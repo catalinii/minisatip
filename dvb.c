@@ -518,13 +518,16 @@ int dvb_tune (int aid, transponder * tp)
 	{
 		case SYS_DVBS:
 		case SYS_DVBS2:
-	
+
 			if (tp->sys == SYS_DVBS2 && tp->mtype == 0)
 				tp->mtype = PSK_8;
 			if (tp->sys == SYS_DVBS && tp->mtype == 0)
 				tp->mtype = QPSK;
 			bpol = getTick();
 			if_freq = setup_switch (fd_frontend, tp);
+			if(if_freq < MIN_FRQ_DVBS || if_freq > MAX_FRQ_DVBS)
+				LOG_AND_RETURN(-404, "Frequency %d is not within range ", if_freq);
+		
 			p = &dvbs2_cmdseq;
 			p->props[DELSYS].u.data = tp->sys;
 			p->props[MODULATION].u.data = tp->mtype;
@@ -544,6 +547,10 @@ int dvb_tune (int aid, transponder * tp)
 
 		case SYS_DVBT:
 		case SYS_DVBT2:
+		
+			if(tp->freq < MIN_FRQ_DVBT || tp->freq > MAX_FRQ_DVBT)
+				LOG_AND_RETURN(-404, "Frequency %d is not within range ", tp->freq);
+
 			if (tp->sys == SYS_DVBT && tp->mtype == 0)
 				tp->mtype = QAM_AUTO;
 			if (tp->sys == SYS_DVBT2 && tp->mtype == 0)
@@ -569,6 +576,10 @@ int dvb_tune (int aid, transponder * tp)
 			break;
 		case SYS_DVBC2:
 		case SYS_DVBC_ANNEX_A:
+		
+			if(tp->freq < MIN_FRQ_DVBC || tp->freq > MAX_FRQ_DVBC)
+				LOG_AND_RETURN(-404, "Frequency %d is not within range ", tp->freq);
+		
 			p = &dvbc_cmdseq;
 			if(tp->mtype == 0)
 				tp->mtype = QAM_AUTO;
@@ -585,6 +596,10 @@ int dvb_tune (int aid, transponder * tp)
 		
 		case SYS_ATSC:
 		case SYS_DVBC_ANNEX_B:
+		
+			if(tp->freq < MIN_FRQ_DVBC || tp->freq > MAX_FRQ_DVBC)
+				LOG_AND_RETURN(-404, "Frequency %d is not within range ", tp->freq);
+				
 			p = &atsc_cmdseq;
 			if(tp->mtype == 0)
 				tp->mtype = QAM_AUTO;
@@ -598,6 +613,10 @@ int dvb_tune (int aid, transponder * tp)
 			break;
 
 		case SYS_ISDBT:
+
+			if(tp->freq < MIN_FRQ_DVBT || tp->freq > MAX_FRQ_DVBT)
+				LOG_AND_RETURN(-404, "Frequency %d is not within range ", tp->freq);
+		
 			p = &isdbt_cmdseq;
 			p->props[DELSYS].u.data = tp->sys;
 			p->props[FREQUENCY].u.data = freq * 1000;
@@ -713,75 +732,59 @@ dvb_delsys (int aid, int fd, fe_delivery_system_t *sys)
 		//	return -1;
 	}
 	
-	LOG("Detected Adapter %d handle %d DVB Card Name: %s", aid, fd, fe_info.name); 
+	LOG("Detected adapter %d handle %d DVB Card Name: %s", aid, fd, fe_info.name); 
 
 	int nsys = enum_cmdargs[0].u.buffer.len;
 
 	if (nsys < 1)
 	{
-	//	LOG ("no available delivery system");
-	//	return 0;
+		
+		int idx = 0;
 		switch ( fe_info.type )
 		{
 		case FE_OFDM:
 			if ( fe_info.caps & FE_CAN_2G_MODULATION )
-			{
-				LOG ("Delivery System DVB-T2");
-				rv=SYS_DVBT2;
-			}
-			else
-			{
-				LOG ("Delivery System DVB-T");
-				rv=SYS_DVBT;
-			}
+				sys[idx++] = SYS_DVBT2;
+			
+			sys[idx++] = SYS_DVBT;
+			
 			break;
 		case FE_QAM:
-			LOG ("Delivery System DVB-C");
-			rv=SYS_DVBC_ANNEX_AC;
+			sys[idx++] = SYS_DVBC_ANNEX_AC;
 			break;
 		case FE_QPSK:
 			if ( fe_info.caps & FE_CAN_2G_MODULATION )
-			{
-				LOG ("Delivery System DVB-S2");
-				rv=SYS_DVBS2;
-			}
-			else
-			{
-				LOG ("Delivery System DVB-S");
-				rv=SYS_DVBS;
-			}
+				sys[idx++] = SYS_DVBS2;
+			
+			sys[idx++] = SYS_DVBS;
+			
 			break;
 		case FE_ATSC:
 			if ( fe_info.caps & (FE_CAN_8VSB | FE_CAN_16VSB) )
-			{
-				LOG ("Delivery System ATSC");
-				rv=SYS_ATSC;
-			}
+				sys[idx++] = SYS_ATSC;
 			else if ( fe_info.caps & (FE_CAN_QAM_64 | FE_CAN_QAM_256 | FE_CAN_QAM_AUTO) )
-			{
-				LOG ("Delivery System ATSC/DVBC");
-				rv=SYS_DVBC_ANNEX_B;
-			}
+				sys[idx++] = SYS_DVBC_ANNEX_B;
 			else return 0;
+			
 			break;
 		default:
-			LOG ("no available delivery system");
+			LOG ("no available delivery system for adapter %d", aid);
 			return 0;
 		}
-		nsys = 1;
-		sys[0] = rv;
+		nsys = idx;
+		rv = sys[0];
 	}
 	else
 	{	
 		for (i = 0; i < nsys; i++)
 		{
 			sys[i] = enum_cmdargs[0].u.buffer.data[i];
-			LOG("Detected del_sys[%d] for adapter %d: %s", i, aid, fe_delsys[sys[i]]);
 		}
 		rv = enum_cmdargs[0].u.buffer.data[0];
 	}
+	for (i = 0; i < nsys; i++)
+			LOG("Detected delivery system for adapter %d: %s [%d]", aid, fe_delsys[sys[i]], sys[i]);
 
-	LOG ("returning default from dvb_delsys => %s (count %d)", fe_delsys[rv] , nsys);
 	return (fe_delivery_system_t) rv;
 
 }

@@ -21,13 +21,14 @@ typedef struct struct_pid
 {
 	int pid;					 // pid for this demux - not used
 	int fd;						 // fd for this demux
-	int err;
+	int err;					// counter errors
 								// stream id - one more to set it -1
 	signed char sid[MAX_STREAMS_PER_PID];
 	char flags;					 // 0 - disabled , 1 enabled, 2 - will be enabled next tune when tune is called, 3 disable when tune is called
 	int type;
 	int csid;  // channel sid if type & TYPE_PMT
 	int cnt;
+	int dec_err;			// decrypt errors
 	unsigned char key, filter, ecm_parity; // custom data kept in the SPid structure
 	unsigned char cc; // continuity
 } SPid;
@@ -62,6 +63,7 @@ typedef struct struct_adapter
 	fe_status_t status;
 	uint32_t ber;
 	uint16_t strength, snr, max_strength, max_snr;
+	uint32_t pid_err, dec_err; // detect pids received but not part of any stream, decrypt errors
 	int switch_type;
 	int uslot; // unicable/jess slot
 	int ufreq; // unicable/jess frequency	
@@ -80,6 +82,8 @@ typedef struct struct_adapter
 	int wp, qp; // written packet, queued packet
 	int want_commit, want_tune, sent_transport;
 	uint8_t satip_fe;
+	uint32_t rcvp, repno, rtp_miss, rtp_ooo;   // rtp statstics
+	uint16_t rtp_seq;
 	Set_pid set_pid;
 	Del_filters  del_filters;
 	Adapter_commit commit;

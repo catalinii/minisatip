@@ -122,7 +122,7 @@ int process_pat(unsigned char *b, adapter *ad)
 		return;
 
 
-	if(!(pat_len = assemble_packet(&b,ad)))
+	if(!(pat_len = assemble_packet(&b,ad,1)))
 		return 0;
 
 	dvbapi_delete_keys_for_adapter(ad->id);
@@ -169,7 +169,7 @@ int process_pat(unsigned char *b, adapter *ad)
 
 #define ASSEMBLE_TIMEOUT 1000
 
-int assemble_packet(uint8_t **b1, adapter *ad)
+int assemble_packet(uint8_t **b1, adapter *ad, int check_crc)
 {
 	int len = 0, pid;
 	uint32_t crc, current_crc;
@@ -208,7 +208,7 @@ int assemble_packet(uint8_t **b1, adapter *ad)
 			return 0;		
 	}	
 	*b1 = b;
-	if(b[0] == 2 || b[0] == 0) // check the crc for PAT and PMT
+	if(check_crc) // check the crc for PAT and PMT
 	{		
 		if(len < 0 || len> 1500)
 			LOG_AND_RETURN(0, "assemble_packet: len %d not valid for pid %d", len, pid);

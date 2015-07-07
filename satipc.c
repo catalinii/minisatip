@@ -151,13 +151,21 @@ int satipc_close(sockets * s)
 
 int satipc_rtcp_reply(sockets * s)
 {
-	char *b = s->buf, *ver, *tun, *signal;
+	unsigned char *b = s->buf, *ver, *tun, *signal;
 	int i, rlen = s->rlen;
 	adapter *ad = get_adapter(s->sid);
 	int strength, status, snr;
+	uint32_t rp, rb;
 	if(!ad)
 		return 0;
 //	LOG("satip_rtcp_reply called");
+	if(b[0] == 0x80 && b[1]==0xC8)
+	{
+		copy32r(rp, b, 20);
+		
+		if((++ad->repno % 100) == 0)  //every 20s
+			LOG("satipc: rtp report, adapter %d: rtcp missing packets %d, rtp missing %d, rtp ooo %d, pid err %d", ad->id,  rp - ad->rcvp, ad->rtp_miss, ad->rtp_ooo, ad->pid_err - ad->dec_err);
+	}
 	for(i = 0; i< rlen - 4; i++)
 		if(b[i]=='v' && b[i+1] == 'e' && b[i+2]=='r' && b[i+3]=='=')
 		{
@@ -168,10 +176,11 @@ int satipc_rtcp_reply(sockets * s)
 			if(signal)
 			{
 				sscanf(signal + 1,"%d,%d,%d", &strength, &status, &snr);
+				if(ad->strength != strength && ad->snr != snr)
+					LOGL(3,"satipc: Received signal status from the server for adapter %d, stength=%d status=%d snr=%d", ad->id, strength, status, snr); 
 				ad->strength = strength;
 				ad->status = status?FE_HAS_LOCK:0;
 				ad->snr = snr;
-				LOGL(5,"satipc: Received signal status from the server for adapter %d, stength=%d status=%d snr=%d", ad->id, ad->strength, ad->status, ad->snr); 
 			}
 		}
 }
@@ -222,6 +231,9 @@ int satipc_open_device(adapter *ad)
 	ad->session[0] = 0;
 	ad->stream_id = -1;
 	ad->wp = ad->qp = ad->want_commit = 0;
+	ad->rcvp = ad->repno = 0;
+	ad->rtp_miss = ad->rtp_ooo = 0;
+	ad->rtp_seq = -1;
 	return 0;
 
 }
@@ -235,9 +247,26 @@ void satip_close_device(adapter *ad)
 
 int satipc_read(int socket, void *buf, int len, sockets *ss)
 {	
-	char buf1[20];
+	unsigned char buf1[20];
+	int rb;
+	uint16_t seq;
 	struct iovec iov[3] = {{ .iov_base = buf1, .iov_len  = 12}, {.iov_base = buf, .iov_len = len }, {NULL, 0}}; 
-	return readv(socket, iov, 2);  // stripping rtp header
+	rb = readv(socket, iov, 2);  // stripping rtp header
+	if(rb > 0)
+	{
+		adapter *ad = get_adapter(ss->sid);
+		ad->rcvp++;
+		
+		copy16r(seq, buf1, 2);
+		if(ad->rtp_seq  == -1)
+			ad->rtp_seq = seq;
+		if(seq > ad->rtp_seq)
+			ad->rtp_miss ++;
+		else if(seq < ad->rtp_seq)
+			ad->rtp_ooo ++;
+		ad->rtp_seq = (seq + 1) & 0xFFFF;
+	}
+	return rb;
 }
 
 void satip_post_init(adapter *ad)

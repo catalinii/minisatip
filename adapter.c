@@ -139,6 +139,7 @@ init_hw ()
 		a[i].delsys (i, a[i].fe, a[i].sys);
 		a[i].master_sid = -1;
 		a[i].sid_cnt = 0;
+		a[i].pid_err = a[i].dec_err = 0;
 		a[i].new_gs = 0;
 		a[i].sock =
 			sockets_add (a[i].dvr, NULL, i, TYPE_DVR, (socket_action) read_dmx,
@@ -295,11 +296,11 @@ dump_pids (int aid)
 		if (p->pids[i].flags > 0)
 	{
 		if(dp)
-			LOGL (2, "Dumping pids table for adapter %d : ", aid);
+			LOGL (2, "Dumping pids table for adapter %d, pid errors %d", aid, p->pid_err - p->dec_err);
 		dp = 0;
 		LOGL
-			(2, "pid %d, fd %d, type %d packets %d, errs %d, flags %d, key %d, sids: %d %d %d %d %d %d %d %d",
-			p->pids[i].pid, p->pids[i].fd, p->pids[i].type, p->pids[i].cnt, p->pids[i].err, p->pids[i].flags, p->pids[i].key,
+			(2, "pid %d, fd %d, type %d packets %d, d/c errs %d/%d, flags %d, key %d, sids: %d %d %d %d %d %d %d %d",
+			p->pids[i].pid, p->pids[i].fd, p->pids[i].type, p->pids[i].cnt, p->pids[i].dec_err, p->pids[i].err, p->pids[i].flags, p->pids[i].key,
 			p->pids[i].sid[0], p->pids[i].sid[1], p->pids[i].sid[2], p->pids[i].sid[3], p->pids[i].sid[4], 
 			p->pids[i].sid[5], p->pids[i].sid[6], p->pids[i].sid[7]);
 	}
@@ -422,6 +423,7 @@ update_pids (int aid)
 			ad->pids[i].cnt = 0;
 			ad->pids[i].cc = 255;
 			ad->pids[i].err = 0;
+			ad->pids[i].dec_err = 0;
 	}
 	
 	ad->commit(ad);
@@ -681,8 +683,7 @@ set_adapter_parameters (int aid, int sid, transponder * tp)
 	if (ad->tp.pids)			 // pids can be specified in SETUP and then followed by a delpids in PLAY, make sure the behaviour is right
 	{
 		mark_pids_deleted (aid, sid, NULL);  // delete all the pids for this 
-		if (mark_pids_add
-			(sid, aid, ad->tp.pids) < 0)
+		if (mark_pids_add(sid, aid, ad->tp.pids) < 0)
 			return -1;
 	}
 

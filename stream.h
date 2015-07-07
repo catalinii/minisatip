@@ -37,7 +37,7 @@ typedef struct struct_streams
 	char *apids, *dpids, *pids, *x_pmt;
 	struct iovec iov[MAX_PACK + 2];
 	int iiov;
-	int sp,sb;
+	uint32_t sp,sb;
 	int timeout;
 
 } streams;
