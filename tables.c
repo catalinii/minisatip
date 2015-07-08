@@ -210,7 +210,7 @@ int assemble_packet(uint8_t **b1, adapter *ad, int check_crc)
 	*b1 = b;
 	if(check_crc) // check the crc for PAT and PMT
 	{		
-		if(len < 0 || len> 1500)
+		if(len < 4 || len> 1500)
 			LOG_AND_RETURN(0, "assemble_packet: len %d not valid for pid %d", len, pid);
 		crc = crc32(b,len - 1);
 		copy32r(current_crc, b, len - 1)
@@ -228,6 +228,8 @@ void free_assemble_packet(int pid, adapter *ad)
 uint32_t crc32(const uint8_t *data, int datalen)
 {	
 	uint32_t crc = 0xFFFFFFFF;
+	if(datalen<0)
+		return crc;
 	while(datalen--)
 		crc = (crc << 8) ^ crc_tab[((crc >> 24) ^ *data++) & 0xff];
 

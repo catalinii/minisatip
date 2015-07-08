@@ -8,7 +8,7 @@
 #include "utils.h"
 
 
-#define VERSION_BUILD "44"
+#define VERSION_BUILD "45"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.3.,VERSION_BUILD,)
 
@@ -35,7 +35,7 @@ void set_options (int argc, char *argv[]);
 #define SYSLOG_OPT 'g'
 #define RTSPPORT_OPT 'y'
 #define SATIPCLIENT_OPT 's'
-
+#define PRIORITY_OPT 'i'
 
 #define PID_FILE "/var/run/minisatip.pid"
 

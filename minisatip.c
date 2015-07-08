@@ -121,6 +121,8 @@ usage ()
 	- specifies 1 dvbc satip server  with address 192.168.1.4:554\n\
 \n\
 -t clean the PSI from all CA information, the client will see the channel as clear if decrypted successfully\n\
+\n\
+-i prio: set the process priority to prio\n\
 ",
 	ADAPTER_BUFFER, DVR_BUFFER);
 	exit (1);
@@ -165,7 +167,7 @@ set_options (int argc, char *argv[])
 	memset(opts.playlist, sizeof(opts.playlist), 0);
 	
 	
-	while ((opt = getopt (argc, argv, "flr:a:td:w:p:s:hc:b:m:p:e:x:u:j:o:gy:z")) != -1)
+	while ((opt = getopt (argc, argv, "flr:a:td:w:p:s:hc:b:m:p:e:x:u:j:o:gy:zi:")) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
 		switch (opt)
@@ -312,8 +314,14 @@ set_options (int argc, char *argv[])
 				else 
 					sprintf(opts.satip_servers, "%s", optarg );
 				break;
-			}
 
+			case PRIORITY_OPT:
+			
+				if(nice(map_int(optarg, NULL)) == -1)
+					LOG("Failed to set priority %s", strerror(errno));
+				break;
+			
+		}
 			
 	}
 	
