@@ -68,6 +68,7 @@ typedef struct tmpinfo
 	uint32_t max_size;
 	uint32_t timeout;
 	uint32_t last_updated;
+	uint8_t no_change, prev_no_change;	
 	unsigned char *data;
 } STmpinfo;
 STmpinfo sinfo[MAX_SINFO];
@@ -98,6 +99,8 @@ STmpinfo *getFreeItemPos(int64_t key)
 		{
 			sinfo[i].id = i;
 			sinfo[i].timeout = 0;
+			sinfo[i].no_change = 0;
+			sinfo[i].prev_no_change = 0;
 			LOGL(2,"Requested new Item for key %llX, returning %d", key, i);
 			return sinfo + i;
 		}
@@ -157,9 +160,13 @@ int setItemTimeout(int64_t key, int tmout)
 
 int setItem(int64_t key, unsigned char *data, int len, int pos)   // pos = -1 -> append, owerwrite the existing key
 {
+	int new_key = 0;
 	STmpinfo *s = getItemPos(key);
 	if(!s)
+	{
 		s = getFreeItemPos(key);
+		new_key = 1;
+	}
 	if(!s)
 		return -1;
 	
@@ -178,15 +185,34 @@ int setItem(int64_t key, unsigned char *data, int len, int pos)   // pos = -1 ->
 		len = s->max_size - pos;
 		
 	s->len = pos + len;
-	
+	if(pos == 0)
+	{
+		s->prev_no_change = s->no_change;
+		s->no_change = 1;
+	}
+	if(new_key)
+		s->no_change = 0;
+	if(memcmp(s->data + pos, data, len) != 0)
+		s->no_change = 0;
+
 	memcpy(s->data + pos, data, len);			
+}
+
+int getItemChange(int64_t key, int *prev)
+{
+	int current;
+	*prev = current = -1;
+	STmpinfo *s = getItemPos(key);
+	if(!s)
+		return 0;
+	*prev = s->prev_no_change;
+	current = s->no_change;
+	return current;
 }
 
 int delItem(int64_t key)
 {
 	STmpinfo *s = getItemPos(key);
-	if(!s)
-		return 0;
 	s->enabled = 0;
 	s->len = 0;
 	s->key = 0;

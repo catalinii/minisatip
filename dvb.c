@@ -232,8 +232,8 @@ int dvb_open_device(adapter *ad)
 	if(ad->ca > 0)
 		close(ad->ca);
 	ad->ca = open (buf, O_RDWR);
-	if (ca > -1)
-		ad->ca_device = (ca_device_t *)ca_init(ca);
+	if (ad->ca > -1)
+		ad->ca_device = (ca_device_t *)ca_init(ad->ca);
 #endif
 	LOG ("opened DVB adapter %d fe:%d dvr:%d", ad->id, ad->fe, ad->dvr);
 	if (ioctl (ad->dvr, DMX_SET_BUFFER_SIZE, opts.dvr_buffer) < 0)
@@ -246,11 +246,12 @@ int dvb_open_device(adapter *ad)
 
 int send_diseqc(int fd, int pos, int pol, int hiband)
 {
-	struct dvb_diseqc_master_cmd cmd = {
-		{0xe0, 0x10, 0x38, 0xf0, 0x00, 0x00}, 4
-	};
-
+/* DiSEqC 1.0 */
+	struct dvb_diseqc_master_cmd cmd = { {0xe0, 0x10, 0x38, 0xf0, 0x00, 0x00}, 4 };
+ /* DiSEqC 1.1 */
+	struct dvb_diseqc_master_cmd uncmd = { {0xe0, 0x10, 0x39, 0xf0, 0x00, 0x00}, 4 };
 	cmd.msg[3] = 0xf0 | ( ((pos << 2) & 0x0c) | (hiband ? 1 : 0) | (pol ? 2 : 0));
+	uncmd.msg[3] = 0xf0 | ( (pos & 0x0c) | (hiband ? 1 : 0) | (pol ? 2 : 0));
 
 	LOGL(3, "send_diseqc fd %d, pos = %d, pol = %d, hiband = %d, diseqc => %02x %02x %02x %02x %02x",
                   fd, pos, pol, hiband, cmd.msg[0], cmd.msg[1], cmd.msg[2], cmd.msg[3], cmd.msg[4]);
@@ -264,6 +265,11 @@ int send_diseqc(int fd, int pos, int pol, int hiband)
 	usleep(15000);
 	if (ioctl(fd, FE_DISEQC_SEND_MASTER_CMD, &cmd) == -1)
 		LOG( "send_diseqc: FE_DISEQC_SEND_MASTER_CMD failed for fd %d: %s", fd, strerror(errno));	
+	
+	usleep(15000);
+	if (ioctl(fd, FE_DISEQC_SEND_MASTER_CMD, &uncmd) == -1)
+		LOG( "send_diseqc: FE_DISEQC_SEND_MASTER_CMD uncommitted failed for fd %d: %s", fd, strerror(errno));	
+	
 	
 	usleep(15000);
 	if (ioctl(fd, FE_DISEQC_SEND_BURST, (pos & 1)?SEC_MINI_B : SEC_MINI_A ) == -1)

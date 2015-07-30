@@ -107,6 +107,13 @@ int process_pat(unsigned char *b, adapter *ad)
 	if(((b[1] & 0x1F) != 0) || (b[2]!=0))
 		return 0;
 
+	if(b[0] != 0x47)
+		return 0;
+		
+	if((b[1] & 0x40) && ((b[4] != 0) || (b[5] != 0)))
+		return 0;
+		
+
 	if(b[1] & 0x40)
 	{
 		tid = b[8] * 256 + b[9];

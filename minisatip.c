@@ -122,7 +122,7 @@ usage ()
 \n\
 -t clean the PSI from all CA information, the client will see the channel as clear if decrypted successfully\n\
 \n\
--i prio: set the process priority to prio\n\
+-i prio: set the process priority to prio (-10 increases the priority by 10)\n\
 ",
 	ADAPTER_BUFFER, DVR_BUFFER);
 	exit (1);

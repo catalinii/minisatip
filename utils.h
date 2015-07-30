@@ -10,6 +10,7 @@ int split (char **rv, char *s, int lrv, char sep);
 int map_int (char *s, char ** v);
 int map_intd (char *s, char ** v, int dv);
 int map_float (char *s, int mul);
+int getItemChange(int64_t key, int *prev);
 void *mymalloc (int a, char *f, int l);
 void myfree (void *x, char *f, int l);
 char *header_parameter(char **arg, int i);

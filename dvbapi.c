@@ -74,13 +74,14 @@ int dvbapi_enabled()
 	return dvbapi_is_enabled;
 }
 
-void invalidate_adapter(int ad)
+void invalidate_adapter(int aid)
 {
-	int64_t pk_key = DVBAPI_ITEM + ((1+ ad) << 24) + 1;
+	int64_t pk_key = DVBAPI_ITEM + ((1+ aid) << 24) + 1;
 	SKey **pid_to_key = (SKey **)getItem(pk_key);				
 	if(pid_to_key)
 		pid_to_key[0] = POINTER_1; // invalidate the cache
 }
+
 
 #define dvbapi_copy32r(v, a, i) if(change_endianness)copy32rr(v, a, i) else copy32r(v, a, i)
 #define dvbapi_copy16r(v, a, i) if(change_endianness)copy16rr(v, a, i) else copy16r(v, a, i)
@@ -211,6 +212,7 @@ int dvbapi_reply(sockets * s)
 			SKey *k;
 			SPid *p;			
 			unsigned char *cw;
+			uint32_t ctime = getTick();
 
 			pos += 21;
 			k_id = b[4];
@@ -220,9 +222,26 @@ int dvbapi_reply(sockets * s)
 			k = get_key(k_id);
 			if(k && (parity < 2))
 			{
-				LOG("dvbapi: received DVBAPI_CA_SET_DESCR, key %d parity %d, index %d, CW: %02X %02X %02X %02X %02X %02X %02X %02X", k_id, parity, index, cw[0], cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);			
-				dvbcsa_bs_key_set(cw, k->key[parity]);
+				char *queued = "";
+				int do_queue = 0;
+				k->key_len = 8;
+				if(parity == k->parity && k->key_ok[k->parity] && (memcmp(cw, k->cw[k->parity], k->key_len) != 0)) 
+					do_queue = 1;
+				if(ctime - k->last_parity_change < 5000) // CW received in the first 5s after key change
+					do_queue = 0;
+				if(do_queue)
+				{
+					memcpy(k->next_cw[parity], cw, k->key_len);
+					queued = "[queued]";
+				} else
+				{
+					dvbcsa_bs_key_set(cw, k->key[parity]);
+					memcpy(k->cw[parity], cw, k->key_len);
+				}
 				k->key_ok[parity] = 1;
+				k->cw_time[parity] = ctime;
+				LOG("dvbapi: received DVBAPI_CA_SET_DESCR, key %d parity %d, index %d, CW: %02X %02X %02X %02X %02X %02X %02X %02X %s", k_id, parity, index, cw[0], cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7], queued);	
+				
 				invalidate_adapter(k->adapter);
 				p = find_pid(k->adapter, k->pmt_pid);
 				if(p)
@@ -248,7 +267,9 @@ SKey *get_active_key(SPid *p)
 {
 	SKey *k;
 	adapter *ad;
-	int key = p->key;	
+	int key = p->key;
+	uint32_t ctime = getTick();
+	uint8_t nullcw[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 	if(key==255)
 		return NULL;
 	if(p->type & TYPE_ECM)
@@ -263,19 +284,34 @@ SKey *get_active_key(SPid *p)
 	LOGL(3, "get_active_key: searching key for pid %d, starting key %d parity %d ok %d %d", p->pid, key, k->parity, k->key_ok[0], k->key_ok[1]);
 	while(k && k->enabled)
 	{
-		if(k->key_ok[0] || k->key_ok[1])
+		if((k->parity != -1) && k->key_ok[k->parity] && (ctime - k->cw_time[k->parity] > MAX_KEY_TIME))  // key expired
+		{
+			k->key_ok[k->parity] = 0;
+			LOGL(2, "get_active_key: Invalidating key %d, parity %d, as the CW expired, pid %d", k->id, k->parity, p->pid);
+		}
+		
+		if((k->parity != -1) && (ctime - k->cw_time[k->parity] > 5000 ) && (memcmp(nullcw, k->next_cw[k->parity], k->key_len) != 0) )
+		{
+			char *cw = k->next_cw[k->parity];
+			LOGL(2, "get_active_key: Setting the queued CW as active CW for key %d, parity %d: %02X %02X %02X ...", k->id, k->parity, cw[0], cw[1], cw[2]);
+			memcpy(k->cw[k->parity], k->next_cw[k->parity], k->key_len);
+			memset(k->next_cw[k->parity], 0, k->key_len);
+			dvbcsa_bs_key_set(k->cw[k->parity], k->key[k->parity]);
+			
+		}
+		
+		if(((k->parity != -1) && k->key_ok[k->parity]) || (k->parity == -1) && (k->key_ok[0] || k->key_ok[1]))
 		{
 			char buf[200];
-			buf[0] = 0;
-			if(p->cnt == 0)
-				sprintf(buf,", decrypt errs %d errs %d, adapter pid errs %d", p->dec_err, p->err, ad?ad->pid_err:-1);
-			LOGL(1, "get_active_key: returning key %d for pid %d%s", k->id, p->pid, buf);			
+			buf[0] = 0;			
+			LOGL(1, "get_active_key: returning key %d for pid %d, d/c errs %d/%d, adapter pid errs %d", k->id, p->pid, p->dec_err, p->err, ad?ad->pid_err:-1);			
 				
 			return k; 
 		}
+		
 		if(k->next_key<keys || k->next_key>keys+MAX_KEYS)
 		{
-			LOG("get_active_key: invalid next_key for key %d: %p", k->id, k->next_key);
+			LOGL(3, "get_active_key: invalid next_key for key %d: %p", k->id, k->next_key);
 			k->next_key = NULL;
 		}
 		k = k->next_key;
@@ -297,6 +333,27 @@ void set_next_key(int k1, int k2)
 	key1->next_key = key2;
 }
 
+void update_pid_key(adapter *ad)
+{
+	int i = 0;
+	
+	int64_t pk_key = DVBAPI_ITEM + ((1+ ad->id) << 24) + 1;
+	SKey **pid_to_key = (SKey **)getItem(pk_key);
+	if(!pid_to_key || pid_to_key[0]) // cache pid_to_key
+	{
+		setItem(pk_key, (uint8_t *) &i, 0, -1);
+		setItemSize(pk_key, 8192*sizeof(*pid_to_key));
+		pid_to_key = (SKey **)getItem(pk_key);
+		memset(pid_to_key, 0, getItemSize(pk_key));
+	
+		for(i=0;i<MAX_PIDS;i++)
+			if(ad->pids[i].flags == 1)
+				pid_to_key[ad->pids[i].pid]=get_active_key(&ad->pids[i]);
+	}
+
+}
+
+
 int decrypt_batch(SKey *k)
 {
 	int oldb1 = -1, oldb2 = -1;
@@ -315,7 +372,6 @@ int decrypt_batch(SKey *k)
 	LOGL(5, "dvbapi: decrypted key %d parity %d at len %d, channel_id %d (pid %d) %p", 
 		k->id, k->parity, k->blen, k->sid, pid, k->batch[0].data); //0x99
 	k->blen = 0;
-	k->parity = -1;
 	memset(k->batch, 0, sizeof(int *)*128);
 	return 0;
 }
@@ -372,19 +428,9 @@ int decrypt_stream(adapter *ad,int rlen)
 		batch_size();
 	
 	pids = (int16_t *)getItem(pid_key);
+	update_pid_key(ad);
 	pid_to_key = (SKey **)getItem(pk_key);
-	if(!pid_to_key || pid_to_key[0]) // cache pid_to_key
-	{
-		setItem(pk_key, b, 0, -1);
-		setItemSize(pk_key, 8192*sizeof(*pid_to_key));
-		pid_to_key = (SKey **)getItem(pk_key);
-		memset(pid_to_key, 0, getItemSize(pk_key));
 	
-		for(i=0;i<MAX_PIDS;i++)
-			if(ad->pids[i].flags == 1)
-				pid_to_key[ad->pids[i].pid]=get_active_key(&ad->pids[i]);
-	}
-
 	for(i=0;i<rlen;i+=188)
 	{
 		b = ad->buf + i;
@@ -413,12 +459,14 @@ int decrypt_stream(adapter *ad,int rlen)
 				{
 					int ctime = getTick();
 					LOGL(2, "Parity change for key %d, old parity %d, new parity %d pid %d [%02X %02X %02X %02X], last_parity_change %d", k->id, old_parity, cp, pid, b[0], b[1], b[2], b[3], k->last_parity_change);
-					if(ctime - k->last_parity_change> 1000)
-						k->key_ok[old_parity] = 0;
+//					if(ctime - k->last_parity_change> 1000)
+//						k->key_ok[old_parity] = 0;
 					k->last_parity_change = ctime;
+					k->parity = cp;
 					invalidate_adapter(ad->id);
+					update_pid_key(ad);
 				}
-				k->parity = cp;
+				
 			}
 			
 			if(!k->key_ok[cp])
@@ -554,6 +602,11 @@ int send_ecm(unsigned char *b, adapter *ad)
 	if(!dvbapi_is_enabled)
 		return 0;
 	
+	if(b[0] != 0x47)
+		return 0;
+	if((b[1] & 0x40) && ((b[4] != 0) || ((b[5] & 0xFE) != 0x80)))
+		return 0;
+		
 	pid = (b[1] & 0x1F)* 256 + b[2];
 	p = find_pid(ad->id, pid);
 	if(p)
@@ -575,13 +628,14 @@ int send_ecm(unsigned char *b, adapter *ad)
 
 	len = ((b[1] & 0xF) << 8) + b[2];
 	len += 3;	
-	LOG("dvbapi: sending DVBAPI_FILTER_DATA key %d for pid %04X (%d), ecm_parity = %d, new parity %d, demux = %d, filter = %d, len = %d [%02X %02X %02X %02X]", k->id, pid, pid, old_parity, b[0] & 1,demux, filter, len, b[0], b[1], b[2], b[3]);
+	LOG("dvbapi: sending DVBAPI_FILTER_DATA key %d for pid %04X (%d), ecm_parity = %d, new parity %d, demux = %d, filter = %d, len = %d [%02X %02X %02X %02X]", k->id, pid, pid, old_parity, b[0] & 1, demux, filter, len, b[0], b[1], b[2], b[3]);
 	
 	if(demux<0)
 		return 0;
 	
 	if(len>559+3)
 		return -1;
+		
 	copy32(buf, 0, DVBAPI_FILTER_DATA);
 	buf[4] = demux;
 	buf[5] = filter;
@@ -635,6 +689,12 @@ int keys_add(int adapter, int sid, int pmt_pid)
 	keys[i].enabled_channels = 0;
 	keys[i].ver = -1;	
 	keys[i].next_key = NULL;
+	keys[i].cw_time[0] = keys[i].cw_time[1] = 0;
+	keys[i].key_len = 8;
+	memset(keys[i].cw[0], 0, 16);
+	memset(keys[i].cw[1], 0, 16);
+	memset(keys[i].next_cw[0], 0, 16);
+	memset(keys[i].next_cw[1], 0, 16);
 	invalidate_adapter(adapter);
 	LOG("returning new key %d for adapter %d, pmt pid %d sid %04X", i, adapter, pmt_pid, sid);
 	
@@ -827,7 +887,11 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 
 	if((b[0]!=0x47)) // make sure we are dealing with TS
 		return 0;
-	
+
+	if((b[1] & 0x40) && ((b[4] != 0) || (b[5] != 2)))
+		return 0;
+		
+		
 	pid = (b[1] & 0x1F)* 256 + b[2];
 	if(!(p = find_pid(ad->id, pid)))
 		return -1;

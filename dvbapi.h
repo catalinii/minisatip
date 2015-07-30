@@ -42,7 +42,11 @@
 typedef struct struct_key
 {
 	void *key[2];
-	int key_ok[2];
+	char key_ok[2];
+	char cw[2][16];
+	char next_cw[2][16];
+	uint32_t cw_time[2];
+	int key_len;
 	int sid;
 	int pmt_pid;
 	int enabled;
@@ -60,6 +64,8 @@ typedef struct struct_key
 	int last_parity_change;
 	struct struct_key *next_key;
 } SKey;
+
+#define MAX_KEY_TIME 25000 // 25s
 
 int init_dvbapi();
 int have_dvbapi();
