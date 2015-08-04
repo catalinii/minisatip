@@ -730,7 +730,7 @@ set_socket_buffer (int sid, unsigned char *buf, int len)
 {
 	s[sid].buf = buf;
 	s[sid].lbuf = len;
-	s[sid].rlen = 0;
+//	s[sid].rlen = 0;
 }
 
 
