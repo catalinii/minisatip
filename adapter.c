@@ -450,6 +450,7 @@ int tune (int aid, int sid)
 		rv = ad->tune (ad->id, &ad->tp);
 		ad->status = 0;
 		ad->status_cnt = 0;
+		set_socket_pos(ad->sock, 0);	// flush the existing buffer	
 		if (ad->sid_cnt > 1)	 // the master changed the frequency
 		{
 			close_streams_for_adapter (aid, sid);

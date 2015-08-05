@@ -80,6 +80,8 @@ int satipc_reply(sockets * s)
 	else if( rc!= 200)
 		ad->err = 1;
 	sid = NULL;
+	if(rc == 200)
+		ad->ignore_packets = 0;
 	
 	for(i = 0; i< la; i++)
 		if(strncasecmp("Session:", arg[i], 8) == 0)
@@ -234,6 +236,7 @@ int satipc_open_device(adapter *ad)
 	ad->rcvp = ad->repno = 0;
 	ad->rtp_miss = ad->rtp_ooo = 0;
 	ad->rtp_seq = -1;
+	ad->ignore_packets = 1;
 	return 0;
 
 }
@@ -245,16 +248,16 @@ void satip_close_device(adapter *ad)
 	ad->sent_transport = 0;
 }
 
-int satipc_read(int socket, void *buf, int len, sockets *ss)
+int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb)
 {	
 	unsigned char buf1[20];
-	int rb;
 	uint16_t seq;
+	adapter *ad = NULL;
 	struct iovec iov[3] = {{ .iov_base = buf1, .iov_len  = 12}, {.iov_base = buf, .iov_len = len }, {NULL, 0}}; 
-	rb = readv(socket, iov, 2);  // stripping rtp header
-	if(rb > 0)
+	*rb = readv(socket, iov, 2);  // stripping rtp header
+	if(*rb > 0)
 	{
-		adapter *ad = get_adapter(ss->sid);
+		ad = get_adapter(ss->sid);
 		ad->rcvp++;
 		
 		copy16r(seq, buf1, 2);
@@ -266,7 +269,14 @@ int satipc_read(int socket, void *buf, int len, sockets *ss)
 			ad->rtp_ooo ++;
 		ad->rtp_seq = (seq + 1) & 0xFFFF;
 	}
-	return rb;
+	if(!ad)
+		ad = get_adapter(ss->sid);
+	if(ad && ad->ignore_packets)
+	{
+		*rb = 0;
+		return 1;
+	}
+	return (*rb > 0);
 }
 
 void satip_post_init(adapter *ad)
@@ -470,6 +480,7 @@ void satipc_commit(adapter *ad)
 	{
 		tune_url(ad, url);
 		len = strlen(url);
+		ad->ignore_packets  = 1; // ignore all the packets until we get 200 from the server
 	} else if(lap[ad->id] > 0)
 	{
 		int ep = get_enabled_pids(ad);

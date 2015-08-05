@@ -4,7 +4,7 @@
 #include <netinet/in.h>
 
 typedef int (*socket_action) (void *s);
-typedef int (*read_action )(int , void *,size_t, void *);
+typedef int (*read_action )(int , void *,size_t, void *, int *);
 
 typedef struct struct_sockets
 {
@@ -61,4 +61,6 @@ void free_all ();
 void sockets_setread(int i, void *r);
 void set_socket_send_buffer(int sock, int len);
 void set_socket_receive_buffer(int sock, int len);
+sockets *get_sockets(int i);
+void set_socket_pos(int sock, int pos);
 #endif

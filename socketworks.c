@@ -333,15 +333,17 @@ int sockets_accept(int socket, void *buf, int len, sockets *ss)
 }
 
 
-int sockets_read(int socket, void *buf, int len, sockets *ss)
-{	
-	return read(socket, buf, len); 
+int sockets_read(int socket, void *buf, int len, sockets *ss, int *rv)
+{
+	*rv = read(socket, buf, len);
+	return (*rv > 0); 
 }
 
-int sockets_recv(int socket, void *buf, int len, sockets *ss)
+int sockets_recv(int socket, void *buf, int len, sockets *ss, int *rv)
 {	
 	int slen =sizeof(ss->sa);
-	return recvfrom(socket, buf, len, 0,(struct sockaddr *) &ss->sa, &slen); 
+	*rv = recvfrom(socket, buf, len, 0,(struct sockaddr *) &ss->sa, &slen); 
+	return (*rv > 0); 
 }
 
 
@@ -448,7 +450,7 @@ select_and_execute ()
 	unsigned char buf[2001];
 	int err;
 	run_loop = 1;
-	int lt;
+	int lt, read_ok;
 
 	lt = getTick ();
 	while (run_loop)
@@ -514,25 +516,25 @@ select_and_execute ()
 
 					}
 					
-					rlen = ss->read(ss->sock, &ss->buf[ss->rlen], ss->lbuf - ss->rlen, ss);
+					read_ok = ss->read(ss->sock, &ss->buf[ss->rlen], ss->lbuf - ss->rlen, ss, &rlen);
 
 					err = 0;
 					if(rlen<0)
 						err = errno;	
 					ss->rtime = c_time;
-					if(rlen>0)
+					if(read_ok && rlen>0)
 						ss->rlen += rlen;
 					else 
 						ss->rlen = 0;
 								 //force 0 at the end of the string
 					if(ss->lbuf >= ss->rlen)
 						ss->buf[ss->rlen] = 0;
-					LOGL(6, "Read %d (rlen:%d/total:%d) bytes from %d -> %p - iteration %d action %p",rlen,ss->rlen,ss->lbuf,ss->sock,ss->buf,it++,ss->action);
+					LOGL(6, "Read %s %d (rlen:%d/total:%d) bytes from %d -> %p - iteration %d action %p", read_ok?"OK":"NOK", rlen,ss->rlen,ss->lbuf,ss->sock,ss->buf,it++,ss->action);
 					
 					if (((ss->rlen > 0)|| err==EWOULDBLOCK) && ss->action && (ss->type != TYPE_SERVER))
 						ss->action (ss);
 			//              if(s[i].type==TYPE_DVR && (c_time/1000 % 10 == 0))sockets_del(i); // we do this in stream.c in flush_stream*
-					if (rlen <= 0 && ss->type != TYPE_SERVER)
+					if (!read_ok && ss->type != TYPE_SERVER)
 					{
 						char *err_str;
 						char *types[] =
@@ -780,4 +782,17 @@ void set_socket_receive_buffer(int sock, int len)
 
 }
 
+sockets *get_sockets(int i)
+{
+	if(i < 0 || i >= MAX_SOCKS || s[i].sock <= 0)
+		return NULL;
+	return &s[i];
+}
 
+void set_socket_pos(int sock, int pos)
+{
+	sockets *ss = get_sockets(sock);
+	if(!ss)
+		return;
+	ss->rlen = pos;
+}
