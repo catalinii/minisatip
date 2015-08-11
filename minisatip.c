@@ -49,29 +49,83 @@ extern sockets s[MAX_SOCKS];
 char public[] = "Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN";
 int rtsp, http, si, si1, ssdp1;
 
+static const struct option long_options[] =
+{
+	{ "remote-rtp",			required_argument, NULL, 'r' },
+	{ "device-id",			required_argument, NULL, 'D' },
+	{ "check-signal",		no_argument, NULL, 'z' },
+	{ "clean-psi",			no_argument, NULL, 't' },
+	{ "log",					no_argument, NULL, 'l' },
+	{ "buffer",				required_argument, NULL, 'b' },
+	{ "enable-adapters", 	required_argument, NULL, 'e' },
+	{ "unicable",			required_argument, NULL, 'u' },
+	{ "jess",			 	required_argument, NULL, 'j' },
+	{ "diseqc",          	required_argument, NULL, 'd' },
+#ifndef DISABLE_DVBCSA
+	{ "dvbapi",				required_argument, NULL, 'o' },
+#endif
+#ifndef DISABLE_SATIPCLIENT
+	{ "satip-servers",		required_argument, NULL, 's' },
+#endif
+	{ "rtsp-port",			required_argument, NULL, 'y' },
+	{ "http-port",			required_argument, NULL, 'x' },
+	{ "http-host",			required_argument, NULL, 'w' },
+	{ "priority",			required_argument, NULL, 'i' },
+	{ "help",				no_argument,       NULL, 'h' },
+	{ "version",			no_argument,       NULL, 'V' },
+	{ 0, 0, 0, 0 }
+};
+
+
+#define RRTP_OPT 'r'
+#define DEVICEID_OPT 'D'
+#define HTTPSERVER_OPT 'w'
+#define HTTPPORT_OPT 'x'
+#define LOG_OPT 'l'
+#define HELP_OPT 'h'
+#define SCAN_OPT 'z'
+#define PLAYLIST_OPT 'p'
+#define DVBS2_ADAPTERS_OPT 'a'
+#define CLEANPSI_OPT 't'
+#define MAC_OPT 'm'
+#define FOREGROUND_OPT 'f'
+#define BW_OPT 'c'
+#define DVRBUFFER_OPT 'b'
+#define ENABLE_ADAPTERS_OPT 'e'
+#define UNICABLE_OPT 'u'
+#define JESS_OPT 'j'
+#define DISEQC_OPT 'd'
+#define DVBAPI_OPT 'o'
+#define SYSLOG_OPT 'g'
+#define RTSPPORT_OPT 'y'
+#define SATIPCLIENT_OPT 's'
+#define PRIORITY_OPT 'i'
+#define PRIORITY_OPT 'i'
+#define VERSION_OPT 'V'
+
 void
 usage ()
 {
 	printf("minisatip [-[flzg]] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] [-p public_host] [-s [DELSYS:]host[:port] [-a x:y:z] [-m mac] [-e X-Y,Z] [-o oscam_host:dvbapi_port] [-c X] [-b X:Y] [-u A1:S1-F1[-PIN]] [-j A1:S1-F1[-PIN]] [-x http_port] [-y rtsp_port]   \n\n \
--f foreground, otherwise run in background\n\
+-f  foreground, otherwise run in background\n\
 \n\
--r remote_rtp_host: send the rtp stream to remote_rtp_host instead of the ip the connection comes from\n \
+-r --remote-rtp  remote_rtp_host: send the rtp stream to remote_rtp_host instead of the ip the connection comes from\n \
 	eg: -r 192.168.7.9\n \
 \n\
--d specify the device id (in case there are multiple SAT>IP servers in the network)\n \
+-D --device-id DVC_ID: specify the device id (in case there are multiple SAT>IP servers in the network)\n \
 	eg: -d 4 \n\
 \n\
--w http_server[:port]: specify the host and the port where the xml file can be downloaded from [default: default_local_ip_address:8080] \n\
+-w --http-host http_server[:port]: specify the host and the port where the xml file can be downloaded from [default: default_local_ip_address:8080] \n\
 	eg: -w 192.168.1.1:8080 \n\
 \n\
--x http_port: port for listening on http [default: 8080]\n\
+-x --http-port port: port for listening on http [default: 8080]\n\
 	eg: -x 9090 \n\
 \n\
--y rtsp_port: port for listening for rtsp requests [default: 554]\n\
+-y --rtsp-port rtsp_port: port for listening for rtsp requests [default: 554]\n\
 	eg: -y 5544 \n\
 	- changing this to a port > 1024 removes the requirement for minisatip to run as root\n\
 \n\
--z force to get signal from the DVB hardware every 200ms (use with care, only when needed)\n\
+-z --check-signal force to get signal from the DVB hardware every 200ms (use with care, only when needed)\n\
 	- retrieving signal could take sometimes more than 200ms which could impact the rtp stream, using it only when you need to adjust your dish\n\
 \n\
 -a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means auto-detect)\n\
@@ -81,7 +135,7 @@ usage ()
 -m xx: simulate xx as local mac address, generates UUID based on mac\n\
 	-m 00:11:22:33:44:55 \n\
 \n\
--e list_of_enabled adapters: enable only specified adapters\n\
+-e --enable-adapters list_of_enabled adapters: enable only specified adapters\n\
 	eg: -e 0-2,5,7 (no spaces between parameters)\n\
 	- keep in mind that the first adapters are the local ones starting with 0 after that are the satip adapters \n\
 	if you have 3 local dvb cards 0-2 will be the local adapters, 3,4, ... will be the satip servers specified with argument -s\n\
@@ -89,7 +143,7 @@ usage ()
 -c X: bandwidth capping for the output to the network [default: unlimited]\n\
 	eg: -c 2048  (does not allow minisatip to send more than 2048KB/s to all remote servers)\n\
 \n\
--b X:Y : set the app adapter buffer to X Bytes (default: %d) and set the kernel DVB buffer to Y Bytes (default: %d) - both multiple of 188\n\
+-b --buffers X:Y : set the app adapter buffer to X Bytes (default: %d) and set the kernel DVB buffer to Y Bytes (default: %d) - both multiple of 188\n\
 	eg: -b 18800:18988\n\
 \n\
 -l increases the verbosity (you can use multiple -l), logging to stdout in foreground mode or in /tmp/log when a daemon\n\
@@ -101,17 +155,22 @@ usage ()
 	eg: -p http://192.168.2.3:8080/playlist\n\
 	- this will add X_SATIPM3U tag into the satip description xml\n\
 \n\
--u unicable_string: defines the unicable adapters (A) and their slot (S), frequency (F) and optionally the PIN for the switch:\n\
+-u --unicable unicable_string: defines the unicable adapters (A) and their slot (S), frequency (F) and optionally the PIN for the switch:\n\
 \tThe format is: A1:S1-F1[-PIN][,A2:S2-F2[-PIN][,...]]\n\
 	eg: 2:0-1284[-1111]\n\
 \n\
--j jess_string - same format as -u \n\
+-j --jess jess_string - same format as -u \n\
 \n\
--o host:port - specify the hostname and port for the dvbapi server (oscam) \n\
+-d --diseqc ADAPTER1:COMMITED1-UNCOMMITED1[,ADAPTER2:COMMITED2-UNCOMMITED2[,...]\n\
+\tThe first argument is the adapter number, second is the number of commited packets to send to a Diseqc 1.0 switch, third the number of uncommited commands to sent to a Diseqc 1.1 switch\n\
+\tThe higher number between the commited and uncommited will be sent first.\n\
+	eg: -d 0:1-0  (which is the default for each adapter).\n\
+\n\
+-o --dvbapi host:port - specify the hostname and port for the dvbapi server (oscam) \n\
 	eg: -o 192.168.9.9:9000 \n\
 	192.168.9.9 is the host where oscam is running and 9000 is the port configured in dvbapi section in oscam.conf\n\
 \n\
--s DELSYS:host:port - specify the remote satip host and port with delivery system DELSYS, it is possible to use multiple -s \n\
+-s --satip-servers DELSYS:host:port - specify the remote satip host and port with delivery system DELSYS, it is possible to use multiple -s \n\
 	DELSYS - can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, isdbt, atsc, dvbcb ( - DVBC_ANNEX_B ) [default: dvbs2]\n\
 	host - the server of the satip server\n\
 	port - rtsp port for the satip server [default: 554]\n\
@@ -120,9 +179,9 @@ usage ()
 	- specifies 1 dvbt satip server  with address 192.168.1.3:554\n\
 	- specifies 1 dvbc satip server  with address 192.168.1.4:554\n\
 \n\
--t clean the PSI from all CA information, the client will see the channel as clear if decrypted successfully\n\
+-t --cleanpsi clean the PSI from all CA information, the client will see the channel as clear if decrypted successfully\n\
 \n\
--i prio: set the process priority to prio (-10 increases the priority by 10)\n\
+-i --priority prio: set the process priority to prio (-10 increases the priority by 10)\n\
 ",
 	ADAPTER_BUFFER, DVR_BUFFER);
 	exit (1);
@@ -167,7 +226,7 @@ set_options (int argc, char *argv[])
 	memset(opts.playlist, sizeof(opts.playlist), 0);
 	
 	
-	while ((opt = getopt (argc, argv, "flr:a:td:w:p:s:hc:b:m:p:e:x:u:j:o:gy:zi:")) != -1)
+	while ((opt = getopt_long (argc, argv, "flr:a:td:w:p:s:hc:b:m:p:e:x:u:j:o:gy:zi:D:V", long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
 		switch (opt)
@@ -219,6 +278,12 @@ set_options (int argc, char *argv[])
 			{
 				usage ();
 				exit (0);
+			}
+			
+			case VERSION_OPT:
+			{
+				LOGL(0, "minisatip version %s, compiled with s2api version: %04X",VERSION, DVBAPIVERSION);
+				exit (0);	
 			}
 
 			case HTTPPORT_OPT:
@@ -285,6 +350,11 @@ set_options (int argc, char *argv[])
 			{
 				set_unicable_adapters(optarg, SWITCH_JESS);
 				break;
+			}
+			
+			case DISEQC_OPT:
+			{
+				set_diseqc_adapters(optarg);
 			}
 			
 			case DVBAPI_OPT:

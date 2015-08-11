@@ -235,6 +235,7 @@ int dvb_open_device(adapter *ad)
 	if (ad->ca > -1)
 		ad->ca_device = (ca_device_t *)ca_init(ad->ca);
 #endif
+		
 	LOG ("opened DVB adapter %d fe:%d dvr:%d", ad->id, ad->fe, ad->dvr);
 	if (ioctl (ad->dvr, DMX_SET_BUFFER_SIZE, opts.dvr_buffer) < 0)
 		perror ("couldn't set DVR buffer size");
@@ -243,9 +244,22 @@ int dvb_open_device(adapter *ad)
 	return 0;
 }
 
-
-int send_diseqc(int fd, int pos, int pol, int hiband)
+void diseqc_cmd(int fd, int times, char *str, struct dvb_diseqc_master_cmd *cmd)
 {
+	int i;
+	for( i = 0; i < times; i++)
+	{
+		usleep(15000);
+		if (ioctl(fd, FE_DISEQC_SEND_MASTER_CMD, cmd) == -1)
+			LOG( "send_diseqc: FE_DISEQC_SEND_MASTER_CMD %s failed for fd %d: %s", str, fd, strerror(errno));	
+	}
+
+}
+
+
+int send_diseqc(int fd, int pos, int pol, int hiband, int committed_no, int uncommitted_no)
+{
+	int uncommitted_first = 0, i;
 /* DiSEqC 1.0 */
 	struct dvb_diseqc_master_cmd cmd = { {0xe0, 0x10, 0x38, 0xf0, 0x00, 0x00}, 4 };
  /* DiSEqC 1.1 */
@@ -253,6 +267,12 @@ int send_diseqc(int fd, int pos, int pol, int hiband)
 	cmd.msg[3] = 0xf0 | ( ((pos << 2) & 0x0c) | (hiband ? 1 : 0) | (pol ? 2 : 0));
 	uncmd.msg[3] = 0xf0 | ( (pos & 0x0c) | (hiband ? 1 : 0) | (pol ? 2 : 0));
 
+	if(uncommitted_no > committed_no)
+		uncommitted_first = 1;
+	
+	if(committed_no == 0 && uncommitted_no == 0)
+		committed_no = 1;
+	
 	LOGL(3, "send_diseqc fd %d, pos = %d, pol = %d, hiband = %d, diseqc => %02x %02x %02x %02x %02x",
                   fd, pos, pol, hiband, cmd.msg[0], cmd.msg[1], cmd.msg[2], cmd.msg[3], cmd.msg[4]);
 
@@ -262,14 +282,13 @@ int send_diseqc(int fd, int pos, int pol, int hiband)
 	if (ioctl(fd, FE_SET_VOLTAGE, pol ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13) == -1)
 		LOG("send_diseqc: FE_SET_VOLTAGE failed for fd %d: %s", fd, strerror(errno));
 
-	usleep(15000);
-	if (ioctl(fd, FE_DISEQC_SEND_MASTER_CMD, &cmd) == -1)
-		LOG( "send_diseqc: FE_DISEQC_SEND_MASTER_CMD failed for fd %d: %s", fd, strerror(errno));	
+	if(	uncommitted_first )
+		diseqc_cmd(fd, uncommitted_no, "uncommitted", &uncmd);
+		
+	diseqc_cmd(fd, committed_no, "committed", &cmd);	
 	
-	usleep(15000);
-	if (ioctl(fd, FE_DISEQC_SEND_MASTER_CMD, &uncmd) == -1)
-		LOG( "send_diseqc: FE_DISEQC_SEND_MASTER_CMD uncommitted failed for fd %d: %s", fd, strerror(errno));	
-	
+	if( !uncommitted_first )
+		diseqc_cmd(fd, uncommitted_no, "uncommitted", &uncmd);
 	
 	usleep(15000);
 	if (ioctl(fd, FE_DISEQC_SEND_BURST, (pos & 1)?SEC_MINI_B : SEC_MINI_A ) == -1)
@@ -391,7 +410,7 @@ int setup_switch (int frontend_fd, transponder *tp)
 	}else
 	{
 		if(tp->old_pol != pol || tp->old_hiband != hiband || tp->old_diseqc != diseqc)
-			send_diseqc(frontend_fd, diseqc, pol, hiband);
+			send_diseqc(frontend_fd, diseqc, pol, hiband, tp->committed_no, tp->uncommitted_no);
 		else 
 			LOGL(3, "Skip sending diseqc commands since the switch position doesn't need to be changed: pol %d, hiband %d, switch position %d", pol, hiband, diseqc);
 	}
@@ -1097,8 +1116,7 @@ void find_dvb_adapter (adapter *a)
 	int na = 0;
 	char buf[100];
 	int fd;
-	int i = 0,
-		j = 0;
+	int i = 0, j = 0;
 
 	for(i = 0; i < MAX_ADAPTERS; i++)
 	{

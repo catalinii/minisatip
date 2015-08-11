@@ -447,6 +447,9 @@ int tune (int aid, int sid)
 		ad->tp.ufreq = ad->ufreq;
 		ad->tp.pin = ad->pin;
 		
+		ad->tp.committed_no = ad->committed_no;
+		ad->tp.uncommitted_no = ad->uncommitted_no;
+		
 		rv = ad->tune (ad->id, &ad->tp);
 		ad->status = 0;
 		ad->status_cnt = 0;
@@ -938,7 +941,36 @@ void set_unicable_adapters(char *o, int type)
 		a[a_id].ufreq = freq;
 		a[a_id].switch_type = type;
 		a[a_id].pin = pin;
-		LOG("Setting %s adapter %d slot %d freq %d", type==SWITCH_UNICABLE?"unicable":"jess", a_id, slot, freq);
+		LOGL(0, "Setting %s adapter %d slot %d freq %d", type==SWITCH_UNICABLE?"unicable":"jess", a_id, slot, freq);
+	}
+}
+
+
+void set_diseqc_adapters(char *o)
+{
+	int i, la, a_id, committed_no, uncommitted_no;
+	char buf[100], *arg[20], *sep1, *sep2, *sep3;
+
+	strncpy(buf, o, sizeof(buf));
+	la = split(arg, buf, sizeof(arg), ',');
+	for (i=0; i<la; i++)
+	{
+		a_id=map_intd(arg[i], NULL, -1);
+		if(a_id < 0 || a_id >= MAX_ADAPTERS)
+			continue;
+		sep1 = strchr(arg[i], ':');
+		sep2 = strchr(arg[i], '-');
+		
+		if( !sep1 || !sep2)
+			continue;
+		committed_no  = map_intd(sep1 + 1, NULL, -1);
+		uncommitted_no = map_intd(sep2 + 1, NULL, -1);
+		if( committed_no < 0 || uncommitted_no < 0)
+			continue;
+
+		a[a_id].committed_no = committed_no;
+		a[a_id].committed_no = uncommitted_no;
+		LOGL(0, "Setting diseqc adapter %d committed_no %d uncommitted_no %d", a_id, committed_no, uncommitted_no);
 	}
 }
 

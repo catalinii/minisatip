@@ -8,34 +8,11 @@
 #include "utils.h"
 
 
-#define VERSION_BUILD "48"
+#define VERSION_BUILD "49"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.3.,VERSION_BUILD,)
 
 void set_options (int argc, char *argv[]);
-
-#define RRTP_OPT 'r'
-#define DEVICEID_OPT 'd'
-#define HTTPSERVER_OPT 'w'
-#define HTTPPORT_OPT 'x'
-#define LOG_OPT 'l'
-#define HELP_OPT 'h'
-#define SCAN_OPT 'z'
-#define PLAYLIST_OPT 'p'
-#define DVBS2_ADAPTERS_OPT 'a'
-#define CLEANPSI_OPT 't'
-#define MAC_OPT 'm'
-#define FOREGROUND_OPT 'f'
-#define BW_OPT 'c'
-#define DVRBUFFER_OPT 'b'
-#define ENABLE_ADAPTERS_OPT 'e'
-#define UNICABLE_OPT 'u'
-#define JESS_OPT 'j'
-#define DVBAPI_OPT 'o'
-#define SYSLOG_OPT 'g'
-#define RTSPPORT_OPT 'y'
-#define SATIPCLIENT_OPT 's'
-#define PRIORITY_OPT 'i'
 
 #define PID_FILE "/var/run/minisatip.pid"
 

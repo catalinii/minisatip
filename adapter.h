@@ -68,6 +68,7 @@ typedef struct struct_adapter
 	int uslot; // unicable/jess slot
 	int ufreq; // unicable/jess frequency	
 	int pin;
+	int committed_no, uncommitted_no; // diseqc info
 	int id;
 	int pat_processed, transponder_id, pat_ver;
 	ca_device_t * ca_device;
@@ -118,6 +119,7 @@ void dump_pids (int aid);
 void sort_pids (int aid);
 void enable_adapters(char *o);
 void set_unicable_adapters(char *o, int type);
+void set_diseqc_adapters(char *o);
 void reset_pids_type(int aid);
 void reset_pids_type_for_key(int aid, int key);
 int delsys_match(adapter *ad, int del_sys);
