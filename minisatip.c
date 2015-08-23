@@ -221,6 +221,7 @@ set_options (int argc, char *argv[])
 	opts.drop_encrypted = 1;
 	opts.rtsp_port = 554;
 	opts.clean_psi = 0;
+	opts.satip_addpids = 0;
 	opts.output_buffer = 512*1024;
 	opts.satip_servers[0] = 0;
 	memset(opts.playlist, sizeof(opts.playlist), 0);
@@ -576,7 +577,7 @@ read_rtsp (sockets * s)
 		if (strncmp (arg[0], "DESCRIBE", 8) == 0)
 		{
 			char sbuf[1000];
-			char *rv;
+			char *rv = NULL;
 			rv = describe_streams(s, arg[1], sbuf, sizeof(sbuf));
 			if (! rv)
 			{

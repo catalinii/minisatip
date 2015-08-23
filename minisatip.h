@@ -8,7 +8,7 @@
 #include "utils.h"
 
 
-#define VERSION_BUILD "49"
+#define VERSION_BUILD "50"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.3.,VERSION_BUILD,)
 
@@ -52,6 +52,7 @@ struct struct_opts
 	char *dvbapi_host;
 	int drop_encrypted;
 	int rtsp_port;
+	int satip_addpids;
 	char playlist[200];
 	char satip_servers[100];
 };

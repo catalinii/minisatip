@@ -319,14 +319,14 @@ void get_s2_url(adapter *ad, char *url)
 	int len = 0;
 	transponder * tp = &ad->tp;
 	url[0] = 0;
-	FILL("freq=%d", tp->freq, 0, tp->freq / 1000);
+	FILL("src=%d", tp->diseqc, 0, tp->diseqc);
+	FILL("&fe=%d", ad->satip_fe, 0, ad->satip_fe);
+	FILL("&freq=%d", tp->freq, 0, tp->freq / 1000);
+	FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
+	FILL("&mtype=%s", tp->mtype, -1, get_modulation(tp->mtype));
 	FILL("&pol=%s", tp->pol, -1, get_pol(tp->pol));
 	FILL("&sr=%d", tp->sr, -1, tp->sr / 1000);
 	FILL("&fec=%s", tp->fec, FEC_AUTO, get_fec(tp->fec));
-	FILL("&fe=%d", ad->satip_fe, 0, ad->satip_fe);
-	FILL("&src=%d", tp->diseqc, 0, tp->diseqc);
-	FILL("&mtype=%s", tp->mod, 0, get_modulation(tp->mod));
-	FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
 	if(ad->tp.sys == SYS_DVBS2)	
 	{
 		FILL("&ro=%s", tp->ro, ROLLOFF_AUTO, get_rolloff(tp->ro));
@@ -341,9 +341,11 @@ void get_c2_url(adapter *ad, char *url)
 	int len = 0;
 	transponder * tp = &ad->tp;
 	url[0] = 0;
-	FILL("freq=%.1f", tp->freq, 0, tp->freq / 1000.0);
-	FILL("&fe=%d", ad->satip_fe, 0, ad->satip_fe);
+	FILL("fe=%d", ad->satip_fe, 0, ad->satip_fe);
+	FILL("&freq=%.1f", tp->freq, 0, tp->freq / 1000.0);
 	FILL("&sr=%d", tp->sr, -1, tp->sr / 1000);
+	FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
+	FILL("&mtype=%s", tp->mtype, -1, get_modulation(tp->mtype));
 	FILL("&bw=%d", tp->bw, BANDWIDTH_AUTO, tp->bw/1000000);
 	FILL("&gi=%s", tp->gi, GUARD_INTERVAL_AUTO, get_gi(tp->gi));
 	FILL("&fec=%s", tp->fec, FEC_AUTO, get_fec(tp->fec));
@@ -352,8 +354,6 @@ void get_c2_url(adapter *ad, char *url)
 	FILL("&t2id=%d", tp->t2id, 0, tp->t2id); 
 	FILL("&sm=%d", tp->sm, 0, tp->sm); 
 	FILL("&plp=%d", tp->plp, 0, tp->plp); 	
-	FILL("&mtype=%s", tp->mod, 0, get_modulation(tp->mod));
-	FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
 	sprintf(url+len, "&pids=");
 	return ;
 }
@@ -363,17 +363,17 @@ void get_t2_url(adapter *ad, char *url)
 	int len = 0;
 	transponder * tp = &ad->tp;
 	url[0] = 0;
-	FILL("freq=%.1f", tp->freq, 0, tp->freq / 1000.0);
-	FILL("&fe=%d", ad->satip_fe, 0, ad->satip_fe);
+	FILL("fe=%d", ad->satip_fe, 0, ad->satip_fe);
+	FILL("&freq=%.1f", tp->freq, 0, tp->freq / 1000.0);
 	FILL("&bw=%d", tp->bw, BANDWIDTH_AUTO, tp->bw/1000000);
+	FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
+	FILL("&mtype=%s", tp->mtype, -1, get_modulation(tp->mtype));
 	FILL("&gi=%s", tp->gi, GUARD_INTERVAL_AUTO, get_gi(tp->gi));
 	FILL("&tmode=%s", tp->tmode, TRANSMISSION_MODE_AUTO, get_tmode(tp->tmode));
 	FILL("&specinv=%d", tp->inversion, INVERSION_AUTO, tp->inversion); 
 	FILL("&c2tft=%d", tp->c2tft, 0, tp->c2tft); 
 	FILL("&ds=%d", tp->ds, 0, tp->ds); 
 	FILL("&plp=%d", tp->plp, 0, tp->plp); 	
-	FILL("&mtype=%s", tp->mod, 0, get_modulation(tp->mod));
-	FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
 	sprintf(url+len, "&pids=");
 	return ;
 }
@@ -481,25 +481,35 @@ void satipc_commit(adapter *ad)
 		tune_url(ad, url);
 		len = strlen(url);
 		ad->ignore_packets  = 1; // ignore all the packets until we get 200 from the server
-	} else if(lap[ad->id] > 0)
+	} // url ends in "pids="
+
+	if(!opts.satip_addpids && !ad->want_tune)
+		len += sprintf(url + len, "pids=");
+
+	if(!opts.satip_addpids || ad->want_tune)
 	{
-		int ep = get_enabled_pids(ad);
-		if(ep == lap[ad->id])
-		{
-			ldp[ad->id] = 0;
-			len += sprintf(url + len, "pids=");
-		} else 
-			len += sprintf(url + len, "addpids=");
+		int pids[MAX_PIDS];
+		int i, ep = get_enabled_pids(ad, pids, sizeof(pids));
+		for(i=0; i < ep; i++)
+			len += sprintf(url + len, "%d,", pids[i]);
+		if(ep == 0)
+			len += sprintf(url + len, "none,");
 	}
-	for ( i = 0; i < lap[ad->id]; i++)
-		if(apid[ad->id][i]==8192)
-			len += sprintf(url + len, "all,");
-		else 
-			len += sprintf(url + len, "%d,", apid[ad->id][i]);
-	if(len > 0)
-		url[len - 1] = '&';		
+		
+
+	if(opts.satip_addpids)
+	{
+		len += sprintf(url + len, "addpids=");
+		for ( i = 0; i < lap[ad->id]; i++)
+			if(apid[ad->id][i]==8192)
+				len += sprintf(url + len, "all,");
+			else 
+				len += sprintf(url + len, "%d,", apid[ad->id][i]);
+		if(len > 0)
+			url[len - 1] = '&';
+	}
 	
-	if(!ad->want_tune)
+	if(!ad->want_tune && opts.satip_addpids)
 	{
 		if(ldp[ad->id] > 0)
 			len += sprintf(url + len, "delpids=");
@@ -509,6 +519,8 @@ void satipc_commit(adapter *ad)
 		else 
 			len += sprintf(url + len, "%d,", dpid[ad->id][i]);	
 	}
+	
+	
 	url[len - 1] = 0;
 		
 	http_request(ad, url, NULL);

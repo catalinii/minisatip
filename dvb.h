@@ -60,7 +60,7 @@ typedef struct struct_transponder
 	fe_delivery_system_t sys;
 	int freq;
 	int inversion;
-	int mod;
+	int mtype;
 	int fe;
 
 	// DVB-T
@@ -73,7 +73,6 @@ typedef struct struct_transponder
 
 	// DVB-S2
 	int ro;
-	int mtype;
 	int plts;
 	int fec;
 	int sr;

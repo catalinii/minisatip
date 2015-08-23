@@ -458,7 +458,7 @@ int decrypt_stream(adapter *ad,int rlen)
 				if(old_parity != cp)
 				{
 					int ctime = getTick();
-					LOGL(2, "Parity change for key %d, old parity %d, new parity %d pid %d [%02X %02X %02X %02X], last_parity_change %d", k->id, old_parity, cp, pid, b[0], b[1], b[2], b[3], k->last_parity_change);
+					LOGL(2, "Parity change for key %d, new parity %d pid %d [%02X %02X %02X %02X], last_parity_change %d", k->id, cp, pid, b[0], b[1], b[2], b[3], k->last_parity_change);
 //					if(ctime - k->last_parity_change> 1000)
 //						k->key_ok[old_parity] = 0;
 					k->last_parity_change = ctime;

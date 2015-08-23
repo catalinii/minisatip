@@ -544,10 +544,6 @@ int dvb_tune (int aid, transponder * tp)
 		case SYS_DVBS:
 		case SYS_DVBS2:
 
-			if (tp->sys == SYS_DVBS2 && tp->mtype == 0)
-				tp->mtype = PSK_8;
-			if (tp->sys == SYS_DVBS && tp->mtype == 0)
-				tp->mtype = QPSK;
 			bpol = getTick();
 			if_freq = setup_switch (fd_frontend, tp);
 			if(if_freq < MIN_FRQ_DVBS || if_freq > MAX_FRQ_DVBS)
@@ -576,10 +572,6 @@ int dvb_tune (int aid, transponder * tp)
 			if(tp->freq < MIN_FRQ_DVBT || tp->freq > MAX_FRQ_DVBT)
 				LOG_AND_RETURN(-404, "Frequency %d is not within range ", tp->freq);
 
-			if (tp->sys == SYS_DVBT && tp->mtype == 0)
-				tp->mtype = QAM_AUTO;
-			if (tp->sys == SYS_DVBT2 && tp->mtype == 0)
-				tp->mtype = QAM_AUTO;
 			p = &dvbt_cmdseq;
 			p->props[DELSYS].u.data = tp->sys;
 			p->props[FREQUENCY].u.data = freq * 1000;
@@ -606,8 +598,6 @@ int dvb_tune (int aid, transponder * tp)
 				LOG_AND_RETURN(-404, "Frequency %d is not within range ", tp->freq);
 		
 			p = &dvbc_cmdseq;
-			if(tp->mtype == 0)
-				tp->mtype = QAM_AUTO;
 			p->props[DELSYS].u.data = tp->sys;
 			p->props[FREQUENCY].u.data = freq * 1000;
 			p->props[INVERSION].u.data = tp->inversion;
@@ -830,7 +820,6 @@ detect_dvb_parameters (char *s, transponder * tp)
 	tp->sys = -1;
 	tp->freq = -1;
 	tp->inversion = -1;
-	tp->mod = -1;
 	tp->hprate = -1;
 	tp->tmode = -1;
 	tp->gi = -1;
@@ -920,7 +909,7 @@ detect_dvb_parameters (char *s, transponder * tp)
 	}
 	
 	if (tp->pids && strncmp (tp->pids, "none", 3) == 0)
-		tp->pids = NULL;
+		tp->pids = "";
 		
 	//      if(!msys)INVALID_URL("no msys= found in URL");
 	//      if(freq<10)INVALID_URL("no freq= found in URL or frequency invalid");
@@ -965,8 +954,6 @@ copy_dvb_parameters (transponder * s, transponder * d)
 		d->freq = s->freq;
 	if (s->inversion != -1)
 		d->inversion = s->inversion;
-	if (s->mod != -1)
-		d->mod = s->mod;
 	if (s->hprate != -1)
 		d->hprate = s->hprate;
 	if (s->tmode != -1)
@@ -1010,6 +997,17 @@ copy_dvb_parameters (transponder * s, transponder * d)
 	if(d->diseqc < 1) // force position 1 on the diseqc switch
 		d->diseqc = 1;
 
+	if ((d->sys == SYS_DVBS2) && (d->mtype == 0))
+		d->mtype = PSK_8;
+	if ((d->sys == SYS_DVBS) && (d->mtype == 0))
+		d->mtype = QPSK;
+
+	if ((d->sys == SYS_ATSC || d->sys == SYS_DVBC_ANNEX_B) && d->mtype == 0)
+		d->mtype = QAM_AUTO;
+
+	if ((d->sys == SYS_DVBT || d->sys == SYS_DVBT2) && d->mtype == 0)
+		d->mtype = QAM_AUTO;		
+		
 	LOG
 		("copy_dvb_parameters -> src=%d, fe=%d, freq=%d, fec=%d sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s, apids=%s, dpids=%s x_pmt=%s",
 		d->diseqc, d->fe, d->freq, d->fec, d->sr, d->pol, d->ro, d->sys, d->mtype,

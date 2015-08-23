@@ -140,7 +140,7 @@ udp_bind (char *addr, int port)
 
 	if (bind (sock, (struct sockaddr *) &serv, sizeof (serv)) < 0)
 	{
-		LOGL (0, "udp_bind: failed: bind(): %s", strerror (errno));
+		LOGL (0, "udp_bind: failed: bind() on host %s port %d: error %s", addr, port, strerror (errno));
 		return -1;
 	}
 	LOGL (0, "New UDP socket %d bound to %s:%d", sock, inet_ntoa (serv.sin_addr),
@@ -275,7 +275,7 @@ tcp_listen (char *addr, int port)
 
 	if (bind (sock, (struct sockaddr *) &serv, sizeof (serv)) < 0)
 	{
-		LOGL (0, "tcp_listen: failed: bind(): %s", strerror (errno));
+		LOGL (0, "tcp_listen: failed: bind() on address: %s, port %d : error %s", addr ? addr :"ANY", port, strerror (errno));
 		return -1;
 	}
 	if (listen (sock, 10) < 0)
@@ -521,7 +521,8 @@ select_and_execute ()
 					err = 0;
 					if(rlen<0)
 						err = errno;	
-					ss->rtime = c_time;
+					if(rlen > 0)
+						ss->rtime = c_time;
 					if(read_ok && rlen>0)
 						ss->rlen += rlen;
 					else 
@@ -574,7 +575,7 @@ select_and_execute ()
 //					ss->err = 0;					
 				}
 								 // checking every 60seconds for idle connections - or if select times out
-		if (rv == 0 || c_time - lt > 200)
+		if (rv == 0 || c_time - lt >= 200)
 		{
 			lt = c_time;
 			i = -1;
@@ -761,7 +762,7 @@ void set_socket_send_buffer(int sock, int len)
 		LOGL(3, "unable to set output UDP buffer size to %d", len);
 	sl = sizeof(int);
 	if(!getsockopt(sock, SOL_SOCKET, SO_SNDBUF, &len, &sl))
-		LOG("output UDP buffer size is %d bytes", len);
+		LOG("output UDP buffer size for socket %d is %d bytes", sock, len);
 
 }
 
