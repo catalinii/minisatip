@@ -1031,11 +1031,17 @@ void reset_pids_type_for_key(int aid, int key)
 }
 
 
-int get_enabled_pids(adapter *ad)
+int get_enabled_pids(adapter *ad, int *pids, int lpids)
 {
-	int ep = 0, i;
-	for(i=0; i < MAX_PIDS; i++)
-		if(ad->pids[i].flags == 1)
-			ep++;
-	return ep;
+        int ep = 0, i;
+
+        for(i=0; i < MAX_PIDS; i++)
+        {
+                if(ad->pids[i].flags == 1)
+                        pids[ep++] = ad->pids[i].pid;
+                if(ep >= lpids)
+                        break;
+        }
+
+        return ep;
 }

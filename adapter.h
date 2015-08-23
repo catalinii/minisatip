@@ -123,6 +123,6 @@ void set_diseqc_adapters(char *o);
 void reset_pids_type(int aid);
 void reset_pids_type_for_key(int aid, int key);
 int delsys_match(adapter *ad, int del_sys);
-int get_enabled_pids(adapter *ad);
+int get_enabled_pids(adapter *ad, int *pids, int lpids);
 #define get_adapter(a) get_adapter1(a, __FILE__, __LINE__)
 #endif							 /*  */
