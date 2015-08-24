@@ -694,7 +694,10 @@ dvb_set_pid (adapter *a, uint16_t i_pid)
 
 	if (ioctl (fd, DMX_SET_PES_FILTER, &s_filter_params) < 0)
 	{
-		LOG ("failed setting filter on %d (%s)", i_pid, strerror (errno));
+		int pids[MAX_PIDS];
+		int ep;
+		ep = get_enabled_pids(a, (int *)pids, MAX_PIDS);
+		LOG ("failed setting filter on %d (%s), enabled pids %d", i_pid, strerror (errno), ep);
 		return -1;
 	}
 

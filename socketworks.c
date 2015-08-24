@@ -434,7 +434,7 @@ sockets_del (int sock)
 }
 
 
-int run_loop, it = 0, c_time;
+int run_loop, it = 0;
 int64_t bw, bwtt; 
 int bwnotify, sleeping, sleeping_cnt;
 unsigned long int tbw;
@@ -450,7 +450,7 @@ select_and_execute ()
 	unsigned char buf[2001];
 	int err;
 	run_loop = 1;
-	int lt, read_ok;
+	int lt, read_ok, c_time;
 
 	lt = getTick ();
 	while (run_loop)
@@ -466,12 +466,12 @@ select_and_execute ()
 		int k = -1;
 
 		//              LOG("select returned %d",rv);
-		c_time = getTick ();
 		if (rv > 0)
 			while (++i < max_sock)
 				if (pf[i].revents)
 				{
 					sockets *ss = &s[i];
+					c_time = getTick ();
 
 					LOGL(6, "event on socket index %d handle %d type %d (poll fd:%d, revents=%d)",i,ss->sock,ss->type,pf[i].fd,pf[i].revents);
 					if(pf[i].revents & POLLOUT)
@@ -517,7 +517,14 @@ select_and_execute ()
 					}
 					
 					read_ok = ss->read(ss->sock, &ss->buf[ss->rlen], ss->lbuf - ss->rlen, ss, &rlen);
-
+					
+					if(opts.log >= 1)
+					{
+						int now = getTick();
+						if(now - c_time > 100)
+							LOG("WARNING: read on socket id %d, handle %d, took %d ms", ss->id, ss->sock, now-c_time);
+					}
+					
 					err = 0;
 					if(rlen<0)
 						err = errno;	

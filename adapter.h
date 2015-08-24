@@ -55,6 +55,7 @@ typedef struct struct_adapter
 	int sid_cnt;				 //number of streams
 	int sock, fe_sock;
 	int do_tune;
+	int force_close;
 	char *buf;					 // 7 rtp packets = MAX_PACK, 7 frames / packet
 	int rlen,rtime;
 	int last_sort;

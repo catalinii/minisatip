@@ -55,6 +55,7 @@ int adapter_timeout(sockets *s)
 {
 	int do_close = 1, i, max_close = 0;
 	int rtime = getTick();
+	adapter *ad = get_adapter(s->sid);
 	for (i = 0; i < MAX_ADAPTERS; i++)
 	{
 		if( a[i].enabled && rtime - a[i].rtime < s->close_sec)
@@ -67,7 +68,16 @@ int adapter_timeout(sockets *s)
 	if(!do_close)
 		s->rtime = max_close;
 	
+	if(ad->force_close)
+		do_close = 1;
+	
 	return do_close;	
+}
+
+void request_adapter_close(adapter *ad)
+{
+	ad->force_close = 1;
+	sockets_timeout(ad->sock, 1);
 }
 
 int
@@ -141,6 +151,7 @@ init_hw ()
 		a[i].sid_cnt = 0;
 		a[i].pid_err = a[i].dec_err = 0;
 		a[i].new_gs = 0;
+		a[i].force_close = 0;
 		a[i].sock =
 			sockets_add (a[i].dvr, NULL, i, TYPE_DVR, (socket_action) read_dmx,
 			(socket_action) close_adapter_for_socket, (socket_action ) adapter_timeout);
@@ -414,9 +425,13 @@ update_pids (int aid)
 		{
 			if(dp)dump_pids (aid);
 			dp = 0;
-			ad->pids[i].flags = 1;
 			if (ad->pids[i].fd <= 0)
-				ad->pids[i].fd = ad->set_pid (ad, ad->pids[i].pid);
+				if((ad->pids[i].fd = ad->set_pid (ad, ad->pids[i].pid)) < 0)
+				{
+					request_adapter_close(ad);
+					return 1; // error
+				}
+			ad->pids[i].flags = 1;
 			ad->pids[i].filter = ad->pids[i].key = ad->pids[i].ecm_parity = 255;			
 			if(ad->pids[i].pid==0)
 				ad->pat_processed = 0;
@@ -457,7 +472,8 @@ int tune (int aid, int sid)
 		if (ad->sid_cnt > 1)	 // the master changed the frequency
 		{
 			close_streams_for_adapter (aid, sid);
-			update_pids (aid);
+			if(update_pids (aid))
+				return -503;
 		}
 #ifdef TABLES_H
 		p = find_pid(aid, 0);
@@ -473,7 +489,8 @@ int tune (int aid, int sid)
 			a[aid].do_tune, a[aid].master_sid);
 	if (rv < 0)
 		mark_pids_deleted (aid, sid, NULL);
-	update_pids (aid);
+	if(update_pids (aid))
+		return -503;
 	return rv;
 }
 
@@ -641,7 +658,9 @@ mark_pids_add (int sid, int aid, char *pids)
 	la = split (arg, pids, MAX_PIDS, ',');
 	for (i = 0; i < la; i++)
 	{
-		pid = map_int (arg[i], NULL);
+		pid = map_intd (arg[i], NULL, -1);
+		if(pid == -1)
+			continue;
 		if(mark_pid_add(sid, aid, pid) < 0)
 			return -1;
 	}
@@ -674,7 +693,8 @@ set_adapter_parameters (int aid, int sid, transponder * tp)
 			new: f:%d sr:%d pol:%d plp:%d src:%d mod %d", ad->tp.freq, ad->tp.sr, ad->tp.pol, ad->tp.plp, ad->tp.diseqc, ad->tp.mtype,
 			tp->freq, tp->sr, tp->pol, tp->plp, tp->diseqc, tp->mtype);	
 		mark_pids_deleted (aid, -1, NULL);
-		update_pids (aid);
+		if(update_pids (aid))
+			return -1;
 		ad->do_tune = 1;
 	}
 								 // just 1 stream per adapter and pids= specified
