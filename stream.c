@@ -696,7 +696,7 @@ void flush_streamb (streams * sid, char *buf, int rlen, int ctime)
 int my_writev(int sock, struct iovec *iov, int iiov, streams *sid)
 {
 	int rv;
-	LOGL(6,"start writev handle %d, iiov %d", sock, iiov);
+	LOGL(6,"start writev handle %d, iov %p, iiov %d", sock, iov, iiov);
 	rv = writev(sock,iov,iiov);
 	if(rv < 0 && errno == ECONNREFUSED) // close the stream int the next second
 	{	

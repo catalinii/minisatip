@@ -923,7 +923,7 @@ main (int argc, char *argv[])
 {
 	realpath(argv[0], pn);
 		
-//	set_signal_handler ();   
+	set_signal_handler ();   
 	set_options (argc, argv);
 	if (opts.daemon)
 		becomeDaemon ();
