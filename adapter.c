@@ -199,6 +199,9 @@ close_adapter (int na)
 	a[na].ca = 0;
 	a[na].fe = 0;
 	a[na].dvr = 0;
+	a[na].strength = 0;
+	a[na].snr = 0;
+
 	//      if(a[na].buf)free1(a[na].buf);a[na].buf=NULL;
 	LOG ("done closing adapter %d", na);
 }
@@ -388,8 +391,8 @@ close_adapter_for_stream (int sid, int aid)
 								 // delete the attached PIDs as well
 	mark_pids_deleted (aid, sid, NULL);
 	update_pids (aid);
-//	if (a[aid].sid_cnt == 0) 
-//		close_adapter (aid);
+	if (a[aid].sid_cnt == 0) 
+		close_adapter (aid);
 }
 
 int
