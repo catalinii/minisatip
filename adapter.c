@@ -204,6 +204,9 @@ void close_adapter(int na)
 	a[na].ca = 0;
 	a[na].fe = 0;
 	a[na].dvr = 0;
+	a[na].strength = 0;
+	a[na].snr = 0;
+
 	//      if(a[na].buf)free1(a[na].buf);a[na].buf=NULL;
 	LOG("done closing adapter %d", na);
 }
