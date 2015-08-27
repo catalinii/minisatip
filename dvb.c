@@ -265,7 +265,7 @@ int send_diseqc(int fd, int pos, int pol, int hiband, int committed_no, int unco
  /* DiSEqC 1.1 */
 	struct dvb_diseqc_master_cmd uncmd = { {0xe0, 0x10, 0x39, 0xf0, 0x00, 0x00}, 4 };
 	cmd.msg[3] = 0xf0 | ( ((pos << 2) & 0x0c) | (hiband ? 1 : 0) | (pol ? 2 : 0));
-	uncmd.msg[3] = 0xf0 | ( (pos & 0x0c) | (hiband ? 1 : 0) | (pol ? 2 : 0));
+	uncmd.msg[3] = 0xf0 |  (pos & 0x0f);
 
 	if(uncommitted_no > committed_no)
 		uncommitted_first = 1;
@@ -282,7 +282,7 @@ int send_diseqc(int fd, int pos, int pol, int hiband, int committed_no, int unco
 	if (ioctl(fd, FE_SET_VOLTAGE, pol ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13) == -1)
 		LOG("send_diseqc: FE_SET_VOLTAGE failed for fd %d: %s", fd, strerror(errno));
 
-	if(	uncommitted_first )
+	if( uncommitted_first )
 		diseqc_cmd(fd, uncommitted_no, "uncommitted", &uncmd);
 		
 	diseqc_cmd(fd, committed_no, "committed", &cmd);	

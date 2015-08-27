@@ -989,7 +989,7 @@ void set_diseqc_adapters(char *o)
 			continue;
 
 		a[a_id].committed_no = committed_no;
-		a[a_id].committed_no = uncommitted_no;
+		a[a_id].uncommitted_no = uncommitted_no;
 		LOGL(0, "Setting diseqc adapter %d committed_no %d uncommitted_no %d", a_id, committed_no, uncommitted_no);
 	}
 }
