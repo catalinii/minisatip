@@ -431,8 +431,7 @@ update_pids (int aid)
 					request_adapter_close(ad);
 					return 1; // error
 				}
-			ad->pids[i].flags = 1;
-			ad->pids[i].filter = ad->pids[i].key = ad->pids[i].ecm_parity = 255;			
+			ad->pids[i].flags = 1;					
 			if(ad->pids[i].pid==0)
 				ad->pat_processed = 0;
 			ad->pids[i].cnt = 0;
@@ -625,6 +624,7 @@ int mark_pid_add(int sid, int aid, int _pid)
 			ad->pids[i].flags = 2;
 			ad->pids[i].pid = _pid;
 			ad->pids[i].sid[0] = sid;
+			ad->pids[i].filter = ad->pids[i].key = ad->pids[i].ecm_parity = 255;
 #ifndef DISABLE_DVBCSA	
 			dvbapi_pid_add(ad, _pid, &ad->pids[i], 0);
 #endif
