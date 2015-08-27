@@ -322,38 +322,45 @@ dump_pids (int aid)
 
 
 int
-get_free_adapter (int freq, int pol, int msys, int src)
+get_free_adapter (int freq, int pol, int msys, int diseqc)
 {
 	int i;
 	int omsys = msys;
 
-	i = (src > 0) ? src - 1 : 0;
-	LOG ("get free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d f:%d pol=%d", src - 1, i,
-		a[i].enabled, a[i].master_sid, a[i].sid_cnt, a[i].tp.freq, a[i].tp.pol);
-	if (src > 0)
-	{
-		if (a[i].enabled)
-		{
-			if (a[i].sid_cnt == 0 && delsys_match(&a[i], msys))
-				return i;
-			if (a[i].tp.freq == freq && delsys_match(&a[i], msys))
-				return i;
-		}
-	}
-	for (i = 0; i < MAX_ADAPTERS; i++)
-								 //first free adapter that has the same msys
-		if (a[i].enabled && a[i].sid_cnt == 0 && delsys_match(&a[i], msys))
-			return i;
+	LOG ("get free adapter for freq:%d, pol:%d, msys:%d diseqc:%d", 
+		freq, pol, msys, diseqc);
 
+
+	// First try to reuse an existing adapter with the right parameters
 	for (i = 0; i < MAX_ADAPTERS; i++)
-		if (a[i].enabled && a[i].tp.freq == freq && delsys_match(&a[i], msys))
+		if (a[i].enabled && a[i].tp.freq == freq && delsys_match(&a[i], msys) && a[i].tp.diseqc == diseqc)
 		{
-			if ((msys == SYS_DVBS2 || msys == SYS_DVBS) && a[i].tp.pol == pol)
-				return i;
+			if (msys == SYS_DVBS2 || msys == SYS_DVBS)
+			{
+				if (a[i].tp.pol == pol)
+				{
+					LOG ("re-using adapter %d", i);
+					return i;
+				}
+			}
 			else
+			{
+				LOG ("re-using adapter %d", i);
 				return i;
+			}
 		}
-	LOG ("no adapter found for f:%d pol:%d msys:%d", freq, pol, msys);
+
+	// Then try to get a not used one
+	for (i = 0; i < MAX_ADAPTERS; i++)
+		//first free adapter that has the same msys
+		if (a[i].enabled && a[i].sid_cnt == 0 && delsys_match(&a[i], msys))
+		{
+			LOG ("using free adapter %d", i);
+			return i;
+		}
+
+
+	LOG ("no adapter found for f:%d pol:%d msys:%d diseqc:%d", freq, pol, msys, diseqc);
 	dump_adapters ();
 	return -1;
 }
