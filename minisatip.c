@@ -46,6 +46,10 @@
 struct struct_opts opts;
 
 extern sockets s[MAX_SOCKS];
+extern adapter a[MAX_ADAPTERS];
+extern streams st[MAX_STREAMS];
+extern char *fe_delsys[];
+
 char public[] = "Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN";
 int rtsp, http, si, si1, ssdp1;
 
@@ -76,6 +80,8 @@ static const struct option long_options[] =
 	{ 0, 0, 0, 0 }
 };
 
+
+static void get_status (char* buf, size_t buflen);
 
 #define RRTP_OPT 'r'
 #define DEVICEID_OPT 'D'
@@ -716,6 +722,17 @@ read_http (sockets * s)
 		return 0;
 	}
 
+	if (strncmp (arg[1], "/status", 7) == 0)
+	{
+		char headers[500];
+
+		get_status(buf, 20000);
+
+		sprintf (headers,  "Content-type: text/html");
+		http_response (s, 200, headers, buf, 0, 0);
+		return 0;
+	}
+
 	if (strncmp (arg[1], "/icons/", 7) == 0)
 	{
 		char *ctype = NULL;
@@ -1095,3 +1112,104 @@ http_response (sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 		send (s->sock, desc, lr, MSG_NOSIGNAL);
 	return resp;
 }
+
+#define status_add(fmt, ...) do { \
+	size_t l = strlen(buf); \
+	snprintf(buf + l, buflen - l, fmt, ##__VA_ARGS__); \
+} while (0)
+
+static char *get_status_pol(int pol)
+{
+	switch (pol) {
+		case 0: return "none";
+		case 1: return "V";
+		case 2: return "H";
+		case 3: return "L";
+		case 4: return "R";
+		default: return "unknown";
+	}
+}
+
+static void get_status (char* buf, size_t buflen)
+{
+	int ad_idx, st_idx;
+
+	buf[0] = 0;
+
+	status_add("<html><br><TABLE BORDER=\"1\"><TR><TH>&nbsp;Device&nbsp;</TH><TH>&nbsp;Status&nbsp;</TH><TH>&nbsp;Type&nbsp;</TH><TH>&nbsp;Transponder&nbsp;</TH><TH>&nbsp;Diseqc&nbsp;</TH><TH>&nbsp;Quality&nbsp;</TH><TH>&nbsp;Clients&nbsp;</TH></TR>");
+
+	for (ad_idx = 0; ad_idx < MAX_ADAPTERS; ad_idx++)
+	{
+		if (a[ad_idx].enabled)
+		{
+			status_add("<TR>");
+
+			// Device
+			status_add("<TD ALIGN=\"center\"><i>%d</i></TD>", ad_idx);
+
+			// Status
+			if (a[ad_idx].sid_cnt == 0)
+				status_add("<TD ALIGN=\"center\"><font color=\"red\">OFF</font></TD>");
+			else
+			{
+				int pid_idx;
+
+				status_add("<TD ALIGN=\"center\" title=\"pids=");
+				for (pid_idx=0; pid_idx<MAX_PIDS; pid_idx++)
+					if (a[ad_idx].pids[pid_idx].flags != 0)
+						status_add("%d ", a[ad_idx].pids[pid_idx].pid);
+				status_add("\"><font color=\"green\">ON</font></TD>");
+                        }
+
+			// Type
+			if (a[ad_idx].tp.sys)
+				status_add("<TD ALIGN=\"center\"><i>%s</i></TD>", fe_delsys[a[ad_idx].tp.sys]);
+			else
+				status_add("<TD ALIGN=\"center\"></TD>");
+
+			// Transpnder
+			if (a[ad_idx].tp.freq)
+				status_add("<TD ALIGN=\"center\" title=\"%d\"><i>%d (%s)</i></TD>", a[ad_idx].tp.sr, a[ad_idx].tp.freq, get_status_pol(a[ad_idx].tp.pol));
+			else
+				status_add("<TD ALIGN=\"center\"></TD>");
+
+			// diseqc
+			if (a[ad_idx].tp.diseqc)
+				status_add("<TD ALIGN=\"center\"><i>%d</i></TD>", a[ad_idx].tp.diseqc);
+			else
+				status_add("<TD ALIGN=\"center\"></TD>");
+
+			// Quality
+			if (a[ad_idx].snr || a[ad_idx].strength)
+				status_add("<TD ALIGN=\"center\"><i>SNR=%d%% LEV=%d%% </i></TD>", ((int)a[ad_idx].snr * 4369 * 100) / 65535, 100*a[ad_idx].strength/255);
+			else
+				status_add("<TD ALIGN=\"center\"></TD>");
+
+			// Clients
+			status_add("<TD ALIGN=\"center\">");
+			for (st_idx=0; st_idx<MAX_STREAMS; st_idx++)
+			{
+				int port;
+				char* host;
+
+				streams *s = &st[st_idx];
+				if (!s->enabled || s->adapter != ad_idx)
+					continue;
+
+				port = ntohs(s->sa.sin_port);
+				host = inet_ntoa(s->sa.sin_addr);
+
+				status_add("%s:%d (%s)", host, port, s->do_play ? "active" : "inactive");
+
+				status_add("<br>");
+			}
+
+			status_add("</TD>");
+
+			status_add("</TR>");
+		}
+	}
+
+	status_add("</TABLE></html>");
+}
+
