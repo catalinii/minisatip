@@ -1163,7 +1163,7 @@ static void get_status (char* buf, size_t buflen)
 
 			// Status
 			if (a[ad_idx].sid_cnt == 0)
-				status_add("<TD ALIGN=\"center\"><font color=\"orange\">Closing</font></TD>");
+				status_add("<TD ALIGN=\"center\"><font color=\"orange\">Idle</font></TD>");
 			else
 			{
 				int pid_idx;
@@ -1172,7 +1172,7 @@ static void get_status (char* buf, size_t buflen)
 				for (pid_idx=0; pid_idx<MAX_PIDS; pid_idx++)
 					if (a[ad_idx].pids[pid_idx].flags != 0)
 						status_add("%d ", a[ad_idx].pids[pid_idx].pid);
-				status_add("\"><font color=\"green\">On</font></TD>");
+				status_add("\"><font color=\"green\">Running</font></TD>");
                         }
 
 			// Type
