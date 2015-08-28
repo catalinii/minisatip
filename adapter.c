@@ -211,7 +211,7 @@ close_adapter (int na)
 	// Tell all open streams that the adapter is closed
 	for (i=0; i<MAX_STREAMS; i++)
 	{
-		if (st[i].adapter == na)
+		if (st[i].enabled && st[i].adapter == na)
 			st[i].adapter = -1;
 	}
 
