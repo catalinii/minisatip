@@ -36,7 +36,7 @@
 adapter a[MAX_ADAPTERS];
 adapter a_init[MAX_ADAPTERS];
 extern struct struct_opts opts;
-
+extern streams st[];
 
 void
 find_adapters ()
@@ -179,6 +179,8 @@ int init_all_hw ()
 void
 close_adapter (int na)
 {
+	int i;
+
 	LOG ("closing adapter %d", na);
 
 	if (na < 0 || na >= MAX_ADAPTERS || !a[na].enabled)
@@ -205,6 +207,13 @@ close_adapter (int na)
 	a[na].dvr = 0;
 	a[na].strength = 0;
 	a[na].snr = 0;
+
+	// Tell all open streams that the adapter is closed
+	for (i=0; i<MAX_STREAMS; i++)
+	{
+		if (st[i].adapter == na)
+			st[i].adapter = -1;
+	}
 
 	//      if(a[na].buf)free1(a[na].buf);a[na].buf=NULL;
 	LOG ("done closing adapter %d", na);
