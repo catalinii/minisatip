@@ -97,7 +97,8 @@ typedef struct struct_adapter
 } adapter;
 
 
-int init_hw ();
+int init_hw (int aid);
+int init_all_hw();
 int getS2Adapters ();
 int getTAdapters ();
 int getCAdapters ();

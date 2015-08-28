@@ -47,6 +47,7 @@ struct struct_opts opts;
 
 extern sockets s[MAX_SOCKS];
 extern adapter a[MAX_ADAPTERS];
+extern adapter a_init[MAX_ADAPTERS];
 extern streams st[MAX_STREAMS];
 extern char *fe_delsys[];
 
@@ -938,6 +939,8 @@ extern char pn[256];
 int
 main (int argc, char *argv[])
 {
+	int nb_adapters;
+
 	realpath(argv[0], pn);
 		
 	set_signal_handler ();   
@@ -975,7 +978,10 @@ main (int argc, char *argv[])
 		NULL, (socket_action) close_http))
 		FAIL ("sockets_add failed for http");
 	
-	LOGL (0, "Initializing with %d devices", init_hw ());
+
+	nb_adapters = init_all_hw();
+	LOGL (0, "Initializing with %d devices", nb_adapters);
+
 	write_pid_file();
 #ifndef DISABLE_DVBCSA	
 	init_dvbapi();
@@ -1140,16 +1146,24 @@ static void get_status (char* buf, size_t buflen)
 
 	for (ad_idx = 0; ad_idx < MAX_ADAPTERS; ad_idx++)
 	{
-		if (a[ad_idx].enabled)
+		if (a_init[ad_idx].enabled)
 		{
+
 			status_add("<TR>");
 
 			// Device
 			status_add("<TD ALIGN=\"center\"><i>%d</i></TD>", ad_idx);
 
+
+			if (!a[ad_idx].enabled)
+			{
+				status_add("<TD ALIGN=\"center\"><font color=\"red\">Closed</font></TD><TD></TD><TD></TD><TD></TD><TD></TD><TD></TD></TR>");
+				continue;
+			}
+
 			// Status
 			if (a[ad_idx].sid_cnt == 0)
-				status_add("<TD ALIGN=\"center\"><font color=\"red\">OFF</font></TD>");
+				status_add("<TD ALIGN=\"center\"><font color=\"orange\">Closing</font></TD>");
 			else
 			{
 				int pid_idx;
@@ -1158,7 +1172,7 @@ static void get_status (char* buf, size_t buflen)
 				for (pid_idx=0; pid_idx<MAX_PIDS; pid_idx++)
 					if (a[ad_idx].pids[pid_idx].flags != 0)
 						status_add("%d ", a[ad_idx].pids[pid_idx].pid);
-				status_add("\"><font color=\"green\">ON</font></TD>");
+				status_add("\"><font color=\"green\">On</font></TD>");
                         }
 
 			// Type

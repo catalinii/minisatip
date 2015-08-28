@@ -191,7 +191,7 @@ setup_stream (char *str, sockets * s)
 
 	int i;
 	transponder t;
-	init_hw ();
+
 	detect_dvb_parameters (str, &t);
 	LOG ("Setup stream %d parameters, sock_id %d, handle %d", s->sid,
 		s->id, s->sock);
