@@ -714,7 +714,7 @@ set_adapter_parameters (int aid, int sid, transponder * tp)
 	ad->do_tune = 0;
 	if (tp->freq != ad->tp.freq || tp->plp != ad->tp.plp || tp->diseqc != ad->tp.diseqc
 		|| (tp->pol > 0 && tp->pol != ad->tp.pol) || (tp->sr>1000 && tp->sr != ad->tp.sr) || 
-		(tp->mtype > 0 && tp->mtype != ad->tp.mtype))
+		(ad->tp.mtype > 0 && tp->mtype > 0 && tp->mtype != ad->tp.mtype))
 	{
 		if (sid != ad->master_sid) {  			 // slave sid requesting to tune to a different frequency
 			LOGL(0, "secondary stream requested tune, not gonna happen\n ad: f:%d sr:%d pol:%d plp:%d src:%d mod %d\n \
