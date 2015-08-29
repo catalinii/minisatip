@@ -97,14 +97,15 @@ typedef struct struct_adapter
 } adapter;
 
 
-int init_hw ();
+int init_hw (int aid);
+int init_all_hw();
 int getS2Adapters ();
 int getTAdapters ();
 int getCAdapters ();
 int getT2Adapters ();
 int getC2Adapters ();
 void close_adapter (int na);
-int get_free_adapter (int freq, int pol, int msys, int src);
+int get_free_adapter (int freq, int pol, int msys, int diseqc);
 int set_adapter_for_stream (int i, int a);
 int close_adapter_for_stream (int sid, int aid);
 int set_adapter_parameters (int aid, int sid, transponder * tp);

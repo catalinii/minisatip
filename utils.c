@@ -481,10 +481,10 @@ becomeDaemon ()
 
 	if (fd != STDIN_FILENO)		 /* 'fd' should be 0 */
 		return -1;
-	if ( stat ("/tmp/log", &sb ) == -1)
-		fd = open ("/tmp/log", O_RDWR | O_CREAT, 0666);
+	if ( stat ("/tmp/minisatip.log", &sb ) == -1)
+		fd = open ("/tmp/minisatip.log", O_RDWR | O_CREAT, 0666);
 	else
-		fd = open ("/tmp/log", O_RDWR | O_APPEND);
+		fd = open ("/tmp/minisatip.log", O_RDWR | O_APPEND);
 	if (fd != STDOUT_FILENO)	 /* 'fd' should be 1 */
 		return -1;
 	if (dup2 (STDOUT_FILENO, STDERR_FILENO) != STDERR_FILENO)

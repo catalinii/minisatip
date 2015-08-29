@@ -34,8 +34,9 @@
 #include "dvbapi.h"
 
 adapter a[MAX_ADAPTERS];
+adapter a_init[MAX_ADAPTERS];
 extern struct struct_opts opts;
-
+extern streams st[];
 
 void
 find_adapters ()
@@ -53,25 +54,31 @@ find_adapters ()
 // avoid adapter close unless all the adapters can be closed
 int adapter_timeout(sockets *s)
 {
-	int do_close = 1, i, max_close = 0;
 	int rtime = getTick();
 	adapter *ad = get_adapter(s->sid);
-	for (i = 0; i < MAX_ADAPTERS; i++)
-	{
-		if( a[i].enabled && rtime - a[i].rtime < s->close_sec)
-			do_close = 0;
-		if(max_close < a[i].rtime)
-			max_close = a[i].rtime;
 
-	}		
-	LOG("Requested adapter %d close due to timeout, result %d max_rtime %d", s->sid, do_close, max_close);
-	if(!do_close)
-		s->rtime = max_close;
-	
-	if(ad->force_close)
-		do_close = 1;
-	
-	return do_close;	
+	if (!ad)
+		return 0;
+
+        if(ad->force_close)
+	{
+		LOG( "Force close requested for adapter %d", ad->pa);
+                return 1;
+	}
+
+	LOG( "Checking timeout for adapter %d", ad->pa);
+
+	if(rtime - ad->rtime >= s->close_sec)
+	{
+		LOG( "Adapter %d close due to timeout", ad->pa);
+		return 1;
+	}
+	else
+		LOG( "Not timed out yet %lld elapsed out of %d", rtime - ad->rtime , s->close_sec);
+
+	s->rtime = ad->rtime;;
+
+	return 0;
 }
 
 void request_adapter_close(adapter *ad)
@@ -90,92 +97,91 @@ close_adapter_for_socket (sockets * s)
 		close_adapter (aid);
 }
 
-int init_complete = 0;
-int num_adapters = 0;
 int
-init_hw ()
+init_hw (int aid)
 {
-	int i,
-		na;
+	int na, num_adapters;
 	char buf[100];
 
 	na = 0;
-	LOG ("starting init_hw %d", init_complete);
-	if (init_complete)
-		return num_adapters;
-	num_adapters = 0;
-	init_complete = 1;
-	for (i = 0; i < MAX_ADAPTERS; i++)
-		if ((!a[i].enabled || a[i].fe <= 0) && ((a[i].pa >= 0 && a[i].fn >= 0) || a[i].sip))
+	LOG ("starting init_hw for adapter %d", aid);
+
+	int k;
+	int ca;
+	if (a[aid].force_disable)
+		return 0;
+
+	a[aid].sock = -1;
+	a[aid].id = aid;
+	a[aid].fe_sock = -1;
+	a[aid].sock = -1;
+	if (a[aid].pa <= 0 && a[aid].fn <= 0)
+		find_adapters ();
+	if(a[aid].open(&a[aid]))
+		return 0;
+
+	a[aid].enabled = 1;
+	if (!a[aid].buf)
+		a[aid].buf = malloc1 (opts.adapter_buffer + 10);
+	if (!a[aid].buf)
 	{
-		int k;
-		int ca;
-		if (a[i].force_disable)continue;
-		a[i].sock = -1;
-		a[i].id = i;
-		a[i].fe_sock = -1;
-		a[i].sock = -1;
-		if (a[i].pa <= 0 && a[i].fn <= 0)
-			find_adapters ();
-		if(a[i].open(&a[i]))
+		LOG ("memory allocation failed for %d bytes failed, adapter %d, trying %d bytes",
+			opts.adapter_buffer, aid, ADAPTER_BUFFER);
+		opts.adapter_buffer = ADAPTER_BUFFER;
+		a[aid].buf = malloc1 (opts.adapter_buffer + 10);
+		if (! a[aid].buf)
 		{
-			init_complete = 0;
-			continue;
+			LOG ("memory allocation failed for %d bytes failed, adapter %d",
+			opts.adapter_buffer, aid);
+			close_adapter (aid);
 		}
-		
-		a[i].enabled = 1;
-		if (!a[i].buf)
-			a[i].buf = malloc1 (opts.adapter_buffer + 10);
-		if (!a[i].buf)
-		{
-			LOG ("memory allocation failed for %d bytes failed, adapter %d, trying %d bytes",
-				opts.adapter_buffer, i, ADAPTER_BUFFER);
-			opts.adapter_buffer = ADAPTER_BUFFER;
-			a[i].buf = malloc1 (opts.adapter_buffer + 10);
-			if (! a[i].buf)
-			{
-				LOG ("memory allocation failed for %d bytes failed, adapter %d",
-				opts.adapter_buffer, i);
-				close_adapter (i);
-			}
-			continue;
-		}
-		memset (a[i].buf, 0, opts.adapter_buffer + 1);
-
-		num_adapters++;
-		init_dvb_parameters (&a[i].tp);
-		mark_pids_deleted (i, -1, NULL);
-		update_pids (i);
-		a[i].delsys (i, a[i].fe, a[i].sys);
-		a[i].master_sid = -1;
-		a[i].sid_cnt = 0;
-		a[i].pid_err = a[i].dec_err = 0;
-		a[i].new_gs = 0;
-		a[i].force_close = 0;
-		a[i].sock =
-			sockets_add (a[i].dvr, NULL, i, TYPE_DVR, (socket_action) read_dmx,
-			(socket_action) close_adapter_for_socket, (socket_action ) adapter_timeout);
-		memset (a[i].buf, 0, opts.adapter_buffer + 1);
-		set_socket_buffer (a[i].sock, a[i].buf, opts.adapter_buffer);
-		sockets_timeout (a[i].sock, 60000);
-		if(a[i].post_init)
-			a[i].post_init(&a[i]);
-		LOG ("done opening adapter %i fe_sys %d %d %d %d", i, a[i].sys[0], a[i].sys[1], a[i].sys[2], a[i].sys[3]);
-
+		return 0;
 	}
-	else if (a[i].enabled)
-		num_adapters++;
-	if (num_adapters == 0)
-		init_complete = 0;
-	LOG ("done init_hw %d", init_complete);
-	return num_adapters;
+
+	memset (a[aid].buf, 0, opts.adapter_buffer + 1);
+
+	init_dvb_parameters (&a[aid].tp);
+	mark_pids_deleted (aid, -1, NULL);
+	update_pids (aid);
+	a[aid].delsys (aid, a[aid].fe, a[aid].sys);
+	a[aid].master_sid = -1;
+	a[aid].sid_cnt = 0;
+	a[aid].pid_err = a[aid].dec_err = 0;
+	a[aid].new_gs = 0;
+	a[aid].force_close = 0;
+	a[aid].sock =
+		sockets_add (a[aid].dvr, NULL, aid, TYPE_DVR, (socket_action) read_dmx,
+			(socket_action) close_adapter_for_socket, (socket_action ) adapter_timeout);
+	memset (a[aid].buf, 0, opts.adapter_buffer + 1);
+	set_socket_buffer (a[aid].sock, a[aid].buf, opts.adapter_buffer);
+	sockets_timeout (a[aid].sock, 10000);
+	if(a[aid].post_init)
+		a[aid].post_init(&a[aid]);
+	LOG ("done opening adapter %i fe_sys %d %d %d %d", aid, a[aid].sys[0], a[aid].sys[1], a[aid].sys[2], a[aid].sys[3]);
+
+	return 1;
 }
 
+int init_all_hw ()
+{
+	int i, num_adapters = 0;
 
+	for (i = 0; i < MAX_ADAPTERS; i++)
+	{
+		if ((!a[i].enabled || a[i].fe <= 0) && ((a[i].pa >= 0 && a[i].fn >= 0) || a[i].sip))
+			num_adapters += init_hw(i);
+	}
+
+	memcpy(a_init, a, MAX_ADAPTERS*sizeof(adapter));
+
+	return num_adapters;
+}
 void
 close_adapter (int na)
 {
-	init_complete = 0;
+	int i;
+
+	LOG ("closing adapter %d", na);
 
 	if (na < 0 || na >= MAX_ADAPTERS || !a[na].enabled)
 		return;
@@ -199,6 +205,16 @@ close_adapter (int na)
 	a[na].ca = 0;
 	a[na].fe = 0;
 	a[na].dvr = 0;
+	a[na].strength = 0;
+	a[na].snr = 0;
+
+	// Tell all open streams that the adapter is closed
+	for (i=0; i<MAX_STREAMS; i++)
+	{
+		if (st[i].enabled && st[i].adapter == na)
+			st[i].adapter = -1;
+	}
+
 	//      if(a[na].buf)free1(a[na].buf);a[na].buf=NULL;
 	LOG ("done closing adapter %d", na);
 }
@@ -214,9 +230,9 @@ getS2Adapters ()
 		LOG_AND_RETURN (opts.force_sadapter,
 			"Returning %d DVB-S adapters as requested",
 			opts.force_sadapter);
-	init_hw ();
+
 	for (i = 0; i < MAX_ADAPTERS; i++)
-		if (a[i].enabled && (delsys_match(&a[i], SYS_DVBS) || delsys_match(&a[i], SYS_DVBS2)))
+		if (a_init[i].enabled && (delsys_match(&a_init[i], SYS_DVBS) || delsys_match(&a_init[i], SYS_DVBS2)))
 			s2++;
 	//      return 1;
 	return s2;
@@ -231,9 +247,9 @@ int getTAdapters ()
 	 if (opts.force_tadapter) 
 		LOG_AND_RETURN (opts.force_tadapter, "Returning %d DVB-T adapters as requested",
                         opts.force_tadapter);
-	init_hw ();
+
 	for (i = 0; i < MAX_ADAPTERS; i++)
-		if (a[i].enabled && delsys_match(&a[i], SYS_DVBT) && !delsys_match(&a[i], SYS_DVBT2))
+		if (a_init[i].enabled && delsys_match(&a_init[i], SYS_DVBT) && !delsys_match(&a_init[i], SYS_DVBT2))
 			t++;
 	return t;
 }
@@ -245,9 +261,9 @@ int getCAdapters ()
 	 if (opts.force_cadapter) 
 		LOG_AND_RETURN (opts.force_cadapter, "Returning %d DVB-C adapters as requested",
                         opts.force_cadapter);
-	init_hw ();
+
 	for (i = 0; i < MAX_ADAPTERS; i++)
-		if (a[i].enabled && delsys_match(&a[i], SYS_DVBC_ANNEX_A) && !delsys_match(&a[i], SYS_DVBC2))
+		if (a_init[i].enabled && delsys_match(&a_init[i], SYS_DVBC_ANNEX_A) && !delsys_match(&a_init[i], SYS_DVBC2))
 			c++;
 	return c;
 }
@@ -257,9 +273,8 @@ int getT2Adapters ()
 	int i,
 		t = 0;
 
-	init_hw ();
 	for (i = 0; i < MAX_ADAPTERS; i++)
-		if (a[i].enabled && delsys_match(&a[i], SYS_DVBT2))
+		if (a_init[i].enabled && delsys_match(&a_init[i], SYS_DVBT2))
 			t++;
 	return t;
 }
@@ -268,9 +283,8 @@ int getC2Adapters ()
 {
 	int i, c = 0;
 
-	init_hw ();
 	for (i = 0; i < MAX_ADAPTERS; i++)
-		if (a[i].enabled && delsys_match(&a[i], SYS_DVBC2))
+		if (a_init[i].enabled && delsys_match(&a_init[i], SYS_DVBC2))
 			c++;
 	return c;
 }
@@ -319,38 +333,52 @@ dump_pids (int aid)
 
 
 int
-get_free_adapter (int freq, int pol, int msys, int src)
+get_free_adapter (int freq, int pol, int msys, int diseqc)
 {
 	int i;
 	int omsys = msys;
 
-	i = (src > 0) ? src - 1 : 0;
-	LOG ("get free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d f:%d pol=%d", src - 1, i,
-		a[i].enabled, a[i].master_sid, a[i].sid_cnt, a[i].tp.freq, a[i].tp.pol);
-	if (src > 0)
-	{
-		if (a[i].enabled)
+	LOGL (0, "asking for a free adapter - freq:%d, pol:%d, msys:%d diseqc:%d", 
+		freq, pol, msys, diseqc);
+
+	// First try to reuse an existing adapter with the right parameters
+	for (i = 0; i < MAX_ADAPTERS; i++)
+		if (a[i].enabled && a[i].tp.freq == freq && delsys_match(&a[i], msys) && a[i].tp.diseqc == diseqc)
 		{
-			if (a[i].sid_cnt == 0 && delsys_match(&a[i], msys))
+			if (msys == SYS_DVBS2 || msys == SYS_DVBS)
+			{
+				if (a[i].tp.pol == pol)
+				{
+					LOGL (0, "=> re-using adapter %d", i);
+					return i;
+				}
+			}
+			else
+			{
+				LOGL (0, "=> re-using adapter %d", i);
 				return i;
-			if (a[i].tp.freq == freq && delsys_match(&a[i], msys))
+			}
+		}
+
+	// Then try to get a not used one
+	for (i = 0; i < MAX_ADAPTERS; i++)
+	{
+		//first free adapter that has the same msys
+		if (a_init[i].enabled)
+		{
+			if (!a[i].enabled)
+				init_hw(i);
+
+			if (a[i].enabled && a[i].sid_cnt == 0 && delsys_match(&a[i], msys))
+			{
+				LOGL (0, "=> using free adapter %d", i);
 				return i;
+			}
 		}
 	}
-	for (i = 0; i < MAX_ADAPTERS; i++)
-								 //first free adapter that has the same msys
-		if (a[i].enabled && a[i].sid_cnt == 0 && delsys_match(&a[i], msys))
-			return i;
 
-	for (i = 0; i < MAX_ADAPTERS; i++)
-		if (a[i].enabled && a[i].tp.freq == freq && delsys_match(&a[i], msys))
-		{
-			if ((msys == SYS_DVBS2 || msys == SYS_DVBS) && a[i].tp.pol == pol)
-				return i;
-			else
-				return i;
-		}
-	LOG ("no adapter found for f:%d pol:%d msys:%d", freq, pol, msys);
+
+	LOGL (0, "=> no adapter found for f:%d pol:%d msys:%d diseqc:%d", freq, pol, msys, diseqc);
 	dump_adapters ();
 	return -1;
 }
@@ -686,12 +714,14 @@ set_adapter_parameters (int aid, int sid, transponder * tp)
 	ad->do_tune = 0;
 	if (tp->freq != ad->tp.freq || tp->plp != ad->tp.plp || tp->diseqc != ad->tp.diseqc
 		|| (tp->pol > 0 && tp->pol != ad->tp.pol) || (tp->sr>1000 && tp->sr != ad->tp.sr) || 
-		(tp->mtype > 0 && tp->mtype != ad->tp.mtype))
+		(ad->tp.mtype > 0 && tp->mtype > 0 && tp->mtype != ad->tp.mtype))
 	{
-		if (sid != ad->master_sid)  			 // slave sid requesting to tune to a different frequency
-			LOG_AND_RETURN(-1, "secondary stream requested tune, not gonna happen\n ad: f:%d sr:%d pol:%d plp:%d src:%d mod %d\n \
+		if (sid != ad->master_sid) {  			 // slave sid requesting to tune to a different frequency
+			LOGL(0, "secondary stream requested tune, not gonna happen\n ad: f:%d sr:%d pol:%d plp:%d src:%d mod %d\n \
 			new: f:%d sr:%d pol:%d plp:%d src:%d mod %d", ad->tp.freq, ad->tp.sr, ad->tp.pol, ad->tp.plp, ad->tp.diseqc, ad->tp.mtype,
-			tp->freq, tp->sr, tp->pol, tp->plp, tp->diseqc, tp->mtype);	
+			tp->freq, tp->sr, tp->pol, tp->plp, tp->diseqc, tp->mtype);
+			return -1;
+		}
 		mark_pids_deleted (aid, -1, NULL);
 		if(update_pids (aid))
 			return -1;

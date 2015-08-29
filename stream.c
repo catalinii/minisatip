@@ -191,7 +191,7 @@ setup_stream (char *str, sockets * s)
 
 	int i;
 	transponder t;
-	init_hw ();
+
 	detect_dvb_parameters (str, &t);
 	LOG ("Setup stream %d parameters, sock_id %d, handle %d", s->sid,
 		s->id, s->sock);
@@ -255,7 +255,7 @@ start_play (streams * sid, sockets * s)
 	{
 		a_id =
 			get_free_adapter (sid->tp.freq, sid->tp.pol, sid->tp.sys,
-			sid->tp.fe);
+			sid->tp.diseqc);
 		LOG ("Got adapter %d on socket %d", a_id, s->id);
 		if (a_id < 0)
 			return -404;
