@@ -92,10 +92,16 @@ getlocalip ()
 
 	fill_sockaddr (&serv, (char *) dest, port);
 	int err = connect (sock, (const struct sockaddr *) &serv, sizeof (serv));
-	
-	h = get_sock_host(sock);
-	if (h) strcpy(localip, h);
-	
+	if(err)
+	{
+		LOG("getlocalip: Error '%s'' during connect", strerror(errno));
+		memset(localip, 0, sizeof(localip));
+	}
+	else
+	{
+		h = get_sock_host(sock);
+		if (h) strcpy(localip, h);
+	}
 	close (sock);
 	return localip;
 
@@ -151,7 +157,6 @@ udp_bind (char *addr, int port)
 int udp_bind_connect(char *src, int sport, char *dest, int dport, struct sockaddr_in *serv)
 {
 	int sock;
-	int optval;
 	sock = udp_bind( src, sport);
 	if(sock<0)
 		return sock;
@@ -306,6 +311,7 @@ int get_sock_port(int fd)
 int
 no_action (int s)
 {
+	(void) s;
 	return 1;
 }
 
@@ -444,8 +450,7 @@ uint64_t nsecs;
 int
 select_and_execute ()
 {
-	fd_set io;
-	struct timeval tv;
+	fd_set io;	
 	int i, rv, rlen;
 	unsigned char buf[2001];
 	int err;
@@ -463,7 +468,6 @@ select_and_execute ()
 			perror ("select_and_execute: select() error");
 			continue;
 		}
-		int k = -1;
 
 		//              LOG("select returned %d",rv);
 		if (rv > 0)
@@ -591,8 +595,6 @@ select_and_execute ()
 				&& ((s[i].close_sec > 0 && lt - s[i].rtime > s[i].close_sec)
 				|| (s[i].close_sec == 1)))
 			{
-				int do_close = 0;
-
 				//                                              LOG("Timeout idle connection %d index %d",s[i].sock,i);
 				if (s[i].timeout && s[i].timeout (&s[i]))
 					sockets_del (i);
@@ -604,6 +606,7 @@ select_and_execute ()
 		}
 	}
 	LOG("The main loop ended, run_loop = %d", run_loop);
+	return 0;
 }
 
 
@@ -732,6 +735,7 @@ sockets_del_for_sid (int ad)
 		s[i].close_sec = 1;	 //trigger close of the socket after this operation ends, otherwise we might close an socket on which we run action
 		s[i].sid = -1;			 // make sure the stream is not closed in the future to prevent closing the stream created by another socket
 	}
+	return 0;
 }
 
 

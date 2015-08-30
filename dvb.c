@@ -192,9 +192,9 @@ char *fe_pol[] =
 #define make_func(a) \
 char * get_##a(int i) \
 { \
-	if(i>=0 && i<sizeof(fe_##a)) \
+	if(i>=0 && i< (int)sizeof(fe_##a)) { \
 		if(fe_##a[i][0] == 32)return ""; \
-			else return fe_##a[i];  \
+			else return fe_##a[i]; }  \
 	return "NONE"; \
 } 
 make_func ( pilot );
@@ -259,7 +259,7 @@ void diseqc_cmd(int fd, int times, char *str, struct dvb_diseqc_master_cmd *cmd)
 
 int send_diseqc(int fd, int pos, int pol, int hiband, int committed_no, int uncommitted_no)
 {
-	int uncommitted_first = 0, i;
+	int uncommitted_first = 0;
 /* DiSEqC 1.0 */
 	struct dvb_diseqc_master_cmd cmd = { {0xe0, 0x10, 0x38, 0xf0, 0x00, 0x00}, 4 };
  /* DiSEqC 1.1 */
@@ -381,11 +381,9 @@ int send_jess(int fd, int freq, int pos, int pol, int hiband, int slot, int ufre
 
 int setup_switch (int frontend_fd, transponder *tp)
 {
-	int i;
-	int err;
 	int hiband = 0;
 	int diseqc = (tp->diseqc > 0)? tp->diseqc - 1: 0;
-	int freq = tp->freq;
+	unsigned int freq = (unsigned int) tp->freq;
 	int pol = (tp->pol - 1) & 1;
 	
 	if (tp->pol > 2) {
@@ -426,12 +424,10 @@ int setup_switch (int frontend_fd, transponder *tp)
 int dvb_tune (int aid, transponder * tp)
 {
 	uint32_t if_freq = 0;
-	int res, bclear, bpol;
+	int bclear, bpol;
 	adapter *ad = get_adapter(aid);
 	int fd_frontend = ad->fe;
 
-	struct dvb_frontend_event event;
-	
 	int freq = tp->freq;
 	struct dtv_properties *p;
 	struct dvb_frontend_event ev;
@@ -643,7 +639,7 @@ int dvb_tune (int aid, transponder * tp)
 			
 			break;
 
-}
+	}
 
 	/* discard stale QPSK events */
 	while (1)
@@ -849,7 +845,7 @@ detect_dvb_parameters (char *s, transponder * tp)
 	if (*s == 0)
 		LOG_AND_RETURN (0, "no ? found in URL");
 
-	*s++;
+	s++;
 	if (strstr(s, "freq="))
 			init_dvb_parameters(tp);
 
@@ -1109,6 +1105,7 @@ int get_signal_new (int fd, fe_status_t * status, uint32_t * ber,
 
 void dvb_commit(adapter *a)
 {
+	(void) a;
 	return ;
 }
 
@@ -1150,7 +1147,7 @@ void find_dvb_adapter (adapter *a)
 				return;
 		}
 	}
-	for (na; na < MAX_ADAPTERS; na++)
+	for (; na < MAX_ADAPTERS; na++)
 		a[na].pa = a[na].fn = -1;
 }
 

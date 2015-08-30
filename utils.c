@@ -62,12 +62,12 @@ char pn[256];
 typedef struct tmpinfo
 {
 	unsigned char enabled;
-	uint32_t len;
+	int len;
 	int64_t key;
 	uint16_t id;
-	uint32_t max_size;
-	uint32_t timeout;
-	uint32_t last_updated;
+	int max_size;
+	int timeout;
+	int last_updated;
 	uint8_t no_change, prev_no_change;	
 	unsigned char *data;
 } STmpinfo;
@@ -516,7 +516,7 @@ void _log(int level, char * file, int line, char *fmt, ...) {
 	int len, len1, both;
 	static int idx, times;
 	static char output[2][2000];
-	char tmp[100];
+
     /* Check if the message should be logged */
 	opts.last_log = fmt;
 	if (opts.log < level)
@@ -541,7 +541,7 @@ void _log(int level, char * file, int line, char *fmt, ...) {
 		output[idx][0] = '\0';
         }
     /* Write the error message */
-	len = len1 = len1 < sizeof(output[0]) ? len1 : sizeof(output[0]) - 1;
+	len = len1 = len1 < (int) sizeof(output[0]) ? len1 : (int) sizeof(output[0]) - 1;
 	both = 0;
     va_start(arg, fmt);
     len += vsnprintf(output[idx] + len, sizeof(output[0]) - len, fmt, arg);
@@ -563,6 +563,10 @@ void _log(int level, char * file, int line, char *fmt, ...) {
 		if(opts.slog)syslog(LOG_NOTICE, "%s", output[1-idx]); else puts(output[1-idx]);
 		both = 0;
 	}
-	if(times==0) if(opts.slog)syslog(LOG_NOTICE, "%s", output[idx]); else puts(output[idx]);
+	if(times==0)
+	{
+		if(opts.slog)syslog(LOG_NOTICE, "%s", output[idx]);
+		else puts(output[idx]);
+	}
 	fflush(stdout);
 }

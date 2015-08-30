@@ -192,8 +192,6 @@ void
 set_options (int argc, char *argv[])
 {
 	int opt;
-	int sethost = 0;
-	int index;
 	char *lip;
 
 	opts.log = 1;
@@ -224,7 +222,7 @@ set_options (int argc, char *argv[])
 	opts.satip_addpids = 0;
 	opts.output_buffer = 512*1024;
 	opts.satip_servers[0] = 0;
-	memset(opts.playlist, sizeof(opts.playlist), 0);
+	memset(opts.playlist, 0, sizeof(opts.playlist));
 	
 	
 	while ((opt = getopt_long (argc, argv, "flr:a:td:w:p:s:hc:b:m:p:e:x:u:j:o:gy:zi:D:V", long_options, NULL)) != -1)
@@ -259,7 +257,6 @@ set_options (int argc, char *argv[])
 			{
 				//                              int i=0;
 				opts.http_host = optarg;
-				sethost = 1;
 				break;
 			}
 
@@ -416,7 +413,7 @@ read_rtsp (sockets * s)
 {
 	char *arg[50];
 	int cseq, la, i, rlen;
-	char *proto, *transport = NULL;
+	char *transport = NULL;
 	int sess_id = 0;
 	char buf[2000];
 	streams *sid = get_sid(s->sid);
@@ -457,13 +454,13 @@ read_rtsp (sockets * s)
 
 	LOG ("read RTSP (from handle %d sock_id %d, len: %d, sid %d):\n%s", s->sock, s->id, s->rlen, s->sid, s->buf);
 
-	if( (s->type != TYPE_HTTP ) && (strncasecmp(s->buf, "GET", 3) == 0))
+	if( (s->type != TYPE_HTTP ) && (strncasecmp((const char*) s->buf, "GET", 3) == 0))
 	{
 		http_response (s , 404, NULL, NULL, 0, 0);
 		return 0;
 	}
 	
-	la = split (arg, s->buf, 50, ' ');
+	la = split (arg, (char*) s->buf, 50, ' ');
 	cseq = 0;	
 	if (la<2)
 		LOG_AND_RETURN(0, "Most likely not an RTSP packet sock_id: %d sid: %d rlen: %d, dropping ....", s->id, s->sid, rlen); 
@@ -478,7 +475,6 @@ read_rtsp (sockets * s)
 
 	if(strstr(arg[1], "freq") || strstr(arg[1], "pids"))
 	{
-		int old_sid = s->sid;
 		sid = (streams *) setup_stream (arg[1], s);
 	}
 	sid = get_sid(s->sid);
@@ -492,7 +488,8 @@ read_rtsp (sockets * s)
 	for (i = 0; i < la; i++)
 		if (strncasecmp ("CSeq:", arg[i], 5) == 0)
 			cseq = map_int (header_parameter(arg, i), NULL);
-		else if (strncasecmp ("Transport:", arg[i], 9) == 0){
+		else if (strncasecmp ("Transport:", arg[i], 9) == 0)
+		{
 			transport = header_parameter(arg, i);
 
 			if( -1 == decode_transport (s, transport, opts.rrtp, opts.start_rtp))
@@ -501,10 +498,14 @@ read_rtsp (sockets * s)
 				return 0;
 			}
 		}
-	else if (strstr (arg[i], "LIVE555"))
+		else if (strstr (arg[i], "LIVE555"))
+		{
 			if(sid) sid->timeout = 0;
-	else if (strstr (arg[i], "Lavf"))
+		}
+		else if (strstr (arg[i], "Lavf"))
+		{
 			if(sid) sid->timeout = 0;
+		}
 	
 	if((strncasecmp (arg[0], "PLAY", 4) == 0) || (strncasecmp (arg[0], "GET", 3) == 0) || (strncasecmp (arg[0], "SETUP", 5) == 0)) 
 	{
@@ -565,7 +566,6 @@ read_rtsp (sockets * s)
 	}
 	else if (strncmp (arg[0], "TEARDOWN", 8) == 0)
 	{
-		streams *sid;
 		buf[0] = 0;
 		if(get_sid(s->sid))
 			sprintf(buf, "Session: %010d", get_session_id(s->sid));
@@ -607,7 +607,6 @@ read_http (sockets * s)
 {
 	char buf[20000];
 	char *arg[50];
-	int la, rlen;
 	char *xml =
 		"<?xml version=\"1.0\"?>"
 		"<root xmlns=\"urn:schemas-upnp-org:device-1-0\" configId=\"0\">"
@@ -672,18 +671,17 @@ read_http (sockets * s)
 		return 0;
 	}
 
-	if (strncasecmp(s->buf,"GET ",4)==0 && strstr(s->buf, "/?" ))
+	if (strncasecmp( (const char*) s->buf,"GET ",4)==0 && strstr( (const char*) s->buf, "/?" ))
 	{
 		read_rtsp(s);
 		return 0;
 	}
 
-	rlen = s->rlen;
 	s->rlen = 0;
 	
 	LOG ("read HTTP from %d sid: %d: %s", s->sock, s->sid, s->buf);
 	
-	la = split (arg, s->buf, 50, ' ');
+	split (arg, (char*) s->buf, 50, ' ');
 	//      LOG("args: %s -> %s -> %s",arg[0],arg[1],arg[2]);
 	if (strncmp (arg[0], "GET", 3) != 0)
 		REPLY_AND_RETURN(503);
@@ -748,7 +746,7 @@ close_http (sockets * s)
 	s->flags = 0;
 	s->buf = NULL;
 	LOG ("Requested stream close %d timeout %d type %d", s->sid, sid?sid->timeout:-1, sid?sid->type:-1);
-	if(sid && ((sid->type == STREAM_RTSP_UDP && sid->timeout != 0) || sid->type == 0 && sid->timeout != 0)) 
+	if(sid && ((sid->type == STREAM_RTSP_UDP && sid->timeout != 0) || (sid->type == 0 && sid->timeout != 0)))
 			// Do not close rtsp udp as most likely there was no TEARDOWN at this point
 		return 0;
 	close_stream (s->sid);
@@ -846,7 +844,7 @@ ssdp_reply (sockets * s)
 	
 	if (strncasecmp (s->buf, "NOTIFY", 6) == 0)
 	{
-		rdid = strcasestr(s->buf, "DEVICEID.SES.COM:");
+		rdid = strcasestr((const char*) s->buf, "DEVICEID.SES.COM:");
 		if(rdid && opts.device_id == map_int(strip(rdid + 17), NULL))
 		{						
 			snprintf(buf, sizeof(buf), device_id_conflict, getlocalip(), VERSION, opts.device_id);
@@ -857,9 +855,9 @@ ssdp_reply (sockets * s)
 		return 0;
 	}	
 	
-	man = strcasestr(s->buf, "MAN");
-	man_sd = strcasestr(s->buf, "ssdp:discover");
-	if(( didsescom = strcasestr(s->buf, "DEVICEID.SES.COM:") ))
+	man = strcasestr((const char*) s->buf, "MAN");
+	man_sd = strcasestr((const char*) s->buf, "ssdp:discover");
+	if(( didsescom = strcasestr((const char*) s->buf, "DEVICEID.SES.COM:") ))
 		did = map_int(didsescom + 17, NULL);		
 	
 	if(man && man_sd && didsescom && (s->rtime < 15000) && did == opts.device_id)  // SSDP Device ID clash, only first 5 seconds after the announcement
@@ -871,7 +869,7 @@ ssdp_reply (sockets * s)
 			readBootID();
 	} else did = opts.device_id;
 	
-	if(strncmp(s->buf,"HTTP/1",6)==0)
+	if(strncmp((const char*) s->buf,"HTTP/1",6)==0)
 		LOG_AND_RETURN(0, "ssdp_reply: the message is a reply, ignoring....");
 	
 	sprintf (buf, reply, get_current_timestamp (), opts.http_host, VERSION, uuid, opts.bootid, did);

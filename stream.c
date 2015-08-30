@@ -86,7 +86,7 @@ int get_next_free_stream()
 
 char *describe_streams (sockets *s, char *req, char *sbuf, int size)
 {
-	char *str, *stream_id;
+	char *stream_id;
 	int i, sidf, do_play = 0, streams_enabled = 0;
 	streams *sid;
 	int do_all = 1;
@@ -186,10 +186,8 @@ set_stream_parameters (int s_id, transponder * t)
 streams *
 setup_stream (char *str, sockets * s)
 {
-	char *arg[20], pol;
 	streams *sid;
 
-	int i;
 	transponder t;
 	init_hw ();
 	detect_dvb_parameters (str, &t);
@@ -197,11 +195,7 @@ setup_stream (char *str, sockets * s)
 		s->id, s->sock);
 	if (!get_sid(s->sid))				 // create the stream
 	{
-		int a_id = 0,
-			s_id = 0;
-		char pol;
-
-		s_id = streams_add ();
+		int s_id = streams_add ();
 		if(!(sid = get_sid(s_id)))
 			LOG_AND_RETURN ( NULL, "Could not add a new stream");
 
@@ -218,7 +212,7 @@ setup_stream (char *str, sockets * s)
 	set_stream_parameters (s->sid, &t);
 	sid->do_play = 0;
 	
-	if(sid->adapter >= 0 && !strncasecmp( s->buf, "SETUP", 5 )) // SETUP after PLAY
+	if(sid->adapter >= 0 && !strncasecmp( (const char*) s->buf, "SETUP", 5 )) // SETUP after PLAY
 	{
 		int ad = sid->adapter;
 		sid->adapter = -1;
@@ -271,6 +265,39 @@ start_play (streams * sid, sockets * s)
 	return tune (sid->adapter, s->sid);
 }
 
+int
+close_stream (int i)
+{
+	int ad;
+	streams *sid;
+	if (i < 0 || i >= MAX_STREAMS || st[i].enabled == 0)
+		return 0;
+	LOG ("closing stream %d", i);
+	sid = &st[i];
+	sid->enabled = 0;
+	ad = sid->adapter;
+	sid->adapter = -1;
+	if ( sid->type == STREAM_RTSP_UDP && sid->rsock > 0) close (sid->rsock);
+	sid->rsock = -1;
+	if(sid->rtcp_sock > 0 || sid->rtcp > 0 )
+	{
+		sockets_del(sid->rtcp_sock);
+		sid->rtcp_sock = -1;
+		sid->rtcp = -1;
+	}
+
+	if (ad >= 0)
+		close_adapter_for_stream (i, ad);
+//	sockets_del_for_sid (i);
+	/*  if(sid->pids)free(sid->pids);
+	  if(sid->apids)free(sid->apids);
+	  if(sid->dpids)free(sid->dpids);
+	  if(sid->buf)free(sid->buf);
+	  sid->pids = sid->apids = sid->dpids = sid->buf = NULL;
+	*/
+	LOG ("closed stream %d", i);
+	return 0;
+}
 
 int decode_transport (sockets * s, char *arg, char *default_rtp, int start_rtp)
 {
@@ -348,7 +375,6 @@ int decode_transport (sockets * s, char *arg, char *default_rtp, int start_rtp)
 	if(sid->type == 0)
 	{
 		int i;
-		socklen_t sl;
 		struct sockaddr_in sa;
 		
 		sid->type = STREAM_RTSP_UDP;
@@ -386,7 +412,6 @@ int
 streams_add ()
 {
 	int i;
-	char *ra;
 
 	i = get_next_free_stream();
 	if (i == -1)
@@ -445,39 +470,6 @@ streams_add ()
 }
 
 
-int
-close_stream (int i)
-{
-	int ad;
-	streams *sid;
-	if (i < 0 || i >= MAX_STREAMS || st[i].enabled == 0)
-		return;		
-	LOG ("closing stream %d", i);
-	sid = &st[i];
-	sid->enabled = 0;
-	ad = sid->adapter;
-	sid->adapter = -1;
-	if ( sid->type == STREAM_RTSP_UDP && sid->rsock > 0) close (sid->rsock);
-	sid->rsock = -1;
-	if(sid->rtcp_sock > 0 || sid->rtcp > 0 )
-	{
-		sockets_del(sid->rtcp_sock);
-		sid->rtcp_sock = -1;
-		sid->rtcp = -1;
-	}
-
-	if (ad >= 0)
-		close_adapter_for_stream (i, ad);
-//	sockets_del_for_sid (i);
-	/*  if(sid->pids)free(sid->pids);
-	  if(sid->apids)free(sid->apids);
-	  if(sid->dpids)free(sid->dpids);
-	  if(sid->buf)free(sid->buf);
-	  sid->pids = sid->apids = sid->dpids = sid->buf = NULL;
-	*/
-	LOG ("closed stream %d", i);
-}
-
 
 int
 								 // close all streams for adapter, excepting except
@@ -491,21 +483,11 @@ close_streams_for_adapter (int ad, int except)
 		if (st[i].enabled && st[i].adapter == ad)
 			if (except < 0 || except != i)
 				close_stream (i);
+	return 0;
 }
 
 
 unsigned char rtp_buf[16];
-
-int
-send_rtpb (streams * sid, unsigned char *b, int len)
-{
-	struct iovec iov[2];
-
-	iov[0].iov_base = b;
-	iov[0].iov_len = len;
-	//      LOG("called send_rtpb %X %d",b,len);
-	return send_rtp (sid, (const struct iovec *) iov, 1);
-}
 
 extern int64_t bw;
 extern int sleeping, sleeping_cnt;
@@ -515,8 +497,22 @@ extern uint32_t reads;
 int slow_down;
 uint64_t last_sd;
 
+int my_writev(int sock, const struct iovec *iov, int iiov, streams *sid)
+{
+	int rv;
+	LOGL(6,"start writev handle %d, iiov %d", sock, iiov);
+	rv = writev(sock,iov,iiov);
+	if(rv < 0 && errno == ECONNREFUSED) // close the stream int the next second
+	{
+		LOGL(0, "Connection REFUSED on stream %d, closing the stream, remote %s:%d", sid->sid, inet_ntoa (sid->sa.sin_addr), ntohs (sid->sa.sin_port));
+		sid->timeout = 1;
+	}
+	LOGL(6,"writev returned %d handle %d, iiov %d", rv, sock, iiov);
+	return rv;
+}
+
 int
-send_rtp (streams * sid, struct iovec *iov, int liov)
+send_rtp (streams * sid, const struct iovec *iov, int liov)
 {
 	struct iovec io[MAX_PACK + 3];
 	int i, total_len = 0, rv;
@@ -585,15 +581,25 @@ send_rtp (streams * sid, struct iovec *iov, int liov)
 	return rv;
 }
 
+int
+send_rtpb (streams * sid, unsigned char *b, int len)
+{
+	struct iovec iov[2];
+
+	iov[0].iov_base = b;
+	iov[0].iov_len = len;
+	//      LOG("called send_rtpb %X %d",b,len);
+	return send_rtp (sid, (const struct iovec *) iov, 1);
+}
+
 unsigned char rtcp_buf[1600];
 
 
 int
 send_rtcp (int s_id, int ctime)
 {
-	int tmp_port;
 	int len, rv = 0;
-	char *rtcp = rtcp_buf + 4;
+	unsigned char *rtcp = rtcp_buf + 4;
 	streams *sid = get_sid(s_id);
 	
 	if(!sid)
@@ -603,7 +609,7 @@ send_rtcp (int s_id, int ctime)
 		return 0;		
 		
 	char *a = describe_adapter (s_id, st[s_id].adapter);
-	int la = strlen (a);
+	unsigned int la = strlen (a);
 	if ( la > sizeof(rtcp_buf) - 68) 
 		la = sizeof(rtcp_buf)-70;
 	len = la + 16;
@@ -670,7 +676,7 @@ send_rtcp (int s_id, int ctime)
 }
 
 
-void flush_streamb (streams * sid, char *buf, int rlen, int ctime)
+void flush_streamb (streams * sid, unsigned char *buf, int rlen, int ctime)
 {
 	int i, rv = 0;
 	
@@ -693,24 +699,10 @@ void flush_streamb (streams * sid, char *buf, int rlen, int ctime)
 	
 }
 
-int my_writev(int sock, struct iovec *iov, int iiov, streams *sid)
-{
-	int rv;
-	LOGL(6,"start writev handle %d, iov %p, iiov %d", sock, iov, iiov);
-	rv = writev(sock,iov,iiov);
-	if(rv < 0 && errno == ECONNREFUSED) // close the stream int the next second
-	{	
-		LOGL(0, "Connection REFUSED on stream %d, closing the stream, remote %s:%d", sid->sid, inet_ntoa (sid->sa.sin_addr), ntohs (sid->sa.sin_port)); 
-		sid->timeout = 1;
-	}
-	LOGL(6,"writev returned %d handle %d, iiov %d", rv, sock, iiov);
-	return rv;
-}
-
 void
 flush_streami (streams * sid, int ctime)
 {
-	int rv, i, len;
+	int rv;
 	
 	if (sid->type == STREAM_HTTP)
 		rv = my_writev (sid->rsock, sid->iov, sid->iiov, sid);
@@ -748,7 +740,7 @@ flush_streami (streams * sid, int ctime)
 
 int process_packet(unsigned char *b, adapter *ad)
 {
-	int i, j, cc;
+	int j, cc;
 	SPid *p;
 	int _pid = (b[1] & 0x1f) * 256 + b[2];
 	streams *sid;
@@ -800,7 +792,7 @@ int process_packet(unsigned char *b, adapter *ad)
 				flush_streami (sid, rtime);
 		}
 	}
-	
+	return 0;
 }
 
 
@@ -813,9 +805,7 @@ read_dmx (sockets * s)
 	static int cnt;
 	streams *sid;
 	adapter *ad;
-	unsigned char sids;
-	SPid *p;
-	int pid, send = 0, flush_all = 0;
+	int send = 0, flush_all = 0;
 	uint64_t stime;
 
 	if (s->rlen % DVB_FRAME != 0)
@@ -849,7 +839,7 @@ read_dmx (sockets * s)
 	LOGL(6, "read_dmx send=%d, flush_all=%d called for adapter %d -> %d out of %d bytes read, %d ms ago", send, flush_all, s->sid, s->rlen, s->lbuf, s->rtime - ad->rtime);
 
 	if(!send) 
-		return;
+		return 0;
 		
 	int rlen = s->rlen;
 	int ms_ago = s->rtime - ad->rtime;
@@ -935,7 +925,6 @@ stream_timeouts ()
 	int i;
 	int ctime, rttime, rtime;
 	streams *sid;
-	char buf[2000];
 	
 	ctime = getTick ();
 	

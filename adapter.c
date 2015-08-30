@@ -33,14 +33,19 @@
 #include "adapter.h"
 #include "dvbapi.h"
 
+#ifndef DISABLE_SATIPCLIENT
+#include "satipc.h"
+#endif
+
 adapter a[MAX_ADAPTERS];
 extern struct struct_opts opts;
 
+extern void find_dvb_adapter (adapter *a);
 
 void
 find_adapters ()
 {
-	static init_find_adapter;
+	static int init_find_adapter;
 	if(init_find_adapter == 1)
 		return ;
 	init_find_adapter = 1;
@@ -88,6 +93,7 @@ close_adapter_for_socket (sockets * s)
 	LOG ("closing DVR socket %d pos %d aid %d", s->sock, s->id, aid);
 	if (aid >= 0)
 		close_adapter (aid);
+	return 0;
 }
 
 int init_complete = 0;
@@ -95,11 +101,8 @@ int num_adapters = 0;
 int
 init_hw ()
 {
-	int i,
-		na;
-	char buf[100];
+	int i;
 
-	na = 0;
 	LOG ("starting init_hw %d", init_complete);
 	if (init_complete)
 		return num_adapters;
@@ -108,8 +111,6 @@ init_hw ()
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		if ((!a[i].enabled || a[i].fe <= 0) && ((a[i].pa >= 0 && a[i].fn >= 0) || a[i].sip))
 	{
-		int k;
-		int ca;
 		if (a[i].force_disable)continue;
 		a[i].sock = -1;
 		a[i].id = i;
@@ -156,7 +157,7 @@ init_hw ()
 			sockets_add (a[i].dvr, NULL, i, TYPE_DVR, (socket_action) read_dmx,
 			(socket_action) close_adapter_for_socket, (socket_action ) adapter_timeout);
 		memset (a[i].buf, 0, opts.adapter_buffer + 1);
-		set_socket_buffer (a[i].sock, a[i].buf, opts.adapter_buffer);
+		set_socket_buffer (a[i].sock, (unsigned char*) a[i].buf, opts.adapter_buffer);
 		sockets_timeout (a[i].sock, 60000);
 		if(a[i].post_init)
 			a[i].post_init(&a[i]);
@@ -321,8 +322,7 @@ dump_pids (int aid)
 int
 get_free_adapter (int freq, int pol, int msys, int src)
 {
-	int i;
-	int omsys = msys;
+	int i;	
 
 	i = (src > 0) ? src - 1 : 0;
 	LOG ("get free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d f:%d pol=%d", src - 1, i,
@@ -369,7 +369,7 @@ set_adapter_for_stream (int sid, int aid)
 }
 
 
-int
+void
 close_adapter_for_stream (int sid, int aid)
 {
 
@@ -395,7 +395,7 @@ close_adapter_for_stream (int sid, int aid)
 int
 update_pids (int aid)
 {
-	int i, j, dp=1;
+	int i, dp=1;
 	adapter *ad;
 	if (aid<0 || aid>=MAX_ADAPTERS)
 		return 0;
@@ -449,8 +449,7 @@ update_pids (int aid)
 int tune (int aid, int sid)
 {
 	adapter *ad = get_adapter(aid);
-	SPid *p;
-	int i, rv = 0;
+	int rv = 0;
 	
 	if(!ad) return -400;
 	ad->last_sort = getTick ();
@@ -509,8 +508,8 @@ SPid *find_pid(int aid, int p)
 
 void mark_pid_deleted(int aid, int sid, int _pid, SPid *p)
 {
-	int i, j;
-	int didit = 0, cnt = 0, sort = 0;
+	int j;
+	int cnt = 0, sort = 0;
 	if(!p)
 		p = find_pid(aid, _pid);
 	if(!p)
@@ -528,8 +527,7 @@ void mark_pid_deleted(int aid, int sid, int _pid, SPid *p)
 	for (j = 0; j < MAX_STREAMS_PER_PID; j++)
 		if (p->sid[j] == sid)  // delete all pids where .sid == sid
 		{
-			p->sid[j] = -1;
-			didit = 1;
+			p->sid[j] = -1;			
 			if((j + 1 < MAX_PIDS) && (p->sid[j+1] >= 0))
 				sort = 1;
 		}	
@@ -555,7 +553,7 @@ void mark_pid_deleted(int aid, int sid, int _pid, SPid *p)
 
 void mark_pids_deleted (int aid, int sid, char *pids)		 //pids==NULL -> delete all pids
 {
-	int i, j, la, k, cnt, pid;
+	int i, la, pid;
 	adapter *ad;
 	char *arg[MAX_PIDS];
 
@@ -641,17 +639,17 @@ int mark_pid_add(int sid, int aid, int _pid)
 int
 mark_pids_add (int sid, int aid, char *pids)
 {
-	int i, j, la, k, found;
+	int i, la;
 	adapter *ad;
 	char *arg[MAX_PIDS];
 	int pid;
 
 	ad = get_adapter(aid);
 	if(!ad)
-		return;
+		return -1;
 	
 	if (!pids)
-		return;
+		return -1;
 	LOG ("adding pids to adapter %d, sid %d, pids=%s", aid, sid,
 		pids ? pids : "NULL");	
 		
@@ -672,7 +670,6 @@ mark_pids_add (int sid, int aid, char *pids)
 int
 set_adapter_parameters (int aid, int sid, transponder * tp)
 {
-	int i;
 	adapter *ad = get_adapter (aid);
 	
 	if(!ad)
@@ -713,10 +710,7 @@ set_adapter_parameters (int aid, int sid, transponder * tp)
 
 	if (ad->tp.dpids)
 	{
-		char *arg[MAX_PIDS];
-
 		mark_pids_deleted (aid, sid, ad->tp.dpids);
-
 	}
 	if (ad->tp.apids)
 	{
@@ -866,7 +860,7 @@ describe_adapter (int sid, int aid)
 void
 sort_pids (int aid)
 {
-	int b, i, j, t;
+	int b, i;
 	SPid pp;
 	SPid *p;
 	
@@ -969,7 +963,7 @@ void set_unicable_adapters(char *o, int type)
 void set_diseqc_adapters(char *o)
 {
 	int i, la, a_id, committed_no, uncommitted_no;
-	char buf[100], *arg[20], *sep1, *sep2, *sep3;
+	char buf[100], *arg[20], *sep1, *sep2;
 
 	strncpy(buf, o, sizeof(buf));
 	la = split(arg, buf, sizeof(arg), ',');
@@ -1005,7 +999,7 @@ int delsys_match(adapter *ad, int del_sys)
 		LOG_AND_RETURN(0, "delsys_match: requesting delsys is 0 for adapter handle %d", ad->fe);
 		
 	for(i = 0; i < 10; i++) 
-		if(ad->sys[i] == del_sys)
+		if(ad->sys[i] == (unsigned int) del_sys)
 			return 1;
 	return 0;
 		
