@@ -56,7 +56,7 @@ typedef struct struct_adapter
 	int sock, fe_sock;
 	int do_tune;
 	int force_close;
-	char *buf;					 // 7 rtp packets = MAX_PACK, 7 frames / packet
+	unsigned char *buf;					 // 7 rtp packets = MAX_PACK, 7 frames / packet
 	int rlen,rtime;
 	int last_sort;
 	int status_cnt;

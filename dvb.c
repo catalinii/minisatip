@@ -383,7 +383,7 @@ int setup_switch (int frontend_fd, transponder *tp)
 {
 	int hiband = 0;
 	int diseqc = (tp->diseqc > 0)? tp->diseqc - 1: 0;
-	unsigned int freq = (unsigned int) tp->freq;
+	int freq = tp->freq;
 	int pol = (tp->pol - 1) & 1;
 	
 	if (tp->pol > 2) {
@@ -1105,7 +1105,6 @@ int get_signal_new (int fd, fe_status_t * status, uint32_t * ber,
 
 void dvb_commit(adapter *a)
 {
-	(void) a;
 	return ;
 }
 

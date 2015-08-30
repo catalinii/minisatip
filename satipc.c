@@ -73,7 +73,7 @@ int satipc_reply(sockets * s)
 		return 0;
 	sess = NULL;
 
-	la = split (arg, s->buf, 50, ' ');
+	la = split (arg, (char *)s->buf, 50, ' ');
 	rc = map_int(arg[1], NULL);
 	if(rc == 454) 
 		ad->sent_transport = 0;		
@@ -91,7 +91,7 @@ int satipc_reply(sockets * s)
 		
 	if(!ad->err && !ad->session[0] && sess)
 	{
-		if(es = strchr(sess, ';'))
+		if((es = strchr(sess, ';')))
 			*es = 0;
 		strncpy(ad->session, sess, sizeof(ad->session));
 		ad->session[sizeof(ad->session) - 1 ] = 0;
@@ -102,7 +102,7 @@ int satipc_reply(sockets * s)
 			
 		ad->expect_reply = 0;
 		http_request(ad, NULL, "PLAY");	
-		return;
+		return 0;
 
 	}
 	
@@ -127,12 +127,11 @@ int satipc_reply(sockets * s)
 	{
 		satipc_commit(ad);
 	}
+	return 0;
 }
 
 int satipc_timeout(sockets *s)
 {
-	char buf[500];
-	char sess[100];
 	adapter *ad = get_adapter(s->sid);
 	LOG("satipc: Sent keep-alive to the satip server %s:%d, adapter %d, socket_id %d, handle %d", ad?ad->sip:NULL, ad?ad->sport:0, s->sid, s->id, s->sock);
 	if(!ad)
@@ -153,11 +152,12 @@ int satipc_close(sockets * s)
 
 int satipc_rtcp_reply(sockets * s)
 {
-	unsigned char *b = s->buf, *ver, *tun, *signal;
+	unsigned char *b = s->buf, *ver, *signal;
+	char *tun;
 	int i, rlen = s->rlen;
 	adapter *ad = get_adapter(s->sid);
 	int strength, status, snr;
-	uint32_t rp, rb;
+	uint32_t rp;
 	if(!ad)
 		return 0;
 //	LOG("satip_rtcp_reply called");
@@ -172,7 +172,7 @@ int satipc_rtcp_reply(sockets * s)
 		if(b[i]=='v' && b[i+1] == 'e' && b[i+2]=='r' && b[i+3]=='=')
 		{
 			ver = b + i;
-			tun = strstr(ver, "tuner=");
+			tun = strstr((const char*) ver, "tuner=");
 			if(tun)
 				signal = strchr(tun, ',');
 			if(signal)
@@ -185,17 +185,16 @@ int satipc_rtcp_reply(sockets * s)
 				ad->snr = snr;
 			}
 		}
+	return 0;
 }
 
 
 int satipc_open_device(adapter *ad)
 {
-	int sock;
-	int ctime;
 	if(!ad->sip)
 		return 1;
 	
-	ctime = getTick();
+	int ctime = getTick();
 	if((ad->last_connect > 0) && (ctime - ad->last_connect < 30000))
 		return 3;
 		
@@ -429,7 +428,7 @@ int http_request (adapter *ad, char *url, char *method)
 	LOG("satipc_http_request: %s to handle %d: \n%s", ad->expect_reply?"queueing":"sending", ad->fe, buf);
 	if(ad->expect_reply)
 	{
-		setItem(MAKE_ITEM(ad->id,ad->qp++), buf, lb + 1, 0);
+		setItem(MAKE_ITEM(ad->id,ad->qp++), (unsigned char *)buf, lb + 1, 0);
 	}
 	else 
 	{
@@ -533,7 +532,6 @@ void satipc_commit(adapter *ad)
 
 int satipc_tune (int aid, transponder * tp)
 {
-	char url[400];
 	adapter *ad = get_adapter(aid);
 	LOG("satipc: tuning to freq %d, sys %d for adapter %d", ad->tp.freq/1000, ad->tp.sys, aid);
 	if(!ad)
@@ -561,6 +559,7 @@ int satipc_tune (int aid, transponder * tp)
 
 fe_delivery_system_t satipc_delsys (int aid, int fd, fe_delivery_system_t *sys)
 {
+	return 0;
 }
 
 uint8_t determine_fe(adapter *a, int pos, char *sip, int sport)

@@ -311,7 +311,6 @@ int get_sock_port(int fd)
 int
 no_action (int s)
 {
-	(void) s;
 	return 1;
 }
 

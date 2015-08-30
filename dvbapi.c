@@ -18,7 +18,7 @@
  *
  */
 
- #include <stdint.h>
+#include <stdint.h>
 #include <string.h>
 #include <math.h>
 #include <sys/types.h>
@@ -93,7 +93,7 @@ int dvbapi_reply(sockets * s)
 	SKey *k;
 	int change_endianness = 0;
 	unsigned int op, version, _pid;
-	int k_id, a_id = 0, s_id, pos = 0;
+	int k_id, a_id = 0, pos = 0;
 	int demux, filter;
 	SPid *p;
 	if(s->rlen == 0)
@@ -127,7 +127,7 @@ int dvbapi_reply(sockets * s)
 		case DVBAPI_SERVER_INFO:
 		
 			if(s->rlen < 6)
-				return;
+				return 0;
 			dvbapi_copy16r(version, b, 4);
 			LOG("dvbapi: server version %d found, name = %s", version, b+7);
 			pos = 6 + strlen(b+6) + 1;
@@ -135,14 +135,12 @@ int dvbapi_reply(sockets * s)
 		
 		case DVBAPI_DMX_SET_FILTER:
 		{
-			int data;
-			int i = 0, k_id;
 			SKey *k;
 			if(change_endianness)
 				pos +=2;  // for some reason the packet is longer with 2 bytes
 			pos += 65;
 			if(s->rlen < 9)
-				return;
+				return 0;
 			dvbapi_copy16r(_pid, b, 7);
 			_pid &= 0x1FFF;
 			k_id = b[4];
@@ -179,7 +177,6 @@ int dvbapi_reply(sockets * s)
 		}
 		case DVBAPI_DMX_STOP:
 		{
-			int ad;
 			k_id = b[4];
 			demux = b[5];
 			filter = b[6];
@@ -300,7 +297,7 @@ SKey *get_active_key(SPid *p)
 			
 		}
 		
-		if(((k->parity != -1) && k->key_ok[k->parity]) || (k->parity == -1) && (k->key_ok[0] || k->key_ok[1]))
+		if(((k->parity != -1) && k->key_ok[k->parity]) || ((k->parity == -1) && (k->key_ok[0] || k->key_ok[1])))
 		{
 			char buf[200];
 			buf[0] = 0;			

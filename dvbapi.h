@@ -43,7 +43,7 @@ typedef struct struct_key
 {
 	void *key[2];
 	char key_ok[2];
-	char cw[2][16];
+	unsigned char cw[2][16];
 	char next_cw[2][16];
 	uint32_t cw_time[2];
 	int key_len;
