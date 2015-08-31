@@ -39,6 +39,7 @@ typedef struct struct_streams
 	int iiov;
 	uint32_t sp,sb;
 	int timeout;
+	char useragent[128];
 
 } streams;
 

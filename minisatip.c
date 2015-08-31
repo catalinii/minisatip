@@ -455,7 +455,7 @@ int read_rtsp(sockets * s)
 {
 	char *arg[50];
 	int cseq, la, i, rlen;
-	char *transport = NULL;
+	char *transport = NULL, *useragent = NULL;
 	int sess_id = 0;
 	char buf[2000];
 	char tmp_ra[50];
@@ -566,20 +566,18 @@ int read_rtsp(sockets * s)
 				return 0;
 			}
 		}
-		else if (strstr(arg[i], "LIVE555"))
+		else if (strstr (arg[i], "LIVE555"))
 		{
-			if (sid)
-				sid->timeout = 0;
+			if(sid) sid->timeout = 0;
 		}
-		else if (strstr(arg[i], "Lavf"))
+		else if (strstr (arg[i], "Lavf"))
 		{
-			if (sid)
-				sid->timeout = 0;
+			if(sid) sid->timeout = 0;
 		}
-
-	if ((strncasecmp(arg[0], "PLAY", 4) == 0)
-			|| (strncasecmp(arg[0], "GET", 3) == 0)
-			|| (strncasecmp(arg[0], "SETUP", 5) == 0))
+		else if (strncasecmp ("User-Agent:", arg[i], 10) == 0)
+			useragent = header_parameter(arg, i);
+	
+	if((strncasecmp (arg[0], "PLAY", 4) == 0) || (strncasecmp (arg[0], "GET", 3) == 0) || (strncasecmp (arg[0], "SETUP", 5) == 0)) 
 	{
 		char ra[100];
 		int rv;
@@ -590,9 +588,11 @@ int read_rtsp(sockets * s)
 			return 0;
 		}
 
-		if ((strncasecmp(arg[0], "PLAY", 3) == 0)
-				|| (strncasecmp(arg[0], "GET", 3) == 0))
-			if ((rv = start_play(sid, s)) < 0)
+		if (useragent)
+			strncpy(sid->useragent, useragent, 127);
+
+		if ((strncasecmp (arg[0], "PLAY", 3) == 0) || (strncasecmp (arg[0], "GET", 3) == 0))
+			if ((rv = start_play (sid, s)) < 0)
 			{
 				http_response(s, -rv, NULL, NULL, cseq, 0);
 				return 0;
@@ -1168,3 +1168,4 @@ _symbols minisatip_sym[] =
 { "http_port", VAR_INT, &opts.http_port, 1, 0, 0 },
 { "version", VAR_STRING, &version, 1, 0, 0 },
 { NULL, 0, NULL, 0, 0 } };
+
