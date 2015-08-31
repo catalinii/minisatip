@@ -423,7 +423,7 @@ read_rtsp (sockets * s)
 {
 	char *arg[50];
 	int cseq, la, i, rlen;
-	char *proto, *transport = NULL;
+	char *proto, *transport = NULL, *useragent = NULL;
 	int sess_id = 0;
 	char buf[2000];
 	streams *sid = get_sid(s->sid);
@@ -508,10 +508,16 @@ read_rtsp (sockets * s)
 				return 0;
 			}
 		}
-	else if (strstr (arg[i], "LIVE555"))
+		else if (strstr (arg[i], "LIVE555"))
+		{
 			if(sid) sid->timeout = 0;
-	else if (strstr (arg[i], "Lavf"))
+		}
+		else if (strstr (arg[i], "Lavf"))
+		{
 			if(sid) sid->timeout = 0;
+		}
+		else if (strncasecmp ("User-Agent:", arg[i], 10) == 0)
+			useragent = header_parameter(arg, i);
 	
 	if((strncasecmp (arg[0], "PLAY", 4) == 0) || (strncasecmp (arg[0], "GET", 3) == 0) || (strncasecmp (arg[0], "SETUP", 5) == 0)) 
 	{
@@ -523,6 +529,9 @@ read_rtsp (sockets * s)
 			http_response (s, 454, NULL, NULL, cseq, 0);
 			return 0;
 		}
+
+		if (useragent)
+			strncpy(sid->useragent, useragent, 127);
 
 		if ((strncasecmp (arg[0], "PLAY", 3) == 0) || (strncasecmp (arg[0], "GET", 3) == 0))
 			if ((rv = start_play (sid, s)) < 0)
@@ -1200,7 +1209,7 @@ static void get_status (char* buf, size_t buflen)
 				status_add("<TD ALIGN=\"center\"></TD>");
 
 			// Clients
-			status_add("<TD ALIGN=\"center\">");
+			status_add("<TD ALIGN=\"left\">");
 			for (st_idx=0; st_idx<MAX_STREAMS; st_idx++)
 			{
 				int port;
@@ -1210,12 +1219,20 @@ static void get_status (char* buf, size_t buflen)
 				if (!s->enabled || s->adapter != ad_idx)
 					continue;
 
+/*				if (s->do_play)
+					status_add("<font color=\"green\">");
+				else
+					status_add("<font color=\"ref\">");
+*/
 				port = ntohs(s->sa.sin_port);
 				host = inet_ntoa(s->sa.sin_addr);
 
-				status_add("%s:%d (%s)", host, port, s->do_play ? "active" : "inactive");
+				if (s->useragent && s->useragent[0])
+					status_add("%s:%d (%s)", host, port, s->useragent);
+				else
+					status_add("%s:%d", host, port);
 
-				status_add("<br>");
+				status_add(/*"</font><br>"*/"<br>");
 			}
 
 			status_add("</TD>");
