@@ -404,6 +404,7 @@ streams_add ()
 	st[i].do_play = 0;
 	st[i].iiov = 0;
 	st[i].sp = st[i].sb = 0;
+	st[i].useragent[0] = 0;
 	memset (&st[i].iov, 0 , sizeof(st[i].iiov));
 	init_dvb_parameters (&st[i].tp);
 	st[i].len = 0;
