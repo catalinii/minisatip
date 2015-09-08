@@ -469,6 +469,7 @@ int streams_add()
 	st[i].sp = st[i].sb = 0;
 	memset(&st[i].iov, 0, sizeof(st[i].iiov));
 	init_dvb_parameters(&st[i].tp);
+	st[i].useragent[0] = 0;
 	st[i].len = 0;
 //	st[i].seq = 0; // set the sequence to 0 for testing purposes - it should be random 
 	st[i].ssrc = random();
