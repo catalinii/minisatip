@@ -83,8 +83,8 @@ typedef struct struct_adapter
 	int err, expect_reply, last_connect;
 	int wp, qp; // written packet, queued packet
 	int want_commit, want_tune, sent_transport;
-	uint8_t ignore_packets; // ignore packets coming from satip server while tuning
-	uint8_t satip_fe;
+	char ignore_packets; // ignore packets coming from satip server while tuning
+	char satip_fe;
 	uint32_t rcvp, repno, rtp_miss, rtp_ooo;   // rtp statstics
 	uint16_t rtp_seq;
 	Set_pid set_pid;

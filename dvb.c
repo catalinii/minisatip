@@ -1030,7 +1030,7 @@ uint16_t * snr)
 //	*status = (*status & FE_HAS_LOCK) ? 1 : 0;
 	if (*status)
 	{
-		if (ioctl (fd, FE_READ_BER, ber) < 0)
+		if (ioctl(fd, FE_READ_BER, ber) < 0)
 			LOG ("ioctl FE_READ_BER failed (%s)", strerror (errno));
 
 		if (ioctl (fd, FE_READ_SIGNAL_STRENGTH, strength) < 0)
