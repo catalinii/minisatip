@@ -82,10 +82,12 @@ int get_next_free_stream()
 			return i;
 	return -1;
 }
+extern int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
+
 
 char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 {
-	char *stream_id;
+	char *stream_id, dad[1000];
 	int i, sidf, do_play = 0, streams_enabled = 0;
 	streams *sid;
 	int do_all = 1;
@@ -101,8 +103,8 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 
 	snprintf(sbuf, size - 1,
 			"v=0\r\no=- %010d %010d IN IP4 %s\r\ns=SatIPServer:1 %d %d %d\r\nt=0 0\r\n",
-			sidf, sidf, get_sock_host(s->sock), getS2Adapters(), getTAdapters(),
-			getCAdapters());
+			sidf, sidf, get_sock_shost(s->sock), tuner_s2, tuner_t + tuner_t2,
+			tuner_c + tuner_c2);
 	if (strchr(req, '?'))
 		do_all = 0;
 
@@ -124,7 +126,7 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 				snprintf(sbuf + slen, size - slen - 1,
 						"m=video %d RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\na=%s\r\n",
 						ntohs(st[i].sa.sin_port), i + 1,
-						describe_adapter(i, st[i].adapter),
+						describe_adapter(i, st[i].adapter, dad, sizeof(dad)),
 						st[i].do_play ? "sendonly" : "inactive");
 				if (size - slen < 10)
 					LOG_AND_RETURN(sbuf, "DESCRIBE BUFFER is full");
@@ -138,7 +140,7 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 		if (sid)
 		{
 			s_id = sid->sid + 1;
-			tp = describe_adapter(sid->sid, sid->adapter);
+			tp = describe_adapter(sid->sid, sid->adapter, dad, sizeof(dad));
 		}
 		else
 			return NULL;
@@ -321,6 +323,7 @@ int decode_transport(sockets * s, char *arg, char *default_rtp, int start_rtp)
 {
 	char *arg2[10];
 	int l;
+	char ra[50];
 	rtp_prop p;
 	streams *sid = get_sid(s->sid);
 	if (!sid)
@@ -365,7 +368,7 @@ int decode_transport(sockets * s, char *arg, char *default_rtp, int start_rtp)
 	if (default_rtp)
 		strncpy(p.dest, default_rtp, sizeof(p.dest));
 	if (p.dest[0] == 0 && p.type == TYPE_UNICAST)
-		strncpy(p.dest, inet_ntoa(s->sa.sin_addr), sizeof(p.dest));
+		get_socket_rhost(s->id, p.dest, sizeof(p.dest));
 	if (p.dest[0] == 0)
 		strcpy(p.dest, opts.disc_host);
 	if (p.port == 0)
@@ -377,7 +380,7 @@ int decode_transport(sockets * s, char *arg, char *default_rtp, int start_rtp)
 		if (sid->type == STREAM_RTSP_UDP && sid->rsock >= 0)
 		{
 			int oldport = ntohs(sid->sa.sin_port);
-			char *oldhost = inet_ntoa(sid->sa.sin_addr);
+			char *oldhost = get_stream_rhost(sid->sid, ra, sizeof(ra));
 
 			if (p.port == oldport && !strcmp(p.dest, oldhost))
 				LOG(
@@ -530,13 +533,14 @@ uint64_t last_sd;
 int my_writev(int sock, const struct iovec *iov, int iiov, streams *sid)
 {
 	int rv;
+	char ra[50];
 	LOGL(6, "start writev handle %d, iiov %d", sock, iiov);
 	rv = writev(sock, iov, iiov);
 	if (rv < 0 && errno == ECONNREFUSED) // close the stream int the next second
 	{
 		LOGL(0,
 				"Connection REFUSED on stream %d, closing the stream, remote %s:%d",
-				sid->sid, inet_ntoa(sid->sa.sin_addr), ntohs (sid->sa.sin_port));
+				sid->sid, get_stream_rhost(sid->sid, ra, sizeof(ra)), get_stream_rport(sid->sid));
 		sid->timeout = 1;
 	}
 	LOGL(6, "writev returned %d handle %d, iiov %d", rv, sock, iiov);
@@ -546,6 +550,7 @@ int my_writev(int sock, const struct iovec *iov, int iiov, streams *sid)
 int send_rtp(streams * sid, const struct iovec *iov, int liov)
 {
 	struct iovec io[MAX_PACK + 3];
+	char ra[50];
 	int i, total_len = 0, rv;
 	unsigned char *rtp_h;
 
@@ -611,12 +616,12 @@ int send_rtp(streams * sid, const struct iovec *iov, int liov)
 	{
 		sid->start_streaming = 1;
 		LOG("Start streaming for stream %d, len %d to handle %d => %s:%d",
-				sid->sid, total_len, sid->rsock, inet_ntoa(sid->sa.sin_addr),
+				sid->sid, total_len, sid->rsock, get_stream_rhost(sid->sid, ra, sizeof(ra)),
 				ntohs(sid->sa.sin_port));
 	}
 
 	LOGL(5, "sent %d bytes for stream %d, handle %d seq %d => %s:%d", total_len,
-			sid->sid, sid->rsock, sid->seq - 1, inet_ntoa(sid->sa.sin_addr),
+			sid->sid, sid->rsock, sid->seq - 1, get_stream_rhost(sid->sid, ra, sizeof(ra)),
 			ntohs(sid->sa.sin_port));
 
 	return rv;
@@ -637,6 +642,7 @@ unsigned char rtcp_buf[1600];
 int send_rtcp(int s_id, int ctime)
 {
 	int len, rv = 0;
+	char dad[1000];
 	unsigned char *rtcp = rtcp_buf + 4;
 	streams *sid = get_sid(s_id);
 
@@ -646,7 +652,7 @@ int send_rtcp(int s_id, int ctime)
 	if (sid->rsock_err > 5)
 		return 0;
 
-	char *a = describe_adapter(s_id, st[s_id].adapter);
+	char *a = describe_adapter(s_id, st[s_id].adapter, dad, sizeof(dad));
 	unsigned int la = strlen(a);
 	if (la > sizeof(rtcp_buf) - 68)
 		la = sizeof(rtcp_buf) - 70;
@@ -970,6 +976,7 @@ int read_dmx(sockets * s)
 int stream_timeouts()
 {
 	int i;
+	char ra[50];
 	int ctime, rttime, rtime;
 	streams *sid;
 
@@ -986,7 +993,7 @@ int stream_timeouts()
 			if (sid->do_play && ctime - rtime > 1000)
 			{
 				LOG("no data sent for more than 1s sid: %d for %s:%d", i,
-						inet_ntoa(sid->sa.sin_addr), ntohs (sid->sa.sin_port));
+						get_stream_rhost(sid->sid, ra, sizeof(ra)), get_stream_rport(sid->sid));
 				flush_streami(sid, ctime);
 			}
 			if (sid->do_play && ctime - rttime >= 200)
@@ -1008,7 +1015,7 @@ int stream_timeouts()
 void dump_streams()
 {
 	int i;
-
+	char ra[50];
 	if (!opts.log)
 		return;
 	LOG("Dumping streams:");
@@ -1016,7 +1023,7 @@ void dump_streams()
 		if (st[i].enabled)
 			LOG("%d|  a:%d rsock:%d type:%d play:%d remote:%s:%d", i,
 					st[i].adapter, st[i].rsock, st[i].type, st[i].do_play,
-					inet_ntoa(st[i].sa.sin_addr), ntohs (st[i].sa.sin_port));
+					get_stream_rhost(i, ra, sizeof(ra)), ntohs (st[i].sa.sin_port));
 }
 
 void free_all_streams()
@@ -1113,3 +1120,31 @@ int rtcp_confirm(sockets *s)
 	}
 	return 0;
 }
+
+char *get_stream_rhost(int s_id, char *dest, int ld)
+{
+	streams *sid = get_sid(s_id);
+	dest[0] = 0;
+	if(!sid)
+		return dest;
+	inet_ntop(AF_INET, &(sid->sa.sin_addr), dest, ld);
+	return dest;
+}
+
+int get_stream_rport(int s_id)
+{
+	streams *sid = get_sid(s_id);
+	if(!sid)
+		return 0;
+	return ntohs (sid->sa.sin_port);
+}
+
+_symbols stream_sym[] =
+{
+{ "st_enabled", VAR_ARRAY_INT, &st[0].enabled, 1, MAX_STREAMS, sizeof(st[0]) },
+{ "st_play", VAR_ARRAY_INT, &st[0].do_play, 1, MAX_STREAMS, sizeof(st[0]) },
+{ "st_adapter", VAR_ARRAY_INT, &st[0].adapter, 1, MAX_STREAMS, sizeof(st[0]) },
+{ "st_rhost", VAR_FUNCTION_STRING, (void *) &get_stream_rhost, 0, 0, 0 },
+{ "st_rport", VAR_FUNCTION_INT, (void *) &get_stream_rport, 0, 0, 0 },
+{ "tuner_c", VAR_INT, &tuner_c, 1, 0, 0 },
+{ NULL, 0, NULL, 0, 0 } };

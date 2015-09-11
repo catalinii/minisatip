@@ -381,7 +381,7 @@ void set_options(int argc, char *argv[])
 		}
 
 		case SATIPCLIENT_OPT:
-#ifdef DISABLE_DVBCSA
+#ifdef DISABLE_SATIPCLIENT
 			LOGL(0, "minisatip was not compiled with satip client support, please change the Makefile");
 			exit (0);
 
@@ -429,6 +429,7 @@ int read_rtsp(sockets * s)
 	char *transport = NULL;
 	int sess_id = 0;
 	char buf[2000];
+	char tmp_ra[50];
 	streams *sid = get_sid(s->sid);
 
 	if (s->buf[0] == 0x24 && s->buf[1] < 2)
@@ -566,7 +567,7 @@ int read_rtsp(sockets * s)
 				http_response(s, -rv, NULL, NULL, cseq, 0);
 				return 0;
 			}
-		strcpy(ra, inet_ntoa(sid->sa.sin_addr));
+		get_socket_rhost(sid->sid, ra, sizeof(ra));
 		buf[0] = 0;
 		if (transport)
 		{
@@ -578,15 +579,15 @@ int read_rtsp(sockets * s)
 				if (atoi(ra) < 224)
 					snprintf(buf, sizeof(buf),
 							"Transport: RTP/AVP;unicast;destination=%s;source=%s;client_port=%d-%d;server_port=%d-%d\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d",
-							ra, get_sock_host(s->sock), ntohs(sid->sa.sin_port),
-							ntohs (sid->sa.sin_port) + 1,
+							ra, get_sock_shost(s->sock), get_stream_rport(sid->sid),
+							get_stream_rport (sid->sid) + 1,
 //							opts.start_rtp, opts.start_rtp + 1,
-							get_sock_port(sid->rsock), get_sock_port(sid->rtcp),
+							get_sock_sport(sid->rsock), get_sock_sport(sid->rtcp),
 							get_session_id(s->sid), s_timeout, sid->sid + 1);
 				else
 					snprintf(buf, sizeof(buf),
 							"Transport: RTP/AVP;multicast;destination=%s;port=%d-%d\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d",
-							ra, ntohs(sid->sa.sin_port),
+							ra, get_stream_rport(sid->sid),
 							ntohs (sid->sa.sin_port) + 1,
 							get_session_id(s->sid), s_timeout, sid->sid + 1);
 				break;
@@ -636,7 +637,7 @@ int read_rtsp(sockets * s)
 			}
 			snprintf(buf, sizeof(buf),
 					"Content-type: application/sdp\r\nContent-Base: rtsp://%s/",
-					get_sock_host(s->sock));
+					get_sock_shost(s->sock));
 			http_response(s, 200, buf, sbuf, cseq, 0);
 
 		}
@@ -653,58 +654,12 @@ int read_rtsp(sockets * s)
 char uuid[100];
 int uuidi;
 struct sockaddr_in ssdp_sa;
+extern int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
+
 
 int read_http(sockets * s)
 {
-	char buf[20000];
 	char *arg[50];
-	char *xml =
-			"<?xml version=\"1.0\"?>"
-					"<root xmlns=\"urn:schemas-upnp-org:device-1-0\" configId=\"0\">"
-					"<specVersion>"
-					"<major>1</major>"
-					"<minor>1</minor>"
-					"</specVersion>"
-					"<device>"
-					"<deviceType>urn:ses-com:device:SatIPServer:1</deviceType>"
-					"<friendlyName>minisatip</friendlyName>"
-					"<manufacturer>cata</manufacturer>"
-					"<manufacturerURL>http://github.com/catalinii/minisatip</manufacturerURL>"
-					"<modelDescription>minisatip for Linux</modelDescription>"
-					"<modelName>minisatip</modelName>"
-					"<modelNumber>1.1</modelNumber>"
-					"<modelURL></modelURL>"
-					"<serialNumber>1</serialNumber>"
-					"<UDN>uuid:%s</UDN>"
-					"<iconList><icon>"
-					"<mimetype>image/png</mimetype>"
-					"<width>48</width>"
-					"<height>48</height>"
-					"<depth>24</depth>"
-					"<url>/icons/sm.png</url>"
-					"</icon><icon>"
-					"<mimetype>image/png</mimetype>"
-					"<width>120</width>"
-					"<height>120</height>"
-					"<depth>24</depth>"
-					"<url>/icons/lr.png</url>"
-					"</icon><icon>"
-					"<mimetype>image/jpeg</mimetype>"
-					"<width>48</width>"
-					"<height>48</height>"
-					"<depth>24</depth>"
-					"<url>/icons/sm.jpg</url>"
-					"</icon><icon>"
-					"<mimetype>image/jpeg</mimetype>"
-					"<width>120</width>"
-					"<height>120</height>"
-					"<depth>24</depth>"
-					"<url>/icons/lr.jpg</url>"
-					"</icon></iconList>"
-					"<presentationURL>http://%s/</presentationURL>\r\n"
-					"<satip:X_SATIPCAP xmlns:satip=\"urn:ses-com:satip\">%s</satip:X_SATIPCAP>"
-					"%s"
-					"</device></root>";
 
 	if (s->rlen < 5 || !end_of_header(s->buf + s->rlen - 4))
 	{
@@ -741,56 +696,36 @@ int read_http(sockets * s)
 		REPLY_AND_RETURN(503);
 	if (uuidi == 0)
 		ssdp_discovery(s);
-
-	if (strncmp(arg[1], "/desc.xml", 9) == 0)
+	
+	if(!strcmp(arg[1],"/"))
+		arg[1] = "/status.html";
+	
+// process file from html directory, the images are just sent back
+	if (!strchr(arg[1] + 1, '/') && !strstr(arg[1], ".." ))
 	{
-		int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
-		char adapters[400];
-		char headers[500];
-		tuner_s2 = getS2Adapters();
-		tuner_t = getTAdapters();
-		tuner_c = getCAdapters();
-		tuner_t2 = getT2Adapters();
-		tuner_c2 = getC2Adapters();
+		char ctype[500];
+		char *f;
+		int nl;
 
-		memset(adapters, 0, sizeof(adapters));
-		if (tuner_s2)
-			sprintf(adapters, "DVBS2-%d,", tuner_s2);
-		if (tuner_t)
-			sprintf(adapters + strlen(adapters), "DVBT-%d,", tuner_t);
-		if (tuner_c)
-			sprintf(adapters + strlen(adapters), "DVBC-%d,", tuner_c);
-		if (tuner_t2)
-			sprintf(adapters + strlen(adapters), "DVBT2-%d,", tuner_t2);
-		if (tuner_c2)
-			sprintf(adapters + strlen(adapters), "DVBC2-%d,", tuner_c2);
-		if (tuner_s2 + tuner_t + tuner_c + tuner_t2 + tuner_c2 == 0)
-			strcpy(adapters, "DVBS2-0,");
-		adapters[strlen(adapters) - 1] = 0;
-		sprintf(buf, xml, uuid, opts.http_host, adapters, opts.playlist);
-		sprintf(headers,
-				"CACHE-CONTROL: no-cache\r\nContent-type: text/xml\r\nX-SATIP-RTSP-Port: %d",
-				opts.rtsp_port);
-		http_response(s, 200, headers, buf, 0, 0);
-		return 0;
-	}
-
-	if (strncmp(arg[1], "/icons/", 7) == 0)
-	{
-		char *ctype = NULL;
-		int nl = sizeof(buf);
-		if (arg[1][strlen(arg[1]) - 2] == 'n')
-			ctype = "Content-type: image/png\r\nConnection: close";
-		else if (arg[1][strlen(arg[1]) - 2] == 'p')
-			ctype = "Content-type: image/jpeg\r\nConnection: close";
-		else
-			REPLY_AND_RETURN(404);
-
-		readfile(arg[1], buf, &nl);
-		if (nl == 0)
+		f = readfile(arg[1], ctype, &nl);
+		if (!f)
+		{
 			http_response(s, 404, NULL, NULL, 0, 0);
-		else
-			http_response(s, 200, ctype, buf, 0, nl);
+			return 0;
+		}
+		if (strstr(ctype, "image"))
+		{
+			http_response(s, 200, ctype, f, 0, nl);
+			closefile(f, nl);
+			return 0;
+		}
+		if(endswith(arg[1], "desc.xml"))
+			sprintf(ctype + strlen(ctype), "\r\nX-SATIP-RTSP-Port: %d",
+				opts.rtsp_port);
+		http_response(s, 200, ctype, "", 0, 0); // sending back the response
+		process_file(s->sock, f, nl);
+		closefile(f, nl);
+		sockets_timeout(s->id, 1); //close the connection 
 		return 0;
 	}
 
@@ -887,6 +822,7 @@ int ssdp_reply(sockets * s)
 	socklen_t salen;
 	char *man, *man_sd, *didsescom, *ruuid, *rdid;
 	char buf[500];
+	char ra[50];
 	int did = 0;
 
 	if (uuidi == 0)
@@ -899,13 +835,13 @@ int ssdp_reply(sockets * s)
 	if (ruuid && strncmp(uuid, strip(ruuid + 5), strlen(uuid)) == 0)
 	{
 		LOGL(3, "Dropping packet from the same UUID as mine (from %s:%d)",
-				inet_ntoa(s->sa.sin_addr), ntohs (s->sa.sin_port));
+				get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id));
 		return 0;
 	}
 
 // not my uuid
 	LOG("Received SSDP packet from %s:%d -> handle %d",
-			inet_ntoa(s->sa.sin_addr), ntohs (s->sa.sin_port), s->sock);
+			get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id), s->sock);
 	LOGL(3, "%s", s->buf);
 
 	if (strncasecmp(s->buf, "NOTIFY", 6) == 0)
@@ -917,7 +853,7 @@ int ssdp_reply(sockets * s)
 			VERSION, opts.device_id);
 			LOG(
 					"A new device joined the network with the same Device ID:  %s, asking to change DEVICEID.SES.COM",
-					inet_ntoa(s->sa.sin_addr));
+					get_socket_rhost(s->id, ra, sizeof(ra)));
 			sendto(ssdp, buf, strlen(buf), MSG_NOSIGNAL,
 					(const struct sockaddr *) &s->sa, salen);
 		}
@@ -938,7 +874,7 @@ int ssdp_reply(sockets * s)
 		s[si].rtime = -s[si].close_sec;
 		LOG(
 				"Device ID conflict, changing our device id to %d, destination SAT>IP server %s",
-				opts.device_id, inet_ntoa(s->sa.sin_addr));
+				opts.device_id, get_socket_rhost(s->id, ra, sizeof(ra)));
 		readBootID();
 	}
 	else
@@ -951,7 +887,7 @@ int ssdp_reply(sockets * s)
 			opts.bootid, did);
 
 	LOG("ssdp_reply fd: %d -> %s:%d, bootid: %d deviceid: %d http: %s", ssdp,
-			inet_ntoa(s->sa.sin_addr), ntohs (s->sa.sin_port), opts.bootid, did,
+			get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id), opts.bootid, did,
 			opts.http_host);
 //use ssdp (unicast) even if received to multicast address
 	LOGL(3, "%s", buf);
@@ -1065,38 +1001,12 @@ int readBootID()
 	return opts.bootid;
 }
 
-int readfile(char *fn, char *buf, int *len)
-{
-	char ffn[500];
-	char *path[] =
-	{ ".", "/usr/share/minisatip", NULL };
-	int fd, i, nl = 0;
-
-	if (strstr(fn, ".."))
-		return 0;
-	for (i = 0; path[i]; i++)
-	{
-		strcpy(ffn, path[i]);
-		strncat(ffn, fn, sizeof(ffn) - strlen(path[i]) - 1);
-		ffn[sizeof(ffn) - 1] = 0;
-		if ((fd = open(ffn, O_RDONLY)) < 0)
-			continue;
-
-		nl = read(fd, buf, *len);
-		close(fd);
-		LOG("opened %s fd %d and read %d bytes from it", ffn, fd, nl);
-	}
-	*len = nl;
-	buf[nl] = 0;
-
-	return nl;
-}
-
 char *
 http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 {
 	int binary = 0;
 	char *desc1;
+	char ra[50];
 	char *reply =
 			"%s/1.0 %d %s\r\nDate: %s%s%s\r\n%s\r\nContent-Length: %d\r\n\r\n%s";
 	char *reply0 = "%s/1.0 %d %s\r\nDate: %s%s%s\r\n%s\r\n\r\n";
@@ -1151,16 +1061,24 @@ http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 	if (s->type != TYPE_HTTP && cseq > 0)
 		sprintf(scseq, "\r\nCseq: %d", cseq);
 
-	if (lr)
+	if (lr > 0)
 		sprintf(resp, reply, proto, rc, d, get_current_timestamp(), sess_id,
 				scseq, ah, lr, desc1);
 	else
 		sprintf(resp, reply0, proto, rc, d, get_current_timestamp(), sess_id,
 				scseq, ah);
-	LOG("reply -> %d (%s:%d) CL:%d :\n%s", s->sock, inet_ntoa(s->sa.sin_addr),
-			ntohs (s->sa.sin_port), lr, resp);
+	LOG("reply -> %d (%s:%d) CL:%d :\n%s", s->sock, get_socket_rhost(s->id, ra, sizeof(ra)),
+			get_socket_rport(s->id), lr, resp);
 	send(s->sock, resp, strlen(resp), MSG_NOSIGNAL);
 	if (binary)
 		send(s->sock, desc, lr, MSG_NOSIGNAL);
 	return resp;
 }
+
+
+_symbols minisatip_sym[] =
+{
+{ "http_host", VAR_PSTRING, &opts.http_host, 0, 0, 0 },
+{ "uuid", VAR_STRING, uuid, 0, 0, 0 },
+{ "http_port", VAR_INT, &opts.http_port, 1, 0, 0 },
+{ NULL, 0, NULL, 0, 0 } };

@@ -47,6 +47,7 @@
 #include <unistd.h>
 #include <syslog.h>
 #include <stdarg.h>
+#include <sys/mman.h>
 #include "utils.h"
 #include "minisatip.h"
 
@@ -596,3 +597,259 @@ void _log(int level, char * file, int line, char *fmt, ...)
 	}
 	fflush(stdout);
 }
+
+int endswith(char *src, char *with)
+{
+	int lw = strlen(with);
+	if (strlen(src) > lw && !strcmp(src + strlen(src) - lw, with))
+		return 1;
+	return 0;
+}
+
+#define VAR_LENGTH 20
+extern _symbols adapters_sym[];
+extern _symbols minisatip_sym[];
+extern _symbols stream_sym[];
+
+_symbols *sym[] =
+{ adapters_sym, stream_sym, minisatip_sym, NULL };
+
+int var_eval(char *orig, int len, char *dest, int max_len)
+{
+	int nb = 0, i, j, off;
+	char var[VAR_LENGTH + 1];
+	memset(var, 0, sizeof(var));
+	strncpy(var, orig + 1, len - 1);
+	for (i = 0; sym[i] != NULL; i++)
+		for (j = 0; sym[i][j].name; j++)
+			if (!strncmp(sym[i][j].name, var, strlen(sym[i][j].name)))
+			{
+				switch (sym[i][j].type)
+				{
+				case VAR_UINT8:
+					nb = snprintf(dest, max_len, "%d",
+							(int) ((*(uint8_t *) sym[i][j].addr)
+									* sym[i][j].multiplier));
+					break;
+				case VAR_INT8:
+					nb = snprintf(dest, max_len, "%d",
+							(int) ((*(int8_t *) sym[i][j].addr)
+									* sym[i][j].multiplier));
+					break;
+				case VAR_UINT16:
+					nb = snprintf(dest, max_len, "%d",
+							(int) ((*(uint16_t *) sym[i][j].addr)
+									* sym[i][j].multiplier));
+					break;
+				case VAR_INT16:
+					nb = snprintf(dest, max_len, "%d",
+							(int) ((*(int16_t *) sym[i][j].addr)
+									* sym[i][j].multiplier));
+					break;
+				case VAR_INT:
+					nb = snprintf(dest, max_len, "%d",
+							(int) ((*(int *) sym[i][j].addr)
+									* sym[i][j].multiplier));
+					break;
+
+				case VAR_STRING:
+					nb = snprintf(dest, max_len, "%s", (char *) sym[i][j].addr);
+					break;
+
+				case VAR_PSTRING:
+					nb = snprintf(dest, max_len, "%s",
+							*(char **) sym[i][j].addr);
+					break;
+
+				case VAR_FLOAT:
+					nb = snprintf(dest, max_len, "%f",
+							(*(float *) sym[i][j].addr) * sym[i][j].multiplier);
+					break;
+
+				case VAR_HEX:
+					nb = snprintf(dest, max_len, "0x%x",
+							*(int *) sym[i][j].addr);
+					break;
+
+				case VAR_ARRAY_INT:
+				case VAR_ARRAY_FLOAT:
+				case VAR_ARRAY_HEX:
+				case VAR_ARRAY_UINT16:
+				case VAR_ARRAY_INT16:
+				case VAR_ARRAY_UINT8:
+				case VAR_ARRAY_INT8:
+					off = map_intd(var + strlen(sym[i][j].name), NULL, 0);
+					if (off < sym[i][j].len)
+					{
+						char *p = (((char *) sym[i][j].addr)
+								+ off * sym[i][j].skip);
+						switch (sym[i][j].type)
+						{
+						case VAR_ARRAY_UINT8:
+							nb =
+									snprintf(dest, max_len, "%d",
+											(int) (*(uint8_t *) p
+													* sym[i][j].multiplier));
+							break;
+						case VAR_ARRAY_INT8:
+							nb =
+									snprintf(dest, max_len, "%d",
+											(int) (*(int8_t *) p
+													* sym[i][j].multiplier));
+							break;
+						case VAR_ARRAY_UINT16:
+							nb = snprintf(dest, max_len, "%d",
+									(int) (*(uint16_t *) p
+											* sym[i][j].multiplier));
+							break;
+						case VAR_ARRAY_INT16:
+							nb =
+									snprintf(dest, max_len, "%d",
+											(int) (*(int16_t *) p
+													* sym[i][j].multiplier));
+							break;
+						case VAR_ARRAY_INT:
+							nb = snprintf(dest, max_len, "%d",
+									(int) (*(int *) p * sym[i][j].multiplier));
+							break;
+						case VAR_ARRAY_FLOAT:
+							nb =
+									snprintf(dest, max_len, "%f",
+											(float) (*(float *) p
+													* sym[i][j].multiplier));
+							break;
+						case VAR_ARRAY_HEX:
+							nb = snprintf(dest, max_len, "0x%x",
+									(int) (*(int *) p * sym[i][j].multiplier));
+							break;
+						case VAR_ARRAY_STRING:
+							nb = snprintf(dest, max_len, "%s", p);
+							break;
+						case VAR_ARRAY_PSTRING:
+							nb = snprintf(dest, max_len, "%s", *(char **) p);
+							break;
+						}
+					}
+					break;
+
+				case VAR_FUNCTION_INT:
+					off = map_intd(var + strlen(sym[i][j].name), NULL, 0);
+					get_data_int funi = (get_data_int) sym[i][j].addr;
+					nb = snprintf(dest, max_len, "%d", funi(off));
+					break;
+
+				case VAR_FUNCTION_STRING:
+					off = map_intd(var + strlen(sym[i][j].name), NULL, 0);
+					get_data_string funs = (get_data_string) sym[i][j].addr;
+					funs(off, dest, max_len);
+					nb = strlen(dest);
+					if (nb > max_len)
+						nb = max_len;
+					break;
+
+				}
+				return nb;
+			}
+	return 0;
+}
+
+int is_var(char *s)
+{
+	int i = 0;
+	if (*s != '$')
+		return 0;
+	while (s[++i] != 0)
+	{
+		if (s[i] == '$')
+			return i;
+		if (i >= VAR_LENGTH)
+			return 0;
+	}
+	return 0;
+}
+
+// replace $VAR$ with it's value and write the output to the socket
+void process_file(int fd, char *s, int len)
+{
+	char outp[8292];
+	int i, io = 0, lv, le;
+	LOG("processing_file %x len %d:", s, len);
+	for (i = 0; i < len; i++)
+	{
+		lv = 0;
+		if (s[i] == '$')
+			lv = is_var(s + i);
+		if (lv == 0)
+		{
+			outp[io++] = s[i];
+			continue;
+		}
+		le = var_eval(s + i, lv, outp + io, sizeof(outp) - io);
+		io += le;
+		i += lv;
+		if (io > sizeof(outp) - 100)
+		{
+			write(fd, outp, io);
+			LOG("%s", outp);
+			io = 0;
+		}
+	}
+	strcpy(outp + io, "\r\n\r\n");
+	write(fd, outp, io + 4);
+	outp[io] = 0;
+	LOG("%s", outp);
+}
+
+char *readfile(char *fn, char *ctype, int *len)
+{
+	char ffn[500];
+	char *mem;
+	struct stat sb;
+	char *path[] = { "html", "/usr/share/minisatip", NULL };
+	int fd, i, nl = 0, sr;
+	*len = 0;
+	ctype[0] = 0;
+
+	if (strstr(fn, ".."))
+		return 0;
+	for (i = 0; path[i]; i++)
+	{
+		strcpy(ffn, path[i]);
+		strncat(ffn, fn, sizeof(ffn) - strlen(path[i]) - 1);
+		ffn[sizeof(ffn) - 1] = 0;
+		if ((fd = open(ffn, O_RDONLY)) < 0)
+			continue;
+		if ((fstat(fd, &sb) == -1) || !S_ISREG(sb.st_mode))
+		{
+			LOG("readfile: %s is not a file", ffn);
+			close(fd);
+			return NULL;
+		}
+		nl = sb.st_size;
+		mem = mmap(0, nl, PROT_READ, MAP_SHARED, fd, 0);
+		if (mem == MAP_FAILED)
+			LOG_AND_RETURN(NULL, "mmap failed for file %s", ffn);
+		close(fd);
+		LOG("opened %s fd %d at %x - %d bytes", ffn, fd, mem, nl);
+		break;
+	}
+	*len = nl;
+	if (ctype)
+	{
+		if (endswith(fn, "png"))
+			strcpy(ctype, "Content-type: image/png\r\nConnection: close");
+		else if (endswith(fn, "jpg") || endswith(fn, "jpeg"))
+			strcpy(ctype, "Content-type: image/jpeg\r\nConnection: close");
+		else if (endswith(fn, "htm") || endswith(fn, "html"))
+			strcpy(ctype, "CACHE-CONTROL: no-cache\r\nContent-type: text/html");
+		else if (endswith(fn, "xml"))
+			strcpy(ctype, "CACHE-CONTROL: no-cache\r\nContent-type: text/xml");
+	}
+	return mem;
+}
+
+int closefile(char *mem, int len)
+{
+	return munmap((void *) mem, len);
+}
+

@@ -44,8 +44,8 @@ int udp_bind_connect(char *src, int sport, char *dest, int dport,
 		struct sockaddr_in *serv);
 int udp_bind(char *addr, int port);
 int tcp_connect(char *addr, int port, struct sockaddr_in *serv, int blocking);
-char *get_sock_host(int fd);
-int get_sock_port(int fd);
+char *get_sock_shost(int fd);
+int get_sock_sport(int fd);
 int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 		socket_action a, socket_action c, socket_action t);
 int sockets_del(int sock);
@@ -64,4 +64,6 @@ void set_socket_send_buffer(int sock, int len);
 void set_socket_receive_buffer(int sock, int len);
 sockets *get_sockets(int i);
 void set_socket_pos(int sock, int pos);
+char *get_socket_rhost(int s_id, char *dest, int ld);
+int get_socket_rport(int s_id);
 #endif

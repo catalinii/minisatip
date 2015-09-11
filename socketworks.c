@@ -97,7 +97,7 @@ getlocalip()
 	}
 	else
 	{
-		h = get_sock_host(sock);
+		h = get_sock_shost(sock);
 		if (h)
 			strcpy(localip, h);
 	}
@@ -279,7 +279,7 @@ int tcp_listen(char *addr, int port)
 	return sock;
 }
 
-char *get_sock_host(int fd)
+char *get_sock_shost(int fd)
 {
 	struct sockaddr_in sin;
 	socklen_t len = sizeof(sin);
@@ -287,7 +287,7 @@ char *get_sock_host(int fd)
 	return inet_ntoa(sin.sin_addr);
 }
 
-int get_sock_port(int fd)
+int get_sock_sport(int fd)
 {
 	struct sockaddr_in sin;
 	socklen_t len = sizeof(sin);
@@ -341,7 +341,7 @@ int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 		socket_action a, socket_action c, socket_action t)
 {
 	int i;
-
+	char ra[50];
 	if (init_sock == 0)
 	{
 		init_sock = 1;
@@ -387,7 +387,7 @@ int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 
 	LOG(
 			"sockets_add: handle %d (type %d) returning socket index %d [%s:%d] read: %p",
-			s[i].sock, s[i].type, i, inet_ntoa(s[i].sa.sin_addr),
+			s[i].sock, s[i].type, i, get_socket_rhost(i, ra, sizeof(ra)),
 			ntohs(s[i].sa.sin_port), s[i].read);
 	return i;
 }
@@ -432,7 +432,7 @@ int select_and_execute()
 	int err;
 	run_loop = 1;
 	int lt, read_ok, c_time;
-
+	char ra[50];
 	lt = getTick();
 	while (run_loop)
 	{
@@ -560,7 +560,7 @@ int select_and_execute()
 						LOG(
 								"select_and_execute[%d]: %s on socket %d (sid:%d) from %s:%d - type %s errno %d",
 								i, err_str, ss->sock, ss->sid,
-								inet_ntoa(ss->sa.sin_addr),
+								get_socket_rhost(ss->id, ra, sizeof(ra)),
 								ntohs(ss->sa.sin_port), types[ss->type], err);
 						if (err == EOVERFLOW || err == EWOULDBLOCK)
 							continue;
@@ -792,3 +792,22 @@ void set_socket_pos(int sock, int pos)
 		return;
 	ss->rlen = pos;
 }
+
+char *get_socket_rhost(int s_id, char *dest, int ld)
+{
+	sockets *ss = get_sockets(s_id);
+	dest[0] = 0;
+	if(!ss)
+		return dest;
+	inet_ntop(AF_INET, &(ss->sa.sin_addr), dest, ld);
+	return dest;
+}
+
+int get_socket_rport(int s_id)
+{
+	sockets *ss = get_sockets(s_id);
+	if(!ss)
+		return 0;
+	return ntohs (ss->sa.sin_port);
+}
+

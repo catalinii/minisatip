@@ -39,7 +39,7 @@
 
 adapter a[MAX_ADAPTERS];
 extern struct struct_opts opts;
-
+int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
 extern void find_dvb_adapter(adapter *a);
 
 void find_adapters()
@@ -174,6 +174,8 @@ int init_hw()
 	if (num_adapters == 0)
 		init_complete = 0;
 	LOG("done init_hw %d", init_complete);
+	if (init_complete)
+		getAdaptersCount();
 	return num_adapters;
 }
 
@@ -207,73 +209,40 @@ void close_adapter(int na)
 	LOG("done closing adapter %d", na);
 }
 
-int getS2Adapters()
+int getAdaptersCount()
 {
-	int i, s2 = 0;
-
+	int i;
+	tuner_s2 = tuner_c2 = tuner_t2 = tuner_c = tuner_t = 0;
 	if (opts.force_sadapter)
-		LOG_AND_RETURN(opts.force_sadapter,
-				"Returning %d DVB-S adapters as requested", opts.force_sadapter);
-	init_hw();
-	for (i = 0; i < MAX_ADAPTERS; i++)
-		if (a[i].enabled
-				&& (delsys_match(&a[i], SYS_DVBS)
-						|| delsys_match(&a[i], SYS_DVBS2)))
-			s2++;
-	//      return 1;
-	return s2;
-}
-
-int getTAdapters()
-{
-	int i, t = 0;
-
+		tuner_s2 = opts.force_sadapter;
 	if (opts.force_tadapter)
-		LOG_AND_RETURN(opts.force_tadapter,
-				"Returning %d DVB-T adapters as requested", opts.force_tadapter);
-	init_hw();
-	for (i = 0; i < MAX_ADAPTERS; i++)
-		if (a[i].enabled && delsys_match(&a[i], SYS_DVBT)
-				&& !delsys_match(&a[i], SYS_DVBT2))
-			t++;
-	return t;
-}
-
-int getCAdapters()
-{
-	int i, c = 0;
-
+		tuner_t = opts.force_tadapter;
 	if (opts.force_cadapter)
-		LOG_AND_RETURN(opts.force_cadapter,
-				"Returning %d DVB-C adapters as requested", opts.force_cadapter);
-	init_hw();
+		tuner_c = opts.force_cadapter;
 	for (i = 0; i < MAX_ADAPTERS; i++)
-		if (a[i].enabled && delsys_match(&a[i], SYS_DVBC_ANNEX_A)
-				&& !delsys_match(&a[i], SYS_DVBC2))
-			c++;
-	return c;
-}
+		if (a[i].enabled)
+		{
+			if (!opts.force_sadapter
+					&& (delsys_match(&a[i], SYS_DVBS)
+							|| delsys_match(&a[i], SYS_DVBS2)))
+				tuner_s2++;
 
-int getT2Adapters()
-{
-	int i, t = 0;
+			if (!opts.force_tadapter && delsys_match(&a[i], SYS_DVBT)
+					&& !delsys_match(&a[i], SYS_DVBT2))
+				tuner_t++;
 
-	init_hw();
-	for (i = 0; i < MAX_ADAPTERS; i++)
-		if (a[i].enabled && delsys_match(&a[i], SYS_DVBT2))
-			t++;
-	return t;
-}
+			if (!opts.force_cadapter && delsys_match(&a[i], SYS_DVBC_ANNEX_A)
+					&& !delsys_match(&a[i], SYS_DVBC2))
+				tuner_c++;
 
-int getC2Adapters()
-{
-	int i, c = 0;
+			if (delsys_match(&a[i], SYS_DVBT2))
+				tuner_t2++;
 
-	init_hw();
-	for (i = 0; i < MAX_ADAPTERS; i++)
-		if (a[i].enabled && delsys_match(&a[i], SYS_DVBC2))
-			c++;
-	return c;
+			if (delsys_match(&a[i], SYS_DVBC2))
+				tuner_c2++;
+		}
+
+	return tuner_s2 + tuner_c2 + tuner_t2 + tuner_c + tuner_t;
 }
 
 void dump_adapters()
@@ -758,11 +727,10 @@ get_adapter1(int aid, char *file, int line)
 	return &a[aid];
 }
 
-char dad[1000];
 char *
-describe_adapter(int sid, int aid)
+describe_adapter(int sid, int aid, char *dad, int ld)
 {
-	int i = 0, x, ts, j, use_ad;
+	int i = 0, ts, j, use_ad, len;
 	transponder *t;
 	adapter *ad;
 	streams *ss;
@@ -783,7 +751,6 @@ describe_adapter(int sid, int aid)
 	else
 		t = &ad->tp;
 	memset(dad, 0, sizeof(dad));
-	x = 0;
 	// do just max 3 signal check 1s after tune
 	if (use_ad && (!ad->sip)
 			&& ((ad->status <= 0 && ad->status_cnt < 8 && ad->status_cnt++ > 4)
@@ -830,51 +797,38 @@ describe_adapter(int sid, int aid)
 		status = (ad->status & FE_HAS_LOCK) > 0;
 	}
 	if (t->sys == 0)
-		sprintf(dad, "ver=1.0;src=1;tuner=%d,0,0,0,0,,,,,,,;pids=", aid + 1);
+		len = snprintf(dad, ld, "ver=1.0;src=1;tuner=%d,0,0,0,0,,,,,,,;pids=",
+				aid + 1);
 	else if (t->sys == SYS_DVBS || t->sys == SYS_DVBS2)
-		sprintf(dad,
-				"ver=1.0;src=%d;tuner=%d,%d,%d,%d,%d,%s,%s,%s,%s,%s,%d,%s;pids=",
-				t->diseqc, aid + 1, strength, status, snr, t->freq / 1000,
-				get_pol(t->pol), get_modulation(t->mtype), get_pilot(t->plts),
-				get_rolloff(t->ro), get_delsys(t->sys), t->sr / 1000,
-				get_fec(t->fec));
+		len = snprintf(dad, ld,
+						"ver=1.0;src=%d;tuner=%d,%d,%d,%d,%d,%s,%s,%s,%s,%s,%d,%s;pids=",
+						t->diseqc, aid + 1, strength, status, snr,
+						t->freq / 1000, get_pol(t->pol),
+						get_modulation(t->mtype), get_pilot(t->plts),
+						get_rolloff(t->ro), get_delsys(t->sys), t->sr / 1000,
+						get_fec(t->fec));
 	else if (t->sys == SYS_DVBT || t->sys == SYS_DVBT2)
-		sprintf(dad,
-				"ver=1.1;src=%d;tuner=%d,%d,%d,%d,%.2f,%d,%s,%s,%s,%s,%s,%d,%d,%d;pids=",
-				t->diseqc, aid + 1, strength, status, snr,
-				(double) t->freq / 1000, t->bw, get_delsys(t->sys),
-				get_tmode(t->tmode), get_modulation(t->mtype), get_gi(t->gi),
-				get_fec(t->fec), t->plp, t->t2id, t->sm);
+		len = snprintf(dad, ld,
+						"ver=1.1;src=%d;tuner=%d,%d,%d,%d,%.2f,%d,%s,%s,%s,%s,%s,%d,%d,%d;pids=",
+						t->diseqc, aid + 1, strength, status, snr,
+						(double) t->freq / 1000, t->bw, get_delsys(t->sys),
+						get_tmode(t->tmode), get_modulation(t->mtype),
+						get_gi(t->gi), get_fec(t->fec), t->plp, t->t2id, t->sm);
 	else
-		sprintf(dad,
-				"ver=1.2;src=%d;tuner=%d,%d,%d,%d,%.2f,8,%s,%s,%d,%d,%d,%d,%d;pids=",
-				t->diseqc, aid + 1, strength, status, snr,
-				(double) t->freq / 1000, get_delsys(t->sys),
-				get_modulation(t->mtype), t->sr, t->c2tft, t->ds, t->plp,
-				t->inversion);
-	for (i = 0; i < MAX_PIDS; i++)
-		if (use_ad && ad->pids[i].flags == 1)
-			for (j = 0; j < MAX_STREAMS_PER_PID; j++)
-				if (ad->pids[i].sid[j] == sid)
-				{
-					x = 1;
-					if (ad->pids[i].pid == 8192)
-						sprintf(dad + strlen(dad), "all");
-					else
-						sprintf(dad + strlen(dad), "%d,", ad->pids[i].pid);
-				}
+		len = snprintf(dad, ld,
+						"ver=1.2;src=%d;tuner=%d,%d,%d,%d,%.2f,8,%s,%s,%d,%d,%d,%d,%d;pids=",
+						t->diseqc, aid + 1, strength, status, snr,
+						(double) t->freq / 1000, get_delsys(t->sys),
+						get_modulation(t->mtype), t->sr, t->c2tft, t->ds,
+						t->plp, t->inversion);
+
+	if (use_ad)
+		len = strlen(get_adapter_pids(ad->id, dad + len, ld - len));
+	
 
 	if (!use_ad && (t->apids || t->pids))
-	{
-		x = 1;
-		sprintf(dad + strlen(dad), "%s,", t->pids ? t->pids : t->apids);
-	}
-
-	if (x)
-		// cut the last comma
-		dad[strlen(dad) - 1] = 0;
-	else
-		dad[strlen(dad)] = '0';
+		len += snprintf(dad + len, ld - len, "%s,",
+				t->pids ? t->pids : t->apids);
 
 	LOGL(5, "describe_adapter: sid %d, aid %d => %s", sid, aid, dad);
 
@@ -1082,3 +1036,50 @@ int get_enabled_pids(adapter *ad, int *pids, int lpids)
 
 	return ep;
 }
+
+char* get_adapter_pids(int aid, char *dest, int max_size)
+{
+	int len = 0;
+	int pids[MAX_PIDS];
+	int lp, i;
+	adapter *ad = get_adapter(aid);
+	dest[0] = 0;
+	
+	if (!ad)
+		return dest;
+	
+	lp = get_enabled_pids(ad, pids, MAX_PIDS);
+	for (i = 0; i < lp; i++)
+	{
+		if (pids[i] == 8192)
+			len += snprintf(dest + len, max_size - len, "8192");
+		else
+			len += snprintf(dest + len, max_size - len, "%d,", pids[i]);
+	}
+	if (len > 0)
+	{
+		len--;
+		dest[len] = 0;
+		
+	}
+	return dest;
+}
+
+_symbols adapters_sym[] =
+{
+{ "ad_freq", VAR_ARRAY_INT, &a[0].tp.freq, 1. / 1000,
+MAX_ADAPTERS, sizeof(a[0]) },
+{ "ad_strength", VAR_ARRAY_UINT16, &a[0].strength, 1, MAX_ADAPTERS, sizeof(a[0]) },
+{ "ad_snr", VAR_ARRAY_UINT16, &a[0].snr, 1, MAX_ADAPTERS, sizeof(a[0]) },
+{ "ad_ber", VAR_ARRAY_UINT16, &a[0].ber, 1, MAX_ADAPTERS, sizeof(a[0]) },
+{ "ad_pol", VAR_ARRAY_INT8, &a[0].tp.pol, 1, MAX_ADAPTERS, sizeof(a[0]) },
+{ "ad_sr", VAR_ARRAY_INT, &a[0].tp.sr, 1./1000, MAX_ADAPTERS, sizeof(a[0]) },
+{ "ad_enabled", VAR_ARRAY_INT, &a[0].enabled, 1, MAX_ADAPTERS, sizeof(a[0]) },
+{ "sys", VAR_ARRAY_UINT8, &a[0].tp.sys, 1, MAX_ADAPTERS, sizeof(a[0]) },
+{ "pids", VAR_FUNCTION_STRING, (void *) &get_adapter_pids, 0, 0, 0 },
+{ "tuner_s2", VAR_INT, &tuner_s2, 1, 0, 0 },
+{ "tuner_t2", VAR_INT, &tuner_t2, 1, 0, 0 },
+{ "tuner_c2", VAR_INT, &tuner_c2, 1, 0, 0 },
+{ "tuner_t", VAR_INT, &tuner_t, 1, 0, 0 },
+{ "tuner_c", VAR_INT, &tuner_c, 1, 0, 0 },
+{ NULL, 0, NULL, 0, 0 } };

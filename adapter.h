@@ -98,11 +98,7 @@ typedef struct struct_adapter
 
 
 int init_hw ();
-int getS2Adapters ();
-int getTAdapters ();
-int getCAdapters ();
-int getT2Adapters ();
-int getC2Adapters ();
+int getAdaptersCount();
 void close_adapter (int na);
 int get_free_adapter (int freq, int pol, int msys, int src);
 int set_adapter_for_stream (int i, int a);
@@ -115,7 +111,7 @@ void mark_pid_deleted(int aid, int sid, int _pid, SPid *p);
 int update_pids (int aid);
 SPid *find_pid(int aid, int p);
 adapter * get_adapter1 (int aid, char *file, int line);
-char *describe_adapter (int sid, int aid);
+char *describe_adapter (int sid, int aid, char *dad, int ld);
 void dump_pids (int aid);
 void sort_pids (int aid);
 void enable_adapters(char *o);
@@ -125,5 +121,6 @@ void reset_pids_type(int aid);
 void reset_pids_type_for_key(int aid, int key);
 int delsys_match(adapter *ad, int del_sys);
 int get_enabled_pids(adapter *ad, int *pids, int lpids);
+char *get_adapter_pids(int aid, char *dest, int max_size);
 #define get_adapter(a) get_adapter1(a, __FILE__, __LINE__)
 #endif							 /*  */

@@ -69,6 +69,8 @@ int get_session_id( int i);
 void set_session_id(int i, int id);
 int fix_master_sid(int adapter);
 int rtcp_confirm(sockets *s);
+char *get_stream_rhost(int s_id, char *dest, int ld);
+int get_stream_rport(int s_id);
 
 #define get_sid(a) get_sid1(a, __FILE__, __LINE__)
 #endif
