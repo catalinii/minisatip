@@ -1086,7 +1086,10 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 		p->type |= PMT_COMPLETE;
 	}
 	else
+	{
 		p->type = 0; // we do not need this pmt pid anymore
+		mark_pid_deleted(ad->id,99,p->pid,p);
+	}
 //	free_assemble_packet(pid, ad);
 	return 0;
 }

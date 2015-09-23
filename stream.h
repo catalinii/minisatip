@@ -16,7 +16,7 @@
 
 typedef struct struct_streams
 {
-	int enabled;
+	char enabled;
 	int sid;					 // socket - <0 for invalid/not used, 0 for end of the list
 	int adapter;
 	struct sockaddr_in sa;		 //remote address - set on accept or recvfrom on udp sockets
@@ -64,7 +64,7 @@ int read_dmx (sockets * s);
 int stream_timeouts ();
 int close_streams_for_adapter (int ad, int except);
 void dump_streams ();
-streams *get_sid1 (int sid, char *file, int line);
+streams *get_sid1 (int sid, char *file, int line, int warning);
 int get_session_id( int i);
 void set_session_id(int i, int id);
 int fix_master_sid(int adapter);
@@ -72,5 +72,6 @@ int rtcp_confirm(sockets *s);
 char *get_stream_rhost(int s_id, char *dest, int ld);
 int get_stream_rport(int s_id);
 
-#define get_sid(a) get_sid1(a, __FILE__, __LINE__)
+#define get_sid(a) get_sid1(a, __FILE__, __LINE__,1)
+#define get_sid_nw(a) get_sid1(a, __FILE__, __LINE__,0)
 #endif

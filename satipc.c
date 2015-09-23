@@ -132,8 +132,9 @@ int satipc_timeout(sockets *s)
 {
 	adapter *ad = get_adapter(s->sid);
 	LOG(
-			"satipc: Sent keep-alive to the satip server %s:%d, adapter %d, socket_id %d, handle %d",
-			ad?ad->sip:NULL, ad ? ad->sport : 0, s->sid, s->id, s->sock);
+			"satipc: Sent keep-alive to the satip server %s:%d, adapter %d, socket_id %d, handle %d, timeout %d",
+			ad?ad->sip:NULL, ad ? ad->sport : 0, s->sid, s->id, s->sock,
+			s->close_sec);
 	if (!ad)
 		return 1;
 	http_request(ad, NULL, "OPTIONS");
@@ -144,9 +145,10 @@ int satipc_timeout(sockets *s)
 
 int satipc_close(sockets * s)
 {
-	LOG("satip_close called for adapter %d, socket_id %d, handle %d", s->sid,
-			s->id, s->sock);
+	LOG("satip_close called for adapter %d, socket_id %d, handle %d timeout %d",
+			s->sid, s->id, s->sock, s->close_sec);
 	close_adapter(s->sid);
+	return 0;
 }
 
 int satipc_rtcp_reply(sockets * s)
@@ -229,7 +231,7 @@ int satipc_open_device(adapter *ad)
 		close(ad->dvr);
 		close(ad->fe);
 	}
-
+	ad->type = ADAPTER_SATIP;
 	ad->session[0] = 0;
 	lap[ad->id] = 0;
 	ldp[ad->id] = 0;
@@ -288,7 +290,8 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb)
 		*rb = 0;
 		return 1;
 	}
-	return (*rb > 0);
+	*rb -= 12;
+	return (*rb >= 0);
 }
 
 void satip_post_init(adapter *ad)
@@ -451,7 +454,7 @@ int http_request(adapter *ad, char *url, char *method)
 		write(ad->fe, buf, lb);
 	}
 	ad->expect_reply = 1;
-
+	return 0;
 }
 
 void tune_url(adapter *ad, char *url)

@@ -1,6 +1,7 @@
 #ifndef UTILS_H
 #define UTILS_H
 #define _GNU_SOURCE 
+#include "socketworks.h"
 
 unsigned char *getItem(int64_t key);
 int getItemLen(int64_t key);
@@ -20,6 +21,7 @@ int split (char **rv, char *s, int lrv, char sep);
 void set_signal_handler ();
 int becomeDaemon ();
 char *readfile(char *fn, char *ctype, int *len);
+void process_file(sockets *so, char *s, int len, char *ctype);
 
 //#define proxy_log(level, fmt, ...) _proxy_log(level, fmt"\n", ##__VA_ARGS__)
 

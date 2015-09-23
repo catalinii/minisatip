@@ -84,7 +84,6 @@ int get_next_free_stream()
 }
 extern int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
 
-
 char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 {
 	char *stream_id, dad[1000];
@@ -245,6 +244,7 @@ int start_play(streams * sid, sockets * s)
 	{
 		sid->type = STREAM_HTTP;
 		sid->rsock = s->sock;
+		memcpy(&sid->sa, &s->sa, sizeof(s->sa));
 	}
 
 	if (sid->type == 0)
@@ -294,6 +294,7 @@ int close_stream(int i)
 	LOG("closing stream %d", i);
 	sid = &st[i];
 	sid->enabled = 0;
+	sid->timeout = 0;
 	ad = sid->adapter;
 	sid->adapter = -1;
 	if (sid->type == STREAM_RTSP_UDP && sid->rsock > 0)
@@ -341,6 +342,7 @@ int decode_transport(sockets * s, char *arg, char *default_rtp, int start_rtp)
 			LOG("Assuming RTSP over TCP for stream %d, arg %s", sid->sid, arg);
 			sid->type = STREAM_RTSP_TCP;
 			sid->rsock = s->sock;
+			memcpy(&sid->sa, &s->sa, sizeof(s->sa));
 			return 0;
 		}
 
@@ -540,8 +542,14 @@ int my_writev(int sock, const struct iovec *iov, int iiov, streams *sid)
 	{
 		LOGL(0,
 				"Connection REFUSED on stream %d, closing the stream, remote %s:%d",
-				sid->sid, get_stream_rhost(sid->sid, ra, sizeof(ra)), get_stream_rport(sid->sid));
+				sid->sid, get_stream_rhost(sid->sid, ra, sizeof(ra)),
+				get_stream_rport(sid->sid));
 		sid->timeout = 1;
+	}
+	if (rv < 0)
+	{
+		LOG("writev returned %d handle %d, iiov %d errno %d error %s", rv, sock,
+				iiov, errno, strerror(errno));
 	}
 	LOGL(6, "writev returned %d handle %d, iiov %d", rv, sock, iiov);
 	return rv;
@@ -616,13 +624,14 @@ int send_rtp(streams * sid, const struct iovec *iov, int liov)
 	{
 		sid->start_streaming = 1;
 		LOG("Start streaming for stream %d, len %d to handle %d => %s:%d",
-				sid->sid, total_len, sid->rsock, get_stream_rhost(sid->sid, ra, sizeof(ra)),
+				sid->sid, total_len, sid->rsock,
+				get_stream_rhost(sid->sid, ra, sizeof(ra)),
 				ntohs(sid->sa.sin_port));
 	}
 
 	LOGL(5, "sent %d bytes for stream %d, handle %d seq %d => %s:%d", total_len,
-			sid->sid, sid->rsock, sid->seq - 1, get_stream_rhost(sid->sid, ra, sizeof(ra)),
-			ntohs(sid->sa.sin_port));
+			sid->sid, sid->rsock, sid->seq - 1,
+			get_stream_rhost(sid->sid, ra, sizeof(ra)), ntohs(sid->sa.sin_port));
 
 	return rv;
 }
@@ -952,7 +961,7 @@ int read_dmx(sockets * s)
 							}
 
 							memcpy(&sid->buf[sid->len], sid->iov[j].iov_base,
-									DVB_FRAME);
+							DVB_FRAME);
 							sid->iov[j].iov_base = &sid->buf[sid->len];
 							sid->len += DVB_FRAME;
 						}
@@ -993,7 +1002,8 @@ int stream_timeouts()
 			if (sid->do_play && ctime - rtime > 1000)
 			{
 				LOG("no data sent for more than 1s sid: %d for %s:%d", i,
-						get_stream_rhost(sid->sid, ra, sizeof(ra)), get_stream_rport(sid->sid));
+						get_stream_rhost(sid->sid, ra, sizeof(ra)),
+						get_stream_rport(sid->sid));
 				flush_streami(sid, ctime);
 			}
 			if (sid->do_play && ctime - rttime >= 200)
@@ -1023,7 +1033,8 @@ void dump_streams()
 		if (st[i].enabled)
 			LOG("%d|  a:%d rsock:%d type:%d play:%d remote:%s:%d", i,
 					st[i].adapter, st[i].rsock, st[i].type, st[i].do_play,
-					get_stream_rhost(i, ra, sizeof(ra)), ntohs (st[i].sa.sin_port));
+					get_stream_rhost(i, ra, sizeof(ra)),
+					ntohs (st[i].sa.sin_port));
 }
 
 void free_all_streams()
@@ -1047,11 +1058,14 @@ void free_all_streams()
 }
 
 streams *
-get_sid1(int sid, char *file, int line)
+get_sid1(int sid, char *file, int line, int warning)
 {
 	if (sid < 0 || sid > MAX_STREAMS || st[sid].enabled == 0)
-		LOG_AND_RETURN(NULL, "%s:%d get_sid returns NULL for s_id = %d", file,
-				line, sid);
+	{
+		if (warning)
+			LOG("%s:%d get_sid returns NULL for s_id = %d", file, line, sid);
+		return NULL;
+	}
 	return &st[sid];
 }
 
@@ -1125,7 +1139,7 @@ char *get_stream_rhost(int s_id, char *dest, int ld)
 {
 	streams *sid = get_sid(s_id);
 	dest[0] = 0;
-	if(!sid)
+	if (!sid)
 		return dest;
 	inet_ntop(AF_INET, &(sid->sa.sin_addr), dest, ld);
 	return dest;
@@ -1134,17 +1148,56 @@ char *get_stream_rhost(int s_id, char *dest, int ld)
 int get_stream_rport(int s_id)
 {
 	streams *sid = get_sid(s_id);
-	if(!sid)
+	if (!sid)
 		return 0;
-	return ntohs (sid->sa.sin_port);
+	return ntohs(sid->sa.sin_port);
+}
+
+char* get_stream_pids(int s_id, char *dest, int max_size)
+{
+	int len = 0;
+	int pids[MAX_PIDS];
+	int lp, i, j;
+	streams *s = get_sid_nw(s_id);
+	adapter *ad;
+	dest[0] = 0;
+
+	if (!s)
+		return dest;
+
+	s = &st[s_id];
+
+	ad = get_adapter(s->adapter);
+
+	if (!ad)
+		return dest;
+
+	for (i = 0; i < MAX_PIDS; i++)
+		if (ad->pids[i].flags == 1)
+			for (j = 0; j < MAX_STREAMS_PER_PID; j++)
+				if (ad->pids[i].sid[j] == s_id)
+				{
+					if (ad->pids[i].pid == 8192)
+						len += snprintf(dest + len, max_size - len, "all,");
+					else
+						len += snprintf(dest + len, max_size - len, "%d,",
+								ad->pids[i].pid);
+				}
+	if (len > 0)
+	{
+		len--;
+		dest[len] = 0;
+
+	}
+	return dest;
 }
 
 _symbols stream_sym[] =
 {
-{ "st_enabled", VAR_ARRAY_INT, &st[0].enabled, 1, MAX_STREAMS, sizeof(st[0]) },
+{ "st_enabled", VAR_ARRAY_INT8, &st[0].enabled, 1, MAX_STREAMS, sizeof(st[0]) },
 { "st_play", VAR_ARRAY_INT, &st[0].do_play, 1, MAX_STREAMS, sizeof(st[0]) },
 { "st_adapter", VAR_ARRAY_INT, &st[0].adapter, 1, MAX_STREAMS, sizeof(st[0]) },
 { "st_rhost", VAR_FUNCTION_STRING, (void *) &get_stream_rhost, 0, 0, 0 },
 { "st_rport", VAR_FUNCTION_INT, (void *) &get_stream_rport, 0, 0, 0 },
-{ "tuner_c", VAR_INT, &tuner_c, 1, 0, 0 },
+{ "st_pids", VAR_FUNCTION_STRING, (void *) &get_stream_pids, 0, 0, 0 },
 { NULL, 0, NULL, 0, 0 } };

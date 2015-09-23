@@ -45,6 +45,8 @@
 
 struct struct_opts opts;
 
+#define DESC_XML "desc.xml"
+
 extern sockets s[MAX_SOCKS];
 char public[] = "Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN";
 int rtsp, http, si, si1, ssdp1;
@@ -71,6 +73,8 @@ static const struct option long_options[] =
 		{ "http-port", required_argument, NULL, 'x' },
 		{ "http-host", required_argument, NULL, 'w' },
 		{ "priority", required_argument, NULL, 'i' },
+		{ "document-root", required_argument, NULL, 'R' },
+		{ "xml", required_argument, NULL, 'X' },
 		{ "help", no_argument, NULL, 'h' },
 		{ "version", no_argument, NULL, 'V' },
 		{ 0, 0, 0, 0 } };
@@ -100,73 +104,61 @@ static const struct option long_options[] =
 #define PRIORITY_OPT 'i'
 #define PRIORITY_OPT 'i'
 #define VERSION_OPT 'V'
+#define DOCUMENTROOT_OPT 'R'
+#define XML_OPT 'X'
 
 void usage()
 {
 	printf(
 			"minisatip [-[flzg]] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] [-p public_host] [-s [DELSYS:]host[:port] [-a x:y:z] [-m mac] [-e X-Y,Z] [-o oscam_host:dvbapi_port] [-c X] [-b X:Y] [-u A1:S1-F1[-PIN]] [-j A1:S1-F1[-PIN]] [-x http_port] [-y rtsp_port]   \n\n \
--f  foreground, otherwise run in background\n\
-\n\
--r --remote-rtp  remote_rtp_host: send the rtp stream to remote_rtp_host instead of the ip the connection comes from\n \
-	eg: -r 192.168.7.9\n \
 \n\
 -D --device-id DVC_ID: specify the device id (in case there are multiple SAT>IP servers in the network)\n \
 	eg: -d 4 \n\
-\n\
--w --http-host http_server[:port]: specify the host and the port where the xml file can be downloaded from [default: default_local_ip_address:8080] \n\
-	eg: -w 192.168.1.1:8080 \n\
-\n\
--x --http-port port: port for listening on http [default: 8080]\n\
-	eg: -x 9090 \n\
-\n\
--y --rtsp-port rtsp_port: port for listening for rtsp requests [default: 554]\n\
-	eg: -y 5544 \n\
-	- changing this to a port > 1024 removes the requirement for minisatip to run as root\n\
-\n\
--z --check-signal force to get signal from the DVB hardware every 200ms (use with care, only when needed)\n\
-	- retrieving signal could take sometimes more than 200ms which could impact the rtp stream, using it only when you need to adjust your dish\n\
 \n\
 -a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means auto-detect)\n\
 	eg: -a 1:2:3  \n\
 	- it will report 1 dvb-s2 device, 2 dvb-t2 devices and 3 dvb-c devices \n\
 \n\
--m xx: simulate xx as local mac address, generates UUID based on mac\n\
-	-m 00:11:22:33:44:55 \n\
-\n\
--e --enable-adapters list_of_enabled adapters: enable only specified adapters\n\
-	eg: -e 0-2,5,7 (no spaces between parameters)\n\
-	- keep in mind that the first adapters are the local ones starting with 0 after that are the satip adapters \n\
-	if you have 3 local dvb cards 0-2 will be the local adapters, 3,4, ... will be the satip servers specified with argument -s\n\
-\n\
--c X: bandwidth capping for the output to the network [default: unlimited]\n\
-	eg: -c 2048  (does not allow minisatip to send more than 2048KB/s to all remote servers)\n\
-\n\
 -b --buffers X:Y : set the app adapter buffer to X Bytes (default: %d) and set the kernel DVB buffer to Y Bytes (default: %d) - both multiple of 188\n\
 	eg: -b 18800:18988\n\
 \n\
--l increases the verbosity (you can use multiple -l), logging to stdout in foreground mode or in /tmp/log when a daemon\n\
-	eg: -l -l -l\n\
-\n\
--g use syslog instead stdout for logging, multiple -g - print to stderr as well\n\
-\n\
--p url: specify playlist url using X_SATIPM3U header \n\
-	eg: -p http://192.168.2.3:8080/playlist\n\
-	- this will add X_SATIPM3U tag into the satip description xml\n\
-\n\
--u --unicable unicable_string: defines the unicable adapters (A) and their slot (S), frequency (F) and optionally the PIN for the switch:\n\
-\tThe format is: A1:S1-F1[-PIN][,A2:S2-F2[-PIN][,...]]\n\
-	eg: 2:0-1284[-1111]\n\
-\n\
--j --jess jess_string - same format as -u \n\
+-c X: bandwidth capping for the output to the network [default: unlimited]\n\
+	eg: -c 2048  (does not allow minisatip to send more than 2048KB/s to all remote servers)\n\
 \n\
 -d --diseqc ADAPTER1:COMMITED1-UNCOMMITED1[,ADAPTER2:COMMITED2-UNCOMMITED2[,...]\n\
 \tThe first argument is the adapter number, second is the number of commited packets to send to a Diseqc 1.0 switch, third the number of uncommited commands to sent to a Diseqc 1.1 switch\n\
 \tThe higher number between the commited and uncommited will be sent first.\n\
 	eg: -d 0:1-0  (which is the default for each adapter).\n\
 \n\
+-D --document-root directory: document root for the minisatip web page and images\n\
+\n\
+-e --enable-adapters list_of_enabled adapters: enable only specified adapters\n\
+	eg: -e 0-2,5,7 (no spaces between parameters)\n\
+	- keep in mind that the first adapters are the local ones starting with 0 after that are the satip adapters \n\
+	if you have 3 local dvb cards 0-2 will be the local adapters, 3,4, ... will be the satip servers specified with argument -s\n\
+\n\
+-f  foreground, otherwise run in background\n\
+\n\
+-g use syslog instead stdout for logging, multiple -g - print to stderr as well\n\
+\n\
+-i --priority prio: set the process priority to prio (-10 increases the priority by 10)\n\
+\n\
+-l increases the verbosity (you can use multiple -l), logging to stdout in foreground mode or in /tmp/log when a daemon\n\
+	eg: -l -l -l\n\
+\n\
+-m xx: simulate xx as local mac address, generates UUID based on mac\n\
+	-m 00:11:22:33:44:55 \n\
+\n\
 -o --dvbapi host:port - specify the hostname and port for the dvbapi server (oscam) \n\
 	eg: -o 192.168.9.9:9000 \n\
 	192.168.9.9 is the host where oscam is running and 9000 is the port configured in dvbapi section in oscam.conf\n\
+\n\
+-p url: specify playlist url using X_SATIPM3U header \n\
+	eg: -p http://192.168.2.3:8080/playlist\n\
+	- this will add X_SATIPM3U tag into the satip description xml\n\
+\n\
+-r --remote-rtp  remote_rtp_host: send the rtp stream to remote_rtp_host instead of the ip the connection comes from\n \
+	eg: -r 192.168.7.9\n \
 \n\
 -s --satip-servers DELSYS:host:port - specify the remote satip host and port with delivery system DELSYS, it is possible to use multiple -s \n\
 	DELSYS - can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, isdbt, atsc, dvbcb ( - DVBC_ANNEX_B ) [default: dvbs2]\n\
@@ -179,7 +171,24 @@ void usage()
 \n\
 -t --cleanpsi clean the PSI from all CA information, the client will see the channel as clear if decrypted successfully\n\
 \n\
--i --priority prio: set the process priority to prio (-10 increases the priority by 10)\n\
+-u --unicable unicable_string: defines the unicable adapters (A) and their slot (S), frequency (F) and optionally the PIN for the switch:\n\
+\tThe format is: A1:S1-F1[-PIN][,A2:S2-F2[-PIN][,...]]\n\
+	eg: 2:0-1284[-1111]\n\
+\n\
+-j --jess jess_string - same format as -u \n\
+\n\
+-w --http-host http_server[:port]: specify the host and the port (if not 80) where the xml file can be downloaded from [default: default_local_ip_address:8080] \n\
+	eg: -w 192.168.1.1:8080 \n\
+\n\
+-x --http-port port: port for listening on http [default: 8080]\n\
+	eg: -x 9090 \n\
+\n\
+-y --rtsp-port rtsp_port: port for listening for rtsp requests [default: 554]\n\
+	eg: -y 5544 \n\
+	- changing this to a port > 1024 removes the requirement for minisatip to run as root\n\
+\n\
+-z --check-signal force to get signal from the DVB hardware every 200ms (use with care, only when needed)\n\
+	- retrieving signal could take sometimes more than 200ms which could impact the rtp stream, using it only when you need to adjust your dish\n\
 ",
 			ADAPTER_BUFFER,
 			DVR_BUFFER);
@@ -219,10 +228,13 @@ void set_options(int argc, char *argv[])
 	opts.satip_addpids = 0;
 	opts.output_buffer = 512 * 1024;
 	opts.satip_servers[0] = 0;
+	opts.document_root = "html";
+	opts.xml_path = DESC_XML;
+
 	memset(opts.playlist, 0, sizeof(opts.playlist));
 
 	while ((opt = getopt_long(argc, argv,
-			"flr:a:td:w:p:s:hc:b:m:p:e:x:u:j:o:gy:zi:D:V", long_options, NULL))
+			"flr:a:td:w:p:s:hc:b:m:p:e:x:u:j:o:gy:zi:D:VR:", long_options, NULL))
 			!= -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
@@ -355,6 +367,7 @@ void set_options(int argc, char *argv[])
 		case DISEQC_OPT:
 		{
 			set_diseqc_adapters(optarg);
+			break;
 		}
 
 		case DVBAPI_OPT:
@@ -405,6 +418,18 @@ void set_options(int argc, char *argv[])
 			;
 			break;
 
+		case DOCUMENTROOT_OPT:
+			opts.document_root = optarg;
+			break;
+
+		case XML_OPT:
+			while (*optarg > 0 && *optarg == '/')
+				optarg++;
+			if (*optarg > 0)
+				opts.xml_path = optarg;
+			else
+				LOGL(0, "Not a valid path for the xml file");
+			break;
 		}
 
 	}
@@ -501,7 +526,7 @@ int read_rtsp(sockets * s)
 	{
 		char *str_id = strstr(arg[1], "stream=") + 7;
 		sess_id = map_intd(str_id, NULL, 0) - 1;
-		if (sid = get_sid(sess_id))
+		if ((sid = get_sid(sess_id)))
 		{
 			s->sid = sid->sid;
 			LOG("Adopting the session id from the stream %d", s->sid);
@@ -571,7 +596,13 @@ int read_rtsp(sockets * s)
 		buf[0] = 0;
 		if (transport)
 		{
-			int s_timeout = (sid->timeout ? sid->timeout : opts.timeout_sec)
+			int s_timeout;
+
+			if (sid->timeout == 1)
+				sid->timeout = opts.timeout_sec;
+
+			s_timeout = (
+					(sid->timeout > 20000) ? sid->timeout : opts.timeout_sec)
 					/ 1000;
 			switch (sid->type)
 			{
@@ -579,11 +610,13 @@ int read_rtsp(sockets * s)
 				if (atoi(ra) < 224)
 					snprintf(buf, sizeof(buf),
 							"Transport: RTP/AVP;unicast;destination=%s;source=%s;client_port=%d-%d;server_port=%d-%d\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d",
-							ra, get_sock_shost(s->sock), get_stream_rport(sid->sid),
-							get_stream_rport (sid->sid) + 1,
+							ra, get_sock_shost(s->sock),
+							get_stream_rport(sid->sid),
+							get_stream_rport(sid->sid) + 1,
 //							opts.start_rtp, opts.start_rtp + 1,
-							get_sock_sport(sid->rsock), get_sock_sport(sid->rtcp),
-							get_session_id(s->sid), s_timeout, sid->sid + 1);
+							get_sock_sport(sid->rsock),
+							get_sock_sport(sid->rtcp), get_session_id(s->sid),
+							s_timeout, sid->sid + 1);
 				else
 					snprintf(buf, sizeof(buf),
 							"Transport: RTP/AVP;multicast;destination=%s;port=%d-%d\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d",
@@ -654,13 +687,30 @@ int read_rtsp(sockets * s)
 char uuid[100];
 int uuidi;
 struct sockaddr_in ssdp_sa;
-extern int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
-
 
 int read_http(sockets * s)
 {
 	char *arg[50];
-
+	char buf[2000]; // the XML should not be larger than 1400 as it will create problems
+	static char *xml =
+			"<?xml version=\"1.0\"?>"
+					"<root xmlns=\"urn:schemas-upnp-org:device-1-0\" configId=\"0\">"
+					"<specVersion><major>1</major><minor>1</minor></specVersion>"
+					"<device><deviceType>urn:ses-com:device:SatIPServer:1</deviceType>"
+					"<friendlyName>minisatip</friendlyName><manufacturer>cata</manufacturer>"
+					"<manufacturerURL>http://github.com/catalinii/minisatip</manufacturerURL>"
+					"<modelDescription>minisatip for Linux</modelDescription><modelName>minisatip</modelName>"
+					"<modelNumber>1.1</modelNumber><modelURL></modelURL><serialNumber>1</serialNumber><UDN>uuid:%s</UDN>"
+					"<iconList>"
+					"<icon><mimetype>image/png</mimetype><width>48</width><height>48</height><depth>24</depth><url>/sm.png</url></icon>"
+					"<icon><mimetype>image/png</mimetype><width>120</width><height>120</height><depth>24</depth><url>/lr.png</url></icon>"
+					"<icon><mimetype>image/jpeg</mimetype><width>48</width><height>48</height><depth>24</depth><url>/sm.jpg</url></icon>"
+					"<icon><mimetype>image/jpeg</mimetype><width>120</width><height>120</height><depth>24</depth><url>/lr.jpg</url></icon>"
+					"</iconList>"
+					"<presentationURL>http://%s/</presentationURL>\r\n"
+					"<satip:X_SATIPCAP xmlns:satip=\"urn:ses-com:satip\">%s</satip:X_SATIPCAP>"
+					"%s"
+					"</device></root>";
 	if (s->rlen < 5 || !end_of_header(s->buf + s->rlen - 4))
 	{
 		if (s->rlen > RBUF - 10)
@@ -696,12 +746,43 @@ int read_http(sockets * s)
 		REPLY_AND_RETURN(503);
 	if (uuidi == 0)
 		ssdp_discovery(s);
-	
-	if(!strcmp(arg[1],"/"))
-		arg[1] = "/status.html";
-	
+
+	sockets_timeout(s->id, 1); //close the connection 
+
+	if (strcmp(arg[1], "/"DESC_XML) == 0)
+	{
+		extern int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
+		char adapters[400];
+		char headers[500];
+
+		memset(adapters, 0, sizeof(adapters));
+		if (tuner_s2)
+			sprintf(adapters, "DVBS2-%d,", tuner_s2);
+		if (tuner_t)
+			sprintf(adapters + strlen(adapters), "DVBT-%d,", tuner_t);
+		if (tuner_c)
+			sprintf(adapters + strlen(adapters), "DVBC-%d,", tuner_c);
+		if (tuner_t2)
+			sprintf(adapters + strlen(adapters), "DVBT2-%d,", tuner_t2);
+		if (tuner_c2)
+			sprintf(adapters + strlen(adapters), "DVBC2-%d,", tuner_c2);
+		if (tuner_s2 + tuner_t + tuner_c + tuner_t2 + tuner_c2 == 0)
+			strcpy(adapters, "DVBS2-0,");
+		adapters[strlen(adapters) - 1] = 0;
+		snprintf(buf, sizeof(buf), xml, uuid, opts.http_host, adapters,
+				opts.playlist);
+		sprintf(headers,
+				"CACHE-CONTROL: no-cache\r\nContent-type: text/xml\r\nX-SATIP-RTSP-Port: %d",
+				opts.rtsp_port);
+		http_response(s, 200, headers, buf, 0, 0);
+		return 0;
+	}
 // process file from html directory, the images are just sent back
-	if (!strchr(arg[1] + 1, '/') && !strstr(arg[1], ".." ))
+
+	if (!strcmp(arg[1], "/"))
+		arg[1] = "/status.html";
+
+	if (!strchr(arg[1] + 1, '/') && !strstr(arg[1], ".."))
 	{
 		char ctype[500];
 		char *f;
@@ -719,13 +800,9 @@ int read_http(sockets * s)
 			closefile(f, nl);
 			return 0;
 		}
-		if(endswith(arg[1], "desc.xml"))
-			sprintf(ctype + strlen(ctype), "\r\nX-SATIP-RTSP-Port: %d",
-				opts.rtsp_port);
-		http_response(s, 200, ctype, "", 0, 0); // sending back the response
-		process_file(s->sock, f, nl);
+
+		process_file(s, f, nl, ctype);
 		closefile(f, nl);
-		sockets_timeout(s->id, 1); //close the connection 
 		return 0;
 	}
 
@@ -736,7 +813,7 @@ int read_http(sockets * s)
 int close_http(sockets * s)
 {
 	streams *sid = get_sid(s->sid);
-	if (s->flags & 1 && s->buf)
+	if ((s->flags & 1) && s->buf)
 		free1(s->buf);
 	s->flags = 0;
 	s->buf = NULL;
@@ -756,7 +833,7 @@ int ssdp_discovery(sockets * s)
 	char *reply = "NOTIFY * HTTP/1.1\r\n"
 			"HOST: %s:1900\r\n"
 			"CACHE-CONTROL: max-age=1800\r\n"
-			"LOCATION: http://%s/desc.xml\r\n"
+			"LOCATION: http://%s/%s\r\n"
 			"NT: %s\r\n"
 			"NTS: ssdp:alive \r\n"
 			"SERVER: Linux/1.0 UPnP/1.1 minisatip/%s\r\n"
@@ -789,7 +866,7 @@ int ssdp_discovery(sockets * s)
 
 	for (i = 0; i < 3; i++)
 	{
-		sprintf(buf, reply, opts.disc_host, opts.http_host, nt[i] + 2, VERSION,
+		sprintf(buf, reply, opts.disc_host, opts.http_host, opts.xml_path, nt[i] + 2, VERSION,
 				uuid, i == 1 ? "" : nt[i], opts.bootid, opts.device_id);
 		salen = sizeof(ssdp_sa);
 		LOGL(3, "Discovery packet %d:\n%s", i + 1, buf);
@@ -807,7 +884,7 @@ int ssdp_reply(sockets * s)
 			"CACHE-CONTROL: max-age=1800\r\n"
 			"DATE: %s\r\n"
 			"EXT:\r\n"
-			"LOCATION: http://%s/desc.xml\r\n"
+			"LOCATION: http://%s/%s\r\n"
 			"SERVER: Linux/1.0 UPnP/1.1 minisatip/%s\r\n"
 			"ST: urn:ses-com:device:SatIPServer:1\r\n"
 			"USN: uuid:%s::urn:ses-com:device:SatIPServer:1\r\n"
@@ -835,13 +912,15 @@ int ssdp_reply(sockets * s)
 	if (ruuid && strncmp(uuid, strip(ruuid + 5), strlen(uuid)) == 0)
 	{
 		LOGL(3, "Dropping packet from the same UUID as mine (from %s:%d)",
-				get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id));
+				get_socket_rhost(s->id, ra, sizeof(ra)),
+				get_socket_rport(s->id));
 		return 0;
 	}
 
 // not my uuid
 	LOG("Received SSDP packet from %s:%d -> handle %d",
-			get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id), s->sock);
+			get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
+			s->sock);
 	LOGL(3, "%s", s->buf);
 
 	if (strncasecmp(s->buf, "NOTIFY", 6) == 0)
@@ -883,12 +962,12 @@ int ssdp_reply(sockets * s)
 	if (strncmp((const char*) s->buf, "HTTP/1", 6) == 0)
 		LOG_AND_RETURN(0, "ssdp_reply: the message is a reply, ignoring....");
 
-	sprintf(buf, reply, get_current_timestamp(), opts.http_host, VERSION, uuid,
+	sprintf(buf, reply, get_current_timestamp(), opts.http_host, opts.xml_path, VERSION, uuid,
 			opts.bootid, did);
 
 	LOG("ssdp_reply fd: %d -> %s:%d, bootid: %d deviceid: %d http: %s", ssdp,
-			get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id), opts.bootid, did,
-			opts.http_host);
+			get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
+			opts.bootid, did, opts.http_host);
 //use ssdp (unicast) even if received to multicast address
 	LOGL(3, "%s", buf);
 	sendto(ssdp, buf, strlen(buf), MSG_NOSIGNAL,
@@ -1067,18 +1146,20 @@ http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 	else
 		sprintf(resp, reply0, proto, rc, d, get_current_timestamp(), sess_id,
 				scseq, ah);
-	LOG("reply -> %d (%s:%d) CL:%d :\n%s", s->sock, get_socket_rhost(s->id, ra, sizeof(ra)),
-			get_socket_rport(s->id), lr, resp);
+	LOG("reply -> %d (%s:%d) CL:%d :\n%s", s->sock,
+			get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
+			lr, resp);
 	send(s->sock, resp, strlen(resp), MSG_NOSIGNAL);
 	if (binary)
 		send(s->sock, desc, lr, MSG_NOSIGNAL);
 	return resp;
 }
 
-
+char version[] = VERSION;
 _symbols minisatip_sym[] =
 {
 { "http_host", VAR_PSTRING, &opts.http_host, 0, 0, 0 },
 { "uuid", VAR_STRING, uuid, 0, 0, 0 },
 { "http_port", VAR_INT, &opts.http_port, 1, 0, 0 },
+{ "version", VAR_STRING, &version, 1, 0, 0 },
 { NULL, 0, NULL, 0, 0 } };

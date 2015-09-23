@@ -228,6 +228,7 @@ int dvb_open_device(adapter *ad)
 		ad->fe = ad->dvr = -1;
 		return 1;
 	}
+	ad->type = ADAPTER_DVB;
 #ifndef DISABLE_DVBCA
 	if(ad->ca > 0)
 		close(ad->ca);

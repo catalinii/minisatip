@@ -51,7 +51,7 @@
 #include "utils.h"
 #include "minisatip.h"
 
-extern char *fe_delsys[];
+
 extern struct struct_opts opts;
 
 #define MAX_DATA 1500 // 16384
@@ -195,6 +195,7 @@ int setItem(int64_t key, unsigned char *data, int len, int pos) // pos = -1 -> a
 		s->no_change = 0;
 
 	memcpy(s->data + pos, data, len);
+	return 0;
 }
 
 int getItemChange(int64_t key, int *prev)
@@ -678,8 +679,10 @@ int var_eval(char *orig, int len, char *dest, int max_len)
 				case VAR_ARRAY_INT16:
 				case VAR_ARRAY_UINT8:
 				case VAR_ARRAY_INT8:
+				case VAR_ARRAY_STRING:
+				case VAR_ARRAY_PSTRING:
 					off = map_intd(var + strlen(sym[i][j].name), NULL, 0);
-					if (off < sym[i][j].len)
+					if (off >= 0 && off < sym[i][j].len)
 					{
 						char *p = (((char *) sym[i][j].addr)
 								+ off * sym[i][j].skip);
@@ -769,10 +772,10 @@ int is_var(char *s)
 }
 
 // replace $VAR$ with it's value and write the output to the socket
-void process_file(int fd, char *s, int len)
+void process_file(sockets *so, char *s, int len, char *ctype)
 {
 	char outp[8292];
-	int i, io = 0, lv, le;
+	int i, io = 0, lv, le, respond = 1;
 	LOG("processing_file %x len %d:", s, len);
 	for (i = 0; i < len; i++)
 	{
@@ -789,50 +792,55 @@ void process_file(int fd, char *s, int len)
 		i += lv;
 		if (io > sizeof(outp) - 100)
 		{
-			write(fd, outp, io);
+			if (respond)
+			{
+				http_response(so, 200, ctype, "", 0, 0); // sending back the response without Content-Length
+				respond = 0;
+			}
+			write(so->sock, outp, io);
 			LOG("%s", outp);
 			io = 0;
 		}
 	}
-	strcpy(outp + io, "\r\n\r\n");
-	write(fd, outp, io + 4);
-	outp[io] = 0;
-	LOG("%s", outp);
+	if (respond)
+		http_response(so, 200, ctype, outp, 0, 0); // sending back the response with Content-Length if output < 8192
+	else
+	{
+		strcpy(outp + io, "\r\n\r\n");
+		write(so->sock, outp, io + 4);
+		outp[io] = 0;
+		LOG("%s", outp);
+	}
 }
 
 char *readfile(char *fn, char *ctype, int *len)
 {
-	char ffn[500];
+	char ffn[256];
 	char *mem;
 	struct stat sb;
-	char *path[] = { "html", "/usr/share/minisatip", NULL };
 	int fd, i, nl = 0, sr;
 	*len = 0;
 	ctype[0] = 0;
 
 	if (strstr(fn, ".."))
 		return 0;
-	for (i = 0; path[i]; i++)
+	snprintf(ffn, sizeof(ffn), "%s/%s", opts.document_root, fn);
+	ffn[sizeof(ffn) - 1] = 0;
+	if ((fd = open(ffn, O_RDONLY)) < 0)
+		LOG_AND_RETURN(NULL, "Could not open file %s", ffn);
+	if ((fstat(fd, &sb) == -1) || !S_ISREG(sb.st_mode))
 	{
-		strcpy(ffn, path[i]);
-		strncat(ffn, fn, sizeof(ffn) - strlen(path[i]) - 1);
-		ffn[sizeof(ffn) - 1] = 0;
-		if ((fd = open(ffn, O_RDONLY)) < 0)
-			continue;
-		if ((fstat(fd, &sb) == -1) || !S_ISREG(sb.st_mode))
-		{
-			LOG("readfile: %s is not a file", ffn);
-			close(fd);
-			return NULL;
-		}
-		nl = sb.st_size;
-		mem = mmap(0, nl, PROT_READ, MAP_SHARED, fd, 0);
-		if (mem == MAP_FAILED)
-			LOG_AND_RETURN(NULL, "mmap failed for file %s", ffn);
+		LOG("readfile: %s is not a file", ffn);
 		close(fd);
-		LOG("opened %s fd %d at %x - %d bytes", ffn, fd, mem, nl);
-		break;
+		return NULL;
 	}
+	nl = sb.st_size;
+	mem = mmap(0, nl, PROT_READ, MAP_SHARED, fd, 0);
+	if (mem == MAP_FAILED)
+		LOG_AND_RETURN(NULL, "mmap failed for file %s", ffn);
+	close(fd);
+	LOG("opened %s fd %d at %x - %d bytes", ffn, fd, mem, nl);
+
 	*len = nl;
 	if (ctype)
 	{

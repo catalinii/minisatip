@@ -10,6 +10,7 @@ typedef struct ca_device ca_device_t;
 #define DVR_BUFFER 30*1024*188
 #define MAX_STREAMS_PER_PID 8
 #define ADAPTER_BUFFER (128 + 5)*DVB_FRAME
+#define ADAPTER_TIMEOUT 10000
 
 #define TYPE_PMT 1
 #define TYPE_ECM 2
@@ -40,15 +41,19 @@ typedef int (* Open_device)(void *ad);
 typedef int (* Tune) (int aid, transponder * tp);
 typedef fe_delivery_system_t (* Dvb_delsys) (int aid, int fd, fe_delivery_system_t *sys);
 
+#define ADAPTER_DVB 1
+#define ADAPTER_SATIP 2
+#define MAX_DELSYS 10
 
 typedef struct struct_adapter
 {
-	int enabled;
+	char enabled;
+	char type; // available on the system 
 	int force_disable;
 	int fe,	dvr, ca;
 	int pa, fn;		
 		// physical adapter, physical frontend number
-	fe_delivery_system_t sys[10]; 
+	fe_delivery_system_t sys[MAX_DELSYS]; 
 	transponder tp;
 	SPid pids[MAX_PIDS];
 	int master_sid;				 // first SID, the one that controls the tuning
@@ -110,7 +115,7 @@ int mark_pid_add(int sid, int aid, int _pid);
 void mark_pid_deleted(int aid, int sid, int _pid, SPid *p);
 int update_pids (int aid);
 SPid *find_pid(int aid, int p);
-adapter * get_adapter1 (int aid, char *file, int line);
+adapter * get_adapter1 (int aid, char *file, int line, int warning);
 char *describe_adapter (int sid, int aid, char *dad, int ld);
 void dump_pids (int aid);
 void sort_pids (int aid);
@@ -122,5 +127,6 @@ void reset_pids_type_for_key(int aid, int key);
 int delsys_match(adapter *ad, int del_sys);
 int get_enabled_pids(adapter *ad, int *pids, int lpids);
 char *get_adapter_pids(int aid, char *dest, int max_size);
-#define get_adapter(a) get_adapter1(a, __FILE__, __LINE__)
+#define get_adapter(a) get_adapter1(a, __FILE__, __LINE__,1)
+#define get_adapter_nw(a) get_adapter1(a, __FILE__, __LINE__,0)
 #endif							 /*  */

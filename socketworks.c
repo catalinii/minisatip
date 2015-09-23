@@ -202,6 +202,23 @@ int udp_connect(char *addr, int port, struct sockaddr_in *serv)
 	return sock;
 }
 
+int set_tcp_socket_timeout(int sockfd)
+{
+	struct timeval timeout;      
+    timeout.tv_sec = 2;
+    timeout.tv_usec = 0;
+
+    if (setsockopt (sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout,
+                sizeof(timeout)) < 0)
+        LOG("setsockopt failed for socket %d", sockfd);
+
+    if (setsockopt (sockfd, SOL_SOCKET, SO_SNDTIMEO, (char *)&timeout,
+                sizeof(timeout)) < 0)
+        LOG("setsockopt failed for socket %d", sockfd);
+
+}
+
+
 int tcp_connect(char *addr, int port, struct sockaddr_in *serv, int blocking)
 {
 	struct sockaddr_in sv;
@@ -240,6 +257,7 @@ int tcp_connect(char *addr, int port, struct sockaddr_in *serv, int blocking)
 			return -1;
 		}
 	}
+	set_tcp_socket_timeout(sock);
 	LOG("New TCP socket %d connected to %s:%d", sock, addr, port);
 	return sock;
 }
@@ -319,6 +337,8 @@ int sockets_accept(int socket, void *buf, int len, sockets *ss)
 	{
 		ss->action(&s[ni]);
 	}
+	set_tcp_socket_timeout(new_sock);
+	
 	return 1;
 }
 
@@ -582,8 +602,8 @@ int select_and_execute()
 		{
 			lt = c_time;
 			i = -1;
-			while (++i < MAX_SOCKS && s[i].sock > 0)
-				if (((s[i].close_sec > 0 && lt - s[i].rtime > s[i].close_sec)
+			while (++i < max_sock)
+				if (( s[i].sock > 0 ) && ((s[i].close_sec > 0 && lt - s[i].rtime > s[i].close_sec)
 						|| (s[i].close_sec == 1)))
 				{
 					if (s[i].timeout && s[i].timeout(&s[i]))
