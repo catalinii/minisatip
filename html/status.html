@@ -1,8 +1,115 @@
+
 <html>
-<title>Test</title>
-<body>Freq $ad_freq0$, SR $ad_sr0$, Strength $ad_strength0$ SNR $ad_snr0$ pids=$pids0$ <br>
-Freq $ad_freq1$, SR $ad_sr1$, Strength $ad_strength1$ SNR $ad_snr1$ pids=$pids1$ <br>
-Stream 0 enabled $st_enabled0$ rhost: $st_rhost0$:$st_rport0$ <br>
-Stream 1 enabled $st_enabled1$ rhost: $st_rhost1$:$st_rport1$ <br>
+<title>Minisatip/$version$ on $http_host$</title>
+<body>
+<script language="javascript" type="text/javascript">
+var ad_type = [$ad_type0$, $ad_type1$, $ad_type2$, $ad_type3$, $ad_type4$, $ad_type5$, $ad_type6$, $ad_type7$, $ad_type8$, $ad_type9$, $ad_type10$, $ad_type11$, $ad_type12$, $ad_type13$, $ad_type14$, $ad_type15$ ]
+var ad_enabled = [$ad_enabled0$, $ad_enabled1$, $ad_enabled2$, $ad_enabled3$, $ad_enabled4$, $ad_enabled5$, $ad_enabled6$, $ad_enabled7$, $ad_enabled8$, $ad_enabled9$, $ad_enabled10$, $ad_enabled11$, $ad_enabled12$, $ad_enabled13$, $ad_enabled14$, $ad_enabled15$ ]
+var ad_sys = [$ad_sys0$, $ad_sys1$, $ad_sys2$, $ad_sys3$, $ad_sys4$, $ad_sys5$, $ad_sys6$, $ad_sys7$, $ad_sys8$, $ad_sys9$, $ad_sys10$, $ad_sys11$, $ad_sys12$, $ad_sys13$, $ad_sys14$, $ad_sys15$ ]
+var ad_strength = [$ad_strength0$, $ad_strength1$, $ad_strength2$, $ad_strength3$, $ad_strength4$, $ad_strength5$, $ad_strength6$, $ad_strength7$, $ad_strength8$, $ad_strength9$, $ad_strength10$, $ad_strength11$, $ad_strength12$, $ad_strength13$, $ad_strength14$, $ad_strength15$ ]
+var ad_ber = [$ad_ber0$, $ad_ber1$, $ad_ber2$, $ad_ber3$, $ad_ber4$, $ad_ber5$, $ad_ber6$, $ad_ber7$, $ad_ber8$, $ad_ber9$, $ad_ber10$, $ad_ber11$, $ad_ber12$, $ad_ber13$, $ad_ber14$, $ad_ber15$ ]
+var ad_master = [$ad_master0$, $ad_master1$, $ad_master2$, $ad_master3$, $ad_master4$, $ad_master5$, $ad_master6$, $ad_master7$, $ad_master8$, $ad_master9$, $ad_master10$, $ad_master11$, $ad_master12$, $ad_master13$, $ad_master14$, $ad_master15$ ]
+var ad_freq = [$ad_freq0$, $ad_freq1$, $ad_freq2$, $ad_freq3$, $ad_freq4$, $ad_freq5$, $ad_freq6$, $ad_freq7$, $ad_freq8$, $ad_freq9$, $ad_freq10$, $ad_freq11$, $ad_freq12$, $ad_freq13$, $ad_freq14$, $ad_freq15$ ]
+var ad_pol = [$ad_pol0$, $ad_pol1$, $ad_pol2$, $ad_pol3$, $ad_pol4$, $ad_pol5$, $ad_pol6$, $ad_pol7$, $ad_pol8$, $ad_pol9$, $ad_pol10$, $ad_pol11$, $ad_pol12$, $ad_pol13$, $ad_pol14$, $ad_pol15$ ]
+var ad_sr = [$ad_sr0$, $ad_sr1$, $ad_sr2$, $ad_sr3$, $ad_sr4$, $ad_sr5$, $ad_sr6$, $ad_sr7$, $ad_sr8$, $ad_sr9$, $ad_sr10$, $ad_sr11$, $ad_sr12$, $ad_sr13$, $ad_sr14$, $ad_sr15$ ]
+var ad_bw = [$ad_bw0$, $ad_bw1$, $ad_bw2$, $ad_bw3$, $ad_bw4$, $ad_bw5$, $ad_bw6$, $ad_bw7$, $ad_bw8$, $ad_bw9$, $ad_bw10$, $ad_bw11$, $ad_bw12$, $ad_bw13$, $ad_bw14$, $ad_bw15$ ]
+var ad_diseqc = [$ad_diseqc0$, $ad_diseqc1$, $ad_diseqc2$, $ad_diseqc3$, $ad_diseqc4$, $ad_diseqc5$, $ad_diseqc6$, $ad_diseqc7$, $ad_diseqc8$, $ad_diseqc9$, $ad_diseqc10$, $ad_diseqc11$, $ad_diseqc12$, $ad_diseqc13$, $ad_diseqc14$, $ad_diseqc15$ ]
+var ad_sys = [$ad_sys0$, $ad_sys1$, $ad_sys2$, $ad_sys3$, $ad_sys4$, $ad_sys5$, $ad_sys6$, $ad_sys7$, $ad_sys8$, $ad_sys9$, $ad_sys10$, $ad_sys11$, $ad_sys12$, $ad_sys13$, $ad_sys14$, $ad_sys15$ ]
+var ad_snr = [$ad_snr0$, $ad_snr1$, $ad_snr2$, $ad_snr3$, $ad_snr4$, $ad_snr5$, $ad_snr6$, $ad_snr7$, $ad_snr8$, $ad_snr9$, $ad_snr10$, $ad_snr11$, $ad_snr12$, $ad_snr13$, $ad_snr14$, $ad_snr15$ ]
+var ad_phyad = [$ad_phyad0$, $ad_phyad1$, $ad_phyad2$, $ad_phyad3$, $ad_phyad4$, $ad_phyad5$, $ad_phyad6$, $ad_phyad7$, $ad_phyad8$, $ad_phyad9$, $ad_phyad10$, $ad_phyad11$, $ad_phyad12$, $ad_phyad13$, $ad_phyad14$, $ad_phyad15$ ]
+var ad_phyfd = [$ad_phyfd0$, $ad_phyfd1$, $ad_phyfd2$, $ad_phyfd3$, $ad_phyfd4$, $ad_phyfd5$, $ad_phyfd6$, $ad_phyfd7$, $ad_phyfd8$, $ad_phyfd9$, $ad_phyfd10$, $ad_phyfd11$, $ad_phyfd12$, $ad_phyfd13$, $ad_phyfd14$, $ad_phyfd15$ ]
+var ad_allsys = ["$ad_allsys0$", "$ad_allsys1$", "$ad_allsys2$", "$ad_allsys3$", "$ad_allsys4$", "$ad_allsys5$", "$ad_allsys6$", "$ad_allsys7$", "$ad_allsys8$", "$ad_allsys9$", "$ad_allsys10$", "$ad_allsys11$", "$ad_allsys12$", "$ad_allsys13$", "$ad_allsys14$", "$ad_allsys15$" ]
+var ad_pids = ["$ad_pids0$", "$ad_pids1$", "$ad_pids2$", "$ad_pids3$", "$ad_pids4$", "$ad_pids5$", "$ad_pids6$", "$ad_pids7$", "$ad_pids8$", "$ad_pids9$", "$ad_pids10$", "$ad_pids11$", "$ad_pids12$", "$ad_pids13$", "$ad_pids14$", "$ad_pids15$" ]
+var ad_satip = ["$ad_satip0$", "$ad_satip1$", "$ad_satip2$", "$ad_satip3$", "$ad_satip4$", "$ad_satip5$", "$ad_satip6$", "$ad_satip7$", "$ad_satip8$", "$ad_satip9$", "$ad_satip10$", "$ad_satip11$", "$ad_satip12$", "$ad_satip13$", "$ad_satip14$", "$ad_satip15$" ]
+var st_enabled = [$st_enabled0$, $st_enabled1$, $st_enabled2$, $st_enabled3$, $st_enabled4$, $st_enabled5$, $st_enabled6$, $st_enabled7$, $st_enabled8$, $st_enabled9$, $st_enabled10$, $st_enabled11$, $st_enabled12$, $st_enabled13$, $st_enabled14$, $st_enabled15$ ]
+var st_adapter = [$st_adapter0$, $st_adapter1$, $st_adapter2$, $st_adapter3$, $st_adapter4$, $st_adapter5$, $st_adapter6$, $st_adapter7$, $st_adapter8$, $st_adapter9$, $st_adapter10$, $st_adapter11$, $st_adapter12$, $st_adapter13$, $st_adapter14$, $st_adapter15$ ]
+var st_rport = [$st_rport0$, $st_rport1$, $st_rport2$, $st_rport3$, $st_rport4$, $st_rport5$, $st_rport6$, $st_rport7$, $st_rport8$, $st_rport9$, $st_rport10$, $st_rport11$, $st_rport12$, $st_rport13$, $st_rport14$, $st_rport15$ ]
+var st_rhost = ["$st_rhost0$", "$st_rhost1$", "$st_rhost2$", "$st_rhost3$", "$st_rhost4$", "$st_rhost5$", "$st_rhost6$", "$st_rhost7$", "$st_rhost8$", "$st_rhost9$", "$st_rhost10$", "$st_rhost11$", "$st_rhost12$", "$st_rhost13$", "$st_rhost14$", "$st_rhost15$" ]
+var st_pids = ["$st_pids0$", "$st_pids1$", "$st_pids2$", "$st_pids3$", "$st_pids4$", "$st_pids5$", "$st_pids6$", "$st_pids7$", "$st_pids8$", "$st_pids9$", "$st_pids10$", "$st_pids11$", "$st_pids12$", "$st_pids13$", "$st_pids14$", "$st_pids15$" ]
+var st_useragent = ["$st_useragent0$", "$st_useragent1$", "$st_useragent2$", "$st_useragent3$", "$st_useragent4$", "$st_useragent5$", "$st_useragent6$", "$st_useragent7$", "$st_useragent8$", "$st_useragent9$", "$st_useragent10$", "$st_useragent11$", "$st_useragent12$", "$st_useragent13$", "$st_useragent14$", "$st_useragent15$" ]
+var st_play = [$st_play0$, $st_play1$, $st_play2$, $st_play3$, $st_play4$, $st_play5$, $st_play6$, $st_play7$, $st_play8$, $st_play9$, $st_play10$, $st_play11$, $st_play12$, $st_play13$, $st_play14$, $st_play15$ ]
+
+var max_adapters = 16;
+var max_streams = 64;
+var pol = ["", "(V)", "(H)", "(R)", "(L)"]
+var sys= [ "", "dvbc", "dvbcb", "dvbt", "dss", "dvbs", "dvbs2", "dvbh", "isdbt", "isdbs", "isdbc", "atsc", "atscmh", "dmbth", "cmmb", "dab", "dvbt2", "turbo", "dvbcc", "dvbc2" ]
+var myTable= "<table border='1'><tr><td style='width: 100px; color: red;'>Tuner</td>";
+    myTable+= "<td style='width: 100px; color: red; text-align: right;'>Status</td>";
+    myTable+="<td style='width: 100px; color: red; text-align: right;'>Frequency</td>";
+    myTable+="<td style='width: 100px; color: red; text-align: right;'>SR/BW</td>";
+    myTable+="<td style='width: 100px; color: red; text-align: right;'>Signal</td>";
+    myTable+="<td style='width: 100px; color: red; text-align: right;'>Streams</td>";
+    myTable+="<td style='width: 100px; color: red; text-align: right;'>Streams Pids</td></tr>";
+
+  for (var i=0; i<max_adapters; i++) {
+	if(ad_type[i] == 0)
+		continue;
+    myTable+="<tr><td style='width: 100px;'>" + i + "</td>";
+	var csys = "";
+	if(ad_sys[i] == 0)
+		csys = ad_allsys[i];
+	else
+		csys = sys[ad_sys[i]];
+	if(ad_enabled[i] == 1)
+		myTable+="<td style='width: 100px; text-align: right; color: green;' title='pids="+ad_pids[i]+"'>" + csys;
+	else
+		myTable+="<td style='width: 100px; text-align: right; color: red;' >" + ad_allsys[i];
+	if(ad_type[i] == 1){
+		myTable+="(" + ad_phyad[i] + "," + ad_phyfd[i] +") </td>";
+	}else{ 
+		myTable+="(" + ad_satip[i] + ")</td>";
+	}
+    myTable+="<td style='width: 100px; text-align: right;' >" + ad_freq[i] + ""+pol[ad_pol[i]]+"</td>";
+	if(ad_sys[i] == 0 || ad_sys[i] == 1 || ad_sys[i] == 2 || ad_sys[i] == 5 || ad_sys[i] == 6 || ad_sys[i] == 18 || ad_sys[i] == 19 )
+		myTable+="<td style='width: 100px;text-align: right;'>" + ad_sr[i] + "</td>";
+	else 
+		myTable+="<td style='width: 100px;text-align: right;'>" + ad_bw[i]/1000 + "MHZ</td>";
+
+	var signal = "LEV "+parseInt(ad_strength[i]/2.55) + "% SNR ";
+	if(ad_type[i] == 1) 
+		signal += parseInt(ad_snr[i]/2.55);
+	else
+		signal += parseInt(ad_snr[i]/0.15);
+	signal += "%";
+	if(ad_ber[i] > 0)
+		signal += " BER "+ad_ber[i];
+		
+	myTable+="<td style='width: 100px;text-align: right;'>" + signal + " </td>";
+
+	myTable +="<td style='width: 100px;text-align: center;'>";
+	for(var j=0;j<max_streams;j++)
+		if(st_enabled[j]==1 && st_adapter[j]==i)
+		{
+			var st_rh = st_rhost[j]+":"+st_rport[j];
+			if(ad_master[i] == j)
+				st_rh = "<b>"+st_rh+"</b>";
+			if(st_play[j] == 0)
+				st_rh = "<i>"+st_rh+"</i>";
+			myTable += st_rh+"("+st_useragent[j]+")<br>";
+		}
+	
+	myTable +="</td><td style='width: 100px;text-align: center;'>";
+
+	for(var j=0;j<max_streams;j++)
+		if(st_enabled[j]==1 && st_adapter[j]==i)
+		{
+			var st_p = st_pids[j];
+			if(ad_master[i] == j)
+				st_p = "<b>"+st_p+"</b>";
+			if(st_play[j] == 0)
+				st_p = "<i>"+st_p+"</i>";
+			myTable += st_p+"<br>";
+		}
+	
+	myTable +="</td></tr>";
+
+	
+  }  
+   myTable+="</table>";
+
+ document.write( myTable);
+
+//-->
+</script> 
 </body>
 </html>

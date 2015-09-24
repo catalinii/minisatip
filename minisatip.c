@@ -522,7 +522,7 @@ int read_rtsp(sockets * s)
 				sess_id = map_int(header_parameter(arg, i), NULL);
 				s->sid = find_session_id(sess_id);
 			}
-	if (s->sid < 0 && strstr(arg[1], "stream="))
+/*	if (s->sid < 0 && strstr(arg[1], "stream=")) // stream= in URL
 	{
 		char *str_id = strstr(arg[1], "stream=") + 7;
 		sess_id = map_intd(str_id, NULL, 0) - 1;
@@ -532,7 +532,8 @@ int read_rtsp(sockets * s)
 			LOG("Adopting the session id from the stream %d", s->sid);
 		}
 	}
-
+*/
+	
 	if (strstr(arg[1], "freq") || strstr(arg[1], "pids"))
 	{
 		sid = (streams *) setup_stream(arg[1], s);
