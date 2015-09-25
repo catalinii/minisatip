@@ -1124,7 +1124,7 @@ http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 		d = "Service Unavailable";
 		rc = 503;
 	}
-	static char resp[5000];
+	static char resp[10000];
 	desc1 = desc;
 	if (!lr)
 		lr = strlen(desc);

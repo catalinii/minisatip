@@ -1,8 +1,17 @@
-
+<!DOCTYPE html>
 <html>
+<head>
+<meta charset="utf-8"/>
+</head>
 <title>Minisatip/$version$ on $http_host$</title>
-<body>
-<script language="javascript" type="text/javascript">
+<body onload="JavaScript:timedRefresh(5000);">
+<p>This page will refresh every 5 seconds.</p>
+<script type="text/javascript">
+<!--
+function timedRefresh(timeoutPeriod) {
+   setTimeout("location.reload(true);",timeoutPeriod);
+}
+
 var ad_type = [$ad_type0$, $ad_type1$, $ad_type2$, $ad_type3$, $ad_type4$, $ad_type5$, $ad_type6$, $ad_type7$, $ad_type8$, $ad_type9$, $ad_type10$, $ad_type11$, $ad_type12$, $ad_type13$, $ad_type14$, $ad_type15$ ]
 var ad_enabled = [$ad_enabled0$, $ad_enabled1$, $ad_enabled2$, $ad_enabled3$, $ad_enabled4$, $ad_enabled5$, $ad_enabled6$, $ad_enabled7$, $ad_enabled8$, $ad_enabled9$, $ad_enabled10$, $ad_enabled11$, $ad_enabled12$, $ad_enabled13$, $ad_enabled14$, $ad_enabled15$ ]
 var ad_sys = [$ad_sys0$, $ad_sys1$, $ad_sys2$, $ad_sys3$, $ad_sys4$, $ad_sys5$, $ad_sys6$, $ad_sys7$, $ad_sys8$, $ad_sys9$, $ad_sys10$, $ad_sys11$, $ad_sys12$, $ad_sys13$, $ad_sys14$, $ad_sys15$ ]
@@ -113,3 +122,4 @@ var myTable= "<table border='1'><tr><td style='width: 100px; color: red;'>Tuner<
 </script> 
 </body>
 </html>
+

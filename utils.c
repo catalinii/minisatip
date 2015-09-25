@@ -532,7 +532,7 @@ void _log(int level, char * file, int line, char *fmt, ...)
 	va_list arg;
 	int len, len1, both;
 	static int idx, times;
-	static char output[2][2000];
+	static char output[2][2000]; // prints just the first 2000 bytes from the message 
 
 	/* Check if the message should be logged */
 	opts.last_log = fmt;
@@ -798,10 +798,12 @@ void process_file(sockets *so, char *s, int len, char *ctype)
 				respond = 0;
 			}
 			write(so->sock, outp, io);
+			outp[io] = 0;
 			LOG("%s", outp);
 			io = 0;
 		}
 	}
+	outp[io] = 0;
 	if (respond)
 		http_response(so, 200, ctype, outp, 0, 0); // sending back the response with Content-Length if output < 8192
 	else

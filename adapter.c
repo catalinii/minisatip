@@ -1045,7 +1045,7 @@ char* get_adapter_pids(int aid, char *dest, int max_size)
 	int len = 0;
 	int pids[MAX_PIDS];
 	int lp, i;
-	adapter *ad = get_adapter(aid);
+	adapter *ad = get_adapter_nw(aid);
 	dest[0] = 0;
 
 	if (!ad)

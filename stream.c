@@ -1137,7 +1137,7 @@ int rtcp_confirm(sockets *s)
 
 char *get_stream_rhost(int s_id, char *dest, int ld)
 {
-	streams *sid = get_sid(s_id);
+	streams *sid = get_sid_nw(s_id);
 	dest[0] = 0;
 	if (!sid)
 		return dest;
