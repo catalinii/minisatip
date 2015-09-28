@@ -112,9 +112,6 @@ void usage()
 	printf(
 			"minisatip [-[flzg]] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] [-p public_host] [-s [DELSYS:]host[:port] [-a x:y:z] [-m mac] [-e X-Y,Z] [-o oscam_host:dvbapi_port] [-c X] [-b X:Y] [-u A1:S1-F1[-PIN]] [-j A1:S1-F1[-PIN]] [-x http_port] [-y rtsp_port]   \n\n \
 \n\
--D --device-id DVC_ID: specify the device id (in case there are multiple SAT>IP servers in the network)\n \
-	eg: -d 4 \n\
-\n\
 -a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means auto-detect)\n\
 	eg: -a 1:2:3  \n\
 	- it will report 1 dvb-s2 device, 2 dvb-t2 devices and 3 dvb-c devices \n\
@@ -130,7 +127,8 @@ void usage()
 \tThe higher number between the commited and uncommited will be sent first.\n\
 	eg: -d 0:1-0  (which is the default for each adapter).\n\
 \n\
--D --document-root directory: document root for the minisatip web page and images\n\
+-D --device-id DVC_ID: specify the device id (in case there are multiple SAT>IP servers in the network)\n \
+	eg: -d 4 \n\
 \n\
 -e --enable-adapters list_of_enabled adapters: enable only specified adapters\n\
 	eg: -e 0-2,5,7 (no spaces between parameters)\n\
@@ -160,6 +158,8 @@ void usage()
 -r --remote-rtp  remote_rtp_host: send the rtp stream to remote_rtp_host instead of the ip the connection comes from\n \
 	eg: -r 192.168.7.9\n \
 \n\
+-R --document-root directory: document root for the minisatip web page and images\n\
+\n\
 -s --satip-servers DELSYS:host:port - specify the remote satip host and port with delivery system DELSYS, it is possible to use multiple -s \n\
 	DELSYS - can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, isdbt, atsc, dvbcb ( - DVBC_ANNEX_B ) [default: dvbs2]\n\
 	host - the server of the satip server\n\
@@ -182,6 +182,10 @@ void usage()
 \n\
 -x --http-port port: port for listening on http [default: 8080]\n\
 	eg: -x 9090 \n\
+\n\
+-X --xml PATH: the path to the xml that is provided as part of the satip protocol	\n\
+    by default desc.xml is provided by minisatip without needing an additional file, \n\
+    however satip.xml is included if it needs to be customized\n\
 \n\
 -y --rtsp-port rtsp_port: port for listening for rtsp requests [default: 554]\n\
 	eg: -y 5544 \n\
