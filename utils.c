@@ -53,6 +53,7 @@
 
 
 extern struct struct_opts opts;
+extern char version[], app_name[];
 
 #define MAX_DATA 1500 // 16384
 #define MAX_SINFO 100
@@ -456,7 +457,7 @@ becomeDaemon()
 
 		if (0 < readlink(buf, path, sizeof(path)) && 0 == strcmp(pn, path))
 		{
-			LOGL(0, "Found minisatip running with pid %d, killing....", pid);
+			LOGL(0, "Found %s running with pid %d, killing....", app_name, pid);
 			kill(pid, SIGINT);
 			usleep(500);
 		}
@@ -501,10 +502,10 @@ becomeDaemon()
 
 	if (fd != STDIN_FILENO) /* 'fd' should be 0 */
 		return -1;
-	if (stat("/tmp/log", &sb) == -1)
-		fd = open("/tmp/log", O_RDWR | O_CREAT, 0666);
+	if (stat("/tmp/minisatip.log", &sb) == -1)
+		fd = open("/tmp/minisatip.log", O_RDWR | O_CREAT, 0666);
 	else
-		fd = open("/tmp/log", O_RDWR | O_APPEND);
+		fd = open("/tmp/minisatip.log", O_RDWR | O_APPEND);
 	if (fd != STDOUT_FILENO) /* 'fd' should be 1 */
 		return -1;
 	if (dup2(STDOUT_FILENO, STDERR_FILENO) != STDERR_FILENO)

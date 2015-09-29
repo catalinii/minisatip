@@ -48,6 +48,7 @@
 
 extern char *fe_delsys[];
 extern struct struct_opts opts;
+extern char version[], app_name[];
 
 uint16_t apid[MAX_ADAPTERS][MAX_PIDS]; // pids to add 
 uint16_t dpid[MAX_ADAPTERS][MAX_PIDS]; // pids to delete
@@ -413,8 +414,8 @@ int http_request(adapter *ad, char *url, char *method)
 	if (ad->sent_transport == 0 && method[0] == 'S')
 	{
 		ad->sent_transport = 1;
-		sprintf(session, "Transport:RTP/AVP;unicast;client_port=%d-%d\r\n",
-				ad->listen_rtp, ad->listen_rtp + 1);
+		sprintf(session, "Transport:RTP/AVP;unicast;client_port=%d-%d\r\nUser-Agent: %s %s\r\n",
+				ad->listen_rtp, ad->listen_rtp + 1, app_name, version);
 	}
 	else
 	{

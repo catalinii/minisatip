@@ -203,7 +203,6 @@ setup_stream(char *str, sockets * s)
 	streams *sid;
 
 	transponder t;
-	init_hw();
 	detect_dvb_parameters(str, &t);
 	LOG("Setup stream %d parameters, sock_id %d, handle %d", s->sid, s->id,
 			s->sock);
@@ -1148,7 +1147,7 @@ char *get_stream_rhost(int s_id, char *dest, int ld)
 
 int get_stream_rport(int s_id)
 {
-	streams *sid = get_sid(s_id);
+	streams *sid = get_sid_nw(s_id);
 	if (!sid)
 		return 0;
 	return ntohs(sid->sa.sin_port);
@@ -1198,6 +1197,7 @@ _symbols stream_sym[] =
 { "st_enabled", VAR_ARRAY_INT8, &st[0].enabled, 1, MAX_STREAMS, sizeof(st[0]) },
 { "st_play", VAR_ARRAY_INT, &st[0].do_play, 1, MAX_STREAMS, sizeof(st[0]) },
 { "st_adapter", VAR_ARRAY_INT, &st[0].adapter, 1, MAX_STREAMS, sizeof(st[0]) },
+{ "st_useragent", VAR_ARRAY_STRING, &st[0].useragent, 1, MAX_STREAMS, sizeof(st[0]) },
 { "st_rhost", VAR_FUNCTION_STRING, (void *) &get_stream_rhost, 0, 0, 0 },
 { "st_rport", VAR_FUNCTION_INT, (void *) &get_stream_rport, 0, 0, 0 },
 { "st_pids", VAR_FUNCTION_STRING, (void *) &get_stream_pids, 0, 0, 0 },

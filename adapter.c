@@ -294,6 +294,7 @@ void dump_pids(int aid)
 int get_free_adapter(int freq, int pol, int msys, int src)
 {
 	int i;
+	init_hw();
 
 	i = (src > 0) ? src - 1 : 0;
 	LOG("get free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d f:%d pol=%d",

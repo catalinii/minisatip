@@ -46,6 +46,8 @@
 struct struct_opts opts;
 
 #define DESC_XML "desc.xml"
+char version[] = VERSION;
+char app_name[] = "minisatip";
 
 extern sockets s[MAX_SOCKS];
 char public[] = "Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN";
@@ -110,7 +112,7 @@ static const struct option long_options[] =
 void usage()
 {
 	printf(
-			"minisatip [-[flzg]] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] [-p public_host] [-s [DELSYS:]host[:port] [-a x:y:z] [-m mac] [-e X-Y,Z] [-o oscam_host:dvbapi_port] [-c X] [-b X:Y] [-u A1:S1-F1[-PIN]] [-j A1:S1-F1[-PIN]] [-x http_port] [-y rtsp_port]   \n\n \
+			"%s [-[flzg]] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] [-p public_host] [-s [DELSYS:]host[:port] [-a x:y:z] [-m mac] [-e X-Y,Z] [-o oscam_host:dvbapi_port] [-c X] [-b X:Y] [-u A1:S1-F1[-PIN]] [-j A1:S1-F1[-PIN]] [-x http_port] [-y rtsp_port]   \n\n \
 \n\
 -a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means auto-detect)\n\
 	eg: -a 1:2:3  \n\
@@ -194,6 +196,7 @@ void usage()
 -z --check-signal force to get signal from the DVB hardware every 200ms (use with care, only when needed)\n\
 	- retrieving signal could take sometimes more than 200ms which could impact the rtp stream, using it only when you need to adjust your dish\n\
 ",
+			app_name,
 			ADAPTER_BUFFER,
 			DVR_BUFFER);
 	exit(1);
@@ -294,8 +297,8 @@ void set_options(int argc, char *argv[])
 
 		case VERSION_OPT:
 		{
-			LOGL(0, "minisatip version %s, compiled with s2api version: %04X",
-					VERSION, DVBAPIVERSION);
+			LOGL(0, "%s version %s, compiled with s2api version: %04X",
+					app_name, version, DVBAPIVERSION);
 			exit(0);
 		}
 
@@ -377,7 +380,7 @@ void set_options(int argc, char *argv[])
 		case DVBAPI_OPT:
 		{
 #ifdef DISABLE_DVBCSA
-			LOGL(0, "minisatip was not compiled with DVBCSA support, please install libdvbcsa (libdvbcsa-dev in Ubuntu) and change the Makefile");
+			LOGL(0, "%s was not compiled with DVBCSA support, please install libdvbcsa (libdvbcsa-dev in Ubuntu) and change the Makefile", app_name);
 			exit (0);
 
 #endif
@@ -399,7 +402,7 @@ void set_options(int argc, char *argv[])
 
 		case SATIPCLIENT_OPT:
 #ifdef DISABLE_SATIPCLIENT
-			LOGL(0, "minisatip was not compiled with satip client support, please change the Makefile");
+			LOGL(0, "%s was not compiled with satip client support, please change the Makefile", app_name);
 			exit (0);
 
 #endif
@@ -702,9 +705,9 @@ int read_http(sockets * s)
 					"<root xmlns=\"urn:schemas-upnp-org:device-1-0\" configId=\"0\">"
 					"<specVersion><major>1</major><minor>1</minor></specVersion>"
 					"<device><deviceType>urn:ses-com:device:SatIPServer:1</deviceType>"
-					"<friendlyName>minisatip</friendlyName><manufacturer>cata</manufacturer>"
+					"<friendlyName>%s</friendlyName><manufacturer>cata</manufacturer>"
 					"<manufacturerURL>http://github.com/catalinii/minisatip</manufacturerURL>"
-					"<modelDescription>minisatip for Linux</modelDescription><modelName>minisatip</modelName>"
+					"<modelDescription>%s for Linux</modelDescription><modelName>%s</modelName>"
 					"<modelNumber>1.1</modelNumber><modelURL></modelURL><serialNumber>1</serialNumber><UDN>uuid:%s</UDN>"
 					"<iconList>"
 					"<icon><mimetype>image/png</mimetype><width>48</width><height>48</height><depth>24</depth><url>/sm.png</url></icon>"
@@ -774,7 +777,7 @@ int read_http(sockets * s)
 		if (tuner_s2 + tuner_t + tuner_c + tuner_t2 + tuner_c2 == 0)
 			strcpy(adapters, "DVBS2-0,");
 		adapters[strlen(adapters) - 1] = 0;
-		snprintf(buf, sizeof(buf), xml, uuid, opts.http_host, adapters,
+		snprintf(buf, sizeof(buf), xml, app_name, app_name, app_name, uuid, opts.http_host, adapters,
 				opts.playlist);
 		sprintf(headers,
 				"CACHE-CONTROL: no-cache\r\nContent-type: text/xml\r\nX-SATIP-RTSP-Port: %d",
@@ -841,7 +844,7 @@ int ssdp_discovery(sockets * s)
 			"LOCATION: http://%s/%s\r\n"
 			"NT: %s\r\n"
 			"NTS: ssdp:alive \r\n"
-			"SERVER: Linux/1.0 UPnP/1.1 minisatip/%s\r\n"
+			"SERVER: Linux/1.0 UPnP/1.1 %s/%s\r\n"
 			"USN: uuid:%s%s\r\n"
 			"BOOTID.UPNP.ORG: %d\r\n"
 			"CONFIGID.UPNP.ORG: 0\r\n" "DEVICEID.SES.COM: %d\r\n\r\n\0";
@@ -871,7 +874,7 @@ int ssdp_discovery(sockets * s)
 
 	for (i = 0; i < 3; i++)
 	{
-		sprintf(buf, reply, opts.disc_host, opts.http_host, opts.xml_path, nt[i] + 2, VERSION,
+		sprintf(buf, reply, opts.disc_host, opts.http_host, opts.xml_path, nt[i] + 2, app_name, version,
 				uuid, i == 1 ? "" : nt[i], opts.bootid, opts.device_id);
 		salen = sizeof(ssdp_sa);
 		LOGL(3, "Discovery packet %d:\n%s", i + 1, buf);
@@ -890,7 +893,7 @@ int ssdp_reply(sockets * s)
 			"DATE: %s\r\n"
 			"EXT:\r\n"
 			"LOCATION: http://%s/%s\r\n"
-			"SERVER: Linux/1.0 UPnP/1.1 minisatip/%s\r\n"
+			"SERVER: Linux/1.0 UPnP/1.1 %s/%s\r\n"
 			"ST: urn:ses-com:device:SatIPServer:1\r\n"
 			"USN: uuid:%s::urn:ses-com:device:SatIPServer:1\r\n"
 			"BOOTID.UPNP.ORG: %d\r\n"
@@ -899,7 +902,7 @@ int ssdp_reply(sockets * s)
 			"HOST: %s:1900\r\n"
 			"MAN: \"ssdp:discover\"\r\n"
 			"ST: urn:ses-com:device:SatIPServer:1\r\n"
-			"USER-AGENT: Linux/1.0 UPnP/1.1 minisatip/%s\r\n"
+			"USER-AGENT: Linux/1.0 UPnP/1.1 %s/%s\r\n"
 			"DEVICEID.SES.COM: %d\r\n\0";
 	socklen_t salen;
 	char *man, *man_sd, *didsescom, *ruuid, *rdid;
@@ -934,7 +937,7 @@ int ssdp_reply(sockets * s)
 		if (rdid && opts.device_id == map_int(strip(rdid + 17), NULL))
 		{
 			snprintf(buf, sizeof(buf), device_id_conflict, getlocalip(),
-			VERSION, opts.device_id);
+			app_name, version, opts.device_id);
 			LOG(
 					"A new device joined the network with the same Device ID:  %s, asking to change DEVICEID.SES.COM",
 					get_socket_rhost(s->id, ra, sizeof(ra)));
@@ -967,7 +970,7 @@ int ssdp_reply(sockets * s)
 	if (strncmp((const char*) s->buf, "HTTP/1", 6) == 0)
 		LOG_AND_RETURN(0, "ssdp_reply: the message is a reply, ignoring....");
 
-	sprintf(buf, reply, get_current_timestamp(), opts.http_host, opts.xml_path, VERSION, uuid,
+	sprintf(buf, reply, get_current_timestamp(), opts.http_host, opts.xml_path, app_name, version, uuid,
 			opts.bootid, did);
 
 	LOG("ssdp_reply fd: %d -> %s:%d, bootid: %d deviceid: %d http: %s", ssdp,
@@ -1017,11 +1020,11 @@ int main(int argc, char *argv[])
 	if (opts.daemon)
 		becomeDaemon();
 	if (opts.slog)
-		openlog("minisatip",
+		openlog(app_name,
 		LOG_NDELAY | LOG_NOWAIT | LOG_PID | (opts.slog > 1 ? LOG_PERROR : 0),
 		LOG_DAEMON);
-	LOGL(0, "Starting minisatip version %s, compiled with s2api version: %04X",
-			VERSION, DVBAPIVERSION);
+	LOGL(0, "Starting %s version %s, compiled with s2api version: %04X",
+			app_name, version, DVBAPIVERSION);
 	readBootID();
 	if ((ssdp = udp_bind(NULL, 1900)) < 1)
 		FAIL("SSDP: Could not bind on udp port 1900");
@@ -1160,7 +1163,7 @@ http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 	return resp;
 }
 
-char version[] = VERSION;
+
 _symbols minisatip_sym[] =
 {
 { "http_host", VAR_PSTRING, &opts.http_host, 0, 0, 0 },

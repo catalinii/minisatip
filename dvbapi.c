@@ -48,6 +48,8 @@
 #include "tables.h"
 
 extern struct struct_opts opts;
+extern char version[], app_name[];
+
 const int64_t DVBAPI_ITEM = 0x1000000000000;
 int dvbapi_sock = -1;
 int sock;
@@ -631,7 +633,7 @@ void send_client_info(sockets *s)
 	unsigned char len;
 	copy32(buf, 0, DVBAPI_CLIENT_INFO);
 	copy16(buf, 4, DVBAPI_PROTOCOL_VERSION);
-	len = sprintf(buf + 7, "minisatip/%s", VERSION);
+	len = sprintf(buf + 7, "%s/%s", app_name, version);
 	buf[6] = len;
 	dvbapi_is_enabled = 1;
 	TEST_WRITE(write(s->sock, buf, len + 7));
