@@ -72,6 +72,7 @@ int fix_master_sid(int adapter);
 int rtcp_confirm(sockets *s);
 char *get_stream_rhost(int s_id, char *dest, int ld);
 int get_stream_rport(int s_id);
+int get_streams_for_adapter(int aid);
 
 #define get_sid(a) get_sid1(a, __FILE__, __LINE__,1)
 #define get_sid_nw(a) get_sid1(a, __FILE__, __LINE__,0)

@@ -241,6 +241,9 @@ int tcp_connect(char *addr, int port, struct sockaddr_in *serv, int blocking)
 		close(sock);
 		return -1;
 	}
+	
+	set_tcp_socket_timeout(sock);
+
 	if (blocking)
 	{
 		int flags = fcntl(sock, F_GETFL, 0);
@@ -257,7 +260,6 @@ int tcp_connect(char *addr, int port, struct sockaddr_in *serv, int blocking)
 			return -1;
 		}
 	}
-	set_tcp_socket_timeout(sock);
 	LOG("New TCP socket %d connected to %s:%d", sock, addr, port);
 	return sock;
 }

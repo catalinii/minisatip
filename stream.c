@@ -1135,6 +1135,15 @@ int rtcp_confirm(sockets *s)
 	return 0;
 }
 
+int get_streams_for_adapter(int aid)
+{
+	int i, sa = 0;
+	for (i = 0; i < MAX_STREAMS; i++)
+		if (st[i].enabled && st[i].adapter == aid)
+			sa++;
+	return sa;
+}
+
 char *get_stream_rhost(int s_id, char *dest, int ld)
 {
 	streams *sid = get_sid_nw(s_id);
@@ -1197,7 +1206,8 @@ _symbols stream_sym[] =
 { "st_enabled", VAR_ARRAY_INT8, &st[0].enabled, 1, MAX_STREAMS, sizeof(st[0]) },
 { "st_play", VAR_ARRAY_INT, &st[0].do_play, 1, MAX_STREAMS, sizeof(st[0]) },
 { "st_adapter", VAR_ARRAY_INT, &st[0].adapter, 1, MAX_STREAMS, sizeof(st[0]) },
-{ "st_useragent", VAR_ARRAY_STRING, &st[0].useragent, 1, MAX_STREAMS, sizeof(st[0]) },
+{ "st_useragent", VAR_ARRAY_STRING, &st[0].useragent, 1, MAX_STREAMS,
+		sizeof(st[0]) },
 { "st_rhost", VAR_FUNCTION_STRING, (void *) &get_stream_rhost, 0, 0, 0 },
 { "st_rport", VAR_FUNCTION_INT, (void *) &get_stream_rport, 0, 0, 0 },
 { "st_pids", VAR_FUNCTION_STRING, (void *) &get_stream_pids, 0, 0, 0 },

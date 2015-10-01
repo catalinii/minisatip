@@ -60,6 +60,19 @@ int adapter_timeout(sockets *s)
 	int do_close = 1, i, max_close = 0;
 	int rtime = getTick();
 	adapter *ad = get_adapter(s->sid);
+	if(!ad)
+		return 1;
+	
+	if(ad->force_close)
+		return 1;
+	
+	if(get_streams_for_adapter(ad->id) > 0)
+	{
+		ad->rtime = getTick();
+		s->rtime = ad->rtime;
+		LOG("Keeping the adapter %d open as there are active streams", ad->id);
+		return 0;
+	}
 	for (i = 0; i < MAX_ADAPTERS; i++)
 	{
 		if (a[i].enabled && rtime - a[i].rtime < s->close_sec)
@@ -72,9 +85,6 @@ int adapter_timeout(sockets *s)
 			s->sid, do_close, max_close);
 	if (!do_close)
 		s->rtime = max_close;
-
-	if (ad->force_close)
-		do_close = 1;
 
 	return do_close;
 }
@@ -154,6 +164,7 @@ int init_hw()
 			a[i].pid_err = a[i].dec_err = 0;
 			a[i].new_gs = 0;
 			a[i].force_close = 0;
+			a[i].rtime =getTick();
 			a[i].sock = sockets_add(a[i].dvr, NULL, i, TYPE_DVR,
 					(socket_action) read_dmx,
 					(socket_action) close_adapter_for_socket,

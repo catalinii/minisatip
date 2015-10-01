@@ -600,7 +600,6 @@ int read_rtsp(sockets * s)
 				http_response(s, -rv, NULL, NULL, cseq, 0);
 				return 0;
 			}
-		get_socket_rhost(sid->sid, ra, sizeof(ra));
 		buf[0] = 0;
 		if (transport)
 		{
@@ -612,6 +611,8 @@ int read_rtsp(sockets * s)
 			s_timeout = (
 					(sid->timeout > 20000) ? sid->timeout : opts.timeout_sec)
 					/ 1000;
+			get_stream_rhost(sid->sid, ra, sizeof(ra));
+			
 			switch (sid->type)
 			{
 			case STREAM_RTSP_UDP:

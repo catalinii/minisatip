@@ -51,7 +51,6 @@
 #include "utils.h"
 #include "minisatip.h"
 
-
 extern struct struct_opts opts;
 extern char version[], app_name[];
 
@@ -500,12 +499,14 @@ becomeDaemon()
 
 	fd = open("/dev/null", O_RDWR);
 
+	snprintf(buf, sizeof(buf), "/tmp/%s.log", app_name);
+	
 	if (fd != STDIN_FILENO) /* 'fd' should be 0 */
 		return -1;
-	if (stat("/tmp/minisatip.log", &sb) == -1)
-		fd = open("/tmp/minisatip.log", O_RDWR | O_CREAT, 0666);
+	if (stat(buf, &sb) == -1)
+		fd = open(buf, O_RDWR | O_CREAT, 0666);
 	else
-		fd = open("/tmp/minisatip.log", O_RDWR | O_APPEND);
+		fd = open(buf, O_RDWR | O_APPEND);
 	if (fd != STDOUT_FILENO) /* 'fd' should be 1 */
 		return -1;
 	if (dup2(STDOUT_FILENO, STDERR_FILENO) != STDERR_FILENO)
