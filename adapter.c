@@ -674,16 +674,13 @@ int set_adapter_parameters(int aid, int sid, transponder * tp)
 					ad->tp.freq, ad->tp.sr, ad->tp.pol, ad->tp.plp,
 					ad->tp.diseqc, ad->tp.mtype, tp->freq, tp->sr, tp->pol,
 					tp->plp, tp->diseqc, tp->mtype);
+					
 		mark_pids_deleted(aid, -1, NULL);
 		if (update_pids(aid))
 			return -1;
 		ad->do_tune = 1;
 	}
-	// just 1 stream per adapter and pids= specified
-//	if (ad->sid_cnt == 1 && tp->pids)
-//	{
-//		mark_pids_deleted (aid, -1, NULL);
-//	}
+
 	copy_dvb_parameters(tp, &ad->tp);
 
 	if (ad->tp.pids) // pids can be specified in SETUP and then followed by a delpids in PLAY, make sure the behaviour is right

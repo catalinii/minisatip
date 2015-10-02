@@ -685,7 +685,10 @@ int read_rtsp(sockets * s)
 		}
 		else if (strncmp(arg[0], "OPTIONS", 8) == 0)
 		{
-			http_response(s, 200, public, NULL, cseq, 0);
+//			if(!get_sid(s->sid))
+//				http_response(s, 454, public, NULL, cseq, 0);
+//			else
+				http_response(s, 200, public, NULL, cseq, 0);
 		}
 	}
 	return 0;

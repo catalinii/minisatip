@@ -76,7 +76,11 @@ int satipc_reply(sockets * s)
 	la = split(arg, (char *) s->buf, 50, ' ');
 	rc = map_int(arg[1], NULL);
 	if (rc == 454)
+	{
 		ad->sent_transport = 0;
+		ad->want_tune = 1;		
+		ad->want_commit = 1;
+	}
 	else if (rc != 200)
 		ad->err = 1;
 	sid = NULL;
@@ -222,7 +226,7 @@ int satipc_open_device(adapter *ad)
 	ad->rtcp_sock = sockets_add(ad->rtcp, NULL, ad->id, TYPE_TCP,
 			(socket_action) satipc_rtcp_reply, (socket_action) satipc_close,
 			NULL);
-	sockets_timeout(ad->fe_sock, 25000); // 25s
+	sockets_timeout(ad->fe_sock, 15000); // 15s
 	set_socket_receive_buffer(ad->dvr, opts.output_buffer);
 	if (ad->fe_sock < 0 || ad->dvr < 0 || ad->rtcp < 0 || ad->rtcp_sock < 0)
 	{
@@ -414,6 +418,8 @@ int http_request(adapter *ad, char *url, char *method)
 	if (ad->sent_transport == 0 && method[0] == 'S')
 	{
 		ad->sent_transport = 1;
+		ad->stream_id = -1;
+		ad->session[0] = 0;
 		sprintf(session, "Transport:RTP/AVP;unicast;client_port=%d-%d\r\nUser-Agent: %s %s\r\n",
 				ad->listen_rtp, ad->listen_rtp + 1, app_name, version);
 	}
@@ -483,18 +489,21 @@ void satipc_commit(adapter *ad)
 	char url[400];
 	int len = 0, i;
 	LOG(
-			"satipc: commit for adapter %d pids to add %d, pids to delete %d, expect_reply %d",
-			ad->id, lap[ad->id], ldp[ad->id], ad->expect_reply);
+			"satipc: commit for adapter %d pids to add %d, pids to delete %d, expect_reply %d, want_tune %d",
+			ad->id, lap[ad->id], ldp[ad->id], ad->expect_reply, ad->want_tune);
 
 	if (lap[ad->id] + ldp[ad->id] == 0)
-		return;
+		 if(ad->sent_transport || !ad->tp.freq)
+			return;
 
 	if (ad->expect_reply)
 	{
 		ad->want_commit = 1;
 		return;
 	}
-
+	if(ad->sent_transport == 0)
+		ad->want_tune = 1;
+	
 	ad->want_commit = 0;
 	if (ad->want_tune)
 	{

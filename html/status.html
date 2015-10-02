@@ -74,15 +74,22 @@ var myTable= "<table border='1'><tr><td style='width: 100px; color: red;'>Tuner<
 	else 
 		myTable+="<td style='width: 100px;text-align: right;'>" + ad_bw[i]/1000 + "MHZ</td>";
 
-	var signal = "LEV "+parseInt(ad_strength[i]/2.55) + "% SNR ";
-	if(ad_type[i] == 1) 
-		signal += parseInt(ad_snr[i]/2.55);
+	var signal = "";
+	if(ad_enabled[i] == 0)
+	{
+		signal = "OFFLINE";
+	}
 	else
-		signal += parseInt(ad_snr[i]/0.15);
-	signal += "%";
-	if(ad_ber[i] > 0)
-		signal += " BER "+ad_ber[i];
-		
+	{
+		signal = "LEV "+parseInt(ad_strength[i]/2.55) + "% SNR ";
+		if(ad_type[i] == 1) 
+			signal += parseInt(ad_snr[i]/2.55);
+		else
+			signal += parseInt(ad_snr[i]/0.15);
+		signal += "%";
+		if(ad_ber[i] > 0)
+			signal += " BER "+ad_ber[i];
+	}	
 	myTable+="<td style='width: 100px;text-align: right;'>" + signal + " </td>";
 
 	myTable +="<td style='width: 100px;text-align: center;'>";

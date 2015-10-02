@@ -447,8 +447,8 @@ becomeDaemon()
 	char buf[255];
 
 	memset(path, 0, sizeof(path));
-
-	if ((f = fopen(PID_FILE, "rt")))
+	snprintf(buf, sizeof(buf), PID_FILE, app_name);
+	if ((f = fopen(buf, "rt")))
 	{
 		fscanf(f, "%d", &pid);
 		fclose(f);
