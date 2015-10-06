@@ -8,7 +8,7 @@
 #include "utils.h"
 
 
-#define VERSION_BUILD "69"
+#define VERSION_BUILD "70"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.3.,VERSION_BUILD,)
 
@@ -53,6 +53,7 @@ struct struct_opts
 	int drop_encrypted;
 	int rtsp_port;
 	int satip_addpids;
+	int satip_setup_pids;
 	char playlist[200];
 	char satip_servers[100];
 	char *document_root;

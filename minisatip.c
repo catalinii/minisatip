@@ -233,6 +233,7 @@ void set_options(int argc, char *argv[])
 	opts.rtsp_port = 554;
 	opts.clean_psi = 0;
 	opts.satip_addpids = 0;
+	opts.satip_setup_pids = 0;
 	opts.output_buffer = 512 * 1024;
 	opts.satip_servers[0] = 0;
 	opts.document_root = "html";

@@ -123,7 +123,9 @@ var myTable= "<table border='1'><tr><td style='width: 100px; color: red;'>Tuner<
   }  
    myTable+="</table>";
 
- document.write( myTable);
+var el = document.createElement('div');
+el.innerHTML = myTable;
+document.body.appendChild(el);
 
 //-->
 </script> 

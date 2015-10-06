@@ -252,10 +252,10 @@ int tcp_connect(char *addr, int port, struct sockaddr_in *serv, int blocking)
 
 	if (connect(sock, (struct sockaddr *) serv, sizeof(*serv)) < 0)
 	{
-		LOGL(0, "tcp_connect: failed: connect to %s:%d failed: %s", addr, port,
-				strerror(errno));
 		if (errno != EINPROGRESS)
 		{
+			LOGL(0, "tcp_connect: failed: connect to %s:%d failed: %s", addr, port,
+				strerror(errno));
 			close(sock);
 			return -1;
 		}

@@ -18,6 +18,13 @@ typedef struct ca_device ca_device_t;
 #define PMTCA_COMPLETE 8
 #define CLEAN_PMT 16
 
+#define RTSP_SETUP 1
+#define RTSP_PLAY 2
+#define RTSP_OPTIONS 3
+#define RTSP_TEARDOWN 4
+#define RTSP_DESCRIBE 5
+
+
 typedef struct struct_pid
 {
 	int pid;					 // pid for this demux - not used
@@ -85,11 +92,12 @@ typedef struct struct_adapter
 	int stream_id;
 	int listen_rtp;
 	int rtcp, rtcp_sock, cseq;
-	int err, expect_reply, last_connect;
+	int err, last_connect;
 	int wp, qp; // written packet, queued packet
-	int want_commit, want_tune, sent_transport;
 	char ignore_packets; // ignore packets coming from satip server while tuning
-	char satip_fe;
+	char satip_fe, last_cmd;
+	char expect_reply, force_commit, want_commit, want_tune, sent_transport;
+	int satip_last_setup;
 	uint32_t rcvp, repno, rtp_miss, rtp_ooo;   // rtp statstics
 	uint16_t rtp_seq;
 	Set_pid set_pid;
