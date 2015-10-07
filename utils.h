@@ -7,6 +7,7 @@ unsigned char *getItem(int64_t key);
 int getItemLen(int64_t key);
 int setItem(int64_t key, unsigned char *data, int len, int pos);
 int delItem(int64_t key);
+int delItemP(void *p);
 int split (char **rv, char *s, int lrv, char sep);
 int map_int (char *s, char ** v);
 int map_intd (char *s, char ** v, int dv);

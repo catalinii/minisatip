@@ -56,6 +56,8 @@ int sock;
 int dvbapi_is_enabled = 0;
 int haveDvbapi = 0;
 int batchSize;
+int dvbapi_protocol_version = DVBAPI_PROTOCOL_VERSION;
+
 SKey keys[MAX_KEYS];
 unsigned char read_buffer[1500];
 
@@ -90,7 +92,7 @@ int dvbapi_reply(sockets * s)
 	unsigned char *b = s->buf;
 	SKey *k;
 	int change_endianness = 0;
-	unsigned int op, version, _pid;
+	unsigned int op, _pid;
 	int k_id, a_id = 0, pos = 0;
 	int demux, filter;
 	SPid *p;
@@ -132,10 +134,13 @@ int dvbapi_reply(sockets * s)
 
 			if (s->rlen < 6)
 				return 0;
-			dvbapi_copy16r(version, b, 4)
+			dvbapi_copy16r(dvbapi_protocol_version, b, 4)
 			;
-			LOG("dvbapi: server version %d found, name = %s", version, b + 7)
+			LOG("dvbapi: server version %d found, name = %s",
+					dvbapi_protocol_version, b + 7)
 			;
+			if (dvbapi_protocol_version > DVBAPI_PROTOCOL_VERSION)
+				dvbapi_protocol_version = DVBAPI_PROTOCOL_VERSION;
 			pos = 6 + strlen(b + 6) + 1;
 			break;
 
@@ -267,6 +272,65 @@ int dvbapi_reply(sockets * s)
 						cw[4], cw[5], cw[6], cw[7]);
 			break;
 		}
+
+		case DVBAPI_ECM_INFO:
+		{
+			int pos1 = s->rlen - pos;
+			SKey *k = get_key(b[4]);
+			char cardsystem[255];
+			char reader[255];
+			char from[255];
+			char protocol[255];
+			unsigned char len = 0;
+			char *msg[5] =
+			{ cardsystem, reader, from, protocol, NULL };
+			int i = 5, j = 0;
+
+			if (k)
+			{
+				int64_t e_key = DVBAPI_ITEM + ((1 + k->adapter) << 24) + 2;
+				setItem(e_key, b, 1, 0);
+				k->ecm_info = getItem(e_key);
+				k->cardsystem = k->ecm_info;
+				k->reader = k->ecm_info + 256;
+				k->from = k->ecm_info + 512;
+				k->protocol = k->ecm_info + 768;
+				msg[0] = k->cardsystem;
+				msg[1] = k->reader;
+				msg[2] = k->from;
+				msg[3] = k->protocol;
+
+			}
+
+			uint16_t sid;
+
+			copy16r(sid, b, i);
+			if (k)
+			{
+				copy16r(k->caid, b, i + 2);
+				copy16r(k->info_pid, b, i + 4);
+				copy32r(k->prid, b, i + 6);
+				copy32r(k->ecmtime, b, i + 10);
+			}
+			i += 14;
+			while (msg[j] && i < pos1)
+			{
+				len = b[i++];
+				memcpy(msg[j], b + i, len);
+				msg[j][len] = 0;
+				i += len;
+				j++;
+			}
+			if (i < pos1 && k)
+				k->hops = b[i++];
+			pos += i;
+			LOG(
+					"dvbapi: ECM_INFO: key %d, SID = %04X, CAID = %04X (%s), PID = %04X, ProvID = %06X, ECM time = %d ms, reader = %s, from = %s, protocol = %s, hops = %d",
+					k ? k->id : -1, sid, k ? k->caid:0, msg[0], k ? k->info_pid:0, k ? k->prid:0, k ? k->ecmtime:0,
+					msg[1], msg[2], msg[3], k ? k->hops:0);
+			break;
+		}
+
 		default:
 		{
 			LOG(
@@ -632,7 +696,7 @@ void send_client_info(sockets *s)
 	unsigned char buf[1000];
 	unsigned char len;
 	copy32(buf, 0, DVBAPI_CLIENT_INFO);
-	copy16(buf, 4, DVBAPI_PROTOCOL_VERSION);
+	copy16(buf, 4, dvbapi_protocol_version);
 	len = sprintf(buf + 7, "%s/%s", app_name, version);
 	buf[6] = len;
 	dvbapi_is_enabled = 1;
@@ -741,6 +805,8 @@ int keys_add(int adapter, int sid, int pmt_pid)
 	keys[i].enabled_channels = 0;
 	keys[i].ver = -1;
 	keys[i].next_key = NULL;
+	keys[i].ecm_info = keys[i].cardsystem = keys[i].reader = keys[i].from =
+			keys[i].protocol = NULL;
 	keys[i].cw_time[0] = keys[i].cw_time[1] = 0;
 	keys[i].key_len = 8;
 	memset(keys[i].cw[0], 0, 16);
@@ -780,6 +846,10 @@ int keys_del(int i)
 	keys[i].next_key = NULL;
 	invalidate_adapter(aid);
 	ek = 0;
+	delItemP(keys[i].ecm_info);
+	keys[i].ecm_info = keys[i].cardsystem = keys[i].reader = NULL;
+	keys[i].from = keys[i].protocol = NULL;
+	keys[i].hops = keys[i].caid = keys[i].info_pid = keys[i].prid = keys[i].ecmtime = 0;
 	buf[7] = 0xFF;
 	for (j = 0; j < MAX_KEYS; j++)
 		if (keys[j].enabled)
@@ -1090,7 +1160,7 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad)
 	else
 	{
 		p->type = 0; // we do not need this pmt pid anymore
-		mark_pid_deleted(ad->id,99,p->pid,p);
+		mark_pid_deleted(ad->id, 99, p->pid, p);
 	}
 //	free_assemble_packet(pid, ad);
 	return 0;
@@ -1103,3 +1173,23 @@ void dvbapi_delete_keys_for_adapter(int aid)
 		if (keys[i].enabled && keys[i].adapter == aid)
 			keys_del(i);
 }
+
+_symbols dvbapi_sym[] =
+{
+		{ "key_enabled", VAR_ARRAY_INT8, &keys[0].enabled, 1, MAX_KEYS,
+				sizeof(keys[0]) },
+		{ "key_hops", VAR_ARRAY_INT8, &keys[0].hops, 1, MAX_KEYS,
+				sizeof(keys[0]) },
+		{ "key_ecmtime", VAR_ARRAY_INT, &keys[0].ecmtime, 1, MAX_KEYS,
+					sizeof(keys[0]) },
+		{ "key_cardsystem", VAR_ARRAY_PSTRING, &keys[0].cardsystem, 1, MAX_KEYS,
+				sizeof(keys[0]) },
+		{ "key_reader", VAR_ARRAY_PSTRING, &keys[0].reader, 1, MAX_KEYS,
+				sizeof(keys[0]) },
+		{ "key_from", VAR_ARRAY_PSTRING, &keys[0].from, 1, MAX_KEYS,
+				sizeof(keys[0]) },
+		{ "key_protocol", VAR_ARRAY_PSTRING, &keys[0].protocol, 1, MAX_KEYS,
+				sizeof(keys[0]) },
+
+		{ NULL, 0, NULL, 0, 0 } };
+

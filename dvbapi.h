@@ -7,7 +7,7 @@
 #include <dvbcsa/dvbcsa.h>
 
 
-#define DVBAPI_PROTOCOL_VERSION         1
+#define DVBAPI_PROTOCOL_VERSION         2
 
 #define DVBAPI_FILTER_DATA     0xFFFF0000
 #define DVBAPI_CLIENT_INFO     0xFFFF0001
@@ -22,7 +22,7 @@
 #define CA_SET_PID_X       0x876f08
 #define DMX_STOP_X         0x2a6f00
 #define DMX_SET_FILTER_X   0x2b6f3c
-
+#define DVBAPI_ECM_INFO    0xFFFF0003
 
 #define AOT_CA_PMT 0x9F803282
 
@@ -49,19 +49,23 @@ typedef struct struct_key
 	int key_len;
 	int sid;
 	int pmt_pid;
-	int enabled;
+	uint8_t enabled;
+	uint8_t hops;
+	uint16_t caid, info_pid;
+	uint32_t prid, ecmtime;
 	int id;
 	int adapter;
 	int demux;
 	int ver;
 	int program_id;  // pmt sid
-	unsigned char *pi;
+	unsigned char *pi, *ecm_info, *cardsystem, *reader, *from, *protocol;
 	int pi_len;
 	struct dvbcsa_bs_batch_s batch[130];
 	int parity;
 	int blen;
 	int enabled_channels;
 	int last_parity_change;
+	
 	struct struct_key *next_key;
 } SKey;
 

@@ -98,6 +98,8 @@ typedef struct struct_adapter
 	char satip_fe, last_cmd;
 	char expect_reply, force_commit, want_commit, want_tune, sent_transport;
 	int satip_last_setup;
+	uint8_t satip_addpids, satip_setup_pids;
+
 	uint32_t rcvp, repno, rtp_miss, rtp_ooo;   // rtp statstics
 	uint16_t rtp_seq;
 	Set_pid set_pid;

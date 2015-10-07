@@ -232,7 +232,7 @@ void set_options(int argc, char *argv[])
 	opts.drop_encrypted = 1;
 	opts.rtsp_port = 554;
 	opts.clean_psi = 0;
-	opts.satip_addpids = 0;
+	opts.satip_addpids = 1;
 	opts.satip_setup_pids = 0;
 	opts.output_buffer = 512 * 1024;
 	opts.satip_servers[0] = 0;
@@ -1100,8 +1100,8 @@ http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 	char *desc1;
 	char ra[50];
 	char *reply =
-			"%s/1.0 %d %s\r\nDate: %s%s%s\r\n%s\r\nContent-Length: %d\r\n\r\n%s";
-	char *reply0 = "%s/1.0 %d %s\r\nDate: %s%s%s\r\n%s\r\n\r\n";
+			"%s/1.0 %d %s\r\nDate: %s%s%s\r\n%s\r\nUser-Agent: %s/%s\r\nContent-Length: %d\r\n\r\n%s";
+	char *reply0 = "%s/1.0 %d %s\r\nDate: %s%s%s\r\n%s\r\nUser-Agent: %s/%s\r\n\r\n";
 	char *d;
 	char *proto;
 	char sess_id[100], scseq[100];
@@ -1155,10 +1155,10 @@ http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 
 	if (lr > 0)
 		sprintf(resp, reply, proto, rc, d, get_current_timestamp(), sess_id,
-				scseq, ah, lr, desc1);
+				scseq, ah, app_name, version, lr, desc1);
 	else
 		sprintf(resp, reply0, proto, rc, d, get_current_timestamp(), sess_id,
-				scseq, ah);
+				scseq, ah, app_name, version);
 	LOG("reply -> %d (%s:%d) CL:%d :\n%s", s->sock,
 			get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
 			lr, resp);

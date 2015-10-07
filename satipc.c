@@ -77,10 +77,10 @@ int satipc_reply(sockets * s)
 
 	la = split(arg, (char *) s->buf, 50, ' ');
 	rc = map_int(arg[1], NULL);
-	
+
 	if (ad->last_cmd == RTSP_OPTIONS && !sess && ad->session[0])
 		rc = 454;
-	
+
 	if (rc == 454 || rc == 503)
 	{
 		ad->sent_transport = 0;
@@ -99,6 +99,15 @@ int satipc_reply(sockets * s)
 			sess = header_parameter(arg, i);
 		else if (strncasecmp("com.ses.streamID:", arg[i], 17) == 0)
 			sid = header_parameter(arg, i);
+		else if (strncasecmp("User-Agent:", arg[i], 11) == 0)
+		{
+			char *ua = header_parameter(arg, i);
+			if (!strncmp(ua, app_name, strlen(app_name)))
+			{
+				ad->satip_addpids = 1;
+				ad->satip_setup_pids = 1;
+			}
+		}
 
 	if (!ad->err && !ad->session[0] && sess)
 	{
@@ -135,7 +144,8 @@ int satipc_reply(sockets * s)
 			delItem(MAKE_ITEM(ad->id, ad->wp++));
 		}
 	}
-	if (!ad->expect_reply && (ad->wp >= ad->qp) && ad->want_commit) // we do not expect reply and no other events in the queue, we commit a
+	if (!ad->expect_reply && (ad->wp >= ad->qp)
+			&& (ad->want_commit || ad->force_commit)) // we do not expect reply and no other events in the queue, we commit a
 	{
 		satipc_commit(ad);
 	}
@@ -235,7 +245,7 @@ int satipc_open_device(adapter *ad)
 	ad->rtcp_sock = sockets_add(ad->rtcp, NULL, ad->id, TYPE_TCP,
 			(socket_action) satipc_rtcp_reply, (socket_action) satipc_close,
 			NULL);
-	sockets_timeout(ad->fe_sock, 15000); // 15s
+	sockets_timeout(ad->fe_sock, 45000); // 15s
 	set_socket_receive_buffer(ad->dvr, opts.output_buffer);
 	if (ad->fe_sock < 0 || ad->dvr < 0 || ad->rtcp < 0 || ad->rtcp_sock < 0)
 	{
@@ -456,15 +466,14 @@ int http_request(adapter *ad, char *url, char *method)
 		sprintf(session + strlen(session), "%s\r\n", public);
 		ad->last_cmd = RTSP_OPTIONS;
 	}
-	
-	if(!strcmp(method, "PLAY"))
+
+	if (!strcmp(method, "PLAY"))
 		ad->last_cmd = RTSP_PLAY;
-	else if(!strcmp(method, "TEARDOWN"))
+	else if (!strcmp(method, "TEARDOWN"))
 		ad->last_cmd = RTSP_TEARDOWN;
-	else if(!strcmp(method, "DESCRIBE"))
+	else if (!strcmp(method, "DESCRIBE"))
 		ad->last_cmd = RTSP_DESCRIBE;
 
-	
 	qm = "?";
 	if (!url || !url[0])
 		qm = "";
@@ -518,7 +527,7 @@ void satipc_commit(adapter *ad)
 	char url[400];
 	int send_pids = 1, send_apids = 1, send_dpids = 1;
 	int len = 0, i;
-	
+
 	url[0] = 0;
 	LOG(
 			"satipc: commit for adapter %d pids to add %d, pids to delete %d, expect_reply %d, force_commit %d want_tune %d",
@@ -535,7 +544,7 @@ void satipc_commit(adapter *ad)
 		return;
 	}
 
-	if (!opts.satip_addpids)
+	if (!ad->satip_addpids)
 	{
 		send_apids = 0;
 		send_dpids = 0;
@@ -545,7 +554,7 @@ void satipc_commit(adapter *ad)
 	{
 		send_apids = 0;
 		send_dpids = 0;
-		if (!opts.satip_setup_pids)
+		if (!ad->satip_setup_pids)
 			send_pids = 0;
 	}
 
@@ -557,10 +566,17 @@ void satipc_commit(adapter *ad)
 
 	send_apids = send_apids && lap[ad->id] > 0;
 	send_dpids = send_dpids && ldp[ad->id] > 0;
-	
+
 	if (getTick() - ad->satip_last_setup < 10000 && !ad->sent_transport)
 	{
-		LOG("satipc: last setup less than 10 seconds ago, probably an error of communication with the server");
+		LOG("satipc: last setup less than 10 seconds ago for server %s, maybe an error ?", ad->sip);
+		return;
+	}
+
+	if (ad->last_cmd != RTSP_OPTIONS && ad->sent_transport == 0)
+	{
+		http_request(ad, NULL, "OPTIONS");
+		ad->force_commit = 1;
 		return;
 	}
 
@@ -569,8 +585,12 @@ void satipc_commit(adapter *ad)
 
 	ad->want_commit = 0;
 	if (ad->want_tune + send_pids + send_apids + send_dpids == 0)
+	{
 		LOG("satipc: nothing to commit");
-
+		ad->force_commit = 0;
+		if(ad->last_cmd == RTSP_SETUP)
+			send_apids = 1;
+	}
 	if (ad->want_tune)
 	{
 		tune_url(ad, url);
@@ -581,16 +601,10 @@ void satipc_commit(adapter *ad)
 
 	if (send_pids)
 	{
-		int pids[MAX_PIDS];
-		int i, ep = get_enabled_pids(ad, pids, sizeof(pids));
 		if (len > 0)
 			len += sprintf(url + len, "&");
 		len += sprintf(url + len, "pids=");
-		for (i = 0; i < ep; i++)
-			len += sprintf(url + len, "%d,", pids[i]);
-		if (ep == 0)
-			len += sprintf(url + len, "none,");
-		url[--len] = 0;
+		get_adapter_pids(ad->id, url+len, sizeof(url) - len);
 		lap[ad->id] = 0;
 		ldp[ad->id] = 0;
 		ad->force_commit = 0;
@@ -608,8 +622,12 @@ void satipc_commit(adapter *ad)
 				len += sprintf(url + len, "all,");
 			else
 				len += sprintf(url + len, "%d,", apid[ad->id][i]);
-		url[--len] = 0;
+		if(lap[ad->id] == 0)
+			get_adapter_pids(ad->id, url+len, sizeof(url) - len);
+		else 
+			url[--len] = 0;
 		lap[ad->id] = 0;
+		ad->force_commit = 0;
 	}
 
 	if (send_dpids)
@@ -624,6 +642,7 @@ void satipc_commit(adapter *ad)
 				len += sprintf(url + len, "%d,", dpid[ad->id][i]);
 		url[--len] = 0;
 		ldp[ad->id] = 0;
+		ad->force_commit = 0;
 	}
 
 	http_request(ad, url, NULL);
@@ -746,6 +765,8 @@ void find_satip_adapter(adapter *a)
 				a[i].sys[1] = SYS_DVBC_ANNEX_A;
 
 			a[i].satip_fe = determine_fe(a, i, a[i].sip, a[i].sport);
+			a[i].satip_addpids = opts.satip_addpids;
+			a[i].satip_setup_pids = opts.satip_setup_pids;
 
 			j++;
 			LOG("Satip device %s port %d delsys %d: %s %s", a[i].sip,

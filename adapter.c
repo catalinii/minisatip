@@ -1073,6 +1073,8 @@ char* get_adapter_pids(int aid, char *dest, int max_size)
 	}
 	if (len > 0)
 		dest[len - 1] = 0;
+	else 
+		snprintf(dest + len, max_size - len, "none");
 
 	return dest;
 }

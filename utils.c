@@ -220,6 +220,16 @@ int delItem(int64_t key)
 	return 0;
 }
 
+int delItemP(void *p)
+{
+	int i;
+	for (i = 0; i < MAX_SINFO; i++)
+		if (sinfo[i].enabled && sinfo[i].data == p)
+			delItem(sinfo[i].key);
+	return 0;
+}
+
+
 int split(char **rv, char *s, int lrv, char sep)
 {
 	int i = 0, j = 0;
@@ -613,9 +623,10 @@ int endswith(char *src, char *with)
 extern _symbols adapters_sym[];
 extern _symbols minisatip_sym[];
 extern _symbols stream_sym[];
+extern _symbols dvbapi_sym[];
 
 _symbols *sym[] =
-{ adapters_sym, stream_sym, minisatip_sym, NULL };
+{ adapters_sym, stream_sym, minisatip_sym, dvbapi_sym, NULL };
 
 int var_eval(char *orig, int len, char *dest, int max_len)
 {
