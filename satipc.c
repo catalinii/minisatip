@@ -362,10 +362,10 @@ void get_s2_url(adapter *ad, char *url)
 	url[0] = 0;
 	plts = tp->plts;
 	ro = tp->ro;
-	if (plts == PILOT_AUTO)
-		plts = PILOT_OFF;
-	if (ro == ROLLOFF_AUTO)
-		ro = ROLLOFF_35;
+//	if (plts == PILOT_AUTO)
+//		plts = PILOT_OFF;
+//	if (ro == ROLLOFF_AUTO)
+//		ro = ROLLOFF_35;
 	FILL("src=%d", tp->diseqc, 0, tp->diseqc);
 	FILL("&fe=%d", ad->satip_fe, 0, ad->satip_fe);
 	FILL("&freq=%d", tp->freq, 0, tp->freq / 1000);
@@ -448,9 +448,8 @@ int http_request(adapter *ad, char *url, char *method)
 		ad->stream_id = -1;
 		ad->session[0] = 0;
 		ad->last_cmd = RTSP_SETUP;
-		sprintf(session,
-				"Transport:RTP/AVP;unicast;client_port=%d-%d\r\nUser-Agent: %s %s\r\n",
-				ad->listen_rtp, ad->listen_rtp + 1, app_name, version);
+		sprintf(session, "Transport:RTP/AVP;unicast;client_port=%d-%d\r\n",
+				ad->listen_rtp, ad->listen_rtp + 1);
 	}
 	else
 	{
@@ -462,8 +461,8 @@ int http_request(adapter *ad, char *url, char *method)
 
 	if (strcmp(method, "OPTIONS") == 0)
 	{
-		char *public = "Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN";
-		sprintf(session + strlen(session), "%s\r\n", public);
+//		sprintf(session + strlen(session), "User-Agent: %s %s\r\n", app_name,
+//				version);
 		ad->last_cmd = RTSP_OPTIONS;
 	}
 
@@ -569,7 +568,9 @@ void satipc_commit(adapter *ad)
 
 	if (getTick() - ad->satip_last_setup < 10000 && !ad->sent_transport)
 	{
-		LOG("satipc: last setup less than 10 seconds ago for server %s, maybe an error ?", ad->sip);
+		LOG(
+				"satipc: last setup less than 10 seconds ago for server %s, maybe an error ?",
+				ad->sip);
 		return;
 	}
 
@@ -588,8 +589,8 @@ void satipc_commit(adapter *ad)
 	{
 		LOG("satipc: nothing to commit");
 		ad->force_commit = 0;
-		if(ad->last_cmd == RTSP_SETUP)
-			send_apids = 1;
+		if (ad->last_cmd == RTSP_SETUP && !ad->satip_setup_pids)
+			send_apids = 1; // force send addpids=
 	}
 	if (ad->want_tune)
 	{
@@ -597,6 +598,7 @@ void satipc_commit(adapter *ad)
 		len = strlen(url);
 		ad->ignore_packets = 1; // ignore all the packets until we get 200 from the server
 		ad->want_tune = 0;
+		if(!ad->satip_setup_pids) sprintf(url + len ,"&pids=none"); 
 	}
 
 	if (send_pids)
@@ -604,7 +606,7 @@ void satipc_commit(adapter *ad)
 		if (len > 0)
 			len += sprintf(url + len, "&");
 		len += sprintf(url + len, "pids=");
-		get_adapter_pids(ad->id, url+len, sizeof(url) - len);
+		get_adapter_pids(ad->id, url + len, sizeof(url) - len);
 		lap[ad->id] = 0;
 		ldp[ad->id] = 0;
 		ad->force_commit = 0;
@@ -622,9 +624,9 @@ void satipc_commit(adapter *ad)
 				len += sprintf(url + len, "all,");
 			else
 				len += sprintf(url + len, "%d,", apid[ad->id][i]);
-		if(lap[ad->id] == 0)
-			get_adapter_pids(ad->id, url+len, sizeof(url) - len);
-		else 
+		if (lap[ad->id] == 0)
+			get_adapter_pids(ad->id, url + len, sizeof(url) - len);
+		else
 			url[--len] = 0;
 		lap[ad->id] = 0;
 		ad->force_commit = 0;

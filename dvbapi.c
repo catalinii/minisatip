@@ -1182,6 +1182,8 @@ _symbols dvbapi_sym[] =
 				sizeof(keys[0]) },
 		{ "key_ecmtime", VAR_ARRAY_INT, &keys[0].ecmtime, 1, MAX_KEYS,
 					sizeof(keys[0]) },
+		{ "key_pmt", VAR_ARRAY_INT, &keys[0].pmt_pid, 1, MAX_KEYS,
+					sizeof(keys[0]) },
 		{ "key_cardsystem", VAR_ARRAY_PSTRING, &keys[0].cardsystem, 1, MAX_KEYS,
 				sizeof(keys[0]) },
 		{ "key_reader", VAR_ARRAY_PSTRING, &keys[0].reader, 1, MAX_KEYS,
