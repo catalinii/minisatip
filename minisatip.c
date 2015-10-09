@@ -1099,9 +1099,9 @@ http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 	int binary = 0;
 	char *desc1;
 	char ra[50];
-	char *reply =
-			"%s/1.0 %d %s\r\nDate: %s%s%s\r\n%s\r\nUser-Agent: %s/%s\r\nContent-Length: %d\r\n\r\n%s";
-	char *reply0 = "%s/1.0 %d %s\r\nDate: %s%s%s\r\n%s\r\nUser-Agent: %s/%s\r\n\r\n";
+	char server[50];
+	char *reply = "%s/1.0 %d %s\r\nDate: %s%s%s\r\n%s%s\r\nContent-Length: %d\r\n\r\n%s";
+	char *reply0 = "%s/1.0 %d %s\r\nDate: %s%s%s\r\n%s%s\r\n\r\n";
 	char *d;
 	char *proto;
 	char sess_id[100], scseq[100];
@@ -1148,6 +1148,10 @@ http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 
 	sess_id[0] = 0;
 	scseq[0] = 0;
+	server[0] = 0;
+	
+	sprintf(server,"\r\nServer: %s/%s", app_name, version);
+	
 	if (s->type != TYPE_HTTP && get_sid(s->sid) && ah && !strstr(ah, "Session"))
 		sprintf(sess_id, "\r\nSession: %010d", get_session_id(s->sid));
 	if (s->type != TYPE_HTTP && cseq > 0)
@@ -1155,10 +1159,10 @@ http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 
 	if (lr > 0)
 		sprintf(resp, reply, proto, rc, d, get_current_timestamp(), sess_id,
-				scseq, ah, app_name, version, lr, desc1);
+				scseq, ah, server, lr, desc1);
 	else
 		sprintf(resp, reply0, proto, rc, d, get_current_timestamp(), sess_id,
-				scseq, ah, app_name, version);
+				scseq, ah, server);
 	LOG("reply -> %d (%s:%d) CL:%d :\n%s", s->sock,
 			get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
 			lr, resp);

@@ -28,22 +28,6 @@
 #define LOF3 (10750*1000UL)
 #define LP_CODERATE_DEFAULT (0)
 
-#define DELSYS 0
-#define FREQUENCY 1
-#define MODULATION 2
-#define INVERSION 3
-#define SYMBOL_RATE 4
-#define BANDWIDTH 4
-#define FEC_INNER 5
-#define DSPLPC2 5
-#define FEC_LP 6
-#define GUARD 7
-#define PILOT 7
-#define TRANSMISSION 8
-#define ROLLOFF 8
-#define HIERARCHY 9
-#define DSPLPT2 10
-
 #ifndef DTV_STREAM_ID
 #define DTV_STREAM_ID           42
 #endif

@@ -81,7 +81,7 @@ int satipc_reply(sockets * s)
 	if (ad->last_cmd == RTSP_OPTIONS && !sess && ad->session[0])
 		rc = 454;
 
-	if (rc == 454 || rc == 503)
+	if (rc == 454 || rc == 503 || rc == 405)
 	{
 		ad->sent_transport = 0;
 		ad->want_tune = 1;
@@ -99,7 +99,7 @@ int satipc_reply(sockets * s)
 			sess = header_parameter(arg, i);
 		else if (strncasecmp("com.ses.streamID:", arg[i], 17) == 0)
 			sid = header_parameter(arg, i);
-		else if (strncasecmp("User-Agent:", arg[i], 11) == 0)
+		else if (strncasecmp("Server:", arg[i], 11) == 0)
 		{
 			char *ua = header_parameter(arg, i);
 			if (!strncmp(ua, app_name, strlen(app_name)))
@@ -427,9 +427,10 @@ int http_request(adapter *ad, char *url, char *method)
 	char session[200];
 	char buf[2048];
 	char sid[40];
-	int lb;
 	char *qm;
-	char format[] = "%s rtsp://%s:%d/%s%s%s RTSP/1.0\r\nCSeq: %d\r\n%s\r\n\r\n";
+	int lb;
+	char format[] = "%s rtsp://%s:%d/%s%s%s RTSP/1.0\r\nCSeq: %d%s\r\n\r\n";
+	
 	session[0] = 0;
 	sid[0] = 0;
 	int ctime = getTick();
@@ -448,21 +449,21 @@ int http_request(adapter *ad, char *url, char *method)
 		ad->stream_id = -1;
 		ad->session[0] = 0;
 		ad->last_cmd = RTSP_SETUP;
-		sprintf(session, "Transport:RTP/AVP;unicast;client_port=%d-%d\r\n",
+		sprintf(session, "\r\nTransport:RTP/AVP;unicast;client_port=%d-%d",
 				ad->listen_rtp, ad->listen_rtp + 1);
 	}
 	else
 	{
 		if (ad->session[0])
-			sprintf(session, "Session: %s\r\n", ad->session);
+			sprintf(session, "\r\nSession: %s", ad->session);
 		else
 			session[0] = 0;
 	}
 
 	if (strcmp(method, "OPTIONS") == 0)
 	{
-//		sprintf(session + strlen(session), "User-Agent: %s %s\r\n", app_name,
-//				version);
+		sprintf(session + strlen(session), "\r\nUser-Agent: %s %s", app_name,
+				version);
 		ad->last_cmd = RTSP_OPTIONS;
 	}
 
