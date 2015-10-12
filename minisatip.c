@@ -530,25 +530,15 @@ int read_rtsp(sockets * s)
 				sess_id = map_int(header_parameter(arg, i), NULL);
 				s->sid = find_session_id(sess_id);
 			}
-/*	if (s->sid < 0 && strstr(arg[1], "stream=")) // stream= in URL
-	{
-		char *str_id = strstr(arg[1], "stream=") + 7;
-		sess_id = map_intd(str_id, NULL, 0) - 1;
-		if ((sid = get_sid(sess_id)))
-		{
-			s->sid = sid->sid;
-			LOG("Adopting the session id from the stream %d", s->sid);
-		}
-	}
-*/
 	
 	if (strstr(arg[1], "freq") || strstr(arg[1], "pids"))
 	{
 		sid = (streams *) setup_stream(arg[1], s);
 	}
 
-//	if(!get_sid(s->sid) && ((strncasecmp (arg[0], "PLAY", 4) == 0) || (strncasecmp (arg[0], "GET", 3) == 0) || (strncasecmp (arg[0], "SETUP", 5) == 0)))
-//		sid = (streams *) setup_stream (arg[1], s);  //setup empty stream
+	//setup empty stream, removing this breaks satip tests
+	if(!get_sid(s->sid) && ((strncasecmp (arg[0], "PLAY", 4) == 0) || (strncasecmp (arg[0], "GET", 3) == 0) || (strncasecmp (arg[0], "SETUP", 5) == 0)))
+		sid = (streams *) setup_stream (arg[1], s);  
 
 	sid = get_sid(s->sid);
 	if (sid)
@@ -1152,7 +1142,7 @@ http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 	
 	sprintf(server,"\r\nServer: %s/%s", app_name, version);
 	
-	if (s->type != TYPE_HTTP && get_sid(s->sid) && ah && !strstr(ah, "Session"))
+	if (s->type != TYPE_HTTP && get_sid(s->sid) && ah && !strstr(ah, "Session") && rc != 454)
 		sprintf(sess_id, "\r\nSession: %010d", get_session_id(s->sid));
 	if (s->type != TYPE_HTTP && cseq > 0)
 		sprintf(scseq, "\r\nCseq: %d", cseq);
