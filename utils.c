@@ -867,6 +867,8 @@ char *readfile(char *fn, char *ctype, int *len)
 			strcpy(ctype, "CACHE-CONTROL: no-cache\r\nContent-type: text/html");
 		else if (endswith(fn, "xml"))
 			strcpy(ctype, "CACHE-CONTROL: no-cache\r\nContent-type: text/xml");
+		else if (endswith(fn, "m3u"))
+			strcpy(ctype, "CACHE-CONTROL: no-cache\r\nContent-type: video/x-mpegurl");		
 	}
 	return mem;
 }

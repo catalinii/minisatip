@@ -570,6 +570,8 @@ int read_rtsp(sockets * s)
 		}
 		else if (strncasecmp ("User-Agent:", arg[i], 10) == 0)
 			useragent = header_parameter(arg, i);
+		else if (!useragent && strncasecmp ("Server:", arg[i], 10) == 0)
+			useragent = header_parameter(arg, i);
 	
 	if((strncasecmp (arg[0], "PLAY", 4) == 0) || (strncasecmp (arg[0], "GET", 3) == 0) || (strncasecmp (arg[0], "SETUP", 5) == 0)) 
 	{

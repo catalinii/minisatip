@@ -215,7 +215,7 @@ int set_tcp_socket_timeout(int sockfd)
     if (setsockopt (sockfd, SOL_SOCKET, SO_SNDTIMEO, (char *)&timeout,
                 sizeof(timeout)) < 0)
         LOG("setsockopt failed for socket %d", sockfd);
-
+    return 0;
 }
 
 

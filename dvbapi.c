@@ -631,6 +631,7 @@ int dvbapi_send_pmt(SKey *k)
 	copy16(buf, 4, len);
 	copy16(buf, 10, len - 11);
 	TEST_WRITE(write(sock, buf, len + 6));
+	return 0;
 }
 static int last_retry = -5000;
 
@@ -856,6 +857,7 @@ int keys_del(int i)
 			ek++;
 //	if(!ek && sock>0)
 //		TEST_WRITE(write(sock, buf, sizeof(buf)));
+	return 0;
 }
 
 SKey *get_key(int i)

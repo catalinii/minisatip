@@ -99,7 +99,7 @@ int satipc_reply(sockets * s)
 			sess = header_parameter(arg, i);
 		else if (strncasecmp("com.ses.streamID:", arg[i], 17) == 0)
 			sid = header_parameter(arg, i);
-		else if (strncasecmp("Server:", arg[i], 11) == 0)
+		else if (strncasecmp("Server:", arg[i], 7) == 0)
 		{
 			char *ua = header_parameter(arg, i);
 			if (!strncmp(ua, app_name, strlen(app_name)))

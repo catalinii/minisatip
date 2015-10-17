@@ -442,6 +442,6 @@ int process_stream(adapter *ad, int rlen)
 #ifndef DISABLE_DVBCSA
 	decrypt_stream(ad, rlen);
 #endif	
-
+	return 0;
 }
 
