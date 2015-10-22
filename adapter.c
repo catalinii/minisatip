@@ -369,7 +369,7 @@ void close_adapter_for_stream(int sid, int aid)
 			a[aid].master_sid, a[aid].sid_cnt);
 	// delete the attached PIDs as well
 	mark_pids_deleted(aid, sid, NULL);
-	update_pids(aid);
+		update_pids(aid);
 //	if (a[aid].sid_cnt == 0) 
 //		close_adapter (aid);
 }

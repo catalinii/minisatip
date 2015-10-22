@@ -112,7 +112,7 @@ static const struct option long_options[] =
 void usage()
 {
 	printf(
-			"%s [-[flzg]] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] [-p public_host] [-s [DELSYS:]host[:port] [-a x:y:z] [-m mac] [-e X-Y,Z] [-o oscam_host:dvbapi_port] [-c X] [-b X:Y] [-u A1:S1-F1[-PIN]] [-j A1:S1-F1[-PIN]] [-x http_port] [-y rtsp_port]   \n\n \
+			"%s [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] [-j A1:S1-F1[-PIN]] [-m mac] [-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] [-R document_root] [-s [DELSYS:]host[:port] [-u A1:S1-F1[-PIN]] [-w http_server[:port]] [-x http_port] [-X xml_path] [-y rtsp_port] \n\n \
 \n\
 -a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means auto-detect)\n\
 	eg: -a 1:2:3  \n\
@@ -130,7 +130,7 @@ void usage()
 	eg: -d 0:1-0  (which is the default for each adapter).\n\
 \n\
 -D --device-id DVC_ID: specify the device id (in case there are multiple SAT>IP servers in the network)\n \
-	eg: -d 4 \n\
+	eg: -D 4 \n\
 \n\
 -e --enable-adapters list_of_enabled adapters: enable only specified adapters\n\
 	eg: -e 0-2,5,7 (no spaces between parameters)\n\
@@ -147,7 +147,7 @@ void usage()
 	eg: -l -l -l\n\
 \n\
 -m xx: simulate xx as local mac address, generates UUID based on mac\n\
-	-m 00:11:22:33:44:55 \n\
+	-m 001122334455 \n\
 \n\
 -o --dvbapi host:port - specify the hostname and port for the dvbapi server (oscam) \n\
 	eg: -o 192.168.9.9:9000 \n\

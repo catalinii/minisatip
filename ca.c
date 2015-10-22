@@ -74,15 +74,6 @@ int shutdown_stackthread = 0;
 #define MAX_CA_DEVICES 8
 #define MAX_CA_DEVICE_RESOURCES 8
 
-typedef struct
-{
-	int missing_fragments;
-	uint16_t len;
-	uint16_t tid;
-	uint8_t ver;
-	uint8_t buffer[1024];
-}pat_t;
-
 typedef struct ca_device
 {
 	int fd;
@@ -97,16 +88,7 @@ typedef struct ca_device
 	struct en50221_app_ca *ca_resource;
 	struct en50221_app_datetime *dt_resource;
 	int ca_session_number;
-
 	uint16_t ai_session_number;
-
-	pat_t pat;
-	uint16_t pmt_pids[MAX_PIDS];
-	int num_pmt_pids;
-	uint16_t last_pmt_pid;
-	int last_pmt_sid;
-	int last_pmt_ver;
-	int last_pmt_len;
 }ca_device_t;
 
 static struct ca_device ca_devices[MAX_CA_DEVICES];
@@ -140,7 +122,7 @@ void hexdump(uint8_t buffer[], int len)
 		{
 			if (s[0])
 			LOG("[%s]",s);
-			LOG("\n%05x: ", i);
+			LOG("%05x: ", i);
 			bzero(s, HEXDUMP_LINE_LEN);
 		}
 		s[i%HEXDUMP_LINE_LEN]=isprint(buffer[i])?buffer[i]:'.';
@@ -149,7 +131,7 @@ void hexdump(uint8_t buffer[], int len)
 	while(i++%HEXDUMP_LINE_LEN)
 	LOG("   ");
 
-	LOG("[%s]\n", s);
+	LOG("[%s]", s);
 }
 
 int dvbca_process_pmt(uint8_t *b, adapter *a)
@@ -157,7 +139,7 @@ int dvbca_process_pmt(uint8_t *b, adapter *a)
 	ca_device_t * d = a->ca_device;
 	uint16_t pid, sid, ver;
 	SPid *p;
-	int len;
+	int len, rc;
 
 	if (!d)
 	return -1;
@@ -166,33 +148,32 @@ int dvbca_process_pmt(uint8_t *b, adapter *a)
 
 	p = find_pid(a->id, pid);
 	if(!p)
-	return 0;
+		return 0;
 
 	if(p->sid[0] == -1) // the pmt is not part of any stream
-	return 0;
+		return 0;
 
 	if(p->type == 0)// mark it as PMT
-	p->type = TYPE_PMT;
+		p->type = TYPE_PMT;
 
 	if(p->type & PMTCA_COMPLETE)
-	return 0;
+		return 0;
 
 	if(!(len = assemble_packet(&b,a,1)))
-	return 0;
+		return 0;
 
-	len = ((b[1] & 0x03) << 8) | b[2];
 	ver = (b[5] >> 1) & 0x1f;
 	sid = (b[3] << 8) | b[4];
 
-	LOG("PMT CA pid %u len %u ver %u pid %u\n", pid, len, ver, sid);
+	LOG("PMT CA pid %u len %u ver %u pid %u", pid, len, ver, sid);
 //	hexdump(&b[5], len + 3 );
 	uint8_t capmt[4096];
 	int size;
-	struct section *section = section_codec((uint8_t*) &b[5], len + 3);
+	struct section *section = section_codec(b, len + 3);
 
 	if (!section)
 	{
-		LOG("failed to decode section\n");
+		LOG("failed to decode section");
 		p->type |= PMTCA_COMPLETE;
 		return -1;
 	}
@@ -200,7 +181,7 @@ int dvbca_process_pmt(uint8_t *b, adapter *a)
 	struct section_ext *result = section_ext_decode(section, 0);
 	if (!section)
 	{
-		LOG("failed to decode ext_section\n");
+		LOG("failed to decode ext_section");
 		p->type |= PMTCA_COMPLETE;
 		return -1;
 	}
@@ -208,17 +189,17 @@ int dvbca_process_pmt(uint8_t *b, adapter *a)
 	struct mpeg_pmt_section *pmt = mpeg_pmt_section_codec(result);
 	if (!pmt)
 	{
-		LOG("failed to decode pmt\n");
+		LOG("failed to decode pmt");
 		p->type |= PMTCA_COMPLETE;
 		return -1;
 	}
 
 	if ((size = en50221_ca_format_pmt((struct mpeg_pmt_section *)b, capmt, sizeof(capmt),
 							CA_LIST_MANAGEMENT_ONLY, 0, CA_PMT_CMD_ID_OK_DESCRAMBLING)) < 0)
-	LOG( "Failed to format CA PMT object\n");
-	if (en50221_app_ca_pmt(d->ca_resource, d->ca_session_number, capmt, size))
+	LOG( "Failed to format CA PMT object");
+	if ((rc = en50221_app_ca_pmt(d->ca_resource, d->ca_session_number, capmt, size)))
 	{
-		LOG("Failed to send CA PMT object\n");
+		LOG("Adapter %d, Failed to send CA PMT object, error %d", ad->id, rc);
 	}
 //	hexdump(&capmt[0], size);
 
@@ -233,11 +214,11 @@ int ca_ai_callback(void *arg, uint8_t slot_id, uint16_t session_number,
 {
 	ca_device_t * d = arg;
 
-	LOG("%02x:%s\n", slot_id, __func__);
-	LOG("  Application type: %02x\n", application_type);
-	LOG("  Application manufacturer: %04x\n", application_manufacturer);
-	LOG("  Manufacturer code: %04x\n", manufacturer_code);
-	LOG("  Menu string: %.*s\n", menu_string_length, menu_string);
+	LOG("%02x:%s", slot_id, __func__);
+	LOG("  Application type: %02x", application_type);
+	LOG("  Application manufacturer: %04x", application_manufacturer);
+	LOG("  Manufacturer code: %04x", manufacturer_code);
+	LOG("  Menu string: %.*s", menu_string_length, menu_string);
 
 	d->ai_session_number = session_number;
 
@@ -250,7 +231,7 @@ stackthread_func(void* arg)
 
 	ca_device_t * d = arg;
 	int lasterror = 0;
-	LOG("%s: start\n", __func__);
+	LOG("%s: start", __func__);
 
 	while(!shutdown_stackthread)
 	{
@@ -259,7 +240,7 @@ stackthread_func(void* arg)
 		{
 			if (error != lasterror)
 			{
-				LOG("Error reported by stack slot:%i error:%i\n",
+				LOG("Error reported by stack slot:%i error:%i",
 						en50221_tl_get_error_slot(d->tl),
 						en50221_tl_get_error(d->tl));
 			}
@@ -279,16 +260,16 @@ ca_session_callback(void *arg,
 		uint32_t resource_id)
 {
 	ca_device_t * d = arg;
-	LOG("%s: reason %d slot_id %u session_number %u resource_id %x\n",
+	LOG("%s: reason %d slot_id %u session_number %u resource_id %x",
 			__func__, reason, slot_id, session_number, resource_id);
 
 	switch(reason)
 	{
 		case S_SCALLBACK_REASON_CAMCONNECTING:
-		LOG("CAM connecting\n");
+		LOG("CAM connecting");
 		break;
 		case S_SCALLBACK_REASON_CAMCONNECTED:
-		LOG("CAM connected\n");
+		LOG("CAM connected");
 		if (resource_id == EN50221_APP_RM_RESOURCEID)
 		{
 			en50221_app_rm_enq(d->rm_resource, session_number);
@@ -317,30 +298,26 @@ ca_lookup_callback(void * arg,
 {
 	ca_device_t * d = arg;
 
-	LOG("%s: slot_id %u requested_resource_id %x\n", __func__, slot_id, requested_resource_id);
+	LOG("%s: slot_id %u requested_resource_id %x", __func__, slot_id, requested_resource_id);
 
 	switch (requested_resource_id)
 	{
 		case EN50221_APP_RM_RESOURCEID:
-		LOG("BINGO RM\n");
 		*callback_out = (en50221_sl_resource_callback) en50221_app_rm_message;
 		*arg_out = d->rm_resource;
 		*connected_resource_id = EN50221_APP_RM_RESOURCEID;
 		break;
 		case EN50221_APP_AI_RESOURCEID:
-		LOG("BINGO AI\n");
 		*callback_out = (en50221_sl_resource_callback) en50221_app_ai_message;
 		*arg_out = d->ai_resource;
 		*connected_resource_id = EN50221_APP_AI_RESOURCEID;
 		break;
 		case EN50221_APP_CA_RESOURCEID:
-		LOG("BINGO CA\n");
 		*callback_out = (en50221_sl_resource_callback) en50221_app_ca_message;
 		*arg_out = d->ca_resource;
 		*connected_resource_id = EN50221_APP_CA_RESOURCEID;
 		break;
 		case EN50221_APP_DATETIME_RESOURCEID:
-		LOG("BINGO DATETIME\n");
 		*callback_out = (en50221_sl_resource_callback) en50221_app_datetime_message;
 		*arg_out = d->dt_resource;
 		*connected_resource_id = EN50221_APP_DATETIME_RESOURCEID;
@@ -357,11 +334,11 @@ ca_rm_enq_callback(void *arg, uint8_t slot_id, uint16_t session_number)
 {
 	ca_device_t * d = arg;
 
-	LOG("%02x:%s\n", slot_id, __func__);
+	LOG("%02x:%s", slot_id, __func__);
 
 	if (en50221_app_rm_reply(d->rm_resource, session_number, resource_ids_count, resource_ids))
 	{
-		LOG("%02x:Failed to send reply to ENQ\n", slot_id);
+		LOG("%02x:Failed to send reply to ENQ", slot_id);
 	}
 
 	return 0;
@@ -371,17 +348,17 @@ static int
 ca_rm_reply_callback(void *arg, uint8_t slot_id, uint16_t session_number, uint32_t resource_id_count, uint32_t *_resource_ids)
 {
 	ca_device_t * d = arg;
-	LOG("%02x:%s\n", slot_id, __func__);
+	LOG("%02x:%s", slot_id, __func__);
 
 	uint32_t i;
 	for(i=0; i< resource_id_count; i++)
 	{
-		LOG("  CAM provided resource id: %08x\n", _resource_ids[i]);
+		LOG("  CAM provided resource id: %08x", _resource_ids[i]);
 	}
 
 	if (en50221_app_rm_changed(d->rm_resource, session_number))
 	{
-		LOG("%02x:Failed to send REPLY\n", slot_id);
+		LOG("%02x:Failed to send REPLY", slot_id);
 	}
 
 	return 0;
@@ -391,11 +368,11 @@ static int
 ca_rm_changed_callback(void *arg, uint8_t slot_id, uint16_t session_number)
 {
 	ca_device_t * d = arg;
-	LOG("%02x:%s\n", slot_id, __func__);
+	LOG("%02x:%s", slot_id, __func__);
 
 	if (en50221_app_rm_enq(d->rm_resource, session_number))
 	{
-		LOG("%02x:Failed to send ENQ\n", slot_id);
+		LOG("%02x:Failed to send ENQ", slot_id);
 	}
 
 	return 0;
@@ -407,11 +384,11 @@ ca_ca_info_callback(void *arg, uint8_t slot_id, uint16_t session_number, uint32_
 	(void)arg;
 	(void)session_number;
 
-	LOG("%02x:%s\n", slot_id, __func__);
+	LOG("%02x:%s", slot_id, __func__);
 	uint32_t i;
 	for(i=0; i< ca_id_count; i++)
 	{
-		LOG("  Supported CA ID: %04x\n", ca_ids[i]);
+		LOG("  Supported CA ID: %04x", ca_ids[i]);
 	}
 
 	//ca_connected = 1;
@@ -427,7 +404,7 @@ ca_ca_pmt_reply_callback(void *arg, uint8_t slot_id, uint16_t session_number,
 	(void)reply;
 	(void)reply_size;
 
-	LOG("%02x:%s\n", slot_id, __func__);
+	LOG("%02x:%s", slot_id, __func__);
 
 	return 0;
 }
@@ -437,12 +414,12 @@ ca_dt_enquiry_callback(void *arg, uint8_t slot_id, uint16_t session_number, uint
 {
 	ca_device_t * d = arg;
 
-	LOG("%02x:%s\n", slot_id, __func__);
-	LOG("  response_interval:%i\n", response_interval);
+	LOG("%02x:%s", slot_id, __func__);
+	LOG("  response_interval:%i", response_interval);
 
 	if (en50221_app_datetime_send(d->dt_resource, session_number, time(NULL), -1))
 	{
-		LOG("%02x:Failed to send datetime\n", slot_id);
+		LOG("%02x:Failed to send datetime", slot_id);
 	}
 
 	return 0;
@@ -499,7 +476,7 @@ ca_init(int fd)
 		LOG( "slot registration failed");
 		goto fail;
 	}
-	LOG("slotid: %i\n", d->slot_id);
+	LOG("slotid: %i", d->slot_id);
 
 	// create session layer
 	d->sl = en50221_sl_create(d->tl, 256);
@@ -537,7 +514,7 @@ ca_init(int fd)
 	en50221_sl_register_session_callback(d->sl, ca_session_callback, d);
 
 	d->tc = en50221_tl_new_tc(d->tl, d->slot_id);
-	LOG("tcid: %i\n", d->tc);
+	LOG("tcid: %i", d->tc);
 
 	ca_devices_count++;
 	return d;

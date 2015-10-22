@@ -229,7 +229,6 @@ int delItemP(void *p)
 	return 0;
 }
 
-
 int split(char **rv, char *s, int lrv, char sep)
 {
 	int i = 0, j = 0;
@@ -510,7 +509,7 @@ becomeDaemon()
 	fd = open("/dev/null", O_RDWR);
 
 	snprintf(buf, sizeof(buf), "/tmp/%s.log", app_name);
-	
+
 	if (fd != STDIN_FILENO) /* 'fd' should be 0 */
 		return -1;
 	if (stat(buf, &sb) == -1)
@@ -798,11 +797,13 @@ void process_file(sockets *so, char *s, int len, char *ctype)
 		if (lv == 0)
 		{
 			outp[io++] = s[i];
-			continue;
 		}
-		le = var_eval(s + i, lv, outp + io, sizeof(outp) - io);
-		io += le;
-		i += lv;
+		else
+		{
+			le = var_eval(s + i, lv, outp + io, sizeof(outp) - io);
+			io += le;
+			i += lv;
+		}
 		if (io > sizeof(outp) - 100)
 		{
 			if (respond)
@@ -868,7 +869,8 @@ char *readfile(char *fn, char *ctype, int *len)
 		else if (endswith(fn, "xml"))
 			strcpy(ctype, "CACHE-CONTROL: no-cache\r\nContent-type: text/xml");
 		else if (endswith(fn, "m3u"))
-			strcpy(ctype, "CACHE-CONTROL: no-cache\r\nContent-type: video/x-mpegurl");		
+			strcpy(ctype,
+					"CACHE-CONTROL: no-cache\r\nContent-type: video/x-mpegurl");
 	}
 	return mem;
 }

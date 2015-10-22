@@ -15,7 +15,7 @@ https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item
 
 Usage:
 
-minisatip [-[flzg]] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] [-p public_host] [-s [DELSYS:]host[:port] [-a x:y:z] [-m mac] [-e X-Y,Z] [-o oscam_host:dvbapi_port] [-c X] [-b X:Y] [-u A1:S1-F1[-PIN]] [-j A1:S1-F1[-PIN]] [-x http_port] [-y rtsp_port]   
+minisatip [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] [-j A1:S1-F1[-PIN]] [-m mac] [-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] [-R document_root] [-s [DELSYS:]host[:port] [-u A1:S1-F1[-PIN]] [-w http_server[:port]] [-x http_port] [-X xml_path] [-y rtsp_port] 
 
  
 -a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means auto-detect)
@@ -34,7 +34,7 @@ minisatip [-[flzg]] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] 
 	eg: -d 0:1-0  (which is the default for each adapter).
 
 -D --device-id DVC_ID: specify the device id (in case there are multiple SAT>IP servers in the network)
- 	eg: -d 4 
+ 	eg: -D 4 
 
 -e --enable-adapters list_of_enabled adapters: enable only specified adapters
 	eg: -e 0-2,5,7 (no spaces between parameters)
@@ -51,7 +51,7 @@ minisatip [-[flzg]] [-r remote_rtp_host] [-d device_id] [-w http_server[:port]] 
 	eg: -l -l -l
 
 -m xx: simulate xx as local mac address, generates UUID based on mac
-	-m 00:11:22:33:44:55 
+	-m 001122334455 
 
 -o --dvbapi host:port - specify the hostname and port for the dvbapi server (oscam) 
 	eg: -o 192.168.9.9:9000 

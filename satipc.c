@@ -91,7 +91,7 @@ int satipc_reply(sockets * s)
 	else if (rc != 200)
 		ad->err = 1;
 	sid = NULL;
-	if (rc == 200)
+	if (rc == 200 && !ad->want_tune)
 		ad->ignore_packets = 0;
 	sess = NULL;
 	for (i = 0; i < la; i++)
@@ -666,6 +666,7 @@ int satipc_tune(int aid, transponder * tp)
 	ad->snr = 0;
 	ad->want_commit = 0;
 	ad->want_tune = 1;
+	ad->ignore_packets = 1; // ignore all the packets until we get 200 from the server
 	lap[ad->id] = 0;
 	ldp[ad->id] = 0;
 	/*	if(ad->sent_transport == 0)
