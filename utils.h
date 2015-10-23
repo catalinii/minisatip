@@ -24,6 +24,8 @@ int becomeDaemon ();
 char *readfile(char *fn, char *ctype, int *len);
 void process_file(sockets *so, char *s, int len, char *ctype);
 
+
+
 //#define proxy_log(level, fmt, ...) _proxy_log(level, fmt"\n", ##__VA_ARGS__)
 
 //#define LOG(a,...) {opts.last_log=a;if(opts.log){int x=getTick();printf(CC([%d.%03d]: ,a,\n),x/1000,x%1000,##__VA_ARGS__);fflush(stdout);};}

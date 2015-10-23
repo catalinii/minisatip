@@ -201,8 +201,11 @@ streams *
 setup_stream(char *str, sockets * s)
 {
 	streams *sid;
+	char tmp_str[2000];
 
 	transponder t;
+	strncpy(tmp_str, str, sizeof(tmp_str));
+	tmp_str[sizeof(tmp_str) - 1] = 0;
 	detect_dvb_parameters(str, &t);
 	LOG("Setup stream %d parameters, sock_id %d, handle %d", s->sid, s->id,
 			s->sock);
@@ -226,7 +229,7 @@ setup_stream(char *str, sockets * s)
 	if (sid->adapter >= 0 && !strncasecmp((const char*) s->buf, "SETUP", 5)) // SETUP after PLAY
 	{
 		int ad = sid->adapter;
-		if (!strstr(str, "addpids") && !strstr(str, "delpids"))
+		if (!strstr(tmp_str, "addpids") && !strstr(tmp_str, "delpids"))
 		{
 			sid->adapter = -1;
 			close_adapter_for_stream(sid->sid, ad);
