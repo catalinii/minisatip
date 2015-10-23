@@ -213,8 +213,6 @@ setup_stream(char *str, sockets * s)
 			LOG_AND_RETURN(NULL, "Could not add a new stream");
 
 		s->sid = s_id;
-//		s->close_sec = 200;
-//		s->timeout = (socket_action) stream_timeout;
 		LOG("Setup stream done: sid: %d (e:%d) for sock %d handle %d", s_id,
 				st[s_id].enabled, s->id, s->sock);
 	}
@@ -228,8 +226,11 @@ setup_stream(char *str, sockets * s)
 	if (sid->adapter >= 0 && !strncasecmp((const char*) s->buf, "SETUP", 5)) // SETUP after PLAY
 	{
 		int ad = sid->adapter;
-		sid->adapter = -1;
-		close_adapter_for_stream(sid->sid, ad);
+		if (!strstr(str, "addpids") && !strstr(str, "delpids"))
+		{
+			sid->adapter = -1;
+			close_adapter_for_stream(sid->sid, ad);
+		}
 	}
 
 	return sid;
@@ -834,7 +835,7 @@ int process_packet(unsigned char *b, adapter *ad)
 
 	for (j = 0; p->sid[j] > -1 && j < MAX_STREAMS_PER_PID; j++)
 	{
-		if ((sid = get_sid(p->sid[j])))
+		if ((sid = get_sid(p->sid[j])) && sid->do_play)
 		{
 			if (sid->iiov > 7)
 			{
