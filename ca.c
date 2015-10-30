@@ -17,9 +17,6 @@
  * USA
  *
  */
-#ifdef DISABLE_DVBCA 
-
-#else
 
 #include <stdint.h>
 #include <string.h>
@@ -134,33 +131,20 @@ void hexdump(uint8_t buffer[], int len)
 	LOG("[%s]", s);
 }
 
-int dvbca_process_pmt(uint8_t *b, adapter *a)
+int dvbca_process_pmt(adapter *ad, void *arg)
 {
-	ca_device_t * d = a->ca_device;
+	ca_device_t * d = ad->ca_device;
 	uint16_t pid, sid, ver;
 	SPid *p;
 	int len, rc;
+	SPMT *spmt = (SPMT *)arg;
+	uint8_t *b = spmt->pmt;
 
 	if (!d)
 	return -1;
 
-	pid = (b[1] & 0x1F) * 256 + b[2];
-
-	p = find_pid(a->id, pid);
-	if(!p)
-		return 0;
-
-	if(p->sid[0] == -1) // the pmt is not part of any stream
-		return 0;
-
-	if(p->type == 0)// mark it as PMT
-		p->type = TYPE_PMT;
-
-	if(p->type & PMTCA_COMPLETE)
-		return 0;
-
-	if(!(len = assemble_packet(&b,a,1)))
-		return 0;
+	pid = spmt->pid;
+	len = spmt->pmt_len;
 
 	ver = (b[5] >> 1) & 0x1f;
 	sid = (b[3] << 8) | b[4];
@@ -206,6 +190,12 @@ int dvbca_process_pmt(uint8_t *b, adapter *a)
 	p->type |= PMTCA_COMPLETE;
 
 }
+
+void dvbca_del_pmt(adapter *ad, void *arg)
+{
+	
+}
+
 
 int ca_ai_callback(void *arg, uint8_t slot_id, uint16_t session_number,
 		uint8_t application_type, uint16_t application_manufacturer,
@@ -523,4 +513,13 @@ ca_init(int fd)
 	return 0;
 }
 
-#endif
+SCA dvbca;
+
+void dvbca_init()
+{
+	memset(dvbca.action, 0, sizeof(dvbca.action));
+	dvbca.enabled = 1; // ignore it anyway
+	dvbca.action[CA_ADD_PMT] = &dvbca_process_pmt;
+	dvbca.action[CA_DEL_PMT] = &dvbca_del_pmt;
+	ca_add(dvbapi);
+}

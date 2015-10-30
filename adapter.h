@@ -10,7 +10,7 @@ typedef struct ca_device ca_device_t;
 #define DVR_BUFFER 30*1024*188
 #define MAX_STREAMS_PER_PID 8
 #define ADAPTER_BUFFER (128 + 5)*DVB_FRAME
-#define ADAPTER_TIMEOUT 10000
+#define ADAPTER_TIMEOUT 60000
 
 #define TYPE_PMT 1
 #define TYPE_ECM 2
@@ -27,18 +27,18 @@ typedef struct ca_device ca_device_t;
 
 typedef struct struct_pid
 {
-	int pid;					 // pid for this demux - not used
+	int16_t pid;					 // pid for this demux - not used
 	int fd;						 // fd for this demux
 	int err;					// counter errors
 								// stream id - one more to set it -1
 	signed char sid[MAX_STREAMS_PER_PID];
 	char flags;					 // 0 - disabled , 1 enabled, 2 - will be enabled next tune when tune is called, 3 disable when tune is called
-	int type;
-	int csid;  // channel sid if type & TYPE_PMT
+	char type;
 	int cnt;
 	int dec_err;			// decrypt errors
+	uint16_t program_id;
 	unsigned char key, filter, ecm_parity; // custom data kept in the SPid structure
-	unsigned char cc; // continuity
+	unsigned char cc, version, enabled_channels; // continuity
 } SPid;
 
 typedef int (* Set_pid) (void *ad, uint16_t i_pid);
@@ -109,10 +109,12 @@ typedef struct struct_adapter
 	Tune tune;
 	Dvb_delsys delsys;
 	Adapter_commit post_init, close;
+	SMutex mutex;
 } adapter;
 
 
-int init_hw ();
+int init_hw (int dev);
+int init_all_hw();
 int getAdaptersCount();
 void close_adapter (int na);
 int get_free_adapter (int freq, int pol, int msys, int src);
@@ -124,6 +126,7 @@ int mark_pids_add (int sid, int aid, char *pids);
 int mark_pid_add(int sid, int aid, int _pid);
 void mark_pid_deleted(int aid, int sid, int _pid, SPid *p);
 int update_pids (int aid);
+int tune(int aid, int sid);
 SPid *find_pid(int aid, int p);
 adapter * get_adapter1 (int aid, char *file, int line, int warning);
 char *describe_adapter (int sid, int aid, char *dad, int ld);
@@ -132,7 +135,7 @@ void sort_pids (int aid);
 void enable_adapters(char *o);
 void set_unicable_adapters(char *o, int type);
 void set_diseqc_adapters(char *o);
-void reset_pids_type(int aid);
+void reset_pids_type(int aid, int clear_pat);
 void reset_pids_type_for_key(int aid, int key);
 int delsys_match(adapter *ad, int del_sys);
 int get_enabled_pids(adapter *ad, int *pids, int lpids);

@@ -214,8 +214,12 @@ setup_stream(char *str, sockets * s)
 		int s_id = streams_add();
 		if (!(sid = get_sid(s_id)))
 			LOG_AND_RETURN(NULL, "Could not add a new stream");
-
+		
+		mutex_unlock(&sid->mutex);
+		set_sock_lock(s->id, &sid->mutex); // lock the mutex as the sockets_unlock will unlock it
 		s->sid = s_id;
+		sid->sock = s->id;
+		
 		LOG("Setup stream done: sid: %d (e:%d) for sock %d handle %d", s_id,
 				st[s_id].enabled, s->id, s->sock);
 	}
@@ -292,9 +296,13 @@ int close_stream(int i)
 {
 	int ad;
 	streams *sid;
-	if (i < 0 || i >= MAX_STREAMS || st[i].enabled == 0)
-		return 0;
 	LOG("closing stream %d", i);
+	mutex_lock(&st[i].mutex);
+	if (i < 0 || i >= MAX_STREAMS || st[i].enabled == 0)
+	{
+		mutex_unlock(&st[i].mutex);
+		return 0;
+	}
 	sid = &st[i];
 	sid->enabled = 0;
 	sid->timeout = 0;
@@ -319,6 +327,10 @@ int close_stream(int i)
 	 if(sid->buf)free(sid->buf);
 	 sid->pids = sid->apids = sid->dpids = sid->buf = NULL;
 	 */
+	set_sock_lock(st[i].sock, NULL);
+	st[i].sock = -1;
+	mutex_unlock(&st[i].mutex);
+//	mutex_destroy(&st[i].mutex);
 	LOG("closed stream %d", i);
 	return 0;
 }
@@ -460,6 +472,8 @@ int streams_add()
 		LOG("The stream could not be added - most likely no free stream");
 		return -1;
 	}
+	mutex_init(&st[i].mutex);
+	mutex_lock(&st[i].mutex);
 
 	st[i].enabled = 1;
 	st[i].adapter = -1;
@@ -506,8 +520,11 @@ int streams_add()
 		if (st[i].x_pmt)
 			free1(st[i].x_pmt);
 		st[i].pids = st[i].apids = st[i].dpids = st[i].buf = st[i].x_pmt = NULL;
+		mutex_unlock(&st[i].mutex);
 		return -1;
 	}
+	mutex_unlock(&st[i].mutex);
+	mutex_destroy(&st[i].mutex);
 	return i;
 }
 
@@ -986,7 +1003,7 @@ int read_dmx(sockets * s)
 	return 0;
 }
 
-int stream_timeouts()
+int stream_timeouts(sockets *s)
 {
 	int i;
 	char ra[50];
@@ -1000,6 +1017,7 @@ int stream_timeouts()
 		{
 //			int active_streams = 0;
 			sid = get_sid(i);
+			mutex_lock(&sid->mutex);
 			rttime = sid->rtcp_wtime, rtime = sid->wtime;
 
 			//LOG("stream timeouts called for sid %d c:%d r:%d rt:%d",i,ctime,rtime,rttime);
@@ -1021,7 +1039,7 @@ int stream_timeouts()
 						i, ctime, sid->rtime, sid->timeout);
 				close_stream(i);
 			}
-
+			mutex_unlock(&sid->mutex);
 		}
 	return 0;
 }

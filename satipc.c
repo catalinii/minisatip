@@ -49,7 +49,6 @@
 
 extern char *fe_delsys[];
 extern struct struct_opts opts;
-extern char version[], app_name[];
 
 uint16_t apid[MAX_ADAPTERS][MAX_PIDS]; // pids to add 
 uint16_t dpid[MAX_ADAPTERS][MAX_PIDS]; // pids to delete
@@ -274,6 +273,9 @@ int satipc_open_device(adapter *ad)
 	ad->force_commit = 0;
 	ad->satip_last_setup = -10000;
 	ad->last_cmd = 0;
+	
+	http_request(ad, NULL, "OPTIONS");
+	
 	return 0;
 
 }
@@ -324,6 +326,8 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb)
 void satip_post_init(adapter *ad)
 {
 	sockets_setread(ad->sock, satipc_read);
+	set_socket_thread(ad->fe_sock ,get_socket_thread(ad->sock)); // set all the threads to run in the new thread with the adapter
+	set_socket_thread(ad->rtcp_sock ,get_socket_thread(ad->sock));
 }
 
 int satipc_set_pid(adapter *ad, uint16_t pid)
@@ -487,8 +491,8 @@ int http_request(adapter *ad, char *url, char *method)
 	lb = snprintf(buf, sizeof(buf), format, method, ad->sip, ad->sport, sid, qm,
 			url, ad->cseq++, session);
 
-	LOG("satipc_http_request: %s to handle %d: \n%s",
-			ad->expect_reply ? "queueing" : "sending", ad->fe, buf);
+	LOG("satipc_http_request (ad %d): %s to handle %d: \n%s",
+			ad->id, ad->expect_reply ? "queueing" : "sending", ad->fe, buf);
 	if (ad->expect_reply)
 	{
 		setItem(MAKE_ITEM(ad->id, ad->qp++), (unsigned char *) buf, lb + 1, 0);
@@ -575,12 +579,12 @@ void satipc_commit(adapter *ad)
 		return;
 	}
 
-	if (ad->last_cmd != RTSP_OPTIONS && ad->sent_transport == 0)
-	{
-		http_request(ad, NULL, "OPTIONS");
-		ad->force_commit = 1;
-		return;
-	}
+//	if (ad->last_cmd != RTSP_OPTIONS && ad->sent_transport == 0)
+//	{
+//		http_request(ad, NULL, "OPTIONS");
+//		ad->force_commit = 1;
+//		return;
+//	}
 
 	if (ad->sent_transport == 0)
 		ad->want_tune = 1;

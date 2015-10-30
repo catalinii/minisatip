@@ -18,6 +18,7 @@ typedef struct struct_streams
 {
 	char enabled;
 	int sid;					 // socket - <0 for invalid/not used, 0 for end of the list
+	int sock;				     // sock_id					
 	int adapter;
 	struct sockaddr_in sa;		 //remote address - set on accept or recvfrom on udp sockets
 	int rsock;				 // return socket handle, for rtsp over tcp, rtsp over udp or http
@@ -40,6 +41,7 @@ typedef struct struct_streams
 	uint32_t sp,sb;
 	int timeout;
 	char useragent[40];
+	SMutex mutex;
 
 } streams;
 
@@ -62,8 +64,9 @@ int start_play (streams * sid, sockets * s);
 int decode_transport (sockets * s, char *arg, char *default_rtp, int start_rtp);
 int streams_add ();
 int read_dmx (sockets * s);
-int stream_timeouts ();
+int stream_timeouts(sockets *s);
 int close_streams_for_adapter (int ad, int except);
+int close_stream(int i);
 void dump_streams ();
 streams *get_sid1 (int sid, char *file, int line, int warning);
 int get_session_id( int i);
@@ -73,6 +76,7 @@ int rtcp_confirm(sockets *s);
 char *get_stream_rhost(int s_id, char *dest, int ld);
 int get_stream_rport(int s_id);
 int get_streams_for_adapter(int aid);
+int find_session_id(int id);
 
 #define get_sid(a) get_sid1(a, __FILE__, __LINE__,1)
 #define get_sid_nw(a) get_sid1(a, __FILE__, __LINE__,0)

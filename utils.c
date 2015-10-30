@@ -51,12 +51,18 @@
 #include "utils.h"
 #include "minisatip.h"
 
+#ifndef __mips__
+#include <execinfo.h>
+#endif
+
 extern struct struct_opts opts;
-extern char version[], app_name[];
 
 #define MAX_DATA 1500 // 16384
 #define MAX_SINFO 100
 char pn[256];
+
+
+
 
 typedef struct tmpinfo
 {
@@ -456,8 +462,7 @@ becomeDaemon()
 	char buf[255];
 
 	memset(path, 0, sizeof(path));
-	snprintf(buf, sizeof(buf), PID_FILE, app_name);
-	if ((f = fopen(buf, "rt")))
+	if ((f = fopen(pid_file, "rt")))
 	{
 		fscanf(f, "%d", &pid);
 		fclose(f);
@@ -543,6 +548,9 @@ void _log(int level, char * file, int line, char *fmt, ...)
 	va_list arg;
 	int len, len1, both;
 	static int idx, times;
+	int tl;
+	char stid[50];
+	static pthread_t tid, pid;
 	static char output[2][2000]; // prints just the first 2000 bytes from the message 
 
 	/* Check if the message should be logged */
@@ -550,6 +558,15 @@ void _log(int level, char * file, int line, char *fmt, ...)
 	if (opts.log < level)
 		return;
 
+	stid[0] = 0;
+#ifndef DISABLE_THREAD
+	tid = get_tid();
+	memset(stid, 0, sizeof(stid));
+	stid[0] = '[';
+	thread_getname(tid, stid + 1, sizeof(stid) - 2);
+	tl = strlen(stid);
+	stid[tl] = ']';
+#endif
 	if (!fmt)
 	{
 		printf("NULL format at %s:%d !!!!!", file, line);
@@ -561,11 +578,11 @@ void _log(int level, char * file, int line, char *fmt, ...)
 	else if (idx < 0)
 		idx = 0;
 	if (opts.file_line && !opts.slog)
-		len1 = snprintf(output[idx], sizeof(output[0]), "[%s] %s:%d: ",
-				get_current_timestamp_log(), file, line);
+		len1 = snprintf(output[idx], sizeof(output[0]), "[%s]%s %s:%d: ",
+				get_current_timestamp_log(), stid, file, line);
 	else if (!opts.slog)
-		len1 = snprintf(output[idx], sizeof(output[0]), "[%s]: ",
-				get_current_timestamp_log());
+		len1 = snprintf(output[idx], sizeof(output[0]), "[%s]%s: ",
+				get_current_timestamp_log(), stid);
 	else if (opts.file_line)
 	{
 		len1 = 0;
@@ -784,10 +801,11 @@ int is_var(char *s)
 }
 
 // replace $VAR$ with it's value and write the output to the socket
-void process_file(sockets *so, char *s, int len, char *ctype)
+void process_file(void *sock, char *s, int len, char *ctype)
 {
 	char outp[8292];
 	int i, io = 0, lv, le, respond = 1;
+	sockets *so = (sockets *)sock;
 	LOG("processing_file %x len %d:", s, len);
 	for (i = 0; i < len; i++)
 	{
@@ -880,3 +898,146 @@ int closefile(char *mem, int len)
 	return munmap((void *) mem, len);
 }
 
+#ifndef DISABLE_THREADS
+
+
+
+void mutex_init(SMutex* mutex)
+{
+	pthread_mutexattr_t attr;
+	pthread_mutexattr_init(&attr);
+	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+	
+	if(mutex->enabled)
+		return;
+	
+	if (pthread_mutex_init(&mutex->mtx, &attr))
+	{
+		LOG("mutex init %p failed with error %d %s", mutex, errno, strerror(errno));		
+		return;
+	}
+	
+	mutex->enabled = 1;
+	mutex->state = 0;
+		
+}
+void mutex_lock1(char *FILE, int line, SMutex* mutex)
+{
+	int rv;
+	LOGL(4, "%s:%d Locking mutex %p", FILE, line, mutex);
+	if(!mutex->enabled)
+	{
+		LOG("%s:%d Mutex not enabled %p", FILE, line, mutex);
+		mutex_init(mutex);
+//		return;
+	}
+	rv = pthread_mutex_lock(&mutex->mtx);
+	mutex->file = FILE;
+	mutex->line = line;
+	mutex->state = 1;
+	
+	if(rv != 0)
+		FAIL("Mutex Lock %x failed", mutex);
+}
+void mutex_unlock1(char *FILE, int line, SMutex* mutex)
+{
+	LOGL(4, "%s:%d Unlocking mutex %p", FILE, line, mutex);
+	if (mutex->enabled)
+		pthread_mutex_unlock(&mutex->mtx);
+	else
+		LOG("%s:%d Unlock NULL mutex", FILE, line);
+}
+
+void mutex_destroy(SMutex* mutex)
+{
+	if(!mutex->enabled)
+	{
+		LOG("destroy NULL mutex");
+		return;
+	}
+	mutex->enabled = 0;
+	mutex_unlock(mutex);
+	LOGL(4, "Destroyed mutex %p", mutex);
+	if (pthread_mutex_destroy(&mutex->mtx))
+	{
+		LOG("mutex destroy %p failed with error %d %s", *mutex, errno,
+				strerror(errno));
+		return;
+	}
+}
+
+pthread_t start_new_thread(char *name)
+{
+	pthread_t tid;
+	if (pthread_create(&tid, NULL, &select_and_execute, NULL))
+	{
+		LOG("Failed to create thread: %s, error %d %s", name, errno,
+				strerror(errno));
+		return get_tid();
+	}
+	thread_setname(tid, name);
+	return tid;
+}
+
+pthread_t get_tid()
+{
+	return pthread_self();
+}
+void thread_getname(pthread_t tid, char *name, int len)
+{
+#ifndef __mips__
+	pthread_getname_np(tid, name, len); 
+#else
+	snprintf(name, len, "%x", tid);
+#endif
+}
+void thread_setname(pthread_t tid, char *name)
+{
+#ifndef __mips__
+	pthread_setname_np(tid, name); 
+#endif
+	return;
+}
+
+
+#else
+
+void mutex_init(SMutex *mutex)
+{
+	*mutex = NULL;
+}
+void mutex_lock1(char *FILE, int line, SMutex *mutex)
+{
+
+}
+void mutex_unlock1(char *FILE, int line, SMutex *mutex)
+{
+}
+
+void mutex_destroy(SMutex *mutex)
+{
+}
+
+pthread_t start_new_thread(char *name)
+{
+	return get_tid();
+
+}
+
+pthread_t get_tid()
+{
+	return 0;
+}
+void thread_getname(pthread_t tid, char *name, int len)
+{
+	name[0] = '0';
+	name[1] = 0;
+	return;
+}
+void thread_setname(pthread_t tid, char *name)
+{
+	return;
+}
+
+
+#endif
