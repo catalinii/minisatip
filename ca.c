@@ -519,7 +519,7 @@ void dvbca_init()
 {
 	memset(dvbca.action, 0, sizeof(dvbca.action));
 	dvbca.enabled = 1; // ignore it anyway
-	dvbca.action[CA_ADD_PMT] = &dvbca_process_pmt;
-	dvbca.action[CA_DEL_PMT] = &dvbca_del_pmt;
-	ca_add(dvbapi);
+	dvbca.action[CA_ADD_PMT] = (ca_action )&dvbca_process_pmt;
+	dvbca.action[CA_DEL_PMT] = (ca_action )&dvbca_del_pmt;
+	add_ca(&dvbca);
 }

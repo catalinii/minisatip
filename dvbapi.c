@@ -783,13 +783,14 @@ int keys_add(int adapter, int sid, int pmt_pid)
 	int i;
 	SKey *k;
 	for (i = 0; i < MAX_KEYS; i++)
-	{
-		mutex_lock(&k->mutex);		
 		if (!keys[i].enabled)
-			break;
-		mutex_unlock(&k->mutex);
+		{
+			mutex_lock(&keys[i].mutex);
+			if (!keys[i].enabled)
+				break;
+			mutex_unlock(&keys[i].mutex);
 
-	}
+		}
 	if (i == MAX_KEYS)
 		LOG_AND_RETURN(-1, "Key buffer is full, could not add new keys");
 	k = &keys[i];

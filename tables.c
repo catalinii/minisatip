@@ -475,7 +475,7 @@ int assemble_packet(uint8_t **b1, adapter *ad, int check_crc)
 		if (len < 4 || len > 1500)
 			LOG_AND_RETURN(0, "assemble_packet: len %d not valid for pid %d",
 					len, pid);
-		crc = crc32(b, len - 1);
+		crc = crc_32(b, len - 1);
 		copy32r(current_crc, b, len - 1)
 		if (crc != current_crc)
 			LOG_AND_RETURN(0, "pid %d (%04X) CRC failed %08X != %08X len %d",
@@ -489,7 +489,7 @@ void free_assemble_packet(int pid, adapter *ad)
 	delItem(TABLES_ITEM + (ad->id << 16) + pid);
 }
 
-uint32_t crc32(const uint8_t *data, int datalen)
+uint32_t crc_32(const uint8_t *data, int datalen)
 {
 	uint32_t crc = 0xFFFFFFFF;
 	if (datalen < 0)
@@ -605,7 +605,7 @@ void clean_psi(adapter *ad, uint8_t *b)
 		n[2] = nlen & 0xFF;
 		n[5] ^= 0x3F; // change version
 
-		crc = crc32(n, nlen - 1);
+		crc = crc_32(n, nlen - 1);
 		copy32(n, nlen - 1, crc);
 		copy16(n, 1498, nlen + 1); // set the position at the end of the pmt
 		_cc = b[3] & 0xF; // continuity counter

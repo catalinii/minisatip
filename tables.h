@@ -48,7 +48,7 @@ void del_ca(SCA *c);
 int process_pat(adapter *ad,unsigned char *b);
 int process_pmt(adapter *ad, unsigned char *b);
 int assemble_packet(uint8_t **b1, adapter *ad, int check_crc);
-uint32_t crc32(const uint8_t *data, int datalen);
+uint32_t crc_32(const uint8_t *data, int datalen);
 int process_stream(adapter *ad, int rlen);
 void tables_pid_del(adapter *ad, int pid);
 void tables_pid_add(adapter *ad, int pid, int existing);
