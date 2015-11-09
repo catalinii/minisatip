@@ -41,6 +41,8 @@
 
 typedef struct struct_key
 {
+	char enabled;
+	SMutex mutex;
 	void *key[2];
 	char key_ok[2];
 	unsigned char cw[2][16];
@@ -49,7 +51,7 @@ typedef struct struct_key
 	int key_len;
 	int sid;
 	int pmt_pid;
-	uint8_t enabled;
+	
 	uint8_t hops;
 	uint16_t caid, info_pid;
 	uint32_t prid, ecmtime;
@@ -63,10 +65,8 @@ typedef struct struct_key
 	struct dvbcsa_bs_batch_s batch[130];
 	int parity;
 	int blen;
-	int last_parity_change;
-	
+	int last_parity_change;	
 	struct struct_key *next_key;
-	SMutex mutex;
 } SKey;
 
 #define MAX_KEY_TIME 25000 // 25s

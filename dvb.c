@@ -42,6 +42,7 @@
 #include "minisatip.h"
 #include "adapter.h"
 #include "ca.h"
+#include "utils.h"
 
 extern struct struct_opts opts;
 
@@ -139,13 +140,6 @@ int dvb_open_device(adapter *ad)
 		return 1;
 	}
 	ad->type = ADAPTER_DVB;
-#ifndef DISABLE_DVBCA
-	if(ad->ca > 0)
-	close(ad->ca);
-	ad->ca = open (buf, O_RDWR);
-	if (ad->ca > -1)
-	ad->ca_device = (ca_device_t *)ca_init(ad->ca);
-#endif
 
 	LOG("opened DVB adapter %d fe:%d dvr:%d", ad->id, ad->fe, ad->dvr);
 	if (ioctl(ad->dvr, DMX_SET_BUFFER_SIZE, opts.dvr_buffer) < 0)
@@ -173,6 +167,7 @@ int send_diseqc(int fd, int pos, int pol, int hiband, int committed_no,
 		int uncommitted_no)
 {
 	int uncommitted_first = 0;
+	int posu, posc;
 	/* DiSEqC 1.0 */
 	struct dvb_diseqc_master_cmd cmd =
 	{
@@ -181,15 +176,23 @@ int send_diseqc(int fd, int pos, int pol, int hiband, int committed_no,
 	struct dvb_diseqc_master_cmd uncmd =
 	{
 	{ 0xe0, 0x10, 0x39, 0xf0, 0x00, 0x00 }, 4 };
-	cmd.msg[3] = 0xf0
-			| (((pos << 2) & 0x0c) | (hiband ? 1 : 0) | (pol ? 2 : 0));
-	uncmd.msg[3] = 0xf0 | (pos & 0x0f);
 
 	if (uncommitted_no > committed_no)
 		uncommitted_first = 1;
 
 	if (committed_no == 0 && uncommitted_no == 0)
 		committed_no = 1;
+	posu = posc = pos;
+
+	if (uncommitted_no > 0 && committed_no > 0) // Diseqc 1.0 and 1.1 enabled. 
+	{
+		posc = pos % 4;
+		posu = pos / 4;
+	}
+
+	cmd.msg[3] = 0xf0
+			| (((pos << 2) & 0x0c) | (hiband ? 1 : 0) | (pol ? 2 : 0));
+	uncmd.msg[3] = 0xf0 | (pos & 0x0f);
 
 	LOGL(3,
 			"send_diseqc fd %d, pos = %d, pol = %d, hiband = %d, diseqc => %02x %02x %02x %02x %02x",
@@ -351,7 +354,10 @@ int setup_switch(int frontend_fd, transponder *tp)
 		freq = send_jess(frontend_fd, freq / 1000, diseqc, pol, hiband,
 				tp->uslot, tp->ufreq, tp->pin);
 	}
-	else
+	else if(tp->switch_type == SWITCH_SLAVE)
+	{
+		LOGL(2, "FD %d is a slave adapter", frontend_fd);
+	}else
 	{
 		if (tp->old_pol != pol || tp->old_hiband != hiband
 				|| tp->old_diseqc != diseqc)
@@ -977,24 +983,13 @@ void dvb_commit(adapter *a)
 	return;
 }
 
-void find_dvb_adapter(adapter *a)
+void find_dvb_adapter(adapter **a)
 {
 	int na = 0;
 	char buf[100];
 	int fd;
 	int i = 0, j = 0;
-
-	for (i = 0; i < MAX_ADAPTERS; i++)
-	{
-		a[i].open = (Open_device) dvb_open_device;
-		a[i].set_pid = (Set_pid) dvb_set_pid;
-		a[i].del_filters = (Del_filters) dvb_del_filters;
-		a[i].commit = (Adapter_commit) dvb_commit;
-		a[i].tune = (Tune) dvb_tune;
-		a[i].delsys = (Dvb_delsys) dvb_delsys;
-		a[i].post_init = NULL;
-		a[i].close = NULL;
-	}
+	adapter *ad;
 
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		for (j = 0; j < MAX_ADAPTERS; j++)
@@ -1004,10 +999,23 @@ void find_dvb_adapter(adapter *a)
 			//LOG("testing device %s -> fd: %d",buf,fd);
 			if (fd >= 0)
 			{
-				a[na].pa = i;
-				a[na].fn = j;
-				a[na].sip = NULL;
-				a[na].sport = 0;
+				if (!a[na])
+					a[na] = malloc1(sizeof(adapter));
+
+				ad = a[na];
+				ad->pa = i;
+				ad->fn = j;
+				ad->sip = NULL;
+				ad->sport = 0;
+
+				ad->open = (Open_device) dvb_open_device;
+				ad->set_pid = (Set_pid) dvb_set_pid;
+				ad->del_filters = (Del_filters) dvb_del_filters;
+				ad->commit = (Adapter_commit) dvb_commit;
+				ad->tune = (Tune) dvb_tune;
+				ad->delsys = (Dvb_delsys) dvb_delsys;
+				ad->post_init = NULL;
+				ad->close = NULL;
 
 				close(fd);
 				na++;
@@ -1016,6 +1024,7 @@ void find_dvb_adapter(adapter *a)
 			}
 		}
 	for (; na < MAX_ADAPTERS; na++)
-		a[na].pa = a[na].fn = -1;
+		if (a[na])
+			a[na]->pa = a[na]->fn = -1;
 }
 

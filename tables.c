@@ -58,18 +58,20 @@ SMutex ca_mutex;
 int add_ca(SCA *c)
 {
 	int i, new_ca;
+	del_ca(c);
 	for (i = 0; i < MAX_CA; i++)
-	{
-		mutex_lock(&ca_mutex);
 		if (!ca[i].enabled)
-			break;
-		mutex_unlock(&ca_mutex);
+		{
+			mutex_lock(&ca_mutex);
+			if (!ca[i].enabled)
+				break;
+			mutex_unlock(&ca_mutex);
 
-	}
+		}
 	if (i == MAX_CA)
 		LOG_AND_RETURN(0, "No free CA slots for %p", ca);
 	new_ca = i;
-	del_ca(c);
+
 	ca[new_ca].enabled = 1;
 	for (i = 0; i < sizeof(ca[0].action) / sizeof(ca_action); i++)
 	{
@@ -77,15 +79,20 @@ int add_ca(SCA *c)
 	}
 	if (new_ca >= nca)
 		nca = new_ca + 1;
+
+	init_ca_device(c);
 	mutex_unlock(&ca_mutex);
+	return new_ca;
 }
 
 void del_ca(SCA *c)
 {
-	int i, j, eq;
+	int i, j, k, eq, mask = 1;
+	adapter *ad;
 	mutex_lock(&ca_mutex);
 
 	for (i = 0; i < MAX_CA; i++)
+	{
 		if (ca[i].enabled)
 		{
 			eq = 1;
@@ -93,17 +100,26 @@ void del_ca(SCA *c)
 				if (ca[i].action[j] != c->action[j])
 					eq = 0;
 			if (eq)
+			{
 				ca[i].enabled = 0;
+				for (k = 0; k < MAX_ADAPTERS; k++)
+				{
+					if ((ad = get_adapter_nw(i)))
+						ad->ca_mask &= ~mask;
+				}
+			}
 		}
+		mask = mask << 1;
+	}
 	i = MAX_CA;
-	while (--i >= 0 && !ca[i].enabled);
+	while (--i >= 0 && !ca[i].enabled)
+		;
 	nca = i + 1;
-	
-	if(nca == 1)
-		nca = 0;
-	
+
+//	if (nca == 1)
+//		nca = 0;
+
 	mutex_unlock(&ca_mutex);
-	mutex_destroy(&ca_mutex);
 }
 
 static uint32_t crc_tab[256] =
@@ -171,7 +187,7 @@ int process_pat(adapter *ad, unsigned char *b)
 //	p = find_pid(ad->id, 0);
 //	if(!p)
 //		return 0;
-	
+
 	tid = b[8] * 256 + b[9];
 	ver = b[10] & 0x3E;
 
@@ -249,14 +265,19 @@ int pi_exist(int ecapid, int ecaid, unsigned char *es, int len)
 	return 0;
 }
 
-void run_ca_action(int action_id, adapter *ad, void *arg)
+int run_ca_action(int action_id, adapter *ad, void *arg)
 {
-	int i;
+	int i, mask = 1;
+	int rv = 0;
 	for (i = 0; i < nca; i++)
-		if (ca[i].enabled && ca[i].action[action_id])
+	{
+		if (ca[i].enabled && (ad->ca_mask & mask) && ca[i].action[action_id])
 		{
-			ca[i].action[action_id](ad, arg);
+			rv += ca[i].action[action_id](ad, arg);
 		}
+		mask = mask << 1;
+	}
+	return rv;
 }
 
 void find_pi(unsigned char *es, int len, unsigned char *pi, int *pi_len)
@@ -299,7 +320,7 @@ int process_pmt(adapter *ad, unsigned char *b)
 	SPid *p, *cp;
 	int64_t pid_key = TABLES_ITEM + ((1 + ad->id) << 24) + 0;
 	int16_t *pids;
-	int opmt, old_pmt;
+	int opmt, old_key;
 
 	if ((b[0] != 0x47)) // make sure we are dealing with TS
 		return 0;
@@ -317,7 +338,7 @@ int process_pmt(adapter *ad, unsigned char *b)
 	program_id = b[8] * 256 + b[9];
 	ver = b[10] & 0x3F;
 
-	if (p->type != TYPE_PMT && p->version == ver && p->program_id == program_id) // pmt processed already
+	if (p->type != TYPE_PMT && p->version == ver && p->csid == program_id) // pmt processed already
 		return 0;
 
 	if (!(pmt_len = assemble_packet(&b, ad, 1)))
@@ -325,7 +346,7 @@ int process_pmt(adapter *ad, unsigned char *b)
 
 	pi_len = ((b[10] & 0xF) << 8) + b[11];
 
-	p->program_id = b[3] * 256 + b[4];
+	p->csid = b[3] * 256 + b[4];
 	p->version = b[5] & 0x3F;
 
 	LOG("PMT pid: %04X (%d), pmt_len %d, pi_len %d, channel id %04X (%d)", pid,
@@ -391,7 +412,7 @@ int process_pmt(adapter *ad, unsigned char *b)
 		{
 			enabled_channels++;
 			pid_list[npl++] = spid;
-			old_pmt = cp->key;
+			old_key = cp->key;
 		}
 
 	}
@@ -400,8 +421,7 @@ int process_pmt(adapter *ad, unsigned char *b)
 	{
 		SPMT pmt =
 		{ .pmt = b, .pmt_len = pmt_len, .pi = pi, .pi_len = pi_len, .p = p,
-				.program_id = program_id, .ver = ver, .pid = pid, .old_pmt =
-						old_pmt };
+				.sid = program_id, .ver = ver, .pid = pid, .old_key = old_key };
 		p->enabled_channels = enabled_channels;
 
 		run_ca_action(CA_ADD_PMT, ad, &pmt);
@@ -652,7 +672,7 @@ void tables_pid_add(adapter *ad, int pid, int existing)
 	if (!ad)
 		return;
 	cp = find_pid(ad->id, pid);
-	if(!cp)
+	if (!cp)
 		return;
 	run_ca_action(CA_ADD_PID, ad, &pid);
 //	invalidate_adapter(ad->id);
@@ -676,7 +696,7 @@ void tables_pid_add(adapter *ad, int pid, int existing)
 	{
 		p = find_pid(ad->id, pids[pid]);
 		LOGL(2,
-				"dvbapi_pid_add: adding pid %d adapter %d, pmt pid %d, pmt pid type %d, pmt pid key %d",
+				"tables_pid_add: adding pid %d adapter %d, pmt pid %d, pmt pid type %d, pmt pid key %d",
 				pid, ad->id, pids[pid], p ? p->type : -1, p ? p->key : -1);
 		if (p && (p->type & PMT_COMPLETE))
 		{
@@ -710,6 +730,18 @@ void tables_pid_add(adapter *ad, int pid, int existing)
 	}
 }
 
+void run_del_pmt(adapter *ad, int pid, int16_t *pids)
+{
+	SPid *p = find_pid(ad->id, pid);
+	if (!p || p->type == 0)
+		return;
+	p->type = 0;
+	run_ca_action(CA_DEL_PMT, ad, &pid);
+	if (pids[pid] != -TYPE_PMT)
+		run_del_pmt(ad, abs(pids[pid]), pids);
+
+}
+
 void tables_pid_del(adapter *ad, int pid)
 {
 	int64_t pid_key = TABLES_ITEM + ((1 + ad->id) << 24) + 0;
@@ -722,11 +754,11 @@ void tables_pid_del(adapter *ad, int pid)
 	run_ca_action(CA_DEL_PID, ad, &pid);
 	pids = (int16_t *) getItem(pid_key);
 	cp = find_pid(ad->id, pid);
-	if(!cp)
+	if (!cp)
 		return;
 	if (cp->key != 255)
 		LOGL(2,
-				"dvbapi_pid_del: pid %d adapter %d key %d pids %d enabled_channels %d",
+				"tables_pid_del: pid %d adapter %d key %d pids %d enabled_channels %d",
 				pid, ad->id, cp->key, pids ? pids[pid] : -1,
 				cp->enabled_channels)
 	else
@@ -735,10 +767,8 @@ void tables_pid_del(adapter *ad, int pid)
 	if (cp->type & TYPE_PMT) // if(pids && (pids[pid]< 0))
 	{
 		if (cp->enabled_channels == 0)
-		{
-			run_ca_action(CA_DEL_PMT, ad, &pid);
-			cp->type = 0;
-		}
+			run_del_pmt(ad, pid, pids);
+
 		return;
 	}
 	if (cp->type == 0)
@@ -748,10 +778,7 @@ void tables_pid_del(adapter *ad, int pid)
 		if (p && p->enabled_channels > 0)
 			p->enabled_channels--;
 		if (p && p->enabled_channels == 0)
-		{
-			run_ca_action(CA_DEL_PMT, ad, &pmt_pid);
-			p->type = 0;
-		}
+			run_del_pmt(ad, pmt_pid, pids);
 	}
 	if (!get_enabled_pids(ad, &ep, 1)) // no pids enabled, set pids type to 0
 	{
@@ -769,6 +796,9 @@ int process_stream(adapter *ad, int rlen)
 	int16_t *pids = (int16_t *) getItem(pid_key);
 
 	if (nca == 0)
+		return 0;
+
+	if (ad->ca_mask == 0) // no CA enabled on this adapter
 		return 0;
 
 	for (i = 0; i < rlen; i += 188)
@@ -795,3 +825,69 @@ int process_stream(adapter *ad, int rlen)
 	return 0;
 }
 
+int tables_init_device(adapter *ad)
+{
+//	ad->ca_mask = run_ca_action(CA_INIT_DEVICE, ad, NULL);
+	int i, mask = 1;
+	int rv = 0;
+	int action_id = CA_INIT_DEVICE;
+	for (i = 0; i < nca; i++)
+	{
+		if (!(ad->ca_mask & mask)) // CA already initialized
+		{
+			if (ca[i].enabled && ca[i].action[action_id]
+					&& ca[i].action[action_id](ad, NULL))
+				rv = rv | mask;
+		}
+		mask = mask << 1;
+	}
+	ad->ca_mask |= rv;
+	return rv;
+}
+
+void init_ca_device(SCA *c)
+{
+	int i, init_cm;
+	SPid *p, *p2;
+	adapter *ad;
+	int ep, epids[MAX_PIDS], j, pid;
+	if (!c->action[CA_ADD_PMT])
+		return;
+
+	for (i = 0; i < MAX_ADAPTERS; i++)
+		if ((ad = get_adapter_nw(i)))
+		{
+			init_cm = ad->ca_mask;
+			tables_init_device(ad);
+			if (init_cm != ad->ca_mask)
+			{
+				ep = get_enabled_pids(ad, epids, MAX_PIDS);
+				for (j = 0; j < ep; j++)
+				{
+					pid = epids[j];
+					p = find_pid(ad->id, pid);
+					if (p->type & PMT_COMPLETE)
+						p->type &= ~PMT_COMPLETE; // force CA_ADD_PMT for the PMT
+				}
+			}
+		}
+}
+
+int tables_close_device(adapter *ad)
+{
+	int rv = run_ca_action(CA_CLOSE_DEVICE, ad, NULL);
+	ad->ca_mask = 0;
+	return rv;
+}
+
+int tables_init()
+{
+	mutex_init(&ca_mutex);
+#ifndef DISABLE_DVBCA
+	dvbca_init();
+#endif
+#ifndef DISABLE_DVBCSA
+	init_dvbapi();
+#endif
+	return 0;
+}

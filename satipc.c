@@ -90,7 +90,7 @@ int satipc_reply(sockets * s)
 	else if (rc != 200)
 		ad->err = 1;
 	sid = NULL;
-	if (rc == 200 && !ad->want_tune)
+	if (rc == 200 && !ad->want_tune && ad->last_cmd == RTSP_PLAY)
 		ad->ignore_packets = 0;
 	sess = NULL;
 	for (i = 0; i < la; i++)
@@ -182,6 +182,8 @@ int satipc_rtcp_reply(sockets * s)
 	adapter *ad = get_adapter(s->sid);
 	int strength, status, snr;
 	uint32_t rp;
+	
+	s->rlen = 0;
 	if (!ad)
 		return 0;
 //	LOG("satip_rtcp_reply called");
@@ -690,42 +692,50 @@ fe_delivery_system_t satipc_delsys(int aid, int fd, fe_delivery_system_t *sys)
 	return 0;
 }
 
-uint8_t determine_fe(adapter *a, int pos, char *sip, int sport)
+uint8_t determine_fe(adapter **a, int pos, char *sip, int sport)
 {
 	int i = pos - 1;
 	while (i >= 0)
 	{
-		if (sport == a[i].sport && !strcmp(a[i].sip, sip))
-			return a[i].satip_fe + 1;
+		adapter *ad = a[i];
+		if(!ad)
+			continue;
+		if (sport == ad->sport && !strcmp(ad->sip, sip))
+			return ad->satip_fe + 1;
 		i--;
 	}
 	return 1;
 
 }
 
-void find_satip_adapter(adapter *a)
+void find_satip_adapter(adapter **a)
 {
 	int i, la, j, k;
 	char *sep1, *sep2, *sep;
 	char *arg[50];
+	adapter *ad;
 	if (!opts.satip_servers[0])
 		return;
 	la = split(arg, opts.satip_servers, 50, ',');
 	j = 0;
 	for (i = 0; i < MAX_ADAPTERS; i++)
-		if (a[i].pa == -1 && a[i].fn == -1 && j < la)
+		if ((!a[i] || (a[i]->pa == -1 && a[i]->fn == -1)) && j < la)
 		{
-			a[i].open = (Open_device) satipc_open_device;
-			a[i].set_pid = (Set_pid) satipc_set_pid;
-			a[i].del_filters = (Del_filters) satipc_del_filters;
-			a[i].commit = (Adapter_commit) satipc_commit;
-			a[i].tune = (Tune) satipc_tune;
-			a[i].delsys = (Dvb_delsys) satipc_delsys;
-			a[i].post_init = (Adapter_commit) satip_post_init;
-			a[i].close = (Adapter_commit) satip_close_device;
+			if(!a[i])
+				a[i] = malloc1(sizeof(adapter));
+			
+			ad = a[i];
+			ad->open = (Open_device) satipc_open_device;
+			ad->set_pid = (Set_pid) satipc_set_pid;
+			ad->del_filters = (Del_filters) satipc_del_filters;
+			ad->commit = (Adapter_commit) satipc_commit;
+			ad->tune = (Tune) satipc_tune;
+			ad->delsys = (Dvb_delsys) satipc_delsys;
+			ad->post_init = (Adapter_commit) satip_post_init;
+			ad->close = (Adapter_commit) satip_close_device;
 
 			for (k = 0; k < 10; k++)
-				a[i].sys[k] = 0;
+				ad->sys[k] = 0;
 
 			sep = NULL;
 			sep1 = NULL;
@@ -762,24 +772,24 @@ void find_satip_adapter(adapter *a)
 			if (!sep2)
 				sep2 = "554";
 
-			a[i].sys[0] = a[i].tp.sys = map_int(sep, fe_delsys);
-			a[i].sip = sep1;
-			a[i].sport = map_int(sep2, NULL);
-			if (a[i].sys[0] == SYS_DVBS2)
-				a[i].sys[1] = SYS_DVBS;
-			if (a[i].sys[0] == SYS_DVBT2)
-				a[i].sys[1] = SYS_DVBT;
-			if (a[i].sys[0] == SYS_DVBC2)
-				a[i].sys[1] = SYS_DVBC_ANNEX_A;
+			ad->sys[0] = ad->tp.sys = map_int(sep, fe_delsys);
+			ad->sip = sep1;
+			ad->sport = map_int(sep2, NULL);
+			if (ad->sys[0] == SYS_DVBS2)
+				ad->sys[1] = SYS_DVBS;
+			if (ad->sys[0] == SYS_DVBT2)
+				ad->sys[1] = SYS_DVBT;
+			if (ad->sys[0] == SYS_DVBC2)
+				ad->sys[1] = SYS_DVBC_ANNEX_A;
 
-			a[i].satip_fe = determine_fe(a, i, a[i].sip, a[i].sport);
-			a[i].satip_addpids = opts.satip_addpids;
-			a[i].satip_setup_pids = opts.satip_setup_pids;
+			ad->satip_fe = determine_fe(a, i, ad->sip, ad->sport);
+			ad->satip_addpids = opts.satip_addpids;
+			ad->satip_setup_pids = opts.satip_setup_pids;
 
 			j++;
-			LOG("Satip device %s port %d delsys %d: %s %s", a[i].sip,
-					a[i].sport, a[i].sys[0], get_delsys(a[i].sys[0]),
-					get_delsys(a[i].sys[1]));
+			LOG("Satip device %s port %d delsys %d: %s %s", ad->sip,
+					ad->sport, ad->sys[0], get_delsys(ad->sys[0]),
+					get_delsys(ad->sys[1]));
 		}
 }
 

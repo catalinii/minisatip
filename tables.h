@@ -18,8 +18,8 @@ typedef struct struct_pmt
 	SPid *p;
 	int pid;
 	uint8_t ver;
-	uint16_t program_id;
-	uint16_t old_pmt;
+	uint16_t sid;
+	uint16_t old_key;
 } SPMT;
 
 
@@ -53,6 +53,10 @@ int process_stream(adapter *ad, int rlen);
 void tables_pid_del(adapter *ad, int pid);
 void tables_pid_add(adapter *ad, int pid, int existing);
 void clean_psi(adapter *ad, uint8_t *b);
+int tables_init_device(adapter *ad);
+int tables_close_device(adapter *ad);
+int tables_init();
+void init_ca_device(SCA *c);
 #endif
 
 #endif

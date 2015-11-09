@@ -23,8 +23,17 @@
 #define VAR_ARRAY_HEX 16
 #define VAR_ARRAY_STRING 17
 #define VAR_ARRAY_PSTRING 18
-#define VAR_FUNCTION_INT 19
-#define VAR_FUNCTION_STRING 20
+#define VAR_AARRAY_UINT8 19
+#define VAR_AARRAY_INT8 20
+#define VAR_AARRAY_UINT16 21
+#define VAR_AARRAY_INT16 22
+#define VAR_AARRAY_INT 23
+#define VAR_AARRAY_FLOAT 24
+#define VAR_AARRAY_HEX 25
+#define VAR_AARRAY_STRING 26
+#define VAR_AARRAY_PSTRING 27
+#define VAR_FUNCTION_INT 28
+#define VAR_FUNCTION_STRING 29
 
 
 typedef int (*get_data_int)(int p);
@@ -46,7 +55,9 @@ typedef struct struct_mutex
 	pthread_mutex_t mtx;
 	int state;
 	int line;
+	pthread_t tid;
 	char *file;
+	char nolog;
 } SMutex;
 
 
@@ -63,7 +74,6 @@ int getItemSize(int64_t key);
 int map_int(char *s, char ** v);
 int map_intd(char *s, char ** v, int dv);
 int map_float(char *s, int mul);
-int getItemChange(int64_t key, int *prev);
 void *mymalloc(int a, char *f, int l);
 void myfree(void *x, char *f, int l);
 char *header_parameter(char **arg, int i);
@@ -77,14 +87,14 @@ char *readfile(char *fn, char *ctype, int *len);
 void process_file(void *sock, char *s, int len, char *ctype);
 int closefile(char *mem, int len);
 
-void mutex_init(SMutex *mutex);
-void mutex_lock1(char *FILE, int line, SMutex *mutex);
-void mutex_unlock1(char *FILE, int line,  SMutex *mutex);
-void mutex_destroy(SMutex *mutex);
+int mutex_init(SMutex *mutex);
+int mutex_lock1(char *FILE, int line, SMutex *mutex);
+int mutex_unlock1(char *FILE, int line,  SMutex *mutex);
+int mutex_destroy(SMutex *mutex);
 pthread_t start_new_thread(char *name);
 pthread_t get_tid();
-void thread_getname(pthread_t tid, char *name, int len);
-void thread_setname(pthread_t tid, char *name);
+
+int add_new_lock(void **arr, int count, int size, SMutex *mutex);
 
 
 #define mutex_lock(m) mutex_lock1(__FILE__,__LINE__,m)
@@ -100,7 +110,5 @@ void thread_setname(pthread_t tid, char *name);
 #define LOG_AND_RETURN(rc,a,...) {LOG(a,##__VA_ARGS__);return rc;}
 #define malloc1(a) mymalloc(a,__FILE__,__LINE__)
 #define free1(a) myfree(a,__FILE__,__LINE__)
-
-
 
 #endif

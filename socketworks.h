@@ -9,6 +9,7 @@ typedef int (*read_action)(int, void *, size_t, void *, int *);
 
 typedef struct struct_sockets {
 	char enabled;
+	SMutex mutex;
 	int sock;		// socket - <0 for invalid/not used, 0 for end of the list
 	struct sockaddr_in sa;//remote address - set on accept or recvfrom on udp sockets
 	socket_action action;
@@ -29,7 +30,7 @@ typedef struct struct_sockets {
 	int events;
 	int last_poll;
 	pthread_t tid;
-	SMutex mutex, *lock;
+	SMutex *lock;
 } sockets;
 
 #define TYPE_UDP 0
@@ -77,4 +78,9 @@ void set_sock_lock(int i, SMutex *m);
 void set_socket_thread(int s_id, pthread_t tid);
 pthread_t get_socket_thread(int s_id);
 int tcp_listen(char *addr, int port);
+int set_linux_socket_timeout(int sockfd);
+extern __thread char *thread_name;
+extern __thread pthread_t tid;
+
+
 #endif

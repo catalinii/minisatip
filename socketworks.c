@@ -39,11 +39,19 @@
 
 #include "socketworks.h"
 #include "minisatip.h"
-#include "pthread.h"
+#include "utils.h"
 
 extern struct struct_opts opts;
-sockets s[MAX_SOCKS];
+sockets *s[MAX_SOCKS];
 int max_sock;
+SMutex s_mutex;
+
+struct thread_info
+{ /* Used as argument to thread_start() */
+	pthread_t thread_id; /* ID returned by pthread_create() */
+	int thread_num; /* Application-defined thread # */
+	char *argv_string; /* From command-line argument */
+};
 
 int fill_sockaddr(struct sockaddr_in *serv, char *host, int port)
 {
@@ -202,7 +210,7 @@ int udp_connect(char *addr, int port, struct sockaddr_in *serv)
 	return sock;
 }
 
-int set_tcp_socket_timeout(int sockfd)
+int set_linux_socket_timeout(int sockfd)
 {
 	struct timeval timeout;
 	timeout.tv_sec = 2;
@@ -241,7 +249,7 @@ int tcp_connect(char *addr, int port, struct sockaddr_in *serv, int blocking)
 		return -1;
 	}
 
-	set_tcp_socket_timeout(sock);
+	set_linux_socket_timeout(sock);
 
 	if (blocking)
 	{
@@ -336,9 +344,9 @@ int sockets_accept(int socket, void *buf, int len, sockets *ss)
 	ni = sockets_add(new_sock, &sa, -1, TYPE_TCP, NULL, NULL, NULL);
 	if (ss->action != NULL)
 	{
-		ss->action(&s[ni]);
+		ss->action(s[ni]);
 	}
-	set_tcp_socket_timeout(new_sock);
+	set_linux_socket_timeout(new_sock);
 
 	return 1;
 }
@@ -362,13 +370,21 @@ void sockets_lock(sockets *ss)
 {
 	mutex_lock(&ss->mutex);
 	if (ss->lock)
-		mutex_lock(ss->lock);
+		if(mutex_lock(ss->lock))
+		{
+			LOG("sockets_lock: Changing socket %d lock %p to NULL", ss->id, ss->lock);
+			ss->lock = NULL;
+		}
 }
 
 void sockets_unlock(sockets *ss)
 {
 	if (ss->lock)
-		mutex_unlock(ss->lock);
+		if(mutex_unlock(ss->lock))
+		{
+			LOG("sockets_unlock: Changing socket %d lock %p to NULL", ss->id, ss->lock);
+			ss->lock = NULL;
+		}
 	mutex_unlock(&ss->mutex);
 
 }
@@ -385,109 +401,106 @@ int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 {
 	int i;
 	char ra[50];
+	sockets *ss;
 
-	if (init_sock == 0)
-	{
-		init_sock = 1;
-		for (i = 0; i < MAX_SOCKS; i++)
-			s[i].sock = -1;
-	}
-	for (i = 0; i < MAX_SOCKS; i++)
-		if (!s[i].enabled)
-		{
-			mutex_init(&s[i].mutex);
-			mutex_lock(&s[i].mutex);
-			if(!s[i].enabled)
-				break;
-			mutex_unlock(&s[i].mutex);
-		}
-		
-	if (i == MAX_SOCKS)
-	{
-		return -1;
-	}	
-	
-	s[i].enabled = 1;
-	s[i].sock = sock;
-	s[i].tid = get_tid();
-	memset(&s[i].sa, 0, sizeof(s[i].sa));
+	i = add_new_lock((void **)s, MAX_SOCKS, sizeof(streams), &s_mutex);
+	if (i == -1)
+		LOG_AND_RETURN(-1, "sockets_add failed for socks %d", sock);
+
+	ss = s[i];
+	ss->enabled = 1;
+	ss->sock = sock;
+	ss->tid = get_tid();
+	memset(&ss->sa, 0, sizeof(ss->sa));
 	if (sa)
-		memcpy(&s[i].sa, sa, sizeof(s[i].sa));
-	s[i].action = s[i].close = s[i].timeout = NULL;
+		memcpy(&ss->sa, sa, sizeof(ss->sa));
+	ss->action = ss->close = ss->timeout = NULL;
 	if (a)
-		s[i].action = a;
+		ss->action = a;
 	if (c)
-		s[i].close = c;
+		ss->close = c;
 	if (t)
-		s[i].timeout = t;
-	s[i].sid = sid;
-	s[i].type = type & ~TYPE_CONNECT;
-	s[i].rtime = getTick();
-	s[i].wtime = 0;
+		ss->timeout = t;
+	ss->sid = sid;
+	ss->type = type & ~TYPE_CONNECT;
+	ss->rtime = getTick();
+	ss->wtime = 0;
 	if (max_sock <= i)
 		max_sock = i + 1;
-	s[i].buf = NULL;
-	s[i].lbuf = 0;
-	s[i].close_sec = 0;
-	s[i].id = i;
-	s[i].read = (read_action) sockets_read;
-	s[i].lock = NULL;
-	if (s[i].type == TYPE_UDP || s[i].type == TYPE_RTCP)
-		s[i].read = (read_action) sockets_recv;
-	else if (s[i].type == TYPE_SERVER)
-		s[i].read = (read_action) sockets_accept;
-	s[i].events = POLLIN | POLLPRI;
+	ss->buf = NULL;
+	ss->lbuf = 0;
+	ss->close_sec = 0;
+	ss->id = i;
+	ss->read = (read_action) sockets_read;
+	ss->lock = NULL;
+	if (ss->type == TYPE_UDP || ss->type == TYPE_RTCP)
+		ss->read = (read_action) sockets_recv;
+	else if (ss->type == TYPE_SERVER)
+		ss->read = (read_action) sockets_accept;
+	ss->events = POLLIN | POLLPRI;
 	if (type & TYPE_CONNECT)
-		s[i].events |= POLLOUT;
+		ss->events |= POLLOUT;
 
 	LOG(
 			"sockets_add: handle %d (type %d) returning socket index %d [%s:%d] read: %p",
-			s[i].sock, s[i].type, i, get_socket_rhost(i, ra, sizeof(ra)),
-			ntohs(s[i].sa.sin_port), s[i].read);
-	mutex_unlock(&s[i].mutex);
+			ss->sock, ss->type, i, get_socket_rhost(i, ra, sizeof(ra)),
+			ntohs(ss->sa.sin_port), ss->read);
+	mutex_unlock(&ss->mutex);
 	return i;
 }
 
 int sockets_del(int sock)
 {
-	int i, ss;
+	int i, so;
+	sockets *ss;
 
-	mutex_lock(&s[sock].mutex);
-	if (sock < 0 || sock > MAX_SOCKS || !s[sock].enabled)
-	{
-		mutex_unlock(&s[sock].mutex);
+	if (sock < 0 || sock > MAX_SOCKS || !s[sock] || !s[sock]->enabled)
 		return 0;
-	}
-	s[sock].enabled = 0;
-	ss = s[sock].sock;
-	s[sock].sock = -1;			 // avoid infinite loop
-	LOG("sockets_del: %d -> handle %d, sid %d", sock, ss, s[sock].sid);
 
-	if (s[sock].close)
-		s[sock].close(&s[sock]);
-	if(ss>=0)
-		close(ss);
-	s[sock].sid = -1;
+	ss = s[sock];
+	mutex_lock(&ss->mutex);
+	if (!ss->enabled)
+	{
+		mutex_unlock(&ss->mutex);
+		return 0;
+
+	}
+	mutex_lock(&s_mutex);
+	ss->enabled = 0;
+	so = ss->sock;
+	ss->sock = -1;			 // avoid infinite loop
+	LOG("sockets_del: %d -> handle %d, sid %d", sock, so, ss->sid);
+
+	if (ss->close)
+		ss->close(ss);
+	if (so >= 0)
+		close(so);
+	ss->sid = -1;
 	i = MAX_SOCKS;
-	while (--i >= 0 && !s[i].enabled)
-		s[i].sock = -1;
+	while (--i >= 0)
+		if(s[i] && !s[i]->enabled)
+			s[i]->sock = -1;
+		else if(s[i] && s[i]->enabled)
+			break;
 	max_sock = i + 1;
-	s[sock].events = 0;
-	s[sock].lock = NULL;
+	ss->events = 0;
+	ss->lock = NULL;
 	LOG("sockets_del: %d Last open socket is at index %d current_handle %d",
-			sock, i, ss);
-	mutex_unlock(&s[sock].mutex);
-	mutex_destroy(&s[sock].mutex);
+			sock, i, so);
+	mutex_unlock(&ss->mutex);
+	mutex_destroy(&ss->mutex);
+	mutex_unlock(&s_mutex);
 	return 0;
 }
 
-int run_loop, it = 0;
-int64_t bw, bwtt;
-int bwnotify, sleeping, sleeping_cnt;
-unsigned long int tbw;
-uint32_t reads;
-uint64_t nsecs;
+int run_loop = 1, it = 0;
 extern pthread_t main_tid;
+extern int bwnotify;
+extern int64_t bwtt, bw;
+
+__thread pthread_t tid;
+__thread char *thread_name;
+
 
 void *select_and_execute(void *arg)
 {
@@ -496,27 +509,31 @@ void *select_and_execute(void *arg)
 	unsigned char buf[2001];
 	int err;
 	struct pollfd pf[MAX_SOCKS];
-	run_loop = 1;
 	int lt, read_ok, c_time;
 	char ra[50];
-	char thread_name[100];
-	pthread_t tid = get_tid();
-	thread_getname(tid, thread_name, sizeof(thread_name));
+	
+	
+	if(arg)
+		thread_name = (char *)arg;
+	else 
+		thread_name = "main";
+		
+	tid = get_tid();
 	les = 1;
 	es = 0;
 	lt = getTick();
-	LOG("Starting select_and_execute on thread ID %x", tid);
+	LOG("Starting select_and_execute on thread ID %x, thread_name %s", tid, thread_name);
 	while (run_loop)
 	{
 		lt = getTick();
 		es = 0;
 		for (i = 0; i < max_sock; i++)
-			if (s[i].enabled && s[i].tid == tid)
+			if (s[i] && s[i]->enabled && s[i]->tid == tid)
 			{
-				pf[i].fd = s[i].sock;
-				pf[i].events = s[i].events;
+				pf[i].fd = s[i]->sock;
+				pf[i].events = s[i]->events;
 				pf[i].revents = 0;
-				s[i].last_poll = lt;
+				s[i]->last_poll = lt;
 				es++;
 			}
 			else
@@ -524,9 +541,8 @@ void *select_and_execute(void *arg)
 		i = -1;
 		if (les == 0 && es == 0 && tid != main_tid)
 		{
-			thread_getname(tid, buf, sizeof(buf));
 			LOG("No enabled sockets for Thread ID %lx name %s ... exiting ",
-					tid, buf);
+					tid, thread_name);
 			break;
 		}
 		les = es;
@@ -542,7 +558,10 @@ void *select_and_execute(void *arg)
 			while (++i < max_sock)
 				if (pf[i].revents)
 				{
-					sockets *ss = &s[i];
+					sockets *ss = s[i];
+					if(!ss)
+						continue;
+					
 					c_time = getTick();
 
 					LOGL(6,
@@ -569,22 +588,6 @@ void *select_and_execute(void *arg)
 						ss->rlen = 0;
 					}
 					rlen = 0;
-					if (tid == main_tid && (c_time - bwtt > 1000))
-					{
-						bwtt = c_time;
-						tbw += bw;
-						if (bw > 2000)
-							LOG(
-									"BW %dKB/s, Total BW: %ld MB, ns/read %lld, r: %d, tt: %lld ms, n: %d (s: %d ms, s_cnt %d)",
-									(int ) bw / 1024, tbw / 1024576,
-									nsecs / reads, reads, nsecs / 1000,
-									bwnotify, sleeping / 1000, sleeping_cnt);
-						bw = 0;
-						bwnotify = 0;
-						nsecs = 0;
-						reads = 0;
-						sleeping = sleeping_cnt = 0;
-					}
 					if (opts.bw > 0 && bw > opts.bw && ss->type == TYPE_DVR)
 					{
 						int ms = 1000 - c_time + bwtt;
@@ -633,7 +636,6 @@ void *select_and_execute(void *arg)
 						ss->action(ss);
 					sockets_unlock(ss);
 
-					//              if(s[i].type==TYPE_DVR && (c_time/1000 % 10 == 0))sockets_del(i); // we do this in stream.c in flush_stream*
 					if (!read_ok && ss->type != TYPE_SERVER)
 					{
 						char *err_str;
@@ -679,41 +681,43 @@ void *select_and_execute(void *arg)
 		// checking every 60seconds for idle connections - or if select times out
 		if (rv == 0 || c_time - lt >= 200)
 		{
+			sockets *ss;
 			lt = c_time;
 			i = -1;
 			while (++i < max_sock)
-				if ((s[i].enabled) && (s[i].tid == tid)
-						&& ((s[i].close_sec > 0
-								&& lt - s[i].rtime > s[i].close_sec)
-								|| (s[i].close_sec == 1)))
+				if ((ss = get_sockets(i)) && (ss->tid == tid)
+						&& ((ss->close_sec > 0
+								&& lt - ss->rtime > ss->close_sec)
+								|| (ss->close_sec == 1)))
 				{
-					if (s[i].timeout)
+					if (ss->timeout)
 					{
 						int rv;
-						sockets_lock(&s[i]);
-						rv = s[i].timeout(&s[i]);
-						sockets_unlock(&s[i]);
+						if(ss->sock == SOCK_TIMEOUT)
+							ss->rtime = c_time;
+						sockets_lock(ss);
+						rv = ss->timeout(ss);
+						sockets_unlock(ss);
 						if (rv)
 							sockets_del(i);
 					}
 
-					if (!s[i].timeout)
+					if (!ss->timeout)
 						sockets_del(i);
 				}
 		}
 	}
-	
-	if(tid == main_tid)
+
+	if (tid == main_tid)
 		LOG("The main loop ended, run_loop = %d", run_loop);
 	return NULL;
 }
 
 void sockets_setread(int i, void *r)
 {
-	if (i < 0 || i >= MAX_SOCKS)
-		return;
-
-	s[i].read = (read_action) r;
+	sockets *ss = get_sockets(i);
+	if (ss)
+		ss->read = (read_action) r;
 }
 
 void sockets_setbuf(int i, char *buf, int len)
@@ -833,24 +837,27 @@ get_current_timestamp_log(void)
 int sockets_del_for_sid(int ad)
 {
 	int i;
-
+	sockets *ss;
 	if (ad < 0)
 		return 0;
 	for (i = 0; i < MAX_SOCKS; i++)
-		if (s[i].enabled && s[i].sid >= 0 && s[i].type != TYPE_DVR
-				&& s[i].sid == ad)
+		if ((ss = get_sockets(i)) && ss->sid >= 0 && ss->type != TYPE_DVR
+				&& ss->sid == ad)
 		{
-			s[i].close_sec = 1;	//trigger close of the socket after this operation ends, otherwise we might close an socket on which we run action
-			s[i].sid = -1;// make sure the stream is not closed in the future to prevent closing the stream created by another socket
+			ss->close_sec = 1;	//trigger close of the socket after this operation ends, otherwise we might close an socket on which we run action
+			ss->sid = -1;// make sure the stream is not closed in the future to prevent closing the stream created by another socket
 		}
 	return 0;
 }
 
 void set_socket_buffer(int sid, unsigned char *buf, int len)
 {
-	s[sid].buf = buf;
-	s[sid].lbuf = len;
-//	s[sid].rlen = 0;
+	sockets *ss = get_sockets(sid);
+	if (!ss)
+		return;
+	
+	ss->buf = buf;
+	ss->lbuf = len;
 }
 
 void free_all_streams();
@@ -861,8 +868,13 @@ void free_all()
 	int i = 0;
 
 	for (i = MAX_SOCKS - 1; i > 0; i--)
-		if (s[i].enabled)
+	{
+		if (s[i] && s[i]->enabled)
 			sockets_del(i);
+		if(s[i])
+			free(s[i]);
+		s[i] = NULL;
+	}
 	free_all_streams();
 	free_all_adapters();
 }
@@ -902,9 +914,9 @@ void set_socket_receive_buffer(int sock, int len)
 
 sockets *get_sockets(int i)
 {
-	if (i < 0 || i >= MAX_SOCKS || !s[i].enabled)
+	if (i < 0 || i >= MAX_SOCKS || !s[i] || !s[i]->enabled)
 		return NULL;
-	return &s[i];
+	return s[i];
 }
 
 void set_socket_pos(int sock, int pos)

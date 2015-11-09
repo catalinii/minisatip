@@ -41,12 +41,14 @@
 #include <linux/dvb/ca.h>
 #include <fcntl.h>
 #include <ctype.h>
+#include "utils.h"
 #include "dvb.h"
 #include "socketworks.h"
 #include "minisatip.h"
 #include "dvbapi.h"
 #include "adapter.h"
 #include "tables.h"
+
 
 extern struct struct_opts opts;
 
@@ -57,10 +59,22 @@ int dvbapi_is_enabled = 0;
 int batchSize;
 int dvbapi_protocol_version = DVBAPI_PROTOCOL_VERSION;
 
-SKey keys[MAX_KEYS];
+SKey *keys[MAX_KEYS];
+SMutex keys_mutex;
 unsigned char read_buffer[1500];
 
-#define TEST_WRITE(a) if((a)<=0){LOG("write to dvbapi socket failed, closing socket %d",sock);sockets_del(dvbapi_sock);sock = 0;dvbapi_sock = -1;dvbapi_is_enabled = 0;}
+#define TEST_WRITE(a) {\
+	mutex_lock(&keys_mutex);\
+	if((a)<=0) \
+	{\
+		LOG("write to dvbapi socket failed, closing socket %d",sock);\
+		sockets_del(dvbapi_sock);\
+		sock = 0;\
+		dvbapi_sock = -1;\
+		dvbapi_is_enabled = 0;\
+	}\
+	mutex_unlock(&keys_mutex);\
+	}
 #define POINTER_TYPE_ECM ((void *)-TYPE_ECM)
 #define POINTER_1 ((void *)1)
 
@@ -142,8 +156,6 @@ int dvbapi_reply(sockets * s)
 			if (change_endianness)
 				pos += 2;  // for some reason the packet is longer with 2 bytes
 			pos += 65;
-			if (s->rlen < 9)
-				return 0;
 			dvbapi_copy16r(_pid, b, 7);
 			_pid &= 0x1FFF;
 			k_id = b[4];
@@ -151,12 +163,12 @@ int dvbapi_reply(sockets * s)
 			a_id = -1;
 			if (k)
 				a_id = k->adapter;
-
+			adapter_lock(a_id);
 			demux = b[5];
 			filter = b[6];
 			LOG(
-					"dvbapi requested set filter for pid %04X (%d), key %d, demux %d, filter %d",
-					_pid, _pid, k_id, demux, filter);
+					"dvbapi requested set filter for pid %04X (%d), key %d, demux %d, filter %d %s",
+					_pid, _pid, k_id, demux, filter, !k?"(KEY NOT VALID)":"");
 			if (!(p = find_pid(a_id, _pid)))
 			{
 				mark_pid_add(-1, a_id, _pid);
@@ -164,9 +176,12 @@ int dvbapi_reply(sockets * s)
 				p = find_pid(a_id, _pid);
 			}
 			if (!p)
+			{
+				adapter_unlock(a_id);
 				break;
+			}
 //			if(k && p->key != k_id)
-			if (p->filter == 255)
+			if (p->key == 255)
 			{
 				p->filter = filter;
 				k->demux = demux;
@@ -174,10 +189,9 @@ int dvbapi_reply(sockets * s)
 				p->key = k_id;
 				p->ecm_parity = 255;
 				invalidate_adapter(k->adapter);
-
 			}
 //			else p->ecm_parity = 255;
-
+			adapter_unlock(a_id);
 			break;
 		}
 		case DVBAPI_DMX_STOP:
@@ -190,6 +204,7 @@ int dvbapi_reply(sockets * s)
 			if (!k)
 				break;
 			a_id = k->adapter;
+			adapter_lock(a_id);
 			dvbapi_copy16r(_pid, b, 7)
 			_pid &= 0x1FFF;
 			LOG(
@@ -201,7 +216,7 @@ int dvbapi_reply(sockets * s)
 				p->key = p->filter = 255;
 				invalidate_adapter(k->adapter);
 			}
-
+			adapter_unlock(a_id);
 			break;
 		}
 		case DVBAPI_CA_SET_PID:
@@ -229,6 +244,7 @@ int dvbapi_reply(sockets * s)
 				char *queued = "";
 				int do_queue = 0;
 				mutex_lock(&k->mutex);
+				adapter_lock(a_id);
 				k->key_len = 8;
 				if (parity == k->parity && k->key_ok[k->parity]
 						&& (memcmp(cw, k->cw[k->parity], k->key_len) != 0))
@@ -257,6 +273,7 @@ int dvbapi_reply(sockets * s)
 				p = find_pid(k->adapter, k->pmt_pid);
 				if (p)
 					p->type |= CLEAN_PMT;
+				adapter_unlock(a_id);
 
 			}
 			else
@@ -284,6 +301,7 @@ int dvbapi_reply(sockets * s)
 			{
 				int64_t e_key = DVBAPI_ITEM + ((1 + k->adapter) << 24) + 2;
 				setItem(e_key, b, 1, 0);
+				mutex_lock(&k->mutex);
 				k->ecm_info = getItem(e_key);
 				k->cardsystem = k->ecm_info;
 				k->reader = k->ecm_info + 256;
@@ -317,11 +335,13 @@ int dvbapi_reply(sockets * s)
 			}
 			if (i < pos1 && k)
 				k->hops = b[i++];
+			if(k)
+				mutex_unlock(&k->mutex);
 			pos += i;
 			LOG(
-					"dvbapi: ECM_INFO: key %d, SID = %04X, CAID = %04X (%s), PID = %04X, ProvID = %06X, ECM time = %d ms, reader = %s, from = %s, protocol = %s, hops = %d",
+					"dvbapi: ECM_INFO: key %d, SID = %04X, CAID = %04X (%s), PID = %d (%04X), ProvID = %06X, ECM time = %d ms, reader = %s, from = %s, protocol = %s, hops = %d",
 					k ? k->id : -1, sid, k ? k->caid : 0, msg[0],
-					k ? k->info_pid : 0, k ? k->prid : 0, k ? k->ecmtime : 0,
+					k ? k->info_pid : 0, k ? k->info_pid : 0, k ? k->prid : 0, k ? k->ecmtime : 0,
 					msg[1], msg[2], msg[3], k ? k->hops : 0);
 			break;
 		}
@@ -399,12 +419,12 @@ SKey *get_active_key(SPid *p)
 			return k;
 		}
 
-		if (k->next_key < keys || k->next_key > keys + MAX_KEYS)
-		{
-			LOGL(3, "get_active_key: invalid next_key for key %d: %p", k->id,
-					k->next_key);
-			k->next_key = NULL;
-		}
+//		if (k->next_key < keys || k->next_key > keys + MAX_KEYS)
+//		{
+//			LOGL(3, "get_active_key: invalid next_key for key %d: %p", k->id,
+//					k->next_key);
+//			k->next_key = NULL;
+//		}
 		k = k->next_key;
 		LOGL(3,
 				"get_active_key: trying next key for pid %d, key %d parity %d ok %d %d",
@@ -469,7 +489,7 @@ int decrypt_batch(SKey *k)
 	k->batch[k->blen].data = NULL;
 	k->batch[k->blen].len = 0;
 	dvbcsa_bs_decrypt(k->key[k->parity], k->batch, 184);
-	LOGL(5,
+	LOGL(6,
 			"dvbapi: decrypted key %d parity %d at len %d, channel_id %d (pid %d) %p",
 			k->id, k->parity, k->blen, k->sid, pid, k->batch[0].data); //0x99
 	k->blen = 0;
@@ -485,7 +505,7 @@ void mark_decryption_failed(unsigned char *b, SKey *k, adapter *ad)
 	if (!ad)
 		return;
 	pid = (b[1] & 0x1F) * 256 + b[2];
-	LOGL(4,
+	LOGL(5,
 			"NOT DECRYPTING for key %d drop_encrypted=%d parity %d pid %d key_ok %d",
 			k ? k->id : -1, opts.drop_encrypted, k ? k->parity : -1, pid,
 			k ? k->key_ok[k->parity] : -1);
@@ -580,7 +600,7 @@ int decrypt_stream(adapter *ad, void *arg)
 			if (b[3] & 0x20)
 			{
 				adapt_len = (b[4] < 183) ? b[4] + 5 : 0;
-				LOGL(4, "Adaptation for pid %d, specified len %d, final len %d",
+				LOGL(5, "Adaptation for pid %d, specified len %d, final len %d",
 						pid, b[4], adapt_len);
 			}
 			else
@@ -599,9 +619,9 @@ int decrypt_stream(adapter *ad, void *arg)
 	}
 
 	for (i = 0; i < MAX_KEYS; i++)  // decrypt everything that's left
-		if (keys[i].enabled && (keys[i].blen > 0)
-				&& (keys[i].adapter == ad->id))
-			decrypt_batch(&keys[i]);
+		if (keys[i] && keys[i]->enabled && (keys[i]->blen > 0)
+				&& (keys[i]->adapter == ad->id))
+			decrypt_batch(keys[i]);
 //	else 
 //		if((parity != -1) && k)LOGL(5, "NOT DECRYPTING sid %d, parity %d, %d %d, ctime %d last_key %d", sid->sid, parity, key_ok[parity], j, ctime, k->last_key[parity]);
 
@@ -618,6 +638,7 @@ int dvbapi_send_pmt(SKey *k)
 
 	copy32(buf, 0, AOT_CA_PMT);
 	buf[6] = CAPMT_LIST_UPDATE;
+//	buf[6] = CAPMT_LIST_ONLY;
 	copy16(buf, 7, k->sid);
 	buf[9] = 1;
 
@@ -639,10 +660,9 @@ int dvbapi_close(sockets * s)
 			s->sock);
 	sock = 0;
 	dvbapi_is_enabled = 0;
-	unregister_dvbapi();
 	SKey *k;
 	for (i = 0; i < MAX_KEYS; i++)
-		if (keys[i].enabled)
+		if (keys[i] && keys[i]->enabled)
 		{
 			k = get_key(i);
 			if (!k)
@@ -656,11 +676,9 @@ int dvbapi_close(sockets * s)
 
 int connect_dvbapi(void *arg)
 {
-	int ctime;
-
-	ctime = getTick();
+	sockets *s = (sockets *)arg;
 	if ((sock > 0) && dvbapi_is_enabled)  // already connected
-		return sock;
+		return 0;
 
 	dvbapi_is_enabled = 0;
 
@@ -688,7 +706,7 @@ void init_dvbapi()
 	NULL, NULL, (socket_action) connect_dvbapi);
 	sockets_timeout(poller_sock, 5000); // try to connect every 5s
 	set_sockets_rtime(poller_sock, -5 * 1000);
-
+	mutex_init(&keys_mutex);
 }
 
 void send_client_info(sockets *s)
@@ -778,23 +796,20 @@ int batch_size() // make sure the number is divisible by 7
 	return batchSize;
 }
 
+
 int keys_add(int adapter, int sid, int pmt_pid)
 {
 	int i;
 	SKey *k;
-	for (i = 0; i < MAX_KEYS; i++)
-		if (!keys[i].enabled)
-		{
-			mutex_lock(&keys[i].mutex);
-			if (!keys[i].enabled)
-				break;
-			mutex_unlock(&keys[i].mutex);
-
-		}
-	if (i == MAX_KEYS)
+	i = add_new_lock((void **)keys, MAX_KEYS, sizeof(SKey), &keys_mutex);
+	
+	if (i == -1)
+	{
 		LOG_AND_RETURN(-1, "Key buffer is full, could not add new keys");
-	k = &keys[i];
-//	mutex_init(&k->mutex, &k->mutex0);
+	}
+	if(!keys[i])
+		keys[i] = malloc(sizeof(SKey));
+	k = keys[i];
 	if (!k->key[0])
 		k->key[0] = dvbcsa_bs_key_alloc();
 	if (!k->key[1])
@@ -837,10 +852,16 @@ int keys_del(int i)
 	SKey *k;
 	unsigned char buf[8] =
 	{ 0x9F, 0x80, 0x3f, 4, 0x83, 2, 0, 0 };
-	if ((i < 0) || (i >= MAX_KEYS) || (!keys[i].enabled))
+	k = get_key(i);
+	if (!k)
 		return 0;
-	k = &keys[i];
+	
 	mutex_lock(&k->mutex);
+	if (!k->enabled)
+	{
+		mutex_unlock(&k->mutex);
+		return 0;
+	}
 	aid = k->adapter;
 	k->enabled = 0;
 //	buf[7] = k->demux;
@@ -849,14 +870,15 @@ int keys_del(int i)
 			sock, k->pmt_pid);
 	if ((buf[7] != 255) && (sock > 0))
 		TEST_WRITE(write(sock, buf, sizeof(buf)));
-	mutex_lock(&k->mutex);
+	
 	k->sid = 0;
 	k->pmt_pid = 0;
 	k->adapter = -1;
 	k->demux = -1;
-	reset_pids_type_for_key(aid, i);
-	if (k->next_key)
-		keys_del(k->next_key->id);
+	reset_ecm_type_for_key(aid, i);
+//	if (k->next_key)
+//		keys_del(k->next_key->id);
+//		tables_pid_del(get_adapter(k->next_key->adapter), k->next_key->pmt_pid);
 	k->next_key = NULL;
 	invalidate_adapter(aid);
 	ek = 0;
@@ -866,7 +888,7 @@ int keys_del(int i)
 	k->hops = k->caid = k->info_pid = k->prid = k->ecmtime = 0;
 	buf[7] = 0xFF;
 	for (j = 0; j < MAX_KEYS; j++)
-		if (keys[j].enabled)
+		if (keys[j] && keys[j]->enabled)
 			ek++;
 //	if(!ek && sock>0)
 //		TEST_WRITE(write(sock, buf, sizeof(buf)));
@@ -877,9 +899,9 @@ int keys_del(int i)
 
 SKey *get_key(int i)
 {
-	if (i < 0 || i >= MAX_KEYS || !keys[i].enabled)
+	if (i < 0 || i >= MAX_KEYS || !keys[i] || !keys[i]->enabled)
 		return NULL;
-	return &keys[i];
+	return keys[i];
 }
 
 void dvbapi_add_pid(adapter *ad, void *arg)
@@ -904,13 +926,21 @@ void dvbapi_add_pmt(adapter *ad, void *arg)
 
 	key = p->key;
 	if (!get_key(p->key))
-		key = keys_add(ad->id, spmt->program_id, pid);
+		key = keys_add(ad->id, spmt->sid, pid);
 	k = get_key(key);
+	if (!k)
+		return;
+	mutex_lock(&k->mutex);
 	k->pi_len = spmt->pi_len;
 	k->pi = spmt->pi;
+	k->sid = spmt->sid;
+	k->adapter = ad->id;
+	k->pmt_pid = pid;
 	dvbapi_send_pmt(k);
 	p->key = key;
-	set_next_key(p->key, spmt->old_pmt);
+	if(p->key != spmt->old_key)
+		set_next_key(p->key, spmt->old_key);
+	mutex_unlock(&k->mutex);
 
 }
 void dvbapi_del_pmt(adapter *ad, void *arg)
@@ -920,12 +950,18 @@ void dvbapi_del_pmt(adapter *ad, void *arg)
 	keys_del(p->key);
 }
 
+int dvbapi_init_dev(adapter *ad, void *arg)
+{
+	return 1;
+}
+
 SCA dvbapi;
 
 void register_dvbapi()
 {
 	dvbapi.enabled = 1; // ignore it anyway
 	memset(dvbapi.action, 0, sizeof(dvbapi.action));
+	dvbapi.action[CA_INIT_DEVICE] = (ca_action) &dvbapi_init_dev;
 	dvbapi.action[CA_ADD_PID] = (ca_action) &dvbapi_add_pid;
 	dvbapi.action[CA_DEL_PID] = (ca_action) &dvbapi_del_pid;
 	dvbapi.action[CA_ADD_PMT] = (ca_action) &dvbapi_add_pmt;
@@ -937,35 +973,38 @@ void register_dvbapi()
 
 void unregister_dvbapi()
 {
+	LOG("unregistering dvbapi as the socket is closed");
 	del_ca(&dvbapi);
 }
 
 void dvbapi_delete_keys_for_adapter(int aid)
 {
 	int i;
+	SKey *k;
 	for (i = 0; i < MAX_KEYS; i++)
-		if (keys[i].enabled && keys[i].adapter == aid)
+		if ((k = get_key(i)) && k->adapter == aid)
 			keys_del(i);
 }
 
+SKey *k_tmp;
 _symbols dvbapi_sym[] =
 {
-		{ "key_enabled", VAR_ARRAY_INT8, &keys[0].enabled, 1, MAX_KEYS,
-				sizeof(keys[0]) },
-		{ "key_hops", VAR_ARRAY_INT8, &keys[0].hops, 1, MAX_KEYS,
-				sizeof(keys[0]) },
-		{ "key_ecmtime", VAR_ARRAY_INT, &keys[0].ecmtime, 1, MAX_KEYS,
-				sizeof(keys[0]) },
-		{ "key_pmt", VAR_ARRAY_INT, &keys[0].pmt_pid, 1, MAX_KEYS,
-				sizeof(keys[0]) },
-		{ "key_cardsystem", VAR_ARRAY_PSTRING, &keys[0].cardsystem, 1, MAX_KEYS,
-				sizeof(keys[0]) },
-		{ "key_reader", VAR_ARRAY_PSTRING, &keys[0].reader, 1, MAX_KEYS,
-				sizeof(keys[0]) },
-		{ "key_from", VAR_ARRAY_PSTRING, &keys[0].from, 1, MAX_KEYS,
-				sizeof(keys[0]) },
-		{ "key_protocol", VAR_ARRAY_PSTRING, &keys[0].protocol, 1, MAX_KEYS,
-				sizeof(keys[0]) },
+		{ "key_enabled", VAR_AARRAY_INT8, keys, 1, MAX_KEYS,
+				(long int)&k_tmp[0].enabled - (long int)&k_tmp[0] },
+		{ "key_hops", VAR_AARRAY_INT8, keys, 1, MAX_KEYS,
+				(long int)&k_tmp[0].hops - (long int)&k_tmp[0] },
+		{ "key_ecmtime", VAR_AARRAY_INT, keys, 1, MAX_KEYS,
+				(long int)&k_tmp[0].ecmtime - (long int)&k_tmp[0] },
+		{ "key_pmt", VAR_AARRAY_INT, keys, 1, MAX_KEYS,
+				(long int)&k_tmp[0].pmt_pid - (long int)&k_tmp[0] },
+		{ "key_cardsystem", VAR_AARRAY_PSTRING, keys, 1, MAX_KEYS,
+				(long int)&k_tmp[0].cardsystem - (long int)&k_tmp[0] },
+		{ "key_reader", VAR_AARRAY_PSTRING, keys, 1, MAX_KEYS,
+				(long int)&k_tmp[0].reader - (long int)&k_tmp[0] },
+		{ "key_from", VAR_AARRAY_PSTRING, keys, 1, MAX_KEYS,
+				(long int)&k_tmp[0].from - (long int)&k_tmp[0] },
+		{ "key_protocol", VAR_AARRAY_PSTRING, keys, 1, MAX_KEYS,
+				(long int)&k_tmp[0].protocol - (long int)&k_tmp[0] },
 
 		{ NULL, 0, NULL, 0, 0 } };
 

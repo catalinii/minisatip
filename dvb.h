@@ -64,7 +64,9 @@ typedef struct struct_transponder
 	int diseqc;
 
 #define SWITCH_UNICABLE 1
-#define SWITCH_JESS 2	
+#define SWITCH_JESS 2
+#define SWITCH_SLAVE 3
+	
 	int switch_type; // tuner type 
 	int uslot; // unicable/jess slot
 	int ufreq; // unicable/jess frequency
