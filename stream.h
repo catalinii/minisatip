@@ -64,6 +64,7 @@ int streams_add ();
 int read_dmx (sockets * s);
 int stream_timeouts ();
 int close_streams_for_adapter (int ad, int except);
+int close_stream(int i);
 void dump_streams ();
 streams *get_sid1 (int sid, char *file, int line, int warning);
 int get_session_id( int i);
@@ -73,6 +74,7 @@ int rtcp_confirm(sockets *s);
 char *get_stream_rhost(int s_id, char *dest, int ld);
 int get_stream_rport(int s_id);
 int get_streams_for_adapter(int aid);
+int find_session_id(int id);
 
 #define get_sid(a) get_sid1(a, __FILE__, __LINE__,1)
 #define get_sid_nw(a) get_sid1(a, __FILE__, __LINE__,0)

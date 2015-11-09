@@ -8,7 +8,10 @@ int getItemLen(int64_t key);
 int setItem(int64_t key, unsigned char *data, int len, int pos);
 int delItem(int64_t key);
 int delItemP(void *p);
-int split (char **rv, char *s, int lrv, char sep);
+int setItemSize(int64_t key, uint32_t max_size);
+int setItemTimeout(int64_t key, int tmout);
+int setItem(int64_t key, unsigned char *data, int len, int pos);
+int getItemSize(int64_t key);
 int map_int (char *s, char ** v);
 int map_intd (char *s, char ** v, int dv);
 int map_float (char *s, int mul);
@@ -23,8 +26,9 @@ void set_signal_handler ();
 int becomeDaemon ();
 char *readfile(char *fn, char *ctype, int *len);
 void process_file(sockets *so, char *s, int len, char *ctype);
-
-
+int end_of_header(char *buf);
+char *readfile(char *fn, char *ctype, int *len);
+int closefile(char *mem, int len);
 
 //#define proxy_log(level, fmt, ...) _proxy_log(level, fmt"\n", ##__VA_ARGS__)
 

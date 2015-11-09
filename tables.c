@@ -194,7 +194,7 @@ int assemble_packet(uint8_t **b1, adapter *ad, int check_crc)
 
 	item_key = TABLES_ITEM + (ad->id << 16) + pid;
 
-	if (len > 183)
+	if (len > 180)
 	{
 		setItem(item_key, b + 5, 183, 0);
 		setItemTimeout(item_key, ASSEMBLE_TIMEOUT);

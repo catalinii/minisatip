@@ -50,6 +50,9 @@
 #include <sys/mman.h>
 #include "utils.h"
 #include "minisatip.h"
+#ifndef __mips__
+#include <execinfo.h>
+#endif
 
 extern struct struct_opts opts;
 extern char version[], app_name[];
