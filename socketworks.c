@@ -370,9 +370,10 @@ void sockets_lock(sockets *ss)
 {
 	mutex_lock(&ss->mutex);
 	if (ss->lock)
-		if(mutex_lock(ss->lock))
+		if (mutex_lock(ss->lock))
 		{
-			LOG("sockets_lock: Changing socket %d lock %p to NULL", ss->id, ss->lock);
+			LOG("sockets_lock: Changing socket %d lock %p to NULL", ss->id,
+					ss->lock);
 			ss->lock = NULL;
 		}
 }
@@ -380,9 +381,10 @@ void sockets_lock(sockets *ss)
 void sockets_unlock(sockets *ss)
 {
 	if (ss->lock)
-		if(mutex_unlock(ss->lock))
+		if (mutex_unlock(ss->lock))
 		{
-			LOG("sockets_unlock: Changing socket %d lock %p to NULL", ss->id, ss->lock);
+			LOG("sockets_unlock: Changing socket %d lock %p to NULL", ss->id,
+					ss->lock);
 			ss->lock = NULL;
 		}
 	mutex_unlock(&ss->mutex);
@@ -393,7 +395,10 @@ void set_sock_lock(int i, SMutex *m)
 {
 	sockets *ss = get_sockets(i);
 	if (ss)
+	{
 		ss->lock = m;
+		LOG("%s: sock_id %d locks also mutex %p", __FUNCTION__, i, m);
+	}
 }
 
 int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
@@ -403,7 +408,7 @@ int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 	char ra[50];
 	sockets *ss;
 
-	i = add_new_lock((void **)s, MAX_SOCKS, sizeof(streams), &s_mutex);
+	i = add_new_lock((void **) s, MAX_SOCKS, sizeof(streams), &s_mutex);
 	if (i == -1)
 		LOG_AND_RETURN(-1, "sockets_add failed for socks %d", sock);
 
@@ -478,9 +483,9 @@ int sockets_del(int sock)
 	ss->sid = -1;
 	i = MAX_SOCKS;
 	while (--i >= 0)
-		if(s[i] && !s[i]->enabled)
+		if (s[i] && !s[i]->enabled)
 			s[i]->sock = -1;
-		else if(s[i] && s[i]->enabled)
+		else if (s[i] && s[i]->enabled)
 			break;
 	max_sock = i + 1;
 	ss->events = 0;
@@ -501,7 +506,6 @@ extern int64_t bwtt, bw;
 __thread pthread_t tid;
 __thread char *thread_name;
 
-
 void *select_and_execute(void *arg)
 {
 	fd_set io;
@@ -511,22 +515,23 @@ void *select_and_execute(void *arg)
 	struct pollfd pf[MAX_SOCKS];
 	int lt, read_ok, c_time;
 	char ra[50];
-	
-	
-	if(arg)
-		thread_name = (char *)arg;
-	else 
+
+	if (arg)
+		thread_name = (char *) arg;
+	else
 		thread_name = "main";
-		
+
 	tid = get_tid();
 	les = 1;
 	es = 0;
 	lt = getTick();
-	LOG("Starting select_and_execute on thread ID %x, thread_name %s", tid, thread_name);
+	LOG("Starting select_and_execute on thread ID %x, thread_name %s", tid,
+			thread_name);
 	while (run_loop)
 	{
 		lt = getTick();
 		es = 0;
+		clean_mutexes();
 		for (i = 0; i < max_sock; i++)
 			if (s[i] && s[i]->enabled && s[i]->tid == tid)
 			{
@@ -559,9 +564,9 @@ void *select_and_execute(void *arg)
 				if (pf[i].revents)
 				{
 					sockets *ss = s[i];
-					if(!ss)
+					if (!ss)
 						continue;
-					
+
 					c_time = getTick();
 
 					LOGL(6,
@@ -653,8 +658,11 @@ void *select_and_execute(void *arg)
 						else
 							err_str = strerror(err);
 
-						if (ss->type == TYPE_RTCP)
+						if (ss->type == TYPE_RTCP || ss->sock == SOCK_TIMEOUT)
 						{
+							LOG(
+									"ignoring error on sock_id %d handle %d type %d",
+									ss->id, ss->sock, ss->type);
 							continue; // do not close the RTCP socket, we might get some errors here but ignore them
 						}
 						LOG(
@@ -686,14 +694,13 @@ void *select_and_execute(void *arg)
 			i = -1;
 			while (++i < max_sock)
 				if ((ss = get_sockets(i)) && (ss->tid == tid)
-						&& ((ss->close_sec > 0
-								&& lt - ss->rtime > ss->close_sec)
+						&& ((ss->close_sec > 0 && lt - ss->rtime > ss->close_sec)
 								|| (ss->close_sec == 1)))
 				{
 					if (ss->timeout)
 					{
 						int rv;
-						if(ss->sock == SOCK_TIMEOUT)
+						if (ss->sock == SOCK_TIMEOUT)
 							ss->rtime = c_time;
 						sockets_lock(ss);
 						rv = ss->timeout(ss);
@@ -844,7 +851,7 @@ int sockets_del_for_sid(int ad)
 		if ((ss = get_sockets(i)) && ss->sid >= 0 && ss->type != TYPE_DVR
 				&& ss->sid == ad)
 		{
-			ss->close_sec = 1;	//trigger close of the socket after this operation ends, otherwise we might close an socket on which we run action
+			ss->close_sec = 1;//trigger close of the socket after this operation ends, otherwise we might close an socket on which we run action
 			ss->sid = -1;// make sure the stream is not closed in the future to prevent closing the stream created by another socket
 		}
 	return 0;
@@ -855,7 +862,7 @@ void set_socket_buffer(int sid, unsigned char *buf, int len)
 	sockets *ss = get_sockets(sid);
 	if (!ss)
 		return;
-	
+
 	ss->buf = buf;
 	ss->lbuf = len;
 }
@@ -871,7 +878,7 @@ void free_all()
 	{
 		if (s[i] && s[i]->enabled)
 			sockets_del(i);
-		if(s[i])
+		if (s[i])
 			free(s[i]);
 		s[i] = NULL;
 	}

@@ -267,8 +267,6 @@ void close_adapter(int na)
 		sockets_del(ad->sock);
 	if (ad->ca_mask > 0)
 		tables_close_device(ad);
-	if (ad->fe_sock > 0)
-		sockets_del(ad->fe_sock);
 	ad->ca_mask = 0;
 	ad->fe = 0;
 	ad->dvr = 0;

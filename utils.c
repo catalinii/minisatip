@@ -517,6 +517,8 @@ void myfree(void *x, char *f, int l)
 	free(x);
 }
 
+pthread_mutex_t log_mutex;
+
 void _log(int level, char * file, int line, char *fmt, ...)
 {
 	va_list arg;
@@ -532,18 +534,18 @@ void _log(int level, char * file, int line, char *fmt, ...)
 		return;
 
 	stid[0] = 0;
-	if(!opts.no_threads)
+	if (!opts.no_threads)
 	{
-		utils_mutex.nolog = 1;
+		pthread_mutex_lock(&log_mutex);
 		snprintf(stid, sizeof(stid) - 2, " %s", thread_name);
 		stid[sizeof(stid) - 1] = 0;
 	}
-	mutex_init(&utils_mutex);
-	mutex_lock(&utils_mutex);
+
 	if (!fmt)
 	{
 		printf("NULL format at %s:%d !!!!!", file, line);
-		mutex_unlock(&utils_mutex);
+		if (!opts.no_threads)
+			pthread_mutex_unlock(&log_mutex);
 		return;
 	}
 	idx = 1 - idx;
@@ -599,7 +601,8 @@ void _log(int level, char * file, int line, char *fmt, ...)
 			puts(output[idx]);
 	}
 	fflush(stdout);
-	mutex_unlock(&utils_mutex);
+	if (!opts.no_threads)
+		pthread_mutex_unlock(&log_mutex);
 }
 
 int endswith(char *src, char *with)
@@ -754,12 +757,13 @@ int var_eval(char *orig, int len, char *dest, int max_len)
 						char **p1 = (char **) sym[i][j].addr;
 						char *p = p1[off];
 						char zero[16];
-						
-						if(!p)
+
+						if (!p)
 						{
 							memset(zero, 0, sizeof(zero));
 							p = zero;
-						} else
+						}
+						else
 							p += sym[i][j].skip;
 
 						switch (sym[i][j].type)
@@ -948,7 +952,7 @@ int closefile(char *mem, int len)
 int mutex_init(SMutex* mutex)
 {
 	int rv;
-	if(opts.no_threads)
+	if (opts.no_threads)
 		return 0;
 	pthread_mutexattr_t attr;
 	pthread_mutexattr_init(&attr);
@@ -959,49 +963,54 @@ int mutex_init(SMutex* mutex)
 
 	if ((rv = pthread_mutex_init(&mutex->mtx, &attr)))
 	{
-		if (!mutex->nolog)
-			LOG("mutex init %p failed with error %d %s", mutex, rv,
-					strerror(rv));
+		LOG("mutex init %p failed with error %d %s", mutex, rv, strerror(rv));
 		return rv;
 	}
 
 	mutex->enabled = 1;
 	mutex->state = 0;
+	LOG("Mutex init %p", mutex);
 	return 0;
 }
+
+__thread SMutex *mutexes[50];
+__thread int imtx = 0;
+
 int mutex_lock1(char *FILE, int line, SMutex* mutex)
 {
 	int rv;
 	int start_lock = 0;
-	if(opts.no_threads)
+	if (opts.no_threads)
 		return 0;
+
+	if (!mutex || !mutex->enabled)
+	{
+		LOGL(3, "%s:%d Mutex not enabled %p", FILE, line, mutex);
+		return 1;
+	}
 
 	if (mutex && mutex->enabled && mutex->state && tid != mutex->tid)
 	{
-		if (!mutex->nolog)
-			LOGL(4, "%s:%d Locking mutex %p already locked at %s:%d tid %x",
-					FILE, line, mutex, mutex->file, mutex->line, mutex->tid);
+		LOGL(4, "%s:%d Locking mutex %p already locked at %s:%d tid %x", FILE,
+				line, mutex, mutex->file, mutex->line, mutex->tid);
 		start_lock = getTick();
 	}
-	if (!mutex->enabled)
-	{
-		if (!mutex->nolog)
-			LOGL(3, "%s:%d Mutex not enabled %p", FILE, line, mutex);
-		return 1;
-	}
+	else
+		LOGL(5, "%s:%d Locking mutex %p", FILE, line, mutex);
 	rv = pthread_mutex_lock(&mutex->mtx);
 	if (rv != 0)
 	{
-		if (!mutex->nolog)
-			LOG("Mutex Lock %p failed", mutex);
+		LOG("Mutex Lock %p failed", mutex);
 		return rv;
 	}
 	mutex->file = FILE;
 	mutex->line = line;
 	mutex->state = 1;
 	mutex->tid = tid;
+	mutexes[imtx++] = mutex;
 	if (start_lock > 0)
-		LOGL(4, "%s:%d Locked %p after %d ms", FILE, line, mutex, getTick() - start_lock);
+		LOGL(4, "%s:%d Locked %p after %d ms", FILE, line, mutex,
+				getTick() - start_lock);
 
 	return 0;
 
@@ -1009,43 +1018,84 @@ int mutex_lock1(char *FILE, int line, SMutex* mutex)
 int mutex_unlock1(char *FILE, int line, SMutex* mutex)
 {
 	int rv = -1;
-	if(opts.no_threads)
+	if (opts.no_threads)
 		return 0;
-	if (mutex->enabled)
-		rv = pthread_mutex_unlock(&mutex->mtx);
-	else if (!mutex->nolog)
-		LOGL(3, "%s:%d Unlock NULL mutex", FILE, line);
-	if(rv != 0 && rv != 1 && rv != -1)
+
+	if (!mutex || mutex->enabled)
 	{
-		if(!mutex->nolog)
-			LOGL(3, "mutex_unlock failed at %s:%d: %d %s", FILE, line, rv, strerror(rv));
+		LOGL(5, "%s:%d Unlocking mutex %p", FILE, line, mutex);
+
+		rv = pthread_mutex_unlock(&mutex->mtx);
 	}
-	else rv = 0;
+	else
+		LOGL(3, "%s:%d Unlock disabled mutex %p", FILE, line, mutex);
+	if (rv != 0 && rv != 1 && rv != -1)
+	{
+		LOGL(3, "mutex_unlock failed at %s:%d: %d %s", FILE, line, rv,
+				strerror(rv));
+	}
+	else
+		rv = 0;
+
+	if ((imtx >= 1) && mutexes[imtx - 1] == mutex)
+		imtx--;
+	else if ((imtx >= 2) && mutexes[imtx - 2] == mutex)
+	{
+		mutexes[imtx - 2] = mutexes[imtx - 1];
+		imtx--;
+	}
+	else
+		LOG("mutex_leak: Expected %p got %p", mutexes[imtx], mutex);
+
 	return rv;
 }
 
 int mutex_destroy(SMutex* mutex)
 {
 	int rv;
-	if(opts.no_threads)
+	if (opts.no_threads)
 		return 0;
 	if (!mutex->enabled)
 	{
-		if (!mutex->nolog)
-			LOG("destroy NULL mutex");
+		LOG("destroy disabled mutex %p", mutex);
+
 		return 1;
 	}
 	mutex->enabled = 0;
-	mutex_unlock(mutex);
-	LOGL(4, "Destroyed mutex %p", mutex);
+
+	if ((imtx >= 1) && mutexes[imtx - 1] == mutex)
+		imtx--;
+	else if ((imtx >= 2) && mutexes[imtx - 2] == mutex)
+	{
+		mutexes[imtx - 2] = mutexes[imtx - 1];
+		imtx--;
+	}
+
+	pthread_mutex_unlock(&mutex->mtx);
+	LOGL(4, "Destroying mutex %p", mutex);
 	if ((rv = pthread_mutex_destroy(&mutex->mtx)))
 	{
-		if (!mutex->nolog)
-			LOG("mutex destroy %p failed with error %d %s", mutex, rv,
-					strerror(rv));
+		LOG("mutex destroy %p failed with error %d %s", mutex, rv, strerror(rv));
 		return 1;
 	}
 	return 0;
+}
+
+void clean_mutexes()
+{
+	int i;
+	if (!imtx)
+		return;
+//	LOG("mutex_leak: unlock %d mutexes", imtx);
+	for (i = imtx - 1; i >= 0; i--)
+	{
+		if (!mutexes[i])
+			continue;
+		LOG("mutex_leak: %s unlocking mutex %p from %s:%d", __FUNCTION__,
+				mutexes[i], mutexes[i]->file, mutexes[i]->line);
+		mutex_unlock(mutexes[i]);
+	}
+	imtx = 0;
 }
 
 pthread_t get_tid()
@@ -1056,9 +1106,9 @@ pthread_t get_tid()
 pthread_t start_new_thread(char *name)
 {
 	pthread_t tid;
-	if(opts.no_threads)
+	if (opts.no_threads)
 		return get_tid();
-	
+
 	if (pthread_create(&tid, NULL, &select_and_execute, name))
 	{
 		LOG("Failed to create thread: %s, error %d %s", name, errno,

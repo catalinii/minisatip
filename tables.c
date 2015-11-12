@@ -191,7 +191,7 @@ int process_pat(adapter *ad, unsigned char *b)
 	tid = b[8] * 256 + b[9];
 	ver = b[10] & 0x3E;
 
-	if ((ad->transponder_id == tid) || (ad->pat_ver == ver)) //pat already processed
+	if ((ad->transponder_id == tid) && (ad->pat_ver == ver)) //pat already processed
 		return 0;
 
 	if (!(pat_len = assemble_packet(&b, ad, 1)))
@@ -338,7 +338,7 @@ int process_pmt(adapter *ad, unsigned char *b)
 	program_id = b[8] * 256 + b[9];
 	ver = b[10] & 0x3F;
 
-	if (p->type != TYPE_PMT && p->version == ver && p->csid == program_id) // pmt processed already
+	if (((p->type & 0xF ) != TYPE_PMT) && p->version == ver && p->csid == program_id) // pmt processed already
 		return 0;
 
 	if (!(pmt_len = assemble_packet(&b, ad, 1)))
@@ -866,8 +866,11 @@ void init_ca_device(SCA *c)
 				{
 					pid = epids[j];
 					p = find_pid(ad->id, pid);
-					if (p->type & PMT_COMPLETE)
-						p->type &= ~PMT_COMPLETE; // force CA_ADD_PMT for the PMT
+					if (p && (p->type & PMT_COMPLETE))
+					{
+						p->type &= ~PMT_COMPLETE; // force CA_ADD_PMT for the PMT		
+						LOG("init-ca_device: triggering CA_ADD_PMT for adapter %d and pid %d type %d", ad->id, pid, p->type);
+					}
 				}
 			}
 		}

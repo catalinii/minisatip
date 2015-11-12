@@ -182,7 +182,7 @@ int satipc_rtcp_reply(sockets * s)
 	adapter *ad = get_adapter(s->sid);
 	int strength, status, snr;
 	uint32_t rp;
-	
+
 	s->rlen = 0;
 	if (!ad)
 		return 0;
@@ -275,9 +275,9 @@ int satipc_open_device(adapter *ad)
 	ad->force_commit = 0;
 	ad->satip_last_setup = -10000;
 	ad->last_cmd = 0;
-	
+
 	http_request(ad, NULL, "OPTIONS");
-	
+
 	return 0;
 
 }
@@ -287,6 +287,13 @@ void satip_close_device(adapter *ad)
 	http_request(ad, NULL, "TEARDOWN");
 	ad->session[0] = 0;
 	ad->sent_transport = 0;
+	if (ad->fe_sock > 0)
+		sockets_del(ad->fe_sock);
+	if (ad->rtcp_sock > 0)
+		sockets_del(ad->rtcp_sock);
+	ad->fe_sock = -1;
+	ad->rtcp_sock = -1;
+
 }
 
 int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb)
@@ -328,8 +335,8 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb)
 void satip_post_init(adapter *ad)
 {
 	sockets_setread(ad->sock, satipc_read);
-	set_socket_thread(ad->fe_sock ,get_socket_thread(ad->sock)); // set all the threads to run in the new thread with the adapter
-	set_socket_thread(ad->rtcp_sock ,get_socket_thread(ad->sock));
+	set_socket_thread(ad->fe_sock, get_socket_thread(ad->sock)); // set all the threads to run in the new thread with the adapter
+	set_socket_thread(ad->rtcp_sock, get_socket_thread(ad->sock));
 }
 
 int satipc_set_pid(adapter *ad, uint16_t pid)
@@ -436,7 +443,7 @@ int http_request(adapter *ad, char *url, char *method)
 	char *qm;
 	int lb;
 	char format[] = "%s rtsp://%s:%d/%s%s%s RTSP/1.0\r\nCSeq: %d%s\r\n\r\n";
-	
+
 	session[0] = 0;
 	sid[0] = 0;
 	int ctime = getTick();
@@ -493,8 +500,8 @@ int http_request(adapter *ad, char *url, char *method)
 	lb = snprintf(buf, sizeof(buf), format, method, ad->sip, ad->sport, sid, qm,
 			url, ad->cseq++, session);
 
-	LOG("satipc_http_request (ad %d): %s to handle %d: \n%s",
-			ad->id, ad->expect_reply ? "queueing" : "sending", ad->fe, buf);
+	LOG("satipc_http_request (ad %d): %s to handle %d: \n%s", ad->id,
+			ad->expect_reply ? "queueing" : "sending", ad->fe, buf);
 	if (ad->expect_reply)
 	{
 		setItem(MAKE_ITEM(ad->id, ad->qp++), (unsigned char *) buf, lb + 1, 0);
@@ -605,7 +612,8 @@ void satipc_commit(adapter *ad)
 		len = strlen(url);
 		ad->ignore_packets = 1; // ignore all the packets until we get 200 from the server
 		ad->want_tune = 0;
-		if(!ad->satip_setup_pids) sprintf(url + len ,"&pids=none"); 
+		if (!ad->satip_setup_pids)
+			sprintf(url + len, "&pids=none");
 	}
 
 	if (send_pids)
@@ -698,7 +706,7 @@ uint8_t determine_fe(adapter **a, int pos, char *sip, int sport)
 	while (i >= 0)
 	{
 		adapter *ad = a[i];
-		if(!ad)
+		if (!ad)
 			continue;
 		if (sport == ad->sport && !strcmp(ad->sip, sip))
 			return ad->satip_fe + 1;
@@ -721,9 +729,9 @@ void find_satip_adapter(adapter **a)
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		if ((!a[i] || (a[i]->pa == -1 && a[i]->fn == -1)) && j < la)
 		{
-			if(!a[i])
+			if (!a[i])
 				a[i] = malloc1(sizeof(adapter));
-			
+
 			ad = a[i];
 			ad->open = (Open_device) satipc_open_device;
 			ad->set_pid = (Set_pid) satipc_set_pid;
@@ -787,9 +795,8 @@ void find_satip_adapter(adapter **a)
 			ad->satip_setup_pids = opts.satip_setup_pids;
 
 			j++;
-			LOG("Satip device %s port %d delsys %d: %s %s", ad->sip,
-					ad->sport, ad->sys[0], get_delsys(ad->sys[0]),
-					get_delsys(ad->sys[1]));
+			LOG("Satip device %s port %d delsys %d: %s %s", ad->sip, ad->sport,
+					ad->sys[0], get_delsys(ad->sys[0]), get_delsys(ad->sys[1]));
 		}
 }
 

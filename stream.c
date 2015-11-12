@@ -211,6 +211,20 @@ setup_stream(char *str, sockets * s)
 		s->sid = s_id;
 		sid->sock = s->id;
 
+		if (sid->st_sock == -1)
+		{
+
+			if (0
+					> (sid->st_sock = sockets_add(SOCK_TIMEOUT, NULL, sid->sid,
+							TYPE_UDP, NULL,
+							NULL, (socket_action) stream_timeout)))
+				LOG_AND_RETURN(NULL,
+						"sockets_add failed for stream timeout sid %d",
+						sid->sid);
+			sockets_timeout(sid->st_sock, 200);
+			set_sock_lock(sid->st_sock, &sid->mutex);
+		}
+
 		LOG("Setup stream done: sid: %d for sock %d handle %d", s_id, s->id,
 				s->sock);
 	}
@@ -277,24 +291,20 @@ int start_play(streams * sid, sockets * s)
 	}
 	if (set_adapter_parameters(sid->adapter, s->sid, &sid->tp) < 0)
 		return -404;
-	
-	if(sid->st_sock == -1)
+
+	if (!opts.no_threads && get_socket_thread(sid->st_sock) == get_tid())
 	{
-		adapter *ad = get_adapter (sid->adapter);
-		if (0
-				> (sid->st_sock = sockets_add(SOCK_TIMEOUT, NULL, -1, TYPE_UDP, NULL,
-						NULL, (socket_action) stream_timeout)))
-			LOG_AND_RETURN(-503, "sockets_add failed for stream timeout");
-		// the timeout thread will be running in the same thread with the adapter
-		set_socket_thread(sid->st_sock, get_socket_thread(ad->sock)); 
-		sockets_timeout(sid->st_sock, 200);
-		set_sock_lock(sid->st_sock, &sid->mutex);
+		adapter *ad = get_adapter(sid->adapter);
+
+		// the stream timeout thread will be running in the same thread with the adapter
+		if (ad)
+			set_socket_thread(sid->st_sock, get_socket_thread(ad->sock));
 	}
-	
+
 	sid->do_play = 1;
 	sid->start_streaming = 0;
 	sid->tp.apids = sid->tp.dpids = sid->tp.pids = sid->tp.x_pmt = NULL;
-	
+
 	return tune(sid->adapter, s->sid);
 }
 
@@ -322,19 +332,7 @@ int close_stream(int i)
 	if (sid->type == STREAM_RTSP_UDP && sid->rsock > 0)
 		close(sid->rsock);
 	sid->rsock = -1;
-	if (sid->rtcp_sock > 0 || sid->rtcp > 0)
-	{
-		sockets_del(sid->rtcp_sock);
-		sid->rtcp_sock = -1;
-		sid->rtcp = -1;
-	}
 
-	if (sid->st_sock > 0)
-	{
-		sockets_del(sid->st_sock);
-		sid->st_sock = -1;
-	}
-	
 //	sockets_del_for_sid (i);
 	/*  if(sid->pids)free(sid->pids);
 	 if(sid->apids)free(sid->apids);
@@ -347,8 +345,22 @@ int close_stream(int i)
 	mutex_unlock(&sid->mutex);
 	mutex_destroy(&sid->mutex);
 
+	if (sid->rtcp_sock > 0 || sid->rtcp > 0)
+	{
+		sockets_del(sid->rtcp_sock);
+		sid->rtcp_sock = -1;
+		sid->rtcp = -1;
+	}
+
+	if (sid->st_sock > 0)
+	{
+		sockets_del(sid->st_sock);
+		sid->st_sock = -1;
+	}
+
 	if (ad >= 0)
 		close_adapter_for_stream(i, ad);
+
 	mutex_unlock(&st_mutex);
 	LOG("closed stream %d", i);
 	return 0;
@@ -1098,12 +1110,12 @@ int lock_streams_for_adapter(int aid, int lock)
 	streams *sid;
 	int i = 0, ls = 0;
 	for (i = 0; i < MAX_STREAMS; i++)
-		if ((sid = get_sid_for(i)) && sid->adapter == aid && sid->do_play == 1)
+		if ((sid = get_sid_for(i)) && sid->adapter == aid)
 			if (lock)
 			{
 				mutex_lock(&sid->mutex);
 				if ((sid = get_sid_for(i))
-						&& (sid->adapter != aid || sid->do_play != 1))
+						&& (sid->adapter != aid))
 					mutex_unlock(&sid->mutex);
 				else
 					ls++;

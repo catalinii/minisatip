@@ -1211,9 +1211,9 @@ http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 	else
 		sprintf(resp, reply0, proto, rc, d, get_current_timestamp(), sess_id,
 				scseq, ah, server);
-	LOG("reply -> %d (%s:%d) CL:%d :\n%s", s->sock,
+	LOG("reply -> %d (%s:%d) CL:%d [sock_id %d]:\n%s", s->sock,
 			get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
-			lr, resp);
+			lr, s->id, resp);
 	send(s->sock, resp, strlen(resp), MSG_NOSIGNAL);
 	if (binary)
 		send(s->sock, desc, lr, MSG_NOSIGNAL);
