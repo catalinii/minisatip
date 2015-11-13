@@ -242,7 +242,7 @@ void set_options(int argc, char *argv[])
 	memset(opts.playlist, 0, sizeof(opts.playlist));
 
 	while ((opt = getopt_long(argc, argv,
-			"flr:a:td:w:p:s:hc:b:m:p:e:x:u:j:o:gy:zi:D:VR:", long_options, NULL))
+			"flr:a:td:w:p:s:hc:b:m:p:e:x:u:j:o:gy:zi:D:VR:X:", long_options, NULL))
 			!= -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
