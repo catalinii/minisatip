@@ -1034,18 +1034,19 @@ int mutex_unlock1(char *FILE, int line, SMutex* mutex)
 		LOGL(3, "mutex_unlock failed at %s:%d: %d %s", FILE, line, rv,
 				strerror(rv));
 	}
-	else
+	if(rv == 0 || rv == 1)
 		rv = 0;
 
-	if ((imtx >= 1) && mutexes[imtx - 1] == mutex)
-		imtx--;
-	else if ((imtx >= 2) && mutexes[imtx - 2] == mutex)
-	{
-		mutexes[imtx - 2] = mutexes[imtx - 1];
-		imtx--;
-	}
-	else
-		LOG("mutex_leak: Expected %p got %p", mutexes[imtx], mutex);
+	if(rv != -1)
+		if ((imtx >= 1) && mutexes[imtx - 1] == mutex)
+			imtx--;
+		else if ((imtx >= 2) && mutexes[imtx - 2] == mutex)
+		{
+			mutexes[imtx - 2] = mutexes[imtx - 1];
+			imtx--;
+		}
+		else
+			LOG("mutex_leak: Expected %p got %p", mutex, mutexes[imtx - 1]);
 
 	return rv;
 }

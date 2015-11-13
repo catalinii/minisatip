@@ -209,7 +209,6 @@ setup_stream(char *str, sockets * s)
 		mutex_lock(&sid->mutex);
 		set_sock_lock(s->id, &sid->mutex); // lock the mutex as the sockets_unlock will unlock it
 		s->sid = s_id;
-		sid->sock = s->id;
 
 		if (sid->st_sock == -1)
 		{
@@ -340,8 +339,6 @@ int close_stream(int i)
 	 if(sid->buf)free(sid->buf);
 	 sid->pids = sid->apids = sid->dpids = sid->buf = NULL;
 	 */
-	set_sock_lock(sid->sock, NULL);
-	sid->sock = -1;
 	mutex_unlock(&sid->mutex);
 	mutex_destroy(&sid->mutex);
 

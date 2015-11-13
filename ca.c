@@ -519,7 +519,7 @@ int dvbca_init_dev(adapter *ad, void *arg)
 	if (!c)
 	{
 		c = ca_devices[ad->id] = malloc1(sizeof(ca_device_t));
-		if (c)
+		if (!c)
 			LOG_AND_RETURN(0, "Could not allocate memory for CA device %d",
 					ad->id);
 		memset(c, 0, sizeof(ca_device_t));
