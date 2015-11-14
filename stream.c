@@ -1071,16 +1071,17 @@ int stream_timeout(sockets *s)
 		}
 		if (sid->do_play && ctime - rttime >= 200)
 			send_rtcp(sid->sid, ctime);
+		mutex_unlock(&sid->mutex);
 		// check stream timeout, and allow 10s more to respond
 		if ((sid->timeout > 0 && (ctime - sid->rtime > sid->timeout + 10000))
 				|| (sid->timeout == 1))
 		{
 			LOG(
 					"Stream timeout %d, closing (ctime %d , sid->rtime %d, sid->timeout %d)",
-					sid->sid, ctime, sid->rtime, sid->timeout);
-			close_stream(sid->sid);
+					sid->sid, ctime, sid->rtime, sid->timeout);			
+			close_stream(sid->sid); // do not lock before this
 		}
-		mutex_unlock(&sid->mutex);
+		
 	}
 
 	return 0;

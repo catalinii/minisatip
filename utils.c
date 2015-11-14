@@ -1077,6 +1077,7 @@ int mutex_destroy(SMutex* mutex)
 	if ((rv = pthread_mutex_destroy(&mutex->mtx)))
 	{
 		LOG("mutex destroy %p failed with error %d %s", mutex, rv, strerror(rv));
+		mutex->enabled = 1;
 		return 1;
 	}
 	return 0;
@@ -1087,6 +1088,8 @@ void clean_mutexes()
 	int i;
 	if (!imtx)
 		return;
+	if (opts.no_threads)
+		return ;
 //	LOG("mutex_leak: unlock %d mutexes", imtx);
 	for (i = imtx - 1; i >= 0; i--)
 	{
