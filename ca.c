@@ -76,6 +76,7 @@ typedef struct ca_device
 	int fd;
 	int slot_id;
 	int tc;
+	int id;
 	struct en50221_transport_layer *tl;
 	struct en50221_session_layer * sl;
 
@@ -128,7 +129,7 @@ void hexdump(uint8_t buffer[], int len)
 
 int dvbca_process_pmt(adapter *ad, void *arg)
 {
-	ca_device_t * d = ad->ca_device;
+	ca_device_t * d = ca_devices[ad->id];
 	uint16_t pid, sid, ver;
 	SPid *p;
 	int len, rc;
@@ -206,14 +207,17 @@ int ca_ai_callback(void *arg, uint8_t slot_id, uint16_t session_number,
 	return 0;
 }
 
+extern __thread char *thread_name;
 void *
 stackthread_func(void* arg)
 {
-
+	char name[100];
 	ca_device_t * d = arg;
 	int lasterror = 0;
+	sprintf(name, "CA%d", d->id);
+	thread_name = name;
 	LOG("%s: start", __func__);
-
+	
 	while (d->enabled)
 	{
 		int error;
@@ -496,7 +500,9 @@ int ca_init(ca_device_t *d)
 	LOG("tcid: %i", d->tc);
 
 	return 1;
-	fail: close(fd);
+	fail: 
+	close(fd);
+	d->enabled = 0;
 	return 0;
 }
 
@@ -526,6 +532,7 @@ int dvbca_init_dev(adapter *ad, void *arg)
 	}
 	c->enabled = 1;
 	c->fd = fd;
+	c->id = ad->id;
 	return ca_init(c);
 }
 

@@ -86,7 +86,6 @@ typedef struct struct_adapter
 	int committed_no, uncommitted_no; // diseqc info
 	int id;
 	int pat_processed, transponder_id, pat_ver;
-	ca_device_t * ca_device;
 // satipc
 	char *sip;
 	int sport;
