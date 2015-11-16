@@ -756,6 +756,10 @@ void set_socket_buffer(int sid, unsigned char *buf, int len)
 //	s[sid].rlen = 0;
 }
 
+void free_all_adapters();
+void free_all_streams();
+
+
 void free_all()
 {
 	int i = 0;

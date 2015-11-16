@@ -124,6 +124,7 @@ int mark_pids_add (int sid, int aid, char *pids);
 int mark_pid_add(int sid, int aid, int _pid);
 void mark_pid_deleted(int aid, int sid, int _pid, SPid *p);
 int update_pids (int aid);
+int tune(int aid, int sid);
 SPid *find_pid(int aid, int p);
 adapter * get_adapter1 (int aid, char *file, int line, int warning);
 char *describe_adapter (int sid, int aid, char *dad, int ld);
@@ -137,6 +138,7 @@ void reset_pids_type_for_key(int aid, int key);
 int delsys_match(adapter *ad, int del_sys);
 int get_enabled_pids(adapter *ad, int *pids, int lpids);
 char *get_adapter_pids(int aid, char *dest, int max_size);
+
 #define get_adapter(a) get_adapter1(a, __FILE__, __LINE__,1)
 #define get_adapter_nw(a) get_adapter1(a, __FILE__, __LINE__,0)
 #endif							 /*  */

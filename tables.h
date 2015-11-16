@@ -12,6 +12,7 @@
 int process_pat(unsigned char *b, adapter *ad);
 int assemble_packet(uint8_t **b1, adapter *ad, int check_crc);
 uint32_t crc32(const uint8_t *data, int datalen);
+int process_stream(adapter *ad, int rlen);
 
 #endif
 

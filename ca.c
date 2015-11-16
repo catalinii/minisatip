@@ -199,7 +199,7 @@ int dvbca_process_pmt(uint8_t *b, adapter *a)
 	LOG( "Failed to format CA PMT object");
 	if ((rc = en50221_app_ca_pmt(d->ca_resource, d->ca_session_number, capmt, size)))
 	{
-		LOG("Adapter %d, Failed to send CA PMT object, error %d", ad->id, rc);
+		LOG("Adapter %d, Failed to send CA PMT object, error %d", a->id, rc);
 	}
 //	hexdump(&capmt[0], size);
 
