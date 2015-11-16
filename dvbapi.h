@@ -41,6 +41,8 @@
 
 typedef struct struct_key
 {
+	char enabled;
+	SMutex mutex;
 	void *key[2];
 	char key_ok[2];
 	unsigned char cw[2][16];
@@ -49,7 +51,7 @@ typedef struct struct_key
 	int key_len;
 	int sid;
 	int pmt_pid;
-	uint8_t enabled;
+	
 	uint8_t hops;
 	uint16_t caid, info_pid;
 	uint32_t prid, ecmtime;
@@ -63,20 +65,18 @@ typedef struct struct_key
 	struct dvbcsa_bs_batch_s batch[130];
 	int parity;
 	int blen;
-	int enabled_channels;
-	int last_parity_change;
-	
+	int last_parity_change;	
 	struct struct_key *next_key;
 } SKey;
 
 #define MAX_KEY_TIME 25000 // 25s
 
-int init_dvbapi();
+void init_dvbapi();
 int have_dvbapi();
 int dvbapi_enabled();
-int send_ecm(unsigned char *b, adapter *ad);
+int send_ecm(adapter *ad, void *arg);
 int batch_size();
-int decrypt_stream(adapter *ad,int rlen);
+int decrypt_stream(adapter *ad, void *arg);
 int keys_add(int adapter, int sid, int pmt);
 int keys_del(int i);
 SKey *get_key(int i);
@@ -84,5 +84,7 @@ int dvbapi_process_pmt(unsigned char *b, adapter *ad);
 void dvbapi_pid_add(adapter *a,int pid, SPid *cp, int existing);
 void dvbapi_pid_del(adapter *a,int pid, SPid *cp);
 void dvbapi_delete_keys_for_adapter(int aid);
+void register_dvbapi();
+void unregister_dvbapi();
 #endif
 #endif

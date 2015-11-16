@@ -8,13 +8,14 @@
 #include "utils.h"
 
 
-#define VERSION_BUILD "79"
+#define VERSION_BUILD "7"
 #define CC(a,b,c) #a b #c
-#define VERSION CC(0.3.,VERSION_BUILD,)
+#define VERSION CC(0.5.,VERSION_BUILD,)
 
 void set_options (int argc, char *argv[]);
 
-#define PID_FILE "/var/run/%s.pid"
+extern char pid_file[];
+extern char app_name[], version[];
 
 #define copy32(a,i,v) { a[i] = ((v)>>24) & 0xFF;\
 			a[i+1] = ((v)>>16) & 0xFF;\
@@ -57,6 +58,7 @@ struct struct_opts
 	char satip_servers[100];
 	char *document_root;
 	char *xml_path;
+	char no_threads;
 };
 
 

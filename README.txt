@@ -1,6 +1,6 @@
 Welcome to Minisatip
 
-Minisatip is a single threaded satip server version 1.2 that runs under Linux and it was tested with DVB-S, DVB-S2, DVB-T, DVB-T2, DVB-C, DVB-C2, ATSC and ISDB-T cards.
+Minisatip is a multi-threaded satip server version 1.2 that runs under Linux and it was tested with DVB-S, DVB-S2, DVB-T, DVB-T2, DVB-C, DVB-C2, ATSC and ISDB-T cards.
 The protocol specification can be found at: satip.info/sites/satip/files/resource/satip_specification_version_1_2_2.pdf
 It is very lightweight (designed for embedded systems with memory and processing constrains), does not need any additional libraries for basic functionality and can be used by existing satip clients like: Tvheadend, DVBViewer, vdr or Android/iOS applications. minisatip can act as a satip client as well in order to connect to satip servers from different networks.
 The application is designed to stream the requested data to multiple clients (even with one dvb card) in the same time while opening different pids.
@@ -15,6 +15,7 @@ https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item
 
 Usage:
 
+minisatip version 0.5.2, compiled with s2api version: 050A
 minisatip [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] [-j A1:S1-F1[-PIN]] [-m mac] [-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] [-R document_root] [-s [DELSYS:]host[:port] [-u A1:S1-F1[-PIN]] [-w http_server[:port]] [-x http_port] [-X xml_path] [-y rtsp_port] 
 
  
@@ -75,7 +76,15 @@ minisatip [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X
 	- specifies 1 dvbt satip server  with address 192.168.1.3:554
 	- specifies 1 dvbc satip server  with address 192.168.1.4:554
 
+-S --slave ADAPTER1,ADAPTER2-ADAPTER4[,..] - specify slave adapters	
+    Allows specifying bonded adapters (multiple adapters connected with a splitter to the same LNB)
+    Only one adapter needs to be master all others needs to have this parameter specified
+    eg: -S 1-2
+    - specifies adapter 1 to 2 as slave, in this case adapter 0 can be the master that controls the LNB
+
 -t --cleanpsi clean the PSI from all CA information, the client will see the channel as clear if decrypted successfully
+
+-T --threads: enables/disable multiple threads (reduces memory consumptions) (default: ENABLED)
 
 -u --unicable unicable_string: defines the unicable adapters (A) and their slot (S), frequency (F) and optionally the PIN for the switch:
 	The format is: A1:S1-F1[-PIN][,A2:S2-F2[-PIN][,...]]

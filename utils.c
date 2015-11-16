@@ -50,12 +50,12 @@
 #include <sys/mman.h>
 #include "utils.h"
 #include "minisatip.h"
+
 #ifndef __mips__
 #include <execinfo.h>
 #endif
 
 extern struct struct_opts opts;
-extern char version[], app_name[];
 
 #define MAX_DATA 1500 // 16384
 #define MAX_SINFO 100
@@ -70,10 +70,11 @@ typedef struct tmpinfo
 	int max_size;
 	int timeout;
 	int last_updated;
-	uint8_t no_change, prev_no_change;
 	unsigned char *data;
 } STmpinfo;
 STmpinfo sinfo[MAX_SINFO];
+
+SMutex utils_mutex;
 
 STmpinfo *getItemPos(int64_t key)
 {
@@ -103,8 +104,6 @@ STmpinfo *getFreeItemPos(int64_t key)
 		{
 			sinfo[i].id = i;
 			sinfo[i].timeout = 0;
-			sinfo[i].no_change = 0;
-			sinfo[i].prev_no_change = 0;
 			LOGL(2, "Requested new Item for key %llX, returning %d", key, i);
 			return sinfo + i;
 		}
@@ -187,30 +186,8 @@ int setItem(int64_t key, unsigned char *data, int len, int pos) // pos = -1 -> a
 		len = s->max_size - pos;
 
 	s->len = pos + len;
-	if (pos == 0)
-	{
-		s->prev_no_change = s->no_change;
-		s->no_change = 1;
-	}
-	if (new_key)
-		s->no_change = 0;
-	if (memcmp(s->data + pos, data, len) != 0)
-		s->no_change = 0;
-
 	memcpy(s->data + pos, data, len);
 	return 0;
-}
-
-int getItemChange(int64_t key, int *prev)
-{
-	int current;
-	*prev = current = -1;
-	STmpinfo *s = getItemPos(key);
-	if (!s)
-		return 0;
-	*prev = s->prev_no_change;
-	current = s->no_change;
-	return current;
 }
 
 int delItem(int64_t key)
@@ -459,8 +436,7 @@ becomeDaemon()
 	char buf[255];
 
 	memset(path, 0, sizeof(path));
-	snprintf(buf, sizeof(buf), PID_FILE, app_name);
-	if ((f = fopen(buf, "rt")))
+	if ((f = fopen(pid_file, "rt")))
 	{
 		fscanf(f, "%d", &pid);
 		fclose(f);
@@ -541,11 +517,15 @@ void myfree(void *x, char *f, int l)
 	free(x);
 }
 
+pthread_mutex_t log_mutex;
+
 void _log(int level, char * file, int line, char *fmt, ...)
 {
 	va_list arg;
 	int len, len1, both;
 	static int idx, times;
+	int tl;
+	char stid[50];
 	static char output[2][2000]; // prints just the first 2000 bytes from the message 
 
 	/* Check if the message should be logged */
@@ -553,9 +533,19 @@ void _log(int level, char * file, int line, char *fmt, ...)
 	if (opts.log < level)
 		return;
 
+	stid[0] = 0;
+	if (!opts.no_threads)
+	{
+		pthread_mutex_lock(&log_mutex);
+		snprintf(stid, sizeof(stid) - 2, " %s", thread_name);
+		stid[sizeof(stid) - 1] = 0;
+	}
+
 	if (!fmt)
 	{
 		printf("NULL format at %s:%d !!!!!", file, line);
+		if (!opts.no_threads)
+			pthread_mutex_unlock(&log_mutex);
 		return;
 	}
 	idx = 1 - idx;
@@ -564,11 +554,11 @@ void _log(int level, char * file, int line, char *fmt, ...)
 	else if (idx < 0)
 		idx = 0;
 	if (opts.file_line && !opts.slog)
-		len1 = snprintf(output[idx], sizeof(output[0]), "[%s] %s:%d: ",
-				get_current_timestamp_log(), file, line);
+		len1 = snprintf(output[idx], sizeof(output[0]), "[%s%s] %s:%d: ",
+				get_current_timestamp_log(), stid, file, line);
 	else if (!opts.slog)
-		len1 = snprintf(output[idx], sizeof(output[0]), "[%s]: ",
-				get_current_timestamp_log());
+		len1 = snprintf(output[idx], sizeof(output[0]), "[%s%s]: ",
+				get_current_timestamp_log(), stid);
 	else if (opts.file_line)
 	{
 		len1 = 0;
@@ -611,6 +601,8 @@ void _log(int level, char * file, int line, char *fmt, ...)
 			puts(output[idx]);
 	}
 	fflush(stdout);
+	if (!opts.no_threads)
+		pthread_mutex_unlock(&log_mutex);
 }
 
 int endswith(char *src, char *with)
@@ -750,6 +742,79 @@ int var_eval(char *orig, int len, char *dest, int max_len)
 					}
 					break;
 
+				case VAR_AARRAY_INT:
+				case VAR_AARRAY_FLOAT:
+				case VAR_AARRAY_HEX:
+				case VAR_AARRAY_UINT16:
+				case VAR_AARRAY_INT16:
+				case VAR_AARRAY_UINT8:
+				case VAR_AARRAY_INT8:
+				case VAR_AARRAY_STRING:
+				case VAR_AARRAY_PSTRING:
+					off = map_intd(var + strlen(sym[i][j].name), NULL, 0);
+					if (off >= 0 && off < sym[i][j].len)
+					{
+						char **p1 = (char **) sym[i][j].addr;
+						char *p = p1[off];
+						char zero[16];
+
+						if (!p)
+						{
+							memset(zero, 0, sizeof(zero));
+							p = zero;
+						}
+						else
+							p += sym[i][j].skip;
+
+						switch (sym[i][j].type)
+						{
+						case VAR_AARRAY_UINT8:
+							nb =
+									snprintf(dest, max_len, "%d",
+											(int) (*(uint8_t *) p
+													* sym[i][j].multiplier));
+							break;
+						case VAR_AARRAY_INT8:
+							nb =
+									snprintf(dest, max_len, "%d",
+											(int) (*(int8_t *) p
+													* sym[i][j].multiplier));
+							break;
+						case VAR_AARRAY_UINT16:
+							nb = snprintf(dest, max_len, "%d",
+									(int) (*(uint16_t *) p
+											* sym[i][j].multiplier));
+							break;
+						case VAR_AARRAY_INT16:
+							nb =
+									snprintf(dest, max_len, "%d",
+											(int) (*(int16_t *) p
+													* sym[i][j].multiplier));
+							break;
+						case VAR_AARRAY_INT:
+							nb = snprintf(dest, max_len, "%d",
+									(int) (*(int *) p * sym[i][j].multiplier));
+							break;
+						case VAR_AARRAY_FLOAT:
+							nb =
+									snprintf(dest, max_len, "%f",
+											(float) (*(float *) p
+													* sym[i][j].multiplier));
+							break;
+						case VAR_AARRAY_HEX:
+							nb = snprintf(dest, max_len, "0x%x",
+									(int) (*(int *) p * sym[i][j].multiplier));
+							break;
+						case VAR_AARRAY_STRING:
+							nb = snprintf(dest, max_len, "%s", p);
+							break;
+						case VAR_AARRAY_PSTRING:
+							nb = snprintf(dest, max_len, "%s", *(char **) p);
+							break;
+						}
+					}
+					break;
+
 				case VAR_FUNCTION_INT:
 					off = map_intd(var + strlen(sym[i][j].name), NULL, 0);
 					get_data_int funi = (get_data_int) sym[i][j].addr;
@@ -787,10 +852,11 @@ int is_var(char *s)
 }
 
 // replace $VAR$ with it's value and write the output to the socket
-void process_file(sockets *so, char *s, int len, char *ctype)
+void process_file(void *sock, char *s, int len, char *ctype)
 {
 	char outp[8292];
 	int i, io = 0, lv, le, respond = 1;
+	sockets *so = (sockets *) sock;
 	LOG("processing_file %x len %d:", s, len);
 	for (i = 0; i < len; i++)
 	{
@@ -883,3 +949,207 @@ int closefile(char *mem, int len)
 	return munmap((void *) mem, len);
 }
 
+int mutex_init(SMutex* mutex)
+{
+	int rv;
+	if (opts.no_threads)
+		return 0;
+	pthread_mutexattr_t attr;
+	pthread_mutexattr_init(&attr);
+	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+
+	if (mutex->enabled)
+		return 1;
+
+	if ((rv = pthread_mutex_init(&mutex->mtx, &attr)))
+	{
+		LOG("mutex init %p failed with error %d %s", mutex, rv, strerror(rv));
+		return rv;
+	}
+
+	mutex->enabled = 1;
+	mutex->state = 0;
+	LOG("Mutex init %p", mutex);
+	return 0;
+}
+
+__thread SMutex *mutexes[50];
+__thread int imtx = 0;
+
+int mutex_lock1(char *FILE, int line, SMutex* mutex)
+{
+	int rv;
+	int start_lock = 0;
+	if (opts.no_threads)
+		return 0;
+
+	if (!mutex || !mutex->enabled)
+	{
+		LOGL(3, "%s:%d Mutex not enabled %p", FILE, line, mutex);
+		return 1;
+	}
+
+	if (mutex && mutex->enabled && mutex->state && tid != mutex->tid)
+	{
+		LOGL(4, "%s:%d Locking mutex %p already locked at %s:%d tid %x", FILE,
+				line, mutex, mutex->file, mutex->line, mutex->tid);
+		start_lock = getTick();
+	}
+	else
+		LOGL(5, "%s:%d Locking mutex %p", FILE, line, mutex);
+	rv = pthread_mutex_lock(&mutex->mtx);
+	if (rv != 0)
+	{
+		LOG("Mutex Lock %p failed", mutex);
+		return rv;
+	}
+	mutex->file = FILE;
+	mutex->line = line;
+	mutex->state = 1;
+	mutex->tid = tid;
+	mutexes[imtx++] = mutex;
+	if (start_lock > 0)
+		LOGL(4, "%s:%d Locked %p after %d ms", FILE, line, mutex,
+				getTick() - start_lock);
+
+	return 0;
+
+}
+int mutex_unlock1(char *FILE, int line, SMutex* mutex)
+{
+	int rv = -1;
+	if (opts.no_threads)
+		return 0;
+
+	if (!mutex || mutex->enabled)
+	{
+		LOGL(5, "%s:%d Unlocking mutex %p", FILE, line, mutex);
+
+		rv = pthread_mutex_unlock(&mutex->mtx);
+	}
+	else
+		LOGL(3, "%s:%d Unlock disabled mutex %p", FILE, line, mutex);
+	if (rv != 0 && rv != 1 && rv != -1)
+	{
+		LOGL(3, "mutex_unlock failed at %s:%d: %d %s", FILE, line, rv,
+				strerror(rv));
+	}
+	if(rv == 0 || rv == 1)
+		rv = 0;
+
+	if(rv != -1)
+		if ((imtx >= 1) && mutexes[imtx - 1] == mutex)
+			imtx--;
+		else if ((imtx >= 2) && mutexes[imtx - 2] == mutex)
+		{
+			mutexes[imtx - 2] = mutexes[imtx - 1];
+			imtx--;
+		}
+		else
+			LOG("mutex_leak: Expected %p got %p", mutex, mutexes[imtx - 1]);
+
+	return rv;
+}
+
+int mutex_destroy(SMutex* mutex)
+{
+	int rv;
+	if (opts.no_threads)
+		return 0;
+	if (!mutex->enabled)
+	{
+		LOG("destroy disabled mutex %p", mutex);
+
+		return 1;
+	}
+	mutex->enabled = 0;
+
+	if ((imtx >= 1) && mutexes[imtx - 1] == mutex)
+		imtx--;
+	else if ((imtx >= 2) && mutexes[imtx - 2] == mutex)
+	{
+		mutexes[imtx - 2] = mutexes[imtx - 1];
+		imtx--;
+	}
+
+	pthread_mutex_unlock(&mutex->mtx);
+	LOGL(4, "Destroying mutex %p", mutex);
+	if ((rv = pthread_mutex_destroy(&mutex->mtx)))
+	{
+		LOG("mutex destroy %p failed with error %d %s", mutex, rv, strerror(rv));
+		mutex->enabled = 1;
+		return 1;
+	}
+	return 0;
+}
+
+void clean_mutexes()
+{
+	int i;
+	if (!imtx)
+		return;
+	if (opts.no_threads)
+		return ;
+//	LOG("mutex_leak: unlock %d mutexes", imtx);
+	for (i = imtx - 1; i >= 0; i--)
+	{
+		if (!mutexes[i])
+			continue;
+		LOG("mutex_leak: %s unlocking mutex %p from %s:%d", __FUNCTION__,
+				mutexes[i], mutexes[i]->file, mutexes[i]->line);
+		mutex_unlock(mutexes[i]);
+	}
+	imtx = 0;
+}
+
+pthread_t get_tid()
+{
+	return pthread_self();
+}
+
+pthread_t start_new_thread(char *name)
+{
+	pthread_t tid;
+	if (opts.no_threads)
+		return get_tid();
+
+	if (pthread_create(&tid, NULL, &select_and_execute, name))
+	{
+		LOG("Failed to create thread: %s, error %d %s", name, errno,
+				strerror(errno));
+		return get_tid();
+	}
+	return tid;
+}
+
+struct struct_array
+{
+	char enabled;
+	SMutex mutex;
+};
+
+int add_new_lock(void **arr, int count, int size, SMutex *mutex)
+{
+	int i;
+	struct struct_array **sa = (struct struct_array **) arr;
+	mutex_init(mutex);
+	mutex_lock(mutex);
+	for (i = 0; i < count; i++)
+		if (!sa[i] || !sa[i]->enabled)
+		{
+			if (!sa[i])
+			{
+				sa[i] = malloc1(size);
+				if (!sa[i])
+					LOG_AND_RETURN(-1,
+							"Could not allocate memory for %p index %d", arr, i);
+				memset(sa[i], 0, size);
+			}
+			mutex_init(&sa[i]->mutex);
+			mutex_lock(&sa[i]->mutex);
+			sa[i]->enabled = 1;
+			mutex_unlock(mutex);
+			return i;
+		}
+	return -1;
+}
