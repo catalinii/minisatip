@@ -8,9 +8,9 @@
 #include "utils.h"
 
 
-#define VERSION_BUILD "79"
+#define VERSION_BUILD "0"
 #define CC(a,b,c) #a b #c
-#define VERSION CC(0.3.,VERSION_BUILD,)
+#define VERSION CC(0.4.,VERSION_BUILD,)
 
 void set_options (int argc, char *argv[]);
 
