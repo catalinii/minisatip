@@ -149,7 +149,7 @@ int dvb_open_device(adapter *ad)
 
 	LOG("opened DVB adapter %d fe:%d dvr:%d", ad->id, ad->fe, ad->dvr);
 	if (ioctl(ad->dvr, DMX_SET_BUFFER_SIZE, opts.dvr_buffer) < 0)
-		perror("couldn't set DVR buffer size");
+		LOG("couldn't set DVR buffer size error %d: %s", errno, strerror(errno));
 	else
 		LOG("Done setting DVR buffer to %d bytes", DVR_BUFFER);
 	return 0;
@@ -522,8 +522,7 @@ int dvb_tune(int aid, transponder * tp)
 	if ((ioctl(fd_frontend, FE_SET_PROPERTY, &p)) == -1)
 		if (ioctl(fd_frontend, FE_SET_PROPERTY, &p) == -1)
 		{
-			perror("FE_SET_PROPERTY TUNE failed");
-			LOG("set property failed");
+			LOG("dvb_tune: set property failed %d %s", errno, strerror(errno));
 			return -404;
 		}
 
