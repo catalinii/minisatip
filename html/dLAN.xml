@@ -1,0 +1,53 @@
+<?xml version="1.0"?>
+<root xmlns="urn:schemas-upnp-org:device-1-0" configId="">
+    <specVersion>
+        <major>1</major>
+        <minor>1</minor>
+    </specVersion>
+    <device>
+        <deviceType>urn:ses-com:device:SatIPServer:1</deviceType>
+        <friendlyName>dLAN&#174; TV SAT Multituner</friendlyName>
+        <manufacturer>devolo</manufacturer>
+        <manufacturerURL>http://www.devolo.de</manufacturerURL>
+        <modelDescription>dLAN&#174; TV SAT Multituner</modelDescription>
+        <modelName>dLAN&#174; TV SAT Multituner</modelName>
+        <modelNumber>2440</modelNumber>
+        <modelURL>http://www.sat-ohne-kabel.de</modelURL>
+        <serialNumber></serialNumber>
+        <UDN></UDN>
+        <UPC></UPC>
+        <iconList>
+            <icon>
+                <mimetype>image/jpeg</mimetype>
+                <width>48</width>
+                <height>48</height>
+                <depth>32</depth>
+                <url>/images/satip48.jpg</url>
+            </icon>
+            <icon>
+                <mimetype>image/png</mimetype>
+                <width>48</width>
+                <height>48</height>
+                <depth>32</depth>
+                <url>/images/satip48.png</url>
+            </icon>
+            <icon>
+                <mimetype>image/jpeg</mimetype>
+                <width>120</width>
+                <height>120</height>
+                <depth>32</depth>
+                <url>/images/satip120.jpg</url>
+            </icon>
+            <icon>
+                <mimetype>image/png</mimetype>
+                <width>120</width>
+                <height>120</height>
+                <depth>32</depth>
+                <url>/images/satip120.png</url>
+            </icon>
+        </iconList>
+        <presentationURL>/</presentationURL>
+        <firmwareVersion></firmwareVersion>
+        <firmwareDate></firmwareDate>
+    </device>
+</root>

@@ -554,7 +554,7 @@ void *select_and_execute(void *arg)
 		//    LOG("start select");
 		if ((rv = poll(pf, max_sock, 100)) < 0)
 		{
-			perror("select_and_execute: select() error");
+			LOG("select_and_execute: select() error %d: %s", errno, strerror(errno));
 			continue;
 		}
 		c_time = getTick();
