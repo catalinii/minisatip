@@ -8,13 +8,13 @@
 #include "utils.h"
 
 
-#define VERSION_BUILD "0"
+#define VERSION_BUILD "1"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.4.,VERSION_BUILD,)
 
 void set_options (int argc, char *argv[]);
 
-#define PID_FILE "/var/run/%s.pid"
+#define PID_FILE "/var/run/minisatip.pid"
 
 #define copy32(a,i,v) { a[i] = ((v)>>24) & 0xFF;\
 			a[i+1] = ((v)>>16) & 0xFF;\
