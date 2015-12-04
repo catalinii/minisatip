@@ -40,11 +40,12 @@
 #endif
 
 adapter *a[MAX_ADAPTERS];
+char disabled[MAX_ADAPTERS]; // disabled adapters
+
 SMutex a_mutex;
 extern struct struct_opts opts;
 int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
 extern void find_dvb_adapter(adapter **a);
-
 
 void find_adapters()
 {
@@ -129,7 +130,7 @@ int init_hw(int i)
 	ad = a[i];
 	mutex_init(&ad->mutex);
 	mutex_lock(&ad->mutex);
-	if (ad->force_disable)
+	if (is_adapter_disabled(i))
 		goto NOK;
 	if (ad->enabled)
 		goto NOK;
@@ -188,7 +189,9 @@ int init_hw(int i)
 	sockets_timeout(ad->sock, ADAPTER_TIMEOUT);
 	snprintf(ad->name, sizeof(ad->name), "AD%d", i);
 	set_socket_thread(ad->sock, start_new_thread(ad->name));
+#ifdef TABLES_H
 	tables_init_device(ad);
+#endif
 	if (ad->post_init)
 		ad->post_init(ad);
 
@@ -265,8 +268,10 @@ void close_adapter(int na)
 		close(ad->fe);
 	if (ad->sock > 0)
 		sockets_del(ad->sock);
+#ifdef TABLES_H
 	if (ad->ca_mask > 0)
 		tables_close_device(ad);
+#endif
 	ad->ca_mask = 0;
 	ad->fe = 0;
 	ad->dvr = 0;
@@ -840,7 +845,7 @@ get_adapter1(int aid, char *file, int line)
 	if (aid < 0 || aid >= MAX_ADAPTERS || !a[aid] || !a[aid]->enabled)
 	{
 		LOG("%s:%d: get_adapter returns NULL for adapter_id %d", file, line,
-					aid);
+				aid);
 		return NULL;
 	}
 	return a[aid];
@@ -992,12 +997,18 @@ void free_all_adapters()
 			free1(a[i]->buf);
 
 }
+char is_adapter_disabled(int i)
+{
+	if (i >= 0 && i < MAX_ADAPTERS)
+		return disabled[i];
+	return 1;
+
+}
 
 void set_disable(int i, int v)
 {
-	adapter *ad = get_adapter(i);
-	if (ad)
-		ad->force_disable = v;
+	if (i >= 0 && i < MAX_ADAPTERS)
+		disabled[i] = v;
 }
 
 void enable_adapters(char *o)
@@ -1120,23 +1131,20 @@ void set_slave_adapters(char *o)
 
 		if (a_id2 < 0 || a_id2 >= MAX_ADAPTERS)
 			continue;
-		
-		for(j=a_id;j<=a_id2; j++)
+
+		for (j = a_id; j <= a_id2; j++)
 		{
 			if (!a[j])
 				a[j] = malloc1(sizeof(adapter));
-				
+
 			ad = a[j];
 			ad->switch_type = SWITCH_SLAVE;
-			
+
 			LOGL(0, "Setting slave adapter %d", j);
 		}
-		
-		
+
 	}
 }
-
-
 
 int delsys_match(adapter *ad, int del_sys)
 {
@@ -1160,7 +1168,7 @@ void adapter_lock1(char *FILE, int line, int aid)
 {
 	adapter *ad;
 	ad = get_adapter_nw(aid);
-	if(!ad)
+	if (!ad)
 		return;
 	mutex_lock1(FILE, line, &ad->mutex);
 }
@@ -1169,11 +1177,10 @@ void adapter_unlock1(char *FILE, int line, int aid)
 {
 	adapter *ad;
 	ad = get_adapter_nw(aid);
-	if(!ad)
+	if (!ad)
 		return;
 	mutex_unlock1(FILE, line, &ad->mutex);
 }
-
 
 void reset_pids_type(int aid, int clear_pat)
 {
@@ -1207,7 +1214,8 @@ void reset_ecm_type_for_key(int aid, int key)
 		return;
 	LOG("clearing ECMs for key %d for adapter %d", key, aid);
 	for (i = 0; i < MAX_PIDS; i++)
-		if ((ad->pids[i].flags > 0) && (ad->pids[i].key == key) && (ad->pids[i].type == TYPE_ECM))
+		if ((ad->pids[i].flags > 0) && (ad->pids[i].key == key)
+				&& (ad->pids[i].type == TYPE_ECM))
 		{
 			ad->pids[i].type = 0;
 			ad->pids[i].key = 255;
@@ -1296,12 +1304,12 @@ MAX_ADAPTERS, (long int) &a_tmp[0].strength - (long int) &a_tmp[0] },
 		- (long int) &a_tmp[0] },
 { "ad_pol", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS, (long int) &a_tmp[0].tp.pol
 		- (long int) &a_tmp[0] },
-{ "ad_sr", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, (long int) &a_tmp[0].tp.sr
-		- (long int) &a_tmp[0] },
-{ "ad_bw", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, (long int) &a_tmp[0].tp.bw
-		- (long int) &a_tmp[0] },
-{ "ad_diseqc", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, (long int) &a_tmp[0].tp.diseqc
-		- (long int) &a_tmp[0] },
+{ "ad_sr", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS,
+		(long int) &a_tmp[0].tp.sr - (long int) &a_tmp[0] },
+{ "ad_bw", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS,
+		(long int) &a_tmp[0].tp.bw - (long int) &a_tmp[0] },
+{ "ad_diseqc", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS,
+		(long int) &a_tmp[0].tp.diseqc - (long int) &a_tmp[0] },
 { "ad_fe", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, (long int) &a_tmp[0].fe
 		- (long int) &a_tmp[0] },
 { "ad_satip", VAR_AARRAY_PSTRING, a, 1, MAX_ADAPTERS, (long int) &a_tmp[0].sip

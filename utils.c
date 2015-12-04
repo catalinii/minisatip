@@ -617,7 +617,11 @@ int endswith(char *src, char *with)
 extern _symbols adapters_sym[];
 extern _symbols minisatip_sym[];
 extern _symbols stream_sym[];
+#ifdef TABLES_H
 extern _symbols dvbapi_sym[];
+#else
+#define dvbapi_sym NULL
+#endif
 
 _symbols *sym[] =
 { adapters_sym, stream_sym, minisatip_sym, dvbapi_sym, NULL };

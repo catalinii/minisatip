@@ -555,6 +555,9 @@ int my_writev(int sock, const struct iovec *iov, int iiov, streams *sid)
 {
 	int rv;
 	char ra[50];
+	if(sid->timeout == 1)
+		return -1;
+	
 	LOGL(7, "start writev handle %d, iiov %d", sock, iiov);
 	rv = writev(sock, iov, iiov);
 	if (rv < 0 && (errno == ECONNREFUSED || errno == EPIPE)) // close the stream int the next second
@@ -772,7 +775,7 @@ void flush_streamb(streams * sid, unsigned char *buf, int rlen, int ctime)
 
 }
 
-void flush_streami(streams * sid, int ctime)
+int flush_streami(streams * sid, int ctime)
 {
 	int rv;
 
@@ -806,7 +809,7 @@ void flush_streami(streams * sid, int ctime)
 		sid->sp++;
 		sid->sb += rv;
 	}
-
+	return rv;
 }
 
 int process_packet(unsigned char *b, adapter *ad)

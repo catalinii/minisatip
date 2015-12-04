@@ -57,7 +57,6 @@ typedef struct struct_adapter
 	char enabled;
 	SMutex mutex;
 	char type; // available on the system 
-	int force_disable;
 	int fe, dvr;
 	int pa, fn;
 	// physical adapter, physical frontend number
@@ -145,7 +144,7 @@ int get_enabled_pids(adapter *ad, int *pids, int lpids);
 char *get_adapter_pids(int aid, char *dest, int max_size);
 void adapter_lock1(char *FILE, int line, int aid);
 void adapter_unlock1(char *FILE, int line, int aid);
-
+char is_adapter_disabled(int i);
 #define get_adapter(a) get_adapter1(a, __FILE__, __LINE__)
 #define get_adapter_nw(aid) ((aid >= 0 && aid < MAX_ADAPTERS && a[aid] && a[aid]->enabled)?a[aid]:NULL)
 

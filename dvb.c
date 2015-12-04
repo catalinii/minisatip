@@ -126,7 +126,6 @@ int dvb_open_device(adapter *ad)
 	ad->fe = open(buf, O_RDWR | O_NONBLOCK);
 	sprintf(buf, "/dev/dvb/adapter%d/dvr%d", ad->pa, ad->fn);
 	ad->dvr = open(buf, O_RDONLY | O_NONBLOCK);
-	sprintf(buf, "/dev/dvb/adapter%d/ca0", ad->pa);
 	if (ad->fe < 0 || ad->dvr < 0)
 	{
 		sprintf(buf, "/dev/dvb/adapter%d/frontend%d", ad->pa, ad->fn);
@@ -145,7 +144,7 @@ int dvb_open_device(adapter *ad)
 	if (ioctl(ad->dvr, DMX_SET_BUFFER_SIZE, opts.dvr_buffer) < 0)
 		LOG("couldn't set DVR buffer size error %d: %s", errno, strerror(errno))
 	else
-		LOG("Done setting DVR buffer to %d bytes", DVR_BUFFER);
+		LOG("Done setting DVR buffer to %d bytes", opts.dvr_buffer);
 	return 0;
 }
 
@@ -354,10 +353,11 @@ int setup_switch(int frontend_fd, transponder *tp)
 		freq = send_jess(frontend_fd, freq / 1000, diseqc, pol, hiband,
 				tp->uslot, tp->ufreq, tp->pin);
 	}
-	else if(tp->switch_type == SWITCH_SLAVE)
+	else if (tp->switch_type == SWITCH_SLAVE)
 	{
 		LOGL(2, "FD %d is a slave adapter", frontend_fd);
-	}else
+	}
+	else
 	{
 		if (tp->old_pol != pol || tp->old_hiband != hiband
 				|| tp->old_diseqc != diseqc)
@@ -995,9 +995,19 @@ void find_dvb_adapter(adapter **a)
 		{
 			sprintf(buf, "/dev/dvb/adapter%d/frontend%d", i, j);
 			fd = open(buf, O_RDONLY | O_NONBLOCK);
+			if (fd < 0)
+			{
+				sprintf(buf, "/dev/dvb/adapter%d/ca%d", i, j);
+				fd = open(buf, O_RDONLY | O_NONBLOCK);
+			}
 			//LOG("testing device %s -> fd: %d",buf,fd);
 			if (fd >= 0)
 			{
+				if (is_adapter_disabled(na))
+				{
+					na++;
+					continue;
+				}
 				if (!a[na])
 					a[na] = malloc1(sizeof(adapter));
 

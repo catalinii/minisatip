@@ -702,15 +702,15 @@ fe_delivery_system_t satipc_delsys(int aid, int fd, fe_delivery_system_t *sys)
 
 uint8_t determine_fe(adapter **a, int pos, char *sip, int sport)
 {
-	int i = pos - 1;
-	while (i >= 0)
+	int i = pos;
+	while (i > 0)
 	{
+		i--;
 		adapter *ad = a[i];
 		if (!ad)
 			continue;
 		if (sport == ad->sport && !strcmp(ad->sip, sip))
-			return ad->satip_fe + 1;
-		i--;
+			return ad->satip_fe + 1;		
 	}
 	return 1;
 
@@ -729,6 +729,8 @@ void find_satip_adapter(adapter **a)
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		if ((!a[i] || (a[i]->pa == -1 && a[i]->fn == -1)) && j < la)
 		{
+			if(is_adapter_disabled(i))
+				continue;
 			if (!a[i])
 				a[i] = malloc1(sizeof(adapter));
 
