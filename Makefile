@@ -1,5 +1,6 @@
 
 CC?=gcc
+EMBEDDED?=no
 DVBCSA?=yes
 DVBCA?=no
 SATIPCLIENT?=yes
@@ -35,6 +36,10 @@ ifeq ($(SATIPCLIENT),yes)
 OBJS+=satipc.o
 else
 CFLAGS+=-DDISABLE_SATIPCLIENT
+endif
+
+ifeq ($(EMBEDDED),yes)
+CFLAGS+=-DNO_BACKTRACE
 endif
 
 
