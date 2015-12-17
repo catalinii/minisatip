@@ -461,7 +461,6 @@ int http_request(adapter *ad, char *url, char *method)
 		ad->sent_transport = 1;
 		ad->stream_id = -1;
 		ad->session[0] = 0;
-		ad->last_cmd = RTSP_SETUP;
 		sprintf(session, "\r\nTransport:RTP/AVP;unicast;client_port=%d-%d",
 				ad->listen_rtp, ad->listen_rtp + 1);
 	}
@@ -486,6 +485,8 @@ int http_request(adapter *ad, char *url, char *method)
 		ad->last_cmd = RTSP_TEARDOWN;
 	else if (!strcmp(method, "DESCRIBE"))
 		ad->last_cmd = RTSP_DESCRIBE;
+	else if (!strcmp(method, "SETUP"))
+		ad->last_cmd = RTSP_SETUP;
 
 	qm = "?";
 	if (!url || !url[0])

@@ -37,8 +37,8 @@
 #include <poll.h>
 #include <fcntl.h>
 
-#include "socketworks.h"
 #include "minisatip.h"
+#include "socketworks.h"
 #include "utils.h"
 
 extern struct struct_opts opts;
@@ -46,12 +46,6 @@ sockets *s[MAX_SOCKS];
 int max_sock;
 SMutex s_mutex;
 
-struct thread_info
-{ /* Used as argument to thread_start() */
-	pthread_t thread_id; /* ID returned by pthread_create() */
-	int thread_num; /* Application-defined thread # */
-	char *argv_string; /* From command-line argument */
-};
 
 int fill_sockaddr(struct sockaddr_in *serv, char *host, int port)
 {
@@ -408,7 +402,7 @@ int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 	char ra[50];
 	sockets *ss;
 
-	i = add_new_lock((void **) s, MAX_SOCKS, sizeof(streams), &s_mutex);
+	i = add_new_lock((void **) s, MAX_SOCKS, sizeof(sockets), &s_mutex);
 	if (i == -1)
 		LOG_AND_RETURN(-1, "sockets_add failed for socks %d", sock);
 
@@ -529,7 +523,7 @@ void *select_and_execute(void *arg)
 			thread_name);
 	while (run_loop)
 	{
-		lt = getTick();
+		c_time = getTick();
 		es = 0;
 		clean_mutexes();
 		for (i = 0; i < max_sock; i++)
@@ -538,7 +532,7 @@ void *select_and_execute(void *arg)
 				pf[i].fd = s[i]->sock;
 				pf[i].events = s[i]->events;
 				pf[i].revents = 0;
-				s[i]->last_poll = lt;
+				s[i]->last_poll = c_time;
 				es++;
 			}
 			else
@@ -557,7 +551,6 @@ void *select_and_execute(void *arg)
 			LOG("select_and_execute: select() error %d: %s", errno, strerror(errno));
 			continue;
 		}
-		c_time = getTick();
 		//              LOG("select returned %d",rv);
 		if (rv > 0)
 			while (++i < max_sock)
@@ -687,7 +680,8 @@ void *select_and_execute(void *arg)
 //					ss->err = 0;					
 				}
 		// checking every 60seconds for idle connections - or if select times out
-		if (rv == 0 || c_time - lt >= 200)
+		c_time = getTick();
+		if (rv == 0 || (c_time - lt >= 200))
 		{
 			sockets *ss;
 			lt = c_time;

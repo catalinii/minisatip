@@ -51,7 +51,7 @@ typedef struct struct_key
 	int key_len;
 	int sid;
 	int pmt_pid;
-	
+	uint32_t last_ecm;	
 	uint8_t hops;
 	uint16_t caid, info_pid;
 	uint32_t prid, ecmtime;

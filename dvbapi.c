@@ -599,14 +599,17 @@ int decrypt_stream(adapter *ad, void *arg)
 			}
 			if (b[3] & 0x20)
 			{
-				adapt_len = (b[4] < 183) ? b[4] + 5 : 0;
+				adapt_len = (b[4] < 183) ? b[4] + 5 : 188;
 				LOGL(5, "Adaptation for pid %d, specified len %d, final len %d",
 						pid, b[4], adapt_len);
 			}
 			else
 				adapt_len = 4;
-			k->batch[k->blen].data = b + adapt_len;
-			k->batch[k->blen++].len = 188 - adapt_len;
+			if(adapt_len < 188)
+			{
+				k->batch[k->blen].data = b + adapt_len;
+				k->batch[k->blen++].len = 188 - adapt_len;
+			}
 			b[3] &= 0x3F; // clear the encrypted flags
 		}
 //		else
@@ -753,6 +756,9 @@ int send_ecm(adapter *ad, void *arg)
 	if (!(len = assemble_packet(&b, ad, 0)))
 		return 0;
 
+	if((getTick() - k->last_ecm > 1000) && !k->key_ok[0] && !k->key_ok[1])
+		p->ecm_parity = -1;
+
 	if ((b[0] & 1) == p->ecm_parity)
 		return 0;
 	old_parity = p->ecm_parity;
@@ -760,6 +766,7 @@ int send_ecm(adapter *ad, void *arg)
 
 	len = ((b[1] & 0xF) << 8) + b[2];
 	len += 3;
+	k->last_ecm = getTick();
 	LOG(
 			"dvbapi: sending ECM key %d for pid %04X (%d), ecm_parity = %d, new parity %d, demux = %d, filter = %d, len = %d [%02X %02X %02X %02X]",
 			k->id, pid, pid, old_parity, b[0] & 1, demux, filter, len, b[0],
