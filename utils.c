@@ -51,7 +51,7 @@
 #include "utils.h"
 #include "minisatip.h"
 
-#ifndef __mips__
+#if !defined(__mips__) && !defined(NO_BACKTRACE)
 #include <execinfo.h>
 #endif
 
@@ -387,7 +387,7 @@ void print_trace(void)
 	size_t size;
 	char **strings;
 	size_t i;
-#ifndef __mips__
+#if !defined(__mips__) && !defined(NO_BACKTRACE)
 
 	size = backtrace(array, 10);
 
