@@ -953,7 +953,7 @@ int ssdp_reply(sockets * s)
 	s->rtime = s->wtime; // consider the timeout of the discovery operation
 
 	salen = sizeof(s->sa);
-	ruuid = strcasestr(s->buf, "uuid:");
+	ruuid = strcasestr((const char *) s->buf, "uuid:");
 	if (ruuid && strncmp(uuid, strip(ruuid + 5), strlen(uuid)) == 0)
 	{
 		LOGL(3, "Dropping packet from the same UUID as mine (from %s:%d)",
@@ -968,7 +968,7 @@ int ssdp_reply(sockets * s)
 			s->sock);
 	LOGL(3, "%s", s->buf);
 
-	if (strncasecmp(s->buf, "NOTIFY", 6) == 0)
+	if (strncasecmp((const char *) s->buf, "NOTIFY", 6) == 0)
 	{
 		rdid = strcasestr((const char*) s->buf, "DEVICEID.SES.COM:");
 		if (rdid && opts.device_id == map_int(strip(rdid + 17), NULL))
@@ -1047,13 +1047,11 @@ void write_pid_file()
 	}
 }
 
-extern char pn[256];
 pthread_t main_tid;
 
 int main(int argc, char *argv[])
 {
 	int sock_st, sock_bw;
-	realpath(argv[0], pn);
 	main_tid = get_tid();
 	thread_name = "main";
 	set_signal_handler();
@@ -1120,9 +1118,10 @@ int readBootID()
 	int did = 0;
 	opts.bootid = 0;
 	FILE *f = fopen("bootid", "rt");
+	__attribute__((unused)) int rv;
 	if (f)
 	{
-		fscanf(f, "%d %d", &opts.bootid, &did);
+		rv = fscanf(f, "%d %d", &opts.bootid, &did);
 		fclose(f);
 		if (opts.device_id < 1)
 			opts.device_id = did;
