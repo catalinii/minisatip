@@ -5,8 +5,8 @@ DVBCSA?=yes
 DVBCA?=no
 SATIPCLIENT?=yes
 
-CFLAGS?=$(NODVBCSA) -ggdb -fPIC
-LDFLAGS?=-lpthread -lrt
+CFLAGS?=$(NODVBCSA) -ggdb -fPIC $(EXTRA_CFLAGS)
+LDFLAGS?=-lpthread -lrt $(EXTRA_LDFLAGS)
 
 OBJS=minisatip.o socketworks.o stream.o dvb.o adapter.o utils.o
 
