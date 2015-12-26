@@ -1047,13 +1047,11 @@ void write_pid_file()
 	}
 }
 
-extern char pn[256];
 pthread_t main_tid;
 
 int main(int argc, char *argv[])
 {
 	int sock_st, sock_bw;
-	realpath(argv[0], pn);
 	main_tid = get_tid();
 	thread_name = "main";
 	set_signal_handler();
