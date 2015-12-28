@@ -1126,7 +1126,7 @@ void set_slave_adapters(char *o)
 
 		sep = strchr(arg[i], '-');
 		a_id2 = a_id;
-		if (!sep)
+		if (sep)
 			a_id2 = map_intd(sep + 1, NULL, -1);
 
 		if (a_id2 < 0 || a_id2 >= MAX_ADAPTERS)

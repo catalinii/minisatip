@@ -1041,7 +1041,7 @@ int mutex_unlock1(char *FILE, int line, SMutex* mutex)
 	if(rv == 0 || rv == 1)
 		rv = 0;
 
-	if(rv != -1)
+	if(rv != -1 && imtx > 0)
 		if ((imtx >= 1) && mutexes[imtx - 1] == mutex)
 			imtx--;
 		else if ((imtx >= 2) && mutexes[imtx - 2] == mutex)

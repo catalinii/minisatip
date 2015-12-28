@@ -148,6 +148,9 @@ int udp_bind(char *addr, int port)
 				port, strerror(errno));
 		return -1;
 	}
+
+	set_linux_socket_timeout(sock);
+
 	LOGL(0, "New UDP socket %d bound to %s:%d", sock, inet_ntoa(serv.sin_addr),
 			ntohs(serv.sin_port));
 	return sock;
