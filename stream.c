@@ -1020,7 +1020,7 @@ int read_dmx(sockets * s)
 	lse = lock_streams_for_adapter(ad->id, 0);
 	if (ls != lse)
 		LOG("leak detected %d %d!!! ", ls, lse);
-
+	return 0;
 }
 
 int calculate_bw(sockets *s)

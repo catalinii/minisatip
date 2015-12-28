@@ -66,6 +66,7 @@ int satipc_reply(sockets * s)
 	adapter *ad;
 	char *arg[50], *sess, *es, *sid;
 	int la, i, rc;
+	__attribute__((unused)) int rv;
 	s->rlen = 0;
 	LOG("satipc_reply (sock %d) handle %d, adapter %d:\n%s", s->id, s->sock,
 			s->sid, s->buf);
@@ -139,7 +140,7 @@ int satipc_reply(sockets * s)
 				sprintf(np + len - 2, "Session: %s\r\n\r\n", ad->session);
 
 			LOG("satipc_reply: sending next packet:\n%s", np);
-			write(s->sock, np, strlen(np));
+			rv = write(s->sock, np, strlen(np));
 			delItem(MAKE_ITEM(ad->id, ad->wp++));
 		}
 	}
@@ -443,6 +444,7 @@ int http_request(adapter *ad, char *url, char *method)
 	char *qm;
 	int lb;
 	char format[] = "%s rtsp://%s:%d/%s%s%s RTSP/1.0\r\nCSeq: %d%s\r\n\r\n";
+	__attribute__((unused)) int rv;
 
 	session[0] = 0;
 	sid[0] = 0;
@@ -510,7 +512,7 @@ int http_request(adapter *ad, char *url, char *method)
 	else
 	{
 		ad->wp = ad->qp = 0;
-		write(ad->fe, buf, lb);
+		rv = write(ad->fe, buf, lb);
 	}
 	ad->expect_reply = 1;
 	return 0;

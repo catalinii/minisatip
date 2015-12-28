@@ -329,7 +329,7 @@ int sockets_accept(int socket, void *buf, int len, sockets *ss)
 	int new_sock, sas, ni;
 	struct sockaddr_in sa;
 	sas = sizeof(sa);
-	new_sock = accept(ss->sock, (struct sockaddr *) &sa, &sas);
+	new_sock = accept(ss->sock, (struct sockaddr *) &sa, (socklen_t *) &sas);
 	if (new_sock < 0)
 	{
 		if (errno != EINTR)
@@ -357,7 +357,7 @@ int sockets_read(int socket, void *buf, int len, sockets *ss, int *rv)
 int sockets_recv(int socket, void *buf, int len, sockets *ss, int *rv)
 {
 	int slen = sizeof(ss->sa);
-	*rv = recvfrom(socket, buf, len, 0, (struct sockaddr *) &ss->sa, &slen);
+	*rv = recvfrom(socket, buf, len, 0, (struct sockaddr *) &ss->sa, (socklen_t *) &slen);
 	return (*rv > 0);
 }
 
@@ -729,7 +729,7 @@ void sockets_setbuf(int i, char *buf, int len)
 	sockets *ss = get_sockets(i);
 	if (ss)
 	{
-		ss->buf = buf;
+		ss->buf = (unsigned char *) buf;
 		ss->lbuf = len;
 	}
 }
@@ -894,7 +894,7 @@ void set_socket_send_buffer(int sock, int len)
 	if (setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &len, sizeof(len)))
 		LOGL(3, "unable to set output UDP buffer size to %d", len);
 	sl = sizeof(int);
-	if (!getsockopt(sock, SOL_SOCKET, SO_SNDBUF, &len, &sl))
+	if (!getsockopt(sock, SOL_SOCKET, SO_SNDBUF, &len, (socklen_t *) &sl))
 		LOG("output UDP buffer size for socket %d is %d bytes", sock, len);
 
 }
