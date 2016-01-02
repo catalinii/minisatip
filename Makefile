@@ -5,16 +5,17 @@ DVBCSA?=no #beat: re-enable later
 DVBCA?=no
 SATIPCLIENT?=yes
 NETCVCLIENT?=yes
+STATIC?=no
 
-CFLAGS?=$(NODVBCSA) -ggdb -fPIC
-LDFLAGS?=-lpthread -lrt
+CFLAGS?=$(NODVBCSA) -ggdb -fPIC $(EXTRA_CFLAGS)
+LDFLAGS?=-lpthread -lrt $(EXTRA_LDFLAGS)
 
 OBJS=minisatip.o socketworks.o stream.o dvb.o adapter.o utils.o
 
 TABLES=no
 
 ifeq ($(DVBCSA),yes)
-LDFLAGS+=-ldvbcsa
+LIBS+=dvbcsa
 OBJS+=dvbapi.o
 TABLES=yes
 else
@@ -22,7 +23,7 @@ CFLAGS+=-DDISABLE_DVBCSA
 endif
 
 ifeq ($(DVBCA),yes)
-LDFLAGS+=-ldvben50221 -ldvbapi -lucsi
+LIBS+=dvben50221 dvbapi ucsi
 OBJS+=ca.o
 TABLES=yes
 else
@@ -51,7 +52,11 @@ ifeq ($(EMBEDDED),yes)
 CFLAGS+=-DNO_BACKTRACE
 endif
 
-
+ifeq ($(STATIC),yes)
+LDFLAGS+=$(addsuffix .a,$(addprefix -l:lib,$(LIBS)))
+else
+LDFLAGS+=$(addprefix -l,$(LIBS))
+endif
 
 minisatip: $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LDFLAGS)

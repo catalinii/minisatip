@@ -430,6 +430,7 @@ int /* Returns 0 on success, -1 on error */
 becomeDaemon()
 {
 	int maxfd, fd, pid;
+	__attribute__((unused)) int rv;
 	struct stat sb;
 	FILE *f;
 	char path[255];
@@ -438,7 +439,7 @@ becomeDaemon()
 	memset(path, 0, sizeof(path));
 	if ((f = fopen(pid_file, "rt")))
 	{
-		fscanf(f, "%d", &pid);
+		rv = fscanf(f, "%d", &pid);
 		fclose(f);
 		snprintf(buf, sizeof(buf), "/proc/%d/exe", pid);
 
@@ -861,6 +862,7 @@ void process_file(void *sock, char *s, int len, char *ctype)
 	char outp[8292];
 	int i, io = 0, lv, le, respond = 1;
 	sockets *so = (sockets *) sock;
+	__attribute__((unused)) int rv;
 	LOG("processing_file %x len %d:", s, len);
 	for (i = 0; i < len; i++)
 	{
@@ -884,7 +886,7 @@ void process_file(void *sock, char *s, int len, char *ctype)
 				http_response(so, 200, ctype, "", 0, 0); // sending back the response without Content-Length
 				respond = 0;
 			}
-			write(so->sock, outp, io);
+			rv = write(so->sock, outp, io);
 			outp[io] = 0;
 			LOG("%s", outp);
 			io = 0;
@@ -896,7 +898,7 @@ void process_file(void *sock, char *s, int len, char *ctype)
 	else
 	{
 		strcpy(outp + io, "\r\n\r\n");
-		write(so->sock, outp, io + 4);
+		rv = write(so->sock, outp, io + 4);
 		outp[io] = 0;
 		LOG("%s", outp);
 	}
@@ -1041,7 +1043,7 @@ int mutex_unlock1(char *FILE, int line, SMutex* mutex)
 	if(rv == 0 || rv == 1)
 		rv = 0;
 
-	if(rv != -1)
+	if(rv != -1 && imtx > 0)
 		if ((imtx >= 1) && mutexes[imtx - 1] == mutex)
 			imtx--;
 		else if ((imtx >= 2) && mutexes[imtx - 2] == mutex)
