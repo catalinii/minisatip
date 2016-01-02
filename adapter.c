@@ -57,6 +57,9 @@ void find_adapters()
 #ifndef DISABLE_SATIPCLIENT
 	find_satip_adapter(a);
 #endif 
+#ifndef DISABLE_NETCVCLIENT
+	find_netcv_adapter(a);
+#endif
 }
 
 // avoid adapter close unless all the adapters can be closed
@@ -993,9 +996,14 @@ void free_all_adapters()
 	int i;
 
 	for (i = 0; i < MAX_ADAPTERS; i++)
-		if (a[i]->buf)
+		if (a[i]) if (a[i]->buf)
 			free1(a[i]->buf);
 
+#ifndef DISABLE_NETCVCLIENT
+	fprintf(stderr, "\n\nREEL: recv_exit\n");
+	if(recv_exit())
+		LOGL(0, "Netceiver exit failed");
+#endif
 }
 char is_adapter_disabled(int i)
 {
