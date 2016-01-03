@@ -67,7 +67,7 @@ int netcv_close(adapter *ad)
 
 int netcv_open_device(adapter *ad)
 {
-	fprintf(stderr, "REEL: netcv_open_device (id=%d)\n", ad->id);
+	//fprintf(stderr, "REEL: netcv_open_device (id=%d)\n", ad->id);
 
 	SN.want_commit = 0;
 	SN.ncv_rec = NULL;
@@ -81,7 +81,7 @@ int netcv_set_pid(adapter *ad, uint16_t pid)
 	//fprintf(stderr, "REEL: netcv_set_pid (id=%d, pid=%d)\n", ad->id, pid);
 
 	int aid = ad->id;
-	LOG("netceiver: set_pid for adapter %d, pid %d, err %d", aid, pid, SN.err);
+	LOGL(0, "netceiver: set_pid for adapter %d, pid %d, err %d", aid, pid, SN.err);
 
 	if (SN.err) // error reported, return error
 		return 0;
@@ -104,7 +104,7 @@ int netcv_del_pid(int fd, int pid)
 	ad = get_adapter(fd);
 	if (!ad)
 		return 0;
-	LOG("netceiver: del_pid for aid %d, pid %d, err %d", fd, pid, SN.err);
+	LOGL(0, "netceiver: del_pid for aid %d, pid %d, err %d", fd, pid, SN.err);
 	if (SN.err) // error reported, return error
 		return 0;
 
@@ -123,9 +123,6 @@ int netcv_del_pid(int fd, int pid)
 
 void netcv_commit(adapter *ad)
 {
-	fprintf(stderr, "REEL: netcv_commit (id=%d, want_tune=%d, want_commit=%d, lp=%d)\n",
-			ad->id, SN.want_tune, SN.want_commit, SN.lp);
-
 	int i;
 
 	int m_pos = 0;
@@ -203,11 +200,13 @@ void netcv_commit(adapter *ad)
 				m_pos = 0xfff; /* not sure, to be tested */
 				memset(&m_sec, 0, sizeof(recv_sec_t));
 
-				m_fep.frequency = tp->freq;
+				m_fep.frequency = tp->freq * 1000;
 				m_fep.inversion = INVERSION_AUTO;
 				m_fep.u.qam.fec_inner = FEC_NONE;
 				m_fep.u.qam.modulation = tp->mtype;
 				m_fep.u.qam.symbol_rate = tp->sr;
+
+				type = FE_QAM;
 
 				break;
 
@@ -235,13 +234,17 @@ void netcv_commit(adapter *ad)
 	{
 		if (SN.lp)
 		{
+			char dbuf[1024] = "REEL: recv_pid: "; //debug
+
 			memset(m_pids, 0, sizeof(m_pids));
 			for(i = 0; i < SN.lp; i++)
 			{
+				sprintf(dbuf + strlen(dbuf), "[%04d]", SN.npid[i]);
 				m_pids[i].pid = SN.npid[i];
 				m_pids[i].id = 0; // here we maybe have to set the SID if this PID is encrypted
 
 			}
+			fprintf(stderr, "%s\n", dbuf);
 
 			m_pids[i].pid = -1;
 			/* call recv_pids of libmcli to set the active PIDs */
@@ -250,6 +253,7 @@ void netcv_commit(adapter *ad)
 		}
 		else
 		{
+			fprintf(stderr, "REEL: recv_pid: none\n");
 			/* call recv_stop of libmcli to deactivate all PIDs */
 			if(recv_stop (SN.ncv_rec))
 				LOGL(0, "netceiver: removing all PIDs failed");
@@ -264,7 +268,7 @@ void netcv_commit(adapter *ad)
 
 int netcv_tune(int aid, transponder * tp)
 {
-	fprintf(stderr, "REEL: netcv_tune (id=%d, tp.freq=%d)\n", aid, tp->freq);
+	//fprintf(stderr, "REEL: netcv_tune (id=%d, tp.freq=%d)\n", aid, tp->freq);
 
 	adapter *ad = get_adapter(aid);
 	if (!ad)

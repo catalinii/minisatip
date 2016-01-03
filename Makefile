@@ -1,10 +1,10 @@
 
 CC?=gcc
 EMBEDDED?=no
-DVBCSA?=no #beat: re-enable later
+DVBCSA?=yes
 DVBCA?=no
 SATIPCLIENT?=yes
-NETCVCLIENT?=yes
+NETCVCLIENT?=no
 STATIC?=no
 
 CFLAGS?=$(NODVBCSA) -ggdb -fPIC $(EXTRA_CFLAGS)
