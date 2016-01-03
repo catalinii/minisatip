@@ -1,9 +1,10 @@
 
 CC?=gcc
 EMBEDDED?=no
-DVBCSA?=yes
+DVBCSA?=no #beat: re-enable later
 DVBCA?=no
 SATIPCLIENT?=yes
+NETCVCLIENT?=yes
 STATIC?=no
 
 CFLAGS?=$(NODVBCSA) -ggdb -fPIC $(EXTRA_CFLAGS)
@@ -37,6 +38,14 @@ ifeq ($(SATIPCLIENT),yes)
 OBJS+=satipc.o
 else
 CFLAGS+=-DDISABLE_SATIPCLIENT
+endif
+
+ifeq ($(NETCVCLIENT),yes)
+OBJS+=netceiver.o
+CFLAGS+=-I../vdr-mcli-plugin/mcast/client -I../vdr-mcli-plugin/mcast/common `xml2-config --cflags`
+LDFLAGS+=-lmcli
+else
+CFLAGS+=-DDISABLE_NETCVCLIENT
 endif
 
 ifeq ($(EMBEDDED),yes)
@@ -78,6 +87,9 @@ tables.o: tables.c tables.h
 
 satipc.o: satipc.c satipc.h
 	$(CC) $(CFLAGS) -c -o $@ satipc.c
+
+netceiver.o: netceiver.c netceiver.h
+	$(CC) $(CFLAGS) -c -o $@ netceiver.c
 
 utils.o: utils.c utils.h
 	$(CC) $(CFLAGS) -c -o $@ utils.c

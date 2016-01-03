@@ -72,6 +72,9 @@ static const struct option long_options[] =
 #ifndef DISABLE_SATIPCLIENT
 		{ "satip-servers", required_argument, NULL, 's' },
 #endif
+#ifndef DISABLE_NETCVCLIENT
+		{ "netcv-servers", required_argument, NULL, 'n' },
+#endif
 		{ "rtsp-port", required_argument, NULL, 'y' },
 		{ "http-port", required_argument, NULL, 'x' },
 		{ "http-host", required_argument, NULL, 'w' },
@@ -107,6 +110,7 @@ static const struct option long_options[] =
 #define SYSLOG_OPT 'g'
 #define RTSPPORT_OPT 'y'
 #define SATIPCLIENT_OPT 's'
+#define NETCVCLIENT_OPT 'n'
 #define PRIORITY_OPT 'i'
 #define PRIORITY_OPT 'i'
 #define DOCUMENTROOT_OPT 'R'
@@ -269,7 +273,7 @@ void set_options(int argc, char *argv[])
 	memset(opts.playlist, 0, sizeof(opts.playlist));
 
 	while ((opt = getopt_long(argc, argv,
-			"flr:a:td:w:p:s:hc:b:m:p:e:x:u:j:o:gy:zi:D:VR:S:TX:", long_options, NULL))
+			"flr:a:td:w:p:s:n:hc:b:m:p:e:x:u:j:o:gy:zi:D:VR:S:TX:", long_options, NULL))
 			!= -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
@@ -443,6 +447,10 @@ void set_options(int argc, char *argv[])
 			else
 				sprintf(opts.satip_servers, "%s", optarg);
 
+			break;
+
+		case NETCVCLIENT_OPT:
+			opts.netcv_count = atoi(optarg);
 			break;
 
 		case PRIORITY_OPT:

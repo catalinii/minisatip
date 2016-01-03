@@ -54,6 +54,7 @@ struct struct_opts
 	int drop_encrypted;
 	int rtsp_port;
 	uint8_t satip_addpids, satip_setup_pids;
+	uint8_t netcv_count;
 	char playlist[200];
 	char satip_servers[100];
 	char *document_root;
