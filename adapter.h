@@ -4,10 +4,6 @@
 #include <linux/dvb/frontend.h>
 #include "dvb.h"
 
-#ifndef DISABLE_NETCVCLIENT
-#include "headers.h"
-#endif
-
 typedef struct ca_device ca_device_t;
 
 #define MAX_ADAPTERS 16

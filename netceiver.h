@@ -2,6 +2,8 @@
 #define NETCEIVERCLIENT_H
 
 #include "adapter.h"
+#include "headers.h"
+
 
 void find_netcv_adapter(adapter **a);
 
