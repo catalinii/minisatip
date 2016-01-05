@@ -15,7 +15,7 @@ https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item
 
 Usage:
 
-minisatip version 0.5.2, compiled with s2api version: 050A
+minisatip version 0.5.10, compiled with s2api version: 050A
 minisatip [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] [-j A1:S1-F1[-PIN]] [-m mac] [-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] [-R document_root] [-s [DELSYS:]host[:port] [-u A1:S1-F1[-PIN]] [-w http_server[:port]] [-x http_port] [-X xml_path] [-y rtsp_port] 
 
  
@@ -36,6 +36,10 @@ minisatip [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X
 
 -D --device-id DVC_ID: specify the device id (in case there are multiple SAT>IP servers in the network)
  	eg: -D 4 
+
+-Y --delsys ADAPTER1:DELIVERY_SYSTEM1[,ADAPTER2:DELIVERY_SYSTEM2[,..]] - specify the delivery system of the adapters	
+    eg: --delsys 1:dvbt,2:dvbs
+    - specifies adapter 1 as a DVBT device, adapter 2 as DVB-S, which overrides the system detection of the adapter
 
 -e --enable-adapters list_of_enabled adapters: enable only specified adapters
 	eg: -e 0-2,5,7 (no spaces between parameters)
