@@ -462,6 +462,10 @@ void set_options(int argc, char *argv[])
 			break;
 
 		case NETCVCLIENT_OPT:
+#ifdef DISABLE_NETCVCLIENT
+			LOGL(0, "%s was not compiled with netceiver client support, please change the Makefile", app_name);
+			exit (0);
+#endif
 			opts.netcv_count = atoi(optarg);
 			break;
 
