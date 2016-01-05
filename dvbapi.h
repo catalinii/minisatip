@@ -86,5 +86,6 @@ void dvbapi_pid_del(adapter *a,int pid, SPid *cp);
 void dvbapi_delete_keys_for_adapter(int aid);
 void register_dvbapi();
 void unregister_dvbapi();
+void send_client_info(sockets *s);
 #endif
 #endif

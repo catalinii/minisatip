@@ -149,6 +149,8 @@ char *get_adapter_pids(int aid, char *dest, int max_size);
 void adapter_lock1(char *FILE, int line, int aid);
 void adapter_unlock1(char *FILE, int line, int aid);
 char is_adapter_disabled(int i);
+void set_adapters_delsys(char *o);
+
 #define get_adapter(a) get_adapter1(a, __FILE__, __LINE__)
 #define get_adapter_nw(aid) ((aid >= 0 && aid < MAX_ADAPTERS && a[aid] && a[aid]->enabled)?a[aid]:NULL)
 

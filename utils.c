@@ -508,6 +508,8 @@ void *
 mymalloc(int a, char *f, int l)
 {
 	void *x = malloc(a);
+	if (x)
+		memset(x, 0, a);
 	LOG("%s:%d allocation_wrapper malloc allocated %d bytes at %p", f, l, a, x);
 	return x;
 }
@@ -1040,10 +1042,10 @@ int mutex_unlock1(char *FILE, int line, SMutex* mutex)
 		LOGL(3, "mutex_unlock failed at %s:%d: %d %s", FILE, line, rv,
 				strerror(rv));
 	}
-	if(rv == 0 || rv == 1)
+	if (rv == 0 || rv == 1)
 		rv = 0;
 
-	if(rv != -1 && imtx > 0)
+	if (rv != -1 && imtx > 0)
 		if ((imtx >= 1) && mutexes[imtx - 1] == mutex)
 			imtx--;
 		else if ((imtx >= 2) && mutexes[imtx - 2] == mutex)
@@ -1095,7 +1097,7 @@ void clean_mutexes()
 	if (!imtx)
 		return;
 	if (opts.no_threads)
-		return ;
+		return;
 //	LOG("mutex_leak: unlock %d mutexes", imtx);
 	for (i = imtx - 1; i >= 0; i--)
 	{

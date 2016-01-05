@@ -228,7 +228,7 @@ int process_pat(adapter *ad, unsigned char *b)
 	{
 		sid = b[i] * 256 + b[i + 1];
 		pid = (b[i + 2] & 0x1F) * 256 + b[i + 3];
-		LOGL(2, "Adapter %d, PMT sid %d, pid %d", ad->id, sid, pid);
+		LOGL(2, "Adapter %d, PMT sid %d (%04X), pid %d", ad->id, sid, sid, pid);
 		if (sid > 0)
 		{
 			pids[pid] = -TYPE_PMT;
@@ -338,7 +338,8 @@ int process_pmt(adapter *ad, unsigned char *b)
 	program_id = b[8] * 256 + b[9];
 	ver = b[10] & 0x3F;
 
-	if (((p->type & 0xF ) != TYPE_PMT) && p->version == ver && p->csid == program_id) // pmt processed already
+	if (((p->type & 0xF) != TYPE_PMT) && p->version == ver
+			&& p->csid == program_id) // pmt processed already
 		return 0;
 
 	if (!(pmt_len = assemble_packet(&b, ad, 1)))
@@ -346,11 +347,11 @@ int process_pmt(adapter *ad, unsigned char *b)
 
 	pi_len = ((b[10] & 0xF) << 8) + b[11];
 
-	p->csid = b[3] * 256 + b[4];
-	p->version = b[5] & 0x3F;
+	program_id = p->csid = b[3] * 256 + b[4];
+	ver = p->version = b[5] & 0x3F;
 
-	LOG("PMT pid: %04X (%d), pmt_len %d, pi_len %d, channel id %04X (%d)", pid,
-			pid, pmt_len, pi_len, program_id, program_id);
+	LOG("PMT pid: %04X (%d), pmt_len %d, pi_len %d, sid %04X (%d)", pid, pid,
+			pmt_len, pi_len, program_id, program_id);
 	pi = b + 12;
 	pmt = pi + pi_len;
 
@@ -424,7 +425,10 @@ int process_pmt(adapter *ad, unsigned char *b)
 				.sid = program_id, .ver = ver, .pid = pid, .old_key = old_key };
 		p->enabled_channels = enabled_channels;
 
-		run_ca_action(CA_ADD_PMT, ad, &pmt);
+		if (program_id > 0)
+			run_ca_action(CA_ADD_PMT, ad, &pmt);
+		else
+			LOG("PMT %d, SID is 0, not running ca_action", pid);
 
 		for (i = 0; i < npl; i++)
 		{
@@ -469,6 +473,9 @@ int assemble_packet(uint8_t **b1, adapter *ad, int check_crc)
 
 	item_key = TABLES_ITEM + (ad->id << 16) + pid;
 
+	if (!getItem(item_key) && !len)
+		return 0;
+
 	if (len > 180)
 	{
 		setItem(item_key, b + 5, 183, 0);
@@ -483,7 +490,7 @@ int assemble_packet(uint8_t **b1, adapter *ad, int check_crc)
 	else // pmt_len == 0 - next part from the pmt
 	{
 		setItem(item_key, b + 4, 184, -1);
-		setItemTimeout(item_key, ASSEMBLE_TIMEOUT);
+//		setItemTimeout(item_key, ASSEMBLE_TIMEOUT);
 		b = getItem(item_key);
 		len = ((b[1] & 0xF) << 8) + b[2];
 		if (getItemLen(item_key) < len)
@@ -869,7 +876,9 @@ void init_ca_device(SCA *c)
 					if (p && (p->type & PMT_COMPLETE))
 					{
 						p->type &= ~PMT_COMPLETE; // force CA_ADD_PMT for the PMT		
-						LOG("init-ca_device: triggering CA_ADD_PMT for adapter %d and pid %d type %d", ad->id, pid, p->type);
+						LOG(
+								"init-ca_device: triggering CA_ADD_PMT for adapter %d and pid %d type %d",
+								ad->id, pid, p->type);
 					}
 				}
 			}

@@ -79,6 +79,7 @@ static const struct option long_options[] =
 		{ "http-port", required_argument, NULL, 'x' },
 		{ "http-host", required_argument, NULL, 'w' },
 		{ "slave", required_argument, NULL, 'S' },
+		{ "delsys", required_argument, NULL, 'Y' },
 		{ "priority", required_argument, NULL, 'i' },
 		{ "document-root", required_argument, NULL, 'R' },
 		{ "threads", no_argument, NULL, 'T' },
@@ -106,6 +107,7 @@ static const struct option long_options[] =
 #define JESS_OPT 'j'
 #define DISEQC_OPT 'd'
 #define SLAVE_OPT 'S'
+#define DELSYS_OPT 'Y'
 #define DVBAPI_OPT 'o'
 #define SYSLOG_OPT 'g'
 #define RTSPPORT_OPT 'y'
@@ -151,6 +153,10 @@ void usage()
 \n\
 -D --device-id DVC_ID: specify the device id (in case there are multiple SAT>IP servers in the network)\n \
 	eg: -D 4 \n\
+\n\
+-Y --delsys ADAPTER1:DELIVERY_SYSTEM1[,ADAPTER2:DELIVERY_SYSTEM2[,..]] - specify the delivery system of the adapters	\n\
+    eg: --delsys 1:dvbt,2:dvbs\n\
+    - specifies adapter 1 as a DVBT device, adapter 2 as DVB-S, which overrides the system detection of the adapter\n\
 \n\
 -e --enable-adapters list_of_enabled adapters: enable only specified adapters\n\
 	eg: -e 0-2,5,7 (no spaces between parameters)\n\
@@ -226,7 +232,7 @@ void usage()
 ",
 			app_name,
 			ADAPTER_BUFFER,
-			DVR_BUFFER, opts.no_threads?"DISABLED":"ENABLED");
+			DVR_BUFFER, opts.no_threads ? "DISABLED" : "ENABLED");
 	exit(1);
 }
 
@@ -273,8 +279,8 @@ void set_options(int argc, char *argv[])
 	memset(opts.playlist, 0, sizeof(opts.playlist));
 
 	while ((opt = getopt_long(argc, argv,
-			"flr:a:td:w:p:s:n:hc:b:m:p:e:x:u:j:o:gy:zi:D:VR:S:TX:", long_options, NULL))
-			!= -1)
+			"flr:a:td:w:p:s:n:hc:b:m:p:e:x:u:j:o:gy:zi:D:VR:S:TX:Y:",
+			long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
 		switch (opt)
@@ -408,6 +414,12 @@ void set_options(int argc, char *argv[])
 			break;
 		}
 
+		case DELSYS_OPT:
+		{
+			set_adapters_delsys(optarg);
+			break;
+		}
+		
 		case DVBAPI_OPT:
 		{
 #ifdef DISABLE_DVBCSA
@@ -468,7 +480,7 @@ void set_options(int argc, char *argv[])
 			opts.no_threads = 1 - opts.no_threads;
 			break;
 
-			case XML_OPT:
+		case XML_OPT:
 			while (*optarg > 0 && *optarg == '/')
 				optarg++;
 			if (*optarg > 0)
@@ -1099,9 +1111,8 @@ int main(int argc, char *argv[])
 	NULL, (socket_action) close_http))
 		FAIL("sockets_add failed for http");
 
-	if (0
-			> (sock_bw = sockets_add(SOCK_TIMEOUT, NULL, -1, TYPE_UDP, NULL,
-					NULL, (socket_action) calculate_bw)))
+	if (0 > (sock_bw = sockets_add(SOCK_TIMEOUT, NULL, -1, TYPE_UDP, NULL,
+	NULL, (socket_action) calculate_bw)))
 		FAIL("sockets_add failed for BW calculation");
 
 //	set_socket_thread(sock_bw, get_socket_thread(sock_st));

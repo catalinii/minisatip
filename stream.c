@@ -213,10 +213,9 @@ setup_stream(char *str, sockets * s)
 		if (sid->st_sock == -1)
 		{
 
-			if (0
-					> (sid->st_sock = sockets_add(SOCK_TIMEOUT, NULL, sid->sid,
-							TYPE_UDP, NULL,
-							NULL, (socket_action) stream_timeout)))
+			if (0 > (sid->st_sock = sockets_add(SOCK_TIMEOUT, NULL, sid->sid,
+			TYPE_UDP, NULL,
+			NULL, (socket_action) stream_timeout)))
 				LOG_AND_RETURN(NULL,
 						"sockets_add failed for stream timeout sid %d",
 						sid->sid);
@@ -555,9 +554,9 @@ int my_writev(int sock, const struct iovec *iov, int iiov, streams *sid)
 {
 	int rv;
 	char ra[50];
-	if(sid->timeout == 1)
+	if (sid->timeout == 1)
 		return -1;
-	
+
 	LOGL(7, "start writev handle %d, iiov %d", sock, iiov);
 	rv = writev(sock, iov, iiov);
 	if (rv < 0 && (errno == ECONNREFUSED || errno == EPIPE)) // close the stream int the next second
@@ -978,7 +977,9 @@ int read_dmx(sockets * s)
 	uint64_t stime;
 
 	if (s->rlen % DVB_FRAME != 0)
-		s->rlen = ((int) s->rlen / DVB_FRAME) * DVB_FRAME;
+//		s->rlen = ((int) s->rlen / DVB_FRAME) * DVB_FRAME;
+		return 0;
+
 	if (s->rlen == s->lbuf)
 		cnt++;
 	else
@@ -1081,10 +1082,10 @@ int stream_timeout(sockets *s)
 		{
 			LOG(
 					"Stream timeout %d, closing (ctime %d , sid->rtime %d, sid->timeout %d)",
-					sid->sid, ctime, sid->rtime, sid->timeout);			
+					sid->sid, ctime, sid->rtime, sid->timeout);
 			close_stream(sid->sid); // do not lock before this
 		}
-		
+
 	}
 
 	return 0;
@@ -1115,8 +1116,7 @@ int lock_streams_for_adapter(int aid, int lock)
 			if (lock)
 			{
 				mutex_lock(&sid->mutex);
-				if ((sid = get_sid_for(i))
-						&& (sid->adapter != aid))
+				if ((sid = get_sid_for(i)) && (sid->adapter != aid))
 					mutex_unlock(&sid->mutex);
 				else
 					ls++;

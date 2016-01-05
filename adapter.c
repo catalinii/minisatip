@@ -81,15 +81,6 @@ int adapter_timeout(sockets *s)
 		LOG("Keeping the adapter %d open as there are active streams", ad->id);
 		return 0;
 	}
-	for (i = 0; i < MAX_ADAPTERS; i++)
-		if ((ad = get_adapter_nw(i)))
-		{
-			if (rtime - ad->rtime < s->close_sec)
-				do_close = 0;
-			if (ad && max_close < ad->rtime)
-				max_close = ad->rtime;
-
-		}
 	LOG("Requested adapter %d close due to timeout, result %d max_rtime %d",
 			s->sid, do_close, max_close);
 	if (!do_close)
@@ -122,13 +113,13 @@ int init_hw(int i)
 	char name[100];
 	adapter *ad;
 	if (i < 0 || i >= MAX_ADAPTERS)
-		return 1;
+		return 3;
 
 	if (a[i] && a[i]->enabled)
-		return 1;
+		return 4;
 
 	if (!a[i])
-		return 1;
+		return 2;
 
 	ad = a[i];
 	mutex_init(&ad->mutex);
@@ -176,7 +167,8 @@ int init_hw(int i)
 	init_dvb_parameters(&ad->tp);
 	mark_pids_deleted(i, -1, NULL);
 	update_pids(i);
-	ad->delsys(i, ad->fe, ad->sys);
+	if (!ad->sys[0])
+		ad->delsys(i, ad->fe, ad->sys);
 	ad->master_sid = -1;
 	ad->sid_cnt = 0;
 	ad->pid_err = ad->dec_err = 0;
@@ -200,8 +192,8 @@ int init_hw(int i)
 
 //	set_sock_lock(ad->sock, &ad->mutex); // locks automatically the adapter on reading from the DVR 
 
-	LOG("done opening adapter %i fe_sys %d %d %d %d", i, ad->sys[0], ad->sys[1],
-			ad->sys[2], ad->sys[3]);
+	LOG("done opening adapter %i delivery systems: %s %s %s %s", i, get_delsys(ad->sys[0]), get_delsys(ad->sys[1]),
+			get_delsys(ad->sys[2]), get_delsys(ad->sys[3]));
 
 	OK:
 	mutex_unlock(&ad->mutex);
@@ -214,7 +206,7 @@ int init_hw(int i)
 
 int init_all_hw()
 {
-	int i;
+	int i, rv;
 	char name[50];
 
 	LOG("starting init_all_hw %d", init_complete);
@@ -230,8 +222,10 @@ int init_all_hw()
 				|| ((!a[i]->enabled || a[i]->fe <= 0)
 						&& ((a[i]->pa >= 0 && a[i]->fn >= 0) || a[i]->sip)))
 		{
-			if (!init_hw(i))
+			if (!(rv = init_hw(i)))
 				num_adapters++;
+			else if (rv != 2)
+				LOG("Failed to init device %d with return value %d", i, rv);
 		}
 		else if (a[i]->enabled)
 			num_adapters++;
@@ -367,11 +361,16 @@ void dump_pids(int aid)
 		}
 }
 
+#define return_adapter(i) { \
+	if(!init_hw(i)) \
+		return i; \
+}
+
 int get_free_adapter(int freq, int pol, int msys, int src)
 {
 	int i;
 	adapter *ad;
-	init_all_hw();
+//	init_all_hw();
 
 	i = (src > 0) ? src - 1 : 0;
 	ad = get_adapter(i);
@@ -380,7 +379,8 @@ int get_free_adapter(int freq, int pol, int msys, int src)
 				src - 1, i, ad->enabled, ad->master_sid, ad->sid_cnt,
 				ad->tp.freq, ad->tp.pol)
 	else
-		LOG("get free adapter %d msys %s", i, get_delsys(i));
+		LOG("get free adapter %d msys %s requested %s", i, get_delsys(i),
+				get_delsys(msys));
 
 	if (src > 0)
 	{
@@ -393,17 +393,24 @@ int get_free_adapter(int freq, int pol, int msys, int src)
 		}
 	}
 	for (i = 0; i < MAX_ADAPTERS; i++)
+	{
 		//first free adapter that has the same msys
 		if ((ad = get_adapter_nw(i)) && ad->sid_cnt == 0
 				&& delsys_match(ad, msys))
 			return i;
+		if (!ad && delsys_match(a[i], msys)) // device is not initialized
+			return_adapter(i);
+	}
 
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		if ((ad = get_adapter_nw(i)) && a[i]->tp.freq == freq
 				&& delsys_match(ad, msys))
 		{
-			if ((msys == SYS_DVBS2 || msys == SYS_DVBS) && ad->tp.pol == pol)
-				return i;
+			if ((msys == SYS_DVBS2 || msys == SYS_DVBS))
+			{
+				if (ad->tp.pol == pol)
+					return i;
+			}
 			else
 				return i;
 		}
@@ -996,12 +1003,13 @@ void free_all_adapters()
 	int i;
 
 	for (i = 0; i < MAX_ADAPTERS; i++)
-		if (a[i]) if (a[i]->buf)
-			free1(a[i]->buf);
+		if (a[i])
+			if (a[i]->buf)
+				free1(a[i]->buf);
 
 #ifndef DISABLE_NETCVCLIENT
 	fprintf(stderr, "\n\nREEL: recv_exit\n");
-	if(recv_exit())
+	if (recv_exit())
 		LOGL(0, "Netceiver exit failed");
 #endif
 }
@@ -1153,185 +1161,227 @@ void set_slave_adapters(char *o)
 
 	}
 }
+extern char *fe_delsys[];
+void set_adapters_delsys(char *o)
+{
+	int i, j, la, a_id, ds;
+	char buf[100], *arg[20], *sep;
+	adapter *ad;
+	strncpy(buf, o, sizeof(buf));
+	la = split(arg, buf, sizeof(arg), ',');
+	for (i = 0; i < la; i++)
+	{
+		a_id = map_intd(arg[i], NULL, -1);
+		if (a_id < 0 || a_id >= MAX_ADAPTERS)
+			continue;
+
+		sep = strchr(arg[i], ':');
+		if (!sep)
+		{
+			LOGL(0,
+					"Delivery system is missing, the format is adapter_number:delivery_system\n example: 2:dvbs2");
+			return;
+		}
+		ds = map_intd(sep + 1, fe_delsys, 0);
+
+		if (!a[a_id])
+			a[a_id] = malloc1(sizeof(adapter));
+
+		ad = a[a_id];
+		ad->sys[0] = ds;
+		
+		if (ad->sys[0] == SYS_DVBS2)
+			ad->sys[1] = SYS_DVBS;
+		if (ad->sys[0] == SYS_DVBT2)
+			ad->sys[1] = SYS_DVBT;
+		if (ad->sys[0] == SYS_DVBC2)
+			ad->sys[1] = SYS_DVBC_ANNEX_A;		
+		
+		LOGL(0, "Setting delivery system for adapter %d to %s and %s", a_id,
+				get_delsys(ad->sys[0]), get_delsys(ad->sys[1]));
+	}
+
+}
+
 
 int delsys_match(adapter *ad, int del_sys)
 {
-	int i;
-	if (!ad)
-		LOG_AND_RETURN(0, "delsys_match: adapter is NULL, delsys %d", del_sys);
+int i;
+if (!ad)
+	LOG_AND_RETURN(0, "delsys_match: adapter is NULL, delsys %d", del_sys);
 
-	if (del_sys == 0)
-		LOG_AND_RETURN(0,
-				"delsys_match: requesting delsys is 0 for adapter handle %d",
-				ad->fe);
+if (del_sys == 0)
+	LOG_AND_RETURN(0,
+			"delsys_match: requesting delsys is 0 for adapter handle %d",
+			ad->fe);
 
-	for (i = 0; i < 10; i++)
-		if (ad->sys[i] == (unsigned int) del_sys)
-			return 1;
-	return 0;
+for (i = 0; i < 10; i++)
+	if (ad->sys[i] == (unsigned int) del_sys)
+		return 1;
+return 0;
 
 }
 
 void adapter_lock1(char *FILE, int line, int aid)
 {
-	adapter *ad;
-	ad = get_adapter_nw(aid);
-	if (!ad)
-		return;
-	mutex_lock1(FILE, line, &ad->mutex);
+adapter *ad;
+ad = get_adapter_nw(aid);
+if (!ad)
+	return;
+mutex_lock1(FILE, line, &ad->mutex);
 }
 
 void adapter_unlock1(char *FILE, int line, int aid)
 {
-	adapter *ad;
-	ad = get_adapter_nw(aid);
-	if (!ad)
-		return;
-	mutex_unlock1(FILE, line, &ad->mutex);
+adapter *ad;
+ad = get_adapter_nw(aid);
+if (!ad)
+	return;
+mutex_unlock1(FILE, line, &ad->mutex);
 }
 
 void reset_pids_type(int aid, int clear_pat)
 {
-	int i;
-	adapter *ad = get_adapter(aid);
-	if (!ad)
-		return;
-	LOG("clearing type and pat processed for adapter %d", aid);
-	for (i = 0; i < MAX_PIDS; i++)
-		if (ad->pids[i].flags > 0)
-		{
-			ad->pids[i].type = 0;
-			ad->pids[i].key = 255;
-			ad->pids[i].filter = 255;
-			if (ad->pids[i].sid[0] == -1)
-				ad->pids[i].flags = 3;
-		}
-	if (clear_pat)
+int i;
+adapter *ad = get_adapter(aid);
+if (!ad)
+	return;
+LOG("clearing type and pat processed for adapter %d", aid);
+for (i = 0; i < MAX_PIDS; i++)
+	if (ad->pids[i].flags > 0)
 	{
-		ad->pat_processed = 0;
-		ad->transponder_id = -1;
-		ad->pat_ver = -1;
+		ad->pids[i].type = 0;
+		ad->pids[i].key = 255;
+		ad->pids[i].filter = 255;
+		if (ad->pids[i].sid[0] == -1)
+			ad->pids[i].flags = 3;
 	}
+if (clear_pat)
+{
+	ad->pat_processed = 0;
+	ad->transponder_id = -1;
+	ad->pat_ver = -1;
+}
 }
 
 void reset_ecm_type_for_key(int aid, int key)
 {
-	int i;
-	adapter *ad = get_adapter(aid);
-	if (!ad)
-		return;
-	LOG("clearing ECMs for key %d for adapter %d", key, aid);
-	for (i = 0; i < MAX_PIDS; i++)
-		if ((ad->pids[i].flags > 0) && (ad->pids[i].key == key)
-				&& (ad->pids[i].type == TYPE_ECM))
-		{
-			ad->pids[i].type = 0;
-			ad->pids[i].key = 255;
-			ad->pids[i].filter = 255;
-			if (ad->pids[i].sid[0] == -1)
-				ad->pids[i].flags = 3;
-		}
+int i;
+adapter *ad = get_adapter(aid);
+if (!ad)
+	return;
+LOG("clearing ECMs for key %d for adapter %d", key, aid);
+for (i = 0; i < MAX_PIDS; i++)
+	if ((ad->pids[i].flags > 0) && (ad->pids[i].key == key)
+			&& (ad->pids[i].type == TYPE_ECM))
+	{
+		ad->pids[i].type = 0;
+		ad->pids[i].key = 255;
+		ad->pids[i].filter = 255;
+		if (ad->pids[i].sid[0] == -1)
+			ad->pids[i].flags = 3;
+	}
 }
 
 int get_enabled_pids(adapter *ad, int *pids, int lpids)
 {
-	int ep = 0, i;
+int ep = 0, i;
 
-	for (i = 0; i < MAX_PIDS; i++)
-	{
-		if (ad->pids[i].flags == 1 || ad->pids[i].flags == 2) // enabled or needed to be added
-			pids[ep++] = ad->pids[i].pid;
-		if (ep >= lpids)
-			break;
-	}
+for (i = 0; i < MAX_PIDS; i++)
+{
+	if (ad->pids[i].flags == 1 || ad->pids[i].flags == 2) // enabled or needed to be added
+		pids[ep++] = ad->pids[i].pid;
+	if (ep >= lpids)
+		break;
+}
 
-	return ep;
+return ep;
 }
 
 char* get_adapter_pids(int aid, char *dest, int max_size)
 {
-	int len = 0;
-	int pids[MAX_PIDS];
-	int lp, i;
-	adapter *ad = get_adapter_nw(aid);
-	dest[0] = 0;
+int len = 0;
+int pids[MAX_PIDS];
+int lp, i;
+adapter *ad = get_adapter_nw(aid);
+dest[0] = 0;
 
-	if (!ad)
-		return dest;
-
-	lp = get_enabled_pids(ad, pids, MAX_PIDS);
-	for (i = 0; i < lp; i++)
-	{
-		if (pids[i] == 8192)
-			len += snprintf(dest + len, max_size - len, "8192");
-		else
-			len += snprintf(dest + len, max_size - len, "%d,", pids[i]);
-	}
-	if (len > 0)
-		dest[len - 1] = 0;
-	else
-		snprintf(dest + len, max_size - len, "none");
-
+if (!ad)
 	return dest;
+
+lp = get_enabled_pids(ad, pids, MAX_PIDS);
+for (i = 0; i < lp; i++)
+{
+	if (pids[i] == 8192)
+		len += snprintf(dest + len, max_size - len, "8192");
+	else
+		len += snprintf(dest + len, max_size - len, "%d,", pids[i]);
+}
+if (len > 0)
+	dest[len - 1] = 0;
+else
+	snprintf(dest + len, max_size - len, "none");
+
+return dest;
 }
 
 char *get_all_delsys(int aid, char *dest, int max_size)
 {
-	int i, len;
-	adapter *ad = get_adapter_nw(aid);
-	dest[0] = 0;
-	len = 0;
-	if (!ad)
-		return dest;
-
-	for (i = 0; i < MAX_DELSYS; i++)
-		if (ad->sys[i] > 0)
-			len += snprintf(dest + len, max_size - len, "%s,",
-					get_delsys(ad->sys[i]));
-
-	if (len > 0)
-		dest[len - 1] = 0;
-
+int i, len;
+adapter *ad = get_adapter_nw(aid);
+dest[0] = 0;
+len = 0;
+if (!ad)
 	return dest;
+
+for (i = 0; i < MAX_DELSYS; i++)
+	if (ad->sys[i] > 0)
+		len += snprintf(dest + len, max_size - len, "%s,",
+				get_delsys(ad->sys[i]));
+
+if (len > 0)
+	dest[len - 1] = 0;
+
+return dest;
 }
 
 adapter *a_tmp;
 _symbols adapters_sym[] =
 {
 { "ad_enabled", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS,
-		(long int) &a_tmp[0].enabled - (long int) &a_tmp[0] },
+	(long int) &a_tmp[0].enabled - (long int) &a_tmp[0] },
 { "ad_type", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS, (long int) &a_tmp[0].type
-		- (long int) &a_tmp[0] },
+	- (long int) &a_tmp[0] },
 { "ad_freq", VAR_AARRAY_INT, a, 1. / 1000,
 MAX_ADAPTERS, (long int) &a_tmp[0].tp.freq - (long int) &a_tmp[0] },
 { "ad_strength", VAR_AARRAY_UINT16, a, 1,
 MAX_ADAPTERS, (long int) &a_tmp[0].strength - (long int) &a_tmp[0] },
 { "ad_snr", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, (long int) &a_tmp[0].snr
-		- (long int) &a_tmp[0] },
+	- (long int) &a_tmp[0] },
 { "ad_ber", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, (long int) &a_tmp[0].ber
-		- (long int) &a_tmp[0] },
+	- (long int) &a_tmp[0] },
 { "ad_pol", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS, (long int) &a_tmp[0].tp.pol
-		- (long int) &a_tmp[0] },
+	- (long int) &a_tmp[0] },
 { "ad_sr", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS,
-		(long int) &a_tmp[0].tp.sr - (long int) &a_tmp[0] },
+	(long int) &a_tmp[0].tp.sr - (long int) &a_tmp[0] },
 { "ad_bw", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS,
-		(long int) &a_tmp[0].tp.bw - (long int) &a_tmp[0] },
+	(long int) &a_tmp[0].tp.bw - (long int) &a_tmp[0] },
 { "ad_diseqc", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS,
-		(long int) &a_tmp[0].tp.diseqc - (long int) &a_tmp[0] },
+	(long int) &a_tmp[0].tp.diseqc - (long int) &a_tmp[0] },
 { "ad_fe", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, (long int) &a_tmp[0].fe
-		- (long int) &a_tmp[0] },
+	- (long int) &a_tmp[0] },
 { "ad_satip", VAR_AARRAY_PSTRING, a, 1, MAX_ADAPTERS, (long int) &a_tmp[0].sip
-		- (long int) &a_tmp[0] },
+	- (long int) &a_tmp[0] },
 { "ad_master", VAR_AARRAY_UINT8, a, 1,
 MAX_ADAPTERS, (long int) &a_tmp[0].master_sid - (long int) &a_tmp[0] },
 { "ad_sidcount", VAR_AARRAY_UINT8, a, 1,
 MAX_ADAPTERS, (long int) &a_tmp[0].sid_cnt - (long int) &a_tmp[0] },
 { "ad_phyad", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, (long int) &a_tmp[0].pa
-		- (long int) &a_tmp[0] },
+	- (long int) &a_tmp[0] },
 { "ad_phyfd", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, (long int) &a_tmp[0].fn
-		- (long int) &a_tmp[0] },
+	- (long int) &a_tmp[0] },
 { "ad_sys", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, (long int) &a_tmp[0].tp.sys
-		- (long int) &a_tmp[0] },
+	- (long int) &a_tmp[0] },
 { "ad_allsys", VAR_FUNCTION_STRING, (void *) &get_all_delsys, 0, 0, 0 },
 { "ad_pids", VAR_FUNCTION_STRING, (void *) &get_adapter_pids, 0, 0, 0 },
 { "tuner_s2", VAR_INT, &tuner_s2, 1, 0, 0 },
