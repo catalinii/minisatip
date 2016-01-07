@@ -12,7 +12,6 @@ typedef struct struct_netceiver
 	recv_info_t *ncv_rec;		// pointer to libmcli receiver instance
 	int err;			// error during receiver instance creation
 	int pwfd;			// file descriptor to writeable end of pipe for TS data
-	int prfd;			// file descriptor to readeable end of pipe for TS data
 	uint16_t npid[MAX_PIDS];	// active pids
 	int lp;				// number of active pids
 	char want_tune, want_commit;	// tuining & and PID handling state machine

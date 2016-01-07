@@ -403,7 +403,6 @@ int handle_ts (unsigned char *buffer, size_t len, void *p) {
 	//fprintf(stderr, "(%d) ", len);
 	SNetceiver *nc = p;
 	size_t lw;
-	char rbuf[65536];
 
 	if(nc->lp == 0) return len;
 
@@ -411,16 +410,7 @@ int handle_ts (unsigned char *buffer, size_t len, void *p) {
 		LOGL(0, "netceiver: TS data not aligned: 0x%02x", buffer[0]);
 
 	lw = write(nc->pwfd, buffer, len);
-	if (lw != len)
-	{
-		LOGL(0, "netceiver: not all data forwarded: len=%d, lw=%d", len, lw);
-		/*
-		while(read(nc->prfd, rbuf, 188) > 0)
-		{
-			fprintf(stderr, "REEL: handle_ts fetched back data\n");
-		}
-		*/
-	}
+	if (lw != len) LOGL(0, "netceiver: not all data forwarded: len=%d, lw=%d", len, lw);
 
 
 	//return len;
