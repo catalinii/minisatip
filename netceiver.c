@@ -158,7 +158,7 @@ void netcv_commit(adapter *ad)
 				fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype],
 				fe_rolloff[tp->ro], fe_pilot[tp->plts]);
 
-		int map_pos[] = { 0, 192, 130, 282, -50 };
+		int map_pos[] = { 0, 192, 130, 282, -50 }; // Default sat positions: 19.2E, 13E, 28.2E, 5W
 		int map_pol[] = { 0, SEC_VOLTAGE_13, SEC_VOLTAGE_18, SEC_VOLTAGE_OFF };
 
 		switch (tp->sys)
@@ -403,14 +403,27 @@ int handle_ts (unsigned char *buffer, size_t len, void *p) {
 	//fprintf(stderr, "(%d) ", len);
 	SNetceiver *nc = p;
 	size_t lw;
+	char rbuf[65536];
 
 	if(nc->lp == 0) return len;
 
+	if (buffer[0] != 0x47)
+		LOGL(0, "netceiver: TS data not aligned: 0x%02x", buffer[0]);
+
 	lw = write(nc->pwfd, buffer, len);
-	if (lw != len) LOGL(0, "netceiver: not all data forwarded...");
+	if (lw != len)
+	{
+		LOGL(0, "netceiver: not all data forwarded: len=%d, lw=%d", len, lw);
+		/*
+		while(read(nc->prfd, rbuf, 188) > 0)
+		{
+			fprintf(stderr, "REEL: handle_ts fetched back data\n");
+		}
+		*/
+	}
 
 
-	return len;
+	//return len;
 
 	switch(len) {
 		case 1316: // 7 TS packets
