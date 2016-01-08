@@ -158,6 +158,7 @@ void diseqc_cmd(int fd, int times, char *str, struct dvb_diseqc_master_cmd *cmd)
 			LOG(
 					"send_diseqc: FE_DISEQC_SEND_MASTER_CMD %s failed for fd %d: %s",
 					str, fd, strerror(errno));
+		usleep(54000);
 	}
 
 }
@@ -190,13 +191,12 @@ int send_diseqc(int fd, int pos, int pol, int hiband, int committed_no,
 	}
 
 	cmd.msg[3] = 0xf0
-			| (((pos << 2) & 0x0c) | (hiband ? 1 : 0) | (pol ? 2 : 0));
-	uncmd.msg[3] = 0xf0 | (pos & 0x0f);
+			| (((posc << 2) & 0x0c) | (hiband ? 1 : 0) | (pol ? 2 : 0));
+	uncmd.msg[3] = 0xf0 | (posu & 0x0f);
 
 	LOGL(3,
-			"send_diseqc fd %d, pos = %d, pol = %d, hiband = %d, diseqc => %02x %02x %02x %02x %02x",
-			fd, pos, pol, hiband, cmd.msg[0], cmd.msg[1], cmd.msg[2],
-			cmd.msg[3], cmd.msg[4]);
+			"send_diseqc fd %d, pos = %d (c %d u %d), pol = %d, hiband = %d",
+			fd, pos, posc, posu, pol, hiband);
 
 	if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
 		LOG("send_diseqc: FE_SET_TONE failed for fd %d: %s", fd,

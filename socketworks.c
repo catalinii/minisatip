@@ -889,13 +889,13 @@ void set_socket_send_buffer(int sock, int len)
 	if (len <= 0)
 		return;
 	if (setsockopt(sock, SOL_SOCKET, SO_SNDBUFFORCE, &len, sizeof(len)))
-		LOGL(3, "unable to set output UDP buffer (force) size to %d", len);
+		LOGL(3, "unable to set output socket buffer (force) size to %d", len);
 
 	if (setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &len, sizeof(len)))
-		LOGL(3, "unable to set output UDP buffer size to %d", len);
+		LOGL(3, "unable to set output socket buffer size to %d", len);
 	sl = sizeof(int);
 	if (!getsockopt(sock, SOL_SOCKET, SO_SNDBUF, &len, (socklen_t *) &sl))
-		LOG("output UDP buffer size for socket %d is %d bytes", sock, len);
+		LOG("output socket buffer size for socket %d is %d bytes", sock, len);
 
 }
 
@@ -906,13 +906,13 @@ void set_socket_receive_buffer(int sock, int len)
 		return;
 
 	if (setsockopt(sock, SOL_SOCKET, SO_RCVBUFFORCE, &len, sizeof(len)))
-		LOGL(3, "unable to set output UDP buffer (force) size to %d", len);
+		LOGL(3, "unable to set receive socket buffer (force) size to %d", len);
 
 	if (setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &len, sizeof(len)))
-		LOGL(3, "unable to set output UDP buffer size to %d", len);
+		LOGL(3, "unable to set receive socket buffer size to %d", len);
 	sl = sizeof(int);
 	if (!getsockopt(sock, SOL_SOCKET, SO_RCVBUF, &len, &sl))
-		LOG("output UDP buffer size is %d bytes", len);
+		LOG("receive socket buffer size is %d bytes", len);
 
 }
 

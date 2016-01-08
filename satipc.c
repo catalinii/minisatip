@@ -248,7 +248,7 @@ int satipc_open_device(adapter *ad)
 			(socket_action) satipc_rtcp_reply, (socket_action) satipc_close,
 			NULL);
 	sockets_timeout(ad->fe_sock, 15000); // 15s
-	set_socket_receive_buffer(ad->dvr, opts.output_buffer);
+	set_socket_receive_buffer(ad->dvr, opts.dvr_buffer);
 	if (ad->fe_sock < 0 || ad->dvr < 0 || ad->rtcp < 0 || ad->rtcp_sock < 0)
 	{
 		sockets_del(ad->rtcp_sock);
