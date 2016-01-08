@@ -246,8 +246,7 @@ int init_all_hw()
 	if (num_adapters == 0)
 		init_complete = 0;
 	LOG("done init_hw %d", init_complete);
-	if (init_complete)
-		getAdaptersCount();
+	getAdaptersCount();
 	mutex_unlock(&a_mutex);
 	return num_adapters;
 }
