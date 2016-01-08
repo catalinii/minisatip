@@ -56,6 +56,10 @@ int netcv_close(adapter *ad)
 	recv_del (SN.ncv_rec);
 	SN.ncv_rec = NULL;
 
+	/* close DVR pipe */
+	close(SN.pwfd);
+	close(ad->dvr);
+
 	ad->strength = 0;
 	ad->status = 0;
 	ad->snr = 0;
@@ -72,6 +76,13 @@ int netcv_open_device(adapter *ad)
 	SN.want_commit = 0;
 	SN.ncv_rec = NULL;
 
+	/* create DVR pipe for TS data transfer from libmcli to minisatip */
+	int pipe_fd[2];
+	if (pipe2 (pipe_fd, O_NONBLOCK)) LOGL (0, "netceiver: creating pipe failed");
+	ad->dvr = pipe_fd[0];	// read end of pipe
+	SN.pwfd = pipe_fd[1];	// write end of pipe
+	LOGL(0, "netceiver: creating DVR pipe for adapter %d  -> dvr: %d", ad->id, ad->dvr);
+
 	return 0;
 }
 
@@ -81,7 +92,7 @@ int netcv_set_pid(adapter *ad, uint16_t pid)
 	//fprintf(stderr, "REEL: netcv_set_pid (id=%d, pid=%d)\n", ad->id, pid);
 
 	int aid = ad->id;
-	LOGL(0, "netceiver: set_pid for adapter %d, pid %d, err %d", aid, pid, SN.err);
+	LOGL(3, "netceiver: set_pid for adapter %d, pid %d, err %d", aid, pid, SN.err);
 
 	if (SN.err) // error reported, return error
 		return 0;
@@ -104,7 +115,7 @@ int netcv_del_pid(int fd, int pid)
 	ad = get_adapter(fd);
 	if (!ad)
 		return 0;
-	LOGL(0, "netceiver: del_pid for aid %d, pid %d, err %d", fd, pid, SN.err);
+	LOGL(3, "netceiver: del_pid for aid %d, pid %d, err %d", fd, pid, SN.err);
 	if (SN.err) // error reported, return error
 		return 0;
 
@@ -158,7 +169,7 @@ void netcv_commit(adapter *ad)
 				fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype],
 				fe_rolloff[tp->ro], fe_pilot[tp->plts]);
 
-		int map_pos[] = { 0, 192, 130, 282, -50 };
+		int map_pos[] = { 0, 192, 130, 282, -50 }; // Default sat positions: 19.2E, 13E, 28.2E, 5W
 		int map_pol[] = { 0, SEC_VOLTAGE_13, SEC_VOLTAGE_18, SEC_VOLTAGE_OFF };
 
 		switch (tp->sys)
@@ -375,12 +386,6 @@ void find_netcv_adapter(adapter **a)
 					break;
 				}
 
-				/* create pipe for TS data transfer from libmcli to minisatip */
-				int pipe_fd[2];
-				if (pipe2 (pipe_fd, O_NONBLOCK)) LOGL (0, "netceiver: creating pipe failed");
-				ad->dvr = pipe_fd[0];		// read end of pipe
-				sn[na].pwfd = pipe_fd[1];	// write end of pipe
-
 				na++; // increase number of tuner count
 			}
 	}
@@ -406,8 +411,14 @@ int handle_ts (unsigned char *buffer, size_t len, void *p) {
 
 	if(nc->lp == 0) return len;
 
+	if (buffer[0] != 0x47)
+		LOGL(0, "netceiver: TS data not aligned: 0x%02x", buffer[0]);
+
 	lw = write(nc->pwfd, buffer, len);
-	if (lw != len) LOGL(0, "netceiver: not all data forwarded...");
+	if (lw != len)
+	{
+		LOGL(0, "netceiver: not all data forwarded(%s): len=%d, lw=%d", strerror(errno), len, lw);
+	}
 
 
 	return len;
