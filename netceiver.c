@@ -56,6 +56,10 @@ int netcv_close(adapter *ad)
 	recv_del (SN.ncv_rec);
 	SN.ncv_rec = NULL;
 
+	/* close DVR pipe */
+	close(SN.pwfd);
+	close(ad->dvr);
+
 	ad->strength = 0;
 	ad->status = 0;
 	ad->snr = 0;
@@ -71,6 +75,13 @@ int netcv_open_device(adapter *ad)
 
 	SN.want_commit = 0;
 	SN.ncv_rec = NULL;
+
+	/* create DVR pipe for TS data transfer from libmcli to minisatip */
+	int pipe_fd[2];
+	if (pipe2 (pipe_fd, O_NONBLOCK)) LOGL (0, "netceiver: creating pipe failed");
+	ad->dvr = pipe_fd[0];	// read end of pipe
+	SN.pwfd = pipe_fd[1];	// write end of pipe
+	LOGL(0, "netceiver: creating DVR pipe for adapter %d  -> dvr: %d", ad->id, ad->dvr);
 
 	return 0;
 }
@@ -375,12 +386,6 @@ void find_netcv_adapter(adapter **a)
 					break;
 				}
 
-				/* create pipe for TS data transfer from libmcli to minisatip */
-				int pipe_fd[2];
-				if (pipe2 (pipe_fd, O_NONBLOCK)) LOGL (0, "netceiver: creating pipe failed");
-				ad->dvr = pipe_fd[0];		// read end of pipe
-				sn[na].pwfd = pipe_fd[1];	// write end of pipe
-
 				na++; // increase number of tuner count
 			}
 	}
@@ -410,7 +415,10 @@ int handle_ts (unsigned char *buffer, size_t len, void *p) {
 		LOGL(0, "netceiver: TS data not aligned: 0x%02x", buffer[0]);
 
 	lw = write(nc->pwfd, buffer, len);
-	if (lw != len) LOGL(0, "netceiver: not all data forwarded: len=%d, lw=%d", len, lw);
+	if (lw != len)
+	{
+		LOGL(0, "netceiver: not all data forwarded(%s): len=%d, lw=%d", strerror(errno), len, lw);
+	}
 
 
 	return len;
