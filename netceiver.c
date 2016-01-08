@@ -92,7 +92,7 @@ int netcv_set_pid(adapter *ad, uint16_t pid)
 	//fprintf(stderr, "REEL: netcv_set_pid (id=%d, pid=%d)\n", ad->id, pid);
 
 	int aid = ad->id;
-	LOGL(1, "netceiver: set_pid for adapter %d, pid %d, err %d", aid, pid, SN.err);
+	LOGL(3, "netceiver: set_pid for adapter %d, pid %d, err %d", aid, pid, SN.err);
 
 	if (SN.err) // error reported, return error
 		return 0;
@@ -115,7 +115,7 @@ int netcv_del_pid(int fd, int pid)
 	ad = get_adapter(fd);
 	if (!ad)
 		return 0;
-	LOGL(1, "netceiver: del_pid for aid %d, pid %d, err %d", fd, pid, SN.err);
+	LOGL(3, "netceiver: del_pid for aid %d, pid %d, err %d", fd, pid, SN.err);
 	if (SN.err) // error reported, return error
 		return 0;
 
