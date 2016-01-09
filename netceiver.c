@@ -46,7 +46,7 @@ int netcv_close(adapter *ad)
 
 	if (!SN.ncv_rec) LOGL(0, "netceiver: receiver instance is NULL (id=%d)", ad->id);
 
-	LOGL(0, "netceiver: delete receiver instance for adapter %d", ad->id);
+	LOGL(3, "netceiver: delete receiver instance for adapter %d", ad->id);
 
 	/* unregister handlers */
 	register_ten_handler(SN.ncv_rec, NULL, NULL);
@@ -81,7 +81,7 @@ int netcv_open_device(adapter *ad)
 	if (pipe2 (pipe_fd, O_NONBLOCK)) LOGL (0, "netceiver: creating pipe failed");
 	ad->dvr = pipe_fd[0];	// read end of pipe
 	SN.pwfd = pipe_fd[1];	// write end of pipe
-	LOGL(0, "netceiver: creating DVR pipe for adapter %d  -> dvr: %d", ad->id, ad->dvr);
+	LOGL(3, "netceiver: creating DVR pipe for adapter %d  -> dvr: %d", ad->id, ad->dvr);
 
 	return 0;
 }
@@ -146,7 +146,7 @@ void netcv_commit(adapter *ad)
 	SN.err = 0;
 	if (!SN.ncv_rec)
 	{
-		LOGL(0, "netceiver: add a new receiver instance for adapter %d", ad->id);
+		LOGL(3, "netceiver: add a new receiver instance for adapter %d", ad->id);
 
 		/* call recv_add of libmcli to add a new receiver instance */
 		SN.ncv_rec = recv_add();
@@ -321,7 +321,6 @@ void find_netcv_adapter(adapter **a)
 	nif1 = nif;
 	while (strcmp (nif1->ifa_name, opts.netcv_if) || nif1->ifa_addr->sa_family != AF_INET6)
 	{
-		fprintf(stderr, "REEL getifaddrs % 6s 0x%0x %d\n", nif1->ifa_name, nif1->ifa_flags, nif1->ifa_addr->sa_family);
 		if (nif1->ifa_next == NULL)
 		{
 			nif1 = NULL;
@@ -342,14 +341,14 @@ void find_netcv_adapter(adapter **a)
 	if(recv_init(opts.netcv_if, 23000))
 		LOGL(0, "Netceiver init failed");
  
-	fprintf(stderr, "REEL: Search for %d Netceivers on %s... ", opts.netcv_count, opts.netcv_if);
+	fprintf(stderr, "REEL: Search for %d Netceiver%s on %s... ", opts.netcv_count, opts.netcv_count == 1 ? "" : "s", opts.netcv_if);
 	n = 0;
 	do
 	{
-		usleep(500000);
-		fprintf(stderr, "####");
+		usleep(250000);
+		fprintf(stderr, "##");
 		nc_list = nc_get_list();
-	} while (nc_list->nci_num < opts.netcv_count && n++ < 20);
+	} while (nc_list->nci_num < opts.netcv_count && n++ < 19);
 	nc_lock_list ();
 	fprintf(stderr, "\n");
 
@@ -431,18 +430,19 @@ void find_netcv_adapter(adapter **a)
  */
 
 int handle_ts (unsigned char *buffer, size_t len, void *p) {
-	//fprintf(stderr, "(%d) ", len);
 	SNetceiver *nc = p;
 	size_t lw;
 
-	if(nc->lp == 0) return len;
+	if (nc->lp == 0) return len;
 
+	/* simple data format check */
 	if (buffer[0] != 0x47 || len % 188 != 0)
 	{
 		LOGL(0, "netceiver: TS data mallformed: buf[0]=0x%02x len=%d", buffer[0], len);
 		return len;
 	}
 
+	/* write TS data to DVR pipe */
 	lw = write(nc->pwfd, buffer, len);
 	if (lw != len)
 	{
@@ -452,7 +452,8 @@ int handle_ts (unsigned char *buffer, size_t len, void *p) {
 	return len;
 
 	/* debug code */
-	switch(len) {
+	switch (len)
+	{
 		case 1316: // 7 TS packets
 			fprintf(stderr, "\bO");
 			break;
@@ -473,7 +474,8 @@ int handle_ten (tra_t *ten, void *p) {
 	adapter *ad = p;
 	recv_festatus_t *festat;
 
-	if(ten) {
+	if (ten)
+	{
 		festat = &ten->s;
 		ad->strength = (festat->strength & 0xffff) >> 8;
 		ad->status = festat->st == 0x1f ? FE_HAS_LOCK : 0;
@@ -481,8 +483,11 @@ int handle_ten (tra_t *ten, void *p) {
 		ad->ber = festat->ber;
 
 		return 0;
+
+		/* debug code */
 		fprintf(stderr, "\nStatus: %02X, Strength: %04X, SNR: %04X, BER: %04X -  ",
 				festat->st, festat->strength, festat->snr, festat->ber);
 	}
+
 	return 0;
 }
