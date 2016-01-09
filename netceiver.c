@@ -164,10 +164,11 @@ void netcv_commit(adapter *ad)
 	if (SN.want_tune)
 	{
 		transponder *tp = &ad->tp;
-		LOGL(0, "tuning to %d@%d pol: %s (%d) sr:%d fec:%s delsys:%s mod:%s (rolloff:%s) (pilot:%s)",
-				tp->freq, tp->diseqc, get_pol(tp->pol), tp->pol, tp->sr,
-				fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype],
-				fe_rolloff[tp->ro], fe_pilot[tp->plts]);
+
+		char *map_posc[] = { "-", "19.2E", "13E", "28.2E", "5W" };
+		LOGL(0, "netceiver: adapter %d tuning to %d @ %s pol:%s sr:%d fec:%s delsys:%s mod:%s",
+				ad->id, tp->freq / 1000, map_posc[tp->diseqc], get_pol(tp->pol), tp->sr / 1000,
+				fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype]);
 
 		int map_pos[] = { 0, 192, 130, 282, -50 }; // Default sat positions: 19.2E, 13E, 28.2E, 5W
 		int map_pol[] = { 0, SEC_VOLTAGE_13, SEC_VOLTAGE_18, SEC_VOLTAGE_OFF };
@@ -259,6 +260,7 @@ void netcv_commit(adapter *ad)
 
 			m_pids[i].pid = -1;
 			/* call recv_pids of libmcli to set the active PIDs */
+			usleep(1000);
 			if(recv_pids (SN.ncv_rec, m_pids))
 				LOGL(0, "netceiver: seting PIDs failed");
 		}
@@ -312,11 +314,35 @@ void find_netcv_adapter(adapter **a)
 	for (na = 0; na < MAX_ADAPTERS; na++)
 		if (!a[na] || (a[na]->pa == -1 && a[na]->fn == -1)) break;
 
+	/* check if network interface is available */
+	struct ifaddrs *nif, *nif1;
+	getifaddrs (&nif);
+
+	nif1 = nif;
+	while (strcmp (nif1->ifa_name, opts.netcv_if) || nif1->ifa_addr->sa_family != AF_INET6)
+	{
+		fprintf(stderr, "REEL getifaddrs % 6s 0x%0x %d\n", nif1->ifa_name, nif1->ifa_flags, nif1->ifa_addr->sa_family);
+		if (nif1->ifa_next == NULL)
+		{
+			nif1 = NULL;
+			break;
+		}
+		nif1 = nif1->ifa_next;
+	}
+
+#define IFF_NETCV (IFF_UP | IFF_RUNNING | IFF_MULTICAST)
+	if (nif1 == NULL || (nif1->ifa_flags & IFF_NETCV) != IFF_NETCV)
+	{
+		LOGL(0, "network interface %s not available", opts.netcv_if);
+		exit (0);
+	}
+	freeifaddrs(nif);
+
 	/* call recv_init of libmcli to initialize the NetCeiver API */
-	if(recv_init("vlan4", 23000))
+	if(recv_init(opts.netcv_if, 23000))
 		LOGL(0, "Netceiver init failed");
  
-	fprintf(stderr, "REEL: Search for %d Netceivers... ", opts.netcv_count);
+	fprintf(stderr, "REEL: Search for %d Netceivers on %s... ", opts.netcv_count, opts.netcv_if);
 	n = 0;
 	do
 	{
@@ -411,18 +437,21 @@ int handle_ts (unsigned char *buffer, size_t len, void *p) {
 
 	if(nc->lp == 0) return len;
 
-	if (buffer[0] != 0x47)
-		LOGL(0, "netceiver: TS data not aligned: 0x%02x", buffer[0]);
+	if (buffer[0] != 0x47 || len % 188 != 0)
+	{
+		LOGL(0, "netceiver: TS data mallformed: buf[0]=0x%02x len=%d", buffer[0], len);
+		return len;
+	}
 
 	lw = write(nc->pwfd, buffer, len);
 	if (lw != len)
 	{
-		LOGL(0, "netceiver: not all data forwarded(%s): len=%d, lw=%d", strerror(errno), len, lw);
+		LOGL(0, "netceiver: not all data forwarded (%s): len=%d, lw=%d", strerror(errno), len, lw);
 	}
-
 
 	return len;
 
+	/* debug code */
 	switch(len) {
 		case 1316: // 7 TS packets
 			fprintf(stderr, "\bO");
