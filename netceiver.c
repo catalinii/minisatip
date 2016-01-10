@@ -352,68 +352,93 @@ void find_netcv_adapter(adapter **a)
 	nc_lock_list ();
 	fprintf(stderr, "\n");
 
-	// loop trough list of found netceivers and ad them to list of adapters
-	for (n = 0; n < nc_list->nci_num; n++) {
+	/* count available tuner types */
+	int nc_sys_c[] = { 0, 0, 0, 0, 0 };
+	int map_type[] = { FE_DVBS2, FE_QPSK, FE_QAM, FE_OFDM, FE_ATSC };
+	int nc_sys_t = 0;
+	for (n = 0; n < nc_list->nci_num; n++)
+	{
 		netceiver_info_t *nci = nc_list->nci + n;
 		fprintf (stderr, "Found NetCeiver: %s \n", nci->uuid);
-			for (i = 0; i < nci->tuner_num; i++) {
-				// TODO: implement disable (low prio)
-
-				if (na >= MAX_ADAPTERS) break;
-				if (!a[na]) a[na] = malloc1(sizeof(adapter));
-
-				fprintf (stderr, "  Tuner: %s, Type %d\n", nci->tuner[i].fe_info.name, nci->tuner[i].fe_info.type);
-
-				ad = a[na];
-				ad->pa = 0;
-				ad->fn = 0;
-				sn[na].want_tune = 0;
-				sn[na].want_commit = 0;
-				sn[na].ncv_rec = NULL;
-
-				/* initialize signal status info */
-				ad->strength = 0;
-				ad->max_strength = 0xff;
-				ad->status = 0;
-				ad->snr = 0;
-				ad->max_snr = 0xff;
-				ad->ber = 0;
-
-				/* register callback functions in adapter structure */
-				ad->open = (Open_device) netcv_open_device;
-				ad->set_pid = (Set_pid) netcv_set_pid;
-				ad->del_filters = (Del_filters) netcv_del_pid;
-				ad->commit = (Adapter_commit) netcv_commit;
-				ad->tune = (Tune) netcv_tune;
-				ad->delsys = (Dvb_delsys) netcv_delsys;
-				ad->post_init = (Adapter_commit) NULL;
-				ad->close = (Adapter_commit) netcv_close;
-
-				/* register delivery system type */
-				for (k = 0; k < 10; k++) ad->sys[k] = 0;
-				switch(nci->tuner[i].fe_info.type)
-				{
-				case FE_DVBS2:
-					ad->sys[0] = ad->tp.sys = SYS_DVBS2;
-					ad->sys[1] = SYS_DVBS;
-					break;
-
-				case FE_QPSK:
-					ad->sys[0] = ad->tp.sys = SYS_DVBS;
-					break;
-
-				case FE_QAM:
-					ad->sys[0] = ad->tp.sys = SYS_DVBC_ANNEX_A;
-					break;
-
-				case FE_OFDM:
-					//ad->sys[0] = SYS_DVBT; // DVB-T not yet implemented...
-					break;
-				}
-
-				na++; // increase number of tuner count
-			}
+		for (i = 0; i < nci->tuner_num; i++)
+		{
+			fprintf (stderr, "	Tuner: %s, Type %d\n", nci->tuner[i].fe_info.name, nci->tuner[i].fe_info.type);
+			nc_sys_c[nci->tuner[i].fe_info.type]++;
+			nc_sys_t++;
+		}
 	}
+
+	// add netceiver tuners to the list of adapters
+	i = FE_QPSK;
+	char dbuf[1024] = "netceiver: adding ";
+	for (n = 0; n < nc_sys_t; n++) {
+		while (nc_sys_c[map_type[i]] == 0 && i < FE_DVBS2) i++;
+		nc_sys_c[map_type[i]]--;
+
+		if (is_adapter_disabled(na))
+		{
+			na++;
+			continue;
+		}
+
+		if (na >= MAX_ADAPTERS) break;
+		if (!a[na]) a[na] = malloc1(sizeof(adapter));
+
+		ad = a[na];
+		ad->pa = 0;
+		ad->fn = 0;
+		sn[na].want_tune = 0;
+		sn[na].want_commit = 0;
+		sn[na].ncv_rec = NULL;
+
+		/* initialize signal status info */
+		ad->strength = 0;
+		ad->max_strength = 0xff;
+		ad->status = 0;
+		ad->snr = 0;
+		ad->max_snr = 0xff;
+		ad->ber = 0;
+
+		/* register callback functions in adapter structure */
+		ad->open = (Open_device) netcv_open_device;
+		ad->set_pid = (Set_pid) netcv_set_pid;
+		ad->del_filters = (Del_filters) netcv_del_pid;
+		ad->commit = (Adapter_commit) netcv_commit;
+		ad->tune = (Tune) netcv_tune;
+		ad->delsys = (Dvb_delsys) netcv_delsys;
+		ad->post_init = (Adapter_commit) NULL;
+		ad->close = (Adapter_commit) netcv_close;
+
+		/* register delivery system type */
+		for (k = 0; k < 10; k++) ad->sys[k] = 0;
+		switch(map_type[i])
+		{
+		case FE_DVBS2:
+			ad->sys[0] = ad->tp.sys = SYS_DVBS2;
+			ad->sys[1] = SYS_DVBS;
+			sprintf(dbuf + strlen(dbuf), "[AD%d DVB-S2] ", na);
+			break;
+
+		case FE_QPSK:
+			ad->sys[0] = ad->tp.sys = SYS_DVBS;
+			sprintf(dbuf + strlen(dbuf), "[AD%d DVB-S] ", na);
+			break;
+			break;
+
+		case FE_QAM:
+			ad->sys[0] = ad->tp.sys = SYS_DVBC_ANNEX_A;
+			sprintf(dbuf + strlen(dbuf), "[AD%d DVB-C] ", na);
+			break;
+
+		case FE_OFDM:
+			sprintf(dbuf + strlen(dbuf), "[AD%d DVB-T] ", na);
+			ad->sys[0] = SYS_DVBT; // DVB-T not yet implemented...
+			break;
+		}
+
+		na++; // increase number of tuner count
+	}
+	LOGL(0, "%s", dbuf);
 	nc_unlock_list(); // netceivers appearing after this will be recognized by libmcli but will not made available to minisatip
 
 	for (; na < MAX_ADAPTERS; na++)
