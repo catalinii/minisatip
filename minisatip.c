@@ -73,7 +73,7 @@ static const struct option long_options[] =
 		{ "satip-servers", required_argument, NULL, 's' },
 #endif
 #ifndef DISABLE_NETCVCLIENT
-		{ "netcv-servers", required_argument, NULL, 'n' },
+		{ "netceiver", required_argument, NULL, 'n' },
 #endif
 		{ "rtsp-port", required_argument, NULL, 'y' },
 		{ "http-port", required_argument, NULL, 'x' },
@@ -134,7 +134,7 @@ void usage()
 {
 	print_version(0);
 	printf(
-			"%s [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] [-j A1:S1-F1[-PIN]] [-m mac] [-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] [-R document_root] [-s [DELSYS:]host[:port] [-u A1:S1-F1[-PIN]] [-w http_server[:port]] [-x http_port] [-X xml_path] [-y rtsp_port] \n\n \
+			"%s [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] [-j A1:S1-F1[-PIN]] [-m mac] [-n [if]:count] [-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] [-R document_root] [-s [DELSYS:]host[:port] [-u A1:S1-F1[-PIN]] [-w http_server[:port]] [-x http_port] [-X xml_path] [-y rtsp_port] \n\n \
 \n\
 -a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means auto-detect)\n\
 	eg: -a 1:2:3  \n\
@@ -174,6 +174,9 @@ void usage()
 \n\
 -m xx: simulate xx as local mac address, generates UUID based on mac\n\
 	-m 001122334455 \n\
+\n\
+-n --netceiver if:count: use network interface <if> (default vlan4) and look for <count> netceivers\n\
+	eg: -n vlan4:2 \n\
 \n\
 -o --dvbapi host:port - specify the hostname and port for the dvbapi server (oscam) \n\
 	eg: -o 192.168.9.9:9000 \n\
@@ -462,12 +465,27 @@ void set_options(int argc, char *argv[])
 			break;
 
 		case NETCVCLIENT_OPT:
+		{
 #ifdef DISABLE_NETCVCLIENT
 			LOGL(0, "%s was not compiled with netceiver client support, please change the Makefile", app_name);
 			exit (0);
+#else
+			// parse network interface name and number of netceivers
+			char* sep1 = strchr(optarg, ':');
+			if (sep1 != NULL)
+			{
+				*sep1 = 0;
+				opts.netcv_if = optarg;
+				opts.netcv_count = map_int(sep1 + 1, NULL);
+				break;
+			}
+
+			// default interface is vlan4 as it is used on the REEL
+			opts.netcv_if = "vlan4";
+			opts.netcv_count = map_int(optarg, NULL);
 #endif
-			opts.netcv_count = atoi(optarg);
 			break;
+		}
 
 		case PRIORITY_OPT:
 

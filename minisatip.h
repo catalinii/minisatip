@@ -55,6 +55,7 @@ struct struct_opts
 	int rtsp_port;
 	uint8_t satip_addpids, satip_setup_pids;
 	uint8_t netcv_count;
+	char *netcv_if;
 	char playlist[200];
 	char satip_servers[100];
 	char *document_root;
