@@ -561,8 +561,9 @@ int read_rtsp(sockets * s)
 	rlen = s->rlen;
 	s->rlen = 0;
 
-	LOG("read RTSP (from handle %d sock_id %d, len: %d, sid %d):\n%s", s->sock,
-			s->id, s->rlen, s->sid, s->buf);
+	LOG("read RTSP (from handle %d sock_id %d, len: %d, sid %d):", s->sock,
+			s->id, s->rlen, s->sid);
+	LOGL(3, "%s", s->buf);
 
 	if ((s->type != TYPE_HTTP)
 			&& (strncasecmp((const char*) s->buf, "GET", 3) == 0))
@@ -806,7 +807,8 @@ int read_http(sockets * s)
 
 	s->rlen = 0;
 
-	LOG("read HTTP from %d sid: %d: %s", s->sock, s->sid, s->buf);
+	LOG("read HTTP from %d sid: %d: ", s->sock, s->sid);
+	LOGL(3, "%s", s->buf);
 
 	split(arg, (char*) s->buf, 50, ' ');
 //      LOG("args: %s -> %s -> %s",arg[0],arg[1],arg[2]);
