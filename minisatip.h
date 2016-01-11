@@ -35,7 +35,7 @@ struct struct_opts
 	char *http_host;			 //http-server host
 	char *disc_host;			 //discover host
 	char mac[13];
-	unsigned int log, slog, start_rtp, http_port;
+	unsigned int log, slog, log_mute, start_rtp, http_port;
 	int timeout_sec;
 	int force_sadapter, force_tadapter, force_cadapter;
 	int daemon;

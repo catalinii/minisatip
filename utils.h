@@ -105,6 +105,7 @@ int add_new_lock(void **arr, int count, int size, SMutex *mutex);
 //#define LOG(a,...) {opts.last_log=a;if(opts.log){printf(CC([%s]:\x20,a,\n),get_current_timestamp_log(),##__VA_ARGS__);fflush(stdout);};}
 #define LOG(a,...) { _log(1,__FILE__,__LINE__,a, ##__VA_ARGS__);}
 #define LOGL(level,a,...) { if(level<=opts.log)_log(level,__FILE__,__LINE__,a, ##__VA_ARGS__);}
+#define LOGLM(level,a,...) { if((!opts.log_mute&&level<=opts.log))_log(level,__FILE__,__LINE__,a, ##__VA_ARGS__);}
 
 #define FAIL(a,...) {LOGL(0,a,##__VA_ARGS__);unlink(pid_file);exit(1);}
 #define LOG_AND_RETURN(rc,a,...) {LOG(a,##__VA_ARGS__);return rc;}

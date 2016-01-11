@@ -56,37 +56,39 @@ int rtsp, http, si, si1, ssdp1;
 
 static const struct option long_options[] =
 {
-{ "remote-rtp", required_argument, NULL, 'r' },
-{ "device-id", required_argument, NULL, 'D' },
-{ "check-signal", no_argument, NULL, 'z' },
-{ "clean-psi", no_argument, NULL, 't' },
-{ "log", no_argument, NULL, 'l' },
-{ "buffer", required_argument, NULL, 'b' },
-{ "enable-adapters", required_argument, NULL, 'e' },
-{ "unicable", required_argument, NULL, 'u' },
-{ "jess", required_argument, NULL, 'j' },
-{ "diseqc", required_argument, NULL, 'd' },
+	{ "remote-rtp", required_argument, NULL, 'r' },
+	{ "device-id", required_argument, NULL, 'D' },
+	{ "check-signal", no_argument, NULL, 'z' },
+	{ "clean-psi", no_argument, NULL, 't' },
+	{ "log", no_argument, NULL, 'l' },
+	{ "buffer", required_argument, NULL, 'b' },
+	{ "enable-adapters", required_argument, NULL, 'e' },
+	{ "unicable", required_argument, NULL, 'u' },
+	{ "jess", required_argument, NULL, 'j' },
+	{ "diseqc", required_argument, NULL, 'd' },
 #ifndef DISABLE_DVBCSA
-		{ "dvbapi", required_argument, NULL, 'o' },
+	{ "dvbapi", required_argument, NULL, 'o' },
 #endif
 #ifndef DISABLE_SATIPCLIENT
-		{ "satip-servers", required_argument, NULL, 's' },
+	{ "satip-servers", required_argument, NULL, 's' },
 #endif
 #ifndef DISABLE_NETCVCLIENT
-		{ "netcv-servers", required_argument, NULL, 'n' },
+	{ "netcv-servers", required_argument, NULL, 'n' },
 #endif
-		{ "rtsp-port", required_argument, NULL, 'y' },
-		{ "http-port", required_argument, NULL, 'x' },
-		{ "http-host", required_argument, NULL, 'w' },
-		{ "slave", required_argument, NULL, 'S' },
-		{ "delsys", required_argument, NULL, 'Y' },
-		{ "priority", required_argument, NULL, 'i' },
-		{ "document-root", required_argument, NULL, 'R' },
-		{ "threads", no_argument, NULL, 'T' },
-		{ "xml", required_argument, NULL, 'X' },
-		{ "help", no_argument, NULL, 'h' },
-		{ "version", no_argument, NULL, 'V' },
-		{ 0, 0, 0, 0 } };
+	{ "rtsp-port", required_argument, NULL, 'y' },
+	{ "http-port", required_argument, NULL, 'x' },
+	{ "http-host", required_argument, NULL, 'w' },
+	{ "slave", required_argument, NULL, 'S' },
+	{ "delsys", required_argument, NULL, 'Y' },
+	{ "priority", required_argument, NULL, 'i' },
+	{ "document-root", required_argument, NULL, 'R' },
+	{ "threads", no_argument, NULL, 'T' },
+	{ "xml", required_argument, NULL, 'X' },
+	{ "log-mute", no_argument, NULL, 'M' },
+	{ "help", no_argument, NULL, 'h' },
+	{ "version", no_argument, NULL, 'V' },
+	{ 0, 0, 0, 0 }
+};
 
 #define RRTP_OPT 'r'
 #define DEVICEID_OPT 'D'
@@ -118,6 +120,7 @@ static const struct option long_options[] =
 #define DOCUMENTROOT_OPT 'R'
 #define XML_OPT 'X'
 #define THREADS_OPT 'T'
+#define MUTE_LOGS 'M'
 
 void print_version(int use_log)
 {
@@ -174,6 +177,8 @@ void usage()
 \n\
 -m xx: simulate xx as local mac address, generates UUID based on mac\n\
 	-m 001122334455 \n\
+\n\
+-M : mute some LOG messages (mainly related to SSDP and UPnP protocols)\n\
 \n\
 -o --dvbapi host:port - specify the hostname and port for the dvbapi server (oscam) \n\
 	eg: -o 192.168.9.9:9000 \n\
@@ -242,6 +247,7 @@ void set_options(int argc, char *argv[])
 	char *lip;
 
 	opts.log = 1;
+	opts.log_mute = 0;
 	opts.rrtp = NULL;
 	opts.disc_host = "239.255.255.250";
 	opts.start_rtp = 5500;
@@ -279,7 +285,7 @@ void set_options(int argc, char *argv[])
 	memset(opts.playlist, 0, sizeof(opts.playlist));
 
 	while ((opt = getopt_long(argc, argv,
-			"flr:a:td:w:p:s:n:hc:b:m:p:e:x:u:j:o:gy:zi:D:VR:S:TX:Y:",
+			"flMr:a:td:w:p:s:n:hc:b:m:p:e:x:u:j:o:gy:zi:D:VR:S:TX:Y:",
 			long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
@@ -324,6 +330,12 @@ void set_options(int argc, char *argv[])
 		case SYSLOG_OPT:
 		{
 			opts.slog++;
+			break;
+		}
+
+		case MUTE_LOGS:
+		{
+			opts.log_mute = 1;
 			break;
 		}
 
@@ -931,7 +943,7 @@ int ssdp_discovery(sockets * s)
 	if (s->type != TYPE_UDP)
 		return 0;
 
-	LOG("ssdp_discovery: bootid: %d deviceid: %d http: %s", opts.bootid,
+	LOGLM(1, "ssdp_discovery: bootid: %d deviceid: %d http: %s", opts.bootid,
 			opts.device_id, opts.http_host);
 
 	for (i = 0; i < 3; i++)
@@ -940,7 +952,7 @@ int ssdp_discovery(sockets * s)
 				nt[i] + 2, app_name, version, uuid, i == 1 ? "" : nt[i],
 				opts.bootid, opts.device_id);
 		salen = sizeof(ssdp_sa);
-		LOGL(3, "Discovery packet %d:\n%s", i + 1, buf);
+		LOGLM(3, "Discovery packet %d:\n%s", i + 1, buf);
 		sendto(s->sock, buf, strlen(buf), MSG_NOSIGNAL,
 				(const struct sockaddr *) &ssdp_sa, salen);
 	}
@@ -982,17 +994,17 @@ int ssdp_reply(sockets * s)
 	ruuid = strcasestr((const char *) s->buf, "uuid:");
 	if (ruuid && strncmp(uuid, strip(ruuid + 5), strlen(uuid)) == 0)
 	{
-		LOGL(3, "Dropping packet from the same UUID as mine (from %s:%d)",
+		LOGLM(2, "Dropping packet from the same UUID as mine (from %s:%d)",
 				get_socket_rhost(s->id, ra, sizeof(ra)),
 				get_socket_rport(s->id));
 		return 0;
 	}
 
 // not my uuid
-	LOG("Received SSDP packet from %s:%d -> handle %d",
+	LOGLM(1, "Received SSDP packet from %s:%d -> handle %d",
 			get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
 			s->sock);
-	LOGL(3, "%s", s->buf);
+	LOGLM(3, "%s", s->buf);
 
 	if (strncasecmp((const char *) s->buf, "NOTIFY", 6) == 0)
 	{
@@ -1001,8 +1013,7 @@ int ssdp_reply(sockets * s)
 		{
 			snprintf(buf, sizeof(buf), device_id_conflict, getlocalip(),
 					app_name, version, opts.device_id);
-			LOG(
-					"A new device joined the network with the same Device ID:  %s, asking to change DEVICEID.SES.COM",
+			LOGLM(1,"A new device joined the network with the same Device ID:  %s, asking to change DEVICEID.SES.COM",
 					get_socket_rhost(s->id, ra, sizeof(ra)));
 			sendto(ssdp, buf, strlen(buf), MSG_NOSIGNAL,
 					(const struct sockaddr *) &s->sa, salen);
@@ -1022,8 +1033,7 @@ int ssdp_reply(sockets * s)
 		opts.device_id++;
 		s[si].close_sec = 1800 * 1000;
 		s[si].rtime = -s[si].close_sec;
-		LOG(
-				"Device ID conflict, changing our device id to %d, destination SAT>IP server %s",
+		LOGLM(1,"Device ID conflict, changing our device id to %d, destination SAT>IP server %s",
 				opts.device_id, get_socket_rhost(s->id, ra, sizeof(ra)));
 		readBootID();
 	}
@@ -1036,11 +1046,11 @@ int ssdp_reply(sockets * s)
 	sprintf(buf, reply, get_current_timestamp(), opts.http_host, opts.xml_path,
 			app_name, version, uuid, opts.bootid, did);
 
-	LOG("ssdp_reply fd: %d -> %s:%d, bootid: %d deviceid: %d http: %s", ssdp,
+	LOGLM(1,"ssdp_reply fd: %d -> %s:%d, bootid: %d deviceid: %d http: %s", ssdp,
 			get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
 			opts.bootid, did, opts.http_host);
 //use ssdp (unicast) even if received to multicast address
-	LOGL(3, "%s", buf);
+	LOGLM(3, "%s", buf);
 	sendto(ssdp, buf, strlen(buf), MSG_NOSIGNAL,
 			(const struct sockaddr *) &s->sa, salen);
 	return 0;
@@ -1235,9 +1245,10 @@ http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 	else
 		sprintf(resp, reply0, proto, rc, d, get_current_timestamp(), sess_id,
 				scseq, ah, server);
-	LOG("reply -> %d (%s:%d) CL:%d [sock_id %d]:\n%s", s->sock,
+	LOG("reply -> %d (%s:%d) CL:%d [sock_id %d]:", s->sock,
 			get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
-			lr, s->id, resp);
+			lr, s->id);
+	LOGL(2, "%s", resp);
 	send(s->sock, resp, strlen(resp), MSG_NOSIGNAL);
 	if (binary)
 		send(s->sock, desc, lr, MSG_NOSIGNAL);
