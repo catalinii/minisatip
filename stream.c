@@ -34,8 +34,6 @@
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include <string.h>
-#include <linux/dvb/frontend.h>
-#include <linux/dvb/dmx.h>
 #include <poll.h>
 #include <fcntl.h>
 

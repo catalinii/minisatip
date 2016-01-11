@@ -35,9 +35,6 @@
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <net/if.h>
-#include <linux/dvb/frontend.h>
-#include <linux/dvb/dmx.h>
-#include <linux/dvb/ca.h>
 #include <fcntl.h>
 #include <ctype.h>
 
