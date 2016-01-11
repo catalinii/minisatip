@@ -1,7 +1,6 @@
 #ifndef ADAPTER_H
 #define ADAPTER_H
 #include "minisatip.h"
-#include <linux/dvb/frontend.h>
 #include "dvb.h"
 
 typedef struct ca_device ca_device_t;
