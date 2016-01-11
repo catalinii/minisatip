@@ -53,10 +53,12 @@ void find_adapters()
 	if (init_find_adapter == 1)
 		return;
 	init_find_adapter = 1;
+#ifndef DISABLE_LINUXDVB
 	find_dvb_adapter(a);
+#endif
 #ifndef DISABLE_SATIPCLIENT
 	find_satip_adapter(a);
-#endif 
+#endif
 #ifndef DISABLE_NETCVCLIENT
 	find_netcv_adapter(a);
 #endif

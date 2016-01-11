@@ -123,7 +123,7 @@ void print_version(int use_log)
 {
 	char buf[200];
 	sprintf(buf, "%s version %s, compiled with s2api version: %04X", app_name,
-			version, DVBAPIVERSION);
+			version, LOGDVBAPIVERSION);
 	if (!use_log)
 		puts(buf);
 	else

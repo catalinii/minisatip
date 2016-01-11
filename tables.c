@@ -36,11 +36,9 @@
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <net/if.h>
-#include <linux/dvb/frontend.h>
-#include <linux/dvb/dmx.h>
-#include <linux/dvb/ca.h>
 #include <fcntl.h>
 #include <ctype.h>
+#include "dvb.h"
 #include "dvbapi.h"
 #include "tables.h"
 #include "ca.h"

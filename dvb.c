@@ -44,13 +44,6 @@
 #include "ca.h"
 #include "utils.h"
 
-extern struct struct_opts opts;
-
-struct diseqc_cmd
-{
-	struct dvb_diseqc_master_cmd cmd;
-	uint32_t wait;
-};
 
 char *fe_pilot[] =
 { "on", "off", " ", //auto
@@ -116,6 +109,17 @@ make_func(tmode);
 make_func(gi);
 make_func(specinv);
 make_func(pol);
+
+#ifndef DISABLE_LINUXDVB
+
+extern struct struct_opts opts;
+
+struct diseqc_cmd
+{
+	struct dvb_diseqc_master_cmd cmd;
+	uint32_t wait;
+};
+
 
 int dvb_open_device(adapter *ad)
 {
@@ -692,6 +696,8 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys)
 
 }
 
+#endif  // #ifndef DISABLE_LINUXDVB
+
 #define INVALID_URL(a) {LOG(a);return 0;}
 char def_pids[100];
 
@@ -899,6 +905,18 @@ void copy_dvb_parameters(transponder * s, transponder * d)
 			d->x_pmt ? d->x_pmt : "NULL");
 }
 
+#ifdef DISABLE_LINUXDVB
+void get_signal(int fd, fe_status_t * status, uint32_t * ber,
+		uint16_t * strength, uint16_t * snr)
+{ return; }
+
+int get_signal_new(int fd, fe_status_t * status, uint32_t * ber,
+		uint16_t * strength, uint16_t * snr)
+{ return -1; }
+#endif  // #ifdef DISABLE_LINUXDVB
+
+#ifndef DISABLE_LINUXDVB
+
 void get_signal(int fd, fe_status_t * status, uint32_t * ber,
 		uint16_t * strength, uint16_t * snr)
 {
@@ -1049,3 +1067,4 @@ void find_dvb_adapter(adapter **a)
 			a[na]->pa = a[na]->fn = -1;
 }
 
+#endif  // #ifndef DISABLE_LINUXDVB
