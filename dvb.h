@@ -1,6 +1,8 @@
 #ifndef DVB_H
 #define DVB_H
 #include <linux/dvb/frontend.h>
+#include <linux/dvb/dmx.h>
+#include <linux/dvb/ca.h>
 #include <linux/dvb/version.h>
 
 #define DVBAPIVERSION (DVB_API_VERSION << 8 | DVB_API_VERSION_MINOR)
