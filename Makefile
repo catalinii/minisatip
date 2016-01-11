@@ -6,11 +6,12 @@ DVBCA?=no
 SATIPCLIENT?=yes
 NETCVCLIENT?=no
 STATIC?=no
+LINUXDVB?=yes
 
 CFLAGS?=$(NODVBCSA) -ggdb -fPIC $(EXTRA_CFLAGS)
 LDFLAGS?=-lpthread -lrt $(EXTRA_LDFLAGS)
 
-OBJS=minisatip.o socketworks.o stream.o dvb.o adapter.o utils.o
+OBJS=minisatip.o socketworks.o stream.o adapter.o utils.o
 
 TABLES=no
 
@@ -46,6 +47,13 @@ CFLAGS+=-I../vdr-mcli-plugin/mcast/client -I../vdr-mcli-plugin/mcast/common `xml
 LDFLAGS+=-lmcli
 else
 CFLAGS+=-DDISABLE_NETCVCLIENT
+endif
+
+ifeq ($(LINUXDVB),yes)
+OBJS+=dvb.o
+else
+CFLAGS+=-DDISABLE_LINUXDVB
+OBJS+=dvb.o
 endif
 
 ifeq ($(EMBEDDED),yes)

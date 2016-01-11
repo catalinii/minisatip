@@ -37,9 +37,6 @@
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <net/if.h>
-#include <linux/dvb/frontend.h>
-#include <linux/dvb/dmx.h>
-#include <linux/dvb/ca.h>
 #include <fcntl.h>
 #include <ctype.h>
 #include <signal.h>
@@ -48,6 +45,7 @@
 #include <syslog.h>
 #include <stdarg.h>
 #include <sys/mman.h>
+#include "dvb.h"
 #include "utils.h"
 #include "minisatip.h"
 
