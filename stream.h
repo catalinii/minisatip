@@ -78,7 +78,8 @@ int get_stream_rport(int s_id);
 int get_streams_for_adapter(int aid);
 int find_session_id(int id);
 int calculate_bw(sockets *s);
-int lock_streams_for_adapter(int aid, int lock);
+int lock_streams_for_adapter(int aid);
+int unlock_streams_for_adapter(int aid);
 
 #define get_sid(a) get_sid1(a, __FILE__, __LINE__)
 #define get_sid_for(i) ((st[i] && st[i]->enabled)?st[i]:NULL)

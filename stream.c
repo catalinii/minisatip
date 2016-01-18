@@ -540,7 +540,6 @@ close_streams_for_adapter(int ad, int except)
 	return 0;
 }
 
-unsigned char rtp_buf[16];
 int64_t bw, bwtt;
 int bwnotify, sleeping, sleeping_cnt;
 unsigned long int tbw;
@@ -582,6 +581,7 @@ int send_rtp(streams * sid, const struct iovec *iov, int liov)
 	char ra[50];
 	int i, total_len = 0, rv;
 	unsigned char *rtp_h;
+	unsigned char rtp_buf[16];
 
 	if (sid->rsock_err > 5)
 		return 0;
@@ -1014,11 +1014,11 @@ int read_dmx(sockets * s)
 	if (!send)
 		return 0;
 
-	ls = lock_streams_for_adapter(ad->id, 1);
+	ls = lock_streams_for_adapter(ad->id);
 	adapter_lock(ad->id);
 	process_dmx(s);
 	adapter_unlock(ad->id);
-	lse = lock_streams_for_adapter(ad->id, 0);
+	lse = unlock_streams_for_adapter(ad->id);
 	if (ls != lse)
 		LOG("leak detected %d %d!!! ", ls, lse);
 	return 0;
@@ -1107,25 +1107,32 @@ void dump_streams()
 					ntohs (sid->sa.sin_port));
 }
 
-int lock_streams_for_adapter(int aid, int lock)
+int lock_streams_for_adapter(int aid)
 {
 	streams *sid;
 	int i = 0, ls = 0;
 	for (i = 0; i < MAX_STREAMS; i++)
 		if ((sid = get_sid_for(i)) && sid->adapter == aid)
-			if (lock)
-			{
-				mutex_lock(&sid->mutex);
-				if ((sid = get_sid_for(i)) && (sid->adapter != aid))
-					mutex_unlock(&sid->mutex);
-				else
-					ls++;
-			}
-			else
-			{
+		{
+			mutex_lock(&sid->mutex);
+			if ((sid = get_sid_for(i)) && (sid->adapter != aid))
 				mutex_unlock(&sid->mutex);
+			else
 				ls++;
-			}
+		}
+	return ls;
+}
+
+int unlock_streams_for_adapter(int aid)
+{
+	streams *sid;
+	int i = 0, ls = 0;
+	for (i = MAX_STREAMS - 1; i >= 0; i--)
+		if ((sid = get_sid_for(i)) && sid->adapter == aid)
+		{
+			mutex_unlock(&sid->mutex);
+			ls++;
+		}
 	return ls;
 }
 
