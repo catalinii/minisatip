@@ -1248,7 +1248,7 @@ http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 	LOG("reply -> %d (%s:%d) CL:%d [sock_id %d]:", s->sock,
 			get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
 			lr, s->id);
-	LOGL(2, "%s", resp);
+	LOGL(3, "%s", resp);
 	send(s->sock, resp, strlen(resp), MSG_NOSIGNAL);
 	if (binary)
 		send(s->sock, desc, lr, MSG_NOSIGNAL);
