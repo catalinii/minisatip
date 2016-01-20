@@ -8,7 +8,7 @@ typedef struct ca_device ca_device_t;
 
 #define MAX_ADAPTERS 16
 #define DVR_BUFFER 30*1024*188
-#define MAX_STREAMS_PER_PID 8
+#define MAX_STREAMS_PER_PID 16
 #define ADAPTER_BUFFER (128 + 5)*DVB_FRAME
 #define ADAPTER_TIMEOUT 60000
 

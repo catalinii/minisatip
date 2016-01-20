@@ -1017,8 +1017,12 @@ void free_all_adapters()
 
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		if (a[i])
+		{
 			if (a[i]->buf)
 				free1(a[i]->buf);
+			free(a[i]);
+			a[i] = NULL;
+		}
 
 #ifndef DISABLE_NETCVCLIENT
 	fprintf(stderr, "\n\nREEL: recv_exit\n");

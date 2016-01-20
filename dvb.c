@@ -1015,11 +1015,11 @@ void find_dvb_adapter(adapter **a)
 			//LOG("testing device %s -> fd: %d",buf,fd);
 			if (fd >= 0)
 			{
-				if (is_adapter_disabled(na))
-				{
-					na++;
-					continue;
-				}
+//				if (is_adapter_disabled(na))
+//				{
+//					na++;
+//					continue;
+//				}
 				if (!a[na])
 					a[na] = malloc1(sizeof(adapter));
 
