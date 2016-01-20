@@ -8,7 +8,7 @@
 #include "utils.h"
 
 
-#define VERSION_BUILD "16"
+#define VERSION_BUILD "17"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.5.,VERSION_BUILD,)
 
@@ -61,6 +61,7 @@ struct struct_opts
 	char *document_root;
 	char *xml_path;
 	char no_threads;
+	int th_priority;
 };
 
 

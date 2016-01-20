@@ -1128,6 +1128,18 @@ pthread_t start_new_thread(char *name)
 	return tid;
 }
 
+void set_thread_prio(pthread_t tid, int prio)
+{
+	int rv;
+	struct sched_param param;
+	memset( &param, 0, sizeof(struct sched_param) );
+	param.sched_priority = prio;
+	if ( (rv = pthread_setschedparam( pthread_self(), SCHED_RR, &param )) )
+		LOG("pthread_setschedparam failed with error %d", rv);
+	return;
+}
+
+
 struct struct_array
 {
 	char enabled;

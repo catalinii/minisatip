@@ -63,7 +63,7 @@ Help
 
 * -g use syslog instead stdout for logging, multiple -g - print to stderr as well
 
-* -i --priority prio: set the process priority to prio (-10 increases the priority by 10)
+* -i --priority prio: set the DVR thread priority to prio 
 
 * -l increases the verbosity (you can use multiple -l), logging to stdout in foreground mode or in /tmp/log when a daemon
 	* eg: -l -l -l

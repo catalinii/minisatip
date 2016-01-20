@@ -93,6 +93,7 @@ int mutex_destroy(SMutex *mutex);
 void clean_mutexes();
 pthread_t start_new_thread(char *name);
 pthread_t get_tid();
+void set_thread_prio(pthread_t tid, int prio);
 
 int add_new_lock(void **arr, int count, int size, SMutex *mutex);
 

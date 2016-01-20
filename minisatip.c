@@ -171,7 +171,7 @@ Help\n\
 \n\
 * -g use syslog instead stdout for logging, multiple -g - print to stderr as well\n\
 \n\
-* -i --priority prio: set the process priority to prio (-10 increases the priority by 10)\n\
+* -i --priority prio: set the DVR thread priority to prio \n\
 \n\
 * -l increases the verbosity (you can use multiple -l), logging to stdout in foreground mode or in /tmp/log when a daemon\n\
 	* eg: -l -l -l\n\
@@ -280,6 +280,7 @@ void set_options(int argc, char *argv[])
 	opts.document_root = "html";
 	opts.xml_path = DESC_XML;
 	opts.no_threads = 0;
+	opts.th_priority = -1;
 #ifdef __mips__
 	opts.no_threads = 1;
 #endif
@@ -492,10 +493,8 @@ void set_options(int argc, char *argv[])
 		}
 
 		case PRIORITY_OPT:
-
-			if (nice(map_int(optarg, NULL)) == -1)
-				LOG("Failed to set priority %s", strerror (errno))
-			;
+		
+			opts.th_priority = map_int(optarg, NULL);
 			break;
 
 		case DOCUMENTROOT_OPT:
