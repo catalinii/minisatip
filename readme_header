@@ -1,0 +1,24 @@
+# Welcome to Minisatip
+
+Minisatip is a multi-threaded satip server version 1.2 that runs under Linux and it was tested with DVB-S, DVB-S2, DVB-T, DVB-T2, DVB-C, DVB-C2, ATSC and ISDB-T cards.
+
+The protocol specification can be found at: 
+http://satip.info/sites/satip/files/resource/satip_specification_version_1_2_2.pdf
+It is very lightweight (designed for embedded systems with memory and processing constrains), does not need any additional libraries for basic functionality and can be used by existing satip clients like: Tvheadend, DVBViewer, vdr, VideoLAN or Android/iOS applications. Minisatip can act as a satip client as well in order to connect to satip servers from different networks.
+
+The application is designed to stream the requested data to multiple clients (even with one dvb card) in the same time while opening different pids.
+
+It is tested on x86_64, x86, ARM and MIPS platforms and it requires DVBAPI 5. Supported protocols are RTSP (both tcp and udp), HTTP (port 8080) and SSDP (as specified in the SAT>IP documentation). On top of that, it supports dvbapi protocol implemented by oscam (requires dvbcsa library) to decrypt channels using an official subscription and support dvbca protocol (requires dvben50221 library) for dvb cards with CA hardware. In order to enable/disable features, please edit the Makefile. 
+
+Contact
+-------
+Please use https://toda.ro/forum/ for any questions.
+
+In order to speed up the investigation of an issue, please provide the full log and a link to the application that is not working.
+
+If you like minisatip and you want to support the development of the project please make a donation: 
+https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item_name=minisatip&currency_code=EUR&bn=PP-DonationsBF:btn_donateCC_LG.gif:NonHostedGuest
+
+Usage:
+-------
+

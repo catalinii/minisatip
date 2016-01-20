@@ -21,15 +21,17 @@ https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item
 
 Usage:
 -------
-minisatip version 0.5.10, compiled with s2api version: 050A
 
-	./minisatip [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] \ 
-	[-j A1:S1-F1[-PIN]] [-m mac] [-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] \ 
-	[-R document_root] [-s [DELSYS:]host[:port] [-u A1:S1-F1[-PIN]] [-w http_server[:port]] \ 
-	[-x http_port] [-X xml_path] [-y rtsp_port] 
+minisatip version 0.5.16, compiled with s2api version: 050A
+
+	./minisatip [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
+		[-j A1:S1-F1[-PIN]] [-m mac] [-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] 
+		[-R document_root] [-s [DELSYS:]host[:port] [-u A1:S1-F1[-PIN]] [-w http_server[:port]] 
+		[-x http_port] [-X xml_path] [-y rtsp_port] 
 
 Help
-------- 
+-------
+
 * -a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means auto-detect)
 	* eg: -a 1:2:3  
 	- it will report 1 dvb-s2 device, 2 dvb-t2 devices and 3 dvb-c devices 
@@ -68,6 +70,9 @@ Help
 
 * -m xx: simulate xx as local mac address, generates UUID based on mac
 	* eg: -m 001122334455 
+
+* -n --netceiver if:count: use network interface <if> (default vlan4) and look for <count> netceivers
+	* eg: -n vlan4:2 
 
 * -o --dvbapi host:port - specify the hostname and port for the dvbapi server (oscam) 
 	* eg: -o 192.168.9.9:9000 
@@ -122,7 +127,7 @@ Help
 	- changing this to a port > 1024 removes the requirement for minisatip to run as root
 
 * -z --check-signal force to get signal from the DVB hardware every 200ms (use with care, only when needed)
-	- retrieving signal could take sometimes more than 200ms which could impact the rtp stream, using it only when you need to adjust your dish
+	* - retrieving signal could take sometimes more than 200ms which could impact the rtp stream, using it only when you need to adjust your dish
 
 Examples:
 -------
