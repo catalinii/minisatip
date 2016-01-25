@@ -787,6 +787,8 @@ int set_adapter_parameters(int aid, int sid, transponder * tp)
 		ad->master_sid = sid; // master sid was closed
 
 	ad->do_tune = 0;
+	LOGL(2, "old parameters: f:%d, plp:%d, diseqc:%d, pol:%d, sr:%d, mtype:%d", tp->freq, tp->plp, tp->diseqc, tp->pol, tp->sr, tp->mtype);
+	LOGL(2, "new parameters: f:%d, plp:%d, diseqc:%d, pol:%d, sr:%d, mtype:%d", ad->tp.freq, ad->tp.plp, ad->tp.diseqc, ad->tp.pol, ad->tp.sr, ad->tp.mtype);
 	if (tp->freq != ad->tp.freq || tp->plp != ad->tp.plp
 			|| tp->diseqc != ad->tp.diseqc
 			|| (tp->pol > 0 && tp->pol != ad->tp.pol)
