@@ -726,8 +726,8 @@ void find_satip_adapter(adapter **a)
 		return;
 	la = split(arg, opts.satip_servers, 50, ',');
 	j = 0;
-	for (i = 0; i < MAX_ADAPTERS; i++)
-		if ((!a[i] || (a[i]->pa == -1 && a[i]->fn == -1)) && j < la)
+	for (i = a_count; i < MAX_ADAPTERS; i++)
+		if (j < la)
 		{
 			if(is_adapter_disabled(i))
 				continue;
@@ -799,6 +799,8 @@ void find_satip_adapter(adapter **a)
 			j++;
 			LOG("Satip device %s port %d delsys %d: %s %s", ad->sip, ad->sport,
 					ad->sys[0], get_delsys(ad->sys[0]), get_delsys(ad->sys[1]));
+
+			a_count = i + 1; // update adapter counter
 		}
 }
 

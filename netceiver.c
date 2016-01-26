@@ -44,9 +44,9 @@ int netcv_close(adapter *ad)
 {
 	SN.want_commit = 0;
 
-	if (!SN.ncv_rec) LOGL(0, "netceiver: receiver instance is NULL (id=%d)", ad->id);
+	if (!SN.ncv_rec) LOGL(3, "netceiver: receiver instance is NULL (id=%d)", ad->id);
 
-	LOGL(0, "netceiver: delete receiver instance for adapter %d", ad->id);
+	LOGL(2, "netceiver: delete receiver instance for adapter %d", ad->id);
 
 	/* unregister handlers */
 	register_ten_handler(SN.ncv_rec, NULL, NULL);
@@ -78,10 +78,10 @@ int netcv_open_device(adapter *ad)
 
 	/* create DVR pipe for TS data transfer from libmcli to minisatip */
 	int pipe_fd[2];
-	if (pipe2 (pipe_fd, O_NONBLOCK)) LOGL (0, "netceiver: creating pipe failed");
+	if (pipe2 (pipe_fd, O_NONBLOCK)) LOGL (3, "netceiver: creating pipe failed");
 	ad->dvr = pipe_fd[0];	// read end of pipe
 	SN.pwfd = pipe_fd[1];	// write end of pipe
-	LOGL(0, "netceiver: creating DVR pipe for adapter %d  -> dvr: %d", ad->id, ad->dvr);
+	LOGL(2, "netceiver: creating DVR pipe for adapter %d  -> dvr: %d", ad->id, ad->dvr);
 
 	return 0;
 }
@@ -315,10 +315,6 @@ void find_netcv_adapter(adapter **a)
 	netceiver_info_list_t *nc_list;
 	adapter *ad;
 
-	// find 1st free adapter
-	for (na = 0; na < MAX_ADAPTERS; na++)
-		if (!a[na] || (a[na]->pa == -1 && a[na]->fn == -1)) break;
-
 	/* check if network interface is available */
 	struct ifaddrs *nif, *nif1;
 	getifaddrs (&nif);
@@ -375,6 +371,7 @@ void find_netcv_adapter(adapter **a)
 
 	// add netceiver tuners to the list of adapters
 	i = FE_QPSK;
+	na = a_count;
 	char dbuf[1024] = "netceiver: adding ";
 	for (n = 0; n < nc_sys_t; n++) {
 		while (nc_sys_c[map_type[i]] == 0 && i < FE_DVBS2) i++;
@@ -442,6 +439,7 @@ void find_netcv_adapter(adapter **a)
 		}
 
 		na++; // increase number of tuner count
+		a_count = na;
 	}
 	LOGL(0, "%s", dbuf);
 	nc_unlock_list(); // netceivers appearing after this will be recognized by libmcli but will not made available to minisatip
