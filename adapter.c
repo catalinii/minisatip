@@ -40,6 +40,7 @@
 #endif
 
 adapter *a[MAX_ADAPTERS];
+int a_count;
 char disabled[MAX_ADAPTERS]; // disabled adapters
 
 SMutex a_mutex;
@@ -53,6 +54,7 @@ void find_adapters()
 	if (init_find_adapter == 1)
 		return;
 	init_find_adapter = 1;
+	a_count = 0;
 #ifndef DISABLE_LINUXDVB
 	find_dvb_adapter(a);
 #endif

@@ -44,9 +44,9 @@ int netcv_close(adapter *ad)
 {
 	SN.want_commit = 0;
 
-	if (!SN.ncv_rec) LOGL(0, "netceiver: receiver instance is NULL (id=%d)", ad->id);
+	if (!SN.ncv_rec) LOGL(3, "netceiver: receiver instance is NULL (id=%d)", ad->id);
 
-	LOGL(3, "netceiver: delete receiver instance for adapter %d", ad->id);
+	LOGL(2, "netceiver: delete receiver instance for adapter %d", ad->id);
 
 	/* unregister handlers */
 	register_ten_handler(SN.ncv_rec, NULL, NULL);
@@ -78,10 +78,10 @@ int netcv_open_device(adapter *ad)
 
 	/* create DVR pipe for TS data transfer from libmcli to minisatip */
 	int pipe_fd[2];
-	if (pipe2 (pipe_fd, O_NONBLOCK)) LOGL (0, "netceiver: creating pipe failed");
+	if (pipe2 (pipe_fd, O_NONBLOCK)) LOGL (3, "netceiver: creating pipe failed");
 	ad->dvr = pipe_fd[0];	// read end of pipe
 	SN.pwfd = pipe_fd[1];	// write end of pipe
-	LOGL(3, "netceiver: creating DVR pipe for adapter %d  -> dvr: %d", ad->id, ad->dvr);
+	LOGL(2, "netceiver: creating DVR pipe for adapter %d  -> dvr: %d", ad->id, ad->dvr);
 
 	return 0;
 }
@@ -165,11 +165,6 @@ void netcv_commit(adapter *ad)
 	{
 		transponder *tp = &ad->tp;
 
-		char *map_posc[] = { "-", "19.2E", "13E", "28.2E", "5W" };
-		LOGL(0, "netceiver: adapter %d tuning to %d @ %s pol:%s sr:%d fec:%s delsys:%s mod:%s",
-				ad->id, tp->freq / 1000, map_posc[tp->diseqc], get_pol(tp->pol), tp->sr / 1000,
-				fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype]);
-
 		int map_pos[] = { 0, 192, 130, 282, -50 }; // Default sat positions: 19.2E, 13E, 28.2E, 5W
 		int map_pol[] = { 0, SEC_VOLTAGE_13, SEC_VOLTAGE_18, SEC_VOLTAGE_OFF };
 
@@ -199,12 +194,17 @@ void netcv_commit(adapter *ad)
 					else		m_fep.u.qpsk.fec_inner = tp->fec | (QPSK_S2 << 16);
 					type = FE_DVBS2;
 				}
+
+				char *map_posc[] = { "", " @ 19.2E", " @ 13E", " @ 28.2E", " @ 5W" };
+				LOGL(0, "netceiver: adapter %d tuning to %d%s pol:%s sr:%d fec:%s delsys:%s mod:%s",
+						ad->id, tp->freq / 1000, map_posc[tp->diseqc], get_pol(tp->pol), tp->sr / 1000,
+						fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype]);
+
 				break;
 
 				/* set roll-off */
 				// TODO: check if needed for DVB-S2 transponders
 				m_fep.u.qpsk.fec_inner |= (tp->ro << 24);
-
 
 				break;
 
@@ -215,10 +215,15 @@ void netcv_commit(adapter *ad)
 				m_fep.frequency = tp->freq * 1000;
 				m_fep.inversion = INVERSION_AUTO;
 				m_fep.u.qam.fec_inner = FEC_NONE;
-				m_fep.u.qam.modulation = tp->mtype;
+				/* we enforce qam256 if qpsk is used falsely, e.g. by Elgato SAT>IP app */
+				m_fep.u.qam.modulation = tp->mtype == QPSK ? QAM_256 : tp->mtype;
 				m_fep.u.qam.symbol_rate = tp->sr;
 
 				type = FE_QAM;
+
+				LOGL(0, "netceiver: adapter %d tuning to %d sr:%d delsys:%s mod:%s",
+						ad->id, tp->freq / 1000, tp->sr / 1000,
+						fe_delsys[tp->sys], fe_modulation[tp->mtype]);
 
 				break;
 
@@ -256,17 +261,17 @@ void netcv_commit(adapter *ad)
 				m_pids[i].id = 0; // here we maybe have to set the SID if this PID is encrypted
 
 			}
-			fprintf(stderr, "%s\n", dbuf);
+			//fprintf(stderr, "%s\n", dbuf);
 
 			m_pids[i].pid = -1;
 			/* call recv_pids of libmcli to set the active PIDs */
-			usleep(1000);
+			usleep(10000);
 			if(recv_pids (SN.ncv_rec, m_pids))
 				LOGL(0, "netceiver: seting PIDs failed");
 		}
 		else
 		{
-			fprintf(stderr, "REEL: recv_pid: none\n");
+			//fprintf(stderr, "REEL: recv_pid: none\n");
 			/* call recv_stop of libmcli to deactivate all PIDs */
 			if(recv_stop (SN.ncv_rec))
 				LOGL(0, "netceiver: removing all PIDs failed");
@@ -309,10 +314,6 @@ void find_netcv_adapter(adapter **a)
 	int i, k, n, na;
 	netceiver_info_list_t *nc_list;
 	adapter *ad;
-
-	// find 1st free adapter
-	for (na = 0; na < MAX_ADAPTERS; na++)
-		if (!a[na] || (a[na]->pa == -1 && a[na]->fn == -1)) break;
 
 	/* check if network interface is available */
 	struct ifaddrs *nif, *nif1;
@@ -370,6 +371,7 @@ void find_netcv_adapter(adapter **a)
 
 	// add netceiver tuners to the list of adapters
 	i = FE_QPSK;
+	na = a_count;
 	char dbuf[1024] = "netceiver: adding ";
 	for (n = 0; n < nc_sys_t; n++) {
 		while (nc_sys_c[map_type[i]] == 0 && i < FE_DVBS2) i++;
@@ -414,19 +416,19 @@ void find_netcv_adapter(adapter **a)
 		switch(map_type[i])
 		{
 		case FE_DVBS2:
-			ad->sys[0] = ad->tp.sys = SYS_DVBS2;
+			ad->sys[0] = SYS_DVBS2;
 			ad->sys[1] = SYS_DVBS;
 			sprintf(dbuf + strlen(dbuf), "[AD%d DVB-S2] ", na);
 			break;
 
 		case FE_QPSK:
-			ad->sys[0] = ad->tp.sys = SYS_DVBS;
+			ad->sys[0] = SYS_DVBS;
 			sprintf(dbuf + strlen(dbuf), "[AD%d DVB-S] ", na);
 			break;
 			break;
 
 		case FE_QAM:
-			ad->sys[0] = ad->tp.sys = SYS_DVBC_ANNEX_A;
+			ad->sys[0] = SYS_DVBC_ANNEX_A;
 			sprintf(dbuf + strlen(dbuf), "[AD%d DVB-C] ", na);
 			break;
 
@@ -437,6 +439,7 @@ void find_netcv_adapter(adapter **a)
 		}
 
 		na++; // increase number of tuner count
+		a_count = na;
 	}
 	LOGL(0, "%s", dbuf);
 	nc_unlock_list(); // netceivers appearing after this will be recognized by libmcli but will not made available to minisatip
@@ -471,7 +474,8 @@ int handle_ts (unsigned char *buffer, size_t len, void *p) {
 	lw = write(nc->pwfd, buffer, len);
 	if (lw != len)
 	{
-		LOGL(0, "netceiver: not all data forwarded (%s): len=%d, lw=%d", strerror(errno), len, lw);
+		//LOGL(0, "netceiver: not all data forwarded (%s): len=%d, lw=%d", strerror(errno), len, lw);
+		LOGL(0, "netceiver: not all data forwarded");
 	}
 
 	return len;

@@ -1056,6 +1056,7 @@ void find_dvb_adapter(adapter **a)
 
 				close(fd);
 				na++;
+				a_count = na; // update adapter counter
 				if (na == MAX_ADAPTERS)
 					return;
 			}
