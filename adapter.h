@@ -116,7 +116,7 @@ typedef struct struct_adapter
 } adapter;
 
 extern adapter *a[MAX_ADAPTERS];
-extern a_count;
+extern int a_count;
 
 int init_hw(int dev);
 int init_all_hw();
