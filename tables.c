@@ -102,7 +102,7 @@ void del_ca(SCA *c)
 				ca[i].enabled = 0;
 				for (k = 0; k < MAX_ADAPTERS; k++)
 				{
-					if ((ad = get_adapter_nw(i)))
+					if ((ad = get_adapter_nw(k)))
 						ad->ca_mask &= ~mask;
 				}
 			}
@@ -840,9 +840,9 @@ int tables_init_device(adapter *ad)
 	{
 		if (!(ad->ca_mask & mask)) // CA already initialized
 		{
-			if (ca[i].enabled && ca[i].action[action_id]
-					&& ca[i].action[action_id](ad, NULL))
-				rv = rv | mask;
+			if (ca[i].enabled && ca[i].action[action_id])
+					if(ca[i].action[action_id](ad, NULL))
+						rv = rv | mask;
 		}
 		mask = mask << 1;
 	}
