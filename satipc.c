@@ -56,12 +56,14 @@ int http_request(adapter *ad, char *url, char *method);
 #define SATIPC_ITEM (0x3000000000000)
 #define MAKE_ITEM(a,b) ((SATIPC_ITEM | (a<<24) | (b)))
 void satipc_commit(adapter *ad);
+void set_adapter_signal(adapter *ad, char *b, int rlen);
+
 
 int satipc_reply(sockets * s)
 {
 	int rlen = s->rlen;
 	adapter *ad;
-	char *arg[50], *sess, *es, *sid;
+	char *arg[50], *sess, *es, *sid, *timeout;
 	int la, i, rc;
 	__attribute__((unused)) int rv;
 	s->rlen = 0;
@@ -70,13 +72,26 @@ int satipc_reply(sockets * s)
 	if (!(ad = get_adapter(s->sid)))
 		return 0;
 
+	if((timeout = strstr(s->buf, "timeout=")))
+	{
+		int tmout;
+		timeout += strlen("timeout=");
+		tmout = map_intd(timeout, NULL, 30);
+		sockets_timeout(ad->fe_sock, tmout*1000); // 30s
+	}
+
 	sess = strstr(s->buf, "Session:");
+	
+	if(ad->last_cmd == RTSP_DESCRIBE)
+	{
+		set_adapter_signal(ad, s->buf, rlen);
+	}
 
 	la = split(arg, (char *) s->buf, 50, ' ');
 	rc = map_int(arg[1], NULL);
 
-	if (ad->last_cmd == RTSP_OPTIONS && !sess && ad->session[0])
-		rc = 454;
+//	if (ad->last_cmd == RTSP_OPTIONS && !sess && ad->session[0])
+//		rc = 454;
 
 	if (rc == 454 || rc == 503 || rc == 405)
 	{
@@ -106,6 +121,7 @@ int satipc_reply(sockets * s)
 			}
 		}
 
+		
 	if (!ad->err && !ad->session[0] && sess)
 	{
 		if ((es = strchr(sess, ';')))
@@ -158,7 +174,11 @@ int satipc_timeout(sockets *s)
 			s->close_sec);
 	if (!ad)
 		return 1;
-	http_request(ad, NULL, "OPTIONS");
+	
+	if(ad->last_cmd == RTSP_PLAY)
+		http_request(ad, NULL, "DESCRIBE");
+	else 
+		http_request(ad, NULL, "OPTIONS");
 
 	s->rtime = getTick();
 	return 0;
@@ -170,6 +190,34 @@ int satipc_close(sockets * s)
 			s->sid, s->id, s->sock, s->close_sec);
 	close_adapter(s->sid);
 	return 0;
+}
+
+
+void set_adapter_signal(adapter *ad, char *b, int rlen)
+{
+	int i, strength, status, snr;
+	char *ver, *tun, *signal;
+	for (i = 0; i < rlen - 4; i++)
+		if (b[i] == 'v' && b[i + 1] == 'e' && b[i + 2] == 'r'
+				&& b[i + 3] == '=')
+		{
+			ver = b + i;
+			tun = strstr((const char*) ver, "tuner=");
+			if (tun)
+				signal = strchr(tun, ',');
+			if (signal)
+			{
+				sscanf(signal + 1, "%d,%d,%d", &strength, &status, &snr);
+				if (ad->strength != strength && ad->snr != snr)
+					LOGL(3,
+							"satipc: Received signal status from the server for adapter %d, stength=%d status=%d snr=%d",
+							ad->id, strength, status, snr);
+				ad->strength = strength;
+				ad->status = status ? FE_HAS_LOCK : 0;
+				ad->snr = snr;
+			}
+		}
+
 }
 
 int satipc_rtcp_reply(sockets * s)
@@ -195,26 +243,7 @@ int satipc_rtcp_reply(sockets * s)
 					ad->id, rp - ad->rcvp, ad->rtp_miss, ad->rtp_ooo,
 					ad->pid_err - ad->dec_err);
 	}
-	for (i = 0; i < rlen - 4; i++)
-		if (b[i] == 'v' && b[i + 1] == 'e' && b[i + 2] == 'r'
-				&& b[i + 3] == '=')
-		{
-			ver = b + i;
-			tun = strstr((const char*) ver, "tuner=");
-			if (tun)
-				signal = strchr(tun, ',');
-			if (signal)
-			{
-				sscanf(signal + 1, "%d,%d,%d", &strength, &status, &snr);
-				if (ad->strength != strength && ad->snr != snr)
-					LOGL(3,
-							"satipc: Received signal status from the server for adapter %d, stength=%d status=%d snr=%d",
-							ad->id, strength, status, snr);
-				ad->strength = strength;
-				ad->status = status ? FE_HAS_LOCK : 0;
-				ad->snr = snr;
-			}
-		}
+	set_adapter_signal(ad, b, rlen);
 	return 0;
 }
 
@@ -244,7 +273,7 @@ int satipc_open_device(adapter *ad)
 	ad->rtcp_sock = sockets_add(ad->rtcp, NULL, ad->id, TYPE_TCP,
 			(socket_action) satipc_rtcp_reply, (socket_action) satipc_close,
 			NULL);
-	sockets_timeout(ad->fe_sock, 15000); // 15s
+	sockets_timeout(ad->fe_sock, 30000); // 30s
 	set_socket_receive_buffer(ad->dvr, opts.dvr_buffer);
 	if (ad->fe_sock < 0 || ad->dvr < 0 || ad->rtcp < 0 || ad->rtcp_sock < 0)
 	{
