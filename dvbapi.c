@@ -239,8 +239,9 @@ int dvbapi_reply(sockets * s)
 			{
 				char *queued = "";
 				int do_queue = 0;
-				mutex_lock(&k->mutex);
 				adapter_lock(a_id);
+				mutex_lock(&k->mutex);
+
 				k->key_len = 8;
 				if (parity == k->parity && k->key_ok[k->parity]
 						&& (memcmp(cw, k->cw[k->parity], k->key_len) != 0))
