@@ -1116,13 +1116,14 @@ pthread_t get_tid()
 pthread_t start_new_thread(char *name)
 {
 	pthread_t tid;
+	int rv;
 	if (opts.no_threads)
 		return get_tid();
 
-	if (pthread_create(&tid, NULL, &select_and_execute, name))
+	if ((rv = pthread_create(&tid, NULL, &select_and_execute, name)))
 	{
-		LOG("Failed to create thread: %s, error %d %s", name, errno,
-				strerror(errno));
+		LOG("Failed to create thread: %s, error %d %s", name, rv,
+				strerror(rv));
 		return get_tid();
 	}
 	return tid;

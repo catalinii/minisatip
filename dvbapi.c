@@ -737,10 +737,11 @@ int send_ecm(adapter *ad, void *arg)
 
 	if (b[0] != 0x47)
 		return 0;
-	if ((b[1] & 0x40) && ((b[4] != 0) || ((b[5] & 0xFE) != 0x80)))
+	pid = (b[1] & 0x1F) * 256 + b[2];
+	
+	if (pid != 1 && ((b[1] & 0x40) && ((b[4] != 0) || ((b[5] & 0xFE) != 0x80))))
 		return 0;
 
-	pid = (b[1] & 0x1F) * 256 + b[2];
 	p = find_pid(ad->id, pid);
 	if (p)
 		k = get_key(p->key);
