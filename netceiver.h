@@ -2,7 +2,12 @@
 #define NETCEIVERCLIENT_H
 
 #include "adapter.h"
+
+#ifndef DISABLE_LINUXDVB
 #include "headers.h"
+#else
+#include "netceiver_mcli_defs.h"
+#endif
 
 
 void find_netcv_adapter(adapter **a);

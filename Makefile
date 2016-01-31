@@ -96,7 +96,7 @@ tables.o: tables.c tables.h
 satipc.o: satipc.c satipc.h
 	$(CC) $(CFLAGS) -c -o $@ satipc.c
 
-netceiver.o: netceiver.c netceiver.h
+netceiver.o: netceiver.c netceiver.h netceiver_mcli_defs.h
 	$(CC) $(CFLAGS) -c -o $@ netceiver.c
 
 utils.o: utils.c utils.h
