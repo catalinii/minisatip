@@ -18,6 +18,12 @@
  *
  */
 
+#include <sys/types.h>
+#include <ifaddrs.h>
+#include <string.h>
+#include <fcntl.h>
+#include <unistd.h>
+
 #include "netceiver.h"
 
 extern struct struct_opts opts;
