@@ -195,10 +195,28 @@ void netcv_commit(adapter *ad)
 				}
 				else
 				{
+					switch (tp->fec)
+					{
+						case 10: //FEC_3_5
+							m_fep.u.qpsk.fec_inner = 13;
+							fprintf(stderr, "fec_inner: 0x%06x -> FEC_3_5\n", m_fep.u.qpsk.fec_inner);
+							break;
+
+						case 11: //FEC_9_10
+							m_fep.u.qpsk.fec_inner = 14;
+							fprintf(stderr, "fec_inner: 0x%06x -> FEC_9_10\n", m_fep.u.qpsk.fec_inner);
+							break;
+
+						default:
+							m_fep.u.qpsk.fec_inner = tp->fec;
+							fprintf(stderr, "fec_inner: 0x%06x\n", m_fep.u.qpsk.fec_inner);
+					}
+
 					// Für DVB-S2 PSK8 oder QPSK, siehe vdr-mcli-plugin/device.c
-					if (tp->mtype)	m_fep.u.qpsk.fec_inner = tp->fec | (PSK8 << 16);
-					else		m_fep.u.qpsk.fec_inner = tp->fec | (QPSK_S2 << 16);
+					if (tp->mtype)	m_fep.u.qpsk.fec_inner |= (PSK8 << 16);
+					else		m_fep.u.qpsk.fec_inner |= (QPSK_S2 << 16);
 					type = FE_DVBS2;
+					fprintf(stderr, "fec_inner: 0x%06x\n", m_fep.u.qpsk.fec_inner);
 				}
 
 				char *map_posc[] = { "", " @ 19.2E", " @ 13E", " @ 28.2E", " @ 5W" };

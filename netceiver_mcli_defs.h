@@ -175,11 +175,6 @@ typedef struct recv_festatus
 	uint32_t ucblocks;
 } recv_festatus_t;
 
-//XML
-#include <libxml/encoding.h>
-#include <libxml/xmlwriter.h>
-#include <libxml/xmlmemory.h>
-#include <libxml/parser.h>
 #include <libxml/xpath.h>
 
 #define UUID_SIZE 256
@@ -197,24 +192,12 @@ typedef struct recv_festatus
 #define QPSK_S2 9 
 #define PSK8 10
 
-#include "version.h"
+//#include "version.h"
 #include "list.h"
 #include "satlists.h"
 #include "mcast.h"
-#include "input.h"
 #include "recv_ccpp.h"
 #include "recv_tv.h"
-#include "tools.h"
-#include "interfaces.h"
-#include "mcast.h"
-#include "mld.h"
-#include "api_server.h"
 #include "tca_handler.h"
-#include "tra_handler.h"
-#include "mld_reporter.h"
-#include "ciparser.h"
-#include "ci_handler.h"
-#include "mmi_handler.h"
-#include "siparser.h"
 
 #endif
