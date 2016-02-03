@@ -9,6 +9,13 @@
 #include "netceiver_mcli_defs.h"
 #endif
 
+// undefine non-standard Netceiver FEC numbering
+#undef FEC_1_4
+#undef FEC_1_3
+#undef FEC_2_5
+#undef FEC_3_5
+#undef FEC_9_10
+
 
 void find_netcv_adapter(adapter **a);
 

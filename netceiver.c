@@ -195,14 +195,14 @@ void netcv_commit(adapter *ad)
 				}
 				else
 				{
-					switch (tp->fec)
+					switch (tp->fec) // Handle FEC numbering exceptions
 					{
-						case 10: //FEC_3_5
+						case FEC_3_5:
 							m_fep.u.qpsk.fec_inner = 13;
 							fprintf(stderr, "fec_inner: 0x%06x -> FEC_3_5\n", m_fep.u.qpsk.fec_inner);
 							break;
 
-						case 11: //FEC_9_10
+						case FEC_9_10:
 							m_fep.u.qpsk.fec_inner = 14;
 							fprintf(stderr, "fec_inner: 0x%06x -> FEC_9_10\n", m_fep.u.qpsk.fec_inner);
 							break;
