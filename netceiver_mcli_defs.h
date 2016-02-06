@@ -192,7 +192,6 @@ typedef struct recv_festatus
 #define QPSK_S2 9 
 #define PSK8 10
 
-//#include "version.h"
 #include "list.h"
 #include "satlists.h"
 #include "mcast.h"

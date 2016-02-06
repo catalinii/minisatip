@@ -199,24 +199,20 @@ void netcv_commit(adapter *ad)
 					{
 						case FEC_3_5:
 							m_fep.u.qpsk.fec_inner = 13;
-							fprintf(stderr, "fec_inner: 0x%06x -> FEC_3_5\n", m_fep.u.qpsk.fec_inner);
 							break;
 
 						case FEC_9_10:
 							m_fep.u.qpsk.fec_inner = 14;
-							fprintf(stderr, "fec_inner: 0x%06x -> FEC_9_10\n", m_fep.u.qpsk.fec_inner);
 							break;
 
 						default:
 							m_fep.u.qpsk.fec_inner = tp->fec;
-							fprintf(stderr, "fec_inner: 0x%06x\n", m_fep.u.qpsk.fec_inner);
 					}
 
 					// Für DVB-S2 PSK8 oder QPSK, siehe vdr-mcli-plugin/device.c
 					if (tp->mtype)	m_fep.u.qpsk.fec_inner |= (PSK8 << 16);
 					else		m_fep.u.qpsk.fec_inner |= (QPSK_S2 << 16);
 					type = FE_DVBS2;
-					fprintf(stderr, "fec_inner: 0x%06x\n", m_fep.u.qpsk.fec_inner);
 				}
 
 				char *map_posc[] = { "", " @ 19.2E", " @ 13E", " @ 28.2E", " @ 5W" };
@@ -252,6 +248,49 @@ void netcv_commit(adapter *ad)
 				break;
 
 			case SYS_DVBT:
+				m_fep.frequency = tp->freq * 1000;
+				m_fep.inversion = INVERSION_AUTO;
+
+				switch (tp->bw)
+				{
+					case 8000000:  m_fep.u.ofdm.bandwidth = BANDWIDTH_8_MHZ; break;
+					case 7000000:  m_fep.u.ofdm.bandwidth = BANDWIDTH_7_MHZ; break;
+					case 6000000:  m_fep.u.ofdm.bandwidth = BANDWIDTH_6_MHZ; break;
+					case 0:        m_fep.u.ofdm.bandwidth = BANDWIDTH_AUTO; break;
+					case 5000000:  m_fep.u.ofdm.bandwidth = BANDWIDTH_5_MHZ; break;
+					case 10000000: m_fep.u.ofdm.bandwidth = BANDWIDTH_10_MHZ; break;
+					case 1712000:  m_fep.u.ofdm.bandwidth = BANDWIDTH_1_712_MHZ; break;
+					default:       m_fep.u.ofdm.bandwidth = BANDWIDTH_AUTO;
+						       LOGL(0, "netceiver: DVB-T: unknown bandwith: %d", tp->bw);
+				}
+
+				m_fep.u.ofdm.code_rate_HP = FEC_AUTO; // TBC
+				m_fep.u.ofdm.code_rate_LP = FEC_AUTO; // TBC
+				m_fep.u.ofdm.constellation = QAM_32; // tp->mtype, not properly handled by vdr-satip-plugin ?
+				m_fep.u.ofdm.transmission_mode = TRANSMISSION_MODE_AUTO; // tp->tmode, not yet implemente upstream?
+				m_fep.u.ofdm.guard_interval = tp->gi;
+				m_fep.u.ofdm.hierarchy_information = HIERARCHY_NONE;
+
+				// SRF
+				/*
+				m_fep.frequency = 562000000;
+				m_fep.inversion = INVERSION_AUTO;
+				m_fep.u.ofdm.bandwidth = BANDWIDTH_8_MHZ;
+				m_fep.u.ofdm.code_rate_HP = FEC_AUTO;
+				m_fep.u.ofdm.code_rate_LP = FEC_AUTO;
+				m_fep.u.ofdm.constellation = QAM_32;
+				m_fep.u.ofdm.transmission_mode = TRANSMISSION_MODE_AUTO;
+				m_fep.u.ofdm.guard_interval = GUARD_INTERVAL_AUTO;
+				m_fep.u.ofdm.hierarchy_information = HIERARCHY_NONE;
+				*/
+
+				type = FE_OFDM;
+
+				LOGL(0, "netceiver: adapter %d tuning to %d inv: %d mtype: %d "
+						"hprate: %d tmode: %d gi: %d bw:%d sm %d t2id %d",
+						ad->id, tp->freq / 1000, tp->inversion, tp->mtype,
+						tp->hprate, tp->tmode, tp->gi, tp->bw, tp->sm, tp->t2id);
+
 				break;
 		}
 
@@ -315,9 +354,6 @@ int netcv_tune(int aid, transponder * tp)
 	adapter *ad = get_adapter(aid);
 	if (!ad)
 		return 1;
-
-	if (tp->sys == SYS_DVBT)
-		LOGL(0, "netceiver: Sorry, DVB-T not yet implemented");
 
 	SN.want_tune = 1;	// we do not tune right now, just set the flag for netcv_commit
 	SN.want_commit = 0;
@@ -458,7 +494,7 @@ void find_netcv_adapter(adapter **a)
 
 		case FE_OFDM:
 			sprintf(dbuf + strlen(dbuf), "[AD%d DVB-T] ", na);
-			ad->sys[0] = SYS_DVBT; // DVB-T not yet implemented...
+			ad->sys[0] = SYS_DVBT;
 			break;
 		}
 
