@@ -486,9 +486,6 @@ int dvb_tune(int aid, transponder * tp)
 		if (tp->freq < MIN_FRQ_DVBC || tp->freq > MAX_FRQ_DVBC)
 			LOG_AND_RETURN(-404, "Frequency %d is not within range ", tp->freq)
 
-		if (tp->mtype == 0)
-			tp->mtype = QAM_AUTO;
-
 		freq = freq * 1000;
 
 		LOG("tuning to %d delsys:%s mod:%s specinv:%s ts clear=%d", freq,
@@ -821,7 +818,7 @@ void init_dvb_parameters(transponder * tp)
 	tp->gi = GUARD_INTERVAL_AUTO;
 	tp->bw = 8000000;
 	tp->ro = ROLLOFF_AUTO;
-	tp->mtype = QPSK;
+	tp->mtype = -1;
 	tp->plts = PILOT_AUTO;
 	tp->fec = FEC_AUTO;
 	tp->old_diseqc = tp->old_pol = tp->old_hiband = -1;
@@ -884,17 +881,16 @@ void copy_dvb_parameters(transponder * s, transponder * d)
 	if (d->diseqc < 1) // force position 1 on the diseqc switch
 		d->diseqc = 1;
 
-	/* Why?
-	if ((d->sys == SYS_DVBS2) && (d->mtype == 0))
+	if ((d->sys == SYS_DVBS2) && (d->mtype == -1))
 		d->mtype = PSK_8;
-	*/
-	if ((d->sys == SYS_DVBS) && (d->mtype == 0))
+
+	if ((d->sys == SYS_DVBS) && (d->mtype == -1))
 		d->mtype = QPSK;
 
-	if ((d->sys == SYS_ATSC || d->sys == SYS_DVBC_ANNEX_B) && d->mtype == 0)
+	if ((d->sys == SYS_ATSC || d->sys == SYS_DVBC_ANNEX_B) && d->mtype == -1)
 		d->mtype = QAM_AUTO;
 
-	if ((d->sys == SYS_DVBT || d->sys == SYS_DVBT2) && d->mtype == 0)
+	if ((d->sys == SYS_DVBT || d->sys == SYS_DVBT2) && d->mtype == -1)
 		d->mtype = QAM_AUTO;
 
 	LOG(
