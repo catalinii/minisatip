@@ -266,8 +266,15 @@ void netcv_commit(adapter *ad)
 
 				m_fep.u.ofdm.code_rate_HP = FEC_AUTO; // TBC
 				m_fep.u.ofdm.code_rate_LP = FEC_AUTO; // TBC
-				m_fep.u.ofdm.constellation = QAM_32; // tp->mtype, not properly handled by vdr-satip-plugin ?
-				m_fep.u.ofdm.transmission_mode = TRANSMISSION_MODE_AUTO; // tp->tmode, not yet implemente upstream?
+				
+				switch (tp->mtype) // not properly handled by vdr-satip-plugin ?
+				{
+					case 0: m_fep.u.ofdm.constellation = QAM_AUTO; break;
+					case 6: m_fep.u.ofdm.constellation = QAM_32; break;
+					default: m_fep.u.ofdm.constellation = tp->mtype;
+				}
+
+				m_fep.u.ofdm.transmission_mode = tp->tmode;
 				m_fep.u.ofdm.guard_interval = tp->gi;
 				m_fep.u.ofdm.hierarchy_information = HIERARCHY_NONE;
 
