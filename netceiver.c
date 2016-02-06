@@ -28,11 +28,11 @@
 
 extern struct struct_opts opts;
 
-SNetceiver sn[MAX_ADAPTERS];
+SNetceiver *sn[MAX_ADAPTERS];
 #define SN sn[ad->id]
 
-int handle_ts (unsigned char *buffer, size_t len, void *p);
-int handle_ten (tra_t *ten, void *p);
+int handle_ts(unsigned char *buffer, size_t len, void *p);
+int handle_ten(tra_t *ten, void *p);
 
 extern char *fe_pilot[];
 extern char *fe_rolloff[];
@@ -45,25 +45,24 @@ extern char *fe_hierarchy[];
 extern char *fe_specinv[];
 extern char *fe_pol[];
 
-
 int netcv_close(adapter *ad)
 {
-	SN.want_commit = 0;
+	SN->want_commit = 0;
 
-	if (!SN.ncv_rec) LOGL(3, "netceiver: receiver instance is NULL (id=%d)", ad->id);
+	if (!SN->ncv_rec) LOGL(3, "netceiver: receiver instance is NULL (id=%d)", ad->id);
 
 	LOGL(2, "netceiver: delete receiver instance for adapter %d", ad->id);
 
 	/* unregister handlers */
-	register_ten_handler(SN.ncv_rec, NULL, NULL);
-	register_ts_handler(SN.ncv_rec, NULL, NULL);
+	register_ten_handler(SN->ncv_rec, NULL, NULL);
+	register_ts_handler(SN->ncv_rec, NULL, NULL);
 
 	/* call recv_init of libmcli to clean up the NetCeiver API */
-	recv_del (SN.ncv_rec);
-	SN.ncv_rec = NULL;
+	recv_del (SN->ncv_rec);
+	SN->ncv_rec = NULL;
 
 	/* close DVR pipe */
-	close(SN.pwfd);
+	close(SN->pwfd);
 	close(ad->dvr);
 
 	ad->strength = 0;
@@ -74,42 +73,40 @@ int netcv_close(adapter *ad)
 	return 0;
 }
 
-
 int netcv_open_device(adapter *ad)
 {
 	//fprintf(stderr, "REEL: netcv_open_device (id=%d)\n", ad->id);
 
-	SN.want_commit = 0;
-	SN.ncv_rec = NULL;
+	SN->want_commit = 0;
+	SN->ncv_rec = NULL;
 
 	/* create DVR pipe for TS data transfer from libmcli to minisatip */
 	int pipe_fd[2];
 	if (pipe2 (pipe_fd, O_NONBLOCK)) LOGL (3, "netceiver: creating pipe failed");
 	ad->dvr = pipe_fd[0];	// read end of pipe
-	SN.pwfd = pipe_fd[1];	// write end of pipe
+	SN->pwfd = pipe_fd[1];// write end of pipe
 	LOGL(2, "netceiver: creating DVR pipe for adapter %d  -> dvr: %d", ad->id, ad->dvr);
 
 	return 0;
 }
-
 
 int netcv_set_pid(adapter *ad, uint16_t pid)
 {
 	//fprintf(stderr, "REEL: netcv_set_pid (id=%d, pid=%d)\n", ad->id, pid);
 
 	int aid = ad->id;
-	LOGL(3, "netceiver: set_pid for adapter %d, pid %d, err %d", aid, pid, SN.err);
+	LOGL(3, "netceiver: set_pid for adapter %d, pid %d, err %d", aid, pid,
+			SN->err);
 
-	if (SN.err) // error reported, return error
-		return 0;
+	if (SN->err) // error reported, return error
+	return 0;
 
-	SN.npid[SN.lp] = pid;
-	SN.lp++;
-	SN.want_commit = 1;
+	SN->npid[SN->lp] = pid;
+	SN->lp++;
+	SN->want_commit = 1;
 
 	return aid + 100;
 }
-
 
 int netcv_del_pid(int fd, int pid)
 {
@@ -121,22 +118,22 @@ int netcv_del_pid(int fd, int pid)
 	ad = get_adapter(fd);
 	if (!ad)
 		return 0;
-	LOGL(3, "netceiver: del_pid for aid %d, pid %d, err %d", fd, pid, SN.err);
-	if (SN.err) // error reported, return error
-		return 0;
+	LOGL(3, "netceiver: del_pid for aid %d, pid %d, err %d", fd, pid, SN->err);
+	if (SN->err) // error reported, return error
+	return 0;
 
-	for(i = 0; i < MAX_PIDS; i++)
-		if (SN.npid[i] == pid || hit)
+	for (i = 0; i < MAX_PIDS; i++)
+		if (SN->npid[i] == pid || hit)
 		{
-			SN.npid[i] = SN.npid[i + 1];
+			SN->npid[i] = SN->npid[i + 1];
 			hit = 1;
 		}
-	if (hit && sn[fd].lp > 0) sn[fd].lp--;
-	SN.want_commit = 1;
+	if (hit && sn[fd]->lp > 0)
+		sn[fd]->lp--;
+	SN->want_commit = 1;
 
 	return 0;
 }
-
 
 void netcv_commit(adapter *ad)
 {
@@ -149,178 +146,181 @@ void netcv_commit(adapter *ad)
 	dvb_pid_t m_pids[MAX_PIDS];
 
 	/* check if we have to create a receiver instance first */
-	SN.err = 0;
-	if (!SN.ncv_rec)
+	SN->err = 0;
+	if (!SN->ncv_rec)
 	{
 		LOGL(3, "netceiver: add a new receiver instance for adapter %d", ad->id);
 
 		/* call recv_add of libmcli to add a new receiver instance */
-		SN.ncv_rec = recv_add();
+		SN->ncv_rec = recv_add();
 
 		/* register handlers */
-		register_ten_handler(SN.ncv_rec, &handle_ten, ad);
-		register_ts_handler(SN.ncv_rec, &handle_ts, sn + ad->id);
+		register_ten_handler(SN->ncv_rec, &handle_ten, ad);
+		register_ts_handler(SN->ncv_rec, &handle_ts, sn + ad->id);
 
-		if (!SN.ncv_rec) SN.err = 1;
+		if (!SN->ncv_rec) SN->err = 1;
 
-		SN.want_tune = 0; // wait until netcv_tune triggers the tuning
+		SN->want_tune = 0; // wait until netcv_tune triggers the tuning
 	}
 
 	/* tune receiver to a new frequency / tranponder */
-	if (SN.want_tune)
+	if (SN->want_tune)
 	{
 		transponder *tp = &ad->tp;
 
-		int map_pos[] = { 0, 192, 130, 282, -50 }; // Default sat positions: 19.2E, 13E, 28.2E, 5W
-		int map_pol[] = { 0, SEC_VOLTAGE_13, SEC_VOLTAGE_18, SEC_VOLTAGE_OFF };
+		int map_pos[] =
+		{	0, 192, 130, 282, -50}; // Default sat positions: 19.2E, 13E, 28.2E, 5W
+		int map_pol[] =
+		{	0, SEC_VOLTAGE_13, SEC_VOLTAGE_18, SEC_VOLTAGE_OFF};
 
 		switch (tp->sys)
 		{
 			case SYS_DVBS:
 			case SYS_DVBS2:
-				m_pos = 1800 + map_pos[tp->diseqc];
+			m_pos = 1800 + map_pos[tp->diseqc];
 
-				memset(&m_sec, 0, sizeof(recv_sec_t));
-				m_sec.voltage = map_pol[tp->pol];
+			memset(&m_sec, 0, sizeof(recv_sec_t));
+			m_sec.voltage = map_pol[tp->pol];
 
-				memset(&m_fep, 0, sizeof(struct dvb_frontend_parameters));
-				m_fep.frequency = tp->freq;
-				m_fep.inversion = INVERSION_AUTO;
-				m_fep.u.qpsk.symbol_rate = tp->sr;
+			memset(&m_fep, 0, sizeof(struct dvb_frontend_parameters));
+			m_fep.frequency = tp->freq;
+			m_fep.inversion = INVERSION_AUTO;
+			m_fep.u.qpsk.symbol_rate = tp->sr;
 
-				if (tp->sys == SYS_DVBS)
+			if (tp->sys == SYS_DVBS)
+			{
+				m_fep.u.qpsk.fec_inner = tp->fec;
+				type = FE_QPSK;
+			}
+			else
+			{
+				switch (tp->fec) // Handle FEC numbering exceptions
 				{
+					case FEC_3_5:
+					m_fep.u.qpsk.fec_inner = 13;
+					break;
+
+					case FEC_9_10:
+					m_fep.u.qpsk.fec_inner = 14;
+					break;
+
+					default:
 					m_fep.u.qpsk.fec_inner = tp->fec;
-					type = FE_QPSK;
-				}
-				else
-				{
-					switch (tp->fec) // Handle FEC numbering exceptions
-					{
-						case FEC_3_5:
-							m_fep.u.qpsk.fec_inner = 13;
-							break;
-
-						case FEC_9_10:
-							m_fep.u.qpsk.fec_inner = 14;
-							break;
-
-						default:
-							m_fep.u.qpsk.fec_inner = tp->fec;
-					}
-
-					// Für DVB-S2 PSK8 oder QPSK, siehe vdr-mcli-plugin/device.c
-					if (tp->mtype)	m_fep.u.qpsk.fec_inner |= (PSK8 << 16);
-					else		m_fep.u.qpsk.fec_inner |= (QPSK_S2 << 16);
-					type = FE_DVBS2;
 				}
 
-				char *map_posc[] = { "", " @ 19.2E", " @ 13E", " @ 28.2E", " @ 5W" };
-				LOGL(0, "netceiver: adapter %d tuning to %d%s pol:%s sr:%d fec:%s delsys:%s mod:%s",
-						ad->id, tp->freq / 1000, map_posc[tp->diseqc], get_pol(tp->pol), tp->sr / 1000,
-						fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype]);
+				// Für DVB-S2 PSK8 oder QPSK, siehe vdr-mcli-plugin/device.c
+				if (tp->mtype) m_fep.u.qpsk.fec_inner |= (PSK8 << 16);
+				else m_fep.u.qpsk.fec_inner |= (QPSK_S2 << 16);
+				type = FE_DVBS2;
+			}
 
-				break;
+			char *map_posc[] =
+			{	"", " @ 19.2E", " @ 13E", " @ 28.2E", " @ 5W"};
+			LOGL(0, "netceiver: adapter %d tuning to %d%s pol:%s sr:%d fec:%s delsys:%s mod:%s",
+			ad->id, tp->freq / 1000, map_posc[tp->diseqc], get_pol(tp->pol), tp->sr / 1000,
+			fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype]);
 
-				/* set roll-off */
-				// TODO: check if needed for DVB-S2 transponders
-				m_fep.u.qpsk.fec_inner |= (tp->ro << 24);
+			break;
 
-				break;
+			/* set roll-off */
+			// TODO: check if needed for DVB-S2 transponders
+			m_fep.u.qpsk.fec_inner |= (tp->ro << 24);
+
+			break;
 
 			case SYS_DVBC_ANNEX_A:
-				m_pos = 0xfff; /* not sure, to be tested */
-				memset(&m_sec, 0, sizeof(recv_sec_t));
+			m_pos = 0xfff; /* not sure, to be tested */
+			memset(&m_sec, 0, sizeof(recv_sec_t));
 
-				m_fep.frequency = tp->freq * 1000;
-				m_fep.inversion = INVERSION_AUTO;
-				m_fep.u.qam.fec_inner = FEC_NONE;
-				/* we enforce qam256 if qpsk is used falsely, e.g. by Elgato SAT>IP app */
-				m_fep.u.qam.modulation = tp->mtype == QPSK ? QAM_256 : tp->mtype;
-				m_fep.u.qam.symbol_rate = tp->sr;
+			m_fep.frequency = tp->freq * 1000;
+			m_fep.inversion = INVERSION_AUTO;
+			m_fep.u.qam.fec_inner = FEC_NONE;
+			/* we enforce qam256 if qpsk is used falsely, e.g. by Elgato SAT>IP app */
+			m_fep.u.qam.modulation = tp->mtype == QPSK ? QAM_256 : tp->mtype;
+			m_fep.u.qam.symbol_rate = tp->sr;
 
-				type = FE_QAM;
+			type = FE_QAM;
 
-				LOGL(0, "netceiver: adapter %d tuning to %d sr:%d delsys:%s mod:%s",
-						ad->id, tp->freq / 1000, tp->sr / 1000,
-						fe_delsys[tp->sys], fe_modulation[tp->mtype]);
+			LOGL(0, "netceiver: adapter %d tuning to %d sr:%d delsys:%s mod:%s",
+			ad->id, tp->freq / 1000, tp->sr / 1000,
+			fe_delsys[tp->sys], fe_modulation[tp->mtype]);
 
-				break;
+			break;
 
 			case SYS_DVBT:
-				m_fep.frequency = tp->freq * 1000;
-				m_fep.inversion = INVERSION_AUTO;
+			m_fep.frequency = tp->freq * 1000;
+			m_fep.inversion = INVERSION_AUTO;
 
-				switch (tp->bw)
-				{
-					case 8000000:  m_fep.u.ofdm.bandwidth = BANDWIDTH_8_MHZ; break;
-					case 7000000:  m_fep.u.ofdm.bandwidth = BANDWIDTH_7_MHZ; break;
-					case 6000000:  m_fep.u.ofdm.bandwidth = BANDWIDTH_6_MHZ; break;
-					case 0:        m_fep.u.ofdm.bandwidth = BANDWIDTH_AUTO; break;
-					case 5000000:  m_fep.u.ofdm.bandwidth = BANDWIDTH_5_MHZ; break;
-					case 10000000: m_fep.u.ofdm.bandwidth = BANDWIDTH_10_MHZ; break;
-					case 1712000:  m_fep.u.ofdm.bandwidth = BANDWIDTH_1_712_MHZ; break;
-					default:       m_fep.u.ofdm.bandwidth = BANDWIDTH_AUTO;
-						       LOGL(0, "netceiver: DVB-T: unknown bandwith: %d", tp->bw);
-				}
+			switch (tp->bw)
+			{
+				case 8000000: m_fep.u.ofdm.bandwidth = BANDWIDTH_8_MHZ; break;
+				case 7000000: m_fep.u.ofdm.bandwidth = BANDWIDTH_7_MHZ; break;
+				case 6000000: m_fep.u.ofdm.bandwidth = BANDWIDTH_6_MHZ; break;
+				case 0: m_fep.u.ofdm.bandwidth = BANDWIDTH_AUTO; break;
+				case 5000000: m_fep.u.ofdm.bandwidth = BANDWIDTH_5_MHZ; break;
+				case 10000000: m_fep.u.ofdm.bandwidth = BANDWIDTH_10_MHZ; break;
+				case 1712000: m_fep.u.ofdm.bandwidth = BANDWIDTH_1_712_MHZ; break;
+				default: m_fep.u.ofdm.bandwidth = BANDWIDTH_AUTO;
+				LOGL(0, "netceiver: DVB-T: unknown bandwith: %d", tp->bw);
+			}
 
-				m_fep.u.ofdm.code_rate_HP = FEC_AUTO; // TBC
-				m_fep.u.ofdm.code_rate_LP = FEC_AUTO; // TBC
-				m_fep.u.ofdm.constellation = QAM_32; // tp->mtype, not properly handled by vdr-satip-plugin ?
-				m_fep.u.ofdm.transmission_mode = TRANSMISSION_MODE_AUTO; // tp->tmode, not yet implemente upstream?
-				m_fep.u.ofdm.guard_interval = tp->gi;
-				m_fep.u.ofdm.hierarchy_information = HIERARCHY_NONE;
+			m_fep.u.ofdm.code_rate_HP = FEC_AUTO; // TBC
+			m_fep.u.ofdm.code_rate_LP = FEC_AUTO;// TBC
+			m_fep.u.ofdm.constellation = QAM_32;// tp->mtype, not properly handled by vdr-satip-plugin ?
+			m_fep.u.ofdm.transmission_mode = TRANSMISSION_MODE_AUTO;// tp->tmode, not yet implemente upstream?
+			m_fep.u.ofdm.guard_interval = tp->gi;
+			m_fep.u.ofdm.hierarchy_information = HIERARCHY_NONE;
 
-				// SRF
-				/*
-				m_fep.frequency = 562000000;
-				m_fep.inversion = INVERSION_AUTO;
-				m_fep.u.ofdm.bandwidth = BANDWIDTH_8_MHZ;
-				m_fep.u.ofdm.code_rate_HP = FEC_AUTO;
-				m_fep.u.ofdm.code_rate_LP = FEC_AUTO;
-				m_fep.u.ofdm.constellation = QAM_32;
-				m_fep.u.ofdm.transmission_mode = TRANSMISSION_MODE_AUTO;
-				m_fep.u.ofdm.guard_interval = GUARD_INTERVAL_AUTO;
-				m_fep.u.ofdm.hierarchy_information = HIERARCHY_NONE;
-				*/
+			// SRF
+			/*
+			 m_fep.frequency = 562000000;
+			 m_fep.inversion = INVERSION_AUTO;
+			 m_fep.u.ofdm.bandwidth = BANDWIDTH_8_MHZ;
+			 m_fep.u.ofdm.code_rate_HP = FEC_AUTO;
+			 m_fep.u.ofdm.code_rate_LP = FEC_AUTO;
+			 m_fep.u.ofdm.constellation = QAM_32;
+			 m_fep.u.ofdm.transmission_mode = TRANSMISSION_MODE_AUTO;
+			 m_fep.u.ofdm.guard_interval = GUARD_INTERVAL_AUTO;
+			 m_fep.u.ofdm.hierarchy_information = HIERARCHY_NONE;
+			 */
 
-				type = FE_OFDM;
+			type = FE_OFDM;
 
-				LOGL(0, "netceiver: adapter %d tuning to %d inv: %d mtype: %d "
-						"hprate: %d tmode: %d gi: %d bw:%d sm %d t2id %d",
-						ad->id, tp->freq / 1000, tp->inversion, tp->mtype,
-						tp->hprate, tp->tmode, tp->gi, tp->bw, tp->sm, tp->t2id);
+			LOGL(0, "netceiver: adapter %d tuning to %d inv: %d mtype: %d "
+			"hprate: %d tmode: %d gi: %d bw:%d sm %d t2id %d",
+			ad->id, tp->freq / 1000, tp->inversion, tp->mtype,
+			tp->hprate, tp->tmode, tp->gi, tp->bw, tp->sm, tp->t2id);
 
-				break;
+			break;
 		}
 
 		memset(m_pids, 0, sizeof(m_pids));
 		m_pids[0].pid=-1;
 
 		/* call recv_tune of libmcli */
-		if(recv_tune(SN.ncv_rec, type, m_pos, &m_sec, &m_fep, m_pids) != 0)
-			LOGL(0, "netceiver: Tuning receiver failed");
+		if(recv_tune(SN->ncv_rec, type, m_pos, &m_sec, &m_fep, m_pids) != 0)
+		LOGL(0, "netceiver: Tuning receiver failed");
 
 		ad->strength = 0;
 		ad->status = 0;
 		ad->snr = 0;
 		ad->ber = 0;
 
-		SN.want_tune = 0;
+		SN->want_tune = 0;
 	}
 
 	/* activate or deactivate PIDs */
-	if (SN.want_commit)
+	if (SN->want_commit)
 	{
-		if (SN.lp)
+		if (SN->lp)
 		{
 			char dbuf[1024] = "REEL: recv_pid: "; //debug
 
 			memset(m_pids, 0, sizeof(m_pids));
-			for(i = 0; i < SN.lp; i++)
+			for(i = 0; i < SN->lp; i++)
 			{
-				sprintf(dbuf + strlen(dbuf), "[%04d]", SN.npid[i]);
-				m_pids[i].pid = SN.npid[i];
+				sprintf(dbuf + strlen(dbuf), "[%04d]", SN->npid[i]);
+				m_pids[i].pid = SN->npid[i];
 				m_pids[i].id = 0; // here we maybe have to set the SID if this PID is encrypted
 
 			}
@@ -329,23 +329,22 @@ void netcv_commit(adapter *ad)
 			m_pids[i].pid = -1;
 			/* call recv_pids of libmcli to set the active PIDs */
 			usleep(10000);
-			if(recv_pids (SN.ncv_rec, m_pids))
-				LOGL(0, "netceiver: seting PIDs failed");
+			if(recv_pids (SN->ncv_rec, m_pids))
+			LOGL(0, "netceiver: seting PIDs failed");
 		}
 		else
 		{
 			//fprintf(stderr, "REEL: recv_pid: none\n");
 			/* call recv_stop of libmcli to deactivate all PIDs */
-			if(recv_stop (SN.ncv_rec))
-				LOGL(0, "netceiver: removing all PIDs failed");
+			if(recv_stop (SN->ncv_rec))
+			LOGL(0, "netceiver: removing all PIDs failed");
 		}
 
-		SN.want_commit = 0;
+		SN->want_commit = 0;
 	}
 
 	return;
 }
-
 
 int netcv_tune(int aid, transponder * tp)
 {
@@ -355,19 +354,17 @@ int netcv_tune(int aid, transponder * tp)
 	if (!ad)
 		return 1;
 
-	SN.want_tune = 1;	// we do not tune right now, just set the flag for netcv_commit
-	SN.want_commit = 0;
-	SN.lp = 0;		// make sure number of active pids is 0 after tuning
+	SN->want_tune = 1;// we do not tune right now, just set the flag for netcv_commit
+	SN->want_commit = 0;
+	SN->lp = 0;		// make sure number of active pids is 0 after tuning
 	return 0;
 }
-
 
 fe_delivery_system_t netcv_delsys(int aid, int fd, fe_delivery_system_t *sys)
 {
 	//fprintf(stderr, "REEL: netcv_delsys (id=%d)\n", aid);
 	return 0;
 }
-
 
 void find_netcv_adapter(adapter **a)
 {
@@ -377,10 +374,11 @@ void find_netcv_adapter(adapter **a)
 
 	/* check if network interface is available */
 	struct ifaddrs *nif, *nif1;
-	getifaddrs (&nif);
+	getifaddrs(&nif);
 
 	nif1 = nif;
-	while (strcmp (nif1->ifa_name, opts.netcv_if) || nif1->ifa_addr->sa_family != AF_INET6)
+	while (strcmp(nif1->ifa_name, opts.netcv_if)
+			|| nif1->ifa_addr->sa_family != AF_INET6)
 	{
 		if (nif1->ifa_next == NULL)
 		{
@@ -394,15 +392,16 @@ void find_netcv_adapter(adapter **a)
 	if (nif1 == NULL || (nif1->ifa_flags & IFF_NETCV) != IFF_NETCV)
 	{
 		LOGL(0, "network interface %s not available", opts.netcv_if);
-		exit (0);
+		exit(0);
 	}
 	freeifaddrs(nif);
 
 	/* call recv_init of libmcli to initialize the NetCeiver API */
-	if(recv_init(opts.netcv_if, 23000))
+	if (recv_init(opts.netcv_if, 23000))
 		LOGL(0, "Netceiver init failed");
- 
-	fprintf(stderr, "REEL: Search for %d Netceiver%s on %s... ", opts.netcv_count, opts.netcv_count == 1 ? "" : "s", opts.netcv_if);
+
+	fprintf(stderr, "REEL: Search for %d Netceiver%s on %s... ",
+			opts.netcv_count, opts.netcv_count == 1 ? "" : "s", opts.netcv_if);
 	n = 0;
 	do
 	{
@@ -410,20 +409,23 @@ void find_netcv_adapter(adapter **a)
 		fprintf(stderr, "##");
 		nc_list = nc_get_list();
 	} while (nc_list->nci_num < opts.netcv_count && n++ < 19);
-	nc_lock_list ();
+	nc_lock_list();
 	fprintf(stderr, "\n");
 
 	/* count available tuner types */
-	int nc_sys_c[] = { 0, 0, 0, 0, 0 };
-	int map_type[] = { FE_DVBS2, FE_QPSK, FE_QAM, FE_OFDM, FE_ATSC };
+	int nc_sys_c[] =
+	{ 0, 0, 0, 0, 0 };
+	int map_type[] =
+	{ FE_DVBS2, FE_QPSK, FE_QAM, FE_OFDM, FE_ATSC };
 	int nc_sys_t = 0;
 	for (n = 0; n < nc_list->nci_num; n++)
 	{
 		netceiver_info_t *nci = nc_list->nci + n;
-		fprintf (stderr, "Found NetCeiver: %s \n", nci->uuid);
+		fprintf(stderr, "Found NetCeiver: %s \n", nci->uuid);
 		for (i = 0; i < nci->tuner_num; i++)
 		{
-			fprintf (stderr, "	Tuner: %s, Type %d\n", nci->tuner[i].fe_info.name, nci->tuner[i].fe_info.type);
+			fprintf(stderr, "	Tuner: %s, Type %d\n", nci->tuner[i].fe_info.name,
+					nci->tuner[i].fe_info.type);
 			nc_sys_c[nci->tuner[i].fe_info.type]++;
 			nc_sys_t++;
 		}
@@ -433,8 +435,10 @@ void find_netcv_adapter(adapter **a)
 	i = FE_QPSK;
 	na = a_count;
 	char dbuf[1024] = "netceiver: adding ";
-	for (n = 0; n < nc_sys_t; n++) {
-		while (nc_sys_c[map_type[i]] == 0 && i < FE_DVBS2) i++;
+	for (n = 0; n < nc_sys_t; n++)
+	{
+		while (nc_sys_c[map_type[i]] == 0 && i < FE_DVBS2)
+			i++;
 		nc_sys_c[map_type[i]]--;
 
 		if (is_adapter_disabled(na))
@@ -443,15 +447,19 @@ void find_netcv_adapter(adapter **a)
 			continue;
 		}
 
-		if (na >= MAX_ADAPTERS) break;
-		if (!a[na]) a[na] = malloc1(sizeof(adapter));
+		if (na >= MAX_ADAPTERS)
+			break;
+		if (!a[na])
+			a[na] = malloc1(sizeof(adapter));
+		if (!sn[na])
+			sn[na] = malloc1(sizeof(SNetceiver));
 
 		ad = a[na];
 		ad->pa = 0;
 		ad->fn = 0;
-		sn[na].want_tune = 0;
-		sn[na].want_commit = 0;
-		sn[na].ncv_rec = NULL;
+		sn[na]->want_tune = 0;
+		sn[na]->want_commit = 0;
+		sn[na]->ncv_rec = NULL;
 
 		/* initialize signal status info */
 		ad->strength = 0;
@@ -470,10 +478,12 @@ void find_netcv_adapter(adapter **a)
 		ad->delsys = (Dvb_delsys) netcv_delsys;
 		ad->post_init = (Adapter_commit) NULL;
 		ad->close = (Adapter_commit) netcv_close;
+		ad->type = ADAPTER_NETCV;
 
 		/* register delivery system type */
-		for (k = 0; k < 10; k++) ad->sys[k] = 0;
-		switch(map_type[i])
+		for (k = 0; k < 10; k++)
+			ad->sys[k] = 0;
+		switch (map_type[i])
 		{
 		case FE_DVBS2:
 			ad->sys[0] = SYS_DVBS2;
@@ -509,7 +519,6 @@ void find_netcv_adapter(adapter **a)
 			a[na]->pa = a[na]->fn = -1;
 }
 
-
 /*
  * Handle TS data
  * This function is called by libmcli each time a IP packet with TS packets arrives.
@@ -517,16 +526,19 @@ void find_netcv_adapter(adapter **a)
  *
  */
 
-int handle_ts (unsigned char *buffer, size_t len, void *p) {
+int handle_ts(unsigned char *buffer, size_t len, void *p)
+{
 	SNetceiver *nc = p;
 	size_t lw;
 
-	if (nc->lp == 0) return len;
+	if (nc->lp == 0)
+		return len;
 
 	/* simple data format check */
 	if (buffer[0] != 0x47 || len % 188 != 0)
 	{
-		LOGL(0, "netceiver: TS data mallformed: buf[0]=0x%02x len=%d", buffer[0], len);
+		LOGL(0, "netceiver: TS data mallformed: buf[0]=0x%02x len=%d",
+				buffer[0], len);
 		return len;
 	}
 
@@ -543,23 +555,24 @@ int handle_ts (unsigned char *buffer, size_t len, void *p) {
 	/* debug code */
 	switch (len)
 	{
-		case 1316: // 7 TS packets
-			fprintf(stderr, "\bO");
-			break;
+	case 1316: // 7 TS packets
+		fprintf(stderr, "\bO");
+		break;
 
-		case 188: // 1 TS packet
-			fprintf(stderr, "\b.");
-			break;
+	case 188: // 1 TS packet
+		fprintf(stderr, "\b.");
+		break;
 
-		default:
-			fprintf(stderr, "\bo");
+	default:
+		fprintf(stderr, "\bo");
 	}
 
 	return len;
 }
 
 /* Handle signal status information */
-int handle_ten (tra_t *ten, void *p) {
+int handle_ten(tra_t *ten, void *p)
+{
 	adapter *ad = p;
 	recv_festatus_t *festat;
 
@@ -574,7 +587,8 @@ int handle_ten (tra_t *ten, void *p) {
 		return 0;
 
 		/* debug code */
-		fprintf(stderr, "\nStatus: %02X, Strength: %04X, SNR: %04X, BER: %04X -  ",
+		fprintf(stderr,
+				"\nStatus: %02X, Strength: %04X, SNR: %04X, BER: %04X -  ",
 				festat->st, festat->strength, festat->snr, festat->ber);
 	}
 
