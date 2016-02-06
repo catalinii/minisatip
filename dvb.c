@@ -884,8 +884,10 @@ void copy_dvb_parameters(transponder * s, transponder * d)
 	if (d->diseqc < 1) // force position 1 on the diseqc switch
 		d->diseqc = 1;
 
+	/* Why?
 	if ((d->sys == SYS_DVBS2) && (d->mtype == 0))
 		d->mtype = PSK_8;
+	*/
 	if ((d->sys == SYS_DVBS) && (d->mtype == 0))
 		d->mtype = QPSK;
 
