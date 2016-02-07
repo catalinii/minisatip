@@ -84,7 +84,7 @@ int netcv_open_device(adapter *ad)
 	int pipe_fd[2];
 	if (pipe2 (pipe_fd, O_NONBLOCK)) LOGL (3, "netceiver: creating pipe failed");
 	ad->dvr = pipe_fd[0];	// read end of pipe
-	SN->pwfd = pipe_fd[1];// write end of pipe
+	SN->pwfd = pipe_fd[1];	// write end of pipe
 	LOGL(2, "netceiver: creating DVR pipe for adapter %d  -> dvr: %d", ad->id, ad->dvr);
 
 	return 0;
@@ -156,7 +156,7 @@ void netcv_commit(adapter *ad)
 
 		/* register handlers */
 		register_ten_handler(SN->ncv_rec, &handle_ten, ad);
-		register_ts_handler(SN->ncv_rec, &handle_ts, sn + ad->id);
+		register_ts_handler(SN->ncv_rec, &handle_ts, SN);
 
 		if (!SN->ncv_rec) SN->err = 1;
 
