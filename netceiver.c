@@ -84,7 +84,7 @@ int netcv_open_device(adapter *ad)
 	int pipe_fd[2];
 	if (pipe2 (pipe_fd, O_NONBLOCK)) LOGL (3, "netceiver: creating pipe failed");
 	ad->dvr = pipe_fd[0];	// read end of pipe
-	SN->pwfd = pipe_fd[1];// write end of pipe
+	SN->pwfd = pipe_fd[1];	// write end of pipe
 	LOGL(2, "netceiver: creating DVR pipe for adapter %d  -> dvr: %d", ad->id, ad->dvr);
 
 	return 0;
@@ -156,7 +156,7 @@ void netcv_commit(adapter *ad)
 
 		/* register handlers */
 		register_ten_handler(SN->ncv_rec, &handle_ten, ad);
-		register_ts_handler(SN->ncv_rec, &handle_ts, sn + ad->id);
+		register_ts_handler(SN->ncv_rec, &handle_ts, SN);
 
 		if (!SN->ncv_rec) SN->err = 1;
 
@@ -265,31 +265,38 @@ void netcv_commit(adapter *ad)
 			}
 
 			m_fep.u.ofdm.code_rate_HP = FEC_AUTO; // TBC
-			m_fep.u.ofdm.code_rate_LP = FEC_AUTO;// TBC
-			m_fep.u.ofdm.constellation = QAM_32;// tp->mtype, not properly handled by vdr-satip-plugin ?
-			m_fep.u.ofdm.transmission_mode = TRANSMISSION_MODE_AUTO;// tp->tmode, not yet implemente upstream?
+			m_fep.u.ofdm.code_rate_LP = FEC_AUTO; // TBC
+			
+			switch (tp->mtype) // not properly handled by vdr-satip-plugin ?
+			{
+				case 0: m_fep.u.ofdm.constellation = QAM_AUTO; break;
+				case 6: m_fep.u.ofdm.constellation = QAM_32; break;
+				default: m_fep.u.ofdm.constellation = tp->mtype;
+			}
+
+			m_fep.u.ofdm.transmission_mode = tp->tmode;
 			m_fep.u.ofdm.guard_interval = tp->gi;
 			m_fep.u.ofdm.hierarchy_information = HIERARCHY_NONE;
 
 			// SRF
 			/*
-			 m_fep.frequency = 562000000;
-			 m_fep.inversion = INVERSION_AUTO;
-			 m_fep.u.ofdm.bandwidth = BANDWIDTH_8_MHZ;
-			 m_fep.u.ofdm.code_rate_HP = FEC_AUTO;
-			 m_fep.u.ofdm.code_rate_LP = FEC_AUTO;
-			 m_fep.u.ofdm.constellation = QAM_32;
-			 m_fep.u.ofdm.transmission_mode = TRANSMISSION_MODE_AUTO;
-			 m_fep.u.ofdm.guard_interval = GUARD_INTERVAL_AUTO;
-			 m_fep.u.ofdm.hierarchy_information = HIERARCHY_NONE;
-			 */
+			m_fep.frequency = 562000000;
+			m_fep.inversion = INVERSION_AUTO;
+			m_fep.u.ofdm.bandwidth = BANDWIDTH_8_MHZ;
+			m_fep.u.ofdm.code_rate_HP = FEC_AUTO;
+			m_fep.u.ofdm.code_rate_LP = FEC_AUTO;
+			m_fep.u.ofdm.constellation = QAM_32;
+			m_fep.u.ofdm.transmission_mode = TRANSMISSION_MODE_AUTO;
+			m_fep.u.ofdm.guard_interval = GUARD_INTERVAL_AUTO;
+			m_fep.u.ofdm.hierarchy_information = HIERARCHY_NONE;
+			*/
 
 			type = FE_OFDM;
 
 			LOGL(0, "netceiver: adapter %d tuning to %d inv: %d mtype: %d "
-			"hprate: %d tmode: %d gi: %d bw:%d sm %d t2id %d",
-			ad->id, tp->freq / 1000, tp->inversion, tp->mtype,
-			tp->hprate, tp->tmode, tp->gi, tp->bw, tp->sm, tp->t2id);
+					"hprate: %d tmode: %d gi: %d bw:%d sm %d t2id %d",
+					ad->id, tp->freq / 1000, tp->inversion, tp->mtype,
+					tp->hprate, tp->tmode, tp->gi, tp->bw, tp->sm, tp->t2id);
 
 			break;
 		}

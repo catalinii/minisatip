@@ -53,6 +53,7 @@ typedef fe_delivery_system_t (*Dvb_delsys)(int aid, int fd,
 
 #define ADAPTER_DVB 1
 #define ADAPTER_SATIP 2
+#define ADAPTER_NETCV 3
 #define MAX_DELSYS 10
 
 typedef struct struct_adapter
