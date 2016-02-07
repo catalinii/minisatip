@@ -54,6 +54,7 @@ typedef fe_delivery_system_t (*Dvb_delsys)(int aid, int fd,
 #define ADAPTER_DVB 1
 #define ADAPTER_SATIP 2
 #define ADAPTER_NETCV 3
+
 #define MAX_DELSYS 10
 
 typedef struct struct_adapter
@@ -89,24 +90,8 @@ typedef struct struct_adapter
 	int committed_no, uncommitted_no; // diseqc info
 	int id;
 	int pat_processed, transponder_id, pat_ver;
-// satipc
-	char *sip;
-	int sport;
-	char session[18];
-	int stream_id;
-	int listen_rtp;
-	int rtcp, rtcp_sock, cseq;
-	int err, last_connect;
-	int wp, qp; // written packet, queued packet
-	char ignore_packets; // ignore packets coming from satip server while tuning
-	char satip_fe, last_cmd;
-	char expect_reply, force_commit, want_commit, want_tune, sent_transport;
-	int satip_last_setup;
 	char name[5];
-	uint8_t satip_addpids, satip_setup_pids;
 
-	uint32_t rcvp, repno, rtp_miss, rtp_ooo;   // rtp statstics
-	uint16_t rtp_seq;
 	Set_pid set_pid;
 	Del_filters del_filters;
 	Adapter_commit commit;
