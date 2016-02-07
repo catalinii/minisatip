@@ -239,7 +239,8 @@ int init_all_hw()
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		if (!a[i]
 				|| ((!a[i]->enabled || a[i]->fe <= 0)
-						&& ((a[i]->pa >= 0 && a[i]->fn >= 0) || a[i]->sip)))
+						&& ((a[i]->pa >= 0 && a[i]->fn >= 0) || 
+								a[i]->type > ADAPTER_DVB))) // ADAPTER is intialized and not DVB
 		{
 			if (!(rv = init_hw(i)))
 				num_adapters++;
@@ -907,7 +908,7 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 		t = &ad->tp;
 	memset(dad, 0, sizeof(dad));
 	// do just max 3 signal check 1s after tune
-	if (use_ad && (!ad->sip)
+	if (use_ad && (!ad->type == ADAPTER_DVB)
 			&& ((ad->status <= 0 && ad->status_cnt < 8 && ad->status_cnt++ > 4)
 					|| opts.force_scan))
 	{
@@ -1369,6 +1370,7 @@ char *get_all_delsys(int aid, char *dest, int max_size)
 }
 
 adapter *a_tmp;
+
 _symbols adapters_sym[] =
 {
 { "ad_enabled", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS,
@@ -1392,8 +1394,6 @@ MAX_ADAPTERS, (long int) &a_tmp[0].strength - (long int) &a_tmp[0] },
 { "ad_diseqc", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS,
 		(long int) &a_tmp[0].tp.diseqc - (long int) &a_tmp[0] },
 { "ad_fe", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, (long int) &a_tmp[0].fe
-		- (long int) &a_tmp[0] },
-{ "ad_satip", VAR_AARRAY_PSTRING, a, 1, MAX_ADAPTERS, (long int) &a_tmp[0].sip
 		- (long int) &a_tmp[0] },
 { "ad_master", VAR_AARRAY_UINT8, a, 1,
 MAX_ADAPTERS, (long int) &a_tmp[0].master_sid - (long int) &a_tmp[0] },

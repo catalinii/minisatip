@@ -1040,8 +1040,6 @@ void find_dvb_adapter(adapter **a)
 				ad = a[na];
 				ad->pa = i;
 				ad->fn = j;
-				ad->sip = NULL;
-				ad->sport = 0;
 
 				ad->open = (Open_device) dvb_open_device;
 				ad->set_pid = (Set_pid) dvb_set_pid;
@@ -1051,7 +1049,7 @@ void find_dvb_adapter(adapter **a)
 				ad->delsys = (Dvb_delsys) dvb_delsys;
 				ad->post_init = NULL;
 				ad->close = NULL;
-
+				ad->type = ADAPTER_DVB;
 				close(fd);
 				na++;
 				a_count = na; // update adapter counter

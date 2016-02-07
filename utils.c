@@ -620,12 +620,22 @@ extern _symbols minisatip_sym[];
 extern _symbols stream_sym[];
 #ifdef TABLES_H
 extern _symbols dvbapi_sym[];
-#else
-#define dvbapi_sym NULL
+#endif
+#ifndef DISABLE_SATIPCLIENT
+extern _symbols satipc_sym[];
 #endif
 
-_symbols *sym[] =
-{ adapters_sym, stream_sym, minisatip_sym, dvbapi_sym, NULL };
+_symbols *sym[] = { 
+		adapters_sym, 
+		stream_sym, 
+		minisatip_sym, 
+#ifdef TABLES_H
+		dvbapi_sym,
+#endif
+#ifndef DISABLE_SATIPCLIENT
+		satipc_sym,
+#endif
+		NULL };
 
 int var_eval(char *orig, int len, char *dest, int max_len)
 {
