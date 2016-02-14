@@ -1095,7 +1095,7 @@ void write_pid_file()
 }
 
 pthread_t main_tid;
-
+extern int sock_signal;
 int main(int argc, char *argv[])
 {
 	int sock_st, sock_bw;
@@ -1138,13 +1138,20 @@ int main(int argc, char *argv[])
 	NULL, (socket_action) close_http))
 		FAIL("sockets_add failed for http");
 
+	if (0 > (sock_signal = sockets_add(SOCK_TIMEOUT, NULL, -1, TYPE_UDP, NULL,
+	NULL, (socket_action) signal_thread)))
+		FAIL("sockets_add failed for signal thread");
+
+	set_socket_thread(sock_signal, start_new_thread("signal"));
+	sockets_timeout(sock_signal, 1000);
+
 	if (0 > (sock_bw = sockets_add(SOCK_TIMEOUT, NULL, -1, TYPE_UDP, NULL,
 	NULL, (socket_action) calculate_bw)))
 		FAIL("sockets_add failed for BW calculation");
 
-//	set_socket_thread(sock_bw, get_socket_thread(sock_st));
+	set_socket_thread(sock_bw, get_socket_thread(sock_signal));
 	sockets_timeout(sock_bw, 1000);
-
+	
 #ifdef TABLES_H
 	tables_init();
 #endif

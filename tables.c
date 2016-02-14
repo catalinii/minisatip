@@ -466,8 +466,8 @@ int assemble_packet(uint8_t **b1, adapter *ad, int check_crc)
 		len = ((b[6] & 0xF) << 8) + b[7];
 
 	if (len > 1500 || len < 0)
-		LOG_AND_RETURN(0, "assemble_packet: len %d not valid for pid %d", len,
-				pid);
+		LOG_AND_RETURN(0, "assemble_packet: len %d not valid for pid %d [%02X %02X %02X %02X %02X]", len,
+				pid, b[4], b[5], b[6], b[7], b[8]);
 
 	item_key = TABLES_ITEM + (ad->id << 16) + pid;
 

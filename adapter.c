@@ -42,6 +42,7 @@
 adapter *a[MAX_ADAPTERS];
 int a_count;
 char disabled[MAX_ADAPTERS]; // disabled adapters
+int sock_signal;
 
 SMutex a_mutex;
 extern struct struct_opts opts;
@@ -565,8 +566,7 @@ int tune(int aid, int sid)
 		ad->tp.uncommitted_no = ad->uncommitted_no;
 
 		rv = ad->tune(ad->id, &ad->tp);
-		ad->status = 0;
-		ad->status_cnt = 0;
+		ad->status = -1;
 		set_socket_pos(ad->sock, 0);	// flush the existing buffer
 		ad->rlen = 0;
 		if (ad->sid_cnt > 1)	 // the master changed the frequency
@@ -907,49 +907,13 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 	else
 		t = &ad->tp;
 	memset(dad, 0, sizeof(dad));
-	// do just max 3 signal check 1s after tune
-	if (use_ad && (!ad->type == ADAPTER_DVB)
-			&& ((ad->status <= 0 && ad->status_cnt < 8 && ad->status_cnt++ > 4)
-					|| opts.force_scan))
-	{
-		int new_gs = 1;
-		ts = getTick();
-		if (ad->new_gs == 0
-				&& (new_gs = get_signal_new(ad->fe, &ad->status, &ad->ber,
-						&ad->strength, &ad->snr)))
-			get_signal(ad->fe, &ad->status, &ad->ber, &ad->strength, &ad->snr);
-		else if (new_gs)
-			get_signal(ad->fe, &ad->status, &ad->ber, &ad->strength, &ad->snr);
 
-		if (ad->status > 0 && new_gs != 0) // we have signal but no new stats, don't try to get them from now on until adapter close
-			ad->new_gs = 1;
-
-		if (ad->max_strength <= ad->strength)
-			ad->max_strength = (ad->strength > 0) ? ad->strength : 1;
-		if (ad->max_snr <= ad->snr)
-			ad->max_snr = (ad->snr > 0) ? ad->snr : 1;
-		LOG(
-				"get_signal%s took %d ms for adapter %d handle %d (status: %d, ber: %d, strength:%d, snr: %d, max_strength: %d, max_snr: %d %d)",
-				new_gs ? "" : "_new", getTick() - ts, aid, ad->fe, ad->status,
-				ad->ber, ad->strength, ad->snr, ad->max_strength, ad->max_snr,
-				opts.force_scan);
-		if (ad->snr > 4096)
-			new_gs = 0;
-		if (new_gs)
-		{
-			ad->strength = ad->strength * 255.0 / ad->max_strength;
-			ad->snr = ad->snr * 255.0 / ad->max_snr;
-		}
-		else
-		{
-			ad->strength = ad->strength >> 8;
-			ad->snr = ad->snr >> 8;
-		}
-	}
 	if (use_ad)
 	{
 		strength = ad->strength;
-		snr = ad->snr >> 4;
+		snr = ad->snr;
+		if(snr > 15)
+			snr = snr >> 4;
 		status = (ad->status & FE_HAS_LOCK) > 0;
 	}
 	if (t->sys == 0)
@@ -1022,7 +986,11 @@ void sort_pids(int aid)
 void free_all_adapters()
 {
 	int i;
-
+	sockets_del(sock_signal);
+	for (i = 0; i < MAX_ADAPTERS; i++)
+		if(a[i] && a[i]->enabled)
+				close_adapter(i);
+	
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		if (a[i])
 		{
@@ -1244,6 +1212,26 @@ int delsys_match(adapter *ad, int del_sys)
 			return 1;
 	return 0;
 
+}
+
+void signal_thread(sockets *s)
+{
+	int i, ts, ctime;
+	adapter *ad;
+	int status;
+	for(i=0;i<MAX_ADAPTERS;i++)
+		if((ad = get_adapter_nw(i)) && ad->get_signal && ad->tp.freq && (opts.force_scan || (ad->status <= 0)))
+		{
+			ts = getTick();
+			ad->get_signal(ad);
+			ctime = getTick();
+			LOG(
+					"get_signal%s took %d ms for adapter %d handle %d (status: %d, ber: %d, strength:%d, snr: %d, max_strength: %d, max_snr: %d %d)",
+					ad->new_gs ? "" : "_new", ctime - ts, ad->id, ad->fe, ad->status,
+					ad->ber, ad->strength, ad->snr, ad->max_strength, ad->max_snr,
+					opts.force_scan);
+
+		}
 }
 
 void adapter_lock1(char *FILE, int line, int aid)

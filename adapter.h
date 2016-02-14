@@ -47,6 +47,7 @@ typedef int (*Set_pid)(void *ad, uint16_t i_pid);
 typedef int (*Del_filters)(int fd, int pid);
 typedef int (*Adapter_commit)(void *ad);
 typedef int (*Open_device)(void *ad);
+typedef int (*Device_signal)(void *ad);
 typedef int (*Tune)(int aid, transponder * tp);
 typedef fe_delivery_system_t (*Dvb_delsys)(int aid, int fd,
 		fe_delivery_system_t *sys);
@@ -77,9 +78,8 @@ typedef struct struct_adapter
 	unsigned char *buf;			// 7 rtp packets = MAX_PACK, 7 frames / packet
 	int rlen, rtime;
 	int last_sort;
-	int status_cnt;
 	int new_gs;
-	fe_status_t status;
+	int status;
 	uint32_t ber;
 	uint16_t strength, snr, max_strength, max_snr;
 	uint32_t pid_err, dec_err; // detect pids received but not part of any stream, decrypt errors
@@ -98,6 +98,7 @@ typedef struct struct_adapter
 	Open_device open;
 	Tune tune;
 	Dvb_delsys delsys;
+	Device_signal get_signal;
 	Adapter_commit post_init, close;
 } adapter;
 
@@ -136,6 +137,7 @@ void adapter_lock1(char *FILE, int line, int aid);
 void adapter_unlock1(char *FILE, int line, int aid);
 char is_adapter_disabled(int i);
 void set_adapters_delsys(char *o);
+void signal_thread(sockets *s);
 
 #define get_adapter(a) get_adapter1(a, __FILE__, __LINE__)
 #define get_adapter_nw(aid) ((aid >= 0 && aid < MAX_ADAPTERS && a[aid] && a[aid]->enabled)?a[aid]:NULL)

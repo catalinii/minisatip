@@ -216,10 +216,6 @@ int tune_it_s2 (int fd_frontend, transponder * tp);
 
 fe_delivery_system_t dvb_delsys (int aid, int fd, fe_delivery_system_t *sys);
 #endif
-void get_signal (int fd, fe_status_t * status, uint32_t * ber,
-	uint16_t * strength, uint16_t * snr);
-int get_signal_new (int fd, fe_status_t * status, uint32_t * ber,
-	uint16_t * strength, uint16_t * snr);
 int detect_dvb_parameters (char *s, transponder * tp);
 void init_dvb_parameters (transponder * tp);
 void copy_dvb_parameters (transponder * s, transponder * d);

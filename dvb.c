@@ -42,7 +42,6 @@
 #include "ca.h"
 #include "utils.h"
 
-
 char *fe_pilot[] =
 { "on", "off", " ", //auto
 		NULL };
@@ -117,7 +116,6 @@ struct diseqc_cmd
 	struct dvb_diseqc_master_cmd cmd;
 	uint32_t wait;
 };
-
 
 int dvb_open_device(adapter *ad)
 {
@@ -196,8 +194,7 @@ int send_diseqc(int fd, int pos, int pol, int hiband, int committed_no,
 			| (((posc << 2) & 0x0c) | (hiband ? 1 : 0) | (pol ? 2 : 0));
 	uncmd.msg[3] = 0xf0 | (posu & 0x0f);
 
-	LOGL(3,
-			"send_diseqc fd %d, pos = %d (c %d u %d), pol = %d, hiband = %d",
+	LOGL(3, "send_diseqc fd %d, pos = %d (c %d u %d), pol = %d, hiband = %d",
 			fd, pos, posc, posu, pol, hiband);
 
 	if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
@@ -902,18 +899,21 @@ void copy_dvb_parameters(transponder * s, transponder * d)
 }
 
 #ifdef DISABLE_LINUXDVB
-void get_signal(int fd, fe_status_t * status, uint32_t * ber,
+void get_signal(int fd, int * status, uint32_t * ber,
 		uint16_t * strength, uint16_t * snr)
-{ return; }
+{	return;}
 
-int get_signal_new(int fd, fe_status_t * status, uint32_t * ber,
+int get_signal_new(int fd, int * status, uint32_t * ber,
 		uint16_t * strength, uint16_t * snr)
-{ return -1; }
+{	return -1;}
+
+void dvb_get_signal(adapter *ad)
+{}
 #endif  // #ifdef DISABLE_LINUXDVB
 
 #ifndef DISABLE_LINUXDVB
 
-void get_signal(int fd, fe_status_t * status, uint32_t * ber,
+void get_signal(int fd, int * status, uint32_t * ber,
 		uint16_t * strength, uint16_t * snr)
 {
 	*status = *ber = *snr = *strength = 0;
@@ -938,7 +938,7 @@ void get_signal(int fd, fe_status_t * status, uint32_t * ber,
 	}
 }
 
-int get_signal_new(int fd, fe_status_t * status, uint32_t * ber,
+int get_signal_new(int fd, int * status, uint32_t * ber,
 		uint16_t * strength, uint16_t * snr)
 {
 
@@ -1003,6 +1003,37 @@ int get_signal_new(int fd, fe_status_t * status, uint32_t * ber,
 #endif
 }
 
+void dvb_get_signal(adapter *ad)
+{
+	int new_gs = 1;
+	if (ad->new_gs == 0
+			&& (new_gs = get_signal_new(ad->fe, &ad->status, &ad->ber,
+					&ad->strength, &ad->snr)))
+		get_signal(ad->fe, &ad->status, &ad->ber, &ad->strength, &ad->snr);
+	else if (new_gs)
+		get_signal(ad->fe, &ad->status, &ad->ber, &ad->strength, &ad->snr);
+
+	if (ad->status > 0 && new_gs != 0) // we have signal but no new stats, don't try to get them from now on until adapter close
+		ad->new_gs = 1;
+
+	if (ad->max_strength <= ad->strength)
+		ad->max_strength = (ad->strength > 0) ? ad->strength : 1;
+	if (ad->max_snr <= ad->snr)
+		ad->max_snr = (ad->snr > 0) ? ad->snr : 1;
+	if (ad->snr > 4096)
+		new_gs = 0;
+	if (new_gs)
+	{
+		ad->strength = ad->strength * 255.0 / ad->max_strength;
+		ad->snr = ad->snr * 255.0 / ad->max_snr;
+	}
+	else
+	{
+		ad->strength = ad->strength >> 8;
+		ad->snr = ad->snr >> 8;
+	}
+}
+
 void dvb_commit(adapter *a)
 {
 	return;
@@ -1049,6 +1080,7 @@ void find_dvb_adapter(adapter **a)
 				ad->delsys = (Dvb_delsys) dvb_delsys;
 				ad->post_init = NULL;
 				ad->close = NULL;
+				ad->get_signal = (Device_signal) dvb_get_signal;
 				ad->type = ADAPTER_DVB;
 				close(fd);
 				na++;
@@ -1063,3 +1095,5 @@ void find_dvb_adapter(adapter **a)
 }
 
 #endif  // #ifndef DISABLE_LINUXDVB
+
+
