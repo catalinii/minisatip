@@ -86,7 +86,7 @@ int adapter_timeout(sockets *s)
 		LOG("Keeping the adapter %d open as there are active streams", ad->id);
 		return 0;
 	}
-	
+
 	if (opts.no_threads)
 	{
 		for (i = 0; i < MAX_ADAPTERS; i++)
@@ -240,8 +240,8 @@ int init_all_hw()
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		if (!a[i]
 				|| ((!a[i]->enabled || a[i]->fe <= 0)
-						&& ((a[i]->pa >= 0 && a[i]->fn >= 0) || 
-								a[i]->type > ADAPTER_DVB))) // ADAPTER is intialized and not DVB
+						&& ((a[i]->pa >= 0 && a[i]->fn >= 0)
+								|| a[i]->type > ADAPTER_DVB))) // ADAPTER is intialized and not DVB
 		{
 			if (!(rv = init_hw(i)))
 				num_adapters++;
@@ -790,8 +790,11 @@ int set_adapter_parameters(int aid, int sid, transponder * tp)
 		ad->master_sid = sid; // master sid was closed
 
 	ad->do_tune = 0;
-	LOGL(2, "old parameters: f:%d, plp:%d, diseqc:%d, pol:%d, sr:%d, mtype:%d", tp->freq, tp->plp, tp->diseqc, tp->pol, tp->sr, tp->mtype);
-	LOGL(2, "new parameters: f:%d, plp:%d, diseqc:%d, pol:%d, sr:%d, mtype:%d", ad->tp.freq, ad->tp.plp, ad->tp.diseqc, ad->tp.pol, ad->tp.sr, ad->tp.mtype);
+	LOGL(2, "old parameters: f:%d, plp:%d, diseqc:%d, pol:%d, sr:%d, mtype:%d",
+			tp->freq, tp->plp, tp->diseqc, tp->pol, tp->sr, tp->mtype);
+	LOGL(2, "new parameters: f:%d, plp:%d, diseqc:%d, pol:%d, sr:%d, mtype:%d",
+			ad->tp.freq, ad->tp.plp, ad->tp.diseqc, ad->tp.pol, ad->tp.sr,
+			ad->tp.mtype);
 	if (tp->freq != ad->tp.freq || tp->plp != ad->tp.plp
 			|| tp->diseqc != ad->tp.diseqc
 			|| (tp->pol > 0 && tp->pol != ad->tp.pol)
@@ -912,7 +915,7 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 	{
 		strength = ad->strength;
 		snr = ad->snr;
-		if(snr > 15)
+		if (snr > 15)
 			snr = snr >> 4;
 		status = (ad->status & FE_HAS_LOCK) > 0;
 	}
@@ -988,9 +991,9 @@ void free_all_adapters()
 	int i;
 	sockets_del(sock_signal);
 	for (i = 0; i < MAX_ADAPTERS; i++)
-		if(a[i] && a[i]->enabled)
-				close_adapter(i);
-	
+		if (a[i] && a[i]->enabled)
+			close_adapter(i);
+
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		if (a[i])
 		{
@@ -1219,19 +1222,22 @@ void signal_thread(sockets *s)
 	int i, ts, ctime;
 	adapter *ad;
 	int status;
-	for(i=0;i<MAX_ADAPTERS;i++)
-		if((ad = get_adapter_nw(i)) && ad->get_signal && ad->tp.freq && (opts.force_scan || (ad->status <= 0)))
-		{
-			ts = getTick();
-			ad->get_signal(ad);
-			ctime = getTick();
-			LOG(
-					"get_signal%s took %d ms for adapter %d handle %d (status: %d, ber: %d, strength:%d, snr: %d, max_strength: %d, max_snr: %d %d)",
-					ad->new_gs ? "" : "_new", ctime - ts, ad->id, ad->fe, ad->status,
-					ad->ber, ad->strength, ad->snr, ad->max_strength, ad->max_snr,
-					opts.force_scan);
+	for (i = 0; i < MAX_ADAPTERS; i++)
+		if ((ad = get_adapter_nw(i)) && ad->get_signal && ad->tp.freq && (opts.no_threads  || ad->status < 0))
+			
+			{
+				int status = ad->status;
+				ts = getTick();
+				ad->get_signal(ad);
+				ctime = getTick();
+			//	if (status == -1)
+					LOG(
+							"get_signal%s took %d ms for adapter %d handle %d (status: %d, ber: %d, strength:%d, snr: %d, max_strength: %d, max_snr: %d %d)",
+							ad->new_gs ? "" : "_new", ctime - ts, ad->id,
+							ad->fe, ad->status, ad->ber, ad->strength, ad->snr,
+							ad->max_strength, ad->max_snr, opts.force_scan);
 
-		}
+			}
 }
 
 void adapter_lock1(char *FILE, int line, int aid)

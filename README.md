@@ -24,7 +24,7 @@ https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item
 Usage:
 -------
 
-minisatip version 0.5.20, compiled with s2api version: 050A
+minisatip version 0.5.24, compiled with s2api version: 050A
 
 	./minisatip [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 		[-j A1:S1-F1[-PIN]] [-m mac] [-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] 
@@ -103,6 +103,8 @@ Help
 	Only one adapter needs to be master all others needs to have this parameter specified
 	eg: -S 1-2
 	- specifies adapter 1 to 2 as slave, in this case adapter 0 can be the master that controls the LNB
+	- the slave adapter will not control the LNB polarity or band, but it will just change the internal frequency to tune to a different transponder
+	- in this way the master will be responsible for changing the LNB polarity and band
 
 * -t --cleanpsi clean the PSI from all CA information, the client will see the channel as clear if decrypted successfully
 
@@ -128,8 +130,6 @@ Help
 	* eg: -y 5544 
 	- changing this to a port > 1024 removes the requirement for minisatip to run as root
 
-* -z --check-signal force to get signal from the DVB hardware every 200ms (use with care, only when needed)
-	* - retrieving signal could take sometimes more than 200ms which could impact the rtp stream, using it only when you need to adjust your dish
 
 Examples:
 -------

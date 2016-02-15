@@ -56,16 +56,16 @@ int rtsp, http, si, si1, ssdp1;
 
 static const struct option long_options[] =
 {
-		{ "remote-rtp", required_argument, NULL, 'r' },
-		{ "device-id", required_argument, NULL, 'D' },
-		{ "check-signal", no_argument, NULL, 'z' },
-		{ "clean-psi", no_argument, NULL, 't' },
-		{ "log", no_argument, NULL, 'l' },
-		{ "buffer", required_argument, NULL, 'b' },
-		{ "enable-adapters", required_argument, NULL, 'e' },
-		{ "unicable", required_argument, NULL, 'u' },
-		{ "jess", required_argument, NULL, 'j' },
-		{ "diseqc", required_argument, NULL, 'd' },
+{ "remote-rtp", required_argument, NULL, 'r' },
+{ "device-id", required_argument, NULL, 'D' },
+{ "check-signal", no_argument, NULL, 'z' },
+{ "clean-psi", no_argument, NULL, 't' },
+{ "log", no_argument, NULL, 'l' },
+{ "buffer", required_argument, NULL, 'b' },
+{ "enable-adapters", required_argument, NULL, 'e' },
+{ "unicable", required_argument, NULL, 'u' },
+{ "jess", required_argument, NULL, 'j' },
+{ "diseqc", required_argument, NULL, 'd' },
 #ifndef DISABLE_DVBCSA
 		{ "dvbapi", required_argument, NULL, 'o' },
 #endif
@@ -94,7 +94,6 @@ static const struct option long_options[] =
 #define HTTPPORT_OPT 'x'
 #define LOG_OPT 'l'
 #define HELP_OPT 'h'
-#define SCAN_OPT 'z'
 #define PLAYLIST_OPT 'p'
 #define DVBS2_ADAPTERS_OPT 'a'
 #define CLEANPSI_OPT 't'
@@ -133,7 +132,8 @@ void print_version(int use_log)
 void usage()
 {
 	print_version(0);
-	printf("\n\t./%s [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] \n\
+	printf(
+			"\n\t./%s [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] \n\
 	\t[-j A1:S1-F1[-PIN]] [-m mac] [-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] \n\
 	\t[-R document_root] [-s [DELSYS:]host[:port] [-u A1:S1-F1[-PIN]] [-w http_server[:port]] \n\
 	\t[-x http_port] [-X xml_path] [-y rtsp_port] \n\n\
@@ -209,6 +209,8 @@ Help\n\
 	Only one adapter needs to be master all others needs to have this parameter specified\n\
 	eg: -S 1-2\n\
 	- specifies adapter 1 to 2 as slave, in this case adapter 0 can be the master that controls the LNB\n\
+	- the slave adapter will not control the LNB polarity or band, but it will just change the internal frequency to tune to a different transponder\n\
+	- in this way the master will be responsible for changing the LNB polarity and band\n\
 \n\
 * -t --cleanpsi clean the PSI from all CA information, the client will see the channel as clear if decrypted successfully\n\
 \n\
@@ -234,8 +236,6 @@ Help\n\
 	* eg: -y 5544 \n\
 	- changing this to a port > 1024 removes the requirement for minisatip to run as root\n\
 \n\
-* -z --check-signal force to get signal from the DVB hardware every 200ms (use with care, only when needed)\n\
-	* - retrieving signal could take sometimes more than 200ms which could impact the rtp stream, using it only when you need to adjust your dish\n\
 ",
 			app_name,
 			ADAPTER_BUFFER,
@@ -264,7 +264,6 @@ void set_options(int argc, char *argv[])
 	opts.bw = 0;
 	opts.device_id = 0;
 	opts.bootid = 0;
-	opts.force_scan = 0;
 	opts.dvr_buffer = DVR_BUFFER;
 	opts.adapter_buffer = ADAPTER_BUFFER;
 	opts.file_line = 0;
@@ -287,7 +286,7 @@ void set_options(int argc, char *argv[])
 	memset(opts.playlist, 0, sizeof(opts.playlist));
 
 	while ((opt = getopt_long(argc, argv,
-			"flr:a:td:w:p:s:n:hc:b:m:p:e:x:u:j:o:gy:zi:D:VR:S:TX:Y:",
+			"flr:a:td:w:p:s:n:hc:b:m:p:e:x:u:j:o:gy:i:D:VR:S:TX:Y:",
 			long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
@@ -378,12 +377,6 @@ void set_options(int argc, char *argv[])
 			break;
 		}
 
-		case SCAN_OPT:
-		{
-			opts.force_scan = 1;
-			break;
-		}
-
 		case PLAYLIST_OPT:
 		{
 			snprintf(opts.playlist, sizeof(opts.playlist),
@@ -427,7 +420,7 @@ void set_options(int argc, char *argv[])
 			set_adapters_delsys(optarg);
 			break;
 		}
-		
+
 		case DVBAPI_OPT:
 		{
 #ifdef DISABLE_DVBCSA
@@ -493,7 +486,7 @@ void set_options(int argc, char *argv[])
 		}
 
 		case PRIORITY_OPT:
-		
+
 			opts.th_priority = map_int(optarg, NULL);
 			break;
 
@@ -1142,7 +1135,8 @@ int main(int argc, char *argv[])
 	NULL, (socket_action) signal_thread)))
 		FAIL("sockets_add failed for signal thread");
 
-	set_socket_thread(sock_signal, start_new_thread("signal"));
+	if (!opts.no_threads)
+		set_socket_thread(sock_signal, start_new_thread("signal"));
 	sockets_timeout(sock_signal, 1000);
 
 	if (0 > (sock_bw = sockets_add(SOCK_TIMEOUT, NULL, -1, TYPE_UDP, NULL,
@@ -1151,7 +1145,7 @@ int main(int argc, char *argv[])
 
 	set_socket_thread(sock_bw, get_socket_thread(sock_signal));
 	sockets_timeout(sock_bw, 1000);
-	
+
 #ifdef TABLES_H
 	tables_init();
 #endif
