@@ -893,7 +893,7 @@ int process_dmx(sockets * s)
 			"process_dmx start flush_all=%d called for adapter %d -> %d out of %d bytes read, %d ms ago",
 			flush_all, s->sid, rlen, s->lbuf, ms_ago);
 
-#ifdef TABLES_H
+#ifndef DISABLE_TABLES
 	process_stream(ad, rlen);
 #else							 
 	if (ad->sid_cnt == 1 && ad->master_sid >= 0 && opts.log < 2) // we have just 1 stream, do not check the pids, send everything to the destination

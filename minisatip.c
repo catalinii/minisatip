@@ -1146,7 +1146,7 @@ int main(int argc, char *argv[])
 	set_socket_thread(sock_bw, get_socket_thread(sock_signal));
 	sockets_timeout(sock_bw, 1000);
 
-#ifdef TABLES_H
+#ifndef DISABLE_TABLES
 	tables_init();
 #endif
 	LOGL(0, "Initializing with %d devices", init_all_hw());
