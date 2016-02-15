@@ -219,6 +219,7 @@ Help\n\
 * -u --unicable unicable_string: defines the unicable adapters (A) and their slot (S), frequency (F) and optionally the PIN for the switch:\n\
 \t* The format is: A1:S1-F1[-PIN][,A2:S2-F2[-PIN][,...]]\n\
 	eg: 2:0-1284[-1111]\n\
+\t* When * character is used before frequency, force 13V only for setup\n\
 \n\
 * -j --jess jess_string - same format as -u \n\
 \n\
