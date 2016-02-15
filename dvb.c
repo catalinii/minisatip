@@ -107,6 +107,214 @@ make_func(gi);
 make_func(specinv);
 make_func(pol);
 
+#define INVALID_URL(a) {LOG(a);return 0;}
+char def_pids[100];
+
+//#define default_pids "0,1,2,3"
+#define default_pids "8192"
+
+int detect_dvb_parameters(char *s, transponder * tp)
+{
+	char *arg[20];
+	int la, i;
+
+	tp->sys = -1;
+	tp->freq = -1;
+	tp->inversion = -1;
+	tp->hprate = -1;
+	tp->tmode = -1;
+	tp->gi = -1;
+	tp->bw = -1;
+	tp->sm = -1;
+	tp->t2id = -1;
+	tp->fe = -1;
+	tp->ro = -1;
+	tp->mtype = -1;
+	tp->plts = -1;
+	tp->fec = -1;
+	tp->sr = -1;
+	tp->pol = -1;
+	tp->diseqc = -1;
+	tp->c2tft = -1;
+	tp->ds = -1;
+	tp->plp = -1;
+
+	tp->pids = tp->apids = tp->dpids = tp->x_pmt = NULL;
+
+	while (*s > 0 && *s != '?')
+		s++;
+
+	if (*s == 0)
+		LOG_AND_RETURN(0, "no ? found in URL");
+
+	s++;
+	if (strstr(s, "freq="))
+		init_dvb_parameters(tp);
+
+	LOG("detect_dvb_parameters (S)-> %s", s);
+	la = split(arg, s, 20, '&');
+
+	for (i = 0; i < la; i++)
+	{
+		if (strncmp("msys=", arg[i], 5) == 0)
+			tp->sys = map_int(arg[i] + 5, fe_delsys);
+		if (strncmp("freq=", arg[i], 5) == 0)
+			tp->freq = map_float(arg[i] + 5, 1000);
+		if (strncmp("pol=", arg[i], 4) == 0)
+			tp->pol = map_int(arg[i] + 4, fe_pol);
+		if (strncmp("sr=", arg[i], 3) == 0)
+			tp->sr = map_int(arg[i] + 3, NULL) * 1000;
+		if (strncmp("fe=", arg[i], 3) == 0)
+			tp->fe = map_int(arg[i] + 3, NULL);
+		if (strncmp("src=", arg[i], 4) == 0)
+			tp->diseqc = map_int(arg[i] + 4, NULL);
+		if (strncmp("ro=", arg[i], 3) == 0)
+			tp->ro = map_int(arg[i] + 3, fe_rolloff);
+		if (strncmp("mtype=", arg[i], 6) == 0)
+			tp->mtype = map_int(arg[i] + 6, fe_modulation);
+		if (strncmp("fec=", arg[i], 4) == 0)
+			tp->fec = map_int(arg[i] + 4, fe_fec);
+		if (strncmp("plts=", arg[i], 5) == 0)
+			tp->plts = map_int(arg[i] + 5, fe_pilot);
+		if (strncmp("gi=", arg[i], 3) == 0)
+			tp->gi = map_int(arg[i] + 3, fe_gi);
+		if (strncmp("tmode=", arg[i], 6) == 0)
+			tp->tmode = map_int(arg[i] + 6, fe_tmode);
+		if (strncmp("bw=", arg[i], 3) == 0)
+			tp->bw = map_float(arg[i] + 3, 1000000);
+		if (strncmp("specinv=", arg[i], 8) == 0)
+			tp->inversion = map_int(arg[i] + 8, NULL);
+		if (strncmp("c2tft=", arg[i], 6) == 0)
+			tp->c2tft = map_int(arg[i] + 6, NULL);
+		if (strncmp("ds=", arg[i], 3) == 0)
+			tp->ds = map_int(arg[i] + 3, NULL);
+		if (strncmp("plp=", arg[i], 4) == 0)
+			tp->plp = map_int(arg[i] + 4, NULL);
+
+		if (strncmp("x_pmt=", arg[i], 6) == 0)
+			tp->x_pmt = arg[i] + 6;
+		if (strncmp("pids=", arg[i], 5) == 0)
+			tp->pids = arg[i] + 5;
+		if (strncmp("addpids=", arg[i], 8) == 0)
+			tp->apids = arg[i] + 8;
+		if (strncmp("delpids=", arg[i], 8) == 0)
+			tp->dpids = arg[i] + 8;
+	}
+
+	if (tp->pids && strstr(tp->pids, "all"))
+	{
+		strcpy(def_pids, default_pids);
+// map pids=all to essential pids
+		tp->pids = (char *) def_pids;
+	}
+
+	if (tp->pids && strncmp(tp->pids, "none", 3) == 0)
+		tp->pids = "";
+
+	//      if(!msys)INVALID_URL("no msys= found in URL");
+	//      if(freq<10)INVALID_URL("no freq= found in URL or frequency invalid");
+	//      if((msys==SYS_DVBS || msys==SYS_DVBS2) && (pol!='H' && pol!='V'))INVALID_URL("no pol= found in URL or pol is not H or V");
+	LOG(
+			"detect_dvb_parameters (E) -> src=%d, fe=%d, freq=%d, fec=%d, sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s - apids=%s - dpids=%s x_pmt=%s",
+			tp->diseqc, tp->fe, tp->freq, tp->fec, tp->sr, tp->pol, tp->ro,
+			tp->sys, tp->mtype, tp->plts, tp->bw, tp->inversion,
+			tp->pids ? tp->pids : "NULL", tp->apids ? tp->apids : "NULL",
+			tp->dpids ? tp->dpids : "NULL", tp->x_pmt ? tp->x_pmt : "NULL");
+	return 0;
+}
+
+void init_dvb_parameters(transponder * tp)
+{
+	memset(tp, 0, sizeof(transponder));
+	tp->inversion = INVERSION_AUTO;
+	tp->hprate = FEC_AUTO;
+	tp->tmode = TRANSMISSION_MODE_AUTO;
+	tp->gi = GUARD_INTERVAL_AUTO;
+	tp->bw = 8000000;
+	tp->ro = ROLLOFF_AUTO;
+	tp->mtype = -1;
+	tp->plts = PILOT_AUTO;
+	tp->fec = FEC_AUTO;
+	tp->old_diseqc = tp->old_pol = tp->old_hiband = -1;
+}
+
+void copy_dvb_parameters(transponder * s, transponder * d)
+{
+	LOG(
+			"copy_dvb_param start -> src=%d, fe=%d, freq=%d, fec=%d, sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s, apids=%s, dpids=%s x_pmt=%s",
+			d->diseqc, d->fe, d->freq, d->fec, d->sr, d->pol, d->ro, d->sys,
+			d->mtype, d->plts, d->bw, d->inversion, d->pids ? d->pids : "NULL",
+			d->apids ? d->apids : "NULL", d->dpids ? d->dpids : "NULL",
+			d->x_pmt ? d->x_pmt : "NULL");
+	if (s->sys != -1)
+		d->sys = s->sys;
+	if (s->freq != -1)
+		d->freq = s->freq;
+	if (s->inversion != -1)
+		d->inversion = s->inversion;
+	if (s->hprate != -1)
+		d->hprate = s->hprate;
+	if (s->tmode != -1)
+		d->tmode = s->tmode;
+	if (s->gi != -1)
+		d->gi = s->gi;
+	if (s->bw != -1)
+		d->bw = s->bw;
+	if (s->sm != -1)
+		d->sm = s->sm;
+	if (s->t2id != -1)
+		d->t2id = s->t2id;
+	if (s->fe != -1)
+		d->fe = s->fe;
+	if (s->ro != -1)
+		d->ro = s->ro;
+	if (s->mtype != -1)
+		d->mtype = s->mtype;
+	if (s->plts != -1)
+		d->plts = s->plts;
+	if (s->fec != -1)
+		d->fec = s->fec;
+	if (s->sr != -1)
+		d->sr = s->sr;
+	if (s->pol != -1)
+		d->pol = s->pol;
+	if (s->diseqc != -1)
+		d->diseqc = s->diseqc;
+	if (s->c2tft != -1)
+		d->c2tft = s->c2tft;
+	if (s->ds != -1)
+		d->ds = s->ds;
+	if (s->plp != -1)
+		d->plp = s->plp;
+
+	d->x_pmt = s->x_pmt;
+	d->apids = s->apids;
+	d->pids = s->pids;
+	d->dpids = s->dpids;
+
+	if (d->diseqc < 1) // force position 1 on the diseqc switch
+		d->diseqc = 1;
+
+	if ((d->sys == SYS_DVBS2) && (d->mtype == -1))
+		d->mtype = PSK_8;
+
+	if ((d->sys == SYS_DVBS) && (d->mtype == -1))
+		d->mtype = QPSK;
+
+	if ((d->sys == SYS_ATSC || d->sys == SYS_DVBC_ANNEX_B) && d->mtype == -1)
+		d->mtype = QAM_AUTO;
+
+	if ((d->sys == SYS_DVBT || d->sys == SYS_DVBT2) && d->mtype == -1)
+		d->mtype = QAM_AUTO;
+
+	LOG(
+			"copy_dvb_parameters -> src=%d, fe=%d, freq=%d, fec=%d sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s, apids=%s, dpids=%s x_pmt=%s",
+			d->diseqc, d->fe, d->freq, d->fec, d->sr, d->pol, d->ro, d->sys,
+			d->mtype, d->plts, d->bw, d->inversion, d->pids ? d->pids : "NULL",
+			d->apids ? d->apids : "NULL", d->dpids ? d->dpids : "NULL",
+			d->x_pmt ? d->x_pmt : "NULL");
+}
+
 #ifndef DISABLE_LINUXDVB
 
 extern struct struct_opts opts;
@@ -688,233 +896,9 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys)
 
 }
 
-#endif  // #ifndef DISABLE_LINUXDVB
 
-#define INVALID_URL(a) {LOG(a);return 0;}
-char def_pids[100];
-
-//#define default_pids "0,1,2,3"
-#define default_pids "8192"
-
-int detect_dvb_parameters(char *s, transponder * tp)
-{
-	char *arg[20];
-	int la, i;
-
-	tp->sys = -1;
-	tp->freq = -1;
-	tp->inversion = -1;
-	tp->hprate = -1;
-	tp->tmode = -1;
-	tp->gi = -1;
-	tp->bw = -1;
-	tp->sm = -1;
-	tp->t2id = -1;
-	tp->fe = -1;
-	tp->ro = -1;
-	tp->mtype = -1;
-	tp->plts = -1;
-	tp->fec = -1;
-	tp->sr = -1;
-	tp->pol = -1;
-	tp->diseqc = -1;
-	tp->c2tft = -1;
-	tp->ds = -1;
-	tp->plp = -1;
-
-	tp->pids = tp->apids = tp->dpids = tp->x_pmt = NULL;
-
-	while (*s > 0 && *s != '?')
-		s++;
-
-	if (*s == 0)
-		LOG_AND_RETURN(0, "no ? found in URL");
-
-	s++;
-	if (strstr(s, "freq="))
-		init_dvb_parameters(tp);
-
-	LOG("detect_dvb_parameters (S)-> %s", s);
-	la = split(arg, s, 20, '&');
-
-	for (i = 0; i < la; i++)
-	{
-		if (strncmp("msys=", arg[i], 5) == 0)
-			tp->sys = map_int(arg[i] + 5, fe_delsys);
-		if (strncmp("freq=", arg[i], 5) == 0)
-			tp->freq = map_float(arg[i] + 5, 1000);
-		if (strncmp("pol=", arg[i], 4) == 0)
-			tp->pol = map_int(arg[i] + 4, fe_pol);
-		if (strncmp("sr=", arg[i], 3) == 0)
-			tp->sr = map_int(arg[i] + 3, NULL) * 1000;
-		if (strncmp("fe=", arg[i], 3) == 0)
-			tp->fe = map_int(arg[i] + 3, NULL);
-		if (strncmp("src=", arg[i], 4) == 0)
-			tp->diseqc = map_int(arg[i] + 4, NULL);
-		if (strncmp("ro=", arg[i], 3) == 0)
-			tp->ro = map_int(arg[i] + 3, fe_rolloff);
-		if (strncmp("mtype=", arg[i], 6) == 0)
-			tp->mtype = map_int(arg[i] + 6, fe_modulation);
-		if (strncmp("fec=", arg[i], 4) == 0)
-			tp->fec = map_int(arg[i] + 4, fe_fec);
-		if (strncmp("plts=", arg[i], 5) == 0)
-			tp->plts = map_int(arg[i] + 5, fe_pilot);
-		if (strncmp("gi=", arg[i], 3) == 0)
-			tp->gi = map_int(arg[i] + 3, fe_gi);
-		if (strncmp("tmode=", arg[i], 6) == 0)
-			tp->tmode = map_int(arg[i] + 6, fe_tmode);
-		if (strncmp("bw=", arg[i], 3) == 0)
-			tp->bw = map_float(arg[i] + 3, 1000000);
-		if (strncmp("specinv=", arg[i], 8) == 0)
-			tp->inversion = map_int(arg[i] + 8, NULL);
-		if (strncmp("c2tft=", arg[i], 6) == 0)
-			tp->c2tft = map_int(arg[i] + 6, NULL);
-		if (strncmp("ds=", arg[i], 3) == 0)
-			tp->ds = map_int(arg[i] + 3, NULL);
-		if (strncmp("plp=", arg[i], 4) == 0)
-			tp->plp = map_int(arg[i] + 4, NULL);
-
-		if (strncmp("x_pmt=", arg[i], 6) == 0)
-			tp->x_pmt = arg[i] + 6;
-		if (strncmp("pids=", arg[i], 5) == 0)
-			tp->pids = arg[i] + 5;
-		if (strncmp("addpids=", arg[i], 8) == 0)
-			tp->apids = arg[i] + 8;
-		if (strncmp("delpids=", arg[i], 8) == 0)
-			tp->dpids = arg[i] + 8;
-	}
-
-	if (tp->pids && strstr(tp->pids, "all"))
-	{
-		strcpy(def_pids, default_pids);
-// map pids=all to essential pids
-		tp->pids = (char *) def_pids;
-	}
-
-	if (tp->pids && strncmp(tp->pids, "none", 3) == 0)
-		tp->pids = "";
-
-	//      if(!msys)INVALID_URL("no msys= found in URL");
-	//      if(freq<10)INVALID_URL("no freq= found in URL or frequency invalid");
-	//      if((msys==SYS_DVBS || msys==SYS_DVBS2) && (pol!='H' && pol!='V'))INVALID_URL("no pol= found in URL or pol is not H or V");
-	LOG(
-			"detect_dvb_parameters (E) -> src=%d, fe=%d, freq=%d, fec=%d, sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s - apids=%s - dpids=%s x_pmt=%s",
-			tp->diseqc, tp->fe, tp->freq, tp->fec, tp->sr, tp->pol, tp->ro,
-			tp->sys, tp->mtype, tp->plts, tp->bw, tp->inversion,
-			tp->pids ? tp->pids : "NULL", tp->apids ? tp->apids : "NULL",
-			tp->dpids ? tp->dpids : "NULL", tp->x_pmt ? tp->x_pmt : "NULL");
-	return 0;
-}
-
-void init_dvb_parameters(transponder * tp)
-{
-	memset(tp, 0, sizeof(transponder));
-	tp->inversion = INVERSION_AUTO;
-	tp->hprate = FEC_AUTO;
-	tp->tmode = TRANSMISSION_MODE_AUTO;
-	tp->gi = GUARD_INTERVAL_AUTO;
-	tp->bw = 8000000;
-	tp->ro = ROLLOFF_AUTO;
-	tp->mtype = -1;
-	tp->plts = PILOT_AUTO;
-	tp->fec = FEC_AUTO;
-	tp->old_diseqc = tp->old_pol = tp->old_hiband = -1;
-}
-
-void copy_dvb_parameters(transponder * s, transponder * d)
-{
-	LOG(
-			"copy_dvb_param start -> src=%d, fe=%d, freq=%d, fec=%d, sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s, apids=%s, dpids=%s x_pmt=%s",
-			d->diseqc, d->fe, d->freq, d->fec, d->sr, d->pol, d->ro, d->sys,
-			d->mtype, d->plts, d->bw, d->inversion, d->pids ? d->pids : "NULL",
-			d->apids ? d->apids : "NULL", d->dpids ? d->dpids : "NULL",
-			d->x_pmt ? d->x_pmt : "NULL");
-	if (s->sys != -1)
-		d->sys = s->sys;
-	if (s->freq != -1)
-		d->freq = s->freq;
-	if (s->inversion != -1)
-		d->inversion = s->inversion;
-	if (s->hprate != -1)
-		d->hprate = s->hprate;
-	if (s->tmode != -1)
-		d->tmode = s->tmode;
-	if (s->gi != -1)
-		d->gi = s->gi;
-	if (s->bw != -1)
-		d->bw = s->bw;
-	if (s->sm != -1)
-		d->sm = s->sm;
-	if (s->t2id != -1)
-		d->t2id = s->t2id;
-	if (s->fe != -1)
-		d->fe = s->fe;
-	if (s->ro != -1)
-		d->ro = s->ro;
-	if (s->mtype != -1)
-		d->mtype = s->mtype;
-	if (s->plts != -1)
-		d->plts = s->plts;
-	if (s->fec != -1)
-		d->fec = s->fec;
-	if (s->sr != -1)
-		d->sr = s->sr;
-	if (s->pol != -1)
-		d->pol = s->pol;
-	if (s->diseqc != -1)
-		d->diseqc = s->diseqc;
-	if (s->c2tft != -1)
-		d->c2tft = s->c2tft;
-	if (s->ds != -1)
-		d->ds = s->ds;
-	if (s->plp != -1)
-		d->plp = s->plp;
-
-	d->x_pmt = s->x_pmt;
-	d->apids = s->apids;
-	d->pids = s->pids;
-	d->dpids = s->dpids;
-
-	if (d->diseqc < 1) // force position 1 on the diseqc switch
-		d->diseqc = 1;
-
-	if ((d->sys == SYS_DVBS2) && (d->mtype == -1))
-		d->mtype = PSK_8;
-
-	if ((d->sys == SYS_DVBS) && (d->mtype == -1))
-		d->mtype = QPSK;
-
-	if ((d->sys == SYS_ATSC || d->sys == SYS_DVBC_ANNEX_B) && d->mtype == -1)
-		d->mtype = QAM_AUTO;
-
-	if ((d->sys == SYS_DVBT || d->sys == SYS_DVBT2) && d->mtype == -1)
-		d->mtype = QAM_AUTO;
-
-	LOG(
-			"copy_dvb_parameters -> src=%d, fe=%d, freq=%d, fec=%d sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s, apids=%s, dpids=%s x_pmt=%s",
-			d->diseqc, d->fe, d->freq, d->fec, d->sr, d->pol, d->ro, d->sys,
-			d->mtype, d->plts, d->bw, d->inversion, d->pids ? d->pids : "NULL",
-			d->apids ? d->apids : "NULL", d->dpids ? d->dpids : "NULL",
-			d->x_pmt ? d->x_pmt : "NULL");
-}
-
-#ifdef DISABLE_LINUXDVB
-void get_signal(int fd, int * status, uint32_t * ber,
-		uint16_t * strength, uint16_t * snr)
-{	return;}
-
-int get_signal_new(int fd, int * status, uint32_t * ber,
-		uint16_t * strength, uint16_t * snr)
-{	return -1;}
-
-void dvb_get_signal(adapter *ad)
-{}
-#endif  // #ifdef DISABLE_LINUXDVB
-
-#ifndef DISABLE_LINUXDVB
-
-void get_signal(int fd, int * status, uint32_t * ber,
-		uint16_t * strength, uint16_t * snr)
+void get_signal(int fd, int * status, uint32_t * ber, uint16_t * strength,
+		uint16_t * snr)
 {
 	*status = *ber = *snr = *strength = 0;
 
@@ -938,8 +922,8 @@ void get_signal(int fd, int * status, uint32_t * ber,
 	}
 }
 
-int get_signal_new(int fd, int * status, uint32_t * ber,
-		uint16_t * strength, uint16_t * snr)
+int get_signal_new(int fd, int * status, uint32_t * ber, uint16_t * strength,
+		uint16_t * snr)
 {
 
 	*status = *snr = *ber = *strength = 0;
@@ -978,13 +962,14 @@ int get_signal_new(int fd, int * status, uint32_t * ber,
 
 	*ber = enum_cmdargs[2].u.st.stat[0].uvalue & 0xFFFF;
 
-	LOG(
-			"get_signal_new returned: Signal (%d): %llu, SNR(%d): %llu, BER: %llu, err %d",
-			enum_cmdargs[0].u.st.stat[0].scale,
-			enum_cmdargs[0].u.st.stat[0].uvalue,
-			enum_cmdargs[1].u.st.stat[0].scale,
-			enum_cmdargs[1].u.st.stat[0].uvalue,
-			enum_cmdargs[2].u.st.stat[0].uvalue, err);
+	if (err)
+		LOG(
+				"get_signal_new returned: Signal (%d): %llu, SNR(%d): %llu, BER: %llu, err %d",
+				enum_cmdargs[0].u.st.stat[0].scale,
+				enum_cmdargs[0].u.st.stat[0].uvalue,
+				enum_cmdargs[1].u.st.stat[0].scale,
+				enum_cmdargs[1].u.st.stat[0].uvalue,
+				enum_cmdargs[2].u.st.stat[0].uvalue, err);
 	if (err)
 		return err;
 
@@ -1095,5 +1080,4 @@ void find_dvb_adapter(adapter **a)
 }
 
 #endif  // #ifndef DISABLE_LINUXDVB
-
 

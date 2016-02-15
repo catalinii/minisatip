@@ -47,7 +47,7 @@ int sock_signal;
 SMutex a_mutex;
 extern struct struct_opts opts;
 int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
-extern void find_dvb_adapter(adapter **a);
+void find_dvb_adapter(adapter **a);
 
 void find_adapters()
 {
@@ -567,6 +567,7 @@ int tune(int aid, int sid)
 
 		rv = ad->tune(ad->id, &ad->tp);
 		ad->status = -1;
+		ad->status_cnt = 0;
 		set_socket_pos(ad->sock, 0);	// flush the existing buffer
 		ad->rlen = 0;
 		if (ad->sid_cnt > 1)	 // the master changed the frequency
@@ -1223,21 +1224,23 @@ void signal_thread(sockets *s)
 	adapter *ad;
 	int status;
 	for (i = 0; i < MAX_ADAPTERS; i++)
-		if ((ad = get_adapter_nw(i)) && ad->get_signal && ad->tp.freq && (opts.no_threads  || ad->status < 0))
-			
-			{
-				int status = ad->status;
-				ts = getTick();
-				ad->get_signal(ad);
-				ctime = getTick();
-			//	if (status == -1)
-					LOG(
-							"get_signal%s took %d ms for adapter %d handle %d (status: %d, ber: %d, strength:%d, snr: %d, max_strength: %d, max_snr: %d %d)",
-							ad->new_gs ? "" : "_new", ctime - ts, ad->id,
-							ad->fe, ad->status, ad->ber, ad->strength, ad->snr,
-							ad->max_strength, ad->max_snr, opts.force_scan);
+		if ((ad = get_adapter_nw(i)) && ad->get_signal && ad->tp.freq
+				&& (ad->status_cnt++ > 2) // make sure the kernel has updated the status
+				&& (!opts.no_threads || (ad->status < 0)))
 
-			}
+		{
+			int status = ad->status;
+			ts = getTick();
+			ad->get_signal(ad);
+			ctime = getTick();
+			if (status == -1)
+				LOG(
+						"get_signal%s took %d ms for adapter %d handle %d (status: %d, ber: %d, strength:%d, snr: %d, max_strength: %d, max_snr: %d %d)",
+						ad->new_gs ? "_new" : "", ctime - ts, ad->id, ad->fe,
+						ad->status, ad->ber, ad->strength, ad->snr,
+						ad->max_strength, ad->max_snr, opts.force_scan);
+
+		}
 }
 
 void adapter_lock1(char *FILE, int line, int aid)

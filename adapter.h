@@ -79,7 +79,7 @@ typedef struct struct_adapter
 	int rlen, rtime;
 	int last_sort;
 	int new_gs;
-	int status;
+	int status, status_cnt;
 	uint32_t ber;
 	uint16_t strength, snr, max_strength, max_snr;
 	uint32_t pid_err, dec_err; // detect pids received but not part of any stream, decrypt errors
