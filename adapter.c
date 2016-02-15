@@ -561,6 +561,7 @@ int tune(int aid, int sid)
 		ad->tp.uslot = ad->uslot;
 		ad->tp.ufreq = ad->ufreq;
 		ad->tp.pin = ad->pin;
+		ad->tp.only13v = ad->only13v;
 
 		ad->tp.committed_no = ad->committed_no;
 		ad->tp.uncommitted_no = ad->uncommitted_no;
@@ -1054,7 +1055,7 @@ void enable_adapters(char *o)
 
 void set_unicable_adapters(char *o, int type)
 {
-	int i, la, a_id, slot, freq, pin;
+	int i, la, a_id, slot, freq, pin, o13v;
 	char buf[100], *arg[20], *sep1, *sep2, *sep3;
 	adapter *ad;
 	strncpy(buf, o, sizeof(buf));
@@ -1074,6 +1075,8 @@ void set_unicable_adapters(char *o, int type)
 
 		if (!sep1 || !sep2)
 			continue;
+		if ((o13v = (sep2[1] == '*')) != 0)
+			sep2++;
 		slot = map_intd(sep1 + 1, NULL, -1);
 		freq = map_intd(sep2 + 1, NULL, -1);
 		if (slot < 0 || freq < 0)
@@ -1085,6 +1088,7 @@ void set_unicable_adapters(char *o, int type)
 		ad->ufreq = freq;
 		ad->switch_type = type;
 		ad->pin = pin;
+		ad->only13v = o13v;
 		LOGL(0, "Setting %s adapter %d slot %d freq %d",
 				type == SWITCH_UNICABLE ? "unicable" : "jess", a_id, slot, freq);
 	}

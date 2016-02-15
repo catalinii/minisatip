@@ -197,6 +197,7 @@ typedef struct struct_transponder
 	int uslot; // unicable/jess slot
 	int ufreq; // unicable/jess frequency
 	int pin;
+	int only13v; // use only 13V voltage
 	int committed_no, uncommitted_no; //diseqc informations
 	int old_pol, old_hiband, old_diseqc; // used to cache the diseqc position
 	

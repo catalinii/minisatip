@@ -87,6 +87,7 @@ typedef struct struct_adapter
 	int uslot; // unicable/jess slot
 	int ufreq; // unicable/jess frequency	
 	int pin;
+	int only13v; // unicable - use 13V voltage only
 	int committed_no, uncommitted_no; // diseqc info
 	int id;
 	int pat_processed, transponder_id, pat_ver;

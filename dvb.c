@@ -435,7 +435,7 @@ int send_diseqc(int fd, int pos, int pol, int hiband, int committed_no,
 }
 
 int send_unicable(int fd, int freq, int pos, int pol, int hiband, int slot,
-		int ufreq, int pin)
+		int ufreq, int pin, int o13v)
 {
 	struct dvb_diseqc_master_cmd cmd =
 	{
@@ -466,7 +466,7 @@ int send_unicable(int fd, int freq, int pos, int pol, int hiband, int slot,
 	if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
 		LOG("send_unicable: FE_SET_TONE failed for fd %d: %s", fd,
 				strerror(errno));
-	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18) == -1)
+	if (!o13v && ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18) == -1)
 		LOG("send_unicable: FE_SET_VOLTAGE failed for fd %d: %s", fd,
 				strerror(errno));
 	usleep(15000);
@@ -482,7 +482,7 @@ int send_unicable(int fd, int freq, int pos, int pol, int hiband, int slot,
 }
 
 int send_jess(int fd, int freq, int pos, int pol, int hiband, int slot,
-		int ufreq, int pin)
+		int ufreq, int pin, int o13v)
 {
 	struct dvb_diseqc_master_cmd cmd =
 	{
@@ -512,7 +512,7 @@ int send_jess(int fd, int freq, int pos, int pol, int hiband, int slot,
 	usleep(15000);
 	if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
 		LOG("send_jess: FE_SET_TONE failed for fd %d: %s", fd, strerror(errno));
-	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18) == -1)
+	if (!o13v && ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18) == -1)
 		LOG("send_jess: FE_SET_VOLTAGE failed for fd %d: %s", fd,
 				strerror(errno));
 	usleep(15000);
@@ -553,12 +553,12 @@ int setup_switch(int frontend_fd, transponder *tp)
 	if (tp->switch_type == SWITCH_UNICABLE)
 	{
 		freq = send_unicable(frontend_fd, freq / 1000, diseqc, pol, hiband,
-				tp->uslot, tp->ufreq, tp->pin);
+				tp->uslot, tp->ufreq, tp->pin, tp->only13v);
 	}
 	else if (tp->switch_type == SWITCH_JESS)
 	{
 		freq = send_jess(frontend_fd, freq / 1000, diseqc, pol, hiband,
-				tp->uslot, tp->ufreq, tp->pin);
+				tp->uslot, tp->ufreq, tp->pin, tp->only13v);
 	}
 	else if (tp->switch_type == SWITCH_SLAVE)
 	{
