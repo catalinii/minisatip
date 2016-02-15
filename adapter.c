@@ -203,7 +203,7 @@ int init_hw(int i)
 	snprintf(ad->name, sizeof(ad->name), "AD%d", i);
 	set_socket_thread(ad->sock, start_new_thread(ad->name));
 	set_thread_prio(get_socket_thread(ad->sock), opts.th_priority);
-#ifdef TABLES_H
+#ifndef DISABLE_TABLES
 	tables_init_device(ad);
 #endif
 	if (ad->post_init)
@@ -285,7 +285,7 @@ void close_adapter(int na)
 		close(ad->fe);
 	if (ad->sock > 0)
 		sockets_del(ad->sock);
-#ifdef TABLES_H
+#ifndef DISABLE_TABLES
 	if (ad->ca_mask > 0)
 		tables_close_device(ad);
 #endif
@@ -492,7 +492,7 @@ int update_pids(int aid)
 	if (!ad)
 		return 0;
 
-#ifdef TABLES_H	
+#ifndef DISABLE_TABLES
 	for (i = 0; i < MAX_PIDS; i++)
 		if ((ad->pids[i].flags == 3))
 			tables_pid_del(ad, ad->pids[i].pid);
@@ -579,7 +579,7 @@ int tune(int aid, int sid)
 				return -503;
 			}
 		}
-#ifdef TABLES_H
+#ifndef DISABLE_TABLES
 		p = find_pid(aid, 0);
 		if (!p || p->flags == 3) // add pid 0 if not explicitly added
 		{
@@ -722,7 +722,7 @@ int mark_pid_add(int sid, int aid, int _pid)
 			return -1;
 
 		}
-#ifdef TABLES_H	
+#ifndef DISABLE_TABLES
 		tables_pid_add(ad, _pid, 1);
 #endif
 		return 0;
@@ -735,7 +735,7 @@ int mark_pid_add(int sid, int aid, int _pid)
 			ad->pids[i].pid = _pid;
 			ad->pids[i].sid[0] = sid;
 			ad->pids[i].filter = ad->pids[i].key = ad->pids[i].ecm_parity = 255;
-#ifdef TABLES_H	
+#ifndef DISABLE_TABLES
 			tables_pid_add(ad, _pid, 0);
 #endif
 			return 0;
