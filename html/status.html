@@ -2,6 +2,33 @@
 <html>
 <head>
 <meta charset="utf-8"/>
+<style>
+.tright {
+  text-align: right;
+}
+.tcenter {
+  text-align: center;
+}
+.enabled {
+  color: green;
+}
+.disabled {
+  color: red;
+}
+table, th, td {
+  border: 1px solid black;
+}
+table {
+  border-collapse: collapse;
+}
+td.header {
+  width: 100px;
+  color: red;
+}
+td.row {
+  width: 100px;
+}
+</style>
 </head>
 <title>Minisatip/$version$ on $http_host$</title>
 <body onload="JavaScript:timedRefresh(5000);">
@@ -49,37 +76,37 @@ var max_adapters = 16;
 var max_streams = 64;
 var pol = ["", "(V)", "(H)", "(R)", "(L)"]
 var sys= [ "", "dvbc", "dvbcb", "dvbt", "dss", "dvbs", "dvbs2", "dvbh", "isdbt", "isdbs", "isdbc", "atsc", "atscmh", "dmbth", "cmmb", "dab", "dvbt2", "turbo", "dvbcc", "dvbc2" ]
-var myTable= "<table border='1'><tr><td style='width: 100px; color: red;'>Tuner</td>";
-    myTable+= "<td style='width: 100px; color: red; text-align: right;'>Status</td>";
-    myTable+="<td style='width: 100px; color: red; text-align: right;'>Frequency</td>";
-    myTable+="<td style='width: 100px; color: red; text-align: right;'>SR/BW</td>";
-    myTable+="<td style='width: 100px; color: red; text-align: right;'>Signal</td>";
-    myTable+="<td style='width: 100px; color: red; text-align: right;'>Streams</td>";
-    myTable+="<td style='width: 100px; color: red; text-align: right;'>Streams Pids</td></tr>";
+var myTable= "<table><tr><td class='header'>Tuner</td>";
+    myTable+="<td class='header tright'>Status</td>";
+    myTable+="<td class='header tright'>Frequency</td>";
+    myTable+="<td class='header tright'>SR/BW</td>";
+    myTable+="<td class='header tright'>Signal</td>";
+    myTable+="<td class='header tright'>Streams</td>";
+    myTable+="<td class='header tright'>Streams Pids</td></tr>";
 
   for (var i=0; i<max_adapters; i++) {
 	if(ad_type[i] == 0)
 		continue;
-    myTable+="<tr><td style='width: 100px;'>" + i + "</td>";
+    myTable+="<tr><td class='row'>" + i + "</td>";
 	var csys = "";
 	if(ad_sys[i] == 0)
 		csys = ad_allsys[i];
 	else
 		csys = sys[ad_sys[i]];
 	if(ad_enabled[i] == 1)
-		myTable+="<td style='width: 100px; text-align: right; color: green;' title='pids="+ad_pids[i]+"'>" + csys;
+		myTable+="<td class='row tright enabled' title='pids="+ad_pids[i]+"'>" + csys;
 	else
-		myTable+="<td style='width: 100px; text-align: right; color: red;' >" + ad_allsys[i];
+		myTable+="<td class='row tright disabled'>" + ad_allsys[i];
 	if(ad_type[i] == 1){
 		myTable+="(" + ad_phyad[i] + "," + ad_phyfd[i] +") </td>";
 	}else{ 
 		myTable+="(" + ad_satip[i] + ")</td>";
 	}
-    myTable+="<td style='width: 100px; text-align: right;' >" + ad_freq[i] + ""+pol[ad_pol[i]]+"</td>";
+    myTable+="<td class='row tright'>" + ad_freq[i] + ""+pol[ad_pol[i]]+"</td>";
 	if(ad_sys[i] == 0 || ad_sys[i] == 1 || ad_sys[i] == 2 || ad_sys[i] == 5 || ad_sys[i] == 6 || ad_sys[i] == 18 || ad_sys[i] == 19 )
-		myTable+="<td style='width: 100px;text-align: right;'>" + ad_sr[i] + "</td>";
+		myTable+="<td class='row tright'>" + ad_sr[i] + "</td>";
 	else 
-		myTable+="<td style='width: 100px;text-align: right;'>" + ad_bw[i]/1000 + "MHZ</td>";
+		myTable+="<td class='row tright'>" + ad_bw[i]/1000 + "MHZ</td>";
 
 	var signal = "";
 	if(ad_enabled[i] == 0)
@@ -97,9 +124,9 @@ var myTable= "<table border='1'><tr><td style='width: 100px; color: red;'>Tuner<
 		if(ad_ber[i] > 0)
 			signal += " BER "+ad_ber[i];
 	}	
-	myTable+="<td style='width: 100px;text-align: right;'>" + signal + " </td>";
+	myTable+="<td class='row tright'>" + signal + " </td>";
 
-	myTable +="<td style='width: 100px;text-align: center;'>";
+	myTable +="<td class='row tright'>";
 	for(var j=0;j<max_streams;j++)
 		if(st_enabled[j]==1 && st_adapter[j]==i)
 		{
@@ -111,7 +138,7 @@ var myTable= "<table border='1'><tr><td style='width: 100px; color: red;'>Tuner<
 			myTable += st_rh+"("+st_useragent[j]+")<br>";
 		}
 	
-	myTable +="</td><td style='width: 100px;text-align: center;'>";
+	myTable +="</td><td class='row tcenter'>";
 
 	for(var j=0;j<max_streams;j++)
 		if(st_enabled[j]==1 && st_adapter[j]==i)
