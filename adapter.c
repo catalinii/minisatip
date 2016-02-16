@@ -1222,7 +1222,7 @@ int delsys_match(adapter *ad, int del_sys)
 
 }
 
-void signal_thread(sockets *s)
+int signal_thread(sockets *s)
 {
 	int i, ts, ctime;
 	adapter *ad;
@@ -1245,6 +1245,7 @@ void signal_thread(sockets *s)
 						ad->max_strength, ad->max_snr, opts.force_scan);
 
 		}
+	return 0;
 }
 
 void adapter_lock1(char *FILE, int line, int aid)
