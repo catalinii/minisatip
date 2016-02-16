@@ -826,15 +826,17 @@ char *
 get_current_timestamp_log(void)
 {
 	static char date_str[200];
-	time_t date;
+	struct timeval tv;
 	struct tm *t;
-	time(&date);
-	t = localtime(&date);
+	
+	if (gettimeofday(&tv, NULL))
+		return "01/01 00:00:20";
+	t = localtime(&tv.tv_sec);
 	if (!t)
 		return "01/01 00:00:20";
 	snprintf(date_str, sizeof(date_str), "%02d/%02d %02d:%02d:%02d.%03d",
 			t->tm_mday, t->tm_mon + 1, t->tm_hour, t->tm_min, t->tm_sec,
-			getTick());
+			(int)(tv.tv_usec / 1000));
 	return date_str;
 }
 
