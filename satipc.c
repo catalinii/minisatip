@@ -916,5 +916,6 @@ void find_satip_adapter(adapter **a)
 satipc *sip_tmp;
 _symbols satipc_sym[] ={
 { "ad_satip", VAR_AARRAY_PSTRING, a, 1, MAX_ADAPTERS, (long int) &sip_tmp[0].sip
-		- (long int) &sip_tmp[0] }
+		- (long int) &sip_tmp[0] },
+{ NULL, 0, NULL, 0, 0 }
 };
