@@ -1293,17 +1293,12 @@ char* get_stream_pids(int s_id, char *dest, int max_size)
 	return dest;
 }
 
-streams *s_tmp;
 _symbols stream_sym[] =
 {
-{ "st_enabled", VAR_AARRAY_INT8, st, 1, MAX_STREAMS,
-		(long int) &s_tmp[0].enabled - (long int) &s_tmp[0] },
-{ "st_play", VAR_AARRAY_INT, st, 1, MAX_STREAMS, (long int) &s_tmp[0].do_play
-		- (long int) &s_tmp[0] },
-{ "st_adapter", VAR_AARRAY_INT, st, 1, MAX_STREAMS, (long int) &s_tmp[0].adapter
-		- (long int) &s_tmp[0] },
-{ "st_useragent", VAR_AARRAY_STRING, st, 1, MAX_STREAMS,
-		(long int) &s_tmp[0].useragent - (long int) &s_tmp[0] },
+{ "st_enabled", VAR_AARRAY_INT8, st, 1, MAX_STREAMS, offsetof(streams, enabled) },
+{ "st_play", VAR_AARRAY_INT, st, 1, MAX_STREAMS, offsetof(streams, do_play) },
+{ "st_adapter", VAR_AARRAY_INT, st, 1, MAX_STREAMS, offsetof(streams, adapter) },
+{ "st_useragent", VAR_AARRAY_STRING, st, 1, MAX_STREAMS, offsetof(streams, useragent) },
 { "st_rhost", VAR_FUNCTION_STRING, (void *) &get_stream_rhost, 0, 0, 0 },
 { "st_rport", VAR_FUNCTION_INT, (void *) &get_stream_rport, 0, 0, 0 },
 { "st_pids", VAR_FUNCTION_STRING, (void *) &get_stream_pids, 0, 0, 0 },

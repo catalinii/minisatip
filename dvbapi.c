@@ -991,25 +991,16 @@ void dvbapi_delete_keys_for_adapter(int aid)
 			keys_del(i);
 }
 
-SKey *k_tmp;
 _symbols dvbapi_sym[] =
 {
-{ "key_enabled", VAR_AARRAY_INT8, keys, 1, MAX_KEYS,
-		(long int) &k_tmp[0].enabled - (long int) &k_tmp[0] },
-{ "key_hops", VAR_AARRAY_INT8, keys, 1, MAX_KEYS, (long int) &k_tmp[0].hops
-		- (long int) &k_tmp[0] },
-{ "key_ecmtime", VAR_AARRAY_INT, keys, 1, MAX_KEYS, (long int) &k_tmp[0].ecmtime
-		- (long int) &k_tmp[0] },
-{ "key_pmt", VAR_AARRAY_INT, keys, 1, MAX_KEYS, (long int) &k_tmp[0].pmt_pid
-		- (long int) &k_tmp[0] },
-{ "key_cardsystem", VAR_AARRAY_PSTRING, keys, 1, MAX_KEYS,
-		(long int) &k_tmp[0].cardsystem - (long int) &k_tmp[0] },
-{ "key_reader", VAR_AARRAY_PSTRING, keys, 1, MAX_KEYS,
-		(long int) &k_tmp[0].reader - (long int) &k_tmp[0] },
-{ "key_from", VAR_AARRAY_PSTRING, keys, 1, MAX_KEYS, (long int) &k_tmp[0].from
-		- (long int) &k_tmp[0] },
-{ "key_protocol", VAR_AARRAY_PSTRING, keys, 1, MAX_KEYS,
-		(long int) &k_tmp[0].protocol - (long int) &k_tmp[0] },
+{ "key_enabled", VAR_AARRAY_INT8, keys, 1, MAX_KEYS, offsetof(SKey, enabled) },
+{ "key_hops", VAR_AARRAY_INT8, keys, 1, MAX_KEYS, offsetof(SKey, hops) },
+{ "key_ecmtime", VAR_AARRAY_INT, keys, 1, MAX_KEYS, offsetof(SKey, ecmtime) },
+{ "key_pmt", VAR_AARRAY_INT, keys, 1, MAX_KEYS, offsetof(SKey, pmt_pid) },
+{ "key_cardsystem", VAR_AARRAY_PSTRING, keys, 1, MAX_KEYS, offsetof(SKey, cardsystem) },
+{ "key_reader", VAR_AARRAY_PSTRING, keys, 1, MAX_KEYS, offsetof(SKey, reader) },
+{ "key_from", VAR_AARRAY_PSTRING, keys, 1, MAX_KEYS, offsetof(SKey, from) },
+{ "key_protocol", VAR_AARRAY_PSTRING, keys, 1, MAX_KEYS, offsetof(SKey, protocol) },
 
 { NULL, 0, NULL, 0, 0 } };
 
