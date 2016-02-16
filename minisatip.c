@@ -134,8 +134,16 @@ void usage()
 	print_version(0);
 	printf(
 			"\n\t./%s [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] \n\
-	\t[-j A1:S1-F1[-PIN]] [-m mac] [-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] \n\
-	\t[-R document_root] [-s [DELSYS:]host[:port] [-u A1:S1-F1[-PIN]] [-w http_server[:port]] \n\
+	\t[-j A1:S1-F1[-PIN]] [-m mac] "
+#ifndef DISABLE_DVBCSA
+				      "[-o oscam_host:dvbapi_port] "
+#endif
+				      				  "[-p public_host] [-r remote_rtp_host] \n\
+	\t[-R document_root] "
+#ifndef DISABLE_SATIPCLIENT
+			    "[-s [DELSYS:]host[:port] "
+#endif
+						     "[-u A1:S1-F1[-PIN]] [-w http_server[:port]] \n\
 	\t[-x http_port] [-X xml_path] [-y rtsp_port] \n\n\
 Help\n\
 -------\n\
@@ -179,13 +187,23 @@ Help\n\
 * -m xx: simulate xx as local mac address, generates UUID based on mac\n\
 	* eg: -m 001122334455 \n\
 \n\
+"
+#ifndef DISABLE_NETCVCLIENT
+"\
 * -n --netceiver if:count: use network interface <if> (default vlan4) and look for <count> netceivers\n\
 	* eg: -n vlan4:2 \n\
 \n\
+"
+#endif
+#ifndef DISABLE_DVBCSA
+"\
 * -o --dvbapi host:port - specify the hostname and port for the dvbapi server (oscam) \n\
 	* eg: -o 192.168.9.9:9000 \n\
 	192.168.9.9 is the host where oscam is running and 9000 is the port configured in dvbapi section in oscam.conf\n\
 \n\
+"
+#endif
+"\
 * -p url: specify playlist url using X_SATIPM3U header \n\
 	* eg: -p http://192.168.2.3:8080/playlist\n\
 	- this will add X_SATIPM3U tag into the satip description xml\n\
@@ -195,6 +213,9 @@ Help\n\
 \n\
 * -R --document-root directory: document root for the minisatip web page and images\n\
 \n\
+"
+#ifndef DISABLE_SATIPCLIENT
+"\
 * -s --satip-servers DELSYS:host:port - specify the remote satip host and port with delivery system DELSYS, it is possible to use multiple -s \n\
 	* DELSYS - can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, isdbt, atsc, dvbcb ( - DVBC_ANNEX_B ) [default: dvbs2]\n\
 	host - the server of the satip server\n\
@@ -204,6 +225,9 @@ Help\n\
 	- specifies 1 dvbt satip server  with address 192.168.1.3:554\n\
 	- specifies 1 dvbc satip server  with address 192.168.1.4:554\n\
 \n\
+"
+#endif
+"\
 * -S --slave ADAPTER1,ADAPTER2-ADAPTER4[,..] - specify slave adapters	\n\
 	* Allows specifying bonded adapters (multiple adapters connected with a splitter to the same LNB)\n\
 	Only one adapter needs to be master all others needs to have this parameter specified\n\
