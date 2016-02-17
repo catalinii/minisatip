@@ -381,19 +381,39 @@ void dump_pids(int aid)
 		}
 }
 
-#define return_adapter(i) { \
-	if(!init_hw(i)) \
-		return i; \
+int adapter_match(adapter *ad, int freq, int pol, int msys, int src, int diseqc)
+{
+	if (!ad->tp.freq == freq)
+		return 0;
+	if (msys == SYS_DVBS2 || msys == SYS_DVBS)
+	{
+		if (ad->tp.pol == pol && ad->tp.diseqc == diseqc)
+			return 1;
+		return 0;
+	}
+	return 1;
 }
 
-int get_free_adapter(int freq, int pol, int msys, int src)
+int get_free_adapter(int freq, int pol, int msys, int src, int diseqc)
 {
 	int i;
 	adapter *ad;
 //	init_all_hw();
 
-	i = (src > 0) ? src - 1 : 0;
-	ad = get_adapter(i);
+	if (src > 0) {
+		i = src - 1;
+		ad = a[i];
+		if (!delsys_match(ad, msys))
+			ad = NULL;
+		if (ad && !ad->enabled)
+		{
+			if (init_hw(i))
+				goto noadapter;
+			ad = get_adapter(i);
+		}
+	} else {
+		ad = get_adapter(i = 0);
+	}
 	if (ad)
 		LOG("get free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d f:%d pol=%d",
 				src - 1, i, ad->enabled, ad->master_sid, ad->sid_cnt,
@@ -404,13 +424,14 @@ int get_free_adapter(int freq, int pol, int msys, int src)
 
 	if (src > 0)
 	{
-		if (ad)
+		if (ad && delsys_match(ad, msys))
 		{
-			if (ad->sid_cnt == 0 && delsys_match(ad, msys))
+			if (ad->sid_cnt == 0)
 				return i;
-			if (ad->tp.freq == freq && delsys_match(ad, msys))
+			if (adapter_match(ad, freq, pol, msys, src, diseqc))
 				return i;
 		}
+		goto noadapter;
 	}
 	for (i = 0; i < MAX_ADAPTERS; i++)
 	{
@@ -419,21 +440,17 @@ int get_free_adapter(int freq, int pol, int msys, int src)
 				&& delsys_match(ad, msys))
 			return i;
 		if (!ad && delsys_match(a[i], msys)) // device is not initialized
-			return_adapter(i);
+		{
+			if(!init_hw(i))
+				return i;
+		}
 	}
 
 	for (i = 0; i < MAX_ADAPTERS; i++)
-		if ((ad = get_adapter_nw(i)) && a[i]->tp.freq == freq
-				&& delsys_match(ad, msys))
-		{
-			if ((msys == SYS_DVBS2 || msys == SYS_DVBS))
-			{
-				if (ad->tp.pol == pol)
-					return i;
-			}
-			else
+		if ((ad = get_adapter_nw(i)) && delsys_match(ad, msys))
+			if (adapter_match(ad, freq, pol, msys, src, diseqc))
 				return i;
-		}
+noadapter:
 	LOG("no adapter found for f:%d pol:%d msys:%d", freq, pol, msys);
 	dump_adapters();
 	return -1;

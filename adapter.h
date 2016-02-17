@@ -110,7 +110,7 @@ int init_hw(int dev);
 int init_all_hw();
 int getAdaptersCount();
 void close_adapter(int na);
-int get_free_adapter(int freq, int pol, int msys, int src);
+int get_free_adapter(int freq, int pol, int msys, int src, int diseqc);
 int set_adapter_for_stream(int i, int a);
 void close_adapter_for_stream(int sid, int aid);
 int set_adapter_parameters(int aid, int sid, transponder * tp);

@@ -277,7 +277,7 @@ int start_play(streams * sid, sockets * s)
 					"Tune requested with no real parameters, ignoring ...");
 		}
 		a_id = get_free_adapter(sid->tp.freq, sid->tp.pol, sid->tp.sys,
-				sid->tp.fe);
+				sid->tp.fe, sid->tp.diseqc);
 		LOG("Got adapter %d on socket %d", a_id, s->id);
 		if (a_id < 0)
 			return -404;
