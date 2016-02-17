@@ -1371,42 +1371,24 @@ char *get_all_delsys(int aid, char *dest, int max_size)
 	return dest;
 }
 
-adapter *a_tmp;
-
 _symbols adapters_sym[] =
 {
-{ "ad_enabled", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS,
-		(long int) &a_tmp[0].enabled - (long int) &a_tmp[0] },
-{ "ad_type", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS, (long int) &a_tmp[0].type
-		- (long int) &a_tmp[0] },
-{ "ad_freq", VAR_AARRAY_INT, a, 1. / 1000,
-MAX_ADAPTERS, (long int) &a_tmp[0].tp.freq - (long int) &a_tmp[0] },
-{ "ad_strength", VAR_AARRAY_UINT16, a, 1,
-MAX_ADAPTERS, (long int) &a_tmp[0].strength - (long int) &a_tmp[0] },
-{ "ad_snr", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, (long int) &a_tmp[0].snr
-		- (long int) &a_tmp[0] },
-{ "ad_ber", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, (long int) &a_tmp[0].ber
-		- (long int) &a_tmp[0] },
-{ "ad_pol", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS, (long int) &a_tmp[0].tp.pol
-		- (long int) &a_tmp[0] },
-{ "ad_sr", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS,
-		(long int) &a_tmp[0].tp.sr - (long int) &a_tmp[0] },
-{ "ad_bw", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS,
-		(long int) &a_tmp[0].tp.bw - (long int) &a_tmp[0] },
-{ "ad_diseqc", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS,
-		(long int) &a_tmp[0].tp.diseqc - (long int) &a_tmp[0] },
-{ "ad_fe", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, (long int) &a_tmp[0].fe
-		- (long int) &a_tmp[0] },
-{ "ad_master", VAR_AARRAY_UINT8, a, 1,
-MAX_ADAPTERS, (long int) &a_tmp[0].master_sid - (long int) &a_tmp[0] },
-{ "ad_sidcount", VAR_AARRAY_UINT8, a, 1,
-MAX_ADAPTERS, (long int) &a_tmp[0].sid_cnt - (long int) &a_tmp[0] },
-{ "ad_phyad", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, (long int) &a_tmp[0].pa
-		- (long int) &a_tmp[0] },
-{ "ad_phyfd", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, (long int) &a_tmp[0].fn
-		- (long int) &a_tmp[0] },
-{ "ad_sys", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, (long int) &a_tmp[0].tp.sys
-		- (long int) &a_tmp[0] },
+{ "ad_enabled", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS, offsetof(adapter, enabled) },
+{ "ad_type", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS, offsetof(adapter, type) },
+{ "ad_freq", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, offsetof(adapter, tp.freq) },
+{ "ad_strength", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, offsetof(adapter, strength) },
+{ "ad_snr", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, offsetof(adapter, snr) },
+{ "ad_ber", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, offsetof(adapter, ber) },
+{ "ad_pol", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.pol) },
+{ "ad_sr", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, offsetof(adapter, tp.sr) },
+{ "ad_bw", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, offsetof(adapter, tp.bw) },
+{ "ad_diseqc", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.diseqc) },
+{ "ad_fe", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, fe) },
+{ "ad_master", VAR_AARRAY_UINT8, a, 1, MAX_ADAPTERS, offsetof(adapter, master_sid) },
+{ "ad_sidcount", VAR_AARRAY_UINT8, a, 1, MAX_ADAPTERS, offsetof(adapter, sid_cnt) },
+{ "ad_phyad", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, pa) },
+{ "ad_phyfd", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, fn) },
+{ "ad_sys", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.sys) },
 { "ad_allsys", VAR_FUNCTION_STRING, (void *) &get_all_delsys, 0, 0, 0 },
 { "ad_pids", VAR_FUNCTION_STRING, (void *) &get_adapter_pids, 0, 0, 0 },
 { "tuner_s2", VAR_INT, &tuner_s2, 1, 0, 0 },

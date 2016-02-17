@@ -17,6 +17,8 @@ void set_options (int argc, char *argv[]);
 extern char pid_file[];
 extern char app_name[], version[];
 
+#define offsetof(st, m) __builtin_offsetof(st, m)
+
 #define copy32(a,i,v) { a[i] = ((v)>>24) & 0xFF;\
 			a[i+1] = ((v)>>16) & 0xFF;\
 			a[i+2] = ((v)>>8) & 0xFF;\
