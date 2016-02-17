@@ -235,7 +235,6 @@ void init_dvb_parameters(transponder * tp)
 	tp->mtype = -1;
 	tp->plts = PILOT_AUTO;
 	tp->fec = FEC_AUTO;
-	tp->old_diseqc = tp->old_pol = tp->old_hiband = -1;
 }
 
 void copy_dvb_parameters(transponder * s, transponder * d)
@@ -378,7 +377,7 @@ void diseqc_cmd(int fd, int times, char *str, struct dvb_diseqc_master_cmd *cmd,
 
 }
 
-int send_diseqc(int fd, int pos, int pol, int hiband, diseqc *d)
+int send_diseqc(int fd, int pos, int pos_change, int pol, int hiband, diseqc *d)
 {
 	int committed_no = d->committed_no;
 	int uncommitted_no = d->uncommitted_no;
@@ -420,20 +419,23 @@ int send_diseqc(int fd, int pos, int pol, int hiband, diseqc *d)
 		LOG("send_diseqc: FE_SET_VOLTAGE failed for fd %d: %s", fd,
 				strerror(errno));
 
-	if (uncommitted_first)
-		diseqc_cmd(fd, uncommitted_no, "uncommitted", &uncmd, d);
+	if (!d->fast || pos_change) {
 
-	diseqc_cmd(fd, committed_no, "committed", &cmd, d);
+		if (uncommitted_first)
+			diseqc_cmd(fd, uncommitted_no, "uncommitted", &uncmd, d);
 
-	if (!uncommitted_first)
-		diseqc_cmd(fd, uncommitted_no, "uncommitted", &uncmd, d);
+		diseqc_cmd(fd, committed_no, "committed", &cmd, d);
 
-	msleep(d->after_switch);
+		if (!uncommitted_first)
+			diseqc_cmd(fd, uncommitted_no, "uncommitted", &uncmd, d);
 
-	if (ioctl(fd, FE_DISEQC_SEND_BURST, (pos & 1) ? SEC_MINI_B : SEC_MINI_A)
-			== -1)
-		LOG("send_diseqc: FE_DISEQC_SEND_BURST failed for fd %d: %s", fd,
-				strerror(errno));
+		msleep(d->after_switch);
+
+		if (ioctl(fd, FE_DISEQC_SEND_BURST, (pos & 1) ? SEC_MINI_B : SEC_MINI_A) == -1)
+			LOG("send_diseqc: FE_DISEQC_SEND_BURST failed for fd %d: %s", fd,
+			    strerror(errno));
+
+	}
 
 	msleep(d->after_burst);
 
@@ -539,7 +541,7 @@ int send_jess(int fd, int freq, int pos, int pol, int hiband, diseqc *d)
 	return d->ufreq * 1000;
 }
 
-int setup_switch(int frontend_fd, transponder *tp)
+int setup_switch(int frontend_fd, adapter *ad, transponder *tp)
 {
 	int hiband = 0;
 	int diseqc = (tp->diseqc > 0) ? tp->diseqc - 1 : 0;
@@ -578,19 +580,20 @@ int setup_switch(int frontend_fd, transponder *tp)
 	}
 	else
 	{
-		if (tp->old_pol != pol || tp->old_hiband != hiband
-				|| tp->old_diseqc != diseqc)
-			send_diseqc(frontend_fd, diseqc, pol, hiband,
-				    &tp->diseqc_param);
+		if (ad->old_pol != pol || ad->old_hiband != hiband
+				|| ad->old_diseqc != diseqc)
+			send_diseqc(frontend_fd, diseqc, ad->old_diseqc != diseqc,
+			            pol, hiband, &tp->diseqc_param);
 		else
-			LOGL(3,
-					"Skip sending diseqc commands since the switch position doesn't need to be changed: pol %d, hiband %d, switch position %d",
+			LOGL(3, "Skip sending diseqc commands since "
+			        "the switch position doesn't need to be changed: "
+			        "pol %d, hiband %d, switch position %d",
 					pol, hiband, diseqc);
 	}
 
-	tp->old_pol = pol;
-	tp->old_hiband = hiband;
-	tp->old_diseqc = diseqc;
+	ad->old_pol = pol;
+	ad->old_hiband = hiband;
+	ad->old_diseqc = diseqc;
 
 	return freq;
 }
@@ -636,7 +639,7 @@ int dvb_tune(int aid, transponder * tp)
 	case SYS_DVBS2:
 
 		bpol = getTick();
-		freq = setup_switch(fd_frontend, tp);
+		freq = setup_switch(fd_frontend, ad, tp);
 		if (freq < MIN_FRQ_DVBS || freq > MAX_FRQ_DVBS)
 			LOG_AND_RETURN(-404, "Frequency %d is not within range ", freq)
 

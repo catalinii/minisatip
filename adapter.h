@@ -84,6 +84,9 @@ typedef struct struct_adapter
 	uint16_t strength, snr, max_strength, max_snr;
 	uint32_t pid_err, dec_err; // detect pids received but not part of any stream, decrypt errors
 	diseqc diseqc_param;
+	int old_diseqc;
+	int old_hiband;
+	int old_pol;
 	int id;
 	int pat_processed, transponder_id, pat_ver;
 	char name[5];

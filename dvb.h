@@ -176,6 +176,7 @@ typedef struct diseqc
 	int ufreq; // unicable/jess frequency
 	int pin;
 	int only13v; // unicable - use 13V voltage only
+	int fast;    // don't send diseqc without position change
 	int committed_no, uncommitted_no; // diseqc info
 	/* timing */
 	int before_cmd;
@@ -212,8 +213,6 @@ typedef struct struct_transponder
 
 	diseqc diseqc_param;
 
-	int old_pol, old_hiband, old_diseqc; // used to cache the diseqc position
-	
 	// DVB-C2
 	int c2tft;
 	int ds;

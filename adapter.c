@@ -53,6 +53,7 @@ adapter *adapter_alloc()
 {
 	adapter *ad = malloc1(sizeof(adapter));
 
+
 	/* diseqc default timing */
 	ad->diseqc_param.before_cmd = 15;
 	ad->diseqc_param.after_cmd = 54;
@@ -61,6 +62,11 @@ adapter *adapter_alloc()
 	ad->diseqc_param.after_burst = 15;
 	ad->diseqc_param.after_tone = 0;
 
+	/* diseqc state control */
+	ad->old_diseqc = -1;
+	ad->old_hiband = -1;
+	ad->old_pol = -1;
+	
 	return ad;
 }
 
@@ -309,6 +315,9 @@ void close_adapter(int na)
 	ad->dvr = 0;
 	ad->strength = 0;
 	ad->snr = 0;
+	ad->old_diseqc = -1;
+	ad->old_hiband = -1;
+	ad->old_pol = -1;
 	mutex_unlock(&ad->mutex);
 	mutex_destroy(&ad->mutex);
 	//      if(a[na]->buf)free1(a[na]->buf);a[na]->buf=NULL;
@@ -1121,7 +1130,7 @@ void set_unicable_adapters(char *o, int type)
 
 void set_diseqc_adapters(char *o)
 {
-	int i, la, a_id, committed_no, uncommitted_no;
+	int i, la, a_id, fast, committed_no, uncommitted_no;
 	char buf[100], *arg[20], *sep1, *sep2;
 	adapter *ad;
 	strncpy(buf, o, sizeof(buf));
@@ -1141,15 +1150,18 @@ void set_diseqc_adapters(char *o)
 
 		if (!sep1 || !sep2)
 			continue;
+		if ((fast = (*sep1 == '*')) != 0)
+			sep1++;
 		committed_no = map_intd(sep1 + 1, NULL, -1);
 		uncommitted_no = map_intd(sep2 + 1, NULL, -1);
 		if (committed_no < 0 || uncommitted_no < 0)
 			continue;
 
+		ad->diseqc_param.fast = fast;
 		ad->diseqc_param.committed_no = committed_no;
 		ad->diseqc_param.uncommitted_no = uncommitted_no;
-		LOGL(0, "Setting diseqc adapter %d committed_no %d uncommitted_no %d",
-				a_id, committed_no, uncommitted_no);
+		LOGL(0, "Setting diseqc adapter %d fast %d committed_no %d uncommitted_no %d",
+				a_id, fast, committed_no, uncommitted_no);
 	}
 }
 

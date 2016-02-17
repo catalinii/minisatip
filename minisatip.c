@@ -160,10 +160,11 @@ Help\n\
 * -c X: bandwidth capping for the output to the network [default: unlimited]\n\
 	* eg: -c 2048  (does not allow minisatip to send more than 2048KB/s to all remote servers)\n\
 \n\
-* -d --diseqc ADAPTER1:COMMITED1-UNCOMMITED1[,ADAPTER2:COMMITED2-UNCOMMITED2[,...]\n\
-\t* The first argument is the adapter number, second is the number of commited packets to send to a Diseqc 1.0 switch, third the number of uncommited commands to sent to a Diseqc 1.1 switch\n\
-\tThe higher number between the commited and uncommited will be sent first.\n\
-	eg: -d 0:1-0  (which is the default for each adapter).\n\
+* -d --diseqc ADAPTER1:COMMITTED1-UNCOMMITTED1[,ADAPTER2:COMMITTED2-UNCOMMITTED2[,...]\n\
+\t* The first argument is the adapter number, second is the number of committed packets to send to a Diseqc 1.0 switch, third the number of uncommitted commands to sent to a Diseqc 1.1 switch\n\
+\tThe higher number between the committed and uncommitted will be sent first.\n\
+	* eg: -d 0:1-0  (which is the default for each adapter).\n\
+	- note: * before committed number enables fast-switch (only voltage/tone)\n\
 \n\
 * -q --diseqc-timing ADAPTER1:BEFORE_CMD1-AFTER_CMD1-AFTER_REPEATED_CMD1-AFTER_SWITCH1-AFTER_BURST1-AFTER_TONE1[,...]\n\
 \t* All timing values are in ms, default adapter values are: 15-54-15-15-15-0\n\
