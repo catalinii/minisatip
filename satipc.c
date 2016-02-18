@@ -840,7 +840,7 @@ void find_satip_adapter(adapter **a)
 			if (is_adapter_disabled(i))
 				continue;
 			if (!a[i])
-				a[i] = malloc1(sizeof(adapter));
+				a[i] = adapter_alloc();
 			if(!satip[i])
 				satip[i] = malloc1(sizeof(satipc));
 			sip = satip[i];

@@ -66,6 +66,7 @@ static const struct option long_options[] =
 { "unicable", required_argument, NULL, 'u' },
 { "jess", required_argument, NULL, 'j' },
 { "diseqc", required_argument, NULL, 'd' },
+{ "diseqc-timing", required_argument, NULL, 'q' },
 #ifndef DISABLE_DVBCSA
 		{ "dvbapi", required_argument, NULL, 'o' },
 #endif
@@ -105,6 +106,7 @@ static const struct option long_options[] =
 #define UNICABLE_OPT 'u'
 #define JESS_OPT 'j'
 #define DISEQC_OPT 'd'
+#define DISEQC_TIMING_OPT 'q'
 #define SLAVE_OPT 'S'
 #define DELSYS_OPT 'Y'
 #define DVBAPI_OPT 'o'
@@ -158,10 +160,16 @@ Help\n\
 * -c X: bandwidth capping for the output to the network [default: unlimited]\n\
 	* eg: -c 2048  (does not allow minisatip to send more than 2048KB/s to all remote servers)\n\
 \n\
-* -d --diseqc ADAPTER1:COMMITED1-UNCOMMITED1[,ADAPTER2:COMMITED2-UNCOMMITED2[,...]\n\
-\t* The first argument is the adapter number, second is the number of commited packets to send to a Diseqc 1.0 switch, third the number of uncommited commands to sent to a Diseqc 1.1 switch\n\
-\tThe higher number between the commited and uncommited will be sent first.\n\
-	eg: -d 0:1-0  (which is the default for each adapter).\n\
+* -d --diseqc ADAPTER1:COMMITTED1-UNCOMMITTED1[,ADAPTER2:COMMITTED2-UNCOMMITTED2[,...]\n\
+\t* The first argument is the adapter number, second is the number of committed packets to send to a Diseqc 1.0 switch, third the number of uncommitted commands to sent to a Diseqc 1.1 switch\n\
+\tThe higher number between the committed and uncommitted will be sent first.\n\
+	* eg: -d 0:1-0  (which is the default for each adapter).\n\
+	- note: * as adapter means apply to all adapters\n\
+	- note: * before committed number enables fast-switch (only voltage/tone)\n\
+\n\
+* -q --diseqc-timing ADAPTER1:BEFORE_CMD1-AFTER_CMD1-AFTER_REPEATED_CMD1-AFTER_SWITCH1-AFTER_BURST1-AFTER_TONE1[,...]\n\
+\t* All timing values are in ms, default adapter values are: 15-54-15-15-15-0\n\
+	- note: * as adapter means apply to all adapters\n\
 \n\
 * -D --device-id DVC_ID: specify the device id (in case there are multiple SAT>IP servers in the network)\n \
 	* eg: -D 4 \n\
@@ -305,13 +313,20 @@ void set_options(int argc, char *argv[])
 	opts.xml_path = DESC_XML;
 	opts.no_threads = 0;
 	opts.th_priority = -1;
+	opts.diseqc_before_cmd = 15;
+	opts.diseqc_after_cmd = 54;
+	opts.diseqc_after_repeated_cmd = 15;
+	opts.diseqc_after_switch = 15;
+	opts.diseqc_after_burst = 15;
+	opts.diseqc_after_tone = 0;
+
 #ifdef __mips__
 	opts.no_threads = 1;
 #endif
 	memset(opts.playlist, 0, sizeof(opts.playlist));
 
 	while ((opt = getopt_long(argc, argv,
-			"flr:a:td:w:p:s:n:hc:b:m:p:e:x:u:j:o:gy:i:D:VR:S:TX:Y:",
+			"flr:a:td:w:p:s:n:hc:b:m:p:e:x:u:j:o:gy:i:q:D:VR:S:TX:Y:",
 			long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
@@ -431,6 +446,12 @@ void set_options(int argc, char *argv[])
 		case DISEQC_OPT:
 		{
 			set_diseqc_adapters(optarg);
+			break;
+		}
+
+		case DISEQC_TIMING_OPT:
+		{
+			set_diseqc_timing(optarg);
 			break;
 		}
 

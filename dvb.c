@@ -235,7 +235,6 @@ void init_dvb_parameters(transponder * tp)
 	tp->mtype = -1;
 	tp->plts = PILOT_AUTO;
 	tp->fec = FEC_AUTO;
-	tp->old_diseqc = tp->old_pol = tp->old_hiband = -1;
 }
 
 void copy_dvb_parameters(transponder * s, transponder * d)
@@ -356,24 +355,32 @@ int dvb_open_device(adapter *ad)
 	return 0;
 }
 
-void diseqc_cmd(int fd, int times, char *str, struct dvb_diseqc_master_cmd *cmd)
+void msleep(long ms)
+{
+	if (ms > 0)
+		usleep(ms * 1000);
+}
+
+void diseqc_cmd(int fd, int times, char *str, struct dvb_diseqc_master_cmd *cmd,
+                diseqc *d)
 {
 	int i;
+	msleep(d->before_cmd);
 	for (i = 0; i < times; i++)
 	{
-		usleep(15000);
 		if (ioctl(fd, FE_DISEQC_SEND_MASTER_CMD, cmd) == -1)
 			LOG(
 					"send_diseqc: FE_DISEQC_SEND_MASTER_CMD %s failed for fd %d: %s",
 					str, fd, strerror(errno));
-		usleep(54000);
+		msleep(i > 0 ? d->after_repeated_cmd : d->after_cmd);
 	}
 
 }
 
-int send_diseqc(int fd, int pos, int pol, int hiband, int committed_no,
-		int uncommitted_no)
+int send_diseqc(int fd, int pos, int pos_change, int pol, int hiband, diseqc *d)
 {
+	int committed_no = d->committed_no;
+	int uncommitted_no = d->uncommitted_no;
 	int uncommitted_first = 0;
 	int posu, posc;
 	/* DiSEqC 1.0 */
@@ -412,77 +419,83 @@ int send_diseqc(int fd, int pos, int pol, int hiband, int committed_no,
 		LOG("send_diseqc: FE_SET_VOLTAGE failed for fd %d: %s", fd,
 				strerror(errno));
 
-	if (uncommitted_first)
-		diseqc_cmd(fd, uncommitted_no, "uncommitted", &uncmd);
+	if (!d->fast || pos_change) {
 
-	diseqc_cmd(fd, committed_no, "committed", &cmd);
+		if (uncommitted_first)
+			diseqc_cmd(fd, uncommitted_no, "uncommitted", &uncmd, d);
 
-	if (!uncommitted_first)
-		diseqc_cmd(fd, uncommitted_no, "uncommitted", &uncmd);
+		diseqc_cmd(fd, committed_no, "committed", &cmd, d);
 
-	usleep(15000);
-	if (ioctl(fd, FE_DISEQC_SEND_BURST, (pos & 1) ? SEC_MINI_B : SEC_MINI_A)
-			== -1)
-		LOG("send_diseqc: FE_DISEQC_SEND_BURST failed for fd %d: %s", fd,
-				strerror(errno));
-	usleep(15000);
+		if (!uncommitted_first)
+			diseqc_cmd(fd, uncommitted_no, "uncommitted", &uncmd, d);
+
+		msleep(d->after_switch);
+
+		if (ioctl(fd, FE_DISEQC_SEND_BURST, (pos & 1) ? SEC_MINI_B : SEC_MINI_A) == -1)
+			LOG("send_diseqc: FE_DISEQC_SEND_BURST failed for fd %d: %s", fd,
+			    strerror(errno));
+
+	}
+
+	msleep(d->after_burst);
 
 	if (ioctl(fd, FE_SET_TONE, hiband ? SEC_TONE_ON : SEC_TONE_OFF) == -1)
 		LOG("send_diseqc: FE_SET_TONE failed for fd %d: %s", fd,
 				strerror(errno));
 
+	msleep(d->after_tone);
+
 	return 0;
 }
 
-int send_unicable(int fd, int freq, int pos, int pol, int hiband, int slot,
-		int ufreq, int pin, int o13v)
+int send_unicable(int fd, int freq, int pos, int pol, int hiband, diseqc *d)
 {
 	struct dvb_diseqc_master_cmd cmd =
 	{
 	{ 0xe0, 0x11, 0x5a, 0x00, 0x00 }, 5 };
 	int t;
 
-	t = (freq + ufreq + 2) / 4 - 350;
+	t = (freq + d->ufreq + 2) / 4 - 350;
 
-	cmd.msg[3] = ((t & 0x0300) >> 8) | (slot << 5) | (pos ? 0x10 : 0)
+	cmd.msg[3] = ((t & 0x0300) >> 8) | (d->uslot << 5) | (pos ? 0x10 : 0)
 			| (hiband ? 4 : 0) | (pol ? 8 : 0);
 	cmd.msg[4] = t & 0xff;
 
-	if (pin)
+	if (d->pin)
 	{
 		cmd.msg_len = 6;
 		cmd.msg[2] = 0x5C;
-		cmd.msg[5] = pin;
+		cmd.msg[5] = d->pin;
 	}
 
 	LOGL(3,
 			"send_unicable fd %d, freq %d, ufreq %d, pos = %d, pol = %d, hiband = %d, slot %d, diseqc => %02x %02x %02x %02x %02x",
-			fd, freq, ufreq, pos, pol, hiband, slot, cmd.msg[0], cmd.msg[1],
+			fd, freq, d->ufreq, pos, pol, hiband, d->uslot, cmd.msg[0], cmd.msg[1],
 			cmd.msg[2], cmd.msg[3], cmd.msg[4]);
 	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_13) == -1)
 		LOG("send_unicable: pre voltage  SEC_VOLTAGE_13 failed for fd %d: %s",
 				fd, strerror(errno));
-	usleep(15000);
+	msleep(d->before_cmd);
 	if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
 		LOG("send_unicable: FE_SET_TONE failed for fd %d: %s", fd,
 				strerror(errno));
-	if (!o13v && ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18) == -1)
+	if (!d->only13v && ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18) == -1)
 		LOG("send_unicable: FE_SET_VOLTAGE failed for fd %d: %s", fd,
 				strerror(errno));
-	usleep(15000);
+	msleep(d->after_burst);
 	if (ioctl(fd, FE_DISEQC_SEND_MASTER_CMD, &cmd) == -1)
 		LOG("send_unicable: FE_DISEQC_SEND_MASTER_CMD failed for fd %d: %s", fd,
 				strerror(errno));
-	usleep(15000);
+	msleep(d->after_repeated_cmd);
 	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_13) == -1)
 		LOG("send_unicable: FE_SET_VOLTAGE failed for fd %d: %s", fd,
 				strerror(errno));
+	msleep(d->after_tone);
 
-	return ufreq * 1000;
+	return d->ufreq * 1000;
 }
 
-int send_jess(int fd, int freq, int pos, int pol, int hiband, int slot,
-		int ufreq, int pin, int o13v)
+int send_jess(int fd, int freq, int pos, int pol, int hiband, diseqc *d)
 {
 	struct dvb_diseqc_master_cmd cmd =
 	{
@@ -490,44 +503,45 @@ int send_jess(int fd, int freq, int pos, int pol, int hiband, int slot,
 //	int t = (freq / 1000) - 100;
 	int t = freq - 100;
 
-	cmd.msg[1] = slot << 3;
+	cmd.msg[1] = d->uslot << 3;
 	cmd.msg[1] |= ((t << 8) & 0x07);
 	cmd.msg[2] = (t & 0xff);
 	cmd.msg[3] = ((pos & 0x3f) << 2) | (pol ? 2 : 0) | (hiband ? 1 : 0);
-	if (pin < 256)
+	if (d->pin < 256)
 	{
 		cmd.msg_len = 5;
 		cmd.msg[0] = 0x71;
-		cmd.msg[4] = pin;
+		cmd.msg[4] = d->pin;
 	}
 
 	LOGL(3,
 			"send_jess fd %d, freq %d, ufreq %d, pos = %d, pol = %d, hiband = %d, slot %d, diseqc => %02x %02x %02x %02x %02x",
-			fd, freq, ufreq, pos, pol, hiband, slot, cmd.msg[0], cmd.msg[1],
+			fd, freq, d->ufreq, pos, pol, hiband, d->uslot, cmd.msg[0], cmd.msg[1],
 			cmd.msg[2], cmd.msg[3], cmd.msg[4]);
 
 	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_13) == -1)
 		LOG("send_jess: pre voltage  SEC_VOLTAGE_13 failed for fd %d: %s", fd,
 				strerror(errno));
-	usleep(15000);
+	msleep(d->before_cmd);
 	if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
 		LOG("send_jess: FE_SET_TONE failed for fd %d: %s", fd, strerror(errno));
-	if (!o13v && ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18) == -1)
+	if (!d->only13v && ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18) == -1)
 		LOG("send_jess: FE_SET_VOLTAGE failed for fd %d: %s", fd,
 				strerror(errno));
-	usleep(15000);
+	msleep(d->after_burst);
 	if (ioctl(fd, FE_DISEQC_SEND_MASTER_CMD, &cmd) == -1)
 		LOG("send_jess: FE_DISEQC_SEND_MASTER_CMD failed for fd %d: %s", fd,
 				strerror(errno));
-	usleep(15000);
+	msleep(d->after_repeated_cmd);
 	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_13) == -1)
 		LOG("send_jess: FE_SET_VOLTAGE failed for fd %d: %s", fd,
 				strerror(errno));
+	msleep(d->after_tone);
 
-	return ufreq * 1000;
+	return d->ufreq * 1000;
 }
 
-int setup_switch(int frontend_fd, transponder *tp)
+int setup_switch(int frontend_fd, adapter *ad, transponder *tp)
 {
 	int hiband = 0;
 	int diseqc = (tp->diseqc > 0) ? tp->diseqc - 1 : 0;
@@ -550,35 +564,36 @@ int setup_switch(int frontend_fd, transponder *tp)
 		hiband = 1;
 	}
 
-	if (tp->switch_type == SWITCH_UNICABLE)
+	if (tp->diseqc_param.switch_type == SWITCH_UNICABLE)
 	{
-		freq = send_unicable(frontend_fd, freq / 1000, diseqc, pol, hiband,
-				tp->uslot, tp->ufreq, tp->pin, tp->only13v);
+		freq = send_unicable(frontend_fd, freq / 1000, diseqc,
+				     pol, hiband, &tp->diseqc_param);
 	}
-	else if (tp->switch_type == SWITCH_JESS)
+	else if (tp->diseqc_param.switch_type == SWITCH_JESS)
 	{
-		freq = send_jess(frontend_fd, freq / 1000, diseqc, pol, hiband,
-				tp->uslot, tp->ufreq, tp->pin, tp->only13v);
+		freq = send_jess(frontend_fd, freq / 1000, diseqc,
+				 pol, hiband, &tp->diseqc_param);
 	}
-	else if (tp->switch_type == SWITCH_SLAVE)
+	else if (tp->diseqc_param.switch_type == SWITCH_SLAVE)
 	{
 		LOGL(2, "FD %d is a slave adapter", frontend_fd);
 	}
 	else
 	{
-		if (tp->old_pol != pol || tp->old_hiband != hiband
-				|| tp->old_diseqc != diseqc)
-			send_diseqc(frontend_fd, diseqc, pol, hiband, tp->committed_no,
-					tp->uncommitted_no);
+		if (ad->old_pol != pol || ad->old_hiband != hiband
+				|| ad->old_diseqc != diseqc)
+			send_diseqc(frontend_fd, diseqc, ad->old_diseqc != diseqc,
+			            pol, hiband, &tp->diseqc_param);
 		else
-			LOGL(3,
-					"Skip sending diseqc commands since the switch position doesn't need to be changed: pol %d, hiband %d, switch position %d",
+			LOGL(3, "Skip sending diseqc commands since "
+			        "the switch position doesn't need to be changed: "
+			        "pol %d, hiband %d, switch position %d",
 					pol, hiband, diseqc);
 	}
 
-	tp->old_pol = pol;
-	tp->old_hiband = hiband;
-	tp->old_diseqc = diseqc;
+	ad->old_pol = pol;
+	ad->old_hiband = hiband;
+	ad->old_diseqc = diseqc;
 
 	return freq;
 }
@@ -624,7 +639,7 @@ int dvb_tune(int aid, transponder * tp)
 	case SYS_DVBS2:
 
 		bpol = getTick();
-		freq = setup_switch(fd_frontend, tp);
+		freq = setup_switch(fd_frontend, ad, tp);
 		if (freq < MIN_FRQ_DVBS || freq > MAX_FRQ_DVBS)
 			LOG_AND_RETURN(-404, "Frequency %d is not within range ", freq)
 
@@ -1051,7 +1066,7 @@ void find_dvb_adapter(adapter **a)
 //					continue;
 //				}
 				if (!a[na])
-					a[na] = malloc1(sizeof(adapter));
+					a[na] = adapter_alloc();
 
 				ad = a[na];
 				ad->pa = i;

@@ -165,6 +165,28 @@ typedef enum fe_modulation {
 #define MIN_FRQ_DVBS  950000
 #define MAX_FRQ_DVBS 2150000
 
+typedef struct diseqc
+{
+#define SWITCH_UNICABLE 1
+#define SWITCH_JESS 2
+#define SWITCH_SLAVE 3
+	int switch_type;
+	/* parameters */
+	int uslot; // unicable/jess slot
+	int ufreq; // unicable/jess frequency
+	int pin;
+	int only13v; // unicable - use 13V voltage only
+	int fast;    // don't send diseqc without position change
+	int committed_no, uncommitted_no; // diseqc info
+	/* timing */
+	int before_cmd;
+	int after_cmd;
+	int after_repeated_cmd;
+	int after_switch;
+	int after_burst;
+	int after_tone;
+} diseqc;
+
 typedef struct struct_transponder
 {
 	fe_delivery_system_t sys;
@@ -189,18 +211,8 @@ typedef struct struct_transponder
 	int pol;
 	int diseqc;
 
-#define SWITCH_UNICABLE 1
-#define SWITCH_JESS 2
-#define SWITCH_SLAVE 3
-	
-	int switch_type; // tuner type 
-	int uslot; // unicable/jess slot
-	int ufreq; // unicable/jess frequency
-	int pin;
-	int only13v; // use only 13V voltage
-	int committed_no, uncommitted_no; //diseqc informations
-	int old_pol, old_hiband, old_diseqc; // used to cache the diseqc position
-	
+	diseqc diseqc_param;
+
 	// DVB-C2
 	int c2tft;
 	int ds;

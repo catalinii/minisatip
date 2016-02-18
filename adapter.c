@@ -49,6 +49,31 @@ extern struct struct_opts opts;
 int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
 void find_dvb_adapter(adapter **a);
 
+adapter *adapter_alloc()
+{
+	adapter *ad = malloc1(sizeof(adapter));
+
+	/* diseqc setup */
+	ad->diseqc_param.fast = opts.diseqc_fast;
+	ad->diseqc_param.committed_no = opts.diseqc_committed_no;
+	ad->diseqc_param.uncommitted_no = opts.diseqc_uncommitted_no;
+
+	/* diseqc default timing */
+	ad->diseqc_param.before_cmd = opts.diseqc_before_cmd;
+	ad->diseqc_param.after_cmd = opts.diseqc_after_cmd;
+	ad->diseqc_param.after_repeated_cmd = opts.diseqc_after_repeated_cmd;
+	ad->diseqc_param.after_switch = opts.diseqc_after_switch;
+	ad->diseqc_param.after_burst = opts.diseqc_after_burst;
+	ad->diseqc_param.after_tone = opts.diseqc_after_tone;
+
+	/* diseqc state control */
+	ad->old_diseqc = -1;
+	ad->old_hiband = -1;
+	ad->old_pol = -1;
+	
+	return ad;
+}
+
 void find_adapters()
 {
 	static int init_find_adapter;
@@ -294,6 +319,9 @@ void close_adapter(int na)
 	ad->dvr = 0;
 	ad->strength = 0;
 	ad->snr = 0;
+	ad->old_diseqc = -1;
+	ad->old_hiband = -1;
+	ad->old_pol = -1;
 	mutex_unlock(&ad->mutex);
 	mutex_destroy(&ad->mutex);
 	//      if(a[na]->buf)free1(a[na]->buf);a[na]->buf=NULL;
@@ -381,19 +409,39 @@ void dump_pids(int aid)
 		}
 }
 
-#define return_adapter(i) { \
-	if(!init_hw(i)) \
-		return i; \
+int adapter_match(adapter *ad, int freq, int pol, int msys, int src, int diseqc)
+{
+	if (!ad->tp.freq == freq)
+		return 0;
+	if (msys == SYS_DVBS2 || msys == SYS_DVBS)
+	{
+		if (ad->tp.pol == pol && ad->tp.diseqc == diseqc)
+			return 1;
+		return 0;
+	}
+	return 1;
 }
 
-int get_free_adapter(int freq, int pol, int msys, int src)
+int get_free_adapter(int freq, int pol, int msys, int src, int diseqc)
 {
 	int i;
 	adapter *ad;
 //	init_all_hw();
 
-	i = (src > 0) ? src - 1 : 0;
-	ad = get_adapter(i);
+	if (src > 0) {
+		i = src - 1;
+		ad = a[i];
+		if (!delsys_match(ad, msys))
+			ad = NULL;
+		if (ad && !ad->enabled)
+		{
+			if (init_hw(i))
+				goto noadapter;
+			ad = get_adapter(i);
+		}
+	} else {
+		ad = get_adapter(i = 0);
+	}
 	if (ad)
 		LOG("get free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d f:%d pol=%d",
 				src - 1, i, ad->enabled, ad->master_sid, ad->sid_cnt,
@@ -404,13 +452,14 @@ int get_free_adapter(int freq, int pol, int msys, int src)
 
 	if (src > 0)
 	{
-		if (ad)
+		if (ad && delsys_match(ad, msys))
 		{
-			if (ad->sid_cnt == 0 && delsys_match(ad, msys))
+			if (ad->sid_cnt == 0)
 				return i;
-			if (ad->tp.freq == freq && delsys_match(ad, msys))
+			if (adapter_match(ad, freq, pol, msys, src, diseqc))
 				return i;
 		}
+		goto noadapter;
 	}
 	for (i = 0; i < MAX_ADAPTERS; i++)
 	{
@@ -419,21 +468,17 @@ int get_free_adapter(int freq, int pol, int msys, int src)
 				&& delsys_match(ad, msys))
 			return i;
 		if (!ad && delsys_match(a[i], msys)) // device is not initialized
-			return_adapter(i);
+		{
+			if(!init_hw(i))
+				return i;
+		}
 	}
 
 	for (i = 0; i < MAX_ADAPTERS; i++)
-		if ((ad = get_adapter_nw(i)) && a[i]->tp.freq == freq
-				&& delsys_match(ad, msys))
-		{
-			if ((msys == SYS_DVBS2 || msys == SYS_DVBS))
-			{
-				if (ad->tp.pol == pol)
-					return i;
-			}
-			else
+		if ((ad = get_adapter_nw(i)) && delsys_match(ad, msys))
+			if (adapter_match(ad, freq, pol, msys, src, diseqc))
 				return i;
-		}
+noadapter:
 	LOG("no adapter found for f:%d pol:%d msys:%d", freq, pol, msys);
 	dump_adapters();
 	return -1;
@@ -557,14 +602,7 @@ int tune(int aid, int sid)
 	ad->last_sort = getTick();
 	if (sid == ad->master_sid && ad->do_tune)
 	{
-		ad->tp.switch_type = ad->switch_type;
-		ad->tp.uslot = ad->uslot;
-		ad->tp.ufreq = ad->ufreq;
-		ad->tp.pin = ad->pin;
-		ad->tp.only13v = ad->only13v;
-
-		ad->tp.committed_no = ad->committed_no;
-		ad->tp.uncommitted_no = ad->uncommitted_no;
+		ad->tp.diseqc_param = ad->diseqc_param;
 
 		rv = ad->tune(ad->id, &ad->tp);
 		ad->status = -1;
@@ -1067,7 +1105,7 @@ void set_unicable_adapters(char *o, int type)
 			continue;
 
 		if (!a[a_id])
-			a[a_id] = malloc(sizeof(adapter));
+			a[a_id] = adapter_alloc();
 		ad = a[a_id];
 
 		sep1 = strchr(arg[i], ':');
@@ -1084,11 +1122,11 @@ void set_unicable_adapters(char *o, int type)
 		sep3 = strchr(sep2 + 1, '-');
 		pin = map_intd(sep3, NULL, 0);
 
-		ad->uslot = slot;
-		ad->ufreq = freq;
-		ad->switch_type = type;
-		ad->pin = pin;
-		ad->only13v = o13v;
+		ad->diseqc_param.uslot = slot;
+		ad->diseqc_param.ufreq = freq;
+		ad->diseqc_param.switch_type = type;
+		ad->diseqc_param.pin = pin;
+		ad->diseqc_param.only13v = o13v;
 		LOGL(0, "Setting %s adapter %d slot %d freq %d",
 				type == SWITCH_UNICABLE ? "unicable" : "jess", a_id, slot, freq);
 	}
@@ -1096,35 +1134,115 @@ void set_unicable_adapters(char *o, int type)
 
 void set_diseqc_adapters(char *o)
 {
-	int i, la, a_id, committed_no, uncommitted_no;
+	int i, la, a_id, fast, committed_no, uncommitted_no;
 	char buf[100], *arg[20], *sep1, *sep2;
 	adapter *ad;
 	strncpy(buf, o, sizeof(buf));
 	la = split(arg, buf, sizeof(arg), ',');
 	for (i = 0; i < la; i++)
 	{
-		a_id = map_intd(arg[i], NULL, -1);
-		if (a_id < 0 || a_id >= MAX_ADAPTERS)
-			continue;
+		if (arg[i] && arg[i][0] == '*') {
+			ad = NULL;
+			a_id = -1;
+		} else {
+			a_id = map_intd(arg[i], NULL, -1);
+			if (a_id < 0 || a_id >= MAX_ADAPTERS)
+				continue;
 
-		if (!a[a_id])
-			a[a_id] = malloc(sizeof(adapter));
-		ad = a[a_id];
+			if (!a[a_id])
+				a[a_id] = adapter_alloc();
+			ad = a[a_id];
+		}
 
 		sep1 = strchr(arg[i], ':');
 		sep2 = strchr(arg[i], '-');
 
 		if (!sep1 || !sep2)
 			continue;
+		if ((fast = (sep1[1] == '*')) != 0)
+			sep1++;
 		committed_no = map_intd(sep1 + 1, NULL, -1);
 		uncommitted_no = map_intd(sep2 + 1, NULL, -1);
 		if (committed_no < 0 || uncommitted_no < 0)
 			continue;
 
-		ad->committed_no = committed_no;
-		ad->uncommitted_no = uncommitted_no;
-		LOGL(0, "Setting diseqc adapter %d committed_no %d uncommitted_no %d",
-				a_id, committed_no, uncommitted_no);
+		if (ad) {
+			ad->diseqc_param.fast = fast;
+			ad->diseqc_param.committed_no = committed_no;
+			ad->diseqc_param.uncommitted_no = uncommitted_no;
+		} else {
+			opts.diseqc_fast = fast;
+			opts.diseqc_committed_no = committed_no;
+			opts.diseqc_uncommitted_no = uncommitted_no;
+		}
+		LOGL(0, "Setting diseqc adapter %d fast %d committed_no %d uncommitted_no %d",
+				a_id, fast, committed_no, uncommitted_no);
+	}
+}
+
+void set_diseqc_timing(char *o)
+{
+	int i, la, a_id;
+	int before_cmd, after_cmd, after_repeated_cmd;
+	int after_switch, after_burst, after_tone;
+	char buf[2000], *arg[20];
+	char *sep1, *sep2, *sep3, *sep4, *sep5, *sep6, *sep7;
+	adapter *ad;
+	strncpy(buf, o, sizeof(buf));
+	la = split(arg, buf, sizeof(arg), ',');
+	for (i = 0; i < la; i++)
+	{
+		if (arg[i] && arg[i][0] == '*') {
+			ad = NULL;
+			a_id = -1;
+		} else {
+			a_id = map_intd(arg[i], NULL, -1);
+			if (a_id < 0 || a_id >= MAX_ADAPTERS)
+				continue;
+
+			if (!a[a_id])
+				a[a_id] = adapter_alloc();
+			ad = a[a_id];
+		}
+
+		sep1 = strchr(arg[i], ':');
+		sep2 = strchr(arg[i], '-');
+		sep3 = sep2 ? strchr(sep2 + 1, '-') : NULL;
+		sep4 = sep3 ? strchr(sep3 + 1, '-') : NULL;
+		sep5 = sep4 ? strchr(sep4 + 1, '-') : NULL;
+		sep6 = sep5 ? strchr(sep5 + 1, '-') : NULL;
+
+		if (!sep1 || !sep2 || !sep3 || !sep4 || !sep5 || !sep6)
+			continue;
+		before_cmd = map_intd(sep1 + 1, NULL, -1);
+		after_cmd = map_intd(sep2 + 1, NULL, -1);
+		after_repeated_cmd = map_intd(sep3 + 1, NULL, -1);
+		after_switch = map_intd(sep4 + 1, NULL, -1);
+		after_burst = map_intd(sep5 + 1, NULL, -1);
+		after_tone = map_intd(sep6 + 1, NULL, -1);
+		if (before_cmd < 0 || after_cmd < 0 || after_repeated_cmd < 0 ||
+		    after_switch < 0 || after_burst < 0 || after_tone < 0)
+			continue;
+
+		if (ad) {
+			ad->diseqc_param.before_cmd = before_cmd;
+			ad->diseqc_param.after_cmd = after_cmd;
+			ad->diseqc_param.after_repeated_cmd = after_repeated_cmd;
+			ad->diseqc_param.after_switch = after_switch;
+			ad->diseqc_param.after_burst = after_burst;
+			ad->diseqc_param.after_tone = after_tone;
+		} else {
+			opts.diseqc_before_cmd = before_cmd;
+			opts.diseqc_after_cmd = after_cmd;
+			opts.diseqc_after_repeated_cmd = after_repeated_cmd;
+			opts.diseqc_after_switch = after_switch;
+			opts.diseqc_after_burst = after_burst;
+			opts.diseqc_after_tone = after_tone;
+		}
+		LOGL(0, "Setting diseqc timing for adapter %d before cmd %d after cmd %d "
+		        "after repeated cmd %d after switch %d after burst %d after tone %d",
+				a_id, before_cmd, after_cmd, after_repeated_cmd,
+				after_switch, after_burst, after_tone);
 	}
 }
 
@@ -1152,10 +1270,10 @@ void set_slave_adapters(char *o)
 		for (j = a_id; j <= a_id2; j++)
 		{
 			if (!a[j])
-				a[j] = malloc1(sizeof(adapter));
+				a[j] = adapter_alloc();
 
 			ad = a[j];
-			ad->switch_type = SWITCH_SLAVE;
+			ad->diseqc_param.switch_type = SWITCH_SLAVE;
 
 			LOGL(0, "Setting slave adapter %d", j);
 		}
@@ -1186,7 +1304,7 @@ void set_adapters_delsys(char *o)
 		ds = map_intd(sep + 1, fe_delsys, 0);
 
 		if (!a[a_id])
-			a[a_id] = malloc1(sizeof(adapter));
+			a[a_id] = adapter_alloc();
 
 		ad = a[a_id];
 		ad->sys[0] = ds;
