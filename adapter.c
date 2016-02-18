@@ -1159,7 +1159,7 @@ void set_diseqc_adapters(char *o)
 
 		if (!sep1 || !sep2)
 			continue;
-		if ((fast = (*sep1 == '*')) != 0)
+		if ((fast = (sep1[1] == '*')) != 0)
 			sep1++;
 		committed_no = map_intd(sep1 + 1, NULL, -1);
 		uncommitted_no = map_intd(sep2 + 1, NULL, -1);
