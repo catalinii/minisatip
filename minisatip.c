@@ -164,10 +164,12 @@ Help\n\
 \t* The first argument is the adapter number, second is the number of committed packets to send to a Diseqc 1.0 switch, third the number of uncommitted commands to sent to a Diseqc 1.1 switch\n\
 \tThe higher number between the committed and uncommitted will be sent first.\n\
 	* eg: -d 0:1-0  (which is the default for each adapter).\n\
+	- note: * as adapter means apply to all adapters\n\
 	- note: * before committed number enables fast-switch (only voltage/tone)\n\
 \n\
 * -q --diseqc-timing ADAPTER1:BEFORE_CMD1-AFTER_CMD1-AFTER_REPEATED_CMD1-AFTER_SWITCH1-AFTER_BURST1-AFTER_TONE1[,...]\n\
 \t* All timing values are in ms, default adapter values are: 15-54-15-15-15-0\n\
+	- note: * as adapter means apply to all adapters\n\
 \n\
 * -D --device-id DVC_ID: specify the device id (in case there are multiple SAT>IP servers in the network)\n \
 	* eg: -D 4 \n\
@@ -311,7 +313,13 @@ void set_options(int argc, char *argv[])
 	opts.xml_path = DESC_XML;
 	opts.no_threads = 0;
 	opts.th_priority = -1;
-	
+	opts.diseqc_before_cmd = 15;
+	opts.diseqc_after_cmd = 54;
+	opts.diseqc_after_repeated_cmd = 15;
+	opts.diseqc_after_switch = 15;
+	opts.diseqc_after_burst = 15;
+	opts.diseqc_after_tone = 0;
+
 #ifdef __mips__
 	opts.no_threads = 1;
 #endif

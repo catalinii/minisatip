@@ -53,14 +53,18 @@ adapter *adapter_alloc()
 {
 	adapter *ad = malloc1(sizeof(adapter));
 
+	/* diseqc setup */
+	ad->diseqc_param.fast = opts.diseqc_fast;
+	ad->diseqc_param.committed_no = opts.diseqc_committed_no;
+	ad->diseqc_param.uncommitted_no = opts.diseqc_uncommitted_no;
 
 	/* diseqc default timing */
-	ad->diseqc_param.before_cmd = 15;
-	ad->diseqc_param.after_cmd = 54;
-	ad->diseqc_param.after_repeated_cmd = 15;
-	ad->diseqc_param.after_switch = 15;
-	ad->diseqc_param.after_burst = 15;
-	ad->diseqc_param.after_tone = 0;
+	ad->diseqc_param.before_cmd = opts.diseqc_before_cmd;
+	ad->diseqc_param.after_cmd = opts.diseqc_after_cmd;
+	ad->diseqc_param.after_repeated_cmd = opts.diseqc_after_repeated_cmd;
+	ad->diseqc_param.after_switch = opts.diseqc_after_switch;
+	ad->diseqc_param.after_burst = opts.diseqc_after_burst;
+	ad->diseqc_param.after_tone = opts.diseqc_after_tone;
 
 	/* diseqc state control */
 	ad->old_diseqc = -1;
@@ -1137,13 +1141,18 @@ void set_diseqc_adapters(char *o)
 	la = split(arg, buf, sizeof(arg), ',');
 	for (i = 0; i < la; i++)
 	{
-		a_id = map_intd(arg[i], NULL, -1);
-		if (a_id < 0 || a_id >= MAX_ADAPTERS)
-			continue;
+		if (arg[i] && arg[i][0] == '*') {
+			ad = NULL;
+			a_id = -1;
+		} else {
+			a_id = map_intd(arg[i], NULL, -1);
+			if (a_id < 0 || a_id >= MAX_ADAPTERS)
+				continue;
 
-		if (!a[a_id])
-			a[a_id] = adapter_alloc();
-		ad = a[a_id];
+			if (!a[a_id])
+				a[a_id] = adapter_alloc();
+			ad = a[a_id];
+		}
 
 		sep1 = strchr(arg[i], ':');
 		sep2 = strchr(arg[i], '-');
@@ -1157,9 +1166,15 @@ void set_diseqc_adapters(char *o)
 		if (committed_no < 0 || uncommitted_no < 0)
 			continue;
 
-		ad->diseqc_param.fast = fast;
-		ad->diseqc_param.committed_no = committed_no;
-		ad->diseqc_param.uncommitted_no = uncommitted_no;
+		if (ad) {
+			ad->diseqc_param.fast = fast;
+			ad->diseqc_param.committed_no = committed_no;
+			ad->diseqc_param.uncommitted_no = uncommitted_no;
+		} else {
+			opts.diseqc_fast = fast;
+			opts.diseqc_committed_no = committed_no;
+			opts.diseqc_uncommitted_no = uncommitted_no;
+		}
 		LOGL(0, "Setting diseqc adapter %d fast %d committed_no %d uncommitted_no %d",
 				a_id, fast, committed_no, uncommitted_no);
 	}
@@ -1177,13 +1192,18 @@ void set_diseqc_timing(char *o)
 	la = split(arg, buf, sizeof(arg), ',');
 	for (i = 0; i < la; i++)
 	{
-		a_id = map_intd(arg[i], NULL, -1);
-		if (a_id < 0 || a_id >= MAX_ADAPTERS)
-			continue;
+		if (arg[i] && arg[i][0] == '*') {
+			ad = NULL;
+			a_id = -1;
+		} else {
+			a_id = map_intd(arg[i], NULL, -1);
+			if (a_id < 0 || a_id >= MAX_ADAPTERS)
+				continue;
 
-		if (!a[a_id])
-			a[a_id] = adapter_alloc();
-		ad = a[a_id];
+			if (!a[a_id])
+				a[a_id] = adapter_alloc();
+			ad = a[a_id];
+		}
 
 		sep1 = strchr(arg[i], ':');
 		sep2 = strchr(arg[i], '-');
@@ -1204,12 +1224,21 @@ void set_diseqc_timing(char *o)
 		    after_switch < 0 || after_burst < 0 || after_tone < 0)
 			continue;
 
-		ad->diseqc_param.before_cmd = before_cmd;
-		ad->diseqc_param.after_cmd = after_cmd;
-		ad->diseqc_param.after_repeated_cmd = after_repeated_cmd;
-		ad->diseqc_param.after_switch = after_switch;
-		ad->diseqc_param.after_burst = after_burst;
-		ad->diseqc_param.after_tone = after_tone;
+		if (ad) {
+			ad->diseqc_param.before_cmd = before_cmd;
+			ad->diseqc_param.after_cmd = after_cmd;
+			ad->diseqc_param.after_repeated_cmd = after_repeated_cmd;
+			ad->diseqc_param.after_switch = after_switch;
+			ad->diseqc_param.after_burst = after_burst;
+			ad->diseqc_param.after_tone = after_tone;
+		} else {
+			opts.diseqc_before_cmd = before_cmd;
+			opts.diseqc_after_cmd = after_cmd;
+			opts.diseqc_after_repeated_cmd = after_repeated_cmd;
+			opts.diseqc_after_switch = after_switch;
+			opts.diseqc_after_burst = after_burst;
+			opts.diseqc_after_tone = after_tone;
+		}
 		LOGL(0, "Setting diseqc timing for adapter %d before cmd %d after cmd %d "
 		        "after repeated cmd %d after switch %d after burst %d after tone %d",
 				a_id, before_cmd, after_cmd, after_repeated_cmd,
