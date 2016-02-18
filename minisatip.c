@@ -56,16 +56,17 @@ int rtsp, http, si, si1, ssdp1;
 
 static const struct option long_options[] =
 {
-		{ "remote-rtp", required_argument, NULL, 'r' },
-		{ "device-id", required_argument, NULL, 'D' },
-		{ "check-signal", no_argument, NULL, 'z' },
-		{ "clean-psi", no_argument, NULL, 't' },
-		{ "log", no_argument, NULL, 'l' },
-		{ "buffer", required_argument, NULL, 'b' },
-		{ "enable-adapters", required_argument, NULL, 'e' },
-		{ "unicable", required_argument, NULL, 'u' },
-		{ "jess", required_argument, NULL, 'j' },
-		{ "diseqc", required_argument, NULL, 'd' },
+{ "remote-rtp", required_argument, NULL, 'r' },
+{ "device-id", required_argument, NULL, 'D' },
+{ "check-signal", no_argument, NULL, 'z' },
+{ "clean-psi", no_argument, NULL, 't' },
+{ "log", no_argument, NULL, 'l' },
+{ "buffer", required_argument, NULL, 'b' },
+{ "enable-adapters", required_argument, NULL, 'e' },
+{ "unicable", required_argument, NULL, 'u' },
+{ "jess", required_argument, NULL, 'j' },
+{ "diseqc", required_argument, NULL, 'd' },
+{ "diseqc-timing", required_argument, NULL, 'q' },
 #ifndef DISABLE_DVBCSA
 		{ "dvbapi", required_argument, NULL, 'o' },
 #endif
@@ -94,7 +95,6 @@ static const struct option long_options[] =
 #define HTTPPORT_OPT 'x'
 #define LOG_OPT 'l'
 #define HELP_OPT 'h'
-#define SCAN_OPT 'z'
 #define PLAYLIST_OPT 'p'
 #define DVBS2_ADAPTERS_OPT 'a'
 #define CLEANPSI_OPT 't'
@@ -106,6 +106,7 @@ static const struct option long_options[] =
 #define UNICABLE_OPT 'u'
 #define JESS_OPT 'j'
 #define DISEQC_OPT 'd'
+#define DISEQC_TIMING_OPT 'q'
 #define SLAVE_OPT 'S'
 #define DELSYS_OPT 'Y'
 #define DVBAPI_OPT 'o'
@@ -133,9 +134,18 @@ void print_version(int use_log)
 void usage()
 {
 	print_version(0);
-	printf("\n\t./%s [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] \n\
-	\t[-j A1:S1-F1[-PIN]] [-m mac] [-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] \n\
-	\t[-R document_root] [-s [DELSYS:]host[:port] [-u A1:S1-F1[-PIN]] [-w http_server[:port]] \n\
+	printf(
+			"\n\t./%s [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] \n\
+	\t[-j A1:S1-F1[-PIN]] [-m mac] "
+#ifndef DISABLE_DVBCSA
+				      "[-o oscam_host:dvbapi_port] "
+#endif
+				      				  "[-p public_host] [-r remote_rtp_host] \n\
+	\t[-R document_root] "
+#ifndef DISABLE_SATIPCLIENT
+			    "[-s [DELSYS:]host[:port] "
+#endif
+						     "[-u A1:S1-F1[-PIN]] [-w http_server[:port]] \n\
 	\t[-x http_port] [-X xml_path] [-y rtsp_port] \n\n\
 Help\n\
 -------\n\
@@ -150,10 +160,16 @@ Help\n\
 * -c X: bandwidth capping for the output to the network [default: unlimited]\n\
 	* eg: -c 2048  (does not allow minisatip to send more than 2048KB/s to all remote servers)\n\
 \n\
-* -d --diseqc ADAPTER1:COMMITED1-UNCOMMITED1[,ADAPTER2:COMMITED2-UNCOMMITED2[,...]\n\
-\t* The first argument is the adapter number, second is the number of commited packets to send to a Diseqc 1.0 switch, third the number of uncommited commands to sent to a Diseqc 1.1 switch\n\
-\tThe higher number between the commited and uncommited will be sent first.\n\
-	eg: -d 0:1-0  (which is the default for each adapter).\n\
+* -d --diseqc ADAPTER1:COMMITTED1-UNCOMMITTED1[,ADAPTER2:COMMITTED2-UNCOMMITTED2[,...]\n\
+\t* The first argument is the adapter number, second is the number of committed packets to send to a Diseqc 1.0 switch, third the number of uncommitted commands to sent to a Diseqc 1.1 switch\n\
+\tThe higher number between the committed and uncommitted will be sent first.\n\
+	* eg: -d 0:1-0  (which is the default for each adapter).\n\
+	- note: * as adapter means apply to all adapters\n\
+	- note: * before committed number enables fast-switch (only voltage/tone)\n\
+\n\
+* -q --diseqc-timing ADAPTER1:BEFORE_CMD1-AFTER_CMD1-AFTER_REPEATED_CMD1-AFTER_SWITCH1-AFTER_BURST1-AFTER_TONE1[,...]\n\
+\t* All timing values are in ms, default adapter values are: 15-54-15-15-15-0\n\
+	- note: * as adapter means apply to all adapters\n\
 \n\
 * -D --device-id DVC_ID: specify the device id (in case there are multiple SAT>IP servers in the network)\n \
 	* eg: -D 4 \n\
@@ -179,13 +195,23 @@ Help\n\
 * -m xx: simulate xx as local mac address, generates UUID based on mac\n\
 	* eg: -m 001122334455 \n\
 \n\
+"
+#ifndef DISABLE_NETCVCLIENT
+"\
 * -n --netceiver if:count: use network interface <if> (default vlan4) and look for <count> netceivers\n\
 	* eg: -n vlan4:2 \n\
 \n\
+"
+#endif
+#ifndef DISABLE_DVBCSA
+"\
 * -o --dvbapi host:port - specify the hostname and port for the dvbapi server (oscam) \n\
 	* eg: -o 192.168.9.9:9000 \n\
 	192.168.9.9 is the host where oscam is running and 9000 is the port configured in dvbapi section in oscam.conf\n\
 \n\
+"
+#endif
+"\
 * -p url: specify playlist url using X_SATIPM3U header \n\
 	* eg: -p http://192.168.2.3:8080/playlist\n\
 	- this will add X_SATIPM3U tag into the satip description xml\n\
@@ -195,6 +221,9 @@ Help\n\
 \n\
 * -R --document-root directory: document root for the minisatip web page and images\n\
 \n\
+"
+#ifndef DISABLE_SATIPCLIENT
+"\
 * -s --satip-servers DELSYS:host:port - specify the remote satip host and port with delivery system DELSYS, it is possible to use multiple -s \n\
 	* DELSYS - can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, isdbt, atsc, dvbcb ( - DVBC_ANNEX_B ) [default: dvbs2]\n\
 	host - the server of the satip server\n\
@@ -204,11 +233,16 @@ Help\n\
 	- specifies 1 dvbt satip server  with address 192.168.1.3:554\n\
 	- specifies 1 dvbc satip server  with address 192.168.1.4:554\n\
 \n\
+"
+#endif
+"\
 * -S --slave ADAPTER1,ADAPTER2-ADAPTER4[,..] - specify slave adapters	\n\
 	* Allows specifying bonded adapters (multiple adapters connected with a splitter to the same LNB)\n\
 	Only one adapter needs to be master all others needs to have this parameter specified\n\
 	eg: -S 1-2\n\
 	- specifies adapter 1 to 2 as slave, in this case adapter 0 can be the master that controls the LNB\n\
+	- the slave adapter will not control the LNB polarity or band, but it will just change the internal frequency to tune to a different transponder\n\
+	- in this way the master will be responsible for changing the LNB polarity and band\n\
 \n\
 * -t --cleanpsi clean the PSI from all CA information, the client will see the channel as clear if decrypted successfully\n\
 \n\
@@ -217,6 +251,7 @@ Help\n\
 * -u --unicable unicable_string: defines the unicable adapters (A) and their slot (S), frequency (F) and optionally the PIN for the switch:\n\
 \t* The format is: A1:S1-F1[-PIN][,A2:S2-F2[-PIN][,...]]\n\
 	eg: 2:0-1284[-1111]\n\
+\t* When * character is used before frequency, force 13V only for setup\n\
 \n\
 * -j --jess jess_string - same format as -u \n\
 \n\
@@ -234,8 +269,6 @@ Help\n\
 	* eg: -y 5544 \n\
 	- changing this to a port > 1024 removes the requirement for minisatip to run as root\n\
 \n\
-* -z --check-signal force to get signal from the DVB hardware every 200ms (use with care, only when needed)\n\
-	* - retrieving signal could take sometimes more than 200ms which could impact the rtp stream, using it only when you need to adjust your dish\n\
 ",
 			app_name,
 			ADAPTER_BUFFER,
@@ -264,7 +297,6 @@ void set_options(int argc, char *argv[])
 	opts.bw = 0;
 	opts.device_id = 0;
 	opts.bootid = 0;
-	opts.force_scan = 0;
 	opts.dvr_buffer = DVR_BUFFER;
 	opts.adapter_buffer = ADAPTER_BUFFER;
 	opts.file_line = 0;
@@ -281,13 +313,20 @@ void set_options(int argc, char *argv[])
 	opts.xml_path = DESC_XML;
 	opts.no_threads = 0;
 	opts.th_priority = -1;
+	opts.diseqc_before_cmd = 15;
+	opts.diseqc_after_cmd = 54;
+	opts.diseqc_after_repeated_cmd = 15;
+	opts.diseqc_after_switch = 15;
+	opts.diseqc_after_burst = 15;
+	opts.diseqc_after_tone = 0;
+
 #ifdef __mips__
 	opts.no_threads = 1;
 #endif
 	memset(opts.playlist, 0, sizeof(opts.playlist));
 
 	while ((opt = getopt_long(argc, argv,
-			"flr:a:td:w:p:s:n:hc:b:m:p:e:x:u:j:o:gy:zi:D:VR:S:TX:Y:",
+			"flr:a:td:w:p:s:n:hc:b:m:p:e:x:u:j:o:gy:i:q:D:VR:S:TX:Y:",
 			long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
@@ -378,12 +417,6 @@ void set_options(int argc, char *argv[])
 			break;
 		}
 
-		case SCAN_OPT:
-		{
-			opts.force_scan = 1;
-			break;
-		}
-
 		case PLAYLIST_OPT:
 		{
 			snprintf(opts.playlist, sizeof(opts.playlist),
@@ -416,6 +449,12 @@ void set_options(int argc, char *argv[])
 			break;
 		}
 
+		case DISEQC_TIMING_OPT:
+		{
+			set_diseqc_timing(optarg);
+			break;
+		}
+
 		case SLAVE_OPT:
 		{
 			set_slave_adapters(optarg);
@@ -427,7 +466,7 @@ void set_options(int argc, char *argv[])
 			set_adapters_delsys(optarg);
 			break;
 		}
-		
+
 		case DVBAPI_OPT:
 		{
 #ifdef DISABLE_DVBCSA
@@ -493,7 +532,7 @@ void set_options(int argc, char *argv[])
 		}
 
 		case PRIORITY_OPT:
-		
+
 			opts.th_priority = map_int(optarg, NULL);
 			break;
 
@@ -1142,7 +1181,8 @@ int main(int argc, char *argv[])
 	NULL, (socket_action) signal_thread)))
 		FAIL("sockets_add failed for signal thread");
 
-	set_socket_thread(sock_signal, start_new_thread("signal"));
+	if (!opts.no_threads)
+		set_socket_thread(sock_signal, start_new_thread("signal"));
 	sockets_timeout(sock_signal, 1000);
 
 	if (0 > (sock_bw = sockets_add(SOCK_TIMEOUT, NULL, -1, TYPE_UDP, NULL,
@@ -1151,8 +1191,8 @@ int main(int argc, char *argv[])
 
 	set_socket_thread(sock_bw, get_socket_thread(sock_signal));
 	sockets_timeout(sock_bw, 1000);
-	
-#ifdef TABLES_H
+
+#ifndef DISABLE_TABLES
 	tables_init();
 #endif
 	LOGL(0, "Initializing with %d devices", init_all_hw());

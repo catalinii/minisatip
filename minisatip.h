@@ -8,7 +8,7 @@
 #include "utils.h"
 
 
-#define VERSION_BUILD "24"
+#define VERSION_BUILD "26"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.5.,VERSION_BUILD,)
 
@@ -16,6 +16,8 @@ void set_options (int argc, char *argv[]);
 
 extern char pid_file[];
 extern char app_name[], version[];
+
+#define offsetof(st, m) __builtin_offsetof(st, m)
 
 #define copy32(a,i,v) { a[i] = ((v)>>24) & 0xFF;\
 			a[i+1] = ((v)>>16) & 0xFF;\
@@ -62,6 +64,15 @@ struct struct_opts
 	char *xml_path;
 	char no_threads;
 	int th_priority;
+	int diseqc_fast;
+	int diseqc_committed_no;
+	int diseqc_uncommitted_no;
+	int diseqc_before_cmd;
+	int diseqc_after_cmd;
+	int diseqc_after_repeated_cmd;
+	int diseqc_after_switch;
+	int diseqc_after_burst;
+	int diseqc_after_tone;
 };
 
 

@@ -831,13 +831,16 @@ void find_satip_adapter(adapter **a)
 		return;
 	la = split(arg, opts.satip_servers, 50, ',');
 	j = 0;
+	for (i = 0; i < MAX_ADAPTERS; i++) {
+		
+	}
 	for (i = a_count; i < MAX_ADAPTERS; i++)
 		if (j < la)
 		{
 			if (is_adapter_disabled(i))
 				continue;
 			if (!a[i])
-				a[i] = malloc1(sizeof(adapter));
+				a[i] = adapter_alloc();
 			if(!satip[i])
 				satip[i] = malloc1(sizeof(satipc));
 			sip = satip[i];
@@ -913,8 +916,7 @@ void find_satip_adapter(adapter **a)
 }
 
 
-satipc *sip_tmp;
 _symbols satipc_sym[] ={
-{ "ad_satip", VAR_AARRAY_PSTRING, a, 1, MAX_ADAPTERS, (long int) &sip_tmp[0].sip
-		- (long int) &sip_tmp[0] }
+{ "ad_satip", VAR_AARRAY_PSTRING, satip, 1, MAX_ADAPTERS, offsetof(satipc, sip) },
+{ NULL, 0, NULL, 0, 0 }
 };

@@ -277,7 +277,7 @@ int start_play(streams * sid, sockets * s)
 					"Tune requested with no real parameters, ignoring ...");
 		}
 		a_id = get_free_adapter(sid->tp.freq, sid->tp.pol, sid->tp.sys,
-				sid->tp.fe);
+				sid->tp.fe, sid->tp.diseqc);
 		LOG("Got adapter %d on socket %d", a_id, s->id);
 		if (a_id < 0)
 			return -404;
@@ -893,7 +893,7 @@ int process_dmx(sockets * s)
 			"process_dmx start flush_all=%d called for adapter %d -> %d out of %d bytes read, %d ms ago",
 			flush_all, s->sid, rlen, s->lbuf, ms_ago);
 
-#ifdef TABLES_H
+#ifndef DISABLE_TABLES
 	process_stream(ad, rlen);
 #else							 
 	if (ad->sid_cnt == 1 && ad->master_sid >= 0 && opts.log < 2) // we have just 1 stream, do not check the pids, send everything to the destination
@@ -1293,17 +1293,12 @@ char* get_stream_pids(int s_id, char *dest, int max_size)
 	return dest;
 }
 
-streams *s_tmp;
 _symbols stream_sym[] =
 {
-{ "st_enabled", VAR_AARRAY_INT8, st, 1, MAX_STREAMS,
-		(long int) &s_tmp[0].enabled - (long int) &s_tmp[0] },
-{ "st_play", VAR_AARRAY_INT, st, 1, MAX_STREAMS, (long int) &s_tmp[0].do_play
-		- (long int) &s_tmp[0] },
-{ "st_adapter", VAR_AARRAY_INT, st, 1, MAX_STREAMS, (long int) &s_tmp[0].adapter
-		- (long int) &s_tmp[0] },
-{ "st_useragent", VAR_AARRAY_STRING, st, 1, MAX_STREAMS,
-		(long int) &s_tmp[0].useragent - (long int) &s_tmp[0] },
+{ "st_enabled", VAR_AARRAY_INT8, st, 1, MAX_STREAMS, offsetof(streams, enabled) },
+{ "st_play", VAR_AARRAY_INT, st, 1, MAX_STREAMS, offsetof(streams, do_play) },
+{ "st_adapter", VAR_AARRAY_INT, st, 1, MAX_STREAMS, offsetof(streams, adapter) },
+{ "st_useragent", VAR_AARRAY_STRING, st, 1, MAX_STREAMS, offsetof(streams, useragent) },
 { "st_rhost", VAR_FUNCTION_STRING, (void *) &get_stream_rhost, 0, 0, 0 },
 { "st_rport", VAR_FUNCTION_INT, (void *) &get_stream_rport, 0, 0, 0 },
 { "st_pids", VAR_FUNCTION_STRING, (void *) &get_stream_pids, 0, 0, 0 },

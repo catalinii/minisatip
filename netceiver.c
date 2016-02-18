@@ -444,7 +444,7 @@ void find_netcv_adapter(adapter **a)
 		if (na >= MAX_ADAPTERS)
 			break;
 		if (!a[na])
-			a[na] = malloc1(sizeof(adapter));
+			a[na] = adapter_alloc();
 		if (!sn[na])
 			sn[na] = malloc1(sizeof(SNetceiver));
 

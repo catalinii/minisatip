@@ -79,15 +79,14 @@ typedef struct struct_adapter
 	int rlen, rtime;
 	int last_sort;
 	int new_gs;
-	int status;
+	int status, status_cnt;
 	uint32_t ber;
 	uint16_t strength, snr, max_strength, max_snr;
 	uint32_t pid_err, dec_err; // detect pids received but not part of any stream, decrypt errors
-	int switch_type;
-	int uslot; // unicable/jess slot
-	int ufreq; // unicable/jess frequency	
-	int pin;
-	int committed_no, uncommitted_no; // diseqc info
+	diseqc diseqc_param;
+	int old_diseqc;
+	int old_hiband;
+	int old_pol;
 	int id;
 	int pat_processed, transponder_id, pat_ver;
 	char name[5];
@@ -108,8 +107,9 @@ extern int a_count;
 int init_hw(int dev);
 int init_all_hw();
 int getAdaptersCount();
+adapter *adapter_alloc();
 void close_adapter(int na);
-int get_free_adapter(int freq, int pol, int msys, int src);
+int get_free_adapter(int freq, int pol, int msys, int src, int diseqc);
 int set_adapter_for_stream(int i, int a);
 void close_adapter_for_stream(int sid, int aid);
 int set_adapter_parameters(int aid, int sid, transponder * tp);
@@ -137,7 +137,7 @@ void adapter_lock1(char *FILE, int line, int aid);
 void adapter_unlock1(char *FILE, int line, int aid);
 char is_adapter_disabled(int i);
 void set_adapters_delsys(char *o);
-void signal_thread(sockets *s);
+int signal_thread(sockets *s);
 
 #define get_adapter(a) get_adapter1(a, __FILE__, __LINE__)
 #define get_adapter_nw(aid) ((aid >= 0 && aid < MAX_ADAPTERS && a[aid] && a[aid]->enabled)?a[aid]:NULL)

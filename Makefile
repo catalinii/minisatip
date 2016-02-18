@@ -8,7 +8,7 @@ NETCVCLIENT?=no
 STATIC?=no
 LINUXDVB?=yes
 
-CFLAGS?=$(NODVBCSA) -ggdb -fPIC $(EXTRA_CFLAGS)
+CFLAGS?=-ggdb -fPIC $(EXTRA_CFLAGS)
 LDFLAGS?=-lpthread -lrt $(EXTRA_LDFLAGS)
 
 OBJS=minisatip.o socketworks.o stream.o adapter.o utils.o
@@ -33,6 +33,8 @@ endif
 
 ifeq ($(TABLES),yes)
 OBJS+=tables.o
+else
+CFLAGS+=-DDISABLE_TABLES
 endif
 
 ifeq ($(SATIPCLIENT),yes)
