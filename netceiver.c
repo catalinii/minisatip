@@ -18,6 +18,8 @@
  *
  */
 
+#define _GNU_SOURCE
+
 #include <sys/types.h>
 #include <ifaddrs.h>
 #include <string.h>

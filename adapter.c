@@ -39,6 +39,10 @@
 #include "satipc.h"
 #endif
 
+#ifndef DISABLE_NETCVCLIENT
+#include "netceiver.h"
+#endif
+
 adapter *a[MAX_ADAPTERS];
 int a_count;
 char disabled[MAX_ADAPTERS]; // disabled adapters
