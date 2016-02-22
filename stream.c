@@ -551,11 +551,17 @@ int my_writev(int sock, const struct iovec *iov, int iiov, streams *sid)
 {
 	int rv;
 	char ra[50];
+	int log_level = 7;
+	int stime = 0;
 	if (sid->timeout == 1)
 		return -1;
 
-	LOGL(7, "start writev handle %d, iiov %d", sock, iiov);
+	LOGL(log_level, "start writev handle %d, iiov %d", sock, iiov);
+	if(opts.log == log_level) 
+		stime =  getTick();
 	rv = writev(sock, iov, iiov);
+	if(opts.log == log_level)
+		stime =  getTick() - stime;
 	if (rv < 0 && (errno == ECONNREFUSED || errno == EPIPE)) // close the stream int the next second
 	{
 		LOGL(0,
@@ -569,7 +575,7 @@ int my_writev(int sock, const struct iovec *iov, int iiov, streams *sid)
 		LOG("writev returned %d handle %d, iiov %d errno %d error %s", rv, sock,
 				iiov, errno, strerror(errno));
 	}
-	LOGL(7, "writev returned %d handle %d, iiov %d", rv, sock, iiov);
+	LOGL(log_level, "writev returned %d handle %d, iiov %d (took %d ms)", rv, sock, iiov, stime);
 	return rv;
 }
 

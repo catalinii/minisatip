@@ -8,7 +8,7 @@
 #include "utils.h"
 
 
-#define VERSION_BUILD "26"
+#define VERSION_BUILD "27"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.5.,VERSION_BUILD,)
 
@@ -79,6 +79,6 @@ struct struct_opts
 int ssdp_discovery (sockets * s);
 int becomeDaemon ();
 int readBootID();
-char * http_response (sockets *s, int rc, char *ah, char *desc, int cseq, int lr);
+void http_response (sockets *s, int rc, char *ah, char *desc, int cseq, int lr);
 
 #endif
