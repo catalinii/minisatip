@@ -624,7 +624,8 @@ int tune(int aid, int sid)
 		}
 #ifndef DISABLE_TABLES
 		p = find_pid(aid, 0);
-		if (!p || p->flags == 3) // add pid 0 if not explicitly added
+		SPid *p_all = find_pid(aid, 8192);
+		if ((!p || p->flags == 3) && (!p_all || p_all->flags == 3)) // add pid 0 if not explicitly added 
 		{
 			LOG(
 					"Adding pid 0 to the list of pids as not explicitly added for adapter %d",
@@ -1461,7 +1462,7 @@ char* get_adapter_pids(int aid, char *dest, int max_size)
 	for (i = 0; i < lp; i++)
 	{
 		if (pids[i] == 8192)
-			len += snprintf(dest + len, max_size - len, "8192");
+			len += snprintf(dest + len, max_size - len, "all,");
 		else
 			len += snprintf(dest + len, max_size - len, "%d,", pids[i]);
 	}

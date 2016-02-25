@@ -731,12 +731,14 @@ void satipc_commit(adapter *ad)
 	{
 		int pids[MAX_PIDS];
 		int i;
+		int init_len;
 		if (len > 0)
 			len += sprintf(url + len, "&");
+		init_len = len;
 		len += sprintf(url + len, "addpids=");
 		for (i = 0; i < sip->lap; i++)
 			if (sip->apid[i] == 8192)
-				len += sprintf(url + len, "all,");
+				len = init_len + sprintf(url + init_len , "pids=all,");
 			else
 				len += sprintf(url + len, "%d,", sip->apid[i]);
 		if (sip->lap == 0)
