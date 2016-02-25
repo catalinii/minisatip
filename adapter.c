@@ -520,12 +520,13 @@ void close_adapter_for_stream(int sid, int aid)
 	}
 	if (ad->sid_cnt > 0)
 		ad->sid_cnt--;
-	else
-		mark_pids_deleted(aid, -1, NULL);
 	LOG("closed adapter %d for stream %d m:%d s:%d", aid, sid, ad->master_sid,
 			ad->sid_cnt);
 	// delete the attached PIDs as well
-	mark_pids_deleted(aid, sid, NULL);
+	if(ad->sid_cnt == 0)
+		mark_pids_deleted(aid, -1, NULL);
+	else
+		mark_pids_deleted(aid, sid, NULL);
 	update_pids(aid);
 //	if (a[aid]->sid_cnt == 0) 
 //		close_adapter (aid);
@@ -1462,8 +1463,10 @@ char* get_adapter_pids(int aid, char *dest, int max_size)
 	for (i = 0; i < lp; i++)
 	{
 		if (pids[i] == 8192)
-			len += snprintf(dest + len, max_size - len, "all,");
-		else
+		{
+			len = snprintf(dest, max_size, "all,");
+			break;
+		}else
 			len += snprintf(dest + len, max_size - len, "%d,", pids[i]);
 	}
 	if (len > 0)
