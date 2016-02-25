@@ -1231,8 +1231,7 @@ int readBootID()
 	return opts.bootid;
 }
 
-char *
-http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
+void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 {
 	int binary = 0;
 	char *desc1;
@@ -1275,8 +1274,10 @@ http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 		d = "Service Unavailable";
 		rc = 503;
 	}
-	static char resp[10000];
+	char resp[10000];
+	int lresp;
 	desc1 = desc;
+	resp[sizeof(resp) - 1] = 0;
 	if (!lr)
 		lr = strlen(desc);
 	else
@@ -1298,19 +1299,18 @@ http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 		sprintf(scseq, "\r\nCseq: %d", cseq);
 
 	if (lr > 0)
-		sprintf(resp, reply, proto, rc, d, get_current_timestamp(), sess_id,
+		lresp = snprintf(resp, sizeof(resp) - 1, reply, proto, rc, d, get_current_timestamp(), sess_id,
 				scseq, ah, server, lr, desc1);
 	else
-		sprintf(resp, reply0, proto, rc, d, get_current_timestamp(), sess_id,
+		lresp = snprintf(resp, sizeof(resp) - 1, reply0, proto, rc, d, get_current_timestamp(), sess_id,
 				scseq, ah, server);
-	LOG("reply -> %d (%s:%d) CL:%d [sock_id %d]:", s->sock,
+	LOG("reply %s-> %d (%s:%d) CL:%d [sock_id %d]:", (lresp==sizeof(resp) - 1)?"message truncated":"", s->sock,
 			get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
 			lr, s->id);
 	LOGL(3, "%s", resp);
 	send(s->sock, resp, strlen(resp), MSG_NOSIGNAL);
 	if (binary)
 		send(s->sock, desc, lr, MSG_NOSIGNAL);
-	return resp;
 }
 
 _symbols minisatip_sym[] =

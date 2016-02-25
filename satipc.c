@@ -437,8 +437,8 @@ int satipc_del_filters(int fd, int pid)
 {
 	adapter *ad;
 	satipc *sip;
-	get_ad_and_sipr(fd,0);
 	fd -= 100;
+	get_ad_and_sipr(fd,0);
 	LOG("satipc: del_pid for aid %d, pid %d, err %d", fd, pid, sip->err);
 	if (sip->err) // error reported, return error
 		return 0;
@@ -635,6 +635,7 @@ void tune_url(adapter *ad, char *url)
 void satipc_commit(adapter *ad)
 {
 	char url[400];
+	char tmp_url[400];
 	int send_pids = 1, send_apids = 1, send_dpids = 1;
 	int len = 0, i;
 	satipc *sip = get_satip(ad->id);
@@ -716,12 +717,21 @@ void satipc_commit(adapter *ad)
 			sprintf(url + len, "&pids=none");
 	}
 
+	get_adapter_pids(ad->id, tmp_url, sizeof(tmp_url));
+	if((send_apids || send_dpids) && (!strcmp(tmp_url, "all") || !strcmp(tmp_url, "none")))
+	{
+		send_apids = send_dpids = 0;
+		send_pids = 1;
+	}
+
 	if (send_pids)
 	{
 		if (len > 0)
 			len += sprintf(url + len, "&");
 		len += sprintf(url + len, "pids=");
-		get_adapter_pids(ad->id, url + len, sizeof(url) - len);
+//		get_adapter_pids(ad->id, url + len, sizeof(url) - len);
+		strncpy(url + len, tmp_url, sizeof(url) - len);
+		url[sizeof(url) - 1] = 0;
 		sip->lap = 0;
 		sip->ldp = 0;
 		sip->force_commit = 0;
@@ -735,10 +745,7 @@ void satipc_commit(adapter *ad)
 			len += sprintf(url + len, "&");
 		len += sprintf(url + len, "addpids=");
 		for (i = 0; i < sip->lap; i++)
-			if (sip->apid[i] == 8192)
-				len += sprintf(url + len, "all,");
-			else
-				len += sprintf(url + len, "%d,", sip->apid[i]);
+			len += sprintf(url + len, "%d,", sip->apid[i]);
 		if (sip->lap == 0)
 			get_adapter_pids(ad->id, url + len, sizeof(url) - len);
 		else
@@ -753,9 +760,6 @@ void satipc_commit(adapter *ad)
 			len += sprintf(url + len, "&");
 		len += sprintf(url + len, "delpids=");
 		for (i = 0; i < sip->ldp; i++)
-			if (sip->dpid[i] == 8192)
-				len += sprintf(url + len, "all,");
-			else
 				len += sprintf(url + len, "%d,", sip->dpid[i]);
 		url[--len] = 0;
 		sip->ldp = 0;
