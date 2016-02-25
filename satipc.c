@@ -731,6 +731,7 @@ void satipc_commit(adapter *ad)
 		len += sprintf(url + len, "pids=");
 //		get_adapter_pids(ad->id, url + len, sizeof(url) - len);
 		strncpy(url + len, tmp_url, sizeof(url) - len);
+		url[sizeof(url) - 1] = 0;
 		sip->lap = 0;
 		sip->ldp = 0;
 		sip->force_commit = 0;
