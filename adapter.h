@@ -63,7 +63,7 @@ typedef struct struct_adapter
 	char enabled;
 	SMutex mutex;
 	char type; // available on the system 
-	int fe, dvr;
+	int fe, dvr, dmx;
 	int pa, fn;
 	// physical adapter, physical frontend number
 	fe_delivery_system_t sys[MAX_DELSYS];
@@ -80,6 +80,7 @@ typedef struct struct_adapter
 	int last_sort;
 	int new_gs;
 	int status, status_cnt;
+	int dmx_source;
 	uint32_t ber;
 	uint16_t strength, snr, max_strength, max_snr;
 	uint32_t pid_err, dec_err; // detect pids received but not part of any stream, decrypt errors
@@ -129,6 +130,7 @@ void set_unicable_adapters(char *o, int type);
 void set_diseqc_adapters(char *o);
 void set_diseqc_timing(char *o);
 void set_slave_adapters(char *o);
+void set_adapter_dmxsource(char *o);
 void reset_pids_type(int aid, int clear_pat);
 void reset_ecm_type_for_key(int aid, int key);
 int delsys_match(adapter *ad, int del_sys);

@@ -84,6 +84,7 @@ static const struct option long_options[] =
 		{ "priority", required_argument, NULL, 'i' },
 		{ "document-root", required_argument, NULL, 'R' },
 		{ "threads", no_argument, NULL, 'T' },
+		{ "dmx-source", required_argument, NULL, '9' },
 		{ "xml", required_argument, NULL, 'X' },
 		{ "help", no_argument, NULL, 'h' },
 		{ "version", no_argument, NULL, 'V' },
@@ -119,6 +120,7 @@ static const struct option long_options[] =
 #define DOCUMENTROOT_OPT 'R'
 #define XML_OPT 'X'
 #define THREADS_OPT 'T'
+#define DMXSOURCE_OPT '9'
 
 void print_version(int use_log)
 {
@@ -136,7 +138,7 @@ void usage()
 	print_version(0);
 	printf(
 			"\n\t./%s [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] \n\
-	\t[-j A1:S1-F1[-PIN]] [-m mac] "
+	\t[-[uj] A1:S1-F1[-PIN]] [-m mac]"
 #ifndef DISABLE_DVBCSA
 				      "[-o oscam_host:dvbapi_port] "
 #endif
@@ -177,6 +179,9 @@ Help\n\
 * -Y --delsys ADAPTER1:DELIVERY_SYSTEM1[,ADAPTER2:DELIVERY_SYSTEM2[,..]] - specify the delivery system of the adapters	\n\
 	* eg: --delsys 1:dvbt,2:dvbs\n\
 	- specifies adapter 1 as a DVBT device, adapter 2 as DVB-S, which overrides the system detection of the adapter\n\
+\n\
+* --dmx-source ADAPTER1:FRONTENDX - specifies the frontend number specified as argument for DMX_SET_SOURCE \n\
+	* eg: --dmx-source 0:1 - enables DMX_SET_SOURCE ioctl call with parameter 1 for adapter 0\n\
 \n\
 * -e --enable-adapters list_of_enabled adapters: enable only specified adapters\n\
 	* eg: -e 0-2,5,7 (no spaces between parameters)\n\
@@ -428,6 +433,12 @@ void set_options(int argc, char *argv[])
 		case ENABLE_ADAPTERS_OPT:
 		{
 			enable_adapters(optarg);
+			break;
+		}
+
+		case DMXSOURCE_OPT:
+		{
+			set_adapter_dmxsource(optarg);
 			break;
 		}
 

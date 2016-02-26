@@ -72,7 +72,6 @@ typedef struct struct_satipc
 
 	uint32_t rcvp, repno, rtp_miss, rtp_ooo;   // rtp statstics
 	uint16_t rtp_seq;
-	
 
 } satipc;
 
@@ -112,7 +111,8 @@ void set_adapter_signal(adapter *ad, char *b, int rlen);
 int satipc_reply(sockets * s)
 {
 	int rlen = s->rlen;
-	adapter *ad;satipc *sip;
+	adapter *ad;
+	satipc *sip;
 	char *arg[50], *sess, *es, *sid, *timeout;
 	int la, i, rc;
 	__attribute__((unused)) int rv;
@@ -215,7 +215,8 @@ int satipc_reply(sockets * s)
 
 int satipc_timeout(sockets *s)
 {
-	adapter *ad;satipc *sip;
+	adapter *ad;
+	satipc *sip;
 	get_ad_and_sipr(s->sid, 1);
 	LOG(
 			"satipc: Sent keep-alive to the satip server %s:%d, adapter %d, socket_id %d, handle %d, timeout %d",
@@ -271,7 +272,8 @@ int satipc_rtcp_reply(sockets * s)
 	unsigned char *b = s->buf, *ver, *signal;
 	char *tun;
 	int i, rlen = s->rlen;
-	adapter *ad;satipc *sip;
+	adapter *ad;
+	satipc *sip;
 	get_ad_and_sipr(s->sid, 0);
 	int strength, status, snr;
 	uint32_t rp;
@@ -329,7 +331,7 @@ int satipc_open_device(adapter *ad)
 		close(ad->dvr);
 		close(ad->fe);
 	}
-	
+
 	sip->session[0] = 0;
 	sip->lap = 0;
 	sip->ldp = 0;
@@ -376,7 +378,8 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb)
 {
 	unsigned char buf1[20];
 	uint16_t seq;
-	adapter *ad;satipc *sip;
+	adapter *ad;
+	satipc *sip;
 	get_ad_and_sipr(ss->sid, 0);
 	struct iovec iov[3] =
 	{
@@ -438,7 +441,7 @@ int satipc_del_filters(int fd, int pid)
 	adapter *ad;
 	satipc *sip;
 	fd -= 100;
-	get_ad_and_sipr(fd,0);
+	get_ad_and_sipr(fd, 0);
 	LOG("satipc: del_pid for aid %d, pid %d, err %d", fd, pid, sip->err);
 	if (sip->err) // error reported, return error
 		return 0;
@@ -453,7 +456,7 @@ void get_s2_url(adapter *ad, char *url)
 	int len = 0, plts, ro;
 	transponder * tp = &ad->tp;
 	satipc *sip = get_satip(ad->id);
-	if(!sip)
+	if (!sip)
 		return;
 	url[0] = 0;
 	plts = tp->plts;
@@ -463,7 +466,7 @@ void get_s2_url(adapter *ad, char *url)
 //	if (ro == ROLLOFF_AUTO)
 //		ro = ROLLOFF_35;
 	FILL("src=%d", tp->diseqc, 0, tp->diseqc);
-	if(sip->use_fe)
+	if (sip->use_fe)
 		FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
 	FILL("&freq=%d", tp->freq, 0, tp->freq / 1000);
 	FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
@@ -482,11 +485,11 @@ void get_c2_url(adapter *ad, char *url)
 	int len = 0;
 	transponder * tp = &ad->tp;
 	satipc *sip = get_satip(ad->id);
-	if(!sip)
+	if (!sip)
 		return;
 	url[0] = 0;
 	FILL("freq=%.1f", tp->freq, 0, tp->freq / 1000.0);
-	if(sip->use_fe)
+	if (sip->use_fe)
 		FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
 	FILL("&sr=%d", tp->sr, -1, tp->sr / 1000);
 	FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
@@ -508,11 +511,11 @@ void get_t2_url(adapter *ad, char *url)
 	int len = 0;
 	transponder * tp = &ad->tp;
 	satipc *sip = get_satip(ad->id);
-	if(!sip)
+	if (!sip)
 		return;
 	url[0] = 0;
 	FILL("freq=%.1f", tp->freq, 0, tp->freq / 1000.0);
-	if(sip->use_fe)
+	if (sip->use_fe)
 		FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
 	FILL("&bw=%d", tp->bw, BANDWIDTH_AUTO, tp->bw / 1000000);
 	FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
@@ -537,7 +540,7 @@ int http_request(adapter *ad, char *url, char *method)
 	char format[] = "%s rtsp://%s:%d/%s%s%s RTSP/1.0\r\nCSeq: %d%s\r\n\r\n";
 	__attribute__((unused)) int rv;
 	satipc *sip = get_satip(ad->id);
-	if(!sip)
+	if (!sip)
 		return 0;
 
 	session[0] = 0;
@@ -594,8 +597,8 @@ int http_request(adapter *ad, char *url, char *method)
 	if (sip->stream_id != -1)
 		sprintf(sid, "stream=%d", sip->stream_id);
 
-	lb = snprintf(buf, sizeof(buf), format, method, sip->sip, sip->sport, sid, qm,
-			url, sip->cseq++, session);
+	lb = snprintf(buf, sizeof(buf), format, method, sip->sip, sip->sport, sid,
+			qm, url, sip->cseq++, session);
 
 	LOG("satipc_http_request (ad %d): %s to handle %d: \n%s", ad->id,
 			sip->expect_reply ? "queueing" : "sending", ad->fe, buf);
@@ -639,14 +642,14 @@ void satipc_commit(adapter *ad)
 	int send_pids = 1, send_apids = 1, send_dpids = 1;
 	int len = 0, i;
 	satipc *sip = get_satip(ad->id);
-	if(!sip)
+	if (!sip)
 		return;
 
 	url[0] = 0;
 	LOG(
 			"satipc: commit for adapter %d pids to add %d, pids to delete %d, expect_reply %d, force_commit %d want_tune %d",
-			ad->id, sip->lap, sip->ldp, sip->expect_reply,
-			sip->force_commit, sip->want_tune);
+			ad->id, sip->lap, sip->ldp, sip->expect_reply, sip->force_commit,
+			sip->want_tune);
 
 	if (sip->lap + sip->ldp == 0)
 		if (!sip->force_commit || !ad->tp.freq)
@@ -718,7 +721,8 @@ void satipc_commit(adapter *ad)
 	}
 
 	get_adapter_pids(ad->id, tmp_url, sizeof(tmp_url));
-	if((send_apids || send_dpids) && (!strcmp(tmp_url, "all") || !strcmp(tmp_url, "none")))
+	if ((send_apids || send_dpids)
+			&& (!strcmp(tmp_url, "all") || !strcmp(tmp_url, "none")))
 	{
 		send_apids = send_dpids = 0;
 		send_pids = 1;
@@ -760,7 +764,7 @@ void satipc_commit(adapter *ad)
 			len += sprintf(url + len, "&");
 		len += sprintf(url + len, "delpids=");
 		for (i = 0; i < sip->ldp; i++)
-				len += sprintf(url + len, "%d,", sip->dpid[i]);
+			len += sprintf(url + len, "%d,", sip->dpid[i]);
 		url[--len] = 0;
 		sip->ldp = 0;
 		sip->force_commit = 0;
@@ -775,7 +779,7 @@ int satipc_tune(int aid, transponder * tp)
 {
 	adapter *ad;
 	satipc *sip;
-	get_ad_and_sipr(aid,1);
+	get_ad_and_sipr(aid, 1);
 	LOG("satipc: tuning to freq %d, sys %d for adapter %d", ad->tp.freq / 1000,
 			ad->tp.sys, aid);
 	sip->err = 0;
@@ -788,7 +792,7 @@ int satipc_tune(int aid, transponder * tp)
 	sip->lap = 0;
 	sip->ldp = 0;
 	sip->use_fe = 0;
-	if(tp->fe > 0)
+	if (tp->fe > 0)
 		sip->use_fe = 1;
 	/*	if(sip->sent_transport == 0)
 	 {
@@ -835,8 +839,9 @@ void find_satip_adapter(adapter **a)
 		return;
 	la = split(arg, opts.satip_servers, 50, ',');
 	j = 0;
-	for (i = 0; i < MAX_ADAPTERS; i++) {
-		
+	for (i = 0; i < MAX_ADAPTERS; i++)
+	{
+
 	}
 	for (i = a_count; i < MAX_ADAPTERS; i++)
 		if (j < la)
@@ -845,7 +850,7 @@ void find_satip_adapter(adapter **a)
 				continue;
 			if (!a[i])
 				a[i] = adapter_alloc();
-			if(!satip[i])
+			if (!satip[i])
 				satip[i] = malloc1(sizeof(satipc));
 			sip = satip[i];
 			ad = a[i];
@@ -858,7 +863,7 @@ void find_satip_adapter(adapter **a)
 			ad->post_init = (Adapter_commit) satip_post_init;
 			ad->close = (Adapter_commit) satip_close_device;
 			ad->type = ADAPTER_SATIP;
-			
+
 			for (k = 0; k < 10; k++)
 				ad->sys[k] = 0;
 
@@ -912,15 +917,16 @@ void find_satip_adapter(adapter **a)
 			sip->setup_pids = opts.satip_setup_pids;
 
 			j++;
-			LOG("Satip device %s port %d delsys %d: %s %s", sip->sip, sip->sport,
-					ad->sys[0], get_delsys(ad->sys[0]), get_delsys(ad->sys[1]));
+			LOG("Satip device %s port %d delsys %d: %s %s", sip->sip,
+					sip->sport, ad->sys[0], get_delsys(ad->sys[0]),
+					get_delsys(ad->sys[1]));
 
 			a_count = i + 1; // update adapter counter
 		}
 }
 
-
-_symbols satipc_sym[] ={
-{ "ad_satip", VAR_AARRAY_PSTRING, satip, 1, MAX_ADAPTERS, offsetof(satipc, sip) },
-{ NULL, 0, NULL, 0, 0 }
-};
+_symbols satipc_sym[] =
+{
+		{ "ad_satip", VAR_AARRAY_PSTRING, satip, 1, MAX_ADAPTERS, offsetof(
+				satipc, sip) },
+		{ NULL, 0, NULL, 0, 0 } };
