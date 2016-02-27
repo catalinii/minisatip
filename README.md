@@ -24,7 +24,7 @@ https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item
 Usage:
 -------
 
-minisatip version 0.5.29, compiled with s2api version: 050A
+minisatip version 0.5.30, compiled with s2api version: 050A
 
 	./minisatip [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 		[-[uj] A1:S1-F1[-PIN]] [-m mac][-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] 
@@ -81,6 +81,9 @@ Help
 
 * -m xx: simulate xx as local mac address, generates UUID based on mac
 	* eg: -m 001122334455 
+
+* -n --netceiver if:count: use network interface <if> (default vlan4) and look for <count> netceivers
+	* eg: -n vlan4:2 
 
 * -o --dvbapi host:port - specify the hostname and port for the dvbapi server (oscam) 
 	* eg: -o 192.168.9.9:9000 
