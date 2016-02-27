@@ -1570,7 +1570,7 @@ _symbols adapters_sym[] =
 				snr) },
 		{ "ad_ber", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, offsetof(adapter,
 				ber) },
-		{ "ad_pol", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS, offsetof(adapter,
+		{ "ad_pol", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter,
 				tp.pol) },
 		{ "ad_sr", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, offsetof(adapter,
 				tp.sr) },
