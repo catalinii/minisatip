@@ -24,10 +24,10 @@ https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item
 Usage:
 -------
 
-minisatip version 0.5.24, compiled with s2api version: 050A
+minisatip version 0.5.30, compiled with s2api version: 050A
 
 	./minisatip [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
-		[-j A1:S1-F1[-PIN]] [-m mac] [-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] 
+		[-[uj] A1:S1-F1[-PIN]] [-m mac][-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] 
 		[-R document_root] [-s [DELSYS:]host[:port] [-u A1:S1-F1[-PIN]] [-w http_server[:port]] 
 		[-x http_port] [-X xml_path] [-y rtsp_port] 
 
@@ -44,10 +44,16 @@ Help
 * -c X: bandwidth capping for the output to the network [default: unlimited]
 	* eg: -c 2048  (does not allow minisatip to send more than 2048KB/s to all remote servers)
 
-* -d --diseqc ADAPTER1:COMMITED1-UNCOMMITED1[,ADAPTER2:COMMITED2-UNCOMMITED2[,...]
-	* The first argument is the adapter number, second is the number of commited packets to send to a Diseqc 1.0 switch, third the number of uncommited commands to sent to a Diseqc 1.1 switch
-	The higher number between the commited and uncommited will be sent first.
-	eg: -d 0:1-0  (which is the default for each adapter).
+* -d --diseqc ADAPTER1:COMMITTED1-UNCOMMITTED1[,ADAPTER2:COMMITTED2-UNCOMMITTED2[,...]
+	* The first argument is the adapter number, second is the number of committed packets to send to a Diseqc 1.0 switch, third the number of uncommitted commands to sent to a Diseqc 1.1 switch
+	The higher number between the committed and uncommitted will be sent first.
+	* eg: -d 0:1-0  (which is the default for each adapter).
+	- note: * as adapter means apply to all adapters
+	- note: * before committed number enables fast-switch (only voltage/tone)
+
+* -q --diseqc-timing ADAPTER1:BEFORE_CMD1-AFTER_CMD1-AFTER_REPEATED_CMD1-AFTER_SWITCH1-AFTER_BURST1-AFTER_TONE1[,...]
+	* All timing values are in ms, default adapter values are: 15-54-15-15-15-0
+	- note: * as adapter means apply to all adapters
 
 * -D --device-id DVC_ID: specify the device id (in case there are multiple SAT>IP servers in the network)
  	* eg: -D 4 
@@ -55,6 +61,9 @@ Help
 * -Y --delsys ADAPTER1:DELIVERY_SYSTEM1[,ADAPTER2:DELIVERY_SYSTEM2[,..]] - specify the delivery system of the adapters	
 	* eg: --delsys 1:dvbt,2:dvbs
 	- specifies adapter 1 as a DVBT device, adapter 2 as DVB-S, which overrides the system detection of the adapter
+
+* --dmx-source ADAPTER1:FRONTENDX - specifies the frontend number specified as argument for DMX_SET_SOURCE 
+	* eg: --dmx-source 0:1 - enables DMX_SET_SOURCE ioctl call with parameter 1 for adapter 0
 
 * -e --enable-adapters list_of_enabled adapters: enable only specified adapters
 	* eg: -e 0-2,5,7 (no spaces between parameters)
@@ -113,6 +122,7 @@ Help
 * -u --unicable unicable_string: defines the unicable adapters (A) and their slot (S), frequency (F) and optionally the PIN for the switch:
 	* The format is: A1:S1-F1[-PIN][,A2:S2-F2[-PIN][,...]]
 	eg: 2:0-1284[-1111]
+	* When * character is used before frequency, force 13V only for setup
 
 * -j --jess jess_string - same format as -u 
 

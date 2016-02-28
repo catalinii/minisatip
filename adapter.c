@@ -74,7 +74,8 @@ adapter *adapter_alloc()
 	ad->old_diseqc = -1;
 	ad->old_hiband = -1;
 	ad->old_pol = -1;
-	
+	ad->dmx_source = -1;
+
 	return ad;
 }
 
@@ -432,7 +433,8 @@ int get_free_adapter(int freq, int pol, int msys, int src, int diseqc)
 	adapter *ad;
 //	init_all_hw();
 
-	if (src > 0) {
+	if (src > 0)
+	{
 		i = src - 1;
 		ad = a[i];
 		if (!delsys_match(ad, msys))
@@ -443,7 +445,9 @@ int get_free_adapter(int freq, int pol, int msys, int src, int diseqc)
 				goto noadapter;
 			ad = get_adapter(i);
 		}
-	} else {
+	}
+	else
+	{
 		ad = get_adapter(i = 0);
 	}
 	if (ad)
@@ -473,7 +477,7 @@ int get_free_adapter(int freq, int pol, int msys, int src, int diseqc)
 			return i;
 		if (!ad && delsys_match(a[i], msys)) // device is not initialized
 		{
-			if(!init_hw(i))
+			if (!init_hw(i))
 				return i;
 		}
 	}
@@ -482,7 +486,7 @@ int get_free_adapter(int freq, int pol, int msys, int src, int diseqc)
 		if ((ad = get_adapter_nw(i)) && delsys_match(ad, msys))
 			if (adapter_match(ad, freq, pol, msys, src, diseqc))
 				return i;
-noadapter:
+	noadapter:
 	LOG("no adapter found for f:%d pol:%d msys:%d", freq, pol, msys);
 	dump_adapters();
 	return -1;
@@ -523,7 +527,7 @@ void close_adapter_for_stream(int sid, int aid)
 	LOG("closed adapter %d for stream %d m:%d s:%d", aid, sid, ad->master_sid,
 			ad->sid_cnt);
 	// delete the attached PIDs as well
-	if(ad->sid_cnt == 0)
+	if (ad->sid_cnt == 0)
 		mark_pids_deleted(aid, -1, NULL);
 	else
 		mark_pids_deleted(aid, sid, NULL);
@@ -1147,10 +1151,13 @@ void set_diseqc_adapters(char *o)
 	la = split(arg, buf, sizeof(arg), ',');
 	for (i = 0; i < la; i++)
 	{
-		if (arg[i] && arg[i][0] == '*') {
+		if (arg[i] && arg[i][0] == '*')
+		{
 			ad = NULL;
 			a_id = -1;
-		} else {
+		}
+		else
+		{
 			a_id = map_intd(arg[i], NULL, -1);
 			if (a_id < 0 || a_id >= MAX_ADAPTERS)
 				continue;
@@ -1172,16 +1179,20 @@ void set_diseqc_adapters(char *o)
 		if (committed_no < 0 || uncommitted_no < 0)
 			continue;
 
-		if (ad) {
+		if (ad)
+		{
 			ad->diseqc_param.fast = fast;
 			ad->diseqc_param.committed_no = committed_no;
 			ad->diseqc_param.uncommitted_no = uncommitted_no;
-		} else {
+		}
+		else
+		{
 			opts.diseqc_fast = fast;
 			opts.diseqc_committed_no = committed_no;
 			opts.diseqc_uncommitted_no = uncommitted_no;
 		}
-		LOGL(0, "Setting diseqc adapter %d fast %d committed_no %d uncommitted_no %d",
+		LOGL(0,
+				"Setting diseqc adapter %d fast %d committed_no %d uncommitted_no %d",
 				a_id, fast, committed_no, uncommitted_no);
 	}
 }
@@ -1198,10 +1209,13 @@ void set_diseqc_timing(char *o)
 	la = split(arg, buf, sizeof(arg), ',');
 	for (i = 0; i < la; i++)
 	{
-		if (arg[i] && arg[i][0] == '*') {
+		if (arg[i] && arg[i][0] == '*')
+		{
 			ad = NULL;
 			a_id = -1;
-		} else {
+		}
+		else
+		{
 			a_id = map_intd(arg[i], NULL, -1);
 			if (a_id < 0 || a_id >= MAX_ADAPTERS)
 				continue;
@@ -1226,18 +1240,21 @@ void set_diseqc_timing(char *o)
 		after_switch = map_intd(sep4 + 1, NULL, -1);
 		after_burst = map_intd(sep5 + 1, NULL, -1);
 		after_tone = map_intd(sep6 + 1, NULL, -1);
-		if (before_cmd < 0 || after_cmd < 0 || after_repeated_cmd < 0 ||
-		    after_switch < 0 || after_burst < 0 || after_tone < 0)
+		if (before_cmd < 0 || after_cmd < 0 || after_repeated_cmd < 0
+				|| after_switch < 0 || after_burst < 0 || after_tone < 0)
 			continue;
 
-		if (ad) {
+		if (ad)
+		{
 			ad->diseqc_param.before_cmd = before_cmd;
 			ad->diseqc_param.after_cmd = after_cmd;
 			ad->diseqc_param.after_repeated_cmd = after_repeated_cmd;
 			ad->diseqc_param.after_switch = after_switch;
 			ad->diseqc_param.after_burst = after_burst;
 			ad->diseqc_param.after_tone = after_tone;
-		} else {
+		}
+		else
+		{
 			opts.diseqc_before_cmd = before_cmd;
 			opts.diseqc_after_cmd = after_cmd;
 			opts.diseqc_after_repeated_cmd = after_repeated_cmd;
@@ -1245,10 +1262,11 @@ void set_diseqc_timing(char *o)
 			opts.diseqc_after_burst = after_burst;
 			opts.diseqc_after_tone = after_tone;
 		}
-		LOGL(0, "Setting diseqc timing for adapter %d before cmd %d after cmd %d "
-		        "after repeated cmd %d after switch %d after burst %d after tone %d",
-				a_id, before_cmd, after_cmd, after_repeated_cmd,
-				after_switch, after_burst, after_tone);
+		LOGL(0,
+				"Setting diseqc timing for adapter %d before cmd %d after cmd %d "
+						"after repeated cmd %d after switch %d after burst %d after tone %d",
+				a_id, before_cmd, after_cmd, after_repeated_cmd, after_switch,
+				after_burst, after_tone);
 	}
 }
 
@@ -1324,6 +1342,46 @@ void set_adapters_delsys(char *o)
 
 		LOGL(0, "Setting delivery system for adapter %d to %s and %s", a_id,
 				get_delsys(ad->sys[0]), get_delsys(ad->sys[1]));
+	}
+
+}
+
+void set_adapter_dmxsource(char *o)
+{
+	int i, j, la, st, end, fd;
+	char buf[100], *arg[20], *sep, *seps;
+	adapter *ad;
+	strncpy(buf, o, sizeof(buf));
+	la = split(arg, buf, sizeof(arg), ',');
+	for (i = 0; i < la; i++)
+	{
+		sep = strchr(arg[i], '-');
+		seps = strchr(arg[i], ':');
+
+		if (!seps)
+			continue;
+
+		fd = map_intd(seps + 1, NULL, -1);
+
+		if (sep == NULL)
+		{
+			st = end = map_int(arg[i], NULL);
+			set_disable(st, 0);
+		}
+		else
+		{
+			st = map_int(arg[i], NULL);
+			end = map_int(sep + 1, NULL);
+		}
+		for (j = st; j <= end; j++)
+		{
+			if (!a[j])
+				a[j] = adapter_alloc();
+
+			ad = a[j];
+			ad->dmx_source = fd;
+			LOGL(0, "Setting frontend %d for adapter %d", fd, j);
+		}
 	}
 
 }
@@ -1466,7 +1524,8 @@ char* get_adapter_pids(int aid, char *dest, int max_size)
 		{
 			len = snprintf(dest, max_size, "all,");
 			break;
-		}else
+		}
+		else
 			len += snprintf(dest + len, max_size - len, "%d,", pids[i]);
 	}
 	if (len > 0)
@@ -1498,28 +1557,45 @@ char *get_all_delsys(int aid, char *dest, int max_size)
 }
 
 _symbols adapters_sym[] =
-{
-{ "ad_enabled", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS, offsetof(adapter, enabled) },
-{ "ad_type", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS, offsetof(adapter, type) },
-{ "ad_freq", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, offsetof(adapter, tp.freq) },
-{ "ad_strength", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, offsetof(adapter, strength) },
-{ "ad_snr", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, offsetof(adapter, snr) },
-{ "ad_ber", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, offsetof(adapter, ber) },
-{ "ad_pol", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.pol) },
-{ "ad_sr", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, offsetof(adapter, tp.sr) },
-{ "ad_bw", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, offsetof(adapter, tp.bw) },
-{ "ad_diseqc", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.diseqc) },
-{ "ad_fe", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, fe) },
-{ "ad_master", VAR_AARRAY_UINT8, a, 1, MAX_ADAPTERS, offsetof(adapter, master_sid) },
-{ "ad_sidcount", VAR_AARRAY_UINT8, a, 1, MAX_ADAPTERS, offsetof(adapter, sid_cnt) },
-{ "ad_phyad", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, pa) },
-{ "ad_phyfd", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, fn) },
-{ "ad_sys", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.sys) },
-{ "ad_allsys", VAR_FUNCTION_STRING, (void *) &get_all_delsys, 0, 0, 0 },
-{ "ad_pids", VAR_FUNCTION_STRING, (void *) &get_adapter_pids, 0, 0, 0 },
-{ "tuner_s2", VAR_INT, &tuner_s2, 1, 0, 0 },
-{ "tuner_t2", VAR_INT, &tuner_t2, 1, 0, 0 },
-{ "tuner_c2", VAR_INT, &tuner_c2, 1, 0, 0 },
-{ "tuner_t", VAR_INT, &tuner_t, 1, 0, 0 },
-{ "tuner_c", VAR_INT, &tuner_c, 1, 0, 0 },
-{ NULL, 0, NULL, 0, 0 } };
+		{
+		{ "ad_enabled", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS, offsetof(adapter,
+				enabled) },
+		{ "ad_type", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS, offsetof(adapter,
+				type) },
+		{ "ad_freq", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, offsetof(
+				adapter, tp.freq) },
+		{ "ad_strength", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, offsetof(
+				adapter, strength) },
+		{ "ad_snr", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, offsetof(adapter,
+				snr) },
+		{ "ad_ber", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, offsetof(adapter,
+				ber) },
+		{ "ad_pol", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS, offsetof(adapter,
+				tp.pol) },
+		{ "ad_sr", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, offsetof(adapter,
+				tp.sr) },
+		{ "ad_bw", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, offsetof(adapter,
+				tp.bw) },
+		{ "ad_diseqc", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter,
+				tp.diseqc) },
+		{ "ad_fe", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, fe) },
+		{ "ad_master", VAR_AARRAY_UINT8, a, 1, MAX_ADAPTERS, offsetof(adapter,
+				master_sid) },
+		{ "ad_sidcount", VAR_AARRAY_UINT8, a, 1, MAX_ADAPTERS, offsetof(adapter,
+				sid_cnt) },
+				{ "ad_phyad", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(
+						adapter, pa) },
+				{ "ad_phyfd", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(
+						adapter, fn) },
+				{ "ad_sys", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(
+						adapter, tp.sys) },
+				{ "ad_allsys", VAR_FUNCTION_STRING, (void *) &get_all_delsys, 0,
+						0, 0 },
+				{ "ad_pids", VAR_FUNCTION_STRING, (void *) &get_adapter_pids, 0,
+						0, 0 },
+				{ "tuner_s2", VAR_INT, &tuner_s2, 1, 0, 0 },
+				{ "tuner_t2", VAR_INT, &tuner_t2, 1, 0, 0 },
+				{ "tuner_c2", VAR_INT, &tuner_c2, 1, 0, 0 },
+				{ "tuner_t", VAR_INT, &tuner_t, 1, 0, 0 },
+				{ "tuner_c", VAR_INT, &tuner_c, 1, 0, 0 },
+				{ NULL, 0, NULL, 0, 0 } };
