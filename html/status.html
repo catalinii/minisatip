@@ -3,49 +3,42 @@
 <head>
 	<meta charset="utf-8"/>
 	<title>Minisatip/$version$ on $http_host$</title>
-<!--	
+	<link rel="stylesheet" type="text/css" href="jquery.dataTables.min.css">
 	<style>
-.tright {
-  text-align: right;
-}
-.tcenter {
-  text-align: center;
-}
-.enabled {
-  color: green;
-}
-.disabled {
-  color: red;
-}
-table, th, td {
-  border: 1px solid black;
-}
-table {
-  border-collapse: collapse;
-}
-td.header {
-  width: 100px;
-  color: red;
-}
-td.row {
-  width: 100px;
-}
+	body {
+		padding: 5px;
+	}
+	body, td {
+		font-family: Tahoma, Geneva, sans-serif;
+		font-size: 0.9em;
+	}
+	th {
+		font-family: Tahoma, Geneva, sans-serif;
+		font-size: 1em;
+	}
+/*
+	.enabled {
+		color: green;
+	}
+	.disabled {
+		color: red;
+	}
+*/
 	</style>
--->	
-	<link href="footable.standalone.min.css" rel="stylesheet" type="text/css" />
 
-	<script src="jquery.min.js" type="text/javascript"></script>
-	<script src="footable.min.js" type="text/javascript"></script>
+	<script type="text/javascript" language="javascript" src="jquery-1.12.0.min.js"></script>
+	<script type="text/javascript" language="javascript" src="jquery.dataTables.min.js"></script>
+	<script type="text/javascript" language="javascript" src="jquery.pBar.min.js"></script>
 </head>
 
-<body onload="JavaScript:timedRefresh(5000);">
+<!--<body onload="JavaScript:timedRefresh(5000);">-->
 <body>
-<p>This page will refresh every 5 seconds.</p>
+This page will refresh every 5 seconds.<br />
 
 <script type="text/javascript">
-function timedRefresh(timeoutPeriod) {
-	// setTimeout("location.reload(true);", timeoutPeriod);
-};
+//function timedRefresh(timeoutPeriod) {
+//	// setTimeout("location.reload(true);", timeoutPeriod);
+//};
 
 var ad_type		= [$ad_type0$, $ad_type1$, $ad_type2$, $ad_type3$, $ad_type4$, $ad_type5$, $ad_type6$, $ad_type7$, $ad_type8$, $ad_type9$, $ad_type10$, $ad_type11$, $ad_type12$, $ad_type13$, $ad_type14$, $ad_type15$ ];
 var ad_enabled	= [$ad_enabled0$, $ad_enabled1$, $ad_enabled2$, $ad_enabled3$, $ad_enabled4$, $ad_enabled5$, $ad_enabled6$, $ad_enabled7$, $ad_enabled8$, $ad_enabled9$, $ad_enabled10$, $ad_enabled11$, $ad_enabled12$, $ad_enabled13$, $ad_enabled14$, $ad_enabled15$ ];
@@ -85,80 +78,134 @@ var max_streams	= 64;
 var pol			= ["", "(V)", "(H)", "(R)", "(L)"];
 var sys			= [ "", "dvbc", "dvbcb", "dvbt", "dss", "dvbs", "dvbs2", "dvbh", "isdbt", "isdbs", "isdbc", "atsc", "atscmh", "dmbth", "cmmb", "dab", "dvbt2", "turbo", "dvbcc", "dvbc2" ];
 
-var myTable = "<table class='foo'><tr><td class='header'>Tuner</td>";
-myTable +="<td class='header tright'>Status</td>";
-myTable +="<td class='header tright'>Frequency</td>";
-myTable +="<td class='header tright'>SR/BW</td>";
-myTable +="<td class='header tright'>Signal</td>";
-myTable +="<td class='header tright'>Streams</td>";
-myTable +="<td class='header tright'>Streams Pids</td></tr>";
+var myTable = "<table id='myTable' class='display cell-border' cellspacing='0' width='100%'>";
+myTable += "<thead><tr><th>Tuner</th>";
+myTable += "<th class='dt-right'>Status</th>";
+myTable += "<th class='dt-right'>Frequency</th>";
+myTable += "<th class='dt-right'>SR/BW</th>";
+myTable += "<th class='dt-right'>Signal</th>";
+myTable += "<th class='dt-right'>Streams</th>";
+myTable += "<th class=''>Streams Pids</th>";
+myTable += "<th class=''>Crypt</th>";
+myTable += "</tr></thead><tbody>";
 
-for (var i=0; i<max_adapters; i++) {
-	if(ad_type[i] == 0)
+for (var i = 0; i < max_adapters; i++) {
+	if (ad_type[i] == 0)
 		continue;
-	myTable+="<tr><td class='row'>" + i + "</td>";
+	
+	if (ad_enabled[i] == 1)
+		myTable += "<tr valign='top'>";
+	else	
+		myTable += "<tr style='opacity: 0.5;'>";
+	
+	// TUNER
+	myTable += "<td class='dt-right'>" + i + "</td>";
+	
+	// STATUS
 	var csys = "";
-	if(ad_sys[i] == 0)
+	if (ad_sys[i] == 0)
 		csys = ad_allsys[i];
 	else
 		csys = sys[ad_sys[i]];
-	if(ad_enabled[i] == 1)
-		myTable+="<td class='row tright enabled' title='pids="+ad_pids[i]+"'>" + csys;
+	
+	if (ad_enabled[i] == 1)
+		myTable += "<td class='dt-right enabled' title='pids="+ad_pids[i]+"'><img src='" + csys + ".png' title='" + csys + "' /><br />";
 	else
-		myTable+="<td class='row tright disabled'>" + ad_allsys[i];
-	if(ad_type[i] == 1){
-		myTable+="(" + ad_phyad[i] + "," + ad_phyfd[i] +") </td>";
-	}else{ 
-		myTable+="(" + ad_satip[i] + ")</td>";
+		myTable += "<td class='dt-right disabled'>" + ad_allsys[i];
+	
+	if (ad_type[i] == 1) {
+		// myTable += "<small>(" + ad_phyad[i] + "," + ad_phyfd[i] +")</small>";
+	} else { 
+		myTable += "<small>(" + ad_satip[i] + ")</small>";
 	}
-	myTable+="<td class='row tright'>" + ad_freq[i] + ""+pol[ad_pol[i]]+"</td>";
-	if(ad_sys[i] == 0 || ad_sys[i] == 1 || ad_sys[i] == 2 || ad_sys[i] == 5 || ad_sys[i] == 6 || ad_sys[i] == 18 || ad_sys[i] == 19 )
-		myTable+="<td class='row tright'>" + ad_sr[i] + "</td>";
+	myTable += "</td>";
+	
+	// FREQUENCY
+	myTable += "<td class='dt-right'>" + ad_freq[i] + " "+pol[ad_pol[i]]+"</td>";
+	
+	if (ad_sys[i] == 0 || ad_sys[i] == 1 || ad_sys[i] == 2 || ad_sys[i] == 5 || ad_sys[i] == 6 || ad_sys[i] == 18 || ad_sys[i] == 19 )
+		myTable += "<td class='dt-right'>" + ad_sr[i] + "</td>";
 	else 
-		myTable+="<td class='row tright'>" + ad_bw[i]/1000 + "MHZ</td>";
+		myTable += "<td class='dt-right'>" + ad_bw[i]/1000 + "MHZ</td>";
+	
+	// SIGNAL
 	var signal = "";
-	if(ad_enabled[i] == 0){
-		signal = "OFFLINE";
-	}else{
-		signal = "LEV "+parseInt(ad_strength[i]/2.55) + "% SNR ";
-		if(ad_type[i] == 1) 
-			signal += parseInt(ad_snr[i]/2.55);
-		else
-			signal += parseInt(ad_snr[i]/0.15);
-		signal += "%";
-		if(ad_ber[i] > 0)
-			signal += " BER "+ad_ber[i];
-	}
-	myTable+="<td class='row tright'>" + signal + " </td>";
+	if (ad_enabled[i] == 0) {
+		signal = "<small>OFFLINE</small>";
+	} else {
+		var s1 = parseInt(ad_strength[i] / 2.55);
+		signal = "LEV <div class='pBar' data-from='"+ s1 + "' data-to='" + s1 + "'></div><br />";
 
-	myTable +="<td class='row tright'>";
-	for(var j=0;j<max_streams;j++)
-		if(st_enabled[j]==1 && st_adapter[j]==i){
+		if (ad_type[i] == 1) 
+			var s2 = parseInt(ad_snr[i] / 2.55);
+		else
+			var s2 = parseInt(ad_snr[i] / 0.15);
+		signal += "SNR <div class='pBar' data-from='"+ s2 + "' data-to='" + s2 + "'></div><br />";
+
+		if (ad_ber[i] > 0)
+			signal += "<small><b style='color:red;'>BER " + ad_ber[i] + "</b></small>";
+	}
+	myTable += "<td class='dt-right'>" + signal + " </td>";
+
+	// STREAMS
+	myTable += "<td class='dt-right'>";
+	for (var j = 0; j < max_streams; j++)
+		if (st_enabled[j] == 1 && st_adapter[j] == i) {
 			var st_rh = st_rhost[j]+":"+st_rport[j];
-			if(ad_master[i] == j)
+			if (ad_master[i] == j)
 				st_rh = "<b>"+st_rh+"</b>";
-			if(st_play[j] == 0)
+			if (st_play[j] == 0)
 				st_rh = "<i>"+st_rh+"</i>";
-			myTable += st_rh+"("+st_useragent[j]+")<br>";
+			myTable += st_rh + "<br />";
+			if (st_useragent[j] != "")
+				myTable += "<small>(" + st_useragent[j] + ")</small><br />";
 		}
-	myTable +="</td><td class='row tcenter'>";
-	for(var j=0;j<max_streams;j++)
-		if(st_enabled[j]==1 && st_adapter[j]==i){
+	
+	// STREAM PIDS
+	myTable +="</td><td class=''>";
+	for (var j = 0; j < max_streams; j++)
+		if (st_enabled[j] == 1 && st_adapter[j] == i) {
 			var st_p = st_pids[j];
 			if(ad_master[i] == j)
-				st_p = "<b>"+st_p+"</b>";
+				st_p = "<b>" + st_p + "</b>";
 			if(st_play[j] == 0)
-				st_p = "<i>"+st_p+"</i>";
-			myTable += st_p+"<br>";
+				st_p = "<i>" + st_p + "</i>";
+			myTable += st_p + "<br />";
 		}
-	myTable +="</td></tr>";
+	// CRYPT
+	myTable +="</td><td class=''><small>";
+	if (key_enabled[i] == 1) {
+		myTable += "SYSTEM: " + key_cardsystem[i] + "<br />";
+		myTable += "ECMTIME: " + key_ecmtime[i] + "<br />";
+		myTable += "READER: " + key_reader[i] + "<br />";
+		myTable += "IP: " + key_from[i] + " (" + key_protocol[i] + ")<br />";
+	}
+	myTable +="</small></td></tr>";
 }
-myTable+="</table>";
+myTable+="</tbody></table>";
 
-var el = document.createElement('div');
-el.innerHTML = myTable;
-document.body.appendChild(el);
+$(document).ready(function() {
+	var el = document.createElement('div');
+	el.innerHTML = myTable;
+	document.body.appendChild(el);
+	
+	$('#myTable').DataTable({
+		"paging":	false,
+		"ordering": true,
+		"info":		false,
+		"columnDefs": [
+			{ "width": "40px", "targets": 0 },
+			{ "width": "40px", "targets": 1 },
+			{ "width": "50px", "targets": 2 },
+			{ "width": "40px", "targets": 3 },
+			{ "width": "70px", "targets": 4 }
+		]
+    });
+	
+	$(".pBar").pBar();
+});
 
 </script>
+
 </body>
 </html>
