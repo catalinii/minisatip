@@ -935,7 +935,7 @@ int read_http(sockets * s)
 			http_response(s, 404, NULL, NULL, 0, 0);
 			return 0;
 		}
-		if (strstr(ctype, "image"))
+		if (strstr(ctype, "image") || strstr(ctype, "css") || strstr(ctype, "javascript")) 
 		{
 			http_response(s, 200, ctype, f, 0, nl);
 			closefile(f, nl);

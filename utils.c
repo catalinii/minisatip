@@ -949,6 +949,10 @@ char *readfile(char *fn, char *ctype, int *len)
 			strcpy(ctype, "Content-type: image/png\r\nConnection: close");
 		else if (endswith(fn, "jpg") || endswith(fn, "jpeg"))
 			strcpy(ctype, "Content-type: image/jpeg\r\nConnection: close");
+		else if (endswith(fn, "css"))
+			strcpy(ctype, "Content-type: text/css\r\nConnection: close");
+		else if (endswith(fn, "js"))
+			strcpy(ctype, "Content-type: text/javascript\r\nConnection: close");
 		else if (endswith(fn, "htm") || endswith(fn, "html"))
 			strcpy(ctype, "CACHE-CONTROL: no-cache\r\nContent-type: text/html");
 		else if (endswith(fn, "xml"))
