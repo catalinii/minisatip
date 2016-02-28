@@ -16,6 +16,10 @@
 		font-family: Tahoma, Geneva, sans-serif;
 		font-size: 1em;
 	}
+	.level {
+		display: inline;
+		white-space: nowrap;
+	}
 /*
 	.enabled {
 		color: green;
@@ -134,13 +138,13 @@ for (var i = 0; i < max_adapters; i++) {
 		signal = "<small>OFFLINE</small>";
 	} else {
 		var s1 = parseInt(ad_strength[i] / 2.55);
-		signal = "LEV <div class='pBar' data-from='"+ s1 + "' data-to='" + s1 + "'></div><br />";
+		signal = "<div class='level'>LEV <div class='pBar' data-from='"+ s1 + "' data-to='" + s1 + "'></div></div><br />";
 
 		if (ad_type[i] == 1) 
 			var s2 = parseInt(ad_snr[i] / 2.55);
 		else
 			var s2 = parseInt(ad_snr[i] / 0.15);
-		signal += "SNR <div class='pBar' data-from='"+ s2 + "' data-to='" + s2 + "'></div><br />";
+		signal += "<div class='level'>SNR <div class='pBar' data-from='"+ s2 + "' data-to='" + s2 + "'></div></div><br />";
 
 		if (ad_ber[i] > 0)
 			signal += "<small><b style='color:red;'>BER " + ad_ber[i] + "</b></small>";
