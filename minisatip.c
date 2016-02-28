@@ -1260,7 +1260,7 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 	else
 		proto = "RTSP";
 
-	if (!ah)
+	if (!ah || !ah[0])
 		ah = public;
 	if (!desc)
 		desc = "";
