@@ -53,7 +53,7 @@ unsigned init_tick, theTick;
 uint32_t getTick()
 {								 //ms
 	struct timespec ts;
-	clock_gettime(CLOCK_REALTIME, &ts);
+	clock_gettime(CLOCK_MONOTONIC, &ts);
 	theTick = ts.tv_nsec / 1000000;
 	theTick += ts.tv_sec * 1000;
 	if (init_tick == 0)
@@ -65,7 +65,7 @@ uint64_t getTickUs()
 {
 	uint64_t utime;
 	struct timespec ts;
-	clock_gettime(CLOCK_REALTIME, &ts);
+	clock_gettime(CLOCK_MONOTONIC, &ts);
 	utime = ((uint64_t) ts.tv_sec) * 1000000 + ts.tv_nsec / 1000;
 	return utime;
 
