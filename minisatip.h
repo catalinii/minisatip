@@ -8,7 +8,7 @@
 #include "utils.h"
 
 
-#define VERSION_BUILD "30"
+#define VERSION_BUILD "31"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.5.,VERSION_BUILD,)
 

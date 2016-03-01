@@ -1,5 +1,8 @@
 #! /bin/bash
 cd /usr/src/minisatip
+rm minisatip.o
+gcc -c minisatip.c 
+make 
 cat readme_header > README.md
 ./minisatip -h  >> README.md
 cat readme_footer >> README.md

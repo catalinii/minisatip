@@ -1506,6 +1506,22 @@ int get_enabled_pids(adapter *ad, int *pids, int lpids)
 	return ep;
 }
 
+int get_all_pids(adapter *ad, int *pids, int lpids)
+{
+	int ep = 0, i;
+
+	for (i = 0; i < MAX_PIDS; i++)
+	{
+		if ((ad->pids[i].flags > 0) && (ad->pids[i].flags < 4)) 
+			pids[ep++] = ad->pids[i].pid;
+		if (ep >= lpids)
+			break;
+	}
+
+	return ep;
+}
+
+
 char* get_adapter_pids(int aid, char *dest, int max_size)
 {
 	int len = 0;
