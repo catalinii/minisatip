@@ -1020,7 +1020,7 @@ int calculate_bw(sockets *s)
 		if (bw > 2000)
 			LOG(
 					"BW %jdKB/s, Total BW: %jd MB, ns/read %jd, r: %d, tt: %jd ms, n: %d (s: %d ms, s_cnt %d)",
-					(int ) bw / 1024, tbw / 1024576, nsecs / reads, reads,
+					bw / 1024, tbw / 1024576, nsecs / reads, reads,
 					nsecs / 1000, bwnotify, sleeping / 1000, sleeping_cnt);
 		bw = 0;
 		bwnotify = 0;
