@@ -322,6 +322,7 @@ void close_adapter(int na)
 	ad->ca_mask = 0;
 	ad->fe = 0;
 	ad->dvr = 0;
+	ad->sock = -1;
 	ad->strength = 0;
 	ad->snr = 0;
 	ad->old_diseqc = -1;
