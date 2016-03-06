@@ -671,7 +671,8 @@ int snprintf_pointer(char *dest, int max_len, int type, void *p,
 		break;
 
 	case VAR_PSTRING:
-		nb = snprintf(dest, max_len, "%s", *(char **) p);
+		nb = snprintf(dest, max_len, "%s",
+				(*(char **) p) ? (*(char **) p) : "");
 		break;
 
 	case VAR_FLOAT:
@@ -687,7 +688,8 @@ int snprintf_pointer(char *dest, int max_len, int type, void *p,
 
 char zero[16];
 
-void * get_var_address(char *var, float *multiplier, void *storage, int ls)
+void * get_var_address(char *var, float *multiplier, int * type, void *storage,
+		int ls)
 {
 	int nb = 0, i, j, off;
 	*multiplier = 0;
@@ -695,12 +697,13 @@ void * get_var_address(char *var, float *multiplier, void *storage, int ls)
 		for (j = 0; sym[i][j].name; j++)
 			if (!strncmp(sym[i][j].name, var, strlen(sym[i][j].name)))
 			{
+				*type = sym[i][j].type;
 				if (sym[i][j].type < VAR_ARRAY)
 				{
 					*multiplier = sym[i][j].multiplier;
 					return sym[i][j].addr;
 				}
-				else if (sym[i][j].type & VAR_ARRAY)
+				else if ((sym[i][j].type & 0xF0) == VAR_ARRAY)
 				{
 					off = map_intd(var + strlen(sym[i][j].name), NULL, 0);
 					if (off >= 0 && off < sym[i][j].len)
@@ -709,7 +712,7 @@ void * get_var_address(char *var, float *multiplier, void *storage, int ls)
 						return (((char *) sym[i][j].addr) + off * sym[i][j].skip);
 					}
 				}
-				else if (sym[i][j].type & VAR_AARRAY)
+				else if ((sym[i][j].type & 0xF0) == VAR_AARRAY)
 				{
 					off = map_intd(var + strlen(sym[i][j].name), NULL, 0);
 					if (off >= 0 && off < sym[i][j].len)
@@ -733,6 +736,7 @@ void * get_var_address(char *var, float *multiplier, void *storage, int ls)
 					off = map_intd(var + strlen(sym[i][j].name), NULL, 0);
 					get_data_int funi = (get_data_int) sym[i][j].addr;
 					*(int *) storage = funi(off);
+					*multiplier = 1;
 					return storage;
 				}
 				else if (sym[i][j].type == VAR_FUNCTION_STRING)
@@ -750,9 +754,17 @@ void * get_var_address(char *var, float *multiplier, void *storage, int ls)
 int var_eval(char *orig, int len, char *dest, int max_len)
 {
 	char var[VAR_LENGTH + 1];
+	char storage[100]; // variable max len
+	float multiplier;
+	int type = 0;
+	void *p;
+	int nb = 0;
 	memset(var, 0, sizeof(var));
 	strncpy(var, orig + 1, len - 1);
-	return 0;
+	p = get_var_address(var, &multiplier, &type, storage, sizeof(storage));
+	if (p)
+		nb = snprintf_pointer(dest, max_len, type, p, multiplier);
+	return nb;
 }
 
 int is_var(char *s)
@@ -1128,6 +1140,8 @@ void add_join_thread(pthread_t t)
 void join_thread()
 {
 	int i, rv;
+	if (!join_lock.enabled)
+		return;
 	mutex_lock(&join_lock);
 //	LOG("starting %s", __FUNCTION__);	
 	for (i = 0; i < join_pos; i++)
