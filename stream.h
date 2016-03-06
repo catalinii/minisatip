@@ -31,9 +31,9 @@ typedef struct struct_streams
 	int len, total_len;
 	uint16_t seq;  //rtp seq id
 	int ssrc; // rtp seq id			 
-	int wtime;
-	int rtime;  // stream timeout
-	int rtcp_wtime;
+	int64_t wtime;
+	int64_t rtime;  // stream timeout
+	int64_t rtcp_wtime;
 	int do_play;
 	int start_streaming;
 	transponder tp;
@@ -56,8 +56,6 @@ typedef struct struct_rtp_prop
 	int ttl;
 } rtp_prop;
 
-uint32_t getTick ();
-uint64_t getTickUs();
 char *describe_streams (sockets *s, char *req, char *sbuf,int size);
 streams *setup_stream (char *str, sockets * s);
 int start_play (streams * sid, sockets * s);

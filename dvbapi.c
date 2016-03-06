@@ -228,7 +228,7 @@ int dvbapi_reply(sockets * s)
 			SKey *k;
 			SPid *p;
 			unsigned char *cw;
-			uint32_t ctime = getTick();
+			int64_t ctime = getTick();
 
 			pos += 21;
 			k_id = b[4];
@@ -285,6 +285,7 @@ int dvbapi_reply(sockets * s)
 		case DVBAPI_ECM_INFO:
 		{
 			int pos1 = s->rlen - pos;
+			int64_t z = 0;
 			SKey *k = get_key(b[4]);
 			char cardsystem[255];
 			char reader[255];
@@ -340,7 +341,8 @@ int dvbapi_reply(sockets * s)
 					"dvbapi: ECM_INFO: key %d, SID = %04X, CAID = %04X (%s), PID = %d (%04X), ProvID = %06X, ECM time = %d ms, reader = %s, from = %s, protocol = %s, hops = %d",
 					k ? k->id : -1, sid, k ? k->caid : 0, msg[0],
 					k ? k->info_pid : 0, k ? k->info_pid : 0, k ? k->prid : 0,
-					k ? k->ecmtime : 0, msg[1], msg[2], msg[3], k ? k->hops : 0);
+					k ? k->ecmtime : -1, msg[1], msg[2], msg[3],
+					k ? k->hops : 0);
 			break;
 		}
 
@@ -364,7 +366,7 @@ SKey *get_active_key(SPid *p)
 	SKey *k;
 	adapter *ad;
 	int key = p->key;
-	uint32_t ctime = getTick();
+	int64_t ctime = getTick();
 	uint8_t nullcw[16] =
 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 	if (key == 255)
@@ -576,9 +578,9 @@ int decrypt_stream(adapter *ad, void *arg)
 				decrypt_batch(k);
 				if (old_parity != cp)
 				{
-					int ctime = getTick();
+					int64_t ctime = getTick();
 					LOGL(2,
-							"Parity change for key %d, new parity %d pid %d [%02X %02X %02X %02X], last_parity_change %d",
+							"Parity change for key %d, new parity %d pid %d [%02X %02X %02X %02X], last_parity_change %jd",
 							k->id, cp, pid, b[0], b[1], b[2], b[3],
 							k->last_parity_change);
 //					if(ctime - k->last_parity_change> 1000)
@@ -624,8 +626,6 @@ int decrypt_stream(adapter *ad, void *arg)
 		if (keys[i] && keys[i]->enabled && (keys[i]->blen > 0)
 				&& (keys[i]->adapter == ad->id))
 			decrypt_batch(keys[i]);
-//	else 
-//		if((parity != -1) && k)LOGL(5, "NOT DECRYPTING sid %d, parity %d, %d %d, ctime %d last_key %d", sid->sid, parity, key_ok[parity], j, ctime, k->last_key[parity]);
 
 }
 

@@ -47,7 +47,6 @@ sockets *s[MAX_SOCKS];
 int max_sock;
 SMutex s_mutex;
 
-
 int fill_sockaddr(struct sockaddr_in *serv, char *host, int port)
 {
 	struct hostent *h;
@@ -358,7 +357,8 @@ int sockets_read(int socket, void *buf, int len, sockets *ss, int *rv)
 int sockets_recv(int socket, void *buf, int len, sockets *ss, int *rv)
 {
 	int slen = sizeof(ss->sa);
-	*rv = recvfrom(socket, buf, len, 0, (struct sockaddr *) &ss->sa, (socklen_t *) &slen);
+	*rv = recvfrom(socket, buf, len, 0, (struct sockaddr *) &ss->sa,
+			(socklen_t *) &slen);
 	return (*rv > 0);
 }
 
@@ -432,7 +432,7 @@ int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 		max_sock = i + 1;
 	ss->buf = NULL;
 	ss->lbuf = 0;
-	ss->close_sec = 0;
+	ss->timeout_ms = 0;
 	ss->id = i;
 	ss->read = (read_action) sockets_read;
 	ss->lock = NULL;
@@ -511,7 +511,8 @@ void *select_and_execute(void *arg)
 	unsigned char buf[2001];
 	int err;
 	struct pollfd pf[MAX_SOCKS];
-	int lt, read_ok, c_time;
+	int64_t lt, c_time;
+	int read_ok;
 	char ra[50];
 
 	if (arg)
@@ -552,7 +553,8 @@ void *select_and_execute(void *arg)
 		//    LOG("start select");
 		if ((rv = poll(pf, max_sock, 100)) < 0)
 		{
-			LOG("select_and_execute: select() error %d: %s", errno, strerror(errno));
+			LOG("select_and_execute: select() error %d: %s", errno,
+					strerror(errno));
 			continue;
 		}
 		//              LOG("select returned %d",rv);
@@ -592,10 +594,10 @@ void *select_and_execute(void *arg)
 					rlen = 0;
 					if (opts.bw > 0 && bw > opts.bw && ss->type == TYPE_DVR)
 					{
-						int ms = 1000 - c_time + bwtt;
+						int64_t ms = 1000 - c_time + bwtt;
 						if (bwnotify++ == 0)
 							LOG(
-									"capping %d sock %d for the next %d ms, sleeping for the next %d ms",
+									"capping %d sock %d for the next %jd ms, sleeping for the next %jd ms",
 									i, ss->sock, ms, ms / 50);
 						if (ms > 50)
 							usleep(ms * 20);
@@ -609,10 +611,10 @@ void *select_and_execute(void *arg)
 
 					if (opts.log >= 1)
 					{
-						int now = getTick();
+						int64_t now = getTick();
 						if (now - c_time > 100)
 							LOG(
-									"WARNING: read on socket id %d, handle %d, took %d ms",
+									"WARNING: read on socket id %d, handle %d, took %jd ms",
 									ss->id, ss->sock, now - c_time);
 					}
 
@@ -658,8 +660,8 @@ void *select_and_execute(void *arg)
 						if (ss->type == TYPE_RTCP || ss->sock == SOCK_TIMEOUT)
 						{
 							LOG(
-									"ignoring error on sock_id %d handle %d type %d",
-									ss->id, ss->sock, ss->type);
+									"ignoring error on sock_id %d handle %d type %d error %d : %s",
+									ss->id, ss->sock, ss->type, err, err_str);
 							continue; // do not close the RTCP socket, we might get some errors here but ignore them
 						}
 						LOG(
@@ -692,8 +694,9 @@ void *select_and_execute(void *arg)
 			i = -1;
 			while (++i < max_sock)
 				if ((ss = get_sockets(i)) && (ss->tid == tid)
-						&& ((ss->close_sec > 0 && lt - ss->rtime > ss->close_sec)
-								|| (ss->close_sec == 1)))
+						&& ((ss->timeout_ms > 0
+								&& lt - ss->rtime > ss->timeout_ms)
+								|| (ss->timeout_ms == 1)))
 				{
 					if (ss->timeout)
 					{
@@ -715,6 +718,8 @@ void *select_and_execute(void *arg)
 
 	if (tid == main_tid)
 		LOG("The main loop ended, run_loop = %d", run_loop);
+	add_join_thread(tid);
+
 	return NULL;
 }
 
@@ -739,7 +744,7 @@ void sockets_timeout(int i, int t)
 {
 	sockets *ss = get_sockets(i);
 	if (ss)
-		ss->close_sec = t;
+		ss->timeout_ms = t;
 }
 
 void set_sockets_rtime(int i, int r)
@@ -829,7 +834,7 @@ get_current_timestamp_log(void)
 	static char date_str[200];
 	struct timeval tv;
 	struct tm *t;
-	
+
 	if (gettimeofday(&tv, NULL))
 		return "01/01 00:00:20";
 	t = localtime(&tv.tv_sec);
@@ -837,7 +842,7 @@ get_current_timestamp_log(void)
 		return "01/01 00:00:20";
 	snprintf(date_str, sizeof(date_str), "%02d/%02d %02d:%02d:%02d.%03d",
 			t->tm_mday, t->tm_mon + 1, t->tm_hour, t->tm_min, t->tm_sec,
-			(int)(tv.tv_usec / 1000));
+			(int) (tv.tv_usec / 1000));
 	return date_str;
 }
 
@@ -851,7 +856,7 @@ int sockets_del_for_sid(int ad)
 		if ((ss = get_sockets(i)) && ss->sid >= 0 && ss->type != TYPE_DVR
 				&& ss->sid == ad)
 		{
-			ss->close_sec = 1;//trigger close of the socket after this operation ends, otherwise we might close an socket on which we run action
+			ss->timeout_ms = 1;	//trigger close of the socket after this operation ends, otherwise we might close an socket on which we run action
 			ss->sid = -1;// make sure the stream is not closed in the future to prevent closing the stream created by another socket
 		}
 	return 0;

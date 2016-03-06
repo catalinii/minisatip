@@ -140,14 +140,14 @@ void usage()
 			"\n\t./%s [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] \n\
 	\t[-[uj] A1:S1-F1[-PIN]] [-m mac]"
 #ifndef DISABLE_DVBCSA
-				      "[-o oscam_host:dvbapi_port] "
+					"[-o oscam_host:dvbapi_port] "
 #endif
-				      				  "[-p public_host] [-r remote_rtp_host] \n\
+			"[-p public_host] [-r remote_rtp_host] \n\
 	\t[-R document_root] "
 #ifndef DISABLE_SATIPCLIENT
-			    "[-s [DELSYS:]host[:port] "
+			"[-s [DELSYS:]host[:port] "
 #endif
-						     "[-u A1:S1-F1[-PIN]] [-w http_server[:port]] \n\
+			"[-u A1:S1-F1[-PIN]] [-w http_server[:port]] \n\
 	\t[-x http_port] [-X xml_path] [-y rtsp_port] \n\n\
 Help\n\
 -------\n\
@@ -202,21 +202,21 @@ Help\n\
 \n\
 "
 #ifndef DISABLE_NETCVCLIENT
-"\
+			"\
 * -n --netceiver if:count: use network interface <if> (default vlan4) and look for <count> netceivers\n\
 	* eg: -n vlan4:2 \n\
 \n\
 "
 #endif
 #ifndef DISABLE_DVBCSA
-"\
+			"\
 * -o --dvbapi host:port - specify the hostname and port for the dvbapi server (oscam) \n\
 	* eg: -o 192.168.9.9:9000 \n\
 	192.168.9.9 is the host where oscam is running and 9000 is the port configured in dvbapi section in oscam.conf\n\
 \n\
 "
 #endif
-"\
+			"\
 * -p url: specify playlist url using X_SATIPM3U header \n\
 	* eg: -p http://192.168.2.3:8080/playlist\n\
 	- this will add X_SATIPM3U tag into the satip description xml\n\
@@ -228,7 +228,7 @@ Help\n\
 \n\
 "
 #ifndef DISABLE_SATIPCLIENT
-"\
+			"\
 * -s --satip-servers DELSYS:host:port - specify the remote satip host and port with delivery system DELSYS, it is possible to use multiple -s \n\
 	* DELSYS - can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, isdbt, atsc, dvbcb ( - DVBC_ANNEX_B ) [default: dvbs2]\n\
 	host - the server of the satip server\n\
@@ -240,7 +240,7 @@ Help\n\
 \n\
 "
 #endif
-"\
+			"\
 * -S --slave ADAPTER1,ADAPTER2-ADAPTER4[,..] - specify slave adapters	\n\
 	* Allows specifying bonded adapters (multiple adapters connected with a splitter to the same LNB)\n\
 	Only one adapter needs to be master all others needs to have this parameter specified\n\
@@ -778,8 +778,8 @@ int read_rtsp(sockets * s)
 				strcat(buf, "\r\n");
 
 			snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf) - 1,
-					"RTP-Info: url=%s;seq=%d;rtptime=%lld\r\nRange: npt=0.000-",
-					arg[1], getTick(), (long long int) (getTickUs() / 1000000));
+					"RTP-Info: url=%s;seq=%jd;rtptime=%jd\r\nRange: npt=0.000-",
+					arg[1], getTick(), (getTickUs() / 1000000));
 		}
 		if (buf[0] == 0 && sid->type == STREAM_HTTP)
 			snprintf(buf, sizeof(buf), "Content-Type: video/mp2t");
@@ -935,7 +935,8 @@ int read_http(sockets * s)
 			http_response(s, 404, NULL, NULL, 0, 0);
 			return 0;
 		}
-		if (strstr(ctype, "image") || strstr(ctype, "css") || strstr(ctype, "javascript")) 
+		if (strstr(ctype, "image") || strstr(ctype, "css")
+				|| strstr(ctype, "javascript"))
 		{
 			http_response(s, 200, ctype, f, 0, nl);
 			closefile(f, nl);
@@ -1091,8 +1092,8 @@ int ssdp_reply(sockets * s)
 			&& did == opts.device_id) // SSDP Device ID clash, only first 5 seconds after the announcement
 	{
 		opts.device_id++;
-		s[si].close_sec = 1800 * 1000;
-		s[si].rtime = -s[si].close_sec;
+		s[si].timeout_ms = 1800 * 1000;
+		s[si].rtime = -s[si].timeout_ms;
 		LOG(
 				"Device ID conflict, changing our device id to %d, destination SAT>IP server %s",
 				opts.device_id, get_socket_rhost(s->id, ra, sizeof(ra)));
@@ -1310,12 +1311,13 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 		sprintf(scseq, "\r\nCseq: %d", cseq);
 
 	if (lr > 0)
-		lresp = snprintf(resp, sizeof(resp) - 1, reply, proto, rc, d, get_current_timestamp(), sess_id,
-				scseq, ah, server, lr, desc1);
+		lresp = snprintf(resp, sizeof(resp) - 1, reply, proto, rc, d,
+				get_current_timestamp(), sess_id, scseq, ah, server, lr, desc1);
 	else
-		lresp = snprintf(resp, sizeof(resp) - 1, reply0, proto, rc, d, get_current_timestamp(), sess_id,
-				scseq, ah, server);
-	LOG("reply %s-> %d (%s:%d) CL:%d [sock_id %d]:", (lresp==sizeof(resp) - 1)?"message truncated":"", s->sock,
+		lresp = snprintf(resp, sizeof(resp) - 1, reply0, proto, rc, d,
+				get_current_timestamp(), sess_id, scseq, ah, server);
+	LOG("reply %s-> %d (%s:%d) CL:%d [sock_id %d]:",
+			(lresp == sizeof(resp) - 1) ? "message truncated" : "", s->sock,
 			get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
 			lr, s->id);
 	LOGL(3, "%s", resp);

@@ -76,8 +76,9 @@ typedef struct struct_adapter
 	int do_tune;
 	int force_close;
 	unsigned char *buf;			// 7 rtp packets = MAX_PACK, 7 frames / packet
-	int rlen, rtime;
-	int last_sort;
+	int rlen;
+	int64_t rtime;
+	int64_t last_sort;
 	int new_gs;
 	int status, status_cnt;
 	int dmx_source;

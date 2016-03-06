@@ -87,12 +87,11 @@ typedef struct ca_device
 } ca_device_t;
 
 static struct ca_device *ca_devices[MAX_ADAPTERS];
-static int ca_devices_count = 0;
 
 // this contains all known resource ids so we can see if the cam asks for something exotic
 uint32_t resource_ids[] =
 { EN50221_APP_TELETEXT_RESOURCEID, EN50221_APP_SMARTCARD_RESOURCEID(1),
-		EN50221_APP_RM_RESOURCEID, EN50221_APP_MMI_RESOURCEID,
+EN50221_APP_RM_RESOURCEID, EN50221_APP_MMI_RESOURCEID,
 		EN50221_APP_LOWSPEED_RESOURCEID(1, 1), EN50221_APP_EPG_RESOURCEID(1),
 		EN50221_APP_DVB_RESOURCEID, EN50221_APP_CA_RESOURCEID,
 		EN50221_APP_DATETIME_RESOURCEID, EN50221_APP_AUTH_RESOURCEID,
@@ -214,7 +213,7 @@ stackthread_func(void* arg)
 	sprintf(name, "CA%d", d->id);
 	thread_name = name;
 	LOG("%s: start", __func__);
-	
+
 	while (d->enabled)
 	{
 		int error;
@@ -497,8 +496,7 @@ int ca_init(ca_device_t *d)
 	LOG("tcid: %i", d->tc);
 
 	return 1;
-	fail: 
-	close(fd);
+	fail: close(fd);
 	d->enabled = 0;
 	return 0;
 }

@@ -61,12 +61,12 @@ typedef struct struct_satipc
 	int stream_id;
 	int listen_rtp;
 	int rtcp, rtcp_sock, cseq;
-	int err, last_connect;
+	int err;
 	int wp, qp; // written packet, queued packet
 	char ignore_packets; // ignore packets coming from satip server while tuning
 	char satip_fe, last_cmd;
 	char expect_reply, force_commit, want_commit, want_tune, sent_transport;
-	int last_setup;
+	int64_t last_setup, last_connect;
 	uint8_t addpids, setup_pids;
 	char use_fe;
 
@@ -221,7 +221,7 @@ int satipc_timeout(sockets *s)
 	LOG(
 			"satipc: Sent keep-alive to the satip server %s:%d, adapter %d, socket_id %d, handle %d, timeout %d",
 			ad?sip->sip:NULL, ad ? sip->sport : 0, s->sid, s->id, s->sock,
-			s->close_sec);
+			s->timeout_ms);
 
 	if (sip->last_cmd == RTSP_PLAY)
 		http_request(ad, NULL, "DESCRIBE");
@@ -235,7 +235,7 @@ int satipc_timeout(sockets *s)
 int satipc_close(sockets * s)
 {
 	LOG("satip_close called for adapter %d, socket_id %d, handle %d timeout %d",
-			s->sid, s->id, s->sock, s->close_sec);
+			s->sid, s->id, s->sock, s->timeout_ms);
 	close_adapter(s->sid);
 	return 0;
 }
@@ -300,7 +300,7 @@ int satipc_open_device(adapter *ad)
 	if (!sip || !sip->sip)
 		return 1;
 
-	int ctime = getTick();
+	int64_t ctime = getTick();
 	if ((sip->last_connect > 0) && (ctime - sip->last_connect < 30000))
 		return 3;
 
@@ -545,7 +545,7 @@ int http_request(adapter *ad, char *url, char *method)
 
 	session[0] = 0;
 	sid[0] = 0;
-	int ctime = getTick();
+	int64_t ctime = getTick();
 
 	if (!method && sip->sent_transport == 0)
 	{

@@ -100,8 +100,8 @@ void find_adapters()
 // avoid adapter close unless all the adapters can be closed
 int adapter_timeout(sockets *s)
 {
-	int do_close = 1, i, max_close = 0;
-	int rtime = getTick();
+	int do_close = 1, i;
+	int64_t rtime = getTick(), max_close = 0;
 	adapter *ad = get_adapter(s->sid);
 	if (!ad)
 		return 1;
@@ -122,14 +122,14 @@ int adapter_timeout(sockets *s)
 		for (i = 0; i < MAX_ADAPTERS; i++)
 			if ((ad = get_adapter_nw(i)))
 			{
-				if (rtime - ad->rtime < s->close_sec)
+				if (rtime - ad->rtime < s->timeout_ms)
 					do_close = 0;
 				if (ad && max_close < ad->rtime)
 					max_close = ad->rtime;
 
 			}
 	}
-	LOG("Requested adapter %d close due to timeout, result %d max_rtime %d",
+	LOG("Requested adapter %d close due to timeout, result %d max_rtime %jd",
 			s->sid, do_close, max_close);
 	if (!do_close)
 		s->rtime = max_close;
@@ -1406,7 +1406,8 @@ int delsys_match(adapter *ad, int del_sys)
 
 int signal_thread(sockets *s)
 {
-	int i, ts, ctime;
+	int i;
+	int64_t ts, ctime;
 	adapter *ad;
 	int status;
 	for (i = 0; i < MAX_ADAPTERS; i++)
@@ -1421,7 +1422,7 @@ int signal_thread(sockets *s)
 			ctime = getTick();
 			if (status == -1)
 				LOG(
-						"get_signal%s took %d ms for adapter %d handle %d (status: %d, ber: %d, strength:%d, snr: %d, max_strength: %d, max_snr: %d %d)",
+						"get_signal%s took %jd ms for adapter %d handle %d (status: %d, ber: %d, strength:%d, snr: %d, max_strength: %d, max_snr: %d %d)",
 						ad->new_gs ? "_new" : "", ctime - ts, ad->id, ad->fe,
 						ad->status, ad->ber, ad->strength, ad->snr,
 						ad->max_strength, ad->max_snr, opts.force_scan);
