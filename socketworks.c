@@ -702,7 +702,7 @@ void *select_and_execute(void *arg)
 					{
 						int rv;
 						if (ss->sock == SOCK_TIMEOUT)
-							ss->rtime = c_time;
+							ss->rtime = getTick();
 						sockets_lock(ss);
 						rv = ss->timeout(ss);
 						sockets_unlock(ss);

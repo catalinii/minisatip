@@ -1008,6 +1008,7 @@ _symbols dvbapi_sym[] =
 { "key_hops", VAR_AARRAY_INT8, keys, 1, MAX_KEYS, offsetof(SKey, hops) },
 { "key_ecmtime", VAR_AARRAY_INT, keys, 1, MAX_KEYS, offsetof(SKey, ecmtime) },
 { "key_pmt", VAR_AARRAY_INT, keys, 1, MAX_KEYS, offsetof(SKey, pmt_pid) },
+{ "key_adapter", VAR_AARRAY_INT, keys, 1, MAX_KEYS, offsetof(SKey, adapter) },
 { "key_cardsystem", VAR_AARRAY_PSTRING, keys, 1, MAX_KEYS, offsetof(SKey,
 		cardsystem) },
 { "key_reader", VAR_AARRAY_PSTRING, keys, 1, MAX_KEYS, offsetof(SKey, reader) },

@@ -1026,32 +1026,38 @@ int get_signal_new(int fd, int * status, uint32_t * ber, uint16_t * strength,
 void dvb_get_signal(adapter *ad)
 {
 	int new_gs = 1;
+	uint16_t strength = 0, snr = 0;
+	uint32_t status = 0, ber = 0;
 	if (ad->new_gs == 0
-			&& (new_gs = get_signal_new(ad->fe, &ad->status, &ad->ber,
-					&ad->strength, &ad->snr)))
-		get_signal(ad->fe, &ad->status, &ad->ber, &ad->strength, &ad->snr);
+			&& (new_gs = get_signal_new(ad->fe, &status, &ber, &strength, &snr)))
+		get_signal(ad->fe, &status, &ber, &strength, &snr);
 	else if (new_gs)
-		get_signal(ad->fe, &ad->status, &ad->ber, &ad->strength, &ad->snr);
+		get_signal(ad->fe, &status, &ber, &strength, &snr);
 
-	if (ad->status > 0 && new_gs != 0) // we have signal but no new stats, don't try to get them from now on until adapter close
+	if (status > 0 && new_gs != 0) // we have signal but no new stats, don't try to get them from now on until adapter close
 		ad->new_gs = 1;
 
-	if (ad->max_strength <= ad->strength)
-		ad->max_strength = (ad->strength > 0) ? ad->strength : 1;
-	if (ad->max_snr <= ad->snr)
-		ad->max_snr = (ad->snr > 0) ? ad->snr : 1;
-	if (ad->snr > 4096)
+	if (ad->max_strength <= strength)
+		ad->max_strength = (strength > 0) ? strength : 1;
+	if (ad->max_snr <= snr)
+		ad->max_snr = (snr > 0) ? snr : 1;
+	if (snr > 4096)
 		new_gs = 0;
 	if (new_gs)
 	{
-		ad->strength = ad->strength * 255.0 / ad->max_strength;
-		ad->snr = ad->snr * 255.0 / ad->max_snr;
+		strength = strength * 255.0 / ad->max_strength;
+		snr = snr * 255.0 / ad->max_snr;
 	}
 	else
 	{
-		ad->strength = ad->strength >> 8;
-		ad->snr = ad->snr >> 8;
+		strength = strength >> 8;
+		snr = snr >> 8;
 	}
+	// keep the assignment at the end for the signal thread to get the right values as no locking is done on the adapter
+	ad->snr = snr;
+	ad->strength = strength;
+	ad->status = status;
+	ad->ber = ber;
 }
 
 void dvb_commit(adapter *a)

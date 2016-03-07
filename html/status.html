@@ -67,6 +67,8 @@ var st_useragent = ["$st_useragent0$", "$st_useragent1$", "$st_useragent2$", "$s
 var st_play		= [$st_play0$, $st_play1$, $st_play2$, $st_play3$, $st_play4$, $st_play5$, $st_play6$, $st_play7$, $st_play8$, $st_play9$, $st_play10$, $st_play11$, $st_play12$, $st_play13$, $st_play14$, $st_play15$ ];
 var key_enabled	= [$key_enabled0$, $key_enabled1$, $key_enabled2$, $key_enabled3$, $key_enabled4$, $key_enabled5$, $key_enabled6$, $key_enabled7$, $key_enabled8$, $key_enabled9$, $key_enabled10$, $key_enabled11$, $key_enabled12$, $key_enabled13$, $key_enabled14$, $key_enabled15$ ];
 var key_hops	= [$key_hops0$, $key_hops1$, $key_hops2$, $key_hops3$, $key_hops4$, $key_hops5$, $key_hops6$, $key_hops7$, $key_hops8$, $key_hops9$, $key_hops10$, $key_hops11$, $key_hops12$, $key_hops13$, $key_hops14$, $key_hops15$ ];
+var key_adapter	= [$key_adapter0$, $key_adapter1$, $key_adapter2$, $key_adapter3$, $key_adapter4$, $key_adapter5$, $key_adapter6$, $key_adapter7$, $key_adapter8$, $key_adapter9$, $key_adapter10$, $key_adapter11$, $key_adapter12$, $key_adapter13$, $key_adapter14$, $key_adapter15$ ];
+var key_pmt	= [$key_pmt0$, $key_pmt1$, $key_pmt2$, $key_pmt3$, $key_pmt4$, $key_pmt5$, $key_pmt6$, $key_pmt7$, $key_pmt8$, $key_pmt9$, $key_pmt10$, $key_pmt11$, $key_pmt12$, $key_pmt13$, $key_pmt14$, $key_pmt15$ ];
 var key_ecmtime	= [$key_ecmtime0$, $key_ecmtime1$, $key_ecmtime2$, $key_ecmtime3$, $key_ecmtime4$, $key_ecmtime5$, $key_ecmtime6$, $key_ecmtime7$, $key_ecmtime8$, $key_ecmtime9$, $key_ecmtime10$, $key_ecmtime11$, $key_ecmtime12$, $key_ecmtime13$, $key_ecmtime14$, $key_ecmtime15$ ];
 var key_cardsystem = ["$key_cardsystem0$", "$key_cardsystem1$", "$key_cardsystem2$", "$key_cardsystem3$", "$key_cardsystem4$", "$key_cardsystem5$", "$key_cardsystem6$", "$key_cardsystem7$", "$key_cardsystem8$", "$key_cardsystem9$", "$key_cardsystem10$", "$key_cardsystem11$", "$key_cardsystem12$", "$key_cardsystem13$", "$key_cardsystem14$", "$key_cardsystem15$" ];
 var key_reader	= ["$key_reader0$", "$key_reader1$", "$key_reader2$", "$key_reader3$", "$key_reader4$", "$key_reader5$", "$key_reader6$", "$key_reader7$", "$key_reader8$", "$key_reader9$", "$key_reader10$", "$key_reader11$", "$key_reader12$", "$key_reader13$", "$key_reader14$", "$key_reader15$" ];
@@ -75,6 +77,7 @@ var key_protocol = ["$key_protocol0$", "$key_protocol1$", "$key_protocol2$", "$k
 
 var max_adapters = 16;
 var max_streams	= 64;
+var max_keys 	= 255;
 var pol			= ["", "(V)", "(H)", "(R)", "(L)"];
 var sys			= [ "", "dvbc", "dvbcb", "dvbt", "dss", "dvbs", "dvbs2", "dvbh", "isdbt", "isdbs", "isdbc", "atsc", "atscmh", "dmbth", "cmmb", "dab", "dvbt2", "turbo", "dvbcc", "dvbc2" ];
 
@@ -174,12 +177,14 @@ for (var i = 0; i < max_adapters; i++) {
 		}
 	// CRYPT
 	myTable +="</td><td class=''><small>";
-	if (key_enabled[i] == 1) {
-		myTable += "SYSTEM: " + key_cardsystem[i] + "<br />";
-		myTable += "ECMTIME: " + key_ecmtime[i] + "<br />";
-		myTable += "READER: " + key_reader[i] + "<br />";
-		myTable += "IP: " + key_from[i] + " (" + key_protocol[i] + ")<br />";
-	}
+	for (var j = 0; j < max_keys; j++)
+		if (key_enabled[j] == 1 && key_adapter[j] == i) {
+			myTable += "SYSTEM: " + key_cardsystem[j] + "<br />";
+			myTable += "PMT: " + key_pmt[j] + "<br />";
+			myTable += "ECMTIME: " + key_ecmtime[j] + "<br />";
+			myTable += "READER: " + key_reader[j] + "<br />";
+			myTable += "IP: " + key_from[j] + " (" + key_protocol[j] + ")<br /><br />";
+		}
 	myTable +="</small></td></tr>";
 }
 myTable+="</tbody></table>";

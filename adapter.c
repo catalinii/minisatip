@@ -468,7 +468,7 @@ int get_free_adapter(int freq, int pol, int msys, int src, int diseqc)
 			if (adapter_match(ad, freq, pol, msys, src, diseqc))
 				return i;
 		}
-		goto noadapter;
+//		goto noadapter; - breaks compatibility with tvheadend (at least) which assumes first adapter is DVB-S
 	}
 	for (i = 0; i < MAX_ADAPTERS; i++)
 	{
