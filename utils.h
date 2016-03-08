@@ -10,30 +10,36 @@
 #define VAR_UINT16 3
 #define VAR_INT16 4
 #define VAR_INT 5
-#define VAR_STRING 6
-#define VAR_PSTRING 7
-#define VAR_FLOAT 8
-#define VAR_HEX 9
-#define VAR_ARRAY_UINT8 10
-#define VAR_ARRAY_INT8 11
-#define VAR_ARRAY_UINT16 12
-#define VAR_ARRAY_INT16 13
-#define VAR_ARRAY_INT 14
-#define VAR_ARRAY_FLOAT 15
-#define VAR_ARRAY_HEX 16
-#define VAR_ARRAY_STRING 17
-#define VAR_ARRAY_PSTRING 18
-#define VAR_AARRAY_UINT8 19
-#define VAR_AARRAY_INT8 20
-#define VAR_AARRAY_UINT16 21
-#define VAR_AARRAY_INT16 22
-#define VAR_AARRAY_INT 23
-#define VAR_AARRAY_FLOAT 24
-#define VAR_AARRAY_HEX 25
-#define VAR_AARRAY_STRING 26
-#define VAR_AARRAY_PSTRING 27
-#define VAR_FUNCTION_INT 28
-#define VAR_FUNCTION_STRING 29
+#define VAR_INT64 6
+#define VAR_STRING 7
+#define VAR_PSTRING 8
+#define VAR_FLOAT 9
+#define VAR_HEX 10
+#define VAR_ARRAY 16
+#define VAR_ARRAY_UINT8 (VAR_ARRAY + VAR_UINT8)
+#define VAR_ARRAY_INT8 (VAR_ARRAY + VAR_INT8)
+#define VAR_ARRAY_UINT16 (VAR_ARRAY + VAR_UINT16)
+#define VAR_ARRAY_INT16 (VAR_ARRAY + VAR_INT16)
+#define VAR_ARRAY_INT (VAR_ARRAY + VAR_INT)
+#define VAR_ARRAY_INT64 (VAR_ARRAY + VAR_INT64)
+#define VAR_ARRAY_FLOAT (VAR_ARRAY + VAR_FLOAT)
+#define VAR_ARRAY_HEX (VAR_ARRAY + VAR_HEX)
+#define VAR_ARRAY_STRING (VAR_ARRAY + VAR_STRING)
+#define VAR_ARRAY_PSTRING (VAR_ARRAY + VAR_PSTRING)
+#define VAR_AARRAY 32
+#define VAR_AARRAY_UINT8 (VAR_AARRAY + VAR_UINT8)
+#define VAR_AARRAY_INT8 (VAR_AARRAY + VAR_INT8)
+#define VAR_AARRAY_UINT16 (VAR_AARRAY + VAR_UINT16)
+#define VAR_AARRAY_INT16 (VAR_AARRAY + VAR_INT16)
+#define VAR_AARRAY_INT (VAR_AARRAY + VAR_INT)
+#define VAR_AARRAY_INT64 (VAR_AARRAY + VAR_INT64)
+#define VAR_AARRAY_FLOAT (VAR_AARRAY + VAR_FLOAT)
+#define VAR_AARRAY_HEX (VAR_AARRAY + VAR_HEX)
+#define VAR_AARRAY_STRING (VAR_AARRAY + VAR_STRING)
+#define VAR_AARRAY_PSTRING (VAR_AARRAY + VAR_PSTRING)
+#define VAR_FUNCTION 48
+#define VAR_FUNCTION_INT (VAR_FUNCTION + VAR_INT)
+#define VAR_FUNCTION_STRING (VAR_FUNCTION + VAR_STRING)
 
 
 typedef int (*get_data_int)(int p);
@@ -96,7 +102,10 @@ pthread_t get_tid();
 void set_thread_prio(pthread_t tid, int prio);
 
 int add_new_lock(void **arr, int count, int size, SMutex *mutex);
-
+int64_t getTick ();
+int64_t getTickUs();
+void join_thread();
+void add_join_thread(pthread_t t);
 
 #define mutex_lock(m) mutex_lock1(__FILE__,__LINE__,m)
 #define mutex_unlock(m) mutex_unlock1(__FILE__,__LINE__,m)

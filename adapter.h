@@ -76,8 +76,9 @@ typedef struct struct_adapter
 	int do_tune;
 	int force_close;
 	unsigned char *buf;			// 7 rtp packets = MAX_PACK, 7 frames / packet
-	int rlen, rtime;
-	int last_sort;
+	int rlen;
+	int64_t rtime;
+	int64_t last_sort;
 	int new_gs;
 	int status, status_cnt;
 	int dmx_source;
@@ -135,6 +136,7 @@ void reset_pids_type(int aid, int clear_pat);
 void reset_ecm_type_for_key(int aid, int key);
 int delsys_match(adapter *ad, int del_sys);
 int get_enabled_pids(adapter *ad, int *pids, int lpids);
+int get_all_pids(adapter *ad, int *pids, int lpids);
 char *get_adapter_pids(int aid, char *dest, int max_size);
 void adapter_lock1(char *FILE, int line, int aid);
 void adapter_unlock1(char *FILE, int line, int aid);

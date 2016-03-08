@@ -466,8 +466,9 @@ int assemble_packet(uint8_t **b1, adapter *ad, int check_crc)
 		len = ((b[6] & 0xF) << 8) + b[7];
 
 	if (len > 1500 || len < 0)
-		LOG_AND_RETURN(0, "assemble_packet: len %d not valid for pid %d [%02X %02X %02X %02X %02X]", len,
-				pid, b[4], b[5], b[6], b[7], b[8]);
+		LOG_AND_RETURN(0,
+				"assemble_packet: len %d not valid for pid %d [%02X %02X %02X %02X %02X]",
+				len, pid, b[4], b[5], b[6], b[7], b[8]);
 
 	item_key = TABLES_ITEM + (ad->id << 16) + pid;
 
@@ -785,7 +786,7 @@ void tables_pid_del(adapter *ad, int pid)
 		if (p && p->enabled_channels == 0)
 			run_del_pmt(ad, pmt_pid, pids);
 	}
-	if (!get_enabled_pids(ad, &ep, 1)) // no pids enabled, set pids type to 0
+	if (!get_all_pids(ad, &ep, 1)) // no pids enabled, set pids type to 0
 	{
 		reset_pids_type(ad->id, 0);
 	}
@@ -841,8 +842,8 @@ int tables_init_device(adapter *ad)
 		if (!(ad->ca_mask & mask)) // CA already initialized
 		{
 			if (ca[i].enabled && ca[i].action[action_id])
-					if(ca[i].action[action_id](ad, NULL))
-						rv = rv | mask;
+				if (ca[i].action[action_id](ad, NULL))
+					rv = rv | mask;
 		}
 		mask = mask << 1;
 	}

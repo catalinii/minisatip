@@ -18,17 +18,17 @@ typedef struct struct_sockets {
 	read_action read;
 	int type;	//0 - udp; 1 -> tcp(client); 2 -> server ; 3 -> http; 4-> rtsp
 	int sid;				//stream_id if set >=0 or adapter_id for dvb handles
-	int rtime;					 // read time
-	int wtime;
+	int64_t rtime;					 // read time
+	int64_t wtime;
 	unsigned char *buf;
 	int lbuf;
 	int rlen;
-	int close_sec;
+	int timeout_ms;
 	int id;				 // socket id
 	int err;
 	int flags; // 1 - buf is allocated dynamically
 	int events;
-	int last_poll;
+	int64_t last_poll;
 	pthread_t tid;
 	SMutex *lock;
 } sockets;

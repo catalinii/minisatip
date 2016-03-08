@@ -51,10 +51,11 @@ typedef struct struct_key
 	int key_len;
 	int sid;
 	int pmt_pid;
-	uint32_t last_ecm;	
+	int64_t last_ecm;	
 	uint8_t hops;
 	uint16_t caid, info_pid;
-	uint32_t prid, ecmtime;
+	uint32_t prid;
+	int ecmtime;
 	int id;
 	int adapter;
 	int demux;
@@ -65,7 +66,7 @@ typedef struct struct_key
 	struct dvbcsa_bs_batch_s batch[130];
 	int parity;
 	int blen;
-	int last_parity_change;	
+	int64_t last_parity_change;	
 	struct struct_key *next_key;
 } SKey;
 

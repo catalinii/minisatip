@@ -48,29 +48,6 @@
 extern struct struct_opts opts;
 streams *st[MAX_STREAMS];
 SMutex st_mutex;
-unsigned init_tick, theTick;
-
-uint32_t getTick()
-{								 //ms
-	struct timespec ts;
-	clock_gettime(CLOCK_REALTIME, &ts);
-	theTick = ts.tv_nsec / 1000000;
-	theTick += ts.tv_sec * 1000;
-	if (init_tick == 0)
-		init_tick = theTick;
-	return theTick - init_tick;
-}
-
-uint64_t getTickUs()
-{
-	uint64_t utime;
-	struct timespec ts;
-	clock_gettime(CLOCK_REALTIME, &ts);
-	utime = ((uint64_t) ts.tv_sec) * 1000000 + ts.tv_nsec / 1000;
-	return utime;
-
-}
-
 extern int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
 
 char *describe_streams(sockets *s, char *req, char *sbuf, int size)
@@ -538,11 +515,11 @@ close_streams_for_adapter(int ad, int except)
 	return 0;
 }
 
-int64_t bw, bwtt;
+int64_t tbw, bw, bwtt;
 int bwnotify, sleeping, sleeping_cnt;
-unsigned long int tbw;
+
 uint32_t reads;
-uint64_t nsecs;
+int64_t nsecs;
 
 int slow_down;
 uint64_t last_sd;
@@ -552,7 +529,7 @@ int my_writev(int sock, const struct iovec *iov, int iiov, streams *sid)
 	int rv;
 	char ra[50];
 	int log_level = 7;
-	int stime = 0;
+	int64_t stime = 0;
 	if (sid->timeout == 1)
 		return -1;
 
@@ -575,7 +552,7 @@ int my_writev(int sock, const struct iovec *iov, int iiov, streams *sid)
 		LOG("writev returned %d handle %d, iiov %d errno %d error %s", rv, sock,
 				iiov, errno, strerror(errno));
 	}
-	LOGL(log_level, "writev returned %d handle %d, iiov %d (took %d ms)", rv, sock, iiov, stime);
+	LOGL(log_level, "writev returned %d handle %d, iiov %d (took %jd ms)", rv, sock, iiov, stime);
 	return rv;
 }
 
@@ -619,7 +596,7 @@ int send_rtp(streams * sid, const struct iovec *iov, int liov)
 	rv = my_writev(sid->rsock, (const struct iovec *) io, liov + 1, sid);
 	if (opts.bw && (slow_down++ > 20))
 	{
-		uint64_t tn = getTickUs();
+		int64_t tn = getTickUs();
 //		int interval = (1328 * 20000 / (opts.bw / 1024)) ;   // For 1328kb/s we have 1000 packets/s, each 20 packets => 20 000 us
 		int interval = opts.bw * 10 / 1024;
 		int result = tn - last_sd;
@@ -673,10 +650,11 @@ int send_rtpb(streams * sid, unsigned char *b, int len)
 
 unsigned char rtcp_buf[1600];
 
-int send_rtcp(int s_id, int ctime)
+int send_rtcp(int s_id, int64_t ctime)
 {
 	int len, rv = 0;
 	char dad[1000];
+	int c_time = (int)(ctime / 1000) & 0xFFFFFFFF;
 	unsigned char *rtcp = rtcp_buf + 4;
 	streams *sid = get_sid(s_id);
 
@@ -701,7 +679,7 @@ int send_rtcp(int s_id, int ctime)
 	rtcp[3] = 6;
 	copy32(rtcp, 4, sid->ssrc);
 	copy32(rtcp, 8, 0);
-	copy32(rtcp, 12, (theTick - init_tick) / 1000);
+	copy32(rtcp, 12, ctime);
 	copy32(rtcp, 16, sid->wtime);
 	copy32(rtcp, 20, sid->sp);
 	copy32(rtcp, 24, sid->sb);
@@ -754,7 +732,7 @@ int send_rtcp(int s_id, int ctime)
 	return rv;
 }
 
-void flush_streamb(streams * sid, unsigned char *buf, int rlen, int ctime)
+void flush_streamb(streams * sid, unsigned char *buf, int rlen, int64_t ctime)
 {
 	int i, rv = 0;
 
@@ -778,7 +756,7 @@ void flush_streamb(streams * sid, unsigned char *buf, int rlen, int ctime)
 
 }
 
-int flush_streami(streams * sid, int ctime)
+int flush_streami(streams * sid, int64_t ctime)
 {
 	int rv;
 
@@ -885,18 +863,18 @@ int process_dmx(sockets * s)
 	streams *sid;
 	adapter *ad;
 	int send = 0, flush_all = 0;
-	uint64_t stime;
+	int64_t stime;
 
 	ad = get_adapter(s->sid);
 
 	int rlen = s->rlen;
-	int ms_ago = s->rtime - ad->rtime;
+	int64_t ms_ago = s->rtime - ad->rtime;
 	ad->rtime = s->rtime;
 	s->rlen = 0;
 	stime = getTickUs();
 
 	LOGL(6,
-			"process_dmx start flush_all=%d called for adapter %d -> %d out of %d bytes read, %d ms ago",
+			"process_dmx start flush_all=%d called for adapter %d -> %d out of %d bytes read, %jd ms ago",
 			flush_all, s->sid, rlen, s->lbuf, ms_ago);
 
 #ifndef DISABLE_TABLES
@@ -1011,7 +989,7 @@ int read_dmx(sockets * s)
 		send = 1;
 
 	LOGL(7,
-			"read_dmx send=%d, flush_all=%d, cnt %d called for adapter %d -> %d out of %d bytes read, %d ms ago",
+			"read_dmx send=%d, flush_all=%d, cnt %d called for adapter %d -> %d out of %d bytes read, %jd ms ago",
 			send, flush_all, cnt, s->sid, s->rlen, s->lbuf,
 			s->rtime - ad->rtime);
 
@@ -1030,7 +1008,7 @@ int read_dmx(sockets * s)
 
 int calculate_bw(sockets *s)
 {
-	int c_time = getTick();
+	int64_t c_time = getTick();
 	s->rtime = c_time;
 
 	if (c_time - bwtt > 1000)
@@ -1041,8 +1019,8 @@ int calculate_bw(sockets *s)
 			reads = 1;
 		if (bw > 2000)
 			LOG(
-					"BW %dKB/s, Total BW: %ld MB, ns/read %lld, r: %d, tt: %lld ms, n: %d (s: %d ms, s_cnt %d)",
-					(int ) bw / 1024, tbw / 1024576, nsecs / reads, reads,
+					"BW %jdKB/s, Total BW: %jd MB, ns/read %jd, r: %d, tt: %jd ms, n: %d (s: %d ms, s_cnt %d)",
+					bw / 1024, tbw / 1024576, nsecs / reads, reads,
 					nsecs / 1000, bwnotify, sleeping / 1000, sleeping_cnt);
 		bw = 0;
 		bwnotify = 0;
@@ -1050,13 +1028,14 @@ int calculate_bw(sockets *s)
 		reads = 0;
 		sleeping = sleeping_cnt = 0;
 	}
+	join_thread();
 	return 0;
 }
 
 int stream_timeout(sockets *s)
 {
 	char ra[50];
-	int ctime, rttime, rtime;
+	int64_t ctime, rttime, rtime;
 	streams *sid;
 
 	ctime = getTick();
@@ -1069,7 +1048,6 @@ int stream_timeout(sockets *s)
 		mutex_lock(&sid->mutex);
 		rttime = sid->rtcp_wtime, rtime = sid->wtime;
 
-		//LOG("stream timeouts called for sid %d c:%d r:%d rt:%d",i,ctime,rtime,rttime);
 		if (sid->do_play && ctime - rtime > 1000)
 		{
 			LOG("no data sent for more than 1s sid: %d for %s:%d", sid->sid,
@@ -1085,7 +1063,7 @@ int stream_timeout(sockets *s)
 				|| (sid->timeout == 1))
 		{
 			LOG(
-					"Stream timeout %d, closing (ctime %d , sid->rtime %d, sid->timeout %d)",
+					"Stream timeout %d, closing (ctime %jd , sid->rtime %jd, sid->timeout %d)",
 					sid->sid, ctime, sid->rtime, sid->timeout);
 			close_stream(sid->sid); // do not lock before this
 		}

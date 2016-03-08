@@ -18,6 +18,7 @@
  *
  */
 #define _GNU_SOURCE 
+#define _FILE_OFFSET_BITS 64
 
 #include <stdint.h>
 #include <string.h>
@@ -67,7 +68,7 @@ typedef struct tmpinfo
 	uint16_t id;
 	int max_size;
 	int timeout;
-	int last_updated;
+	int64_t last_updated;
 	unsigned char *data;
 } STmpinfo;
 STmpinfo sinfo[MAX_SINFO];
@@ -94,7 +95,7 @@ STmpinfo *getItemPos(int64_t key)
 STmpinfo *getFreeItemPos(int64_t key)
 {
 	int i;
-	int tick = getTick();
+	int64_t tick = getTick();
 	for (i = 0; i < MAX_SINFO; i++)
 		if (!sinfo[i].enabled
 				|| (sinfo[i].timeout
@@ -102,7 +103,7 @@ STmpinfo *getFreeItemPos(int64_t key)
 		{
 			sinfo[i].id = i;
 			sinfo[i].timeout = 0;
-			LOGL(2, "Requested new Item for key %llX, returning %d", key, i);
+			LOGL(2, "Requested new Item for key %jX, returning %d", key, i);
 			return sinfo + i;
 		}
 	return NULL;
@@ -625,10 +626,8 @@ extern _symbols dvbapi_sym[];
 extern _symbols satipc_sym[];
 #endif
 
-_symbols *sym[] = { 
-		adapters_sym, 
-		stream_sym, 
-		minisatip_sym, 
+_symbols *sym[] =
+{ adapters_sym, stream_sym, minisatip_sym,
 #ifndef DISABLE_DVBCSA
 		dvbapi_sym,
 #endif
@@ -637,141 +636,89 @@ _symbols *sym[] = {
 #endif
 		NULL };
 
-int var_eval(char *orig, int len, char *dest, int max_len)
+int snprintf_pointer(char *dest, int max_len, int type, void *p,
+		float multiplier)
+{
+	int nb;
+	switch (type & 0xF)
+	{
+	case VAR_UINT8:
+		nb = snprintf(dest, max_len, "%d",
+				(int) ((*(unsigned char *) p) * multiplier));
+		break;
+	case VAR_INT8:
+		nb = snprintf(dest, max_len, "%d", (int) ((*(char *) p) * multiplier));
+		break;
+	case VAR_UINT16:
+		nb = snprintf(dest, max_len, "%d",
+				(int) ((*(uint16_t *) p) * multiplier));
+		break;
+	case VAR_INT16:
+		nb = snprintf(dest, max_len, "%d",
+				(int) ((*(int16_t *) p) * multiplier));
+		break;
+	case VAR_INT:
+		nb = snprintf(dest, max_len, "%d", (int) ((*(int *) p) * multiplier));
+		break;
+
+	case VAR_INT64:
+		nb = snprintf(dest, max_len, "%jd",
+				(int64_t) ((*(int64_t *) p) * multiplier));
+		break;
+
+	case VAR_STRING:
+		nb = snprintf(dest, max_len, "%s", (char *) p);
+		break;
+
+	case VAR_PSTRING:
+		nb = snprintf(dest, max_len, "%s",
+				(*(char **) p) ? (*(char **) p) : "");
+		break;
+
+	case VAR_FLOAT:
+		nb = snprintf(dest, max_len, "%f", (*(float *) p) * multiplier);
+		break;
+
+	case VAR_HEX:
+		nb = snprintf(dest, max_len, "0x%x", (int) ((*(int *) p) * multiplier));
+		break;
+	}
+	return nb;
+}
+
+char zero[16];
+
+void * get_var_address(char *var, float *multiplier, int * type, void *storage,
+		int ls)
 {
 	int nb = 0, i, j, off;
-	char var[VAR_LENGTH + 1];
-	memset(var, 0, sizeof(var));
-	strncpy(var, orig + 1, len - 1);
+	*multiplier = 0;
 	for (i = 0; sym[i] != NULL; i++)
 		for (j = 0; sym[i][j].name; j++)
 			if (!strncmp(sym[i][j].name, var, strlen(sym[i][j].name)))
 			{
-				switch (sym[i][j].type)
+				*type = sym[i][j].type;
+				if (sym[i][j].type < VAR_ARRAY)
 				{
-				case VAR_UINT8:
-					nb = snprintf(dest, max_len, "%d",
-							(int) ((*(uint8_t *) sym[i][j].addr)
-									* sym[i][j].multiplier));
-					break;
-				case VAR_INT8:
-					nb = snprintf(dest, max_len, "%d",
-							(int) ((*(int8_t *) sym[i][j].addr)
-									* sym[i][j].multiplier));
-					break;
-				case VAR_UINT16:
-					nb = snprintf(dest, max_len, "%d",
-							(int) ((*(uint16_t *) sym[i][j].addr)
-									* sym[i][j].multiplier));
-					break;
-				case VAR_INT16:
-					nb = snprintf(dest, max_len, "%d",
-							(int) ((*(int16_t *) sym[i][j].addr)
-									* sym[i][j].multiplier));
-					break;
-				case VAR_INT:
-					nb = snprintf(dest, max_len, "%d",
-							(int) ((*(int *) sym[i][j].addr)
-									* sym[i][j].multiplier));
-					break;
-
-				case VAR_STRING:
-					nb = snprintf(dest, max_len, "%s", (char *) sym[i][j].addr);
-					break;
-
-				case VAR_PSTRING:
-					nb = snprintf(dest, max_len, "%s",
-							*(char **) sym[i][j].addr);
-					break;
-
-				case VAR_FLOAT:
-					nb = snprintf(dest, max_len, "%f",
-							(*(float *) sym[i][j].addr) * sym[i][j].multiplier);
-					break;
-
-				case VAR_HEX:
-					nb = snprintf(dest, max_len, "0x%x",
-							*(int *) sym[i][j].addr);
-					break;
-
-				case VAR_ARRAY_INT:
-				case VAR_ARRAY_FLOAT:
-				case VAR_ARRAY_HEX:
-				case VAR_ARRAY_UINT16:
-				case VAR_ARRAY_INT16:
-				case VAR_ARRAY_UINT8:
-				case VAR_ARRAY_INT8:
-				case VAR_ARRAY_STRING:
-				case VAR_ARRAY_PSTRING:
+					*multiplier = sym[i][j].multiplier;
+					return sym[i][j].addr;
+				}
+				else if ((sym[i][j].type & 0xF0) == VAR_ARRAY)
+				{
 					off = map_intd(var + strlen(sym[i][j].name), NULL, 0);
 					if (off >= 0 && off < sym[i][j].len)
 					{
-						char *p = (((char *) sym[i][j].addr)
-								+ off * sym[i][j].skip);
-						switch (sym[i][j].type)
-						{
-						case VAR_ARRAY_UINT8:
-							nb =
-									snprintf(dest, max_len, "%d",
-											(int) (*(uint8_t *) p
-													* sym[i][j].multiplier));
-							break;
-						case VAR_ARRAY_INT8:
-							nb =
-									snprintf(dest, max_len, "%d",
-											(int) (*(int8_t *) p
-													* sym[i][j].multiplier));
-							break;
-						case VAR_ARRAY_UINT16:
-							nb = snprintf(dest, max_len, "%d",
-									(int) (*(uint16_t *) p
-											* sym[i][j].multiplier));
-							break;
-						case VAR_ARRAY_INT16:
-							nb =
-									snprintf(dest, max_len, "%d",
-											(int) (*(int16_t *) p
-													* sym[i][j].multiplier));
-							break;
-						case VAR_ARRAY_INT:
-							nb = snprintf(dest, max_len, "%d",
-									(int) (*(int *) p * sym[i][j].multiplier));
-							break;
-						case VAR_ARRAY_FLOAT:
-							nb =
-									snprintf(dest, max_len, "%f",
-											(float) (*(float *) p
-													* sym[i][j].multiplier));
-							break;
-						case VAR_ARRAY_HEX:
-							nb = snprintf(dest, max_len, "0x%x",
-									(int) (*(int *) p * sym[i][j].multiplier));
-							break;
-						case VAR_ARRAY_STRING:
-							nb = snprintf(dest, max_len, "%s", p);
-							break;
-						case VAR_ARRAY_PSTRING:
-							nb = snprintf(dest, max_len, "%s", *(char **) p);
-							break;
-						}
+						*multiplier = sym[i][j].multiplier;
+						return (((char *) sym[i][j].addr) + off * sym[i][j].skip);
 					}
-					break;
-
-				case VAR_AARRAY_INT:
-				case VAR_AARRAY_FLOAT:
-				case VAR_AARRAY_HEX:
-				case VAR_AARRAY_UINT16:
-				case VAR_AARRAY_INT16:
-				case VAR_AARRAY_UINT8:
-				case VAR_AARRAY_INT8:
-				case VAR_AARRAY_STRING:
-				case VAR_AARRAY_PSTRING:
+				}
+				else if ((sym[i][j].type & 0xF0) == VAR_AARRAY)
+				{
 					off = map_intd(var + strlen(sym[i][j].name), NULL, 0);
 					if (off >= 0 && off < sym[i][j].len)
 					{
 						char **p1 = (char **) sym[i][j].addr;
 						char *p = p1[off];
-						char zero[16];
 
 						if (!p)
 						{
@@ -780,75 +727,44 @@ int var_eval(char *orig, int len, char *dest, int max_len)
 						}
 						else
 							p += sym[i][j].skip;
-
-						switch (sym[i][j].type)
-						{
-						case VAR_AARRAY_UINT8:
-							nb =
-									snprintf(dest, max_len, "%d",
-											(int) (*(uint8_t *) p
-													* sym[i][j].multiplier));
-							break;
-						case VAR_AARRAY_INT8:
-							nb =
-									snprintf(dest, max_len, "%d",
-											(int) (*(int8_t *) p
-													* sym[i][j].multiplier));
-							break;
-						case VAR_AARRAY_UINT16:
-							nb = snprintf(dest, max_len, "%d",
-									(int) (*(uint16_t *) p
-											* sym[i][j].multiplier));
-							break;
-						case VAR_AARRAY_INT16:
-							nb =
-									snprintf(dest, max_len, "%d",
-											(int) (*(int16_t *) p
-													* sym[i][j].multiplier));
-							break;
-						case VAR_AARRAY_INT:
-							nb = snprintf(dest, max_len, "%d",
-									(int) (*(int *) p * sym[i][j].multiplier));
-							break;
-						case VAR_AARRAY_FLOAT:
-							nb =
-									snprintf(dest, max_len, "%f",
-											(float) (*(float *) p
-													* sym[i][j].multiplier));
-							break;
-						case VAR_AARRAY_HEX:
-							nb = snprintf(dest, max_len, "0x%x",
-									(int) (*(int *) p * sym[i][j].multiplier));
-							break;
-						case VAR_AARRAY_STRING:
-							nb = snprintf(dest, max_len, "%s", p);
-							break;
-						case VAR_AARRAY_PSTRING:
-							nb = snprintf(dest, max_len, "%s", *(char **) p);
-							break;
-						}
+						*multiplier = sym[i][j].multiplier;
+						return p;
 					}
-					break;
-
-				case VAR_FUNCTION_INT:
+				}
+				else if (sym[i][j].type == VAR_FUNCTION_INT)
+				{
 					off = map_intd(var + strlen(sym[i][j].name), NULL, 0);
 					get_data_int funi = (get_data_int) sym[i][j].addr;
-					nb = snprintf(dest, max_len, "%d", funi(off));
-					break;
-
-				case VAR_FUNCTION_STRING:
+					*(int *) storage = funi(off);
+					*multiplier = 1;
+					return storage;
+				}
+				else if (sym[i][j].type == VAR_FUNCTION_STRING)
+				{
 					off = map_intd(var + strlen(sym[i][j].name), NULL, 0);
 					get_data_string funs = (get_data_string) sym[i][j].addr;
-					funs(off, dest, max_len);
-					nb = strlen(dest);
-					if (nb > max_len)
-						nb = max_len;
-					break;
-
+					funs(off, storage, ls);
+					return storage;
 				}
-				return nb;
+
 			}
-	return 0;
+	return NULL;
+}
+
+int var_eval(char *orig, int len, char *dest, int max_len)
+{
+	char var[VAR_LENGTH + 1];
+	char storage[100]; // variable max len
+	float multiplier;
+	int type = 0;
+	void *p;
+	int nb = 0;
+	memset(var, 0, sizeof(var));
+	strncpy(var, orig + 1, len - 1);
+	p = get_var_address(var, &multiplier, &type, storage, sizeof(storage));
+	if (p)
+		nb = snprintf_pointer(dest, max_len, type, p, multiplier);
+	return nb;
 }
 
 int is_var(char *s)
@@ -927,7 +843,7 @@ char *readfile(char *fn, char *ctype, int *len)
 		return 0;
 	snprintf(ffn, sizeof(ffn), "%s/%s", opts.document_root, fn);
 	ffn[sizeof(ffn) - 1] = 0;
-	if ((fd = open(ffn, O_RDONLY)) < 0)
+	if ((fd = open(ffn, O_RDONLY | O_LARGEFILE)) < 0)
 		LOG_AND_RETURN(NULL, "Could not open file %s", ffn);
 	if ((fstat(fd, &sb) == -1) || !S_ISREG(sb.st_mode))
 	{
@@ -999,7 +915,7 @@ __thread int imtx = 0;
 int mutex_lock1(char *FILE, int line, SMutex* mutex)
 {
 	int rv;
-	int start_lock = 0;
+	int64_t start_lock = 0;
 	if (opts.no_threads)
 		return 0;
 
@@ -1029,7 +945,7 @@ int mutex_lock1(char *FILE, int line, SMutex* mutex)
 	mutex->tid = tid;
 	mutexes[imtx++] = mutex;
 	if (start_lock > 0)
-		LOGL(4, "%s:%d Locked %p after %d ms", FILE, line, mutex,
+		LOGL(4, "%s:%d Locked %p after %ld ms", FILE, line, mutex,
 				getTick() - start_lock);
 
 	return 0;
@@ -1136,8 +1052,7 @@ pthread_t start_new_thread(char *name)
 
 	if ((rv = pthread_create(&tid, NULL, &select_and_execute, name)))
 	{
-		LOG("Failed to create thread: %s, error %d %s", name, rv,
-				strerror(rv));
+		LOG("Failed to create thread: %s, error %d %s", name, rv, strerror(rv));
 		return get_tid();
 	}
 	return tid;
@@ -1147,13 +1062,12 @@ void set_thread_prio(pthread_t tid, int prio)
 {
 	int rv;
 	struct sched_param param;
-	memset( &param, 0, sizeof(struct sched_param) );
+	memset(&param, 0, sizeof(struct sched_param));
 	param.sched_priority = prio;
-	if ( (rv = pthread_setschedparam( pthread_self(), SCHED_RR, &param )) )
+	if ((rv = pthread_setschedparam(pthread_self(), SCHED_RR, &param)))
 		LOG("pthread_setschedparam failed with error %d", rv);
 	return;
 }
-
 
 struct struct_array
 {
@@ -1186,3 +1100,58 @@ int add_new_lock(void **arr, int count, int size, SMutex *mutex)
 		}
 	return -1;
 }
+
+int64_t init_tick, theTick;
+
+int64_t getTick()
+{								 //ms
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	theTick = ts.tv_nsec / 1000000;
+	theTick += ts.tv_sec * 1000;
+	if (init_tick == 0)
+		init_tick = theTick;
+	return theTick - init_tick;
+}
+
+int64_t getTickUs()
+{
+	uint64_t utime;
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	utime = ((uint64_t) ts.tv_sec) * 1000000 + ts.tv_nsec / 1000;
+	return utime;
+
+}
+
+pthread_t join_th[100];
+int join_pos = 0;
+SMutex join_lock;
+
+void add_join_thread(pthread_t t)
+{
+	mutex_init(&join_lock);
+	mutex_lock(&join_lock);
+	join_th[join_pos++] = t;
+	LOG("%s: pthread %x", __FUNCTION__, t);
+	mutex_unlock(&join_lock);
+}
+
+void join_thread()
+{
+	int i, rv;
+	if (!join_lock.enabled)
+		return;
+	mutex_lock(&join_lock);
+//	LOG("starting %s", __FUNCTION__);	
+	for (i = 0; i < join_pos; i++)
+	{
+		LOGL(3, "Joining thread %x", join_th[i]);
+		if ((rv = pthread_join(join_th[i], NULL)))
+			LOG("Join thread failed for %x with %d %s", join_th[i], rv,
+					strerror(rv));
+	}
+	join_pos = 0;
+	mutex_unlock(&join_lock);
+}
+

@@ -8,7 +8,7 @@
 #include "utils.h"
 
 
-#define VERSION_BUILD "30"
+#define VERSION_BUILD "33"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.5.,VERSION_BUILD,)
 
@@ -17,7 +17,10 @@ void set_options (int argc, char *argv[]);
 extern char pid_file[];
 extern char app_name[], version[];
 
+#ifndef offsetof
 #define offsetof(st, m) __builtin_offsetof(st, m)
+#endif
+
 
 #define copy32(a,i,v) { a[i] = ((v)>>24) & 0xFF;\
 			a[i+1] = ((v)>>16) & 0xFF;\
