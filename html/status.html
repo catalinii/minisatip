@@ -19,15 +19,37 @@
 	.level {
 		display: inline;
 		white-space: nowrap;
+		font-family: "Lucida Console", Monaco, monospace;
 	}
-/*
-	.enabled {
-		color: green;
+	.noPadding {
+		padding: 1px !important;
 	}
-	.disabled {
-		color: red;
+	.strike {
+		text-decoration: line-through;
+		color: #eee !important;
 	}
-*/
+	table#myTable thead th {
+		background-color: #aaa;
+	}
+	table.dataTable.no-footer {
+		border-bottom: 1px solid #eee;
+	}
+	#pintervall {
+		font-size: 14px;
+		font-weight: 500;
+		width: 28px;
+		height: 18px;
+		color: #000;
+		background-color: transparent;
+		border: none;
+		border-radius: 4px;
+		text-align: center;
+		margin: 0 4px;
+		padding: 0;
+	}
+	.polling {
+		padding-bottom: 4px;
+	}
 	</style>
 
 	<script type="text/javascript" language="javascript" src="jquery-1.12.0.min.js"></script>
@@ -35,11 +57,15 @@
 	<script type="text/javascript" language="javascript" src="jquery.pBar.min.js"></script>
 </head>
 
-<!--<body onload="JavaScript:timedRefresh(5000);">-->
 <body>
+<div class="polling">Refresh:
+<input type="text" id="pintervall" value="" readonly /> sec.
+<button id="pdec">&minus;</button>
+<button id="pstatus">PAUSE</button>
+<button id="pinc">+</button>
+</div>
 
 <script type="text/javascript">
-
 var ad_type		= [$ad_type0$, $ad_type1$, $ad_type2$, $ad_type3$, $ad_type4$, $ad_type5$, $ad_type6$, $ad_type7$, $ad_type8$, $ad_type9$, $ad_type10$, $ad_type11$, $ad_type12$, $ad_type13$, $ad_type14$, $ad_type15$ ];
 var ad_enabled	= [$ad_enabled0$, $ad_enabled1$, $ad_enabled2$, $ad_enabled3$, $ad_enabled4$, $ad_enabled5$, $ad_enabled6$, $ad_enabled7$, $ad_enabled8$, $ad_enabled9$, $ad_enabled10$, $ad_enabled11$, $ad_enabled12$, $ad_enabled13$, $ad_enabled14$, $ad_enabled15$ ];
 var ad_sys		= [$ad_sys0$, $ad_sys1$, $ad_sys2$, $ad_sys3$, $ad_sys4$, $ad_sys5$, $ad_sys6$, $ad_sys7$, $ad_sys8$, $ad_sys9$, $ad_sys10$, $ad_sys11$, $ad_sys12$, $ad_sys13$, $ad_sys14$, $ad_sys15$ ];
@@ -51,7 +77,6 @@ var ad_pol		= [$ad_pol0$, $ad_pol1$, $ad_pol2$, $ad_pol3$, $ad_pol4$, $ad_pol5$,
 var ad_sr		= [$ad_sr0$, $ad_sr1$, $ad_sr2$, $ad_sr3$, $ad_sr4$, $ad_sr5$, $ad_sr6$, $ad_sr7$, $ad_sr8$, $ad_sr9$, $ad_sr10$, $ad_sr11$, $ad_sr12$, $ad_sr13$, $ad_sr14$, $ad_sr15$ ];
 var ad_bw		= [$ad_bw0$, $ad_bw1$, $ad_bw2$, $ad_bw3$, $ad_bw4$, $ad_bw5$, $ad_bw6$, $ad_bw7$, $ad_bw8$, $ad_bw9$, $ad_bw10$, $ad_bw11$, $ad_bw12$, $ad_bw13$, $ad_bw14$, $ad_bw15$ ];
 var ad_diseqc	= [$ad_diseqc0$, $ad_diseqc1$, $ad_diseqc2$, $ad_diseqc3$, $ad_diseqc4$, $ad_diseqc5$, $ad_diseqc6$, $ad_diseqc7$, $ad_diseqc8$, $ad_diseqc9$, $ad_diseqc10$, $ad_diseqc11$, $ad_diseqc12$, $ad_diseqc13$, $ad_diseqc14$, $ad_diseqc15$ ];
-// var ad_sys = [$ad_sys0$, $ad_sys1$, $ad_sys2$, $ad_sys3$, $ad_sys4$, $ad_sys5$, $ad_sys6$, $ad_sys7$, $ad_sys8$, $ad_sys9$, $ad_sys10$, $ad_sys11$, $ad_sys12$, $ad_sys13$, $ad_sys14$, $ad_sys15$ ];
 var ad_snr		= [$ad_snr0$, $ad_snr1$, $ad_snr2$, $ad_snr3$, $ad_snr4$, $ad_snr5$, $ad_snr6$, $ad_snr7$, $ad_snr8$, $ad_snr9$, $ad_snr10$, $ad_snr11$, $ad_snr12$, $ad_snr13$, $ad_snr14$, $ad_snr15$ ];
 var ad_phyad	= [$ad_phyad0$, $ad_phyad1$, $ad_phyad2$, $ad_phyad3$, $ad_phyad4$, $ad_phyad5$, $ad_phyad6$, $ad_phyad7$, $ad_phyad8$, $ad_phyad9$, $ad_phyad10$, $ad_phyad11$, $ad_phyad12$, $ad_phyad13$, $ad_phyad14$, $ad_phyad15$ ];
 var ad_phyfd	= [$ad_phyfd0$, $ad_phyfd1$, $ad_phyfd2$, $ad_phyfd3$, $ad_phyfd4$, $ad_phyfd5$, $ad_phyfd6$, $ad_phyfd7$, $ad_phyfd8$, $ad_phyfd9$, $ad_phyfd10$, $ad_phyfd11$, $ad_phyfd12$, $ad_phyfd13$, $ad_phyfd14$, $ad_phyfd15$ ];
@@ -81,15 +106,14 @@ var max_keys 	= 255;
 var pol			= ["", "(V)", "(H)", "(R)", "(L)"];
 var sys			= [ "", "dvbc", "dvbcb", "dvbt", "dss", "dvbs", "dvbs2", "dvbh", "isdbt", "isdbs", "isdbc", "atsc", "atscmh", "dmbth", "cmmb", "dab", "dvbt2", "turbo", "dvbcc", "dvbc2" ];
 
-var myTable = "<table id='myTable' class='display cell-border' cellspacing='0' width='100%'>";
+var myTable = "<table id='myTable' class='display cell-border compact' cellspacing='0' width='100%'>";
 myTable += "<thead><tr><th>Tuner</th>";
-myTable += "<th class='dt-right'>Status</th>";
+myTable += "<th class=''>Status</th>";
 myTable += "<th class='dt-right'>Frequency</th>";
 myTable += "<th class='dt-right'>SR/BW</th>";
 myTable += "<th class='dt-right'>Signal</th>";
-myTable += "<th class='dt-right'>Streams</th>";
-myTable += "<th class=''>Streams Pids</th>";
-myTable += "<th class=''>Crypt</th>";
+myTable += "<th class='dt-left'>Streams</th>";
+myTable += "<th class='dt-left'>Crypt</th>";
 myTable += "</tr></thead><tbody>";
 
 for (var i = 0; i < max_adapters; i++) {
@@ -112,7 +136,7 @@ for (var i = 0; i < max_adapters; i++) {
 		csys = sys[ad_sys[i]];
 	
 	if (ad_enabled[i] == 1)
-		myTable += "<td class='dt-right enabled' title='pids="+ad_pids[i]+"'><img src='" + csys + ".png' title='" + csys + "' /><br />";
+		myTable += "<td class='dt-right enabled'><img src='" + csys + ".png' title='" + csys + "' /><br />";
 	else
 		myTable += "<td class='dt-right disabled'>" + ad_allsys[i];
 	
@@ -137,7 +161,7 @@ for (var i = 0; i < max_adapters; i++) {
 		signal = "<small>OFFLINE</small>";
 	} else {
 		var s1 = parseInt(ad_strength[i] / 2.55);
-		signal = "<div class='level'>LEV <div class='pBar' data-from='"+ s1 + "' data-to='" + s1 + "'></div></div><br />";
+		signal = "<div class='level'>STR <div class='pBar' data-from='"+ s1 + "' data-to='" + s1 + "'></div></div><br />";
 
 		if (ad_type[i] == 1) 
 			var s2 = parseInt(ad_snr[i] / 2.55);
@@ -146,13 +170,13 @@ for (var i = 0; i < max_adapters; i++) {
 		signal += "<div class='level'>SNR <div class='pBar' data-from='"+ s2 + "' data-to='" + s2 + "'></div></div><br />";
 
 		if (ad_ber[i] > 0)
-			signal += "<small><b style='color:red;'>BER " + ad_ber[i] + "</b></small>";
+			signal += "<div class='level'>BER <div class='pBar' data-from='"+ ad_ber[i] + "' data-to='" + ad_ber[i] + "' data-color='red'></div></div><br />";
 	}
 	myTable += "<td class='dt-right'>" + signal + " </td>";
 
 	// STREAMS
-	myTable += "<td class='dt-right'>";
-	for (var j = 0; j < max_streams; j++)
+	myTable += "<td class='dt-left'>";
+	for (var j = 0; j < max_streams; j++) {
 		if (st_enabled[j] == 1 && st_adapter[j] == i) {
 			var st_rh = st_rhost[j]+":"+st_rport[j];
 			if (ad_master[i] == j)
@@ -161,22 +185,23 @@ for (var i = 0; i < max_adapters; i++) {
 				st_rh = "<i>"+st_rh+"</i>";
 			myTable += st_rh + "<br />";
 			if (st_useragent[j] != "")
-				myTable += "<small>(" + st_useragent[j] + ")</small><br />";
+				myTable += "<small>Client: " + st_useragent[j] + "</small><br />";
 		}
-	
-	// STREAM PIDS
-	myTable +="</td><td class=''>";
-	for (var j = 0; j < max_streams; j++)
+	}
+	for (var j = 0; j < max_streams; j++) {
 		if (st_enabled[j] == 1 && st_adapter[j] == i) {
 			var st_p = st_pids[j];
-			if(ad_master[i] == j)
-				st_p = "<b>" + st_p + "</b>";
-			if(st_play[j] == 0)
+			if (ad_master[i] == j)
+				st_p = "" + st_p + "";
+			if (st_play[j] == 0)
 				st_p = "<i>" + st_p + "</i>";
-			myTable += st_p + "<br />";
+			myTable += "<small>Pids: " + st_p + "</small><br />";
 		}
+	}
+	myTable +="</td>";
+
 	// CRYPT
-	myTable +="</td><td class=''><small>";
+	myTable +="<td class=''><small>";
 	for (var j = 0; j < max_keys; j++)
 		if (key_enabled[j] == 1 && key_adapter[j] == i) {
 			myTable += "SYSTEM: " + key_cardsystem[j] + "<br />";
@@ -189,25 +214,87 @@ for (var i = 0; i < max_adapters; i++) {
 }
 myTable+="</tbody></table>";
 
+
+var pcurrent = 1;
+var pvalues = [5, 10, 15, 30, 60, 300 ];
+var prefresh;
+
+var hashTag = location.hash;
+if (typeof hashTag.split('#')[1] !== "undefined") {
+	var temp = parseInt(hashTag.split('#')[1]);
+	if (temp >= 0 && temp <= 5) {
+		pcurrent = temp;
+	}
+}
+
+function reloadPage() {	
+	$("#pintervall").val( pvalues[pcurrent] );
+	
+	clearInterval(prefresh);
+	
+	prefresh = setInterval(function () {
+		var url = location.origin + location.pathname + "#" + pcurrent;
+		location.href = url;
+		location.reload(true); // force reload
+	}, pvalues[pcurrent] * 1000); 
+}
+
 $(document).ready(function() {
+	console.log("minisatip status: " + Date());
+
 	var el = document.createElement('div');
 	el.innerHTML = myTable;
 	document.body.appendChild(el);
 	
 	$('#myTable').DataTable({
 		"paging":	false,
-		"ordering": true,
+		"bFilter":	false,
+		"ordering":	true,
 		"info":		false,
 		"columnDefs": [
 			{ "width": "40px", "targets": 0 },
 			{ "width": "40px", "targets": 1 },
 			{ "width": "50px", "targets": 2 },
-			{ "width": "40px", "targets": 3 },
-			{ "width": "70px", "targets": 4 }
-		]
-    });
+			{ "width": "50px", "targets": 3 },
+			{ "width": "50px", "targets": 4 }
+		],
+		"aoColumnDefs": [
+			{ "sClass": "noPadding", "aTargets": [ 1 ] }
+		],
+		"language": {
+			"emptyTable": "No tuner found/active"
+		}
+	});
 	
 	$(".pBar").pBar();
+	
+	$("#pdec").click(function() {
+		if (pcurrent > 0) {
+			pcurrent = pcurrent - 1;
+			reloadPage();
+		}
+	});
+	
+	$("#pinc").click(function() {
+		if (pcurrent <= 4) {
+			pcurrent = pcurrent + 1;
+			reloadPage();
+		}
+	});
+	
+	$("#pstatus").click(function() {
+		if ($("#pstatus").html() == "PAUSE") {
+			clearInterval(prefresh);
+			$("#pstatus").html("START");
+			$("#pintervall").addClass("strike");
+		} else {
+			reloadPage();
+			$("#pstatus").html("PAUSE");
+			$("#pintervall").removeClass("strike");
+		}
+	});
+	
+	reloadPage();
 });
 
 </script>
