@@ -1032,13 +1032,13 @@ int ssdp_reply(sockets * s)
 			"ST: urn:ses-com:device:SatIPServer:1\r\n"
 			"USN: uuid:%s::urn:ses-com:device:SatIPServer:1\r\n"
 			"BOOTID.UPNP.ORG: %d\r\n"
-			"CONFIGID.UPNP.ORG: 0\r\n" "DEVICEID.SES.COM: %d\r\n\0";
+			"CONFIGID.UPNP.ORG: 0\r\n" "DEVICEID.SES.COM: %d\r\n\r\n\0";
 	char *device_id_conflict = "M-SEARCH * HTTP/1.1\r\n"
 			"HOST: %s:1900\r\n"
 			"MAN: \"ssdp:discover\"\r\n"
 			"ST: urn:ses-com:device:SatIPServer:1\r\n"
 			"USER-AGENT: Linux/1.0 UPnP/1.1 %s/%s\r\n"
-			"DEVICEID.SES.COM: %d\r\n\0";
+			"DEVICEID.SES.COM: %d\r\n\r\n\0";
 	socklen_t salen;
 	char *man, *man_sd, *didsescom, *ruuid, *rdid;
 	char buf[500];
