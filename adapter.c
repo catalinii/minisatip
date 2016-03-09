@@ -51,6 +51,7 @@ int sock_signal;
 SMutex a_mutex;
 extern struct struct_opts opts;
 int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
+char fe_map[2*MAX_ADAPTERS];
 void find_dvb_adapter(adapter **a);
 
 adapter *adapter_alloc()
@@ -164,7 +165,7 @@ int init_hw(int i)
 		return 3;
 
 	if (a[i] && a[i]->enabled)
-		return 4;
+		return 0;
 
 	if (!a[i])
 		return 2;
@@ -334,10 +335,19 @@ void close_adapter(int na)
 	LOG("done closing adapter %d", na);
 }
 
+
+
 int getAdaptersCount()
 {
-	int i;
+	int i, j, k, sys;
 	adapter *ad;
+	char fes[20][MAX_ADAPTERS];
+	char ifes[20]; 
+	char order[] = {SYS_DVBS2, SYS_DVBT, SYS_DVBC_ANNEX_A, SYS_DVBT2, SYS_DVBC2, -1};
+
+	memset(&ifes, 0, sizeof(ifes));	
+	memset(&fe_map, -1, sizeof(fe_map));
+	
 	tuner_s2 = tuner_c2 = tuner_t2 = tuner_c = tuner_t = 0;
 	if (opts.force_sadapter)
 		tuner_s2 = opts.force_sadapter;
@@ -348,25 +358,53 @@ int getAdaptersCount()
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		if ((ad = get_adapter_nw(i)))
 		{
+			sys = ad->sys[0];
 			if (!opts.force_sadapter
 					&& (delsys_match(ad, SYS_DVBS)
 							|| delsys_match(ad, SYS_DVBS2)))
-				tuner_s2++;
+				{
+					tuner_s2++;
+					fes[SYS_DVBS2][ifes[SYS_DVBS2]++] = i;
+				}
 
 			if (!opts.force_tadapter && delsys_match(ad, SYS_DVBT)
 					&& !delsys_match(ad, SYS_DVBT2))
-				tuner_t++;
+				{
+					tuner_t++;
+					fes[SYS_DVBT][ifes[SYS_DVBT]++] = i;
+				}
+
 
 			if (!opts.force_cadapter && delsys_match(ad, SYS_DVBC_ANNEX_A)
 					&& !delsys_match(ad, SYS_DVBC2))
-				tuner_c++;
+				{
+					tuner_c++;
+					fes[SYS_DVBC_ANNEX_A][ifes[SYS_DVBC_ANNEX_A]++] = i;
+				}
 
 			if (delsys_match(ad, SYS_DVBT2))
+			{
 				tuner_t2++;
-
+				fes[SYS_DVBT2][ifes[SYS_DVBT2]++] = i;
+			}
+			
 			if (delsys_match(ad, SYS_DVBC2))
+			{
 				tuner_c2++;
+				fes[SYS_DVBC2][ifes[SYS_DVBC2]++] = i;
+			}
+
 		}
+	k = 0;
+	for(i=0;order[i] > 0;i++)
+	{
+		sys = order[i];
+		for(j=0;j<ifes[sys]; j++)
+		{
+			fe_map[k++] = fes[sys][j]; 
+			LOG("FE %d mapped to Adapter %d, sys %s", k, fes[sys][j], get_delsys(sys));			
+		}
+	}
 
 	return tuner_s2 + tuner_c2 + tuner_t2 + tuner_c + tuner_t;
 }
@@ -430,45 +468,41 @@ int adapter_match(adapter *ad, int freq, int pol, int msys, int src, int diseqc)
 
 int get_free_adapter(int freq, int pol, int msys, int src, int diseqc)
 {
-	int i;
-	adapter *ad;
+	int i, init_src = src;
+	int match;
+	adapter *ad = a[0];
 //	init_all_hw();
 
-	if (src > 0)
+	if((src > 0) && (src <= sizeof(fe_map)) && (fe_map[src - 1] >= 0))
 	{
-		i = src - 1;
-		ad = a[i];
-		if (!delsys_match(ad, msys))
-			ad = NULL;
-		if (ad && !ad->enabled)
-		{
-			if (init_hw(i))
-				goto noadapter;
-			ad = get_adapter(i);
-		}
+		src = fe_map[src - 1];
+		ad = a[src];
 	}
-	else
-	{
-		ad = get_adapter(i = 0);
-	}
+	else 
+		src = -1;
+
+
 	if (ad)
-		LOG("get free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d f:%d pol=%d",
-				src - 1, i, ad->enabled, ad->master_sid, ad->sid_cnt,
-				ad->tp.freq, ad->tp.pol)
+		LOG("get free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d f:%d pol=%d sys: %s %s",
+				init_src, ad->id, ad->enabled, ad->master_sid, ad->sid_cnt,
+				ad->tp.freq, ad->tp.pol, get_delsys(ad->sys[0]), get_delsys(ad->sys[1]))
 	else
 		LOG("get free adapter %d msys %s requested %s", i, get_delsys(i),
 				get_delsys(msys));
 
-	if (src > 0)
+	if (src >= 0)
 	{
 		if (ad && delsys_match(ad, msys))
 		{
+			match = 0;
 			if (ad->sid_cnt == 0)
-				return i;
+				match = 1;
 			if (adapter_match(ad, freq, pol, msys, src, diseqc))
-				return i;
+				match = 1;
+			if(match && !init_hw(src))
+				return src;
 		}
-//		goto noadapter; - breaks compatibility with tvheadend (at least) which assumes first adapter is DVB-S
+		goto noadapter; 
 	}
 	for (i = 0; i < MAX_ADAPTERS; i++)
 	{
@@ -487,7 +521,7 @@ int get_free_adapter(int freq, int pol, int msys, int src, int diseqc)
 		if ((ad = get_adapter_nw(i)) && delsys_match(ad, msys))
 			if (adapter_match(ad, freq, pol, msys, src, diseqc))
 				return i;
-	noadapter:
+noadapter:
 	LOG("no adapter found for f:%d pol:%d msys:%d", freq, pol, msys);
 	dump_adapters();
 	return -1;

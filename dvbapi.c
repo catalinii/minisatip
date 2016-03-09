@@ -637,7 +637,7 @@ int dvbapi_send_pmt(SKey *k)
 	LOG(
 			"Sending pmt to dvbapi server for pid %d, Channel ID %04X, key %d, using socket %d",
 			k->pmt_pid, k->sid, k->id, sock);
-
+	memset(buf, 0, sizeof(buf));
 	copy32(buf, 0, AOT_CA_PMT);
 	buf[6] = CAPMT_LIST_UPDATE;
 //	buf[6] = CAPMT_LIST_ONLY;
