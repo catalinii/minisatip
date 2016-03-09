@@ -541,7 +541,10 @@ void *select_and_execute(void *arg)
 				es++;
 			}
 			else
+			{
 				pf[i].fd = -1;
+				pf[i].events = pf[i].revents = 0;
+			}
 		i = -1;
 		if (les == 0 && es == 0 && tid != main_tid)
 		{
@@ -560,7 +563,7 @@ void *select_and_execute(void *arg)
 		//              LOG("select returned %d",rv);
 		if (rv > 0)
 			while (++i < max_sock)
-				if (pf[i].revents)
+				if ((pf[i].fd >=0) && pf[i].revents)
 				{
 					sockets *ss = s[i];
 					if (!ss)
