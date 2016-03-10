@@ -323,13 +323,16 @@ int end_of_header(char *buf)
 }
 
 void posix_signal_handler(int sig, siginfo_t * siginfo, ucontext_t * ctx);
-void set_signal_handler()
+void set_signal_handler(char *argv0)
 {
 	struct sigaction sig_action =
 	{ };
 	sig_action.sa_sigaction =
 			(void (*)(int, siginfo_t *, void *)) posix_signal_handler;
 	sigemptyset(&sig_action.sa_mask);
+
+	memset(pn, 0, sizeof(pn));
+	strncpy(pn, argv0, sizeof(pn) - 1);
 
 	sig_action.sa_flags = SA_SIGINFO | SA_ONSTACK;
 

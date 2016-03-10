@@ -1152,7 +1152,7 @@ int main(int argc, char *argv[])
 	int sock_st, sock_bw;
 	main_tid = get_tid();
 	thread_name = "main";
-	set_signal_handler();
+	set_signal_handler(argv[0]);
 	set_options(argc, argv);
 	if (opts.daemon)
 		becomeDaemon();

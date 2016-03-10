@@ -51,7 +51,7 @@ int sock_signal;
 SMutex a_mutex;
 extern struct struct_opts opts;
 int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
-char fe_map[2*MAX_ADAPTERS];
+char fe_map[2 * MAX_ADAPTERS];
 void find_dvb_adapter(adapter **a);
 
 adapter *adapter_alloc()
@@ -335,19 +335,18 @@ void close_adapter(int na)
 	LOG("done closing adapter %d", na);
 }
 
-
-
 int getAdaptersCount()
 {
 	int i, j, k, sys;
 	adapter *ad;
 	char fes[20][MAX_ADAPTERS];
-	char ifes[20]; 
-	char order[] = {SYS_DVBS2, SYS_DVBT, SYS_DVBC_ANNEX_A, SYS_DVBT2, SYS_DVBC2, -1};
+	char ifes[20];
+	char order[] =
+	{ SYS_DVBS2, SYS_DVBT, SYS_DVBC_ANNEX_A, SYS_DVBT2, SYS_DVBC2, -1 };
 
-	memset(&ifes, 0, sizeof(ifes));	
+	memset(&ifes, 0, sizeof(ifes));
 	memset(&fe_map, -1, sizeof(fe_map));
-	
+
 	tuner_s2 = tuner_c2 = tuner_t2 = tuner_c = tuner_t = 0;
 	if (opts.force_sadapter)
 		tuner_s2 = opts.force_sadapter;
@@ -362,32 +361,31 @@ int getAdaptersCount()
 			if (!opts.force_sadapter
 					&& (delsys_match(ad, SYS_DVBS)
 							|| delsys_match(ad, SYS_DVBS2)))
-				{
-					tuner_s2++;
-					fes[SYS_DVBS2][ifes[SYS_DVBS2]++] = i;
-				}
+			{
+				tuner_s2++;
+				fes[SYS_DVBS2][ifes[SYS_DVBS2]++] = i;
+			}
 
 			if (!opts.force_tadapter && delsys_match(ad, SYS_DVBT)
 					&& !delsys_match(ad, SYS_DVBT2))
-				{
-					tuner_t++;
-					fes[SYS_DVBT][ifes[SYS_DVBT]++] = i;
-				}
-
+			{
+				tuner_t++;
+				fes[SYS_DVBT][ifes[SYS_DVBT]++] = i;
+			}
 
 			if (!opts.force_cadapter && delsys_match(ad, SYS_DVBC_ANNEX_A)
 					&& !delsys_match(ad, SYS_DVBC2))
-				{
-					tuner_c++;
-					fes[SYS_DVBC_ANNEX_A][ifes[SYS_DVBC_ANNEX_A]++] = i;
-				}
+			{
+				tuner_c++;
+				fes[SYS_DVBC_ANNEX_A][ifes[SYS_DVBC_ANNEX_A]++] = i;
+			}
 
 			if (delsys_match(ad, SYS_DVBT2))
 			{
 				tuner_t2++;
 				fes[SYS_DVBT2][ifes[SYS_DVBT2]++] = i;
 			}
-			
+
 			if (delsys_match(ad, SYS_DVBC2))
 			{
 				tuner_c2++;
@@ -396,13 +394,14 @@ int getAdaptersCount()
 
 		}
 	k = 0;
-	for(i=0;order[i] > 0;i++)
+	for (i = 0; order[i] > 0; i++)
 	{
 		sys = order[i];
-		for(j=0;j<ifes[sys]; j++)
+		for (j = 0; j < ifes[sys]; j++)
 		{
-			fe_map[k++] = fes[sys][j]; 
-			LOG("FE %d mapped to Adapter %d, sys %s", k, fes[sys][j], get_delsys(sys));			
+			fe_map[k++] = fes[sys][j];
+			LOG("FE %d mapped to Adapter %d, sys %s", k, fes[sys][j],
+					get_delsys(sys));
 		}
 	}
 
@@ -473,19 +472,20 @@ int get_free_adapter(int freq, int pol, int msys, int src, int diseqc)
 	adapter *ad = a[0];
 //	init_all_hw();
 
-	if((src > 0) && (src <= sizeof(fe_map)) && (fe_map[src - 1] >= 0))
+	if ((src > 0) && (src <= sizeof(fe_map)) && (fe_map[src - 1] >= 0))
 	{
 		src = fe_map[src - 1];
 		ad = a[src];
 	}
-	else 
+	else
 		src = -1;
 
-
 	if (ad)
-		LOG("get free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d f:%d pol=%d sys: %s %s",
+		LOG(
+				"get free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d f:%d pol=%d sys: %s %s",
 				init_src, ad->id, ad->enabled, ad->master_sid, ad->sid_cnt,
-				ad->tp.freq, ad->tp.pol, get_delsys(ad->sys[0]), get_delsys(ad->sys[1]))
+				ad->tp.freq, ad->tp.pol, get_delsys(ad->sys[0]),
+				get_delsys(ad->sys[1]))
 	else
 		LOG("get free adapter %d msys %s requested %s", i, get_delsys(i),
 				get_delsys(msys));
@@ -499,10 +499,10 @@ int get_free_adapter(int freq, int pol, int msys, int src, int diseqc)
 				match = 1;
 			if (adapter_match(ad, freq, pol, msys, src, diseqc))
 				match = 1;
-			if(match && !init_hw(src))
+			if (match && !init_hw(src))
 				return src;
 		}
-		goto noadapter; 
+		goto noadapter;
 	}
 	for (i = 0; i < MAX_ADAPTERS; i++)
 	{
@@ -521,7 +521,7 @@ int get_free_adapter(int freq, int pol, int msys, int src, int diseqc)
 		if ((ad = get_adapter_nw(i)) && delsys_match(ad, msys))
 			if (adapter_match(ad, freq, pol, msys, src, diseqc))
 				return i;
-noadapter:
+	noadapter:
 	LOG("no adapter found for f:%d pol:%d msys:%d", freq, pol, msys);
 	dump_adapters();
 	return -1;
@@ -1548,7 +1548,7 @@ int get_all_pids(adapter *ad, int *pids, int lpids)
 
 	for (i = 0; i < MAX_PIDS; i++)
 	{
-		if ((ad->pids[i].flags > 0) && (ad->pids[i].flags < 4)) 
+		if ((ad->pids[i].flags > 0) && (ad->pids[i].flags < 4))
 			pids[ep++] = ad->pids[i].pid;
 		if (ep >= lpids)
 			break;
@@ -1556,7 +1556,6 @@ int get_all_pids(adapter *ad, int *pids, int lpids)
 
 	return ep;
 }
-
 
 char* get_adapter_pids(int aid, char *dest, int max_size)
 {
