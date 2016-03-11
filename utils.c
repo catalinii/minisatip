@@ -757,7 +757,7 @@ void * get_var_address(char *var, float *multiplier, int * type, void *storage,
 int var_eval(char *orig, int len, char *dest, int max_len)
 {
 	char var[VAR_LENGTH + 1];
-	char storage[100]; // variable max len
+	char storage[64*5]; // variable max len
 	float multiplier;
 	int type = 0;
 	void *p;
