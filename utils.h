@@ -85,7 +85,7 @@ char *header_parameter(char **arg, int i);
 void _log(int level, char * file, int line, char *fmt, ...);
 char *strip(char *s);
 int split(char **rv, char *s, int lrv, char sep);
-void set_signal_handler();
+void set_signal_handler(char *argv0);
 int becomeDaemon();
 int end_of_header(char *buf);
 char *readfile(char *fn, char *ctype, int *len);

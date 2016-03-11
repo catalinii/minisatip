@@ -14,7 +14,7 @@ The application shows also a status page by default at the address: http://IP:80
 
 Contact
 -------
-Please use https://toda.ro/forum/ for any questions.
+Please use https://minisatip.org/forum/ for any questions.
 
 In order to speed up the investigation of an issue, please provide the full log and a link to the application that is not working.
 
@@ -24,7 +24,7 @@ https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item
 Usage:
 -------
 
-minisatip version 0.5.30, compiled with s2api version: 050A
+minisatip version 0.5.35, compiled with s2api version: 050A
 
 	./minisatip [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 		[-[uj] A1:S1-F1[-PIN]] [-m mac][-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] 

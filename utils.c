@@ -323,13 +323,16 @@ int end_of_header(char *buf)
 }
 
 void posix_signal_handler(int sig, siginfo_t * siginfo, ucontext_t * ctx);
-void set_signal_handler()
+void set_signal_handler(char *argv0)
 {
 	struct sigaction sig_action =
 	{ };
 	sig_action.sa_sigaction =
 			(void (*)(int, siginfo_t *, void *)) posix_signal_handler;
 	sigemptyset(&sig_action.sa_mask);
+
+	memset(pn, 0, sizeof(pn));
+	strncpy(pn, argv0, sizeof(pn) - 1);
 
 	sig_action.sa_flags = SA_SIGINFO | SA_ONSTACK;
 
@@ -754,7 +757,7 @@ void * get_var_address(char *var, float *multiplier, int * type, void *storage,
 int var_eval(char *orig, int len, char *dest, int max_len)
 {
 	char var[VAR_LENGTH + 1];
-	char storage[100]; // variable max len
+	char storage[64*5]; // variable max len
 	float multiplier;
 	int type = 0;
 	void *p;
