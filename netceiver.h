@@ -4,6 +4,7 @@
 #include "adapter.h"
 
 #ifndef DISABLE_LINUXDVB
+#undef AOT_CA_PMT
 #include "headers.h"
 #else
 #include "netceiver_mcli_defs.h"
