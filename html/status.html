@@ -113,7 +113,7 @@ myTable += "<th class='dt-right'>Frequency</th>";
 myTable += "<th class='dt-right'>SR/BW</th>";
 myTable += "<th class='dt-right'>Signal</th>";
 myTable += "<th class='dt-left'>Streams</th>";
-myTable += "<th class='dt-left'>Crypt</th>";
+myTable += "<th class='dt-left'>Cryptinfo</th>";
 myTable += "</tr></thead><tbody>";
 
 for (var i = 0; i < max_adapters; i++) {
@@ -161,16 +161,16 @@ for (var i = 0; i < max_adapters; i++) {
 		signal = "<small>OFFLINE</small>";
 	} else {
 		var s1 = parseInt(ad_strength[i] / 2.55);
-		signal = "<div class='level'>STR <div class='pBar' data-from='"+ s1 + "' data-to='" + s1 + "'></div></div><br />";
+		signal = "<div class='level'>STR <div class='pBar' data-from='"+ s1 + "' data-to='" + s1 + "'></div> " + s1 + "%</div><br />";
 
 		if (ad_type[i] == 1) 
 			var s2 = parseInt(ad_snr[i] / 2.55);
 		else
 			var s2 = parseInt(ad_snr[i] / 0.15);
-		signal += "<div class='level'>SNR <div class='pBar' data-from='"+ s2 + "' data-to='" + s2 + "'></div></div><br />";
+		signal += "<div class='level'>SNR <div class='pBar' data-from='"+ s2 + "' data-to='" + s2 + "'></div> " + s2 + "%</div><br />";
 
 		if (ad_ber[i] > 0)
-			signal += "<div class='level'>BER <div class='pBar' data-from='"+ ad_ber[i] + "' data-to='" + ad_ber[i] + "' data-color='red'></div></div><br />";
+			signal += "<div class='level'>BER <div class='pBar' data-from='"+ ad_ber[i] + "' data-to='" + ad_ber[i] + "' data-color='red'></div> " + ad_ber[i] + "</div><br />";
 	}
 	myTable += "<td class='dt-right'>" + signal + " </td>";
 
