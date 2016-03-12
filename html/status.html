@@ -140,7 +140,7 @@ for (var i = 0; i < max_adapters; i++) {
 	else
 		myTable += "<td class='dt-right disabled'>" + ad_allsys[i];
 	
-	if (ad_type[i] == 1) {
+	if (ad_type[i] == 1 || ad_type[i] == 3) {
 		// myTable += "<small>(" + ad_phyad[i] + "," + ad_phyfd[i] +")</small>";
 	} else { 
 		myTable += "<small>(" + ad_satip[i] + ")</small>";
@@ -163,7 +163,7 @@ for (var i = 0; i < max_adapters; i++) {
 		var s1 = parseInt(ad_strength[i] / 2.55);
 		signal = "<div class='level'>STR <div class='pBar' data-from='"+ s1 + "' data-to='" + s1 + "'></div> " + s1 + "%</div><br />";
 
-		if (ad_type[i] == 1) 
+		if (ad_type[i] == 1 || ad_type[i] == 3)
 			var s2 = parseInt(ad_snr[i] / 2.55);
 		else
 			var s2 = parseInt(ad_snr[i] / 0.15);
