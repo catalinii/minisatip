@@ -629,6 +629,14 @@ int update_pids(int aid)
 
 	ad->commit(ad);
 
+#ifndef DISABLE_TABLES
+	int ep;
+	if (!get_all_pids(ad, &ep, 1)) // no pids enabled, set pids type to 0
+	{
+		reset_pids_type(ad->id, 0);
+	}
+#endif
+	
 	return 0;
 }
 

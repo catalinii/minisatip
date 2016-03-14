@@ -8,6 +8,7 @@
 #include "adapter.h"
 
 #define PID_FROM_TS(b) ((b[1] & 0x1F)*256 + b[2])
+#define MAX_PI_LEN 1500
 
 typedef struct struct_pmt
 {

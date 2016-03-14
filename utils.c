@@ -103,7 +103,7 @@ STmpinfo *getFreeItemPos(int64_t key)
 		{
 			sinfo[i].id = i;
 			sinfo[i].timeout = 0;
-			LOGL(2, "Requested new Item for key %jX, returning %d", key, i);
+			LOGL(2, "Requested new Item for key %jX, returning %d (enabled %d last_updated %jd timeout %d tick %jd)", key, i, sinfo[i].enabled, sinfo[i].last_updated, sinfo[i].timeout, tick);
 			return sinfo + i;
 		}
 	return NULL;

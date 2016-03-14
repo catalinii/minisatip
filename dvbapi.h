@@ -36,7 +36,6 @@
 
 #define MAX_KEYS 255
 #define MAX_PMT_DATA 1880
-#define MAX_PI_LEN 1500
 
 
 typedef struct struct_key
