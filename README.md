@@ -24,7 +24,7 @@ https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item
 Usage:
 -------
 
-minisatip version 0.5.35, compiled with s2api version: 050A
+minisatip version 0.5.36, compiled with s2api version: 050A
 
 	./minisatip [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 		[-[uj] A1:S1-F1[-PIN]] [-m mac][-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] 
@@ -140,6 +140,15 @@ Help
 	* eg: -y 5544 
 	- changing this to a port > 1024 removes the requirement for minisatip to run as root
 
+How to compile:
+------
+- ./configure
+
+Configures minisatip for the current system (use ./configure --help for options)
+
+- make
+
+Compiles the application
 
 Examples:
 -------
