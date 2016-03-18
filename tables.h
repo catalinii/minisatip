@@ -1,4 +1,4 @@
-#if !defined(DISABLE_DVBCA) || !defined(DISABLE_DVBCSA)								 
+#if !defined(DISABLE_DVBCA) || !defined(DISABLE_DVBAPI)								 
 
 #ifndef TABLES_H
 #define TABLES_H

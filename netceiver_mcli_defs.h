@@ -175,7 +175,7 @@ typedef struct recv_festatus
 	uint32_t ucblocks;
 } recv_festatus_t;
 
-#include <libxml/xpath.h>
+#include <linxml2/libxml/xpath.h>
 
 #define UUID_SIZE 256
 #define DLL_SYMBOL

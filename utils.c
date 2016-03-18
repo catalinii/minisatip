@@ -622,7 +622,7 @@ int endswith(char *src, char *with)
 extern _symbols adapters_sym[];
 extern _symbols minisatip_sym[];
 extern _symbols stream_sym[];
-#ifndef DISABLE_DVBCSA
+#ifndef DISABLE_DVBAPI
 extern _symbols dvbapi_sym[];
 #endif
 #ifndef DISABLE_SATIPCLIENT
@@ -631,7 +631,7 @@ extern _symbols satipc_sym[];
 
 _symbols *sym[] =
 { adapters_sym, stream_sym, minisatip_sym,
-#ifndef DISABLE_DVBCSA
+#ifndef DISABLE_DVBAPI
 		dvbapi_sym,
 #endif
 #ifndef DISABLE_SATIPCLIENT

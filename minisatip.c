@@ -67,7 +67,7 @@ static const struct option long_options[] =
 { "jess", required_argument, NULL, 'j' },
 { "diseqc", required_argument, NULL, 'd' },
 { "diseqc-timing", required_argument, NULL, 'q' },
-#ifndef DISABLE_DVBCSA
+#ifndef DISABLE_DVBAPI
 		{ "dvbapi", required_argument, NULL, 'o' },
 #endif
 #ifndef DISABLE_SATIPCLIENT
@@ -122,15 +122,63 @@ static const struct option long_options[] =
 #define THREADS_OPT 'T'
 #define DMXSOURCE_OPT '9'
 
+char *built_info[] =
+{
+#ifdef DISABLE_DVBCSA
+		"Built without dvbcsa",
+#else 
+		"Built with dvbcsa",
+#endif
+#ifdef DISABLE_DVBAPI
+		"Built without dvbapi",
+#else 
+		"Built with dvbapi",
+#endif
+#ifdef DISABLE_DVBAES
+		"Built without AES (OpenSSL)",
+#else 
+		"Built with AES (OpenSSL)",
+#endif
+#ifdef DISABLE_TABLES
+		"Built without tables processing",
+#else 
+		"Built with tables processing",
+#endif
+#ifdef DISABLE_SATIPCLIENT
+		"Built without satip client",
+#else 
+		"Built with satip client",
+#endif
+#ifdef DISABLE_LINUXDVB
+		"Built without linux dvb client",
+#else 
+		"Built with linux dvb client",
+#endif
+#ifdef NO_BACKTRACE
+		"Built without backtrace",
+#else 
+		"Built with backtrace",
+#endif
+#ifdef DISABLE_NETCVCLIENT
+		"Built without netceiver",
+#else 
+		"Built with netceiver",
+#endif
+		NULL };
+
 void print_version(int use_log)
 {
 	char buf[200];
-	sprintf(buf, "%s version %s, compiled with s2api version: %04X", app_name,
+	int i, len = 0;
+	memset(buf, 0, sizeof(buf));
+	len += sprintf(buf, "%s version %s, compiled with s2api version: %04X", app_name,
 			version, LOGDVBAPIVERSION);
 	if (!use_log)
 		puts(buf);
 	else
 		LOGL(0, buf);
+	for (i = 0; built_info[i]; i++)
+		LOGL(0, "%s", built_info[i]);
 }
 
 void usage()
@@ -139,7 +187,7 @@ void usage()
 	printf(
 			"\n\t./%s [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] \n\
 	\t[-[uj] A1:S1-F1[-PIN]] [-m mac]"
-#ifndef DISABLE_DVBCSA
+#ifndef DISABLE_DVBAPI
 					"[-o oscam_host:dvbapi_port] "
 #endif
 			"[-p public_host] [-r remote_rtp_host] \n\
@@ -208,7 +256,7 @@ Help\n\
 \n\
 "
 #endif
-#ifndef DISABLE_DVBCSA
+#ifndef DISABLE_DVBAPI
 			"\
 * -o --dvbapi host:port - specify the hostname and port for the dvbapi server (oscam) \n\
 	* eg: -o 192.168.9.9:9000 \n\
@@ -325,7 +373,7 @@ void set_options(int argc, char *argv[])
 	opts.diseqc_after_burst = 15;
 	opts.diseqc_after_tone = 0;
 
-#ifdef __mips__
+#ifdef NO_BACKTRACE
 	opts.no_threads = 1;
 #endif
 	memset(opts.playlist, 0, sizeof(opts.playlist));
@@ -480,7 +528,7 @@ void set_options(int argc, char *argv[])
 
 		case DVBAPI_OPT:
 		{
-#ifdef DISABLE_DVBCSA
+#ifdef DISABLE_DVBAPI
 			LOGL(0, "%s was not compiled with DVBCSA support, please install libdvbcsa (libdvbcsa-dev in Ubuntu) and change the Makefile", app_name);
 			exit (0);
 #else

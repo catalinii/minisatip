@@ -208,7 +208,7 @@ int process_pat(adapter *ad, unsigned char *b)
 
 	ad->pat_ver = ver;
 	ad->transponder_id = tid;
-#ifndef DISABLE_DVBCSA
+#ifndef DISABLE_DVBAPI
 	dvbapi_delete_keys_for_adapter(ad->id);
 #endif
 //	LOG("tid %d pat_len %d: %02X %02X %02X %02X %02X %02X %02X %02X", tid, pat_len, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]);
@@ -549,7 +549,7 @@ void clean_psi(adapter *ad, uint8_t *b)
 	if (!p || p->sid[0] == -1) // no need to fix this PMT as it not requested by any stream
 		return;
 
-#ifndef DISABLE_DVBCSA
+#ifndef DISABLE_DVBAPI
 	if (!get_key(p->key)) // no key associated with PMT - most likely the channel is clear
 		return;
 #else 
@@ -899,7 +899,7 @@ int tables_init()
 #ifndef DISABLE_DVBCA
 	dvbca_init();
 #endif
-#ifndef DISABLE_DVBCSA
+#ifndef DISABLE_DVBAPI
 	init_dvbapi();
 #endif
 	return 0;

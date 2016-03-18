@@ -1,4 +1,4 @@
-#ifndef DISABLE_DVBCSA
+#ifndef DISABLE_DVBAPI
 #ifndef DVBAPI_H
 #define DVBAPI_H
 

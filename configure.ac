@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.4])
-AC_INIT(minisatip, 0.5, catalinii@yahoo.com)
+AC_INIT(minisatip, 0.5, https://github.com/catalinii/minisatip)
 AC_CONFIG_SRCDIR([minisatip.h])
 # AC_CONFIG_HEADERS([config.h])
 
@@ -106,10 +106,25 @@ else
 FM="$FM\n$dvb_csa disabled"
 fi
 
-CFLAGS="-I. -I../vdr-mcli-plugin/mcast/client -I../vdr-mcli-plugin/mcast/common `xml2-config --cflags`"
-CPPFLAGS="-I. -I../vdr-mcli-plugin/mcast/client -I../vdr-mcli-plugin/mcast/common `xml2-config --cflags`"
-
 AC_MSG_NOTICE([ == Checking NETCVCLIENT == ])
+
+mcli_dir="../vdr-mcli-plugin"
+xml2_dir="/usr/include/libxml2"
+
+AC_ARG_WITH([mcli],
+  [AS_HELP_STRING([--with-mcli],
+  [specify vdr-mcli-plugin directory default=../vdr-mcli-plugin])],
+  [mcli_dir=$with_mcli])
+
+AC_ARG_WITH([xml2],
+  [AS_HELP_STRING([--with-xml2],
+  [specify libxml2 directory default=/usr/include/libxml2])],
+  [xml2_dir=$with_xml2])
+  
+CFLAGS="-I. -I$mcli_dir/mcast/client -I$mcli_dir/mcast/common -I$xml2_dir"
+CPPFLAGS="-I. -I$mcli_dir/mcast/client -I$mcli_dir/mcast/common -I$xml2_dir"
+
+
 AC_CHECK_HEADERS([netceiver.h],[NETCVCLIENT=1],[NETCVCLIENT=0])
 AC_ARG_ENABLE([netcv],
   [AS_HELP_STRING([--disable-netceiver],
@@ -121,6 +136,8 @@ if test "$NETCVCLIENT" = "1"; then
 FM="$FM\n$netcv enabled"
 else
 FM="$FM\n$netcv disabled"
+CFLAGS=
+CPPFLAGS=
 fi
 
 
