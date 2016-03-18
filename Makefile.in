@@ -1,0 +1,102 @@
+
+AUTOMAKE_OPTIONS = foreign
+
+CC=@CC@
+EMBEDDED=@EMBEDDED@
+DVBCSA=@DVBCSA@
+DVBAES=@DVBAES@
+DVBCA=@DVBCA@
+SATIPCLIENT=@SATIPCLIENT@
+NETCVCLIENT=@NETCVCLIENT@
+STATIC=@STATIC@
+LINUXDVB?=@LINUXDVB@
+
+CFLAGS?=-ggdb -fPIC @CFLAGS@
+LDFLAGS?=-lpthread -lrt @LDFLAGS@
+
+OBJS=minisatip.o socketworks.o stream.o adapter.o utils.o
+
+TABLES=0
+DVBAPI=0
+
+ifeq ($(DVBAES),1)
+LIBS+=ssl
+OBJS+=aes.o
+DVBAPI=1
+TABLES=1
+else
+CFLAGS+=-DDISABLE_DVBCSA
+endif
+
+ifeq ($(DVBCSA),1)
+LIBS+=dvbcsa
+OBJS+=csa.o
+DVBAPI=1
+TABLES=1
+else
+CFLAGS+=-DDISABLE_DVBCSA
+endif
+
+ifeq ($(DVBAPI),1)
+LIBS+=dvbcsa
+OBJS+=dvbapi.o
+DVBAPI=1
+TABLES=1
+else
+CFLAGS+=-DDISABLE_DVBCSA
+endif
+
+ifeq ($(DVBCA),1)
+LIBS+=dvben50221 dvbapi ucsi
+OBJS+=ca.o
+TABLES=1
+else
+CFLAGS+=-DDISABLE_DVBCA
+endif
+
+ifeq ($(TABLES),1)
+OBJS+=tables.o
+else
+CFLAGS+=-DDISABLE_TABLES
+endif
+
+ifeq ($(SATIPCLIENT),1)
+OBJS+=satipc.o
+else
+CFLAGS+=-DDISABLE_SATIPCLIENT
+endif
+
+ifeq ($(NETCVCLIENT),1)
+OBJS+=netceiver.o
+LDFLAGS+=-lmcli -lxml2
+else
+CFLAGS+=-DDISABLE_NETCVCLIENT
+endif
+
+ifeq ($(LINUXDVB),1)
+OBJS+=dvb.o
+else
+CFLAGS+=-DDISABLE_LINUXDVB
+OBJS+=dvb.o
+endif
+
+ifeq ($(EMBEDDED),1)
+CFLAGS+=-DNO_BACKTRACE
+endif
+
+ifeq ($(STATIC),1)
+LDFLAGS+=$(addsuffix .a,$(addprefix -l:lib,$(LIBS)))
+else
+LDFLAGS+=$(addprefix -l,$(LIBS))
+endif
+
+minisatip: $(OBJS)
+	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LDFLAGS)
+
+%.o : %.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+all: minisatip
+
+clean:
+	rm *.o minisatip >> /dev/null
