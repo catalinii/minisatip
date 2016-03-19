@@ -11,6 +11,7 @@ The application is designed to stream the requested data to multiple clients (ev
 It is tested on x86_64, x86, ARM and MIPS platforms and it requires DVBAPI 5. Supported protocols are RTSP (both tcp and udp), HTTP (port 8080) and SSDP (as specified in the SAT>IP documentation). On top of that, it supports dvbapi protocol implemented by oscam (requires dvbcsa library) to decrypt channels using an official subscription and support dvbca protocol (requires dvben50221 library) for dvb cards with CA hardware. In order to enable/disable features, please edit the Makefile. 
 
 The application shows also a status page by default at the address: http://IP:8080 
+The latest binaries for embedded platforms: https://minisatip.org/forum/viewtopic.php?f=5&t=371 
 
 Contact
 -------
@@ -25,14 +26,14 @@ Usage:
 -------
 
 minisatip version 0.5.39, compiled with s2api version: 050A
-[19/03 11:16:44.067 main]: Built with dvbcsa
-[19/03 11:16:44.067 main]: Built with dvbapi
-[19/03 11:16:44.067 main]: Built with AES (OpenSSL)
-[19/03 11:16:44.067 main]: Built with tables processing
-[19/03 11:16:44.067 main]: Built with satip client
-[19/03 11:16:44.067 main]: Built with linux dvb client
-[19/03 11:16:44.067 main]: Built with backtrace
-[19/03 11:16:44.067 main]: Built with netceiver
+[19/03 11:23:51.663 main]: Built with dvbcsa
+[19/03 11:23:51.663 main]: Built with dvbapi
+[19/03 11:23:51.663 main]: Built with AES (OpenSSL)
+[19/03 11:23:51.663 main]: Built with tables processing
+[19/03 11:23:51.663 main]: Built with satip client
+[19/03 11:23:51.663 main]: Built with linux dvb client
+[19/03 11:23:51.663 main]: Built with backtrace
+[19/03 11:23:51.663 main]: Built with netceiver
 
 	./minisatip [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 		[-[uj] A1:S1-F1[-PIN]] [-m mac][-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] 
@@ -159,9 +160,13 @@ To cross compile, use something like (static compilation):
 
 - ./configure --host=mips CC=/usr/src/./configure --host=mips --enable-static CC=/usr/src/openwrt/attitude_adjustment/staging_dir/toolchain-mips_r2_gcc-4.6-linaro_uClibc-0.9.33.2/bin/mips-openwrt-linux-gcc
 
+To compiles the application
+
 - make
 
-Compiles the application
+To add custom compilation flags you can use:
+
+make EXTRA_CFLAGS=....
 
 Examples:
 -------

@@ -1098,7 +1098,7 @@ void free_all_adapters()
 
 #ifndef DISABLE_NETCVCLIENT
 	fprintf(stderr, "\n\nREEL: recv_exit\n");
-	if (recv_exit())
+	if (opts.netcv_if && recv_exit())
 		LOGL(0, "Netceiver exit failed");
 #endif
 }

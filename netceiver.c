@@ -370,6 +370,10 @@ void find_netcv_adapter(adapter **a)
 
 	/* check if network interface is available */
 	struct ifaddrs *nif, *nif1;
+
+	if(!opts.netcv_if)
+		return;
+
 	getifaddrs(&nif);
 
 	nif1 = nif;

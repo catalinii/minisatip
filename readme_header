@@ -11,6 +11,7 @@ The application is designed to stream the requested data to multiple clients (ev
 It is tested on x86_64, x86, ARM and MIPS platforms and it requires DVBAPI 5. Supported protocols are RTSP (both tcp and udp), HTTP (port 8080) and SSDP (as specified in the SAT>IP documentation). On top of that, it supports dvbapi protocol implemented by oscam (requires dvbcsa library) to decrypt channels using an official subscription and support dvbca protocol (requires dvben50221 library) for dvb cards with CA hardware. In order to enable/disable features, please edit the Makefile. 
 
 The application shows also a status page by default at the address: http://IP:8080 
+The latest binaries for embedded platforms: https://minisatip.org/forum/viewtopic.php?f=5&t=371 
 
 Contact
 -------

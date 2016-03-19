@@ -9,9 +9,13 @@ To cross compile, use something like (static compilation):
 
 - ./configure --host=mips CC=/usr/src/./configure --host=mips --enable-static CC=/usr/src/openwrt/attitude_adjustment/staging_dir/toolchain-mips_r2_gcc-4.6-linaro_uClibc-0.9.33.2/bin/mips-openwrt-linux-gcc
 
+To compiles the application
+
 - make
 
-Compiles the application
+To add custom compilation flags you can use:
+
+make EXTRA_CFLAGS=....
 
 Examples:
 -------
