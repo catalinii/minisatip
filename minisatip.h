@@ -8,7 +8,7 @@
 #include "utils.h"
 
 
-#define VERSION_BUILD "41"
+#define VERSION_BUILD "42"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.5.,VERSION_BUILD,)
 
@@ -62,7 +62,7 @@ struct struct_opts
 	uint8_t netcv_count;
 	char *netcv_if;
 	char playlist[200];
-	char satip_servers[100];
+	char satip_servers[500];
 	char *document_root;
 	char *xml_path;
 	char no_threads;
