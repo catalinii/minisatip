@@ -556,7 +556,6 @@ void clean_psi(adapter *ad, uint8_t *b)
 	return;
 #endif
 
-
 	if (!(p->type & CLEAN_PMT))
 	{
 //		mark_pid_null(b);

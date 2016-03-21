@@ -747,7 +747,7 @@ int send_ecm(adapter *ad, void *arg)
 		return 0;
 	pid = (b[1] & 0x1F) * 256 + b[2];
 
-	if (pid != 1 && ((b[1] & 0x40) && ((b[5] & 0x80) != 0x80)))
+	if ((pid != 0) && (pid != 1) && ((b[1] & 0x40) && ((b[5] & 0x80) != 0x80)))
 		return 0;
 
 	p = find_pid(ad->id, pid);
@@ -907,7 +907,6 @@ int keys_del(int i)
 	enabledKeys = ek;
 	if (!ek && sock > 0)
 		TEST_WRITE(write(sock, buf, sizeof(buf)));
-	mutex_unlock(&k->mutex);
 	mutex_destroy(&k->mutex);
 	return 0;
 }

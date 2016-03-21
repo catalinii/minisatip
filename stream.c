@@ -313,7 +313,6 @@ int close_stream(int i)
 	 if(sid->buf)free(sid->buf);
 	 sid->pids = sid->apids = sid->dpids = sid->buf = NULL;
 	 */
-	mutex_unlock(&sid->mutex);
 	mutex_destroy(&sid->mutex);
 
 	if (sid->rtcp_sock > 0 || sid->rtcp > 0)
@@ -534,11 +533,11 @@ int my_writev(int sock, const struct iovec *iov, int iiov, streams *sid)
 		return -1;
 
 	LOGL(log_level, "start writev handle %d, iiov %d", sock, iiov);
-	if(opts.log == log_level) 
-		stime =  getTick();
+	if (opts.log == log_level)
+		stime = getTick();
 	rv = writev(sock, iov, iiov);
-	if(opts.log == log_level)
-		stime =  getTick() - stime;
+	if (opts.log == log_level)
+		stime = getTick() - stime;
 	if (rv < 0 && (errno == ECONNREFUSED || errno == EPIPE)) // close the stream int the next second
 	{
 		LOGL(0,
@@ -552,7 +551,8 @@ int my_writev(int sock, const struct iovec *iov, int iiov, streams *sid)
 		LOG("writev returned %d handle %d, iiov %d errno %d error %s", rv, sock,
 				iiov, errno, strerror(errno));
 	}
-	LOGL(log_level, "writev returned %d handle %d, iiov %d (took %jd ms)", rv, sock, iiov, stime);
+	LOGL(log_level, "writev returned %d handle %d, iiov %d (took %jd ms)", rv,
+			sock, iiov, stime);
 	return rv;
 }
 
@@ -654,7 +654,7 @@ int send_rtcp(int s_id, int64_t ctime)
 {
 	int len, rv = 0;
 	char dad[1000];
-	int c_time = (int)(ctime / 1000) & 0xFFFFFFFF;
+	int c_time = (int) (ctime / 1000) & 0xFFFFFFFF;
 	unsigned char *rtcp = rtcp_buf + 4;
 	streams *sid = get_sid(s_id);
 
@@ -883,7 +883,7 @@ int process_dmx(sockets * s)
 	if (ad->sid_cnt == 1 && ad->master_sid >= 0 && opts.log < 2) // we have just 1 stream, do not check the pids, send everything to the destination
 	{
 		sid = get_sid(ad->master_sid);
-		if (sid->enabled != 1)
+		if (!sid || sid->enabled != 1)
 		{
 			LOG ("Master SID %d not enabled ", ad->master_sid);
 			return -1;
@@ -1278,12 +1278,19 @@ char* get_stream_pids(int s_id, char *dest, int max_size)
 }
 
 _symbols stream_sym[] =
-{
-{ "st_enabled", VAR_AARRAY_INT8, st, 1, MAX_STREAMS, offsetof(streams, enabled) },
-{ "st_play", VAR_AARRAY_INT, st, 1, MAX_STREAMS, offsetof(streams, do_play) },
-{ "st_adapter", VAR_AARRAY_INT, st, 1, MAX_STREAMS, offsetof(streams, adapter) },
-{ "st_useragent", VAR_AARRAY_STRING, st, 1, MAX_STREAMS, offsetof(streams, useragent) },
-{ "st_rhost", VAR_FUNCTION_STRING, (void *) &get_stream_rhost, 0, 0, 0 },
-{ "st_rport", VAR_FUNCTION_INT, (void *) &get_stream_rport, 0, 0, 0 },
-{ "st_pids", VAR_FUNCTION_STRING, (void *) &get_stream_pids, 0, 0, 0 },
-{ NULL, 0, NULL, 0, 0 } };
+		{
+		{ "st_enabled", VAR_AARRAY_INT8, st, 1, MAX_STREAMS, offsetof(streams,
+				enabled) },
+		{ "st_play", VAR_AARRAY_INT, st, 1, MAX_STREAMS, offsetof(streams,
+				do_play) },
+		{ "st_adapter", VAR_AARRAY_INT, st, 1, MAX_STREAMS, offsetof(streams,
+				adapter) },
+		{ "st_useragent", VAR_AARRAY_STRING, st, 1, MAX_STREAMS, offsetof(
+				streams, useragent) },
+				{ "st_rhost", VAR_FUNCTION_STRING, (void *) &get_stream_rhost,
+						0, 0, 0 },
+				{ "st_rport", VAR_FUNCTION_INT, (void *) &get_stream_rport, 0,
+						0, 0 },
+				{ "st_pids", VAR_FUNCTION_STRING, (void *) &get_stream_pids, 0,
+						0, 0 },
+				{ NULL, 0, NULL, 0, 0 } };

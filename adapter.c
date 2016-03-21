@@ -329,7 +329,6 @@ void close_adapter(int na)
 	ad->old_diseqc = -1;
 	ad->old_hiband = -1;
 	ad->old_pol = -1;
-	mutex_unlock(&ad->mutex);
 	mutex_destroy(&ad->mutex);
 	//      if(a[na]->buf)free1(a[na]->buf);a[na]->buf=NULL;
 	LOG("done closing adapter %d", na);
@@ -636,7 +635,7 @@ int update_pids(int aid)
 		reset_pids_type(ad->id, 0);
 	}
 #endif
-	
+
 	return 0;
 }
 

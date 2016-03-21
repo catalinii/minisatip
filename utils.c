@@ -905,7 +905,8 @@ int mutex_init(SMutex* mutex)
 		LOG("mutex init %p failed with error %d %s", mutex, rv, strerror(rv));
 		return rv;
 	}
-
+	
+	mutex->create_time = getTick();
 	mutex->enabled = 1;
 	mutex->state = 0;
 	LOG("Mutex init %p", mutex);
@@ -946,6 +947,8 @@ int mutex_lock1(char *FILE, int line, SMutex* mutex)
 	mutex->line = line;
 	mutex->state = 1;
 	mutex->tid = tid;
+	mutex->lock_time = getTick();
+	
 	mutexes[imtx++] = mutex;
 	if (start_lock > 0)
 		LOGL(4, "%s:%d Locked %p after %ld ms", FILE, line, mutex,
@@ -968,6 +971,7 @@ int mutex_unlock1(char *FILE, int line, SMutex* mutex)
 	}
 	else
 		LOGL(3, "%s:%d Unlock disabled mutex %p", FILE, line, mutex);
+
 	if (rv != 0 && rv != 1 && rv != -1)
 	{
 		LOGL(3, "mutex_unlock failed at %s:%d: %d %s", FILE, line, rv,
@@ -1011,7 +1015,12 @@ int mutex_destroy(SMutex* mutex)
 		imtx--;
 	}
 
-	pthread_mutex_unlock(&mutex->mtx);
+	if((rv = pthread_mutex_unlock(&mutex->mtx)))
+			LOG("%s: pthread_mutex_unlock 1 failed for %p with error %d %s", mutex, rv, strerror(rv));
+
+	if((rv = pthread_mutex_unlock(&mutex->mtx)))
+			LOG("%s: pthread_mutex_unlock 2 failed for %p with error %d %s", mutex, rv, strerror(rv));
+	
 	LOGL(4, "Destroying mutex %p", mutex);
 	if ((rv = pthread_mutex_destroy(&mutex->mtx)))
 	{

@@ -41,7 +41,6 @@
 #define VAR_FUNCTION_INT (VAR_FUNCTION + VAR_INT)
 #define VAR_FUNCTION_STRING (VAR_FUNCTION + VAR_STRING)
 
-
 typedef int (*get_data_int)(int p);
 typedef char * (*get_data_string)(int p, char *dest, int max_len);
 
@@ -62,9 +61,9 @@ typedef struct struct_mutex
 	int state;
 	int line;
 	pthread_t tid;
+	int64_t lock_time, create_time;
 	char *file;
 } SMutex;
-
 
 unsigned char *getItem(int64_t key);
 int getItemLen(int64_t key);
@@ -94,7 +93,7 @@ int closefile(char *mem, int len);
 
 int mutex_init(SMutex *mutex);
 int mutex_lock1(char *FILE, int line, SMutex *mutex);
-int mutex_unlock1(char *FILE, int line,  SMutex *mutex);
+int mutex_unlock1(char *FILE, int line, SMutex *mutex);
 int mutex_destroy(SMutex *mutex);
 void clean_mutexes();
 pthread_t start_new_thread(char *name);
@@ -102,7 +101,7 @@ pthread_t get_tid();
 void set_thread_prio(pthread_t tid, int prio);
 
 int add_new_lock(void **arr, int count, int size, SMutex *mutex);
-int64_t getTick ();
+int64_t getTick();
 int64_t getTickUs();
 void join_thread();
 void add_join_thread(pthread_t t);
