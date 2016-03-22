@@ -891,14 +891,15 @@ int closefile(char *mem, int len)
 int mutex_init(SMutex* mutex)
 {
 	int rv;
+	pthread_mutexattr_t attr;
+
 	if (opts.no_threads)
 		return 0;
-	pthread_mutexattr_t attr;
-	pthread_mutexattr_init(&attr);
-	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
-
 	if (mutex->enabled)
 		return 1;
+
+	pthread_mutexattr_init(&attr);
+	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
 
 	if ((rv = pthread_mutex_init(&mutex->mtx, &attr)))
 	{
