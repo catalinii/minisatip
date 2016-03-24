@@ -389,20 +389,20 @@ void print_trace(void)
 	size_t size;
 	char **strings;
 	size_t i;
-#if !defined(__mips__) && !defined(NO_BACKTRACE)
+#if !defined(NO_BACKTRACE)
 
 	size = backtrace(array, 10);
 
-	LOGL(0, "Obtained %zd stack frames.\n", size);
+	printf( "Obtained %zd stack frames.\n", size);
 
 	for (i = 0; i < size; i++)
 	{
-		LOGL(0, "%p : ", array[i]);
+		printf( "%p : ", array[i]);
 		if (addr2line(pn, array[i]))
-			LOGL(0, "\n");
+			printf( "\n");
 	}
 #else
-	LOGL(0, " No backtrace defined\n");
+	printf( " No backtrace defined\n");
 #endif
 }
 
@@ -421,7 +421,7 @@ void posix_signal_handler(int sig, siginfo_t * siginfo, ucontext_t * ctx)
 	sp = ctx->uc_mcontext.gregs[29];
 	ip = ctx->uc_mcontext.pc;
 #endif
-	LOGL(0, "RECEIVED SIGNAL %d - SP=%lX IP=%lX\n", sig,
+	printf( "RECEIVED SIGNAL %d - SP=%lX IP=%lX\n", sig,
 			(long unsigned int ) sp, (long unsigned int ) ip);
 
 	print_trace();
@@ -1017,10 +1017,10 @@ int mutex_destroy(SMutex* mutex)
 	}
 
 	if((rv = pthread_mutex_unlock(&mutex->mtx)))
-			LOG("%s: pthread_mutex_unlock 1 failed for %p with error %d %s", mutex, rv, strerror(rv));
+			LOG("%s: pthread_mutex_unlock 1 failed for %p with error %d %s", __FUNCTION__, mutex, rv, strerror(rv));
 
 	if((rv = pthread_mutex_unlock(&mutex->mtx)))
-			LOG("%s: pthread_mutex_unlock 2 failed for %p with error %d %s", mutex, rv, strerror(rv));
+			LOG("%s: pthread_mutex_unlock 2 failed for %p with error %d %s", __FUNCTION__, mutex, rv, strerror(rv));
 	
 	LOGL(4, "Destroying mutex %p", mutex);
 	if ((rv = pthread_mutex_destroy(&mutex->mtx)))

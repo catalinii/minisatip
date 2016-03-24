@@ -336,12 +336,13 @@ void close_adapter(int na)
 
 int getAdaptersCount()
 {
-	int i, j, k, sys;
+	int i, j, k;
+	char sys;
 	adapter *ad;
 	char fes[20][MAX_ADAPTERS];
 	char ifes[20];
 	char order[] =
-	{ SYS_DVBS2, SYS_DVBT, SYS_DVBC_ANNEX_A, SYS_DVBT2, SYS_DVBC2, -1 };
+	{ SYS_DVBS2, SYS_DVBT, SYS_DVBC_ANNEX_A, SYS_DVBT2, SYS_DVBC2 };
 
 	memset(&ifes, 0, sizeof(ifes));
 	memset(&fe_map, -1, sizeof(fe_map));
@@ -393,7 +394,7 @@ int getAdaptersCount()
 
 		}
 	k = 0;
-	for (i = 0; order[i] > 0; i++)
+	for (i = 0; i < sizeof(order); i++)
 	{
 		sys = order[i];
 		for (j = 0; j < ifes[sys]; j++)
