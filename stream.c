@@ -306,7 +306,6 @@ int close_stream(int i)
 		close(sid->rsock);
 	sid->rsock = -1;
 
-//	sockets_del_for_sid (i);
 	/*  if(sid->pids)free(sid->pids);
 	 if(sid->apids)free(sid->apids);
 	 if(sid->dpids)free(sid->dpids);
@@ -330,6 +329,8 @@ int close_stream(int i)
 
 	if (ad >= 0)
 		close_adapter_for_stream(i, ad);
+
+	sockets_del_for_sid (i);
 
 	mutex_unlock(&st_mutex);
 	LOG("closed stream %d", i);

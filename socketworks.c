@@ -850,15 +850,15 @@ get_current_timestamp_log(void)
 	return date_str;
 }
 
-int sockets_del_for_sid(int ad)
+int sockets_del_for_sid(int sid)
 {
 	int i;
 	sockets *ss;
-	if (ad < 0)
+	if (sid < 0)
 		return 0;
 	for (i = 0; i < MAX_SOCKS; i++)
-		if ((ss = get_sockets(i)) && ss->sid >= 0 && ss->type != TYPE_DVR
-				&& ss->sid == ad)
+		if ((ss = get_sockets(i)) && ss->sid >= 0 && ss->type == TYPE_RTSP
+				&& ss->sid == sid)
 		{
 			ss->timeout_ms = 1;	//trigger close of the socket after this operation ends, otherwise we might close an socket on which we run action
 			ss->sid = -1;// make sure the stream is not closed in the future to prevent closing the stream created by another socket
