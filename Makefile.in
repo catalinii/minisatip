@@ -20,7 +20,7 @@ TABLES=0
 DVBAPI=0
 
 ifeq ($(DVBAES),1)
-LIBS+=ssl
+LIBS+=crypto
 OBJS+=aes.o
 DVBAPI=1
 TABLES=1

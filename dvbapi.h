@@ -4,7 +4,6 @@
 
 #include "adapter.h"
 #include "stream.h"
-#include <dvbcsa/dvbcsa.h>
 
 
 #define DVBAPI_PROTOCOL_VERSION         2
@@ -23,6 +22,8 @@
 #define DMX_STOP_X         0x2a6f00
 #define DMX_SET_FILTER_X   0x2b6f3c
 #define DVBAPI_ECM_INFO    0xFFFF0003
+#define CA_SET_DESCR_MODE  0x400c6f88
+
 
 #define AOT_CA_PMT 0x9F803282
 
@@ -36,6 +37,39 @@
 
 #define MAX_KEYS 255
 #define MAX_PMT_DATA 1880
+
+#define	CA_ALGO_DVBCSA 0
+#define	CA_ALGO_DES 1
+#define CA_ALGO_AES128 2
+
+#define CA_MODE_ECB 0
+#define	CA_MODE_CBC 1
+
+typedef struct struct_batch  // same as struct dvbcsa_bs_batch_s
+{
+  unsigned char         *data;  /* pointer to payload */
+  unsigned int          len;    /* payload bytes lenght */	
+} dvbapi_batch;
+
+
+typedef void *(*Create_cwkey)(void );
+typedef void (*Delete_cwkey)(void *);
+typedef int (*Batch_size)(void);
+typedef void (*Set_CW)(unsigned char *cw,void *key);
+typedef void (*Decrypt_Stream)(void *key, dvbapi_batch *batch, int batch_len);
+
+
+
+typedef struct struct_dvbapi_op
+{
+	int algo;
+	int mode;
+	Create_cwkey create_cwkey;
+	Delete_cwkey delete_cwkey;
+	Batch_size batch_size;
+	Set_CW set_cw;
+	Decrypt_Stream decrypt_stream;
+} dvbapi_op;
 
 
 typedef struct struct_key
@@ -62,11 +96,12 @@ typedef struct struct_key
 	int program_id;  // pmt sid
 	unsigned char *pi, *ecm_info, *cardsystem, *reader, *from, *protocol;
 	int pi_len;
-	struct dvbcsa_bs_batch_s batch[130];
+	dvbapi_batch batch[130];
 	int parity;
 	int blen;
 	int64_t last_parity_change;	
 	struct struct_key *next_key;
+	dvbapi_op *op;
 } SKey;
 
 #define MAX_KEY_TIME 25000 // 25s
@@ -87,5 +122,7 @@ void dvbapi_delete_keys_for_adapter(int aid);
 void register_dvbapi();
 void unregister_dvbapi();
 void send_client_info(sockets *s);
+int set_algo(SKey *k, int algo, int mode);
+
 #endif
 #endif
