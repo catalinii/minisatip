@@ -124,5 +124,7 @@ void unregister_dvbapi();
 void send_client_info(sockets *s);
 int set_algo(SKey *k, int algo, int mode);
 
+void free_all_keys();
+
 #endif
 #endif

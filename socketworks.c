@@ -462,15 +462,16 @@ int sockets_del(int sock)
 	if (sock < 0 || sock > MAX_SOCKS || !s[sock] || !s[sock]->enabled)
 		return 0;
 
+	mutex_lock(&s_mutex);
 	ss = s[sock];
 	mutex_lock(&ss->mutex);
 	if (!ss->enabled)
 	{
 		mutex_unlock(&ss->mutex);
+		mutex_unlock(&s_mutex);
 		return 0;
 
 	}
-	mutex_lock(&s_mutex);
 	ss->enabled = 0;
 	so = ss->sock;
 	ss->sock = -1;			 // avoid infinite loop
@@ -492,7 +493,7 @@ int sockets_del(int sock)
 	ss->lock = NULL;
 	LOG("sockets_del: %d Last open socket is at index %d current_handle %d",
 			sock, i, so);
-	mutex_destroy(&ss->mutex);
+	mutex_unlock(&ss->mutex);
 	mutex_unlock(&s_mutex);
 	return 0;
 }
@@ -878,6 +879,7 @@ void set_socket_buffer(int sid, unsigned char *buf, int len)
 
 void free_all_streams();
 void free_all_adapters();
+void free_all_keys();
 
 void free_all()
 {
@@ -887,12 +889,17 @@ void free_all()
 	{
 		if (s[i] && s[i]->enabled)
 			sockets_del(i);
-		if (s[i])
+		if (s[i]) {
+			mutex_destroy(&s[i]->mutex);
 			free(s[i]);
+		}
 		s[i] = NULL;
 	}
 	free_all_streams();
 	free_all_adapters();
+#ifndef DISABLE_DVBAPI
+	free_all_keys();
+#endif
 }
 
 void set_socket_send_buffer(int sock, int len)
