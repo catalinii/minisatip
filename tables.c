@@ -815,7 +815,7 @@ int process_stream(adapter *ad, int rlen)
 		if (pid == 0)
 		{
 			process_pat(ad, b);
-			continue;
+//			continue;
 		}
 
 		if (pids && pids[pid] < 0)

@@ -167,7 +167,7 @@ int dvbca_process_pmt(adapter *ad, void *arg)
 	}
 
 	if ((size = en50221_ca_format_pmt((struct mpeg_pmt_section *) b, capmt,
-			sizeof(capmt), CA_LIST_MANAGEMENT_ONLY, 0,
+			sizeof(capmt), 0, CA_LIST_MANAGEMENT_ONLY,
 			CA_PMT_CMD_ID_OK_DESCRAMBLING)) < 0)
 		LOG("Failed to format CA PMT object");
 	if ((rc = en50221_app_ca_pmt(d->ca_resource, d->ca_session_number, capmt,

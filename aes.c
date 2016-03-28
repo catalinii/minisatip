@@ -65,32 +65,27 @@ int dvbaes_batch_size() // make sure the number is divisible by 7
 	return 64; // process 64 packets at a time
 }
 
-void dvbaes_set_cw(unsigned char *cw,void *key)
+void dvbaes_set_cw(unsigned char *cw, void *key)
 {
-	AES_set_decrypt_key(cw, 128, (AES_KEY *)key);
+	AES_set_decrypt_key(cw, 128, (AES_KEY *) key);
 }
 
 void dvbaes_decrypt_stream(void *key, dvbapi_batch *batch, int max_len)
 {
 	int i, j, len;
-	for(i=0;batch[i].data && i<max_len;i++)
+	for (i = 0; batch[i].data && i < max_len; i++)
 	{
 		len = (batch[i].len / 16) * 16;
-		for(j=0;j<len;j++)
-			AES_ecb_encrypt(batch[i].data + j, batch[i].data + j, (AES_KEY *)key, AES_DECRYPT);
+		for (j = 0; j < len; j++)
+			AES_ecb_encrypt(batch[i].data + j, batch[i].data + j,
+					(AES_KEY *) key, AES_DECRYPT);
 
 	}
 }
 
-
-dvbapi_op aes_op = 
-{
-	.algo = CA_ALGO_AES128,
-	.mode = CA_MODE_ECB,
-	.create_cwkey = dvbaes_create_key,
-	.delete_cwkey = dvbaes_delete_key,
-	.batch_size = dvbaes_batch_size,
-	.set_cw = dvbaes_set_cw,
-	.decrypt_stream = dvbaes_decrypt_stream
-};
+dvbapi_op aes_op =
+{ .algo = CA_ALGO_AES128, .mode = CA_MODE_ECB,
+		.create_cwkey = dvbaes_create_key, .delete_cwkey = dvbaes_delete_key,
+		.batch_size = dvbaes_batch_size, .set_cw = dvbaes_set_cw,
+		.decrypt_stream = dvbaes_decrypt_stream };
 

@@ -67,25 +67,19 @@ int dvbcsa_batch_size() // make sure the number is divisible by 7
 	return batchSize;
 }
 
-void dvbcsa_set_cw(unsigned char *cw,void *key)
+void dvbcsa_set_cw(unsigned char *cw, void *key)
 {
-	dvbcsa_bs_key_set(cw,key);
+	dvbcsa_bs_key_set(cw, key);
 }
 
 void dvbcsa_decrypt_stream(void *key, dvbapi_batch *batch, int max_len)
 {
-	dvbcsa_bs_decrypt((const struct dvbcsa_bs_key_s *) key, (const struct dvbcsa_bs_batch_s *) batch, max_len);
+	dvbcsa_bs_decrypt((const struct dvbcsa_bs_key_s *) key,
+			(const struct dvbcsa_bs_batch_s *) batch, max_len);
 }
 
-dvbapi_op csa_op = 
-{
-	.algo = CA_ALGO_DVBCSA,
-	.mode = 0,
-	.create_cwkey = dvbcsa_create_key,
-	.delete_cwkey = dvbcsa_delete_key,
-	.batch_size = dvbcsa_batch_size,
-	.set_cw = dvbcsa_set_cw,
-	.decrypt_stream = dvbcsa_decrypt_stream
-};
-
+dvbapi_op csa_op =
+{ .algo = CA_ALGO_DVBCSA, .mode = 0, .create_cwkey = dvbcsa_create_key,
+		.delete_cwkey = dvbcsa_delete_key, .batch_size = dvbcsa_batch_size,
+		.set_cw = dvbcsa_set_cw, .decrypt_stream = dvbcsa_decrypt_stream };
 

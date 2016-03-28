@@ -59,9 +59,6 @@ SKey *keys[MAX_KEYS];
 SMutex keys_mutex;
 unsigned char read_buffer[1500];
 
-
-
-
 #ifndef DISABLE_DVBCSA
 dvbapi_op csa_op;
 #endif
@@ -69,16 +66,15 @@ dvbapi_op csa_op;
 dvbapi_op aes_op;
 #endif
 
-
-dvbapi_op *ops[] ={
+dvbapi_op *ops[] =
+{
 #ifndef DISABLE_DVBCSA
-	&csa_op,
+		&csa_op,
 #endif
 #ifndef DISABLE_DVBAES
-	&aes_op,
+		&aes_op,
 #endif
-	NULL
-	};
+		NULL };
 
 #define TEST_WRITE(a) {\
 	mutex_lock(&keys_mutex);\
@@ -365,7 +361,7 @@ int dvbapi_reply(sockets * s)
 					k ? k->hops : 0);
 			break;
 		}
-		
+
 		case CA_SET_DESCR_MODE:
 		{
 			int k_id, algo, mode;
@@ -374,7 +370,7 @@ int dvbapi_reply(sockets * s)
 			k_id = b[4];
 			dvbapi_copy32r(algo, b, 5);
 			dvbapi_copy32r(mode, b, 9);
-			LOG("Key %d, Algo set to %d, Mode set to %d" , k_id, algo, mode);
+			LOG("Key %d, Algo set to %d, Mode set to %d", k_id, algo, mode);
 			k = get_key(k_id);
 			set_algo(k, algo, mode);
 			break;
@@ -578,7 +574,6 @@ int decrypt_stream(adapter *ad, void *arg)
 	if (!dvbapi_is_enabled)
 		return 0;
 
-
 	pids = (int16_t *) getItem(pid_key);
 	update_pid_key(ad);
 	pid_to_key = (SKey **) getItem(pk_key);
@@ -605,7 +600,7 @@ int decrypt_stream(adapter *ad, void *arg)
 			cp = ((b[3] & 0x40) > 0);
 			if (k->parity == -1)
 				k->parity = cp;
-			
+
 			if (!batchSize)
 				batchSize = k->op->batch_size();
 
@@ -748,11 +743,13 @@ int poller_sock;
 void init_dvbapi()
 {
 	int sec = 1;
-	if(!ops[0]) 
+	if (!ops[0])
 	{
-		LOG("%s: no algoritm registered, no point in connecting to the server (try installing libdvbcsa or openssl)", __FUNCTION__);
+		LOG(
+				"%s: no algoritm registered, no point in connecting to the server (try installing libdvbcsa or openssl)",
+				__FUNCTION__);
 		return;
-	}	
+	}
 	poller_sock = sockets_add(SOCK_TIMEOUT, NULL, -1, TYPE_UDP,
 	NULL, NULL, (socket_action) connect_dvbapi);
 	sockets_timeout(poller_sock, sec * 1000); // try to connect every 1s
@@ -835,13 +832,12 @@ int send_ecm(adapter *ad, void *arg)
 	TEST_WRITE(write(sock, buf, len + 6));
 }
 
-
 void create_cw_keys(SKey *k)
 {
 	if (!k->key[0])
 		k->key[0] = k->op->create_cwkey();
 	if (!k->key[1])
-		k->key[1] = k->op->create_cwkey();	
+		k->key[1] = k->op->create_cwkey();
 }
 
 void delete_cw_keys(SKey *k)
@@ -849,7 +845,7 @@ void delete_cw_keys(SKey *k)
 	if (!k->key[0])
 		k->op->delete_cwkey(k->key[0]);
 	if (!k->key[1])
-		k->op->delete_cwkey(k->key[1]);	
+		k->op->delete_cwkey(k->key[1]);
 	k->key[0] = k->key[1] = NULL;
 }
 
@@ -857,16 +853,17 @@ int set_algo(SKey *k, int algo, int mode)
 {
 	int i;
 	dvbapi_op *op = NULL;
-	if(k->op->algo == algo && k->op->mode == mode)
+	if (k->op->algo == algo && k->op->mode == mode)
 		return 1;
-	
-	for(i=0;ops[i];i++)
-		if(ops[i]->algo == algo && ops[i]->mode == mode)
+
+	for (i = 0; ops[i]; i++)
+		if (ops[i]->algo == algo && ops[i]->mode == mode)
 			op = ops[i];
-	
-	if(!op)
+
+	if (!op)
 	{
-		LOG("%s: key %d: no matching algorithm found for algo %d and mode %d", __FUNCTION__, k->id, algo, mode);
+		LOG("%s: key %d: no matching algorithm found for algo %d and mode %d",
+				__FUNCTION__, k->id, algo, mode);
 		return 2;
 	}
 	mutex_lock(&k->mutex);
@@ -879,12 +876,11 @@ int set_algo(SKey *k, int algo, int mode)
 	return 0;
 }
 
-
 int keys_add(int adapter, int sid, int pmt_pid)
 {
 	int i;
 	SKey *k;
-	
+
 	i = add_new_lock((void **) keys, MAX_KEYS, sizeof(SKey), &keys_mutex);
 
 	if (i == -1)
@@ -894,8 +890,7 @@ int keys_add(int adapter, int sid, int pmt_pid)
 	if (!keys[i])
 		keys[i] = malloc(sizeof(SKey));
 	k = keys[i];
-	
-	
+
 	k->op = ops[0];
 	create_cw_keys(k);
 
@@ -955,9 +950,9 @@ int keys_del(int i)
 			sock, k->pmt_pid);
 	if ((buf[7] != 255) && (sock > 0))
 		TEST_WRITE(write(sock, buf, sizeof(buf)));
-	
+
 	delete_cw_keys(k);
-	
+
 	k->sid = 0;
 	k->pmt_pid = 0;
 	k->adapter = -1;

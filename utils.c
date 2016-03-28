@@ -103,7 +103,10 @@ STmpinfo *getFreeItemPos(int64_t key)
 		{
 			sinfo[i].id = i;
 			sinfo[i].timeout = 0;
-			LOGL(2, "Requested new Item for key %jX, returning %d (enabled %d last_updated %jd timeout %d tick %jd)", key, i, sinfo[i].enabled, sinfo[i].last_updated, sinfo[i].timeout, tick);
+			LOGL(2,
+					"Requested new Item for key %jX, returning %d (enabled %d last_updated %jd timeout %d tick %jd)",
+					key, i, sinfo[i].enabled, sinfo[i].last_updated,
+					sinfo[i].timeout, tick);
 			return sinfo + i;
 		}
 	return NULL;
@@ -393,13 +396,13 @@ void print_trace(void)
 
 	size = backtrace(array, 10);
 
-	printf( "Obtained %zd stack frames.\n", size);
+	printf("Obtained %zd stack frames.\n", size);
 
 	for (i = 0; i < size; i++)
 	{
-		printf( "%p : ", array[i]);
+		printf("%p : ", array[i]);
 		if (addr2line(pn, array[i]))
-			printf( "\n");
+			printf("\n");
 	}
 #else
 	printf( " No backtrace defined\n");
@@ -421,8 +424,8 @@ void posix_signal_handler(int sig, siginfo_t * siginfo, ucontext_t * ctx)
 	sp = ctx->uc_mcontext.gregs[29];
 	ip = ctx->uc_mcontext.pc;
 #endif
-	printf( "RECEIVED SIGNAL %d - SP=%lX IP=%lX\n", sig,
-			(long unsigned int ) sp, (long unsigned int ) ip);
+	printf("RECEIVED SIGNAL %d - SP=%lX IP=%lX\n", sig, (long unsigned int) sp,
+			(long unsigned int) ip);
 
 	print_trace();
 	exit(1);
@@ -757,7 +760,7 @@ void * get_var_address(char *var, float *multiplier, int * type, void *storage,
 int var_eval(char *orig, int len, char *dest, int max_len)
 {
 	char var[VAR_LENGTH + 1];
-	char storage[64*5]; // variable max len
+	char storage[64 * 5]; // variable max len
 	float multiplier;
 	int type = 0;
 	void *p;
@@ -906,7 +909,7 @@ int mutex_init(SMutex* mutex)
 		LOG("mutex init %p failed with error %d %s", mutex, rv, strerror(rv));
 		return rv;
 	}
-	
+
 	mutex->create_time = getTick();
 	mutex->enabled = 1;
 	mutex->state = 0;
@@ -949,7 +952,7 @@ int mutex_lock1(char *FILE, int line, SMutex* mutex)
 	mutex->state = 1;
 	mutex->tid = tid;
 	mutex->lock_time = getTick();
-	
+
 	mutexes[imtx++] = mutex;
 	if (start_lock > 0)
 		LOGL(4, "%s:%d Locked %p after %ld ms", FILE, line, mutex,
@@ -1016,12 +1019,14 @@ int mutex_destroy(SMutex* mutex)
 		imtx--;
 	}
 
-	if((rv = pthread_mutex_unlock(&mutex->mtx)))
-			LOG("%s: pthread_mutex_unlock 1 failed for %p with error %d %s", __FUNCTION__, mutex, rv, strerror(rv));
+	if ((rv = pthread_mutex_unlock(&mutex->mtx)) != 1)
+		LOG("%s: pthread_mutex_unlock 1 failed for %p with error %d %s",
+				__FUNCTION__, mutex, rv, strerror(rv));
 
-	if((rv = pthread_mutex_unlock(&mutex->mtx)))
-			LOG("%s: pthread_mutex_unlock 2 failed for %p with error %d %s", __FUNCTION__, mutex, rv, strerror(rv));
-	
+	if ((rv = pthread_mutex_unlock(&mutex->mtx)) != 1)
+		LOG("%s: pthread_mutex_unlock 2 failed for %p with error %d %s",
+				__FUNCTION__, mutex, rv, strerror(rv));
+
 	LOGL(4, "Destroying mutex %p", mutex);
 	if ((rv = pthread_mutex_destroy(&mutex->mtx)))
 	{
