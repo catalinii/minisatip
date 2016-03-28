@@ -419,7 +419,9 @@ int dvb_tune(int aid, transponder * tp)
 		ADD_PROP(DTV_INNER_FEC, tp->fec)
 		ADD_PROP(DTV_PILOT, tp->plts)
 		ADD_PROP(DTV_ROLLOFF, tp->ro)
+#if DVBAPIVERSION >= 0x0502
 		ADD_PROP(DTV_STREAM_ID, tp->plp)
+#endif
 
 		LOG(
 				"tuning to %d(%d) pol: %s (%d) sr:%d fec:%s delsys:%s mod:%s rolloff:%s pilot:%s, ts clear=%d, ts pol=%d",
@@ -441,7 +443,9 @@ int dvb_tune(int aid, transponder * tp)
 		ADD_PROP(DTV_GUARD_INTERVAL, tp->gi)
 		ADD_PROP(DTV_TRANSMISSION_MODE, tp->tmode)
 		ADD_PROP(DTV_HIERARCHY, HIERARCHY_AUTO)
+#if DVBAPIVERSION >= 0x0502
 		ADD_PROP(DTV_STREAM_ID, tp->plp & 0xFF)
+#endif
 
 		LOG(
 				"tuning to %d delsys: %s bw:%d inversion:%s mod:%s fec:%s guard:%s transmission: %s, ts clear = %d",
@@ -458,7 +462,9 @@ int dvb_tune(int aid, transponder * tp)
 
 		freq = freq * 1000;
 		ADD_PROP(DTV_SYMBOL_RATE, tp->sr)
+#if DVBAPIVERSION >= 0x0502
 		ADD_PROP(DTV_STREAM_ID, ((tp->ds & 0xFF) << 8) | (tp->plp & 0xFF))
+#endif
 		// valid for DD DVB-C2 devices
 
 		LOG("tuning to %d sr:%d specinv:%s delsys:%s mod:%s ts clear =%d", freq,
@@ -489,10 +495,12 @@ int dvb_tune(int aid, transponder * tp)
 			LOG_AND_RETURN(-404, "Frequency %d is not within range ", tp->freq)
 
 		freq = freq * 1000;
-		ADD_PROP(DTV_ISDBT_PARTIAL_RECEPTION, 0)
 		ADD_PROP(DTV_BANDWIDTH_HZ, tp->bw)
-//	    ADD_PROP(DTV_ISDBT_LAYERA_SEGMENT_COUNT,   1);  
-//	    ADD_PROP(DTV_ISDBT_LAYER_ENABLED,   1); 
+#if DVBAPIVERSION >= 0x0501
+		ADD_PROP(DTV_ISDBT_PARTIAL_RECEPTION, 0)
+//		ADD_PROP(DTV_ISDBT_LAYERA_SEGMENT_COUNT,   1);
+//		ADD_PROP(DTV_ISDBT_LAYER_ENABLED,   1);
+#endif
 
 		LOG("tuning to %d delsys: %s bw:%d inversion:%s , ts clear = %d", freq,
 				fe_delsys[tp->sys], tp->bw, fe_specinv[tp->inversion], bclear)
@@ -624,8 +632,10 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys)
 		switch (fe_info.type)
 		{
 		case FE_OFDM:
+#if DVBAPIVERSION >= 0x0501
 			if (fe_info.caps & FE_CAN_2G_MODULATION)
 				sys[idx++] = SYS_DVBT2;
+#endif
 
 			sys[idx++] = SYS_DVBT;
 
@@ -634,8 +644,10 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys)
 			sys[idx++] = SYS_DVBC_ANNEX_AC;
 			break;
 		case FE_QPSK:
+#if DVBAPIVERSION >= 0x0501
 			if (fe_info.caps & FE_CAN_2G_MODULATION)
 				sys[idx++] = SYS_DVBS2;
+#endif
 
 			sys[idx++] = SYS_DVBS;
 

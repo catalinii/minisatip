@@ -1113,7 +1113,7 @@ _symbols adapters_sym[] =
 						sizeof(a[0]) },
 				{ "ad_ber", VAR_ARRAY_UINT16, &a[0].ber, 1, MAX_ADAPTERS,
 						sizeof(a[0]) },
-				{ "ad_pol", VAR_ARRAY_INT8, &a[0].tp.pol, 1, MAX_ADAPTERS,
+				{ "ad_pol", VAR_ARRAY_INT, &a[0].tp.pol, 1, MAX_ADAPTERS,
 						sizeof(a[0]) },
 				{ "ad_sr", VAR_ARRAY_INT, &a[0].tp.sr, 1. / 1000, MAX_ADAPTERS,
 						sizeof(a[0]) },

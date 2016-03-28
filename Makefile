@@ -1,11 +1,12 @@
 
 CC?=gcc
+EMBEDDED?=no
 DVBCSA?=yes
 DVBCA?=no
 SATIPCLIENT?=yes
 
-CFLAGS=$(NODVBCSA) -ggdb -fPIC
-LDFLAGS=-lpthread -lrt
+CFLAGS?=$(NODVBCSA) -ggdb -fPIC
+LDFLAGS?=-lpthread -lrt
 
 OBJS=minisatip.o socketworks.o stream.o dvb.o adapter.o utils.o
 
@@ -35,6 +36,10 @@ ifeq ($(SATIPCLIENT),yes)
 OBJS+=satipc.o
 else
 CFLAGS+=-DDISABLE_SATIPCLIENT
+endif
+
+ifeq ($(EMBEDDED),yes)
+CFLAGS+=-DNO_BACKTRACE
 endif
 
 

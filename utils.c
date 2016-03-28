@@ -50,7 +50,7 @@
 #include <sys/mman.h>
 #include "utils.h"
 #include "minisatip.h"
-#ifndef __mips__
+#if !defined(__mips__) && !defined(NO_BACKTRACE)
 #include <execinfo.h>
 #endif
 
@@ -410,7 +410,7 @@ void print_trace(void)
 	size_t size;
 	char **strings;
 	size_t i;
-#ifndef __mips__
+#if !defined(__mips__) && !defined(NO_BACKTRACE)
 
 	size = backtrace(array, 10);
 
@@ -624,7 +624,11 @@ int endswith(char *src, char *with)
 extern _symbols adapters_sym[];
 extern _symbols minisatip_sym[];
 extern _symbols stream_sym[];
+#ifndef DISABLE_DVBCSA
 extern _symbols dvbapi_sym[];
+#else
+static _symbols dvbapi_sym[] = { NULL };
+#endif
 
 _symbols *sym[] =
 { adapters_sym, stream_sym, minisatip_sym, dvbapi_sym, NULL };

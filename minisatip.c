@@ -702,15 +702,13 @@ int read_http(sockets * s)
 					"<root xmlns=\"urn:schemas-upnp-org:device-1-0\" configId=\"0\">"
 					"<specVersion><major>1</major><minor>1</minor></specVersion>"
 					"<device><deviceType>urn:ses-com:device:SatIPServer:1</deviceType>"
-					"<friendlyName>%s</friendlyName><manufacturer>cata</manufacturer>"
-					"<manufacturerURL>http://github.com/catalinii/minisatip</manufacturerURL>"
-					"<modelDescription>%s for Linux</modelDescription><modelName>%s</modelName>"
-					"<modelNumber>1.1</modelNumber><modelURL></modelURL><serialNumber>1</serialNumber><UDN>uuid:%s</UDN>"
+					"<friendlyName>Dreambox DM500</friendlyName><manufacturer>jmendeth</manufacturer>"
+					"<manufacturerURL>https://github.com/jmendeth/dm500-satip</manufacturerURL>"
+					"<modelDescription>dm500-satip-2.1, linux 2.6.28, minisatip 0.4</modelDescription><modelName>dm500-satip-2.1</modelName>"
+					"<modelNumber>2.1</modelNumber><modelURL></modelURL><serialNumber>1</serialNumber><UDN>uuid:%s</UDN>"
 					"<iconList>"
 					"<icon><mimetype>image/png</mimetype><width>48</width><height>48</height><depth>24</depth><url>/sm.png</url></icon>"
-					"<icon><mimetype>image/png</mimetype><width>120</width><height>120</height><depth>24</depth><url>/lr.png</url></icon>"
 					"<icon><mimetype>image/jpeg</mimetype><width>48</width><height>48</height><depth>24</depth><url>/sm.jpg</url></icon>"
-					"<icon><mimetype>image/jpeg</mimetype><width>120</width><height>120</height><depth>24</depth><url>/lr.jpg</url></icon>"
 					"</iconList>"
 					"<presentationURL>http://%s/</presentationURL>\r\n"
 					"<satip:X_SATIPCAP xmlns:satip=\"urn:ses-com:satip\">%s</satip:X_SATIPCAP>"
@@ -774,7 +772,7 @@ int read_http(sockets * s)
 		if (tuner_s2 + tuner_t + tuner_c + tuner_t2 + tuner_c2 == 0)
 			strcpy(adapters, "DVBS2-0,");
 		adapters[strlen(adapters) - 1] = 0;
-		snprintf(buf, sizeof(buf), xml, app_name, app_name, app_name, uuid, opts.http_host, adapters,
+		snprintf(buf, sizeof(buf), xml, uuid, opts.http_host, adapters,
 				opts.playlist);
 		sprintf(headers,
 				"CACHE-CONTROL: no-cache\r\nContent-type: text/xml\r\nX-SATIP-RTSP-Port: %d",
@@ -1103,7 +1101,7 @@ http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 	else
 		proto = "RTSP";
 
-	if (!ah)
+	if (!ah || !(*ah))
 		ah = public;
 	if (!desc)
 		desc = "";
