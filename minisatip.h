@@ -8,7 +8,7 @@
 #include "utils.h"
 
 
-#define VERSION_BUILD "43"
+#define VERSION_BUILD "44"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.5.,VERSION_BUILD,)
 
@@ -58,7 +58,7 @@ struct struct_opts
 	char *dvbapi_host;
 	int drop_encrypted;
 	int rtsp_port;
-	uint8_t satip_addpids, satip_setup_pids;
+	uint8_t satip_addpids, satip_setup_pids, satip_rtsp_over_tcp;
 	uint8_t netcv_count;
 	char *netcv_if;
 	char playlist[200];

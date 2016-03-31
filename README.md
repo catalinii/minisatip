@@ -25,15 +25,16 @@ https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item
 Usage:
 -------
 
-minisatip version 0.5.39, compiled with s2api version: 050A
-[19/03 11:23:51.663 main]: Built with dvbcsa
-[19/03 11:23:51.663 main]: Built with dvbapi
-[19/03 11:23:51.663 main]: Built with AES (OpenSSL)
-[19/03 11:23:51.663 main]: Built with tables processing
-[19/03 11:23:51.663 main]: Built with satip client
-[19/03 11:23:51.663 main]: Built with linux dvb client
-[19/03 11:23:51.663 main]: Built with backtrace
-[19/03 11:23:51.663 main]: Built with netceiver
+minisatip version 0.5.43, compiled with s2api version: 050A
+[31/03 15:15:33.990 main]: Built with dvbcsa
+[31/03 15:15:33.990 main]: Built with CI
+[31/03 15:15:33.990 main]: Built with dvbapi
+[31/03 15:15:33.990 main]: Built with AES (OpenSSL)
+[31/03 15:15:33.990 main]: Built with tables processing
+[31/03 15:15:33.990 main]: Built with satip client
+[31/03 15:15:33.990 main]: Built with linux dvb client
+[31/03 15:15:33.990 main]: Built with backtrace
+[31/03 15:15:33.990 main]: Built with netceiver
 
 	./minisatip [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 		[-[uj] A1:S1-F1[-PIN]] [-m mac][-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] 
@@ -116,6 +117,7 @@ Help
 	- specifies 1 dvbt satip server  with address 192.168.1.3:554
 	- specifies 1 dvbc satip server  with address 192.168.1.4:554
 
+* -O --satip-tcp Use RTSP over TCP instead of UDP for data transport 
 * -S --slave ADAPTER1,ADAPTER2-ADAPTER4[,..] - specify slave adapters	
 	* Allows specifying bonded adapters (multiple adapters connected with a splitter to the same LNB)
 	Only one adapter needs to be master all others needs to have this parameter specified

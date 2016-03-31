@@ -185,8 +185,10 @@ int setItem(int64_t key, unsigned char *data, int len, int pos) // pos = -1 -> a
 	if (pos == -1)
 		pos = s->len;
 	if (pos + len >= s->max_size) // make sure we do not overflow the data buffer
+	{
+		LOG("Overflow detected for item %jx, pos %d, size to be added %d, max_size %d", key, pos, len, s->max_size);
 		len = s->max_size - pos;
-
+	}
 	s->len = pos + len;
 	memcpy(s->data + pos, data, len);
 	return 0;

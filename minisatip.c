@@ -72,6 +72,7 @@ static const struct option long_options[] =
 #endif
 #ifndef DISABLE_SATIPCLIENT
 		{ "satip-servers", required_argument, NULL, 's' },
+		{ "satip-tcp", no_argument, NULL, 'O' },		
 #endif
 #ifndef DISABLE_NETCVCLIENT
 		{ "netceiver", required_argument, NULL, 'n' },
@@ -116,7 +117,7 @@ static const struct option long_options[] =
 #define SATIPCLIENT_OPT 's'
 #define NETCVCLIENT_OPT 'n'
 #define PRIORITY_OPT 'i'
-#define PRIORITY_OPT 'i'
+#define SATIP_TCP_OPT 'O'
 #define DOCUMENTROOT_OPT 'R'
 #define XML_OPT 'X'
 #define THREADS_OPT 'T'
@@ -128,6 +129,11 @@ char *built_info[] =
 		"Built without dvbcsa",
 #else 
 		"Built with dvbcsa",
+#endif
+#ifdef DISABLE_DVBCA
+                "Built without CI",
+#else
+                "Built with CI",
 #endif
 #ifdef DISABLE_DVBAPI
 		"Built without dvbapi",
@@ -286,6 +292,7 @@ Help\n\
 	- specifies 1 dvbt satip server  with address 192.168.1.3:554\n\
 	- specifies 1 dvbc satip server  with address 192.168.1.4:554\n\
 \n\
+* -O --satip-tcp Use RTSP over TCP instead of UDP for data transport \n\
 "
 #endif
 			"\
@@ -360,6 +367,7 @@ void set_options(int argc, char *argv[])
 	opts.clean_psi = 0;
 	opts.satip_addpids = 1;
 	opts.satip_setup_pids = 0;
+	opts.satip_rtsp_over_tcp = 0;
 	opts.output_buffer = 512 * 1024;
 	opts.satip_servers[0] = 0;
 	opts.document_root = "html";
@@ -379,7 +387,7 @@ void set_options(int argc, char *argv[])
 	memset(opts.playlist, 0, sizeof(opts.playlist));
 
 	while ((opt = getopt_long(argc, argv,
-			"flr:a:td:w:p:s:n:hc:b:m:p:e:x:u:j:o:gy:i:q:D:VR:S:TX:Y:",
+			"flr:a:td:w:p:s:n:hc:b:m:p:e:x:u:j:o:gy:i:q:D:VR:S:TX:Y:O",
 			long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
@@ -567,6 +575,15 @@ void set_options(int argc, char *argv[])
 
 			break;
 
+		case SATIP_TCP_OPT:
+#ifdef DISABLE_SATIPCLIENT
+			LOGL(0, "%s was not compiled with satip client support, please change the Makefile", app_name);
+			exit (0);
+
+#endif
+			opts.satip_rtsp_over_tcp = 1;
+			break;
+			
 		case NETCVCLIENT_OPT:
 		{
 #ifdef DISABLE_NETCVCLIENT

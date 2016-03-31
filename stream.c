@@ -632,8 +632,8 @@ int send_rtp(streams * sid, const struct iovec *iov, int liov)
 				ntohs(sid->sa.sin_port));
 	}
 
-	LOGL(7, "sent %d bytes for stream %d, handle %d seq %d => %s:%d", total_len,
-			sid->sid, sid->rsock, sid->seq - 1,
+	LOGL(7, "%s: sent %d bytes for stream %d, handle %d seq %d => %s:%d", 
+			__FUNCTION__, total_len, sid->sid, sid->rsock, sid->seq - 1,
 			get_stream_rhost(sid->sid, ra, sizeof(ra)), ntohs(sid->sa.sin_port));
 
 	return rv;
@@ -649,12 +649,14 @@ int send_rtpb(streams * sid, unsigned char *b, int len)
 	return send_rtp(sid, (const struct iovec *) iov, 1);
 }
 
-unsigned char rtcp_buf[1600];
 
 int send_rtcp(int s_id, int64_t ctime)
 {
 	int len, rv = 0;
+	int total_len = 0;
 	char dad[1000];
+	char ra[50];
+	unsigned char rtcp_buf[1600];
 	int c_time = (int) (ctime / 1000) & 0xFFFFFFFF;
 	unsigned char *rtcp = rtcp_buf + 4;
 	streams *sid = get_sid(s_id);
@@ -714,20 +716,26 @@ int send_rtcp(int s_id, int64_t ctime)
 	rtcp[65] = 0;
 	copy16(rtcp, 66, la);
 	memcpy(rtcp + 68, a, la + 4);
+	total_len = len + 52;
 	if (sid->type == STREAM_RTSP_UDP)
-		rv = send(sid->rtcp, rtcp, len + 52, MSG_NOSIGNAL);
+		rv = send(sid->rtcp, rtcp, total_len, MSG_NOSIGNAL);
 	else
 	{
 		rtcp_buf[0] = 0x24;
 		rtcp_buf[1] = 1;
-		copy16(rtcp_buf, 2, len + 52);
-		rv = send(sid->rsock, rtcp_buf, len + 52 + 4, MSG_NOSIGNAL);
+		copy16(rtcp_buf, 2, total_len);
+		total_len += 4;
+		rv = send(sid->rsock, rtcp_buf, total_len, MSG_NOSIGNAL);
 	}
 //	if(rv>0)
 //		sid->rsock_err = 0;
 //	else	
 //		sid->rsock_err ++;
 	sid->rtcp_wtime = ctime;
+	LOGL(7, "%s: sent %d bytes for stream %d, handle %d seq %d => %s:%d", 
+			__FUNCTION__, total_len, sid->sid, sid->rsock, sid->seq - 1,
+			get_stream_rhost(sid->sid, ra, sizeof(ra)), ntohs(sid->sa.sin_port));
+
 //	sid->sp = 0;
 //	sid->sb = 0;
 	return rv;

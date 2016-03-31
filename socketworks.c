@@ -525,6 +525,7 @@ void *select_and_execute(void *arg)
 	les = 1;
 	es = 0;
 	lt = getTick();
+	memset(&pf, -1, sizeof(pf));
 	LOG("Starting select_and_execute on thread ID %x, thread_name %s", tid,
 			thread_name);
 	while (run_loop)
@@ -627,7 +628,7 @@ void *select_and_execute(void *arg)
 						err = errno;
 					if (rlen > 0)
 						ss->rtime = c_time;
-					if (read_ok && rlen > 0)
+					if (read_ok && rlen >= 0)
 						ss->rlen += rlen;
 					else
 						ss->rlen = 0;

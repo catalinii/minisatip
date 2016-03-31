@@ -17,6 +17,7 @@
  * USA
  *
  */
+#define _GNU_SOURCE
 
 #include <stdint.h>
 #include <string.h>
@@ -37,12 +38,14 @@
 #include <net/if.h>
 #include <fcntl.h>
 #include <ctype.h>
-#include <string.h>
+#include "utils.h"
 #include "dvbapi.h"
 #include "satipc.h"
 #include "ca.h"
 #include "minisatip.h"
 #include "dvb.h"
+
+#define TCP_DATA_SIZE ((ADAPTER_BUFFER/1316)*(1316+16))     
 
 extern char *fe_delsys[];
 extern struct struct_opts opts;
@@ -65,11 +68,13 @@ typedef struct struct_satipc
 	int wp, qp; // written packet, queued packet
 	char ignore_packets; // ignore packets coming from satip server while tuning
 	char satip_fe, last_cmd;
+	char use_tcp;
 	char expect_reply, force_commit, want_commit, want_tune, sent_transport;
 	int64_t last_setup, last_connect;
 	uint8_t addpids, setup_pids;
+	unsigned char *tcp_data;
+	int tcp_size, tcp_pos, tcp_len;
 	char use_fe;
-
 	uint32_t rcvp, repno, rtp_miss, rtp_ooo;   // rtp statstics
 	uint16_t rtp_seq;
 
@@ -210,6 +215,10 @@ int satipc_reply(sockets * s)
 	{
 		satipc_commit(ad);
 	}
+
+	if (!sip->expect_reply && sip->last_cmd == RTSP_PLAY)
+		http_request(ad, NULL, "DESCRIBE");
+
 	return 0;
 }
 
@@ -223,10 +232,7 @@ int satipc_timeout(sockets *s)
 			ad?sip->sip:NULL, ad ? sip->sport : 0, s->sid, s->id, s->sock,
 			s->timeout_ms);
 
-	if (sip->last_cmd == RTSP_PLAY)
-		http_request(ad, NULL, "DESCRIBE");
-	else
-		http_request(ad, NULL, "OPTIONS");
+	http_request(ad, NULL, "OPTIONS");
 
 	s->rtime = getTick();
 	return 0;
@@ -284,7 +290,7 @@ int satipc_rtcp_reply(sockets * s)
 	{
 		copy32r(rp, b, 20);
 
-		if ((++sip->repno % 100) == 0)  //every 20s
+		if (!sip->use_tcp && ((++sip->repno % 100) == 0))  //every 20s
 			LOG(
 					"satipc: rtp report, adapter %d: rtcp missing packets %d, rtp missing %d, rtp ooo %d, pid err %d",
 					ad->id, rp - sip->rcvp, sip->rtp_miss, sip->rtp_ooo,
@@ -309,34 +315,47 @@ int satipc_open_device(adapter *ad)
 	if (ad->fe < 0)
 		return 2;
 
-	LOG("satipc: connected to SAT>IP server %s port %d, handle %d", sip->sip,
-			sip->sport, ad->fe);
-	sip->listen_rtp = opts.start_rtp + 1000 + ad->id * 2;
-	ad->dvr = udp_bind(NULL, sip->listen_rtp);
-	sip->rtcp = udp_bind(NULL, sip->listen_rtp + 1);
-
-	ad->fe_sock = sockets_add(ad->fe, NULL, ad->id, TYPE_TCP,
-			(socket_action) satipc_reply, (socket_action) satipc_close,
-			(socket_action) satipc_timeout);
-	sip->rtcp_sock = sockets_add(sip->rtcp, NULL, ad->id, TYPE_TCP,
-			(socket_action) satipc_rtcp_reply, (socket_action) satipc_close,
-			NULL);
-	sockets_timeout(ad->fe_sock, 30000); // 30s
-	set_socket_receive_buffer(ad->dvr, opts.dvr_buffer);
-	if (ad->fe_sock < 0 || ad->dvr < 0 || sip->rtcp < 0 || sip->rtcp_sock < 0)
+	LOG("satipc: connected to SAT>IP server %s port %d %s handle %d", sip->sip,
+			sip->sport, sip->use_tcp ? "[RTSP OVER TCP]" : "", ad->fe);
+	if (!sip->use_tcp)
 	{
-		sockets_del(sip->rtcp_sock);
-		sockets_del(ad->fe_sock);
-		close(sip->rtcp);
-		close(ad->dvr);
-		close(ad->fe);
-	}
+		sip->listen_rtp = opts.start_rtp + 1000 + ad->id * 2;
+		ad->dvr = udp_bind(NULL, sip->listen_rtp);
+		sip->rtcp = udp_bind(NULL, sip->listen_rtp + 1);
 
+		ad->fe_sock = sockets_add(ad->fe, NULL, ad->id, TYPE_TCP,
+				(socket_action) satipc_reply, (socket_action) satipc_close,
+				(socket_action) satipc_timeout);
+		sip->rtcp_sock = sockets_add(sip->rtcp, NULL, ad->id, TYPE_TCP,
+				(socket_action) satipc_rtcp_reply, (socket_action) satipc_close,
+				NULL);
+		sockets_timeout(ad->fe_sock, 30000); // 30s
+		set_socket_receive_buffer(ad->dvr, opts.dvr_buffer);
+		if (ad->fe_sock < 0 || ad->dvr < 0 || sip->rtcp < 0
+				|| sip->rtcp_sock < 0)
+		{
+			sockets_del(sip->rtcp_sock);
+			sockets_del(ad->fe_sock);
+			close(sip->rtcp);
+			close(ad->dvr);
+			close(ad->fe);
+		}
+	}
+	else
+	{
+		ad->dvr = ad->fe;
+		ad->fe = -1;
+		ad->fe_sock = sockets_add(SOCK_TIMEOUT, NULL, ad->id, TYPE_UDP,
+		NULL, NULL, (socket_action) satipc_timeout);
+		sockets_timeout(ad->fe_sock, 30000); // 30s
+
+	}
 	sip->session[0] = 0;
 	sip->lap = 0;
 	sip->ldp = 0;
 	sip->cseq = 1;
 	sip->err = 0;
+	sip->tcp_pos = sip->tcp_len = 0;
 	sip->expect_reply = 0;
 	sip->last_connect = 0;
 	sip->sent_transport = 0;
@@ -412,13 +431,170 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb)
 	return (*rb >= 0);
 }
 
+int process_rtsp_tcp(sockets *ss, unsigned char *rtsp, int rtsp_len, void *buf,
+		int len)
+{
+	int nl = 0;
+	unsigned char tmp_char;
+	satipc *sip = get_satip(ss->sid);
+	adapter *ad = get_adapter(ss->sid);
+	if (!ad || !sip)
+		return 0;
+
+	if (sip->ignore_packets)
+		return 0;
+
+	if (rtsp[1] == 1)
+	{
+		tmp_char = rtsp[rtsp_len + 4];
+		rtsp[rtsp_len + 4] = 0;
+		set_adapter_signal(ad, rtsp + 4, rtsp_len);
+		rtsp[rtsp_len + 4] = tmp_char;
+		return 0;
+	}
+	else if (rtsp[1] == 0)
+	{
+		nl = rtsp_len - 12;
+		if (nl > len)
+			nl = len;
+
+		if (nl > 0)
+			memcpy(buf, rtsp + 16, nl);
+
+	}
+	else
+		LOG("Not processing packet as the type is %02X (not 0 or 1)", rtsp[1]);
+
+	return nl;
+}
+
+int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb)
+{
+	unsigned char *rtsp;
+	sockets tmp_sock;
+	uint16_t seq;
+	static int iter;
+	int pos;
+	int rtsp_len;
+	int tmp_len;
+	adapter *ad;
+	satipc *sip;
+	get_ad_and_sipr(ss->sid, 0);
+	*rb = 0;
+
+	if (!sip->tcp_data)
+	{
+		sip->tcp_size = TCP_DATA_SIZE;
+		sip->tcp_data = malloc1(sip->tcp_size + 1);
+		if (!sip->tcp_data)
+			LOG_AND_RETURN(-1, "Cannot alloc memory for tcp_data with size %d",
+					sip->tcp_size);
+		memset(sip->tcp_data, 0, sip->tcp_size + 1);
+	}
+
+	if (sip->tcp_len == sip->tcp_size && sip->tcp_pos == 0)
+	{
+		LOG("Probably the buffer needs to be increased, as it is full");
+		sip->tcp_len = 0;
+	}
+	if (sip->tcp_len == sip->tcp_size)
+	{
+		int nl = sip->tcp_len - sip->tcp_pos;
+		memmove(sip->tcp_data, sip->tcp_data + sip->tcp_pos, nl);
+//		LOG("Moved from the position %d, length %d", sip->tcp_pos, nl);
+		sip->tcp_pos = 0;
+		sip->tcp_len = nl;
+
+	}
+
+	tmp_len = read(socket, sip->tcp_data + sip->tcp_len,
+			sip->tcp_size - sip->tcp_len);
+
+	if (tmp_len <= 0)
+		return 0;
+
+	pos = 0;
+	sip->tcp_len += tmp_len;
+	while (sip->tcp_pos < sip->tcp_len - 6)
+	{
+		rtsp = sip->tcp_data + sip->tcp_pos;
+
+		if ((rtsp[0] == 0x24) && (rtsp[1] < 2) && (rtsp[4] == 0x80)
+				&& ((rtsp[5] == 0x21) || (rtsp[5] == 0xC8)))
+		{
+			copy16r(rtsp_len, rtsp, 2);
+
+			if (rtsp_len + sip->tcp_pos > sip->tcp_len) // expecting more data in the buffer
+				break;
+
+			if (rtsp[1] == 0 && (rtsp_len - 12 + pos > len)) // destination buffer full
+			{
+				LOGL(4,
+						"Destination buffer is full @ buf %x pos %d, required %d len %d [%d]",
+						buf, pos, rtsp_len - 12, len, sip->tcp_pos);
+				break;
+			}
+			sip->tcp_pos += rtsp_len + 4;
+
+			pos += process_rtsp_tcp(ss, rtsp, rtsp_len, buf + pos, len - pos);
+			*rb = pos;
+
+		}
+		else if (!strncmp(rtsp, "RTSP", 4))
+		{
+			unsigned char *nlnl, *cl;
+			int bytes;
+			unsigned char tmp_char;
+			nlnl = strstr(rtsp, "\r\n\r\n");
+			if (nlnl && (cl = strcasestr(rtsp, "content-length:")))
+			{
+				cl += 15;
+				while (*cl == 0x20)
+					cl++;
+
+				int icl = map_intd(cl, NULL, 0);
+				nlnl += icl;
+			}
+			if (!nlnl)
+				break;
+			memset(&tmp_sock, 0, sizeof(tmp_sock));
+			bytes = nlnl - rtsp;
+			sip->tcp_pos += bytes + 4;
+			tmp_sock.buf = rtsp;
+			tmp_sock.rlen = bytes;
+			tmp_sock.sid = ss->sid;
+			tmp_sock.sock = ad->dvr;
+			tmp_sock.id = ss->id;
+			tmp_char = rtsp[bytes + 4];
+			rtsp[bytes + 4] = 0;
+			satipc_reply(&tmp_sock);
+			rtsp[bytes + 4] = tmp_char;
+		}
+		else
+		{
+			LOG("ignoring byte %02X", rtsp[0]);
+			sip->tcp_pos++;
+		}
+	}
+
+	if (sip->tcp_pos == sip->tcp_len)
+		sip->tcp_pos = sip->tcp_len = 0;
+
+	return (*rb >= 0);
+}
+
 void satip_post_init(adapter *ad)
 {
 	satipc *sip;
 	get_ad_and_sip(ad->id);
-	sockets_setread(ad->sock, satipc_read);
-	set_socket_thread(ad->fe_sock, get_socket_thread(ad->sock)); // set all the threads to run in the new thread with the adapter
-	set_socket_thread(sip->rtcp_sock, get_socket_thread(ad->sock));
+	if (sip->use_tcp)
+		sockets_setread(ad->sock, satipc_tcp_read);
+	else
+	{
+		sockets_setread(ad->sock, satipc_read);
+		set_socket_thread(sip->rtcp_sock, get_socket_thread(ad->sock));
+	}
+	set_socket_thread(ad->fe_sock, get_socket_thread(ad->sock));
 }
 
 int satipc_set_pid(adapter *ad, uint16_t pid)
@@ -536,7 +712,7 @@ int http_request(adapter *ad, char *url, char *method)
 	char buf[2048];
 	char sid[40];
 	char *qm;
-	int lb;
+	int lb, remote_socket;
 	char format[] = "%s rtsp://%s:%d/%s%s%s RTSP/1.0\r\nCSeq: %d%s\r\n\r\n";
 	__attribute__((unused)) int rv;
 	satipc *sip = get_satip(ad->id);
@@ -546,6 +722,7 @@ int http_request(adapter *ad, char *url, char *method)
 	session[0] = 0;
 	sid[0] = 0;
 	int64_t ctime = getTick();
+	remote_socket = sip->use_tcp ? ad->dvr : ad->fe;
 
 	if (!method && sip->sent_transport == 0)
 	{
@@ -560,8 +737,11 @@ int http_request(adapter *ad, char *url, char *method)
 		sip->sent_transport = 1;
 		sip->stream_id = -1;
 		sip->session[0] = 0;
-		sprintf(session, "\r\nTransport:RTP/AVP;unicast;client_port=%d-%d",
-				sip->listen_rtp, sip->listen_rtp + 1);
+		if (sip->use_tcp)
+			sprintf(session, "\r\nTransport: RTP/AVP/TCP;interleaved=0-1");
+		else
+			sprintf(session, "\r\nTransport:RTP/AVP;unicast;client_port=%d-%d",
+					sip->listen_rtp, sip->listen_rtp + 1);
 	}
 	else
 	{
@@ -601,7 +781,7 @@ int http_request(adapter *ad, char *url, char *method)
 			qm, url, sip->cseq++, session);
 
 	LOG("satipc_http_request (ad %d): %s to handle %d: \n%s", ad->id,
-			sip->expect_reply ? "queueing" : "sending", ad->fe, buf);
+			sip->expect_reply ? "queueing" : "sending", remote_socket, buf);
 	if (sip->expect_reply)
 	{
 		setItem(MAKE_ITEM(ad->id, sip->qp++), (unsigned char *) buf, lb + 1, 0);
@@ -609,7 +789,7 @@ int http_request(adapter *ad, char *url, char *method)
 	else
 	{
 		sip->wp = sip->qp = 0;
-		rv = write(ad->fe, buf, lb);
+		rv = write(remote_socket, buf, lb);
 	}
 	sip->expect_reply = 1;
 	return 0;
@@ -915,6 +1095,9 @@ void find_satip_adapter(adapter **a)
 			sip->satip_fe = determine_fe(a, i, sip->sip, sip->sport);
 			sip->addpids = opts.satip_addpids;
 			sip->setup_pids = opts.satip_setup_pids;
+			sip->tcp_size = 0;
+			sip->tcp_data = NULL;
+			sip->use_tcp = opts.satip_rtsp_over_tcp;
 
 			j++;
 			LOG("Satip device %s port %d delsys %d: %s %s", sip->sip,

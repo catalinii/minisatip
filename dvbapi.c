@@ -366,7 +366,7 @@ int dvbapi_reply(sockets * s)
 		{
 			int k_id, algo, mode;
 			SKey *k;
-			pos += 13;
+			pos += 17;
 			k_id = b[4];
 			dvbapi_copy32r(algo, b, 5);
 			dvbapi_copy32r(mode, b, 9);
