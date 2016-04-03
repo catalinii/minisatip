@@ -1,2 +1,5 @@
 /minisatip
 *.o
+config.log
+config.status
+Makefile
