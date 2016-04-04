@@ -72,7 +72,7 @@ static const struct option long_options[] =
 #endif
 #ifndef DISABLE_SATIPCLIENT
 		{ "satip-servers", required_argument, NULL, 's' },
-		{ "satip-tcp", no_argument, NULL, 'O' },		
+		{ "satip-tcp", no_argument, NULL, 'O' },
 #endif
 #ifndef DISABLE_NETCVCLIENT
 		{ "netceiver", required_argument, NULL, 'n' },
@@ -131,9 +131,9 @@ char *built_info[] =
 		"Built with dvbcsa",
 #endif
 #ifdef DISABLE_DVBCA
-                "Built without CI",
+		"Built without CI",
 #else
-                "Built with CI",
+		"Built with CI",
 #endif
 #ifdef DISABLE_DVBAPI
 		"Built without dvbapi",
@@ -583,7 +583,7 @@ void set_options(int argc, char *argv[])
 #endif
 			opts.satip_rtsp_over_tcp = 1;
 			break;
-			
+
 		case NETCVCLIENT_OPT:
 		{
 #ifdef DISABLE_NETCVCLIENT
@@ -934,11 +934,14 @@ int read_http(sockets * s)
 		return 0;
 	}
 
-	if (strncasecmp((const char*) s->buf, "GET ", 4) == 0
-			&& strstr((const char*) s->buf, "/?"))
+	if (strncasecmp((const char*) s->buf, "GET ", 4) == 0)
 	{
-		read_rtsp(s);
-		return 0;
+		char *space = strstr(s->buf + 4, " ");
+		if (space > strstr((const char*) s->buf, "/?"))
+		{
+			read_rtsp(s);
+			return 0;
+		}
 	}
 
 	s->rlen = 0;

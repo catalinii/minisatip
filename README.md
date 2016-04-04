@@ -25,16 +25,7 @@ https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item
 Usage:
 -------
 
-minisatip version 0.5.43, compiled with s2api version: 050A
-[31/03 15:15:33.990 main]: Built with dvbcsa
-[31/03 15:15:33.990 main]: Built with CI
-[31/03 15:15:33.990 main]: Built with dvbapi
-[31/03 15:15:33.990 main]: Built with AES (OpenSSL)
-[31/03 15:15:33.990 main]: Built with tables processing
-[31/03 15:15:33.990 main]: Built with satip client
-[31/03 15:15:33.990 main]: Built with linux dvb client
-[31/03 15:15:33.990 main]: Built with backtrace
-[31/03 15:15:33.990 main]: Built with netceiver
+minisatip version 0.5.44, compiled with s2api version: 050A
 
 	./minisatip [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 		[-[uj] A1:S1-F1[-PIN]] [-m mac][-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] 

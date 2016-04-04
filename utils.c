@@ -186,7 +186,9 @@ int setItem(int64_t key, unsigned char *data, int len, int pos) // pos = -1 -> a
 		pos = s->len;
 	if (pos + len >= s->max_size) // make sure we do not overflow the data buffer
 	{
-		LOG("Overflow detected for item %jx, pos %d, size to be added %d, max_size %d", key, pos, len, s->max_size);
+		LOG(
+				"Overflow detected for item %jx, pos %d, size to be added %d, max_size %d",
+				key, pos, len, s->max_size);
 		len = s->max_size - pos;
 	}
 	s->len = pos + len;
@@ -944,6 +946,12 @@ int mutex_lock1(char *FILE, int line, SMutex* mutex)
 	else
 		LOGL(5, "%s:%d Locking mutex %p", FILE, line, mutex);
 	rv = pthread_mutex_lock(&mutex->mtx);
+	if (!mutex->enabled && rv != 0)
+	{
+		pthread_mutex_unlock(&mutex->mtx);
+		LOG("Mutex %x destroyed meanwhile", mutex);
+		return 1;
+	}
 	if (rv != 0)
 	{
 		LOG("Mutex Lock %p failed", mutex);
@@ -951,7 +959,7 @@ int mutex_lock1(char *FILE, int line, SMutex* mutex)
 	}
 	mutex->file = FILE;
 	mutex->line = line;
-	mutex->state = 1;
+	mutex->state++;
 	mutex->tid = tid;
 	mutex->lock_time = getTick();
 
@@ -972,7 +980,7 @@ int mutex_unlock1(char *FILE, int line, SMutex* mutex)
 	if (!mutex || mutex->enabled)
 	{
 		LOGL(5, "%s:%d Unlocking mutex %p", FILE, line, mutex);
-
+		mutex->state--;
 		rv = pthread_mutex_unlock(&mutex->mtx);
 	}
 	else
@@ -1030,12 +1038,12 @@ int mutex_destroy(SMutex* mutex)
 				__FUNCTION__, mutex, rv, strerror(rv));
 
 	LOGL(4, "Destroying mutex %p", mutex);
-	if ((rv = pthread_mutex_destroy(&mutex->mtx)))
-	{
-		LOG("mutex destroy %p failed with error %d %s", mutex, rv, strerror(rv));
-		mutex->enabled = 1;
-		return 1;
-	}
+//	if ((rv = pthread_mutex_destroy(&mutex->mtx)))
+//	{
+//		LOG("mutex destroy %p failed with error %d %s", mutex, rv, strerror(rv));
+//		mutex->enabled = 1;
+//		return 1;
+//	}
 	return 0;
 }
 

@@ -721,6 +721,8 @@ void *select_and_execute(void *arg)
 		}
 	}
 
+	clean_mutexes();
+
 	if (tid == main_tid)
 		LOG("The main loop ended, run_loop = %d", run_loop);
 	add_join_thread(tid);
