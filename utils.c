@@ -946,7 +946,7 @@ int mutex_lock1(char *FILE, int line, SMutex* mutex)
 	else
 		LOGL(5, "%s:%d Locking mutex %p", FILE, line, mutex);
 	rv = pthread_mutex_lock(&mutex->mtx);
-	if (!mutex->enabled && rv != 0)
+	if (!mutex->enabled && rv == 0)
 	{
 		pthread_mutex_unlock(&mutex->mtx);
 		LOG("Mutex %x destroyed meanwhile", mutex);
