@@ -183,10 +183,8 @@ int init_hw(int i)
 	ad->fe_sock = -1;
 	ad->sock = -1;
 
-	if (ad->enabled)
-	{
+	if (!ad->open)
 		goto NOK;
-	}
 
 	if (ad->open(ad))
 	{

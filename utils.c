@@ -1029,11 +1029,11 @@ int mutex_destroy(SMutex* mutex)
 		imtx--;
 	}
 
-	if ((rv = pthread_mutex_unlock(&mutex->mtx)) != 1)
+	if ((rv = pthread_mutex_unlock(&mutex->mtx)) != 1  && rv != 0)
 		LOG("%s: pthread_mutex_unlock 1 failed for %p with error %d %s",
 				__FUNCTION__, mutex, rv, strerror(rv));
 
-	if ((rv = pthread_mutex_unlock(&mutex->mtx)) != 1)
+	if ((rv = pthread_mutex_unlock(&mutex->mtx)) != 1 && rv != 0)
 		LOG("%s: pthread_mutex_unlock 2 failed for %p with error %d %s",
 				__FUNCTION__, mutex, rv, strerror(rv));
 

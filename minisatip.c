@@ -936,8 +936,15 @@ int read_http(sockets * s)
 
 	if (strncasecmp((const char*) s->buf, "GET ", 4) == 0)
 	{
-		char *space = strstr(s->buf + 4, " ");
-		if (space > strstr((const char*) s->buf, "/?"))
+		int qm = 0;
+		char *b = s->buf + 4;
+		while (*b != ' ' && *b != 0)
+		{
+			if(*b == '/' && *b == '?')
+				qm = 1;
+			b++;
+		}
+		if (qm)
 		{
 			read_rtsp(s);
 			return 0;
