@@ -940,8 +940,11 @@ int read_http(sockets * s)
 		char *b = s->buf + 4;
 		while (*b != ' ' && *b != 0)
 		{
-			if(*b == '/' && *b == '?')
+			if(*b == '/' && *(b+1) == '?')
+			{
 				qm = 1;
+				break;
+			}
 			b++;
 		}
 		if (qm)
@@ -1078,7 +1081,7 @@ int ssdp_discovery(sockets * s)
 	if (s->type != TYPE_UDP)
 		return 0;
 
-	LOG("ssdp_discovery: bootid: %d deviceid: %d http: %s", opts.bootid,
+	LOGL(3, "ssdp_discovery: bootid: %d deviceid: %d http: %s", opts.bootid,
 			opts.device_id, opts.http_host);
 
 	for (i = 0; i < 3; i++)
@@ -1087,7 +1090,7 @@ int ssdp_discovery(sockets * s)
 				nt[i] + 2, app_name, version, uuid, i == 1 ? "" : nt[i],
 				opts.bootid, opts.device_id);
 		salen = sizeof(ssdp_sa);
-		LOGL(3, "Discovery packet %d:\n%s", i + 1, buf);
+		LOGL(5, "Discovery packet %d:\n%s", i + 1, buf);
 		sendto(s->sock, buf, strlen(buf), MSG_NOSIGNAL,
 				(const struct sockaddr *) &ssdp_sa, salen);
 	}
@@ -1129,17 +1132,17 @@ int ssdp_reply(sockets * s)
 	ruuid = strcasestr((const char *) s->buf, "uuid:");
 	if (ruuid && strncmp(uuid, strip(ruuid + 5), strlen(uuid)) == 0)
 	{
-		LOGL(3, "Dropping packet from the same UUID as mine (from %s:%d)",
+		LOGL(5, "Dropping packet from the same UUID as mine (from %s:%d)",
 				get_socket_rhost(s->id, ra, sizeof(ra)),
 				get_socket_rport(s->id));
 		return 0;
 	}
 
 // not my uuid
-	LOG("Received SSDP packet from %s:%d -> handle %d",
+	LOGL(4, "Received SSDP packet from %s:%d -> handle %d",
 			get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
 			s->sock);
-	LOGL(3, "%s", s->buf);
+	LOGL(5, "%s", s->buf);
 
 	if (strncasecmp((const char *) s->buf, "NOTIFY", 6) == 0)
 	{
@@ -1183,11 +1186,11 @@ int ssdp_reply(sockets * s)
 	sprintf(buf, reply, get_current_timestamp(), opts.http_host, opts.xml_path,
 			app_name, version, uuid, opts.bootid, did);
 
-	LOG("ssdp_reply fd: %d -> %s:%d, bootid: %d deviceid: %d http: %s", ssdp,
+	LOGL(5, "ssdp_reply fd: %d -> %s:%d, bootid: %d deviceid: %d http: %s", ssdp,
 			get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
 			opts.bootid, did, opts.http_host);
 //use ssdp (unicast) even if received to multicast address
-	LOGL(3, "%s", buf);
+	LOGL(5, "%s", buf);
 	sendto(ssdp, buf, strlen(buf), MSG_NOSIGNAL,
 			(const struct sockaddr *) &s->sa, salen);
 	return 0;
