@@ -897,6 +897,9 @@ int read_http(sockets * s)
 {
 	char *arg[50];
 	char buf[2000]; // the XML should not be larger than 1400 as it will create problems
+	char url[300];
+	char *space;
+	int is_head = 0;
 	static char *xml =
 			"<?xml version=\"1.0\"?>"
 					"<root xmlns=\"urn:schemas-upnp-org:device-1-0\" configId=\"0\">"
@@ -933,27 +936,35 @@ int read_http(sockets * s)
 		s->flags = s->flags | 1;
 		return 0;
 	}
-
-	if (strncasecmp((const char*) s->buf, "GET ", 4) == 0)
+	url[0] = 0;
+	space = strchr(s->buf, ' ');
+	if(space)
 	{
-		int qm = 0;
-		char *b = s->buf + 4;
-		while (*b != ' ' && *b != 0)
+		int i = 0;
+		space++;
+		while( space[i] && space[i] != ' ')
 		{
-			if(*b == '/' && *(b+1) == '?')
-			{
-				qm = 1;
+			url[i] = space[i];
+			if( i++ > sizeof(url) - 3)
 				break;
-			}
-			b++;
 		}
-		if (qm)
-		{
-			read_rtsp(s);
-			return 0;
-		}
+		url[i] = 0;
 	}
 
+	if (strstr(url, "/?") && !strncasecmp((const char*) s->buf, "GET ", 4))
+	{
+			read_rtsp(s);
+			return 0;
+	}
+
+	if(!strncasecmp((const char*) s->buf, "HEAD ", 5))
+		is_head = 1;
+
+	if (is_head && strstr(url, "/?"))
+	{
+		http_response(s, 200, NULL, NULL, 0, 0);
+		return 0;	
+	}
 	s->rlen = 0;
 
 	LOG("read HTTP from %d sid: %d: ", s->sock, s->sid);
@@ -961,7 +972,7 @@ int read_http(sockets * s)
 
 	split(arg, (char*) s->buf, 50, ' ');
 //      LOG("args: %s -> %s -> %s",arg[0],arg[1],arg[2]);
-	if (strncmp(arg[0], "GET", 3) != 0)
+	if (strncmp(arg[0], "GET", 3) && !is_head)
 		REPLY_AND_RETURN(503);
 	if (uuidi == 0)
 		ssdp_discovery(s);
@@ -973,7 +984,7 @@ int read_http(sockets * s)
 		extern int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
 		char adapters[400];
 		char headers[500];
-
+		
 		memset(adapters, 0, sizeof(adapters));
 		if (tuner_s2)
 			sprintf(adapters, "DVBS2-%d,", tuner_s2);
@@ -1011,6 +1022,11 @@ int read_http(sockets * s)
 		if (!f)
 		{
 			http_response(s, 404, NULL, NULL, 0, 0);
+			return 0;
+		}
+		if(is_head)
+		{
+			http_response(s, 200, ctype, NULL, 0, 0);
 			return 0;
 		}
 		if (strstr(ctype, "image") || strstr(ctype, "css")
