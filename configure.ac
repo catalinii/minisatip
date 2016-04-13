@@ -84,8 +84,8 @@ else
 FM="$FM\n$openssl disabled"
 fi
 
-
-AC_CHECK_HEADERS([execinfo.h],[EMBEDDED=0],[EMBEDDED=1])
+AC_MSG_NOTICE([ == Checking Embedded == ])
+AC_CHECK_FUNCS([backtrace],[EMBEDDED=0],[EMBEDDED=1])
 if test "$EMBEDDED" = "1"; then
 FM="$FM\n$emb enabled"
 else

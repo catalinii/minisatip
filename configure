@@ -4040,19 +4040,19 @@ else
 FM="$FM\n$openssl disabled"
 fi
 
-
-for ac_header in execinfo.h
+{ $as_echo "$as_me:${as_lineno-$LINENO}:  == Checking Embedded == " >&5
+$as_echo "$as_me:  == Checking Embedded == " >&6;}
+for ac_func in backtrace
 do :
-  ac_fn_c_check_header_mongrel "$LINENO" "execinfo.h" "ac_cv_header_execinfo_h" "$ac_includes_default"
-if test "x$ac_cv_header_execinfo_h" = xyes; then :
+  ac_fn_c_check_func "$LINENO" "backtrace" "ac_cv_func_backtrace"
+if test "x$ac_cv_func_backtrace" = xyes; then :
   cat >>confdefs.h <<_ACEOF
-#define HAVE_EXECINFO_H 1
+#define HAVE_BACKTRACE 1
 _ACEOF
  EMBEDDED=0
 else
   EMBEDDED=1
 fi
-
 done
 
 if test "$EMBEDDED" = "1"; then
