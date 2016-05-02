@@ -372,6 +372,8 @@ int dvbapi_reply(sockets * s)
 			dvbapi_copy32r(mode, b, 9);
 			LOG("Key %d, Algo set to %d, Mode set to %d", k_id, algo, mode);
 			k = get_key(k_id);
+			if(!k)
+				break;
 			set_algo(k, algo, mode);
 			break;
 		}
