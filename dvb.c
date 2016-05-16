@@ -524,7 +524,7 @@ int send_jess(int fd, int freq, int pos, int pol, int hiband, diseqc *d)
 	int t = freq - 100;
 
 	cmd.msg[1] = d->uslot << 3;
-	cmd.msg[1] |= ((t << 8) & 0x07);
+	cmd.msg[1] |= ((t >> 8) & 0x07);
 	cmd.msg[2] = (t & 0xff);
 	cmd.msg[3] = ((pos & 0x3f) << 2) | (pol ? 2 : 0) | (hiband ? 1 : 0);
 	if (d->pin < 256)
