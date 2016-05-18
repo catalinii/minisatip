@@ -450,58 +450,53 @@ void dump_pids(int aid)
 		}
 }
 
-int adapter_match(adapter *ad, int freq, int pol, int msys, int src, int diseqc)
+int get_free_adapter(transponder *tp)
 {
-	if (!ad->tp.freq == freq)
-		return 0;
-	if (msys == SYS_DVBS2 || msys == SYS_DVBS)
-	{
-		if (ad->tp.pol == pol && ad->tp.diseqc == diseqc)
-			return 1;
-		return 0;
-	}
-	return 1;
-}
+	int i;
+	int match = 0;
+	int msys = tp->sys;
+	int fe = tp->fe;
 
-int get_free_adapter(int freq, int pol, int msys, int src, int diseqc)
-{
-	int i, init_src = src;
-	int match;
 	adapter *ad = a[0];
-//	init_all_hw();
 
-	if ((src > 0) && (src <= sizeof(fe_map)) && (fe_map[src - 1] >= 0))
+	if ((fe > 0) && (fe <= sizeof(fe_map)) && (fe_map[fe - 1] >= 0))
 	{
-		src = fe_map[src - 1];
-		ad = a[src];
+		fe = fe_map[fe - 1];
+		ad = a[fe];
 	}
 	else
-		src = -1;
+		fe = -1;
 
 	if (ad)
 		LOG(
 				"get free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d f:%d pol=%d sys: %s %s",
-				init_src, ad->id, ad->enabled, ad->master_sid, ad->sid_cnt,
+				tp->fe, ad->id, ad->enabled, ad->master_sid, ad->sid_cnt,
 				ad->tp.freq, ad->tp.pol, get_delsys(ad->sys[0]),
 				get_delsys(ad->sys[1]))
 	else
 		LOG("get free adapter %d msys %s requested %s", i, get_delsys(i),
 				get_delsys(msys));
 
-	if (src >= 0)
+	if (fe >= 0)
 	{
 		if (ad && delsys_match(ad, msys))
 		{
 			match = 0;
 			if (ad->sid_cnt == 0)
 				match = 1;
-			if (adapter_match(ad, freq, pol, msys, src, diseqc))
+			if (!compare_tunning_parameters(ad->id, tp))
 				match = 1;
-			if (match && !init_hw(src))
-				return src;
+			if (match && !init_hw(fe))
+				return fe;
 		}
 		goto noadapter;
 	}
+	// provide an already existing adapter
+        for (i = 0; i < MAX_ADAPTERS; i++)
+                if ((ad = get_adapter_nw(i)) && delsys_match(ad, msys))
+                        if (!compare_tunning_parameters(ad->id, tp))
+                                return i;
+
 	for (i = 0; i < MAX_ADAPTERS; i++)
 	{
 		//first free adapter that has the same msys
@@ -515,12 +510,8 @@ int get_free_adapter(int freq, int pol, int msys, int src, int diseqc)
 		}
 	}
 
-	for (i = 0; i < MAX_ADAPTERS; i++)
-		if ((ad = get_adapter_nw(i)) && delsys_match(ad, msys))
-			if (adapter_match(ad, freq, pol, msys, src, diseqc))
-				return i;
 	noadapter:
-	LOG("no adapter found for f:%d pol:%d msys:%d", freq, pol, msys);
+	LOG("no adapter found for f:%d pol:%d msys:%d", tp->freq, tp->pol, tp->sys);
 	dump_adapters();
 	return -1;
 }
@@ -867,6 +858,28 @@ int mark_pids_add(int sid, int aid, char *pids)
 	return 0;
 }
 
+int compare_tunning_parameters(int aid, transponder * tp)
+{
+	int same = 0;
+	adapter *ad = get_adapter(aid);
+	if (!ad)
+                return -1;
+
+	LOGL(4, "new parameters: f:%d, plp:%d, diseqc:%d, pol:%d, sr:%d, mtype:%d",
+		tp->freq, tp->plp, tp->diseqc, tp->pol, tp->sr, tp->mtype);
+	LOGL(4, "old parameters: f:%d, plp:%d, diseqc:%d, pol:%d, sr:%d, mtype:%d",
+		ad->tp.freq, ad->tp.plp, ad->tp.diseqc, ad->tp.pol, ad->tp.sr, ad->tp.mtype);
+	if (tp->freq != ad->tp.freq || tp->plp != ad->tp.plp
+			|| tp->diseqc != ad->tp.diseqc
+			|| (tp->pol > 0 && tp->pol != ad->tp.pol)
+			|| (tp->sr > 1000 && tp->sr != ad->tp.sr)
+			|| (tp->mtype > 0 && tp->mtype != ad->tp.mtype))
+			
+		return 1;
+	
+	return 0;
+}
+
 int set_adapter_parameters(int aid, int sid, transponder * tp)
 {
 	adapter *ad = get_adapter(aid);
@@ -881,22 +894,13 @@ int set_adapter_parameters(int aid, int sid, transponder * tp)
 		ad->master_sid = sid; // master sid was closed
 
 	ad->do_tune = 0;
-	LOGL(2, "old parameters: f:%d, plp:%d, diseqc:%d, pol:%d, sr:%d, mtype:%d",
-			tp->freq, tp->plp, tp->diseqc, tp->pol, tp->sr, tp->mtype);
-	LOGL(2, "new parameters: f:%d, plp:%d, diseqc:%d, pol:%d, sr:%d, mtype:%d",
-			ad->tp.freq, ad->tp.plp, ad->tp.diseqc, ad->tp.pol, ad->tp.sr,
-			ad->tp.mtype);
-	if (tp->freq != ad->tp.freq || tp->plp != ad->tp.plp
-			|| tp->diseqc != ad->tp.diseqc
-			|| (tp->pol > 0 && tp->pol != ad->tp.pol)
-			|| (tp->sr > 1000 && tp->sr != ad->tp.sr)
-			|| (tp->mtype > 0 && tp->mtype != ad->tp.mtype))
+	if(compare_tunning_parameters(aid, tp))
 	{
 		if (sid != ad->master_sid) // slave sid requesting to tune to a different frequency
 		{
 			mutex_unlock(&ad->mutex);
 			LOG(
-					"secondary stream requested tune, not gonna happen\n ad: f:%d sr:%d pol:%d plp:%d src:%d mod %d\n \
+					"secondary stream requested tune, not gonna happen ad: f:%d sr:%d pol:%d plp:%d src:%d mod %d -> \
 			new: f:%d sr:%d pol:%d plp:%d src:%d mod %d",
 					ad->tp.freq, ad->tp.sr, ad->tp.pol, ad->tp.plp,
 					ad->tp.diseqc, ad->tp.mtype, tp->freq, tp->sr, tp->pol,

@@ -111,7 +111,7 @@ int init_all_hw();
 int getAdaptersCount();
 adapter *adapter_alloc();
 void close_adapter(int na);
-int get_free_adapter(int freq, int pol, int msys, int src, int diseqc);
+int get_free_adapter(transponder *tp);
 int set_adapter_for_stream(int i, int a);
 void close_adapter_for_stream(int sid, int aid);
 int set_adapter_parameters(int aid, int sid, transponder * tp);
@@ -143,6 +143,7 @@ void adapter_unlock1(char *FILE, int line, int aid);
 char is_adapter_disabled(int i);
 void set_adapters_delsys(char *o);
 int signal_thread(sockets *s);
+int compare_tunning_parameters(int aid, transponder * tp);
 
 #define get_adapter(a) get_adapter1(a, __FILE__, __LINE__)
 #define get_adapter_nw(aid) ((aid >= 0 && aid < MAX_ADAPTERS && a[aid] && a[aid]->enabled)?a[aid]:NULL)

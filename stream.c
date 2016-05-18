@@ -224,6 +224,7 @@ setup_stream(char *str, sockets * s)
 int start_play(streams * sid, sockets * s)
 {
 	int a_id;
+	adapter *ad;
 
 	if (sid->type == 0 && s->type == TYPE_HTTP)
 	{
@@ -244,8 +245,10 @@ int start_play(streams * sid, sockets * s)
 	LOG(
 			"Play for stream %d, type %d, rsock %d, adapter %d, sock_id %d handle %d",
 			s->sid, sid->type, sid->rsock, sid->adapter, s->id, s->sock);
+	ad = get_adapter(sid->adapter);
 
-	if (sid->adapter == -1)	// associate the adapter only at play (not at setup)
+	// check if the adapter is not valid or if a slave SID is trying to change frequency
+	if (!ad || (compare_tunning_parameters(sid->adapter, &sid->tp) && ad->master_sid != sid->sid  ))	// associate the adapter only at play (not at setup)
 	{
 		if (sid->tp.sys == 0 && sid->tp.freq == 0) // play streams with no real parameters ==> sending empty packets to the dest
 		{
@@ -253,8 +256,12 @@ int start_play(streams * sid, sockets * s)
 			LOG_AND_RETURN(0,
 					"Tune requested with no real parameters, ignoring ...");
 		}
-		a_id = get_free_adapter(sid->tp.freq, sid->tp.pol, sid->tp.sys,
-				sid->tp.fe, sid->tp.diseqc);
+		if(ad)
+		{
+			LOG("slave stream tuning to a new frequency, finding a new adapter");
+			close_adapter_for_stream(sid->sid, ad->id);
+		}
+		a_id = get_free_adapter(&sid->tp);
 		LOG("Got adapter %d on socket %d", a_id, s->id);
 		if (a_id < 0)
 			return -404;
@@ -267,7 +274,7 @@ int start_play(streams * sid, sockets * s)
 
 	if (!opts.no_threads && get_socket_thread(sid->st_sock) == get_tid())
 	{
-		adapter *ad = get_adapter(sid->adapter);
+		ad = get_adapter(sid->adapter);
 
 		// the stream timeout thread will be running in the same thread with the adapter
 		if (ad)
