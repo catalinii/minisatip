@@ -853,7 +853,12 @@ char *readfile(char *fn, char *ctype, int *len)
 		return 0;
 	snprintf(ffn, sizeof(ffn), "%s/%s", opts.document_root, fn);
 	ffn[sizeof(ffn) - 1] = 0;
-	if ((fd = open(ffn, O_RDONLY | O_LARGEFILE)) < 0)
+#ifndef __CYGWIN__
+   	if ((fd = open(ffn, O_RDONLY | O_LARGEFILE)) < 0)
+#else
+	if ((fd = open(ffn, O_RDONLY)) < 0)
+#endif
+
 		LOG_AND_RETURN(NULL, "Could not open file %s", ffn);
 	if ((fstat(fd, &sb) == -1) || !S_ISREG(sb.st_mode))
 	{

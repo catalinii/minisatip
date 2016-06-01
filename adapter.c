@@ -26,7 +26,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <poll.h>
-#include <linux/ioctl.h>
+//#include <linux/ioctl.h>
+#include <sys/ioctl.h>
 
 #include "socketworks.h"
 #include "dvb.h"
@@ -484,7 +485,7 @@ int get_free_adapter(transponder *tp)
 			match = 0;
 			if (ad->sid_cnt == 0)
 				match = 1;
-			if (!compare_tunning_parameters(ad->id, tp))
+			if (!ad->enabled || !compare_tunning_parameters(ad->id, tp))
 				match = 1;
 			if (match && !init_hw(fe))
 				return fe;

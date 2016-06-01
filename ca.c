@@ -74,6 +74,7 @@ typedef struct ca_device
 	int slot_id;
 	int tc;
 	int id;
+	pthread_t stackthread;
 	struct en50221_transport_layer *tl;
 	struct en50221_session_layer * sl;
 
@@ -445,7 +446,7 @@ int ca_init(ca_device_t *d)
 		goto fail;
 	}
 
-	if ((d->slot_id = en50221_tl_register_slot(d->tl, fd, 0, 1000, 100)) < 0)
+	if ((d->slot_id = en50221_tl_register_slot(d->tl, fd, 0, 10000, 1000)) < 0)
 	{
 		LOG("slot registration failed");
 		goto fail;
@@ -486,8 +487,7 @@ int ca_init(ca_device_t *d)
 	en50221_app_ca_register_pmt_reply_callback(d->ca_resource,
 			ca_ca_pmt_reply_callback, d);
 
-	pthread_t stackthread;
-	pthread_create(&stackthread, NULL, stackthread_func, d);
+	pthread_create(&d->stackthread, NULL, stackthread_func, d);
 
 	en50221_sl_register_lookup_callback(d->sl, ca_lookup_callback, d);
 	en50221_sl_register_session_callback(d->sl, ca_session_callback, d);
@@ -536,8 +536,13 @@ int dvbca_close_dev(adapter *ad, void *arg)
 	ca_device_t *c = ca_devices[ad->id];
 	if (c && c->enabled)
 	{
-		close(c->fd);
+		LOG("closing CA device %d, fd %d", ad->id, c->fd);
+		en50221_tl_destroy_slot(c->tl, c->slot_id);
+		en50221_sl_destroy(c->sl);
+		en50221_tl_destroy(c->tl);
 		c->enabled = 0;
+//		pthread_join(c->stackthread, NULL);
+		close(c->fd);
 	}
 	return 1;
 }

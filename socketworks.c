@@ -115,7 +115,9 @@ int udp_bind(char *addr, int port)
 
 	if (!fill_sockaddr(&serv, addr, port))
 		return -1;
-	sock = socket(AF_INET, SOCK_DGRAM, 0);
+//	sock = socket(AF_INET, SOCK_DGRAM, 0);
+	sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+
 	if (sock < 0)
 	{
 		LOGL(0, "udp_bind failed: socket(): %s", strerror(errno));
@@ -490,6 +492,9 @@ int sockets_del(int sock)
 	max_sock = i + 1;
 	ss->events = 0;
 	ss->lock = NULL;
+	if((ss->flags & 1) && ss->buf)
+		free1(ss->buf);
+
 	LOG("sockets_del: %d Last open socket is at index %d current_handle %d",
 			sock, i, so);
 	mutex_destroy(&ss->mutex);

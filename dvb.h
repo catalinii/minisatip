@@ -2,7 +2,8 @@
 #define DVB_H
 
 #ifdef DISABLE_LINUXDVB
-#include <linux/types.h>
+//#include <linux/types.h>
+#include <stdint.h>
 #include <time.h>
 #define DVBAPIVERSION 0x0500
 #define LOGDVBAPIVERSION 0x0000
