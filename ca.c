@@ -413,6 +413,7 @@ int ca_init(ca_device_t *d)
 	info.num = 0;
 	int tries = 10;
 	int fd = d->fd;
+	adapter *ad = get_adapter(d->id);
 
 	if (ioctl(fd, CA_RESET, &info))
 		return 0;
@@ -494,6 +495,8 @@ int ca_init(ca_device_t *d)
 
 	d->tc = en50221_tl_new_tc(d->tl, d->slot_id);
 	LOG("tcid: %i", d->tc);
+	if(ad)
+		ad->slow_dev = 1;
 
 	return 1;
 	fail: close(fd);
@@ -537,11 +540,11 @@ int dvbca_close_dev(adapter *ad, void *arg)
 	if (c && c->enabled)
 	{
 		LOG("closing CA device %d, fd %d", ad->id, c->fd);
+		c->enabled = 0;
+		pthread_join(c->stackthread, NULL);
 		en50221_tl_destroy_slot(c->tl, c->slot_id);
 		en50221_sl_destroy(c->sl);
 		en50221_tl_destroy(c->tl);
-		c->enabled = 0;
-//		pthread_join(c->stackthread, NULL);
 		close(c->fd);
 	}
 	return 1;

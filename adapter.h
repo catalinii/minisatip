@@ -62,14 +62,14 @@ typedef struct struct_adapter
 {
 	char enabled;
 	SMutex mutex;
-	char type; // available on the system 
+	char type, slow_dev; // available on the system 
 	int fe, dvr, dmx;
 	int pa, fn;
 	// physical adapter, physical frontend number
 	fe_delivery_system_t sys[MAX_DELSYS];
 	transponder tp;
 	SPid pids[MAX_PIDS];
-	int ca_mask;
+	int ca_mask;	
 	int master_sid;				 // first SID, the one that controls the tuning
 	int sid_cnt;				 //number of streams
 	int sock, fe_sock;
@@ -110,7 +110,7 @@ int init_hw(int dev);
 int init_all_hw();
 int getAdaptersCount();
 adapter *adapter_alloc();
-void close_adapter(int na);
+int close_adapter(int na);
 int get_free_adapter(transponder *tp);
 int set_adapter_for_stream(int i, int a);
 void close_adapter_for_stream(int sid, int aid);
