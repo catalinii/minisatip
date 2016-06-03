@@ -297,14 +297,15 @@ int close_stream(int i)
 		return 0;
 
 	sid = st[i];
+	mutex_lock(&st_mutex);
 	mutex_lock(&sid->mutex);
 	if (!sid->enabled)
 	{
 		adapter_unlock(sid->adapter);
 		mutex_unlock(&sid->mutex);
+		mutex_unlock(&st_mutex);
 		return 0;
 	}
-	mutex_lock(&st_mutex);
 	sid->enabled = 0;
 	sid->timeout = 0;
 	ad = sid->adapter;
@@ -319,7 +320,6 @@ int close_stream(int i)
 	 if(sid->buf)free(sid->buf);
 	 sid->pids = sid->apids = sid->dpids = sid->buf = NULL;
 	 */
-	mutex_destroy(&sid->mutex);
 
 	if (sid->rtcp_sock > 0 || sid->rtcp > 0)
 	{
@@ -339,6 +339,7 @@ int close_stream(int i)
 
 	sockets_del_for_sid (i);
 
+	mutex_unlock(&sid->mutex);
 	mutex_unlock(&st_mutex);
 	LOG("closed stream %d", i);
 	return 0;
@@ -1140,8 +1141,10 @@ void free_all_streams()
 
 	for (i = 0; i < MAX_STREAMS; i++)
 	{
-		if (st[i])
+		if (st[i]) {
+			mutex_destroy(&st[i]->mutex);
 			free1(st[i]);
+		}
 		st[i] = NULL;
 
 	}

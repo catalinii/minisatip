@@ -59,6 +59,8 @@ adapter *adapter_alloc()
 {
 	adapter *ad = malloc1(sizeof(adapter));
 
+	mutex_init(&ad->mutex);
+
 	/* diseqc setup */
 	ad->diseqc_param.fast = opts.diseqc_fast;
 	ad->diseqc_param.committed_no = opts.diseqc_committed_no;
@@ -182,7 +184,6 @@ int init_hw(int i)
 		return 2;
 
 	ad = a[i];
-	mutex_init(&ad->mutex);
 	mutex_lock(&ad->mutex);
 	if (is_adapter_disabled(i))
 		goto NOK;
@@ -348,7 +349,7 @@ int close_adapter(int na)
 	ad->old_diseqc = -1;
 	ad->old_hiband = -1;
 	ad->old_pol = -1;
-	mutex_destroy(&ad->mutex);
+	mutex_unlock(&ad->mutex);
 	//      if(a[na]->buf)free1(a[na]->buf);a[na]->buf=NULL;
 	LOG("done closing adapter %d", na);
 	return 1;
@@ -1119,9 +1120,11 @@ void free_all_adapters()
 		{
 			if (a[i]->buf)
 				free1(a[i]->buf);
+			mutex_destroy(&a[i]->mutex);
 			free(a[i]);
 			a[i] = NULL;
 		}
+	mutex_destroy(&a_mutex);
 
 #ifndef DISABLE_NETCVCLIENT
 	fprintf(stderr, "\n\nREEL: recv_exit\n");

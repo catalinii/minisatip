@@ -1124,8 +1124,8 @@ int add_new_lock(void **arr, int count, int size, SMutex *mutex)
 					LOG_AND_RETURN(-1,
 							"Could not allocate memory for %p index %d", arr, i);
 				memset(sa[i], 0, size);
+				mutex_init(&sa[i]->mutex);
 			}
-			mutex_init(&sa[i]->mutex);
 			mutex_lock(&sa[i]->mutex);
 			sa[i]->enabled = 1;
 			mutex_unlock(mutex);

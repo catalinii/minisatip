@@ -978,7 +978,6 @@ int keys_del(int i)
 	enabledKeys = ek;
 	if (!ek && sock > 0)
 		TEST_WRITE(write(sock, buf, sizeof(buf)));
-	mutex_destroy(&k->mutex);
 	return 0;
 }
 
@@ -1070,6 +1069,18 @@ void dvbapi_delete_keys_for_adapter(int aid)
 	for (i = 0; i < MAX_KEYS; i++)
 		if ((k = get_key(i)) && k->adapter == aid)
 			keys_del(i);
+}
+
+void free_all_keys(void)
+{
+	SKey *k;
+	for (i = 0; i < MAX_KEYS; i++) {
+		if (key[i]) {
+			mutex_destroy(&key[i]->mutex);
+			free(key[i]);
+		}
+	}
+	mutex_destroy(&keys_mutex);
 }
 
 _symbols dvbapi_sym[] =
