@@ -86,6 +86,7 @@ typedef struct ca_device
 	int ca_session_number;
 	uint16_t ai_session_number;
 } ca_device_t;
+SCA dvbca;
 
 static struct ca_device *ca_devices[MAX_ADAPTERS];
 
@@ -248,6 +249,8 @@ static int ca_session_callback(void *arg, int reason, uint8_t slot_id,
 		break;
 	case S_SCALLBACK_REASON_CAMCONNECTED:
 		LOG("CAM connected")
+		del_ca(&dvbca);
+		add_ca(&dvbca);
 		;
 		if (resource_id == EN50221_APP_RM_RESOURCEID)
 		{
@@ -410,28 +413,30 @@ static int ca_dt_enquiry_callback(void *arg, uint8_t slot_id,
 int ca_init(ca_device_t *d)
 {
 	ca_slot_info_t info;
+	int64_t st = getTick();
 	info.num = 0;
-	int tries = 10;
+	int tries = 600;
 	int fd = d->fd;
 	adapter *ad = get_adapter(d->id);
 
 	if (ioctl(fd, CA_RESET, &info))
-		return 0;
+		LOG_AND_RETURN(0, "%s: Could not reset ca %d", __FUNCTION__, d->id);
 
 	do
 	{
 		if (ioctl(fd, CA_GET_SLOT_INFO, &info))
-			return 0;
-		usleep(200000);
+			LOG_AND_RETURN(0, "%s: Could not get info1 for ca %d", __FUNCTION__, d->id);
+		usleep(10000);
 	} while (tries-- && !(info.flags & CA_CI_MODULE_READY));
 
 	if (ioctl(fd, CA_GET_SLOT_INFO, &info))
-		return 0;
-	LOG("initializing CA, fd %d type %d flags 0x%x", fd, info.type, info.flags);
+		LOG_AND_RETURN(0, "%s: Could not get info2 for ca %d", __FUNCTION__, d->id);
+
+	LOG("initializing CA, fd %d type %d flags 0x%x, after %jd ms", fd, info.type, info.flags, (getTick() - st));
 
 	if (info.type != CA_CI_LINK)
 	{
-		LOG("incopatible CA interface");
+		LOG("incompatible CA interface");
 		goto fail;
 	}
 
@@ -549,8 +554,6 @@ int dvbca_close_dev(adapter *ad, void *arg)
 	}
 	return 1;
 }
-
-SCA dvbca;
 
 void dvbca_init()
 {

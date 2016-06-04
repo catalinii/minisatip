@@ -118,7 +118,7 @@ int adapter_timeout(sockets *s)
 		s->rtime = getTick();
 		return 0;
 	}
-	
+
 	if (get_streams_for_adapter(ad->id) > 0)
 	{
 		ad->rtime = getTick();
@@ -158,7 +158,7 @@ int close_adapter_for_socket(sockets * s)
 	int aid = s->sid;
 	adapter *ad = get_adapter(aid);
 	LOG("closing DVR socket %d pos %d aid %d", s->sock, s->id, aid);
-	ad->rtime = getTick(); 
+	ad->rtime = getTick();
 	if (ad)
 		return close_adapter(aid);
 	return 1;
@@ -251,14 +251,14 @@ int init_hw(int i)
 		ad->post_init(ad);
 
 	et = getTick();
-	
+
 	if(et - st > 1000000)
 	{
 		LOG("Slow adapter %d detected", ad->id);
 		ad->slow_dev = 1;
 	}
-	
-//	set_sock_lock(ad->sock, &ad->mutex); // locks automatically the adapter on reading from the DVR 
+
+//	set_sock_lock(ad->sock, &ad->mutex); // locks automatically the adapter on reading from the DVR
 
 	LOG("done opening adapter %i delivery systems: %s %s %s %s", i,
 			get_delsys(ad->sys[0]), get_delsys(ad->sys[1]),
@@ -315,7 +315,7 @@ int close_adapter(int na)
 	ad = get_adapter_nw(na);
 	if (!ad)
 		return 1;
-	
+
 	mutex_lock(&ad->mutex);
 	if (!ad->enabled)
 	{
@@ -363,7 +363,7 @@ int getAdaptersCount()
 	char ifes[20];
 	char order[] =
 	{ SYS_DVBS2, SYS_DVBT, SYS_DVBC_ANNEX_A, SYS_DVBT2, SYS_DVBC2 };
-
+	
 	memset(&ifes, 0, sizeof(ifes));
 	memset(&fe_map, -1, sizeof(fe_map));
 
@@ -578,7 +578,7 @@ void close_adapter_for_stream(int sid, int aid)
 	else
 		mark_pids_deleted(aid, sid, NULL);
 	update_pids(aid);
-//	if (a[aid]->sid_cnt == 0) 
+//	if (a[aid]->sid_cnt == 0)
 //		close_adapter (aid);
 	mutex_unlock(&ad->mutex);
 
@@ -684,7 +684,7 @@ int tune(int aid, int sid)
 #ifndef DISABLE_TABLES
 		p = find_pid(aid, 0);
 		SPid *p_all = find_pid(aid, 8192);
-		if ((!p || p->flags == 3) && (!p_all || p_all->flags == 3)) // add pid 0 if not explicitly added 
+		if ((!p || p->flags == 3) && (!p_all || p_all->flags == 3)) // add pid 0 if not explicitly added
 		{
 			LOG(
 					"Adding pid 0 to the list of pids as not explicitly added for adapter %d",
@@ -896,9 +896,9 @@ int compare_tunning_parameters(int aid, transponder * tp)
 			|| (tp->pol > 0 && tp->pol != ad->tp.pol)
 			|| (tp->sr > 1000 && tp->sr != ad->tp.sr)
 			|| (tp->mtype > 0 && tp->mtype != ad->tp.mtype))
-			
+
 		return 1;
-	
+
 	return 0;
 }
 
@@ -942,7 +942,7 @@ int set_adapter_parameters(int aid, int sid, transponder * tp)
 
 	if (ad->tp.pids) // pids can be specified in SETUP and then followed by a delpids in PLAY, make sure the behaviour is right
 	{
-		mark_pids_deleted(aid, sid, NULL);  // delete all the pids for this 
+		mark_pids_deleted(aid, sid, NULL);  // delete all the pids for this
 		if (mark_pids_add(sid, aid, ad->tp.pids) < 0)
 		{
 			mutex_unlock(&ad->mutex);
