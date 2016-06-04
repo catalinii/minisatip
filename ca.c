@@ -212,6 +212,7 @@ stackthread_func(void* arg)
 	char name[100];
 	ca_device_t * d = arg;
 	int lasterror = 0;
+	adapter *ad;
 	sprintf(name, "CA%d", d->id);
 	thread_name = name;
 	LOG("%s: start", __func__);
@@ -226,6 +227,10 @@ stackthread_func(void* arg)
 				LOG("Error reported by stack slot:%i error:%i",
 						en50221_tl_get_error_slot(d->tl),
 						en50221_tl_get_error(d->tl));
+				ad = get_adapter(d->id);
+				if(ad)
+					ad->slow_dev = 0;
+				break;
 			}
 			lasterror = error;
 		}
