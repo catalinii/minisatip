@@ -88,4 +88,3 @@ dvbapi_op aes_op =
 		.create_cwkey = dvbaes_create_key, .delete_cwkey = dvbaes_delete_key,
 		.batch_size = dvbaes_batch_size, .set_cw = dvbaes_set_cw,
 		.decrypt_stream = dvbaes_decrypt_stream };
-

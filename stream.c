@@ -572,7 +572,7 @@ int send_rtp(streams * sid, const struct iovec *iov, int liov)
 	unsigned char *rtp_h;
 	unsigned char rtp_buf[16];
 
-	if (sid->rsock_err > 5)
+	if (sid->rsock_err > 50)
 		return 0;
 	rtp_h = rtp_buf + 4;
 
@@ -625,7 +625,7 @@ int send_rtp(streams * sid, const struct iovec *iov, int liov)
 		sid->rsock_err++;
 		LOG("write to handle %d failed: %d, %s, socket err %d %s", sid->rsock,
 				rv, strerror(errno), sid->rsock_err,
-				sid->rsock_err > 5 ? "socket blacklisted" : "");
+				sid->rsock_err > 50 ? "socket blacklisted" : "");
 	}
 	else
 		sid->rsock_err = 0;
@@ -671,7 +671,7 @@ int send_rtcp(int s_id, int64_t ctime)
 	if (!sid)
 		LOG_AND_RETURN(0, "Sid is null for s_id %d", s_id);
 
-	if (sid->rsock_err > 5)
+	if (sid->rsock_err > 50)
 		return 0;
 
 	char *a = describe_adapter(s_id, sid->adapter, dad, sizeof(dad));
