@@ -58,7 +58,7 @@ void find_dvb_adapter(adapter **a);
 adapter *adapter_alloc()
 {
 	adapter *ad = malloc1(sizeof(adapter));
-
+	memset(ad, 0, sizeof(adapter));
 	/* diseqc setup */
 	ad->diseqc_param.fast = opts.diseqc_fast;
 	ad->diseqc_param.committed_no = opts.diseqc_committed_no;
@@ -158,7 +158,8 @@ int close_adapter_for_socket(sockets * s)
 	int aid = s->sid;
 	adapter *ad = get_adapter(aid);
 	LOG("closing DVR socket %d pos %d aid %d", s->sock, s->id, aid);
-	ad->rtime = getTick();
+	if(ad)
+		ad->rtime = getTick();
 	if (ad)
 		return close_adapter(aid);
 	return 1;
@@ -363,7 +364,7 @@ int getAdaptersCount()
 	char ifes[20];
 	char order[] =
 	{ SYS_DVBS2, SYS_DVBT, SYS_DVBC_ANNEX_A, SYS_DVBT2, SYS_DVBC2 };
-	
+
 	memset(&ifes, 0, sizeof(ifes));
 	memset(&fe_map, -1, sizeof(fe_map));
 

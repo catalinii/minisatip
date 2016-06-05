@@ -1,4 +1,4 @@
-#if !defined(DISABLE_DVBCA) || !defined(DISABLE_DVBAPI)								 
+#if !defined(DISABLE_DVBCA) || !defined(DISABLE_DVBAPI)
 
 #ifndef TABLES_H
 #define TABLES_H
@@ -36,11 +36,13 @@ typedef int (*ca_action)(adapter *ad, void *arg);
 #define CA_DEL_PMT 5
 #define CA_ECM 6
 #define CA_TS 7
+#define CA_CLOSE 8
 
 typedef struct struct_CA
 {
 	uint8_t enabled;
-	ca_action action[8];
+	ca_action action[9];
+	int adapter_mask;  // 1 << x, means enabled for adapter X
 } SCA;
 
 
@@ -54,10 +56,15 @@ int process_stream(adapter *ad, int rlen);
 void tables_pid_del(adapter *ad, int pid);
 void tables_pid_add(adapter *ad, int pid, int existing);
 void clean_psi(adapter *ad, uint8_t *b);
-int tables_init_device(adapter *ad);
+int tables_init_device(adapter *ad); // will call action[CA_INIT_DEVICE] for the adapter if CA is registered for it in adapter_mask,
+																		 //if the call succeds, the PMTs will be sent to that CA for that adapter
 int tables_close_device(adapter *ad);
 int tables_init();
-void init_ca_device(SCA *c);
+int tables_destroy();
+void init_ca_device(SCA *c); //  calls table_init_device for all the devices
+int register_ca_for_adapter(int nca, int aid);  // register a CA just for a device, and run tables_init_device for the CA and Adapter, if succeds, send all the opened PMTs
+int unregister_ca_for_adapter(int nca, int aid); // unregister a CA just for a device
+
 #endif
 
 #endif

@@ -74,6 +74,7 @@ typedef struct ca_device
 	int slot_id;
 	int tc;
 	int id;
+	int ignore_close;
 	pthread_t stackthread;
 	struct en50221_transport_layer *tl;
 	struct en50221_session_layer * sl;
@@ -88,6 +89,7 @@ typedef struct ca_device
 } ca_device_t;
 SCA dvbca;
 
+int dvbca_id;
 static struct ca_device *ca_devices[MAX_ADAPTERS];
 
 // this contains all known resource ids so we can see if the cam asks for something exotic
@@ -230,6 +232,7 @@ stackthread_func(void* arg)
 				ad = get_adapter(d->id);
 				if(ad)
 					ad->slow_dev = 0;
+				d->ignore_close = 0; // force device close..
 				break;
 			}
 			lasterror = error;
@@ -254,9 +257,7 @@ static int ca_session_callback(void *arg, int reason, uint8_t slot_id,
 		break;
 	case S_SCALLBACK_REASON_CAMCONNECTED:
 		LOG("CAM connected")
-		del_ca(&dvbca);
-		add_ca(&dvbca);
-		;
+
 		if (resource_id == EN50221_APP_RM_RESOURCEID)
 		{
 			en50221_app_rm_enq(d->rm_resource, session_number);
@@ -270,6 +271,9 @@ static int ca_session_callback(void *arg, int reason, uint8_t slot_id,
 			en50221_app_ca_info_enq(d->ca_resource, session_number);
 			d->ca_session_number = session_number;
 		}
+		d->ignore_close = 1;
+		unregister_ca_for_adapter(dvbca_id, d->id);
+		register_ca_for_adapter(dvbca_id, d->id);
 		break;
 	}
 	return 0;
@@ -420,7 +424,7 @@ int ca_init(ca_device_t *d)
 	ca_slot_info_t info;
 	int64_t st = getTick();
 	info.num = 0;
-	int tries = 600;
+	int tries = 800; // wait up to 8s for the CAM
 	int fd = d->fd;
 	adapter *ad = get_adapter(d->id);
 
@@ -505,8 +509,6 @@ int ca_init(ca_device_t *d)
 
 	d->tc = en50221_tl_new_tc(d->tl, d->slot_id);
 	LOG("tcid: %i", d->tc);
-	if(ad)
-		ad->slow_dev = 1;
 
 	return 1;
 	fail: close(fd);
@@ -539,28 +541,46 @@ int dvbca_init_dev(adapter *ad, void *arg)
 		memset(c, 0, sizeof(ca_device_t));
 	}
 	c->enabled = 1;
+	c->ignore_close = 0;
 	c->fd = fd;
 	c->id = ad->id;
 	return ca_init(c);
 }
 
+int dvbca_close_device(ca_device_t *c)
+{
+	LOG("closing CA device %d, fd %d", c->id, c->fd);
+	c->enabled = 0;
+	pthread_join(c->stackthread, NULL);
+	en50221_tl_destroy_slot(c->tl, c->slot_id);
+	en50221_sl_destroy(c->sl);
+	en50221_tl_destroy(c->tl);
+	close(c->fd);
+
+}
 int dvbca_close_dev(adapter *ad, void *arg)
 {
 	ca_device_t *c = ca_devices[ad->id];
-	if (c && c->enabled)
+	if (c && c->enabled && !c->ignore_close) // do not close the CA unless in a bad state
 	{
-		LOG("closing CA device %d, fd %d", ad->id, c->fd);
-		c->enabled = 0;
-		pthread_join(c->stackthread, NULL);
-		en50221_tl_destroy_slot(c->tl, c->slot_id);
-		en50221_sl_destroy(c->sl);
-		en50221_tl_destroy(c->tl);
-		close(c->fd);
+		dvbca_close_device(c);
 	}
 	return 1;
 }
 
-void dvbca_init()
+void dvbca_close(adapter *ad, void *arg)
+{
+	int i;
+	adapter tmp_ad;
+	for(i=0;i<MAX_ADAPTERS;i++)
+		if(ca_devices[i] && ca_devices[i]->enabled)
+				{
+					dvbca_close_device(ca_devices[i]);
+				}
+
+}
+
+void dvbca_init() // you can search the devices here and fill the ca_devices, then open them here (for example independent CA devices), or use dvbca_init_dev to open them (like in this module)
 {
 	memset(dvbca.action, 0, sizeof(dvbca.action));
 	dvbca.enabled = 1; // ignore it anyway
@@ -568,5 +588,7 @@ void dvbca_init()
 	dvbca.action[CA_CLOSE_DEVICE] = (ca_action) &dvbca_close_dev;
 	dvbca.action[CA_ADD_PMT] = (ca_action) &dvbca_process_pmt;
 	dvbca.action[CA_DEL_PMT] = (ca_action) &dvbca_del_pmt;
-	add_ca(&dvbca);
+	dvbca.action[CA_CLOSE] = (ca_action) &dvbca_close;
+	dvbca.adapter_mask = 0xFFFFFFFF; // enabled for all the adapters
+	dvbca_id = add_ca(&dvbca);
 }

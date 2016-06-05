@@ -225,7 +225,10 @@ int dvbapi_reply(sockets * s)
 					k_id, a_id, demux, filter, _pid, _pid);
 			if ((p = find_pid(a_id, _pid)) && (p->key == k_id))
 			{
-				p->type = 0;
+				if(p->type & TYPE_PMT)
+					p->type = TYPE_PMT;
+				else
+					p->type = 0;
 				p->key = p->filter = 255;
 				invalidate_adapter(k->adapter);
 			}
@@ -568,16 +571,13 @@ int decrypt_stream(adapter *ad, void *arg)
 	SPid *p;
 	int pid;
 	int cp;
-	int16_t *pids;
 	SKey **pid_to_key;
-	int64_t pid_key = TABLES_ITEM + ((1 + ad->id) << 24) + 0;
 	int64_t pk_key = DVBAPI_ITEM + ((1 + ad->id) << 24) + 1;
 	int rlen = *(int *) arg;
 
 	if (!dvbapi_is_enabled)
 		return 0;
 
-	pids = (int16_t *) getItem(pid_key);
 	update_pid_key(ad);
 	pid_to_key = (SKey **) getItem(pk_key);
 
@@ -1054,6 +1054,7 @@ void register_dvbapi()
 	dvbapi.action[CA_DEL_PMT] = (ca_action) &dvbapi_del_pmt;
 	dvbapi.action[CA_ECM] = &send_ecm;
 	dvbapi.action[CA_TS] = &decrypt_stream;
+	dvbapi.adapter_mask = 0xFFFFFFFF;
 	add_ca(&dvbapi);
 }
 
@@ -1087,4 +1088,3 @@ _symbols dvbapi_sym[] =
 		protocol) },
 
 { NULL, 0, NULL, 0, 0 } };
-

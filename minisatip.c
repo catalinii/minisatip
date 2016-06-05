@@ -127,7 +127,7 @@ char *built_info[] =
 {
 #ifdef DISABLE_DVBCSA
 		"Built without dvbcsa",
-#else 
+#else
 		"Built with dvbcsa",
 #endif
 #ifdef DISABLE_DVBCA
@@ -137,37 +137,37 @@ char *built_info[] =
 #endif
 #ifdef DISABLE_DVBAPI
 		"Built without dvbapi",
-#else 
+#else
 		"Built with dvbapi",
 #endif
 #ifdef DISABLE_DVBAES
 		"Built without AES (OpenSSL)",
-#else 
+#else
 		"Built with AES (OpenSSL)",
 #endif
 #ifdef DISABLE_TABLES
 		"Built without tables processing",
-#else 
+#else
 		"Built with tables processing",
 #endif
 #ifdef DISABLE_SATIPCLIENT
 		"Built without satip client",
-#else 
+#else
 		"Built with satip client",
 #endif
 #ifdef DISABLE_LINUXDVB
 		"Built without linux dvb client",
-#else 
+#else
 		"Built with linux dvb client",
 #endif
 #ifdef NO_BACKTRACE
 		"Built without backtrace",
-#else 
+#else
 		"Built with backtrace",
 #endif
 #ifdef DISABLE_NETCVCLIENT
 		"Built without netceiver",
-#else 
+#else
 		"Built with netceiver",
 #endif
 		NULL };
@@ -963,7 +963,7 @@ int read_http(sockets * s)
 	if (is_head && strstr(url, "/?"))
 	{
 		http_response(s, 200, NULL, NULL, 0, 0);
-		return 0;	
+		return 0;
 	}
 	s->rlen = 0;
 
@@ -977,14 +977,14 @@ int read_http(sockets * s)
 	if (uuidi == 0)
 		ssdp_discovery(s);
 
-	sockets_timeout(s->id, 1); //close the connection 
+	sockets_timeout(s->id, 1); //close the connection
 
 	if (strcmp(arg[1], "/"DESC_XML) == 0)
 	{
 		extern int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
 		char adapters[400];
 		char headers[500];
-		
+
 		memset(adapters, 0, sizeof(adapters));
 		if (tuner_s2)
 			sprintf(adapters, "DVBS2-%d,", tuner_s2);
@@ -1306,6 +1306,9 @@ int main(int argc, char *argv[])
 	write_pid_file();
 	select_and_execute(NULL);
 	unlink(pid_file);
+#ifndef DISABLE_TABLES
+	tables_destroy();
+#endif
 	free_all();
 	if (opts.slog)
 		closelog();
@@ -1427,4 +1430,3 @@ _symbols minisatip_sym[] =
 { "http_port", VAR_INT, &opts.http_port, 1, 0, 0 },
 { "version", VAR_STRING, &version, 1, 0, 0 },
 { NULL, 0, NULL, 0, 0 } };
-

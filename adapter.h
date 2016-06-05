@@ -39,7 +39,7 @@ typedef struct struct_pid
 	int dec_err;			// decrypt errors
 	unsigned char key, filter, ecm_parity; // custom data kept in the SPid structure
 	unsigned char cc, version; // continuity
-	unsigned char enabled_channels; // ca information 
+	unsigned char enabled_channels; // ca information
 	uint16_t csid; // channel sid
 } SPid;
 
@@ -62,7 +62,7 @@ typedef struct struct_adapter
 {
 	char enabled;
 	SMutex mutex;
-	char type, slow_dev; // available on the system 
+	char type, slow_dev; // available on the system
 	int fe, dvr, dmx;
 	int pa, fn;
 	// physical adapter, physical frontend number

@@ -71,6 +71,8 @@ int add_ca(SCA *c)
 	new_ca = i;
 
 	ca[new_ca].enabled = 1;
+	ca[new_ca].adapter_mask = c->adapter_mask;
+
 	for (i = 0; i < sizeof(ca[0].action) / sizeof(ca_action); i++)
 	{
 		ca[new_ca].action[i] = c->action[i];
@@ -552,7 +554,7 @@ void clean_psi(adapter *ad, uint8_t *b)
 #ifndef DISABLE_DVBAPI
 	if (!get_key(p->key)) // no key associated with PMT - most likely the channel is clear
 		return;
-#else 
+#else
 	return;
 #endif
 
@@ -832,32 +834,108 @@ int process_stream(adapter *ad, int rlen)
 	return 0;
 }
 
+int tables_init_ca_for_device(int i, adapter *ad)
+{
+	int mask = (1 << i);
+	int rv = 0;
+	int action_id = CA_INIT_DEVICE;
+
+	if(i<0 || i>=nca)
+		return 0;
+
+	if ((ca[i].adapter_mask & mask) && !(ad->ca_mask & mask)) // CA registered and not already initialized
+	{
+		if (ca[i].enabled && ca[i].action[action_id])
+			if (ca[i].action[action_id](ad, NULL))
+			{
+				ad->ca_mask = ad->ca_mask | mask;
+				rv = 1;
+			}
+	}
+	return rv;
+
+}
+
+void send_pmt_to_ca_for_device(SCA *c, adapter *ad)
+{
+	SPid *p, *p2;
+	int ep, epids[MAX_PIDS], j, pid;
+	ep = get_enabled_pids(ad, epids, MAX_PIDS);
+	for (j = 0; j < ep; j++)
+	{
+		pid = epids[j];
+		dump_pids(ad->id);
+		p = find_pid(ad->id, pid);
+		if (p && (p->type & PMT_COMPLETE))
+		{
+			p->type &= ~PMT_COMPLETE; // force CA_ADD_PMT for the PMT
+			LOG(
+					"init-ca_device: triggering CA_ADD_PMT for adapter %d and pid %d type %d",
+					ad->id, pid, p->type);
+		}
+	}
+
+}
+
+
+int register_ca_for_adapter(int i, int aid)
+{
+	adapter *ad = get_adapter(aid);
+	int mask, rv;
+	if(i<0 || i>=nca)
+		return 1;
+	if(!ad)
+		return 1;
+
+	mask = (1 << ad->id);
+	if((ca[i].adapter_mask & mask) == 0)
+	{
+		ca[i].adapter_mask |= mask;
+		rv = tables_init_ca_for_device(i, ad);
+		if(rv)
+			send_pmt_to_ca_for_device(&ca[i], ad);
+		return 0;
+	}
+	return 2;
+}
+
+int unregister_ca_for_adapter(int i, int aid)
+{
+	adapter *ad = get_adapter(aid);
+	int mask;
+	if(i<0 || i>=nca)
+		return 1;
+	if(!ad)
+		return 1;
+
+	mask = (1 << ad->id);
+	ca[i].adapter_mask &= ~mask;
+	mask = (1 << i);
+	if(ad->ca_mask & mask)
+	{
+			run_ca_action(CA_CLOSE_DEVICE, ad, NULL);
+			ad->ca_mask &= ~mask;
+			LOG("Unregistering CA %d for adapter %d", i, ad->id);
+	}
+	return 0;
+}
+
+
 int tables_init_device(adapter *ad)
 {
 //	ad->ca_mask = run_ca_action(CA_INIT_DEVICE, ad, NULL);
 	int i, mask = 1;
 	int rv = 0;
-	int action_id = CA_INIT_DEVICE;
 	for (i = 0; i < nca; i++)
-	{
-		if (!(ad->ca_mask & mask)) // CA already initialized
-		{
-			if (ca[i].enabled && ca[i].action[action_id])
-				if (ca[i].action[action_id](ad, NULL))
-					rv = rv | mask;
-		}
-		mask = mask << 1;
-	}
-	ad->ca_mask |= rv;
+		if(ca[i].enabled)
+			rv += tables_init_ca_for_device(i, ad);
 	return rv;
 }
 
 void init_ca_device(SCA *c)
 {
 	int i, init_cm;
-	SPid *p, *p2;
 	adapter *ad;
-	int ep, epids[MAX_PIDS], j, pid;
 	if (!c->action[CA_ADD_PMT])
 		return;
 
@@ -868,22 +946,11 @@ void init_ca_device(SCA *c)
 			tables_init_device(ad);
 			if (init_cm != ad->ca_mask)
 			{
-				ep = get_enabled_pids(ad, epids, MAX_PIDS);
-				for (j = 0; j < ep; j++)
-				{
-					pid = epids[j];
-					p = find_pid(ad->id, pid);
-					if (p && (p->type & PMT_COMPLETE))
-					{
-						p->type &= ~PMT_COMPLETE; // force CA_ADD_PMT for the PMT		
-						LOG(
-								"init-ca_device: triggering CA_ADD_PMT for adapter %d and pid %d type %d",
-								ad->id, pid, p->type);
-					}
-				}
+				send_pmt_to_ca_for_device(c,ad);
 			}
 		}
 }
+
 
 int tables_close_device(adapter *ad)
 {
@@ -902,4 +969,9 @@ int tables_init()
 	init_dvbapi();
 #endif
 	return 0;
+}
+
+int tables_destroy()
+{
+				run_ca_action(CA_CLOSE, NULL, NULL);
 }
