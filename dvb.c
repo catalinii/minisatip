@@ -568,19 +568,19 @@ int setup_switch(int frontend_fd, adapter *ad, transponder *tp)
 	int freq = tp->freq;
 	int pol = (tp->pol - 1) & 1;
 
-	if (tp->pol > 2)
+	if (tp->pol > 2 && tp->diseqc_param.lnb_circular > 0)
 	{
-		freq = (freq - LOF3);
+		freq = (freq - tp->diseqc_param.lnb_circular);
 		hiband = 0;
 	}
-	else if (freq < SLOF)
+	else if (freq < tp->diseqc_param.lnb_switch)
 	{
-		freq = (freq - LOF1);
+		freq = (freq - tp->diseqc_param.lnb_low);
 		hiband = 0;
 	}
 	else
 	{
-		freq = (freq - LOF2);
+		freq = (freq - tp->diseqc_param.lnb_high);
 		hiband = 1;
 	}
 

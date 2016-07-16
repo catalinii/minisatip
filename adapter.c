@@ -1268,6 +1268,71 @@ void set_diseqc_adapters(char *o)
 	}
 }
 
+
+void set_lnb_adapters(char *o)
+{
+	int i, la, a_id, lnb_low, lnb_high, lnb_switch;
+	char buf[100], *arg[20], *sep1, *sep2, *sep3;
+	adapter *ad;
+	strncpy(buf, o, sizeof(buf));
+	la = split(arg, buf, sizeof(arg), ',');
+	for (i = 0; i < la; i++)
+	{
+		if (arg[i] && arg[i][0] == '*')
+		{
+			ad = NULL;
+			a_id = -1;
+		}
+		else
+		{
+			a_id = map_intd(arg[i], NULL, -1);
+			if (a_id < 0 || a_id >= MAX_ADAPTERS)
+				continue;
+
+			if (!a[a_id])
+				a[a_id] = adapter_alloc();
+			ad = a[a_id];
+		}
+		sep3 = NULL;
+		sep1 = strchr(arg[i], ':');
+		sep2 = strchr(arg[i], '-');
+		if(sep2)
+			sep2 = strchr(sep2 + 1, '-');
+			
+		
+		if (!sep1 || !sep2 || !sep3)
+		{
+			LOG("LNB parameters not correctly specified: %s", arg[i]);
+			continue;
+		}
+
+		lnb_low = map_intd(sep1 + 1, NULL, -1) * 1000;
+		lnb_high = map_intd(sep2 + 1, NULL, -1) * 1000;
+		lnb_switch = map_intd(sep2 + 1, NULL, -1) * 1000;
+		if (lnb_low < 0 || lnb_high < 0 || lnb_switch < 0)
+			continue;
+
+		if (ad)
+		{
+			ad->diseqc_param.lnb_low = lnb_low;
+			ad->diseqc_param.lnb_high = lnb_high;
+			ad->diseqc_param.lnb_switch = lnb_switch;
+			ad->diseqc_param.lnb_circular = 0;
+		}
+		else
+		{
+			opts.lnb_low = lnb_low;
+			opts.lnb_high = lnb_high;
+			opts.lnb_switch = lnb_switch;
+			opts.lnb_circular = 0;
+		}
+		LOGL(0,
+				"Setting diseqc adapter %d lnb_low %d lnb_high %d lnb_switch %d",
+				a_id, lnb_low, lnb_high, lnb_switch);
+	}
+}
+
+
 void set_diseqc_timing(char *o)
 {
 	int i, la, a_id;

@@ -142,6 +142,7 @@ void adapter_lock1(char *FILE, int line, int aid);
 void adapter_unlock1(char *FILE, int line, int aid);
 char is_adapter_disabled(int i);
 void set_adapters_delsys(char *o);
+void set_lnb_adapters(char *o);
 int signal_thread(sockets *s);
 int compare_tunning_parameters(int aid, transponder * tp);
 

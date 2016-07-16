@@ -148,11 +148,6 @@ typedef enum fe_modulation {
 #define SYS_DVBT2 16
 #endif
 
-
-#define SLOF (11700*1000UL)
-#define LOF1 (9750*1000UL)
-#define LOF2 (10600*1000UL)
-#define LOF3 (10750*1000UL)
 #define LP_CODERATE_DEFAULT (0)
 
 #ifndef DTV_STREAM_ID
@@ -186,6 +181,8 @@ typedef struct diseqc
 	int after_switch;
 	int after_burst;
 	int after_tone;
+	
+	int lnb_low, lnb_high, lnb_circular, lnb_switch;
 } diseqc;
 
 typedef struct struct_transponder

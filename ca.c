@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2015 Damjan Marion <damjan.marion@gmail.com>
+ * Copyright (C) 2016 Catalin Toda <catalinii@yahoo.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -85,21 +86,47 @@ typedef struct ca_device
 	struct en50221_app_ca *ca_resource;
 	struct en50221_app_datetime *dt_resource;
 	int ca_session_number;
+	int ai_version;
+	int high_bitrate_mode;
 	uint16_t ai_session_number;
 } ca_device_t;
 SCA dvbca;
 
 int dvbca_id;
 static struct ca_device *ca_devices[MAX_ADAPTERS];
+#define TS101699_APP_AI_RESOURCEID  MKRID(2, 1, 2)
+#define CIPLUS13_APP_AI_RESOURCEID  MKRID(2, 1, 3)
+
+typedef enum {
+  CIPLUS13_DATA_RATE_72_MBPS = 0,
+  CIPLUS13_DATA_RATE_96_MBPS = 1,
+} ciplus13_data_rate_t;
+
+static int
+ciplus13_app_ai_data_rate_info(ca_device_t *d, ciplus13_data_rate_t rate)
+{
+  uint8_t data[] = {0x9f, 0x80, 0x24, 0x01, (uint8_t) rate};
+
+  /* only version 3 (CI+ 1.3) supports data_rate_info */
+  if (d->ai_version != 3)
+    return 0;
+
+  LOG("setting CI+ CAM data rate to %s Mbps", rate ? "96":"72");
+
+  return en50221_sl_send_data(d->sl, d->ai_session_number, data, sizeof(data));
+}
+
 
 // this contains all known resource ids so we can see if the cam asks for something exotic
 uint32_t resource_ids[] =
-{ EN50221_APP_TELETEXT_RESOURCEID, EN50221_APP_SMARTCARD_RESOURCEID(1),
-EN50221_APP_RM_RESOURCEID, EN50221_APP_MMI_RESOURCEID,
+{	
+		EN50221_APP_TELETEXT_RESOURCEID, EN50221_APP_SMARTCARD_RESOURCEID(1),
+		EN50221_APP_RM_RESOURCEID, EN50221_APP_MMI_RESOURCEID,
 		EN50221_APP_LOWSPEED_RESOURCEID(1, 1), EN50221_APP_EPG_RESOURCEID(1),
 		EN50221_APP_DVB_RESOURCEID, EN50221_APP_CA_RESOURCEID,
 		EN50221_APP_DATETIME_RESOURCEID, EN50221_APP_AUTH_RESOURCEID,
-		EN50221_APP_AI_RESOURCEID, };
+		EN50221_APP_AI_RESOURCEID, TS101699_APP_AI_RESOURCEID, CIPLUS13_APP_AI_RESOURCEID
+};
 int resource_ids_count = sizeof(resource_ids) / 4;
 
 void hexdump(uint8_t buffer[], int len)
@@ -233,7 +260,7 @@ stackthread_func(void* arg)
 				if(ad)
 					ad->slow_dev = 0;
 				d->ignore_close = 0; // force device close..
-				break;
+				//break;
 			}
 			lasterror = error;
 		}
@@ -251,26 +278,32 @@ static int ca_session_callback(void *arg, int reason, uint8_t slot_id,
 
 	switch (reason)
 	{
-	case S_SCALLBACK_REASON_CAMCONNECTING:
-		LOG("CAM connecting")
-		;
-		break;
-	case S_SCALLBACK_REASON_CAMCONNECTED:
-		LOG("CAM connected")
+		case S_SCALLBACK_REASON_CAMCONNECTING:
+			LOG("CAM connecting")			
+			break;
+			
+		case S_SCALLBACK_REASON_CAMCONNECTED:
+			LOG("CAM connected")
 
-		if (resource_id == EN50221_APP_RM_RESOURCEID)
-		{
-			en50221_app_rm_enq(d->rm_resource, session_number);
-		}
-		else if (resource_id == EN50221_APP_AI_RESOURCEID)
-		{
-			en50221_app_ai_enquiry(d->ai_resource, session_number);
-		}
-		else if (resource_id == EN50221_APP_CA_RESOURCEID)
-		{
-			en50221_app_ca_info_enq(d->ca_resource, session_number);
-			d->ca_session_number = session_number;
-		}
+			if (resource_id == EN50221_APP_RM_RESOURCEID)
+			{
+				en50221_app_rm_enq(d->rm_resource, session_number);
+			}
+			else if (resource_id == EN50221_APP_AI_RESOURCEID || resource_id == TS101699_APP_AI_RESOURCEID || resource_id == CIPLUS13_APP_AI_RESOURCEID)
+			{
+				d->ai_version = resource_id & 0x3f;
+				d->ai_session_number = session_number;
+				en50221_app_ai_enquiry(d->ai_resource, session_number);
+				ciplus13_app_ai_data_rate_info(d, d->high_bitrate_mode ?
+                                       CIPLUS13_DATA_RATE_96_MBPS :
+                                       CIPLUS13_DATA_RATE_72_MBPS );
+			}
+			else if (resource_id == EN50221_APP_CA_RESOURCEID)
+			{
+				en50221_app_ca_info_enq(d->ca_resource, session_number);
+				d->ca_session_number = session_number;
+			}
+			
 		d->ignore_close = 1;
 		unregister_ca_for_adapter(dvbca_id, d->id);
 		register_ca_for_adapter(dvbca_id, d->id);
@@ -312,6 +345,13 @@ static int ca_lookup_callback(void * arg, uint8_t slot_id,
 		*arg_out = d->dt_resource;
 		*connected_resource_id = EN50221_APP_DATETIME_RESOURCEID;
 		break;
+	case TS101699_APP_AI_RESOURCEID:	
+	case CIPLUS13_APP_AI_RESOURCEID:
+		*callback_out = (en50221_sl_resource_callback) en50221_app_ai_message;
+		*arg_out = d->ai_resource;
+		*connected_resource_id = requested_resource_id;
+        break;		
+		
 	default:
 		LOG("unknown resource id")
 		;
@@ -544,6 +584,7 @@ int dvbca_init_dev(adapter *ad, void *arg)
 	c->ignore_close = 0;
 	c->fd = fd;
 	c->id = ad->id;
+	c->high_bitrate_mode = 0;
 	return ca_init(c);
 }
 

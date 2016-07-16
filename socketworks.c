@@ -112,6 +112,7 @@ int udp_bind(char *addr, int port)
 {
 	struct sockaddr_in serv;
 	int sock, optval = 1;
+	int is_multicast = 0;
 
 	if (!fill_sockaddr(&serv, addr, port))
 		return -1;
@@ -130,6 +131,7 @@ int udp_bind(char *addr, int port)
 
 		mreq.imr_multiaddr.s_addr = inet_addr(addr);
 		mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+		is_multicast = 0;
 		LOG("setting multicast for %s", addr);
 		if (setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq))
 				== -1)
@@ -148,7 +150,16 @@ int udp_bind(char *addr, int port)
 	{
 		LOGL(0, "udp_bind: failed: bind() on host %s port %d: error %s", addr,
 				port, strerror(errno));
-		return -1;
+		if(is_multicast)
+		{
+			serv.sin_addr.s_addr = htonl(INADDR_ANY);
+			if (bind(sock, (struct sockaddr *) &serv, sizeof(serv)) < 0)
+			{
+				LOGL(0, "udp_bind: failed: bind() on host ANY port %d: error %s", port, strerror(errno));
+				return -1;
+			}
+			
+		}
 	}
 
 	set_linux_socket_timeout(sock);
@@ -909,9 +920,10 @@ void set_socket_send_buffer(int sock, int len)
 	int rv;
 	if (len <= 0)
 		return;
+#ifdef SO_SNDBUFFORCE
 	if ((rv = setsockopt(sock, SOL_SOCKET, SO_SNDBUFFORCE, &len, sizeof(len))))
 		LOGL(3, "unable to set output socket buffer (force) size to %d", len);
-
+#endif
 	if (rv && setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &len, sizeof(len)))
 		LOGL(3, "unable to set output socket buffer size to %d", len);
 	sl = sizeof(int);
@@ -926,10 +938,10 @@ void set_socket_receive_buffer(int sock, int len)
 	int rv;
 	if (len <= 0)
 		return;
-
+#ifdef SO_RCVBUFFORCE
 	if ((rv = setsockopt(sock, SOL_SOCKET, SO_RCVBUFFORCE, &len, sizeof(len))))
 		LOGL(3, "unable to set receive socket buffer (force) size to %d", len);
-
+#endif
 	if (rv && setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &len, sizeof(len)))
 		LOGL(3, "unable to set receive socket buffer size to %d", len);
 	sl = sizeof(int);

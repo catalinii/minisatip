@@ -86,6 +86,7 @@ static const struct option long_options[] =
 		{ "document-root", required_argument, NULL, 'R' },
 		{ "threads", no_argument, NULL, 'T' },
 		{ "dmx-source", required_argument, NULL, '9' },
+		{ "lnb", required_argument, NULL, 'L' },
 		{ "xml", required_argument, NULL, 'X' },
 		{ "help", no_argument, NULL, 'h' },
 		{ "version", no_argument, NULL, 'V' },
@@ -122,6 +123,8 @@ static const struct option long_options[] =
 #define XML_OPT 'X'
 #define THREADS_OPT 'T'
 #define DMXSOURCE_OPT '9'
+#define LNB_OPT 'L'
+
 
 char *built_info[] =
 {
@@ -201,7 +204,7 @@ void usage()
 #ifndef DISABLE_SATIPCLIENT
 			"[-s [DELSYS:]host[:port] "
 #endif
-			"[-u A1:S1-F1[-PIN]] [-w http_server[:port]] \n\
+			"[-u A1:S1-F1[-PIN]] [-L A1:low:high:switch] [-w http_server[:port]] \n\
 	\t[-x http_port] [-X xml_path] [-y rtsp_port] \n\n\
 Help\n\
 -------\n\
@@ -250,6 +253,11 @@ Help\n\
 \n\
 * -l increases the verbosity (you can use multiple -l), logging to stdout in foreground mode or in /tmp/log when a daemon\n\
 	* eg: -l -l -l\n\
+\n\
+* -L --lnb specifies the adapter and LNB parameters (low, high and switch frequency)\n\
+	* eg: -L *:9750:10600:11700 - sets all the adapters to use Universal LNB parameters (default)\n\
+	* eg: -L *:10750:10750:10750 - sets the parameters for Sky NZ LNB using 10750 Mhz\n\
+	* eg: -L 0:10750:10750:10750,1:9750:10600:11700 - adapter 0 has a SKY NZ LNB, adapter 1 has an Universal LNB\n\
 \n\
 * -m xx: simulate xx as local mac address, generates UUID based on mac\n\
 	* eg: -m 001122334455 \n\
@@ -381,13 +389,18 @@ void set_options(int argc, char *argv[])
 	opts.diseqc_after_burst = 15;
 	opts.diseqc_after_tone = 0;
 
+	opts.lnb_low = (9750*1000UL);
+	opts.lnb_high = (10600*1000UL);
+	opts.lnb_circular = (10750*1000UL);
+	opts.lnb_switch = (11700*1000UL);
+	
 #ifdef NO_BACKTRACE
 	opts.no_threads = 1;
 #endif
 	memset(opts.playlist, 0, sizeof(opts.playlist));
 
 	while ((opt = getopt_long(argc, argv,
-			"flr:a:td:w:p:s:n:hc:b:m:p:e:x:u:j:o:gy:i:q:D:VR:S:TX:Y:O",
+			"flr:a:td:w:p:s:n:hc:b:m:p:e:x:u:j:o:gy:i:q:D:VR:S:TX:Y:Ol:",
 			long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
@@ -519,6 +532,12 @@ void set_options(int argc, char *argv[])
 		case DISEQC_TIMING_OPT:
 		{
 			set_diseqc_timing(optarg);
+			break;
+		}
+
+		case LNB_OPT:
+		{
+			set_lnb_adapters(optarg);
 			break;
 		}
 

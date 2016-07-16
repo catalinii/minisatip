@@ -973,5 +973,7 @@ int tables_init()
 
 int tables_destroy()
 {
-				run_ca_action(CA_CLOSE, NULL, NULL);
+	adapter tmp;
+	tmp.ca_mask = -1;
+	run_ca_action(CA_CLOSE, &tmp, NULL);
 }
