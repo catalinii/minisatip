@@ -1304,7 +1304,7 @@ void set_lnb_adapters(char *o)
 		sep1 = strchr(arg[i], ':');
 		sep2 = strchr(arg[i], '-');
 		if(sep2)
-			sep2 = strchr(sep2 + 1, '-');
+			sep3 = strchr(sep2 + 1, '-');
 			
 		
 		if (!sep1 || !sep2 || !sep3)
