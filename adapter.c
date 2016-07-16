@@ -78,6 +78,13 @@ adapter *adapter_alloc()
 	ad->old_pol = -1;
 	ad->dmx_source = -1;
 	ad->slow_dev = 0;
+	/* LOF setup */
+	
+	ad->diseqc_param.lnb_low = opts.lnb_low;
+	ad->diseqc_param.lnb_high = opts.lnb_high;
+	ad->diseqc_param.lnb_circular = opts.lnb_circular;
+	ad->diseqc_param.lnb_switch = opts.lnb_switch;
+
 
 	return ad;
 }

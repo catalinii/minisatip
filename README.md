@@ -25,11 +25,11 @@ https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item
 Usage:
 -------
 
-minisatip version 0.5.44, compiled with s2api version: 050A
+minisatip version 0.5.55, compiled with s2api version: 050A
 
 	./minisatip [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 		[-[uj] A1:S1-F1[-PIN]] [-m mac][-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] 
-		[-R document_root] [-s [DELSYS:]host[:port] [-u A1:S1-F1[-PIN]] [-w http_server[:port]] 
+		[-R document_root] [-s [DELSYS:]host[:port] [-u A1:S1-F1[-PIN]] [-L A1:low:high:switch] [-w http_server[:port]] 
 		[-x http_port] [-X xml_path] [-y rtsp_port] 
 
 Help
@@ -79,6 +79,11 @@ Help
 
 * -l increases the verbosity (you can use multiple -l), logging to stdout in foreground mode or in /tmp/log when a daemon
 	* eg: -l -l -l
+
+* -L --lnb specifies the adapter and LNB parameters (low, high and switch frequency)
+	* eg: -L *:9750:10600:11700 - sets all the adapters to use Universal LNB parameters (default)
+	* eg: -L *:10750:10750:10750 - sets the parameters for Sky NZ LNB using 10750 Mhz
+	* eg: -L 0:10750:10750:10750,1:9750:10600:11700 - adapter 0 has a SKY NZ LNB, adapter 1 has an Universal LNB
 
 * -m xx: simulate xx as local mac address, generates UUID based on mac
 	* eg: -m 001122334455 
