@@ -1315,7 +1315,7 @@ void set_lnb_adapters(char *o)
 
 		lnb_low = map_intd(sep1 + 1, NULL, -1) * 1000;
 		lnb_high = map_intd(sep2 + 1, NULL, -1) * 1000;
-		lnb_switch = map_intd(sep2 + 1, NULL, -1) * 1000;
+		lnb_switch = map_intd(sep3 + 1, NULL, -1) * 1000;
 		if (lnb_low < 0 || lnb_high < 0 || lnb_switch < 0)
 			continue;
 
