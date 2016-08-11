@@ -102,6 +102,9 @@ typedef enum {
   CIPLUS13_DATA_RATE_96_MBPS = 1,
 } ciplus13_data_rate_t;
 
+int dvbca_close_device(ca_device_t *c);
+
+
 static int
 ciplus13_app_ai_data_rate_info(ca_device_t *d, ciplus13_data_rate_t rate)
 {
@@ -467,7 +470,9 @@ int ca_init(ca_device_t *d)
 	int tries = 800; // wait up to 8s for the CAM
 	int fd = d->fd;
 
-	d->tl = d->sl = d->slot_id = -1;
+	d->tl = NULL;
+	d->sl = NULL;
+	d->slot_id = -1;
 
 	adapter *ad = get_adapter(d->id);
 
@@ -605,11 +610,11 @@ int dvbca_close_device(ca_device_t *c)
 	c->enabled = 0;
 	if(c->stackthread)
 		pthread_join(c->stackthread, NULL);
-	if((c->tl >= 0) && (c->slot_id >= 0)) 
+	if(c->tl  && (c->slot_id >= 0)) 
 		en50221_tl_destroy_slot(c->tl, c->slot_id);
-	if((c->sl >= 0))
+	if(c->sl)
 		en50221_sl_destroy(c->sl);
-	if((c->tl >= 0))
+	if(c->tl >= 0)
 		en50221_tl_destroy(c->tl);
 	if(c->fd >= 0)
 		close(c->fd);
