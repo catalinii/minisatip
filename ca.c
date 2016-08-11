@@ -466,6 +466,9 @@ int ca_init(ca_device_t *d)
 	info.num = 0;
 	int tries = 800; // wait up to 8s for the CAM
 	int fd = d->fd;
+
+	d->tl = d->sl = d->slot_id = -1;
+
 	adapter *ad = get_adapter(d->id);
 
 	if (ioctl(fd, CA_RESET, &info))
@@ -560,6 +563,7 @@ int dvbca_init_dev(adapter *ad, void *arg)
 {
 	ca_device_t *c = ca_devices[ad->id];
 	int fd;
+	int init_ok = 0;
 	char ca_dev_path[100];
 
 	if (c && c->enabled)
@@ -585,18 +589,30 @@ int dvbca_init_dev(adapter *ad, void *arg)
 	c->fd = fd;
 	c->id = ad->id;
 	c->high_bitrate_mode = 0;
-	return ca_init(c);
+	c->stackthread = 0;
+	init_ok = ca_init(c)
+	if(!init_ok)
+	{
+		dvbca_close_device(c);
+		return 0;	
+	}
+	return 1;
 }
 
 int dvbca_close_device(ca_device_t *c)
 {
 	LOG("closing CA device %d, fd %d", c->id, c->fd);
 	c->enabled = 0;
-	pthread_join(c->stackthread, NULL);
-	en50221_tl_destroy_slot(c->tl, c->slot_id);
-	en50221_sl_destroy(c->sl);
-	en50221_tl_destroy(c->tl);
-	close(c->fd);
+	if(c->stackthread)
+		pthread_join(c->stackthread, NULL);
+	if((c->tl >= 0) && (c->slot_id >= 0)) 
+		en50221_tl_destroy_slot(c->tl, c->slot_id);
+	if((c->sl >= 0))
+		en50221_sl_destroy(c->sl);
+	if((c->tl >= 0))
+		en50221_tl_destroy(c->tl);
+	if(c->fd >= 0)
+		close(c->fd);
 
 }
 int dvbca_close_dev(adapter *ad, void *arg)
