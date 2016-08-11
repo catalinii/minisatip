@@ -504,7 +504,7 @@ int get_free_adapter(transponder *tp)
 				ad->tp.freq, ad->tp.pol, get_delsys(ad->sys[0]),
 				get_delsys(ad->sys[1]))
 	else
-		LOG("get free adapter %d msys %s requested %s", i, get_delsys(i),
+		LOG("get free adapter %d msys %s requested %s", fe, get_delsys(fe),
 				get_delsys(msys));
 
 	if (fe >= 0)
