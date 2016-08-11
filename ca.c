@@ -590,7 +590,7 @@ int dvbca_init_dev(adapter *ad, void *arg)
 	c->id = ad->id;
 	c->high_bitrate_mode = 0;
 	c->stackthread = 0;
-	init_ok = ca_init(c)
+	init_ok = ca_init(c);
 	if(!init_ok)
 	{
 		dvbca_close_device(c);
