@@ -72,6 +72,7 @@ int add_ca(SCA *c)
 
 	ca[new_ca].enabled = 1;
 	ca[new_ca].adapter_mask = c->adapter_mask;
+	ca[new_ca].id = new_ca;
 
 	for (i = 0; i < sizeof(ca[0].action) / sizeof(ca_action); i++)
 	{
@@ -80,7 +81,7 @@ int add_ca(SCA *c)
 	if (new_ca >= nca)
 		nca = new_ca + 1;
 
-	init_ca_device(c);
+	init_ca_device(&ca[new_ca]);
 	mutex_unlock(&ca_mutex);
 	return new_ca;
 }
@@ -920,7 +921,7 @@ int unregister_ca_for_adapter(int i, int aid)
 	return 0;
 }
 
-
+//unused ?
 int tables_init_device(adapter *ad)
 {
 //	ad->ca_mask = run_ca_action(CA_INIT_DEVICE, ad, NULL);
@@ -943,7 +944,8 @@ void init_ca_device(SCA *c)
 		if ((ad = get_adapter_nw(i)))
 		{
 			init_cm = ad->ca_mask;
-			tables_init_device(ad);
+//			tables_init_device(ad);
+			tables_init_ca_for_device(c->id, ad);
 			if (init_cm != ad->ca_mask)
 			{
 				send_pmt_to_ca_for_device(c,ad);
