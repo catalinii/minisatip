@@ -43,6 +43,7 @@ typedef struct struct_CA
 	uint8_t enabled;
 	ca_action action[9];
 	int adapter_mask;  // 1 << x, means enabled for adapter X
+	int id;
 } SCA;
 
 
