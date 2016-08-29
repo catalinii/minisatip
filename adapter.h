@@ -69,7 +69,7 @@ typedef struct struct_adapter
 	fe_delivery_system_t sys[MAX_DELSYS];
 	transponder tp;
 	SPid pids[MAX_PIDS];
-	int ca_mask;	
+	int ca_mask;
 	int master_sid;				 // first SID, the one that controls the tuning
 	int sid_cnt;				 //number of streams
 	int sock, fe_sock;
@@ -91,6 +91,8 @@ typedef struct struct_adapter
 	int old_pol;
 	int id;
 	int pat_processed, transponder_id, pat_ver;
+	int wait_new_stream, wait_transponder_id;
+	uint64_t tune_time;
 	char name[5];
 
 	Set_pid set_pid;

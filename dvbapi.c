@@ -201,6 +201,8 @@ int dvbapi_reply(sockets * s)
 				p->type = TYPE_ECM;
 				p->key = k_id;
 				p->ecm_parity = 255;
+				if(k)
+					k->ecms ++;
 				invalidate_adapter(k->adapter);
 			}
 //			else p->ecm_parity = 255;
@@ -230,6 +232,11 @@ int dvbapi_reply(sockets * s)
 				else
 					p->type = 0;
 				p->key = p->filter = 255;
+				if(k)
+				{
+					k->ecms --;
+					k->last_dmx_stop = getTick();
+				}
 				invalidate_adapter(k->adapter);
 			}
 			adapter_unlock(a_id);
@@ -720,8 +727,20 @@ int dvbapi_timeout(sockets * s)
 int connect_dvbapi(void *arg)
 {
 	sockets *s = (sockets *) arg;
+
 	if ((sock > 0) && dvbapi_is_enabled)  // already connected
+	{
+		int i;
+		uint64_t ctime = getTick();
+
+		for(i = 0; i< MAX_KEYS; i++)
+			if(keys[i] && keys[i]->enabled && (keys[i]->ecms == 0) && (keys[i]->last_dmx_stop > 0) && (ctime - keys[i]->last_dmx_stop > 3000))
+			{
+				LOG("Key %d active but no active filter, closing ", i);
+				keys_del(i);
+			}
 		return 0;
+	}
 
 	dvbapi_is_enabled = 0;
 
@@ -916,6 +935,8 @@ int keys_add(int adapter, int sid, int pmt_pid)
 	k->ecm_info = k->cardsystem = k->reader = k->from = k->protocol = NULL;
 	k->cw_time[0] = k->cw_time[1] = 0;
 	k->key_len = 8;
+	k->ecms = 0;
+	k->last_dmx_stop = 0;
 	memset(k->cw[0], 0, 16);
 	memset(k->cw[1], 0, 16);
 	memset(k->next_cw[0], 0, 16);
@@ -960,6 +981,7 @@ int keys_del(int i)
 	k->pmt_pid = 0;
 	k->adapter = -1;
 	k->demux = -1;
+	k->last_dmx_stop = 0;
 	reset_ecm_type_for_key(aid, i);
 //	if (k->next_key)
 //		keys_del(k->next_key->id);

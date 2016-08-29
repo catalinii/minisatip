@@ -79,7 +79,7 @@ adapter *adapter_alloc()
 	ad->dmx_source = -1;
 	ad->slow_dev = 0;
 	/* LOF setup */
-	
+
 	ad->diseqc_param.lnb_low = opts.lnb_low;
 	ad->diseqc_param.lnb_high = opts.lnb_high;
 	ad->diseqc_param.lnb_circular = opts.lnb_circular;
@@ -242,6 +242,8 @@ int init_hw(int i)
 	ad->new_gs = 0;
 	ad->force_close = 0;
 	ad->ca_mask = 0;
+	ad->tune_time = 0;
+	ad->wait_new_stream = 0;
 	ad->rtime = getTick();
 	ad->sock = sockets_add(ad->dvr, NULL, i, TYPE_DVR, (socket_action) read_dmx,
 			(socket_action) close_adapter_for_socket,
@@ -662,7 +664,7 @@ int update_pids(int aid)
 int tune(int aid, int sid)
 {
 	adapter *ad = get_adapter(aid);
-	int rv = 0;
+	int rv = 0, flush_data = 0;
 	SPid *p;
 
 	if (!ad)
@@ -678,6 +680,9 @@ int tune(int aid, int sid)
 		rv = ad->tune(ad->id, &ad->tp);
 		ad->status = -1;
 		ad->status_cnt = 0;
+		ad->wait_new_stream = 1;
+		ad->tune_time = getTick();
+		flush_data = 1;
 		set_socket_pos(ad->sock, 0);	// flush the existing buffer
 		ad->rlen = 0;
 		if (ad->sid_cnt > 1)	 // the master changed the frequency
@@ -711,6 +716,9 @@ int tune(int aid, int sid)
 		mutex_unlock(&ad->mutex);
 		return -503;
 	}
+	if(flush_data)
+		ad->tune_time = getTick();
+
 	mutex_unlock(&ad->mutex);
 	return rv;
 }
@@ -1305,8 +1313,8 @@ void set_lnb_adapters(char *o)
 		sep2 = strchr(arg[i], '-');
 		if(sep2)
 			sep3 = strchr(sep2 + 1, '-');
-			
-		
+
+
 		if (!sep1 || !sep2 || !sep3)
 		{
 			LOG("LNB parameters not correctly specified: %s", arg[i]);
@@ -1624,14 +1632,22 @@ void reset_ecm_type_for_key(int aid, int key)
 		return;
 	LOG("clearing ECMs for key %d for adapter %d", key, aid);
 	for (i = 0; i < MAX_PIDS; i++)
-		if ((ad->pids[i].flags > 0) && (ad->pids[i].key == key)
-				&& (ad->pids[i].type == TYPE_ECM))
+		if ((ad->pids[i].flags > 0) && (ad->pids[i].key == key))
 		{
-			ad->pids[i].type = 0;
-			ad->pids[i].key = 255;
-			ad->pids[i].filter = 255;
-			if (ad->pids[i].sid[0] == -1)
-				ad->pids[i].flags = 3;
+				if(ad->pids[i].type == TYPE_ECM)
+				{
+					ad->pids[i].type = 0;
+					ad->pids[i].key = 255;
+					ad->pids[i].filter = 255;
+					if (ad->pids[i].sid[0] == -1)
+						ad->pids[i].flags = 3;
+				}
+				if((ad->pids[i].type & PMT_COMPLETE))
+				{
+					ad->pids[i].type &= ~PMT_COMPLETE;
+					ad->pids[i].key = 255;
+					ad->pids[i].filter = 255;
+				}
 		}
 }
 

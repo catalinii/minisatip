@@ -48,7 +48,7 @@
 typedef struct struct_batch  // same as struct dvbcsa_bs_batch_s
 {
   unsigned char         *data;  /* pointer to payload */
-  unsigned int          len;    /* payload bytes lenght */	
+  unsigned int          len;    /* payload bytes lenght */
 } dvbapi_batch;
 
 
@@ -84,7 +84,7 @@ typedef struct struct_key
 	int key_len;
 	int sid;
 	int pmt_pid;
-	int64_t last_ecm;	
+	int64_t last_ecm, last_dmx_stop;
 	uint8_t hops;
 	uint16_t caid, info_pid;
 	uint32_t prid;
@@ -93,13 +93,14 @@ typedef struct struct_key
 	int adapter;
 	int demux;
 	int ver;
+	int ecms;
 	int program_id;  // pmt sid
 	unsigned char *pi, *ecm_info, *cardsystem, *reader, *from, *protocol;
 	int pi_len;
 	dvbapi_batch batch[130];
 	int parity;
 	int blen;
-	int64_t last_parity_change;	
+	int64_t last_parity_change;
 	struct struct_key *next_key;
 	dvbapi_op *op;
 } SKey;

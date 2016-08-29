@@ -497,7 +497,7 @@ int streams_add()
 	ss->useragent[0] = 0;
 	ss->len = 0;
 	ss->st_sock = -1;
-//	ss->seq = 0; // set the sequence to 0 for testing purposes - it should be random 
+//	ss->seq = 0; // set the sequence to 0 for testing purposes - it should be random
 	ss->ssrc = random();
 	ss->timeout = opts.timeout_sec;
 	ss->wtime = ss->rtcp_wtime = getTick();
@@ -639,7 +639,7 @@ int send_rtp(streams * sid, const struct iovec *iov, int liov)
 				ntohs(sid->sa.sin_port));
 	}
 
-	LOGL(7, "%s: sent %d bytes for stream %d, handle %d seq %d => %s:%d", 
+	LOGL(7, "%s: sent %d bytes for stream %d, handle %d seq %d => %s:%d",
 			__FUNCTION__, total_len, sid->sid, sid->rsock, sid->seq - 1,
 			get_stream_rhost(sid->sid, ra, sizeof(ra)), ntohs(sid->sa.sin_port));
 
@@ -736,10 +736,10 @@ int send_rtcp(int s_id, int64_t ctime)
 	}
 //	if(rv>0)
 //		sid->rsock_err = 0;
-//	else	
+//	else
 //		sid->rsock_err ++;
 	sid->rtcp_wtime = ctime;
-	LOGL(7, "%s: sent %d bytes for stream %d, handle %d seq %d => %s:%d", 
+	LOGL(7, "%s: sent %d bytes for stream %d, handle %d seq %d => %s:%d",
 			__FUNCTION__, total_len, sid->sid, sid->rsock, sid->seq - 1,
 			get_stream_rhost(sid->sid, ra, sizeof(ra)), ntohs(sid->sa.sin_port));
 
@@ -795,7 +795,7 @@ int flush_streami(streams * sid, int64_t ctime)
 		writev(fd, sid->iov, sid->iiov);
 		close(fd);
 	}
-#endif		
+#endif
 	sid->iiov = 0;
 	sid->wtime = ctime;
 	sid->len = 0;
@@ -809,6 +809,45 @@ int flush_streami(streams * sid, int64_t ctime)
 	return rv;
 }
 
+int check_new_transponder(adapter *ad, int rlen)
+{
+	unsigned char *b;
+	int all_good = 0;
+	int tid = 0;
+	int i;
+
+	for(i = 0; i< rlen; i+= 188)
+	{
+
+		b = ad->buf + i;
+		if(b[0] == 0x47 && b[1] == 0x40 && b[2] == 0) // pid 0, calculate transponder_id
+		{
+				tid = b[8] * 256 + b[9];
+				if(tid != ad->wait_transponder_id)
+				{
+					int j = 0;
+					all_good = 1;
+					LOG("Got the new transponder %04X %d", tid, tid);
+					for(j = 0; j< i; j+= 188)
+					{
+						b = ad->buf + j;
+						if(b[0] == 0x47) // mark all the pids to 8191 to avoid being processed
+						{
+							b[1] |= 0x1F;
+							b[2] |= 0xFF;
+						}
+					}
+					break;
+				}
+		}
+
+	}
+	if(!all_good)
+		return 0;
+	ad->wait_transponder_id = tid;
+	return 1;
+}
+
 int process_packet(unsigned char *b, adapter *ad)
 {
 	int j, cc;
@@ -818,7 +857,7 @@ int process_packet(unsigned char *b, adapter *ad)
 	int rtime = ad->rtime;
 //	if( _pid == 8191)
 //	{
-//		return 0;	
+//		return 0;
 //	}
 	p = find_pid(ad->id, _pid);
 	if (!p)
@@ -893,9 +932,10 @@ int process_dmx(sockets * s)
 			"process_dmx start flush_all=%d called for adapter %d -> %d out of %d bytes read, %jd ms ago",
 			flush_all, s->sid, rlen, s->lbuf, ms_ago);
 
+
 #ifndef DISABLE_TABLES
 	process_stream(ad, rlen);
-#else							 
+#else
 	if (ad->sid_cnt == 1 && ad->master_sid >= 0 && opts.log < 2) // we have just 1 stream, do not check the pids, send everything to the destination
 	{
 		sid = get_sid(ad->master_sid);
@@ -989,6 +1029,7 @@ int read_dmx(sockets * s)
 		return 0;
 	}
 
+
 	if (s->rtime - ad->rtime > 50) // flush buffers every 50ms
 	{
 		flush_all = 1; // flush everything that we've read so far
@@ -1004,10 +1045,21 @@ int read_dmx(sockets * s)
 	if (s->rtime - ad->rtime > 1000)
 		send = 1;
 
+	if(ad && ad->wait_new_stream && (s->rtime - ad->tune_time < 100) ) // check new transponder
+	{
+			LOGL(1, "Flushing buffer of %d bytes after the tune", s->rlen);
+			s->rlen = 0;
+			return 0;
+	}
+	ad->wait_new_stream = 0;
+
 	LOGL(7,
 			"read_dmx send=%d, flush_all=%d, cnt %d called for adapter %d -> %d out of %d bytes read, %jd ms ago",
 			send, flush_all, cnt, s->sid, s->rlen, s->lbuf,
 			s->rtime - ad->rtime);
+
+
+
 
 	if (!send)
 		return 0;
