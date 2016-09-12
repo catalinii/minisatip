@@ -185,6 +185,9 @@ int process_pat(adapter *ad, unsigned char *b)
 	if ((b[1] & 0x40) && ((b[4] != 0) || (b[5] != 0)))
 		return 0;
 
+	if(ad->pat_processed && ((b[1] & 0x40) == 0))
+		return 0;
+
 //	p = find_pid(ad->id, 0);
 //	if(!p)
 //		return 0;

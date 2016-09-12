@@ -670,7 +670,6 @@ void get_c2_url(adapter *ad, char *url)
 	FILL("&sr=%d", tp->sr, -1, tp->sr / 1000);
 	FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
 	FILL("&mtype=%s", tp->mtype, -1, get_modulation(tp->mtype));
-	FILL("&bw=%d", tp->bw, BANDWIDTH_AUTO, tp->bw / 1000000);
 	FILL("&gi=%s", tp->gi, GUARD_INTERVAL_AUTO, get_gi(tp->gi));
 	FILL("&fec=%s", tp->fec, FEC_AUTO, get_fec(tp->fec));
 	FILL("&tmode=%s", tp->tmode, TRANSMISSION_MODE_AUTO, get_tmode(tp->tmode));

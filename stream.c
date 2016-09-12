@@ -809,6 +809,7 @@ int flush_streami(streams * sid, int64_t ctime)
 	return rv;
 }
 
+// to be removed? 
 int check_new_transponder(adapter *ad, int rlen)
 {
 	unsigned char *b;

@@ -194,6 +194,9 @@ int dvbapi_reply(sockets * s)
 				break;
 			}
 //			if(k && p->key != k_id)
+			if(k)
+				k->ecms ++;
+
 			if (p->key == 255)
 			{
 				p->filter = filter;
@@ -201,8 +204,6 @@ int dvbapi_reply(sockets * s)
 				p->type = TYPE_ECM;
 				p->key = k_id;
 				p->ecm_parity = 255;
-				if(k)
-					k->ecms ++;
 				invalidate_adapter(k->adapter);
 			}
 //			else p->ecm_parity = 255;
@@ -232,14 +233,15 @@ int dvbapi_reply(sockets * s)
 				else
 					p->type = 0;
 				p->key = p->filter = 255;
-				if(k)
-				{
-					k->ecms --;
-					k->last_dmx_stop = getTick();
-				}
+
 				invalidate_adapter(k->adapter);
 			}
-			adapter_unlock(a_id);
+			
+			if(k)
+			{
+				k->ecms --;
+				k->last_dmx_stop = getTick();
+			}			adapter_unlock(a_id);
 			break;
 		}
 		case DVBAPI_CA_SET_PID:

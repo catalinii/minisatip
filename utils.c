@@ -189,8 +189,7 @@ int setItem(int64_t key, unsigned char *data, int len, int pos) // pos = -1 -> a
 		LOG(
 				"Overflow detected for item %jx, pos %d, size to be added %d, max_size %d",
 				key, pos, len, s->max_size);
-		s->len = 0;
-		return 0;
+		len = s->max_size - pos;
 	}
 	s->len = pos + len;
 	memcpy(s->data + pos, data, len);
@@ -854,7 +853,7 @@ char *readfile(char *fn, char *ctype, int *len)
 		return 0;
 	snprintf(ffn, sizeof(ffn), "%s/%s", opts.document_root, fn);
 	ffn[sizeof(ffn) - 1] = 0;
-#ifndef __CYGWIN__
+#ifdef O_LARGEFILE
    	if ((fd = open(ffn, O_RDONLY | O_LARGEFILE)) < 0)
 #else
 	if ((fd = open(ffn, O_RDONLY)) < 0)

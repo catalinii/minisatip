@@ -124,7 +124,7 @@ static const struct option long_options[] =
 #define THREADS_OPT 'T'
 #define DMXSOURCE_OPT '9'
 #define LNB_OPT 'L'
-
+#define DROP_ENCRYPTED_OPT 'E'
 
 char *built_info[] =
 {
@@ -194,7 +194,7 @@ void usage()
 {
 	print_version(0);
 	printf(
-			"\n\t./%s [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] \n\
+			"\n\t./%s [-[fgltzE]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] \n\
 	\t[-[uj] A1:S1-F1[-PIN]] [-m mac]"
 #ifndef DISABLE_DVBAPI
 					"[-o oscam_host:dvbapi_port] "
@@ -232,6 +232,8 @@ Help\n\
 \n\
 * -D --device-id DVC_ID: specify the device id (in case there are multiple SAT>IP servers in the network)\n \
 	* eg: -D 4 \n\
+\n\
+* -E Allow encrypted stream to be sent to the client even if the decrypting was unsuccessfull\n \
 \n\
 * -Y --delsys ADAPTER1:DELIVERY_SYSTEM1[,ADAPTER2:DELIVERY_SYSTEM2[,..]] - specify the delivery system of the adapters	\n\
 	* eg: --delsys 1:dvbt,2:dvbs\n\
@@ -400,7 +402,7 @@ void set_options(int argc, char *argv[])
 	memset(opts.playlist, 0, sizeof(opts.playlist));
 
 	while ((opt = getopt_long(argc, argv,
-			"flr:a:td:w:p:s:n:hc:b:m:p:e:x:u:j:o:gy:i:q:D:VR:S:TX:Y:OL:",
+			"flr:a:td:w:p:s:n:hc:b:m:p:e:x:u:j:o:gy:i:q:D:VR:S:TX:Y:OL:E",
 			long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
@@ -637,6 +639,10 @@ void set_options(int argc, char *argv[])
 
 		case THREADS_OPT:
 			opts.no_threads = 1 - opts.no_threads;
+			break;
+
+		case DROP_ENCRYPTED_OPT:
+			opts.drop_encrypted = 1 - opts.drop_encrypted;
 			break;
 
 		case XML_OPT:
