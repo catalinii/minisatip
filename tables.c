@@ -835,6 +835,20 @@ int process_stream(adapter *ad, int rlen)
 
 	}
 	run_ca_action(CA_TS, ad, &rlen);
+	if(opts.drop_encrypted)
+	{
+                for (i = 0; i < rlen; i += 188)
+                {
+                        b = ad->buf + i;
+                        if((b[3] & 0x80) == 0x80)
+                        {
+                                b[1] |= 0x1F;
+                                b[2] |= 0xFF;
+                        }
+                }
+        }
+
+
 	return 0;
 }
 
