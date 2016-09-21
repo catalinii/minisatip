@@ -1737,6 +1737,8 @@ _symbols adapters_sym[] =
 				enabled) },
 		{ "ad_type", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS, offsetof(adapter,
 				type) },
+		{ "ad_pos", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter,
+				tp.diseqc) },
 		{ "ad_freq", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, offsetof(
 				adapter, tp.freq) },
 		{ "ad_strength", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, offsetof(

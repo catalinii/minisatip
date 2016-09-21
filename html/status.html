@@ -72,6 +72,7 @@ var ad_sys		= [$ad_sys0$, $ad_sys1$, $ad_sys2$, $ad_sys3$, $ad_sys4$, $ad_sys5$,
 var ad_strength	= [$ad_strength0$, $ad_strength1$, $ad_strength2$, $ad_strength3$, $ad_strength4$, $ad_strength5$, $ad_strength6$, $ad_strength7$, $ad_strength8$, $ad_strength9$, $ad_strength10$, $ad_strength11$, $ad_strength12$, $ad_strength13$, $ad_strength14$, $ad_strength15$ ];
 var ad_ber		= [$ad_ber0$, $ad_ber1$, $ad_ber2$, $ad_ber3$, $ad_ber4$, $ad_ber5$, $ad_ber6$, $ad_ber7$, $ad_ber8$, $ad_ber9$, $ad_ber10$, $ad_ber11$, $ad_ber12$, $ad_ber13$, $ad_ber14$, $ad_ber15$ ];
 var ad_master	= [$ad_master0$, $ad_master1$, $ad_master2$, $ad_master3$, $ad_master4$, $ad_master5$, $ad_master6$, $ad_master7$, $ad_master8$, $ad_master9$, $ad_master10$, $ad_master11$, $ad_master12$, $ad_master13$, $ad_master14$, $ad_master15$ ];
+var ad_pos		= [$ad_pos0$, $ad_pos1$, $ad_pos2$, $ad_pos3$, $ad_pos4$, $ad_pos5$, $ad_pos6$, $ad_pos7$, $ad_pos8$, $ad_pos9$, $ad_pos10$, $ad_pos11$, $ad_pos12$, $ad_pos13$, $ad_pos14$, $ad_pos15$ ];
 var ad_freq		= [$ad_freq0$, $ad_freq1$, $ad_freq2$, $ad_freq3$, $ad_freq4$, $ad_freq5$, $ad_freq6$, $ad_freq7$, $ad_freq8$, $ad_freq9$, $ad_freq10$, $ad_freq11$, $ad_freq12$, $ad_freq13$, $ad_freq14$, $ad_freq15$ ];
 var ad_pol		= [$ad_pol0$, $ad_pol1$, $ad_pol2$, $ad_pol3$, $ad_pol4$, $ad_pol5$, $ad_pol6$, $ad_pol7$, $ad_pol8$, $ad_pol9$, $ad_pol10$, $ad_pol11$, $ad_pol12$, $ad_pol13$, $ad_pol14$, $ad_pol15$ ];
 var ad_sr		= [$ad_sr0$, $ad_sr1$, $ad_sr2$, $ad_sr3$, $ad_sr4$, $ad_sr5$, $ad_sr6$, $ad_sr7$, $ad_sr8$, $ad_sr9$, $ad_sr10$, $ad_sr11$, $ad_sr12$, $ad_sr13$, $ad_sr14$, $ad_sr15$ ];
@@ -109,6 +110,7 @@ var sys			= [ "", "dvbc", "dvbcb", "dvbt", "dss", "dvbs", "dvbs2", "dvbh", "isdb
 var myTable = "<table id='myTable' class='display cell-border compact' cellspacing='0' width='100%'>";
 myTable += "<thead><tr><th>Tuner</th>";
 myTable += "<th class=''>Status</th>";
+myTable += "<th class='dt-right'>Pos.</th>";
 myTable += "<th class='dt-right'>Frequency</th>";
 myTable += "<th class='dt-right'>SR/BW</th>";
 myTable += "<th class='dt-right'>Signal</th>";
@@ -147,13 +149,24 @@ for (var i = 0; i < max_adapters; i++) {
 	}
 	myTable += "</td>";
 	
+	// POSITION
+	if ((ad_sys[i] == 5 || ad_sys[i] == 6) && ad_enabled[i])
+		myTable += "<td class='dt-right'>" + ad_pos[i] + "</td>";
+	else
+		myTable += "<td class='dt-right'></td>";
+
 	// FREQUENCY
-	myTable += "<td class='dt-right'>" + ad_freq[i] + " "+pol[ad_pol[i]]+"</td>";
+	if (ad_enabled[i])
+		myTable += "<td class='dt-right'>" + ad_freq[i] + " "+pol[ad_pol[i]]+"</td>";
+	else
+		myTable += "<td class='dt-right'></td>";
 	
-	if (ad_sys[i] == 0 || ad_sys[i] == 1 || ad_sys[i] == 2 || ad_sys[i] == 5 || ad_sys[i] == 6 || ad_sys[i] == 18 || ad_sys[i] == 19 )
+	if (ad_enabled[i] && (ad_sys[i] == 0 || ad_sys[i] == 1 || ad_sys[i] == 2 || ad_sys[i] == 5 || ad_sys[i] == 6 || ad_sys[i] == 18 || ad_sys[i] == 19))
 		myTable += "<td class='dt-right'>" + ad_sr[i] + "</td>";
-	else 
+	else if (ad_enabled[i])
 		myTable += "<td class='dt-right'>" + ad_bw[i]/1000 + "MHZ</td>";
+	else
+		myTable += "<td class='dt-right'></td>";
 	
 	// SIGNAL
 	var signal = "";
