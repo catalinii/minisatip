@@ -548,11 +548,13 @@ int send_jess(int fd, int freq, int pos, int pol, int hiband, diseqc *d)
 	if (!d->only13v && ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18) == -1)
 		LOG("send_jess: FE_SET_VOLTAGE failed for fd %d: %s", fd,
 				strerror(errno));
-	msleep(d->after_burst);
-	if (ioctl(fd, FE_DISEQC_SEND_MASTER_CMD, &cmd) == -1)
-		LOG("send_jess: FE_DISEQC_SEND_MASTER_CMD failed for fd %d: %s", fd,
-				strerror(errno));
-	msleep(d->after_repeated_cmd);
+//	msleep(d->after_burst);
+//	if (ioctl(fd, FE_DISEQC_SEND_MASTER_CMD, &cmd) == -1)
+//		LOG("send_jess: FE_DISEQC_SEND_MASTER_CMD failed for fd %d: %s", fd,
+//				strerror(errno));
+//	msleep(d->after_repeated_cmd);
+	diseqc_cmd(fd, 3, "jess", &cmd, d);
+
 	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_13) == -1)
 		LOG("send_jess: FE_SET_VOLTAGE failed for fd %d: %s", fd,
 				strerror(errno));
