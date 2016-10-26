@@ -38,7 +38,6 @@ CFLAGS+=-DDISABLE_DVBCSA
 endif
 
 ifeq ($(DVBAPI),1)
-LIBS+=dvbcsa
 OBJS+=dvbapi.o
 DVBAPI=1
 TABLES=1
