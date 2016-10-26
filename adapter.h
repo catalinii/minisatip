@@ -5,7 +5,7 @@
 
 typedef struct ca_device ca_device_t;
 
-#define MAX_ADAPTERS 16
+#define MAX_ADAPTERS 32
 #define DVR_BUFFER 30*1024*188
 #ifdef NO_BACKTRACE
 #define MAX_STREAMS_PER_PID 8

@@ -474,7 +474,8 @@ int send_unicable(int fd, int freq, int pos, int pol, int hiband, diseqc *d)
 	{
 	{ 0xe0, 0x11, 0x5a, 0x00, 0x00 }, 5 };
 	int t;
-
+	int committed_no = d->committed_no;
+	
 	t = (freq + d->ufreq + 2) / 4 - 350;
 
 	cmd.msg[3] = ((t & 0x0300) >> 8) | (d->uslot << 5) | (pos ? 0x10 : 0)
@@ -502,11 +503,7 @@ int send_unicable(int fd, int freq, int pos, int pol, int hiband, diseqc *d)
 	if (!d->only13v && ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18) == -1)
 		LOG("send_unicable: FE_SET_VOLTAGE failed for fd %d: %s", fd,
 				strerror(errno));
-	msleep(d->after_burst);
-	if (ioctl(fd, FE_DISEQC_SEND_MASTER_CMD, &cmd) == -1)
-		LOG("send_unicable: FE_DISEQC_SEND_MASTER_CMD failed for fd %d: %s", fd,
-				strerror(errno));
-	msleep(d->after_repeated_cmd);
+	diseqc_cmd(fd, committed_no, "unicable", &cmd, d);
 	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_13) == -1)
 		LOG("send_unicable: FE_SET_VOLTAGE failed for fd %d: %s", fd,
 				strerror(errno));
@@ -520,6 +517,9 @@ int send_jess(int fd, int freq, int pos, int pol, int hiband, diseqc *d)
 	struct dvb_diseqc_master_cmd cmd =
 	{
 	{ 0x70, 0x00, 0x00, 0x00, 0x00 }, 4 };
+
+	int committed_no = d->committed_no;
+	
 //	int t = (freq / 1000) - 100;
 	int t = freq - 100;
 
@@ -548,12 +548,7 @@ int send_jess(int fd, int freq, int pos, int pol, int hiband, diseqc *d)
 	if (!d->only13v && ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18) == -1)
 		LOG("send_jess: FE_SET_VOLTAGE failed for fd %d: %s", fd,
 				strerror(errno));
-//	msleep(d->after_burst);
-//	if (ioctl(fd, FE_DISEQC_SEND_MASTER_CMD, &cmd) == -1)
-//		LOG("send_jess: FE_DISEQC_SEND_MASTER_CMD failed for fd %d: %s", fd,
-//				strerror(errno));
-//	msleep(d->after_repeated_cmd);
-	diseqc_cmd(fd, 3, "jess", &cmd, d);
+	diseqc_cmd(fd, committed_no, "jess", &cmd, d);
 
 	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_13) == -1)
 		LOG("send_jess: FE_SET_VOLTAGE failed for fd %d: %s", fd,
