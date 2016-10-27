@@ -395,6 +395,7 @@ void set_options(int argc, char *argv[])
 	opts.diseqc_after_switch = 15;
 	opts.diseqc_after_burst = 15;
 	opts.diseqc_after_tone = 0;
+	opts.diseqc_uncommitted_no = 1;
 
 	opts.lnb_low = (9750*1000UL);
 	opts.lnb_high = (10600*1000UL);
@@ -569,7 +570,7 @@ void set_options(int argc, char *argv[])
 		case DVBAPI_OPT:
 		{
 #ifdef DISABLE_DVBAPI
-			LOGL(0, "%s was not compiled with DVBCSA support, please install libdvbcsa (libdvbcsa-dev in Ubuntu) and change the Makefile", app_name);
+			LOGL(0, "%s was not compiled with DVBAPI support, please install libdvbcsa (libdvbcsa-dev in Ubuntu) and change the Makefile", app_name);
 			exit (0);
 #else
 			char* sep1 = strchr(optarg, ':');
