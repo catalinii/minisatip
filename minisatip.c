@@ -395,7 +395,7 @@ void set_options(int argc, char *argv[])
 	opts.diseqc_after_switch = 15;
 	opts.diseqc_after_burst = 15;
 	opts.diseqc_after_tone = 0;
-	opts.diseqc_uncommitted_no = 1;
+	opts.diseqc_committed_no = 1;
 
 	opts.lnb_low = (9750*1000UL);
 	opts.lnb_high = (10600*1000UL);
