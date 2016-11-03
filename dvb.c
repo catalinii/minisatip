@@ -545,6 +545,8 @@ int send_jess(int fd, int freq, int pos, int pol, int hiband, diseqc *d)
 	msleep(d->before_cmd);
 	if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
 		LOG("send_jess: FE_SET_TONE failed for fd %d: %s", fd, strerror(errno));
+	msleep(d->after_tone);
+
 	if (!d->only13v && ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18) == -1)
 		LOG("send_jess: FE_SET_VOLTAGE failed for fd %d: %s", fd,
 				strerror(errno));
