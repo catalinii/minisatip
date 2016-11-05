@@ -25,10 +25,10 @@ https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item
 Usage:
 -------
 
-minisatip version 0.5.55, compiled with s2api version: 050A
+minisatip version 0.5.63, compiled with s2api version: 050A
 
-	./minisatip [-[fgltz]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
-		[-[uj] A1:S1-F1[-PIN]] [-m mac][-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] 
+	./minisatip [-[fgltzE]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
+		[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port][-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] 
 		[-R document_root] [-s [DELSYS:]host[:port] [-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] 
 		[-x http_port] [-X xml_path] [-y rtsp_port] 
 
@@ -59,6 +59,8 @@ Help
 * -D --device-id DVC_ID: specify the device id (in case there are multiple SAT>IP servers in the network)
  	* eg: -D 4 
 
+* -E Allow encrypted stream to be sent to the client even if the decrypting was unsuccessfull
+ 
 * -Y --delsys ADAPTER1:DELIVERY_SYSTEM1[,ADAPTER2:DELIVERY_SYSTEM2[,..]] - specify the delivery system of the adapters	
 	* eg: --delsys 1:dvbt,2:dvbs
 	- specifies adapter 1 as a DVBT device, adapter 2 as DVB-S, which overrides the system detection of the adapter
@@ -88,6 +90,11 @@ Help
 * -m xx: simulate xx as local mac address, generates UUID based on mac
 	* eg: -m 001122334455 
 
+* -Z --nopm ADAPTER1,ADAPTER2-ADAPTER4[,..] - specify no power management for the adapters (does not turn power off)	
+	eg: --nopm 1-2
+	- turns off power management for adapter 1 to 2 
+	- required for some Unicable LNBs 
+
 * -n --netceiver if:count: use network interface <if> (default vlan4) and look for <count> netceivers
 	* eg: -n vlan4:2 
 
@@ -99,6 +106,10 @@ Help
 	* eg: -p http://192.168.2.3:8080/playlist
 	- this will add X_SATIPM3U tag into the satip description xml
 
+* -P  port: use port number to listen for UDP socket in the RTP communication. port + 1000 will be used to listen by the sat>ip client (option -s)
+ 	* eg: -P 5500 (default): will use for the sat>ip server 5500 + 2*A and 5500 + 2*A + 1, where A is the adapter number. 
+				6500 + 2*A and 6500 + 2*A + 1 - will be used by the sat>ip client
+ 
 * -r --remote-rtp  remote_rtp_host: send the rtp stream to remote_rtp_host instead of the ip the connection comes from
  	* eg: -r 192.168.7.9
  
