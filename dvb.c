@@ -496,10 +496,10 @@ int send_unicable(int fd, int freq, int pos, int pol, int hiband, diseqc *d)
 	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_13) == -1)
 		LOG("send_unicable: pre voltage  SEC_VOLTAGE_13 failed for fd %d: %s",
 				fd, strerror(errno));
-	msleep(d->before_cmd);
 	if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
 		LOG("send_unicable: FE_SET_TONE failed for fd %d: %s", fd,
 				strerror(errno));
+	msleep(d->after_tone);
 	if (!d->only13v && ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18) == -1)
 		LOG("send_unicable: FE_SET_VOLTAGE failed for fd %d: %s", fd,
 				strerror(errno));
@@ -507,7 +507,6 @@ int send_unicable(int fd, int freq, int pos, int pol, int hiband, diseqc *d)
 	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_13) == -1)
 		LOG("send_unicable: FE_SET_VOLTAGE failed for fd %d: %s", fd,
 				strerror(errno));
-	msleep(d->after_tone);
 
 	return d->ufreq * 1000;
 }
@@ -542,7 +541,6 @@ int send_jess(int fd, int freq, int pos, int pol, int hiband, diseqc *d)
 	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_13) == -1)
 		LOG("send_jess: pre voltage  SEC_VOLTAGE_13 failed for fd %d: %s", fd,
 				strerror(errno));
-	msleep(d->before_cmd);
 	if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
 		LOG("send_jess: FE_SET_TONE failed for fd %d: %s", fd, strerror(errno));
 	msleep(d->after_tone);
@@ -555,7 +553,6 @@ int send_jess(int fd, int freq, int pos, int pol, int hiband, diseqc *d)
 	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_13) == -1)
 		LOG("send_jess: FE_SET_VOLTAGE failed for fd %d: %s", fd,
 				strerror(errno));
-	msleep(d->after_tone);
 
 	return d->ufreq * 1000;
 }

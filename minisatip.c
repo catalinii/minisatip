@@ -67,6 +67,7 @@ static const struct option long_options[] =
 { "jess", required_argument, NULL, 'j' },
 { "diseqc", required_argument, NULL, 'd' },
 { "diseqc-timing", required_argument, NULL, 'q' },
+{"nopm", required_argument, NULL, 'Z'},
 #ifndef DISABLE_DVBAPI
 		{ "dvbapi", required_argument, NULL, 'o' },
 #endif
@@ -126,6 +127,7 @@ static const struct option long_options[] =
 #define LNB_OPT 'L'
 #define DROP_ENCRYPTED_OPT 'E'
 #define UDPPORT_OPT 'P'
+#define NOPM_OPT 'Z'
 
 char *built_info[] =
 {
@@ -264,6 +266,11 @@ Help\n\
 \n\
 * -m xx: simulate xx as local mac address, generates UUID based on mac\n\
 	* eg: -m 001122334455 \n\
+\n\
+* -Z --nopm ADAPTER1,ADAPTER2-ADAPTER4[,..] - specify no power management for the adapters (does not turn power off)	\n\
+	eg: --nopm 1-2\n\
+	- turns off power management for adapter 1 to 2 \n\
+	- required for some Unicable LNBs \n\
 \n\
 "
 #ifndef DISABLE_NETCVCLIENT
@@ -408,7 +415,7 @@ void set_options(int argc, char *argv[])
 	memset(opts.playlist, 0, sizeof(opts.playlist));
 
 	while ((opt = getopt_long(argc, argv,
-			"flr:a:td:w:p:s:n:hc:b:m:p:e:x:u:j:o:gy:i:q:D:VR:S:TX:Y:OL:EP:",
+			"flr:a:td:w:p:s:n:hc:b:m:p:e:x:u:j:o:gy:i:q:D:VR:S:TX:Y:OL:EP:Z:",
 			long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
@@ -558,6 +565,12 @@ void set_options(int argc, char *argv[])
 		case SLAVE_OPT:
 		{
 			set_slave_adapters(optarg);
+			break;
+		}
+
+		case NOPM_OPT:
+		{
+			set_nopm_adapters(optarg);
 			break;
 		}
 
