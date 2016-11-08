@@ -77,7 +77,7 @@ adapter *adapter_alloc()
 	ad->old_hiband = -1;
 	ad->old_pol = -1;
 	ad->dmx_source = -1;
-	ad->slow_dev = 0;
+	ad->slow_dev = opts.nopm;
 	/* LOF setup */
 
 	ad->diseqc_param.lnb_low = opts.lnb_low;
@@ -1463,6 +1463,11 @@ void set_nopm_adapters(char *o)
 	adapter *ad;
 	strncpy(buf, o, sizeof(buf));
 	la = split(arg, buf, sizeof(arg), ',');
+	if(arg[0] && (arg[0][0] == '*'))
+	{
+		opts.nopm = 1;
+		return;
+	}
 	for (i = 0; i < la; i++)
 	{
 		a_id = map_intd(arg[i], NULL, -1);
@@ -1485,7 +1490,7 @@ void set_nopm_adapters(char *o)
 			ad = a[j];
 			ad->slow_dev = 1;
 
-			LOGL(0, "Setting slave adapter %d", j);
+			LOGL(0, "Disabling power management for adapter %d", j);
 		}
 
 	}

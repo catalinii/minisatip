@@ -8,7 +8,7 @@
 #include "utils.h"
 
 
-#define VERSION_BUILD "63"
+#define VERSION_BUILD "64"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.5.,VERSION_BUILD,)
 
@@ -77,6 +77,7 @@ struct struct_opts
 	int diseqc_after_burst;
 	int diseqc_after_tone;
 	int lnb_low, lnb_high, lnb_switch, lnb_circular;
+	int nopm;
 };
 
 

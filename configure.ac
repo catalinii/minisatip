@@ -40,7 +40,7 @@ emb="Embedded system:\t\t\t "
 netcv="Netceiver support:\t\t\t "
 satipc="SatIP Client:\t\t\t\t "
 static="Static:\t\t\t\t\t "
-
+dvbapi="dvbapi:\t\t\t\t\t "
 
 AC_MSG_NOTICE([ == Checking LINUX DVB == ])
 AC_CHECK_HEADERS([linux/dvb/frontend.h],[LINUXDVB=1],[LINUXDVB=0])
@@ -121,8 +121,8 @@ AC_ARG_WITH([xml2],
   [specify libxml2 directory default=/usr/include/libxml2])],
   [xml2_dir=$with_xml2])
   
-CFLAGS="-I. -I$mcli_dir/mcast/client -I$mcli_dir/mcast/common -I$xml2_dir"
-CPPFLAGS="-I. -I$mcli_dir/mcast/client -I$mcli_dir/mcast/common -I$xml2_dir"
+CFLAGS="-I. -I$mcli_dir/mcast/client -I$mcli_dir/mcast/common -L$mcli_dir/mcast/client -I$xml2_dir"
+CPPFLAGS="-I. -I$mcli_dir/mcast/client -I$mcli_dir/mcast/common -L$mcli_dir/mcast/client -I$xml2_dir"
 
 
 AC_CHECK_HEADERS([netceiver.h],[NETCVCLIENT=1],[NETCVCLIENT=0])
@@ -163,6 +163,17 @@ else
 FM="$FM\n$static disabled"
 fi
 
+AC_ARG_ENABLE([dvbapi],
+  [AS_HELP_STRING([--disable-dvbapi],
+  [disable dvbapi protocol support])],
+  [DVBAPI=0],
+  [DVBAPI=1])
+if test "$DVBAPI" = "1"; then
+FM="$FM\n$dvbapi enabled"
+else
+FM="$FM\n$dvbapi disabled"
+fi
+
 
 AC_SUBST(LINUXDVB)
 AC_SUBST(DVBCSA)
@@ -172,6 +183,7 @@ AC_SUBST(EMBEDDED)
 AC_SUBST(NETCVCLIENT)
 AC_SUBST(SATIPCLIENT)
 AC_SUBST(STATIC)
+AC_SUBST(DVBAPI)
 
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT

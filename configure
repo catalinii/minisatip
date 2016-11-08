@@ -624,6 +624,7 @@ ac_includes_default="\
 
 ac_header_list=
 ac_subst_vars='LTLIBOBJS
+DVBAPI
 STATIC
 SATIPCLIENT
 NETCVCLIENT
@@ -694,6 +695,7 @@ with_xml2
 enable_netcv
 enable_satipc
 enable_static
+enable_dvbapi
 '
       ac_precious_vars='build_alias
 host_alias
@@ -1331,6 +1333,7 @@ Optional Features:
   --disable-netceiver     disable NETCEIVER support
   --disable-satipc        disable satip client support
   --enable-static         enable static compilation
+  --disable-dvbapi        disable dvbapi protocol support
 
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
@@ -3960,7 +3963,7 @@ emb="Embedded system:\t\t\t "
 netcv="Netceiver support:\t\t\t "
 satipc="SatIP Client:\t\t\t\t "
 static="Static:\t\t\t\t\t "
-
+dvbapi="dvbapi:\t\t\t\t\t "
 
 { $as_echo "$as_me:${as_lineno-$LINENO}:  == Checking LINUX DVB == " >&5
 $as_echo "$as_me:  == Checking LINUX DVB == " >&6;}
@@ -4123,8 +4126,8 @@ if test "${with_xml2+set}" = set; then :
 fi
 
 
-CFLAGS="-I. -I$mcli_dir/mcast/client -I$mcli_dir/mcast/common -I$xml2_dir"
-CPPFLAGS="-I. -I$mcli_dir/mcast/client -I$mcli_dir/mcast/common -I$xml2_dir"
+CFLAGS="-I. -I$mcli_dir/mcast/client -I$mcli_dir/mcast/common -L$mcli_dir/mcast/client -I$xml2_dir"
+CPPFLAGS="-I. -I$mcli_dir/mcast/client -I$mcli_dir/mcast/common -L$mcli_dir/mcast/client -I$xml2_dir"
 
 
 for ac_header in netceiver.h
@@ -4183,6 +4186,20 @@ FM="$FM\n$static enabled"
 else
 FM="$FM\n$static disabled"
 fi
+
+# Check whether --enable-dvbapi was given.
+if test "${enable_dvbapi+set}" = set; then :
+  enableval=$enable_dvbapi; DVBAPI=0
+else
+  DVBAPI=1
+fi
+
+if test "$DVBAPI" = "1"; then
+FM="$FM\n$dvbapi enabled"
+else
+FM="$FM\n$dvbapi disabled"
+fi
+
 
 
 

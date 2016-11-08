@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2020 Catalin Toda <catalinii@yahoo.com>
+ * Copyright (C) 2014-2020 Catalin Toda
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,6 +37,7 @@
 #include <string.h>
 #include <poll.h>
 #include <fcntl.h>
+#include <sys/un.h>
 
 #include "minisatip.h"
 #include "socketworks.h"
@@ -315,6 +316,45 @@ int tcp_listen(char *addr, int port)
 	}
 	return sock;
 }
+
+
+int connect_local_socket(char *file, int blocking)
+{
+	struct sockaddr_un serv;
+	int sock, optval = 1;
+
+	
+	sock = socket(AF_LOCAL, SOCK_STREAM, 0);
+	if (sock < 0)
+	{
+		LOGL(0, "tcp_connect failed: socket() %s", strerror(errno));
+		return -1;
+	}
+	memset(&serv, 0, sizeof(serv));
+	serv.sun_family = AF_LOCAL;
+	strncpy(serv.sun_path, file, sizeof(serv.sun_path) - 1);
+	
+	set_linux_socket_timeout(sock);
+
+	if (blocking)
+	{
+		int flags = fcntl(sock, F_GETFL, 0);
+		fcntl(sock, F_SETFL, flags | O_NONBLOCK);
+	}
+
+	if (connect(sock, (struct sockaddr *) &serv, sizeof(serv)) < 0)
+	{
+		if (errno != EINPROGRESS)
+		{
+			LOGL(0, "tcp_connect: failed: connect to %s failed: %s", file , strerror(errno));
+			close(sock);
+			return -1;
+		}
+	}
+	LOG("New LOCAL socket %d connected to %s", sock, file);
+	return sock;
+}
+
 
 char *get_sock_shost(int fd)
 {

@@ -9,6 +9,7 @@ DVBCA=@DVBCA@
 SATIPCLIENT=@SATIPCLIENT@
 NETCVCLIENT=@NETCVCLIENT@
 STATIC=@STATIC@
+DVBAPI=@DVBAPI@
 LINUXDVB=@LINUXDVB@
 
 CFLAGS?=-ggdb -fPIC $(EXTRA_CFLAGS) @CFLAGS@
@@ -17,12 +18,10 @@ LDFLAGS?=-lpthread -lrt @LDFLAGS@
 OBJS=minisatip.o socketworks.o stream.o adapter.o utils.o
 
 TABLES=0
-DVBAPI=0
 
 ifeq ($(DVBAES),1)
 LIBS+=crypto
 OBJS+=aes.o
-DVBAPI=1
 TABLES=1
 else
 CFLAGS+=-DDISABLE_DVBAES
@@ -31,7 +30,6 @@ endif
 ifeq ($(DVBCSA),1)
 LIBS+=dvbcsa
 OBJS+=csa.o
-DVBAPI=1
 TABLES=1
 else
 CFLAGS+=-DDISABLE_DVBCSA
@@ -39,7 +37,6 @@ endif
 
 ifeq ($(DVBAPI),1)
 OBJS+=dvbapi.o
-DVBAPI=1
 TABLES=1
 else
 CFLAGS+=-DDISABLE_DVBAPI

@@ -53,6 +53,7 @@ int dvbapi_sock = -1;
 int sock;
 int dvbapi_is_enabled = 0;
 int enabledKeys = 0;
+int network_mode = 1;
 int dvbapi_protocol_version = DVBAPI_PROTOCOL_VERSION;
 
 SKey *keys[MAX_KEYS];
@@ -752,7 +753,13 @@ int connect_dvbapi(void *arg)
 	if (sock <= 0)
 	{
 		int err;
-		sock = tcp_connect(opts.dvbapi_host, opts.dvbapi_port, NULL, 1);
+		if(opts.dvbapi_host[0] == '/')
+		{
+			network_mode = 0;
+			sock = connect_local_socket(opts.dvbapi_host, 1);
+		}
+		else
+			sock = tcp_connect(opts.dvbapi_host, opts.dvbapi_port, NULL, 1);
 		dvbapi_sock = sockets_add(sock, NULL, -1, TYPE_TCP | TYPE_CONNECT,
 				(socket_action) dvbapi_reply, (socket_action) dvbapi_close,
 				(socket_action) dvbapi_timeout);
@@ -785,8 +792,9 @@ void send_client_info(sockets *s)
 {
 	unsigned char buf[1000];
 	unsigned char len;
+	memset(buf, 0, sizeof(buf));
 	copy32(buf, 0, DVBAPI_CLIENT_INFO);
-	copy16(buf, 4, dvbapi_protocol_version);
+	copy16(buf, 4, dvbapi_protocol_version)
 	len = sprintf(buf + 7, "%s/%s", app_name, version);
 	buf[6] = len;
 	dvbapi_is_enabled = 1;

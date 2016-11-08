@@ -78,6 +78,7 @@ void set_sock_lock(int i, SMutex *m);
 void set_socket_thread(int s_id, pthread_t tid);
 pthread_t get_socket_thread(int s_id);
 int tcp_listen(char *addr, int port);
+int connect_local_socket(char *file, int blocking);
 int set_linux_socket_timeout(int sockfd);
 extern __thread char *thread_name;
 extern __thread pthread_t tid;

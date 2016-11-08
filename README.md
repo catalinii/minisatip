@@ -93,14 +93,18 @@ Help
 * -Z --nopm ADAPTER1,ADAPTER2-ADAPTER4[,..] - specify no power management for the adapters (does not turn power off)	
 	eg: --nopm 1-2
 	- turns off power management for adapter 1 to 2 
+	--nopm *
+	- turns off power management for all adapters (recommended instead of --nopm 0-32) 
 	- required for some Unicable LNBs 
 
 * -n --netceiver if:count: use network interface <if> (default vlan4) and look for <count> netceivers
 	* eg: -n vlan4:2 
 
-* -o --dvbapi host:port - specify the hostname and port for the dvbapi server (oscam) 
+* -o --dvbapi host:port - specify the hostname and port for the dvbapi server (oscam). Port 9000 is set by default (if not specified) 
 	* eg: -o 192.168.9.9:9000 
-	192.168.9.9 is the host where oscam is running and 9000 is the port configured in dvbapi section in oscam.conf
+	192.168.9.9 is the host where oscam is running and 9000 is the port configured in dvbapi section in oscam.conf.
+	* eg: -o /tmp/camd.socket 
+	/tmp/camd.socket is the local socket that can be used 
 
 * -p url: specify playlist url using X_SATIPM3U header 
 	* eg: -p http://192.168.2.3:8080/playlist

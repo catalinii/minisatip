@@ -270,6 +270,8 @@ Help\n\
 * -Z --nopm ADAPTER1,ADAPTER2-ADAPTER4[,..] - specify no power management for the adapters (does not turn power off)	\n\
 	eg: --nopm 1-2\n\
 	- turns off power management for adapter 1 to 2 \n\
+	--nopm *\n\
+	- turns off power management for all adapters (recommended instead of --nopm 0-32) \n\
 	- required for some Unicable LNBs \n\
 \n\
 "
@@ -282,9 +284,11 @@ Help\n\
 #endif
 #ifndef DISABLE_DVBAPI
 			"\
-* -o --dvbapi host:port - specify the hostname and port for the dvbapi server (oscam) \n\
+* -o --dvbapi host:port - specify the hostname and port for the dvbapi server (oscam). Port 9000 is set by default (if not specified) \n\
 	* eg: -o 192.168.9.9:9000 \n\
-	192.168.9.9 is the host where oscam is running and 9000 is the port configured in dvbapi section in oscam.conf\n\
+	192.168.9.9 is the host where oscam is running and 9000 is the port configured in dvbapi section in oscam.conf.\n\
+	* eg: -o /tmp/camd.socket \n\
+	/tmp/camd.socket is the local socket that can be used \n\
 \n\
 "
 #endif
@@ -403,7 +407,7 @@ void set_options(int argc, char *argv[])
 	opts.diseqc_after_burst = 15;
 	opts.diseqc_after_tone = 0;
 	opts.diseqc_committed_no = 1;
-
+	opts.nopm = 0;
 	opts.lnb_low = (9750*1000UL);
 	opts.lnb_high = (10600*1000UL);
 	opts.lnb_circular = (10750*1000UL);
@@ -592,6 +596,11 @@ void set_options(int argc, char *argv[])
 				*sep1 = 0;
 				opts.dvbapi_host = optarg;
 				opts.dvbapi_port = map_int(sep1 + 1, NULL);
+			}
+			else
+			{
+				opts.dvbapi_host = optarg;
+				opts.dvbapi_port = 9000;
 			}
 #endif
 			break;
