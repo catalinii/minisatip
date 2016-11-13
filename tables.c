@@ -447,6 +447,9 @@ int process_pmt(adapter *ad, unsigned char *b)
 	{
 		p->type = 0; // we do not need this pmt pid anymore
 		mark_pid_deleted(ad->id, 99, p->pid, p);
+		do_dump_pids = 0;
+		update_pids(ad->id);
+		do_dump_pids = 1;
 	}
 //	free_assemble_packet(pid, ad);
 	if (opts.clean_psi && p->sid[0] != -1)

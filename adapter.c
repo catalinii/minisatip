@@ -48,6 +48,8 @@ adapter *a[MAX_ADAPTERS];
 int a_count;
 char disabled[MAX_ADAPTERS]; // disabled adapters
 int sock_signal;
+char do_dump_pids = 1;
+
 
 SMutex a_mutex;
 extern struct struct_opts opts;
@@ -206,6 +208,11 @@ int init_hw(int i)
 	if (!ad->open)
 		goto NOK;
 
+#ifdef ENIGMA
+	ad->dmx_source = ad->id;
+#endif
+	
+	
 	if (ad->open(ad))
 	{
 		init_complete = 0;
@@ -461,6 +468,9 @@ void dump_pids(int aid)
 
 	if (!opts.log)
 		return;
+	
+	if(!do_dump_pids)
+		return;
 	adapter *p = get_adapter(aid);
 	if (!p)
 		return;
@@ -628,14 +638,24 @@ int update_pids(int aid)
 	for (i = 0; i < MAX_PIDS; i++)
 		if (ad->pids[i].flags == 2)
 		{
+			if(opts.max_pids && (opts.max_pids < get_active_pids_number(ad)))
+			{
+				LOG("maximum number of pids %d out of %d reached", get_active_pids_number(ad), opts.max_pids);
+				break;
+			}
+			
 			if (dp)
 				dump_pids(aid);
 			dp = 0;
 			if (ad->pids[i].fd <= 0)
 				if ((ad->pids[i].fd = ad->set_pid(ad, ad->pids[i].pid)) < 0)
 				{
-					request_adapter_close(ad);
-					return 1; // error
+					
+					int new_max_pids = get_active_pids_number(ad) - 5;
+					if(new_max_pids > 0)						
+						opts.max_pids = new_max_pids;
+					LOG("Maximum pid filter reached, lowering the value to %d", opts.max_pids);
+					break;
 				}
 			ad->pids[i].flags = 1;
 			if (ad->pids[i].pid == 0)
@@ -1707,6 +1727,20 @@ int get_enabled_pids(adapter *ad, int *pids, int lpids)
 
 	return ep;
 }
+
+int get_active_pids_number(adapter *ad)
+{
+	int ep = 0, i;
+
+	for (i = 0; i < MAX_PIDS; i++)
+	{
+		if ((ad->pids[i].flags != 0) && (ad->pids[i].fd > 0)) // enabled or needed to be added
+			ep++;
+	}
+
+	return ep;
+}
+
 
 int get_all_pids(adapter *ad, int *pids, int lpids)
 {

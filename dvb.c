@@ -367,7 +367,8 @@ int dvb_open_device(adapter *ad)
 		else
 			LOG("Set DMX_SET_SOURCE for adapter %d to %d", ad->id,
 					ad->dmx_source);
-
+		close(ad->dmx);
+		ad->dmx = -1;	
 	}
 
 	return 0;

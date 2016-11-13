@@ -412,6 +412,10 @@ void set_options(int argc, char *argv[])
 	opts.lnb_high = (10600*1000UL);
 	opts.lnb_circular = (10750*1000UL);
 	opts.lnb_switch = (11700*1000UL);
+	opts.max_pids = 0;
+#if defined(__sh__)
+        opts.max_pids = 20;
+#endif
 
 #ifdef NO_BACKTRACE
 	opts.no_threads = 1;

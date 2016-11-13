@@ -63,7 +63,7 @@ typedef struct struct_adapter
 	char enabled;
 	SMutex mutex;
 	char type, slow_dev; // available on the system
-	int fe, dvr, dmx;
+	int fe, dmx, dvr;
 	int pa, fn;
 	// physical adapter, physical frontend number
 	fe_delivery_system_t sys[MAX_DELSYS];
@@ -107,6 +107,7 @@ typedef struct struct_adapter
 
 extern adapter *a[MAX_ADAPTERS];
 extern int a_count;
+extern char do_dump_pids;
 
 int init_hw(int dev);
 int init_all_hw();
@@ -139,6 +140,7 @@ void reset_pids_type(int aid, int clear_pat);
 void reset_ecm_type_for_key(int aid, int key);
 int delsys_match(adapter *ad, int del_sys);
 int get_enabled_pids(adapter *ad, int *pids, int lpids);
+int get_active_pids_number(adapter *ad);
 int get_all_pids(adapter *ad, int *pids, int lpids);
 char *get_adapter_pids(int aid, char *dest, int max_size);
 void adapter_lock1(char *FILE, int line, int aid);
@@ -154,4 +156,4 @@ int compare_tunning_parameters(int aid, transponder * tp);
 
 #define adapter_lock(a) adapter_lock1(__FILE__,__LINE__,a)
 #define adapter_unlock(a) adapter_unlock1(__FILE__,__LINE__,a)
-#endif							 /*  */
+#endif	
