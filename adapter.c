@@ -737,8 +737,10 @@ int tune(int aid, int sid)
 		return -503;
 	}
 	if(flush_data)
+	{
 		ad->tune_time = getTick();
-
+		get_socket_iteration(ad->sock,0);
+	}
 	mutex_unlock(&ad->mutex);
 	return rv;
 }

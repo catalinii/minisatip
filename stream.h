@@ -23,7 +23,7 @@ typedef struct struct_streams
 	int adapter;
 	struct sockaddr_in sa;//remote address - set on accept or recvfrom on udp sockets
 	int rsock;// return socket handle, for rtsp over tcp, rtsp over udp or http
-	int rsock_err;
+	int rsock_id;
 	int rtcp, rtcp_sock, st_sock;
 	int type;
 	unsigned char buf[STREAMS_BUFFER + 10];

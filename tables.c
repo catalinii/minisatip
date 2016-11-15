@@ -239,10 +239,15 @@ int process_pat(adapter *ad, unsigned char *b)
 			pids[pid] = -TYPE_PMT;
 			p = find_pid(ad->id, pid);
 			if (!p)
+			{
 				mark_pid_add(-1, ad->id, pid);
+				p = find_pid(ad->id, pid);
+				if(p)
+					p->type = PMT_SKIPFIRST;
+			}
 			if ((p = find_pid(ad->id, pid)))
 			{
-				p->type = TYPE_PMT;
+				p->type |= TYPE_PMT;
 				csid = pid;
 				if (p->flags == 3)
 					p->flags = 1;
@@ -340,6 +345,13 @@ int process_pmt(adapter *ad, unsigned char *b)
 	if (!p || (p->type & PMT_COMPLETE) || (p->type == 0))
 		return 0;
 
+	// skip the first PMT, allow for the PMT that is already added to the list of pids to be processed first
+	if ((b[1] & 0x40) && (p->type & PMT_SKIPFIRST)) 
+	{
+		p->type &= ~PMT_SKIPFIRST;
+		return 0;
+	}
+	
 	program_id = b[8] * 256 + b[9];
 	ver = b[10] & 0x3F;
 
@@ -843,6 +855,11 @@ int process_stream(adapter *ad, int rlen)
                 for (i = 0; i < rlen; i += 188)
                 {
                         b = ad->buf + i;
+						pid = PID_FROM_TS(b);
+						p = find_pid(ad->id, pid);
+						if (p)
+							p->dec_err++;
+
                         if((b[3] & 0x80) == 0x80)
                         {
                                 b[1] |= 0x1F;

@@ -18,6 +18,7 @@ typedef struct ca_device ca_device_t;
 #define TYPE_PMT 1
 #define TYPE_ECM 2
 #define PMT_COMPLETE 4
+#define PMT_SKIPFIRST 8
 #define CLEAN_PMT 16
 
 #define RTSP_SETUP 1

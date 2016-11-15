@@ -230,6 +230,7 @@ int start_play(streams * sid, sockets * s)
 	{
 		sid->type = STREAM_HTTP;
 		sid->rsock = s->sock;
+		sid->rsock_id = s->id;
 		memcpy(&sid->sa, &s->sa, sizeof(s->sa));
 	}
 
@@ -288,6 +289,14 @@ int start_play(streams * sid, sockets * s)
 	return tune(sid->adapter, s->sid);
 }
 
+int close_stream_for_socket(int id)
+{
+	sockets *s = get_fsockets(id);
+	if(!s)
+		return 0;
+	close_stream(s->sid);
+}
+
 int close_stream(int i)
 {
 	int ad;
@@ -309,10 +318,13 @@ int close_stream(int i)
 	sid->timeout = 0;
 	ad = sid->adapter;
 	sid->adapter = -1;
-	if (sid->type == STREAM_RTSP_UDP && sid->rsock > 0)
-		close(sid->rsock);
+	if (sid->type == STREAM_RTSP_UDP && sid->rsock_id > 0)
+	{
+		sockets_del(sid->rsock_id);
+		sid->rsock_id = -1;
+	}
 	sid->rsock = -1;
-
+	
 	/*  if(sid->pids)free(sid->pids);
 	 if(sid->apids)free(sid->apids);
 	 if(sid->dpids)free(sid->dpids);
@@ -359,7 +371,6 @@ int decode_transport(sockets * s, char *arg, char *default_rtp, int start_rtp)
 		return -1;
 	}
 	l = 0;
-	sid->rsock_err = 0;
 	if (arg)
 	{
 		if (strstr(arg, "RTP/AVP/TCP"))
@@ -418,8 +429,9 @@ int decode_transport(sockets * s, char *arg, char *default_rtp, int start_rtp)
 				LOG(
 						"Stream has already a transport header associated with it to %s:%d - sid = %d type = %d, closing %d",
 						oldhost, oldport, sid->sid, sid->type, sid->rsock);
-				close(sid->rsock);
+				sockets_del(sid->rsock_id);
 				sid->rsock = -1;
+				sid->rsock_id = -1;
 				sid->type = 0;
 			}
 		}
@@ -443,7 +455,10 @@ int decode_transport(sockets * s, char *arg, char *default_rtp, int start_rtp)
 			LOG_AND_RETURN(-1,
 					"decode_transport failed: UDP connection on rtp port to %s:%d failed",
 					p.dest, p.port);
-
+					
+		if ((sid->rsock_id = sockets_add(sid->rsock, NULL, sid->sid, TYPE_UDP, NULL, NULL, NULL)) < 0)
+			LOG_AND_RETURN(-1, "RTP socket_add failed");
+		
 		set_socket_send_buffer(sid->rsock, opts.output_buffer);
 
 		if ((sid->rtcp = udp_bind_connect(NULL,
@@ -487,7 +502,7 @@ int streams_add()
 	ss->adapter = -1;
 	ss->sid = i;
 	ss->rsock = -1;
-	ss->rsock_err = 0;
+	ss->rsock_id = -1;
 	ss->type = 0;
 	ss->do_play = 0;
 	ss->iiov = 0;
@@ -528,41 +543,7 @@ int bwnotify, sleeping, sleeping_cnt;
 uint32_t reads;
 int64_t nsecs;
 
-int slow_down;
 uint64_t last_sd;
-
-int my_writev(int sock, const struct iovec *iov, int iiov, streams *sid)
-{
-	int rv;
-	char ra[50];
-	int log_level = 7;
-	int64_t stime = 0;
-	if (sid->timeout == 1)
-		return -1;
-
-	LOGL(log_level, "start writev handle %d, iiov %d", sock, iiov);
-	if (opts.log == log_level)
-		stime = getTick();
-	rv = writev(sock, iov, iiov);
-	if (opts.log == log_level)
-		stime = getTick() - stime;
-	if (rv < 0 && (errno == ECONNREFUSED || errno == EPIPE)) // close the stream int the next second
-	{
-		LOGL(0,
-				"Connection REFUSED on stream %d, closing the stream, remote %s:%d",
-				sid->sid, get_stream_rhost(sid->sid, ra, sizeof(ra)),
-				get_stream_rport(sid->sid));
-		sid->timeout = 1;
-	}
-	if (rv < 0)
-	{
-		LOG("writev returned %d handle %d, iiov %d errno %d error %s", rv, sock,
-				iiov, errno, strerror(errno));
-	}
-	LOGL(log_level, "writev returned %d handle %d, iiov %d (took %jd ms)", rv,
-			sock, iiov, stime);
-	return rv;
-}
 
 int send_rtp(streams * sid, const struct iovec *iov, int liov)
 {
@@ -572,8 +553,6 @@ int send_rtp(streams * sid, const struct iovec *iov, int liov)
 	unsigned char *rtp_h;
 	unsigned char rtp_buf[16];
 
-	if (sid->rsock_err > 50)
-		return 0;
 	rtp_h = rtp_buf + 4;
 
 	for (i = 0; i < liov; i++)
@@ -601,34 +580,7 @@ int send_rtp(streams * sid, const struct iovec *iov, int liov)
 
 	}
 	memcpy(&io[1], iov, liov * sizeof(struct iovec));
-	rv = my_writev(sid->rsock, (const struct iovec *) io, liov + 1, sid);
-	if (opts.bw && (slow_down++ > 20))
-	{
-		int64_t tn = getTickUs();
-//		int interval = (1328 * 20000 / (opts.bw / 1024)) ;   // For 1328kb/s we have 1000 packets/s, each 20 packets => 20 000 us
-		int interval = opts.bw * 10 / 1024;
-		int result = tn - last_sd;
-		if ((result > 0) && (result < interval))
-		{
-			usleep(result);
-			sleeping += result;
-			sleeping_cnt++;
-		}
-		if (slow_down > 20)
-		{
-			last_sd = tn;
-			slow_down = 0;
-		}
-	}
-	if (rv < 0)
-	{
-		sid->rsock_err++;
-		LOG("write to handle %d failed: %d, %s, socket err %d %s", sid->rsock,
-				rv, strerror(errno), sid->rsock_err,
-				sid->rsock_err > 50 ? "socket blacklisted" : "");
-	}
-	else
-		sid->rsock_err = 0;
+	rv = sockets_writev(sid->rsock_id, io, liov + 1);
 
 	if (total_len > 0 && sid->start_streaming == 0)
 	{
@@ -670,9 +622,6 @@ int send_rtcp(int s_id, int64_t ctime)
 
 	if (!sid)
 		LOG_AND_RETURN(0, "Sid is null for s_id %d", s_id);
-
-	if (sid->rsock_err > 50)
-		return 0;
 
 	char *a = describe_adapter(s_id, sid->adapter, dad, sizeof(dad));
 	unsigned int la = strlen(a);
@@ -734,10 +683,7 @@ int send_rtcp(int s_id, int64_t ctime)
 		total_len += 4;
 		rv = send(sid->rsock, rtcp_buf, total_len, MSG_NOSIGNAL);
 	}
-//	if(rv>0)
-//		sid->rsock_err = 0;
-//	else
-//		sid->rsock_err ++;
+
 	sid->rtcp_wtime = ctime;
 	LOGL(7, "%s: sent %d bytes for stream %d, handle %d seq %d => %s:%d",
 			__FUNCTION__, total_len, sid->sid, sid->rsock, sid->seq - 1,
@@ -753,7 +699,7 @@ void flush_streamb(streams * sid, unsigned char *buf, int rlen, int64_t ctime)
 	int i, rv = 0;
 
 	if (sid->type == STREAM_HTTP)
-		rv = send(sid->rsock, buf, rlen, MSG_NOSIGNAL);
+		rv = sockets_write(sid->rsock_id, buf, rlen);
 	else
 		for (i = 0; i < rlen; i += DVB_FRAME * 7)
 			rv += send_rtpb(sid, &buf[i],
@@ -777,7 +723,7 @@ int flush_streami(streams * sid, int64_t ctime)
 	int rv;
 
 	if (sid->type == STREAM_HTTP)
-		rv = my_writev(sid->rsock, sid->iov, sid->iiov, sid);
+		rv = sockets_writev(sid->rsock_id, sid->iov, sid->iiov);
 	else
 		rv = send_rtp(sid, sid->iov, sid->iiov);
 
@@ -1030,8 +976,8 @@ int read_dmx(sockets * s)
 		return 0;
 	}
 
-
-	if (s->rtime - ad->rtime > 50) // flush buffers every 50ms
+// flush buffers every 50ms or the first 1000 packets (for PAT and PMT processing)
+	if (((s->iteration < 1000) && (s->rlen > 7*DVB_FRAME)) || (s->rtime - ad->rtime > 50)) 
 	{
 		flush_all = 1; // flush everything that we've read so far
 		send = 1;
@@ -1043,12 +989,12 @@ int read_dmx(sockets * s)
 	if (s->rlen == s->lbuf)
 		send = 1;
 
-	if (s->rtime - ad->rtime > 1000)
+	if (s->rtime - ad->rtime > 100) // force flush every 100ms
 		send = 1;
 
-	if(ad && ad->wait_new_stream && (s->rtime - ad->tune_time < 100) ) // check new transponder
+	if(ad && ad->wait_new_stream && (s->rtime - ad->tune_time < 50) ) // check new transponder
 	{
-			LOGL(1, "Flushing buffer of %d bytes after the tune", s->rlen);
+			LOGL(3, "Flushing adapter buffer of %d bytes after the tune", s->rlen);
 			s->rlen = 0;
 			return 0;
 	}

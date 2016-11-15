@@ -113,7 +113,7 @@ int dvbapi_enabled();
 int send_ecm(adapter *ad, void *arg);
 int batch_size();
 int decrypt_stream(adapter *ad, void *arg);
-int keys_add(int adapter, int sid, int pmt);
+int keys_add(int i, int adapter, int sid, int pmt);
 int keys_del(int i);
 SKey *get_key(int i);
 int dvbapi_process_pmt(unsigned char *b, adapter *ad);

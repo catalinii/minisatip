@@ -8,7 +8,7 @@
 #include "utils.h"
 
 
-#define VERSION_BUILD "65"
+#define VERSION_BUILD "66"
 #define CC(a,b,c) #a b #c
 #define VERSION CC(0.5.,VERSION_BUILD,)
 
@@ -46,7 +46,6 @@ struct struct_opts
 	int daemon;
 	int device_id;
 	int bootid;
-	int bw;	
 	int dvr_buffer;
 	int adapter_buffer;
 	int output_buffer;
@@ -79,6 +78,7 @@ struct struct_opts
 	int lnb_low, lnb_high, lnb_switch, lnb_circular;
 	int nopm;
 	int max_pids;
+	int max_sinfo;
 };
 
 

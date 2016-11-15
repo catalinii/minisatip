@@ -789,6 +789,8 @@ int http_request(adapter *ad, char *url, char *method)
 	{
 		sip->wp = sip->qp = 0;
 		rv = write(remote_socket, buf, lb);
+		if(rv != lb)
+			LOG("satipc: write error %d: %d from %d written (%s)", errno, rv, lb, strerror(errno));
 	}
 	sip->expect_reply = 1;
 	return 0;

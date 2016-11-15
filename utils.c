@@ -57,7 +57,7 @@
 extern struct struct_opts opts;
 
 #define MAX_DATA 1500 // 16384
-#define MAX_SINFO 100
+int MAX_SINFO;
 char pn[256];
 
 typedef struct tmpinfo
@@ -71,13 +71,31 @@ typedef struct tmpinfo
 	int64_t last_updated;
 	unsigned char *data;
 } STmpinfo;
-STmpinfo sinfo[MAX_SINFO];
+STmpinfo *sinfo;
 
 SMutex utils_mutex;
 
+int init_tmpinfo(int no)
+{
+	void *os = sinfo;
+	int new_size = no * sizeof(STmpinfo);
+	sinfo = realloc(sinfo, new_size);
+	if(os && !sinfo)
+	{
+		sinfo = os;
+		LOG_AND_RETURN(0, "%d bytes could not be re-allocated from %d", new_size, MAX_SINFO * sizeof(STmpinfo));
+	}
+	if(!sinfo)
+		LOG_AND_RETURN(1, "Could not allocate memory for SINFO, reduce the application memory needs");
+	memset(sinfo + MAX_SINFO, 0, (no - MAX_SINFO) * sizeof(STmpinfo));
+	MAX_SINFO = no;
+	return 0;
+}
+
+
 STmpinfo *getItemPos(int64_t key)
 {
-	static STmpinfo *last;
+	static __thread STmpinfo *last;
 	int i;
 	if (last && (last->enabled) && (last->key == key))
 	{
@@ -103,7 +121,7 @@ STmpinfo *getFreeItemPos(int64_t key)
 		{
 			sinfo[i].id = i;
 			sinfo[i].timeout = 0;
-			LOGL(2,
+			LOGL(5,
 					"Requested new Item for key %jX, returning %d (enabled %d last_updated %jd timeout %d tick %jd)",
 					key, i, sinfo[i].enabled, sinfo[i].last_updated,
 					sinfo[i].timeout, tick);
@@ -133,6 +151,16 @@ int getItemSize(int64_t key)
 		return 0;
 	return s->max_size;
 }
+
+int setItemLen(int64_t key, int len)
+{
+	STmpinfo *s = getItemPos(key);
+	if (!s || (len > s->max_size))
+		return 1;
+	s->len = len;
+	return 0;
+}
+
 
 int setItemSize(int64_t key, uint32_t max_size)
 {
@@ -199,10 +227,12 @@ int setItem(int64_t key, unsigned char *data, int len, int pos) // pos = -1 -> a
 int delItem(int64_t key)
 {
 	STmpinfo *s = getItemPos(key);
+	if(!s)
+		return 0;
 	s->enabled = 0;
 	s->len = 0;
 	s->key = 0;
-	LOG("Deleted Item Pos %d", s->id);
+	LOGL(4, "Deleted Item Pos %d", s->id);
 	return 0;
 }
 
@@ -519,13 +549,13 @@ mymalloc(int a, char *f, int l)
 	void *x = malloc(a);
 	if (x)
 		memset(x, 0, a);
-	LOG("%s:%d allocation_wrapper malloc allocated %d bytes at %p", f, l, a, x);
+	LOGL(5, "%s:%d allocation_wrapper malloc allocated %d bytes at %p", f, l, a, x);
 	return x;
 }
 
 void myfree(void *x, char *f, int l)
 {
-	LOG("%s:%d allocation_wrapper free called with argument %p", f, l, x);
+	LOGL(3, "%s:%d allocation_wrapper free called with argument %p", f, l, x);
 	free(x);
 }
 
@@ -1188,3 +1218,13 @@ void join_thread()
 	mutex_unlock(&join_lock);
 }
 
+
+
+int init_utils(char *arg0)
+{
+	int rv;
+	set_signal_handler(arg0);
+	if((rv = init_tmpinfo(opts.max_sinfo)))
+		return rv;
+	return 0;
+}

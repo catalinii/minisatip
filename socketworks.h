@@ -25,12 +25,16 @@ typedef struct struct_sockets {
 	int rlen;
 	int timeout_ms;
 	int id;				 // socket id
+	int iteration;
 	int err;
 	int flags; // 1 - buf is allocated dynamically
 	int events;
 	int64_t last_poll;
 	pthread_t tid;
 	SMutex *lock;
+	int sock_err;
+	int spos, wmax, wpos;
+	int overflow;
 } sockets;
 
 #define TYPE_UDP 0
@@ -71,6 +75,7 @@ void sockets_setread(int i, void *r);
 void set_socket_send_buffer(int sock, int len);
 void set_socket_receive_buffer(int sock, int len);
 sockets *get_sockets(int i);
+sockets *get_fsockets(int i);
 void set_socket_pos(int sock, int pos);
 char *get_socket_rhost(int s_id, char *dest, int ld);
 int get_socket_rport(int s_id);
@@ -80,6 +85,10 @@ pthread_t get_socket_thread(int s_id);
 int tcp_listen(char *addr, int port);
 int connect_local_socket(char *file, int blocking);
 int set_linux_socket_timeout(int sockfd);
+int sockets_writev(int sock_id, struct iovec *iov, int iovcnt);
+int sockets_write(int sock_id, void *buf, int len);
+int flush_socket(sockets *s);
+void get_socket_iteration(int s_id, int it);
 extern __thread char *thread_name;
 extern __thread pthread_t tid;
 

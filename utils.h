@@ -75,6 +75,7 @@ int setItemSize(int64_t key, uint32_t max_size);
 int setItemTimeout(int64_t key, int tmout);
 int setItem(int64_t key, unsigned char *data, int len, int pos);
 int getItemSize(int64_t key);
+int setItemLen(int64_t key, int len);
 int map_int(char *s, char ** v);
 int map_intd(char *s, char ** v, int dv);
 int map_float(char *s, int mul);
@@ -105,6 +106,7 @@ int64_t getTick();
 int64_t getTickUs();
 void join_thread();
 void add_join_thread(pthread_t t);
+int init_utils(char *argv0);
 
 #define mutex_lock(m) mutex_lock1(__FILE__,__LINE__,m)
 #define mutex_unlock(m) mutex_unlock1(__FILE__,__LINE__,m)

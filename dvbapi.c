@@ -908,19 +908,32 @@ int set_algo(SKey *k, int algo, int mode)
 	return 0;
 }
 
-int keys_add(int adapter, int sid, int pmt_pid)
+int keys_add(int i, int adapter, int sid, int pmt_pid)
 {
-	int i;
+	
 	SKey *k;
+	if( i == -1)
+		i = add_new_lock((void **) keys, MAX_KEYS, sizeof(SKey), &keys_mutex);
+	else
+	{
+		if(keys[i])
+			mutex_lock(&keys[i]->mutex);
+		else
+		{
+			keys[i] = malloc(sizeof(SKey));
+			if(!keys[i])
+				LOG_AND_RETURN(-1, "Could not allocate memory for the key %d", i);
+			memset(keys[i], 0, sizeof(SKey));
+			mutex_init(&keys[i]->mutex);
+			mutex_lock(&keys[i]->mutex);
+		}
 
-	i = add_new_lock((void **) keys, MAX_KEYS, sizeof(SKey), &keys_mutex);
-
-	if (i == -1)
+	}
+	if (i == -1 || !keys[i])
 	{
 		LOG_AND_RETURN(-1, "Key buffer is full, could not add new keys");
 	}
-	if (!keys[i])
-		keys[i] = malloc(sizeof(SKey));
+	
 	k = keys[i];
 
 	k->op = ops[0];
@@ -1031,7 +1044,7 @@ void dvbapi_del_pid(adapter *ad, void *arg)
 	invalidate_adapter(ad->id);
 }
 
-void dvbapi_add_pmt(adapter *ad, void *arg)
+int dvbapi_add_pmt(adapter *ad, void *arg)
 {
 	SPMT *spmt = (SPMT *) arg;
 	SKey *k;
@@ -1039,14 +1052,25 @@ void dvbapi_add_pmt(adapter *ad, void *arg)
 	int key, pid = spmt->pid;
 	p = find_pid(ad->id, pid);
 	if (!p)
-		return;
+		return 1;
 
-	key = p->key;
-	if (!get_key(p->key))
-		key = keys_add(ad->id, spmt->sid, pid);
+	if(!network_mode)
+	{
+		if(key != 255 && key != ad->id)
+			keys_del(key);
+		key = ad->id;
+		if(get_key(key))
+			LOG_AND_RETURN(0, "Not sending PMT pid %d to dvbapi server in local socket mode", pid);
+		key = keys_add(key, ad->id, spmt->sid, pid); // in local mode, the adapter and the key have the same ID		
+	}else
+	{
+		key = p->key;
+		if (!get_key(p->key))
+			key = keys_add(-1, ad->id, spmt->sid, pid);		
+	}
 	k = get_key(key);
 	if (!k)
-		return;
+		return 1;
 	mutex_lock(&k->mutex);
 	k->pi_len = spmt->pi_len;
 	k->pi = spmt->pi;
@@ -1058,6 +1082,7 @@ void dvbapi_add_pmt(adapter *ad, void *arg)
 	if (p->key != spmt->old_key)
 		set_next_key(p->key, spmt->old_key);
 	mutex_unlock(&k->mutex);
+	return 0;
 
 }
 void dvbapi_del_pmt(adapter *ad, void *arg)

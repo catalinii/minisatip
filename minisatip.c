@@ -104,8 +104,8 @@ static const struct option long_options[] =
 #define CLEANPSI_OPT 't'
 #define MAC_OPT 'm'
 #define FOREGROUND_OPT 'f'
-#define BW_OPT 'c'
 #define DVRBUFFER_OPT 'b'
+#define APPBUFFER_OPT 'B'
 #define ENABLE_ADAPTERS_OPT 'e'
 #define UNICABLE_OPT 'u'
 #define JESS_OPT 'j'
@@ -197,7 +197,7 @@ void usage()
 {
 	print_version(0);
 	printf(
-			"\n\t./%s [-[fgltzE]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] \n\
+			"\n\t./%s [-[fgltzE]] [-a x:y:z] [-b X:Y] [-B X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] \n\
 	\t[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port]"
 #ifndef DISABLE_DVBAPI
 					"[-o oscam_host:dvbapi_port] "
@@ -219,8 +219,9 @@ Help\n\
 * -b --buffers X:Y : set the app adapter buffer to X Bytes (default: %d) and set the kernel DVB buffer to Y Bytes (default: %d) - both multiple of 188\n\
 	* eg: -b 18800:18988\n\
 \n\
-* -c X: bandwidth capping for the output to the network [default: unlimited]\n\
-	* eg: -c 2048  (does not allow minisatip to send more than 2048KB/s to all remote servers)\n\
+* -B X : set the app socket write buffer to X KB. \n\
+	The buffer will be split between multiple sockets, each getting maximum X/2 KB\n\
+	* eg: -B 10\n\
 \n\
 * -d --diseqc ADAPTER1:COMMITTED1-UNCOMMITTED1[,ADAPTER2:COMMITTED2-UNCOMMITTED2[,...]\n\
 \t* The first argument is the adapter number, second is the number of committed packets to send to a Diseqc 1.0 switch, third the number of uncommitted commands to sent to a Diseqc 1.1 switch\n\
@@ -380,7 +381,6 @@ void set_options(int argc, char *argv[])
 	opts.force_cadapter = 0;
 	opts.mac[0] = 0;
 	opts.daemon = 1;
-	opts.bw = 0;
 	opts.device_id = 0;
 	opts.bootid = 0;
 	opts.dvr_buffer = DVR_BUFFER;
@@ -412,6 +412,7 @@ void set_options(int argc, char *argv[])
 	opts.lnb_high = (10600*1000UL);
 	opts.lnb_circular = (10750*1000UL);
 	opts.lnb_switch = (11700*1000UL);
+	opts.max_sinfo = 200;
 	opts.max_pids = 0;
 #if defined(__sh__)
         opts.max_pids = 20;
@@ -423,7 +424,7 @@ void set_options(int argc, char *argv[])
 	memset(opts.playlist, 0, sizeof(opts.playlist));
 
 	while ((opt = getopt_long(argc, argv,
-			"flr:a:td:w:p:s:n:hc:b:m:p:e:x:u:j:o:gy:i:q:D:VR:S:TX:Y:OL:EP:Z:",
+			"flr:a:td:w:p:s:n:hB:b:m:p:e:x:u:j:o:gy:i:q:D:VR:S:TX:Y:OL:EP:Z:",
 			long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
@@ -489,12 +490,6 @@ void set_options(int argc, char *argv[])
 			break;
 		}
 
-		case BW_OPT:
-		{
-			opts.bw = atoi(optarg) * 1024;
-			break;
-		}
-
 		case DVRBUFFER_OPT:
 		{
 			sscanf(optarg, "%d:%d", &opts.adapter_buffer, &opts.dvr_buffer);
@@ -506,6 +501,15 @@ void set_options(int argc, char *argv[])
 
 			break;
 		}
+
+		case APPBUFFER_OPT:
+		{
+			int val = atoi(optarg) / 1.5;
+			if(val > opts.max_sinfo)
+				opts.max_sinfo = val;
+			break;
+		}
+
 
 		case DVBS2_ADAPTERS_OPT:
 		{
@@ -695,9 +699,6 @@ void set_options(int argc, char *argv[])
 		}
 
 	}
-
-	if (opts.bw && (opts.bw < opts.adapter_buffer))
-		opts.adapter_buffer = (opts.bw / 188) * 188;
 
 	lip = getlocalip();
 	if (!opts.http_host)
@@ -1306,11 +1307,15 @@ pthread_t main_tid;
 extern int sock_signal;
 int main(int argc, char *argv[])
 {
-	int sock_st, sock_bw;
+	int sock_st, sock_bw, rv;
 	main_tid = get_tid();
 	thread_name = "main";
-	set_signal_handler(argv[0]);
 	set_options(argc, argv);
+	if((rv = init_utils(argv[0])))
+	{
+		LOG("init_utils failed with %d", rv);
+		return rv;
+	}
 	if (opts.daemon)
 		becomeDaemon();
 	if (opts.slog)

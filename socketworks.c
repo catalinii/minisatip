@@ -48,6 +48,10 @@ sockets *s[MAX_SOCKS];
 int max_sock;
 SMutex s_mutex;
 
+#define SOCKETWORKS_ITEM ((uint64_t) 0x4000000000000)
+#define MAKE_ITEM(a,b) ((SOCKETWORKS_ITEM | (((uint64_t )a)<<32) | (b)))
+
+
 int fill_sockaddr(struct sockaddr_in *serv, char *host, int port)
 {
 	struct hostent *h;
@@ -220,12 +224,16 @@ int udp_connect(char *addr, int port, struct sockaddr_in *serv)
 			ntohs(serv->sin_port));
 	return sock;
 }
+int set_linux_socket_timeout_(int sockfd)
+{
+	return fcntl(sockfd, F_SETFL, O_NONBLOCK);
+}
 
 int set_linux_socket_timeout(int sockfd)
 {
 	struct timeval timeout;
-	timeout.tv_sec = 2;
-	timeout.tv_usec = 0;
+	timeout.tv_sec = 1;
+	timeout.tv_usec = 100000;
 
 	if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *) &timeout,
 			sizeof(timeout)) < 0)
@@ -489,6 +497,12 @@ int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 	ss->lbuf = 0;
 	ss->timeout_ms = 0;
 	ss->id = i;
+	ss->sock_err = 0;
+	ss->overflow = 0;
+	ss->iteration = 0;
+	ss->spos = ss->wpos;
+	ss->wmax = opts.max_sinfo / 2;
+	
 	ss->read = (read_action) sockets_read;
 	ss->lock = NULL;
 	if (ss->type == TYPE_UDP || ss->type == TYPE_RTCP)
@@ -527,7 +541,7 @@ int sockets_del(int sock)
 	ss->enabled = 0;
 	so = ss->sock;
 	ss->sock = -1;			 // avoid infinite loop
-	LOG("sockets_del: %d -> handle %d, sid %d", sock, so, ss->sid);
+	LOG("sockets_del: %d -> handle %d, sid %d, overflow %d", sock, so, ss->sid, ss->overflow);
 
 	if (ss->close)
 		ss->close(ss);
@@ -545,7 +559,14 @@ int sockets_del(int sock)
 	ss->lock = NULL;
 	if((ss->flags & 1) && ss->buf)
 		free1(ss->buf);
+	
+	for(i = 0; i < ss->wmax; i++)
+	{
+		uint64_t item = MAKE_ITEM(sock,i);
+		delItem(item);
 
+	}
+	
 	LOG("sockets_del: %d Last open socket is at index %d current_handle %d",
 			sock, i, so);
 	mutex_destroy(&ss->mutex);
@@ -553,7 +574,7 @@ int sockets_del(int sock)
 	return 0;
 }
 
-int run_loop = 1, it = 0;
+int run_loop = 1;
 extern pthread_t main_tid;
 extern int bwnotify;
 extern int64_t bwtt, bw;
@@ -594,6 +615,10 @@ void *select_and_execute(void *arg)
 			{
 				pf[i].fd = s[i]->sock;
 				pf[i].events = s[i]->events;
+				
+				if(s[i]->spos != s[i]->wpos)
+					pf[i].events |= POLLOUT;
+				
 				pf[i].revents = 0;
 				s[i]->last_poll = c_time;
 				es++;
@@ -628,15 +653,37 @@ void *select_and_execute(void *arg)
 						continue;
 
 					c_time = getTick();
-
+					ss->iteration++;
+					
 					LOGL(6,
 							"event on socket index %d handle %d type %d (poll fd:%d, revents=%d)",
 							i, ss->sock, ss->type, pf[i].fd, pf[i].revents);
 					sockets_lock(ss);
 
+					if ((pf[i].revents & POLLOUT) && (ss->spos != ss->wpos))
+					{
+						int k=300;
+						
+						while(!flush_socket(ss))
+							if(!k--)
+								break;
+						if(k == 0)
+							LOGL(7, "Sock %d: Dequeued max packets", ss->id);
+						
+						if((pf[i].revents & (~POLLOUT)) == 0)
+						{
+							LOGL(7, "Sock %d: No Read event, continuing", ss->id);
+							sockets_unlock(ss);
+							continue;
+						}
+						
+						pf[i].revents &= ~POLLOUT;
+					}
+					
 					if (pf[i].revents & POLLOUT)
 					{
 						ss->events &= ~POLLOUT;
+						ss->type &= ~TYPE_CONNECT;
 					}
 					if (!ss->buf || ss->buf == buf)
 					{
@@ -653,22 +700,10 @@ void *select_and_execute(void *arg)
 						ss->rlen = 0;
 					}
 					rlen = 0;
-					if (opts.bw > 0 && bw > opts.bw && ss->type == TYPE_DVR)
-					{
-						int64_t ms = 1000 - c_time + bwtt;
-						if (bwnotify++ == 0)
-							LOG(
-									"capping %d sock %d for the next %jd ms, sleeping for the next %jd ms",
-									i, ss->sock, ms, ms / 50);
-						if (ms > 50)
-							usleep(ms * 20);
-						sockets_unlock(ss);
-						continue;
-
-					}
-
-					read_ok = ss->read(ss->sock, &ss->buf[ss->rlen],
-							ss->lbuf - ss->rlen, ss, &rlen);
+					read_ok = 0;
+					if(ss->read) 
+						read_ok = ss->read(ss->sock, &ss->buf[ss->rlen],
+								ss->lbuf - ss->rlen, ss, &rlen);
 
 					if (opts.log >= 1)
 					{
@@ -694,7 +729,7 @@ void *select_and_execute(void *arg)
 					LOGL(6,
 							"Read %s %d (rlen:%d/total:%d) bytes from %d -> %p - iteration %d action %p",
 							read_ok ? "OK" : "NOK", rlen, ss->rlen, ss->lbuf,
-							ss->sock, ss->buf, it++, ss->action);
+							ss->sock, ss->buf, ss->iteration, ss->action);
 
 					if (((ss->rlen > 0) || err == EWOULDBLOCK) && ss->action
 							&& (ss->type != TYPE_SERVER))
@@ -997,6 +1032,13 @@ sockets *get_sockets(int i)
 	return s[i];
 }
 
+sockets *get_fsockets(int i)
+{
+	if (i < 0 || i >= MAX_SOCKS || !s[i])
+		return NULL;
+	return s[i];
+}
+
 void set_socket_pos(int sock, int pos)
 {
 	sockets *ss = get_sockets(sock);
@@ -1023,6 +1065,15 @@ int get_socket_rport(int s_id)
 	return ntohs(ss->sa.sin_port);
 }
 
+void get_socket_iteration(int s_id, int it)
+{
+	sockets *ss = get_sockets(s_id);
+	if (!ss)
+		return;
+	ss->iteration = it;
+}
+
+
 void set_socket_thread(int s_id, pthread_t tid)
 {
 	sockets *ss = get_sockets(s_id);
@@ -1038,4 +1089,131 @@ pthread_t get_socket_thread(int s_id)
 	if (!ss)
 		LOG_AND_RETURN(0, "get_socket_thread: socket is NULL for s_id %d", s_id);
 	return ss->tid;
+}
+
+int my_writev(sockets *s, const struct iovec *iov, int iiov)
+{
+	int rv;
+	char ra[50];
+	int log_level = 7;
+	int64_t stime = 0;
+	if (s->timeout_ms == 1)
+		return -1;
+
+	LOGL(log_level, "start writev handle %d, iiov %d", s->sock, iiov);
+	if (opts.log == log_level)
+		stime = getTick();
+	rv = writev(s->sock, iov, iiov);
+	if (opts.log == log_level)
+		stime = getTick() - stime;
+	
+	if ((rv < 0) && (errno == EWOULDBLOCK)) // blocking
+		return -EWOULDBLOCK;
+	
+	if (rv < 0 && (errno == ECONNREFUSED || errno == EPIPE)) // close the stream int the next second
+	{
+		LOGL(1,
+				"Connection REFUSED on socket %d (sid %d), closing the socket, remote %s:%d",
+				s->id, s->sid, get_socket_rhost(s->id, ra, sizeof(ra)),
+				get_socket_rport(s->id));
+		s->timeout_ms = 1;
+	}
+	if (rv < 0)
+	{
+		s->sock_err++;
+		LOG("writev returned %d handle %d, iiov %d errno %d error %s", rv, s->sock,
+				iiov, errno, strerror(errno));
+	}
+	else
+		s->sock_err = 0;
+	
+	LOGL(log_level, "writev returned %d handle %d, iiov %d (took %jd ms)", rv,
+			s->sock, iiov, stime);
+	return rv;
+}
+
+
+int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
+{
+	int rv = 0, i;
+	char *buf[1];
+	sockets *s = get_sockets(sock_id);
+	if(!s)
+		return -1;
+	if(s->spos == s->wpos)
+	{
+		rv = my_writev(s, iov, iovcnt);
+		if(rv > 0)
+			return rv;
+	}
+	// queue the packet otherwise
+//	LOG("SOCK %d: queueing at %d send pos %d", s->id, s->wpos, s->spos);
+	uint64_t item = MAKE_ITEM(s->id,s->wpos);
+	for(i=0;i<iovcnt;i++)
+	{
+		if(setItem(item, iov[0].iov_base, iov[0].iov_len, (i==0)?0:-1))
+			s->overflow++;		
+	}
+	
+	s->wpos ++;
+	
+	if(s->wpos == s->wmax)
+		s->wpos = 0;
+
+	if(s->spos == s->wpos) // the queue is full, start overwriting
+	{
+		s->overflow ++;
+		s->spos ++;
+		if((s->overflow % 100) == 0)
+		LOG("sock %d: overflow %d", s->id, s->overflow);
+	}
+	if(s->spos == s->wmax)
+		s->spos = 0;
+	
+}
+
+int sockets_write(int sock_id, void *buf, int len)
+{
+	struct iovec iov[1];
+	iov[0].iov_base = buf;
+	iov[0].iov_len = len;
+	return sockets_writev(sock_id, iov, 1);
+}
+
+
+
+int flush_socket(sockets *s)
+{
+	struct iovec iov[1];
+	uint64_t item;
+	int rv;
+	
+	if(s->spos == s->wpos)
+		return 1;
+
+	item = MAKE_ITEM(s->id, s->spos);
+	iov[0].iov_base = getItem(item);
+	
+	if(iov[0].iov_base)
+	{
+	
+		iov[0].iov_len = getItemLen(item);
+		rv = my_writev(s, iov, 1);
+		if((rv > 0 ) && (rv != iov[0].iov_len))
+		{
+			memmove(iov[0].iov_base, iov[0].iov_base + rv, iov[0].iov_len - rv);
+			setItemLen(item, iov[0].iov_len - rv);
+		}
+		if(rv != iov[0].iov_len)
+			return 1;
+	
+	}
+//	delItem(item);
+//	LOG("SOCK %d: flushed %d out of %d", s->id, s->spos, s->wpos);
+	s->spos ++;
+	if(s->spos == s->wmax)
+		s->spos = 0;
+	if(s->spos == s->wpos)
+		s->spos = s->wpos = 0;
+	return 0;
 }
