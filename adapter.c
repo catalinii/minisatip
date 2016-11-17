@@ -250,6 +250,7 @@ int init_hw(int i)
 	ad->force_close = 0;
 	ad->ca_mask = 0;
 	ad->tune_time = 0;
+	
 	ad->wait_new_stream = 0;
 	ad->rtime = getTick();
 	ad->sock = sockets_add(ad->dvr, NULL, i, TYPE_DVR, (socket_action) read_dmx,

@@ -289,12 +289,12 @@ int start_play(streams * sid, sockets * s)
 	return tune(sid->adapter, s->sid);
 }
 
-int close_stream_for_socket(int id)
+int close_stream_for_socket(sockets *s)
 {
-	sockets *s = get_fsockets(id);
-	if(!s)
-		return 0;
-	close_stream(s->sid);
+	streams *sid = get_sid(s->sid);
+	LOG("%s: start close_stream_for_socket for id %d %p", __FUNCTION__, s->sid, sid);
+	if(sid)
+		sid->timeout = 1;
 }
 
 int close_stream(int i)
@@ -456,7 +456,7 @@ int decode_transport(sockets * s, char *arg, char *default_rtp, int start_rtp)
 					"decode_transport failed: UDP connection on rtp port to %s:%d failed",
 					p.dest, p.port);
 					
-		if ((sid->rsock_id = sockets_add(sid->rsock, NULL, sid->sid, TYPE_UDP, NULL, NULL, NULL)) < 0)
+		if ((sid->rsock_id = sockets_add(sid->rsock, NULL, sid->sid, TYPE_UDP, NULL, (socket_action )close_stream_for_socket, NULL)) < 0)
 			LOG_AND_RETURN(-1, "RTP socket_add failed");
 		
 		set_socket_send_buffer(sid->rsock, opts.output_buffer);
@@ -711,9 +711,8 @@ void flush_streamb(streams * sid, unsigned char *buf, int rlen, int64_t ctime)
 
 	if (rv > 0)
 	{
-		bw += rv;
 		sid->sp++;
-		sid->sb += rv;
+		sid->sb += rlen;
 	}
 
 }
@@ -748,7 +747,6 @@ int flush_streami(streams * sid, int64_t ctime)
 
 	if (rv > 0)
 	{
-		bw += rv;
 		sid->sp++;
 		sid->sb += rv;
 	}

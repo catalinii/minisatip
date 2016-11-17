@@ -469,6 +469,14 @@ int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 	char ra[50];
 	sockets *ss;
 
+	
+	if(sock < 0 && sock != SOCK_TIMEOUT)
+		LOG_AND_RETURN(-1, "sockets_add does not add negative sockets %d", sock);
+
+	if(sock == SOCK_TIMEOUT && t == NULL)
+		LOG_AND_RETURN(-1, "sockets_add timeout without timeout function");
+
+	
 	i = add_new_lock((void **) s, MAX_SOCKS, sizeof(sockets), &s_mutex);
 	if (i == -1)
 		LOG_AND_RETURN(-1, "sockets_add failed for socks %d", sock);
@@ -501,7 +509,7 @@ int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 	ss->overflow = 0;
 	ss->iteration = 0;
 	ss->spos = ss->wpos;
-	ss->wmax = opts.max_sinfo / 2;
+	ss->wmax = opts.max_sinfo * 2 / 5;
 	
 	ss->read = (read_action) sockets_read;
 	ss->lock = NULL;
@@ -1032,13 +1040,6 @@ sockets *get_sockets(int i)
 	return s[i];
 }
 
-sockets *get_fsockets(int i)
-{
-	if (i < 0 || i >= MAX_SOCKS || !s[i])
-		return NULL;
-	return s[i];
-}
-
 void set_socket_pos(int sock, int pos)
 {
 	sockets *ss = get_sockets(sock);
@@ -1126,7 +1127,10 @@ int my_writev(sockets *s, const struct iovec *iov, int iiov)
 	}
 	else
 		s->sock_err = 0;
-	
+
+	if(rv > 0)
+		bw += rv;
+
 	LOGL(log_level, "writev returned %d handle %d, iiov %d (took %jd ms)", rv,
 			s->sock, iiov, stime);
 	return rv;
@@ -1136,6 +1140,7 @@ int my_writev(sockets *s, const struct iovec *iov, int iiov)
 int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 {
 	int rv = 0, i;
+	uint64_t item;
 	char *buf[1];
 	sockets *s = get_sockets(sock_id);
 	if(!s)
@@ -1148,27 +1153,31 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 	}
 	// queue the packet otherwise
 //	LOG("SOCK %d: queueing at %d send pos %d", s->id, s->wpos, s->spos);
-	uint64_t item = MAKE_ITEM(s->id,s->wpos);
-	for(i=0;i<iovcnt;i++)
+	while(s->wpos != s->spos)
 	{
-		if(setItem(item, iov[0].iov_base, iov[0].iov_len, (i==0)?0:-1))
+		item = MAKE_ITEM(s->id,s->wpos);
+		if(!setItem(item, iov[0].iov_base, iov[0].iov_len, 0))
+			break;
+		s->wpos = (s->wpos + 1) % s->wmax;
+	}
+	
+	for(i=1;i<iovcnt;i++)
+	{
+		if(setItem(item, iov[0].iov_base, iov[0].iov_len, -1))
 			s->overflow++;		
 	}
 	
-	s->wpos ++;
+	s->wpos = (s->wpos + 1) % s->wmax;
 	
-	if(s->wpos == s->wmax)
-		s->wpos = 0;
-
 	if(s->spos == s->wpos) // the queue is full, start overwriting
 	{
 		s->overflow ++;
-		s->spos ++;
+		s->spos = (s->spos + 1) % s->wmax;
 		if((s->overflow % 100) == 0)
-		LOG("sock %d: overflow %d", s->id, s->overflow);
+			LOG("sock %d: overflow %d", s->id, s->overflow);
 	}
-	if(s->spos == s->wmax)
-		s->spos = 0;
+	
+	return 0;
 	
 }
 

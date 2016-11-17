@@ -75,7 +75,6 @@ void sockets_setread(int i, void *r);
 void set_socket_send_buffer(int sock, int len);
 void set_socket_receive_buffer(int sock, int len);
 sockets *get_sockets(int i);
-sockets *get_fsockets(int i);
 void set_socket_pos(int sock, int pos);
 char *get_socket_rhost(int s_id, char *dest, int ld);
 int get_socket_rport(int s_id);

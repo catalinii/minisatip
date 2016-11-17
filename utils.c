@@ -112,8 +112,16 @@ STmpinfo *getItemPos(int64_t key)
 
 STmpinfo *getFreeItemPos(int64_t key)
 {
-	int i;
+	int i, ek = 0;
 	int64_t tick = getTick();
+	uint64_t mask = 0xFF000000000000;
+	for (i = 0; i < MAX_SINFO; i++)
+		if (sinfo[i].enabled && ((key & mask) == (sinfo[i].key & mask)))
+			ek ++ ;
+	
+	if(ek > 0.8 * MAX_SINFO )
+		LOG_AND_RETURN(NULL, "dynamic capacity for %jX exhausted", key & mask);
+	
 	for (i = 0; i < MAX_SINFO; i++)
 		if (!sinfo[i].enabled
 				|| (sinfo[i].timeout

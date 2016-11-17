@@ -692,7 +692,7 @@ int dvbapi_send_pmt(SKey *k)
 	copy32(buf, 12, 0x01820200);
 	buf[15] = k->id;
 	buf[16] = k->id;
-	memcpy(buf + 17, k->pi, k->pi_len + 2);
+	memcpy(buf + 17, k->pi, k->pi_len);
 	len = 17 - 6 + k->pi_len + 2;
 	copy16(buf, 4, len);
 	copy16(buf, 10, len - 11);
@@ -760,9 +760,13 @@ int connect_dvbapi(void *arg)
 		}
 		else
 			sock = tcp_connect(opts.dvbapi_host, opts.dvbapi_port, NULL, 1);
+		if(sock < 0)
+			LOG_AND_RETURN(1, "%s: connect to %s failed", __FUNCTION__, opts.dvbapi_host);
 		dvbapi_sock = sockets_add(sock, NULL, -1, TYPE_TCP | TYPE_CONNECT,
 				(socket_action) dvbapi_reply, (socket_action) dvbapi_close,
 				(socket_action) dvbapi_timeout);
+		if(dvbapi_sock < 0)
+			LOG_AND_RETURN(1, "%s: socket_add failed", __FUNCTION__);
 		set_socket_buffer(dvbapi_sock, read_buffer, sizeof(read_buffer));
 		sockets_timeout(dvbapi_sock, 2000); // 2s timeout to close the socket
 		return 0;
@@ -1054,20 +1058,10 @@ int dvbapi_add_pmt(adapter *ad, void *arg)
 	if (!p)
 		return 1;
 
-	if(!network_mode)
-	{
-		if(key != 255 && key != ad->id)
-			keys_del(key);
-		key = ad->id;
-		if(get_key(key))
-			LOG_AND_RETURN(0, "Not sending PMT pid %d to dvbapi server in local socket mode", pid);
-		key = keys_add(key, ad->id, spmt->sid, pid); // in local mode, the adapter and the key have the same ID		
-	}else
-	{
-		key = p->key;
-		if (!get_key(p->key))
-			key = keys_add(-1, ad->id, spmt->sid, pid);		
-	}
+	key = p->key;
+	if (!get_key(p->key))
+		key = keys_add(-1, ad->id, spmt->sid, pid);		
+
 	k = get_key(key);
 	if (!k)
 		return 1;

@@ -220,7 +220,7 @@ Help\n\
 	* eg: -b 18800:18988\n\
 \n\
 * -B X : set the app socket write buffer to X KB. \n\
-	The buffer will be split between multiple sockets, each getting maximum X/2 KB\n\
+	The buffer will be split between multiple sockets, each getting maximum 0.4 * X KB\n\
 	* eg: -B 10\n\
 \n\
 * -d --diseqc ADAPTER1:COMMITTED1-UNCOMMITTED1[,ADAPTER2:COMMITTED2-UNCOMMITTED2[,...]\n\
@@ -1170,7 +1170,7 @@ int ssdp_discovery(sockets * s)
 				nt[i] + 2, app_name, version, uuid, i == 1 ? "" : nt[i],
 				opts.bootid, opts.device_id);
 		salen = sizeof(ssdp_sa);
-		LOGL(5, "Discovery packet %d:\n%s", i + 1, buf);
+		LOGL(4, "Discovery packet %d:\n%s", i + 1, buf);
 		sendto(s->sock, buf, strlen(buf), MSG_NOSIGNAL,
 				(const struct sockaddr *) &ssdp_sa, salen);
 	}
@@ -1212,7 +1212,7 @@ int ssdp_reply(sockets * s)
 	ruuid = strcasestr((const char *) s->buf, "uuid:");
 	if (ruuid && strncmp(uuid, strip(ruuid + 5), strlen(uuid)) == 0)
 	{
-		LOGL(5, "Dropping packet from the same UUID as mine (from %s:%d)",
+		LOGL(4, "Dropping packet from the same UUID as mine (from %s:%d)",
 				get_socket_rhost(s->id, ra, sizeof(ra)),
 				get_socket_rport(s->id));
 		return 0;
@@ -1222,7 +1222,7 @@ int ssdp_reply(sockets * s)
 	LOGL(4, "Received SSDP packet from %s:%d -> handle %d",
 			get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
 			s->sock);
-	LOGL(5, "%s", s->buf);
+	LOGL(4, "%s", s->buf);
 
 	if (strncasecmp((const char *) s->buf, "NOTIFY", 6) == 0)
 	{
@@ -1266,11 +1266,11 @@ int ssdp_reply(sockets * s)
 	sprintf(buf, reply, get_current_timestamp(), opts.http_host, opts.xml_path,
 			app_name, version, uuid, opts.bootid, did);
 
-	LOGL(5, "ssdp_reply fd: %d -> %s:%d, bootid: %d deviceid: %d http: %s", ssdp,
+	LOGL(4, "ssdp_reply fd: %d -> %s:%d, bootid: %d deviceid: %d http: %s", ssdp,
 			get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
 			opts.bootid, did, opts.http_host);
 //use ssdp (unicast) even if received to multicast address
-	LOGL(5, "%s", buf);
+	LOGL(4, "%s", buf);
 	sendto(ssdp, buf, strlen(buf), MSG_NOSIGNAL,
 			(const struct sockaddr *) &s->sa, salen);
 	return 0;

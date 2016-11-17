@@ -25,9 +25,18 @@ https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item
 Usage:
 -------
 
-minisatip version 0.5.63, compiled with s2api version: 050A
+minisatip version 0.5.66, compiled with s2api version: 050A
+[15/11 22:00:36.518 main]: Built with dvbcsa
+[15/11 22:00:36.518 main]: Built with CI
+[15/11 22:00:36.518 main]: Built with dvbapi
+[15/11 22:00:36.518 main]: Built with AES (OpenSSL)
+[15/11 22:00:36.518 main]: Built with tables processing
+[15/11 22:00:36.518 main]: Built with satip client
+[15/11 22:00:36.518 main]: Built with linux dvb client
+[15/11 22:00:36.518 main]: Built with backtrace
+[15/11 22:00:36.518 main]: Built with netceiver
 
-	./minisatip [-[fgltzE]] [-a x:y:z] [-b X:Y] [-c X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
+	./minisatip [-[fgltzE]] [-a x:y:z] [-b X:Y] [-B X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 		[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port][-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] 
 		[-R document_root] [-s [DELSYS:]host[:port] [-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] 
 		[-x http_port] [-X xml_path] [-y rtsp_port] 
@@ -42,8 +51,9 @@ Help
 * -b --buffers X:Y : set the app adapter buffer to X Bytes (default: 25004) and set the kernel DVB buffer to Y Bytes (default: 5775360) - both multiple of 188
 	* eg: -b 18800:18988
 
-* -c X: bandwidth capping for the output to the network [default: unlimited]
-	* eg: -c 2048  (does not allow minisatip to send more than 2048KB/s to all remote servers)
+* -B X : set the app socket write buffer to X KB. 
+	The buffer will be split between multiple sockets, each getting maximum X/2 KB
+	* eg: -B 10
 
 * -d --diseqc ADAPTER1:COMMITTED1-UNCOMMITTED1[,ADAPTER2:COMMITTED2-UNCOMMITTED2[,...]
 	* The first argument is the adapter number, second is the number of committed packets to send to a Diseqc 1.0 switch, third the number of uncommitted commands to sent to a Diseqc 1.1 switch
