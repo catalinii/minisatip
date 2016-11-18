@@ -625,7 +625,7 @@ int decrypt_stream(adapter *ad, void *arg)
 				{
 					int64_t ctime = getTick();
 					LOGL(2,
-							"Parity change for key %d, new parity %d pid %d [%02X %02X %02X %02X], last_parity_change %jd",
+							"Parity change for key %d, new active parity %d pid %d [%02X %02X %02X %02X], last_parity_change %jd",
 							k->id, cp, pid, b[0], b[1], b[2], b[3],
 							k->last_parity_change);
 //					if(ctime - k->last_parity_change> 1000)
@@ -850,8 +850,8 @@ int send_ecm(adapter *ad, void *arg)
 	len += 3;
 	k->last_ecm = getTick();
 	LOG(
-			"dvbapi: sending ECM key %d for pid %04X (%d), ecm_parity = %d, new parity %d, demux = %d, filter = %d, len = %d [%02X %02X %02X %02X]",
-			k->id, pid, pid, old_parity, b[0] & 1, demux, filter, len, b[0],
+			"dvbapi: sending ECM key %d for pid %04X (%d), current ecm_parity = %d, next parity = %d, demux = %d, filter = %d, len = %d [%02X %02X %02X %02X]",
+			k->id, pid, pid, old_parity, p->ecm_parity, demux, filter, len, b[0],
 			b[1], b[2], b[3]);
 
 	if (demux < 0)
