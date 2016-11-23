@@ -290,6 +290,20 @@ int run_ca_action(int action_id, adapter *ad, void *arg)
 	return rv;
 }
 
+
+int is_ac3_es(unsigned char *es, int len)
+{
+	int i, es_len, isAC3 = 0;
+	for (i = 0; i < len; i+= es_len)
+	{
+		es_len = es[i + 1] + 2;
+		if(es[i] == 0x6A)
+			isAC3 = 1;
+	}
+	
+	return isAC3;
+}
+
 void find_pi(unsigned char *es, int len, unsigned char *pi, int *pi_len)
 {
 
@@ -318,7 +332,7 @@ void find_pi(unsigned char *es, int len, unsigned char *pi, int *pi_len)
 
 int process_pmt(adapter *ad, unsigned char *b)
 {
-	int pi_len = 0, ver, pmt_len = 0, i, _pid, es_len, len, init_pi_len;
+	int pi_len = 0, isAC3, ver, pmt_len = 0, i, _pid, es_len, len, init_pi_len;
 	int program_id = 0;
 	int prio = 0;
 	int enabled_channels = 0;
@@ -399,14 +413,17 @@ int process_pmt(adapter *ad, unsigned char *b)
 		es_len = (pmt[i + 3] & 0xF) * 256 + pmt[i + 4];
 		stype = pmt[i];
 		spid = (pmt[i + 1] & 0x1F) * 256 + pmt[i + 2];
-		LOG(
-				"PMT pid %d - stream pid %04X (%d), type %d, es_len %d, pos %d, pi_len %d old pmt %d, old pmt for this pid %d",
-				pid, spid, spid, stype, es_len, i, pi_len, pids[pid],
-				pids[spid]);
+		isAC3 = 0;
+		if(stype == 6)
+			isAC3 = is_ac3_es(pmt + i + 5, es_len);
+		
+		LOG("PMT pid %d - stream pid %04X (%d), type %d%s, es_len %d, pos %d, pi_len %d old pmt %d, old pmt for this pid %d",
+				pid, spid, spid, stype, isAC3?" [AC3]":"", es_len, i, pi_len, pids[pid], pids[spid]);
 		if ((es_len + i > pmt_len) || (init_pi_len + es_len == 0))
 			break;
-		if (stype != 2 && stype != 3 && stype != 4 && stype != 6 && stype != 27
-				&& stype != 36 || spid < 64)
+		
+		if (stype != 2 && stype != 3 && stype != 4 && !isAC3 && stype != 27
+				&& stype != 36)
 			continue;
 
 		find_pi(pmt + i + 5, es_len, pi, &pi_len);
@@ -489,8 +506,8 @@ int assemble_packet(uint8_t **b1, adapter *ad, int check_crc)
 
 	if (len > 1500 || len < 0)
 		LOG_AND_RETURN(0,
-				"assemble_packet: len %d not valid for pid %d [%02X %02X %02X %02X %02X]",
-				len, pid, b[4], b[5], b[6], b[7], b[8]);
+				"assemble_packet: len %d not valid for pid %d [%02X %02X %02X %02X %02X %02X]",
+				len, pid, b[3], b[4], b[5], b[6], b[7], b[8]);
 
 	item_key = TABLES_ITEM + (ad->id << 16) + pid;
 

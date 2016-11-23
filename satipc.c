@@ -45,7 +45,7 @@
 #include "minisatip.h"
 #include "dvb.h"
 
-#define TCP_DATA_SIZE ((ADAPTER_BUFFER/1316)*(1316+16))     
+#define TCP_DATA_SIZE ((ADAPTER_BUFFER/1316)*(1316+16))  
 
 extern char *fe_delsys[];
 extern struct struct_opts opts;
@@ -525,7 +525,9 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb)
 			copy16r(rtsp_len, rtsp, 2);
 
 			if (rtsp_len + sip->tcp_pos > sip->tcp_len) // expecting more data in the buffer
+			{
 				break;
+			}	
 
 			if (rtsp[1] == 0 && (rtsp_len - 12 + pos > len)) // destination buffer full
 			{
@@ -535,7 +537,7 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb)
 				break;
 			}
 			sip->tcp_pos += rtsp_len + 4;
-
+//			LOG("processed %d", rtsp_len);
 			pos += process_rtsp_tcp(ss, rtsp, rtsp_len, buf + pos, len - pos);
 			*rb = pos;
 

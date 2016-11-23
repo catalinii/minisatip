@@ -244,8 +244,8 @@ int start_play(streams * sid, sockets * s)
 	}
 
 	LOG(
-			"Play for stream %d, type %d, rsock %d, adapter %d, sock_id %d handle %d",
-			s->sid, sid->type, sid->rsock, sid->adapter, s->id, s->sock);
+			"Play for stream %d, type %d, rsock %d, adapter %d, sock_id %d, rsock_id %d, handle %d",
+			s->sid, sid->type, sid->rsock, sid->adapter, s->id, sid->rsock_id, s->sock);
 	ad = get_adapter(sid->adapter);
 
 	// check if the adapter is not valid or if a slave SID is trying to change frequency
@@ -378,6 +378,7 @@ int decode_transport(sockets * s, char *arg, char *default_rtp, int start_rtp)
 			LOG("Assuming RTSP over TCP for stream %d, arg %s", sid->sid, arg);
 			sid->type = STREAM_RTSP_TCP;
 			sid->rsock = s->sock;
+			sid->rsock_id = s->id;
 			memcpy(&sid->sa, &s->sa, sizeof(s->sa));
 			return 0;
 		}
@@ -591,8 +592,8 @@ int send_rtp(streams * sid, const struct iovec *iov, int liov)
 				ntohs(sid->sa.sin_port));
 	}
 
-	LOGL(7, "%s: sent %d bytes for stream %d, handle %d seq %d => %s:%d",
-			__FUNCTION__, total_len, sid->sid, sid->rsock, sid->seq - 1,
+	LOGL(7, "%s: sent %d bytes for stream %d, handle %d, sock_id %d, seq %d => %s:%d",
+			__FUNCTION__, total_len, sid->sid, sid->rsock, sid->rsock_id, sid->seq - 1,
 			get_stream_rhost(sid->sid, ra, sizeof(ra)), ntohs(sid->sa.sin_port));
 
 	return rv;
@@ -674,14 +675,14 @@ int send_rtcp(int s_id, int64_t ctime)
 	memcpy(rtcp + 68, a, la + 4);
 	total_len = len + 52;
 	if (sid->type == STREAM_RTSP_UDP)
-		rv = send(sid->rtcp, rtcp, total_len, MSG_NOSIGNAL);
+		rv = sockets_write(sid->rtcp_sock, rtcp, total_len);
 	else
 	{
 		rtcp_buf[0] = 0x24;
 		rtcp_buf[1] = 1;
 		copy16(rtcp_buf, 2, total_len);
 		total_len += 4;
-		rv = send(sid->rsock, rtcp_buf, total_len, MSG_NOSIGNAL);
+		rv = sockets_write(sid->rsock_id, rtcp_buf, total_len);
 	}
 
 	sid->rtcp_wtime = ctime;

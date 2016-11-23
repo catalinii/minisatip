@@ -828,6 +828,7 @@ int send_ecm(adapter *ad, void *arg)
 	p = find_pid(ad->id, pid);
 	if (p)
 		k = get_key(p->key);
+	
 	if (!k)
 //		LOG_AND_RETURN(0, "key is null pid %d for p->key %d", pid, p?p->key:-1);
 		return 0;
@@ -841,7 +842,7 @@ int send_ecm(adapter *ad, void *arg)
 	if ((getTick() - k->last_ecm > 1000) && !k->key_ok[0] && !k->key_ok[1])
 		p->ecm_parity = -1;
 
-	if ((b[0] & 1) == p->ecm_parity)
+	if ((pid != 0) && (pid != 1) && (b[0] & 1) == p->ecm_parity)
 		return 0;
 	old_parity = p->ecm_parity;
 	p->ecm_parity = b[0] & 1;

@@ -1092,7 +1092,7 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 				snprintf(dad, ld,
 						"ver=1.1;src=%d;tuner=%d,%d,%d,%d,%.2f,%d,%s,%s,%s,%s,%s,%d,%d,%d;pids=",
 						t->diseqc, aid + 1, strength, status, snr,
-						(double) t->freq / 1000, t->bw, get_delsys(t->sys),
+						(double) t->freq / 1000000, t->bw, get_delsys(t->sys),
 						get_tmode(t->tmode), get_modulation(t->mtype),
 						get_gi(t->gi), get_fec(t->fec), t->plp, t->t2id, t->sm);
 	else
@@ -1100,7 +1100,7 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 				snprintf(dad, ld,
 						"ver=1.2;src=%d;tuner=%d,%d,%d,%d,%.2f,8,%s,%s,%d,%d,%d,%d,%d;pids=",
 						t->diseqc, aid + 1, strength, status, snr,
-						(double) t->freq / 1000, get_delsys(t->sys),
+						(double) t->freq / 1000000, get_delsys(t->sys),
 						get_modulation(t->mtype), t->sr, t->c2tft, t->ds,
 						t->plp, t->inversion);
 

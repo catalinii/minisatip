@@ -1139,17 +1139,38 @@ int my_writev(sockets *s, const struct iovec *iov, int iiov)
 
 int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 {
-	int rv = 0, i;
+	int rv = 0, i, pos = 0;
 	uint64_t item;
 	char *buf[1];
+	unsigned char tmpbuf[1500];
+	struct iovec tmpiov;
 	sockets *s = get_sockets(sock_id);
 	if(!s)
 		return -1;
 	if(s->spos == s->wpos)
 	{
+		int len = 0;
+		for(i=0;i<iovcnt;i++)
+			len += iov[i].iov_len;
+		
 		rv = my_writev(s, iov, iovcnt);
-		if(rv > 0)
+		if(rv == len)
 			return rv;
+		
+		if(rv > 0 && (len < sizeof(tmpbuf)))
+		{			
+			for(i=0;i<iovcnt;i++)
+			{
+				memcpy(tmpbuf + pos, iov[i].iov_base, iov[i].iov_len);
+				pos += iov[i].iov_len;
+			}
+			LOG("incomplete write, setting the buffer at offset %d and length %d from %d", rv, len - rv, len);
+			tmpiov.iov_base = tmpbuf + rv;
+			tmpiov.iov_len = len - rv;
+			
+		}else if(len > sizeof(tmpbuf))
+			LOG("tmpbuf size is too small: %d required ", len);
+		
 	}
 	// queue the packet otherwise
 //	LOG("SOCK %d: queueing at %d send pos %d", s->id, s->wpos, s->spos);
