@@ -51,9 +51,9 @@ int netcv_close(adapter *ad)
 {
 	SN->want_commit = 0;
 
-	if (!SN->ncv_rec) LOGL(3, "netceiver: receiver instance is NULL (id=%d)", ad->id);
+	if (!SN->ncv_rec) LOGL(1, "netceiver: receiver instance is NULL (id=%d)", ad->id);
 
-	LOGL(2, "netceiver: delete receiver instance for adapter %d", ad->id);
+	LOGL(1, "netceiver: delete receiver instance for adapter %d", ad->id);
 
 	/* unregister handlers */
 	register_ten_handler(SN->ncv_rec, NULL, NULL);
@@ -77,25 +77,23 @@ int netcv_close(adapter *ad)
 
 int netcv_open_device(adapter *ad)
 {
-	//fprintf(stderr, "REEL: netcv_open_device (id=%d)\n", ad->id);
-
 	SN->want_commit = 0;
 	SN->ncv_rec = NULL;
 
 	/* create DVR pipe for TS data transfer from libmcli to minisatip */
 	int pipe_fd[2];
-	if (pipe2 (pipe_fd, O_NONBLOCK)) LOGL (3, "netceiver: creating pipe failed");
+	if (pipe2 (pipe_fd, O_NONBLOCK)) LOGL (0, "netceiver: creating pipe failed (%s)", strerror(errno));
+	if (-1 == fcntl (pipe_fd[0], F_SETPIPE_SZ, 5 * 188 * 1024))
+		LOGL (0, "netceiver pipe buffer size change failed (%s)", strerror(errno));
 	ad->dvr = pipe_fd[0];	// read end of pipe
 	SN->pwfd = pipe_fd[1];	// write end of pipe
-	LOGL(2, "netceiver: creating DVR pipe for adapter %d  -> dvr: %d", ad->id, ad->dvr);
+	LOGL(1, "netceiver: creating DVR pipe for adapter %d  -> dvr: %d", ad->id, ad->dvr);
 
 	return 0;
 }
 
 int netcv_set_pid(adapter *ad, uint16_t pid)
 {
-	//fprintf(stderr, "REEL: netcv_set_pid (id=%d, pid=%d)\n", ad->id, pid);
-
 	int aid = ad->id;
 	LOGL(3, "netceiver: set_pid for adapter %d, pid %d, err %d", aid, pid,
 			SN->err);
@@ -112,8 +110,6 @@ int netcv_set_pid(adapter *ad, uint16_t pid)
 
 int netcv_del_pid(int fd, int pid)
 {
-	//fprintf(stderr, "REEL: netcv_del_pid (id=%d, pid=%d)\n", fd, pid);
-
 	int i, hit = 0;
 	adapter *ad;
 	fd -= 100;
@@ -151,7 +147,7 @@ void netcv_commit(adapter *ad)
 	SN->err = 0;
 	if (!SN->ncv_rec)
 	{
-		LOGL(3, "netceiver: add a new receiver instance for adapter %d", ad->id);
+		LOGL(1, "netceiver: add a new receiver instance for adapter %d", ad->id);
 
 		/* call recv_add of libmcli to add a new receiver instance */
 		SN->ncv_rec = recv_add();
@@ -310,17 +306,13 @@ void netcv_commit(adapter *ad)
 	{
 		if (SN->lp)
 		{
-			char dbuf[1024] = "REEL: recv_pid: "; //debug
-
 			memset(m_pids, 0, sizeof(m_pids));
 			for(i = 0; i < SN->lp; i++)
 			{
-				sprintf(dbuf + strlen(dbuf), "[%04d]", SN->npid[i]);
 				m_pids[i].pid = SN->npid[i];
 				m_pids[i].id = 0; // here we maybe have to set the SID if this PID is encrypted
 
 			}
-			//fprintf(stderr, "%s\n", dbuf);
 
 			m_pids[i].pid = -1;
 			/* call recv_pids of libmcli to set the active PIDs */
@@ -330,7 +322,6 @@ void netcv_commit(adapter *ad)
 		}
 		else
 		{
-			//fprintf(stderr, "REEL: recv_pid: none\n");
 			/* call recv_stop of libmcli to deactivate all PIDs */
 			if(recv_stop (SN->ncv_rec))
 			LOGL(0, "netceiver: removing all PIDs failed");
@@ -344,13 +335,11 @@ void netcv_commit(adapter *ad)
 
 int netcv_tune(int aid, transponder * tp)
 {
-	//fprintf(stderr, "REEL: netcv_tune (id=%d, tp.freq=%d)\n", aid, tp->freq);
-
 	adapter *ad = get_adapter(aid);
 	if (!ad)
 		return 1;
 
-	SN->want_tune = 1;// we do not tune right now, just set the flag for netcv_commit
+	SN->want_tune = 1; // we do not tune right now, just set the flag for netcv_commit
 	SN->want_commit = 0;
 	SN->lp = 0;		// make sure number of active pids is 0 after tuning
 	return 0;
@@ -358,7 +347,6 @@ int netcv_tune(int aid, transponder * tp)
 
 fe_delivery_system_t netcv_delsys(int aid, int fd, fe_delivery_system_t *sys)
 {
-	//fprintf(stderr, "REEL: netcv_delsys (id=%d)\n", aid);
 	return 0;
 }
 
@@ -367,6 +355,7 @@ void find_netcv_adapter(adapter **a)
 	int i, k, n, na;
 	netceiver_info_list_t *nc_list;
 	adapter *ad;
+	char dbuf[2048];
 
 	/* check if network interface is available */
 	struct ifaddrs *nif, *nif1;
@@ -400,17 +389,17 @@ void find_netcv_adapter(adapter **a)
 	if (recv_init(opts.netcv_if, 23000))
 		LOGL(0, "Netceiver init failed");
 
-	fprintf(stderr, "REEL: Search for %d Netceiver%s on %s... ",
+	sprintf(dbuf, "REEL: Search for %d Netceiver%s on %s... ",
 			opts.netcv_count, opts.netcv_count == 1 ? "" : "s", opts.netcv_if);
 	n = 0;
 	do
 	{
 		usleep(250000);
-		fprintf(stderr, "##");
+		sprintf(dbuf + strlen(dbuf), "##");
 		nc_list = nc_get_list();
 	} while (nc_list->nci_num < opts.netcv_count && n++ < 19);
 	nc_lock_list();
-	fprintf(stderr, "\n");
+	sprintf(dbuf + strlen(dbuf), "\n");
 
 	/* count available tuner types */
 	int nc_sys_c[] =
@@ -421,20 +410,21 @@ void find_netcv_adapter(adapter **a)
 	for (n = 0; n < nc_list->nci_num; n++)
 	{
 		netceiver_info_t *nci = nc_list->nci + n;
-		fprintf(stderr, "Found NetCeiver: %s \n", nci->uuid);
+		sprintf(dbuf + strlen(dbuf), "Found NetCeiver: %s \n", nci->uuid);
 		for (i = 0; i < nci->tuner_num; i++)
 		{
-			fprintf(stderr, "	Tuner: %s, Type %d\n", nci->tuner[i].fe_info.name,
+			sprintf(dbuf + strlen(dbuf), "	Tuner: %s, Type %d\n", nci->tuner[i].fe_info.name,
 					nci->tuner[i].fe_info.type);
 			nc_sys_c[nci->tuner[i].fe_info.type]++;
 			nc_sys_t++;
 		}
 	}
+	LOGL(0, "%s", dbuf);
 
 	// add netceiver tuners to the list of adapters
 	i = FE_QPSK;
 	na = a_count;
-	char dbuf[1024] = "netceiver: adding ";
+	sprintf(dbuf, "netceiver: adding ");
 	for (n = 0; n < nc_sys_t; n++)
 	{
 		while (nc_sys_c[map_type[i]] == 0 && i < FE_DVBS2)
@@ -544,28 +534,7 @@ int handle_ts(unsigned char *buffer, size_t len, void *p)
 
 	/* write TS data to DVR pipe */
 	lw = write(nc->pwfd, buffer, len);
-	if (lw != len)
-	{
-		//LOGL(0, "netceiver: not all data forwarded (%s): len=%d, lw=%d", strerror(errno), len, lw);
-		LOGL(0, "netceiver: not all data forwarded");
-	}
-
-	return len;
-
-	/* debug code */
-	switch (len)
-	{
-	case 1316: // 7 TS packets
-		fprintf(stderr, "\bO");
-		break;
-
-	case 188: // 1 TS packet
-		fprintf(stderr, "\b.");
-		break;
-
-	default:
-		fprintf(stderr, "\bo");
-	}
+	if (lw != len) LOGL(0, "netceiver: not all data forwarded (%s)", strerror(errno));
 
 	return len;
 }
@@ -585,11 +554,6 @@ int handle_ten(tra_t *ten, void *p)
 		ad->ber = festat->ber;
 
 		return 0;
-
-		/* debug code */
-		fprintf(stderr,
-				"\nStatus: %02X, Strength: %04X, SNR: %04X, BER: %04X -  ",
-				festat->st, festat->strength, festat->snr, festat->ber);
 	}
 
 	return 0;
