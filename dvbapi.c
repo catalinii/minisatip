@@ -761,12 +761,12 @@ int connect_dvbapi(void *arg)
 		else
 			sock = tcp_connect(opts.dvbapi_host, opts.dvbapi_port, NULL, 1);
 		if(sock < 0)
-			LOG_AND_RETURN(1, "%s: connect to %s failed", __FUNCTION__, opts.dvbapi_host);
+			LOG_AND_RETURN(0, "%s: connect to %s failed", __FUNCTION__, opts.dvbapi_host);
 		dvbapi_sock = sockets_add(sock, NULL, -1, TYPE_TCP | TYPE_CONNECT,
 				(socket_action) dvbapi_reply, (socket_action) dvbapi_close,
 				(socket_action) dvbapi_timeout);
 		if(dvbapi_sock < 0)
-			LOG_AND_RETURN(1, "%s: socket_add failed", __FUNCTION__);
+			LOG_AND_RETURN(0, "%s: socket_add failed", __FUNCTION__);
 		set_socket_buffer(dvbapi_sock, read_buffer, sizeof(read_buffer));
 		sockets_timeout(dvbapi_sock, 2000); // 2s timeout to close the socket
 		return 0;
