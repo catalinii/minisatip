@@ -39,9 +39,11 @@
 #define VAR_AARRAY_PSTRING (VAR_AARRAY + VAR_PSTRING)
 #define VAR_FUNCTION 48
 #define VAR_FUNCTION_INT (VAR_FUNCTION + VAR_INT)
+#define VAR_FUNCTION_INT64 (VAR_FUNCTION + VAR_INT64)
 #define VAR_FUNCTION_STRING (VAR_FUNCTION + VAR_STRING)
-
+ 
 typedef int (*get_data_int)(int p);
+typedef int64_t (*get_data_int64)(int p);
 typedef char * (*get_data_string)(int p, char *dest, int max_len);
 
 typedef struct struct_symbols
@@ -69,6 +71,7 @@ unsigned char *getItem(int64_t key);
 int getItemLen(int64_t key);
 int setItem(int64_t key, unsigned char *data, int len, int pos);
 int delItem(int64_t key);
+int delItemMask(int64_t key, int64_t mask);
 int delItemP(void *p);
 int split(char **rv, char *s, int lrv, char sep);
 int setItemSize(int64_t key, uint32_t max_size);

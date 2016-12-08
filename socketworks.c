@@ -49,7 +49,7 @@ int max_sock;
 SMutex s_mutex;
 
 #define SOCKETWORKS_ITEM ((uint64_t) 0x4000000000000)
-#define MAKE_ITEM(a,b) ((SOCKETWORKS_ITEM | (((uint64_t )a)<<32) | (b)))
+#define MAKE_ITEM(a,b) ((SOCKETWORKS_ITEM + (((uint64_t )a)<<24) + (b)))
 
 
 int fill_sockaddr(struct sockaddr_in *serv, char *host, int port)
@@ -510,7 +510,7 @@ int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 	ss->iteration = 0;
 	ss->spos = ss->wpos;
 	ss->wmax = opts.max_sinfo * 2 / 5;
-	
+	ss->use_items = 0;
 	ss->read = (read_action) sockets_read;
 	ss->lock = NULL;
 	if (ss->type == TYPE_UDP || ss->type == TYPE_RTCP)
@@ -553,6 +553,7 @@ int sockets_del(int sock)
 
 	if (ss->close)
 		ss->close(ss);
+
 	if (so >= 0)
 		close(so);
 	ss->sid = -1;
@@ -567,13 +568,13 @@ int sockets_del(int sock)
 	ss->lock = NULL;
 	if((ss->flags & 1) && ss->buf)
 		free1(ss->buf);
-	
-	for(i = 0; i < ss->wmax; i++)
+	if(ss->use_items)
 	{
-		uint64_t item = MAKE_ITEM(sock,i);
-		delItem(item);
-
+		uint64_t item = MAKE_ITEM(ss->id,0);
+		uint64_t mask = MAKE_ITEM(0xFF,0);
+		delItemMask(item, 0xFF000000000000 | mask);
 	}
+	ss->use_items = 0;
 	
 	LOG("sockets_del: %d Last open socket is at index %d current_handle %d",
 			sock, i, so);
@@ -586,6 +587,7 @@ int run_loop = 1;
 extern pthread_t main_tid;
 extern int bwnotify;
 extern int64_t bwtt, bw;
+extern uint32_t writes, failed_writes;
 
 __thread pthread_t tid;
 __thread char *thread_name;
@@ -980,6 +982,7 @@ void set_socket_buffer(int sid, unsigned char *buf, int len)
 
 void free_all_streams();
 void free_all_adapters();
+void free_all_keys();
 
 void free_all()
 {
@@ -995,6 +998,9 @@ void free_all()
 	}
 	free_all_streams();
 	free_all_adapters();
+#ifndef DISABLE_DVBAPI
+	free_all_keys();
+#endif
 }
 
 void set_socket_send_buffer(int sock, int len)
@@ -1094,7 +1100,7 @@ pthread_t get_socket_thread(int s_id)
 
 int my_writev(sockets *s, const struct iovec *iov, int iiov)
 {
-	int rv;
+	int rv, len = 0, i;
 	char ra[50];
 	int log_level = 7;
 	int64_t stime = 0;
@@ -1107,6 +1113,23 @@ int my_writev(sockets *s, const struct iovec *iov, int iiov)
 	rv = writev(s->sock, iov, iiov);
 	if (opts.log == log_level)
 		stime = getTick() - stime;
+
+	len = 0;
+	for (i=0;i<iiov;i++)
+		len += iov[i].iov_len;
+	
+
+	if(rv > 0)
+	{
+		bw += rv;
+		writes ++;
+	}
+	
+	if(rv != len)
+	{
+		failed_writes ++; 
+		LOGL(log_level, "writev handle %d, iiov %d, len %d, rv %d, errno %d", s->sock, iiov, len, rv, errno);
+	}
 	
 	if ((rv < 0) && (errno == EWOULDBLOCK)) // blocking
 		return -EWOULDBLOCK;
@@ -1117,7 +1140,8 @@ int my_writev(sockets *s, const struct iovec *iov, int iiov)
 				"Connection REFUSED on socket %d (sid %d), closing the socket, remote %s:%d",
 				s->id, s->sid, get_socket_rhost(s->id, ra, sizeof(ra)),
 				get_socket_rport(s->id));
-		s->timeout_ms = 1;
+		if(s->type != TYPE_RTCP)
+			s->timeout_ms = 1;
 	}
 	if (rv < 0)
 	{
@@ -1127,10 +1151,7 @@ int my_writev(sockets *s, const struct iovec *iov, int iiov)
 	}
 	else
 		s->sock_err = 0;
-
-	if(rv > 0)
-		bw += rv;
-
+	
 	LOGL(log_level, "writev returned %d handle %d, iiov %d (took %jd ms)", rv,
 			s->sock, iiov, stime);
 	return rv;
@@ -1164,7 +1185,7 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 				memcpy(tmpbuf + pos, iov[i].iov_base, iov[i].iov_len);
 				pos += iov[i].iov_len;
 			}
-			LOG("incomplete write, setting the buffer at offset %d and length %d from %d", rv, len - rv, len);
+			LOGL(4, "incomplete write, setting the buffer at offset %d and length %d from %d", rv, len - rv, len);
 			tmpiov.iov_base = tmpbuf + rv;
 			tmpiov.iov_len = len - rv;
 			
@@ -1173,7 +1194,7 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 		
 	}
 	// queue the packet otherwise
-//	LOG("SOCK %d: queueing at %d send pos %d", s->id, s->wpos, s->spos);
+	LOGL(4, "SOCK %d: queueing at %d send pos %d", s->id, s->wpos, s->spos);
 	while(s->wpos != s->spos)
 	{
 		item = MAKE_ITEM(s->id,s->wpos);
@@ -1185,7 +1206,8 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 	for(i=1;i<iovcnt;i++)
 	{
 		if(setItem(item, iov[0].iov_base, iov[0].iov_len, -1))
-			s->overflow++;		
+			s->overflow++;
+		s->use_items = 1;
 	}
 	
 	s->wpos = (s->wpos + 1) % s->wmax;
@@ -1239,7 +1261,7 @@ int flush_socket(sockets *s)
 	
 	}
 //	delItem(item);
-//	LOG("SOCK %d: flushed %d out of %d", s->id, s->spos, s->wpos);
+	LOGL(4, "SOCK %d: flushed %d out of %d", s->id, s->spos, s->wpos);
 	s->spos ++;
 	if(s->spos == s->wmax)
 		s->spos = 0;

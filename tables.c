@@ -838,7 +838,7 @@ int process_stream(adapter *ad, int rlen)
 	uint8_t *b;
 
 	int64_t pid_key = TABLES_ITEM + ((1 + ad->id) << 24) + 0;
-	int16_t *pids = (int16_t *) getItem(pid_key);
+	int16_t *pids;
 
 	if (nca == 0)
 		return 0;
@@ -846,6 +846,8 @@ int process_stream(adapter *ad, int rlen)
 	if (ad->ca_mask == 0) // no CA enabled on this adapter
 		return 0;
 
+	pids = (int16_t *) getItem(pid_key);
+	
 	for (i = 0; i < rlen; i += 188)
 	{
 		b = ad->buf + i;

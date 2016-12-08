@@ -241,5 +241,4 @@ char *get_gi(int i);
 char *get_specinv(int i);
 char *get_pol(int i);
 
-
 #endif							 /*  */

@@ -41,6 +41,7 @@ netcv="Netceiver support:\t\t\t "
 satipc="SatIP Client:\t\t\t\t "
 static="Static:\t\t\t\t\t "
 dvbapi="dvbapi:\t\t\t\t\t "
+axe="axe:\t\t\t\t\t "
 
 AC_MSG_NOTICE([ == Checking LINUX DVB == ])
 AC_CHECK_HEADERS([linux/dvb/frontend.h],[LINUXDVB=1],[LINUXDVB=0])
@@ -175,6 +176,18 @@ FM="$FM\n$dvbapi disabled"
 fi
 
 
+AC_ARG_ENABLE([axe],
+  [AS_HELP_STRING([--enable-axe],
+  [enable compilation for axe: Inverto IDL400])],
+  [AXE=1],
+  [AXE=0])
+if test "$AXE" = "1"; then
+FM="$FM\n$axe enabled"
+else
+FM="$FM\n$axe disabled"
+fi
+
+
 AC_SUBST(LINUXDVB)
 AC_SUBST(DVBCSA)
 AC_SUBST(DVBCA)
@@ -184,6 +197,7 @@ AC_SUBST(NETCVCLIENT)
 AC_SUBST(SATIPCLIENT)
 AC_SUBST(STATIC)
 AC_SUBST(DVBAPI)
+AC_SUBST(AXE)
 
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT

@@ -207,7 +207,7 @@ int setItem(int64_t key, unsigned char *data, int len, int pos) // pos = -1 -> a
 		new_key = 1;
 	}
 	if (!s)
-		return -1;
+		LOG_AND_RETURN(-1, "%s failed for key %jx", __FUNCTION__, key);
 
 	if (s->max_size == 0)
 		s->max_size = MAX_DATA + 10;
@@ -243,6 +243,23 @@ int delItem(int64_t key)
 	LOGL(4, "Deleted Item Pos %d", s->id);
 	return 0;
 }
+
+int delItemMask(int64_t key, int64_t mask)
+{
+	int i;
+	for (i = 0; i < MAX_SINFO; i++)
+		if (sinfo[i].enabled && ((sinfo[i].key & mask) == key))
+		{
+			STmpinfo *s = &sinfo[i];
+			s->enabled = 0;
+			s->len = 0;
+			LOGL(4, "Deleted Item key %jx, pos %d (key %jx, mask %jx)", s->key, s->id, key, mask);
+			s->key = 0;
+		}
+	
+	return 0;
+}
+
 
 int delItemP(void *p)
 {
@@ -673,6 +690,10 @@ extern _symbols dvbapi_sym[];
 #ifndef DISABLE_SATIPCLIENT
 extern _symbols satipc_sym[];
 #endif
+#ifdef AXE
+extern _symbols axe_sym[];
+#endif
+
 
 _symbols *sym[] =
 { adapters_sym, stream_sym, minisatip_sym,
@@ -681,6 +702,9 @@ _symbols *sym[] =
 #endif
 #ifndef DISABLE_SATIPCLIENT
 		satipc_sym,
+#endif
+#ifdef AXE
+		axe_sym,
 #endif
 		NULL };
 
@@ -787,7 +811,14 @@ void * get_var_address(char *var, float *multiplier, int * type, void *storage,
 					*multiplier = 1;
 					return storage;
 				}
-				else if (sym[i][j].type == VAR_FUNCTION_STRING)
+				else if (sym[i][j].type == VAR_FUNCTION_INT64)
+				{
+					off = map_intd(var + strlen(sym[i][j].name), NULL, 0);
+					get_data_int64 fun64 = (get_data_int64) sym[i][j].addr;
+					*(int64_t *) storage = fun64(off);
+					*multiplier = 1;
+					return storage;
+				}else if (sym[i][j].type == VAR_FUNCTION_STRING)
 				{
 					off = map_intd(var + strlen(sym[i][j].name), NULL, 0);
 					get_data_string funs = (get_data_string) sym[i][j].addr;
@@ -1187,10 +1218,10 @@ int64_t getTick()
 
 int64_t getTickUs()
 {
-	uint64_t utime;
+	int64_t utime;
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	utime = ((uint64_t) ts.tv_sec) * 1000000 + ts.tv_nsec / 1000;
+	utime = ((int64_t) ts.tv_sec) * 1000000 + ts.tv_nsec / 1000;
 	return utime;
 
 }

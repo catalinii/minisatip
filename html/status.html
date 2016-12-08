@@ -84,6 +84,9 @@ var ad_phyfd	= [$ad_phyfd0$, $ad_phyfd1$, $ad_phyfd2$, $ad_phyfd3$, $ad_phyfd4$,
 var ad_allsys	= ["$ad_allsys0$", "$ad_allsys1$", "$ad_allsys2$", "$ad_allsys3$", "$ad_allsys4$", "$ad_allsys5$", "$ad_allsys6$", "$ad_allsys7$", "$ad_allsys8$", "$ad_allsys9$", "$ad_allsys10$", "$ad_allsys11$", "$ad_allsys12$", "$ad_allsys13$", "$ad_allsys14$", "$ad_allsys15$" ];
 var ad_pids		= ["$ad_pids0$", "$ad_pids1$", "$ad_pids2$", "$ad_pids3$", "$ad_pids4$", "$ad_pids5$", "$ad_pids6$", "$ad_pids7$", "$ad_pids8$", "$ad_pids9$", "$ad_pids10$", "$ad_pids11$", "$ad_pids12$", "$ad_pids13$", "$ad_pids14$", "$ad_pids15$" ];
 var ad_satip	= ["$ad_satip0$", "$ad_satip1$", "$ad_satip2$", "$ad_satip3$", "$ad_satip4$", "$ad_satip5$", "$ad_satip6$", "$ad_satip7$", "$ad_satip8$", "$ad_satip9$", "$ad_satip10$", "$ad_satip11$", "$ad_satip12$", "$ad_satip13$", "$ad_satip14$", "$ad_satip15$" ];
+var ad_axe_pktc = ["$ad_axe_pktc0$, $ad_axe_pktc1$, $ad_axe_pktc2$, $ad_axe_pktc3$];
+var ad_axe_ccerr = ["$ad_axe_ccerr0$, $ad_axe_ccerr1$, $ad_axe_ccerr2$, $ad_axe_ccerr3$];
+var ad_axe_coax = ["$ad_axe_coax0$, "$ad_axe_coax1$", "$ad_axe_coax2$", "$ad_axe_coax3$"];
 var st_enabled	= [$st_enabled0$, $st_enabled1$, $st_enabled2$, $st_enabled3$, $st_enabled4$, $st_enabled5$, $st_enabled6$, $st_enabled7$, $st_enabled8$, $st_enabled9$, $st_enabled10$, $st_enabled11$, $st_enabled12$, $st_enabled13$, $st_enabled14$, $st_enabled15$ ];
 var st_adapter	= [$st_adapter0$, $st_adapter1$, $st_adapter2$, $st_adapter3$, $st_adapter4$, $st_adapter5$, $st_adapter6$, $st_adapter7$, $st_adapter8$, $st_adapter9$, $st_adapter10$, $st_adapter11$, $st_adapter12$, $st_adapter13$, $st_adapter14$, $st_adapter15$ ];
 var st_rport	= [$st_rport0$, $st_rport1$, $st_rport2$, $st_rport3$, $st_rport4$, $st_rport5$, $st_rport6$, $st_rport7$, $st_rport8$, $st_rport9$, $st_rport10$, $st_rport11$, $st_rport12$, $st_rport13$, $st_rport14$, $st_rport15$ ];
@@ -101,11 +104,13 @@ var key_reader	= ["$key_reader0$", "$key_reader1$", "$key_reader2$", "$key_reade
 var key_from	= ["$key_from0$", "$key_from1$", "$key_from2$", "$key_from3$", "$key_from4$", "$key_from5$", "$key_from6$", "$key_from7$", "$key_from8$", "$key_from9$", "$key_from10$", "$key_from11$", "$key_from12$", "$key_from13$", "$key_from14$", "$key_from15$" ];
 var key_protocol = ["$key_protocol0$", "$key_protocol1$", "$key_protocol2$", "$key_protocol3$", "$key_protocol4$", "$key_protocol5$", "$key_protocol6$", "$key_protocol7$", "$key_protocol8$", "$key_protocol9$", "$key_protocol10$", "$key_protocol11$", "$key_protocol12$", "$key_protocol13$", "$key_protocol14$", "$key_protocol15$" ];
 
-var max_adapters = 16;
+var max_adapters = 32;
 var max_streams	= 64;
 var max_keys 	= 255;
 var pol			= ["", "(V)", "(H)", "(R)", "(L)"];
 var sys			= [ "", "dvbc", "dvbcb", "dvbt", "dss", "dvbs", "dvbs2", "dvbh", "isdbt", "isdbs", "isdbc", "atsc", "atscmh", "dmbth", "cmmb", "dab", "dvbt2", "turbo", "dvbcc", "dvbc2" ];
+
+var has_axe 	= $has_axe$;
 
 var myTable = "<table id='myTable' class='display cell-border compact' cellspacing='0' width='100%'>";
 myTable += "<thead><tr><th>Tuner</th>";
@@ -114,6 +119,12 @@ myTable += "<th class='dt-right'>Pos.</th>";
 myTable += "<th class='dt-right'>Frequency</th>";
 myTable += "<th class='dt-right'>SR/BW</th>";
 myTable += "<th class='dt-right'>Signal</th>";
+if(has_axe)
+{
+myTable += "<th class='dt-right'>Packets</th>";
+myTable += "<th class='dt-right'>CC Errors</th>";
+myTable += "<th class='dt-right'>Coax Cable</th>";
+}
 myTable += "<th class='dt-left'>Streams</th>";
 myTable += "<th class='dt-left'>Cryptinfo</th>";
 myTable += "</tr></thead><tbody>";
@@ -187,6 +198,12 @@ for (var i = 0; i < max_adapters; i++) {
 	}
 	myTable += "<td class='dt-right'>" + signal + " </td>";
 
+	if(has_axe)
+	{
+		myTable += "<td class='dt-right'>" + ad_axe_pktc[i] + " </td>";
+		myTable += "<td class='dt-right'>" + ad_axe_ccerr[i] + " </td>";
+		myTable += "<td class='dt-right'>" + ad_axe_coax[i] + " </td>";	}
+	
 	// STREAMS
 	myTable += "<td class='dt-left'>";
 	for (var j = 0; j < max_streams; j++) {

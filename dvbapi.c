@@ -330,15 +330,19 @@ int dvbapi_reply(sockets * s)
 				int64_t e_key = DVBAPI_ITEM + ((1 + k->adapter) << 24) + 2;
 				setItem(e_key, b, 1, 0);
 				mutex_lock(&k->mutex);
-				k->ecm_info = getItem(e_key);
-				k->cardsystem = k->ecm_info;
-				k->reader = k->ecm_info + 256;
-				k->from = k->ecm_info + 512;
-				k->protocol = k->ecm_info + 768;
-				msg[0] = k->cardsystem;
-				msg[1] = k->reader;
-				msg[2] = k->from;
-				msg[3] = k->protocol;
+				char *ecm_info = getItem(e_key);
+				if(ecm_info)
+				{
+					k->ecm_info = ecm_info;
+					k->cardsystem = k->ecm_info;
+					k->reader = k->ecm_info + 256;
+					k->from = k->ecm_info + 512;
+					k->protocol = k->ecm_info + 768;
+					msg[0] = k->cardsystem;
+					msg[1] = k->reader;
+					msg[2] = k->from;
+					msg[3] = k->protocol;
+				}
 
 			}
 
@@ -1124,6 +1128,20 @@ void dvbapi_delete_keys_for_adapter(int aid)
 		if ((k = get_key(i)) && k->adapter == aid)
 			keys_del(i);
 }
+
+void free_all_keys(void)
+{
+	SKey *k;
+	int i;
+	for (i = 0; i < MAX_KEYS; i++) {
+		if (keys[i]) {
+			mutex_destroy(&keys[i]->mutex);
+			free(keys[i]);
+		}
+	}
+	mutex_destroy(&keys_mutex);
+}
+
 
 _symbols dvbapi_sym[] =
 {

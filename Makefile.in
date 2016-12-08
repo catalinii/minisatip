@@ -11,6 +11,8 @@ NETCVCLIENT=@NETCVCLIENT@
 STATIC=@STATIC@
 DVBAPI=@DVBAPI@
 LINUXDVB=@LINUXDVB@
+AXE=@AXE@
+
 
 CFLAGS?=-ggdb -fPIC $(EXTRA_CFLAGS) @CFLAGS@
 LDFLAGS?=-lpthread -lrt @LDFLAGS@
@@ -76,6 +78,10 @@ CFLAGS+=-DDISABLE_LINUXDVB
 OBJS+=dvb.o
 endif
 
+OBJS-$(AXE) += axe.c
+CFLAGS-$(AXE) += -DAXE
+
+
 ifeq ($(EMBEDDED),1)
 CFLAGS+=-DNO_BACKTRACE
 endif
@@ -85,6 +91,11 @@ LDFLAGS+=$(addsuffix .a,$(addprefix -l:lib,$(LIBS)))
 else
 LDFLAGS+=$(addprefix -l,$(LIBS))
 endif
+
+OBJS+=$(OBJS-1)
+CFLAGS+=$(CFLAGS-1)
+LDFLAGS+=$(LDFLAGS-1)
+
 
 minisatip: $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LDFLAGS)

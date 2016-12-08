@@ -42,6 +42,10 @@
 #include "ca.h"
 #include "utils.h"
 
+#ifdef AXE
+#include "axe.h"
+#endif
+
 char *fe_pilot[] =
 { "on", "off", " ", //auto
 		NULL };
@@ -430,6 +434,9 @@ int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol, int hiban
 
 	LOGL(3, "send_diseqc fd %d, pos = %d (c %d u %d), pol = %d, hiband = %d",
 			fd, pos, posc, posu, pol, hiband);
+#ifdef AXE
+	axe_wakeup(fd, pol ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13);
+#endif
 
 	if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
 		LOG("send_diseqc: FE_SET_TONE failed for fd %d: %s", fd,
@@ -494,6 +501,9 @@ int send_unicable(adapter *ad, int fd, int freq, int pos, int pol, int hiband, d
 			"send_unicable fd %d, freq %d, ufreq %d, pos = %d, pol = %d, hiband = %d, slot %d, diseqc => %02x %02x %02x %02x %02x",
 			fd, freq, d->ufreq, pos, pol, hiband, d->uslot, cmd.msg[0],
 			cmd.msg[1], cmd.msg[2], cmd.msg[3], cmd.msg[4]);
+#ifdef AXE
+	axe_wakeup(fd, SEC_VOLTAGE_13);
+#endif
 	if(!ad->tune_time)
 	{
 		if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_13) == -1)
@@ -542,6 +552,10 @@ int send_jess(adapter *ad, int fd, int freq, int pos, int pol, int hiband, diseq
 			fd, freq, d->ufreq, pos, pol, hiband, d->uslot, cmd.msg[0],
 			cmd.msg[1], cmd.msg[2], cmd.msg[3], cmd.msg[4]);
 
+#ifdef AXE
+	axe_wakeup(fd, SEC_VOLTAGE_13);
+#endif
+			
 	if(!ad->tune_time)
 	{
 		if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_13) == -1)
@@ -591,13 +605,23 @@ int setup_switch(adapter *ad)
 
 	if (tp->diseqc_param.switch_type == SWITCH_UNICABLE)
 	{
+#ifdef AXE
+		freq = send_unicable(ad, ad->fe2, freq / 1000, diseqc, pol, hiband,
+				&tp->diseqc_param);
+#else
 		freq = send_unicable(ad, frontend_fd, freq / 1000, diseqc, pol, hiband,
 				&tp->diseqc_param);
+#endif
 	}
 	else if (tp->diseqc_param.switch_type == SWITCH_JESS)
 	{
+#ifdef AXE
+		freq = send_jess(ad, ad->fe2, freq / 1000, diseqc, pol, hiband,
+				&tp->diseqc_param);
+#else
 		freq = send_jess(ad, frontend_fd, freq / 1000, diseqc, pol, hiband,
 				&tp->diseqc_param);
+#endif
 	}
 	else if (tp->diseqc_param.switch_type == SWITCH_SLAVE)
 	{
@@ -665,14 +689,20 @@ int dvb_tune(int aid, transponder * tp)
 	case SYS_DVBS2:
 
 		bpol = getTick();
+#ifndef AXE
 		freq = setup_switch(ad);
+#else
+		freq = axe_setup_switch(ad);
+#endif	
 		if (freq < MIN_FRQ_DVBS || freq > MAX_FRQ_DVBS)
 			LOG_AND_RETURN(-404, "Frequency %d is not within range ", freq)
 
 		ADD_PROP(DTV_SYMBOL_RATE, tp->sr)
 		ADD_PROP(DTV_INNER_FEC, tp->fec)
+#ifndef AXE
 		ADD_PROP(DTV_PILOT, tp->plts)
 		ADD_PROP(DTV_ROLLOFF, tp->ro)
+#endif
 #if DVBAPIVERSION >= 0x0502
 		ADD_PROP(DTV_STREAM_ID, tp->plp)
 #endif
@@ -681,7 +711,12 @@ int dvb_tune(int aid, transponder * tp)
 				"tuning to %d(%d) pol: %s (%d) sr:%d fec:%s delsys:%s mod:%s rolloff:%s pilot:%s, ts clear=%jd, ts pol=%jd",
 				tp->freq, freq, get_pol(tp->pol), tp->pol, tp->sr,
 				fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype],
-				fe_rolloff[tp->ro], fe_pilot[tp->plts], bclear, bpol)
+#ifdef AXE
+				"auto", "auto",
+#else
+				fe_rolloff[tp->ro], fe_pilot[tp->plts],
+#endif
+				bclear, bpol)
 		break;
 
 	case SYS_DVBT:
@@ -782,8 +817,14 @@ int dvb_tune(int aid, transponder * tp)
 		if (ioctl(fd_frontend, FE_SET_PROPERTY, &p) == -1)
 		{
 			LOG("dvb_tune: set property failed %d %s", errno, strerror(errno));
+#ifdef AXE
+			axe_set_tuner_led(aid + 1, 0);
+#endif
 			return -404;
 		}
+#ifdef AXE
+	axe_dmxts_start(ad->dvr);
+#endif
 
 	return 0;
 }
@@ -1090,28 +1131,35 @@ void find_dvb_adapter(adapter **a)
 {
 	int na = 0;
 	char buf[100];
-	int fd;
+	int cnt;
 	int i = 0, j = 0;
 	adapter *ad;
 
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		for (j = 0; j < MAX_ADAPTERS; j++)
 		{
+			cnt = 0;
 			sprintf(buf, "/dev/dvb/adapter%d/frontend%d", i, j);
-			fd = open(buf, O_RDONLY | O_NONBLOCK);
-			if (fd < 0)
-			{
-				sprintf(buf, "/dev/dvb/adapter%d/ca%d", i, j);
-				fd = open(buf, O_RDONLY | O_NONBLOCK);
-			}
+			if(!access(buf, R_OK))
+				cnt++;
+
+			sprintf(buf, "/dev/dvb/adapter%d/demux%d", i, j);
+			if(!access(buf, R_OK))
+				cnt++;
+
+			sprintf(buf, "/dev/dvb/adapter%d/dvr%d", i, j);
+			if(!access(buf, R_OK))
+				cnt++;
+			
 			//LOG("testing device %s -> fd: %d",buf,fd);
-			if (fd >= 0)
+			if (cnt == 3)
 			{
 //				if (is_adapter_disabled(na))
 //				{
 //					na++;
 //					continue;
 //				}
+				LOGL(3, "%s: adding %d %d to the list of devices", __FUNCTION__, i, j);
 				if (!a[na])
 					a[na] = adapter_alloc();
 
@@ -1129,7 +1177,7 @@ void find_dvb_adapter(adapter **a)
 				ad->close = (Adapter_commit) dvb_close;
 				ad->get_signal = (Device_signal) dvb_get_signal;
 				ad->type = ADAPTER_DVB;
-				close(fd);
+				
 				na++;
 				a_count = na; // update adapter counter
 				if (na == MAX_ADAPTERS)

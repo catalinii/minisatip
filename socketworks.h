@@ -33,7 +33,7 @@ typedef struct struct_sockets {
 	pthread_t tid;
 	SMutex *lock;
 	int sock_err;
-	int spos, wmax, wpos;
+	int spos, wmax, wpos, use_items;
 	int overflow;
 } sockets;
 

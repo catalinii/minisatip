@@ -65,6 +65,14 @@ typedef struct struct_adapter
 	SMutex mutex;
 	char type, slow_dev; // available on the system
 	int fe, dmx, dvr;
+#ifdef AXE
+	int fe2;
+	int axe_used;
+	int64_t axe_vdevice_last_sync;
+	int64_t axe_pktc;
+	int64_t axe_ccerr;
+	int slave;
+#endif
 	int pa, fn;
 	// physical adapter, physical frontend number
 	fe_delivery_system_t sys[MAX_DELSYS];

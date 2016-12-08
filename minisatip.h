@@ -79,6 +79,14 @@ struct struct_opts
 	int nopm;
 	int max_pids;
 	int max_sinfo;
+#ifdef AXE
+	int quattro;
+	int quattro_hiband;
+	int axe_unicinp[4];
+	int axe_skippkt;
+	int axe_power;
+#endif
+
 };
 
 

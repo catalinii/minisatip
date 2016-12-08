@@ -35,6 +35,7 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <fcntl.h>
+#include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <syslog.h>
 #include "socketworks.h"
@@ -42,6 +43,10 @@
 #include "adapter.h"
 #include "dvb.h"
 #include "tables.h"
+
+#ifdef AXE
+#include "axe.h"
+#endif
 
 struct struct_opts opts;
 
@@ -91,6 +96,13 @@ static const struct option long_options[] =
 		{ "xml", required_argument, NULL, 'X' },
 		{ "help", no_argument, NULL, 'h' },
 		{ "version", no_argument, NULL, 'V' },
+#ifdef AXE
+		{ "link-adapters", required_argument, NULL, '7' },
+		{ "free-inputs", required_argument, NULL, 'A' },
+		{ "quattro", no_argument, NULL, 'Q' },
+		{ "quattro-hiband", required_argument, NULL, '8' },
+		{ "skip-mpegts", required_argument, NULL, 'M' },
+#endif
 		{ 0, 0, 0, 0 } };
 
 #define RRTP_OPT 'r'
@@ -128,6 +140,12 @@ static const struct option long_options[] =
 #define DROP_ENCRYPTED_OPT 'E'
 #define UDPPORT_OPT 'P'
 #define NOPM_OPT 'Z'
+#define LINK_OPT '7'
+#define QUATTRO_OPT 'Q'
+#define QUATTRO_HIBAND_OPT '8'
+#define AXE_SKIP_PKT 'M'
+#define AXE_POWER 'W'
+#define ABSOLUTE_SRC 'A'
 
 char *built_info[] =
 {
@@ -176,6 +194,9 @@ char *built_info[] =
 #else
 		"Built with netceiver",
 #endif
+#ifdef AXE
+		"Built for satip-axe",
+#endif
 		NULL };
 
 void print_version(int use_log)
@@ -202,13 +223,15 @@ void usage()
 #ifndef DISABLE_DVBAPI
 					"[-o oscam_host:dvbapi_port] "
 #endif
-			"[-p public_host] [-r remote_rtp_host] \n\
-	\t[-R document_root] "
+			"[-p public_host] [-r remote_rtp_host] [-R document_root] "
 #ifndef DISABLE_SATIPCLIENT
 			"[-s [DELSYS:]host[:port] "
 #endif
-			"[-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] \n\
-	\t[-x http_port] [-X xml_path] [-y rtsp_port] \n\n\
+	"[-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] \n "
+#ifdef AXE
+	"[-7 M1:S1[,M2:S2]] [-M mpegts_packets] [-A SRC1:INP1:DISEQC1[,SRC2:INP2:DISEQC2]]\n\n" 
+#endif
+	"\t[-x http_port] [-X xml_path] [-y rtsp_port] \n\n\
 Help\n\
 -------\n\
 \n\
@@ -355,8 +378,34 @@ Help\n\
 * -y --rtsp-port rtsp_port: port for listening for rtsp requests [default: 554]\n\
 	* eg: -y 5544 \n\
 	- changing this to a port > 1024 removes the requirement for minisatip to run as root\n\
+\n "
+#ifdef AXE
+"\
+* -7 --link-adapters mapping_string: link adapters (identical src,lo/hi,h/v)\n\
+\t* The format is: M1:S1[,M2:S2] - master:slave\n\
+	* eg: 0:1,0:2,0:3 \n\
 \n\
-",
+* -A --free-inputs mapping_string: absolute source mapping for free input mode\n\
+\t* The format is: SRC1:INP1:DISEQC1[,SRC2:INP2:DISEQC2]\n\
+	* SRC: source number (src argument for SAT>IP minus 1 - 0-15)\n\
+	* INP: coaxial input (0-3)\n\
+	* DISEQC: diseqc position (0-15)\n\
+	* eg: 13E,19.2E on inputs 0&1 and 23.5E,28.2E on inputs 2&3:\n\
+		-A 0:0:0,0:1:0,1:0:0,1:1:1,2:2:0,2:3:0,3:2:1,3:2:2\n\
+\n\
+* -W --power num: power to all inputs (0 = only active inputs, 1 = all inputs)\n\
+\n\
+* -Q --quattro  quattro LNB config (H/H,H/V,L/H,L/V)\n\
+\n\
+* -8 --quattro-hiband hiband\n\
+	* if hiband is 0, do not allow hiband\n\
+	* if hiband is 1, allow hiband\n\
+\n\
+* -M --skip-mpegts packets: skip initial MPEG-TS packets for AXE demuxer (default 35)\n\
+\n\
+"
+#endif
+,
 			app_name,
 			ADAPTER_BUFFER,
 			DVR_BUFFER, opts.no_threads ? "DISABLED" : "ENABLED");
@@ -415,16 +464,27 @@ void set_options(int argc, char *argv[])
 	opts.max_sinfo = 200;
 	opts.max_pids = 0;
 #if defined(__sh__)
-        opts.max_pids = 20;
+    opts.max_pids = 20;
 #endif
 
 #ifdef NO_BACKTRACE
 	opts.no_threads = 1;
 #endif
+
+#ifdef AXE
+	opts.nopm = 1;
+	opts.no_threads = 1;
+	opts.axe_skippkt = 35;
+	opts.document_root = "/usr/share/minisatip/html";
+#define	AXE_OPTS "7:QW:M:8:A:"
+#else
+#define AXE_OPTS ""
+
+#endif
 	memset(opts.playlist, 0, sizeof(opts.playlist));
 
 	while ((opt = getopt_long(argc, argv,
-			"flr:a:td:w:p:s:n:hB:b:m:p:e:x:u:j:o:gy:i:q:D:VR:S:TX:Y:OL:EP:Z:",
+			"flr:a:td:w:p:s:n:hB:b:m:p:e:x:u:j:o:gy:i:q:D:VR:S:TX:Y:OL:EP:Z:"AXE_OPTS,
 			long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
@@ -496,6 +556,10 @@ void set_options(int argc, char *argv[])
 			opts.adapter_buffer = (opts.adapter_buffer / 188) * 188;
 			if (opts.adapter_buffer < ADAPTER_BUFFER)
 				opts.adapter_buffer = ADAPTER_BUFFER;
+#ifdef AXE
+			opts.dvr_buffer += 7*188 - 1;
+			opts.dvr_buffer -= opts.dvr_buffer % (7*188);
+#endif
 			if (opts.dvr_buffer == 0)
 				opts.dvr_buffer = DVR_BUFFER;
 
@@ -696,6 +760,35 @@ void set_options(int argc, char *argv[])
 				LOGL(0, "Not a valid path for the xml file")
 			;
 			break;
+#ifdef AXE
+		case LINK_OPT:
+			set_link_adapters(optarg);
+                        break;
+
+		case ABSOLUTE_SRC:
+			set_absolute_src(optarg);
+			break;
+
+		case QUATTRO_OPT:
+			opts.quattro = 1;
+                        break;
+
+		case QUATTRO_HIBAND_OPT:
+			opts.quattro_hiband = atoi(optarg) + 1;
+                        break;
+
+		case AXE_POWER:
+			opts.axe_power = atoi(optarg) + 1;
+			break;
+
+		case AXE_SKIP_PKT:
+			opts.axe_skippkt = atoi(optarg);
+			if (opts.axe_skippkt < 0)
+				opts.axe_skippkt = 0;
+			if (opts.axe_skippkt > 200)
+				opts.axe_skippkt = 200;
+			break;
+#endif
 		}
 
 	}
@@ -1219,6 +1312,11 @@ int ssdp_reply(sockets * s)
 	}
 
 // not my uuid
+
+#ifdef AXE
+	axe_set_network_led(1);
+#endif
+
 	LOGL(4, "Received SSDP packet from %s:%d -> handle %d",
 			get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
 			s->sock);

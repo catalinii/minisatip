@@ -539,9 +539,7 @@ close_streams_for_adapter(int ad, int except)
 }
 
 int64_t tbw, bw, bwtt;
-int bwnotify, sleeping, sleeping_cnt;
-
-uint32_t reads;
+uint32_t reads, writes, failed_writes;
 int64_t nsecs;
 
 uint64_t last_sd;
@@ -1033,14 +1031,13 @@ int calculate_bw(sockets *s)
 			reads = 1;
 		if (bw > 2000)
 			LOG(
-					"BW %jdKB/s, Total BW: %jd MB, ns/read %jd, r: %d, tt: %jd ms, n: %d (s: %d ms, s_cnt %d)",
-					bw / 1024, tbw / 1024576, nsecs / reads, reads,
-					nsecs / 1000, bwnotify, sleeping / 1000, sleeping_cnt);
+					"BW %jdKB/s, Total BW: %jd MB, ns/read %jd, r: %d, w: %d fw: %d, tt: %jd ms",
+					bw / 1024, tbw / 1024576, nsecs / reads, reads, writes, failed_writes, nsecs / 1000);
 		bw = 0;
-		bwnotify = 0;
+		failed_writes = 0;
 		nsecs = 0;
 		reads = 0;
-		sleeping = sleeping_cnt = 0;
+		writes = 0;
 	}
 	join_thread();
 	return 0;

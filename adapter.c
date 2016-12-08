@@ -44,6 +44,10 @@
 #include "netceiver.h"
 #endif
 
+#ifdef AXE
+#include "axe.h"
+#endif
+
 adapter *a[MAX_ADAPTERS];
 int a_count;
 char disabled[MAX_ADAPTERS]; // disabled adapters
@@ -107,6 +111,9 @@ void find_adapters()
 #ifndef DISABLE_NETCVCLIENT
 	find_netcv_adapter(a);
 #endif
+#ifdef AXE
+	find_axe_adapter(a);
+#endif
 }
 
 // avoid adapter close unless all the adapters can be closed
@@ -136,6 +143,7 @@ int adapter_timeout(sockets *s)
 		return 0;
 	}
 
+#ifndef AXE
 	if (opts.no_threads)
 	{
 		for (i = 0; i < MAX_ADAPTERS; i++)
@@ -152,7 +160,7 @@ int adapter_timeout(sockets *s)
 			s->sid, do_close, max_close);
 	if (!do_close)
 		s->rtime = max_close;
-
+#endif
 	return do_close;
 }
 
@@ -209,7 +217,8 @@ int init_hw(int i)
 		goto NOK;
 
 #ifdef ENIGMA
-	ad->dmx_source = ad->id;
+	if(ad->dmx_source == -1)
+		ad->dmx_source = ad->id;
 #endif
 	
 	
@@ -363,9 +372,11 @@ int close_adapter(int na)
 	ad->sock = -1;
 	ad->strength = 0;
 	ad->snr = 0;
+#ifndef AXE
 	ad->old_diseqc = -1;
 	ad->old_hiband = -1;
 	ad->old_pol = -1;
+#endif
 	mutex_destroy(&ad->mutex);
 	//      if(a[na]->buf)free1(a[na]->buf);a[na]->buf=NULL;
 	LOG("done closing adapter %d", na);
@@ -595,8 +606,12 @@ void close_adapter_for_stream(int sid, int aid)
 			ad->sid_cnt);
 	// delete the attached PIDs as well
 	if (ad->sid_cnt == 0)
+	{
 		mark_pids_deleted(aid, -1, NULL);
-	else
+#ifdef AXE
+		free_axe_input(ad);
+#endif
+	}else
 		mark_pids_deleted(aid, sid, NULL);
 	update_pids(aid);
 //	if (a[aid]->sid_cnt == 0)
