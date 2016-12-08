@@ -26,19 +26,22 @@ Usage:
 -------
 
 minisatip version 0.7.1, compiled with s2api version: 050A
-[08/12 12:26:22.509 main]: Built with dvbcsa
-[08/12 12:26:22.509 main]: Built with CI
-[08/12 12:26:22.509 main]: Built with dvbapi
-[08/12 12:26:22.509 main]: Built with AES (OpenSSL)
-[08/12 12:26:22.509 main]: Built with tables processing
-[08/12 12:26:22.509 main]: Built with satip client
-[08/12 12:26:22.509 main]: Built with linux dvb client
-[08/12 12:26:22.509 main]: Built with backtrace
-[08/12 12:26:22.509 main]: Built with netceiver
+[08/12 12:31:04.597]: Built with dvbcsa
+[08/12 12:31:04.597]: Built with CI
+[08/12 12:31:04.597]: Built with dvbapi
+[08/12 12:31:04.597]: Built with AES (OpenSSL)
+[08/12 12:31:04.597]: Built with tables processing
+[08/12 12:31:04.597]: Built with satip client
+[08/12 12:31:04.597]: Built with linux dvb client
+[08/12 12:31:04.597]: Built with backtrace
+[08/12 12:31:04.597]: Built without netceiver
+[08/12 12:31:04.597]: Built for satip-axe
 
 	./minisatip [-[fgltzE]] [-a x:y:z] [-b X:Y] [-B X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 		[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port][-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] [-R document_root] [-s [DELSYS:]host[:port] [-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] 
- 	[-x http_port] [-X xml_path] [-y rtsp_port] 
+ [-7 M1:S1[,M2:S2]] [-M mpegts_packets] [-A SRC1:INP1:DISEQC1[,SRC2:INP2:DISEQC2]]
+
+	[-x http_port] [-X xml_path] [-y rtsp_port] 
 
 Help
 -------
@@ -106,9 +109,6 @@ Help
 	- turns off power management for all adapters (recommended instead of --nopm 0-32) 
 	- required for some Unicable LNBs 
 
-* -n --netceiver if:count: use network interface <if> (default vlan4) and look for <count> netceivers
-	* eg: -n vlan4:2 
-
 * -o --dvbapi host:port - specify the hostname and port for the dvbapi server (oscam). Port 9000 is set by default (if not specified) 
 	* eg: -o 192.168.9.9:9000 
 	192.168.9.9 is the host where oscam is running and 9000 is the port configured in dvbapi section in oscam.conf.
@@ -148,7 +148,7 @@ Help
 
 * -t --cleanpsi clean the PSI from all CA information, the client will see the channel as clear if decrypted successfully
 
-* -T --threads: enables/disable multiple threads (reduces memory consumptions) (default: ENABLED)
+* -T --threads: enables/disable multiple threads (reduces memory consumptions) (default: DISABLED)
 
 * -u --unicable unicable_string: defines the unicable adapters (A) and their slot (S), frequency (F) and optionally the PIN for the switch:
 	* The format is: A1:S1-F1[-PIN][,A2:S2-F2[-PIN][,...]]
@@ -171,7 +171,29 @@ Help
 	* eg: -y 5544 
 	- changing this to a port > 1024 removes the requirement for minisatip to run as root
 
- How to compile:
+ * -7 --link-adapters mapping_string: link adapters (identical src,lo/hi,h/v)
+	* The format is: M1:S1[,M2:S2] - master:slave
+	* eg: 0:1,0:2,0:3 
+
+* -A --free-inputs mapping_string: absolute source mapping for free input mode
+	* The format is: SRC1:INP1:DISEQC1[,SRC2:INP2:DISEQC2]
+	* SRC: source number (src argument for SAT>IP minus 1 - 0-15)
+	* INP: coaxial input (0-3)
+	* DISEQC: diseqc position (0-15)
+	* eg: 13E,19.2E on inputs 0&1 and 23.5E,28.2E on inputs 2&3:
+		-A 0:0:0,0:1:0,1:0:0,1:1:1,2:2:0,2:3:0,3:2:1,3:2:2
+
+* -W --power num: power to all inputs (0 = only active inputs, 1 = all inputs)
+
+* -Q --quattro  quattro LNB config (H/H,H/V,L/H,L/V)
+
+* -8 --quattro-hiband hiband
+	* if hiband is 0, do not allow hiband
+	* if hiband is 1, allow hiband
+
+* -M --skip-mpegts packets: skip initial MPEG-TS packets for AXE demuxer (default 35)
+
+How to compile:
 ------
 
 - ./configure
