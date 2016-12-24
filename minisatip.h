@@ -1,7 +1,7 @@
 #ifndef MINISATIP_H
 #define MINISATIP_H
 
-#define _GNU_SOURCE 
+#define _GNU_SOURCE
 
 #include "stream.h"
 #include "socketworks.h"
@@ -52,7 +52,7 @@ struct struct_opts
 	int force_scan;
 	int clean_psi;
 	int file_line;
-	char *last_log;	
+	char *last_log;
 	int dvbapi_port;
 	char *dvbapi_host;
 	int drop_encrypted;
@@ -78,7 +78,7 @@ struct struct_opts
 	int lnb_low, lnb_high, lnb_switch, lnb_circular;
 	int nopm;
 	int max_pids;
-	int max_sinfo;
+	int max_sbuf;
 #ifdef AXE
 	int quattro;
 	int quattro_hiband;

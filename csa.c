@@ -1,5 +1,5 @@
 /*
- - * Copyright (C) 2014-2020 Catalin Toda <catalinii@yahoo.com>
+   - * Copyright (C) 2014-2020 Catalin Toda <catalinii@yahoo.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -75,11 +75,10 @@ void dvbcsa_set_cw(unsigned char *cw, void *key)
 void dvbcsa_decrypt_stream(void *key, dvbapi_batch *batch, int max_len)
 {
 	dvbcsa_bs_decrypt((const struct dvbcsa_bs_key_s *) key,
-			(const struct dvbcsa_bs_batch_s *) batch, max_len);
+																			(const struct dvbcsa_bs_batch_s *) batch, max_len);
 }
 
 dvbapi_op csa_op =
 { .algo = CA_ALGO_DVBCSA, .mode = 0, .create_cwkey = dvbcsa_create_key,
 		.delete_cwkey = dvbcsa_delete_key, .batch_size = dvbcsa_batch_size,
 		.set_cw = dvbcsa_set_cw, .decrypt_stream = dvbcsa_decrypt_stream };
-

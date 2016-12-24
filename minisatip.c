@@ -61,49 +61,50 @@ int rtsp, http, si, si1, ssdp1;
 
 static const struct option long_options[] =
 {
-{ "remote-rtp", required_argument, NULL, 'r' },
-{ "device-id", required_argument, NULL, 'D' },
-{ "check-signal", no_argument, NULL, 'z' },
-{ "clean-psi", no_argument, NULL, 't' },
-{ "log", no_argument, NULL, 'l' },
-{ "buffer", required_argument, NULL, 'b' },
-{ "enable-adapters", required_argument, NULL, 'e' },
-{ "unicable", required_argument, NULL, 'u' },
-{ "jess", required_argument, NULL, 'j' },
-{ "diseqc", required_argument, NULL, 'd' },
-{ "diseqc-timing", required_argument, NULL, 'q' },
-{"nopm", required_argument, NULL, 'Z'},
+	{ "remote-rtp", required_argument, NULL, 'r' },
+	{ "device-id", required_argument, NULL, 'D' },
+	{ "check-signal", no_argument, NULL, 'z' },
+	{ "clean-psi", no_argument, NULL, 't' },
+	{ "log", no_argument, NULL, 'l' },
+	{ "buffer", required_argument, NULL, 'b' },
+	{ "enable-adapters", required_argument, NULL, 'e' },
+	{ "unicable", required_argument, NULL, 'u' },
+	{ "jess", required_argument, NULL, 'j' },
+	{ "diseqc", required_argument, NULL, 'd' },
+	{ "diseqc-timing", required_argument, NULL, 'q' },
+	{"nopm", required_argument, NULL, 'Z'},
 #ifndef DISABLE_DVBAPI
-		{ "dvbapi", required_argument, NULL, 'o' },
+	{ "dvbapi", required_argument, NULL, 'o' },
 #endif
 #ifndef DISABLE_SATIPCLIENT
-		{ "satip-servers", required_argument, NULL, 's' },
-		{ "satip-tcp", no_argument, NULL, 'O' },
+	{ "satip-servers", required_argument, NULL, 's' },
+	{ "satip-tcp", no_argument, NULL, 'O' },
 #endif
 #ifndef DISABLE_NETCVCLIENT
-		{ "netceiver", required_argument, NULL, 'n' },
+	{ "netceiver", required_argument, NULL, 'n' },
 #endif
-		{ "rtsp-port", required_argument, NULL, 'y' },
-		{ "http-port", required_argument, NULL, 'x' },
-		{ "http-host", required_argument, NULL, 'w' },
-		{ "slave", required_argument, NULL, 'S' },
-		{ "delsys", required_argument, NULL, 'Y' },
-		{ "priority", required_argument, NULL, 'i' },
-		{ "document-root", required_argument, NULL, 'R' },
-		{ "threads", no_argument, NULL, 'T' },
-		{ "dmx-source", required_argument, NULL, '9' },
-		{ "lnb", required_argument, NULL, 'L' },
-		{ "xml", required_argument, NULL, 'X' },
-		{ "help", no_argument, NULL, 'h' },
-		{ "version", no_argument, NULL, 'V' },
+	{ "rtsp-port", required_argument, NULL, 'y' },
+	{ "http-port", required_argument, NULL, 'x' },
+	{ "http-host", required_argument, NULL, 'w' },
+	{ "slave", required_argument, NULL, 'S' },
+	{ "delsys", required_argument, NULL, 'Y' },
+	{ "priority", required_argument, NULL, 'i' },
+	{ "document-root", required_argument, NULL, 'R' },
+	{ "threads", no_argument, NULL, 'T' },
+	{ "dmx-source", required_argument, NULL, '9' },
+	{ "lnb", required_argument, NULL, 'L' },
+	{ "xml", required_argument, NULL, 'X' },
+	{ "help", no_argument, NULL, 'h' },
+	{ "version", no_argument, NULL, 'V' },
 #ifdef AXE
-		{ "link-adapters", required_argument, NULL, '7' },
-		{ "free-inputs", required_argument, NULL, 'A' },
-		{ "quattro", no_argument, NULL, 'Q' },
-		{ "quattro-hiband", required_argument, NULL, '8' },
-		{ "skip-mpegts", required_argument, NULL, 'M' },
+	{ "link-adapters", required_argument, NULL, '7' },
+	{ "free-inputs", required_argument, NULL, 'A' },
+	{ "quattro", no_argument, NULL, 'Q' },
+	{ "quattro-hiband", required_argument, NULL, '8' },
+	{ "skip-mpegts", required_argument, NULL, 'M' },
 #endif
-		{ 0, 0, 0, 0 } };
+	{ 0, 0, 0, 0 }
+};
 
 #define RRTP_OPT 'r'
 #define DEVICEID_OPT 'D'
@@ -150,54 +151,55 @@ static const struct option long_options[] =
 char *built_info[] =
 {
 #ifdef DISABLE_DVBCSA
-		"Built without dvbcsa",
+	"Built without dvbcsa",
 #else
-		"Built with dvbcsa",
+	"Built with dvbcsa",
 #endif
 #ifdef DISABLE_DVBCA
-		"Built without CI",
+	"Built without CI",
 #else
-		"Built with CI",
+	"Built with CI",
 #endif
 #ifdef DISABLE_DVBAPI
-		"Built without dvbapi",
+	"Built without dvbapi",
 #else
-		"Built with dvbapi",
+	"Built with dvbapi",
 #endif
 #ifdef DISABLE_DVBAES
-		"Built without AES (OpenSSL)",
+	"Built without AES (OpenSSL)",
 #else
-		"Built with AES (OpenSSL)",
+	"Built with AES (OpenSSL)",
 #endif
 #ifdef DISABLE_TABLES
-		"Built without tables processing",
+	"Built without tables processing",
 #else
-		"Built with tables processing",
+	"Built with tables processing",
 #endif
 #ifdef DISABLE_SATIPCLIENT
-		"Built without satip client",
+	"Built without satip client",
 #else
-		"Built with satip client",
+	"Built with satip client",
 #endif
 #ifdef DISABLE_LINUXDVB
-		"Built without linux dvb client",
+	"Built without linux dvb client",
 #else
-		"Built with linux dvb client",
+	"Built with linux dvb client",
 #endif
 #ifdef NO_BACKTRACE
-		"Built without backtrace",
+	"Built without backtrace",
 #else
-		"Built with backtrace",
+	"Built with backtrace",
 #endif
 #ifdef DISABLE_NETCVCLIENT
-		"Built without netceiver",
+	"Built without netceiver",
 #else
-		"Built with netceiver",
+	"Built with netceiver",
 #endif
 #ifdef AXE
-		"Built for satip-axe",
+	"Built for satip-axe",
 #endif
-		NULL };
+	NULL
+};
 
 void print_version(int use_log)
 {
@@ -205,7 +207,7 @@ void print_version(int use_log)
 	int i, len = 0;
 	memset(buf, 0, sizeof(buf));
 	len += sprintf(buf, "%s version %s, compiled with s2api version: %04X",
-			app_name, version, LOGDVBAPIVERSION);
+																app_name, version, LOGDVBAPIVERSION);
 	if (!use_log)
 		puts(buf);
 	else
@@ -218,20 +220,20 @@ void usage()
 {
 	print_version(0);
 	printf(
-			"\n\t./%s [-[fgltzE]] [-a x:y:z] [-b X:Y] [-B X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] \n\
+		"\n\t./%s [-[fgltzE]] [-a x:y:z] [-b X:Y] [-B X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] \n\
 	\t[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port]"
 #ifndef DISABLE_DVBAPI
-					"[-o oscam_host:dvbapi_port] "
+		"[-o oscam_host:dvbapi_port] "
 #endif
-			"[-p public_host] [-r remote_rtp_host] [-R document_root] "
+		"[-p public_host] [-r remote_rtp_host] [-R document_root] "
 #ifndef DISABLE_SATIPCLIENT
-			"[-s [DELSYS:]host[:port] "
+		"[-s [DELSYS:]host[:port] "
 #endif
-	"[-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] \n "
+		"[-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] \n "
 #ifdef AXE
-	"[-7 M1:S1[,M2:S2]] [-M mpegts_packets] [-A SRC1:INP1:DISEQC1[,SRC2:INP2:DISEQC2]]\n\n" 
+		"[-7 M1:S1[,M2:S2]] [-M mpegts_packets] [-A SRC1:INP1:DISEQC1[,SRC2:INP2:DISEQC2]]\n\n"
 #endif
-	"\t[-x http_port] [-X xml_path] [-y rtsp_port] \n\n\
+		"\t[-x http_port] [-X xml_path] [-y rtsp_port] \n\n\
 Help\n\
 -------\n\
 \n\
@@ -243,8 +245,7 @@ Help\n\
 	* eg: -b 18800:18988\n\
 \n\
 * -B X : set the app socket write buffer to X KB. \n\
-	The buffer will be split between multiple sockets, each getting maximum 0.4 * X KB\n\
-	* eg: -B 10\n\
+	* eg: -B 10000 - to set the socket buffer to 10MB\n\
 \n\
 * -d --diseqc ADAPTER1:COMMITTED1-UNCOMMITTED1[,ADAPTER2:COMMITTED2-UNCOMMITTED2[,...]\n\
 \t* The first argument is the adapter number, second is the number of committed packets to send to a Diseqc 1.0 switch, third the number of uncommitted commands to sent to a Diseqc 1.1 switch\n\
@@ -300,14 +301,14 @@ Help\n\
 \n\
 "
 #ifndef DISABLE_NETCVCLIENT
-			"\
+		"\
 * -n --netceiver if:count: use network interface <if> (default vlan4) and look for <count> netceivers\n\
 	* eg: -n vlan4:2 \n\
 \n\
 "
 #endif
 #ifndef DISABLE_DVBAPI
-			"\
+		"\
 * -o --dvbapi host:port - specify the hostname and port for the dvbapi server (oscam). Port 9000 is set by default (if not specified) \n\
 	* eg: -o 192.168.9.9:9000 \n\
 	192.168.9.9 is the host where oscam is running and 9000 is the port configured in dvbapi section in oscam.conf.\n\
@@ -316,7 +317,7 @@ Help\n\
 \n\
 "
 #endif
-			"\
+		"\
 * -p url: specify playlist url using X_SATIPM3U header \n\
 	* eg: -p http://192.168.2.3:8080/playlist\n\
 	- this will add X_SATIPM3U tag into the satip description xml\n\
@@ -332,7 +333,7 @@ Help\n\
 \n\
 "
 #ifndef DISABLE_SATIPCLIENT
-			"\
+		"\
 * -s --satip-servers DELSYS:host:port - specify the remote satip host and port with delivery system DELSYS, it is possible to use multiple -s \n\
 	* DELSYS - can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, isdbt, atsc, dvbcb ( - DVBC_ANNEX_B ) [default: dvbs2]\n\
 	host - the server of the satip server\n\
@@ -345,7 +346,7 @@ Help\n\
 * -O --satip-tcp Use RTSP over TCP instead of UDP for data transport \n\
 "
 #endif
-			"\
+		"\
 * -S --slave ADAPTER1,ADAPTER2-ADAPTER4[,..] - specify slave adapters	\n\
 	* Allows specifying bonded adapters (multiple adapters connected with a splitter to the same LNB)\n\
 	Only one adapter needs to be master all others needs to have this parameter specified\n\
@@ -380,7 +381,7 @@ Help\n\
 	- changing this to a port > 1024 removes the requirement for minisatip to run as root\n\
 \n "
 #ifdef AXE
-"\
+		"\
 * -7 --link-adapters mapping_string: link adapters (identical src,lo/hi,h/v)\n\
 \t* The format is: M1:S1[,M2:S2] - master:slave\n\
 	* eg: 0:1,0:2,0:3 \n\
@@ -405,10 +406,10 @@ Help\n\
 \n\
 "
 #endif
-,
-			app_name,
-			ADAPTER_BUFFER,
-			DVR_BUFFER, opts.no_threads ? "DISABLED" : "ENABLED");
+		,
+		app_name,
+		ADAPTER_BUFFER,
+		DVR_BUFFER, opts.no_threads ? "DISABLED" : "ENABLED");
 	exit(1);
 }
 
@@ -461,10 +462,10 @@ void set_options(int argc, char *argv[])
 	opts.lnb_high = (10600*1000UL);
 	opts.lnb_circular = (10750*1000UL);
 	opts.lnb_switch = (11700*1000UL);
-	opts.max_sinfo = 200;
+	opts.max_sbuf = 100;
 	opts.max_pids = 0;
 #if defined(__sh__)
-    opts.max_pids = 20;
+	opts.max_pids = 20;
 #endif
 
 #ifdef NO_BACKTRACE
@@ -476,7 +477,7 @@ void set_options(int argc, char *argv[])
 	opts.no_threads = 1;
 	opts.axe_skippkt = 35;
 	opts.document_root = "/usr/share/minisatip/html";
-#define	AXE_OPTS "7:QW:M:8:A:"
+#define AXE_OPTS "7:QW:M:8:A:"
 #else
 #define AXE_OPTS ""
 
@@ -484,8 +485,8 @@ void set_options(int argc, char *argv[])
 	memset(opts.playlist, 0, sizeof(opts.playlist));
 
 	while ((opt = getopt_long(argc, argv,
-			"flr:a:td:w:p:s:n:hB:b:m:p:e:x:u:j:o:gy:i:q:D:VR:S:TX:Y:OL:EP:Z:"AXE_OPTS,
-			long_options, NULL)) != -1)
+																											"flr:a:td:w:p:s:n:hB:b:m:p:e:x:u:j:o:gy:i:q:D:VR:S:TX:Y:OL:EP:Z:"AXE_OPTS,
+																											long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
 		switch (opt)
@@ -568,9 +569,8 @@ void set_options(int argc, char *argv[])
 
 		case APPBUFFER_OPT:
 		{
-			int val = atoi(optarg) / 1.5;
-			if(val > opts.max_sinfo)
-				opts.max_sinfo = val;
+			int val = atoi(optarg)/1.5;
+			opts.max_sbuf = val;
 			break;
 		}
 
@@ -578,7 +578,7 @@ void set_options(int argc, char *argv[])
 		case DVBS2_ADAPTERS_OPT:
 		{
 			sscanf(optarg, "%d:%d:%d", &opts.force_sadapter,
-					&opts.force_tadapter, &opts.force_cadapter);
+										&opts.force_tadapter, &opts.force_cadapter);
 			break;
 		}
 
@@ -590,9 +590,7 @@ void set_options(int argc, char *argv[])
 
 		case PLAYLIST_OPT:
 		{
-			snprintf(opts.playlist, sizeof(opts.playlist),
-					"<satip:X_SATIPM3U xmlns:satip=\"urn:ses-com:satip\">%s</satip:X_SATIPM3U>\r\n",
-					optarg);
+			snprintf(opts.playlist, sizeof(opts.playlist),"<satip:X_SATIPM3U xmlns:satip=\"urn:ses-com:satip\">%s</satip:X_SATIPM3U>\r\n", optarg);
 			break;
 		}
 
@@ -691,12 +689,12 @@ void set_options(int argc, char *argv[])
 
 #endif
 			if (strlen(optarg) + strlen(opts.satip_servers)
-					> sizeof(opts.satip_servers))
+							> sizeof(opts.satip_servers))
 				break;
 
 			if (opts.satip_servers[0])
 				sprintf(opts.satip_servers + strlen(opts.satip_servers), ",%s",
-						optarg);
+												optarg);
 			else
 				sprintf(opts.satip_servers, "%s", optarg);
 
@@ -758,12 +756,12 @@ void set_options(int argc, char *argv[])
 				opts.xml_path = optarg;
 			else
 				LOGL(0, "Not a valid path for the xml file")
-			;
+				;
 			break;
 #ifdef AXE
 		case LINK_OPT:
 			set_link_adapters(optarg);
-                        break;
+			break;
 
 		case ABSOLUTE_SRC:
 			set_absolute_src(optarg);
@@ -771,11 +769,11 @@ void set_options(int argc, char *argv[])
 
 		case QUATTRO_OPT:
 			opts.quattro = 1;
-                        break;
+			break;
 
 		case QUATTRO_HIBAND_OPT:
 			opts.quattro_hiband = atoi(optarg) + 1;
-                        break;
+			break;
 
 		case AXE_POWER:
 			opts.axe_power = atoi(optarg) + 1;
@@ -820,9 +818,9 @@ int read_rtsp(sockets * s)
 
 		int rtsp_len = s->buf[2] * 256 + s->buf[3];
 		LOG(
-				"Received RTSP over tcp packet (sock_id %d, stream %d, rlen %d) packet len: %d, type %02X %02X discarding %s...",
-				s->id, s->sid, s->rlen, rtsp_len, s->buf[4], s->buf[5],
-				(s->rlen == rtsp_len + 4) ? "complete" : "fragment");
+			"Received RTSP over tcp packet (sock_id %d, stream %d, rlen %d) packet len: %d, type %02X %02X discarding %s...",
+			s->id, s->sid, s->rlen, rtsp_len, s->buf[4], s->buf[5],
+			(s->rlen == rtsp_len + 4) ? "complete" : "fragment");
 		if (s->rlen == rtsp_len + 4)
 		{ // we did not receive the entire packet
 			s->rlen = 0;
@@ -835,13 +833,13 @@ int read_rtsp(sockets * s)
 		if (s->rlen > RBUF - 10)
 		{
 			LOG(
-					"Discarding %d bytes from the socket buffer, request > %d, consider increasing  RBUF",
-					s->rlen, RBUF);
+				"Discarding %d bytes from the socket buffer, request > %d, consider increasing  RBUF",
+				s->rlen, RBUF);
 			s->rlen = 0;
 		}
 		LOG(
-				"read_rtsp: read %d bytes from handle %d, sock_id %d, flags %d not ending with \\r\\n\\r\\n",
-				s->rlen, s->sock, s->id, s->flags);
+			"read_rtsp: read %d bytes from handle %d, sock_id %d, flags %d not ending with \\r\\n\\r\\n",
+			s->rlen, s->sock, s->id, s->flags);
 		if (s->flags & 1)
 			return 0;
 		unsigned char *new_alloc = malloc1(RBUF);
@@ -855,11 +853,11 @@ int read_rtsp(sockets * s)
 	s->rlen = 0;
 
 	LOG("read RTSP (from handle %d sock_id %d, len: %d, sid %d):", s->sock,
-			s->id, s->rlen, s->sid);
+					s->id, s->rlen, s->sid);
 	LOGL(3, "%s", s->buf);
 
 	if ((s->type != TYPE_HTTP)
-			&& (strncasecmp((const char*) s->buf, "GET", 3) == 0))
+					&& (strncasecmp((const char*) s->buf, "GET", 3) == 0))
 	{
 		http_response(s, 404, NULL, NULL, 0, 0);
 		return 0;
@@ -869,8 +867,8 @@ int read_rtsp(sockets * s)
 	cseq = 0;
 	if (la < 2)
 		LOG_AND_RETURN(0,
-				"Most likely not an RTSP packet sock_id: %d sid: %d rlen: %d, dropping ....",
-				s->id, s->sid, rlen);
+																	"Most likely not an RTSP packet sock_id: %d sid: %d rlen: %d, dropping ....",
+																	s->id, s->sid, rlen);
 
 	if (s->sid < 0)
 		for (i = 0; i < la; i++)
@@ -887,9 +885,9 @@ int read_rtsp(sockets * s)
 
 	//setup empty stream, removing this breaks satip tests
 	if (!get_sid(s->sid)
-			&& ((strncasecmp(arg[0], "PLAY", 4) == 0)
-					|| (strncasecmp(arg[0], "GET", 3) == 0)
-					|| (strncasecmp(arg[0], "SETUP", 5) == 0)))
+					&& ((strncasecmp(arg[0], "PLAY", 4) == 0)
+									|| (strncasecmp(arg[0], "GET", 3) == 0)
+									|| (strncasecmp(arg[0], "SETUP", 5) == 0)))
 		sid = (streams *) setup_stream(arg[1], s);
 
 	sid = get_sid(s->sid);
@@ -928,8 +926,8 @@ int read_rtsp(sockets * s)
 			useragent = header_parameter(arg, i);
 
 	if ((strncasecmp(arg[0], "PLAY", 4) == 0)
-			|| (strncasecmp(arg[0], "GET", 3) == 0)
-			|| (strncasecmp(arg[0], "SETUP", 5) == 0))
+					|| (strncasecmp(arg[0], "GET", 3) == 0)
+					|| (strncasecmp(arg[0], "SETUP", 5) == 0))
 	{
 		char ra[100];
 		int rv;
@@ -944,7 +942,7 @@ int read_rtsp(sockets * s)
 			strncpy(sid->useragent, useragent, sizeof(sid->useragent) - 1);
 
 		if ((strncasecmp(arg[0], "PLAY", 3) == 0)
-				|| (strncasecmp(arg[0], "GET", 3) == 0))
+						|| (strncasecmp(arg[0], "GET", 3) == 0))
 			if ((rv = start_play(sid, s)) < 0)
 			{
 				http_response(s, -rv, NULL, NULL, cseq, 0);
@@ -959,8 +957,8 @@ int read_rtsp(sockets * s)
 				sid->timeout = opts.timeout_sec;
 
 			s_timeout = (
-					(sid->timeout > 20000) ? sid->timeout : opts.timeout_sec)
-					/ 1000;
+				(sid->timeout > 20000) ? sid->timeout : opts.timeout_sec)
+															/ 1000;
 			get_stream_rhost(sid->sid, ra, sizeof(ra));
 
 			switch (sid->type)
@@ -968,25 +966,25 @@ int read_rtsp(sockets * s)
 			case STREAM_RTSP_UDP:
 				if (atoi(ra) < 224)
 					snprintf(buf, sizeof(buf),
-							"Transport: RTP/AVP;unicast;destination=%s;source=%s;client_port=%d-%d;server_port=%d-%d\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d",
-							ra, get_sock_shost(s->sock),
-							get_stream_rport(sid->sid),
-							get_stream_rport(sid->sid) + 1,
+														"Transport: RTP/AVP;unicast;destination=%s;source=%s;client_port=%d-%d;server_port=%d-%d\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d",
+														ra, get_sock_shost(s->sock),
+														get_stream_rport(sid->sid),
+														get_stream_rport(sid->sid) + 1,
 //							opts.start_rtp, opts.start_rtp + 1,
-							get_sock_sport(sid->rsock),
-							get_sock_sport(sid->rtcp), get_session_id(s->sid),
-							s_timeout, sid->sid + 1);
+														get_sock_sport(sid->rsock),
+														get_sock_sport(sid->rtcp), get_session_id(s->sid),
+														s_timeout, sid->sid + 1);
 				else
 					snprintf(buf, sizeof(buf),
-							"Transport: RTP/AVP;multicast;destination=%s;port=%d-%d\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d",
-							ra, get_stream_rport(sid->sid),
-							ntohs (sid->sa.sin_port) + 1,
-							get_session_id(s->sid), s_timeout, sid->sid + 1);
+														"Transport: RTP/AVP;multicast;destination=%s;port=%d-%d\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d",
+														ra, get_stream_rport(sid->sid),
+														ntohs (sid->sa.sin_port) + 1,
+														get_session_id(s->sid), s_timeout, sid->sid + 1);
 				break;
 			case STREAM_RTSP_TCP:
 				snprintf(buf, sizeof(buf),
-						"Transport: RTP/AVP/TCP;interleaved=0-1\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d",
-						get_session_id(s->sid), s_timeout, sid->sid + 1);
+													"Transport: RTP/AVP/TCP;interleaved=0-1\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d",
+													get_session_id(s->sid), s_timeout, sid->sid + 1);
 				break;
 			}
 		}
@@ -1000,8 +998,8 @@ int read_rtsp(sockets * s)
 				strcat(buf, "\r\n");
 
 			snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf) - 1,
-					"RTP-Info: url=%s;seq=%jd;rtptime=%jd\r\nRange: npt=0.000-",
-					arg[1], getTick(), (getTickUs() / 1000000));
+												"RTP-Info: url=%s;seq=%jd;rtptime=%jd\r\nRange: npt=0.000-",
+												arg[1], getTick(), (getTickUs() / 1000000));
 		}
 		if (buf[0] == 0 && sid->type == STREAM_HTTP)
 			snprintf(buf, sizeof(buf), "Content-Type: video/mp2t");
@@ -1028,8 +1026,8 @@ int read_rtsp(sockets * s)
 				return 0;
 			}
 			snprintf(buf, sizeof(buf),
-					"Content-type: application/sdp\r\nContent-Base: rtsp://%s/",
-					get_sock_shost(s->sock));
+												"Content-type: application/sdp\r\nContent-Base: rtsp://%s/",
+												get_sock_shost(s->sock));
 			http_response(s, 200, buf, sbuf, cseq, 0);
 
 		}
@@ -1044,7 +1042,7 @@ int read_rtsp(sockets * s)
 	return 0;
 }
 
-#define REPLY_AND_RETURN(c) {http_response (s, c, NULL, NULL, 0, 0);return 0;}
+#define REPLY_AND_RETURN(c) {http_response (s, c, NULL, NULL, 0, 0); return 0;}
 
 char uuid[100];
 int uuidi;
@@ -1058,31 +1056,31 @@ int read_http(sockets * s)
 	char *space;
 	int is_head = 0;
 	static char *xml =
-			"<?xml version=\"1.0\"?>"
-					"<root xmlns=\"urn:schemas-upnp-org:device-1-0\" configId=\"0\">"
-					"<specVersion><major>1</major><minor>1</minor></specVersion>"
-					"<device><deviceType>urn:ses-com:device:SatIPServer:1</deviceType>"
-					"<friendlyName>%s</friendlyName><manufacturer>cata</manufacturer>"
-					"<manufacturerURL>http://github.com/catalinii/minisatip</manufacturerURL>"
-					"<modelDescription>%s for Linux</modelDescription><modelName>%s</modelName>"
-					"<modelNumber>1.1</modelNumber><modelURL></modelURL><serialNumber>1</serialNumber><UDN>uuid:%s</UDN>"
-					"<iconList>"
-					"<icon><mimetype>image/png</mimetype><width>48</width><height>48</height><depth>24</depth><url>/sm.png</url></icon>"
-					"<icon><mimetype>image/png</mimetype><width>120</width><height>120</height><depth>24</depth><url>/lr.png</url></icon>"
-					"<icon><mimetype>image/jpeg</mimetype><width>48</width><height>48</height><depth>24</depth><url>/sm.jpg</url></icon>"
-					"<icon><mimetype>image/jpeg</mimetype><width>120</width><height>120</height><depth>24</depth><url>/lr.jpg</url></icon>"
-					"</iconList>"
-					"<presentationURL>http://%s/</presentationURL>\r\n"
-					"<satip:X_SATIPCAP xmlns:satip=\"urn:ses-com:satip\">%s</satip:X_SATIPCAP>"
-					"%s"
-					"</device></root>";
+		"<?xml version=\"1.0\"?>"
+		"<root xmlns=\"urn:schemas-upnp-org:device-1-0\" configId=\"0\">"
+		"<specVersion><major>1</major><minor>1</minor></specVersion>"
+		"<device><deviceType>urn:ses-com:device:SatIPServer:1</deviceType>"
+		"<friendlyName>%s</friendlyName><manufacturer>cata</manufacturer>"
+		"<manufacturerURL>http://github.com/catalinii/minisatip</manufacturerURL>"
+		"<modelDescription>%s for Linux</modelDescription><modelName>%s</modelName>"
+		"<modelNumber>1.1</modelNumber><modelURL></modelURL><serialNumber>1</serialNumber><UDN>uuid:%s</UDN>"
+		"<iconList>"
+		"<icon><mimetype>image/png</mimetype><width>48</width><height>48</height><depth>24</depth><url>/sm.png</url></icon>"
+		"<icon><mimetype>image/png</mimetype><width>120</width><height>120</height><depth>24</depth><url>/lr.png</url></icon>"
+		"<icon><mimetype>image/jpeg</mimetype><width>48</width><height>48</height><depth>24</depth><url>/sm.jpg</url></icon>"
+		"<icon><mimetype>image/jpeg</mimetype><width>120</width><height>120</height><depth>24</depth><url>/lr.jpg</url></icon>"
+		"</iconList>"
+		"<presentationURL>http://%s/</presentationURL>\r\n"
+		"<satip:X_SATIPCAP xmlns:satip=\"urn:ses-com:satip\">%s</satip:X_SATIPCAP>"
+		"%s"
+		"</device></root>";
 	if (s->rlen < 5 || !end_of_header(s->buf + s->rlen - 4))
 	{
 		if (s->rlen > RBUF - 10)
 		{
 			LOG(
-					"Discarding %d bytes from the socket buffer, request > %d, consider increasing  RBUF",
-					s->rlen, RBUF);
+				"Discarding %d bytes from the socket buffer, request > %d, consider increasing  RBUF",
+				s->rlen, RBUF);
 			s->rlen = 0;
 		}
 		if (s->flags & 1)
@@ -1110,8 +1108,8 @@ int read_http(sockets * s)
 
 	if (strstr(url, "/?") && !strncasecmp((const char*) s->buf, "GET ", 4))
 	{
-			read_rtsp(s);
-			return 0;
+		read_rtsp(s);
+		return 0;
 	}
 
 	if(!strncasecmp((const char*) s->buf, "HEAD ", 5))
@@ -1157,10 +1155,10 @@ int read_http(sockets * s)
 			strcpy(adapters, "DVBS2-0,");
 		adapters[strlen(adapters) - 1] = 0;
 		snprintf(buf, sizeof(buf), xml, app_name, app_name, app_name, uuid,
-				opts.http_host, adapters, opts.playlist);
+											opts.http_host, adapters, opts.playlist);
 		sprintf(headers,
-				"CACHE-CONTROL: no-cache\r\nContent-type: text/xml\r\nX-SATIP-RTSP-Port: %d",
-				opts.rtsp_port);
+										"CACHE-CONTROL: no-cache\r\nContent-type: text/xml\r\nX-SATIP-RTSP-Port: %d",
+										opts.rtsp_port);
 		http_response(s, 200, headers, buf, 0, 0);
 		return 0;
 	}
@@ -1187,7 +1185,7 @@ int read_http(sockets * s)
 			return 0;
 		}
 		if (strstr(ctype, "image") || strstr(ctype, "css")
-				|| strstr(ctype, "javascript"))
+						|| strstr(ctype, "javascript"))
 		{
 			http_response(s, 200, ctype, f, 0, nl);
 			closefile(f, nl);
@@ -1211,10 +1209,10 @@ int close_http(sockets * s)
 	s->flags = 0;
 	s->buf = NULL;
 	LOG("Requested stream close %d timeout %d type %d", s->sid,
-			sid ? sid->timeout : -1, sid ? sid->type : -1);
+					sid ? sid->timeout : -1, sid ? sid->type : -1);
 	if (sid
-			&& ((sid->type == STREAM_RTSP_UDP && sid->timeout != 0)
-					|| (sid->type == 0 && sid->timeout != 0)))
+					&& ((sid->type == STREAM_RTSP_UDP && sid->timeout != 0)
+									|| (sid->type == 0 && sid->timeout != 0)))
 // Do not close rtsp udp as most likely there was no TEARDOWN at this point
 		return 0;
 	close_stream(s->sid);
@@ -1224,15 +1222,15 @@ int close_http(sockets * s)
 int ssdp_discovery(sockets * s)
 {
 	char *reply = "NOTIFY * HTTP/1.1\r\n"
-			"HOST: %s:1900\r\n"
-			"CACHE-CONTROL: max-age=1800\r\n"
-			"LOCATION: http://%s/%s\r\n"
-			"NT: %s\r\n"
-			"NTS: ssdp:alive \r\n"
-			"SERVER: Linux/1.0 UPnP/1.1 %s/%s\r\n"
-			"USN: uuid:%s%s\r\n"
-			"BOOTID.UPNP.ORG: %d\r\n"
-			"CONFIGID.UPNP.ORG: 0\r\n" "DEVICEID.SES.COM: %d\r\n\r\n\0";
+															"HOST: %s:1900\r\n"
+															"CACHE-CONTROL: max-age=1800\r\n"
+															"LOCATION: http://%s/%s\r\n"
+															"NT: %s\r\n"
+															"NTS: ssdp:alive \r\n"
+															"SERVER: Linux/1.0 UPnP/1.1 %s/%s\r\n"
+															"USN: uuid:%s%s\r\n"
+															"BOOTID.UPNP.ORG: %d\r\n"
+															"CONFIGID.UPNP.ORG: 0\r\n" "DEVICEID.SES.COM: %d\r\n\r\n\0";
 	char buf[500], mac[15] = "00000000000000";
 	char nt[3][50];
 
@@ -1255,17 +1253,17 @@ int ssdp_discovery(sockets * s)
 		return 0;
 
 	LOGL(3, "ssdp_discovery: bootid: %d deviceid: %d http: %s", opts.bootid,
-			opts.device_id, opts.http_host);
+						opts.device_id, opts.http_host);
 
 	for (i = 0; i < 3; i++)
 	{
 		sprintf(buf, reply, opts.disc_host, opts.http_host, opts.xml_path,
-				nt[i] + 2, app_name, version, uuid, i == 1 ? "" : nt[i],
-				opts.bootid, opts.device_id);
+										nt[i] + 2, app_name, version, uuid, i == 1 ? "" : nt[i],
+										opts.bootid, opts.device_id);
 		salen = sizeof(ssdp_sa);
 		LOGL(4, "Discovery packet %d:\n%s", i + 1, buf);
 		sendto(s->sock, buf, strlen(buf), MSG_NOSIGNAL,
-				(const struct sockaddr *) &ssdp_sa, salen);
+									(const struct sockaddr *) &ssdp_sa, salen);
 	}
 	s->rtime = getTick();
 	return 0;
@@ -1275,21 +1273,21 @@ int ssdp;
 int ssdp_reply(sockets * s)
 {
 	char *reply = "HTTP/1.1 200 OK\r\n"
-			"CACHE-CONTROL: max-age=1800\r\n"
-			"DATE: %s\r\n"
-			"EXT:\r\n"
-			"LOCATION: http://%s/%s\r\n"
-			"SERVER: Linux/1.0 UPnP/1.1 %s/%s\r\n"
-			"ST: urn:ses-com:device:SatIPServer:1\r\n"
-			"USN: uuid:%s::urn:ses-com:device:SatIPServer:1\r\n"
-			"BOOTID.UPNP.ORG: %d\r\n"
-			"CONFIGID.UPNP.ORG: 0\r\n" "DEVICEID.SES.COM: %d\r\n\r\n\0";
+															"CACHE-CONTROL: max-age=1800\r\n"
+															"DATE: %s\r\n"
+															"EXT:\r\n"
+															"LOCATION: http://%s/%s\r\n"
+															"SERVER: Linux/1.0 UPnP/1.1 %s/%s\r\n"
+															"ST: urn:ses-com:device:SatIPServer:1\r\n"
+															"USN: uuid:%s::urn:ses-com:device:SatIPServer:1\r\n"
+															"BOOTID.UPNP.ORG: %d\r\n"
+															"CONFIGID.UPNP.ORG: 0\r\n" "DEVICEID.SES.COM: %d\r\n\r\n\0";
 	char *device_id_conflict = "M-SEARCH * HTTP/1.1\r\n"
-			"HOST: %s:1900\r\n"
-			"MAN: \"ssdp:discover\"\r\n"
-			"ST: urn:ses-com:device:SatIPServer:1\r\n"
-			"USER-AGENT: Linux/1.0 UPnP/1.1 %s/%s\r\n"
-			"DEVICEID.SES.COM: %d\r\n\r\n\0";
+																												"HOST: %s:1900\r\n"
+																												"MAN: \"ssdp:discover\"\r\n"
+																												"ST: urn:ses-com:device:SatIPServer:1\r\n"
+																												"USER-AGENT: Linux/1.0 UPnP/1.1 %s/%s\r\n"
+																												"DEVICEID.SES.COM: %d\r\n\r\n\0";
 	socklen_t salen;
 	char *man, *man_sd, *didsescom, *ruuid, *rdid;
 	char buf[500];
@@ -1306,8 +1304,8 @@ int ssdp_reply(sockets * s)
 	if (ruuid && strncmp(uuid, strip(ruuid + 5), strlen(uuid)) == 0)
 	{
 		LOGL(4, "Dropping packet from the same UUID as mine (from %s:%d)",
-				get_socket_rhost(s->id, ra, sizeof(ra)),
-				get_socket_rport(s->id));
+							get_socket_rhost(s->id, ra, sizeof(ra)),
+							get_socket_rport(s->id));
 		return 0;
 	}
 
@@ -1318,8 +1316,8 @@ int ssdp_reply(sockets * s)
 #endif
 
 	LOGL(4, "Received SSDP packet from %s:%d -> handle %d",
-			get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
-			s->sock);
+						get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
+						s->sock);
 	LOGL(4, "%s", s->buf);
 
 	if (strncasecmp((const char *) s->buf, "NOTIFY", 6) == 0)
@@ -1328,12 +1326,12 @@ int ssdp_reply(sockets * s)
 		if (rdid && opts.device_id == map_int(strip(rdid + 17), NULL))
 		{
 			snprintf(buf, sizeof(buf), device_id_conflict, getlocalip(),
-					app_name, version, opts.device_id);
+												app_name, version, opts.device_id);
 			LOG(
-					"A new device joined the network with the same Device ID:  %s, asking to change DEVICEID.SES.COM",
-					get_socket_rhost(s->id, ra, sizeof(ra)));
+				"A new device joined the network with the same Device ID:  %s, asking to change DEVICEID.SES.COM",
+				get_socket_rhost(s->id, ra, sizeof(ra)));
 			sendto(ssdp, buf, strlen(buf), MSG_NOSIGNAL,
-					(const struct sockaddr *) &s->sa, salen);
+										(const struct sockaddr *) &s->sa, salen);
 		}
 
 		return 0;
@@ -1345,14 +1343,14 @@ int ssdp_reply(sockets * s)
 		did = map_int(didsescom + 17, NULL);
 
 	if (man && man_sd && didsescom && (s->rtime < 15000)
-			&& did == opts.device_id) // SSDP Device ID clash, only first 5 seconds after the announcement
+					&& did == opts.device_id) // SSDP Device ID clash, only first 5 seconds after the announcement
 	{
 		opts.device_id++;
 		s[si].timeout_ms = 1800 * 1000;
 		s[si].rtime = -s[si].timeout_ms;
 		LOG(
-				"Device ID conflict, changing our device id to %d, destination SAT>IP server %s",
-				opts.device_id, get_socket_rhost(s->id, ra, sizeof(ra)));
+			"Device ID conflict, changing our device id to %d, destination SAT>IP server %s",
+			opts.device_id, get_socket_rhost(s->id, ra, sizeof(ra)));
 		readBootID();
 	}
 	else
@@ -1362,15 +1360,15 @@ int ssdp_reply(sockets * s)
 		LOG_AND_RETURN(0, "ssdp_reply: the message is a reply, ignoring....");
 
 	sprintf(buf, reply, get_current_timestamp(), opts.http_host, opts.xml_path,
-			app_name, version, uuid, opts.bootid, did);
+									app_name, version, uuid, opts.bootid, did);
 
 	LOGL(4, "ssdp_reply fd: %d -> %s:%d, bootid: %d deviceid: %d http: %s", ssdp,
-			get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
-			opts.bootid, did, opts.http_host);
+						get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
+						opts.bootid, did, opts.http_host);
 //use ssdp (unicast) even if received to multicast address
 	LOGL(4, "%s", buf);
 	sendto(ssdp, buf, strlen(buf), MSG_NOSIGNAL,
-			(const struct sockaddr *) &s->sa, salen);
+								(const struct sockaddr *) &s->sa, salen);
 	return 0;
 }
 
@@ -1418,8 +1416,8 @@ int main(int argc, char *argv[])
 		becomeDaemon();
 	if (opts.slog)
 		openlog(app_name,
-		LOG_NDELAY | LOG_NOWAIT | LOG_PID | (opts.slog > 1 ? LOG_PERROR : 0),
-		LOG_DAEMON);
+										LOG_NDELAY | LOG_NOWAIT | LOG_PID | (opts.slog > 1 ? LOG_PERROR : 0),
+										LOG_DAEMON);
 
 	print_version(1);
 
@@ -1434,23 +1432,23 @@ int main(int argc, char *argv[])
 		FAIL("Could not listen on http port %d", opts.http_port);
 
 	si = sockets_add(ssdp, NULL, -1, TYPE_UDP, (socket_action) ssdp_reply, NULL,
-			(socket_action) ssdp_discovery);
+																		(socket_action) ssdp_discovery);
 	si1 = sockets_add(ssdp1, NULL, -1, TYPE_UDP, (socket_action) ssdp_reply,
-	NULL, (socket_action) ssdp_discovery);
+																			NULL, (socket_action) ssdp_discovery);
 	if (si < 0 || si1 < 0)
 		FAIL("sockets_add failed for ssdp");
 
 	sockets_timeout(si, 60 * 1000);
 	set_sockets_rtime(si, -60 * 1000);
 	if (0 > sockets_add(rtsp, NULL, -1, TYPE_SERVER, (socket_action) new_rtsp,
-	NULL, (socket_action) close_http))
+																					NULL, (socket_action) close_http))
 		FAIL("sockets_add failed for rtsp");
 	if (0 > sockets_add(http, NULL, -1, TYPE_SERVER, (socket_action) new_http,
-	NULL, (socket_action) close_http))
+																					NULL, (socket_action) close_http))
 		FAIL("sockets_add failed for http");
 
 	if (0 > (sock_signal = sockets_add(SOCK_TIMEOUT, NULL, -1, TYPE_UDP, NULL,
-	NULL, (socket_action) signal_thread)))
+																																				NULL, (socket_action) signal_thread)))
 		FAIL("sockets_add failed for signal thread");
 
 	if (!opts.no_threads)
@@ -1458,7 +1456,7 @@ int main(int argc, char *argv[])
 	sockets_timeout(sock_signal, 1000);
 
 	if (0 > (sock_bw = sockets_add(SOCK_TIMEOUT, NULL, -1, TYPE_UDP, NULL,
-	NULL, (socket_action) calculate_bw)))
+																																NULL, (socket_action) calculate_bw)))
 		FAIL("sockets_add failed for BW calculation");
 
 	set_socket_thread(sock_bw, get_socket_thread(sock_signal));
@@ -1513,7 +1511,7 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 	char ra[50];
 	char server[50];
 	char *reply =
-			"%s/1.0 %d %s\r\nDate: %s%s%s\r\n%s%s\r\nContent-Length: %d\r\n\r\n%s";
+		"%s/1.0 %d %s\r\nDate: %s%s%s\r\n%s%s\r\nContent-Length: %d\r\n\r\n%s";
 	char *reply0 = "%s/1.0 %d %s\r\nDate: %s%s%s\r\n%s%s\r\n\r\n";
 	char *d;
 	char *proto;
@@ -1568,21 +1566,21 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 	sprintf(server, "\r\nServer: %s/%s", app_name, version);
 
 	if (s->type != TYPE_HTTP && get_sid(s->sid) && ah && !strstr(ah, "Session")
-			&& rc != 454)
+					&& rc != 454)
 		sprintf(sess_id, "\r\nSession: %010d", get_session_id(s->sid));
 	if (s->type != TYPE_HTTP && cseq > 0)
 		sprintf(scseq, "\r\nCseq: %d", cseq);
 
 	if (lr > 0)
 		lresp = snprintf(resp, sizeof(resp) - 1, reply, proto, rc, d,
-				get_current_timestamp(), sess_id, scseq, ah, server, lr, desc1);
+																			get_current_timestamp(), sess_id, scseq, ah, server, lr, desc1);
 	else
 		lresp = snprintf(resp, sizeof(resp) - 1, reply0, proto, rc, d,
-				get_current_timestamp(), sess_id, scseq, ah, server);
+																			get_current_timestamp(), sess_id, scseq, ah, server);
 	LOG("reply %s-> %d (%s:%d) CL:%d [sock_id %d]:",
-			(lresp == sizeof(resp) - 1) ? "message truncated" : "", s->sock,
-			get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
-			lr, s->id);
+					(lresp == sizeof(resp) - 1) ? "message truncated" : "", s->sock,
+					get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
+					lr, s->id);
 	LOGL(3, "%s", resp);
 	send(s->sock, resp, strlen(resp), MSG_NOSIGNAL);
 	if (binary)
@@ -1591,8 +1589,9 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 
 _symbols minisatip_sym[] =
 {
-{ "http_host", VAR_PSTRING, &opts.http_host, 0, 0, 0 },
-{ "uuid", VAR_STRING, uuid, 0, 0, 0 },
-{ "http_port", VAR_INT, &opts.http_port, 1, 0, 0 },
-{ "version", VAR_STRING, &version, 1, 0, 0 },
-{ NULL, 0, NULL, 0, 0 } };
+	{ "http_host", VAR_PSTRING, &opts.http_host, 0, 0, 0 },
+	{ "uuid", VAR_STRING, uuid, 0, 0, 0 },
+	{ "http_port", VAR_INT, &opts.http_port, 1, 0, 0 },
+	{ "version", VAR_STRING, &version, 1, 0, 0 },
+	{ NULL, 0, NULL, 0, 0 }
+};

@@ -47,7 +47,7 @@
 
 extern struct struct_opts opts;
 
-#define TEST_WRITE(a) if((a)<=0){LOG("%s:%d: write to dvbapi socket failed, closing socket %d",__FILE__,__LINE__,sock);sockets_del(dvbapi_sock);sock = 0;dvbapi_sock = -1;isEnabled = 0;}
+#define TEST_WRITE(a) if((a)<=0) {LOG("%s:%d: write to dvbapi socket failed, closing socket %d",__FILE__,__LINE__,sock); sockets_del(dvbapi_sock); sock = 0; dvbapi_sock = -1; isEnabled = 0;}
 
 SCA ca[MAX_CA];
 int nca;
@@ -204,7 +204,7 @@ int process_pat(adapter *ad, unsigned char *b)
 	tid = b[3] * 256 + b[4];
 	ver = b[5] & 0x3E;
 	if (((ad->transponder_id != tid) || (ad->pat_ver != ver)) && (pat_len > 0)
-			&& (pat_len < 1500))
+					&& (pat_len < 1500))
 	{
 		ad->pat_processed = 0;
 	}
@@ -225,7 +225,7 @@ int process_pat(adapter *ad, unsigned char *b)
 	pat_len -= 9;
 	b += 8;
 	LOGL(2, "PAT Adapter %d, Transponder ID %d, len %d, version %d", ad->id,
-			tid, pat_len, ad->pat_ver);
+						tid, pat_len, ad->pat_ver);
 	if (pat_len > 1500)
 		return 0;
 
@@ -300,7 +300,7 @@ int is_ac3_es(unsigned char *es, int len)
 		if(es[i] == 0x6A)
 			isAC3 = 1;
 	}
-	
+
 	return isAC3;
 }
 
@@ -322,7 +322,7 @@ void find_pi(unsigned char *es, int len, unsigned char *pi, int *pi_len)
 			if (*pi_len + es_len > MAX_PI_LEN)
 				return;
 			LOG("PI pos %d caid %04X => pid %04X (%d)", *pi_len, caid, capid,
-					capid);
+							capid);
 			memcpy(pi + *pi_len, es + i, es_len);
 			*pi_len += es_len;
 		}
@@ -360,17 +360,17 @@ int process_pmt(adapter *ad, unsigned char *b)
 		return 0;
 
 	// skip the first PMT, allow for the PMT that is already added to the list of pids to be processed first
-	if ((b[1] & 0x40) && (p->type & PMT_SKIPFIRST)) 
+	if ((b[1] & 0x40) && (p->type & PMT_SKIPFIRST))
 	{
 		p->type &= ~PMT_SKIPFIRST;
 		return 0;
 	}
-	
+
 	program_id = b[8] * 256 + b[9];
 	ver = b[10] & 0x3F;
 
 	if (((p->type & 0xF) != TYPE_PMT) && p->version == ver
-			&& p->csid == program_id) // pmt processed already
+					&& p->csid == program_id) // pmt processed already
 		return 0;
 
 	if (!(pmt_len = assemble_packet(&b, ad, 1)))
@@ -382,7 +382,7 @@ int process_pmt(adapter *ad, unsigned char *b)
 	ver = p->version = b[5] & 0x3F;
 
 	LOG("PMT pid: %04X (%d), pmt_len %d, pi_len %d, sid %04X (%d)", pid, pid,
-			pmt_len, pi_len, program_id, program_id);
+					pmt_len, pi_len, program_id, program_id);
 	pi = b + 12;
 	pmt = pi + pi_len;
 
@@ -416,14 +416,14 @@ int process_pmt(adapter *ad, unsigned char *b)
 		isAC3 = 0;
 		if(stype == 6)
 			isAC3 = is_ac3_es(pmt + i + 5, es_len);
-		
+
 		LOG("PMT pid %d - stream pid %04X (%d), type %d%s, es_len %d, pos %d, pi_len %d old pmt %d, old pmt for this pid %d",
-				pid, spid, spid, stype, isAC3?" [AC3]":"", es_len, i, pi_len, pids[pid], pids[spid]);
+						pid, spid, spid, stype, isAC3 ? " [AC3]" : "", es_len, i, pi_len, pids[pid], pids[spid]);
 		if ((es_len + i > pmt_len) || (init_pi_len + es_len == 0))
 			break;
-		
+
 		if (stype != 2 && stype != 3 && stype != 4 && !isAC3 && stype != 27
-				&& stype != 36)
+						&& stype != 36)
 			continue;
 
 		find_pi(pmt + i + 5, es_len, pi, &pi_len);
@@ -439,7 +439,7 @@ int process_pmt(adapter *ad, unsigned char *b)
 			{
 				pids[pid] = -opmt;
 				LOG("Linking PMT pid %d with PMT pid %d for pid %d, adapter %d",
-						pid, opmt, spid, ad->id);
+								pid, opmt, spid, ad->id);
 			}
 		}
 
@@ -506,8 +506,8 @@ int assemble_packet(uint8_t **b1, adapter *ad, int check_crc)
 
 	if (len > 1500 || len < 0)
 		LOG_AND_RETURN(0,
-				"assemble_packet: len %d not valid for pid %d [%02X %02X %02X %02X %02X %02X]",
-				len, pid, b[3], b[4], b[5], b[6], b[7], b[8]);
+																	"assemble_packet: len %d not valid for pid %d [%02X %02X %02X %02X %02X %02X]",
+																	len, pid, b[3], b[4], b[5], b[6], b[7], b[8]);
 
 	item_key = TABLES_ITEM + (ad->id << 16) + pid;
 
@@ -539,12 +539,12 @@ int assemble_packet(uint8_t **b1, adapter *ad, int check_crc)
 	{
 		if (len < 4 || len > 1500)
 			LOG_AND_RETURN(0, "assemble_packet: len %d not valid for pid %d",
-					len, pid);
+																		len, pid);
 		crc = crc_32(b, len - 1);
 		copy32r(current_crc, b, len - 1)
 		if (crc != current_crc)
 			LOG_AND_RETURN(0, "pid %d (%04X) CRC failed %08X != %08X len %d",
-					pid, pid, crc, current_crc, len);
+																		pid, pid, crc, current_crc, len);
 	}
 	return len;
 }
@@ -633,7 +633,7 @@ void clean_psi(adapter *ad, uint8_t *b)
 		pi_len = ((pmt[10] & 0xF) << 8) + pmt[11];
 		pmt_len = ((pmt[1] & 0xF) << 8) + pmt[2];
 		LOG("Cleaning PMT for pid %d, pmt_len %d, pi_len %d, pmt %p", pid,
-				pmt_len, pi_len, pmt);
+						pmt_len, pi_len, pmt);
 		n = clean;
 		o = pmt + pi_len + 12;
 		nlen = 12;
@@ -646,7 +646,7 @@ void clean_psi(adapter *ad, uint8_t *b)
 			int init_len = nlen + 5;
 			es_len = (o[i + 3] & 0xF) * 256 + o[i + 4];
 			LOGL(4, "es: copy 5 bytes from %d -> %d : %02X %02X %02X %02X %02X",
-					i, nlen, t[0], t[1], t[2], t[3], t[4]);
+								i, nlen, t[0], t[1], t[2], t[3], t[4]);
 			memcpy(n + nlen, o + i, 5);
 			nlen += 5;
 			for (j = 0; j < es_len; j += desc_len) // reading program info
@@ -656,14 +656,14 @@ void clean_psi(adapter *ad, uint8_t *b)
 				{
 					t = o + i + 5 + j;
 					LOGL(4, "desc copy %d bytes from %d -> %d : %02X %02X %02X",
-							desc_len, i + 5 + j, nlen, t[0], t[1], t[2]);
+										desc_len, i + 5 + j, nlen, t[0], t[1], t[2]);
 					memcpy(n + nlen, o + i + 5 + j, desc_len);
 					nlen += desc_len;
 				}
 			}
 			int nes_len = nlen - init_len;
 			LOGL(4, "clean_psi: setting the new es_len %d at position %d",
-					nes_len, init_len - 2);
+								nes_len, init_len - 2);
 			n[init_len - 2] = (n[init_len - 2] & 0xF0) | ((nes_len >> 8) & 0xF);
 			n[init_len - 1] = (nes_len) & 0xFF;
 		}
@@ -745,8 +745,8 @@ void tables_pid_add(adapter *ad, int pid, int existing)
 	{
 		p = find_pid(ad->id, pids[pid]);
 		LOGL(2,
-				"tables_pid_add: adding pid %d adapter %d, pmt pid %d, pmt pid type %d, pmt pid key %d",
-				pid, ad->id, pids[pid], p ? p->type : -1, p ? p->key : -1);
+							"tables_pid_add: adding pid %d adapter %d, pmt pid %d, pmt pid type %d, pmt pid key %d",
+							pid, ad->id, pids[pid], p ? p->type : -1, p ? p->key : -1);
 		if (p && (p->type & PMT_COMPLETE))
 		{
 			cp->key = p->key;
@@ -760,13 +760,13 @@ void tables_pid_add(adapter *ad, int pid, int existing)
 		{
 			int i, next_pmt;
 			LOG(
-					"Detected pid %d adapter %d without the PMT added to the list of pids",
-					pid, ad->id);
-			for (i = pids[pid]; i != -TYPE_PMT;)
+				"Detected pid %d adapter %d without the PMT added to the list of pids",
+				pid, ad->id);
+			for (i = pids[pid]; i != -TYPE_PMT; )
 			{
 				next_pmt = abs(i);
 				LOG("Adding PMT pid %d to the list of pids, next pid %d",
-						next_pmt, -pids[next_pmt]);
+								next_pmt, -pids[next_pmt]);
 				mark_pid_add(-1, ad->id, next_pmt);
 				p = find_pid(ad->id, next_pmt);
 				if (!p)
@@ -807,11 +807,11 @@ void tables_pid_del(adapter *ad, int pid)
 		return;
 	if (cp->key != 255)
 		LOGL(2,
-				"tables_pid_del: pid %d adapter %d key %d pids %d enabled_channels %d",
-				pid, ad->id, cp->key, pids ? pids[pid] : -1,
-				cp->enabled_channels)
-	else
-		return;
+							"tables_pid_del: pid %d adapter %d key %d pids %d enabled_channels %d",
+							pid, ad->id, cp->key, pids ? pids[pid] : -1,
+							cp->enabled_channels)
+		else
+			return;
 
 	if (cp->type & TYPE_PMT) // if(pids && (pids[pid]< 0))
 	{
@@ -847,7 +847,7 @@ int process_stream(adapter *ad, int rlen)
 		return 0;
 
 	pids = (int16_t *) getItem(pid_key);
-	
+
 	for (i = 0; i < rlen; i += 188)
 	{
 		b = ad->buf + i;
@@ -871,21 +871,21 @@ int process_stream(adapter *ad, int rlen)
 	run_ca_action(CA_TS, ad, &rlen);
 	if(opts.drop_encrypted)
 	{
-                for (i = 0; i < rlen; i += 188)
-                {
-                        b = ad->buf + i;
-						pid = PID_FROM_TS(b);
-						p = find_pid(ad->id, pid);
-						if (p)
-							p->dec_err++;
+		for (i = 0; i < rlen; i += 188)
+		{
+			b = ad->buf + i;
+			pid = PID_FROM_TS(b);
+			p = find_pid(ad->id, pid);
+			if (p)
+				p->dec_err++;
 
-                        if((b[3] & 0x80) == 0x80)
-                        {
-                                b[1] |= 0x1F;
-                                b[2] |= 0xFF;
-                        }
-                }
-        }
+			if((b[3] & 0x80) == 0x80)
+			{
+				b[1] |= 0x1F;
+				b[2] |= 0xFF;
+			}
+		}
+	}
 
 
 	return 0;
@@ -927,8 +927,8 @@ void send_pmt_to_ca_for_device(SCA *c, adapter *ad)
 		{
 			p->type &= ~PMT_COMPLETE; // force CA_ADD_PMT for the PMT
 			LOG(
-					"init-ca_device: triggering CA_ADD_PMT for adapter %d and pid %d type %d",
-					ad->id, pid, p->type);
+				"init-ca_device: triggering CA_ADD_PMT for adapter %d and pid %d type %d",
+				ad->id, pid, p->type);
 		}
 	}
 
@@ -970,9 +970,9 @@ int unregister_ca_for_adapter(int i, int aid)
 	mask = (1 << i);
 	if(ad->ca_mask & mask)
 	{
-			run_ca_action(CA_CLOSE_DEVICE, ad, NULL);
-			ad->ca_mask &= ~mask;
-			LOG("Unregistering CA %d for adapter %d", i, ad->id);
+		run_ca_action(CA_CLOSE_DEVICE, ad, NULL);
+		ad->ca_mask &= ~mask;
+		LOG("Unregistering CA %d for adapter %d", i, ad->id);
 	}
 	return 0;
 }

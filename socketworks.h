@@ -7,6 +7,12 @@
 typedef int (*socket_action)(void *s);
 typedef int (*read_action)(int, void *, size_t, void *, int *);
 
+typedef struct struct_spacket {
+	uint16_t len;
+	uint16_t size;
+	uint8_t *buf;
+} SNPacket;
+
 typedef struct struct_sockets {
 	char enabled;
 	SMutex mutex;
@@ -14,7 +20,7 @@ typedef struct struct_sockets {
 	struct sockaddr_in sa;//remote address - set on accept or recvfrom on udp sockets
 	socket_action action;
 	socket_action close;
-	socket_action timeout;	
+	socket_action timeout;
 	read_action read;
 	int type;	//0 - udp; 1 -> tcp(client); 2 -> server ; 3 -> http; 4-> rtsp
 	int sid;				//stream_id if set >=0 or adapter_id for dvb handles
@@ -33,7 +39,8 @@ typedef struct struct_sockets {
 	pthread_t tid;
 	SMutex *lock;
 	int sock_err;
-	int spos, wmax, wpos, use_items;
+	SNPacket *pack;
+	int spos, wmax, wpos;
 	int overflow;
 } sockets;
 

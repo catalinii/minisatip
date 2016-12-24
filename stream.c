@@ -67,9 +67,9 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 //	else LOG_AND_RETURN(NULL, "No session associated with sock_id %d", s->sock_id);
 
 	snprintf(sbuf, size - 1,
-			"v=0\r\no=- %010d %010d IN IP4 %s\r\ns=SatIPServer:1 %d %d %d\r\nt=0 0\r\n",
-			sidf, sidf, get_sock_shost(s->sock), tuner_s2, tuner_t + tuner_t2,
-			tuner_c + tuner_c2);
+										"v=0\r\no=- %010d %010d IN IP4 %s\r\ns=SatIPServer:1 %d %d %d\r\nt=0 0\r\n",
+										sidf, sidf, get_sock_shost(s->sock), tuner_s2, tuner_t + tuner_t2,
+										tuner_c + tuner_c2);
 	if (strchr(req, '?'))
 		do_all = 0;
 
@@ -89,10 +89,10 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 				int slen = strlen(sbuf);
 				streams_enabled++;
 				snprintf(sbuf + slen, size - slen - 1,
-						"m=video %d RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\na=%s\r\n",
-						ntohs(sid2->sa.sin_port), i + 1,
-						describe_adapter(i, sid2->adapter, dad, sizeof(dad)),
-						sid2->do_play ? "sendonly" : "inactive");
+													"m=video %d RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\na=%s\r\n",
+													ntohs(sid2->sa.sin_port), i + 1,
+													describe_adapter(i, sid2->adapter, dad, sizeof(dad)),
+													sid2->do_play ? "sendonly" : "inactive");
 				if (size - slen < 10)
 					LOG_AND_RETURN(sbuf, "DESCRIBE BUFFER is full");
 			}
@@ -111,8 +111,8 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 			return NULL;
 
 		snprintf(sbuf + slen, size - slen - 1,
-				"m=video 0 RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\nb=AS:5000\r\na=%s\r\n",
-				s_id, tp, do_play ? "sendonly" : "inactive");
+											"m=video 0 RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\nb=AS:5000\r\na=%s\r\n",
+											s_id, tp, do_play ? "sendonly" : "inactive");
 	}
 	return sbuf;
 }
@@ -174,8 +174,8 @@ setup_stream(char *str, sockets * s)
 	tmp_str[sizeof(tmp_str) - 1] = 0;
 	detect_dvb_parameters(str, &t);
 	LOG("Setup stream %d parameters, sock_id %d, handle %d", s->sid, s->id,
-			s->sock);
-	if (!get_sid(s->sid))				 // create the stream
+					s->sock);
+	if (!get_sid(s->sid))     // create the stream
 	{
 		int s_id = streams_add();
 		if (!(sid = get_sid(s_id)))
@@ -189,21 +189,21 @@ setup_stream(char *str, sockets * s)
 		{
 
 			if (0 > (sid->st_sock = sockets_add(SOCK_TIMEOUT, NULL, sid->sid,
-			TYPE_UDP, NULL,
-			NULL, (socket_action) stream_timeout)))
+																																							TYPE_UDP, NULL,
+																																							NULL, (socket_action) stream_timeout)))
 				LOG_AND_RETURN(NULL,
-						"sockets_add failed for stream timeout sid %d",
-						sid->sid);
+																			"sockets_add failed for stream timeout sid %d",
+																			sid->sid);
 			sockets_timeout(sid->st_sock, 200);
 			set_sock_lock(sid->st_sock, &sid->mutex);
 		}
 
 		LOG("Setup stream done: sid: %d for sock %d handle %d", s_id, s->id,
-				s->sock);
+						s->sock);
 	}
 	if (!(sid = get_sid(s->sid)))
 		LOG_AND_RETURN(NULL, "Stream %d not enabled for sock_id %d handle %d",
-				s->sid, s->id, s->sock);
+																	s->sid, s->id, s->sock);
 
 	set_stream_parameters(s->sid, &t);
 	sid->do_play = 0;
@@ -240,22 +240,22 @@ int start_play(streams * sid, sockets * s)
 //			sid->type = STREAM_RTSP_TCP;
 //			sid->rsock = s->sock;
 		LOG_AND_RETURN(-454, "No Transport header was specified, for sid %d",
-				sid->sid);
+																	sid->sid);
 	}
 
 	LOG(
-			"Play for stream %d, type %d, rsock %d, adapter %d, sock_id %d, rsock_id %d, handle %d",
-			s->sid, sid->type, sid->rsock, sid->adapter, s->id, sid->rsock_id, s->sock);
+		"Play for stream %d, type %d, rsock %d, adapter %d, sock_id %d, rsock_id %d, handle %d",
+		s->sid, sid->type, sid->rsock, sid->adapter, s->id, sid->rsock_id, s->sock);
 	ad = get_adapter(sid->adapter);
 
 	// check if the adapter is not valid or if a slave SID is trying to change frequency
-	if (!ad || (compare_tunning_parameters(sid->adapter, &sid->tp) && ad->master_sid != sid->sid  ))	// associate the adapter only at play (not at setup)
+	if (!ad || (compare_tunning_parameters(sid->adapter, &sid->tp) && ad->master_sid != sid->sid  )) // associate the adapter only at play (not at setup)
 	{
 		if (sid->tp.sys == 0 && sid->tp.freq == 0) // play streams with no real parameters ==> sending empty packets to the dest
 		{
 			sid->do_play = 1;
 			LOG_AND_RETURN(0,
-					"Tune requested with no real parameters, ignoring ...");
+																		"Tune requested with no real parameters, ignoring ...");
 		}
 		if(ad)
 		{
@@ -324,12 +324,12 @@ int close_stream(int i)
 		sid->rsock_id = -1;
 	}
 	sid->rsock = -1;
-	
+
 	/*  if(sid->pids)free(sid->pids);
-	 if(sid->apids)free(sid->apids);
-	 if(sid->dpids)free(sid->dpids);
-	 if(sid->buf)free(sid->buf);
-	 sid->pids = sid->apids = sid->dpids = sid->buf = NULL;
+	   if(sid->apids)free(sid->apids);
+	   if(sid->dpids)free(sid->dpids);
+	   if(sid->buf)free(sid->buf);
+	   sid->pids = sid->apids = sid->dpids = sid->buf = NULL;
 	 */
 	mutex_destroy(&sid->mutex);
 
@@ -367,7 +367,7 @@ int decode_transport(sockets * s, char *arg, char *default_rtp, int start_rtp)
 	if (!sid)
 	{
 		LOG("Error: No stream to set transport to, sock_id %d, arg %s ", s->id,
-				arg);
+						arg);
 		return -1;
 	}
 	l = 0;
@@ -413,7 +413,7 @@ int decode_transport(sockets * s, char *arg, char *default_rtp, int start_rtp)
 	if (p.port == 0)
 		p.port = start_rtp;
 	LOG("decode_transport ->type %d, ttl %d new socket to: %s:%d", p.type,
-			p.ttl, p.dest, p.port);
+					p.ttl, p.dest, p.port);
 	if (sid->type != 0)
 	{
 		if (sid->type == STREAM_RTSP_UDP && sid->rsock >= 0)
@@ -423,18 +423,18 @@ int decode_transport(sockets * s, char *arg, char *default_rtp, int start_rtp)
 
 			if (p.port == oldport && !strcmp(p.dest, oldhost))
 				LOG(
-						"Transport for this connection is already setup to %s:%d, leaving as it is: sid = %d, handle %d",
-						p.dest, p.port, sid->sid, sid->rsock)
-			else
-			{
-				LOG(
+					"Transport for this connection is already setup to %s:%d, leaving as it is: sid = %d, handle %d",
+					p.dest, p.port, sid->sid, sid->rsock)
+				else
+				{
+					LOG(
 						"Stream has already a transport header associated with it to %s:%d - sid = %d type = %d, closing %d",
 						oldhost, oldport, sid->sid, sid->type, sid->rsock);
-				sockets_del(sid->rsock_id);
-				sid->rsock = -1;
-				sid->rsock_id = -1;
-				sid->type = 0;
-			}
+					sockets_del(sid->rsock_id);
+					sid->rsock = -1;
+					sid->rsock_id = -1;
+					sid->type = 0;
+				}
 		}
 	}
 
@@ -452,37 +452,37 @@ int decode_transport(sockets * s, char *arg, char *default_rtp, int start_rtp)
 		}
 
 		if ((sid->rsock = udp_bind_connect(NULL,
-				opts.start_rtp + (sid->sid * 2), p.dest, p.port, &sid->sa)) < 0)
+																																					opts.start_rtp + (sid->sid * 2), p.dest, p.port, &sid->sa)) < 0)
 			LOG_AND_RETURN(-1,
-					"decode_transport failed: UDP connection on rtp port to %s:%d failed",
-					p.dest, p.port);
-					
+																		"decode_transport failed: UDP connection on rtp port to %s:%d failed",
+																		p.dest, p.port);
+
 		if ((sid->rsock_id = sockets_add(sid->rsock, NULL, sid->sid, TYPE_UDP, NULL, (socket_action )close_stream_for_socket, NULL)) < 0)
 			LOG_AND_RETURN(-1, "RTP socket_add failed");
-		
+
 		set_socket_send_buffer(sid->rsock, opts.output_buffer);
 
 		if ((sid->rtcp = udp_bind_connect(NULL,
-				opts.start_rtp + (sid->sid * 2) + 1, p.dest, p.port + 1, &sa))
-				< 1)
+																																				opts.start_rtp + (sid->sid * 2) + 1, p.dest, p.port + 1, &sa))
+						< 1)
 			LOG_AND_RETURN(-1,
-					"decode_transport failed: UDP connection on rtcp port to %s:%d failed",
-					p.dest, p.port + 1);
+																		"decode_transport failed: UDP connection on rtcp port to %s:%d failed",
+																		p.dest, p.port + 1);
 
 		set_linux_socket_timeout(sid->rtcp);
 
 		if ((sid->rtcp_sock = sockets_add(sid->rtcp, NULL, sid->sid, TYPE_RTCP,
-				(socket_action) rtcp_confirm, NULL, NULL)) < 0) // read rtcp
+																																				(socket_action) rtcp_confirm, NULL, NULL)) < 0) // read rtcp
 			LOG_AND_RETURN(-1, "RTCP socket_add failed");
 
 		for (i = 0; i < MAX_STREAMS; i++)
 			if ((sid2 = get_sid_for(i)) && i != sid->sid
-					&& sid2->sa.sin_port == sid->sa.sin_port
-					&& sid2->sa.sin_addr.s_addr == sid->sa.sin_addr.s_addr)
+							&& sid2->sa.sin_port == sid->sa.sin_port
+							&& sid2->sa.sin_addr.s_addr == sid->sa.sin_addr.s_addr)
 			{
 				LOG(
-						"Detected stream with the same destination as sid %d: sid %d -> %s:%d, aid: %d",
-						sid->sid, i, p.dest, p.port, sid2->adapter);
+					"Detected stream with the same destination as sid %d: sid %d -> %s:%d, aid: %d",
+					sid->sid, i, p.dest, p.port, sid2->adapter);
 				close_stream(i);
 			}
 	}
@@ -585,14 +585,14 @@ int send_rtp(streams * sid, const struct iovec *iov, int liov)
 	{
 		sid->start_streaming = 1;
 		LOG("Start streaming for stream %d, len %d to handle %d => %s:%d",
-				sid->sid, total_len, sid->rsock,
-				get_stream_rhost(sid->sid, ra, sizeof(ra)),
-				ntohs(sid->sa.sin_port));
+						sid->sid, total_len, sid->rsock,
+						get_stream_rhost(sid->sid, ra, sizeof(ra)),
+						ntohs(sid->sa.sin_port));
 	}
 
 	LOGL(7, "%s: sent %d bytes for stream %d, handle %d, sock_id %d, seq %d => %s:%d",
-			__FUNCTION__, total_len, sid->sid, sid->rsock, sid->rsock_id, sid->seq - 1,
-			get_stream_rhost(sid->sid, ra, sizeof(ra)), ntohs(sid->sa.sin_port));
+						__FUNCTION__, total_len, sid->sid, sid->rsock, sid->rsock_id, sid->seq - 1,
+						get_stream_rhost(sid->sid, ra, sizeof(ra)), ntohs(sid->sa.sin_port));
 
 	return rv;
 }
@@ -685,8 +685,8 @@ int send_rtcp(int s_id, int64_t ctime)
 
 	sid->rtcp_wtime = ctime;
 	LOGL(7, "%s: sent %d bytes for stream %d, handle %d seq %d => %s:%d",
-			__FUNCTION__, total_len, sid->sid, sid->rsock, sid->seq - 1,
-			get_stream_rhost(sid->sid, ra, sizeof(ra)), ntohs(sid->sa.sin_port));
+						__FUNCTION__, total_len, sid->sid, sid->rsock, sid->seq - 1,
+						get_stream_rhost(sid->sid, ra, sizeof(ra)), ntohs(sid->sa.sin_port));
 
 //	sid->sp = 0;
 //	sid->sb = 0;
@@ -702,7 +702,7 @@ void flush_streamb(streams * sid, unsigned char *buf, int rlen, int64_t ctime)
 	else
 		for (i = 0; i < rlen; i += DVB_FRAME * 7)
 			rv += send_rtpb(sid, &buf[i],
-					((rlen - i) > DVB_FRAME * 7) ? DVB_FRAME * 7 : (rlen - i));
+																			((rlen - i) > DVB_FRAME * 7) ? DVB_FRAME * 7 : (rlen - i));
 
 	sid->iiov = 0;
 	sid->wtime = ctime;
@@ -732,10 +732,10 @@ int flush_streami(streams * sid, int64_t ctime)
 	SPid *p;
 	fd = open(fn, O_WRONLY);
 	if(fd < 0)
-	fd = open(fn, O_CREAT | O_WRONLY, 0666);
+		fd = open(fn, O_CREAT | O_WRONLY, 0666);
 	if(fd)
 	{
-		lseek(fd, 0 , 2);
+		lseek(fd, 0, 2);
 		writev(fd, sid->iov, sid->iiov);
 		close(fd);
 	}
@@ -752,7 +752,7 @@ int flush_streami(streams * sid, int64_t ctime)
 	return rv;
 }
 
-// to be removed? 
+// to be removed?
 int check_new_transponder(adapter *ad, int rlen)
 {
 	unsigned char *b;
@@ -766,23 +766,23 @@ int check_new_transponder(adapter *ad, int rlen)
 		b = ad->buf + i;
 		if(b[0] == 0x47 && b[1] == 0x40 && b[2] == 0) // pid 0, calculate transponder_id
 		{
-				tid = b[8] * 256 + b[9];
-				if(tid != ad->wait_transponder_id)
+			tid = b[8] * 256 + b[9];
+			if(tid != ad->wait_transponder_id)
+			{
+				int j = 0;
+				all_good = 1;
+				LOG("Got the new transponder %04X %d", tid, tid);
+				for(j = 0; j< i; j+= 188)
 				{
-					int j = 0;
-					all_good = 1;
-					LOG("Got the new transponder %04X %d", tid, tid);
-					for(j = 0; j< i; j+= 188)
+					b = ad->buf + j;
+					if(b[0] == 0x47)  // mark all the pids to 8191 to avoid being processed
 					{
-						b = ad->buf + j;
-						if(b[0] == 0x47) // mark all the pids to 8191 to avoid being processed
-						{
-							b[1] |= 0x1F;
-							b[2] |= 0xFF;
-						}
+						b[1] |= 0x1F;
+						b[2] |= 0xFF;
 					}
-					break;
 				}
+				break;
+			}
 		}
 
 	}
@@ -825,8 +825,8 @@ int process_packet(unsigned char *b, adapter *ad)
 	if (p->cc != cc)
 	{
 		LOGL(5,
-				"PID Continuity error (adapter %d): pid: %03d, Expected CC: %X, Actual CC: %X",
-				ad->id, _pid, p->cc, cc);
+							"PID Continuity error (adapter %d): pid: %03d, Expected CC: %X, Actual CC: %X",
+							ad->id, _pid, p->cc, cc);
 		p->err++;
 	}
 	p->cc = cc;
@@ -841,8 +841,8 @@ int process_packet(unsigned char *b, adapter *ad)
 			if (sid->iiov > 7)
 			{
 				LOG(
-						"ERROR: possible writing outside of allocated space iiov > 7 for SID %d PID %d",
-						sid->sid, _pid);
+					"ERROR: possible writing outside of allocated space iiov > 7 for SID %d PID %d",
+					sid->sid, _pid);
 				sid->iiov = 6;
 			}
 			sid->iov[sid->iiov].iov_base = b;
@@ -873,8 +873,8 @@ int process_dmx(sockets * s)
 	stime = getTickUs();
 
 	LOGL(6,
-			"process_dmx start flush_all=%d called for adapter %d -> %d out of %d bytes read, %jd ms ago",
-			flush_all, s->sid, rlen, s->lbuf, ms_ago);
+						"process_dmx start flush_all=%d called for adapter %d -> %d out of %d bytes read, %jd ms ago",
+						flush_all, s->sid, rlen, s->lbuf, ms_ago);
 
 
 #ifndef DISABLE_TABLES
@@ -889,7 +889,7 @@ int process_dmx(sockets * s)
 			return -1;
 		}
 		if (sid->len > 0)
-		flush_streamb (sid, sid->buf, sid->len, s->rtime);
+			flush_streamb (sid, sid->buf, sid->len, s->rtime);
 		flush_streamb (sid, s->buf, rlen, s->rtime);
 
 	}
@@ -903,7 +903,7 @@ int process_dmx(sockets * s)
 		{
 			for (i = 0; i < MAX_STREAMS; i++)
 				if ((sid = st[i]) && (sid->enabled) && sid->adapter == s->sid
-						&& sid->iiov > 0)
+								&& sid->iiov > 0)
 					flush_streami(sid, s->rtime);
 
 		}
@@ -913,23 +913,23 @@ int process_dmx(sockets * s)
 			max = &s->buf[rlen];
 			for (i = 0; i < MAX_STREAMS; i++)
 				if ((sid = st[i]) && (sid->enabled) && sid->adapter == s->sid
-						&& sid->iiov > 0)
+								&& sid->iiov > 0)
 				{
 					for (j = 0; j < sid->iiov; j++)
 						if (sid->iov[j].iov_base >= min
-								&& sid->iov[j].iov_base <= max)
+										&& sid->iov[j].iov_base <= max)
 						{
 							if (sid->len + DVB_FRAME >= STREAMS_BUFFER)
 							{
 								LOG(
-										"ERROR: requested to write outside of stream's buffer for sid %d len %d iiov %d - flushing stream's buffer",
-										i, sid->len, sid->iiov);
+									"ERROR: requested to write outside of stream's buffer for sid %d len %d iiov %d - flushing stream's buffer",
+									i, sid->len, sid->iiov);
 								flush_streamb(sid, sid->buf, sid->len,
-										s->rtime);
+																						s->rtime);
 							}
 
 							memcpy(&sid->buf[sid->len], sid->iov[j].iov_base,
-							DVB_FRAME);
+														DVB_FRAME);
 							sid->iov[j].iov_base = &sid->buf[sid->len];
 							sid->len += DVB_FRAME;
 						}
@@ -974,7 +974,7 @@ int read_dmx(sockets * s)
 	}
 
 // flush buffers every 50ms or the first 1000 packets (for PAT and PMT processing)
-	if (((s->iteration < 1000) && (s->rlen > 7*DVB_FRAME)) || (s->rtime - ad->rtime > 50)) 
+	if (((s->iteration < 1000) && (s->rlen > 7*DVB_FRAME)) || (s->rtime - ad->rtime > 50))
 	{
 		flush_all = 1; // flush everything that we've read so far
 		send = 1;
@@ -991,16 +991,16 @@ int read_dmx(sockets * s)
 
 	if(ad && ad->wait_new_stream && (s->rtime - ad->tune_time < 50) ) // check new transponder
 	{
-			LOGL(3, "Flushing adapter buffer of %d bytes after the tune", s->rlen);
-			s->rlen = 0;
-			return 0;
+		LOGL(3, "Flushing adapter buffer of %d bytes after the tune", s->rlen);
+		s->rlen = 0;
+		return 0;
 	}
 	ad->wait_new_stream = 0;
 
 	LOGL(7,
-			"read_dmx send=%d, flush_all=%d, cnt %d called for adapter %d -> %d out of %d bytes read, %jd ms ago",
-			send, flush_all, cnt, s->sid, s->rlen, s->lbuf,
-			s->rtime - ad->rtime);
+						"read_dmx send=%d, flush_all=%d, cnt %d called for adapter %d -> %d out of %d bytes read, %jd ms ago",
+						send, flush_all, cnt, s->sid, s->rlen, s->lbuf,
+						s->rtime - ad->rtime);
 
 
 
@@ -1031,8 +1031,8 @@ int calculate_bw(sockets *s)
 			reads = 1;
 		if (bw > 2000)
 			LOG(
-					"BW %jdKB/s, Total BW: %jd MB, ns/read %jd, r: %d, w: %d fw: %d, tt: %jd ms",
-					bw / 1024, tbw / 1024576, nsecs / reads, reads, writes, failed_writes, nsecs / 1000);
+				"BW %jdKB/s, Total BW: %jd MB, ns/read %jd, r: %d, w: %d fw: %d, tt: %jd ms",
+				bw / 1024, tbw / 1024576, nsecs / reads, reads, writes, failed_writes, nsecs / 1000);
 		bw = 0;
 		failed_writes = 0;
 		nsecs = 0;
@@ -1062,8 +1062,8 @@ int stream_timeout(sockets *s)
 		if (sid->do_play && ctime - rtime > 1000)
 		{
 			LOG("no data sent for more than 1s sid: %d for %s:%d", sid->sid,
-					get_stream_rhost(sid->sid, ra, sizeof(ra)),
-					get_stream_rport(sid->sid));
+							get_stream_rhost(sid->sid, ra, sizeof(ra)),
+							get_stream_rport(sid->sid));
 			flush_streami(sid, ctime);
 		}
 		if (sid->do_play && ctime - rttime >= 200)
@@ -1071,11 +1071,11 @@ int stream_timeout(sockets *s)
 		mutex_unlock(&sid->mutex);
 		// check stream timeout, and allow 10s more to respond
 		if ((sid->timeout > 0 && (ctime - sid->rtime > sid->timeout + 10000))
-				|| (sid->timeout == 1))
+						|| (sid->timeout == 1))
 		{
 			LOG(
-					"Stream timeout %d, closing (ctime %jd , sid->rtime %jd, sid->timeout %d)",
-					sid->sid, ctime, sid->rtime, sid->timeout);
+				"Stream timeout %d, closing (ctime %jd , sid->rtime %jd, sid->timeout %d)",
+				sid->sid, ctime, sid->rtime, sid->timeout);
 			close_stream(sid->sid); // do not lock before this
 		}
 
@@ -1095,9 +1095,9 @@ void dump_streams()
 	for (i = 0; i < MAX_STREAMS; i++)
 		if ((sid = get_sid_for(i)))
 			LOG("%d|  a:%d rsock:%d type:%d play:%d remote:%s:%d", i,
-					sid->adapter, sid->rsock, sid->type, sid->do_play,
-					get_stream_rhost(i, ra, sizeof(ra)),
-					ntohs (sid->sa.sin_port));
+							sid->adapter, sid->rsock, sid->type, sid->do_play,
+							get_stream_rhost(i, ra, sizeof(ra)),
+							ntohs (sid->sa.sin_port));
 }
 
 int lock_streams_for_adapter(int aid)
@@ -1202,8 +1202,8 @@ int find_session_id(int id)
 		{
 			sid->rtime = getTick();
 			LOG(
-					"recovered session id from a closed connection, sid %d , id: %d",
-					i, id);
+				"recovered session id from a closed connection, sid %d , id: %d",
+				i, id);
 			return i;
 		}
 	return -1;
@@ -1277,7 +1277,7 @@ char* get_stream_pids(int s_id, char *dest, int max_size)
 						len += snprintf(dest + len, max_size - len, "all,");
 					else
 						len += snprintf(dest + len, max_size - len, "%d,",
-								ad->pids[i].pid);
+																						ad->pids[i].pid);
 				}
 	if (len > 0)
 	{
@@ -1289,19 +1289,20 @@ char* get_stream_pids(int s_id, char *dest, int max_size)
 }
 
 _symbols stream_sym[] =
-		{
-		{ "st_enabled", VAR_AARRAY_INT8, st, 1, MAX_STREAMS, offsetof(streams,
-				enabled) },
-		{ "st_play", VAR_AARRAY_INT, st, 1, MAX_STREAMS, offsetof(streams,
-				do_play) },
-		{ "st_adapter", VAR_AARRAY_INT, st, 1, MAX_STREAMS, offsetof(streams,
-				adapter) },
-		{ "st_useragent", VAR_AARRAY_STRING, st, 1, MAX_STREAMS, offsetof(
+{
+	{ "st_enabled", VAR_AARRAY_INT8, st, 1, MAX_STREAMS, offsetof(streams,
+																																																															enabled) },
+	{ "st_play", VAR_AARRAY_INT, st, 1, MAX_STREAMS, offsetof(streams,
+																																																											do_play) },
+	{ "st_adapter", VAR_AARRAY_INT, st, 1, MAX_STREAMS, offsetof(streams,
+																																																														adapter) },
+	{ "st_useragent", VAR_AARRAY_STRING, st, 1, MAX_STREAMS, offsetof(
 				streams, useragent) },
-				{ "st_rhost", VAR_FUNCTION_STRING, (void *) &get_stream_rhost,
-						0, 0, 0 },
-				{ "st_rport", VAR_FUNCTION_INT, (void *) &get_stream_rport, 0,
-						0, 0 },
-				{ "st_pids", VAR_FUNCTION_STRING, (void *) &get_stream_pids, 0,
-						0, 0 },
-				{ NULL, 0, NULL, 0, 0 } };
+	{ "st_rhost", VAR_FUNCTION_STRING, (void *) &get_stream_rhost,
+			0, 0, 0 },
+	{ "st_rport", VAR_FUNCTION_INT, (void *) &get_stream_rport, 0,
+			0, 0 },
+	{ "st_pids", VAR_FUNCTION_STRING, (void *) &get_stream_pids, 0,
+			0, 0 },
+	{ NULL, 0, NULL, 0, 0 }
+};

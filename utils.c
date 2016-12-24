@@ -17,7 +17,7 @@
  * USA
  *
  */
-#define _GNU_SOURCE 
+#define _GNU_SOURCE
 #define _FILE_OFFSET_BITS 64
 
 #include <stdint.h>
@@ -117,22 +117,22 @@ STmpinfo *getFreeItemPos(int64_t key)
 	uint64_t mask = 0xFF000000000000;
 	for (i = 0; i < MAX_SINFO; i++)
 		if (sinfo[i].enabled && ((key & mask) == (sinfo[i].key & mask)))
-			ek ++ ;
-	
+			ek++;
+
 	if(ek > 0.8 * MAX_SINFO )
 		LOG_AND_RETURN(NULL, "dynamic capacity for %jX exhausted", key & mask);
-	
+
 	for (i = 0; i < MAX_SINFO; i++)
 		if (!sinfo[i].enabled
-				|| (sinfo[i].timeout
-						&& (tick - sinfo[i].last_updated > sinfo[i].timeout)))
+						|| (sinfo[i].timeout
+										&& (tick - sinfo[i].last_updated > sinfo[i].timeout)))
 		{
 			sinfo[i].id = i;
 			sinfo[i].timeout = 0;
 			LOGL(5,
-					"Requested new Item for key %jX, returning %d (enabled %d last_updated %jd timeout %d tick %jd)",
-					key, i, sinfo[i].enabled, sinfo[i].last_updated,
-					sinfo[i].timeout, tick);
+								"Requested new Item for key %jX, returning %d (enabled %d last_updated %jd timeout %d tick %jd)",
+								key, i, sinfo[i].enabled, sinfo[i].last_updated,
+								sinfo[i].timeout, tick);
 			return sinfo + i;
 		}
 	return NULL;
@@ -223,8 +223,8 @@ int setItem(int64_t key, unsigned char *data, int len, int pos) // pos = -1 -> a
 	if (pos + len >= s->max_size) // make sure we do not overflow the data buffer
 	{
 		LOG(
-				"Overflow detected for item %jx, pos %d, size to be added %d, max_size %d",
-				key, pos, len, s->max_size);
+			"Overflow detected for item %jx, pos %d, size to be added %d, max_size %d",
+			key, pos, len, s->max_size);
 		len = s->max_size - pos;
 	}
 	s->len = pos + len;
@@ -256,7 +256,7 @@ int delItemMask(int64_t key, int64_t mask)
 			LOGL(4, "Deleted Item key %jx, pos %d (key %jx, mask %jx)", s->key, s->id, key, mask);
 			s->key = 0;
 		}
-	
+
 	return 0;
 }
 
@@ -302,7 +302,7 @@ int split(char **rv, char *s, int lrv, char sep)
 	return j;
 }
 
-char *strip(char *s) // strip spaces from the front of a string 
+char *strip(char *s) // strip spaces from the front of a string
 {
 	if (s < (char *) 1000)
 		return NULL;
@@ -312,7 +312,7 @@ char *strip(char *s) // strip spaces from the front of a string
 	return s;
 }
 
-#define LR(s) {LOG("map_int returns %d",s);return s;}
+#define LR(s) {LOG("map_int returns %d",s); return s;}
 int map_intd(char *s, char ** v, int dv)
 {
 	int i, n = dv;
@@ -320,7 +320,7 @@ int map_intd(char *s, char ** v, int dv)
 	if (s == NULL)
 	{
 		LOG_AND_RETURN(dv, "map_int: s=>NULL, v=%p, %s %s", v,
-				v ? v[0] : "NULL", v ? v[1] : "NULL");
+																	v ? v[0] : "NULL", v ? v[1] : "NULL");
 	}
 
 	s = strip(s);
@@ -332,7 +332,7 @@ int map_intd(char *s, char ** v, int dv)
 	{
 		if (s[0] != '+' && s[0] != '-' && (s[0] < '0' || s[0] > '9'))
 			LOG_AND_RETURN(dv, "map_int: s not a number: %s, v=%p, %s %s", s, v,
-					v ? v[0] : "NULL", v ? v[1] : "NULL");
+																		v ? v[0] : "NULL", v ? v[1] : "NULL");
 		return atoi(s);
 	}
 	for (i = 0; v[i]; i++)
@@ -341,7 +341,7 @@ int map_intd(char *s, char ** v, int dv)
 	return n;
 }
 
-char *header_parameter(char **arg, int i) // get the value of a header parameter 
+char *header_parameter(char **arg, int i) // get the value of a header parameter
 {
 	int len = strlen(arg[i]);
 	char *result;
@@ -390,7 +390,7 @@ void set_signal_handler(char *argv0)
 	struct sigaction sig_action =
 	{ };
 	sig_action.sa_sigaction =
-			(void (*)(int, siginfo_t *, void *)) posix_signal_handler;
+		(void (*)(int, siginfo_t *, void *))posix_signal_handler;
 	sigemptyset(&sig_action.sa_mask);
 
 	memset(pn, 0, sizeof(pn));
@@ -484,7 +484,7 @@ void posix_signal_handler(int sig, siginfo_t * siginfo, ucontext_t * ctx)
 	ip = ctx->uc_mcontext.pc;
 #endif
 	printf("RECEIVED SIGNAL %d - SP=%lX IP=%lX\n", sig, (long unsigned int) sp,
-			(long unsigned int) ip);
+								(long unsigned int) ip);
 
 	print_trace();
 	exit(1);
@@ -574,13 +574,13 @@ mymalloc(int a, char *f, int l)
 	void *x = malloc(a);
 	if (x)
 		memset(x, 0, a);
-	LOGL(5, "%s:%d allocation_wrapper malloc allocated %d bytes at %p", f, l, a, x);
+	LOGL(4, "%s:%d allocation_wrapper malloc allocated %d bytes at %p", f, l, a, x);
 	return x;
 }
 
 void myfree(void *x, char *f, int l)
 {
-	LOGL(3, "%s:%d allocation_wrapper free called with argument %p", f, l, x);
+	LOGL(4, "%s:%d allocation_wrapper free called with argument %p", f, l, x);
 	free(x);
 }
 
@@ -593,7 +593,7 @@ void _log(int level, char * file, int line, char *fmt, ...)
 	static int idx, times;
 	int tl;
 	char stid[50];
-	static char output[2][2000]; // prints just the first 2000 bytes from the message 
+	static char output[2][2000]; // prints just the first 2000 bytes from the message
 
 	/* Check if the message should be logged */
 	opts.last_log = fmt;
@@ -622,10 +622,10 @@ void _log(int level, char * file, int line, char *fmt, ...)
 		idx = 0;
 	if (opts.file_line && !opts.slog)
 		len1 = snprintf(output[idx], sizeof(output[0]), "[%s%s] %s:%d: ",
-				get_current_timestamp_log(), stid, file, line);
+																		get_current_timestamp_log(), stid, file, line);
 	else if (!opts.slog)
 		len1 = snprintf(output[idx], sizeof(output[0]), "[%s%s]: ",
-				get_current_timestamp_log(), stid);
+																		get_current_timestamp_log(), stid);
 	else if (opts.file_line)
 	{
 		len1 = 0;
@@ -633,7 +633,7 @@ void _log(int level, char * file, int line, char *fmt, ...)
 	}
 	/* Write the error message */
 	len = len1 =
-			len1 < (int) sizeof(output[0]) ? len1 : (int) sizeof(output[0]) - 1;
+								len1 < (int) sizeof(output[0]) ? len1 : (int) sizeof(output[0]) - 1;
 	both = 0;
 	va_start(arg, fmt);
 	len += vsnprintf(output[idx] + len, sizeof(output[0]) - len, fmt, arg);
@@ -647,7 +647,7 @@ void _log(int level, char * file, int line, char *fmt, ...)
 		{
 			both = 1;
 			snprintf(output[1 - idx], sizeof(output[0]),
-					"Message repeated %d times", times);
+												"Message repeated %d times", times);
 		}
 		times = 0;
 	}
@@ -709,25 +709,25 @@ _symbols *sym[] =
 		NULL };
 
 int snprintf_pointer(char *dest, int max_len, int type, void *p,
-		float multiplier)
+																					float multiplier)
 {
 	int nb;
 	switch (type & 0xF)
 	{
 	case VAR_UINT8:
 		nb = snprintf(dest, max_len, "%d",
-				(int) ((*(unsigned char *) p) * multiplier));
+																(int) ((*(unsigned char *) p) * multiplier));
 		break;
 	case VAR_INT8:
 		nb = snprintf(dest, max_len, "%d", (int) ((*(char *) p) * multiplier));
 		break;
 	case VAR_UINT16:
 		nb = snprintf(dest, max_len, "%d",
-				(int) ((*(uint16_t *) p) * multiplier));
+																(int) ((*(uint16_t *) p) * multiplier));
 		break;
 	case VAR_INT16:
 		nb = snprintf(dest, max_len, "%d",
-				(int) ((*(int16_t *) p) * multiplier));
+																(int) ((*(int16_t *) p) * multiplier));
 		break;
 	case VAR_INT:
 		nb = snprintf(dest, max_len, "%d", (int) ((*(int *) p) * multiplier));
@@ -735,7 +735,7 @@ int snprintf_pointer(char *dest, int max_len, int type, void *p,
 
 	case VAR_INT64:
 		nb = snprintf(dest, max_len, "%jd",
-				(int64_t) ((*(int64_t *) p) * multiplier));
+																(int64_t) ((*(int64_t *) p) * multiplier));
 		break;
 
 	case VAR_STRING:
@@ -744,7 +744,7 @@ int snprintf_pointer(char *dest, int max_len, int type, void *p,
 
 	case VAR_PSTRING:
 		nb = snprintf(dest, max_len, "%s",
-				(*(char **) p) ? (*(char **) p) : "");
+																(*(char **) p) ? (*(char **) p) : "");
 		break;
 
 	case VAR_FLOAT:
@@ -761,7 +761,7 @@ int snprintf_pointer(char *dest, int max_len, int type, void *p,
 char zero[16];
 
 void * get_var_address(char *var, float *multiplier, int * type, void *storage,
-		int ls)
+																							int ls)
 {
 	int nb = 0, i, j, off;
 	*multiplier = 0;
@@ -923,7 +923,7 @@ char *readfile(char *fn, char *ctype, int *len)
 	snprintf(ffn, sizeof(ffn), "%s/%s", opts.document_root, fn);
 	ffn[sizeof(ffn) - 1] = 0;
 #ifdef O_LARGEFILE
-   	if ((fd = open(ffn, O_RDONLY | O_LARGEFILE)) < 0)
+	if ((fd = open(ffn, O_RDONLY | O_LARGEFILE)) < 0)
 #else
 	if ((fd = open(ffn, O_RDONLY)) < 0)
 #endif
@@ -959,7 +959,7 @@ char *readfile(char *fn, char *ctype, int *len)
 			strcpy(ctype, "CACHE-CONTROL: no-cache\r\nContent-type: text/xml");
 		else if (endswith(fn, "m3u"))
 			strcpy(ctype,
-					"CACHE-CONTROL: no-cache\r\nContent-type: video/x-mpegurl");
+										"CACHE-CONTROL: no-cache\r\nContent-type: video/x-mpegurl");
 	}
 	return mem;
 }
@@ -1014,7 +1014,7 @@ int mutex_lock1(char *FILE, int line, SMutex* mutex)
 	if (mutex && mutex->enabled && mutex->state && tid != mutex->tid)
 	{
 		LOGL(4, "%s:%d Locking mutex %p already locked at %s:%d tid %x", FILE,
-				line, mutex, mutex->file, mutex->line, mutex->tid);
+							line, mutex, mutex->file, mutex->line, mutex->tid);
 		start_lock = getTick();
 	}
 	else
@@ -1040,7 +1040,7 @@ int mutex_lock1(char *FILE, int line, SMutex* mutex)
 	mutexes[imtx++] = mutex;
 	if (start_lock > 0)
 		LOGL(4, "%s:%d Locked %p after %ld ms", FILE, line, mutex,
-				getTick() - start_lock);
+							getTick() - start_lock);
 
 	return 0;
 
@@ -1063,7 +1063,7 @@ int mutex_unlock1(char *FILE, int line, SMutex* mutex)
 	if (rv != 0 && rv != 1 && rv != -1)
 	{
 		LOGL(3, "mutex_unlock failed at %s:%d: %d %s", FILE, line, rv,
-				strerror(rv));
+							strerror(rv));
 	}
 	if (rv == 0 || rv == 1)
 		rv = 0;
@@ -1105,11 +1105,11 @@ int mutex_destroy(SMutex* mutex)
 
 	if ((rv = pthread_mutex_unlock(&mutex->mtx)) != 1  && rv != 0)
 		LOG("%s: pthread_mutex_unlock 1 failed for %p with error %d %s",
-				__FUNCTION__, mutex, rv, strerror(rv));
+						__FUNCTION__, mutex, rv, strerror(rv));
 
 	if ((rv = pthread_mutex_unlock(&mutex->mtx)) != 1 && rv != 0)
 		LOG("%s: pthread_mutex_unlock 2 failed for %p with error %d %s",
-				__FUNCTION__, mutex, rv, strerror(rv));
+						__FUNCTION__, mutex, rv, strerror(rv));
 
 	LOGL(4, "Destroying mutex %p", mutex);
 //	if ((rv = pthread_mutex_destroy(&mutex->mtx)))
@@ -1134,7 +1134,7 @@ void clean_mutexes()
 		if (!mutexes[i])
 			continue;
 		LOG("mutex_leak: %s unlocking mutex %p from %s:%d", __FUNCTION__,
-				mutexes[i], mutexes[i]->file, mutexes[i]->line);
+						mutexes[i], mutexes[i]->file, mutexes[i]->line);
 		mutex_unlock(mutexes[i]);
 	}
 	imtx = 0;
@@ -1191,7 +1191,7 @@ int add_new_lock(void **arr, int count, int size, SMutex *mutex)
 				sa[i] = malloc1(size);
 				if (!sa[i])
 					LOG_AND_RETURN(-1,
-							"Could not allocate memory for %p index %d", arr, i);
+																				"Could not allocate memory for %p index %d", arr, i);
 				memset(sa[i], 0, size);
 			}
 			mutex_init(&sa[i]->mutex);
@@ -1206,7 +1206,7 @@ int add_new_lock(void **arr, int count, int size, SMutex *mutex)
 int64_t init_tick, theTick;
 
 int64_t getTick()
-{								 //ms
+{         //ms
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	theTick = ts.tv_nsec / 1000000;
@@ -1245,13 +1245,13 @@ void join_thread()
 	if (!join_lock.enabled)
 		return;
 	mutex_lock(&join_lock);
-//	LOG("starting %s", __FUNCTION__);	
+//	LOG("starting %s", __FUNCTION__);
 	for (i = 0; i < join_pos; i++)
 	{
 		LOGL(3, "Joining thread %x", join_th[i]);
 		if ((rv = pthread_join(join_th[i], NULL)))
 			LOG("Join thread failed for %x with %d %s", join_th[i], rv,
-					strerror(rv));
+							strerror(rv));
 	}
 	join_pos = 0;
 	mutex_unlock(&join_lock);
@@ -1263,7 +1263,7 @@ int init_utils(char *arg0)
 {
 	int rv;
 	set_signal_handler(arg0);
-	if((rv = init_tmpinfo(opts.max_sinfo)))
+	if((rv = init_tmpinfo(100)))
 		return rv;
 	return 0;
 }

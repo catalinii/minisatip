@@ -91,16 +91,16 @@ char *fe_specinv[] =
 
 char *fe_pol[] =
 { "none", "v", "h", "r", "l",
-NULL };
+		NULL };
 
 #define make_func(a) \
-char * get_##a(int i) \
-{ \
-	if(i>=0 && i< (int)sizeof(fe_##a)) { \
-		if(fe_##a[i][0] == 32)return ""; \
-			else return fe_##a[i]; }  \
-	return "NONE"; \
-} 
+	char * get_ ## a(int i) \
+	{ \
+		if(i>=0 && i< (int)sizeof(fe_ ## a)) { \
+			if(fe_ ## a[i][0] == 32) return ""; \
+			else return fe_ ## a[i]; }  \
+		return "NONE"; \
+	}
 make_func(pilot);
 make_func(rolloff);
 make_func(delsys);
@@ -111,7 +111,7 @@ make_func(gi);
 make_func(specinv);
 make_func(pol);
 
-#define INVALID_URL(a) {LOG(a);return 0;}
+#define INVALID_URL(a) {LOG(a); return 0;}
 char def_pids[100];
 
 //#define default_pids "0,1,2,3"
@@ -219,11 +219,11 @@ int detect_dvb_parameters(char *s, transponder * tp)
 	//      if(freq<10)INVALID_URL("no freq= found in URL or frequency invalid");
 	//      if((msys==SYS_DVBS || msys==SYS_DVBS2) && (pol!='H' && pol!='V'))INVALID_URL("no pol= found in URL or pol is not H or V");
 	LOG(
-			"detect_dvb_parameters (E) -> src=%d, fe=%d, freq=%d, fec=%d, sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s - apids=%s - dpids=%s x_pmt=%s",
-			tp->diseqc, tp->fe, tp->freq, tp->fec, tp->sr, tp->pol, tp->ro,
-			tp->sys, tp->mtype, tp->plts, tp->bw, tp->inversion,
-			tp->pids ? tp->pids : "NULL", tp->apids ? tp->apids : "NULL",
-			tp->dpids ? tp->dpids : "NULL", tp->x_pmt ? tp->x_pmt : "NULL");
+		"detect_dvb_parameters (E) -> src=%d, fe=%d, freq=%d, fec=%d, sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s - apids=%s - dpids=%s x_pmt=%s",
+		tp->diseqc, tp->fe, tp->freq, tp->fec, tp->sr, tp->pol, tp->ro,
+		tp->sys, tp->mtype, tp->plts, tp->bw, tp->inversion,
+		tp->pids ? tp->pids : "NULL", tp->apids ? tp->apids : "NULL",
+		tp->dpids ? tp->dpids : "NULL", tp->x_pmt ? tp->x_pmt : "NULL");
 	return 0;
 }
 
@@ -244,11 +244,11 @@ void init_dvb_parameters(transponder * tp)
 void copy_dvb_parameters(transponder * s, transponder * d)
 {
 	LOG(
-			"copy_dvb_param start -> src=%d, fe=%d, freq=%d, fec=%d, sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s, apids=%s, dpids=%s x_pmt=%s",
-			d->diseqc, d->fe, d->freq, d->fec, d->sr, d->pol, d->ro, d->sys,
-			d->mtype, d->plts, d->bw, d->inversion, d->pids ? d->pids : "NULL",
-			d->apids ? d->apids : "NULL", d->dpids ? d->dpids : "NULL",
-			d->x_pmt ? d->x_pmt : "NULL");
+		"copy_dvb_param start -> src=%d, fe=%d, freq=%d, fec=%d, sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s, apids=%s, dpids=%s x_pmt=%s",
+		d->diseqc, d->fe, d->freq, d->fec, d->sr, d->pol, d->ro, d->sys,
+		d->mtype, d->plts, d->bw, d->inversion, d->pids ? d->pids : "NULL",
+		d->apids ? d->apids : "NULL", d->dpids ? d->dpids : "NULL",
+		d->x_pmt ? d->x_pmt : "NULL");
 	if (s->sys != -1)
 		d->sys = s->sys;
 	if (s->freq != -1)
@@ -311,11 +311,11 @@ void copy_dvb_parameters(transponder * s, transponder * d)
 		d->mtype = QAM_AUTO;
 
 	LOG(
-			"copy_dvb_parameters -> src=%d, fe=%d, freq=%d, fec=%d sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s, apids=%s, dpids=%s x_pmt=%s",
-			d->diseqc, d->fe, d->freq, d->fec, d->sr, d->pol, d->ro, d->sys,
-			d->mtype, d->plts, d->bw, d->inversion, d->pids ? d->pids : "NULL",
-			d->apids ? d->apids : "NULL", d->dpids ? d->dpids : "NULL",
-			d->x_pmt ? d->x_pmt : "NULL");
+		"copy_dvb_parameters -> src=%d, fe=%d, freq=%d, fec=%d sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s, apids=%s, dpids=%s x_pmt=%s",
+		d->diseqc, d->fe, d->freq, d->fec, d->sr, d->pol, d->ro, d->sys,
+		d->mtype, d->plts, d->bw, d->inversion, d->pids ? d->pids : "NULL",
+		d->apids ? d->apids : "NULL", d->dpids ? d->dpids : "NULL",
+		d->x_pmt ? d->x_pmt : "NULL");
 }
 
 #ifndef DISABLE_LINUXDVB
@@ -332,7 +332,7 @@ int dvb_open_device(adapter *ad)
 {
 	char buf[100];
 	LOG("trying to open [%d] adapter %d and frontend %d", ad->id, ad->pa,
-			ad->fn);
+					ad->fn);
 	sprintf(buf, "/dev/dvb/adapter%d/frontend%d", ad->pa, ad->fn);
 	ad->fe = open(buf, O_RDWR | O_NONBLOCK);
 	sprintf(buf, "/dev/dvb/adapter%d/dvr%d", ad->pa, ad->fn);
@@ -341,7 +341,7 @@ int dvb_open_device(adapter *ad)
 	{
 		sprintf(buf, "/dev/dvb/adapter%d/frontend%d", ad->pa, ad->fn);
 		LOGL(0, "Could not open %s in RW mode (fe: %d, dvr: %d)", buf, ad->fe,
-				ad->dvr);
+							ad->dvr);
 		if (ad->fe >= 0)
 			close(ad->fe);
 		if (ad->dvr >= 0)
@@ -354,8 +354,8 @@ int dvb_open_device(adapter *ad)
 	LOG("opened DVB adapter %d fe:%d dvr:%d", ad->id, ad->fe, ad->dvr);
 	if (ioctl(ad->dvr, DMX_SET_BUFFER_SIZE, opts.dvr_buffer) < 0)
 		LOG("couldn't set DVR buffer size error %d: %s", errno, strerror(errno))
-	else
-		LOG("DVR buffer set to %d bytes", opts.dvr_buffer);
+		else
+			LOG("DVR buffer set to %d bytes", opts.dvr_buffer);
 
 	if (ad->dmx_source >= 0)
 	{
@@ -363,16 +363,16 @@ int dvb_open_device(adapter *ad)
 		ad->dmx = open(buf, O_RDWR | O_NONBLOCK);
 		if (ad->dmx <= 0)
 			LOG("DMX_SET_SOURCE: Failed opening %s", buf)
-		else if (ioctl(ad->dmx, DMX_SET_SOURCE, &ad->dmx_source))
-		{
-			LOG("DMX_SET_SOURCE failed for adapter %d - %d: %s", ad->id, errno,
-					strerror(errno));
-		}
-		else
-			LOG("Set DMX_SET_SOURCE for adapter %d to %d", ad->id,
-					ad->dmx_source);
+			else if (ioctl(ad->dmx, DMX_SET_SOURCE, &ad->dmx_source))
+			{
+				LOG("DMX_SET_SOURCE failed for adapter %d - %d: %s", ad->id, errno,
+								strerror(errno));
+			}
+			else
+				LOG("Set DMX_SET_SOURCE for adapter %d to %d", ad->id,
+								ad->dmx_source);
 		close(ad->dmx);
-		ad->dmx = -1;	
+		ad->dmx = -1;
 	}
 
 	return 0;
@@ -385,7 +385,7 @@ void msleep(long ms)
 }
 
 void diseqc_cmd(int fd, int times, char *str, struct dvb_diseqc_master_cmd *cmd,
-		diseqc *d)
+																diseqc *d)
 {
 	int i;
 	msleep(d->before_cmd);
@@ -393,8 +393,8 @@ void diseqc_cmd(int fd, int times, char *str, struct dvb_diseqc_master_cmd *cmd,
 	{
 		if (ioctl(fd, FE_DISEQC_SEND_MASTER_CMD, cmd) == -1)
 			LOG(
-					"send_diseqc: FE_DISEQC_SEND_MASTER_CMD %s failed for fd %d: %s",
-					str, fd, strerror(errno));
+				"send_diseqc: FE_DISEQC_SEND_MASTER_CMD %s failed for fd %d: %s",
+				str, fd, strerror(errno));
 		msleep(i > 0 ? d->after_repeated_cmd : d->after_cmd);
 	}
 
@@ -409,11 +409,13 @@ int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol, int hiban
 	/* DiSEqC 1.0 */
 	struct dvb_diseqc_master_cmd cmd =
 	{
-	{ 0xe0, 0x10, 0x38, 0xf0, 0x00, 0x00 }, 4 };
+		{ 0xe0, 0x10, 0x38, 0xf0, 0x00, 0x00 }, 4
+	};
 	/* DiSEqC 1.1 */
 	struct dvb_diseqc_master_cmd uncmd =
 	{
-	{ 0xe0, 0x10, 0x39, 0xf0, 0x00, 0x00 }, 4 };
+		{ 0xe0, 0x10, 0x39, 0xf0, 0x00, 0x00 }, 4
+	};
 
 	if (uncommitted_no > committed_no)
 		uncommitted_first = 1;
@@ -422,28 +424,28 @@ int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol, int hiban
 		committed_no = 1;
 	posu = posc = pos;
 
-	if (uncommitted_no > 0 && committed_no > 0) // Diseqc 1.0 and 1.1 enabled. 
+	if (uncommitted_no > 0 && committed_no > 0) // Diseqc 1.0 and 1.1 enabled.
 	{
 		posc = pos % 4;
 		posu = pos / 4;
 	}
 
 	cmd.msg[3] = 0xf0
-			| (((posc << 2) & 0x0c) | (hiband ? 1 : 0) | (pol ? 2 : 0));
+														| (((posc << 2) & 0x0c) | (hiband ? 1 : 0) | (pol ? 2 : 0));
 	uncmd.msg[3] = 0xf0 | (posu & 0x0f);
 
 	LOGL(3, "send_diseqc fd %d, pos = %d (c %d u %d), pol = %d, hiband = %d",
-			fd, pos, posc, posu, pol, hiband);
+						fd, pos, posc, posu, pol, hiband);
 #ifdef AXE
 	axe_wakeup(fd, pol ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13);
 #endif
 
 	if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
 		LOG("send_diseqc: FE_SET_TONE failed for fd %d: %s", fd,
-				strerror(errno));
+						strerror(errno));
 	if (ioctl(fd, FE_SET_VOLTAGE, pol ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13) == -1)
 		LOG("send_diseqc: FE_SET_VOLTAGE failed for fd %d: %s", fd,
-				strerror(errno));
+						strerror(errno));
 
 	if (!d->fast || pos_change)
 	{
@@ -459,9 +461,9 @@ int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol, int hiban
 		msleep(d->after_switch);
 
 		if (ioctl(fd, FE_DISEQC_SEND_BURST, (pos & 1) ? SEC_MINI_B : SEC_MINI_A)
-				== -1)
+						== -1)
 			LOG("send_diseqc: FE_DISEQC_SEND_BURST failed for fd %d: %s", fd,
-					strerror(errno));
+							strerror(errno));
 
 	}
 
@@ -469,7 +471,7 @@ int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol, int hiban
 
 	if (ioctl(fd, FE_SET_TONE, hiband ? SEC_TONE_ON : SEC_TONE_OFF) == -1)
 		LOG("send_diseqc: FE_SET_TONE failed for fd %d: %s", fd,
-				strerror(errno));
+						strerror(errno));
 
 	msleep(d->after_tone);
 
@@ -480,14 +482,15 @@ int send_unicable(adapter *ad, int fd, int freq, int pos, int pol, int hiband, d
 {
 	struct dvb_diseqc_master_cmd cmd =
 	{
-	{ 0xe0, 0x11, 0x5a, 0x00, 0x00 }, 5 };
+		{ 0xe0, 0x11, 0x5a, 0x00, 0x00 }, 5
+	};
 	int t;
 	int committed_no = d->committed_no;
-	
+
 	t = (freq + d->ufreq + 2) / 4 - 350;
 
 	cmd.msg[3] = ((t & 0x0300) >> 8) | (d->uslot << 5) | (pos ? 0x10 : 0)
-			| (hiband ? 4 : 0) | (pol ? 8 : 0);
+														| (hiband ? 4 : 0) | (pol ? 8 : 0);
 	cmd.msg[4] = t & 0xff;
 
 	if (d->pin)
@@ -498,9 +501,9 @@ int send_unicable(adapter *ad, int fd, int freq, int pos, int pol, int hiband, d
 	}
 
 	LOGL(3,
-			"send_unicable fd %d, freq %d, ufreq %d, pos = %d, pol = %d, hiband = %d, slot %d, diseqc => %02x %02x %02x %02x %02x",
-			fd, freq, d->ufreq, pos, pol, hiband, d->uslot, cmd.msg[0],
-			cmd.msg[1], cmd.msg[2], cmd.msg[3], cmd.msg[4]);
+						"send_unicable fd %d, freq %d, ufreq %d, pos = %d, pol = %d, hiband = %d, slot %d, diseqc => %02x %02x %02x %02x %02x",
+						fd, freq, d->ufreq, pos, pol, hiband, d->uslot, cmd.msg[0],
+						cmd.msg[1], cmd.msg[2], cmd.msg[3], cmd.msg[4]);
 #ifdef AXE
 	axe_wakeup(fd, SEC_VOLTAGE_13);
 #endif
@@ -508,19 +511,19 @@ int send_unicable(adapter *ad, int fd, int freq, int pos, int pol, int hiband, d
 	{
 		if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_13) == -1)
 			LOG("send_unicable: pre voltage  SEC_VOLTAGE_13 failed for fd %d: %s",
-					fd, strerror(errno));
+							fd, strerror(errno));
 		if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
 			LOG("send_unicable: FE_SET_TONE failed for fd %d: %s", fd,
-					strerror(errno));
+							strerror(errno));
 		msleep(d->after_tone);
 	}
 	if (!d->only13v && ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18) == -1)
 		LOG("send_unicable: FE_SET_VOLTAGE failed for fd %d: %s", fd,
-				strerror(errno));
+						strerror(errno));
 	diseqc_cmd(fd, committed_no, "unicable", &cmd, d);
 	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_13) == -1)
 		LOG("send_unicable: FE_SET_VOLTAGE failed for fd %d: %s", fd,
-				strerror(errno));
+						strerror(errno));
 
 	return d->ufreq * 1000;
 }
@@ -529,10 +532,11 @@ int send_jess(adapter *ad, int fd, int freq, int pos, int pol, int hiband, diseq
 {
 	struct dvb_diseqc_master_cmd cmd =
 	{
-	{ 0x70, 0x00, 0x00, 0x00, 0x00 }, 4 };
+		{ 0x70, 0x00, 0x00, 0x00, 0x00 }, 4
+	};
 
 	int committed_no = d->committed_no;
-	
+
 //	int t = (freq / 1000) - 100;
 	int t = freq - 100;
 
@@ -548,19 +552,19 @@ int send_jess(adapter *ad, int fd, int freq, int pos, int pol, int hiband, diseq
 	}
 
 	LOGL(3,
-			"send_jess fd %d, freq %d, ufreq %d, pos = %d, pol = %d, hiband = %d, slot %d, diseqc => %02x %02x %02x %02x %02x",
-			fd, freq, d->ufreq, pos, pol, hiband, d->uslot, cmd.msg[0],
-			cmd.msg[1], cmd.msg[2], cmd.msg[3], cmd.msg[4]);
+						"send_jess fd %d, freq %d, ufreq %d, pos = %d, pol = %d, hiband = %d, slot %d, diseqc => %02x %02x %02x %02x %02x",
+						fd, freq, d->ufreq, pos, pol, hiband, d->uslot, cmd.msg[0],
+						cmd.msg[1], cmd.msg[2], cmd.msg[3], cmd.msg[4]);
 
 #ifdef AXE
 	axe_wakeup(fd, SEC_VOLTAGE_13);
 #endif
-			
+
 	if(!ad->tune_time)
 	{
 		if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_13) == -1)
 			LOG("send_jess: pre voltage  SEC_VOLTAGE_13 failed for fd %d: %s", fd,
-					strerror(errno));
+							strerror(errno));
 		if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
 			LOG("send_jess: FE_SET_TONE failed for fd %d: %s", fd, strerror(errno));
 		msleep(d->after_tone);
@@ -568,12 +572,12 @@ int send_jess(adapter *ad, int fd, int freq, int pos, int pol, int hiband, diseq
 
 	if (!d->only13v && ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18) == -1)
 		LOG("send_jess: FE_SET_VOLTAGE failed for fd %d: %s", fd,
-				strerror(errno));
+						strerror(errno));
 	diseqc_cmd(fd, committed_no, "jess", &cmd, d);
 
 	if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_13) == -1)
 		LOG("send_jess: FE_SET_VOLTAGE failed for fd %d: %s", fd,
-				strerror(errno));
+						strerror(errno));
 
 	return d->ufreq * 1000;
 }
@@ -607,20 +611,20 @@ int setup_switch(adapter *ad)
 	{
 #ifdef AXE
 		freq = send_unicable(ad, ad->fe2, freq / 1000, diseqc, pol, hiband,
-				&tp->diseqc_param);
+																							&tp->diseqc_param);
 #else
 		freq = send_unicable(ad, frontend_fd, freq / 1000, diseqc, pol, hiband,
-				&tp->diseqc_param);
+																							&tp->diseqc_param);
 #endif
 	}
 	else if (tp->diseqc_param.switch_type == SWITCH_JESS)
 	{
 #ifdef AXE
 		freq = send_jess(ad, ad->fe2, freq / 1000, diseqc, pol, hiband,
-				&tp->diseqc_param);
+																			&tp->diseqc_param);
 #else
 		freq = send_jess(ad, frontend_fd, freq / 1000, diseqc, pol, hiband,
-				&tp->diseqc_param);
+																			&tp->diseqc_param);
 #endif
 	}
 	else if (tp->diseqc_param.switch_type == SWITCH_SLAVE)
@@ -630,14 +634,14 @@ int setup_switch(adapter *ad)
 	else
 	{
 		if (ad->old_pol != pol || ad->old_hiband != hiband
-				|| ad->old_diseqc != diseqc)
+						|| ad->old_diseqc != diseqc)
 			send_diseqc(ad, frontend_fd, diseqc, ad->old_diseqc != diseqc, pol,
-					hiband, &tp->diseqc_param);
+															hiband, &tp->diseqc_param);
 		else
 			LOGL(3, "Skip sending diseqc commands since "
-					"the switch position doesn't need to be changed: "
-					"pol %d, hiband %d, switch position %d", pol, hiband,
-					diseqc);
+								"the switch position doesn't need to be changed: "
+								"pol %d, hiband %d, switch position %d", pol, hiband,
+								diseqc);
 	}
 
 	ad->old_pol = pol;
@@ -647,11 +651,11 @@ int setup_switch(adapter *ad)
 	return freq;
 }
 
-#define ADD_PROP(c, d) {\
-	p_cmd[iProp].cmd = (c);\
-	p_cmd[iProp].u.data = (d);\
-	iProp++;\
-	}
+#define ADD_PROP(c, d) { \
+		p_cmd[iProp].cmd = (c); \
+		p_cmd[iProp].u.data = (d); \
+		iProp++; \
+}
 
 int dvb_tune(int aid, transponder * tp)
 {
@@ -668,7 +672,8 @@ int dvb_tune(int aid, transponder * tp)
 
 	struct dtv_property p_clear[] =
 	{
-	{ .cmd = DTV_CLEAR }, };
+		{ .cmd = DTV_CLEAR },
+	};
 
 	struct dtv_properties cmdseq_clear =
 	{ .num = 1, .props = p_clear };
@@ -679,7 +684,7 @@ int dvb_tune(int aid, transponder * tp)
 	if ((ioctl(fd_frontend, FE_SET_PROPERTY, &cmdseq_clear)) == -1)
 	{
 		LOG("FE_SET_PROPERTY DTV_CLEAR failed for fd %d: %s", fd_frontend,
-				strerror(errno));
+						strerror(errno));
 		//        return -1;
 	}
 
@@ -693,21 +698,21 @@ int dvb_tune(int aid, transponder * tp)
 		freq = setup_switch(ad);
 #else
 		freq = axe_setup_switch(ad);
-#endif	
+#endif
 		if (freq < MIN_FRQ_DVBS || freq > MAX_FRQ_DVBS)
 			LOG_AND_RETURN(-404, "Frequency %d is not within range ", freq)
 
-		ADD_PROP(DTV_SYMBOL_RATE, tp->sr)
-		ADD_PROP(DTV_INNER_FEC, tp->fec)
+			ADD_PROP(DTV_SYMBOL_RATE, tp->sr)
+			ADD_PROP(DTV_INNER_FEC, tp->fec)
 #ifndef AXE
-		ADD_PROP(DTV_PILOT, tp->plts)
-		ADD_PROP(DTV_ROLLOFF, tp->ro)
+			ADD_PROP(DTV_PILOT, tp->plts)
+			ADD_PROP(DTV_ROLLOFF, tp->ro)
 #endif
 #if DVBAPIVERSION >= 0x0502
-		ADD_PROP(DTV_STREAM_ID, tp->plp)
+			ADD_PROP(DTV_STREAM_ID, tp->plp)
 #endif
 
-		LOG(
+			LOG(
 				"tuning to %d(%d) pol: %s (%d) sr:%d fec:%s delsys:%s mod:%s rolloff:%s pilot:%s, ts clear=%jd, ts pol=%jd",
 				tp->freq, freq, get_pol(tp->pol), tp->pol, tp->sr,
 				fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype],
@@ -717,7 +722,7 @@ int dvb_tune(int aid, transponder * tp)
 				fe_rolloff[tp->ro], fe_pilot[tp->plts],
 #endif
 				bclear, bpol)
-		break;
+			break;
 
 	case SYS_DVBT:
 	case SYS_DVBT2:
@@ -725,7 +730,7 @@ int dvb_tune(int aid, transponder * tp)
 		if (tp->freq < MIN_FRQ_DVBT || tp->freq > MAX_FRQ_DVBT)
 			LOG_AND_RETURN(-404, "Frequency %d is not within range ", tp->freq)
 
-		freq = freq * 1000;
+			freq = freq * 1000;
 		ADD_PROP(DTV_BANDWIDTH_HZ, tp->bw)
 		ADD_PROP(DTV_CODE_RATE_HP, tp->fec)
 		ADD_PROP(DTV_CODE_RATE_LP, tp->fec)
@@ -737,10 +742,10 @@ int dvb_tune(int aid, transponder * tp)
 #endif
 
 		LOG(
-				"tuning to %d delsys: %s bw:%d inversion:%s mod:%s fec:%s guard:%s transmission: %s, ts clear = %jd",
-				freq, fe_delsys[tp->sys], tp->bw, fe_specinv[tp->inversion],
-				fe_modulation[tp->mtype], fe_fec[tp->fec], fe_gi[tp->gi],
-				fe_tmode[tp->tmode], bclear)
+			"tuning to %d delsys: %s bw:%d inversion:%s mod:%s fec:%s guard:%s transmission: %s, ts clear = %jd",
+			freq, fe_delsys[tp->sys], tp->bw, fe_specinv[tp->inversion],
+			fe_modulation[tp->mtype], fe_fec[tp->fec], fe_gi[tp->gi],
+			fe_tmode[tp->tmode], bclear)
 		break;
 
 	case SYS_DVBC2:
@@ -749,7 +754,7 @@ int dvb_tune(int aid, transponder * tp)
 		if (tp->freq < MIN_FRQ_DVBC || tp->freq > MAX_FRQ_DVBC)
 			LOG_AND_RETURN(-404, "Frequency %d is not within range ", tp->freq)
 
-		freq = freq * 1000;
+			freq = freq * 1000;
 		ADD_PROP(DTV_SYMBOL_RATE, tp->sr)
 #if DVBAPIVERSION >= 0x0502
 		ADD_PROP(DTV_STREAM_ID, ((tp->ds & 0xFF) << 8) | (tp->plp & 0xFF))
@@ -757,8 +762,8 @@ int dvb_tune(int aid, transponder * tp)
 		// valid for DD DVB-C2 devices
 
 		LOG("tuning to %d sr:%d specinv:%s delsys:%s mod:%s ts clear = %jd",
-				freq, tp->sr, fe_specinv[tp->inversion], fe_delsys[tp->sys],
-				fe_modulation[tp->mtype], bclear)
+						freq, tp->sr, fe_specinv[tp->inversion], fe_delsys[tp->sys],
+						fe_modulation[tp->mtype], bclear)
 		break;
 
 	case SYS_ATSC:
@@ -767,11 +772,11 @@ int dvb_tune(int aid, transponder * tp)
 		if (tp->freq < MIN_FRQ_DVBC || tp->freq > MAX_FRQ_DVBC)
 			LOG_AND_RETURN(-404, "Frequency %d is not within range ", tp->freq)
 
-		freq = freq * 1000;
+			freq = freq * 1000;
 
 		LOG("tuning to %d delsys:%s mod:%s specinv:%s ts clear = %jd", freq,
-				fe_delsys[tp->sys], fe_modulation[tp->mtype],
-				fe_specinv[tp->inversion], bclear)
+						fe_delsys[tp->sys], fe_modulation[tp->mtype],
+						fe_specinv[tp->inversion], bclear)
 
 		break;
 
@@ -780,7 +785,7 @@ int dvb_tune(int aid, transponder * tp)
 		if (tp->freq < MIN_FRQ_DVBT || tp->freq > MAX_FRQ_DVBT)
 			LOG_AND_RETURN(-404, "Frequency %d is not within range ", tp->freq)
 
-		freq = freq * 1000;
+			freq = freq * 1000;
 		ADD_PROP(DTV_BANDWIDTH_HZ, tp->bw)
 #if DVBAPIVERSION >= 0x0501
 		ADD_PROP(DTV_ISDBT_PARTIAL_RECEPTION, 0)
@@ -789,13 +794,13 @@ int dvb_tune(int aid, transponder * tp)
 #endif
 
 		LOG("tuning to %d delsys: %s bw:%d inversion:%s , ts clear = %jd", freq,
-				fe_delsys[tp->sys], tp->bw, fe_specinv[tp->inversion], bclear)
+						fe_delsys[tp->sys], tp->bw, fe_specinv[tp->inversion], bclear)
 		;
 
 		break;
 	default:
 		LOG("tuninng to unknown delsys: %s freq %s ts clear = %jd", freq,
-				fe_delsys[tp->sys], bclear)
+						fe_delsys[tp->sys], bclear)
 		break;
 	}
 
@@ -839,13 +844,13 @@ int dvb_set_pid(adapter *a, uint16_t i_pid)
 	ad = a->fn;
 	if (i_pid > 8192)
 		LOG_AND_RETURN(-1, "pid %d > 8192 for /dev/dvb/adapter%d/demux%d",
-				i_pid, hw, ad);
+																	i_pid, hw, ad);
 
 	sprintf(buf, "/dev/dvb/adapter%d/demux%d", hw, ad);
 	if ((fd = open(buf, O_RDWR | O_NONBLOCK)) < 0)
 	{
 		LOG("Could not open demux device /dev/dvb/adapter%d/demux%d: %s ", hw,
-				ad, strerror (errno));
+						ad, strerror (errno));
 		return -1;
 	}
 
@@ -864,7 +869,7 @@ int dvb_set_pid(adapter *a, uint16_t i_pid)
 		int ep;
 		ep = get_enabled_pids(a, (int *) pids, MAX_PIDS);
 		LOG("failed setting filter on %d (%s), enabled pids %d", i_pid,
-				strerror (errno), ep);
+						strerror (errno), ep);
 		return -1;
 	}
 
@@ -879,8 +884,8 @@ int dvb_del_filters(int fd, int pid)
 		LOG_AND_RETURN(0, "DMX_STOP on an invalid handle %d, pid %d", fd, pid);
 	if (ioctl(fd, DMX_STOP, NULL) < 0)
 		LOG("DMX_STOP failed on PID %d FD %d: %s", pid, fd, strerror (errno))
-	else
-		LOG("clearing filter on PID %d FD %d", pid, fd);
+		else
+			LOG("clearing filter on PID %d FD %d", pid, fd);
 	close(fd);
 	return 0;
 }
@@ -892,10 +897,11 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys)
 
 	static struct dtv_property enum_cmdargs[] =
 	{
-	{ .cmd = DTV_ENUM_DELSYS, .u.data = 0 }, };
+		{ .cmd = DTV_ENUM_DELSYS, .u.data = 0 },
+	};
 	static struct dtv_properties enum_cmdseq =
 	{ .num = sizeof(enum_cmdargs) / sizeof(struct dtv_property), .props =
-			enum_cmdargs };
+				enum_cmdargs };
 
 	for (i = 0; i < 10; i++)
 		sys[i] = 0;
@@ -908,12 +914,12 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys)
 	if ((res = ioctl(fd, FE_GET_INFO, &fe_info) < 0))
 	{
 		LOG("FE_GET_INFO failed for adapter %d, fd %d: %s ", aid, fd,
-				strerror(errno));
+						strerror(errno));
 //	return -1;
 	}
 
 	LOG("Detected adapter %d handle %d DVB Card Name: %s", aid, fd,
-			fe_info.name);
+					fe_info.name);
 
 	int nsys = enum_cmdargs[0].u.buffer.len;
 
@@ -948,7 +954,7 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys)
 			if (fe_info.caps & (FE_CAN_8VSB | FE_CAN_16VSB))
 				sys[idx++] = SYS_ATSC;
 			else if (fe_info.caps
-					& (FE_CAN_QAM_64 | FE_CAN_QAM_256 | FE_CAN_QAM_AUTO))
+												& (FE_CAN_QAM_64 | FE_CAN_QAM_256 | FE_CAN_QAM_AUTO))
 				sys[idx++] = SYS_DVBC_ANNEX_B;
 			else
 				return 0;
@@ -972,14 +978,14 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys)
 	}
 	for (i = 0; i < nsys; i++)
 		LOG("Detected delivery system for adapter %d: %s [%d]", aid,
-				fe_delsys[sys[i]], sys[i]);
+						fe_delsys[sys[i]], sys[i]);
 
 	return (fe_delivery_system_t) rv;
 
 }
 
 void get_signal(int fd, int * status, uint32_t * ber, uint16_t * strength,
-		uint16_t * snr)
+																uint16_t * snr)
 {
 	*status = *ber = *snr = *strength = 0;
 
@@ -1004,7 +1010,7 @@ void get_signal(int fd, int * status, uint32_t * ber, uint16_t * strength,
 }
 
 int get_signal_new(int fd, int * status, uint32_t * ber, uint16_t * strength,
-		uint16_t * snr)
+																			uint16_t * snr)
 {
 
 	*status = *snr = *ber = *strength = 0;
@@ -1013,17 +1019,18 @@ int get_signal_new(int fd, int * status, uint32_t * ber, uint16_t * strength,
 	int err = 0;
 	static struct dtv_property enum_cmdargs[] =
 	{
-	{ .cmd = DTV_STAT_SIGNAL_STRENGTH, .u.data = 0 },
-	{ .cmd = DTV_STAT_CNR, .u.data = 0 },
-	{ .cmd = DTV_STAT_ERROR_BLOCK_COUNT, .u.data = 0 }, };
+		{ .cmd = DTV_STAT_SIGNAL_STRENGTH, .u.data = 0 },
+		{ .cmd = DTV_STAT_CNR, .u.data = 0 },
+		{ .cmd = DTV_STAT_ERROR_BLOCK_COUNT, .u.data = 0 },
+	};
 	static struct dtv_properties enum_cmdseq =
 	{ .num = sizeof(enum_cmdargs) / sizeof(struct dtv_property), .props =
-			enum_cmdargs };
+				enum_cmdargs };
 
 	if (ioctl(fd, FE_GET_PROPERTY, &enum_cmdseq) < 0)
 	{
 		LOG("get_signal_new: unable to query frontend %d: %s", fd,
-				strerror (errno));
+						strerror (errno));
 		err = 100;
 	}
 
@@ -1045,12 +1052,12 @@ int get_signal_new(int fd, int * status, uint32_t * ber, uint16_t * strength,
 
 	if (err)
 		LOG(
-				"get_signal_new returned: Signal (%d): %llu, SNR(%d): %llu, BER: %llu, err %d",
-				enum_cmdargs[0].u.st.stat[0].scale,
-				enum_cmdargs[0].u.st.stat[0].uvalue,
-				enum_cmdargs[1].u.st.stat[0].scale,
-				enum_cmdargs[1].u.st.stat[0].uvalue,
-				enum_cmdargs[2].u.st.stat[0].uvalue, err);
+			"get_signal_new returned: Signal (%d): %llu, SNR(%d): %llu, BER: %llu, err %d",
+			enum_cmdargs[0].u.st.stat[0].scale,
+			enum_cmdargs[0].u.st.stat[0].uvalue,
+			enum_cmdargs[1].u.st.stat[0].scale,
+			enum_cmdargs[1].u.st.stat[0].uvalue,
+			enum_cmdargs[2].u.st.stat[0].uvalue, err);
 	if (err)
 		return err;
 
@@ -1075,7 +1082,7 @@ void dvb_get_signal(adapter *ad)
 	uint16_t strength = 0, snr = 0;
 	uint32_t status = 0, ber = 0;
 	if (ad->new_gs == 0
-			&& (new_gs = get_signal_new(ad->fe, &status, &ber, &strength, &snr)))
+					&& (new_gs = get_signal_new(ad->fe, &status, &ber, &strength, &snr)))
 		get_signal(ad->fe, &status, &ber, &strength, &snr);
 	else if (new_gs)
 		get_signal(ad->fe, &status, &ber, &strength, &snr);
@@ -1104,14 +1111,14 @@ void dvb_get_signal(adapter *ad)
 	ad->strength = strength;
 	ad->status = status;
 	ad->ber = ber;
-	
+
 	if(ad->status == 0 && ((ad->tp.diseqc_param.switch_type == SWITCH_JESS) || (ad->tp.diseqc_param.switch_type == SWITCH_UNICABLE)))
 	{
 		adapter_lock(ad->id);
 		setup_switch(ad);
 		adapter_unlock(ad->id);
 	}
-	
+
 }
 
 void dvb_commit(adapter *a)
@@ -1150,7 +1157,7 @@ void find_dvb_adapter(adapter **a)
 			sprintf(buf, "/dev/dvb/adapter%d/dvr%d", i, j);
 			if(!access(buf, R_OK))
 				cnt++;
-			
+
 			//LOG("testing device %s -> fd: %d",buf,fd);
 			if (cnt == 3)
 			{
@@ -1177,7 +1184,7 @@ void find_dvb_adapter(adapter **a)
 				ad->close = (Adapter_commit) dvb_close;
 				ad->get_signal = (Device_signal) dvb_get_signal;
 				ad->type = ADAPTER_DVB;
-				
+
 				na++;
 				a_count = na; // update adapter counter
 				if (na == MAX_ADAPTERS)
@@ -1190,4 +1197,3 @@ void find_dvb_adapter(adapter **a)
 }
 
 #endif  // #ifndef DISABLE_LINUXDVB
-

@@ -85,8 +85,8 @@ int netcv_open_device(adapter *ad)
 	if (pipe2 (pipe_fd, O_NONBLOCK)) LOGL (0, "netceiver: creating pipe failed (%s)", strerror(errno));
 	if (-1 == fcntl (pipe_fd[0], F_SETPIPE_SZ, 5 * 188 * 1024))
 		LOGL (0, "netceiver pipe buffer size change failed (%s)", strerror(errno));
-	ad->dvr = pipe_fd[0];	// read end of pipe
-	SN->pwfd = pipe_fd[1];	// write end of pipe
+	ad->dvr = pipe_fd[0]; // read end of pipe
+	SN->pwfd = pipe_fd[1]; // write end of pipe
 	LOGL(1, "netceiver: creating DVR pipe for adapter %d  -> dvr: %d", ad->id, ad->dvr);
 
 	return 0;
@@ -96,10 +96,10 @@ int netcv_set_pid(adapter *ad, uint16_t pid)
 {
 	int aid = ad->id;
 	LOGL(3, "netceiver: set_pid for adapter %d, pid %d, err %d", aid, pid,
-			SN->err);
+						SN->err);
 
 	if (SN->err) // error reported, return error
-	return 0;
+		return 0;
 
 	SN->npid[SN->lp] = pid;
 	SN->lp++;
@@ -118,7 +118,7 @@ int netcv_del_pid(int fd, int pid)
 		return 0;
 	LOGL(3, "netceiver: del_pid for aid %d, pid %d, err %d", fd, pid, SN->err);
 	if (SN->err) // error reported, return error
-	return 0;
+		return 0;
 
 	for (i = 0; i < MAX_PIDS; i++)
 		if (SN->npid[i] == pid || hit)
@@ -167,14 +167,14 @@ void netcv_commit(adapter *ad)
 		transponder *tp = &ad->tp;
 
 		int map_pos[] =
-		{	0, 192, 130, 282, -50}; // Default sat positions: 19.2E, 13E, 28.2E, 5W
+		{ 0, 192, 130, 282, -50}; // Default sat positions: 19.2E, 13E, 28.2E, 5W
 		int map_pol[] =
-		{	0, SEC_VOLTAGE_13, SEC_VOLTAGE_18, SEC_VOLTAGE_OFF};
+		{ 0, SEC_VOLTAGE_13, SEC_VOLTAGE_18, SEC_VOLTAGE_OFF};
 
 		switch (tp->sys)
 		{
-			case SYS_DVBS:
-			case SYS_DVBS2:
+		case SYS_DVBS:
+		case SYS_DVBS2:
 			m_pos = 1800 + map_pos[tp->diseqc];
 
 			memset(&m_sec, 0, sizeof(recv_sec_t));
@@ -194,15 +194,15 @@ void netcv_commit(adapter *ad)
 			{
 				switch (tp->fec) // Handle FEC numbering exceptions
 				{
-					case FEC_3_5:
+				case FEC_3_5:
 					m_fep.u.qpsk.fec_inner = 13;
 					break;
 
-					case FEC_9_10:
+				case FEC_9_10:
 					m_fep.u.qpsk.fec_inner = 14;
 					break;
 
-					default:
+				default:
 					m_fep.u.qpsk.fec_inner = tp->fec;
 				}
 
@@ -213,10 +213,10 @@ void netcv_commit(adapter *ad)
 			}
 
 			char *map_posc[] =
-			{	"", " @ 19.2E", " @ 13E", " @ 28.2E", " @ 5W"};
+			{ "", " @ 19.2E", " @ 13E", " @ 28.2E", " @ 5W"};
 			LOGL(0, "netceiver: adapter %d tuning to %d%s pol:%s sr:%d fec:%s delsys:%s mod:%s",
-			ad->id, tp->freq / 1000, map_posc[tp->diseqc], get_pol(tp->pol), tp->sr / 1000,
-			fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype]);
+								ad->id, tp->freq / 1000, map_posc[tp->diseqc], get_pol(tp->pol), tp->sr / 1000,
+								fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype]);
 
 			break;
 
@@ -226,7 +226,7 @@ void netcv_commit(adapter *ad)
 
 			break;
 
-			case SYS_DVBC_ANNEX_A:
+		case SYS_DVBC_ANNEX_A:
 			m_pos = 0xfff; /* not sure, to be tested */
 			memset(&m_sec, 0, sizeof(recv_sec_t));
 
@@ -240,36 +240,36 @@ void netcv_commit(adapter *ad)
 			type = FE_QAM;
 
 			LOGL(0, "netceiver: adapter %d tuning to %d sr:%d delsys:%s mod:%s",
-			ad->id, tp->freq / 1000, tp->sr / 1000,
-			fe_delsys[tp->sys], fe_modulation[tp->mtype]);
+								ad->id, tp->freq / 1000, tp->sr / 1000,
+								fe_delsys[tp->sys], fe_modulation[tp->mtype]);
 
 			break;
 
-			case SYS_DVBT:
+		case SYS_DVBT:
 			m_fep.frequency = tp->freq * 1000;
 			m_fep.inversion = INVERSION_AUTO;
 
 			switch (tp->bw)
 			{
-				case 8000000: m_fep.u.ofdm.bandwidth = BANDWIDTH_8_MHZ; break;
-				case 7000000: m_fep.u.ofdm.bandwidth = BANDWIDTH_7_MHZ; break;
-				case 6000000: m_fep.u.ofdm.bandwidth = BANDWIDTH_6_MHZ; break;
-				case 0: m_fep.u.ofdm.bandwidth = BANDWIDTH_AUTO; break;
-				case 5000000: m_fep.u.ofdm.bandwidth = BANDWIDTH_5_MHZ; break;
-				case 10000000: m_fep.u.ofdm.bandwidth = BANDWIDTH_10_MHZ; break;
-				case 1712000: m_fep.u.ofdm.bandwidth = BANDWIDTH_1_712_MHZ; break;
-				default: m_fep.u.ofdm.bandwidth = BANDWIDTH_AUTO;
+			case 8000000: m_fep.u.ofdm.bandwidth = BANDWIDTH_8_MHZ; break;
+			case 7000000: m_fep.u.ofdm.bandwidth = BANDWIDTH_7_MHZ; break;
+			case 6000000: m_fep.u.ofdm.bandwidth = BANDWIDTH_6_MHZ; break;
+			case 0: m_fep.u.ofdm.bandwidth = BANDWIDTH_AUTO; break;
+			case 5000000: m_fep.u.ofdm.bandwidth = BANDWIDTH_5_MHZ; break;
+			case 10000000: m_fep.u.ofdm.bandwidth = BANDWIDTH_10_MHZ; break;
+			case 1712000: m_fep.u.ofdm.bandwidth = BANDWIDTH_1_712_MHZ; break;
+			default: m_fep.u.ofdm.bandwidth = BANDWIDTH_AUTO;
 				LOGL(0, "netceiver: DVB-T: unknown bandwith: %d", tp->bw);
 			}
 
 			m_fep.u.ofdm.code_rate_HP = FEC_AUTO; // TBC
 			m_fep.u.ofdm.code_rate_LP = FEC_AUTO; // TBC
-			
+
 			switch (tp->mtype) // not properly handled by vdr-satip-plugin ?
 			{
-				case 0: m_fep.u.ofdm.constellation = QAM_AUTO; break;
-				case 6: m_fep.u.ofdm.constellation = QAM_32; break;
-				default: m_fep.u.ofdm.constellation = tp->mtype;
+			case 0: m_fep.u.ofdm.constellation = QAM_AUTO; break;
+			case 6: m_fep.u.ofdm.constellation = QAM_32; break;
+			default: m_fep.u.ofdm.constellation = tp->mtype;
 			}
 
 			m_fep.u.ofdm.transmission_mode = tp->tmode;
@@ -279,9 +279,9 @@ void netcv_commit(adapter *ad)
 			type = FE_OFDM;
 
 			LOGL(0, "netceiver: adapter %d tuning to %d inv: %d mtype: %d "
-					"hprate: %d tmode: %d gi: %d bw:%d sm %d t2id %d",
-					ad->id, tp->freq / 1000, tp->inversion, tp->mtype,
-					tp->hprate, tp->tmode, tp->gi, tp->bw, tp->sm, tp->t2id);
+								"hprate: %d tmode: %d gi: %d bw:%d sm %d t2id %d",
+								ad->id, tp->freq / 1000, tp->inversion, tp->mtype,
+								tp->hprate, tp->tmode, tp->gi, tp->bw, tp->sm, tp->t2id);
 
 			break;
 		}
@@ -291,7 +291,7 @@ void netcv_commit(adapter *ad)
 
 		/* call recv_tune of libmcli */
 		if(recv_tune(SN->ncv_rec, type, m_pos, &m_sec, &m_fep, m_pids) != 0)
-		LOGL(0, "netceiver: Tuning receiver failed");
+			LOGL(0, "netceiver: Tuning receiver failed");
 
 		ad->strength = 0;
 		ad->status = 0;
@@ -318,13 +318,13 @@ void netcv_commit(adapter *ad)
 			/* call recv_pids of libmcli to set the active PIDs */
 			usleep(10000);
 			if(recv_pids (SN->ncv_rec, m_pids))
-			LOGL(0, "netceiver: seting PIDs failed");
+				LOGL(0, "netceiver: seting PIDs failed");
 		}
 		else
 		{
 			/* call recv_stop of libmcli to deactivate all PIDs */
 			if(recv_stop (SN->ncv_rec))
-			LOGL(0, "netceiver: removing all PIDs failed");
+				LOGL(0, "netceiver: removing all PIDs failed");
 		}
 
 		SN->want_commit = 0;
@@ -341,7 +341,7 @@ int netcv_tune(int aid, transponder * tp)
 
 	SN->want_tune = 1; // we do not tune right now, just set the flag for netcv_commit
 	SN->want_commit = 0;
-	SN->lp = 0;		// make sure number of active pids is 0 after tuning
+	SN->lp = 0;  // make sure number of active pids is 0 after tuning
 	return 0;
 }
 
@@ -367,7 +367,7 @@ void find_netcv_adapter(adapter **a)
 
 	nif1 = nif;
 	while (strcmp(nif1->ifa_name, opts.netcv_if)
-			|| nif1->ifa_addr->sa_family != AF_INET6)
+								|| nif1->ifa_addr->sa_family != AF_INET6)
 	{
 		if (nif1->ifa_next == NULL)
 		{
@@ -390,7 +390,7 @@ void find_netcv_adapter(adapter **a)
 		LOGL(0, "Netceiver init failed");
 
 	sprintf(dbuf, "REEL: Search for %d Netceiver%s on %s... ",
-			opts.netcv_count, opts.netcv_count == 1 ? "" : "s", opts.netcv_if);
+									opts.netcv_count, opts.netcv_count == 1 ? "" : "s", opts.netcv_if);
 	n = 0;
 	do
 	{
@@ -414,7 +414,7 @@ void find_netcv_adapter(adapter **a)
 		for (i = 0; i < nci->tuner_num; i++)
 		{
 			sprintf(dbuf + strlen(dbuf), "	Tuner: %s, Type %d\n", nci->tuner[i].fe_info.name,
-					nci->tuner[i].fe_info.type);
+											nci->tuner[i].fe_info.type);
 			nc_sys_c[nci->tuner[i].fe_info.type]++;
 			nc_sys_t++;
 		}
@@ -528,7 +528,7 @@ int handle_ts(unsigned char *buffer, size_t len, void *p)
 	if (buffer[0] != 0x47 || len % 188 != 0)
 	{
 		LOGL(0, "netceiver: TS data mallformed: buf[0]=0x%02x len=%d",
-				buffer[0], len);
+							buffer[0], len);
 		return len;
 	}
 

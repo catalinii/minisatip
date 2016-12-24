@@ -1,5 +1,5 @@
 /*
- - * Copyright (C) 2014-2020 Catalin Toda <catalinii@yahoo.com>
+   - * Copyright (C) 2014-2020 Catalin Toda <catalinii@yahoo.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -78,7 +78,7 @@ void dvbaes_decrypt_stream(void *key, dvbapi_batch *batch, int max_len)
 		len = (batch[i].len / 16) * 16;
 		for (j = 0; j < len; j++)
 			AES_ecb_encrypt(batch[i].data + j, batch[i].data + j,
-					(AES_KEY *) key, AES_DECRYPT);
+																			(AES_KEY *) key, AES_DECRYPT);
 
 	}
 }

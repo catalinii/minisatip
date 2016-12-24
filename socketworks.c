@@ -48,10 +48,6 @@ sockets *s[MAX_SOCKS];
 int max_sock;
 SMutex s_mutex;
 
-#define SOCKETWORKS_ITEM ((uint64_t) 0x4000000000000)
-#define MAKE_ITEM(a,b) ((SOCKETWORKS_ITEM + (((uint64_t )a)<<24) + (b)))
-
-
 int fill_sockaddr(struct sockaddr_in *serv, char *host, int port)
 {
 	struct hostent *h;
@@ -69,7 +65,7 @@ int fill_sockaddr(struct sockaddr_in *serv, char *host, int port)
 	serv->sin_family = AF_INET;
 	if (host)
 		memcpy(&serv->sin_addr.s_addr, h->h_addr, h->h_length);
-		else
+	else
 		serv->sin_addr.s_addr = htonl(INADDR_ANY);
 	serv->sin_port = htons(port);
 	return 1;
@@ -139,7 +135,7 @@ int udp_bind(char *addr, int port)
 		is_multicast = 0;
 		LOG("setting multicast for %s", addr);
 		if (setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq))
-				== -1)
+						== -1)
 		{
 			LOGL(0, "membership error: %s", strerror(errno));
 		}
@@ -147,14 +143,14 @@ int udp_bind(char *addr, int port)
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0)
 	{
 		LOGL(0, "udp_bind failed: setsockopt(SO_REUSEADDR): %s",
-				strerror(errno));
+							strerror(errno));
 		return -1;
 	}
 
 	if (bind(sock, (struct sockaddr *) &serv, sizeof(serv)) < 0)
 	{
 		LOGL(0, "udp_bind: failed: bind() on host %s port %d: error %s", addr,
-				port, strerror(errno));
+							port, strerror(errno));
 		if(is_multicast)
 		{
 			serv.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -163,19 +159,19 @@ int udp_bind(char *addr, int port)
 				LOGL(0, "udp_bind: failed: bind() on host ANY port %d: error %s", port, strerror(errno));
 				return -1;
 			}
-			
+
 		}
 	}
 
 	set_linux_socket_timeout(sock);
 
 	LOGL(1, "New UDP socket %d bound to %s:%d", sock, inet_ntoa(serv.sin_addr),
-			ntohs(serv.sin_port));
+						ntohs(serv.sin_port));
 	return sock;
 }
 
 int udp_bind_connect(char *src, int sport, char *dest, int dport,
-		struct sockaddr_in *serv)
+																					struct sockaddr_in *serv)
 {
 	int sock;
 	sock = udp_bind(src, sport);
@@ -188,7 +184,7 @@ int udp_bind_connect(char *src, int sport, char *dest, int dport,
 		return -1;
 	}
 	LOG("New UDP socket %d connected to %s:%d", sock, inet_ntoa(serv->sin_addr),
-			ntohs(serv->sin_port));
+					ntohs(serv->sin_port));
 
 	return sock;
 }
@@ -221,7 +217,7 @@ int udp_connect(char *addr, int port, struct sockaddr_in *serv)
 		return -1;
 	}
 	LOG("New UDP socket %d connected to %s:%d", sock, inet_ntoa(serv->sin_addr),
-			ntohs(serv->sin_port));
+					ntohs(serv->sin_port));
 	return sock;
 }
 int set_linux_socket_timeout_(int sockfd)
@@ -236,11 +232,11 @@ int set_linux_socket_timeout(int sockfd)
 	timeout.tv_usec = 100000;
 
 	if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *) &timeout,
-			sizeof(timeout)) < 0)
+																sizeof(timeout)) < 0)
 		LOG("setsockopt failed for socket %d", sockfd);
 
 	if (setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, (char *) &timeout,
-			sizeof(timeout)) < 0)
+																sizeof(timeout)) < 0)
 		LOG("setsockopt failed for socket %d", sockfd);
 	return 0;
 }
@@ -281,7 +277,7 @@ int tcp_connect(char *addr, int port, struct sockaddr_in *serv, int blocking)
 		if (errno != EINPROGRESS)
 		{
 			LOGL(0, "tcp_connect: failed: connect to %s:%d failed: %s", addr,
-					port, strerror(errno));
+								port, strerror(errno));
 			close(sock);
 			return -1;
 		}
@@ -307,14 +303,14 @@ int tcp_listen(char *addr, int port)
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0)
 	{
 		LOGL(0, "tcp_listen failed: setsockopt(SO_REUSEADDR): %s",
-				strerror(errno));
+							strerror(errno));
 		return -1;
 	}
 
 	if (bind(sock, (struct sockaddr *) &serv, sizeof(serv)) < 0)
 	{
 		LOGL(0, "tcp_listen: failed: bind() on address: %s, port %d : error %s",
-				addr ? addr : "ANY", port, strerror(errno));
+							addr ? addr : "ANY", port, strerror(errno));
 		return -1;
 	}
 	if (listen(sock, 10) < 0)
@@ -331,7 +327,7 @@ int connect_local_socket(char *file, int blocking)
 	struct sockaddr_un serv;
 	int sock, optval = 1;
 
-	
+
 	sock = socket(AF_LOCAL, SOCK_STREAM, 0);
 	if (sock < 0)
 	{
@@ -341,7 +337,7 @@ int connect_local_socket(char *file, int blocking)
 	memset(&serv, 0, sizeof(serv));
 	serv.sun_family = AF_LOCAL;
 	strncpy(serv.sun_path, file, sizeof(serv.sun_path) - 1);
-	
+
 	set_linux_socket_timeout(sock);
 
 	if (blocking)
@@ -354,7 +350,7 @@ int connect_local_socket(char *file, int blocking)
 	{
 		if (errno != EINPROGRESS)
 		{
-			LOGL(0, "tcp_connect: failed: connect to %s failed: %s", file , strerror(errno));
+			LOGL(0, "tcp_connect: failed: connect to %s failed: %s", file, strerror(errno));
 			close(sock);
 			return -1;
 		}
@@ -419,7 +415,7 @@ int sockets_recv(int socket, void *buf, int len, sockets *ss, int *rv)
 {
 	int slen = sizeof(ss->sa);
 	*rv = recvfrom(socket, buf, len, 0, (struct sockaddr *) &ss->sa,
-			(socklen_t *) &slen);
+																(socklen_t *) &slen);
 	return (*rv > 0);
 }
 
@@ -433,7 +429,7 @@ void sockets_lock(sockets *ss)
 		if ((rv = mutex_lock(ss->lock)))
 		{
 			LOG("%s: Changing socket %d lock %p to NULL error %d %s",
-					__FUNCTION__, ss->id, ss->lock, rv, strerror(rv));
+							__FUNCTION__, ss->id, ss->lock, rv, strerror(rv));
 			ss->lock = NULL;
 		}
 }
@@ -445,7 +441,7 @@ void sockets_unlock(sockets *ss)
 		if ((rv = mutex_unlock(ss->lock)))
 		{
 			LOG("%s: Changing socket %d lock %p to NULL error %d %s",
-					__FUNCTION__, ss->id, ss->lock, rv, strerror(rv));
+							__FUNCTION__, ss->id, ss->lock, rv, strerror(rv));
 			ss->lock = NULL;
 		}
 	mutex_unlock(&ss->mutex);
@@ -463,20 +459,19 @@ void set_sock_lock(int i, SMutex *m)
 }
 
 int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
-		socket_action a, socket_action c, socket_action t)
+																socket_action a, socket_action c, socket_action t)
 {
 	int i;
 	char ra[50];
 	sockets *ss;
 
-	
 	if(sock < 0 && sock != SOCK_TIMEOUT)
 		LOG_AND_RETURN(-1, "sockets_add does not add negative sockets %d", sock);
 
 	if(sock == SOCK_TIMEOUT && t == NULL)
 		LOG_AND_RETURN(-1, "sockets_add timeout without timeout function");
 
-	
+
 	i = add_new_lock((void **) s, MAX_SOCKS, sizeof(sockets), &s_mutex);
 	if (i == -1)
 		LOG_AND_RETURN(-1, "sockets_add failed for socks %d", sock);
@@ -509,8 +504,8 @@ int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 	ss->overflow = 0;
 	ss->iteration = 0;
 	ss->spos = ss->wpos;
-	ss->wmax = opts.max_sinfo * 2 / 5;
-	ss->use_items = 0;
+	ss->wmax = opts.max_sbuf;
+
 	ss->read = (read_action) sockets_read;
 	ss->lock = NULL;
 	if (ss->type == TYPE_UDP || ss->type == TYPE_RTCP)
@@ -521,10 +516,9 @@ int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 	if (type & TYPE_CONNECT)
 		ss->events |= POLLOUT;
 
-	LOG(
-			"sockets_add: handle %d (type %d) returning socket index %d [%s:%d] read: %p",
-			ss->sock, ss->type, i, get_socket_rhost(i, ra, sizeof(ra)),
-			ntohs(ss->sa.sin_port), ss->read);
+	LOG("sockets_add: handle %d (type %d) returning socket index %d [%s:%d] read: %p",
+					ss->sock, ss->type, i, get_socket_rhost(i, ra, sizeof(ra)),
+					ntohs(ss->sa.sin_port), ss->read);
 	mutex_unlock(&ss->mutex);
 	return i;
 }
@@ -548,7 +542,7 @@ int sockets_del(int sock)
 	mutex_lock(&s_mutex);
 	ss->enabled = 0;
 	so = ss->sock;
-	ss->sock = -1;			 // avoid infinite loop
+	ss->sock = -1;                             // avoid infinite loop
 	LOG("sockets_del: %d -> handle %d, sid %d, overflow %d", sock, so, ss->sid, ss->overflow);
 
 	if (ss->close)
@@ -568,16 +562,21 @@ int sockets_del(int sock)
 	ss->lock = NULL;
 	if((ss->flags & 1) && ss->buf)
 		free1(ss->buf);
-	if(ss->use_items)
+	if(ss->pack)
 	{
-		uint64_t item = MAKE_ITEM(ss->id,0);
-		uint64_t mask = MAKE_ITEM(0xFF,0);
-		delItemMask(item, 0xFF000000000000 | mask);
+		int i;
+		for(i = 0; i < ss->wmax; i++)
+			if(ss->pack[i].buf)
+			{
+				free1(ss->pack[i].buf);
+				ss->pack[i].buf = NULL;
+			}
+		free1(ss->pack);
+		ss->pack = NULL;
 	}
-	ss->use_items = 0;
-	
+
 	LOG("sockets_del: %d Last open socket is at index %d current_handle %d",
-			sock, i, so);
+					sock, i, so);
 	mutex_destroy(&ss->mutex);
 	mutex_unlock(&s_mutex);
 	return 0;
@@ -614,7 +613,7 @@ void *select_and_execute(void *arg)
 	lt = getTick();
 	memset(&pf, -1, sizeof(pf));
 	LOG("Starting select_and_execute on thread ID %x, thread_name %s", tid,
-			thread_name);
+					thread_name);
 	while (run_loop)
 	{
 		c_time = getTick();
@@ -625,10 +624,10 @@ void *select_and_execute(void *arg)
 			{
 				pf[i].fd = s[i]->sock;
 				pf[i].events = s[i]->events;
-				
+
 				if(s[i]->spos != s[i]->wpos)
 					pf[i].events |= POLLOUT;
-				
+
 				pf[i].revents = 0;
 				s[i]->last_poll = c_time;
 				es++;
@@ -642,7 +641,7 @@ void *select_and_execute(void *arg)
 		if (les == 0 && es == 0 && tid != main_tid)
 		{
 			LOG("No enabled sockets for Thread ID %lx name %s ... exiting ",
-					tid, thread_name);
+							tid, thread_name);
 			break;
 		}
 		les = es;
@@ -650,7 +649,7 @@ void *select_and_execute(void *arg)
 		if ((rv = poll(pf, max_sock, 100)) < 0)
 		{
 			LOG("select_and_execute: select() error %d: %s", errno,
-					strerror(errno));
+							strerror(errno));
 			continue;
 		}
 		//              LOG("select returned %d",rv);
@@ -664,32 +663,32 @@ void *select_and_execute(void *arg)
 
 					c_time = getTick();
 					ss->iteration++;
-					
+
 					LOGL(6,
-							"event on socket index %d handle %d type %d (poll fd:%d, revents=%d)",
-							i, ss->sock, ss->type, pf[i].fd, pf[i].revents);
+										"event on socket index %d handle %d type %d (poll fd:%d, revents=%d)",
+										i, ss->sock, ss->type, pf[i].fd, pf[i].revents);
 					sockets_lock(ss);
 
 					if ((pf[i].revents & POLLOUT) && (ss->spos != ss->wpos))
 					{
 						int k=300;
-						
+
 						while(!flush_socket(ss))
 							if(!k--)
 								break;
 						if(k == 0)
 							LOGL(7, "Sock %d: Dequeued max packets", ss->id);
-						
+
 						if((pf[i].revents & (~POLLOUT)) == 0)
 						{
 							LOGL(7, "Sock %d: No Read event, continuing", ss->id);
 							sockets_unlock(ss);
 							continue;
 						}
-						
+
 						pf[i].revents &= ~POLLOUT;
 					}
-					
+
 					if (pf[i].revents & POLLOUT)
 					{
 						ss->events &= ~POLLOUT;
@@ -704,24 +703,24 @@ void *select_and_execute(void *arg)
 					if (ss->rlen >= ss->lbuf)
 					{
 						LOG(
-								"Socket buffer full, handle %d, sock_id %d, type %d, lbuf %d, rlen %d, ss->buf = %p, buf %p",
-								ss->sock, i, ss->type, ss->lbuf, ss->rlen,
-								ss->buf, buf);
+							"Socket buffer full, handle %d, sock_id %d, type %d, lbuf %d, rlen %d, ss->buf = %p, buf %p",
+							ss->sock, i, ss->type, ss->lbuf, ss->rlen,
+							ss->buf, buf);
 						ss->rlen = 0;
 					}
 					rlen = 0;
 					read_ok = 0;
-					if(ss->read) 
+					if(ss->read)
 						read_ok = ss->read(ss->sock, &ss->buf[ss->rlen],
-								ss->lbuf - ss->rlen, ss, &rlen);
+																									ss->lbuf - ss->rlen, ss, &rlen);
 
 					if (opts.log >= 1)
 					{
 						int64_t now = getTick();
 						if (now - c_time > 100)
 							LOG(
-									"WARNING: read on socket id %d, handle %d, took %jd ms",
-									ss->id, ss->sock, now - c_time);
+								"WARNING: read on socket id %d, handle %d, took %jd ms",
+								ss->id, ss->sock, now - c_time);
 					}
 
 					err = 0;
@@ -737,12 +736,12 @@ void *select_and_execute(void *arg)
 					if (ss->lbuf >= ss->rlen)
 						ss->buf[ss->rlen] = 0;
 					LOGL(6,
-							"Read %s %d (rlen:%d/total:%d) bytes from %d -> %p - iteration %d action %p",
-							read_ok ? "OK" : "NOK", rlen, ss->rlen, ss->lbuf,
-							ss->sock, ss->buf, ss->iteration, ss->action);
+										"Read %s %d (rlen:%d/total:%d) bytes from %d -> %p - iteration %d action %p",
+										read_ok ? "OK" : "NOK", rlen, ss->rlen, ss->lbuf,
+										ss->sock, ss->buf, ss->iteration, ss->action);
 
 					if (((ss->rlen > 0) || err == EWOULDBLOCK) && ss->action
-							&& (ss->type != TYPE_SERVER))
+									&& (ss->type != TYPE_SERVER))
 						ss->action(ss);
 					sockets_unlock(ss);
 
@@ -766,15 +765,15 @@ void *select_and_execute(void *arg)
 						if (ss->type == TYPE_RTCP || ss->sock == SOCK_TIMEOUT)
 						{
 							LOG(
-									"ignoring error on sock_id %d handle %d type %d error %d : %s",
-									ss->id, ss->sock, ss->type, err, err_str);
-							continue; // do not close the RTCP socket, we might get some errors here but ignore them
+								"ignoring error on sock_id %d handle %d type %d error %d : %s",
+								ss->id, ss->sock, ss->type, err, err_str);
+							continue;                                                                                                                                                                                                     // do not close the RTCP socket, we might get some errors here but ignore them
 						}
 						LOG(
-								"select_and_execute[%d]: %s on socket %d (sid:%d) from %s:%d - type %s errno %d",
-								i, err_str, ss->sock, ss->sid,
-								get_socket_rhost(ss->id, ra, sizeof(ra)),
-								ntohs(ss->sa.sin_port), types[ss->type], err);
+							"select_and_execute[%d]: %s on socket %d (sid:%d) from %s:%d - type %s errno %d",
+							i, err_str, ss->sock, ss->sid,
+							get_socket_rhost(ss->id, ra, sizeof(ra)),
+							ntohs(ss->sa.sin_port), types[ss->type], err);
 						if (err == EOVERFLOW || err == EWOULDBLOCK)
 							continue;
 						if (err == EAGAIN)
@@ -789,7 +788,7 @@ void *select_and_execute(void *arg)
 						continue;
 					}
 
-//					ss->err = 0;					
+//					ss->err = 0;
 				}
 		// checking every 60seconds for idle connections - or if select times out
 		c_time = getTick();
@@ -800,9 +799,9 @@ void *select_and_execute(void *arg)
 			i = -1;
 			while (++i < max_sock)
 				if ((ss = get_sockets(i)) && (ss->tid == tid)
-						&& ((ss->timeout_ms > 0
-								&& lt - ss->rtime > ss->timeout_ms)
-								|| (ss->timeout_ms == 1)))
+								&& ((ss->timeout_ms > 0
+													&& lt - ss->rtime > ss->timeout_ms)
+												|| (ss->timeout_ms == 1)))
 				{
 					if (ss->timeout)
 					{
@@ -895,7 +894,7 @@ int get_mac(char *mac)
 		if (ioctl(sock, SIOCGIFFLAGS, &ifr) == 0)
 		{
 			if (!(ifr.ifr_flags & IFF_LOOPBACK))
-			{		// don't count loopback
+			{                                                                                     // don't count loopback
 				if (ioctl(sock, SIOCGIFHWADDR, &ifr) == 0)
 				{
 					success = 1;
@@ -911,7 +910,7 @@ int get_mac(char *mac)
 
 	memcpy(m, ifr.ifr_hwaddr.sa_data, 6);
 	sprintf(mac, "%02x%02x%02x%02x%02x%02x", m[0], m[1], m[2], m[3], m[4],
-			m[5]);
+									m[5]);
 	return 1;
 }
 
@@ -931,8 +930,8 @@ get_current_timestamp(void)
 	if (!t)
 		return "Fri, Sat Jan 1 00:00:20 2000 GMT";
 	snprintf(date_str, sizeof(date_str), "%s, %s %d %02d:%02d:%02d %d GMT",
-			day[t->tm_wday], month[t->tm_mon], t->tm_mday, t->tm_hour,
-			t->tm_min, t->tm_sec, t->tm_year + 1900);
+										day[t->tm_wday], month[t->tm_mon], t->tm_mday, t->tm_hour,
+										t->tm_min, t->tm_sec, t->tm_year + 1900);
 	return date_str;
 }
 
@@ -949,8 +948,8 @@ get_current_timestamp_log(void)
 	if (!t)
 		return "01/01 00:00:20";
 	snprintf(date_str, sizeof(date_str), "%02d/%02d %02d:%02d:%02d.%03d",
-			t->tm_mday, t->tm_mon + 1, t->tm_hour, t->tm_min, t->tm_sec,
-			(int) (tv.tv_usec / 1000));
+										t->tm_mday, t->tm_mon + 1, t->tm_hour, t->tm_min, t->tm_sec,
+										(int) (tv.tv_usec / 1000));
 	return date_str;
 }
 
@@ -962,10 +961,10 @@ int sockets_del_for_sid(int sid)
 		return 0;
 	for (i = 0; i < MAX_SOCKS; i++)
 		if ((ss = get_sockets(i)) && ss->sid >= 0 && ss->type == TYPE_RTSP
-				&& ss->sid == sid)
+						&& ss->sid == sid)
 		{
-			ss->timeout_ms = 1;	//trigger close of the socket after this operation ends, otherwise we might close an socket on which we run action
-			ss->sid = -1;// make sure the stream is not closed in the future to prevent closing the stream created by another socket
+			ss->timeout_ms = 1;                                                                                     //trigger close of the socket after this operation ends, otherwise we might close an socket on which we run action
+			ss->sid = -1;                                                                                    // make sure the stream is not closed in the future to prevent closing the stream created by another socket
 		}
 	return 0;
 }
@@ -1115,31 +1114,31 @@ int my_writev(sockets *s, const struct iovec *iov, int iiov)
 		stime = getTick() - stime;
 
 	len = 0;
-	for (i=0;i<iiov;i++)
+	for (i=0; i<iiov; i++)
 		len += iov[i].iov_len;
-	
+
 
 	if(rv > 0)
 	{
 		bw += rv;
-		writes ++;
+		writes++;
 	}
-	
+
 	if(rv != len)
 	{
-		failed_writes ++; 
+		failed_writes++;
 		LOGL(log_level, "writev handle %d, iiov %d, len %d, rv %d, errno %d", s->sock, iiov, len, rv, errno);
 	}
-	
-	if ((rv < 0) && (errno == EWOULDBLOCK)) // blocking
+
+	if ((rv < 0) && (errno == EWOULDBLOCK))                             // blocking
 		return -EWOULDBLOCK;
-	
-	if (rv < 0 && (errno == ECONNREFUSED || errno == EPIPE)) // close the stream int the next second
+
+	if (rv < 0 && (errno == ECONNREFUSED || errno == EPIPE))                             // close the stream int the next second
 	{
 		LOGL(1,
-				"Connection REFUSED on socket %d (sid %d), closing the socket, remote %s:%d",
-				s->id, s->sid, get_socket_rhost(s->id, ra, sizeof(ra)),
-				get_socket_rport(s->id));
+							"Connection REFUSED on socket %d (sid %d), closing the socket, remote %s:%d",
+							s->id, s->sid, get_socket_rhost(s->id, ra, sizeof(ra)),
+							get_socket_rport(s->id));
 		if(s->type != TYPE_RTCP)
 			s->timeout_ms = 1;
 	}
@@ -1147,22 +1146,37 @@ int my_writev(sockets *s, const struct iovec *iov, int iiov)
 	{
 		s->sock_err++;
 		LOG("writev returned %d handle %d, iiov %d errno %d error %s", rv, s->sock,
-				iiov, errno, strerror(errno));
+						iiov, errno, strerror(errno));
 	}
 	else
 		s->sock_err = 0;
-	
+
 	LOGL(log_level, "writev returned %d handle %d, iiov %d (took %jd ms)", rv,
-			s->sock, iiov, stime);
+						s->sock, iiov, stime);
 	return rv;
 }
 
+int alloc_snpacket(SNPacket *p, int len)
+{
+	if(!p->buf || (p->size < len))
+	{
+		if(p->buf)
+		{
+			free1(p->buf);
+			p->buf = NULL;
+		}
+		int newlen = (len < 1500) ? 1500 : len;
+		p->buf = malloc1(newlen);
+		if(p->buf)
+			p->size = newlen;
+		else LOG_AND_RETURN(1, "%s: could not allocate %d bytes for socket buffer", __FUNCTION__, newlen);
+	}
+	return 0;
+}
 
 int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 {
-	int rv = 0, i, pos = 0;
-	uint64_t item;
-	char *buf[1];
+	int rv = 0, i, pos = 0, len;
 	unsigned char tmpbuf[1500];
 	struct iovec tmpiov;
 	sockets *s = get_sockets(sock_id);
@@ -1171,16 +1185,16 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 	if(s->spos == s->wpos)
 	{
 		int len = 0;
-		for(i=0;i<iovcnt;i++)
+		for(i=0; i<iovcnt; i++)
 			len += iov[i].iov_len;
-		
+
 		rv = my_writev(s, iov, iovcnt);
 		if(rv == len)
 			return rv;
-		
+
 		if(rv > 0 && (len < sizeof(tmpbuf)))
-		{			
-			for(i=0;i<iovcnt;i++)
+		{
+			for(i=0; i<iovcnt; i++)
 			{
 				memcpy(tmpbuf + pos, iov[i].iov_base, iov[i].iov_len);
 				pos += iov[i].iov_len;
@@ -1188,40 +1202,64 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 			LOGL(4, "incomplete write, setting the buffer at offset %d and length %d from %d", rv, len - rv, len);
 			tmpiov.iov_base = tmpbuf + rv;
 			tmpiov.iov_len = len - rv;
-			
+
 		}else if(len > sizeof(tmpbuf))
 			LOG("tmpbuf size is too small: %d required ", len);
-		
+
 	}
-	// queue the packet otherwise
-	LOGL(4, "SOCK %d: queueing at %d send pos %d", s->id, s->wpos, s->spos);
-	while(s->wpos != s->spos)
+
+	if(!s->pack)
 	{
-		item = MAKE_ITEM(s->id,s->wpos);
-		if(!setItem(item, iov[0].iov_base, iov[0].iov_len, 0))
+		s->pack = malloc1(s->wmax * sizeof(SNPacket));
+		if(!s->pack)
+		{
+			s->overflow++;
+			LOG_AND_RETURN(0, "%s: Could not allocate memory for s->pack", __FUNCTION__, s->wmax);
+		}
+	}
+
+	len = 0;
+	for(i=0; i<iovcnt; i++)
+		len += iov[i].iov_len;
+	// queue the packet otherwise
+	SNPacket *p = s->pack + s->wpos;
+	if(!p->buf)
+		alloc_snpacket(p, len);
+
+	while(s->wpos != s->spos && !p->buf)
+	{
+		if(!p->buf && !alloc_snpacket(p, len))
 			break;
 		s->wpos = (s->wpos + 1) % s->wmax;
+		p = &s->pack[s->wpos];
 	}
-	
-	for(i=1;i<iovcnt;i++)
+
+	if(!p || !p->buf)
 	{
-		if(setItem(item, iov[0].iov_base, iov[0].iov_len, -1))
-			s->overflow++;
-		s->use_items = 1;
+		LOGL(4, "overflow p is %p, buf %p", p, p ? p->buf : NULL);
+		s->overflow++;
+		return 0;
 	}
-	
+	LOGL(4, "SOCK %d: queueing %d bytes at %d (out of %d) send pos %d", s->id, len, s->wpos, s->wmax, s->spos);
+	pos = 0;
+	for(i=0; i<iovcnt; i++)
+	{
+		memcpy(p->buf + pos, iov[i].iov_base, iov[i].iov_len);
+		pos += iov[i].iov_len;
+	}
+	p->len = pos;
 	s->wpos = (s->wpos + 1) % s->wmax;
-	
-	if(s->spos == s->wpos) // the queue is full, start overwriting
+
+	if(s->spos == s->wpos)                             // the queue is full, start overwriting
 	{
-		s->overflow ++;
+		s->overflow++;
 		s->spos = (s->spos + 1) % s->wmax;
 		if((s->overflow % 100) == 0)
-			LOG("sock %d: overflow %d", s->id, s->overflow);
+			LOGL(3, "sock %d: overflow %d", s->id, s->overflow);
 	}
-	
+
 	return 0;
-	
+
 }
 
 int sockets_write(int sock_id, void *buf, int len)
@@ -1239,30 +1277,31 @@ int flush_socket(sockets *s)
 	struct iovec iov[1];
 	uint64_t item;
 	int rv;
-	
+	SNPacket *p = NULL;
+
 	if(s->spos == s->wpos)
 		return 1;
-
-	item = MAKE_ITEM(s->id, s->spos);
-	iov[0].iov_base = getItem(item);
-	
-	if(iov[0].iov_base)
+	if(s->pack)
+		p = s->pack + s->spos;
+	if(p && p->buf)
 	{
-	
-		iov[0].iov_len = getItemLen(item);
+
+		iov[0].iov_len = p->len;
+		iov[0].iov_base = p->buf;
 		rv = my_writev(s, iov, 1);
 		if((rv > 0 ) && (rv != iov[0].iov_len))
 		{
-			memmove(iov[0].iov_base, iov[0].iov_base + rv, iov[0].iov_len - rv);
-			setItemLen(item, iov[0].iov_len - rv);
+			LOG("incomplete write %d out of %d", rv, p->len);
+			memmove(p->buf, iov[0].iov_base + rv, iov[0].iov_len - rv);
+			p->len = iov[0].iov_len - rv;
 		}
 		if(rv != iov[0].iov_len)
 			return 1;
-	
+
 	}
 //	delItem(item);
-	LOGL(4, "SOCK %d: flushed %d out of %d", s->id, s->spos, s->wpos);
-	s->spos ++;
+	LOGL(4, "SOCK %d: flushed %d out of %d (%d bytes)", s->id, s->spos, s->wpos, p ? p->len : -1);
+	s->spos++;
 	if(s->spos == s->wmax)
 		s->spos = 0;
 	if(s->spos == s->wpos)

@@ -50,7 +50,7 @@ extern struct struct_opts opts;
 int dvb_tune(int aid, transponder * tp);
 int setup_switch(adapter *ad);
 void get_signal(int fd, int * status, uint32_t * ber, uint16_t * strength,
-		uint16_t * snr);
+																uint16_t * snr);
 int send_jess(adapter *ad, int fd, int freq, int pos, int pol, int hiband, diseqc *d);
 int send_unicable(adapter *ad, int fd, int freq, int pos, int pol, int hiband, diseqc *d);
 int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol, int hiband, diseqc *d);
@@ -60,48 +60,48 @@ int axe_fp_fd = -1;
 
 static inline void axe_fp_fd_open(void)
 {
-  if (axe_fp_fd < 0)
-    axe_fp_fd = open("/dev/axe/fp-0", O_WRONLY);
+	if (axe_fp_fd < 0)
+		axe_fp_fd = open("/dev/axe/fp-0", O_WRONLY);
 }
 
 static inline void axe_fp_fd_write(const char *s)
 {
-  const char *b;
-  size_t len;
-  ssize_t r;
+	const char *b;
+	size_t len;
+	ssize_t r;
 
-  axe_fp_fd_open();
-  len = strlen(b = s);
-  while (len > 0) {
-    r = write(axe_fp_fd, b, len);
-    if (r > 0) {
-      len -= r;
-      b += r;
-    }
-  }
+	axe_fp_fd_open();
+	len = strlen(b = s);
+	while (len > 0) {
+		r = write(axe_fp_fd, b, len);
+		if (r > 0) {
+			len -= r;
+			b += r;
+		}
+	}
 }
 
 void axe_set_tuner_led(int tuner, int on)
 {
-  static int state = 0;
-  char buf[16];
-  if (((state >> tuner) & 1) != !!on) {
-    sprintf(buf, "T%d_LED %d\n", tuner, on ? 1 : 0);
-    axe_fp_fd_write(buf);
-    if (on)
-      state |= 1 << tuner;
-    else
-      state &= ~(1 << tuner);
-  }
+	static int state = 0;
+	char buf[16];
+	if (((state >> tuner) & 1) != !!on) {
+		sprintf(buf, "T%d_LED %d\n", tuner, on ? 1 : 0);
+		axe_fp_fd_write(buf);
+		if (on)
+			state |= 1 << tuner;
+		else
+			state &= ~(1 << tuner);
+	}
 }
 
 void axe_set_network_led(int on)
 {
-  static int state = -1;
-  if (state != on) {
-    axe_fp_fd_write(on ? "NET_LED 1\n" : "NET_LED 0\n");
-    state = on;
-  }
+	static int state = -1;
+	if (state != on) {
+		axe_fp_fd_write(on ? "NET_LED 1\n" : "NET_LED 0\n");
+		state = on;
+	}
 }
 
 int axe_read(int socket, void *buf, int len, sockets *ss, int *rv)
@@ -122,7 +122,7 @@ int axe_open_device(adapter *ad)
 {
 	char buf[100];
 	LOG("trying to open [%d] adapter %d and frontend %d", ad->id, ad->pa,
-			ad->fn);
+					ad->fn);
 	sprintf(buf, "/dev/axe/frontend-%d", ad->pa);
 	if (ad->fe2 > 0)
 		ad->fe = ad->fe2;
@@ -134,7 +134,7 @@ int axe_open_device(adapter *ad)
 	{
 		sprintf(buf, "/dev/axe/frontend-%d", ad->pa);
 		LOGL(0, "Could not open %s in RW mode (fe: %d, dvr: %d)", buf, ad->fe,
-				ad->dvr);
+							ad->dvr);
 		if (ad->fe >= 0)
 			close(ad->fe);
 		if (ad->dvr >= 0)
@@ -197,50 +197,50 @@ void axe_wakeup(int fe_fd, int voltage)
 
 static inline int extra_quattro(int input, int diseqc, int *equattro)
 {
-  if (diseqc <= 0)
-    *equattro = 0;
-  /* lowband allowed - control the hiband inputs independently for positions src=2+ */
-  else if (opts.quattro && opts.quattro_hiband == 1 && input < 2)
-    *equattro = diseqc;
-  /* hiband allowed - control the lowband inputs independently for positions src=2+ */
-  else if (opts.quattro && opts.quattro_hiband == 2 && input >= 2 && input < 4)
-    *equattro = diseqc;
-  else
-    *equattro = 0;
-  return *equattro;
+	if (diseqc <= 0)
+		*equattro = 0;
+	/* lowband allowed - control the hiband inputs independently for positions src=2+ */
+	else if (opts.quattro && opts.quattro_hiband == 1 && input < 2)
+		*equattro = diseqc;
+	/* hiband allowed - control the lowband inputs independently for positions src=2+ */
+	else if (opts.quattro && opts.quattro_hiband == 2 && input >= 2 && input < 4)
+		*equattro = diseqc;
+	else
+		*equattro = 0;
+	return *equattro;
 }
 
 adapter *use_adapter(int input)
 {
-  int input2 = input < 4 ? input : -1;
-  adapter *ad = get_adapter(input2);
-  char buf[32];
-  if(!ad)
-	init_hw(input2);
-  ad = get_adapter(input2);
-  if (ad) {
-    if (ad->fe2 <= 0) {
-      sprintf (buf, "/dev/axe/frontend-%d", input);
-      ad->fe2 = open(buf, O_RDONLY | O_NONBLOCK);
-      LOG("adapter %d force open, fe2: %d", input, ad->fe2);
-      if (ad->fe2 < 0)
-        ad = NULL;
-    }
-  }
-  return ad;
+	int input2 = input < 4 ? input : -1;
+	adapter *ad = get_adapter(input2);
+	char buf[32];
+	if(!ad)
+		init_hw(input2);
+	ad = get_adapter(input2);
+	if (ad) {
+		if (ad->fe2 <= 0) {
+			sprintf (buf, "/dev/axe/frontend-%d", input);
+			ad->fe2 = open(buf, O_RDONLY | O_NONBLOCK);
+			LOG("adapter %d force open, fe2: %d", input, ad->fe2);
+			if (ad->fe2 < 0)
+				ad = NULL;
+		}
+	}
+	return ad;
 }
 
 int tune_check(adapter *ad, int pol, int hiband, int diseqc)
 {
-  LOGL(3, "axe: tune check for adapter %d, pol %d/%d, hiband %d/%d, diseqc %d/%d",
-       ad->id, ad->old_pol, pol, ad->old_hiband, hiband, ad->old_diseqc, diseqc);
-  if (ad->old_pol != pol)
-    return 0;
-  if (ad->old_hiband != hiband)
-    return 0;
-  if (ad->old_diseqc != diseqc)
-    return 0;
-  return 1;
+	LOGL(3, "axe: tune check for adapter %d, pol %d/%d, hiband %d/%d, diseqc %d/%d",
+						ad->id, ad->old_pol, pol, ad->old_hiband, hiband, ad->old_diseqc, diseqc);
+	if (ad->old_pol != pol)
+		return 0;
+	if (ad->old_hiband != hiband)
+		return 0;
+	if (ad->old_diseqc != diseqc)
+		return 0;
+	return 1;
 }
 
 int absolute_switch;
@@ -276,7 +276,7 @@ int axe_setup_switch(adapter *ad)
 	int input = 0, src, aid, pos = 0, equattro = 0, master = -1;
 
 	if (tp->diseqc_param.switch_type != SWITCH_UNICABLE &&
-	    tp->diseqc_param.switch_type != SWITCH_JESS) {
+					tp->diseqc_param.switch_type != SWITCH_JESS) {
 		input = ad->id;
 		if (!opts.quattro || extra_quattro(input, diseqc, &equattro)) {
 			if (equattro > 0)
@@ -344,10 +344,10 @@ int axe_setup_switch(adapter *ad)
 				input = master;
 				if (!tune_check(adm, pol, hiband, diseqc)) {
 					send_diseqc(adm, adm->fe2, diseqc, adm->old_diseqc != diseqc,
-						    pol, hiband, &tp->diseqc_param);
+																	pol, hiband, &tp->diseqc_param);
 					adm->old_pol = pol;
 					adm->old_hiband = hiband;
-				        adm->old_diseqc = diseqc;
+					adm->old_diseqc = diseqc;
 				}
 				goto axe;
 			}
@@ -369,7 +369,7 @@ int axe_setup_switch(adapter *ad)
 			adm->old_diseqc = diseqc = 0;
 			if(!tune_check(adm, pol, hiband, 0)) {
 				send_diseqc(adm, adm->fe2, 0, 0, pol, hiband,
-				            &tp->diseqc_param);
+																&tp->diseqc_param);
 				adm->old_pol = pol;
 				adm->old_hiband = hiband;
 				adm->old_diseqc = 0;
@@ -379,7 +379,7 @@ int axe_setup_switch(adapter *ad)
 		}
 	} else {
 		aid = ad->id & 3;
-		input = ad->dmx_source < 0 ? 0: ad->dmx_source; //opts.axe_unicinp[aid];
+		input = ad->dmx_source < 0 ? 0 : ad->dmx_source; //opts.axe_unicinp[aid];
 		frontend_fd = ad->fe;
 		ad = use_adapter(input);
 		if (ad == NULL) {
@@ -387,19 +387,19 @@ int axe_setup_switch(adapter *ad)
 			return 0;
 		}else
 			ad->axe_used |= (1 << aid);
-		
+
 		LOG("adapter %d: using source %d, fe %d fe2 %d", ad->id, input, ad->fe, ad->fe2);
 	}
 
 	if (tp->diseqc_param.switch_type == SWITCH_UNICABLE)
 	{
-			freq = send_unicable(ad, ad->fe2, freq / 1000, diseqc,
-					     pol, hiband, &tp->diseqc_param);
+		freq = send_unicable(ad, ad->fe2, freq / 1000, diseqc,
+																							pol, hiband, &tp->diseqc_param);
 	}
 	else if (tp->diseqc_param.switch_type == SWITCH_JESS)
 	{
-			freq = send_jess(ad, ad->fe2, freq / 1000, diseqc,
-					 pol, hiband, &tp->diseqc_param);
+		freq = send_jess(ad, ad->fe2, freq / 1000, diseqc,
+																			pol, hiband, &tp->diseqc_param);
 	}
 
 	ad->old_pol = pol;
@@ -411,7 +411,7 @@ axe:
 		ad2 = get_adapter(aid);
 		if (ad2)
 			LOGL(3, "axe_fe: used[%d] = 0x%x, pol=%d, hiband=%d, diseqc=%d",
-			     aid, ad2->axe_used, ad2->old_pol, ad2->old_hiband, ad2->old_diseqc);
+								aid, ad2->axe_used, ad2->old_pol, ad2->old_hiband, ad2->old_diseqc);
 	}
 	LOGL(3, "axe_fe: reset for fd %d adapter %d input %d diseqc %d", frontend_fd, ad ? ad->pa : -1, input, diseqc);
 	if (axe_fe_reset(frontend_fd) < 0)
@@ -428,19 +428,19 @@ axe:
 int axe_tune(int aid, transponder * tp)
 {
 	adapter *ad = get_adapter(aid);
-	
+
 	ssize_t drv;
 	char buf[1316];
 	axe_set_tuner_led(aid + 1, 1);
 	axe_dmxts_stop(ad->dvr);
 	axe_fe_reset(ad->fe);
-	
+
 	//probably can be removed
-	
+
 	do { drv = read(ad->dvr, buf, sizeof(buf)); } while (drv > 0);
 
 	return dvb_tune(aid, tp);
-	
+
 }
 int axe_set_pid(adapter *a, uint16_t i_pid)
 {
@@ -464,8 +464,8 @@ int axe_del_filters(int fd, int pid)
 		LOG_AND_RETURN(0, "AXE PID remove on an invalid handle %d, pid %d", fd, pid);
 	if (axe_dmxts_remove_pid(a->dvr, pid) < 0)
 		LOG("AXE PID remove failed on PID %d ADAPTER %d: %s", pid, a->pa, strerror (errno))
-	else
-		LOG("clearing filters on PID %d ADAPTER %d", pid, a->pa);
+		else
+			LOG("clearing filters on PID %d ADAPTER %d", pid, a->pa);
 	return 0;
 }
 
@@ -473,7 +473,7 @@ fe_delivery_system_t axe_delsys(int aid, int fd, fe_delivery_system_t *sys)
 {
 	int i;
 	LOG ("Delivery System DVB-S/DVB-S2 (AXE)");
-	for(i = 0 ; i < 10 ; i ++)
+	for(i = 0; i < 10; i++)
 		sys[i] = 0;
 	sys[0] = SYS_DVBS;
 	sys[1] = SYS_DVBS2;
@@ -503,14 +503,14 @@ void axe_get_signal(adapter *ad)
 	ad->strength = strength;
 	ad->status = status;
 	ad->ber = ber;
-	
+
 	if(ad->status == 0 && ((ad->tp.diseqc_param.switch_type == SWITCH_JESS) || (ad->tp.diseqc_param.switch_type == SWITCH_UNICABLE)))
 	{
 		adapter_lock(ad->id);
 		axe_setup_switch(ad);
 		adapter_unlock(ad->id);
 	}
-	
+
 }
 
 void axe_commit(adapter *a)
@@ -542,7 +542,7 @@ int axe_close(adapter *a2)
 			continue;
 		if (c->axe_used != 0 || c->sid_cnt > 0) {
 			LOG("AXE standby: adapter %d busy (cnt=%d/used=%04x/fe=%d), keeping",
-			    aid, c->sid_cnt, c->axe_used, c->fe);
+							aid, c->sid_cnt, c->axe_used, c->fe);
 			continue;
 		}
 		if (c->fe2 < 0)
@@ -678,7 +678,7 @@ void set_absolute_src(char *o)
 		src = map_intd(arg[i], NULL, -1);
 		inp = map_intd(inps, NULL, -1);
 		pos = map_intd(poss, NULL, -1);
-		
+
 		if (src < 0 || src > 31)
 			continue;
 		if (inp < 0 || inp > 3)
@@ -727,7 +727,7 @@ adapter *axe_vdevice_sync(int aid)
 	if (p) p = strchr(p, '\n');
 	if (p) {
 		if (sscanf(p + 1, "#%08x:  %08x %08x %08x %08x",
-			        &addr, &pktc, &syncerrc, &tperrc, &ccerr) == 5) {
+													&addr, &pktc, &syncerrc, &tperrc, &ccerr) == 5) {
 			ad->axe_pktc = pktc;
 			ad->axe_ccerr = ccerr;
 		}
@@ -770,13 +770,13 @@ char *get_axe_coax(int aid, char *dest, int max_size)
 
 int has_axe = 1;
 _symbols axe_sym[] =
-		{
-				{ "has_axe", VAR_INT, &has_axe, 1, 0, 0 },
-				{ "ad_axe_pktc", VAR_FUNCTION_INT64, (void *) &get_axe_pktc, 0, 0, 0 },
-				{ "ad_axe_ccerr", VAR_FUNCTION_INT64, (void *) &get_axe_ccerr, 0, 0, 0 },
-				{ "ad_axe_coax", VAR_FUNCTION_STRING, (void *) &get_axe_coax, 0, 0, 0 },
-				{ NULL, 0, NULL, 0, 0 } };
+{
+	{ "has_axe", VAR_INT, &has_axe, 1, 0, 0 },
+	{ "ad_axe_pktc", VAR_FUNCTION_INT64, (void *) &get_axe_pktc, 0, 0, 0 },
+	{ "ad_axe_ccerr", VAR_FUNCTION_INT64, (void *) &get_axe_ccerr, 0, 0, 0 },
+	{ "ad_axe_coax", VAR_FUNCTION_STRING, (void *) &get_axe_coax, 0, 0, 0 },
+	{ NULL, 0, NULL, 0, 0 }
+};
 
 
 #endif  // #ifndef DISABLE_LINUXDVB
-
