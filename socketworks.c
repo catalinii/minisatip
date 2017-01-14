@@ -544,7 +544,7 @@ int sockets_del(int sock)
 	ss->enabled = 0;
 	so = ss->sock;
 	ss->sock = -1;                             // avoid infinite loop
-	LOG("sockets_del: %d -> handle %d, sid %d, overflow %d, allocated %d, used", sock, so, ss->sid, ss->overflow, ss->buf_alloc, ss->buf_used);
+	LOG("sockets_del: %d -> handle %d, sid %d, overflow %d, allocated %d, used %d", sock, so, ss->sid, ss->overflow, ss->buf_alloc, ss->buf_used);
 
 	if (ss->close)
 		ss->close(ss);
