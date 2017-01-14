@@ -502,6 +502,7 @@ int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 	ss->id = i;
 	ss->sock_err = 0;
 	ss->overflow = 0;
+	ss->buf_alloc = ss->buf_used = 0;
 	ss->iteration = 0;
 	ss->spos = ss->wpos;
 	ss->wmax = opts.max_sbuf;
@@ -543,7 +544,7 @@ int sockets_del(int sock)
 	ss->enabled = 0;
 	so = ss->sock;
 	ss->sock = -1;                             // avoid infinite loop
-	LOG("sockets_del: %d -> handle %d, sid %d, overflow %d", sock, so, ss->sid, ss->overflow);
+	LOG("sockets_del: %d -> handle %d, sid %d, overflow %d, allocated %d, used", sock, so, ss->sid, ss->overflow, ss->buf_alloc, ss->buf_used);
 
 	if (ss->close)
 		ss->close(ss);
@@ -1224,12 +1225,19 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 	// queue the packet otherwise
 	SNPacket *p = s->pack + s->wpos;
 	if(!p->buf)
-		alloc_snpacket(p, len);
+	{
+		int rv = alloc_snpacket(p, len);
+		if(!rv)
+			s->buf_alloc++;
+	}
 
 	while(s->wpos != s->spos && !p->buf)
 	{
 		if(!p->buf && !alloc_snpacket(p, len))
+		{
+			s->buf_alloc++;
 			break;
+		}
 		s->wpos = (s->wpos + 1) % s->wmax;
 		p = &s->pack[s->wpos];
 	}
@@ -1240,7 +1248,8 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 		s->overflow++;
 		return 0;
 	}
-	LOGL(4, "SOCK %d: queueing %d bytes at %d (out of %d) send pos %d", s->id, len, s->wpos, s->wmax, s->spos);
+	s->buf_used ++;
+	LOGL(4, "SOCK %d: queueing %d bytes at %d (out of %d) send pos %d [A:%d, U:%d]", s->id, len, s->wpos, s->wmax, s->spos, s->buf_alloc, s->buf_used);
 	pos = 0;
 	for(i=0; i<iovcnt; i++)
 	{

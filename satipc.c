@@ -486,11 +486,11 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb)
 	if (!sip->tcp_data)
 	{
 		sip->tcp_size = TCP_DATA_SIZE;
-		sip->tcp_data = malloc1(sip->tcp_size + 1);
+		sip->tcp_data = malloc1(sip->tcp_size + 2);
 		if (!sip->tcp_data)
 			LOG_AND_RETURN(-1, "Cannot alloc memory for tcp_data with size %d",
 																		sip->tcp_size);
-		memset(sip->tcp_data, 0, sip->tcp_size + 1);
+		memset(sip->tcp_data, 0, sip->tcp_size + 2);
 	}
 
 	if (sip->tcp_len == sip->tcp_size && sip->tcp_pos == 0)
@@ -507,12 +507,11 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb)
 		sip->tcp_len = nl;
 
 	}
-
-	tmp_len = read(socket, sip->tcp_data + sip->tcp_len,
-																sip->tcp_size - sip->tcp_len);
-
+	uint8_t *tmp_b = sip->tcp_data + sip->tcp_len;
+	tmp_len = read(socket, sip->tcp_data + sip->tcp_len, sip->tcp_size - sip->tcp_len);
+//	LOG("read %d (from %d) from rtsp socket [%02X %02X, %02X %02X]", tmp_len, sip->tcp_size - sip->tcp_len, tmp_b[0],tmp_b[1],tmp_b[2],tmp_b[3]);
 	if (tmp_len <= 0)
-		return 0;
+		LOG_AND_RETURN(0, "read %d from RTSP socket, errno %d, %s", tmp_len, errno, strerror(errno));
 
 	pos = 0;
 	sip->tcp_len += tmp_len;
@@ -524,17 +523,21 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb)
 						&& ((rtsp[5] == 0x21) || (rtsp[5] == 0xC8)))
 		{
 			copy16r(rtsp_len, rtsp, 2);
+			// debug
+			if((rtsp[1] == 0) && (((rtsp_len - 12) > 1316) || (((rtsp_len - 12) % 188) != 0)))
+				LOG("invalid rtsp_len %d", rtsp_len);
 
 			if (rtsp_len + sip->tcp_pos > sip->tcp_len) // expecting more data in the buffer
 			{
+				LOGL(5, "satip buffer is full @ pos %d, tcp_pos %d, required %d len %d tcp_len %d, tcp_size %d",
+									pos, sip->tcp_pos, rtsp_len - 12, len, sip->tcp_len, sip->tcp_size);
 				break;
 			}
 
 			if (rtsp[1] == 0 && (rtsp_len - 12 + pos > len)) // destination buffer full
 			{
-				LOGL(4,
-									"Destination buffer is full @ buf %x pos %d, required %d len %d [%d]",
-									buf, pos, rtsp_len - 12, len, sip->tcp_pos);
+				LOGL(5, "Destination buffer is full @ pos %d, tcp_pos %d, required %d len %d",
+									pos, sip->tcp_pos, rtsp_len - 12, len );
 				break;
 			}
 			sip->tcp_pos += rtsp_len + 4;
@@ -546,20 +549,33 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb)
 		else if (!strncmp(rtsp, "RTSP", 4))
 		{
 			unsigned char *nlnl, *cl;
-			int bytes;
+			int bytes, icl = 0;
 			unsigned char tmp_char;
 			nlnl = strstr(rtsp, "\r\n\r\n");
+			if(nlnl > sip->tcp_data + sip->tcp_len)
+			{
+				LOGL(3, "Unlikely, found newline after the end of string, tcp_pos %d", sip->tcp_pos);
+				nlnl = NULL;
+				sip->tcp_data[sip->tcp_size + 1] = 0;
+			}
 			if (nlnl && (cl = strcasestr(rtsp, "content-length:")))
 			{
 				cl += 15;
 				while (*cl == 0x20)
 					cl++;
 
-				int icl = map_intd(cl, NULL, 0);
+				icl = map_intd(cl, NULL, 0);
 				nlnl += icl;
 			}
 			if (!nlnl)
+			{
+				LOGL(3, "End of rtsp rtsp message not found in this block, pos %d, tcp_pos %d, len %d, size %d", pos, sip->tcp_pos, len, sip->tcp_size);
 				break;
+			}else if(nlnl > sip->tcp_data + sip->tcp_len)
+			{
+				LOGL(3, "Found newline after the end of string, tcp_pos %d", sip->tcp_pos);
+				break;
+			}
 			memset(&tmp_sock, 0, sizeof(tmp_sock));
 			bytes = nlnl - rtsp;
 			sip->tcp_pos += bytes + 4;
@@ -570,6 +586,7 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb)
 			tmp_sock.id = ss->id;
 			tmp_char = rtsp[bytes + 4];
 			rtsp[bytes + 4] = 0;
+			LOGL(3, "sending %d bytes to satipc_reply, cl %d, pos %d, tcp_len %d, left %d", bytes + 4, icl, sip->tcp_pos - bytes - 4, sip->tcp_len);
 			satipc_reply(&tmp_sock);
 			rtsp[bytes + 4] = tmp_char;
 		}

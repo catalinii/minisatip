@@ -41,7 +41,7 @@ typedef struct struct_sockets {
 	int sock_err;
 	SNPacket *pack;
 	int spos, wmax, wpos;
-	int overflow;
+	int overflow, buf_alloc, buf_used;
 } sockets;
 
 #define TYPE_UDP 0
