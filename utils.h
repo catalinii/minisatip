@@ -1,6 +1,6 @@
 #ifndef UTILS_H
 #define UTILS_H
-#define _GNU_SOURCE 
+#define _GNU_SOURCE
 #include "pthread.h"
 
 #include <sys/types.h>
@@ -41,7 +41,7 @@
 #define VAR_FUNCTION_INT (VAR_FUNCTION + VAR_INT)
 #define VAR_FUNCTION_INT64 (VAR_FUNCTION + VAR_INT64)
 #define VAR_FUNCTION_STRING (VAR_FUNCTION + VAR_STRING)
- 
+
 typedef int (*get_data_int)(int p);
 typedef int64_t (*get_data_int64)(int p);
 typedef char * (*get_data_string)(int p, char *dest, int max_len);
@@ -110,6 +110,7 @@ int64_t getTickUs();
 void join_thread();
 void add_join_thread(pthread_t t);
 int init_utils(char *argv0);
+void hexdump(char *log_message,void *addr, int len);
 
 #define mutex_lock(m) mutex_lock1(__FILE__,__LINE__,m)
 #define mutex_unlock(m) mutex_unlock1(__FILE__,__LINE__,m)

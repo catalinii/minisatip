@@ -824,8 +824,7 @@ int process_packet(unsigned char *b, adapter *ad)
 
 	if (p->cc != cc)
 	{
-		LOGL(5,
-							"PID Continuity error (adapter %d): pid: %03d, Expected CC: %X, Actual CC: %X",
+		LOGL(5, "PID Continuity error (adapter %d): pid: %03d, Expected CC: %X, Actual CC: %X",
 							ad->id, _pid, p->cc, cc);
 		p->err++;
 	}
@@ -833,6 +832,33 @@ int process_packet(unsigned char *b, adapter *ad)
 
 	if (p->sid[0] == -1)
 		return 0;
+
+#ifdef CRC_TS
+	if(p)
+	{
+		char buf[1024];
+		int len = 0, i;
+		uint32_t crc = crc_32(b, 188);
+		p->crc ^= crc;
+		if(p->count + 1 >= CRC_TS)
+		{
+			hexdump("packet", b, 188);
+			LOG("pid %d cnt %d count %d cc %d err %d crc %08X ", p->pid, p->cnt, p->count, p->cc, p->err, p->crc);
+//			LOG("count %d", p->cnt);
+			p->count = 0;
+			p->crc = 0;
+		}
+
+		if((p->count < 15) && (p->cc == 0))
+			p->crc = 0;
+		if(p->cc == 0 && ((CRC_TS % 16) == 0))
+		{
+			LOG("Reseting count from %d, CRC_TS %d", p->count, CRC_TS);
+			p->count = 0;
+		}
+		p->count++;
+	}
+#endif
 
 	for (j = 0; p->sid[j] > -1 && j < MAX_STREAMS_PER_PID; j++)
 	{

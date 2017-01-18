@@ -1107,7 +1107,7 @@ int my_writev(sockets *s, const struct iovec *iov, int iiov)
 	if (s->timeout_ms == 1)
 		return -1;
 
-	LOGL(log_level, "start writev handle %d, iiov %d", s->sock, iiov);
+	LOGL(log_level + 1, "start writev handle %d, iiov %d", s->sock, iiov);
 	if (opts.log == log_level)
 		stime = getTick();
 	rv = writev(s->sock, iov, iiov);
@@ -1200,9 +1200,11 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 				memcpy(tmpbuf + pos, iov[i].iov_base, iov[i].iov_len);
 				pos += iov[i].iov_len;
 			}
-			LOGL(4, "incomplete write, setting the buffer at offset %d and length %d from %d", rv, len - rv, len);
+			LOGL(3, "incomplete write it %d, setting the buffer at offset %d and length %d from %d", s->iteration, rv, len - rv, len);
 			tmpiov.iov_base = tmpbuf + rv;
 			tmpiov.iov_len = len - rv;
+			iov = &tmpiov;
+			iovcnt = 1;
 
 		}else if(len > sizeof(tmpbuf))
 			LOG("tmpbuf size is too small: %d required ", len);
@@ -1248,8 +1250,17 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 		s->overflow++;
 		return 0;
 	}
-	s->buf_used ++;
-	LOGL(4, "SOCK %d: queueing %d bytes at %d (out of %d) send pos %d [A:%d, U:%d]", s->id, len, s->wpos, s->wmax, s->spos, s->buf_alloc, s->buf_used);
+	s->buf_used++;
+	LOGL(4, "SOCK %d it %d: queueing %d bytes at %d (out of %d) send pos %d [A:%d, U:%d]", s->id, s->iteration, len, s->wpos, s->wmax, s->spos, s->buf_alloc, s->buf_used);
+
+	if(s->spos == ((s->wpos + 1) % s->wmax))                             // the queue is full, start overwriting
+	{
+		s->overflow++;
+		if((s->overflow % 100) == 0)
+			LOGL(3, "sock %d: overflow %d it %d", s->id, s->overflow, s->iteration);
+		return 0;
+	}
+
 	pos = 0;
 	for(i=0; i<iovcnt; i++)
 	{
@@ -1258,14 +1269,6 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 	}
 	p->len = pos;
 	s->wpos = (s->wpos + 1) % s->wmax;
-
-	if(s->spos == s->wpos)                             // the queue is full, start overwriting
-	{
-		s->overflow++;
-		s->spos = (s->spos + 1) % s->wmax;
-		if((s->overflow % 100) == 0)
-			LOGL(3, "sock %d: overflow %d", s->id, s->overflow);
-	}
 
 	return 0;
 

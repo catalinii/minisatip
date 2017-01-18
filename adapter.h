@@ -42,6 +42,10 @@ typedef struct struct_pid
 	unsigned char cc, version; // continuity
 	unsigned char enabled_channels; // ca information
 	uint16_t csid; // channel sid
+#ifdef CRC_TS
+	uint32_t crc;
+	int count;
+#endif
 } SPid;
 
 typedef int (*Set_pid)(void *ad, uint16_t i_pid);
@@ -165,4 +169,4 @@ int compare_tunning_parameters(int aid, transponder * tp);
 
 #define adapter_lock(a) adapter_lock1(__FILE__,__LINE__,a)
 #define adapter_unlock(a) adapter_unlock1(__FILE__,__LINE__,a)
-#endif	
+#endif

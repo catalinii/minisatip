@@ -527,7 +527,7 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb)
 			if((rtsp[1] == 0) && (((rtsp_len - 12) > 1316) || (((rtsp_len - 12) % 188) != 0)))
 				LOG("invalid rtsp_len %d", rtsp_len);
 
-			if (rtsp_len + sip->tcp_pos > sip->tcp_len) // expecting more data in the buffer
+			if (rtsp_len + 4 + sip->tcp_pos > sip->tcp_len) // expecting more data in the buffer
 			{
 				LOGL(5, "satip buffer is full @ pos %d, tcp_pos %d, required %d len %d tcp_len %d, tcp_size %d",
 									pos, sip->tcp_pos, rtsp_len - 12, len, sip->tcp_len, sip->tcp_size);

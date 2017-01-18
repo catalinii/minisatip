@@ -132,30 +132,6 @@ uint32_t resource_ids[] =
 };
 int resource_ids_count = sizeof(resource_ids) / 4;
 
-void hexdump(uint8_t buffer[], int len)
-{
-#define HEXDUMP_LINE_LEN 16
-	int i;
-	char s[HEXDUMP_LINE_LEN + 1];
-	bzero(s, HEXDUMP_LINE_LEN+1);
-
-	for (i = 0; i < len; i++)
-	{
-		if (!(i % HEXDUMP_LINE_LEN))
-		{
-			if (s[0])
-				LOG("[%s]", s);
-			LOG("%05x: ", i);
-			bzero(s, HEXDUMP_LINE_LEN);
-		}
-		s[i % HEXDUMP_LINE_LEN] = isprint(buffer[i]) ? buffer[i] : '.';
-		LOG("%02x ", buffer[i]);
-	}
-	while (i++ % HEXDUMP_LINE_LEN)
-		LOG("   ");
-
-	LOG("[%s]", s);
-}
 
 int dvbca_process_pmt(adapter *ad, void *arg)
 {
@@ -476,6 +452,12 @@ int ca_init(ca_device_t *d)
 
 	adapter *ad = get_adapter(d->id);
 
+#ifdef ENIGMA
+	char buf[256];
+	read(fd, buf, sizeof(buf));
+	if (ioctl(fd, 0))
+		LOG_AND_RETURN(0, "%s: Could not reset ca %d", __FUNCTION__, d->id);
+#else
 	if (ioctl(fd, CA_RESET, &info))
 		LOG_AND_RETURN(0, "%s: Could not reset ca %d", __FUNCTION__, d->id);
 
@@ -489,8 +471,6 @@ int ca_init(ca_device_t *d)
 	if (ioctl(fd, CA_GET_SLOT_INFO, &info))
 		LOG_AND_RETURN(0, "%s: Could not get info2 for ca %d", __FUNCTION__, d->id);
 
-	LOG("initializing CA, fd %d type %d flags 0x%x, after %jd ms", fd, info.type, info.flags, (getTick() - st));
-
 	if (info.type != CA_CI_LINK)
 	{
 		LOG("incompatible CA interface");
@@ -502,6 +482,8 @@ int ca_init(ca_device_t *d)
 		LOG("CA module not present or not ready");
 		goto fail;
 	}
+#endif
+	LOG("initializing CA%d, fd %d type %d flags 0x%x, after %jd ms", d->id, fd, info.type, info.flags, (getTick() - st));
 
 	if ((d->tl = en50221_tl_create(5, 32)) == NULL)
 	{
@@ -576,8 +558,11 @@ int dvbca_init_dev(adapter *ad, void *arg)
 
 	if (ad->type != ADAPTER_DVB)
 		return 0;
-
+#ifdef ENIGMA
+	sprintf(ca_dev_path, "/dev/ci%d", ad->pa);
+#else
 	sprintf(ca_dev_path, "/dev/dvb/adapter%d/ca0", ad->pa);
+#endif
 	fd = open(ca_dev_path, O_RDWR);
 	if (fd <= 0)
 		LOG_AND_RETURN(0, "No CA device detected on adapter %d", ad->id);
