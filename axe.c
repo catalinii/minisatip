@@ -768,10 +768,8 @@ char *get_axe_coax(int aid, char *dest, int max_size)
 	return dest;
 }
 
-int has_axe = 1;
 _symbols axe_sym[] =
 {
-	{ "has_axe", VAR_INT, &has_axe, 1, 0, 0 },
 	{ "ad_axe_pktc", VAR_FUNCTION_INT64, (void *) &get_axe_pktc, 0, 0, 0 },
 	{ "ad_axe_ccerr", VAR_FUNCTION_INT64, (void *) &get_axe_ccerr, 0, 0, 0 },
 	{ "ad_axe_coax", VAR_FUNCTION_STRING, (void *) &get_axe_coax, 0, 0, 0 },

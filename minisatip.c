@@ -1587,8 +1587,15 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 		send(s->sock, desc, lr, MSG_NOSIGNAL);
 }
 
+#ifdef AXE
+int has_axe = 1;
+#else
+int has_axe = 0;
+#endif
+
 _symbols minisatip_sym[] =
 {
+	{ "has_axe", VAR_INT, &has_axe, 1, 0, 0 },
 	{ "http_host", VAR_PSTRING, &opts.http_host, 0, 0, 0 },
 	{ "uuid", VAR_STRING, uuid, 0, 0, 0 },
 	{ "http_port", VAR_INT, &opts.http_port, 1, 0, 0 },
