@@ -119,7 +119,7 @@ static const struct option long_options[] =
 	{ "jess", required_argument, NULL, 'j' },
 	{ "diseqc", required_argument, NULL, 'd' },
 	{ "diseqc-timing", required_argument, NULL, 'q' },
-	{"nopm", required_argument, NULL, 'Z'},
+	{ "nopm", required_argument, NULL, 'Z' },
 #ifndef DISABLE_DVBAPI
 	{ "dvbapi", required_argument, NULL, 'o' },
 #endif
@@ -459,7 +459,6 @@ void set_options(int argc, char *argv[])
 	opts.no_threads = 1;
 #endif
 #ifdef AXE
-	opts.nopm = 1;
 	opts.no_threads = 1;
 	opts.document_root = "/usr/share/minisatip/html";
 #define AXE_OPTS "7:QW:8:A:"
