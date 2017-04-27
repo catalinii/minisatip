@@ -213,11 +213,8 @@ static inline int extra_quattro(int input, int diseqc, int *equattro)
 adapter *use_adapter(int input)
 {
 	int input2 = input < 4 ? input : -1;
-	adapter *ad = get_adapter(input2);
+	adapter *ad = get_configured_adapter(input2);
 	char buf[32];
-	if(!ad)
-		init_hw(input2);
-	ad = get_adapter(input2);
 	if (ad) {
 		if (ad->fe2 <= 0) {
 			sprintf (buf, "/dev/axe/frontend-%d", input);
@@ -287,7 +284,7 @@ int axe_setup_switch(adapter *ad)
 					pos = absolute_table[diseqc][aid];
 					if (pos <= 0) continue;
 					pos--;
-					ad2 = get_adapter(aid);
+					ad2 = get_configured_adapter(aid);
 					if (!ad2) continue;
 					if (ad2->fe2 <= 0) continue;
 					if ((ad2->axe_used & ~(1 << ad->id)) == 0) continue;
@@ -300,7 +297,7 @@ int axe_setup_switch(adapter *ad)
 						pos = absolute_table[diseqc][aid];
 						if (pos <= 0) continue;
 						pos--;
-						ad2 = get_adapter(aid);
+						ad2 = get_configured_adapter(aid);
 						if (!ad2) continue;
 						LOGL(3, "axe: checking %d used 0x%x in %d", ad->id, ad2->axe_used, ad2->id);
 						if (ad2->axe_used & ~(1 << ad->id)) continue;
@@ -327,7 +324,7 @@ int axe_setup_switch(adapter *ad)
 				}
 				if (adm->old_pol >= 0) {
 					for (aid = 0; aid < 4; aid++) {
-						ad2 = get_adapter(aid);
+						ad2 = get_configured_adapter(aid);
 						if (!ad2 || ad2->fe2 <= 0 || ad == ad2) continue;
 						if (ad2->slave && ad2->slave - 1 != adm->pa) continue;
 						if (!ad2->slave && ad2 != adm) continue;
@@ -408,7 +405,7 @@ int axe_setup_switch(adapter *ad)
 
 axe:
 	for (aid = 0; aid < 4; aid++) {
-		ad2 = get_adapter(aid);
+		ad2 = get_configured_adapter(aid);
 		if (ad2)
 			LOGL(3, "axe_fe: used[%d] = 0x%x, pol=%d, hiband=%d, diseqc=%d",
 								aid, ad2->axe_used, ad2->old_pol, ad2->old_hiband, ad2->old_diseqc);
@@ -757,7 +754,7 @@ char *get_axe_coax(int aid, char *dest, int max_size)
 		return dest;
 
 	for (i = 0; i < 4; i++) {
-		ad = get_adapter(i);
+		ad = get_configured_adapter(i);
 		if (ad && ad->axe_used & (1<<aid))
 			len += snprintf(dest + len, max_size - len, "LNB%d,", i + 1);
 	}
