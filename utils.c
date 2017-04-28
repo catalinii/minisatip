@@ -472,7 +472,7 @@ extern int run_loop;
 
 void posix_signal_handler(int sig, siginfo_t * siginfo, ucontext_t * ctx)
 {
-	int sp = 0, ip = 0;
+	uint64_t sp = 0, ip = 0;
 
 	if (sig == SIGINT)
 	{
@@ -481,6 +481,10 @@ void posix_signal_handler(int sig, siginfo_t * siginfo, ucontext_t * ctx)
 	}
 #ifdef __mips__
 	sp = ctx->uc_mcontext.gregs[29];
+	ip = ctx->uc_mcontext.pc;
+#endif
+#ifdef __sh__
+	sp = ctx->uc_mcontext.pr;
 	ip = ctx->uc_mcontext.pc;
 #endif
 	printf("RECEIVED SIGNAL %d - SP=%lX IP=%lX\n", sig, (long unsigned int) sp,
