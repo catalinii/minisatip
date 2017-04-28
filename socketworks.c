@@ -1178,7 +1178,7 @@ int alloc_snpacket(SNPacket *p, int len)
 int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 {
 	int rv = 0, i, pos = 0, len;
-	unsigned char tmpbuf[1500];
+	unsigned char tmpbuf[(STREAMS_BUFFER*3)/2];
 	struct iovec tmpiov;
 	sockets *s = get_sockets(sock_id);
 	if(!s)
@@ -1197,7 +1197,8 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 		{
 			for(i=0; i<iovcnt; i++)
 			{
-				memcpy(tmpbuf + pos, iov[i].iov_base, iov[i].iov_len);
+				if (rv < pos + iov[i].iov_len)
+					memcpy(tmpbuf + pos, iov[i].iov_base, iov[i].iov_len);
 				pos += iov[i].iov_len;
 			}
 			LOGL(3, "incomplete write it %d, setting the buffer at offset %d and length %d from %d", s->iteration, rv, len - rv, len);

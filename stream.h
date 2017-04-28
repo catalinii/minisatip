@@ -7,12 +7,17 @@
 
 #define MAX_STREAMS 100
 #define DVB_FRAME 188
-#define STREAMS_BUFFER 7*DVB_FRAME
+#define TCP_RTP_CHUNKS 20
+#define UDP_STREAMS_BUFFER (7 * DVB_FRAME)
+#define TCP_STREAMS_BUFFER (TCP_RTP_CHUNKS * UDP_STREAMS_BUFFER)
+#define STREAMS_BUFFER TCP_STREAMS_BUFFER
 
 #define STREAM_HTTP 1
 #define STREAM_RTSP_UDP 2
 #define STREAM_RTSP_TCP 3
-#define MAX_PACK 7				 // maximum rtp packets to buffer
+#define UDP_MAX_PACK 7 // maximum udp rtp packets to buffer
+#define TCP_MAX_PACK (TCP_RTP_CHUNKS * UDP_MAX_PACK)
+#define MAX_PACK TCP_MAX_PACK
 #define LEN_PIDS (MAX_PIDS * 5 + 1)
 
 typedef struct struct_streams

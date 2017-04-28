@@ -695,14 +695,17 @@ int send_rtcp(int s_id, int64_t ctime)
 
 void flush_streamb(streams * sid, unsigned char *buf, int rlen, int64_t ctime)
 {
-	int i, rv = 0;
+	int i, rv = 0, blen, len;
 
 	if (sid->type == STREAM_HTTP)
 		rv = sockets_write(sid->rsock_id, buf, rlen);
-	else
-		for (i = 0; i < rlen; i += DVB_FRAME * 7)
-			rv += send_rtpb(sid, &buf[i],
-																			((rlen - i) > DVB_FRAME * 7) ? DVB_FRAME * 7 : (rlen - i));
+	else {
+		blen = sid->type == STREAM_RTSP_TCP ? TCP_STREAMS_BUFFER : UDP_STREAMS_BUFFER;
+		for (i = 0; i < rlen; i += blen) {
+			len = ((rlen - i) > blen) ? blen : (rlen - i);
+			rv += send_rtpb(sid, &buf[i], len);
+		}
+	}
 
 	sid->iiov = 0;
 	sid->wtime = ctime;
@@ -794,7 +797,7 @@ int check_new_transponder(adapter *ad, int rlen)
 
 int process_packet(unsigned char *b, adapter *ad)
 {
-	int j, cc;
+	int j, cc, max_pack;
 	SPid *p;
 	int _pid = (b[1] & 0x1f) * 256 + b[2];
 	streams *sid;
@@ -824,7 +827,7 @@ int process_packet(unsigned char *b, adapter *ad)
 
 	if (p->cc != cc)
 	{
-		LOGL(5, "PID Continuity error (adapter %d): pid: %03d, Expected CC: %X, Actual CC: %X",
+		LOGL(1, "PID Continuity error (adapter %d): pid: %03d, Expected CC: %X, Actual CC: %X",
 							ad->id, _pid, p->cc, cc);
 		p->err++;
 	}
@@ -864,16 +867,17 @@ int process_packet(unsigned char *b, adapter *ad)
 	{
 		if ((sid = get_sid(p->sid[j])) && sid->do_play)
 		{
-			if (sid->iiov > 7)
+			max_pack = sid->type == STREAM_RTSP_TCP ? TCP_MAX_PACK : UDP_MAX_PACK;
+			if (sid->iiov > max_pack)
 			{
 				LOG(
-					"ERROR: possible writing outside of allocated space iiov > 7 for SID %d PID %d",
-					sid->sid, _pid);
+					"ERROR: possible writing outside of allocated space iiov > %d for SID %d PID %d",
+					MAX_PACK, sid->sid, _pid);
 				sid->iiov = 6;
 			}
 			sid->iov[sid->iiov].iov_base = b;
 			sid->iov[sid->iiov++].iov_len = DVB_FRAME;
-			if (sid->iiov >= 7)
+			if (sid->iiov >= max_pack)
 				flush_streami(sid, rtime);
 		}
 	}
@@ -906,7 +910,7 @@ int process_dmx(sockets * s)
 #ifndef DISABLE_TABLES
 	process_stream(ad, rlen);
 #else
-	if (ad->sid_cnt == 1 && ad->master_sid >= 0 && opts.log < 2) // we have just 1 stream, do not check the pids, send everything to the destination
+	if (ad->sid_cnt == 1 && ad->master_sid >= 0) // we have just 1 stream, do not check the pids, send everything to the destination
 	{
 		sid = get_sid(ad->master_sid);
 		if (!sid || sid->enabled != 1)
