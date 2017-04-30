@@ -1581,9 +1581,21 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 					get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
 					lr, s->id);
 	LOGL(3, "%s", resp);
-	send(s->sock, resp, strlen(resp), MSG_NOSIGNAL);
-	if (binary)
-		send(s->sock, desc, lr, MSG_NOSIGNAL);
+
+	if (!s->nonblock) {
+		send(s->sock, resp, strlen(resp), MSG_NOSIGNAL);
+		if (binary)
+			send(s->sock, desc, lr, MSG_NOSIGNAL);
+	} else {
+		struct iovec iov[2];
+		iov[0].iov_base = resp;
+		iov[0].iov_len = strlen(resp);
+		if (binary) {
+			iov[1].iov_base = desc;
+			iov[1].iov_len = lr;
+		}
+		sockets_writev(s->id, iov, binary ? 2 : 1);
+	}
 }
 
 #ifdef AXE

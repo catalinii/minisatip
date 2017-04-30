@@ -380,6 +380,9 @@ int decode_transport(sockets * s, char *arg, char *default_rtp, int start_rtp)
 			sid->rsock = s->sock;
 			sid->rsock_id = s->id;
 			memcpy(&sid->sa, &s->sa, sizeof(s->sa));
+			if (!set_linux_socket_nonblock(s->sock))
+				s->nonblock = 1;
+			set_socket_send_buffer(s->sock, opts.output_buffer);
 			return 0;
 		}
 

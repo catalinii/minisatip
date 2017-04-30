@@ -17,6 +17,7 @@ typedef struct struct_sockets {
 	char enabled;
 	SMutex mutex;
 	int sock;		// socket - <0 for invalid/not used, 0 for end of the list
+	int nonblock;		// non-blocking i/o mode
 	struct sockaddr_in sa;//remote address - set on accept or recvfrom on udp sockets
 	socket_action action;
 	socket_action close;
@@ -51,7 +52,8 @@ typedef struct struct_sockets {
 #define TYPE_RTSP 4
 #define TYPE_DVR 5
 #define TYPE_RTCP 6
-#define TYPE_CONNECT 256 // support for non blocking connect -> when it is connected call write with s->rlen 0
+#define TYPE_NONBLOCK 256 // support for non blocking i/o mode
+#define TYPE_CONNECT 512 // support for non blocking connect -> when it is connected call write with s->rlen 0
 
 #define MAX_HOST 50
 #define SOCK_TIMEOUT -2
@@ -90,6 +92,7 @@ void set_socket_thread(int s_id, pthread_t tid);
 pthread_t get_socket_thread(int s_id);
 int tcp_listen(char *addr, int port);
 int connect_local_socket(char *file, int blocking);
+int set_linux_socket_nonblock(int sockfd);
 int set_linux_socket_timeout(int sockfd);
 int sockets_writev(int sock_id, struct iovec *iov, int iovcnt);
 int sockets_write(int sock_id, void *buf, int len);
