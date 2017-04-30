@@ -1016,7 +1016,7 @@ int read_dmx(sockets * s)
 	if (s->rlen == s->lbuf)
 		send = 1;
 
-	if (s->rtime - ad->rtime > 100) // force flush every 100ms
+	if (s->rtime - ad->rtime > 50) // force flush every 50ms
 		send = 1;
 
 	if(ad && ad->wait_new_stream && (s->rtime - ad->tune_time < 50) ) // check new transponder
