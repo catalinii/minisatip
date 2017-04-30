@@ -481,7 +481,7 @@ fe_delivery_system_t axe_delsys(int aid, int fd, fe_delivery_system_t *sys)
 void axe_get_signal(adapter *ad)
 {
 	uint16_t strength = 0, snr = 0;
-	uint32_t status = 0, ber = 0;
+	uint32_t status = 0, ber = 0, tmp;
 	get_signal(ad->fe, &status, &ber, &strength, &snr);
 
 	if (ad->max_strength <= strength)
@@ -492,9 +492,12 @@ void axe_get_signal(adapter *ad)
 	strength = strength * 240 / 24000;
 	if (strength > 240)
 		strength = 240;
-	snr = snr * 15 / 54000;
-	if (snr > 15)
-		snr = 15;
+	tmp = (uint32_t)snr * 255 / 54000;
+	if (tmp > 255)
+		tmp = 255;
+	if (tmp <= 15)
+		tmp = 0;
+	snr = tmp;
 	// keep the assignment at the end for the signal thread to get the right values as no locking is done on the adapter
 	ad->snr = snr;
 	ad->strength = strength;
