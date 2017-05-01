@@ -67,6 +67,7 @@ static const struct option long_options[] =
 	{ "clean-psi", no_argument, NULL, 't' },
 	{ "log", no_argument, NULL, 'l' },
 	{ "buffer", required_argument, NULL, 'b' },
+	{ "threshold", required_argument, NULL, 'H' },
 	{ "enable-adapters", required_argument, NULL, 'e' },
 	{ "unicable", required_argument, NULL, 'u' },
 	{ "jess", required_argument, NULL, 'j' },
@@ -119,6 +120,7 @@ static const struct option long_options[] =
 #define FOREGROUND_OPT 'f'
 #define DVRBUFFER_OPT 'b'
 #define APPBUFFER_OPT 'B'
+#define THRESHOLD_OPT 'H'
 #define ENABLE_ADAPTERS_OPT 'e'
 #define UNICABLE_OPT 'u'
 #define JESS_OPT 'j'
@@ -220,7 +222,7 @@ void usage()
 {
 	print_version(0);
 	printf(
-		"\n\t./%s [-[fgltzE]] [-a x:y:z] [-b X:Y] [-B X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] \n\
+		"\n\t./%s [-[fgltzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] \n\
 	\t[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port]"
 #ifndef DISABLE_DVBAPI
 		"[-o oscam_host:dvbapi_port] "
@@ -246,6 +248,9 @@ Help\n\
 \n\
 * -B X : set the app socket write buffer to X KB. \n\
 	* eg: -B 10000 - to set the socket buffer to 10MB\n\
+\n\
+* -H --threshold X:Y : set the write time threshold to X (UDP) / Y (TCP)  milliseconds. \n\
+	* eg: -H 5:50 - set thresholds to 5ms (UDP) and 50ms (TCP)\n\
 \n\
 * -d --diseqc ADAPTER1:COMMITTED1-UNCOMMITTED1[,ADAPTER2:COMMITTED2-UNCOMMITTED2[,...]\n\
 \t* The first argument is the adapter number, second is the number of committed packets to send to a Diseqc 1.0 switch, third the number of uncommitted commands to sent to a Diseqc 1.1 switch\n\
@@ -435,6 +440,8 @@ void set_options(int argc, char *argv[])
 	opts.bootid = 0;
 	opts.dvr_buffer = DVR_BUFFER;
 	opts.adapter_buffer = ADAPTER_BUFFER;
+	opts.udp_threshold = 25;
+	opts.tcp_threshold = 50;
 	opts.file_line = 0;
 	opts.dvbapi_port = 0;
 	opts.dvbapi_host = NULL;
@@ -484,7 +491,7 @@ void set_options(int argc, char *argv[])
 	memset(opts.playlist, 0, sizeof(opts.playlist));
 
 	while ((opt = getopt_long(argc, argv,
-																											"flr:a:td:w:p:s:n:hB:b:m:p:e:x:u:j:o:gy:i:q:D:VR:S:TX:Y:OL:EP:Z:"AXE_OPTS,
+																											"flr:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:o:gy:i:q:D:VR:S:TX:Y:OL:EP:Z:"AXE_OPTS,
 																											long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
@@ -570,6 +577,21 @@ void set_options(int argc, char *argv[])
 		{
 			int val = atoi(optarg)/1.5;
 			opts.max_sbuf = val;
+			break;
+		}
+
+
+		case THRESHOLD_OPT:
+		{
+			sscanf(optarg, "%d:%d", &opts.udp_threshold, &opts.tcp_threshold);
+			if (opts.udp_threshold < 0)
+				opts.udp_threshold = 0;
+			else if (opts.udp_threshold > 200)
+				opts.udp_threshold = 200;
+			if (opts.tcp_threshold < 0)
+				opts.tcp_threshold = 0;
+			else if (opts.tcp_threshold > 200)
+				opts.tcp_threshold = 200;
 			break;
 		}
 
