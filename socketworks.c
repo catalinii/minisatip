@@ -495,7 +495,7 @@ int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 		max_sock = i + 1;
 	ss->buf = NULL;
 	ss->lbuf = 0;
-	ss->timeout_ms = 0;
+	ss->timeout_ms = ss->timeout_ms_wrwait = 0;
 	ss->id = i;
 	ss->sock_err = 0;
 	ss->overflow = 0;
@@ -546,8 +546,10 @@ int sockets_del(int sock)
 	if (ss->close)
 		ss->close(ss);
 
-	if (so >= 0)
+	if (so >= 0) {
+		LOGL(4, "sockets_del: closing socket %d", so);
 		close(so);
+	}
 	ss->sid = -1;
 	i = MAX_SOCKS;
 	while (--i >= 0)
@@ -847,8 +849,13 @@ void sockets_setbuf(int i, char *buf, int len)
 void sockets_timeout(int i, int t)
 {
 	sockets *ss = get_sockets(i);
-	if (ss)
+	if (ss) {
+		if (t == 1) {
+			ss->timeout_ms_wrwait = 1;
+			return;
+		}
 		ss->timeout_ms = t;
+	}
 }
 
 void set_sockets_rtime(int i, int r)
@@ -1180,7 +1187,7 @@ int alloc_snpacket(SNPacket *p, int len)
 int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 {
 	int rv = 0, i, pos = 0, len;
-	unsigned char tmpbuf[(STREAMS_BUFFER*3)/2];
+	unsigned char *tmpbuf = NULL;
 	struct iovec tmpiov[MAX_PACK + 3];
 	sockets *s = get_sockets(sock_id);
 	if(!s)
@@ -1196,8 +1203,14 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 		if(rv == len)
 			return rv;
 
-		if(rv > 0 && (len < sizeof(tmpbuf)))
+		if(rv > 0)
 		{
+			tmpbuf = malloc(len);
+			if (!tmpbuf)
+			{
+				s->overflow++;
+				LOG_AND_RETURN(0, "%s: Could not allocate memory for tmpbuf", __FUNCTION__, len);
+			}
 			for(i=0; i<iovcnt; i++)
 			{
 				if (rv < pos + tmpiov[i].iov_len)
@@ -1210,9 +1223,7 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 			iov = tmpiov;
 			iovcnt = 1;
 
-		}else if(len > sizeof(tmpbuf))
-			LOG("tmpbuf size is too small: %d required ", len);
-
+		}
 	}
 
 	if(!s->pack)
@@ -1221,6 +1232,7 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 		if(!s->pack)
 		{
 			s->overflow++;
+			free(tmpbuf);
 			LOG_AND_RETURN(0, "%s: Could not allocate memory for s->pack", __FUNCTION__, s->wmax);
 		}
 	}
@@ -1240,6 +1252,7 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 	{
 		LOGL(4, "overflow p is %p, buf %p", p, p ? p->buf : NULL);
 		s->overflow++;
+		free(tmpbuf);
 		return 0;
 	}
 	s->buf_used++;
@@ -1250,6 +1263,7 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 		s->overflow++;
 		if((s->overflow % 100) == 0)
 			LOGL(3, "sock %d: overflow %d it %d", s->id, s->overflow, s->iteration);
+		free(tmpbuf);
 		return 0;
 	}
 
@@ -1262,6 +1276,7 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 	p->len = pos;
 	s->wpos = (s->wpos + 1) % s->wmax;
 
+	free(tmpbuf);
 	return 0;
 
 }
@@ -1279,11 +1294,11 @@ int sockets_write(int sock_id, void *buf, int len)
 int flush_socket(sockets *s)
 {
 	struct iovec iov[1];
-	int rv;
+	int r = 1, rv;
 	SNPacket *p = NULL;
 
 	if(s->spos == s->wpos)
-		return 1;
+		goto end;
 	if(s->pack)
 		p = s->pack + s->spos;
 	if(p && p->buf)
@@ -1308,5 +1323,12 @@ int flush_socket(sockets *s)
 	}
 	LOGL(4, "SOCK %d: flushed %d out of %d (%d bytes)", s->id, s->spos, s->wpos, p ? p->len : -1);
 	s->spos = (s->spos + 1) % s->wmax;
-	return 0;
+	r = 0;
+end:
+	if (s->timeout_ms_wrwait && s->spos == s->wpos) {
+		LOGL(4, "SOCK %d: set timeout_ms to %d from wrwait", s->timeout_ms);
+		s->timeout_ms = s->timeout_ms_wrwait;
+		s->timeout_ms_wrwait = 0;
+	}
+	return r;
 }

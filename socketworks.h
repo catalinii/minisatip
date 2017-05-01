@@ -31,6 +31,7 @@ typedef struct struct_sockets {
 	int lbuf;
 	int rlen;
 	int timeout_ms;
+	int timeout_ms_wrwait;
 	int id;				 // socket id
 	int iteration;
 	int err;
