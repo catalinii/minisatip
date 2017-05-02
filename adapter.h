@@ -115,6 +115,7 @@ int update_pids(int aid);
 int tune(int aid, int sid);
 SPid *find_pid(int aid, int p);
 adapter * get_adapter1(int aid, char *file, int line);
+adapter * get_configured_adapter1(int aid, char *file, int line);
 char *describe_adapter(int sid, int aid, char *dad, int ld);
 void dump_pids(int aid);
 void sort_pids(int aid);
@@ -142,6 +143,7 @@ int compare_tunning_parameters(int aid, transponder * tp);
 void restart_needed_adapters(int aid, int sid);
 
 #define get_adapter(a) get_adapter1(a, __FILE__, __LINE__)
+#define get_configured_adapter(a) get_configured_adapter1(a, __FILE__, __LINE__)
 #define get_adapter_nw(aid) ((aid >= 0 && aid < MAX_ADAPTERS && a[aid] && a[aid]->enabled) ? a[aid] : NULL)
 
 #define adapter_lock(a) adapter_lock1(__FILE__,__LINE__,a)

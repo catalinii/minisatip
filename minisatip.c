@@ -76,6 +76,7 @@ int rtsp, http, si, si1, ssdp1;
 #define FOREGROUND_OPT 'f'
 #define DVRBUFFER_OPT 'b'
 #define APPBUFFER_OPT 'B'
+#define THRESHOLD_OPT 'H'
 #define ENABLE_ADAPTERS_OPT 'e'
 #define UNICABLE_OPT 'u'
 #define JESS_OPT 'j'
@@ -114,6 +115,7 @@ static const struct option long_options[] =
 	{ "clean-psi", no_argument, NULL, 't' },
 	{ "log", no_argument, NULL, 'l' },
 	{ "buffer", required_argument, NULL, 'b' },
+	{ "threshold", required_argument, NULL, 'H' },
 	{ "enable-adapters", required_argument, NULL, 'e' },
 	{ "unicable", required_argument, NULL, 'u' },
 	{ "jess", required_argument, NULL, 'j' },
@@ -226,7 +228,7 @@ void usage()
 {
 	print_version(0);
 	printf(
-		"\n\t./%s [-[fgltzE]] [-a x:y:z] [-b X:Y] [-B X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] \n\
+		"\n\t./%s [-[fgltzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] \n\
 	\t[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port]"
 #ifndef DISABLE_DVBAPI
 		"[-o oscam_host:dvbapi_port] "
@@ -283,6 +285,9 @@ Help\n\
 * -f  foreground, otherwise run in background\n\
 \n\
 * -g use syslog instead stdout for logging, multiple -g - print to stderr as well\n\
+\n\
+* -H --threshold X:Y : set the write time threshold to X (UDP) / Y (TCP)  milliseconds. \n\
+	* eg: -H 5:50 - set thresholds to 5ms (UDP) and 50ms (TCP)\n\
 \n\
 * -i --priority prio: set the DVR thread priority to prio \n\
 \n\
@@ -432,6 +437,11 @@ void set_options(int argc, char *argv[])
 	opts.daemon = 1;
 	opts.dvr_buffer = DVR_BUFFER;
 	opts.adapter_buffer = ADAPTER_BUFFER;
+	opts.udp_threshold = 25;
+	opts.tcp_threshold = 50;
+	opts.file_line = 0;
+	opts.dvbapi_port = 0;
+	opts.dvbapi_host = NULL;
 	opts.drop_encrypted = 1;
 	opts.rtsp_port = 554;
 	opts.satip_addpids = 1;
@@ -467,7 +477,7 @@ void set_options(int argc, char *argv[])
 
 #endif
 
-	while ((opt = getopt_long(argc, argv, "flr:a:td:w:p:s:n:hB:b:m:p:e:x:u:j:o:gy:i:q:DVR:S:TX:Y:OL:EP:Z:"AXE_OPTS, long_options, NULL)) != -1)
+	while ((opt = getopt_long(argc, argv, "flr:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:o:gy:i:q:DVR:S:TX:Y:OL:EP:Z:"AXE_OPTS, long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
 		switch (opt)
@@ -552,6 +562,21 @@ void set_options(int argc, char *argv[])
 		{
 			int val = atoi(optarg)/1.5;
 			opts.max_sbuf = val;
+			break;
+		}
+
+
+		case THRESHOLD_OPT:
+		{
+			sscanf(optarg, "%d:%d", &opts.udp_threshold, &opts.tcp_threshold);
+			if (opts.udp_threshold < 0)
+				opts.udp_threshold = 0;
+			else if (opts.udp_threshold > 200)
+				opts.udp_threshold = 200;
+			if (opts.tcp_threshold < 0)
+				opts.tcp_threshold = 0;
+			else if (opts.tcp_threshold > 200)
+				opts.tcp_threshold = 200;
 			break;
 		}
 
@@ -807,6 +832,7 @@ int read_rtsp(sockets * s)
 	int cseq, la, i, rlen;
 	char *transport = NULL, *useragent = NULL;
 	int sess_id = 0;
+	int end = s->type == TYPE_HTTP;
 	char buf[2000];
 	char tmp_ra[50];
 	streams *sid = get_sid(s->sid);
@@ -859,7 +885,7 @@ int read_rtsp(sockets * s)
 	if ((s->type != TYPE_HTTP)
 					&& (strncasecmp((const char*) s->buf, "GET", 3) == 0))
 	{
-		http_response(s, 404, NULL, NULL, 0, 0);
+		http_response(s, 404, NULL, NULL, 0, 0, end);
 		return 0;
 	}
 
@@ -906,7 +932,7 @@ int read_rtsp(sockets * s)
 
 			if (-1 == decode_transport(s, transport, opts.rrtp, opts.start_rtp))
 			{
-				http_response(s, 400, NULL, NULL, cseq, 0);
+				http_response(s, 400, NULL, NULL, cseq, 0, end);
 				return 0;
 			}
 		}
@@ -934,7 +960,7 @@ int read_rtsp(sockets * s)
 
 		if (!(sid = get_sid(s->sid)))
 		{
-			http_response(s, 454, NULL, NULL, cseq, 0);
+			http_response(s, 454, NULL, NULL, cseq, 0, end);
 			return 0;
 		}
 
@@ -945,7 +971,7 @@ int read_rtsp(sockets * s)
 						|| (strncasecmp(arg[0], "GET", 3) == 0))
 			if ((rv = start_play(sid, s)) < 0)
 			{
-				http_response(s, -rv, NULL, NULL, cseq, 0);
+				http_response(s, -rv, NULL, NULL, cseq, 0, end);
 				return 0;
 			}
 		buf[0] = 0;
@@ -1003,7 +1029,7 @@ int read_rtsp(sockets * s)
 		}
 		if (buf[0] == 0 && sid->type == STREAM_HTTP)
 			snprintf(buf, sizeof(buf), "Content-Type: video/mp2t");
-		http_response(s, 200, buf, NULL, cseq, 0);
+		http_response(s, 200, buf, NULL, cseq, 0, end);
 	}
 	else if (strncmp(arg[0], "TEARDOWN", 8) == 0)
 	{
@@ -1011,7 +1037,7 @@ int read_rtsp(sockets * s)
 		if (get_sid(s->sid))
 			sprintf(buf, "Session: %010d", get_session_id(s->sid));
 		close_stream(s->sid);
-		http_response(s, 200, buf, NULL, cseq, 0);
+		http_response(s, 200, buf, NULL, cseq, 0, end);
 	}
 	else
 	{
@@ -1022,27 +1048,27 @@ int read_rtsp(sockets * s)
 			rv = describe_streams(s, arg[1], sbuf, sizeof(sbuf));
 			if (!rv)
 			{
-				http_response(s, 404, NULL, NULL, cseq, 0);
+				http_response(s, 404, NULL, NULL, cseq, 0, end);
 				return 0;
 			}
 			snprintf(buf, sizeof(buf),
 												"Content-type: application/sdp\r\nContent-Base: rtsp://%s/",
 												get_sock_shost(s->sock));
-			http_response(s, 200, buf, sbuf, cseq, 0);
+			http_response(s, 200, buf, sbuf, cseq, 0, end);
 
 		}
 		else if (strncmp(arg[0], "OPTIONS", 8) == 0)
 		{
 //			if(!get_sid(s->sid))
-//				http_response(s, 454, public, NULL, cseq, 0);
+//				http_response(s, 454, public, NULL, cseq, 0, end);
 //			else
-			http_response(s, 200, public, NULL, cseq, 0);
+			http_response(s, 200, public, NULL, cseq, 0, end);
 		}
 	}
 	return 0;
 }
 
-#define REPLY_AND_RETURN(c) {http_response (s, c, NULL, NULL, 0, 0); return 0;}
+#define REPLY_AND_RETURN(c) {http_response (s, c, NULL, NULL, 0, 0, 1); return 0;}
 
 char uuid[100];
 int uuidi;
@@ -1117,7 +1143,7 @@ int read_http(sockets * s)
 
 	if (is_head && strstr(url, "/?"))
 	{
-		http_response(s, 200, NULL, NULL, 0, 0);
+		http_response(s, 200, NULL, NULL, 0, 0, 1);
 		return 0;
 	}
 	s->rlen = 0;
@@ -1156,7 +1182,7 @@ int read_http(sockets * s)
 		adapters[strlen(adapters) - 1] = 0;
 		snprintf(buf, sizeof(buf), xml, app_name, app_name, app_name, uuid, opts.http_host, adapters, opts.playlist ? opts.playlist : "");
 		sprintf(headers, "CACHE-CONTROL: no-cache\r\nContent-type: text/xml\r\nX-SATIP-RTSP-Port: %d", opts.rtsp_port);
-		http_response(s, 200, headers, buf, 0, 0);
+		http_response(s, 200, headers, buf, 0, 0, 1);
 		return 0;
 	}
 // process file from html directory, the images are just sent back
@@ -1173,28 +1199,29 @@ int read_http(sockets * s)
 		f = readfile(arg[1], ctype, &nl);
 		if (!f)
 		{
-			http_response(s, 404, NULL, NULL, 0, 0);
+			http_response(s, 404, NULL, NULL, 0, 0, 1);
 			return 0;
 		}
 		if(is_head)
 		{
-			http_response(s, 200, ctype, NULL, 0, 0);
+			http_response(s, 200, ctype, NULL, 0, 0, 1);
 			return 0;
 		}
 		if (strstr(ctype, "image") || strstr(ctype, "css")
 						|| strstr(ctype, "javascript"))
 		{
-			http_response(s, 200, ctype, f, 0, nl);
+			http_response(s, 200, ctype, f, 0, nl, 1);
 			closefile(f, nl);
 			return 0;
 		}
 
 		process_file(s, f, nl, ctype);
+		flush_socket(s);
 		closefile(f, nl);
 		return 0;
 	}
 
-	http_response(s, 404, NULL, NULL, 0, 0);
+	http_response(s, 404, NULL, NULL, 0, 0, 1);
 	return 0;
 }
 
@@ -1374,6 +1401,8 @@ int new_rtsp(sockets * s)
 	s->type = TYPE_RTSP;
 	s->action = (socket_action) read_rtsp;
 	s->close = (socket_action) close_http;
+	if (!set_linux_socket_nonblock(s->sock))
+		s->nonblock = 1;
 	return 0;
 }
 
@@ -1382,6 +1411,8 @@ int new_http(sockets * s)
 	s->type = TYPE_HTTP;
 	s->action = (socket_action) read_http;
 	s->close = (socket_action) close_http;
+	if (!set_linux_socket_nonblock(s->sock))
+		s->nonblock = 1;
 	return 0;
 }
 
@@ -1510,7 +1541,7 @@ int readBootID()
 	return opts.bootid;
 }
 
-void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
+void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr, int end)
 {
 	int binary = 0;
 	char *desc1;
@@ -1588,9 +1619,24 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 					get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
 					lr, s->id);
 	LOGL(3, "%s", resp);
-	sockets_write(s->id, resp, strlen(resp));
-	if (binary)
-		sockets_write(s->id, desc, lr);
+
+	if (!s->nonblock) {
+		send(s->sock, resp, strlen(resp), MSG_NOSIGNAL);
+		if (binary)
+			send(s->sock, desc, lr, MSG_NOSIGNAL);
+	} else {
+		struct iovec iov[2];
+		iov[0].iov_base = resp;
+		iov[0].iov_len = strlen(resp);
+		if (binary) {
+			iov[1].iov_base = desc;
+			iov[1].iov_len = lr;
+		}
+		sockets_writev(s->id, iov, binary ? 2 : 1);
+	}
+
+	if (end)
+		flush_socket(s);
 }
 
 #ifdef AXE

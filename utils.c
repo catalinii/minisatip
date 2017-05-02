@@ -473,7 +473,7 @@ extern int run_loop;
 
 void posix_signal_handler(int sig, siginfo_t * siginfo, ucontext_t * ctx)
 {
-	int sp = 0, ip = 0;
+	uint64_t sp = 0, ip = 0;
 
 	if (sig == SIGINT)
 	{
@@ -482,6 +482,10 @@ void posix_signal_handler(int sig, siginfo_t * siginfo, ucontext_t * ctx)
 	}
 #ifdef __mips__
 	sp = ctx->uc_mcontext.gregs[29];
+	ip = ctx->uc_mcontext.pc;
+#endif
+#ifdef __sh__
+	sp = ctx->uc_mcontext.pr;
 	ip = ctx->uc_mcontext.pc;
 #endif
 	printf("RECEIVED SIGNAL %d - SP=%lX IP=%lX\n", sig, (long unsigned int) sp,
@@ -891,10 +895,10 @@ void process_file(void *sock, char *s, int len, char *ctype)
 		{
 			if (respond)
 			{
-				http_response(so, 200, ctype, "", 0, 0); // sending back the response without Content-Length
+				http_response(so, 200, ctype, "", 0, 0, 0); // sending back the response without Content-Length
 				respond = 0;
 			}
-			rv = write(so->sock, outp, io);
+			rv = sockets_write(so->id, outp, io);
 			outp[io] = 0;
 			LOG("%s", outp);
 			io = 0;
@@ -902,11 +906,11 @@ void process_file(void *sock, char *s, int len, char *ctype)
 	}
 	outp[io] = 0;
 	if (respond)
-		http_response(so, 200, ctype, outp, 0, 0); // sending back the response with Content-Length if output < 8192
+		http_response(so, 200, ctype, outp, 0, 0, 0); // sending back the response with Content-Length if output < 8192
 	else
 	{
 		strcpy(outp + io, "\r\n\r\n");
-		rv = write(so->sock, outp, io + 4);
+		rv = sockets_write(so->id, outp, io + 4);
 		outp[io] = 0;
 		LOG("%s", outp);
 	}
