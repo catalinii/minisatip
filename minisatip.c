@@ -1069,6 +1069,8 @@ int read_rtsp(sockets * s)
 
 #define REPLY_AND_RETURN(c) {http_response (s, c, NULL, NULL, 0, 0); return 0;}
 
+#define JSON_STATE_MAXLEN (128*1024)
+
 char uuid[100];
 int uuidi;
 struct sockaddr_in ssdp_sa;
@@ -1182,6 +1184,15 @@ int read_http(sockets * s)
 		snprintf(buf, sizeof(buf), xml, app_name, app_name, app_name, uuid, opts.http_host, adapters, opts.playlist ? opts.playlist : "");
 		sprintf(headers, "CACHE-CONTROL: no-cache\r\nContent-type: text/xml\r\nX-SATIP-RTSP-Port: %d", opts.rtsp_port);
 		http_response(s, 200, headers, buf, 0, 0);
+		return 0;
+	}
+
+	if (strcmp(arg[1], "/state.json") == 0)
+	{
+		char *buf = malloc(JSON_STATE_MAXLEN);
+		int len = get_json_state(buf, JSON_STATE_MAXLEN);
+		http_response(s, 200, "Content-Type: application/json", buf, 0, len, 1);
+		free(buf);
 		return 0;
 	}
 
