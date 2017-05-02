@@ -16,7 +16,7 @@ typedef struct struct_spacket {
 typedef struct struct_sockets {
 	char enabled;
 	SMutex mutex;
-	char is_enabled;
+	char is_enabled, force_close;
 	int sock;  // socket - <0 for invalid/not used, 0 for end of the list
 	int nonblock;  // non-blocking i/o mode
 	struct sockaddr_in sa;//remote address - set on accept or recvfrom on udp sockets
@@ -34,7 +34,6 @@ typedef struct struct_sockets {
 	int rlen;
 	int timeout_ms;
 	int id;     // socket id
-	int timeout_ms_wrwait;
 	int iteration;
 	int err;
 	int flags; // 1 - buf is allocated dynamically
@@ -103,6 +102,7 @@ int flush_socket(sockets *s);
 void get_socket_iteration(int s_id, int it);
 void set_sockets_sid(int id, int sid);
 void sockets_set_opaque(int id, void *opaque, void *opaque2, void *opaque3);
+void sockets_force_close(int id);
 extern __thread char *thread_name;
 extern __thread pthread_t tid;
 

@@ -895,7 +895,7 @@ void process_file(void *sock, char *s, int len, char *ctype)
 		{
 			if (respond)
 			{
-				http_response(so, 200, ctype, "", 0, 0, 0); // sending back the response without Content-Length
+				http_response(so, 200, ctype, "", 0, 0); // sending back the response without Content-Length
 				respond = 0;
 			}
 			rv = sockets_write(so->id, outp, io);
@@ -906,7 +906,7 @@ void process_file(void *sock, char *s, int len, char *ctype)
 	}
 	outp[io] = 0;
 	if (respond)
-		http_response(so, 200, ctype, outp, 0, 0, 0); // sending back the response with Content-Length if output < 8192
+		http_response(so, 200, ctype, outp, 0, 0); // sending back the response with Content-Length if output < 8192
 	else
 	{
 		strcpy(outp + io, "\r\n\r\n");

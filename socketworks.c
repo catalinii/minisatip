@@ -475,6 +475,7 @@ int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 	ss = s[i];
 	ss->enabled = 1;
 	ss->is_enabled = 1;
+	ss->force_close = 0;
 	ss->sock = sock;
 	ss->nonblock = !!(type & TYPE_NONBLOCK);
 	ss->tid = get_tid();
@@ -497,7 +498,7 @@ int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 	ss->opaque = ss->opaque2 = ss->opaque3 = NULL;
 	ss->buf = NULL;
 	ss->lbuf = 0;
-	ss->timeout_ms = ss->timeout_ms_wrwait = 0;
+	ss->timeout_ms = 0;
 	ss->id = i;
 	ss->sock_err = 0;
 	ss->overflow = 0;
@@ -804,7 +805,7 @@ void *select_and_execute(void *arg)
 			while (++i < max_sock)
 				if ((ss = get_sockets(i)) && (ss->tid == tid) &&
 								(((ss->timeout_ms > 0) && (lt - ss->rtime > ss->timeout_ms) && (ss->spos == ss->wpos))
-									|| (ss->timeout_ms == 1)))
+									|| (ss->force_close)))
 				{
 					if (ss->timeout)
 					{
@@ -854,10 +855,6 @@ void sockets_timeout(int i, int t)
 {
 	sockets *ss = get_sockets(i);
 	if (ss) {
-		if (t == 1) {
-			ss->timeout_ms_wrwait = 1;
-			return;
-		}
 		ss->timeout_ms = t;
 	}
 }
@@ -1112,7 +1109,7 @@ int my_writev(sockets *s, const struct iovec *iov, int iiov)
 	char ra[50];
 	int log_level = 7;
 	int64_t stime = 0;
-	if (s->timeout_ms == 1)
+	if (s->force_close)
 		LOG_AND_RETURN(-2, "socket about to be closed, not writing");
 
 	len = 0;
@@ -1148,7 +1145,7 @@ int my_writev(sockets *s, const struct iovec *iov, int iiov)
 							s->id, s->sid, get_socket_rhost(s->id, ra, sizeof(ra)),
 							get_socket_rport(s->id));
 		if(s->type != TYPE_RTCP)
-			s->timeout_ms = 1;
+			sockets_force_close(s->id);
 	}
 	if (rv < 0)
 	{
@@ -1330,10 +1327,9 @@ int flush_socket(sockets *s)
 	s->spos = (s->spos + 1) % s->wmax;
 	r = 0;
 end:
-	if (s->timeout_ms_wrwait && s->spos == s->wpos) {
+	if (s->force_close && s->spos == s->wpos) {
 		LOGL(4, "SOCK %d: set timeout_ms to %d from wrwait", s->timeout_ms);
-		s->timeout_ms = s->timeout_ms_wrwait;
-		s->timeout_ms_wrwait = 0;
+		s->timeout_ms = 1;
 	}
 	return r;
 }
@@ -1355,4 +1351,11 @@ void sockets_set_opaque(int id, void *opaque, void *opaque2, void *opaque3)
 		s->opaque2 = opaque2;
 		s->opaque3 = opaque3;
 	}
+}
+
+void sockets_force_close(int id)
+{
+	sockets *s = get_sockets(id);
+	if(s)
+		s->force_close = 1;
 }

@@ -167,7 +167,7 @@ int adapter_timeout(sockets *s)
 void request_adapter_close(adapter *ad)
 {
 	ad->force_close = 1;
-	sockets_timeout(ad->sock, 1);
+	sockets_force_close(ad->sock);
 }
 
 int close_adapter_for_socket(sockets * s)
