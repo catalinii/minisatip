@@ -49,6 +49,8 @@ struct struct_opts
 	int dvr_buffer;
 	int adapter_buffer;
 	int output_buffer;
+	int udp_threshold;
+	int tcp_threshold;
 	int force_scan;
 	int clean_psi;
 	int file_line;
@@ -93,6 +95,6 @@ struct struct_opts
 int ssdp_discovery (sockets * s);
 int becomeDaemon ();
 int readBootID();
-void http_response (sockets *s, int rc, char *ah, char *desc, int cseq, int lr);
+void http_response (sockets *s, int rc, char *ah, char *desc, int cseq, int lr, int end);
 
 #endif

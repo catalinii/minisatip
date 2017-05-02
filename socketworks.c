@@ -220,9 +220,11 @@ int udp_connect(char *addr, int port, struct sockaddr_in *serv)
 					ntohs(serv->sin_port));
 	return sock;
 }
-int set_linux_socket_timeout_(int sockfd)
+
+int set_linux_socket_nonblock(int sockfd)
 {
-	return fcntl(sockfd, F_SETFL, O_NONBLOCK);
+	int flags = fcntl(sockfd, F_GETFL, 0);
+	return fcntl(sockfd, F_SETFL, flags | O_NONBLOCK);
 }
 
 int set_linux_socket_timeout(int sockfd)
@@ -267,10 +269,7 @@ int tcp_connect(char *addr, int port, struct sockaddr_in *serv, int blocking)
 	set_linux_socket_timeout(sock);
 
 	if (blocking)
-	{
-		int flags = fcntl(sock, F_GETFL, 0);
-		fcntl(sock, F_SETFL, flags | O_NONBLOCK);
-	}
+		set_linux_socket_nonblock(sock);
 
 	if (connect(sock, (struct sockaddr *) serv, sizeof(*serv)) < 0)
 	{
@@ -341,10 +340,7 @@ int connect_local_socket(char *file, int blocking)
 	set_linux_socket_timeout(sock);
 
 	if (blocking)
-	{
-		int flags = fcntl(sock, F_GETFL, 0);
-		fcntl(sock, F_SETFL, flags | O_NONBLOCK);
-	}
+		set_linux_socket_nonblock(sock);
 
 	if (connect(sock, (struct sockaddr *) &serv, sizeof(serv)) < 0)
 	{
@@ -479,6 +475,7 @@ int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 	ss = s[i];
 	ss->enabled = 1;
 	ss->sock = sock;
+	ss->nonblock = !!(type & TYPE_NONBLOCK);
 	ss->tid = get_tid();
 	memset(&ss->sa, 0, sizeof(ss->sa));
 	if (sa)
@@ -491,20 +488,20 @@ int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 	if (t)
 		ss->timeout = t;
 	ss->sid = sid;
-	ss->type = type & ~TYPE_CONNECT;
+	ss->type = type & ~(TYPE_NONBLOCK|TYPE_CONNECT);
 	ss->rtime = getTick();
 	ss->wtime = 0;
 	if (max_sock <= i)
 		max_sock = i + 1;
 	ss->buf = NULL;
 	ss->lbuf = 0;
-	ss->timeout_ms = 0;
+	ss->timeout_ms = ss->timeout_ms_wrwait = 0;
 	ss->id = i;
 	ss->sock_err = 0;
 	ss->overflow = 0;
 	ss->buf_alloc = ss->buf_used = 0;
 	ss->iteration = 0;
-	ss->spos = ss->wpos;
+	ss->spos = ss->wpos = 0;
 	ss->wmax = opts.max_sbuf;
 
 	ss->read = (read_action) sockets_read;
@@ -549,8 +546,10 @@ int sockets_del(int sock)
 	if (ss->close)
 		ss->close(ss);
 
-	if (so >= 0)
+	if (so >= 0) {
+		LOGL(4, "sockets_del: closing socket %d", so);
 		close(so);
+	}
 	ss->sid = -1;
 	i = MAX_SOCKS;
 	while (--i >= 0)
@@ -693,7 +692,6 @@ void *select_and_execute(void *arg)
 					if (pf[i].revents & POLLOUT)
 					{
 						ss->events &= ~POLLOUT;
-						ss->type &= ~TYPE_CONNECT;
 					}
 					if (!ss->buf || ss->buf == buf)
 					{
@@ -851,8 +849,13 @@ void sockets_setbuf(int i, char *buf, int len)
 void sockets_timeout(int i, int t)
 {
 	sockets *ss = get_sockets(i);
-	if (ss)
+	if (ss) {
+		if (t == 1) {
+			ss->timeout_ms_wrwait = 1;
+			return;
+		}
 		ss->timeout_ms = t;
+	}
 }
 
 void set_sockets_rtime(int i, int r)
@@ -1009,6 +1012,7 @@ void set_socket_send_buffer(int sock, int len)
 	int rv;
 	if (len <= 0)
 		return;
+	// len = 8*1024; /* have a nice testing !!!! */
 #ifdef SO_SNDBUFFORCE
 	if ((rv = setsockopt(sock, SOL_SOCKET, SO_SNDBUFFORCE, &len, sizeof(len))))
 		LOGL(3, "unable to set output socket buffer (force) size to %d", len);
@@ -1107,17 +1111,16 @@ int my_writev(sockets *s, const struct iovec *iov, int iiov)
 	if (s->timeout_ms == 1)
 		return -1;
 
-	LOGL(log_level + 1, "start writev handle %d, iiov %d", s->sock, iiov);
+	len = 0;
+	for (i=0; i<iiov; i++)
+		len += iov[i].iov_len;
+
+	LOGL(log_level + 1, "start writev handle %d, iiov %d, len %d", s->sock, iiov, len);
 	if (opts.log == log_level)
 		stime = getTick();
 	rv = writev(s->sock, iov, iiov);
 	if (opts.log == log_level)
 		stime = getTick() - stime;
-
-	len = 0;
-	for (i=0; i<iiov; i++)
-		len += iov[i].iov_len;
-
 
 	if(rv > 0)
 	{
@@ -1168,9 +1171,15 @@ int alloc_snpacket(SNPacket *p, int len)
 		}
 		int newlen = (len < 1500) ? 1500 : len;
 		p->buf = malloc1(newlen);
-		if(p->buf)
+		if(p->buf) {
 			p->size = newlen;
-		else LOG_AND_RETURN(1, "%s: could not allocate %d bytes for socket buffer", __FUNCTION__, newlen);
+			return 1;
+		}
+		else
+		{
+			LOGL(1, "%s: could not allocate %d bytes for socket buffer", __FUNCTION__, newlen);
+			return -1;
+		}
 	}
 	return 0;
 }
@@ -1178,8 +1187,8 @@ int alloc_snpacket(SNPacket *p, int len)
 int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 {
 	int rv = 0, i, pos = 0, len;
-	unsigned char tmpbuf[1500];
-	struct iovec tmpiov;
+	unsigned char *tmpbuf = NULL;
+	struct iovec tmpiov[MAX_PACK + 3];
 	sockets *s = get_sockets(sock_id);
 	if(!s)
 		return -1;
@@ -1188,27 +1197,33 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 		int len = 0;
 		for(i=0; i<iovcnt; i++)
 			len += iov[i].iov_len;
+		memcpy(tmpiov, iov, iovcnt * sizeof(tmpiov[0]));
 
 		rv = my_writev(s, iov, iovcnt);
 		if(rv == len)
 			return rv;
 
-		if(rv > 0 && (len < sizeof(tmpbuf)))
+		if(rv > 0)
 		{
+			tmpbuf = malloc(len);
+			if (!tmpbuf)
+			{
+				s->overflow++;
+				LOG_AND_RETURN(0, "%s: Could not allocate memory for tmpbuf", __FUNCTION__, len);
+			}
 			for(i=0; i<iovcnt; i++)
 			{
-				memcpy(tmpbuf + pos, iov[i].iov_base, iov[i].iov_len);
-				pos += iov[i].iov_len;
+				if (rv < pos + tmpiov[i].iov_len)
+					memcpy(tmpbuf + pos, tmpiov[i].iov_base, tmpiov[i].iov_len);
+				pos += tmpiov[i].iov_len;
 			}
 			LOGL(3, "incomplete write it %d, setting the buffer at offset %d and length %d from %d", s->iteration, rv, len - rv, len);
-			tmpiov.iov_base = tmpbuf + rv;
-			tmpiov.iov_len = len - rv;
-			iov = &tmpiov;
+			tmpiov[0].iov_base = tmpbuf + rv;
+			tmpiov[0].iov_len = len - rv;
+			iov = tmpiov;
 			iovcnt = 1;
 
-		}else if(len > sizeof(tmpbuf))
-			LOG("tmpbuf size is too small: %d required ", len);
-
+		}
 	}
 
 	if(!s->pack)
@@ -1217,6 +1232,7 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 		if(!s->pack)
 		{
 			s->overflow++;
+			free(tmpbuf);
 			LOG_AND_RETURN(0, "%s: Could not allocate memory for s->pack", __FUNCTION__, s->wmax);
 		}
 	}
@@ -1226,28 +1242,17 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 		len += iov[i].iov_len;
 	// queue the packet otherwise
 	SNPacket *p = s->pack + s->wpos;
-	if(!p->buf)
-	{
-		int rv = alloc_snpacket(p, len);
-		if(!rv)
-			s->buf_alloc++;
-	}
 
-	while(s->wpos != s->spos && !p->buf)
+	i = alloc_snpacket(p, len);
+	if (i > 0)
 	{
-		if(!p->buf && !alloc_snpacket(p, len))
-		{
-			s->buf_alloc++;
-			break;
-		}
-		s->wpos = (s->wpos + 1) % s->wmax;
-		p = &s->pack[s->wpos];
+		s->buf_alloc++;
 	}
-
-	if(!p || !p->buf)
+	else if (i < 0)
 	{
 		LOGL(4, "overflow p is %p, buf %p", p, p ? p->buf : NULL);
 		s->overflow++;
+		free(tmpbuf);
 		return 0;
 	}
 	s->buf_used++;
@@ -1258,6 +1263,7 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 		s->overflow++;
 		if((s->overflow % 100) == 0)
 			LOGL(3, "sock %d: overflow %d it %d", s->id, s->overflow, s->iteration);
+		free(tmpbuf);
 		return 0;
 	}
 
@@ -1270,6 +1276,7 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 	p->len = pos;
 	s->wpos = (s->wpos + 1) % s->wmax;
 
+	free(tmpbuf);
 	return 0;
 
 }
@@ -1287,12 +1294,11 @@ int sockets_write(int sock_id, void *buf, int len)
 int flush_socket(sockets *s)
 {
 	struct iovec iov[1];
-	uint64_t item;
-	int rv;
+	int r = 1, rv;
 	SNPacket *p = NULL;
 
 	if(s->spos == s->wpos)
-		return 1;
+		goto end;
 	if(s->pack)
 		p = s->pack + s->spos;
 	if(p && p->buf)
@@ -1301,22 +1307,28 @@ int flush_socket(sockets *s)
 		iov[0].iov_len = p->len;
 		iov[0].iov_base = p->buf;
 		rv = my_writev(s, iov, 1);
-		if((rv > 0 ) && (rv != iov[0].iov_len))
+		if((rv > 0) && (rv != p->len))
 		{
 			LOG("incomplete write %d out of %d", rv, p->len);
-			memmove(p->buf, iov[0].iov_base + rv, iov[0].iov_len - rv);
-			p->len = iov[0].iov_len - rv;
-		}
-		if(rv != iov[0].iov_len)
+			memmove(p->buf, p->buf + rv, p->len - rv);
+			p->len -= rv;
 			return 1;
+		}
+		else
+		{
+			if(rv != p->len)
+				return 1;
+		}
 
 	}
-//	delItem(item);
 	LOGL(4, "SOCK %d: flushed %d out of %d (%d bytes)", s->id, s->spos, s->wpos, p ? p->len : -1);
-	s->spos++;
-	if(s->spos == s->wmax)
-		s->spos = 0;
-	if(s->spos == s->wpos)
-		s->spos = s->wpos = 0;
-	return 0;
+	s->spos = (s->spos + 1) % s->wmax;
+	r = 0;
+end:
+	if (s->timeout_ms_wrwait && s->spos == s->wpos) {
+		LOGL(4, "SOCK %d: set timeout_ms to %d from wrwait", s->timeout_ms);
+		s->timeout_ms = s->timeout_ms_wrwait;
+		s->timeout_ms_wrwait = 0;
+	}
+	return r;
 }
