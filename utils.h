@@ -92,6 +92,7 @@ void set_signal_handler(char *argv0);
 int becomeDaemon();
 int end_of_header(char *buf);
 char *readfile(char *fn, char *ctype, int *len);
+int get_json_state(char *buf, int len);
 void process_file(void *sock, char *s, int len, char *ctype);
 int closefile(char *mem, int len);
 
@@ -125,5 +126,9 @@ void hexdump(char *log_message,void *addr, int len);
 #define LOG_AND_RETURN(rc,a,...) {LOG(a,##__VA_ARGS__);return rc;}
 #define malloc1(a) mymalloc(a,__FILE__,__LINE__)
 #define free1(a) myfree(a,__FILE__,__LINE__)
+
+#define strlcatf(buf, size, ptr, fmt...) \
+  do { int __r = snprintf((buf) + ptr, (size) - ptr, fmt); \
+         ptr = __r >= (size) - ptr ? (size) - 1 : ptr + __r; } while (0)
 
 #endif

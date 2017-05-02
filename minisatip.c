@@ -1066,6 +1066,8 @@ int read_rtsp(sockets * s)
 
 #define REPLY_AND_RETURN(c) {http_response (s, c, NULL, NULL, 0, 0, 1); return 0;}
 
+#define JSON_STATE_MAXLEN (128*1024)
+
 char uuid[100];
 int uuidi;
 struct sockaddr_in ssdp_sa;
@@ -1184,6 +1186,16 @@ int read_http(sockets * s)
 		http_response(s, 200, headers, buf, 0, 0, 1);
 		return 0;
 	}
+
+	if (strcmp(arg[1], "/state.json") == 0)
+	{
+		char *buf = malloc(JSON_STATE_MAXLEN);
+		int len = get_json_state(buf, JSON_STATE_MAXLEN);
+		http_response(s, 200, "Content-Type: application/json", buf, 0, len, 1);
+		free(buf);
+		return 0;
+	}
+
 // process file from html directory, the images are just sent back
 
 	if (!strcmp(arg[1], "/"))

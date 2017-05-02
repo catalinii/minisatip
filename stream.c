@@ -1348,10 +1348,10 @@ _symbols stream_sym[] =
 	{ "st_useragent", VAR_AARRAY_STRING, st, 1, MAX_STREAMS, offsetof(
 				streams, useragent) },
 	{ "st_rhost", VAR_FUNCTION_STRING, (void *) &get_stream_rhost,
-			0, 0, 0 },
+			0, MAX_STREAMS, 0 },
 	{ "st_rport", VAR_FUNCTION_INT, (void *) &get_stream_rport, 0,
-			0, 0 },
+			MAX_STREAMS, 0 },
 	{ "st_pids", VAR_FUNCTION_STRING, (void *) &get_stream_pids, 0,
-			0, 0 },
+			MAX_STREAMS, 0 },
 	{ NULL, 0, NULL, 0, 0 }
 };
