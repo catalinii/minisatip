@@ -18,7 +18,7 @@
 	}
 	.level {
 		display: inline;
-		white-space: nowrap;
+		white-space: pre;
 		font-family: "Lucida Console", Monaco, monospace;
 	}
 	.noPadding {
@@ -84,6 +84,7 @@ var ad_phyfd = [ $ad_phyfd0$, $ad_phyfd1$, $ad_phyfd2$, $ad_phyfd3$, $ad_phyfd4$
 var ad_allsys = [ "$ad_allsys0$", "$ad_allsys1$", "$ad_allsys2$", "$ad_allsys3$", "$ad_allsys4$", "$ad_allsys5$", "$ad_allsys6$", "$ad_allsys7$", "$ad_allsys8$", "$ad_allsys9$", "$ad_allsys10$", "$ad_allsys11$", "$ad_allsys12$", "$ad_allsys13$", "$ad_allsys14$", "$ad_allsys15$", "$ad_allsys16$", "$ad_allsys17$", "$ad_allsys18$", "$ad_allsys19$", "$ad_allsys20$", "$ad_allsys21$", "$ad_allsys22$", "$ad_allsys23$", "$ad_allsys24$", "$ad_allsys25$", "$ad_allsys26$", "$ad_allsys27$", "$ad_allsys28$", "$ad_allsys29$", "$ad_allsys30$", "$ad_allsys31$" ];
 var ad_pids = [ "$ad_pids0$", "$ad_pids1$", "$ad_pids2$", "$ad_pids3$", "$ad_pids4$", "$ad_pids5$", "$ad_pids6$", "$ad_pids7$", "$ad_pids8$", "$ad_pids9$", "$ad_pids10$", "$ad_pids11$", "$ad_pids12$", "$ad_pids13$", "$ad_pids14$", "$ad_pids15$", "$ad_pids16$", "$ad_pids17$", "$ad_pids18$", "$ad_pids19$", "$ad_pids20$", "$ad_pids21$", "$ad_pids22$", "$ad_pids23$", "$ad_pids24$", "$ad_pids25$", "$ad_pids26$", "$ad_pids27$", "$ad_pids28$", "$ad_pids29$", "$ad_pids30$", "$ad_pids31$" ];
 var ad_satip = [ "$ad_satip0$", "$ad_satip1$", "$ad_satip2$", "$ad_satip3$", "$ad_satip4$", "$ad_satip5$", "$ad_satip6$", "$ad_satip7$", "$ad_satip8$", "$ad_satip9$", "$ad_satip10$", "$ad_satip11$", "$ad_satip12$", "$ad_satip13$", "$ad_satip14$", "$ad_satip15$", "$ad_satip16$", "$ad_satip17$", "$ad_satip18$", "$ad_satip19$", "$ad_satip20$", "$ad_satip21$", "$ad_satip22$", "$ad_satip23$", "$ad_satip24$", "$ad_satip25$", "$ad_satip26$", "$ad_satip27$", "$ad_satip28$", "$ad_satip29$", "$ad_satip30$", "$ad_satip31$" ];
+var ad_ccerr = [ $ad_ccerr0$, $ad_ccerr1$, $ad_ccerr2$, $ad_ccerr3$, $ad_ccerr4$, $ad_ccerr5$, $ad_ccerr6$, $ad_ccerr7$, $ad_ccerr8$, $ad_ccerr9$, $ad_ccerr10$, $ad_ccerr11$, $ad_ccerr12$, $ad_ccerr13$, $ad_ccerr14$, $ad_ccerr15$, $ad_ccerr16$, $ad_ccerr17$, $ad_ccerr18$, $ad_ccerr19$, $ad_ccerr20$, $ad_ccerr21$, $ad_ccerr22$, $ad_ccerr23$, $ad_ccerr24$, $ad_ccerr25$, $ad_ccerr26$, $ad_ccerr27$, $ad_ccerr28$, $ad_ccerr29$, $ad_ccerr30$, $ad_ccerr31$ ];
 var ad_axe_pktc = [$ad_axe_pktc0$, $ad_axe_pktc1$, $ad_axe_pktc2$, $ad_axe_pktc3$];
 var ad_axe_ccerr = [$ad_axe_ccerr0$, $ad_axe_ccerr1$, $ad_axe_ccerr2$, $ad_axe_ccerr3$];
 var ad_axe_coax = ["$ad_axe_coax0$", "$ad_axe_coax1$", "$ad_axe_coax2$", "$ad_axe_coax3$"];
@@ -190,16 +191,24 @@ for (var i = 0; i < max_adapters; i++) {
 		signal = "<small>OFFLINE</small>";
 	} else {
 		var s1 = parseInt(ad_strength[i] / 2.55);
+		s1 = ("     " + s1).slice(-5);
 		signal = "<div class='level'>STR <div class='pBar' data-from='"+ s1 + "' data-to='" + s1 + "'></div> " + s1 + "%</div><br />";
 
 		if (ad_type[i] == 1 || ad_type[i] == 3)
 			var s2 = parseInt(ad_snr[i] / 2.55);
 		else
 			var s2 = parseInt(ad_snr[i] / 0.15);
+		s2 = ("     " + s2).slice(-5);
 		signal += "<div class='level'>SNR <div class='pBar' data-from='"+ s2 + "' data-to='" + s2 + "'></div> " + s2 + "%</div><br />";
+		ccerr = parseInt(ad_ccerr[i]);
+		ccerr = ("      " + ccerr).slice(-6);
+		ber = parseInt(ad_ber[i]);
+	 	ber = ("      " + ber).slice(-6);
 
 		if (ad_ber[i] > 0)
-			signal += "<div class='level'>BER <div class='pBar' data-from='"+ ad_ber[i] + "' data-to='" + ad_ber[i] + "' data-color='red'></div> " + ad_ber[i] + "</div><br />";
+			signal += "<div class='level'>BER <div class='pBar' data-from='"+ ber + "' data-to='" + ber + "' data-color='red'></div> " + ber + "</div><br />";
+		if (ad_ccerr[i] > 0)
+				signal += "<div class='level'>CCE <div class='pBar' data-from='"+ ccerr + "' data-to='" + ccerr + "' data-color='red'></div> " + ccerr + "</div><br />";
 	}
 	myTable += "<td class='dt-right'>" + signal + " </td>";
 

@@ -25,112 +25,112 @@
 
 #ifdef DISABLE_LINUXDVB
 typedef enum fe_delivery_system {
-        SYS_UNDEFINED,
-        SYS_DVBC_ANNEX_AC,
-        SYS_DVBC_ANNEX_B,
-        SYS_DVBT,
-        SYS_DSS,
-        SYS_DVBS,
-        SYS_DVBS2,
-        SYS_DVBH,
-        SYS_ISDBT,
-        SYS_ISDBS,
-        SYS_ISDBC,
-        SYS_ATSC,
-        SYS_ATSCMH,
-        SYS_DMBTH,
-        SYS_CMMB,
-        SYS_DAB,
-        SYS_DVBT2,
-        SYS_TURBO,
+	SYS_UNDEFINED,
+	SYS_DVBC_ANNEX_AC,
+	SYS_DVBC_ANNEX_B,
+	SYS_DVBT,
+	SYS_DSS,
+	SYS_DVBS,
+	SYS_DVBS2,
+	SYS_DVBH,
+	SYS_ISDBT,
+	SYS_ISDBS,
+	SYS_ISDBC,
+	SYS_ATSC,
+	SYS_ATSCMH,
+	SYS_DMBTH,
+	SYS_CMMB,
+	SYS_DAB,
+	SYS_DVBT2,
+	SYS_TURBO,
 } fe_delivery_system_t;
 typedef enum fe_status {
-        FE_HAS_SIGNAL   = 0x01,
-        FE_HAS_CARRIER  = 0x02,
-        FE_HAS_VITERBI  = 0x04,
-        FE_HAS_SYNC     = 0x08,
-        FE_HAS_LOCK     = 0x10,
-        FE_TIMEDOUT     = 0x20,
-        FE_REINIT       = 0x40
+	FE_HAS_SIGNAL   = 0x01,
+	FE_HAS_CARRIER  = 0x02,
+	FE_HAS_VITERBI  = 0x04,
+	FE_HAS_SYNC     = 0x08,
+	FE_HAS_LOCK     = 0x10,
+	FE_TIMEDOUT     = 0x20,
+	FE_REINIT       = 0x40
 } fe_status_t;
 typedef enum fe_code_rate {
-        FEC_NONE = 0,
-        FEC_1_2,
-        FEC_2_3,
-        FEC_3_4,
-        FEC_4_5,
-        FEC_5_6,
-        FEC_6_7,
-        FEC_7_8,
-        FEC_8_9,
-        FEC_AUTO,
-        FEC_3_5,
-        FEC_9_10,
+	FEC_NONE = 0,
+	FEC_1_2,
+	FEC_2_3,
+	FEC_3_4,
+	FEC_4_5,
+	FEC_5_6,
+	FEC_6_7,
+	FEC_7_8,
+	FEC_8_9,
+	FEC_AUTO,
+	FEC_3_5,
+	FEC_9_10,
 } fe_code_rate_t;
 typedef enum fe_rolloff {
-        ROLLOFF_35,
-        ROLLOFF_20,
-        ROLLOFF_25,
-        ROLLOFF_AUTO,
+	ROLLOFF_35,
+	ROLLOFF_20,
+	ROLLOFF_25,
+	ROLLOFF_AUTO,
 } fe_rolloff_t;
 typedef enum fe_pilot {
-        PILOT_ON,
-        PILOT_OFF,
-        PILOT_AUTO,
+	PILOT_ON,
+	PILOT_OFF,
+	PILOT_AUTO,
 } fe_pilot_t;
 typedef enum fe_bandwidth {
-        BANDWIDTH_8_MHZ,
-        BANDWIDTH_7_MHZ,
-        BANDWIDTH_6_MHZ,
-        BANDWIDTH_AUTO,
-        BANDWIDTH_5_MHZ,
-        BANDWIDTH_10_MHZ,
-        BANDWIDTH_1_712_MHZ,
+	BANDWIDTH_8_MHZ,
+	BANDWIDTH_7_MHZ,
+	BANDWIDTH_6_MHZ,
+	BANDWIDTH_AUTO,
+	BANDWIDTH_5_MHZ,
+	BANDWIDTH_10_MHZ,
+	BANDWIDTH_1_712_MHZ,
 } fe_bandwidth_t;
 typedef enum fe_guard_interval {
-        GUARD_INTERVAL_1_32,
-        GUARD_INTERVAL_1_16,
-        GUARD_INTERVAL_1_8,
-        GUARD_INTERVAL_1_4,
-        GUARD_INTERVAL_AUTO,
-        GUARD_INTERVAL_1_128,
-        GUARD_INTERVAL_19_128,
-        GUARD_INTERVAL_19_256,
+	GUARD_INTERVAL_1_32,
+	GUARD_INTERVAL_1_16,
+	GUARD_INTERVAL_1_8,
+	GUARD_INTERVAL_1_4,
+	GUARD_INTERVAL_AUTO,
+	GUARD_INTERVAL_1_128,
+	GUARD_INTERVAL_19_128,
+	GUARD_INTERVAL_19_256,
 } fe_guard_interval_t;
 typedef enum fe_spectral_inversion {
-        INVERSION_OFF,
-        INVERSION_ON,
-        INVERSION_AUTO
+	INVERSION_OFF,
+	INVERSION_ON,
+	INVERSION_AUTO
 } fe_spectral_inversion_t;
 typedef enum fe_transmit_mode {
-        TRANSMISSION_MODE_2K,
-        TRANSMISSION_MODE_8K,
-        TRANSMISSION_MODE_AUTO,
-        TRANSMISSION_MODE_4K,
-        TRANSMISSION_MODE_1K,
-        TRANSMISSION_MODE_16K,
-        TRANSMISSION_MODE_32K,
+	TRANSMISSION_MODE_2K,
+	TRANSMISSION_MODE_8K,
+	TRANSMISSION_MODE_AUTO,
+	TRANSMISSION_MODE_4K,
+	TRANSMISSION_MODE_1K,
+	TRANSMISSION_MODE_16K,
+	TRANSMISSION_MODE_32K,
 } fe_transmit_mode_t;
 typedef enum fe_type {
-        FE_QPSK,
-        FE_QAM,
-        FE_OFDM,
-        FE_ATSC
+	FE_QPSK,
+	FE_QAM,
+	FE_OFDM,
+	FE_ATSC
 } fe_type_t;
 typedef enum fe_modulation {
-        QPSK,
-        QAM_16,
-        QAM_32,
-        QAM_64,
-        QAM_128,
-        QAM_256,
-        QAM_AUTO,
-        VSB_8,
-        VSB_16,
-        PSK_8,
-        APSK_16,
-        APSK_32,
-        DQPSK,
+	QPSK,
+	QAM_16,
+	QAM_32,
+	QAM_64,
+	QAM_128,
+	QAM_256,
+	QAM_AUTO,
+	VSB_8,
+	VSB_16,
+	PSK_8,
+	APSK_16,
+	APSK_32,
+	DQPSK,
 } fe_modulation_t;
 #endif
 
@@ -141,7 +141,7 @@ typedef enum fe_modulation {
 #endif
 
 #ifndef SYS_DVBC2
-#define SYS_DVBC2 19 // support for DVB-C2 DD 
+#define SYS_DVBC2 19 // support for DVB-C2 DD
 #endif
 
 #ifndef SYS_DVBT2
@@ -153,6 +153,15 @@ typedef enum fe_modulation {
 #ifndef DTV_STREAM_ID
 #define DTV_STREAM_ID           42
 #endif
+
+#define MAX_PIDS 64
+#ifdef NO_BACKTRACE
+#define MAX_STREAMS_PER_PID 8
+#else
+#define MAX_STREAMS_PER_PID 16
+#endif
+
+
 
 #define MIN_FRQ_DVBT  174000
 #define MAX_FRQ_DVBT  858000
@@ -181,7 +190,7 @@ typedef struct diseqc
 	int after_switch;
 	int after_burst;
 	int after_tone;
-	
+
 	int lnb_low, lnb_high, lnb_circular, lnb_switch;
 } diseqc;
 
@@ -215,11 +224,32 @@ typedef struct struct_transponder
 	int c2tft;
 	int ds;
 	int plp;
-	
+
 	char *apids, *pids, *dpids, *x_pmt;
 } transponder;
 
-#define MAX_PIDS 64
+
+typedef struct struct_pid
+{
+	int16_t pid;      // pid for this demux - not used
+	int fd;       // fd for this demux
+	int cc_err;     // counter errors
+	// stream id - one more to set it -1
+	signed char sid[MAX_STREAMS_PER_PID];
+	char flags; // 0 - disabled , 1 enabled, 2 - will be enabled next tune when tune is called, 3 disable when tune is called
+	char type;
+	int packets;  // how many packets for this pid arrived, used to sort the pids
+	int dec_err;   // decrypt errors, continuity counters
+	int16_t pmt;
+	char pmt_counter; // ca information
+	char cc;
+#ifdef CRC_TS
+	uint32_t crc;
+	int count;
+#endif
+} SPid;
+
+
 
 #ifndef DISABLE_LINUXDVB
 //int tune_it(int fd_frontend, unsigned int freq, unsigned int srate, char pol, int tone, fe_spectral_inversion_t specInv, unsigned char diseqc,fe_modulation_t modulation,fe_code_rate_t HP_CodeRate,fe_transmit_mode_t TransmissionMode,fe_guard_interval_t guardInterval, fe_bandwidth_t bandwidth);
@@ -241,4 +271,4 @@ char *get_gi(int i);
 char *get_specinv(int i);
 char *get_pol(int i);
 
-#endif							 /*  */
+#endif        /*  */

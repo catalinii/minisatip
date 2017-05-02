@@ -42,10 +42,9 @@
 #include "dvb.h"
 #include "socketworks.h"
 #include "minisatip.h"
-#include "dvbapi.h"
 #include "adapter.h"
 #include "tables.h"
-#include "dvbapi.h"
+#include "pmt.h"
 #include <dvbcsa/dvbcsa.h>
 
 extern struct struct_opts opts;
@@ -72,13 +71,18 @@ void dvbcsa_set_cw(unsigned char *cw, void *key)
 	dvbcsa_bs_key_set(cw, key);
 }
 
-void dvbcsa_decrypt_stream(void *key, dvbapi_batch *batch, int max_len)
+void dvbcsa_decrypt_stream(void *key, SPMT_batch *batch, int max_len)
 {
 	dvbcsa_bs_decrypt((const struct dvbcsa_bs_key_s *) key,
 																			(const struct dvbcsa_bs_batch_s *) batch, max_len);
 }
 
-dvbapi_op csa_op =
+SPMT_op csa_op =
 { .algo = CA_ALGO_DVBCSA, .mode = 0, .create_cwkey = dvbcsa_create_key,
 		.delete_cwkey = dvbcsa_delete_key, .batch_size = dvbcsa_batch_size,
 		.set_cw = dvbcsa_set_cw, .decrypt_stream = dvbcsa_decrypt_stream };
+
+void init_algo_csa()
+{
+	register_algo(&csa_op);
+}

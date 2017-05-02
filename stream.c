@@ -43,12 +43,15 @@
 #include "dvb.h"
 #include "adapter.h"
 
-#include "tables.h"
+#include "pmt.h"
 
 extern struct struct_opts opts;
 streams *st[MAX_STREAMS];
 SMutex st_mutex;
 extern int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
+
+int pmt_process_stream(adapter *ad);
+
 
 char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 {
@@ -248,6 +251,11 @@ int start_play(streams * sid, sockets * s)
 		s->sid, sid->type, sid->rsock, sid->adapter, s->id, sid->rsock_id, s->sock);
 	ad = get_adapter(sid->adapter);
 
+	if(compare_tunning_parameters(sid->adapter, &sid->tp)) // close the adapter that is required to be closed
+	{
+		restart_needed_adapters(sid->adapter, sid->sid);
+		ad = get_adapter(sid->adapter);
+	}
 	// check if the adapter is not valid or if a slave SID is trying to change frequency
 	if (!ad || (compare_tunning_parameters(sid->adapter, &sid->tp) && ad->master_sid != sid->sid  )) // associate the adapter only at play (not at setup)
 	{
@@ -328,8 +336,7 @@ int close_stream(int i)
 	/*  if(sid->pids)free(sid->pids);
 	   if(sid->apids)free(sid->apids);
 	   if(sid->dpids)free(sid->dpids);
-	   if(sid->buf)free(sid->buf);
-	   sid->pids = sid->apids = sid->dpids = sid->buf = NULL;
+	   sid->pids = sid->apids = sid->dpids = NULL;
 	 */
 	mutex_destroy(&sid->mutex);
 
@@ -578,6 +585,8 @@ int send_rtp(streams * sid, const struct iovec *iov, int liov)
 		io[0].iov_len = 16;
 
 	}
+	int k;
+
 	memcpy(&io[1], iov, liov * sizeof(struct iovec));
 	rv = sockets_writev(sid->rsock_id, io, liov + 1);
 
@@ -752,7 +761,7 @@ int flush_streami(streams * sid, int64_t ctime)
 	return rv;
 }
 
-// to be removed?
+
 int check_new_transponder(adapter *ad, int rlen)
 {
 	unsigned char *b;
@@ -760,7 +769,8 @@ int check_new_transponder(adapter *ad, int rlen)
 	int tid = 0;
 	int i;
 
-	for(i = 0; i< rlen; i+= 188)
+
+	for(i = 0; i < rlen; i+= 188)
 	{
 
 		b = ad->buf + i;
@@ -771,18 +781,11 @@ int check_new_transponder(adapter *ad, int rlen)
 			{
 				int j = 0;
 				all_good = 1;
-				LOG("Got the new transponder %04X %d", tid, tid);
-				for(j = 0; j< i; j+= 188)
-				{
-					b = ad->buf + j;
-					if(b[0] == 0x47)  // mark all the pids to 8191 to avoid being processed
-					{
-						b[1] |= 0x1F;
-						b[2] |= 0xFF;
-					}
-				}
-				break;
+				LOG("Got the new transponder %04X %d, position %d, %jd ms after tune", tid, tid, i, getTick() - ad->tune_time);
+				memmove(ad->buf, ad->buf + i, rlen - i);
+				return rlen - i;
 			}
+			else LOGL(3, "Got old transponder id %04X %d, position %d, %jd ms after tune", tid, tid, i, getTick() - ad->tune_time);
 		}
 
 	}
@@ -813,7 +816,7 @@ int process_packet(unsigned char *b, adapter *ad)
 		ad->pid_err++;
 		return 0;
 	}
-	p->cnt++;
+	p->packets++;
 	cc = b[3] & 0xF;
 	if (p->cc == 255)
 		p->cc = cc;
@@ -821,12 +824,12 @@ int process_packet(unsigned char *b, adapter *ad)
 		p->cc = 0;
 	else
 		p->cc++;
-
+	if(b[1] ==0x40 && b[2]==0) LOG("PAT TID = %d", b[8] * 256 + b[9]);
 	if (p->cc != cc)
 	{
 		LOGL(5, "PID Continuity error (adapter %d): pid: %03d, Expected CC: %X, Actual CC: %X",
 							ad->id, _pid, p->cc, cc);
-		p->err++;
+		p->cc_err++;
 	}
 	p->cc = cc;
 
@@ -843,10 +846,10 @@ int process_packet(unsigned char *b, adapter *ad)
 		if(p->count + 1 >= CRC_TS)
 		{
 			hexdump("packet", b, 188);
-			LOG("pid %d cnt %d count %d cc %d err %d crc %08X ", p->pid, p->cnt, p->count, p->cc, p->err, p->crc);
+			LOG("pid %d cnt %d count %d cc %d err %d crc %08X ", p->pid, p->packets, p->count, p->cc, p->cc_err, p->crc);
 //			LOG("count %d", p->cnt);
 			p->count = 0;
-			p->crc = 0;
+			p->cc_crc = 0;
 		}
 
 		if((p->count < 15) && (p->cc == 0))
@@ -887,26 +890,27 @@ int process_dmx(sockets * s)
 	static int cnt;
 	streams *sid;
 	adapter *ad;
-	int send = 0, flush_all = 0;
+	int send = 0;
 	int64_t stime;
+	int rlen = s->rlen;
+	s->rlen = 0;
 
 	ad = get_adapter(s->sid);
+	if(!ad)
+		return 0;
 
-	int rlen = s->rlen;
 	int64_t ms_ago = s->rtime - ad->rtime;
 	ad->rtime = s->rtime;
-	s->rlen = 0;
+	ad->rlen = rlen;
 	stime = getTickUs();
 
-	LOGL(6,
-						"process_dmx start flush_all=%d called for adapter %d -> %d out of %d bytes read, %jd ms ago",
-						flush_all, s->sid, rlen, s->lbuf, ms_ago);
-
+	LOGL(6, "process_dmx start called for adapter %d -> %d out of %d bytes read, %jd ms ago",
+						s->sid, rlen, s->lbuf, ms_ago);
 
 #ifndef DISABLE_TABLES
-	process_stream(ad, rlen);
+	pmt_process_stream(ad);
 #else
-	if (ad->sid_cnt == 1 && ad->master_sid >= 0 && opts.log < 2) // we have just 1 stream, do not check the pids, send everything to the destination
+	if (ad->sid_cnt == 1 && ad->master_sid >= 0 && !ad->ca_mask) // we have just 1 stream, do not check the pids, send everything to the destination
 	{
 		sid = get_sid(ad->master_sid);
 		if (!sid || sid->enabled != 1)
@@ -914,8 +918,6 @@ int process_dmx(sockets * s)
 			LOG ("Master SID %d not enabled ", ad->master_sid);
 			return -1;
 		}
-		if (sid->len > 0)
-			flush_streamb (sid, sid->buf, sid->len, s->rtime);
 		flush_streamb (sid, s->buf, rlen, s->rtime);
 
 	}
@@ -925,42 +927,11 @@ int process_dmx(sockets * s)
 		for (dp = 0; dp < rlen; dp += DVB_FRAME)
 			process_packet(&s->buf[dp], ad);
 
-		if (flush_all) // more than 50ms passed since the last write, so we flush our buffers
-		{
-			for (i = 0; i < MAX_STREAMS; i++)
-				if ((sid = st[i]) && (sid->enabled) && sid->adapter == s->sid
-								&& sid->iiov > 0)
-					flush_streami(sid, s->rtime);
+		for (i = 0; i < MAX_STREAMS; i++)
+			if ((sid = st[i]) && (sid->enabled) && sid->adapter == s->sid
+							&& sid->iiov > 0)
+				flush_streami(sid, s->rtime);
 
-		}
-		else
-		{   //move all dvb packets that were not sent out of the s->buf
-			min = s->buf;
-			max = &s->buf[rlen];
-			for (i = 0; i < MAX_STREAMS; i++)
-				if ((sid = st[i]) && (sid->enabled) && sid->adapter == s->sid
-								&& sid->iiov > 0)
-				{
-					for (j = 0; j < sid->iiov; j++)
-						if (sid->iov[j].iov_base >= min
-										&& sid->iov[j].iov_base <= max)
-						{
-							if (sid->len + DVB_FRAME >= STREAMS_BUFFER)
-							{
-								LOG(
-									"ERROR: requested to write outside of stream's buffer for sid %d len %d iiov %d - flushing stream's buffer",
-									i, sid->len, sid->iiov);
-								flush_streamb(sid, sid->buf, sid->len,
-																						s->rtime);
-							}
-
-							memcpy(&sid->buf[sid->len], sid->iov[j].iov_base,
-														DVB_FRAME);
-							sid->iov[j].iov_base = &sid->buf[sid->len];
-							sid->len += DVB_FRAME;
-						}
-				}
-		}
 
 		if (s->rtime - ad->last_sort > 2000)
 		{
@@ -983,6 +954,7 @@ int read_dmx(sockets * s)
 	adapter *ad;
 	int send = 0, flush_all = 0, ls, lse;
 	uint64_t stime;
+	uint64_t rtime = getTick();
 
 	if (s->rlen % DVB_FRAME != 0)
 //		s->rlen = ((int) s->rlen / DVB_FRAME) * DVB_FRAME;
@@ -1000,7 +972,7 @@ int read_dmx(sockets * s)
 	}
 
 // flush buffers every 50ms or the first 1000 packets (for PAT and PMT processing)
-	if (((s->iteration < 1000) && (s->rlen > 7*DVB_FRAME)) || (s->rtime - ad->rtime > 50))
+	if (((s->iteration < 1000) && (s->rlen > 7*DVB_FRAME)) || (rtime - ad->rtime > 50))
 	{
 		flush_all = 1; // flush everything that we've read so far
 		send = 1;
@@ -1009,24 +981,33 @@ int read_dmx(sockets * s)
 	if (flush_all && (s->rlen > 20000)) // if the bw/s > 300kB - waiting for the buffer to fill - most likely watching a TV channel and not scanning
 		send = 0;
 
-	if (s->rlen == s->lbuf)
+	if (s->lbuf - s->rlen < 7*DVB_FRAME )
 		send = 1;
 
 	if (s->rtime - ad->rtime > 100) // force flush every 100ms
 		send = 1;
 
-	if(ad && ad->wait_new_stream && (s->rtime - ad->tune_time < 50) ) // check new transponder
+	if(ad->wait_new_stream && !ad->tune_time)
+		ad->tune_time = rtime;
+
+	if(ad && ad->wait_new_stream && (rtime - ad->tune_time < 200) ) // check new transponder
 	{
-		LOGL(3, "Flushing adapter buffer of %d bytes after the tune", s->rlen);
-		s->rlen = 0;
-		return 0;
+		int new_rlen = check_new_transponder(ad, s->rlen);
+		if(!new_rlen)
+		{
+			LOGL(3, "Flushing adapter buffer of %d bytes after the tune %jd ms ago", s->rlen, rtime - ad->tune_time);
+			s->rlen = 0;
+			return 0;
+		}
+		s->rlen = new_rlen;
+
 	}
+	ad->tune_time = 0;
 	ad->wait_new_stream = 0;
 
 	LOGL(7,
-						"read_dmx send=%d, flush_all=%d, cnt %d called for adapter %d -> %d out of %d bytes read, %jd ms ago",
-						send, flush_all, cnt, s->sid, s->rlen, s->lbuf,
-						s->rtime - ad->rtime);
+						"read_dmx send=%d, flush_all=%d, cnt %d called for adapter %d -> %d out of %d bytes read, %jd ms ago (%jd %jd)",
+						send, flush_all, cnt, s->sid, s->rlen, s->lbuf, rtime - ad->rtime, rtime, ad->rtime);
 
 
 

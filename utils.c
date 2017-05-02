@@ -49,6 +49,7 @@
 #include "dvb.h"
 #include "utils.h"
 #include "minisatip.h"
+#include "socketworks.h"
 
 #if !defined(__mips__) && !defined(NO_BACKTRACE)
 #include <execinfo.h>
@@ -514,6 +515,8 @@ becomeDaemon()
 			usleep(500);
 		}
 	}
+
+	LOGL(0, "running %s in background", app_name);
 
 	switch (fork())
 	{ /* Become background process */
@@ -1320,5 +1323,71 @@ void hexdump (char *desc, void *addr, int len) {
 		LOG("\n%s", buf)
 		else
 			LOG ("%s:\n%s", desc, buf);
+
+}
+
+typedef int (*http_client_action)(void *s, int len, void *opaque);
+int http_client_close(sockets *s)
+{
+	http_client_action func = (http_client_action )s->opaque3;
+	if(func)
+		func(NULL, 0, s->opaque);
+	return 1;
+
+}
+
+void http_client_read(sockets *s)
+{
+	if(!s->rlen && s->opaque2)
+	{
+		char headers[500];
+		sprintf(headers, "GET %s HTTP/1.0\r\n\r\n", (char *)s->opaque2);
+		LOG("%s: sending to %d: %s",__FUNCTION__, s->sock, (char *)s->opaque2);
+		send(s->sock, headers, strlen(headers), MSG_NOSIGNAL);
+		s->opaque2 = NULL;
+	}
+	http_client_action func = (http_client_action )s->opaque3;
+	if(func)
+		func(s->buf, s->rlen, s->opaque);
+	s->rlen = 0;
+	return;
+}
+
+int http_client(char *url, char *request, void *callback, void *opaque)
+{
+	char host[200];
+	int port = 80;
+	char *req;
+	char *sep, *sep1;
+	int http_client_sock, sock;
+
+	if(strncmp("http", url, 4))
+		LOG_AND_RETURN(0, "Only http support for %s", url);
+
+	memset(host, 0, sizeof(host));
+	strncpy(host, url + 7, sizeof(host) - 1);
+	sep = strchr(host, ':' );
+	if(sep)
+	{
+		port = map_intd(sep + 1, NULL, 80);
+	}
+	if(!sep)
+		sep = strchr(host, '/' );
+	if(!sep)
+		sep = url + strlen(host);
+	sep[0] = 0;
+
+	req = strchr(url + 7, '/');
+	if(!req)
+		req = "/";
+
+	sock = tcp_connect(host, port, NULL, 1);
+	if(sock < 0)
+		LOG_AND_RETURN(1, "%s: connect to %s:%d failed", __FUNCTION__, host, port);
+	http_client_sock = sockets_add(sock, NULL, -1, TYPE_TCP | TYPE_CONNECT, (socket_action) http_client_read, (socket_action) http_client_close, (socket_action) http_client_close);
+	if(http_client_sock < 0)
+		LOG_AND_RETURN(1, "%s: socket_add failed", __FUNCTION__);
+	sockets_set_opaque(http_client_sock, opaque, req, callback);
+	sockets_timeout(http_client_sock, 2000); // 2s timeout
 
 }

@@ -1141,7 +1141,11 @@ void find_dvb_adapter(adapter **a)
 	int cnt;
 	int i = 0, j = 0;
 	adapter *ad;
-
+	if(opts.disable_dvb)
+	{
+		LOG("DVB device detection disabled");
+		return;
+	}
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		for (j = 0; j < MAX_ADAPTERS; j++)
 		{

@@ -456,7 +456,7 @@ int process_pmt(adapter *ad, unsigned char *b)
 	{
 		SPMT pmt =
 		{ .pmt = b, .pmt_len = pmt_len, .pi = pi, .pi_len = pi_len, .p = p,
-				.sid = program_id, .ver = ver, .pid = pid, .old_key = old_key };
+				.sid = program_id, .ver = ver, .pid = pid };
 		p->enabled_channels = enabled_channels;
 
 		if (program_id > 0)
@@ -831,65 +831,6 @@ void tables_pid_del(adapter *ad, int pid)
 	}
 }
 
-int process_stream(adapter *ad, int rlen)
-{
-	SPid *p;
-	int i, pid;
-	uint8_t *b;
-
-	int64_t pid_key = TABLES_ITEM + ((1 + ad->id) << 24) + 0;
-	int16_t *pids;
-
-	if (nca == 0)
-		return 0;
-
-	if (ad->ca_mask == 0) // no CA enabled on this adapter
-		return 0;
-
-	pids = (int16_t *) getItem(pid_key);
-
-	for (i = 0; i < rlen; i += 188)
-	{
-		b = ad->buf + i;
-		pid = PID_FROM_TS(b);
-		if (pid == 0)
-		{
-			process_pat(ad, b);
-//			continue;
-		}
-
-		if (pids && pids[pid] < 0)
-		{
-			process_pmt(ad, b);
-			continue;
-		}
-		p = find_pid(ad->id, pid);
-		if (p && p->type == TYPE_ECM)
-			run_ca_action(CA_ECM, ad, b);
-
-	}
-	run_ca_action(CA_TS, ad, &rlen);
-	if(opts.drop_encrypted)
-	{
-		for (i = 0; i < rlen; i += 188)
-		{
-			b = ad->buf + i;
-			pid = PID_FROM_TS(b);
-			p = find_pid(ad->id, pid);
-			if (p)
-				p->dec_err++;
-
-			if((b[3] & 0x80) == 0x80)
-			{
-				b[1] |= 0x1F;
-				b[2] |= 0xFF;
-			}
-		}
-	}
-
-
-	return 0;
-}
 
 int tables_init_ca_for_device(int i, adapter *ad)
 {

@@ -42,10 +42,9 @@
 #include "dvb.h"
 #include "socketworks.h"
 #include "minisatip.h"
-#include "dvbapi.h"
+#include "pmt.h"
 #include "adapter.h"
 #include "tables.h"
-#include "dvbapi.h"
 #include "openssl/aes.h"
 
 extern struct struct_opts opts;
@@ -70,7 +69,7 @@ void dvbaes_set_cw(unsigned char *cw, void *key)
 	AES_set_decrypt_key(cw, 128, (AES_KEY *) key);
 }
 
-void dvbaes_decrypt_stream(void *key, dvbapi_batch *batch, int max_len)
+void dvbaes_decrypt_stream(void *key, SPMT_batch *batch, int max_len)
 {
 	int i, j, len;
 	for (i = 0; batch[i].data && i < max_len; i++)
@@ -83,8 +82,13 @@ void dvbaes_decrypt_stream(void *key, dvbapi_batch *batch, int max_len)
 	}
 }
 
-dvbapi_op aes_op =
-{ .algo = CA_ALGO_AES128, .mode = CA_MODE_ECB,
+SPMT_op aes_op =
+{ .algo = CA_ALGO_AES128_ECB,
 		.create_cwkey = dvbaes_create_key, .delete_cwkey = dvbaes_delete_key,
 		.batch_size = dvbaes_batch_size, .set_cw = dvbaes_set_cw,
 		.decrypt_stream = dvbaes_decrypt_stream };
+
+void init_algo_aes()
+{
+	register_algo(&aes_op);
+}

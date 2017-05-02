@@ -42,6 +42,7 @@ satipc="SatIP Client:\t\t\t\t "
 static="Static:\t\t\t\t\t "
 dvbapi="dvbapi:\t\t\t\t\t "
 axe="axe:\t\t\t\t\t "
+enigma="enigma:\t\t\t\t\t "
 
 AC_MSG_NOTICE([ == Checking LINUX DVB == ])
 AC_CHECK_HEADERS([linux/dvb/frontend.h],[LINUXDVB=1],[LINUXDVB=0])
@@ -187,6 +188,16 @@ else
 FM="$FM\n$axe disabled"
 fi
 
+AC_ARG_ENABLE([enigma],
+  [AS_HELP_STRING([--enable-enigma],
+  [enable compilation for enigma boxes])],
+  [ENIGMA=1],
+  [ENIGMA=0])
+if test "$ENIGMA" = "1"; then
+FM="$FM\n$enigma enabled"
+else
+FM="$FM\n$enigma disabled"
+fi
 
 AC_SUBST(LINUXDVB)
 AC_SUBST(DVBCSA)
@@ -198,6 +209,7 @@ AC_SUBST(SATIPCLIENT)
 AC_SUBST(STATIC)
 AC_SUBST(DVBAPI)
 AC_SUBST(AXE)
+AC_SUBST(ENIGMA)
 
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT

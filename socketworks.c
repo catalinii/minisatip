@@ -478,6 +478,7 @@ int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 
 	ss = s[i];
 	ss->enabled = 1;
+	ss->is_enabled = 1;
 	ss->sock = sock;
 	ss->tid = get_tid();
 	memset(&ss->sa, 0, sizeof(ss->sa));
@@ -496,6 +497,7 @@ int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 	ss->wtime = 0;
 	if (max_sock <= i)
 		max_sock = i + 1;
+	ss->opaque = ss->opaque2 = ss->opaque3 = NULL;
 	ss->buf = NULL;
 	ss->lbuf = 0;
 	ss->timeout_ms = 0;
@@ -529,7 +531,7 @@ int sockets_del(int sock)
 	int i, so;
 	sockets *ss;
 
-	if (sock < 0 || sock > MAX_SOCKS || !s[sock] || !s[sock]->enabled)
+	if (sock < 0 || sock > MAX_SOCKS || !s[sock] || !s[sock]->enabled || !s[sock]->is_enabled)
 		return 0;
 
 	ss = s[sock];
@@ -540,14 +542,13 @@ int sockets_del(int sock)
 		return 0;
 
 	}
-	mutex_lock(&s_mutex);
-	ss->enabled = 0;
+	if (ss->close)
+		ss->close(ss);
+
+	ss->is_enabled = 0;
 	so = ss->sock;
 	ss->sock = -1;                             // avoid infinite loop
 	LOG("sockets_del: %d -> handle %d, sid %d, overflow %d, allocated %d, used %d", sock, so, ss->sid, ss->overflow, ss->buf_alloc, ss->buf_used);
-
-	if (ss->close)
-		ss->close(ss);
 
 	if (so >= 0)
 		close(so);
@@ -579,7 +580,10 @@ int sockets_del(int sock)
 	LOG("sockets_del: %d Last open socket is at index %d current_handle %d",
 					sock, i, so);
 	mutex_destroy(&ss->mutex);
+	mutex_lock(&s_mutex);
+	ss->enabled = 0;
 	mutex_unlock(&s_mutex);
+
 	return 0;
 }
 
@@ -666,14 +670,14 @@ void *select_and_execute(void *arg)
 					ss->iteration++;
 
 					LOGL(6,
-										"event on socket index %d handle %d type %d (poll fd:%d, revents=%d)",
-										i, ss->sock, ss->type, pf[i].fd, pf[i].revents);
+										"event on socket index %d handle %d type %d spos %d wpos %d (poll fd: %d, events: %d, revents: %d)",
+										i, ss->sock, ss->type, ss->spos, ss->wpos, pf[i].fd, pf[i].events, pf[i].revents);
 					sockets_lock(ss);
 
 					if ((pf[i].revents & POLLOUT) && (ss->spos != ss->wpos))
 					{
 						int k=300;
-
+						LOG("start flush sock id %d", ss->id);
 						while(!flush_socket(ss))
 							if(!k--)
 								break;
@@ -799,10 +803,9 @@ void *select_and_execute(void *arg)
 			lt = c_time;
 			i = -1;
 			while (++i < max_sock)
-				if ((ss = get_sockets(i)) && (ss->tid == tid)
-								&& ((ss->timeout_ms > 0
-													&& lt - ss->rtime > ss->timeout_ms)
-												|| (ss->timeout_ms == 1)))
+				if ((ss = get_sockets(i)) && (ss->tid == tid) &&
+								(((ss->timeout_ms > 0) && (lt - ss->rtime > ss->timeout_ms) && (ss->spos == ss->wpos))
+									|| (ss->timeout_ms == 1)))
 				{
 					if (ss->timeout)
 					{
@@ -1041,7 +1044,7 @@ void set_socket_receive_buffer(int sock, int len)
 
 sockets *get_sockets(int i)
 {
-	if (i < 0 || i >= MAX_SOCKS || !s[i] || !s[i]->enabled)
+	if (i < 0 || i >= MAX_SOCKS || !s[i] || !s[i]->enabled || !s[i]->is_enabled)
 		return NULL;
 	return s[i];
 }
@@ -1105,7 +1108,7 @@ int my_writev(sockets *s, const struct iovec *iov, int iiov)
 	int log_level = 7;
 	int64_t stime = 0;
 	if (s->timeout_ms == 1)
-		return -1;
+		LOG_AND_RETURN(-2, "socket about to be closed, not writing");
 
 	LOGL(log_level + 1, "start writev handle %d, iiov %d", s->sock, iiov);
 	if (opts.log == log_level)
@@ -1190,10 +1193,10 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 			len += iov[i].iov_len;
 
 		rv = my_writev(s, iov, iovcnt);
-		if(rv == len)
+		if(rv == len || rv < 0)
 			return rv;
 
-		if(rv > 0 && (len < sizeof(tmpbuf)))
+		if(len < sizeof(tmpbuf))
 		{
 			for(i=0; i<iovcnt; i++)
 			{
@@ -1206,8 +1209,14 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 			iov = &tmpiov;
 			iovcnt = 1;
 
+		}else if(iovcnt == 1)
+		{
+			tmpiov.iov_base = iov[0].iov_base + rv;
+			tmpiov.iov_len = iov[0].iov_len - rv;
+			iov = &tmpiov;
+			iovcnt = 1;
 		}else if(len > sizeof(tmpbuf))
-			LOG("tmpbuf size is too small: %d required ", len);
+			LOG("tmpbuf size is too small: %d required, iovcnt %d", len, iovcnt);
 
 	}
 
@@ -1250,6 +1259,7 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 		s->overflow++;
 		return 0;
 	}
+
 	s->buf_used++;
 	LOGL(4, "SOCK %d it %d: queueing %d bytes at %d (out of %d) send pos %d [A:%d, U:%d]", s->id, s->iteration, len, s->wpos, s->wmax, s->spos, s->buf_alloc, s->buf_used);
 
@@ -1308,7 +1318,7 @@ int flush_socket(sockets *s)
 			p->len = iov[0].iov_len - rv;
 		}
 		if(rv != iov[0].iov_len)
-			return 1;
+			LOG_AND_RETURN(1, "SOCK %d: write %d out of %d bytes, error %d: %s", s->id, rv, iov[0].iov_len, errno, strerror(errno));
 
 	}
 //	delItem(item);
@@ -1319,4 +1329,23 @@ int flush_socket(sockets *s)
 	if(s->spos == s->wpos)
 		s->spos = s->wpos = 0;
 	return 0;
+}
+
+void set_sockets_sid(int id, int sid)
+{
+	sockets *s = get_sockets(id);
+	if(s)
+		s->sid = sid;
+	else LOGL(3, "sid for socket id %d could not be set", id);
+}
+
+void sockets_set_opaque(int id, void *opaque, void *opaque2, void *opaque3)
+{
+	sockets *s = get_sockets(id);
+	if(s)
+	{
+		s->opaque = opaque;
+		s->opaque2 = opaque2;
+		s->opaque3 = opaque3;
+	}
 }

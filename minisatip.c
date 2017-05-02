@@ -44,6 +44,10 @@
 #include "dvb.h"
 #include "tables.h"
 
+#ifndef DISABLE_SATIPCLIENT
+#include "satipc.h"
+#endif
+
 #ifdef AXE
 #include "axe.h"
 #endif
@@ -59,55 +63,8 @@ extern sockets s[MAX_SOCKS];
 char public[] = "Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN";
 int rtsp, http, si, si1, ssdp1;
 
-static const struct option long_options[] =
-{
-	{ "remote-rtp", required_argument, NULL, 'r' },
-	{ "device-id", required_argument, NULL, 'D' },
-	{ "check-signal", no_argument, NULL, 'z' },
-	{ "clean-psi", no_argument, NULL, 't' },
-	{ "log", no_argument, NULL, 'l' },
-	{ "buffer", required_argument, NULL, 'b' },
-	{ "enable-adapters", required_argument, NULL, 'e' },
-	{ "unicable", required_argument, NULL, 'u' },
-	{ "jess", required_argument, NULL, 'j' },
-	{ "diseqc", required_argument, NULL, 'd' },
-	{ "diseqc-timing", required_argument, NULL, 'q' },
-	{"nopm", required_argument, NULL, 'Z'},
-#ifndef DISABLE_DVBAPI
-	{ "dvbapi", required_argument, NULL, 'o' },
-#endif
-#ifndef DISABLE_SATIPCLIENT
-	{ "satip-servers", required_argument, NULL, 's' },
-	{ "satip-tcp", no_argument, NULL, 'O' },
-#endif
-#ifndef DISABLE_NETCVCLIENT
-	{ "netceiver", required_argument, NULL, 'n' },
-#endif
-	{ "rtsp-port", required_argument, NULL, 'y' },
-	{ "http-port", required_argument, NULL, 'x' },
-	{ "http-host", required_argument, NULL, 'w' },
-	{ "slave", required_argument, NULL, 'S' },
-	{ "delsys", required_argument, NULL, 'Y' },
-	{ "priority", required_argument, NULL, 'i' },
-	{ "document-root", required_argument, NULL, 'R' },
-	{ "threads", no_argument, NULL, 'T' },
-	{ "dmx-source", required_argument, NULL, '9' },
-	{ "lnb", required_argument, NULL, 'L' },
-	{ "xml", required_argument, NULL, 'X' },
-	{ "help", no_argument, NULL, 'h' },
-	{ "version", no_argument, NULL, 'V' },
-#ifdef AXE
-	{ "link-adapters", required_argument, NULL, '7' },
-	{ "free-inputs", required_argument, NULL, 'A' },
-	{ "quattro", no_argument, NULL, 'Q' },
-	{ "quattro-hiband", required_argument, NULL, '8' },
-	{ "skip-mpegts", required_argument, NULL, 'M' },
-#endif
-	{ 0, 0, 0, 0 }
-};
-
 #define RRTP_OPT 'r'
-#define DEVICEID_OPT 'D'
+#define DISABLEDVB_OPT 'D'
 #define HTTPSERVER_OPT 'w'
 #define HTTPPORT_OPT 'x'
 #define LOG_OPT 'l'
@@ -144,9 +101,58 @@ static const struct option long_options[] =
 #define LINK_OPT '7'
 #define QUATTRO_OPT 'Q'
 #define QUATTRO_HIBAND_OPT '8'
-#define AXE_SKIP_PKT 'M'
 #define AXE_POWER 'W'
 #define ABSOLUTE_SRC 'A'
+#define SATIPXML_OPT '6'
+
+
+static const struct option long_options[] =
+{
+	{ "remote-rtp", required_argument, NULL, 'r' },
+	{ "disable-dvb", no_argument, NULL, DISABLEDVB_OPT },
+	{ "check-signal", no_argument, NULL, 'z' },
+	{ "clean-psi", no_argument, NULL, 't' },
+	{ "log", no_argument, NULL, 'l' },
+	{ "buffer", required_argument, NULL, 'b' },
+	{ "enable-adapters", required_argument, NULL, 'e' },
+	{ "unicable", required_argument, NULL, 'u' },
+	{ "jess", required_argument, NULL, 'j' },
+	{ "diseqc", required_argument, NULL, 'd' },
+	{ "diseqc-timing", required_argument, NULL, 'q' },
+	{"nopm", required_argument, NULL, 'Z'},
+#ifndef DISABLE_DVBAPI
+	{ "dvbapi", required_argument, NULL, 'o' },
+#endif
+#ifndef DISABLE_SATIPCLIENT
+	{ "satip-servers", required_argument, NULL, 's' },
+	{ "satip-tcp", no_argument, NULL, 'O' },
+	{ "satip-xml", required_argument, NULL, SATIPXML_OPT },
+#endif
+#ifndef DISABLE_NETCVCLIENT
+	{ "netceiver", required_argument, NULL, 'n' },
+#endif
+	{ "rtsp-port", required_argument, NULL, 'y' },
+	{ "http-port", required_argument, NULL, 'x' },
+	{ "http-host", required_argument, NULL, 'w' },
+	{ "slave", required_argument, NULL, 'S' },
+	{ "delsys", required_argument, NULL, 'Y' },
+	{ "priority", required_argument, NULL, 'i' },
+	{ "document-root", required_argument, NULL, 'R' },
+	{ "threads", no_argument, NULL, 'T' },
+	{ "dmx-source", required_argument, NULL, '9' },
+	{ "lnb", required_argument, NULL, 'L' },
+	{ "xml", required_argument, NULL, 'X' },
+	{ "help", no_argument, NULL, 'h' },
+	{ "version", no_argument, NULL, 'V' },
+#ifdef AXE
+	{ "link-adapters", required_argument, NULL, '7' },
+	{ "free-inputs", required_argument, NULL, 'A' },
+	{ "quattro", no_argument, NULL, 'Q' },
+	{ "quattro-hiband", required_argument, NULL, '8' },
+	{ "skip-mpegts", required_argument, NULL, 'M' },
+#endif
+	{ 0, 0, 0, 0 }
+};
 
 char *built_info[] =
 {
@@ -258,8 +264,7 @@ Help\n\
 \t* All timing values are in ms, default adapter values are: 15-54-15-15-15-0\n\
 	- note: * as adapter means apply to all adapters\n\
 \n\
-* -D --device-id DVC_ID: specify the device id (in case there are multiple SAT>IP servers in the network)\n \
-	* eg: -D 4 \n\
+* -D --disable-dvb disable DVB adapter detection\n \
 \n\
 * -E Allow encrypted stream to be sent to the client even if the decrypting was unsuccessfull\n \
 \n\
@@ -342,11 +347,14 @@ Help\n\
 	- specifies 1 dvbs2 (and dvbs)satip server with address 192.168.1.2:554\n\
 	- specifies 1 dvbt satip server  with address 192.168.1.3:554\n\
 	- specifies 1 dvbc satip server  with address 192.168.1.4:554\n\
+	\n\
+*  --satip-xml <URL> Use the xml retrieved from a satip server to configure satip adapters \n\
+	eg: --satip-xml http://localhost:8080/desc.xml \n\
 \n\
 * -O --satip-tcp Use RTSP over TCP instead of UDP for data transport \n\
 "
 #endif
-		"\
+		" \
 * -S --slave ADAPTER1,ADAPTER2-ADAPTER4[,..] - specify slave adapters	\n\
 	* Allows specifying bonded adapters (multiple adapters connected with a splitter to the same LNB)\n\
 	Only one adapter needs to be master all others needs to have this parameter specified\n\
@@ -402,8 +410,6 @@ Help\n\
 	* if hiband is 0, do not allow hiband\n\
 	* if hiband is 1, allow hiband\n\
 \n\
-* -M --skip-mpegts packets: skip initial MPEG-TS packets for AXE demuxer (default 35)\n\
-\n\
 "
 #endif
 		,
@@ -417,38 +423,21 @@ void set_options(int argc, char *argv[])
 {
 	int opt;
 	char *lip;
-
+	memset(&opts, 0, sizeof(opts));
 	opts.log = 1;
-	opts.rrtp = NULL;
 	opts.disc_host = "239.255.255.250";
 	opts.start_rtp = 5500;
 	opts.http_port = 8080;
-	opts.http_host = NULL;
-	opts.log = 0;
 	opts.timeout_sec = 30000;
-	opts.force_sadapter = 0;
-	opts.force_tadapter = 0;
-	opts.force_cadapter = 0;
-	opts.mac[0] = 0;
 	opts.daemon = 1;
-	opts.device_id = 0;
-	opts.bootid = 0;
 	opts.dvr_buffer = DVR_BUFFER;
 	opts.adapter_buffer = ADAPTER_BUFFER;
-	opts.file_line = 0;
-	opts.dvbapi_port = 0;
-	opts.dvbapi_host = NULL;
 	opts.drop_encrypted = 1;
 	opts.rtsp_port = 554;
-	opts.clean_psi = 0;
 	opts.satip_addpids = 1;
-	opts.satip_setup_pids = 0;
-	opts.satip_rtsp_over_tcp = 0;
 	opts.output_buffer = 512 * 1024;
-	opts.satip_servers[0] = 0;
 	opts.document_root = "html";
 	opts.xml_path = DESC_XML;
-	opts.no_threads = 0;
 	opts.th_priority = -1;
 	opts.diseqc_before_cmd = 15;
 	opts.diseqc_after_cmd = 54;
@@ -457,13 +446,11 @@ void set_options(int argc, char *argv[])
 	opts.diseqc_after_burst = 15;
 	opts.diseqc_after_tone = 0;
 	opts.diseqc_committed_no = 1;
-	opts.nopm = 0;
 	opts.lnb_low = (9750*1000UL);
 	opts.lnb_high = (10600*1000UL);
 	opts.lnb_circular = (10750*1000UL);
 	opts.lnb_switch = (11700*1000UL);
 	opts.max_sbuf = 100;
-	opts.max_pids = 0;
 #if defined(__sh__)
 	opts.max_pids = 20;
 #endif
@@ -471,22 +458,17 @@ void set_options(int argc, char *argv[])
 #ifdef NO_BACKTRACE
 	opts.no_threads = 1;
 #endif
-
 #ifdef AXE
 	opts.nopm = 1;
 	opts.no_threads = 1;
-	opts.axe_skippkt = 35;
 	opts.document_root = "/usr/share/minisatip/html";
-#define AXE_OPTS "7:QW:M:8:A:"
+#define AXE_OPTS "7:QW:8:A:"
 #else
 #define AXE_OPTS ""
 
 #endif
-	memset(opts.playlist, 0, sizeof(opts.playlist));
 
-	while ((opt = getopt_long(argc, argv,
-																											"flr:a:td:w:p:s:n:hB:b:m:p:e:x:u:j:o:gy:i:q:D:VR:S:TX:Y:OL:EP:Z:"AXE_OPTS,
-																											long_options, NULL)) != -1)
+	while ((opt = getopt_long(argc, argv, "flr:a:td:w:p:s:n:hB:b:m:p:e:x:u:j:o:gy:i:q:DVR:S:TX:Y:OL:EP:Z:"AXE_OPTS, long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
 		switch (opt)
@@ -508,9 +490,9 @@ void set_options(int argc, char *argv[])
 			break;
 		}
 
-		case DEVICEID_OPT:
+		case DISABLEDVB_OPT:
 		{
-			opts.device_id = atoi(optarg);
+			opts.disable_dvb = 1;
 			break;
 		}
 
@@ -590,7 +572,12 @@ void set_options(int argc, char *argv[])
 
 		case PLAYLIST_OPT:
 		{
-			snprintf(opts.playlist, sizeof(opts.playlist),"<satip:X_SATIPM3U xmlns:satip=\"urn:ses-com:satip\">%s</satip:X_SATIPM3U>\r\n", optarg);
+			if(strlen(optarg) < 1000)
+			{
+				opts.playlist = malloc1(strlen(optarg) + 200);
+				if(opts.playlist)
+					sprintf(opts.playlist,"<satip:X_SATIPM3U xmlns:satip=\"urn:ses-com:satip\">%s</satip:X_SATIPM3U>\r\n", optarg);
+			}else LOGL(0, "playlist length is too big %d bytes", strlen(optarg));
 			break;
 		}
 
@@ -682,14 +669,23 @@ void set_options(int argc, char *argv[])
 			break;
 		}
 
-		case SATIPCLIENT_OPT:
 #ifdef DISABLE_SATIPCLIENT
+		case SATIPCLIENT_OPT:
+		case SATIPXML_OPT:
+		case SATIP_TCP_OPT:
+
 			LOGL(0, "%s was not compiled with satip client support, please change the Makefile", app_name);
 			exit (0);
 
-#endif
+#else
+
+		case SATIPCLIENT_OPT:
+			if(!opts.satip_servers)
+				opts.satip_servers = init_satip_pointer(SATIP_STR_LEN);
+			if(!opts.satip_servers)
+				break;
 			if (strlen(optarg) + strlen(opts.satip_servers)
-							> sizeof(opts.satip_servers))
+							> SATIP_STR_LEN)
 				break;
 
 			if (opts.satip_servers[0])
@@ -700,15 +696,27 @@ void set_options(int argc, char *argv[])
 
 			break;
 
-		case SATIP_TCP_OPT:
-#ifdef DISABLE_SATIPCLIENT
-			LOGL(0, "%s was not compiled with satip client support, please change the Makefile", app_name);
-			exit (0);
+		case SATIPXML_OPT:
+			if(!opts.satip_xml)
+				opts.satip_xml = init_satip_pointer(SATIP_STR_LEN);
+			if(!opts.satip_xml)
+				break;
+			if (strlen(optarg) + strlen(opts.satip_xml)
+							> SATIP_STR_LEN)
+				break;
 
-#endif
-			opts.satip_rtsp_over_tcp = 1;
+			if (opts.satip_xml[0])
+				sprintf(opts.satip_xml + strlen(opts.satip_xml), " %s",
+												optarg);
+			else
+				sprintf(opts.satip_xml, "%s", optarg);
 			break;
 
+
+		case SATIP_TCP_OPT:
+			opts.satip_rtsp_over_tcp = 1;
+			break;
+#endif
 		case NETCVCLIENT_OPT:
 		{
 #ifdef DISABLE_NETCVCLIENT
@@ -779,13 +787,6 @@ void set_options(int argc, char *argv[])
 			opts.axe_power = atoi(optarg) + 1;
 			break;
 
-		case AXE_SKIP_PKT:
-			opts.axe_skippkt = atoi(optarg);
-			if (opts.axe_skippkt < 0)
-				opts.axe_skippkt = 0;
-			if (opts.axe_skippkt > 200)
-				opts.axe_skippkt = 200;
-			break;
 #endif
 		}
 
@@ -1132,7 +1133,7 @@ int read_http(sockets * s)
 	if (uuidi == 0)
 		ssdp_discovery(s);
 
-	sockets_timeout(s->id, 1); //close the connection
+	sockets_timeout(s->id, 100); //close the connection
 
 	if (strcmp(arg[1], "/"DESC_XML) == 0)
 	{
@@ -1154,11 +1155,8 @@ int read_http(sockets * s)
 		if (tuner_s2 + tuner_t + tuner_c + tuner_t2 + tuner_c2 == 0)
 			strcpy(adapters, "DVBS2-0,");
 		adapters[strlen(adapters) - 1] = 0;
-		snprintf(buf, sizeof(buf), xml, app_name, app_name, app_name, uuid,
-											opts.http_host, adapters, opts.playlist);
-		sprintf(headers,
-										"CACHE-CONTROL: no-cache\r\nContent-type: text/xml\r\nX-SATIP-RTSP-Port: %d",
-										opts.rtsp_port);
+		snprintf(buf, sizeof(buf), xml, app_name, app_name, app_name, uuid, opts.http_host, adapters, opts.playlist ? opts.playlist : "");
+		sprintf(headers, "CACHE-CONTROL: no-cache\r\nContent-type: text/xml\r\nX-SATIP-RTSP-Port: %d", opts.rtsp_port);
 		http_response(s, 200, headers, buf, 0, 0);
 		return 0;
 	}
@@ -1403,7 +1401,7 @@ pthread_t main_tid;
 extern int sock_signal;
 int main(int argc, char *argv[])
 {
-	int sock_st, sock_bw, rv;
+	int sock_st, sock_bw, sock_satip, rv;
 	main_tid = get_tid();
 	thread_name = "main";
 	set_options(argc, argv);
@@ -1461,7 +1459,16 @@ int main(int argc, char *argv[])
 
 	set_socket_thread(sock_bw, get_socket_thread(sock_signal));
 	sockets_timeout(sock_bw, 1000);
+#ifndef DISABLE_SATIPCLIENT
+	if(opts.satip_xml)
+	{
+		if (0 > (sock_satip = sockets_add(SOCK_TIMEOUT, NULL, -1, TYPE_UDP, NULL, NULL, (socket_action) satip_getxml)))
+			FAIL("sockets_add failed for satip_xml retrieval");
 
+		set_socket_thread(sock_satip, get_socket_thread(sock_signal));
+		sockets_timeout(sock_satip, 120000);
+	}
+#endif
 #ifndef DISABLE_TABLES
 	tables_init();
 #endif
@@ -1582,9 +1589,9 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 					get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
 					lr, s->id);
 	LOGL(3, "%s", resp);
-	send(s->sock, resp, strlen(resp), MSG_NOSIGNAL);
+	sockets_write(s->id, resp, strlen(resp));
 	if (binary)
-		send(s->sock, desc, lr, MSG_NOSIGNAL);
+		sockets_write(s->id, desc, lr);
 }
 
 #ifdef AXE

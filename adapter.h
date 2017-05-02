@@ -2,16 +2,13 @@
 #define ADAPTER_H
 #include "minisatip.h"
 #include "dvb.h"
+#include "pmt.h"
 
 typedef struct ca_device ca_device_t;
 
 #define MAX_ADAPTERS 32
 #define DVR_BUFFER 30*1024*188
-#ifdef NO_BACKTRACE
-#define MAX_STREAMS_PER_PID 8
-#else
-#define MAX_STREAMS_PER_PID 16
-#endif
+
 #define ADAPTER_BUFFER (128 + 5)*DVB_FRAME
 #define ADAPTER_TIMEOUT 60000
 
@@ -27,27 +24,6 @@ typedef struct ca_device ca_device_t;
 #define RTSP_TEARDOWN 4
 #define RTSP_DESCRIBE 5
 
-typedef struct struct_pid
-{
-	int16_t pid;					 // pid for this demux - not used
-	int fd;						 // fd for this demux
-	int err;					// counter errors
-								// stream id - one more to set it -1
-	signed char sid[MAX_STREAMS_PER_PID];
-	char flags;	// 0 - disabled , 1 enabled, 2 - will be enabled next tune when tune is called, 3 disable when tune is called
-	char type;
-	int cnt;
-	int dec_err;			// decrypt errors
-	unsigned char key, filter, ecm_parity; // custom data kept in the SPid structure
-	unsigned char cc, version; // continuity
-	unsigned char enabled_channels; // ca information
-	uint16_t csid; // channel sid
-#ifdef CRC_TS
-	uint32_t crc;
-	int count;
-#endif
-} SPid;
-
 typedef int (*Set_pid)(void *ad, uint16_t i_pid);
 typedef int (*Del_filters)(int fd, int pid);
 typedef int (*Adapter_commit)(void *ad);
@@ -55,7 +31,7 @@ typedef int (*Open_device)(void *ad);
 typedef int (*Device_signal)(void *ad);
 typedef int (*Tune)(int aid, transponder * tp);
 typedef fe_delivery_system_t (*Dvb_delsys)(int aid, int fd,
-		fe_delivery_system_t *sys);
+																																											fe_delivery_system_t *sys);
 
 #define ADAPTER_DVB 1
 #define ADAPTER_SATIP 2
@@ -67,29 +43,21 @@ typedef struct struct_adapter
 {
 	char enabled;
 	SMutex mutex;
-	char type, slow_dev; // available on the system
+	char type, slow_dev, restart_when_tune, restart_needed; // available on the system
 	int fe, dmx, dvr;
-#ifdef AXE
-	int fe2;
-	int axe_used;
-	int64_t axe_vdevice_last_sync;
-	int64_t axe_pktc;
-	int64_t axe_ccerr;
-	int slave;
-#endif
+
 	int pa, fn;
 	// physical adapter, physical frontend number
 	fe_delivery_system_t sys[MAX_DELSYS];
 	transponder tp;
 	SPid pids[MAX_PIDS];
 	int ca_mask;
-	int master_sid;				 // first SID, the one that controls the tuning
-	int sid_cnt;				 //number of streams
+	int master_sid;     // first SID, the one that controls the tuning
+	int sid_cnt;     //number of streams
 	int sock, fe_sock;
 	int do_tune;
 	int force_close;
-	unsigned char *buf;			// 7 rtp packets = MAX_PACK, 7 frames / packet
-	int rlen;
+	unsigned char *buf;   // 7 rtp packets = MAX_PACK, 7 frames / packet
 	int64_t rtime;
 	int64_t last_sort;
 	int new_gs;
@@ -103,11 +71,19 @@ typedef struct struct_adapter
 	int old_hiband;
 	int old_pol;
 	int id;
+	int rlen, lbuf; // how many bytes are received in the TS buffer, length of the buffer
 	int pat_processed, transponder_id, pat_ver;
 	int wait_new_stream, wait_transponder_id;
 	uint64_t tune_time;
 	char name[5];
-
+#ifdef AXE
+	int fe2;
+	int axe_used;
+	int64_t axe_vdevice_last_sync;
+	int64_t axe_pktc;
+	int64_t axe_ccerr;
+	int slave;
+#endif
 	Set_pid set_pid;
 	Del_filters del_filters;
 	Adapter_commit commit;
@@ -150,7 +126,7 @@ void set_slave_adapters(char *o);
 void set_nopm_adapters(char *o);
 void set_adapter_dmxsource(char *o);
 void reset_pids_type(int aid, int clear_pat);
-void reset_ecm_type_for_key(int aid, int key);
+void reset_ecm_type_for_pmt(int aid, int pmt);
 int delsys_match(adapter *ad, int del_sys);
 int get_enabled_pids(adapter *ad, int *pids, int lpids);
 int get_active_pids_number(adapter *ad);
@@ -163,9 +139,10 @@ void set_adapters_delsys(char *o);
 void set_lnb_adapters(char *o);
 int signal_thread(sockets *s);
 int compare_tunning_parameters(int aid, transponder * tp);
+void restart_needed_adapters(int aid, int sid);
 
 #define get_adapter(a) get_adapter1(a, __FILE__, __LINE__)
-#define get_adapter_nw(aid) ((aid >= 0 && aid < MAX_ADAPTERS && a[aid] && a[aid]->enabled)?a[aid]:NULL)
+#define get_adapter_nw(aid) ((aid >= 0 && aid < MAX_ADAPTERS && a[aid] && a[aid]->enabled) ? a[aid] : NULL)
 
 #define adapter_lock(a) adapter_lock1(__FILE__,__LINE__,a)
 #define adapter_unlock(a) adapter_unlock1(__FILE__,__LINE__,a)

@@ -6,25 +6,13 @@
 #define TABLES_ITEM 0x2000000000000
 
 #include "adapter.h"
+#include <linux/dvb/dmx.h>
 
 #define PID_FROM_TS(b) ((b[1] & 0x1F)*256 + b[2])
 #define MAX_PI_LEN 1500
 
-typedef struct struct_pmt
-{
-	uint8_t *pmt;
-	int pmt_len;
-	uint8_t *pi;
-	int pi_len;
-	SPid *p;
-	int pid;
-	uint8_t ver;
-	uint16_t sid;
-	uint16_t old_key;
-} SPMT;
-
-
 typedef int (*ca_action)(adapter *ad, void *arg);
+typedef int (*filter_function)(void *buf, int len, void *opaque);
 
 #define MAX_CA 4
 
@@ -46,19 +34,30 @@ typedef struct struct_CA
 	int id;
 } SCA;
 
+SMutex filter_mutex;
 
-int add_ca(SCA *c);
+typedef struct struct_filter
+{
+	char enabled;
+	SMutex mutex;
+	int id;
+	void *opaque;
+	filter_function callback;
+	unsigned char filter[DMX_FILTER_SIZE];
+	unsigned char mask[DMX_FILTER_SIZE];
+	unsigned char data[1500];
+} SFilter;
+int add_ca (SCA *c);
 void del_ca(SCA *c);
 int process_pat(adapter *ad,unsigned char *b);
 int process_pmt(adapter *ad, unsigned char *b);
 int assemble_packet(uint8_t **b1, adapter *ad, int check_crc);
 uint32_t crc_32(const uint8_t *data, int datalen);
-int process_stream(adapter *ad, int rlen);
 void tables_pid_del(adapter *ad, int pid);
 void tables_pid_add(adapter *ad, int pid, int existing);
 void clean_psi(adapter *ad, uint8_t *b);
 int tables_init_device(adapter *ad); // will call action[CA_INIT_DEVICE] for the adapter if CA is registered for it in adapter_mask,
-																		 //if the call succeds, the PMTs will be sent to that CA for that adapter
+//if the call succeds, the PMTs will be sent to that CA for that adapter
 int tables_close_device(adapter *ad);
 int tables_init();
 int tables_destroy();

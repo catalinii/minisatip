@@ -22,10 +22,10 @@ extern char app_name[], version[];
 #endif
 
 
-#define copy32(a,i,v) { a[i] = ((v)>>24) & 0xFF;\
-			a[i+1] = ((v)>>16) & 0xFF;\
-			a[i+2] = ((v)>>8) & 0xFF;\
-			a[i+3] = (v) & 0xFF; }
+#define copy32(a,i,v) { a[i] = ((v)>>24) & 0xFF; \
+																								a[i+1] = ((v)>>16) & 0xFF; \
+																								a[i+2] = ((v)>>8) & 0xFF; \
+																								a[i+3] = (v) & 0xFF; }
 #define copy16(a,i,v) { a[i] = ((v)>>8) & 0xFF; a[i+1] = (v) & 0xFF; }
 
 #define copy16r(v, a, i) { v = ((a[i] & 0xFF) << 8) | a[i+1]; }
@@ -37,8 +37,8 @@ extern char app_name[], version[];
 struct struct_opts
 {
 	char *rrtp;
-	char *http_host;			 //http-server host
-	char *disc_host;			 //discover host
+	char *http_host;    //http-server host
+	char *disc_host;    //discover host
 	char mac[13];
 	unsigned int log, slog, start_rtp, http_port;
 	int timeout_sec;
@@ -60,8 +60,12 @@ struct struct_opts
 	uint8_t satip_addpids, satip_setup_pids, satip_rtsp_over_tcp;
 	uint8_t netcv_count;
 	char *netcv_if;
-	char playlist[200];
-	char satip_servers[500];
+	char *playlist;
+#ifndef DISABLE_SATIPCLIENT
+	char *satip_servers;
+	char *satip_init;
+	char *satip_xml;
+#endif
 	char *document_root;
 	char *xml_path;
 	char no_threads;
@@ -79,11 +83,11 @@ struct struct_opts
 	int nopm;
 	int max_pids;
 	int max_sbuf;
+	char disable_dvb;
 #ifdef AXE
 	int quattro;
 	int quattro_hiband;
 	int axe_unicinp[4];
-	int axe_skippkt;
 	int axe_power;
 #endif
 

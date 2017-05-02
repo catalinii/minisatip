@@ -12,7 +12,7 @@ STATIC=@STATIC@
 DVBAPI=@DVBAPI@
 LINUXDVB=@LINUXDVB@
 AXE=@AXE@
-
+ENIGMA=@ENIGMA@
 
 CFLAGS?=-ggdb -fPIC $(EXTRA_CFLAGS) @CFLAGS@
 LDFLAGS?=-lpthread -lrt @LDFLAGS@
@@ -53,7 +53,7 @@ CFLAGS+=-DDISABLE_DVBCA
 endif
 
 ifeq ($(TABLES),1)
-OBJS+=tables.o
+OBJS+=tables.o pmt.o
 else
 CFLAGS+=-DDISABLE_TABLES
 endif
@@ -81,6 +81,7 @@ endif
 OBJS-$(AXE) += axe.c
 CFLAGS-$(AXE) += -DAXE
 
+CFLAGS-$(ENIGMA) += -DENIGMA
 
 ifeq ($(EMBEDDED),1)
 CFLAGS+=-DNO_BACKTRACE
