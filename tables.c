@@ -53,6 +53,11 @@ SCA ca[MAX_CA];
 int nca;
 SMutex ca_mutex;
 
+SFilter filters[MAX_FILTERS];
+SMutex filters_mutex;
+int nfilters;
+
+
 int add_ca(SCA *c)
 {
 	int i, new_ca;
@@ -723,6 +728,11 @@ void tables_pid_add(adapter *ad, int pid, int existing)
 	cp = find_pid(ad->id, pid);
 	if (!cp)
 		return;
+
+	cp->filter = get_pid_filter(ad->id, pid);
+	if(cp->filter != -1)
+		cp->type |= TYPE_FILTER;
+
 	run_ca_action(CA_ADD_PID, ad, &pid);
 //	invalidate_adapter(ad->id);
 	pids = (int16_t *) getItem(pid_key);
@@ -958,6 +968,12 @@ int tables_close_device(adapter *ad)
 	return rv;
 }
 
+int tables_tune(adapter *ad)
+{
+
+}
+
+
 int tables_init()
 {
 	mutex_init(&ca_mutex);
@@ -975,4 +991,27 @@ int tables_destroy()
 	adapter tmp;
 	tmp.ca_mask = -1;
 	run_ca_action(CA_CLOSE, &tmp, NULL);
+}
+
+
+SFilter *get_filter(int id)
+{
+
+}
+
+int add_filter(int aid, int pid, void *callback, void *opaque, int flags)
+{
+	uint8_t data[DMX_FILTER_SIZE], mask[DMX_FILTER_SIZE];
+	memset(data, 0, sizeof(data));
+	memset(mask, 0, sizeof(mask));
+	add_filter_mask(aid, pid, callback, opaque, data, mask);
+}
+int add_filter_mask(int aid, int pid, void * callback, void *opaque, uint8_t *data, uint8_t *mask, int flags){
+}
+int del_filter(int id){
+}
+int get_pid_filter(int aid, int pid){
+}
+
+int change_filter_mask(int id,uint8_t *data, uint8_t *mask){
 }

@@ -63,6 +63,8 @@ typedef struct struct_rtp_prop
 	int ttl;
 } rtp_prop;
 
+streams *get_stream(int i);
+
 char *describe_streams(sockets *s, char *req, char *sbuf, int size);
 streams *setup_stream(char *str, sockets * s);
 int start_play(streams * sid, sockets * s);

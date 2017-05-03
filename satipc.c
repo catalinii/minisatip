@@ -46,10 +46,13 @@
 #include "minisatip.h"
 #include "dvb.h"
 
-#define TCP_DATA_SIZE ((ADAPTER_BUFFER/1316)*(1316+16))
+#define TCP_DATA_SIZE ((ADAPTER_BUFFER/1316)*(1316+16)*3)
 #define TCP_DATA_MAX (TCP_DATA_SIZE * 8)
 extern char *fe_delsys[];
 extern struct struct_opts opts;
+
+#define SATIP_LOG 5
+
 
 typedef struct struct_satipc
 {
@@ -540,7 +543,7 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb)
 	{
 		int nl = sip->tcp_len - sip->tcp_pos;
 		memmove(sip->tcp_data, sip->tcp_data + sip->tcp_pos, nl);
-//		LOG("Moved from the position %d, length %d", sip->tcp_pos, nl);
+		LOGL(SATIP_LOG, "Moved from the position %d, length %d", sip->tcp_pos, nl);
 		sip->tcp_pos = 0;
 		sip->tcp_len = nl;
 
@@ -550,12 +553,13 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb)
 	if(expected_len > 0 )
 	{
 		tmp_len = read(socket, sip->tcp_data + sip->tcp_len, expected_len);
-//		LOG("read %d (from %d) from rtsp socket %d (id %d) [%02X %02X, %02X %02X]", tmp_len, sip->tcp_size - sip->tcp_len, socket, ss->id, tmp_b[0],tmp_b[1],tmp_b[2],tmp_b[3]);
+		LOGL(SATIP_LOG, "read %d (from %d) from rtsp socket %d (id %d) [%02X %02X, %02X %02X]", tmp_len, sip->tcp_size - sip->tcp_len, socket, ss->id, tmp_b[0],tmp_b[1],tmp_b[2],tmp_b[3]);
 		if (tmp_len <= 0)
 			LOG_AND_RETURN(0, "read %d from RTSP socket, errno %d, %s", tmp_len, errno, strerror(errno));
 	}else
 	{
-		LOG("buffer is full, skipping read");
+		tmp_b = sip->tcp_data + sip->tcp_pos;
+		LOGL(3, "buffer is full, skipping read, %d, pos %d [%02X %02X, %02X %02X]", sip->tcp_size, sip->tcp_pos, tmp_b[0],tmp_b[1],tmp_b[2],tmp_b[3]);
 /*		if(!first)
    {
    first = 1;
@@ -594,24 +598,24 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb)
 				skipped_bytes = 0;
 			}
 			// debug
-			if((rtsp[1] == 0) && (((rtsp_len - 12) > 1316) || (((rtsp_len - 12) % 188) != 0)))
-				LOG("invalid rtsp_len %d", rtsp_len);
+//			if((rtsp[1] == 0) && (((rtsp_len - 12) > 26320) || (((rtsp_len - 12) % 188) != 0)))
+//				LOG("invalid rtsp_len %d", rtsp_len);
 
 			if (rtsp_len + 4 + sip->tcp_pos > sip->tcp_len) // expecting more data in the buffer
 			{
-				LOGL(5, "satip buffer is full @ pos %d, tcp_pos %d, required %d len %d tcp_len %d, tcp_size %d",
-									pos, sip->tcp_pos, rtsp_len - 12, len, sip->tcp_len, sip->tcp_size);
+				LOGL(SATIP_LOG, "satip buffer is full @ pos %d, tcp_pos %d, required %d len %d tcp_len %d, tcp_size %d, left to read %d",
+									pos, sip->tcp_pos, rtsp_len - 12, len, sip->tcp_len, sip->tcp_size, rtsp_len + 4 + sip->tcp_pos - sip->tcp_len);
 				break;
 			}
 
 			if (rtsp[1] == 0 && (rtsp_len - 12 + pos > len)) // destination buffer full
 			{
-				LOGL(5, "Destination buffer is full @ pos %d, tcp_pos %d, required %d len %d",
+				LOGL(SATIP_LOG, "Destination buffer is full @ pos %d, tcp_pos %d, required %d len %d",
 									pos, sip->tcp_pos, rtsp_len - 12, len );
 				break;
 			}
 			sip->tcp_pos += rtsp_len + 4;
-//			LOG("ad %d processed %d, socket %d", ad->id, rtsp_len, socket);
+			LOGL(SATIP_LOG, "ad %d processed %d, socket %d", ad->id, rtsp_len, socket);
 			pos += process_rtsp_tcp(ss, rtsp, rtsp_len, buf + pos, len - pos);
 			*rb = pos;
 
@@ -668,7 +672,7 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb)
 		}
 		else
 		{
-			LOGL(5, "ignoring byte %02X", rtsp[0]);
+			LOGL(SATIP_LOG + 1, "ignoring byte %02X", rtsp[0]);
 			skipped_bytes++;
 			sip->tcp_pos++;
 		}
@@ -676,7 +680,7 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb)
 
 	if (sip->tcp_pos == sip->tcp_len)
 		sip->tcp_pos = sip->tcp_len = 0;
-	LOGL(6, "%s: returning %d bytes", __FUNCTION__, *rb);
+	LOGL(SATIP_LOG, "%s: returning %d bytes", __FUNCTION__, *rb);
 	return (*rb >= 0);
 }
 

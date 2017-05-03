@@ -26,6 +26,8 @@ typedef int (*filter_function)(void *buf, int len, void *opaque);
 #define CA_TS 7
 #define CA_CLOSE 8
 
+#define MAX_FILTERS 200
+
 typedef struct struct_CA
 {
 	uint8_t enabled;
@@ -36,19 +38,26 @@ typedef struct struct_CA
 
 SMutex filter_mutex;
 
+
+
 typedef struct struct_filter
 {
 	char enabled;
 	SMutex mutex;
 	int id;
+	int flags;
 	void *opaque;
 	filter_function callback;
 	unsigned char filter[DMX_FILTER_SIZE];
 	unsigned char mask[DMX_FILTER_SIZE];
 	unsigned char data[1500];
+	int next_filter;
 } SFilter;
+
+
 int add_ca (SCA *c);
 void del_ca(SCA *c);
+SFilter *get_filter(int id);
 int process_pat(adapter *ad,unsigned char *b);
 int process_pmt(adapter *ad, unsigned char *b);
 int assemble_packet(uint8_t **b1, adapter *ad, int check_crc);
@@ -64,7 +73,12 @@ int tables_destroy();
 void init_ca_device(SCA *c); //  calls table_init_device for all the devices
 int register_ca_for_adapter(int nca, int aid);  // register a CA just for a device, and run tables_init_device for the CA and Adapter, if succeds, send all the opened PMTs
 int unregister_ca_for_adapter(int nca, int aid); // unregister a CA just for a device
-
+int tables_tune(adapter *ad);
+int add_filter(int aid, int pid, void *callback, void *opaque, int flags);
+int add_filter_mask(int aid, int pid, void * callback, void *opaque, uint8_t *data, uint8_t *mask, int flags);
+int del_filter(int id);
+int change_filter_mask(int id,uint8_t *data, uint8_t *mask);
+int get_pid_filter(int aid, int pid);
 #endif
 
 #endif

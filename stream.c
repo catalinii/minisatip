@@ -49,9 +49,12 @@ extern struct struct_opts opts;
 streams *st[MAX_STREAMS];
 SMutex st_mutex;
 extern int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
-
 int pmt_process_stream(adapter *ad);
 
+streams *get_stream(int i)
+{
+	return (st[i] && st[i]->enabled) ? st[i] : NULL;
+}
 
 char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 {
@@ -979,34 +982,16 @@ int read_dmx(sockets * s)
 		return 0;
 	}
 
-	if (ad->sid_cnt == 1 && ad->master_sid >= 0) {
-		sid = st[ad->master_sid];
-		if (sid->type == STREAM_RTSP_TCP || sid->type == STREAM_HTTP)
-			threshold = opts.tcp_threshold;
-	} else if (ad->sid_cnt > 0) {
-		for (i = 0; i < MAX_STREAMS; i++)
-			if ((sid = st[i]) && (sid->enabled) && sid->adapter == s->sid)
-				if (sid->type == STREAM_RTSP_UDP)
-					break;
-		if (i >= MAX_STREAMS)
-			threshold = opts.tcp_threshold;
-	}
+	threshold = ad->threshold;
 
 // flush buffers every 50ms or the first 1000 packets (for PAT and PMT processing)
-	if (((s->iteration < 1000) && (s->rlen > 7*DVB_FRAME)) ||
-					!threshold || (s->rtime - ad->rtime > threshold))
+	if (rtime - ad->rtime > threshold)
 	{
 		flush_all = 1;   // flush everything that we've read so far
 		send = 1;
 	}
 
-	if (flush_all && (s->rlen > 20000))   // if the bw/s > 300kB - waiting for the buffer to fill - most likely watching a TV channel and not scanning
-		send = 0;
-
-	if (s->lbuf - s->rlen < 7*DVB_FRAME )
-		send = 1;
-
-	if (s->rtime - ad->rtime > 50)  // force flush every 50ms
+	if (s->rlen - s->lbuf <= 7*DVB_FRAME)
 		send = 1;
 
 	if(ad->wait_new_stream && !ad->tune_time)

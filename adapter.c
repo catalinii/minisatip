@@ -264,6 +264,7 @@ int init_hw(int i)
 	ad->force_close = 0;
 	ad->ca_mask = 0;
 	ad->tune_time = 0;
+	ad->threshold = opts.udp_threshold;
 
 	ad->wait_new_stream = 0;
 	ad->rtime = getTick();
@@ -516,10 +517,10 @@ void dump_pids(int aid)
 									p->pid_err - p->dec_err);
 			dp = 0;
 			LOGL(2,
-								"pid %d, fd %d, type %d packets %d, d/c errs %d/%d, flags %d, pmt %d, sids: %d %d %d %d %d %d %d %d",
+								"pid %d, fd %d, type %d packets %d, d/c errs %d/%d, flags %d, pmt %d, filter %d, sids: %d %d %d %d %d %d %d %d",
 								p->pids[i].pid, p->pids[i].fd, p->pids[i].type,
 								p->pids[i].packets, p->pids[i].dec_err, p->pids[i].cc_err,
-								p->pids[i].flags, p->pids[i].pmt, p->pids[i].sid[0],
+								p->pids[i].flags, p->pids[i].pmt, p->pids[i].filter, p->pids[i].sid[0],
 								p->pids[i].sid[1], p->pids[i].sid[2], p->pids[i].sid[3],
 								p->pids[i].sid[4], p->pids[i].sid[5], p->pids[i].sid[6],
 								p->pids[i].sid[7]);
@@ -592,6 +593,29 @@ noadapter:
 	return -1;
 }
 
+void adapter_update_threshold(adapter *ad)
+{
+	streams *sid = NULL;
+	int i, threshold = opts.udp_threshold;
+	if (ad->sid_cnt == 1 && ad->master_sid >= 0) {
+		sid = get_stream(ad->master_sid);
+		if (sid && sid->type == STREAM_RTSP_TCP || sid->type == STREAM_HTTP)
+			threshold = opts.tcp_threshold;
+	} else if (ad->sid_cnt > 0) {
+		for (i = 0; i < MAX_STREAMS; i++)
+			if ((sid = get_stream(i)))
+				if (sid->type == STREAM_RTSP_UDP)
+					break;
+		if (i >= MAX_STREAMS)
+			threshold = opts.tcp_threshold;
+	}
+
+	if(threshold <= 0 || threshold >= 200)
+		threshold = 200;
+
+	ad->threshold = threshold;
+}
+
 int set_adapter_for_stream(int sid, int aid)
 {
 	adapter *ad;
@@ -605,6 +629,7 @@ int set_adapter_for_stream(int sid, int aid)
 		ad->tp.freq = 0;
 	LOG("set adapter %d for stream %d m:%d s:%d", aid, sid, ad->master_sid,
 					ad->sid_cnt);
+	adapter_update_threshold(ad);
 	mutex_unlock(&ad->mutex);
 
 	return 0;
@@ -637,6 +662,7 @@ void close_adapter_for_stream(int sid, int aid)
 	}else
 		mark_pids_deleted(aid, sid, NULL);
 	update_pids(aid);
+	adapter_update_threshold(ad);
 	mutex_unlock(&ad->mutex);
 	if (ad->restart_needed == 1)
 	{
@@ -644,7 +670,6 @@ void close_adapter_for_stream(int sid, int aid)
 //		request_adapter_close (ad);
 		close_adapter(ad->id);
 	}
-
 }
 
 int update_pids(int aid)
@@ -764,6 +789,7 @@ int tune(int aid, int sid)
 				aid);
 			mark_pid_add(-1, aid, 0);
 		}
+		tables_tune(ad);
 #endif
 	}
 	else
@@ -918,6 +944,7 @@ int mark_pid_add(int sid, int aid, int _pid)
 			ad->pids[i].pid = _pid;
 			ad->pids[i].sid[0] = sid;
 			ad->pids[i].pmt = -1;
+			ad->pids[i].filter = -1;
 #ifndef DISABLE_TABLES
 			tables_pid_add(ad, _pid, 0);
 #endif
@@ -1752,7 +1779,7 @@ void reset_ecm_type_for_pmt(int aid, int pmt)
 	for (i = 0; i < MAX_PIDS; i++)
 		if ((ad->pids[i].flags > 0) && (ad->pids[i].pmt == pmt))
 		{
-			if(ad->pids[i].type == TYPE_ECM)
+			if(ad->pids[i].type == TYPE_FILTER)
 			{
 				ad->pids[i].type = 0;
 				ad->pids[i].pmt = -1;

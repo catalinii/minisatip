@@ -9,11 +9,11 @@ typedef struct ca_device ca_device_t;
 #define MAX_ADAPTERS 32
 #define DVR_BUFFER 30*1024*188
 
-#define ADAPTER_BUFFER (128 + 5)*DVB_FRAME
+#define ADAPTER_BUFFER 300*DVB_FRAME
 #define ADAPTER_TIMEOUT 60000
 
 #define TYPE_PMT 1
-#define TYPE_ECM 2
+#define TYPE_FILTER 2
 #define PMT_COMPLETE 4
 #define PMT_SKIPFIRST 8
 #define CLEAN_PMT 16
@@ -74,6 +74,7 @@ typedef struct struct_adapter
 	int rlen, lbuf; // how many bytes are received in the TS buffer, length of the buffer
 	int pat_processed, transponder_id, pat_ver;
 	int wait_new_stream, wait_transponder_id;
+	int threshold;
 	uint64_t tune_time;
 	char name[5];
 #ifdef AXE

@@ -240,7 +240,7 @@ typedef struct struct_pid
 	char type;
 	int packets;  // how many packets for this pid arrived, used to sort the pids
 	int dec_err;   // decrypt errors, continuity counters
-	int16_t pmt;
+	int16_t pmt, filter;
 	char pmt_counter; // ca information
 	char cc;
 #ifdef CRC_TS
