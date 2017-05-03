@@ -19,6 +19,7 @@
  */
 #define _GNU_SOURCE
 
+#include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
@@ -45,10 +46,13 @@
 #include "minisatip.h"
 #include "dvb.h"
 
-#define TCP_DATA_SIZE ((ADAPTER_BUFFER/1316)*(1316+16))
-
+#define TCP_DATA_SIZE ((ADAPTER_BUFFER/1316)*(1316+16)*3)
+#define TCP_DATA_MAX (TCP_DATA_SIZE * 8)
 extern char *fe_delsys[];
 extern struct struct_opts opts;
+
+#define SATIP_LOG 5
+
 
 typedef struct struct_satipc
 {
@@ -58,7 +62,7 @@ typedef struct struct_satipc
 	uint16_t apid[MAX_PIDS]; // pids to add
 	uint16_t dpid[MAX_PIDS]; // pids to delete
 	// satipc
-	char *sip;
+	char sip[40];
 	int sport;
 	char session[18];
 	int stream_id;
@@ -74,7 +78,7 @@ typedef struct struct_satipc
 	uint8_t addpids, setup_pids;
 	unsigned char *tcp_data;
 	int tcp_size, tcp_pos, tcp_len;
-	char use_fe;
+	char use_fe, option_no_session, option_no_setup, option_no_option;
 	uint32_t rcvp, repno, rtp_miss, rtp_ooo;   // rtp statstics
 	uint16_t rtp_seq;
 
@@ -118,7 +122,7 @@ int satipc_reply(sockets * s)
 	int rlen = s->rlen;
 	adapter *ad;
 	satipc *sip;
-	char *arg[50], *sess, *es, *sid, *timeout;
+	char *arg[50], *sess, *es, *sid, *timeout, *sep;
 	int la, i, rc;
 	__attribute__((unused)) int rv;
 	get_ad_and_sipr(s->sid, 1);
@@ -131,7 +135,7 @@ int satipc_reply(sockets * s)
 		int tmout;
 		timeout += strlen("timeout=");
 		tmout = map_intd(timeout, NULL, 30);
-		sockets_timeout(ad->fe_sock, tmout * 1000); // 30s
+		sockets_timeout(ad->fe_sock, tmout * 500); // 2 times 30s
 	}
 
 	sess = strstr(s->buf, "Session:");
@@ -141,11 +145,37 @@ int satipc_reply(sockets * s)
 		set_adapter_signal(ad, s->buf, rlen);
 	}
 
+	sep = strstr(s->buf, "minisatip");
+	if(sep)
+	{
+		sip->option_no_session = 1;
+		sip->option_no_setup = 1;
+		sip->option_no_option = 1;
+	}
+	sep = strstr(s->buf, "enigma_minisatip");
+	if(sep && !ad->restart_when_tune)
+	{
+		LOGL(3, "Setting adapter %d to restart every time the transponder is changed", ad->id);
+		ad->restart_when_tune = 1;
+		if(sip->use_tcp == 0)
+		{
+			sip->use_tcp = 1;
+			if(ad)
+			{
+				LOG("adapter %d is not RTSP over TCP, switching", ad->id);
+				ad->restart_needed = 1;
+			}
+		}
+	}
+
 	la = split(arg, (char *) s->buf, 50, ' ');
 	rc = map_int(arg[1], NULL);
 
-//	if (sip->last_cmd == RTSP_OPTIONS && !sess && sip->session[0])
-//		rc = 454;
+	if (sip->option_no_session && sip->last_cmd == RTSP_OPTIONS && !sess && sip->session[0])
+		rc = 454;
+
+	if(rc == 404)
+		ad->restart_needed = 1;
 
 	if (rc == 454 || rc == 503 || rc == 405)
 	{
@@ -157,8 +187,12 @@ int satipc_reply(sockets * s)
 	else if (rc != 200)
 		sip->err = 1;
 	sid = NULL;
-	if (rc == 200 && !sip->want_tune && sip->last_cmd == RTSP_PLAY)
+	if (rc == 200 && !sip->want_tune && sip->last_cmd == RTSP_PLAY && sip->ignore_packets)
+	{
+		LOG("accepting packets from RTSP server");
 		sip->ignore_packets = 0;
+		ad->wait_new_stream = 1;
+	}
 	sess = NULL;
 	for (i = 0; i < la; i++)
 		if (strncasecmp("Session:", arg[i], 8) == 0)
@@ -227,12 +261,17 @@ int satipc_timeout(sockets *s)
 	adapter *ad;
 	satipc *sip;
 	get_ad_and_sipr(s->sid, 1);
+	if(sip->want_tune || sip->lap || sip->ldp)
+	{
+		LOG("no timeout will be performed as we have operations in queue");
+		return 0;
+	}
 	LOG(
 		"satipc: Sent keep-alive to the satip server %s:%d, adapter %d, socket_id %d, handle %d, timeout %d",
 		ad ? sip->sip : NULL, ad ? sip->sport : 0, s->sid, s->id, s->sock,
 		s->timeout_ms);
-
-	http_request(ad, NULL, "OPTIONS");
+	if(sip->wp == sip->qp)
+		http_request(ad, NULL, "OPTIONS");
 
 	s->rtime = getTick();
 	return 0;
@@ -370,8 +409,8 @@ int satipc_open_device(adapter *ad)
 	sip->last_setup = -10000;
 	sip->last_cmd = 0;
 	sip->enabled = 1;
-
-	http_request(ad, NULL, "OPTIONS");
+	if(!sip->option_no_option)
+		http_request(ad, NULL, "OPTIONS");
 
 	return 0;
 
@@ -469,6 +508,7 @@ int process_rtsp_tcp(sockets *ss, unsigned char *rtsp, int rtsp_len, void *buf,
 	return nl;
 }
 
+int first;
 int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb)
 {
 	unsigned char *rtsp;
@@ -477,71 +517,105 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb)
 	static int iter;
 	int pos;
 	int rtsp_len;
-	int tmp_len;
+	int tmp_len = 0;
 	adapter *ad;
 	satipc *sip;
+	int skipped_bytes = 0;
 	get_ad_and_sipr(ss->sid, 0);
 	*rb = 0;
-
+//	LOG("start satipc_tcp_read");
 	if (!sip->tcp_data)
 	{
 		sip->tcp_size = TCP_DATA_SIZE;
-		sip->tcp_data = malloc1(sip->tcp_size + 2);
+		sip->tcp_data = malloc1(sip->tcp_size + 3);
 		if (!sip->tcp_data)
 			LOG_AND_RETURN(-1, "Cannot alloc memory for tcp_data with size %d",
 																		sip->tcp_size);
 		memset(sip->tcp_data, 0, sip->tcp_size + 2);
 	}
 
-	if (sip->tcp_len == sip->tcp_size && sip->tcp_pos == 0)
-	{
-		LOG("Probably the buffer needs to be increased, as it is full");
-		sip->tcp_len = 0;
-	}
-	if (sip->tcp_len == sip->tcp_size)
+//	if (sip->tcp_len == sip->tcp_size && sip->tcp_pos == 0)
+//	{
+//		LOG("Probably the buffer needs to be increased, as it is full");
+//		sip->tcp_len = 0;
+//	}
+	if (sip->tcp_len == sip->tcp_size && sip->tcp_pos)
 	{
 		int nl = sip->tcp_len - sip->tcp_pos;
 		memmove(sip->tcp_data, sip->tcp_data + sip->tcp_pos, nl);
-//		LOG("Moved from the position %d, length %d", sip->tcp_pos, nl);
+		LOGL(SATIP_LOG, "Moved from the position %d, length %d", sip->tcp_pos, nl);
 		sip->tcp_pos = 0;
 		sip->tcp_len = nl;
 
 	}
 	uint8_t *tmp_b = sip->tcp_data + sip->tcp_len;
-	tmp_len = read(socket, sip->tcp_data + sip->tcp_len, sip->tcp_size - sip->tcp_len);
-//	LOG("read %d (from %d) from rtsp socket [%02X %02X, %02X %02X]", tmp_len, sip->tcp_size - sip->tcp_len, tmp_b[0],tmp_b[1],tmp_b[2],tmp_b[3]);
-	if (tmp_len <= 0)
-		LOG_AND_RETURN(0, "read %d from RTSP socket, errno %d, %s", tmp_len, errno, strerror(errno));
+	int expected_len = sip->tcp_size - sip->tcp_len;
+	if(expected_len > 0 )
+	{
+		tmp_len = read(socket, sip->tcp_data + sip->tcp_len, expected_len);
+		LOGL(SATIP_LOG, "read %d (from %d) from rtsp socket %d (id %d) [%02X %02X, %02X %02X]", tmp_len, sip->tcp_size - sip->tcp_len, socket, ss->id, tmp_b[0],tmp_b[1],tmp_b[2],tmp_b[3]);
+		if (tmp_len <= 0)
+			LOG_AND_RETURN(0, "read %d from RTSP socket, errno %d, %s", tmp_len, errno, strerror(errno));
+	}else
+	{
+		tmp_b = sip->tcp_data + sip->tcp_pos;
+		LOGL(3, "buffer is full, skipping read, %d, pos %d [%02X %02X, %02X %02X]", sip->tcp_size, sip->tcp_pos, tmp_b[0],tmp_b[1],tmp_b[2],tmp_b[3]);
+/*		if(!first)
+   {
+   first = 1;
+   LOG("tcp_size %d tcp_len %d", sip->tcp_size, sip->tcp_len);
+   hexdump("buffer full", sip->tcp_data, sip->tcp_len);
+   }
+   if(sip->tcp_size * 2 > TCP_DATA_MAX)
+   {
+   int new_size = sip->tcp_size * 2;
+   LOG("allocating %d", new_size);
+   void *p = realloc(sip->tcp_data, new_size + 10);
+   if(p)
+   {
+    sip->tcp_data = p;
+    memset(sip->tcp_data + sip->tcp_size, 0, new_size - sip->tcp_size);
+    sip->tcp_size = new_size;
 
+   }
+   else LOG("reallocation failed for %d bytes", new_size);
+   }
+ */
+	}
 	pos = 0;
 	sip->tcp_len += tmp_len;
 	while (sip->tcp_pos < sip->tcp_len - 6)
 	{
 		rtsp = sip->tcp_data + sip->tcp_pos;
-
 		if ((rtsp[0] == 0x24) && (rtsp[1] < 2) && (rtsp[4] == 0x80)
 						&& ((rtsp[5] == 0x21) || (rtsp[5] == 0xC8)))
 		{
 			copy16r(rtsp_len, rtsp, 2);
+//			LOG("found at pos %d, rtsp_len %d, len %d", sip->tcp_pos, rtsp_len, sip->tcp_len);
+			if(skipped_bytes)
+			{
+				LOG("%s: skipped %d bytes", __FUNCTION__, skipped_bytes);
+				skipped_bytes = 0;
+			}
 			// debug
-			if((rtsp[1] == 0) && (((rtsp_len - 12) > 1316) || (((rtsp_len - 12) % 188) != 0)))
-				LOG("invalid rtsp_len %d", rtsp_len);
+//			if((rtsp[1] == 0) && (((rtsp_len - 12) > 26320) || (((rtsp_len - 12) % 188) != 0)))
+//				LOG("invalid rtsp_len %d", rtsp_len);
 
 			if (rtsp_len + 4 + sip->tcp_pos > sip->tcp_len) // expecting more data in the buffer
 			{
-				LOGL(5, "satip buffer is full @ pos %d, tcp_pos %d, required %d len %d tcp_len %d, tcp_size %d",
-									pos, sip->tcp_pos, rtsp_len - 12, len, sip->tcp_len, sip->tcp_size);
+				LOGL(SATIP_LOG, "satip buffer is full @ pos %d, tcp_pos %d, required %d len %d tcp_len %d, tcp_size %d, left to read %d",
+									pos, sip->tcp_pos, rtsp_len - 12, len, sip->tcp_len, sip->tcp_size, rtsp_len + 4 + sip->tcp_pos - sip->tcp_len);
 				break;
 			}
 
 			if (rtsp[1] == 0 && (rtsp_len - 12 + pos > len)) // destination buffer full
 			{
-				LOGL(5, "Destination buffer is full @ pos %d, tcp_pos %d, required %d len %d",
+				LOGL(SATIP_LOG, "Destination buffer is full @ pos %d, tcp_pos %d, required %d len %d",
 									pos, sip->tcp_pos, rtsp_len - 12, len );
 				break;
 			}
 			sip->tcp_pos += rtsp_len + 4;
-//			LOG("processed %d", rtsp_len);
+			LOGL(SATIP_LOG, "ad %d processed %d, socket %d", ad->id, rtsp_len, socket);
 			pos += process_rtsp_tcp(ss, rtsp, rtsp_len, buf + pos, len - pos);
 			*rb = pos;
 
@@ -551,7 +625,13 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb)
 			unsigned char *nlnl, *cl;
 			int bytes, icl = 0;
 			unsigned char tmp_char;
+			if(skipped_bytes)
+			{
+				LOG("%s: skipped %d bytes", __FUNCTION__, skipped_bytes);
+				skipped_bytes = 0;
+			}
 			nlnl = strstr(rtsp, "\r\n\r\n");
+//			LOG("found RTSP nlnl %d, len %d", nlnl - rtsp, sip->tcp_len);
 			if(nlnl > sip->tcp_data + sip->tcp_len)
 			{
 				LOGL(3, "Unlikely, found newline after the end of string, tcp_pos %d", sip->tcp_pos);
@@ -586,20 +666,21 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb)
 			tmp_sock.id = ss->id;
 			tmp_char = rtsp[bytes + 4];
 			rtsp[bytes + 4] = 0;
-			LOGL(3, "sending %d bytes to satipc_reply, cl %d, pos %d, tcp_len %d, left %d", bytes + 4, icl, sip->tcp_pos - bytes - 4, sip->tcp_len);
+			LOGL(3, "sending %d bytes to satipc_reply, cl %d, pos %d, tcp_len %d, left %d", bytes + 4, icl, sip->tcp_pos - bytes - 4, sip->tcp_len, pos);
 			satipc_reply(&tmp_sock);
 			rtsp[bytes + 4] = tmp_char;
 		}
 		else
 		{
-			LOG("ignoring byte %02X", rtsp[0]);
+			LOGL(SATIP_LOG + 1, "ignoring byte %02X", rtsp[0]);
+			skipped_bytes++;
 			sip->tcp_pos++;
 		}
 	}
 
 	if (sip->tcp_pos == sip->tcp_len)
 		sip->tcp_pos = sip->tcp_len = 0;
-
+	LOGL(SATIP_LOG, "%s: returning %d bytes", __FUNCTION__, *rb);
 	return (*rb >= 0);
 }
 
@@ -662,7 +743,7 @@ void get_s2_url(adapter *ad, char *url)
 //	if (ro == ROLLOFF_AUTO)
 //		ro = ROLLOFF_35;
 	FILL("src=%d", tp->diseqc, 0, tp->diseqc);
-	if (sip->use_fe)
+	if (sip->use_fe && sip->satip_fe < 128)
 		FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
 	FILL("&freq=%d", tp->freq, 0, tp->freq / 1000);
 	FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
@@ -743,16 +824,15 @@ int http_request(adapter *ad, char *url, char *method)
 	int64_t ctime = getTick();
 	remote_socket = sip->use_tcp ? ad->dvr : ad->fe;
 
-	if (!method && sip->sent_transport == 0)
-	{
+	if (!sip->option_no_setup && !method && sip->sent_transport == 0)
 		method = "SETUP";
-		sip->last_setup = getTick();
-	}
+
 	if (!method)
 		method = "PLAY";
 
-	if (sip->sent_transport == 0 && method[0] == 'S')
+	if (sip->sent_transport == 0 && (method[0] == 'S' || method[0] == 'P'))
 	{
+		sip->last_setup = getTick();
 		sip->sent_transport = 1;
 		sip->stream_id = -1;
 		sip->session[0] = 0;
@@ -810,7 +890,7 @@ int http_request(adapter *ad, char *url, char *method)
 		sip->wp = sip->qp = 0;
 		rv = write(remote_socket, buf, lb);
 		if(rv != lb)
-			LOG("satipc: write error %d: %d from %d written (%s)", errno, rv, lb, strerror(errno));
+			LOG("satipc: write on socket %d, error %d: %d from %d written (%s)", remote_socket, errno, rv, lb, strerror(errno));
 	}
 	sip->expect_reply = 1;
 	return 0;
@@ -852,6 +932,11 @@ void satipc_commit(adapter *ad)
 		ad->id, sip->lap, sip->ldp, sip->expect_reply, sip->force_commit,
 		sip->want_tune);
 
+	if (ad->do_tune && !sip->want_tune)
+	{
+		sip->lap = sip->ldp = 0;
+		return;
+	}
 	if (sip->lap + sip->ldp == 0)
 		if (!sip->force_commit || !ad->tp.freq)
 			return;
@@ -900,9 +985,21 @@ void satipc_commit(adapter *ad)
 //		return;
 //	}
 
+	if (ad->do_tune && sip->want_tune) // subsequent PLAY command should have pids
+	{
+		send_pids = 1;
+		send_apids = 0;
+		send_dpids = 0;
+	}
 	if (sip->sent_transport == 0)
 		sip->want_tune = 1;
 
+	if(!sip->sent_transport && sip->option_no_setup)
+	{
+		send_pids = 1;
+		send_apids = 0;
+		send_dpids = 0;
+	}
 	sip->want_commit = 0;
 	if (sip->want_tune + send_pids + send_apids + send_dpids == 0)
 	{
@@ -1036,25 +1133,32 @@ void find_satip_adapter(adapter **a)
 	char *arg[50];
 	adapter *ad;
 	satipc *sip;
-	if (!opts.satip_servers[0])
+
+	if (!opts.satip_servers || !opts.satip_servers[0])
 		return;
-	la = split(arg, opts.satip_servers, 50, ',');
+	char satip_servers[strlen(opts.satip_servers)+10];
+	strcpy(satip_servers, opts.satip_servers);
+	la = split(arg, satip_servers, 50, ',');
 	j = 0;
 	for (i = 0; i < MAX_ADAPTERS; i++)
-	{
-
-	}
-	for (i = a_count; i < MAX_ADAPTERS; i++)
-		if (j < la)
+		if(!a[i] || a[i]->type == ADAPTER_SATIP || a[i]->type == 0)
 		{
+			if (j >= la)
+				break;
+
 			if (is_adapter_disabled(i))
 				continue;
 			if (!a[i])
 				a[i] = adapter_alloc();
 			if (!satip[i])
+			{
 				satip[i] = malloc1(sizeof(satipc));
+				if(satip[i])
+					memset(satip[i], 0, sizeof(satipc));
+			}
 			sip = satip[i];
 			ad = a[i];
+			mutex_lock(&ad->mutex);
 			ad->open = (Open_device) satipc_open_device;
 			ad->set_pid = (Set_pid) satipc_set_pid;
 			ad->del_filters = (Del_filters) satipc_del_filters;
@@ -1102,9 +1206,15 @@ void find_satip_adapter(adapter **a)
 				sep = "dvbs2";
 			if (!sep2)
 				sep2 = "554";
-
+			memset(sip->sip, 0, sizeof(sip->sip));
 			ad->sys[0] = ad->tp.sys = map_int(sep, fe_delsys);
-			sip->sip = sep1;
+			strncpy(sip->sip, sep1, sizeof(sip->sip) - 1);
+			sip->satip_fe = -1;
+			if(strchr(sip->sip, '@'))
+			{
+				sip->satip_fe = map_int(sep1, NULL);
+				memmove(sip->sip, strchr(sip->sip, '@') + 1, sizeof(sip->sip) - 1);
+			}
 			sip->sport = map_int(sep2, NULL);
 			if (ad->sys[0] == SYS_DVBS2)
 				ad->sys[1] = SYS_DVBS;
@@ -1112,26 +1222,29 @@ void find_satip_adapter(adapter **a)
 				ad->sys[1] = SYS_DVBT;
 			if (ad->sys[0] == SYS_DVBC2)
 				ad->sys[1] = SYS_DVBC_ANNEX_A;
-
-			sip->satip_fe = determine_fe(a, i, sip->sip, sip->sport);
+			if(sip->satip_fe == -1)
+				sip->satip_fe = determine_fe(a, i, sip->sip, sip->sport);
 			sip->addpids = opts.satip_addpids;
 			sip->setup_pids = opts.satip_setup_pids;
 			sip->tcp_size = 0;
 			sip->tcp_data = NULL;
 			sip->use_tcp = opts.satip_rtsp_over_tcp;
 
-			j++;
-			LOG("Satip device %s port %d delsys %d: %s %s", sip->sip,
-							sip->sport, ad->sys[0], get_delsys(ad->sys[0]),
-							get_delsys(ad->sys[1]));
+			if(i + 1 > a_count)
+				a_count = i + 1; // update adapter counter
 
-			a_count = i + 1; // update adapter counter
+			j++;
+			LOG("AD%d: Satip device %s port %d delsys %d: %s %s, total number of devices %d", ad->id, sip->sip,
+							sip->sport, ad->sys[0], get_delsys(ad->sys[0]),
+							get_delsys(ad->sys[1]), a_count);
+			mutex_unlock(&ad->mutex);
 		}
 }
 
+
 _symbols satipc_sym[] =
 {
-	{ "ad_satip", VAR_AARRAY_PSTRING, satip, 1, MAX_ADAPTERS, offsetof(
+	{ "ad_satip", VAR_AARRAY_STRING, satip, 1, MAX_ADAPTERS, offsetof(
 				satipc, sip) },
 	{ NULL, 0, NULL, 0, 0 }
 };
