@@ -897,7 +897,7 @@ void process_file(void *sock, char *s, int len, char *ctype)
 			}
 			rv = sockets_write(so->id, outp, io);
 			outp[io] = 0;
-			LOG("%s", outp);
+//			LOG("%s", outp);
 			io = 0;
 		}
 	}
@@ -962,8 +962,8 @@ char *readfile(char *fn, char *ctype, int *len)
 		else if (endswith(fn, "xml"))
 			strcpy(ctype, "CACHE-CONTROL: no-cache\r\nContent-type: text/xml");
 		else if (endswith(fn, "m3u"))
-			strcpy(ctype,
-										"CACHE-CONTROL: no-cache\r\nContent-type: video/x-mpegurl");
+			strcpy(ctype, "CACHE-CONTROL: no-cache\r\nContent-type: video/x-mpegurl");
+		else strcpy(ctype, "CACHE-CONTROL: no-cache\r\nContent-type: application/octet-stream");
 	}
 	return mem;
 }
