@@ -1200,7 +1200,6 @@ int read_http(sockets * s)
 	{
 		char buf[1024];
 		int len = get_json_bandwidth(buf, sizeof(buf));
-		LOG("%s", buf);
 		http_response(s, 200, "Content-Type: application/json\r\nConnection: close", buf, 0, len, 1);
 		return 0;
 	}
