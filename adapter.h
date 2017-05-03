@@ -12,7 +12,7 @@ typedef struct ca_device ca_device_t;
 #else
 #define MAX_STREAMS_PER_PID 16
 #endif
-#define ADAPTER_BUFFER (128 + 5)*DVB_FRAME
+#define ADAPTER_BUFFER 300*DVB_FRAME
 #define ADAPTER_TIMEOUT 60000
 
 #define TYPE_PMT 1
@@ -67,7 +67,7 @@ typedef struct struct_adapter
 {
 	char enabled;
 	SMutex mutex;
-	char type, slow_dev; // available on the system
+	char type, slow_dev, restart_when_tune, restart_needed; // available on the system
 	int fe, dmx, dvr;
 #ifdef AXE
 	int fe2;

@@ -991,6 +991,7 @@ int read_dmx(sockets * s)
 	int send = 0, flush_all = 0, ls, lse, i;
 	int threshold = opts.udp_threshold;
 	uint64_t stime;
+	uint64_t rtime = getTick();
 
 	if (s->rlen % DVB_FRAME != 0)
 //		s->rlen = ((int) s->rlen / DVB_FRAME) * DVB_FRAME;
@@ -1022,7 +1023,7 @@ int read_dmx(sockets * s)
 
 // flush buffers every 50ms or the first 1000 packets (for PAT and PMT processing)
 	if (((s->iteration < 1000) && (s->rlen > 7*DVB_FRAME)) ||
-				!threshold || (s->rtime - ad->rtime > threshold))
+				!threshold || (rtime - ad->rtime > threshold))
 	{
 		flush_all = 1; // flush everything that we've read so far
 		send = 1;
@@ -1034,10 +1035,10 @@ int read_dmx(sockets * s)
 	if (s->rlen == s->lbuf)
 		send = 1;
 
-	if (s->rtime - ad->rtime > 50) // force flush every 50ms
+	if (rtime - ad->rtime > 50) // force flush every 50ms
 		send = 1;
 
-	if(ad && ad->wait_new_stream && (s->rtime - ad->tune_time < 50) ) // check new transponder
+	if(ad && ad->wait_new_stream && (rtime - ad->tune_time < 50) ) // check new transponder
 	{
 		LOGL(3, "Flushing adapter buffer of %d bytes after the tune", s->rlen);
 		s->rlen = 0;
@@ -1048,7 +1049,7 @@ int read_dmx(sockets * s)
 	LOGL(7,
 						"read_dmx send=%d, flush_all=%d, cnt %d called for adapter %d -> %d out of %d bytes read, %jd ms ago",
 						send, flush_all, cnt, s->sid, s->rlen, s->lbuf,
-						s->rtime - ad->rtime);
+						rtime - ad->rtime);
 
 
 
