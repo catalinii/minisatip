@@ -93,6 +93,7 @@ int becomeDaemon();
 int end_of_header(char *buf);
 char *readfile(char *fn, char *ctype, int *len);
 int get_json_state(char *buf, int len);
+int get_json_bandwidth(char *buf, int len);
 void process_file(void *sock, char *s, int len, char *ctype);
 int closefile(char *mem, int len);
 

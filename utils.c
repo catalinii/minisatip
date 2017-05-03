@@ -765,11 +765,6 @@ int snprintf_pointer(char *dest, int max_len, int type, void *p,
 
 char zero[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
-#define json_var_start(_off) \
-	if (json_var_string(p->type)) strlcatf(buf, len, ptr, _off > 0 ? ",\"" : "\"")
-#define json_var_end(_off) \
-	if (json_var_string(p->type)) strlcatf(buf, len, ptr, "\"")
-
 int get_json_state(char *buf, int len)
 {
 	int ptr = 0, first = 1, i, j, off, string;
@@ -859,6 +854,27 @@ int get_json_state(char *buf, int len)
 		}
 	}
 	strlcatf(buf, len, ptr, "\n}\n");
+	return ptr;
+}
+
+extern SMutex bw_mutex;
+
+int get_json_bandwidth(char *buf, int len)
+{
+	int ptr = 0;
+	mutex_init(&bw_mutex);
+	mutex_lock(&bw_mutex);
+	strlcatf(buf, len, ptr, "\
+{\n\
+\"bw\":%jd,\n\
+\"tbw\":%jd,\n\
+\"reads\":%u,\n\
+\"writes\":%u,\n\
+\"fwrites\":%u,\n\
+\"ns_read\":%jd,\n\
+\"tt\":%jd\n\
+}", c_bw, c_tbw, c_reads, c_writes, c_failed_writes, c_ns_read, c_tt);
+	mutex_unlock(&bw_mutex);
 	return ptr;
 }
 

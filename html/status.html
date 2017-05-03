@@ -47,8 +47,16 @@
 		margin: 0 4px;
 		padding: 0;
 	}
-	.polling {
+	.upperbar {
 		padding-bottom: 4px;
+	}
+	.separator {
+		padding-left: 16px;
+	}
+	.dstate {
+		text-valign: center;
+		text-size: 1.5em;
+		font-family: "Lucida Console", Monaco, monospace;
 	}
 	</style>
 
@@ -58,16 +66,36 @@
 </head>
 
 <body>
-<div class="polling">Refresh:
+<table class='display cell-border compact'><tbody><tr>
+<td class="upperbar">Refresh:
 <input type="text" id="pintervall" value="" readonly /> sec.
 <button id="pdec">&minus;</button>
 <button id="pstatus">PAUSE</button>
 <button id="pinc">+</button>
-</div>
+</td>
+<td class="separator" />
+<td class="upperbar">
+<button id="stats">Stats ON</button>
+</td>
+<td class="separator" />
+<td id="statsarea" class="upperbar"/>
+</tr></tbody></table>
 
 <div id="table"/>
 
 <script type="text/javascript">
+
+function getDebug(data) {
+	var s = "BW <strong>" + data.bw + "</strong>KiB/s | " +
+	        "Total BW <strong>" + data.tbw + "</strong>MB | " +
+	        "ns/read " + data.ns_read + " | " +
+	        "reads " + data.reads + " | " +
+	        "writes " + data.writes + " | ";
+	if (data.fwrites)
+	        s += "failed writes " + data.fwrites + " | ";
+	s += "tt <strong>" + data.tt + "</strong>ms";
+	return "<div class='dstate'>" + s + "</div>";
+}
 
 var pol = ["", "(V)", "(H)", "(R)", "(L)"];
 var sys = ["", "dvbc", "dvbcb", "dvbt", "dss", "dvbs", "dvbs2", "dvbh", "isdbt", "isdbs", "isdbc", "atsc", "atscmh", "dmbth", "cmmb", "dab", "dvbt2", "turbo", "dvbcc", "dvbc2"];
@@ -233,6 +261,8 @@ function getTable(state) {
 var pcurrent = 1;
 var pvalues = [5, 10, 15, 30, 60, 300 ];
 var prefresh;
+var stats = 0;
+var statsrefresh;
 var table = null;
 
 var hashTag = location.hash;
@@ -241,6 +271,15 @@ if (typeof hashTag.split('#')[1] !== "undefined") {
 	if (temp >= 0 && temp <= 5) {
 		pcurrent = temp;
 	}
+}
+
+function updateStats() {
+	$.post("bandwidth.json", function(data, status) {
+		if (status !== "success") return;
+		$("#statsarea").html(getDebug(data));
+	}).fail(function() {
+		$("#statsarea").html("No data from server");
+	});
 }
 
 function renewTable(data) {
@@ -319,6 +358,18 @@ $(document).ready(function() {
 			reloadPage();
 			$("#pstatus").html("PAUSE");
 			$("#pintervall").removeClass("strike");
+		}
+	});
+
+	$("#stats").click(function() {
+		stats ^= 1;
+		$("#stats").html("Stats " + (stats ? "OFF" : "ON"));
+		if (stats) {
+			updateStats();
+			statsrefresh = setInterval(updateStats, 500);
+		} else {
+			clearInterval(statsrefresh);
+			$("#statsarea").html("");
 		}
 	});
 
