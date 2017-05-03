@@ -2,7 +2,7 @@
 <html>
 <head>
 	<meta charset="utf-8"/>
-	<title>Minisatip/$version$ on $http_host$</title>
+	<title>Minisatip status</title>
 	<link rel="stylesheet" type="text/css" href="jquery.dataTables.min.css">
 	<style>
 	body {
@@ -246,6 +246,7 @@ if (typeof hashTag.split('#')[1] !== "undefined") {
 function renewTable(data) {
 	if (table)
 		table.destroy();
+	document.title = "Minisatip/" + data['version'] + " on " + data['http_host'];
 	$('#table').html(getTable(data));
 	table = $('#myTable').DataTable({
 		"paging":	false,
@@ -273,8 +274,12 @@ function renewTable(data) {
 
 function getData() {
 	$.post("state.json", function(data, status) {
-		if (status === "success")
+		if (status === "success") {
 			renewTable(data);
+		}
+	}).fail(function() {
+		if (table)
+			table.clear().draw();
 	});
 }
 
@@ -288,6 +293,8 @@ function reloadPage() {
 
 $(document).ready(function() {
 	$("#table").html("Loading...");
+	
+	document.title = "Minisatip on " + document.location.hostname;
 
 	$("#pdec").click(function() {
 		if (pcurrent > 0) {

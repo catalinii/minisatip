@@ -1218,8 +1218,7 @@ int read_http(sockets * s)
 			http_response(s, 200, ctype, NULL, 0, 0, 1);
 			return 0;
 		}
-		if (strstr(ctype, "image") || strstr(ctype, "css")
-						|| strstr(ctype, "javascript") || strstr(ctype, "octet-stream"))
+		if (strstr("no-cache", ctype) == NULL)
 		{
 			http_response(s, 200, ctype, f, 0, nl, 1);
 			closefile(f, nl);

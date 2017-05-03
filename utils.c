@@ -1047,22 +1047,23 @@ char *readfile(char *fn, char *ctype, int *len)
 	if (ctype)
 	{
 		if (endswith(fn, "png"))
-			strcpy(ctype, "Content-type: image/png\r\nConnection: close");
+			strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: image/png\r\nConnection: close");
 		else if (endswith(fn, "jpg") || endswith(fn, "jpeg"))
-			strcpy(ctype, "Content-type: image/jpeg\r\nConnection: close");
+			strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: image/jpeg\r\nConnection: close");
 		else if (endswith(fn, "css"))
-			strcpy(ctype, "Content-type: text/css\r\nConnection: close");
+			strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: text/css\r\nConnection: close");
 		else if (endswith(fn, "js"))
-			strcpy(ctype, "Content-type: text/javascript\r\nConnection: close");
+			strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: text/javascript\r\nConnection: close");
 		else if (endswith(fn, "htm") || endswith(fn, "html"))
-			strcpy(ctype, "CACHE-CONTROL: no-cache\r\nContent-type: text/html");
+			strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: text/html\r\nConnection: close");
 		else if (endswith(fn, "xml"))
-			strcpy(ctype, "CACHE-CONTROL: no-cache\r\nContent-type: text/xml");
+			strcpy(ctype, "Cache-Control: no-cache\r\nContent-type: text/xml");
 		else if (endswith(fn, "json"))
-			strcpy(ctype, "CACHE-CONTROL: no-cache\r\nContent-type: application/json");
+			strcpy(ctype, "Cache-Control: no-cache\r\nContent-type: application/json");
 		else if (endswith(fn, "m3u"))
-			strcpy(ctype, "CACHE-CONTROL: no-cache\r\nContent-type: video/x-mpegurl");
-		else strcpy(ctype, "CACHE-CONTROL: no-cache\r\nContent-type: application/octet-stream");
+			strcpy(ctype, "Cache-Control: no-cache\r\nContent-type: video/x-mpegurl");
+		else
+			strcpy(ctype, "Cache-Control: no-cache\r\nContent-type: application/octet-stream");
 	}
 	return mem;
 }
