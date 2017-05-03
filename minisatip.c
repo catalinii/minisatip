@@ -1136,6 +1136,8 @@ int read_http(sockets * s)
 		return 0;
 	}
 
+	sockets_timeout(s->id, 1); //close the connection
+
 	if(!strncasecmp((const char*) s->buf, "HEAD ", 5))
 		is_head = 1;
 
@@ -1151,12 +1153,10 @@ int read_http(sockets * s)
 
 	split(arg, (char*) s->buf, 50, ' ');
 //      LOG("args: %s -> %s -> %s",arg[0],arg[1],arg[2]);
-	if (strncmp(arg[0], "GET", 3) && !is_head)
+	if (strncmp(arg[0], "GET", 3) && strncmp(arg[0], "POST", 4))
 		REPLY_AND_RETURN(503);
 	if (uuidi == 0)
 		ssdp_discovery(s);
-
-	sockets_timeout(s->id, 1); //close the connection
 
 	if (strcmp(arg[1], "/"DESC_XML) == 0)
 	{

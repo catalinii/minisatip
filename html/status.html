@@ -272,7 +272,7 @@ function renewTable(data) {
 }
 
 function getData() {
-	$.get("state.json", function(data, status) {
+	$.post("state.json", function(data, status) {
 		if (status === "success")
 			renewTable(data);
 	});
