@@ -593,9 +593,8 @@ pthread_mutex_t log_mutex;
 void _log(int level, char * file, int line, char *fmt, ...)
 {
 	va_list arg;
-	int len, len1, both;
+	int len = 0, len1 = 0, both = 0;
 	static int idx, times;
-	int tl;
 	char stid[50];
 	static char output[2][2000]; // prints just the first 2000 bytes from the message
 
