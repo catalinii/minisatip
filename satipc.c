@@ -743,7 +743,7 @@ void get_s2_url(adapter *ad, char *url)
 //	if (ro == ROLLOFF_AUTO)
 //		ro = ROLLOFF_35;
 	FILL("src=%d", tp->diseqc, 0, tp->diseqc);
-	if (sip->use_fe && sip->satip_fe < 128)
+	if (sip->use_fe && (satip_fe > 0) && (sip->satip_fe < 128))
 		FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
 	FILL("&freq=%d", tp->freq, 0, tp->freq / 1000);
 	FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
