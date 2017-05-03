@@ -1184,6 +1184,7 @@ int read_http(sockets * s)
 		http_response(s, 200, headers, buf, 0, 0);
 		return 0;
 	}
+
 // process file from html directory, the images are just sent back
 
 	if (!strcmp(arg[1], "/"))
