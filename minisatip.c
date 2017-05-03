@@ -1027,7 +1027,7 @@ int read_rtsp(sockets * s)
 												arg[1], getTick(), (getTickUs() / 1000000));
 		}
 		if (buf[0] == 0 && sid->type == STREAM_HTTP)
-			snprintf(buf, sizeof(buf), "Content-Type: video/mp2t");
+			snprintf(buf, sizeof(buf), "Content-Type: video/mp2t\r\nConnection: close");
 		http_response(s, 200, buf, NULL, cseq, 0);
 	}
 	else if (strncmp(arg[0], "TEARDOWN", 8) == 0)
@@ -1181,8 +1181,11 @@ int read_http(sockets * s)
 		if (tuner_s2 + tuner_t + tuner_c + tuner_t2 + tuner_c2 == 0)
 			strcpy(adapters, "DVBS2-0,");
 		adapters[strlen(adapters) - 1] = 0;
-		snprintf(buf, sizeof(buf), xml, app_name, app_name, app_name, uuid, opts.http_host, adapters, opts.playlist ? opts.playlist : "");
-		sprintf(headers, "CACHE-CONTROL: no-cache\r\nContent-type: text/xml\r\nX-SATIP-RTSP-Port: %d", opts.rtsp_port);
+		snprintf(buf, sizeof(buf), xml, app_name, app_name, app_name, uuid,
+											opts.http_host, adapters, opts.playlist);
+		sprintf(headers,
+										"Cache-Control: no-cache\r\nContent-type: text/xml\r\nX-SATIP-RTSP-Port: %d\r\nConnection: close",
+										opts.rtsp_port);
 		http_response(s, 200, headers, buf, 0, 0);
 		return 0;
 	}
@@ -1191,8 +1194,17 @@ int read_http(sockets * s)
 	{
 		char *buf = malloc(JSON_STATE_MAXLEN);
 		int len = get_json_state(buf, JSON_STATE_MAXLEN);
-		http_response(s, 200, "Content-Type: application/json", buf, 0, len, 1);
+		http_response(s, 200, "Content-Type: application/json\r\nConnection: close", buf, 0, len);
 		free(buf);
+		return 0;
+	}
+
+	if (strcmp(arg[1], "/bandwidth.json") == 0)
+	{
+		char buf[1024];
+		int len = get_json_bandwidth(buf, sizeof(buf));
+		LOG("%s", buf);
+		http_response(s, 200, "Content-Type: application/json\r\nConnection: close", buf, 0, len);
 		return 0;
 	}
 
@@ -1218,7 +1230,7 @@ int read_http(sockets * s)
 			http_response(s, 200, ctype, NULL, 0, 0);
 			return 0;
 		}
-		if (strstr("no-cache", ctype) == NULL)
+		if (strstr(ctype, "no-cache") == NULL)
 		{
 			http_response(s, 200, ctype, f, 0, nl);
 			closefile(f, nl);

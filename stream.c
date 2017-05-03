@@ -47,7 +47,7 @@
 
 extern struct struct_opts opts;
 streams *st[MAX_STREAMS];
-SMutex st_mutex;
+SMutex st_mutex, bw_mutex;
 extern int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
 int pmt_process_stream(adapter *ad);
 
@@ -555,6 +555,10 @@ int64_t tbw, bw, bwtt;
 uint32_t reads, writes, failed_writes;
 int64_t nsecs;
 
+int64_t c_tbw, c_bw;
+uint32_t c_reads, c_writes, c_failed_writes;
+int64_t c_ns_read, c_tt;
+
 uint64_t last_sd;
 
 int send_rtp(streams * sid, const struct iovec *iov, int liov)
@@ -1043,10 +1047,21 @@ int calculate_bw(sockets *s)
 		tbw += bw;
 		if (!reads)
 			reads = 1;
-		if (bw > 2000)
+		if (bw > 2000) {
+			mutex_init(&bw_mutex);
+			mutex_lock(&bw_mutex);
+			c_bw = bw / 1024;
+			c_tbw = tbw / 1024576;
+			c_ns_read = nsecs / reads;
+			c_reads = reads;
+			c_writes = writes;
+			c_failed_writes = failed_writes;
+			c_tt = nsecs / 1000;
 			LOG(
 				"BW %jdKB/s, Total BW: %jd MB, ns/read %jd, r: %d, w: %d fw: %d, tt: %jd ms",
-				bw / 1024, tbw / 1024576, nsecs / reads, reads, writes, failed_writes, nsecs / 1000);
+				c_bw, c_tbw, c_ns_read, c_reads, c_writes, c_failed_writes, c_tt);
+			mutex_unlock(&bw_mutex);
+		}
 		bw = 0;
 		failed_writes = 0;
 		nsecs = 0;
