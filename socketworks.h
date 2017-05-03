@@ -8,8 +8,8 @@ typedef int (*socket_action)(void *s);
 typedef int (*read_action)(int, void *, size_t, void *, int *);
 
 typedef struct struct_spacket {
-	uint16_t len;
-	uint16_t size;
+	int len;
+	int size;
 	uint8_t *buf;
 } SNPacket;
 

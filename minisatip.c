@@ -1207,16 +1207,18 @@ int read_http(sockets * s)
 			return 0;
 		}
 		if (strstr(ctype, "image") || strstr(ctype, "css")
-						|| strstr(ctype, "javascript"))
+						|| strstr(ctype, "javascript") || strstr(ctype, "octet-stream"))
 		{
 			http_response(s, 200, ctype, f, 0, nl);
 			closefile(f, nl);
 			return 0;
 		}
 
-		process_file(s, f, nl, ctype);
-		flush_socket(s);
-		closefile(f, nl);
+		if(strstr(ctype, "html"))
+		{
+			process_file(s, f, nl, ctype);
+			closefile(f, nl);
+		}
 		return 0;
 	}
 
