@@ -824,7 +824,7 @@ void set_options(int argc, char *argv[])
 	}
 }
 
-#define RBUF 4000
+#define RBUF 8000
 
 int read_rtsp(sockets * s)
 {
