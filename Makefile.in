@@ -14,7 +14,7 @@ LINUXDVB=@LINUXDVB@
 AXE=@AXE@
 
 
-CFLAGS?=-ggdb -fPIC $(EXTRA_CFLAGS) @CFLAGS@
+CFLAGS?=-Wall -Wno-switch -ggdb -fPIC $(EXTRA_CFLAGS) @CFLAGS@
 LDFLAGS?=-lpthread -lrt @LDFLAGS@
 
 OBJS=minisatip.o socketworks.o stream.o adapter.o utils.o
@@ -78,7 +78,7 @@ CFLAGS+=-DDISABLE_LINUXDVB
 OBJS+=dvb.o
 endif
 
-OBJS-$(AXE) += axe.c
+OBJS-$(AXE) += axe.o
 CFLAGS-$(AXE) += -DAXE
 
 
@@ -96,14 +96,23 @@ OBJS+=$(OBJS-1)
 CFLAGS+=$(CFLAGS-1)
 LDFLAGS+=$(LDFLAGS-1)
 
+DEPS=$(OBJS:.o=.d)
 
-minisatip: $(OBJS)
+minisatip: $(DEPS) $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LDFLAGS)
 
+%.d : %.c
+	@$(CC) $(CFLAGS) -MM $(basename $*).c | sed -e 's@^\(.*\)\.o:@\1.d \1.o:@' > $@
+
 %.o : %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $*.c -o $@
 
 all: minisatip
 
 clean:
-	rm *.o minisatip >> /dev/null
+	rm *.o *.d minisatip >> /dev/null
+
+# pull in dependency info for *existing* .o files
+ifneq "$(MAKECMDGOALS)" "clean"
+-include $(DEPS)
+endif

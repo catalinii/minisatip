@@ -324,7 +324,7 @@ int tcp_listen(char *addr, int port)
 int connect_local_socket(char *file, int blocking)
 {
 	struct sockaddr_un serv;
-	int sock, optval = 1;
+	int sock;
 
 
 	sock = socket(AF_LOCAL, SOCK_STREAM, 0);
@@ -593,7 +593,6 @@ __thread char *thread_name;
 
 void *select_and_execute(void *arg)
 {
-	fd_set io;
 	int i, rv, rlen, les, es;
 	unsigned char buf[2001];
 	int err;
@@ -870,7 +869,6 @@ int get_mac(char *mac)
 	struct ifreq ifr;
 	struct ifconf ifc;
 	char buf[1024];
-	int success = 0;
 
 	if (opts.mac[0])
 	{
@@ -900,10 +898,7 @@ int get_mac(char *mac)
 			if (!(ifr.ifr_flags & IFF_LOOPBACK))
 			{                                                                                     // don't count loopback
 				if (ioctl(sock, SIOCGIFHWADDR, &ifr) == 0)
-				{
-					success = 1;
 					break;
-				}
 			}
 		}
 		else
