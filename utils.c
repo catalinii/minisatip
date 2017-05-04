@@ -200,12 +200,10 @@ int setItemTimeout(int64_t key, int tmout)
 
 int setItem(int64_t key, unsigned char *data, int len, int pos) // pos = -1 -> append, owerwrite the existing key
 {
-	int new_key = 0;
 	STmpinfo *s = getItemPos(key);
 	if (!s)
 	{
 		s = getFreeItemPos(key);
-		new_key = 1;
 	}
 	if (!s)
 		LOG_AND_RETURN(-1, "%s failed for key %jx", __FUNCTION__, key);
@@ -450,7 +448,6 @@ void print_trace(void)
 {
 	void *array[10];
 	size_t size;
-	char **strings;
 	size_t i;
 #if !defined(NO_BACKTRACE)
 
@@ -760,6 +757,10 @@ int snprintf_pointer(char *dest, int max_len, int type, void *p,
 	case VAR_HEX:
 		nb = snprintf(dest, max_len, "0x%x", (int) ((*(int *) p) * multiplier));
 		break;
+
+	default:
+		nb = 0;
+		break;
 	}
 	if (nb > max_len) /* see man 'snprintf' */
 		nb = max_len;
@@ -884,7 +885,7 @@ int get_json_bandwidth(char *buf, int len)
 void * get_var_address(char *var, float *multiplier, int * type, void *storage,
 																							int ls)
 {
-	int nb = 0, i, j, off;
+	int i, j, off;
 	*multiplier = 0;
 	for (i = 0; sym[i] != NULL; i++)
 		for (j = 0; sym[i][j].name; j++)
@@ -1034,7 +1035,7 @@ char *readfile(char *fn, char *ctype, int *len)
 	char ffn[256];
 	char *mem;
 	struct stat sb;
-	int fd, i, nl = 0, sr;
+	int fd, nl = 0;
 	*len = 0;
 	ctype[0] = 0;
 
@@ -1191,7 +1192,7 @@ int mutex_unlock1(char *FILE, int line, SMutex* mutex)
 	if (rv == 0 || rv == 1)
 		rv = 0;
 
-	if (rv != -1 && imtx > 0)
+	if (rv != -1 && imtx > 0) {
 		if ((imtx >= 1) && mutexes[imtx - 1] == mutex)
 			imtx--;
 		else if ((imtx >= 2) && mutexes[imtx - 2] == mutex)
@@ -1201,7 +1202,7 @@ int mutex_unlock1(char *FILE, int line, SMutex* mutex)
 		}
 		else
 			LOG("mutex_leak: Expected %p got %p", mutex, mutexes[imtx - 1]);
-
+	}
 	return rv;
 }
 
@@ -1414,14 +1415,14 @@ void hexdump (char *desc, void *addr, int len) {
 		if ((i % 16) == 0) {
 			// Just don't print ASCII for the zeroth line.
 			if (i != 0)
-				pos += sprintf (buf + pos, "  %s\n", buff);
+				pos += sprintf ((char *)buf + pos, "  %s\n", buff);
 
 			// Output the offset.
-			pos += sprintf (buf + pos, "  %04x ", i);
+			pos += sprintf ((char *)buf + pos, "  %04x ", i);
 		}
 
 		// Now the hex code for the specific character.
-		pos += sprintf (buf + pos, " %02x", pc[i]);
+		pos += sprintf ((char *)buf + pos, " %02x", pc[i]);
 
 		// And store a printable ASCII character for later.
 		if ((pc[i] < 0x20) || (pc[i] > 0x7e))
@@ -1433,12 +1434,12 @@ void hexdump (char *desc, void *addr, int len) {
 
 	// Pad out last line if not exactly 16 characters.
 	while ((i % 16) != 0) {
-		pos += sprintf (buf + pos, "   ");
+		pos += sprintf ((char *)buf + pos, "   ");
 		i++;
 	}
 
 	// And print the final ASCII bit.
-	pos += sprintf (buf + pos, "  %s\n", buff);
+	pos += sprintf ((char *)buf + pos, "  %s\n", buff);
 	if(!desc)
 		LOG("\n%s", buf)
 		else

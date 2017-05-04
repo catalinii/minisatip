@@ -187,7 +187,6 @@ int num_adapters = 0;
 
 int init_hw(int i)
 {
-	char name[100];
 	int64_t st, et;
 	adapter *ad;
 	if (i < 0 || i >= MAX_ADAPTERS)
@@ -298,7 +297,6 @@ int init_hw(int i)
 					get_delsys(ad->sys[2]), get_delsys(ad->sys[3]));
 	getAdaptersCount();
 
-OK:
 	mutex_unlock(&ad->mutex);
 	return 0;
 
@@ -310,7 +308,6 @@ NOK:
 int init_all_hw()
 {
 	int i, rv;
-	char name[50];
 
 	LOG("starting init_all_hw %d", init_complete);
 	if (init_complete)
@@ -396,12 +393,11 @@ int close_adapter(int na)
 
 int getAdaptersCount()
 {
-	int i, j, k;
-	char sys;
+	int i, j, k, sys;
 	adapter *ad;
 	int ts2 = 0, tc2 = 0, tt2 = 0, tc = 0, tt = 0;
-	char fes[20][MAX_ADAPTERS];
-	char ifes[20];
+	int fes[20][MAX_ADAPTERS];
+	int ifes[20];
 	char order[] =
 	{ SYS_DVBS2, SYS_DVBT, SYS_DVBC_ANNEX_A, SYS_DVBT2, SYS_DVBC2 };
 
@@ -749,7 +745,7 @@ int tune(int aid, int sid)
 	adapter *ad = get_adapter(aid);
 	int rv = 0, flush_data = 0;
 	SPid *p;
-
+  
 	if (!ad)
 		return -400;
 
@@ -989,7 +985,6 @@ int mark_pids_add(int sid, int aid, char *pids)
 
 int compare_tunning_parameters(int aid, transponder * tp)
 {
-	int same = 0;
 	adapter *ad = get_adapter(aid);
 	if (!ad)
 		return -1;
@@ -1126,7 +1121,7 @@ char* get_stream_pids(int s_id, char *dest, int max_size);
 char *
 describe_adapter(int sid, int aid, char *dad, int ld)
 {
-	int i = 0, ts, j, use_ad, len;
+	int use_ad, len;
 	transponder *t;
 	adapter *ad;
 	streams *ss;
@@ -1146,7 +1141,7 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 	}
 	else
 		t = &ad->tp;
-	memset(dad, 0, sizeof(dad));
+	memset(dad, 0, ld);
 
 	if (use_ad)
 	{
@@ -1458,7 +1453,7 @@ void set_diseqc_timing(char *o)
 	int before_cmd, after_cmd, after_repeated_cmd;
 	int after_switch, after_burst, after_tone;
 	char buf[2000], *arg[20];
-	char *sep1, *sep2, *sep3, *sep4, *sep5, *sep6, *sep7;
+	char *sep1, *sep2, *sep3, *sep4, *sep5, *sep6;
 	adapter *ad;
 	strncpy(buf, o, sizeof(buf));
 	la = split(arg, buf, sizeof(arg), ',');
@@ -1604,7 +1599,7 @@ void set_nopm_adapters(char *o)
 extern char *fe_delsys[];
 void set_adapters_delsys(char *o)
 {
-	int i, j, la, a_id, ds;
+	int i, la, a_id, ds;
 	char buf[100], *arg[20], *sep;
 	adapter *ad;
 	strncpy(buf, o, sizeof(buf));
@@ -1706,7 +1701,6 @@ int signal_thread(sockets *s)
 	int i;
 	int64_t ts, ctime;
 	adapter *ad;
-	int status;
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		if ((ad = get_adapter_nw(i)) && ad->get_signal && ad->tp.freq
 						&& (ad->status_cnt++ > 2) // make sure the kernel has updated the status

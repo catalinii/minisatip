@@ -1,5 +1,6 @@
 /minisatip
 *.o
+*.d
 config.log
 config.status
 Makefile
