@@ -1217,6 +1217,7 @@ int read_http(sockets * s)
 		if(strstr(ctype, "html"))
 		{
 			process_file(s, f, nl, ctype);
+			flush_socket(s);
 			closefile(f, nl);
 		}
 		return 0;
