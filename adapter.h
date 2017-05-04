@@ -53,6 +53,7 @@ typedef int (*Del_filters)(int fd, int pid);
 typedef int (*Adapter_commit)(void *ad);
 typedef int (*Open_device)(void *ad);
 typedef int (*Device_signal)(void *ad);
+typedef int (*Device_wakeup)(void *ad, int fd, int voltage);
 typedef int (*Tune)(int aid, transponder * tp);
 typedef fe_delivery_system_t (*Dvb_delsys)(int aid, int fd,
 		fe_delivery_system_t *sys);
@@ -115,6 +116,7 @@ typedef struct struct_adapter
 	Tune tune;
 	Dvb_delsys delsys;
 	Device_signal get_signal;
+	Device_wakeup wakeup;
 	Adapter_commit post_init, close;
 } adapter;
 

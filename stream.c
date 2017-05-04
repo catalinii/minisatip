@@ -295,6 +295,7 @@ int close_stream_for_socket(sockets *s)
 	LOG("%s: start close_stream_for_socket for id %d %p", __FUNCTION__, s->sid, sid);
 	if(sid)
 		sid->timeout = 1;
+	return 0;
 }
 
 int close_stream(int i)
@@ -618,7 +619,6 @@ int send_rtcp(int s_id, int64_t ctime)
 	char dad[1000];
 	char ra[50];
 	unsigned char rtcp_buf[1600];
-	int c_time = (int) (ctime / 1000) & 0xFFFFFFFF;
 	unsigned char *rtcp = rtcp_buf + 4;
 	streams *sid = get_sid(s_id);
 
@@ -891,10 +891,9 @@ int process_dmx(sockets * s)
 {
 	void *min, *max;
 	int i, j, dp;
-	static int cnt;
 	streams *sid;
 	adapter *ad;
-	int send = 0, flush_all = 0;
+	int flush_all = 0;
 	int64_t stime;
 
 	ad = get_adapter(s->sid);
@@ -990,7 +989,6 @@ int read_dmx(sockets * s)
 	adapter *ad;
 	int send = 0, flush_all = 0, ls, lse, i;
 	int threshold = opts.udp_threshold;
-	uint64_t stime;
 	uint64_t rtime = getTick();
 
 	if (s->rlen % DVB_FRAME != 0)
@@ -1303,8 +1301,7 @@ int get_stream_rport(int s_id)
 char* get_stream_pids(int s_id, char *dest, int max_size)
 {
 	int len = 0;
-	int pids[MAX_PIDS];
-	int lp, i, j;
+	int i, j;
 	streams *s = get_sid_nw(s_id);
 	adapter *ad;
 	dest[0] = 0;

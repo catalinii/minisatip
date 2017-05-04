@@ -830,7 +830,6 @@ int read_rtsp(sockets * s)
 	int sess_id = 0;
 	int end = s->type == TYPE_HTTP;
 	char buf[2000];
-	char tmp_ra[50];
 	streams *sid = get_sid(s->sid);
 
 	if (s->buf[0] == 0x24 && s->buf[1] < 2)
@@ -850,7 +849,7 @@ int read_rtsp(sockets * s)
 		}
 	}
 
-	if (s->rlen < 4 || !end_of_header(s->buf + s->rlen - 4))
+	if (s->rlen < 4 || !end_of_header((char *)s->buf + s->rlen - 4))
 	{
 		if (s->rlen > RBUF - 10)
 		{
@@ -1096,7 +1095,7 @@ int read_http(sockets * s)
 		"<satip:X_SATIPCAP xmlns:satip=\"urn:ses-com:satip\">%s</satip:X_SATIPCAP>"
 		"%s"
 		"</device></root>";
-	if (s->rlen < 5 || !end_of_header(s->buf + s->rlen - 4))
+	if (s->rlen < 5 || !end_of_header((char *)s->buf + s->rlen - 4))
 	{
 		if (s->rlen > RBUF - 10)
 		{
@@ -1114,7 +1113,7 @@ int read_http(sockets * s)
 		return 0;
 	}
 	url[0] = 0;
-	space = strchr(s->buf, ' ');
+	space = strchr((char *)s->buf, ' ');
 	if(space)
 	{
 		int i = 0;
@@ -1433,7 +1432,7 @@ pthread_t main_tid;
 extern int sock_signal;
 int main(int argc, char *argv[])
 {
-	int sock_st, sock_bw, rv;
+	int sock_bw, rv;
 	main_tid = get_tid();
 	thread_name = "main";
 	set_options(argc, argv);
