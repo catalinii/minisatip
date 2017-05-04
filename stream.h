@@ -96,5 +96,4 @@ extern int64_t c_tbw, c_bw;
 extern uint32_t c_reads, c_writes, c_failed_writes;
 extern int64_t c_ns_read, c_tt;
 
->>>>>>> 5eb0b60... add 'stats' button to web status page
 #endif
