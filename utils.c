@@ -593,9 +593,8 @@ pthread_mutex_t log_mutex;
 void _log(int level, char * file, int line, char *fmt, ...)
 {
 	va_list arg;
-	int len, len1, both;
+	int len = 0, len1 = 0, both = 0;
 	static int idx, times;
-	int tl;
 	char stid[50];
 	static char output[2][2000]; // prints just the first 2000 bytes from the message
 
@@ -897,7 +896,7 @@ void process_file(void *sock, char *s, int len, char *ctype)
 			}
 			rv = sockets_write(so->id, outp, io);
 			outp[io] = 0;
-			LOG("%s", outp);
+//			LOG("%s", outp);
 			io = 0;
 		}
 	}
@@ -962,8 +961,8 @@ char *readfile(char *fn, char *ctype, int *len)
 		else if (endswith(fn, "xml"))
 			strcpy(ctype, "CACHE-CONTROL: no-cache\r\nContent-type: text/xml");
 		else if (endswith(fn, "m3u"))
-			strcpy(ctype,
-										"CACHE-CONTROL: no-cache\r\nContent-type: video/x-mpegurl");
+			strcpy(ctype, "CACHE-CONTROL: no-cache\r\nContent-type: video/x-mpegurl");
+		else strcpy(ctype, "CACHE-CONTROL: no-cache\r\nContent-type: application/octet-stream");
 	}
 	return mem;
 }
