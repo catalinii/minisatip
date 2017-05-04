@@ -241,4 +241,11 @@ char *get_gi(int i);
 char *get_specinv(int i);
 char *get_pol(int i);
 
+extern char *fe_delsys[];
+extern char *fe_fec[];
+extern char *fe_tmode[];
+extern char *fe_modulation[];
+extern char *fe_specinv[];
+extern char *fe_gi[];
+
 #endif							 /*  */
