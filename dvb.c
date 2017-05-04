@@ -42,10 +42,6 @@
 #include "ca.h"
 #include "utils.h"
 
-#ifdef AXE
-#include "axe.h"
-#endif
-
 char *fe_pilot[] =
 { "on", "off", " ", //auto
 		NULL };
@@ -436,9 +432,8 @@ int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol, int hiban
 
 	LOGL(3, "send_diseqc fd %d, pos = %d (c %d u %d), pol = %d, hiband = %d",
 						fd, pos, posc, posu, pol, hiband);
-#ifdef AXE
-	axe_wakeup(fd, pol ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13);
-#endif
+	if (ad->wakeup)
+		ad->wakeup(ad, fd, pol ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13);
 
 	if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
 		LOG("send_diseqc: FE_SET_TONE failed for fd %d: %s", fd,
@@ -504,9 +499,8 @@ int send_unicable(adapter *ad, int fd, int freq, int pos, int pol, int hiband, d
 						"send_unicable fd %d, freq %d, ufreq %d, pos = %d, pol = %d, hiband = %d, slot %d, diseqc => %02x %02x %02x %02x %02x",
 						fd, freq, d->ufreq, pos, pol, hiband, d->uslot, cmd.msg[0],
 						cmd.msg[1], cmd.msg[2], cmd.msg[3], cmd.msg[4]);
-#ifdef AXE
-	axe_wakeup(fd, SEC_VOLTAGE_13);
-#endif
+	if (ad->wakeup)
+		ad->wakeup(ad, fd, SEC_VOLTAGE_13);
 	if(!ad->tune_time)
 	{
 		if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_13) == -1)
@@ -551,14 +545,12 @@ int send_jess(adapter *ad, int fd, int freq, int pos, int pol, int hiband, diseq
 		cmd.msg[4] = d->pin;
 	}
 
-	LOGL(3,
-						"send_jess fd %d, freq %d, ufreq %d, pos = %d, pol = %d, hiband = %d, slot %d, diseqc => %02x %02x %02x %02x %02x",
-						fd, freq, d->ufreq, pos, pol, hiband, d->uslot, cmd.msg[0],
-						cmd.msg[1], cmd.msg[2], cmd.msg[3], cmd.msg[4]);
+	LOGL(3, "send_jess fd %d, freq %d, ufreq %d, pos = %d, pol = %d, hiband = %d, slot %d, diseqc => %02x %02x %02x %02x %02x",
+		fd, freq, d->ufreq, pos, pol, hiband, d->uslot, cmd.msg[0],
+		cmd.msg[1], cmd.msg[2], cmd.msg[3], cmd.msg[4]);
 
-#ifdef AXE
-	axe_wakeup(fd, SEC_VOLTAGE_13);
-#endif
+	if (ad->wakeup)
+		ad->wakeup(ad, fd, SEC_VOLTAGE_13);
 
 	if(!ad->tune_time)
 	{
@@ -609,23 +601,13 @@ int setup_switch(adapter *ad)
 
 	if (tp->diseqc_param.switch_type == SWITCH_UNICABLE)
 	{
-#ifdef AXE
-		freq = send_unicable(ad, ad->fe2, freq / 1000, diseqc, pol, hiband,
-																							&tp->diseqc_param);
-#else
-		freq = send_unicable(ad, frontend_fd, freq / 1000, diseqc, pol, hiband,
-																							&tp->diseqc_param);
-#endif
+		freq = send_unicable(ad, frontend_fd, freq / 1000, diseqc,
+					pol, hiband, &tp->diseqc_param);
 	}
 	else if (tp->diseqc_param.switch_type == SWITCH_JESS)
 	{
-#ifdef AXE
-		freq = send_jess(ad, ad->fe2, freq / 1000, diseqc, pol, hiband,
-																			&tp->diseqc_param);
-#else
-		freq = send_jess(ad, frontend_fd, freq / 1000, diseqc, pol, hiband,
-																			&tp->diseqc_param);
-#endif
+		freq = send_jess(ad, frontend_fd, freq / 1000, diseqc,
+					pol, hiband, &tp->diseqc_param);
 	}
 	else if (tp->diseqc_param.switch_type == SWITCH_SLAVE)
 	{
@@ -639,9 +621,9 @@ int setup_switch(adapter *ad)
 															hiband, &tp->diseqc_param);
 		else
 			LOGL(3, "Skip sending diseqc commands since "
-								"the switch position doesn't need to be changed: "
-								"pol %d, hiband %d, switch position %d", pol, hiband,
-								diseqc);
+				"the switch position doesn't need to be changed: "
+				"pol %d, hiband %d, switch position %d",
+				pol, hiband, diseqc);
 	}
 
 	ad->old_pol = pol;
@@ -694,35 +676,24 @@ int dvb_tune(int aid, transponder * tp)
 	case SYS_DVBS2:
 
 		bpol = getTick();
-#ifndef AXE
 		freq = setup_switch(ad);
-#else
-		freq = axe_setup_switch(ad);
-#endif
 		if (freq < MIN_FRQ_DVBS || freq > MAX_FRQ_DVBS)
 			LOG_AND_RETURN(-404, "Frequency %d is not within range ", freq)
 
-			ADD_PROP(DTV_SYMBOL_RATE, tp->sr)
+		ADD_PROP(DTV_SYMBOL_RATE, tp->sr)
 			ADD_PROP(DTV_INNER_FEC, tp->fec)
-#ifndef AXE
-			ADD_PROP(DTV_PILOT, tp->plts)
-			ADD_PROP(DTV_ROLLOFF, tp->ro)
-#endif
+		ADD_PROP(DTV_PILOT, tp->plts)
+		ADD_PROP(DTV_ROLLOFF, tp->ro)
 #if DVBAPIVERSION >= 0x0502
-			ADD_PROP(DTV_STREAM_ID, tp->plp)
+		ADD_PROP(DTV_STREAM_ID, tp->plp)
 #endif
 
-			LOG(
-				"tuning to %d(%d) pol: %s (%d) sr:%d fec:%s delsys:%s mod:%s rolloff:%s pilot:%s, ts clear=%jd, ts pol=%jd",
-				tp->freq, freq, get_pol(tp->pol), tp->pol, tp->sr,
-				fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype],
-#ifdef AXE
-				"auto", "auto",
-#else
-				fe_rolloff[tp->ro], fe_pilot[tp->plts],
-#endif
-				bclear, bpol)
-			break;
+		LOG("tuning to %d(%d) pol: %s (%d) sr:%d fec:%s delsys:%s mod:%s rolloff:%s pilot:%s, ts clear=%jd, ts pol=%jd",
+			tp->freq, freq, get_pol(tp->pol), tp->pol, tp->sr,
+			fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype],
+			fe_rolloff[tp->ro], fe_pilot[tp->plts],
+			bclear, bpol)
+		break;
 
 	case SYS_DVBT:
 	case SYS_DVBT2:
@@ -799,7 +770,7 @@ int dvb_tune(int aid, transponder * tp)
 
 		break;
 	default:
-		LOG("tuninng to unknown delsys: %s freq %s ts clear = %jd", freq,
+		LOG("tuning to unknown delsys: %s freq %s ts clear = %jd", freq,
 						fe_delsys[tp->sys], bclear)
 		break;
 	}
@@ -822,14 +793,8 @@ int dvb_tune(int aid, transponder * tp)
 		if (ioctl(fd_frontend, FE_SET_PROPERTY, &p) == -1)
 		{
 			LOG("dvb_tune: set property failed %d %s", errno, strerror(errno));
-#ifdef AXE
-			axe_set_tuner_led(aid + 1, 0);
-#endif
 			return -404;
 		}
-#ifdef AXE
-	axe_dmxts_start(ad->dvr);
-#endif
 
 	return 0;
 }
@@ -984,7 +949,7 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys)
 
 }
 
-void get_signal(int fd, int * status, uint32_t * ber, uint16_t * strength,
+void get_signal(int fd, uint32_t * status, uint32_t * ber, uint16_t * strength,
 																uint16_t * snr)
 {
 	*status = *ber = *snr = *strength = 0;
@@ -1009,7 +974,7 @@ void get_signal(int fd, int * status, uint32_t * ber, uint16_t * strength,
 	}
 }
 
-int get_signal_new(int fd, int * status, uint32_t * ber, uint16_t * strength,
+int get_signal_new(int fd, uint32_t * status, uint32_t * ber, uint16_t * strength,
 																			uint16_t * snr)
 {
 

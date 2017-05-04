@@ -97,7 +97,7 @@ static inline int axe_dmxts_stop(int fd)
 void axe_set_tuner_led(int tuner, int on);
 void axe_set_network_led(int on);
 void axe_status(char *buf, size_t buflen);
-void axe_wakeup(int fe_fd, int voltage);
+void axe_wakeup(void *ad, int fe_fd, int voltage);
 void find_axe_adapter(adapter **a);
 int axe_setup_switch(adapter *ad);
 void free_axe_input(adapter *ad);

@@ -47,10 +47,7 @@
 #ifndef DISABLE_LINUXDVB
 
 extern struct struct_opts opts;
-int dvb_tune(int aid, transponder * tp);
-int setup_switch(adapter *ad);
-void get_signal(int fd, int * status, uint32_t * ber, uint16_t * strength,
-																uint16_t * snr);
+void get_signal(int fd, uint32_t * status, uint32_t * ber, uint16_t * strength, uint16_t * snr);
 int send_jess(adapter *ad, int fd, int freq, int pos, int pol, int hiband, diseqc *d);
 int send_unicable(adapter *ad, int fd, int freq, int pos, int pol, int hiband, diseqc *d);
 int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol, int hiband, diseqc *d);
@@ -155,7 +152,7 @@ void axe_post_init(adapter *ad)
 }
 
 
-void axe_wakeup(int fe_fd, int voltage)
+void axe_wakeup(void *_ad, int fe_fd, int voltage)
 {
 	int i, mask;
 	adapter *a;
@@ -270,7 +267,7 @@ int axe_setup_switch(adapter *ad)
 	}
 
 	adapter *ad2, *adm;
-	int input = 0, src, aid, pos = 0, equattro = 0, master = -1;
+	int input = 0, aid, pos = 0, equattro = 0, master = -1;
 
 	if (tp->diseqc_param.switch_type != SWITCH_UNICABLE &&
 					tp->diseqc_param.switch_type != SWITCH_JESS) {
@@ -385,18 +382,35 @@ int axe_setup_switch(adapter *ad)
 		}else
 			ad->axe_used |= (1 << aid);
 
-		LOG("adapter %d: using source %d, fe %d fe2 %d", ad->id, input, ad->fe, ad->fe2);
+		LOG("adapter %d: using source %d, fe %d fe2 %d",
+					ad->id, input, ad->fe, ad->fe2);
 	}
 
 	if (tp->diseqc_param.switch_type == SWITCH_UNICABLE)
 	{
 		freq = send_unicable(ad, ad->fe2, freq / 1000, diseqc,
-																							pol, hiband, &tp->diseqc_param);
+					pol, hiband, &tp->diseqc_param);
 	}
 	else if (tp->diseqc_param.switch_type == SWITCH_JESS)
 	{
 		freq = send_jess(ad, ad->fe2, freq / 1000, diseqc,
-																			pol, hiband, &tp->diseqc_param);
+					pol, hiband, &tp->diseqc_param);
+	}
+	else if (tp->diseqc_param.switch_type == SWITCH_SLAVE)
+	{
+		LOGL(2, "FD %d (%d) is a slave adapter", frontend_fd);
+	}
+	else
+	{
+		if (ad->old_pol != pol || ad->old_hiband != hiband
+						|| ad->old_diseqc != diseqc)
+			send_diseqc(ad, frontend_fd, diseqc, ad->old_diseqc != diseqc, pol,
+					hiband, &tp->diseqc_param);
+		else
+			LOGL(3, "Skip sending diseqc commands since "
+				"the switch position doesn't need to be changed: "
+				"pol %d, hiband %d, switch position %d",
+				pol, hiband, diseqc);
 	}
 
 	ad->old_pol = pol;
@@ -415,30 +429,154 @@ axe:
 		LOG("axe_fe: RESET failed for fd %d: %s", frontend_fd, strerror(errno));
 	if (axe_fe_input(frontend_fd, input))
 		LOG("axe_fe: INPUT failed for fd %d input %d: %s", frontend_fd, input, strerror(errno));
-	if (opts.quattro)
-		return freq;
 
 	return freq;
 }
 
+#define ADD_PROP(c, d) { \
+	p_cmd[iProp].cmd = (c); \
+        p_cmd[iProp].u.data = (d); \
+        iProp++; \
+}
 
 int axe_tune(int aid, transponder * tp)
 {
 	adapter *ad = get_adapter(aid);
-
 	ssize_t drv;
 	char buf[1316];
+
+	int64_t bclear, bpol;
+	int iProp = 0;
+	int fd_frontend = ad->fe;
+
+	int freq = tp->freq;
+	struct dtv_property p_cmd[20];
+	struct dtv_properties p =
+	{ .num = 0, .props = p_cmd };
+	struct dvb_frontend_event ev;
+
+	struct dtv_property p_clear[] =
+	{
+		{ .cmd = DTV_CLEAR },
+	};
+
+	struct dtv_properties cmdseq_clear =
+	{ .num = 1, .props = p_clear };
+
 	axe_set_tuner_led(aid + 1, 1);
 	axe_dmxts_stop(ad->dvr);
 	axe_fe_reset(ad->fe);
 
 	//probably can be removed
-
 	do { drv = read(ad->dvr, buf, sizeof(buf)); } while (drv > 0);
 
-	return dvb_tune(aid, tp);
+	memset(p_cmd, 0, sizeof(p_cmd));
+	bclear = getTick();
 
+	if ((ioctl(fd_frontend, FE_SET_PROPERTY, &cmdseq_clear)) == -1)
+	{
+		LOG("FE_SET_PROPERTY DTV_CLEAR failed for fd %d: %s", fd_frontend,
+						strerror(errno));
+		//        return -1;
+	}
+
+	switch (tp->sys)
+	{
+	case SYS_DVBS:
+	case SYS_DVBS2:
+
+		bpol = getTick();
+		freq = axe_setup_switch(ad);
+		if (freq < MIN_FRQ_DVBS || freq > MAX_FRQ_DVBS)
+			LOG_AND_RETURN(-404, "Frequency %d is not within range ", freq)
+
+		ADD_PROP(DTV_SYMBOL_RATE, tp->sr)
+		ADD_PROP(DTV_INNER_FEC, tp->fec)
+#if DVBAPIVERSION >= 0x0502
+		ADD_PROP(DTV_STREAM_ID, tp->plp)
+#endif
+
+		LOG("tuning to %d(%d) pol: %s (%d) sr:%d fec:%s delsys:%s mod:%s rolloff:%s pilot:%s, ts clear=%jd, ts pol=%jd",
+			tp->freq, freq, get_pol(tp->pol), tp->pol, tp->sr,
+			fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype],
+			"auto", "auto",
+			bclear, bpol)
+		break;
+
+	case SYS_DVBT:
+	case SYS_DVBT2:
+
+		if (tp->freq < MIN_FRQ_DVBT || tp->freq > MAX_FRQ_DVBT)
+			LOG_AND_RETURN(-404, "Frequency %d is not within range ", tp->freq)
+
+			freq = freq * 1000;
+		ADD_PROP(DTV_BANDWIDTH_HZ, tp->bw)
+		ADD_PROP(DTV_CODE_RATE_HP, tp->fec)
+		ADD_PROP(DTV_CODE_RATE_LP, tp->fec)
+		ADD_PROP(DTV_GUARD_INTERVAL, tp->gi)
+		ADD_PROP(DTV_TRANSMISSION_MODE, tp->tmode)
+		ADD_PROP(DTV_HIERARCHY, HIERARCHY_AUTO)
+#if DVBAPIVERSION >= 0x0502
+		ADD_PROP(DTV_STREAM_ID, tp->plp & 0xFF)
+#endif
+
+		LOG(
+			"tuning to %d delsys: %s bw:%d inversion:%s mod:%s fec:%s guard:%s transmission: %s, ts clear = %jd",
+			freq, fe_delsys[tp->sys], tp->bw, fe_specinv[tp->inversion],
+			fe_modulation[tp->mtype], fe_fec[tp->fec], fe_gi[tp->gi],
+			fe_tmode[tp->tmode], bclear)
+		break;
+
+	case SYS_DVBC2:
+	case SYS_DVBC_ANNEX_A:
+
+		if (tp->freq < MIN_FRQ_DVBC || tp->freq > MAX_FRQ_DVBC)
+			LOG_AND_RETURN(-404, "Frequency %d is not within range ", tp->freq)
+
+			freq = freq * 1000;
+		ADD_PROP(DTV_SYMBOL_RATE, tp->sr)
+#if DVBAPIVERSION >= 0x0502
+		ADD_PROP(DTV_STREAM_ID, ((tp->ds & 0xFF) << 8) | (tp->plp & 0xFF))
+#endif
+		// valid for DD DVB-C2 devices
+
+		LOG("tuning to %d sr:%d specinv:%s delsys:%s mod:%s ts clear = %jd",
+						freq, tp->sr, fe_specinv[tp->inversion], fe_delsys[tp->sys],
+						fe_modulation[tp->mtype], bclear)
+		break;
+
+	default:
+		LOG("tuning to unknown delsys: %s freq %s ts clear = %jd", freq,
+						fe_delsys[tp->sys], bclear)
+		break;
+	}
+
+	ADD_PROP(DTV_FREQUENCY, freq)
+	ADD_PROP(DTV_INVERSION, tp->inversion)
+	ADD_PROP(DTV_MODULATION, tp->mtype);
+	ADD_PROP(DTV_DELIVERY_SYSTEM, tp->sys);
+	ADD_PROP(DTV_TUNE, 0)
+
+	p.num = iProp;
+	/* discard stale QPSK events */
+	while (1)
+	{
+		if (ioctl(fd_frontend, FE_GET_EVENT, &ev) == -1)
+			break;
+	}
+
+	if ((ioctl(fd_frontend, FE_SET_PROPERTY, &p)) == -1)
+		if (ioctl(fd_frontend, FE_SET_PROPERTY, &p) == -1)
+		{
+			LOG("dvb_tune: set property failed %d %s", errno, strerror(errno));
+			axe_set_tuner_led(aid + 1, 0);
+			return -404;
+		}
+
+	axe_dmxts_start(ad->dvr);
+	return 0;
 }
+
 int axe_set_pid(adapter *a, uint16_t i_pid)
 {
 	if (i_pid > 8192 || a == NULL)
@@ -597,6 +735,7 @@ void find_axe_adapter(adapter **a)
 				ad->post_init = (Adapter_commit) axe_post_init;
 				ad->close = (Adapter_commit) axe_close;
 				ad->get_signal = (Device_signal) axe_get_signal;
+				ad->wakeup = (Device_wakeup) axe_wakeup;
 				ad->type = ADAPTER_DVB;
 				close(fd);
 				na++;
@@ -715,7 +854,6 @@ adapter *axe_vdevice_sync(int aid)
 	char buf[1024], *p;
 	int64_t t;
 	uint32_t addr, pktc, syncerrc, tperrc, ccerr;
-	int fd;
 
 	if (!ad)
 		return NULL;
