@@ -53,10 +53,14 @@ SCA ca[MAX_CA];
 int nca;
 SMutex ca_mutex;
 
-SFilter filters[MAX_FILTERS];
+SFilter *filters[MAX_FILTERS];
 SMutex filters_mutex;
 int nfilters;
 
+SFilter *get_filter(int id)
+{
+	return (id>= 0 && id<=MAX_FILTERS && filters[id] && filters[id]->enabled) ? filters[id] : NULL;
+}
 
 int add_ca(SCA *c)
 {
@@ -173,13 +177,13 @@ static uint32_t crc_tab[256] =
 		0x933eb0bb, 0x97ffad0c, 0xafb010b1, 0xab710d06, 0xa6322bdf, 0xa2f33668,
 		0xbcb4666d, 0xb8757bda, 0xb5365d03, 0xb1f740b4 };
 
-int process_pat(adapter *ad, unsigned char *b)
+int process_pat(int filter, unsigned char *b, int len, void *opaque)
 {
 	int pat_len = 0, i, tid = 0, sid, pid, ver, csid = 0;
-	int64_t pid_key = TABLES_ITEM + ((1 + ad->id) << 24) + 0;
 	int16_t *pids;
 	unsigned char *init_b = b;
 	SPid *p;
+	adapter *ad = get_adapter((int )opaque);
 
 	if (((b[1] & 0x1F) != 0) || (b[2] != 0))
 		return 0;
@@ -223,9 +227,7 @@ int process_pat(adapter *ad, unsigned char *b)
 	dvbapi_delete_keys_for_adapter(ad->id);
 #endif
 //	LOG("tid %d pat_len %d: %02X %02X %02X %02X %02X %02X %02X %02X", tid, pat_len, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]);
-	setItem(pid_key, b, 1, 0);
-	setItemSize(pid_key, 8192 * sizeof(*pids));
-	pids = (int16_t *) getItem(pid_key);
+	pids = NULL;
 	memset(pids, 0, 8192 * sizeof(*pids));
 	pat_len -= 9;
 	b += 8;
@@ -335,61 +337,56 @@ void find_pi(unsigned char *es, int len, unsigned char *pi, int *pi_len)
 	return;
 }
 
-int process_pmt(adapter *ad, unsigned char *b)
+int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 {
-	int pi_len = 0, isAC3, ver, pmt_len = 0, i, _pid, es_len, len, init_pi_len;
+	int pi_len = 0, isAC3, ver, pmt_len = 0, i, _pid, es_len, init_pi_len;
 	int program_id = 0;
 	int prio = 0;
 	int enabled_channels = 0;
-	unsigned char *pmt, *pi, tmp_pi[MAX_PI_LEN];
+	unsigned char *pmt_b, *pi, tmp_pi[MAX_PI_LEN];
 	unsigned char *init_b = b;
 	int caid, capid, pid, spid, stype;
 	uint16_t pid_list[MAX_PIDS];
 	int npl = 0;
 	SPid *p, *cp;
-	int64_t pid_key = TABLES_ITEM + ((1 + ad->id) << 24) + 0;
+	int64_t pid_key = 0;
 	int16_t *pids;
+	adapter *ad;
 	int opmt, old_key;
+	int pmt_id = (int )opaque;
 
-	if ((b[0] != 0x47)) // make sure we are dealing with TS
+	SPMT *pmt = get_pmt(pmt_id);
+	SFilter *f = get_filter(filter);
+	if(!pmt)
+	{
+		LOG("PMT %d does not exist", pmt_id);
 		return 0;
+	}
 
-	if ((b[1] & 0x40) && ((b[4] != 0) || (b[5] != 2)))
+	ad = get_adapter(pmt->adapter);
+	if(!ad)
+	{
+		LOG("Adapter %d does not exist", pmt->adapter);
 		return 0;
+	}
+	pid = f->pid;
 
-	pid = (b[1] & 0x1F) * 256 + b[2];
 	if (!(p = find_pid(ad->id, pid)))
 		return -1;
 
 	if (!p || (p->type & PMT_COMPLETE) || (p->type == 0))
 		return 0;
 
-	// skip the first PMT, allow for the PMT that is already added to the list of pids to be processed first
-	if ((b[1] & 0x40) && (p->type & PMT_SKIPFIRST))
-	{
-		p->type &= ~PMT_SKIPFIRST;
-		return 0;
-	}
-
-	program_id = b[8] * 256 + b[9];
-	ver = b[10] & 0x3F;
-
-	if (((p->type & 0xF) != TYPE_PMT) && p->version == ver
-					&& p->csid == program_id) // pmt processed already
-		return 0;
-
-	if (!(pmt_len = assemble_packet(&b, ad, 1)))
-		return 0;
 
 	pi_len = ((b[10] & 0xF) << 8) + b[11];
 
-	program_id = p->csid = b[3] * 256 + b[4];
-	ver = p->version = b[5] & 0x3F;
+	program_id = pmt->sid = b[3] * 256 + b[4];
+	ver = pmt->version = b[5] & 0x3F;
 
 	LOG("PMT pid: %04X (%d), pmt_len %d, pi_len %d, sid %04X (%d)", pid, pid,
 					pmt_len, pi_len, program_id, program_id);
 	pi = b + 12;
-	pmt = pi + pi_len;
+	pmt_b = pi + pi_len;
 
 	if (pmt_len > 1500)
 		return 0;
@@ -415,12 +412,12 @@ int process_pmt(adapter *ad, unsigned char *b)
 
 	for (i = 0; i < pmt_len - init_pi_len - 17; i += (es_len) + 5) // reading streams
 	{
-		es_len = (pmt[i + 3] & 0xF) * 256 + pmt[i + 4];
-		stype = pmt[i];
-		spid = (pmt[i + 1] & 0x1F) * 256 + pmt[i + 2];
+		es_len = (pmt_b[i + 3] & 0xF) * 256 + pmt_b[i + 4];
+		stype = pmt_b[i];
+		spid = (pmt_b[i + 1] & 0x1F) * 256 + pmt_b[i + 2];
 		isAC3 = 0;
 		if(stype == 6)
-			isAC3 = is_ac3_es(pmt + i + 5, es_len);
+			isAC3 = is_ac3_es(pmt_b + i + 5, es_len);
 
 		LOG("PMT pid %d - stream pid %04X (%d), type %d%s, es_len %d, pos %d, pi_len %d old pmt %d, old pmt for this pid %d",
 						pid, spid, spid, stype, isAC3 ? " [AC3]" : "", es_len, i, pi_len, pids[pid], pids[spid]);
@@ -431,7 +428,7 @@ int process_pmt(adapter *ad, unsigned char *b)
 						&& stype != 36)
 			continue;
 
-		find_pi(pmt + i + 5, es_len, pi, &pi_len);
+		find_pi(pmt_b + i + 5, es_len, pi, &pi_len);
 
 		if (pi_len == 0)
 			continue;
@@ -452,18 +449,13 @@ int process_pmt(adapter *ad, unsigned char *b)
 		{
 			enabled_channels++;
 			pid_list[npl++] = spid;
-			old_key = cp->key;
+//			old_key = cp->key;
 		}
 
 	}
 
 	if ((pi_len > 0) && enabled_channels) // PMT contains CA descriptor and there are active pids
 	{
-		SPMT pmt =
-		{ .pmt = b, .pmt_len = pmt_len, .pi = pi, .pi_len = pi_len, .p = p,
-				.sid = program_id, .ver = ver, .pid = pid };
-		p->enabled_channels = enabled_channels;
-
 		if (program_id > 0)
 			run_ca_action(CA_ADD_PMT, ad, &pmt);
 		else
@@ -472,8 +464,8 @@ int process_pmt(adapter *ad, unsigned char *b)
 		for (i = 0; i < npl; i++)
 		{
 			cp = find_pid(ad->id, pid_list[i]);
-			if (cp)
-				cp->key = p->key;
+//			if (cp)
+//				cp->key = p->key;
 		}
 		p->type |= PMT_COMPLETE;
 	}
@@ -593,7 +585,7 @@ void clean_psi(adapter *ad, uint8_t *b)
 		return;
 
 #ifndef DISABLE_DVBAPI
-	if (!get_key(p->key)) // no key associated with PMT - most likely the channel is clear
+	if (!get_pmt(p->pmt)) // no key associated with PMT - most likely the channel is clear
 		return;
 #else
 	return;
@@ -754,17 +746,14 @@ void tables_pid_add(adapter *ad, int pid, int existing)
 	if (pids && (pids[pid] > 0))
 	{
 		p = find_pid(ad->id, pids[pid]);
-		LOGL(2,
-							"tables_pid_add: adding pid %d adapter %d, pmt pid %d, pmt pid type %d, pmt pid key %d",
-							pid, ad->id, pids[pid], p ? p->type : -1, p ? p->key : -1);
+		LOGL(2, "tables_pid_add: adding pid %d adapter %d, pmt pid %d, pmt pid type %d, pmt pid pmt %d",
+							pid, ad->id, pids[pid], p ? p->type : -1, p ? p->pmt : -1);
 		if (p && (p->type & PMT_COMPLETE))
 		{
-			cp->key = p->key;
-			if (!existing)
-				p->enabled_channels++;
+			cp->pmt = p->pmt;
 			return;
 		}
-		cp->key = 255;
+//		cp->pmt = -1;
 
 		if (!p || (p->type == 0))
 		{
@@ -803,42 +792,24 @@ void run_del_pmt(adapter *ad, int pid, int16_t *pids)
 
 void tables_pid_del(adapter *ad, int pid)
 {
-	int64_t pid_key = TABLES_ITEM + ((1 + ad->id) << 24) + 0;
-	int16_t *pids = NULL;
 	int ep;
 	SPid *p, *cp;
 	if (!ad)
 		return;
 //	invalidate_adapter(ad->id);
 	run_ca_action(CA_DEL_PID, ad, &pid);
-	pids = (int16_t *) getItem(pid_key);
 	cp = find_pid(ad->id, pid);
 	if (!cp)
 		return;
-	if (cp->key != 255)
-		LOGL(2,
-							"tables_pid_del: pid %d adapter %d key %d pids %d enabled_channels %d",
-							pid, ad->id, cp->key, pids ? pids[pid] : -1,
-							cp->enabled_channels)
+	if (cp->pmt != -1)
+		LOGL(2, "tables_pid_del: pid %d adapter %d pmt %d",
+							pid, ad->id, cp->pmt)
 		else
 			return;
 
-	if (cp->type & TYPE_PMT) // if(pids && (pids[pid]< 0))
-	{
-		if (cp->enabled_channels == 0)
-			run_del_pmt(ad, pid, pids);
+	if (pmt_enabled_channels(cp->pmt) == 0)
+		run_del_pmt(ad, pid, NULL);
 
-		return;
-	}
-	if (cp->type == 0)
-	{
-		int pmt_pid = abs(pids[pid]);
-		p = find_pid(ad->id, pmt_pid);
-		if (p && p->enabled_channels > 0)
-			p->enabled_channels--;
-		if (p && p->enabled_channels == 0)
-			run_del_pmt(ad, pmt_pid, pids);
-	}
 }
 
 
@@ -970,7 +941,11 @@ int tables_close_device(adapter *ad)
 
 int tables_tune(adapter *ad)
 {
-
+	int i;
+	SFilter *f;
+	for (i = 0; i < nfilters; i++)
+		if((f = get_filter(i)) && (f->adapter == ad->id) && !(f->flags & FILTER_PERMANENT))
+			del_filter(i);
 }
 
 
@@ -994,17 +969,12 @@ int tables_destroy()
 }
 
 
-SFilter *get_filter(int id)
-{
-
-}
-
 int add_filter(int aid, int pid, void *callback, void *opaque, int flags)
 {
 	uint8_t data[DMX_FILTER_SIZE], mask[DMX_FILTER_SIZE];
 	memset(data, 0, sizeof(data));
 	memset(mask, 0, sizeof(mask));
-	add_filter_mask(aid, pid, callback, opaque, data, mask);
+	add_filter_mask(aid, pid, callback, opaque, data, mask, flags);
 }
 int add_filter_mask(int aid, int pid, void * callback, void *opaque, uint8_t *data, uint8_t *mask, int flags){
 }

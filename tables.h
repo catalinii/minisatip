@@ -12,7 +12,7 @@
 #define MAX_PI_LEN 1500
 
 typedef int (*ca_action)(adapter *ad, void *arg);
-typedef int (*filter_function)(void *buf, int len, void *opaque);
+typedef int (*filter_function)(int filter, void *buf, int len, void *opaque);
 
 #define MAX_CA 4
 
@@ -38,14 +38,18 @@ typedef struct struct_CA
 
 SMutex filter_mutex;
 
-
+#define FILTER_ADD_PID 0
+#define FILTER_KEEP_PID 1
+#define FILTER_PERMANENT 2
 
 typedef struct struct_filter
 {
 	char enabled;
 	SMutex mutex;
 	int id;
+	int pid;
 	int flags;
+	int adapter;
 	void *opaque;
 	filter_function callback;
 	unsigned char filter[DMX_FILTER_SIZE];
@@ -58,8 +62,8 @@ typedef struct struct_filter
 int add_ca (SCA *c);
 void del_ca(SCA *c);
 SFilter *get_filter(int id);
-int process_pat(adapter *ad,unsigned char *b);
-int process_pmt(adapter *ad, unsigned char *b);
+int process_pat(int filter, unsigned char *b, int len, void *opaque);
+int process_pmt(int filter, unsigned char *b, int len, void *opaque);
 int assemble_packet(uint8_t **b1, adapter *ad, int check_crc);
 uint32_t crc_32(const uint8_t *data, int datalen);
 void tables_pid_del(adapter *ad, int pid);

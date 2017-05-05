@@ -16,7 +16,8 @@
 #define CA_MODE_ECB 0
 #define CA_MODE_CBC 1
 
-#define MAX_PMT 64
+#define MAX_PMT 128
+#define MAX_CW 20
 
 typedef struct struct_batch  // same as struct dvbcsa_bs_batch_s
 {
@@ -71,6 +72,7 @@ typedef struct struct_pmt
 	int pid;
 	int adapter;
 	int caids;
+	int version;
 	uint16_t caid[MAX_CAID], cais_mask[MAX_CAID];
 	uint32_t provid[MAX_CAID];
 	int active_pid[MAX_ACTIVE_PIDS];
@@ -85,7 +87,7 @@ typedef struct struct_pmt
 	SPMT_batch batch[130];
 	int8_t cw_id, parity;
 	int64_t last_parity_change;
-	int8_t master_pmt;
+	int16_t master_pmt;
 	SPid *p;
 	void *opaque;
 } SPMT;
@@ -93,7 +95,7 @@ typedef struct struct_pmt
 int register_algo(SPMT_op *o);
 int send_cw(int pmt_id, int type, int parity, uint8_t *cw);
 SPMT *get_pmt(int id);
-
+int pmt_enabled_channels(int id);
 
 #endif
 #endif
