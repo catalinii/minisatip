@@ -2,14 +2,13 @@
 #define ADAPTER_H
 #include "minisatip.h"
 #include "dvb.h"
-#include "pmt.h"
 
 typedef struct ca_device ca_device_t;
 
 #define MAX_ADAPTERS 32
-#define DVR_BUFFER 30*1024*188
+#define DVR_BUFFER 30 * 1024 * 188
 
-#define ADAPTER_BUFFER 300*DVB_FRAME
+#define ADAPTER_BUFFER 300 * DVB_FRAME
 #define ADAPTER_TIMEOUT 60000
 
 #define TYPE_PMT 1
@@ -30,9 +29,9 @@ typedef int (*Adapter_commit)(void *ad);
 typedef int (*Open_device)(void *ad);
 typedef int (*Device_signal)(void *ad);
 typedef int (*Device_wakeup)(void *ad, int fd, int voltage);
-typedef int (*Tune)(int aid, transponder * tp);
+typedef int (*Tune)(int aid, transponder *tp);
 typedef fe_delivery_system_t (*Dvb_delsys)(int aid, int fd,
-																																											fe_delivery_system_t *sys);
+										   fe_delivery_system_t *sys);
 
 #define ADAPTER_DVB 1
 #define ADAPTER_SATIP 2
@@ -53,12 +52,12 @@ typedef struct struct_adapter
 	transponder tp;
 	SPid pids[MAX_PIDS];
 	int ca_mask;
-	int master_sid;     // first SID, the one that controls the tuning
-	int sid_cnt;     //number of streams
+	int master_sid; // first SID, the one that controls the tuning
+	int sid_cnt;	//number of streams
 	int sock, fe_sock;
 	int do_tune;
 	int force_close;
-	unsigned char *buf;   // 7 rtp packets = MAX_PACK, 7 frames / packet
+	unsigned char *buf; // 7 rtp packets = MAX_PACK, 7 frames / packet
 	int64_t rtime;
 	int64_t last_sort;
 	int new_gs;
@@ -86,6 +85,7 @@ typedef struct struct_adapter
 	int64_t axe_ccerr;
 	int slave;
 #endif
+
 	Set_pid set_pid;
 	Del_filters del_filters;
 	Adapter_commit commit;
@@ -109,7 +109,7 @@ int close_adapter(int na);
 int get_free_adapter(transponder *tp);
 int set_adapter_for_stream(int i, int a);
 void close_adapter_for_stream(int sid, int aid);
-int set_adapter_parameters(int aid, int sid, transponder * tp);
+int set_adapter_parameters(int aid, int sid, transponder *tp);
 void mark_pids_deleted(int aid, int sid, char *pids);
 int mark_pids_add(int sid, int aid, char *pids);
 int mark_pid_add(int sid, int aid, int _pid);
@@ -117,8 +117,8 @@ void mark_pid_deleted(int aid, int sid, int _pid, SPid *p);
 int update_pids(int aid);
 int tune(int aid, int sid);
 SPid *find_pid(int aid, int p);
-adapter * get_adapter1(int aid, char *file, int line);
-adapter * get_configured_adapter1(int aid, char *file, int line);
+adapter *get_adapter1(int aid, char *file, int line);
+adapter *get_configured_adapter1(int aid, char *file, int line);
 char *describe_adapter(int sid, int aid, char *dad, int ld);
 void dump_pids(int aid);
 void sort_pids(int aid);
@@ -142,13 +142,13 @@ char is_adapter_disabled(int i);
 void set_adapters_delsys(char *o);
 void set_lnb_adapters(char *o);
 int signal_thread(sockets *s);
-int compare_tunning_parameters(int aid, transponder * tp);
+int compare_tunning_parameters(int aid, transponder *tp);
 void restart_needed_adapters(int aid, int sid);
 
 #define get_adapter(a) get_adapter1(a, __FILE__, __LINE__)
 #define get_configured_adapter(a) get_configured_adapter1(a, __FILE__, __LINE__)
 #define get_adapter_nw(aid) ((aid >= 0 && aid < MAX_ADAPTERS && a[aid] && a[aid]->enabled) ? a[aid] : NULL)
 
-#define adapter_lock(a) adapter_lock1(__FILE__,__LINE__,a)
-#define adapter_unlock(a) adapter_unlock1(__FILE__,__LINE__,a)
+#define adapter_lock(a) adapter_lock1(__FILE__, __LINE__, a)
+#define adapter_unlock(a) adapter_unlock1(__FILE__, __LINE__, a)
 #endif

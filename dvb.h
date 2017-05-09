@@ -22,7 +22,6 @@
 #error minisatip requires Linux DVB driver API version 5.0 or higher!
 #endif
 
-
 #ifdef DISABLE_LINUXDVB
 typedef enum fe_delivery_system {
 	SYS_UNDEFINED,
@@ -45,13 +44,13 @@ typedef enum fe_delivery_system {
 	SYS_TURBO,
 } fe_delivery_system_t;
 typedef enum fe_status {
-	FE_HAS_SIGNAL   = 0x01,
-	FE_HAS_CARRIER  = 0x02,
-	FE_HAS_VITERBI  = 0x04,
-	FE_HAS_SYNC     = 0x08,
-	FE_HAS_LOCK     = 0x10,
-	FE_TIMEDOUT     = 0x20,
-	FE_REINIT       = 0x40
+	FE_HAS_SIGNAL = 0x01,
+	FE_HAS_CARRIER = 0x02,
+	FE_HAS_VITERBI = 0x04,
+	FE_HAS_SYNC = 0x08,
+	FE_HAS_LOCK = 0x10,
+	FE_TIMEDOUT = 0x20,
+	FE_REINIT = 0x40
 } fe_status_t;
 typedef enum fe_code_rate {
 	FEC_NONE = 0,
@@ -134,10 +133,9 @@ typedef enum fe_modulation {
 } fe_modulation_t;
 #endif
 
-
 #if DVBAPIVERSION < 0x0505
 #define DTV_ENUM_DELSYS 44
-#define SYS_DVBC_ANNEX_A       SYS_DVBC_ANNEX_AC
+#define SYS_DVBC_ANNEX_A SYS_DVBC_ANNEX_AC
 #endif
 
 #ifndef SYS_DVBC2
@@ -151,7 +149,7 @@ typedef enum fe_modulation {
 #define LP_CODERATE_DEFAULT (0)
 
 #ifndef DTV_STREAM_ID
-#define DTV_STREAM_ID           42
+#define DTV_STREAM_ID 42
 #endif
 
 #define MAX_PIDS 64
@@ -161,13 +159,11 @@ typedef enum fe_modulation {
 #define MAX_STREAMS_PER_PID 16
 #endif
 
-
-
-#define MIN_FRQ_DVBT  174000
-#define MAX_FRQ_DVBT  858000
-#define MIN_FRQ_DVBC   51000
-#define MAX_FRQ_DVBC  860000
-#define MIN_FRQ_DVBS  950000
+#define MIN_FRQ_DVBT 174000
+#define MAX_FRQ_DVBT 858000
+#define MIN_FRQ_DVBC 51000
+#define MAX_FRQ_DVBC 860000
+#define MIN_FRQ_DVBS 950000
 #define MAX_FRQ_DVBS 2150000
 
 typedef struct diseqc
@@ -180,8 +176,8 @@ typedef struct diseqc
 	int uslot; // unicable/jess slot
 	int ufreq; // unicable/jess frequency
 	int pin;
-	int only13v; // unicable - use 13V voltage only
-	int fast;    // don't send diseqc without position change
+	int only13v;					  // unicable - use 13V voltage only
+	int fast;						  // don't send diseqc without position change
 	int committed_no, uncommitted_no; // diseqc info
 	/* timing */
 	int before_cmd;
@@ -228,18 +224,17 @@ typedef struct struct_transponder
 	char *apids, *pids, *dpids, *x_pmt;
 } transponder;
 
-
 typedef struct struct_pid
 {
-	int16_t pid;      // pid for this demux - not used
-	int fd;       // fd for this demux
-	int cc_err;     // counter errors
+	int16_t pid; // pid for this demux - not used
+	int fd;		 // fd for this demux
+	int cc_err;  // counter errors
 	// stream id - one more to set it -1
 	signed char sid[MAX_STREAMS_PER_PID];
 	char flags; // 0 - disabled , 1 enabled, 2 - will be enabled next tune when tune is called, 3 disable when tune is called
 	char type;
-	int packets;  // how many packets for this pid arrived, used to sort the pids
-	int dec_err;   // decrypt errors, continuity counters
+	int packets; // how many packets for this pid arrived, used to sort the pids
+	int dec_err; // decrypt errors, continuity counters
 	int16_t pmt, filter;
 	char pmt_counter; // ca information
 	char cc;
@@ -249,17 +244,15 @@ typedef struct struct_pid
 #endif
 } SPid;
 
-
-
 #ifndef DISABLE_LINUXDVB
 //int tune_it(int fd_frontend, unsigned int freq, unsigned int srate, char pol, int tone, fe_spectral_inversion_t specInv, unsigned char diseqc,fe_modulation_t modulation,fe_code_rate_t HP_CodeRate,fe_transmit_mode_t TransmissionMode,fe_guard_interval_t guardInterval, fe_bandwidth_t bandwidth);
-int tune_it_s2 (int fd_frontend, transponder * tp);
+int tune_it_s2(int fd_frontend, transponder *tp);
 
-fe_delivery_system_t dvb_delsys (int aid, int fd, fe_delivery_system_t *sys);
+fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys);
 #endif
-int detect_dvb_parameters (char *s, transponder * tp);
-void init_dvb_parameters (transponder * tp);
-void copy_dvb_parameters (transponder * s, transponder * d);
+int detect_dvb_parameters(char *s, transponder *tp);
+void init_dvb_parameters(transponder *tp);
+void copy_dvb_parameters(transponder *s, transponder *d);
 
 char *get_pilot(int i);
 char *get_rolloff(int i);
@@ -278,4 +271,4 @@ extern char *fe_modulation[];
 extern char *fe_specinv[];
 extern char *fe_gi[];
 
-#endif							 /*  */
+#endif /*  */

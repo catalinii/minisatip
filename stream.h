@@ -8,7 +8,7 @@
 #define MAX_STREAMS 100
 #define DVB_FRAME 188
 
-#define TCP_RTP_CHUNKS 20
+#define TCP_RTP_CHUNKS 6 // a value higher than 6 can cause issues in some clients (example: ffmpeg)
 #define UDP_STREAMS_BUFFER (7 * DVB_FRAME)
 #define TCP_STREAMS_BUFFER (TCP_RTP_CHUNKS * UDP_STREAMS_BUFFER)
 #define STREAMS_BUFFER TCP_STREAMS_BUFFER
@@ -89,8 +89,8 @@ int lock_streams_for_adapter(int aid);
 int unlock_streams_for_adapter(int aid);
 
 #define get_sid(a) get_sid1(a, __FILE__, __LINE__)
-#define get_sid_for(i) ((st[i] && st[i]->enabled)?st[i]:NULL)
-#define get_sid_nw(i) ((i>=0 && i<MAX_STREAMS && st[i] && st[i]->enabled)?st[i]:NULL)
+#define get_sid_for(i) ((st[i] && st[i]->enabled) ? st[i] : NULL)
+#define get_sid_nw(i) ((i>=0 && i<MAX_STREAMS && st[i] && st[i]->enabled) ? st[i] : NULL)
 
 extern int64_t c_tbw, c_bw;
 extern uint32_t c_reads, c_writes, c_failed_writes;
