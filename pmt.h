@@ -84,7 +84,6 @@ typedef struct struct_pmt
 	uint16_t caid[MAX_CAID], cais_mask[MAX_CAID];
 	uint32_t provid[MAX_CAID];
 	int active_pid[MAX_ACTIVE_PIDS];
-	int req_pid[MAX_ACTIVE_PIDS];
 	int id;
 	int ver;
 	unsigned char *pmt;
@@ -115,7 +114,7 @@ typedef struct struct_filter
 	unsigned char filter[DMX_FILTER_SIZE];
 	unsigned char mask[DMX_FILTER_SIZE];
 	unsigned char data[1500];
-	int next_filter;
+	int next_filter, master_filter;
 } SFilter;
 
 int register_algo(SPMT_op *o);

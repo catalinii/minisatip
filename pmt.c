@@ -126,16 +126,138 @@ int add_filter(int aid, int pid, void *callback, void *opaque, int flags)
 }
 int add_filter_mask(int aid, int pid, void *callback, void *opaque, uint8_t *data, uint8_t *mask, int flags)
 {
+	SFilter *f;
+	int i, fid = 0;
+	fid = add_new_lock((void **)filters, MAX_FILTERS, sizeof(Filter), &filters_mutex);
+	if (fid == -1)
+		LOG_AND_RETURN(-1, "%s failed", __FUNCTION__);
+	f = filters[fid];
+	f->id = fid;
+	f->opaque = opaque;
+	f->pid = pid;
+	f->callback = callback;
+	f->flags = flags;
+	f->next_filter = -1;
+	memcpy(f->data, data, sizeof(f->data));
+	memcpy(f->mask, mask, sizeof(f->mask));
+	if (i >= nfilters)
+		nfilters = i + 1;
+	for (i = 0; i < nfilters; i++)
+		if (i != fid && filters[i] && filters[i]->enabled && filters[i]->pid == pid && filters[i]->next_filter == -1)
+		{
+			filters[i]->next_filter = fid;
+			f->master_filter = filters[i]->master_filter;
+		}
+	mutex_unlock(&f->mutex);
 }
+
+int reset_master_filter(int adapter, int pid, it id)
+{
+	int nf = 0;
+	for (i = 0; i < nfilters; i++)
+		if ((filters[i] && filters[i]->enabled && filters[i]->adapter == adapter && filters[i]->pid == pid))
+		{
+			filters[i]->master_filter = id;
+			nf++;
+		}
+	return nf;
+}
+
 int del_filter(int id)
 {
+	SFilter *f;
+	LOG("deleting filter %d", id);
+	if (id < 0 || id >= MAX_FILTERS || !filters[id] || !filters[id]->enabled)
+		return 0;
+
+	f = filters[id];
+	mutex_lock(&f->mutex);
+	if (!f->enabled)
+	{
+		mutex_unlock(&f->mutex);
+		return 0;
+	}
+
+	if (id == f->master_filter)
+	{
+		int master_filter = f->next_filter;
+		SFilter *m = get_filter(master_filter);
+		if (!m) // double check there is no other filter
+		{
+			for (i = 0; i < nfilters; i++)
+				if ((filters[i] && filters[i]->enabled && filters[i]->adapter == f->adapter && filters[i]->pid == pid))
+				{
+					m = filters[i];
+					LOGL(3, "warning: filter %d was also found for pid %d", m->id, pid);
+					break;
+				}
+		}
+		if (m) // reset master_filter for all filters
+			reset_master_filter(f->adapter, pid, m->id);
+		else
+		{
+			SPid *p = find_pid(f->adapter, f->pid);
+			if (p->sid[0] == -1 && filters[i]->flags == FILTER_ADD_PID)
+				mark_pid_del(ad->id, f->pid);
+		}
+	}
+	else
+	{
+		for (i = 0; i < nfilters; i++)
+			if (filters[i] && filters[i]->enabled && filters[i]->adapter == f->adapter && filters[i]->pid == pid && filters[i]->next_filter == f->id)
+			{
+				filters[i]->next_filter = f->next_filter;
+				break;
+			}
+	}
+
+	mutex_destroy(&f->mutex);
+	LOG("deleted filter %d", id);
+	return 0;
 }
 int get_pid_filter(int aid, int pid)
 {
+	int i;
+	for (i = 0; i < nfilters; i++)
+		if (filters[i] && filters[i]->enabled && filters[i]->adapter == aid && filters[i]->pid == pid)
+
+			return filters[i]->master_filter;
+	return -1;
 }
 
 int change_filter_mask(int id, uint8_t *data, uint8_t *mask)
 {
+	SFilter *f = get_filter(id);
+	if (f)
+	{
+		memcpy(f->data, data, sizeof(f->data));
+		memcpy(f->mask, mask, sizeof(f->mask));
+	}
+	else
+		LOGL(3, "Filter %d not found", id);
+	return f ? 0 : 1;
+}
+
+void process_filters(SFilter *f, unsigned char *b)
+{
+}
+void process_filters(adapter *ad, unsigned char *b, SPid *p)
+{
+	int pid = PID_FROM_TS(b);
+	SFilter *f;
+	int filter = p->filter;
+	f = get_filter(filter);
+	if (!f || f->master_filter != filter)
+	{
+		filter = get_pid_filter(ad->id, pid);
+		p->filter = filter;
+		f = get_filter(filter);
+	}
+	while (f)
+	{
+		process_filter(f, b);
+		f = get_filter(f->next_filter);
+	}
 }
 
 void update_cw(SPMT *pmt)
@@ -307,10 +429,6 @@ int pmt_decrypt_stream(adapter *ad)
 			decrypt_batch(pmts[i]);
 }
 
-void process_filter(adapter *ad, unsigned char *b)
-{
-}
-
 int pmt_process_stream(adapter *ad)
 {
 	SPid *p;
@@ -326,11 +444,8 @@ int pmt_process_stream(adapter *ad)
 		p = find_pid(ad->id, pid);
 		if (p && (p->type & TYPE_FILTER))
 		{
-			process_filter(ad, b);
-			//			continue;
+			process_filters(ad, b, p);
 		}
-		//		if (p && p->type == TYPE_ECM)
-		//			run_ca_action(CA_ECM, ad, b);
 	}
 #ifndef DISABLE_TABLES
 
@@ -846,6 +961,21 @@ void find_pi(unsigned char *es, int len, unsigned char *pi, int *pi_len)
 	return;
 }
 
+int get_master_pmt_for_pid(int aid, int pid)
+{
+	int i, j;
+	SPMT *pmt;
+	for (i = 0; i < MAX_PMT; i++)
+		if (pmts[i] && pmts[i]->enabled && pmts[i].adapter == aid)
+		{
+			pmt = pmts[i];
+			for (j = 0; j < MAX_ACTIVE_PIDS && pmt->active_pid[j] > 0; j++)
+				if (pmt->active_pid[j] == pid)
+					return pmt->master_pmt;
+		}
+	return -1;
+}
+
 int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 {
 	int pi_len = 0, isAC3, ver, pmt_len = 0, i, _pid, es_len, init_pi_len;
@@ -994,9 +1124,9 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 
 void pmt_pid_add(adapter *ad, int pid, int existing)
 {
-	int64_t pid_key = TABLES_ITEM + ((1 + ad->id) << 24) + 0;
-	int16_t *pids = NULL;
+	int i;
 	SPid *p, *cp;
+	SPMT *pmt;
 	if (!ad)
 		return;
 	cp = find_pid(ad->id, pid);
@@ -1007,89 +1137,69 @@ void pmt_pid_add(adapter *ad, int pid, int existing)
 	if (cp->filter != -1)
 		cp->type |= TYPE_FILTER;
 
+#ifndef DISABLE_TABLES
+
 	run_ca_action(CA_ADD_PID, ad, &pid);
 	//	invalidate_adapter(ad->id);
-	pids = (int16_t *)getItem(pid_key);
-	if (pid == 0)
+	int pmt_pid = get_master_pmt_for_pid(ad->id, pid);
+	cp = find_pid(ad->id, pmt_pid);
+	if (!cp)
 	{
-		return;
-	}
-	if (pids && pids[pid] <= -TYPE_PMT)
-	{
-		p = find_pid(ad->id, pid);
-		if (p && p->type == 0)
-		{
-			LOG("Adding PMT pid %d to list of pids for adapter %d", pid, ad->id);
-			p->type = TYPE_PMT;
-		}
-		return;
-	}
-
-	if (pids && (pids[pid] > 0))
-	{
-		p = find_pid(ad->id, pids[pid]);
-		LOGL(2, "tables_pid_add: adding pid %d adapter %d, pmt pid %d, pmt pid type %d, pmt pid pmt %d",
-			 pid, ad->id, pids[pid], p ? p->type : -1, p ? p->pmt : -1);
-		if (p && (p->type & PMT_COMPLETE))
-		{
-			cp->pmt = p->pmt;
-			return;
-		}
-		//		cp->pmt = -1;
-
-		if (!p || (p->type == 0))
-		{
-			int i, next_pmt;
-			LOG(
-				"Detected pid %d adapter %d without the PMT added to the list of pids",
-				pid, ad->id);
-			for (i = pids[pid]; i != -TYPE_PMT;)
+		for (i = 0; i < MAX_PMT; i++)
+			if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == ad->id && pmts[i]->master_pmt == pmt_pid)
 			{
-				next_pmt = abs(i);
-				LOG("Adding PMT pid %d to the list of pids, next pid %d",
-					next_pmt, -pids[next_pmt]);
-				mark_pid_add(-1, ad->id, next_pmt);
-				p = find_pid(ad->id, next_pmt);
-				if (!p)
-					continue;
-				p->type |= TYPE_PMT;
-				i = pids[next_pmt];
-				pids[next_pmt] = -TYPE_PMT;
+				pmt = pmts[i];
+				SPid *mp = find_pid(ad->id, pmt->pid);
+				if (!mp)
+					mark_pid_add(-1, ad->id, pmt->pid);
+				SPid *mp = find_pid(ad->id, pmt->pid);
+				if (mp && !(mp->type & TYPE_PMT))
+				{
+					mp->type |= TYPE_PMT;
+					run_ca_action(CA_ADD_PMT, ad, &pmt);
+				}
 			}
-		}
 	}
-}
 
-void run_del_pmt(adapter *ad, int pid, int16_t *pids)
-{
-	SPid *p = find_pid(ad->id, pid);
-	if (!p || p->type == 0)
-		return;
-	p->type = 0;
-	run_ca_action(CA_DEL_PMT, ad, &pid);
-	if (pids[pid] != -TYPE_PMT)
-		run_del_pmt(ad, abs(pids[pid]), pids);
+#endif
 }
 
 void pmt_pid_del(adapter *ad, int pid)
 {
 	int ep;
-	SPid *p, *cp;
+	SPid *p;
 	if (!ad)
 		return;
-	//	invalidate_adapter(ad->id);
+
+// filter code
+
+#ifndef DISABLE_TABLES
+	int i;
 	run_ca_action(CA_DEL_PID, ad, &pid);
-	cp = find_pid(ad->id, pid);
-	if (!cp)
+	p = find_pid(ad->id, pid);
+	if (!p)
 		return;
-	if (cp->pmt != -1)
+	SPMT *pmt = get_pmt(p->pmt);
+	if (pmt)
 		LOGL(2, "tables_pid_del: pid %d adapter %d pmt %d",
-			 pid, ad->id, cp->pmt)
+			 pid, ad->id, p->pmt)
 	else
 		return;
+	ep = 0;
+	for (i = 0; i < MAX_ACTIVE_PIDS && pmt->active_pid[i]; i++)
+		if (pmt->active[i] != pid && find_pid(ad->id, pmt->active_pid[i]))
+			ep++;
 
-	if (pmt_enabled_channels(cp->pmt) == 0)
-		run_del_pmt(ad, pid, NULL);
+	if (!ep)
+	{
+
+		for (i = 0; i < MAX_PMT; i++)
+			if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == ad->id && pmts[i]->master_pmt == pmt->master_pmt)
+			{
+				run_ca_action(CA_DEL_PMT, ad, pmt);
+			}
+	}
+#endif
 }
 
 int pmt_init_device(adapter *ad)
@@ -1109,6 +1219,15 @@ int pmt_tune(adapter *ad)
 {
 	int i;
 	SFilter *f;
+
+	if (ad->pat_filter == -1)
+	{
+		ad->pat_filter = add_filter(ad->id, 0, (void *)process_pat, ad, FILTER_PERMANENT);
+		SPid *p = find_pid(ad->id, 0);
+		p->type |= TYPE_FILTER;
+		p->filter = ad->pat_filter;
+	}
+
 	for (i = 0; i < nfilters; i++)
 		if ((f = get_filter(i)) && (f->adapter == ad->id) && !(f->flags & FILTER_PERMANENT))
 			del_filter(i);

@@ -56,7 +56,7 @@ char do_dump_pids = 1;
 
 SMutex a_mutex;
 extern struct struct_opts opts;
-int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
+int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2, tuner_at, tuner_ac;
 char fe_map[2 * MAX_ADAPTERS];
 void find_dvb_adapter(adapter **a);
 
@@ -89,6 +89,9 @@ adapter *adapter_alloc()
 	ad->diseqc_param.lnb_high = opts.lnb_high;
 	ad->diseqc_param.lnb_circular = opts.lnb_circular;
 	ad->diseqc_param.lnb_switch = opts.lnb_switch;
+
+	// filter for pid 0
+	ad->pat_filter = -1;
 
 	return ad;
 }
@@ -387,11 +390,11 @@ int getAdaptersCount()
 {
 	int i, j, k, sys;
 	adapter *ad;
-	int ts2 = 0, tc2 = 0, tt2 = 0, tc = 0, tt = 0;
+	int ts2 = 0, tc2 = 0, tt2 = 0, tc = 0, tt = 0, tac = 0, tat = 0;
 	int fes[20][MAX_ADAPTERS];
 	int ifes[20];
 	char order[] =
-		{SYS_DVBS2, SYS_DVBT, SYS_DVBC_ANNEX_A, SYS_DVBT2, SYS_DVBC2};
+		{SYS_DVBS2, SYS_DVBT, SYS_DVBC_ANNEX_A, SYS_DVBT2, SYS_DVBC2, SYS_ATSC, SYS_DVBC_ANNEX_B};
 
 	memset(&ifes, 0, sizeof(ifes));
 
@@ -434,8 +437,18 @@ int getAdaptersCount()
 				tc2++;
 				fes[SYS_DVBC2][ifes[SYS_DVBC2]++] = i;
 			}
+			if (delsys_match(ad, SYS_DVBC_ANNEX_B))
+			{
+				tac++;
+				fes[SYS_DVBC2][ifes[SYS_DVBC_ANNEX_B]++] = i;
+			}
+			if (delsys_match(ad, SYS_ATSC))
+			{
+				tat++;
+				fes[SYS_DVBC2][ifes[SYS_ATSC]++] = i;
+			}
 		}
-	if (tuner_s2 != ts2 || tuner_c2 != tc2 || tt2 != tuner_t2 || tc != tuner_c || tt != tuner_t)
+	if (tuner_s2 != ts2 || tuner_c2 != tc2 || tt2 != tuner_t2 || tc != tuner_c || tt != tuner_t || tac != tuner_ac || tat != tuner_at)
 	{
 		if (!opts.force_sadapter)
 			tuner_s2 = ts2;
@@ -445,6 +458,8 @@ int getAdaptersCount()
 			tuner_c = tc;
 		if (!opts.force_cadapter)
 			tuner_t = tt;
+		tuner_at = tat;
+		tuner_ac = tac;
 
 		memset(&fe_map, -1, sizeof(fe_map));
 
@@ -1909,4 +1924,6 @@ _symbols adapters_sym[] =
 		{"tuner_c2", VAR_INT, &tuner_c2, 1, 0, 0},
 		{"tuner_t", VAR_INT, &tuner_t, 1, 0, 0},
 		{"tuner_c", VAR_INT, &tuner_c, 1, 0, 0},
+		{"tuner_ac", VAR_INT, &tuner_ac, 1, 0, 0},
+		{"tuner_at", VAR_INT, &tuner_at, 1, 0, 0},
 		{NULL, 0, NULL, 0, 0}};

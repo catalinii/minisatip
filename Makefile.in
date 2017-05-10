@@ -20,11 +20,12 @@ LDFLAGS?=-lpthread -lrt @LDFLAGS@
 OBJS=minisatip.o socketworks.o stream.o adapter.o utils.o
 
 TABLES=0
+PMT=0
 
 ifeq ($(DVBAES),1)
 LIBS+=crypto
 OBJS+=aes.o
-TABLES=1
+PMT=1
 else
 CFLAGS+=-DDISABLE_DVBAES
 endif
@@ -32,7 +33,7 @@ endif
 ifeq ($(DVBCSA),1)
 LIBS+=dvbcsa
 OBJS+=csa.o
-TABLES=1
+PMT=1
 else
 CFLAGS+=-DDISABLE_DVBCSA
 endif
@@ -40,6 +41,7 @@ endif
 ifeq ($(DVBAPI),1)
 OBJS+=dvbapi.o
 TABLES=1
+PMT=1
 else
 CFLAGS+=-DDISABLE_DVBAPI
 endif
@@ -48,12 +50,19 @@ ifeq ($(DVBCA),1)
 LIBS+=dvben50221 dvbapi ucsi
 OBJS+=ca.o
 TABLES=1
+PMT=1
 else
 CFLAGS+=-DDISABLE_DVBCA
 endif
 
+ifeq ($(PMT),1)
+OBJS+=pmt.o
+else
+CFLAGS+=-DDISABLE_PMT
+endif
+
 ifeq ($(TABLES),1)
-OBJS+=tables.o pmt.o
+OBJS+=tables.o
 else
 CFLAGS+=-DDISABLE_TABLES
 endif
