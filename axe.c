@@ -341,7 +341,7 @@ int axe_setup_switch(adapter *ad)
 				input = master;
 				if (!tune_check(adm, pol, hiband, diseqc)) {
 					send_diseqc(adm, adm->fe2, diseqc, adm->old_diseqc != diseqc,
-																	pol, hiband, &tp->diseqc_param);
+						    pol, hiband, &tp->diseqc_param);
 					adm->old_pol = pol;
 					adm->old_hiband = hiband;
 					adm->old_diseqc = diseqc;

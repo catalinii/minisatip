@@ -73,6 +73,7 @@ static const struct option long_options[] =
 	{ "jess", required_argument, NULL, 'j' },
 	{ "diseqc", required_argument, NULL, 'd' },
 	{ "diseqc-timing", required_argument, NULL, 'q' },
+	{ "diseqc-multi", required_argument, NULL, '0' },
 	{ "nopm", required_argument, NULL, 'Z' },
 #ifndef DISABLE_DVBAPI
 	{ "dvbapi", required_argument, NULL, 'o' },
@@ -149,6 +150,7 @@ static const struct option long_options[] =
 #define AXE_SKIP_PKT 'M'
 #define AXE_POWER 'W'
 #define ABSOLUTE_SRC 'A'
+#define DISEQC_MULTI '0'
 
 char *built_info[] =
 {
@@ -235,7 +237,7 @@ void usage()
 #ifdef AXE
 		"[-7 M1:S1[,M2:S2]] [-M mpegts_packets] [-A SRC1:INP1:DISEQC1[,SRC2:INP2:DISEQC2]]\n\n"
 #endif
-		"\t[-x http_port] [-X xml_path] [-y rtsp_port] \n\n\
+		"\t[-x http_port] [-X xml_path] [-y rtsp_port]\n\n\
 Help\n\
 -------\n\
 \n\
@@ -261,6 +263,10 @@ Help\n\
 \n\
 * -q --diseqc-timing ADAPTER1:BEFORE_CMD1-AFTER_CMD1-AFTER_REPEATED_CMD1-AFTER_SWITCH1-AFTER_BURST1-AFTER_TONE1[,...]\n\
 \t* All timing values are in ms, default adapter values are: 15-54-15-15-15-0\n\
+	- note: * as adapter means apply to all adapters\n\
+\n\
+* -0 --diseqc-multi ADAPTER1:DISEQC_POSITION[,...]\n\
+\t* Send diseqc to selected position before other position is set.\n\
 	- note: * as adapter means apply to all adapters\n\
 \n\
 * -D --device-id DVC_ID: specify the device id (in case there are multiple SAT>IP servers in the network)\n \
@@ -464,6 +470,7 @@ void set_options(int argc, char *argv[])
 	opts.diseqc_after_burst = 15;
 	opts.diseqc_after_tone = 0;
 	opts.diseqc_committed_no = 1;
+	opts.diseqc_multi = -1;
 	opts.nopm = 0;
 	opts.lnb_low = (9750*1000UL);
 	opts.lnb_high = (10600*1000UL);
@@ -491,7 +498,7 @@ void set_options(int argc, char *argv[])
 	memset(opts.playlist, 0, sizeof(opts.playlist));
 
 	while ((opt = getopt_long(argc, argv,
-																											"flr:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:o:gy:i:q:D:VR:S:TX:Y:OL:EP:Z:"AXE_OPTS,
+																											"flr:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:o:gy:i:q:D:VR:S:TX:Y:OL:EP:Z:0:"AXE_OPTS,
 																											long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
@@ -648,6 +655,12 @@ void set_options(int argc, char *argv[])
 		case DISEQC_TIMING_OPT:
 		{
 			set_diseqc_timing(optarg);
+			break;
+		}
+
+		case DISEQC_MULTI:
+		{
+			set_diseqc_multi(optarg);
 			break;
 		}
 

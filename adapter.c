@@ -65,6 +65,7 @@ adapter *adapter_alloc()
 {
 	adapter *ad = malloc1(sizeof(adapter));
 	memset(ad, 0, sizeof(adapter));
+
 	/* diseqc setup */
 	ad->diseqc_param.fast = opts.diseqc_fast;
 	ad->diseqc_param.committed_no = opts.diseqc_committed_no;
@@ -84,13 +85,13 @@ adapter *adapter_alloc()
 	ad->old_pol = -1;
 	ad->dmx_source = -1;
 	ad->slow_dev = opts.nopm;
-	/* LOF setup */
+	ad->diseqc_multi = opts.diseqc_multi;
 
+	/* LOF setup */
 	ad->diseqc_param.lnb_low = opts.lnb_low;
 	ad->diseqc_param.lnb_high = opts.lnb_high;
 	ad->diseqc_param.lnb_circular = opts.lnb_circular;
 	ad->diseqc_param.lnb_switch = opts.lnb_switch;
-
 
 	return ad;
 }
@@ -1333,6 +1334,51 @@ void set_diseqc_adapters(char *o)
 	}
 }
 
+void set_diseqc_multi(char *o)
+{
+	int i, la, a_id, position;
+	char buf[100], *arg[20], *sep1;
+	adapter *ad;
+	strncpy(buf, o, sizeof(buf));
+	la = split(arg, buf, sizeof(arg), ',');
+	for (i = 0; i < la; i++)
+	{
+		if (arg[i] && arg[i][0] == '*')
+		{
+			ad = NULL;
+			a_id = -1;
+		}
+		else
+		{
+			a_id = map_intd(arg[i], NULL, -1);
+			if (a_id < 0 || a_id >= MAX_ADAPTERS)
+				continue;
+
+			if (!a[a_id])
+				a[a_id] = adapter_alloc();
+			ad = a[a_id];
+		}
+
+		sep1 = strchr(arg[i], ':');
+
+		if (!sep1)
+			continue;
+		position = map_intd(sep1 + 1, NULL, -1);
+		if (position < 0)
+			continue;
+		if (ad)
+		{
+			ad->diseqc_multi = position;
+		}
+		else
+		{
+			opts.diseqc_multi = position;
+		}
+		LOGL(0,
+							"Setting diseqc multi adapter %d position %d",
+							a_id, position);
+	}
+}
 
 void set_lnb_adapters(char *o)
 {
