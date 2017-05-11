@@ -413,6 +413,11 @@ int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol, int hiban
 		{ 0xe0, 0x10, 0x39, 0xf0, 0x00, 0x00 }, 4
 	};
 
+	if (pos_change && ad->diseqc_multi >= 0 && pos != ad->diseqc_multi) {
+		send_diseqc(ad, fd, ad->diseqc_multi, 1, pol, hiband, d);
+		pos_change = 1;
+	}
+
 	if (uncommitted_no > committed_no)
 		uncommitted_first = 1;
 

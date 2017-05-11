@@ -64,6 +64,7 @@ typedef struct struct_adapter
 	uint16_t strength, snr, max_strength, max_snr;
 	uint32_t pid_err, dec_err; // detect pids received but not part of any stream, decrypt errors
 	diseqc diseqc_param;
+	int diseqc_multi;
 	int old_diseqc;
 	int old_hiband;
 	int old_pol;
@@ -123,6 +124,7 @@ void enable_adapters(char *o);
 void set_unicable_adapters(char *o, int type);
 void set_diseqc_adapters(char *o);
 void set_diseqc_timing(char *o);
+void set_diseqc_multi(char *o);
 void set_slave_adapters(char *o);
 void set_nopm_adapters(char *o);
 void set_adapter_dmxsource(char *o);
