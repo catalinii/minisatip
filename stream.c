@@ -305,6 +305,7 @@ int close_stream_for_socket(sockets *s)
 	LOG("%s: start close_stream_for_socket for id %d %p", __FUNCTION__, s->sid, sid);
 	if (sid)
 		sid->timeout = 1;
+	return 0;
 }
 
 int close_stream(int i)
@@ -589,7 +590,6 @@ int send_rtp(streams *sid, const struct iovec *iov, int liov)
 		io[0].iov_base = rtp_buf;
 		io[0].iov_len = 16;
 	}
-	int k;
 
 	memcpy(&io[1], iov, liov * sizeof(struct iovec));
 	rv = sockets_writev(sid->rsock_id, io, liov + 1);
@@ -627,7 +627,6 @@ int send_rtcp(int s_id, int64_t ctime)
 	char dad[1000];
 	char ra[50];
 	unsigned char rtcp_buf[1600];
-	int c_time = (int)(ctime / 1000) & 0xFFFFFFFF;
 	unsigned char *rtcp = rtcp_buf + 4;
 	streams *sid = get_sid(s_id);
 
@@ -784,7 +783,6 @@ int check_new_transponder(adapter *ad, int rlen)
 			tid = b[8] * 256 + b[9];
 			if (tid != ad->wait_transponder_id)
 			{
-				int j = 0;
 				all_good = 1;
 				LOG("Got the new transponder %04X %d, position %d, %jd ms after tune", tid, tid, i, getTick() - ad->tune_time);
 				memmove(ad->buf, ad->buf + i, rlen - i);
@@ -806,10 +804,8 @@ int check_cc(adapter *ad)
 	SPid *p;
 	int pid;
 	int packet_no_sid = 0;
-	streams *sid;
 	unsigned char *b;
 	int is_8192 = 0;
-	int rtime = ad->rtime;
 	if ((p = find_pid(ad->id, 8192)))
 		is_8192 = 1;
 
@@ -882,7 +878,7 @@ int check_cc(adapter *ad)
 
 int process_packet(unsigned char *b, adapter *ad)
 {
-	int j, cc, max_pack;
+	int j, max_pack;
 	SPid *p;
 	int _pid = (b[1] & 0x1f) * 256 + b[2];
 	streams *sid;
@@ -918,12 +914,9 @@ int process_packet(unsigned char *b, adapter *ad)
 
 int process_dmx(sockets *s)
 {
-	void *min, *max;
-	int i, j, dp;
-	static int cnt;
+	int i, dp;
 	streams *sid;
 	adapter *ad;
-	int send = 0;
 	int64_t stime;
 	int rlen = s->rlen;
 	s->rlen = 0;
@@ -982,11 +975,9 @@ int process_dmx(sockets *s)
 int read_dmx(sockets *s)
 {
 	static int cnt;
-	streams *sid;
 	adapter *ad;
-	int send = 0, flush_all = 0, ls, lse, i;
+	int send = 0, flush_all = 0, ls, lse;
 	int threshold = opts.udp_threshold;
-	uint64_t stime;
 	uint64_t rtime = getTick();
 
 	if (s->rlen % DVB_FRAME != 0)
@@ -1033,6 +1024,9 @@ int read_dmx(sockets *s)
 	ad->tune_time = 0;
 	ad->wait_new_stream = 0;
 
+	if (ad->flush)
+		send = 1;
+
 	LOGL(7,
 		 "read_dmx send=%d, flush_all=%d, cnt %d called for adapter %d -> %d out of %d bytes read, %jd ms ago (%jd %jd)",
 		 send, flush_all, cnt, s->sid, s->rlen, s->lbuf, rtime - ad->rtime, rtime, ad->rtime);
@@ -1040,6 +1034,7 @@ int read_dmx(sockets *s)
 	if (!send)
 		return 0;
 
+	ad->flush = 0;
 	ls = lock_streams_for_adapter(ad->id);
 	adapter_lock(ad->id);
 	process_dmx(s);
@@ -1295,8 +1290,7 @@ int get_stream_rport(int s_id)
 char *get_stream_pids(int s_id, char *dest, int max_size)
 {
 	int len = 0;
-	int pids[MAX_PIDS];
-	int lp, i, j;
+	int i, j;
 	streams *s = get_sid_nw(s_id);
 	adapter *ad;
 	dest[0] = 0;

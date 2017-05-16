@@ -8,14 +8,8 @@ typedef struct ca_device ca_device_t;
 #define MAX_ADAPTERS 32
 #define DVR_BUFFER 30 * 1024 * 188
 
-#define ADAPTER_BUFFER 300 * DVB_FRAME
+#define ADAPTER_BUFFER 350 * DVB_FRAME
 #define ADAPTER_TIMEOUT 60000
-
-#define TYPE_PMT 1
-#define TYPE_FILTER 2
-#define PMT_COMPLETE 4
-#define PMT_SKIPFIRST 8
-#define CLEAN_PMT 16
 
 #define RTSP_SETUP 1
 #define RTSP_PLAY 2
@@ -43,10 +37,13 @@ typedef struct struct_adapter
 {
 	char enabled;
 	SMutex mutex;
-	char type, slow_dev, restart_when_tune, restart_needed; // available on the system
+	char type; // available on the system
 	int fe, dmx, dvr;
-
 	int pa, fn;
+	// flags
+
+	char slow_dev, restart_when_tune, restart_needed;
+	char flush;
 	// physical adapter, physical frontend number
 	fe_delivery_system_t sys[MAX_DELSYS];
 	transponder tp;

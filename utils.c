@@ -81,18 +81,17 @@ int init_tmpinfo(int no)
 	void *os = sinfo;
 	int new_size = no * sizeof(STmpinfo);
 	sinfo = realloc(sinfo, new_size);
-	if(os && !sinfo)
+	if (os && !sinfo)
 	{
 		sinfo = os;
 		LOG_AND_RETURN(0, "%d bytes could not be re-allocated from %d", new_size, MAX_SINFO * sizeof(STmpinfo));
 	}
-	if(!sinfo)
+	if (!sinfo)
 		LOG_AND_RETURN(1, "Could not allocate memory for SINFO, reduce the application memory needs");
 	memset(sinfo + MAX_SINFO, 0, (no - MAX_SINFO) * sizeof(STmpinfo));
 	MAX_SINFO = no;
 	return 0;
 }
-
 
 STmpinfo *getItemPos(int64_t key)
 {
@@ -120,20 +119,18 @@ STmpinfo *getFreeItemPos(int64_t key)
 		if (sinfo[i].enabled && ((key & mask) == (sinfo[i].key & mask)))
 			ek++;
 
-	if(ek > 0.8 * MAX_SINFO )
+	if (ek > 0.8 * MAX_SINFO)
 		LOG_AND_RETURN(NULL, "dynamic capacity for %jX exhausted", key & mask);
 
 	for (i = 0; i < MAX_SINFO; i++)
-		if (!sinfo[i].enabled
-						|| (sinfo[i].timeout
-										&& (tick - sinfo[i].last_updated > sinfo[i].timeout)))
+		if (!sinfo[i].enabled || (sinfo[i].timeout && (tick - sinfo[i].last_updated > sinfo[i].timeout)))
 		{
 			sinfo[i].id = i;
 			sinfo[i].timeout = 0;
 			LOGL(5,
-								"Requested new Item for key %jX, returning %d (enabled %d last_updated %jd timeout %d tick %jd)",
-								key, i, sinfo[i].enabled, sinfo[i].last_updated,
-								sinfo[i].timeout, tick);
+				 "Requested new Item for key %jX, returning %d (enabled %d last_updated %jd timeout %d tick %jd)",
+				 key, i, sinfo[i].enabled, sinfo[i].last_updated,
+				 sinfo[i].timeout, tick);
 			return sinfo + i;
 		}
 	return NULL;
@@ -169,7 +166,6 @@ int setItemLen(int64_t key, int len)
 	s->len = len;
 	return 0;
 }
-
 
 int setItemSize(int64_t key, uint32_t max_size)
 {
@@ -234,7 +230,7 @@ int setItem(int64_t key, unsigned char *data, int len, int pos) // pos = -1 -> a
 int delItem(int64_t key)
 {
 	STmpinfo *s = getItemPos(key);
-	if(!s)
+	if (!s)
 		return 0;
 	s->enabled = 0;
 	s->len = 0;
@@ -258,7 +254,6 @@ int delItemMask(int64_t key, int64_t mask)
 
 	return 0;
 }
-
 
 int delItemP(void *p)
 {
@@ -303,7 +298,7 @@ int split(char **rv, char *s, int lrv, char sep)
 
 char *strip(char *s) // strip spaces from the front of a string
 {
-	if (s < (char *) 1000)
+	if (s < (char *)1000)
 		return NULL;
 
 	while (*s && *s == ' ')
@@ -311,15 +306,19 @@ char *strip(char *s) // strip spaces from the front of a string
 	return s;
 }
 
-#define LR(s) {LOG("map_int returns %d",s); return s;}
-int map_intd(char *s, char ** v, int dv)
+#define LR(s)                         \
+	{                                 \
+		LOG("map_int returns %d", s); \
+		return s;                     \
+	}
+int map_intd(char *s, char **v, int dv)
 {
 	int i, n = dv;
 
 	if (s == NULL)
 	{
 		LOG_AND_RETURN(dv, "map_int: s=>NULL, v=%p, %s %s", v,
-																	v ? v[0] : "NULL", v ? v[1] : "NULL");
+					   v ? v[0] : "NULL", v ? v[1] : "NULL");
 	}
 
 	s = strip(s);
@@ -331,7 +330,7 @@ int map_intd(char *s, char ** v, int dv)
 	{
 		if (s[0] != '+' && s[0] != '-' && (s[0] < '0' || s[0] > '9'))
 			LOG_AND_RETURN(dv, "map_int: s not a number: %s, v=%p, %s %s", s, v,
-																		v ? v[0] : "NULL", v ? v[1] : "NULL");
+						   v ? v[0] : "NULL", v ? v[1] : "NULL");
 		return atoi(s);
 	}
 	for (i = 0; v[i]; i++)
@@ -368,12 +367,12 @@ int map_float(char *s, int mul)
 		LOG_AND_RETURN(0, "map_float: s not a number: %s, mul=%d", s, mul);
 
 	f = atof(s);
-	r = (int) (f * mul);
+	r = (int)(f * mul);
 	//      LOG("atof returned %.1f, mul = %d, result=%d",f,mul,r);
 	return r;
 }
 
-int map_int(char *s, char ** v)
+int map_int(char *s, char **v)
 {
 	return map_intd(s, v, 0);
 }
@@ -383,11 +382,11 @@ int end_of_header(char *buf)
 	return buf[0] == 0x0d && buf[1] == 0x0a && buf[2] == 0x0d && buf[3] == 0x0a;
 }
 
-void posix_signal_handler(int sig, siginfo_t * siginfo, ucontext_t * ctx);
+void posix_signal_handler(int sig, siginfo_t *siginfo, ucontext_t *ctx);
 void set_signal_handler(char *argv0)
 {
 	struct sigaction sig_action =
-	{ };
+		{};
 	sig_action.sa_sigaction =
 		(void (*)(int, siginfo_t *, void *))posix_signal_handler;
 	sigemptyset(&sig_action.sa_mask);
@@ -435,10 +434,10 @@ void set_signal_handler(char *argv0)
 	}
 }
 
-int addr2line(char const * const program_name, void const * const addr)
+int addr2line(char const *const program_name, void const *const addr)
 {
 	char addr2line_cmd[512] =
-	{ 0 };
+		{0};
 
 	sprintf(addr2line_cmd, "addr2line -f -p -e %.256s %p", program_name, addr);
 	return system(addr2line_cmd);
@@ -462,13 +461,13 @@ void print_trace(void)
 			printf("\n");
 	}
 #else
-	printf( " No backtrace defined\n");
+	printf(" No backtrace defined\n");
 #endif
 }
 
 extern int run_loop;
 
-void posix_signal_handler(int sig, siginfo_t * siginfo, ucontext_t * ctx)
+void posix_signal_handler(int sig, siginfo_t *siginfo, ucontext_t *ctx)
 {
 	uint64_t sp = 0, ip = 0;
 
@@ -485,15 +484,15 @@ void posix_signal_handler(int sig, siginfo_t * siginfo, ucontext_t * ctx)
 	sp = ctx->uc_mcontext.pr;
 	ip = ctx->uc_mcontext.pc;
 #endif
-	printf("RECEIVED SIGNAL %d - SP=%lX IP=%lX\n", sig, (long unsigned int) sp,
-								(long unsigned int) ip);
+	printf("RECEIVED SIGNAL %d - SP=%lX IP=%lX\n", sig, (long unsigned int)sp,
+		   (long unsigned int)ip);
 
 	print_trace();
 	exit(1);
 }
 
 int /* Returns 0 on success, -1 on error */
-becomeDaemon()
+	becomeDaemon()
 {
 	int maxfd, fd, pid;
 	__attribute__((unused)) int rv;
@@ -526,7 +525,7 @@ becomeDaemon()
 	case 0:
 		break; /* Child falls through... */
 	default:
-		_exit(0);/* while parent terminates */
+		_exit(0); /* while parent terminates */
 	}
 
 	if (setsid() == -1) /* Become leader of new session */
@@ -545,7 +544,7 @@ becomeDaemon()
 	umask(0); /* Clear file mode creation mask */
 
 	maxfd = sysconf(_SC_OPEN_MAX);
-	if (maxfd == -1) /* Limit is indeterminate... */
+	if (maxfd == -1)  /* Limit is indeterminate... */
 		maxfd = 1024; /* so take a guess */
 
 	for (fd = 0; fd < maxfd; fd++)
@@ -590,7 +589,7 @@ void myfree(void *x, char *f, int l)
 
 pthread_mutex_t log_mutex;
 
-void _log(int level, char * file, int line, char *fmt, ...)
+void _log(int level, char *file, int line, char *fmt, ...)
 {
 	va_list arg;
 	int len = 0, len1 = 0, both = 0;
@@ -625,10 +624,10 @@ void _log(int level, char * file, int line, char *fmt, ...)
 		idx = 0;
 	if (opts.file_line && !opts.slog)
 		len1 = snprintf(output[idx], sizeof(output[0]), "[%s%s] %s:%d: ",
-																		get_current_timestamp_log(), stid, file, line);
+						get_current_timestamp_log(), stid, file, line);
 	else if (!opts.slog)
 		len1 = snprintf(output[idx], sizeof(output[0]), "[%s%s]: ",
-																		get_current_timestamp_log(), stid);
+						get_current_timestamp_log(), stid);
 	else if (opts.file_line)
 	{
 		len1 = 0;
@@ -636,7 +635,7 @@ void _log(int level, char * file, int line, char *fmt, ...)
 	}
 	/* Write the error message */
 	len = len1 =
-								len1 < (int) sizeof(output[0]) ? len1 : (int) sizeof(output[0]) - 1;
+		len1 < (int)sizeof(output[0]) ? len1 : (int)sizeof(output[0]) - 1;
 	both = 0;
 	va_start(arg, fmt);
 	len += vsnprintf(output[idx] + len, sizeof(output[0]) - len, fmt, arg);
@@ -650,7 +649,7 @@ void _log(int level, char * file, int line, char *fmt, ...)
 		{
 			both = 1;
 			snprintf(output[1 - idx], sizeof(output[0]),
-												"Message repeated %d times", times);
+					 "Message repeated %d times", times);
 		}
 		times = 0;
 	}
@@ -697,65 +696,64 @@ extern _symbols satipc_sym[];
 extern _symbols axe_sym[];
 #endif
 
-
 _symbols *sym[] =
-{ adapters_sym, stream_sym, minisatip_sym,
+	{adapters_sym, stream_sym, minisatip_sym,
 #ifndef DISABLE_DVBAPI
-		dvbapi_sym,
+	 dvbapi_sym,
 #endif
 #ifndef DISABLE_SATIPCLIENT
-		satipc_sym,
+	 satipc_sym,
 #endif
 #ifdef AXE
-		axe_sym,
+	 axe_sym,
 #endif
-		NULL };
+	 NULL};
 
 int snprintf_pointer(char *dest, int max_len, int type, void *p,
-																					float multiplier)
+					 float multiplier)
 {
 	int nb;
 	switch (type & 0xF)
 	{
 	case VAR_UINT8:
 		nb = snprintf(dest, max_len, "%d",
-																(int) ((*(unsigned char *) p) * multiplier));
+					  (int)((*(unsigned char *)p) * multiplier));
 		break;
 	case VAR_INT8:
-		nb = snprintf(dest, max_len, "%d", (int) ((*(char *) p) * multiplier));
+		nb = snprintf(dest, max_len, "%d", (int)((*(char *)p) * multiplier));
 		break;
 	case VAR_UINT16:
 		nb = snprintf(dest, max_len, "%d",
-																(int) ((*(uint16_t *) p) * multiplier));
+					  (int)((*(uint16_t *)p) * multiplier));
 		break;
 	case VAR_INT16:
 		nb = snprintf(dest, max_len, "%d",
-																(int) ((*(int16_t *) p) * multiplier));
+					  (int)((*(int16_t *)p) * multiplier));
 		break;
 	case VAR_INT:
-		nb = snprintf(dest, max_len, "%d", (int) ((*(int *) p) * multiplier));
+		nb = snprintf(dest, max_len, "%d", (int)((*(int *)p) * multiplier));
 		break;
 
 	case VAR_INT64:
 		nb = snprintf(dest, max_len, "%jd",
-																(int64_t) ((*(int64_t *) p) * multiplier));
+					  (int64_t)((*(int64_t *)p) * multiplier));
 		break;
 
 	case VAR_STRING:
-		nb = snprintf(dest, max_len, "%s", (char *) p);
+		nb = snprintf(dest, max_len, "%s", (char *)p);
 		break;
 
 	case VAR_PSTRING:
 		nb = snprintf(dest, max_len, "%s",
-																(*(char **) p) ? (*(char **) p) : "");
+					  (*(char **)p) ? (*(char **)p) : "");
 		break;
 
 	case VAR_FLOAT:
-		nb = snprintf(dest, max_len, "%f", (*(float *) p) * multiplier);
+		nb = snprintf(dest, max_len, "%f", (*(float *)p) * multiplier);
 		break;
 
 	case VAR_HEX:
-		nb = snprintf(dest, max_len, "0x%x", (int) ((*(int *) p) * multiplier));
+		nb = snprintf(dest, max_len, "0x%x", (int)((*(int *)p) * multiplier));
 		break;
 
 	default:
@@ -767,7 +765,7 @@ int snprintf_pointer(char *dest, int max_len, int type, void *p,
 	return nb;
 }
 
-char zero[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+char zero[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 int get_json_state(char *buf, int len)
 {
@@ -775,68 +773,84 @@ int get_json_state(char *buf, int len)
 	_symbols *p;
 
 	strlcatf(buf, len, ptr, "{\n");
-	for (i = 0; sym[i] != NULL; i++) {
-		for (j = 0; sym[i][j].name; j++) {
+	for (i = 0; sym[i] != NULL; i++)
+	{
+		for (j = 0; sym[i][j].name; j++)
+		{
 			p = sym[i] + j;
 			strlcatf(buf, len, ptr, first ? "\"%s\":" : ",\n\"%s\":", p->name);
 			string = 0;
-			switch (p->type) {
+			switch (p->type)
+			{
 			case VAR_STRING:
 			case VAR_PSTRING:
 			case VAR_HEX:
 			case VAR_AARRAY_STRING:
-			case VAR_AARRAY_PSTRING: string = 1; break;
+			case VAR_AARRAY_PSTRING:
+				string = 1;
+				break;
 			}
 			if (p->type < VAR_ARRAY)
 			{
-				if (string) strlcatf(buf, len, ptr, "\"");
+				if (string)
+					strlcatf(buf, len, ptr, "\"");
 				ptr += snprintf_pointer(buf + ptr, len - ptr, p->type, p->addr, p->multiplier);
-				if (string) strlcatf(buf, len, ptr, "\"");
+				if (string)
+					strlcatf(buf, len, ptr, "\"");
 			}
 			else if ((p->type & 0xF0) == VAR_ARRAY)
 			{
 				strlcatf(buf, len, ptr, "[");
-				for (off = 0; off < p->len; off++) {
-					if (string) strlcatf(buf, len, ptr, off > 0 ? ",\"" : "\"");
+				for (off = 0; off < p->len; off++)
+				{
+					if (string)
+						strlcatf(buf, len, ptr, off > 0 ? ",\"" : "\"");
 					ptr += snprintf_pointer(buf + ptr, len - ptr, p->type,
-								((char *)p->addr) + off + p->skip, p->multiplier);
-					if (string) strlcatf(buf, len, ptr, "\"");
+											((char *)p->addr) + off + p->skip, p->multiplier);
+					if (string)
+						strlcatf(buf, len, ptr, "\"");
 				}
 				strlcatf(buf, len, ptr, "]");
 			}
 			else if ((sym[i][j].type & 0xF0) == VAR_AARRAY)
 			{
 				strlcatf(buf, len, ptr, "[");
-				for (off = 0; off < p->len; off++) {
-					char **p1 = (char **) p->addr;
+				for (off = 0; off < p->len; off++)
+				{
+					char **p1 = (char **)p->addr;
 					if (string)
 						strlcatf(buf, len, ptr, off > 0 ? ",\"" : "\"");
 					else if (off > 0)
 						strlcatf(buf, len, ptr, ",");
 					ptr += snprintf_pointer(buf + ptr, len - ptr, p->type,
-								p1[off] ? p1[off] + p->skip : zero, p->multiplier);
-					if (string) strlcatf(buf, len, ptr, "\"");
+											p1[off] ? p1[off] + p->skip : zero, p->multiplier);
+					if (string)
+						strlcatf(buf, len, ptr, "\"");
 				}
 				strlcatf(buf, len, ptr, "]");
 			}
 			else if (sym[i][j].type == VAR_FUNCTION_INT)
 			{
-				get_data_int funi = (get_data_int) p->addr;
+				get_data_int funi = (get_data_int)p->addr;
 				strlcatf(buf, len, ptr, "[");
-				for (off = 0; off < p->len; off++) {
+				for (off = 0; off < p->len; off++)
+				{
 					int storage = funi(off);
-					if (off > 0) strlcatf(buf, len, ptr, ",");
+					if (off > 0)
+						strlcatf(buf, len, ptr, ",");
 					ptr += snprintf_pointer(buf + ptr, len - ptr, p->type, &storage, 1);
 				}
 				strlcatf(buf, len, ptr, "]");
 			}
 			else if (sym[i][j].type == VAR_FUNCTION_INT64)
 			{
-				get_data_int64 fun64 = (get_data_int64) p->addr;
+				get_data_int64 fun64 = (get_data_int64)p->addr;
 				strlcatf(buf, len, ptr, "[");
-				for (off = 0; off < p->len; off++) {
+				for (off = 0; off < p->len; off++)
+				{
 					int64_t storage = fun64(off);
-					if (off > 0) strlcatf(buf, len, ptr, ",");
+					if (off > 0)
+						strlcatf(buf, len, ptr, ",");
 					ptr += snprintf_pointer(buf + ptr, len - ptr, p->type, &storage, 1);
 				}
 				strlcatf(buf, len, ptr, "]");
@@ -844,14 +858,17 @@ int get_json_state(char *buf, int len)
 			else if (sym[i][j].type == VAR_FUNCTION_STRING)
 			{
 				char storage[64 * 5]; // variable max len
-				get_data_string funs = (get_data_string) p->addr;
+				get_data_string funs = (get_data_string)p->addr;
 				strlcatf(buf, len, ptr, "[");
-				for (off = 0; off < p->len; off++) {
+				for (off = 0; off < p->len; off++)
+				{
 					funs(off, storage, sizeof(storage));
 					strlcatf(buf, len, ptr, off > 0 ? ",\"%s\"" : "\"%s\"", storage);
 				}
 				strlcatf(buf, len, ptr, "]");
-			} else {
+			}
+			else
+			{
 				strlcatf(buf, len, ptr, "\"\"");
 			}
 			first = 0;
@@ -877,13 +894,14 @@ int get_json_bandwidth(char *buf, int len)
 \"fwrites\":%u,\n\
 \"ns_read\":%jd,\n\
 \"tt\":%jd\n\
-}", c_bw, c_tbw, c_reads, c_writes, c_failed_writes, c_ns_read, c_tt);
+}",
+			 c_bw, c_tbw, c_reads, c_writes, c_failed_writes, c_ns_read, c_tt);
 	mutex_unlock(&bw_mutex);
 	return ptr;
 }
 
-void * get_var_address(char *var, float *multiplier, int * type, void *storage,
-																							int ls)
+void *get_var_address(char *var, float *multiplier, int *type, void *storage,
+					  int ls)
 {
 	int i, j, off;
 	*multiplier = 0;
@@ -903,7 +921,7 @@ void * get_var_address(char *var, float *multiplier, int * type, void *storage,
 					if (off >= 0 && off < sym[i][j].len)
 					{
 						*multiplier = sym[i][j].multiplier;
-						return (((char *) sym[i][j].addr) + off * sym[i][j].skip);
+						return (((char *)sym[i][j].addr) + off * sym[i][j].skip);
 					}
 				}
 				else if ((sym[i][j].type & 0xF0) == VAR_AARRAY)
@@ -911,7 +929,7 @@ void * get_var_address(char *var, float *multiplier, int * type, void *storage,
 					off = map_intd(var + strlen(sym[i][j].name), NULL, 0);
 					if (off >= 0 && off < sym[i][j].len)
 					{
-						char **p1 = (char **) sym[i][j].addr;
+						char **p1 = (char **)sym[i][j].addr;
 						char *p = p1[off];
 
 						if (!p)
@@ -927,26 +945,26 @@ void * get_var_address(char *var, float *multiplier, int * type, void *storage,
 				else if (sym[i][j].type == VAR_FUNCTION_INT)
 				{
 					off = map_intd(var + strlen(sym[i][j].name), NULL, 0);
-					get_data_int funi = (get_data_int) sym[i][j].addr;
-					*(int *) storage = funi(off);
+					get_data_int funi = (get_data_int)sym[i][j].addr;
+					*(int *)storage = funi(off);
 					*multiplier = 1;
 					return storage;
 				}
 				else if (sym[i][j].type == VAR_FUNCTION_INT64)
 				{
 					off = map_intd(var + strlen(sym[i][j].name), NULL, 0);
-					get_data_int64 fun64 = (get_data_int64) sym[i][j].addr;
-					*(int64_t *) storage = fun64(off);
+					get_data_int64 fun64 = (get_data_int64)sym[i][j].addr;
+					*(int64_t *)storage = fun64(off);
 					*multiplier = 1;
 					return storage;
-				}else if (sym[i][j].type == VAR_FUNCTION_STRING)
+				}
+				else if (sym[i][j].type == VAR_FUNCTION_STRING)
 				{
 					off = map_intd(var + strlen(sym[i][j].name), NULL, 0);
-					get_data_string funs = (get_data_string) sym[i][j].addr;
+					get_data_string funs = (get_data_string)sym[i][j].addr;
 					funs(off, storage, ls);
 					return storage;
 				}
-
 			}
 	return NULL;
 }
@@ -987,7 +1005,7 @@ void process_file(void *sock, char *s, int len, char *ctype)
 {
 	char outp[8292];
 	int i, io = 0, lv, le, respond = 1;
-	sockets *so = (sockets *) sock;
+	sockets *so = (sockets *)sock;
 	__attribute__((unused)) int rv;
 	LOG("processing_file %x len %d:", s, len);
 	for (i = 0; i < len; i++)
@@ -1014,7 +1032,7 @@ void process_file(void *sock, char *s, int len, char *ctype)
 			}
 			rv = sockets_write(so->id, outp, io);
 			outp[io] = 0;
-//			LOG("%s", outp);
+			//			LOG("%s", outp);
 			io = 0;
 		}
 	}
@@ -1090,10 +1108,10 @@ char *readfile(char *fn, char *ctype, int *len)
 
 int closefile(char *mem, int len)
 {
-	return munmap((void *) mem, len);
+	return munmap((void *)mem, len);
 }
 
-int mutex_init(SMutex* mutex)
+int mutex_init(SMutex *mutex)
 {
 	int rv;
 	pthread_mutexattr_t attr;
@@ -1122,7 +1140,7 @@ int mutex_init(SMutex* mutex)
 __thread SMutex *mutexes[50];
 __thread int imtx = 0;
 
-int mutex_lock1(char *FILE, int line, SMutex* mutex)
+int mutex_lock1(char *FILE, int line, SMutex *mutex)
 {
 	int rv;
 	int64_t start_lock = 0;
@@ -1138,7 +1156,7 @@ int mutex_lock1(char *FILE, int line, SMutex* mutex)
 	if (mutex && mutex->enabled && mutex->state && tid != mutex->tid)
 	{
 		LOGL(4, "%s:%d Locking mutex %p already locked at %s:%d tid %x", FILE,
-							line, mutex, mutex->file, mutex->line, mutex->tid);
+			 line, mutex, mutex->file, mutex->line, mutex->tid);
 		start_lock = getTick();
 	}
 	else
@@ -1164,12 +1182,11 @@ int mutex_lock1(char *FILE, int line, SMutex* mutex)
 	mutexes[imtx++] = mutex;
 	if (start_lock > 0)
 		LOGL(4, "%s:%d Locked %p after %ld ms", FILE, line, mutex,
-							getTick() - start_lock);
+			 getTick() - start_lock);
 
 	return 0;
-
 }
-int mutex_unlock1(char *FILE, int line, SMutex* mutex)
+int mutex_unlock1(char *FILE, int line, SMutex *mutex)
 {
 	int rv = -1;
 	if (opts.no_threads)
@@ -1187,12 +1204,13 @@ int mutex_unlock1(char *FILE, int line, SMutex* mutex)
 	if (rv != 0 && rv != 1 && rv != -1)
 	{
 		LOGL(3, "mutex_unlock failed at %s:%d: %d %s", FILE, line, rv,
-							strerror(rv));
+			 strerror(rv));
 	}
 	if (rv == 0 || rv == 1)
 		rv = 0;
 
-	if (rv != -1 && imtx > 0) {
+	if (rv != -1 && imtx > 0)
+	{
 		if ((imtx >= 1) && mutexes[imtx - 1] == mutex)
 			imtx--;
 		else if ((imtx >= 2) && mutexes[imtx - 2] == mutex)
@@ -1206,7 +1224,7 @@ int mutex_unlock1(char *FILE, int line, SMutex* mutex)
 	return rv;
 }
 
-int mutex_destroy(SMutex* mutex)
+int mutex_destroy(SMutex *mutex)
 {
 	int rv;
 	if (opts.no_threads)
@@ -1227,21 +1245,21 @@ int mutex_destroy(SMutex* mutex)
 		imtx--;
 	}
 
-	if ((rv = pthread_mutex_unlock(&mutex->mtx)) != 1  && rv != 0)
+	if ((rv = pthread_mutex_unlock(&mutex->mtx)) != 1 && rv != 0)
 		LOG("%s: pthread_mutex_unlock 1 failed for %p with error %d %s",
-						__FUNCTION__, mutex, rv, strerror(rv));
+			__FUNCTION__, mutex, rv, strerror(rv));
 
 	if ((rv = pthread_mutex_unlock(&mutex->mtx)) != 1 && rv != 0)
 		LOG("%s: pthread_mutex_unlock 2 failed for %p with error %d %s",
-						__FUNCTION__, mutex, rv, strerror(rv));
+			__FUNCTION__, mutex, rv, strerror(rv));
 
 	LOGL(4, "Destroying mutex %p", mutex);
-//	if ((rv = pthread_mutex_destroy(&mutex->mtx)))
-//	{
-//		LOG("mutex destroy %p failed with error %d %s", mutex, rv, strerror(rv));
-//		mutex->enabled = 1;
-//		return 1;
-//	}
+	//	if ((rv = pthread_mutex_destroy(&mutex->mtx)))
+	//	{
+	//		LOG("mutex destroy %p failed with error %d %s", mutex, rv, strerror(rv));
+	//		mutex->enabled = 1;
+	//		return 1;
+	//	}
 	return 0;
 }
 
@@ -1252,13 +1270,13 @@ void clean_mutexes()
 		return;
 	if (opts.no_threads)
 		return;
-//	LOG("mutex_leak: unlock %d mutexes", imtx);
+	//	LOG("mutex_leak: unlock %d mutexes", imtx);
 	for (i = imtx - 1; i >= 0; i--)
 	{
 		if (!mutexes[i])
 			continue;
 		LOG("mutex_leak: %s unlocking mutex %p from %s:%d", __FUNCTION__,
-						mutexes[i], mutexes[i]->file, mutexes[i]->line);
+			mutexes[i], mutexes[i]->file, mutexes[i]->line);
 		mutex_unlock(mutexes[i]);
 	}
 	imtx = 0;
@@ -1304,7 +1322,7 @@ struct struct_array
 int add_new_lock(void **arr, int count, int size, SMutex *mutex)
 {
 	int i;
-	struct struct_array **sa = (struct struct_array **) arr;
+	struct struct_array **sa = (struct struct_array **)arr;
 	mutex_init(mutex);
 	mutex_lock(mutex);
 	for (i = 0; i < count; i++)
@@ -1315,7 +1333,7 @@ int add_new_lock(void **arr, int count, int size, SMutex *mutex)
 				sa[i] = malloc1(size);
 				if (!sa[i])
 					LOG_AND_RETURN(-1,
-																				"Could not allocate memory for %p index %d", arr, i);
+								   "Could not allocate memory for %p index %d", arr, i);
 				memset(sa[i], 0, size);
 			}
 			mutex_init(&sa[i]->mutex);
@@ -1330,7 +1348,7 @@ int add_new_lock(void **arr, int count, int size, SMutex *mutex)
 int64_t init_tick, theTick;
 
 int64_t getTick()
-{         //ms
+{ //ms
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	theTick = ts.tv_nsec / 1000000;
@@ -1345,9 +1363,8 @@ int64_t getTickUs()
 	int64_t utime;
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	utime = ((int64_t) ts.tv_sec) * 1000000 + ts.tv_nsec / 1000;
+	utime = ((int64_t)ts.tv_sec) * 1000000 + ts.tv_nsec / 1000;
 	return utime;
-
 }
 
 pthread_t join_th[100];
@@ -1369,60 +1386,62 @@ void join_thread()
 	if (!join_lock.enabled)
 		return;
 	mutex_lock(&join_lock);
-//	LOG("starting %s", __FUNCTION__);
+	//	LOG("starting %s", __FUNCTION__);
 	for (i = 0; i < join_pos; i++)
 	{
 		LOGL(3, "Joining thread %x", join_th[i]);
 		if ((rv = pthread_join(join_th[i], NULL)))
 			LOG("Join thread failed for %x with %d %s", join_th[i], rv,
-							strerror(rv));
+				strerror(rv));
 	}
 	join_pos = 0;
 	mutex_unlock(&join_lock);
 }
 
-
-
 int init_utils(char *arg0)
 {
 	int rv;
 	set_signal_handler(arg0);
-	if((rv = init_tmpinfo(100)))
+	if ((rv = init_tmpinfo(100)))
 		return rv;
 	return 0;
 }
 
-
-void hexdump (char *desc, void *addr, int len) {
-	int i, pos = 0;
+void hexdump(char *desc, void *addr, int len)
+{
+	int i, pos = 0, bl = len * 6;
 	unsigned char buff[17];
-	unsigned char buf[len * 5];
-	unsigned char *pc = (unsigned char*)addr;
+	unsigned char buf[bl];
+	unsigned char *pc = (unsigned char *)addr;
 
-	if (len == 0) {
+	if (len == 0)
+	{
 		LOG("  ZERO LENGTH\n");
 		return;
 	}
-	if (len < 0) {
-		LOG("  NEGATIVE LENGTH: %i\n",len);
+	if (len < 0)
+	{
+		LOG("  NEGATIVE LENGTH: %i\n", len);
 		return;
 	}
-
+	memset(buf, 0, bl - 1);
 	// Process every byte in the data.
-	for (i = 0; i < len; i++) {
+	for (i = 0; i < len; i++)
+	{
 		// Multiple of 16 means new line (with line offset).
 
-		if ((i % 16) == 0) {
+		if ((i % 16) == 0)
+		{
 			// Just don't print ASCII for the zeroth line.
 			if (i != 0)
-				pos += sprintf ((char *)buf + pos, "  %s\n", buff);
+				pos += snprintf((char *)buf + pos, bl - pos, "  %s\n", buff);
 
 			// Output the offset.
-			pos += sprintf ((char *)buf + pos, "  %04x ", i);
+			pos += snprintf((char *)buf + pos, bl - pos, "  %04x ", i);
 		}
 
 		// Now the hex code for the specific character.
-		pos += sprintf ((char *)buf + pos, " %02x", pc[i]);
+		pos += snprintf((char *)buf + pos, bl - pos, " %02x", pc[i]);
 
 		// And store a printable ASCII character for later.
 		if ((pc[i] < 0x20) || (pc[i] > 0x7e))
@@ -1433,42 +1452,41 @@ void hexdump (char *desc, void *addr, int len) {
 	}
 
 	// Pad out last line if not exactly 16 characters.
-	while ((i % 16) != 0) {
-		pos += sprintf ((char *)buf + pos, "   ");
+	while ((i % 16) != 0)
+	{
+		pos += snprintf((char *)buf + pos, bl - pos, "   ");
 		i++;
 	}
 
 	// And print the final ASCII bit.
-	pos += sprintf ((char *)buf + pos, "  %s\n", buff);
-	if(!desc)
+	pos += snprintf((char *)buf + pos, bl - pos, "  %s\n", buff);
+	if (!desc)
 		LOG("\n%s", buf)
-		else
-			LOG ("%s:\n%s", desc, buf);
-
+	else
+		LOG("%s:\n%s", desc, buf);
 }
 
 typedef int (*http_client_action)(void *s, int len, void *opaque);
 int http_client_close(sockets *s)
 {
-	http_client_action func = (http_client_action )s->opaque3;
-	if(func)
+	http_client_action func = (http_client_action)s->opaque3;
+	if (func)
 		func(NULL, 0, s->opaque);
 	return 1;
-
 }
 
 void http_client_read(sockets *s)
 {
-	if(!s->rlen && s->opaque2)
+	if (!s->rlen && s->opaque2)
 	{
 		char headers[500];
 		sprintf(headers, "GET %s HTTP/1.0\r\n\r\n", (char *)s->opaque2);
-		LOG("%s: sending to %d: %s",__FUNCTION__, s->sock, (char *)s->opaque2);
+		LOG("%s: sending to %d: %s", __FUNCTION__, s->sock, (char *)s->opaque2);
 		send(s->sock, headers, strlen(headers), MSG_NOSIGNAL);
 		s->opaque2 = NULL;
 	}
-	http_client_action func = (http_client_action )s->opaque3;
-	if(func)
+	http_client_action func = (http_client_action)s->opaque3;
+	if (func)
 		func(s->buf, s->rlen, s->opaque);
 	s->rlen = 0;
 	return;
@@ -1482,33 +1500,32 @@ int http_client(char *url, char *request, void *callback, void *opaque)
 	char *sep, *sep1;
 	int http_client_sock, sock;
 
-	if(strncmp("http", url, 4))
+	if (strncmp("http", url, 4))
 		LOG_AND_RETURN(0, "Only http support for %s", url);
 
 	memset(host, 0, sizeof(host));
 	strncpy(host, url + 7, sizeof(host) - 1);
-	sep = strchr(host, ':' );
-	if(sep)
+	sep = strchr(host, ':');
+	if (sep)
 	{
 		port = map_intd(sep + 1, NULL, 80);
 	}
-	if(!sep)
-		sep = strchr(host, '/' );
-	if(!sep)
+	if (!sep)
+		sep = strchr(host, '/');
+	if (!sep)
 		sep = url + strlen(host);
 	sep[0] = 0;
 
 	req = strchr(url + 7, '/');
-	if(!req)
+	if (!req)
 		req = "/";
 
 	sock = tcp_connect(host, port, NULL, 1);
-	if(sock < 0)
+	if (sock < 0)
 		LOG_AND_RETURN(1, "%s: connect to %s:%d failed", __FUNCTION__, host, port);
-	http_client_sock = sockets_add(sock, NULL, -1, TYPE_TCP | TYPE_CONNECT, (socket_action) http_client_read, (socket_action) http_client_close, (socket_action) http_client_close);
-	if(http_client_sock < 0)
+	http_client_sock = sockets_add(sock, NULL, -1, TYPE_TCP | TYPE_CONNECT, (socket_action)http_client_read, (socket_action)http_client_close, (socket_action)http_client_close);
+	if (http_client_sock < 0)
 		LOG_AND_RETURN(1, "%s: socket_add failed", __FUNCTION__);
 	sockets_set_opaque(http_client_sock, opaque, req, callback);
 	sockets_timeout(http_client_sock, 2000); // 2s timeout
-
 }

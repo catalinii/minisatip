@@ -158,22 +158,14 @@ int tables_init_ca_for_device(int i, adapter *ad)
 
 void send_pmt_to_ca_for_device(SCA *c, adapter *ad)
 {
-	SPid *p, *p2;
-	int ep, epids[MAX_PIDS], j, pid;
-	ep = get_enabled_pids(ad, epids, MAX_PIDS);
-	for (j = 0; j < ep; j++)
-	{
-		pid = epids[j];
-		dump_pids(ad->id);
-		p = find_pid(ad->id, pid);
-		if (p && (p->type & PMT_COMPLETE))
+	SPMT *pmt;
+	int i;
+	for (i = 0; i < MAX_PMT; i++)
+		if ((pmt = get_pmt(i)) && pmt->adapter == ad->id && pmt->running)
 		{
-			p->type &= ~PMT_COMPLETE; // force CA_ADD_PMT for the PMT
-			LOG(
-				"init-ca_device: triggering CA_ADD_PMT for adapter %d and pid %d type %d",
-				ad->id, pid, p->type);
+			if (c->action[CA_ADD_PMT])
+				c->action[CA_ADD_PMT](ad, pmt);
 		}
-	}
 }
 
 int register_ca_for_adapter(int i, int aid)
@@ -221,7 +213,7 @@ int unregister_ca_for_adapter(int i, int aid)
 int tables_init_device(adapter *ad)
 {
 	//	ad->ca_mask = run_ca_action(CA_INIT_DEVICE, ad, NULL);
-	int i, mask = 1;
+	int i;
 	int rv = 0;
 	for (i = 0; i < nca; i++)
 		if (ca[i].enabled)
@@ -273,4 +265,5 @@ int tables_destroy()
 	adapter tmp;
 	tmp.ca_mask = -1;
 	run_ca_action(CA_CLOSE, &tmp, NULL);
+	return 0;
 }

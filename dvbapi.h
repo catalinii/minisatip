@@ -61,7 +61,7 @@ typedef struct struct_key
 	int pi_len;
 	int parity;
 	int blen;
-	int filter_id[20], filter[20], demux[20];
+	int filter_id[20], filter[20], demux[20], pid[20], ecm_parity[20];
 	int64_t last_parity_change;
 } SKey;
 
@@ -70,7 +70,7 @@ typedef struct struct_key
 void init_dvbapi();
 int have_dvbapi();
 int dvbapi_enabled();
-int send_ecm(adapter *ad, void *arg);
+int send_ecm(int filter_id, unsigned char *b, int len, void *opaque);
 int batch_size();
 int decrypt_stream(adapter *ad, void *arg);
 int keys_add(int i, int adapter, int pmt);

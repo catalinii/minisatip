@@ -19,10 +19,12 @@
 #define MAX_PMT 128
 #define MAX_CW 20
 
+#define FILTER_SIZE 16 // based on DMX_FILTER_SIZE
 #define MAX_FILTERS 200
-#define FILTER_ADD_PID 0
-#define FILTER_KEEP_PID 1
-#define FILTER_PERMANENT 2
+#define FILTER_ADD_REMOVE 1
+#define FILTER_PERMANENT 4
+#define FILTER_REVERSE 8
+
 #define PID_FROM_TS(b) ((b[1] & 0x1F) * 256 + b[2])
 #define MAX_PI_LEN 1500
 
@@ -79,16 +81,15 @@ typedef struct struct_pmt
 	int sid;
 	int pid;
 	int adapter;
-	int caids;
 	int version;
-	uint16_t caid[MAX_CAID], cais_mask[MAX_CAID];
-	uint32_t provid[MAX_CAID];
+	uint16_t caid[MAX_CAID];
+	uint16_t caids;
 	int active_pid[MAX_ACTIVE_PIDS];
+	int active_pids;
 	int id;
-	int ver;
-	unsigned char *pmt;
+	unsigned char pmt[MAX_PI_LEN];
 	int pmt_len;
-	unsigned char *pi;
+	unsigned char pi[MAX_PI_LEN];
 	int pi_len;
 	int blen;
 	SPMT_batch batch[130];
@@ -99,6 +100,10 @@ typedef struct struct_pmt
 	SPMT_op *op;		// cached
 	SPid *p;
 	void *opaque;
+	char skip_first;
+	char active;  // PMT structure was already filled
+	char running; // PMT has channels running
+	uint16_t filter;
 } SPMT;
 
 typedef struct struct_filter
@@ -110,9 +115,11 @@ typedef struct struct_filter
 	int flags;
 	int adapter;
 	void *opaque;
+	int len, mask_len;
+	char match, isEMM, check_crc;
 	filter_function callback;
-	unsigned char filter[DMX_FILTER_SIZE];
-	unsigned char mask[DMX_FILTER_SIZE];
+	unsigned char filter[FILTER_SIZE];
+	unsigned char mask[FILTER_SIZE];
 	unsigned char data[1500];
 	int next_filter, master_filter;
 } SFilter;
@@ -125,6 +132,7 @@ static inline SPMT *get_pmt(int id)
 	extern SPMT *pmts[];
 
 	if (id < 0 || id >= MAX_PMT || !pmts[id] || !pmts[id]->enabled)
+		//		LOG_AND_RETURN(NULL, "PMT not found for id %d", id);
 		return NULL;
 	return pmts[id];
 }
@@ -134,8 +142,7 @@ static inline SFilter *get_filter(int id)
 	extern SFilter *filters[];
 	return (id >= 0 && id <= MAX_FILTERS && filters[id] && filters[id]->enabled) ? filters[id] : NULL;
 }
-
-int pmt_enabled_channels(int id);
+int process_pmt(int filter, unsigned char *b, int len, void *opaque);
 void pmt_pid_del(adapter *ad, int pid);
 void pmt_pid_add(adapter *ad, int pid, int existing);
 int pmt_init_device(adapter *ad); // will call action[CA_INIT_DEVICE] for the adapter if CA is registered for it in adapter_mask,
@@ -145,12 +152,17 @@ int pmt_init();
 int pmt_destroy();
 int pmt_init_device(adapter *ad);
 int tables_tune(adapter *ad);
+int delete_pmt_for_adapter(int aid);
 
 int add_filter(int aid, int pid, void *callback, void *opaque, int flags);
-int add_filter_mask(int aid, int pid, void *callback, void *opaque, uint8_t *data, uint8_t *mask, int flags);
+int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags, uint8_t *data, uint8_t *mask);
 int del_filter(int id);
-int change_filter_mask(int id, uint8_t *data, uint8_t *mask);
+int set_filter_mask(int id, uint8_t *data, uint8_t *mask);
+int set_filter_flags(int id, int flags);
 int get_pid_filter(int aid, int pid);
+int get_filter_pid(int filter);
+int get_filter_adapter(int filter);
+int assemble_packet(SFilter *f, uint8_t *b1);
 
 #endif
 #endif

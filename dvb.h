@@ -231,12 +231,10 @@ typedef struct struct_pid
 	int cc_err;  // counter errors
 	// stream id - one more to set it -1
 	signed char sid[MAX_STREAMS_PER_PID];
-	char flags; // 0 - disabled , 1 enabled, 2 - will be enabled next tune when tune is called, 3 disable when tune is called
-	char type;
+	char flags;  // 0 - disabled , 1 enabled, 2 - will be enabled next tune when tune is called, 3 disable when tune is called
 	int packets; // how many packets for this pid arrived, used to sort the pids
 	int dec_err; // decrypt errors, continuity counters
 	int16_t pmt, filter;
-	char pmt_counter; // ca information
 	char cc;
 #ifdef CRC_TS
 	uint32_t crc;

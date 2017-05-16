@@ -90,9 +90,13 @@ void invalidate_adapter(int aid)
 	return;
 }
 
-SKey *get_key_for_pmt(int pmt)
+int get_index_for_filter(SKey *k, int filter)
 {
-	return NULL;
+	int i;
+	for (i = 0; i < sizeof(k->filter_id); i++)
+		if (k->filter_id[i] == filter)
+			return i;
+	return -1;
 }
 
 #define dvbapi_copy32r(v, a, i) \
@@ -110,7 +114,7 @@ int dvbapi_reply(sockets *s)
 	unsigned int op, _pid;
 	int k_id, a_id = 0, pos = 0;
 	int demux, filter;
-	SPid *p;
+
 	if (s->rlen == 0)
 	{
 		send_client_info(s);
@@ -154,12 +158,13 @@ int dvbapi_reply(sockets *s)
 
 			register_dvbapi();
 			dvbapi_is_enabled = 1;
-			pos = 6 + strlen(b + 6) + 1;
+			pos = 6 + strlen((const char *)b + 6) + 1;
 			break;
 
 		case DVBAPI_DMX_SET_FILTER:
 		{
 			SKey *k;
+			int i;
 			if (change_endianness)
 				pos += 2; // for some reason the packet is longer with 2 bytes
 			pos += 65;
@@ -173,26 +178,31 @@ int dvbapi_reply(sockets *s)
 			adapter_lock(a_id);
 			demux = b[5];
 			filter = b[6];
+			int fid = add_filter(k->adapter, _pid, (void *)send_ecm, (void *)k, 0);
+			i = get_index_for_filter(k, -1);
 			LOG(
-				"dvbapi requested set filter for pid %04X (%d), key %d, demux %d, filter %d %s",
-				_pid, _pid, k_id, demux, filter,
+				"dvbapi set filter for pid %04X (%d), key %d, filter_id %d index %d demux %d, filter %d %s",
+				_pid, _pid, k_id, fid, i, demux, filter,
 				!k ? "(KEY NOT VALID)" : "");
 
-			add_filter(k->adapter, _pid, (void *)send_ecm, (void *)k, 0);
-			if (!p)
+			if (i >= 0 && fid >= 0)
 			{
-				adapter_unlock(a_id);
-				break;
+				k->filter_id[i] = fid;
+				k->filter[i] = filter;
+				k->demux[i] = demux;
+				k->pid[i] = _pid;
+				if (k)
+					k->ecms++;
 			}
-			if (k)
-				k->ecms++;
-
+			else
+				LOG("dvbapi: DMX_SET_FILTER failed, fid %d, index %d", fid, i);
 			invalidate_adapter(k->adapter);
 			adapter_unlock(a_id);
 			break;
 		}
 		case DVBAPI_DMX_STOP:
 		{
+			int i;
 			k_id = b[4];
 			demux = b[5];
 			filter = b[6];
@@ -204,10 +214,14 @@ int dvbapi_reply(sockets *s)
 			adapter_lock(a_id);
 			dvbapi_copy16r(_pid, b, 7)
 				_pid &= 0x1FFF;
+			for (i = 0; i < sizeof(k->filter_id); i++)
+				if (k->filter[i] == filter && k->demux[i] == demux && k->pid[i] == _pid)
+					break;
 			LOG(
-				"dvbapi: received DMX_STOP for key %d, adapter %d, demux %d, filter %d, pid %X (%d)",
-				k_id, a_id, demux, filter, _pid, _pid);
-			del_filter(k->pmt_id);
+				"dvbapi: received DMX_STOP for key %d, index %d, adapter %d, demux %d, filter %d, pid %X (%d)",
+				k_id, i, a_id, demux, filter, _pid, _pid);
+			if (i < sizeof(k->filter))
+				del_filter(k->filter_id[i]);
 			invalidate_adapter(k->adapter);
 
 			if (k)
@@ -229,9 +243,7 @@ int dvbapi_reply(sockets *s)
 		{
 			int index, parity, k_id;
 			SKey *k;
-			SPid *p;
 			unsigned char *cw;
-			int64_t ctime = getTick();
 
 			pos += 21;
 			k_id = b[4];
@@ -241,8 +253,6 @@ int dvbapi_reply(sockets *s)
 			k = get_key(k_id);
 			if (k && (parity < 2))
 			{
-				char *queued = "";
-				int do_queue = 0;
 				adapter_lock(a_id);
 				mutex_lock(&k->mutex);
 
@@ -251,15 +261,12 @@ int dvbapi_reply(sockets *s)
 				memcpy(k->cw[parity], cw, k->key_len);
 
 				LOG(
-					"dvbapi: received DVBAPI_CA_SET_DESCR, key %d parity %d, index %d, CW: %02X %02X %02X %02X %02X %02X %02X %02X %s",
+					"dvbapi: received DVBAPI_CA_SET_DESCR, key %d parity %d, index %d, CW: %02X %02X %02X %02X %02X %02X %02X %02X",
 					k_id, parity, index, cw[0], cw[1], cw[2], cw[3], cw[4],
-					cw[5], cw[6], cw[7], queued);
+					cw[5], cw[6], cw[7]);
 
 				mutex_unlock(&k->mutex);
 				invalidate_adapter(k->adapter);
-				p = find_pid(k->adapter, k->pmt_pid);
-				if (p)
-					p->type |= CLEAN_PMT;
 				adapter_unlock(a_id);
 			}
 			else
@@ -273,14 +280,13 @@ int dvbapi_reply(sockets *s)
 		case DVBAPI_ECM_INFO:
 		{
 			int pos1 = s->rlen - pos;
-			int64_t z = 0;
 			SKey *k = get_key(b[4]);
 			char cardsystem[255];
 			char reader[255];
 			char from[255];
 			char protocol[255];
 			unsigned char len = 0;
-			char *msg[5] =
+			unsigned char *msg[5] =
 				{cardsystem, reader, from, protocol, NULL};
 			int i = 5, j = 0;
 			uint16_t sid;
@@ -410,7 +416,6 @@ int dvbapi_timeout(sockets *s)
 
 int connect_dvbapi(void *arg)
 {
-	sockets *s = (sockets *)arg;
 
 	if ((sock > 0) && dvbapi_is_enabled) // already connected
 	{
@@ -433,7 +438,6 @@ int connect_dvbapi(void *arg)
 
 	if (sock <= 0)
 	{
-		int err;
 		if (opts.dvbapi_host[0] == '/')
 		{
 			network_mode = 0;
@@ -468,7 +472,7 @@ void init_dvbapi()
 
 void send_client_info(sockets *s)
 {
-	unsigned char buf[1000];
+	char buf[1000];
 	unsigned char len;
 	memset(buf, 0, sizeof(buf));
 	copy32(buf, 0, DVBAPI_CLIENT_INFO);
@@ -479,50 +483,44 @@ void send_client_info(sockets *s)
 	TEST_WRITE(write(s->sock, buf, len + 7), len + 7);
 }
 
-int send_ecm(adapter *ad, void *arg)
+int send_ecm(int filter_id, unsigned char *b, int len, void *opaque)
 {
-	unsigned char buf[1500];
-	unsigned char *b = (unsigned char *)arg;
-	SPid *p;
 	SKey *k = NULL;
 	SPMT *pmt;
-	int pid, len = 0;
+	uint8_t buf[1600];
+	int i, pid;
 	int filter, demux;
 	int old_parity;
 
 	if (!dvbapi_is_enabled)
 		return 0;
 
-	if (b[0] != 0x47)
+	pid = get_filter_pid(filter_id);
+	if (pid == -1)
+		LOG_AND_RETURN(0, "%s: pid not found in filter", __FUNCTION__, pid);
+
+	k = (void *)opaque;
+	if (!k || !k->enabled)
+		LOG_AND_RETURN(0, "key is null pid %d and filter %d", pid, filter_id);
+	pmt = get_pmt(k->pmt_id);
+	if (!pmt)
+		LOG_AND_RETURN(0, "PMT not found for pid %d and filter %d", pid, filter_id);
+
+	i = get_index_for_filter(k, filter_id);
+	if (i == -1)
+		LOG_AND_RETURN(0, "filter %d not found", filter_id);
+
+	demux = k->demux[i];
+	filter = k->filter[i];
+
+	if ((getTick() - k->last_ecm > 1000) && !pmt->cw)
+		k->ecm_parity[i] = -1;
+
+	if ((pid != 0) && (pid != 1) && (b[0] & 1) == k->ecm_parity[i])
 		return 0;
-	pid = (b[1] & 0x1F) * 256 + b[2];
 
-	if ((pid != 0) && (pid != 1) && ((b[1] & 0x40) && ((b[5] & 0x80) != 0x80)))
-		return 0;
-
-	p = find_pid(ad->id, pid);
-	if (p)
-		pmt = get_pmt(p->pmt);
-
-	if (pmt)
-		k = get_key((int)pmt->opaque);
-	if (!k)
-		//		LOG_AND_RETURN(0, "key is null pid %d for p->key %d", pid, p?p->key:-1);
-		return 0;
-
-	//	demux = k->demux;
-	//	filter = p->filter;
-
-	if (!(len = assemble_packet(&b, ad, 0)))
-		return 0;
-
-	//	if ((getTick() - k->last_ecm > 1000) && !pmt_valid_cw(ad->id, k->pmt_id))
-	//		p->ecm_parity = -1;
-
-	//	if ((pid != 0) && (pid != 1) && (b[0] & 1) == p->ecm_parity)
-	//		return 0;
-	//	old_parity = p->ecm_parity;
-	//	p->ecm_parity = b[0] & 1;
+	old_parity = k->ecm_parity[i];
+	k->ecm_parity[i] = b[0] & 1;
 
 	len = ((b[1] & 0xF) << 8) + b[2];
 	len += 3;
@@ -542,13 +540,14 @@ int send_ecm(adapter *ad, void *arg)
 	buf[4] = demux;
 	buf[5] = filter;
 	// filter id
-	memcpy(buf + 6, b, len + 6);
+	memcpy(buf + 6, b, len);
+	hexdump("ecm: ", buf, len + 6);
 	TEST_WRITE(write(sock, buf, len + 6), len + 6);
+	return 0;
 }
 
 int set_algo(SKey *k, int algo, int mode)
 {
-	int i;
 	if (algo == CA_ALGO_AES128 && mode == CA_MODE_CBC)
 		algo = CA_ALGO_AES128_CBC;
 
@@ -562,6 +561,8 @@ int keys_add(int i, int adapter, int pmt_id)
 
 	SKey *k;
 	SPMT *pmt = get_pmt(pmt_id);
+	if (!pmt)
+		LOG_AND_RETURN(-1, "%s: PMT %d not found ", __FUNCTION__, pmt_id);
 	if (i == -1)
 		i = add_new_lock((void **)keys, MAX_KEYS, sizeof(SKey), &keys_mutex);
 	else
@@ -611,7 +612,7 @@ int keys_add(int i, int adapter, int pmt_id)
 
 int keys_del(int i)
 {
-	int aid, j, ek;
+	int j, ek;
 	SKey *k;
 	unsigned char buf[8] =
 		{0x9F, 0x80, 0x3f, 4, 0x83, 2, 0, 0};
@@ -625,7 +626,6 @@ int keys_del(int i)
 		mutex_unlock(&k->mutex);
 		return 0;
 	}
-	aid = k->adapter;
 	k->enabled = 0;
 	//	buf[7] = k->demux;
 	buf[7] = i;
@@ -667,26 +667,27 @@ void dvbapi_del_pid(adapter *ad, void *arg)
 
 int dvbapi_add_pmt(adapter *ad, void *arg)
 {
-	SPMT *spmt = (SPMT *)arg;
+	SPMT *pmt = (SPMT *)arg;
 	SKey *k;
 	SPid *p;
-	int key, pid = spmt->pid;
+	int key, pid = pmt->pid;
 	p = find_pid(ad->id, pid);
 	if (!p)
 		return 1;
 
-	key = (int)spmt->opaque;
-	if (!get_key(key))
-		key = keys_add(-1, ad->id, spmt->id);
-
-	k = get_key_for_pmt(key);
+	k = (SKey *)pmt->opaque;
+	if (!k || !k->enabled)
+	{
+		key = keys_add(-1, ad->id, pmt->id);
+		k = get_key(key);
+	}
 	if (!k)
-		return 1;
+		LOG_AND_RETURN(1, "Could not add key for pmt %d", pmt->id);
 	mutex_lock(&k->mutex);
-	spmt->opaque = key;
-	k->pi_len = spmt->pi_len;
-	k->pi = spmt->pi;
-	k->sid = spmt->sid;
+	pmt->opaque = k;
+	k->pi_len = pmt->pi_len;
+	k->pi = pmt->pi;
+	k->sid = pmt->sid;
 	k->adapter = ad->id;
 	k->pmt_pid = pid;
 	dvbapi_send_pmt(k);
@@ -697,11 +698,10 @@ int dvbapi_add_pmt(adapter *ad, void *arg)
 }
 void dvbapi_del_pmt(adapter *ad, void *arg)
 {
-	int pid = *(int *)arg;
-	SPid *p = find_pid(ad->id, pid);
-	SPMT *pmt = get_pmt(p->pmt);
-	keys_del((int)pmt->opaque);
-	LOG("%s: deleted PMT pid %d, id %d", __FUNCTION__, pid, pmt->id);
+	SPMT *pmt = (SPMT *)arg;
+	SKey *k = (SKey *)pmt->opaque;
+	keys_del(k->id);
+	LOG("%s: deleted PMT pid %d, id %d", __FUNCTION__, pmt->pid, pmt->id);
 }
 
 int dvbapi_init_dev(adapter *ad, void *arg)
@@ -720,7 +720,7 @@ void register_dvbapi()
 	dvbapi.action[CA_DEL_PID] = (ca_action)&dvbapi_del_pid;
 	dvbapi.action[CA_ADD_PMT] = (ca_action)&dvbapi_add_pmt;
 	dvbapi.action[CA_DEL_PMT] = (ca_action)&dvbapi_del_pmt;
-	dvbapi.action[CA_ECM] = &send_ecm;
+	dvbapi.action[CA_ECM] = (ca_action)&send_ecm;
 	dvbapi.action[CA_TS] = NULL;
 	dvbapi.adapter_mask = 0xFFFFFFFF;
 	add_ca(&dvbapi);
@@ -743,7 +743,6 @@ void dvbapi_delete_keys_for_adapter(int aid)
 
 void free_all_keys(void)
 {
-	SKey *k;
 	int i;
 	for (i = 0; i < MAX_KEYS; i++)
 	{

@@ -6,7 +6,6 @@
 #define TABLES_ITEM 0x2000000000000
 
 #include "adapter.h"
-#include <linux/dvb/dmx.h>
 
 #define MAX_CA 4
 
@@ -37,7 +36,8 @@ int unregister_ca_for_adapter(int nca, int aid); // unregister a CA just for a d
 int tables_init_device(adapter *ad);
 int run_ca_action(int action_id, adapter *ad, void *arg);
 int tables_close_device(adapter *ad);
-
+int tables_init();
+int tables_destroy();
 #endif
 
 #endif

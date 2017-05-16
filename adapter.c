@@ -440,12 +440,12 @@ int getAdaptersCount()
 			if (delsys_match(ad, SYS_DVBC_ANNEX_B))
 			{
 				tac++;
-				fes[SYS_DVBC2][ifes[SYS_DVBC_ANNEX_B]++] = i;
+				fes[SYS_DVBC_ANNEX_B][ifes[SYS_DVBC_ANNEX_B]++] = i;
 			}
 			if (delsys_match(ad, SYS_ATSC))
 			{
 				tat++;
-				fes[SYS_DVBC2][ifes[SYS_ATSC]++] = i;
+				fes[SYS_ATSC][ifes[SYS_ATSC]++] = i;
 			}
 		}
 	if (tuner_s2 != ts2 || tuner_c2 != tc2 || tt2 != tuner_t2 || tc != tuner_c || tt != tuner_t || tac != tuner_ac || tat != tuner_at)
@@ -514,8 +514,8 @@ void dump_pids(int aid)
 					 p->pid_err - p->dec_err);
 			dp = 0;
 			LOGL(2,
-				 "pid %d, fd %d, type %d packets %d, d/c errs %d/%d, flags %d, pmt %d, filter %d, sids: %d %d %d %d %d %d %d %d",
-				 p->pids[i].pid, p->pids[i].fd, p->pids[i].type,
+				 "pid %d, fd %d, packets %d, d/c errs %d/%d, flags %d, pmt %d, filter %d, sids: %d %d %d %d %d %d %d %d",
+				 p->pids[i].pid, p->pids[i].fd,
 				 p->pids[i].packets, p->pids[i].dec_err, p->pids[i].cc_err,
 				 p->pids[i].flags, p->pids[i].pmt, p->pids[i].filter, p->pids[i].sid[0],
 				 p->pids[i].sid[1], p->pids[i].sid[2], p->pids[i].sid[3],
@@ -696,8 +696,8 @@ int update_pids(int aid)
 			if (ad->pids[i].fd > 0)
 				ad->del_filters(ad->pids[i].fd, ad->pids[i].pid);
 			ad->pids[i].fd = 0;
-			ad->pids[i].type = 0;
-			ad->pids[i].pmt_counter = 0;
+			ad->pids[i].filter = -1;
+			ad->pids[i].pmt = -1;
 		}
 
 	for (i = 0; i < MAX_PIDS; i++)
@@ -856,8 +856,8 @@ void mark_pid_deleted(int aid, int sid, int _pid, SPid *p)
 	for (j = 0; j < MAX_STREAMS_PER_PID; j++)
 		if (p->sid[j] >= 0)
 			cnt++;
-	//	if ((cnt == 0) && (p->flags != 0) && (p->type == 0 || didit))
-	if ((cnt == 0) && (p->flags != 0) && (p->type == 0))
+
+	if ((cnt == 0) && (p->flags != 0))
 		p->flags = 3;
 
 	if (sort)
@@ -1079,7 +1079,7 @@ int set_adapter_parameters(int aid, int sid, transponder *tp)
 			cp = find_pid(ad->id, pmt);
 			if (!cp)
 				continue;
-			cp->type |= TYPE_PMT;
+			//			cp->type |= TYPE_PMT;
 		}
 	}
 
@@ -1732,7 +1732,7 @@ void reset_pids_type(int aid, int clear_pat)
 	for (i = 0; i < MAX_PIDS; i++)
 		if (ad->pids[i].flags > 0)
 		{
-			ad->pids[i].type = 0;
+			ad->pids[i].filter = -1;
 			ad->pids[i].pmt = -1;
 			if (ad->pids[i].sid[0] == -1)
 				ad->pids[i].flags = 3;
@@ -1755,17 +1755,12 @@ void reset_ecm_type_for_pmt(int aid, int pmt)
 	for (i = 0; i < MAX_PIDS; i++)
 		if ((ad->pids[i].flags > 0) && (ad->pids[i].pmt == pmt))
 		{
-			if (ad->pids[i].type == TYPE_FILTER)
+			if (ad->pids[i].filter != -1)
 			{
-				ad->pids[i].type = 0;
+				ad->pids[i].filter = -1;
 				ad->pids[i].pmt = -1;
 				if (ad->pids[i].sid[0] == -1)
 					ad->pids[i].flags = 3;
-			}
-			if ((ad->pids[i].type & PMT_COMPLETE))
-			{
-				ad->pids[i].type &= ~PMT_COMPLETE;
-				ad->pids[i].pmt = -1;
 			}
 		}
 }

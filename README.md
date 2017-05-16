@@ -25,23 +25,20 @@ https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item
 Usage:
 -------
 
-minisatip version 0.7.1, compiled with s2api version: 050A
-[08/12 12:31:04.597]: Built with dvbcsa
-[08/12 12:31:04.597]: Built with CI
-[08/12 12:31:04.597]: Built with dvbapi
-[08/12 12:31:04.597]: Built with AES (OpenSSL)
-[08/12 12:31:04.597]: Built with tables processing
-[08/12 12:31:04.597]: Built with satip client
-[08/12 12:31:04.597]: Built with linux dvb client
-[08/12 12:31:04.597]: Built with backtrace
-[08/12 12:31:04.597]: Built without netceiver
-[08/12 12:31:04.597]: Built for satip-axe
+minisatip version 0.7.4, compiled with s2api version: 050A
+[11/05 04:39:55.239 main]: Built with dvbcsa
+[11/05 04:39:55.239 main]: Built with CI
+[11/05 04:39:55.239 main]: Built with dvbapi
+[11/05 04:39:55.239 main]: Built with AES (OpenSSL)
+[11/05 04:39:55.239 main]: Built with tables processing
+[11/05 04:39:55.239 main]: Built with satip client
+[11/05 04:39:55.239 main]: Built with linux dvb client
+[11/05 04:39:55.239 main]: Built with backtrace
+[11/05 04:39:55.239 main]: Built with netceiver
 
-	./minisatip [-[fgltzE]] [-a x:y:z] [-b X:Y] [-B X] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
+	./minisatip [-[fgltzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 		[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port][-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] [-R document_root] [-s [DELSYS:]host[:port] [-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] 
- [-7 M1:S1[,M2:S2]] [-M mpegts_packets] [-A SRC1:INP1:DISEQC1[,SRC2:INP2:DISEQC2]]
-
-	[-x http_port] [-X xml_path] [-y rtsp_port] 
+ 	[-x http_port] [-X xml_path] [-y rtsp_port] 
 
 Help
 -------
@@ -50,12 +47,11 @@ Help
 	* eg: -a 1:2:3  
 	- it will report 1 dvb-s2 device, 2 dvb-t2 devices and 3 dvb-c devices 
 
-* -b --buffers X:Y : set the app adapter buffer to X Bytes (default: 25004) and set the kernel DVB buffer to Y Bytes (default: 5775360) - both multiple of 188
+* -b --buffers X:Y : set the app adapter buffer to X Bytes (default: 56400) and set the kernel DVB buffer to Y Bytes (default: 5775360) - both multiple of 188
 	* eg: -b 18800:18988
 
 * -B X : set the app socket write buffer to X KB. 
-	The buffer will be split between multiple sockets, each getting maximum 0.4 * X KB
-	* eg: -B 10
+	* eg: -B 10000 - to set the socket buffer to 10MB
 
 * -d --diseqc ADAPTER1:COMMITTED1-UNCOMMITTED1[,ADAPTER2:COMMITTED2-UNCOMMITTED2[,...]
 	* The first argument is the adapter number, second is the number of committed packets to send to a Diseqc 1.0 switch, third the number of uncommitted commands to sent to a Diseqc 1.1 switch
@@ -68,9 +64,8 @@ Help
 	* All timing values are in ms, default adapter values are: 15-54-15-15-15-0
 	- note: * as adapter means apply to all adapters
 
-* -D --device-id DVC_ID: specify the device id (in case there are multiple SAT>IP servers in the network)
- 	* eg: -D 4 
-
+* -D --disable-dvb disable DVB adapter detection
+ 
 * -E Allow encrypted stream to be sent to the client even if the decrypting was unsuccessfull
  
 * -Y --delsys ADAPTER1:DELIVERY_SYSTEM1[,ADAPTER2:DELIVERY_SYSTEM2[,..]] - specify the delivery system of the adapters	
@@ -88,6 +83,9 @@ Help
 * -f  foreground, otherwise run in background
 
 * -g use syslog instead stdout for logging, multiple -g - print to stderr as well
+
+* -H --threshold X:Y : set the write time threshold to X (UDP) / Y (TCP)  milliseconds. 
+	* eg: -H 5:50 - set thresholds to 5ms (UDP) and 50ms (TCP)
 
 * -i --priority prio: set the DVR thread priority to prio 
 
@@ -108,6 +106,9 @@ Help
 	--nopm *
 	- turns off power management for all adapters (recommended instead of --nopm 0-32) 
 	- required for some Unicable LNBs 
+
+* -n --netceiver if:count: use network interface <if> (default vlan4) and look for <count> netceivers
+	* eg: -n vlan4:2 
 
 * -o --dvbapi host:port - specify the hostname and port for the dvbapi server (oscam). Port 9000 is set by default (if not specified) 
 	* eg: -o 192.168.9.9:9000 
@@ -136,9 +137,12 @@ Help
 	- specifies 1 dvbs2 (and dvbs)satip server with address 192.168.1.2:554
 	- specifies 1 dvbt satip server  with address 192.168.1.3:554
 	- specifies 1 dvbc satip server  with address 192.168.1.4:554
+	
+*  --satip-xml <URL> Use the xml retrieved from a satip server to configure satip adapters 
+	eg: --satip-xml http://localhost:8080/desc.xml 
 
 * -O --satip-tcp Use RTSP over TCP instead of UDP for data transport 
-* -S --slave ADAPTER1,ADAPTER2-ADAPTER4[,..] - specify slave adapters	
+ * -S --slave ADAPTER1,ADAPTER2-ADAPTER4[,..] - specify slave adapters	
 	* Allows specifying bonded adapters (multiple adapters connected with a splitter to the same LNB)
 	Only one adapter needs to be master all others needs to have this parameter specified
 	eg: -S 1-2
@@ -148,7 +152,7 @@ Help
 
 * -t --cleanpsi clean the PSI from all CA information, the client will see the channel as clear if decrypted successfully
 
-* -T --threads: enables/disable multiple threads (reduces memory consumptions) (default: DISABLED)
+* -T --threads: enables/disable multiple threads (reduces memory consumptions) (default: ENABLED)
 
 * -u --unicable unicable_string: defines the unicable adapters (A) and their slot (S), frequency (F) and optionally the PIN for the switch:
 	* The format is: A1:S1-F1[-PIN][,A2:S2-F2[-PIN][,...]]
@@ -171,29 +175,7 @@ Help
 	* eg: -y 5544 
 	- changing this to a port > 1024 removes the requirement for minisatip to run as root
 
- * -7 --link-adapters mapping_string: link adapters (identical src,lo/hi,h/v)
-	* The format is: M1:S1[,M2:S2] - master:slave
-	* eg: 0:1,0:2,0:3 
-
-* -A --free-inputs mapping_string: absolute source mapping for free input mode
-	* The format is: SRC1:INP1:DISEQC1[,SRC2:INP2:DISEQC2]
-	* SRC: source number (src argument for SAT>IP minus 1 - 0-15)
-	* INP: coaxial input (0-3)
-	* DISEQC: diseqc position (0-15)
-	* eg: 13E,19.2E on inputs 0&1 and 23.5E,28.2E on inputs 2&3:
-		-A 0:0:0,0:1:0,1:0:0,1:1:1,2:2:0,2:3:0,3:2:1,3:2:2
-
-* -W --power num: power to all inputs (0 = only active inputs, 1 = all inputs)
-
-* -Q --quattro  quattro LNB config (H/H,H/V,L/H,L/V)
-
-* -8 --quattro-hiband hiband
-	* if hiband is 0, do not allow hiband
-	* if hiband is 1, allow hiband
-
-* -M --skip-mpegts packets: skip initial MPEG-TS packets for AXE demuxer (default 35)
-
-How to compile:
+ How to compile:
 ------
 
 - ./configure
