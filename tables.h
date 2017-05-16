@@ -7,7 +7,7 @@
 
 #include "adapter.h"
 
-#define MAX_CA 4
+#define MAX_CA 8
 
 #define CA_INIT_DEVICE 0
 #define CA_CLOSE_DEVICE 1
@@ -15,16 +15,15 @@
 #define CA_DEL_PID 3
 #define CA_ADD_PMT 4
 #define CA_DEL_PMT 5
-#define CA_ECM 6
-#define CA_TS 7
-#define CA_CLOSE 8
+#define CA_TS 6
+#define CA_CLOSE 7
 
 typedef int (*ca_action)(adapter *ad, void *arg);
 
 typedef struct struct_CA
 {
 	uint8_t enabled;
-	ca_action action[9];
+	ca_action action[8];
 	int adapter_mask; // 1 << x, means enabled for adapter X
 	int id;
 } SCA;

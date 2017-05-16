@@ -720,7 +720,6 @@ void register_dvbapi()
 	dvbapi.action[CA_DEL_PID] = (ca_action)&dvbapi_del_pid;
 	dvbapi.action[CA_ADD_PMT] = (ca_action)&dvbapi_add_pmt;
 	dvbapi.action[CA_DEL_PMT] = (ca_action)&dvbapi_del_pmt;
-	dvbapi.action[CA_ECM] = (ca_action)&send_ecm;
 	dvbapi.action[CA_TS] = NULL;
 	dvbapi.adapter_mask = 0xFFFFFFFF;
 	add_ca(&dvbapi);
