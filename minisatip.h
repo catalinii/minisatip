@@ -77,6 +77,7 @@ struct struct_opts
 	int diseqc_after_switch;
 	int diseqc_after_burst;
 	int diseqc_after_tone;
+	int diseqc_multi;
 	int lnb_low, lnb_high, lnb_switch, lnb_circular;
 	int nopm;
 	int max_pids;
