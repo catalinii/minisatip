@@ -107,7 +107,7 @@ typedef struct struct_adapter
 	int wait_new_stream, wait_transponder_id;
 	uint64_t tune_time;
 	char name[5];
-
+	char flush;
 	Set_pid set_pid;
 	Del_filters del_filters;
 	Adapter_commit commit;

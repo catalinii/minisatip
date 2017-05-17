@@ -1271,37 +1271,41 @@ int init_utils(char *arg0)
 	return 0;
 }
 
-
-void hexdump (char *desc, void *addr, int len) {
-	int i, pos = 0;
+void hexdump(char *desc, void *addr, int len)
+{
+	int i, pos = 0, bl = len * 6;
 	unsigned char buff[17];
-	unsigned char buf[len * 5];
-	unsigned char *pc = (unsigned char*)addr;
+	unsigned char buf[bl];
+	unsigned char *pc = (unsigned char *)addr;
 
-	if (len == 0) {
+	if (len == 0)
+	{
 		LOG("  ZERO LENGTH\n");
 		return;
 	}
-	if (len < 0) {
-		LOG("  NEGATIVE LENGTH: %i\n",len);
+	if (len < 0)
+	{
+		LOG("  NEGATIVE LENGTH: %i\n", len);
 		return;
 	}
-
+	memset(buf, 0, bl - 1);
 	// Process every byte in the data.
-	for (i = 0; i < len; i++) {
+	for (i = 0; i < len; i++)
+	{
 		// Multiple of 16 means new line (with line offset).
 
-		if ((i % 16) == 0) {
+		if ((i % 16) == 0)
+		{
 			// Just don't print ASCII for the zeroth line.
 			if (i != 0)
-				pos += sprintf (buf + pos, "  %s\n", buff);
+				pos += snprintf((char *)buf + pos, bl - pos, "  %s\n", buff);
 
 			// Output the offset.
-			pos += sprintf (buf + pos, "  %04x ", i);
+			pos += snprintf((char *)buf + pos, bl - pos, "  %04x ", i);
 		}
 
 		// Now the hex code for the specific character.
-		pos += sprintf (buf + pos, " %02x", pc[i]);
+		pos += snprintf((char *)buf + pos, bl - pos, " %02x", pc[i]);
 
 		// And store a printable ASCII character for later.
 		if ((pc[i] < 0x20) || (pc[i] > 0x7e))
@@ -1312,16 +1316,18 @@ void hexdump (char *desc, void *addr, int len) {
 	}
 
 	// Pad out last line if not exactly 16 characters.
-	while ((i % 16) != 0) {
-		pos += sprintf (buf + pos, "   ");
+	while ((i % 16) != 0)
+	{
+		pos += snprintf((char *)buf + pos, bl - pos, "   ");
 		i++;
 	}
 
 	// And print the final ASCII bit.
-	pos += sprintf (buf + pos, "  %s\n", buff);
-	if(!desc)
+	pos += snprintf((char *)buf + pos, bl - pos, "  %s\n", buff);
+	if (!desc)
 		LOG("\n%s", buf)
-		else
-			LOG ("%s:\n%s", desc, buf);
-
+	else
+		LOG("%s:\n%s", desc, buf);
 }
+
+

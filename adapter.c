@@ -726,6 +726,7 @@ int tune(int aid, int sid)
 			close_streams_for_adapter(aid, sid);
 			if (update_pids(aid))
 			{
+				ad->do_tune = 0;
 				mutex_unlock(&ad->mutex);
 				return -503;
 			}
@@ -749,6 +750,7 @@ int tune(int aid, int sid)
 		mark_pids_deleted(aid, sid, NULL);
 	if (update_pids(aid))
 	{
+		ad->do_tune = 0;
 		mutex_unlock(&ad->mutex);
 		return -503;
 	}
@@ -757,6 +759,7 @@ int tune(int aid, int sid)
 		ad->tune_time = getTick();
 		get_socket_iteration(ad->sock,0);
 	}
+	ad->do_tune = 0;
 	mutex_unlock(&ad->mutex);
 	return rv;
 }

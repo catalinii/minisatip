@@ -1045,7 +1045,9 @@ int read_dmx(sockets * s)
 		return 0;
 	}
 	ad->wait_new_stream = 0;
-
+	
+	if(ad->flush)
+		send = 1;
 	LOGL(7,
 						"read_dmx send=%d, flush_all=%d, cnt %d called for adapter %d -> %d out of %d bytes read, %jd ms ago",
 						send, flush_all, cnt, s->sid, s->rlen, s->lbuf,
@@ -1056,9 +1058,9 @@ int read_dmx(sockets * s)
 
 	if (!send)
 		return 0;
-
 	ls = lock_streams_for_adapter(ad->id);
 	adapter_lock(ad->id);
+	ad->flush = 0;
 	process_dmx(s);
 	adapter_unlock(ad->id);
 	lse = unlock_streams_for_adapter(ad->id);

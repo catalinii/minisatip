@@ -871,6 +871,7 @@ int send_ecm(adapter *ad, void *arg)
 	buf[5] = filter;
 	// filter id
 	memcpy(buf + 6, b, len + 6);
+//	hexdump("ecm: ", buf, len+6);
 	TEST_WRITE(write(sock, buf, len + 6));
 }
 

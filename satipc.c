@@ -610,6 +610,7 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb)
 
 			if (rtsp[1] == 0 && (rtsp_len - 12 + pos > len)) // destination buffer full
 			{
+				ad->flush = 1;
 				LOGL(SATIP_LOG, "Destination buffer is full @ pos %d, tcp_pos %d, required %d len %d",
 									pos, sip->tcp_pos, rtsp_len - 12, len );
 				break;
