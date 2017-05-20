@@ -17,7 +17,8 @@
 #define CA_MODE_CBC 1
 
 #define MAX_PMT 128
-#define MAX_CW 20
+#define MAX_CW 80
+#define MAX_CW_TIME 25000 // 25s
 
 #define FILTER_SIZE 16 // based on DMX_FILTER_SIZE
 #define MAX_FILTERS 200
@@ -34,43 +35,44 @@ typedef struct struct_batch // same as struct dvbcsa_bs_batch_s
 	unsigned int len;	/* payload bytes lenght */
 } SPMT_batch;
 
-typedef void *(*Create_cwkey)(void);
-typedef void (*Delete_cwkey)(void *);
+typedef void (*Create_CW)(void *);
+typedef void (*Delete_CW)(void *);
 typedef int (*Batch_size)(void);
-typedef void (*Set_CW)(unsigned char *cw, void *key);
-typedef void (*Decrypt_Stream)(void *key, SPMT_batch *batch, int batch_len);
+typedef void (*Set_CW)(void *cw, void *pmt);
+typedef void (*Decrypt_Stream)(void *cw, SPMT_batch *batch, int batch_len);
 
 typedef int (*filter_function)(int filter, void *buf, int len, void *opaque);
 
 typedef struct struct_pmt_op
 {
 	int algo;
-	int mode;
-	Create_cwkey create_cwkey;
-	Delete_cwkey delete_cwkey;
+	Create_CW create_cw;
+	Delete_CW delete_cw;
 	Batch_size batch_size;
-	Set_CW set_cw;
+	Set_CW set_cw, stop_cw;
 	Decrypt_Stream decrypt_stream;
-} SPMT_op;
+} SCW_op;
 
 typedef struct struct_internal_op
 {
 	char enabled;
-	SPMT_op *op;
-} _Spmt_op;
+	SCW_op *op;
+} _SCW_op;
 
 typedef struct struct_cw
 {
 	char enabled;
-	char cw[16];
+	unsigned char cw[16], iv[16];
 	uint64_t time;
 	void *key;
 	int algo;
-	int8_t pmt;
+	int16_t pmt;
+	SCW_op *op;
 	char prio; // CW priority
-	int8_t op_id;
 	char adapter;
 	char parity;
+	char cw_len;
+	int16_t id;
 
 } SCW;
 
@@ -93,11 +95,10 @@ typedef struct struct_pmt
 	int pi_len;
 	int blen;
 	SPMT_batch batch[130];
-	int8_t cw_id, parity, invalidated;
+	int8_t parity, invalidated;
 	int64_t last_parity_change;
 	int16_t master_pmt; //  the pmt that contains the same pids as this PMT
-	SCW *cw;			// cached
-	SPMT_op *op;		// cached
+	SCW *cw;
 	SPid *p;
 	void *opaque;
 	char skip_first;
@@ -105,6 +106,15 @@ typedef struct struct_pmt
 	char running; // PMT has channels running
 	uint16_t filter;
 } SPMT;
+
+// filters can be setup for specific pids and masks
+// it calls assemble_packet to reassemble the packets and then calls the callback function
+// flags - 0 - does not add the pid
+// flags - FILTER_ADD_REMOVE - adds the pids if there is at least one filter with this type and removes the pid from the list of pids, if there is no filter
+// flags - FITLER_PERMANENT - keeps the filter active after changing the frequency and does not add the pid to the list of pids (pid 0 is permanent)
+// PAT, PMT, CAT, ... can be processed also using filters
+// another use cases: ECM EMM
+// could be extended at later time with timeout or close callbacks
 
 typedef struct struct_filter
 {
@@ -124,8 +134,8 @@ typedef struct struct_filter
 	int next_filter, master_filter;
 } SFilter;
 
-int register_algo(SPMT_op *o);
-int send_cw(int pmt_id, int cw_type, int parity, uint8_t *cw);
+int register_algo(SCW_op *o);
+int send_cw(int pmt_id, int cw_type, int parity, uint8_t *cw, uint8_t *iv);
 
 static inline SPMT *get_pmt(int id)
 {
@@ -153,6 +163,7 @@ int pmt_destroy();
 int pmt_init_device(adapter *ad);
 int tables_tune(adapter *ad);
 int delete_pmt_for_adapter(int aid);
+int pmt_tune(adapter *ad);
 
 int add_filter(int aid, int pid, void *callback, void *opaque, int flags);
 int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags, uint8_t *data, uint8_t *mask);

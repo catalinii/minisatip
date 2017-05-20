@@ -47,11 +47,12 @@
 #include "tables.h"
 
 extern struct struct_opts opts;
-
+#define PMT_LOG 3
 SPMT *pmts[MAX_PMT];
 SMutex pmts_mutex;
 
-_Spmt_op ops[10];
+#define MAX_OPS 10
+_SCW_op ops[MAX_OPS];
 
 SCW *cws[MAX_CW];
 SMutex cws_mutex;
@@ -67,16 +68,10 @@ static inline SCW *get_cw(int id)
 	return cws[id];
 }
 
-static inline SPMT_op *get_op(int id)
-{
-	if (ops[id].enabled)
-		return ops[id].op;
-	return NULL;
-}
-int register_algo(SPMT_op *o)
+int register_algo(SCW_op *o)
 {
 	int i;
-	for (i = 0; i < sizeof(ops); i++)
+	for (i = 0; i < MAX_OPS; i++)
 		if (!ops[i].enabled)
 		{
 			ops[i].op = o;
@@ -95,6 +90,7 @@ void init_algo_aes();
 
 typedef void (*type_algo_init_func)();
 
+// software decryption should be last, use first hardware
 type_algo_init_func algo_init_func[] =
 	{
 #ifndef DISABLE_DVBCSA
@@ -108,13 +104,19 @@ type_algo_init_func algo_init_func[] =
 void init_algo()
 {
 	int i;
-	for (i = 0; i < sizeof(algo_init_func); i++)
+	for (i = 0; algo_init_func[i]; i++)
 		if (algo_init_func[i])
 			algo_init_func[i]();
 }
 
-#define POINTER_TYPE_ECM ((void *)-TYPE_ECM)
-#define POINTER_1 ((void *)1)
+SCW_op *get_op_for_algo(int algo)
+{
+	int i;
+	for (i = 0; i < MAX_OPS; i++)
+		if (ops[i].enabled && ops[i].op->algo == algo)
+			return ops[i].op;
+	return NULL;
+}
 
 int get_mask_len(uint8_t *filter, int l)
 {
@@ -156,6 +158,7 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags, u
 	f->flags = flags;
 	f->len = 0;
 	f->next_filter = -1;
+	f->adapter = aid;
 
 	memcpy(f->filter, filter, sizeof(f->data));
 	memcpy(f->mask, mask, sizeof(f->mask));
@@ -174,13 +177,16 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags, u
 		}
 	mutex_unlock(&f->mutex);
 
-	LOG("new filter %d added for pid %d, flags %d, mask_len %d, master_filter %d",
-		fid, pid, f->flags, f->mask_len, f->master_filter);
+	LOGL(3, "new filter %d added for adapter %d, pid %d, flags %d, mask_len %d, master_filter %d",
+		 fid, f->adapter, pid, f->flags, f->mask_len, f->master_filter);
 	if (flags & FILTER_ADD_REMOVE)
 	{
 		SPid *p = find_pid(f->adapter, pid);
 		if (!p)
+		{
 			mark_pid_add(-1, f->adapter, pid);
+			//			update_pids(f->adapter);  // should be done on the caller side
+		}
 	}
 	SPid *p = find_pid(f->adapter, pid);
 	if (p)
@@ -363,7 +369,7 @@ void process_filter(SFilter *f, unsigned char *b)
 			return;
 		}
 		if (!f->isEMM)
-			f->callback(f->id, f->data, f->len, f->opaque);
+			f->callback(f->id, f->data, len, f->opaque);
 		else
 		{
 			// TO DO: EMM
@@ -410,11 +416,21 @@ int get_filter_adapter(int filter)
 	return -1;
 }
 
+void disable_cw(SPMT *pmt, SCW *cw)
+{
+	if (cw->op->stop_cw)
+		cw->op->stop_cw(cw, pmt);
+	cw->enabled = 0;
+	if (pmt)
+	{
+		pmt->cw = NULL;
+		pmt->invalidated = 1;
+	}
+}
 void update_cw(SPMT *pmt)
 {
 	SPMT *master = get_pmt(pmt->master_pmt);
 	SCW *cw = NULL;
-	SPMT_op *op = NULL;
 	int i = 0;
 	if (!master)
 	{
@@ -423,11 +439,11 @@ void update_cw(SPMT *pmt)
 	}
 	if (!pmt->invalidated && !master->invalidated)
 	{
-		LOGL(3, "PMT %d (master %d) not invalidated, ignoring", pmt->id, master->id);
+		//		LOGL(3, "PMT %d (master %d) not invalidated, ignoring", pmt->id, master->id);
 		return;
 	}
+	LOG("%s: start pmt %d, master %d, parity %d", __FUNCTION__, pmt->id, master->id, pmt->parity);
 	pmt->cw = NULL;
-	pmt->op = NULL;
 	for (i = 0; i < MAX_CW; i++)
 		if (cws[i] && cws[i]->enabled && (pmt->parity == cws[i]->parity) && (cws[i]->pmt == pmt->id || cws[i]->pmt == master->id))
 		{
@@ -437,28 +453,103 @@ void update_cw(SPMT *pmt)
 				continue;
 			}
 		}
+	LOG("found CW: %d for PMT %d master %d", cw ? cw->id : -1, pmt->id, master->id);
 	if (cw)
-		op = get_op(cw->op_id);
-	if (cw && op)
 	{
 		mutex_lock(&pmt->mutex);
 		pmt->cw = cw;
-		pmt->op = op;
 		pmt->invalidated = 0;
 		mutex_unlock(&pmt->mutex);
 
 		mutex_lock(&master->mutex);
 		master->cw = cw;
-		master->op = op;
 		master->invalidated = 0;
 		master->parity = pmt->parity;
+		master->invalidated = 0;
+		cw->op->set_cw(cw, master);
 		mutex_unlock(&master->mutex);
+	}
+	else
+	{
+		pmt->invalidated = 0;
+		master->invalidated = 0;
 	}
 }
 
-int send_cw(int pmt_id, int type, int parity, uint8_t *cw)
+int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv)
 {
-	LOG("got CW for PMT %d, type %d, parity %d: %02X %02X %02X %02X %02X %02X %02X %02X", pmt_id, type, parity,
+	int i, master_pmt;
+	SCW_op *op = get_op_for_algo(algo);
+	LOGL(PMT_LOG, "got CW for PMT %d, algo %d, parity %d: %02X %02X %02X %02X %02X %02X %02X %02X", pmt_id, algo, parity,
+		 cw[0], cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);
+	SPMT *pmt = get_pmt(pmt_id);
+	if (!pmt)
+		LOG_AND_RETURN(1, "%s: pmt not found %d", __FUNCTION__, pmt_id);
+	master_pmt = pmt->master_pmt;
+	pmt = get_pmt(master_pmt);
+	if (!pmt)
+	{
+		LOG("%s: master pmt not found %d for pmt %d", __FUNCTION__, master_pmt, pmt_id);
+		pmt = get_pmt(pmt_id);
+		if (!pmt)
+			LOG_AND_RETURN(2, "%s: pmt %d and master pmt not found %d ", __FUNCTION__, pmt_id, master_pmt);
+	}
+	if (!op)
+		LOG_AND_RETURN(3, "op not found for algo %d", algo);
+
+	for (i = 0; i < MAX_CW; i++)
+		if (cws[i] && cws[i]->enabled && cws[i]->pmt == master_pmt && cws[i]->parity == parity && !memcmp(cw, cws[i]->cw, cws[i]->cw_len))
+			LOG_AND_RETURN(1, "cw already exist at position %d: %02X %02X %02X %02X %02X %02X %02X %02X", i, cw[0], cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);
+
+	uint64_t ctime = getTick();
+	mutex_lock(&cws_mutex);
+	for (i = 0; i < MAX_CW; i++)
+		if (!cws[i] || (!cws[i]->enabled && cws[i]->algo == algo) ||
+			(cws[i]->enabled && cws[i]->algo == algo && (ctime - cws[i]->time > MAX_CW_TIME)))
+			break;
+	if (i == MAX_CW)
+	{
+		LOG("CWS is full %d", i);
+		mutex_unlock(&cws_mutex);
+		return 1;
+	}
+
+	if (!cws[i])
+	{
+		cws[i] = malloc1(sizeof(SCW));
+		if (!cws[i])
+		{
+			LOG("CWS: could not allocate memory");
+			mutex_unlock(&cws_mutex);
+			return 2;
+		}
+		memset(cws[i], 0, sizeof(SCW));
+		op->create_cw(cws[i]);
+	}
+	SCW *c = cws[i];
+
+	if (c->enabled)
+		disable_cw(NULL, c);
+
+	c->id = i;
+	c->adapter = pmt->adapter;
+	c->parity = parity;
+	c->pmt = master_pmt;
+	c->cw_len = 16;
+	if (algo < 2)
+		c->cw_len = 8;
+	c->algo = algo;
+	memcpy(c->cw, cw, c->cw_len);
+	if (iv)
+		memcpy(c->iv, iv, c->cw_len);
+	else
+		memset(c->iv, 0, sizeof(c->iv));
+	c->op = op;
+	c->enabled = 1;
+	c->time = getTick();
+	mutex_unlock(&cws_mutex);
+	pmt->invalidated = 1;
+	LOG("CW %d for PMT %d, algo %d, parity %d: %02X %02X %02X %02X %02X %02X %02X %02X", c->id, pmt_id, algo, parity,
 		cw[0], cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);
 	return 0;
 }
@@ -467,9 +558,10 @@ int decrypt_batch(SPMT *pmt)
 {
 	unsigned char *b = NULL;
 	int pid = 0;
-
+	if (pmt->blen <= 0)
+		return 0;
 	mutex_lock(&pmt->mutex);
-	if (!pmt->cw || !pmt->op)
+	if (!pmt->cw)
 	{
 		LOG("No CW found or OP found for pmt %d pid %d", pmt->id, pmt->pid);
 		mutex_unlock(&pmt->mutex);
@@ -479,12 +571,12 @@ int decrypt_batch(SPMT *pmt)
 	pid = (b[1] & 0x1F) * 256 + b[2];
 	pmt->batch[pmt->blen].data = NULL;
 	pmt->batch[pmt->blen].len = 0;
-	pmt->op->decrypt_stream(pmt->cw->key, pmt->batch, 184);
-	LOGL(6,
-		 "tables: decrypted key %d parity %d at len %d, channel_id %d (pid %d) %p",
+	pmt->cw->op->decrypt_stream(pmt->cw, pmt->batch, 184);
+	LOGL(PMT_LOG,
+		 "pmt: decrypted key %d parity %d at len %d, channel_id %d (pid %d) %p",
 		 pmt->id, pmt->parity, pmt->blen, pmt->sid, pid, pmt->batch[0].data); //0x99
 	pmt->blen = 0;
-	memset(pmt->batch, 0, sizeof(int *) * 128);
+	//	memset(pmt->batch, 0, sizeof(int *) * 128);
 	mutex_unlock(&pmt->mutex);
 	return 0;
 }
@@ -508,6 +600,7 @@ int pmt_decrypt_stream(adapter *ad)
 		pid = (b[1] & 0x1F) * 256 + b[2];
 		if (b[3] & 0x80)
 		{
+
 			p = find_pid(ad->id, pid);
 			if (p && p->pmt > 0 && p->pmt < MAX_PMT && pmts[p->pmt])
 				pmt = pmts[p->pmt];
@@ -515,24 +608,26 @@ int pmt_decrypt_stream(adapter *ad)
 				pmt = NULL;
 			if (!pmt)
 			{
+				LOGL(6, "PMT not found for pid %d, id %d", p ? p->pmt : -3, pid);
 				continue; // cannot decrypt
-			}
-			if (!pmt->op || !pmt->cw || !pmt->cw->enabled || pmt->cw->pmt != pmt->master_pmt)
-			{
-				update_cw(pmt);
-			}
-			if (!pmt->op || !pmt->cw)
-			{
-				LOG("CW %x not found (%d) or OP not found %x", pmt->op, pmt->cw_id, pmt->cw);
-				continue;
 			}
 
 			cp = ((b[3] & 0x40) > 0);
 			if (pmt->parity == -1)
 				pmt->parity = cp;
 
+			if (!pmt->cw || !pmt->cw->enabled || pmt->cw->pmt != pmt->master_pmt)
+			{
+				update_cw(pmt);
+			}
+			if (!pmt->cw)
+			{
+				LOGL(6, "pmt %d CW not found", pmt->id);
+				continue;
+			}
+
 			if (!batchSize)
-				batchSize = pmt->op->batch_size();
+				batchSize = pmt->cw->op->batch_size();
 
 			if ((pmt->parity != cp) || (pmt->blen >= batchSize)) // partiy change or batch buffer full
 			{
@@ -547,9 +642,7 @@ int pmt_decrypt_stream(adapter *ad)
 						 pmt->last_parity_change);
 					pmt->last_parity_change = ctime;
 					pmt->parity = cp;
-					pmt->invalidated = 1;
-					pmt->cw->enabled = 0;
-					pmt->op = NULL;
+					disable_cw(pmt, pmt->cw);
 					update_cw(pmt);
 				}
 			}
@@ -938,10 +1031,6 @@ int assemble_packet(SFilter *f, uint8_t *b)
 		len = len + 8 - 5; // byte 8 - 5 bytes that we skip
 		f->len = 0;
 		memset(f->data, 0, sizeof(f->data));
-		if (b[4] == 0 || b[4] == 2)
-			f->check_crc = 1;
-		else
-			f->check_crc = 0;
 	}
 
 	if (len > 1500 || len < 0)
@@ -970,7 +1059,7 @@ int assemble_packet(SFilter *f, uint8_t *b)
 			return 0;
 	}
 	b = f->data;
-	if (f->check_crc) // check the crc for PAT and PMT
+	if (b[0] == 0 || b[0] == 2) // check the crc for PAT and PMT
 	{
 		int current_crc;
 		if (len < 4 || len > 1500)
@@ -1240,6 +1329,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 		{
 			enabled_channels++;
 			pmt->running = 1;
+			cp->pmt = pmt->master_pmt;
 		}
 	}
 
@@ -1380,6 +1470,27 @@ void free_all_pmts(void)
 		}
 	}
 	mutex_destroy(&pmts_mutex);
+}
+
+int pmt_init()
+{
+	mutex_init(&pmts_mutex);
+	mutex_init(&cws_mutex);
+	init_algo();
+#ifndef DISABLE_TABLES
+	tables_init();
+#endif
+	return 0;
+}
+
+int pmt_destroy()
+{
+#ifndef DISABLE_TABLES
+	tables_destroy();
+#endif
+	mutex_destroy(&cws_mutex);
+	mutex_destroy(&pmts_mutex);
+	return 0;
 }
 
 _symbols pmt_sym[] =

@@ -49,14 +49,14 @@
 
 extern struct struct_opts opts;
 
-void *dvbaes_create_key()
+void dvbaes_create_key(SCW *cw)
 {
-	return malloc1(sizeof(AES_KEY));
+	cw->key = malloc1(sizeof(AES_KEY));
 }
 
-void dvbaes_delete_key(void *key)
+void dvbaes_delete_key(SCW *cw)
 {
-	free1(key);
+	free1(cw->key);
 }
 
 int dvbaes_batch_size() // make sure the number is divisible by 7
@@ -64,12 +64,12 @@ int dvbaes_batch_size() // make sure the number is divisible by 7
 	return 64; // process 64 packets at a time
 }
 
-void dvbaes_set_cw(unsigned char *cw, void *key)
+void dvbaes_set_cw(SCW *cw, SPMT *pmt)
 {
-	AES_set_decrypt_key(cw, 128, (AES_KEY *) key);
+	AES_set_decrypt_key(cw->cw, 128, (AES_KEY *)cw->key);
 }
 
-void dvbaes_decrypt_stream(void *key, SPMT_batch *batch, int max_len)
+void dvbaes_decrypt_stream(SCW *cw, SPMT_batch *batch, int max_len)
 {
 	int i, j, len;
 	for (i = 0; batch[i].data && i < max_len; i++)
@@ -77,16 +77,18 @@ void dvbaes_decrypt_stream(void *key, SPMT_batch *batch, int max_len)
 		len = (batch[i].len / 16) * 16;
 		for (j = 0; j < len; j++)
 			AES_ecb_encrypt(batch[i].data + j, batch[i].data + j,
-																			(AES_KEY *) key, AES_DECRYPT);
-
+							(AES_KEY *)cw->key, AES_DECRYPT);
 	}
 }
 
-SPMT_op aes_op =
-{ .algo = CA_ALGO_AES128_ECB,
-		.create_cwkey = dvbaes_create_key, .delete_cwkey = dvbaes_delete_key,
-		.batch_size = dvbaes_batch_size, .set_cw = dvbaes_set_cw,
-		.decrypt_stream = dvbaes_decrypt_stream };
+SCW_op aes_op =
+	{.algo = CA_ALGO_AES128_ECB,
+	 .create_cw = (Create_CW)dvbaes_create_key,
+	 .delete_cw = (Delete_CW)dvbaes_delete_key,
+	 .batch_size = dvbaes_batch_size,
+	 .set_cw = (Set_CW)dvbaes_set_cw,
+	 .stop_cw = NULL,
+	 .decrypt_stream = (Decrypt_Stream)dvbaes_decrypt_stream};
 
 void init_algo_aes()
 {

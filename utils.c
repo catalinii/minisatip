@@ -1497,7 +1497,7 @@ int http_client(char *url, char *request, void *callback, void *opaque)
 	char host[200];
 	int port = 80;
 	char *req;
-	char *sep, *sep1;
+	char *sep;
 	int http_client_sock, sock;
 
 	if (strncmp("http", url, 4))
@@ -1528,4 +1528,5 @@ int http_client(char *url, char *request, void *callback, void *opaque)
 		LOG_AND_RETURN(1, "%s: socket_add failed", __FUNCTION__);
 	sockets_set_opaque(http_client_sock, opaque, req, callback);
 	sockets_timeout(http_client_sock, 2000); // 2s timeout
+	return 0;
 }

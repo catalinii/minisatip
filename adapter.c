@@ -339,7 +339,7 @@ int close_adapter(int na)
 {
 	adapter *ad;
 	init_complete = 0;
-	int sock, dvr;
+	int sock;
 
 	ad = get_adapter_nw(na);
 	if (!ad)
@@ -598,7 +598,7 @@ void adapter_update_threshold(adapter *ad)
 	if (ad->sid_cnt == 1 && ad->master_sid >= 0)
 	{
 		sid = get_stream(ad->master_sid);
-		if (sid && sid->type == STREAM_RTSP_TCP || sid->type == STREAM_HTTP)
+		if (sid && (sid->type == STREAM_RTSP_TCP || sid->type == STREAM_HTTP))
 			threshold = opts.tcp_threshold;
 	}
 	else if (ad->sid_cnt > 0)
@@ -1419,8 +1419,8 @@ void set_diseqc_multi(char *o)
 			opts.diseqc_multi = position;
 		}
 		LOGL(0,
-							"Setting diseqc multi adapter %d position %d",
-							a_id, position);
+			 "Setting diseqc multi adapter %d position %d",
+			 a_id, position);
 	}
 }
 

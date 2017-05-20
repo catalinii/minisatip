@@ -42,7 +42,7 @@
 #include "stream.h"
 #include "adapter.h"
 #include "dvb.h"
-#include "tables.h"
+#include "pmt.h"
 
 #ifndef DISABLE_SATIPCLIENT
 #include "satipc.h"
@@ -107,7 +107,6 @@ int rtsp, http, si, si1, ssdp1;
 #define SATIPXML_OPT '6'
 #define DISEQC_MULTI '0'
 
-
 static const struct option long_options[] =
 	{
 		{"remote-rtp", required_argument, NULL, 'r'},
@@ -122,7 +121,7 @@ static const struct option long_options[] =
 		{"jess", required_argument, NULL, 'j'},
 		{"diseqc", required_argument, NULL, 'd'},
 		{"diseqc-timing", required_argument, NULL, 'q'},
-	        { "diseqc-multi", required_argument, NULL, DISEQC_MULTI },
+		{"diseqc-multi", required_argument, NULL, DISEQC_MULTI},
 		{"nopm", required_argument, NULL, 'Z'},
 #ifndef DISABLE_DVBAPI
 		{"dvbapi", required_argument, NULL, 'o'},
@@ -183,6 +182,11 @@ char *built_info[] =
 		"Built without tables processing",
 #else
 		"Built with tables processing",
+#endif
+#ifdef DISABLE_PMT
+		"Built without pmt processing",
+#else
+		"Built with pmt processing",
 #endif
 #ifdef DISABLE_SATIPCLIENT
 		"Built without satip client",
@@ -461,10 +465,10 @@ void set_options(int argc, char *argv[])
 	opts.diseqc_after_tone = 0;
 	opts.diseqc_committed_no = 1;
 	opts.diseqc_multi = -1;
-	opts.lnb_low = (9750*1000UL);
-	opts.lnb_high = (10600*1000UL);
-	opts.lnb_circular = (10750*1000UL);
-	opts.lnb_switch = (11700*1000UL);
+	opts.lnb_low = (9750 * 1000UL);
+	opts.lnb_high = (10600 * 1000UL);
+	opts.lnb_circular = (10750 * 1000UL);
+	opts.lnb_switch = (11700 * 1000UL);
 	opts.max_sbuf = 100;
 	opts.pmt_scan = 1;
 #if defined(__sh__)
@@ -1525,16 +1529,16 @@ int main(int argc, char *argv[])
 		sockets_timeout(sock_satip, 120000);
 	}
 #endif
-#ifndef DISABLE_TABLES
-	tables_init();
+#ifndef DISABLE_PMT
+	pmt_init();
 #endif
 	LOGL(0, "Initializing with %d devices", init_all_hw());
 
 	write_pid_file();
 	select_and_execute(NULL);
 	unlink(pid_file);
-#ifndef DISABLE_TABLES
-	tables_destroy();
+#ifndef DISABLE_PMT
+	pmt_destroy();
 #endif
 	free_all();
 	if (opts.slog)

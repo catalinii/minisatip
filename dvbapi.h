@@ -35,7 +35,7 @@
 
 #define MAX_KEYS 255
 #define MAX_PMT_DATA 1880
-
+#define MAX_KEY_FILTERS 20
 typedef struct struct_key
 {
 	char enabled;
@@ -61,11 +61,9 @@ typedef struct struct_key
 	int pi_len;
 	int parity;
 	int blen;
-	int filter_id[20], filter[20], demux[20], pid[20], ecm_parity[20];
+	int filter_id[MAX_KEY_FILTERS], filter[MAX_KEY_FILTERS], demux[MAX_KEY_FILTERS], pid[MAX_KEY_FILTERS], ecm_parity[MAX_KEY_FILTERS];
 	int64_t last_parity_change;
 } SKey;
-
-#define MAX_KEY_TIME 25000 // 25s
 
 void init_dvbapi();
 int have_dvbapi();
