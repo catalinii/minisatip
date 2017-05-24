@@ -1876,9 +1876,9 @@ _symbols adapters_sym[] =
 	{ "ad_sys", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(
 				adapter, tp.sys) },
 	{ "ad_allsys", VAR_FUNCTION_STRING, (void *) &get_all_delsys, 0,
-			0, 0 },
+			MAX_ADAPTERS, 0 },
 	{ "ad_pids", VAR_FUNCTION_STRING, (void *) &get_adapter_pids, 0,
-			0, 0 },
+			MAX_ADAPTERS, 0 },
 	{ "tuner_s2", VAR_INT, &tuner_s2, 1, 0, 0 },
 	{ "tuner_t2", VAR_INT, &tuner_t2, 1, 0, 0 },
 	{ "tuner_c2", VAR_INT, &tuner_c2, 1, 0, 0 },

@@ -1024,7 +1024,7 @@ int read_rtsp(sockets * s)
 												arg[1], getTick(), (getTickUs() / 1000000));
 		}
 		if (buf[0] == 0 && sid->type == STREAM_HTTP)
-			snprintf(buf, sizeof(buf), "Content-Type: video/mp2t");
+			snprintf(buf, sizeof(buf), "Content-Type: video/mp2t\r\nConnection: close");
 		http_response(s, 200, buf, NULL, cseq, 0, end);
 	}
 	else if (strncmp(arg[0], "TEARDOWN", 8) == 0)
@@ -1065,6 +1065,8 @@ int read_rtsp(sockets * s)
 }
 
 #define REPLY_AND_RETURN(c) {http_response (s, c, NULL, NULL, 0, 0, 1); return 0;}
+
+#define JSON_STATE_MAXLEN (128*1024)
 
 char uuid[100];
 int uuidi;
@@ -1134,6 +1136,8 @@ int read_http(sockets * s)
 		return 0;
 	}
 
+	sockets_timeout(s->id, 1); //close the connection
+
 	if(!strncasecmp((const char*) s->buf, "HEAD ", 5))
 		is_head = 1;
 
@@ -1149,12 +1153,10 @@ int read_http(sockets * s)
 
 	split(arg, (char*) s->buf, 50, ' ');
 //      LOG("args: %s -> %s -> %s",arg[0],arg[1],arg[2]);
-	if (strncmp(arg[0], "GET", 3) && !is_head)
+	if (strncmp(arg[0], "GET", 3) && strncmp(arg[0], "POST", 4))
 		REPLY_AND_RETURN(503);
 	if (uuidi == 0)
 		ssdp_discovery(s);
-
-	sockets_timeout(s->id, 1); //close the connection
 
 	if (strcmp(arg[1], "/"DESC_XML) == 0)
 	{
@@ -1179,11 +1181,29 @@ int read_http(sockets * s)
 		snprintf(buf, sizeof(buf), xml, app_name, app_name, app_name, uuid,
 											opts.http_host, adapters, opts.playlist);
 		sprintf(headers,
-										"CACHE-CONTROL: no-cache\r\nContent-type: text/xml\r\nX-SATIP-RTSP-Port: %d",
+										"Cache-Control: no-cache\r\nContent-type: text/xml\r\nX-SATIP-RTSP-Port: %d\r\nConnection: close",
 										opts.rtsp_port);
 		http_response(s, 200, headers, buf, 0, 0, 1);
 		return 0;
 	}
+
+	if (strcmp(arg[1], "/state.json") == 0)
+	{
+		char *buf = malloc(JSON_STATE_MAXLEN);
+		int len = get_json_state(buf, JSON_STATE_MAXLEN);
+		http_response(s, 200, "Content-Type: application/json\r\nConnection: close", buf, 0, len, 1);
+		free(buf);
+		return 0;
+	}
+
+	if (strcmp(arg[1], "/bandwidth.json") == 0)
+	{
+		char buf[1024];
+		int len = get_json_bandwidth(buf, sizeof(buf));
+		http_response(s, 200, "Content-Type: application/json\r\nConnection: close", buf, 0, len, 1);
+		return 0;
+	}
+
 // process file from html directory, the images are just sent back
 
 	if (!strcmp(arg[1], "/"))
@@ -1206,8 +1226,7 @@ int read_http(sockets * s)
 			http_response(s, 200, ctype, NULL, 0, 0, 1);
 			return 0;
 		}
-		if (strstr(ctype, "image") || strstr(ctype, "css")
-						|| strstr(ctype, "javascript") || strstr(ctype, "octet-stream"))
+		if (strstr(ctype, "no-cache") == NULL)
 		{
 			http_response(s, 200, ctype, f, 0, nl, 1);
 			closefile(f, nl);

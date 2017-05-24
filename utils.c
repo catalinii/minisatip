@@ -758,10 +758,125 @@ int snprintf_pointer(char *dest, int max_len, int type, void *p,
 		nb = snprintf(dest, max_len, "0x%x", (int) ((*(int *) p) * multiplier));
 		break;
 	}
+	if (nb > max_len) /* see man 'snprintf' */
+		nb = max_len;
 	return nb;
 }
 
-char zero[16];
+char zero[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+
+int get_json_state(char *buf, int len)
+{
+	int ptr = 0, first = 1, i, j, off, string;
+	_symbols *p;
+
+	strlcatf(buf, len, ptr, "{\n");
+	for (i = 0; sym[i] != NULL; i++) {
+		for (j = 0; sym[i][j].name; j++) {
+			p = sym[i] + j;
+			strlcatf(buf, len, ptr, first ? "\"%s\":" : ",\n\"%s\":", p->name);
+			string = 0;
+			switch (p->type) {
+			case VAR_STRING:
+			case VAR_PSTRING:
+			case VAR_HEX:
+			case VAR_AARRAY_STRING:
+			case VAR_AARRAY_PSTRING: string = 1; break;
+			}
+			if (p->type < VAR_ARRAY)
+			{
+				if (string) strlcatf(buf, len, ptr, "\"");
+				ptr += snprintf_pointer(buf + ptr, len - ptr, p->type, p->addr, p->multiplier);
+				if (string) strlcatf(buf, len, ptr, "\"");
+			}
+			else if ((p->type & 0xF0) == VAR_ARRAY)
+			{
+				strlcatf(buf, len, ptr, "[");
+				for (off = 0; off < p->len; off++) {
+					if (string) strlcatf(buf, len, ptr, off > 0 ? ",\"" : "\"");
+					ptr += snprintf_pointer(buf + ptr, len - ptr, p->type,
+								((char *)p->addr) + off + p->skip, p->multiplier);
+					if (string) strlcatf(buf, len, ptr, "\"");
+				}
+				strlcatf(buf, len, ptr, "]");
+			}
+			else if ((sym[i][j].type & 0xF0) == VAR_AARRAY)
+			{
+				strlcatf(buf, len, ptr, "[");
+				for (off = 0; off < p->len; off++) {
+					char **p1 = (char **) p->addr;
+					if (string)
+						strlcatf(buf, len, ptr, off > 0 ? ",\"" : "\"");
+					else if (off > 0)
+						strlcatf(buf, len, ptr, ",");
+					ptr += snprintf_pointer(buf + ptr, len - ptr, p->type,
+								p1[off] ? p1[off] + p->skip : zero, p->multiplier);
+					if (string) strlcatf(buf, len, ptr, "\"");
+				}
+				strlcatf(buf, len, ptr, "]");
+			}
+			else if (sym[i][j].type == VAR_FUNCTION_INT)
+			{
+				get_data_int funi = (get_data_int) p->addr;
+				strlcatf(buf, len, ptr, "[");
+				for (off = 0; off < p->len; off++) {
+					int storage = funi(off);
+					if (off > 0) strlcatf(buf, len, ptr, ",");
+					ptr += snprintf_pointer(buf + ptr, len - ptr, p->type, &storage, 1);
+				}
+				strlcatf(buf, len, ptr, "]");
+			}
+			else if (sym[i][j].type == VAR_FUNCTION_INT64)
+			{
+				get_data_int64 fun64 = (get_data_int64) p->addr;
+				strlcatf(buf, len, ptr, "[");
+				for (off = 0; off < p->len; off++) {
+					int64_t storage = fun64(off);
+					if (off > 0) strlcatf(buf, len, ptr, ",");
+					ptr += snprintf_pointer(buf + ptr, len - ptr, p->type, &storage, 1);
+				}
+				strlcatf(buf, len, ptr, "]");
+			}
+			else if (sym[i][j].type == VAR_FUNCTION_STRING)
+			{
+				char storage[64 * 5]; // variable max len
+				get_data_string funs = (get_data_string) p->addr;
+				strlcatf(buf, len, ptr, "[");
+				for (off = 0; off < p->len; off++) {
+					funs(off, storage, sizeof(storage));
+					strlcatf(buf, len, ptr, off > 0 ? ",\"%s\"" : "\"%s\"", storage);
+				}
+				strlcatf(buf, len, ptr, "]");
+			} else {
+				strlcatf(buf, len, ptr, "\"\"");
+			}
+			first = 0;
+		}
+	}
+	strlcatf(buf, len, ptr, "\n}\n");
+	return ptr;
+}
+
+extern SMutex bw_mutex;
+
+int get_json_bandwidth(char *buf, int len)
+{
+	int ptr = 0;
+	mutex_init(&bw_mutex);
+	mutex_lock(&bw_mutex);
+	strlcatf(buf, len, ptr, "\
+{\n\
+\"bw\":%jd,\n\
+\"tbw\":%jd,\n\
+\"reads\":%u,\n\
+\"writes\":%u,\n\
+\"fwrites\":%u,\n\
+\"ns_read\":%jd,\n\
+\"tt\":%jd\n\
+}", c_bw, c_tbw, c_reads, c_writes, c_failed_writes, c_ns_read, c_tt);
+	mutex_unlock(&bw_mutex);
+	return ptr;
+}
 
 void * get_var_address(char *var, float *multiplier, int * type, void *storage,
 																							int ls)
@@ -797,7 +912,6 @@ void * get_var_address(char *var, float *multiplier, int * type, void *storage,
 
 						if (!p)
 						{
-							memset(zero, 0, sizeof(zero));
 							p = zero;
 						}
 						else
@@ -949,20 +1063,23 @@ char *readfile(char *fn, char *ctype, int *len)
 	if (ctype)
 	{
 		if (endswith(fn, "png"))
-			strcpy(ctype, "Content-type: image/png\r\nConnection: close");
+			strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: image/png\r\nConnection: close");
 		else if (endswith(fn, "jpg") || endswith(fn, "jpeg"))
-			strcpy(ctype, "Content-type: image/jpeg\r\nConnection: close");
+			strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: image/jpeg\r\nConnection: close");
 		else if (endswith(fn, "css"))
-			strcpy(ctype, "Content-type: text/css\r\nConnection: close");
+			strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: text/css\r\nConnection: close");
 		else if (endswith(fn, "js"))
-			strcpy(ctype, "Content-type: text/javascript\r\nConnection: close");
+			strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: text/javascript\r\nConnection: close");
 		else if (endswith(fn, "htm") || endswith(fn, "html"))
-			strcpy(ctype, "CACHE-CONTROL: no-cache\r\nContent-type: text/html");
+			strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: text/html\r\nConnection: close");
 		else if (endswith(fn, "xml"))
-			strcpy(ctype, "CACHE-CONTROL: no-cache\r\nContent-type: text/xml");
+			strcpy(ctype, "Cache-Control: no-cache\r\nContent-type: text/xml");
+		else if (endswith(fn, "json"))
+			strcpy(ctype, "Cache-Control: no-cache\r\nContent-type: application/json");
 		else if (endswith(fn, "m3u"))
-			strcpy(ctype, "CACHE-CONTROL: no-cache\r\nContent-type: video/x-mpegurl");
-		else strcpy(ctype, "CACHE-CONTROL: no-cache\r\nContent-type: application/octet-stream");
+			strcpy(ctype, "Cache-Control: no-cache\r\nContent-type: video/x-mpegurl");
+		else
+			strcpy(ctype, "Cache-Control: no-cache\r\nContent-type: application/octet-stream");
 	}
 	return mem;
 }
