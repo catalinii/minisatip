@@ -48,6 +48,8 @@
 #include "axe.h"
 #endif
 
+#define DEFAULT_LOG LOG_ADAPTER
+
 adapter *a[MAX_ADAPTERS];
 int a_count;
 char disabled[MAX_ADAPTERS]; // disabled adapters
@@ -55,7 +57,7 @@ int sock_signal;
 char do_dump_pids = 1;
 
 SMutex a_mutex;
-extern struct struct_opts opts;
+
 int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2, tuner_at, tuner_ac;
 char fe_map[2 * MAX_ADAPTERS];
 void find_dvb_adapter(adapter **a);
@@ -265,7 +267,7 @@ int init_hw(int i)
 	ad->ca_mask = 0;
 	ad->tune_time = 0;
 	ad->threshold = opts.udp_threshold;
-
+	ad->updating_pids = 0;
 	ad->wait_new_stream = 0;
 	ad->rtime = getTick();
 	ad->sock = sockets_add(ad->dvr, NULL, i, TYPE_DVR, (socket_action)read_dmx,
@@ -512,8 +514,7 @@ void dump_pids(int aid)
 		if (p->pids[i].flags > 0)
 		{
 			if (dp)
-				LOGL(2, "Dumping pids table for adapter %d, pid errors %d", aid,
-					 p->pid_err - p->dec_err);
+				LOG("Dumping pids table for adapter %d, pid errors %d", aid, p->pid_err);
 			dp = 0;
 			LOGL(2,
 				 "pid %d, fd %d, packets %d, d/c errs %d/%d, flags %d, pmt %d, filter %d, sids: %d %d %d %d %d %d %d %d",
@@ -679,9 +680,10 @@ int update_pids(int aid)
 	int i, dp = 1;
 	adapter *ad;
 	ad = get_adapter(aid);
-	if (!ad)
+	if (!ad || ad->updating_pids)
 		return 0;
 
+	ad->updating_pids = 1;
 #ifndef DISABLE_PMT
 	for (i = 0; i < MAX_PIDS; i++)
 		if ((ad->pids[i].flags == 3))
@@ -742,7 +744,7 @@ int update_pids(int aid)
 	//		reset_pids_type(ad->id, 0);
 	//	}
 	//#endif
-
+	ad->updating_pids = 0;
 	return 0;
 }
 
@@ -837,6 +839,7 @@ void mark_pid_deleted(int aid, int sid, int _pid, SPid *p)
 		p = find_pid(aid, _pid);
 	if (!p)
 		return;
+
 	if (sid == -1) // delete all sids and the pid
 	{
 		if (p->flags != 0)
@@ -858,8 +861,14 @@ void mark_pid_deleted(int aid, int sid, int _pid, SPid *p)
 	for (j = 0; j < MAX_STREAMS_PER_PID; j++)
 		if (p->sid[j] >= 0)
 			cnt++;
+	int keep = 0;
 
-	if ((cnt == 0) && (p->flags != 0))
+#ifndef DISABLE_PMT
+	if (cnt == 0 && p->filter != -1 && p->flags > 0)
+		keep = get_active_filters_for_pid(p->filter, aid, _pid, FILTER_ADD_REMOVE); // 0 - no filter with type ADD_REMOVE
+#endif
+
+	if ((cnt == 0) && (p->flags != 0) && !keep)
 		p->flags = 3;
 
 	if (sort)
@@ -992,9 +1001,9 @@ int compare_tunning_parameters(int aid, transponder *tp)
 	if (!ad)
 		return -1;
 
-	LOGL(4, "new parameters: f:%d, plp:%d, diseqc:%d, pol:%d, sr:%d, mtype:%d",
+	LOGM("new parameters: f:%d, plp:%d, diseqc:%d, pol:%d, sr:%d, mtype:%d",
 		 tp->freq, tp->plp, tp->diseqc, tp->pol, tp->sr, tp->mtype);
-	LOGL(4, "old parameters: f:%d, plp:%d, diseqc:%d, pol:%d, sr:%d, mtype:%d",
+	LOGM("old parameters: f:%d, plp:%d, diseqc:%d, pol:%d, sr:%d, mtype:%d",
 		 ad->tp.freq, ad->tp.plp, ad->tp.diseqc, ad->tp.pol, ad->tp.sr, ad->tp.mtype);
 	if (tp->freq != ad->tp.freq || tp->plp != ad->tp.plp || tp->diseqc != ad->tp.diseqc || (tp->pol > 0 && tp->pol != ad->tp.pol) || (tp->sr > 1000 && tp->sr != ad->tp.sr) || (tp->mtype > 0 && tp->mtype != ad->tp.mtype))
 
@@ -1185,7 +1194,7 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 		len += snprintf(dad + len, ld - len, "%s",
 						t->pids ? t->pids : t->apids);
 
-	LOGL(5, "describe_adapter: sid %d, aid %d => %s", sid, aid, dad);
+	LOGM("describe_adapter: sid %d, aid %d => %s", sid, aid, dad);
 
 	return dad;
 }
@@ -1239,7 +1248,7 @@ void free_all_adapters()
 #ifndef DISABLE_NETCVCLIENT
 	fprintf(stderr, "\n\nREEL: recv_exit\n");
 	if (opts.netcv_if && recv_exit())
-		LOGL(0, "Netceiver exit failed");
+		LOG("Netceiver exit failed");
 #endif
 }
 char is_adapter_disabled(int i)
@@ -1318,7 +1327,7 @@ void set_unicable_adapters(char *o, int type)
 		ad->diseqc_param.switch_type = type;
 		ad->diseqc_param.pin = pin;
 		ad->diseqc_param.only13v = o13v;
-		LOGL(0, "Setting %s adapter %d slot %d freq %d",
+		LOG("Setting %s adapter %d slot %d freq %d",
 			 type == SWITCH_UNICABLE ? "unicable" : "jess", a_id, slot, freq);
 	}
 }
@@ -1372,7 +1381,7 @@ void set_diseqc_adapters(char *o)
 			opts.diseqc_committed_no = committed_no;
 			opts.diseqc_uncommitted_no = uncommitted_no;
 		}
-		LOGL(0,
+		LOG(
 			 "Setting diseqc adapter %d fast %d committed_no %d uncommitted_no %d",
 			 a_id, fast, committed_no, uncommitted_no);
 	}
@@ -1418,7 +1427,7 @@ void set_diseqc_multi(char *o)
 		{
 			opts.diseqc_multi = position;
 		}
-		LOGL(0,
+		LOG(
 			 "Setting diseqc multi adapter %d position %d",
 			 a_id, position);
 	}
@@ -1480,7 +1489,7 @@ void set_lnb_adapters(char *o)
 			opts.lnb_switch = lnb_switch;
 			opts.lnb_circular = 0;
 		}
-		LOGL(0,
+		LOG(
 			 "Setting diseqc adapter %d lnb_low %d lnb_high %d lnb_switch %d",
 			 a_id, lnb_low, lnb_high, lnb_switch);
 	}
@@ -1550,7 +1559,7 @@ void set_diseqc_timing(char *o)
 			opts.diseqc_after_burst = after_burst;
 			opts.diseqc_after_tone = after_tone;
 		}
-		LOGL(0,
+		LOG(
 			 "Setting diseqc timing for adapter %d before cmd %d after cmd %d "
 			 "after repeated cmd %d after switch %d after burst %d after tone %d",
 			 a_id, before_cmd, after_cmd, after_repeated_cmd, after_switch,
@@ -1587,7 +1596,7 @@ void set_slave_adapters(char *o)
 			ad = a[j];
 			ad->diseqc_param.switch_type = SWITCH_SLAVE;
 
-			LOGL(0, "Setting slave adapter %d", j);
+			LOG("Setting slave adapter %d", j);
 		}
 	}
 }
@@ -1626,7 +1635,7 @@ void set_nopm_adapters(char *o)
 			ad = a[j];
 			ad->slow_dev = 1;
 
-			LOGL(0, "Disabling power management for adapter %d", j);
+			LOG("Disabling power management for adapter %d", j);
 		}
 	}
 }
@@ -1648,7 +1657,7 @@ void set_adapters_delsys(char *o)
 		sep = strchr(arg[i], ':');
 		if (!sep)
 		{
-			LOGL(0,
+			LOG(
 				 "Delivery system is missing, the format is adapter_number:delivery_system\n example: 2:dvbs2");
 			return;
 		}
@@ -1667,7 +1676,7 @@ void set_adapters_delsys(char *o)
 		if (ad->sys[0] == SYS_DVBC2)
 			ad->sys[1] = SYS_DVBC_ANNEX_A;
 
-		LOGL(0, "Setting delivery system for adapter %d to %s and %s", a_id,
+		LOG("Setting delivery system for adapter %d to %s and %s", a_id,
 			 get_delsys(ad->sys[0]), get_delsys(ad->sys[1]));
 	}
 }
@@ -1706,7 +1715,7 @@ void set_adapter_dmxsource(char *o)
 
 			ad = a[j];
 			ad->dmx_source = fd;
-			LOGL(0, "Setting frontend %d for adapter %d", fd, j);
+			LOG("Setting frontend %d for adapter %d", fd, j);
 		}
 	}
 }
@@ -1768,49 +1777,6 @@ void adapter_unlock1(char *FILE, int line, int aid)
 	if (!ad)
 		return;
 	mutex_unlock1(FILE, line, &ad->mutex);
-}
-
-void reset_pids_type(int aid, int clear_pat)
-{
-	int i;
-	adapter *ad = get_adapter(aid);
-	if (!ad)
-		return;
-	LOG("clearing type and pat processed for adapter %d", aid);
-	for (i = 0; i < MAX_PIDS; i++)
-		if (ad->pids[i].flags > 0)
-		{
-			ad->pids[i].filter = -1;
-			ad->pids[i].pmt = -1;
-			if (ad->pids[i].sid[0] == -1)
-				ad->pids[i].flags = 3;
-		}
-	if (clear_pat)
-	{
-		ad->pat_processed = 0;
-		ad->transponder_id = -1;
-		ad->pat_ver = -1;
-	}
-}
-
-void reset_ecm_type_for_pmt(int aid, int pmt)
-{
-	int i;
-	adapter *ad = get_adapter(aid);
-	if (!ad)
-		return;
-	LOG("clearing ECMs for key %d for adapter %d", pmt, aid);
-	for (i = 0; i < MAX_PIDS; i++)
-		if ((ad->pids[i].flags > 0) && (ad->pids[i].pmt == pmt))
-		{
-			if (ad->pids[i].filter != -1)
-			{
-				ad->pids[i].filter = -1;
-				ad->pids[i].pmt = -1;
-				if (ad->pids[i].sid[0] == -1)
-					ad->pids[i].flags = 3;
-			}
-		}
 }
 
 int get_enabled_pids(adapter *ad, int *pids, int lpids)
@@ -1910,7 +1876,7 @@ void restart_needed_adapters(int aid, int sid)
 {
 	adapter *ad = get_adapter(aid);
 	if (ad)
-		LOGL(4, "starting restart_needed_adapters %d, rn: %d, sc %d, master_sid %d, sid %d", aid, ad->restart_needed, ad->sid_cnt, ad->master_sid, sid);
+		LOGM("starting restart_needed_adapters %d, rn: %d, sc %d, master_sid %d, sid %d", aid, ad->restart_needed, ad->sid_cnt, ad->master_sid, sid);
 
 	if (ad && ad->enabled && ad->restart_needed && ((ad->sid_cnt == 0 || ad->master_sid == sid)))
 	{

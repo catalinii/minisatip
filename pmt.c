@@ -46,8 +46,8 @@
 #include "adapter.h"
 #include "tables.h"
 
-extern struct struct_opts opts;
-#define PMT_LOG 3
+#define DEFAULT_LOG LOG_PMT
+
 SPMT *pmts[MAX_PMT];
 SMutex pmts_mutex;
 
@@ -138,7 +138,7 @@ void dump_filters(int aid)
 
 int add_filter(int aid, int pid, void *callback, void *opaque, int flags)
 {
-	uint8_t filter[DMX_FILTER_SIZE], mask[DMX_FILTER_SIZE];
+	uint8_t filter[FILTER_SIZE], mask[FILTER_SIZE];
 	memset(filter, 0, sizeof(filter));
 	memset(mask, 0, sizeof(mask));
 	return add_filter_mask(aid, pid, callback, opaque, flags, filter, mask);
@@ -155,7 +155,7 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags, u
 	f->opaque = opaque;
 	f->pid = pid;
 	f->callback = callback;
-	f->flags = flags;
+	f->flags = 0;
 	f->len = 0;
 	f->next_filter = -1;
 	f->adapter = aid;
@@ -175,19 +175,12 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags, u
 			filters[i]->next_filter = fid;
 			f->master_filter = filters[i]->master_filter;
 		}
+	set_filter_flags(fid, flags);
 	mutex_unlock(&f->mutex);
 
-	LOGL(3, "new filter %d added for adapter %d, pid %d, flags %d, mask_len %d, master_filter %d",
+	LOGM("new filter %d added for adapter %d, pid %d, flags %d, mask_len %d, master_filter %d",
 		 fid, f->adapter, pid, f->flags, f->mask_len, f->master_filter);
-	if (flags & FILTER_ADD_REMOVE)
-	{
-		SPid *p = find_pid(f->adapter, pid);
-		if (!p)
-		{
-			mark_pid_add(-1, f->adapter, pid);
-			//			update_pids(f->adapter);  // should be done on the caller side
-		}
-	}
+
 	SPid *p = find_pid(f->adapter, pid);
 	if (p)
 		p->filter = fid;
@@ -222,6 +215,7 @@ int del_filter(int id)
 		mutex_unlock(&f->mutex);
 		return 0;
 	}
+	set_filter_flags(id, 0); // remote all pids if any
 	pid = f->pid;
 	if (id == f->master_filter)
 	{
@@ -230,21 +224,15 @@ int del_filter(int id)
 		if (!m) // double check there is no other filter
 		{
 			for (i = 0; i < nfilters; i++)
-				if ((filters[i] && filters[i]->enabled && filters[i]->adapter == f->adapter && filters[i]->pid == pid))
+				if (i != id && (filters[i] && filters[i]->enabled && filters[i]->adapter == f->adapter && filters[i]->pid == pid))
 				{
 					m = filters[i];
-					LOGL(3, "warning: filter %d was also found for pid %d", m->id, pid);
+					LOGM("warning: filter %d was also found for pid %d", m->id, pid);
 					break;
 				}
 		}
 		if (m) // reset master_filter for all filters
 			reset_master_filter(f->adapter, pid, m->id);
-		else
-		{
-			SPid *p = find_pid(f->adapter, f->pid);
-			if (p->sid[0] == -1 && filters[i]->flags == FILTER_ADD_REMOVE)
-				mark_pid_deleted(f->adapter, -1, f->pid, NULL);
-		}
 	}
 	else
 	{
@@ -271,10 +259,23 @@ int get_pid_filter(int aid, int pid)
 	for (i = 0; i < nfilters; i++)
 		if (filters[i] && filters[i]->enabled && filters[i]->adapter == aid && filters[i]->pid == pid)
 		{
-			LOGL(3, "found filter %d for pid %d, master %d (%d)", i, pid, filters[i]->master_filter, nfilters);
+			LOGM("found filter %d for pid %d, master %d (%d)", i, pid, filters[i]->master_filter, nfilters);
 			return filters[i]->master_filter;
 		}
 	return -1;
+}
+
+int get_active_filters_for_pid(int master_filter, int aid, int pid, int flags)
+{
+	SFilter *f;
+	int add_remove = 0;
+	if (master_filter == -1)
+		master_filter = get_pid_filter(aid, pid);
+	for (f = get_filter(master_filter); f; f = get_filter(f->next_filter))
+		if (f->flags & flags)
+			add_remove++;
+	LOGM("Found %d filters for adapter %d pid %d master %d with flags %d", add_remove, aid, pid, master_filter, flags);
+	return add_remove;
 }
 
 int set_filter_flags(int id, int flags)
@@ -291,20 +292,17 @@ int set_filter_flags(int id, int flags)
 	}
 	else if (flags == 0)
 	{
-		SFilter *f2;
-		int add_remove = 0;
-		for (f2 = get_filter(f->master_filter); f2; f2 = get_filter(f2->next_filter))
-			if (f2->flags & FILTER_ADD_REMOVE)
-				add_remove++;
-		LOGL(3, "Found %d filters for pid %d with type ADD_REMOVE", add_remove, f->pid);
+		int add_remove = get_active_filters_for_pid(f->master_filter, f->adapter, f->pid, FILTER_ADD_REMOVE | FILTER_PERMANENT);
 		if (!add_remove)
 		{
 			SPid *p = find_pid(f->adapter, f->pid);
-			if (p)
+			if (p && p->flags != 3 && p->sid[0] == -1)
 			{
 				mark_pid_deleted(f->adapter, -1, f->pid, p);
 				update_pids(f->adapter);
 			}
+			else
+				LOG("pid not found or pid in use by stream %d", p ? p->sid[0] : -1);
 		}
 	}
 	return 0;
@@ -320,7 +318,7 @@ int set_filter_mask(int id, uint8_t *filter, uint8_t *mask)
 		f->mask_len = get_mask_len(f->mask, sizeof(f->mask));
 	}
 	else
-		LOGL(3, "Filter %d not found", id);
+		LOGM("Filter %d not found", id);
 	return f ? 0 : 1;
 }
 
@@ -343,8 +341,8 @@ int match_filter(SFilter *f, unsigned char *b)
 		}
 	if (f->flags & FILTER_REVERSE)
 		match = 1 - match;
-	LOGL(5, "filter %smatch: %d: pid %d, flags %d, mask_len %d, filter -> %02X %02X %02X %02X %02X, mask ->%02X %02X %02X %02x %02x -> data %02x %02x %02x %02x %02x",
-		 match ? "" : "not ", f->id, f->pid, f->flags, f->mask_len, f->filter[0], f->filter[1], f->filter[2], f->filter[3], f->filter[4], f->mask[0], f->mask[1], f->mask[2], f->mask[3], f->mask[4], b[5], b[6], b[7], b[8], b[9]);
+	DEBUGM("filter %smatch: %d: pid %d, flags %d, mask_len %d, filter -> %02X %02X %02X %02X %02X, mask ->%02X %02X %02X %02x %02x -> data %02x %02x %02x %02x %02x",
+		   match ? "" : "not ", f->id, f->pid, f->flags, f->mask_len, f->filter[0], f->filter[1], f->filter[2], f->filter[3], f->filter[4], f->mask[0], f->mask[1], f->mask[2], f->mask[3], f->mask[4], b[5], b[6], b[7], b[8], b[9]);
 	return match;
 }
 
@@ -363,7 +361,7 @@ void process_filter(SFilter *f, unsigned char *b)
 	if (f->match || f->isEMM)
 	{
 		int len = assemble_packet(f, b);
-		LOGL(5, "assemble_packet returned %d", len);
+		DEBUGM("assemble_packet returned %d", len);
 		if (!len)
 		{
 			return;
@@ -382,7 +380,7 @@ void process_filters(adapter *ad, unsigned char *b, SPid *p)
 	SFilter *f;
 	int filter = p->filter;
 	f = get_filter(filter);
-	//	LOGL(3, "got filter %d for pid (%d) %d master filter %d", filter, pid, p->pid, f ? f->master_filter : -1);
+	//	LOGM("got filter %d for pid (%d) %d master filter %d", filter, pid, p->pid, f ? f->master_filter : -1);
 	if (!f || f->master_filter != filter || pid != f->pid)
 	{
 		p->filter = get_pid_filter(ad->id, pid);
@@ -431,29 +429,36 @@ void update_cw(SPMT *pmt)
 {
 	SPMT *master = get_pmt(pmt->master_pmt);
 	SCW *cw = NULL;
+	uint64_t ctime = getTick();
 	int i = 0;
 	if (!master)
 	{
-		LOGL(3, "Master PMT %d does not exist", pmt->master_pmt);
+		LOGM("Master PMT %d does not exist", pmt->master_pmt);
 		return;
 	}
 	if (!pmt->invalidated && !master->invalidated)
 	{
-		//		LOGL(3, "PMT %d (master %d) not invalidated, ignoring", pmt->id, master->id);
 		return;
 	}
-	LOG("%s: start pmt %d, master %d, parity %d", __FUNCTION__, pmt->id, master->id, pmt->parity);
 	pmt->cw = NULL;
 	for (i = 0; i < MAX_CW; i++)
 		if (cws[i] && cws[i]->enabled && (pmt->parity == cws[i]->parity) && (cws[i]->pmt == pmt->id || cws[i]->pmt == master->id))
 		{
+			LOGM("candidate CW %d, time %jd ago, parity %d, pmt %d", i, ctime - cws[i]->time, pmt->parity, cws[i]->pmt);
 			if (!cw)
 			{
 				cw = cws[i];
 				continue;
 			}
+			if (cw->time > cws[i]->time)
+				cw = cws[i];
 		}
-	LOG("found CW: %d for PMT %d master %d", cw ? cw->id : -1, pmt->id, master->id);
+	char buf[100];
+	sprintf(buf, "not found");
+	if (cw)
+		sprintf(buf, "%02X %02X %02X %02X %02X %02X %02X %02X", cw->cw[0], cw->cw[1], cw->cw[2], cw->cw[3], cw->cw[4], cw->cw[5], cw->cw[6], cw->cw[7]);
+
+	LOG("found CW: %d for PMT %d, pid %d, master %d, parity %d: %s", cw ? cw->id : -1, pmt->id, pmt->pid, master->id, pmt->parity, buf);
 	if (cw)
 	{
 		mutex_lock(&pmt->mutex);
@@ -468,6 +473,7 @@ void update_cw(SPMT *pmt)
 		master->invalidated = 0;
 		cw->op->set_cw(cw, master);
 		mutex_unlock(&master->mutex);
+		cw->pmt = master->id;
 	}
 	else
 	{
@@ -480,7 +486,7 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv)
 {
 	int i, master_pmt;
 	SCW_op *op = get_op_for_algo(algo);
-	LOGL(PMT_LOG, "got CW for PMT %d, algo %d, parity %d: %02X %02X %02X %02X %02X %02X %02X %02X", pmt_id, algo, parity,
+	LOGM("got CW for PMT %d, algo %d, parity %d: %02X %02X %02X %02X %02X %02X %02X %02X", pmt_id, algo, parity,
 		 cw[0], cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);
 	SPMT *pmt = get_pmt(pmt_id);
 	if (!pmt)
@@ -549,7 +555,7 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv)
 	c->time = getTick();
 	mutex_unlock(&cws_mutex);
 	pmt->invalidated = 1;
-	LOG("CW %d for PMT %d, algo %d, parity %d: %02X %02X %02X %02X %02X %02X %02X %02X", c->id, pmt_id, algo, parity,
+	LOG("CW %d for PMT %d, pid %d, algo %d, parity %d: %02X %02X %02X %02X %02X %02X %02X %02X", c->id, pmt_id, pmt->pid, algo, parity,
 		cw[0], cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);
 	return 0;
 }
@@ -557,13 +563,13 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv)
 int decrypt_batch(SPMT *pmt)
 {
 	unsigned char *b = NULL;
-	int pid = 0;
+	int pid = 0, i;
 	if (pmt->blen <= 0)
 		return 0;
 	mutex_lock(&pmt->mutex);
 	if (!pmt->cw)
 	{
-		LOG("No CW found or OP found for pmt %d pid %d", pmt->id, pmt->pid);
+		LOG("No CW found for pmt %d parity %d pid %d", pmt->id, pmt->parity, pmt->pid);
 		mutex_unlock(&pmt->mutex);
 		return 1;
 	}
@@ -572,9 +578,19 @@ int decrypt_batch(SPMT *pmt)
 	pmt->batch[pmt->blen].data = NULL;
 	pmt->batch[pmt->blen].len = 0;
 	pmt->cw->op->decrypt_stream(pmt->cw, pmt->batch, 184);
-	LOGL(PMT_LOG,
-		 "pmt: decrypted key %d parity %d at len %d, channel_id %d (pid %d) %p",
-		 pmt->id, pmt->parity, pmt->blen, pmt->sid, pid, pmt->batch[0].data); //0x99
+	DEBUGM("pmt: decrypted key %d parity %d at len %d, channel_id %d (pid %d) %p",
+		   pmt->id, pmt->parity, pmt->blen, pmt->sid, pid, pmt->batch[0].data);
+
+	for (i = 0; i < pmt->blen; i++)
+	{
+		b = pmt->batch[i].data - 4;
+		if (b[0] == 0x47 && (b[1] & 0x40))
+		{
+			if (b[4] != 0 || b[5] != 0 || b[6] != 1)
+				LOGM("decryption failed for parity %d: %02X %02X %02X", pmt->parity, b[4], b[5], b[6]);
+		}
+	}
+
 	pmt->blen = 0;
 	//	memset(pmt->batch, 0, sizeof(int *) * 128);
 	mutex_unlock(&pmt->mutex);
@@ -602,13 +618,13 @@ int pmt_decrypt_stream(adapter *ad)
 		{
 
 			p = find_pid(ad->id, pid);
-			if (p && p->pmt > 0 && p->pmt < MAX_PMT && pmts[p->pmt])
+			if (p && p->pmt > 0 && p->pmt < MAX_PMT && pmts[p->pmt] && pmts[p->pmt]->enabled)
 				pmt = pmts[p->pmt];
 			else
 				pmt = NULL;
 			if (!pmt)
 			{
-				LOGL(6, "PMT not found for pid %d, id %d", p ? p->pmt : -3, pid);
+				DEBUGM("PMT not found for pid %d, id %d", p ? p->pmt : -3, pid);
 				continue; // cannot decrypt
 			}
 
@@ -618,11 +634,12 @@ int pmt_decrypt_stream(adapter *ad)
 
 			if (!pmt->cw || !pmt->cw->enabled || pmt->cw->pmt != pmt->master_pmt)
 			{
-				update_cw(pmt);
+				if (pmt->invalidated)
+					update_cw(pmt);
 			}
 			if (!pmt->cw)
 			{
-				LOGL(6, "pmt %d CW not found", pmt->id);
+				DEBUGM("pmt %d CW not found", pmt->id);
 				continue;
 			}
 
@@ -636,10 +653,10 @@ int pmt_decrypt_stream(adapter *ad)
 				if (old_parity != cp)
 				{
 					int64_t ctime = getTick();
-					LOGL(2,
-						 "Parity change for key %d, new active parity %d pid %d [%02X %02X %02X %02X], last_parity_change %jd",
-						 pmt->id, cp, pid, b[0], b[1], b[2], b[3],
-						 pmt->last_parity_change);
+					LOG(
+						"Parity change for key %d, new active parity %d pid %d [%02X %02X %02X %02X], last_parity_change %jd",
+						pmt->id, cp, pid, b[0], b[1], b[2], b[3],
+						pmt->last_parity_change);
 					pmt->last_parity_change = ctime;
 					pmt->parity = cp;
 					disable_cw(pmt, pmt->cw);
@@ -650,8 +667,8 @@ int pmt_decrypt_stream(adapter *ad)
 			if (b[3] & 0x20)
 			{
 				adapt_len = (b[4] < 183) ? b[4] + 5 : 188;
-				LOGL(5, "Adaptation for pid %d, specified len %d, final len %d",
-					 pid, b[4], adapt_len);
+				DEBUGM("Adaptation for pid %d, specified len %d, final len %d",
+					   pid, b[4], adapt_len);
 			}
 			else
 				adapt_len = 4;
@@ -694,7 +711,7 @@ int pmt_process_stream(adapter *ad)
 		return 0;
 
 	pmt_decrypt_stream(ad);
-	run_ca_action(CA_TS, ad, &rlen);
+	tables_ca_ts(ad);
 	if (ad->ca_mask && opts.drop_encrypted)
 	{
 		for (i = 0; i < rlen; i += DVB_FRAME)
@@ -758,6 +775,7 @@ int pmt_add(int i, int adapter, int sid, int pmt_pid)
 	pmt->skip_first = 1;
 	pmt->active = 0;
 	pmt->opaque = NULL;
+	pmt->ca_mask = pmt->disabled_ca_mask = 0;
 	mutex_unlock(&pmt->mutex);
 	LOG("returning new pmt %d for adapter %d, pmt pid %d sid %d %04X", i, adapter,
 		pmt_pid, sid, sid);
@@ -774,12 +792,17 @@ int pmt_del(int id)
 	if (!pmt)
 		return 0;
 
+#ifndef DISABLE_TABLES
+	close_pmt_for_cas(get_adapter(pmt->adapter), pmt);
+#endif
+
 	mutex_lock(&pmt->mutex);
 	if (!pmt->enabled)
 	{
 		mutex_unlock(&pmt->mutex);
 		return 0;
 	}
+	LOG("deleting PMT %d, master PMT %d", pmt->id, pmt->master_pmt);
 	master_pmt = pmt->master_pmt;
 	aid = pmt->adapter;
 	pmt->enabled = 0;
@@ -800,11 +823,20 @@ int pmt_del(int id)
 
 int clear_pmt_for_adapter(int aid)
 {
+	uint8_t filter[FILTER_SIZE], mask[FILTER_SIZE];
 	adapter *ad = get_adapter(aid);
 	delete_pmt_for_adapter(aid);
 	delete_filter_for_adapter(aid);
 	if (ad)
+	{
 		ad->pat_processed = 0;
+		ad->transponder_id = 0;
+		ad->pat_ver = 0;
+		memset(filter, 0, FILTER_SIZE);
+		memset(mask, 0, FILTER_SIZE);
+		set_filter_mask(ad->pat_filter, filter, mask);
+		set_filter_flags(ad->pat_filter, FILTER_PERMANENT);
+	}
 	return 0;
 }
 
@@ -948,8 +980,8 @@ void clean_psi(adapter *ad, uint8_t *b)
 			uint8_t *t = o + i;
 			int init_len = nlen + 5;
 			es_len = (o[i + 3] & 0xF) * 256 + o[i + 4];
-			LOGL(4, "es: copy 5 bytes from %d -> %d : %02X %02X %02X %02X %02X",
-				 i, nlen, t[0], t[1], t[2], t[3], t[4]);
+			DEBUGM("es: copy 5 bytes from %d -> %d : %02X %02X %02X %02X %02X",
+				   i, nlen, t[0], t[1], t[2], t[3], t[4]);
 			memcpy(n + nlen, o + i, 5);
 			nlen += 5;
 			for (j = 0; j < es_len; j += desc_len) // reading program info
@@ -958,20 +990,20 @@ void clean_psi(adapter *ad, uint8_t *b)
 				if (o[i + 5 + j] != 9)
 				{
 					t = o + i + 5 + j;
-					LOGL(4, "desc copy %d bytes from %d -> %d : %02X %02X %02X",
-						 desc_len, i + 5 + j, nlen, t[0], t[1], t[2]);
+					DEBUGM("desc copy %d bytes from %d -> %d : %02X %02X %02X",
+						   desc_len, i + 5 + j, nlen, t[0], t[1], t[2]);
 					memcpy(n + nlen, o + i + 5 + j, desc_len);
 					nlen += desc_len;
 				}
 			}
 			int nes_len = nlen - init_len;
-			LOGL(4, "clean_psi: setting the new es_len %d at position %d",
-				 nes_len, init_len - 2);
+			DEBUGM("clean_psi: setting the new es_len %d at position %d",
+				   nes_len, init_len - 2);
 			n[init_len - 2] = (n[init_len - 2] & 0xF0) | ((nes_len >> 8) & 0xF);
 			n[init_len - 1] = (nes_len)&0xFF;
 		}
 		nlen += 4 - 3;
-		LOGL(4, "new len is %d, old len is %d", nlen, pmt_len);
+		DEBUGM("new len is %d, old len is %d", nlen, pmt_len);
 		n[1] &= 0xF0;
 		n[1] |= (nlen >> 8);
 		n[2] = nlen & 0xFF;
@@ -1086,7 +1118,7 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque)
 		LOG_AND_RETURN(0, "Adapter %d no longer enabled, not processing PAT", ad->id);
 
 	if ((ad->transponder_id == tid) && (ad->pat_ver == ver)) //pat already processed
-		LOG_AND_RETURN(0, "AD %d: PAT already processed tsid %d version %d", ad->id, tid, ver);
+		LOG_AND_RETURN(0, "AD %d: tsid %d version %d", ad->id, tid, ver);
 
 	if (ad->pat_processed && ((ad->transponder_id != tid) || (ad->pat_ver != ver)))
 	{
@@ -1109,8 +1141,8 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque)
 	set_filter_flags(filter, FILTER_PERMANENT | FILTER_REVERSE);
 	pat_len -= 9;
 	b += 8;
-	LOGL(2, "PAT Adapter %d, Transponder ID %d, len %d, version %d", ad->id,
-		 tid, pat_len, ad->pat_ver);
+	LOG("PAT Adapter %d, Transponder ID %d, len %d, version %d", ad->id,
+		tid, pat_len, ad->pat_ver);
 	if (pat_len > 1500)
 		return 0;
 
@@ -1118,7 +1150,7 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque)
 	{
 		sid = b[i] * 256 + b[i + 1];
 		pid = (b[i + 2] & 0x1F) * 256 + b[i + 3];
-		LOGL(2, "Adapter %d, PMT sid %d (%04X), pid %d", ad->id, sid, sid, pid);
+		LOG("Adapter %d, PMT sid %d (%04X), pid %d", ad->id, sid, sid, pid);
 		if (sid > 0)
 		{
 			int pmt_id = pmt_add(-1, ad->id, sid, pid);
@@ -1224,7 +1256,6 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 	int pi_len = 0, isAC3, pmt_len = 0, i, es_len, ver;
 	int enabled_channels = 0;
 	unsigned char *pmt_b, *pi;
-	uint8_t new_filter[FILTER_SIZE], new_mask[FILTER_SIZE];
 	int pid, spid, stype;
 	SPid *p, *cp;
 
@@ -1243,11 +1274,17 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 		return 0;
 	}
 
+	ad = get_adapter(pmt->adapter);
 	ver = b[5] & 0x3F;
 	if (pmt->version == ver)
+	{
+#ifndef DISABLE_TABLES
+		if (ad)
+			send_pmt_to_cas(ad, pmt);
+#endif
 		return 0;
+	}
 
-	ad = get_adapter(pmt->adapter);
 	if (!ad)
 	{
 		LOG("Adapter %d does not exist", pmt->adapter);
@@ -1271,13 +1308,6 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 
 	pmt->sid = b[3] * 256 + b[4];
 	pmt->version = b[5] & 0x3F;
-	memset(new_filter, 0, sizeof(new_filter));
-	memset(new_mask, 0, sizeof(new_mask));
-	new_filter[3] = b[3];
-	new_mask[3] = 0xFF;
-	new_filter[4] = b[4];
-	new_mask[4] = 0xFF;
-	set_filter_mask(filter, new_filter, new_mask);
 
 	mutex_lock(&pmt->mutex);
 	LOG("PMT %d pid: %04X (%d), pmt_len %d, pi_len %d, sid %04X (%d)", pmt->id, pid, pid,
@@ -1337,7 +1367,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 	{
 #ifndef DISABLE_TABLES
 		if (pmt->sid > 0)
-			run_ca_action(CA_ADD_PMT, ad, pmt);
+			send_pmt_to_cas(ad, pmt);
 		else
 			LOG("PMT %d, SID is 0, not running ca_action", pid);
 #endif
@@ -1358,7 +1388,7 @@ void pmt_pid_add(adapter *ad, int pid, int existing)
 	int i;
 	SPid *cp;
 	SPMT *pmt;
-	if (!ad)
+	if (!ad || ad->do_tune)
 		return;
 	cp = find_pid(ad->id, pid);
 	if (!cp)
@@ -1372,21 +1402,20 @@ void pmt_pid_add(adapter *ad, int pid, int existing)
 
 #ifndef DISABLE_TABLES
 
-	run_ca_action(CA_ADD_PID, ad, &pid);
-	//	invalidate_adapter(ad->id);
-
-	cp = find_pid(ad->id, pmt_id);
-	if (!cp)
-	{
-		for (i = 0; i < MAX_PMT; i++)
-			if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == ad->id && pmts[i]->master_pmt == pmt_id && !pmts[i]->running)
+	for (i = 0; i < MAX_PMT; i++)
+		if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == ad->id && pmts[i]->master_pmt == pmt_id)
+		{
+			pmt = pmts[i];
+			if (!pmt->running)
 			{
-				pmt = pmts[i];
 				pmt->running = 1;
 				set_filter_flags(pmt->filter, FILTER_ADD_REMOVE);
-				run_ca_action(CA_ADD_PMT, ad, pmt);
+				send_pmt_to_cas(ad, pmt);
+				tables_add_pid(ad, pmt, pid);
 			}
-	}
+			else
+				tables_add_pid(ad, pmt, pid);
+		}
 
 #endif
 }
@@ -1395,37 +1424,43 @@ void pmt_pid_del(adapter *ad, int pid)
 {
 	int ep;
 	SPid *p;
-	if (!ad)
+	if (!ad || ad->do_tune)
 		return;
 
 // filter code
 
 #ifndef DISABLE_TABLES
 	int i;
-	run_ca_action(CA_DEL_PID, ad, &pid);
 	p = find_pid(ad->id, pid);
 	if (!p)
 		return;
 	SPMT *pmt = get_pmt(p->pmt);
 	if (pmt)
-		LOGL(2, "tables_pid_del: pid %d adapter %d pmt %d",
-			 pid, ad->id, p->pmt)
+		LOGM("%s: pid %d adapter %d pmt %d", __FUNCTION__, pid, ad->id, p->pmt)
 	else
 		return;
+
+	for (i = 0; i < MAX_PMT; i++)
+		if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == ad->id && pmts[i]->master_pmt == pmt->master_pmt && pmts[i]->running)
+			tables_del_pid(ad, pmts[i], pid);
+
 	ep = 0;
-	for (i = 0; i < MAX_ACTIVE_PIDS && pmt->active_pid[i]; i++)
-		if (pmt->active_pid[i] != pid && find_pid(ad->id, pmt->active_pid[i]))
+	for (i = 0; i < pmt->active_pids; i++)
+		if (pmt->active_pid[i] != pid && (p = find_pid(ad->id, pmt->active_pid[i])) && (p->flags == 1 || p->flags == 2))
+		{
+			LOG("found active pid %d for pmt id %d, pid %d", pmt->active_pid[i], pmt->id, pmt->pid);
 			ep++;
+		}
 
 	if (!ep)
 	{
-
 		for (i = 0; i < MAX_PMT; i++)
-			if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == ad->id && pmts[i]->master_pmt == pmt->master_pmt)
+			if (pmts[i] && pmts[i]->enabled && pmts[i]->running && pmts[i]->adapter == ad->id && pmts[i]->master_pmt == pmt->master_pmt)
 			{
+				LOG("PMT %d with no pid added, removing all PMTs with master %d", pmt->id, pmt->master_pmt);
 				pmts[i]->running = 0;
 				set_filter_flags(pmt->filter, 0);
-				run_ca_action(CA_DEL_PMT, ad, pmts[i]);
+				close_pmt_for_cas(ad, pmts[i]);
 			}
 	}
 #endif
@@ -1454,6 +1489,7 @@ int pmt_tune(adapter *ad)
 		SPid *p = find_pid(ad->id, 0);
 		p->filter = ad->pat_filter;
 	}
+	// to comment
 	clear_pmt_for_adapter(ad->id);
 	return 0;
 }

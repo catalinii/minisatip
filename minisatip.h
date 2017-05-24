@@ -7,12 +7,11 @@
 #include "socketworks.h"
 #include "utils.h"
 
-
 #define VERSION_BUILD "4"
-#define CC(a,b,c) #a b #c
-#define VERSION CC(0.7.,VERSION_BUILD,)
+#define CC(a, b, c) #a b #c
+#define VERSION CC(0.7., VERSION_BUILD, )
 
-void set_options (int argc, char *argv[]);
+void set_options(int argc, char *argv[]);
 
 extern char pid_file[];
 extern char app_name[], version[];
@@ -21,26 +20,44 @@ extern char app_name[], version[];
 #define offsetof(st, m) __builtin_offsetof(st, m)
 #endif
 
+#define copy32(a, i, v)                \
+	{                                  \
+		a[i] = ((v) >> 24) & 0xFF;     \
+		a[i + 1] = ((v) >> 16) & 0xFF; \
+		a[i + 2] = ((v) >> 8) & 0xFF;  \
+		a[i + 3] = (v)&0xFF;           \
+	}
+#define copy16(a, i, v)           \
+	{                             \
+		a[i] = ((v) >> 8) & 0xFF; \
+		a[i + 1] = (v)&0xFF;      \
+	}
 
-#define copy32(a,i,v) { a[i] = ((v)>>24) & 0xFF; \
-																								a[i+1] = ((v)>>16) & 0xFF; \
-																								a[i+2] = ((v)>>8) & 0xFF; \
-																								a[i+3] = (v) & 0xFF; }
-#define copy16(a,i,v) { a[i] = ((v)>>8) & 0xFF; a[i+1] = (v) & 0xFF; }
+#define copy16r(v, a, i)                     \
+	{                                        \
+		v = ((a[i] & 0xFF) << 8) | a[i + 1]; \
+	}
+#define copy16rr(v, a, i)                    \
+	{                                        \
+		v = ((a[i + 1] & 0xFF) << 8) | a[i]; \
+	}
 
-#define copy16r(v, a, i) { v = ((a[i] & 0xFF) << 8) | a[i+1]; }
-#define copy16rr(v, a, i) { v = ((a[i+1] & 0xFF) << 8) | a[i]; }
-
-#define copy32r(v, a, i) { v = ((a[i] & 0xFF) << 24) | ((a[i+1] & 0xFF) << 16) | ((a[i+2] & 0xFF) << 8)| (a[i+3] & 0xFF);   }
-#define copy32rr(v, a, i) { v = ((a[i+3] & 0xFF) << 24) | ((a[i+2] & 0xFF) << 16) | ((a[i+1] & 0xFF) << 8)| (a[i] & 0xFF);   }
+#define copy32r(v, a, i)                                                                                      \
+	{                                                                                                         \
+		v = ((a[i] & 0xFF) << 24) | ((a[i + 1] & 0xFF) << 16) | ((a[i + 2] & 0xFF) << 8) | (a[i + 3] & 0xFF); \
+	}
+#define copy32rr(v, a, i)                                                                                     \
+	{                                                                                                         \
+		v = ((a[i + 3] & 0xFF) << 24) | ((a[i + 2] & 0xFF) << 16) | ((a[i + 1] & 0xFF) << 8) | (a[i] & 0xFF); \
+	}
 
 struct struct_opts
 {
 	char *rrtp;
-	char *http_host;    //http-server host
-	char *disc_host;    //discover host
+	char *http_host; //http-server host
+	char *disc_host; //discover host
 	char mac[13];
-	unsigned int log, slog, start_rtp, http_port;
+	unsigned int log, debug, slog, start_rtp, http_port;
 	int timeout_sec;
 	int force_sadapter, force_tadapter, force_cadapter;
 	int daemon;
@@ -94,13 +111,12 @@ struct struct_opts
 	int axe_unicinp[4];
 	int axe_power;
 #endif
-
 };
+extern struct struct_opts opts;
 
-
-int ssdp_discovery (sockets * s);
-int becomeDaemon ();
+int ssdp_discovery(sockets *s);
+int becomeDaemon();
 int readBootID();
-void http_response (sockets *s, int rc, char *ah, char *desc, int cseq, int lr);
+void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr);
 
 #endif

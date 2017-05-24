@@ -1,7 +1,6 @@
 #ifndef DISABLE_PMT
 #ifndef PMT_H
 #define PMT_H
-#warning "compile with make DVBAPI=0 DVBCSA=0 DVBAES=0  DVBCA=0"
 #include "dvb.h"
 #include "adapter.h"
 
@@ -94,6 +93,7 @@ typedef struct struct_pmt
 	unsigned char pi[MAX_PI_LEN];
 	int pi_len;
 	int blen;
+	int ca_mask, disabled_ca_mask;
 	SPMT_batch batch[130];
 	int8_t parity, invalidated;
 	int64_t last_parity_change;
@@ -164,6 +164,7 @@ int pmt_init_device(adapter *ad);
 int tables_tune(adapter *ad);
 int delete_pmt_for_adapter(int aid);
 int pmt_tune(adapter *ad);
+int get_active_filters_for_pid(int start_filter, int aid, int pid, int flags);
 
 int add_filter(int aid, int pid, void *callback, void *opaque, int flags);
 int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags, uint8_t *data, uint8_t *mask);

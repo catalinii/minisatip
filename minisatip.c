@@ -54,6 +54,8 @@
 
 struct struct_opts opts;
 
+#define DEFAULT_LOG LOG_HTTP
+
 #define DESC_XML "desc.xml"
 #define PID_NAME "/var/run/%s.pid"
 char version[] = VERSION;
@@ -68,6 +70,7 @@ int rtsp, http, si, si1, ssdp1;
 #define HTTPSERVER_OPT 'w'
 #define HTTPPORT_OPT 'x'
 #define LOG_OPT 'l'
+#define DEBUG_OPT 'v'
 #define HELP_OPT 'h'
 #define PLAYLIST_OPT 'p'
 #define DVBS2_ADAPTERS_OPT 'a'
@@ -114,6 +117,7 @@ static const struct option long_options[] =
 		{"check-signal", no_argument, NULL, 'z'},
 		{"clean-psi", no_argument, NULL, 't'},
 		{"log", no_argument, NULL, 'l'},
+		{"debug", no_argument, NULL, 'v'},
 		{"buffer", required_argument, NULL, 'b'},
 		{"threshold", required_argument, NULL, 'H'},
 		{"enable-adapters", required_argument, NULL, 'e'},
@@ -223,17 +227,24 @@ void print_version(int use_log)
 	if (!use_log)
 		puts(buf);
 	else
-		LOGL(0, buf);
+		LOG(buf);
 	for (i = 0; built_info[i]; i++)
-		LOGL(0, "%s", built_info[i]);
+		LOG("%s", built_info[i]);
 }
 
 void usage()
 {
+	char modules[1000];
+	int len = 0, i;
 	print_version(0);
+
+	for (i = 0; loglevels[i]; i++)
+		len += sprintf(modules + len, "%s,", loglevels[i]);
+	modules[len - 1] = 0;
+
 	printf(
-		"\n\t./%s [-[fgltzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] \n\
-	\t[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port]"
+		"\n\t./%s [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] \n\
+	\t[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]]"
 #ifndef DISABLE_DVBAPI
 		"[-o oscam_host:dvbapi_port] "
 #endif
@@ -299,8 +310,13 @@ Help\n\
 \n\
 * -i --priority prio: set the DVR thread priority to prio \n\
 \n\
-* -l increases the verbosity (you can use multiple -l), logging to stdout in foreground mode or in /tmp/log when a daemon\n\
-	* eg: -l -l -l\n\
+* -l specifies the modules comma separated that will have increased verbosity, \n\
+	logging to stdout in foreground mode or in /tmp/minisatip.log when a daemon\n\
+	Possible modules: %s\n\
+	* eg: -l http,pmt\n\
+\n\
+* -v specifies the modules comma separated that will have increased debug level (more verbose than -l), \n\
+	* eg: -d http,pmt\n\
 \n\
 * -L --lnb specifies the adapter and LNB parameters (low, high and switch frequency)\n\
 	* eg: -L *:9750-10600-11700 - sets all the adapters to use Universal LNB parameters (default)\n\
@@ -428,7 +444,7 @@ Help\n\
 		,
 		app_name,
 		ADAPTER_BUFFER,
-		DVR_BUFFER, opts.no_threads ? "DISABLED" : "ENABLED");
+		DVR_BUFFER, modules, opts.no_threads ? "DISABLED" : "ENABLED");
 	exit(1);
 }
 
@@ -437,7 +453,9 @@ void set_options(int argc, char *argv[])
 	int opt;
 	char *lip;
 	memset(&opts, 0, sizeof(opts));
-	opts.log = 0;
+	opts.log = 1;
+	opts.debug = 0;
+	opts.file_line = 0;
 	opts.disc_host = "239.255.255.250";
 	opts.start_rtp = 5500;
 	opts.http_port = 8080;
@@ -447,7 +465,6 @@ void set_options(int argc, char *argv[])
 	opts.adapter_buffer = ADAPTER_BUFFER;
 	opts.udp_threshold = 25;
 	opts.tcp_threshold = 50;
-	opts.file_line = 0;
 	opts.dvbapi_port = 0;
 	opts.dvbapi_host = NULL;
 	opts.drop_encrypted = 1;
@@ -487,7 +504,7 @@ void set_options(int argc, char *argv[])
 
 #endif
 
-	while ((opt = getopt_long(argc, argv, "flr:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:o:gy:i:q:DVR:S:TX:Y:OL:EP:Z:0:" AXE_OPTS, long_options, NULL)) != -1)
+	while ((opt = getopt_long(argc, argv, "fl:r:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:o:gy:i:q:DVR:S:TX:Y:OL:EP:Z:0:" AXE_OPTS, long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
 		switch (opt)
@@ -522,9 +539,42 @@ void set_options(int argc, char *argv[])
 			break;
 		}
 
+		case DEBUG_OPT:
 		case LOG_OPT:
 		{
-			opts.log++;
+			if (strstr(optarg, "all"))
+			{
+				opts.log = 0xFFFF;
+				break;
+			}
+			char buf[200];
+			char *arg[50];
+			int i;
+			memset(buf, 0, sizeof(buf));
+			strncpy(buf, optarg, sizeof(buf) - 1);
+			int la = split(arg, buf, 50, ',');
+			for (i = 0; i < la; i++)
+			{
+				int level = map_intd(arg[i], loglevels, -1);
+				if (level == -1)
+				{
+					if (!strcmp(arg[i], "-l"))
+					{
+						LOG("The LOG option has changed, please run ./minisatip -h");
+						level = 1;
+					}
+					else
+					{
+						LOG("module %s not recognised", arg[i]);
+						continue;
+					}
+				}
+
+				int log = (1 << level);
+				if (opt == DEBUG_OPT)
+					opts.debug |= log;
+				opts.log |= log;
+			}
 			break;
 		}
 
@@ -611,7 +661,7 @@ void set_options(int argc, char *argv[])
 					sprintf(opts.playlist, "<satip:X_SATIPM3U xmlns:satip=\"urn:ses-com:satip\">%s</satip:X_SATIPM3U>\r\n", optarg);
 			}
 			else
-				LOGL(0, "playlist length is too big %d bytes", strlen(optarg));
+				LOG("playlist length is too big %d bytes", strlen(optarg));
 			break;
 		}
 
@@ -684,7 +734,7 @@ void set_options(int argc, char *argv[])
 		case DVBAPI_OPT:
 		{
 #ifdef DISABLE_DVBAPI
-			LOGL(0, "%s was not compiled with DVBAPI support, please install libdvbcsa (libdvbcsa-dev in Ubuntu) and change the Makefile", app_name);
+			LOG("%s was not compiled with DVBAPI support, please install libdvbcsa (libdvbcsa-dev in Ubuntu) and change the Makefile", app_name);
 			exit(0);
 #else
 			char *sep1 = strchr(optarg, ':');
@@ -714,7 +764,7 @@ void set_options(int argc, char *argv[])
 		case SATIPXML_OPT:
 		case SATIP_TCP_OPT:
 
-			LOGL(0, "%s was not compiled with satip client support, please change the Makefile", app_name);
+			LOG("%s was not compiled with satip client support, please change the Makefile", app_name);
 			exit(0);
 
 #else
@@ -757,7 +807,7 @@ void set_options(int argc, char *argv[])
 		case NETCVCLIENT_OPT:
 		{
 #ifdef DISABLE_NETCVCLIENT
-			LOGL(0, "%s was not compiled with netceiver client support, please change the Makefile", app_name);
+			LOG("%s was not compiled with netceiver client support, please change the Makefile", app_name);
 			exit(0);
 #else
 			// parse network interface name and number of netceivers
@@ -800,7 +850,7 @@ void set_options(int argc, char *argv[])
 			if (*optarg > 0)
 				opts.xml_path = optarg;
 			else
-				LOGL(0, "Not a valid path for the xml file");
+				LOG("Not a valid path for the xml file");
 			break;
 #ifdef AXE
 		case LINK_OPT:
@@ -889,7 +939,7 @@ int read_rtsp(sockets *s)
 
 	LOG("read RTSP (from handle %d sock_id %d, len: %d, sid %d):", s->sock,
 		s->id, s->rlen, s->sid);
-	LOGL(3, "%s", s->buf);
+	LOGM("%s", s->buf);
 
 	if ((s->type != TYPE_HTTP) && (strncasecmp((const char *)s->buf, "GET", 3) == 0))
 	{
@@ -1156,7 +1206,7 @@ int read_http(sockets *s)
 	s->rlen = 0;
 
 	LOG("read HTTP from %d sid: %d: ", s->sock, s->sid);
-	LOGL(3, "%s", s->buf);
+	LOGM("%s", s->buf);
 
 	split(arg, (char *)s->buf, 50, ' ');
 	//      LOG("args: %s -> %s -> %s",arg[0],arg[1],arg[2]);
@@ -1272,6 +1322,9 @@ int close_http(sockets *s)
 	return 0;
 }
 
+#undef DEFAULT_LOG
+#define DEFAULT_LOG LOG_SSDP
+
 int ssdp_discovery(sockets *s)
 {
 	char *reply = "NOTIFY * HTTP/1.1\r\n"
@@ -1306,7 +1359,7 @@ int ssdp_discovery(sockets *s)
 	if (s->type != TYPE_UDP)
 		return 0;
 
-	LOGL(3, "ssdp_discovery: bootid: %d deviceid: %d http: %s", opts.bootid,
+	LOGM("ssdp_discovery: bootid: %d deviceid: %d http: %s", opts.bootid,
 		 opts.device_id, opts.http_host);
 
 	for (i = 0; i < 3; i++)
@@ -1315,7 +1368,7 @@ int ssdp_discovery(sockets *s)
 				nt[i] + 2, app_name, version, uuid, i == 1 ? "" : nt[i],
 				opts.bootid, opts.device_id);
 		salen = sizeof(ssdp_sa);
-		LOGL(4, "Discovery packet %d:\n%s", i + 1, buf);
+		LOGM("Discovery packet %d:\n%s", i + 1, buf);
 		sendto(s->sock, buf, strlen(buf), MSG_NOSIGNAL,
 			   (const struct sockaddr *)&ssdp_sa, salen);
 	}
@@ -1358,7 +1411,7 @@ int ssdp_reply(sockets *s)
 	ruuid = strcasestr((const char *)s->buf, "uuid:");
 	if (ruuid && strncmp(uuid, strip(ruuid + 5), strlen(uuid)) == 0)
 	{
-		LOGL(4, "Dropping packet from the same UUID as mine (from %s:%d)",
+		LOGM("Dropping packet from the same UUID as mine (from %s:%d)",
 			 get_socket_rhost(s->id, ra, sizeof(ra)),
 			 get_socket_rport(s->id));
 		return 0;
@@ -1370,10 +1423,10 @@ int ssdp_reply(sockets *s)
 	axe_set_network_led(1);
 #endif
 
-	LOGL(4, "Received SSDP packet from %s:%d -> handle %d",
+	LOGM("Received SSDP packet from %s:%d -> handle %d",
 		 get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
 		 s->sock);
-	LOGL(4, "%s", s->buf);
+	LOGM("%s", s->buf);
 
 	if (strncasecmp((const char *)s->buf, "NOTIFY", 6) == 0)
 	{
@@ -1416,15 +1469,18 @@ int ssdp_reply(sockets *s)
 	sprintf(buf, reply, get_current_timestamp(), opts.http_host, opts.xml_path,
 			app_name, version, uuid, opts.bootid, did);
 
-	LOGL(4, "ssdp_reply fd: %d -> %s:%d, bootid: %d deviceid: %d http: %s", ssdp,
+	LOGM("ssdp_reply fd: %d -> %s:%d, bootid: %d deviceid: %d http: %s", ssdp,
 		 get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
 		 opts.bootid, did, opts.http_host);
 	//use ssdp (unicast) even if received to multicast address
-	LOGL(4, "%s", buf);
+	LOGM("%s", buf);
 	sendto(ssdp, buf, strlen(buf), MSG_NOSIGNAL,
 		   (const struct sockaddr *)&s->sa, salen);
 	return 0;
 }
+
+#undef DEFAULT_LOG
+#define DEFAULT_LOG LOG_HTTP
 
 int new_rtsp(sockets *s)
 {
@@ -1532,7 +1588,7 @@ int main(int argc, char *argv[])
 #ifndef DISABLE_PMT
 	pmt_init();
 #endif
-	LOGL(0, "Initializing with %d devices", init_all_hw());
+	LOG("Initializing with %d devices", init_all_hw());
 
 	write_pid_file();
 	select_and_execute(NULL);
@@ -1647,7 +1703,7 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 		(lresp == sizeof(resp) - 1) ? "message truncated" : "", s->sock,
 		get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
 		lr, s->id);
-	LOGL(3, "%s", resp);
+	LOGM("%s", resp);
 
 	struct iovec iov[2];
 	iov[0].iov_base = resp;

@@ -624,6 +624,7 @@ ac_includes_default="\
 
 ac_header_list=
 ac_subst_vars='LTLIBOBJS
+ENIGMA
 AXE
 DVBAPI
 STATIC
@@ -691,13 +692,14 @@ enable_linuxdvb
 enable_dvbca
 enable_dvbaes
 enable_dvbcsa
+enable_netcv
 with_mcli
 with_xml2
-enable_netcv
 enable_satipc
 enable_static
 enable_dvbapi
 enable_axe
+enable_enigma
 '
       ac_precious_vars='build_alias
 host_alias
@@ -1337,6 +1339,7 @@ Optional Features:
   --enable-static         enable static compilation
   --disable-dvbapi        disable dvbapi protocol support
   --enable-axe            enable compilation for axe: Inverto IDL400
+  --enable-enigma         enable compilation for enigma boxes
 
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
@@ -3968,6 +3971,25 @@ satipc="SatIP Client:\t\t\t\t "
 static="Static:\t\t\t\t\t "
 dvbapi="dvbapi:\t\t\t\t\t "
 axe="axe:\t\t\t\t\t "
+enigma="enigma:\t\t\t\t\t "
+LINUXDVB=0
+DVBCA=0
+DVBAES=0
+DVBCSA=0
+NETCVCLIENT=0
+SATIPCLIENT=0
+STATIC=0
+AXE=0
+ENIGMA=0
+DVBAPI=0
+
+# Check whether --enable-linuxdvb was given.
+if test "${enable_linuxdvb+set}" = set; then :
+  enableval=$enable_linuxdvb;
+fi
+
+
+if test "x$enable_linuxdvb" != "xno"; then :
 
 { $as_echo "$as_me:${as_lineno-$LINENO}:  == Checking LINUX DVB == " >&5
 $as_echo "$as_me:  == Checking LINUX DVB == " >&6;}
@@ -3985,19 +4007,23 @@ fi
 
 done
 
-# Check whether --enable-linuxdvb was given.
-if test "${enable_linuxdvb+set}" = set; then :
-  enableval=$enable_linuxdvb; LINUXDVB=0
-else
-  LINUXDVB="$LINUXDVB"
-fi
+LINUXDVB=1
 
+fi
 
 if test "$LINUXDVB" = "1"; then
 FM="$FM\n$linux_dvb enabled"
 else
 FM="$FM\n$linux_dvb disabled"
 fi
+
+# Check whether --enable-dvbca was given.
+if test "${enable_dvbca+set}" = set; then :
+  enableval=$enable_dvbca;
+fi
+
+
+if test "x$enable_dvbca" != "xno"; then :
 
 { $as_echo "$as_me:${as_lineno-$LINENO}:  == Checking DVBEN50221 == " >&5
 $as_echo "$as_me:  == Checking DVBEN50221 == " >&6;}
@@ -4015,19 +4041,22 @@ fi
 
 done
 
-# Check whether --enable-dvbca was given.
-if test "${enable_dvbca+set}" = set; then :
-  enableval=$enable_dvbca; DVBCA=0
-else
-  DVBCA="$DVBCA"
-fi
 
+fi
 
 if test "$DVBCA" = "1"; then
 FM="$FM\n$dvb_ca enabled"
 else
 FM="$FM\n$dvb_ca disabled"
 fi
+
+# Check whether --enable-dvbaes was given.
+if test "${enable_dvbaes+set}" = set; then :
+  enableval=$enable_dvbaes;
+fi
+
+
+if test "x$enable_dvbaes" != "xno"; then :
 
 { $as_echo "$as_me:${as_lineno-$LINENO}:  == Checking OpenSSL == " >&5
 $as_echo "$as_me:  == Checking OpenSSL == " >&6;}
@@ -4045,13 +4074,8 @@ fi
 
 done
 
-# Check whether --enable-dvbaes was given.
-if test "${enable_dvbaes+set}" = set; then :
-  enableval=$enable_dvbaes; DVBAES=0
-else
-  DVBAES="$DVBAES"
-fi
 
+fi
 
 if test "$DVBAES" = "1"; then
 FM="$FM\n$openssl enabled"
@@ -4080,6 +4104,14 @@ else
 FM="$FM\n$emb disabled"
 fi
 
+# Check whether --enable-dvbcsa was given.
+if test "${enable_dvbcsa+set}" = set; then :
+  enableval=$enable_dvbcsa;
+fi
+
+
+if test "x$enable_dvbcsa" != "xno"; then :
+
 { $as_echo "$as_me:${as_lineno-$LINENO}:  == Checking DVBCSA == " >&5
 $as_echo "$as_me:  == Checking DVBCSA == " >&6;}
 for ac_header in dvbcsa/dvbcsa.h
@@ -4096,19 +4128,23 @@ fi
 
 done
 
-# Check whether --enable-dvbcsa was given.
-if test "${enable_dvbcsa+set}" = set; then :
-  enableval=$enable_dvbcsa; DVBCSA=0
-else
-  DVBCSA="$DVBCSA"
-fi
 
+fi
 
 if test "$DVBCSA" = "1"; then
 FM="$FM\n$dvb_csa enabled"
 else
 FM="$FM\n$dvb_csa disabled"
 fi
+
+
+# Check whether --enable-netcv was given.
+if test "${enable_netcv+set}" = set; then :
+  enableval=$enable_netcv;
+fi
+
+
+if test "x$enable_netcv" != "xno"; then :
 
 { $as_echo "$as_me:${as_lineno-$LINENO}:  == Checking NETCVCLIENT == " >&5
 $as_echo "$as_me:  == Checking NETCVCLIENT == " >&6;}
@@ -4148,13 +4184,8 @@ fi
 
 done
 
-# Check whether --enable-netcv was given.
-if test "${enable_netcv+set}" = set; then :
-  enableval=$enable_netcv; NETCVCLIENT=0
-else
-  NETCVCLIENT="$NETCVCLIENT"
-fi
 
+fi
 
 if test "$NETCVCLIENT" = "1"; then
 FM="$FM\n$netcv enabled"
@@ -4167,9 +4198,14 @@ fi
 
 # Check whether --enable-satipc was given.
 if test "${enable_satipc+set}" = set; then :
-  enableval=$enable_satipc; SATIPCLIENT=0
-else
-  SATIPCLIENT=1
+  enableval=$enable_satipc;
+fi
+
+
+if test "x$enable_satipc" != "xno"; then :
+
+SATIPCLIENT=1
+
 fi
 
 if test "$SATIPCLIENT" = "1"; then
@@ -4180,9 +4216,14 @@ fi
 
 # Check whether --enable-static was given.
 if test "${enable_static+set}" = set; then :
-  enableval=$enable_static; STATIC=1
-else
-  STATIC=0
+  enableval=$enable_static;
+fi
+
+
+if test "x$enable_static" = "xyes"; then :
+
+STATIC=1
+
 fi
 
 if test "$STATIC" = "1"; then
@@ -4193,9 +4234,14 @@ fi
 
 # Check whether --enable-dvbapi was given.
 if test "${enable_dvbapi+set}" = set; then :
-  enableval=$enable_dvbapi; DVBAPI=0
-else
-  DVBAPI=1
+  enableval=$enable_dvbapi;
+fi
+
+
+if test "x$enable_dvbapi" != "xno"; then :
+
+DVBAPI=1
+
 fi
 
 if test "$DVBAPI" = "1"; then
@@ -4207,9 +4253,14 @@ fi
 
 # Check whether --enable-axe was given.
 if test "${enable_axe+set}" = set; then :
-  enableval=$enable_axe; AXE=1
-else
-  AXE=0
+  enableval=$enable_axe;
+fi
+
+
+if test "x$enable_axe" = "xyes"; then :
+
+AXE=1
+
 fi
 
 if test "$AXE" = "1"; then
@@ -4217,6 +4268,25 @@ FM="$FM\n$axe enabled"
 else
 FM="$FM\n$axe disabled"
 fi
+
+# Check whether --enable-enigma was given.
+if test "${enable_enigma+set}" = set; then :
+  enableval=$enable_enigma;
+fi
+
+
+if test "x$enable_enigma" = "xyes"; then :
+
+ENIGMA=1
+
+fi
+
+if test "$ENIGMA" = "1"; then
+FM="$FM\n$enigma enabled"
+else
+FM="$FM\n$enigma disabled"
+fi
+
 
 
 

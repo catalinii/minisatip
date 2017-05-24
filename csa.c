@@ -47,8 +47,6 @@
 #include "pmt.h"
 #include <dvbcsa/dvbcsa.h>
 
-extern struct struct_opts opts;
-
 void dvbcsa_create_key(SCW *cw)
 {
 	cw->key = dvbcsa_bs_key_alloc();

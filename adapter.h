@@ -43,7 +43,7 @@ typedef struct struct_adapter
 	// flags
 
 	char slow_dev, restart_when_tune, restart_needed;
-	char flush;
+	char flush, updating_pids;
 	// physical adapter, physical frontend number
 	fe_delivery_system_t sys[MAX_DELSYS];
 	transponder tp;

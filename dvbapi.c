@@ -47,7 +47,7 @@
 #include "tables.h"
 #include "pmt.h"
 
-extern struct struct_opts opts;
+#define DEFAULT_LOG LOG_DVBAPI
 
 const int64_t DVBAPI_ITEM = 0x1000000000000;
 int dvbapi_sock = -1;
@@ -56,6 +56,7 @@ int dvbapi_is_enabled = 0;
 int enabledKeys = 0;
 int network_mode = 1;
 int dvbapi_protocol_version = DVBAPI_PROTOCOL_VERSION;
+int dvbapi_ca = -1;
 
 SKey *keys[MAX_KEYS];
 SMutex keys_mutex;
@@ -75,8 +76,6 @@ unsigned char read_buffer[1500];
 		}                                                                                                                                       \
 		mutex_unlock(&keys_mutex);                                                                                                              \
 	}
-#define POINTER_TYPE_ECM ((void *)-TYPE_ECM)
-#define POINTER_1 ((void *)1)
 
 static inline SKey *get_key(int i)
 {
@@ -138,9 +137,8 @@ int dvbapi_reply(sockets *s)
 			b[4] = b[0];
 			change_endianness = 1;
 		}
-		LOGL(3,
-			 "dvbapi read from socket %d the following data (%d bytes), pos = %d, op %08X, key %d",
-			 s->sock, s->rlen, pos, op, b[4]);
+		LOG("dvbapi read from socket %d the following data (%d bytes), pos = %d, op %08X, key %d",
+			s->sock, s->rlen, pos, op, b[4]);
 		//		LOGL(3, "dvbapi read from socket %d the following data (%d bytes), pos = %d, op %08X, key %d -> %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X", s->sock, s->rlen, pos, op, b[4], b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10]);
 
 		switch (op)
@@ -176,13 +174,13 @@ int dvbapi_reply(sockets *s)
 			a_id = -1;
 			if (k)
 				a_id = k->adapter;
-			adapter_lock(a_id);
 			demux = b[5];
 			filter = b[6];
 			LOG(
 				"dvbapi set filter for pid %04X (%d), key %d, demux %d, filter %d %s",
 				_pid, _pid, k_id, demux, filter,
 				!k ? "(KEY NOT VALID)" : "");
+			LOGM("filter: %02X %02X %02X %02X %02X, mask: %02X %02X %02X %02X %02X", b[9], b[10], b[11], b[12], b[13], b[25], b[26], b[27], b[28], b[29]);
 			i = -1;
 			int fid = -1;
 			if (k)
@@ -215,8 +213,6 @@ int dvbapi_reply(sockets *s)
 			}
 			else if (not_found)
 				LOG("dvbapi: DMX_SET_FILTER failed, fid %d, index %d", fid, i);
-			invalidate_adapter(k->adapter);
-			adapter_unlock(a_id);
 			break;
 		}
 		case DVBAPI_DMX_STOP:
@@ -230,7 +226,6 @@ int dvbapi_reply(sockets *s)
 			if (!k)
 				break;
 			a_id = k->adapter;
-			adapter_lock(a_id);
 			dvbapi_copy16r(_pid, b, 7)
 				_pid &= 0x1FFF;
 			for (i = 0; i < MAX_KEY_FILTERS; i++)
@@ -243,15 +238,15 @@ int dvbapi_reply(sockets *s)
 				del_filter(k->filter_id[i]);
 			k->filter_id[i] = -1;
 			k->pid[i] = -1;
-			invalidate_adapter(k->adapter);
 
 			if (k)
 			{
 				k->ecms--;
 				k->last_dmx_stop = getTick();
+				if (k->ecms <= 0)
+					close_pmt_for_ca(dvbapi_ca, get_adapter(k->adapter), get_pmt(k->pmt_id));
 			}
 
-			adapter_unlock(a_id);
 			break;
 		}
 		case DVBAPI_CA_SET_PID:
@@ -274,7 +269,6 @@ int dvbapi_reply(sockets *s)
 			k = get_key(k_id);
 			if (k && (parity < 2))
 			{
-				adapter_lock(a_id);
 				mutex_lock(&k->mutex);
 
 				k->key_len = 8;
@@ -288,8 +282,6 @@ int dvbapi_reply(sockets *s)
 				send_cw(k->pmt_id, k->algo, parity, cw, NULL);
 
 				mutex_unlock(&k->mutex);
-				invalidate_adapter(k->adapter);
-				adapter_unlock(a_id);
 			}
 			else
 				LOG(
@@ -423,7 +415,6 @@ int dvbapi_close(sockets *s)
 			k = get_key(i);
 			if (!k)
 				continue;
-			//			reset_pids_type(k->adapter);
 			keys_del(i);
 		}
 	unregister_dvbapi();
@@ -516,7 +507,6 @@ int send_ecm(int filter_id, unsigned char *b, int len, void *opaque)
 
 	if (!dvbapi_is_enabled)
 		return 0;
-
 	pid = get_filter_pid(filter_id);
 	if (pid == -1)
 		LOG_AND_RETURN(0, "%s: pid not found in filter", __FUNCTION__, pid);
@@ -561,9 +551,8 @@ int send_ecm(int filter_id, unsigned char *b, int len, void *opaque)
 	copy32(buf, 0, DVBAPI_FILTER_DATA);
 	buf[4] = demux;
 	buf[5] = filter;
-	// filter id
 	memcpy(buf + 6, b, len);
-	hexdump("ecm: ", buf, len + 6);
+	//	hexdump("ecm: ", buf, len + 6);
 	TEST_WRITE(write(sock, buf, len + 6), len + 6);
 	return 0;
 }
@@ -677,32 +666,17 @@ int keys_del(int i)
 	return 0;
 }
 
-void dvbapi_add_pid(adapter *ad, void *arg)
+int dvbapi_add_pmt(adapter *ad, SPMT *pmt)
 {
-	invalidate_adapter(ad->id);
-}
-
-void dvbapi_del_pid(adapter *ad, void *arg)
-{
-	invalidate_adapter(ad->id);
-}
-
-int dvbapi_add_pmt(adapter *ad, void *arg)
-{
-	SPMT *pmt = (SPMT *)arg;
-	SKey *k;
+	SKey *k = NULL;
 	SPid *p;
 	int key, pid = pmt->pid;
 	p = find_pid(ad->id, pid);
 	if (!p)
 		return 1;
 
-	k = (SKey *)pmt->opaque;
-	if (!k || !k->enabled)
-	{
-		key = keys_add(-1, ad->id, pmt->id);
-		k = get_key(key);
-	}
+	key = keys_add(-1, ad->id, pmt->id);
+	k = get_key(key);
 	if (!k)
 		LOG_AND_RETURN(1, "Could not add key for pmt %d", pmt->id);
 	mutex_lock(&k->mutex);
@@ -718,39 +692,36 @@ int dvbapi_add_pmt(adapter *ad, void *arg)
 	mutex_unlock(&k->mutex);
 	return 0;
 }
-void dvbapi_del_pmt(adapter *ad, void *arg)
+
+int dvbapi_del_pmt(adapter *ad, SPMT *pmt)
 {
-	SPMT *pmt = (SPMT *)arg;
 	SKey *k = (SKey *)pmt->opaque;
 	keys_del(k->id);
 	LOG("%s: deleted PMT pid %d, id %d", __FUNCTION__, pmt->pid, pmt->id);
+	return 0;
 }
 
-int dvbapi_init_dev(adapter *ad, void *arg)
+int dvbapi_init_dev(adapter *ad)
 {
-	return 1;
+	return TABLES_RESULT_OK;
 }
 
-SCA dvbapi;
+SCA_op dvbapi;
 
 void register_dvbapi()
 {
-	dvbapi.enabled = 1; // ignore it anyway
-	memset(dvbapi.action, 0, sizeof(dvbapi.action));
-	dvbapi.action[CA_INIT_DEVICE] = (ca_action)&dvbapi_init_dev;
-	dvbapi.action[CA_ADD_PID] = (ca_action)&dvbapi_add_pid;
-	dvbapi.action[CA_DEL_PID] = (ca_action)&dvbapi_del_pid;
-	dvbapi.action[CA_ADD_PMT] = (ca_action)&dvbapi_add_pmt;
-	dvbapi.action[CA_DEL_PMT] = (ca_action)&dvbapi_del_pmt;
-	dvbapi.action[CA_TS] = NULL;
-	dvbapi.adapter_mask = 0xFFFFFFFF;
-	add_ca(&dvbapi);
+	memset(&dvbapi, 0, sizeof(dvbapi));
+	dvbapi.ca_init_dev = dvbapi_init_dev;
+	dvbapi.ca_add_pmt = dvbapi_add_pmt;
+	dvbapi.ca_del_pmt = dvbapi_del_pmt;
+	dvbapi_ca = add_ca(&dvbapi, 0xFFFFFFFF);
 }
 
 void unregister_dvbapi()
 {
 	LOG("unregistering dvbapi as the socket is closed");
 	del_ca(&dvbapi);
+	dvbapi_ca = -1;
 }
 
 void dvbapi_delete_keys_for_adapter(int aid)

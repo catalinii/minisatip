@@ -19,6 +19,7 @@
  */
 #define _GNU_SOURCE
 #define _FILE_OFFSET_BITS 64
+#define UTILS_C
 
 #include <stdint.h>
 #include <string.h>
@@ -55,7 +56,7 @@
 #include <execinfo.h>
 #endif
 
-extern struct struct_opts opts;
+#define DEFAULT_LOG LOG_UTILS
 
 #define MAX_DATA 1500 // 16384
 int MAX_SINFO;
@@ -127,10 +128,10 @@ STmpinfo *getFreeItemPos(int64_t key)
 		{
 			sinfo[i].id = i;
 			sinfo[i].timeout = 0;
-			LOGL(5,
-				 "Requested new Item for key %jX, returning %d (enabled %d last_updated %jd timeout %d tick %jd)",
-				 key, i, sinfo[i].enabled, sinfo[i].last_updated,
-				 sinfo[i].timeout, tick);
+			LOGM(
+				"Requested new Item for key %jX, returning %d (enabled %d last_updated %jd timeout %d tick %jd)",
+				key, i, sinfo[i].enabled, sinfo[i].last_updated,
+				sinfo[i].timeout, tick);
 			return sinfo + i;
 		}
 	return NULL;
@@ -235,7 +236,7 @@ int delItem(int64_t key)
 	s->enabled = 0;
 	s->len = 0;
 	s->key = 0;
-	LOGL(4, "Deleted Item Pos %d", s->id);
+	LOGM("Deleted Item Pos %d", s->id);
 	return 0;
 }
 
@@ -248,7 +249,7 @@ int delItemMask(int64_t key, int64_t mask)
 			STmpinfo *s = &sinfo[i];
 			s->enabled = 0;
 			s->len = 0;
-			LOGL(4, "Deleted Item key %jx, pos %d (key %jx, mask %jx)", s->key, s->id, key, mask);
+			LOGM("Deleted Item key %jx, pos %d (key %jx, mask %jx)", s->key, s->id, key, mask);
 			s->key = 0;
 		}
 
@@ -510,13 +511,13 @@ int /* Returns 0 on success, -1 on error */
 
 		if (0 < readlink(buf, path, sizeof(path)) && 0 == strcmp(pn, path))
 		{
-			LOGL(0, "Found %s running with pid %d, killing....", app_name, pid);
+			LOG("Found %s running with pid %d, killing....", app_name, pid);
 			kill(pid, SIGINT);
 			usleep(500);
 		}
 	}
 
-	LOGL(0, "running %s in background", app_name);
+	LOG("running %s in background", app_name);
 
 	switch (fork())
 	{ /* Become background process */
@@ -577,19 +578,19 @@ mymalloc(int a, char *f, int l)
 	void *x = malloc(a);
 	if (x)
 		memset(x, 0, a);
-	LOGL(4, "%s:%d allocation_wrapper malloc allocated %d bytes at %p", f, l, a, x);
+	LOGM("%s:%d allocation_wrapper malloc allocated %d bytes at %p", f, l, a, x);
 	return x;
 }
 
 void myfree(void *x, char *f, int l)
 {
-	LOGL(4, "%s:%d allocation_wrapper free called with argument %p", f, l, x);
+	LOGM("%s:%d allocation_wrapper free called with argument %p", f, l, x);
 	free(x);
 }
 
 pthread_mutex_t log_mutex;
 
-void _log(int level, char *file, int line, char *fmt, ...)
+void _log(char *file, int line, char *fmt, ...)
 {
 	va_list arg;
 	int len = 0, len1 = 0, both = 0;
@@ -599,8 +600,6 @@ void _log(int level, char *file, int line, char *fmt, ...)
 
 	/* Check if the message should be logged */
 	opts.last_log = fmt;
-	if (opts.log < level)
-		return;
 
 	stid[0] = 0;
 	if (!opts.no_threads)
@@ -1111,6 +1110,9 @@ int closefile(char *mem, int len)
 	return munmap((void *)mem, len);
 }
 
+#undef DEFAULT_LOG
+#define DEFAULT_LOG LOG_LOCK
+
 int mutex_init(SMutex *mutex)
 {
 	int rv;
@@ -1149,18 +1151,17 @@ int mutex_lock1(char *FILE, int line, SMutex *mutex)
 
 	if (!mutex || !mutex->enabled)
 	{
-		LOGL(3, "%s:%d Mutex not enabled %p", FILE, line, mutex);
+		LOGM("%s:%d Mutex not enabled %p", FILE, line, mutex);
 		return 1;
 	}
-
 	if (mutex && mutex->enabled && mutex->state && tid != mutex->tid)
 	{
-		LOGL(4, "%s:%d Locking mutex %p already locked at %s:%d tid %x", FILE,
+		LOGM("%s:%d Locking mutex %p already locked at %s:%d tid %x", FILE,
 			 line, mutex, mutex->file, mutex->line, mutex->tid);
 		start_lock = getTick();
 	}
 	else
-		LOGL(5, "%s:%d Locking mutex %p", FILE, line, mutex);
+		LOGM("%s:%d Locking mutex %p", FILE, line, mutex);
 	rv = pthread_mutex_lock(&mutex->mtx);
 	if (!mutex->enabled && rv == 0)
 	{
@@ -1181,7 +1182,7 @@ int mutex_lock1(char *FILE, int line, SMutex *mutex)
 
 	mutexes[imtx++] = mutex;
 	if (start_lock > 0)
-		LOGL(4, "%s:%d Locked %p after %ld ms", FILE, line, mutex,
+		LOGM("%s:%d Locked %p after %ld ms", FILE, line, mutex,
 			 getTick() - start_lock);
 
 	return 0;
@@ -1194,16 +1195,16 @@ int mutex_unlock1(char *FILE, int line, SMutex *mutex)
 
 	if (!mutex || mutex->enabled)
 	{
-		LOGL(5, "%s:%d Unlocking mutex %p", FILE, line, mutex);
+		LOGM("%s:%d Unlocking mutex %p", FILE, line, mutex);
 		mutex->state--;
 		rv = pthread_mutex_unlock(&mutex->mtx);
 	}
 	else
-		LOGL(3, "%s:%d Unlock disabled mutex %p", FILE, line, mutex);
+		LOGM("%s:%d Unlock disabled mutex %p", FILE, line, mutex);
 
 	if (rv != 0 && rv != 1 && rv != -1)
 	{
-		LOGL(3, "mutex_unlock failed at %s:%d: %d %s", FILE, line, rv,
+		LOGM("mutex_unlock failed at %s:%d: %d %s", FILE, line, rv,
 			 strerror(rv));
 	}
 	if (rv == 0 || rv == 1)
@@ -1253,7 +1254,7 @@ int mutex_destroy(SMutex *mutex)
 		LOG("%s: pthread_mutex_unlock 2 failed for %p with error %d %s",
 			__FUNCTION__, mutex, rv, strerror(rv));
 
-	LOGL(4, "Destroying mutex %p", mutex);
+	LOGM("Destroying mutex %p", mutex);
 	//	if ((rv = pthread_mutex_destroy(&mutex->mtx)))
 	//	{
 	//		LOG("mutex destroy %p failed with error %d %s", mutex, rv, strerror(rv));
@@ -1281,6 +1282,8 @@ void clean_mutexes()
 	}
 	imtx = 0;
 }
+#undef DEFAULT_LOG
+#define DEFAULT_LOG LOG_UTILS
 
 pthread_t get_tid()
 {
@@ -1389,7 +1392,7 @@ void join_thread()
 	//	LOG("starting %s", __FUNCTION__);
 	for (i = 0; i < join_pos; i++)
 	{
-		LOGL(3, "Joining thread %x", join_th[i]);
+		LOGM("Joining thread %x", join_th[i]);
 		if ((rv = pthread_join(join_th[i], NULL)))
 			LOG("Join thread failed for %x with %d %s", join_th[i], rv,
 				strerror(rv));

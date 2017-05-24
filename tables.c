@@ -45,16 +45,16 @@
 #include "minisatip.h"
 #include "adapter.h"
 
-extern struct struct_opts opts;
+#define DEFAULT_LOG LOG_TABLES
 
 SCA ca[MAX_CA];
 int nca;
 SMutex ca_mutex;
 
-int add_ca(SCA *c)
+int add_ca(SCA_op *op, int adapter_mask)
 {
 	int i, new_ca;
-	del_ca(c);
+	del_ca(op);
 	for (i = 0; i < MAX_CA; i++)
 		if (!ca[i].enabled)
 		{
@@ -68,13 +68,10 @@ int add_ca(SCA *c)
 	new_ca = i;
 
 	ca[new_ca].enabled = 1;
-	ca[new_ca].adapter_mask = c->adapter_mask;
+	ca[new_ca].adapter_mask = adapter_mask;
 	ca[new_ca].id = new_ca;
+	ca[new_ca].op = op;
 
-	for (i = 0; i < sizeof(ca[0].action) / sizeof(ca_action); i++)
-	{
-		ca[new_ca].action[i] = c->action[i];
-	}
 	if (new_ca >= nca)
 		nca = new_ca + 1;
 
@@ -82,10 +79,10 @@ int add_ca(SCA *c)
 	mutex_unlock(&ca_mutex);
 	return new_ca;
 }
-
-void del_ca(SCA *c)
+extern SPMT *pmts[];
+void del_ca(SCA_op *op)
 {
-	int i, j, k, eq, mask = 1;
+	int i, k, mask = 1;
 	adapter *ad;
 	mutex_lock(&ca_mutex);
 
@@ -93,18 +90,17 @@ void del_ca(SCA *c)
 	{
 		if (ca[i].enabled)
 		{
-			eq = 1;
-			for (j = 0; j < sizeof(ca[0].action) / sizeof(ca_action); j++)
-				if (ca[i].action[j] != c->action[j])
-					eq = 0;
-			if (eq)
+			if (ca[i].op == op)
 			{
 				ca[i].enabled = 0;
-				for (k = 0; k < MAX_ADAPTERS; k++)
+				for (k = 0; k < MAX_ADAPTERS; k++) // delete ca_mask for all adapters
 				{
 					if ((ad = get_adapter_nw(k)))
 						ad->ca_mask &= ~mask;
 				}
+				for (k = 0; k < MAX_PMT; k++) // delete ca_mask for all the PMTs
+					if (pmts[k] && pmts[k]->enabled && pmts[k]->running && (pmts[k]->ca_mask & mask))
+						pmts[k]->ca_mask &= ~mask;
 			}
 		}
 		mask = mask << 1;
@@ -120,39 +116,143 @@ void del_ca(SCA *c)
 	mutex_unlock(&ca_mutex);
 }
 
-int run_ca_action(int action_id, adapter *ad, void *arg)
+void tables_ca_ts(adapter *ad)
 {
 	int i, mask = 1;
-	int rv = 0;
+
 	for (i = 0; i < nca; i++)
 	{
-		if (ca[i].enabled && (ad->ca_mask & mask) && ca[i].action[action_id])
+		if (ca[i].enabled && (ad->ca_mask & mask) && ca[i].op->ca_ts)
 		{
-			rv += ca[i].action[action_id](ad, arg);
+			ca[i].op->ca_ts(ad);
 		}
 		mask = mask << 1;
 	}
-	return rv;
+}
+
+void add_caid_mask(int ica, int caid, int mask)
+{
+	int i;
+	if (ca[ica].enabled)
+	{
+		for (i = 0; i < ca[i].caids; i++)
+			if (ca[ica].caid[i] == caid)
+				return;
+		i = ca[ica].caids;
+		ca[ica].caid[i] = caid;
+		ca[ica].mask[i] = mask;
+	}
 }
 
 int tables_init_ca_for_device(int i, adapter *ad)
 {
 	int mask = (1 << i);
 	int rv = 0;
-	int action_id = CA_INIT_DEVICE;
-
 	if (i < 0 || i >= nca)
 		return 0;
 
 	if ((ca[i].adapter_mask & mask) && !(ad->ca_mask & mask)) // CA registered and not already initialized
 	{
-		if (ca[i].enabled && ca[i].action[action_id])
-			if (ca[i].action[action_id](ad, NULL))
+		if (ca[i].enabled && ca[i].op->ca_init_dev)
+			if (ca[i].op->ca_init_dev(ad) == TABLES_RESULT_OK)
 			{
 				ad->ca_mask = ad->ca_mask | mask;
 				rv = 1;
 			}
 	}
+	return rv;
+}
+
+int match_caid(SPMT *pmt, int caid, int mask)
+{
+	int i;
+	for (i = 0; i < pmt->caids; i++)
+		if ((pmt->caid[i] & mask) == caid)
+		{
+			LOGM("%s: match caid %d with CA caid %d and mask %d", pmt->caid[i], caid, mask);
+			return 1;
+		}
+	return 0;
+}
+
+void close_pmt_for_ca(int i, adapter *ad, SPMT *pmt)
+{
+	int mask = 1 << i;
+	if (!ad)
+		ad = get_adapter(pmt->adapter);
+	if (!ad)
+		return;
+	if (ca[i].enabled && (ad->ca_mask & mask) && (pmt->ca_mask & mask))
+	{
+		if (ad && ca[i].op->ca_del_pmt)
+			ca[i].op->ca_del_pmt(ad, pmt);
+		pmt->ca_mask &= ~mask;
+	}
+}
+
+int close_pmt_for_cas(adapter *ad, SPMT *pmt)
+{
+	int i;
+	if (!pmt->ca_mask)
+		return 0;
+
+	for (i = 0; i < nca; i++)
+		if (ca[i].enabled)
+			close_pmt_for_ca(i, ad, pmt);
+	return 0;
+}
+
+void disable_pmt_for_ca(int i, SPMT *pmt)
+{
+	int mask = 1 << i;
+	if (ca[i].enabled && (pmt->ca_mask & mask))
+	{
+		pmt->disabled_ca_mask |= mask;
+	}
+}
+
+int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt)
+{
+	int mask = 1;
+	int rv = 0, result = 0;
+	mask = 1 << i;
+
+	if (ca[i].enabled && (ad->ca_mask & mask) && ca[i].op->ca_add_pmt && !(pmt->disabled_ca_mask & mask) && !(pmt->ca_mask & mask))
+	{
+		int j, send = 0;
+		for (j = 0; j < ca[i].caids; j++)
+			if (match_caid(pmt, ca[i].caid[j], ca[i].mask[j]))
+			{
+				send = 1;
+				break;
+			}
+		result = 1;
+		if (send || ca[i].caids == 0)
+			result = ca[i].op->ca_add_pmt(ad, pmt);
+		else // do not process it next time
+			pmt->disabled_ca_mask |= mask;
+		if (result == TABLES_RESULT_OK)
+			pmt->ca_mask |= mask;
+		else if (result == TABLES_RESULT_ERROR_NORETRY)
+			pmt->disabled_ca_mask |= mask;
+		rv += (1 - result);
+		LOGM("In processing PMT %d, ca %d, CA matched %d, ca_pmt_add returned %d", pmt->id, i, send, result);
+	}
+	return rv;
+}
+
+int send_pmt_to_cas(adapter *ad, SPMT *pmt)
+{
+	int i, rv = 1;
+	if (!ad || (ad->ca_mask == (pmt->disabled_ca_mask | pmt->ca_mask)))
+	{
+		LOGM("PMT %d does not require to be sent to any CA: ad_ca_mask %X, pmt_ca_mask %X, disabled_ca_mask %X", pmt->id, ad ? ad->ca_mask : -2, pmt->disabled_ca_mask, pmt->ca_mask);
+		return 0;
+	}
+
+	for (i = 0; i < nca; i++)
+		if (ca[i].enabled)
+			rv += send_pmt_to_ca(i, ad, pmt);
 	return rv;
 }
 
@@ -162,10 +262,29 @@ void send_pmt_to_ca_for_device(SCA *c, adapter *ad)
 	int i;
 	for (i = 0; i < MAX_PMT; i++)
 		if ((pmt = get_pmt(i)) && pmt->adapter == ad->id && pmt->running)
-		{
-			if (c->action[CA_ADD_PMT])
-				c->action[CA_ADD_PMT](ad, pmt);
-		}
+			send_pmt_to_ca(c->id, ad, pmt);
+}
+
+void tables_add_pid(adapter *ad, SPMT *pmt, int pid)
+{
+	int i, mask;
+	for (i = 0; i < nca; i++)
+	{
+		mask = 1 << i;
+		if (ca[i].enabled && (pmt->ca_mask & mask) && ca[i].op->ca_add_pid)
+			ca[i].op->ca_add_pid(ad, pmt, pid);
+	}
+}
+
+void tables_del_pid(adapter *ad, SPMT *pmt, int pid)
+{
+	int mask, i;
+	for (i = 0; i < nca; i++)
+	{
+		mask = 1 << i;
+		if (ca[i].enabled && (pmt->ca_mask & mask) && ca[i].op->ca_del_pid)
+			ca[i].op->ca_del_pid(ad, pmt, pid);
+	}
 }
 
 int register_ca_for_adapter(int i, int aid)
@@ -203,7 +322,8 @@ int unregister_ca_for_adapter(int i, int aid)
 	mask = (1 << i);
 	if (ad->ca_mask & mask)
 	{
-		run_ca_action(CA_CLOSE_DEVICE, ad, NULL);
+		if (ca[i].op->ca_close_dev)
+			ca[i].op->ca_close_dev(ad);
 		ad->ca_mask &= ~mask;
 		LOG("Unregistering CA %d for adapter %d", i, ad->id);
 	}
@@ -212,7 +332,6 @@ int unregister_ca_for_adapter(int i, int aid)
 
 int tables_init_device(adapter *ad)
 {
-	//	ad->ca_mask = run_ca_action(CA_INIT_DEVICE, ad, NULL);
 	int i;
 	int rv = 0;
 	for (i = 0; i < nca; i++)
@@ -225,7 +344,7 @@ void init_ca_device(SCA *c)
 {
 	int i, init_cm;
 	adapter *ad;
-	if (!c->action[CA_ADD_PMT])
+	if (!c->op->ca_add_pmt)
 		return;
 
 	for (i = 0; i < MAX_ADAPTERS; i++)
@@ -243,7 +362,17 @@ void init_ca_device(SCA *c)
 
 int tables_close_device(adapter *ad)
 {
-	int rv = run_ca_action(CA_CLOSE_DEVICE, ad, NULL);
+	int i, mask = 1;
+	int rv = 0;
+
+	for (i = 0; i < nca; i++)
+	{
+		if (ca[i].enabled && (ad->ca_mask & mask) && ca[i].op->ca_close_dev)
+		{
+			ca[i].op->ca_close_dev(ad);
+		}
+	}
+
 	ad->ca_mask = 0;
 	return rv;
 }
@@ -262,8 +391,11 @@ int tables_init()
 
 int tables_destroy()
 {
-	adapter tmp;
-	tmp.ca_mask = -1;
-	run_ca_action(CA_CLOSE, &tmp, NULL);
+	int i;
+	for (i = 0; i < nca; i++)
+	{
+		if (ca[i].enabled && ca[i].op->ca_close_ca)
+			ca[i].op->ca_close_ca(&ca[i]);
+	}
 	return 0;
 }

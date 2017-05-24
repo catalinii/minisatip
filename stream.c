@@ -45,7 +45,8 @@
 
 #include "pmt.h"
 
-extern struct struct_opts opts;
+#define DEFAULT_LOG LOG_STREAM
+
 streams *st[MAX_STREAMS];
 SMutex st_mutex, bw_mutex;
 extern int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
@@ -603,9 +604,9 @@ int send_rtp(streams *sid, const struct iovec *iov, int liov)
 			ntohs(sid->sa.sin_port));
 	}
 
-	LOGL(7, "%s: sent %d bytes for stream %d, handle %d, sock_id %d, seq %d => %s:%d",
-		 __FUNCTION__, total_len, sid->sid, sid->rsock, sid->rsock_id, sid->seq - 1,
-		 get_stream_rhost(sid->sid, ra, sizeof(ra)), ntohs(sid->sa.sin_port));
+	DEBUGM("%s: sent %d bytes for stream %d, handle %d, sock_id %d, seq %d => %s:%d",
+		   __FUNCTION__, total_len, sid->sid, sid->rsock, sid->rsock_id, sid->seq - 1,
+		   get_stream_rhost(sid->sid, ra, sizeof(ra)), ntohs(sid->sa.sin_port));
 
 	return rv;
 }
@@ -695,9 +696,9 @@ int send_rtcp(int s_id, int64_t ctime)
 	}
 
 	sid->rtcp_wtime = ctime;
-	LOGL(7, "%s: sent %d bytes for stream %d, handle %d seq %d => %s:%d",
-		 __FUNCTION__, total_len, sid->sid, sid->rsock, sid->seq - 1,
-		 get_stream_rhost(sid->sid, ra, sizeof(ra)), ntohs(sid->sa.sin_port));
+	DEBUGM("%s: sent %d bytes for stream %d, handle %d seq %d => %s:%d",
+		   __FUNCTION__, total_len, sid->sid, sid->rsock, sid->seq - 1,
+		   get_stream_rhost(sid->sid, ra, sizeof(ra)), ntohs(sid->sa.sin_port));
 
 	//	sid->sp = 0;
 	//	sid->sb = 0;
@@ -767,6 +768,9 @@ int flush_streami(streams *sid, int64_t ctime)
 	return rv;
 }
 
+#undef DEFAULT_LOG
+#define DEFAULT_LOG LOG_DMX
+
 int check_new_transponder(adapter *ad, int rlen)
 {
 	unsigned char *b;
@@ -789,7 +793,7 @@ int check_new_transponder(adapter *ad, int rlen)
 				return rlen - i;
 			}
 			else
-				LOGL(3, "Got old transponder id %04X %d, position %d, %jd ms after tune", tid, tid, i, getTick() - ad->tune_time);
+				LOGM("Got old transponder id %04X %d, position %d, %jd ms after tune", tid, tid, i, getTick() - ad->tune_time);
 		}
 	}
 	if (!all_good)
@@ -819,7 +823,7 @@ int check_cc(adapter *ad)
 		{
 			if (!is_8192)
 			{
-				LOGL(5, "%s: pid %d not found", __FUNCTION__, pid);
+				LOGM("%s: pid %d not found", __FUNCTION__, pid);
 				ad->pid_err++;
 			}
 			packet_no_sid++;
@@ -838,8 +842,8 @@ int check_cc(adapter *ad)
 
 		if (p->cc != cc)
 		{
-			LOGL(1, "PID Continuity error (adapter %d): pid: %03d, Expected CC: %X, Actual CC: %X",
-				 ad->id, pid, p->cc, cc);
+			LOG("PID Continuity error (adapter %d): pid: %03d, Expected CC: %X, Actual CC: %X",
+				ad->id, pid, p->cc, cc);
 			p->cc_err++;
 		}
 		p->cc = cc;
@@ -930,7 +934,7 @@ int process_dmx(sockets *s)
 	ad->rlen = rlen;
 	stime = getTickUs();
 
-	LOGL(6, "process_dmx start called for adapter %d -> %d out of %d bytes read, %jd ms ago",
+	LOGM("process_dmx start called for adapter %d -> %d out of %d bytes read, %jd ms ago",
 		 s->sid, rlen, s->lbuf, ms_ago);
 
 #ifndef DISABLE_TABLES
@@ -1015,7 +1019,7 @@ int read_dmx(sockets *s)
 		int new_rlen = check_new_transponder(ad, s->rlen);
 		if (!new_rlen)
 		{
-			LOGL(3, "Flushing adapter buffer of %d bytes after the tune %jd ms ago", s->rlen, rtime - ad->tune_time);
+			LOGM("Flushing adapter buffer of %d bytes after the tune %jd ms ago", s->rlen, rtime - ad->tune_time);
 			s->rlen = 0;
 			return 0;
 		}
@@ -1027,8 +1031,7 @@ int read_dmx(sockets *s)
 	if (ad->flush)
 		send = 1;
 
-	LOGL(7,
-		 "read_dmx send=%d, flush_all=%d, cnt %d called for adapter %d -> %d out of %d bytes read, %jd ms ago (%jd %jd)",
+	LOGM("read_dmx send=%d, flush_all=%d, cnt %d called for adapter %d -> %d out of %d bytes read, %jd ms ago (%jd %jd)",
 		 send, flush_all, cnt, s->sid, s->rlen, s->lbuf, rtime - ad->rtime, rtime, ad->rtime);
 
 	if (!send)
@@ -1044,6 +1047,8 @@ int read_dmx(sockets *s)
 		LOG("leak detected %d %d!!! ", ls, lse);
 	return 0;
 }
+#undef DEFAULT_LOG
+#define DEFAULT_LOG LOG_STREAM
 
 int calculate_bw(sockets *s)
 {
@@ -1253,7 +1258,7 @@ int rtcp_confirm(sockets *s)
 	sid = get_sid(s->sid);
 	if (sid)
 	{
-		LOGL(4, "Acknowledging stream %d via rtcp packet", s->sid);
+		LOGM("Acknowledging stream %d via rtcp packet", s->sid);
 		sid->rtime = s->rtime;
 	}
 	return 0;

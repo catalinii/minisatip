@@ -47,7 +47,7 @@
 #include "tables.h"
 #include "openssl/aes.h"
 
-extern struct struct_opts opts;
+#define DEFAULT_LOG LOG_PMT
 
 void dvbaes_create_key(SCW *cw)
 {

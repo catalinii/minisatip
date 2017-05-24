@@ -43,14 +43,26 @@ static="Static:\t\t\t\t\t "
 dvbapi="dvbapi:\t\t\t\t\t "
 axe="axe:\t\t\t\t\t "
 enigma="enigma:\t\t\t\t\t "
+LINUXDVB=0
+DVBCA=0
+DVBAES=0
+DVBCSA=0
+NETCVCLIENT=0
+SATIPCLIENT=0
+STATIC=0
+AXE=0
+ENIGMA=0
+DVBAPI=0
 
-AC_MSG_NOTICE([ == Checking LINUX DVB == ])
-AC_CHECK_HEADERS([linux/dvb/frontend.h],[LINUXDVB=1],[LINUXDVB=0])
 AC_ARG_ENABLE([linuxdvb],
   [AS_HELP_STRING([--disable-linuxdvb],
-  [disable linux dvb support])],
-  [LINUXDVB=0],
-  [LINUXDVB="$LINUXDVB"])
+  [disable linux dvb support])])
+
+AS_IF([test "x$enable_linuxdvb" != "xno"], [
+AC_MSG_NOTICE([ == Checking LINUX DVB == ])
+AC_CHECK_HEADERS([linux/dvb/frontend.h],[LINUXDVB=1],[LINUXDVB=0])
+LINUXDVB=1
+]) 
 
 if test "$LINUXDVB" = "1"; then
 FM="$FM\n$linux_dvb enabled"
@@ -58,13 +70,14 @@ else
 FM="$FM\n$linux_dvb disabled"
 fi
 
-AC_MSG_NOTICE([ == Checking DVBEN50221 == ])
-AC_CHECK_HEADERS([libdvben50221/en50221_app_dvb.h],[DVBCA=1],[DVBCA=0])
 AC_ARG_ENABLE([dvbca],
   [AS_HELP_STRING([--disable-dvbca],
-  [disable dvbca support (decrypting using CI)])],
-  [DVBCA=0],
-  [DVBCA="$DVBCA"])
+  [disable dvbca support (decrypting using CI)])])
+
+AS_IF([test "x$enable_dvbca" != "xno"], [
+AC_MSG_NOTICE([ == Checking DVBEN50221 == ])
+AC_CHECK_HEADERS([libdvben50221/en50221_app_dvb.h],[DVBCA=1],[DVBCA=0])
+])
 
 if test "$DVBCA" = "1"; then
 FM="$FM\n$dvb_ca enabled"
@@ -72,13 +85,14 @@ else
 FM="$FM\n$dvb_ca disabled"
 fi
 
-AC_MSG_NOTICE([ == Checking OpenSSL == ])
-AC_CHECK_HEADERS([openssl/aes.h],[DVBAES=1],[DVBAES=0])
 AC_ARG_ENABLE([dvbaes],
   [AS_HELP_STRING([--disable-dvbaes],
-  [disable AES support (decrypting using openssl)])],
-  [DVBAES=0],
-  [DVBAES="$DVBAES"])
+  [disable AES support (decrypting using openssl)])])
+
+AS_IF([test "x$enable_dvbaes" != "xno"], [
+AC_MSG_NOTICE([ == Checking OpenSSL == ])
+AC_CHECK_HEADERS([openssl/aes.h],[DVBAES=1],[DVBAES=0])
+])
 
 if test "$DVBAES" = "1"; then
 FM="$FM\n$openssl enabled"
@@ -94,13 +108,14 @@ else
 FM="$FM\n$emb disabled"
 fi
 
-AC_MSG_NOTICE([ == Checking DVBCSA == ])
-AC_CHECK_HEADERS([dvbcsa/dvbcsa.h],[DVBCSA=1],[DVBCSA=0])
 AC_ARG_ENABLE([dvbcsa],
   [AS_HELP_STRING([--disable-dvbcsa],
-  [disable dvbcsa support (decrypting with dvbcsa)])],
-  [DVBCSA=0],
-  [DVBCSA="$DVBCSA"])
+  [disable dvbcsa support (decrypting with dvbcsa)])])
+
+AS_IF([test "x$enable_dvbcsa" != "xno"], [
+AC_MSG_NOTICE([ == Checking DVBCSA == ])
+AC_CHECK_HEADERS([dvbcsa/dvbcsa.h],[DVBCSA=1],[DVBCSA=0])
+])
 
 if test "$DVBCSA" = "1"; then
 FM="$FM\n$dvb_csa enabled"
@@ -108,6 +123,12 @@ else
 FM="$FM\n$dvb_csa disabled"
 fi
 
+
+AC_ARG_ENABLE([netcv],
+  [AS_HELP_STRING([--disable-netceiver],
+  [disable NETCEIVER support])])
+
+AS_IF([test "x$enable_netcv" != "xno"], [
 AC_MSG_NOTICE([ == Checking NETCVCLIENT == ])
 
 mcli_dir="../vdr-mcli-plugin"
@@ -128,11 +149,7 @@ CPPFLAGS="-I. -I$mcli_dir/mcast/client -I$mcli_dir/mcast/common -L$mcli_dir/mcas
 
 
 AC_CHECK_HEADERS([netceiver.h],[NETCVCLIENT=1],[NETCVCLIENT=0])
-AC_ARG_ENABLE([netcv],
-  [AS_HELP_STRING([--disable-netceiver],
-  [disable NETCEIVER support])],
-  [NETCVCLIENT=0],
-  [NETCVCLIENT="$NETCVCLIENT"])
+])
 
 if test "$NETCVCLIENT" = "1"; then
 FM="$FM\n$netcv enabled"
@@ -145,9 +162,12 @@ fi
 
 AC_ARG_ENABLE([satipc],
   [AS_HELP_STRING([--disable-satipc],
-  [disable satip client support])],
-  [SATIPCLIENT=0],
-  [SATIPCLIENT=1])
+  [disable satip client support])])
+
+AS_IF([test "x$enable_satipc" != "xno"], [
+SATIPCLIENT=1
+])
+
 if test "$SATIPCLIENT" = "1"; then
 FM="$FM\n$satipc enabled"
 else
@@ -156,9 +176,12 @@ fi
 
 AC_ARG_ENABLE([static],
   [AS_HELP_STRING([--enable-static],
-  [enable static compilation])],
-  [STATIC=1],
-  [STATIC=0])
+  [enable static compilation])])
+
+AS_IF([test "x$enable_static" = "xyes"], [
+STATIC=1
+])
+  
 if test "$STATIC" = "1"; then
 FM="$FM\n$static enabled"
 else
@@ -167,9 +190,12 @@ fi
 
 AC_ARG_ENABLE([dvbapi],
   [AS_HELP_STRING([--disable-dvbapi],
-  [disable dvbapi protocol support])],
-  [DVBAPI=0],
-  [DVBAPI=1])
+  [disable dvbapi protocol support])])
+
+AS_IF([test "x$enable_dvbapi" != "xno"], [
+DVBAPI=1
+])
+
 if test "$DVBAPI" = "1"; then
 FM="$FM\n$dvbapi enabled"
 else
@@ -179,9 +205,12 @@ fi
 
 AC_ARG_ENABLE([axe],
   [AS_HELP_STRING([--enable-axe],
-  [enable compilation for axe: Inverto IDL400])],
-  [AXE=1],
-  [AXE=0])
+  [enable compilation for axe: Inverto IDL400])])
+
+AS_IF([test "x$enable_axe" = "xyes"], [
+AXE=1
+])
+  
 if test "$AXE" = "1"; then
 FM="$FM\n$axe enabled"
 else
@@ -190,14 +219,18 @@ fi
 
 AC_ARG_ENABLE([enigma],
   [AS_HELP_STRING([--enable-enigma],
-  [enable compilation for enigma boxes])],
-  [ENIGMA=1],
-  [ENIGMA=0])
+  [enable compilation for enigma boxes])])
+
+AS_IF([test "x$enable_enigma" = "xyes"], [
+ENIGMA=1
+])
+
 if test "$ENIGMA" = "1"; then
 FM="$FM\n$enigma enabled"
 else
 FM="$FM\n$enigma disabled"
 fi
+
 
 AC_SUBST(LINUXDVB)
 AC_SUBST(DVBCSA)

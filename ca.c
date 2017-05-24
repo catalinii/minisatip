@@ -54,6 +54,7 @@
 #include <libdvben50221/en50221_app_lowspeed.h>
 #include <libdvbapi/dvbca.h>
 
+#include <linux/dvb/ca.h>
 #include "dvb.h"
 #include "socketworks.h"
 #include "minisatip.h"
@@ -67,6 +68,7 @@
 #define READ_DELAY 0
 #define MAX_CA_DEVICES 8
 #define MAX_CA_DEVICE_RESOURCES 8
+#define DEFAULT_LOG LOG_DVBCA
 
 typedef struct ca_device
 {
@@ -76,6 +78,7 @@ typedef struct ca_device
 	int tc;
 	int id;
 	int ignore_close;
+	int init_ok;
 	pthread_t stackthread;
 	struct en50221_transport_layer *tl;
 	struct en50221_session_layer *sl;
@@ -90,7 +93,6 @@ typedef struct ca_device
 	int high_bitrate_mode;
 	uint16_t ai_session_number;
 } ca_device_t;
-SCA dvbca;
 
 int dvbca_id;
 static struct ca_device *ca_devices[MAX_ADAPTERS];
@@ -129,16 +131,17 @@ uint32_t resource_ids[] =
 		EN50221_APP_AI_RESOURCEID, TS101699_APP_AI_RESOURCEID, CIPLUS13_APP_AI_RESOURCEID};
 int resource_ids_count = sizeof(resource_ids) / 4;
 
-int dvbca_process_pmt(adapter *ad, void *arg)
+int dvbca_process_pmt(adapter *ad, SPMT *spmt)
 {
 	ca_device_t *d = ca_devices[ad->id];
 	uint16_t pid, sid, ver;
 	int len, rc;
-	SPMT *spmt = (SPMT *)arg;
 	uint8_t *b = spmt->pmt;
 
 	if (!d)
-		return -1;
+		return TABLES_RESULT_ERROR_NORETRY;
+	if (!d->init_ok)
+		return TABLES_RESULT_ERROR_RETRY;
 
 	pid = spmt->pid;
 	len = spmt->pmt_len;
@@ -185,8 +188,9 @@ int dvbca_process_pmt(adapter *ad, void *arg)
 	return 0;
 }
 
-void dvbca_del_pmt(adapter *ad, void *arg)
+int dvbca_del_pmt(adapter *ad, SPMT *pmt)
 {
+	return 0;
 }
 
 int ca_ai_callback(void *arg, uint8_t slot_id, uint16_t session_number,
@@ -276,8 +280,7 @@ static int ca_session_callback(void *arg, int reason, uint8_t slot_id,
 		}
 
 		d->ignore_close = 1;
-		unregister_ca_for_adapter(dvbca_id, d->id);
-		register_ca_for_adapter(dvbca_id, d->id);
+		d->init_ok = 1;
 		break;
 	}
 	return 0;
@@ -536,7 +539,7 @@ fail:
 	return 0;
 }
 
-int dvbca_init_dev(adapter *ad, void *arg)
+int dvbca_init_dev(adapter *ad)
 {
 	ca_device_t *c = ca_devices[ad->id];
 	int fd;
@@ -570,13 +573,14 @@ int dvbca_init_dev(adapter *ad, void *arg)
 	c->id = ad->id;
 	c->high_bitrate_mode = 0;
 	c->stackthread = 0;
+	c->init_ok = 0;
 	init_ok = ca_init(c);
 	if (!init_ok)
 	{
 		dvbca_close_device(c);
-		return 0;
+		return TABLES_RESULT_ERROR_NORETRY;
 	}
-	return 1;
+	return TABLES_RESULT_OK;
 }
 
 int dvbca_close_device(ca_device_t *c)
@@ -595,17 +599,18 @@ int dvbca_close_device(ca_device_t *c)
 		close(c->fd);
 	return 0;
 }
-int dvbca_close_dev(adapter *ad, void *arg)
+int dvbca_close_dev(adapter *ad)
 {
 	ca_device_t *c = ca_devices[ad->id];
 	if (c && c->enabled && !c->ignore_close) // do not close the CA unless in a bad state
 	{
 		dvbca_close_device(c);
 	}
-	return 1;
+	return TABLES_RESULT_OK;
 }
+SCA_op dvbca;
 
-void dvbca_close(adapter *ad, void *arg)
+int dvbca_close()
 {
 	int i;
 	for (i = 0; i < MAX_ADAPTERS; i++)
@@ -613,17 +618,16 @@ void dvbca_close(adapter *ad, void *arg)
 		{
 			dvbca_close_device(ca_devices[i]);
 		}
+	return 0;
 }
 
 void dvbca_init() // you can search the devices here and fill the ca_devices, then open them here (for example independent CA devices), or use dvbca_init_dev to open them (like in this module)
 {
-	memset(dvbca.action, 0, sizeof(dvbca.action));
-	dvbca.enabled = 1; // ignore it anyway
-	dvbca.action[CA_INIT_DEVICE] = (ca_action)&dvbca_init_dev;
-	dvbca.action[CA_CLOSE_DEVICE] = (ca_action)&dvbca_close_dev;
-	dvbca.action[CA_ADD_PMT] = (ca_action)&dvbca_process_pmt;
-	dvbca.action[CA_DEL_PMT] = (ca_action)&dvbca_del_pmt;
-	dvbca.action[CA_CLOSE] = (ca_action)&dvbca_close;
-	dvbca.adapter_mask = 0xFFFFFFFF; // enabled for all the adapters
-	dvbca_id = add_ca(&dvbca);
+	memset(&dvbca, 0, sizeof(dvbca));
+	dvbca.ca_init_dev = dvbca_init_dev;
+	dvbca.ca_close_dev = dvbca_close_dev;
+	dvbca.ca_add_pmt = dvbca_process_pmt;
+	dvbca.ca_del_pmt = dvbca_del_pmt;
+	dvbca.ca_close_ca = dvbca_close;
+	dvbca_id = add_ca(&dvbca, 0xFFFFFFFF);
 }

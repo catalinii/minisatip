@@ -25,20 +25,9 @@ https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item
 Usage:
 -------
 
-minisatip version 0.7.4, compiled with s2api version: 050A
-[11/05 04:39:55.239 main]: Built with dvbcsa
-[11/05 04:39:55.239 main]: Built with CI
-[11/05 04:39:55.239 main]: Built with dvbapi
-[11/05 04:39:55.239 main]: Built with AES (OpenSSL)
-[11/05 04:39:55.239 main]: Built with tables processing
-[11/05 04:39:55.239 main]: Built with satip client
-[11/05 04:39:55.239 main]: Built with linux dvb client
-[11/05 04:39:55.239 main]: Built with backtrace
-[11/05 04:39:55.239 main]: Built with netceiver
-
-	./minisatip [-[fgltzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
-		[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port][-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] [-R document_root] [-s [DELSYS:]host[:port] [-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] 
- 	[-x http_port] [-X xml_path] [-y rtsp_port] 
+./minisatip [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
+		[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]][-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] [-R document_root] [-s [DELSYS:]host[:port] [-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] 
+ 	[-x http_port] [-X xml_path] [-y rtsp_port]
 
 Help
 -------
@@ -47,7 +36,7 @@ Help
 	* eg: -a 1:2:3  
 	- it will report 1 dvb-s2 device, 2 dvb-t2 devices and 3 dvb-c devices 
 
-* -b --buffers X:Y : set the app adapter buffer to X Bytes (default: 56400) and set the kernel DVB buffer to Y Bytes (default: 5775360) - both multiple of 188
+* -b --buffers X:Y : set the app adapter buffer to X Bytes (default: 72192) and set the kernel DVB buffer to Y Bytes (default: 5775360) - both multiple of 188
 	* eg: -b 18800:18988
 
 * -B X : set the app socket write buffer to X KB. 
@@ -66,6 +55,10 @@ Help
 
 * -D --disable-dvb disable DVB adapter detection
  
+* -0 --diseqc-multi ADAPTER1:DISEQC_POSITION[,...]
+	* Send diseqc to selected position before other position is set.
+	- note: * as adapter means apply to all adapters
+
 * -E Allow encrypted stream to be sent to the client even if the decrypting was unsuccessfull
  
 * -Y --delsys ADAPTER1:DELIVERY_SYSTEM1[,ADAPTER2:DELIVERY_SYSTEM2[,..]] - specify the delivery system of the adapters	
@@ -89,8 +82,13 @@ Help
 
 * -i --priority prio: set the DVR thread priority to prio 
 
-* -l increases the verbosity (you can use multiple -l), logging to stdout in foreground mode or in /tmp/log when a daemon
-	* eg: -l -l -l
+* -l specifies the modules comma separated that will have increased verbosity, 
+	logging to stdout in foreground mode or in /tmp/minisatip.log when a daemon
+	Possible modules: general,http,socketworks,stream,adapter,satipc,pmt,tables,dvbapi,lock,netceiver,dvbca,axe,socket,utils,dmx,ssdp,dvb
+	* eg: -l http,pmt
+
+* -v specifies the modules comma separated that will have increased debug level (more verbose than -l), 
+	* eg: -d http,pmt
 
 * -L --lnb specifies the adapter and LNB parameters (low, high and switch frequency)
 	* eg: -L *:9750-10600-11700 - sets all the adapters to use Universal LNB parameters (default)
