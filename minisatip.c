@@ -488,7 +488,10 @@ void set_options(int argc, char *argv[])
 	opts.lnb_switch = (11700 * 1000UL);
 	opts.max_sbuf = 100;
 	opts.pmt_scan = 1;
-#if defined(__sh__)
+	opts.max_pids = 0;
+#if defined(AXE)
+	opts.max_pids = 32;
+#elif defined(__sh__)
 	opts.max_pids = 20;
 #endif
 
