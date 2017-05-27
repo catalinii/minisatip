@@ -3,8 +3,6 @@
 #ifndef TABLES_H
 #define TABLES_H
 
-#define TABLES_ITEM 0x2000000000000
-
 #include "adapter.h"
 #include "pmt.h"
 

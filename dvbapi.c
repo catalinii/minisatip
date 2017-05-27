@@ -180,13 +180,13 @@ int dvbapi_reply(sockets *s)
 				"dvbapi set filter for pid %04X (%d), key %d, demux %d, filter %d %s",
 				_pid, _pid, k_id, demux, filter,
 				!k ? "(KEY NOT VALID)" : "");
-			LOGM("filter: %02X %02X %02X %02X %02X, mask: %02X %02X %02X %02X %02X", b[9], b[10], b[11], b[12], b[13], b[25], b[26], b[27], b[28], b[29]);
+			LOG("filter: %02X %02X %02X %02X %02X, mask: %02X %02X %02X %02X %02X", b[9], b[10], b[11], b[12], b[13], b[25], b[26], b[27], b[28], b[29]);
 			i = -1;
 			int fid = -1;
 			if (k)
 			{
 				for (i = 0; i < MAX_KEY_FILTERS; i++)
-					if (k->filter_id[i] >= 0 && k->pid[i] == _pid)
+					if (k->filter_id[i] >= 0 && k->pid[i] == _pid && k->demux[i] == demux && k->filter[i] == filter)
 					{
 						not_found = 0;
 						break;
@@ -194,7 +194,7 @@ int dvbapi_reply(sockets *s)
 				if (not_found)
 				{
 
-					fid = add_filter(k->adapter, _pid, (void *)send_ecm, (void *)k, FILTER_ADD_REMOVE);
+					fid = add_filter_mask(k->adapter, _pid, (void *)send_ecm, (void *)k, FILTER_ADD_REMOVE, b + 9, b + 25);
 					i = get_index_for_filter(k, -1);
 				}
 				else

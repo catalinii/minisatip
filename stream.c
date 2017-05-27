@@ -839,6 +839,7 @@ int check_cc(adapter *ad)
 			p->cc++;
 
 		//	if(b[1] ==0x40 && b[2]==0) LOG("PAT TID = %d", b[8] * 256 + b[9]);
+		DEBUGM("PID Continuity counter (adapter %d): pid: %03d, Expected CC: %X, Actual CC: %X, pos: %d, packet %d", ad->id, pid, p->cc, cc, i, i / DVB_FRAME);
 
 		if (p->cc != cc)
 		{

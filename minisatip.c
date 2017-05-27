@@ -504,7 +504,7 @@ void set_options(int argc, char *argv[])
 
 #endif
 
-	while ((opt = getopt_long(argc, argv, "fl:r:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:o:gy:i:q:DVR:S:TX:Y:OL:EP:Z:0:" AXE_OPTS, long_options, NULL)) != -1)
+	while ((opt = getopt_long(argc, argv, "fl:v:r:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:o:gy:i:q:DVR:S:TX:Y:OL:EP:Z:0:" AXE_OPTS, long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
 		switch (opt)

@@ -45,8 +45,12 @@
 #include "dvbapi.h"
 #include "adapter.h"
 #include "tables.h"
+#include "pmt.h"
 
 #define DEFAULT_LOG LOG_PMT
+
+//to be removed
+#define TABLES_ITEM 0x2000000000000
 
 SPMT *pmts[MAX_PMT];
 SMutex pmts_mutex;
@@ -160,10 +164,6 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags, u
 	f->next_filter = -1;
 	f->adapter = aid;
 
-	memcpy(f->filter, filter, sizeof(f->data));
-	memcpy(f->mask, mask, sizeof(f->mask));
-	f->mask_len = get_mask_len(f->mask, sizeof(f->mask));
-
 	if (fid >= nfilters)
 		nfilters = fid + 1;
 
@@ -176,6 +176,7 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags, u
 			f->master_filter = filters[i]->master_filter;
 		}
 	set_filter_flags(fid, flags);
+	set_filter_mask(fid, filter, mask);
 	mutex_unlock(&f->mutex);
 
 	LOGM("new filter %d added for adapter %d, pid %d, flags %d, mask_len %d, master_filter %d",
@@ -332,17 +333,24 @@ void delete_filter_for_adapter(int aid)
 }
 int match_filter(SFilter *f, unsigned char *b)
 {
-	int i, match = 1;
-	for (i = 0; i < f->mask_len; i++)
-		if ((b[i + 5] & f->mask[i]) != f->filter[i])
+	int i, match = 1, idx, filter;
+	for (i = 0; match && (i < f->mask_len); i++)
+	{
+		if (i == 0)
+			idx = i;
+		else
+			idx = i + 2;
+		filter = f->filter[i] & f->mask[i];
+		if ((b[idx] & f->mask[i]) != filter)
 		{
-			//			LOG("filter %d, pid %d, index %d did not match: %02X & %02X != %02X", f->id, f->pid, i, b[i + 5], f->mask[i], f->filter[i]);
+			DEBUGM("filter %d, pid %d, index %d did not match: %02X & %02X != %02X inital filter: %02X", f->id, f->pid, i, b[i + 5], f->mask[i], filter, f->filter[i]);
 			match = 0;
 		}
+	}
 	if (f->flags & FILTER_REVERSE)
 		match = 1 - match;
-	DEBUGM("filter %smatch: %d: pid %d, flags %d, mask_len %d, filter -> %02X %02X %02X %02X %02X, mask ->%02X %02X %02X %02x %02x -> data %02x %02x %02x %02x %02x",
-		   match ? "" : "not ", f->id, f->pid, f->flags, f->mask_len, f->filter[0], f->filter[1], f->filter[2], f->filter[3], f->filter[4], f->mask[0], f->mask[1], f->mask[2], f->mask[3], f->mask[4], b[5], b[6], b[7], b[8], b[9]);
+	DEBUGM("filter %smatch: id %d: pid %d, flags %d, mask_len %d, filter -> %02X %02X %02X %02X %02X, mask ->%02X %02X %02X %02x %02x -> data %02x [%02x %02x] %02x %02x %02x %02x",
+		   match ? "" : "not ", f->id, f->pid, f->flags, f->mask_len, f->filter[0], f->filter[1], f->filter[2], f->filter[3], f->filter[4], f->mask[0], f->mask[1], f->mask[2], f->mask[3], f->mask[4], b[0], b[1], b[2], b[3], b[4], b[5], b[6]);
 	return match;
 }
 
@@ -351,10 +359,10 @@ void process_filter(SFilter *f, unsigned char *b)
 	int match = 0;
 	if ((b[1] & 0x40))
 	{
-		if (b[4] == 1 && b[5] > 0x81) // EMM
+		if (b[4] == 0 && b[5] >= 0x82 && b[5] <= 0x8F) // EMM
 			f->isEMM = 1;
 		else
-			match = match_filter(f, b);
+			match = match_filter(f, b + 5);
 		//		LOG("matching pid %d, filter %d, match %d, isEMM %d", f->pid, f->id, match, f->isEMM);
 		f->match = match;
 	}
@@ -370,7 +378,21 @@ void process_filter(SFilter *f, unsigned char *b)
 			f->callback(f->id, f->data, len, f->opaque);
 		else
 		{
-			// TO DO: EMM
+			int i = 0, cl;
+			unsigned char *data = f->data;
+			while (i < len)
+			{
+				if (data[i] < 0x82 || data[i] > 0x8F)
+					break;
+				cl = (data[i + 1] & 0xF) * 256 + data[i + 2];
+				match = match_filter(f, data + i);
+
+				DEBUGM("EMM: match %d id: %d len: %d: %02X %02X %02X %02X %02X", match, f->id, cl + 3, data[i], data[i + 1], data[i + 2], data[i + 3], data[i + 4]);
+
+				if (match)
+					f->callback(f->id, data + i, cl + 3, f->opaque);
+				i += cl + 3;
+			}
 		}
 	}
 }
@@ -624,7 +646,7 @@ int pmt_decrypt_stream(adapter *ad)
 				pmt = NULL;
 			if (!pmt)
 			{
-				DEBUGM("PMT not found for pid %d, id %d", p ? p->pmt : -3, pid);
+				DEBUGM("PMT not found for pid %d, id %d, packet %d, pos %d", p ? p->pmt : -3, pid, i / 188, i);
 				continue; // cannot decrypt
 			}
 
@@ -677,6 +699,7 @@ int pmt_decrypt_stream(adapter *ad)
 				pmt->batch[pmt->blen].data = b + adapt_len;
 				pmt->batch[pmt->blen++].len = 188 - adapt_len;
 			}
+			DEBUGM("clear encrypted flags for pid %d", pid);
 			b[3] &= 0x3F; // clear the encrypted flags
 		}
 	}
@@ -714,7 +737,7 @@ int pmt_process_stream(adapter *ad)
 	tables_ca_ts(ad);
 	if (ad->ca_mask && opts.drop_encrypted)
 	{
-		for (i = 0; i < rlen; i += DVB_FRAME)
+		for (i = 0; i < ad->rlen; i += DVB_FRAME)
 		{
 			b = ad->buf + i;
 			pid = PID_FROM_TS(b);
@@ -725,9 +748,12 @@ int pmt_process_stream(adapter *ad)
 
 			if ((b[3] & 0x80) == 0x80)
 			{
+				DEBUGL(LOG_DMX, "Marking PID %d packet %d pos %d as NULL", pid, i / 188, i);
 				b[1] |= 0x1F;
 				b[2] |= 0xFF;
 			}
+			else
+				DEBUGL(LOG_DMX, "PID %d packet %d pos %d not marked: %02X %02X %02X %02X", pid, i / 188, i, b[0], b[1], b[2], b[3]);
 		}
 	}
 
@@ -1047,16 +1073,56 @@ void clean_psi(adapter *ad, uint8_t *b)
 	mark_pid_null(b);
 }
 
-int assemble_packet(SFilter *f, uint8_t *b)
+int getEMMlen(unsigned char *b, int len)
+{
+	int i = 0, cl, emms = 0;
+	while (i < len)
+	{
+		if (b[i] < 0x82 || b[i] > 0x8F)
+			break;
+		cl = (b[i + 1] & 0xF) * 256 + b[i + 2];
+		i += cl + 3;
+		emms++;
+	}
+	DEBUGM("returning EMM len %d (%X) from %d, found %d emms", i, i, len, emms);
+	return i;
+}
+
+int assemble_emm(SFilter *f, uint8_t *b)
+{
+	int len = 0;
+	if (b[4] == 0 && (b[5] >= 0x82 && b[5] <= 0x8F))
+	{
+		f->len = 0;
+		memset(f->data, 0, sizeof(f->data));
+		memcpy(f->data + f->len, b + 5, 183);
+		f->len += 183;
+	}
+	else
+	{
+		// f >1500
+		if (f->len + 183 > sizeof(f->data))
+		{
+			LOG("EMM data too large %d", f->len + 183);
+			f->len = 0;
+			return 0;
+		}
+		memcpy(f->data + f->len, b + 5, 183);
+		f->len += 183;
+	}
+	//	hexdump("emm: ", b, 188);
+	len = getEMMlen(f->data, f->len);
+	if (f->len < len)
+		return 0;
+	//	hexdump("emm full: ", f->data + len - 188, 190);
+
+	return len;
+}
+
+int assemble_normal(SFilter *f, uint8_t *b)
 {
 	int len = 0, pid;
-	uint32_t crc;
-
-	if ((b[0] != 0x47)) // make sure we are dealing with TS
-		return 0;
-
 	pid = (b[1] & 0x1F) * 256 + b[2];
-
 	if ((b[1] & 0x40) == 0x40)
 	{
 		len = ((b[6] & 0xF) << 8) + b[7];
@@ -1064,8 +1130,7 @@ int assemble_packet(SFilter *f, uint8_t *b)
 		f->len = 0;
 		memset(f->data, 0, sizeof(f->data));
 	}
-
-	if (len > 1500 || len < 0)
+	if ((len > 1500 || len < 0))
 		LOG_AND_RETURN(0,
 					   "assemble_packet: len %d not valid for pid %d [%02X %02X %02X %02X %02X %02X]",
 					   len, pid, b[3], b[4], b[5], b[6], b[7], b[8]);
@@ -1090,6 +1155,23 @@ int assemble_packet(SFilter *f, uint8_t *b)
 		if (f->len < len)
 			return 0;
 	}
+	return len;
+}
+
+int assemble_packet(SFilter *f, uint8_t *b)
+{
+	int len = 0, pid;
+	uint32_t crc;
+
+	if ((b[0] != 0x47)) // make sure we are dealing with TS
+		return 0;
+
+	pid = (b[1] & 0x1F) * 256 + b[2];
+	if (f->isEMM)
+		len = assemble_emm(f, b);
+	else
+		len = assemble_normal(f, b);
+
 	b = f->data;
 	if (b[0] == 0 || b[0] == 2) // check the crc for PAT and PMT
 	{
@@ -1131,12 +1213,12 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque)
 
 	memset(new_filter, 0, sizeof(new_filter));
 	memset(new_mask, 0, sizeof(new_mask));
-	new_filter[3] = b[3];
+	new_filter[1] = b[3];
+	new_mask[1] = 0xFF;
+	new_filter[2] = b[4];
+	new_mask[2] = 0xFF;
+	new_filter[3] = b[5];
 	new_mask[3] = 0xFF;
-	new_filter[4] = b[4];
-	new_mask[4] = 0xFF;
-	new_filter[5] = b[5];
-	new_mask[5] = 0xFF;
 	set_filter_mask(filter, new_filter, new_mask);
 	set_filter_flags(filter, FILTER_PERMANENT | FILTER_REVERSE);
 	pat_len -= 9;
@@ -1162,10 +1244,10 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque)
 			}
 			memset(new_filter, 0, sizeof(new_filter));
 			memset(new_mask, 0, sizeof(new_mask));
-			new_filter[3] = b[i];
-			new_mask[3] = 0xFF;
-			new_filter[4] = b[i + 1];
-			new_mask[4] = 0xFF;
+			new_filter[1] = b[i];
+			new_mask[1] = 0xFF;
+			new_filter[2] = b[i + 1];
+			new_mask[2] = 0xFF;
 			if (pmt)
 				pmt->filter = add_filter_mask(ad->id, pid, (void *)process_pmt, pmt, opts.pmt_scan ? FILTER_ADD_REMOVE : 0, new_filter, new_mask);
 			else
