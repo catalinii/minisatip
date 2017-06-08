@@ -1,63 +1,76 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-	<meta charset="utf-8"/>
+	<meta charset="utf-8" />
 	<title>Minisatip status</title>
 	<link rel="stylesheet" type="text/css" href="jquery.dataTables.min.css">
 	<style>
-	body {
-		padding: 5px;
-	}
-	body, td {
-		font-family: Tahoma, Geneva, sans-serif;
-		font-size: 0.9em;
-	}
-	th {
-		font-family: Tahoma, Geneva, sans-serif;
-		font-size: 1em;
-	}
-	.level {
-		display: inline;
-		white-space: pre;
-		font-family: "Lucida Console", Monaco, monospace;
-	}
-	.noPadding {
-		padding: 1px !important;
-	}
-	.strike {
-		text-decoration: line-through;
-		color: #eee !important;
-	}
-	table#myTable thead th {
-		background-color: #aaa;
-	}
-	table.dataTable.no-footer {
-		border-bottom: 1px solid #eee;
-	}
-	#pintervall {
-		font-size: 14px;
-		font-weight: 500;
-		width: 28px;
-		height: 18px;
-		color: #000;
-		background-color: transparent;
-		border: none;
-		border-radius: 4px;
-		text-align: center;
-		margin: 0 4px;
-		padding: 0;
-	}
-	.upperbar {
-		padding-bottom: 4px;
-	}
-	.separator {
-		padding-left: 16px;
-	}
-	.dstate {
-		text-valign: center;
-		text-size: 1.5em;
-		font-family: "Lucida Console", Monaco, monospace;
-	}
+		body {
+			padding: 5px;
+		}
+
+		body,
+		td {
+			font-family: Tahoma, Geneva, sans-serif;
+			font-size: 0.9em;
+		}
+
+		th {
+			font-family: Tahoma, Geneva, sans-serif;
+			font-size: 1em;
+		}
+
+		.level {
+			display: inline;
+			white-space: pre;
+			font-family: "Lucida Console", Monaco, monospace;
+		}
+
+		.noPadding {
+			padding: 1px !important;
+		}
+
+		.strike {
+			text-decoration: line-through;
+			color: #eee !important;
+		}
+
+		table#myTable thead th {
+			background-color: #aaa;
+		}
+
+		table.dataTable.no-footer {
+			border-bottom: 1px solid #eee;
+		}
+
+		#pintervall {
+			font-size: 14px;
+			font-weight: 500;
+			width: 28px;
+			height: 18px;
+			color: #000;
+			background-color: transparent;
+			border: none;
+			border-radius: 4px;
+			text-align: center;
+			margin: 0 4px;
+			padding: 0;
+		}
+
+		.upperbar {
+			padding-bottom: 4px;
+		}
+
+		.separator {
+			padding-left: 16px;
+		}
+
+		.dstate {
+			text-valign: center;
+			text-size: 1.5em;
+			font-family: "Lucida Console", Monaco, monospace;
+		}
 	</style>
 
 	<script type="text/javascript" language="javascript" src="jquery-1.12.0.min.js"></script>
@@ -66,320 +79,328 @@
 </head>
 
 <body>
-<table class='display cell-border compact'><tbody><tr>
-<td class="upperbar">Refresh:
-<input type="text" id="pintervall" value="" readonly /> sec.
-<button id="pdec">&minus;</button>
-<button id="pstatus">PAUSE</button>
-<button id="pinc">+</button>
-</td>
-<td class="separator" />
-<td class="upperbar">
-<button id="stats">Stats ON</button>
-</td>
-<td class="separator" />
-<td id="statsarea" class="upperbar"/>
-</tr></tbody></table>
+	<table class='display cell-border compact'>
+		<tbody>
+			<tr>
+				<td class="upperbar">Refresh:
+					<input type="text" id="pintervall" value="" readonly /> sec.
+					<button id="pdec">&minus;</button>
+					<button id="pstatus">PAUSE</button>
+					<button id="pinc">+</button>
+				</td>
+				<td class="separator" />
+				<td class="upperbar">
+					<button id="stats">Stats ON</button>
+				</td>
+				<td class="separator" />
+				<td id="statsarea" class="upperbar" />
+			</tr>
+		</tbody>
+	</table>
 
-<div id="table"/>
+	<div id="table" />
 
-<script type="text/javascript">
-
-function getDebug(data) {
-	var s = "BW <strong>" + data.bw + "</strong>KB/s | " +
-	        "Total BW <strong>" + data.tbw + "</strong>MiB | " +
-	        "ns/read " + data.ns_read + " | " +
-	        "reads " + data.reads + " | " +
-	        "writes " + data.writes + " | ";
-	if (data.fwrites)
-	        s += "failed writes " + data.fwrites + " | ";
-	s += "tt <strong>" + data.tt + "</strong>ms";
-	return "<div class='dstate'>" + s + "</div>";
-}
-
-var pol = ["", "(V)", "(H)", "(R)", "(L)"];
-var sys = ["", "dvbc", "dvbcb", "dvbt", "dss", "dvbs", "dvbs2", "dvbh", "isdbt", "isdbs", "isdbc", "atsc", "atscmh", "dmbth", "cmmb", "dab", "dvbt2", "turbo", "dvbcc", "dvbc2"];
-
-function getTable(state) {
-
-	if (!state)
-		return '';
-
-	var myTable = '';
-	var max_adapters = state['ad_enabled'].length;
-	var max_streams = state['st_enabled'].length;
-	var max_keys = 'key_enabled' in state ? state['key_enabled'].length : 0;
-	var has_axe = state['has_axe'];
-
-	var myTable = "<table id='myTable' class='display cell-border compact' cellspacing='0' width='100%'>";
-	myTable += "<thead><tr><th>Tuner</th>";
-	myTable += "<th class=''>Status</th>";
-	myTable += "<th class='dt-right'>Pos.</th>";
-	myTable += "<th class='dt-right'>Frequency</th>";
-	myTable += "<th class='dt-right'>SR/BW</th>";
-	myTable += "<th class='dt-right'>Signal</th>";
-	if(state['has_axe'])
-	{
-		myTable += "<th class='dt-right'>Packets</th>";
-		myTable += "<th class='dt-right'>CC Errors</th>";
-		myTable += "<th class='dt-right'>Coax Cable</th>";
-	}
-	myTable += "<th class='dt-left'>Streams</th>";
-	myTable += "<th class='dt-left'>Cryptinfo</th>";
-	myTable += "</tr></thead><tbody>";
-
-	for (var i = 0; i < max_adapters; i++) {
-		if (state['ad_type'][i] == 0)
-			continue;
-
-		if (state['ad_enabled'][i] == 1)
-			myTable += "<tr valign='top'>";
-		else
-			myTable += "<tr style='opacity: 0.5;'>";
-
-		// TUNER
-		myTable += "<td class='dt-right'>" + i + "</td>";
->>>>>>> 816b34e... obtain the state data through json
-
-		// STATUS
-		var csys = "";
-		if (state['ad_sys'][i] == 0)
-			csys = state['ad_allsys'][i];
-		else
-			csys = sys[state['ad_sys'][i]];
-
-		var tmpimg = csys.split(',');
-		var sysimg = csys;
-		if(tmpimg.length > 0)
-			sysimg = tmpimg[0];
-			
-		var ad_enabled = state['ad_enabled'][i];
-		var ad_type = state['ad_type'][i];
-		var ad_sys = state['ad_sys'][i];
-
-		if (ad_enabled)
-			myTable += "<td class='dt-right enabled'><img src='" + sysimg + ".png' title='" + csys + "' /><br />";
-		else
-			myTable += "<td class='dt-right disabled'>" + state['ad_allsys'][i];
-
-		if (ad_type == 1 || ad_type == 3) {
-			// myTable += "<small>(" + state['ad_phyad'][i] + "," + state['ad_phyfd'][i] +")</small>";
-		} else {
-			myTable += "<small>(" + state['ad_satip'][i] + ")</small>";
+	<script type="text/javascript">
+		function getDebug(data) {
+			var s = "BW <strong>" + data.bw + "</strong>KB/s | " +
+				"Total BW <strong>" + data.tbw + "</strong>MiB | " +
+				"ns/read " + data.ns_read + " | " +
+				"reads " + data.reads + " | " +
+				"writes " + data.writes + " | ";
+			if (data.fwrites)
+				s += "failed writes " + data.fwrites + " | ";
+			s += "tt <strong>" + data.tt + "</strong>ms";
+			return "<div class='dstate'>" + s + "</div>";
 		}
-		myTable += "</td>";
 
-		// POSITION
-		if ((ad_sys == 5 || ad_sys == 6) && ad_enabled)
-			myTable += "<td class='dt-right'>" + state['ad_pos'][i] + "</td>";
-		else
-			myTable += "<td class='dt-right'></td>";
+		var pol = ["", "(V)", "(H)", "(R)", "(L)"];
+		var sys = ["", "dvbc", "dvbcb", "dvbt", "dss", "dvbs", "dvbs2", "dvbh", "isdbt", "isdbs", "isdbc", "atsc", "atscmh", "dmbth", "cmmb", "dab", "dvbt2", "turbo", "dvbcc", "dvbc2"];
 
-		// FREQUENCY
-		if (ad_enabled)
-			myTable += "<td class='dt-right'>" +state['ad_freq'][i] + " "+pol[state['ad_pol'][i]]+"</td>";
-		else
-			myTable += "<td class='dt-right'></td>";
+		function getTable(state) {
 
-		if (ad_enabled && (ad_sys == 0 || ad_sys == 1 || ad_sys == 2 || ad_sys == 5 || ad_sys == 6 || ad_sys == 18 || ad_sys == 19))
-			myTable += "<td class='dt-right'>" + state['ad_sr'][i] + "</td>";
-		else if (ad_enabled)
-			myTable += "<td class='dt-right'>" + state['ad_bw'][i]/1000 + "MHZ</td>";
-		else
-			myTable += "<td class='dt-right'></td>";
+			if (!state)
+				return '';
 
-		// SIGNAL
-		var signal = "";
-		if (!ad_enabled) {
-			signal = "<small>OFFLINE</small>";
-		} else {
-			var sig = parseInt(state['ad_strength'][i] / 2.55);
-			var sig0 = Math.max(0, sig - 10);
-			signal = "<div class='level'>STR <div class='pBar' data-from='"+ sig0 + "' data-to='" + sig + "'></div> " + sig + "%</div><br />";
+			var myTable = '';
+			var max_adapters = state['ad_enabled'].length;
+			var max_streams = state['st_enabled'].length;
+			var max_keys = 'key_enabled' in state ? state['key_enabled'].length : 0;
+			var has_axe = state['has_axe'];
 
-			if (ad_type == 1 || ad_type == 3)
-				var snr = parseInt(state['ad_snr'][i] / 2.55);
-			else
-				var snr = parseInt(state['ad_snr'][i] / 0.15);
-			var snr0 = Math.max(0, snr - 10);
-			signal += "<div class='level'>SNR <div class='pBar' data-from='"+ snr0 + "' data-to='" + snr + "'></div> " + snr + "%</div><br />";
+			var myTable = "<table id='myTable' class='display cell-border compact' cellspacing='0' width='100%'>";
+			myTable += "<thead><tr><th>Tuner</th>";
+			myTable += "<th class=''>Status</th>";
+			myTable += "<th class='dt-right'>Pos.</th>";
+			myTable += "<th class='dt-right'>Frequency</th>";
+			myTable += "<th class='dt-right'>SR/BW</th>";
+			myTable += "<th class='dt-right'>Signal</th>";
+			if (has_axe) {
+				myTable += "<th class='dt-right'>Packets</th>";
+				myTable += "<th class='dt-right'>CC Errors</th>";
+				myTable += "<th class='dt-right'>Coax Cable</th>";
+			}
+			myTable += "<th class='dt-left'>Streams</th>";
+			myTable += "<th class='dt-left'>Cryptinfo</th>";
+			myTable += "</tr></thead><tbody>";
 
-			var ber = state['ad_ber'][i];
-			if (ber > 0)
-				signal += "<div class='level'>BER <div class='pBar' data-from='"+ ber + "' data-to='" + ber + "' data-color='red'></div> " + ber + "</div><br />";
+			for (var i = 0; i < max_adapters; i++) {
+				if (state['ad_type'][i] == 0)
+					continue;
+
+				if (state['ad_enabled'][i] == 1)
+					myTable += "<tr valign='top'>";
+				else
+					myTable += "<tr style='opacity: 0.5;'>";
+
+				// TUNER
+				myTable += "<td class='dt-right'>" + i + "</td>";
+
+				// STATUS
+				var csys = "";
+				if (state['ad_sys'][i] == 0)
+					csys = state['ad_allsys'][i];
+				else
+					csys = sys[state['ad_sys'][i]];
+
+				var tmpimg = csys.split(',');
+				var sysimg = csys;
+				if (tmpimg.length > 0)
+					sysimg = tmpimg[0];
+
+				var ad_enabled = state['ad_enabled'][i];
+				var ad_type = state['ad_type'][i];
+				var ad_sys = state['ad_sys'][i];
+
+				if (ad_enabled)
+					myTable += "<td class='dt-right enabled'><img src='" + sysimg + ".png' title='" + csys + "' /><br />";
+				else
+					myTable += "<td class='dt-right disabled'>" + state['ad_allsys'][i];
+
+				if (ad_type == 1 || ad_type == 3) {
+					// myTable += "<small>(" + state['ad_phyad'][i] + "," + state['ad_phyfd'][i] +")</small>";
+				} else {
+					myTable += "<small>(" + state['ad_satip'][i] + ")</small>";
+				}
+				myTable += "</td>";
+
+				// POSITION
+				if ((ad_sys == 5 || ad_sys == 6) && ad_enabled)
+					myTable += "<td class='dt-right'>" + state['ad_pos'][i] + "</td>";
+				else
+					myTable += "<td class='dt-right'></td>";
+
+				// FREQUENCY
+				if (ad_enabled)
+					myTable += "<td class='dt-right'>" + state['ad_freq'][i] + " " + pol[state['ad_pol'][i]] + "</td>";
+				else
+					myTable += "<td class='dt-right'></td>";
+
+				if (ad_enabled && (ad_sys == 0 || ad_sys == 1 || ad_sys == 2 || ad_sys == 5 || ad_sys == 6 || ad_sys == 18 || ad_sys == 19))
+					myTable += "<td class='dt-right'>" + state['ad_sr'][i] + "</td>";
+				else if (ad_enabled)
+					myTable += "<td class='dt-right'>" + state['ad_bw'][i] / 1000 + "MHZ</td>";
+				else
+					myTable += "<td class='dt-right'></td>";
+
+				// SIGNAL
+				var signal = "";
+				if (!ad_enabled) {
+					signal = "<small>OFFLINE</small>";
+				} else {
+					var sig = parseInt(state['ad_strength'][i] / 2.55);
+					var sig0 = Math.max(0, sig - 10);
+					signal = "<div class='level'>STR <div class='pBar' data-from='" + sig0 + "' data-to='" + sig + "'></div> " + sig + "%</div><br />";
+
+					if (ad_type == 1 || ad_type == 3)
+						var snr = parseInt(state['ad_snr'][i] / 2.55);
+					else
+						var snr = parseInt(state['ad_snr'][i] / 0.15);
+					var snr0 = Math.max(0, snr - 10);
+					signal += "<div class='level'>SNR <div class='pBar' data-from='" + snr0 + "' data-to='" + snr + "'></div> " + snr + "%</div><br />";
+
+					var ber = state['ad_ber'][i];
+					if (ber > 0)
+						signal += "<div class='level'>BER <div class='pBar' data-from='" + ber + "' data-to='" + ber + "' data-color='red'></div> " + ber + "</div><br />";
+					var ccerr = state['ad_ccerr'][i];
+					if (ccerr > 0)
+						signal += "<div class='level'>CC <div class='pBar' data-from='" + ccerr + "' data-to='" + ccerr + "' data-color='red'></div> " + ccerr + "</div><br />";
+				}
+				myTable += "<td class='dt-right'>" + signal + " </td>";
+
+				if (has_axe) {
+					myTable += "<td class='dt-right'>" + state['ad_axe_pktc'][i] + " </td>";
+					myTable += "<td class='dt-right'>" + state['ad_axe_ccerr'][i] + " </td>";
+					myTable += "<td class='dt-right'>" + state['ad_axe_coax'][i] + " </td>";
+				}
+
+				// STREAMS
+				myTable += "<td class='dt-left'>";
+				if (state['has_pmt']) {
+					myTable += "<b>" + state['ad_channel'][i] + "</b><br>";
+				}
+				for (var j = 0; j < max_streams; j++) {
+					if (state['st_enabled'][j] == 1 && state['st_adapter'][j] == i) {
+						var st_rh = state['st_rhost'][j] + ":" + state['st_rport'][j];
+						if (state['ad_master'][i] == j)
+							st_rh = "<b>" + st_rh + "</b>";
+						if (state['st_play'][j] == 0)
+							st_rh = "<i>" + st_rh + "</i>";
+						myTable += st_rh + "<br />";
+						if (state['st_useragent'][j] != "")
+							myTable += "<small>Client: " + state['st_useragent'][j] + "</small><br />";
+					}
+				}
+				for (var j = 0; j < max_streams; j++) {
+					if (state['st_enabled'][j] == 1 && state['st_adapter'][j] == i) {
+						var st_p = state['st_pids'][j];
+						if (state['ad_master'][i] == j)
+							st_p = "" + st_p + "";
+						if (state['st_play'][j] == 0)
+							st_p = "<i>" + st_p + "</i>";
+						myTable += "<small>Pids: " + st_p + "</small><br />";
+					}
+				}
+				myTable += "</td>";
+
+				// CRYPT
+				myTable += "<td class=''><small>";
+				for (var j = 0; j < max_keys; j++)
+					if (state['key_enabled'][j] == 1 && state['key_adapter'][j] == i) {
+						myTable += "CHANNEL: " + state['key_channel'][j] + "<br />";
+						myTable += "SYSTEM: " + state['key_cardsystem'][j] + "<br />";
+						myTable += "PMT: " + state['key_pmt'][j] + "<br />";
+						myTable += "ECMTIME: " + state['key_ecmtime'][j] + "<br />";
+						myTable += "READER: " + state['key_reader'][j] + "<br />";
+						myTable += "IP: " + state['key_from'][j] + " (" + state['key_protocol'][j] + ")<br /><br />";
+					}
+				myTable += "</small></td></tr>";
+			}
+
+			myTable += "</tbody></table>";
+			return myTable;
 		}
-		myTable += "<td class='dt-right'>" + signal + " </td>";
 
-		if(has_axe)
-		{
-			myTable += "<td class='dt-right'>" + state['ad_axe_pktc'][i] + " </td>";
-			myTable += "<td class='dt-right'>" + state['ad_axe_ccerr'][i] + " </td>";
-			myTable += "<td class='dt-right'>" + state['ad_axe_coax'][i] + " </td>";	}
+		var pcurrent = 1;
+		var pvalues = [5, 10, 15, 30, 60, 300];
+		var prefresh;
+		var stats = 0;
+		var statsrefresh;
+		var table = null;
 
-		// STREAMS
-		myTable += "<td class='dt-left'>";
-		for (var j = 0; j < max_streams; j++) {
-			if (state['st_enabled'][j] == 1 && state['st_adapter'][j] == i) {
-				var st_rh = state['st_rhost'][j]+":"+state['st_rport'][j];
-				if (state['ad_master'][i] == j)
-					st_rh = "<b>"+st_rh+"</b>";
-				if (state['st_play'][j] == 0)
-					st_rh = "<i>"+st_rh+"</i>";
-				myTable += st_rh + "<br />";
-				if (state['st_useragent'][j] != "")
-					myTable += "<small>Client: " + state['st_useragent'][j] + "</small><br />";
+		var hashTag = location.hash;
+		if (typeof hashTag.split('#')[1] !== "undefined") {
+			var temp = parseInt(hashTag.split('#')[1]);
+			if (temp >= 0 && temp <= 5) {
+				pcurrent = temp;
 			}
 		}
-		for (var j = 0; j < max_streams; j++) {
-			if (state['st_enabled'][j] == 1 && state['st_adapter'][j] == i) {
-				var st_p = state['st_pids'][j];
-				if (state['ad_master'][i] == j)
-					st_p = "" + st_p + "";
-				if (state['st_play'][j] == 0)
-					st_p = "<i>" + st_p + "</i>";
-				myTable += "<small>Pids: " + st_p + "</small><br />";
-			}
+
+		function updateStats() {
+			$.post("bandwidth.json", function (data, status) {
+				if (status !== "success") return;
+				$("#statsarea").html(getDebug(data));
+			}).fail(function () {
+				$("#statsarea").html("No data from server");
+			});
 		}
-		myTable +="</td>";
 
-		// CRYPT
-		myTable +="<td class=''><small>";
-		for (var j = 0; j < max_keys; j++)
-			if (state['key_enabled'][j] == 1 && state['key_adapter'][j] == i) {
-				myTable += "SYSTEM: " + state['key_cardsystem'][j] + "<br />";
-				myTable += "PMT: " + state['key_pmt'][j] + "<br />";
-				myTable += "ECMTIME: " + state['key_ecmtime'][j] + "<br />";
-				myTable += "READER: " + state['key_reader'][j] + "<br />";
-				myTable += "IP: " + state['key_from'][j] + " (" + state['key_protocol'][j] + ")<br /><br />";
-			}
-		myTable +="</small></td></tr>";
-	}
-
-	myTable += "</tbody></table>";
-	return myTable;
-}
-
-var pcurrent = 1;
-var pvalues = [5, 10, 15, 30, 60, 300 ];
-var prefresh;
-var stats = 0;
-var statsrefresh;
-var table = null;
-
-var hashTag = location.hash;
-if (typeof hashTag.split('#')[1] !== "undefined") {
-	var temp = parseInt(hashTag.split('#')[1]);
-	if (temp >= 0 && temp <= 5) {
-		pcurrent = temp;
-	}
-}
-
-function updateStats() {
-	$.post("bandwidth.json", function(data, status) {
-		if (status !== "success") return;
-		$("#statsarea").html(getDebug(data));
-	}).fail(function() {
-		$("#statsarea").html("No data from server");
-	});
-}
-
-function renewTable(data) {
-	if (table)
-		table.destroy();
-	document.title = "Minisatip/" + data['version'] + " on " + data['http_host'];
-	$('#table').html(getTable(data));
-	table = $('#myTable').DataTable({
-		"paging":	false,
-		"bFilter":	false,
-		"ordering":	true,
-		"info":		false,
-		"stateSave":	true,
-		"stateDuration": -1,
-		"columnDefs": [
-			{ "width": "40px", "targets": 0 },
-			{ "width": "40px", "targets": 1 },
-			{ "width": "50px", "targets": 2 },
-			{ "width": "50px", "targets": 3 },
-			{ "width": "50px", "targets": 4 }
-		],
-		"aoColumnDefs": [
-			{ "sClass": "noPadding", "aTargets": [ 1 ] }
-		],
-		"language": {
-			"emptyTable": "No tuner found/active"
+		function renewTable(data) {
+			if (table)
+				table.destroy();
+			document.title = "Minisatip/" + data['version'] + " on " + data['http_host'];
+			$('#table').html(getTable(data));
+			table = $('#myTable').DataTable({
+				"paging": false,
+				"bFilter": false,
+				"ordering": true,
+				"info": false,
+				"stateSave": true,
+				"stateDuration": -1,
+				"columnDefs": [
+					{ "width": "40px", "targets": 0 },
+					{ "width": "40px", "targets": 1 },
+					{ "width": "50px", "targets": 2 },
+					{ "width": "50px", "targets": 3 },
+					{ "width": "50px", "targets": 4 }
+				],
+				"aoColumnDefs": [
+					{ "sClass": "noPadding", "aTargets": [1] }
+				],
+				"language": {
+					"emptyTable": "No tuner found/active"
+				}
+			});
+			$(".pBar").pBar();
 		}
-	});
-	$(".pBar").pBar();
-}
 
-function getData() {
-	$.post("state.json", function(data, status) {
-		if (status === "success") {
-			renewTable(data);
+		function getData() {
+			$.post("state.json", function (data, status) {
+				if (status === "success") {
+					renewTable(data);
+				}
+			}).fail(function () {
+				if (table)
+					table.clear().draw();
+			});
 		}
-	}).fail(function() {
-		if (table)
-			table.clear().draw();
-	});
-}
 
-function reloadPage() {
-	$("#pintervall").val( pvalues[pcurrent] );
+		function reloadPage() {
+			$("#pintervall").val(pvalues[pcurrent]);
 
-	clearInterval(prefresh);
-
-	prefresh = setInterval(getData, pvalues[pcurrent] * 1000);
-}
-
-$(document).ready(function() {
-	$("#table").html("Loading...");
-	
-	document.title = "Minisatip on " + document.location.hostname;
-
-	$("#pdec").click(function() {
-		if (pcurrent > 0) {
-			pcurrent = pcurrent - 1;
-			reloadPage();
-		}
-	});
-
-	$("#pinc").click(function() {
-		if (pcurrent <= 4) {
-			pcurrent = pcurrent + 1;
-			reloadPage();
-		}
-	});
-
-	$("#pstatus").click(function() {
-		if ($("#pstatus").html() == "PAUSE") {
 			clearInterval(prefresh);
-			$("#pstatus").html("START");
-			$("#pintervall").addClass("strike");
-		} else {
+
+			prefresh = setInterval(getData, pvalues[pcurrent] * 1000);
+		}
+
+		$(document).ready(function () {
+			$("#table").html("Loading...");
+
+			document.title = "Minisatip on " + document.location.hostname;
+
+			$("#pdec").click(function () {
+				if (pcurrent > 0) {
+					pcurrent = pcurrent - 1;
+					reloadPage();
+				}
+			});
+
+			$("#pinc").click(function () {
+				if (pcurrent <= 4) {
+					pcurrent = pcurrent + 1;
+					reloadPage();
+				}
+			});
+
+			$("#pstatus").click(function () {
+				if ($("#pstatus").html() == "PAUSE") {
+					clearInterval(prefresh);
+					$("#pstatus").html("START");
+					$("#pintervall").addClass("strike");
+				} else {
+					reloadPage();
+					$("#pstatus").html("PAUSE");
+					$("#pintervall").removeClass("strike");
+				}
+			});
+
+			$("#stats").click(function () {
+				stats ^= 1;
+				$("#stats").html("Stats " + (stats ? "OFF" : "ON"));
+				if (stats) {
+					updateStats();
+					statsrefresh = setInterval(updateStats, 500);
+				} else {
+					clearInterval(statsrefresh);
+					$("#statsarea").html("");
+				}
+			});
+
+
+			getData();
 			reloadPage();
-			$("#pstatus").html("PAUSE");
-			$("#pintervall").removeClass("strike");
-		}
-	});
-
-	$("#stats").click(function() {
-		stats ^= 1;
-		$("#stats").html("Stats " + (stats ? "OFF" : "ON"));
-		if (stats) {
-			updateStats();
-			statsrefresh = setInterval(updateStats, 500);
-		} else {
-			clearInterval(statsrefresh);
-			$("#statsarea").html("");
-		}
-	});
-
-
-	getData();
-	reloadPage();
-});
-
-</script>
+		});
+	</script>
 
 </body>
+
 </html>

@@ -804,7 +804,8 @@ int check_new_transponder(adapter *ad, int rlen)
 
 int check_cc(adapter *ad)
 {
-	int i, cc;
+	int i;
+	char cc, cc_before;
 	SPid *p;
 	int pid;
 	int packet_no_sid = 0;
@@ -830,25 +831,26 @@ int check_cc(adapter *ad)
 			continue;
 		}
 		p->packets++;
-		cc = b[3] & 0xF;
-		if (p->cc == 255)
-			p->cc = cc;
-		else if (p->cc == 15)
-			p->cc = 0;
-		else
-			p->cc++;
-
-		//	if(b[1] ==0x40 && b[2]==0) LOG("PAT TID = %d", b[8] * 256 + b[9]);
-		DEBUGM("PID Continuity counter (adapter %d): pid: %03d, Expected CC: %X, Actual CC: %X, pos: %d, packet %d", ad->id, pid, p->cc, cc, i, i / DVB_FRAME);
-
-		if (p->cc != cc)
+		if (b[3] & 0x10)
 		{
-			LOG("PID Continuity error (adapter %d): pid: %03d, Expected CC: %X, Actual CC: %X",
-				ad->id, pid, p->cc, cc);
-			p->cc_err++;
-		}
-		p->cc = cc;
+			cc_before = p->cc;
+			cc = b[3] & 0xF;
+			if (p->cc < 0 || p->cc > 15)
+				p->cc = cc;
+			else
+				p->cc = (p->cc + 1) % 16;
 
+			dump_packets("check_cc -> ", b, 188, i);
+
+			//	if(b[1] ==0x40 && b[2]==0) LOG("PAT TID = %d", b[8] * 256 + b[9]);
+			if (p->cc != cc)
+			{
+				LOG("PID Continuity error (adapter %d): pid: %03d, Expected CC: %X, Actual CC: %X, CC Before %X",
+					ad->id, pid, p->cc, cc, cc_before);
+				p->cc_err++;
+			}
+			p->cc = cc;
+		}
 		if (p->sid[0] == -1)
 			packet_no_sid++;
 #ifdef CRC_TS

@@ -93,10 +93,11 @@ adapter *adapter_alloc()
 	ad->diseqc_param.lnb_high = opts.lnb_high;
 	ad->diseqc_param.lnb_circular = opts.lnb_circular;
 	ad->diseqc_param.lnb_switch = opts.lnb_switch;
-
+#ifndef DISABLE_PMT
 	// filter for pid 0
 	ad->pat_filter = -1;
-
+	ad->sdt_filter = -1;
+#endif
 	return ad;
 }
 
@@ -304,6 +305,7 @@ int init_hw(int i)
 	return 0;
 
 NOK:
+	LOG("opening adapter %i failed", ad->id);
 	mutex_unlock(&ad->mutex);
 	return 1;
 }
@@ -1328,7 +1330,7 @@ void set_unicable_adapters(char *o, int type)
 		ad->diseqc_param.pin = pin;
 		ad->diseqc_param.only13v = o13v;
 		LOG("Setting %s adapter %d slot %d freq %d",
-			 type == SWITCH_UNICABLE ? "unicable" : "jess", a_id, slot, freq);
+			type == SWITCH_UNICABLE ? "unicable" : "jess", a_id, slot, freq);
 	}
 }
 
@@ -1382,8 +1384,8 @@ void set_diseqc_adapters(char *o)
 			opts.diseqc_uncommitted_no = uncommitted_no;
 		}
 		LOG(
-			 "Setting diseqc adapter %d fast %d committed_no %d uncommitted_no %d",
-			 a_id, fast, committed_no, uncommitted_no);
+			"Setting diseqc adapter %d fast %d committed_no %d uncommitted_no %d",
+			a_id, fast, committed_no, uncommitted_no);
 	}
 }
 
@@ -1428,8 +1430,8 @@ void set_diseqc_multi(char *o)
 			opts.diseqc_multi = position;
 		}
 		LOG(
-			 "Setting diseqc multi adapter %d position %d",
-			 a_id, position);
+			"Setting diseqc multi adapter %d position %d",
+			a_id, position);
 	}
 }
 
@@ -1490,8 +1492,8 @@ void set_lnb_adapters(char *o)
 			opts.lnb_circular = 0;
 		}
 		LOG(
-			 "Setting diseqc adapter %d lnb_low %d lnb_high %d lnb_switch %d",
-			 a_id, lnb_low, lnb_high, lnb_switch);
+			"Setting diseqc adapter %d lnb_low %d lnb_high %d lnb_switch %d",
+			a_id, lnb_low, lnb_high, lnb_switch);
 	}
 }
 
@@ -1560,10 +1562,10 @@ void set_diseqc_timing(char *o)
 			opts.diseqc_after_tone = after_tone;
 		}
 		LOG(
-			 "Setting diseqc timing for adapter %d before cmd %d after cmd %d "
-			 "after repeated cmd %d after switch %d after burst %d after tone %d",
-			 a_id, before_cmd, after_cmd, after_repeated_cmd, after_switch,
-			 after_burst, after_tone);
+			"Setting diseqc timing for adapter %d before cmd %d after cmd %d "
+			"after repeated cmd %d after switch %d after burst %d after tone %d",
+			a_id, before_cmd, after_cmd, after_repeated_cmd, after_switch,
+			after_burst, after_tone);
 	}
 }
 
@@ -1658,7 +1660,7 @@ void set_adapters_delsys(char *o)
 		if (!sep)
 		{
 			LOG(
-				 "Delivery system is missing, the format is adapter_number:delivery_system\n example: 2:dvbs2");
+				"Delivery system is missing, the format is adapter_number:delivery_system\n example: 2:dvbs2");
 			return;
 		}
 		ds = map_intd(sep + 1, fe_delsys, 0);
@@ -1677,7 +1679,7 @@ void set_adapters_delsys(char *o)
 			ad->sys[1] = SYS_DVBC_ANNEX_A;
 
 		LOG("Setting delivery system for adapter %d to %s and %s", a_id,
-			 get_delsys(ad->sys[0]), get_delsys(ad->sys[1]));
+			get_delsys(ad->sys[0]), get_delsys(ad->sys[1]));
 	}
 }
 
@@ -1927,7 +1929,7 @@ _symbols adapters_sym[] =
 		{"ad_sys", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.sys)},
 		{"ad_allsys", VAR_FUNCTION_STRING, (void *)&get_all_delsys, 0, MAX_ADAPTERS, 0},
 		{"ad_pids", VAR_FUNCTION_STRING, (void *)&get_adapter_pids, 0, MAX_ADAPTERS, 0},
-		{"ad_ccerr", VAR_FUNCTION_INT64, (void *)&get_adapter_ccerrs, 0, MAX_ADAPTERS, 0},
+		{"ad_ccerr", VAR_FUNCTION_INT, (void *)&get_adapter_ccerrs, 0, MAX_ADAPTERS, 0},
 		{"tuner_s2", VAR_INT, &tuner_s2, 1, 0, 0},
 		{"tuner_t2", VAR_INT, &tuner_t2, 1, 0, 0},
 		{"tuner_c2", VAR_INT, &tuner_c2, 1, 0, 0},

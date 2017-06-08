@@ -74,6 +74,7 @@ struct struct_opts
 	char *last_log;
 	int dvbapi_port;
 	char *dvbapi_host;
+	int dvbapi_offset;
 	int drop_encrypted;
 	int rtsp_port;
 	uint8_t satip_addpids, satip_setup_pids, satip_rtsp_over_tcp;

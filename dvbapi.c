@@ -169,7 +169,7 @@ int dvbapi_reply(sockets *s)
 			pos += 65;
 			dvbapi_copy16r(_pid, b, 7);
 			_pid &= 0x1FFF;
-			k_id = b[4];
+			k_id = b[4] - opts.dvbapi_offset;
 			k = get_key(k_id);
 			a_id = -1;
 			if (k)
@@ -218,7 +218,7 @@ int dvbapi_reply(sockets *s)
 		case DVBAPI_DMX_STOP:
 		{
 			int i;
-			k_id = b[4];
+			k_id = b[4] - opts.dvbapi_offset;
 			demux = b[5];
 			filter = b[6];
 			pos += 9;
@@ -243,8 +243,8 @@ int dvbapi_reply(sockets *s)
 			{
 				k->ecms--;
 				k->last_dmx_stop = getTick();
-				if (k->ecms <= 0)
-					close_pmt_for_ca(dvbapi_ca, get_adapter(k->adapter), get_pmt(k->pmt_id));
+				//			if (k->ecms <= 0)
+				//				close_pmt_for_ca(dvbapi_ca, get_adapter(k->adapter), get_pmt(k->pmt_id));
 			}
 
 			break;
@@ -262,7 +262,7 @@ int dvbapi_reply(sockets *s)
 			unsigned char *cw;
 
 			pos += 21;
-			k_id = b[4];
+			k_id = b[4] - opts.dvbapi_offset;
 			dvbapi_copy32r(index, b, 5);
 			dvbapi_copy32r(parity, b, 9);
 			cw = b + 13;
@@ -294,7 +294,7 @@ int dvbapi_reply(sockets *s)
 		case DVBAPI_ECM_INFO:
 		{
 			int pos1 = s->rlen - pos;
-			SKey *k = get_key(b[4]);
+			SKey *k = get_key(b[4] - opts.dvbapi_offset);
 			unsigned char cardsystem[255];
 			unsigned char reader[255];
 			unsigned char from[255];
@@ -350,7 +350,7 @@ int dvbapi_reply(sockets *s)
 			int k_id, algo, mode;
 			SKey *k;
 			pos += 17;
-			k_id = b[4];
+			k_id = b[4] - opts.dvbapi_offset;
 			dvbapi_copy32r(algo, b, 5);
 			dvbapi_copy32r(mode, b, 9);
 			LOG("Key %d, Algo set to %d, Mode set to %d", k_id, algo, mode);
@@ -391,8 +391,8 @@ int dvbapi_send_pmt(SKey *k)
 	buf[9] = 1;
 
 	copy32(buf, 12, 0x01820200);
-	buf[15] = k->id;
-	buf[16] = k->id;
+	buf[15] = k->id + opts.dvbapi_offset;
+	buf[16] = k->id + opts.dvbapi_offset;
 	memcpy(buf + 17, k->pi, k->pi_len);
 	len = 17 - 6 + k->pi_len + 2;
 	copy16(buf, 4, len);
@@ -526,8 +526,8 @@ int send_ecm(int filter_id, unsigned char *b, int len, void *opaque)
 	filter = k->filter[i];
 	//	LOG("%s: pid %d %d %02X", __FUNCTION__, pid, k->ecm_parity[i], b[1]);
 
-	//	if ((getTick() - k->last_ecm > 1000) && !pmt->cw)
-	//		k->ecm_parity[i] = -1;
+	if ((getTick() - k->last_ecm > 1000) && !pmt->cw)
+		k->ecm_parity[i] = -1;
 
 	if ((b[0] == 0x80 || b[0] == 0x81) && (b[0] & 1) == k->ecm_parity[i])
 		return 0;
@@ -615,8 +615,8 @@ int keys_add(int i, int adapter, int pmt_id)
 	mutex_unlock(&k->mutex);
 	invalidate_adapter(adapter);
 	enabledKeys++;
-	LOG("returning new key %d for adapter %d, pmt pid %d sid %04X", i, adapter,
-		pmt->pid, k->sid);
+	LOG("returning new key %d for adapter %d, pmt %d pid %d sid %04X", i, adapter,
+		pmt->id, pmt->pid, k->sid);
 
 	return i;
 }
@@ -733,6 +733,20 @@ void dvbapi_delete_keys_for_adapter(int aid)
 			keys_del(i);
 }
 
+char *get_channel_for_key(int key, char *dest, int max_size)
+{
+	SKey *k = get_key(key);
+	SPMT *pmt = NULL;
+	dest[0] = 0;
+	dest[max_size - 1] = 0;
+	if (k)
+		pmt = get_pmt(k->pmt_id);
+	if (pmt)
+		strncpy(dest, pmt->name, max_size - 1);
+
+	return dest;
+}
+
 void free_all_keys(void)
 {
 	int i;
@@ -754,11 +768,12 @@ _symbols dvbapi_sym[] =
 		{"key_ecmtime", VAR_AARRAY_INT, keys, 1, MAX_KEYS, offsetof(SKey, ecmtime)},
 		{"key_pmt", VAR_AARRAY_INT, keys, 1, MAX_KEYS, offsetof(SKey, pmt_pid)},
 		{"key_adapter", VAR_AARRAY_INT, keys, 1, MAX_KEYS, offsetof(SKey, adapter)},
-		{"key_cardsystem", VAR_AARRAY_PSTRING, keys, 1, MAX_KEYS, offsetof(SKey,
-																		   cardsystem)},
-		{"key_reader", VAR_AARRAY_PSTRING, keys, 1, MAX_KEYS, offsetof(SKey, reader)},
-		{"key_from", VAR_AARRAY_PSTRING, keys, 1, MAX_KEYS, offsetof(SKey, from)},
-		{"key_protocol", VAR_AARRAY_PSTRING, keys, 1, MAX_KEYS, offsetof(SKey,
-																		 protocol)},
+		{"key_cardsystem", VAR_AARRAY_STRING, keys, 1, MAX_KEYS, offsetof(SKey,
+																		  cardsystem)},
+		{"key_reader", VAR_AARRAY_STRING, keys, 1, MAX_KEYS, offsetof(SKey, reader)},
+		{"key_from", VAR_AARRAY_STRING, keys, 1, MAX_KEYS, offsetof(SKey, from)},
+		{"key_protocol", VAR_AARRAY_STRING, keys, 1, MAX_KEYS, offsetof(SKey,
+																		protocol)},
+		{"key_channel", VAR_FUNCTION_STRING, (void *)&get_channel_for_key, 0, MAX_KEYS, 0},
 
 		{NULL, 0, NULL, 0, 0}};

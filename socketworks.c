@@ -142,14 +142,14 @@ int udp_bind(char *addr, int port)
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0)
 	{
 		LOG("udp_bind failed: setsockopt(SO_REUSEADDR): %s",
-			 strerror(errno));
+			strerror(errno));
 		return -1;
 	}
 
 	if (bind(sock, (struct sockaddr *)&serv, sizeof(serv)) < 0)
 	{
 		LOG("udp_bind: failed: bind() on host %s port %d: error %s", addr,
-			 port, strerror(errno));
+			port, strerror(errno));
 		if (is_multicast)
 		{
 			serv.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -274,7 +274,7 @@ int tcp_connect(char *addr, int port, struct sockaddr_in *serv, int blocking)
 		if (errno != EINPROGRESS)
 		{
 			LOG("tcp_connect: failed: connect to %s:%d failed: %s", addr,
-				 port, strerror(errno));
+				port, strerror(errno));
 			close(sock);
 			return -1;
 		}
@@ -300,14 +300,14 @@ int tcp_listen(char *addr, int port)
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0)
 	{
 		LOG("tcp_listen failed: setsockopt(SO_REUSEADDR): %s",
-			 strerror(errno));
+			strerror(errno));
 		return -1;
 	}
 
 	if (bind(sock, (struct sockaddr *)&serv, sizeof(serv)) < 0)
 	{
 		LOG("tcp_listen: failed: bind() on address: %s, port %d : error %s",
-			 addr ? addr : "ANY", port, strerror(errno));
+			addr ? addr : "ANY", port, strerror(errno));
 		return -1;
 	}
 	if (listen(sock, 10) < 0)
@@ -399,6 +399,9 @@ int sockets_accept(int socket, void *buf, int len, sockets *ss)
 int sockets_read(int socket, void *buf, int len, sockets *ss, int *rv)
 {
 	*rv = read(socket, buf, len);
+	if (*rv > 0 && ss->type == TYPE_DVR && (opts.debug & LOG_DMX))
+		dump_packets("read ->", buf, *rv, ss->rlen);
+
 	return (*rv > 0);
 }
 
@@ -594,7 +597,7 @@ __thread char *thread_name;
 void *select_and_execute(void *arg)
 {
 	int i, rv, rlen, les, es;
-	unsigned char buf[2001];
+	unsigned char buf[2001], *pos;
 	int err;
 	struct pollfd pf[MAX_SOCKS];
 	int64_t lt, c_time;
@@ -670,7 +673,7 @@ void *select_and_execute(void *arg)
 					if ((pf[i].revents & POLLOUT) && (ss->spos != ss->wpos))
 					{
 						int k = 300;
-						LOG("start flush sock id %d", ss->id);
+						LOG("start flush sock id %d, send pos %d, write pos %d", ss->id, ss->spos, ss->wpos);
 						while (!flush_socket(ss))
 							if (!k--)
 								break;
@@ -706,8 +709,9 @@ void *select_and_execute(void *arg)
 					}
 					rlen = 0;
 					read_ok = 0;
+					pos = ss->buf + ss->rlen;
 					if (ss->read)
-						read_ok = ss->read(ss->sock, &ss->buf[ss->rlen],
+						read_ok = ss->read(ss->sock, pos,
 										   ss->lbuf - ss->rlen, ss, &rlen);
 
 					if (opts.log >= 1)
@@ -732,8 +736,8 @@ void *select_and_execute(void *arg)
 					if (ss->lbuf >= ss->rlen)
 						ss->buf[ss->rlen] = 0;
 					DEBUGM(
-						"Read %s %d (rlen:%d/total:%d) bytes from %d -> %p - iteration %d action %p",
-						read_ok ? "OK" : "NOK", rlen, ss->rlen, ss->lbuf,
+						"Read %s %d (rlen:%d/total:%d) bytes from %d -> %p (buf: %p) - iteration %d action %p",
+						read_ok ? "OK" : "NOK", rlen, ss->rlen, pos, ss->lbuf,
 						ss->sock, ss->buf, ss->iteration, ss->action);
 
 					if (((ss->rlen > 0) || err == EWOULDBLOCK) && ss->action && (ss->type != TYPE_SERVER))
@@ -1294,7 +1298,7 @@ int flush_socket(sockets *s)
 		rv = my_writev(s, iov, 1);
 		if ((rv > 0) && (rv != p->len))
 		{
-			LOG("incomplete write %d out of %d", rv, p->len);
+			LOG("incomplete write, send pos %d, bytes written %d out of %d", rv, s->spos, p->len);
 			memmove(p->buf, p->buf + rv, p->len - rv);
 			p->len -= rv;
 			return 1;

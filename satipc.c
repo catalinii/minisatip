@@ -124,7 +124,7 @@ int satipc_reply(sockets *s)
 	int rlen = s->rlen;
 	adapter *ad;
 	satipc *sip;
-	char *arg[50], *sess, *es, *sid, *timeout, *sep;
+	char *arg[100], *sess, *es, *sid, *timeout, *sep;
 	int la, i, rc;
 	__attribute__((unused)) int rv;
 	get_ad_and_sipr(s->sid, 1);
@@ -170,7 +170,7 @@ int satipc_reply(sockets *s)
 		}
 	}
 
-	la = split(arg, (char *)s->buf, 50, ' ');
+	la = split(arg, (char *)s->buf, 100, ' ');
 	rc = map_int(arg[1], NULL);
 
 	if (sip->option_no_session && sip->last_cmd == RTSP_OPTIONS && !sess && sip->session[0])
@@ -228,7 +228,7 @@ int satipc_reply(sockets *s)
 		satipc_commit(ad);
 		return 0;
 	}
-
+	LOG("wp %d qp %d, expect_reply %d, want_tune %d, force_commit %d, want commit %d", sip->wp, sip->qp, sip->expect_reply, sip->want_tune, sip->force_commit, sip->want_commit);
 	if (sip->wp >= sip->qp)
 		sip->expect_reply = 0;
 	else
@@ -241,7 +241,7 @@ int satipc_reply(sockets *s)
 				sprintf(np + len - 2, "Session: %s\r\n\r\n", sip->session);
 
 			LOG("satipc_reply: sending next packet:\n%s", np);
-			rv = write(s->sock, np, strlen(np));
+			rv = sockets_write(s->id, np, strlen(np));
 			delItem(MAKE_ITEM(ad->id, sip->wp++));
 		}
 	}
@@ -272,7 +272,6 @@ int satipc_timeout(sockets *s)
 		s->timeout_ms);
 	if (sip->wp == sip->qp)
 		http_request(ad, NULL, "OPTIONS");
-
 	s->rtime = getTick();
 	return 0;
 }
@@ -403,8 +402,6 @@ int satipc_open_device(adapter *ad)
 	sip->last_setup = -10000;
 	sip->last_cmd = 0;
 	sip->enabled = 1;
-	if (!sip->option_no_option)
-		http_request(ad, NULL, "OPTIONS");
 
 	return 0;
 }
@@ -578,15 +575,12 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb)
 		if ((rtsp[0] == 0x24) && (rtsp[1] < 2) && (rtsp[4] == 0x80) && ((rtsp[5] == 0x21) || (rtsp[5] == 0xC8)))
 		{
 			copy16r(rtsp_len, rtsp, 2);
-			//			LOG("found at pos %d, rtsp_len %d, len %d", sip->tcp_pos, rtsp_len, sip->tcp_len);
+			DEBUGM("found at pos %d, rtsp_len %d, len %d", sip->tcp_pos, rtsp_len, sip->tcp_len);
 			if (skipped_bytes)
 			{
 				LOG("%s: skipped %d bytes", __FUNCTION__, skipped_bytes);
 				skipped_bytes = 0;
 			}
-			// debug
-			//			if((rtsp[1] == 0) && (((rtsp_len - 12) > 26320) || (((rtsp_len - 12) % 188) != 0)))
-			//				LOG("invalid rtsp_len %d", rtsp_len);
 
 			if (rtsp_len + 4 + sip->tcp_pos > sip->tcp_len) // expecting more data in the buffer
 			{
@@ -684,6 +678,8 @@ void satip_post_init(adapter *ad)
 		set_socket_thread(sip->rtcp_sock, get_socket_thread(ad->sock));
 	}
 	set_socket_thread(ad->fe_sock, get_socket_thread(ad->sock));
+	if (!sip->option_no_option)
+		http_request(ad, NULL, "OPTIONS");
 }
 
 int satipc_set_pid(adapter *ad, uint16_t pid)
@@ -811,7 +807,7 @@ int http_request(adapter *ad, char *url, char *method)
 
 	session[0] = 0;
 	sid[0] = 0;
-	remote_socket = sip->use_tcp ? ad->dvr : ad->fe;
+	remote_socket = sip->use_tcp ? ad->sock : ad->fe_sock;
 
 	if (!sip->option_no_setup && !method && sip->sent_transport == 0)
 		method = "SETUP";
@@ -877,11 +873,14 @@ int http_request(adapter *ad, char *url, char *method)
 	else
 	{
 		sip->wp = sip->qp = 0;
-		rv = write(remote_socket, buf, lb);
-		if (rv != lb)
-			LOG("satipc: write on socket %d, error %d: %d from %d written (%s)", remote_socket, errno, rv, lb, strerror(errno));
+		if (remote_socket >= 0)
+		{
+			sockets_write(remote_socket, buf, lb);
+			sip->expect_reply = 1;
+		}
+		else
+			LOG("%s: remote socket is -1", __FUNCTION__);
 	}
-	sip->expect_reply = 1;
 	return 0;
 }
 

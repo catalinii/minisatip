@@ -489,6 +489,7 @@ void set_options(int argc, char *argv[])
 	opts.max_sbuf = 100;
 	opts.pmt_scan = 1;
 	opts.max_pids = 0;
+	opts.dvbapi_offset = 0; // offset for multiple dvbapi clients to the same server
 #if defined(AXE)
 	opts.max_pids = 32;
 #elif defined(__sh__)
@@ -1724,10 +1725,16 @@ int has_axe = 1;
 #else
 int has_axe = 0;
 #endif
+#ifndef DISABLE_PMT
+int has_pmt = 1;
+#else
+int has_pmt = 0;
+#endif
 
 _symbols minisatip_sym[] =
 	{
 		{"has_axe", VAR_INT, &has_axe, 1, 0, 0},
+		{"has_pmt", VAR_INT, &has_pmt, 1, 0, 0},
 		{"http_host", VAR_PSTRING, &opts.http_host, 0, 0, 0},
 		{"uuid", VAR_STRING, uuid, 0, 0, 0},
 		{"http_port", VAR_INT, &opts.http_port, 1, 0, 0},

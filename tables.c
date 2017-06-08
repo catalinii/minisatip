@@ -98,7 +98,7 @@ void del_ca(SCA_op *op)
 					if ((ad = get_adapter_nw(k)))
 						ad->ca_mask &= ~mask;
 				}
-				for (k = 0; k < MAX_PMT; k++) // delete ca_mask for all the PMTs
+				for (k = 0; k < npmts; k++) // delete ca_mask for all the PMTs
 					if (pmts[k] && pmts[k]->enabled && pmts[k]->running && (pmts[k]->ca_mask & mask))
 						pmts[k]->ca_mask &= ~mask;
 			}
@@ -260,7 +260,7 @@ void send_pmt_to_ca_for_device(SCA *c, adapter *ad)
 {
 	SPMT *pmt;
 	int i;
-	for (i = 0; i < MAX_PMT; i++)
+	for (i = 0; i < npmts; i++)
 		if ((pmt = get_pmt(i)) && pmt->adapter == ad->id && pmt->running)
 			send_pmt_to_ca(c->id, ad, pmt);
 }

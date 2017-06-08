@@ -113,6 +113,8 @@ void join_thread();
 void add_join_thread(pthread_t t);
 int init_utils(char *argv0);
 void hexdump(char *log_message, void *addr, int len);
+uint32_t crc_32(const uint8_t *data, int datalen);
+void dump_packets(char *message, unsigned char *b, int len, int packet_offset);
 
 #define mutex_lock(m) mutex_lock1(__FILE__, __LINE__, m)
 #define mutex_unlock(m) mutex_unlock1(__FILE__, __LINE__, m)

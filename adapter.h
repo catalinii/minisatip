@@ -70,11 +70,14 @@ typedef struct struct_adapter
 	int old_pol;
 	int id;
 	int rlen, lbuf; // how many bytes are received in the TS buffer, length of the buffer
-	int pat_processed, transponder_id, pat_ver, pat_filter;
+	int pat_processed;
 	int wait_new_stream, wait_transponder_id;
 	int threshold;
 	uint64_t tune_time;
 	char name[5];
+#ifndef DISABLE_PMT
+	int transponder_id, pat_ver, pat_filter, sdt_filter;
+#endif
 #ifdef AXE
 	int fe2;
 	int axe_used;

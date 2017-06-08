@@ -100,6 +100,7 @@ typedef struct struct_pmt
 	int16_t master_pmt; //  the pmt that contains the same pids as this PMT
 	SCW *cw;
 	SPid *p;
+	char provider[50], name[50];
 	void *opaque;
 	char skip_first;
 	char active;  // PMT structure was already filled
@@ -130,18 +131,19 @@ typedef struct struct_filter
 	filter_function callback;
 	unsigned char filter[FILTER_SIZE];
 	unsigned char mask[FILTER_SIZE];
-	unsigned char data[1500];
+	unsigned char data[2500];
 	int next_filter, master_filter;
 } SFilter;
 
 int register_algo(SCW_op *o);
 int send_cw(int pmt_id, int cw_type, int parity, uint8_t *cw, uint8_t *iv);
 
+extern int npmts;
 static inline SPMT *get_pmt(int id)
 {
 	extern SPMT *pmts[];
 
-	if (id < 0 || id >= MAX_PMT || !pmts[id] || !pmts[id]->enabled)
+	if (id < 0 || id >= npmts || !pmts[id] || !pmts[id]->enabled)
 		//		LOG_AND_RETURN(NULL, "PMT not found for id %d", id);
 		return NULL;
 	return pmts[id];
@@ -160,6 +162,7 @@ int pmt_init_device(adapter *ad); // will call action[CA_INIT_DEVICE] for the ad
 int pmt_close_device(adapter *ad);
 int pmt_init();
 int pmt_destroy();
+void start_pmt(SPMT *pmt, adapter *ad);
 int pmt_init_device(adapter *ad);
 int tables_tune(adapter *ad);
 int delete_pmt_for_adapter(int aid);
