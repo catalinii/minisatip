@@ -690,6 +690,10 @@ int update_pids(int aid)
 	for (i = 0; i < MAX_PIDS; i++)
 		if ((ad->pids[i].flags == 3))
 			pmt_pid_del(ad, ad->pids[i].pid);
+
+	for (i = 0; i < MAX_PIDS; i++)
+		if ((ad->pids[i].flags == 2))
+			pmt_pid_add(ad, ad->pids[i].pid, 0);
 #endif
 
 	for (i = 0; i < MAX_PIDS; i++)
@@ -942,9 +946,6 @@ int mark_pid_add(int sid, int aid, int _pid)
 			LOG("too many streams for PID %d adapter %d", _pid, aid);
 			return -1;
 		}
-#ifndef DISABLE_PMT
-		pmt_pid_add(ad, _pid, 1);
-#endif
 		return 0;
 	}
 	// add the new pid in a new position
@@ -956,9 +957,6 @@ int mark_pid_add(int sid, int aid, int _pid)
 			ad->pids[i].sid[0] = sid;
 			ad->pids[i].pmt = -1;
 			ad->pids[i].filter = -1;
-#ifndef DISABLE_PMT
-			pmt_pid_add(ad, _pid, 0);
-#endif
 			return 0;
 		}
 	LOG("MAX_PIDS (%d) reached for adapter %d in adding PID: %d", MAX_PIDS, aid,

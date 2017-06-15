@@ -1180,6 +1180,11 @@ int mutex_lock1(char *FILE, int line, SMutex *mutex)
 		LOG("Mutex Lock %p failed", mutex);
 		return rv;
 	}
+	if (start_lock > 0)
+	{
+		uint64_t ms = getTick() - start_lock;
+		LOGL(ms > 1000 ? 1 : DEFAULT_LOG, "%s:%d Locked %p after %ld ms, previously locked at: %s, line %d", FILE, line, mutex, ms, mutex->file, mutex->line);
+	}
 	mutex->file = FILE;
 	mutex->line = line;
 	mutex->state++;
@@ -1187,10 +1192,6 @@ int mutex_lock1(char *FILE, int line, SMutex *mutex)
 	mutex->lock_time = getTick();
 
 	mutexes[imtx++] = mutex;
-	if (start_lock > 0)
-		LOGM("%s:%d Locked %p after %ld ms", FILE, line, mutex,
-			 getTick() - start_lock);
-
 	return 0;
 }
 int mutex_unlock1(char *FILE, int line, SMutex *mutex)
@@ -1418,7 +1419,7 @@ int init_utils(char *arg0)
 
 void hexdump(char *desc, void *addr, int len)
 {
-	int i, pos = 0, bl = len * 6;
+	int i, pos = 0, bl = (len * 6 < 100) ? 100 : len * 6;
 	unsigned char buff[17];
 	unsigned char buf[bl];
 	unsigned char *pc = (unsigned char *)addr;

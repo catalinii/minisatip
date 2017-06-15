@@ -582,7 +582,7 @@ int keys_add(int i, int adapter, int pmt_id)
 			mutex_lock(&keys[i]->mutex);
 		else
 		{
-			keys[i] = malloc(sizeof(SKey));
+			keys[i] = malloc1(sizeof(SKey));
 			if (!keys[i])
 				LOG_AND_RETURN(-1, "Could not allocate memory for the key %d", i);
 			memset(keys[i], 0, sizeof(SKey));

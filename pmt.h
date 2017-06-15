@@ -18,7 +18,7 @@
 #define MAX_PMT 128
 #define MAX_CW 80
 #define MAX_CW_TIME 25000 // 25s
-
+#define MAX_BATCH_SIZE 128
 #define FILTER_SIZE 16 // based on DMX_FILTER_SIZE
 #define MAX_FILTERS 200
 #define FILTER_ADD_REMOVE 1
@@ -61,7 +61,7 @@ typedef struct struct_internal_op
 typedef struct struct_cw
 {
 	char enabled;
-	unsigned char cw[16], iv[16];
+	unsigned char cw[32], iv[32];
 	uint64_t time;
 	void *key;
 	int algo;
@@ -94,7 +94,7 @@ typedef struct struct_pmt
 	int pi_len;
 	int blen;
 	int ca_mask, disabled_ca_mask;
-	SPMT_batch batch[130];
+	SPMT_batch batch[MAX_BATCH_SIZE + 2];
 	int8_t parity, invalidated;
 	int64_t last_parity_change;
 	int16_t master_pmt; //  the pmt that contains the same pids as this PMT

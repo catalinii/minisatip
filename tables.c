@@ -138,10 +138,13 @@ void add_caid_mask(int ica, int caid, int mask)
 		for (i = 0; i < ca[i].caids; i++)
 			if (ca[ica].caid[i] == caid)
 				return;
-		i = ca[ica].caids;
+		i = ca[ica].caids++;
 		ca[ica].caid[i] = caid;
 		ca[ica].mask[i] = mask;
+		LOG("CA %d can handle CAID %04X mask %04X at position %d", ica, caid, mask, i);
 	}
+	else
+		LOG("CA not enabled %d", ica);
 }
 
 int tables_init_ca_for_device(int i, adapter *ad)
@@ -154,11 +157,16 @@ int tables_init_ca_for_device(int i, adapter *ad)
 	if ((ca[i].adapter_mask & mask) && !(ad->ca_mask & mask)) // CA registered and not already initialized
 	{
 		if (ca[i].enabled && ca[i].op->ca_init_dev)
+		{
 			if (ca[i].op->ca_init_dev(ad) == TABLES_RESULT_OK)
 			{
+				LOGM("CA %d will handle adapter %d", i, ad->id);
 				ad->ca_mask = ad->ca_mask | mask;
 				rv = 1;
 			}
+			else
+				LOGM("CA %d is disabled for adapter %d", i, ad->id);
+		}
 	}
 	return rv;
 }
@@ -169,7 +177,7 @@ int match_caid(SPMT *pmt, int caid, int mask)
 	for (i = 0; i < pmt->caids; i++)
 		if ((pmt->caid[i] & mask) == caid)
 		{
-			LOGM("%s: match caid %d with CA caid %d and mask %d", pmt->caid[i], caid, mask);
+			LOGM("%s: match caid %04X with CA caid %04X and mask %04X", __FUNCTION__, pmt->caid[i], caid, mask);
 			return 1;
 		}
 	return 0;
@@ -223,20 +231,21 @@ int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt)
 		for (j = 0; j < ca[i].caids; j++)
 			if (match_caid(pmt, ca[i].caid[j], ca[i].mask[j]))
 			{
+				LOG("CAID %04X and mask %04X matched PMT %d", ca[i].caid[j], ca[i].mask[j], pmt->id);
 				send = 1;
 				break;
 			}
-		result = 1;
+		result = TABLES_RESULT_ERROR_NORETRY;
 		if (send || ca[i].caids == 0)
 			result = ca[i].op->ca_add_pmt(ad, pmt);
-		else // do not process it next time
-			pmt->disabled_ca_mask |= mask;
+
 		if (result == TABLES_RESULT_OK)
 			pmt->ca_mask |= mask;
 		else if (result == TABLES_RESULT_ERROR_NORETRY)
 			pmt->disabled_ca_mask |= mask;
+		pmt->invalidated = 1;
 		rv += (1 - result);
-		LOGM("In processing PMT %d, ca %d, CA matched %d, ca_pmt_add returned %d", pmt->id, i, send, result);
+		LOGM("In processing PMT %d, ca %d, CA matched %d, ca_pmt_add returned %d, new ca_mask %d new disabled_ca_mask %d", pmt->id, i, send, result, pmt->ca_mask, pmt->disabled_ca_mask);
 	}
 	return rv;
 }
@@ -246,7 +255,7 @@ int send_pmt_to_cas(adapter *ad, SPMT *pmt)
 	int i, rv = 1;
 	if (!ad || (ad->ca_mask == (pmt->disabled_ca_mask | pmt->ca_mask)))
 	{
-		LOGM("PMT %d does not require to be sent to any CA: ad_ca_mask %X, pmt_ca_mask %X, disabled_ca_mask %X", pmt->id, ad ? ad->ca_mask : -2, pmt->disabled_ca_mask, pmt->ca_mask);
+		LOGM("PMT %d does not require to be sent to any CA: ad_ca_mask %X, pmt_ca_mask %X, disabled_ca_mask %X", pmt->id, ad ? ad->ca_mask : -2, pmt->ca_mask, pmt->disabled_ca_mask);
 		return 0;
 	}
 

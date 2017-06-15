@@ -863,7 +863,7 @@ void set_sockets_rtime(int i, int r)
 		ss->rtime = r;
 }
 
-int get_mac(char *mac)
+int get_mac_address(char *mac)
 {
 	struct ifreq ifr;
 	struct ifconf ifc;
@@ -1197,7 +1197,7 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 
 		if (rv > 0)
 		{
-			tmpbuf = malloc(len);
+			tmpbuf = malloc1(len);
 			if (!tmpbuf)
 			{
 				s->overflow++;

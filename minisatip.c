@@ -884,7 +884,7 @@ void set_options(int argc, char *argv[])
 	lip = getlocalip();
 	if (!opts.http_host)
 	{
-		opts.http_host = (char *)malloc(MAX_HOST);
+		opts.http_host = (char *)malloc1(MAX_HOST);
 		sprintf(opts.http_host, "%s:%d", lip, opts.http_port);
 	}
 }
@@ -1254,7 +1254,7 @@ int read_http(sockets *s)
 
 	if (strcmp(arg[1], "/state.json") == 0)
 	{
-		char *buf = malloc(JSON_STATE_MAXLEN);
+		char *buf = malloc1(JSON_STATE_MAXLEN);
 		int len = get_json_state(buf, JSON_STATE_MAXLEN);
 		http_response(s, 200, "Content-Type: application/json\r\nConnection: close", buf, 0, len);
 		free(buf);
@@ -1352,7 +1352,7 @@ int ssdp_discovery(sockets *s)
 	if (uuidi == 0)
 	{
 		uuidi = 1;
-		get_mac(mac);
+		get_mac_address(mac);
 		sprintf(uuid, "%s-%s", uuid1, mac);
 		fill_sockaddr(&ssdp_sa, opts.disc_host, 1900);
 	}

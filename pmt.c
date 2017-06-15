@@ -389,7 +389,7 @@ void process_filter(SFilter *f, unsigned char *b)
 	if (f->match || f->isEMM)
 	{
 		int len = assemble_packet(f, b);
-		DEBUGM("assemble_packet returned %d", len);
+		DEBUGM("assemble_packet returned %d for pid %d", len, f->pid);
 		if (!len)
 		{
 			mutex_unlock(&f->mutex);
@@ -465,15 +465,16 @@ void disable_cw(int master_pmt, int parity)
 	int i, dcw = 0;
 	uint64_t ctime = getTick();
 	SPMT *pmt = get_pmt(master_pmt);
-	for (i = 0; i < ncws; i++)
-		if (cws[i] && cws[i]->enabled && cws[i]->pmt == master_pmt && cws[i]->parity == parity && (ctime - cws[i]->time > 2000))
-		{
-			LOG("disabling CW %d, parity %d created %jd ms ago", i, cws[i]->parity, ctime - cws[i]->time);
-			if (cws[i]->op->stop_cw)
-				cws[i]->op->stop_cw(cws[i], pmt);
-			cws[i]->enabled = 0;
-			dcw++;
-		}
+	if (0)
+		for (i = 0; i < ncws; i++)
+			if (cws[i] && cws[i]->enabled && cws[i]->pmt == master_pmt && cws[i]->parity == parity && (ctime - cws[i]->time > 10000))
+			{
+				LOG("disabling CW %d, parity %d created %jd ms ago", i, cws[i]->parity, ctime - cws[i]->time);
+				if (cws[i]->op->stop_cw)
+					cws[i]->op->stop_cw(cws[i], pmt);
+				cws[i]->enabled = 0;
+				dcw++;
+			}
 	if (pmt)
 	{
 		pmt->cw = NULL;
@@ -502,11 +503,12 @@ void update_cw(SPMT *pmt)
 	{
 		return;
 	}
+	LOGM("%s: pmt %d, parity %d, CW %d", __FUNCTION__, pmt->id, pmt->parity, pmt->cw ? pmt->cw->id : -1);
 	pmt->cw = NULL;
 	for (i = 0; i < ncws; i++)
 		if (cws[i] && cws[i]->enabled && (pmt->parity == cws[i]->parity) && (cws[i]->pmt == pmt->id || cws[i]->pmt == master->id))
 		{
-			LOGM("candidate CW %d, time %jd ago, parity %d, pmt %d, found %d", i, ctime - cws[i]->time, pmt->parity, cws[i]->pmt, cw ? cw->id : -1);
+			LOGM("candidate CW %d, time %jd ms ago, parity %d, pmt %d, found %d", i, ctime - cws[i]->time, pmt->parity, cws[i]->pmt, cw ? cw->id : -1);
 			if (!cw)
 			{
 				cw = cws[i];
@@ -516,10 +518,12 @@ void update_cw(SPMT *pmt)
 			if ((cw->time < cws[i]->time) && (ctime - cws[i]->time > 2000))
 				cw = cws[i];
 		}
-	char buf[100];
+	char buf[300];
 	sprintf(buf, "not found");
 	if (cw)
 		sprintf(buf, "%02X %02X %02X %02X %02X %02X %02X %02X", cw->cw[0], cw->cw[1], cw->cw[2], cw->cw[3], cw->cw[4], cw->cw[5], cw->cw[6], cw->cw[7]);
+	if (cw && cw->iv[0])
+		sprintf(buf + strlen(buf), ", IV: %02X %02X %02X %02X %02X %02X %02X %02X", cw->iv[0], cw->iv[1], cw->iv[2], cw->iv[3], cw->iv[4], cw->iv[5], cw->iv[6], cw->iv[7]);
 
 	LOG("found CW: %d for %s PMT %d, pid %d, master %d, %jd ms ago, parity %d: %s", cw ? cw->id : -1, pmt->name, pmt->id, pmt->pid, master->id, cw ? (getTick() - cw->time) : 0, pmt->parity, buf);
 	if (cw)
@@ -548,9 +552,15 @@ void update_cw(SPMT *pmt)
 int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv)
 {
 	int i, master_pmt;
+	char buf[400];
 	SCW_op *op = get_op_for_algo(algo);
-	LOGM("got CW for PMT %d, algo %d, parity %d: %02X %02X %02X %02X %02X %02X %02X %02X", pmt_id, algo, parity,
-		 cw[0], cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);
+	buf[0] = 0;
+	if (iv)
+	{
+		sprintf(buf, ", IV: %02X %02X %02X %02X %02X %02X %02X %02X", iv[0], iv[1], iv[2], iv[3], iv[4], iv[5], iv[6], iv[7]);
+	}
+	LOGM("got CW for PMT %d, algo %d, parity %d: %02X %02X %02X %02X %02X %02X %02X %02X %s", pmt_id, algo, parity,
+		 cw[0], cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7], buf);
 	SPMT *pmt = get_pmt(pmt_id);
 	if (!pmt)
 		LOG_AND_RETURN(1, "%s: pmt not found %d", __FUNCTION__, pmt_id);
@@ -635,7 +645,8 @@ int decrypt_batch(SPMT *pmt)
 	mutex_lock(&pmt->mutex);
 	if (!pmt->cw)
 	{
-		LOG("No CW found for pmt %d parity %d pid %d", pmt->id, pmt->parity, pmt->pid);
+		LOG("No CW found for pmt %d parity %d pid %d, blen %d", pmt->id, pmt->parity, pmt->pid, pmt->blen);
+		pmt->blen = 0;
 		mutex_unlock(&pmt->mutex);
 		return 1;
 	}
@@ -644,19 +655,23 @@ int decrypt_batch(SPMT *pmt)
 	pmt->batch[pmt->blen].data = NULL;
 	pmt->batch[pmt->blen].len = 0;
 	pmt->cw->op->decrypt_stream(pmt->cw, pmt->batch, 184);
-	DEBUGM("pmt: decrypted key %d parity %d at len %d, channel_id %d (pid %d) %p",
-		   pmt->id, pmt->parity, pmt->blen, pmt->sid, pid, pmt->batch[0].data);
-
-	for (i = 0; i < pmt->blen; i++)
+	DEBUGM("pmt: decrypted key %d, CW %d, parity %d at len %d, channel_id %d (pid %d) %p",
+		   pmt->id, pmt->cw->id, pmt->parity, pmt->blen, pmt->sid, pid, pmt->batch[0].data);
+	if (opts.log & DEFAULT_LOG)
 	{
-		b = pmt->batch[i].data - 4;
-		if (b[0] == 0x47 && (b[1] & 0x40))
+		for (i = 0; i < pmt->blen; i++)
 		{
-			if (b[4] != 0 || b[5] != 0 || b[6] != 1)
-				LOGM("decryption failed for pmt %d, cw %d, pid %d, parity %d: [%02X %02X %02X %02X] %02X %02X %02X", pmt->id, pmt->cw ? pmt->cw->id : -1, PID_FROM_TS(b), pmt->parity, b[0], b[1], b[2], b[3], b[4], b[5], b[6]);
+			b = pmt->batch[i].data + pmt->batch[i].len - 188;
+			if (b[0] == 0x47 && (b[1] & 0x40))
+			{
+				int start = 4;
+				if (b[3] & 0x20)
+					start = 5 + b[4];
+				if (b[start] != 0 || b[start + 1] != 0 || b[start + 2] != 1)
+					LOGM("decryption failed for pmt %d, cw %d, pid %d, parity %d, start %d, packet %d: [%02X %02X %02X %02X] %02X %02X %02X", pmt->id, pmt->cw ? pmt->cw->id : -1, PID_FROM_TS(b), pmt->parity, start, i, b[0], b[1], b[2], b[3], b[start], b[start + 1], b[start + 2])
+			}
 		}
 	}
-
 	pmt->blen = 0;
 	//	memset(pmt->batch, 0, sizeof(int *) * 128);
 	mutex_unlock(&pmt->mutex);
@@ -696,7 +711,7 @@ int pmt_decrypt_stream(adapter *ad)
 				pmt = NULL;
 			if (!pmt)
 			{
-				DEBUGM("PMT not found for pid %d, id %d, packet %d, pos %d", p ? p->pmt : -3, pid, i / 188, i);
+				DEBUGM("PMT not found for pid %d, id %d, packet %d, pos %d", pid, p ? p->pmt : -3, i / 188, i);
 				continue; // cannot decrypt
 			}
 
@@ -711,13 +726,17 @@ int pmt_decrypt_stream(adapter *ad)
 			}
 			if (!pmt->cw)
 			{
-				DEBUGM("pmt %d channel %s CW not found", pmt->id, pmt->name);
-				continue;
+				DEBUGM("pmt %d channel %s CW not found, parity %d, packet parity %d", pmt->id, pmt->name, pmt->parity, cp);
+				if (pmt->parity == cp) // allow the parity change to be processed if the CW is invalid
+					continue;
 			}
 
-			if (!batchSize)
+			if (!batchSize && pmt->cw)
+			{
 				batchSize = pmt->cw->op->batch_size();
-
+				if (batchSize > MAX_BATCH_SIZE)
+					batchSize = MAX_BATCH_SIZE;
+			}
 			if ((pmt->parity != cp) || (pmt->blen >= batchSize)) // partiy change or batch buffer full
 			{
 				int old_parity = pmt->parity;
@@ -725,8 +744,7 @@ int pmt_decrypt_stream(adapter *ad)
 				if (old_parity != cp)
 				{
 					int64_t ctime = getTick();
-					LOG(
-						"Parity change for %s PMT %d, new active parity %d pid %d [%02X %02X %02X %02X], last_parity_change %jd",
+					LOG("Parity change for %s PMT %d, new active parity %d pid %d [%02X %02X %02X %02X], last_parity_change %jd",
 						pmt->name, pmt->id, cp, pid, b[0], b[1], b[2], b[3],
 						pmt->last_parity_change);
 					pmt->last_parity_change = ctime;
@@ -739,8 +757,8 @@ int pmt_decrypt_stream(adapter *ad)
 			if (b[3] & 0x20)
 			{
 				adapt_len = (b[4] < 183) ? b[4] + 5 : 188;
-				DEBUGM("Adaptation for pid %d, specified len %d, final len %d",
-					   pid, b[4], adapt_len);
+				//				DEBUGM("Adaptation for pid %d, len %d, packet %d",
+				//					   pid, adapt_len, i / 188);
 			}
 			else
 				adapt_len = 4;
@@ -783,8 +801,9 @@ int pmt_process_stream(adapter *ad)
 	if (ad->ca_mask == 0) // no CA enabled on this adapter
 		return 0;
 
-	pmt_decrypt_stream(ad);
 	tables_ca_ts(ad);
+	pmt_decrypt_stream(ad);
+
 	if (ad->ca_mask && opts.drop_encrypted)
 	{
 		for (i = 0; i < ad->rlen; i += DVB_FRAME)
@@ -1177,7 +1196,7 @@ int assemble_packet(SFilter *f, uint8_t *b)
 		len = assemble_normal(f, b);
 
 	b = f->data;
-	if ((len > 0) && (b[0] == 0 || b[0] == 2)) // check the crc for PAT and PMT
+	if ((len > 0) && (f->pid == 0 || b[0] == 2)) // check the crc for PAT and PMT
 	{
 		int current_crc;
 		if (len < 4 || len > 1500)
@@ -1200,6 +1219,9 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque)
 	tid = b[3] * 256 + b[4];
 	ver = b[5] & 0x3E;
 	//	LOG("tid %d (old tid %d) pat_len %d : %02X %02X %02X %02X %02X %02X %02X %02X", tid, ad ? ad->transponder_id : -1, pat_len, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]);
+	if (b[0] != 0)
+		return 0;
+
 	if (!ad->enabled)
 		LOG_AND_RETURN(0, "Adapter %d no longer enabled, not processing PAT", ad->id);
 
@@ -1350,6 +1372,9 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 	int opmt;
 	SPMT *pmt = (void *)opaque;
 
+	if (b[0] != 2)
+		return 0;
+
 	if (!pmt || !pmt->enabled)
 	{
 		LOG("PMT %d does not exist", pmt->id);
@@ -1486,6 +1511,9 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque)
 	unsigned char *b;
 	uint8_t new_filter[FILTER_SIZE], new_mask[FILTER_SIZE];
 
+	if (sdt[0] != 0x42)
+		return 0;
+
 	adapter *ad = (void *)opaque;
 	tsid = sdt[3] * 256 + sdt[4];
 
@@ -1499,13 +1527,13 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque)
 	new_mask[1] = 0xFF;
 	new_filter[2] = sdt[4];
 	new_mask[2] = 0xFF;
-	new_filter[3] = sdt[5];
-	new_mask[3] = 0xFF;
+	new_filter[3] = (sdt[5] & 0x3E);
+	new_mask[3] = 0x3E;
 	set_filter_mask(filter, new_filter, new_mask);
 	set_filter_flags(filter, FILTER_PERMANENT | FILTER_REVERSE);
 	sdt_len = (sdt[1] & 0xF) * 256 + sdt[2];
 	i = 11;
-	LOG("Processing SDT for transponder %d (%x) with length %d", tsid, tsid, sdt_len);
+	LOG("Processing SDT for transponder %d (%x) with length %d, sdt[5] %02X", tsid, tsid, sdt_len, sdt[5]);
 
 	for (i = 11; i < sdt_len - 1; i += desc_loop_len)
 	{
@@ -1721,8 +1749,8 @@ _symbols pmt_sym[] =
 		{"pmt_enabled", VAR_AARRAY_INT8, pmts, 1, MAX_PMT, offsetof(SPMT, enabled)},
 		{"pmt_adapter", VAR_AARRAY_INT, pmts, 1, MAX_PMT, offsetof(SPMT, adapter)},
 		{"pmt_name", VAR_AARRAY_STRING, pmts, 1, MAX_PMT, offsetof(SPMT, name)},
-		{"pmt_pid", VAR_AARRAY_INT, pmts, 1, MAX_PMT, offsetof(SPMT, adapter)},
-		{"pmt_sid", VAR_AARRAY_INT, pmts, 1, MAX_PMT, offsetof(SPMT, adapter)},
+		{"pmt_pid", VAR_AARRAY_INT, pmts, 1, MAX_PMT, offsetof(SPMT, pmt)},
+		{"pmt_sid", VAR_AARRAY_INT, pmts, 1, MAX_PMT, offsetof(SPMT, sid)},
 		{"pmt_running", VAR_AARRAY_UINT8, pmts, 1, MAX_PMT, offsetof(SPMT, running)},
 		{"ad_channel", VAR_FUNCTION_STRING, (void *)&get_channel_for_adapter, 0, MAX_ADAPTERS, 0},
 
