@@ -34,7 +34,7 @@ typedef struct struct_streams
 	unsigned char buf[STREAMS_BUFFER + 10];
 	int len, total_len;
 	uint16_t seq;  //rtp seq id
-	int ssrc; // rtp seq id			 
+	int ssrc; // rtp seq id
 	int64_t wtime;
 	int64_t rtime;  // stream timeout
 	int64_t rtcp_wtime;
@@ -83,6 +83,7 @@ int find_session_id(int id);
 int calculate_bw(sockets *s);
 int lock_streams_for_adapter(int aid);
 int unlock_streams_for_adapter(int aid);
+streams *st[MAX_STREAMS];
 
 #define get_sid(a) get_sid1(a, __FILE__, __LINE__)
 #define get_sid_for(i) ((st[i] && st[i]->enabled)?st[i]:NULL)
