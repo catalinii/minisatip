@@ -517,7 +517,7 @@ int /* Returns 0 on success, -1 on error */
 		}
 	}
 
-	LOG("running %s in background", app_name);
+	LOG("running %s in background and logging to %s", app_name, opts.log_file);
 
 	switch (fork())
 	{ /* Become background process */
@@ -556,7 +556,7 @@ int /* Returns 0 on success, -1 on error */
 
 	fd = open("/dev/null", O_RDWR);
 
-	snprintf(buf, sizeof(buf), "/tmp/%s.log", app_name);
+	snprintf(buf, sizeof(buf), "%s", opts.log_file);
 
 	if (fd != STDIN_FILENO) /* 'fd' should be 0 */
 		return -1;

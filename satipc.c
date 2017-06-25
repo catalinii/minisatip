@@ -74,7 +74,7 @@ typedef struct struct_satipc
 	char ignore_packets; // ignore packets coming from satip server while tuning
 	char satip_fe, last_cmd;
 	char use_tcp;
-	char expect_reply, force_commit, want_commit, want_tune, sent_transport;
+	char expect_reply, force_commit, want_commit, want_tune, sent_transport, force_pids;
 	int64_t last_setup, last_connect;
 	uint8_t addpids, setup_pids;
 	unsigned char *tcp_data;
@@ -185,6 +185,7 @@ int satipc_reply(sockets *s)
 		sip->want_tune = 1;
 		sip->want_commit = 1;
 		sip->force_commit = 1;
+		sip->last_setup = -10000;
 	}
 	else if (rc != 200)
 		sip->err = 1;
@@ -363,7 +364,7 @@ int satipc_open_device(adapter *ad)
 		sip->rtcp_sock = sockets_add(sip->rtcp, NULL, ad->id, TYPE_TCP,
 									 (socket_action)satipc_rtcp_reply, (socket_action)satipc_close,
 									 NULL);
-		sockets_timeout(ad->fe_sock, 30000); // 30s
+		sockets_timeout(ad->fe_sock, 25000); // 25s
 		set_socket_receive_buffer(ad->dvr, opts.dvr_buffer);
 		if (ad->fe_sock < 0 || ad->dvr < 0 || sip->rtcp < 0 || sip->rtcp_sock < 0)
 		{
@@ -380,7 +381,7 @@ int satipc_open_device(adapter *ad)
 		ad->fe = -1;
 		ad->fe_sock = sockets_add(SOCK_TIMEOUT, NULL, ad->id, TYPE_UDP,
 								  NULL, NULL, (socket_action)satipc_timeout);
-		sockets_timeout(ad->fe_sock, 30000); // 30s
+		sockets_timeout(ad->fe_sock, 25000); // 25s
 	}
 	sip->session[0] = 0;
 	sip->lap = 0;
@@ -398,7 +399,17 @@ int satipc_open_device(adapter *ad)
 	sip->rtp_miss = sip->rtp_ooo = 0;
 	sip->rtp_seq = 0xFFFF;
 	sip->ignore_packets = 1;
-	sip->force_commit = 0;
+	if (ad->failed_adapter)
+	{
+		sip->want_tune = 1;
+		sip->force_commit = 1;
+		sip->force_pids = 1;
+	}
+	else
+	{
+		sip->force_commit = 0;
+		sip->force_pids = 0;
+	}
 	sip->last_setup = -10000;
 	sip->last_cmd = 0;
 	sip->enabled = 1;
@@ -409,6 +420,7 @@ int satipc_open_device(adapter *ad)
 void satip_close_device(adapter *ad)
 {
 	satipc *sip = get_satip(ad->id);
+	LOG("satip device %s:%d is closing", sip->sip, sip->sport);
 	http_request(ad, NULL, "TEARDOWN");
 	sip->session[0] = 0;
 	sip->sent_transport = 0;
@@ -680,6 +692,8 @@ void satip_post_init(adapter *ad)
 	set_socket_thread(ad->fe_sock, get_socket_thread(ad->sock));
 	if (!sip->option_no_option)
 		http_request(ad, NULL, "OPTIONS");
+	else if (sip->force_commit)
+		satipc_commit(ad);
 }
 
 int satipc_set_pid(adapter *ad, uint16_t pid)
@@ -900,6 +914,8 @@ void tune_url(adapter *ad, char *url)
 	case SYS_DVBT:
 	case SYS_ISDBT:
 		get_t2_url(ad, url);
+	default:
+		LOG("No system specified %d", ad->sys[0]);
 		break;
 	}
 }
@@ -916,9 +932,8 @@ void satipc_commit(adapter *ad)
 
 	url[0] = 0;
 	LOG(
-		"satipc: commit for adapter %d pids to add %d, pids to delete %d, expect_reply %d, force_commit %d want_tune %d",
-		ad->id, sip->lap, sip->ldp, sip->expect_reply, sip->force_commit,
-		sip->want_tune);
+		"satipc: commit for adapter %d pids to add %d, pids to delete %d, expect_reply %d, force_commit %d want_tune %d do_tune %d, force_pids %d",
+		ad->id, sip->lap, sip->ldp, sip->expect_reply, sip->force_commit, sip->want_tune, ad->do_tune, sip->force_pids);
 
 	if (ad->do_tune && !sip->want_tune)
 	{
@@ -979,6 +994,7 @@ void satipc_commit(adapter *ad)
 		send_apids = 0;
 		send_dpids = 0;
 	}
+
 	if (sip->sent_transport == 0)
 		sip->want_tune = 1;
 
@@ -988,6 +1004,14 @@ void satipc_commit(adapter *ad)
 		send_apids = 0;
 		send_dpids = 0;
 	}
+
+	if (sip->force_pids && (send_pids + send_apids + send_dpids == 0))
+	{
+		send_pids = 1;
+		send_apids = 0;
+		send_dpids = 0;
+	}
+
 	sip->want_commit = 0;
 	if (sip->want_tune + send_pids + send_apids + send_dpids == 0)
 	{
@@ -1024,6 +1048,7 @@ void satipc_commit(adapter *ad)
 		sip->lap = 0;
 		sip->ldp = 0;
 		sip->force_commit = 0;
+		sip->force_pids = 0;
 	}
 
 	if (send_apids)

@@ -71,6 +71,7 @@ int rtsp, http, si, si1, ssdp1;
 #define HTTPPORT_OPT 'x'
 #define LOG_OPT 'l'
 #define DEBUG_OPT 'v'
+#define LOGFILE_OPT 'F'
 #define HELP_OPT 'h'
 #define PLAYLIST_OPT 'p'
 #define DVBS2_ADAPTERS_OPT 'a'
@@ -118,6 +119,7 @@ static const struct option long_options[] =
 		{"clean-psi", no_argument, NULL, 't'},
 		{"log", no_argument, NULL, 'l'},
 		{"debug", no_argument, NULL, 'v'},
+		{"logfile", required_argument, NULL, 'F'},
 		{"buffer", required_argument, NULL, 'b'},
 		{"threshold", required_argument, NULL, 'H'},
 		{"enable-adapters", required_argument, NULL, 'e'},
@@ -301,7 +303,9 @@ Help\n\
 	- keep in mind that the first adapters are the local ones starting with 0 after that are the satip adapters \n\
 	if you have 3 local dvb cards 0-2 will be the local adapters, 3,4, ... will be the satip servers specified with argument -s\n\
 \n\
-* -f  foreground, otherwise run in background\n\
+* -f foreground, otherwise run in background\n\
+\n\
+* -F --logfile log_file, output the debug/log information to  log_file when running in background (option -f not used), default /tmp/minisatip.log\n\
 \n\
 * -g use syslog instead stdout for logging, multiple -g - print to stderr as well\n\
 \n\
@@ -456,6 +460,7 @@ void set_options(int argc, char *argv[])
 	opts.log = 1;
 	opts.debug = 0;
 	opts.file_line = 0;
+	opts.log_file = "/tmp/minisatip.log";
 	opts.disc_host = "239.255.255.250";
 	opts.start_rtp = 5500;
 	opts.http_port = 8080;
@@ -508,7 +513,7 @@ void set_options(int argc, char *argv[])
 
 #endif
 
-	while ((opt = getopt_long(argc, argv, "fl:v:r:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:o:gy:i:q:DVR:S:TX:Y:OL:EP:Z:0:" AXE_OPTS, long_options, NULL)) != -1)
+	while ((opt = getopt_long(argc, argv, "fl:v:r:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:o:gy:i:q:DVR:S:TX:Y:OL:EP:Z:0:F:" AXE_OPTS, long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
 		switch (opt)
@@ -587,6 +592,10 @@ void set_options(int argc, char *argv[])
 			opts.slog++;
 			break;
 		}
+
+		case LOGFILE_OPT:
+			opts.log_file = optarg;
+			break;
 
 		case HELP_OPT:
 		{

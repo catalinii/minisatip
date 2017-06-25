@@ -1126,6 +1126,19 @@ int stream_timeout(sockets *s)
 		}
 	}
 
+	if ((sid = get_sid_for(s->sid)) && sid->do_play && (ctime - sid->last_init_hw > 5000))
+	{
+		sid->last_init_hw = ctime;
+		if (sid->adapter != -1)
+		{
+			adapter *ad = get_adapter_nw(sid->adapter);
+			if (!ad)
+			{
+				LOG("stream %d is active but the adapter %d is closed, initializing", sid->sid, sid->adapter);
+				enable_failed_adapter(sid->adapter);
+			}
+		}
+	}
 	return 0;
 }
 

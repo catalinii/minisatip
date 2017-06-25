@@ -24,7 +24,7 @@ PMT=0
 
 ifeq ($(DVBAES),1)
 LIBS+=crypto
-LDFLAGS-1+=-ldl
+LDFLAGS-$(STATIC)+=-ldl
 OBJS+=aes.o
 PMT=1
 else

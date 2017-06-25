@@ -47,6 +47,8 @@
 #include "tables.h"
 #include "openssl/aes.h"
 #include <openssl/evp.h>
+#include <openssl/conf.h>
+#include <openssl/err.h>
 
 #define DEFAULT_LOG LOG_PMT
 
@@ -133,7 +135,7 @@ int decrypt(void *context, unsigned char *ciphertext, int ciphertext_len, unsign
 void dvbaes_cbc_decrypt_stream(SCW *cw, SPMT_batch *batch, int max_len)
 {
 	int i, len;
-	uint8_t decryptedtext[300], ciphertext[300];
+	uint8_t decryptedtext[300]; //, ciphertext[300];
 	for (i = 0; batch[i].data && i < max_len; i++)
 	{
 

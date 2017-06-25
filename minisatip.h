@@ -81,6 +81,7 @@ struct struct_opts
 	uint8_t netcv_count;
 	char *netcv_if;
 	char *playlist;
+	char *log_file;
 #ifndef DISABLE_SATIPCLIENT
 	char *satip_servers;
 	char *satip_init;

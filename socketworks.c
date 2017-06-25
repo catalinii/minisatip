@@ -1146,8 +1146,8 @@ int my_writev(sockets *s, const struct iovec *iov, int iiov)
 	else
 		s->sock_err = 0;
 
-	DEBUGM("writev returned %d handle %d, iiov %d (took %jd ms)", rv,
-		   s->sock, iiov, stime);
+	DEBUGM("writev returned %d handle %d, iiov %d, len %d (took %jd ms)", rv,
+		   s->sock, iiov, len, stime);
 	return rv;
 }
 

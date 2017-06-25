@@ -27,24 +27,25 @@ typedef struct struct_streams
 {
 	char enabled;
 	SMutex mutex;
-	int sid;  // socket - <0 for invalid/not used, 0 for end of the list
+	int sid; // socket - <0 for invalid/not used, 0 for end of the list
 	int adapter;
-	struct sockaddr_in sa;//remote address - set on accept or recvfrom on udp sockets
-	int rsock;// return socket handle, for rtsp over tcp, rtsp over udp or http
+	struct sockaddr_in sa; //remote address - set on accept or recvfrom on udp sockets
+	int rsock;			   // return socket handle, for rtsp over tcp, rtsp over udp or http
 	int rsock_id;
 	int rtcp, rtcp_sock, st_sock;
 	int type;
 	int len, total_len;
-	uint16_t seq;  //rtp seq id
-	int ssrc; // rtp seq id
+	uint16_t seq; //rtp seq id
+	int ssrc;	 // rtp seq id
 	int64_t wtime;
-	int64_t rtime;  // stream timeout
+	int64_t rtime; // stream timeout
 	int64_t rtcp_wtime;
+	int64_t last_init_hw;
 	int do_play;
 	int start_streaming;
 	transponder tp;
 	char apids[LEN_PIDS + 1], dpids[LEN_PIDS + 1], pids[LEN_PIDS + 1],
-						x_pmt[LEN_PIDS + 1];
+		x_pmt[LEN_PIDS + 1];
 	struct iovec iov[MAX_PACK + 2];
 	int iiov;
 	uint32_t sp, sb;
@@ -66,11 +67,11 @@ typedef struct struct_rtp_prop
 streams *get_stream(int i);
 
 char *describe_streams(sockets *s, char *req, char *sbuf, int size);
-streams *setup_stream(char *str, sockets * s);
-int start_play(streams * sid, sockets * s);
-int decode_transport(sockets * s, char *arg, char *default_rtp, int start_rtp);
+streams *setup_stream(char *str, sockets *s);
+int start_play(streams *sid, sockets *s);
+int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp);
 int streams_add();
-int read_dmx(sockets * s);
+int read_dmx(sockets *s);
 int stream_timeout(sockets *s);
 int close_streams_for_adapter(int ad, int except);
 int close_stream(int i);
@@ -90,7 +91,7 @@ int unlock_streams_for_adapter(int aid);
 
 #define get_sid(a) get_sid1(a, __FILE__, __LINE__)
 #define get_sid_for(i) ((st[i] && st[i]->enabled) ? st[i] : NULL)
-#define get_sid_nw(i) ((i>=0 && i<MAX_STREAMS && st[i] && st[i]->enabled) ? st[i] : NULL)
+#define get_sid_nw(i) ((i >= 0 && i < MAX_STREAMS && st[i] && st[i]->enabled) ? st[i] : NULL)
 
 extern int64_t c_tbw, c_bw;
 extern uint32_t c_reads, c_writes, c_failed_writes;

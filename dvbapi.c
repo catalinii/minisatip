@@ -176,13 +176,16 @@ int dvbapi_reply(sockets *s)
 				a_id = k->adapter;
 			demux = b[5];
 			filter = b[6];
-			LOG(
-				"dvbapi set filter for pid %04X (%d), key %d, demux %d, filter %d %s",
-				_pid, _pid, k_id, demux, filter,
-				!k ? "(KEY NOT VALID)" : "");
-			LOG("filter: %02X %02X %02X %02X %02X, mask: %02X %02X %02X %02X %02X", b[9], b[10], b[11], b[12], b[13], b[25], b[26], b[27], b[28], b[29]);
 			i = -1;
 			int fid = -1;
+			int isEMM = b[9] & b[25];
+			if (isEMM >= 0x82 && isEMM <= 0x8F)
+				isEMM = FILTER_EMM;
+			else
+				isEMM = 0;
+			LOG("dvbapi set filter for pid %04X (%d), key %d, demux %d, filter %d %s%s", _pid, _pid, k_id, demux, filter, !k ? "(KEY NOT VALID)" : "", isEMM ? " EMM" : "");
+			LOGM("filter: %02X %02X %02X %02X %02X, mask: %02X %02X %02X %02X %02X", b[9], b[10], b[11], b[12], b[13], b[25], b[26], b[27], b[28], b[29]);
+
 			if (k)
 			{
 				for (i = 0; i < MAX_KEY_FILTERS; i++)
@@ -194,7 +197,7 @@ int dvbapi_reply(sockets *s)
 				if (not_found)
 				{
 
-					fid = add_filter_mask(k->adapter, _pid, (void *)send_ecm, (void *)k, FILTER_ADD_REMOVE, b + 9, b + 25);
+					fid = add_filter_mask(k->adapter, _pid, (void *)send_ecm, (void *)k, FILTER_ADD_REMOVE | isEMM, b + 9, b + 25);
 					i = get_index_for_filter(k, -1);
 				}
 				else

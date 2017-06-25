@@ -19,11 +19,17 @@
 #define MAX_CW 80
 #define MAX_CW_TIME 25000 // 25s
 #define MAX_BATCH_SIZE 128
+
 #define FILTER_SIZE 16 // based on DMX_FILTER_SIZE
+#define FILTER_PACKET_SIZE 2500
+
 #define MAX_FILTERS 200
 #define FILTER_ADD_REMOVE 1
 #define FILTER_PERMANENT 4
 #define FILTER_REVERSE 8
+
+#define FILTER_CRC 16
+#define FILTER_EMM 32
 
 #define PID_FROM_TS(b) ((b[1] & 0x1F) * 256 + b[2])
 #define MAX_PI_LEN 1500
@@ -123,15 +129,15 @@ typedef struct struct_filter
 	SMutex mutex;
 	int id;
 	int pid;
-	int flags;
 	int adapter;
 	void *opaque;
 	int len, mask_len;
-	char match, isEMM, check_crc;
+	char match;
 	filter_function callback;
 	unsigned char filter[FILTER_SIZE];
 	unsigned char mask[FILTER_SIZE];
-	unsigned char data[2500];
+	unsigned char data[FILTER_PACKET_SIZE + 2];
+	int flags;
 	int next_filter, master_filter;
 } SFilter;
 

@@ -379,14 +379,12 @@ void process_filter(SFilter *f, unsigned char *b)
 
 	if ((b[1] & 0x40))
 	{
-		if (b[4] == 0 && b[5] >= 0x82 && b[5] <= 0x8F) // EMM
-			f->isEMM = 1;
-		else
+		if (!(f->flags & FILTER_EMM))
 			match = match_filter(f, b + 5);
-		//		LOG("matching pid %d, filter %d, match %d, isEMM %d", f->pid, f->id, match, f->isEMM);
+		DEBUGM("matching pid %d, filter %d, match %d, flags %d, isEMM %d", f->pid, f->id, match, f->flags, (f->flags & FILTER_EMM) > 0);
 		f->match = match;
 	}
-	if (f->match || f->isEMM)
+	if (f->match || (f->flags & FILTER_EMM))
 	{
 		int len = assemble_packet(f, b);
 		DEBUGM("assemble_packet returned %d for pid %d", len, f->pid);
@@ -395,7 +393,7 @@ void process_filter(SFilter *f, unsigned char *b)
 			mutex_unlock(&f->mutex);
 			return;
 		}
-		if (!f->isEMM)
+		if (!(f->flags & FILTER_EMM))
 			f->callback(f->id, f->data, len, f->opaque);
 		else
 		{
@@ -403,7 +401,7 @@ void process_filter(SFilter *f, unsigned char *b)
 			unsigned char *data = f->data;
 			while (i < len)
 			{
-				if (data[i] < 0x82 || data[i] > 0x8F)
+				if (data[i] < 0x80 || data[i] > 0x8F)
 					break;
 				cl = (data[i + 1] & 0xF) * 256 + data[i + 2];
 				match = match_filter(f, data + i);
@@ -699,7 +697,7 @@ int pmt_decrypt_stream(adapter *ad)
 		{
 
 			p = find_pid(ad->id, pid);
-			if (p && p->pmt > 0 && p->pmt < npmts && pmts[p->pmt] && pmts[p->pmt]->enabled)
+			if (p && p->pmt >= 0 && p->pmt < npmts && pmts[p->pmt] && pmts[p->pmt]->enabled)
 			{
 				pmt = pmts[p->pmt];
 				mid = pmt->master_pmt;
@@ -727,6 +725,7 @@ int pmt_decrypt_stream(adapter *ad)
 			if (!pmt->cw)
 			{
 				DEBUGM("pmt %d channel %s CW not found, parity %d, packet parity %d", pmt->id, pmt->name, pmt->parity, cp);
+				p->dec_err++;
 				if (pmt->parity == cp) // allow the parity change to be processed if the CW is invalid
 					continue;
 			}
@@ -811,10 +810,10 @@ int pmt_process_stream(adapter *ad)
 			b = ad->buf + i;
 			pid = PID_FROM_TS(b);
 			p = find_pid(ad->id, pid);
-
 			if ((b[3] & 0x80) == 0x80)
 			{
-				DEBUGL(LOG_DMX, "Marking PID %d packet %d pos %d as NULL", pid, i / 188, i);
+				if (opts.debug & (DEFAULT_LOG | LOG_DMX))
+					LOG("Marking PID %d packet %d pos %d as NULL", pid, i / 188, i);
 				b[1] |= 0x1F;
 				b[2] |= 0xFF;
 				ad->dec_err++;
@@ -940,7 +939,7 @@ int clear_pmt_for_adapter(int aid)
 		memset(filter, 0, FILTER_SIZE);
 		memset(mask, 0, FILTER_SIZE);
 		set_filter_mask(ad->pat_filter, filter, mask);
-		set_filter_flags(ad->pat_filter, FILTER_PERMANENT);
+		set_filter_flags(ad->pat_filter, FILTER_PERMANENT | FILTER_CRC);
 	}
 	return 0;
 }
@@ -1101,7 +1100,7 @@ int getEMMlen(unsigned char *b, int len)
 	int i = 0, cl, emms = 0;
 	while (i < len)
 	{
-		if (b[i] < 0x82 || b[i] > 0x8F)
+		if (b[i] < 0x80 || b[i] > 0x8F)
 			break;
 		cl = (b[i + 1] & 0xF) * 256 + b[i + 2];
 		i += cl + 3;
@@ -1117,16 +1116,16 @@ int assemble_emm(SFilter *f, uint8_t *b)
 	if (b[4] == 0 && (b[5] >= 0x82 && b[5] <= 0x8F))
 	{
 		f->len = 0;
-		memset(f->data, 0, sizeof(f->data));
+		memset(f->data, 0, FILTER_PACKET_SIZE);
 		memcpy(f->data + f->len, b + 5, 183);
 		f->len += 183;
 	}
 	else
 	{
 		// f >1500
-		if (f->len + 183 > sizeof(f->data))
+		if (f->len + 183 > FILTER_PACKET_SIZE)
 		{
-			LOG("EMM data too large %d", f->len + 183);
+			LOG("%s: data too large %d", __FUNCTION__, f->len + 184);
 			f->len = 0;
 			return 0;
 		}
@@ -1151,7 +1150,7 @@ int assemble_normal(SFilter *f, uint8_t *b)
 		len = ((b[6] & 0xF) << 8) + b[7];
 		len = len + 8 - 5; // byte 8 - 5 bytes that we skip
 		f->len = 0;
-		memset(f->data, 0, sizeof(f->data));
+		memset(f->data, 0, FILTER_PACKET_SIZE);
 	}
 	if ((len > 1500 || len < 0))
 		LOG_AND_RETURN(0,
@@ -1171,6 +1170,12 @@ int assemble_normal(SFilter *f, uint8_t *b)
 	}
 	else // pmt_len == 0 - next part from the pmt
 	{
+		if (f->len + 184 > FILTER_PACKET_SIZE)
+		{
+			LOG("%s: data too large %d", __FUNCTION__, f->len + 184);
+			f->len = 0;
+			return 0;
+		}
 		memcpy(f->data + f->len, b + 4, 184);
 		f->len += 184;
 		len = ((f->data[1] & 0xF) << 8) + f->data[2];
@@ -1190,18 +1195,18 @@ int assemble_packet(SFilter *f, uint8_t *b)
 		return 0;
 
 	pid = (b[1] & 0x1F) * 256 + b[2];
-	if (f->isEMM)
+	if (f->flags & FILTER_EMM)
 		len = assemble_emm(f, b);
 	else
 		len = assemble_normal(f, b);
 
 	b = f->data;
-	if ((len > 0) && (f->pid == 0 || b[0] == 2)) // check the crc for PAT and PMT
+	if ((len > 0) && (f->flags & FILTER_CRC)) // check the crc for PAT and PMT
 	{
 		int current_crc;
-		if (len < 4 || len > 1500)
-			LOG_AND_RETURN(0, "assemble_packet: len %d not valid for pid %d",
-						   len, pid);
+		if (len < 4 || len > FILTER_PACKET_SIZE)
+			LOG_AND_RETURN(0, "assemble_packet: CRC check: flags %d len %d not valid for pid %d [%02X %02X %02X %02X %02X %02X]",
+						   f->flags, len, pid, b[0], b[1], b[2], b[3], b[4], b[5]);
 		crc = crc_32(b, len - 4);
 		copy32r(current_crc, b, len - 4) if (crc != current_crc)
 			LOG_AND_RETURN(0, "pid %d (%04X) CRC failed %08X != %08X len %d",
@@ -1247,7 +1252,7 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque)
 	new_filter[3] = b[5];
 	new_mask[3] = 0xFF;
 	set_filter_mask(filter, new_filter, new_mask);
-	set_filter_flags(filter, FILTER_PERMANENT | FILTER_REVERSE);
+	set_filter_flags(filter, FILTER_PERMANENT | FILTER_REVERSE | FILTER_CRC);
 	pat_len -= 9;
 	b += 8;
 	LOG("PAT Adapter %d, Transponder ID %d, len %d, version %d", ad->id,
@@ -1276,7 +1281,7 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque)
 			new_filter[2] = b[i + 1];
 			new_mask[2] = 0xFF;
 			if (pmt)
-				pmt->filter = add_filter_mask(ad->id, pid, (void *)process_pmt, pmt, opts.pmt_scan ? FILTER_ADD_REMOVE : 0, new_filter, new_mask);
+				pmt->filter = add_filter_mask(ad->id, pid, (void *)process_pmt, pmt, opts.pmt_scan ? FILTER_ADD_REMOVE | FILTER_CRC : 0, new_filter, new_mask);
 			else
 				LOG("could not add PMT pid %d sid %d (%X) for processing", pid, sid, sid);
 		}
@@ -1575,7 +1580,7 @@ void start_pmt(SPMT *pmt, adapter *ad)
 {
 	LOGM("starting PMT %d master %d for channel: %s", pmt->id, pmt->master_pmt, pmt->name);
 	pmt->running = 1;
-	set_filter_flags(pmt->filter, FILTER_ADD_REMOVE);
+	set_filter_flags(pmt->filter, FILTER_ADD_REMOVE | FILTER_CRC);
 #ifndef DISABLE_TABLES
 	send_pmt_to_cas(ad, pmt);
 #endif
@@ -1679,7 +1684,7 @@ int pmt_close_device(adapter *ad)
 int pmt_tune(adapter *ad)
 {
 	if (ad->pat_filter == -1)
-		ad->pat_filter = add_filter(ad->id, 0, (void *)process_pat, ad, FILTER_PERMANENT);
+		ad->pat_filter = add_filter(ad->id, 0, (void *)process_pat, ad, FILTER_PERMANENT | FILTER_CRC);
 
 	if (ad->sdt_filter == -1)
 		ad->sdt_filter = add_filter(ad->id, 17, (void *)process_sdt, ad, FILTER_PERMANENT);

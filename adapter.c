@@ -93,6 +93,8 @@ adapter *adapter_alloc()
 	ad->diseqc_param.lnb_high = opts.lnb_high;
 	ad->diseqc_param.lnb_circular = opts.lnb_circular;
 	ad->diseqc_param.lnb_switch = opts.lnb_switch;
+
+	ad->failed_adapter = 0;
 #ifndef DISABLE_PMT
 	// filter for pid 0
 	ad->pat_filter = -1;
@@ -255,9 +257,12 @@ int init_hw(int i)
 		goto NOK;
 	}
 	memset(ad->buf, 0, opts.adapter_buffer + 1);
-	init_dvb_parameters(&ad->tp);
-	mark_pids_deleted(i, -1, NULL);
-	update_pids(i);
+	if (!ad->failed_adapter)
+	{
+		init_dvb_parameters(&ad->tp);
+		mark_pids_deleted(i, -1, NULL);
+		update_pids(i);
+	}
 	if (!ad->sys[0])
 		ad->delsys(i, ad->fe, ad->sys);
 	ad->master_sid = -1;
@@ -270,6 +275,7 @@ int init_hw(int i)
 	ad->threshold = opts.udp_threshold;
 	ad->updating_pids = 0;
 	ad->wait_new_stream = 0;
+	ad->failed_adapter = 0;
 	ad->rtime = getTick();
 	ad->sock = sockets_add(ad->dvr, NULL, i, TYPE_DVR, (socket_action)read_dmx,
 						   (socket_action)close_adapter_for_socket,
@@ -308,6 +314,16 @@ NOK:
 	LOG("opening adapter %i failed", ad->id);
 	mutex_unlock(&ad->mutex);
 	return 1;
+}
+
+int enable_failed_adapter(int id)
+{
+	adapter *ad = a[id];
+	if (!ad)
+		return 1;
+
+	ad->failed_adapter = 1;
+	return init_hw(id);
 }
 
 int init_all_hw()

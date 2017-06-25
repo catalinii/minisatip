@@ -43,6 +43,7 @@ typedef struct struct_adapter
 	// flags
 
 	char slow_dev, restart_when_tune, restart_needed;
+	char failed_adapter; // is set when the adapter was closed unexpected and needs to be re-enabled
 	char flush, updating_pids;
 	// physical adapter, physical frontend number
 	fe_delivery_system_t sys[MAX_DELSYS];
@@ -146,7 +147,7 @@ void set_lnb_adapters(char *o);
 int signal_thread(sockets *s);
 int compare_tunning_parameters(int aid, transponder *tp);
 void restart_needed_adapters(int aid, int sid);
-
+int enable_failed_adapter(int id);
 #define get_adapter(a) get_adapter1(a, __FILE__, __LINE__)
 #define get_configured_adapter(a) get_configured_adapter1(a, __FILE__, __LINE__)
 #define get_adapter_nw(aid) ((aid >= 0 && aid < MAX_ADAPTERS && a[aid] && a[aid]->enabled) ? a[aid] : NULL)
