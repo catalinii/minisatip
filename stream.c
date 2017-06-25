@@ -46,7 +46,6 @@
 #include "tables.h"
 
 extern struct struct_opts opts;
-streams *st[MAX_STREAMS];
 SMutex st_mutex;
 extern int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
 
@@ -1045,7 +1044,7 @@ int read_dmx(sockets * s)
 		return 0;
 	}
 	ad->wait_new_stream = 0;
-	
+
 	if(ad->flush)
 		send = 1;
 	LOGL(7,

@@ -51,6 +51,7 @@
 struct struct_opts opts;
 
 #define DESC_XML "desc.xml"
+#define STATUS_JSON "status.json"
 #define PID_NAME "/var/run/%s.pid"
 char version[] = VERSION;
 char app_name[] = "minisatip";
@@ -1184,6 +1185,85 @@ int read_http(sockets * s)
 		http_response(s, 200, headers, buf, 0, 0, 1);
 		return 0;
 	}
+  if (strcmp(arg[1], "/"STATUS_JSON) == 0)
+	{
+		extern int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
+		char json_headers[500];
+		char json_adapters[ 200 * (tuner_s2 + tuner_c2 + tuner_t2 + tuner_c + tuner_t) ];
+
+		static char *json =
+			"{"
+			"	\"num_adapters\": "
+			"	{"
+			"		\"dvbs2\": %d, \"dvbt\": %d, \"dvbc\": %d, \"dvbt2\": %d, \"dvbc2\": %d"
+			"	}"
+			", \"adapters\": [%s]"
+			", \"streams\": [%s]"
+			"}";
+
+		memset(json_adapters, 0, sizeof(json_adapters));
+		sprintf(json_adapters, "");
+
+		// list adapters
+		int i;
+		adapter *ad;
+		for (i = 0; i < MAX_ADAPTERS; i++) {
+			if ((ad = get_adapter_nw(i))) {
+				int slen = strlen(json_adapters);
+				snprintf(json_adapters + slen, sizeof(json_adapters) - slen - 1,
+								"{"
+								"\"id\": %d, \"frequency\": %d, \"sid_cnt\": %d, "
+								"\"master_sid\": %d, \"del_sys\": \"%s %s %s\", "
+								"\"sys\": \"%s\", \"fe\": %d, \"pol\": %d"
+								"},",
+								i, ad->tp.freq, ad->sid_cnt, ad->master_sid,
+								get_delsys(ad->sys[0]), get_delsys(ad->sys[1]),
+								get_delsys(ad->sys[2]),
+								get_delsys(ad->tp.sys),
+								ad->tp.fe, ad->tp.pol
+								//ad->tp.sr, ad->tp.pol, ad->tp.plp,
+								//ad->tp.diseqc, ad->tp.mtype
+							);
+			}
+		}
+		if (strlen(json_adapters) > 0)
+			json_adapters[strlen(json_adapters) - 1] = 0;
+
+		//  list streams
+		char ra[50];
+		streams *sid;
+		int streams_count = 0;
+		for (i = 0; i < MAX_STREAMS; i++) {
+			if ((sid = get_sid_for(i))) {
+				streams_count++;
+			}
+		}
+		char json_streams[200 * streams_count];
+		memset(json_streams, 0, sizeof(json_streams));
+		sprintf(json_streams, "");
+
+		for (i = 0; i < MAX_STREAMS; i++) {
+			if ((sid = get_sid_for(i))) {
+				int slen = strlen(json_streams);
+				snprintf(json_streams + slen, sizeof(json_streams) - slen - 1,
+							"{\"id\": %d, \"adapter\":%d, \"rsock\":%d, \"type\":%d, \"play\":%d, \"remote\":\"%s:%d\"},",
+								i, sid->adapter, sid->rsock, sid->type, sid->do_play,
+								get_stream_rhost(i, ra, sizeof(ra)),
+								ntohs (sid->sa.sin_port));
+			}
+		}
+		if (strlen(json_streams) > 0)
+			json_streams[strlen(json_streams) - 1] = 0;
+
+		snprintf(buf, sizeof(buf), json,
+								 	tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2, json_adapters, json_streams);
+
+		sprintf(json_headers,
+										"CACHE-CONTROL: no-cache\r\nContent-type: application/json");
+		http_response(s, 200, json_headers, buf, 0, 0, 1);
+		return 0;
+	}
+
 // process file from html directory, the images are just sent back
 
 	if (!strcmp(arg[1], "/"))
