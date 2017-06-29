@@ -543,7 +543,7 @@ int send_ecm(int filter_id, unsigned char *b, int len, void *opaque)
 	k->last_ecm = getTick();
 	LOG(
 		"dvbapi: sending ECM key %d for pid %04X (%d), current ecm_parity = %d, previous parity %d, demux = %d, filter = %d, len = %d [%02X %02X %02X %02X]",
-		k->id, pid, pid, old_parity, k->ecm_parity[i], demux, filter, len, b[0], b[1], b[2], b[3]);
+		k->id, pid, pid, k->ecm_parity[i], old_parity, demux, filter, len, b[0], b[1], b[2], b[3]);
 
 	if (demux < 0)
 		return 0;

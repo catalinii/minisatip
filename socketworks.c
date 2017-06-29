@@ -1254,7 +1254,7 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 	{
 		s->overflow++;
 		if ((s->overflow % 100) == 0)
-			LOGM("sock %d: overflow %d it %d", s->id, s->overflow, s->iteration);
+			LOG("sock %d: overflow %d it %d", s->id, s->overflow, s->iteration);
 		free(tmpbuf);
 		return 0;
 	}

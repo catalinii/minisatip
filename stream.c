@@ -54,7 +54,17 @@ int pmt_process_stream(adapter *ad);
 
 streams *get_stream(int i)
 {
-	return (st[i] && st[i]->enabled) ? st[i] : NULL;
+	return (i >= 0 && i < MAX_STREAMS && st[i] && st[i]->enabled) ? st[i] : NULL;
+}
+
+streams *get_sid1(int sid, char *file, int line)
+{
+	if (sid < 0 || sid > MAX_STREAMS || !st[sid] || st[sid]->enabled == 0)
+	{
+		LOG("%s:%d get_sid returns NULL for s_id = %d", file, line, sid);
+		return NULL;
+	}
+	return st[sid];
 }
 
 char *describe_streams(sockets *s, char *req, char *sbuf, int size)
@@ -1126,7 +1136,7 @@ int stream_timeout(sockets *s)
 		}
 	}
 
-	if ((sid = get_sid_for(s->sid)) && sid->do_play && (ctime - sid->last_init_hw > 5000))
+	if ((sid = get_stream(s->sid)) && sid->do_play && (ctime - sid->last_init_hw > 5000))
 	{
 		sid->last_init_hw = ctime;
 		if (sid->adapter != -1)
@@ -1197,17 +1207,6 @@ void free_all_streams()
 			free1(st[i]);
 		st[i] = NULL;
 	}
-}
-
-streams *
-get_sid1(int sid, char *file, int line)
-{
-	if (sid < 0 || sid > MAX_STREAMS || !st[sid] || st[sid]->enabled == 0)
-	{
-		LOG("%s:%d get_sid returns NULL for s_id = %d", file, line, sid);
-		return NULL;
-	}
-	return st[sid];
 }
 
 int get_session_id(int i)
