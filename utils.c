@@ -1411,7 +1411,7 @@ void join_thread()
 int init_utils(char *arg0)
 {
 	int rv;
-//	set_signal_handler(arg0);
+	set_signal_handler(arg0);
 	if ((rv = init_tmpinfo(100)))
 		return rv;
 	return 0;

@@ -71,6 +71,7 @@ int add_ca(SCA_op *op, int adapter_mask)
 	ca[new_ca].adapter_mask = adapter_mask;
 	ca[new_ca].id = new_ca;
 	ca[new_ca].op = op;
+	memset(ca[new_ca].ad_info, 0, sizeof(ca[new_ca].ad_info));
 
 	if (new_ca >= nca)
 		nca = new_ca + 1;
@@ -130,17 +131,23 @@ void tables_ca_ts(adapter *ad)
 	}
 }
 
-void add_caid_mask(int ica, int caid, int mask)
+void add_caid_mask(int ica, int aid, int caid, int mask)
 {
 	int i;
+	adapter *ad = get_adapter(aid);
+	if (!ad)
+	{
+		LOG("%s: No adapter %d found ", __FUNCTION__, aid);
+		return;
+	}
 	if (ca[ica].enabled)
 	{
-		for (i = 0; i < ca[i].caids; i++)
-			if (ca[ica].caid[i] == caid)
+		for (i = 0; i < ca[ica].ad_info[aid].caids; i++)
+			if (ca[ica].ad_info[aid].caid[i] == caid && ca[ica].ad_info[aid].mask[i] == mask)
 				return;
-		i = ca[ica].caids++;
-		ca[ica].caid[i] = caid;
-		ca[ica].mask[i] = mask;
+		i = ca[ica].ad_info[aid].caids++;
+		ca[ica].ad_info[aid].caid[i] = caid;
+		ca[ica].ad_info[aid].mask[i] = mask;
 		LOG("CA %d can handle CAID %04X mask %04X at position %d", ica, caid, mask, i);
 	}
 	else
@@ -228,15 +235,15 @@ int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt)
 	if (ca[i].enabled && (ad->ca_mask & mask) && ca[i].op->ca_add_pmt && !(pmt->disabled_ca_mask & mask) && !(pmt->ca_mask & mask))
 	{
 		int j, send = 0;
-		for (j = 0; j < ca[i].caids; j++)
-			if (match_caid(pmt, ca[i].caid[j], ca[i].mask[j]))
+		for (j = 0; j < ca[i].ad_info[ad->id].caids; j++)
+			if (match_caid(pmt, ca[i].ad_info[ad->id].caid[j], ca[i].ad_info[ad->id].mask[j]))
 			{
-				LOG("CAID %04X and mask %04X matched PMT %d", ca[i].caid[j], ca[i].mask[j], pmt->id);
+				LOG("CAID %04X and mask %04X matched PMT %d", ca[i].ad_info[ad->id].caid[j], ca[i].ad_info[ad->id].mask[j], pmt->id);
 				send = 1;
 				break;
 			}
 		result = TABLES_RESULT_ERROR_NORETRY;
-		if (send || ca[i].caids == 0)
+		if (send || ca[i].ad_info[ad->id].caids == 0)
 			result = ca[i].op->ca_add_pmt(ad, pmt);
 
 		if (result == TABLES_RESULT_OK)

@@ -1344,7 +1344,10 @@ void find_pi(SPMT *pmt, unsigned char *es, int len)
 				capid);
 			memcpy(pmt->pi + pmt->pi_len, es + i, es_len);
 			pmt->pi_len += es_len;
-			pmt->caid[pmt->caids++] = caid;
+			if (pmt->caids < MAX_CAID - 1)
+				pmt->caid[pmt->caids++] = caid;
+			else
+				LOG("Too many CAIDs for pmt %d, discarding %04X", pmt->id, pmt->caid);
 		}
 	}
 	return;
@@ -1438,6 +1441,9 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 	if (pi_len > pmt_len)
 		pi_len = 0;
 
+	pmt->caids = 0;
+	pmt->all_pids = 0;
+
 	if (pi_len > 0)
 		find_pi(pmt, pi, pi_len);
 
@@ -1452,6 +1458,11 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 		isAC3 = 0;
 		if (stype == 6)
 			isAC3 = is_ac3_es(pmt_b + i + 5, es_len);
+
+		if (pmt->all_pids < MAX_PMT_PIDS - 1)
+			pmt->all_pid[pmt->all_pids++] = spid;
+		else
+			LOG("Too many pids for pmt %d, discarding pid %d", pmt->id, spid);
 
 		LOG("PMT pid %d - stream pid %04X (%d), type %d%s, es_len %d, pos %d, pi_len %d",
 			pid, spid, spid, stype, isAC3 ? " [AC3]" : "", es_len, i, pmt->pi_len);
