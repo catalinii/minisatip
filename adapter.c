@@ -534,14 +534,14 @@ void dump_pids(int aid)
 			if (dp)
 				LOG("Dumping pids table for adapter %d, pid errors %d", aid, p->pid_err);
 			dp = 0;
-			LOGL(2,
-				 "pid %d, fd %d, packets %d, d/c errs %d/%d, flags %d, pmt %d, filter %d, sids: %d %d %d %d %d %d %d %d",
-				 p->pids[i].pid, p->pids[i].fd,
-				 p->pids[i].packets, p->pids[i].dec_err, p->pids[i].cc_err,
-				 p->pids[i].flags, p->pids[i].pmt, p->pids[i].filter, p->pids[i].sid[0],
-				 p->pids[i].sid[1], p->pids[i].sid[2], p->pids[i].sid[3],
-				 p->pids[i].sid[4], p->pids[i].sid[5], p->pids[i].sid[6],
-				 p->pids[i].sid[7]);
+			LOG(,
+				"pid %d, fd %d, packets %d, d/c errs %d/%d, flags %d, pmt %d, filter %d, sids: %d %d %d %d %d %d %d %d",
+				p->pids[i].pid, p->pids[i].fd,
+				p->pids[i].packets, p->pids[i].dec_err, p->pids[i].cc_err,
+				p->pids[i].flags, p->pids[i].pmt, p->pids[i].filter, p->pids[i].sid[0],
+				p->pids[i].sid[1], p->pids[i].sid[2], p->pids[i].sid[3],
+				p->pids[i].sid[4], p->pids[i].sid[5], p->pids[i].sid[6],
+				p->pids[i].sid[7]);
 		}
 }
 

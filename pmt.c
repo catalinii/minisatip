@@ -1466,7 +1466,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 
 		LOG("PMT pid %d - stream pid %04X (%d), type %d%s, es_len %d, pos %d, pi_len %d",
 			pid, spid, spid, stype, isAC3 ? " [AC3]" : "", es_len, i, pmt->pi_len);
-		if ((es_len + i > pmt_len) || (pi_len + es_len == 0))
+		if ((es_len + i > pmt_len) || (es_len < -4))
 			break;
 
 		if (stype != 2 && stype != 3 && stype != 4 && !isAC3 && stype != 27 && stype != 36)

@@ -737,8 +737,8 @@ void *select_and_execute(void *arg)
 						ss->buf[ss->rlen] = 0;
 					DEBUGM(
 						"Read %s %d (rlen:%d/total:%d) bytes from %d -> %p (buf: %p) - iteration %d action %p",
-						read_ok ? "OK" : "NOK", rlen, ss->rlen, pos, ss->lbuf,
-						ss->sock, ss->buf, ss->iteration, ss->action);
+						read_ok ? "OK" : "NOK", rlen, ss->rlen, ss->lbuf,
+						ss->sock, pos, ss->buf, ss->iteration, ss->action);
 
 					if (((ss->rlen > 0) || err == EWOULDBLOCK) && ss->action && (ss->type != TYPE_SERVER))
 						ss->action(ss);
