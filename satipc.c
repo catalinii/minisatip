@@ -188,7 +188,10 @@ int satipc_reply(sockets *s)
 		sip->last_setup = -10000;
 	}
 	else if (rc != 200)
+	{
+		LOG("marking device %d as error, rc = %d", sip->id, rc);
 		sip->err = 1;
+	}
 	sid = NULL;
 	if (rc == 200 && !sip->want_tune && sip->last_cmd == RTSP_PLAY && sip->ignore_packets)
 	{
@@ -701,8 +704,6 @@ int satipc_set_pid(adapter *ad, uint16_t pid)
 	satipc *sip;
 	sip = get_satip(ad->id);
 	int aid = ad->id;
-	if (sip->err) // error reported, return error
-		return 0;
 	LOG("satipc: set_pid for adapter %d, pid %d, err %d", aid, pid, sip->err);
 	if (sip->err) // error reported, return error
 		return 0;
@@ -856,12 +857,17 @@ int http_request(adapter *ad, char *url, char *method)
 		sip->last_cmd = RTSP_OPTIONS;
 	}
 
+	if (strcmp(method, "DESCRIBE") == 0)
+	{
+		sprintf(session + strlen(session), "\r\nAccept: application/sdp ", app_name,
+				version);
+		sip->last_cmd = RTSP_DESCRIBE;
+	}
+
 	if (!strcmp(method, "PLAY"))
 		sip->last_cmd = RTSP_PLAY;
 	else if (!strcmp(method, "TEARDOWN"))
 		sip->last_cmd = RTSP_TEARDOWN;
-	else if (!strcmp(method, "DESCRIBE"))
-		sip->last_cmd = RTSP_DESCRIBE;
 	else if (!strcmp(method, "SETUP"))
 		sip->last_cmd = RTSP_SETUP;
 
@@ -1026,6 +1032,7 @@ void satipc_commit(adapter *ad)
 		len = strlen(url);
 		sip->ignore_packets = 1; // ignore all the packets until we get 200 from the server
 		sip->want_tune = 0;
+		sip->err = 0;
 		if (!sip->setup_pids)
 			sprintf(url + len, "&pids=none");
 	}

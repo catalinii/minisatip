@@ -1895,7 +1895,7 @@ void restart_needed_adapters(int aid, int sid)
 
 	if (ad && ad->enabled && ad->restart_needed && ((ad->sid_cnt == 0 || ad->master_sid == sid)))
 	{
-		LOGL(3, "restart of the adapter %d requested", ad->id);
+		LOG("restart of the adapter %d requested", ad->id);
 		close_adapter(ad->id);
 	}
 }
