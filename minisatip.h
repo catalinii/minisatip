@@ -7,7 +7,7 @@
 #include "socketworks.h"
 #include "utils.h"
 
-#define VERSION_BUILD "5"
+#define VERSION_BUILD "6"
 #define CC(a, b, c) #a b #c
 #define VERSION CC(0.7., VERSION_BUILD, )
 
