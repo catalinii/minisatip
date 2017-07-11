@@ -242,7 +242,7 @@ void init_dvb_parameters(transponder *tp)
 	tp->gi = GUARD_INTERVAL_AUTO;
 	tp->bw = 8000000;
 	tp->ro = ROLLOFF_AUTO;
-	tp->mtype = -1;
+	tp->mtype = QAM_AUTO;
 	tp->plts = PILOT_AUTO;
 	tp->fec = FEC_AUTO;
 }
@@ -310,12 +310,6 @@ void copy_dvb_parameters(transponder *s, transponder *d)
 	if ((d->sys == SYS_DVBS) && (d->mtype == -1))
 		d->mtype = QPSK;
 
-	if ((d->sys == SYS_ATSC || d->sys == SYS_DVBC_ANNEX_B) && d->mtype == -1)
-		d->mtype = QAM_AUTO;
-
-	if ((d->sys == SYS_DVBT || d->sys == SYS_DVBT2) && d->mtype == -1)
-		d->mtype = QAM_AUTO;
-
 	LOG(
 		"copy_dvb_parameters -> src=%d, fe=%d, freq=%d, fec=%d sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s, apids=%s, dpids=%s x_pmt=%s",
 		d->diseqc, d->fe, d->freq, d->fec, d->sr, d->pol, d->ro, d->sys,
@@ -345,7 +339,7 @@ int dvb_open_device(adapter *ad)
 	{
 		sprintf(buf, "/dev/dvb/adapter%d/frontend%d", ad->pa, ad->fn);
 		LOG("Could not open %s in RW mode (fe: %d, dvr: %d)", buf, ad->fe,
-			 ad->dvr);
+			ad->dvr);
 		if (ad->fe >= 0)
 			close(ad->fe);
 		if (ad->dvr >= 0)

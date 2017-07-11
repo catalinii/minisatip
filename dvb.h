@@ -1,6 +1,11 @@
 #ifndef DVB_H
 #define DVB_H
 
+#ifdef __APPLE__
+#include <sys/types.h>
+#endif
+
+
 #ifdef DISABLE_LINUXDVB
 //#include <linux/types.h>
 #include <stdint.h>

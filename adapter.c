@@ -285,7 +285,8 @@ int init_hw(int i)
 	sockets_timeout(ad->sock, ADAPTER_TIMEOUT);
 	snprintf(ad->name, sizeof(ad->name), "AD%d", i);
 	set_socket_thread(ad->sock, start_new_thread(ad->name));
-	set_thread_prio(get_socket_thread(ad->sock), opts.th_priority);
+	if (opts.th_priority > 0)
+		set_thread_prio(get_socket_thread(ad->sock), opts.th_priority);
 #ifndef DISABLE_PMT
 	pmt_init_device(ad);
 #endif

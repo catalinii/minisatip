@@ -15,7 +15,12 @@ AXE=@AXE@
 ENIGMA=@ENIGMA@
 
 CFLAGS?=-Wall -Wno-switch -ggdb -fPIC $(EXTRA_CFLAGS) @CFLAGS@
-LDFLAGS?=-lpthread -lrt @LDFLAGS@
+LDFLAGS?=-lpthread @LDFLAGS@
+UNAME_S := $(shell uname -s)
+    
+ifneq ($(UNAME_S),Darwin)
+        LDFLAGS += -lrt
+endif
 
 OBJS=minisatip.o socketworks.o stream.o adapter.o utils.o
 

@@ -557,9 +557,9 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv)
 	{
 		sprintf(buf, ", IV: %02X %02X %02X %02X %02X %02X %02X %02X", iv[0], iv[1], iv[2], iv[3], iv[4], iv[5], iv[6], iv[7]);
 	}
-	LOGM("got CW for PMT %d, algo %d, parity %d: %02X %02X %02X %02X %02X %02X %02X %02X %s", pmt_id, algo, parity,
-		 cw[0], cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7], buf);
 	SPMT *pmt = get_pmt(pmt_id);
+	LOGM("got CW for PMT %d, master %d, algo %d, parity %d: %02X %02X %02X %02X %02X %02X %02X %02X %s", pmt_id, pmt ? pmt->master_pmt : -2, algo, parity,
+		 cw[0], cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7], buf);
 	if (!pmt)
 		LOG_AND_RETURN(1, "%s: pmt not found %d", __FUNCTION__, pmt_id);
 	master_pmt = pmt->master_pmt;
@@ -629,7 +629,7 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv)
 
 	mutex_unlock(&cws_mutex);
 	pmt->invalidated = 1;
-	LOG("CW %d for %s PMT %d, pid %d, algo %d, parity %d: %02X %02X %02X %02X %02X %02X %02X %02X", c->id, pmt->name, pmt_id, pmt->pid, algo, parity,
+	LOG("CW %d for %s PMT %d, master %d, pid %d, algo %d, parity %d: %02X %02X %02X %02X %02X %02X %02X %02X", c->id, pmt->name, pmt_id, master_pmt, pmt->pid, algo, parity,
 		cw[0], cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);
 	return 0;
 }

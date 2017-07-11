@@ -82,6 +82,7 @@ typedef struct struct_satipc
 	char use_fe, option_no_session, option_no_setup, option_no_option;
 	uint32_t rcvp, repno, rtp_miss, rtp_ooo; // rtp statstics
 	uint16_t rtp_seq;
+	char static_config;
 
 } satipc;
 
@@ -349,7 +350,7 @@ int satipc_open_device(adapter *ad)
 		return 3;
 
 	sip->last_connect = ctime;
-	ad->fe = tcp_connect(sip->sip, sip->sport, NULL, 0); // non-blockin socket
+	ad->fe = tcp_connect(sip->sip, sip->sport, NULL, 1); // blocking socket
 	if (ad->fe < 0)
 		return 2;
 
@@ -859,8 +860,7 @@ int http_request(adapter *ad, char *url, char *method)
 
 	if (strcmp(method, "DESCRIBE") == 0)
 	{
-		sprintf(session + strlen(session), "\r\nAccept: application/sdp ", app_name,
-				version);
+		sprintf(session + strlen(session), "\r\nAccept: application/sdp ");
 		sip->last_cmd = RTSP_DESCRIBE;
 	}
 
@@ -1226,6 +1226,7 @@ void find_satip_adapter(adapter **a)
 			ad->sys[0] = ad->tp.sys = map_int(sep, fe_delsys);
 			strncpy(sip->sip, sep1, sizeof(sip->sip) - 1);
 			sip->satip_fe = -1;
+			sip->static_config = 1;
 			if (strchr(sip->sip, '@'))
 			{
 				sip->satip_fe = map_int(sep1, NULL);
@@ -1257,18 +1258,15 @@ void find_satip_adapter(adapter **a)
 		}
 }
 
-void satip_getxml_data(char *data, int len, void *opaque)
+void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h)
 {
+	if (!data)
+		return; // the socket will be closed;
 	LOG("%s: %s", __FUNCTION__, data);
 }
 
 int satip_getxml(void *x)
 {
-	char satip_xml_servers[SATIP_STR_LEN];
-	char satip_xml[SATIP_STR_LEN];
-	char *arg[50];
-	int la;
-
 	if (!opts.satip_xml)
 		return 1;
 	if (!opts.satip_init && !opts.satip_servers)
@@ -1287,8 +1285,8 @@ int satip_getxml(void *x)
 			return 1;
 	}
 
-	http_client("http://10.0.0.3:8080/desc.xml", "", satip_getxml_data, "");
-	return 1;
+	http_client(opts.satip_xml, "", satip_getxml_data, "");
+	return 0;
 }
 
 char *init_satip_pointer(int len)

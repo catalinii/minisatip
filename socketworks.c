@@ -266,7 +266,7 @@ int tcp_connect(char *addr, int port, struct sockaddr_in *serv, int blocking)
 
 	set_linux_socket_timeout(sock);
 
-	if (blocking)
+	if (!blocking)
 		set_linux_socket_nonblock(sock);
 
 	if (connect(sock, (struct sockaddr *)serv, sizeof(*serv)) < 0)
@@ -862,6 +862,7 @@ void set_sockets_rtime(int i, int r)
 	if (ss)
 		ss->rtime = r;
 }
+#ifndef __APPLE__
 
 int get_mac_address(char *mac)
 {
@@ -911,6 +912,23 @@ int get_mac_address(char *mac)
 			m[5]);
 	return 1;
 }
+
+#else
+int get_mac_address(char *mac)
+{
+
+	if (opts.mac[0])
+	{
+		// simulate mac address
+		strncpy(mac, opts.mac, 13);
+		return 0;
+	}
+	// TO DO: detect mac on MACOSX
+
+	strcpy(mac, "00:11:22:33:44:55");
+	return 0;
+}
+#endif
 
 char *
 get_current_timestamp(void)
