@@ -289,7 +289,7 @@ Help\n\
 \t* Send diseqc to selected position before other position is set.\n\
 	- note: * as adapter means apply to all adapters\n\
 \n\
-* -E Allow encrypted stream to be sent to the client even if the decrypting was unsuccessfull\n \
+* -E Allows encrypted stream to be sent to the client even if the decrypting is unsuccessful\n \
 \n\
 * -Y --delsys ADAPTER1:DELIVERY_SYSTEM1[,ADAPTER2:DELIVERY_SYSTEM2[,..]] - specify the delivery system of the adapters	\n\
 	* eg: --delsys 1:dvbt,2:dvbs\n\
