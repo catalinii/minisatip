@@ -20,6 +20,7 @@ UNAME_S := $(shell uname -s)
     
 ifneq ($(UNAME_S),Darwin)
         LDFLAGS += -lrt
+else
 	LINUXDVB=0
 endif
 

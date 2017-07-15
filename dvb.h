@@ -3,6 +3,8 @@
 
 #ifdef __APPLE__
 #include <sys/types.h>
+#else
+#include <linux/types.h>
 #endif
 
 #ifdef DISABLE_LINUXDVB
