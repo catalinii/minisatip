@@ -86,7 +86,6 @@ adapter *adapter_alloc()
 	ad->old_hiband = -1;
 	ad->old_pol = -1;
 	ad->dmx_source = -1;
-	ad->slow_dev = opts.nopm;
 	ad->diseqc_multi = opts.diseqc_multi;
 
 	/* LOF setup */
@@ -96,6 +95,7 @@ adapter *adapter_alloc()
 	ad->diseqc_param.lnb_switch = opts.lnb_switch;
 
 	ad->failed_adapter = 0;
+	ad->adapter_timeout = opts.adapter_timeout;
 #ifndef DISABLE_PMT
 	// filter for pid 0
 	ad->pat_filter = -1;
@@ -137,7 +137,7 @@ int adapter_timeout(sockets *s)
 	if (ad->force_close)
 		return 1;
 
-	if (ad->slow_dev)
+	if (ad->adapter_timeout == 0)
 	{
 		LOG("keeping the adapter %d open as the initialization is slow", ad->id);
 		s->rtime = getTick();
@@ -164,8 +164,8 @@ int adapter_timeout(sockets *s)
 					max_close = ad->rtime;
 			}
 	}
-	LOG("Requested adapter %d close due to timeout, result %d max_rtime %jd",
-		s->sid, do_close, max_close);
+	LOG("Requested adapter %d close due to timeout %d sec, result %d max_rtime %jd",
+		s->sid, ad->adapter_timeout / 1000, do_close, max_close);
 	if (!do_close)
 		s->rtime = max_close;
 #endif
@@ -282,7 +282,8 @@ int init_hw(int i)
 						   (socket_action)adapter_timeout);
 	memset(ad->buf, 0, opts.adapter_buffer + 1);
 	set_socket_buffer(ad->sock, (unsigned char *)ad->buf, opts.adapter_buffer);
-	sockets_timeout(ad->sock, ADAPTER_TIMEOUT);
+	if (ad->adapter_timeout > 0)
+		sockets_timeout(ad->sock, ad->adapter_timeout);
 	snprintf(ad->name, sizeof(ad->name), "AD%d", i);
 	set_socket_thread(ad->sock, start_new_thread(ad->name));
 	if (opts.th_priority > 0)
@@ -298,7 +299,7 @@ int init_hw(int i)
 	if (et - st > 1000000)
 	{
 		LOG("Slow adapter %d detected", ad->id);
-		ad->slow_dev = 1;
+		ad->adapter_timeout = 0;
 	}
 
 	//	set_sock_lock(ad->sock, &ad->mutex); // locks automatically the adapter on reading from the DVR
@@ -1250,7 +1251,7 @@ void free_all_adapters()
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		if (a[i] && a[i]->enabled)
 		{
-			a[i]->slow_dev = 0;
+			a[i]->adapter_timeout = opts.adapter_timeout;
 			close_adapter(i);
 		}
 
@@ -1619,16 +1620,21 @@ void set_slave_adapters(char *o)
 	}
 }
 
-void set_nopm_adapters(char *o)
+void set_timeout_adapters(char *o)
 {
 	int i, j, la, a_id, a_id2;
+	int timeout = opts.adapter_timeout / 1000;
 	char buf[100], *arg[20], *sep;
 	adapter *ad;
 	strncpy(buf, o, sizeof(buf));
+	sep = strchr(buf, ':');
+	if (sep)
+		timeout = map_intd(sep + 1, NULL, timeout);
 	la = split(arg, buf, sizeof(arg), ',');
 	if (arg[0] && (arg[0][0] == '*'))
 	{
-		opts.nopm = 1;
+		opts.adapter_timeout = timeout * 1000;
+		LOG("Set default timeout to %d", opts.adapter_timeout);
 		return;
 	}
 	for (i = 0; i < la; i++)
@@ -1651,9 +1657,9 @@ void set_nopm_adapters(char *o)
 				a[j] = adapter_alloc();
 
 			ad = a[j];
-			ad->slow_dev = 1;
+			ad->adapter_timeout = timeout * 1000;
 
-			LOG("Disabling power management for adapter %d", j);
+			LOG("Set timeout for adapter %d to %d", j, ad->adapter_timeout);
 		}
 	}
 }

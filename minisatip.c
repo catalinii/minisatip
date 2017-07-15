@@ -102,7 +102,7 @@ int rtsp, http, si, si1, ssdp1;
 #define LNB_OPT 'L'
 #define DROP_ENCRYPTED_OPT 'E'
 #define UDPPORT_OPT 'P'
-#define NOPM_OPT 'Z'
+#define ADAPTERTIMEOUT_OPT 'Z'
 #define LINK_OPT '7'
 #define QUATTRO_OPT 'Q'
 #define QUATTRO_HIBAND_OPT '8'
@@ -128,7 +128,7 @@ static const struct option long_options[] =
 		{"diseqc", required_argument, NULL, 'd'},
 		{"diseqc-timing", required_argument, NULL, 'q'},
 		{"diseqc-multi", required_argument, NULL, DISEQC_MULTI},
-		{"nopm", required_argument, NULL, 'Z'},
+		{"adapter-timeout", required_argument, NULL, 'Z'},
 #ifndef DISABLE_DVBAPI
 		{"dvbapi", required_argument, NULL, 'o'},
 #endif
@@ -330,11 +330,11 @@ Help\n\
 * -m xx: simulate xx as local mac address, generates UUID based on mac\n\
 	* eg: -m 001122334455 \n\
 \n\
-* -Z --nopm ADAPTER1,ADAPTER2-ADAPTER4[,..] - specify no power management for the adapters (does not turn power off)	\n\
-	eg: --nopm 1-2\n\
-	- turns off power management for adapter 1 to 2 \n\
-	--nopm *\n\
-	- turns off power management for all adapters (recommended instead of --nopm 0-32) \n\
+* -Z --adapter-timeout ADAPTER1,ADAPTER2-ADAPTER4[,..]:TIMEOUT - specify the timeout for the adapters (0 enabled infinite timeout)	\n\
+	eg: --adapter-timeout 1-2:30\n\
+	- sets the timeouts for adapter 1 and 2 to 30 seconds \n\
+	--adapter-timeout *:0\n\
+	- turns off power management for all adapters (recommended instead of --adapter-timeout 0-32:0) \n\
 	- required for some Unicable LNBs \n\
 \n\
 "
@@ -455,6 +455,7 @@ Help\n\
 void set_options(int argc, char *argv[])
 {
 	int opt;
+	int is_log = 0;
 	char *lip;
 	memset(&opts, 0, sizeof(opts));
 	opts.log = 1;
@@ -465,6 +466,7 @@ void set_options(int argc, char *argv[])
 	opts.start_rtp = 5500;
 	opts.http_port = 8080;
 	opts.timeout_sec = 30000;
+	opts.adapter_timeout = 30000;
 	opts.daemon = 1;
 	opts.dvr_buffer = DVR_BUFFER;
 	opts.adapter_buffer = ADAPTER_BUFFER;
@@ -551,6 +553,7 @@ void set_options(int argc, char *argv[])
 		case DEBUG_OPT:
 		case LOG_OPT:
 		{
+			is_log = 1;
 			if (strstr(optarg, "all"))
 			{
 				opts.log = 0xFFFF;
@@ -732,9 +735,9 @@ void set_options(int argc, char *argv[])
 			break;
 		}
 
-		case NOPM_OPT:
+		case ADAPTERTIMEOUT_OPT:
 		{
-			set_nopm_adapters(optarg);
+			set_timeout_adapters(optarg);
 			break;
 		}
 
@@ -896,6 +899,8 @@ void set_options(int argc, char *argv[])
 		opts.http_host = (char *)malloc1(MAX_HOST);
 		sprintf(opts.http_host, "%s:%d", lip, opts.http_port);
 	}
+	if (!is_log)
+		opts.log = 0;
 }
 
 #define RBUF 8000

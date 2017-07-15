@@ -9,8 +9,6 @@ typedef struct ca_device ca_device_t;
 #define DVR_BUFFER 30 * 1024 * 188
 
 #define ADAPTER_BUFFER 384 * DVB_FRAME // 128 * 3 > 65535
-#define ADAPTER_TIMEOUT 60000
-
 #define RTSP_SETUP 1
 #define RTSP_PLAY 2
 #define RTSP_OPTIONS 3
@@ -43,6 +41,7 @@ typedef struct struct_adapter
 	// flags
 
 	char slow_dev, restart_when_tune, restart_needed;
+	int adapter_timeout;
 	char failed_adapter; // is set when the adapter was closed unexpected and needs to be re-enabled
 	char flush, updating_pids;
 	// physical adapter, physical frontend number
@@ -130,7 +129,7 @@ void set_diseqc_adapters(char *o);
 void set_diseqc_timing(char *o);
 void set_diseqc_multi(char *o);
 void set_slave_adapters(char *o);
-void set_nopm_adapters(char *o);
+void set_timeout_adapters(char *o);
 void set_adapter_dmxsource(char *o);
 void reset_pids_type(int aid, int clear_pat);
 void reset_ecm_type_for_pmt(int aid, int pmt);

@@ -26,16 +26,16 @@ Usage:
 -------
 
 minisatip version 0.7.6, compiled with s2api version: 050A
-[15/07 20:52:39.481 main]: Built with dvbcsa
-[15/07 20:52:39.481 main]: Built with CI
-[15/07 20:52:39.481 main]: Built with dvbapi
-[15/07 20:52:39.481 main]: Built with AES (OpenSSL)
-[15/07 20:52:39.481 main]: Built with tables processing
-[15/07 20:52:39.481 main]: Built with pmt processing
-[15/07 20:52:39.481 main]: Built with satip client
-[15/07 20:52:39.481 main]: Built with linux dvb client
-[15/07 20:52:39.481 main]: Built with backtrace
-[15/07 20:52:39.481 main]: Built with netceiver
+[15/07 21:30:52.953 main]: Built with dvbcsa
+[15/07 21:30:52.954 main]: Built with CI
+[15/07 21:30:52.954 main]: Built with dvbapi
+[15/07 21:30:52.954 main]: Built with AES (OpenSSL)
+[15/07 21:30:52.954 main]: Built with tables processing
+[15/07 21:30:52.954 main]: Built with pmt processing
+[15/07 21:30:52.954 main]: Built with satip client
+[15/07 21:30:52.954 main]: Built with linux dvb client
+[15/07 21:30:52.954 main]: Built with backtrace
+[15/07 21:30:52.954 main]: Built with netceiver
 
 	./minisatip [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 		[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]][-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] [-R document_root] [-s [DELSYS:]host[:port] [-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] 
@@ -112,11 +112,11 @@ Help
 * -m xx: simulate xx as local mac address, generates UUID based on mac
 	* eg: -m 001122334455 
 
-* -Z --nopm ADAPTER1,ADAPTER2-ADAPTER4[,..] - specify no power management for the adapters (does not turn power off)	
-	eg: --nopm 1-2
-	- turns off power management for adapter 1 to 2 
-	--nopm *
-	- turns off power management for all adapters (recommended instead of --nopm 0-32) 
+* -Z --adapter-timeout ADAPTER1,ADAPTER2-ADAPTER4[,..]:TIMEOUT - specify the timeout for the adapters (0 enabled infinite timeout)	
+	eg: --adapter-timeout 1-2:30
+	- sets the timeouts for adapter 1 and 2 to 30 seconds 
+	--adapter-timeout *:0
+	- turns off power management for all adapters (recommended instead of --adapter-timeout 0-32:0) 
 	- required for some Unicable LNBs 
 
 * -n --netceiver if:count: use network interface <if> (default vlan4) and look for <count> netceivers
@@ -194,9 +194,9 @@ Help
 
 Configures minisatip for the current system (use ./configure --help for options)
 
-To cross compile, use something like (static compilation):
+To cross compile, use something like (static compilation), considering that mips-openwrt-linux-musl-gcc is the gcc executable for that platform:
 
-- ./configure --host=mips CC=/usr/src/./configure --host=mips --enable-static CC=/usr/src/openwrt/attitude_adjustment/staging_dir/toolchain-mips_r2_gcc-4.6-linaro_uClibc-0.9.33.2/bin/mips-openwrt-linux-gcc
+- ./configure --host=mips-openwrt-linux-musl --enable-static
 
 To compiles the application
 

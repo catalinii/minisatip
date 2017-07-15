@@ -293,7 +293,7 @@ stackthread_func(void *arg)
 					en50221_tl_get_error(d->tl));
 				ad = get_adapter(d->id);
 				if (ad)
-					ad->slow_dev = 0;
+					ad->adapter_timeout = opts.adapter_timeout;
 				d->ignore_close = 0; // force device close..
 									 //break;
 			}

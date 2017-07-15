@@ -101,7 +101,7 @@ struct struct_opts
 	int diseqc_after_tone;
 	int diseqc_multi;
 	int lnb_low, lnb_high, lnb_switch, lnb_circular;
-	int nopm;
+	int adapter_timeout;
 	int max_pids;
 	int max_sbuf;
 	char disable_dvb;
