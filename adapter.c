@@ -66,6 +66,7 @@ adapter *adapter_alloc()
 {
 	adapter *ad = malloc1(sizeof(adapter));
 	memset(ad, 0, sizeof(adapter));
+	mutex_init(&ad->mutex);
 
 	/* diseqc setup */
 	ad->diseqc_param.fast = opts.diseqc_fast;
@@ -206,7 +207,6 @@ int init_hw(int i)
 		return 2;
 
 	ad = a[i];
-	mutex_init(&ad->mutex);
 	mutex_lock(&ad->mutex);
 	if (is_adapter_disabled(i))
 		goto NOK;
@@ -414,8 +414,8 @@ int getAdaptersCount()
 	int i, j, k, sys;
 	adapter *ad;
 	int ts2 = 0, tc2 = 0, tt2 = 0, tc = 0, tt = 0, tac = 0, tat = 0;
-	int fes[20][MAX_ADAPTERS];
-	int ifes[20];
+	int fes[MAX_DVBAPI_SYSTEMS][MAX_ADAPTERS];
+	int ifes[MAX_DVBAPI_SYSTEMS];
 	char order[] =
 		{SYS_DVBS2, SYS_DVBT, SYS_DVBC_ANNEX_A, SYS_DVBT2, SYS_DVBC2, SYS_ATSC, SYS_DVBC_ANNEX_B};
 
@@ -658,6 +658,7 @@ int set_adapter_for_stream(int sid, int aid)
 void close_adapter_for_stream(int sid, int aid)
 {
 	adapter *ad;
+	int is_slave = 1;
 	if (!(ad = get_adapter(aid)))
 		return;
 
@@ -675,6 +676,7 @@ void close_adapter_for_stream(int sid, int aid)
 	// delete the attached PIDs as well
 	if (ad->sid_cnt == 0)
 	{
+		is_slave = 0;
 		mark_pids_deleted(aid, -1, NULL);
 #ifdef AXE
 		free_axe_input(ad);
@@ -685,7 +687,7 @@ void close_adapter_for_stream(int sid, int aid)
 	update_pids(aid);
 	adapter_update_threshold(ad);
 	mutex_unlock(&ad->mutex);
-	if (ad->restart_needed == 1)
+	if ((ad->restart_needed == 1) && !is_slave)
 	{
 		LOG("restarting adapter %d as needed", ad->id);
 		//		request_adapter_close (ad);

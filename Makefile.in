@@ -20,6 +20,7 @@ UNAME_S := $(shell uname -s)
     
 ifneq ($(UNAME_S),Darwin)
         LDFLAGS += -lrt
+	LINUXDVB=0
 endif
 
 OBJS=minisatip.o socketworks.o stream.o adapter.o utils.o

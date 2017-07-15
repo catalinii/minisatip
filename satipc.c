@@ -299,7 +299,7 @@ void set_adapter_signal(adapter *ad, char *b, int rlen)
 			ver = b + i;
 			tun = strstr((const char *)ver, "tuner=");
 			if (tun)
-				signal = strchr(tun, ',');
+				signal = strchr(tun, '=');
 			if (signal)
 			{
 				sscanf(signal + 1, "%d,%d,%d", &strength, &status, &snr);
@@ -745,8 +745,8 @@ void get_s2_url(adapter *ad, char *url)
 	//	if (ro == ROLLOFF_AUTO)
 	//		ro = ROLLOFF_35;
 	FILL("src=%d", tp->diseqc, 0, tp->diseqc);
-	if (sip->use_fe && (sip->satip_fe > 0) && (sip->satip_fe < 128))
-		FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
+	if (sip->use_fe && (sip->satip_fe >= 0) && (sip->satip_fe < 128))
+		FILL("&fe=%d", sip->satip_fe + 1, 0, sip->satip_fe + 1);
 	FILL("&freq=%d", tp->freq, 0, tp->freq / 1000);
 	FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
 	FILL("&mtype=%s", tp->mtype, -1, get_modulation(tp->mtype));
@@ -1138,31 +1138,19 @@ uint8_t determine_fe(adapter **a, int pos, char *csip, int sport)
 		if (!ad || !sip)
 			continue;
 		if (sport == sip->sport && !strcmp(sip->sip, csip))
-			return sip->satip_fe + 1;
+			return sip->satip_fe;
 	}
 	return 1;
 }
 
-void find_satip_adapter(adapter **a)
+int add_satip_server(char *host, int port, int fe, int delsys)
 {
-	int i, la, j, k;
-	char *sep1, *sep2, *sep;
-	char *arg[50];
+	int i, k;
 	adapter *ad;
 	satipc *sip;
-
-	if (!opts.satip_servers || !opts.satip_servers[0])
-		return;
-	char satip_servers[strlen(opts.satip_servers) + 10];
-	strcpy(satip_servers, opts.satip_servers);
-	la = split(arg, satip_servers, 50, ',');
-	j = 0;
 	for (i = 0; i < MAX_ADAPTERS; i++)
-		if (!a[i] || a[i]->type == ADAPTER_SATIP || a[i]->type == 0)
+		if (!a[i] || a[i]->type == 0)
 		{
-			if (j >= la)
-				break;
-
 			if (is_adapter_disabled(i))
 				continue;
 			if (!a[i])
@@ -1173,119 +1161,254 @@ void find_satip_adapter(adapter **a)
 				if (satip[i])
 					memset(satip[i], 0, sizeof(satipc));
 			}
-			sip = satip[i];
-			ad = a[i];
-			mutex_lock(&ad->mutex);
-			ad->open = (Open_device)satipc_open_device;
-			ad->set_pid = (Set_pid)satipc_set_pid;
-			ad->del_filters = (Del_filters)satipc_del_filters;
-			ad->commit = (Adapter_commit)satipc_commit;
-			ad->tune = (Tune)satipc_tune;
-			ad->delsys = (Dvb_delsys)satipc_delsys;
-			ad->post_init = (Adapter_commit)satip_post_init;
-			ad->close = (Adapter_commit)satip_close_device;
-			ad->type = ADAPTER_SATIP;
+			if (a[i] && satip[i])
+				break;
+		}
+	if (i == MAX_ADAPTERS)
+		LOG_AND_RETURN(1, "MAX_ADAPTERS reached");
 
-			for (k = 0; k < 10; k++)
-				ad->sys[k] = 0;
+	sip = satip[i];
+	ad = a[i];
+	mutex_lock(&ad->mutex);
+	ad->open = (Open_device)satipc_open_device;
+	ad->set_pid = (Set_pid)satipc_set_pid;
+	ad->del_filters = (Del_filters)satipc_del_filters;
+	ad->commit = (Adapter_commit)satipc_commit;
+	ad->tune = (Tune)satipc_tune;
+	ad->delsys = (Dvb_delsys)satipc_delsys;
+	ad->post_init = (Adapter_commit)satip_post_init;
+	ad->close = (Adapter_commit)satip_close_device;
+	ad->type = ADAPTER_SATIP;
 
-			sep = NULL;
-			sep1 = NULL;
-			sep2 = NULL;
-			sep1 = strchr(arg[j], ':');
+	for (k = 0; k < 10; k++)
+		ad->sys[k] = 0;
+
+	memset(sip->sip, 0, sizeof(sip->sip));
+	ad->sys[0] = ad->tp.sys = delsys;
+	strncpy(sip->sip, host, sizeof(sip->sip) - 1);
+	sip->satip_fe = fe;
+	sip->static_config = 1;
+	sip->sport = port;
+
+	if (ad->sys[0] == SYS_DVBS2)
+		ad->sys[1] = SYS_DVBS;
+	if (ad->sys[0] == SYS_DVBT2)
+		ad->sys[1] = SYS_DVBT;
+	if (ad->sys[0] == SYS_DVBC2)
+		ad->sys[1] = SYS_DVBC_ANNEX_A;
+	if (sip->satip_fe == -1)
+		sip->satip_fe = determine_fe(a, i, sip->sip, sip->sport);
+	sip->addpids = opts.satip_addpids;
+	sip->setup_pids = opts.satip_setup_pids;
+	sip->tcp_size = 0;
+	sip->tcp_data = NULL;
+	sip->use_tcp = opts.satip_rtsp_over_tcp;
+
+	if (i + 1 > a_count)
+		a_count = i + 1; // update adapter counter
+
+	LOG("AD%d: Satip device %s port %d delsys %d: %s %s, fe %d, total number of devices %d", ad->id, sip->sip,
+		sip->sport, ad->sys[0], get_delsys(ad->sys[0]),
+		get_delsys(ad->sys[1]), sip->satip_fe, a_count);
+	mutex_unlock(&ad->mutex);
+
+	return sip->id;
+}
+
+void find_satip_adapter(adapter **a)
+{
+	int i, la;
+	char *sep1, *sep2, *sep;
+	char *arg[50];
+	char host[100];
+	int port;
+	int fe, delsys;
+
+	if (!opts.satip_servers || !opts.satip_servers[0])
+		return;
+	char satip_servers[strlen(opts.satip_servers) + 10];
+	strcpy(satip_servers, opts.satip_servers);
+	la = split(arg, satip_servers, 50, ',');
+
+	for (i = 0; i < la; i++)
+	{
+		sep = NULL;
+		sep1 = NULL;
+		sep2 = NULL;
+		sep1 = strchr(arg[i], ':');
+		if (sep1)
+			sep2 = strchr(sep1 + 1, ':');
+		if (map_intd(arg[i], fe_delsys, -1) != -1)
+			sep = arg[i];
+
+		if (sep1)
+			*sep1++ = 0;
+		if (sep2)
+			*sep2++ = 0;
+
+		if (sep)
+		{
+			if (!sep1)
+			{
+				LOG("Found only the system for satip adapter %s", arg[i]);
+				continue;
+			}
+		}
+		else
+		{
 			if (sep1)
-				sep2 = strchr(sep1 + 1, ':');
-			if (map_intd(arg[j], fe_delsys, -1) != -1)
-				sep = arg[j];
+				sep2 = sep1;
+			sep1 = arg[i];
+		}
 
-			if (sep1)
-				*sep1++ = 0;
-			if (sep2)
-				*sep2++ = 0;
+		if (!sep)
+			sep = "dvbs2";
+		if (!sep2)
+			sep2 = "554";
+		memset(host, 0, sizeof(host));
+		delsys = map_int(sep, fe_delsys);
+		strncpy(host, sep1, sizeof(host) - 1);
+		fe = -1;
+		if (strchr(host, '@'))
+		{
+			fe = map_int(sep1, NULL);
+			memmove(host, strchr(host, '@') + 1, sizeof(host) - 1);
+		}
+		port = map_int(sep2, NULL);
+		add_satip_server(host, port, fe, delsys);
+	}
+}
 
-			if (sep)
-			{
-				if (!sep1)
-				{
-					LOG("Found only the system for satip adapter %s", arg[j]);
-					continue;
-				}
-			}
-			else
-			{
-				if (sep1)
-					sep2 = sep1;
-				sep1 = arg[j];
-			}
-
-			if (!sep)
-				sep = "dvbs2";
-			if (!sep2)
-				sep2 = "554";
-			memset(sip->sip, 0, sizeof(sip->sip));
-			ad->sys[0] = ad->tp.sys = map_int(sep, fe_delsys);
-			strncpy(sip->sip, sep1, sizeof(sip->sip) - 1);
-			sip->satip_fe = -1;
-			sip->static_config = 1;
-			if (strchr(sip->sip, '@'))
-			{
-				sip->satip_fe = map_int(sep1, NULL);
-				memmove(sip->sip, strchr(sip->sip, '@') + 1, sizeof(sip->sip) - 1);
-			}
-			sip->sport = map_int(sep2, NULL);
-			if (ad->sys[0] == SYS_DVBS2)
-				ad->sys[1] = SYS_DVBS;
-			if (ad->sys[0] == SYS_DVBT2)
-				ad->sys[1] = SYS_DVBT;
-			if (ad->sys[0] == SYS_DVBC2)
-				ad->sys[1] = SYS_DVBC_ANNEX_A;
-			if (sip->satip_fe == -1)
-				sip->satip_fe = determine_fe(a, i, sip->sip, sip->sport);
-			sip->addpids = opts.satip_addpids;
-			sip->setup_pids = opts.satip_setup_pids;
-			sip->tcp_size = 0;
-			sip->tcp_data = NULL;
-			sip->use_tcp = opts.satip_rtsp_over_tcp;
-
-			if (i + 1 > a_count)
-				a_count = i + 1; // update adapter counter
-
-			j++;
-			LOG("AD%d: Satip device %s port %d delsys %d: %s %s, total number of devices %d", ad->id, sip->sip,
-				sip->sport, ad->sys[0], get_delsys(ad->sys[0]),
-				get_delsys(ad->sys[1]), a_count);
-			mutex_unlock(&ad->mutex);
+void detect_tuners_satip(char *host, int port, int *tuners)
+{
+	int i;
+	for (i = 0; i < MAX_ADAPTERS; i++)
+		if (satip[i] && a[i])
+		{
+			if (!strcmp(satip[i]->sip, host) && (satip[i]->sport == port))
+				tuners[a[i]->sys[0]]++;
 		}
 }
 
+void disable_satip_server(char *host, int port)
+{
+	int i;
+	for (i = 0; i < MAX_ADAPTERS; i++)
+		if (satip[i] && a[i] && a[i]->type == ADAPTER_SATIP)
+		{
+			if (!strcmp(satip[i]->sip, host) && (satip[i]->sport == port))
+			{
+				a[i]->type = 0;
+				if (a[i]->enabled)
+					request_adapter_close(a[i]);
+			}
+		}
+}
+#define MAX_SATIP_XML 20
+typedef struct satip_xml_data
+{
+	char url[100];
+	char host[64];
+	int port;
+	char xml[4000];
+	int tuners[MAX_DVBAPI_SYSTEMS];
+} Ssatip_xml_data;
+
+Ssatip_xml_data sxd[MAX_SATIP_XML];
+char *satip_delsys[] =
+	{"undefined", "DVBC", "ATSCC", "DVBT", "DSS", "DVBS", "DVBS2", "DVBH", "ISDBT",
+	 "ISDBS", "ISDBC", "ATSCT", "ATSCMH", "DMBTH", "CMMB", "DAB", "DVBT2",
+	 "TURBO", "DVBCC", "DVBC2",
+	 NULL};
+
 void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h)
 {
-	if (!data)
-		return; // the socket will be closed;
-	LOG("%s: %s", __FUNCTION__, data);
+	Ssatip_xml_data *s = (Ssatip_xml_data *)opaque;
+	if (!data) // the socket will be closed, process the data;
+	{
+		char *sep;
+		char *arg[MAX_DVBAPI_SYSTEMS];
+		char order[MAX_DVBAPI_SYSTEMS];
+		int i_order = 0;
+		int i, j, la;
+		memset(s->host, 0, sizeof(s->host));
+		strncpy(s->host, h->host, sizeof(s->host) - 1);
+		s->port = 554;
+		sep = strstr(s->xml, "X-SATIP-RTSP-Port:");
+		if (sep)
+		{
+			s->port = map_intd(sep + 18, NULL, 554);
+		}
+		sep = strstr(s->xml, "<satip:X_SATIPCAP");
+		if (sep)
+			sep = strstr(sep, ">");
+		if (!sep)
+		{
+			LOG("No satipcap found for %s", s->url);
+			return;
+		}
+		sep++;
+		la = split(arg, sep, MAX_DVBAPI_SYSTEMS, ',');
+		for (i = 0; i < la; i++)
+		{
+			int ds = map_intd(arg[i], satip_delsys, -1);
+			sep = strchr(arg[i], '-');
+			int t = map_intd(sep ? sep + 1 : NULL, NULL, -1);
+			if (ds < 0 || ds >= MAX_DVBAPI_SYSTEMS || t < 0)
+			{
+				LOG("Could not determine the delivery system for %s (%d) tuners %d", arg[i], ds, t);
+				continue;
+			}
+
+			s->tuners[ds] = t;
+			order[i_order++] = ds;
+			LOGM("%s: %d tuners for %s", satip_delsys[ds], t, s->url);
+		}
+		int tuners[MAX_DVBAPI_SYSTEMS];
+		memset(tuners, 0, sizeof(tuners));
+		detect_tuners_satip(s->host, s->port, tuners);
+		if (memcmp(tuners, s->tuners, sizeof(tuners)))
+		{
+			int fe = 0;
+			LOG("updating tuners for %s, host: %s, satip port %d", s->url, s->host, s->port);
+			disable_satip_server(s->host, s->port);
+			for (i = 0; i < i_order; i++)
+			{
+				int ds = order[i];
+				for (j = 0; j < s->tuners[ds]; j++)
+					add_satip_server(s->host, s->port, fe++, ds);
+			}
+			getAdaptersCount();
+		}
+		else
+			LOG("No change for satip xml: %s", s->url);
+		return;
+	}
+	if (len + strlen(s->xml) > sizeof(s->xml))
+	{
+		LOG("too much data from the satip server for URL %s", s->url);
+		return;
+	}
+	strncpy(s->xml + strlen(s->xml), data, len);
+	DEBUGM("%s: %s", __FUNCTION__, s->xml);
 }
 
 int satip_getxml(void *x)
 {
+	int i, la;
+	char *arg[MAX_SATIP_XML];
+	char satip_xml[1000];
 	if (!opts.satip_xml)
 		return 1;
-	if (!opts.satip_init && !opts.satip_servers)
-		opts.satip_init = "";
-	if (!opts.satip_init)
+	memset(satip_xml, 0, sizeof(satip_xml));
+	memset(sxd, 0, sizeof(sxd));
+	strncpy(satip_xml, opts.satip_xml, sizeof(satip_xml) - 1);
+	la = split(arg, satip_xml, MAX_SATIP_XML, ',');
+	for (i = 0; i < la; i++)
 	{
-		opts.satip_init = init_satip_pointer(SATIP_STR_LEN);
-		if (!opts.satip_init)
-			return 1;
-		strcpy(opts.satip_init, opts.satip_servers);
+		strncpy(sxd[i].url, arg[i], sizeof(sxd[i].url));
+		http_client(sxd[i].url, "", satip_getxml_data, &sxd[i]);
 	}
-	if (!opts.satip_servers)
-	{
-		opts.satip_servers = init_satip_pointer(SATIP_STR_LEN);
-		if (!opts.satip_servers)
-			return 1;
-	}
-
-	http_client(opts.satip_xml, "", satip_getxml_data, "");
 	return 0;
 }
 

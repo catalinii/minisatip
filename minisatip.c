@@ -1595,7 +1595,8 @@ int main(int argc, char *argv[])
 			FAIL("sockets_add failed for satip_xml retrieval");
 
 		set_socket_thread(sock_satip, get_socket_thread(sock_signal));
-		sockets_timeout(sock_satip, 3000);
+		sockets_timeout(sock_satip, 120000);
+		set_sockets_rtime(sock_satip, -120000);
 		LOG("Added sockets id %d for polling the satip servers", sock_satip);
 	}
 #endif

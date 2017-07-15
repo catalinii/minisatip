@@ -25,7 +25,19 @@ https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item
 Usage:
 -------
 
-./minisatip [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
+minisatip version 0.7.6, compiled with s2api version: 050A
+[15/07 20:52:39.481 main]: Built with dvbcsa
+[15/07 20:52:39.481 main]: Built with CI
+[15/07 20:52:39.481 main]: Built with dvbapi
+[15/07 20:52:39.481 main]: Built with AES (OpenSSL)
+[15/07 20:52:39.481 main]: Built with tables processing
+[15/07 20:52:39.481 main]: Built with pmt processing
+[15/07 20:52:39.481 main]: Built with satip client
+[15/07 20:52:39.481 main]: Built with linux dvb client
+[15/07 20:52:39.481 main]: Built with backtrace
+[15/07 20:52:39.481 main]: Built with netceiver
+
+	./minisatip [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 		[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]][-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] [-R document_root] [-s [DELSYS:]host[:port] [-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] 
  	[-x http_port] [-X xml_path] [-y rtsp_port]
 
@@ -59,7 +71,7 @@ Help
 	* Send diseqc to selected position before other position is set.
 	- note: * as adapter means apply to all adapters
 
-* -E Allow encrypted stream to be sent to the client even if the decrypting was unsuccessfull
+* -E Allows encrypted stream to be sent to the client even if the decrypting is unsuccessful
  
 * -Y --delsys ADAPTER1:DELIVERY_SYSTEM1[,ADAPTER2:DELIVERY_SYSTEM2[,..]] - specify the delivery system of the adapters	
 	* eg: --delsys 1:dvbt,2:dvbs
@@ -73,7 +85,9 @@ Help
 	- keep in mind that the first adapters are the local ones starting with 0 after that are the satip adapters 
 	if you have 3 local dvb cards 0-2 will be the local adapters, 3,4, ... will be the satip servers specified with argument -s
 
-* -f  foreground, otherwise run in background
+* -f foreground, otherwise run in background
+
+* -F --logfile log_file, output the debug/log information to  log_file when running in background (option -f not used), default /tmp/minisatip.log
 
 * -g use syslog instead stdout for logging, multiple -g - print to stderr as well
 

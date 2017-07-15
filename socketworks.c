@@ -914,6 +914,10 @@ int get_mac_address(char *mac)
 }
 
 #else
+#include <ifaddrs.h>
+#include <sys/socket.h>
+#include <net/if_dl.h>
+
 int get_mac_address(char *mac)
 {
 
@@ -923,9 +927,26 @@ int get_mac_address(char *mac)
 		strncpy(mac, opts.mac, 13);
 		return 0;
 	}
-	// TO DO: detect mac on MACOSX
+	memset(mac, 0, 3 * 6);
+	const char *if_name = "en0";
+	struct ifaddrs *iflist, *cur;
+	if (getifaddrs(&iflist) == 0)
+	{
+		for (cur = iflist; cur; cur = cur->ifa_next)
+		{
+			if ((cur->ifa_addr->sa_family == AF_LINK) && cur->ifa_addr)
+			{
+				struct sockaddr_dl *sdl = (struct sockaddr_dl *)cur->ifa_addr;
+				unsigned char *m = LLADDR(sdl);
+				sprintf(mac, "%02x%02x%02x%02x%02x%02x", m[0], m[1], m[2], m[3], m[4],m[5]);
+				LOG("mac -> %s, interface %s", mac, cur->ifa_name);
+				if ((strcmp(cur->ifa_name, if_name) == 0))
+					break;
+			}
+		}
 
-	strcpy(mac, "00:11:22:33:44:55");
+		freeifaddrs(iflist);
+	}
 	return 0;
 }
 #endif

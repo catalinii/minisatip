@@ -5,7 +5,6 @@
 #include <sys/types.h>
 #endif
 
-
 #ifdef DISABLE_LINUXDVB
 //#include <linux/types.h>
 #include <stdint.h>
@@ -162,6 +161,7 @@ typedef enum fe_modulation {
 #endif
 
 #define MAX_PIDS 64
+#define MAX_DVBAPI_SYSTEMS 22
 #ifdef NO_BACKTRACE
 #define MAX_STREAMS_PER_PID 8
 #else

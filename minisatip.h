@@ -77,15 +77,14 @@ struct struct_opts
 	int dvbapi_offset;
 	int drop_encrypted;
 	int rtsp_port;
-	uint8_t satip_addpids, satip_setup_pids, satip_rtsp_over_tcp;
 	uint8_t netcv_count;
 	char *netcv_if;
 	char *playlist;
 	char *log_file;
 #ifndef DISABLE_SATIPCLIENT
 	char *satip_servers;
-	char *satip_init;
 	char *satip_xml;
+	uint8_t satip_addpids, satip_setup_pids, satip_rtsp_over_tcp;
 #endif
 	char *document_root;
 	char *xml_path;

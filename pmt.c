@@ -1469,7 +1469,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 		if ((es_len + i > pmt_len) || (es_len < 0))
 			break;
 
-		if (stype != 2 && stype != 3 && stype != 4 && !isAC3 && stype != 27 && stype != 36)
+		if (stype != 2 && stype != 3 && stype != 4 && !isAC3 && stype != 27 && stype != 36 && stype != 15)
 			continue;
 
 		find_pi(pmt, pmt_b + i + 5, es_len);

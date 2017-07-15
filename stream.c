@@ -276,8 +276,7 @@ int start_play(streams *sid, sockets *s)
 		if (sid->tp.sys == 0 && sid->tp.freq == 0) // play streams with no real parameters ==> sending empty packets to the dest
 		{
 			sid->do_play = 1;
-			LOG_AND_RETURN(0,
-						   "Tune requested with no real parameters, ignoring ...");
+			LOG_AND_RETURN(0, "Tune requested with no real parameters, ignoring ...");
 		}
 		if (ad)
 		{

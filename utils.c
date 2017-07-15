@@ -1512,7 +1512,7 @@ int http_client_del(int i)
 		return 0;
 	h->enabled = 0;
 	mutex_destroy(&h->mutex);
-	LOG("Stopping http client %d", i);
+	LOGM("Stopping http client %d", i);
 	return 0;
 }
 
@@ -1525,7 +1525,7 @@ int http_client_close(sockets *s)
 		return 1;
 	}
 	if (h->action)
-		h->action(NULL, 0, s->opaque, h);
+		h->action(NULL, 0, h->opaque, h);
 
 	http_client_del(h->id);
 	return 1;
@@ -1543,13 +1543,13 @@ void http_client_read(sockets *s)
 	{
 		char headers[500];
 		sprintf(headers, "GET %s HTTP/1.0\r\n\r\n", (char *)h->req);
-		LOG("%s: sending to %d: %s", __FUNCTION__, s->sock, (char *)h->req);
+		LOGM("%s: sending to %d: %s", __FUNCTION__, s->sock, (char *)h->req);
 		send(s->sock, headers, strlen(headers), MSG_NOSIGNAL);
 		h->req[0] = 0;
 		return;
 	}
 	if (h->action)
-		h->action(s->buf, s->rlen, s->opaque, h);
+		h->action(s->buf, s->rlen, h->opaque, h);
 	s->rlen = 0;
 	return;
 }
@@ -1597,7 +1597,7 @@ int http_client(char *url, char *request, void *callback, void *opaque)
 	set_sockets_sid(http_client_sock, id);
 	strncpy(h->req, req, sizeof(h->req) - 1);
 	sockets_timeout(http_client_sock, 2000); // 2s timeout
-	LOGM("%s using handle %d s_id %d", __FUNCTION__, sock, http_client_sock);
+	LOGM("%s url %s using handle %d s_id %d", __FUNCTION__, url, sock, http_client_sock);
 	return 0;
 }
 
