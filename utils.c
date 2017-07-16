@@ -1261,7 +1261,7 @@ int mutex_destroy(SMutex *mutex)
 		LOG("%s: pthread_mutex_unlock 2 failed for %p with error %d %s",
 			__FUNCTION__, mutex, rv, strerror(rv));
 
-	LOGM("Destroying mutex %p", mutex);
+	LOG("Destroying mutex %p", mutex);
 	//	if ((rv = pthread_mutex_destroy(&mutex->mtx)))
 	//	{
 	//		LOG("mutex destroy %p failed with error %d %s", mutex, rv, strerror(rv));
@@ -1281,7 +1281,7 @@ void clean_mutexes()
 	//	LOG("mutex_leak: unlock %d mutexes", imtx);
 	for (i = imtx - 1; i >= 0; i--)
 	{
-		if (!mutexes[i])
+		if (!mutexes[i] || !mutexes[i]->enabled)
 			continue;
 		LOG("mutex_leak: %s unlocking mutex %p from %s:%d", __FUNCTION__,
 			mutexes[i], mutexes[i]->file, mutexes[i]->line);

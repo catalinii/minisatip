@@ -74,10 +74,11 @@ typedef struct struct_cw
 	int algo;
 	int16_t pmt;
 	SCW_op *op;
-	char prio; // CW priority
 	char adapter;
 	char parity;
 	char cw_len;
+	int prio;
+	char low_prio;
 	int16_t id;
 
 } SCW;

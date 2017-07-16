@@ -506,14 +506,31 @@ void update_cw(SPMT *pmt)
 	for (i = 0; i < ncws; i++)
 		if (cws[i] && cws[i]->enabled && (pmt->parity == cws[i]->parity) && (cws[i]->pmt == pmt->id || cws[i]->pmt == master->id))
 		{
-			LOGM("candidate CW %d, time %jd ms ago, parity %d, pmt %d, found %d", i, ctime - cws[i]->time, pmt->parity, cws[i]->pmt, cw ? cw->id : -1);
+			int change = 0;
 			if (!cw)
 			{
 				cw = cws[i];
 				continue;
 			}
-			// newest older than 2seconds
-			if ((cw->time < cws[i]->time) && (ctime - cws[i]->time > 2000))
+			if (cw->low_prio)
+			{
+				cw->low_prio = 0;
+				cw->prio++;
+			}
+			if (cws[i]->low_prio)
+			{
+				cws[i]->low_prio = 0;
+				cws[i]->prio++;
+			}
+
+			if (cw->prio < cws[i]->prio)
+				change = 1;
+			// newest CW
+			if ((cw->prio == cws[i]->prio) && (cw->time < cws[i]->time))
+				change = 1;
+
+			LOGM("candidate CW %d, prio %d, time %jd ms ago, parity %d, pmt %d, found %d, prio %d, change %d", i, cws[i]->prio, ctime - cws[i]->time, pmt->parity, cws[i]->pmt, cw ? cw->id : -1, cw ? cw->prio : -1, change);
+			if (change)
 				cw = cws[i];
 		}
 	char buf[300];
@@ -613,6 +630,13 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv)
 	c->parity = parity;
 	c->pmt = master_pmt;
 	c->cw_len = 16;
+	c->prio = 0;
+	c->low_prio = 0;
+	if ((pmt->parity == parity) && (ctime - pmt->last_parity_change > 2000))
+	{
+		c->prio = -1;
+		c->low_prio = 1;
+	}
 	if (algo < 2)
 		c->cw_len = 8;
 	c->algo = algo;
@@ -747,6 +771,7 @@ int pmt_decrypt_stream(adapter *ad)
 						pmt->name, pmt->id, cp, pid, b[0], b[1], b[2], b[3],
 						pmt->last_parity_change);
 					pmt->last_parity_change = ctime;
+					master->last_parity_change = ctime;
 					pmt->parity = cp;
 					disable_cw(pmt->master_pmt, old_parity);
 					update_cw(pmt);

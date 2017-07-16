@@ -66,7 +66,6 @@ adapter *adapter_alloc()
 {
 	adapter *ad = malloc1(sizeof(adapter));
 	memset(ad, 0, sizeof(adapter));
-	mutex_init(&ad->mutex);
 
 	/* diseqc setup */
 	ad->diseqc_param.fast = opts.diseqc_fast;
@@ -207,6 +206,7 @@ int init_hw(int i)
 		return 2;
 
 	ad = a[i];
+	mutex_init(&ad->mutex);
 	mutex_lock(&ad->mutex);
 	if (is_adapter_disabled(i))
 		goto NOK;
