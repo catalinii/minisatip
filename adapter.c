@@ -182,7 +182,7 @@ int close_adapter_for_socket(sockets *s)
 	int aid = s->sid;
 	adapter *ad = get_adapter(aid);
 	LOG("closing DVR socket %d pos %d aid %d", s->sock, s->id, aid);
-	if (s->sid == ad->sock)
+	if (ad && (s->sid == ad->sock))
 	{
 		ad->sock = -1;
 		s->sid = -1;

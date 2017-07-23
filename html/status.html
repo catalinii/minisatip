@@ -258,6 +258,8 @@
 						if (state['st_play'][j] == 0)
 							st_p = "<i>" + st_p + "</i>";
 						myTable += "<small>Pids: " + st_p + "</small><br />";
+						if (state['st_overflow'][j] > 0)
+							myTable += "<small>Dropped packets: " + state['st_overflow'][j] + "</small><br />";
 					}
 				}
 				myTable += "</td>";
@@ -335,10 +337,14 @@
 
 		function getData() {
 			$.post("state.json", function (data, status) {
+				console.log("status ", status, " at ", Date.now());
+
 				if (status === "success") {
 					renewTable(data);
 				}
-			}).fail(function () {
+				console.log("done ", status, " at ", Date.now());
+			}).fail(function (xhr, textStatus, error) {
+				console.log("Error ", xhr.statusText, " ", textStatus, "\n", error);
 				if (table)
 					table.clear().draw();
 			});
