@@ -58,6 +58,8 @@ int network_mode = 1;
 int dvbapi_protocol_version = DVBAPI_PROTOCOL_VERSION;
 int dvbapi_ca = -1;
 
+uint64_t dvbapi_last_close = 0;
+
 SKey *keys[MAX_KEYS];
 SMutex keys_mutex;
 unsigned char read_buffer[1500];
@@ -69,10 +71,7 @@ unsigned char read_buffer[1500];
 		if ((x = (a)) != (xlen))                                                                                                                \
 		{                                                                                                                                       \
 			LOG("write to dvbapi socket failed (%d out of %d), closing socket %d, errno %d, error: %s", x, xlen, sock, errno, strerror(errno)); \
-			sockets_del(dvbapi_sock);                                                                                                           \
-			sock = 0;                                                                                                                           \
-			dvbapi_sock = -1;                                                                                                                   \
-			dvbapi_is_enabled = 0;                                                                                                              \
+			dvbapi_close_socket();                                                                                                              \
 		}                                                                                                                                       \
 		mutex_unlock(&keys_mutex);                                                                                                              \
 	}
@@ -82,6 +81,14 @@ static inline SKey *get_key(int i)
 	if (i < 0 || i >= MAX_KEYS || !keys[i] || !keys[i]->enabled)
 		return NULL;
 	return keys[i];
+}
+
+void dvbapi_close_socket()
+{
+	sockets_del(dvbapi_sock);
+	sock = 0;
+	dvbapi_sock = -1;
+	dvbapi_is_enabled = 0;
 }
 
 void invalidate_adapter(int aid)
@@ -382,7 +389,9 @@ int dvbapi_send_pmt(SKey *k)
 {
 	unsigned char buf[1500];
 	int len;
-
+	SPMT *pmt = get_pmt(k->pmt_id);
+	if (!pmt)
+		return 1;
 	LOG(
 		"Sending pmt to dvbapi server for pid %d, Channel ID %04X, key %d, using socket %d",
 		k->pmt_pid, k->sid, k->id, sock);
@@ -393,11 +402,35 @@ int dvbapi_send_pmt(SKey *k)
 	copy16(buf, 7, k->sid);
 	buf[9] = 1;
 
-	copy32(buf, 12, 0x01820200);
-	buf[15] = k->id + opts.dvbapi_offset;
-	buf[16] = k->id + opts.dvbapi_offset;
-	memcpy(buf + 17, k->pi, k->pi_len);
-	len = 17 - 6 + k->pi_len + 2;
+	if (network_mode)
+	{
+		buf[15] = k->id + opts.dvbapi_offset;
+		buf[16] = k->id + opts.dvbapi_offset;
+		copy32(buf, 12, 0x01820200);
+		memcpy(buf + 17, k->pi, k->pi_len);
+		len = 17 - 6 + k->pi_len + 2;
+	}
+	else
+	{
+		adapter *ad = get_adapter(k->adapter);
+		int demux = 0;
+		int adapter = 0;
+		if (ad)
+		{
+			demux = ad->fn;
+			adapter = ad->pa;
+		}
+		LOG("Using adapter %d and demux %d for local socket", adapter, demux);
+		copy32(buf, 22, 0x01820200);
+		buf[25] = 1 << demux;
+		buf[26] = demux;
+		copy16(buf, 27, 0x8402);
+		copy16(buf, 29, pmt->pid);
+		copy16(buf, 31, 0x8301);
+		buf[33] = adapter;
+		memcpy(buf + 34, k->pi, k->pi_len);
+		len = 34 - 6 + k->pi_len + 2;
+	}
 	copy16(buf, 4, len);
 	copy16(buf, 10, len - 11);
 	TEST_WRITE(write(sock, buf, len + 6), len + 6);
@@ -435,21 +468,31 @@ int connect_dvbapi(void *arg)
 
 	if ((sock > 0) && dvbapi_is_enabled) // already connected
 	{
-		int i;
+		int i, ek = 0;
 		uint64_t ctime = getTick();
 
 		for (i = 0; i < MAX_KEYS; i++)
+		{
 			if (keys[i] && keys[i]->enabled && (keys[i]->ecms == 0) && (keys[i]->last_dmx_stop > 0) && (ctime - keys[i]->last_dmx_stop > 3000))
 			{
 				LOG("Key %d active but no active filter, closing ", i);
 				keys_del(i);
 			}
+			if (keys[i] && keys[i]->enabled)
+				ek++;
+		}
+		if (!ek && (getTick() - dvbapi_last_close > opts.adapter_timeout))
+			dvbapi_close_socket();
+
 		return 0;
 	}
 
 	dvbapi_is_enabled = 0;
 
 	if (!opts.dvbapi_port || !opts.dvbapi_host)
+		return 0;
+
+	if (!get_active_pmt_with_ca()) // no active encrypted pmts
 		return 0;
 
 	if (sock <= 0)
@@ -665,6 +708,7 @@ int keys_del(int i)
 	enabledKeys = ek;
 	if (!ek && sock > 0)
 		TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
+	dvbapi_last_close = getTick();
 	mutex_destroy(&k->mutex);
 	return 0;
 }

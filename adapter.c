@@ -182,6 +182,7 @@ int close_adapter_for_socket(sockets *s)
 	int aid = s->sid;
 	adapter *ad = get_adapter(aid);
 	LOG("closing DVR socket %d pos %d aid %d", s->sock, s->id, aid);
+	s->sid = -1;
 	if (ad)
 		ad->rtime = getTick();
 	if (ad)
@@ -400,12 +401,13 @@ int close_adapter(int na)
 #endif
 	sock = ad->sock;
 	ad->sock = -1;
-	set_sockets_sid(sock, -1);
-
+	if (sock >= 0) // avoid locking the socket after the adapter
+	{
+		sockets_force_close(sock);
+		set_sockets_sid(sock, -1);
+	}
 	mutex_destroy(&ad->mutex);
 	//      if(a[na]->buf)free1(a[na]->buf);a[na]->buf=NULL;
-	if (sock > 0)
-		sockets_del(sock);
 	LOG("done closing adapter %d", na);
 	return 1;
 }

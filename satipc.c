@@ -299,12 +299,12 @@ void set_adapter_signal(adapter *ad, char *b, int rlen)
 			ver = b + i;
 			tun = strstr((const char *)ver, "tuner=");
 			if (tun)
-				signal = strchr(tun, '=');
+				signal = strchr(tun, ',');
 			if (signal)
 			{
 				sscanf(signal + 1, "%d,%d,%d", &strength, &status, &snr);
 				if (ad->strength != strength && ad->snr != snr)
-					LOGM(
+					LOG(
 						"satipc: Received signal status from the server for adapter %d, stength=%d status=%d snr=%d",
 						ad->id, strength, status, snr);
 				ad->strength = strength;

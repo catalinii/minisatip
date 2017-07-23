@@ -16,9 +16,11 @@ ENIGMA=@ENIGMA@
 
 CFLAGS?=-Wall -Wno-switch -ggdb -fPIC $(EXTRA_CFLAGS) @CFLAGS@
 LDFLAGS?=-lpthread @LDFLAGS@
-UNAME_S := $(shell uname -s)
-    
-ifneq ($(UNAME_S),Darwin)
+
+OS := $(shell $(CC) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 2)
+ARCH := $(shell $(CC) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 1)
+
+ifneq ($(UNAME_S),apple)
         LDFLAGS += -lrt
 else
 	LINUXDVB=0

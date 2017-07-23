@@ -44,6 +44,10 @@
 
 #define DEFAULT_LOG LOG_DVB
 
+#define DEV_FRONTEND "/dev/dvb/adapter%d/frontend%d"
+#define DEV_DEMUX "/dev/dvb/adapter%d/demux%d"
+#define DEV_DVR "/dev/dvb/adapter%d/dvr%d"
+
 char *fe_pilot[] =
 	{"on", "off", " ", //auto
 	 NULL};
@@ -331,15 +335,15 @@ int dvb_open_device(adapter *ad)
 	char buf[100];
 	LOG("trying to open [%d] adapter %d and frontend %d", ad->id, ad->pa,
 		ad->fn);
-	sprintf(buf, "/dev/dvb/adapter%d/frontend%d", ad->pa, ad->fn);
+	sprintf(buf, DEV_FRONTEND, ad->pa, ad->fn);
 	ad->fe = open(buf, O_RDWR | O_NONBLOCK);
-	sprintf(buf, "/dev/dvb/adapter%d/dvr%d", ad->pa, ad->fn);
+	sprintf(buf, DEV_DVR, ad->pa, ad->fn);
 	ad->dvr = open(buf, O_RDONLY | O_NONBLOCK);
 	if (ad->fe < 0 || ad->dvr < 0)
 	{
-		sprintf(buf, "/dev/dvb/adapter%d/frontend%d", ad->pa, ad->fn);
-		LOG("Could not open %s in RW mode (fe: %d, dvr: %d)", buf, ad->fe,
-			ad->dvr);
+		sprintf(buf, DEV_FRONTEND, ad->pa, ad->fn);
+		LOG("Could not open %s in RW mode (fe: %d, dvr: %d) error %d: %s", buf, ad->fe,
+			ad->dvr, errno, strerror(errno));
 		if (ad->fe >= 0)
 			close(ad->fe);
 		if (ad->dvr >= 0)
@@ -357,7 +361,7 @@ int dvb_open_device(adapter *ad)
 
 	if (ad->dmx_source >= 0)
 	{
-		sprintf(buf, "/dev/dvb/adapter%d/demux%d", ad->pa, ad->fn);
+		sprintf(buf, DEV_DEMUX, ad->pa, ad->fn);
 		ad->dmx = open(buf, O_RDWR | O_NONBLOCK);
 		if (ad->dmx <= 0)
 			LOG("DMX_SET_SOURCE: Failed opening %s", buf)
@@ -806,13 +810,13 @@ int dvb_set_pid(adapter *a, uint16_t i_pid)
 	hw = a->pa;
 	ad = a->fn;
 	if (i_pid > 8192)
-		LOG_AND_RETURN(-1, "pid %d > 8192 for /dev/dvb/adapter%d/demux%d",
+		LOG_AND_RETURN(-1, "pid %d > 8192 for " DEV_DEMUX,
 					   i_pid, hw, ad);
 
-	sprintf(buf, "/dev/dvb/adapter%d/demux%d", hw, ad);
+	sprintf(buf, DEV_DEMUX, hw, ad);
 	if ((fd = open(buf, O_RDWR | O_NONBLOCK)) < 0)
 	{
-		LOG("Could not open demux device /dev/dvb/adapter%d/demux%d: %s ", hw,
+		LOG("Could not open demux device " DEV_DEMUX ": %s ", hw,
 			ad, strerror(errno));
 		return -1;
 	}
@@ -1106,15 +1110,15 @@ void find_dvb_adapter(adapter **a)
 		for (j = 0; j < MAX_ADAPTERS; j++)
 		{
 			cnt = 0;
-			sprintf(buf, "/dev/dvb/adapter%d/frontend%d", i, j);
+			sprintf(buf, DEV_FRONTEND, i, j);
 			if (!access(buf, R_OK))
 				cnt++;
 
-			sprintf(buf, "/dev/dvb/adapter%d/demux%d", i, j);
+			sprintf(buf, DEV_DEMUX, i, j);
 			if (!access(buf, R_OK))
 				cnt++;
 
-			sprintf(buf, "/dev/dvb/adapter%d/dvr%d", i, j);
+			sprintf(buf, DEV_DVR, i, j);
 			if (!access(buf, R_OK))
 				cnt++;
 

@@ -1475,7 +1475,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 	es_len = 0;
 	pmt->active_pids = 0;
 	pmt->active = 1;
-	for (i = 0; i < pmt_len - pi_len - 17; i += (es_len) + 5) // reading streams
+	for (i = 0; i < pmt_len - pi_len - 12; i += (es_len) + 5) // reading streams
 	{
 		es_len = (pmt_b[i + 3] & 0xF) * 256 + pmt_b[i + 4];
 		stype = pmt_b[i];
@@ -1491,9 +1491,11 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 
 		LOG("PMT pid %d - stream pid %04X (%d), type %d%s, es_len %d, pos %d, pi_len %d",
 			pid, spid, spid, stype, isAC3 ? " [AC3]" : "", es_len, i, pmt->pi_len);
-		if ((es_len + i > pmt_len) || (es_len < 0))
+		if ((es_len + i + 5 > pmt_len) || (es_len < 0))
+		{
+			LOGM("pmt processing complete, es_len + i %d, len %d, es_len %d", es_len + i, pmt_len, es_len);
 			break;
-
+		}
 		if (stype != 2 && stype != 3 && stype != 4 && !isAC3 && stype != 27 && stype != 36 && stype != 15)
 			continue;
 
@@ -1748,6 +1750,18 @@ char *get_channel_for_adapter(int aid, char *dest, int max_size)
 	if (len > 0)
 		dest[len - 1] = 0;
 	return dest;
+}
+
+int get_active_pmt_with_ca()
+{
+	int i;
+	int npmt = 0;
+	for (i = 0; i < npmts; i++)
+		if (pmts[i] && pmts[i]->enabled && pmts[i]->running && (pmts[i]->pi_len > 0))
+		{
+			npmt++;
+		}
+	return npmt;
 }
 
 void free_all_pmts(void)

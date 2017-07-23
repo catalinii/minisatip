@@ -541,7 +541,7 @@ int sockets_del(int sock)
 	ss->is_enabled = 0;
 	so = ss->sock;
 	ss->sock = -1; // avoid infinite loop
-	LOG("sockets_del: %d -> handle %d, sid %d, overflow %d, allocated %d, used %d", sock, so, ss->sid, ss->overflow, ss->buf_alloc, ss->buf_used);
+	LOG("sockets_del: %d -> handle %d, sid %d, overflow %d, allocated %d, used %d, unsend packets %d", sock, so, ss->sid, ss->overflow, ss->buf_alloc, ss->buf_used, (ss->wmax > 0) ? ((ss->wpos - ss->spos) % ss->wmax) : 0);
 
 	if (so >= 0)
 	{
@@ -800,7 +800,7 @@ void *select_and_execute(void *arg)
 				if ((ss = get_sockets(i)) && (ss->tid == tid) &&
 					(((ss->timeout_ms > 0) && (lt - ss->rtime > ss->timeout_ms) && (ss->spos == ss->wpos)) || (ss->force_close)))
 				{
-					if (ss->timeout)
+					if (ss->timeout && !ss->force_close)
 					{
 						int rv;
 						if (ss->sock == SOCK_TIMEOUT)
@@ -811,8 +811,7 @@ void *select_and_execute(void *arg)
 						if (rv)
 							sockets_del(i);
 					}
-
-					if (!ss->timeout)
+					else
 						sockets_del(i);
 				}
 		}
@@ -821,8 +820,9 @@ void *select_and_execute(void *arg)
 	clean_mutexes();
 
 	if (tid == main_tid)
-		LOG("The main loop ended, run_loop = %d", run_loop);
-	add_join_thread(tid);
+		LOG("The main loop ended, run_loop = %d", run_loop)
+	else
+		add_join_thread(tid);
 
 	return NULL;
 }
@@ -938,7 +938,7 @@ int get_mac_address(char *mac)
 			{
 				struct sockaddr_dl *sdl = (struct sockaddr_dl *)cur->ifa_addr;
 				unsigned char *m = LLADDR(sdl);
-				sprintf(mac, "%02x%02x%02x%02x%02x%02x", m[0], m[1], m[2], m[3], m[4],m[5]);
+				sprintf(mac, "%02x%02x%02x%02x%02x%02x", m[0], m[1], m[2], m[3], m[4], m[5]);
 				LOG("mac -> %s, interface %s", mac, cur->ifa_name);
 				if ((strcmp(cur->ifa_name, if_name) == 0))
 					break;
@@ -999,7 +999,7 @@ int sockets_del_for_sid(int sid)
 	for (i = 0; i < MAX_SOCKS; i++)
 		if ((ss = get_sockets(i)) && ss->sid >= 0 && ss->type == TYPE_RTSP && ss->sid == sid)
 		{
-			ss->timeout_ms = 1; //trigger close of the socket after this operation ends, otherwise we might close an socket on which we run action
+			ss->timeout_ms = 1; // avoid locking socket after stream
 			ss->sid = -1;		// make sure the stream is not closed in the future to prevent closing the stream created by another socket
 		}
 	return 0;
@@ -1138,8 +1138,6 @@ int my_writev(sockets *s, const struct iovec *iov, int iiov)
 	int rv, len = 0, i;
 	char ra[50];
 	int64_t stime = 0;
-	if (s->force_close)
-		LOG_AND_RETURN(-2, "socket about to be closed, not writing");
 
 	len = 0;
 	for (i = 0; i < iiov; i++)
@@ -1380,9 +1378,13 @@ void sockets_set_opaque(int id, void *opaque, void *opaque2, void *opaque3)
 	}
 }
 
+// does not flush all the buffers before close, but ensures the socket will be closed regardless of the result of the timeout function
+
 void sockets_force_close(int id)
 {
 	sockets *s = get_sockets(id);
 	if (s)
+	{
 		s->force_close = 1;
+	}
 }

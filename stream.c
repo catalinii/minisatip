@@ -988,6 +988,9 @@ int process_dmx(sockets *s)
 	return 0;
 }
 
+// lock order: socket -> stream -> adapter
+// after stream or adapter, avoid locking socket
+
 int read_dmx(sockets *s)
 {
 	static int cnt;
@@ -1341,6 +1344,15 @@ char *get_stream_pids(int s_id, char *dest, int max_size)
 	return dest;
 }
 
+int get_stream_overflow(int s_id)
+{
+	streams *sid = get_sid_nw(s_id);
+	if (!sid)
+		return 0;
+	sockets *s = get_sockets(sid->rsock_id);
+	return s ? s->overflow : -1;
+}
+
 _symbols stream_sym[] =
 	{
 		{"st_enabled", VAR_AARRAY_INT8, st, 1, MAX_STREAMS, offsetof(streams,
@@ -1356,5 +1368,7 @@ _symbols stream_sym[] =
 		{"st_rport", VAR_FUNCTION_INT, (void *)&get_stream_rport, 0,
 		 MAX_STREAMS, 0},
 		{"st_pids", VAR_FUNCTION_STRING, (void *)&get_stream_pids, 0,
+		 MAX_STREAMS, 0},
+		{"st_overflow", VAR_FUNCTION_INT, (void *)&get_stream_overflow, 0,
 		 MAX_STREAMS, 0},
 		{NULL, 0, NULL, 0, 0}};
