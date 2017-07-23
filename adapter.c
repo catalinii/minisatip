@@ -182,7 +182,11 @@ int close_adapter_for_socket(sockets *s)
 	int aid = s->sid;
 	adapter *ad = get_adapter(aid);
 	LOG("closing DVR socket %d pos %d aid %d", s->sock, s->id, aid);
-	s->sid = -1;
+	if (s->sid == ad->sock)
+	{
+		ad->sock = -1;
+		s->sid = -1;
+	}
 	if (ad)
 		ad->rtime = getTick();
 	if (ad)
@@ -747,7 +751,7 @@ int update_pids(int aid)
 				if ((ad->pids[i].fd = ad->set_pid(ad, ad->pids[i].pid)) < 0)
 				{
 
-					int new_max_pids = get_active_pids_number(ad) - 5;
+					int new_max_pids = get_active_pids_number(ad) - 2;
 					if (new_max_pids > 0)
 						opts.max_pids = new_max_pids;
 					LOG("Maximum pid filter reached, lowering the value to %d", opts.max_pids);
