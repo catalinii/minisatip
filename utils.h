@@ -162,6 +162,11 @@ void dump_packets(char *message, unsigned char *b, int len, int packet_offset);
 	}
 #define DEBUGM(a, ...) DEBUGL(DEFAULT_LOG, a, ##__VA_ARGS__)
 
+#define LOG0(a, ...)                                \
+	{                                               \
+		_log(__FILE__, __LINE__, a, ##__VA_ARGS__); \
+	}
+
 #define FAIL(a, ...)               \
 	{                              \
 		LOGL(0, a, ##__VA_ARGS__); \

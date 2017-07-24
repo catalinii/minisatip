@@ -59,7 +59,7 @@ streams *get_stream(int i)
 
 streams *get_sid1(int sid, char *file, int line)
 {
-	if (sid < 0 || sid > MAX_STREAMS || !st[sid] || st[sid]->enabled == 0)
+	if (sid < 0 || sid >= MAX_STREAMS || !st[sid] || st[sid]->enabled == 0)
 	{
 		LOG("%s:%d get_sid returns NULL for s_id = %d", file, line, sid);
 		return NULL;

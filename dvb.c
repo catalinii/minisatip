@@ -691,11 +691,11 @@ int dvb_tune(int aid, transponder *tp)
 		ADD_PROP(DTV_STREAM_ID, tp->plp)
 #endif
 
-		LOG("tuning to %d(%d) pol: %s (%d) sr:%d fec:%s delsys:%s mod:%s rolloff:%s pilot:%s, ts clear=%jd, ts pol=%jd",
-			tp->freq, freq, get_pol(tp->pol), tp->pol, tp->sr,
-			fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype],
-			fe_rolloff[tp->ro], fe_pilot[tp->plts],
-			bclear, bpol)
+		LOG0("tuning to %d(%d) pol: %s (%d) sr:%d fec:%s delsys:%s mod:%s rolloff:%s pilot:%s, ts clear=%jd, ts pol=%jd",
+			 tp->freq, freq, get_pol(tp->pol), tp->pol, tp->sr,
+			 fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype],
+			 fe_rolloff[tp->ro], fe_pilot[tp->plts],
+			 bclear, bpol)
 		break;
 
 	case SYS_DVBT:

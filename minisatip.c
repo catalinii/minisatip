@@ -991,7 +991,10 @@ int read_rtsp(sockets *s)
 
 	sid = get_sid(s->sid);
 	if (sid)
+	{
+		LOGM("Updating stream %d time to %jd, current time %jd", sid->sid, s->rtime, getTick());
 		sid->rtime = s->rtime;
+	}
 
 	if (sess_id)
 		set_session_id(s->sid, sess_id);
@@ -1535,7 +1538,7 @@ pthread_t main_tid;
 extern int sock_signal;
 int main(int argc, char *argv[])
 {
-	int sock_bw, sock_satip, rv;
+	int sock_bw, sock_satip, rv, devices;
 	main_tid = get_tid();
 	thread_name = "main";
 	set_options(argc, argv);
@@ -1608,7 +1611,8 @@ int main(int argc, char *argv[])
 #ifndef DISABLE_PMT
 	pmt_init();
 #endif
-	LOG("Initializing with %d devices", init_all_hw());
+	devices = init_all_hw();
+	LOG0("Initializing with %d devices", devices);
 
 	write_pid_file();
 	select_and_execute(NULL);
