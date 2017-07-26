@@ -1547,6 +1547,34 @@ SPMT *get_pmt_for_sid(int aid, int sid)
 	return NULL;
 }
 
+void copy_en300568_string(char *dest, int dest_len, char *src, int len)
+{
+	int start = (src[0] < 0x20) ? 1 : 0;
+	int i;
+	if (src[0] == 0x10)
+		start += 2;
+	for (i = start; (i < len) && (--dest_len > 0); i++)
+	{
+		unsigned char c = (unsigned char)src[i];
+		switch (c)
+		{
+		case 0x80 ... 0x85:
+		case 0x88 ... 0x89:
+		case 0x8B ... 0x9F:
+		case 0x8A:
+			*dest++ = '\n';
+			continue;
+		case 0x86 ... 0x87: // ignore emphasis
+			continue;
+		case 0xE0:
+		case 0xC2:
+			continue;
+		}
+		*dest++ = src[i];
+	}
+	*dest = 0;
+}
+
 int process_sdt(int filter, unsigned char *sdt, int len, void *opaque)
 {
 	int i, j, tsid, sdt_len, sid, desc_loop_len, desc_len;
@@ -1598,15 +1626,11 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque)
 			desc_len += 2;
 			if (c[0] == 0x48)
 			{
-				int len, name_size = sizeof(pmt->name) - 1;
+				int name_size = sizeof(pmt->name) - 1;
 				c += 3;
-				len = (c[0] > name_size) ? name_size : c[0];
-				strncpy(pmt->provider, (char *)c + 1, len);
-				pmt->provider[len] = 0;
+				copy_en300568_string(pmt->provider, name_size, (char *)c + 1, c[0]);
 				c += c[0] + 1;
-				len = (c[0] > name_size) ? name_size : c[0];
-				strncpy(pmt->name, (char *)c + 1, len);
-				pmt->name[len] = 0;
+				copy_en300568_string(pmt->name, name_size, (char *)c + 1, c[0]);
 				LOG("SDT PMT %d: name %s provider %s, sid: %d (%X)", pmt->id, pmt->name, pmt->provider, sid, sid);
 			}
 		}

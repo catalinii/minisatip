@@ -770,12 +770,33 @@ int snprintf_pointer(char *dest, int max_len, int type, void *p,
 	return nb;
 }
 
+int escape_json_string(char *dest, int dl, char *src, int sl)
+{
+	int i, j = 1;
+	if (dl < 2)
+		LOG_AND_RETURN(0, "%s: dl %d < 2 for %s", __FUNCTION__, dl, src);
+
+	dest[0] = '"';
+	for (i = 0; (i < sl) && (j < dl - 1); i++)
+	{
+		unsigned char c = (unsigned char)src[i];
+		if (c >= 32)
+			dest[j++] = src[i];
+		else
+			strlcatf(dest, sl, j, "%%x%02X", c);
+	}
+	dest[j++] = '"';
+	dest[j] = 0;
+	return j;
+}
+
 char zero[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 int get_json_state(char *buf, int len)
 {
 	int ptr = 0, first = 1, i, j, off, string;
 	_symbols *p;
+	char escape[200]; // string variable max len
 
 	strlcatf(buf, len, ptr, "{\n");
 	for (i = 0; sym[i] != NULL; i++)
@@ -798,10 +819,12 @@ int get_json_state(char *buf, int len)
 			if (p->type < VAR_ARRAY)
 			{
 				if (string)
-					strlcatf(buf, len, ptr, "\"");
-				ptr += snprintf_pointer(buf + ptr, len - ptr, p->type, p->addr, p->multiplier);
-				if (string)
-					strlcatf(buf, len, ptr, "\"");
+				{
+					int len2 = snprintf_pointer(escape, sizeof(escape) - 1, p->type, p->addr, p->multiplier);
+					ptr += escape_json_string(buf + ptr, len - ptr, escape, len2);
+				}
+				else
+					ptr += snprintf_pointer(buf + ptr, len - ptr, p->type, p->addr, p->multiplier);
 			}
 			else if ((p->type & 0xF0) == VAR_ARRAY)
 			{
@@ -809,11 +832,13 @@ int get_json_state(char *buf, int len)
 				for (off = 0; off < p->len; off++)
 				{
 					if (string)
-						strlcatf(buf, len, ptr, off > 0 ? ",\"" : "\"");
-					ptr += snprintf_pointer(buf + ptr, len - ptr, p->type,
-											((char *)p->addr) + off + p->skip, p->multiplier);
-					if (string)
-						strlcatf(buf, len, ptr, "\"");
+					{
+						int len2 = snprintf_pointer(escape, sizeof(escape) - 1, p->type, ((char *)p->addr) + off + p->skip, p->multiplier);
+						ptr += escape_json_string(buf + ptr, len - ptr, escape, len2);
+					}
+					else
+						ptr += snprintf_pointer(buf + ptr, len - ptr, p->type,
+												((char *)p->addr) + off + p->skip, p->multiplier);
 				}
 				strlcatf(buf, len, ptr, "]");
 			}
@@ -823,14 +848,16 @@ int get_json_state(char *buf, int len)
 				for (off = 0; off < p->len; off++)
 				{
 					char **p1 = (char **)p->addr;
-					if (string)
-						strlcatf(buf, len, ptr, off > 0 ? ",\"" : "\"");
-					else if (off > 0)
+					if (off > 0)
 						strlcatf(buf, len, ptr, ",");
-					ptr += snprintf_pointer(buf + ptr, len - ptr, p->type,
-											p1[off] ? p1[off] + p->skip : zero, p->multiplier);
 					if (string)
-						strlcatf(buf, len, ptr, "\"");
+					{
+						int len2 = snprintf_pointer(escape, sizeof(escape) - 1, p->type, p1[off] ? p1[off] + p->skip : zero, p->multiplier);
+						ptr += escape_json_string(buf + ptr, len - ptr, escape, len2);
+					}
+					else
+						ptr += snprintf_pointer(buf + ptr, len - ptr, p->type,
+												p1[off] ? p1[off] + p->skip : zero, p->multiplier);
 				}
 				strlcatf(buf, len, ptr, "]");
 			}
@@ -862,15 +889,18 @@ int get_json_state(char *buf, int len)
 			}
 			else if (sym[i][j].type == VAR_FUNCTION_STRING)
 			{
-				char storage[64 * 5]; // variable max len
 				get_data_string funs = (get_data_string)p->addr;
 				strlcatf(buf, len, ptr, "[");
 				for (off = 0; off < p->len; off++)
 				{
-					funs(off, storage, sizeof(storage));
-					strlcatf(buf, len, ptr, off > 0 ? ",\"%s\"" : "\"%s\"", storage);
+					escape[strlen(escape) - 1] = 0;
+					funs(off, escape, sizeof(escape) - 1);
+					if (off > 0)
+						strlcatf(buf, len, ptr, ",");
+					ptr += escape_json_string(buf + ptr, len - ptr, escape, strlen(escape));
 				}
 				strlcatf(buf, len, ptr, "]");
+				//				LOG("func_str -> %s", buf);
 			}
 			else
 			{
@@ -1101,6 +1131,8 @@ char *readfile(char *fn, char *ctype, int *len)
 			strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: text/html\r\nConnection: close");
 		else if (endswith(fn, "xml"))
 			strcpy(ctype, "Cache-Control: no-cache\r\nContent-type: text/xml");
+		else if (endswith(fn, "2.json")) // debug
+			strcpy(ctype, "Content-type: application/json");
 		else if (endswith(fn, "json"))
 			strcpy(ctype, "Cache-Control: no-cache\r\nContent-type: application/json");
 		else if (endswith(fn, "m3u"))
