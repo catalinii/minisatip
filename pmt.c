@@ -965,6 +965,8 @@ int clear_pmt_for_adapter(int aid)
 		memset(mask, 0, FILTER_SIZE);
 		set_filter_mask(ad->pat_filter, filter, mask);
 		set_filter_flags(ad->pat_filter, FILTER_PERMANENT | FILTER_CRC);
+		set_filter_mask(ad->sdt_filter, filter, mask);
+		set_filter_flags(ad->sdt_filter, FILTER_PERMANENT | FILTER_CRC);
 	}
 	return 0;
 }
@@ -1601,7 +1603,7 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque)
 	new_filter[3] = (sdt[5] & 0x3E);
 	new_mask[3] = 0x3E;
 	set_filter_mask(filter, new_filter, new_mask);
-	set_filter_flags(filter, FILTER_PERMANENT | FILTER_REVERSE);
+	set_filter_flags(filter, FILTER_PERMANENT | FILTER_REVERSE | FILTER_CRC);
 	sdt_len = (sdt[1] & 0xF) * 256 + sdt[2];
 	i = 11;
 	LOG("Processing SDT for transponder %d (%x) with length %d, sdt[5] %02X", tsid, tsid, sdt_len, sdt[5]);
@@ -1749,7 +1751,7 @@ int pmt_tune(adapter *ad)
 		ad->pat_filter = add_filter(ad->id, 0, (void *)process_pat, ad, FILTER_PERMANENT | FILTER_CRC);
 
 	if (ad->sdt_filter == -1)
-		ad->sdt_filter = add_filter(ad->id, 17, (void *)process_sdt, ad, FILTER_PERMANENT);
+		ad->sdt_filter = add_filter(ad->id, 17, (void *)process_sdt, ad, FILTER_PERMANENT | FILTER_CRC);
 
 	// to comment
 	clear_pmt_for_adapter(ad->id);
