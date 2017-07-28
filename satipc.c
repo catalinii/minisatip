@@ -64,6 +64,7 @@ typedef struct struct_satipc
 	uint16_t dpid[MAX_PIDS]; // pids to delete
 	// satipc
 	char sip[40];
+	char source_ip[20]; // source ip address
 	int sport;
 	char session[18];
 	int stream_id;
@@ -350,12 +351,13 @@ int satipc_open_device(adapter *ad)
 		return 3;
 
 	sip->last_connect = ctime;
-	ad->fe = tcp_connect(sip->sip, sip->sport, NULL, 1); // blocking socket
+	ad->fe = tcp_connect_src(sip->sip, sip->sport, NULL, 1, sip->source_ip[0] ? sip->source_ip : NULL); // blocking socket
 	if (ad->fe < 0)
 		return 2;
 
-	LOG("satipc: connected to SAT>IP server %s port %d %s handle %d", sip->sip,
-		sip->sport, sip->use_tcp ? "[RTSP OVER TCP]" : "", ad->fe);
+	LOG("satipc: connected to SAT>IP server %s port %d %s handle %d %s %s", sip->sip,
+		sip->sport, sip->use_tcp ? "[RTSP OVER TCP]" : "", ad->fe, sip->source_ip[0] ? "from source" : "", sip->source_ip[0] ? sip->source_ip : "");
+
 	if (!sip->use_tcp)
 	{
 		sip->listen_rtp = opts.start_rtp + 1000 + ad->id * 2;
@@ -1143,7 +1145,7 @@ uint8_t determine_fe(adapter **a, int pos, char *csip, int sport)
 	return 1;
 }
 
-int add_satip_server(char *host, int port, int fe, int delsys)
+int add_satip_server(char *host, int port, int fe, int delsys, char *source_ip)
 {
 	int i, k;
 	adapter *ad;
@@ -1189,6 +1191,12 @@ int add_satip_server(char *host, int port, int fe, int delsys)
 	sip->satip_fe = fe;
 	sip->static_config = 1;
 	sip->sport = port;
+	sip->source_ip[0] = 0;
+	if (source_ip)
+	{
+		memset(sip->source_ip, 0, sizeof(sip->source_ip));
+		strncpy(sip->source_ip, source_ip, sizeof(sip->source_ip) - 1);
+	}
 
 	if (ad->sys[0] == SYS_DVBS2)
 		ad->sys[1] = SYS_DVBS;
@@ -1221,6 +1229,7 @@ void find_satip_adapter(adapter **a)
 	char *sep1, *sep2, *sep;
 	char *arg[50];
 	char host[100];
+	char source_ip[100];
 	int port;
 	int fe, delsys;
 
@@ -1269,13 +1278,21 @@ void find_satip_adapter(adapter **a)
 		delsys = map_int(sep, fe_delsys);
 		strncpy(host, sep1, sizeof(host) - 1);
 		fe = -1;
+		source_ip[0] = 0;
 		if (strchr(host, '@'))
 		{
 			fe = map_int(sep1, NULL);
 			memmove(host, strchr(host, '@') + 1, sizeof(host) - 1);
 		}
+		if (strchr(host, '/'))
+		{
+			char *end = strchr(host, '/');
+			memset(source_ip, 0, sizeof(source_ip));
+			strncpy(source_ip, host, end - host);
+			memmove(host, end + 1, sizeof(host) - 1);
+		}
 		port = map_int(sep2, NULL);
-		add_satip_server(host, port, fe, delsys);
+		add_satip_server(host, port, fe, delsys, source_ip);
 	}
 }
 
@@ -1376,7 +1393,7 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h)
 			{
 				int ds = order[i];
 				for (j = 0; j < s->tuners[ds]; j++)
-					add_satip_server(s->host, s->port, fe++, ds);
+					add_satip_server(s->host, s->port, fe++, ds, NULL);
 			}
 			getAdaptersCount();
 		}

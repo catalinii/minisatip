@@ -372,14 +372,19 @@ Help\n\
 "
 #ifndef DISABLE_SATIPCLIENT
 		"\
-* -s --satip-servers DELSYS:host:port - specify the remote satip host and port with delivery system DELSYS, it is possible to use multiple -s \n\
+* -s --satip-servers [DELSYS:][FE_ID@][source_ip/]host[:port] - specify the remote satip host and port with delivery system DELSYS, it is possible to use multiple -s \n\
 	* DELSYS - can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, isdbt, atsc, dvbcb ( - DVBC_ANNEX_B ) [default: dvbs2]\n\
 	host - the server of the satip server\n\
 	port - rtsp port for the satip server [default: 554]\n\
+	FE_ID - will be determined automatically\n\
 	eg: -s 192.168.1.2 -s dvbt:192.168.1.3:554 -s dvbc:192.168.1.4\n\
 	- specifies 1 dvbs2 (and dvbs)satip server with address 192.168.1.2:554\n\
 	- specifies 1 dvbt satip server  with address 192.168.1.3:554\n\
 	- specifies 1 dvbc satip server  with address 192.168.1.4:554\n\
+	eg: -s dvbt:2@192.168.1.100/192.168.1.2:555\n\
+	- specifies 1 dvbt adapter to satip server with address 192.168.1.2, port 555. The client will use fe=2 (indicating adapter 2 on the server) and will connect from IP address 192.168.1.100\n\
+	address 192.168.1.100 needs to be assigned to an interface on the server running minisatip.\n\
+	This feature is useful for AVM FRITZ!WLAN Repeater\n\
 	\n\
 *  --satip-xml <URL> Use the xml retrieved from a satip server to configure satip adapters \n\
 	eg: --satip-xml http://localhost:8080/desc.xml \n\

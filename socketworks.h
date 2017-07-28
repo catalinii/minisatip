@@ -68,6 +68,7 @@ int udp_bind_connect(char *src, int sport, char *dest, int dport,
 					 struct sockaddr_in *serv);
 int udp_bind(char *addr, int port);
 int tcp_connect(char *addr, int port, struct sockaddr_in *serv, int blocking);
+int tcp_connect_src(char *addr, int port, struct sockaddr_in *serv, int blocking, char *src);
 char *get_sock_shost(int fd);
 int get_sock_sport(int fd);
 int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,

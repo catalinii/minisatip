@@ -26,16 +26,16 @@ Usage:
 -------
 
 minisatip version 0.7.6, compiled with s2api version: 050A
-[15/07 21:30:52.953 main]: Built with dvbcsa
-[15/07 21:30:52.954 main]: Built with CI
-[15/07 21:30:52.954 main]: Built with dvbapi
-[15/07 21:30:52.954 main]: Built with AES (OpenSSL)
-[15/07 21:30:52.954 main]: Built with tables processing
-[15/07 21:30:52.954 main]: Built with pmt processing
-[15/07 21:30:52.954 main]: Built with satip client
-[15/07 21:30:52.954 main]: Built with linux dvb client
-[15/07 21:30:52.954 main]: Built with backtrace
-[15/07 21:30:52.954 main]: Built with netceiver
+[28/07 12:42:11.371 main]: Built with dvbcsa
+[28/07 12:42:11.371 main]: Built with CI
+[28/07 12:42:11.371 main]: Built with dvbapi
+[28/07 12:42:11.371 main]: Built with AES (OpenSSL)
+[28/07 12:42:11.371 main]: Built with tables processing
+[28/07 12:42:11.371 main]: Built with pmt processing
+[28/07 12:42:11.371 main]: Built with satip client
+[28/07 12:42:11.371 main]: Built with linux dvb client
+[28/07 12:42:11.371 main]: Built with backtrace
+[28/07 12:42:11.371 main]: Built with netceiver
 
 	./minisatip [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 		[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]][-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] [-R document_root] [-s [DELSYS:]host[:port] [-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] 
@@ -141,14 +141,19 @@ Help
  
 * -R --document-root directory: document root for the minisatip web page and images
 
-* -s --satip-servers DELSYS:host:port - specify the remote satip host and port with delivery system DELSYS, it is possible to use multiple -s 
+* -s --satip-servers [DELSYS:][FE_ID@][source_ip/]host[:port] - specify the remote satip host and port with delivery system DELSYS, it is possible to use multiple -s 
 	* DELSYS - can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, isdbt, atsc, dvbcb ( - DVBC_ANNEX_B ) [default: dvbs2]
 	host - the server of the satip server
 	port - rtsp port for the satip server [default: 554]
+	FE_ID - will be determined automatically
 	eg: -s 192.168.1.2 -s dvbt:192.168.1.3:554 -s dvbc:192.168.1.4
 	- specifies 1 dvbs2 (and dvbs)satip server with address 192.168.1.2:554
 	- specifies 1 dvbt satip server  with address 192.168.1.3:554
 	- specifies 1 dvbc satip server  with address 192.168.1.4:554
+	eg: -s dvbt:2@192.168.1.100/192.168.1.2:555
+	- specifies 1 dvbt adapter to satip server with address 192.168.1.2, port 555. The client will use fe=2 (indicating adapter 2 on the server) and will connect from IP address 192.168.1.100
+	address 192.168.1.100 needs to be assigned to an interface on the server running minisatip.
+	This feature is useful for AVM FRITZ!WLAN Repeater
 	
 *  --satip-xml <URL> Use the xml retrieved from a satip server to configure satip adapters 
 	eg: --satip-xml http://localhost:8080/desc.xml 

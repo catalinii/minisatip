@@ -241,15 +241,17 @@ int set_linux_socket_timeout(int sockfd)
 	return 0;
 }
 
-int tcp_connect(char *addr, int port, struct sockaddr_in *serv, int blocking)
+int tcp_connect_src(char *addr, int port, struct sockaddr_in *serv, int blocking, char *src)
 {
 	struct sockaddr_in sv;
 	int sock, optval = 1;
 
 	if (serv == NULL)
 		serv = &sv;
+
 	if (!fill_sockaddr(serv, addr, port))
 		return -1;
+
 	sock = socket(AF_INET, SOCK_STREAM, 0);
 	if (sock < 0)
 	{
@@ -269,6 +271,20 @@ int tcp_connect(char *addr, int port, struct sockaddr_in *serv, int blocking)
 	if (!blocking)
 		set_linux_socket_nonblock(sock);
 
+	if (src && src[0])
+	{
+		struct sockaddr_in src_add;
+		if (!fill_sockaddr(&src_add, src, 0))
+			return -1;
+
+		if (bind(sock, (struct sockaddr *)&src_add, sizeof(src_add)) < 0)
+		{
+			LOG("%s: failed: bind() on address: %s: error %s",
+				__FUNCTION__, src, strerror(errno));
+			return -1;
+		}
+	}
+
 	if (connect(sock, (struct sockaddr *)serv, sizeof(*serv)) < 0)
 	{
 		if (errno != EINPROGRESS)
@@ -283,6 +299,10 @@ int tcp_connect(char *addr, int port, struct sockaddr_in *serv, int blocking)
 	return sock;
 }
 
+int tcp_connect(char *addr, int port, struct sockaddr_in *serv, int blocking)
+{
+	return tcp_connect_src(addr, port, serv, blocking, NULL);
+}
 int tcp_listen(char *addr, int port)
 {
 	struct sockaddr_in serv;
