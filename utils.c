@@ -1215,7 +1215,14 @@ int mutex_lock1(char *FILE, int line, SMutex *mutex)
 	if (start_lock > 0)
 	{
 		uint64_t ms = getTick() - start_lock;
-		LOGL(ms > 1000 ? 1 : DEFAULT_LOG, "%s:%d Locked %p after %ld ms, previously locked at: %s, line %d", FILE, line, mutex, ms, mutex->file, mutex->line);
+		char *prev_file = "none";
+		int prev_line = -1;
+		if (mutex && mutex->enabled && mutex->file)
+		{
+			prev_file = mutex->file;
+			prev_line = mutex->line;
+		}
+		LOGL(ms > 1000 ? 1 : DEFAULT_LOG, "%s:%d Locked %p after %ld ms, previously locked at: %s, line %d", FILE, line, mutex, ms, prev_file, prev_line);
 	}
 	mutex->file = FILE;
 	mutex->line = line;
