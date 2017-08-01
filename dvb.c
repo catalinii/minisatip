@@ -835,8 +835,8 @@ int dvb_set_pid(adapter *a, uint16_t i_pid)
 		int pids[MAX_PIDS];
 		int ep;
 		ep = get_enabled_pids(a, (int *)pids, MAX_PIDS);
-		LOG("failed setting filter on %d (%s), enabled pids %d", i_pid,
-			strerror(errno), ep);
+		LOG0("failed setting filter on %s pid %d, errno %d (%s), enabled pids %d", buf, i_pid,
+			 errno, strerror(errno), ep);
 		return -1;
 	}
 
