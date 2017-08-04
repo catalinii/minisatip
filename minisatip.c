@@ -502,10 +502,14 @@ void set_options(int argc, char *argv[])
 	opts.pmt_scan = 1;
 	opts.max_pids = 0;
 	opts.dvbapi_offset = 0; // offset for multiple dvbapi clients to the same server
+	opts.tcp_max_pack = 42;
+//6 * 7; // number of TS packets to fit in a RTSP over tcp packet. More than 42 can cause issues in clients such as ffmpeg
+// increasing this number reduces the number of syscalls to write data. On devices with slow CPU, this increases the bandwidth if DVBCSA, DVBAES, DVBCA, DVBAPI is not set
+// but it might make it incompatible with some clients
 #if defined(AXE)
 	opts.max_pids = 32;
 #elif defined(__sh__)
-	opts.max_pids = 20;
+	opts.max_pids = 20; // allow oscam to use couple of pids as well
 #endif
 
 #ifdef NO_BACKTRACE

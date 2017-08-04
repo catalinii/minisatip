@@ -8,18 +8,11 @@
 #define MAX_STREAMS 100
 #define DVB_FRAME 188
 
-#define TCP_RTP_CHUNKS 6 // a value higher than 6 can cause issues in some clients (example: ffmpeg)
-#define UDP_STREAMS_BUFFER (7 * DVB_FRAME)
-#define TCP_STREAMS_BUFFER (TCP_RTP_CHUNKS * UDP_STREAMS_BUFFER)
-#define STREAMS_BUFFER TCP_STREAMS_BUFFER
-
 #define STREAM_HTTP 1
 #define STREAM_RTSP_UDP 2
 #define STREAM_RTSP_TCP 3
 
 #define UDP_MAX_PACK 7 // maximum udp rtp packets to buffer
-#define TCP_MAX_PACK (TCP_RTP_CHUNKS * UDP_MAX_PACK)
-#define MAX_PACK TCP_MAX_PACK
 
 #define LEN_PIDS (MAX_PIDS * 5 + 1)
 
@@ -34,7 +27,7 @@ typedef struct struct_streams
 	int rsock_id;
 	int rtcp, rtcp_sock, st_sock;
 	int type;
-	int len, total_len;
+	int len;
 	uint16_t seq; //rtp seq id
 	int ssrc;	 // rtp seq id
 	int64_t wtime;
@@ -46,8 +39,8 @@ typedef struct struct_streams
 	transponder tp;
 	char apids[LEN_PIDS + 1], dpids[LEN_PIDS + 1], pids[LEN_PIDS + 1],
 		x_pmt[LEN_PIDS + 1];
-	struct iovec iov[MAX_PACK + 2];
-	int iiov;
+	struct iovec *iov;
+	int iiov, max_iov;
 	uint32_t sp, sb;
 	int timeout;
 	char useragent[40];

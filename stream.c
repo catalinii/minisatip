@@ -282,6 +282,7 @@ int start_play(streams *sid, sockets *s)
 		{
 			LOG("slave stream tuning to a new frequency, finding a new adapter");
 			close_adapter_for_stream(sid->sid, ad->id);
+			sid->adapter = -1;
 		}
 		a_id = get_free_adapter(&sid->tp);
 		LOG("Got adapter %d on socket %d", a_id, s->id);
@@ -518,6 +519,16 @@ int streams_add()
 		LOG_AND_RETURN(-1, "streams_add failed");
 
 	ss = st[i];
+	if (!ss->iov || ss->max_iov < opts.tcp_max_pack)
+	{
+		if (ss->iov)
+			free1(ss->iov);
+		ss->max_iov = 0;
+		ss->iov = malloc1((opts.tcp_max_pack + 3) * sizeof(struct iovec));
+		if (!ss->iov)
+			LOG_AND_RETURN(-1, "%s: iiov allocation failed", __FUNCTION__);
+		ss->max_iov = opts.tcp_max_pack;
+	}
 	ss->enabled = 1;
 	ss->adapter = -1;
 	ss->sid = i;
@@ -527,7 +538,7 @@ int streams_add()
 	ss->do_play = 0;
 	ss->iiov = 0;
 	ss->sp = ss->sb = 0;
-	memset(&ss->iov, 0, sizeof(ss->iiov));
+	memset(ss->iov, 0, sizeof(struct iovec) * (ss->max_iov + 3));
 	init_dvb_parameters(&ss->tp);
 	ss->useragent[0] = 0;
 	ss->len = 0;
@@ -537,7 +548,6 @@ int streams_add()
 	ss->timeout = opts.timeout_sec;
 	ss->wtime = ss->rtcp_wtime = getTick();
 
-	ss->total_len = 7 * DVB_FRAME; // max 7 packets
 	mutex_unlock(&ss->mutex);
 	return i;
 }
@@ -569,7 +579,7 @@ uint64_t last_sd;
 
 int send_rtp(streams *sid, const struct iovec *iov, int liov)
 {
-	struct iovec io[MAX_PACK + 3];
+	struct iovec io[sid->max_iov + 3];
 	char ra[50];
 	int i, total_len = 0, rv;
 	unsigned char *rtp_h;
@@ -722,7 +732,8 @@ void flush_streamb(streams *sid, unsigned char *buf, int rlen, int64_t ctime)
 		rv = sockets_write(sid->rsock_id, buf, rlen);
 	else
 	{
-		blen = sid->type == STREAM_RTSP_TCP ? TCP_STREAMS_BUFFER : UDP_STREAMS_BUFFER;
+		int max_pack = sid->type == STREAM_RTSP_TCP ? sid->max_iov : UDP_MAX_PACK;
+		blen = max_pack * DVB_FRAME;
 		for (i = 0; i < rlen; i += blen)
 		{
 			len = ((rlen - i) > blen) ? blen : (rlen - i);
@@ -911,12 +922,12 @@ int process_packet(unsigned char *b, adapter *ad)
 	{
 		if ((sid = get_sid(p->sid[j])) && sid->do_play)
 		{
-			max_pack = sid->type == STREAM_RTSP_TCP ? TCP_MAX_PACK : UDP_MAX_PACK;
+			max_pack = sid->type == STREAM_RTSP_TCP ? sid->max_iov : UDP_MAX_PACK;
 			if (sid->iiov > max_pack)
 			{
 				LOG(
 					"ERROR: possible writing outside of allocated space iiov > %d for SID %d PID %d",
-					MAX_PACK, sid->sid, _pid);
+					max_pack, sid->sid, _pid);
 				sid->iiov = 6;
 			}
 			sid->iov[sid->iiov].iov_base = b;
@@ -1205,6 +1216,8 @@ void free_all_streams()
 
 	for (i = 0; i < MAX_STREAMS; i++)
 	{
+		if (st[i] && st[i]->iov)
+			free1(st[i]->iov);
 		if (st[i])
 			free1(st[i]);
 		st[i] = NULL;

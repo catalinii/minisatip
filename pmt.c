@@ -458,33 +458,34 @@ int get_filter_adapter(int filter)
 	return -1;
 }
 
-void disable_cw(int master_pmt, int parity)
+void clear_cw_for_pmt(int master_pmt, int parity)
 {
 	int i, dcw = 0;
-	uint64_t ctime = getTick();
+	for (i = 0; i < ncws; i++)
+		if (cws[i] && cws[i]->enabled && cws[i]->pmt == master_pmt && cws[i]->parity == parity)
+		{
+			LOG("disabling CW %d, parity %d created %jd ms ago", i, cws[i]->parity, ctime - cws[i]->time);
+			if (cws[i]->op->stop_cw)
+				cws[i]->op->stop_cw(cws[i], get_pmt(master_pmt));
+			cws[i]->enabled = 0;
+			dcw++;
+		}
+	i = MAX_CW;
+	while (--i >= 0)
+		if (cws[i] && cws[i]->enabled)
+			break;
+	ncws = i + 1;
+}
+
+void disable_cw(int master_pmt, int parity)
+{
 	SPMT *pmt = get_pmt(master_pmt);
-	if (0)
-		for (i = 0; i < ncws; i++)
-			if (cws[i] && cws[i]->enabled && cws[i]->pmt == master_pmt && cws[i]->parity == parity && (ctime - cws[i]->time > 10000))
-			{
-				LOG("disabling CW %d, parity %d created %jd ms ago", i, cws[i]->parity, ctime - cws[i]->time);
-				if (cws[i]->op->stop_cw)
-					cws[i]->op->stop_cw(cws[i], pmt);
-				cws[i]->enabled = 0;
-				dcw++;
-			}
 	if (pmt)
 	{
 		pmt->cw = NULL;
 		pmt->invalidated = 1;
 	}
 	//	LOGM("disabled %d CWs for PMT %d, valid %d, parity %d", dcw, master_pmt, pmt != NULL, parity);
-
-	i = MAX_CW;
-	while (--i >= 0)
-		if (cws[i] && cws[i]->enabled)
-			break;
-	ncws = i + 1;
 }
 void update_cw(SPMT *pmt)
 {
@@ -926,6 +927,13 @@ int pmt_del(int id)
 	}
 	LOG("deleting PMT %d, master PMT %d, name %s ", pmt->id, pmt->master_pmt, pmt->name);
 	master_pmt = pmt->master_pmt;
+
+	if (master_pmt == id)
+	{
+		clear_cw_for_pmt(master_pmt, 0);
+		clear_cw_for_pmt(master_pmt, 1);
+	}
+
 	aid = pmt->adapter;
 	pmt->enabled = 0;
 

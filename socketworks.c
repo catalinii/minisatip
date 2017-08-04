@@ -1217,7 +1217,7 @@ int alloc_snpacket(SNPacket *p, int len)
 			free1(p->buf);
 			p->buf = NULL;
 		}
-		int newlen = (len < 1500) ? 1500 : len;
+		int newlen = (len < 1500) ? 1500 : len + 10;
 		p->buf = malloc1(newlen);
 		if (p->buf)
 		{
@@ -1237,7 +1237,7 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 {
 	int rv = 0, i, pos = 0, len;
 	unsigned char *tmpbuf = NULL;
-	struct iovec tmpiov[MAX_PACK + 3];
+	struct iovec tmpiov[3];
 	sockets *s = get_sockets(sock_id);
 	if (!s)
 		return -1;
@@ -1246,7 +1246,6 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 		int len = 0;
 		for (i = 0; i < iovcnt; i++)
 			len += iov[i].iov_len;
-		memcpy(tmpiov, iov, iovcnt * sizeof(tmpiov[0]));
 
 		rv = my_writev(s, iov, iovcnt);
 		if (rv == len || rv < 0)
@@ -1262,9 +1261,9 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 			}
 			for (i = 0; i < iovcnt; i++)
 			{
-				if (rv < pos + tmpiov[i].iov_len)
-					memcpy(tmpbuf + pos, tmpiov[i].iov_base, tmpiov[i].iov_len);
-				pos += tmpiov[i].iov_len;
+				if (rv <= pos + iov[i].iov_len) // copy only the unsent data
+					memcpy(tmpbuf + pos, iov[i].iov_base, iov[i].iov_len);
+				pos += iov[i].iov_len;
 			}
 			LOGM("incomplete write it %d, setting the buffer at offset %d and length %d from %d", s->iteration, rv, len - rv, len);
 			tmpiov[0].iov_base = tmpbuf + rv;
@@ -1280,7 +1279,8 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 		if (!s->pack)
 		{
 			s->overflow++;
-			free(tmpbuf);
+			if (tmpbuf)
+				free(tmpbuf);
 			LOG_AND_RETURN(0, "%s: Could not allocate memory for s->pack", __FUNCTION__, s->wmax);
 		}
 	}
@@ -1300,7 +1300,8 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 	{
 		LOGM("overflow p is %p, buf %p", p, p ? p->buf : NULL);
 		s->overflow++;
-		free(tmpbuf);
+		if (tmpbuf)
+			free(tmpbuf);
 		return 0;
 	}
 
@@ -1312,7 +1313,9 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 		s->overflow++;
 		if ((s->overflow % 100) == 0)
 			LOG("sock %d: overflow %d it %d", s->id, s->overflow, s->iteration);
-		free(tmpbuf);
+
+		if (tmpbuf)
+			free(tmpbuf);
 		return 0;
 	}
 
@@ -1325,7 +1328,9 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 	p->len = pos;
 	s->wpos = (s->wpos + 1) % s->wmax;
 
-	free(tmpbuf);
+	if (tmpbuf)
+		free(tmpbuf);
+
 	return 0;
 }
 

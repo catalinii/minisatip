@@ -81,6 +81,7 @@ struct struct_opts
 	char *netcv_if;
 	char *playlist;
 	char *log_file;
+	int tcp_max_pack;
 #ifndef DISABLE_SATIPCLIENT
 	char *satip_servers;
 	char *satip_xml;

@@ -545,11 +545,12 @@ void send_client_info(sockets *s)
 int send_ecm(int filter_id, unsigned char *b, int len, void *opaque)
 {
 	SKey *k = NULL;
-	SPMT *pmt;
+	SPMT *pmt, *master;
 	uint8_t buf[1600];
 	int i, pid;
 	int filter, demux;
 	int old_parity;
+	int valid_cw;
 
 	if (!dvbapi_is_enabled)
 		return 0;
@@ -570,9 +571,13 @@ int send_ecm(int filter_id, unsigned char *b, int len, void *opaque)
 
 	demux = k->demux[i];
 	filter = k->filter[i];
-	//	LOG("%s: pid %d %d %02X", __FUNCTION__, pid, k->ecm_parity[i], b[1]);
 
-	if ((getTick() - k->last_ecm > 1000) && !pmt->cw)
+	valid_cw = pmt->cw != NULL;
+	master = get_pmt(pmt->master_pmt);
+	if (master)
+		valid_cw = master->cw != NULL;
+
+	if ((getTick() - k->last_ecm > 1000) && !valid_cw)
 		k->ecm_parity[i] = -1;
 
 	if ((b[0] == 0x80 || b[0] == 0x81) && (b[0] & 1) == k->ecm_parity[i])
