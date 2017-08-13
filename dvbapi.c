@@ -820,12 +820,10 @@ _symbols dvbapi_sym[] =
 		{"key_ecmtime", VAR_AARRAY_INT, keys, 1, MAX_KEYS, offsetof(SKey, ecmtime)},
 		{"key_pmt", VAR_AARRAY_INT, keys, 1, MAX_KEYS, offsetof(SKey, pmt_pid)},
 		{"key_adapter", VAR_AARRAY_INT, keys, 1, MAX_KEYS, offsetof(SKey, adapter)},
-		{"key_cardsystem", VAR_AARRAY_STRING, keys, 1, MAX_KEYS, offsetof(SKey,
-																		  cardsystem)},
+		{"key_cardsystem", VAR_AARRAY_STRING, keys, 1, MAX_KEYS, offsetof(SKey, cardsystem)},
 		{"key_reader", VAR_AARRAY_STRING, keys, 1, MAX_KEYS, offsetof(SKey, reader)},
 		{"key_from", VAR_AARRAY_STRING, keys, 1, MAX_KEYS, offsetof(SKey, from)},
-		{"key_protocol", VAR_AARRAY_STRING, keys, 1, MAX_KEYS, offsetof(SKey,
-																		protocol)},
+		{"key_protocol", VAR_AARRAY_STRING, keys, 1, MAX_KEYS, offsetof(SKey, protocol)},
 		{"key_channel", VAR_FUNCTION_STRING, (void *)&get_channel_for_key, 0, MAX_KEYS, 0},
 
 		{NULL, 0, NULL, 0, 0}};

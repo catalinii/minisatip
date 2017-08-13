@@ -1924,22 +1924,14 @@ int get_adapter_ccerrs(int aid)
 
 _symbols adapters_sym[] =
 	{
-		{"ad_enabled", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS, offsetof(adapter,
-																	 enabled)},
-		{"ad_type", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS, offsetof(adapter,
-																  type)},
-		{"ad_pos", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter,
-																tp.diseqc)},
-		{"ad_freq", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, offsetof(
-																	adapter, tp.freq)},
-		{"ad_strength", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(
-																adapter, strength)},
-		{"ad_snr", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter,
-																snr)},
-		{"ad_ber", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter,
-																ber)},
-		{"ad_pol", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter,
-																tp.pol)},
+		{"ad_enabled", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS, offsetof(adapter, enabled)},
+		{"ad_type", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS, offsetof(adapter, type)},
+		{"ad_pos", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.diseqc)},
+		{"ad_freq", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, offsetof(adapter, tp.freq)},
+		{"ad_strength", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, strength)},
+		{"ad_snr", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, snr)},
+		{"ad_ber", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, ber)},
+		{"ad_pol", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.pol)},
 		{"ad_sr", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, offsetof(adapter, tp.sr)},
 		{"ad_bw", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, offsetof(adapter, tp.bw)},
 		{"ad_diseqc", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.diseqc)},
