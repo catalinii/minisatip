@@ -1932,8 +1932,8 @@ _symbols adapters_sym[] =
 																tp.diseqc)},
 		{"ad_freq", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, offsetof(
 																	adapter, tp.freq)},
-		{"ad_strength", VAR_AARRAY_INT16, a, 1, MAX_ADAPTERS, offsetof(
-																  adapter, strength)},
+		{"ad_strength", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(
+																adapter, strength)},
 		{"ad_snr", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter,
 																snr)},
 		{"ad_ber", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter,
