@@ -15,8 +15,8 @@ typedef struct ca_device ca_device_t;
 #define RTSP_TEARDOWN 4
 #define RTSP_DESCRIBE 5
 
-typedef int (*Set_pid)(void *ad, uint16_t i_pid);
-typedef int (*Del_filters)(int fd, int pid);
+typedef int (*Set_pid)(void *ad, int i_pid);
+typedef int (*Del_filters)(void *ad, int fd, int pid);
 typedef int (*Adapter_commit)(void *ad);
 typedef int (*Open_device)(void *ad);
 typedef int (*Device_signal)(void *ad);
@@ -60,8 +60,7 @@ typedef struct struct_adapter
 	int new_gs;
 	int status, status_cnt;
 	int dmx_source;
-	uint32_t ber;
-	uint16_t strength, snr, max_strength, max_snr;
+	int strength, ber, snr, max_strength, max_snr;
 	uint32_t pid_err, dec_err; // detect pids received but not part of any stream, decrypt errors
 	diseqc diseqc_param;
 	int diseqc_multi;
@@ -73,6 +72,7 @@ typedef struct struct_adapter
 	int pat_processed;
 	int wait_new_stream, wait_transponder_id;
 	int threshold;
+	int active_pids;
 	uint64_t tune_time;
 	char name[5];
 #ifndef DISABLE_PMT
@@ -135,7 +135,6 @@ void reset_pids_type(int aid, int clear_pat);
 void reset_ecm_type_for_pmt(int aid, int pmt);
 int delsys_match(adapter *ad, int del_sys);
 int get_enabled_pids(adapter *ad, int *pids, int lpids);
-int get_active_pids_number(adapter *ad);
 int get_all_pids(adapter *ad, int *pids, int lpids);
 char *get_adapter_pids(int aid, char *dest, int max_size);
 void adapter_lock1(char *FILE, int line, int aid);

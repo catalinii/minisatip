@@ -500,6 +500,7 @@ void set_options(int argc, char *argv[])
 	opts.lnb_switch = (11700 * 1000UL);
 	opts.max_sbuf = 100;
 	opts.pmt_scan = 1;
+	opts.use_demux_device = 0; // set 1 to read TS packets from /dev/dvb/adapterX/demuxY instead of /dev/dvb/adapterX/dvrY
 	opts.max_pids = 0;
 	opts.dvbapi_offset = 0; // offset for multiple dvbapi clients to the same server
 	opts.tcp_max_pack = 42;
@@ -1621,6 +1622,7 @@ int main(int argc, char *argv[])
 	pmt_init();
 #endif
 	devices = init_all_hw();
+	getAdaptersCount();
 	LOG0("Initializing with %d devices", devices);
 
 	write_pid_file();

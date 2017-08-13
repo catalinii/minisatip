@@ -95,6 +95,10 @@ adapter *adapter_alloc()
 
 	ad->failed_adapter = 0;
 	ad->adapter_timeout = opts.adapter_timeout;
+
+	ad->max_strength = -30000;
+	ad->max_snr = -30000;
+
 #ifndef DISABLE_PMT
 	// filter for pid 0
 	ad->pat_filter = -1;
@@ -721,7 +725,7 @@ int update_pids(int aid)
 			pmt_pid_add(ad, ad->pids[i].pid, 0);
 #endif
 
-	for (i = 0; i < MAX_PIDS; i++)
+	for (i = MAX_PIDS - 1; i >= 0; i--)
 		if ((ad->pids[i].flags == 3))
 		{
 			if (dp)
@@ -729,7 +733,11 @@ int update_pids(int aid)
 			dp = 0;
 			ad->pids[i].flags = 0;
 			if (ad->pids[i].fd > 0)
-				ad->del_filters(ad->pids[i].fd, ad->pids[i].pid);
+			{
+				if (ad->active_pids > 0)
+					ad->active_pids--;
+				ad->del_filters(ad, ad->pids[i].fd, ad->pids[i].pid);
+			}
 			ad->pids[i].fd = 0;
 			ad->pids[i].filter = -1;
 			ad->pids[i].pmt = -1;
@@ -738,9 +746,9 @@ int update_pids(int aid)
 	for (i = 0; i < MAX_PIDS; i++)
 		if (ad->pids[i].flags == 2)
 		{
-			if (opts.max_pids && (opts.max_pids < get_active_pids_number(ad)))
+			if (opts.max_pids && (opts.max_pids < ad->active_pids))
 			{
-				LOG("maximum number of pids %d out of %d reached", get_active_pids_number(ad), opts.max_pids);
+				LOG("maximum number of pids %d out of %d reached", ad->active_pids, opts.max_pids);
 				break;
 			}
 
@@ -751,7 +759,7 @@ int update_pids(int aid)
 				if ((ad->pids[i].fd = ad->set_pid(ad, ad->pids[i].pid)) < 0)
 				{
 
-					int new_max_pids = get_active_pids_number(ad) - 2;
+					int new_max_pids = ad->active_pids - 2;
 					if (new_max_pids > 0)
 						opts.max_pids = new_max_pids;
 					LOG("Maximum pid filter reached, lowering the value to %d", opts.max_pids);
@@ -764,17 +772,11 @@ int update_pids(int aid)
 			ad->pids[i].cc = 255;
 			ad->pids[i].cc_err = 0;
 			ad->pids[i].dec_err = 0;
+			ad->active_pids++;
 		}
 
 	ad->commit(ad);
 
-	//#ifndef DISABLE_PMT
-	//	int ep;
-	//	if (!get_all_pids(ad, &ep, 1)) // no pids enabled, set pids type to 0
-	//	{
-	//		reset_pids_type(ad->id, 0);
-	//	}
-	//#endif
 	ad->updating_pids = 0;
 	return 0;
 }
@@ -1773,7 +1775,7 @@ int signal_thread(sockets *s)
 	int64_t ts, ctime;
 	adapter *ad;
 	for (i = 0; i < MAX_ADAPTERS; i++)
-		if ((ad = get_adapter_nw(i)) && ad->get_signal && ad->tp.freq && (ad->status_cnt++ > 2) // make sure the kernel has updated the status
+		if ((ad = get_adapter_nw(i)) && ad->get_signal && ad->tp.freq && (ad->status_cnt++ > 0) // make sure the kernel has updated the status
 			&& (!opts.no_threads || (ad->status < 0)))
 
 		{
@@ -1784,7 +1786,7 @@ int signal_thread(sockets *s)
 			if (status == -1)
 				LOG(
 					"get_signal%s took %jd ms for adapter %d handle %d (status: %d, ber: %d, strength:%d, snr: %d, max_strength: %d, max_snr: %d %d)",
-					ad->new_gs ? "_new" : "", ctime - ts, ad->id, ad->fe,
+					(ad->new_gs == 1) ? "_new" : "", ctime - ts, ad->id, ad->fe,
 					ad->status, ad->ber, ad->strength, ad->snr,
 					ad->max_strength, ad->max_snr, opts.force_scan);
 		}
@@ -1809,6 +1811,8 @@ void adapter_unlock1(char *FILE, int line, int aid)
 	mutex_unlock1(FILE, line, &ad->mutex);
 }
 
+#if 0
+// unused
 int get_enabled_pids(adapter *ad, int *pids, int lpids)
 {
 	int ep = 0, i;
@@ -1824,19 +1828,7 @@ int get_enabled_pids(adapter *ad, int *pids, int lpids)
 	return ep;
 }
 
-int get_active_pids_number(adapter *ad)
-{
-	int ep = 0, i;
-
-	for (i = 0; i < MAX_PIDS; i++)
-	{
-		if ((ad->pids[i].flags != 0) && (ad->pids[i].fd > 0)) // enabled or needed to be added
-			ep++;
-	}
-
-	return ep;
-}
-
+// unused
 int get_all_pids(adapter *ad, int *pids, int lpids)
 {
 	int ep = 0, i;
@@ -1852,28 +1844,30 @@ int get_all_pids(adapter *ad, int *pids, int lpids)
 	return ep;
 }
 
+#endif
+
 char *get_adapter_pids(int aid, char *dest, int max_size)
 {
 	int len = 0;
-	int pids[MAX_PIDS];
-	int lp, i;
+	int i;
 	adapter *ad = get_adapter_nw(aid);
 	dest[0] = 0;
 
 	if (!ad)
 		return dest;
 
-	lp = get_enabled_pids(ad, pids, MAX_PIDS);
-	for (i = 0; i < lp; i++)
-	{
-		if (pids[i] == 8192)
+	for (i = 0; i < MAX_PIDS; i++)
+		if (ad->pids[i].flags == 1 || ad->pids[i].flags == 2)
 		{
-			len = snprintf(dest, max_size, "all,");
-			break;
+			int pid = ad->pids[i].pid;
+			if (pid == 8192)
+			{
+				len = snprintf(dest, max_size, "all,");
+				break;
+			}
+			else
+				len += snprintf(dest + len, max_size - len, "%d,", pid);
 		}
-		else
-			len += snprintf(dest + len, max_size - len, "%d,", pids[i]);
-	}
 	if (len > 0)
 		dest[len - 1] = 0;
 	else
@@ -1938,12 +1932,12 @@ _symbols adapters_sym[] =
 																tp.diseqc)},
 		{"ad_freq", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, offsetof(
 																	adapter, tp.freq)},
-		{"ad_strength", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, offsetof(
-																   adapter, strength)},
-		{"ad_snr", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, offsetof(adapter,
-																   snr)},
-		{"ad_ber", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, offsetof(adapter,
-																   ber)},
+		{"ad_strength", VAR_AARRAY_INT16, a, 1, MAX_ADAPTERS, offsetof(
+																  adapter, strength)},
+		{"ad_snr", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter,
+																snr)},
+		{"ad_ber", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter,
+																ber)},
 		{"ad_pol", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter,
 																tp.pol)},
 		{"ad_sr", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, offsetof(adapter, tp.sr)},

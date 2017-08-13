@@ -133,7 +133,7 @@ int axe_open_device(adapter *ad)
 	{
 		sprintf(buf, "/dev/axe/frontend-%d", ad->pa);
 		LOG("Could not open %s in RW mode (fe: %d, dvr: %d)", buf, ad->fe,
-			 ad->dvr);
+			ad->dvr);
 		if (ad->fe >= 0)
 			close(ad->fe);
 		if (ad->dvr >= 0)
@@ -624,7 +624,7 @@ int axe_tune(int aid, transponder *tp)
 	return 0;
 }
 
-int axe_set_pid(adapter *a, uint16_t i_pid)
+int axe_set_pid(adapter *a, int i_pid)
 {
 	if (i_pid > 8192 || a == NULL)
 		LOG_AND_RETURN(-1, "pid %d > 8192 for ADAPTER %d", i_pid, a->id);
@@ -637,7 +637,7 @@ int axe_set_pid(adapter *a, uint16_t i_pid)
 	return ((a->id + 1) << 16) | i_pid;
 }
 
-int axe_del_filters(int fd, int pid)
+int axe_del_filters(adapter *ad, int fd, int pid)
 {
 	adapter *a = get_adapter((fd >> 16) - 1);
 	if (a == NULL)

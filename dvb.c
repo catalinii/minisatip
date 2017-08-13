@@ -337,8 +337,12 @@ int dvb_open_device(adapter *ad)
 		ad->fn);
 	sprintf(buf, DEV_FRONTEND, ad->pa, ad->fn);
 	ad->fe = open(buf, O_RDWR | O_NONBLOCK);
-	sprintf(buf, DEV_DVR, ad->pa, ad->fn);
-	ad->dvr = open(buf, O_RDONLY | O_NONBLOCK);
+	if (!opts.use_demux_device)
+		sprintf(buf, DEV_DVR, ad->pa, ad->fn);
+	else
+		sprintf(buf, DEV_DEMUX, ad->pa, ad->fn);
+
+	ad->dvr = open(buf, opts.use_demux_device ? O_RDWR | O_NONBLOCK : O_RDONLY | O_NONBLOCK);
 	if (ad->fe < 0 || ad->dvr < 0)
 	{
 		sprintf(buf, DEV_FRONTEND, ad->pa, ad->fn);
@@ -635,6 +639,12 @@ int setup_switch(adapter *ad)
 	return freq;
 }
 
+//#define USE_DVBAPI3
+
+#if DVBAPIVERSION < 0x0500
+#define USE_DVBAPI3
+#endif
+
 #define ADD_PROP(c, d)             \
 	{                              \
 		p_cmd[iProp].cmd = (c);    \
@@ -662,6 +672,11 @@ int dvb_tune(int aid, transponder *tp)
 
 	struct dtv_properties cmdseq_clear =
 		{.num = 1, .props = p_clear};
+
+#ifdef USE_DVBAPI3
+	struct dvb_frontend_parameters fep;
+	memset(&fep, 0, sizeof(fep));
+#endif
 
 	memset(p_cmd, 0, sizeof(p_cmd));
 	bclear = getTick();
@@ -691,6 +706,13 @@ int dvb_tune(int aid, transponder *tp)
 		ADD_PROP(DTV_STREAM_ID, tp->plp)
 #endif
 
+#ifdef USE_DVBAPI3
+		fep.inversion = tp->inversion;
+		fep.u.qpsk.symbol_rate = tp->sr;
+		fep.u.qpsk.fec_inner = tp->fec;
+		fep.frequency = freq;
+#endif
+
 		LOG0("tuning to %d(%d) pol: %s (%d) sr:%d fec:%s delsys:%s mod:%s rolloff:%s pilot:%s, ts clear=%jd, ts pol=%jd",
 			 tp->freq, freq, get_pol(tp->pol), tp->pol, tp->sr,
 			 fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype],
@@ -715,6 +737,25 @@ int dvb_tune(int aid, transponder *tp)
 		ADD_PROP(DTV_STREAM_ID, tp->plp & 0xFF)
 #endif
 
+// old DVBAPI version 3
+#ifdef USE_DVBAPI3
+		fep.frequency = freq;
+		fep.u.ofdm.bandwidth = BANDWIDTH_8_MHZ;
+		if (tp->bw == 6000000)
+			fep.u.ofdm.bandwidth = BANDWIDTH_6_MHZ;
+		else if (tp->bw == 7000000)
+			fep.u.ofdm.bandwidth = BANDWIDTH_7_MHZ;
+
+		fep.u.ofdm.code_rate_HP = tp->fec;
+		fep.u.ofdm.code_rate_LP = tp->fec;
+		fep.u.ofdm.constellation = tp->mtype;
+		fep.u.ofdm.transmission_mode = tp->tmode;
+		fep.u.ofdm.guard_interval = tp->gi;
+		fep.u.ofdm.hierarchy_information = HIERARCHY_AUTO;
+		fep.inversion = tp->inversion;
+
+#endif
+
 		LOG(
 			"tuning to %d delsys: %s bw:%d inversion:%s mod:%s fec:%s guard:%s transmission: %s, ts clear = %jd",
 			freq, fe_delsys[tp->sys], tp->bw, fe_specinv[tp->inversion],
@@ -733,7 +774,15 @@ int dvb_tune(int aid, transponder *tp)
 #if DVBAPIVERSION >= 0x0502
 		ADD_PROP(DTV_STREAM_ID, ((tp->ds & 0xFF) << 8) | (tp->plp & 0xFF))
 #endif
-		// valid for DD DVB-C2 devices
+// valid for DD DVB-C2 devices
+
+#ifdef USE_DVBAPI3
+		fep.frequency = tp->freq;
+		fep.inversion = tp->inversion;
+		fep.u.qam.symbol_rate = tp->sr;
+		fep.u.qam.fec_inner = FEC_AUTO;
+		fep.u.qam.modulation = tp->mtype;
+#endif
 
 		LOG("tuning to %d sr:%d specinv:%s delsys:%s mod:%s ts clear = %jd",
 			freq, tp->sr, fe_specinv[tp->inversion], fe_delsys[tp->sys],
@@ -791,17 +840,28 @@ int dvb_tune(int aid, transponder *tp)
 			break;
 	}
 
+#ifndef USE_DVBAPI3
 	if ((ioctl(fd_frontend, FE_SET_PROPERTY, &p)) == -1)
 		if (ioctl(fd_frontend, FE_SET_PROPERTY, &p) == -1)
 		{
 			LOG("dvb_tune: set property failed %d %s", errno, strerror(errno));
 			return -404;
 		}
+#else
+	LOG("dvb_tune: trying dvbapi version 3");
+	if (ioctl(fd_frontend, FE_SET_FRONTEND, &fep) == -1)
+	{
+		LOG("dvbapi v3 ioctl failed, fd %d, errno %d (%s)", fd_frontend, errno, strerror(errno));
+		return -404;
+	}
+	else
+		return 0;
+#endif
 
 	return 0;
 }
 
-int dvb_set_pid(adapter *a, uint16_t i_pid)
+int dvb_set_pid(adapter *a, int i_pid)
 {
 	char buf[100];
 	int fd;
@@ -832,9 +892,7 @@ int dvb_set_pid(adapter *a, uint16_t i_pid)
 
 	if (ioctl(fd, DMX_SET_PES_FILTER, &s_filter_params) < 0)
 	{
-		int pids[MAX_PIDS];
-		int ep;
-		ep = get_enabled_pids(a, (int *)pids, MAX_PIDS);
+		int ep = a->active_pids;
 		LOG0("failed setting filter on %s pid %d, errno %d (%s), enabled pids %d", buf, i_pid,
 			 errno, strerror(errno), ep);
 		return -1;
@@ -845,15 +903,79 @@ int dvb_set_pid(adapter *a, uint16_t i_pid)
 	return fd;
 }
 
-int dvb_del_filters(int fd, int pid)
+int dvb_del_filters(adapter *ad, int fd, int pid)
 {
 	if (fd < 0)
 		LOG_AND_RETURN(0, "DMX_STOP on an invalid handle %d, pid %d", fd, pid);
 	if (ioctl(fd, DMX_STOP, NULL) < 0)
-		LOG("DMX_STOP failed on PID %d FD %d: %s", pid, fd, strerror(errno))
+		LOG0("DMX_STOP failed on PID %d FD %d: error %d %s", pid, fd, errno, strerror(errno))
 	else
 		LOG("clearing filter on PID %d FD %d", pid, fd);
 	close(fd);
+	return 0;
+}
+
+// useful on devices where DVR is not used
+
+int dvb_demux_set_pid(adapter *a, int i_pid)
+{
+	int fd = a->dvr;
+
+	if (i_pid > 8192)
+		LOG_AND_RETURN(-1, "pid %d > 8192 for adapter %d", a->id);
+
+	if (a->active_pids == 0)
+	{
+		struct dmx_pes_filter_params s_filter_params;
+
+		memset(&s_filter_params, 0, sizeof(s_filter_params));
+		s_filter_params.pid = 0;
+		s_filter_params.input = DMX_IN_FRONTEND;
+		s_filter_params.output = DMX_OUT_TSDEMUX_TAP;
+		s_filter_params.flags = DMX_IMMEDIATE_START;
+		s_filter_params.pes_type = DMX_PES_OTHER;
+
+		if (ioctl(fd, DMX_SET_PES_FILTER, &s_filter_params) < 0)
+		{
+			int ep = a->active_pids;
+			LOG0("failed setting filter on fd %d, adapter %d, errno %d (%s), enabled pids %d", fd, a->id, i_pid, errno, strerror(errno), ep);
+			return -1;
+		}
+		LOG("started setting filters for fd %d", fd);
+	}
+	if (i_pid != 0)
+	{
+		uint16_t p = i_pid;
+		if (ioctl(fd, DMX_ADD_PID, &p) < 0)
+		{
+			LOG0("failed to add pid %d to fd %d: %d, %s", p, fd, errno, strerror(errno));
+			return -1;
+		}
+		LOG("setting filter on PID %d for fd %d", i_pid, fd);
+	}
+	return fd;
+}
+
+int dvb_demux_del_filters(adapter *ad, int fd, int pid)
+{
+	if (fd < 0)
+		LOG_AND_RETURN(0, "DMX_STOP on an invalid handle %d, pid %d", fd, pid);
+
+	if (pid != 0)
+	{
+		uint16_t p;
+		if (ioctl(fd, DMX_REMOVE_PID, &p) < 0)
+		{
+			LOG0("failed to add pid %d to fd %d: %d, %s", p, fd, errno, strerror(errno));
+		}
+	}
+	if (!ad->active_pids)
+	{
+		if (ioctl(fd, DMX_STOP, NULL) < 0)
+			LOG("DMX_STOP failed on PID %d FD %d: error %d %s", pid, fd, strerror(errno));
+		LOG("stopped filters on fd %d", fd);
+	}
+	LOG("clearing filter on PID %d FD %d", pid, fd);
 	return 0;
 }
 
@@ -947,14 +1069,13 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys)
 	return (fe_delivery_system_t)rv;
 }
 
-void get_signal(int fd, uint32_t *status, uint32_t *ber, uint16_t *strength,
-				uint16_t *snr)
+void get_signal(int fd, int *status, int *ber, int *strength, int *snr)
 {
 	*status = *ber = *snr = *strength = 0;
 
 	if (ioctl(fd, FE_READ_STATUS, status) < 0)
 	{
-		LOG("ioctl FE_READ_STATUS failed (%s)", strerror(errno));
+		LOG("ioctl fd %d FE_READ_STATUS failed, error %d (%s)", fd, errno, strerror(errno));
 		*status = 0;
 		return;
 	}
@@ -962,21 +1083,23 @@ void get_signal(int fd, uint32_t *status, uint32_t *ber, uint16_t *strength,
 	if (*status)
 	{
 		if (ioctl(fd, FE_READ_BER, ber) < 0)
-			LOG("ioctl FE_READ_BER failed (%s)", strerror(errno));
+			LOG("ioctl fd %d FE_READ_BER failed, error %d (%s)", fd, errno, strerror(errno));
 
 		if (ioctl(fd, FE_READ_SIGNAL_STRENGTH, strength) < 0)
-			LOG("ioctl FE_READ_SIGNAL_STRENGTH failed (%s)", strerror(errno));
+			LOG("ioctl fd %d FE_READ_SIGNAL_STRENGTH failed, error %d (%s)", fd, errno, strerror(errno));
 
 		if (ioctl(fd, FE_READ_SNR, snr) < 0)
-			LOG("ioctl FE_READ_SNR failed (%s)", strerror(errno));
+			LOG("ioctl fd %d FE_READ_SNR failed, error %d (%s)", fd, errno, strerror(errno));
 	}
+	LOGM("get_signal returned: status %d, strength %d, snr %d, BER: %d", *status, *strength, *snr, *ber);
 }
 
-int get_signal_new(int fd, uint32_t *status, uint32_t *ber, uint16_t *strength,
-				   uint16_t *snr)
+int get_signal_new(int fd, int *status, int *ber, int *strength, int *snr)
 {
 
 	*status = *snr = *ber = *strength = 0;
+	double strengthd, snrd, init_strength, init_snr;
+	char *strength_s = "", *snr_s = "";
 
 #if DVBAPIVERSION >= 0x050A
 	int err = 0;
@@ -997,67 +1120,95 @@ int get_signal_new(int fd, uint32_t *status, uint32_t *ber, uint16_t *strength,
 	}
 
 	if (enum_cmdargs[0].u.st.stat[0].scale == FE_SCALE_RELATIVE)
-		*strength = enum_cmdargs[0].u.st.stat[0].uvalue;
+	{
+		strength_s = "%";
+		strengthd = enum_cmdargs[0].u.st.stat[0].uvalue; // The frontend provides a 0% to 100% measurement for Signal/Noise (actually, 0 to 65535)
+	}
 	else if (enum_cmdargs[0].u.st.stat[0].scale == FE_SCALE_DECIBEL)
-		*strength = enum_cmdargs[0].u.st.stat[0].uvalue;
-	else
-		err++;
+	{
+		strength_s = "dBm";
+		init_strength = enum_cmdargs[0].u.st.stat[0].svalue / 1000;
+		strengthd = (init_strength + 100) * 65535 / 100; // dBm value + 100 ==> %  ( -97 dBm => 3%)
+	}
+	else if (enum_cmdargs[0].u.st.stat[0].scale == 0)
+		err |= 1;
 
 	if (enum_cmdargs[1].u.st.stat[0].scale == FE_SCALE_RELATIVE)
-		*snr = enum_cmdargs[1].u.st.stat[0].uvalue;
+	{
+		snr_s = "%";
+		snrd = enum_cmdargs[1].u.st.stat[0].uvalue;
+	}
 	else if (enum_cmdargs[1].u.st.stat[0].scale == FE_SCALE_DECIBEL)
-		*snr = enum_cmdargs[1].u.st.stat[0].uvalue;
-	else
-		err++;
+	{
+		snr_s = "dB";
+		init_snr = enum_cmdargs[1].u.st.stat[0].svalue / 1000;
+		snrd = init_snr * 65535 / 100; // dB value ==> %  ( 3 dB => 3%)
+	}
+	//	else if (enum_cmdargs[1].u.st.stat[0].scale == 0)
+	//		err |= 2;
 
 	*ber = enum_cmdargs[2].u.st.stat[0].uvalue & 0xFFFF;
+	if (ioctl(fd, FE_READ_STATUS, status) < 0)
+	{
+		LOG("ioctl fd %d FE_READ_STATUS failed, error %d (%s)", fd, errno, strerror(errno));
+		*status = 0;
+	}
 
-	if (err)
-		LOG(
-			"get_signal_new returned: Signal (%d): %llu, SNR(%d): %llu, BER: %llu, err %d",
-			enum_cmdargs[0].u.st.stat[0].scale,
-			enum_cmdargs[0].u.st.stat[0].uvalue,
-			enum_cmdargs[1].u.st.stat[0].scale,
-			enum_cmdargs[1].u.st.stat[0].uvalue,
-			enum_cmdargs[2].u.st.stat[0].uvalue, err);
+	LOGM("get_signal_new returned: status %d, strength %.2f %s -> %.0f, snr %.2f %s -> %.0f, BER: %d, err %d",
+		 *status, init_strength, strengthd, strength_s, init_snr, snrd, snr_s, *ber, err);
+
 	if (err)
 		return err;
 
-	if (ioctl(fd, FE_READ_STATUS, status) < 0)
-	{
-		LOG("ioctl FE_READ_STATUS failed (%s)", strerror(errno));
-		*status = 0;
-		return -1;
-	}
+	*strength = (int)strengthd;
+	*snr = (int)snrd;
 
-	if (*status && !*strength)
-		return -1;
 	return 0;
+
 #else
 	return -1;
 #endif
 }
 
+#define NEW_SIGNAL 1
+#define OLD_SIGNAL 2
+
 void dvb_get_signal(adapter *ad)
 {
-	int new_gs = 1;
-	uint16_t strength = 0, snr = 0;
-	uint32_t status = 0, ber = 0;
-	if (ad->new_gs == 0 && (new_gs = get_signal_new(ad->fe, &status, &ber, &strength, &snr)))
-		get_signal(ad->fe, &status, &ber, &strength, &snr);
-	else if (new_gs)
-		get_signal(ad->fe, &status, &ber, &strength, &snr);
+	int start = 0, relative = 0;
+	int strength = 0, snr = 0;
+	int status = 0, ber = 0;
 
-	if (status > 0 && new_gs != 0) // we have signal but no new stats, don't try to get them from now on until adapter close
-		ad->new_gs = 1;
+	if (ad->new_gs == 0)
+	{
+		int new_gs = get_signal_new(ad->fe, &status, &ber, &strength, &snr);
+		if (!new_gs)
+			ad->new_gs = NEW_SIGNAL;
+		else
+			ad->new_gs = OLD_SIGNAL;
+		start = 1;
+	}
+
+	if (!start && ad->new_gs == NEW_SIGNAL)
+		get_signal_new(ad->fe, &status, &ber, &strength, &snr);
+
+	if (ad->new_gs == OLD_SIGNAL)
+		get_signal(ad->fe, &status, &ber, &strength, &snr);
 
 	if (ad->max_strength <= strength)
-		ad->max_strength = (strength > 0) ? strength : 1;
+		ad->max_strength = (strength != 0) ? strength : 1;
 	if (ad->max_snr <= snr)
-		ad->max_snr = (snr > 0) ? snr : 1;
-	if (snr > 4096)
-		new_gs = 0;
-	if (new_gs)
+		ad->max_snr = (snr != 0) ? snr : 1;
+
+	if (ad->new_gs == OLD_SIGNAL)
+	{
+		if (ad->max_snr > 4096)
+			relative = 0;
+		else
+			relative = 1;
+	}
+
+	if (relative)
 	{
 		strength = strength * 255.0 / ad->max_strength;
 		snr = snr * 255.0 / ad->max_snr;
@@ -1122,7 +1273,6 @@ void find_dvb_adapter(adapter **a)
 			if (!access(buf, R_OK))
 				cnt++;
 
-			//LOG("testing device %s -> fd: %d",buf,fd);
 			if (cnt == 3)
 			{
 				//				if (is_adapter_disabled(na))
@@ -1139,8 +1289,16 @@ void find_dvb_adapter(adapter **a)
 				ad->fn = j;
 
 				ad->open = (Open_device)dvb_open_device;
-				ad->set_pid = (Set_pid)dvb_set_pid;
-				ad->del_filters = (Del_filters)dvb_del_filters;
+				if (opts.use_demux_device)
+				{
+					ad->set_pid = (Set_pid)dvb_demux_set_pid;
+					ad->del_filters = (Del_filters)dvb_demux_del_filters;
+				}
+				else
+				{
+					ad->set_pid = (Set_pid)dvb_set_pid;
+					ad->del_filters = (Del_filters)dvb_del_filters;
+				}
 				ad->commit = (Adapter_commit)dvb_commit;
 				ad->tune = (Tune)dvb_tune;
 				ad->delsys = (Dvb_delsys)dvb_delsys;

@@ -702,7 +702,7 @@ void satip_post_init(adapter *ad)
 		satipc_commit(ad);
 }
 
-int satipc_set_pid(adapter *ad, uint16_t pid)
+int satipc_set_pid(adapter *ad, int pid)
 {
 	satipc *sip;
 	sip = get_satip(ad->id);
@@ -715,12 +715,10 @@ int satipc_set_pid(adapter *ad, uint16_t pid)
 	return aid + 100;
 }
 
-int satipc_del_filters(int fd, int pid)
+int satipc_del_filters(adapter *ad, int fd, int pid)
 {
-	adapter *ad;
-	satipc *sip;
+	satipc *sip = get_satip(ad->id);
 	fd -= 100;
-	get_ad_and_sipr(fd, 0);
 	LOG("satipc: del_pid for aid %d, pid %d, err %d", fd, pid, sip->err);
 	if (sip->err) // error reported, return error
 		return 0;

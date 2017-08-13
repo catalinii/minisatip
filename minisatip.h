@@ -82,6 +82,7 @@ struct struct_opts
 	char *playlist;
 	char *log_file;
 	int tcp_max_pack;
+	int use_demux_device;
 #ifndef DISABLE_SATIPCLIENT
 	char *satip_servers;
 	char *satip_xml;

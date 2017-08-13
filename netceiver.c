@@ -94,7 +94,7 @@ int netcv_open_device(adapter *ad)
 	return 0;
 }
 
-int netcv_set_pid(adapter *ad, uint16_t pid)
+int netcv_set_pid(adapter *ad, int pid)
 {
 	int aid = ad->id;
 	LOG("netceiver: set_pid for adapter %d, pid %d, err %d", aid, pid,
@@ -110,7 +110,7 @@ int netcv_set_pid(adapter *ad, uint16_t pid)
 	return aid + 100;
 }
 
-int netcv_del_pid(int fd, int pid)
+int netcv_del_pid(adapter *ad, int fd, int pid)
 {
 	int i, hit = 0;
 	adapter *ad;
@@ -220,8 +220,8 @@ void netcv_commit(adapter *ad)
 			char *map_posc[] =
 				{"", " @ 19.2E", " @ 13E", " @ 28.2E", " @ 5W"};
 			LOG("netceiver: adapter %d tuning to %d%s pol:%s sr:%d fec:%s delsys:%s mod:%s",
-				 ad->id, tp->freq / 1000, map_posc[tp->diseqc], get_pol(tp->pol), tp->sr / 1000,
-				 fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype]);
+				ad->id, tp->freq / 1000, map_posc[tp->diseqc], get_pol(tp->pol), tp->sr / 1000,
+				fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype]);
 
 			break;
 
@@ -245,8 +245,8 @@ void netcv_commit(adapter *ad)
 			type = FE_QAM;
 
 			LOG("netceiver: adapter %d tuning to %d sr:%d delsys:%s mod:%s",
-				 ad->id, tp->freq / 1000, tp->sr / 1000,
-				 fe_delsys[tp->sys], fe_modulation[tp->mtype]);
+				ad->id, tp->freq / 1000, tp->sr / 1000,
+				fe_delsys[tp->sys], fe_modulation[tp->mtype]);
 
 			break;
 
@@ -304,9 +304,9 @@ void netcv_commit(adapter *ad)
 			type = FE_OFDM;
 
 			LOG("netceiver: adapter %d tuning to %d inv: %d mtype: %d "
-					"hprate: %d tmode: %d gi: %d bw:%d sm %d t2id %d",
-				 ad->id, tp->freq / 1000, tp->inversion, tp->mtype,
-				 tp->hprate, tp->tmode, tp->gi, tp->bw, tp->sm, tp->t2id);
+				"hprate: %d tmode: %d gi: %d bw:%d sm %d t2id %d",
+				ad->id, tp->freq / 1000, tp->inversion, tp->mtype,
+				tp->hprate, tp->tmode, tp->gi, tp->bw, tp->sm, tp->t2id);
 
 			break;
 		}
@@ -551,7 +551,7 @@ int handle_ts(unsigned char *buffer, size_t len, void *p)
 	if (buffer[0] != 0x47 || len % 188 != 0)
 	{
 		LOG("netceiver: TS data mallformed: buf[0]=0x%02x len=%d",
-			 buffer[0], len);
+			buffer[0], len);
 		return len;
 	}
 
