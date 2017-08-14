@@ -48,7 +48,7 @@
 
 #ifndef DISABLE_LINUXDVB
 
-void get_signal(int fd, uint32_t *status, uint32_t *ber, uint16_t *strength, uint16_t *snr);
+void get_signal(adapter *ad, uint32_t *status, uint32_t *ber, uint16_t *strength, uint16_t *snr);
 int send_jess(adapter *ad, int fd, int freq, int pos, int pol, int hiband, diseqc *d);
 int send_unicable(adapter *ad, int fd, int freq, int pos, int pol, int hiband, diseqc *d);
 int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol, int hiband, diseqc *d);
@@ -666,12 +666,7 @@ void axe_get_signal(adapter *ad)
 {
 	uint16_t strength = 0, snr = 0;
 	uint32_t status = 0, ber = 0, tmp;
-	get_signal(ad->fe, &status, &ber, &strength, &snr);
-
-	if (ad->max_strength <= strength)
-		ad->max_strength = (strength > 0) ? strength : 1;
-	if (ad->max_snr <= snr)
-		ad->max_snr = (snr > 0) ? snr : 1;
+	get_signal(ad, &status, &ber, &strength, &snr);
 
 	strength = strength * 240 / 24000;
 	if (strength > 240)

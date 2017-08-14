@@ -60,8 +60,9 @@ typedef struct struct_adapter
 	int new_gs;
 	int status, status_cnt;
 	int dmx_source;
-	int strength, ber, snr, max_strength, max_snr;
-	uint32_t pid_err, dec_err; // detect pids received but not part of any stream, decrypt errors
+	int strength, ber, snr;					   // strength and snr have values between 0 and 255
+	float strength_multiplier, snr_multiplier; // final value: strength * strength_multipler, same for snr
+	uint32_t pid_err, dec_err;				   // detect pids received but not part of any stream, decrypt errors
 	diseqc diseqc_param;
 	int diseqc_multi;
 	int old_diseqc;

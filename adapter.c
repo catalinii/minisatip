@@ -96,8 +96,8 @@ adapter *adapter_alloc()
 	ad->failed_adapter = 0;
 	ad->adapter_timeout = opts.adapter_timeout;
 
-	ad->max_strength = -30000;
-	ad->max_snr = -30000;
+	ad->strength_multiplier = opts.strength_multiplier;
+	ad->snr_multiplier = opts.snr_multiplier;
 
 #ifndef DISABLE_PMT
 	// filter for pid 0
@@ -1184,6 +1184,11 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 		if (snr > 15)
 			snr = snr >> 4;
 		status = (ad->status & FE_HAS_LOCK) > 0;
+
+		if (strength > 255 || strength < 0)
+			strength = 1;
+		if (snr > 15 || snr < 0)
+			snr = 1;
 	}
 	if (t->sys == 0)
 		len = snprintf(dad, ld, "ver=1.0;src=1;tuner=%d,0,0,0,0,,,,,,,;pids=",
@@ -1752,6 +1757,58 @@ void set_adapter_dmxsource(char *o)
 	}
 }
 
+void set_signal_multiplier(char *o)
+{
+	int i, la, a_id;
+	float strength_multiplier, snr_multiplier;
+	char buf[100], *arg[20], *sep1, *sep2;
+	adapter *ad;
+	strncpy(buf, o, sizeof(buf));
+	la = split(arg, buf, sizeof(arg), ',');
+	for (i = 0; i < la; i++)
+	{
+		if (arg[i] && arg[i][0] == '*')
+		{
+			ad = NULL;
+			a_id = -1;
+		}
+		else
+		{
+			a_id = map_intd(arg[i], NULL, -1);
+			if (a_id < 0 || a_id >= MAX_ADAPTERS)
+				continue;
+
+			if (!a[a_id])
+				a[a_id] = adapter_alloc();
+			ad = a[a_id];
+		}
+
+		sep1 = strchr(arg[i], ':');
+		sep2 = strchr(arg[i], '-');
+
+		if (!sep1 || !sep2)
+			continue;
+
+		strength_multiplier = strtod(sep1 + 1, NULL);
+		snr_multiplier = strtod(sep2 + 1, NULL);
+		if (strength_multiplier <= 0 || snr_multiplier <= 0)
+			continue;
+
+		if (ad)
+		{
+			ad->strength_multiplier = strength_multiplier;
+			ad->snr_multiplier = snr_multiplier;
+		}
+		else
+		{
+			opts.strength_multiplier = strength_multiplier;
+			opts.snr_multiplier = snr_multiplier;
+		}
+		LOG("Setting signal multipler for adapter %d strength_multiplier %.2f snr_multiplier %.2f",
+			a_id, strength_multiplier, snr_multiplier);
+	}
+}
+
 int delsys_match(adapter *ad, int del_sys)
 {
 	int i;
@@ -1783,12 +1840,11 @@ int signal_thread(sockets *s)
 			ts = getTick();
 			ad->get_signal(ad);
 			ctime = getTick();
-			if (status == -1)
+			if (status == -1 || (opts.log & DEFAULT_LOG))
 				LOG(
-					"get_signal%s took %jd ms for adapter %d handle %d (status: %d, ber: %d, strength:%d, snr: %d, max_strength: %d, max_snr: %d %d)",
+					"get_signal%s took %jd ms for adapter %d handle %d (status: %d, ber: %d, strength:%d, snr: %d, force scan %d)",
 					(ad->new_gs == 1) ? "_new" : "", ctime - ts, ad->id, ad->fe,
-					ad->status, ad->ber, ad->strength, ad->snr,
-					ad->max_strength, ad->max_snr, opts.force_scan);
+					ad->status, ad->ber, ad->strength, ad->snr, opts.force_scan);
 		}
 	return 0;
 }

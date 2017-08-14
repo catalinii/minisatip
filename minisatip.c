@@ -110,6 +110,7 @@ int rtsp, http, si, si1, ssdp1;
 #define ABSOLUTE_SRC 'A'
 #define SATIPXML_OPT '6'
 #define DISEQC_MULTI '0'
+#define SIGNALMULTIPLIER_OPT 'M'
 
 static const struct option long_options[] =
 	{
@@ -129,6 +130,7 @@ static const struct option long_options[] =
 		{"diseqc-timing", required_argument, NULL, 'q'},
 		{"diseqc-multi", required_argument, NULL, DISEQC_MULTI},
 		{"adapter-timeout", required_argument, NULL, 'Z'},
+
 #ifndef DISABLE_DVBAPI
 		{"dvbapi", required_argument, NULL, 'o'},
 #endif
@@ -158,7 +160,6 @@ static const struct option long_options[] =
 		{"free-inputs", required_argument, NULL, 'A'},
 		{"quattro", no_argument, NULL, 'Q'},
 		{"quattro-hiband", required_argument, NULL, '8'},
-		{"skip-mpegts", required_argument, NULL, 'M'},
 #endif
 		{0, 0, 0, 0}};
 
@@ -256,7 +257,7 @@ void usage()
 #endif
 		"[-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] \n "
 #ifdef AXE
-		"[-7 M1:S1[,M2:S2]] [-M mpegts_packets] [-A SRC1:INP1:DISEQC1[,SRC2:INP2:DISEQC2]]\n\n"
+		"[-7 M1:S1[,M2:S2]] [-A SRC1:INP1:DISEQC1[,SRC2:INP2:DISEQC2]]\n\n"
 #endif
 		"\t[-x http_port] [-X xml_path] [-y rtsp_port]\n\n\
 Help\n\
@@ -329,6 +330,10 @@ Help\n\
 \n\
 * -m xx: simulate xx as local mac address, generates UUID based on mac\n\
 	* eg: -m 001122334455 \n\
+\n\
+* -M multiplies the signal and strength of the DVB adapter with the specified values\n\
+	* eg: -M 4-6:1.2-1.3 - multiplies the strength with 1.2 and the snr with 1.3 for adapter 4, 5 and 6\n\
+	* eg: -M *:1.5-1.6 - multiplies the strength with 1.5 and the snr with 1.6 for all adapters\n\
 \n\
 * -Z --adapter-timeout ADAPTER1,ADAPTER2-ADAPTER4[,..]:TIMEOUT - specify the timeout for the adapters (0 enabled infinite timeout)	\n\
 	eg: --adapter-timeout 1-2:30\n\
@@ -500,6 +505,8 @@ void set_options(int argc, char *argv[])
 	opts.lnb_switch = (11700 * 1000UL);
 	opts.max_sbuf = 100;
 	opts.pmt_scan = 1;
+	opts.strength_multiplier = 1;
+	opts.snr_multiplier = 1;
 	opts.use_demux_device = 0; // set 1 to read TS packets from /dev/dvb/adapterX/demuxY instead of /dev/dvb/adapterX/dvrY
 	opts.max_pids = 0;
 	opts.dvbapi_offset = 0; // offset for multiple dvbapi clients to the same server
@@ -525,7 +532,7 @@ void set_options(int argc, char *argv[])
 
 #endif
 
-	while ((opt = getopt_long(argc, argv, "fl:v:r:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:o:gy:i:q:DVR:S:TX:Y:OL:EP:Z:0:F:" AXE_OPTS, long_options, NULL)) != -1)
+	while ((opt = getopt_long(argc, argv, "fl:v:r:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:o:gy:i:q:DVR:S:TX:Y:OL:EP:Z:0:F:M:" AXE_OPTS, long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
 		switch (opt)
@@ -754,6 +761,12 @@ void set_options(int argc, char *argv[])
 		case DELSYS_OPT:
 		{
 			set_adapters_delsys(optarg);
+			break;
+		}
+
+		case SIGNALMULTIPLIER_OPT:
+		{
+			set_signal_multiplier(optarg);
 			break;
 		}
 

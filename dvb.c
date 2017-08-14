@@ -1069,8 +1069,11 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys)
 	return (fe_delivery_system_t)rv;
 }
 
-void get_signal(int fd, int *status, int *ber, int *strength, int *snr)
+// returns the strength and SNR between 0 .. 65535
+
+void get_signal(adapter *ad, int *status, int *ber, int *strength, int *snr)
 {
+	int fd = ad->fe;
 	*status = *ber = *snr = *strength = 0;
 
 	if (ioctl(fd, FE_READ_STATUS, status) < 0)
@@ -1091,12 +1094,14 @@ void get_signal(int fd, int *status, int *ber, int *strength, int *snr)
 		if (ioctl(fd, FE_READ_SNR, snr) < 0)
 			LOG("ioctl fd %d FE_READ_SNR failed, error %d (%s)", fd, errno, strerror(errno));
 	}
-	LOGM("get_signal returned: status %d, strength %d, snr %d, BER: %d", *status, *strength, *snr, *ber);
+	LOGM("get_signal adapter %d: status %d, strength %d, snr %d, BER: %d", ad->id, *status, *strength, *snr, *ber);
 }
 
-int get_signal_new(int fd, int *status, int *ber, int *strength, int *snr)
-{
+// returns the strength and SNR between 0 .. 65535
 
+int get_signal_new(adapter *ad, int *status, int *ber, int *strength, int *snr)
+{
+	int fd = ad->fe;
 	*status = *snr = *ber = *strength = 0;
 	double strengthd, snrd, init_strength, init_snr;
 	char *strength_s = "", *snr_s = "";
@@ -1127,8 +1132,8 @@ int get_signal_new(int fd, int *status, int *ber, int *strength, int *snr)
 	else if (enum_cmdargs[0].u.st.stat[0].scale == FE_SCALE_DECIBEL)
 	{
 		strength_s = "dBm";
-		init_strength = enum_cmdargs[0].u.st.stat[0].svalue / 1000;
-		strengthd = (init_strength + 100) * 65535 / 100; // dBm value + 100 ==> %  ( -97 dBm => 3%)
+		init_strength = enum_cmdargs[0].u.st.stat[0].svalue / 1000.0;
+		strengthd = (init_strength + 100) * 65535.0 / 100; // dBm value + 100 ==> %  ( -97 dBm => 3%)
 	}
 	else if (enum_cmdargs[0].u.st.stat[0].scale == 0)
 		err |= 1;
@@ -1141,8 +1146,8 @@ int get_signal_new(int fd, int *status, int *ber, int *strength, int *snr)
 	else if (enum_cmdargs[1].u.st.stat[0].scale == FE_SCALE_DECIBEL)
 	{
 		snr_s = "dB";
-		init_snr = enum_cmdargs[1].u.st.stat[0].svalue / 1000;
-		snrd = init_snr * 65535 / 100; // dB value ==> %  ( 3 dB => 3%)
+		init_snr = enum_cmdargs[1].u.st.stat[0].svalue / 1000.0;
+		snrd = init_snr * 65535.0 / 100; // dB value ==> %  ( 3 dB => 3%)
 	}
 	//	else if (enum_cmdargs[1].u.st.stat[0].scale == 0)
 	//		err |= 2;
@@ -1154,8 +1159,8 @@ int get_signal_new(int fd, int *status, int *ber, int *strength, int *snr)
 		*status = 0;
 	}
 
-	LOGM("get_signal_new returned: status %d, strength %.2f %s -> %.0f, snr %.2f %s -> %.0f, BER: %d, err %d",
-		 *status, init_strength, strengthd, strength_s, init_snr, snrd, snr_s, *ber, err);
+	LOGM("get_signal_new adapter %d: status %d, strength %.2f %s -> %.0f, snr %.2f %s -> %.0f, BER: %d, err %d",
+		 ad->id, *status, init_strength, strengthd, strength_s, init_snr, snrd, snr_s, *ber, err);
 
 	if (err)
 		return err;
@@ -1173,15 +1178,17 @@ int get_signal_new(int fd, int *status, int *ber, int *strength, int *snr)
 #define NEW_SIGNAL 1
 #define OLD_SIGNAL 2
 
+// converts the strength and SNR between 0 .. 255 after multiplying with *_multiplier
+
 void dvb_get_signal(adapter *ad)
 {
-	int start = 0, relative = 0;
+	int start = 0;
 	int strength = 0, snr = 0;
 	int status = 0, ber = 0;
 
 	if (ad->new_gs == 0)
 	{
-		int new_gs = get_signal_new(ad->fe, &status, &ber, &strength, &snr);
+		int new_gs = get_signal_new(ad, &status, &ber, &strength, &snr);
 		if (!new_gs)
 			ad->new_gs = NEW_SIGNAL;
 		else
@@ -1190,34 +1197,23 @@ void dvb_get_signal(adapter *ad)
 	}
 
 	if (!start && ad->new_gs == NEW_SIGNAL)
-		get_signal_new(ad->fe, &status, &ber, &strength, &snr);
+		get_signal_new(ad, &status, &ber, &strength, &snr);
 
 	if (ad->new_gs == OLD_SIGNAL)
-		get_signal(ad->fe, &status, &ber, &strength, &snr);
+		get_signal(ad, &status, &ber, &strength, &snr);
 
-	if (ad->max_strength <= strength)
-		ad->max_strength = (strength != 0) ? strength : 1;
-	if (ad->max_snr <= snr)
-		ad->max_snr = (snr != 0) ? snr : 1;
+	strength = strength * ad->strength_multiplier;
+	snr = snr * ad->snr_multiplier;
 
-	if (ad->new_gs == OLD_SIGNAL)
-	{
-		if (ad->max_snr > 4096)
-			relative = 0;
-		else
-			relative = 1;
-	}
+	strength = strength >> 8;
+	snr = snr >> 8;
 
-	if (relative)
-	{
-		strength = strength * 255.0 / ad->max_strength;
-		snr = snr * 255.0 / ad->max_snr;
-	}
-	else
-	{
-		strength = strength >> 8;
-		snr = snr >> 8;
-	}
+	if (strength > 255 || strength < 0)
+		strength = 255;
+
+	if (strength > 255 || strength < 0)
+		strength = 255;
+
 	// keep the assignment at the end for the signal thread to get the right values as no locking is done on the adapter
 	ad->snr = snr;
 	ad->strength = strength;

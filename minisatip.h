@@ -83,6 +83,7 @@ struct struct_opts
 	char *log_file;
 	int tcp_max_pack;
 	int use_demux_device;
+	float strength_multiplier, snr_multiplier;
 #ifndef DISABLE_SATIPCLIENT
 	char *satip_servers;
 	char *satip_xml;

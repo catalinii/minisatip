@@ -692,6 +692,8 @@ int decrypt_batch(SPMT *pmt)
 					start = 5 + b[4];
 				if (b[start] != 0 || b[start + 1] != 0 || b[start + 2] != 1)
 					LOGM("decryption failed for pmt %d, cw %d, pid %d, parity %d, start %d, packet %d: [%02X %02X %02X %02X] %02X %02X %02X", pmt->id, pmt->cw ? pmt->cw->id : -1, PID_FROM_TS(b), pmt->parity, start, i, b[0], b[1], b[2], b[3], b[start], b[start + 1], b[start + 2])
+				else
+					DEBUGM("decryption worked for pmt %d, cw %d, pid %d, parity %d, start %d, packet %d: %02X %02X %02X %02X %02X %02X %02X %02X", pmt->id, pmt->cw ? pmt->cw->id : -1, PID_FROM_TS(b), pmt->parity, start, i, b[start], b[start + 1], b[start + 2], b[start + 3], b[start + 4], b[start + 5], b[start + 6], b[start + 7])
 			}
 		}
 	}

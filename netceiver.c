@@ -476,10 +476,8 @@ void find_netcv_adapter(adapter **a)
 
 		/* initialize signal status info */
 		ad->strength = 0;
-		ad->max_strength = 0xff;
 		ad->status = 0;
 		ad->snr = 0;
-		ad->max_snr = 0xff;
 		ad->ber = 0;
 
 		/* register callback functions in adapter structure */
