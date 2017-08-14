@@ -177,8 +177,6 @@ int pmt_init_device(adapter *ad);
 int tables_tune(adapter *ad);
 int delete_pmt_for_adapter(int aid);
 int pmt_tune(adapter *ad);
-int get_active_pmt_with_ca();
-
 int get_active_filters_for_pid(int start_filter, int aid, int pid, int flags);
 int add_filter(int aid, int pid, void *callback, void *opaque, int flags);
 int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags, uint8_t *data, uint8_t *mask);

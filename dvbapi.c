@@ -462,9 +462,21 @@ int dvbapi_timeout(sockets *s)
 	return 0;
 }
 
+int is_adapter_active()
+{
+	extern adapter *a[];
+	int i, active_adapters = 0;
+	for (i = 0; i < MAX_ADAPTERS; i++)
+		if (a[i] && a[i]->enabled)
+		{
+			active_adapters = 1;
+			break;
+		}
+	return active_adapters;
+}
+
 int connect_dvbapi(void *arg)
 {
-
 	if ((sock > 0) && dvbapi_is_enabled) // already connected
 	{
 		int i, ek = 0;
@@ -480,7 +492,7 @@ int connect_dvbapi(void *arg)
 			if (keys[i] && keys[i]->enabled)
 				ek++;
 		}
-		if (!ek && (getTick() - dvbapi_last_close > opts.adapter_timeout))
+		if (!is_adapter_active())
 			dvbapi_close_socket();
 
 		return 0;
@@ -491,7 +503,7 @@ int connect_dvbapi(void *arg)
 	if (!opts.dvbapi_port || !opts.dvbapi_host)
 		return 0;
 
-	if (!get_active_pmt_with_ca()) // no active encrypted pmts
+	if (!is_adapter_active())
 		return 0;
 
 	if (sock <= 0)
@@ -754,6 +766,7 @@ int dvbapi_del_pmt(adapter *ad, SPMT *pmt)
 
 int dvbapi_init_dev(adapter *ad)
 {
+	set_sockets_rtime(poller_sock, 0);
 	return TABLES_RESULT_OK;
 }
 

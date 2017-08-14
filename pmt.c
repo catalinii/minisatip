@@ -1799,18 +1799,6 @@ char *get_channel_for_adapter(int aid, char *dest, int max_size)
 	return dest;
 }
 
-int get_active_pmt_with_ca()
-{
-	int i;
-	int npmt = 0;
-	for (i = 0; i < npmts; i++)
-		if (pmts[i] && pmts[i]->enabled && pmts[i]->running && (pmts[i]->pi_len > 0))
-		{
-			npmt++;
-		}
-	return npmt;
-}
-
 void free_all_pmts(void)
 {
 	int i;
