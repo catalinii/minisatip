@@ -297,7 +297,7 @@ int set_filter_flags(int id, int flags)
 {
 	SFilter *f = get_filter(id);
 	if (!f)
-		LOG_AND_RETURN(0, "Filter %d not found", id)
+		LOG_AND_RETURN(1, "Filter %d not found", id)
 	f->flags = flags;
 	if (flags & FILTER_ADD_REMOVE)
 	{

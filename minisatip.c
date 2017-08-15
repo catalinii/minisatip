@@ -1254,8 +1254,9 @@ int read_http(sockets *s)
 
 	split(arg, (char *)s->buf, 50, ' ');
 	//      LOG("args: %s -> %s -> %s",arg[0],arg[1],arg[2]);
-	if (strncmp(arg[0], "GET", 3) && strncmp(arg[0], "POST", 4))
+	if (strncmp(arg[0], "GET", 3) && strncmp(arg[0], "POST", 4) && !is_head)
 		REPLY_AND_RETURN(503);
+
 	if (uuidi == 0)
 		ssdp_discovery(s);
 

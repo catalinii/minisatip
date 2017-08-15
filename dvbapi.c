@@ -195,10 +195,14 @@ int dvbapi_reply(sockets *s)
 
 			if (k)
 			{
+				int new_filter_id = -1, fpos = -1;
+
 				for (i = 0; i < MAX_KEY_FILTERS; i++)
 					if (k->filter_id[i] >= 0 && k->pid[i] == _pid && k->demux[i] == demux && k->filter[i] == filter)
 					{
 						not_found = 0;
+						fpos = i;
+						new_filter_id = k->filter_id[i];
 						break;
 					}
 				if (not_found)
@@ -208,7 +212,15 @@ int dvbapi_reply(sockets *s)
 					i = get_index_for_filter(k, -1);
 				}
 				else
-					LOG("dvbapi: filter for pid %d and key %d already exists", _pid, k->id);
+				{
+					LOG("dvbapi: filter for pid %d and key %d already exists, fid %d", _pid, k->id, new_filter_id);
+
+					if (set_filter_flags(fid, FILTER_ADD_REMOVE | isEMM))
+					{
+						k->filter_id[fpos] = -1;
+						k->pid[fpos] = -1;
+					}
+				}
 			}
 			if (i >= 0 && fid >= 0)
 			{
