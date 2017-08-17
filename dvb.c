@@ -91,6 +91,10 @@ char *fe_specinv[] =
 	{"off", "on", " ", // auto
 	 NULL};
 
+char *fe_inversion[] =
+	{"0", "1", " ", // auto
+	 NULL};
+
 char *fe_pol[] =
 	{"none", "v", "h", "r", "l",
 	 NULL};
@@ -115,6 +119,7 @@ make_func(modulation);
 make_func(tmode);
 make_func(gi);
 make_func(specinv);
+make_func(inversion);
 make_func(pol);
 
 #define INVALID_URL(a) \

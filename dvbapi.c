@@ -215,7 +215,7 @@ int dvbapi_reply(sockets *s)
 				{
 					LOG("dvbapi: filter for pid %d and key %d already exists, fid %d", _pid, k->id, new_filter_id);
 
-					if (set_filter_flags(fid, FILTER_ADD_REMOVE | isEMM))
+					if (set_filter_flags(new_filter_id, FILTER_ADD_REMOVE | isEMM))
 					{
 						k->filter_id[fpos] = -1;
 						k->pid[fpos] = -1;

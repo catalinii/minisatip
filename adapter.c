@@ -126,6 +126,9 @@ void find_adapters()
 #ifdef AXE
 	find_axe_adapter(a);
 #endif
+#ifdef DDCI
+	find_ddci_adapter(a);
+#endif
 }
 
 // avoid adapter close unless all the adapters can be closed
@@ -774,8 +777,8 @@ int update_pids(int aid)
 			ad->pids[i].dec_err = 0;
 			ad->active_pids++;
 		}
-
-	ad->commit(ad);
+	if (ad->commit)
+		ad->commit(ad);
 
 	ad->updating_pids = 0;
 	return 0;
@@ -1213,11 +1216,11 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 	else
 		len =
 			snprintf(dad, ld,
-					 "ver=1.2;tuner=%d,%d,%d,%d,%.2f,8,%s,%s,%d,%d,%d,%d,%d;pids=",
+					 "ver=1.2;tuner=%d,%d,%d,%d,%.2f,8,%s,%s,%d,%d,%d,%d,%s;pids=",
 					 aid + 1, strength, status, snr,
 					 (double)t->freq / 1000, get_delsys(t->sys),
 					 get_modulation(t->mtype), t->sr, t->c2tft, t->ds,
-					 t->plp, t->inversion);
+					 t->plp, get_inversion(t->inversion));
 
 	if (use_ad)
 		len += strlen(get_stream_pids(sid, dad + len, ld - len));
