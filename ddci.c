@@ -113,24 +113,39 @@ int ddci_del_filters(adapter *ad, int fd, int pid)
 {
 	return 0;
 }
+
+int ddci_read_sec_data(sockets *s)
+{
+	return 0;
+}
+
+void ddci_post_init(adapter *ad)
+{
+	sockets *s = get_sockets(ad->sock);
+	s->action = (socket_action)ddci_read_sec_data;
+}
+
 int ddci_open_device(adapter *ad)
 {
 	char buf[100];
-	LOG("trying to open [%d] adapter %d and frontend %d", ad->id, ad->pa,
+	LOG("DDCI opening [%d] adapter %d and frontend %d", ad->id, ad->pa,
 		ad->fn);
 	sprintf(buf, "/dev/dvb/adapter%d/sec%d", ad->pa, ad->fn);
-	ad->fe = open(buf, O_RDONLY);
+	ad->fe = open(buf, O_WRONLY);
 	if (ad->fe < 0)
 	{
-		LOG("%s: could not open %s in RDONLY mode error %d: %s", __FUNCTION__, buf, errno, strerror(errno));
-		//		return 1;
+		LOG("%s: could not open %s in WRONLY mode error %d: %s", __FUNCTION__, buf, errno, strerror(errno));
+		return 1;
 	}
 
-	ad->dvr = open(buf, O_WRONLY);
+	ad->dvr = open(buf, O_RDONLY);
 	if (ad->dvr < 0)
 	{
-		LOG("%s: could not open %s in RW mode (fe: %d, dvr: %d) error %d: %s", __FUNCTION__, buf, ad->fe, ad->dvr, errno, strerror(errno));
-		//		return 1;
+		LOG("%s: could not open %s in RDONLY mode error %d: %s", __FUNCTION__, buf, errno, strerror(errno));
+		if (ad->fe >= 0)
+			close(ad->fe);
+		ad->fe = -1;
+		return 1;
 	}
 	ad->type = ADAPTER_DVB;
 	ad->dmx = -1;
@@ -190,11 +205,11 @@ void find_ddci_adapter(adapter **a)
 				ad->commit = (Adapter_commit)NULL;
 				ad->tune = (Tune)NULL;
 				ad->delsys = (Dvb_delsys)ddci_delsys;
-				ad->post_init = NULL;
+				ad->post_init = (Adapter_commit)ddci_post_init;
 				ad->close = (Adapter_commit)ddci_close;
 				ad->get_signal = (Device_signal)NULL;
-				ad->set_pid = ddci_set_pid;
-				ad->del_filters = ddci_del_filters;
+				ad->set_pid = (Set_pid)ddci_set_pid;
+				ad->del_filters = (Del_filters)ddci_del_filters;
 				ad->type = ADAPTER_DVB;
 
 				na++;

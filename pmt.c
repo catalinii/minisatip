@@ -898,6 +898,12 @@ int pmt_add(int i, int adapter, int sid, int pmt_pid)
 	pmt->opaque = NULL;
 	pmt->ca_mask = pmt->disabled_ca_mask = 0;
 	pmt->name[0] = pmt->provider[0] = 0;
+
+	pmt->active_pids = 0;
+	memset(pmt->active_pid, 0, sizeof(pmt->active_pids));
+	pmt->all_pids = 0;
+	memset(pmt->all_pid, 0, sizeof(pmt->all_pid));
+
 	if (i >= npmts)
 		npmts = i + 1;
 
@@ -1398,7 +1404,7 @@ int get_master_pmt_for_pid(int aid, int pid)
 		if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == aid)
 		{
 			pmt = pmts[i];
-			for (j = 0; j < MAX_ACTIVE_PIDS && pmt->active_pid[j] > 0; j++)
+			for (j = 0; j < pmt->active_pids && pmt->active_pid[j] > 0; j++)
 				if (pmt->active_pid[j] == pid)
 					return pmt->master_pmt;
 		}

@@ -48,6 +48,10 @@
 #include "axe.h"
 #endif
 
+#ifdef DDCI
+#include "ddci.h"
+#endif
+
 #define DEFAULT_LOG LOG_ADAPTER
 
 adapter *a[MAX_ADAPTERS];

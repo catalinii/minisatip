@@ -1332,18 +1332,16 @@ int read_http(sockets *s)
 			http_response(s, 200, ctype, NULL, 0, 0);
 			return 0;
 		}
-		if (strstr(ctype, "no-cache") == NULL)
+		if (strstr(ctype, "html") || strstr(ctype, "xml"))
 		{
-			http_response(s, 200, ctype, f, 0, nl);
+			process_file(s, f, nl, ctype);
 			closefile(f, nl);
 			return 0;
 		}
 
-		if (strstr(ctype, "html"))
-		{
-			process_file(s, f, nl, ctype);
-			closefile(f, nl);
-		}
+		http_response(s, 200, ctype, f, 0, nl);
+		closefile(f, nl);
+
 		return 0;
 	}
 

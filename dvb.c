@@ -1094,10 +1094,16 @@ void get_signal(adapter *ad, int *status, int *ber, int *strength, int *snr)
 			LOG("ioctl fd %d FE_READ_BER failed, error %d (%s)", fd, errno, strerror(errno));
 
 		if (ioctl(fd, FE_READ_SIGNAL_STRENGTH, strength) < 0)
+		{
 			LOG("ioctl fd %d FE_READ_SIGNAL_STRENGTH failed, error %d (%s)", fd, errno, strerror(errno));
+			*strength = 65535;
+		}
 
 		if (ioctl(fd, FE_READ_SNR, snr) < 0)
+		{
 			LOG("ioctl fd %d FE_READ_SNR failed, error %d (%s)", fd, errno, strerror(errno));
+			*snr = 65535;
+		}
 	}
 	LOGM("get_signal adapter %d: status %d, strength %d, snr %d, BER: %d", ad->id, *status, *strength, *snr, *ber);
 }
