@@ -80,7 +80,7 @@ typedef struct struct_satipc
 	uint8_t addpids, setup_pids;
 	unsigned char *tcp_data;
 	int tcp_size, tcp_pos, tcp_len;
-	char use_fe, option_no_session, option_no_setup, option_no_option;
+	char use_fe, option_no_session, option_no_setup, option_no_option, option_no_describe;
 	uint32_t rcvp, repno, rtp_miss, rtp_ooo; // rtp statstics
 	uint16_t rtp_seq;
 	char static_config;
@@ -256,7 +256,7 @@ int satipc_reply(sockets *s)
 		satipc_commit(ad);
 	}
 
-	if (!sip->expect_reply && sip->last_cmd == RTSP_PLAY)
+	if (!sip->expect_reply && sip->last_cmd == RTSP_PLAY && !sip->option_no_describe)
 		http_request(ad, NULL, "DESCRIBE");
 
 	return 0;
@@ -336,6 +336,7 @@ int satipc_rtcp_reply(sockets *s)
 				ad->id, rp - sip->rcvp, sip->rtp_miss, sip->rtp_ooo,
 				ad->pid_err);
 	}
+	sip->option_no_describe = 1;
 	set_adapter_signal(ad, (char *)b, rlen);
 	return 0;
 }

@@ -508,6 +508,9 @@ void update_cw(SPMT *pmt)
 		if (cws[i] && cws[i]->enabled && (pmt->parity == cws[i]->parity) && (cws[i]->pmt == pmt->id || cws[i]->pmt == master->id))
 		{
 			int change = 0;
+			if (ctime - cws[i]->time > MAX_CW_TIME)
+				continue;
+
 			if (!cw)
 			{
 				cw = cws[i];
