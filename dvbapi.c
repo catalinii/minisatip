@@ -300,7 +300,7 @@ int dvbapi_reply(sockets *s)
 				LOG("dvbapi: received DVBAPI_CA_SET_DESCR, key %d parity %d, index %d, CW %s: %02X %02X %02X %02X %02X %02X %02X %02X",
 					k_id, parity, index, correct ? "OK" : "NOK", cw[0], cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);
 
-				send_cw(k->pmt_id, k->algo, parity, cw, NULL);
+				send_cw(k->pmt_id, k->algo, parity, cw, NULL, 0);
 
 				mutex_unlock(&k->mutex);
 			}

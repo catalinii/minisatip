@@ -230,9 +230,9 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt)
 	}
 
 	if (d->key[0][0])
-		send_cw(spmt->id, CA_ALGO_AES128_CBC, 0, d->key[0], d->iv[0]);
+		send_cw(spmt->id, CA_ALGO_AES128_CBC, 0, d->key[0], d->iv[0], 3600); // 1 hour
 	if (d->key[1][0])
-		send_cw(spmt->id, CA_ALGO_AES128_CBC, 1, d->key[1], d->iv[1]);
+		send_cw(spmt->id, CA_ALGO_AES128_CBC, 1, d->key[1], d->iv[1], 3600);
 
 	return 0;
 }

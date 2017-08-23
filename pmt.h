@@ -80,6 +80,7 @@ typedef struct struct_cw
 	int prio;
 	char low_prio;
 	int16_t id;
+	int64_t expiry;
 
 } SCW;
 
@@ -146,7 +147,7 @@ typedef struct struct_filter
 } SFilter;
 
 int register_algo(SCW_op *o);
-int send_cw(int pmt_id, int cw_type, int parity, uint8_t *cw, uint8_t *iv);
+int send_cw(int pmt_id, int cw_type, int parity, uint8_t *cw, uint8_t *iv, int64_t expiry);
 
 extern int npmts;
 static inline SPMT *get_pmt(int id)

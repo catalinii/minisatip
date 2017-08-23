@@ -508,7 +508,7 @@ void update_cw(SPMT *pmt)
 		if (cws[i] && cws[i]->enabled && (pmt->parity == cws[i]->parity) && (cws[i]->pmt == pmt->id || cws[i]->pmt == master->id))
 		{
 			int change = 0;
-			if (ctime - cws[i]->time > MAX_CW_TIME)
+			if (ctime - cws[i]->time > cws[i]->expiry)
 				continue;
 
 			if (!cw)
@@ -568,7 +568,7 @@ void update_cw(SPMT *pmt)
 	}
 }
 
-int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv)
+int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv, int64_t expiry)
 {
 	int i, master_pmt;
 	char buf[400];
@@ -603,7 +603,7 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv)
 	mutex_lock(&cws_mutex);
 	for (i = 0; i < MAX_CW; i++)
 		if (!cws[i] || (!cws[i]->enabled && cws[i]->algo == algo) ||
-			(cws[i]->enabled && cws[i]->algo == algo && (ctime - cws[i]->time > MAX_CW_TIME)))
+			(cws[i]->enabled && cws[i]->algo == algo && (ctime - cws[i]->time > cws[i]->expiry)))
 			break;
 	if (i == MAX_CW)
 	{
@@ -636,6 +636,11 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv)
 	c->cw_len = 16;
 	c->prio = 0;
 	c->low_prio = 0;
+	if (expiry == 0)
+		c->expiry = getTick() + MAX_CW_TIME;
+	else
+		c->expiry = getTick() + expiry * 1000;
+
 	if ((pmt->parity == parity) && (ctime - pmt->last_parity_change > 2000))
 	{
 		c->prio = -1;
@@ -657,7 +662,7 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv)
 
 	mutex_unlock(&cws_mutex);
 	pmt->invalidated = 1;
-	LOG("CW %d for %s PMT %d, master %d, pid %d, algo %d, parity %d: %02X %02X %02X %02X %02X %02X %02X %02X", c->id, pmt->name, pmt_id, master_pmt, pmt->pid, algo, parity,
+	LOG("CW %d for %s PMT %d, master %d, pid %d, expiry in %jd ms, algo %d, parity %d: %02X %02X %02X %02X %02X %02X %02X %02X", c->id, pmt->name, pmt_id, master_pmt, pmt->pid, cws[i]->expiry - getTick(), algo, parity,
 		cw[0], cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);
 	return 0;
 }

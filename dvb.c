@@ -1079,7 +1079,8 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys)
 void get_signal(adapter *ad, int *status, int *ber, int *strength, int *snr)
 {
 	int fd = ad->fe;
-	*status = *ber = *snr = *strength = 0;
+	*status = 0;
+	*ber = *snr = *strength = 0xFFFF;
 
 	if (ioctl(fd, FE_READ_STATUS, status) < 0)
 	{
@@ -1096,13 +1097,11 @@ void get_signal(adapter *ad, int *status, int *ber, int *strength, int *snr)
 		if (ioctl(fd, FE_READ_SIGNAL_STRENGTH, strength) < 0)
 		{
 			LOG("ioctl fd %d FE_READ_SIGNAL_STRENGTH failed, error %d (%s)", fd, errno, strerror(errno));
-			*strength = 65535;
 		}
 
 		if (ioctl(fd, FE_READ_SNR, snr) < 0)
 		{
 			LOG("ioctl fd %d FE_READ_SNR failed, error %d (%s)", fd, errno, strerror(errno));
-			*snr = 65535;
 		}
 	}
 	LOGM("get_signal adapter %d: status %d, strength %d, snr %d, BER: %d", ad->id, *status, *strength, *snr, *ber);
