@@ -113,11 +113,7 @@ int netcv_set_pid(adapter *ad, int pid)
 int netcv_del_pid(adapter *ad, int fd, int pid)
 {
 	int i, hit = 0;
-	adapter *ad;
 	fd -= 100;
-	ad = get_adapter(fd);
-	if (!ad)
-		return 0;
 	LOG("netceiver: del_pid for aid %d, pid %d, err %d", fd, pid, SN->err);
 	if (SN->err) // error reported, return error
 		return 0;
