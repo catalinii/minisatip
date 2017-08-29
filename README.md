@@ -100,11 +100,9 @@ Help
 * -m xx: simulate xx as local mac address, generates UUID based on mac
 	* eg: -m 001122334455 
 
-* -Z --nopm ADAPTER1,ADAPTER2-ADAPTER4[,..] - specify no power management for the adapters (does not turn power off)	
-	eg: --nopm 1-2
-	- turns off power management for adapter 1 to 2 
-	--nopm *
-	- turns off power management for all adapters (recommended instead of --nopm 0-32) 
+* -Z --nopm ADAPTER1,ADAPTER2-ADAPTER4[,..] - specify no power management for the adapters (does not turn power off)
+	* eg: --nopm 1-2 - turns off power management for adapter 1 to 2 
+	--nopm * - turns off power management for all adapters (recommended instead of --nopm 0-32) 
 	- required for some Unicable LNBs 
 
 * -n --netceiver if:count: use network interface <if> (default vlan4) and look for <count> netceivers
