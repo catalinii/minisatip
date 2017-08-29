@@ -508,12 +508,13 @@ void update_cw(SPMT *pmt)
 		if (cws[i] && cws[i]->enabled && (pmt->parity == cws[i]->parity) && (cws[i]->pmt == pmt->id || cws[i]->pmt == master->id))
 		{
 			int change = 0;
-			if (ctime - cws[i]->time > cws[i]->expiry)
+			if (cws[i]->time > cws[i]->expiry)
 				continue;
 
 			if (!cw)
 			{
 				cw = cws[i];
+				LOGM("candidate CW %d, prio %d, time %jd ms ago, expiry in %jd ms, parity %d, pmt %d, change %d", i, cws[i]->prio, ctime - cws[i]->time, cws[i]->expiry - ctime, pmt->parity, cws[i]->pmt, 1);
 				continue;
 			}
 			if (cw->low_prio)
@@ -533,7 +534,7 @@ void update_cw(SPMT *pmt)
 			if ((cw->prio == cws[i]->prio) && (cw->time < cws[i]->time))
 				change = 1;
 
-			LOGM("candidate CW %d, prio %d, time %jd ms ago, parity %d, pmt %d, found %d, prio %d, change %d", i, cws[i]->prio, ctime - cws[i]->time, pmt->parity, cws[i]->pmt, cw ? cw->id : -1, cw ? cw->prio : -1, change);
+			LOGM("candidate CW %d, prio %d, time %jd ms ago, expiry in %jd ms, parity %d, pmt %d, change %d", i, cws[i]->prio, ctime - cws[i]->time, cws[i]->expiry - ctime, pmt->parity, cws[i]->pmt, change);
 			if (change)
 				cw = cws[i];
 		}
@@ -603,7 +604,7 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv, int64_t 
 	mutex_lock(&cws_mutex);
 	for (i = 0; i < MAX_CW; i++)
 		if (!cws[i] || (!cws[i]->enabled && cws[i]->algo == algo) ||
-			(cws[i]->enabled && cws[i]->algo == algo && (ctime - cws[i]->time > cws[i]->expiry)))
+			(cws[i]->enabled && cws[i]->algo == algo && (ctime > cws[i]->expiry)))
 			break;
 	if (i == MAX_CW)
 	{

@@ -16,7 +16,7 @@
 #define CA_MODE_ECB 0
 #define CA_MODE_CBC 1
 
-#define MAX_PMT 128
+#define MAX_PMT 256
 #define MAX_CW 80
 #define MAX_CW_TIME 25000 // 25s
 #define MAX_BATCH_SIZE 128

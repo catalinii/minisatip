@@ -176,13 +176,13 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt)
 	pid = spmt->pid;
 	len = spmt->pmt_len;
 	for (i = 0; i < MAX_CA_PMT; i++)
-		if (d->pmt_id[i] == -1)
+		if ((d->pmt_id[i] == -1) || (d->pmt_id[i] == spmt->id))
 			break;
 
 	if (i < MAX_CA_PMT)
 		d->pmt_id[i] = spmt->id;
 	else
-		LOG("pmt_id full for device %d", d->id);
+		LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY, "pmt_id full for device %d", d->id);
 
 	ver = (b[5] >> 1) & 0x1f;
 	sid = (b[3] << 8) | b[4];
