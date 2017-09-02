@@ -508,13 +508,13 @@ void update_cw(SPMT *pmt)
 		if (cws[i] && cws[i]->enabled && (pmt->parity == cws[i]->parity) && (cws[i]->pmt == pmt->id || cws[i]->pmt == master->id))
 		{
 			int change = 0;
-			if (cws[i]->time > cws[i]->expiry)
+			if (ctime > cws[i]->expiry)
 				continue;
 
 			if (!cw)
 			{
 				cw = cws[i];
-				LOGM("candidate CW %d, prio %d, time %jd ms ago, expiry in %jd ms, parity %d, pmt %d, change %d", i, cws[i]->prio, ctime - cws[i]->time, cws[i]->expiry - ctime, pmt->parity, cws[i]->pmt, 1);
+				LOGM("candidate CW %d, prio %d, time %jd ms ago, expiry in %jd s, parity %d, pmt %d, change %d", i, cws[i]->prio, ctime - cws[i]->time, cws[i]->expiry - ctime, pmt->parity, cws[i]->pmt, 1);
 				continue;
 			}
 			if (cw->low_prio)

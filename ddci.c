@@ -116,6 +116,8 @@ int ddci_del_filters(adapter *ad, int fd, int pid)
 
 int ddci_read_sec_data(sockets *s)
 {
+	read_dmx(s);
+	LOG("done read_dmx")
 	return 0;
 }
 
@@ -128,25 +130,39 @@ void ddci_post_init(adapter *ad)
 int ddci_open_device(adapter *ad)
 {
 	char buf[100];
-	LOG("DDCI opening [%d] adapter %d and frontend %d", ad->id, ad->pa,
-		ad->fn);
+	int read_fd, write_fd;
+	LOG("DDCI opening [%d] adapter %d and frontend %d", ad->id, ad->pa, ad->fn);
 	sprintf(buf, "/dev/dvb/adapter%d/sec%d", ad->pa, ad->fn);
-	ad->fe = open(buf, O_WRONLY);
-	if (ad->fe < 0)
+#ifdef DDCI_TEST
+	write_fd = open(buf, O_WRONLY);
+	if (write_fd < 0)
 	{
 		LOG("%s: could not open %s in WRONLY mode error %d: %s", __FUNCTION__, buf, errno, strerror(errno));
 		return 1;
 	}
 
-	ad->dvr = open(buf, O_RDONLY);
-	if (ad->dvr < 0)
+	read_fd = open(buf, O_RDONLY);
+	if (read_fd < 0)
 	{
 		LOG("%s: could not open %s in RDONLY mode error %d: %s", __FUNCTION__, buf, errno, strerror(errno));
-		if (ad->fe >= 0)
-			close(ad->fe);
+		if (write_fd >= 0)
+			close(write_fd);
 		ad->fe = -1;
 		return 1;
 	}
+#else
+	int fd[2];
+	if (pipe(fd) == -1)
+	{
+		LOG("pipe failed errno %d: %s", errno, strerror(errno));
+		return 1;
+	}
+	read_fd = fd[0];
+	write_fd = fd[1];
+
+#endif
+	ad->fe = write_fd;
+	ad->dvr = read_fd;
 	ad->type = ADAPTER_DVB;
 	ad->dmx = -1;
 	ad->sys[0] = 0;
@@ -190,7 +206,9 @@ void find_ddci_adapter(adapter **a)
 			sprintf(buf, "/dev/dvb/adapter%d/sec%d", i, j);
 			if (!access(buf, R_OK))
 				cnt++;
-
+#ifdef DDCI_TEST
+			cnt = 2;
+#endif
 			if (cnt == 2)
 			{
 				LOGM("%s: adding %d %d to the list of devices", __FUNCTION__, i, j);
@@ -216,6 +234,9 @@ void find_ddci_adapter(adapter **a)
 				a_count = na; // update adapter counter
 				if (na == MAX_ADAPTERS)
 					return;
+#ifdef DDCI_TEST
+				break;
+#endif
 			}
 		}
 	for (; na < MAX_ADAPTERS; na++)

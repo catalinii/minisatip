@@ -13,6 +13,7 @@ DVBAPI=@DVBAPI@
 LINUXDVB=@LINUXDVB@
 AXE=@AXE@
 ENIGMA=@ENIGMA@
+DDCI=0
 
 CFLAGS?=-Wall -Wno-switch -ggdb -fPIC $(EXTRA_CFLAGS) @CFLAGS@
 LDFLAGS?=-lpthread @LDFLAGS@
@@ -95,6 +96,13 @@ OBJS+=dvb.o
 else
 CFLAGS+=-DDISABLE_LINUXDVB
 OBJS+=dvb.o
+endif
+
+ifeq ($(DDCI),1)
+OBJS+=ddci.o
+CFLAGS+=-DDDCI_TEST
+else
+CFLAGS+=-DDISABLE_DDCI
 endif
 
 OBJS-$(AXE) += axe.o

@@ -48,7 +48,7 @@
 #include "axe.h"
 #endif
 
-#ifdef DDCI
+#ifndef DISABLE_DDCI
 #include "ddci.h"
 #endif
 
@@ -130,7 +130,7 @@ void find_adapters()
 #ifdef AXE
 	find_axe_adapter(a);
 #endif
-#ifdef DDCI
+#ifndef DISABLE_DDCI
 	find_ddci_adapter(a);
 #endif
 }
@@ -165,13 +165,14 @@ int adapter_timeout(sockets *s)
 #ifndef AXE
 	if (opts.no_threads)
 	{
+		adapter *ad1;
 		for (i = 0; i < MAX_ADAPTERS; i++)
-			if ((ad = get_adapter_nw(i)))
+			if ((ad1 = get_adapter_nw(i)))
 			{
-				if (rtime - ad->rtime < s->timeout_ms)
+				if (rtime - ad1->rtime < s->timeout_ms)
 					do_close = 0;
-				if (ad && max_close < ad->rtime)
-					max_close = ad->rtime;
+				if (ad1 && max_close < ad1->rtime)
+					max_close = ad1->rtime;
 			}
 	}
 	LOG("Requested adapter %d close due to timeout %d sec, result %d max_rtime %jd",

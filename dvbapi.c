@@ -263,10 +263,9 @@ int dvbapi_reply(sockets *s)
 
 			if (k)
 			{
-				k->ecms--;
+				if (k->ecms > 0)
+					k->ecms--;
 				k->last_dmx_stop = getTick();
-				//			if (k->ecms <= 0)
-				//				close_pmt_for_ca(dvbapi_ca, get_adapter(k->adapter), get_pmt(k->pmt_id));
 			}
 
 			break;
@@ -498,8 +497,14 @@ int connect_dvbapi(void *arg)
 		{
 			if (keys[i] && keys[i]->enabled && (keys[i]->ecms == 0) && (keys[i]->last_dmx_stop > 0) && (ctime - keys[i]->last_dmx_stop > 3000))
 			{
+				int pmt_id = keys[i]->pmt_id, adapter_id = keys[i]->adapter;
 				LOG("Key %d active but no active filter, closing ", i);
 				keys_del(i);
+
+				// resent the PMT if the decrypting stops
+				SPMT *pmt = get_pmt(pmt_id);
+				if (pmt)
+					close_pmt_for_ca(dvbapi_ca, get_adapter(adapter_id), pmt);
 			}
 			if (keys[i] && keys[i]->enabled)
 				ek++;
