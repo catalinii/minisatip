@@ -132,7 +132,7 @@ int udp_bind(char *addr, int port)
 
 		mreq.imr_multiaddr.s_addr = inet_addr(addr);
 		mreq.imr_interface.s_addr = htonl(INADDR_ANY);
-		is_multicast = 0;
+		is_multicast = 1;
 		LOG("setting multicast for %s", addr);
 		if (setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)) == -1)
 		{
@@ -143,6 +143,7 @@ int udp_bind(char *addr, int port)
 	{
 		LOG("udp_bind failed: setsockopt(SO_REUSEADDR): %s",
 			strerror(errno));
+		close(sock);
 		return -1;
 	}
 
@@ -156,6 +157,7 @@ int udp_bind(char *addr, int port)
 			if (bind(sock, (struct sockaddr *)&serv, sizeof(serv)) < 0)
 			{
 				LOG("udp_bind: failed: bind() on host ANY port %d: error %s", port, strerror(errno));
+				close(sock);
 				return -1;
 			}
 		}
@@ -175,10 +177,12 @@ int udp_bind_connect(char *src, int sport, char *dest, int dport,
 	sock = udp_bind(src, sport);
 	if (sock < 0)
 		return sock;
+
 	fill_sockaddr(serv, dest, dport);
 	if (connect(sock, (struct sockaddr *)serv, sizeof(*serv)) < 0)
 	{
 		LOG("udp_bind_connect: failed: bind(): %s", strerror(errno));
+		close(sock);
 		return -1;
 	}
 	LOG("New UDP socket %d connected to %s:%d", sock, inet_ntoa(serv->sin_addr),
@@ -407,6 +411,12 @@ int sockets_accept(int socket, void *buf, int len, sockets *ss)
 		}
 	}
 	ni = sockets_add(new_sock, &sa, -1, TYPE_TCP, NULL, NULL, NULL);
+	if (ni < 0)
+	{
+		LOG("ERROR on accept: could not add new socket %d to the list", new_sock);
+		close(new_socket);
+		return 1;
+	}
 	if (ss->action != NULL)
 	{
 		ss->action(s[ni]);
@@ -545,7 +555,7 @@ int sockets_del(int sock)
 	int i, so;
 	sockets *ss;
 
-	if (sock < 0 || sock > MAX_SOCKS || !s[sock] || !s[sock]->enabled || !s[sock]->is_enabled)
+	if (sock < 0 || sock >= MAX_SOCKS || !s[sock] || !s[sock]->enabled || !s[sock]->is_enabled)
 		return 0;
 
 	ss = s[sock];
@@ -921,15 +931,13 @@ int get_mac_address(char *mac)
 					break;
 			}
 		}
-		else
-		{
-		};
 	}
 	unsigned char m[6];
 
 	memcpy(m, ifr.ifr_hwaddr.sa_data, 6);
 	sprintf(mac, "%02x%02x%02x%02x%02x%02x", m[0], m[1], m[2], m[3], m[4],
 			m[5]);
+	close(sock);
 	return 1;
 }
 

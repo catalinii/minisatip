@@ -1225,7 +1225,7 @@ int read_http(sockets *s)
 		while (space[i] && space[i] != ' ')
 		{
 			url[i] = space[i];
-			if (i++ > sizeof(url) - 3)
+			if (++i > sizeof(url) - 4)
 				break;
 		}
 		url[i] = 0;

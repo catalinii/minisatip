@@ -495,7 +495,7 @@ void posix_signal_handler(int sig, siginfo_t *siginfo, ucontext_t *ctx)
 int /* Returns 0 on success, -1 on error */
 	becomeDaemon()
 {
-	int maxfd, fd, pid;
+	int maxfd, fd, fdi, fdo, pid;
 	__attribute__((unused)) int rv;
 	struct stat sb;
 	FILE *f;
@@ -554,18 +554,24 @@ int /* Returns 0 on success, -1 on error */
 	close(STDIN_FILENO); /* Reopen standard fd's to /dev/null */
 	//	chdir ("/tmp");				 /* Change to root directory */
 
-	fd = open("/dev/null", O_RDWR);
+	fdi = open("/dev/null", O_RDWR);
 
 	snprintf(buf, sizeof(buf), "%s", opts.log_file);
 
-	if (fd != STDIN_FILENO) /* 'fd' should be 0 */
+	if (fdi != STDIN_FILENO) /* 'fdi' should be 0 */
+	{
+		close(fdi);
 		return -1;
+	}
 	if (stat(buf, &sb) == -1)
-		fd = open(buf, O_RDWR | O_CREAT, 0666);
+		fdo = open(buf, O_RDWR | O_CREAT, 0666);
 	else
-		fd = open(buf, O_RDWR | O_APPEND);
-	if (fd != STDOUT_FILENO) /* 'fd' should be 1 */
+		fdo = open(buf, O_RDWR | O_APPEND);
+	if (fdo != STDOUT_FILENO) /* 'fd' should be 1 */
+	{
+		close(fdo);
 		return -1;
+	}
 	if (dup2(STDOUT_FILENO, STDERR_FILENO) != STDERR_FILENO)
 		return -1;
 
@@ -798,6 +804,7 @@ int get_json_state(char *buf, int len)
 	_symbols *p;
 	char escape[200]; // string variable max len
 
+	memset(escape, 0, sizeof(escape));
 	strlcatf(buf, len, ptr, "{\n");
 	for (i = 0; sym[i] != NULL; i++)
 	{
@@ -1038,7 +1045,7 @@ int is_var(char *s)
 // replace $VAR$ with it's value and write the output to the socket
 void process_file(void *sock, char *s, int len, char *ctype)
 {
-	char outp[8292];
+	char outp[8300];
 	int i, io = 0, lv, le, respond = 1;
 	sockets *so = (sockets *)sock;
 	__attribute__((unused)) int rv;
@@ -1054,7 +1061,7 @@ void process_file(void *sock, char *s, int len, char *ctype)
 		}
 		else
 		{
-			le = var_eval(s + i, lv, outp + io, sizeof(outp) - io);
+			le = var_eval(s + i, lv, outp + io, sizeof(outp) - io - 10);
 			io += le;
 			i += lv;
 		}
@@ -1101,8 +1108,8 @@ char *readfile(char *fn, char *ctype, int *len)
 #else
 	if ((fd = open(ffn, O_RDONLY)) < 0)
 #endif
-
 		LOG_AND_RETURN(NULL, "Could not open file %s", ffn);
+
 	if ((fstat(fd, &sb) == -1) || !S_ISREG(sb.st_mode))
 	{
 		LOG("readfile: %s is not a file", ffn);
@@ -1112,7 +1119,10 @@ char *readfile(char *fn, char *ctype, int *len)
 	nl = sb.st_size;
 	mem = mmap(0, nl, PROT_READ, MAP_SHARED, fd, 0);
 	if (mem == MAP_FAILED)
+	{
+		close(fd);
 		LOG_AND_RETURN(NULL, "mmap failed for file %s", ffn);
+	}
 	close(fd);
 	LOG("opened %s fd %d at %x - %d bytes", ffn, fd, mem, nl);
 

@@ -88,6 +88,16 @@ int ddci_close(adapter *a)
 	return 0;
 }
 
+// determine if the pids from this PMT needs to be added to the virtual adapter, also adds the PIDs to the translation table
+int ddci_process_pmt(adapter *ad, SPMT *spmt)
+{
+}
+
+// if the PMT is used by the adapter, the pids will be removed from the translation table
+int dvbca_del_pmt(adapter *ad, SPMT *spmt)
+{
+}
+
 int ddci_ts(adapter *ad)
 {
 	return 0;
@@ -98,8 +108,8 @@ void ddci_init() // you can search the devices here and fill the ddci_devices, t
 	memset(&ddci, 0, sizeof(ddci));
 	ddci.ca_init_dev = ddci_init_dev;
 	ddci.ca_close_dev = ddci_close_dev;
-	ddci.ca_add_pmt = NULL;
-	ddci.ca_del_pmt = NULL;
+	ddci.ca_add_pmt = ddci_process_pmt;
+	ddci.ca_del_pmt = dvbca_del_pmt;
 	ddci.ca_close_ca = ddci_close;
 	ddci.ca_ts = ddci_ts;
 	ddci_id = add_ca(&ddci, 0xFFFFFFFF);
@@ -133,7 +143,7 @@ int ddci_open_device(adapter *ad)
 	int read_fd, write_fd;
 	LOG("DDCI opening [%d] adapter %d and frontend %d", ad->id, ad->pa, ad->fn);
 	sprintf(buf, "/dev/dvb/adapter%d/sec%d", ad->pa, ad->fn);
-#ifdef DDCI_TEST
+#ifndef DDCI_TEST
 	write_fd = open(buf, O_WRONLY);
 	if (write_fd < 0)
 	{
@@ -235,7 +245,7 @@ void find_ddci_adapter(adapter **a)
 				if (na == MAX_ADAPTERS)
 					return;
 #ifdef DDCI_TEST
-				break;
+				return;
 #endif
 			}
 		}

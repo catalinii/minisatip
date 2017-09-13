@@ -1153,7 +1153,7 @@ int stream_timeout(sockets *s)
 	if ((sid = get_stream(s->sid)) && sid->do_play && (ctime - sid->last_init_hw > 5000))
 	{
 		sid->last_init_hw = ctime;
-		if (sid->adapter != -1)
+		if (sid->adapter > 0 && sid->adapter < MAX_ADAPTERS)
 		{
 			adapter *ad = get_adapter_nw(sid->adapter);
 			if (!ad)

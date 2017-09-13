@@ -1,0 +1,50 @@
+
+AUTOMAKE_OPTIONS = foreign
+BUILDDIR := ../build
+
+CFLAGS?=-Wall -Wno-switch -ggdb -fPIC $(EXTRA_CFLAGS) @CFLAGS@
+LDFLAGS?=-lpthread @LDFLAGS@
+
+OS := $(shell $(CC) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 2)
+ARCH := $(shell $(CC) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 1)
+
+ifneq ($(UNAME_S),apple)
+        LDFLAGS += -lrt
+else
+	LINUXDVB=0
+endif
+
+SOURCES=minisatip.c socketworks.c stream.c adapter.c utils.c
+
+TABLES=0
+PMT=0
+
+LIBS+=crypto dl
+LIBS+=dvbcsa
+LIBS+=dvben50221 dvbapi ucsi lmcli -lxml2
+CFLAGS += -DAXE
+
+CFLAGS += -DENIGMA
+
+LDFLAGS+=$(addprefix -l,$(LIBS))
+
+OBJS := $(patsubst %.c, $(BUILDDIR)/%.o, $(SOURCES))
+DEPS=$(OBJS:.o=.d)
+
+all: $(DEPS) $(OBJS)
+	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LDFLAGS)
+
+$(BUILDDIR)/%.d : %.c
+	@mkdir -p $(BUILDDIR)
+	@$(CC) $(CFLAGS) -MM $(basename $*).c | sed -e 's@^\(.*\)\.o:@\1.d \1.o:@' > $@
+
+$(BUILDDIR)/%.o : %.c
+	$(CC) $(CFLAGS) -c $*.c -o $@
+
+clean:
+	rm -rf $(BUILDDIR) $(TARGET) >> /dev/null
+
+# pull in dependency info for *existing* .o files
+ifneq "$(MAKECMDGOALS)" "clean"
+-include $(DEPS)
+endif

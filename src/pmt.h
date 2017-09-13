@@ -6,7 +6,7 @@
 
 #define MAX_CAID 20
 #define MAX_ACTIVE_PIDS 10
-#define MAX_PMT_PIDS 25
+#define MAX_PMT_PIDS (2 * MAX_ACTIVE_PIDS)
 #define CA_ALGO_DVBCSA 0
 #define CA_ALGO_DES 1
 #define CA_ALGO_AES128 2
@@ -96,7 +96,7 @@ typedef struct struct_pmt
 	uint16_t caids;
 	int active_pid[MAX_ACTIVE_PIDS];
 	int active_pids;
-	int all_pid[2 * MAX_ACTIVE_PIDS];
+	int all_pid[MAX_PMT_PIDS];
 	int all_pids;
 	int id;
 	unsigned char pmt[MAX_PI_LEN];

@@ -1114,7 +1114,7 @@ int get_signal_new(adapter *ad, int *status, int *ber, int *strength, int *snr)
 #if DVBAPIVERSION >= 0x050A
 	int fd = ad->fe;
 	*status = *snr = *ber = *strength = 0;
-	double strengthd, snrd, init_strength, init_snr;
+	double strengthd = 0, snrd = 0, init_strength = 0, init_snr = 0;
 	char *strength_s = "", *snr_s = "";
 	int err = 0;
 	static struct dtv_property enum_cmdargs[] =

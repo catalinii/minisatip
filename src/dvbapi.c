@@ -257,9 +257,11 @@ int dvbapi_reply(sockets *s)
 				"dvbapi: received DMX_STOP for key %d, index %d, adapter %d, demux %d, filter %d, pid %X (%d)",
 				k_id, i, a_id, demux, filter, _pid, _pid);
 			if (i < MAX_KEY_FILTERS && i >= 0)
+			{
 				del_filter(k->filter_id[i]);
-			k->filter_id[i] = -1;
-			k->pid[i] = -1;
+				k->filter_id[i] = -1;
+				k->pid[i] = -1;
+			}
 
 			if (k)
 			{

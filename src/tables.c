@@ -45,6 +45,10 @@
 #include "minisatip.h"
 #include "adapter.h"
 
+#ifndef DISABLE_DDCI
+#include "ddci.h"
+#endif
+
 #define DEFAULT_LOG LOG_TABLES
 
 SCA ca[MAX_CA];
@@ -148,7 +152,7 @@ void add_caid_mask(int ica, int aid, int caid, int mask)
 		i = ca[ica].ad_info[aid].caids++;
 		ca[ica].ad_info[aid].caid[i] = caid;
 		ca[ica].ad_info[aid].mask[i] = mask;
-		LOG("CA %d can handle CAID %04X mask %04X at position %d", ica, caid, mask, i);
+		LOG("CA %d can handle CAID %04X mask %04X on adapter %d at position %d", ica, caid, mask, ad->id, i);
 	}
 	else
 		LOG("CA not enabled %d", ica);

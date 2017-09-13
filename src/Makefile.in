@@ -1,0 +1,148 @@
+
+AUTOMAKE_OPTIONS = foreign
+BUILDDIR := ../build
+TARGET:=../minisatip
+
+CC=@CC@
+EMBEDDED=@EMBEDDED@
+DVBCSA=@DVBCSA@
+DVBAES=@DVBAES@
+DVBCA=@DVBCA@
+SATIPCLIENT=@SATIPCLIENT@
+NETCVCLIENT=@NETCVCLIENT@
+STATIC=@STATIC@
+DVBAPI=@DVBAPI@
+LINUXDVB=@LINUXDVB@
+AXE=@AXE@
+ENIGMA=@ENIGMA@
+DDCI=0
+
+CFLAGS?=-Wall -Wno-switch -ggdb -fPIC $(EXTRA_CFLAGS) @CFLAGS@
+LDFLAGS?=-lpthread @LDFLAGS@
+
+OS := $(shell $(CC) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 2)
+ARCH := $(shell $(CC) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 1)
+
+ifneq ($(UNAME_S),apple)
+        LDFLAGS += -lrt
+else
+	LINUXDVB=0
+endif
+
+SOURCES=minisatip.c socketworks.c stream.c adapter.c utils.c
+
+TABLES=0
+PMT=0
+
+ifeq ($(DVBAES),1)
+LIBS+=crypto
+LDFLAGS-$(STATIC)+=-ldl
+SOURCES+=aes.c
+PMT=1
+else
+CFLAGS+=-DDISABLE_DVBAES
+endif
+
+ifeq ($(DVBCSA),1)
+LIBS+=dvbcsa
+SOURCES+=csa.c
+PMT=1
+else
+CFLAGS+=-DDISABLE_DVBCSA
+endif
+
+ifeq ($(DVBAPI),1)
+SOURCES+=dvbapi.c
+TABLES=1
+PMT=1
+else
+CFLAGS+=-DDISABLE_DVBAPI
+endif
+
+ifeq ($(DVBCA),1)
+LIBS+=dvben50221 dvbapi ucsi
+SOURCES+=ca.c
+TABLES=1
+PMT=1
+else
+CFLAGS+=-DDISABLE_DVBCA
+endif
+
+ifeq ($(PMT),1)
+SOURCES+=pmt.c
+else
+CFLAGS+=-DDISABLE_PMT
+endif
+
+ifeq ($(TABLES),1)
+SOURCES+=tables.c
+else
+CFLAGS+=-DDISABLE_TABLES
+endif
+
+ifeq ($(SATIPCLIENT),1)
+SOURCES+=satipc.c
+else
+CFLAGS+=-DDISABLE_SATIPCLIENT
+endif
+
+ifeq ($(NETCVCLIENT),1)
+SOURCES+=netceiver.c
+LDFLAGS+=-lmcli -lxml2
+else
+CFLAGS+=-DDISABLE_NETCVCLIENT
+endif
+
+ifeq ($(LINUXDVB),1)
+SOURCES+=dvb.c
+else
+CFLAGS+=-DDISABLE_LINUXDVB
+SOURCES+=dvb.c
+endif
+
+ifeq ($(DDCI),1)
+SOURCES+=ddci.c
+CFLAGS+=-DDDCI_TEST
+else
+CFLAGS+=-DDISABLE_DDCI
+endif
+
+SOURCES-$(AXE) += axe.c
+CFLAGS-$(AXE) += -DAXE
+
+CFLAGS-$(ENIGMA) += -DENIGMA
+
+CFLAGS-$(EMBEDDED) += -DNO_BACKTRACE
+
+ifeq ($(STATIC),1)
+LDFLAGS+=$(addsuffix .a,$(addprefix -l:lib,$(LIBS)))
+else
+LDFLAGS+=$(addprefix -l,$(LIBS))
+endif
+
+SOURCES+=$(SOURCES-1)
+CFLAGS+=$(CFLAGS-1)
+LDFLAGS+=$(LDFLAGS-1)
+
+OBJS := $(patsubst %.c, $(BUILDDIR)/%.o, $(SOURCES))
+DEPS=$(OBJS:.o=.d)
+
+$(TARGET): $(DEPS) $(OBJS)
+	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LDFLAGS)
+
+$(BUILDDIR)/%.d : %.c
+	@mkdir -p $(BUILDDIR)
+	@$(CC) $(CFLAGS) -MM $(basename $*).c | sed -e 's@^\(.*\)\.o:@\1.d \1.o:@' > $@
+
+$(BUILDDIR)/%.o : %.c
+	$(CC) $(CFLAGS) -c $*.c -o $@
+
+all: $(TARGET)
+
+clean:
+	rm -rf $(BUILDDIR) $(TARGET) >> /dev/null
+
+# pull in dependency info for *existing* .o files
+ifneq "$(MAKECMDGOALS)" "clean"
+-include $(DEPS)
+endif

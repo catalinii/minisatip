@@ -3,6 +3,6 @@
 #include "adapter.h"
 #include "tables.h"
 void find_ddci_adapter(adapter **a);
-void dvbci_init();
+void ddci_init();
 
 #endif

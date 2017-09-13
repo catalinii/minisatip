@@ -2,9 +2,9 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.4])
-AC_INIT(minisatip, 0.5, https://github.com/catalinii/minisatip)
-AC_CONFIG_SRCDIR([minisatip.h])
-# AC_CONFIG_HEADERS([config.h])
+AC_INIT(minisatip, 0.7, https://github.com/catalinii/minisatip)
+AC_CONFIG_SRCDIR([src/minisatip.h])
+#AC_CONFIG_HEADERS([config.h])
 
 # Checks for programs.
 AC_PROG_CC
@@ -244,7 +244,10 @@ AC_SUBST(DVBAPI)
 AC_SUBST(AXE)
 AC_SUBST(ENIGMA)
 
+AC_CONFIG_FILES([src/Makefile])
+AC_CONFIG_FILES([tests/Makefile])
 AC_CONFIG_FILES([Makefile])
+
 AC_OUTPUT
 
 echo -e "$FM\n"

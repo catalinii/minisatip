@@ -80,7 +80,7 @@ typedef struct struct_satipc
 	uint8_t addpids, setup_pids;
 	unsigned char *tcp_data;
 	int tcp_size, tcp_pos, tcp_len;
-	char use_fe, option_no_session, option_no_setup, option_no_option, option_no_describe;
+	char use_fe, option_no_session, option_no_setup, option_no_option;
 	uint32_t rcvp, repno, rtp_miss, rtp_ooo; // rtp statstics
 	uint16_t rtp_seq;
 	char static_config;
@@ -256,7 +256,7 @@ int satipc_reply(sockets *s)
 		satipc_commit(ad);
 	}
 
-	if (!sip->expect_reply && sip->last_cmd == RTSP_PLAY && !sip->option_no_describe)
+	if (!sip->expect_reply && (sip->last_cmd == RTSP_PLAY || sip->last_cmd == RTSP_DESCRIBE) && !ad->strength)
 		http_request(ad, NULL, "DESCRIBE");
 
 	return 0;
@@ -336,7 +336,7 @@ int satipc_rtcp_reply(sockets *s)
 				ad->id, rp - sip->rcvp, sip->rtp_miss, sip->rtp_ooo,
 				ad->pid_err);
 	}
-	sip->option_no_describe = 1;
+
 	set_adapter_signal(ad, (char *)b, rlen);
 	return 0;
 }
@@ -1370,12 +1370,11 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h)
 			int ds = map_intd(arg[i], satip_delsys, -1);
 			sep = strchr(arg[i], '-');
 			int t = map_intd(sep ? sep + 1 : NULL, NULL, -1);
-			if (ds < 0 || ds >= MAX_DVBAPI_SYSTEMS || t < 0)
+			if (ds < 0 || ds >= MAX_DVBAPI_SYSTEMS || t < 0 || i_order >= sizeof(order))
 			{
-				LOG("Could not determine the delivery system for %s (%d) tuners %d", arg[i], ds, t);
+				LOG("Could not determine the delivery system for %s (%d) tuners %d, order %d", arg[i], ds, t, i_order);
 				continue;
 			}
-
 			s->tuners[ds] = t;
 			order[i_order++] = ds;
 			LOGM("%s: %d tuners for %s", satip_delsys[ds], t, s->url);

@@ -188,6 +188,15 @@ void dump_packets(char *message, unsigned char *b, int len, int packet_offset);
 		ptr = __r >= (size)-ptr ? (size)-1 : ptr + __r;   \
 	} while (0)
 
+#define SAFE_STRCPY(a, b)                                                  \
+	{                                                                      \
+		int x = sizeof(a);                                                 \
+		if (x < 10)                                                        \
+			LOG("sizeof %d is too small at %s:%d", x, __FILE__, __LINE__); \
+		strncpy(a, b, x - 1);                                              \
+		a[x - 1] = 0;                                                      \
+	}
+
 #define LOG_GENERAL 1
 #define LOG_HTTP (1 << 1)
 #define LOG_SOCKETWORKS (1 << 2)
