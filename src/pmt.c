@@ -461,6 +461,7 @@ int get_filter_adapter(int filter)
 void clear_cw_for_pmt(int master_pmt, int parity)
 {
 	int i, dcw = 0;
+	int64_t ctime = getTick();
 	for (i = 0; i < ncws; i++)
 		if (cws[i] && cws[i]->enabled && cws[i]->pmt == master_pmt && cws[i]->parity == parity)
 		{

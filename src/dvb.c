@@ -900,6 +900,7 @@ int dvb_set_pid(adapter *a, int i_pid)
 		int ep = a->active_pids;
 		LOG0("failed setting filter on %s pid %d, errno %d (%s), enabled pids %d", buf, i_pid,
 			 errno, strerror(errno), ep);
+		close(fd);
 		return -1;
 	}
 

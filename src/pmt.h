@@ -163,7 +163,7 @@ static inline SPMT *get_pmt(int id)
 static inline SFilter *get_filter(int id)
 {
 	extern SFilter *filters[];
-	return (id >= 0 && id <= MAX_FILTERS && filters[id] && filters[id]->enabled) ? filters[id] : NULL;
+	return (id >= 0 && id < MAX_FILTERS && filters[id] && filters[id]->enabled) ? filters[id] : NULL;
 }
 int process_pmt(int filter, unsigned char *b, int len, void *opaque);
 void pmt_pid_del(adapter *ad, int pid);

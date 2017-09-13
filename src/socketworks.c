@@ -204,18 +204,21 @@ int udp_connect(char *addr, int port, struct sockaddr_in *serv)
 	if (sock < 0)
 	{
 		LOG("udp_connect failed: socket() %s", strerror(errno));
+		close(sock);
 		return -1;
 	}
 
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0)
 	{
 		LOG("udp_bind: setsockopt(SO_REUSEADDR): %s", strerror(errno));
+		close(sock);
 		return -1;
 	}
 
 	if (connect(sock, (struct sockaddr *)serv, sizeof(*serv)) < 0)
 	{
 		LOG("udp_connect: failed: bind(): %s", strerror(errno));
+		close(sock);
 		return -1;
 	}
 	LOG("New UDP socket %d connected to %s:%d", sock, inet_ntoa(serv->sin_addr),
@@ -279,12 +282,15 @@ int tcp_connect_src(char *addr, int port, struct sockaddr_in *serv, int blocking
 	{
 		struct sockaddr_in src_add;
 		if (!fill_sockaddr(&src_add, src, 0))
+		{
+			close(sock);
 			return -1;
-
+		}
 		if (bind(sock, (struct sockaddr *)&src_add, sizeof(src_add)) < 0)
 		{
 			LOG("%s: failed: bind() on address: %s: error %s",
 				__FUNCTION__, src, strerror(errno));
+			close(sock);
 			return -1;
 		}
 	}
@@ -325,6 +331,7 @@ int tcp_listen(char *addr, int port)
 	{
 		LOG("tcp_listen failed: setsockopt(SO_REUSEADDR): %s",
 			strerror(errno));
+		close(sock);
 		return -1;
 	}
 
@@ -332,11 +339,13 @@ int tcp_listen(char *addr, int port)
 	{
 		LOG("tcp_listen: failed: bind() on address: %s, port %d : error %s",
 			addr ? addr : "ANY", port, strerror(errno));
+		close(sock);
 		return -1;
 	}
 	if (listen(sock, 10) < 0)
 	{
 		LOG("tcp_listen: listen(): %s", strerror(errno));
+		close(sock);
 		return -1;
 	}
 	return sock;

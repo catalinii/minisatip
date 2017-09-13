@@ -559,6 +559,7 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb)
 		DEBUGM("read %d (from %d) from rtsp socket %d (id %d) [%02X %02X, %02X %02X]", tmp_len, sip->tcp_size - sip->tcp_len, socket, ss->id, tmp_b[0], tmp_b[1], tmp_b[2], tmp_b[3]);
 		if (tmp_len <= 0)
 			LOG_AND_RETURN(0, "read %d from RTSP socket, errno %d, %s", tmp_len, errno, strerror(errno));
+		sip->tcp_data[sip->tcp_len + tmp_len] = 0;
 	}
 	else if (len > 65535)
 	{
@@ -1421,7 +1422,7 @@ int satip_getxml(void *x)
 	la = split(arg, satip_xml, MAX_SATIP_XML, ',');
 	for (i = 0; i < la; i++)
 	{
-		strncpy(sxd[i].url, arg[i], sizeof(sxd[i].url));
+		SAFE_STRCPY(sxd[i].url, arg[i]);
 		http_client(sxd[i].url, "", satip_getxml_data, &sxd[i]);
 	}
 	return 0;

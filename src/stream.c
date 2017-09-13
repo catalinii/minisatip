@@ -425,12 +425,12 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp)
 		if (strncmp("port=", arg2[l], 5) == 0)
 			p.port = atoi(arg2[l] + 5);
 		if (strncmp("destination=", arg2[l], 12) == 0)
-			strncpy(p.dest, arg2[l] + 12, sizeof(p.dest));
+			SAFE_STRCPY(p.dest, arg2[l] + 12);
 	}
 	if (default_rtp)
-		strncpy(p.dest, default_rtp, sizeof(p.dest));
+		SAFE_STRCPY(p.dest, default_rtp);
 	if (p.dest[0] == 0 && p.type == TYPE_UNICAST)
-		get_socket_rhost(s->id, p.dest, sizeof(p.dest));
+		get_socket_rhost(s->id, p.dest, sizeof(p.dest) - 1);
 	if (p.dest[0] == 0)
 		strcpy(p.dest, opts.disc_host);
 	if (p.port == 0)
@@ -442,7 +442,7 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp)
 		if (sid->type == STREAM_RTSP_UDP && sid->rsock >= 0)
 		{
 			int oldport = ntohs(sid->sa.sin_port);
-			char *oldhost = get_stream_rhost(sid->sid, ra, sizeof(ra));
+			char *oldhost = get_stream_rhost(sid->sid, ra, sizeof(ra) - 1);
 
 			if (p.port == oldport && !strcmp(p.dest, oldhost))
 				LOG(
@@ -655,8 +655,8 @@ int send_rtcp(int s_id, int64_t ctime)
 
 	char *a = describe_adapter(s_id, sid->adapter, dad, sizeof(dad));
 	unsigned int la = strlen(a);
-	if (la > sizeof(rtcp_buf) - 68)
-		la = sizeof(rtcp_buf) - 70;
+	if (la > sizeof(rtcp_buf) - 78)
+		la = sizeof(rtcp_buf) - 80;
 	len = la + 16;
 	if (len % 4 > 0)
 		len = len - (len % 4) + 4;
@@ -918,7 +918,7 @@ int process_packet(unsigned char *b, adapter *ad)
 	if (p->sid[0] == -1)
 		return 0;
 
-	for (j = 0; p->sid[j] > -1 && j < MAX_STREAMS_PER_PID; j++)
+	for (j = 0; j < MAX_STREAMS_PER_PID && p->sid[j] > -1; j++)
 	{
 		if ((sid = get_sid(p->sid[j])) && sid->do_play)
 		{
