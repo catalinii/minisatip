@@ -1,0 +1,4 @@
+dist: xenial
+language: c
+install: apt-get install libdvbcsa-dev dvb-apps
+
