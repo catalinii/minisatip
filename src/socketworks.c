@@ -414,7 +414,7 @@ int sockets_accept(int socket, void *buf, int len, sockets *ss)
 	if (ni < 0)
 	{
 		LOG("ERROR on accept: could not add new socket %d to the list", new_sock);
-		close(new_socket);
+		close(new_sock);
 		return 1;
 	}
 	if (ss->action != NULL)
