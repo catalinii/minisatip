@@ -1,0 +1,1 @@
+#define HAVE_NETCEIVER_H 1

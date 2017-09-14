@@ -131,12 +131,12 @@ AC_ARG_ENABLE([netcv],
 AS_IF([test "x$enable_netcv" != "xno"], [
 AC_MSG_NOTICE([ == Checking NETCVCLIENT == ])
 
-mcli_dir="../vdr-mcli-plugin"
+mcli_dir="../../vdr-mcli-plugin"
 xml2_dir="/usr/include/libxml2"
 
 AC_ARG_WITH([mcli],
   [AS_HELP_STRING([--with-mcli],
-  [specify vdr-mcli-plugin directory default=../vdr-mcli-plugin])],
+  [specify vdr-mcli-plugin directory default=../../vdr-mcli-plugin])],
   [mcli_dir=$with_mcli])
 
 AC_ARG_WITH([xml2],
@@ -147,9 +147,10 @@ AC_ARG_WITH([xml2],
 CFLAGS="-I. -I$mcli_dir/mcast/client -I$mcli_dir/mcast/common -L$mcli_dir/mcast/client -I$xml2_dir"
 CPPFLAGS="-I. -I$mcli_dir/mcast/client -I$mcli_dir/mcast/common -L$mcli_dir/mcast/client -I$xml2_dir"
 
-
+cd src
 AC_CHECK_HEADERS([netceiver.h],[NETCVCLIENT=1],[NETCVCLIENT=0])
 ])
+cd ..
 
 if test "$NETCVCLIENT" = "1"; then
 FM="$FM\n$netcv enabled"

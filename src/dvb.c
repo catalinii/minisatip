@@ -382,7 +382,8 @@ int dvb_open_device(adapter *ad)
 		else
 			LOG("Set DMX_SET_SOURCE for adapter %d to %d", ad->id,
 				ad->dmx_source);
-		close(ad->dmx);
+		if (ad->dmx >= 0)
+			close(ad->dmx);
 		ad->dmx = -1;
 	}
 
@@ -662,7 +663,7 @@ int dvb_tune(int aid, transponder *tp)
 	int64_t bclear, bpol;
 	int iProp = 0;
 	adapter *ad = get_adapter(aid);
-	int fd_frontend = ad->fe;
+	int fd_frontend;
 
 	int freq = tp->freq;
 	struct dtv_property p_cmd[20];
@@ -683,6 +684,10 @@ int dvb_tune(int aid, transponder *tp)
 	memset(&fep, 0, sizeof(fep));
 #endif
 
+	if (!ad)
+		return -404;
+
+	fd_frontend = ad->fe;
 	memset(p_cmd, 0, sizeof(p_cmd));
 	bclear = getTick();
 
@@ -1221,8 +1226,8 @@ void dvb_get_signal(adapter *ad)
 	if (strength > 255 || strength < 0)
 		strength = 255;
 
-	if (strength > 255 || strength < 0)
-		strength = 255;
+	if (snr > 255 || snr < 0)
+		snr = 255;
 
 	// keep the assignment at the end for the signal thread to get the right values as no locking is done on the adapter
 	ad->snr = snr;

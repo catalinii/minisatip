@@ -491,7 +491,7 @@ int axe_tune(int aid, transponder *tp)
 
 	int64_t bclear, bpol;
 	int iProp = 0;
-	int fd_frontend = ad->fe;
+	int fd_frontend;
 
 	int freq = tp->freq;
 	struct dtv_property p_cmd[20];
@@ -506,6 +506,11 @@ int axe_tune(int aid, transponder *tp)
 
 	struct dtv_properties cmdseq_clear =
 		{.num = 1, .props = p_clear};
+
+	if (!ad)
+		return -404;
+
+	fd_frontend = ad->fe;
 
 	axe_set_tuner_led(aid + 1, 1);
 	axe_dmxts_stop(ad->dvr);
@@ -627,7 +632,7 @@ int axe_tune(int aid, transponder *tp)
 int axe_set_pid(adapter *a, int i_pid)
 {
 	if (i_pid > 8192 || a == NULL)
-		LOG_AND_RETURN(-1, "pid %d > 8192 for ADAPTER %d", i_pid, a->id);
+		LOG_AND_RETURN(-1, "pid %d > 8192 for ADAPTER %d", i_pid, a ? a->id : -1);
 	if (axe_dmxts_add_pid(a->dvr, i_pid) < 0)
 	{
 		LOG("failed setting filter on PID %d for ADAPTER %d (%s)", i_pid, a->id, strerror(errno));
@@ -733,7 +738,9 @@ int axe_close(adapter *a2)
 		LOG("AXE standby: adapter %d", aid);
 		axe_fe_standby(c->fe2, -1);
 		axe_set_tuner_led(aid + 1, 0);
-		ioctl(c->fe2, FE_SET_VOLTAGE, SEC_VOLTAGE_OFF);
+		if (ioctl(c->fe2, FE_SET_VOLTAGE, SEC_VOLTAGE_OFF) < 0)
+			LOG("ioctl FE_SET_VOLTAGE for fd %d failed: %d : %s ", c->fe2, errno, strerror(errno));
+
 		close(c->fe2);
 		c->fe2 = -1;
 		c->old_diseqc = c->old_pol = c->old_hiband = -1;
@@ -885,10 +892,18 @@ static char *axe_vdevice_read(int aid, char *buf, size_t buflen)
 {
 	size_t len;
 	int i, fd;
+	if (buflen < 1)
+		return NULL;
+	buf[buflen - 1] = 0;
 	for (i = 0; i < 10; i++)
 	{
 		snprintf(buf, buflen, "/proc/STAPI/stpti/PTI%d/vDeviceInfo", aid ^ 1);
 		fd = open(buf, O_RDONLY);
+		if (fd < 0)
+		{
+			LOG("Could not open %s, error %d: %s", buf, errno, strerror(errno));
+			continue;
+		}
 		len = read(fd, buf, buflen - 1);
 		close(fd);
 		if (len > 200)

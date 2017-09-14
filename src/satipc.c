@@ -48,8 +48,8 @@
 
 #define TCP_DATA_SIZE ((ADAPTER_BUFFER / 1316) * (1316 + 16) * 3)
 #define TCP_DATA_MAX (TCP_DATA_SIZE * 8)
-#define SATIPC_ITEM (0x3000000000000)
-#define MAKE_ITEM(a, b) ((SATIPC_ITEM | (a << 24) | (b)))
+#define SATIPC_ITEM (0x30000000)
+#define MAKE_ITEM(a, b) ((SATIPC_ITEM | (a << 16) | (b)))
 
 extern char *fe_delsys[];
 
@@ -344,7 +344,7 @@ int satipc_rtcp_reply(sockets *s)
 int satipc_open_device(adapter *ad)
 {
 	satipc *sip = satip[ad->id];
-	if (!sip || !sip->sip)
+	if (!sip)
 		return 1;
 
 	int64_t ctime = getTick();
@@ -354,7 +354,7 @@ int satipc_open_device(adapter *ad)
 	sip->last_connect = ctime;
 	ad->fe = tcp_connect_src(sip->sip, sip->sport, NULL, 1, sip->source_ip[0] ? sip->source_ip : NULL); // blocking socket
 	if (ad->fe < 0)
-		return 2;
+		LOG_AND_RETURN(2, "could not connect to %s:%d", sip->sip, sip->sport);
 
 	LOG("satipc: connected to SAT>IP server %s port %d %s handle %d %s %s", sip->sip,
 		sip->sport, sip->use_tcp ? "[RTSP OVER TCP]" : "", ad->fe, sip->source_ip[0] ? "from source" : "", sip->source_ip[0] ? sip->source_ip : "");
@@ -363,23 +363,37 @@ int satipc_open_device(adapter *ad)
 	{
 		sip->listen_rtp = opts.start_rtp + 1000 + ad->id * 2;
 		ad->dvr = udp_bind(NULL, sip->listen_rtp);
+		if (ad->dvr < 0)
+			LOG("Could not listen on port %d: err %d: %s", sip->listen_rtp, errno, strerror(errno));
+
 		sip->rtcp = udp_bind(NULL, sip->listen_rtp + 1);
+		if (sip->rtcp < 0)
+			LOG("Could not listen on port %d: err %d: %s", sip->listen_rtp + 1, errno, strerror(errno));
 
 		ad->fe_sock = sockets_add(ad->fe, NULL, ad->id, TYPE_TCP,
 								  (socket_action)satipc_reply, (socket_action)satipc_close,
 								  (socket_action)satipc_timeout);
-		sip->rtcp_sock = sockets_add(sip->rtcp, NULL, ad->id, TYPE_TCP,
-									 (socket_action)satipc_rtcp_reply, (socket_action)satipc_close,
-									 NULL);
+		sip->rtcp_sock = -1;
+		if (sip->rtcp >= 0)
+			sip->rtcp_sock = sockets_add(sip->rtcp, NULL, ad->id, TYPE_TCP,
+										 (socket_action)satipc_rtcp_reply, (socket_action)satipc_close,
+										 NULL);
 		sockets_timeout(ad->fe_sock, 25000); // 25s
-		set_socket_receive_buffer(ad->dvr, opts.dvr_buffer);
-		if (ad->fe_sock < 0 || ad->dvr < 0 || sip->rtcp < 0 || sip->rtcp_sock < 0)
+		if (ad->dvr >= 0)
+			set_socket_receive_buffer(ad->dvr, opts.dvr_buffer);
+		if (ad->fe_sock < 0 || sip->rtcp_sock < 0 || ad->dvr < 0 || sip->rtcp < 0)
 		{
-			sockets_del(sip->rtcp_sock);
-			sockets_del(ad->fe_sock);
-			close(sip->rtcp);
-			close(ad->dvr);
-			close(ad->fe);
+			if (sip->rtcp_sock >= 0)
+				sockets_del(sip->rtcp_sock);
+			if (ad->fe_sock >= 0)
+				sockets_del(ad->fe_sock);
+			if (sip->rtcp > 0)
+				close(sip->rtcp);
+			if (ad->dvr > 0)
+				close(ad->dvr);
+			if (ad->fe > 0)
+				close(ad->fe);
+			ad->fe = ad->dvr = sip->rtcp = ad->fe_sock = sip->rtcp_sock = 0;
 		}
 	}
 	else
@@ -427,6 +441,8 @@ int satipc_open_device(adapter *ad)
 void satip_close_device(adapter *ad)
 {
 	satipc *sip = get_satip(ad->id);
+	if (!sip)
+		return;
 	LOG("satip device %s:%d is closing", sip->sip, sip->sport);
 	http_request(ad, NULL, "TEARDOWN");
 	sip->session[0] = 0;
@@ -596,6 +612,14 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb)
 		{
 			copy16r(rtsp_len, rtsp, 2);
 			DEBUGM("found at pos %d, rtsp_len %d, len %d", sip->tcp_pos, rtsp_len, sip->tcp_len);
+
+			if (rtsp_len < 0 || rtsp_len > 0xFFFF)
+			{
+				skipped_bytes++;
+				sip->tcp_pos++;
+				continue;
+			}
+
 			if (skipped_bytes)
 			{
 				LOG("%s: skipped %d bytes", __FUNCTION__, skipped_bytes);
@@ -689,7 +713,13 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb)
 void satip_post_init(adapter *ad)
 {
 	satipc *sip;
-	get_ad_and_sip(ad->id);
+	if (!ad)
+		return;
+
+	sip = get_satip(ad->id);
+	if (!sip)
+		return;
+
 	if (sip->use_tcp)
 		sockets_setread(ad->sock, satipc_tcp_read);
 	else
@@ -709,8 +739,8 @@ int satipc_set_pid(adapter *ad, int pid)
 	satipc *sip;
 	sip = get_satip(ad->id);
 	int aid = ad->id;
-	LOG("satipc: set_pid for adapter %d, pid %d, err %d", aid, pid, sip->err);
-	if (sip->err) // error reported, return error
+	LOG("satipc: set_pid for adapter %d, pid %d, err %d", aid, pid, sip ? sip->err : -2);
+	if (!sip || sip->err) // error reported, return error
 		return 0;
 	sip->apid[sip->lap] = pid;
 	sip->lap++;
@@ -721,8 +751,8 @@ int satipc_del_filters(adapter *ad, int fd, int pid)
 {
 	satipc *sip = get_satip(ad->id);
 	fd -= 100;
-	LOG("satipc: del_pid for aid %d, pid %d, err %d", fd, pid, sip->err);
-	if (sip->err) // error reported, return error
+	LOG("satipc: del_pid for aid %d, pid %d, err %d", fd, pid, sip ? sip->err : -2);
+	if (!sip || sip->err) // error reported, return error
 		return 0;
 	sip->dpid[sip->ldp] = pid;
 	sip->ldp++;
@@ -922,6 +952,7 @@ void tune_url(adapter *ad, char *url)
 	case SYS_DVBT:
 	case SYS_ISDBT:
 		get_t2_url(ad, url);
+		break;
 	default:
 		LOG("No system specified %d", ad->sys[0]);
 		break;
@@ -1336,7 +1367,7 @@ char *satip_delsys[] =
 	{"undefined", "DVBC", "ATSCC", "DVBT", "DSS", "DVBS", "DVBS2", "DVBH", "ISDBT",
 	 "ISDBS", "ISDBC", "ATSCT", "ATSCMH", "DMBTH", "CMMB", "DAB", "DVBT2",
 	 "TURBO", "DVBCC", "DVBC2",
-	 NULL};
+	 NULL, NULL, NULL, NULL};
 
 void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h)
 {

@@ -117,6 +117,8 @@ typedef struct struct_pmt
 	char active;  // PMT structure was already filled
 	char running; // PMT has channels running
 	uint16_t filter;
+	int clean_pos, clean_cc;
+	uint8_t *clean;
 } SPMT;
 
 // filters can be setup for specific pids and masks

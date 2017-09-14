@@ -657,6 +657,7 @@ int ca_init(ca_device_t *d)
 	return 0;
 fail:
 	close(fd);
+	d->fd = -1;
 	d->enabled = 0;
 	return 1;
 }
@@ -678,7 +679,7 @@ int dvbca_init_dev(adapter *ad)
 	sprintf(ca_dev_path, "/dev/dvb/adapter%d/ca0", ad->pa);
 #endif
 	fd = open(ca_dev_path, O_RDWR);
-	if (fd <= 0)
+	if (fd < 0)
 		LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "No CA device detected on adapter %d", ad->id);
 	if (!c)
 	{
@@ -720,7 +721,7 @@ int dvbca_close_device(ca_device_t *c)
 		en50221_tl_destroy_slot(c->tl, c->slot_id);
 	if (c->sl)
 		en50221_sl_destroy(c->sl);
-	if (c->tl >= 0)
+	if (c->tl)
 		en50221_tl_destroy(c->tl);
 	if (c->fd >= 0)
 		close(c->fd);

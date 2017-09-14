@@ -49,9 +49,6 @@
 
 #define DEFAULT_LOG LOG_PMT
 
-//to be removed
-#define TABLES_ITEM 0x2000000000000
-
 SPMT *pmts[MAX_PMT];
 SMutex pmts_mutex;
 int npmts;
@@ -908,6 +905,7 @@ int pmt_add(int i, int adapter, int sid, int pmt_pid)
 	pmt->opaque = NULL;
 	pmt->ca_mask = pmt->disabled_ca_mask = 0;
 	pmt->name[0] = pmt->provider[0] = 0;
+	pmt->clean_pos = pmt->clean_cc = 0;
 
 	pmt->active_pids = 0;
 	memset(pmt->active_pid, 0, sizeof(pmt->active_pids));
@@ -1016,8 +1014,7 @@ void clean_psi(adapter *ad, uint8_t *b)
 {
 	int pid = PID_FROM_TS(b);
 	int pmt_len;
-	int64_t clean_key = TABLES_ITEM + ((1 + ad->id) << 24) + pid;
-	int64_t item_key = TABLES_ITEM + (ad->id << 16) + pid;
+	int clean_size = 1500;
 	uint8_t *clean, *pmt;
 	SPid *p;
 	SPMT *cpmt;
@@ -1028,25 +1025,24 @@ void clean_psi(adapter *ad, uint8_t *b)
 	if (!p || p->sid[0] == -1) // no need to fix this PMT as it not requested by any stream
 		return;
 
-	if (!(cpmt = get_pmt(p->pmt))) // no key associated with PMT - most likely the channel is clear
+	if (!(cpmt = get_pmt(-p->pmt))) // no key associated with PMT - most likely the channel is clear
 		return;
 
-	if (!(cpmt->cw))
+	if (!(cpmt->cw) || !cpmt->running)
 	{
 		//		mark_pid_null(b);
 		return;
 	}
-	clean = getItem(clean_key);
-	if (!(pmt = getItem(item_key)))
-	{
-		pmt_len = ((b[6] & 0xF) << 8) + b[7];
-		if ((b[1] & 0x40) && (pmt_len < 183))
-			pmt = b + 5;
-	}
+	if (!cpmt->clean)
+		cpmt->clean = malloc1(clean_size + 10);
+	clean = cpmt->clean;
 
-	if (!clean && !pmt)
+	pmt_len = cpmt->pmt_len;
+	pmt = cpmt->pmt;
+
+	if (!clean)
 	{
-		mark_pid_null(b);
+		//		mark_pid_null(b);
 		return;
 	}
 
@@ -1055,17 +1051,8 @@ void clean_psi(adapter *ad, uint8_t *b)
 		uint8_t *n, *o;
 		int nlen = 0;
 		uint32_t crc;
-		setItem(clean_key, pmt, 1, 0);
-		if (getItemSize(clean_key) < 1500)
-			setItemSize(clean_key, 1500);
-		clean = getItem(clean_key);
-		if (!clean)
-		{
-			mark_pid_null(b);
-			return;
-		}
-		memset(clean, -1, getItemSize(clean_key));
-		setItem(clean_key, pmt, 12, 0);
+		memset(clean, -1, clean_size + 10);
+		memcpy(clean, pmt, 12);
 		pi_len = ((pmt[10] & 0xF) << 8) + pmt[11];
 		pmt_len = ((pmt[1] & 0xF) << 8) + pmt[2];
 		LOG("Cleaning PMT for pid %d, pmt_len %d, pi_len %d, pmt %p", pid,
@@ -1121,31 +1108,28 @@ void clean_psi(adapter *ad, uint8_t *b)
 
 	if (clean)
 	{
-		uint16_t *pos = (uint16_t *)clean + 1498;
 		pmt_len = ((clean[1] & 0xF) << 8) + clean[2];
-		cc = (uint8_t *)clean + 1497;
 		if (b[1] & 0x40)
-			*pos = 0;
-		if (*pos > pmt_len)
+			cpmt->clean_pos = 0;
+		if (cpmt->clean_pos > pmt_len || cpmt->clean_pos < 0)
 		{
 			mark_pid_null(b);
 			return;
 		}
-		if (*pos == 0)
+		if (cpmt->clean_pos == 0)
 		{
 			memcpy(b + 5, clean, 183);
-			*pos = 183;
+			cpmt->clean_pos = 183;
 		}
 		else
 		{
-			memcpy(b + 4, clean + *pos, 184);
-			*pos += 184;
+			memcpy(b + 4, clean + cpmt->clean_pos, 184);
+			cpmt->clean_pos += 184;
 		}
-		*cc = (*cc + 1) & 0xF;
-		b[3] = (b[3] & 0xF0) | *cc;
+		cpmt->clean_cc = (cpmt->clean_cc + 1) & 0xF;
+		b[3] = (b[3] & 0xF0) | cpmt->clean_cc;
 		return;
 	}
-	mark_pid_null(b);
 }
 
 int getEMMlen(unsigned char *b, int len)
@@ -1438,7 +1422,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 
 	if (!pmt || !pmt->enabled)
 	{
-		LOG("PMT %d does not exist", pmt->id);
+		LOG("PMT %d does not exist", pmt ? pmt->id : -1);
 		return 0;
 	}
 	if (pmt->skip_first)
@@ -1460,6 +1444,10 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 		p = find_pid(pmt->adapter, pid);
 		if (p)
 			p->pmt = -pmt->id;
+
+		if (opts.clean_psi && p->sid[0] != -1)
+			clean_psi(ad, b);
+
 		return 0;
 	}
 
@@ -1556,8 +1544,6 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 #endif
 	}
 
-	if (opts.clean_psi && p->sid[0] != -1)
-		clean_psi(ad, b);
 	if (!pmt->running)
 		set_filter_flags(filter, 0);
 	mutex_unlock(&pmt->mutex);

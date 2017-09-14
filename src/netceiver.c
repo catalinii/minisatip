@@ -118,7 +118,7 @@ int netcv_del_pid(adapter *ad, int fd, int pid)
 	if (SN->err) // error reported, return error
 		return 0;
 
-	for (i = 0; i < MAX_PIDS; i++)
+	for (i = 0; i < MAX_PIDS - 1; i++)
 		if (SN->npid[i] == pid || hit)
 		{
 			SN->npid[i] = SN->npid[i + 1];
@@ -136,7 +136,7 @@ void netcv_commit(adapter *ad)
 	int i;
 
 	int m_pos = 0;
-	fe_type_t type;
+	fe_type_t type = 0;
 	recv_sec_t m_sec;
 	struct dvb_frontend_parameters m_fep;
 	dvb_pid_t m_pids[MAX_PIDS];
@@ -221,11 +221,11 @@ void netcv_commit(adapter *ad)
 
 			break;
 
-			/* set roll-off */
-			// TODO: check if needed for DVB-S2 transponders
-			m_fep.u.qpsk.fec_inner |= (tp->ro << 24);
-
-			break;
+		/* set roll-off */
+		// TODO: check if needed for DVB-S2 transponders
+		// unreachable code
+		//			m_fep.u.qpsk.fec_inner |= (tp->ro << 24);
+		//			break;
 
 		case SYS_DVBC_ANNEX_A:
 			m_pos = 0xfff; /* not sure, to be tested */

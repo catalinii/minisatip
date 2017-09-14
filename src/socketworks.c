@@ -103,7 +103,7 @@ getlocalip()
 	{
 		h = get_sock_shost(sock);
 		if (h)
-			strcpy(localip, h);
+			SAFE_STRCPY(localip, h);
 	}
 	close(sock);
 	return localip;
@@ -204,7 +204,6 @@ int udp_connect(char *addr, int port, struct sockaddr_in *serv)
 	if (sock < 0)
 	{
 		LOG("udp_connect failed: socket() %s", strerror(errno));
-		close(sock);
 		return -1;
 	}
 
@@ -276,7 +275,10 @@ int tcp_connect_src(char *addr, int port, struct sockaddr_in *serv, int blocking
 	set_linux_socket_timeout(sock);
 
 	if (!blocking)
-		set_linux_socket_nonblock(sock);
+	{
+		if (set_linux_socket_nonblock(sock) < 0)
+			LOG("%s: could not set the socket %d in nonblocking mode %d err: %s", __FUNCTION__, sock, errno, strerror(errno));
+	}
 
 	if (src && src[0])
 	{
@@ -369,7 +371,10 @@ int connect_local_socket(char *file, int blocking)
 	set_linux_socket_timeout(sock);
 
 	if (blocking)
-		set_linux_socket_nonblock(sock);
+	{
+		if (set_linux_socket_nonblock(sock) < 0)
+			LOG("%s: could not set the socket %d in nonblocking mode %d err: %s", __FUNCTION__, sock, errno, strerror(errno));
+	}
 
 	if (connect(sock, (struct sockaddr *)&serv, sizeof(serv)) < 0)
 	{
@@ -388,7 +393,8 @@ char *get_sock_shost(int fd)
 {
 	struct sockaddr_in sin;
 	socklen_t len = sizeof(sin);
-	getsockname(fd, (struct sockaddr *)&sin, &len);
+	if (getsockname(fd, (struct sockaddr *)&sin, &len))
+		return "none";
 	return inet_ntoa(sin.sin_addr);
 }
 
@@ -396,7 +402,8 @@ int get_sock_sport(int fd)
 {
 	struct sockaddr_in sin;
 	socklen_t len = sizeof(sin);
-	getsockname(fd, (struct sockaddr *)&sin, &len);
+	if (getsockname(fd, (struct sockaddr *)&sin, &len))
+		return -1;
 	return ntohs(sin.sin_port);
 }
 
@@ -413,11 +420,8 @@ int sockets_accept(int socket, void *buf, int len, sockets *ss)
 	new_sock = accept(ss->sock, (struct sockaddr *)&sa, (socklen_t *)&sas);
 	if (new_sock < 0)
 	{
-		if (errno != EINTR)
-		{
-			LOG("sockets_accept: accept()");
-			return 1;
-		}
+		LOG("sockets_accept: failed %d: %s", errno, strerror(errno));
+		return 1;
 	}
 	ni = sockets_add(new_sock, &sa, -1, TYPE_TCP, NULL, NULL, NULL);
 	if (ni < 0)
@@ -462,7 +466,7 @@ void sockets_lock(sockets *ss)
 		if ((rv = mutex_lock(ss->lock)))
 		{
 			LOG("%s: Changing socket %d lock %p to NULL error %d %s",
-				__FUNCTION__, ss->id, ss->lock, rv, strerror(rv));
+				__FUNCTION__, ss->id, ss->lock, rv, strerror((rv > 0) ? rv : 0));
 			ss->lock = NULL;
 		}
 }
@@ -474,7 +478,7 @@ void sockets_unlock(sockets *ss)
 		if ((rv = mutex_unlock(ss->lock)))
 		{
 			LOG("%s: Changing socket %d lock %p to NULL error %d %s",
-				__FUNCTION__, ss->id, ss->lock, rv, strerror(rv));
+				__FUNCTION__, ss->id, ss->lock, rv, strerror((rv > 0) ? rv : 0));
 			ss->lock = NULL;
 		}
 	mutex_unlock(&ss->mutex);

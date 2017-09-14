@@ -432,7 +432,7 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp)
 	if (p.dest[0] == 0 && p.type == TYPE_UNICAST)
 		get_socket_rhost(s->id, p.dest, sizeof(p.dest) - 1);
 	if (p.dest[0] == 0)
-		strcpy(p.dest, opts.disc_host);
+		SAFE_STRCPY(p.dest, opts.disc_host);
 	if (p.port == 0)
 		p.port = start_rtp;
 	LOG("decode_transport ->type %d, ttl %d new socket to: %s:%d", p.type,
@@ -794,20 +794,18 @@ int flush_streami(streams *sid, int64_t ctime)
 int check_new_transponder(adapter *ad, int rlen)
 {
 	unsigned char *b;
-	int all_good = 0;
 	int tid = 0;
 	int i;
 
 	for (i = 0; i < rlen; i += 188)
 	{
-
 		b = ad->buf + i;
 		if (b[0] == 0x47 && b[1] == 0x40 && b[2] == 0) // pid 0, calculate transponder_id
 		{
 			tid = b[8] * 256 + b[9];
 			if (tid != ad->wait_transponder_id)
 			{
-				all_good = 1;
+				ad->wait_transponder_id = tid;
 				LOG("Got the new transponder %04X %d, position %d, %jd ms after tune", tid, tid, i, getTick() - ad->tune_time);
 				memmove(ad->buf, ad->buf + i, rlen - i);
 				return rlen - i;
@@ -816,10 +814,7 @@ int check_new_transponder(adapter *ad, int rlen)
 				LOGM("Got old transponder id %04X %d, position %d, %jd ms after tune", tid, tid, i, getTick() - ad->tune_time);
 		}
 	}
-	if (!all_good)
-		return 0;
-	ad->wait_transponder_id = tid;
-	return 1;
+	return 0;
 }
 
 int check_cc(adapter *ad)

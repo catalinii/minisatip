@@ -222,15 +222,14 @@ int dvbapi_reply(sockets *s)
 					}
 				}
 			}
-			if (i >= 0 && fid >= 0)
+			if (i >= 0 && fid >= 0 && k)
 			{
 				k->filter_id[i] = fid;
 				k->filter[i] = filter;
 				k->demux[i] = demux;
 				k->pid[i] = _pid;
 				k->ecm_parity[i] = -1;
-				if (k)
-					k->ecms++;
+				k->ecms++;
 				update_pids(a_id);
 			}
 			else if (not_found)

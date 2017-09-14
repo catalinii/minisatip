@@ -1412,8 +1412,9 @@ int ssdp_discovery(sockets *s)
 				opts.bootid, opts.device_id);
 		salen = sizeof(ssdp_sa);
 		LOGM("Discovery packet %d:\n%s", i + 1, buf);
-		sendto(s->sock, buf, strlen(buf), MSG_NOSIGNAL,
-			   (const struct sockaddr *)&ssdp_sa, salen);
+		int wb = sendto(s->sock, buf, strlen(buf), MSG_NOSIGNAL, (const struct sockaddr *)&ssdp_sa, salen);
+		if (wb != strlen(buf))
+			LOG("incomplete ssdp_discovery: wrote %d out of %d: error %d: %s", wb, strlen(buf), errno, strerror(errno));
 	}
 	s->rtime = getTick();
 	return 0;
@@ -1481,8 +1482,10 @@ int ssdp_reply(sockets *s)
 			LOG(
 				"A new device joined the network with the same Device ID:  %s, asking to change DEVICEID.SES.COM",
 				get_socket_rhost(s->id, ra, sizeof(ra)));
-			sendto(ssdp, buf, strlen(buf), MSG_NOSIGNAL,
-				   (const struct sockaddr *)&s->sa, salen);
+			int wb = sendto(ssdp, buf, strlen(buf), MSG_NOSIGNAL,
+							(const struct sockaddr *)&s->sa, salen);
+			if (wb != strlen(buf))
+				LOG("incomplete ssdp_reply notify: wrote %d out of %d: error %d: %s", wb, strlen(buf), errno, strerror(errno));
 		}
 
 		return 0;
@@ -1517,8 +1520,9 @@ int ssdp_reply(sockets *s)
 		 opts.bootid, did, opts.http_host);
 	//use ssdp (unicast) even if received to multicast address
 	LOGM("%s", buf);
-	sendto(ssdp, buf, strlen(buf), MSG_NOSIGNAL,
-		   (const struct sockaddr *)&s->sa, salen);
+	int wb = sendto(ssdp, buf, strlen(buf), MSG_NOSIGNAL, (const struct sockaddr *)&s->sa, salen);
+	if (wb != strlen(buf))
+		LOG("incomplete ssdp_reply: wrote %d out of %d: error %d: %s", wb, strlen(buf), errno, strerror(errno));
 	return 0;
 }
 

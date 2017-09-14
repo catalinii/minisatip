@@ -94,7 +94,7 @@ int init_tmpinfo(int no)
 	return 0;
 }
 
-STmpinfo *getItemPos(int64_t key)
+STmpinfo *getItemPos(uint32_t key)
 {
 	static __thread STmpinfo *last;
 	int i;
@@ -111,7 +111,7 @@ STmpinfo *getItemPos(int64_t key)
 	return NULL;
 }
 
-STmpinfo *getFreeItemPos(int64_t key)
+STmpinfo *getFreeItemPos(uint32_t key)
 {
 	int i, ek = 0;
 	int64_t tick = getTick();
@@ -137,7 +137,7 @@ STmpinfo *getFreeItemPos(int64_t key)
 	return NULL;
 }
 
-unsigned char *getItem(int64_t key)
+unsigned char *getItem(uint32_t key)
 {
 	STmpinfo *s = getItemPos(key);
 	if (s)
@@ -145,13 +145,13 @@ unsigned char *getItem(int64_t key)
 	return s ? s->data : NULL;
 }
 
-int getItemLen(int64_t key)
+int getItemLen(uint32_t key)
 {
 	STmpinfo *s = getItemPos(key);
 	return s ? s->len : 0;
 }
 
-int getItemSize(int64_t key)
+int getItemSize(uint32_t key)
 {
 	STmpinfo *s = getItemPos(key);
 	if (!s)
@@ -159,7 +159,7 @@ int getItemSize(int64_t key)
 	return s->max_size;
 }
 
-int setItemLen(int64_t key, int len)
+int setItemLen(uint32_t key, int len)
 {
 	STmpinfo *s = getItemPos(key);
 	if (!s || (len > s->max_size))
@@ -168,7 +168,7 @@ int setItemLen(int64_t key, int len)
 	return 0;
 }
 
-int setItemSize(int64_t key, uint32_t max_size)
+int setItemSize(uint32_t key, uint32_t max_size)
 {
 	STmpinfo *s = getItemPos(key);
 	if (!s)
@@ -184,7 +184,7 @@ int setItemSize(int64_t key, uint32_t max_size)
 	return 0;
 }
 
-int setItemTimeout(int64_t key, int tmout)
+int setItemTimeout(uint32_t key, int tmout)
 {
 	STmpinfo *s = getItemPos(key);
 	if (!s)
@@ -195,7 +195,7 @@ int setItemTimeout(int64_t key, int tmout)
 	return 0;
 }
 
-int setItem(int64_t key, unsigned char *data, int len, int pos) // pos = -1 -> append, owerwrite the existing key
+int setItem(uint32_t key, unsigned char *data, int len, int pos) // pos = -1 -> append, owerwrite the existing key
 {
 	STmpinfo *s = getItemPos(key);
 	if (!s)
@@ -228,7 +228,7 @@ int setItem(int64_t key, unsigned char *data, int len, int pos) // pos = -1 -> a
 	return 0;
 }
 
-int delItem(int64_t key)
+int delItem(uint32_t key)
 {
 	STmpinfo *s = getItemPos(key);
 	if (!s)
@@ -240,7 +240,7 @@ int delItem(int64_t key)
 	return 0;
 }
 
-int delItemMask(int64_t key, int64_t mask)
+int delItemMask(uint32_t key, uint32_t mask)
 {
 	int i;
 	for (i = 0; i < MAX_SINFO; i++)
@@ -501,6 +501,7 @@ int /* Returns 0 on success, -1 on error */
 	FILE *f;
 	char path[255];
 	char buf[255];
+	char log_file[sizeof(buf)];
 
 	memset(path, 0, sizeof(path));
 	if ((f = fopen(pid_file, "rt")))
@@ -555,21 +556,23 @@ int /* Returns 0 on success, -1 on error */
 	//	chdir ("/tmp");				 /* Change to root directory */
 
 	fdi = open("/dev/null", O_RDWR);
-
-	snprintf(buf, sizeof(buf), "%s", opts.log_file);
-
+	memset(buf, 0, sizeof(buf));
+	snprintf(buf, sizeof(buf) - 1, "%s", opts.log_file);
+	SAFE_STRCPY(log_file, buf);
 	if (fdi != STDIN_FILENO) /* 'fdi' should be 0 */
 	{
-		close(fdi);
+		if (fdi >= 0)
+			close(fdi);
 		return -1;
 	}
 	if (stat(buf, &sb) == -1)
-		fdo = open(buf, O_RDWR | O_CREAT, 0666);
+		fdo = open(log_file, O_RDWR | O_CREAT, 0666);
 	else
-		fdo = open(buf, O_RDWR | O_APPEND);
+		fdo = open(log_file, O_RDWR | O_APPEND);
 	if (fdo != STDOUT_FILENO) /* 'fd' should be 1 */
 	{
-		close(fdo);
+		if (fdo >= 0)
+			close(fdo);
 		return -1;
 	}
 	if (dup2(STDOUT_FILENO, STDERR_FILENO) != STDERR_FILENO)
@@ -1097,7 +1100,6 @@ char *readfile(char *fn, char *ctype, int *len)
 	struct stat sb;
 	int fd, nl = 0;
 	*len = 0;
-	ctype[0] = 0;
 
 	if (strstr(fn, ".."))
 		return 0;
@@ -1129,6 +1131,7 @@ char *readfile(char *fn, char *ctype, int *len)
 	*len = nl;
 	if (ctype)
 	{
+		ctype[0] = 0;
 		if (endswith(fn, "png"))
 			strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: image/png\r\nConnection: close");
 		else if (endswith(fn, "jpg") || endswith(fn, "jpeg"))
@@ -1252,8 +1255,11 @@ int mutex_unlock1(char *FILE, int line, SMutex *mutex)
 	if (!mutex || mutex->enabled)
 	{
 		LOGM("%s:%d Unlocking mutex %p", FILE, line, mutex);
-		mutex->state--;
-		rv = pthread_mutex_unlock(&mutex->mtx);
+		if (mutex)
+		{
+			mutex->state--;
+			rv = pthread_mutex_unlock(&mutex->mtx);
+		}
 	}
 	else
 		LOG("%s:%d Unlock disabled mutex %p", FILE, line, mutex);
@@ -1378,6 +1384,7 @@ struct struct_array
 	SMutex mutex;
 };
 
+// leaves sa[i]->mutex locked
 int add_new_lock(void **arr, int count, int size, SMutex *mutex)
 {
 	int i;
@@ -1391,8 +1398,11 @@ int add_new_lock(void **arr, int count, int size, SMutex *mutex)
 			{
 				sa[i] = malloc1(size);
 				if (!sa[i])
-					LOG_AND_RETURN(-1,
-								   "Could not allocate memory for %p index %d", arr, i);
+				{
+					mutex_unlock(mutex);
+					LOG("Could not allocate memory for %p index %d", arr, i);
+					return -1;
+				}
 				memset(sa[i], 0, size);
 			}
 			mutex_init(&sa[i]->mutex);
@@ -1593,7 +1603,7 @@ void http_client_read(sockets *s)
 		char headers[500];
 		sprintf(headers, "GET %s HTTP/1.0\r\n\r\n", (char *)h->req);
 		LOGM("%s: sending to %d: %s", __FUNCTION__, s->sock, (char *)h->req);
-		send(s->sock, headers, strlen(headers), MSG_NOSIGNAL);
+		sockets_write(s->id, headers, strlen(headers));
 		h->req[0] = 0;
 		return;
 	}

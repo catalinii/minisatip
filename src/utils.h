@@ -90,18 +90,18 @@ typedef struct struct_http_client
 Shttp_client *httpc[MAX_HTTPC];
 int http_client(char *url, char *request, void *callback, void *opaque);
 
-unsigned char *getItem(int64_t key);
-int getItemLen(int64_t key);
-int setItem(int64_t key, unsigned char *data, int len, int pos);
-int delItem(int64_t key);
-int delItemMask(int64_t key, int64_t mask);
+unsigned char *getItem(uint32_t key);
+int getItemLen(uint32_t key);
+int setItem(uint32_t key, unsigned char *data, int len, int pos);
+int delItem(uint32_t key);
+int delItemMask(uint32_t key, uint32_t mask);
 int delItemP(void *p);
 int split(char **rv, char *s, int lrv, char sep);
-int setItemSize(int64_t key, uint32_t max_size);
-int setItemTimeout(int64_t key, int tmout);
-int setItem(int64_t key, unsigned char *data, int len, int pos);
-int getItemSize(int64_t key);
-int setItemLen(int64_t key, int len);
+int setItemSize(uint32_t key, uint32_t max_size);
+int setItemTimeout(uint32_t key, int tmout);
+int setItem(uint32_t key, unsigned char *data, int len, int pos);
+int getItemSize(uint32_t key);
+int setItemLen(uint32_t key, int len);
 int map_int(char *s, char **v);
 int map_intd(char *s, char **v, int dv);
 int map_float(char *s, int mul);
@@ -138,6 +138,27 @@ int init_utils(char *argv0);
 void hexdump(char *log_message, void *addr, int len);
 uint32_t crc_32(const uint8_t *data, int datalen);
 void dump_packets(char *message, unsigned char *b, int len, int packet_offset);
+int get_index_hash_search(void *p, int max, int struct_size, uint32_t key, uint32_t value);
+
+// https://stackoverflow.com/questions/664014/what-integer-hash-function-are-good-that-accepts-an-integer-hash-key
+static inline uint32_t hash(uint32_t x)
+{
+	x = ((x >> 16) ^ x) * 0x45d9f3b;
+	x = ((x >> 16) ^ x) * 0x45d9f3b;
+	x = (x >> 16) ^ x;
+	return x;
+}
+
+static inline int get_index_hash(void *p, int max, int struct_size, uint32_t key, uint32_t value)
+{
+	int pos = hash(key) % max;
+	if (*(uint32_t *)(p + struct_size * pos) == value)
+		return pos;
+	pos = (pos * hash(key >> 16)) % max;
+	if (*(uint32_t *)(p + struct_size * pos) == value)
+		return pos;
+	return get_index_hash_search(p, max, struct_size, key, value);
+}
 
 #define mutex_lock(m) mutex_lock1(__FILE__, __LINE__, m)
 #define mutex_unlock(m) mutex_unlock1(__FILE__, __LINE__, m)

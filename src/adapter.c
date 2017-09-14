@@ -138,8 +138,7 @@ void find_adapters()
 // avoid adapter close unless all the adapters can be closed
 int adapter_timeout(sockets *s)
 {
-	int do_close = 1, i;
-	int64_t rtime = getTick(), max_close = 0;
+	int do_close = 1;
 	adapter *ad = get_adapter(s->sid);
 	if (!ad)
 		return 1;
@@ -163,6 +162,8 @@ int adapter_timeout(sockets *s)
 	}
 
 #ifndef AXE
+	int64_t rtime = getTick(), max_close = 0;
+	int i;
 	if (opts.no_threads)
 	{
 		adapter *ad1;
@@ -432,7 +433,7 @@ int close_adapter(int na)
 
 int getAdaptersCount()
 {
-	int i, j, k, sys;
+	int i, j, k;
 	adapter *ad;
 	int ts2 = 0, tc2 = 0, tt2 = 0, tc = 0, tt = 0, tac = 0, tat = 0;
 	int fes[MAX_DVBAPI_SYSTEMS][MAX_ADAPTERS];
@@ -451,7 +452,6 @@ int getAdaptersCount()
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		if ((ad = a[i]))
 		{
-			sys = ad->sys[0];
 			if (!opts.force_sadapter && (delsys_match(ad, SYS_DVBS) || delsys_match(ad, SYS_DVBS2)))
 			{
 				ts2++;
@@ -510,7 +510,7 @@ int getAdaptersCount()
 		k = 0;
 		for (i = 0; i < sizeof(order); i++)
 		{
-			sys = order[i];
+			int sys = order[i];
 			for (j = 0; j < ifes[sys]; j++)
 			{
 				fe_map[k++] = fes[sys][j];
