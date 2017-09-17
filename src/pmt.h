@@ -5,7 +5,7 @@
 #include "adapter.h"
 
 #define MAX_CAID 20
-#define MAX_ACTIVE_PIDS 10
+#define MAX_ACTIVE_PIDS 20
 #define MAX_PMT_PIDS (2 * MAX_ACTIVE_PIDS)
 #define CA_ALGO_DVBCSA 0
 #define CA_ALGO_DES 1

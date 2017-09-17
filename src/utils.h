@@ -138,9 +138,9 @@ int init_utils(char *argv0);
 void hexdump(char *log_message, void *addr, int len);
 uint32_t crc_32(const uint8_t *data, int datalen);
 void dump_packets(char *message, unsigned char *b, int len, int packet_offset);
-int get_index_hash_search(void *p, int max, int struct_size, uint32_t key, uint32_t value);
+int get_index_hash_search(int start_pos, void *p, int max, int struct_size, uint32_t key, uint32_t value);
 
-// https://stackoverflow.com/questions/664014/what-integer-hash-function-are-good-that-accepts-an-integer-hash-key
+// Hash function from https://stackoverflow.com/questions/664014/what-integer-hash-function-are-good-that-accepts-an-integer-hash-key
 static inline uint32_t hash(uint32_t x)
 {
 	x = ((x >> 16) ^ x) * 0x45d9f3b;
@@ -152,12 +152,14 @@ static inline uint32_t hash(uint32_t x)
 static inline int get_index_hash(void *p, int max, int struct_size, uint32_t key, uint32_t value)
 {
 	int pos = hash(key) % max;
+	extern int64_t hash_calls;
+	hash_calls++;
 	if (*(uint32_t *)(p + struct_size * pos) == value)
 		return pos;
 	pos = (pos * hash(key >> 16)) % max;
 	if (*(uint32_t *)(p + struct_size * pos) == value)
 		return pos;
-	return get_index_hash_search(p, max, struct_size, key, value);
+	return get_index_hash_search(pos, p, max, struct_size, key, value);
 }
 
 #define mutex_lock(m) mutex_lock1(__FILE__, __LINE__, m)

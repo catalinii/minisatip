@@ -77,6 +77,26 @@ STmpinfo *sinfo;
 
 SMutex utils_mutex;
 
+int64_t hash_calls, hash_conflicts;
+
+int get_index_hash_search(int start_pos, void *p, int max, int struct_size, uint32_t key, uint32_t value)
+{
+	int pos;
+	for (pos = start_pos; pos < max; pos++)
+	{
+		hash_conflicts++;
+		if (*(uint32_t *)(p + struct_size * pos) == value)
+			return pos;
+	}
+	for (pos = 0; pos < start_pos; pos++)
+	{
+		hash_conflicts++;
+		if (*(uint32_t *)(p + struct_size * pos) == value)
+			return pos;
+	}
+	return -1;
+}
+
 int init_tmpinfo(int no)
 {
 	void *os = sinfo;

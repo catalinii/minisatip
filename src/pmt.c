@@ -1524,7 +1524,8 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 			LOG("master pmt %d set for pmt %d", opmt, pmt->id);
 		}
 
-		pmt->active_pid[pmt->active_pids++] = spid;
+		if (pmt->active_pids < MAX_ACTIVE_PIDS - 1)
+			pmt->active_pid[pmt->active_pids++] = spid;
 
 		if ((cp = find_pid(ad->id, spid))) // the pid is already requested by the client
 		{
