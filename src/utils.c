@@ -47,6 +47,7 @@
 #include <syslog.h>
 #include <stdarg.h>
 #include <sys/mman.h>
+#include <sys/time.h>
 #include "dvb.h"
 #include "utils.h"
 #include "minisatip.h"

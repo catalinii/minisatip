@@ -231,7 +231,7 @@ static inline int get_index_hash(void *p, int max, int struct_size, uint32_t key
 			return _tmp_var;                                     \
 		}                                                        \
 		else                                                     \
-			LOG("%40s OK", #a);                                  \
+			LOG("%-40s OK", #a);                                 \
 	}
 
 #define LOG_GENERAL 1
