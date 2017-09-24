@@ -84,6 +84,7 @@ typedef struct struct_satipc
 	uint32_t rcvp, repno, rtp_miss, rtp_ooo; // rtp statstics
 	uint16_t rtp_seq;
 	char static_config;
+	int num_describe;
 
 } satipc;
 
@@ -257,7 +258,13 @@ int satipc_reply(sockets *s)
 	}
 
 	if (!sip->expect_reply && (sip->last_cmd == RTSP_PLAY || sip->last_cmd == RTSP_DESCRIBE) && !ad->strength)
-		http_request(ad, NULL, "DESCRIBE");
+	{
+		sip->num_describe++;
+		if (sip->num_describe < 4 && sip->num_describe >= 0)
+			http_request(ad, NULL, "DESCRIBE");
+		else
+			sip->num_describe = 0;
+	}
 
 	return 0;
 }
@@ -420,6 +427,8 @@ int satipc_open_device(adapter *ad)
 	sip->rtp_miss = sip->rtp_ooo = 0;
 	sip->rtp_seq = 0xFFFF;
 	sip->ignore_packets = 1;
+	sip->num_describe = 0;
+
 	if (ad->failed_adapter)
 	{
 		sip->want_tune = 1;

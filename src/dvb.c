@@ -1086,7 +1086,7 @@ void get_signal(adapter *ad, int *status, int *ber, int *strength, int *snr)
 {
 	int fd = ad->fe;
 	*status = 0;
-	*ber = *snr = *strength = 0xFFFF;
+	*ber = *snr = *strength = 0;
 
 	if (ioctl(fd, FE_READ_STATUS, status) < 0)
 	{
@@ -1120,8 +1120,8 @@ int get_signal_new(adapter *ad, int *status, int *ber, int *strength, int *snr)
 #if DVBAPIVERSION >= 0x050A
 	int fd = ad->fe;
 	*status = *snr = *ber = *strength = 0;
-	double strengthd = 0, snrd = 0, init_strength = 0, init_snr = 0;
-	char *strength_s = "", *snr_s = "";
+	int64_t strengthd = 0, snrd = 0, init_strength = 0, init_snr = 0;
+	char *strength_s = "(none)", *snr_s = "(none)";
 	int err = 0;
 	static struct dtv_property enum_cmdargs[] =
 		{
@@ -1147,8 +1147,8 @@ int get_signal_new(adapter *ad, int *status, int *ber, int *strength, int *snr)
 	else if (enum_cmdargs[0].u.st.stat[0].scale == FE_SCALE_DECIBEL)
 	{
 		strength_s = "dBm";
-		init_strength = enum_cmdargs[0].u.st.stat[0].svalue / 1000.0;
-		strengthd = (init_strength + 100) * 65535.0 / 100; // dBm value + 100 ==> %  ( -97 dBm => 3%)
+		init_strength = enum_cmdargs[0].u.st.stat[0].svalue;			   // dBm / 1000
+		strengthd = (init_strength + 100 * 1000) * 65535.0 / (100 * 1000); // dBm value + 100 ==> %  ( -97 dBm => 3%)
 	}
 	else if (enum_cmdargs[0].u.st.stat[0].scale == 0)
 		err |= 1;
@@ -1161,21 +1161,21 @@ int get_signal_new(adapter *ad, int *status, int *ber, int *strength, int *snr)
 	else if (enum_cmdargs[1].u.st.stat[0].scale == FE_SCALE_DECIBEL)
 	{
 		snr_s = "dB";
-		init_snr = enum_cmdargs[1].u.st.stat[0].svalue / 1000.0;
-		snrd = init_snr * 65535.0 / 100; // dB value ==> %  ( 3 dB => 3%)
+		init_snr = enum_cmdargs[1].u.st.stat[0].svalue; // dB / 1000
+		snrd = init_snr * 65535.0 / (100 * 1000);		// dB value ==> %  ( 3 dB => 3%)
 	}
 	//	else if (enum_cmdargs[1].u.st.stat[0].scale == 0)
 	//		err |= 2;
 
-	*ber = enum_cmdargs[2].u.st.stat[0].uvalue & 0xFFFF;
+	*ber = enum_cmdargs[2].u.st.stat[0].uvalue & 0x7FFF;
 	if (ioctl(fd, FE_READ_STATUS, status) < 0)
 	{
 		LOG("ioctl fd %d FE_READ_STATUS failed, error %d (%s)", fd, errno, strerror(errno));
 		*status = 0;
 	}
 
-	LOGM("get_signal_new adapter %d: status %d, strength %.2f %s -> %.0f, snr %.2f %s -> %.0f, BER: %d, err %d",
-		 ad->id, *status, init_strength, strengthd, strength_s, init_snr, snrd, snr_s, *ber, err);
+	LOGM("get_signal_new adapter %d: status %d, strength %jd %s -> %jd, snr %jd %s -> %jd, BER: %d, err %d",
+		 ad->id, *status, init_strength, strength_s, strengthd, init_snr, snr_s, snrd, *ber, err);
 
 	if (err)
 		return err;

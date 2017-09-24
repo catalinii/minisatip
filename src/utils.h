@@ -108,6 +108,8 @@ int map_float(char *s, int mul);
 void *mymalloc(int a, char *f, int l);
 void myfree(void *x, char *f, int l);
 char *header_parameter(char **arg, int i);
+char *get_current_timestamp();
+char *get_current_timestamp_log();
 void _log(char *file, int line, char *fmt, ...);
 char *strip(char *s);
 int split(char **rv, char *s, int lrv, char sep);
@@ -218,6 +220,18 @@ static inline int get_index_hash(void *p, int max, int struct_size, uint32_t key
 			LOG("sizeof %d is too small at %s:%d", x, __FILE__, __LINE__); \
 		strncpy(a, b, x - 1);                                              \
 		a[x - 1] = 0;                                                      \
+	}
+
+#define TEST_FUNC(a, str, ...)                                   \
+	{                                                            \
+		int _tmp_var;                                            \
+		if ((_tmp_var = (a)))                                    \
+		{                                                        \
+			LOG(#a " failed with message: " str, ##__VA_ARGS__); \
+			return _tmp_var;                                     \
+		}                                                        \
+		else                                                     \
+			LOG("%40s OK", #a);                                  \
 	}
 
 #define LOG_GENERAL 1

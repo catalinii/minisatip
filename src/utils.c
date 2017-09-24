@@ -619,6 +619,43 @@ void myfree(void *x, char *f, int l)
 
 pthread_mutex_t log_mutex;
 
+char *get_current_timestamp(void)
+{
+	static char date_str[200];
+	time_t date;
+	struct tm *t;
+	char *day[] =
+		{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+	char *month[] =
+		{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct",
+		 "Nov", "Dec"};
+	time(&date);
+	t = gmtime(&date);
+	if (!t)
+		return "Fri, Sat Jan 1 00:00:20 2000 GMT";
+	snprintf(date_str, sizeof(date_str), "%s, %s %d %02d:%02d:%02d %d GMT",
+			 day[t->tm_wday], month[t->tm_mon], t->tm_mday, t->tm_hour,
+			 t->tm_min, t->tm_sec, t->tm_year + 1900);
+	return date_str;
+}
+
+char *get_current_timestamp_log(void)
+{
+	static char date_str[200];
+	struct timeval tv;
+	struct tm *t;
+
+	if (gettimeofday(&tv, NULL))
+		return "01/01 00:00:20";
+	t = localtime(&tv.tv_sec);
+	if (!t)
+		return "01/01 00:00:20";
+	snprintf(date_str, sizeof(date_str), "%02d/%02d %02d:%02d:%02d.%03d",
+			 t->tm_mday, t->tm_mon + 1, t->tm_hour, t->tm_min, t->tm_sec,
+			 (int)(tv.tv_usec / 1000));
+	return date_str;
+}
+
 void _log(char *file, int line, char *fmt, ...)
 {
 	va_list arg;
@@ -709,6 +746,8 @@ int endswith(char *src, char *with)
 		return 1;
 	return 0;
 }
+
+#ifndef TESTING
 
 #define VAR_LENGTH 20
 extern _symbols adapters_sym[];
@@ -1180,6 +1219,7 @@ int closefile(char *mem, int len)
 {
 	return munmap((void *)mem, len);
 }
+#endif
 
 #undef DEFAULT_LOG
 #define DEFAULT_LOG LOG_LOCK
@@ -1372,6 +1412,8 @@ pthread_t get_tid()
 	return pthread_self();
 }
 
+#ifndef TESTING
+
 pthread_t start_new_thread(char *name)
 {
 	pthread_t tid;
@@ -1386,6 +1428,8 @@ pthread_t start_new_thread(char *name)
 	}
 	return tid;
 }
+
+#endif
 
 void set_thread_prio(pthread_t tid, int prio)
 {
@@ -1555,6 +1599,8 @@ void hexdump(char *desc, void *addr, int len)
 	else
 		LOG("%s:\n%s", desc, buf);
 }
+
+#ifndef TESTING
 
 SMutex httpc_mutex;
 
@@ -1751,3 +1797,5 @@ void dump_packets(char *message, unsigned char *b, int len, int packet_offset)
 		LOG("%s: pid %d (%X) CC=%X CRC=%08X%s pos: %d packet %d : %02X %02X %02X %02X", message, pid, pid, cc, crc, (b[i + 3] & 0x80) ? "encrypted" : "", i + packet_offset, (packet_offset + i) / 188, b[i], b[i + 1], b[i + 2], b[i + 3]);
 	}
 }
+
+#endif

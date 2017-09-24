@@ -79,8 +79,6 @@ void *select_and_execute(void *args);
 int get_mac_address(char *mac);
 int fill_sockaddr(struct sockaddr_in *serv, char *host, int port);
 int sockets_del_for_sid(int ad);
-char *get_current_timestamp();
-char *get_current_timestamp_log();
 void set_socket_buffer(int sid, unsigned char *buf, int len);
 void sockets_timeout(int i, int t);
 void set_sockets_rtime(int s, int r);

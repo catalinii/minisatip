@@ -1613,8 +1613,12 @@ int main(int argc, char *argv[])
 		FAIL("sockets_add failed for signal thread");
 
 	if (!opts.no_threads)
+	{
 		set_socket_thread(sock_signal, start_new_thread("signal"));
-	sockets_timeout(sock_signal, 1000);
+		sockets_timeout(sock_signal, 300); // 300 ms
+	}
+	else
+		sockets_timeout(sock_signal, 1000); // 1 sec
 
 	if (0 > (sock_bw = sockets_add(SOCK_TIMEOUT, NULL, -1, TYPE_UDP, NULL,
 								   NULL, (socket_action)calculate_bw)))
