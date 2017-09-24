@@ -60,7 +60,7 @@ __thread char *thread_name = "test";
 
 struct struct_opts opts;
 
-int x() { return 1; }
+int x() { return 0; }
 int main()
 {
 	opts.log = 1;
