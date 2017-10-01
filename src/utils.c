@@ -83,6 +83,7 @@ int64_t hash_calls, hash_conflicts;
 int get_index_hash_search(int start_pos, void *p, int max, int struct_size, uint32_t key, uint32_t value)
 {
 	int pos;
+	//	LOG("pos => %d key %d", start_pos, key);
 	for (pos = start_pos; pos < max; pos++)
 	{
 		hash_conflicts++;
@@ -117,18 +118,11 @@ int init_tmpinfo(int no)
 
 STmpinfo *getItemPos(uint32_t key)
 {
-	static __thread STmpinfo *last;
-	int i;
-	if (last && (last->enabled) && (last->key == key))
-	{
-		return last;
-	}
-	for (i = 0; i < MAX_SINFO; i++)
-		if (sinfo[i].enabled && sinfo[i].key == key)
-		{
-			last = sinfo + i;
-			return last;
-		}
+	int i = get_index_hash(&sinfo[0].key, MAX_SINFO, sizeof(STmpinfo), key, key);
+	if (i == -1)
+		return NULL;
+	if (sinfo[i].enabled && sinfo[i].key == key)
+		return sinfo + i;
 	return NULL;
 }
 
@@ -136,7 +130,7 @@ STmpinfo *getFreeItemPos(uint32_t key)
 {
 	int i, ek = 0;
 	int64_t tick = getTick();
-	uint64_t mask = 0xFF000000000000;
+	uint32_t mask = 0xFF000000;
 	for (i = 0; i < MAX_SINFO; i++)
 		if (sinfo[i].enabled && ((key & mask) == (sinfo[i].key & mask)))
 			ek++;
@@ -144,17 +138,23 @@ STmpinfo *getFreeItemPos(uint32_t key)
 	if (ek > 0.8 * MAX_SINFO)
 		LOG_AND_RETURN(NULL, "dynamic capacity for %jX exhausted", key & mask);
 
-	for (i = 0; i < MAX_SINFO; i++)
-		if (!sinfo[i].enabled || (sinfo[i].timeout && (tick - sinfo[i].last_updated > sinfo[i].timeout)))
-		{
-			sinfo[i].id = i;
-			sinfo[i].timeout = 0;
-			LOGM(
-				"Requested new Item for key %jX, returning %d (enabled %d last_updated %jd timeout %d tick %jd)",
-				key, i, sinfo[i].enabled, sinfo[i].last_updated,
-				sinfo[i].timeout, tick);
-			return sinfo + i;
-		}
+	// getItemPos is called before getFreeItemPos, no need to check if the element with that key already exists
+	i = get_index_hash(&sinfo[0].key, MAX_SINFO, sizeof(STmpinfo), key, 0);
+	if (i == -1)
+		LOG_AND_RETURN(NULL, "Could not find free element for key %d", key);
+
+	if (!sinfo[i].enabled || (sinfo[i].timeout && (tick - sinfo[i].last_updated > sinfo[i].timeout)))
+	{
+		sinfo[i].id = i;
+		sinfo[i].timeout = 0;
+		LOGM(
+			"Requested new Item for key %jX, returning %d (enabled %d last_updated %jd timeout %d tick %jd)",
+			key, i, sinfo[i].enabled, sinfo[i].last_updated,
+			sinfo[i].timeout, tick);
+		return sinfo + i;
+	}
+	else
+		LOG("WARNING: the key %d found but not suitable pos %d enabled %d timeout %d last_updated %d", key, i, sinfo[i].timeout, sinfo[i].last_updated);
 	return NULL;
 }
 

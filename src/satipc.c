@@ -251,6 +251,8 @@ int satipc_reply(sockets *s)
 			rv = sockets_write(s->id, np, strlen(np));
 			delItem(MAKE_ITEM(ad->id, sip->wp++));
 		}
+		else
+			LOG("satipc: expected element but not found %08x", MAKE_ITEM(ad->id, sip->wp));
 	}
 	if (!sip->expect_reply && (sip->wp >= sip->qp) && (sip->want_commit || sip->force_commit)) // we do not expect reply and no other events in the queue, we commit a
 	{

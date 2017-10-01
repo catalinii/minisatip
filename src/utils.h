@@ -155,12 +155,12 @@ static inline int get_index_hash(void *p, int max, int struct_size, uint32_t key
 {
 	int pos = hash(key) % max;
 	extern int64_t hash_calls;
+	if (*(uint32_t *)(p + struct_size * pos) == value)
+		return pos;
+	pos = (pos * hash(key >> 16)) % max; // most likely a composite key (x << 16 + y)
+	if (*(uint32_t *)(p + struct_size * pos) == value)
+		return pos;
 	hash_calls++;
-	if (*(uint32_t *)(p + struct_size * pos) == value)
-		return pos;
-	pos = (pos * hash(key >> 16)) % max;
-	if (*(uint32_t *)(p + struct_size * pos) == value)
-		return pos;
 	return get_index_hash_search(pos, p, max, struct_size, key, value);
 }
 
