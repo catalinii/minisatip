@@ -92,7 +92,7 @@ typedef struct struct_pmt
 	int pid;
 	int adapter;
 	int version;
-	uint16_t caid[MAX_CAID];
+	uint16_t caid[MAX_CAID], capid[MAX_CAID];
 	uint16_t caids;
 	int active_pid[MAX_ACTIVE_PIDS];
 	int active_pids;

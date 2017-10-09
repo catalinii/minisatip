@@ -1350,7 +1350,7 @@ int is_ac3_es(unsigned char *es, int len)
 	for (i = 0; i < len; i += es_len)
 	{
 		es_len = es[i + 1] + 2;
-		if (es[i] == 0x6A)
+		if (es[i] == 0x6A || es[i] == 0x7A)
 			isAC3 = 1;
 	}
 
@@ -1382,7 +1382,10 @@ void find_pi(SPMT *pmt, unsigned char *es, int len)
 			memcpy(pmt->pi + pmt->pi_len, es + i, es_len);
 			pmt->pi_len += es_len;
 			if (pmt->caids < MAX_CAID - 1)
+			{
 				pmt->caid[pmt->caids++] = caid;
+				pmt->capid[pmt->caids++] = capid;
+			}
 			else
 				LOG("Too many CAIDs for pmt %d, discarding %04X", pmt->id, pmt->caid);
 		}

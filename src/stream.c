@@ -825,9 +825,9 @@ int check_cc(adapter *ad)
 	int pid;
 	int packet_no_sid = 0;
 	unsigned char *b;
-	int is_8192 = 0;
+
 	if ((p = find_pid(ad->id, 8192)))
-		is_8192 = 1;
+		return 0;
 
 	for (i = 0; i < ad->rlen; i += DVB_FRAME)
 	{
@@ -837,11 +837,8 @@ int check_cc(adapter *ad)
 
 		if ((!p))
 		{
-			if (!is_8192)
-			{
-				LOGM("%s: pid %d not found", __FUNCTION__, pid);
-				ad->pid_err++;
-			}
+			LOGM("%s: pid %d not found", __FUNCTION__, pid);
+			ad->pid_err++;
 			packet_no_sid++;
 			continue;
 		}
@@ -855,7 +852,8 @@ int check_cc(adapter *ad)
 			else
 				p->cc = (p->cc + 1) % 16;
 
-			dump_packets("check_cc -> ", b, 188, i);
+			if ((opts.debug & LOG_DMX) == LOG_DMX)
+				dump_packets("check_cc -> ", b, 188, i);
 
 			//	if(b[1] ==0x40 && b[2]==0) LOG("PAT TID = %d", b[8] * 256 + b[9]);
 			if (p->cc != cc)
@@ -908,10 +906,17 @@ int process_packet(unsigned char *b, adapter *ad)
 
 	p = find_pid(ad->id, _pid);
 	if (!p)
+		p = find_pid(ad->id, 8192);
+
+	if (!p)
+	{
 		return 0;
+	}
 
 	if (p->sid[0] == -1)
+	{
 		return 0;
+	}
 
 	for (j = 0; j < MAX_STREAMS_PER_PID && p->sid[j] > -1; j++)
 	{
@@ -975,7 +980,7 @@ int process_dmx(sockets *s)
 	else
 	{
 		for (dp = 0; dp < rlen; dp += DVB_FRAME)
-			process_packet(&s->buf[dp], ad);
+			process_packet(s->buf + dp, ad);
 
 		for (i = 0; i < MAX_STREAMS; i++)
 			if ((sid = st[i]) && (sid->enabled) && sid->adapter == s->sid && sid->iiov > 0)
