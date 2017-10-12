@@ -1383,7 +1383,7 @@ void find_pi(SPMT *pmt, unsigned char *es, int len)
 			pmt->pi_len += es_len;
 			if (pmt->caids < MAX_CAID - 1)
 			{
-				pmt->caid[pmt->caids++] = caid;
+				pmt->caid[pmt->caids] = caid;
 				pmt->capid[pmt->caids++] = capid;
 			}
 			else
