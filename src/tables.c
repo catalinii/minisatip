@@ -188,7 +188,7 @@ int match_caid(SPMT *pmt, int caid, int mask)
 	for (i = 0; i < pmt->caids; i++)
 		if ((pmt->caid[i] & mask) == caid)
 		{
-			LOGM("%s: match caid %04X with CA caid %04X and mask %04X", __FUNCTION__, pmt->caid[i], caid, mask);
+			LOGM("%s: match caid %04X (%d/%d) with CA caid %04X and mask %04X", __FUNCTION__, pmt->caid[i], i, pmt->caids, caid, mask);
 			return 1;
 		}
 	return 0;

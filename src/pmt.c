@@ -1377,8 +1377,8 @@ void find_pi(SPMT *pmt, unsigned char *es, int len)
 				LOG("PI is too small %d", sizeof(pmt->pi));
 				return;
 			}
-			LOG("PI pos %d caid %04X => pid %04X (%d)", pmt->pi_len, caid, capid,
-				capid);
+			LOG("PI pos %d caid %04X => pid %04X (%d), pmt caid position %d", pmt->pi_len, caid, capid,
+				capid, pmt->caids);
 			memcpy(pmt->pi + pmt->pi_len, es + i, es_len);
 			pmt->pi_len += es_len;
 			if (pmt->caids < MAX_CAID - 1)
