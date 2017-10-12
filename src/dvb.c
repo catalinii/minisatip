@@ -1201,24 +1201,35 @@ void dvb_get_signal(adapter *ad)
 	int strength = 0, snr = 0;
 	int status = 0, ber = 0;
 
-	if (ad->new_gs == 0)
+	if (ad->strength_multiplier || ad->snr_multiplier)
 	{
-		int new_gs = get_signal_new(ad, &status, &ber, &strength, &snr);
-		if (!new_gs)
-			ad->new_gs = NEW_SIGNAL;
-		else
-			ad->new_gs = OLD_SIGNAL;
-		start = 1;
+		if (ad->new_gs == 0)
+		{
+			int new_gs = get_signal_new(ad, &status, &ber, &strength, &snr);
+			if (!new_gs)
+				ad->new_gs = NEW_SIGNAL;
+			else
+				ad->new_gs = OLD_SIGNAL;
+			start = 1;
+		}
+
+		if (!start && ad->new_gs == NEW_SIGNAL)
+			get_signal_new(ad, &status, &ber, &strength, &snr);
+
+		if (ad->new_gs == OLD_SIGNAL)
+			get_signal(ad, &status, &ber, &strength, &snr);
 	}
+	else
+		LOGM("Signal is not retrieved from the adapter as both signal multipliers are 0");
 
-	if (!start && ad->new_gs == NEW_SIGNAL)
-		get_signal_new(ad, &status, &ber, &strength, &snr);
-
-	if (ad->new_gs == OLD_SIGNAL)
-		get_signal(ad, &status, &ber, &strength, &snr);
-
-	strength = strength * ad->strength_multiplier;
-	snr = snr * ad->snr_multiplier;
+	if (ad->strength_multiplier)
+		strength = strength * ad->strength_multiplier;
+	else
+		strength = 65535;
+	if (ad->snr_multiplier)
+		snr = snr * ad->snr_multiplier;
+	else
+		snr = 65535;
 
 	strength = strength >> 8;
 	snr = snr >> 8;

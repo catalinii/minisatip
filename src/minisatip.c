@@ -331,7 +331,8 @@ Help\n\
 * -m xx: simulate xx as local mac address, generates UUID based on mac\n\
 	* eg: -m 001122334455 \n\
 \n\
-* -M multiplies the signal and strength of the DVB adapter with the specified values\n\
+* -M multiplies the strength and snr of the DVB adapter with the specified values\n\
+	* If the snr or the strength multipliers are set to 0, minisatip will override the value received from the adapter and will report always full signal 100%% \n\
 	* eg: -M 4-6:1.2-1.3 - multiplies the strength with 1.2 and the snr with 1.3 for adapter 4, 5 and 6\n\
 	* eg: -M *:1.5-1.6 - multiplies the strength with 1.5 and the snr with 1.6 for all adapters\n\
 \n\

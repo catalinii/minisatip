@@ -1801,7 +1801,7 @@ void set_signal_multiplier(char *o)
 
 		strength_multiplier = strtod(sep1 + 1, NULL);
 		snr_multiplier = strtod(sep2 + 1, NULL);
-		if (strength_multiplier <= 0 || snr_multiplier <= 0)
+		if (strength_multiplier < 0 || snr_multiplier < 0)
 			continue;
 
 		if (ad)
