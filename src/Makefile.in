@@ -23,10 +23,12 @@ LDFLAGS?=-lpthread @LDFLAGS@
 OS := $(shell $(CC) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 2)
 ARCH := $(shell $(CC) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 1)
 
-ifneq ($(UNAME_S),apple)
+ifneq ($(OS),apple)
         LDFLAGS += -lrt
 else
 	LINUXDVB=0
+	DVBAES=0
+	NETCVCLIENT=0
 endif
 
 SOURCES=minisatip.c socketworks.c stream.c adapter.c utils.c

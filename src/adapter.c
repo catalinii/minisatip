@@ -1422,6 +1422,14 @@ void set_diseqc_adapters(char *o)
 			opts.diseqc_fast = fast;
 			opts.diseqc_committed_no = committed_no;
 			opts.diseqc_uncommitted_no = uncommitted_no;
+			int j;
+			for (j = 0; j < MAX_ADAPTERS; j++)
+				if (a[j])
+				{
+					a[j]->diseqc_param.fast = fast;
+					a[j]->diseqc_param.committed_no = committed_no;
+					a[j]->diseqc_param.uncommitted_no = uncommitted_no;
+				}
 		}
 		LOG(
 			"Setting diseqc adapter %d fast %d committed_no %d uncommitted_no %d",
@@ -1468,6 +1476,12 @@ void set_diseqc_multi(char *o)
 		else
 		{
 			opts.diseqc_multi = position;
+			int j;
+			for (j = 0; j < MAX_ADAPTERS; j++)
+				if (a[j])
+				{
+					a[j]->diseqc_multi = position;
+				}
 		}
 		LOG(
 			"Setting diseqc multi adapter %d position %d",
@@ -1530,6 +1544,15 @@ void set_lnb_adapters(char *o)
 			opts.lnb_high = lnb_high;
 			opts.lnb_switch = lnb_switch;
 			opts.lnb_circular = 0;
+			int j;
+			for (j = 0; j < MAX_ADAPTERS; j++)
+				if (a[j])
+				{
+					a[j]->diseqc_param.lnb_low = lnb_low;
+					a[j]->diseqc_param.lnb_high = lnb_high;
+					a[j]->diseqc_param.lnb_switch = lnb_switch;
+					a[j]->diseqc_param.lnb_circular = 0;
+				}
 		}
 		LOG(
 			"Setting diseqc adapter %d lnb_low %d lnb_high %d lnb_switch %d",
@@ -1600,6 +1623,17 @@ void set_diseqc_timing(char *o)
 			opts.diseqc_after_switch = after_switch;
 			opts.diseqc_after_burst = after_burst;
 			opts.diseqc_after_tone = after_tone;
+			int j;
+			for (j = 0; j < MAX_ADAPTERS; j++)
+				if (a[j])
+				{
+					a[j]->diseqc_param.before_cmd = before_cmd;
+					a[j]->diseqc_param.after_cmd = after_cmd;
+					a[j]->diseqc_param.after_repeated_cmd = after_repeated_cmd;
+					a[j]->diseqc_param.after_switch = after_switch;
+					a[j]->diseqc_param.after_burst = after_burst;
+					a[j]->diseqc_param.after_tone = after_tone;
+				}
 		}
 		LOG(
 			"Setting diseqc timing for adapter %d before cmd %d after cmd %d "
@@ -1657,6 +1691,12 @@ void set_timeout_adapters(char *o)
 	if (arg[0] && (arg[0][0] == '*'))
 	{
 		opts.adapter_timeout = timeout * 1000;
+		int j;
+		for (j = 0; j < MAX_ADAPTERS; j++)
+			if (a[j])
+			{
+				a[j]->adapter_timeout = timeout * 1000;
+			}
 		LOG("Set default timeout to %d", opts.adapter_timeout);
 		return;
 	}
@@ -1813,6 +1853,13 @@ void set_signal_multiplier(char *o)
 		{
 			opts.strength_multiplier = strength_multiplier;
 			opts.snr_multiplier = snr_multiplier;
+			int j;
+			for (j = 0; j < MAX_ADAPTERS; j++)
+				if (a[j])
+				{
+					a[j]->strength_multiplier = strength_multiplier;
+					a[j]->snr_multiplier = snr_multiplier;
+				}
 		}
 		LOG("Setting signal multipler for adapter %d strength_multiplier %.2f snr_multiplier %.2f",
 			a_id, strength_multiplier, snr_multiplier);

@@ -811,7 +811,7 @@ void get_c2_url(adapter *ad, char *url)
 		return;
 	url[0] = 0;
 	FILL("freq=%.1f", tp->freq, 0, tp->freq / 1000.0);
-	if (sip->use_fe)
+	if (sip->use_fe && (sip->satip_fe >= 0) && (sip->satip_fe < 128))
 		FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
 	FILL("&sr=%d", tp->sr, -1, tp->sr / 1000);
 	FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
@@ -836,7 +836,7 @@ void get_t2_url(adapter *ad, char *url)
 		return;
 	url[0] = 0;
 	FILL("freq=%.1f", tp->freq, 0, tp->freq / 1000.0);
-	if (sip->use_fe)
+	if (sip->use_fe && (sip->satip_fe >= 0) && (sip->satip_fe < 128))
 		FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
 	FILL("&bw=%d", tp->bw, BANDWIDTH_AUTO, tp->bw / 1000000);
 	FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));

@@ -1220,8 +1220,10 @@ void dvb_get_signal(adapter *ad)
 			get_signal(ad, &status, &ber, &strength, &snr);
 	}
 	else
+	{
+		status = 1;
 		LOGM("Signal is not retrieved from the adapter as both signal multipliers are 0");
-
+	}
 	if (ad->strength_multiplier)
 		strength = strength * ad->strength_multiplier;
 	else
