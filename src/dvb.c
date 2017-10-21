@@ -342,12 +342,12 @@ int dvb_open_device(adapter *ad)
 		ad->fn);
 	sprintf(buf, DEV_FRONTEND, ad->pa, ad->fn);
 	ad->fe = open(buf, O_RDWR | O_NONBLOCK);
-	if (!opts.use_demux_device)
-		sprintf(buf, DEV_DVR, ad->pa, ad->fn);
-	else
+	if (opts.use_demux_device == 1)
 		sprintf(buf, DEV_DEMUX, ad->pa, ad->fn);
+	else
+		sprintf(buf, DEV_DVR, ad->pa, ad->fn);
 
-	ad->dvr = open(buf, opts.use_demux_device ? O_RDWR | O_NONBLOCK : O_RDONLY | O_NONBLOCK);
+	ad->dvr = open(buf, (opts.use_demux_device == 1) ? O_RDWR | O_NONBLOCK : O_RDONLY | O_NONBLOCK);
 	if (ad->fe < 0 || ad->dvr < 0)
 	{
 		sprintf(buf, DEV_FRONTEND, ad->pa, ad->fn);
@@ -922,7 +922,12 @@ int dvb_del_filters(adapter *ad, int fd, int pid)
 		LOG0("DMX_STOP failed on PID %d FD %d: error %d %s", pid, fd, errno, strerror(errno))
 	else
 		LOG("clearing filter on PID %d FD %d", pid, fd);
-	close(fd);
+
+	SPid *p = find_pid(ad->id, pid);
+	if (p && (p->sock >= 0))
+		sockets_force_close(p->sock);
+	else
+		close(fd);
 	return 0;
 }
 
@@ -962,7 +967,7 @@ int dvb_demux_set_pid(adapter *a, int i_pid)
 			LOG0("failed to add pid %d to fd %d: %d, %s", p, fd, errno, strerror(errno));
 			return -1;
 		}
-		LOG("setting filter on PID %d for fd %d", i_pid, fd);
+		LOG("setting demux filter on PID %d for fd %d", i_pid, fd);
 	}
 	return fd;
 }
@@ -986,8 +991,153 @@ int dvb_demux_del_filters(adapter *ad, int fd, int pid)
 			LOG("DMX_STOP failed on PID %d FD %d: error %d %s", pid, fd, strerror(errno));
 		LOG("stopped filters on fd %d", fd);
 	}
-	LOG("clearing filter on PID %d FD %d", pid, fd);
+	LOG("clearing demux filter on PID %d FD %d", pid, fd);
 	return 0;
+}
+
+// construct TS header from PSI data
+
+int dvb_psi_read(int socket, void *buf, int len, sockets *ss, int *rb)
+{
+	unsigned char section[4096]; // max section size
+	int r;
+	*rb = 0;
+	memset(section, 0, sizeof(section));
+	r = read(socket, section + 1, sizeof(section) - 1); // section[0] = 0
+	if (r <= 0)
+	{
+		//		LOG("%s: read %d, errno %d", __FUNCTION__, r, errno);
+		if (errno == EOVERFLOW)
+			LOG_AND_RETURN(1, "socket %d error: EOVERFLOW", socket);
+		*rb = r;
+
+		return 0;
+	}
+	r++;
+
+	adapter *ad = get_adapter(ss->sid);
+	if (!ad)
+		return 0;
+
+	int i, pid = -1;
+	// obtain the pid
+	for (i = 0; i < MAX_PIDS; i++)
+		if ((ad->pids[i].flags == 1) && (ad->pids[i].fd == socket))
+		{
+			pid = ad->pids[i].pid;
+			break;
+		}
+
+	if (pid == -1)
+	{
+		LOGM("Pid was not found for adapter %d, socket %d, section bytes: %02X, %02X, %02X, %02X", ad->id, socket, section[0], section[1], section[2], section[3]);
+		return 1;
+	}
+
+	SPid *p = &ad->pids[i];
+	if (pid < 32 || section[1] == 2)
+	{
+		uint32_t crc = crc_32(section + 1, r - 1);
+		copy32(section, r, crc);
+		r += 4;
+	}
+
+	char cc = p->cc1;
+	int pos = 0, left;
+	unsigned char *b;
+
+	while ((r > 0) && (*rb < len))
+	{
+		if (len - *rb < 188)
+			LOG_AND_RETURN(1, "Not enough space copy the section for adapter %d, left %d", ad->id, len - *rb)
+		b = buf + *rb;
+		b[0] = 0x47;
+		b[1] = pid >> 8;
+		if (pos == 0)
+			b[1] |= 0x40;
+		b[2] = pid & 0xFF;
+		b[3] = 0x10 | (cc++ & 0xF);
+		left = r > 184 ? 184 : r;
+		memcpy(b + 4, section + pos, left);
+		pos += left;
+		r -= left;
+		if (left < 184)
+			memset(b + left + 4, -1, 184 - left);
+		*rb += 188;
+	}
+	p->cc1 = cc;
+	return 1;
+}
+// Use DMX_SET_FILTER to add PSI filter
+
+int dvb_set_psi_filter(adapter *a, int i_pid)
+{
+	char buf[100];
+	int fd;
+	int hw, ad;
+
+	hw = a->pa;
+	ad = a->fn;
+	if (i_pid > 8192)
+		LOG_AND_RETURN(-1, "pid %d > 8192 for " DEV_DEMUX,
+					   i_pid, hw, ad);
+
+	sprintf(buf, DEV_DEMUX, hw, ad);
+	if ((fd = open(buf, O_RDWR | O_NONBLOCK)) < 0)
+	{
+		LOG("Could not open demux device " DEV_DEMUX ": %s ", hw,
+			ad, strerror(errno));
+		return -1;
+	}
+
+	struct dmx_sct_filter_params sct;
+	memset(&sct, 0, sizeof(sct));
+	sct.pid = i_pid;
+	sct.timeout = 0;
+	sct.flags = DMX_IMMEDIATE_START;
+
+	if (ioctl(fd, DMX_SET_FILTER, &sct) < 0)
+	{
+		int ep = a->active_pids;
+		LOG0("%s: failed setting filter on %s pid %d, errno %d (%s), enabled pids %d", __FUNCTION__,
+			 buf, i_pid, errno, strerror(errno), ep);
+		close(fd);
+		return -1;
+	}
+
+	LOG("setting PSI filter on PID %d for fd %d", i_pid, fd);
+	int sock = sockets_add(fd, NULL, a->id, TYPE_DVR, NULL, NULL, NULL);
+	if (sock < 0)
+	{
+		LOG("Failed to add socket for filter pid %d, adapter %d", i_pid, a->id);
+		close(fd);
+		return -1;
+	}
+	sockets_setread(sock, dvb_psi_read);
+	sockets_set_master(sock, a->sock);
+	SPid *p = find_pid(a->id, i_pid);
+	if (p)
+		p->sock = sock;
+	return fd;
+}
+
+int dvb_is_psi(adapter *ad, int pid)
+{
+	if (pid < 32)
+		return 1;
+#ifndef DISABLE_PMT
+	if (get_pid_filter(ad->id, pid) >= 0)
+		return 1;
+#endif
+	return 0;
+}
+
+int dvb_set_psi_pes_filter(adapter *a, int i_pid)
+{
+	if (dvb_is_psi(a, i_pid))
+		return dvb_set_psi_filter(a, i_pid);
+	else
+		return dvb_set_pid(a, i_pid);
 }
 
 fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys)
@@ -1313,16 +1463,22 @@ void find_dvb_adapter(adapter **a)
 				ad->fn = j;
 
 				ad->open = (Open_device)dvb_open_device;
-				if (opts.use_demux_device)
-				{
-					ad->set_pid = (Set_pid)dvb_demux_set_pid;
-					ad->del_filters = (Del_filters)dvb_demux_del_filters;
-				}
-				else
+				if (opts.use_demux_device == 0)
 				{
 					ad->set_pid = (Set_pid)dvb_set_pid;
 					ad->del_filters = (Del_filters)dvb_del_filters;
 				}
+				else if (opts.use_demux_device == 1)
+				{
+					ad->set_pid = (Set_pid)dvb_demux_set_pid;
+					ad->del_filters = (Del_filters)dvb_demux_del_filters;
+				}
+				else if (opts.use_demux_device == 2)
+				{
+					ad->set_pid = (Set_pid)dvb_set_psi_pes_filter;
+					ad->del_filters = (Del_filters)dvb_del_filters;
+				}
+
 				ad->commit = (Adapter_commit)dvb_commit;
 				ad->tune = (Tune)dvb_tune;
 				ad->delsys = (Dvb_delsys)dvb_delsys;

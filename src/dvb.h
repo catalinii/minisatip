@@ -246,7 +246,8 @@ typedef struct struct_pid
 	int packets; // how many packets for this pid arrived, used to sort the pids
 	int dec_err; // decrypt errors, continuity counters
 	int16_t pmt, filter;
-	char cc;
+	char cc, cc1;
+	int sock; // sock_id
 #ifdef CRC_TS
 	uint32_t crc;
 	int count;

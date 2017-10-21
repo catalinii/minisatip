@@ -1,6 +1,6 @@
 #ifndef SOCKETWORKS_H
 #define SOCKETWORKS_H
-#define MAX_SOCKS 100
+#define MAX_SOCKS 300
 #include <netinet/in.h>
 #include "utils.h"
 
@@ -47,6 +47,9 @@ typedef struct struct_sockets
 	SNPacket *pack;
 	int spos, wmax, wpos;
 	int overflow, buf_alloc, buf_used;
+	// if != -1 points to the master socket which holds the buffer and the action function.
+	//Useful when the DVR buffer comes from different file handles
+	int master;
 } sockets;
 
 #define TYPE_UDP 0
@@ -86,7 +89,6 @@ void free_all();
 void sockets_setread(int i, void *r);
 void set_socket_send_buffer(int sock, int len);
 void set_socket_receive_buffer(int sock, int len);
-sockets *get_sockets(int i);
 void set_socket_pos(int sock, int pos);
 char *get_socket_rhost(int s_id, char *dest, int ld);
 int get_socket_rport(int s_id);
@@ -104,7 +106,16 @@ void get_socket_iteration(int s_id, int it);
 void set_sockets_sid(int id, int sid);
 void sockets_set_opaque(int id, void *opaque, void *opaque2, void *opaque3);
 void sockets_force_close(int id);
+void sockets_set_master(int slave, int master);
 extern __thread char *thread_name;
 extern __thread pthread_t tid;
+
+static inline sockets *get_sockets(int i)
+{
+	extern sockets *s[];
+	if (i < 0 || i >= MAX_SOCKS || !s[i] || !s[i]->enabled || !s[i]->is_enabled)
+		return NULL;
+	return s[i];
+}
 
 #endif

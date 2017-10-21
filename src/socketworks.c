@@ -461,6 +461,7 @@ int init_sock = 0;
 void sockets_lock(sockets *ss)
 {
 	int rv;
+	sockets *s = NULL;
 	mutex_lock(&ss->mutex);
 	if (ss->lock)
 		if ((rv = mutex_lock(ss->lock)))
@@ -469,11 +470,26 @@ void sockets_lock(sockets *ss)
 				__FUNCTION__, ss->id, ss->lock, rv, strerror((rv > 0) ? rv : 0));
 			ss->lock = NULL;
 		}
+	if ((ss->master >= 0) && (s = get_sockets(ss->master)))
+	{
+		if (ss->tid != s->tid)
+		{
+			LOG("Master socket %d has different thread id than socket %d: %x != %x, closing slave socket", s->id, ss->id, s->tid, ss->tid);
+			ss->force_close = 1;
+		}
+		else
+			sockets_lock(s);
+	}
 }
 
 void sockets_unlock(sockets *ss)
 {
 	int rv;
+	sockets *s;
+	if ((ss->master >= 0) && (s = get_sockets(ss->master)))
+	{
+		sockets_unlock(s);
+	}
 	if (ss->lock)
 		if ((rv = mutex_unlock(ss->lock)))
 		{
@@ -545,6 +561,7 @@ int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 	ss->iteration = 0;
 	ss->spos = ss->wpos = 0;
 	ss->wmax = opts.max_sbuf;
+	ss->master = -1;
 
 	ss->read = (read_action)sockets_read;
 	ss->lock = NULL;
@@ -601,6 +618,7 @@ int sockets_del(int sock)
 	max_sock = i + 1;
 	ss->events = 0;
 	ss->lock = NULL;
+	ss->master = -1;
 	if ((ss->flags & 1) && ss->buf)
 		free1(ss->buf);
 	if (ss->pack)
@@ -623,6 +641,12 @@ int sockets_del(int sock)
 	ss->enabled = 0;
 	mutex_unlock(&s_mutex);
 
+	for (i = 0; i < MAX_SOCKS; i++)
+		if (s[i] && s[i]->enabled && s[i]->master == sock)
+		{
+			LOG("Closing slave socket index %d (master %d)", i, sock);
+			sockets_del(i);
+		}
 	return 0;
 }
 #undef DEFAULT_LOG
@@ -639,7 +663,7 @@ __thread char *thread_name;
 
 void *select_and_execute(void *arg)
 {
-	int i, rv, rlen, les, es;
+	int i, rv, rlen, les, es, pos_len;
 	unsigned char buf[2001], *pos;
 	int err;
 	struct pollfd pf[MAX_SOCKS];
@@ -737,54 +761,65 @@ void *select_and_execute(void *arg)
 					{
 						ss->events &= ~POLLOUT;
 					}
-					if (!ss->buf || ss->buf == buf)
+					// use the buffer of the master socket, but the FD and the read function of the slave socket
+					sockets *master = ss;
+					if (ss->master >= 0)
+						master = get_sockets(ss->master);
+
+					if (!master->buf || master->buf == buf)
 					{
-						ss->buf = buf;
-						ss->lbuf = sizeof(buf) - 1;
-						ss->rlen = 0;
+						master->buf = buf;
+						master->lbuf = sizeof(buf) - 1;
+						master->rlen = 0;
 					}
-					if (ss->rlen >= ss->lbuf)
+					if (master->rlen >= master->lbuf)
 					{
-						DEBUGM("Socket buffer full, handle %d, sock_id %d, type %d, lbuf %d, rlen %d, ss->buf = %p, buf %p",
-							   ss->sock, i, ss->type, ss->lbuf, ss->rlen,
-							   ss->buf, buf);
-						ss->rlen = 0;
+						DEBUGM("Socket buffer full, handle %d, sock_id %d (m: %d), type %d, lbuf %d, rlen %d, ss->buf = %p, buf %p",
+							   master->sock, ss->id, master->id, master->type, master->lbuf, master->rlen, master->buf, buf);
+						master->rlen = 0;
 					}
 					rlen = 0;
 					read_ok = 0;
-					pos = ss->buf + ss->rlen;
-					if (ss->read)
-						read_ok = ss->read(ss->sock, pos,
-										   ss->lbuf - ss->rlen, ss, &rlen);
 
-					if (opts.log >= 1)
+					pos = master->buf + master->rlen;
+					pos_len = master->lbuf - master->rlen;
+
+					if (ss->read)
+						read_ok = ss->read(ss->sock, pos, pos_len, ss, &rlen);
+
+					if (opts.log & LOG_SOCKET)
 					{
 						int64_t now = getTick();
 						if (now - c_time > 100)
-							DEBUGM(
+							LOGM(
 								"WARNING: read on socket id %d, handle %d, took %jd ms",
 								ss->id, ss->sock, now - c_time);
 					}
 
 					err = 0;
-					if (rlen < 0)
+					if (rlen <= 0)
 						err = errno;
-					if (rlen > 0)
-						ss->rtime = c_time;
-					if (read_ok && rlen >= 0)
-						ss->rlen += rlen;
-					else
-						ss->rlen = 0;
-					//force 0 at the end of the string
-					if (ss->lbuf >= ss->rlen)
-						ss->buf[ss->rlen] = 0;
-					DEBUGM(
-						"Read %s %d (rlen:%d/total:%d) bytes from %d -> %p (buf: %p) - iteration %d action %p",
-						read_ok ? "OK" : "NOK", rlen, ss->rlen, ss->lbuf,
-						ss->sock, pos, ss->buf, ss->iteration, ss->action);
 
-					if (((ss->rlen > 0) || err == EWOULDBLOCK) && ss->action && (ss->type != TYPE_SERVER))
-						ss->action(ss);
+					if (rlen > 0)
+						master->rtime = c_time;
+
+					if (read_ok && rlen >= 0)
+						master->rlen += rlen;
+					else
+						master->rlen = 0;
+
+					//force 0 at the end of the string
+					if (master->lbuf >= master->rlen)
+						master->buf[master->rlen] = 0;
+
+					DEBUGM(
+						"Read %s %d (rlen:%d/total:%d) bytes from %d [s: %d m: %d] -> %p (buf: %p) - iteration %d action %p",
+						read_ok ? "OK" : "NOK", rlen, master->rlen, master->lbuf,
+						ss->sock, ss->id, master->id, pos, master->buf, ss->iteration, master->action);
+
+					if (((master->rlen > 0) || err == EWOULDBLOCK) && master->action && (master->type != TYPE_SERVER))
+						master->action(master);
+
 					sockets_unlock(ss);
 
 					if (!read_ok && ss->type != TYPE_SERVER)
@@ -1073,13 +1108,6 @@ void set_socket_receive_buffer(int sock, int len)
 	sl = sizeof(int);
 	if (!getsockopt(sock, SOL_SOCKET, SO_RCVBUF, &len, &sl))
 		LOG("receive socket buffer size is %d bytes", len);
-}
-
-sockets *get_sockets(int i)
-{
-	if (i < 0 || i >= MAX_SOCKS || !s[i] || !s[i]->enabled || !s[i]->is_enabled)
-		return NULL;
-	return s[i];
 }
 
 void set_socket_pos(int sock, int pos)
@@ -1394,4 +1422,18 @@ void sockets_force_close(int id)
 	{
 		s->force_close = 1;
 	}
+}
+
+void sockets_set_master(int slave, int master)
+{
+	sockets *s = get_sockets(slave);
+	sockets *m = get_sockets(master);
+
+	if (!s || !m)
+	{
+		LOG("Unable to set master for sockets %d to %d as one of them is NULL", slave, master);
+		return;
+	}
+	s->tid = m->tid;
+	s->master = master;
 }

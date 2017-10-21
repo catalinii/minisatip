@@ -741,7 +741,6 @@ int update_pids(int aid)
 			if (dp)
 				dump_pids(aid);
 			dp = 0;
-			ad->pids[i].flags = 0;
 			if (ad->pids[i].fd > 0)
 			{
 				if (ad->active_pids > 0)
@@ -751,6 +750,7 @@ int update_pids(int aid)
 			ad->pids[i].fd = 0;
 			ad->pids[i].filter = -1;
 			ad->pids[i].pmt = -1;
+			ad->pids[i].flags = 0;
 		}
 
 	for (i = 0; i < MAX_PIDS; i++)
@@ -994,6 +994,7 @@ int mark_pid_add(int sid, int aid, int _pid)
 			ad->pids[i].sid[0] = sid;
 			ad->pids[i].pmt = -1;
 			ad->pids[i].filter = -1;
+			ad->pids[i].sock = -1;
 			return 0;
 		}
 	LOG("MAX_PIDS (%d) reached for adapter %d in adding PID: %d", MAX_PIDS, aid,
