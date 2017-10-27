@@ -1001,6 +1001,7 @@ int dvb_psi_read(int socket, void *buf, int len, sockets *ss, int *rb)
 {
 	unsigned char section[4096]; // max section size
 	int r;
+	uint32_t crc = 0;
 	*rb = 0;
 	memset(section, 0, sizeof(section));
 	r = read(socket, section + 1, sizeof(section) - 1); // section[0] = 0
@@ -1035,12 +1036,12 @@ int dvb_psi_read(int socket, void *buf, int len, sockets *ss, int *rb)
 	}
 
 	SPid *p = &ad->pids[i];
-	if (pid < 32 || section[1] == 2)
-	{
-		uint32_t crc = crc_32(section + 1, r - 1);
-		copy32(section, r, crc);
-		r += 4;
-	}
+	//	if (pid < 32 || section[1] == 2)
+	//	{
+	//		crc = crc_32(section + 1, r - 1);
+	//		copy32(section, r, crc);
+	//		r += 4;
+	//	}
 
 	char cc = p->cc1;
 	int pos = 0, left;
@@ -1063,6 +1064,11 @@ int dvb_psi_read(int socket, void *buf, int len, sockets *ss, int *rb)
 		r -= left;
 		if (left < 184)
 			memset(b + left + 4, -1, 184 - left);
+		if (opts.debug & DEFAULT_LOG)
+		{
+			LOG("left -> %d, len, crc %08X", left, crc);
+			hexdump("packet -> ", b, 188);
+		}
 		*rb += 188;
 	}
 	p->cc1 = cc;

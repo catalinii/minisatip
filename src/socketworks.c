@@ -797,7 +797,7 @@ void *select_and_execute(void *arg)
 					}
 
 					err = 0;
-					if (rlen <= 0)
+					if (!read_ok)
 						err = errno;
 
 					if (rlen > 0)
