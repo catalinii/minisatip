@@ -509,9 +509,9 @@ void set_options(int argc, char *argv[])
 	opts.snr_multiplier = 1;
 	// set 1 to read TS packets from /dev/dvb/adapterX/demuxY instead of /dev/dvb/adapterX/dvrY
 	// set to 2 to set PSI and PES filters using different ioctl
-	opts.use_demux_device = 2;
-#if defined(__arm__) && defined(ENIGMA)
 	opts.use_demux_device = 0;
+#if defined(__arm__) && defined(ENIGMA)
+	opts.use_demux_device = 2;
 #endif
 	opts.max_pids = 0;
 	opts.dvbapi_offset = 0; // offset for multiple dvbapi clients to the same server
