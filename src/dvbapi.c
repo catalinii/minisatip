@@ -431,7 +431,7 @@ int dvbapi_send_pmt(SKey *k)
 			demux = ad->fn;
 			adapter = ad->pa;
 		}
-		LOG("Using adapter %d and demux %d for local socket", adapter, demux);
+		LOG("Using adapter %d and demux %d for local socket (key adapter %d)", adapter, demux, k->adapter);
 		copy32(buf, 22, 0x01820200);
 		buf[25] = 1 << demux;
 		buf[26] = demux;
@@ -754,7 +754,7 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt)
 	int key, pid = pmt->pid;
 	p = find_pid(ad->id, pid);
 	if (!p)
-		return 1;
+		LOG("%s: could not find %d on adapter %d", __FUNCTION__, pid, ad->id);
 
 	key = keys_add(-1, ad->id, pmt->id);
 	k = get_key(key);
@@ -768,8 +768,7 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt)
 	k->adapter = ad->id;
 	k->pmt_pid = pid;
 	dvbapi_send_pmt(k);
-	//	if (p->key != spmt->old_key)
-	//		set_next_key(p->key, spmt->old_key);
+
 	mutex_unlock(&k->mutex);
 	return 0;
 }

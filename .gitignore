@@ -4,3 +4,5 @@
 config.log
 config.status
 Makefile
+src/Makefile
+tests/Makefile

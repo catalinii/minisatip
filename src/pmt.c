@@ -1415,7 +1415,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 	unsigned char *pmt_b, *pi;
 	int pid, spid, stype;
 	SPid *p, *cp;
-
+	SFilter *f;
 	adapter *ad;
 	int opmt;
 	SPMT *pmt = (void *)opaque;
@@ -1437,6 +1437,11 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 	pid = get_filter_pid(filter);
 	ad = get_adapter(pmt->adapter);
 	ver = b[5] & 0x3F;
+
+	f = get_filter(filter);
+	if (f->adapter != pmt->adapter)
+		LOG("Adapter mismatch %d != %d", f->adapter, pmt->adapter);
+
 	if (pmt->version == ver)
 	{
 #ifndef DISABLE_TABLES
@@ -1477,7 +1482,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 	pmt->version = b[5] & 0x3F;
 
 	mutex_lock(&pmt->mutex);
-	LOG("new PMT %d pid: %04X (%d), pmt_len %d, pi_len %d, sid %04X (%d) %s %s", pmt->id, pid, pid,
+	LOG("new PMT %d AD %d, pid: %04X (%d), pmt_len %d, pi_len %d, sid %04X (%d) %s %s", pmt->id, ad->id, pid, pid,
 		pmt_len, pi_len, pmt->sid, pmt->sid, pmt->name[0] ? "channel:" : "", pmt->name);
 	pi = b + 12;
 	pmt_b = pi + pi_len;

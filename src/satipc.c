@@ -157,7 +157,7 @@ int satipc_reply(sockets *s)
 		sip->option_no_setup = 1;
 		sip->option_no_option = 1;
 	}
-	sep = strstr((char *)s->buf, "enigma_minisatip");
+	sep = strcasestr((char *)s->buf, "enigma");
 	if (sep && !ad->restart_when_tune)
 	{
 		LOGM("Setting adapter %d to restart every time the transponder is changed", ad->id);
@@ -171,6 +171,9 @@ int satipc_reply(sockets *s)
 				ad->restart_needed = 1;
 			}
 		}
+		sip->option_no_session = 1;
+		sip->option_no_setup = 1;
+		sip->option_no_option = 1;
 	}
 
 	la = split(arg, (char *)s->buf, 100, ' ');
@@ -1482,6 +1485,5 @@ char *init_satip_pointer(int len)
 
 _symbols satipc_sym[] =
 	{
-		{"ad_satip", VAR_AARRAY_STRING, satip, 1, MAX_ADAPTERS, offsetof(
-																	satipc, sip)},
+		{"ad_satip", VAR_AARRAY_STRING, satip, 1, MAX_ADAPTERS, offsetof(satipc, sip)},
 		{NULL, 0, NULL, 0, 0}};
