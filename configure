@@ -1334,7 +1334,7 @@ Optional Features:
   --disable-dvbca         disable dvbca support (decrypting using CI)
   --disable-dvbaes        disable AES support (decrypting using openssl)
   --disable-dvbcsa        disable dvbcsa support (decrypting with dvbcsa)
-  --disable-netceiver     disable NETCEIVER support
+  --disable-netcv         disable NETCEIVER support
   --disable-satipc        disable satip client support
   --enable-static         enable static compilation
   --disable-dvbapi        disable dvbapi protocol support
@@ -4184,9 +4184,9 @@ fi
 
 done
 
+cd ..
 
 fi
-cd ..
 
 if test "$NETCVCLIENT" = "1"; then
 FM="$FM\n$netcv enabled"

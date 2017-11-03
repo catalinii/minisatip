@@ -125,7 +125,7 @@ fi
 
 
 AC_ARG_ENABLE([netcv],
-  [AS_HELP_STRING([--disable-netceiver],
+  [AS_HELP_STRING([--disable-netcv],
   [disable NETCEIVER support])])
 
 AS_IF([test "x$enable_netcv" != "xno"], [
@@ -149,8 +149,8 @@ CPPFLAGS="-I. -I$mcli_dir/mcast/client -I$mcli_dir/mcast/common -L$mcli_dir/mcas
 
 cd src
 AC_CHECK_HEADERS([netceiver.h],[NETCVCLIENT=1],[NETCVCLIENT=0])
-])
 cd ..
+])
 
 if test "$NETCVCLIENT" = "1"; then
 FM="$FM\n$netcv enabled"
