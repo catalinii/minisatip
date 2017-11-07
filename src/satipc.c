@@ -157,10 +157,10 @@ int satipc_reply(sockets *s)
 		sip->option_no_setup = 1;
 		sip->option_no_option = 1;
 	}
-	sep = strcasestr((char *)s->buf, "enigma");
+	sep = strstr((char *)s->buf, "enigma");
 	if (sep && !ad->restart_when_tune)
 	{
-		LOGM("Setting adapter %d to restart every time the transponder is changed", ad->id);
+		LOG("Setting adapter %d to restart every time the transponder is changed", ad->id);
 		ad->restart_when_tune = 1;
 		if (sip->use_tcp == 0)
 		{
