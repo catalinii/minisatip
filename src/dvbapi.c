@@ -767,6 +767,7 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt)
 	k->sid = pmt->sid;
 	k->adapter = ad->id;
 	k->pmt_pid = pid;
+	k->last_dmx_stop = getTick();
 	dvbapi_send_pmt(k);
 
 	mutex_unlock(&k->mutex);
