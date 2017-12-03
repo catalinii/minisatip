@@ -65,7 +65,7 @@ char public[] = "Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN";
 int rtsp, http, si, si1, ssdp1;
 
 #define RRTP_OPT 'r'
-#define DISABLEDVB_OPT 'D'
+#define DISABLEDVB_OPT 'N'
 #define HTTPSERVER_OPT 'w'
 #define HTTPPORT_OPT 'x'
 #define LOG_OPT 'l'
@@ -110,11 +110,13 @@ int rtsp, http, si, si1, ssdp1;
 #define SATIPXML_OPT '6'
 #define DISEQC_MULTI '0'
 #define SIGNALMULTIPLIER_OPT 'M'
+#define DEVICEID_OPT 'D'
 
 static const struct option long_options[] =
 	{
 		{"remote-rtp", required_argument, NULL, 'r'},
 		{"disable-dvb", no_argument, NULL, DISABLEDVB_OPT},
+		{"device-id", required_argument, NULL, DEVICEID_OPT},
 		{"check-signal", no_argument, NULL, 'z'},
 		{"clean-psi", no_argument, NULL, 't'},
 		{"log", no_argument, NULL, 'l'},
@@ -478,6 +480,7 @@ void set_options(int argc, char *argv[])
 	opts.timeout_sec = 30000;
 	opts.adapter_timeout = 30000;
 	opts.daemon = 1;
+	opts.device_id = 1;
 	opts.dvr_buffer = DVR_BUFFER;
 	opts.adapter_buffer = ADAPTER_BUFFER;
 	opts.udp_threshold = 25;
@@ -537,7 +540,7 @@ void set_options(int argc, char *argv[])
 
 #endif
 
-	while ((opt = getopt_long(argc, argv, "fl:v:r:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:o:gy:i:q:DVR:S:TX:Y:OL:EP:Z:0:F:M:" AXE_OPTS, long_options, NULL)) != -1)
+	while ((opt = getopt_long(argc, argv, "fl:v:r:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:o:gy:i:q:D:NVR:S:TX:Y:OL:EP:Z:0:F:M:" AXE_OPTS, long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
 		switch (opt)
@@ -562,6 +565,12 @@ void set_options(int argc, char *argv[])
 		case DISABLEDVB_OPT:
 		{
 			opts.disable_dvb = 1;
+			break;
+		}
+
+		case DEVICEID_OPT:
+		{
+			opts.device_id = atoi(optarg);
 			break;
 		}
 
@@ -1466,7 +1475,7 @@ int ssdp_reply(sockets *s)
 		return 0;
 	}
 
-// not my uuid
+		// not my uuid
 
 #ifdef AXE
 	axe_set_network_led(1);
