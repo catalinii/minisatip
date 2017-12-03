@@ -25,17 +25,17 @@ https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item
 Usage:
 -------
 
-minisatip version 0.7.7, compiled with s2api version: 050A
-[12/10 21:48:40.800 main]: Built with dvbcsa
-[12/10 21:48:40.801 main]: Built with CI
-[12/10 21:48:40.801 main]: Built with dvbapi
-[12/10 21:48:40.801 main]: Built with AES (OpenSSL)
-[12/10 21:48:40.801 main]: Built with tables processing
-[12/10 21:48:40.801 main]: Built with pmt processing
-[12/10 21:48:40.801 main]: Built with satip client
-[12/10 21:48:40.801 main]: Built with linux dvb client
-[12/10 21:48:40.801 main]: Built with backtrace
-[12/10 21:48:40.801 main]: Built with netceiver
+minisatip version 0.7.13, compiled with s2api version: 050A
+[03/12 07:47:35.455 main]: Built with dvbcsa
+[03/12 07:47:35.455 main]: Built with CI
+[03/12 07:47:35.455 main]: Built with dvbapi
+[03/12 07:47:35.455 main]: Built with AES (OpenSSL)
+[03/12 07:47:35.455 main]: Built with tables processing
+[03/12 07:47:35.455 main]: Built with pmt processing
+[03/12 07:47:35.455 main]: Built with satip client
+[03/12 07:47:35.455 main]: Built with linux dvb client
+[03/12 07:47:35.455 main]: Built with backtrace
+[03/12 07:47:35.455 main]: Built with netceiver
 
 	./minisatip [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 		[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]][-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] [-R document_root] [-s [DELSYS:]host[:port] [-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] 
@@ -65,8 +65,9 @@ Help
 	* All timing values are in ms, default adapter values are: 15-54-15-15-15-0
 	- note: * as adapter means apply to all adapters
 
-* -D --disable-dvb disable DVB adapter detection
- 
+* -D --device-id DVC_ID: specify the device id (in case there are multiple SAT>IP servers in the network)
+ 	* eg: -D 4 
+
 * -0 --diseqc-multi ADAPTER1:DISEQC_POSITION[,...]
 	* Send diseqc to selected position before other position is set.
 	- note: * as adapter means apply to all adapters
@@ -117,6 +118,8 @@ Help
 	* eg: -M 4-6:1.2-1.3 - multiplies the strength with 1.2 and the snr with 1.3 for adapter 4, 5 and 6
 	* eg: -M *:1.5-1.6 - multiplies the strength with 1.5 and the snr with 1.6 for all adapters
 
+* -N --disable-dvb disable DVB adapter detection
+ 
 * -Z --adapter-timeout ADAPTER1,ADAPTER2-ADAPTER4[,..]:TIMEOUT - specify the timeout for the adapters (0 enabled infinite timeout)	
 	eg: --adapter-timeout 1-2:30
 	- sets the timeouts for adapter 1 and 2 to 30 seconds 
