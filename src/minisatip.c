@@ -285,7 +285,8 @@ Help\n\
 \t* All timing values are in ms, default adapter values are: 15-54-15-15-15-0\n\
 	- note: * as adapter means apply to all adapters\n\
 \n\
-* -D --disable-dvb disable DVB adapter detection\n \
+* -D --device-id DVC_ID: specify the device id (in case there are multiple SAT>IP servers in the network)\n \
+	* eg: -D 4 \n\
 \n\
 * -0 --diseqc-multi ADAPTER1:DISEQC_POSITION[,...]\n\
 \t* Send diseqc to selected position before other position is set.\n\
@@ -336,6 +337,8 @@ Help\n\
 	* If the snr or the strength multipliers are set to 0, minisatip will override the value received from the adapter and will report always full signal 100%% \n\
 	* eg: -M 4-6:1.2-1.3 - multiplies the strength with 1.2 and the snr with 1.3 for adapter 4, 5 and 6\n\
 	* eg: -M *:1.5-1.6 - multiplies the strength with 1.5 and the snr with 1.6 for all adapters\n\
+\n\
+* -N --disable-dvb disable DVB adapter detection\n \
 \n\
 * -Z --adapter-timeout ADAPTER1,ADAPTER2-ADAPTER4[,..]:TIMEOUT - specify the timeout for the adapters (0 enabled infinite timeout)	\n\
 	eg: --adapter-timeout 1-2:30\n\
