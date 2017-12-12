@@ -25,7 +25,6 @@
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <time.h>
-#include <unistd.h>
 #include <stdio.h>
 #include <errno.h>
 #include <unistd.h>
@@ -58,6 +57,8 @@ extern SCA ca[MAX_CA];
 
 int first_ddci = -1;
 
+#define DDCI_BUFFER 10000 * 188
+
 #define get_ddci(i) ((i >= 0 && i < MAX_ADAPTERS && ddci_devices[i] && ddci_devices[i]->enabled) ? ddci_devices[i] : NULL)
 typedef struct ddci_device
 {
@@ -72,6 +73,8 @@ typedef struct ddci_device
 	int cat_processed;
 	int capid[MAX_CA_PIDS + 1];
 	int ncapid;
+	unsigned char *out;
+	int ro, wo;
 } ddci_device_t;
 
 int ddci_id;
@@ -362,8 +365,132 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt)
 	return 0;
 }
 
+void set_pid_ts(unsigned char *b, int pid)
+{
+	pid &= 0x1FFF;
+	b[1] &= 0xE0;
+	b[1] |= (pid >> 8) & 0x1F;
+	b[2] = pid & 0xFF;
+}
+
+int push_ts_to_adapter(adapter *ad, unsigned char *b, int *ad_pos)
+{
+	int i, new_pos = -1;
+	for (i = *ad_pos; i < ad->rlen; i++)
+		if (PID_FROM_TS(ad->buf + i) == 0x1FFFF)
+		{
+			new_pos = i;
+			break;
+		}
+	if ((new_pos == -1) && (ad->rlen <= ad->lbuf + 188))
+	{
+		new_pos = ad->rlen;
+		ad->rlen += 188;
+	}
+	if (new_pos < 0 || new_pos + 188 > ad->lbuf)
+	{
+		LOGM("Could not push more data for adapter %d, rlen %d, lbuf %d, new+pos %d", ad->id, ad->rlen, ad->lbuf, new_pos);
+		*ad_pos = 0;
+		return 1;
+	}
+
+	memcpy(ad->buf + new_pos, b, 188);
+	*ad_pos = new_pos;
+	return 0;
+}
+
+// the packet is not needed -> 0, adapter buffer is full, stop processing -> 1
+
+int copy_ts_from_ddci(adapter *ad, ddci_device_t *d, unsigned char *b, int *ad_pos)
+{
+	int pid = PID_FROM_TS(b);
+	if (pid == 0x1FFF)
+		return 0;
+
+	int idx = d->pid_mapping[pid];
+
+	if (idx == -1)
+		return 0;
+
+	int aid = mapping_table[idx].ad_pid >> 16;
+	if (aid != ad->id)
+		return -1;
+	// search for a position to put the packet in
+	int dpid = mapping_table[idx].ad_pid & 0x1FFF;
+	set_pid_ts(b, dpid);
+	if (push_ts_to_adapter(ad, b, ad_pos))
+	{
+		set_pid_ts(b, pid);
+		return 1;
+	}
+	return 0;
+}
+
+int ddci_process_ts(adapter *ad, ddci_device_t *d)
+{
+	unsigned char *b = ad->buf;
+	int rlen = ad->rlen;
+	int iop = 0, iomax = ad->rlen / 188;
+	int pid, dpid, i, ddci;
+	struct iovec io[iomax];
+	if (mutex_lock(&d->mutex))
+		return 0;
+	if (!d->enabled)
+		return 0;
+	// step 1 - fill the IO with TS packets and change the PID as required by mapping table
+	for (i = 0; i < rlen; i += 188)
+	{
+		pid = PID_FROM_TS(b);
+		dpid = get_mapping_table(ad->id, pid, &ddci);
+		if (dpid == -1)
+			continue;
+		if (ddci != d->id)
+			continue;
+		if (dpid != (dpid & 0x1FFF))
+			LOG("%s: mapped pid not valid %d, source pid %d adapter %d", __FUNCTION__, dpid, pid, ad->id);
+
+		set_pid_ts(b, dpid);
+		io[iop].iov_base = b;
+		io[iop].iov_len = 188;
+		iop++;
+	}
+	// write the TS to the DDCI handle
+	if (iop > 0)
+	{
+		int rb = writev(ad->fe, io, iop);
+		if (rb != iop * 188)
+			LOG("%s: write incomplete %d out of %d", __FUNCTION__, rb, iop * 188);
+	}
+	// mark the written TS packets as 8191 (0x1FFF)
+	for (i = 0; i < iop; i++)
+	{
+		unsigned char *b = io[i].iov_base;
+		b[1] |= 0x1F;
+		b[2] |= 0xFF;
+	}
+
+	// move back TS packets from the DDCI out buffer to the adapter buffer
+	int ad_pos = 0;
+	for (i = d->ro; i < d->wo; i = (i + 188) % DDCI_BUFFER)
+	{
+		int rv = copy_ts_from_ddci(ad, d, d->out + i, &ad_pos);
+		if (!rv && (d->ro == i))
+			d->ro = (i + 188) % DDCI_BUFFER;
+		if (rv == 1)
+			break;
+	}
+
+	mutex_unlock(&d->mutex);
+	return 0;
+}
+
 int ddci_ts(adapter *ad)
 {
+	int i;
+	for (i = 0; i < MAX_ADAPTERS; i++)
+		if (ddci_devices[i] && ddci_devices[i]->enabled)
+			ddci_process_ts(ad, ddci_devices[i]);
+
 	return 0;
 }
 
@@ -392,6 +519,33 @@ int ddci_read_sec_data(sockets *s)
 {
 	read_dmx(s);
 	LOG("done read_dmx")
+
+	// copy the processed data to d->out buffer
+	adapter *ad = get_adapter(s->sid);
+	ddci_device_t *d = get_ddci(s->sid);
+	unsigned char *b = ad->buf;
+	int left = 0, rlen = ad->rlen;
+
+	if (d->ro < d->wo)
+	{
+		left = DDCI_BUFFER - d->wo;
+		if (left > rlen)
+			left = rlen;
+		memcpy(d->out + d->wo, b, left);
+		rlen -= left;
+		b += left;
+		d->wo = (d->wo + left) % DDCI_BUFFER;
+	}
+	if (rlen > 0)
+	{
+		left = d->ro - d->wo;
+		if (left > rlen)
+			left = rlen;
+		memcpy(d->out + d->wo, b, left);
+		rlen -= left;
+		b += left;
+		d->wo = (d->wo + left) % DDCI_BUFFER;
+	}
 	return 0;
 }
 
@@ -408,11 +562,20 @@ int ddci_open_device(adapter *ad)
 	ddci_device_t *d = ddci_devices[ad->id];
 	if (!d)
 	{
+		unsigned char *out;
+		out = malloc1(DDCI_BUFFER + 10);
+		if (!out)
+		{
+			LOG_AND_RETURN(1, "%s: could not allocated memory for the output buffer for adapter %d", __FUNCTION__, ad->id);
+		}
+
 		d = ddci_devices[ad->id] = malloc1(sizeof(ddci_device_t));
 		if (!d)
 			return -1;
 		mutex_init(&d->mutex);
 		d->id = ad->id;
+		memset(out, -1, DDCI_BUFFER + 10);
+		d->out = out;
 	}
 	LOG("DDCI opening [%d] adapter %d and frontend %d", ad->id, ad->pa, ad->fn);
 	sprintf(buf, "/dev/dvb/adapter%d/sec%d", ad->pa, ad->fn);
@@ -455,6 +618,7 @@ int ddci_open_device(adapter *ad)
 	d->ncapid = 0;
 	d->max_channels = MAX_CHANNELS_ON_CI;
 	d->channels = 0;
+	d->ro = d->wo = 0;
 	d->enabled = 1;
 	mutex_unlock(&d->mutex);
 	LOG("opened DDCI adapter %d fe:%d dvr:%d", ad->id, ad->fe, ad->dvr);
