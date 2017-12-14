@@ -18,8 +18,9 @@
  *
  */
 
-#define _GNU_SOURCE
+#ifndef DISABLE_NETCVCLIENT
 
+#define _GNU_SOURCE
 #include <sys/types.h>
 #include <ifaddrs.h>
 #include <string.h>
@@ -221,11 +222,11 @@ void netcv_commit(adapter *ad)
 
 			break;
 
-		/* set roll-off */
-		// TODO: check if needed for DVB-S2 transponders
-		// unreachable code
-		//			m_fep.u.qpsk.fec_inner |= (tp->ro << 24);
-		//			break;
+			/* set roll-off */
+			// TODO: check if needed for DVB-S2 transponders
+			// unreachable code
+			//			m_fep.u.qpsk.fec_inner |= (tp->ro << 24);
+			//			break;
 
 		case SYS_DVBC_ANNEX_A:
 			m_pos = 0xfff; /* not sure, to be tested */
@@ -576,3 +577,4 @@ int handle_ten(tra_t *ten, void *p)
 
 	return 0;
 }
+#endif

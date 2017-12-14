@@ -253,10 +253,21 @@ static inline int get_index_hash(void *p, int max, int struct_size, uint32_t key
 #define LOG_SSDP (1 << 16)
 #define LOG_DVB (1 << 17)
 
+typedef ssize_t (*mywritev)(int fd, const struct iovec *io, int len);
+
+#ifdef TESTING
+
+#define writev(a, b, c) _writev(a, b, c)
+
+#endif
+
 #ifdef UTILS_C
 char *loglevels[] =
 	{"general", "http", "socketworks", "stream", "adapter", "satipc", "pmt", "tables", "dvbapi", "lock", "netceiver", "dvbca", "axe", "socket", "utils", "dmx", "ssdp", "dvb", NULL};
+mywritev _writev;
 #else
 extern char *loglevels[];
+extern mywritev _writev;
 #endif
+
 #endif

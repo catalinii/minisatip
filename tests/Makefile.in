@@ -14,7 +14,7 @@ else
 	LINUXDVB=0
 endif
 
-SOURCES=test_utils.c
+SOURCES=test_utils.c test_ddci.c
 
 TABLES=0
 PMT=0
@@ -26,6 +26,8 @@ CFLAGS += -DAXE
 
 CFLAGS += -DENIGMA
 CFLAGS += -DTESTING
+CFLAGS += -DDDCI_TEST
+CFLAGS += -DDISABLE_NETCVCLIENT
 
 LDFLAGS+=$(addprefix -l,$(LIBS))
 
@@ -40,7 +42,7 @@ $(BUILDDIR)/%.d : %.c
 
 $(BUILDDIR)/% : %.c
 	@mkdir -p $(BUILDDIR)
-	$(CC) $(CFLAGS) $*.c ../src/utils.c -o $(BUILDDIR)/test $(LDFLAGS)
+	$(CC) $(CFLAGS) $*.c ../src/*c -o $(BUILDDIR)/test $(LDFLAGS)
 	@echo "Running $@"
 	@$(BUILDDIR)/test
 	@rm -f $(BUILDDIR)/test

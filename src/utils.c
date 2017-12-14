@@ -748,7 +748,6 @@ int endswith(char *src, char *with)
 	return 0;
 }
 
-#ifndef TESTING
 
 #define VAR_LENGTH 20
 extern _symbols adapters_sym[];
@@ -1220,7 +1219,6 @@ int closefile(char *mem, int len)
 {
 	return munmap((void *)mem, len);
 }
-#endif
 
 #undef DEFAULT_LOG
 #define DEFAULT_LOG LOG_LOCK
@@ -1413,8 +1411,6 @@ pthread_t get_tid()
 	return pthread_self();
 }
 
-#ifndef TESTING
-
 pthread_t start_new_thread(char *name)
 {
 	pthread_t tid;
@@ -1429,8 +1425,6 @@ pthread_t start_new_thread(char *name)
 	}
 	return tid;
 }
-
-#endif
 
 void set_thread_prio(pthread_t tid, int prio)
 {
@@ -1601,7 +1595,6 @@ void hexdump(char *desc, void *addr, int len)
 		LOG("%s:\n%s", desc, buf);
 }
 
-#ifndef TESTING
 
 SMutex httpc_mutex;
 
@@ -1798,5 +1791,3 @@ void dump_packets(char *message, unsigned char *b, int len, int packet_offset)
 		LOG("%s: pid %d (%X) CC=%X CRC=%08X%s pos: %d packet %d : %02X %02X %02X %02X", message, pid, pid, cc, crc, (b[i + 3] & 0x80) ? "encrypted" : "", i + packet_offset, (packet_offset + i) / 188, b[i], b[i + 1], b[i + 2], b[i + 3]);
 	}
 }
-
-#endif

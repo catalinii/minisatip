@@ -1579,6 +1579,9 @@ void write_pid_file()
 
 pthread_t main_tid;
 extern int sock_signal;
+
+#ifndef TESTING
+
 int main(int argc, char *argv[])
 {
 	int sock_bw, sock_satip, rv, devices;
@@ -1673,6 +1676,8 @@ int main(int argc, char *argv[])
 		closelog();
 	return 0;
 }
+
+#endif 
 
 int readBootID()
 {

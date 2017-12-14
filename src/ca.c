@@ -559,7 +559,7 @@ int ca_init(ca_device_t *d)
 	ca_slot_info_t info;
 	int64_t st = getTick();
 	info.num = 0;
-	int tries = 800; // wait up to 8s for the CAM
+	__attribute__((unused)) int tries = 800; // wait up to 8s for the CAM
 	int fd = d->fd;
 
 	d->tl = NULL;
@@ -580,10 +580,10 @@ int ca_init(ca_device_t *d)
 		if (ioctl(fd, CA_GET_SLOT_INFO, &info))
 			LOG_AND_RETURN(0, "%s: Could not get info1 for ca %d", __FUNCTION__, d->id);
 		usleep(10000);
-	} while (tries-- && !(info.flags & CA_CI_MODULE_READY));
+	} while ((tries-- > 0) && !(info.flags & CA_CI_MODULE_READY));
 
 	if (ioctl(fd, CA_GET_SLOT_INFO, &info))
-		LOG_AND_RETURN(0, "%s: Could not get info2 for ca %d", __FUNCTION__, d->id);
+		LOG_AND_RETURN(0, "%s: Could not get info2 for ca %d, tries %d", __FUNCTION__, d->id, tries);
 
 	if (info.type != CA_CI_LINK)
 	{
