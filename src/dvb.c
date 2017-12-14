@@ -645,7 +645,7 @@ int setup_switch(adapter *ad)
 	return freq;
 }
 
-//#define USE_DVBAPI3
+	//#define USE_DVBAPI3
 
 #if DVBAPIVERSION < 0x0500
 #define USE_DVBAPI3
@@ -784,7 +784,7 @@ int dvb_tune(int aid, transponder *tp)
 #if DVBAPIVERSION >= 0x0502
 		ADD_PROP(DTV_STREAM_ID, ((tp->ds & 0xFF) << 8) | (tp->plp & 0xFF))
 #endif
-// valid for DD DVB-C2 devices
+		// valid for DD DVB-C2 devices
 
 #ifdef USE_DVBAPI3
 		fep.frequency = tp->freq;
@@ -909,7 +909,7 @@ int dvb_set_pid(adapter *a, int i_pid)
 		return -1;
 	}
 
-	LOG("setting filter on PID %d for fd %d", i_pid, fd);
+	LOG("AD %d [demux %d %d], setting filter on PID %d for fd %d", a->id, hw, ad, i_pid, fd);
 
 	return fd;
 }
@@ -957,7 +957,7 @@ int dvb_demux_set_pid(adapter *a, int i_pid)
 			LOG0("failed setting filter on fd %d, adapter %d, errno %d (%s), enabled pids %d", fd, a->id, i_pid, errno, strerror(errno), ep);
 			return -1;
 		}
-		LOG("started setting filters for fd %d", fd);
+		LOG("AD %d started setting filters for fd %d", a->id, fd);
 	}
 	if (i_pid != 0)
 	{
@@ -967,7 +967,7 @@ int dvb_demux_set_pid(adapter *a, int i_pid)
 			LOG0("failed to add pid %d to fd %d: %d, %s", p, fd, errno, strerror(errno));
 			return -1;
 		}
-		LOG("setting demux filter on PID %d for fd %d", i_pid, fd);
+		LOG("AD %d setting demux filter on PID %d for fd %d", a->id, i_pid, fd);
 	}
 	return fd;
 }
@@ -1111,7 +1111,7 @@ int dvb_set_psi_filter(adapter *a, int i_pid)
 		return -1;
 	}
 
-	LOG("setting PSI filter on PID %d for fd %d", i_pid, fd);
+	LOG("AD %d [demux %d %d], setting PSI filter on PID %d for fd %d", a->id, hw, ad, i_pid, fd);
 	int sock = sockets_add(fd, NULL, a->id, TYPE_DVR, NULL, NULL, NULL);
 	if (sock < 0)
 	{

@@ -51,6 +51,7 @@
 #include "minisatip.h"
 #include "socketworks.h"
 
+/*
 // external references of utils.c
 int run_loop;
 char pid_file[50];
@@ -59,6 +60,7 @@ char app_name[] = "test";
 __thread char *thread_name = "test";
 
 struct struct_opts opts;
+*/
 
 typedef struct
 {
@@ -123,6 +125,7 @@ int test_get_index_hash()
 int main()
 {
 	opts.log = 1;
+	thread_name = "test";
 	TEST_FUNC(test_get_index_hash(), "testing get_index_hash");
 	return 0;
 }
