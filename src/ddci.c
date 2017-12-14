@@ -368,7 +368,7 @@ int push_ts_to_adapter(adapter *ad, unsigned char *b, int new_pid, int *ad_pos)
 			new_pos = i;
 			break;
 		}
-	if ((new_pos == -1) && (ad->rlen <= ad->lbuf + 188))
+	if ((new_pos == -1) && (ad->rlen <= ad->lbuf - 188))
 	{
 		new_pos = ad->rlen;
 		ad->rlen += 188;
@@ -400,7 +400,7 @@ int copy_ts_from_ddci(adapter *ad, ddci_device_t *d, unsigned char *b, int *ad_p
 
 	if (idx == -1)
 	{
-		LOG("idx = -1");
+		LOGM("DD %d pid %d not found in mapping table", d->id, pid);
 		return 0;
 	}
 
@@ -461,7 +461,7 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d)
 	if (iop > 0)
 	{
 
-		LOG("writing %d bytes to fd %d", iop * 188, ad2->fe);
+		LOGM("writing %d bytes to fd %d", iop * 188, ad2->fe);
 		int rb = writev(ad2->fe, io, iop);
 		if (rb != iop * 188)
 			LOG("%s: write incomplete to DDCI %d,fd %d, wrote %d out of %d, errno %d: %s", __FUNCTION__, ad2->id, ad2->fe, rb, iop * 188, errno, strerror(errno));
@@ -472,8 +472,16 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d)
 
 	// move back TS packets from the DDCI out buffer to the adapter buffer
 	int ad_pos = 0;
-	LOG("ddci_process_ts ro %d, wo %d max %d", d->ro, d->wo, DDCI_BUFFER);
-	for (i = d->ro; i < d->wo; i = (i + 188) % DDCI_BUFFER)
+	LOGM("ddci_process_ts ro %d, wo %d max %d", d->ro, d->wo, DDCI_BUFFER);
+
+	if ((d->ro % 188) != (d->wo % 188))
+	{
+		LOG("ddci %d, ro and wo not correctly alligned ro %d wo %d", d->ro, d->wo);
+		mutex_unlock(&d->mutex);
+		return 0;
+	}
+
+	for (i = d->ro; i != d->wo; i = (i + 188) % DDCI_BUFFER)
 	{
 		dump_packets("ddci_process_ts ->", d->out + i, 188, i);
 		int rv = copy_ts_from_ddci(ad, d, d->out + i, &ad_pos);
@@ -481,7 +489,7 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d)
 			d->ro = (i + 188) % DDCI_BUFFER;
 		if (rv == 1)
 		{
-			LOG("ddci_process_ts processing %d, rv %d", i, rv);
+			LOGM("adapter %d buffer full %d, dd %d, ro %d, wo %d", ad->id, d->id, d->ro, d->wo);
 			break;
 		}
 	}
@@ -523,14 +531,15 @@ int ddci_del_filters(adapter *ad, int fd, int pid)
 
 int push_ts_to_ddci(ddci_device_t *d, unsigned char *b, int rlen)
 {
-	int left, init_rlen = rlen;
+	int left, i, init_rlen = rlen;
+	unsigned char *init_b = b;
 	if (d->ro <= d->wo)
 	{
 		left = DDCI_BUFFER - d->wo;
 		if (left > rlen)
 			left = rlen;
 		memcpy(d->out + d->wo, b, left);
-		dump_packets("ddci_read_sec_data1 -> ", b, left, 0);
+		//		dump_packets("ddci_read_sec_data1 -> ", b, left, 0);
 		rlen -= left;
 		b += left;
 		d->wo = (d->wo + left) % DDCI_BUFFER;
@@ -542,12 +551,17 @@ int push_ts_to_ddci(ddci_device_t *d, unsigned char *b, int rlen)
 		if (left > rlen)
 			left = rlen;
 		memcpy(d->out + d->wo, b, left);
-		dump_packets("ddci_read_sec_data2 -> ", b, left, 0);
+		//		dump_packets("ddci_read_sec_data2 -> ", b, left, 0);
 		rlen -= left;
 		b += left;
 		d->wo = (d->wo + left) % DDCI_BUFFER;
 	}
-	LOG("%s: %d bytes, left %d, ro %d, wo %d", __FUNCTION__, init_rlen, rlen, d->ro, d->wo);
+	for (i = 0; i < init_rlen - rlen; i += 188)
+	{
+		init_b[i + 1] |= 0x1F;
+		init_b[i + 2] |= 0xFF;
+	}
+	LOGM("%s: %d bytes, left %d, ro %d, wo %d", __FUNCTION__, init_rlen, rlen, d->ro, d->wo);
 	return rlen;
 }
 
@@ -555,6 +569,11 @@ int ddci_read_sec_data(sockets *s)
 {
 	read_dmx(s);
 
+	if (s->rlen != 0)
+	{
+		LOGM("process_dmx not called as s->rlen %d", s->rlen);
+		return 0;
+	}
 	// copy the processed data to d->out buffer
 	adapter *ad = get_adapter(s->sid);
 	ddci_device_t *d = get_ddci(s->sid);

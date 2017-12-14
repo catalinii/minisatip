@@ -721,6 +721,10 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb)
 	if (sip->tcp_pos == sip->tcp_len)
 		sip->tcp_pos = sip->tcp_len = 0;
 	DEBUGM("%s: returning %d bytes", __FUNCTION__, *rb);
+
+	if ((*rb > 0) && (opts.debug & LOG_DMX))
+		dump_packets("satip_read ->", buf, *rb, buf - (void *)ad->buf);
+
 	return (*rb >= 0);
 }
 

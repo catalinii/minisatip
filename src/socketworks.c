@@ -1321,7 +1321,7 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 	if (s->spos == ((s->wpos + 1) % s->wmax)) // the queue is full, start overwriting
 	{
 		s->overflow++;
-		if ((s->overflow % 100) == 0)
+		if ((s->overflow < 100) || ((s->overflow % 100) == 0))
 			LOG("sock %d: overflow %d it %d", s->id, s->overflow, s->iteration);
 
 		if (tmpbuf)
