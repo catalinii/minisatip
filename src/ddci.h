@@ -24,6 +24,9 @@ typedef struct ddci_device
 	int ncapid;
 	unsigned char *out;
 	int ro, wo;
+	uint64_t last_pat, last_pmt;
+	int tid, ver;
+	char pat_cc, pmt_cc[MAX_CHANNELS_ON_CI + 1];
 } ddci_device_t;
 
 void find_ddci_adapter(adapter **a);

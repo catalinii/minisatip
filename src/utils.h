@@ -141,6 +141,7 @@ void hexdump(char *log_message, void *addr, int len);
 uint32_t crc_32(const uint8_t *data, int datalen);
 void dump_packets(char *message, unsigned char *b, int len, int packet_offset);
 int get_index_hash_search(int start_pos, void *p, int max, int struct_size, uint32_t key, uint32_t value);
+int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, char *cc, int pid);
 
 // Hash function from https://stackoverflow.com/questions/664014/what-integer-hash-function-are-good-that-accepts-an-integer-hash-key
 static inline uint32_t hash(uint32_t x)

@@ -514,7 +514,7 @@ void posix_signal_handler(int sig, siginfo_t *siginfo, ucontext_t *ctx)
 }
 
 int /* Returns 0 on success, -1 on error */
-	becomeDaemon()
+becomeDaemon()
 {
 	int maxfd, fd, fdi, fdo, pid;
 	__attribute__((unused)) int rv;
@@ -747,7 +747,6 @@ int endswith(char *src, char *with)
 		return 1;
 	return 0;
 }
-
 
 #define VAR_LENGTH 20
 extern _symbols adapters_sym[];
@@ -1595,7 +1594,6 @@ void hexdump(char *desc, void *addr, int len)
 		LOG("%s:\n%s", desc, buf);
 }
 
-
 SMutex httpc_mutex;
 
 int http_client_add()
@@ -1790,4 +1788,37 @@ void dump_packets(char *message, unsigned char *b, int len, int packet_offset)
 		cc = b[i + 3] & 0xF;
 		LOG("%s: pid %d (%X) CC=%X CRC=%08X%s pos: %d packet %d : %02X %02X %02X %02X", message, pid, pid, cc, crc, (b[i + 3] & 0x80) ? "encrypted" : "", i + packet_offset, (packet_offset + i) / 188, b[i], b[i + 1], b[i + 2], b[i + 3]);
 	}
+}
+
+int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, char *cc, int pid)
+{
+	int pos = 0, left = 0, len = 0;
+	uint8_t *b;
+
+	while ((srclen > 0) && (len < dstsize))
+	{
+		if (dstsize - len < 188)
+			LOG_AND_RETURN(1, "Not enough space copy pid %d from %p to %p", pid, src, dest)
+		b = dest + len;
+		*cc = ((*cc) + 1) % 16;
+		b[0] = 0x47;
+		b[1] = pid >> 8;
+		if (pos == 0)
+			b[1] |= 0x40;
+		b[2] = pid & 0xFF;
+		b[3] = 0x10 | *cc;
+		left = srclen > 184 ? 184 : srclen;
+		memcpy(b + 4, src + pos, left);
+		pos += left;
+		srclen -= left;
+		if (left < 184)
+			memset(b + left + 4, -1, 184 - left);
+		if (opts.debug & DEFAULT_LOG)
+		{
+			LOG("pid %d, left -> %d, len, cc %d", pid, left, *cc);
+			hexdump("packet -> ", b, 188);
+		}
+		len += 188;
+	}
+	return len;
 }

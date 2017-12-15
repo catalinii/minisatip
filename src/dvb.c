@@ -1001,7 +1001,6 @@ int dvb_psi_read(int socket, void *buf, int len, sockets *ss, int *rb)
 {
 	unsigned char section[4096]; // max section size
 	int r;
-	uint32_t crc = 0;
 	*rb = 0;
 	memset(section, 0, sizeof(section));
 	r = read(socket, section + 1, sizeof(section) - 1); // section[0] = 0
@@ -1036,6 +1035,7 @@ int dvb_psi_read(int socket, void *buf, int len, sockets *ss, int *rb)
 	}
 
 	SPid *p = &ad->pids[i];
+	//	uint32_t crc = 0;
 	//	if (pid < 32 || section[1] == 2)
 	//	{
 	//		crc = crc_32(section + 1, r - 1);
@@ -1043,35 +1043,8 @@ int dvb_psi_read(int socket, void *buf, int len, sockets *ss, int *rb)
 	//		r += 4;
 	//	}
 
-	char cc = p->cc1;
-	int pos = 0, left;
-	unsigned char *b;
+	*rb = buffer_to_ts(buf, len, section, r, &p->cc1, pid);
 
-	while ((r > 0) && (*rb < len))
-	{
-		if (len - *rb < 188)
-			LOG_AND_RETURN(1, "Not enough space copy the section for adapter %d, left %d", ad->id, len - *rb)
-		b = buf + *rb;
-		b[0] = 0x47;
-		b[1] = pid >> 8;
-		if (pos == 0)
-			b[1] |= 0x40;
-		b[2] = pid & 0xFF;
-		b[3] = 0x10 | (cc++ & 0xF);
-		left = r > 184 ? 184 : r;
-		memcpy(b + 4, section + pos, left);
-		pos += left;
-		r -= left;
-		if (left < 184)
-			memset(b + left + 4, -1, 184 - left);
-		if (opts.debug & DEFAULT_LOG)
-		{
-			LOG("left -> %d, len, crc %08X", left, crc);
-			hexdump("packet -> ", b, 188);
-		}
-		*rb += 188;
-	}
-	p->cc1 = cc;
 	return 1;
 }
 // Use DMX_SET_FILTER to add PSI filter
@@ -1112,6 +1085,7 @@ int dvb_set_psi_filter(adapter *a, int i_pid)
 	}
 
 	LOG("AD %d [demux %d %d], setting PSI filter on PID %d for fd %d", a->id, hw, ad, i_pid, fd);
+
 	int sock = sockets_add(fd, NULL, a->id, TYPE_DVR, NULL, NULL, NULL);
 	if (sock < 0)
 	{
