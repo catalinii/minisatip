@@ -244,7 +244,7 @@ int init_hw(int i)
 
 #ifdef ENIGMA
 	if (ad->dmx_source == -1)
-		ad->dmx_source = ad->id;
+		ad->dmx_source = 16 + ad->id;
 #endif
 
 	if (ad->open(ad))

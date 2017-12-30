@@ -585,10 +585,16 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb)
 	int expected_len = sip->tcp_size - sip->tcp_len;
 	if (expected_len > 0)
 	{
+		int err;
 		tmp_len = read(socket, sip->tcp_data + sip->tcp_len, expected_len);
+		err = errno;
 		DEBUGM("read %d (from %d) from rtsp socket %d (id %d) [%02X %02X, %02X %02X]", tmp_len, sip->tcp_size - sip->tcp_len, socket, ss->id, tmp_b[0], tmp_b[1], tmp_b[2], tmp_b[3]);
 		if (tmp_len <= 0)
-			LOG_AND_RETURN(0, "read %d from RTSP socket, errno %d, %s", tmp_len, errno, strerror(errno));
+		{
+			LOG("read %d from RTSP socket, errno %d, %s", tmp_len, err, strerror(err));
+			errno = err;
+			return 0;
+		}
 		sip->tcp_data[sip->tcp_len + tmp_len] = 0;
 	}
 	else if (len > 65535)
