@@ -1392,7 +1392,7 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h)
 	Ssatip_xml_data *s = (Ssatip_xml_data *)opaque;
 	if (!data) // the socket will be closed, process the data;
 	{
-		char *sep;
+		char *sep, *eos;
 		char *arg[MAX_DVBAPI_SYSTEMS];
 		char order[MAX_DVBAPI_SYSTEMS];
 		int i_order = 0;
@@ -1410,10 +1410,13 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h)
 			sep = strstr(sep, ">");
 		if (!sep)
 		{
-			LOG("No satipcap found for %s", s->url);
+			LOG("No satipcap found for %s, XML:\n%s", s->url, s->xml);
 			return;
 		}
 		sep++;
+		eos = strchr(sep, '<');
+		if (eos)
+			*eos = 0;
 		la = split(arg, sep, MAX_DVBAPI_SYSTEMS, ',');
 		for (i = 0; i < la; i++)
 		{
