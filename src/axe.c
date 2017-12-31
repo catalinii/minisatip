@@ -336,7 +336,7 @@ int axe_setup_switch(adapter *ad)
 			}
 			else
 			{
-				master = ad->slave ? ad->slave - 1 : ad->pa;
+				master = (ad->master_source > = 0) ? ad->master_source : ad->pa;
 				adm = use_adapter(master);
 				if (adm == NULL)
 				{
@@ -350,9 +350,9 @@ int axe_setup_switch(adapter *ad)
 						ad2 = get_configured_adapter(aid);
 						if (!ad2 || ad2->fe2 <= 0 || ad == ad2)
 							continue;
-						if (ad2->slave && ad2->slave - 1 != adm->pa)
+						if ((ad2->master_source >= 0) && ad2->master_source != adm->pa)
 							continue;
-						if (!ad2->slave && ad2 != adm)
+						if ((ad2->master_source >= 0) && ad2 != adm)
 							continue;
 						if (ad2->sid_cnt > 0)
 							break;
@@ -414,7 +414,7 @@ int axe_setup_switch(adapter *ad)
 	else
 	{
 		aid = ad->id & 3;
-		input = ad->dmx_source < 0 ? 0 : ad->dmx_source; //opts.axe_unicinp[aid];
+		input = ad->master_source < 0 ? 0 : ad->master_source; //opts.axe_unicinp[aid];
 		frontend_fd = ad->fe;
 		ad = use_adapter(input);
 		if (ad == NULL)
@@ -825,6 +825,7 @@ void free_axe_input(adapter *ad)
 	}
 }
 
+// deprecate this for set_slave_adapters
 void set_link_adapters(char *o)
 {
 	int i, la, a_id, b_id;
@@ -844,11 +845,11 @@ void set_link_adapters(char *o)
 		b_id = map_intd(sep1 + 1, NULL, -1);
 		if (b_id < 0 || b_id >= MAX_ADAPTERS)
 			continue;
-		if (a_id == b_id || (a[a_id] && a[a_id]->slave))
+		if (a_id == b_id || (a[a_id] && (a[a_id]->master_source >= 0)))
 			continue;
 		if (!a[b_id])
 			a[b_id] = adapter_alloc();
-		a[b_id]->slave = a_id + 1;
+		a[b_id]->master_source = a_id;
 		LOG("Setting adapter %d as master for adapter %d", a_id, b_id);
 	}
 }

@@ -158,7 +158,7 @@ static const struct option long_options[] =
 		{"version", no_argument, NULL, 'V'},
 #ifdef AXE
 		{"link-adapters", required_argument, NULL, '7'},
-		{"free-inputs", required_argument, NULL, 'A'},
+		{"free-inputs", required_argument, NULL, ABSOLUTE_SRC},
 		{"quattro", no_argument, NULL, 'Q'},
 		{"quattro-hiband", required_argument, NULL, '8'},
 #endif
@@ -403,13 +403,18 @@ Help\n\
 "
 #endif
 		" \
-* -S --slave ADAPTER1,ADAPTER2-ADAPTER4[,..] - specify slave adapters	\n\
+* -S --slave ADAPTER1,ADAPTER2-ADAPTER4[,..]:MASTER - specify slave adapters	\n\
 	* Allows specifying bonded adapters (multiple adapters connected with a splitter to the same LNB)\n\
+	* This feature is used by FBC receivers and AXE to specify the source input of the adapter\n\
 	Only one adapter needs to be master all others needs to have this parameter specified\n\
-	eg: -S 1-2\n\
-	- specifies adapter 1 to 2 as slave, in this case adapter 0 can be the master that controls the LNB\n\
+	eg: -S 1-2:0\n\
+	- specifies adapter 1 to 2 as slave, in this case adapter 0 is the master that controls the LNB\n\
 	- the slave adapter will not control the LNB polarity or band, but it will just change the internal frequency to tune to a different transponder\n\
-	- in this way the master will be responsible for changing the LNB polarity and band\n\
+	- if there is no adapter using this link, the slave will use master adapters frontend to change the LNB polarity and band\n\
+	eg: -S 0-7:0 (default for DVB-S2 FBC)\n\
+	- all 8 adapters use physical input A to tune\n\
+	eg: -S 0-3:0,4-7:1\n\
+	- first 4 adapters use physical input A to tune, while the last 4 uses input B to tune\n\
 \n\
 * -t --cleanpsi clean the PSI from all CA information, the client will see the channel as clear if decrypted successfully\n\
 \n\
@@ -444,7 +449,7 @@ Help\n\
 \n\
 * -A --free-inputs mapping_string: absolute source mapping for free input mode\n\
 \t* The format is: SRC1:INP1:DISEQC1[,SRC2:INP2:DISEQC2]\n\
-	* SRC: source number (src argument for SAT>IP minus 1 - 0-15)\n\
+	* SRC: source number (src argument for SAT>IP minus 1 - 0-32)\n\
 	* INP: coaxial input (0-3)\n\
 	* DISEQC: diseqc position (0-15)\n\
 	* eg: 13E,19.2E on inputs 0&1 and 23.5E,28.2E on inputs 2&3:\n\
@@ -1677,7 +1682,7 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
-#endif 
+#endif
 
 int readBootID()
 {

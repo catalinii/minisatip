@@ -89,6 +89,7 @@ adapter *adapter_alloc()
 	ad->old_hiband = -1;
 	ad->old_pol = -1;
 	ad->dmx_source = -1;
+	ad->master_source = -1;
 	ad->diseqc_multi = opts.diseqc_multi;
 
 	/* LOF setup */
@@ -1646,8 +1647,8 @@ void set_diseqc_timing(char *o)
 
 void set_slave_adapters(char *o)
 {
-	int i, j, la, a_id, a_id2;
-	char buf[100], *arg[20], *sep;
+	int i, j, la, a_id, a_id2, master = 0;
+	char buf[100], *arg[20], *sep, *sep2;
 	adapter *ad;
 	SAFE_STRCPY(buf, o);
 	la = split(arg, buf, sizeof(arg), ',');
@@ -1665,6 +1666,10 @@ void set_slave_adapters(char *o)
 		if (a_id2 < 0 || a_id2 >= MAX_ADAPTERS)
 			continue;
 
+		sep2 = strchr(arg[i], '-');
+		if (sep2)
+			master = map_intd(sep + 1, NULL, 0);
+
 		for (j = a_id; j <= a_id2; j++)
 		{
 			if (!a[j])
@@ -1672,6 +1677,7 @@ void set_slave_adapters(char *o)
 
 			ad = a[j];
 			ad->diseqc_param.switch_type = SWITCH_SLAVE;
+			ad->master_source = master;
 
 			LOG("Setting slave adapter %d", j);
 		}
