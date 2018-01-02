@@ -270,6 +270,9 @@ int start_play(streams *sid, sockets *s)
 		restart_needed_adapters(sid->adapter, sid->sid);
 		ad = get_adapter(sid->adapter);
 	}
+	// TO DO: if a slave adapter changes the band, pol or diseqc, detach it from the adapter and find a new one for it
+	// the same applies to a stream from a master adapter where there are already slave adapters using it.
+
 	// check if the adapter is not valid or if a slave SID is trying to change frequency
 	if (!ad || (compare_tunning_parameters(sid->adapter, &sid->tp) && ad->master_sid != sid->sid)) // associate the adapter only at play (not at setup)
 	{
@@ -553,8 +556,8 @@ int streams_add()
 }
 
 int
-	// close all streams for adapter, excepting except
-	close_streams_for_adapter(int ad, int except)
+// close all streams for adapter, excepting except
+close_streams_for_adapter(int ad, int except)
 {
 	int i;
 	streams *sid;

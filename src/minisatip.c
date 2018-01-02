@@ -411,10 +411,10 @@ Help\n\
 	- specifies adapter 1 to 2 as slave, in this case adapter 0 is the master that controls the LNB\n\
 	- the slave adapter will not control the LNB polarity or band, but it will just change the internal frequency to tune to a different transponder\n\
 	- if there is no adapter using this link, the slave will use master adapters frontend to change the LNB polarity and band\n\
-	eg: -S 0-7:0 (default for DVB-S2 FBC)\n\
+	eg: -S 1-7:0 (default for DVB-S2 FBC)\n\
 	- all 8 adapters use physical input A to tune\n\
-	eg: -S 0-3:0,4-7:1\n\
-	- first 4 adapters use physical input A to tune, while the last 4 uses input B to tune\n\
+	eg: -S 2-4:0,5-7:1\n\
+	- adapters 2,3,4 use physical input A to tune, while 1,5,6,7 uses input B to tune, adapter 0 and 1 are masters\n\
 \n\
 * -t --cleanpsi clean the PSI from all CA information, the client will see the channel as clear if decrypted successfully\n\
 \n\
@@ -449,7 +449,7 @@ Help\n\
 \n\
 * -A --free-inputs mapping_string: absolute source mapping for free input mode\n\
 \t* The format is: SRC1:INP1:DISEQC1[,SRC2:INP2:DISEQC2]\n\
-	* SRC: source number (src argument for SAT>IP minus 1 - 0-32)\n\
+	* SRC: source number (src argument for SAT>IP minus 1 - 0-31)\n\
 	* INP: coaxial input (0-3)\n\
 	* DISEQC: diseqc position (0-15)\n\
 	* eg: 13E,19.2E on inputs 0&1 and 23.5E,28.2E on inputs 2&3:\n\
@@ -946,6 +946,11 @@ void set_options(int argc, char *argv[])
 	}
 	if (!is_log)
 		opts.log = 0;
+
+// FBC setup
+#if defined(__arm__) && defined(ENIGMA)
+	set_slave_adapters("1-7:0");
+#endif
 }
 
 #define RBUF 8000

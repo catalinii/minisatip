@@ -62,6 +62,7 @@ typedef struct struct_adapter
 	int dmx_source;
 	int master_source;
 	int is_fbc;
+	int used;
 	int strength, ber, snr;					   // strength and snr have values between 0 and 255
 	float strength_multiplier, snr_multiplier; // final value: strength * strength_multipler, same for snr
 	uint32_t pid_err, dec_err;				   // detect pids received but not part of any stream, decrypt errors
@@ -83,10 +84,10 @@ typedef struct struct_adapter
 #endif
 #ifdef AXE
 	int fe2;
-	int axe_used;
 	int64_t axe_vdevice_last_sync;
 	int64_t axe_pktc;
 	int64_t axe_ccerr;
+	int axe_used;
 #endif
 
 	Set_pid set_pid;

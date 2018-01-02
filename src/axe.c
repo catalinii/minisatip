@@ -336,7 +336,7 @@ int axe_setup_switch(adapter *ad)
 			}
 			else
 			{
-				master = (ad->master_source > = 0) ? ad->master_source : ad->pa;
+				master = (ad->master_source >= 0) ? ad->master_source : ad->pa;
 				adm = use_adapter(master);
 				if (adm == NULL)
 				{
@@ -350,7 +350,7 @@ int axe_setup_switch(adapter *ad)
 						ad2 = get_configured_adapter(aid);
 						if (!ad2 || ad2->fe2 <= 0 || ad == ad2)
 							continue;
-						if ((ad2->master_source >= 0) && ad2->master_source != adm->pa)
+						if ((ad2->master_source >= 0) && ad2->master_source != adm->pa) // adm->id ?
 							continue;
 						if ((ad2->master_source >= 0) && ad2 != adm)
 							continue;

@@ -329,6 +329,12 @@ int init_hw(int i)
 	getAdaptersCount();
 
 	mutex_unlock(&ad->mutex);
+
+	if ((ad->master_source >= 0) && (ad->master_source < MAX_ADAPTERS))
+	{
+		return init_hw(ad->master_source);
+	}
+
 	return 0;
 
 NOK:
@@ -382,7 +388,7 @@ int close_adapter(int na)
 {
 	adapter *ad;
 	init_complete = 0;
-	int sock;
+	int sock, i;
 
 	ad = get_adapter_nw(na);
 	if (!ad)
@@ -394,6 +400,14 @@ int close_adapter(int na)
 		mutex_unlock(&ad->mutex);
 		return 1;
 	}
+	for (i = 0; i < MAX_ADAPTERS; i++)
+		if (a[i] && (a[i]->master_source == ad->id) && ad->enabled)
+		{
+			LOG("adapter %d is already used by a slave adapters %d, used %x", ad->id, a[i]->id, a[i]->used);
+			mutex_unlock(&ad->mutex);
+			return 1;
+		}
+
 	LOG("closing adapter %d  -> fe:%d dvr:%d, sock:%d, fe_sock:%d", na, ad->fe, ad->dvr, ad->sock, ad->fe_sock);
 	ad->enabled = 0;
 	if (ad->close)
@@ -567,6 +581,62 @@ void dump_pids(int aid)
 		}
 }
 
+// makes sure the slave and the master adapter have the same polarity, band and diseqc
+int slave_match(adapter *ad, transponder *tp)
+{
+	adapter *master = NULL;
+	// is not a slave and does not have a slave adapter
+	if ((ad->master_source < 0) && !ad->used)
+		return 1;
+	// is slave and the switch is UNICABLE/JESS - we do not care about pol and band
+	if ((ad->master_source >= 0) && ((ad->tp.diseqc_param.switch_type == SWITCH_JESS) || (ad->tp.diseqc_param.switch_type == SWITCH_UNICABLE)))
+		return 1;
+
+	// master adapter is used by other
+	int diseqc = (tp->diseqc > 0) ? tp->diseqc - 1 : 0;
+	int pol = (tp->pol - 1) & 1;
+	int hiband = 0;
+	int freq = tp->freq;
+
+	if (tp->pol > 2 && tp->diseqc_param.lnb_circular > 0)
+		hiband = 0;
+	else if (freq < tp->diseqc_param.lnb_switch)
+		hiband = 0;
+	else
+		hiband = 1;
+
+	if (ad->master_source >= 0 && ad->master_source < MAX_ADAPTERS)
+		master = a[ad->master_source];
+
+	// master adapter used by slave adapters, check slave parameters if they match
+	if (ad && ad->used)
+	{
+		int i;
+		for (i = 0; i < MAX_ADAPTERS; i++)
+			if (ad->used & (1 << i))
+			{
+				adapter *ad2 = get_adapter(i);
+				if (!ad2)
+				{
+					LOG("adapter %d used is set for adapter %d but it is disabled, clearing");
+					ad->used &= ~(1 << i);
+					continue;
+				}
+				if (ad2->old_pol == pol && ad2->old_hiband == hiband && ad2->old_diseqc == diseqc)
+					return 1; // slave parameters matches with the required parameters
+			}
+	}
+
+	// master adapter used by slave adapters
+	if (master)
+	{
+		if (master->old_pol == pol && master->old_hiband == hiband && master->old_diseqc == diseqc)
+			return 1; // master parameters matches with the required parameters
+	}
+
+	return 0;
+}
+
 int get_free_adapter(transponder *tp)
 {
 	int i;
@@ -617,9 +687,9 @@ int get_free_adapter(transponder *tp)
 	for (i = 0; i < MAX_ADAPTERS; i++)
 	{
 		//first free adapter that has the same msys
-		if ((ad = get_adapter_nw(i)) && ad->sid_cnt == 0 && delsys_match(ad, msys))
+		if ((ad = get_adapter_nw(i)) && ad->sid_cnt == 0 && delsys_match(ad, msys) && slave_match(ad, tp))
 			return i;
-		if (!ad && delsys_match(a[i], msys)) // device is not initialized
+		if (!ad && delsys_match(a[i], msys) && slave_match(ad, tp)) // device is not initialized
 		{
 			if (!init_hw(i))
 				return i;
@@ -669,8 +739,13 @@ int set_adapter_for_stream(int sid, int aid)
 		ad->master_sid = sid;
 	if (ad->sid_cnt++ == 0) // tune always first time for a stream
 		ad->tp.freq = 0;
-	LOG("set adapter %d for stream %d m:%d s:%d", aid, sid, ad->master_sid,
-		ad->sid_cnt);
+
+	if (ad->master_source >= 0 && ad->master_source < MAX_ADAPTERS)
+	{
+		adapter *ad2 = a[ad->master_source];
+		ad2->used |= (1 << ad->id);
+	}
+	LOG("set adapter %d for stream %d m:%d s:%d", aid, sid, ad->master_sid, ad->sid_cnt);
 	adapter_update_threshold(ad);
 	mutex_unlock(&ad->mutex);
 
@@ -703,6 +778,12 @@ void close_adapter_for_stream(int sid, int aid)
 #ifdef AXE
 		free_axe_input(ad);
 #endif
+		if (ad->master_source >= 0 && ad->master_source < MAX_ADAPTERS)
+		{
+			adapter *ad2 = a[ad->master_source];
+			ad2->used &= ~(1 << ad->id);
+			LOGM("adapter %d freed from slave adapter %d, used %d", ad2->id, ad->id, ad2->used);
+		}
 	}
 	else
 		mark_pids_deleted(aid, sid, NULL);
@@ -1666,9 +1747,9 @@ void set_slave_adapters(char *o)
 		if (a_id2 < 0 || a_id2 >= MAX_ADAPTERS)
 			continue;
 
-		sep2 = strchr(arg[i], '-');
+		sep2 = strchr(arg[i], ':');
 		if (sep2)
-			master = map_intd(sep + 1, NULL, 0);
+			master = map_intd(sep2 + 1, NULL, 0);
 
 		for (j = a_id; j <= a_id2; j++)
 		{
@@ -1676,10 +1757,22 @@ void set_slave_adapters(char *o)
 				a[j] = adapter_alloc();
 
 			ad = a[j];
+
+			// make sure the source is not already set
+			if (ad && ad->master_source != -1)
+				continue;
+
 			ad->diseqc_param.switch_type = SWITCH_SLAVE;
 			ad->master_source = master;
+			if (master >= 0 && master < MAX_ADAPTERS)
+			{
+				if (!a[master])
 
-			LOG("Setting slave adapter %d", j);
+					if (!a[master])
+						a[master] = adapter_alloc();
+				a[master]->master_source = -2; // force this adapter as master
+			}
+			LOG("Setting master adapter %d for adapter %d", ad->master_source, j);
 		}
 	}
 }

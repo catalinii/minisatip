@@ -335,6 +335,24 @@ struct diseqc_cmd
 	uint32_t wait;
 };
 
+// based on enigma2 fbc.cpp, setProcData
+void set_proc_data(int adapter, char *name, int val)
+{
+	char filename[100];
+	sprintf(filename, "/proc/stb/frontend/%d/%s", adapter, name);
+	LOG("setProcData %s -> %d", filename, val);
+	FILE *fp = fopen(filename, "w");
+	if (fp)
+	{
+		fprintf(fp, "%d", val);
+		fclose(fp);
+	}
+	else
+	{
+		LOG("setProcData open failed, %s: %m", filename);
+	}
+}
+
 int dvb_open_device(adapter *ad)
 {
 	char buf[100];
@@ -368,6 +386,7 @@ int dvb_open_device(adapter *ad)
 	else
 		LOG("DVR buffer set to %d bytes", opts.dvr_buffer);
 
+#ifdef DMX_SET_SOURCE
 	if (ad->dmx_source >= 0)
 	{
 		sprintf(buf, DEV_DEMUX, ad->pa, ad->fn);
@@ -385,6 +404,21 @@ int dvb_open_device(adapter *ad)
 		if (ad->dmx >= 0)
 			close(ad->dmx);
 		ad->dmx = -1;
+	}
+#endif
+
+	if (ad->is_fbc)
+	{
+		if (ad->master_source != -1)
+		{
+			set_proc_data(ad->fn, "fbc_link", 1);
+			set_proc_data(ad->fn, "fbc_connect", ad->master_source);
+		}
+		else
+		{
+			set_proc_data(ad->fn, "fbc_link", 0);
+			set_proc_data(ad->fn, "fbc_connect", ad->fn);
+		}
 	}
 
 	return 0;
@@ -589,12 +623,31 @@ int send_jess(adapter *ad, int fd, int freq, int pos, int pol, int hiband, diseq
 
 int setup_switch(adapter *ad)
 {
-	int frontend_fd = ad->fe;
+	int frontend_fd = -1;
 	transponder *tp = &ad->tp;
 	int hiband = 0;
 	int diseqc = (tp->diseqc > 0) ? tp->diseqc - 1 : 0;
 	int freq = tp->freq;
 	int pol = (tp->pol - 1) & 1;
+	adapter *master = ad;
+
+	if (ad->master_source >= 0)
+	{
+		master = get_adapter(ad->master_source);
+		if (!master)
+		{
+			init_hw(ad->master_source);
+			master = get_adapter(ad->master_source);
+		}
+		if (!master)
+		{
+			LOG("Adapter %d master source %d for specified but adapter not enabled", ad->id, ad->master_source);
+			master = ad;
+		}
+	}
+	// master should be set to the master adapter or to the current adapter if there is no master
+
+	frontend_fd = master->fe;
 
 	if (tp->pol > 2 && tp->diseqc_param.lnb_circular > 0)
 	{
@@ -616,28 +669,51 @@ int setup_switch(adapter *ad)
 	{
 		freq = send_unicable(ad, frontend_fd, freq / 1000, diseqc,
 							 pol, hiband, &tp->diseqc_param);
+		hiband = pol = 0; // do not care about polarity and hiband on Unicable
 	}
 	else if (tp->diseqc_param.switch_type == SWITCH_JESS)
 	{
 		freq = send_jess(ad, frontend_fd, freq / 1000, diseqc,
 						 pol, hiband, &tp->diseqc_param);
-	}
-	else if (tp->diseqc_param.switch_type == SWITCH_SLAVE)
-	{
-		LOG("FD %d is a slave adapter", frontend_fd);
+		hiband = pol = 0; // do not care about polarity and hiband on Unicable
 	}
 	else
 	{
+		int do_setup_switch = 0;
+		int change_par = 0;
 		if (ad->old_pol != pol || ad->old_hiband != hiband || ad->old_diseqc != diseqc)
+			change_par = 1;
+
+		if (ad == master && change_par)
+			do_setup_switch = 1;
+
+		if (ad != master) // slave adapter
+		{
+			if (!master->sid_cnt && !(master->used & ~(1 << ad->id))) // the master is not used by another adapters
+				do_setup_switch = 1;
+
+			if (change_par && !do_setup_switch)
+			{
+				LOG("Slave adapter %d wants to change the paramters of the master adapter %d: pol %d %d, hiband %d %d, diseqc %d %d ", ad->id, master->id, pol, ad->old_pol, hiband, ad->old_hiband, diseqc, ad->old_diseqc);
+				return -1;
+			}
+		}
+		if (do_setup_switch)
 			send_diseqc(ad, frontend_fd, diseqc, ad->old_diseqc != diseqc, pol,
 						hiband, &tp->diseqc_param);
+		else if (ad == master)
+			LOGM("Skip sending diseqc commands since the switch position doesn't need to be changed: pol %d, hiband %d, switch position %d",
+				 pol, hiband, diseqc)
 		else
-			LOGM("Skip sending diseqc commands since "
-				 "the switch position doesn't need to be changed: "
-				 "pol %d, hiband %d, switch position %d",
-				 pol, hiband, diseqc);
+			LOGM("Slave adapter %d not sending switch updates using master %d", ad->id, master->id);
 	}
-
+	// update master if exists, otherwise the current adapter is updated
+	if (ad != master)
+	{
+		master->old_pol = pol;
+		master->old_hiband = hiband;
+		master->old_diseqc = diseqc;
+	}
 	ad->old_pol = pol;
 	ad->old_hiband = hiband;
 	ad->old_diseqc = diseqc;
@@ -1466,6 +1542,13 @@ void find_dvb_adapter(adapter **a)
 				ad->close = (Adapter_commit)dvb_close;
 				ad->get_signal = (Device_signal)dvb_get_signal;
 				ad->type = ADAPTER_DVB;
+
+				if (ad->pa == 0)
+				{
+					sprintf(buf, "/proc/stb/frontend/%d/fbc_connect", ad->fn);
+					if (!access(buf, W_OK))
+						ad->is_fbc = 1;
+				}
 
 				na++;
 				a_count = na; // update adapter counter
