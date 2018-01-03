@@ -1762,16 +1762,18 @@ void set_slave_adapters(char *o)
 			if (ad && ad->master_source != -1)
 				continue;
 
-			ad->master_source = master;
 			if (master >= 0 && master < MAX_ADAPTERS)
 			{
-				if (!a[master])
-
-					if (!a[master])
+				if (!a[master] && !is_adapter_disabled(master))
 						a[master] = adapter_alloc();
-				a[master]->master_source = -2; // force this adapter as master
+
+				if(a[master] && a[master]->master_source == -1)
+				{
+					a[master]->master_source = -2; // force this adapter as master
+					ad->master_source = master;
+					LOG("Setting master adapter %d for adapter %d", ad->master_source, j);
+				}
 			}
-			LOG("Setting master adapter %d for adapter %d", ad->master_source, j);
 		}
 	}
 }

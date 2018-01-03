@@ -430,7 +430,7 @@ int dvb_open_device(adapter *ad)
 
 	if (ad->is_fbc)
 	{
-		if (ad->master_source != -1)
+		if (ad->master_source >= 0)
 		{
 			set_proc_data(ad->fn, "fbc_link", 1);
 			set_proc_data(ad->fn, "fbc_connect", ad->master_source);
