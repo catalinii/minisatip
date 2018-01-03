@@ -268,6 +268,11 @@ int start_play(streams *sid, sockets *s)
 	if (compare_tunning_parameters(sid->adapter, &sid->tp)) // close the adapter that is required to be closed
 	{
 		restart_needed_adapters(sid->adapter, sid->sid);
+		if (ad && compare_slave_parameters(ad, sip->tp))
+		{
+			close_adapter_for_stream(sid->sid, ad->id);
+			sid->adapter = -1;
+		}
 		ad = get_adapter(sid->adapter);
 	}
 	// TO DO: if a slave adapter changes the band, pol or diseqc, detach it from the adapter and find a new one for it

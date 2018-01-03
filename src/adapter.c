@@ -582,15 +582,15 @@ void dump_pids(int aid)
 }
 
 // makes sure the slave and the master adapter have the same polarity, band and diseqc
-int slave_match(adapter *ad, transponder *tp)
+int compare_slave_parameters(adapter *ad, transponder *tp)
 {
 	adapter *master = NULL;
 	// is not a slave and does not have a slave adapter
 	if ((ad->master_source < 0) && !ad->used)
-		return 1;
+		return 0;
 	// is slave and the switch is UNICABLE/JESS - we do not care about pol and band
-	if ((ad->master_source >= 0) && ((ad->tp.diseqc_param.switch_type == SWITCH_JESS) || (ad->tp.diseqc_param.switch_type == SWITCH_UNICABLE)))
-		return 1;
+	if (ad->tp.diseqc_param.switch_type == SWITCH_JESS)
+		|| (ad->tp.diseqc_param.switch_type == SWITCH_UNICABLE) return 0;
 
 	// master adapter is used by other
 	int diseqc = (tp->diseqc > 0) ? tp->diseqc - 1 : 0;
@@ -623,7 +623,7 @@ int slave_match(adapter *ad, transponder *tp)
 					continue;
 				}
 				if (ad2->old_pol == pol && ad2->old_hiband == hiband && ad2->old_diseqc == diseqc)
-					return 1; // slave parameters matches with the required parameters
+					return 0; // slave parameters matches with the required parameters
 			}
 	}
 
@@ -634,7 +634,7 @@ int slave_match(adapter *ad, transponder *tp)
 			return 1; // master parameters matches with the required parameters
 	}
 
-	return 0;
+	return 1;
 }
 
 int get_free_adapter(transponder *tp)
