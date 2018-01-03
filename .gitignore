@@ -1,6 +1,8 @@
 /minisatip
 *.o
 *.d
+bootid
+src/bootid
 config.log
 config.status
 Makefile
