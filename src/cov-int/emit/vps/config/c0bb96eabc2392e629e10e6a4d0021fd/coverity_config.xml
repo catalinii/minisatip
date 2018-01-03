@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE coverity SYSTEM "coverity_config.dtd">
+<coverity>
+<!-- Version 2017.07 -->
+    <cit_version>1</cit_version>
+    <config>
+      <include>$CONFIGDIR$/gcc-config-0/coverity_config.xml</include>
+      <include>$CONFIGDIR$/g++-config-0/coverity_config.xml</include>
+      <include>$CONFIGDIR$/g++cc-config-0/coverity_config.xml</include>
+      <include>$CONFIGDIR$/g++-config-1/coverity_config.xml</include>
+      <include>$CONFIGDIR$/g++cc-config-1/coverity_config.xml</include>
+      <include>$CONFIGDIR$/ld-config-0/coverity_config.xml</include>
+    </config>
+</coverity>
+

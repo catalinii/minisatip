@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE coverity SYSTEM "config.dtd">
+<coverity>
+
+<metrics>
+    <metric>
+        <name>time</name>
+        <value>14</value>
+    </metric>
+    <metric>
+        <name>args</name>
+        <value>/usr/src/cov-analysis-linux64-2017.07/bin/cov-build --dir cov-int</value>
+    </metric>
+    <metric>
+        <name>host</name>
+        <value>vps</value>
+    </metric>
+    <metric>
+        <name>short-platform</name>
+        <value>linux64</value>
+    </metric>
+    <metric>
+        <name>platform</name>
+        <value>Linux 2.6.32-042stab123.9 x86_64</value>
+    </metric>
+    <metric>
+        <name>ident</name>
+        <value>2017.07 (build c7e331b562 p-milo-push-30112.651)</value>
+    </metric>
+    <metric>
+        <name>user</name>
+        <value>root</value>
+    </metric>
+    <metric>
+        <name>cwd</name>
+        <value>/home/files/cifs/xxx/src</value>
+    </metric>
+    <metric>
+        <name>config</name>
+        <value>/usr/src/cov-analysis-linux64-2017.07/config/coverity_config.xml</value>
+    </metric>
+    <metric>
+        <name>intermediatedir</name>
+        <value>/home/files/cifs/xxx/src/cov-int</value>
+    </metric>
+    <metric>
+        <name>outputdir</name>
+        <value>/home/files/cifs/xxx/src/cov-int/output</value>
+    </metric>
+    <metric>
+        <name>emitdir</name>
+        <value>/home/files/cifs/xxx/src/cov-int/emit</value>
+    </metric>
+    <metric>
+        <name>force</name>
+        <value>no</value>
+    </metric>
+    <metric>
+        <name>cygwin</name>
+        <value>no</value>
+    </metric>
+    <metric>
+        <name>failures</name>
+        <value>1</value>
+    </metric>
+    <metric>
+        <name>successes</name>
+        <value>0</value>
+    </metric>
+    <metric>
+        <name>recoverable-errors</name>
+        <value>0</value>
+    </metric>
+    <metric>
+        <name>cs-webapps-detected</name>
+        <value>0</value>
+    </metric>
+    <metric>
+        <name>cs-webapp-successes</name>
+        <value>0</value>
+    </metric>
+    <metric>
+        <name>cs-webapp-compilation-secs</name>
+        <value>0</value>
+    </metric>
+    <metric>
+        <name>buildcmd</name>
+        <value>make</value>
+    </metric>
+</metrics>
+</coverity>

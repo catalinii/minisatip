@@ -765,6 +765,8 @@ void *select_and_execute(void *arg)
 					sockets *master = ss;
 					if (ss->master >= 0)
 						master = get_sockets(ss->master);
+					if(!master)
+						master = ss;
 
 					if (!master->buf || master->buf == buf)
 					{
@@ -1165,7 +1167,7 @@ pthread_t get_socket_thread(int s_id)
 
 int my_writev(sockets *s, const struct iovec *iov, int iiov)
 {
-	int rv, len = 0, i;
+	int rv = 0, len = 0, i;
 	char ra[50];
 	int64_t stime = 0;
 
@@ -1176,7 +1178,10 @@ int my_writev(sockets *s, const struct iovec *iov, int iiov)
 	DEBUGM("start writev handle %d, iiov %d, len %d", s->sock, iiov, len);
 	if (opts.log & DEFAULT_LOG)
 		stime = getTick();
-	rv = writev(s->sock, iov, iiov);
+
+	if(s->sock > 0)
+		rv = writev(s->sock, iov, iiov);
+		
 	if (opts.log & DEFAULT_LOG)
 		stime = getTick() - stime;
 

@@ -1,0 +1,2557 @@
+2018-01-03T20:03:34.523895Z|cov-build|3447|info|> cov-build 2017.07 (build c7e331b562 p-milo-push-30112.651)
+2018-01-03T20:03:34.523929Z|cov-build|3447|info|> Coverity Build Capture (64-bit) version 2017.07 on Linux 2.6.32-042stab123.9 x86_64
+2018-01-03T20:03:34.523929Z|cov-build|3447|info|> Internal version numbers: c7e331b562 p-milo-push-30112.651
+2018-01-03T20:03:34.523929Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.523942Z|cov-build|3447|info|> Dumping from hostname : vps
+2018-01-03T20:03:34.523942Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.523951Z|cov-build|3447|info|> Platform info:
+2018-01-03T20:03:34.523951Z|cov-build|3447|info|> Sysname = Linux
+2018-01-03T20:03:34.523951Z|cov-build|3447|info|> Release = 2.6.32-042stab123.9
+2018-01-03T20:03:34.523951Z|cov-build|3447|info|> Machine = x86_64
+2018-01-03T20:03:34.523951Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.523951Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.523969Z|cov-build|3447|info|> cov-build command: /usr/src/cov-analysis-linux64-2017.07/bin/cov-build --dir cov-int make 
+2018-01-03T20:03:34.523978Z|cov-build|3447|info|> cov-build expanded command: /usr/src/cov-analysis-linux64-2017.07/bin/cov-build --dir cov-int make 
+2018-01-03T20:03:34.524255Z|cov-build|3447|info|> build command: /usr/bin/make
+2018-01-03T20:03:34.524267Z|cov-build|3447|info|> thunk command: /usr/src/cov-analysis-linux64-2017.07/bin/cov-internal-thunk.sh make
+2018-01-03T20:03:34.524267Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.524278Z|cov-build|3447|info|> Set UseSharedCompilation to false.
+2018-01-03T20:03:34.524296Z|cov-build|3447|info|> Set COVERITY_BIN to /usr/src/cov-analysis-linux64-2017.07/bin
+2018-01-03T20:03:34.524315Z|cov-build|3447|info|> Set COVERITY_SITE_CC to apt;c++;cc;cl;clang;clang++;csc;csc2;devenv;g++;g++-3;g++-4;gcc;gcc-3;gcc-4;java;javac;javaw;ld;link;msbuild
+2018-01-03T20:03:34.524327Z|cov-build|3447|info|> Set COVERITY_TEMP to /tmp/cov-root/b0c78c178a21f137327e0cc2b256003f
+2018-01-03T20:03:34.524343Z|cov-build|3447|info|> Set COVERITY_COMMON_TEMP to /tmp
+2018-01-03T20:03:34.524356Z|cov-build|3447|info|> Set COVERITY_IDIR to /home/files/cifs/xxx/src/cov-int
+2018-01-03T20:03:34.524386Z|cov-build|3447|info|> Set COVERITY_OUTPUT to /home/files/cifs/xxx/src/cov-int/build-log.txt
+2018-01-03T20:03:34.524393Z|cov-build|3447|info|> Set COVERITY_LOG to /home/files/cifs/xxx/src/cov-int/build-log.txt
+2018-01-03T20:03:34.524410Z|cov-build|3447|info|> Set COVERITY_OUTPUT_ENCODING to UTF-8
+2018-01-03T20:03:34.524418Z|cov-build|3447|info|> Set COVERITY_SYSTEM_ENCODING to UTF-8
+2018-01-03T20:03:34.524429Z|cov-build|3447|info|> Set COVERITY_EMIT to /home/files/cifs/xxx/src/cov-int/emit
+2018-01-03T20:03:34.524456Z|cov-build|3447|info|> Set COVERITY_EMIT to /home/files/cifs/xxx/src/cov-int/emit
+2018-01-03T20:03:34.524484Z|cov-build|3447|info|> Set COVERITY_ENABLE_JAVA_PARSE_ERROR_RECOVERY to 1
+2018-01-03T20:03:34.524496Z|cov-build|3447|info|> Append to LD_LIBRARY_PATH /usr/src/cov-analysis-linux64-2017.07/jars
+2018-01-03T20:03:34.524509Z|cov-build|3447|info|> Setting COVERITY_LD_LIBRARY_PATH to /usr/src/cov-analysis-linux64-2017.07/jars
+2018-01-03T20:03:34.524568Z|cov-build|3447|info|> Set COVERITY_JAVA_CONFIG to javac#TEMPLATE##java#TEMPLATE##apt#TEMPLATE##javaw#TEMPLATE###
+2018-01-03T20:03:34.524586Z|cov-build|3447|info|> Set COVERITY_IS_COMPILER to 0
+2018-01-03T20:03:34.524593Z|cov-build|3447|info|> Set COVERITY_TOP_PROCESS to 0
+2018-01-03T20:03:34.524600Z|cov-build|3447|info|> Set COVERITY_IS_COMPILER_DESCENDANT to 0
+2018-01-03T20:03:34.524626Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.524626Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.524626Z|cov-build|3447|info|> Dumping configuration:
+2018-01-03T20:03:34.524626Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.524640Z|cov-build|3447|info|> User/default configuration:
+2018-01-03T20:03:34.524640Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.524649Z|cov-build|3447|info|> Configuration read from: command-line
+2018-01-03T20:03:34.524649Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.524649Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.524649Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/coverity_config.xml
+2018-01-03T20:03:34.524649Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.524649Z|cov-build|3447|info|>     Node: prevent
+2018-01-03T20:03:34.524649Z|cov-build|3447|info|>       Node: dir Value: /home/files/cifs/xxx/src/cov-int
+2018-01-03T20:03:34.524649Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-gcc-config-0/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-g++-config-0/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-gcc-config-1/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-gcc-config-2/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-g++-config-1/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-g++-config-2/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-ld-config-0/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-gcc-config-3/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-g++-config-3/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-javac-config-0/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-java-config-0/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-apt-config-0/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-javaw-config-0/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-jsp-config-0/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-android-config-0/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-web-app-config-config-0/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-msvc-config-0/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-msvc_devenv-config-0/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-msvc_msbuild-config-0/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-msvc_link-config-0/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-csc-config-0/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-csc-config-1/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-clangcc-config-0/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-clangcxx-config-0/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-javascript-config-0/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-html-config-0/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-ruby-config-0/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-php-config-0/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|>     Node: include Value: /usr/src/cov-analysis-linux64-2017.07/config/template-python-config-0/coverity_config.xml
+2018-01-03T20:03:34.524681Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.524776Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-gcc-config-0/coverity_config.xml
+2018-01-03T20:03:34.524776Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.524776Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.524776Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.524776Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.524776Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.524776Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.524776Z|cov-build|3447|info|>         Node: comp_name Value: gcc
+2018-01-03T20:03:34.524776Z|cov-build|3447|info|>         Node: comp_translator Value: gcc
+2018-01-03T20:03:34.524776Z|cov-build|3447|info|>         Node: comp_lang Value: C/C++
+2018-01-03T20:03:34.524776Z|cov-build|3447|info|>         Node: comp_generic Value: gnu
+2018-01-03T20:03:34.524776Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.524776Z|cov-build|3447|info|>         Node: id Value: gcc-gcc-.*
+2018-01-03T20:03:34.524776Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-gcc-config-0/../user_nodefs.h
+2018-01-03T20:03:34.524776Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.524776Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.524776Z|cov-build|3447|info|>         Node: id Value: g++-gcc-.*
+2018-01-03T20:03:34.524776Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-gcc-config-0/../user_nodefs.h
+2018-01-03T20:03:34.524776Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.524776Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.524776Z|cov-build|3447|info|>         Node: id Value: g++cc-gcc-.*
+2018-01-03T20:03:34.524776Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-gcc-config-0/../user_nodefs.h
+2018-01-03T20:03:34.524776Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.524776Z|cov-build|3447|info|>   Node: md5 Value: 220ab2f621b426ef21b5bff0d14bd626
+2018-01-03T20:03:34.524776Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.524856Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-g++-config-0/coverity_config.xml
+2018-01-03T20:03:34.524856Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.524856Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.524856Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.524856Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.524856Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.524856Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.524856Z|cov-build|3447|info|>         Node: comp_name Value: g++
+2018-01-03T20:03:34.524856Z|cov-build|3447|info|>         Node: comp_translator Value: g++
+2018-01-03T20:03:34.524856Z|cov-build|3447|info|>         Node: comp_lang Value: C/C++
+2018-01-03T20:03:34.524856Z|cov-build|3447|info|>         Node: comp_generic Value: gnu
+2018-01-03T20:03:34.524856Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.524856Z|cov-build|3447|info|>         Node: id Value: g++-g++-.*
+2018-01-03T20:03:34.524856Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-g++-config-0/../user_nodefs.h
+2018-01-03T20:03:34.524856Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.524856Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.524856Z|cov-build|3447|info|>         Node: id Value: g++cc-g++-.*
+2018-01-03T20:03:34.524856Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-g++-config-0/../user_nodefs.h
+2018-01-03T20:03:34.524856Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.524856Z|cov-build|3447|info|>   Node: md5 Value: d8da15d655e23f85d5c6ae35de65d439
+2018-01-03T20:03:34.524856Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.524915Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-gcc-config-1/coverity_config.xml
+2018-01-03T20:03:34.524915Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.524915Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.524915Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.524915Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.524915Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.524915Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.524915Z|cov-build|3447|info|>         Node: comp_name Value: gcc-3
+2018-01-03T20:03:34.524915Z|cov-build|3447|info|>         Node: comp_translator Value: gcc
+2018-01-03T20:03:34.524915Z|cov-build|3447|info|>         Node: comp_lang Value: C/C++
+2018-01-03T20:03:34.524915Z|cov-build|3447|info|>         Node: comp_generic Value: gnu
+2018-01-03T20:03:34.524915Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.524915Z|cov-build|3447|info|>         Node: id Value: gcc-gcc-3-.*
+2018-01-03T20:03:34.524915Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-gcc-config-1/../user_nodefs.h
+2018-01-03T20:03:34.524915Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.524915Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.524915Z|cov-build|3447|info|>         Node: id Value: g++-gcc-3-.*
+2018-01-03T20:03:34.524915Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-gcc-config-1/../user_nodefs.h
+2018-01-03T20:03:34.524915Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.524915Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.524915Z|cov-build|3447|info|>         Node: id Value: g++cc-gcc-3-.*
+2018-01-03T20:03:34.524915Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-gcc-config-1/../user_nodefs.h
+2018-01-03T20:03:34.524915Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.524915Z|cov-build|3447|info|>   Node: md5 Value: 6a6dc6f1a6c9360514c721c673fa1951
+2018-01-03T20:03:34.524915Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.524980Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-gcc-config-2/coverity_config.xml
+2018-01-03T20:03:34.524980Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.524980Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.524980Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.524980Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.524980Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.524980Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.524980Z|cov-build|3447|info|>         Node: comp_name Value: gcc-4
+2018-01-03T20:03:34.524980Z|cov-build|3447|info|>         Node: comp_translator Value: gcc
+2018-01-03T20:03:34.524980Z|cov-build|3447|info|>         Node: comp_lang Value: C/C++
+2018-01-03T20:03:34.524980Z|cov-build|3447|info|>         Node: comp_generic Value: gnu
+2018-01-03T20:03:34.524980Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.524980Z|cov-build|3447|info|>         Node: id Value: gcc-gcc-4-.*
+2018-01-03T20:03:34.524980Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-gcc-config-2/../user_nodefs.h
+2018-01-03T20:03:34.524980Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.524980Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.524980Z|cov-build|3447|info|>         Node: id Value: g++-gcc-4-.*
+2018-01-03T20:03:34.524980Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-gcc-config-2/../user_nodefs.h
+2018-01-03T20:03:34.524980Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.524980Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.524980Z|cov-build|3447|info|>         Node: id Value: g++cc-gcc-4-.*
+2018-01-03T20:03:34.524980Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-gcc-config-2/../user_nodefs.h
+2018-01-03T20:03:34.524980Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.524980Z|cov-build|3447|info|>   Node: md5 Value: 6f1a220d892e908cc9817e94bdeb7bc5
+2018-01-03T20:03:34.524980Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.525054Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-g++-config-1/coverity_config.xml
+2018-01-03T20:03:34.525054Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.525054Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.525054Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.525054Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.525054Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.525054Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.525054Z|cov-build|3447|info|>         Node: comp_name Value: g++-3
+2018-01-03T20:03:34.525054Z|cov-build|3447|info|>         Node: comp_translator Value: g++
+2018-01-03T20:03:34.525054Z|cov-build|3447|info|>         Node: comp_lang Value: C/C++
+2018-01-03T20:03:34.525054Z|cov-build|3447|info|>         Node: comp_generic Value: gnu
+2018-01-03T20:03:34.525054Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.525054Z|cov-build|3447|info|>         Node: id Value: g++-g++-3-.*
+2018-01-03T20:03:34.525054Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-g++-config-1/../user_nodefs.h
+2018-01-03T20:03:34.525054Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.525054Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.525054Z|cov-build|3447|info|>         Node: id Value: g++cc-g++-3-.*
+2018-01-03T20:03:34.525054Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-g++-config-1/../user_nodefs.h
+2018-01-03T20:03:34.525054Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.525054Z|cov-build|3447|info|>   Node: md5 Value: ada4013796c1b19ed1fe7ebb4197cd2d
+2018-01-03T20:03:34.525054Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.525124Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-g++-config-2/coverity_config.xml
+2018-01-03T20:03:34.525124Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.525124Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.525124Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.525124Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.525124Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.525124Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.525124Z|cov-build|3447|info|>         Node: comp_name Value: g++-4
+2018-01-03T20:03:34.525124Z|cov-build|3447|info|>         Node: comp_translator Value: g++
+2018-01-03T20:03:34.525124Z|cov-build|3447|info|>         Node: comp_lang Value: C/C++
+2018-01-03T20:03:34.525124Z|cov-build|3447|info|>         Node: comp_generic Value: gnu
+2018-01-03T20:03:34.525124Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.525124Z|cov-build|3447|info|>         Node: id Value: g++-g++-4-.*
+2018-01-03T20:03:34.525124Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-g++-config-2/../user_nodefs.h
+2018-01-03T20:03:34.525124Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.525124Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.525124Z|cov-build|3447|info|>         Node: id Value: g++cc-g++-4-.*
+2018-01-03T20:03:34.525124Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-g++-config-2/../user_nodefs.h
+2018-01-03T20:03:34.525124Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.525124Z|cov-build|3447|info|>   Node: md5 Value: deb1268a1fd912fa66d290aac3a8d6e1
+2018-01-03T20:03:34.525124Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.525178Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-ld-config-0/coverity_config.xml
+2018-01-03T20:03:34.525178Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.525178Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.525178Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.525178Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.525178Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.525178Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.525178Z|cov-build|3447|info|>         Node: comp_name Value: ld
+2018-01-03T20:03:34.525178Z|cov-build|3447|info|>         Node: comp_translator Value: ld
+2018-01-03T20:03:34.525178Z|cov-build|3447|info|>         Node: comp_lang Value: C/C++
+2018-01-03T20:03:34.525178Z|cov-build|3447|info|>         Node: comp_generic Value: gnu
+2018-01-03T20:03:34.525178Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.525178Z|cov-build|3447|info|>         Node: id Value: ld-ld-.*
+2018-01-03T20:03:34.525178Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-ld-config-0/../user_nodefs.h
+2018-01-03T20:03:34.525178Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.525178Z|cov-build|3447|info|>   Node: md5 Value: a31ebdf549aecdabc7c15e5c23be5e63
+2018-01-03T20:03:34.525178Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.525224Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-gcc-config-3/coverity_config.xml
+2018-01-03T20:03:34.525224Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.525224Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.525224Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.525224Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.525224Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.525224Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.525224Z|cov-build|3447|info|>         Node: comp_name Value: cc
+2018-01-03T20:03:34.525224Z|cov-build|3447|info|>         Node: comp_translator Value: gcc
+2018-01-03T20:03:34.525224Z|cov-build|3447|info|>         Node: comp_lang Value: C/C++
+2018-01-03T20:03:34.525224Z|cov-build|3447|info|>         Node: comp_generic Value: gnu
+2018-01-03T20:03:34.525224Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.525224Z|cov-build|3447|info|>         Node: id Value: gcc-cc-.*
+2018-01-03T20:03:34.525224Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-gcc-config-3/../user_nodefs.h
+2018-01-03T20:03:34.525224Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.525224Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.525224Z|cov-build|3447|info|>         Node: id Value: g++-cc-.*
+2018-01-03T20:03:34.525224Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-gcc-config-3/../user_nodefs.h
+2018-01-03T20:03:34.525224Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.525224Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.525224Z|cov-build|3447|info|>         Node: id Value: g++cc-cc-.*
+2018-01-03T20:03:34.525224Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-gcc-config-3/../user_nodefs.h
+2018-01-03T20:03:34.525224Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.525224Z|cov-build|3447|info|>   Node: md5 Value: 5ab1d465abf1e699248ecdb7fe5931c0
+2018-01-03T20:03:34.525224Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.525292Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-g++-config-3/coverity_config.xml
+2018-01-03T20:03:34.525292Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.525292Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.525292Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.525292Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.525292Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.525292Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.525292Z|cov-build|3447|info|>         Node: comp_name Value: c++
+2018-01-03T20:03:34.525292Z|cov-build|3447|info|>         Node: comp_translator Value: g++
+2018-01-03T20:03:34.525292Z|cov-build|3447|info|>         Node: comp_lang Value: C/C++
+2018-01-03T20:03:34.525292Z|cov-build|3447|info|>         Node: comp_generic Value: gnu
+2018-01-03T20:03:34.525292Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.525292Z|cov-build|3447|info|>         Node: id Value: g++-c++-.*
+2018-01-03T20:03:34.525292Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-g++-config-3/../user_nodefs.h
+2018-01-03T20:03:34.525292Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.525292Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.525292Z|cov-build|3447|info|>         Node: id Value: g++cc-c++-.*
+2018-01-03T20:03:34.525292Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-g++-config-3/../user_nodefs.h
+2018-01-03T20:03:34.525292Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.525292Z|cov-build|3447|info|>   Node: md5 Value: 92107d6a420ac9dd06caaaf4fa667276
+2018-01-03T20:03:34.525292Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.525346Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-javac-config-0/coverity_config.xml
+2018-01-03T20:03:34.525346Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.525346Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.525346Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.525346Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.525346Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.525346Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.525346Z|cov-build|3447|info|>         Node: comp_name Value: javac
+2018-01-03T20:03:34.525346Z|cov-build|3447|info|>         Node: comp_translator Value: javac
+2018-01-03T20:03:34.525346Z|cov-build|3447|info|>         Node: comp_lang Value: Static Java
+2018-01-03T20:03:34.525346Z|cov-build|3447|info|>         Node: comp_generic Value: java
+2018-01-03T20:03:34.525346Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.525346Z|cov-build|3447|info|>         Node: id Value: javac-javac-.*
+2018-01-03T20:03:34.525346Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.525346Z|cov-build|3447|info|>   Node: md5 Value: 4dff82855a5f75486f23dc3987a065c8
+2018-01-03T20:03:34.525346Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.525393Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-java-config-0/coverity_config.xml
+2018-01-03T20:03:34.525393Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.525393Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.525393Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.525393Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.525393Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.525393Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.525393Z|cov-build|3447|info|>         Node: comp_name Value: java
+2018-01-03T20:03:34.525393Z|cov-build|3447|info|>         Node: comp_translator Value: java
+2018-01-03T20:03:34.525393Z|cov-build|3447|info|>         Node: comp_lang Value: Static Java
+2018-01-03T20:03:34.525393Z|cov-build|3447|info|>         Node: comp_generic Value: java
+2018-01-03T20:03:34.525393Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.525393Z|cov-build|3447|info|>         Node: id Value: java-java-.*
+2018-01-03T20:03:34.525393Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.525393Z|cov-build|3447|info|>   Node: md5 Value: 670e0eff61ca6e268d4c53f998738922
+2018-01-03T20:03:34.525393Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.525435Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-apt-config-0/coverity_config.xml
+2018-01-03T20:03:34.525435Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.525435Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.525435Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.525435Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.525435Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.525435Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.525435Z|cov-build|3447|info|>         Node: comp_name Value: apt
+2018-01-03T20:03:34.525435Z|cov-build|3447|info|>         Node: comp_translator Value: apt
+2018-01-03T20:03:34.525435Z|cov-build|3447|info|>         Node: comp_lang Value: Static Java
+2018-01-03T20:03:34.525435Z|cov-build|3447|info|>         Node: comp_generic Value: java
+2018-01-03T20:03:34.525435Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.525435Z|cov-build|3447|info|>         Node: id Value: apt-apt-.*
+2018-01-03T20:03:34.525435Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.525435Z|cov-build|3447|info|>   Node: md5 Value: 0c3c17692884987df5fe47566993553e
+2018-01-03T20:03:34.525435Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.525479Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-javaw-config-0/coverity_config.xml
+2018-01-03T20:03:34.525479Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.525479Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.525479Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.525479Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.525479Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.525479Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.525479Z|cov-build|3447|info|>         Node: comp_name Value: javaw
+2018-01-03T20:03:34.525479Z|cov-build|3447|info|>         Node: comp_translator Value: javaw
+2018-01-03T20:03:34.525479Z|cov-build|3447|info|>         Node: comp_lang Value: Static Java
+2018-01-03T20:03:34.525479Z|cov-build|3447|info|>         Node: comp_generic Value: java
+2018-01-03T20:03:34.525479Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.525479Z|cov-build|3447|info|>         Node: id Value: javaw-javaw-.*
+2018-01-03T20:03:34.525479Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.525479Z|cov-build|3447|info|>   Node: md5 Value: aa3bf49b5164470df847ce74b96aa069
+2018-01-03T20:03:34.525479Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.525525Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-jsp-config-0/coverity_config.xml
+2018-01-03T20:03:34.525525Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.525525Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.525525Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.525525Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.525525Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.525525Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.525525Z|cov-build|3447|info|>         Node: comp_name Value: cov-filesystem-capture-jsp-0
+2018-01-03T20:03:34.525525Z|cov-build|3447|info|>         Node: comp_translator Value: jsp
+2018-01-03T20:03:34.525525Z|cov-build|3447|info|>         Node: comp_lang Value: Non Compiled
+2018-01-03T20:03:34.525525Z|cov-build|3447|info|>         Node: comp_generic Value: java
+2018-01-03T20:03:34.525525Z|cov-build|3447|info|>         Node: file_include_pattern Value: ^.*\.(jsp|jspx)$
+2018-01-03T20:03:34.525525Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.525525Z|cov-build|3447|info|>         Node: id Value: jsp-cov-filesystem-capture-jsp-0-.*
+2018-01-03T20:03:34.525525Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.525525Z|cov-build|3447|info|>   Node: md5 Value: 425f5b1409471a4a55890e518ffea917
+2018-01-03T20:03:34.525525Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.525572Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-android-config-0/coverity_config.xml
+2018-01-03T20:03:34.525572Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.525572Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.525572Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.525572Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.525572Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.525572Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.525572Z|cov-build|3447|info|>         Node: comp_name Value: cov-filesystem-capture-android-0
+2018-01-03T20:03:34.525572Z|cov-build|3447|info|>         Node: comp_translator Value: android
+2018-01-03T20:03:34.525572Z|cov-build|3447|info|>         Node: comp_lang Value: Non Compiled
+2018-01-03T20:03:34.525572Z|cov-build|3447|info|>         Node: comp_generic Value: java
+2018-01-03T20:03:34.525572Z|cov-build|3447|info|>         Node: file_include_pattern Value: ^.*\.xml$
+2018-01-03T20:03:34.525572Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.525572Z|cov-build|3447|info|>         Node: id Value: android-cov-filesystem-capture-android-0-.*
+2018-01-03T20:03:34.525572Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.525572Z|cov-build|3447|info|>   Node: md5 Value: 07be021ce31fbf4d039bdd2f06118c8b
+2018-01-03T20:03:34.525572Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.525624Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-web-app-config-config-0/coverity_config.xml
+2018-01-03T20:03:34.525624Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.525624Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.525624Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.525624Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.525624Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.525624Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.525624Z|cov-build|3447|info|>         Node: comp_name Value: cov-filesystem-capture-web-app-config-0
+2018-01-03T20:03:34.525624Z|cov-build|3447|info|>         Node: comp_translator Value: web-app-config
+2018-01-03T20:03:34.525624Z|cov-build|3447|info|>         Node: comp_lang Value: Non Compiled
+2018-01-03T20:03:34.525624Z|cov-build|3447|info|>         Node: comp_generic Value: web_app_config
+2018-01-03T20:03:34.525624Z|cov-build|3447|info|>         Node: file_include_pattern Value: a^
+2018-01-03T20:03:34.525624Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.525624Z|cov-build|3447|info|>         Node: id Value: web-app-config-cov-filesystem-capture-web-app-config-0-.*
+2018-01-03T20:03:34.525624Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.525624Z|cov-build|3447|info|>   Node: md5 Value: 4b5ee114698aa398279ca05a07bbd880
+2018-01-03T20:03:34.525624Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-msvc-config-0/coverity_config.xml
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>         Node: comp_name Value: cl
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>         Node: comp_translator Value: msvc
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>         Node: comp_lang Value: C/C++
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>         Node: comp_generic Value: msvc
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>         Node: id Value: msvc-cl-.*
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-msvc-config-0/../user_nodefs.h
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>         Node: instrument_variable
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>           Node: var_name Value: cov_instrument_config_version
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>           Node: cond_platform_value
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>             Node: platform_name Value: all
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>             Node: var_value Value: 3
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>         Node: instrument_variable
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>           Node: var_name Value: cov_lib_deployment_path
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>           Node: cond_platform_value
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>             Node: platform_name Value: all
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>             Node: var_value Value: /Users/mllaguno/Downloads/scan/2017.07/capture_tarballs/cov-analysis-macosx-2017.07/lib
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>         Node: instrument_variable
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>           Node: var_name Value: cov_lib_header_path
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>           Node: cond_platform_value
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>             Node: platform_name Value: all
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>             Node: var_value Value: /Users/mllaguno/Downloads/scan/2017.07/capture_tarballs/cov-analysis-macosx-2017.07/sdk/runtime/ta-runtime
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>         Node: instrument_variable
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>           Node: var_name Value: cov_lib_name
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>           Node: cond_platform_value
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>             Node: platform_name Value: x64
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>             Node: var_value Value: libci-runtime-x64.lib
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>           Node: cond_platform_value
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>             Node: platform_name Value: x86
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>             Node: var_value Value: libci-runtime-x86.lib
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>         Node: instrument_variable
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>           Node: var_name Value: cov_lib_path
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>           Node: cond_platform_value
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>             Node: platform_name Value: all
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>             Node: var_value Value: /Users/mllaguno/Downloads/scan/2017.07/capture_tarballs/cov-analysis-macosx-2017.07/lib
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>         Node: id Value: msvc_cxx-cl-.*
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-msvc-config-0/../user_nodefs.h
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>         Node: instrument_variable
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>           Node: var_name Value: cov_instrument_config_version
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>           Node: cond_platform_value
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>             Node: platform_name Value: all
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>             Node: var_value Value: 3
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>         Node: instrument_variable
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>           Node: var_name Value: cov_lib_deployment_path
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>           Node: cond_platform_value
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>             Node: platform_name Value: all
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>             Node: var_value Value: /Users/mllaguno/Downloads/scan/2017.07/capture_tarballs/cov-analysis-macosx-2017.07/lib
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>         Node: instrument_variable
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>           Node: var_name Value: cov_lib_header_path
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>           Node: cond_platform_value
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>             Node: platform_name Value: all
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>             Node: var_value Value: /Users/mllaguno/Downloads/scan/2017.07/capture_tarballs/cov-analysis-macosx-2017.07/sdk/runtime/ta-runtime
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>         Node: instrument_variable
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>           Node: var_name Value: cov_lib_name
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>           Node: cond_platform_value
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>             Node: platform_name Value: x64
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>             Node: var_value Value: libci-runtime-x64.lib
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>           Node: cond_platform_value
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>             Node: platform_name Value: x86
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>             Node: var_value Value: libci-runtime-x86.lib
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>         Node: instrument_variable
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>           Node: var_name Value: cov_lib_path
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>           Node: cond_platform_value
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>             Node: platform_name Value: all
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>             Node: var_value Value: /Users/mllaguno/Downloads/scan/2017.07/capture_tarballs/cov-analysis-macosx-2017.07/lib
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|>   Node: md5 Value: 7be94be8fa739ed4bbd4d6878dcf05b2
+2018-01-03T20:03:34.525670Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.525875Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-msvc_devenv-config-0/coverity_config.xml
+2018-01-03T20:03:34.525875Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.525875Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.525875Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.525875Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.525875Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.525875Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.525875Z|cov-build|3447|info|>         Node: comp_name Value: devenv
+2018-01-03T20:03:34.525875Z|cov-build|3447|info|>         Node: comp_translator Value: msvc_devenv
+2018-01-03T20:03:34.525875Z|cov-build|3447|info|>         Node: comp_lang Value: C/C++
+2018-01-03T20:03:34.525875Z|cov-build|3447|info|>         Node: comp_generic Value: msvc
+2018-01-03T20:03:34.525875Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.525875Z|cov-build|3447|info|>         Node: id Value: msvc_devenv-devenv-.*
+2018-01-03T20:03:34.525875Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-msvc_devenv-config-0/../user_nodefs.h
+2018-01-03T20:03:34.525875Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.525875Z|cov-build|3447|info|>   Node: md5 Value: 1bd6116a591fe1eeb03a04d0299f415d
+2018-01-03T20:03:34.525875Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.525921Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-msvc_msbuild-config-0/coverity_config.xml
+2018-01-03T20:03:34.525921Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.525921Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.525921Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.525921Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.525921Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.525921Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.525921Z|cov-build|3447|info|>         Node: comp_name Value: msbuild
+2018-01-03T20:03:34.525921Z|cov-build|3447|info|>         Node: comp_translator Value: msvc_msbuild
+2018-01-03T20:03:34.525921Z|cov-build|3447|info|>         Node: comp_lang Value: C/C++
+2018-01-03T20:03:34.525921Z|cov-build|3447|info|>         Node: comp_generic Value: msvc
+2018-01-03T20:03:34.525921Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.525921Z|cov-build|3447|info|>         Node: id Value: msvc_msbuild-msbuild-.*
+2018-01-03T20:03:34.525921Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-msvc_msbuild-config-0/../user_nodefs.h
+2018-01-03T20:03:34.525921Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.525921Z|cov-build|3447|info|>   Node: md5 Value: 90758a4508778ab76c418f64362bed29
+2018-01-03T20:03:34.525921Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-msvc_link-config-0/coverity_config.xml
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>         Node: comp_name Value: link
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>         Node: comp_translator Value: msvc_link
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>         Node: comp_lang Value: C/C++
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>         Node: comp_generic Value: msvc
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>         Node: id Value: msvc_link-link-.*
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-msvc_link-config-0/../user_nodefs.h
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>         Node: instrument_variable
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>           Node: var_name Value: cov_instrument_config_version
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>           Node: cond_platform_value
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>             Node: platform_name Value: all
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>             Node: var_value Value: 3
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>         Node: instrument_variable
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>           Node: var_name Value: cov_lib_deployment_path
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>           Node: cond_platform_value
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>             Node: platform_name Value: all
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>             Node: var_value Value: /Users/mllaguno/Downloads/scan/2017.07/capture_tarballs/cov-analysis-macosx-2017.07/lib
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>         Node: instrument_variable
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>           Node: var_name Value: cov_lib_header_path
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>           Node: cond_platform_value
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>             Node: platform_name Value: all
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>             Node: var_value Value: /Users/mllaguno/Downloads/scan/2017.07/capture_tarballs/cov-analysis-macosx-2017.07/sdk/runtime/ta-runtime
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>         Node: instrument_variable
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>           Node: var_name Value: cov_lib_name
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>           Node: cond_platform_value
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>             Node: platform_name Value: x64
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>             Node: var_value Value: libci-runtime-x64.lib
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>           Node: cond_platform_value
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>             Node: platform_name Value: x86
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>             Node: var_value Value: libci-runtime-x86.lib
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>         Node: instrument_variable
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>           Node: var_name Value: cov_lib_path
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>           Node: cond_platform_value
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>             Node: platform_name Value: all
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>             Node: var_value Value: /Users/mllaguno/Downloads/scan/2017.07/capture_tarballs/cov-analysis-macosx-2017.07/lib
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|>   Node: md5 Value: b934bab21dd57b9bd4e87b6bc04c90ff
+2018-01-03T20:03:34.525970Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.526106Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-csc-config-0/coverity_config.xml
+2018-01-03T20:03:34.526106Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.526106Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.526106Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.526106Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.526106Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.526106Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.526106Z|cov-build|3447|info|>         Node: comp_name Value: csc
+2018-01-03T20:03:34.526106Z|cov-build|3447|info|>         Node: comp_translator Value: csc
+2018-01-03T20:03:34.526106Z|cov-build|3447|info|>         Node: comp_lang Value: C#
+2018-01-03T20:03:34.526106Z|cov-build|3447|info|>         Node: comp_generic Value: csc
+2018-01-03T20:03:34.526106Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.526106Z|cov-build|3447|info|>         Node: id Value: csc-csc-.*
+2018-01-03T20:03:34.526106Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.526106Z|cov-build|3447|info|>   Node: md5 Value: fe090f9c5ade85b6791417ae28e7af34
+2018-01-03T20:03:34.526106Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.526149Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-csc-config-1/coverity_config.xml
+2018-01-03T20:03:34.526149Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.526149Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.526149Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.526149Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.526149Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.526149Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.526149Z|cov-build|3447|info|>         Node: comp_name Value: csc2
+2018-01-03T20:03:34.526149Z|cov-build|3447|info|>         Node: comp_translator Value: csc
+2018-01-03T20:03:34.526149Z|cov-build|3447|info|>         Node: comp_lang Value: C#
+2018-01-03T20:03:34.526149Z|cov-build|3447|info|>         Node: comp_generic Value: csc
+2018-01-03T20:03:34.526149Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.526149Z|cov-build|3447|info|>         Node: id Value: csc-csc2-.*
+2018-01-03T20:03:34.526149Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.526149Z|cov-build|3447|info|>   Node: md5 Value: 977437d947559cc8595a296b529da4b3
+2018-01-03T20:03:34.526149Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-clangcc-config-0/coverity_config.xml
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>         Node: comp_name Value: clang
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>         Node: comp_translator Value: clangcc
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>         Node: comp_lang Value: C/C++
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>         Node: comp_generic Value: clang
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>         Node: id Value: clangcc-clang-.*
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-clangcc-config-0/../user_nodefs.h
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>         Node: id Value: clangcxx-clang-.*
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-clangcc-config-0/../user_nodefs.h
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>         Node: id Value: clangcxxcc-clang-.*
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-clangcc-config-0/../user_nodefs.h
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>         Node: id Value: clangobjc-clang-.*
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-clangcc-config-0/../user_nodefs.h
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>         Node: id Value: clangobjcxx-clang-.*
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-clangcc-config-0/../user_nodefs.h
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|>   Node: md5 Value: 15fd1279f5d22c97f5ebadaac9bf1e6b
+2018-01-03T20:03:34.526192Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-clangcxx-config-0/coverity_config.xml
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|>         Node: comp_name Value: clang++
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|>         Node: comp_translator Value: clangcxx
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|>         Node: comp_lang Value: C/C++
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|>         Node: comp_generic Value: clang
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|>         Node: id Value: clangcxx-clang++-.*
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-clangcxx-config-0/../user_nodefs.h
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|>         Node: id Value: clangcxxcc-clang++-.*
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-clangcxx-config-0/../user_nodefs.h
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|>         Node: id Value: clangobjc-clang++-.*
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-clangcxx-config-0/../user_nodefs.h
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|>         Node: id Value: clangobjcxx-clang++-.*
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|>         Node: opt_preinclude_file Value: /usr/src/cov-analysis-linux64-2017.07/config/template-clangcxx-config-0/../user_nodefs.h
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|>   Node: md5 Value: a5fffed9db920f7281ac5687f6514630
+2018-01-03T20:03:34.526279Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.526370Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-javascript-config-0/coverity_config.xml
+2018-01-03T20:03:34.526370Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.526370Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.526370Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.526370Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.526370Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.526370Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.526370Z|cov-build|3447|info|>         Node: comp_name Value: cov-filesystem-capture-javascript-0
+2018-01-03T20:03:34.526370Z|cov-build|3447|info|>         Node: comp_translator Value: javascript
+2018-01-03T20:03:34.526370Z|cov-build|3447|info|>         Node: comp_lang Value: Non Compiled
+2018-01-03T20:03:34.526370Z|cov-build|3447|info|>         Node: comp_generic Value: javascript
+2018-01-03T20:03:34.526370Z|cov-build|3447|info|>         Node: file_include_pattern Value: ^.*\.(js|xsjs|xsjslib)$
+2018-01-03T20:03:34.526370Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.526370Z|cov-build|3447|info|>         Node: id Value: javascript-cov-filesystem-capture-javascript-0-.*
+2018-01-03T20:03:34.526370Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.526370Z|cov-build|3447|info|>   Node: md5 Value: 27a00c60dd27cc03e3adb984b7a5dffd
+2018-01-03T20:03:34.526370Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.526417Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-html-config-0/coverity_config.xml
+2018-01-03T20:03:34.526417Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.526417Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.526417Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.526417Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.526417Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.526417Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.526417Z|cov-build|3447|info|>         Node: comp_name Value: cov-filesystem-capture-html-0
+2018-01-03T20:03:34.526417Z|cov-build|3447|info|>         Node: comp_translator Value: html
+2018-01-03T20:03:34.526417Z|cov-build|3447|info|>         Node: comp_lang Value: Non Compiled
+2018-01-03T20:03:34.526417Z|cov-build|3447|info|>         Node: comp_generic Value: javascript
+2018-01-03T20:03:34.526417Z|cov-build|3447|info|>         Node: file_include_pattern Value: ^.*\.(html|htm)$
+2018-01-03T20:03:34.526417Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.526417Z|cov-build|3447|info|>         Node: id Value: html-cov-filesystem-capture-html-0-.*
+2018-01-03T20:03:34.526417Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.526417Z|cov-build|3447|info|>   Node: md5 Value: 19397d11982615e58d756dc918e6d3c2
+2018-01-03T20:03:34.526417Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.526466Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-ruby-config-0/coverity_config.xml
+2018-01-03T20:03:34.526466Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.526466Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.526466Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.526466Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.526466Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.526466Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.526466Z|cov-build|3447|info|>         Node: comp_name Value: cov-filesystem-capture-ruby-0
+2018-01-03T20:03:34.526466Z|cov-build|3447|info|>         Node: comp_translator Value: ruby
+2018-01-03T20:03:34.526466Z|cov-build|3447|info|>         Node: comp_lang Value: Non Compiled
+2018-01-03T20:03:34.526466Z|cov-build|3447|info|>         Node: comp_generic Value: ruby
+2018-01-03T20:03:34.526466Z|cov-build|3447|info|>         Node: file_include_pattern Value: ^.*\.rb$
+2018-01-03T20:03:34.526466Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.526466Z|cov-build|3447|info|>         Node: id Value: ruby-cov-filesystem-capture-ruby-0-.*
+2018-01-03T20:03:34.526466Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.526466Z|cov-build|3447|info|>   Node: md5 Value: e05b5d016abf502f4374682646f80501
+2018-01-03T20:03:34.526466Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.526512Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-php-config-0/coverity_config.xml
+2018-01-03T20:03:34.526512Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.526512Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.526512Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.526512Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.526512Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.526512Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.526512Z|cov-build|3447|info|>         Node: comp_name Value: cov-filesystem-capture-php-0
+2018-01-03T20:03:34.526512Z|cov-build|3447|info|>         Node: comp_translator Value: php
+2018-01-03T20:03:34.526512Z|cov-build|3447|info|>         Node: comp_lang Value: Non Compiled
+2018-01-03T20:03:34.526512Z|cov-build|3447|info|>         Node: comp_generic Value: php
+2018-01-03T20:03:34.526512Z|cov-build|3447|info|>         Node: file_include_pattern Value: ^.*\.php$
+2018-01-03T20:03:34.526512Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.526512Z|cov-build|3447|info|>         Node: id Value: php-cov-filesystem-capture-php-0-.*
+2018-01-03T20:03:34.526512Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.526512Z|cov-build|3447|info|>   Node: md5 Value: 8bf88b4c45e978fe7f5e31c6d61cde3a
+2018-01-03T20:03:34.526512Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.526558Z|cov-build|3447|info|> Configuration read from: /usr/src/cov-analysis-linux64-2017.07/config/template-python-config-0/coverity_config.xml
+2018-01-03T20:03:34.526558Z|cov-build|3447|info|> Node: coverity
+2018-01-03T20:03:34.526558Z|cov-build|3447|info|>   Node: cit_version Value: 1
+2018-01-03T20:03:34.526558Z|cov-build|3447|info|>   Node: config
+2018-01-03T20:03:34.526558Z|cov-build|3447|info|>     Node: build
+2018-01-03T20:03:34.526558Z|cov-build|3447|info|>       Node: compiler
+2018-01-03T20:03:34.526558Z|cov-build|3447|info|>         Node: template_compiler Value: true
+2018-01-03T20:03:34.526558Z|cov-build|3447|info|>         Node: comp_name Value: cov-filesystem-capture-python-0
+2018-01-03T20:03:34.526558Z|cov-build|3447|info|>         Node: comp_translator Value: python
+2018-01-03T20:03:34.526558Z|cov-build|3447|info|>         Node: comp_lang Value: Non Compiled
+2018-01-03T20:03:34.526558Z|cov-build|3447|info|>         Node: comp_generic Value: python
+2018-01-03T20:03:34.526558Z|cov-build|3447|info|>         Node: file_include_pattern Value: ^.*\.py$
+2018-01-03T20:03:34.526558Z|cov-build|3447|info|>       Node: options
+2018-01-03T20:03:34.526558Z|cov-build|3447|info|>         Node: id Value: python-cov-filesystem-capture-python-0-.*
+2018-01-03T20:03:34.526558Z|cov-build|3447|info|>         Node: begin_command_line_config
+2018-01-03T20:03:34.526558Z|cov-build|3447|info|>   Node: md5 Value: 4498fd410774a9faa0109aad2e182841
+2018-01-03T20:03:34.526558Z|cov-build|3447|info|> 
+2018-01-03T20:03:34.527877Z|cov-build|3447|info|> Using LD_PRELOAD = /usr/src/cov-analysis-linux64-2017.07/bin/libcapture-linux64-${PLATFORM}.so
+[3450] EXECUTING: make
+[3451] EXECUTING: /bin/sh -c "gcc -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 2"
+[3453] EXECUTING: grep Target
+[3454] EXECUTING: sed "s/Target: //"
+[3452] EXECUTING: gcc -v
+[3455] EXECUTING: cut -d- -f 2
+[3456] CWD: /home/files/cifs/xxx/src
+[3456] COMPILING: /usr/src/cov-analysis-linux64-2017.07/bin/cov-translate gcc -v
+Encountered compiler /usr/bin/gcc-5 for the first time, configuring it
+* Configuring /usr/bin/gcc as a C compiler
+[STATUS] gcc-config-0: Running sanity tests on native compiler
+[STATUS] gcc-config-0: Detecting size and alignment of fundamental types.
+Looking for macros in standard headers. This can take a long time.
+[STATUS] gcc-config-0: Retrieving values for macros
+* Configuring /usr/bin/gcc as a C++ compiler
+[STATUS] g++-config-0: Running sanity tests on native compiler
+[STATUS] g++-config-0: Detecting size and alignment of fundamental types.
+Looking for macros in standard headers. This can take a long time.
+[STATUS] g++-config-0: Retrieving values for macros
+* Configuring /usr/bin/gcc as a C compiler
+[STATUS] g++cc-config-0: Running sanity tests on native compiler
+[STATUS] g++cc-config-0: Detecting size and alignment of fundamental types.
+Looking for macros in standard headers. This can take a long time.
+[STATUS] g++cc-config-0: Retrieving values for macros
+* Configuring /usr/bin/g++ as a C++ compiler
+[STATUS] g++-config-1: Running sanity tests on native compiler
+[STATUS] g++-config-1: Detecting size and alignment of fundamental types.
+Looking for macros in standard headers. This can take a long time.
+[STATUS] g++-config-1: Retrieving values for macros
+* Configuring /usr/bin/g++ as a C compiler
+[STATUS] g++cc-config-1: Running sanity tests on native compiler
+[STATUS] g++cc-config-1: Detecting size and alignment of fundamental types.
+Looking for macros in standard headers. This can take a long time.
+[STATUS] g++cc-config-1: Retrieving values for macros
+* Configuring /usr/bin/ld as a C++ compiler
+Added template compiler configuration instance /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/coverity_config.xml
+Configuration read from: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/coverity_config.xml
+Node: coverity
+  Node: cit_version Value: 1
+  Node: config
+    Node: include Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/gcc-config-0/coverity_config.xml
+    Node: include Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/g++-config-0/coverity_config.xml
+    Node: include Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/g++cc-config-0/coverity_config.xml
+    Node: include Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/g++-config-1/coverity_config.xml
+    Node: include Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/g++cc-config-1/coverity_config.xml
+    Node: include Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/ld-config-0/coverity_config.xml
+Configuration read from: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/gcc-config-0/coverity_config.xml
+Node: coverity
+  Node: cit_version Value: 1
+  Node: config
+    Node: build
+      Node: compiler
+        Node: comp_name Value: gcc
+        Node: comp_name Value: gcc-5
+        Node: comp_dir Value: /usr/bin
+        Node: comp_translator Value: gcc
+        Node: comp_lang Value: C/C++
+        Node: comp_front_end Value: cov-emit
+        Node: comp_desc Value: GNU C compiler
+        Node: comp_next_type Value: g++
+        Node: comp_generic Value: gnu
+        Node: comp_require
+        Node: id Value: gcc-gcc-5.4.0-8214d047244147b5ee8a110bd4cef3f3-0
+        Node: version Value: 5.4.0
+        Node: is_compiler Value: true
+        Node: is_linker Value: true
+        Node: target_platform Value: all
+      Node: options
+        Node: id Value: gcc-gcc-5.4.0-8214d047244147b5ee8a110bd4cef3f3-0
+        Node: instrument_predicates
+          Node: remove_regex Value: (^|\s)\-Werror(=\S*)?(\s|$)
+          Node: if
+            Node: conditions
+              Node: or_cond
+                Node: cond
+                  Node: contains_regex Value: (^|\s)[^-]
+                Node: cond
+                  Node: contains_regex Value: (^|\s)\-l
+            Node: then
+              Node: insert
+                Node: insertion_string Value: -L[[:cov_lib_path:]] -Wl,-rpath=[[:cov_lib_deployment_path:]] [[:cov_lib_gcc:]] -I[[:cov_lib_header_path:]]
+                Node: precedes_regex Value: nothing
+        Node: instrument_variable
+          Node: var_name Value: cov_instrument_config_version
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: 3
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_deployment_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/lib
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_gcc
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: -lci-runtime -Wl,--no-as-needed -pthread -lpthread -lrt -lc
+          Node: cond_platform_value
+            Node: platform_name Value: mingw
+            Node: var_value Value: -lci-runtime-x86
+          Node: cond_platform_value
+            Node: platform_name Value: mingw64
+            Node: var_value Value: -lci-runtime-x64
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_header_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/sdk/runtime/ta-runtime
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/lib
+        Node: template_config_option_id Value: gcc-gcc-.*
+        Node: sysinclude_dir Value: /usr/lib/gcc/x86_64-linux-gnu/5/include
+        Node: sysinclude_dir Value: /usr/local/include
+        Node: sysinclude_dir Value: /usr/lib/gcc/x86_64-linux-gnu/5/include-fixed
+        Node: sysinclude_dir Value: /usr/include/x86_64-linux-gnu
+        Node: sysinclude_dir Value: /usr/include
+        Node: dryrun_switch Value: -E
+        Node: dryrun_switch Value: -v
+        Node: dump_macros_arg Value: -dM
+        Node: dump_macros_arg Value: -E
+        Node: preprocess_remove_arg Value: -o.+
+        Node: preprocess_remove_arg Value: -c
+        Node: preprocess_remove_arg Value: -Werror
+        Node: preprocess_remove_next_arg Value: -o
+        Node: preprocess_switch Value: -E
+        Node: preprocess_switch Value: -U__BLOCKS__
+        Node: preprocess_switch Value: -xc
+        Node: preprocess_compile_switch Value: -C
+        Node: supports_pch Value: true
+        Node: native_pch_suffix Value: .gch
+        Node: preprocess_output Value: -
+        Node: sysroot_dir Value: /
+        Node: dryrun_output Value: 2
+        Node: pre_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/gcc-config-0/coverity-macro-compat.h
+        Node: pre_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/gcc-config-0/coverity-compiler-compat.h
+        Node: prepend_arg Value: --add_type_modifier=__coverity___fpreg
+        Node: prepend_arg Value: --add_type_modifier=__coverity_decimal
+        Node: prepend_arg Value: --no_predefined_feature_test_macros
+        Node: prepend_arg Value: --no_stdarg_builtin
+        Node: prepend_arg Value: --incompat_proto
+        Node: prepend_arg Value: --no_predefined_cplusplus
+        Node: prepend_arg Value: -w
+        Node: prepend_arg Value: --no_predefines
+        Node: prepend_arg Value: --comp_ver
+        Node: prepend_arg Value: 5.4.0
+        Node: prepend_arg Value: --size_t_type=m
+        Node: prepend_arg Value: --ptrdiff_t_type=l
+        Node: prepend_arg Value: --type_sizes=xl8i4s2e16d8f4P8
+        Node: prepend_arg Value: --type_alignments=xl8i4s2e16d8f4P8
+        Node: prepend_arg Value: --char_bit_size=8
+        Node: prepend_arg Value: --restrict
+        Node: prepend_arg Value: --gnu_carriage_return_line_terminator
+        Node: prepend_arg Value: --wchar_t_type=i
+        Node: prepend_arg Value: --no_multiline_string
+        Node: prepend_arg Value: --no_trigraphs
+        Node: prepend_arg Value: --ignore_calling_convention
+        Node: prepend_arg Value: --c11
+        Node: prepend_arg Value: --enable_80bit_float
+        Node: prepend_arg Value: --enable_128bit_float
+        Node: prepend_arg Value: --allow__bool
+        Node: prepend_arg Value: --macro_stack_pragmas
+        Node: prepend_arg Value: --inline_keyword
+        Node: prepend_arg Value: --no_predefines
+        Node: skip_arg Value: -###
+        Node: skip_arg Value: -E
+        Node: skip_arg Value: -fsyntax-only
+        Node: skip_arg Value: -M
+        Node: skip_arg Value: -MM
+        Node: skip_arg Value: -wrapper
+        Node: skip_arg Value: --version
+        Node: skip_file Value: conftest\.c{1,2}$
+        Node: skip_file Value: conftest\.cpp$
+        Node: opt_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/gcc-config-0/../user_nodefs.h
+        Node: expand
+          Node: options
+            Node: replace_arg_regex
+              Node: replace Value: @(.*)
+              Node: with Value: --coverity_resp_file=$1
+        Node: pre_trans
+          Node: options
+            Node: intern_trans Value: gnu_pre_translate
+        Node: trans
+          Node: options
+            Node: includes_from_env_var Value: CPATH
+            Node: includes_from_env_var_empty_is_cwd Value: true
+        Node: trans
+          Node: options
+            Node: includes_from_env_var Value: C_INCLUDE_PATH
+            Node: pre_prepend_arg Value: --c
+        Node: begin_command_line_config
+  Node: md5 Value: 4627d539581630f3ebe9ea45753a4553
+Configuration read from: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/g++-config-0/coverity_config.xml
+Node: coverity
+  Node: cit_version Value: 1
+  Node: config
+    Node: build
+      Node: compiler
+        Node: comp_name Value: gcc
+        Node: comp_name Value: gcc-5
+        Node: comp_dir Value: /usr/bin
+        Node: comp_translator Value: g++
+        Node: comp_lang Value: C/C++
+        Node: comp_front_end Value: cov-emit
+        Node: comp_desc Value: GNU C++ Compiler
+        Node: comp_cxx Value: true
+        Node: comp_next_type Value: g++cc
+        Node: comp_generic Value: gnu
+        Node: comp_require
+        Node: id Value: g++-gcc-5.4.0-8214d047244147b5ee8a110bd4cef3f3-0
+        Node: version Value: 5.4.0
+        Node: is_compiler Value: true
+        Node: is_linker Value: true
+        Node: target_platform Value: all
+      Node: options
+        Node: id Value: g++-gcc-5.4.0-8214d047244147b5ee8a110bd4cef3f3-0
+        Node: instrument_predicates
+          Node: remove_regex Value: (^|\s)\-Werror(=\S*)?(\s|$)
+          Node: if
+            Node: conditions
+              Node: or_cond
+                Node: cond
+                  Node: contains_regex Value: (^|\s)[^-]
+                Node: cond
+                  Node: contains_regex Value: (^|\s)\-l
+            Node: then
+              Node: insert
+                Node: insertion_string Value: -L[[:cov_lib_path:]] -Wl,-rpath=[[:cov_lib_deployment_path:]] [[:cov_lib_gcc:]] -I[[:cov_lib_header_path:]]
+                Node: precedes_regex Value: nothing
+        Node: instrument_variable
+          Node: var_name Value: cov_instrument_config_version
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: 3
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_deployment_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/lib
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_gcc
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: -lci-runtime -Wl,--no-as-needed -pthread -lpthread -lrt -lc
+          Node: cond_platform_value
+            Node: platform_name Value: mingw
+            Node: var_value Value: -lci-runtime-x86
+          Node: cond_platform_value
+            Node: platform_name Value: mingw64
+            Node: var_value Value: -lci-runtime-x64
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_header_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/sdk/runtime/ta-runtime
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/lib
+        Node: template_config_option_id Value: g++-gcc-.*
+        Node: sysinclude_dir Value: /usr/include/c++/5
+        Node: sysinclude_dir Value: /usr/include/x86_64-linux-gnu/c++/5
+        Node: sysinclude_dir Value: /usr/include/c++/5/backward
+        Node: sysinclude_dir Value: /usr/lib/gcc/x86_64-linux-gnu/5/include
+        Node: sysinclude_dir Value: /usr/local/include
+        Node: sysinclude_dir Value: /usr/lib/gcc/x86_64-linux-gnu/5/include-fixed
+        Node: sysinclude_dir Value: /usr/include/x86_64-linux-gnu
+        Node: sysinclude_dir Value: /usr/include
+        Node: dryrun_switch Value: -E
+        Node: dryrun_switch Value: -v
+        Node: dump_macros_arg Value: -dM
+        Node: dump_macros_arg Value: -E
+        Node: preprocess_remove_arg Value: -o.+
+        Node: preprocess_remove_arg Value: -c
+        Node: preprocess_remove_arg Value: -Werror
+        Node: preprocess_remove_next_arg Value: -o
+        Node: preprocess_switch Value: -xc++
+        Node: preprocess_switch Value: -E
+        Node: preprocess_switch Value: -U__BLOCKS__
+        Node: preprocess_compile_switch Value: -C
+        Node: supports_pch Value: true
+        Node: native_pch_suffix Value: .gch
+        Node: preprocess_output Value: -
+        Node: sysroot_dir Value: /
+        Node: dryrun_output Value: 2
+        Node: pre_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/g++-config-0/coverity-macro-compat.h
+        Node: pre_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/g++-config-0/coverity-compiler-compat.h
+        Node: prepend_arg Value: --add_type_modifier=__coverity___fpreg
+        Node: prepend_arg Value: --add_type_modifier=__coverity_decimal
+        Node: prepend_arg Value: --no_predefined_feature_test_macros
+        Node: prepend_arg Value: --no_stdarg_builtin
+        Node: prepend_arg Value: --incompat_proto
+        Node: prepend_arg Value: --no_predefined_cplusplus
+        Node: prepend_arg Value: -w
+        Node: prepend_arg Value: --no_predefines
+        Node: prepend_arg Value: --comp_ver
+        Node: prepend_arg Value: 5.4.0
+        Node: prepend_arg Value: --size_t_type=m
+        Node: prepend_arg Value: --ptrdiff_t_type=l
+        Node: prepend_arg Value: --type_sizes=w4xl8i4s2e16d8f4P8
+        Node: prepend_arg Value: --type_alignments=w4xl8i4s2e16d8f4P8
+        Node: prepend_arg Value: --char_bit_size=8
+        Node: prepend_arg Value: --gnu_carriage_return_line_terminator
+        Node: prepend_arg Value: --wchar_t_keyword
+        Node: prepend_arg Value: --no_multiline_string
+        Node: prepend_arg Value: --no_trigraphs
+        Node: prepend_arg Value: --ignore_calling_convention
+        Node: prepend_arg Value: --enable_80bit_float
+        Node: prepend_arg Value: --enable_128bit_float
+        Node: prepend_arg Value: --macro_stack_pragmas
+        Node: prepend_arg Value: --exceptions
+        Node: prepend_arg Value: --arg_dependent_overload
+        Node: prepend_arg Value: --inline_keyword
+        Node: prepend_arg Value: --no_predefines
+        Node: skip_arg Value: -###
+        Node: skip_arg Value: -E
+        Node: skip_arg Value: -fsyntax-only
+        Node: skip_arg Value: -M
+        Node: skip_arg Value: -MM
+        Node: skip_arg Value: -wrapper
+        Node: skip_arg Value: --version
+        Node: skip_file Value: conftest\.c{1,2}$
+        Node: skip_file Value: conftest\.cpp$
+        Node: opt_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/g++-config-0/../user_nodefs.h
+        Node: trans
+          Node: options
+            Node: includes_from_env_var Value: CPLUS_INCLUDE_PATH
+            Node: pre_prepend_arg Value: --c++
+        Node: expand
+          Node: options
+            Node: replace_arg_regex
+              Node: replace Value: @(.*)
+              Node: with Value: --coverity_resp_file=$1
+        Node: pre_trans
+          Node: options
+            Node: intern_trans Value: gnu_pre_translate
+        Node: trans
+          Node: options
+            Node: includes_from_env_var Value: CPATH
+            Node: includes_from_env_var_empty_is_cwd Value: true
+        Node: begin_command_line_config
+  Node: md5 Value: 0b83ffdf15be3094fe6a23a54c638da1
+Configuration read from: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/g++cc-config-0/coverity_config.xml
+Node: coverity
+  Node: cit_version Value: 1
+  Node: config
+    Node: build
+      Node: compiler
+        Node: comp_name Value: gcc
+        Node: comp_name Value: gcc-5
+        Node: comp_dir Value: /usr/bin
+        Node: comp_translator Value: g++cc
+        Node: comp_lang Value: C/C++
+        Node: comp_front_end Value: cov-emit
+        Node: comp_desc Value: GNU C++ Compiler
+        Node: comp_generic Value: gnu
+        Node: comp_require
+        Node: id Value: g++cc-gcc-5.4.0-8214d047244147b5ee8a110bd4cef3f3-0
+        Node: version Value: 5.4.0
+        Node: is_compiler Value: true
+        Node: is_linker Value: true
+        Node: target_platform Value: all
+      Node: options
+        Node: id Value: g++cc-gcc-5.4.0-8214d047244147b5ee8a110bd4cef3f3-0
+        Node: instrument_predicates
+          Node: remove_regex Value: (^|\s)\-Werror(=\S*)?(\s|$)
+          Node: if
+            Node: conditions
+              Node: or_cond
+                Node: cond
+                  Node: contains_regex Value: (^|\s)[^-]
+                Node: cond
+                  Node: contains_regex Value: (^|\s)\-l
+            Node: then
+              Node: insert
+                Node: insertion_string Value: -L[[:cov_lib_path:]] -Wl,-rpath=[[:cov_lib_deployment_path:]] [[:cov_lib_gcc:]] -I[[:cov_lib_header_path:]]
+                Node: precedes_regex Value: nothing
+        Node: instrument_variable
+          Node: var_name Value: cov_instrument_config_version
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: 3
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_deployment_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/lib
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_gcc
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: -lci-runtime -Wl,--no-as-needed -pthread -lpthread -lrt -lc
+          Node: cond_platform_value
+            Node: platform_name Value: mingw
+            Node: var_value Value: -lci-runtime-x86
+          Node: cond_platform_value
+            Node: platform_name Value: mingw64
+            Node: var_value Value: -lci-runtime-x64
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_header_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/sdk/runtime/ta-runtime
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/lib
+        Node: template_config_option_id Value: g++cc-gcc-.*
+        Node: sysinclude_dir Value: /usr/lib/gcc/x86_64-linux-gnu/5/include
+        Node: sysinclude_dir Value: /usr/local/include
+        Node: sysinclude_dir Value: /usr/lib/gcc/x86_64-linux-gnu/5/include-fixed
+        Node: sysinclude_dir Value: /usr/include/x86_64-linux-gnu
+        Node: sysinclude_dir Value: /usr/include
+        Node: dryrun_switch Value: -xc
+        Node: dryrun_switch Value: -E
+        Node: dryrun_switch Value: -v
+        Node: dump_macros_arg Value: -xc
+        Node: dump_macros_arg Value: -dM
+        Node: dump_macros_arg Value: -E
+        Node: preprocess_remove_arg Value: -o.+
+        Node: preprocess_remove_arg Value: -c
+        Node: preprocess_remove_arg Value: -Werror
+        Node: preprocess_remove_next_arg Value: -o
+        Node: preprocess_switch Value: -E
+        Node: preprocess_switch Value: -U__BLOCKS__
+        Node: preprocess_switch Value: -xc
+        Node: preprocess_compile_switch Value: -C
+        Node: supports_pch Value: true
+        Node: native_pch_suffix Value: .gch
+        Node: preprocess_output Value: -
+        Node: sysroot_dir Value: /
+        Node: dryrun_output Value: 2
+        Node: pre_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/g++cc-config-0/coverity-macro-compat.h
+        Node: pre_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/g++cc-config-0/coverity-compiler-compat.h
+        Node: prepend_arg Value: --add_type_modifier=__coverity___fpreg
+        Node: prepend_arg Value: --add_type_modifier=__coverity_decimal
+        Node: prepend_arg Value: --no_predefined_feature_test_macros
+        Node: prepend_arg Value: --no_stdarg_builtin
+        Node: prepend_arg Value: --incompat_proto
+        Node: prepend_arg Value: --no_predefined_cplusplus
+        Node: prepend_arg Value: -w
+        Node: prepend_arg Value: --no_predefines
+        Node: prepend_arg Value: --comp_ver
+        Node: prepend_arg Value: 5.4.0
+        Node: prepend_arg Value: --size_t_type=m
+        Node: prepend_arg Value: --ptrdiff_t_type=l
+        Node: prepend_arg Value: --type_sizes=xl8i4s2e16d8f4P8
+        Node: prepend_arg Value: --type_alignments=xl8i4s2e16d8f4P8
+        Node: prepend_arg Value: --char_bit_size=8
+        Node: prepend_arg Value: --restrict
+        Node: prepend_arg Value: --gnu_carriage_return_line_terminator
+        Node: prepend_arg Value: --wchar_t_type=i
+        Node: prepend_arg Value: --no_multiline_string
+        Node: prepend_arg Value: --no_trigraphs
+        Node: prepend_arg Value: --ignore_calling_convention
+        Node: prepend_arg Value: --c11
+        Node: prepend_arg Value: --enable_80bit_float
+        Node: prepend_arg Value: --enable_128bit_float
+        Node: prepend_arg Value: --allow__bool
+        Node: prepend_arg Value: --macro_stack_pragmas
+        Node: prepend_arg Value: --inline_keyword
+        Node: prepend_arg Value: --no_predefines
+        Node: skip_arg Value: -###
+        Node: skip_arg Value: -E
+        Node: skip_arg Value: -fsyntax-only
+        Node: skip_arg Value: -M
+        Node: skip_arg Value: -MM
+        Node: skip_arg Value: -wrapper
+        Node: skip_arg Value: --version
+        Node: skip_file Value: conftest\.c{1,2}$
+        Node: skip_file Value: conftest\.cpp$
+        Node: opt_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/g++cc-config-0/../user_nodefs.h
+        Node: pre_trans
+          Node: options
+            Node: pre_prepend_arg Value: -coverity_cxx_suffixes=c;i
+            Node: pre_prepend_arg Value: -coverity_cxx_header_suffixes=h
+        Node: expand
+          Node: options
+            Node: replace_arg_regex
+              Node: replace Value: @(.*)
+              Node: with Value: --coverity_resp_file=$1
+        Node: pre_trans
+          Node: options
+            Node: intern_trans Value: gnu_pre_translate
+        Node: trans
+          Node: options
+            Node: includes_from_env_var Value: CPATH
+            Node: includes_from_env_var_empty_is_cwd Value: true
+        Node: trans
+          Node: options
+            Node: includes_from_env_var Value: C_INCLUDE_PATH
+            Node: pre_prepend_arg Value: --c
+        Node: begin_command_line_config
+  Node: md5 Value: a90afc72cb5a3ab7c7d4626397284e0a
+Configuration read from: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/g++-config-1/coverity_config.xml
+Node: coverity
+  Node: cit_version Value: 1
+  Node: config
+    Node: build
+      Node: compiler
+        Node: comp_name Value: g++
+        Node: comp_name Value: g++-5
+        Node: comp_dir Value: /usr/bin
+        Node: comp_translator Value: g++
+        Node: comp_lang Value: C/C++
+        Node: comp_front_end Value: cov-emit
+        Node: comp_desc Value: GNU C++ Compiler
+        Node: comp_cxx Value: true
+        Node: comp_next_type Value: g++cc
+        Node: comp_generic Value: gnu
+        Node: comp_require
+        Node: id Value: g++-g++-5.4.0-8214d047244147b5ee8a110bd4cef3f3-1
+        Node: version Value: 5.4.0
+        Node: is_compiler Value: true
+        Node: is_linker Value: true
+        Node: target_platform Value: all
+      Node: options
+        Node: id Value: g++-g++-5.4.0-8214d047244147b5ee8a110bd4cef3f3-1
+        Node: instrument_predicates
+          Node: remove_regex Value: (^|\s)\-Werror(=\S*)?(\s|$)
+          Node: if
+            Node: conditions
+              Node: or_cond
+                Node: cond
+                  Node: contains_regex Value: (^|\s)[^-]
+                Node: cond
+                  Node: contains_regex Value: (^|\s)\-l
+            Node: then
+              Node: insert
+                Node: insertion_string Value: -L[[:cov_lib_path:]] -Wl,-rpath=[[:cov_lib_deployment_path:]] [[:cov_lib_gcc:]] -I[[:cov_lib_header_path:]]
+                Node: precedes_regex Value: nothing
+        Node: instrument_variable
+          Node: var_name Value: cov_instrument_config_version
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: 3
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_deployment_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/lib
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_gcc
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: -lci-runtime -Wl,--no-as-needed -pthread -lpthread -lrt -lc
+          Node: cond_platform_value
+            Node: platform_name Value: mingw
+            Node: var_value Value: -lci-runtime-x86
+          Node: cond_platform_value
+            Node: platform_name Value: mingw64
+            Node: var_value Value: -lci-runtime-x64
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_header_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/sdk/runtime/ta-runtime
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/lib
+        Node: template_config_option_id Value: g++-g++-.*
+        Node: sysinclude_dir Value: /usr/include/c++/5
+        Node: sysinclude_dir Value: /usr/include/x86_64-linux-gnu/c++/5
+        Node: sysinclude_dir Value: /usr/include/c++/5/backward
+        Node: sysinclude_dir Value: /usr/lib/gcc/x86_64-linux-gnu/5/include
+        Node: sysinclude_dir Value: /usr/local/include
+        Node: sysinclude_dir Value: /usr/lib/gcc/x86_64-linux-gnu/5/include-fixed
+        Node: sysinclude_dir Value: /usr/include/x86_64-linux-gnu
+        Node: sysinclude_dir Value: /usr/include
+        Node: dryrun_switch Value: -E
+        Node: dryrun_switch Value: -v
+        Node: dump_macros_arg Value: -dM
+        Node: dump_macros_arg Value: -E
+        Node: preprocess_remove_arg Value: -o.+
+        Node: preprocess_remove_arg Value: -c
+        Node: preprocess_remove_arg Value: -Werror
+        Node: preprocess_remove_next_arg Value: -o
+        Node: preprocess_switch Value: -xc++
+        Node: preprocess_switch Value: -E
+        Node: preprocess_switch Value: -U__BLOCKS__
+        Node: preprocess_compile_switch Value: -C
+        Node: supports_pch Value: true
+        Node: native_pch_suffix Value: .gch
+        Node: preprocess_output Value: -
+        Node: sysroot_dir Value: /
+        Node: dryrun_output Value: 2
+        Node: pre_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/g++-config-1/coverity-macro-compat.h
+        Node: pre_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/g++-config-1/coverity-compiler-compat.h
+        Node: prepend_arg Value: --add_type_modifier=__coverity___fpreg
+        Node: prepend_arg Value: --add_type_modifier=__coverity_decimal
+        Node: prepend_arg Value: --no_predefined_feature_test_macros
+        Node: prepend_arg Value: --no_stdarg_builtin
+        Node: prepend_arg Value: --incompat_proto
+        Node: prepend_arg Value: --no_predefined_cplusplus
+        Node: prepend_arg Value: -w
+        Node: prepend_arg Value: --no_predefines
+        Node: prepend_arg Value: --comp_ver
+        Node: prepend_arg Value: 5.4.0
+        Node: prepend_arg Value: --size_t_type=m
+        Node: prepend_arg Value: --ptrdiff_t_type=l
+        Node: prepend_arg Value: --type_sizes=w4xl8i4s2e16d8f4P8
+        Node: prepend_arg Value: --type_alignments=w4xl8i4s2e16d8f4P8
+        Node: prepend_arg Value: --char_bit_size=8
+        Node: prepend_arg Value: --gnu_carriage_return_line_terminator
+        Node: prepend_arg Value: --wchar_t_keyword
+        Node: prepend_arg Value: --no_multiline_string
+        Node: prepend_arg Value: --no_trigraphs
+        Node: prepend_arg Value: --ignore_calling_convention
+        Node: prepend_arg Value: --enable_80bit_float
+        Node: prepend_arg Value: --enable_128bit_float
+        Node: prepend_arg Value: --macro_stack_pragmas
+        Node: prepend_arg Value: --exceptions
+        Node: prepend_arg Value: --arg_dependent_overload
+        Node: prepend_arg Value: --inline_keyword
+        Node: prepend_arg Value: --no_predefines
+        Node: skip_arg Value: -###
+        Node: skip_arg Value: -E
+        Node: skip_arg Value: -fsyntax-only
+        Node: skip_arg Value: -M
+        Node: skip_arg Value: -MM
+        Node: skip_arg Value: -wrapper
+        Node: skip_arg Value: --version
+        Node: skip_file Value: conftest\.c{1,2}$
+        Node: skip_file Value: conftest\.cpp$
+        Node: opt_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/g++-config-1/../user_nodefs.h
+        Node: trans
+          Node: options
+            Node: includes_from_env_var Value: CPLUS_INCLUDE_PATH
+            Node: pre_prepend_arg Value: --c++
+        Node: expand
+          Node: options
+            Node: replace_arg_regex
+              Node: replace Value: @(.*)
+              Node: with Value: --coverity_resp_file=$1
+        Node: pre_trans
+          Node: options
+            Node: intern_trans Value: gnu_pre_translate
+        Node: trans
+          Node: options
+            Node: includes_from_env_var Value: CPATH
+            Node: includes_from_env_var_empty_is_cwd Value: true
+        Node: begin_command_line_config
+  Node: md5 Value: d5570ab6736ca3e9d121bd66820c4295
+Configuration read from: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/g++cc-config-1/coverity_config.xml
+Node: coverity
+  Node: cit_version Value: 1
+  Node: config
+    Node: build
+      Node: compiler
+        Node: comp_name Value: g++
+        Node: comp_name Value: g++-5
+        Node: comp_dir Value: /usr/bin
+        Node: comp_translator Value: g++cc
+        Node: comp_lang Value: C/C++
+        Node: comp_front_end Value: cov-emit
+        Node: comp_desc Value: GNU C++ Compiler
+        Node: comp_generic Value: gnu
+        Node: comp_require
+        Node: id Value: g++cc-g++-5.4.0-8214d047244147b5ee8a110bd4cef3f3-1
+        Node: version Value: 5.4.0
+        Node: is_compiler Value: true
+        Node: is_linker Value: true
+        Node: target_platform Value: all
+      Node: options
+        Node: id Value: g++cc-g++-5.4.0-8214d047244147b5ee8a110bd4cef3f3-1
+        Node: instrument_predicates
+          Node: remove_regex Value: (^|\s)\-Werror(=\S*)?(\s|$)
+          Node: if
+            Node: conditions
+              Node: or_cond
+                Node: cond
+                  Node: contains_regex Value: (^|\s)[^-]
+                Node: cond
+                  Node: contains_regex Value: (^|\s)\-l
+            Node: then
+              Node: insert
+                Node: insertion_string Value: -L[[:cov_lib_path:]] -Wl,-rpath=[[:cov_lib_deployment_path:]] [[:cov_lib_gcc:]] -I[[:cov_lib_header_path:]]
+                Node: precedes_regex Value: nothing
+        Node: instrument_variable
+          Node: var_name Value: cov_instrument_config_version
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: 3
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_deployment_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/lib
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_gcc
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: -lci-runtime -Wl,--no-as-needed -pthread -lpthread -lrt -lc
+          Node: cond_platform_value
+            Node: platform_name Value: mingw
+            Node: var_value Value: -lci-runtime-x86
+          Node: cond_platform_value
+            Node: platform_name Value: mingw64
+            Node: var_value Value: -lci-runtime-x64
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_header_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/sdk/runtime/ta-runtime
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/lib
+        Node: template_config_option_id Value: g++cc-g++-.*
+        Node: sysinclude_dir Value: /usr/lib/gcc/x86_64-linux-gnu/5/include
+        Node: sysinclude_dir Value: /usr/local/include
+        Node: sysinclude_dir Value: /usr/lib/gcc/x86_64-linux-gnu/5/include-fixed
+        Node: sysinclude_dir Value: /usr/include/x86_64-linux-gnu
+        Node: sysinclude_dir Value: /usr/include
+        Node: dryrun_switch Value: -xc
+        Node: dryrun_switch Value: -E
+        Node: dryrun_switch Value: -v
+        Node: dump_macros_arg Value: -xc
+        Node: dump_macros_arg Value: -dM
+        Node: dump_macros_arg Value: -E
+        Node: preprocess_remove_arg Value: -o.+
+        Node: preprocess_remove_arg Value: -c
+        Node: preprocess_remove_arg Value: -Werror
+        Node: preprocess_remove_next_arg Value: -o
+        Node: preprocess_switch Value: -E
+        Node: preprocess_switch Value: -U__BLOCKS__
+        Node: preprocess_switch Value: -xc
+        Node: preprocess_compile_switch Value: -C
+        Node: supports_pch Value: true
+        Node: native_pch_suffix Value: .gch
+        Node: preprocess_output Value: -
+        Node: sysroot_dir Value: /
+        Node: dryrun_output Value: 2
+        Node: pre_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/g++cc-config-1/coverity-macro-compat.h
+        Node: pre_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/g++cc-config-1/coverity-compiler-compat.h
+        Node: prepend_arg Value: --add_type_modifier=__coverity___fpreg
+        Node: prepend_arg Value: --add_type_modifier=__coverity_decimal
+        Node: prepend_arg Value: --no_predefined_feature_test_macros
+        Node: prepend_arg Value: --no_stdarg_builtin
+        Node: prepend_arg Value: --incompat_proto
+        Node: prepend_arg Value: --no_predefined_cplusplus
+        Node: prepend_arg Value: -w
+        Node: prepend_arg Value: --no_predefines
+        Node: prepend_arg Value: --comp_ver
+        Node: prepend_arg Value: 5.4.0
+        Node: prepend_arg Value: --size_t_type=m
+        Node: prepend_arg Value: --ptrdiff_t_type=l
+        Node: prepend_arg Value: --type_sizes=xl8i4s2e16d8f4P8
+        Node: prepend_arg Value: --type_alignments=xl8i4s2e16d8f4P8
+        Node: prepend_arg Value: --char_bit_size=8
+        Node: prepend_arg Value: --restrict
+        Node: prepend_arg Value: --gnu_carriage_return_line_terminator
+        Node: prepend_arg Value: --wchar_t_type=i
+        Node: prepend_arg Value: --no_multiline_string
+        Node: prepend_arg Value: --no_trigraphs
+        Node: prepend_arg Value: --ignore_calling_convention
+        Node: prepend_arg Value: --c11
+        Node: prepend_arg Value: --enable_80bit_float
+        Node: prepend_arg Value: --enable_128bit_float
+        Node: prepend_arg Value: --allow__bool
+        Node: prepend_arg Value: --macro_stack_pragmas
+        Node: prepend_arg Value: --inline_keyword
+        Node: prepend_arg Value: --no_predefines
+        Node: skip_arg Value: -###
+        Node: skip_arg Value: -E
+        Node: skip_arg Value: -fsyntax-only
+        Node: skip_arg Value: -M
+        Node: skip_arg Value: -MM
+        Node: skip_arg Value: -wrapper
+        Node: skip_arg Value: --version
+        Node: skip_file Value: conftest\.c{1,2}$
+        Node: skip_file Value: conftest\.cpp$
+        Node: opt_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/g++cc-config-1/../user_nodefs.h
+        Node: pre_trans
+          Node: options
+            Node: pre_prepend_arg Value: -coverity_cxx_suffixes=c;i
+            Node: pre_prepend_arg Value: -coverity_cxx_header_suffixes=h
+        Node: expand
+          Node: options
+            Node: replace_arg_regex
+              Node: replace Value: @(.*)
+              Node: with Value: --coverity_resp_file=$1
+        Node: pre_trans
+          Node: options
+            Node: intern_trans Value: gnu_pre_translate
+        Node: trans
+          Node: options
+            Node: includes_from_env_var Value: CPATH
+            Node: includes_from_env_var_empty_is_cwd Value: true
+        Node: trans
+          Node: options
+            Node: includes_from_env_var Value: C_INCLUDE_PATH
+            Node: pre_prepend_arg Value: --c
+        Node: begin_command_line_config
+  Node: md5 Value: 5eb77705f465bb8ea0b37a8cbddb6c36
+Configuration read from: /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/ld-config-0/coverity_config.xml
+Node: coverity
+  Node: cit_version Value: 1
+  Node: config
+    Node: build
+      Node: compiler
+        Node: comp_name Value: ld
+        Node: comp_name Value: x86_64-linux-gnu-ld
+        Node: comp_name Value: ld.bfd
+        Node: comp_name Value: x86_64-linux-gnu-ld.bfd
+        Node: comp_dir Value: /usr/bin
+        Node: comp_translator Value: ld
+        Node: comp_lang Value: C/C++
+        Node: comp_front_end Value: cov-emit
+        Node: comp_desc Value: GNU C/C++ Linker
+        Node: comp_cxx Value: true
+        Node: comp_generic Value: gnu
+        Node: comp_require
+        Node: id Value: ld-ld-8214d047244147b5ee8a110bd4cef3f3-0
+        Node: is_compiler Value: false
+        Node: is_linker Value: true
+      Node: options
+        Node: id Value: ld-ld-8214d047244147b5ee8a110bd4cef3f3-0
+        Node: instrument_predicates
+          Node: if
+            Node: conditions
+              Node: cond
+                Node: contains_regex Value: (^|\s)(\-Ur|\-r|\-\-relocatable|\-i)(\s|$)
+            Node: then
+          Node: elif
+            Node: conditions
+              Node: cond
+                Node: contains_regex Value: /crtend\.o(\s|$)
+            Node: then
+              Node: insert
+                Node: insertion_string Value: -L[[:cov_lib_path:]] -rpath=[[:cov_lib_deployment_path:]] [[:cov_lib_ld:]] 
+                Node: precedes_regex Value: /crtend\.o(\s|$)
+          Node: elif
+            Node: conditions
+              Node: cond
+                Node: contains_regex Value: \-lc\b
+            Node: then
+              Node: insert
+                Node: insertion_string Value: -L[[:cov_lib_path:]] -rpath=[[:cov_lib_deployment_path:]] [[:cov_lib_ld:]] 
+                Node: follows_regex Value: \-lc\b
+          Node: else
+            Node: insert
+              Node: insertion_string Value: -L[[:cov_lib_path:]] -rpath=[[:cov_lib_deployment_path:]] [[:cov_lib_ld:]] 
+              Node: precedes_regex Value: nothing
+        Node: instrument_variable
+          Node: var_name Value: cov_instrument_config_version
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: 3
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_deployment_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/lib
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_gcc
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: -lci-runtime -Wl,--no-as-needed -pthread -lpthread -lrt -lc
+          Node: cond_platform_value
+            Node: platform_name Value: mingw
+            Node: var_value Value: -lci-runtime-x86
+          Node: cond_platform_value
+            Node: platform_name Value: mingw64
+            Node: var_value Value: -lci-runtime-x64
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_header_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/sdk/runtime/ta-runtime
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_ld
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: -lci-runtime --no-as-needed -lpthread -lrt -lc
+          Node: cond_platform_value
+            Node: platform_name Value: mingw
+            Node: var_value Value: -lci-runtime-x86
+          Node: cond_platform_value
+            Node: platform_name Value: mingw64
+            Node: var_value Value: -lci-runtime-x64
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/lib
+        Node: template_config_option_id Value: ld-ld-.*
+        Node: begin_command_line_config
+  Node: md5 Value: 01cdd68a7a6e68569cdd6604549f0d3c
+COV_TRANSLATE EXPANDED ARGS: "-v"
+[4915] EXECUTING: /bin/sh -c "gcc -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 1"
+[4919] EXECUTING: cut -d- -f 1
+[4918] EXECUTING: sed "s/Target: //"
+[4916] EXECUTING: gcc -v
+[4920] CWD: /home/files/cifs/xxx/src
+[4920] COMPILING: /usr/src/cov-analysis-linux64-2017.07/bin/cov-translate gcc -v
+[4917] EXECUTING: grep Target
+Using cached template compiler configuration instance /home/files/cifs/xxx/src/cov-int/emit/vps/config/8214d047244147b5ee8a110bd4cef3f3/coverity_config.xml
+COV_TRANSLATE EXPANDED ARGS: "-v"
+[4922] CWD: /home/files/cifs/xxx/src
+[4922] COMPILING: /usr/src/cov-analysis-linux64-2017.07/bin/cov-translate gcc -Wall -Wno-switch -ggdb -fPIC -DDISABLE_NETCVCLIENT -DDISABLE_DDCI -c adapter.c -o ../build/adapter.o
+Encountered compiler /usr/bin/gcc-5 for the first time, configuring it
+* Configuring /usr/bin/gcc as a C compiler
+[STATUS] gcc-config-0: Running sanity tests on native compiler
+[STATUS] gcc-config-0: Detecting size and alignment of fundamental types.
+Looking for macros in standard headers. This can take a long time.
+|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|
+[STATUS] gcc-config-0: Retrieving values for macros
+* Configuring /usr/bin/gcc as a C++ compiler
+[STATUS] g++-config-0: Running sanity tests on native compiler
+[STATUS] g++-config-0: Detecting size and alignment of fundamental types.
+Looking for macros in standard headers. This can take a long time.
+[STATUS] g++-config-0: Retrieving values for macros
+* Configuring /usr/bin/gcc as a C compiler
+[STATUS] g++cc-config-0: Running sanity tests on native compiler
+[STATUS] g++cc-config-0: Detecting size and alignment of fundamental types.
+Looking for macros in standard headers. This can take a long time.
+[STATUS] g++cc-config-0: Retrieving values for macros
+* Configuring /usr/bin/g++ as a C++ compiler
+[STATUS] g++-config-1: Running sanity tests on native compiler
+[STATUS] g++-config-1: Detecting size and alignment of fundamental types.
+Looking for macros in standard headers. This can take a long time.
+[STATUS] g++-config-1: Retrieving values for macros
+* Configuring /usr/bin/g++ as a C compiler
+[STATUS] g++cc-config-1: Running sanity tests on native compiler
+[STATUS] g++cc-config-1: Detecting size and alignment of fundamental types.
+Looking for macros in standard headers. This can take a long time.
+[STATUS] g++cc-config-1: Retrieving values for macros
+* Configuring /usr/bin/ld as a C++ compiler
+Added template compiler configuration instance /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/coverity_config.xml
+Configuration read from: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/coverity_config.xml
+Node: coverity
+  Node: cit_version Value: 1
+  Node: config
+    Node: include Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/gcc-config-0/coverity_config.xml
+    Node: include Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/g++-config-0/coverity_config.xml
+    Node: include Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/g++cc-config-0/coverity_config.xml
+    Node: include Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/g++-config-1/coverity_config.xml
+    Node: include Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/g++cc-config-1/coverity_config.xml
+    Node: include Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/ld-config-0/coverity_config.xml
+Configuration read from: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/gcc-config-0/coverity_config.xml
+Node: coverity
+  Node: cit_version Value: 1
+  Node: config
+    Node: build
+      Node: compiler
+        Node: comp_name Value: gcc
+        Node: comp_name Value: gcc-5
+        Node: comp_dir Value: /usr/bin
+        Node: comp_translator Value: gcc
+        Node: comp_lang Value: C/C++
+        Node: comp_front_end Value: cov-emit
+        Node: comp_desc Value: GNU C compiler
+        Node: comp_next_type Value: g++
+        Node: comp_generic Value: gnu
+        Node: comp_require Value: -fPIC
+        Node: id Value: gcc-gcc-5.4.0-c0bb96eabc2392e629e10e6a4d0021fd-0
+        Node: version Value: 5.4.0
+        Node: is_compiler Value: true
+        Node: is_linker Value: true
+        Node: target_platform Value: all
+      Node: options
+        Node: id Value: gcc-gcc-5.4.0-c0bb96eabc2392e629e10e6a4d0021fd-0
+        Node: instrument_predicates
+          Node: remove_regex Value: (^|\s)\-Werror(=\S*)?(\s|$)
+          Node: if
+            Node: conditions
+              Node: or_cond
+                Node: cond
+                  Node: contains_regex Value: (^|\s)[^-]
+                Node: cond
+                  Node: contains_regex Value: (^|\s)\-l
+            Node: then
+              Node: insert
+                Node: insertion_string Value: -L[[:cov_lib_path:]] -Wl,-rpath=[[:cov_lib_deployment_path:]] [[:cov_lib_gcc:]] -I[[:cov_lib_header_path:]]
+                Node: precedes_regex Value: nothing
+        Node: instrument_variable
+          Node: var_name Value: cov_instrument_config_version
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: 3
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_deployment_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/lib
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_gcc
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: -lci-runtime -Wl,--no-as-needed -pthread -lpthread -lrt -lc
+          Node: cond_platform_value
+            Node: platform_name Value: mingw
+            Node: var_value Value: -lci-runtime-x86
+          Node: cond_platform_value
+            Node: platform_name Value: mingw64
+            Node: var_value Value: -lci-runtime-x64
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_header_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/sdk/runtime/ta-runtime
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/lib
+        Node: template_config_option_id Value: gcc-gcc-.*
+        Node: sysinclude_dir Value: /usr/lib/gcc/x86_64-linux-gnu/5/include
+        Node: sysinclude_dir Value: /usr/local/include
+        Node: sysinclude_dir Value: /usr/lib/gcc/x86_64-linux-gnu/5/include-fixed
+        Node: sysinclude_dir Value: /usr/include/x86_64-linux-gnu
+        Node: sysinclude_dir Value: /usr/include
+        Node: dryrun_switch Value: -E
+        Node: dryrun_switch Value: -v
+        Node: dump_macros_arg Value: -dM
+        Node: dump_macros_arg Value: -E
+        Node: preprocess_remove_arg Value: -o.+
+        Node: preprocess_remove_arg Value: -c
+        Node: preprocess_remove_arg Value: -Werror
+        Node: preprocess_remove_next_arg Value: -o
+        Node: preprocess_switch Value: -E
+        Node: preprocess_switch Value: -U__BLOCKS__
+        Node: preprocess_switch Value: -xc
+        Node: preprocess_compile_switch Value: -C
+        Node: supports_pch Value: true
+        Node: native_pch_suffix Value: .gch
+        Node: preprocess_output Value: -
+        Node: sysroot_dir Value: /
+        Node: dryrun_output Value: 2
+        Node: pre_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/gcc-config-0/coverity-macro-compat.h
+        Node: pre_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/gcc-config-0/coverity-compiler-compat.h
+        Node: prepend_arg Value: --add_type_modifier=__coverity___fpreg
+        Node: prepend_arg Value: --add_type_modifier=__coverity_decimal
+        Node: prepend_arg Value: --no_predefined_feature_test_macros
+        Node: prepend_arg Value: --no_stdarg_builtin
+        Node: prepend_arg Value: --incompat_proto
+        Node: prepend_arg Value: --no_predefined_cplusplus
+        Node: prepend_arg Value: -w
+        Node: prepend_arg Value: --no_predefines
+        Node: prepend_arg Value: --comp_ver
+        Node: prepend_arg Value: 5.4.0
+        Node: prepend_arg Value: --size_t_type=m
+        Node: prepend_arg Value: --ptrdiff_t_type=l
+        Node: prepend_arg Value: --type_sizes=xl8i4s2e16d8f4P8
+        Node: prepend_arg Value: --type_alignments=xl8i4s2e16d8f4P8
+        Node: prepend_arg Value: --char_bit_size=8
+        Node: prepend_arg Value: --restrict
+        Node: prepend_arg Value: --gnu_carriage_return_line_terminator
+        Node: prepend_arg Value: --wchar_t_type=i
+        Node: prepend_arg Value: --no_multiline_string
+        Node: prepend_arg Value: --no_trigraphs
+        Node: prepend_arg Value: --ignore_calling_convention
+        Node: prepend_arg Value: --c11
+        Node: prepend_arg Value: --enable_80bit_float
+        Node: prepend_arg Value: --enable_128bit_float
+        Node: prepend_arg Value: --allow__bool
+        Node: prepend_arg Value: --macro_stack_pragmas
+        Node: prepend_arg Value: --inline_keyword
+        Node: prepend_arg Value: --no_predefines
+        Node: skip_arg Value: -###
+        Node: skip_arg Value: -E
+        Node: skip_arg Value: -fsyntax-only
+        Node: skip_arg Value: -M
+        Node: skip_arg Value: -MM
+        Node: skip_arg Value: -wrapper
+        Node: skip_arg Value: --version
+        Node: skip_file Value: conftest\.c{1,2}$
+        Node: skip_file Value: conftest\.cpp$
+        Node: opt_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/gcc-config-0/../user_nodefs.h
+        Node: expand
+          Node: options
+            Node: replace_arg_regex
+              Node: replace Value: @(.*)
+              Node: with Value: --coverity_resp_file=$1
+        Node: pre_trans
+          Node: options
+            Node: intern_trans Value: gnu_pre_translate
+        Node: trans
+          Node: options
+            Node: includes_from_env_var Value: CPATH
+            Node: includes_from_env_var_empty_is_cwd Value: true
+        Node: trans
+          Node: options
+            Node: includes_from_env_var Value: C_INCLUDE_PATH
+            Node: pre_prepend_arg Value: --c
+        Node: begin_command_line_config
+  Node: md5 Value: 0680cf57f695d63d766b51b6aa48398e
+Configuration read from: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/g++-config-0/coverity_config.xml
+Node: coverity
+  Node: cit_version Value: 1
+  Node: config
+    Node: build
+      Node: compiler
+        Node: comp_name Value: gcc
+        Node: comp_name Value: gcc-5
+        Node: comp_dir Value: /usr/bin
+        Node: comp_translator Value: g++
+        Node: comp_lang Value: C/C++
+        Node: comp_front_end Value: cov-emit
+        Node: comp_desc Value: GNU C++ Compiler
+        Node: comp_cxx Value: true
+        Node: comp_next_type Value: g++cc
+        Node: comp_generic Value: gnu
+        Node: comp_require Value: -fPIC
+        Node: id Value: g++-gcc-5.4.0-c0bb96eabc2392e629e10e6a4d0021fd-0
+        Node: version Value: 5.4.0
+        Node: is_compiler Value: true
+        Node: is_linker Value: true
+        Node: target_platform Value: all
+      Node: options
+        Node: id Value: g++-gcc-5.4.0-c0bb96eabc2392e629e10e6a4d0021fd-0
+        Node: instrument_predicates
+          Node: remove_regex Value: (^|\s)\-Werror(=\S*)?(\s|$)
+          Node: if
+            Node: conditions
+              Node: or_cond
+                Node: cond
+                  Node: contains_regex Value: (^|\s)[^-]
+                Node: cond
+                  Node: contains_regex Value: (^|\s)\-l
+            Node: then
+              Node: insert
+                Node: insertion_string Value: -L[[:cov_lib_path:]] -Wl,-rpath=[[:cov_lib_deployment_path:]] [[:cov_lib_gcc:]] -I[[:cov_lib_header_path:]]
+                Node: precedes_regex Value: nothing
+        Node: instrument_variable
+          Node: var_name Value: cov_instrument_config_version
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: 3
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_deployment_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/lib
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_gcc
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: -lci-runtime -Wl,--no-as-needed -pthread -lpthread -lrt -lc
+          Node: cond_platform_value
+            Node: platform_name Value: mingw
+            Node: var_value Value: -lci-runtime-x86
+          Node: cond_platform_value
+            Node: platform_name Value: mingw64
+            Node: var_value Value: -lci-runtime-x64
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_header_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/sdk/runtime/ta-runtime
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/lib
+        Node: template_config_option_id Value: g++-gcc-.*
+        Node: sysinclude_dir Value: /usr/include/c++/5
+        Node: sysinclude_dir Value: /usr/include/x86_64-linux-gnu/c++/5
+        Node: sysinclude_dir Value: /usr/include/c++/5/backward
+        Node: sysinclude_dir Value: /usr/lib/gcc/x86_64-linux-gnu/5/include
+        Node: sysinclude_dir Value: /usr/local/include
+        Node: sysinclude_dir Value: /usr/lib/gcc/x86_64-linux-gnu/5/include-fixed
+        Node: sysinclude_dir Value: /usr/include/x86_64-linux-gnu
+        Node: sysinclude_dir Value: /usr/include
+        Node: dryrun_switch Value: -E
+        Node: dryrun_switch Value: -v
+        Node: dump_macros_arg Value: -dM
+        Node: dump_macros_arg Value: -E
+        Node: preprocess_remove_arg Value: -o.+
+        Node: preprocess_remove_arg Value: -c
+        Node: preprocess_remove_arg Value: -Werror
+        Node: preprocess_remove_next_arg Value: -o
+        Node: preprocess_switch Value: -xc++
+        Node: preprocess_switch Value: -E
+        Node: preprocess_switch Value: -U__BLOCKS__
+        Node: preprocess_compile_switch Value: -C
+        Node: supports_pch Value: true
+        Node: native_pch_suffix Value: .gch
+        Node: preprocess_output Value: -
+        Node: sysroot_dir Value: /
+        Node: dryrun_output Value: 2
+        Node: pre_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/g++-config-0/coverity-macro-compat.h
+        Node: pre_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/g++-config-0/coverity-compiler-compat.h
+        Node: prepend_arg Value: --add_type_modifier=__coverity___fpreg
+        Node: prepend_arg Value: --add_type_modifier=__coverity_decimal
+        Node: prepend_arg Value: --no_predefined_feature_test_macros
+        Node: prepend_arg Value: --no_stdarg_builtin
+        Node: prepend_arg Value: --incompat_proto
+        Node: prepend_arg Value: --no_predefined_cplusplus
+        Node: prepend_arg Value: -w
+        Node: prepend_arg Value: --no_predefines
+        Node: prepend_arg Value: --comp_ver
+        Node: prepend_arg Value: 5.4.0
+        Node: prepend_arg Value: --size_t_type=m
+        Node: prepend_arg Value: --ptrdiff_t_type=l
+        Node: prepend_arg Value: --type_sizes=w4xl8i4s2e16d8f4P8
+        Node: prepend_arg Value: --type_alignments=w4xl8i4s2e16d8f4P8
+        Node: prepend_arg Value: --char_bit_size=8
+        Node: prepend_arg Value: --gnu_carriage_return_line_terminator
+        Node: prepend_arg Value: --wchar_t_keyword
+        Node: prepend_arg Value: --no_multiline_string
+        Node: prepend_arg Value: --no_trigraphs
+        Node: prepend_arg Value: --ignore_calling_convention
+        Node: prepend_arg Value: --enable_80bit_float
+        Node: prepend_arg Value: --enable_128bit_float
+        Node: prepend_arg Value: --macro_stack_pragmas
+        Node: prepend_arg Value: --exceptions
+        Node: prepend_arg Value: --arg_dependent_overload
+        Node: prepend_arg Value: --inline_keyword
+        Node: prepend_arg Value: --no_predefines
+        Node: skip_arg Value: -###
+        Node: skip_arg Value: -E
+        Node: skip_arg Value: -fsyntax-only
+        Node: skip_arg Value: -M
+        Node: skip_arg Value: -MM
+        Node: skip_arg Value: -wrapper
+        Node: skip_arg Value: --version
+        Node: skip_file Value: conftest\.c{1,2}$
+        Node: skip_file Value: conftest\.cpp$
+        Node: opt_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/g++-config-0/../user_nodefs.h
+        Node: trans
+          Node: options
+            Node: includes_from_env_var Value: CPLUS_INCLUDE_PATH
+            Node: pre_prepend_arg Value: --c++
+        Node: expand
+          Node: options
+            Node: replace_arg_regex
+              Node: replace Value: @(.*)
+              Node: with Value: --coverity_resp_file=$1
+        Node: pre_trans
+          Node: options
+            Node: intern_trans Value: gnu_pre_translate
+        Node: trans
+          Node: options
+            Node: includes_from_env_var Value: CPATH
+            Node: includes_from_env_var_empty_is_cwd Value: true
+        Node: begin_command_line_config
+  Node: md5 Value: 90ef16b138de9f4df0ee24890f70c910
+Configuration read from: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/g++cc-config-0/coverity_config.xml
+Node: coverity
+  Node: cit_version Value: 1
+  Node: config
+    Node: build
+      Node: compiler
+        Node: comp_name Value: gcc
+        Node: comp_name Value: gcc-5
+        Node: comp_dir Value: /usr/bin
+        Node: comp_translator Value: g++cc
+        Node: comp_lang Value: C/C++
+        Node: comp_front_end Value: cov-emit
+        Node: comp_desc Value: GNU C++ Compiler
+        Node: comp_generic Value: gnu
+        Node: comp_require Value: -fPIC
+        Node: id Value: g++cc-gcc-5.4.0-c0bb96eabc2392e629e10e6a4d0021fd-0
+        Node: version Value: 5.4.0
+        Node: is_compiler Value: true
+        Node: is_linker Value: true
+        Node: target_platform Value: all
+      Node: options
+        Node: id Value: g++cc-gcc-5.4.0-c0bb96eabc2392e629e10e6a4d0021fd-0
+        Node: instrument_predicates
+          Node: remove_regex Value: (^|\s)\-Werror(=\S*)?(\s|$)
+          Node: if
+            Node: conditions
+              Node: or_cond
+                Node: cond
+                  Node: contains_regex Value: (^|\s)[^-]
+                Node: cond
+                  Node: contains_regex Value: (^|\s)\-l
+            Node: then
+              Node: insert
+                Node: insertion_string Value: -L[[:cov_lib_path:]] -Wl,-rpath=[[:cov_lib_deployment_path:]] [[:cov_lib_gcc:]] -I[[:cov_lib_header_path:]]
+                Node: precedes_regex Value: nothing
+        Node: instrument_variable
+          Node: var_name Value: cov_instrument_config_version
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: 3
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_deployment_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/lib
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_gcc
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: -lci-runtime -Wl,--no-as-needed -pthread -lpthread -lrt -lc
+          Node: cond_platform_value
+            Node: platform_name Value: mingw
+            Node: var_value Value: -lci-runtime-x86
+          Node: cond_platform_value
+            Node: platform_name Value: mingw64
+            Node: var_value Value: -lci-runtime-x64
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_header_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/sdk/runtime/ta-runtime
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/lib
+        Node: template_config_option_id Value: g++cc-gcc-.*
+        Node: sysinclude_dir Value: /usr/lib/gcc/x86_64-linux-gnu/5/include
+        Node: sysinclude_dir Value: /usr/local/include
+        Node: sysinclude_dir Value: /usr/lib/gcc/x86_64-linux-gnu/5/include-fixed
+        Node: sysinclude_dir Value: /usr/include/x86_64-linux-gnu
+        Node: sysinclude_dir Value: /usr/include
+        Node: dryrun_switch Value: -xc
+        Node: dryrun_switch Value: -E
+        Node: dryrun_switch Value: -v
+        Node: dump_macros_arg Value: -xc
+        Node: dump_macros_arg Value: -dM
+        Node: dump_macros_arg Value: -E
+        Node: preprocess_remove_arg Value: -o.+
+        Node: preprocess_remove_arg Value: -c
+        Node: preprocess_remove_arg Value: -Werror
+        Node: preprocess_remove_next_arg Value: -o
+        Node: preprocess_switch Value: -E
+        Node: preprocess_switch Value: -U__BLOCKS__
+        Node: preprocess_switch Value: -xc
+        Node: preprocess_compile_switch Value: -C
+        Node: supports_pch Value: true
+        Node: native_pch_suffix Value: .gch
+        Node: preprocess_output Value: -
+        Node: sysroot_dir Value: /
+        Node: dryrun_output Value: 2
+        Node: pre_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/g++cc-config-0/coverity-macro-compat.h
+        Node: pre_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/g++cc-config-0/coverity-compiler-compat.h
+        Node: prepend_arg Value: --add_type_modifier=__coverity___fpreg
+        Node: prepend_arg Value: --add_type_modifier=__coverity_decimal
+        Node: prepend_arg Value: --no_predefined_feature_test_macros
+        Node: prepend_arg Value: --no_stdarg_builtin
+        Node: prepend_arg Value: --incompat_proto
+        Node: prepend_arg Value: --no_predefined_cplusplus
+        Node: prepend_arg Value: -w
+        Node: prepend_arg Value: --no_predefines
+        Node: prepend_arg Value: --comp_ver
+        Node: prepend_arg Value: 5.4.0
+        Node: prepend_arg Value: --size_t_type=m
+        Node: prepend_arg Value: --ptrdiff_t_type=l
+        Node: prepend_arg Value: --type_sizes=xl8i4s2e16d8f4P8
+        Node: prepend_arg Value: --type_alignments=xl8i4s2e16d8f4P8
+        Node: prepend_arg Value: --char_bit_size=8
+        Node: prepend_arg Value: --restrict
+        Node: prepend_arg Value: --gnu_carriage_return_line_terminator
+        Node: prepend_arg Value: --wchar_t_type=i
+        Node: prepend_arg Value: --no_multiline_string
+        Node: prepend_arg Value: --no_trigraphs
+        Node: prepend_arg Value: --ignore_calling_convention
+        Node: prepend_arg Value: --c11
+        Node: prepend_arg Value: --enable_80bit_float
+        Node: prepend_arg Value: --enable_128bit_float
+        Node: prepend_arg Value: --allow__bool
+        Node: prepend_arg Value: --macro_stack_pragmas
+        Node: prepend_arg Value: --inline_keyword
+        Node: prepend_arg Value: --no_predefines
+        Node: skip_arg Value: -###
+        Node: skip_arg Value: -E
+        Node: skip_arg Value: -fsyntax-only
+        Node: skip_arg Value: -M
+        Node: skip_arg Value: -MM
+        Node: skip_arg Value: -wrapper
+        Node: skip_arg Value: --version
+        Node: skip_file Value: conftest\.c{1,2}$
+        Node: skip_file Value: conftest\.cpp$
+        Node: opt_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/g++cc-config-0/../user_nodefs.h
+        Node: pre_trans
+          Node: options
+            Node: pre_prepend_arg Value: -coverity_cxx_suffixes=c;i
+            Node: pre_prepend_arg Value: -coverity_cxx_header_suffixes=h
+        Node: expand
+          Node: options
+            Node: replace_arg_regex
+              Node: replace Value: @(.*)
+              Node: with Value: --coverity_resp_file=$1
+        Node: pre_trans
+          Node: options
+            Node: intern_trans Value: gnu_pre_translate
+        Node: trans
+          Node: options
+            Node: includes_from_env_var Value: CPATH
+            Node: includes_from_env_var_empty_is_cwd Value: true
+        Node: trans
+          Node: options
+            Node: includes_from_env_var Value: C_INCLUDE_PATH
+            Node: pre_prepend_arg Value: --c
+        Node: begin_command_line_config
+  Node: md5 Value: 3e836f28ece6170d16813afc7e42dbfb
+Configuration read from: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/g++-config-1/coverity_config.xml
+Node: coverity
+  Node: cit_version Value: 1
+  Node: config
+    Node: build
+      Node: compiler
+        Node: comp_name Value: g++
+        Node: comp_name Value: g++-5
+        Node: comp_dir Value: /usr/bin
+        Node: comp_translator Value: g++
+        Node: comp_lang Value: C/C++
+        Node: comp_front_end Value: cov-emit
+        Node: comp_desc Value: GNU C++ Compiler
+        Node: comp_cxx Value: true
+        Node: comp_next_type Value: g++cc
+        Node: comp_generic Value: gnu
+        Node: comp_require Value: -fPIC
+        Node: id Value: g++-g++-5.4.0-c0bb96eabc2392e629e10e6a4d0021fd-1
+        Node: version Value: 5.4.0
+        Node: is_compiler Value: true
+        Node: is_linker Value: true
+        Node: target_platform Value: all
+      Node: options
+        Node: id Value: g++-g++-5.4.0-c0bb96eabc2392e629e10e6a4d0021fd-1
+        Node: instrument_predicates
+          Node: remove_regex Value: (^|\s)\-Werror(=\S*)?(\s|$)
+          Node: if
+            Node: conditions
+              Node: or_cond
+                Node: cond
+                  Node: contains_regex Value: (^|\s)[^-]
+                Node: cond
+                  Node: contains_regex Value: (^|\s)\-l
+            Node: then
+              Node: insert
+                Node: insertion_string Value: -L[[:cov_lib_path:]] -Wl,-rpath=[[:cov_lib_deployment_path:]] [[:cov_lib_gcc:]] -I[[:cov_lib_header_path:]]
+                Node: precedes_regex Value: nothing
+        Node: instrument_variable
+          Node: var_name Value: cov_instrument_config_version
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: 3
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_deployment_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/lib
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_gcc
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: -lci-runtime -Wl,--no-as-needed -pthread -lpthread -lrt -lc
+          Node: cond_platform_value
+            Node: platform_name Value: mingw
+            Node: var_value Value: -lci-runtime-x86
+          Node: cond_platform_value
+            Node: platform_name Value: mingw64
+            Node: var_value Value: -lci-runtime-x64
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_header_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/sdk/runtime/ta-runtime
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/lib
+        Node: template_config_option_id Value: g++-g++-.*
+        Node: sysinclude_dir Value: /usr/include/c++/5
+        Node: sysinclude_dir Value: /usr/include/x86_64-linux-gnu/c++/5
+        Node: sysinclude_dir Value: /usr/include/c++/5/backward
+        Node: sysinclude_dir Value: /usr/lib/gcc/x86_64-linux-gnu/5/include
+        Node: sysinclude_dir Value: /usr/local/include
+        Node: sysinclude_dir Value: /usr/lib/gcc/x86_64-linux-gnu/5/include-fixed
+        Node: sysinclude_dir Value: /usr/include/x86_64-linux-gnu
+        Node: sysinclude_dir Value: /usr/include
+        Node: dryrun_switch Value: -E
+        Node: dryrun_switch Value: -v
+        Node: dump_macros_arg Value: -dM
+        Node: dump_macros_arg Value: -E
+        Node: preprocess_remove_arg Value: -o.+
+        Node: preprocess_remove_arg Value: -c
+        Node: preprocess_remove_arg Value: -Werror
+        Node: preprocess_remove_next_arg Value: -o
+        Node: preprocess_switch Value: -xc++
+        Node: preprocess_switch Value: -E
+        Node: preprocess_switch Value: -U__BLOCKS__
+        Node: preprocess_compile_switch Value: -C
+        Node: supports_pch Value: true
+        Node: native_pch_suffix Value: .gch
+        Node: preprocess_output Value: -
+        Node: sysroot_dir Value: /
+        Node: dryrun_output Value: 2
+        Node: pre_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/g++-config-1/coverity-macro-compat.h
+        Node: pre_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/g++-config-1/coverity-compiler-compat.h
+        Node: prepend_arg Value: --add_type_modifier=__coverity___fpreg
+        Node: prepend_arg Value: --add_type_modifier=__coverity_decimal
+        Node: prepend_arg Value: --no_predefined_feature_test_macros
+        Node: prepend_arg Value: --no_stdarg_builtin
+        Node: prepend_arg Value: --incompat_proto
+        Node: prepend_arg Value: --no_predefined_cplusplus
+        Node: prepend_arg Value: -w
+        Node: prepend_arg Value: --no_predefines
+        Node: prepend_arg Value: --comp_ver
+        Node: prepend_arg Value: 5.4.0
+        Node: prepend_arg Value: --size_t_type=m
+        Node: prepend_arg Value: --ptrdiff_t_type=l
+        Node: prepend_arg Value: --type_sizes=w4xl8i4s2e16d8f4P8
+        Node: prepend_arg Value: --type_alignments=w4xl8i4s2e16d8f4P8
+        Node: prepend_arg Value: --char_bit_size=8
+        Node: prepend_arg Value: --gnu_carriage_return_line_terminator
+        Node: prepend_arg Value: --wchar_t_keyword
+        Node: prepend_arg Value: --no_multiline_string
+        Node: prepend_arg Value: --no_trigraphs
+        Node: prepend_arg Value: --ignore_calling_convention
+        Node: prepend_arg Value: --enable_80bit_float
+        Node: prepend_arg Value: --enable_128bit_float
+        Node: prepend_arg Value: --macro_stack_pragmas
+        Node: prepend_arg Value: --exceptions
+        Node: prepend_arg Value: --arg_dependent_overload
+        Node: prepend_arg Value: --inline_keyword
+        Node: prepend_arg Value: --no_predefines
+        Node: skip_arg Value: -###
+        Node: skip_arg Value: -E
+        Node: skip_arg Value: -fsyntax-only
+        Node: skip_arg Value: -M
+        Node: skip_arg Value: -MM
+        Node: skip_arg Value: -wrapper
+        Node: skip_arg Value: --version
+        Node: skip_file Value: conftest\.c{1,2}$
+        Node: skip_file Value: conftest\.cpp$
+        Node: opt_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/g++-config-1/../user_nodefs.h
+        Node: trans
+          Node: options
+            Node: includes_from_env_var Value: CPLUS_INCLUDE_PATH
+            Node: pre_prepend_arg Value: --c++
+        Node: expand
+          Node: options
+            Node: replace_arg_regex
+              Node: replace Value: @(.*)
+              Node: with Value: --coverity_resp_file=$1
+        Node: pre_trans
+          Node: options
+            Node: intern_trans Value: gnu_pre_translate
+        Node: trans
+          Node: options
+            Node: includes_from_env_var Value: CPATH
+            Node: includes_from_env_var_empty_is_cwd Value: true
+        Node: begin_command_line_config
+  Node: md5 Value: 3f5a8815f9eae0aea7c31e895fdb8a5a
+Configuration read from: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/g++cc-config-1/coverity_config.xml
+Node: coverity
+  Node: cit_version Value: 1
+  Node: config
+    Node: build
+      Node: compiler
+        Node: comp_name Value: g++
+        Node: comp_name Value: g++-5
+        Node: comp_dir Value: /usr/bin
+        Node: comp_translator Value: g++cc
+        Node: comp_lang Value: C/C++
+        Node: comp_front_end Value: cov-emit
+        Node: comp_desc Value: GNU C++ Compiler
+        Node: comp_generic Value: gnu
+        Node: comp_require Value: -fPIC
+        Node: id Value: g++cc-g++-5.4.0-c0bb96eabc2392e629e10e6a4d0021fd-1
+        Node: version Value: 5.4.0
+        Node: is_compiler Value: true
+        Node: is_linker Value: true
+        Node: target_platform Value: all
+      Node: options
+        Node: id Value: g++cc-g++-5.4.0-c0bb96eabc2392e629e10e6a4d0021fd-1
+        Node: instrument_predicates
+          Node: remove_regex Value: (^|\s)\-Werror(=\S*)?(\s|$)
+          Node: if
+            Node: conditions
+              Node: or_cond
+                Node: cond
+                  Node: contains_regex Value: (^|\s)[^-]
+                Node: cond
+                  Node: contains_regex Value: (^|\s)\-l
+            Node: then
+              Node: insert
+                Node: insertion_string Value: -L[[:cov_lib_path:]] -Wl,-rpath=[[:cov_lib_deployment_path:]] [[:cov_lib_gcc:]] -I[[:cov_lib_header_path:]]
+                Node: precedes_regex Value: nothing
+        Node: instrument_variable
+          Node: var_name Value: cov_instrument_config_version
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: 3
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_deployment_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/lib
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_gcc
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: -lci-runtime -Wl,--no-as-needed -pthread -lpthread -lrt -lc
+          Node: cond_platform_value
+            Node: platform_name Value: mingw
+            Node: var_value Value: -lci-runtime-x86
+          Node: cond_platform_value
+            Node: platform_name Value: mingw64
+            Node: var_value Value: -lci-runtime-x64
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_header_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/sdk/runtime/ta-runtime
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/lib
+        Node: template_config_option_id Value: g++cc-g++-.*
+        Node: sysinclude_dir Value: /usr/lib/gcc/x86_64-linux-gnu/5/include
+        Node: sysinclude_dir Value: /usr/local/include
+        Node: sysinclude_dir Value: /usr/lib/gcc/x86_64-linux-gnu/5/include-fixed
+        Node: sysinclude_dir Value: /usr/include/x86_64-linux-gnu
+        Node: sysinclude_dir Value: /usr/include
+        Node: dryrun_switch Value: -xc
+        Node: dryrun_switch Value: -E
+        Node: dryrun_switch Value: -v
+        Node: dump_macros_arg Value: -xc
+        Node: dump_macros_arg Value: -dM
+        Node: dump_macros_arg Value: -E
+        Node: preprocess_remove_arg Value: -o.+
+        Node: preprocess_remove_arg Value: -c
+        Node: preprocess_remove_arg Value: -Werror
+        Node: preprocess_remove_next_arg Value: -o
+        Node: preprocess_switch Value: -E
+        Node: preprocess_switch Value: -U__BLOCKS__
+        Node: preprocess_switch Value: -xc
+        Node: preprocess_compile_switch Value: -C
+        Node: supports_pch Value: true
+        Node: native_pch_suffix Value: .gch
+        Node: preprocess_output Value: -
+        Node: sysroot_dir Value: /
+        Node: dryrun_output Value: 2
+        Node: pre_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/g++cc-config-1/coverity-macro-compat.h
+        Node: pre_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/g++cc-config-1/coverity-compiler-compat.h
+        Node: prepend_arg Value: --add_type_modifier=__coverity___fpreg
+        Node: prepend_arg Value: --add_type_modifier=__coverity_decimal
+        Node: prepend_arg Value: --no_predefined_feature_test_macros
+        Node: prepend_arg Value: --no_stdarg_builtin
+        Node: prepend_arg Value: --incompat_proto
+        Node: prepend_arg Value: --no_predefined_cplusplus
+        Node: prepend_arg Value: -w
+        Node: prepend_arg Value: --no_predefines
+        Node: prepend_arg Value: --comp_ver
+        Node: prepend_arg Value: 5.4.0
+        Node: prepend_arg Value: --size_t_type=m
+        Node: prepend_arg Value: --ptrdiff_t_type=l
+        Node: prepend_arg Value: --type_sizes=xl8i4s2e16d8f4P8
+        Node: prepend_arg Value: --type_alignments=xl8i4s2e16d8f4P8
+        Node: prepend_arg Value: --char_bit_size=8
+        Node: prepend_arg Value: --restrict
+        Node: prepend_arg Value: --gnu_carriage_return_line_terminator
+        Node: prepend_arg Value: --wchar_t_type=i
+        Node: prepend_arg Value: --no_multiline_string
+        Node: prepend_arg Value: --no_trigraphs
+        Node: prepend_arg Value: --ignore_calling_convention
+        Node: prepend_arg Value: --c11
+        Node: prepend_arg Value: --enable_80bit_float
+        Node: prepend_arg Value: --enable_128bit_float
+        Node: prepend_arg Value: --allow__bool
+        Node: prepend_arg Value: --macro_stack_pragmas
+        Node: prepend_arg Value: --inline_keyword
+        Node: prepend_arg Value: --no_predefines
+        Node: skip_arg Value: -###
+        Node: skip_arg Value: -E
+        Node: skip_arg Value: -fsyntax-only
+        Node: skip_arg Value: -M
+        Node: skip_arg Value: -MM
+        Node: skip_arg Value: -wrapper
+        Node: skip_arg Value: --version
+        Node: skip_file Value: conftest\.c{1,2}$
+        Node: skip_file Value: conftest\.cpp$
+        Node: opt_preinclude_file Value: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/g++cc-config-1/../user_nodefs.h
+        Node: pre_trans
+          Node: options
+            Node: pre_prepend_arg Value: -coverity_cxx_suffixes=c;i
+            Node: pre_prepend_arg Value: -coverity_cxx_header_suffixes=h
+        Node: expand
+          Node: options
+            Node: replace_arg_regex
+              Node: replace Value: @(.*)
+              Node: with Value: --coverity_resp_file=$1
+        Node: pre_trans
+          Node: options
+            Node: intern_trans Value: gnu_pre_translate
+        Node: trans
+          Node: options
+            Node: includes_from_env_var Value: CPATH
+            Node: includes_from_env_var_empty_is_cwd Value: true
+        Node: trans
+          Node: options
+            Node: includes_from_env_var Value: C_INCLUDE_PATH
+            Node: pre_prepend_arg Value: --c
+        Node: begin_command_line_config
+  Node: md5 Value: 56f59e2ebbed367bef9f0dbeaa47018f
+Configuration read from: /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/ld-config-0/coverity_config.xml
+Node: coverity
+  Node: cit_version Value: 1
+  Node: config
+    Node: build
+      Node: compiler
+        Node: comp_name Value: ld
+        Node: comp_name Value: x86_64-linux-gnu-ld
+        Node: comp_name Value: ld.bfd
+        Node: comp_name Value: x86_64-linux-gnu-ld.bfd
+        Node: comp_dir Value: /usr/bin
+        Node: comp_translator Value: ld
+        Node: comp_lang Value: C/C++
+        Node: comp_front_end Value: cov-emit
+        Node: comp_desc Value: GNU C/C++ Linker
+        Node: comp_cxx Value: true
+        Node: comp_generic Value: gnu
+        Node: comp_require Value: -fPIC
+        Node: id Value: ld-ld-c0bb96eabc2392e629e10e6a4d0021fd-0
+        Node: is_compiler Value: false
+        Node: is_linker Value: true
+      Node: options
+        Node: id Value: ld-ld-c0bb96eabc2392e629e10e6a4d0021fd-0
+        Node: instrument_predicates
+          Node: if
+            Node: conditions
+              Node: cond
+                Node: contains_regex Value: (^|\s)(\-Ur|\-r|\-\-relocatable|\-i)(\s|$)
+            Node: then
+          Node: elif
+            Node: conditions
+              Node: cond
+                Node: contains_regex Value: /crtend\.o(\s|$)
+            Node: then
+              Node: insert
+                Node: insertion_string Value: -L[[:cov_lib_path:]] -rpath=[[:cov_lib_deployment_path:]] [[:cov_lib_ld:]] 
+                Node: precedes_regex Value: /crtend\.o(\s|$)
+          Node: elif
+            Node: conditions
+              Node: cond
+                Node: contains_regex Value: \-lc\b
+            Node: then
+              Node: insert
+                Node: insertion_string Value: -L[[:cov_lib_path:]] -rpath=[[:cov_lib_deployment_path:]] [[:cov_lib_ld:]] 
+                Node: follows_regex Value: \-lc\b
+          Node: else
+            Node: insert
+              Node: insertion_string Value: -L[[:cov_lib_path:]] -rpath=[[:cov_lib_deployment_path:]] [[:cov_lib_ld:]] 
+              Node: precedes_regex Value: nothing
+        Node: instrument_variable
+          Node: var_name Value: cov_instrument_config_version
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: 3
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_deployment_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/lib
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_gcc
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: -lci-runtime -Wl,--no-as-needed -pthread -lpthread -lrt -lc
+          Node: cond_platform_value
+            Node: platform_name Value: mingw
+            Node: var_value Value: -lci-runtime-x86
+          Node: cond_platform_value
+            Node: platform_name Value: mingw64
+            Node: var_value Value: -lci-runtime-x64
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_header_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/sdk/runtime/ta-runtime
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_ld
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: -lci-runtime --no-as-needed -lpthread -lrt -lc
+          Node: cond_platform_value
+            Node: platform_name Value: mingw
+            Node: var_value Value: -lci-runtime-x86
+          Node: cond_platform_value
+            Node: platform_name Value: mingw64
+            Node: var_value Value: -lci-runtime-x64
+        Node: instrument_variable
+          Node: var_name Value: cov_lib_path
+          Node: cond_platform_value
+            Node: platform_name Value: all
+            Node: var_value Value: /usr/src/cov-analysis-linux64-2017.07/lib
+        Node: template_config_option_id Value: ld-ld-.*
+        Node: begin_command_line_config
+  Node: md5 Value: 8c14154c0ef1023d205e614ce874c81a
+COV_TRANSLATE EXPANDED ARGS: "-Wall" "-Wno-switch" "-ggdb" "-fPIC" "-DDISABLE_NETCVCLIENT" "-DDISABLE_DDCI" "-c" "adapter.c" "-o" "../build/adapter.o"
+[STATUS] Compiling adapter.c
+/usr/src/cov-analysis-linux64-2017.07/bin/cov-emit --dir=/home/files/cifs/xxx/src/cov-int --ignore_path=/tmp/cov-root/b0c78c178a21f137327e0cc2b256003f/cov-configure --ignore_path=/tmp/cov-root/b0c78c178a21f137327e0cc2b256003f/cov-root/8b26b73b041a33f145fbdf26cd03733a --add_type_modifier=__coverity___fpreg --add_type_modifier=__coverity_decimal --no_predefined_feature_test_macros --no_stdarg_builtin --incompat_proto --no_predefined_cplusplus -w --no_predefines --comp_ver 5.4.0 --char_bit_size=8 --restrict --gnu_carriage_return_line_terminator --no_multiline_string --no_trigraphs --ignore_calling_convention --c11 --enable_80bit_float --enable_128bit_float --allow__bool --macro_stack_pragmas --inline_keyword --no_predefines --pre_preinclude /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/gcc-config-0/coverity-macro-compat.h --pre_preinclude /home/files/cifs/xxx/src/cov-int/emit/vps/config/c0bb96eabc2392e629e10e6a4d0021fd/gcc-config-0/coverity-compiler-compat.h --preinclude /usr/src/cov-analysis-linux64-2017.07/config/template-gcc-config-0/../user_nodefs.h --c --gcc --c11 --gnu_version 50400 --no_trigraphs --uliterals --sys_include /usr/lib/gcc/x86_64-linux-gnu/5/include --sys_include /usr/local/include --sys_include /usr/lib/gcc/x86_64-linux-gnu/5/include-fixed --sys_include /usr/include/x86_64-linux-gnu --sys_include /usr/include -DDISABLE_DDCI -DDISABLE_NETCVCLIENT -D__NO_INLINE__ --type_sizes=e16Pdlx8fi4s2 --type_alignments=e16Pdlx8fi4s2 --size_t_type=m --wchar_t_type=i --ptrdiff_t_type=l adapter.c 
+"adapter.c", line 6: error #1712: cannot open source file " stdio.h "
+  #include < stdio.h > 
+                       ^
+
+Emit for file '/home/files/cifs/xxx/src/adapter.c' complete.
+[ERROR] 1 error detected in the compilation of "adapter.c".
+WARNING: cov-emit returned with code 1
+
+[6383] EXECUTING: /usr/lib/gcc/x86_64-linux-gnu/5/cc1 -quiet -imultiarch x86_64-linux-gnu -D DISABLE_NETCVCLIENT -D DISABLE_DDCI adapter.c -quiet -dumpbase adapter.c -mtune=generic -march=x86-64 -auxbase-strip ../build/adapter.o -ggdb -Wall -Wno-switch -fPIC -fstack-protector-strong -Wformat-security -o /tmp/cc7PceUn.s
+2018-01-03T20:03:48.564433Z|cov-build|3447|info|> 
+2018-01-03T20:03:48.564433Z|cov-build|3447|info|> Build time (cov-build overall): 00:00:14.091069
+2018-01-03T20:03:48.564433Z|cov-build|3447|info|> 
+2018-01-03T20:03:48.564896Z|cov-build|3447|info|> Build time (C/C++ emits total): 00:00:13.966216
+2018-01-03T20:03:48.564896Z|cov-build|3447|info|> 
+2018-01-03T20:03:48.564896Z|cov-build|3447|info|> 
+2018-01-03T20:03:48.564936Z|cov-build|3447|info|> [WARNING] Build command make exited with code 2. Please verify that the build completed successfully.
+2018-01-03T20:03:48.564936Z|cov-build|3447|info|> [WARNING] Emitted 0 C/C++ compilation units (0%) successfully
+2018-01-03T20:03:48.564936Z|cov-build|3447|info|> 
+2018-01-03T20:03:48.564936Z|cov-build|3447|info|> 0 C/C++ compilation units (0%) are ready for analysis
+2018-01-03T20:03:48.564936Z|cov-build|3447|info|>  For more details, please look at: 
+2018-01-03T20:03:48.564936Z|cov-build|3447|info|>     /home/files/cifs/xxx/src/cov-int/build-log.txt

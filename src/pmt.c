@@ -1046,7 +1046,7 @@ void clean_psi(adapter *ad, uint8_t *b)
 		return;
 	}
 
-	if (!clean && pmt) // populate clean psi
+	if (pmt) // populate clean psi
 	{
 		uint8_t *n, *o;
 		int nlen = 0;
@@ -1439,7 +1439,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 	ver = b[5] & 0x3F;
 
 	f = get_filter(filter);
-	if (f->adapter != pmt->adapter)
+	if (f && f->adapter != pmt->adapter)
 		LOG("Adapter mismatch %d != %d", f->adapter, pmt->adapter);
 
 	if (pmt->version == ver)
@@ -1453,7 +1453,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 		if (p)
 			p->pmt = -pmt->id;
 
-		if (opts.clean_psi && p->sid[0] != -1)
+		if (ad && p && opts.clean_psi && p->sid[0] != -1)
 			clean_psi(ad, b);
 
 		return 0;
