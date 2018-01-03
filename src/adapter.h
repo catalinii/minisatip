@@ -151,6 +151,7 @@ int compare_tunning_parameters(int aid, transponder *tp);
 void restart_needed_adapters(int aid, int sid);
 int enable_failed_adapter(int id);
 void request_adapter_close(adapter *ad);
+int compare_slave_parameters(adapter *ad, transponder *tp);
 #define get_adapter(a) get_adapter1(a, __FILE__, __LINE__)
 #define get_configured_adapter(a) get_configured_adapter1(a, __FILE__, __LINE__)
 #define get_adapter_nw(aid) ((aid >= 0 && aid < MAX_ADAPTERS && a[aid] && a[aid]->enabled) ? a[aid] : NULL)

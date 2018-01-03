@@ -589,8 +589,8 @@ int compare_slave_parameters(adapter *ad, transponder *tp)
 	if ((ad->master_source < 0) && !ad->used)
 		return 0;
 	// is slave and the switch is UNICABLE/JESS - we do not care about pol and band
-	if (ad->tp.diseqc_param.switch_type == SWITCH_JESS)
-		|| (ad->tp.diseqc_param.switch_type == SWITCH_UNICABLE) return 0;
+	if ((ad->tp.diseqc_param.switch_type == SWITCH_JESS) || (ad->tp.diseqc_param.switch_type == SWITCH_UNICABLE))
+		return 0;
 
 	// master adapter is used by other
 	int diseqc = (tp->diseqc > 0) ? tp->diseqc - 1 : 0;
@@ -687,9 +687,9 @@ int get_free_adapter(transponder *tp)
 	for (i = 0; i < MAX_ADAPTERS; i++)
 	{
 		//first free adapter that has the same msys
-		if ((ad = get_adapter_nw(i)) && ad->sid_cnt == 0 && delsys_match(ad, msys) && slave_match(ad, tp))
+		if ((ad = get_adapter_nw(i)) && ad->sid_cnt == 0 && delsys_match(ad, msys) && !compare_slave_parameters(ad, tp))
 			return i;
-		if (!ad && delsys_match(a[i], msys) && slave_match(ad, tp)) // device is not initialized
+		if (!ad && delsys_match(a[i], msys) && !compare_slave_parameters(ad, tp)) // device is not initialized
 		{
 			if (!init_hw(i))
 				return i;
@@ -778,7 +778,7 @@ void close_adapter_for_stream(int sid, int aid)
 #ifdef AXE
 		free_axe_input(ad);
 #endif
-		if (ad->master_source >= 0 && ad->master_source < MAX_ADAPTERS)
+		if ((ad->master_source >= 0) && (ad->master_source < MAX_ADAPTERS))
 		{
 			adapter *ad2 = a[ad->master_source];
 			ad2->used &= ~(1 << ad->id);
@@ -1762,7 +1762,6 @@ void set_slave_adapters(char *o)
 			if (ad && ad->master_source != -1)
 				continue;
 
-			ad->diseqc_param.switch_type = SWITCH_SLAVE;
 			ad->master_source = master;
 			if (master >= 0 && master < MAX_ADAPTERS)
 			{

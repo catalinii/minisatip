@@ -25,17 +25,17 @@ https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item
 Usage:
 -------
 
-minisatip version 0.7.13, compiled with s2api version: 0000
-[03/12 15:38:59.465 main]: Built without dvbcsa
-[03/12 15:38:59.466 main]: Built without CI
-[03/12 15:38:59.466 main]: Built with dvbapi
-[03/12 15:38:59.466 main]: Built without AES (OpenSSL)
-[03/12 15:38:59.466 main]: Built with tables processing
-[03/12 15:38:59.466 main]: Built with pmt processing
-[03/12 15:38:59.466 main]: Built with satip client
-[03/12 15:38:59.466 main]: Built without linux dvb client
-[03/12 15:38:59.466 main]: Built with backtrace
-[03/12 15:38:59.466 main]: Built without netceiver
+minisatip version 0.7.13, compiled with s2api version: 050A
+[03/01 10:38:20.909 main]: Built with dvbcsa
+[03/01 10:38:20.909 main]: Built with CI
+[03/01 10:38:20.909 main]: Built with dvbapi
+[03/01 10:38:20.909 main]: Built with AES (OpenSSL)
+[03/01 10:38:20.909 main]: Built with tables processing
+[03/01 10:38:20.909 main]: Built with pmt processing
+[03/01 10:38:20.909 main]: Built with satip client
+[03/01 10:38:20.909 main]: Built with linux dvb client
+[03/01 10:38:20.909 main]: Built with backtrace
+[03/01 10:38:20.909 main]: Built without netceiver
 
 	./minisatip [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 		[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]][-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] [-R document_root] [-s [DELSYS:]host[:port] [-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] 
@@ -99,7 +99,7 @@ Help
 
 * -l specifies the modules comma separated that will have increased verbosity, 
 	logging to stdout in foreground mode or in /tmp/minisatip.log when a daemon
-	Possible modules: general,http,socketworks,stream,adapter,satipc,pmt,tables,dvbapi,lock,netceiver,dvbca,axe,socket,utils,dmx,ssdp,dvb
+	Possible modules: general,http,socketworks,stream,adapter,satipc,pmt,tables,dvbapi,lock,netceiver,ca,axe,socket,utils,dmx,ssdp,dvb
 	* eg: -l http,pmt
 
 * -v specifies the modules comma separated that will have increased debug level (more verbose than -l), 
@@ -164,13 +164,18 @@ Help
 	eg: --satip-xml http://localhost:8080/desc.xml 
 
 * -O --satip-tcp Use RTSP over TCP instead of UDP for data transport 
- * -S --slave ADAPTER1,ADAPTER2-ADAPTER4[,..] - specify slave adapters	
+ * -S --slave ADAPTER1,ADAPTER2-ADAPTER4[,..]:MASTER - specify slave adapters	
 	* Allows specifying bonded adapters (multiple adapters connected with a splitter to the same LNB)
+	* This feature is used by FBC receivers and AXE to specify the source input of the adapter
 	Only one adapter needs to be master all others needs to have this parameter specified
-	eg: -S 1-2
-	- specifies adapter 1 to 2 as slave, in this case adapter 0 can be the master that controls the LNB
+	eg: -S 1-2:0
+	- specifies adapter 1 to 2 as slave, in this case adapter 0 is the master that controls the LNB
 	- the slave adapter will not control the LNB polarity or band, but it will just change the internal frequency to tune to a different transponder
-	- in this way the master will be responsible for changing the LNB polarity and band
+	- if there is no adapter using this link, the slave will use master adapters frontend to change the LNB polarity and band
+	eg: -S 1-7:0 (default for DVB-S2 FBC)
+	- all 8 adapters use physical input A to tune
+	eg: -S 2-4:0,5-7:1
+	- adapters 2,3,4 use physical input A to tune, while 1,5,6,7 uses input B to tune, adapter 0 and 1 are masters
 
 * -t --cleanpsi clean the PSI from all CA information, the client will see the channel as clear if decrypted successfully
 
