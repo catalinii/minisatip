@@ -585,6 +585,9 @@ void dump_pids(int aid)
 int compare_slave_parameters(adapter *ad, transponder *tp)
 {
 	adapter *master = NULL;
+
+	if(!ad)
+		return 0;
 	// is not a slave and does not have a slave adapter
 	if ((ad->master_source < 0) && !ad->used)
 		return 0;
@@ -689,7 +692,7 @@ int get_free_adapter(transponder *tp)
 		//first free adapter that has the same msys
 		if ((ad = get_adapter_nw(i)) && ad->sid_cnt == 0 && delsys_match(ad, msys) && !compare_slave_parameters(ad, tp))
 			return i;
-		if (!ad && delsys_match(a[i], msys) && !compare_slave_parameters(ad, tp)) // device is not initialized
+		if (!ad && delsys_match(a[i], msys) && !compare_slave_parameters(a[i], tp)) // device is not initialized
 		{
 			if (!init_hw(i))
 				return i;
@@ -781,8 +784,9 @@ void close_adapter_for_stream(int sid, int aid)
 		if ((ad->master_source >= 0) && (ad->master_source < MAX_ADAPTERS))
 		{
 			adapter *ad2 = a[ad->master_source];
-			ad2->used &= ~(1 << ad->id);
-			LOGM("adapter %d freed from slave adapter %d, used %d", ad2->id, ad->id, ad2->used);
+			if(ad2)
+				ad2->used &= ~(1 << ad->id);
+			LOGM("adapter %d freed from slave adapter %d, used %d", ad2?ad2->id:-1, ad->id, ad2?ad2->used:-1);
 		}
 	}
 	else
