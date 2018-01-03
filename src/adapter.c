@@ -546,8 +546,8 @@ void dump_adapters()
 	LOG("Dumping adapters:");
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		if ((ad = get_adapter_nw(i)))
-			LOG("%d|f: %d sid_cnt:%d master_sid:%d del_sys: %s %s %s", i,
-				ad->tp.freq, ad->sid_cnt, ad->master_sid,
+			LOG("%d|f: %d sid_cnt:%d master_sid:%d master_source:%d del_sys: %s %s %s", i,
+				ad->tp.freq, ad->sid_cnt, ad->master_sid, ad->master_source,
 				get_delsys(ad->sys[0]), get_delsys(ad->sys[1]),
 				get_delsys(ad->sys[2]));
 	dump_streams();
@@ -633,7 +633,7 @@ int compare_slave_parameters(adapter *ad, transponder *tp)
 		if (master->old_pol == pol && master->old_hiband == hiband && master->old_diseqc == diseqc)
 			return 1; // master parameters matches with the required parameters
 	}
-
+	LOGM("%s: adapter %d used %d master %d used %d (pol %d, band %d, diseqc %d) not compatible with freq %d, pol %d band %d diseqc %d", __FUNCTION__, ad->id, ad->used, master?master->id:ad->master_source, master?master->used:-1, ad->old_pol, ad->old_hiband, ad->old_diseqc, freq, pol, hiband, diseqc);
 	return 1;
 }
 
