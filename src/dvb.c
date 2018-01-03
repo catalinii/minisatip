@@ -437,6 +437,8 @@ int dvb_open_device(adapter *ad)
 		}
 		else
 		{
+			if (ad->fn > 1)
+				LOG("FBC master adapter is recommended to be adapter 0 or 1, depending on the number of physical inputs");
 			set_proc_data(ad->fn, "fbc_link", 0);
 			set_proc_data(ad->fn, "fbc_connect", ad->fn);
 		}
