@@ -1019,7 +1019,6 @@ void clean_psi(adapter *ad, uint8_t *b)
 	SPid *p;
 	SPMT *cpmt;
 	int pi_len, i, j, es_len, desc_len;
-	uint8_t *cc, _cc;
 
 	p = find_pid(ad->id, pid);
 	if (!p || p->sid[0] == -1) // no need to fix this PMT as it not requested by any stream
@@ -1099,11 +1098,6 @@ void clean_psi(adapter *ad, uint8_t *b)
 
 		crc = crc_32(n, nlen - 1);
 		copy32(n, nlen - 1, crc);
-		copy16(n, 1498, nlen + 1); // set the position at the end of the pmt
-		_cc = b[3] & 0xF;		   // continuity counter
-		_cc = (_cc - 1) & 0xF;
-		cc = (uint8_t *)n + 1497;
-		*cc = _cc;
 	}
 
 	if (clean)
