@@ -496,7 +496,7 @@ int connect_dvbapi(void *arg)
 
 		for (i = 0; i < MAX_KEYS; i++)
 		{
-			if (!network_mode && keys[i] && keys[i]->enabled && (keys[i]->ecms == 0) && (keys[i]->last_dmx_stop > 0) && (ctime - keys[i]->last_dmx_stop > 3000))
+			if (network_mode && keys[i] && keys[i]->enabled && (keys[i]->ecms == 0) && (keys[i]->last_dmx_stop > 0) && (ctime - keys[i]->last_dmx_stop > 3000))
 			{
 				int pmt_id = keys[i]->pmt_id, adapter_id = keys[i]->adapter;
 				LOG("Key %d active but no active filter, closing ", i);

@@ -25,17 +25,17 @@ https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item
 Usage:
 -------
 
-minisatip version 0.7.13, compiled with s2api version: 050A
-[03/01 10:38:20.909 main]: Built with dvbcsa
-[03/01 10:38:20.909 main]: Built with CI
-[03/01 10:38:20.909 main]: Built with dvbapi
-[03/01 10:38:20.909 main]: Built with AES (OpenSSL)
-[03/01 10:38:20.909 main]: Built with tables processing
-[03/01 10:38:20.909 main]: Built with pmt processing
-[03/01 10:38:20.909 main]: Built with satip client
-[03/01 10:38:20.909 main]: Built with linux dvb client
-[03/01 10:38:20.909 main]: Built with backtrace
-[03/01 10:38:20.909 main]: Built without netceiver
+minisatip version 0.7.15, compiled with s2api version: 050A
+[04/01 21:47:41.842 main]: Built with dvbcsa
+[04/01 21:47:41.842 main]: Built with CI
+[04/01 21:47:41.842 main]: Built with dvbapi
+[04/01 21:47:41.842 main]: Built with AES (OpenSSL)
+[04/01 21:47:41.842 main]: Built with tables processing
+[04/01 21:47:41.842 main]: Built with pmt processing
+[04/01 21:47:41.842 main]: Built with satip client
+[04/01 21:47:41.842 main]: Built with linux dvb client
+[04/01 21:47:41.842 main]: Built with backtrace
+[04/01 21:47:41.842 main]: Built with netceiver
 
 	./minisatip [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 		[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]][-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] [-R document_root] [-s [DELSYS:]host[:port] [-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] 
@@ -127,6 +127,9 @@ Help
 	- turns off power management for all adapters (recommended instead of --adapter-timeout 0-32:0) 
 	- required for some Unicable LNBs 
 
+* -n --netceiver if:count: use network interface <if> (default vlan4) and look for <count> netceivers
+	* eg: -n vlan4:2 
+
 * -o --dvbapi host:port - specify the hostname and port for the dvbapi server (oscam). Port 9000 is set by default (if not specified) 
 	* eg: -o 192.168.9.9:9000 
 	192.168.9.9 is the host where oscam is running and 9000 is the port configured in dvbapi section in oscam.conf.
@@ -201,6 +204,10 @@ Help
 * -y --rtsp-port rtsp_port: port for listening for rtsp requests [default: 554]
 	* eg: -y 5544 
 	- changing this to a port > 1024 removes the requirement for minisatip to run as root
+* -1 --demux-dev [1|2|3]: the protocol used to get the data from demux
+	* 0 - use dvrX device 
+	* 1 - use demuxX device 
+	* 2 - use dvrX device and additionally capture PSI data from demuxX device 
 
  How to compile:
 ------

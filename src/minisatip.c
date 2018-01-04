@@ -111,6 +111,7 @@ int rtsp, http, si, si1, ssdp1;
 #define DISEQC_MULTI '0'
 #define SIGNALMULTIPLIER_OPT 'M'
 #define DEVICEID_OPT 'D'
+#define DEMUXDEV_OPT '1'
 
 static const struct option long_options[] =
 	{
@@ -131,6 +132,7 @@ static const struct option long_options[] =
 		{"diseqc-timing", required_argument, NULL, 'q'},
 		{"diseqc-multi", required_argument, NULL, DISEQC_MULTI},
 		{"adapter-timeout", required_argument, NULL, 'Z'},
+		{"demux-dev", required_argument, NULL, DEMUXDEV_OPT},
 
 #ifndef DISABLE_DVBAPI
 		{"dvbapi", required_argument, NULL, 'o'},
@@ -440,6 +442,10 @@ Help\n\
 * -y --rtsp-port rtsp_port: port for listening for rtsp requests [default: 554]\n\
 	* eg: -y 5544 \n\
 	- changing this to a port > 1024 removes the requirement for minisatip to run as root\n\
+* -1 --demux-dev [1|2|3]: the protocol used to get the data from demux\n\
+	* 0 - use dvrX device \n\
+	* 1 - use demuxX device \n\
+	* 2 - use dvrX device and additionally capture PSI data from demuxX device \n\
 \n "
 #ifdef AXE
 		"\
@@ -548,7 +554,7 @@ void set_options(int argc, char *argv[])
 
 #endif
 
-	while ((opt = getopt_long(argc, argv, "fl:v:r:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:o:gy:i:q:D:NVR:S:TX:Y:OL:EP:Z:0:F:M:" AXE_OPTS, long_options, NULL)) != -1)
+	while ((opt = getopt_long(argc, argv, "fl:v:r:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:o:gy:i:q:D:NVR:S:TX:Y:OL:EP:Z:0:F:M:1:" AXE_OPTS, long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
 		switch (opt)
@@ -912,6 +918,15 @@ void set_options(int argc, char *argv[])
 				opts.xml_path = optarg;
 			else
 				LOG("Not a valid path for the xml file");
+			break;
+
+		case DEMUXDEV_OPT:
+		{
+			int o = atoi(optarg);
+			if(o >= 0 && o < 3)
+				opts.use_demux_device = o;
+				else LOG("Demux device can be 0, 1 or 2 and not %d", o);
+		}
 			break;
 #ifdef AXE
 		case LINK_OPT:
