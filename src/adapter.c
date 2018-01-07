@@ -592,7 +592,7 @@ int compare_slave_parameters(adapter *ad, transponder *tp)
 	if ((ad->master_source < 0) && !ad->used)
 		return 0;
 	// is slave and the switch is UNICABLE/JESS - we do not care about pol and band
-	if ((ad->tp.diseqc_param.switch_type == SWITCH_JESS) || (ad->tp.diseqc_param.switch_type == SWITCH_UNICABLE))
+	if ((ad->diseqc_param.switch_type == SWITCH_JESS) || (ad->diseqc_param.switch_type == SWITCH_UNICABLE))
 		return 0;
 
 	// master adapter is used by other
