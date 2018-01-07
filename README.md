@@ -26,16 +26,16 @@ Usage:
 -------
 
 minisatip version 0.7.15, compiled with s2api version: 050A
-[04/01 21:47:41.842 main]: Built with dvbcsa
-[04/01 21:47:41.842 main]: Built with CI
-[04/01 21:47:41.842 main]: Built with dvbapi
-[04/01 21:47:41.842 main]: Built with AES (OpenSSL)
-[04/01 21:47:41.842 main]: Built with tables processing
-[04/01 21:47:41.842 main]: Built with pmt processing
-[04/01 21:47:41.842 main]: Built with satip client
-[04/01 21:47:41.842 main]: Built with linux dvb client
-[04/01 21:47:41.842 main]: Built with backtrace
-[04/01 21:47:41.842 main]: Built with netceiver
+[07/01 06:55:48.445 main]: Built with dvbcsa
+[07/01 06:55:48.445 main]: Built with CI
+[07/01 06:55:48.445 main]: Built with dvbapi
+[07/01 06:55:48.445 main]: Built with AES (OpenSSL)
+[07/01 06:55:48.445 main]: Built with tables processing
+[07/01 06:55:48.445 main]: Built with pmt processing
+[07/01 06:55:48.445 main]: Built with satip client
+[07/01 06:55:48.445 main]: Built with linux dvb client
+[07/01 06:55:48.445 main]: Built with backtrace
+[07/01 06:55:48.445 main]: Built with netceiver
 
 	./minisatip [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 		[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]][-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] [-R document_root] [-s [DELSYS:]host[:port] [-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] 
@@ -175,7 +175,7 @@ Help
 	- specifies adapter 1 to 2 as slave, in this case adapter 0 is the master that controls the LNB
 	- the slave adapter will not control the LNB polarity or band, but it will just change the internal frequency to tune to a different transponder
 	- if there is no adapter using this link, the slave will use master adapters frontend to change the LNB polarity and band
-	eg: -S 1-7:0 (default for DVB-S2 FBC)
+	eg: -S 2-7:0 (default for DVB-S2 FBC), adapter 0 and 1 are masters, 2-7 slave and linked to input 0 (A)
 	- all 8 adapters use physical input A to tune
 	eg: -S 2-4:0,5-7:1
 	- adapters 2,3,4 use physical input A to tune, while 1,5,6,7 uses input B to tune, adapter 0 and 1 are masters
