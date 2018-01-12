@@ -1501,6 +1501,8 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 		isAC3 = 0;
 		if (stype == 6)
 			isAC3 = is_ac3_es(pmt_b + i + 5, es_len);
+		else if(stype == 129)
+			isAC3 = 1;
 
 		if (pmt->all_pids < MAX_PMT_PIDS - 1)
 			pmt->all_pid[pmt->all_pids++] = spid;
@@ -1514,7 +1516,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 			LOGM("pmt processing complete, es_len + i %d, len %d, es_len %d", es_len + i, pmt_len, es_len);
 			break;
 		}
-		if (stype != 2 && stype != 3 && stype != 4 && !isAC3 && stype != 27 && stype != 36 && stype != 15)
+		if ((stype != 2) && (stype != 3) && (stype != 4) && !isAC3 && (stype != 27) && (stype != 36) && (stype != 15))
 			continue;
 
 		find_pi(pmt, pmt_b + i + 5, es_len);
