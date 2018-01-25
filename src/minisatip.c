@@ -711,6 +711,7 @@ void set_options(int argc, char *argv[])
 				opts.tcp_max_pack = 7;
 			else if (opts.tcp_max_pack > 697)
                                 opts.tcp_max_pack = 697;
+                        break;
 		}
 
 		case DVBS2_ADAPTERS_OPT:
