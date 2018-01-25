@@ -515,7 +515,7 @@ int getAdaptersCount()
 		tuner_t2 = tt2;
 		if (!opts.force_cadapter)
 			tuner_c = tc;
-		if (!opts.force_cadapter)
+		if (!opts.force_tadapter)
 			tuner_t = tt;
 		tuner_at = tat;
 		tuner_ac = tac;
