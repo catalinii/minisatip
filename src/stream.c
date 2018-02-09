@@ -84,7 +84,7 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 	//	else LOG_AND_RETURN(NULL, "No session associated with sock_id %d", s->sock_id);
 
 	snprintf(sbuf, size - 1,
-			 "v=0\r\no=- %010d %010d IN IP4 %s\r\ns=SatIPServer:1 %d %d %d\r\nt=0 0\r\n",
+			 "v=0\r\no=- %010d %010d IN IP4 %s\r\ns=SatIPServer:1 %d,%d,%d\r\nt=0 0\r\n",
 			 sidf, sidf, get_sock_shost(s->sock), tuner_s2, tuner_t + tuner_t2,
 			 tuner_c + tuner_c2);
 	if (strchr(req, '?'))
