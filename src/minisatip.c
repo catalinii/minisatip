@@ -112,6 +112,7 @@ int rtsp, http, si, si1, ssdp1;
 #define SIGNALMULTIPLIER_OPT 'M'
 #define DEVICEID_OPT 'D'
 #define DEMUXDEV_OPT '1'
+#define TCPMAXPACK_OPT '2'
 
 static const struct option long_options[] =
 	{
@@ -156,6 +157,7 @@ static const struct option long_options[] =
 		{"dmx-source", required_argument, NULL, '9'},
 		{"lnb", required_argument, NULL, 'L'},
 		{"xml", required_argument, NULL, 'X'},
+		{"tcp-max-pack", required_argument, NULL, '2'},
 		{"help", no_argument, NULL, 'h'},
 		{"version", no_argument, NULL, 'V'},
 #ifdef AXE
@@ -275,6 +277,8 @@ Help\n\
 \n\
 * -B X : set the app socket write buffer to X KB. \n\
 	* eg: -B 10000 - to set the socket buffer to 10MB\n\
+\n\
+* -2 --tcp-max-pack X : set the TCP data chunk size in MPEG-TS packets (188 bytes), default value is 42\n\
 \n\
 * -d --diseqc ADAPTER1:COMMITTED1-UNCOMMITTED1[,ADAPTER2:COMMITTED2-UNCOMMITTED2[,...]\n\
 \t* The first argument is the adapter number, second is the number of committed packets to send to a Diseqc 1.0 switch, third the number of uncommitted commands to sent to a Diseqc 1.1 switch\n\
@@ -554,7 +558,7 @@ void set_options(int argc, char *argv[])
 
 #endif
 
-	while ((opt = getopt_long(argc, argv, "fl:v:r:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:o:gy:i:q:D:NVR:S:TX:Y:OL:EP:Z:0:F:M:1:" AXE_OPTS, long_options, NULL)) != -1)
+	while ((opt = getopt_long(argc, argv, "fl:v:r:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:o:gy:i:q:D:NVR:S:TX:Y:OL:EP:Z:0:F:M:1:2:" AXE_OPTS, long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
 		switch (opt)
@@ -698,6 +702,16 @@ void set_options(int argc, char *argv[])
 			else if (opts.tcp_threshold > 200)
 				opts.tcp_threshold = 200;
 			break;
+		}
+
+		case TCPMAXPACK_OPT:
+		{
+			opts.tcp_max_pack = atoi(optarg);
+			if (opts.tcp_max_pack < 7)
+				opts.tcp_max_pack = 7;
+			else if (opts.tcp_max_pack > 697)
+                                opts.tcp_max_pack = 697;
+                        break;
 		}
 
 		case DVBS2_ADAPTERS_OPT:

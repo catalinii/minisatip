@@ -515,7 +515,7 @@ int getAdaptersCount()
 		tuner_t2 = tt2;
 		if (!opts.force_cadapter)
 			tuner_c = tc;
-		if (!opts.force_cadapter)
+		if (!opts.force_tadapter)
 			tuner_t = tt;
 		tuner_at = tat;
 		tuner_ac = tac;
@@ -881,7 +881,6 @@ int tune(int aid, int sid)
 {
 	adapter *ad = get_adapter(aid);
 	int rv = 0, flush_data = 0;
-	SPid *p;
 
 	if (!ad)
 		return -400;
@@ -913,7 +912,7 @@ int tune(int aid, int sid)
 			}
 		}
 #ifndef DISABLE_PMT
-		p = find_pid(aid, 0);
+		SPid *p = find_pid(aid, 0);
 		SPid *p_all = find_pid(aid, 8192);
 		if ((!p || p->flags == 3) && (!p_all || p_all->flags == 3)) // add pid 0 if not explicitly added
 		{
