@@ -48,7 +48,7 @@
 
 #ifndef DISABLE_LINUXDVB
 
-void get_signal(adapter *ad, uint32_t *status, uint32_t *ber, uint16_t *strength, uint16_t *snr);
+void get_signal(adapter *ad, int *status, int *ber, int *strength, int *snr);
 int send_jess(adapter *ad, int fd, int freq, int pos, int pol, int hiband, diseqc *d);
 int send_unicable(adapter *ad, int fd, int freq, int pos, int pol, int hiband, diseqc *d);
 int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol, int hiband, diseqc *d);
@@ -819,9 +819,11 @@ void free_axe_input(adapter *ad)
 
 	for (aid = 0; aid < 4; aid++)
 	{
-		ad2 = get_adapter(aid);
-		if (ad2)
+		ad2 = get_configured_adapter(aid);
+		if (ad2) {
 			ad2->axe_used &= ~(1 << ad->id);
+			LOGM("axe: free input %d : %04x", ad2->id, ad2->axe_used);
+		}
 	}
 }
 
