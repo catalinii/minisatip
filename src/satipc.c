@@ -892,7 +892,7 @@ int http_request(adapter *ad, char *url, char *method)
 		if (sip->use_tcp)
 			sprintf(session, "\r\nTransport: RTP/AVP/TCP;interleaved=0-1");
 		else
-			sprintf(session, "\r\nTransport:RTP/AVP;unicast;client_port=%d-%d",
+			sprintf(session, "\r\nTransport: RTP/AVP;unicast;client_port=%d-%d",
 					sip->listen_rtp, sip->listen_rtp + 1);
 	}
 	else
