@@ -1120,7 +1120,7 @@ int read_rtsp(sockets *s)
 		if (useragent)
 			strncpy(sid->useragent, useragent, sizeof(sid->useragent) - 1);
 
-		if ((strncasecmp(arg[0], "PLAY", 3) == 0) || (strncasecmp(arg[0], "GET", 3) == 0))
+		if ((strncasecmp(arg[0], "PLAY", 4) == 0) || (strncasecmp(arg[0], "GET", 3) == 0))
 			if ((rv = start_play(sid, s)) < 0)
 			{
 				http_response(s, -rv, NULL, NULL, cseq, 0);
