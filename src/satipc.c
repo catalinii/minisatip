@@ -304,8 +304,8 @@ int satipc_close(sockets *s)
 
 void set_adapter_signal(adapter *ad, char *b, int rlen)
 {
-	int i, strength, status, snr;
-	char *ver, *tun, *signal = NULL;
+	int strength, status, snr;
+	char *tun, *signal = NULL;
 	
 	tun = strstr((const char *)b, "tuner=");
 	if (tun)
