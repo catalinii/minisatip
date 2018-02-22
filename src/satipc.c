@@ -306,24 +306,20 @@ void set_adapter_signal(adapter *ad, char *b, int rlen)
 {
 	int i, strength, status, snr;
 	char *ver, *tun, *signal = NULL;
-	for (i = 0; i < rlen - 4; i++)
-		if (b[i] == 'v' && b[i + 1] == 'e' && b[i + 2] == 'r' && b[i + 3] == '=')
+	
+	tun = strstr((const char *)b, "tuner=");
+	if (tun)
+		signal = strchr(tun, ',');
+		if (signal)
 		{
-			ver = b + i;
-			tun = strstr((const char *)ver, "tuner=");
-			if (tun)
-				signal = strchr(tun, ',');
-			if (signal)
-			{
-				sscanf(signal + 1, "%d,%d,%d", &strength, &status, &snr);
-				if (ad->strength != strength && ad->snr != snr)
-					LOG(
-						"satipc: Received signal status from the server for adapter %d, stength=%d status=%d snr=%d",
-						ad->id, strength, status, snr);
+			sscanf(signal + 1, "%d,%d,%d", &strength, &status, &snr);
+			if (ad->strength != strength || ad->snr != snr)
+				LOG(
+					"satipc: Received signal status from the server for adapter %d, stength=%d status=%d snr=%d",
+					ad->id, strength, status, snr);
 				ad->strength = strength;
 				ad->status = status ? FE_HAS_LOCK : 0;
 				ad->snr = snr;
-			}
 		}
 }
 
@@ -896,7 +892,7 @@ int http_request(adapter *ad, char *url, char *method)
 		if (sip->use_tcp)
 			sprintf(session, "\r\nTransport: RTP/AVP/TCP;interleaved=0-1");
 		else
-			sprintf(session, "\r\nTransport:RTP/AVP;unicast;client_port=%d-%d",
+			sprintf(session, "\r\nTransport: RTP/AVP;unicast;client_port=%d-%d",
 					sip->listen_rtp, sip->listen_rtp + 1);
 	}
 	else
