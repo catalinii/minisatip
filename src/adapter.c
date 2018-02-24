@@ -1279,12 +1279,11 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 		snr = ad->snr;
 		if (snr > 15)
 			snr = snr >> 4;
-		status = (ad->status & FE_HAS_LOCK) > 0;
-
 		if (strength > 255 || strength < 0)
 			strength = 1;
 		if (snr > 15 || snr < 0)
 			snr = 1;
+		status = (ad->status & FE_HAS_LOCK) > 0;
 	}
 	if (t->sys == 0)
 		len = snprintf(dad, ld, "ver=1.0;src=1;tuner=%d,0,0,0,0,,,,,,,;pids=",
