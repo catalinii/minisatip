@@ -12,6 +12,9 @@ clean: FORCE
 test: FORCE
 	$(MAKE) -C src clean
 	$(MAKE) -C tests $@
+
+debug: FORCE
+	$(MAKE) -C src DEBUG=1
 	
 FORCE:
 

@@ -111,6 +111,12 @@ else
 CFLAGS+=-DDISABLE_DDCI
 endif
 
+ifeq ($(T2MI),1)
+SOURCES+= t2mi.c
+else
+CFLAGS+=-DDISABLE_T2MI
+endif
+
 SOURCES-$(AXE) += axe.c
 CFLAGS-$(AXE) += -DAXE
 
@@ -118,10 +124,6 @@ CFLAGS-$(ENIGMA) += -DENIGMA
 
 CFLAGS-$(EMBEDDED) += -DNO_BACKTRACE
 CFLAGS-$(DEBUG) += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=null -static-libasan -static-libubsan
-
-CFLAGS-$(T2MI) = -DT2MI
-SOURCES-$(T2MI) = t2mi.c
-CFLAGS-$((1-$T2MI)) = -DDISABLE_T2MI
 
 ifeq ($(STATIC),1)
 LDFLAGS+=$(addsuffix .a,$(addprefix -l:lib,$(LIBS)))
