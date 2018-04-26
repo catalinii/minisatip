@@ -42,6 +42,7 @@
 #include "stream.h"
 #include "dvb.h"
 #include "adapter.h"
+#include "t2mi.h"
 
 #include "pmt.h"
 
@@ -310,10 +311,16 @@ int start_play(streams *sid, sockets *s)
 		if (ad)
 			set_socket_thread(sid->st_sock, get_socket_thread(ad->sock));
 	}
-
+	//  flush the sockets buffer if no pid was requested
+	if (!sid->tp.apids && sid->tp.pids && (!sid->tp.pids[0] || !strcmp(sid->tp.pids, "0")))
+		s->flush_enqued_data = 1;
 	sid->do_play = 1;
 	sid->start_streaming = 0;
 	sid->tp.apids = sid->tp.dpids = sid->tp.pids = sid->tp.x_pmt = NULL;
+
+	ad = get_adapter(sid->adapter);
+	if (ad->do_tune)
+		s->flush_enqued_data = 1;
 
 	return tune(sid->adapter, s->sid);
 }
@@ -841,6 +848,8 @@ int check_cc(adapter *ad)
 	{
 		b = ad->buf + i;
 		pid = (b[1] & 0x1f) * 256 + b[2];
+		if (pid == 8191)
+			continue;
 		p = find_pid(ad->id, pid);
 
 		if ((!p))
@@ -967,6 +976,11 @@ int process_dmx(sockets *s)
 
 	LOGM("process_dmx start called for adapter %d -> %d out of %d bytes read, %jd ms ago",
 		 s->sid, rlen, s->lbuf, ms_ago);
+
+#ifndef DISABLE_T2MI
+	if (ad->is_t2mi >= 0)
+		t2mi_process_ts(ad);
+#endif
 
 #ifndef DISABLE_TABLES
 	pmt_process_stream(ad);
@@ -1375,6 +1389,19 @@ int get_stream_overflow(int s_id)
 	return s ? s->overflow : -1;
 }
 
+int get_stream_buffered_size(int s_id)
+{
+	int i, bytes = 0;
+	streams *sid = get_sid_nw(s_id);
+	if (!sid)
+		return 0;
+	sockets *s = get_sockets(sid->rsock_id);
+	if (!s || s->spos == s->wpos || !s->pack)
+		return 0;
+	for (i = s->spos; i != s->wpos; i = (i + 1) % s->wmax)
+		bytes += s->pack[i].len;
+	return bytes;
+}
 _symbols stream_sym[] =
 	{
 		{"st_enabled", VAR_AARRAY_INT8, st, 1, MAX_STREAMS, offsetof(streams, enabled)},
@@ -1385,4 +1412,5 @@ _symbols stream_sym[] =
 		{"st_rport", VAR_FUNCTION_INT, (void *)&get_stream_rport, 0, MAX_STREAMS, 0},
 		{"st_pids", VAR_FUNCTION_STRING, (void *)&get_stream_pids, 0, MAX_STREAMS, 0},
 		{"st_overflow", VAR_FUNCTION_INT, (void *)&get_stream_overflow, 0, MAX_STREAMS, 0},
+		{"st_buffered", VAR_FUNCTION_INT, (void *)&get_stream_buffered_size, 0, MAX_STREAMS, 0},
 		{NULL, 0, NULL, 0, 0}};

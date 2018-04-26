@@ -306,21 +306,21 @@ void set_adapter_signal(adapter *ad, char *b, int rlen)
 {
 	int strength, status, snr;
 	char *tun, *signal = NULL;
-	
+
 	tun = strstr((const char *)b, "tuner=");
 	if (tun)
 		signal = strchr(tun, ',');
-		if (signal)
-		{
-			sscanf(signal + 1, "%d,%d,%d", &strength, &status, &snr);
-			if (ad->strength != strength || ad->snr != snr)
-				LOG(
-					"satipc: Received signal status from the server for adapter %d, stength=%d status=%d snr=%d",
-					ad->id, strength, status, snr);
-				ad->strength = strength;
-				ad->status = status ? FE_HAS_LOCK : 0;
-				ad->snr = snr;
-		}
+	if (signal)
+	{
+		sscanf(signal + 1, "%d,%d,%d", &strength, &status, &snr);
+		if (ad->strength != strength || ad->snr != snr)
+			LOG(
+				"satipc: Received signal status from the server for adapter %d, stength=%d status=%d snr=%d",
+				ad->id, strength, status, snr);
+		ad->strength = strength;
+		ad->status = status ? FE_HAS_LOCK : 0;
+		ad->snr = snr;
+	}
 }
 
 int satipc_rtcp_reply(sockets *s)
@@ -797,8 +797,8 @@ void get_s2_url(adapter *ad, char *url)
 	//	if (ro == ROLLOFF_AUTO)
 	//		ro = ROLLOFF_35;
 	FILL("src=%d", tp->diseqc, 0, tp->diseqc);
-	if (sip->use_fe && (sip->satip_fe >= 0) && (sip->satip_fe < 128))
-		FILL("&fe=%d", sip->satip_fe + 1, 0, sip->satip_fe + 1);
+	if (sip->use_fe && (sip->satip_fe > 0) && (sip->satip_fe < 128))
+		FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
 	FILL("&freq=%d", tp->freq, 0, tp->freq / 1000);
 	FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
 	FILL("&mtype=%s", tp->mtype, -1, get_modulation(tp->mtype));
@@ -820,7 +820,7 @@ void get_c2_url(adapter *ad, char *url)
 		return;
 	url[0] = 0;
 	FILL("freq=%.1f", tp->freq, 0, tp->freq / 1000.0);
-	if (sip->use_fe && (sip->satip_fe >= 0) && (sip->satip_fe < 128))
+	if (sip->use_fe && (sip->satip_fe > 0) && (sip->satip_fe < 128))
 		FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
 	FILL("&sr=%d", tp->sr, -1, tp->sr / 1000);
 	FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
@@ -845,7 +845,7 @@ void get_t2_url(adapter *ad, char *url)
 		return;
 	url[0] = 0;
 	FILL("freq=%.1f", tp->freq, 0, tp->freq / 1000.0);
-	if (sip->use_fe && (sip->satip_fe >= 0) && (sip->satip_fe < 128))
+	if (sip->use_fe && (sip->satip_fe > 0) && (sip->satip_fe < 128))
 		FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
 	FILL("&bw=%d", tp->bw, BANDWIDTH_AUTO, tp->bw / 1000000);
 	FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
@@ -936,7 +936,7 @@ int http_request(adapter *ad, char *url, char *method)
 	lb = snprintf(buf, sizeof(buf), format, method, sip->sip, sip->sport, sid,
 				  qm, url, sip->cseq++, session);
 
-	LOG("satipc_http_request (ad %d): %s to handle %d: \n%s", ad->id,
+	LOG("satipc_http_request (ad %d): %s to sock %d: \n%s", ad->id,
 		sip->expect_reply ? "queueing" : "sending", remote_socket, buf);
 	if (sip->expect_reply)
 	{
@@ -1191,7 +1191,7 @@ uint8_t determine_fe(adapter **a, int pos, char *csip, int sport)
 		if (!ad || !sip)
 			continue;
 		if (sport == sip->sport && !strcmp(sip->sip, csip))
-			return sip->satip_fe;
+			return sip->satip_fe + 1;
 	}
 	return 1;
 }
@@ -1330,10 +1330,11 @@ void find_satip_adapter(adapter **a)
 		strncpy(host, sep1, sizeof(host) - 1);
 		fe = -1;
 		source_ip[0] = 0;
-		if (strchr(host, '@'))
+		char *pos_at = strchr(host, '@');
+		if (pos_at)
 		{
 			fe = map_int(sep1, NULL);
-			memmove(host, strchr(host, '@') + 1, sizeof(host) - 1);
+			memmove(host, pos_at + 1, strlen(pos_at));
 		}
 		if (strchr(host, '/'))
 		{

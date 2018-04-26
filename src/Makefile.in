@@ -16,6 +16,7 @@ LINUXDVB=@LINUXDVB@
 AXE=@AXE@
 ENIGMA=@ENIGMA@
 DDCI=0
+T2MI=0
 
 CFLAGS?=-Wall -Wno-switch -ggdb -fPIC $(EXTRA_CFLAGS) @CFLAGS@
 LDFLAGS?=@LDFLAGS@
@@ -116,6 +117,11 @@ CFLAGS-$(AXE) += -DAXE
 CFLAGS-$(ENIGMA) += -DENIGMA
 
 CFLAGS-$(EMBEDDED) += -DNO_BACKTRACE
+CFLAGS-$(DEBUG) += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=null -static-libasan -static-libubsan
+
+CFLAGS-$(T2MI) = -DT2MI
+SOURCES-$(T2MI) = t2mi.c
+CFLAGS-$((1-$T2MI)) = -DDISABLE_T2MI
 
 ifeq ($(STATIC),1)
 LDFLAGS+=$(addsuffix .a,$(addprefix -l:lib,$(LIBS)))
@@ -144,6 +150,10 @@ all: $(TARGET)
 
 clean:
 	rm -rf $(BUILDDIR) $(TARGET) >> /dev/null
+
+debug: 
+	CFLAGS+=-fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=null
+	@(MAKE) all
 
 # pull in dependency info for *existing* .o files
 ifneq "$(MAKECMDGOALS)" "clean"

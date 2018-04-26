@@ -1,0 +1,3 @@
+(echo 'PLAY rtsp://192.168.101.132:554/stream=4?src=1&freq=10714&sr=23500&pol=h&msys=dvbs2&mtype=8psk&fec=34&pids=0,1,16,17,18 RTSP/1.0';echo 'Transport: RTP/AVP;unicast;destination=10.0.0.175;source=192.168.101.132;client_port=5002-5003;server_port=5502-5503';printf '\r\n\r\n';sleep 5;echo 'PLAY rtsp://192.168.101.132:554/stream=4?src=1&freq=10729&sr=22000&pol=v&msys=dvbs2&mtype=8psk&fec=34&pids=0,1,16,17,18 RTSP/1.0';printf '\r\n\r\n';sleep 5;echo 'PLAY rtsp://192.168.101.132:554/stream=1?src=1&freq=10758&msys=dvbs2&mtype=8psk&pol=v&sr=22000&pids=0,1,16,17,18 RTSP/1.0';printf '\r\n\r\n') | nc  192.168.101.132 554
+
+

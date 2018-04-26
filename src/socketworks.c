@@ -231,6 +231,22 @@ int set_linux_socket_nonblock(int sockfd)
 	return fcntl(sockfd, F_SETFL, flags | O_NONBLOCK);
 }
 
+int set_linux_connect_timeout(int sockfd)
+{
+	struct timeval timeout;
+	timeout.tv_sec = 2;
+	timeout.tv_usec = 0;
+
+	if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout,
+				   sizeof(timeout)) < 0)
+		LOG("setsockopt failed for socket %d", sockfd);
+
+	if (setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, (char *)&timeout,
+				   sizeof(timeout)) < 0)
+		LOG("setsockopt failed for socket %d", sockfd);
+	return 0;
+}
+
 int set_linux_socket_timeout(int sockfd)
 {
 	struct timeval timeout;
@@ -272,7 +288,7 @@ int tcp_connect_src(char *addr, int port, struct sockaddr_in *serv, int blocking
 		return -1;
 	}
 
-	set_linux_socket_timeout(sock);
+	set_linux_connect_timeout(sock);
 
 	if (!blocking)
 	{
@@ -299,14 +315,15 @@ int tcp_connect_src(char *addr, int port, struct sockaddr_in *serv, int blocking
 
 	if (connect(sock, (struct sockaddr *)serv, sizeof(*serv)) < 0)
 	{
-		if (errno != EINPROGRESS)
+		if (blocking || (!blocking && errno != EINPROGRESS))
 		{
-			LOG("tcp_connect: failed: connect to %s:%d failed: %s", addr,
-				port, strerror(errno));
+			LOG("tcp_connect: failed: connect to %s:%d failed with errno %d: %s", addr,
+				port, errno, errno == 11 ? "connect timed out" : strerror(errno));
 			close(sock);
 			return -1;
 		}
 	}
+	set_linux_socket_timeout(sock);
 	LOG("New TCP socket %d connected to %s:%d", sock, addr, port);
 	return sock;
 }
@@ -562,7 +579,8 @@ int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 	ss->spos = ss->wpos = 0;
 	ss->wmax = opts.max_sbuf;
 	ss->master = -1;
-
+	ss->flush_enqued_data = 0;
+	ss->prio_pack.len = 0;
 	ss->read = (read_action)sockets_read;
 	ss->lock = NULL;
 	if (ss->type == TYPE_UDP || ss->type == TYPE_RTCP)
@@ -601,7 +619,7 @@ int sockets_del(int sock)
 	ss->is_enabled = 0;
 	so = ss->sock;
 	ss->sock = -1; // avoid infinite loop
-	LOG("sockets_del: %d -> handle %d, sid %d, overflow %d, allocated %d, used %d, unsend packets %d", sock, so, ss->sid, ss->overflow, ss->buf_alloc, ss->buf_used, (ss->wmax > 0) ? ((ss->wpos - ss->spos) % ss->wmax) : 0);
+	LOG("sockets_del: %d -> handle %d, sid %d, overflow bytes %d, allocated %d, used %d, unsend packets %d", sock, so, ss->sid, ss->overflow, ss->buf_alloc, ss->buf_used, (ss->wmax > 0) ? ((ss->wpos - ss->spos) % ss->wmax) : 0);
 
 	if (so >= 0)
 	{
@@ -740,7 +758,7 @@ void *select_and_execute(void *arg)
 					if ((pf[i].revents & POLLOUT) && (ss->spos != ss->wpos))
 					{
 						int k = 300;
-						LOG("start flush sock id %d, send pos %d, write pos %d", ss->id, ss->spos, ss->wpos);
+						LOGM("start flush sock id %d, send pos %d, write pos %d", ss->id, ss->spos, ss->wpos);
 						while (!flush_socket(ss))
 							if (!k--)
 								break;
@@ -765,7 +783,7 @@ void *select_and_execute(void *arg)
 					sockets *master = ss;
 					if (ss->master >= 0)
 						master = get_sockets(ss->master);
-					if(!master)
+					if (!master)
 						master = ss;
 
 					if (!master->buf || master->buf == buf)
@@ -1057,15 +1075,35 @@ void set_socket_buffer(int sid, unsigned char *buf, int len)
 void free_all_streams();
 void free_all_adapters();
 void free_all_keys();
+void free_t2mi();
 
+void free_pack(SNPacket *p)
+{
+	if (!p)
+		return;
+	if (p->buf)
+		free1(p->buf);
+	p->size = 0;
+	p->buf = NULL;
+	p->len = 0;
+}
 void free_all()
 {
-	int i = 0;
+	int i = 0, j;
 
 	for (i = MAX_SOCKS - 1; i > 0; i--)
 	{
-		if (s[i] && s[i]->enabled)
+		if (!s[i])
+			continue;
+		if (s[i]->enabled)
 			sockets_del(i);
+		if (s[i]->pack)
+		{
+			for (j = 0; j < s[i]->wmax; j++)
+				free_pack(&s[i]->pack[j]);
+			free1(s[i]->pack);
+		}
+		free_pack(&s[i]->prio_pack);
 		if (s[i])
 			free(s[i]);
 		s[i] = NULL;
@@ -1074,6 +1112,9 @@ void free_all()
 	free_all_adapters();
 #ifndef DISABLE_DVBAPI
 	free_all_keys();
+#endif
+#ifndef DISABLE_T2MI
+	free_t2mi();
 #endif
 }
 
@@ -1165,11 +1206,13 @@ pthread_t get_socket_thread(int s_id)
 #undef DEFAULT_LOG
 #define DEFAULT_LOG LOG_SOCKET
 
+// returns -1 or -EWOULDBLOCK
 int my_writev(sockets *s, const struct iovec *iov, int iiov)
 {
 	int rv = 0, len = 0, i;
 	char ra[50];
 	int64_t stime = 0;
+	int _errno;
 
 	len = 0;
 	for (i = 0; i < iiov; i++)
@@ -1179,9 +1222,10 @@ int my_writev(sockets *s, const struct iovec *iov, int iiov)
 	if (opts.log & DEFAULT_LOG)
 		stime = getTick();
 
-	if(s->sock > 0)
+	if (s->sock > 0)
 		rv = writev(s->sock, iov, iiov);
-		
+	_errno = errno;
+
 	if (opts.log & DEFAULT_LOG)
 		stime = getTick() - stime;
 
@@ -1196,8 +1240,8 @@ int my_writev(sockets *s, const struct iovec *iov, int iiov)
 		failed_writes++;
 		DEBUGM("writev handle %d, iiov %d, len %d, rv %d, errno %d", s->sock, iiov, len, rv, errno);
 	}
-
-	if ((rv < 0) && (errno == EWOULDBLOCK)) // blocking
+	errno = _errno;
+	if ((rv < 0) && (_errno == EWOULDBLOCK)) // blocking
 		return -EWOULDBLOCK;
 
 	if (rv < 0 && (errno == ECONNREFUSED || errno == EPIPE)) // close the stream int the next second
@@ -1220,6 +1264,7 @@ int my_writev(sockets *s, const struct iovec *iov, int iiov)
 
 	DEBUGM("writev returned %d handle %d, iiov %d, len %d (took %jd ms)", rv,
 		   s->sock, iiov, len, stime);
+	errno = _errno;
 	return rv;
 }
 
@@ -1227,15 +1272,11 @@ int alloc_snpacket(SNPacket *p, int len)
 {
 	if (!p->buf || (p->size < len))
 	{
-		if (p->buf)
-		{
-			free1(p->buf);
-			p->buf = NULL;
-		}
 		int newlen = (len < 1500) ? 1500 : len + 10;
-		p->buf = malloc1(newlen);
-		if (p->buf)
+		void *mem = realloc1(p->buf, newlen);
+		if (mem)
 		{
+			p->buf = mem;
 			p->size = newlen;
 			return 1;
 		}
@@ -1248,9 +1289,28 @@ int alloc_snpacket(SNPacket *p, int len)
 	return 0;
 }
 
-int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
+int socket_enque_highprio(sockets *s, struct iovec *iov, int iovcnt)
 {
-	int rv = 0, i, pos = 0, len;
+	int len = 0, i, pos = 0;
+	for (i = 0; i < iovcnt; i++)
+		len += iov[i].iov_len;
+
+	pos = s->prio_pack.len;
+
+	if (-1 == alloc_snpacket(&s->prio_pack, pos + len))
+		return 0;
+
+	for (i = 0; i < iovcnt; i++)
+	{
+		memcpy(s->prio_pack.buf + pos, iov[i].iov_base, iov[i].iov_len);
+		pos += iov[i].iov_len;
+	}
+	s->prio_pack.len = pos;
+	return 0;
+}
+int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt, int high_prio)
+{
+	int i, pos = 0, len;
 	unsigned char *tmpbuf = NULL;
 	struct iovec tmpiov[3];
 	sockets *s = get_sockets(sock_id);
@@ -1262,17 +1322,22 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 		for (i = 0; i < iovcnt; i++)
 			len += iov[i].iov_len;
 
-		rv = my_writev(s, iov, iovcnt);
-		if (rv == len || rv < 0)
+		int rv = my_writev(s, iov, iovcnt);
+		if (rv == len || rv == 0 || rv == -1)
+		{
+			s->flush_enqued_data = 0;
 			return rv;
+		}
+		if (rv == -EWOULDBLOCK)
+			rv = 0;
 
-		if (rv > 0)
+		if (rv >= 0)
 		{
 			tmpbuf = malloc1(len);
 			if (!tmpbuf)
 			{
-				s->overflow++;
-				LOG_AND_RETURN(0, "%s: Could not allocate memory for tmpbuf", __FUNCTION__, len);
+				s->overflow += len - rv;
+				LOG_AND_RETURN(0, "%s: Could not allocate %d bytes for tmpbuf", __FUNCTION__, len);
 			}
 			for (i = 0; i < iovcnt; i++)
 			{
@@ -1280,7 +1345,7 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 					memcpy(tmpbuf + pos, iov[i].iov_base, iov[i].iov_len);
 				pos += iov[i].iov_len;
 			}
-			LOGM("incomplete write it %d, setting the buffer at offset %d and length %d from %d", s->iteration, rv, len - rv, len);
+			LOGM("incomplete write %d left %d from %d", rv, len - rv, len);
 			tmpiov[0].iov_base = tmpbuf + rv;
 			tmpiov[0].iov_len = len - rv;
 			iov = tmpiov;
@@ -1300,9 +1365,28 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 		}
 	}
 
+	// high priority packets will be queued in high_prio and flushed after the current packet
+	// example http_response, to avoid waiting all other rtsp data to be dequeued first
+	if (high_prio && !s->flush_enqued_data && s->spos != s->wpos)
+	{
+		int rv = socket_enque_highprio(s, iov, iovcnt);
+		if (tmpbuf)
+			free(tmpbuf);
+		return rv;
+	}
+	// if we need the user tuned to a new freq, drop all the data that is in the buffer
+	// if both high_prio and flush_enqued_data are both set, no need to add to pio_pack
+	if (s->flush_enqued_data)
+	{
+		LOG("sock %d dropping enqueued stream data from %d to %d", s->id, s->wpos, (s->spos + 1) % s->wmax);
+		s->flush_enqued_data = 0;
+		s->wpos = (s->spos + 1) % s->wmax;
+	}
+
 	len = 0;
 	for (i = 0; i < iovcnt; i++)
 		len += iov[i].iov_len;
+
 	// queue the packet otherwise
 	SNPacket *p = s->pack + s->wpos;
 
@@ -1313,8 +1397,8 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 	}
 	else if (i < 0)
 	{
-		LOGM("overflow p is %p, buf %p", p, p ? p->buf : NULL);
-		s->overflow++;
+		LOG("overflow p is %p, buf %p", p, p ? p->buf : NULL);
+		s->overflow += len;
 		if (tmpbuf)
 			free(tmpbuf);
 		return 0;
@@ -1325,9 +1409,9 @@ int sockets_writev(int sock_id, struct iovec *iov, int iovcnt)
 
 	if (s->spos == ((s->wpos + 1) % s->wmax)) // the queue is full, start overwriting
 	{
-		s->overflow++;
-		if ((s->overflow < 100) || ((s->overflow % 100) == 0))
-			LOG("sock %d: overflow %d it %d", s->id, s->overflow, s->iteration);
+		s->overflow += len;
+		if ((s->overflow < 100) || ((s->overflow % 100) == 0) || (opts.log & DEFAULT_LOG))
+			LOG("sock %d: overflow %d bytes it %d", s->id, s->overflow, s->iteration);
 
 		if (tmpbuf)
 			free(tmpbuf);
@@ -1359,10 +1443,11 @@ int sockets_write(int sock_id, void *buf, int len)
 
 int flush_socket(sockets *s)
 {
-	struct iovec iov[1];
+	struct iovec iov[2];
 	int r = 1, rv;
 	SNPacket *p = NULL;
 
+	memset(iov, 0, sizeof(iov));
 	if (s->spos == s->wpos)
 		goto end;
 	if (s->pack)
@@ -1375,7 +1460,7 @@ int flush_socket(sockets *s)
 		rv = my_writev(s, iov, 1);
 		if ((rv > 0) && (rv != p->len))
 		{
-			LOG("incomplete write, send pos %d, bytes written %d out of %d", rv, s->spos, p->len);
+			LOG("incomplete write, buffered %d packets, wrote %d, bytes left %d", (s->wpos - s->spos + s->wmax) % s->wmax, rv, p->len - rv);
 			memmove(p->buf, p->buf + rv, p->len - rv);
 			p->len -= rv;
 			return 1;
@@ -1387,7 +1472,17 @@ int flush_socket(sockets *s)
 		}
 	}
 	LOGM("SOCK %d: flushed %d out of %d (%d bytes)", s->id, s->spos, s->wpos, p ? p->len : -1);
-	s->spos = (s->spos + 1) % s->wmax;
+	if (!s->prio_pack.len)
+		s->spos = (s->spos + 1) % s->wmax;
+	else
+	{ // makes sure http response (prio_pack) is sent next
+		SNPacket tmp;
+		memcpy(&tmp, p, sizeof(tmp));
+		memcpy(p, &s->prio_pack, sizeof(tmp));
+		memcpy(&s->prio_pack, &tmp, sizeof(tmp));
+		s->prio_pack.len = 0;
+		LOG("SOCK %d moved priority packet in the queue at pos %d instead of %d", s->id, s->spos, s->wpos);
+	}
 	r = 0;
 end:
 	if (s->force_close && s->spos == s->wpos)

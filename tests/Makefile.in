@@ -14,7 +14,7 @@ else
 	LINUXDVB=0
 endif
 
-SOURCES=test_utils.c test_ddci.c
+SOURCES=test_utils.c test_ddci.c test_socketworks.c
 
 TABLES=0
 PMT=0
@@ -23,6 +23,7 @@ LIBS+=crypto dl pthread
 LIBS+=dvbcsa
 LIBS+=dvben50221 dvbapi ucsi
 CFLAGS += -DAXE
+#CFLAGS += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=null
 
 CFLAGS += -DENIGMA
 CFLAGS += -DTESTING

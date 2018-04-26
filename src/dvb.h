@@ -162,13 +162,18 @@ typedef enum fe_modulation {
 #define DTV_STREAM_ID 42
 #endif
 
-#define MAX_PIDS 64
+#define MAX_PIDS 128
 #define MAX_DVBAPI_SYSTEMS 22
 #ifdef NO_BACKTRACE
 #define MAX_STREAMS_PER_PID 8
 #else
 #define MAX_STREAMS_PER_PID 16
 #endif
+
+#define USE_DVR 0
+#define USE_DEMUX 1
+#define USE_PES_FILTERS_AND_DVR 2
+#define USE_PES_FILTERS_AND_DEMUX 3
 
 #define MIN_FRQ_DVBT 174000
 #define MAX_FRQ_DVBT 858000

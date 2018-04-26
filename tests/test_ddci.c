@@ -74,6 +74,7 @@ int test_push_ts_to_ddci()
 	d.ro = d.wo = 0;
 	if (push_ts_to_ddci(&d, buf, 376) != 0)
 		LOG_AND_RETURN(1, "push 376 bytes");
+	free1(d.out);
 	return 0;
 }
 
@@ -128,7 +129,7 @@ int test_copy_ts_from_ddci()
 		LOG_AND_RETURN(1, "invalid pid not returned correctly");
 	if (PID_FROM_TS(buf) != 1200)
 		LOG_AND_RETURN(1, "invalid pid buffer pid not set correctly", PID_FROM_TS(buf));
-
+	free1(d.out);
 	return 0;
 }
 
@@ -206,7 +207,7 @@ int test_ddci_process_ts()
 		LOG_AND_RETURN(1, "adapter buffer length mismatch %d != %d", ad.rlen, ad.lbuf);
 	if (d.ro != 188 && d.wo != 188 * 2)
 		LOG_AND_RETURN(1, "indexes in DDCI devices set wrong ro %d wo %d", d.ro, d.wo);
-
+	free1(d.out);
 	return 0;
 }
 

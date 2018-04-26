@@ -377,16 +377,17 @@ void set_proc_data(int adapter, char *name, int val)
 int dvb_open_device(adapter *ad)
 {
 	char buf[100];
+	int use_demux = opts.use_demux_device == USE_DEMUX || opts.use_demux_device == USE_PES_FILTERS_AND_DEMUX;
 	LOG("trying to open [%d] adapter %d and frontend %d", ad->id, ad->pa,
 		ad->fn);
 	sprintf(buf, DEV_FRONTEND, ad->pa, ad->fn);
 	ad->fe = open(buf, O_RDWR | O_NONBLOCK);
-	if (opts.use_demux_device == 1)
+	if (use_demux)
 		sprintf(buf, DEV_DEMUX, ad->pa, ad->fn);
 	else
 		sprintf(buf, DEV_DVR, ad->pa, ad->fn);
 
-	ad->dvr = open(buf, (opts.use_demux_device == 1) ? O_RDWR | O_NONBLOCK : O_RDONLY | O_NONBLOCK);
+	ad->dvr = open(buf, use_demux ? O_RDWR | O_NONBLOCK : O_RDONLY | O_NONBLOCK);
 	if (ad->fe < 0 || ad->dvr < 0)
 	{
 		sprintf(buf, DEV_FRONTEND, ad->pa, ad->fn);
@@ -1010,6 +1011,10 @@ int dvb_set_pid(adapter *a, int i_pid)
 
 	LOG("AD %d [demux %d %d], setting filter on PID %d for fd %d", a->id, hw, ad, i_pid, fd);
 
+	SPid *p = find_pid(a->id, i_pid);
+	if (p)
+		p->sock = -1;
+
 	return fd;
 }
 
@@ -1023,8 +1028,13 @@ int dvb_del_filters(adapter *ad, int fd, int pid)
 		LOG("clearing filter on PID %d FD %d", pid, fd);
 
 	SPid *p = find_pid(ad->id, pid);
+	if (!p)
+		LOG("%s: Could not find pid %d on adapter %d", __FUNCTION__, pid, ad->id);
 	if (p && (p->sock >= 0))
+	{
 		sockets_force_close(p->sock);
+		p->sock = -1;
+	}
 	else
 		close(fd);
 	return 0;
@@ -1039,12 +1049,12 @@ int dvb_demux_set_pid(adapter *a, int i_pid)
 	if (i_pid > 8192)
 		LOG_AND_RETURN(-1, "pid %d > 8192 for adapter %d", a->id);
 
-	if (a->active_pids == 0)
+	if (a->active_demux_pids++ == 0)
 	{
 		struct dmx_pes_filter_params s_filter_params;
 
 		memset(&s_filter_params, 0, sizeof(s_filter_params));
-		s_filter_params.pid = 0;
+		s_filter_params.pid = i_pid;
 		s_filter_params.input = DMX_IN_FRONTEND;
 		s_filter_params.output = DMX_OUT_TSDEMUX_TAP;
 		s_filter_params.flags = DMX_IMMEDIATE_START;
@@ -1056,18 +1066,18 @@ int dvb_demux_set_pid(adapter *a, int i_pid)
 			LOG0("failed setting filter on fd %d, adapter %d, errno %d (%s), enabled pids %d", fd, a->id, i_pid, errno, strerror(errno), ep);
 			return -1;
 		}
-		LOG("AD %d started setting filters for fd %d", a->id, fd);
+		LOG("AD %d started setting filters for fd %d, active pids %d", a->id, fd, a->active_pids);
+		return fd;
 	}
-	if (i_pid != 0)
+
+	uint16_t p = i_pid;
+	if (ioctl(fd, DMX_ADD_PID, &p) < 0)
 	{
-		uint16_t p = i_pid;
-		if (ioctl(fd, DMX_ADD_PID, &p) < 0)
-		{
-			LOG0("failed to add pid %d to fd %d: %d, %s", p, fd, errno, strerror(errno));
-			return -1;
-		}
-		LOG("AD %d setting demux filter on PID %d for fd %d", a->id, i_pid, fd);
+		LOG0("failed to add pid %d to fd %d: errno %d, %s", p, fd, errno, strerror(errno));
+		return -1;
 	}
+	LOG("AD %d setting demux filter on PID %d for fd %d", a->id, i_pid, fd);
+
 	return fd;
 }
 
@@ -1076,21 +1086,23 @@ int dvb_demux_del_filters(adapter *ad, int fd, int pid)
 	if (fd < 0)
 		LOG_AND_RETURN(0, "DMX_STOP on an invalid handle %d, pid %d", fd, pid);
 
-	if (pid != 0)
+	if (pid > 8192)
+		LOG_AND_RETURN(-1, "pid %d > 8192 for adapter %d", ad->id);
+
+	uint16_t p = pid;
+	if (ioctl(fd, DMX_REMOVE_PID, &p) < 0)
 	{
-		uint16_t p;
-		if (ioctl(fd, DMX_REMOVE_PID, &p) < 0)
-		{
-			LOG0("failed to add pid %d to fd %d: %d, %s", p, fd, errno, strerror(errno));
-		}
+		LOG0("failed to remove pid %d to fd %d: errno %d, %s", p, fd, errno, strerror(errno));
 	}
-	if (!ad->active_pids)
+
+	if (!--ad->active_demux_pids)
 	{
 		if (ioctl(fd, DMX_STOP, NULL) < 0)
 			LOG("DMX_STOP failed on PID %d FD %d: error %d %s", pid, fd, strerror(errno));
 		LOG("stopped filters on fd %d", fd);
 	}
-	LOG("clearing demux filter on PID %d FD %d", pid, fd);
+
+	LOG("clearing demux filter on PID %d FD %d, active_pids %d", pid, fd, ad->active_pids);
 	return 0;
 }
 
@@ -1197,6 +1209,8 @@ int dvb_set_psi_filter(adapter *a, int i_pid)
 	SPid *p = find_pid(a->id, i_pid);
 	if (p)
 		p->sock = sock;
+	else
+		LOG0("%s: ould not find pid %d", __FUNCTION__, i_pid)
 	return fd;
 }
 
@@ -1215,8 +1229,24 @@ int dvb_set_psi_pes_filter(adapter *a, int i_pid)
 {
 	if (dvb_is_psi(a, i_pid))
 		return dvb_set_psi_filter(a, i_pid);
-	else
+	else if (opts.use_demux_device == USE_PES_FILTERS_AND_DVR)
 		return dvb_set_pid(a, i_pid);
+	else
+		return dvb_demux_set_pid(a, i_pid);
+}
+
+int dvb_del_psi_filters(adapter *ad, int fd, int pid)
+{
+	int rv = 0, is_psi = 0;
+	SPid *p = find_pid(ad->id, pid);
+	if (p)
+		is_psi = (p->sock >= 0);
+
+	if (is_psi || opts.use_demux_device == USE_PES_FILTERS_AND_DVR)
+		rv = dvb_del_filters(ad, fd, pid);
+	else
+		rv = dvb_demux_del_filters(ad, fd, pid);
+	return rv;
 }
 
 fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys)
@@ -1319,7 +1349,7 @@ void get_signal(adapter *ad, int *status, int *ber, int *strength, int *snr)
 
 	if (ioctl(fd, FE_READ_STATUS, status) < 0)
 	{
-		LOG("ioctl fd %d FE_READ_STATUS failed, error %d (%s)", fd, errno, strerror(errno));
+		LOG("ad %d ioctl fd %d FE_READ_STATUS failed, error %d (%s)", ad->id, fd, errno, strerror(errno));
 		*status = 0;
 		return;
 	}
@@ -1327,16 +1357,16 @@ void get_signal(adapter *ad, int *status, int *ber, int *strength, int *snr)
 	if (*status)
 	{
 		if (ioctl(fd, FE_READ_BER, ber) < 0)
-			LOG("ioctl fd %d FE_READ_BER failed, error %d (%s)", fd, errno, strerror(errno));
+			LOG("ad %d ioctl fd %d, FE_READ_BER failed, error %d (%s)", ad->id, fd, errno, strerror(errno));
 
 		if (ioctl(fd, FE_READ_SIGNAL_STRENGTH, strength) < 0)
 		{
-			LOG("ioctl fd %d FE_READ_SIGNAL_STRENGTH failed, error %d (%s)", fd, errno, strerror(errno));
+			LOG("ad %d ioctl fd %d FE_READ_SIGNAL_STRENGTH failed, error %d (%s)", ad->id, fd, errno, strerror(errno));
 		}
 
 		if (ioctl(fd, FE_READ_SNR, snr) < 0)
 		{
-			LOG("ioctl fd %d FE_READ_SNR failed, error %d (%s)", fd, errno, strerror(errno));
+			LOG("ad %d ioctl fd %d FE_READ_SNR failed, error %d (%s)", ad->id, fd, errno, strerror(errno));
 		}
 	}
 	LOGM("get_signal adapter %d: status %d, strength %d, snr %d, BER: %d", ad->id, *status, *strength, *snr, *ber);
@@ -1542,20 +1572,20 @@ void find_dvb_adapter(adapter **a)
 				ad->fn = j;
 
 				ad->open = (Open_device)dvb_open_device;
-				if (opts.use_demux_device == 0)
+				if (opts.use_demux_device == USE_DVR)
 				{
 					ad->set_pid = (Set_pid)dvb_set_pid;
 					ad->del_filters = (Del_filters)dvb_del_filters;
 				}
-				else if (opts.use_demux_device == 1)
+				else if (opts.use_demux_device == USE_DEMUX)
 				{
 					ad->set_pid = (Set_pid)dvb_demux_set_pid;
 					ad->del_filters = (Del_filters)dvb_demux_del_filters;
 				}
-				else if (opts.use_demux_device == 2)
+				else if (opts.use_demux_device >= USE_PES_FILTERS_AND_DVR)
 				{
 					ad->set_pid = (Set_pid)dvb_set_psi_pes_filter;
-					ad->del_filters = (Del_filters)dvb_del_filters;
+					ad->del_filters = (Del_filters)dvb_del_psi_filters;
 				}
 
 				ad->commit = (Adapter_commit)dvb_commit;

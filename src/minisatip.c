@@ -450,6 +450,7 @@ Help\n\
 	* 0 - use dvrX device \n\
 	* 1 - use demuxX device \n\
 	* 2 - use dvrX device and additionally capture PSI data from demuxX device \n\
+	* 3 - use demuxX device and additionally capture PSI data from demuxX device \n\
 \n "
 #ifdef AXE
 		"\
@@ -685,7 +686,7 @@ void set_options(int argc, char *argv[])
 
 		case APPBUFFER_OPT:
 		{
-			int val = atoi(optarg) / 1.5;
+			int val = atoi(optarg);
 			opts.max_sbuf = val;
 			break;
 		}
@@ -710,8 +711,8 @@ void set_options(int argc, char *argv[])
 			if (opts.tcp_max_pack < 7)
 				opts.tcp_max_pack = 7;
 			else if (opts.tcp_max_pack > 697)
-                                opts.tcp_max_pack = 697;
-                        break;
+				opts.tcp_max_pack = 697;
+			break;
 		}
 
 		case DVBS2_ADAPTERS_OPT:
@@ -937,11 +938,12 @@ void set_options(int argc, char *argv[])
 		case DEMUXDEV_OPT:
 		{
 			int o = atoi(optarg);
-			if(o >= 0 && o < 3)
+			if (o >= 0 && o < 4)
 				opts.use_demux_device = o;
-				else LOG("Demux device can be 0, 1 or 2 and not %d", o);
+			else
+				LOG("Demux device can be 0-3 and not %d", o);
 		}
-			break;
+		break;
 #ifdef AXE
 		case LINK_OPT:
 			set_link_adapters(optarg);
@@ -1187,6 +1189,7 @@ int read_rtsp(sockets *s)
 		if (get_sid(s->sid))
 			sprintf(buf, "Session: %010d", get_session_id(s->sid));
 		close_stream(s->sid);
+		s->flush_enqued_data = 1;
 		http_response(s, 200, buf, NULL, cseq, 0);
 	}
 	else
@@ -1829,7 +1832,7 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 		iov[1].iov_base = desc;
 		iov[1].iov_len = lr;
 	}
-	sockets_writev(s->id, iov, binary ? 2 : 1);
+	sockets_writev_prio(s->id, iov, binary ? 2 : 1, 1);
 }
 
 #ifdef AXE

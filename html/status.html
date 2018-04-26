@@ -259,7 +259,9 @@
 							st_p = "<i>" + st_p + "</i>";
 						myTable += "<small>Pids: " + st_p + "</small><br />";
 						if (state['st_overflow'][j] > 0)
-							myTable += "<small>Dropped packets: " + state['st_overflow'][j] + "</small><br />";
+							myTable += "<small>Dropped: " + (state['st_overflow'][j]/1048576.0).toFixed(2) + " MB</small><br />";
+						if (state['st_buffered'][j] > 0)
+							myTable += "<small>Buffered: " + (state['st_buffered'][j]/1048576.0).toFixed(2) + " MB</small><br />";
 					}
 				}
 				myTable += "</td>";

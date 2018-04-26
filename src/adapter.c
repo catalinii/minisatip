@@ -52,6 +52,8 @@
 #include "ddci.h"
 #endif
 
+#include "t2mi.h"
+
 #define DEFAULT_LOG LOG_ADAPTER
 
 adapter *a[MAX_ADAPTERS];
@@ -571,10 +573,10 @@ void dump_pids(int aid)
 			if (dp)
 				LOG("Dumping pids table for adapter %d, pid errors %d", aid, p->pid_err);
 			dp = 0;
-			LOG("pid %d, fd %d, packets %d, d/c errs %d/%d, flags %d, pmt %d, filter %d, sids: %d %d %d %d %d %d %d %d",
+			LOG("pid %d, fd %d, packets %d, d/c errs %d/%d, flags %d, pmt %d, filter %d, sock %d, sids: %d %d %d %d %d %d %d %d",
 				p->pids[i].pid, p->pids[i].fd,
 				p->pids[i].packets, p->pids[i].dec_err, p->pids[i].cc_err,
-				p->pids[i].flags, p->pids[i].pmt, p->pids[i].filter, p->pids[i].sid[0],
+				p->pids[i].flags, p->pids[i].pmt, p->pids[i].filter, p->pids[i].sock, p->pids[i].sid[0],
 				p->pids[i].sid[1], p->pids[i].sid[2], p->pids[i].sid[3],
 				p->pids[i].sid[4], p->pids[i].sid[5], p->pids[i].sid[6],
 				p->pids[i].sid[7]);
@@ -586,7 +588,7 @@ int compare_slave_parameters(adapter *ad, transponder *tp)
 {
 	adapter *master = NULL;
 
-	if(!ad)
+	if (!ad)
 		return 0;
 	// is not a slave and does not have a slave adapter
 	if ((ad->master_source < 0) && !ad->used)
@@ -636,7 +638,7 @@ int compare_slave_parameters(adapter *ad, transponder *tp)
 		if (master->old_pol == pol && master->old_hiband == hiband && master->old_diseqc == diseqc)
 			return 1; // master parameters matches with the required parameters
 	}
-	LOGM("%s: adapter %d used %d master %d used %d (pol %d, band %d, diseqc %d) not compatible with freq %d, pol %d band %d diseqc %d", __FUNCTION__, ad->id, ad->used, master?master->id:ad->master_source, master?master->used:-1, ad->old_pol, ad->old_hiband, ad->old_diseqc, freq, pol, hiband, diseqc);
+	LOGM("%s: adapter %d used %d master %d used %d (pol %d, band %d, diseqc %d) not compatible with freq %d, pol %d band %d diseqc %d", __FUNCTION__, ad->id, ad->used, master ? master->id : ad->master_source, master ? master->used : -1, ad->old_pol, ad->old_hiband, ad->old_diseqc, freq, pol, hiband, diseqc);
 	return 1;
 }
 
@@ -784,9 +786,9 @@ void close_adapter_for_stream(int sid, int aid)
 		if ((ad->master_source >= 0) && (ad->master_source < MAX_ADAPTERS))
 		{
 			adapter *ad2 = a[ad->master_source];
-			if(ad2)
+			if (ad2)
 				ad2->used &= ~(1 << ad->id);
-			LOGM("adapter %d freed from slave adapter %d, used %d", ad2?ad2->id:-1, ad->id, ad2?ad2->used:-1);
+			LOGM("adapter %d freed from slave adapter %d, used %d", ad2 ? ad2->id : -1, ad->id, ad2 ? ad2->used : -1);
 		}
 	}
 	else
@@ -877,6 +879,30 @@ int update_pids(int aid)
 	return 0;
 }
 
+void post_tune(adapter *ad)
+{
+	int aid = ad->id;
+#ifndef DISABLE_PMT
+	SPid *p = find_pid(aid, 0);
+	SPid *p_all = find_pid(aid, 8192);
+	if ((!p || p->flags == 3) && (!p_all || p_all->flags == 3)) // add pid 0 if not explicitly added
+	{
+		LOG(
+			"Adding pid 0 to the list of pids as not explicitly added for adapter %d",
+			aid);
+		mark_pid_add(-1, aid, 0);
+	}
+	pmt_tune(ad);
+#endif
+#ifndef DISABLE_T2MI
+	SPid *p_t2mi = find_pid(aid, T2MI_PID);
+	if (!p)
+	{
+		mark_pid_add(-1, aid, T2MI_PID);
+	}
+#endif
+}
+
 int tune(int aid, int sid)
 {
 	adapter *ad = get_adapter(aid);
@@ -897,6 +923,7 @@ int tune(int aid, int sid)
 		ad->status_cnt = 0;
 		ad->wait_new_stream = 1;
 		flush_data = 1;
+		ad->is_t2mi = 0;
 		if (ad->restart_when_tune)
 			ad->restart_needed = 1;
 		set_socket_pos(ad->sock, 0); // flush the existing buffer
@@ -911,18 +938,7 @@ int tune(int aid, int sid)
 				return -503;
 			}
 		}
-#ifndef DISABLE_PMT
-		SPid *p = find_pid(aid, 0);
-		SPid *p_all = find_pid(aid, 8192);
-		if ((!p || p->flags == 3) && (!p_all || p_all->flags == 3)) // add pid 0 if not explicitly added
-		{
-			LOG(
-				"Adding pid 0 to the list of pids as not explicitly added for adapter %d",
-				aid);
-			mark_pid_add(-1, aid, 0);
-		}
-		pmt_tune(ad);
-#endif
+		post_tune(ad);
 	}
 	else
 		LOG("not tuning for SID %d (do_tune=%d, master_sid=%d)", sid,
@@ -1768,9 +1784,9 @@ void set_slave_adapters(char *o)
 			if (master >= 0 && master < MAX_ADAPTERS)
 			{
 				if (!a[master] && !is_adapter_disabled(master))
-						a[master] = adapter_alloc();
+					a[master] = adapter_alloc();
 
-				if(a[master] && a[master]->master_source == -1)
+				if (a[master] && a[master]->master_source == -1)
 				{
 					a[master]->master_source = -2; // force this adapter as master
 					ad->master_source = master;

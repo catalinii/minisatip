@@ -45,6 +45,8 @@ typedef struct struct_sockets
 	SMutex *lock;
 	int sock_err;
 	SNPacket *pack;
+	SNPacket prio_pack; // http_responses have higher priority
+	int flush_enqued_data;
 	int spos, wmax, wpos;
 	int overflow, buf_alloc, buf_used;
 	// if != -1 points to the master socket which holds the buffer and the action function.
@@ -86,6 +88,7 @@ void set_socket_buffer(int sid, unsigned char *buf, int len);
 void sockets_timeout(int i, int t);
 void set_sockets_rtime(int s, int r);
 void free_all();
+void free_pack(SNPacket *p);
 void sockets_setread(int i, void *r);
 void set_socket_send_buffer(int sock, int len);
 void set_socket_receive_buffer(int sock, int len);
@@ -99,7 +102,8 @@ int tcp_listen(char *addr, int port);
 int connect_local_socket(char *file, int blocking);
 int set_linux_socket_nonblock(int sockfd);
 int set_linux_socket_timeout(int sockfd);
-int sockets_writev(int sock_id, struct iovec *iov, int iovcnt);
+int socket_enque_highprio(sockets *s, struct iovec *iov, int iovcnt);
+int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt, int high_prio);
 int sockets_write(int sock_id, void *buf, int len);
 int flush_socket(sockets *s);
 void get_socket_iteration(int s_id, int it);
@@ -117,5 +121,6 @@ static inline sockets *get_sockets(int i)
 		return NULL;
 	return s[i];
 }
+#define sockets_writev(sock_id, iov, iovcnt) sockets_writev_prio(sock_id, iov, iovcnt, 0)
 
 #endif

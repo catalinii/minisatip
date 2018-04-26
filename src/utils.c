@@ -612,6 +612,15 @@ mymalloc(int a, char *f, int l)
 	return x;
 }
 
+void *myrealloc(void *p, int a, char *f, int l)
+{
+        void *x = realloc(p, a);
+        if (!p)
+                memset(x, 0, a);
+        LOGM("%s:%d allocation_wrapper realloc allocated %d bytes from %p -> %p", f, l, a, p, x);
+        return x;
+}
+
 void myfree(void *x, char *f, int l)
 {
 	LOGM("%s:%d allocation_wrapper free called with argument %p", f, l, x);
@@ -961,7 +970,7 @@ int get_json_state(char *buf, int len)
 				strlcatf(buf, len, ptr, "[");
 				for (off = 0; off < p->len; off++)
 				{
-					escape[strlen(escape) - 1] = 0;
+					memset(escape, 0, sizeof(escape));
 					funs(off, escape, sizeof(escape) - 1);
 					if (off > 0)
 						strlcatf(buf, len, ptr, ",");
@@ -1798,7 +1807,7 @@ int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, char *cc,
 	while ((srclen > 0) && (len < dstsize))
 	{
 		if (dstsize - len < 188)
-			LOG_AND_RETURN(1, "Not enough space copy pid %d from %p to %p", pid, src, dest)
+			LOG_AND_RETURN(1, "Not enough space to copy pid %d, len %d from %d, srclen %d", pid, len, dstsize,srclen)
 		b = dest + len;
 		*cc = ((*cc) + 1) % 16;
 		b[0] = 0x47;

@@ -4,6 +4,7 @@
 #include "pthread.h"
 
 #include <sys/types.h>
+#include <sys/uio.h>
 
 #define VAR_UINT8 1
 #define VAR_INT8 2
@@ -106,6 +107,7 @@ int map_int(char *s, char **v);
 int map_intd(char *s, char **v, int dv);
 int map_float(char *s, int mul);
 void *mymalloc(int a, char *f, int l);
+void *myrealloc(void *p, int a, char *f, int l);
 void myfree(void *x, char *f, int l);
 char *header_parameter(char **arg, int i);
 char *get_current_timestamp();
@@ -206,6 +208,7 @@ static inline int get_index_hash(void *p, int max, int struct_size, uint32_t key
 	}
 #define malloc1(a) mymalloc(a, __FILE__, __LINE__)
 #define free1(a) myfree(a, __FILE__, __LINE__)
+#define realloc1(a, b) myrealloc(a, b, __FILE__, __LINE__)
 
 #define strlcatf(buf, size, ptr, fmt...)                  \
 	do                                                    \
@@ -265,7 +268,7 @@ typedef ssize_t (*mywritev)(int fd, const struct iovec *io, int len);
 #ifdef UTILS_C
 char *loglevels[] =
 	{"general", "http", "socketworks", "stream", "adapter", "satipc", "pmt", "tables", "dvbapi", "lock", "netceiver", "ca", "axe", "socket", "utils", "dmx", "ssdp", "dvb", NULL};
-mywritev _writev;
+mywritev _writev = writev;
 #else
 extern char *loglevels[];
 extern mywritev _writev;
