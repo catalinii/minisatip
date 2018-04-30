@@ -42,6 +42,7 @@
 #include "minisatip.h"
 #include "socketworks.h"
 #include "utils.h"
+#include "t2mi.h"
 
 #define DEFAULT_LOG LOG_SOCKETWORKS
 

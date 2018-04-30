@@ -896,7 +896,7 @@ void post_tune(adapter *ad)
 #endif
 #ifndef DISABLE_T2MI
 	SPid *p_t2mi = find_pid(aid, T2MI_PID);
-	if (!p)
+	if (!p_t2mi)
 	{
 		mark_pid_add(-1, aid, T2MI_PID);
 	}

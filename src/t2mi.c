@@ -90,7 +90,7 @@ void detect_t2mi(adapter *ad)
 }
 
 // unpack t2mi stream
-void t2mi_process_t2mi(adapter *ad, uint8_t *b)
+void t2mi_process_t2mi(t2mi_device_t *t, adapter *ad, uint8_t *b)
 {
 }
 
@@ -112,7 +112,7 @@ int t2mi_process_ts(adapter *ad)
 		b = ad->buf + i;
 		pid = PID_FROM_TS(b);
 		if (pid == T2MI_PID)
-			t2mi_process_t2mi(ad, b);
+			t2mi_process_t2mi(t, ad, b);
 	}
 	return 0;
 }
