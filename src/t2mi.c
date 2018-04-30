@@ -120,7 +120,7 @@ int t2mi_process_ts(adapter *ad)
 void free_t2mi()
 {
 	int i;
-	for(i=0;i<MAX_ADAPTERS)
+	for(i=0;i<MAX_ADAPTERS;i++)
 	if(t2[i])
 	{
 		free1(t2[i]);

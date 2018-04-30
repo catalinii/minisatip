@@ -16,6 +16,7 @@ LINUXDVB=@LINUXDVB@
 AXE=@AXE@
 ENIGMA=@ENIGMA@
 DDCI=0
+DDCI_TEST=0
 T2MI=0
 
 CFLAGS?=-Wall -Wno-switch -ggdb -fPIC $(EXTRA_CFLAGS) @CFLAGS@
@@ -106,7 +107,6 @@ endif
 
 ifeq ($(DDCI),1)
 SOURCES+=ddci.c
-CFLAGS+=-DDDCI_TEST
 else
 CFLAGS+=-DDISABLE_DDCI
 endif
@@ -121,9 +121,10 @@ SOURCES-$(AXE) += axe.c
 CFLAGS-$(AXE) += -DAXE
 
 CFLAGS-$(ENIGMA) += -DENIGMA
-
+CFLAGS-$(DDCI_TEST) +=-DDDCI_TEST
 CFLAGS-$(EMBEDDED) += -DNO_BACKTRACE
-CFLAGS-$(DEBUG) += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=null -static-libasan -static-libubsan
+CFLAGS-$(DEBUG) += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=null -static-libasan -static-libubsan -static-liblsan
+
 
 ifeq ($(STATIC),1)
 LDFLAGS+=$(addsuffix .a,$(addprefix -l:lib,$(LIBS)))

@@ -62,6 +62,7 @@
 #define MAX_DATA 1500 // 16384
 int MAX_SINFO;
 char pn[256];
+int alloc_bytes = 0;
 
 typedef struct tmpinfo
 {
@@ -445,7 +446,10 @@ void set_signal_handler(char *argv0)
 		LOG("Could not set signal SIGINT");
 	}
 
-	//    if (sigaction(SIGTERM, &sig_action, NULL) != 0) { err(1, "sigaction"); }
+    if (sigaction(SIGTERM, &sig_action, NULL) != 0) 
+	{
+		 LOG("Could not set signal SIGTERM");
+	}
 	if (signal(SIGHUP, SIG_IGN) != 0)
 	{
 		LOG("Could not ignore signal SIGHUP");
@@ -493,7 +497,7 @@ void posix_signal_handler(int sig, siginfo_t *siginfo, ucontext_t *ctx)
 {
 	uint64_t sp = 0, ip = 0;
 
-	if (sig == SIGINT)
+	if (sig == SIGINT || sig == SIGTERM)
 	{
 		run_loop = 0;
 		return;
@@ -608,7 +612,8 @@ mymalloc(int a, char *f, int l)
 	void *x = malloc(a);
 	if (x)
 		memset(x, 0, a);
-	LOGM("%s:%d allocation_wrapper malloc allocated %d bytes at %p", f, l, a, x);
+	alloc_bytes += a;
+	LOGM("%s:%d allocation_wrapper malloc allocated %d bytes at %p, total %d", f, l, a, x, alloc_bytes);
 	return x;
 }
 

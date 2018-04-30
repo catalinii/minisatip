@@ -680,7 +680,7 @@ int dvbca_init_dev(adapter *ad)
 #endif
 	fd = open(ca_dev_path, O_RDWR);
 	if (fd < 0)
-		LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "No CA device detected on adapter %d", ad->id);
+		LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "No CA device detected on adapter %d: file %s", ad->id, ca_dev_path);
 	if (!c)
 	{
 		c = ca_devices[ad->id] = malloc1(sizeof(ca_device_t));

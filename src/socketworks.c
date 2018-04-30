@@ -1075,7 +1075,6 @@ void set_socket_buffer(int sid, unsigned char *buf, int len)
 void free_all_streams();
 void free_all_adapters();
 void free_all_keys();
-void free_t2mi();
 
 void free_pack(SNPacket *p)
 {
