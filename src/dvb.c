@@ -374,6 +374,30 @@ void set_proc_data(int adapter, char *name, int val)
 	}
 }
 
+void dvb_set_demux_source(adapter *ad)
+{
+#ifdef DMX_SET_SOURCE
+	if (ad->dmx_source >= 0)
+	{
+		char buf[255];
+		sprintf(buf, DEV_DEMUX, ad->pa, ad->fn);
+		int dmx = open(buf, O_RDWR | O_NONBLOCK);
+		if (dmx <= 0)
+			LOG("DMX_SET_SOURCE: Failed opening %s", buf)
+		else if (ioctl(dmx, DMX_SET_SOURCE, &ad->dmx_source))
+		{
+			LOG("DMX_SET_SOURCE failed for adapter %d - %d: %s", ad->id, errno,
+				strerror(errno));
+		}
+		else
+			LOG("Set DMX_SET_SOURCE for adapter %d to %d", ad->id,
+				ad->dmx_source);
+		if (dmx >= 0)
+			close(dmx);
+	}
+#endif
+}
+
 int dvb_open_device(adapter *ad)
 {
 	char buf[100];
@@ -407,27 +431,6 @@ int dvb_open_device(adapter *ad)
 		LOG("couldn't set DVR buffer size error %d: %s", errno, strerror(errno))
 	else
 		LOG("DVR buffer set to %d bytes", opts.dvr_buffer);
-
-#ifdef DMX_SET_SOURCE
-	if (ad->dmx_source >= 0)
-	{
-		sprintf(buf, DEV_DEMUX, ad->pa, ad->fn);
-		ad->dmx = open(buf, O_RDWR | O_NONBLOCK);
-		if (ad->dmx <= 0)
-			LOG("DMX_SET_SOURCE: Failed opening %s", buf)
-		else if (ioctl(ad->dmx, DMX_SET_SOURCE, &ad->dmx_source))
-		{
-			LOG("DMX_SET_SOURCE failed for adapter %d - %d: %s", ad->id, errno,
-				strerror(errno));
-		}
-		else
-			LOG("Set DMX_SET_SOURCE for adapter %d to %d", ad->id,
-				ad->dmx_source);
-		if (ad->dmx >= 0)
-			close(ad->dmx);
-		ad->dmx = -1;
-	}
-#endif
 
 	if (ad->is_fbc)
 	{
@@ -798,6 +801,8 @@ int dvb_tune(int aid, transponder *tp)
 		//        return -1;
 	}
 
+	dvb_set_demux_source(ad);
+
 	switch (tp->sys)
 	{
 	case SYS_DVBS:
@@ -1153,7 +1158,7 @@ int dvb_psi_read(int socket, void *buf, int len, sockets *ss, int *rb)
 	//		copy32(section, r, crc);
 	//		r += 4;
 	//	}
-
+	DEBUGM("%s: len %d, read %d", __FUNCTION__, len, r);
 	*rb = buffer_to_ts(buf, len, section, r, &p->cc1, pid);
 
 	return 1;

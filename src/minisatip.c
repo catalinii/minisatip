@@ -532,7 +532,7 @@ void set_options(int argc, char *argv[])
 	// set 1 to read TS packets from /dev/dvb/adapterX/demuxY instead of /dev/dvb/adapterX/dvrY
 	// set to 2 to set PSI and PES filters using different ioctl
 	opts.use_demux_device = 0;
-#if defined(__arm__) && defined(ENIGMA)
+#if defined(ENIGMA)
 	opts.use_demux_device = 2;
 #endif
 	opts.max_pids = 0;

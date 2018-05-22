@@ -1810,7 +1810,7 @@ int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, char *cc,
 	while ((srclen > 0) && (len < dstsize))
 	{
 		if (dstsize - len < 188)
-			LOG_AND_RETURN(1, "Not enough space to copy pid %d, len %d from %d, srclen %d", pid, len, dstsize,srclen)
+			LOG_AND_RETURN(-1, "Not enough space to copy pid %d, len %d from %d, srclen %d", pid, len, dstsize,srclen)
 		b = dest + len;
 		*cc = ((*cc) + 1) % 16;
 		b[0] = 0x47;
