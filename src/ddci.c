@@ -272,6 +272,8 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 	int i, ddid = 0;
 	int add_pmt = 0;
 	int rv = TABLES_RESULT_ERROR_NORETRY;
+
+	LOGM("%s: start adapter %d and pmt %d", __FUNCTION__, ad->id, pmt->id);
 	ddid = find_ddci_for_pmt(pmt);
 #ifdef DDCI_TEST
 	ddid = first_ddci;
@@ -807,6 +809,7 @@ int ddci_open_device(adapter *ad)
 	ad->type = ADAPTER_DVB;
 	ad->dmx = -1;
 	ad->sys[0] = 0;
+	ad->adapter_timeout = 0;
 	memset(d->pid_mapping, -1, sizeof(d->pid_mapping));
 	memset(d->pmt, -1, sizeof(d->pmt));
 	d->ncapid = 0;
