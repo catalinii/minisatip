@@ -16,7 +16,6 @@ LINUXDVB=@LINUXDVB@
 AXE=@AXE@
 ENIGMA=@ENIGMA@
 DDCI=0
-DDCI_TEST=0
 T2MI=0
 
 CFLAGS?=-Wall -Wno-switch -ggdb -fPIC $(EXTRA_CFLAGS) @CFLAGS@
@@ -121,7 +120,6 @@ SOURCES-$(AXE) += axe.c
 CFLAGS-$(AXE) += -DAXE
 
 CFLAGS-$(ENIGMA) += -DENIGMA
-CFLAGS-$(DDCI_TEST) +=-DDDCI_TEST
 CFLAGS-$(EMBEDDED) += -DNO_BACKTRACE
 CFLAGS-$(DEBUG) += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=null -static-libasan -static-libubsan -static-liblsan
 
