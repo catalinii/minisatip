@@ -150,8 +150,6 @@ int udp_bind(char *addr, int port)
 
 	if (bind(sock, (struct sockaddr *)&serv, sizeof(serv)) < 0)
 	{
-		LOG("udp_bind: failed: bind() on host %s port %d: error %s", addr,
-			port, strerror(errno));
 		if (is_multicast)
 		{
 			serv.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -161,13 +159,17 @@ int udp_bind(char *addr, int port)
 				close(sock);
 				return -1;
 			}
+		} else {
+			LOG("udp_bind: failed: bind() on host %s port %d: error %s", addr,
+				port, strerror(errno));
+			return -1;
 		}
 	}
 
 	set_linux_socket_timeout(sock);
 
-	LOG("New UDP socket %d bound to %s:%d", sock, inet_ntoa(serv.sin_addr),
-		ntohs(serv.sin_port));
+	LOG("New UDP socket %d bound to %s:%d %s%s%s", sock, inet_ntoa(serv.sin_addr),
+		ntohs(serv.sin_port), is_multicast ? "(mcast:" : "", is_multicast ? addr : "", is_multicast ? ")" : "");
 	return sock;
 }
 
