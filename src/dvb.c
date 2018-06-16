@@ -1348,11 +1348,10 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys)
 
 void get_signal(adapter *ad, int *status, int *ber, int *strength, int *snr)
 {
-	int fd = ad->fe;
 	*status = 0;
 	*ber = *snr = *strength = 0;
 
-	if (ioctl(fd, FE_READ_STATUS, status) < 0)
+	if (ad->fe > 0 && ioctl(ad->fe, FE_READ_STATUS, status) < 0)
 	{
 		LOG("ad %d ioctl fd %d FE_READ_STATUS failed, error %d (%s)", ad->id, fd, errno, strerror(errno));
 		*status = 0;
@@ -1361,15 +1360,15 @@ void get_signal(adapter *ad, int *status, int *ber, int *strength, int *snr)
 	//	*status = (*status & FE_HAS_LOCK) ? 1 : 0;
 	if (*status)
 	{
-		if (ioctl(fd, FE_READ_BER, ber) < 0)
+		if (ad->fe > 0 && ioctl(ad->fe, FE_READ_BER, ber) < 0)
 			LOG("ad %d ioctl fd %d, FE_READ_BER failed, error %d (%s)", ad->id, fd, errno, strerror(errno));
 
-		if (ioctl(fd, FE_READ_SIGNAL_STRENGTH, strength) < 0)
+		if (ad->fe > 0 && ioctl(ad->fe, FE_READ_SIGNAL_STRENGTH, strength) < 0)
 		{
 			LOG("ad %d ioctl fd %d FE_READ_SIGNAL_STRENGTH failed, error %d (%s)", ad->id, fd, errno, strerror(errno));
 		}
 
-		if (ioctl(fd, FE_READ_SNR, snr) < 0)
+		if (ad->fe > 0 && ioctl(ad->fe, FE_READ_SNR, snr) < 0)
 		{
 			LOG("ad %d ioctl fd %d FE_READ_SNR failed, error %d (%s)", ad->id, fd, errno, strerror(errno));
 		}
@@ -1382,7 +1381,6 @@ void get_signal(adapter *ad, int *status, int *ber, int *strength, int *snr)
 int get_signal_new(adapter *ad, int *status, int *ber, int *strength, int *snr)
 {
 #if DVBAPIVERSION >= 0x050A
-	int fd = ad->fe;
 	*status = *snr = *ber = *strength = 0;
 	int64_t strengthd = 0, snrd = 0, init_strength = 0, init_snr = 0;
 	char *strength_s = "(none)", *snr_s = "(none)";
@@ -1396,7 +1394,7 @@ int get_signal_new(adapter *ad, int *status, int *ber, int *strength, int *snr)
 	static struct dtv_properties enum_cmdseq =
 		{.num = sizeof(enum_cmdargs) / sizeof(struct dtv_property), .props = enum_cmdargs};
 
-	if (ioctl(fd, FE_GET_PROPERTY, &enum_cmdseq) < 0)
+	if (ad->fe > 0 && ioctl(ad->fe, FE_GET_PROPERTY, &enum_cmdseq) < 0)
 	{
 		LOG("get_signal_new: unable to query frontend %d: %s", fd,
 			strerror(errno));
@@ -1432,7 +1430,7 @@ int get_signal_new(adapter *ad, int *status, int *ber, int *strength, int *snr)
 	//		err |= 2;
 
 	*ber = enum_cmdargs[2].u.st.stat[0].uvalue & 0x7FFF;
-	if (ioctl(fd, FE_READ_STATUS, status) < 0)
+	if (ad->fe > 0 && ioctl(ad->fe, FE_READ_STATUS, status) < 0)
 	{
 		LOG("ioctl fd %d FE_READ_STATUS failed, error %d (%s)", fd, errno, strerror(errno));
 		*status = 0;

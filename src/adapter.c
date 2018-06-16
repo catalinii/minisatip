@@ -2009,7 +2009,7 @@ int signal_thread(sockets *s)
 	int64_t ts, ctime;
 	adapter *ad;
 	for (i = 0; i < MAX_ADAPTERS; i++)
-		if ((ad = get_adapter_nw(i)) && ad->get_signal && ad->tp.freq && (ad->status_cnt++ > 0) // make sure the kernel has updated the status
+		if ((ad = get_adapter_nw(i)) && ad->get_signal && (ad->fe > 0) && ad->tp.freq && (ad->status_cnt++ > 0) // make sure the kernel has updated the status
 			&& (!opts.no_threads || (ad->status < 0)))
 
 		{
