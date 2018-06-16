@@ -1353,7 +1353,7 @@ void get_signal(adapter *ad, int *status, int *ber, int *strength, int *snr)
 
 	if (ad->fe > 0 && ioctl(ad->fe, FE_READ_STATUS, status) < 0)
 	{
-		LOG("ad %d ioctl fd %d FE_READ_STATUS failed, error %d (%s)", ad->id, fd, errno, strerror(errno));
+		LOG("ad %d ioctl fd %d FE_READ_STATUS failed, error %d (%s)", ad->id, ad->fe, errno, strerror(errno));
 		*status = 0;
 		return;
 	}
@@ -1361,16 +1361,16 @@ void get_signal(adapter *ad, int *status, int *ber, int *strength, int *snr)
 	if (*status)
 	{
 		if (ad->fe > 0 && ioctl(ad->fe, FE_READ_BER, ber) < 0)
-			LOG("ad %d ioctl fd %d, FE_READ_BER failed, error %d (%s)", ad->id, fd, errno, strerror(errno));
+			LOG("ad %d ioctl fd %d, FE_READ_BER failed, error %d (%s)", ad->id, ad->fe, errno, strerror(errno));
 
 		if (ad->fe > 0 && ioctl(ad->fe, FE_READ_SIGNAL_STRENGTH, strength) < 0)
 		{
-			LOG("ad %d ioctl fd %d FE_READ_SIGNAL_STRENGTH failed, error %d (%s)", ad->id, fd, errno, strerror(errno));
+			LOG("ad %d ioctl fd %d FE_READ_SIGNAL_STRENGTH failed, error %d (%s)", ad->id, ad->fe, errno, strerror(errno));
 		}
 
 		if (ad->fe > 0 && ioctl(ad->fe, FE_READ_SNR, snr) < 0)
 		{
-			LOG("ad %d ioctl fd %d FE_READ_SNR failed, error %d (%s)", ad->id, fd, errno, strerror(errno));
+			LOG("ad %d ioctl fd %d FE_READ_SNR failed, error %d (%s)", ad->id, ad->fe, errno, strerror(errno));
 		}
 	}
 	LOGM("get_signal adapter %d: status %d, strength %d, snr %d, BER: %d", ad->id, *status, *strength, *snr, *ber);
@@ -1396,7 +1396,7 @@ int get_signal_new(adapter *ad, int *status, int *ber, int *strength, int *snr)
 
 	if (ad->fe > 0 && ioctl(ad->fe, FE_GET_PROPERTY, &enum_cmdseq) < 0)
 	{
-		LOG("get_signal_new: unable to query frontend %d: %s", fd,
+		LOG("get_signal_new: unable to query frontend %d: %s", ad->fe,
 			strerror(errno));
 		err = 100;
 	}
@@ -1432,7 +1432,7 @@ int get_signal_new(adapter *ad, int *status, int *ber, int *strength, int *snr)
 	*ber = enum_cmdargs[2].u.st.stat[0].uvalue & 0x7FFF;
 	if (ad->fe > 0 && ioctl(ad->fe, FE_READ_STATUS, status) < 0)
 	{
-		LOG("ioctl fd %d FE_READ_STATUS failed, error %d (%s)", fd, errno, strerror(errno));
+		LOG("ioctl fd %d FE_READ_STATUS failed, error %d (%s)", ad->fe, errno, strerror(errno));
 		*status = 0;
 	}
 
