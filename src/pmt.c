@@ -803,6 +803,7 @@ int pmt_decrypt_stream(adapter *ad)
 			}
 			//			DEBUGM("clear encrypted flags for pid %d", pid);
 			b[3] &= 0x3F; // clear the encrypted flags
+			if (pmt->cw) ad->dec_init = 1; // Decoding initialized!
 		}
 	}
 
@@ -838,7 +839,7 @@ int pmt_process_stream(adapter *ad)
 	tables_ca_ts(ad);
 	pmt_decrypt_stream(ad);
 
-	if (ad->ca_mask && opts.drop_encrypted)
+	if (ad->ca_mask && (opts.drop_encrypted || (ad->dec_init == 0)))
 	{
 		for (i = 0; i < ad->rlen; i += DVB_FRAME)
 		{
