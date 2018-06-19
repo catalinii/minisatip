@@ -85,7 +85,7 @@ int add_pid_ddci(int ddci_adapter, int pid, int ddci_pid, int idx)
 	if (ddci_pid >= 0 && d->pid_mapping[ddci_pid] == idx)
 		return ddci_pid;
 
-	for (ddci_pid = pid + 20 /*pid*/; (ddci_pid & 0xFFFF) < 8191; ddci_pid++)
+	for (ddci_pid = pid; (ddci_pid & 0xFFFF) < 8191; ddci_pid++)
 	{
 		if (d->pid_mapping[ddci_pid] == -1)
 		{
@@ -280,7 +280,10 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 #endif
 	ddci_device_t *d = get_ddci(ddid);
 	if (!d)
+	{
+		LOGM("Could not find ddci device for adapter %d", ad->id);
 		return TABLES_RESULT_ERROR_NORETRY;
+	}
 	mutex_lock(&d->mutex);
 
 	LOGM("found device %d for pmt %d", ddid, pmt->id);
@@ -540,7 +543,7 @@ int push_ts_to_adapter(adapter *ad, unsigned char *b, int new_pid, int *ad_pos)
 
 // the packet is not needed -> 0, adapter buffer is full, stop processing -> 1
 
-int copy_ts_from_ddci(adapter *ad, ddci_device_t *d, unsigned char *b, int *ad_pos)
+int copy_ts_from_ddci_buffer(adapter *ad, ddci_device_t *d, unsigned char *b, int *ad_pos)
 {
 	int pid = PID_FROM_TS(b);
 	if (pid == 0x1FFF)
@@ -644,7 +647,7 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d)
 	for (i = d->ro; i != d->wo; i = (i + 188) % DDCI_BUFFER)
 	{
 		dump_packets("ddci_process_ts ->", d->out + i, 188, i);
-		int rv = copy_ts_from_ddci(ad, d, d->out + i, &ad_pos);
+		int rv = copy_ts_from_ddci_buffer(ad, d, d->out + i, &ad_pos);
 		if (!rv && (d->ro == i))
 			d->ro = (i + 188) % DDCI_BUFFER;
 		if (rv == 1)
@@ -689,7 +692,7 @@ int ddci_del_filters(adapter *ad, int fd, int pid)
 	return 0;
 }
 
-int push_ts_to_ddci(ddci_device_t *d, unsigned char *b, int rlen)
+int push_ts_to_ddci_buffer(ddci_device_t *d, unsigned char *b, int rlen)
 {
 	int left, i, init_rlen = rlen;
 	unsigned char *init_b = b;
@@ -728,7 +731,6 @@ int push_ts_to_ddci(ddci_device_t *d, unsigned char *b, int rlen)
 int ddci_read_sec_data(sockets *s)
 {
 	read_dmx(s);
-
 	if (s->rlen != 0)
 	{
 		LOGM("process_dmx not called as s->rlen %d", s->rlen);
@@ -740,7 +742,7 @@ int ddci_read_sec_data(sockets *s)
 	unsigned char *b = ad->buf;
 	int left = 0, rlen = ad->rlen;
 
-	if ((left = push_ts_to_ddci(d, b, rlen)) > 0)
+	if ((left = push_ts_to_ddci_buffer(d, b, rlen)) > 0)
 		LOG("dropping %d bytes for ddci_adapter %d", left, d->id);
 	return 0;
 }
