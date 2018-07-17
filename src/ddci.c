@@ -258,7 +258,7 @@ int find_ddci_for_pmt(SPMT *pmt)
 			for (j = 0; j < ca[dvbca_id].ad_info[i].caids; j++)
 				if (match_caid(pmt, ca[dvbca_id].ad_info[i].caid[j], ca[dvbca_id].ad_info[i].mask[j]))
 				{
-					LOG("DDCI CAID %04X and mask %04X matched PMT %d", ca[dvbca_id].ad_info[i].caid[j], ca[dvbca_id].ad_info[i].mask[j], pmt->id);
+					LOG("DDCI %d CAID %04X and mask %04X matched PMT %d", i, ca[dvbca_id].ad_info[i].caid[j], ca[dvbca_id].ad_info[i].mask[j], pmt->id);
 					if (d->channels < d->max_channels)
 						return d->id;
 				}
@@ -428,6 +428,7 @@ void ddci_replace_pi(int adapter, unsigned char *es, int len)
 		es[i+4] &= 0xE0; //~0x1F
 		es[i+4] |= (dpid >> 8);
 		es[i+5] = dpid & 0xFF;
+		LOGM("%s: CA pid %d -> pid %d", __FUNCTION__, capid, dpid)
 	}
 	return;
 }
@@ -565,7 +566,7 @@ int copy_ts_from_ddci_buffer(adapter *ad, ddci_device_t *d, unsigned char *b, in
 	}
 	// search for a position to put the packet in
 	int dpid = mapping_table[idx].ad_pid & 0x1FFF;
-	LOGM("%s: mapping pid %d -> %d", __FUNCTION__, pid, dpid);
+	DEBUGM("%s: mapping pid %d -> %d", __FUNCTION__, pid, dpid);
 	if (push_ts_to_adapter(ad, b, dpid, ad_pos))
 	{
 		return 1;
@@ -610,7 +611,7 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d)
 		set_pid_ts(b, dpid);
 		io[iop].iov_base = b;
 		io[iop].iov_len = 188;
-		LOGM("pos %d of %d, mapping pid %d to %d", iop, rlen / 188, pid, dpid);
+		DEBUGM("pos %d of %d, mapping pid %d to %d", iop, rlen / 188, pid, dpid);
 		iop++;
 	}
 	// write the TS to the DDCI handle

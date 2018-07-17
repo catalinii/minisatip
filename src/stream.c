@@ -319,7 +319,7 @@ int start_play(streams *sid, sockets *s)
 	sid->tp.apids = sid->tp.dpids = sid->tp.pids = sid->tp.x_pmt = NULL;
 
 	ad = get_adapter(sid->adapter);
-	if (ad->do_tune)
+	if (ad && ad->do_tune)
 		s->flush_enqued_data = 1;
 
 	return tune(sid->adapter, s->sid);
