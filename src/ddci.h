@@ -32,9 +32,11 @@ typedef struct ddci_device
 void find_ddci_adapter(adapter **a);
 void ddci_init();
 int add_pid_mapping_table(int ad, int pid, int pmt, int ddci_adapter);
-int push_ts_to_ddci(ddci_device_t *d, unsigned char *b, int rlen);
-int copy_ts_from_ddci(adapter *ad, ddci_device_t *d, unsigned char *b, int *ad_pos);
+int push_ts_to_ddci_buffer(ddci_device_t *d, unsigned char *b, int rlen);
+int copy_ts_from_ddci_buffer(adapter *ad, ddci_device_t *d, unsigned char *b, int *ad_pos);
 void set_pid_ts(unsigned char *b, int pid);
 int ddci_process_ts(adapter *ad, ddci_device_t *d);
+int ddci_create_pat(ddci_device_t *d, uint8_t *b);
+int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *clean);
 
 #endif

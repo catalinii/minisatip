@@ -122,6 +122,7 @@ int mark_pid_add(int sid, int aid, int _pid);
 void mark_pid_deleted(int aid, int sid, int _pid, SPid *p);
 int update_pids(int aid);
 int tune(int aid, int sid);
+void post_tune(adapter *ad);
 SPid *find_pid(int aid, int p);
 adapter *get_adapter1(int aid, char *file, int line);
 adapter *get_configured_adapter1(int aid, char *file, int line);

@@ -1547,12 +1547,12 @@ int init_utils(char *arg0)
 	return 0;
 }
 
-void hexdump(char *desc, void *addr, int len)
+void _hexdump(char *desc, void *addr, int len)
 {
 	int i, pos = 0, bl = (len * 6 < 100) ? 100 : len * 6;
-	unsigned char buff[17];
-	unsigned char buf[bl];
-	unsigned char *pc = (unsigned char *)addr;
+	char buff[17];
+	char buf[bl];
+	char *pc = (char *)addr;
 
 	if (len == 0)
 	{
@@ -1574,14 +1574,14 @@ void hexdump(char *desc, void *addr, int len)
 		{
 			// Just don't print ASCII for the zeroth line.
 			if (i != 0)
-				pos += snprintf((char *)buf + pos, bl - pos, "  %s\n", buff);
+				strlcatf(buf, bl, pos, "  %s\n", buff);
 
 			// Output the offset.
-			pos += snprintf((char *)buf + pos, bl - pos, "  %04x ", i);
+			strlcatf(buf, bl, pos, "  %04x ", i);
 		}
 
 		// Now the hex code for the specific character.
-		pos += snprintf((char *)buf + pos, bl - pos, " %02x", pc[i]);
+		strlcatf(buf, bl, pos, " %02x", pc[i]);
 
 		// And store a printable ASCII character for later.
 		if ((pc[i] < 0x20) || (pc[i] > 0x7e))
@@ -1594,12 +1594,12 @@ void hexdump(char *desc, void *addr, int len)
 	// Pad out last line if not exactly 16 characters.
 	while ((i % 16) != 0)
 	{
-		pos += snprintf((char *)buf + pos, bl - pos, "   ");
+		strlcatf(buf, bl, pos, "   ");
 		i++;
 	}
 
 	// And print the final ASCII bit.
-	pos += snprintf((char *)buf + pos, bl - pos, "  %s\n", buff);
+	strlcatf(buf, bl, pos, "  %s\n", buff);
 	if (!desc)
 		LOG("\n%s", buf)
 	else
@@ -1781,17 +1781,16 @@ uint32_t crc_32(const uint8_t *data, int datalen)
 	if (datalen < 0)
 		return crc;
 	while (datalen--)
+	{
 		crc = (crc << 8) ^ crc_tab[((crc >> 24) ^ *data++) & 0xff];
-
+	}
 	return crc;
 }
 
-void dump_packets(char *message, unsigned char *b, int len, int packet_offset)
+void _dump_packets(char *message, unsigned char *b, int len, int packet_offset)
 {
 	int i, pid, cc;
 	uint32_t crc;
-	if ((opts.debug & LOG_DMX) == 0)
-		return;
 
 	for (i = 0; i < len; i += 188)
 	{
@@ -1833,4 +1832,15 @@ int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, char *cc,
 		len += 188;
 	}
 	return len;
+}
+
+
+void write_buf_to_file(char *file, uint8_t *buf, int len)
+{
+	int x = open(file, O_RDWR);
+	if(x >= 0)
+	{
+		write(x, buf, len);
+		close(x);
+	} else LOG("Could not write %d bytes to %s: %d", file, errno);
 }

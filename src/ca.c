@@ -558,13 +558,13 @@ int ca_init(ca_device_t *d)
 {
 	ca_slot_info_t info;
 	int64_t st = getTick();
-	info.num = 0;
 	__attribute__((unused)) int tries = 800; // wait up to 8s for the CAM
 	int fd = d->fd;
 
 	d->tl = NULL;
 	d->sl = NULL;
 	d->slot_id = -1;
+	memset(&info, 0, sizeof(info));
 
 #ifdef ENIGMA
 	char buf[256];

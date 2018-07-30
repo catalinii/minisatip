@@ -420,7 +420,7 @@ void process_filters(adapter *ad, unsigned char *b, SPid *p)
 	SFilter *f;
 	int filter = p->filter;
 	f = get_filter(filter);
-	//	LOGM("got filter %d for pid (%d) %d master filter %d", filter, pid, p->pid, f ? f->master_filter : -1);
+//	DEBUGM("got filter %d for pid (%d) %d master filter %d", filter, pid, p->pid, f ? f->master_filter : -1);
 	if (!f || f->master_filter != filter || pid != f->pid)
 	{
 		p->filter = get_pid_filter(ad->id, pid);
@@ -1239,9 +1239,14 @@ int assemble_packet(SFilter *f, uint8_t *b)
 			LOG_AND_RETURN(0, "assemble_packet: CRC check: flags %d len %d not valid for pid %d [%02X %02X %02X %02X %02X %02X]",
 						   f->flags, len, pid, b[0], b[1], b[2], b[3], b[4], b[5]);
 		crc = crc_32(b, len - 4);
-		copy32r(current_crc, b, len - 4) if (crc != current_crc)
-			LOG_AND_RETURN(0, "pid %d (%04X) CRC failed %08X != %08X len %d",
+		copy32r(current_crc, b, len - 4);
+		if (crc != current_crc)
+		{
+			LOG("pid %d (%04X) CRC failed %08X != %08X len %d",
 						   pid, pid, crc, current_crc, len);
+			hexdump("packet failed CRC ", b, len);
+			return 0;
+		}
 	}
 	return len;
 }

@@ -109,7 +109,7 @@ int add_pid_mapping_table(int ad, int pid, int pmt, int ddci_adapter)
 
 	ddci_pid = add_pid_ddci(ddci_adapter, pid, mapping_table[idx].ddci_pid, idx);
 	if (ddci_pid == -1)
-		LOG_AND_RETURN(-1, "could not map the pid %d (ad %d) to a ddci pid", ad, pid);
+		LOG_AND_RETURN(-1, "could not add pid %d and ad %d to the mapping table", pid, ad);
 	mapping_table[idx].ad_pid = key;
 	mapping_table[idx].ddci_adapter = ddci_adapter;
 	mapping_table[idx].ddci_pid = ddci_pid;
@@ -140,6 +140,7 @@ int add_pid_mapping_table(int ad, int pid, int pmt, int ddci_adapter)
 			mark_pid_add(-1, ad, pid);
 		else
 			mapping_table[idx].filter_id = add_filter(ad, 1, (void *)process_cat, get_ddci(ddci_adapter), FILTER_CRC);
+		mark_pid_add(-1, ddci_adapter, ddci_pid);
 	}
 	LOG("mapped adapter %d pid %d to %d", ad, pid, ddci_pid);
 	return ddci_pid;
@@ -151,7 +152,8 @@ inline static int get_mapping_table(int ad, int pid, int *ddci_adapter, int *rew
 	int idx = get_index_hash(&mapping_table[0].ad_pid, mapping_table_pids, sizeof(ddci_mapping_table_t), key, key);
 	if (idx == -1)
 		return -1;
-	*ddci_adapter = mapping_table[idx].ddci_adapter;
+	if(ddci_adapter)
+		*ddci_adapter = mapping_table[idx].ddci_adapter;
 	if (rewrite)
 		*rewrite = mapping_table[idx].rewrite;
 	return mapping_table[idx].ddci_pid;
@@ -390,21 +392,38 @@ int ddci_create_pat(ddci_device_t *d, uint8_t *b)
 	b[7] = b[8] = 0;
 	// Channel ID 0
 	b[9] = b[10] = 0;
-	b[11] = 0xFF;
-	b[12] = 0xFC;
+	// PID 16
+	b[11] = 0x00;
+	b[12] = 0x10; 
 	len = 13;
 	for (i = 0; i < MAX_CHANNELS_ON_CI; i++)
 		if ((pmt = get_pmt(d->pmt[i])))
 		{
 			int dpid = get_mapping_table(pmt->adapter, pmt->pid, &ddci, NULL);
+			if(dpid == -1)
+			{
+				LOG("adapter %d pid %d not found in the mapping table", pmt->adapter, pmt->pid);
+				continue;
+			}
+				
+			if(ddci != d->id)
+			{
+				LOG("adapter %d pid %d not mapped to the right DDCI adapter %d != expected %d", pmt->adapter, pmt->pid, ddci, d->id);
+				continue;
+			}
 			copy16(b, len, pmt->sid);
-			copy16(b, len + 2, 0xE0 | dpid);
+			copy16(b, len + 2, 0xE000 | dpid);
 			len += 4;
 		}
-	copy32(b, len, crc_32(b, len));
+	int len1 = len;
 	len += 4;
-	b[2] |= (len >> 8);
-	b[3] |= (len & 0xFF);
+	b[2] |= (len1 >> 8);
+	b[3] |= (len1 & 0xFF);
+	uint32_t crc = crc_32(b + 1, len1 - 1);
+	copy32(b, len1, crc);
+	char buf[100];
+	sprintf(buf, "PAT Created CRC %08X: ", crc);
+	hexdump(buf, b + 1, len1 - 1);
 	return len;
 }
 
@@ -439,8 +458,9 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *clean)
 	int ddci, pid = pmt->pid, pi_len, pmt_len;
 	int es_len, i, spid, dpid;
 	uint8_t *b, *pi, *pmt_b;
-	memcpy(clean, pmt->pmt, len);
-	b = clean;
+	clean[0] = 0;
+	b = clean + 1;
+	memcpy(b, pmt->pmt, len);	
 	pi_len = ((b[10] & 0xF) << 8) + b[11];
 	pmt_len = pmt->pmt_len - 4;
 
@@ -483,7 +503,7 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *clean)
 
 	uint32_t crc = crc_32(b, pmt_len);
 	copy32(b,pmt_len, crc);
-	return 0;
+	return pmt->pmt_len;
 }
 
 int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len)
@@ -506,7 +526,11 @@ int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len)
 			if ((pmt = get_pmt(d->pmt[i])))
 			{
 				psi_len = ddci_create_pmt(d, pmt, psi);
-				pos += buffer_to_ts(dst + pos, len - pos, psi, psi_len, &d->pmt_cc[i], 0);
+				int dpid = get_mapping_table(pmt->adapter, pmt->pid, NULL, NULL);
+				if(dpid != -1)
+					pos += buffer_to_ts(dst + pos, len - pos, psi, psi_len, &d->pmt_cc[i], dpid);
+				else 
+				    LOG("%s: could not find PMT adapter %d and pid %d to mapping table", __FUNCTION__, pmt->adapter, pmt->pid);
 			}
 		d->last_pmt = ctime;
 	}
@@ -619,13 +643,14 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d)
 	{
 		unsigned char psi[MAX_CHANNELS_ON_CI * 1500];
 		int psi_len = ddci_add_psi(d, psi, sizeof(psi) - 1);
+		hexdump("PSI -> ", psi, psi_len);
 		if (psi_len > 0)
 		{
 			io[iop].iov_base = psi;
 			io[iop].iov_len = psi_len;
 			iop++;
 		}
-		LOGM("writing %d bytes to fd %d", iop * 188, ad2->fe);
+		LOGM("writing %d bytes to DDCI device fb %d", iop * 188, ad2->fe);
 		int rb = writev(ad2->fe, io, iop);
 		if (rb != iop * 188)
 			LOG("%s: write incomplete to DDCI %d,fd %d, wrote %d out of %d, errno %d: %s", __FUNCTION__, ad2->id, ad2->fe, rb, iop * 188, errno, strerror(errno));
@@ -665,6 +690,11 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d)
 int ddci_ts(adapter *ad)
 {
 	int i;
+
+	// do not process the TS for DDCI devices
+	if (ddci_devices[ad->id] && ddci_devices[ad->id]->enabled)
+		return 0;
+
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		if (ddci_devices[i] && ddci_devices[i]->enabled)
 			ddci_process_ts(ad, ddci_devices[i]);
@@ -731,6 +761,15 @@ int push_ts_to_ddci_buffer(ddci_device_t *d, unsigned char *b, int rlen)
 
 int ddci_read_sec_data(sockets *s)
 {
+	unsigned char *b = s->buf;
+	int i, len = s->rlen;
+	for (i = 0; i < len; i += 188)
+	{
+		int pid = (b[i + 1] & 0x1F) * 256 + b[i + 2];
+		char cc = b[i + 3] & 0xF;
+		LOG("pid %d (%X) CC=%X %s pos: %d packet %d : %02X %02X %02X %02X", pid, pid, cc, (b[i + 3] & 0x80) ? "encrypted" : "", i, i / 188, b[i], b[i + 1], b[i + 2], b[i + 3]);
+	}
+
 	read_dmx(s);
 	if (s->rlen != 0)
 	{
@@ -740,7 +779,7 @@ int ddci_read_sec_data(sockets *s)
 	// copy the processed data to d->out buffer
 	adapter *ad = get_adapter(s->sid);
 	ddci_device_t *d = get_ddci(s->sid);
-	unsigned char *b = ad->buf;
+	b = ad->buf;
 	int left = 0, rlen = ad->rlen;
 
 	if ((left = push_ts_to_ddci_buffer(d, b, rlen)) > 0)
@@ -752,6 +791,7 @@ void ddci_post_init(adapter *ad)
 {
 	sockets *s = get_sockets(ad->sock);
 	s->action = (socket_action)ddci_read_sec_data;
+	post_tune(ad);
 }
 
 int ddci_open_device(adapter *ad)
@@ -822,6 +862,7 @@ int ddci_open_device(adapter *ad)
 	d->last_pmt = d->last_pat = 0;
 	d->tid = d->ver = 0;
 	d->enabled = 1;
+	ad->enabled = 1;
 	mutex_unlock(&d->mutex);
 	LOG("opened DDCI adapter %d fe:%d dvr:%d", ad->id, ad->fe, ad->dvr);
 
@@ -975,7 +1016,7 @@ void find_ddci_adapter(adapter **a)
 		if (a[na])
 			a[na]->pa = a[na]->fn = -1;
 
-	mapping_table_pids = ddci_adapters * PIDS_FOR_ADAPTER;
+	mapping_table_pids = (ddci_adapters + 1) * PIDS_FOR_ADAPTER;
 	mapping_table = malloc1(mapping_table_pids * sizeof(ddci_mapping_table_t));
 	if (!mapping_table)
 		LOG("could not allocate memory for mapping table");
