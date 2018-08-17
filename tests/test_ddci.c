@@ -235,7 +235,7 @@ int test_create_pat()
 	f.flags = FILTER_CRC;
 	f.id = 0;
 	f.adapter = 0;
-	d.pmt[0] = 1; // set to pmt 1
+	d.pmt[0] = 1;   // set to pmt 1
 	pmts[1] = &pmt; // enable pmt 1
 	npmts = 2;
 	pmt.enabled = 1;
@@ -244,18 +244,78 @@ int test_create_pat()
 	psi_len = ddci_create_pat(&d, psi);
 	cc = 1;
 	buffer_to_ts(packet, 188, psi, psi_len, &cc, 0);
-	write_buf_to_file("/jail/tmp/x.ts", packet, 188);
 	int len = assemble_packet(&f, packet);
-	if(!len)
+	if (!len)
 		return 1;
 	int new_sid = packet[17] * 256 + packet[18];
-    int new_pid = packet[19] * 256 + packet[20];
+	int new_pid = packet[19] * 256 + packet[20];
 	new_pid &= 0x1FFF;
-	if(new_pid != dpid)
-	   LOG_AND_RETURN(1, "PAT pid %d != mapping table pid %d", new_pid, dpid);
-	if(new_sid != pmt.sid)
-	   LOG_AND_RETURN(1, "PAT sid %d != pmt sid %d", new_sid, pmt.sid);
-    return 0;
+	if (new_pid != dpid)
+		LOG_AND_RETURN(1, "PAT pid %d != mapping table pid %d", new_pid, dpid);
+	if (new_sid != pmt.sid)
+		LOG_AND_RETURN(1, "PAT sid %d != pmt sid %d", new_sid, pmt.sid);
+	return 0;
+}
+
+int test_create_pmt()
+{
+	ddci_device_t d;
+	uint8_t psi[188];
+	uint8_t packet[188];
+
+	unsigned char pmt_sample[] = "\x02\xb0\x49\x00\x32\xeb\x00\x00\xe3\xff\xf0\x18\x09\x04\x09\xc4"
+								 "\xfb\x9c\x09\x04\x09\x8c\xfa\x9c\x09\x04\x09\xaf\xff\x9c\x09\x04"
+								 "\x09\x8d\xfc\x9c\x1b\xe3\xff\xf0\x03\x52\x01\x02\x03\xe4\x00\xf0"
+								 "\x09\x0a\x04\x64\x65\x75\x01\x52\x01\x03\x03\xe4\x01\xf0\x09\x0a"
+								 "\x04\x65\x6e\x67\x01\x52\x01\x06\xdc\x54\xdb\x72";
+
+	SPMT pmt;
+	char cc;
+	int psi_len;
+	SFilter f;
+	memset(&d, 0, sizeof(d));
+	memset(&pmt, 0, sizeof(pmt));
+	d.id = 0;
+	d.enabled = 1;
+	d.wo = DDCI_BUFFER - 188;
+	d.ro = 188;
+	memset(d.pid_mapping, -1, sizeof(d.pid_mapping));
+	memset(ddci_devices, 0, sizeof(ddci_devices));
+	ddci_devices[0] = &d;
+	int pid = 1023;
+	int capid = 7068;
+	//	d.pid_mapping[pid] = 22; // forcing mapping to a different pid
+	//	d.pid_mapping[capid] = 23; // forcing mapping to a different pid
+	int dpid = add_pid_mapping_table(0, pid, 0, 0);
+	int dcapid = add_pid_mapping_table(0, capid, 0, 0);
+	f.flags = FILTER_CRC;
+	f.id = 0;
+	f.adapter = 0;
+	d.pmt[0] = 1;   // set to pmt 1
+	pmts[1] = &pmt; // enable pmt 1
+	npmts = 2;
+	pmt.enabled = 1;
+	pmt.sid = 0x66;
+	pmt.pid = pid;
+	strcpy(pmt.name, "TEST CHANNEL HD");
+	memcpy(pmt.pmt, pmt_sample, sizeof(pmt_sample));
+	pmt.pmt_len = sizeof(pmt_sample);
+	psi_len = ddci_create_pmt(&d, &pmt, psi);
+	cc = 1;
+	hexdump("PACK ", psi, psi_len);
+	buffer_to_ts(packet, 188, psi, psi_len, &cc, 0x63);
+	int len = assemble_packet(&f, packet);
+	if (!len)
+		return 1;
+	int new_pid = packet[42] * 256 + packet[43];
+	int new_capid = packet[21] * 256 + packet[22];
+	new_pid &= 0x1FFF;
+	new_capid &= 0x1FFF;
+	if (new_pid != dpid)
+		LOG_AND_RETURN(1, "PMT stream pid %04X != mapping table pid %04X", new_pid, dpid);
+	if (new_capid != dcapid)
+		LOG_AND_RETURN(1, "PMT PSI pid %04X != mapping table pid %04X", new_capid, dcapid);
+	return 0;
 }
 
 int main()
@@ -267,9 +327,8 @@ int main()
 	TEST_FUNC(test_push_ts_to_ddci(), "testing test_push_ts_to_ddci");
 	TEST_FUNC(test_copy_ts_from_ddci(), "testing test_copy_ts_from_ddci");
 	TEST_FUNC(test_ddci_process_ts(), "testing ddci_process_ts");
-	opts.debug = 0xFFFF;
-	opts.log = 0xFFFF;
 	TEST_FUNC(test_create_pat(), "testing create_pat");
+	TEST_FUNC(test_create_pmt(), "testing create_pat");
 	fflush(stdout);
 	return 0;
 }

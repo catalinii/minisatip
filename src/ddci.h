@@ -8,7 +8,7 @@
 #define PIDS_FOR_ADAPTER 128
 #define MAX_CA_PIDS 20
 
-#define DDCI_BUFFER (10000 * 188)
+#define DDCI_BUFFER (100000 * 188)
 typedef struct ddci_device
 {
 	SMutex mutex;

@@ -445,9 +445,9 @@ void set_signal_handler(char *argv0)
 		LOG("Could not set signal SIGINT");
 	}
 
-    if (sigaction(SIGTERM, &sig_action, NULL) != 0) 
+	if (sigaction(SIGTERM, &sig_action, NULL) != 0)
 	{
-		 LOG("Could not set signal SIGTERM");
+		LOG("Could not set signal SIGTERM");
 	}
 	if (signal(SIGHUP, SIG_IGN) != 0)
 	{
@@ -617,11 +617,11 @@ mymalloc(int a, char *f, int l)
 
 void *myrealloc(void *p, int a, char *f, int l)
 {
-        void *x = realloc(p, a);
-        if (!p)
-                memset(x, 0, a);
-        LOGM("%s:%d allocation_wrapper realloc allocated %d bytes from %p -> %p", f, l, a, p, x);
-        return x;
+	void *x = realloc(p, a);
+	if (!p)
+		memset(x, 0, a);
+	LOGM("%s:%d allocation_wrapper realloc allocated %d bytes from %p -> %p", f, l, a, p, x);
+	return x;
 }
 
 void myfree(void *x, char *f, int l)
@@ -1552,7 +1552,7 @@ void _hexdump(char *desc, void *addr, int len)
 	int i, pos = 0, bl = (len * 6 < 100) ? 100 : len * 6;
 	char buff[17];
 	char buf[bl];
-	char *pc = (char *)addr;
+	unsigned char *pc = (unsigned char *)addr;
 
 	if (len == 0)
 	{
@@ -1809,7 +1809,7 @@ int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, char *cc,
 	while ((srclen > 0) && (len < dstsize))
 	{
 		if (dstsize - len < 188)
-			LOG_AND_RETURN(-1, "Not enough space to copy pid %d, len %d from %d, srclen %d", pid, len, dstsize,srclen)
+			LOG_AND_RETURN(-1, "Not enough space to copy pid %d, len %d from %d, srclen %d", pid, len, dstsize, srclen)
 		b = dest + len;
 		*cc = ((*cc) + 1) % 16;
 		b[0] = 0x47;
@@ -1826,7 +1826,7 @@ int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, char *cc,
 			memset(b + left + 4, -1, 184 - left);
 		if (opts.debug & DEFAULT_LOG)
 		{
-			LOG("pid %d, left -> %d, len, cc %d", pid, left, *cc);
+			LOG("pid %d, left -> %d, len %d, cc %d", pid, left, len, *cc);
 			hexdump("packet -> ", b, 188);
 		}
 		len += 188;
@@ -1834,13 +1834,14 @@ int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, char *cc,
 	return len;
 }
 
-
 void write_buf_to_file(char *file, uint8_t *buf, int len)
 {
 	int x = open(file, O_RDWR);
-	if(x >= 0)
+	if (x >= 0)
 	{
 		write(x, buf, len);
 		close(x);
-	} else LOG("Could not write %d bytes to %s: %d", file, errno);
+	}
+	else
+		LOG("Could not write %d bytes to %s: %d", file, errno);
 }
