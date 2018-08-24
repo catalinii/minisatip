@@ -1239,8 +1239,9 @@ int my_writev(sockets *s, const struct iovec *iov, int iiov)
 
 	if (rv != len)
 	{
-		failed_writes++;
-		DEBUGM("writev handle %d, iiov %d, len %d, rv %d, errno %d", s->sock, iiov, len, rv, errno);
+		if(rv <= 0)
+			failed_writes++;
+		DEBUGM("writev handle %d, iiov %d, len %d, rv %d, errno %d", s->sock, iiov, len, rv, _errno);
 	}
 	errno = _errno;
 	if ((rv < 0) && (_errno == EWOULDBLOCK)) // blocking

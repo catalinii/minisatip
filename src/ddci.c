@@ -225,6 +225,9 @@ int ddci_init_dev(adapter *ad)
 
 int ddci_close_dev(adapter *ad)
 {
+	if (ad->fe_sock > 0)
+		sockets_del(ad->fe_sock);
+	ad->fe_sock = -1;
 	return TABLES_RESULT_OK;
 }
 SCA_op ddci;
@@ -604,6 +607,7 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d)
 	unsigned char *b;
 	adapter *ad2 = get_adapter(d->id);
 	int rlen = ad->rlen;
+	int bytes = 0;
 	int iop = 0, iomax = ad->rlen / 188;
 	int pid, dpid, i, ddci, rewrite;
 	struct iovec io[iomax];
@@ -621,6 +625,8 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d)
 	for (i = 0; i < rlen; i += 188)
 	{
 		b = ad->buf + i;
+		if(b[0] != 0x47)
+			continue;
 		pid = PID_FROM_TS(b);
 		dpid = get_mapping_table(ad->id, pid, &ddci, &rewrite);
 		if (dpid == -1)
@@ -636,6 +642,7 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d)
 		set_pid_ts(b, dpid);
 		io[iop].iov_base = b;
 		io[iop].iov_len = 188;
+		bytes += io[iop].iov_len;
 		DEBUGM("pos %d of %d, mapping pid %d to %d", iop, rlen / 188, pid, dpid);
 		iop++;
 	}
@@ -649,12 +656,14 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d)
 		{
 			io[iop].iov_base = psi;
 			io[iop].iov_len = psi_len;
+			bytes += io[iop].iov_len; 
 			iop++;
 		}
-		LOGM("writing %d bytes to DDCI device fb %d", iop * 188, ad2->fe);
+
+		LOGM("writing %d bytes to DDCI device fd %d, sock %d", iop * 188, ad2->fe, ad2->fe_sock);
 		int rb = writev(ad2->fe, io, iop);
-		if (rb != iop * 188)
-			LOG("%s: write incomplete to DDCI %d,fd %d, wrote %d out of %d, errno %d: %s", __FUNCTION__, ad2->id, ad2->fe, rb, iop * 188, errno, strerror(errno));
+		if (rb != bytes)
+			LOG("%s: write incomplete to DDCI %d,fd %d, wrote %d out of %d, errno %d: %s", __FUNCTION__, ad2->id, ad2->fe, rb, bytes, errno, strerror(errno));
 	}
 	// mark the written TS packets as 8191 (0x1FFF)
 	for (i = 0; i < iop; i++)
@@ -785,7 +794,7 @@ void ddci_post_init(adapter *ad)
 {
 	sockets *s = get_sockets(ad->sock);
 	s->action = (socket_action)ddci_read_sec_data;
-	post_tune(ad);
+	set_socket_thread(ad->fe_sock, get_socket_thread(ad->sock));
 }
 
 int ddci_open_device(adapter *ad)
@@ -842,6 +851,10 @@ int ddci_open_device(adapter *ad)
 #endif
 	mutex_lock(&d->mutex);
 	ad->fe = write_fd;
+	// create a sockets for buffering
+	ad->fe_sock = sockets_add(ad->fe, NULL, ad->id, TYPE_TCP, NULL, NULL, NULL); 
+	if(ad->fe_sock < 0)
+		LOG_AND_RETURN(ad->fe_sock, "Failed to add sockets for the DDCI device");
 	ad->dvr = read_fd;
 	ad->type = ADAPTER_DVB;
 	ad->dmx = -1;
