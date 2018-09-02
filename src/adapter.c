@@ -165,7 +165,7 @@ int adapter_timeout(sockets *s)
 	}
 
 #ifndef AXE
-	int64_t rtime = getTick(), max_close = rtime + 10000;
+	int64_t rtime = getTick(), max_close = rtime + 1000;
 	int i;
 	if (opts.no_threads)
 	{
@@ -176,11 +176,14 @@ int adapter_timeout(sockets *s)
 				if (rtime - ad1->rtime < s->timeout_ms)
 					do_close = 0;
 				if (ad1 && max_close < ad1->rtime)
+				{
 					max_close = ad1->rtime;
+					LOGM("max_close set to %jd for adapter %d", max_close, ad1->rtime);
+				}
 			}
-	}
+	}	
 	for (i = 0; i < MAX_ADAPTERS; i++)
-		if (a[i] && (a[i]->master_source == ad->id) && ad->enabled)
+		if (a[i] && (a[i]->master_source == ad->id) && ad->enabled && a[i]->enabled)
 		{
 			LOG("adapter %d is already used by a slave adapters %d, used %x", ad->id, a[i]->id, a[i]->used);
 			do_close = 0;
@@ -394,11 +397,13 @@ int init_all_hw()
 	return num_adapters;
 }
 
+// this method needs to close the adapter otherwise the adapter will be in a half closed state
+
 int close_adapter(int na)
 {
 	adapter *ad;
 	init_complete = 0;
-	int sock;
+	int sock, i;
 
 	ad = get_adapter_nw(na);
 	if (!ad)
@@ -446,6 +451,12 @@ int close_adapter(int na)
 	mutex_destroy(&ad->mutex);
 	//      if(a[na]->buf)free1(a[na]->buf);a[na]->buf=NULL;
 	LOG("done closing adapter %d", na);
+	for(i = 0;i<MAX_ADAPTERS;i++)
+		if (a[i] && (a[i]->master_source == ad->id) && ad->enabled && a[i]->enabled)
+		{
+			LOG("Slave adapter %d of adapter %d will be closed", i, ad->id);
+			request_adapter_close(a[i]);
+		}
 	return 1;
 }
 

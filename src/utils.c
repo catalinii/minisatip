@@ -1780,7 +1780,7 @@ uint32_t crc_32(const uint8_t *data, int datalen)
 	uint32_t crc = 0xFFFFFFFF;
 	if (datalen < 0)
 		return crc;
-	hexdump("crc_32 ", data, datalen);
+	hexdump("crc_32 ", (uint8_t *)data, datalen);
 	while (datalen--)
 	{
 		crc = (crc << 8) ^ crc_tab[((crc >> 24) ^ *data++) & 0xff];
