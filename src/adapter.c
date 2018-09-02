@@ -165,7 +165,7 @@ int adapter_timeout(sockets *s)
 	}
 
 #ifndef AXE
-	int64_t rtime = getTick(), max_close = 0;
+	int64_t rtime = getTick(), max_close = rtime + 10000;
 	int i;
 	if (opts.no_threads)
 	{
@@ -179,6 +179,14 @@ int adapter_timeout(sockets *s)
 					max_close = ad1->rtime;
 			}
 	}
+	for (i = 0; i < MAX_ADAPTERS; i++)
+		if (a[i] && (a[i]->master_source == ad->id) && ad->enabled)
+		{
+			LOG("adapter %d is already used by a slave adapters %d, used %x", ad->id, a[i]->id, a[i]->used);
+			do_close = 0;
+			break;
+		}
+
 	LOG("Requested adapter %d close due to timeout %d sec, result %d max_rtime %jd",
 		s->sid, ad->adapter_timeout / 1000, do_close, max_close);
 	if (!do_close)
@@ -390,7 +398,7 @@ int close_adapter(int na)
 {
 	adapter *ad;
 	init_complete = 0;
-	int sock, i;
+	int sock;
 
 	ad = get_adapter_nw(na);
 	if (!ad)
@@ -402,13 +410,6 @@ int close_adapter(int na)
 		mutex_unlock(&ad->mutex);
 		return 1;
 	}
-	for (i = 0; i < MAX_ADAPTERS; i++)
-		if (a[i] && (a[i]->master_source == ad->id) && ad->enabled)
-		{
-			LOG("adapter %d is already used by a slave adapters %d, used %x", ad->id, a[i]->id, a[i]->used);
-			mutex_unlock(&ad->mutex);
-			return 1;
-		}
 
 	LOG("closing adapter %d  -> fe:%d dvr:%d, sock:%d, fe_sock:%d", na, ad->fe, ad->dvr, ad->sock, ad->fe_sock);
 	ad->enabled = 0;

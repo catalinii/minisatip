@@ -1556,12 +1556,12 @@ void _hexdump(char *desc, void *addr, int len)
 
 	if (len == 0)
 	{
-		LOG("  ZERO LENGTH\n");
+		LOG("%s: ZERO LENGTH", desc);
 		return;
 	}
 	if (len < 0)
 	{
-		LOG("  NEGATIVE LENGTH: %i\n", len);
+		LOG("%s: NEGATIVE LENGTH: %i\n", desc, len);
 		return;
 	}
 	memset(buf, 0, bl - 1);
@@ -1780,6 +1780,7 @@ uint32_t crc_32(const uint8_t *data, int datalen)
 	uint32_t crc = 0xFFFFFFFF;
 	if (datalen < 0)
 		return crc;
+	hexdump("crc_32 ", data, datalen);
 	while (datalen--)
 	{
 		crc = (crc << 8) ^ crc_tab[((crc >> 24) ^ *data++) & 0xff];

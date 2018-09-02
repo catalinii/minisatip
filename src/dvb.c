@@ -1118,6 +1118,8 @@ int dvb_psi_read(int socket, void *buf, int len, sockets *ss, int *rb)
 	unsigned char section[4096]; // max section size
 	int r;
 	*rb = 0;
+//	if(len < sizeof(section) * 1.1)
+//		return 1;
 	memset(section, 0, sizeof(section));
 	r = read(socket, section + 1, sizeof(section) - 1); // section[0] = 0
 	if (r <= 0)
@@ -1158,7 +1160,7 @@ int dvb_psi_read(int socket, void *buf, int len, sockets *ss, int *rb)
 	//		copy32(section, r, crc);
 	//		r += 4;
 	//	}
-	DEBUGM("%s: len %d, read %d", __FUNCTION__, len, r);
+	DEBUGM("%s: socket %d, master %d, buf %p len %d, read %d", __FUNCTION__, socket, ss->master, buf, len, r);
 	*rb = buffer_to_ts(buf, len, section, r, &p->cc1, pid);
 
 	return 1;

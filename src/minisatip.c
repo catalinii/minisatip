@@ -984,7 +984,7 @@ void set_options(int argc, char *argv[])
 #endif
 }
 
-#define RBUF 8000
+#define RBUF 32000
 
 int read_rtsp(sockets *s)
 {
@@ -1024,6 +1024,7 @@ int read_rtsp(sockets *s)
 		LOG(
 			"read_rtsp: read %d bytes from handle %d, sock_id %d, flags %d not ending with \\r\\n\\r\\n",
 			s->rlen, s->sock, s->id, s->flags);
+		hexdump("read_rtsp: ", s->buf, s->rlen);
 		if (s->flags & 1)
 			return 0;
 		unsigned char *new_alloc = malloc1(RBUF);
@@ -1036,7 +1037,7 @@ int read_rtsp(sockets *s)
 	rlen = s->rlen;
 	s->rlen = 0;
 
-	LOG("read RTSP (from handle %d sock_id %d, len: %d, sid %d):", s->sock,
+	LOG("read RTSP (from handle %d sock %d, len: %d, sid %d):", s->sock,
 		s->id, s->rlen, s->sid);
 	LOGM("%s", s->buf);
 

@@ -594,7 +594,7 @@ int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 	if (type & TYPE_CONNECT)
 		ss->events |= POLLOUT;
 
-	LOG("sockets_add: handle %d (type %d) returning socket index %d [%s:%d] read: %p",
+	LOG("sockets_add: handle %d (type %d) returning socket sock %d [%s:%d] read: %p",
 		ss->sock, ss->type, i, get_socket_rhost(i, ra, sizeof(ra)),
 		ntohs(ss->sa.sin_port), ss->read);
 	mutex_unlock(&ss->mutex);
@@ -622,7 +622,7 @@ int sockets_del(int sock)
 	ss->is_enabled = 0;
 	so = ss->sock;
 	ss->sock = -1; // avoid infinite loop
-	LOG("sockets_del: %d -> handle %d, sid %d, overflow bytes %d, allocated %d, used %d, unsend packets %d", sock, so, ss->sid, ss->overflow, ss->buf_alloc, ss->buf_used, (ss->wmax > 0) ? ((ss->wpos - ss->spos) % ss->wmax) : 0);
+	LOG("sockets_del: sock %d -> handle %d, sid %d, overflow bytes %d, allocated %d, used %d, unsend packets %d", sock, so, ss->sid, ss->overflow, ss->buf_alloc, ss->buf_used, (ss->wmax > 0) ? ((ss->wpos - ss->spos) % ss->wmax) : 0);
 
 	if (so >= 0)
 	{
@@ -1539,4 +1539,5 @@ void sockets_set_master(int slave, int master)
 	}
 	s->tid = m->tid;
 	s->master = master;
+	LOG("sock %d is master for sock %d", s->master, s->id);
 }
