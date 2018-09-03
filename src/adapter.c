@@ -165,7 +165,7 @@ int adapter_timeout(sockets *s)
 	}
 
 #ifndef AXE
-	int64_t rtime = getTick(), max_close = rtime + 1000;
+	int64_t rtime = getTick(), max_close = ad->rtime + 1000;
 	int i;
 	if (opts.no_threads)
 	{
