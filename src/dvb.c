@@ -716,6 +716,13 @@ int setup_switch(adapter *ad)
 
 		if (ad != master) // slave adapter
 		{
+			change_par = 0;
+			if (!master)
+				LOG_AND_RETURN(-1, "master adapter %d of adapter %d is not initialized", ad->master_source, ad->id);
+
+			if (master->old_pol != pol || master->old_hiband != hiband || master->old_diseqc != diseqc)
+				change_par = 1;
+
 			if (!master->sid_cnt && !(master->used & ~(1 << ad->id))) // the master is not used by another adapters
 				do_setup_switch = 1;
 
@@ -748,7 +755,7 @@ int setup_switch(adapter *ad)
 	return freq;
 }
 
-	//#define USE_DVBAPI3
+//#define USE_DVBAPI3
 
 #if DVBAPIVERSION < 0x0500
 #define USE_DVBAPI3
@@ -1118,8 +1125,8 @@ int dvb_psi_read(int socket, void *buf, int len, sockets *ss, int *rb)
 	unsigned char section[4096]; // max section size
 	int r;
 	*rb = 0;
-//	if(len < sizeof(section) * 1.1)
-//		return 1;
+	//	if(len < sizeof(section) * 1.1)
+	//		return 1;
 	memset(section, 0, sizeof(section));
 	r = read(socket, section + 1, sizeof(section) - 1); // section[0] = 0
 	if (r <= 0)

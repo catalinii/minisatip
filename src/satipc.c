@@ -356,7 +356,7 @@ int satipc_open_device(adapter *ad)
 		return 1;
 
 	int64_t ctime = getTick();
-	if ((sip->last_connect > 0) && (ctime - sip->last_connect < 30000))
+	if ((sip->last_connect > 0) && (ctime - sip->last_connect < 5000))
 		return 3;
 
 	sip->last_connect = ctime;
