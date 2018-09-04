@@ -260,9 +260,8 @@ int init_hw(int i)
 	ad->restart_needed = 0;
 
 	st = getTick();
-	if (!(rv = ad->open))
+	if (!ad->open)
 	{
-		LOG("Opening adapter %d failed with error %d", ad->id, rv);
 		rv = 5;
 		goto NOK;
 	}
@@ -272,10 +271,11 @@ int init_hw(int i)
 		ad->dmx_source = ad->id;
 #endif
 
-	if (ad->open(ad))
+	if ((rv = ad->open(ad)))
 	{
 		init_complete = 0;
-		rv = 6;
+		LOG("Opening adapter %d failed with error %d", ad->id, rv);
+		rv |= 0x600;
 		goto NOK;
 	}
 	ad->enabled = 1;
