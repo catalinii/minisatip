@@ -612,15 +612,23 @@ mymalloc(int a, char *f, int l)
 	if (x)
 		memset(x, 0, a);
 	LOGM("%s:%d allocation_wrapper malloc allocated %d bytes at %p", f, l, a, x);
+	if (!x)
+		LOG0("Failed allocating %d bytes of memory", a)
 	return x;
 }
 
 void *myrealloc(void *p, int a, char *f, int l)
 {
 	void *x = realloc(p, a);
-	if (!x)
+	if (x)
 		memset(x, 0, a);
 	LOGM("%s:%d allocation_wrapper realloc allocated %d bytes from %p -> %p", f, l, a, p, x);
+	if (!x)
+	{
+		LOG0("Failed allocating %d bytes of memory", a)
+		if (!strcmp(f, "socketworks.c"))
+			LOG0("Try to decrease the parameters -b and/or -B")
+	}
 	return x;
 }
 
