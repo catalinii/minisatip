@@ -181,7 +181,7 @@ int adapter_timeout(sockets *s)
 					LOGM("max_close set to %jd for adapter %d", max_close, ad1->rtime);
 				}
 			}
-	}	
+	}
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		if (a[i] && (a[i]->master_source == ad->id) && ad->enabled && a[i]->enabled)
 		{
@@ -228,6 +228,7 @@ int init_hw(int i)
 {
 	int64_t st, et;
 	adapter *ad;
+	int rv = 0;
 	if (i < 0 || i >= MAX_ADAPTERS)
 		return 3;
 
@@ -241,9 +242,15 @@ int init_hw(int i)
 	mutex_init(&ad->mutex);
 	mutex_lock(&ad->mutex);
 	if (is_adapter_disabled(i))
+	{
+		rv = 3;
 		goto NOK;
+	}
 	if (ad->enabled)
+	{
+		rv = 4;
 		goto NOK;
+	}
 
 	ad->sock = -1;
 	ad->id = i;
@@ -254,7 +261,10 @@ int init_hw(int i)
 
 	st = getTick();
 	if (!ad->open)
+	{
+		rv = 5;
 		goto NOK;
+	}
 
 #ifdef ENIGMA
 	if (ad->dmx_source == -1)
@@ -264,6 +274,7 @@ int init_hw(int i)
 	if (ad->open(ad))
 	{
 		init_complete = 0;
+		rv = 6;
 		goto NOK;
 	}
 	ad->enabled = 1;
@@ -286,6 +297,7 @@ int init_hw(int i)
 				opts.adapter_buffer, i);
 			close_adapter(i);
 		}
+		rv = 7;
 		goto NOK;
 	}
 	memset(ad->buf, 0, opts.adapter_buffer + 1);
@@ -351,7 +363,7 @@ int init_hw(int i)
 	return 0;
 
 NOK:
-	LOG("opening adapter %i failed", ad->id);
+	LOG("opening adapter %i failed with exit code %d", ad->id, rv);
 	mutex_unlock(&ad->mutex);
 	return 1;
 }
@@ -451,7 +463,7 @@ int close_adapter(int na)
 	mutex_destroy(&ad->mutex);
 	//      if(a[na]->buf)free1(a[na]->buf);a[na]->buf=NULL;
 	LOG("done closing adapter %d", na);
-	for(i = 0;i<MAX_ADAPTERS;i++)
+	for (i = 0; i < MAX_ADAPTERS; i++)
 		if (a[i] && (a[i]->master_source == ad->id) && ad->enabled && a[i]->enabled)
 		{
 			LOG("Slave adapter %d of adapter %d will be closed", i, ad->id);

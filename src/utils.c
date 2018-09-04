@@ -618,7 +618,7 @@ mymalloc(int a, char *f, int l)
 void *myrealloc(void *p, int a, char *f, int l)
 {
 	void *x = realloc(p, a);
-	if (!p)
+	if (!x)
 		memset(x, 0, a);
 	LOGM("%s:%d allocation_wrapper realloc allocated %d bytes from %p -> %p", f, l, a, p, x);
 	return x;
