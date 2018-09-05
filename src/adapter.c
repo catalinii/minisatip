@@ -885,7 +885,7 @@ int update_pids(int aid)
 					int new_max_pids = ad->active_pids - 2;
 					if (new_max_pids > 0)
 						opts.max_pids = new_max_pids;
-					LOG("Maximum pid filter reached, lowering the value to %d", opts.max_pids);
+					LOG0("Maximum pid filter reached, lowering the value to %d", opts.max_pids);
 					break;
 				}
 			ad->pids[i].flags = 1;

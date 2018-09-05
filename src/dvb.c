@@ -1085,7 +1085,7 @@ int dvb_demux_set_pid(adapter *a, int i_pid)
 	uint16_t p = i_pid;
 	if (ioctl(fd, DMX_ADD_PID, &p) < 0)
 	{
-		LOG0("failed to add pid %d to fd %d: errno %d, %s", p, fd, errno, strerror(errno));
+		LOG0("failed to add pid %d to fd %d maximum pids %d: errno %d, %s", p, fd, a->active_pids, errno, strerror(errno));
 		return -1;
 	}
 	LOG("AD %d setting demux filter on PID %d for fd %d", a->id, i_pid, fd);
