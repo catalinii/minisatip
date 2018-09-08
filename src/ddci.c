@@ -141,6 +141,7 @@ int add_pid_mapping_table(int ad, int pid, int pmt, int ddci_adapter)
 		else
 			mapping_table[idx].filter_id = add_filter(ad, 1, (void *)process_cat, get_ddci(ddci_adapter), FILTER_CRC);
 		mark_pid_add(-1, ddci_adapter, ddci_pid);
+		update_pids(ddci_adapter);
 	}
 	LOG("mapped adapter %d pid %d to %d", ad, pid, ddci_pid);
 	return ddci_pid;
@@ -289,6 +290,12 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 		LOGM("Could not find ddci device for adapter %d", ad->id);
 		return TABLES_RESULT_ERROR_NORETRY;
 	}
+	if(get_ddci(ad->id))
+	{
+		LOGM("Skip proxessing pmt for ddci adapter %d", ad->id);
+		return TABLES_RESULT_ERROR_NORETRY;
+	}
+
 	mutex_lock(&d->mutex);
 
 	LOGM("found device %d for pmt %d", ddid, pmt->id);
@@ -794,7 +801,9 @@ void ddci_post_init(adapter *ad)
 {
 	sockets *s = get_sockets(ad->sock);
 	s->action = (socket_action)ddci_read_sec_data;
-	set_socket_thread(ad->fe_sock, get_socket_thread(ad->sock));
+	if(ad->fe_sock >= 0)
+		set_socket_thread(ad->fe_sock, get_socket_thread(ad->sock));
+	post_tune(ad);
 }
 
 int ddci_open_device(adapter *ad)
@@ -852,9 +861,10 @@ int ddci_open_device(adapter *ad)
 	mutex_lock(&d->mutex);
 	ad->fe = write_fd;
 	// create a sockets for buffering
-	ad->fe_sock = sockets_add(ad->fe, NULL, ad->id, TYPE_TCP, NULL, NULL, NULL); 
-	if(ad->fe_sock < 0)
-		LOG_AND_RETURN(ad->fe_sock, "Failed to add sockets for the DDCI device");
+	ad->fe_sock = -1;
+//	ad->fe_sock = sockets_add(ad->fe, NULL, ad->id, TYPE_TCP, NULL, NULL, NULL); 
+//	if(ad->fe_sock < 0)
+//		LOG_AND_RETURN(ad->fe_sock, "Failed to add sockets for the DDCI device");
 	ad->dvr = read_fd;
 	ad->type = ADAPTER_DVB;
 	ad->dmx = -1;

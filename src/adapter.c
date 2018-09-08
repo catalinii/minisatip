@@ -165,7 +165,7 @@ int adapter_timeout(sockets *s)
 	}
 
 #ifndef AXE
-	int64_t rtime = getTick(), max_close = ad->rtime + 1000;
+	int64_t rtime = getTick(), max_close = rtime - ad->adapter_timeout + 2000;
 	int i;
 	if (opts.no_threads)
 	{
@@ -1811,7 +1811,7 @@ void set_slave_adapters(char *o)
 				if (!a[master] && !is_adapter_disabled(master))
 					a[master] = adapter_alloc();
 
-				if (a[master] && a[master]->master_source == -1)
+				if (a[master] && a[master]->master_source < 0)
 				{
 					a[master]->master_source = -2; // force this adapter as master
 					ad->master_source = master;

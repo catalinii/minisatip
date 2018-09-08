@@ -979,9 +979,8 @@ void set_options(int argc, char *argv[])
 		opts.log = 0;
 
 // FBC setup
-#if defined(__arm__) && defined(ENIGMA)
-	set_slave_adapters("2-7:0");
-#endif
+	if (!access("/proc/stb/frontend/0/fbc_connect", W_OK))
+		set_slave_adapters("2-7:0");
 }
 
 #define RBUF 32000
@@ -1012,7 +1011,7 @@ int read_rtsp(sockets *s)
 		}
 	}
 
-	if (s->rlen < 4 || !end_of_header((char *)s->buf + s->rlen - 4))
+	if ((s->rlen > 0) && (s->rlen < 4 || !end_of_header((char *)s->buf + s->rlen - 4)))
 	{
 		if (s->rlen > RBUF - 10)
 		{
