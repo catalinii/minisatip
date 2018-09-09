@@ -292,7 +292,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 	}
 	if(get_ddci(ad->id))
 	{
-		LOGM("Skip proxessing pmt for ddci adapter %d", ad->id);
+		LOGM("Skip processing pmt for ddci adapter %d", ad->id);
 		return TABLES_RESULT_ERROR_NORETRY;
 	}
 
@@ -313,7 +313,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 
 		return TABLES_RESULT_ERROR_RETRY;
 	}
-
+	d->ver = (d->ver + 1) & 0xF;
 	d->channels++;
 	if (d->pmt[0] == pmt->id) //process the CAT only for the first PMT
 	{
