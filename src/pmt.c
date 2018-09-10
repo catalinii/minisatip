@@ -420,7 +420,7 @@ void process_filters(adapter *ad, unsigned char *b, SPid *p)
 	SFilter *f;
 	int filter = p->filter;
 	f = get_filter(filter);
-//	DEBUGM("got filter %d for pid (%d) %d master filter %d", filter, pid, p->pid, f ? f->master_filter : -1);
+	//	DEBUGM("got filter %d for pid (%d) %d master filter %d", filter, pid, p->pid, f ? f->master_filter : -1);
 	if (!f || f->master_filter != filter || pid != f->pid)
 	{
 		p->filter = get_pid_filter(ad->id, pid);
@@ -1243,7 +1243,7 @@ int assemble_packet(SFilter *f, uint8_t *b)
 		if (crc != current_crc)
 		{
 			LOG("pid %d (%04X) CRC failed %08X != %08X len %d",
-						   pid, pid, crc, current_crc, len);
+				pid, pid, crc, current_crc, len);
 			hexdump("packet failed CRC ", b, len);
 			return 0;
 		}
@@ -1269,9 +1269,16 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque)
 	if ((ad->transponder_id == tid) && (ad->pat_ver == ver)) //pat already processed
 		LOG_AND_RETURN(0, "AD %d: tsid %d version %d", ad->id, tid, ver);
 
-	if (ad->pat_processed && ((ad->transponder_id != tid) || (ad->pat_ver != ver)))
+	if (ad->pat_processed && ad->transponder_id == tid && ad->pat_ver != ver)
 	{
-		LOG("PAT alredy processed for transponder %d, version %d, cleaning", ad->transponder_id, ad->pat_ver);
+		LOG("PAT new version for transponder %d, version %d", ad->transponder_id, ad->pat_ver);
+		clear_pmt_for_adapter(ad->id);
+		ad->pat_processed = 0;
+	}
+
+	if (ad->pat_processed && ad->transponder_id != tid)
+	{
+		LOG("PAT new transponder %d, version %d", ad->transponder_id, ad->pat_ver);
 		clear_pmt_for_adapter(ad->id);
 		ad->pat_processed = 0;
 	}
@@ -1506,7 +1513,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 		isAC3 = 0;
 		if (stype == 6)
 			isAC3 = is_ac3_es(pmt_b + i + 5, es_len);
-		else if(stype == 129)
+		else if (stype == 129)
 			isAC3 = 1;
 
 		if (pmt->all_pids < MAX_PMT_PIDS - 1)
