@@ -669,8 +669,8 @@ fe_delivery_system_t axe_delsys(int aid, int fd, fe_delivery_system_t *sys)
 
 void axe_get_signal(adapter *ad)
 {
-	uint16_t strength = 0, snr = 0, tmp;
-	uint32_t status = 0, ber = 0;
+	int strength = 0, snr = 0, tmp;
+	int status = 0, ber = 0;
 	get_signal(ad, &status, &ber, &strength, &snr);
 
 	strength = strength * 240 / 24000;
