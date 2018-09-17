@@ -1004,6 +1004,16 @@ int delete_pmt_for_adapter(int aid)
 	return 0;
 }
 
+SPMT *get_pmt_for_sid(int aid, int sid)
+
+{
+	int i;
+	for (i = 0; i < npmts; i++)
+		if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == aid && pmts[i]->sid == sid)
+			return pmts[i];
+	return NULL;
+}
+
 void mark_pid_null(uint8_t *b)
 {
 	b[1] |= 0x1F;
@@ -1253,9 +1263,11 @@ int assemble_packet(SFilter *f, uint8_t *b)
 
 int process_pat(int filter, unsigned char *b, int len, void *opaque)
 {
-	int pat_len = 0, i, tid = 0, sid, pid, ver;
+	int pat_len = 0, i, tid = 0, pid, sid, ver;
 	adapter *ad = (adapter *)opaque;
 	uint8_t new_filter[FILTER_SIZE], new_mask[FILTER_SIZE];
+	uint8_t sids[0xFFFF];
+	int new_version = 0;
 	pat_len = len - 4; // remove crc
 	tid = b[3] * 256 + b[4];
 	ver = b[5] & 0x3E;
@@ -1269,11 +1281,12 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque)
 	if ((ad->transponder_id == tid) && (ad->pat_ver == ver)) //pat already processed
 		LOG_AND_RETURN(0, "AD %d: tsid %d version %d", ad->id, tid, ver);
 
+	memset(sids, 0, sizeof(sids));
+
 	if (ad->pat_processed && ad->transponder_id == tid && ad->pat_ver != ver)
 	{
 		LOG("PAT new version for transponder %d, version %d", ad->transponder_id, ad->pat_ver);
-		clear_pmt_for_adapter(ad->id);
-		ad->pat_processed = 0;
+		new_version = 1;
 	}
 
 	if (ad->pat_processed && ad->transponder_id != tid)
@@ -1305,10 +1318,16 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque)
 
 	for (i = 0; i < pat_len; i += 4)
 	{
+		int new_pmt = 1;
 		sid = b[i] * 256 + b[i + 1];
 		pid = (b[i + 2] & 0x1F) * 256 + b[i + 3];
+		sids[sid] = 1;
 		LOG("Adapter %d, PMT sid %d (%04X), pid %d", ad->id, sid, sid, pid);
-		if (sid > 0)
+
+		if (new_version)
+			new_pmt = !get_pmt_for_sid(ad->id, sid);
+
+		if (sid > 0 && new_pmt)
 		{
 			int pmt_id = pmt_add(-1, ad->id, sid, pid);
 			SPid *p = find_pid(ad->id, pid);
@@ -1329,6 +1348,18 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque)
 				LOG("could not add PMT pid %d sid %d (%X) for processing", pid, sid, sid);
 		}
 	}
+
+	if (new_version)
+	{
+		for (i = 0; i < npmts; i++)
+			if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == ad->id && sids[pmts[i]->sid] == 0)
+			{
+				LOG("Deleting PMT %d and filter %d as it is not present in the new PAT", i, pmts[i]->filter);
+				del_filter(pmts[i]->filter);
+				pmt_del(i);
+			}
+	}
+
 	update_pids(ad->id);
 	ad->pat_processed = 1;
 	return 0;
@@ -1566,16 +1597,6 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 	mutex_unlock(&pmt->mutex);
 
 	return 0;
-}
-
-SPMT *get_pmt_for_sid(int aid, int sid)
-
-{
-	int i;
-	for (i = 0; i < npmts; i++)
-		if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == aid && pmts[i]->sid == sid)
-			return pmts[i];
-	return NULL;
 }
 
 void copy_en300468_string(char *dest, int dest_len, char *src, int len)

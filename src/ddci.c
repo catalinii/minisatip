@@ -290,7 +290,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 		LOGM("Could not find ddci device for adapter %d", ad->id);
 		return TABLES_RESULT_ERROR_NORETRY;
 	}
-	if(get_ddci(ad->id))
+	if (get_ddci(ad->id))
 	{
 		LOGM("Skip processing pmt for ddci adapter %d", ad->id);
 		return TABLES_RESULT_ERROR_NORETRY;
@@ -351,6 +351,7 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt)
 	if (!d)
 		LOG_AND_RETURN(0, "%s: ddci %d already disabled", __FUNCTION__, ddid);
 	LOG("%s: deleting pmt id %d, pid %d, ddci %d", __FUNCTION__, spmt->id, pid, ddid);
+	d->ver = (d->ver + 1) & 0xF;
 	if (d->pmt[0] == pmt)
 		d->cat_processed = 0;
 
@@ -632,7 +633,7 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d)
 	for (i = 0; i < rlen; i += 188)
 	{
 		b = ad->buf + i;
-		if(b[0] != 0x47)
+		if (b[0] != 0x47)
 			continue;
 		pid = PID_FROM_TS(b);
 		dpid = get_mapping_table(ad->id, pid, &ddci, &rewrite);
@@ -663,7 +664,7 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d)
 		{
 			io[iop].iov_base = psi;
 			io[iop].iov_len = psi_len;
-			bytes += io[iop].iov_len; 
+			bytes += io[iop].iov_len;
 			iop++;
 		}
 
@@ -801,7 +802,7 @@ void ddci_post_init(adapter *ad)
 {
 	sockets *s = get_sockets(ad->sock);
 	s->action = (socket_action)ddci_read_sec_data;
-	if(ad->fe_sock >= 0)
+	if (ad->fe_sock >= 0)
 		set_socket_thread(ad->fe_sock, get_socket_thread(ad->sock));
 	post_tune(ad);
 }
@@ -862,9 +863,9 @@ int ddci_open_device(adapter *ad)
 	ad->fe = write_fd;
 	// create a sockets for buffering
 	ad->fe_sock = -1;
-//	ad->fe_sock = sockets_add(ad->fe, NULL, ad->id, TYPE_TCP, NULL, NULL, NULL); 
-//	if(ad->fe_sock < 0)
-//		LOG_AND_RETURN(ad->fe_sock, "Failed to add sockets for the DDCI device");
+	//	ad->fe_sock = sockets_add(ad->fe, NULL, ad->id, TYPE_TCP, NULL, NULL, NULL);
+	//	if(ad->fe_sock < 0)
+	//		LOG_AND_RETURN(ad->fe_sock, "Failed to add sockets for the DDCI device");
 	ad->dvr = read_fd;
 	ad->type = ADAPTER_DVB;
 	ad->dmx = -1;
