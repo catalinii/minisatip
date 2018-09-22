@@ -878,7 +878,7 @@ int update_pids(int aid)
 			if (dp)
 				dump_pids(aid);
 			dp = 0;
-			if (ad->pids[i].fd <= 0)
+			if (ad->pids[i].fd <= 0) {
 				if ((ad->pids[i].fd = ad->set_pid(ad, ad->pids[i].pid)) < 0)
 				{
 
@@ -888,6 +888,8 @@ int update_pids(int aid)
 					LOG0("Maximum pid filter reached, lowering the value to %d", opts.max_pids);
 					break;
 				}
+				ad->active_pids++;
+			}
 			ad->pids[i].flags = 1;
 			if (ad->pids[i].pid == 0)
 				ad->pat_processed = 0;
@@ -895,7 +897,6 @@ int update_pids(int aid)
 			ad->pids[i].cc = 255;
 			ad->pids[i].cc_err = 0;
 			ad->pids[i].dec_err = 0;
-			ad->active_pids++;
 		}
 	if (ad->commit)
 		ad->commit(ad);
