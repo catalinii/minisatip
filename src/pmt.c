@@ -210,6 +210,7 @@ int del_filter(int id)
 {
 	SFilter *f;
 	int i, pid;
+	int adapter = -1;
 	LOG("deleting filter %d", id);
 	if (id < 0 || id >= MAX_FILTERS || !filters[id] || !filters[id]->enabled)
 		return 0;
@@ -224,6 +225,7 @@ int del_filter(int id)
 	mutex_lock(&filters_mutex);
 	set_filter_flags(id, 0); // remote all pids if any
 	pid = f->pid;
+	adapter = f->adapter;
 	if (id == f->master_filter)
 	{
 		int master_filter = f->next_filter;
@@ -262,7 +264,7 @@ int del_filter(int id)
 	f->enabled = 0;
 	mutex_unlock(&filters_mutex);
 	mutex_destroy(&f->mutex);
-	LOG("deleted filter %d, pid %d, max filters %d", id, pid, nfilters);
+	LOG("deleted filter %d, ad %d, pid %d, max filters %d", id, adapter, pid, nfilters);
 	return 0;
 }
 int get_pid_filter(int aid, int pid)

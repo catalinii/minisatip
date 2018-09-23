@@ -187,7 +187,7 @@ int del_pid_mapping_table(int ad, int pid, int pmt)
 	int key = (ad << 16) | pid;
 	int idx = get_index_hash(&mapping_table[0].ad_pid, mapping_table_pids, sizeof(ddci_mapping_table_t), key, key);
 	if (idx == -1)
-		return -1;
+		LOG_AND_RETURN(-1, "%s: adapter %d pid %d not found in mapping table", __FUNCTION__, ad, pid);
 	ddci_pid = mapping_table[idx].ddci_pid;
 	ddci_adapter = mapping_table[idx].ddci_adapter;
 	filter_id = mapping_table[idx].filter_id;
@@ -203,17 +203,20 @@ int del_pid_mapping_table(int ad, int pid, int pmt)
 		if (mapping_table[idx].pmt[i] == pmt)
 			mapping_table[idx].pmt[i] = -1;
 		if (mapping_table[idx].pmt[i] >= 0)
+		{
+			LOG("%s: ad %d pid %d, pid also associated with pmt %d", __FUNCTION__, ad, pid, mapping_table[idx].pmt[i]);
 			del_pid = 0;
+		}
 	}
 	if (del_pid)
 	{
-		SPid *p = find_pid(ad, pid);
+		SPid *p = find_pid(ddci_adapter, pid);
 		LOGM("No pmt found for ad %d pid %d, deleteing if not used %d", ad, pid, p ? p->sid[0] : -2);
 		if (pid == 1)
 			del_filter(filter_id);
 		else if (p && p->sid[0] == -1)
 		{
-			mark_pid_deleted(ad, -1, pid, NULL);
+			mark_pid_deleted(ddci_adapter, -1, pid, NULL);
 		}
 	}
 	return del_pid_ddci(ddci_adapter, ddci_pid, pmt);
@@ -298,7 +301,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 
 	mutex_lock(&d->mutex);
 
-	LOGM("found device %d for pmt %d", ddid, pmt->id);
+	LOG("found device %d for pmt %d", ddid, pmt->id);
 	for (i = 0; i < d->max_channels; i++)
 		if (d->pmt[i] == -1)
 		{
@@ -375,9 +378,8 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt)
 				LOG("Deleting pid %d", mapping_table[i].ad_pid & 0xFFFF);
 				del_pid_mapping_table(ad->id, mapping_table[i].ad_pid & 0xFFFF, pmt);
 			}
-			LOGM("pid %d does not have pmt %d", mapping_table[i].ad_pid & 0xFFFF, pmt);
 		}
-	update_pids(ad->id);
+	update_pids(d->id);
 	return 0;
 }
 
@@ -731,13 +733,15 @@ void ddci_init() // you can search the devices here and fill the ddci_devices, t
 	ddci.ca_ts = ddci_ts;
 	ddci_id = add_ca(&ddci, 0xFFFFFFFF);
 }
-int ddci_set_pid(adapter *a, int i_pid)
+int ddci_set_pid(adapter *ad, int pid)
 {
+	LOG("%s: ddci %d add pid %d", __FUNCTION__, ad->id, pid);
 	return 100;
 }
 
 int ddci_del_filters(adapter *ad, int fd, int pid)
 {
+	LOG("%s: ddci %d del pid %d", __FUNCTION__, ad->id, pid);
 	return 0;
 }
 

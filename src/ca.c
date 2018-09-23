@@ -129,7 +129,8 @@ static struct ca_device *ca_devices[MAX_ADAPTERS];
 #define TS101699_APP_AI_RESOURCEID MKRID(2, 1, 2)
 #define CIPLUS13_APP_AI_RESOURCEID MKRID(2, 1, 3)
 
-typedef enum {
+typedef enum
+{
 	CIPLUS13_DATA_RATE_72_MBPS = 0,
 	CIPLUS13_DATA_RATE_96_MBPS = 1,
 } ciplus13_data_rate_t;
@@ -187,7 +188,16 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt)
 	ver = (b[5] >> 1) & 0x1f;
 	sid = (b[3] << 8) | b[4];
 
-	LOG("PMT CA pid %u len %u ver %u sid %u (%x)", pid, len, ver, sid, sid);
+	listmgmt = CA_LIST_MANAGEMENT_ONLY;
+	for (i = 0; i < MAX_CA_PMT; i++)
+		if (d->pmt_id[i] > 0 && d->pmt_id[i] != spmt->id)
+		{
+			listmgmt = CA_LIST_MANAGEMENT_ADD;
+		}
+
+	LOG("PMT CA pid %u len %u ver %u sid %u (%x) %s", pid, len, ver, sid, sid,
+		listmgmt == CA_LIST_MANAGEMENT_ONLY ? "only" : "add");
+
 	uint8_t capmt[8192];
 	int size;
 	struct section *section = section_codec(b, len);
@@ -213,11 +223,6 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt)
 		LOG("failed to decode pmt");
 		return TABLES_RESULT_ERROR_RETRY;
 	}
-
-	listmgmt = CA_LIST_MANAGEMENT_ONLY;
-	for (i = 0; i < MAX_CA_PMT; i++)
-		if (d->pmt_id[i] != spmt->id)
-			listmgmt = CA_LIST_MANAGEMENT_ADD;
 
 	if ((size = en50221_ca_format_pmt((struct mpeg_pmt_section *)b, capmt,
 									  sizeof(capmt), 0, listmgmt,

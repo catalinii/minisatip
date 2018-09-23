@@ -203,6 +203,7 @@ void close_pmt_for_ca(int i, adapter *ad, SPMT *pmt)
 		return;
 	if (ca[i].enabled && (ad->ca_mask & mask) && (pmt->ca_mask & mask))
 	{
+		LOGM("Closing pmt %d for ca %d and adapter %d", pmt->id, i, ad->id);
 		if (ad && ca[i].op->ca_del_pmt)
 			ca[i].op->ca_del_pmt(ad, pmt);
 		pmt->ca_mask &= ~mask;
@@ -215,6 +216,7 @@ int close_pmt_for_cas(adapter *ad, SPMT *pmt)
 	if (!pmt->ca_mask)
 		return 0;
 
+	LOGM("Closing pmt %d for adapter %d", pmt->id, ad->id);
 	for (i = 0; i < nca; i++)
 		if (ca[i].enabled)
 			close_pmt_for_ca(i, ad, pmt);
