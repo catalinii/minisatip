@@ -907,7 +907,9 @@ int update_pids(int aid)
 
 void post_tune(adapter *ad)
 {
+#if !defined(DISABLE_PMT) || !defined(DISABLE_T2MI)
 	int aid = ad->id;
+#endif
 #ifndef DISABLE_PMT
 	SPid *p = find_pid(aid, 0);
 	SPid *p_all = find_pid(aid, 8192);
