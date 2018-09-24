@@ -210,7 +210,7 @@ static inline int extra_quattro(int input, int diseqc, int *equattro)
 	return *equattro;
 }
 
-adapter *use_adapter(int input)
+adapter *axe_use_adapter(int input)
 {
 	int input2 = input < 4 ? input : -1;
 	adapter *ad = get_configured_adapter(input2);
@@ -229,11 +229,33 @@ adapter *use_adapter(int input)
 	return ad;
 }
 
-int tune_check(adapter *ad, int pol, int hiband, int diseqc)
+int axe_get_hiband(transponder *tp, diseqc *diseqc_param)
 {
+	if (tp->pol > 2 && diseqc_param->lnb_circular > 0)
+		return 0;
+	if (tp->freq < diseqc_param->lnb_switch)
+		return 0;
+	return 1;
+}
+
+int axe_get_freq(transponder *tp, diseqc *diseqc_param)
+{
+	int freq = tp->freq;
+
+	if (tp->pol > 2 && diseqc_param->lnb_circular > 0)
+		return (freq - diseqc_param->lnb_circular);
+	if (freq < diseqc_param->lnb_switch)
+		return (freq - diseqc_param->lnb_low);
+	return (freq - diseqc_param->lnb_high);
+}
+
+int axe_tune_check(adapter *ad, transponder *tp, diseqc *diseqc_param, int diseqc)
+{
+	int pol = tp->pol;
+	int hiband = axe_get_hiband(tp, diseqc_param);
 	LOGM("axe: tune check for adapter %d, pol %d/%d, hiband %d/%d, diseqc %d/%d",
 		 ad->id, ad->old_pol, pol, ad->old_hiband, hiband, ad->old_diseqc, diseqc);
-	if (ad->old_pol != pol)
+	if (ad->old_pol != tp->pol)
 		return 0;
 	if (ad->old_hiband != hiband)
 		return 0;
@@ -249,33 +271,18 @@ int axe_setup_switch(adapter *ad)
 {
 	int frontend_fd = ad->fe;
 	transponder *tp = &ad->tp;
+	diseqc *diseqc_param = &tp->diseqc_param;
 
-	int hiband = 0;
+	int hiband;
+	int freq;
 	int diseqc = (tp->diseqc > 0) ? tp->diseqc - 1 : 0;
-	int freq = tp->freq;
 	int pol = (tp->pol - 1) & 1;
-
-	if (tp->pol > 2 && tp->diseqc_param.lnb_circular > 0)
-	{
-		freq = (freq - tp->diseqc_param.lnb_circular);
-		hiband = 0;
-	}
-	else if (freq < tp->diseqc_param.lnb_switch)
-	{
-		freq = (freq - tp->diseqc_param.lnb_low);
-		hiband = 0;
-	}
-	else
-	{
-		freq = (freq - tp->diseqc_param.lnb_high);
-		hiband = 1;
-	}
 
 	adapter *ad2, *adm;
 	int input = 0, aid, pos = 0, equattro = 0, master = -1;
 
-	if (tp->diseqc_param.switch_type != SWITCH_UNICABLE &&
-		tp->diseqc_param.switch_type != SWITCH_JESS)
+	if (diseqc_param->switch_type != SWITCH_UNICABLE &&
+		diseqc_param->switch_type != SWITCH_JESS)
 	{
 		input = ad->id;
 		if (!opts.quattro || extra_quattro(input, diseqc, &equattro))
@@ -298,7 +305,7 @@ int axe_setup_switch(adapter *ad)
 						continue;
 					if ((ad2->axe_used & ~(1 << ad->id)) == 0)
 						continue;
-					if (!tune_check(ad2, pol, hiband, pos))
+					if (!axe_tune_check(ad2, tp, &ad2->diseqc_param, pos))
 						continue;
 					break;
 				}
@@ -327,7 +334,7 @@ int axe_setup_switch(adapter *ad)
 				}
 				diseqc = pos;
 				master = aid;
-				adm = use_adapter(master);
+				adm = axe_use_adapter(master);
 				if (adm == NULL)
 				{
 					LOG("axe_fe: unknown master adapter for input %d", input);
@@ -337,7 +344,7 @@ int axe_setup_switch(adapter *ad)
 			else
 			{
 				master = (ad->master_source >= 0) ? ad->master_source : ad->pa;
-				adm = use_adapter(master);
+				adm = axe_use_adapter(master);
 				if (adm == NULL)
 				{
 					LOG("axe_fe: unknown master adapter for input %d", input);
@@ -357,7 +364,7 @@ int axe_setup_switch(adapter *ad)
 						if (ad2->sid_cnt > 0)
 							break;
 					}
-					if (adm != ad && aid < 4 && !tune_check(adm, pol, hiband, diseqc))
+					if (adm != ad && aid < 4 && !axe_tune_check(adm, tp, &adm->diseqc_param, diseqc))
 					{
 						LOG("unable to use slave adapter %d (master %d)", input, adm->pa);
 						return 0;
@@ -368,10 +375,13 @@ int axe_setup_switch(adapter *ad)
 			if (master >= 0)
 			{
 				input = master;
-				if (!tune_check(adm, pol, hiband, diseqc))
+				diseqc_param = &adm->diseqc_param;
+				hiband = axe_get_hiband(tp, diseqc_param);
+				freq = axe_get_freq(tp, diseqc_param);
+				if (!axe_tune_check(adm, tp, diseqc_param, diseqc))
 				{
 					send_diseqc(adm, adm->fe2, diseqc, adm->old_diseqc != diseqc,
-								pol, hiband, &adm->diseqc_param);
+								pol, hiband, diseqc_param);
 					adm->old_pol = pol;
 					adm->old_hiband = hiband;
 					adm->old_diseqc = diseqc;
@@ -381,6 +391,7 @@ int axe_setup_switch(adapter *ad)
 		}
 		else if (opts.quattro)
 		{
+			hiband = axe_get_hiband(tp, diseqc_param);
 			if (opts.quattro_hiband == 1 && hiband)
 			{
 				LOG("axe_fe: hiband is not allowed for quattro config (adapter %d)", input);
@@ -392,17 +403,19 @@ int axe_setup_switch(adapter *ad)
 				return 0;
 			}
 			input = ((hiband ^ 1) << 1) | (pol ^ 1);
-			adm = use_adapter(input);
+			adm = axe_use_adapter(input);
 			if (adm == NULL)
 			{
 				LOG("axe_fe: unknown master adapter %d", input);
 				return 0;
 			}
 			adm->old_diseqc = diseqc = 0;
-			if (!tune_check(adm, pol, hiband, 0))
+			diseqc_param = &adm->diseqc_param;
+			hiband = axe_get_hiband(tp, diseqc_param);
+			freq = axe_get_freq(tp, diseqc_param);
+			if (!axe_tune_check(adm, tp, diseqc_param, 0))
 			{
-				send_diseqc(adm, adm->fe2, 0, 0, pol, hiband,
-							&adm->diseqc_param);
+				send_diseqc(adm, adm->fe2, 0, 0, pol, hiband, diseqc_param);
 				adm->old_pol = pol;
 				adm->old_hiband = hiband;
 				adm->old_diseqc = 0;
@@ -414,9 +427,15 @@ int axe_setup_switch(adapter *ad)
 	else
 	{
 		aid = ad->id & 3;
-		input = ad->master_source < 0 ? 0 : ad->master_source; //opts.axe_unicinp[aid];
+		if (diseqc_param->switch_type == SWITCH_UNICABLE ||
+			diseqc_param->switch_type == SWITCH_JESS)
+		{
+			input = ad->dmx_source < 0 ? 0 : ad->dmx_source;
+		} else {
+			input = ad->master_source < 0 ? 0 : ad->master_source;
+		}
 		frontend_fd = ad->fe;
-		ad = use_adapter(input);
+		ad = axe_use_adapter(input);
 		if (ad == NULL)
 		{
 			LOGM("axe setup: unable to find adapter %d", input);
@@ -429,17 +448,20 @@ int axe_setup_switch(adapter *ad)
 			ad->id, input, ad->fe, ad->fe2);
 	}
 
-	if (tp->diseqc_param.switch_type == SWITCH_UNICABLE)
+	hiband = axe_get_hiband(tp, diseqc_param);
+	freq = axe_get_freq(tp, diseqc_param);
+	
+	if (diseqc_param->switch_type == SWITCH_UNICABLE)
 	{
 		freq = send_unicable(ad, ad->fe2, freq / 1000, diseqc,
-							 pol, hiband, &tp->diseqc_param);
+							 pol, hiband, diseqc_param);
 	}
-	else if (tp->diseqc_param.switch_type == SWITCH_JESS)
+	else if (diseqc_param->switch_type == SWITCH_JESS)
 	{
 		freq = send_jess(ad, ad->fe2, freq / 1000, diseqc,
-						 pol, hiband, &tp->diseqc_param);
+						 pol, hiband, diseqc_param);
 	}
-	else if (tp->diseqc_param.switch_type == SWITCH_SLAVE)
+	else if (diseqc_param->switch_type == SWITCH_SLAVE)
 	{
 		LOG("FD %d (%d) is a slave adapter", frontend_fd);
 	}
@@ -447,7 +469,7 @@ int axe_setup_switch(adapter *ad)
 	{
 		if (ad->old_pol != pol || ad->old_hiband != hiband || ad->old_diseqc != diseqc)
 			send_diseqc(ad, frontend_fd, diseqc, ad->old_diseqc != diseqc, pol,
-						hiband, &tp->diseqc_param);
+						hiband, diseqc_param);
 		else
 			LOGM("Skip sending diseqc commands since "
 				 "the switch position doesn't need to be changed: "
