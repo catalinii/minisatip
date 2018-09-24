@@ -831,11 +831,11 @@ void free_axe_input(adapter *ad)
 void set_link_adapters(char *o)
 {
 	int i, la, a_id, b_id;
-	char buf[100], *arg[20], *sep1;
+	char buf[1000], *arg[40], *sep1;
 
 	strncpy(buf, o, sizeof(buf) - 1);
 	buf[sizeof(buf) - 1] = '\0';
-	la = split(arg, buf, sizeof(arg), ',');
+	la = split(arg, buf, ARRAY_SIZE(arg), ',');
 	for (i = 0; i < la; i++)
 	{
 		a_id = map_intd(arg[i], NULL, -1);
@@ -859,11 +859,11 @@ void set_link_adapters(char *o)
 void set_absolute_src(char *o)
 {
 	int i, la, src, inp, pos;
-	char buf[100], *arg[20], *inps, *poss;
+	char buf[1000], *arg[40], *inps, *poss;
 
 	strncpy(buf, o, sizeof(buf) - 1);
 	buf[sizeof(buf) - 1] = '\0';
-	la = split(arg, buf, sizeof(arg), ',');
+	la = split(arg, buf, ARRAY_SIZE(arg), ',');
 	for (i = 0; i < la; i++)
 	{
 		inps = strchr(arg[i], ':');

@@ -422,7 +422,7 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp)
 			return 0;
 		}
 
-		l = split(arg2, arg, 10, ';');
+		l = split(arg2, arg, ARRAY_SIZE(arg2), ';');
 	}
 	//      LOG("arg2 %s %s %s",arg2[0],arg2[1],arg2[2]);
 	memset(&p, 0, sizeof(p));

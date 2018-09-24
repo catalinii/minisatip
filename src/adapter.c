@@ -550,7 +550,7 @@ int getAdaptersCount()
 		memset(&fe_map, -1, sizeof(fe_map));
 
 		k = 0;
-		for (i = 0; i < sizeof(order); i++)
+		for (i = 0; i < ARRAY_SIZE(order); i++)
 		{
 			int sys = order[i];
 			for (j = 0; j < ifes[sys]; j++)
@@ -676,7 +676,7 @@ int get_free_adapter(transponder *tp)
 
 	adapter *ad = a[0];
 
-	if ((fe > 0) && (fe <= sizeof(fe_map)) && (fe_map[fe - 1] >= 0))
+	if ((fe > 0) && (fe <= ARRAY_SIZE(fe_map)) && (fe_map[fe - 1] >= 0))
 	{
 		fe = fe_map[fe - 1];
 		ad = a[fe];
@@ -1067,7 +1067,7 @@ void mark_pids_deleted(int aid, int sid, char *pids) //pids==NULL -> delete all 
 		pids ? pids : "NULL");
 	if (pids)
 	{
-		la = split(arg, pids, MAX_PIDS, ',');
+		la = split(arg, pids, ARRAY_SIZE(arg), ',');
 		for (i = 0; i < la; i++)
 		{
 			pid = map_int(arg[i], NULL);
@@ -1147,7 +1147,7 @@ int mark_pids_add(int sid, int aid, char *pids)
 	LOG("adding pids to adapter %d, sid %d, pids=%s", aid, sid,
 		pids ? pids : "NULL");
 
-	la = split(arg, pids, MAX_PIDS, ',');
+	la = split(arg, pids, ARRAY_SIZE(arg), ',');
 	for (i = 0; i < la; i++)
 	{
 		pid = map_intd(arg[i], NULL, -1);
@@ -1243,7 +1243,7 @@ int set_adapter_parameters(int aid, int sid, transponder *tp)
 	{
 		char *arg[64];
 		int i, la;
-		la = split(arg, ad->tp.x_pmt, 64, ',');
+		la = split(arg, ad->tp.x_pmt, ARRAY_SIZE(arg), ',');
 		for (i = 0; i < la; i++)
 		{
 			int pmt = map_int(arg[i], NULL);
@@ -1437,12 +1437,12 @@ void set_disable(int i, int v)
 void enable_adapters(char *o)
 {
 	int i, la, st, end, j;
-	char buf[100], *arg[20], *sep;
+	char buf[1000], *arg[40], *sep;
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		set_disable(i, 1);
 	SAFE_STRCPY(buf, o);
 
-	la = split(arg, buf, sizeof(arg), ',');
+	la = split(arg, buf, ARRAY_SIZE(arg), ',');
 	for (i = 0; i < la; i++)
 	{
 		sep = strchr(arg[i], '-');
@@ -1464,10 +1464,10 @@ void enable_adapters(char *o)
 void set_unicable_adapters(char *o, int type)
 {
 	int i, la, a_id, slot, freq, pin, o13v;
-	char buf[100], *arg[20], *sep1, *sep2, *sep3;
+	char buf[1000], *arg[40], *sep1, *sep2, *sep3;
 	adapter *ad;
 	SAFE_STRCPY(buf, o);
-	la = split(arg, buf, sizeof(arg), ',');
+	la = split(arg, buf, ARRAY_SIZE(arg), ',');
 	for (i = 0; i < la; i++)
 	{
 		a_id = map_intd(arg[i], NULL, -1);
@@ -1505,10 +1505,10 @@ void set_unicable_adapters(char *o, int type)
 void set_diseqc_adapters(char *o)
 {
 	int i, la, a_id, fast, committed_no, uncommitted_no;
-	char buf[100], *arg[20], *sep1, *sep2;
+	char buf[1000], *arg[40], *sep1, *sep2;
 	adapter *ad;
 	SAFE_STRCPY(buf, o);
-	la = split(arg, buf, sizeof(arg), ',');
+	la = split(arg, buf, ARRAY_SIZE(arg), ',');
 	for (i = 0; i < la; i++)
 	{
 		if (arg[i] && arg[i][0] == '*')
@@ -1568,10 +1568,10 @@ void set_diseqc_adapters(char *o)
 void set_diseqc_multi(char *o)
 {
 	int i, la, a_id, position;
-	char buf[100], *arg[20], *sep1;
+	char buf[1000], *arg[40], *sep1;
 	adapter *ad;
 	SAFE_STRCPY(buf, o);
-	la = split(arg, buf, sizeof(arg), ',');
+	la = split(arg, buf, ARRAY_SIZE(arg), ',');
 	for (i = 0; i < la; i++)
 	{
 		if (arg[i] && arg[i][0] == '*')
@@ -1620,10 +1620,10 @@ void set_diseqc_multi(char *o)
 void set_lnb_adapters(char *o)
 {
 	int i, la, a_id, lnb_low, lnb_high, lnb_switch;
-	char buf[100], *arg[20], *sep1, *sep2, *sep3;
+	char buf[1000], *arg[40], *sep1, *sep2, *sep3;
 	adapter *ad;
 	SAFE_STRCPY(buf, o);
-	la = split(arg, buf, sizeof(arg), ',');
+	la = split(arg, buf, ARRAY_SIZE(arg), ',');
 	for (i = 0; i < la; i++)
 	{
 		if (arg[i] && arg[i][0] == '*')
@@ -1693,11 +1693,11 @@ void set_diseqc_timing(char *o)
 	int i, la, a_id;
 	int before_cmd, after_cmd, after_repeated_cmd;
 	int after_switch, after_burst, after_tone;
-	char buf[2000], *arg[20];
+	char buf[2000], *arg[40];
 	char *sep1, *sep2, *sep3, *sep4, *sep5, *sep6;
 	adapter *ad;
 	SAFE_STRCPY(buf, o);
-	la = split(arg, buf, sizeof(arg), ',');
+	la = split(arg, buf, ARRAY_SIZE(arg), ',');
 	for (i = 0; i < la; i++)
 	{
 		if (arg[i] && arg[i][0] == '*')
@@ -1774,10 +1774,10 @@ void set_diseqc_timing(char *o)
 void set_slave_adapters(char *o)
 {
 	int i, j, la, a_id, a_id2, master = 0;
-	char buf[100], *arg[20], *sep, *sep2;
+	char buf[1000], *arg[40], *sep, *sep2;
 	adapter *ad;
 	SAFE_STRCPY(buf, o);
-	la = split(arg, buf, sizeof(arg), ',');
+	la = split(arg, buf, ARRAY_SIZE(arg), ',');
 	for (i = 0; i < la; i++)
 	{
 		a_id = map_intd(arg[i], NULL, -1);
@@ -1827,13 +1827,13 @@ void set_timeout_adapters(char *o)
 {
 	int i, j, la, a_id, a_id2;
 	int timeout = opts.adapter_timeout / 1000;
-	char buf[100], *arg[20], *sep;
+	char buf[1000], *arg[40], *sep;
 	adapter *ad;
 	SAFE_STRCPY(buf, o);
 	sep = strchr(buf, ':');
 	if (sep)
 		timeout = map_intd(sep + 1, NULL, timeout);
-	la = split(arg, buf, sizeof(arg), ',');
+	la = split(arg, buf, ARRAY_SIZE(arg), ',');
 	if (arg[0] && (arg[0][0] == '*'))
 	{
 		opts.adapter_timeout = timeout * 1000;
@@ -1877,10 +1877,10 @@ extern char *fe_delsys[];
 void set_adapters_delsys(char *o)
 {
 	int i, la, a_id, ds;
-	char buf[100], *arg[20], *sep;
+	char buf[1000], *arg[40], *sep;
 	adapter *ad;
 	SAFE_STRCPY(buf, o);
-	la = split(arg, buf, sizeof(arg), ',');
+	la = split(arg, buf, ARRAY_SIZE(arg), ',');
 	for (i = 0; i < la; i++)
 	{
 		a_id = map_intd(arg[i], NULL, -1);
@@ -1917,10 +1917,10 @@ void set_adapters_delsys(char *o)
 void set_adapter_dmxsource(char *o)
 {
 	int i, j, la, st, end, fd;
-	char buf[100], *arg[20], *sep, *seps;
+	char buf[1000], *arg[40], *sep, *seps;
 	adapter *ad;
 	SAFE_STRCPY(buf, o);
-	la = split(arg, buf, sizeof(arg), ',');
+	la = split(arg, buf, ARRAY_SIZE(arg), ',');
 	for (i = 0; i < la; i++)
 	{
 		sep = strchr(arg[i], '-');
@@ -1957,10 +1957,10 @@ void set_signal_multiplier(char *o)
 {
 	int i, la, a_id;
 	float strength_multiplier, snr_multiplier;
-	char buf[100], *arg[20], *sep1, *sep2;
+	char buf[1000], *arg[40], *sep1, *sep2;
 	adapter *ad;
 	SAFE_STRCPY(buf, o);
-	la = split(arg, buf, sizeof(arg), ',');
+	la = split(arg, buf, ARRAY_SIZE(arg), ',');
 	for (i = 0; i < la; i++)
 	{
 		if (arg[i] && arg[i][0] == '*')

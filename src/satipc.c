@@ -176,7 +176,7 @@ int satipc_reply(sockets *s)
 		sip->option_no_option = 1;
 	}
 
-	la = split(arg, (char *)s->buf, 100, ' ');
+	la = split(arg, (char *)s->buf, ARRAY_SIZE(arg), ' ');
 	rc = map_int(arg[1], NULL);
 
 	if (sip->option_no_session && sip->last_cmd == RTSP_OPTIONS && !sess && sip->session[0])
@@ -1288,7 +1288,7 @@ void find_satip_adapter(adapter **a)
 		return;
 	char satip_servers[strlen(opts.satip_servers) + 10];
 	strcpy(satip_servers, opts.satip_servers);
-	la = split(arg, satip_servers, 50, ',');
+	la = split(arg, satip_servers, ARRAY_SIZE(arg), ',');
 
 	for (i = 0; i < la; i++)
 	{
@@ -1420,7 +1420,7 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h)
 		eos = strchr(sep, '<');
 		if (eos)
 			*eos = 0;
-		la = split(arg, sep, MAX_DVBAPI_SYSTEMS, ',');
+		la = split(arg, sep, ARRAY_SIZE(arg), ',');
 		for (i = 0; i < la; i++)
 		{
 			int ds = map_intd(arg[i], satip_delsys, -1);
@@ -1474,7 +1474,7 @@ int satip_getxml(void *x)
 	memset(satip_xml, 0, sizeof(satip_xml));
 	memset(sxd, 0, sizeof(sxd));
 	strncpy(satip_xml, opts.satip_xml, sizeof(satip_xml) - 1);
-	la = split(arg, satip_xml, MAX_SATIP_XML, ',');
+	la = split(arg, satip_xml, ARRAY_SIZE(arg), ',');
 	for (i = 0; i < la; i++)
 	{
 		SAFE_STRCPY(sxd[i].url, arg[i]);
