@@ -192,7 +192,7 @@ int detect_dvb_parameters(char *s, transponder *tp)
 		init_dvb_parameters(tp);
 
 	LOG("detect_dvb_parameters (S)-> %s", s);
-	la = split(arg, s, 20, '&');
+	la = split(arg, s, ARRAY_SIZE(arg), '&');
 
 	for (i = 0; i < la; i++)
 	{

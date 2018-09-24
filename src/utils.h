@@ -263,6 +263,8 @@ static inline int get_index_hash(void *p, int max, int struct_size, uint32_t key
 
 typedef ssize_t (*mywritev)(int fd, const struct iovec *io, int len);
 
+#define ARRAY_SIZE(a) (sizeof(a)/sizeof(a[0]))
+
 #ifdef TESTING
 
 #define writev(a, b, c) _writev(a, b, c)

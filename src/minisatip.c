@@ -614,7 +614,7 @@ void set_options(int argc, char *argv[])
 			int i;
 			memset(buf, 0, sizeof(buf));
 			strncpy(buf, optarg, sizeof(buf) - 1);
-			int la = split(arg, buf, 50, ',');
+			int la = split(arg, buf, ARRAY_SIZE(arg), ',');
 			for (i = 0; i < la; i++)
 			{
 				int level = map_intd(arg[i], loglevels, -1);
@@ -1046,7 +1046,7 @@ int read_rtsp(sockets *s)
 		return 0;
 	}
 
-	la = split(arg, (char *)s->buf, 50, ' ');
+	la = split(arg, (char *)s->buf, ARRAY_SIZE(arg), ' ');
 	cseq = 0;
 	if (la < 2)
 		LOG_AND_RETURN(0,
@@ -1311,7 +1311,7 @@ int read_http(sockets *s)
 	LOG("read HTTP from %d sid: %d: ", s->sock, s->sid);
 	LOGM("%s", s->buf);
 
-	split(arg, (char *)s->buf, 50, ' ');
+	split(arg, (char *)s->buf, ARRAY_SIZE(arg), ' ');
 	//      LOG("args: %s -> %s -> %s",arg[0],arg[1],arg[2]);
 	if (strncmp(arg[0], "GET", 3) && strncmp(arg[0], "POST", 4) && !is_head)
 		REPLY_AND_RETURN(503);
