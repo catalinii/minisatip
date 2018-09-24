@@ -281,6 +281,13 @@ int axe_setup_switch(adapter *ad)
 	adapter *ad2, *adm;
 	int input = 0, aid, pos = 0, equattro = 0, master = -1;
 
+	/* this is a new tune, so clear all adapter<->input mappings */
+	for (aid = 0; aid < 4; aid++)
+	{
+		ad2 = a[aid];
+		ad2->axe_used &= ~(1 << ad->id);
+	}
+
 	if (diseqc_param->switch_type != SWITCH_UNICABLE &&
 		diseqc_param->switch_type != SWITCH_JESS)
 	{
