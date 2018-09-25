@@ -506,7 +506,9 @@ int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol, int hiban
 		posu = pos / 4;
 	}
 
+	cmd.msg[1] = d->addr;
 	cmd.msg[3] = 0xf0 | (((posc << 2) & 0x0c) | (hiband ? 1 : 0) | (pol ? 2 : 0));
+	uncmd.msg[1] = d->addr;
 	uncmd.msg[3] = 0xf0 | (posu & 0x0f);
 
 	LOGM("send_diseqc fd %d, pos = %d (c %d u %d), pol = %d, hiband = %d",
@@ -554,12 +556,13 @@ int send_unicable(adapter *ad, int fd, int freq, int pos, int pol, int hiband, d
 {
 	struct dvb_diseqc_master_cmd cmd =
 		{
-			{0xe0, 0x11, 0x5a, 0x00, 0x00}, 5};
+			{0xe0, 0x10, 0x5a, 0x00, 0x00}, 5};
 	int t;
 	int committed_no = d->committed_no;
 
 	t = (freq + d->ufreq + 2) / 4 - 350;
 
+	cmd.msg[1] = d->addr;
 	cmd.msg[3] = ((t & 0x0300) >> 8) | (d->uslot << 5) | (pos ? 0x10 : 0) | (hiband ? 4 : 0) | (pol ? 8 : 0);
 	cmd.msg[4] = t & 0xff;
 

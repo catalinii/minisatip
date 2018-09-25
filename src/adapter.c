@@ -75,6 +75,7 @@ adapter *adapter_alloc()
 
 	/* diseqc setup */
 	ad->diseqc_param.fast = opts.diseqc_fast;
+	ad->diseqc_param.addr = opts.diseqc_addr;
 	ad->diseqc_param.committed_no = opts.diseqc_committed_no;
 	ad->diseqc_param.uncommitted_no = opts.diseqc_uncommitted_no;
 
@@ -1506,7 +1507,7 @@ void set_unicable_adapters(char *o, int type)
 
 void set_diseqc_adapters(char *o)
 {
-	int i, la, a_id, fast, committed_no, uncommitted_no;
+	int i, la, a_id, fast, addr, committed_no, uncommitted_no;
 	char buf[1000], *arg[40], *sep1, *sep2;
 	adapter *ad;
 	SAFE_STRCPY(buf, o);
@@ -1534,8 +1535,28 @@ void set_diseqc_adapters(char *o)
 
 		if (!sep1 || !sep2)
 			continue;
-		if ((fast = (sep1[1] == '*')) != 0)
-			sep1++;
+
+		fast = 0;
+		addr = 0x10;
+		while (sep1[1] == '*' || sep1[1] == '@' || sep1[1] == '.')
+		{
+			if (sep1[1] == '*')
+			{
+				fast = 1;
+				sep1++;
+			}
+			else if (sep1[1] == '@')
+			{
+				addr = 0;
+				sep1++;
+			}
+			else if (sep1[1] == '.')
+			{
+				addr = 0x11;
+				sep1++;
+			}
+		}
+
 		committed_no = map_intd(sep1 + 1, NULL, -1);
 		uncommitted_no = map_intd(sep2 + 1, NULL, -1);
 		if (committed_no < 0 || uncommitted_no < 0)
@@ -1544,12 +1565,14 @@ void set_diseqc_adapters(char *o)
 		if (ad)
 		{
 			ad->diseqc_param.fast = fast;
+			ad->diseqc_param.addr = addr;
 			ad->diseqc_param.committed_no = committed_no;
 			ad->diseqc_param.uncommitted_no = uncommitted_no;
 		}
 		else
 		{
 			opts.diseqc_fast = fast;
+			opts.diseqc_addr = addr;
 			opts.diseqc_committed_no = committed_no;
 			opts.diseqc_uncommitted_no = uncommitted_no;
 			int j;
@@ -1557,13 +1580,14 @@ void set_diseqc_adapters(char *o)
 				if (a[j])
 				{
 					a[j]->diseqc_param.fast = fast;
+					a[j]->diseqc_param.addr = addr;
 					a[j]->diseqc_param.committed_no = committed_no;
 					a[j]->diseqc_param.uncommitted_no = uncommitted_no;
 				}
 		}
 		LOG(
-			"Setting diseqc adapter %d fast %d committed_no %d uncommitted_no %d",
-			a_id, fast, committed_no, uncommitted_no);
+			"Setting diseqc adapter %d fast %d addr 0x%02x committed_no %d uncommitted_no %d",
+			a_id, fast, addr, committed_no, uncommitted_no);
 	}
 }
 
