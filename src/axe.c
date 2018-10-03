@@ -251,11 +251,11 @@ int axe_get_freq(transponder *tp, diseqc *diseqc_param)
 
 int axe_tune_check(adapter *ad, transponder *tp, diseqc *diseqc_param, int diseqc)
 {
-	int pol = tp->pol;
+	int pol = (tp->pol - 1) & 1;
 	int hiband = axe_get_hiband(tp, diseqc_param);
 	LOGM("axe: tune check for adapter %d, pol %d/%d, hiband %d/%d, diseqc %d/%d",
 		 ad->id, ad->old_pol, pol, ad->old_hiband, hiband, ad->old_diseqc, diseqc);
-	if (ad->old_pol != tp->pol)
+	if (ad->old_pol != pol)
 		return 0;
 	if (ad->old_hiband != hiband)
 		return 0;
