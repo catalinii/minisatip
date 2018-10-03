@@ -286,6 +286,8 @@ Help\n\
 	* eg: -d 0:1-0  (which is the default for each adapter).\n\
 	- note: * as adapter means apply to all adapters\n\
 	- note: * before committed number enables fast-switch (only voltage/tone)\n\
+	- note: @ before committed number sets 'Any Device' diseqc address (0x00)\n\
+	- note: . before committed number sets 'LNB' diseqc address (0x11)\n\
 \n\
 * -q --diseqc-timing ADAPTER1:BEFORE_CMD1-AFTER_CMD1-AFTER_REPEATED_CMD1-AFTER_SWITCH1-AFTER_BURST1-AFTER_TONE1[,...]\n\
 \t* All timing values are in ms, default adapter values are: 15-54-15-15-15-0\n\
@@ -513,6 +515,7 @@ void set_options(int argc, char *argv[])
 	opts.document_root = "html";
 	opts.xml_path = DESC_XML;
 	opts.th_priority = -1;
+	opts.diseqc_addr = 0x10;
 	opts.diseqc_before_cmd = 15;
 	opts.diseqc_after_cmd = 54;
 	opts.diseqc_after_repeated_cmd = 15;

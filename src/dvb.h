@@ -189,12 +189,14 @@ typedef struct diseqc
 #define SWITCH_SLAVE 3
 	int switch_type;
 	/* parameters */
-	int uslot; // unicable/jess slot
-	int ufreq; // unicable/jess frequency
-	int pin;
-	int only13v;					  // unicable - use 13V voltage only
-	int fast;						  // don't send diseqc without position change
-	int committed_no, uncommitted_no; // diseqc info
+	int uslot;		// unicable/jess slot
+	int ufreq;		// unicable/jess frequency
+	int pin;		// unicable pin code
+	int only13v;		// unicable - use 13V voltage only
+	int fast;		// don't send diseqc without position change
+	int addr;		// diseqc address (second byte in the sequence)
+	int committed_no;	// committed switch number
+	int uncommitted_no;	// uncommitted switch number
 	/* timing */
 	int before_cmd;
 	int after_cmd;
