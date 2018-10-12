@@ -234,10 +234,10 @@ typedef struct struct_transponder
 
 	diseqc diseqc_param;
 
-	// DVB-C2
-	int c2tft;
-	int ds;
-	int plp;
+	int c2tft;	// DVB-C2
+	int ds;		// DVB-C2 (data slice)
+	int plp_isi;	// DVB-T2/DVB-S2
+	int pls_code;   // DVB-S2
 
 	char *apids, *pids, *dpids, *x_pmt;
 } transponder;

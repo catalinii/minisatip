@@ -177,7 +177,8 @@ int detect_dvb_parameters(char *s, transponder *tp)
 	tp->diseqc = -1;
 	tp->c2tft = -1;
 	tp->ds = -1;
-	tp->plp = -1;
+	tp->plp_isi = -1;
+	tp->pls_code = -1;
 
 	tp->pids = tp->apids = tp->dpids = tp->x_pmt = NULL;
 
@@ -228,8 +229,11 @@ int detect_dvb_parameters(char *s, transponder *tp)
 			tp->c2tft = map_int(arg[i] + 6, NULL);
 		if (strncmp("ds=", arg[i], 3) == 0)
 			tp->ds = map_int(arg[i] + 3, NULL);
-		if (strncmp("plp=", arg[i], 4) == 0)
-			tp->plp = map_int(arg[i] + 4, NULL);
+		if (strncmp("plp=", arg[i], 4) == 0 ||
+		    strncmp("isi=", arg[i], 4) == 0)
+			tp->plp_isi = map_int(arg[i] + 4, NULL);
+		if (strncmp("plsc=", arg[i], 5) == 0)
+			tp->pls_code = map_int(arg[i] + 5, NULL);
 
 		if (strncmp("x_pmt=", arg[i], 6) == 0)
 			tp->x_pmt = arg[i] + 6;
@@ -323,8 +327,10 @@ void copy_dvb_parameters(transponder *s, transponder *d)
 		d->c2tft = s->c2tft;
 	if (s->ds != -1)
 		d->ds = s->ds;
-	if (s->plp != -1)
-		d->plp = s->plp;
+	if (s->plp_isi != -1)
+		d->plp_isi = s->plp_isi;
+	if (s->pls_code != -1)
+		d->pls_code = s->pls_code;
 
 	d->x_pmt = s->x_pmt;
 	d->apids = s->apids;
@@ -828,7 +834,10 @@ int dvb_tune(int aid, transponder *tp)
 		ADD_PROP(DTV_PILOT, tp->plts)
 		ADD_PROP(DTV_ROLLOFF, tp->ro)
 #if DVBAPIVERSION >= 0x0502
-		ADD_PROP(DTV_STREAM_ID, tp->plp)
+		ADD_PROP(DTV_STREAM_ID, tp->plp_isi)
+#endif
+#if DVBAPIVERSION >= 0x050b /* 5.11 */
+		ADD_PROP(DTV_SCRAMBLING_SEQUENCE_INDEX, tp->pls_code)
 #endif
 
 #ifdef USE_DVBAPI3
@@ -859,7 +868,7 @@ int dvb_tune(int aid, transponder *tp)
 		ADD_PROP(DTV_TRANSMISSION_MODE, tp->tmode)
 		ADD_PROP(DTV_HIERARCHY, HIERARCHY_AUTO)
 #if DVBAPIVERSION >= 0x0502
-		ADD_PROP(DTV_STREAM_ID, tp->plp & 0xFF)
+		ADD_PROP(DTV_STREAM_ID, tp->plp_isi & 0xFF)
 #endif
 
 // old DVBAPI version 3
@@ -897,7 +906,7 @@ int dvb_tune(int aid, transponder *tp)
 		freq = freq * 1000;
 		ADD_PROP(DTV_SYMBOL_RATE, tp->sr)
 #if DVBAPIVERSION >= 0x0502
-		ADD_PROP(DTV_STREAM_ID, ((tp->ds & 0xFF) << 8) | (tp->plp & 0xFF))
+		ADD_PROP(DTV_STREAM_ID, ((tp->ds & 0xFF) << 8) | (tp->plp_isi & 0xFF))
 #endif
 		// valid for DD DVB-C2 devices
 
