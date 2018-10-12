@@ -807,8 +807,12 @@ void get_s2_url(adapter *ad, char *url)
 	FILL("&fec=%s", tp->fec, FEC_AUTO, get_fec(tp->fec));
 	FILL("&ro=%s", ro, ROLLOFF_AUTO, get_rolloff(ro));
 	FILL("&plts=%s", plts, PILOT_AUTO, get_pilot(plts));
-	FILL("&isi=%d", tp->plp_isi, 0, tp->plp_isi);
-	FILL("&plsc=%d", tp->pls_code, -1, tp->pls_code);
+	if (tp->plp_isi >= 0)
+		FILL("&isi=%d", tp->plp_isi, 0, tp->plp_isi);
+	if (tp->pls_mode >= 0)
+		FILL("&plsm=%s", tp->pls_mode, -1, get_pls_mode(tp->pls_mode));
+	if (tp->pls_code >= 0)
+		FILL("&plsc=%d", tp->pls_code, -1, tp->pls_code);
 	url[len] = 0;
 	return;
 }
@@ -833,7 +837,8 @@ void get_c2_url(adapter *ad, char *url)
 	FILL("&specinv=%d", tp->inversion, INVERSION_AUTO, tp->inversion);
 	FILL("&t2id=%d", tp->t2id, 0, tp->t2id);
 	FILL("&sm=%d", tp->sm, 0, tp->sm);
-	FILL("&plp=%d", tp->plp_isi, 0, tp->plp_isi);
+	if (tp->plp_isi >= 0)
+		FILL("&plp=%d", tp->plp_isi, 0, tp->plp_isi);
 	url[len] = 0;
 	return;
 }
@@ -856,8 +861,10 @@ void get_t2_url(adapter *ad, char *url)
 	FILL("&tmode=%s", tp->tmode, TRANSMISSION_MODE_AUTO, get_tmode(tp->tmode));
 	FILL("&specinv=%d", tp->inversion, INVERSION_AUTO, tp->inversion);
 	FILL("&c2tft=%d", tp->c2tft, 0, tp->c2tft);
-	FILL("&ds=%d", tp->ds, 0, tp->ds);
-	FILL("&plp=%d", tp->plp_isi, 0, tp->plp_isi);
+	if (tp->ds >= 0)
+		FILL("&ds=%d", tp->ds, 0, tp->ds);
+	if (tp->plp_isi >= 0)
+		FILL("&plp=%d", tp->plp_isi, 0, tp->plp_isi);
 	url[len] = 0;
 	return;
 }
