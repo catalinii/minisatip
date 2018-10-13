@@ -280,6 +280,8 @@ int detect_dvb_parameters(char *s, transponder *tp);
 void init_dvb_parameters(transponder *tp);
 void copy_dvb_parameters(transponder *s, transponder *d);
 
+uint32_t pls_scrambling_index(transponder *tp);
+
 char *get_pilot(int i);
 char *get_rolloff(int i);
 char *get_delsys(int i);

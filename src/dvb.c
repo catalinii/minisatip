@@ -790,6 +790,21 @@ int setup_switch(adapter *ad)
 		iProp++;                   \
 	}
 
+uint32_t pls_scrambling_index(transponder *tp)
+{
+	if (tp->pls_mode == PLS_MODE_ROOT) {
+		/* convert ROOT code to GOLD code */
+		uint32_t x, g;
+		for (g = 0, x = 1; g < 0x3ffff; g++)  {
+			if (tp->pls_code == x)
+				return g;
+			x = (((x ^ (x >> 7)) & 1) << 17) | (x >> 1);
+		}
+		return 0x3ffff;
+	}
+	return tp->pls_code; /* GOLD code 0 (default) */
+}
+
 int dvb_tune(int aid, transponder *tp)
 {
 	int64_t bclear, bpol;
@@ -851,7 +866,7 @@ int dvb_tune(int aid, transponder *tp)
 			ADD_PROP(DTV_STREAM_ID, tp->plp_isi)
 #endif
 #if DVBAPIVERSION >= 0x050b /* 5.11 */
-		ADD_PROP(DTV_SCRAMBLING_SEQUENCE_INDEX, tp->pls_code)
+		ADD_PROP(DTV_SCRAMBLING_SEQUENCE_INDEX, pls_scrambling_index(tp))
 #endif
 
 #ifdef USE_DVBAPI3

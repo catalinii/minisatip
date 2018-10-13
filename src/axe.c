@@ -628,7 +628,7 @@ int axe_tune(int aid, transponder *tp)
 			ADD_PROP(DTV_STREAM_ID, tp->plp_isi & 0xFF)
 #endif
 #if DVBAPIVERSION >= 0x050b /* 5.11 */
-		ADD_PROP(DTV_SCRAMBLING_SEQUENCE_INDEX, tp->pls_code)
+		ADD_PROP(DTV_SCRAMBLING_SEQUENCE_INDEX, pls_scrambling_index(tp))
 #endif
 
 		LOG("tuning to %d(%d) pol: %s (%d) sr:%d fec:%s delsys:%s mod:%s rolloff:%s pilot:%s, ts clear=%jd, ts pol=%jd",
