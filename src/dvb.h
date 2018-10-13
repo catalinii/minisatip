@@ -143,6 +143,12 @@ typedef enum fe_modulation {
 } fe_modulation_t;
 #endif
 
+typedef enum fe_pls_mode {
+	PLS_MODE_ROOT,
+	PLS_MODE_GOLD,
+	PLS_MODE_COMBO,
+} fe_pls_mode_t;
+
 #if DVBAPIVERSION < 0x0505
 #define DTV_ENUM_DELSYS 44
 #define SYS_DVBC_ANNEX_A SYS_DVBC_ANNEX_AC
@@ -181,6 +187,8 @@ typedef enum fe_modulation {
 #define MAX_FRQ_DVBC 860000
 #define MIN_FRQ_DVBS 950000
 #define MAX_FRQ_DVBS 2150000
+
+#define TP_VALUE_UNSET (-255)
 
 typedef struct diseqc
 {
@@ -234,10 +242,11 @@ typedef struct struct_transponder
 
 	diseqc diseqc_param;
 
-	// DVB-C2
-	int c2tft;
-	int ds;
-	int plp;
+	int c2tft;	// DVB-C2
+	int ds;		// DVB-C2 (data slice)
+	int plp_isi;	// DVB-T2/DVB-S2
+	int pls_mode;   // DVB-S2
+	int pls_code;   // DVB-S2
 
 	char *apids, *pids, *dpids, *x_pmt;
 } transponder;
@@ -271,6 +280,8 @@ int detect_dvb_parameters(char *s, transponder *tp);
 void init_dvb_parameters(transponder *tp);
 void copy_dvb_parameters(transponder *s, transponder *d);
 
+uint32_t pls_scrambling_index(transponder *tp);
+
 char *get_pilot(int i);
 char *get_rolloff(int i);
 char *get_delsys(int i);
@@ -281,6 +292,7 @@ char *get_gi(int i);
 char *get_specinv(int i);
 char *get_pol(int i);
 char *get_inversion(int i);
+char *get_pls_mode(int i);
 
 extern char *fe_delsys[];
 extern char *fe_fec[];

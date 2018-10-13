@@ -120,6 +120,10 @@ char *fe_pol[] =
 	{"none", "v", "h", "r", "l",
 	 NULL};
 
+char *fe_pls_mode[] =
+	{"root", "gold", "combo",
+	 NULL};
+
 #define make_func(a)                           \
 	char *get_##a(int i)                       \
 	{                                          \
@@ -142,6 +146,7 @@ make_func(gi);
 make_func(specinv);
 make_func(inversion);
 make_func(pol);
+make_func(pls_mode);
 
 #define INVALID_URL(a) \
 	{                  \
@@ -177,7 +182,9 @@ int detect_dvb_parameters(char *s, transponder *tp)
 	tp->diseqc = -1;
 	tp->c2tft = -1;
 	tp->ds = -1;
-	tp->plp = -1;
+	tp->plp_isi = -1;
+	tp->pls_mode = -1;
+	tp->pls_code = -1;
 
 	tp->pids = tp->apids = tp->dpids = tp->x_pmt = NULL;
 
@@ -228,8 +235,13 @@ int detect_dvb_parameters(char *s, transponder *tp)
 			tp->c2tft = map_int(arg[i] + 6, NULL);
 		if (strncmp("ds=", arg[i], 3) == 0)
 			tp->ds = map_int(arg[i] + 3, NULL);
-		if (strncmp("plp=", arg[i], 4) == 0)
-			tp->plp = map_int(arg[i] + 4, NULL);
+		if (strncmp("plp=", arg[i], 4) == 0 ||
+		    strncmp("isi=", arg[i], 4) == 0)
+			tp->plp_isi = map_int(arg[i] + 4, NULL);
+		if (strncmp("plsm=", arg[i], 5) == 0)
+			tp->pls_mode = map_int(arg[i] + 5, fe_pls_mode);
+		if (strncmp("plsc=", arg[i], 5) == 0)
+			tp->pls_code = map_int(arg[i] + 5, NULL);
 
 		if (strncmp("x_pmt=", arg[i], 6) == 0)
 			tp->x_pmt = arg[i] + 6;
@@ -275,6 +287,9 @@ void init_dvb_parameters(transponder *tp)
 	tp->mtype = QAM_AUTO;
 	tp->plts = PILOT_AUTO;
 	tp->fec = FEC_AUTO;
+	tp->ds = TP_VALUE_UNSET;
+	tp->plp_isi = TP_VALUE_UNSET;
+	tp->pls_mode = TP_VALUE_UNSET;
 }
 
 void copy_dvb_parameters(transponder *s, transponder *d)
@@ -323,8 +338,12 @@ void copy_dvb_parameters(transponder *s, transponder *d)
 		d->c2tft = s->c2tft;
 	if (s->ds != -1)
 		d->ds = s->ds;
-	if (s->plp != -1)
-		d->plp = s->plp;
+	if (s->plp_isi != -1)
+		d->plp_isi = s->plp_isi;
+	if (s->pls_mode != -1)
+		d->pls_mode = s->pls_mode;
+	if (s->pls_code != -1)
+		d->pls_code = s->pls_code;
 
 	d->x_pmt = s->x_pmt;
 	d->apids = s->apids;
@@ -771,6 +790,21 @@ int setup_switch(adapter *ad)
 		iProp++;                   \
 	}
 
+uint32_t pls_scrambling_index(transponder *tp)
+{
+	if (tp->pls_mode == PLS_MODE_ROOT) {
+		/* convert ROOT code to GOLD code */
+		uint32_t x, g;
+		for (g = 0, x = 1; g < 0x3ffff; g++)  {
+			if (tp->pls_code == x)
+				return g;
+			x = (((x ^ (x >> 7)) & 1) << 17) | (x >> 1);
+		}
+		return 0x3ffff;
+	}
+	return tp->pls_code; /* GOLD code 0 (default) */
+}
+
 int dvb_tune(int aid, transponder *tp)
 {
 	int64_t bclear, bpol;
@@ -828,7 +862,11 @@ int dvb_tune(int aid, transponder *tp)
 		ADD_PROP(DTV_PILOT, tp->plts)
 		ADD_PROP(DTV_ROLLOFF, tp->ro)
 #if DVBAPIVERSION >= 0x0502
-		ADD_PROP(DTV_STREAM_ID, tp->plp)
+		if (tp->plp_isi >= 0)
+			ADD_PROP(DTV_STREAM_ID, tp->plp_isi)
+#endif
+#if DVBAPIVERSION >= 0x050b /* 5.11 */
+		ADD_PROP(DTV_SCRAMBLING_SEQUENCE_INDEX, pls_scrambling_index(tp))
 #endif
 
 #ifdef USE_DVBAPI3
@@ -859,7 +897,8 @@ int dvb_tune(int aid, transponder *tp)
 		ADD_PROP(DTV_TRANSMISSION_MODE, tp->tmode)
 		ADD_PROP(DTV_HIERARCHY, HIERARCHY_AUTO)
 #if DVBAPIVERSION >= 0x0502
-		ADD_PROP(DTV_STREAM_ID, tp->plp & 0xFF)
+		if (tp->plp_isi >= 0)
+			ADD_PROP(DTV_STREAM_ID, tp->plp_isi & 0xFF)
 #endif
 
 // old DVBAPI version 3
@@ -897,7 +936,12 @@ int dvb_tune(int aid, transponder *tp)
 		freq = freq * 1000;
 		ADD_PROP(DTV_SYMBOL_RATE, tp->sr)
 #if DVBAPIVERSION >= 0x0502
-		ADD_PROP(DTV_STREAM_ID, ((tp->ds & 0xFF) << 8) | (tp->plp & 0xFF))
+		if (tp->plp_isi >= 0) {
+			int v = tp->plp_isi & 0xFF;
+			if (tp->ds >= 0)
+				v |= (tp->ds & 0xFF) << 8;
+			ADD_PROP(DTV_STREAM_ID, v);
+		}
 #endif
 		// valid for DD DVB-C2 devices
 

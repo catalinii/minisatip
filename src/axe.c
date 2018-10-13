@@ -68,6 +68,8 @@ static inline void axe_fp_fd_write(const char *s)
 	ssize_t r;
 
 	axe_fp_fd_open();
+	if (axe_fp_fd < 0)
+		return;
 	len = strlen(b = s);
 	while (len > 0)
 	{
@@ -150,6 +152,54 @@ int axe_open_device(adapter *ad)
 void axe_post_init(adapter *ad)
 {
 	sockets_setread(ad->sock, axe_read);
+}
+
+static void axe_stv0900_i2c_4(const char *name, int pa, int v)
+{
+	char buf[64];
+	const char *b;
+	int fd;
+	size_t len;
+	ssize_t r;
+
+	snprintf(buf, sizeof(buf), "/sys/devices/platform/i2c-stm.0/i2c-0/stv0900_%s%d", name, pa + 1);
+	fd = open(buf, O_WRONLY);
+	if (fd < 0)
+		return;
+	snprintf(buf, sizeof(buf), "%d", v);
+	len = strlen(b = buf);
+	while (len > 0)
+	{
+		r = write(fd, b, len);
+		if (r > 0)
+		{
+			len -= r;
+			b += r;
+		}
+	}
+	close(fd);
+}
+
+static void axe_pls_isi(adapter *ad, transponder *tp)
+{
+	static int isi[4] = { -2, -2, -2, -2 };
+	static int pls_code[4] = { -2, -2, -2, -2 };
+	int v;
+	LOGM("axe: isi %d pls %d mode %d\n", tp->plp_isi, tp->pls_code, tp->pls_mode);
+	if (tp->plp_isi != isi[ad->pa]) {
+		v = tp->plp_isi < 0 ? -1 : (tp->plp_isi & 0xff);
+		axe_stv0900_i2c_4("mis", ad->pa, v);
+		isi[ad->pa] = tp->plp_isi;
+	}
+	if (tp->pls_code != pls_code[ad->pa]) {
+		v = tp->pls_code < 0 ? 0 : (tp->pls_code & 0x3ffff);
+		if (tp->pls_mode == PLS_MODE_GOLD || tp->pls_mode < 0)
+			v |= 0x40000;
+		else if (tp->pls_mode == PLS_MODE_COMBO)
+			v |= 0x80000; /* really? */
+		axe_stv0900_i2c_4("pls", ad->pa, v);
+		pls_code[ad->pa] = tp->pls_code;
+	}
 }
 
 void axe_wakeup(void *_ad, int fe_fd, int voltage)
@@ -574,7 +624,11 @@ int axe_tune(int aid, transponder *tp)
 		ADD_PROP(DTV_SYMBOL_RATE, tp->sr)
 		ADD_PROP(DTV_INNER_FEC, tp->fec)
 #if DVBAPIVERSION >= 0x0502
-		ADD_PROP(DTV_STREAM_ID, tp->plp)
+		if (tp->plp_isi >= 0)
+			ADD_PROP(DTV_STREAM_ID, tp->plp_isi & 0xFF)
+#endif
+#if DVBAPIVERSION >= 0x050b /* 5.11 */
+		ADD_PROP(DTV_SCRAMBLING_SEQUENCE_INDEX, pls_scrambling_index(tp))
 #endif
 
 		LOG("tuning to %d(%d) pol: %s (%d) sr:%d fec:%s delsys:%s mod:%s rolloff:%s pilot:%s, ts clear=%jd, ts pol=%jd",
@@ -598,7 +652,8 @@ int axe_tune(int aid, transponder *tp)
 		ADD_PROP(DTV_TRANSMISSION_MODE, tp->tmode)
 		ADD_PROP(DTV_HIERARCHY, HIERARCHY_AUTO)
 #if DVBAPIVERSION >= 0x0502
-		ADD_PROP(DTV_STREAM_ID, tp->plp & 0xFF)
+		if (tp->plp_isi >= 0)
+			ADD_PROP(DTV_STREAM_ID, tp->plp_isi & 0xFF)
 #endif
 
 		LOG(
@@ -617,7 +672,12 @@ int axe_tune(int aid, transponder *tp)
 		freq = freq * 1000;
 		ADD_PROP(DTV_SYMBOL_RATE, tp->sr)
 #if DVBAPIVERSION >= 0x0502
-		ADD_PROP(DTV_STREAM_ID, ((tp->ds & 0xFF) << 8) | (tp->plp & 0xFF))
+		if (tp->plp_isi >= 0) {
+			int v = tp->plp_isi & 0xFF;
+			if (tp->ds >= 0)
+				v |= (tp->ds & 0xFF) << 8;
+			ADD_PROP(DTV_STREAM_ID, v);
+		}
 #endif
 		// valid for DD DVB-C2 devices
 
@@ -645,6 +705,8 @@ int axe_tune(int aid, transponder *tp)
 		if (ioctl(fd_frontend, FE_GET_EVENT, &ev) == -1)
 			break;
 	}
+
+	axe_pls_isi(ad, tp);
 
 	if ((ioctl(fd_frontend, FE_SET_PROPERTY, &p)) == -1)
 		if (ioctl(fd_frontend, FE_SET_PROPERTY, &p) == -1)

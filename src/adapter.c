@@ -1169,11 +1169,11 @@ int compare_tunning_parameters(int aid, transponder *tp)
 	if (!ad)
 		return -1;
 
-	LOGM("new parameters: f:%d, plp:%d, diseqc:%d, pol:%d, sr:%d, mtype:%d",
-		 tp->freq, tp->plp, tp->diseqc, tp->pol, tp->sr, tp->mtype);
-	LOGM("old parameters: f:%d, plp:%d, diseqc:%d, pol:%d, sr:%d, mtype:%d",
-		 ad->tp.freq, ad->tp.plp, ad->tp.diseqc, ad->tp.pol, ad->tp.sr, ad->tp.mtype);
-	if (tp->freq != ad->tp.freq || tp->plp != ad->tp.plp || tp->diseqc != ad->tp.diseqc || (tp->pol > 0 && tp->pol != ad->tp.pol) || (tp->sr > 1000 && tp->sr != ad->tp.sr) || (tp->mtype > 0 && tp->mtype != ad->tp.mtype))
+	LOGM("new parameters: f:%d, plp/isi:%d, diseqc:%d, pol:%d, sr:%d, mtype:%d",
+		 tp->freq, tp->plp_isi, tp->diseqc, tp->pol, tp->sr, tp->mtype);
+	LOGM("old parameters: f:%d, plp/isi:%d, diseqc:%d, pol:%d, sr:%d, mtype:%d",
+		 ad->tp.freq, ad->tp.plp_isi, ad->tp.diseqc, ad->tp.pol, ad->tp.sr, ad->tp.mtype);
+	if (tp->freq != ad->tp.freq || tp->plp_isi != ad->tp.plp_isi || tp->diseqc != ad->tp.diseqc || (tp->pol > 0 && tp->pol != ad->tp.pol) || (tp->sr > 1000 && tp->sr != ad->tp.sr) || (tp->mtype > 0 && tp->mtype != ad->tp.mtype))
 
 		return 1;
 
@@ -1200,11 +1200,11 @@ int set_adapter_parameters(int aid, int sid, transponder *tp)
 		{
 			mutex_unlock(&ad->mutex);
 			LOG(
-				"secondary stream requested tune, not gonna happen ad: f:%d sr:%d pol:%d plp:%d src:%d mod %d -> \
-			new: f:%d sr:%d pol:%d plp:%d src:%d mod %d",
-				ad->tp.freq, ad->tp.sr, ad->tp.pol, ad->tp.plp,
+				"secondary stream requested tune, not gonna happen ad: f:%d sr:%d pol:%d plp/isi:%d src:%d mod %d -> \
+			new: f:%d sr:%d pol:%d plp/isi:%d src:%d mod %d",
+				ad->tp.freq, ad->tp.sr, ad->tp.pol, ad->tp.plp_isi,
 				ad->tp.diseqc, ad->tp.mtype, tp->freq, tp->sr, tp->pol,
-				tp->plp, tp->diseqc, tp->mtype);
+				tp->plp_isi, tp->diseqc, tp->mtype);
 			return -1;
 		}
 		ad->do_tune = 1;
@@ -1350,7 +1350,7 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 					 ad ? ad->tp.fe : aid + 1, strength, status, snr,
 					 (double)t->freq / 1000.0, t->bw / 1000000, get_delsys(t->sys),
 					 get_tmode(t->tmode), get_modulation(t->mtype),
-					 get_gi(t->gi), get_fec(t->fec), t->plp, t->t2id, t->sm);
+					 get_gi(t->gi), get_fec(t->fec), t->plp_isi, t->t2id, t->sm);
 	else
 		len =
 			snprintf(dad, ld,
@@ -1358,7 +1358,7 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 					 ad ? ad->tp.fe : aid + 1, strength, status, snr,
 					 (double)t->freq / 1000, get_delsys(t->sys),
 					 get_modulation(t->mtype), t->sr / 1000, t->c2tft, t->ds,
-					 t->plp, get_inversion(t->inversion));
+					 t->plp_isi, get_inversion(t->inversion));
 
 	if (use_ad)
 		len += strlen(get_stream_pids(sid, dad + len, ld - len));
@@ -2220,6 +2220,7 @@ _symbols adapters_sym[] =
 		{"ad_sr", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, offsetof(adapter, tp.sr)},
 		{"ad_bw", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, offsetof(adapter, tp.bw)},
 		{"ad_diseqc", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.diseqc)},
+		{"ad_stream", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.plp_isi)},
 		{"ad_fe", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, fe)},
 		{"ad_master", VAR_AARRAY_UINT8, a, 1, MAX_ADAPTERS, offsetof(adapter, master_sid)},
 		{"ad_sidcount", VAR_AARRAY_UINT8, a, 1, MAX_ADAPTERS, offsetof(adapter, sid_cnt)},
