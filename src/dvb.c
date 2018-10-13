@@ -287,10 +287,9 @@ void init_dvb_parameters(transponder *tp)
 	tp->mtype = QAM_AUTO;
 	tp->plts = PILOT_AUTO;
 	tp->fec = FEC_AUTO;
-	tp->ds = TP_VALUE_NOT_ENABLED;
-	tp->plp_isi = TP_VALUE_NOT_ENABLED;
-	tp->pls_mode = TP_VALUE_NOT_ENABLED;
-	tp->pls_code = 1;
+	tp->ds = TP_VALUE_UNSET;
+	tp->plp_isi = TP_VALUE_UNSET;
+	tp->pls_mode = TP_VALUE_UNSET;
 }
 
 void copy_dvb_parameters(transponder *s, transponder *d)

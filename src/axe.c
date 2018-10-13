@@ -193,7 +193,7 @@ static void axe_pls_isi(adapter *ad, transponder *tp)
 	}
 	if (tp->pls_code != pls_code[ad->pa]) {
 		v = tp->pls_code < 0 ? 0 : (tp->pls_code & 0x3ffff);
-		if (tp->pls_mode == PLS_MODE_GOLD)
+		if (tp->pls_mode == PLS_MODE_GOLD || tp->pls_mode < 0)
 			v |= 0x40000;
 		else if (tp->pls_mode == PLS_MODE_COMBO)
 			v |= 0x80000; /* really? */

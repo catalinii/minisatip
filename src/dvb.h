@@ -188,7 +188,7 @@ typedef enum fe_pls_mode {
 #define MIN_FRQ_DVBS 950000
 #define MAX_FRQ_DVBS 2150000
 
-#define TP_VALUE_NOT_ENABLED (-255)
+#define TP_VALUE_UNSET (-255)
 
 typedef struct diseqc
 {
