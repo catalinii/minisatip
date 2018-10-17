@@ -1156,7 +1156,7 @@ int mark_pids_add(int sid, int aid, char *pids)
 	for (i = 0; i < la; i++)
 	{
 		pid = map_intd(arg[i], NULL, -1);
-		if (pid == -1)
+		if (pid < 0 || pid > 8192)
 			continue;
 		if (mark_pid_add(sid, aid, pid) < 0)
 			return -1;
