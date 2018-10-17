@@ -2074,7 +2074,7 @@ int signal_thread(sockets *s)
 		status = ad->status;
 		if (ad->status_cnt++ <= 0) // make sure the kernel has updated the status
 			continue;
-		if (opts.no_threads && status >= 0)
+		if (opts.no_threads && !ad->fast_status && status >= 0)
 			continue;
 		ts = getTick();
 		ad->get_signal(ad);

@@ -883,6 +883,7 @@ void find_axe_adapter(adapter **a)
 				ad->get_signal = (Device_signal)axe_get_signal;
 				ad->wakeup = (Device_wakeup)axe_wakeup;
 				ad->type = ADAPTER_DVB;
+				ad->fast_status = 1;
 				close(fd);
 				na++;
 				a_count = na; // update adapter counter
