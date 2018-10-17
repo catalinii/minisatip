@@ -185,7 +185,7 @@ static void axe_pls_isi(adapter *ad, transponder *tp)
 	static int isi[4] = { -2, -2, -2, -2 };
 	static int pls_code[4] = { -2, -2, -2, -2 };
 	int v;
-	LOGM("axe: isi %d pls %d mode %d\n", tp->plp_isi, tp->pls_code, tp->pls_mode);
+	LOGM("axe: isi %d pls %d mode %d", tp->plp_isi, tp->pls_code, tp->pls_mode);
 	if (tp->plp_isi != isi[ad->pa]) {
 		v = tp->plp_isi < 0 ? -1 : (tp->plp_isi & 0xff);
 		axe_stv0900_i2c_4("mis", ad->pa, v);
