@@ -951,6 +951,8 @@ int tune(int aid, int sid)
 		ad->status = -1;
 		ad->status_cnt = 0;
 		ad->wait_new_stream = 1;
+		ad->strength = 0;
+		ad->snr = 0;
 		flush_data = 1;
 		ad->is_t2mi = 0;
 		if (ad->restart_when_tune)
@@ -1320,16 +1322,20 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 
 	if (use_ad)
 	{
-		strength = ad->strength;
-		snr = ad->snr;
-		if (snr > 15)
-			snr = snr >> 4;
-		status = (ad->status & FE_HAS_LOCK) > 0;
+		if (ad->status < 0) {
+			status = strength = snr = 0;
+		} else {
+			strength = ad->strength;
+			snr = ad->snr;
+			if (snr > 15)
+				snr = snr >> 4;
+			status = (ad->status & FE_HAS_LOCK) > 0;
 
-		if (strength > 255 || strength < 0)
-			strength = 1;
-		if (snr > 15 || snr < 0)
-			snr = 1;
+			if (strength > 255 || strength < 0)
+				strength = 1;
+			if (snr > 15 || snr < 0)
+				snr = 1;
+		}
 	}
 	if (t->sys == 0)
 		len = snprintf(dad, ld, "ver=1.0;src=1;tuner=%d,0,0,0,0,,,,,,,;pids=",
@@ -2057,24 +2063,28 @@ int delsys_match(adapter *ad, int del_sys)
 
 int signal_thread(sockets *s)
 {
-	int i;
+	int i, status;
 	int64_t ts, ctime;
 	adapter *ad;
-	for (i = 0; i < MAX_ADAPTERS; i++)
-		if ((ad = get_adapter_nw(i)) && ad->get_signal && (ad->fe > 0) && ad->tp.freq && (ad->status_cnt++ > 0) // make sure the kernel has updated the status
-			&& (!opts.no_threads || (ad->status < 0)))
-
-		{
-			int status = ad->status;
-			ts = getTick();
-			ad->get_signal(ad);
-			ctime = getTick();
-			if (status == -1 || (opts.log & DEFAULT_LOG))
-				LOG(
-					"get_signal%s took %jd ms for adapter %d handle %d (status: %d, ber: %d, strength:%d, snr: %d, force scan %d)",
-					(ad->new_gs == 1) ? "_new" : "", ctime - ts, ad->id, ad->fe,
-					ad->status, ad->ber, ad->strength, ad->snr, opts.force_scan);
-		}
+	for (i = 0; i < MAX_ADAPTERS; i++) {
+		if ((ad = get_adapter_nw(i)) == NULL || ad->get_signal == NULL)
+			continue;
+		if (ad->fe <= 0 || ad->tp.freq <= 0)
+			continue;
+		status = ad->status;
+		if (ad->status_cnt++ <= 0) // make sure the kernel has updated the status
+			continue;
+		if (opts.no_threads && status >= 0)
+			continue;
+		ts = getTick();
+		ad->get_signal(ad);
+		ctime = getTick();
+		if (status < 0 || (opts.log & DEFAULT_LOG))
+			LOG(
+				"get_signal%s took %jd ms for adapter %d handle %d (status: %d, ber: %d, strength:%d, snr: %d, force scan %d)",
+				(ad->new_gs == 1) ? "_new" : "", ctime - ts, ad->id, ad->fe,
+				ad->status, ad->ber, ad->strength, ad->snr, opts.force_scan);
+	}
 	return 0;
 }
 

@@ -897,9 +897,10 @@ void *select_and_execute(void *arg)
 			sockets *ss;
 			lt = c_time;
 			i = -1;
-			while (++i < max_sock)
-				if ((ss = get_sockets(i)) && (ss->tid == tid) &&
-					(((ss->timeout_ms > 0) && (lt - ss->rtime > ss->timeout_ms) && (ss->spos == ss->wpos)) || (ss->force_close)))
+			while (++i < max_sock) {
+				if ((ss = get_sockets(i)) == NULL || (ss->tid != tid))
+					continue;
+				if (((ss->timeout_ms > 0) && (lt - ss->rtime > ss->timeout_ms) && (ss->spos == ss->wpos)) || (ss->force_close))
 				{
 					if (ss->timeout && !ss->force_close)
 					{
@@ -915,6 +916,7 @@ void *select_and_execute(void *arg)
 					else
 						sockets_del(i);
 				}
+			}
 		}
 	}
 
