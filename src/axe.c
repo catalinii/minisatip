@@ -185,7 +185,7 @@ static void axe_pls_isi(adapter *ad, transponder *tp)
 	static int isi[4] = { -2, -2, -2, -2 };
 	static int pls_code[4] = { -2, -2, -2, -2 };
 	int v;
-	LOGM("axe: isi %d pls %d mode %d\n", tp->plp_isi, tp->pls_code, tp->pls_mode);
+	LOGM("axe: isi %d pls %d mode %d", tp->plp_isi, tp->pls_code, tp->pls_mode);
 	if (tp->plp_isi != isi[ad->pa]) {
 		v = tp->plp_isi < 0 ? -1 : (tp->plp_isi & 0xff);
 		axe_stv0900_i2c_4("mis", ad->pa, v);
@@ -883,6 +883,7 @@ void find_axe_adapter(adapter **a)
 				ad->get_signal = (Device_signal)axe_get_signal;
 				ad->wakeup = (Device_wakeup)axe_wakeup;
 				ad->type = ADAPTER_DVB;
+				ad->fast_status = 1;
 				close(fd);
 				na++;
 				a_count = na; // update adapter counter

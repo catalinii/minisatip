@@ -58,7 +58,7 @@ typedef struct struct_adapter
 	int64_t rtime;
 	int64_t last_sort;
 	int new_gs;
-	int status, status_cnt;
+	int status, status_cnt, fast_status;
 	int dmx_source;
 	int master_source;
 	int is_fbc;
