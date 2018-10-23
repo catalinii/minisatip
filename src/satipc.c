@@ -783,7 +783,7 @@ void get_s2_url(adapter *ad, char *url)
 {
 #define FILL(req, val, def, met)     \
 	if ((val != def) && (val != -1)) \
-		len += sprintf(url + len, req, met);
+		strcatf(url, len, req, met);
 	int len = 0, plts, ro;
 	transponder *tp = &ad->tp;
 	satipc *sip = get_satip(ad->id);
@@ -990,10 +990,10 @@ void tune_url(adapter *ad, char *url)
 
 void satipc_commit(adapter *ad)
 {
-	char url[400];
-	char tmp_url[400];
+	char url[1000];
+	char tmp_url[1000];
 	int send_pids = 1, send_apids = 1, send_dpids = 1;
-	int len = 0, i;
+	int len = 0;
 	satipc *sip = get_satip(ad->id);
 	if (!sip)
 		return;
@@ -1096,7 +1096,7 @@ void satipc_commit(adapter *ad)
 		sip->want_tune = 0;
 		sip->err = 0;
 		if (!sip->setup_pids)
-			sprintf(url + len, "&pids=none");
+			strcatf(url, len, "&pids=none");
 	}
 
 	get_adapter_pids(ad->id, tmp_url, sizeof(tmp_url));
@@ -1109,8 +1109,8 @@ void satipc_commit(adapter *ad)
 	if (send_pids)
 	{
 		if (len > 0)
-			len += sprintf(url + len, "&");
-		len += sprintf(url + len, "pids=");
+			strcatf(url, len, "&");
+		strcatf(url, len, "pids=");
 		//		get_adapter_pids(ad->id, url + len, sizeof(url) - len);
 		strncpy(url + len, tmp_url, sizeof(url) - len);
 		url[sizeof(url) - 1] = 0;
@@ -1124,10 +1124,10 @@ void satipc_commit(adapter *ad)
 	{
 		int i;
 		if (len > 0)
-			len += sprintf(url + len, "&");
-		len += sprintf(url + len, "addpids=");
+			strcatf(url, len, "&");
+		strcatf(url, len, "addpids=");
 		for (i = 0; i < sip->lap; i++)
-			len += sprintf(url + len, "%d,", sip->apid[i]);
+			strcatf(url, len, "%d,", sip->apid[i]);
 		if (sip->lap == 0)
 			get_adapter_pids(ad->id, url + len, sizeof(url) - len);
 		else
@@ -1138,11 +1138,12 @@ void satipc_commit(adapter *ad)
 
 	if (send_dpids)
 	{
+		int i;
 		if (len > 0)
-			len += sprintf(url + len, "&");
-		len += sprintf(url + len, "delpids=");
+			strcatf(url, len, "&");
+		strcatf(url, len, "delpids=");
 		for (i = 0; i < sip->ldp; i++)
-			len += sprintf(url + len, "%d,", sip->dpid[i]);
+			strcatf(url, len, "%d,", sip->dpid[i]);
 		url[--len] = 0;
 		sip->ldp = 0;
 		sip->force_commit = 0;

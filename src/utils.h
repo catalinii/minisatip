@@ -191,8 +191,12 @@ static inline int get_index_hash(void *p, int max, int struct_size, uint32_t key
 	}
 #define DEBUGM(a, ...) DEBUGL(DEFAULT_LOG, a, ##__VA_ARGS__)
 
-#define dump_packets(message, b, len, packet_offset) if (DEFAULT_LOG & opts.debug) _dump_packets(message, b, len, packet_offset) 
-#define hexdump(message, b, len) if (DEFAULT_LOG & opts.debug) _hexdump(message, b, len) 
+#define dump_packets(message, b, len, packet_offset) \
+	if (DEFAULT_LOG & opts.debug)                    \
+	_dump_packets(message, b, len, packet_offset)
+#define hexdump(message, b, len)  \
+	if (DEFAULT_LOG & opts.debug) \
+	_hexdump(message, b, len)
 
 #define LOG0(a, ...)                                \
 	{                                               \
@@ -220,6 +224,8 @@ static inline int get_index_hash(void *p, int max, int struct_size, uint32_t key
 		int __r = snprintf((buf) + ptr, (size)-ptr, fmt); \
 		ptr = __r >= (size)-ptr ? (size)-1 : ptr + __r;   \
 	} while (0)
+
+#define strcatf(buf, ptr, fmt, ...) strlcatf(buf, sizeof(buf) - 1, ptr, fmt, ##__VA_ARGS__)
 
 #define SAFE_STRCPY(a, b)                                                  \
 	{                                                                      \
@@ -263,7 +269,7 @@ static inline int get_index_hash(void *p, int max, int struct_size, uint32_t key
 
 typedef ssize_t (*mywritev)(int fd, const struct iovec *io, int len);
 
-#define ARRAY_SIZE(a) (sizeof(a)/sizeof(a[0]))
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
 
 #ifdef TESTING
 
