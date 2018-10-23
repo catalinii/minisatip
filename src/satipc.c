@@ -779,11 +779,11 @@ int satipc_del_filters(adapter *ad, int fd, int pid)
 	return 0;
 }
 
-void get_s2_url(adapter *ad, char *url)
+void get_s2_url(adapter *ad, char *url, int url_len)
 {
 #define FILL(req, val, def, met)     \
 	if ((val != def) && (val != -1)) \
-		strcatf(url, len, req, met);
+		strlcatf(url, url_len, len, req, met);
 	int len = 0, plts, ro;
 	transponder *tp = &ad->tp;
 	satipc *sip = get_satip(ad->id);
@@ -817,7 +817,7 @@ void get_s2_url(adapter *ad, char *url)
 	return;
 }
 
-void get_c2_url(adapter *ad, char *url)
+void get_c2_url(adapter *ad, char *url, int url_len)
 {
 	int len = 0;
 	transponder *tp = &ad->tp;
@@ -843,7 +843,7 @@ void get_c2_url(adapter *ad, char *url)
 	return;
 }
 
-void get_t2_url(adapter *ad, char *url)
+void get_t2_url(adapter *ad, char *url, int url_len)
 {
 	int len = 0;
 	transponder *tp = &ad->tp;
@@ -875,6 +875,7 @@ int http_request(adapter *ad, char *url, char *method)
 	char buf[2048];
 	char sid[40];
 	char *qm;
+	int ptr = 0;
 	int lb, remote_socket;
 	char format[] = "%s rtsp://%s:%d/%s%s%s RTSP/1.0\r\nCSeq: %d%s\r\n\r\n";
 	__attribute__((unused)) int rv;
@@ -899,29 +900,31 @@ int http_request(adapter *ad, char *url, char *method)
 		sip->stream_id = -1;
 		sip->session[0] = 0;
 		if (sip->use_tcp)
-			sprintf(session, "\r\nTransport: RTP/AVP/TCP;interleaved=0-1");
+			strcatf(session, ptr, "\r\nTransport: RTP/AVP/TCP;interleaved=0-1");
 		else
-			sprintf(session, "\r\nTransport: RTP/AVP;unicast;client_port=%d-%d",
+			strcatf(session, ptr, "\r\nTransport: RTP/AVP;unicast;client_port=%d-%d",
 					sip->listen_rtp, sip->listen_rtp + 1);
 	}
 	else
 	{
 		if (sip->session[0])
-			sprintf(session, "\r\nSession: %s", sip->session);
+			strcatf(session, ptr, "\r\nSession: %s", sip->session);
 		else
 			session[0] = 0;
 	}
+	
+	ptr = strlen(session);
 
 	if (strcmp(method, "OPTIONS") == 0)
 	{
-		sprintf(session + strlen(session), "\r\nUser-Agent: %s %s", app_name,
+		strcatf(session, ptr, "\r\nUser-Agent: %s %s", app_name,
 				version);
 		sip->last_cmd = RTSP_OPTIONS;
 	}
 
 	if (strcmp(method, "DESCRIBE") == 0)
 	{
-		sprintf(session + strlen(session), "\r\nAccept: application/sdp ");
+		strcatf(session, ptr, "\r\nAccept: application/sdp ");
 		sip->last_cmd = RTSP_DESCRIBE;
 	}
 
@@ -965,22 +968,22 @@ int http_request(adapter *ad, char *url, char *method)
 	return 0;
 }
 
-void tune_url(adapter *ad, char *url)
+void tune_url(adapter *ad, char *url, int url_len)
 {
 	switch (ad->sys[0])
 	{
 	case SYS_DVBS2:
 	case SYS_DVBS:
-		get_s2_url(ad, url);
+		get_s2_url(ad, url, url_len);
 		break;
 	case SYS_DVBC2:
 	case SYS_DVBC_ANNEX_A:
-		get_c2_url(ad, url);
+		get_c2_url(ad, url, url_len);
 		break;
 	case SYS_DVBT2:
 	case SYS_DVBT:
 	case SYS_ISDBT:
-		get_t2_url(ad, url);
+		get_t2_url(ad, url, url_len);
 		break;
 	default:
 		LOG("No system specified %d", ad->sys[0]);
@@ -1090,7 +1093,7 @@ void satipc_commit(adapter *ad)
 	}
 	if (sip->want_tune)
 	{
-		tune_url(ad, url);
+		tune_url(ad, url, sizeof(url) - 1);
 		len = strlen(url);
 		sip->ignore_packets = 1; // ignore all the packets until we get 200 from the server
 		sip->want_tune = 0;
