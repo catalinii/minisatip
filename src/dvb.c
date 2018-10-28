@@ -863,7 +863,12 @@ int dvb_tune(int aid, transponder *tp)
 		ADD_PROP(DTV_ROLLOFF, tp->ro)
 #if DVBAPIVERSION >= 0x0502
 		if (tp->plp_isi >= 0)
+#if DVBAPIVERSION >= 0x050b /* 5.11 */
 			ADD_PROP(DTV_STREAM_ID, tp->plp_isi)
+#else
+			//In DVBAPI < 5.11 DTV_STREAM_ID takes also the PLS Code and Mode
+			ADD_PROP(DTV_STREAM_ID, tp->plp_isi | (tp->pls_code << 8) | (tp->pls_mode << 26))
+#endif
 #endif
 #if DVBAPIVERSION >= 0x050b /* 5.11 */
 		ADD_PROP(DTV_SCRAMBLING_SEQUENCE_INDEX, pls_scrambling_index(tp))
