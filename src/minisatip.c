@@ -997,7 +997,7 @@ int read_rtsp(sockets *s)
 	char buf[2000];
 	streams *sid = get_sid(s->sid);
 
-	if (s->buf[0] == 0x24 && s->buf[1] < 2)
+	if (s->rlen > 3 && s->buf[0] == 0x24 && s->buf[1] < 2)
 	{
 		if (sid)
 			sid->rtime = s->rtime;
@@ -1007,9 +1007,16 @@ int read_rtsp(sockets *s)
 			"Received RTSP over tcp packet (sock_id %d, stream %d, rlen %d) packet len: %d, type %02X %02X discarding %s...",
 			s->id, s->sid, s->rlen, rtsp_len, s->buf[4], s->buf[5],
 			(s->rlen == rtsp_len + 4) ? "complete" : "fragment");
-		if (s->rlen == rtsp_len + 4)
+		if (s->rlen >= rtsp_len + 4)
 		{ // we did not receive the entire packet
-			s->rlen = 0;
+			s->rlen -= rtsp_len + 4;
+			if (s->rlen == 0)
+				return 0;
+		} else { // handle the remaining data as next fragment
+			rtsp_len -= s->rlen - 4;
+			s->rlen = 4;
+			s->buf[2] = rtsp_len >> 8;
+			s->buf[3] = rtsp_len & 0xFF;
 			return 0;
 		}
 	}
@@ -1040,7 +1047,7 @@ int read_rtsp(sockets *s)
 	s->rlen = 0;
 
 	LOG("read RTSP (from handle %d sock %d, len: %d, sid %d):", s->sock,
-		s->id, s->rlen, s->sid);
+		s->id, rlen, s->sid);
 	LOGM("%s", s->buf);
 
 	if ((s->type != TYPE_HTTP) && (strncasecmp((const char *)s->buf, "GET", 3) == 0))
