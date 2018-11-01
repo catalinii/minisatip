@@ -1009,6 +1009,7 @@ int read_rtsp(sockets *s)
 			(s->rlen == rtsp_len + 4) ? "complete" : "fragment");
 		if (s->rlen >= rtsp_len + 4)
 		{ // we did not receive the entire packet
+			memmove(s->buf, s->buf + rtsp_len + 4, s->rlen - (rtsp_len + 4));
 			s->rlen -= rtsp_len + 4;
 			if (s->rlen == 0)
 				return 0;
