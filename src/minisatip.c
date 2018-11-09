@@ -1252,7 +1252,7 @@ int read_http(sockets *s)
 	int is_head = 0;
 	static char *xml =
 		"<?xml version=\"1.0\"?>"
-		"<root xmlns=\"urn:schemas-upnp-org:device-1-0\" configId=\"0\">"
+		"<root xmlns=\"urn:schemas-upnp-org:device-1-0\" configId=\"1\">"
 		"<specVersion><major>1</major><minor>1</minor></specVersion>"
 		"<device><deviceType>urn:ses-com:device:SatIPServer:1</deviceType>"
 		"<friendlyName>%s</friendlyName><manufacturer>cata</manufacturer>"
