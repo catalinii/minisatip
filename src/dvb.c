@@ -260,7 +260,7 @@ int detect_dvb_parameters(char *s, transponder *tp)
 		tp->pids = (char *)def_pids;
 	}
 
-	if (tp->pids && strncmp(tp->pids, "none", 3) == 0)
+	if (tp->pids && strncmp(tp->pids, "none", 4) == 0)
 		tp->pids = "";
 
 	//      if(!msys)INVALID_URL("no msys= found in URL");
