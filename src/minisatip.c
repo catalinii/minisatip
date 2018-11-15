@@ -1062,7 +1062,7 @@ int read_rtsp(sockets *s)
 	if (la < 2)
 		LOG_AND_RETURN(0,
 					   "Most likely not an RTSP packet sock_id: %d sid: %d rlen: %d, dropping ....",
-					   s->id, s->sid, rlen);239.255.255.250
+					   s->id, s->sid, rlen);
 
 	if (s->sid < 0)
 		for (i = 0; i < la; i++)
