@@ -815,7 +815,7 @@ void set_options(int argc, char *argv[])
 			set_signal_multiplier(optarg);
 			break;
 		}
-239.255.255.250
+
 		case DVBAPI_OPT:
 		{
 #ifdef DISABLE_DVBAPI
