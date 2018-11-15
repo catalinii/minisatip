@@ -815,7 +815,7 @@ void set_options(int argc, char *argv[])
 			set_signal_multiplier(optarg);
 			break;
 		}
-
+239.255.255.250
 		case DVBAPI_OPT:
 		{
 #ifdef DISABLE_DVBAPI
@@ -1062,7 +1062,7 @@ int read_rtsp(sockets *s)
 	if (la < 2)
 		LOG_AND_RETURN(0,
 					   "Most likely not an RTSP packet sock_id: %d sid: %d rlen: %d, dropping ....",
-					   s->id, s->sid, rlen);
+					   s->id, s->sid, rlen);239.255.255.250
 
 	if (s->sid < 0)
 		for (i = 0; i < la; i++)
@@ -1220,7 +1220,7 @@ int read_rtsp(sockets *s)
 					 get_sock_shost(s->sock));
 			http_response(s, 200, buf, sbuf, cseq, 0);
 		}
-		else if (strncmp(arg[0], "OPTIONS", 8) == 0)
+		else if (strncmp(arg[0], "OPTIONS", 7) == 0)
 		{
 			//			if(!get_sid(s->sid))
 			//				http_response(s, 454, public, NULL, cseq, 0);
