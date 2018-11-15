@@ -1094,7 +1094,7 @@ int read_rtsp(sockets *s)
 	for (i = 0; i < la; i++)
 		if (strncasecmp("CSeq:", arg[i], 5) == 0)
 			cseq = map_int(header_parameter(arg, i), NULL);
-		else if (strncasecmp("Transport:", arg[i], 9) == 0)
+		else if (strncasecmp("Transport:", arg[i], 10) == 0)
 		{
 			transport = header_parameter(arg, i);
 
@@ -1114,9 +1114,9 @@ int read_rtsp(sockets *s)
 			if (sid)
 				sid->timeout = 0;
 		}
-		else if (strncasecmp("User-Agent:", arg[i], 10) == 0)
+		else if (strncasecmp("User-Agent:", arg[i], 11) == 0)
 			useragent = header_parameter(arg, i);
-		else if (!useragent && strncasecmp("Server:", arg[i], 10) == 0)
+		else if (!useragent && strncasecmp("Server:", arg[i], 7) == 0)
 			useragent = header_parameter(arg, i);
 
 	if ((strncasecmp(arg[0], "PLAY", 4) == 0) || (strncasecmp(arg[0], "GET", 3) == 0) || (strncasecmp(arg[0], "SETUP", 5) == 0))
