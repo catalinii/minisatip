@@ -1125,7 +1125,7 @@ void free_all()
 void set_socket_send_buffer(int sock, int len)
 {
 	int sl;
-	int rv;
+	int rv = 0;
 	if (len <= 0)
 		return;
 // len = 8*1024; /* have a nice testing !!!! */
@@ -1133,7 +1133,7 @@ void set_socket_send_buffer(int sock, int len)
 	if ((rv = setsockopt(sock, SOL_SOCKET, SO_SNDBUFFORCE, &len, sizeof(len))))
 		LOG("unable to set output socket buffer (force) size to %d", len);
 #endif
-	if (rv = setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &len, sizeof(len)))
+	if (rv && setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &len, sizeof(len)))
 		LOG("unable to set output socket buffer size to %d", len);
 	sl = sizeof(int);
 	if (!getsockopt(sock, SOL_SOCKET, SO_SNDBUF, &len, (socklen_t *)&sl))
@@ -1143,14 +1143,14 @@ void set_socket_send_buffer(int sock, int len)
 void set_socket_receive_buffer(int sock, int len)
 {
 	socklen_t sl;
-	int rv;
+	int rv = 0;
 	if (len <= 0)
 		return;
 #ifdef SO_RCVBUFFORCE
 	if ((rv = setsockopt(sock, SOL_SOCKET, SO_RCVBUFFORCE, &len, sizeof(len))))
 		LOG("unable to set receive socket buffer (force) size to %d", len);
 #endif
-	if (rv = setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &len, sizeof(len)))
+	if (rv && setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &len, sizeof(len)))
 		LOG("unable to set receive socket buffer size to %d", len);
 	sl = sizeof(int);
 	if (!getsockopt(sock, SOL_SOCKET, SO_RCVBUF, &len, &sl))
