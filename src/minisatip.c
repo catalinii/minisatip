@@ -1220,7 +1220,7 @@ int read_rtsp(sockets *s)
 					 get_sock_shost(s->sock));
 			http_response(s, 200, buf, sbuf, cseq, 0);
 		}
-		else if (strncmp(arg[0], "OPTIONS", 8) == 0)
+		else if (strncmp(arg[0], "OPTIONS", 7) == 0)
 		{
 			//			if(!get_sid(s->sid))
 			//				http_response(s, 454, public, NULL, cseq, 0);
