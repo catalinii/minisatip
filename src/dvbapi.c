@@ -507,8 +507,6 @@ int connect_dvbapi(void *arg)
 				if (pmt)
 					close_pmt_for_ca(dvbapi_ca, get_adapter(adapter_id), pmt);
 			}
-			if (keys[i] && keys[i]->enabled)
-				ek++;
 		}
 			
 		if (!is_adapter_active())
