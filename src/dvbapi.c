@@ -491,7 +491,7 @@ int connect_dvbapi(void *arg)
 {
 	if ((sock > 0) && dvbapi_is_enabled) // already connected
 	{
-		int i, ek = 0;
+		int i;
 		uint64_t ctime = getTick();
 
 		for (i = 0; i < MAX_KEYS; i++)
