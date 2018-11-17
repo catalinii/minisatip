@@ -846,7 +846,6 @@ int pmt_process_stream(adapter *ad)
 		{
 			b = ad->buf + i;
 			pid = PID_FROM_TS(b);
-			p = find_pid(ad->id, pid);
 			if ((b[3] & 0x80) == 0x80)
 			{
 				if (opts.debug & (DEFAULT_LOG | LOG_DMX))
