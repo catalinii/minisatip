@@ -318,7 +318,7 @@ int tcp_connect_src(char *addr, int port, struct sockaddr_in *serv, int blocking
 
 	if (connect(sock, (struct sockaddr *)serv, sizeof(*serv)) < 0)
 	{
-		if (blocking || (!blocking && errno != EINPROGRESS))
+		if (blocking || errno != EINPROGRESS)
 		{
 			LOG("tcp_connect: failed: connect to %s:%d failed with errno %d: %s", addr,
 				port, errno, errno == 11 ? "connect timed out" : strerror(errno));
