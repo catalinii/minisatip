@@ -85,9 +85,9 @@ int test_get_index_hash()
 			LOG_AND_RETURN(1, "found already existing elemets with the same key %d", i);
 		idx = get_index_hash(&kv[0].key, MAX_KV, sizeof(Skey_value), KEY_FOR_INDEX(i), (uint32_t)-1);
 		if (idx == -1)
-			LOG_AND_RETURN(1, "found no elemets for key %d", i)
+			LOG_AND_RETURN(1, "found no elemets for key %d", i);
 		else if (idx < 0 || idx >= MAX_KV)
-			LOG_AND_RETURN(1, "value outside of bounds for key %d, val %d", i, idx)
+			LOG_AND_RETURN(1, "value outside of bounds for key %d, val %d", i, idx);
 		if (kv[idx].value != -1)
 			LOG_AND_RETURN(1, "re-using old item at pos %d, old index %d old key %d", i, kv[idx].value, kv[idx].value);
 		kv[idx].key = KEY_FOR_INDEX(i);
@@ -101,11 +101,11 @@ int test_get_index_hash()
 	{
 		idx = get_index_hash(&kv[0].key, MAX_KV, sizeof(Skey_value), KEY_FOR_INDEX(i), KEY_FOR_INDEX(i));
 		if (idx < 0 || idx >= MAX_KV)
-			LOG_AND_RETURN(1, "value outside of bounds when checking key %d", KEY_FOR_INDEX(i))
+			LOG_AND_RETURN(1, "value outside of bounds when checking key %d", KEY_FOR_INDEX(i));
 		if (idx == -1)
 			LOG_AND_RETURN(1, "did not find any key with value %d", i);
 		if (idx != kv[idx].value || (KEY_FOR_INDEX(i) != kv[idx].key))
-			LOG_AND_RETURN(1, "inconsistent results found for key %d, index %d, key %d value %d", KEY_FOR_INDEX(i), idx, kv[idx].key, kv[idx].value)
+			LOG_AND_RETURN(1, "inconsistent results found for key %d, index %d, key %d value %d", KEY_FOR_INDEX(i), idx, kv[idx].key, kv[idx].value);
 		if (i > MAX_KV / 2 && !calls50)
 		{
 			calls50 = hash_calls;
