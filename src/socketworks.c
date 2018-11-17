@@ -1150,7 +1150,7 @@ void set_socket_receive_buffer(int sock, int len)
 	if ((rv = setsockopt(sock, SOL_SOCKET, SO_RCVBUFFORCE, &len, sizeof(len))))
 		LOG("unable to set receive socket buffer (force) size to %d", len);
 #endif
-	if (rv && setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &len, sizeof(len)))
+	if (rv = setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &len, sizeof(len)))
 		LOG("unable to set receive socket buffer size to %d", len);
 	sl = sizeof(int);
 	if (!getsockopt(sock, SOL_SOCKET, SO_RCVBUF, &len, &sl))
