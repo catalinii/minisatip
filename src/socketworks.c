@@ -1133,7 +1133,7 @@ void set_socket_send_buffer(int sock, int len)
 	if ((rv = setsockopt(sock, SOL_SOCKET, SO_SNDBUFFORCE, &len, sizeof(len))))
 		LOG("unable to set output socket buffer (force) size to %d", len);
 #endif
-	if (rv && setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &len, sizeof(len)))
+	if (rv = setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &len, sizeof(len)))
 		LOG("unable to set output socket buffer size to %d", len);
 	sl = sizeof(int);
 	if (!getsockopt(sock, SOL_SOCKET, SO_SNDBUF, &len, (socklen_t *)&sl))
