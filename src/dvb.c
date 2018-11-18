@@ -90,7 +90,8 @@ char *fe_fec[] =
 
 char *fe_modulation[] =
 	{"qpsk", "16qam", "32qam", "64qam", "128qam", "256qam", " ", // auto
-	 "8vsb", "16vsb", "8psk", "16apsk", "32apsk", "dqpsk",
+	 "8vsb", "16vsb", "8psk", "16apsk", "32apsk", "64apsk", "128apsk", "256apsk",
+	 "dqpsk",
 	 NULL};
 
 char *fe_tmode[] =
