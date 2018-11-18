@@ -107,13 +107,13 @@ extern adapter *a[MAX_ADAPTERS];
 extern int a_count;
 extern char do_dump_pids;
 
-int init_hw(int dev);
+int init_hw(int i);
 int init_all_hw();
 int getAdaptersCount();
 adapter *adapter_alloc();
 int close_adapter(int na);
 int get_free_adapter(transponder *tp);
-int set_adapter_for_stream(int i, int a);
+int set_adapter_for_stream(int sid, int aid);
 void close_adapter_for_stream(int sid, int aid);
 int set_adapter_parameters(int aid, int sid, transponder *tp);
 void mark_pids_deleted(int aid, int sid, char *pids);
