@@ -1125,7 +1125,7 @@ void free_all()
 void set_socket_send_buffer(int sock, int len)
 {
 	int sl;
-	int rv;
+	int rv = 0;
 	if (len <= 0)
 		return;
 // len = 8*1024; /* have a nice testing !!!! */
@@ -1143,7 +1143,7 @@ void set_socket_send_buffer(int sock, int len)
 void set_socket_receive_buffer(int sock, int len)
 {
 	socklen_t sl;
-	int rv;
+	int rv = 0;
 	if (len <= 0)
 		return;
 #ifdef SO_RCVBUFFORCE
