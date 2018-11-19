@@ -1169,7 +1169,7 @@ int compare_tunning_parameters(int aid, transponder *tp)
 {
 	adapter *ad = get_adapter(aid);
 	if (!ad)
-		return -1;
+		return 0;
 
 	LOGM("new parameters: f:%d, plp/isi:%d, diseqc:%d, pol:%d, sr:%d, mtype:%d",
 		 tp->freq, tp->plp_isi, tp->diseqc, tp->pol, tp->sr, tp->mtype);
