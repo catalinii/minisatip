@@ -268,6 +268,7 @@ int start_play(streams *sid, sockets *s)
 
 	if (compare_tunning_parameters(sid->adapter, &sid->tp)) // close the adapter that is required to be closed
 	{
+		ad->restart_needed = 1;
 		restart_needed_adapters(sid->adapter, sid->sid);
 		if (ad && compare_slave_parameters(ad, &sid->tp))
 		{
