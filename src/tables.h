@@ -41,12 +41,12 @@ typedef struct struct_CA
 	int id;
 	SCA_AD ad_info[MAX_ADAPTERS];
 } SCA;
-int add_ca(SCA_op *c, int adapter_mask);
-void del_ca(SCA_op *c);
+int add_ca(SCA_op *op, int adapter_mask);
+void del_ca(SCA_op *op);
 void add_caid_mask(int ica, int aid, int caid, int mask);
 void init_ca_device(SCA *c);					 //  calls table_init_device for all the devices
-int register_ca_for_adapter(int nca, int aid);   // register a CA just for a device, and run tables_init_device for the CA and Adapter, if succeds, send all the opened PMTs
-int unregister_ca_for_adapter(int nca, int aid); // unregister a CA just for a device
+int register_ca_for_adapter(int i, int aid);   // register a CA just for a device, and run tables_init_device for the CA and Adapter, if succeds, send all the opened PMTs
+int unregister_ca_for_adapter(int i, int aid); // unregister a CA just for a device
 int tables_init_device(adapter *ad);
 int tables_close_device(adapter *ad);
 int tables_init();
