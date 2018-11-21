@@ -1865,4 +1865,4 @@ _symbols minisatip_sym[] =
 		{"uuid", VAR_STRING, uuid, 0, 0, 0},
 		{"http_port", VAR_INT, &opts.http_port, 1, 0, 0},
 		{"version", VAR_STRING, &version, 1, 0, 0},
-		{NULL, 0, NULL, 0, 0}};
+		{NULL, 0, NULL, 0, 0, 0}};
