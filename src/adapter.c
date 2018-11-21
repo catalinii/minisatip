@@ -653,19 +653,19 @@ int compare_slave_parameters(adapter *ad, transponder *tp)
 					ad->used &= ~(1 << i);
 					continue;
 				}
-				if (ad2->old_pol == pol && ad2->old_hiband == hiband && ad2->old_diseqc == diseqc)
-					return 0; // slave parameters matches with the required parameters
+				if (ad2->old_pol != pol || ad2->old_hiband != hiband || ad2->old_diseqc != diseqc)
+					return 1; // slave parameters matches with the required parameters
 			}
 	}
 
 	// master adapter used by slave adapters
 	if (master)
 	{
-		if (master->old_pol == pol && master->old_hiband == hiband && master->old_diseqc == diseqc)
+		if (master->old_pol != pol || master->old_hiband != hiband || master->old_diseqc != diseqc)
 			return 1; // master parameters matches with the required parameters
 	}
 	LOGM("%s: adapter %d used %d master %d used %d (pol %d, band %d, diseqc %d) not compatible with freq %d, pol %d band %d diseqc %d", __FUNCTION__, ad->id, ad->used, master ? master->id : ad->master_source, master ? master->used : -1, ad->old_pol, ad->old_hiband, ad->old_diseqc, freq, pol, hiband, diseqc);
-	return 1;
+	return 0;
 }
 
 int get_free_adapter(transponder *tp)
