@@ -799,12 +799,13 @@ void close_adapter_for_stream(int sid, int aid)
 	}
 	if (ad->sid_cnt > 0)
 		ad->sid_cnt--;
-	LOG("closed adapter %d for stream %d m:%d s:%d, restart_needed %d", aid, sid, ad->master_sid,
+	LOG("closed adapter %d for stream %d m:%d sid_cnt:%d, restart_needed %d", aid, sid, ad->master_sid,
 		ad->sid_cnt, ad->restart_needed);
 	// delete the attached PIDs as well
 	if (ad->sid_cnt == 0)
 	{
 		is_slave = 0;
+		ad->master_sid = -1;
 		mark_pids_deleted(aid, -1, NULL);
 #ifdef AXE
 		free_axe_input(ad);
