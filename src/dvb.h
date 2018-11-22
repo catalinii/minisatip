@@ -139,6 +139,9 @@ typedef enum fe_modulation {
 	PSK_8,
 	APSK_16,
 	APSK_32,
+	APSK_64,
+	APSK_128,
+	APSK_256,
 	DQPSK,
 } fe_modulation_t;
 #endif
