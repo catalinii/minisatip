@@ -855,4 +855,4 @@ _symbols dvbapi_sym[] =
 		{"key_protocol", VAR_AARRAY_STRING, keys, 1, MAX_KEYS, offsetof(SKey, protocol)},
 		{"key_channel", VAR_FUNCTION_STRING, (void *)&get_channel_for_key, 0, MAX_KEYS, 0},
 
-		{NULL, 0, NULL, 0, 0}};
+		{NULL, 0, NULL, 0, 0, 0}};
