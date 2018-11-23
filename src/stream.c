@@ -1410,4 +1410,4 @@ _symbols stream_sym[] =
 		{"st_pids", VAR_FUNCTION_STRING, (void *)&get_stream_pids, 0, MAX_STREAMS, 0},
 		{"st_overflow", VAR_FUNCTION_INT, (void *)&get_stream_overflow, 0, MAX_STREAMS, 0},
 		{"st_buffered", VAR_FUNCTION_INT, (void *)&get_stream_buffered_size, 0, MAX_STREAMS, 0},
-		{NULL, 0, NULL, 0, 0}};
+		{NULL, 0, NULL, 0, 0, 0}};

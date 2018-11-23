@@ -1077,6 +1077,6 @@ _symbols axe_sym[] =
 		{"ad_axe_pktc", VAR_FUNCTION_INT64, (void *)&get_axe_pktc, 0, MAX_ADAPTERS, 0},
 		{"ad_axe_ccerr", VAR_FUNCTION_INT64, (void *)&get_axe_ccerr, 0, MAX_ADAPTERS, 0},
 		{"ad_axe_coax", VAR_FUNCTION_STRING, (void *)&get_axe_coax, 0, MAX_ADAPTERS, 0},
-		{NULL, 0, NULL, 0, 0}};
+		{NULL, 0, NULL, 0, 0, 0}};
 
 #endif // #ifndef DISABLE_LINUXDVB

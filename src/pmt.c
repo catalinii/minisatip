@@ -1885,4 +1885,4 @@ _symbols pmt_sym[] =
 		{"pmt_running", VAR_AARRAY_UINT8, pmts, 1, MAX_PMT, offsetof(SPMT, running)},
 		{"ad_channel", VAR_FUNCTION_STRING, (void *)&get_channel_for_adapter, 0, MAX_ADAPTERS, 0},
 
-		{NULL, 0, NULL, 0, 0}};
+		{NULL, 0, NULL, 0, 0, 0}};
