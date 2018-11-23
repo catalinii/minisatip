@@ -231,7 +231,6 @@ setup_stream(char *str, sockets *s)
 		int ad = sid->adapter;
 		if (!strstr(tmp_str, "addpids") && !strstr(tmp_str, "delpids"))
 		{
-			sid->adapter = -1;
 			close_adapter_for_stream(sid->sid, ad);
 		}
 	}
@@ -272,7 +271,6 @@ int start_play(streams *sid, sockets *s)
 		if (ad && !compare_slave_parameters(ad, &sid->tp))
 		{
 			close_adapter_for_stream(sid->sid, ad->id);
-			sid->adapter = -1;
 		}
 		ad = get_adapter(sid->adapter);
 	}
@@ -291,7 +289,6 @@ int start_play(streams *sid, sockets *s)
 		{
 			LOG("slave stream tuning to a new frequency, finding a new adapter");
 			close_adapter_for_stream(sid->sid, ad->id);
-			sid->adapter = -1;
 		}
 		a_id = get_free_adapter(&sid->tp);
 		LOG("Got adapter %d on socket %d", a_id, s->id);

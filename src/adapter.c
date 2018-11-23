@@ -35,6 +35,7 @@
 #include "dvbapi.h"
 #include "utils.h"
 #include "pmt.h"
+#include "stream.h"
 
 #ifndef DISABLE_SATIPCLIENT
 #include "satipc.h"
@@ -786,11 +787,17 @@ int set_adapter_for_stream(int sid, int aid)
 void close_adapter_for_stream(int sid, int aid)
 {
 	adapter *ad;
+	streams *s = get_sid(sid);
 	int is_slave = 1;
 	if (!(ad = get_adapter(aid)))
 		return;
 
 	mutex_lock(&ad->mutex);
+
+	if (s && s->adapter == aid)
+		s->adapter = -1;
+	else if (s && s->adapter != aid)
+		LOG("%s adapter mismatch: got %d expected %d", __FUNCTION__, s->adapter, aid);
 
 	if (ad->master_sid == sid)
 	{
