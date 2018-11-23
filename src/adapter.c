@@ -1302,6 +1302,14 @@ get_configured_adapter1(int aid, char *file, int line)
 	return a[aid];
 }
 
+char *itoa_positive(char *dest, int val)
+{
+	dest[0] = 0;
+	if(val >= 0)
+		sprintf(dest, "%d", val);
+	return dest;
+}
+
 char *get_stream_pids(int s_id, char *dest, int max_size);
 char *
 describe_adapter(int sid, int aid, char *dad, int ld)
@@ -1310,6 +1318,7 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 	transponder *t;
 	adapter *ad;
 	streams *ss;
+	char plp_isi[10], ds[10];
 	int status = 1, strength = 255, snr = 15;
 
 	ss = get_sid(sid);
@@ -1360,19 +1369,20 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 	else if (t->sys == SYS_DVBT || t->sys == SYS_DVBT2)
 		len =
 			snprintf(dad, ld,
-					 "ver=1.1;tuner=%d,%d,%d,%d,%.2f,%d,%s,%s,%s,%s,%s,%d,%d,%d;pids=",
+					 "ver=1.1;tuner=%d,%d,%d,%d,%.2f,%d,%s,%s,%s,%s,%s,%s,%d,%d;pids=",
 					 ad ? ad->tp.fe + 1: aid + 1, strength, status, snr,
 					 (double)t->freq / 1000.0, t->bw / 1000000, get_delsys(t->sys),
 					 get_tmode(t->tmode), get_modulation(t->mtype),
-					 get_gi(t->gi), get_fec(t->fec), t->plp_isi, t->t2id, t->sm);
+					 get_gi(t->gi), get_fec(t->fec), itoa_positive(plp_isi, t->plp_isi), 
+					 t->t2id, t->sm);
 	else
 		len =
 			snprintf(dad, ld,
-					 "ver=1.2;tuner=%d,%d,%d,%d,%.2f,8,%s,%s,%d,%d,%d,%d,%s;pids=",
+					 "ver=1.2;tuner=%d,%d,%d,%d,%.2f,8,%s,%s,%d,%d,%s,%s,%s;pids=",
 					 ad ? ad->tp.fe + 1: aid + 1, strength, status, snr,
 					 (double)t->freq / 1000, get_delsys(t->sys),
-					 get_modulation(t->mtype), t->sr / 1000, t->c2tft, t->ds,
-					 t->plp_isi, get_inversion(t->inversion));
+					 get_modulation(t->mtype), t->sr / 1000, t->c2tft, itoa_positive(ds, t->ds),
+					 itoa_positive(plp_isi, t->plp_isi), get_inversion(t->inversion));
 
 	if (use_ad)
 		len += strlen(get_stream_pids(sid, dad + len, ld - len));

@@ -337,11 +337,11 @@ void copy_dvb_parameters(transponder *s, transponder *d)
 		d->diseqc = s->diseqc;
 	if (s->c2tft != -1)
 		d->c2tft = s->c2tft;
-	if (s->ds != -1)
+	if (s->ds != TP_VALUE_UNSET)
 		d->ds = s->ds;
-	if (s->plp_isi != -1)
+	if (s->plp_isi != TP_VALUE_UNSET)
 		d->plp_isi = s->plp_isi;
-	if (s->pls_mode != -1)
+	if (s->pls_mode != TP_VALUE_UNSET)
 		d->pls_mode = s->pls_mode;
 	if (s->pls_code != -1)
 		d->pls_code = s->pls_code;
