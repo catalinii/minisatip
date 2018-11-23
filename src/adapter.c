@@ -1517,15 +1517,17 @@ void set_unicable_adapters(char *o, int type)
 		if (slot < 0 || freq < 0)
 			continue;
 		sep3 = strchr(sep2 + 1, '-');
-		pin = map_intd(sep3, NULL, 0);
+		pin = TP_VALUE_UNSET;
+		if (sep3)
+			pin = map_intd(sep3 + 1, NULL, TP_VALUE_UNSET);
 
 		ad->diseqc_param.uslot = slot;
 		ad->diseqc_param.ufreq = freq;
 		ad->diseqc_param.switch_type = type;
 		ad->diseqc_param.pin = pin;
 		ad->diseqc_param.only13v = o13v;
-		LOG("Setting %s adapter %d slot %d freq %d",
-			type == SWITCH_UNICABLE ? "unicable" : "jess", a_id, slot, freq);
+		LOG("Setting %s adapter %d slot %d freq %d pin %d",
+			type == SWITCH_UNICABLE ? "unicable" : "jess", a_id, slot, freq, pin);
 	}
 }
 
