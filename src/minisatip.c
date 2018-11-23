@@ -258,7 +258,7 @@ void usage()
 #endif
 		"[-p public_host] [-r remote_rtp_host] [-R document_root] "
 #ifndef DISABLE_SATIPCLIENT
-		"[-s [DELSYS:]host[:port] "
+		"[-s [*][DELSYS:][FE_ID@][source_ip/]host[:port] "
 #endif
 		"[-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] \n "
 #ifdef AXE
@@ -390,8 +390,9 @@ Help\n\
 "
 #ifndef DISABLE_SATIPCLIENT
 		"\
-* -s --satip-servers [DELSYS:][FE_ID@][source_ip/]host[:port] - specify the remote satip host and port with delivery system DELSYS, it is possible to use multiple -s \n\
-	* DELSYS - can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, isdbt, atsc, dvbcb ( - DVBC_ANNEX_B ) [default: dvbs2]\n\
+* -s --satip-servers [*][DELSYS:][FE_ID@][source_ip/]host[:port] - specify the remote satip host and port with delivery system DELSYS, it is possible to use multiple -s \n\
+	* - Use TCP if -O is not specified and UDP if -O is specified\n\
+	DELSYS - can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, isdbt, atsc, dvbcb ( - DVBC_ANNEX_B ) [default: dvbs2]\n\
 	host - the server of the satip server\n\
 	port - rtsp port for the satip server [default: 554]\n\
 	FE_ID - will be determined automatically\n\
@@ -981,7 +982,7 @@ void set_options(int argc, char *argv[])
 	if (!is_log)
 		opts.log = 0;
 
-// FBC setup
+	// FBC setup
 	if (!access("/proc/stb/frontend/0/fbc_connect", W_OK))
 		set_slave_adapters("2-7:0");
 }
@@ -1013,7 +1014,9 @@ int read_rtsp(sockets *s)
 			s->rlen -= rtsp_len + 4;
 			if (s->rlen == 0)
 				return 0;
-		} else { // handle the remaining data as next fragment
+		}
+		else
+		{ // handle the remaining data as next fragment
 			rtsp_len -= s->rlen - 4;
 			s->rlen = 4;
 			s->buf[2] = rtsp_len >> 8;
@@ -1531,7 +1534,7 @@ int ssdp_reply(sockets *s)
 		return 0;
 	}
 
-		// not my uuid
+	// not my uuid
 
 #ifdef AXE
 	axe_set_network_led(1);

@@ -849,16 +849,16 @@ int update_pids(int aid)
 	ad->updating_pids = 1;
 #ifndef DISABLE_PMT
 	for (i = 0; i < MAX_PIDS; i++)
-		if ((ad->pids[i].flags == 3))
+		if (ad->pids[i].flags == 3)
 			pmt_pid_del(ad, ad->pids[i].pid);
 
 	for (i = 0; i < MAX_PIDS; i++)
-		if ((ad->pids[i].flags == 2))
+		if (ad->pids[i].flags == 2)
 			pmt_pid_add(ad, ad->pids[i].pid, 0);
 #endif
 
 	for (i = MAX_PIDS - 1; i >= 0; i--)
-		if ((ad->pids[i].flags == 3))
+		if (ad->pids[i].flags == 3)
 		{
 			if (dp)
 				dump_pids(aid);
@@ -887,7 +887,8 @@ int update_pids(int aid)
 			if (dp)
 				dump_pids(aid);
 			dp = 0;
-			if (ad->pids[i].fd <= 0) {
+			if (ad->pids[i].fd <= 0)
+			{
 				if ((ad->pids[i].fd = ad->set_pid(ad, ad->pids[i].pid)) < 0)
 				{
 
@@ -903,7 +904,7 @@ int update_pids(int aid)
 			if (ad->pids[i].pid == 0)
 				ad->pat_processed = 0;
 			ad->pids[i].packets = 0;
-			ad->pids[i].cc = 255;
+			ad->pids[i].cc = -1;
 			ad->pids[i].cc_err = 0;
 			ad->pids[i].dec_err = 0;
 		}
@@ -1330,9 +1331,12 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 
 	if (use_ad)
 	{
-		if (ad->status < 0) {
+		if (ad->status < 0)
+		{
 			status = strength = snr = 0;
-		} else {
+		}
+		else
+		{
 			strength = ad->strength;
 			snr = ad->snr;
 			if (snr > 15)
@@ -1352,7 +1356,7 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 		len =
 			snprintf(dad, ld,
 					 "ver=1.0;src=%d;tuner=%d,%d,%d,%d,%d,%s,%s,%s,%s,%s,%d,%s;pids=",
-					 t->diseqc, ad ? ad->tp.fe + 1: aid + 1, strength, status, snr,
+					 t->diseqc, ad ? ad->tp.fe + 1 : aid + 1, strength, status, snr,
 					 t->freq / 1000, get_pol(t->pol),
 					 get_modulation(t->mtype), get_pilot(t->plts),
 					 get_rolloff(t->ro), get_delsys(t->sys), t->sr / 1000,
@@ -1361,7 +1365,7 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 		len =
 			snprintf(dad, ld,
 					 "ver=1.1;tuner=%d,%d,%d,%d,%.2f,%d,%s,%s,%s,%s,%s,%d,%d,%d;pids=",
-					 ad ? ad->tp.fe + 1: aid + 1, strength, status, snr,
+					 ad ? ad->tp.fe + 1 : aid + 1, strength, status, snr,
 					 (double)t->freq / 1000.0, t->bw / 1000000, get_delsys(t->sys),
 					 get_tmode(t->tmode), get_modulation(t->mtype),
 					 get_gi(t->gi), get_fec(t->fec), t->plp_isi, t->t2id, t->sm);
@@ -1369,7 +1373,7 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 		len =
 			snprintf(dad, ld,
 					 "ver=1.2;tuner=%d,%d,%d,%d,%.2f,8,%s,%s,%d,%d,%d,%d,%s;pids=",
-					 ad ? ad->tp.fe + 1: aid + 1, strength, status, snr,
+					 ad ? ad->tp.fe + 1 : aid + 1, strength, status, snr,
 					 (double)t->freq / 1000, get_delsys(t->sys),
 					 get_modulation(t->mtype), t->sr / 1000, t->c2tft, t->ds,
 					 t->plp_isi, get_inversion(t->inversion));
@@ -2074,7 +2078,8 @@ int signal_thread(sockets *s)
 	int i, status;
 	int64_t ts, ctime;
 	adapter *ad;
-	for (i = 0; i < MAX_ADAPTERS; i++) {
+	for (i = 0; i < MAX_ADAPTERS; i++)
+	{
 		if ((ad = get_adapter_nw(i)) == NULL || ad->get_signal == NULL)
 			continue;
 		if (ad->fe <= 0 || ad->tp.freq <= 0)

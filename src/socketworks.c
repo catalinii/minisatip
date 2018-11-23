@@ -159,7 +159,9 @@ int udp_bind(char *addr, int port)
 				close(sock);
 				return -1;
 			}
-		} else {
+		}
+		else
+		{
 			LOG("udp_bind: failed: bind() on host %s port %d: error %s", addr,
 				port, strerror(errno));
 			return -1;
@@ -897,7 +899,8 @@ void *select_and_execute(void *arg)
 			sockets *ss;
 			lt = c_time;
 			i = -1;
-			while (++i < max_sock) {
+			while (++i < max_sock)
+			{
 				if ((ss = get_sockets(i)) == NULL || (ss->tid != tid))
 					continue;
 				if (((ss->timeout_ms > 0) && (lt - ss->rtime > ss->timeout_ms) && (ss->spos == ss->wpos)) || (ss->force_close))
@@ -1038,9 +1041,9 @@ int get_mac_address(char *mac)
 			if ((cur->ifa_addr->sa_family == AF_LINK) && cur->ifa_addr)
 			{
 				struct sockaddr_dl *sdl = (struct sockaddr_dl *)cur->ifa_addr;
-				unsigned char *m = LLADDR(sdl);
+				unsigned char *m = (unsigned char *)LLADDR(sdl);
 				sprintf(mac, "%02x%02x%02x%02x%02x%02x", m[0], m[1], m[2], m[3], m[4], m[5]);
-				LOG("mac -> %s, interface %s", mac, cur->ifa_name);
+				LOGM("mac -> %s, interface %s", mac, cur->ifa_name);
 				if ((strcmp(cur->ifa_name, if_name) == 0))
 					break;
 			}
@@ -1241,7 +1244,7 @@ int my_writev(sockets *s, const struct iovec *iov, int iiov)
 
 	if (rv != len)
 	{
-		if(rv <= 0)
+		if (rv <= 0)
 			failed_writes++;
 		DEBUGM("writev handle %d, iiov %d, len %d, rv %d, errno %d", s->sock, iiov, len, rv, _errno);
 	}
