@@ -447,7 +447,7 @@ int close_adapter(int na)
 		pmt_close_device(ad);
 #endif
 	ad->ca_mask = 0;
-	ad->fe = 0;
+	ad->fe = -1;
 	ad->dvr = 0;
 	ad->strength = 0;
 	ad->snr = 0;
