@@ -337,11 +337,11 @@ void copy_dvb_parameters(transponder *s, transponder *d)
 		d->diseqc = s->diseqc;
 	if (s->c2tft != -1)
 		d->c2tft = s->c2tft;
-	if (s->ds != -1)
+	if (s->ds != TP_VALUE_UNSET)
 		d->ds = s->ds;
-	if (s->plp_isi != -1)
+	if (s->plp_isi != TP_VALUE_UNSET)
 		d->plp_isi = s->plp_isi;
-	if (s->pls_mode != -1)
+	if (s->pls_mode != TP_VALUE_UNSET)
 		d->pls_mode = s->pls_mode;
 	if (s->pls_code != -1)
 		d->pls_code = s->pls_code;
@@ -586,7 +586,7 @@ int send_unicable(adapter *ad, int fd, int freq, int pos, int pol, int hiband, d
 	cmd.msg[3] = ((t & 0x0300) >> 8) | (d->uslot << 5) | (pos ? 0x10 : 0) | (hiband ? 4 : 0) | (pol ? 8 : 0);
 	cmd.msg[4] = t & 0xff;
 
-	if (d->pin)
+	if (d->pin > 0 && d->pin < 256)
 	{
 		cmd.msg_len = 6;
 		cmd.msg[2] = 0x5C;
@@ -594,8 +594,8 @@ int send_unicable(adapter *ad, int fd, int freq, int pos, int pol, int hiband, d
 	}
 
 	LOGM(
-		"send_unicable fd %d, freq %d, ufreq %d, pos = %d, pol = %d, hiband = %d, slot %d, diseqc => %02x %02x %02x %02x %02x",
-		fd, freq, d->ufreq, pos, pol, hiband, d->uslot, cmd.msg[0],
+		"send_unicable fd %d, freq %d, ufreq %d, pos = %d, pol = %d, hiband = %d, slot %d, pin %d, diseqc => %02x %02x %02x %02x %02x",
+		fd, freq, d->ufreq, pos, pol, hiband, d->uslot, d->pin, cmd.msg[0],
 		cmd.msg[1], cmd.msg[2], cmd.msg[3], cmd.msg[4]);
 	if (ad->wakeup)
 		ad->wakeup(ad, fd, SEC_VOLTAGE_13);
@@ -635,15 +635,15 @@ int send_jess(adapter *ad, int fd, int freq, int pos, int pol, int hiband, diseq
 	cmd.msg[1] |= ((t >> 8) & 0x07);
 	cmd.msg[2] = (t & 0xff);
 	cmd.msg[3] = ((pos & 0x3f) << 2) | (pol ? 2 : 0) | (hiband ? 1 : 0);
-	if (d->pin < 256)
+	if (d->pin > 0 && d->pin < 256)
 	{
 		cmd.msg_len = 5;
 		cmd.msg[0] = 0x71;
 		cmd.msg[4] = d->pin;
 	}
 
-	LOGM("send_jess fd %d, freq %d, ufreq %d, pos = %d, pol = %d, hiband = %d, slot %d, diseqc => %02x %02x %02x %02x %02x",
-		 fd, freq, d->ufreq, pos, pol, hiband, d->uslot, cmd.msg[0],
+	LOGM("send_jess fd %d, freq %d, ufreq %d, pos = %d, pol = %d, hiband = %d, slot %d, pin %d, diseqc => %02x %02x %02x %02x %02x",
+		 fd, freq, d->ufreq, pos, pol, hiband, d->uslot, d->pin, cmd.msg[0],
 		 cmd.msg[1], cmd.msg[2], cmd.msg[3], cmd.msg[4]);
 
 	if (ad->wakeup)
