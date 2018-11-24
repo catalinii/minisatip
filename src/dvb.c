@@ -183,7 +183,7 @@ int detect_dvb_parameters(char *s, transponder *tp)
 	tp->diseqc = -1;
 	tp->c2tft = -1;
 	tp->ds = -1;
-	tp->plp_isi = -1;
+	tp->plp_isi = TP_VALUE_UNSET;
 	tp->pls_mode = -1;
 	tp->pls_code = -1;
 
@@ -237,7 +237,7 @@ int detect_dvb_parameters(char *s, transponder *tp)
 		if (strncmp("ds=", arg[i], 3) == 0)
 			tp->ds = map_int(arg[i] + 3, NULL);
 		if (strncmp("plp=", arg[i], 4) == 0 ||
-		    strncmp("isi=", arg[i], 4) == 0)
+			strncmp("isi=", arg[i], 4) == 0)
 			tp->plp_isi = map_int(arg[i] + 4, NULL);
 		if (strncmp("plsm=", arg[i], 5) == 0)
 			tp->pls_mode = map_int(arg[i] + 5, fe_pls_mode);
@@ -793,10 +793,12 @@ int setup_switch(adapter *ad)
 
 uint32_t pls_scrambling_index(transponder *tp)
 {
-	if (tp->pls_mode == PLS_MODE_ROOT) {
+	if (tp->pls_mode == PLS_MODE_ROOT)
+	{
 		/* convert ROOT code to GOLD code */
 		uint32_t x, g;
-		for (g = 0, x = 1; g < 0x3ffff; g++)  {
+		for (g = 0, x = 1; g < 0x3ffff; g++)
+		{
 			if (tp->pls_code == x)
 				return g;
 			x = (((x ^ (x >> 7)) & 1) << 17) | (x >> 1);
@@ -942,7 +944,8 @@ int dvb_tune(int aid, transponder *tp)
 		freq = freq * 1000;
 		ADD_PROP(DTV_SYMBOL_RATE, tp->sr)
 #if DVBAPIVERSION >= 0x0502
-		if (tp->plp_isi >= 0) {
+		if (tp->plp_isi >= 0)
+		{
 			int v = tp->plp_isi & 0xFF;
 			if (tp->ds >= 0)
 				v |= (tp->ds & 0xFF) << 8;
