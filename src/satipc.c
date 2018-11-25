@@ -73,7 +73,8 @@ typedef struct struct_satipc
 	int err;
 	int wp, qp;			 // written packet, queued packet
 	char ignore_packets; // ignore packets coming from satip server while tuning
-	char satip_fe, last_cmd;
+	int satip_fe;
+	char last_cmd;
 	char use_tcp;
 	char expect_reply, force_commit, want_commit, want_tune, sent_transport, force_pids;
 	int64_t last_setup, last_connect;
@@ -1209,7 +1210,7 @@ uint8_t determine_fe(adapter **a, int pos, char *csip, int sport)
 	return 1;
 }
 
-int add_satip_server(char *host, int port, int fe, int delsys, char *source_ip, int use_tcp)
+int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip, int use_tcp)
 {
 	int i, k;
 	adapter *ad;
@@ -1297,7 +1298,8 @@ void find_satip_adapter(adapter **a)
 	char source_ip[100];
 	int port;
 	int use_tcp;
-	int fe, delsys;
+	int fe;
+	uint8_t delsys;
 
 	if (!opts.satip_servers || !opts.satip_servers[0])
 		return;
@@ -1467,7 +1469,7 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h)
 			disable_satip_server(s->host, s->port);
 			for (i = 0; i < i_order; i++)
 			{
-				int ds = order[i];
+				uint8_t ds = order[i];
 				for (j = 0; j < s->tuners[ds]; j++)
 					add_satip_server(s->host, s->port, fe++, ds, NULL, opts.satip_rtsp_over_tcp);
 			}

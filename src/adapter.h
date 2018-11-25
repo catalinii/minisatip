@@ -22,8 +22,8 @@ typedef int (*Open_device)(void *ad);
 typedef int (*Device_signal)(void *ad);
 typedef int (*Device_wakeup)(void *ad, int fd, int voltage);
 typedef int (*Tune)(int aid, transponder *tp);
-typedef fe_delivery_system_t (*Dvb_delsys)(int aid, int fd,
-										   fe_delivery_system_t *sys);
+typedef uint8_t (*Dvb_delsys)(int aid, int fd,
+							  uint8_t *sys);
 
 #define ADAPTER_DVB 1
 #define ADAPTER_SATIP 2
@@ -45,7 +45,7 @@ typedef struct struct_adapter
 	char failed_adapter; // is set when the adapter was closed unexpected and needs to be re-enabled
 	char flush, updating_pids;
 	// physical adapter, physical frontend number
-	fe_delivery_system_t sys[MAX_DELSYS];
+	uint8_t sys[MAX_DELSYS];
 	transponder tp;
 	SPid pids[MAX_PIDS];
 	int ca_mask;
