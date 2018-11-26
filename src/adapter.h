@@ -81,6 +81,7 @@ typedef struct struct_adapter
 	uint8_t is_t2mi;
 	uint64_t tune_time;
 	char name[5];
+	char null_packets;
 #ifndef DISABLE_PMT
 	int transponder_id, pat_ver, pat_filter, sdt_filter;
 #endif

@@ -821,6 +821,7 @@ int pmt_process_stream(adapter *ad)
 	uint8_t *b;
 
 	int rlen = ad->rlen;
+	ad->null_packets = 0;
 
 	for (i = 0; i < rlen; i += DVB_FRAME)
 	{
@@ -853,6 +854,7 @@ int pmt_process_stream(adapter *ad)
 				b[1] |= 0x1F;
 				b[2] |= 0xFF;
 				ad->dec_err++;
+				ad->null_packets = 1;
 			}
 			//			else
 			//				DEBUGL(LOG_DMX, "PID %d packet %d pos %d not marked: %02X %02X %02X %02X", pid, i / 188, i, b[0], b[1], b[2], b[3]);
