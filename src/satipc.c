@@ -925,7 +925,7 @@ int http_request(adapter *ad, char *url, char *method)
 
 	if (strcmp(method, "DESCRIBE") == 0)
 	{
-		strcatf(session, ptr, "\r\nAccept: application/sdp ");
+		strcatf(session, ptr, "\r\nAccept: application/sdp");
 		sip->last_cmd = RTSP_DESCRIBE;
 	}
 
