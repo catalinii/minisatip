@@ -1448,7 +1448,7 @@ int ssdp_discovery(sockets *s)
 				  "CACHE-CONTROL: max-age=1800\r\n"
 				  "LOCATION: http://%s/%s\r\n"
 				  "NT: %s\r\n"
-				  "NTS: ssdp:alive \r\n"
+				  "NTS: ssdp:alive\r\n"
 				  "SERVER: Linux/1.0 UPnP/1.1 %s/%s\r\n"
 				  "USN: uuid:%s%s\r\n"
 				  "BOOTID.UPNP.ORG: %d\r\n"
