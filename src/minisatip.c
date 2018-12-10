@@ -427,7 +427,7 @@ Help\n\
 \n\
 * -t --cleanpsi clean the PSI from all CA information, the client will see the channel as clear if decrypted successfully\n\
 \n\
-* -T --threads: enables/disable multiple threads (reduces memory consumptions) (default: %s)\n\
+* -T --threads: enables/disable multiple threads (reduces memory consumption) (default: %s)\n\
 \n\
 * -u --unicable unicable_string: defines the unicable adapters (A) and their slot (S), frequency (F) and optionally the PIN for the switch:\n\
 \t* The format is: A1:S1-F1[-PIN][,A2:S2-F2[-PIN][,...]]\n\
