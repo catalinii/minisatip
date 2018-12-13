@@ -1824,7 +1824,7 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 	if (s->type != TYPE_HTTP && get_sid(s->sid) && ah && !strstr(ah, "Session") && rc != 454)
 		sprintf(sess_id, "\r\nSession: %010d", get_session_id(s->sid));
 	if (s->type != TYPE_HTTP && cseq > 0)
-		sprintf(scseq, "\r\nCseq: %d", cseq);
+		sprintf(scseq, "\r\nCSeq: %d", cseq);
 
 	if (lr > 0)
 		lresp = snprintf(resp, sizeof(resp) - 1, reply, proto, rc, d,
