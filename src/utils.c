@@ -1728,7 +1728,7 @@ int http_client(char *url, char *request, void *callback, void *opaque)
 		LOG_AND_RETURN(1, "%s: connect to %s:%d failed", __FUNCTION__, h->host, h->port);
 	http_client_sock = sockets_add(sock, NULL, -1, TYPE_TCP | TYPE_CONNECT, (socket_action)http_client_read, (socket_action)http_client_close, (socket_action)http_client_close);
 	if (http_client_sock < 0)
-		LOG_AND_RETURN(1, "%s: socket_add failed", __FUNCTION__);
+		LOG_AND_RETURN(1, "%s: sockets_add failed", __FUNCTION__);
 	h->opaque = opaque;
 	h->action = callback;
 	set_sockets_sid(http_client_sock, id);

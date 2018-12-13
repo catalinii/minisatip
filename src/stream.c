@@ -493,7 +493,7 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp)
 						   p.dest, p.port);
 
 		if ((sid->rsock_id = sockets_add(sid->rsock, NULL, sid->sid, TYPE_UDP, NULL, (socket_action)close_stream_for_socket, NULL)) < 0)
-			LOG_AND_RETURN(-1, "RTP socket_add failed");
+			LOG_AND_RETURN(-1, "RTP sockets_add failed");
 
 		set_socket_send_buffer(sid->rsock, opts.output_buffer);
 
@@ -507,7 +507,7 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp)
 
 		if ((sid->rtcp_sock = sockets_add(sid->rtcp, NULL, sid->sid, TYPE_RTCP,
 										  (socket_action)rtcp_confirm, NULL, NULL)) < 0) // read rtcp
-			LOG_AND_RETURN(-1, "RTCP socket_add failed");
+			LOG_AND_RETURN(-1, "RTCP sockets_add failed");
 
 		for (i = 0; i < MAX_STREAMS; i++)
 			if ((sid2 = get_sid_for(i)) && i != sid->sid && sid2->sa.sin_port == sid->sa.sin_port && sid2->sa.sin_addr.s_addr == sid->sa.sin_addr.s_addr)
