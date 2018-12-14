@@ -503,8 +503,6 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp)
 						   "decode_transport failed: UDP connection on rtcp port to %s:%d failed",
 						   p.dest, p.port + 1);
 
-		set_linux_socket_timeout(sid->rtcp);
-
 		if ((sid->rtcp_sock = sockets_add(sid->rtcp, NULL, sid->sid, TYPE_RTCP,
 										  (socket_action)rtcp_confirm, NULL, NULL)) < 0) // read rtcp
 			LOG_AND_RETURN(-1, "RTCP socket_add failed");
