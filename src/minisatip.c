@@ -331,7 +331,7 @@ Help\n\
 	* eg: -l http,pmt\n\
 \n\
 * -v specifies the modules comma separated that will have increased debug level (more verbose than -l), \n\
-	* eg: -d http,pmt\n\
+	* eg: -v http,pmt\n\
 \n\
 * -L --lnb specifies the adapter and LNB parameters (low, high and switch frequency)\n\
 	* eg: -L *:9750-10600-11700 - sets all the adapters to use Universal LNB parameters (default)\n\
@@ -427,7 +427,7 @@ Help\n\
 \n\
 * -t --cleanpsi clean the PSI from all CA information, the client will see the channel as clear if decrypted successfully\n\
 \n\
-* -T --threads: enables/disable multiple threads (reduces memory consumptions) (default: %s)\n\
+* -T --threads: enables/disable multiple threads (reduces memory consumption) (default: %s)\n\
 \n\
 * -u --unicable unicable_string: defines the unicable adapters (A) and their slot (S), frequency (F) and optionally the PIN for the switch:\n\
 \t* The format is: A1:S1-F1[-PIN][,A2:S2-F2[-PIN][,...]]\n\
