@@ -309,6 +309,9 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 			add_pmt = 1;
 			break;
 		}
+	if (d->pmt[0] == pmt->id)
+		d->tid = ad->transponder_id;
+
 	if (!add_pmt)
 	{
 		LOG("No free slot found for pmt %d on DDCI %d", pmt->id, d->id);
@@ -355,6 +358,8 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt)
 		LOG_AND_RETURN(0, "%s: ddci %d already disabled", __FUNCTION__, ddid);
 	LOG("%s: deleting pmt id %d, pid %d, ddci %d", __FUNCTION__, spmt->id, pid, ddid);
 	d->ver = (d->ver + 1) & 0xF;
+	if (d->channels > 0)
+		d->channels++;
 	if (d->pmt[0] == pmt)
 		d->cat_processed = 0;
 
@@ -401,7 +406,7 @@ int ddci_create_pat(ddci_device_t *d, uint8_t *b)
 	b[2] = 0xb0;
 	b[3] = 0; // len
 	copy16(b, 4, d->tid);
-	b[6] = 0xd | (d->ver << 1);
+	b[6] = 0xC0 | (d->ver << 1);
 	b[7] = b[8] = 0;
 	// Channel ID 0
 	b[9] = b[10] = 0;
@@ -434,7 +439,8 @@ int ddci_create_pat(ddci_device_t *d, uint8_t *b)
 	b[3] |= (len1 & 0xFF);
 	uint32_t crc = crc_32(b + 1, len1 - 1);
 	copy32(b, len1, crc);
-	char buf[100];
+	LOGM("%s: transponder %d version %d, len %d", __FUNCTION__, d->tid, d->ver, len1);
+	char buf[500];
 	sprintf(buf, "PAT Created CRC %08X: ", crc);
 	hexdump(buf, b + 1, len1 - 1);
 	return len;
@@ -504,7 +510,7 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *clean)
 		pmt_b[i + 1] |= (dpid >> 8);
 		pmt_b[i + 2] = dpid & 0xFF;
 
-		LOGM("DDCI: PMT pid %d - stream pid %04X -> %04X es_len %d, pos %d",
+		LOGM("DDCI: PMT pid %d - stream pid %d -> %d es_len %d, pos %d",
 			 pid, spid, dpid, es_len, i);
 		if ((es_len + i + 5 > pmt_len) || (es_len < 0))
 		{
@@ -670,7 +676,7 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d)
 			iop++;
 		}
 
-		LOGM("writing %d bytes to DDCI device fd %d, sock %d", iop * 188, ad2->fe, ad2->fe_sock);
+		LOGM("writing %d bytes to DDCI device %d, fd %d, sock %d", iop * 188, d->id, ad2->fe, ad2->fe_sock);
 		int rb = writev(ad2->fe, io, iop);
 		if (rb != bytes)
 			LOG("%s: write incomplete to DDCI %d,fd %d, wrote %d out of %d, errno %d: %s", __FUNCTION__, ad2->id, ad2->fe, rb, bytes, errno, strerror(errno));

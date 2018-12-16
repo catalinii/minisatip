@@ -195,7 +195,7 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt)
 			listmgmt = CA_LIST_MANAGEMENT_ADD;
 		}
 
-	LOG("PMT CA pid %u len %u ver %u sid %u (%x) %s", pid, len, ver, sid, sid,
+	LOG("PMT CA pid %u (%s) len %u ver %u sid %u (%x) %s", pid, spmt->name, len, ver, sid, sid,
 		listmgmt == CA_LIST_MANAGEMENT_ONLY ? "only" : "add");
 
 	uint8_t capmt[8192];

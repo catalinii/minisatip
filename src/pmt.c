@@ -362,7 +362,7 @@ int match_filter(SFilter *f, unsigned char *b)
 	}
 	if (f->flags & FILTER_REVERSE)
 		match = 1 - match;
-	DEBUGM("filter %smatch: id %d: pid %d, flags %d, mask_len %d, filter -> %02X %02X %02X %02X %02X, mask ->%02X %02X %02X %02x %02x -> data %02x [%02x %02x] %02x %02x %02x %02x",
+	DEBUGM("filter %smatch: id %d: pid %d, flags %d, mask_len %d, filter -> %02X %02X %02X %02X %02X, mask ->%02X %02X %02X %02X %02X -> data %02X [%02x %02x] %02X %02X %02X %02X",
 		   match ? "" : "not ", f->id, f->pid, f->flags, f->mask_len, f->filter[0], f->filter[1], f->filter[2], f->filter[3], f->filter[4], f->mask[0], f->mask[1], f->mask[2], f->mask[3], f->mask[4], b[0], b[1], b[2], b[3], b[4], b[5], b[6]);
 	return match;
 }
@@ -1273,8 +1273,8 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque)
 	int new_version = 0;
 	pat_len = len - 4; // remove crc
 	tid = b[3] * 256 + b[4];
-	ver = b[5] & 0x3E;
-	//	LOG("tid %d (old tid %d) pat_len %d : %02X %02X %02X %02X %02X %02X %02X %02X", tid, ad ? ad->transponder_id : -1, pat_len, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]);
+	ver = (b[5] & 0x3e) >> 1;
+	//	LOGM("PAT: tid %d (%d) ver %d (%d) pat_len %d : %02X %02X %02X %02X %02X %02X %02X %02X", tid, ad ? ad->transponder_id : -1, ver, ad ? ad->pat_ver : -1, pat_len, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]);
 	if (b[0] != 0)
 		return 0;
 
@@ -1282,13 +1282,13 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque)
 		LOG_AND_RETURN(0, "Adapter %d no longer enabled, not processing PAT", ad->id);
 
 	if ((ad->transponder_id == tid) && (ad->pat_ver == ver)) //pat already processed
-		LOG_AND_RETURN(0, "AD %d: tsid %d version %d", ad->id, tid, ver);
+		LOG_AND_RETURN(0, "PAT AD %d: tsid %d version %d", ad->id, tid, ver);
 
 	memset(sids, 0, sizeof(sids));
 
 	if (ad->pat_processed && ad->transponder_id == tid && ad->pat_ver != ver)
 	{
-		LOG("PAT new version for transponder %d, version %d", ad->transponder_id, ad->pat_ver);
+		LOG("PAT new version for transponder %d, version %d", ad->transponder_id, ver);
 		new_version = 1;
 	}
 
@@ -1314,8 +1314,8 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque)
 	set_filter_flags(filter, FILTER_PERMANENT | FILTER_REVERSE | FILTER_CRC);
 	pat_len -= 9;
 	b += 8;
-	LOG("PAT Adapter %d, Transponder ID %d, len %d, version %d", ad->id,
-		tid, pat_len, ad->pat_ver);
+	LOG("PAT Adapter %d, Transponder ID %d, version %d, len %d", ad->id,
+		tid, ad->pat_ver, pat_len);
 	if (pat_len > 1500)
 		return 0;
 
@@ -1357,7 +1357,7 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque)
 		for (i = 0; i < npmts; i++)
 			if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == ad->id && sids[pmts[i]->sid] == 0)
 			{
-				LOG("Deleting PMT %d and filter %d as it is not present in the new PAT", i, pmts[i]->filter);
+				LOG("Deleting PMT %d (%s) and filter %d as it is not present in the new PAT", i, pmts[i]->name, pmts[i]->filter);
 				del_filter(pmts[i]->filter);
 				pmt_del(i);
 			}
@@ -1476,7 +1476,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 
 	pid = get_filter_pid(filter);
 	ad = get_adapter(pmt->adapter);
-	ver = b[5] & 0x3F;
+	ver = (b[5] & 0x3e) >> 1;
 
 	f = get_filter(filter);
 	if (f && f->adapter != pmt->adapter)
@@ -1519,7 +1519,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 	pi_len = ((b[10] & 0xF) << 8) + b[11];
 
 	pmt->sid = b[3] * 256 + b[4];
-	pmt->version = b[5] & 0x3F;
+	pmt->version = ver;
 
 	mutex_lock(&pmt->mutex);
 	LOG("new PMT %d AD %d, pid: %04X (%d), pmt_len %d, pi_len %d, sid %04X (%d) %s %s", pmt->id, ad->id, pid, pid,
@@ -1706,7 +1706,7 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque)
 
 void start_pmt(SPMT *pmt, adapter *ad)
 {
-	LOGM("starting PMT %d master %d for channel: %s", pmt->id, pmt->master_pmt, pmt->name);
+	LOGM("starting PMT %d master %d, pid %d, sid %d for channel: %s", pmt->id, pmt->master_pmt, pmt->pid, pmt->sid, pmt->name);
 	pmt->running = 1;
 	set_filter_flags(pmt->filter, FILTER_ADD_REMOVE | FILTER_CRC);
 #ifndef DISABLE_TABLES
