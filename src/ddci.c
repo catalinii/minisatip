@@ -270,6 +270,8 @@ int find_ddci_for_pmt(SPMT *pmt)
 					LOG("DDCI %d CAID %04X and mask %04X matched PMT %d", i, ca[dvbca_id].ad_info[i].caid[j], ca[dvbca_id].ad_info[i].mask[j], pmt->id);
 					if (d->channels < d->max_channels)
 						return d->id;
+					else
+						LOGM("DDCI %d has already %d channels running (max %d)", d->id, d->channels, d->max_channels);
 				}
 		}
 	return -1;
@@ -331,13 +333,13 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 
 	for (i = 0; i < pmt->caids; i++)
 	{
-		LOG("%s: Adding ECM pid %d", __FUNCTION__, pmt->capid[i]);
+		LOGM("Adding ECM pid %d", __FUNCTION__, pmt->capid[i]);
 		add_pid_mapping_table(ad->id, pmt->capid[i], pmt->id, d->id);
 	}
 
 	for (i = 0; i < pmt->all_pids; i++)
 	{
-		LOG("%s: Adding ALL pid %d", __FUNCTION__, pmt->all_pid[i]);
+		LOGM("Adding ALL pid %d", __FUNCTION__, pmt->all_pid[i]);
 		add_pid_mapping_table(ad->id, pmt->all_pid[i], pmt->id, d->id);
 	}
 
@@ -359,7 +361,7 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt)
 	LOG("%s: deleting pmt id %d, pid %d, ddci %d", __FUNCTION__, spmt->id, pid, ddid);
 	d->ver = (d->ver + 1) & 0xF;
 	if (d->channels > 0)
-		d->channels++;
+		d->channels--;
 	if (d->pmt[0] == pmt)
 		d->cat_processed = 0;
 
