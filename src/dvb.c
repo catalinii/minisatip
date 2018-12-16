@@ -1280,7 +1280,7 @@ int dvb_set_psi_filter(adapter *a, int i_pid)
 	if (p)
 		p->sock = sock;
 	else
-		LOG0("%s: ould not find pid %d", __FUNCTION__, i_pid)
+		LOG0("%s: could not find pid %d", __FUNCTION__, i_pid)
 	return fd;
 }
 
