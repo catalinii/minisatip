@@ -331,7 +331,7 @@ Help\n\
 	* eg: -l http,pmt\n\
 \n\
 * -v specifies the modules comma separated that will have increased debug level (more verbose than -l), \n\
-	* eg: -d http,pmt\n\
+	* eg: -v http,pmt\n\
 \n\
 * -L --lnb specifies the adapter and LNB parameters (low, high and switch frequency)\n\
 	* eg: -L *:9750-10600-11700 - sets all the adapters to use Universal LNB parameters (default)\n\
