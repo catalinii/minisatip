@@ -271,7 +271,7 @@ int find_ddci_for_pmt(SPMT *pmt)
 					if (d->channels < d->max_channels)
 						return d->id;
 					else
-						LOGM("DDCI %d has already %d channels running (max %d)", d->id, d->channels, d->max_channels);
+						LOG("DDCI %d has already %d channels running (max %d)", d->id, d->channels, d->max_channels);
 				}
 		}
 	return -1;
@@ -284,7 +284,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 	int add_pmt = 0;
 	int rv = TABLES_RESULT_ERROR_NORETRY;
 
-	LOGM("%s: start adapter %d and pmt %d", __FUNCTION__, ad->id, pmt->id);
+	LOG("%s: adapter %d, pmt %d, sid %d, %s", __FUNCTION__, ad->id, pmt->id, pmt->sid, pmt->name);
 	ddid = find_ddci_for_pmt(pmt);
 #ifdef DDCI_TEST
 	ddid = first_ddci;
@@ -292,18 +292,17 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 	ddci_device_t *d = get_ddci(ddid);
 	if (!d)
 	{
-		LOGM("Could not find ddci device for adapter %d", ad->id);
+		LOG("Could not find ddci device for adapter %d", ad->id);
 		return TABLES_RESULT_ERROR_NORETRY;
 	}
 	if (get_ddci(ad->id))
 	{
-		LOGM("Skip processing pmt for ddci adapter %d", ad->id);
+		LOG("Skip processing pmt for ddci adapter %d", ad->id);
 		return TABLES_RESULT_ERROR_NORETRY;
 	}
 
 	mutex_lock(&d->mutex);
 
-	LOG("found device %d for pmt %d", ddid, pmt->id);
 	for (i = 0; i < d->max_channels; i++)
 		if (d->pmt[i] == -1)
 		{
@@ -318,11 +317,13 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 	{
 		LOG("No free slot found for pmt %d on DDCI %d", pmt->id, d->id);
 		mutex_unlock(&d->mutex);
-
 		return TABLES_RESULT_ERROR_RETRY;
 	}
 	d->ver = (d->ver + 1) & 0xF;
 	d->channels++;
+
+	LOG("found DDCI %d for pmt %d, running channels %d", ddid, pmt->id, d->channels);
+
 	if (d->pmt[0] == pmt->id) //process the CAT only for the first PMT
 	{
 		add_pid_mapping_table(ad->id, 1, pmt->id, d->id); // add pid 1
@@ -358,10 +359,10 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt)
 	ddci_device_t *d = get_ddci(ddid);
 	if (!d)
 		LOG_AND_RETURN(0, "%s: ddci %d already disabled", __FUNCTION__, ddid);
-	LOG("%s: deleting pmt id %d, pid %d, ddci %d", __FUNCTION__, spmt->id, pid, ddid);
 	d->ver = (d->ver + 1) & 0xF;
 	if (d->channels > 0)
 		d->channels--;
+	LOG("%s: deleting pmt id %d, sid %X, pid %d, ddci %d", __FUNCTION__, spmt->id, spmt->sid, pid, ddid);
 	if (d->pmt[0] == pmt)
 		d->cat_processed = 0;
 
