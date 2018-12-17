@@ -770,7 +770,7 @@ int set_adapter_for_stream(int sid, int aid)
 	if (ad->master_sid == -1)
 		ad->master_sid = sid;
 	if (ad->sid_cnt++ == 0) // tune always first time for a stream
-		ad->tp.freq = 0;
+		ad->do_tune = 1;
 
 	if (ad->master_source >= 0 && ad->master_source < MAX_ADAPTERS)
 	{
