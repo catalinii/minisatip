@@ -511,7 +511,9 @@ void set_options(int argc, char *argv[])
 	opts.dvbapi_host = NULL;
 	opts.drop_encrypted = 1;
 	opts.rtsp_port = 554;
+#ifndef DISABLE_SATIPCLIENT
 	opts.satip_addpids = 1;
+#endif
 	opts.output_buffer = 512 * 1024;
 	opts.document_root = "html";
 	opts.xml_path = DESC_XML;
@@ -1640,7 +1642,7 @@ extern int sock_signal;
 
 int main(int argc, char *argv[])
 {
-	int sock_bw, sock_satip, rv, devices;
+	int sock_bw, rv, devices;
 	main_tid = get_tid();
 	thread_name = "main";
 	set_options(argc, argv);
@@ -1705,6 +1707,7 @@ int main(int argc, char *argv[])
 #ifndef DISABLE_SATIPCLIENT
 	if (opts.satip_xml)
 	{
+		int sock_satip;
 		if (0 > (sock_satip = sockets_add(SOCK_TIMEOUT, NULL, -1, TYPE_UDP, NULL, NULL, (socket_action)satip_getxml)))
 			FAIL("sockets_add failed for satip_xml retrieval");
 
