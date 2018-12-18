@@ -334,13 +334,13 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 
 	for (i = 0; i < pmt->caids; i++)
 	{
-		LOGM("Adding ECM pid %d", __FUNCTION__, pmt->capid[i]);
+		LOGM("DD %d adding ECM pid %d", d->id, pmt->capid[i]);
 		add_pid_mapping_table(ad->id, pmt->capid[i], pmt->id, d->id);
 	}
 
 	for (i = 0; i < pmt->all_pids; i++)
 	{
-		LOGM("Adding ALL pid %d", __FUNCTION__, pmt->all_pid[i]);
+		LOGM("DD %d adding ALL pid %d", d->id, pmt->all_pid[i]);
 		add_pid_mapping_table(ad->id, pmt->all_pid[i], pmt->id, d->id);
 	}
 
