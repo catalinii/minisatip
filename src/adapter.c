@@ -1105,7 +1105,7 @@ int mark_pid_add(int sid, int aid, int _pid)
 	int found = 0;
 	SPid *p;
 	if (!ad)
-		return 1;
+		return -1;
 	// check if the pid already exists, if yes add the sid
 	if ((p = find_pid(aid, _pid)))
 	{
