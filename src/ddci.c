@@ -284,6 +284,12 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 	int add_pmt = 0;
 	int rv = TABLES_RESULT_ERROR_NORETRY;
 
+	if (get_ddci(ad->id))
+	{
+		LOG("Skip processing pmt for ddci adapter %d", ad->id);
+		return TABLES_RESULT_ERROR_NORETRY;
+	}
+
 	LOG("%s: adapter %d, pmt %d, sid %d, %s", __FUNCTION__, ad->id, pmt->id, pmt->sid, pmt->name);
 	ddid = find_ddci_for_pmt(pmt);
 #ifdef DDCI_TEST
@@ -293,11 +299,6 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 	if (!d)
 	{
 		LOG("Could not find ddci device for adapter %d", ad->id);
-		return TABLES_RESULT_ERROR_NORETRY;
-	}
-	if (get_ddci(ad->id))
-	{
-		LOG("Skip processing pmt for ddci adapter %d", ad->id);
 		return TABLES_RESULT_ERROR_NORETRY;
 	}
 

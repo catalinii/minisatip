@@ -162,11 +162,57 @@ uint32_t resource_ids[] =
 		EN50221_APP_AI_RESOURCEID, TS101699_APP_AI_RESOURCEID, CIPLUS13_APP_AI_RESOURCEID};
 int resource_ids_count = sizeof(resource_ids) / 4;
 
+int createCAPMT(uint8_t *b, int len, int listmgmt, uint8_t *capmt, int capmt_len)
+{
+	struct section *section = section_codec(b, len);
+	int size;
+	hexdump("CAPMT ", b, len);
+	if (!section)
+	{
+		LOG("failed to decode section");
+		return 0;
+	}
+
+	struct section_ext *result = section_ext_decode(section, 0);
+	if (!result)
+	{
+		LOG("failed to decode ext_section");
+		return 0;
+	}
+
+	struct mpeg_pmt_section *pmt = mpeg_pmt_section_codec(result);
+	if (!pmt)
+	{
+		LOG("failed to decode pmt");
+		return 0;
+	}
+
+	if ((size = en50221_ca_format_pmt((struct mpeg_pmt_section *)b, capmt, capmt_len, 0, listmgmt,
+									  CA_PMT_CMD_ID_OK_DESCRAMBLING)) < 0)
+		LOG("Failed to format CA PMT object");
+	return size;
+}
+
+int sendCAPMT(struct en50221_app_ca *ca_resource, int ca_session_number, uint8_t *b, int len, int listmgmt)
+{
+	uint8_t capmt[8192];
+	int rc;
+	int size = createCAPMT(b, len, listmgmt, capmt, sizeof(capmt));
+
+	if (size <= 0)
+		LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "createCAPMT failed");
+
+	if ((rc = en50221_app_ca_pmt(ca_resource, ca_session_number, capmt, size)))
+	{
+		LOG("Failed to send CA PMT object, error %d", rc);
+	}
+	return rc;
+}
 int dvbca_process_pmt(adapter *ad, SPMT *spmt)
 {
 	ca_device_t *d = ca_devices[ad->id];
 	uint16_t pid, sid, ver;
-	int len, rc, listmgmt, i;
+	int len, listmgmt, i;
 	uint8_t *b = spmt->pmt;
 
 	if (!d)
@@ -198,41 +244,8 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt)
 	LOG("PMT CA pid %u (%s) len %u ver %u sid %u (%x) %s", pid, spmt->name, len, ver, sid, sid,
 		listmgmt == CA_LIST_MANAGEMENT_ONLY ? "only" : "add");
 
-	uint8_t capmt[8192];
-	int size;
-	struct section *section = section_codec(b, len);
-
-	//	d->sp = 0;
-
-	if (!section)
-	{
-		LOG("failed to decode section");
-		return TABLES_RESULT_ERROR_RETRY;
-	}
-
-	struct section_ext *result = section_ext_decode(section, 0);
-	if (!section)
-	{
-		LOG("failed to decode ext_section");
-		return TABLES_RESULT_ERROR_RETRY;
-	}
-
-	struct mpeg_pmt_section *pmt = mpeg_pmt_section_codec(result);
-	if (!pmt)
-	{
-		LOG("failed to decode pmt");
-		return TABLES_RESULT_ERROR_RETRY;
-	}
-
-	if ((size = en50221_ca_format_pmt((struct mpeg_pmt_section *)b, capmt,
-									  sizeof(capmt), 0, listmgmt,
-									  CA_PMT_CMD_ID_OK_DESCRAMBLING)) < 0)
-		LOG("Failed to format CA PMT object");
-	if ((rc = en50221_app_ca_pmt(d->ca_resource, d->ca_session_number, capmt,
-								 size)))
-	{
-		LOG("Adapter %d, Failed to send CA PMT object, error %d", ad->id, rc);
-	}
+	if (sendCAPMT(d->ca_resource, d->ca_session_number, b, len, listmgmt))
+		LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "sendCAPMT failed");
 
 	if (d->key[0][0])
 		send_cw(spmt->id, CA_ALGO_AES128_CBC, 0, d->key[0], d->iv[0], 3600); // 1 hour
@@ -246,12 +259,25 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt)
 {
 	ca_device_t *d = ca_devices[ad->id];
 	int i;
+	int num_pmt = 0;
 	for (i = 0; i < MAX_CA_PMT; i++)
 		if (d->pmt_id[i] == spmt->id)
 		{
 			LOG("CA %d, removing PMT from position %d", ad->id, i);
 			d->pmt_id[i] = -1;
 		}
+		else if (d->pmt_id[i] > 0)
+			num_pmt++;
+
+	uint8_t clean[1500];
+
+	int new_len = clean_psi_buffer(spmt->pmt, clean, sizeof(clean));
+
+	if (new_len < 1)
+		LOG_AND_RETURN(0, "Could not clean the PSI information for PMT %d", spmt->id);
+
+	if (sendCAPMT(d->ca_resource, d->ca_session_number, clean, new_len, (num_pmt > 0) ? CA_LIST_MANAGEMENT_ADD : CA_LIST_MANAGEMENT_ONLY))
+		LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "%s: sendCAPMT for clean PMT failed", __FUNCTION__);
 
 	return 0;
 }
