@@ -85,7 +85,7 @@ int test_get_index_hash()
 			LOG_AND_RETURN(1, "found already existing elemets with the same key %d", i);
 		idx = get_index_hash(&kv[0].key, MAX_KV, sizeof(Skey_value), KEY_FOR_INDEX(i), (uint32_t)-1);
 		if (idx == -1)
-			LOG_AND_RETURN(1, "found no elemets for key %d", i);
+			LOG_AND_RETURN(1, "found no elemets for key %d", i)
 		else if (idx < 0 || idx >= MAX_KV)
 			LOG_AND_RETURN(1, "value outside of bounds for key %d, val %d", i, idx);
 		if (kv[idx].value != -1)

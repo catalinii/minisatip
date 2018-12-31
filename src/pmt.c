@@ -1023,6 +1023,63 @@ void mark_pid_null(uint8_t *b)
 	b[2] |= 0xFF;
 }
 
+int clean_psi_buffer(uint8_t *pmt, uint8_t *clean, int clean_size)
+{
+	uint8_t *n, *o;
+	int nlen = 0, i, j, es_len, desc_len;
+	uint32_t crc;
+	memset(clean, -1, clean_size);
+	memcpy(clean, pmt, 12);
+	int pi_len = ((pmt[10] & 0xF) << 8) + pmt[11];
+	int pmt_len = ((pmt[1] & 0xF) << 8) + pmt[2];
+	int ver = (clean[5] & 0x3e) >> 1;
+	ver = (ver + 1) % 16;
+	clean[5] = (0xC0 & clean[5]) | (ver << 1);
+	n = clean;
+	o = pmt + pi_len + 12;
+	nlen = 12;
+	n[10] &= 0xF0; // pi_len => 0
+	n[11] &= 0x0;
+
+	for (i = 0; i < pmt_len - pi_len - 17; i += (es_len) + 5) // reading streams
+	{
+		uint8_t *t = o + i;
+		int init_len = nlen + 5;
+		es_len = (o[i + 3] & 0xF) * 256 + o[i + 4];
+		DEBUGM("es: copy 5 bytes from %d -> %d : %02X %02X %02X %02X %02X",
+			   i, nlen, t[0], t[1], t[2], t[3], t[4]);
+		memcpy(n + nlen, o + i, 5);
+		nlen += 5;
+		for (j = 0; j < es_len; j += desc_len) // reading program info
+		{
+			desc_len = o[i + 5 + j + 1] + 2;
+			if (o[i + 5 + j] != 9)
+			{
+				t = o + i + 5 + j;
+				DEBUGM("desc copy %d bytes from %d -> %d : %02X %02X %02X",
+					   desc_len, i + 5 + j, nlen, t[0], t[1], t[2]);
+				memcpy(n + nlen, o + i + 5 + j, desc_len);
+				nlen += desc_len;
+			}
+		}
+		int nes_len = nlen - init_len;
+		DEBUGM("clean_psi: setting the new es_len %d at position %d",
+			   nes_len, init_len - 2);
+		n[init_len - 2] = (n[init_len - 2] & 0xF0) | ((nes_len >> 8) & 0xF);
+		n[init_len - 1] = (nes_len)&0xFF;
+	}
+	nlen += 4 - 3;
+	DEBUGM("new len is %d, old len is %d", nlen, pmt_len);
+	n[1] &= 0xF0;
+	n[1] |= (nlen >> 8);
+	n[2] = nlen & 0xFF;
+	n[5] ^= 0x3F; // change version
+
+	crc = crc_32(n, nlen - 1);
+	copy32(n, nlen - 1, crc);
+	return nlen + 3;
+}
+
 void clean_psi(adapter *ad, uint8_t *b)
 {
 	int pid = PID_FROM_TS(b);
@@ -1031,7 +1088,6 @@ void clean_psi(adapter *ad, uint8_t *b)
 	uint8_t *clean, *pmt;
 	SPid *p;
 	SPMT *cpmt;
-	int pi_len, i, j, es_len, desc_len;
 
 	p = find_pid(ad->id, pid);
 	if (!p || p->sid[0] == -1) // no need to fix this PMT as it not requested by any stream
@@ -1060,57 +1116,7 @@ void clean_psi(adapter *ad, uint8_t *b)
 
 	if (pmt) // populate clean psi
 	{
-		uint8_t *n, *o;
-		int nlen = 0;
-		uint32_t crc;
-		memset(clean, -1, clean_size + 10);
-		memcpy(clean, pmt, 12);
-		pi_len = ((pmt[10] & 0xF) << 8) + pmt[11];
-		pmt_len = ((pmt[1] & 0xF) << 8) + pmt[2];
-		LOG("Cleaning PMT for pid %d, pmt_len %d, pi_len %d, pmt %p", pid,
-			pmt_len, pi_len, pmt);
-		n = clean;
-		o = pmt + pi_len + 12;
-		nlen = 12;
-		n[10] &= 0xF0; // pi_len => 0
-		n[11] &= 0x0;
-
-		for (i = 0; i < pmt_len - pi_len - 17; i += (es_len) + 5) // reading streams
-		{
-			uint8_t *t = o + i;
-			int init_len = nlen + 5;
-			es_len = (o[i + 3] & 0xF) * 256 + o[i + 4];
-			DEBUGM("es: copy 5 bytes from %d -> %d : %02X %02X %02X %02X %02X",
-				   i, nlen, t[0], t[1], t[2], t[3], t[4]);
-			memcpy(n + nlen, o + i, 5);
-			nlen += 5;
-			for (j = 0; j < es_len; j += desc_len) // reading program info
-			{
-				desc_len = o[i + 5 + j + 1] + 2;
-				if (o[i + 5 + j] != 9)
-				{
-					t = o + i + 5 + j;
-					DEBUGM("desc copy %d bytes from %d -> %d : %02X %02X %02X",
-						   desc_len, i + 5 + j, nlen, t[0], t[1], t[2]);
-					memcpy(n + nlen, o + i + 5 + j, desc_len);
-					nlen += desc_len;
-				}
-			}
-			int nes_len = nlen - init_len;
-			DEBUGM("clean_psi: setting the new es_len %d at position %d",
-				   nes_len, init_len - 2);
-			n[init_len - 2] = (n[init_len - 2] & 0xF0) | ((nes_len >> 8) & 0xF);
-			n[init_len - 1] = (nes_len)&0xFF;
-		}
-		nlen += 4 - 3;
-		DEBUGM("new len is %d, old len is %d", nlen, pmt_len);
-		n[1] &= 0xF0;
-		n[1] |= (nlen >> 8);
-		n[2] = nlen & 0xFF;
-		n[5] ^= 0x3F; // change version
-
-		crc = crc_32(n, nlen - 1);
-		copy32(n, nlen - 1, crc);
+		clean_psi_buffer(pmt, clean, clean_size);
 	}
 
 	if (clean)

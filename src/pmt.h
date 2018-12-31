@@ -190,6 +190,7 @@ int get_pid_filter(int aid, int pid);
 int get_filter_pid(int filter);
 int get_filter_adapter(int filter);
 int assemble_packet(SFilter *f, uint8_t *b1);
+int clean_psi_buffer(uint8_t *pmt, uint8_t *clean, int clean_size);
 
 #endif
 #endif

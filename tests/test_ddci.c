@@ -176,7 +176,10 @@ int test_ddci_process_ts()
 	ad.buf = buf;
 	ad.lbuf = sizeof(buf);
 	for (i = 0; i < ad.lbuf; i += 188)
+	{
+		buf[i] = 0x47;
 		set_pid_ts(buf + i, 2121); // unmapped pid
+	}
 	a[0]->enabled = 1;
 	a[1] = &ad;
 	buf[0] = 0x47;
@@ -196,7 +199,7 @@ int test_ddci_process_ts()
 	_writev = (mywritev)&xwritev;
 	ddci_process_ts(&ad, &d);
 	if (is_err)
-		return 1;
+		LOG_AND_RETURN(1, "is_err is set");
 	if (!did_write)
 		LOG_AND_RETURN(1, "no writev called");
 	if (PID_FROM_TS(ad.buf + 188) != 1000)
