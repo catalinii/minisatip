@@ -1040,6 +1040,8 @@ int clean_psi_buffer(uint8_t *pmt, uint8_t *clean, int clean_size)
 	nlen = 12;
 	n[10] &= 0xF0; // pi_len => 0
 	n[11] &= 0x0;
+	if (pi_len > 1500)
+		LOG_AND_RETURN(0, "Program Info Length is too big %d", pi_len);
 
 	for (i = 0; i < pmt_len - pi_len - 17; i += (es_len) + 5) // reading streams
 	{
