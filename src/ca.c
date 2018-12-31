@@ -166,7 +166,6 @@ int createCAPMT(uint8_t *b, int len, int listmgmt, uint8_t *capmt, int capmt_len
 {
 	struct section *section = section_codec(b, len);
 	int size;
-	hexdump("CAPMT ", b, len);
 	if (!section)
 	{
 		LOG("failed to decode section");
@@ -196,8 +195,11 @@ int createCAPMT(uint8_t *b, int len, int listmgmt, uint8_t *capmt, int capmt_len
 int sendCAPMT(struct en50221_app_ca *ca_resource, int ca_session_number, uint8_t *b, int len, int listmgmt)
 {
 	uint8_t capmt[8192];
+	uint8_t init_b[len + 10];
 	int rc;
-	int size = createCAPMT(b, len, listmgmt, capmt, sizeof(capmt));
+	memset(init_b, 0, sizeof(init_b));
+	memcpy(init_b, b, len);
+	int size = createCAPMT(init_b, len, listmgmt, capmt, sizeof(capmt));
 
 	if (size <= 0)
 		LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "createCAPMT failed");
@@ -270,7 +272,6 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt)
 			num_pmt++;
 
 	uint8_t clean[1500];
-
 	int new_len = clean_psi_buffer(spmt->pmt, clean, sizeof(clean));
 
 	if (new_len < 1)

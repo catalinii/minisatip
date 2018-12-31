@@ -58,6 +58,22 @@ extern adapter *a[MAX_ADAPTERS];
 extern SFilter *filters[MAX_FILTERS];
 extern SPMT *pmts[MAX_PMT];
 
+int test_clean_psi_buffer_only()
+{
+	unsigned char pmt_sample[] = "\x02\xb0\x3b\x02\x06\xc9\x00\x00\xeb\xff\xf0\x18\x09\x04\x09\xc4"
+								 "\xfb\x62\x09\x04\x09\x8c\xfa\x62\x09\x04\x09\xaf\xff\x62\x09\x04"
+								 "\x09\x8d\xfc\x62\x1b\xeb\xff\xf0\x03\x52\x01\x02\x03\xec\x00\xf0"
+								 "\x09\x0a\x04\x64\x65\x75\x01\x52\x01\x03\x7c\xae\xca\xf2";
+	unsigned char clean[4096];
+	memset(clean, 0, sizeof(clean));
+	hexdump("Original PMT:", pmt_sample, sizeof(pmt_sample));
+	int clean_size = clean_psi_buffer(pmt_sample, clean, sizeof(clean));
+	hexdump("CLEAN ONLY:", clean, clean_size);
+	if (clean_size > sizeof(pmt_sample))
+		return 1;
+	return 0;
+}
+
 int test_clean_psi_buffer()
 {
 
@@ -136,6 +152,7 @@ int main()
 	opts.log = -1;
 	opts.debug = -1;
 	thread_name = "test";
+	TEST_FUNC(test_clean_psi_buffer_only(), "testing test_clean_psi_buffer_only");
 	TEST_FUNC(test_clean_psi_buffer(), "testing test_clean_psi_buffer");
 	fflush(stdout);
 	return 0;
