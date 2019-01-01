@@ -44,6 +44,7 @@
 #include "ddci.h"
 #include "utils.h"
 #include "tables.h"
+#include "ca.h"
 
 #define DEFAULT_LOG LOG_DVBCA
 
@@ -258,12 +259,16 @@ int ddci_close(adapter *a)
 
 int find_ddci_for_pmt(SPMT *pmt)
 {
-	int i;
+	int i, has_ddci = 0;
 	ddci_device_t *d;
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		if ((d = get_ddci(i)))
 		{
 			int j;
+			// DDCI exists but not yet initialized
+			if (!is_ca_initialized(i))
+				has_ddci = 1;
+
 			for (j = 0; j < ca[dvbca_id].ad_info[i].caids; j++)
 				if (match_caid(pmt, ca[dvbca_id].ad_info[i].caid[j], ca[dvbca_id].ad_info[i].mask[j]))
 				{
@@ -274,6 +279,8 @@ int find_ddci_for_pmt(SPMT *pmt)
 						LOG("DDCI %d has already %d channels running (max %d)", d->id, d->channels, d->max_channels);
 				}
 		}
+	if (has_ddci)
+		return -2;
 	return -1;
 }
 
@@ -295,6 +302,9 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 #ifdef DDCI_TEST
 	ddid = first_ddci;
 #endif
+	if (ddid == -2)
+		LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY, "DDCI not ready yet");
+
 	ddci_device_t *d = get_ddci(ddid);
 	if (!d)
 	{
