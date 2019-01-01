@@ -162,6 +162,13 @@ uint32_t resource_ids[] =
 		EN50221_APP_AI_RESOURCEID, TS101699_APP_AI_RESOURCEID, CIPLUS13_APP_AI_RESOURCEID};
 int resource_ids_count = sizeof(resource_ids) / 4;
 
+int is_ca_initialized(int i)
+{
+	if (i >= 0 && i < MAX_CA && ca_devices[i]->enabled && ca_devices[i]->init_ok)
+		return 1;
+	return 0;
+}
+
 int createCAPMT(uint8_t *b, int len, int listmgmt, uint8_t *capmt, int capmt_len)
 {
 	struct section *section = section_codec(b, len);
