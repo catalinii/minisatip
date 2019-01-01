@@ -681,8 +681,12 @@ extern int bwnotify;
 extern int64_t bwtt, bw;
 extern uint32_t writes, failed_writes;
 
+// remove __thread if your platform does not support threads.
+// also make sure to run with option -t (no threads)
+// or set EMBEDDED=1 in Makefile
+
 __thread pthread_t tid;
-__thread char *thread_name;
+__thread char thread_name[100];
 
 void *select_and_execute(void *arg)
 {
@@ -694,10 +698,13 @@ void *select_and_execute(void *arg)
 	int read_ok;
 	char ra[50];
 
+	memset(thread_name, 0, sizeof(thread_name));
 	if (arg)
-		thread_name = (char *)arg;
+	{
+		strncpy(thread_name, (char *)arg, sizeof(thread_name) - 1);
+	}
 	else
-		thread_name = "main";
+		strcpy(thread_name, "main");
 
 	tid = get_tid();
 	les = 1;
