@@ -308,16 +308,14 @@ int ca_ai_callback(void *arg, uint8_t slot_id, uint16_t session_number,
 	return 0;
 }
 
-extern __thread char *thread_name;
 void *
 stackthread_func(void *arg)
 {
-	char name[100];
 	ca_device_t *d = arg;
 	int lasterror = 0;
 	adapter *ad;
-	sprintf(name, "CA%d", d->id);
-	thread_name = name;
+	sprintf(thread_name, "CA%d", d->id);
+
 	LOG("%s: start", __func__);
 
 	while (d->enabled)

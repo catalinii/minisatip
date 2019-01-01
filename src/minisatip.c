@@ -1644,7 +1644,7 @@ int main(int argc, char *argv[])
 {
 	int sock_bw, rv, devices;
 	main_tid = get_tid();
-	thread_name = "main";
+	strcpy(thread_name, "main");
 	set_options(argc, argv);
 	if ((rv = init_utils(argv[0])))
 	{
