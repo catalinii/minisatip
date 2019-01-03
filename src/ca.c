@@ -269,6 +269,7 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt)
 	ca_device_t *d = ca_devices[ad->id];
 	int i;
 	int num_pmt = 0;
+	LOG("PMT CA DEL pid %u (%s) sid %u (%x) %s", spmt->pid, spmt->name, spmt->sid, spmt->sid, spmt->name);
 	for (i = 0; i < MAX_CA_PMT; i++)
 		if (d->pmt_id[i] == spmt->id)
 		{
