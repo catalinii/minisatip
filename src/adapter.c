@@ -216,11 +216,11 @@ int close_adapter_for_socket(sockets *s)
 		ad->sock = -1;
 		s->sid = -1;
 	}
-	if (ad)
-		ad->rtime = getTick();
-	if (ad)
-		return close_adapter(aid);
-	return 1;
+	if (!ad)
+		return 1;
+	
+	ad->rtime = getTick();
+	return close_adapter(aid);
 }
 
 int init_complete = 0;
@@ -1105,7 +1105,7 @@ int mark_pid_add(int sid, int aid, int _pid)
 	int found = 0;
 	SPid *p;
 	if (!ad)
-		return 1;
+		return -1;
 	// check if the pid already exists, if yes add the sid
 	if ((p = find_pid(aid, _pid)))
 	{
