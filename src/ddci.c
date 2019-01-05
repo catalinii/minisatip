@@ -373,7 +373,7 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt)
 	d->ver = (d->ver + 1) & 0xF;
 	if (d->channels > 0)
 		d->channels--;
-	LOG("%s: deleting pmt id %d, sid %X, pid %d, ddci %d", __FUNCTION__, spmt->id, spmt->sid, pid, ddid);
+	LOG("%s: deleting pmt id %d, sid %d (%X), pid %d, ddci %d", __FUNCTION__, spmt->id, spmt->sid, spmt->sid, pid, ddid);
 	if (d->pmt[0] == pmt)
 		d->cat_processed = 0;
 
