@@ -508,7 +508,7 @@ int connect_dvbapi(void *arg)
 					close_pmt_for_ca(dvbapi_ca, get_adapter(adapter_id), pmt);
 			}
 		}
-			
+
 		if (!is_adapter_active())
 			dvbapi_close_socket();
 
@@ -777,7 +777,8 @@ int dvbapi_del_pmt(adapter *ad, SPMT *pmt)
 {
 	SKey *k = (SKey *)pmt->opaque;
 	keys_del(k->id);
-	LOG("%s: deleted PMT pid %d, id %d", __FUNCTION__, pmt->pid, pmt->id);
+	LOG("%s: deleted key %d, PMT pid %d, sid %d (%X), PMT %d",
+		__FUNCTION__, k->id, pmt->pid, pmt->sid, pmt->sid, pmt->id);
 	return 0;
 }
 
