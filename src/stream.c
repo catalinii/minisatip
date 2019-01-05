@@ -291,7 +291,7 @@ int start_play(streams *sid, sockets *s)
 			close_adapter_for_stream(sid->sid, ad->id);
 		}
 		a_id = get_free_adapter(&sid->tp);
-		LOG("Got adapter %d on socket %d", a_id, s->id);
+		LOG("Got adapter %d on stream %d socket %d", a_id, sid->sid, s->id);
 		if (a_id < 0)
 			return -404;
 		sid->adapter = a_id;
