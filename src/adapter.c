@@ -218,7 +218,7 @@ int close_adapter_for_socket(sockets *s)
 	}
 	if (!ad)
 		return 1;
-	
+
 	ad->rtime = getTick();
 	return close_adapter(aid);
 }
@@ -2180,16 +2180,16 @@ char *get_adapter_pids(int aid, char *dest, int max_size)
 			int pid = ad->pids[i].pid;
 			if (pid == 8192)
 			{
-				len = snprintf(dest, max_size, "all,");
+				strlcatf(dest, max_size, len, "all,");
 				break;
 			}
 			else
-				len += snprintf(dest + len, max_size - len, "%d,", pid);
+				strlcatf(dest, max_size, len, "%d,", pid);
 		}
 	if (len > 0)
 		dest[len - 1] = 0;
 	else
-		snprintf(dest + len, max_size - len, "none");
+		strlcatf(dest, max_size, len, "none");
 
 	return dest;
 }
@@ -2205,8 +2205,8 @@ char *get_all_delsys(int aid, char *dest, int max_size)
 
 	for (i = 0; i < MAX_DELSYS; i++)
 		if (ad->sys[i] > 0)
-			len += snprintf(dest + len, max_size - len, "%s,",
-							get_delsys(ad->sys[i]));
+			strlcatf(dest, max_size, len, "%s,",
+					 get_delsys(ad->sys[i]));
 
 	if (len > 0)
 		dest[len - 1] = 0;
