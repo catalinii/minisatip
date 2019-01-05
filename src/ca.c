@@ -250,7 +250,7 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt)
 			listmgmt = CA_LIST_MANAGEMENT_ADD;
 		}
 
-	LOG("PMT CA pid %u (%s) len %u ver %u sid %u (%x) %s", pid, spmt->name, len, ver, sid, sid,
+	LOG("PMT CA %d pid %u (%s) len %u ver %u sid %u (%x) %s", spmt->adapter, pid, spmt->name, len, ver, sid, sid,
 		listmgmt == CA_LIST_MANAGEMENT_ONLY ? "only" : "add");
 
 	if (sendCAPMT(d->ca_resource, d->ca_session_number, b, len, listmgmt))
@@ -269,7 +269,7 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt)
 	ca_device_t *d = ca_devices[ad->id];
 	int i;
 	int num_pmt = 0;
-	LOG("PMT CA DEL pid %u (%s) sid %u (%x) %s", spmt->pid, spmt->name, spmt->sid, spmt->sid, spmt->name);
+	LOG("PMT CA %d DEL pid %u (%s) sid %u (%x) %s", spmt->adapter, spmt->pid, spmt->name, spmt->sid, spmt->sid, spmt->name);
 	for (i = 0; i < MAX_CA_PMT; i++)
 		if (d->pmt_id[i] == spmt->id)
 		{

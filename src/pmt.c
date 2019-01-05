@@ -1449,10 +1449,15 @@ int get_master_pmt_for_pid(int aid, int pid)
 		if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == aid)
 		{
 			pmt = pmts[i];
+			LOGM("searching pid %d ad %d in pmt %d, active pids %d", pid, aid, pmt->active_pids);
 			for (j = 0; j < pmt->active_pids && pmt->active_pid[j] > 0; j++)
+			{
+				LOGM("comparing with pid %d", pmt->active_pid[j]);
 				if (pmt->active_pid[j] == pid)
 					return pmt->master_pmt;
+			}
 		}
+	LOGM("%s: no pmt found for pid %d adapter %d", __FUNCTION__, pid, aid);
 	return -1;
 }
 
