@@ -510,8 +510,6 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *clean)
 		 __FUNCTION__, pmt->id, pmt->adapter, pid, pid, pmt_len, pi_len, pmt_len - pi_len - 13, pmt->sid, pmt->sid, pmt->name[0] ? "channel:" : "", pmt->name);
 
 	es_len = 0;
-	pmt->active_pids = 0;
-	pmt->active = 1;
 	for (i = 0; i < pmt_len - pi_len - 13; i += (es_len) + 5) // reading streams
 	{
 		es_len = (pmt_b[i + 3] & 0xF) * 256 + pmt_b[i + 4];
