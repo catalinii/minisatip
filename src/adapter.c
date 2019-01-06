@@ -1390,8 +1390,7 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 		len += strlen(get_stream_pids(sid, dad + len, ld - len));
 
 	if (!use_ad && (t->apids || t->pids))
-		len += snprintf(dad + len, ld - len, "%s",
-						t->pids ? t->pids : t->apids);
+		strlcatf(dad, ld, len, "%s", t->pids ? t->pids : t->apids);
 
 	LOGM("describe_adapter: sid %d, aid %d => %s", sid, aid, dad);
 
