@@ -1060,7 +1060,7 @@ int read_dmx(sockets *s)
 	if (ad->wait_new_stream && !ad->tune_time)
 		ad->tune_time = rtime;
 
-	if (ad && ad->wait_new_stream && (rtime - ad->tune_time < 200)) // check new transponder
+	if (ad->wait_new_stream && (rtime - ad->tune_time < 200)) // check new transponder
 	{
 		int new_rlen = check_new_transponder(ad, s->rlen);
 		if (!new_rlen)
