@@ -1283,7 +1283,7 @@ int mutex_lock1(char *FILE, int line, SMutex *mutex)
 		LOGM("%s:%d Mutex not enabled %p", FILE, line, mutex);
 		return 1;
 	}
-	if (mutex && mutex->enabled && mutex->state && tid != mutex->tid)
+	if (mutex->enabled && mutex->state && tid != mutex->tid)
 	{
 		LOGM("%s:%d Locking mutex %p already locked at %s:%d tid %x", FILE,
 			 line, mutex, mutex->file, mutex->line, mutex->tid);
