@@ -177,7 +177,7 @@ int adapter_timeout(sockets *s)
 			{
 				if (rtime - ad1->rtime < s->timeout_ms)
 					do_close = 0;
-				if (ad1 && max_close < ad1->rtime)
+				if (max_close < ad1->rtime)
 				{
 					max_close = ad1->rtime;
 					LOGM("max_close set to %jd for adapter %d", max_close, i);
