@@ -138,7 +138,7 @@ int64_t getTick();
 int64_t getTickUs();
 void join_thread();
 void add_join_thread(pthread_t t);
-int init_utils(char *argv0);
+int init_utils(char *arg0);
 void _hexdump(char *log_message, void *addr, int len);
 uint32_t crc_32(const uint8_t *data, int datalen);
 void _dump_packets(char *message, unsigned char *b, int len, int packet_offset);
