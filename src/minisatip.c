@@ -230,7 +230,7 @@ void print_version(int use_log)
 	char buf[200];
 	int i, len = 0;
 	memset(buf, 0, sizeof(buf));
-	len += sprintf(buf, "%s version %s, compiled with s2api version: %04X",
+	sprintf(buf, "%s version %s, compiled with s2api version: %04X",
 				   app_name, version, LOGDVBAPIVERSION);
 	if (!use_log)
 		puts(buf);
