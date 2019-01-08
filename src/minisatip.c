@@ -228,7 +228,7 @@ char *built_info[] =
 void print_version(int use_log)
 {
 	char buf[200];
-	int i, len = 0;
+	int i;
 	memset(buf, 0, sizeof(buf));
 	sprintf(buf, "%s version %s, compiled with s2api version: %04X",
 				   app_name, version, LOGDVBAPIVERSION);
