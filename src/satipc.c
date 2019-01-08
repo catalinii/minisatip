@@ -1317,7 +1317,6 @@ void find_satip_adapter(adapter **a)
 			arg[i]++;
 		}
 		sep = NULL;
-		sep1 = NULL;
 		sep2 = NULL;
 		sep1 = strchr(arg[i], ':');
 		if (sep1)
