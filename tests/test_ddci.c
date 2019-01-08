@@ -324,7 +324,7 @@ int test_create_pmt()
 int main()
 {
 	opts.log = 1;
-	thread_name = "test";
+	strcpy(thread_name, "test");;
 	//	opts.log = LOG_DVBCA + 1;
 	find_ddci_adapter(a);
 	TEST_FUNC(test_push_ts_to_ddci(), "testing test_push_ts_to_ddci");

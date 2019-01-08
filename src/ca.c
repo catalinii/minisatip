@@ -278,7 +278,7 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt)
 		else if (d->pmt_id[i] > 0)
 			num_pmt++;
 
-	LOG("PMT CA %d DEL pid %u (%s) sid %u (%x), pos %d, %s", spmt->adapter, spmt->pid, spmt->name, spmt->sid, spmt->sid, ca_pos, spmt->name);
+	LOG("PMT CA %d DEL pid %u (%s) sid %u (%x), ver %d, pos %d, %s", spmt->adapter, spmt->pid, spmt->name, spmt->sid, spmt->sid, spmt->version, ca_pos, spmt->name);
 	uint8_t clean[1500];
 	int new_len = clean_psi_buffer(spmt->pmt, clean, sizeof(clean));
 

@@ -57,7 +57,7 @@ int run_loop;
 char pid_file[50];
 __thread pthread_t tid;
 char app_name[] = "test";
-__thread char *thread_name = "test";
+__thread char *strcpy(thread_name, "test");;
 
 struct struct_opts opts;
 */
@@ -125,7 +125,7 @@ int test_get_index_hash()
 int main()
 {
 	opts.log = 1;
-	thread_name = "test";
+	strcpy(thread_name, "test");;
 	TEST_FUNC(test_get_index_hash(), "testing get_index_hash");
 	return 0;
 }

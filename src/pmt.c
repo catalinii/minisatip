@@ -1033,7 +1033,7 @@ int clean_psi_buffer(uint8_t *pmt, uint8_t *clean, int clean_size)
 	int pi_len = ((pmt[10] & 0xF) << 8) + pmt[11];
 	int pmt_len = ((pmt[1] & 0xF) << 8) + pmt[2];
 	int ver = (clean[5] & 0x3e) >> 1;
-	ver = (~ver) % 16;
+	ver = (~ver) & 0xF;
 	clean[5] = (0xC0 & clean[5]) | (ver << 1);
 	n = clean;
 	o = pmt + pi_len + 12;
@@ -1538,8 +1538,8 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 	pmt->version = ver;
 
 	mutex_lock(&pmt->mutex);
-	LOG("new PMT %d AD %d, pid: %04X (%d), pmt_len %d, pi_len %d, sid %04X (%d) %s %s", pmt->id, ad->id, pid, pid,
-		pmt_len, pi_len, pmt->sid, pmt->sid, pmt->name[0] ? "channel:" : "", pmt->name);
+	LOG("new PMT %d AD %d, pid: %04X (%d), len %d, pi_len %d, ver %d, sid %04X (%d) %s %s", pmt->id, ad->id, pid, pid,
+		pmt_len, pi_len, ver, pmt->sid, pmt->sid, pmt->name[0] ? "channel:" : "", pmt->name);
 	pi = b + 12;
 	pmt_b = pi + pi_len;
 

@@ -142,8 +142,6 @@ int test_clean_psi_buffer()
 		LOG_AND_RETURN(1, "process_pmt failed");
 	if (!createCAPMT(pmt.pmt, pmt.pmt_len, 1, clean, sizeof(clean)))
 		LOG_AND_RETURN(1, "createCAPMT failed");
-	pmt.id = 0;
-	pmt.pid = 99;
 	return 0;
 }
 
@@ -151,7 +149,7 @@ int main()
 {
 	opts.log = -1;
 	opts.debug = -1;
-	thread_name = "test";
+	strcpy(thread_name, "test");;
 	TEST_FUNC(test_clean_psi_buffer_only(), "testing test_clean_psi_buffer_only");
 	TEST_FUNC(test_clean_psi_buffer(), "testing test_clean_psi_buffer");
 	fflush(stdout);
