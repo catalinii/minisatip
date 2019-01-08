@@ -1213,7 +1213,7 @@ int read_rtsp(sockets *s)
 		if (strncmp(arg[0], "DESCRIBE", 8) == 0)
 		{
 			char sbuf[1000];
-			char *rv = NULL;
+			char *rv;
 			rv = describe_streams(s, arg[1], sbuf, sizeof(sbuf));
 			if (!rv)
 			{
