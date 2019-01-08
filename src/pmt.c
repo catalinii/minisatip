@@ -1033,7 +1033,7 @@ int clean_psi_buffer(uint8_t *pmt, uint8_t *clean, int clean_size)
 	int pi_len = ((pmt[10] & 0xF) << 8) + pmt[11];
 	int pmt_len = ((pmt[1] & 0xF) << 8) + pmt[2];
 	int ver = (clean[5] & 0x3e) >> 1;
-	ver = (ver + 1) % 16;
+	ver = (~ver) % 16;
 	clean[5] = (0xC0 & clean[5]) | (ver << 1);
 	n = clean;
 	o = pmt + pi_len + 12;
@@ -1449,10 +1449,10 @@ int get_master_pmt_for_pid(int aid, int pid)
 		if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == aid)
 		{
 			pmt = pmts[i];
-			LOGM("searching pid %d ad %d in pmt %d, active pids %d", pid, aid, pmt->id, pmt->active_pids);
+			DEBUGM("searching pid %d ad %d in pmt %d, active pids %d", pid, aid, pmt->id, pmt->active_pids);
 			for (j = 0; j < pmt->active_pids && pmt->active_pid[j] > 0; j++)
 			{
-				LOGM("comparing with pid %d", pmt->active_pid[j]);
+				DEBUGM("comparing with pid %d", pmt->active_pid[j]);
 				if (pmt->active_pid[j] == pid)
 				{
 					LOGM("%s: ad %d found pid %d in master pmt %d", __FUNCTION__, aid, pid, pmt->master_pmt);

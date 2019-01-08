@@ -569,6 +569,7 @@ int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len)
 	return pos;
 }
 
+// find a position starting with *ad_pos or at the end of the ad->buf
 int push_ts_to_adapter(adapter *ad, unsigned char *b, int new_pid, int *ad_pos)
 {
 	int i, new_pos = -1;
@@ -716,7 +717,7 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d)
 			d->ro = (i + 188) % DDCI_BUFFER;
 		if (rv == 1)
 		{
-			LOGM("adapter %d buffer full %d, dd %d, ro %d, wo %d", ad->id, d->id, d->ro, d->wo);
+			LOGM("adapter %d buffer full, DD %d, ro %d, wo %d", ad->id, d->id, d->ro, d->wo);
 			break;
 		}
 	}

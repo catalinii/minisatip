@@ -221,7 +221,7 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt)
 {
 	ca_device_t *d = ca_devices[ad->id];
 	uint16_t pid, sid, ver;
-	int len, listmgmt, i;
+	int len, listmgmt, i, ca_pos;
 	uint8_t *b = spmt->pmt;
 
 	if (!d)
@@ -231,12 +231,12 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt)
 
 	pid = spmt->pid;
 	len = spmt->pmt_len;
-	for (i = 0; i < MAX_CA_PMT; i++)
-		if ((d->pmt_id[i] == -1) || (d->pmt_id[i] == spmt->id))
+	for (ca_pos = 0; ca_pos < MAX_CA_PMT; ca_pos++)
+		if ((d->pmt_id[ca_pos] == -1) || (d->pmt_id[ca_pos] == spmt->id))
 			break;
 
-	if (i < MAX_CA_PMT)
-		d->pmt_id[i] = spmt->id;
+	if (ca_pos < MAX_CA_PMT)
+		d->pmt_id[ca_pos] = spmt->id;
 	else
 		LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY, "pmt_id full for device %d", d->id);
 
@@ -250,8 +250,8 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt)
 			listmgmt = CA_LIST_MANAGEMENT_ADD;
 		}
 
-	LOG("PMT CA %d pid %u (%s) len %u ver %u sid %u (%x) %s", spmt->adapter, pid, spmt->name, len, ver, sid, sid,
-		listmgmt == CA_LIST_MANAGEMENT_ONLY ? "only" : "add");
+	LOG("PMT CA %d pid %u (%s) len %u ver %u sid %u (%x), pos %d, %s", spmt->adapter, pid, spmt->name, len, ver, sid, sid,
+		ca_pos, listmgmt == CA_LIST_MANAGEMENT_ONLY ? "only" : "add");
 
 	if (sendCAPMT(d->ca_resource, d->ca_session_number, b, len, listmgmt))
 		LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "sendCAPMT failed");
@@ -267,18 +267,18 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt)
 int dvbca_del_pmt(adapter *ad, SPMT *spmt)
 {
 	ca_device_t *d = ca_devices[ad->id];
-	int i;
+	int i, ca_pos = -1;
 	int num_pmt = 0;
-	LOG("PMT CA %d DEL pid %u (%s) sid %u (%x) %s", spmt->adapter, spmt->pid, spmt->name, spmt->sid, spmt->sid, spmt->name);
 	for (i = 0; i < MAX_CA_PMT; i++)
 		if (d->pmt_id[i] == spmt->id)
 		{
-			LOG("CA %d, removing PMT from position %d", ad->id, i);
+			ca_pos = i;
 			d->pmt_id[i] = -1;
 		}
 		else if (d->pmt_id[i] > 0)
 			num_pmt++;
 
+	LOG("PMT CA %d DEL pid %u (%s) sid %u (%x), pos %d, %s", spmt->adapter, spmt->pid, spmt->name, spmt->sid, spmt->sid, ca_pos, spmt->name);
 	uint8_t clean[1500];
 	int new_len = clean_psi_buffer(spmt->pmt, clean, sizeof(clean));
 
