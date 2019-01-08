@@ -2082,7 +2082,7 @@ int delsys_match(adapter *ad, int del_sys)
 	return 0;
 }
 
-int signal_thread(sockets *s)
+int signal_thread(void)
 {
 	int i, status;
 	int64_t ts, ctime;
