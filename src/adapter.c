@@ -2258,7 +2258,7 @@ _symbols adapters_sym[] =
 		{"ad_sidcount", VAR_AARRAY_UINT8, a, 1, MAX_ADAPTERS, offsetof(adapter, sid_cnt)},
 		{"ad_phyad", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, pa)},
 		{"ad_phyfd", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, fn)},
-		{"ad_sys", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.sys)},
+		{"ad_sys", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.sys)},
 		{"ad_allsys", VAR_FUNCTION_STRING, (void *)&get_all_delsys, 0, MAX_ADAPTERS, 0},
 		{"ad_pids", VAR_FUNCTION_STRING, (void *)&get_adapter_pids, 0, MAX_ADAPTERS, 0},
 		{"ad_ccerr", VAR_FUNCTION_INT, (void *)&get_adapter_ccerrs, 0, MAX_ADAPTERS, 0},
