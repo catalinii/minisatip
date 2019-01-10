@@ -1143,7 +1143,6 @@ void clean_psi(adapter *ad, uint8_t *b)
 		}
 		cpmt->clean_cc = (cpmt->clean_cc + 1) & 0xF;
 		b[3] = (b[3] & 0xF0) | cpmt->clean_cc;
-		return;
 	}
 }
 
