@@ -150,7 +150,7 @@ char is_adapter_disabled(int i);
 void set_adapters_delsys(char *o);
 void set_lnb_adapters(char *o);
 void set_signal_multiplier(char *o);
-int signal_thread(void);
+int signal_thread(sockets *s);
 int compare_tunning_parameters(int aid, transponder *tp);
 void restart_needed_adapters(int aid, int sid);
 int enable_failed_adapter(int id);
