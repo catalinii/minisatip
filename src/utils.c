@@ -1837,6 +1837,7 @@ int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, char *cc,
 	return len;
 }
 
+/*
 void write_buf_to_file(char *file, uint8_t *buf, int len)
 {
 	int x = open(file, O_RDWR);
@@ -1846,5 +1847,6 @@ void write_buf_to_file(char *file, uint8_t *buf, int len)
 		close(x);
 	}
 	else
-		LOG("Could not write %d bytes to %s: %d", file, errno);
+		LOG("Could not write %d bytes to %s: %d", len, file, errno);
 }
+*/
