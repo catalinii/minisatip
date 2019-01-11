@@ -687,8 +687,8 @@ int axe_tune(int aid, transponder *tp)
 		break;
 
 	default:
-		LOG("tuning to unknown delsys: %s freq %s ts clear = %jd", freq,
-			fe_delsys[tp->sys], bclear)
+		LOG("tuning to unknown delsys: %s freq %s ts clear = %jd", fe_delsys[tp->sys],
+			freq, bclear)
 		break;
 	}
 
