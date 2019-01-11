@@ -1,7 +1,7 @@
 #ifndef UTILS_H
 #define UTILS_H
 #define _GNU_SOURCE
-#include "pthread.h"
+#include <pthread.h>
 
 #include <sys/types.h>
 #include <sys/uio.h>
