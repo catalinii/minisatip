@@ -42,7 +42,6 @@
 #include <fcntl.h>
 #include <ctype.h>
 #include <signal.h>
-#include <sys/ucontext.h>
 #include <unistd.h>
 #include <syslog.h>
 #include <stdarg.h>
