@@ -22,7 +22,6 @@
 #include <errno.h>
 #include <getopt.h>
 #include <signal.h>
-#include <sys/ucontext.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
