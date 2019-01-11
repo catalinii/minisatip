@@ -2061,7 +2061,7 @@ void set_signal_multiplier(char *o)
 				}
 		}
 		LOG("Setting signal multipler for adapter %d strength_multiplier %.2f snr_multiplier %.2f",
-			a_id, strength_multiplier, snr_multiplier);
+			a_id, (double)strength_multiplier, (double)snr_multiplier);
 	}
 }
 
