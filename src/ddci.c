@@ -482,7 +482,6 @@ void ddci_replace_pi(int adapter, unsigned char *es, int len)
 		es[i + 5] = dpid & 0xFF;
 		LOGM("%s: CA pid %d -> pid %d", __FUNCTION__, capid, dpid)
 	}
-	return;
 }
 
 int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *clean)
