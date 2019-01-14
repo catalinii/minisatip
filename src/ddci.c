@@ -318,6 +318,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 		if (d->pmt[i] == -1)
 		{
 			d->pmt[i] = pmt->id;
+			d->pmt_ver[i] = (d->pmt_ver[i] + 1) & 0xF;
 			add_pmt = 1;
 			break;
 		}
@@ -381,6 +382,8 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt)
 		if (d->pmt[i] == pmt)
 		{
 			d->pmt[i] = -1;
+			d->pmt_ver[i] = (d->pmt_ver[i] + 1) & 0xF;
+			;
 		}
 	for (i = 0; i < mapping_table_pids; i++)
 		if ((mapping_table[i].ad_pid >= 0) && (mapping_table[i].ad_pid >> 16) == ad->id)
@@ -485,7 +488,7 @@ void ddci_replace_pi(int adapter, unsigned char *es, int len)
 	return;
 }
 
-int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *clean)
+int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *clean, int ver)
 {
 	int len = pmt->pmt_len;
 	int ddci, pid = pmt->pid, pi_len, pmt_len;
@@ -497,6 +500,7 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *clean)
 	pi_len = ((b[10] & 0xF) << 8) + b[11];
 	pmt_len = pmt->pmt_len - 4;
 
+	b[5] = (0xC0 & b[5]) | (ver << 1);
 	pi = b + 12;
 	pmt_b = pi + pi_len;
 
@@ -506,8 +510,8 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *clean)
 	if (pi_len > 0)
 		ddci_replace_pi(pmt->adapter, pi, pi_len);
 
-	LOGM("%s: PMT %d AD %d, pid: %04X (%d), pmt_len %d, pi_len %d, total_len %d, sid %04X (%d) %s %s",
-		 __FUNCTION__, pmt->id, pmt->adapter, pid, pid, pmt_len, pi_len, pmt_len - pi_len - 13, pmt->sid, pmt->sid, pmt->name[0] ? "channel:" : "", pmt->name);
+	LOGM("%s: PMT %d AD %d, pid: %04X (%d), ver %d, pmt_len %d, pi_len %d, total_len %d, sid %04X (%d) %s %s",
+		 __FUNCTION__, pmt->id, pmt->adapter, pid, pid, ver, pmt_len, pi_len, pmt_len - pi_len - 13, pmt->sid, pmt->sid, pmt->name[0] ? "channel:" : "", pmt->name);
 
 	es_len = 0;
 	for (i = 0; i < pmt_len - pi_len - 13; i += (es_len) + 5) // reading streams
@@ -557,7 +561,7 @@ int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len)
 		for (i = 0; i < MAX_CHANNELS_ON_CI; i++)
 			if ((pmt = get_pmt(d->pmt[i])))
 			{
-				psi_len = ddci_create_pmt(d, pmt, psi);
+				psi_len = ddci_create_pmt(d, pmt, psi, d->pmt_ver[i]);
 				int dpid = get_mapping_table(pmt->adapter, pmt->pid, NULL, NULL);
 				if (dpid != -1)
 					pos += buffer_to_ts(dst + pos, len - pos, psi, psi_len, &d->pmt_cc[i], dpid);

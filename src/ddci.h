@@ -19,6 +19,7 @@ typedef struct ddci_device
 	int channels;
 	int max_channels;
 	int pmt[MAX_CHANNELS_ON_CI + 1];
+	int pmt_ver[MAX_CHANNELS_ON_CI + 1];
 	int cat_processed;
 	int capid[MAX_CA_PIDS + 1];
 	int ncapid;
@@ -37,6 +38,6 @@ int copy_ts_from_ddci_buffer(adapter *ad, ddci_device_t *d, unsigned char *b, in
 void set_pid_ts(unsigned char *b, int pid);
 int ddci_process_ts(adapter *ad, ddci_device_t *d);
 int ddci_create_pat(ddci_device_t *d, uint8_t *b);
-int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *clean);
+int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *clean, int ver);
 
 #endif

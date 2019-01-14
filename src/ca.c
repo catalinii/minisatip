@@ -240,8 +240,8 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt)
 	else
 		LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY, "pmt_id full for device %d", d->id);
 
-	ver = (b[5] >> 1) & 0x1f;
-	sid = (b[3] << 8) | b[4];
+	ver = spmt->version;
+	sid = spmt->sid;
 
 	listmgmt = CA_LIST_MANAGEMENT_ONLY;
 	for (i = 0; i < MAX_CA_PMT; i++)
@@ -278,7 +278,8 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt)
 		else if (d->pmt_id[i] > 0)
 			num_pmt++;
 
-	LOG("PMT CA %d DEL pid %u (%s) sid %u (%x), ver %d, pos %d, %s", spmt->adapter, spmt->pid, spmt->name, spmt->sid, spmt->sid, spmt->version, ca_pos, spmt->name);
+	LOG("PMT CA %d DEL pid %u (%s) sid %u (%x), ver %d, pos %d, num pmt %d, %s",
+		spmt->adapter, spmt->pid, spmt->name, spmt->sid, spmt->sid, spmt->version, ca_pos, num_pmt, spmt->name);
 	uint8_t clean[1500];
 	int new_len = clean_psi_buffer(spmt->pmt, clean, sizeof(clean));
 

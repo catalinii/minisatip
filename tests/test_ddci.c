@@ -303,7 +303,7 @@ int test_create_pmt()
 	strcpy(pmt.name, "TEST CHANNEL HD");
 	memcpy(pmt.pmt, pmt_sample, sizeof(pmt_sample));
 	pmt.pmt_len = sizeof(pmt_sample);
-	psi_len = ddci_create_pmt(&d, &pmt, psi);
+	psi_len = ddci_create_pmt(&d, &pmt, psi, 0);
 	cc = 1;
 	hexdump("PACK ", psi, psi_len);
 	buffer_to_ts(packet, 188, psi, psi_len, &cc, 0x63);

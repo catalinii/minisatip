@@ -1033,7 +1033,7 @@ int clean_psi_buffer(uint8_t *pmt, uint8_t *clean, int clean_size)
 	int pi_len = ((pmt[10] & 0xF) << 8) + pmt[11];
 	int pmt_len = ((pmt[1] & 0xF) << 8) + pmt[2];
 	int ver = (clean[5] & 0x3e) >> 1;
-	ver = (~ver) & 0xF;
+	ver = (ver + 1) & 0xF;
 	clean[5] = (0xC0 & clean[5]) | (ver << 1);
 	n = clean;
 	o = pmt + pi_len + 12;
