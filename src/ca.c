@@ -164,7 +164,7 @@ int resource_ids_count = sizeof(resource_ids) / 4;
 
 int is_ca_initialized(int i)
 {
-	if (i >= 0 && i < MAX_CA && ca_devices[i]->enabled && ca_devices[i]->init_ok)
+	if (i >= 0 && i < MAX_CA && ca_devices[i] && ca_devices[i]->enabled && ca_devices[i]->init_ok)
 		return 1;
 	return 0;
 }
