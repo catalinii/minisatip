@@ -322,8 +322,6 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 			add_pmt = 1;
 			break;
 		}
-	if (d->pmt[0] == pmt->id)
-		d->tid = ad->transponder_id;
 
 	if (!add_pmt)
 	{
@@ -332,14 +330,13 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 		return TABLES_RESULT_ERROR_RETRY;
 	}
 	d->ver = (d->ver + 1) & 0xF;
-	d->channels++;
-
-	LOG("found DDCI %d for pmt %d, running channels %d", ddid, pmt->id, d->channels);
-
-	if (d->pmt[0] == pmt->id) //process the CAT only for the first PMT
+	if (d->channels++) // for first PMT set transponder ID and add CAT
 	{
+		d->tid = ad->transponder_id;
 		add_pid_mapping_table(ad->id, 1, pmt->id, d->id); // add pid 1
 	}
+
+	LOG("found DDCI %d for pmt %d, running channels %d", ddid, pmt->id, d->channels);
 
 	add_pid_mapping_table(ad->id, pmt->pid, pmt->id, d->id);
 	set_pid_rewrite(ad->id, pmt->pid, 0); // do not send the PMT pid to the DDCI device
