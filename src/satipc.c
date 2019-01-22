@@ -166,11 +166,8 @@ int satipc_reply(sockets *s)
 		if (sip->use_tcp == 0)
 		{
 			sip->use_tcp = 1;
-			if (ad)
-			{
-				LOG("adapter %d is not RTSP over TCP, switching", ad->id);
-				ad->restart_needed = 1;
-			}
+			LOG("adapter %d is not RTSP over TCP, switching", ad->id);
+			ad->restart_needed = 1;
 		}
 		sip->option_no_session = 1;
 		sip->option_no_setup = 1;
