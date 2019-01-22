@@ -876,7 +876,6 @@ int http_request(adapter *ad, char *url, char *method)
 	int ptr = 0;
 	int lb, remote_socket;
 	char format[] = "%s rtsp://%s:%d/%s%s%s RTSP/1.0\r\nCSeq: %d%s\r\n\r\n";
-	__attribute__((unused)) int rv;
 	satipc *sip = get_satip(ad->id);
 	if (!sip)
 		return 0;
