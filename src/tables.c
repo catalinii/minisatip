@@ -234,7 +234,7 @@ void disable_pmt_for_ca(int i, SPMT *pmt)
 
 int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt)
 {
-	int mask = 1;
+	int mask;
 	int rv = 0, result = 0;
 	mask = 1 << i;
 

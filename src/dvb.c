@@ -1032,8 +1032,6 @@ int dvb_tune(int aid, transponder *tp)
 		LOG("dvbapi v3 ioctl failed, fd %d, errno %d (%s)", fd_frontend, errno, strerror(errno));
 		return -404;
 	}
-	else
-		return 0;
 #endif
 
 	return 0;

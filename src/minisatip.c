@@ -22,7 +22,6 @@
 #include <errno.h>
 #include <getopt.h>
 #include <signal.h>
-#include <sys/ucontext.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -228,9 +227,9 @@ char *built_info[] =
 void print_version(int use_log)
 {
 	char buf[200];
-	int i, len = 0;
+	int i;
 	memset(buf, 0, sizeof(buf));
-	len += sprintf(buf, "%s version %s, compiled with s2api version: %04X",
+	sprintf(buf, "%s version %s, compiled with s2api version: %04X",
 				   app_name, version, LOGDVBAPIVERSION);
 	if (!use_log)
 		puts(buf);
@@ -979,7 +978,7 @@ void set_options(int argc, char *argv[])
 	if (!opts.http_host)
 	{
 		opts.http_host = (char *)malloc1(MAX_HOST);
-		sprintf(opts.http_host, "%s:%d", lip, opts.http_port);
+		sprintf(opts.http_host, "%s:%u", lip, opts.http_port);
 	}
 	if (!is_log)
 		opts.log = 0;
@@ -1213,7 +1212,7 @@ int read_rtsp(sockets *s)
 		if (strncmp(arg[0], "DESCRIBE", 8) == 0)
 		{
 			char sbuf[1000];
-			char *rv = NULL;
+			char *rv;
 			rv = describe_streams(s, arg[1], sbuf, sizeof(sbuf));
 			if (!rv)
 			{

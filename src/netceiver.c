@@ -503,7 +503,6 @@ void find_netcv_adapter(adapter **a)
 			ad->sys[0] = SYS_DVBS;
 			sprintf(dbuf + strlen(dbuf), "[AD%d DVB-S] ", na);
 			break;
-			break;
 
 		case FE_QAM:
 			ad->sys[0] = SYS_DVBC_ANNEX_A;

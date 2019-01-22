@@ -972,7 +972,7 @@ int process_dmx(sockets *s)
 	stime = getTickUs();
 
 	LOGM("process_dmx start called for adapter %d -> %d out of %d bytes read, %jd ms ago",
-		 s->sid, rlen, s->lbuf, ms_ago);
+		 ad->id, rlen, s->lbuf, ms_ago);
 
 #ifndef DISABLE_T2MI
 	if (ad->is_t2mi >= 0)
@@ -1060,12 +1060,12 @@ int read_dmx(sockets *s)
 	if (ad->wait_new_stream && !ad->tune_time)
 		ad->tune_time = rtime;
 
-	if (ad && ad->wait_new_stream && (rtime - ad->tune_time < 200)) // check new transponder
+	if (ad->wait_new_stream && (rtime - ad->tune_time < 200)) // check new transponder
 	{
 		int new_rlen = check_new_transponder(ad, s->rlen);
 		if (!new_rlen)
 		{
-			LOGM("Flushing adapter buffer of %d bytes after the tune %jd ms ago", s->rlen, rtime - ad->tune_time);
+			LOGM("Flushing adapter %d buffer of %d bytes after the tune %jd ms ago", ad->id, s->rlen, rtime - ad->tune_time);
 			s->rlen = 0;
 			return 0;
 		}
@@ -1078,7 +1078,7 @@ int read_dmx(sockets *s)
 		send = 1;
 
 	LOGM("read_dmx send=%d, flush_all=%d, cnt %d called for adapter %d -> %d out of %d bytes read, %jd ms ago (%jd %jd)",
-		 send, flush_all, cnt, s->sid, s->rlen, s->lbuf, rtime - ad->rtime, rtime, ad->rtime);
+		 send, flush_all, cnt, ad->id, s->rlen, s->lbuf, rtime - ad->rtime, rtime, ad->rtime);
 
 	if (!send)
 		return 0;

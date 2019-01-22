@@ -177,7 +177,7 @@ int adapter_timeout(sockets *s)
 			{
 				if (rtime - ad1->rtime < s->timeout_ms)
 					do_close = 0;
-				if (ad1 && max_close < ad1->rtime)
+				if (max_close < ad1->rtime)
 				{
 					max_close = ad1->rtime;
 					LOGM("max_close set to %jd for adapter %d", max_close, i);
@@ -2061,7 +2061,7 @@ void set_signal_multiplier(char *o)
 				}
 		}
 		LOG("Setting signal multipler for adapter %d strength_multiplier %.2f snr_multiplier %.2f",
-			a_id, strength_multiplier, snr_multiplier);
+			a_id, (double)strength_multiplier, (double)snr_multiplier);
 	}
 }
 
@@ -2251,7 +2251,6 @@ _symbols adapters_sym[] =
 		{"ad_pol", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.pol)},
 		{"ad_sr", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, offsetof(adapter, tp.sr)},
 		{"ad_bw", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, offsetof(adapter, tp.bw)},
-		{"ad_diseqc", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.diseqc)},
 		{"ad_stream", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.plp_isi)},
 		{"ad_fe", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, fe)},
 		{"ad_master", VAR_AARRAY_UINT8, a, 1, MAX_ADAPTERS, offsetof(adapter, master_sid)},

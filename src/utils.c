@@ -42,7 +42,6 @@
 #include <fcntl.h>
 #include <ctype.h>
 #include <signal.h>
-#include <sys/ucontext.h>
 #include <unistd.h>
 #include <syslog.h>
 #include <stdarg.h>
@@ -328,11 +327,6 @@ char *strip(char *s) // strip spaces from the front of a string
 	return s;
 }
 
-#define LR(s)                         \
-	{                                 \
-		LOG("map_int returns %d", s); \
-		return s;                     \
-	}
 int map_intd(char *s, char **v, int dv)
 {
 	int i, n = dv;
@@ -477,7 +471,7 @@ void print_trace(void)
 
 	size = backtrace(array, 10);
 
-	printf("Obtained %zd stack frames.\n", size);
+	printf("Obtained %zu stack frames.\n", size);
 
 	for (i = 0; i < size; i++)
 	{
@@ -841,7 +835,7 @@ int snprintf_pointer(char *dest, int max_len, int type, void *p,
 		break;
 
 	case VAR_FLOAT:
-		nb = snprintf(dest, max_len, "%f", (*(float *)p) * multiplier);
+		nb = snprintf(dest, max_len, "%f", (double)((*(float *)p) * multiplier));
 		break;
 
 	case VAR_HEX:
@@ -1283,7 +1277,7 @@ int mutex_lock1(char *FILE, int line, SMutex *mutex)
 		LOGM("%s:%d Mutex not enabled %p", FILE, line, mutex);
 		return 1;
 	}
-	if (mutex && mutex->enabled && mutex->state && tid != mutex->tid)
+	if (mutex->enabled && mutex->state && tid != mutex->tid)
 	{
 		LOGM("%s:%d Locking mutex %p already locked at %s:%d tid %x", FILE,
 			 line, mutex, mutex->file, mutex->line, mutex->tid);
@@ -1843,6 +1837,7 @@ int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, char *cc,
 	return len;
 }
 
+/*
 void write_buf_to_file(char *file, uint8_t *buf, int len)
 {
 	int x = open(file, O_RDWR);
@@ -1852,5 +1847,6 @@ void write_buf_to_file(char *file, uint8_t *buf, int len)
 		close(x);
 	}
 	else
-		LOG("Could not write %d bytes to %s: %d", file, errno);
+		LOG("Could not write %d bytes to %s: %d", len, file, errno);
 }
+*/
