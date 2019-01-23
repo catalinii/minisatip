@@ -166,11 +166,8 @@ int satipc_reply(sockets *s)
 		if (sip->use_tcp == 0)
 		{
 			sip->use_tcp = 1;
-			if (ad)
-			{
-				LOG("adapter %d is not RTSP over TCP, switching", ad->id);
-				ad->restart_needed = 1;
-			}
+			LOG("adapter %d is not RTSP over TCP, switching", ad->id);
+			ad->restart_needed = 1;
 		}
 		sip->option_no_session = 1;
 		sip->option_no_setup = 1;
@@ -879,7 +876,6 @@ int http_request(adapter *ad, char *url, char *method)
 	int ptr = 0;
 	int lb, remote_socket;
 	char format[] = "%s rtsp://%s:%d/%s%s%s RTSP/1.0\r\nCSeq: %d%s\r\n\r\n";
-	__attribute__((unused)) int rv;
 	satipc *sip = get_satip(ad->id);
 	if (!sip)
 		return 0;
