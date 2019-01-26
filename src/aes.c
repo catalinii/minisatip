@@ -75,7 +75,7 @@ void dvbaes_set_cw(SCW *cw, SPMT *pmt)
 void dvbaes_decrypt_stream(SCW *cw, SPMT_batch *batch, int max_len)
 {
 	int i, j, len;
-	for (i = 0; batch[i].data && i < max_len; i++)
+	for (i = 0; i < max_len && batch[i].data; i++)
 	{
 		len = (batch[i].len / 16) * 16;
 		for (j = 0; j < len; j++)
@@ -136,7 +136,7 @@ void dvbaes_cbc_decrypt_stream(SCW *cw, SPMT_batch *batch, int max_len)
 {
 	int i, len;
 	uint8_t decryptedtext[300]; //, ciphertext[300];
-	for (i = 0; batch[i].data && i < max_len; i++)
+	for (i = 0; i < max_len && batch[i].data; i++)
 	{
 
 		//memset(decryptedtext, 0, sizeof(decryptedtext));
