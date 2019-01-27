@@ -1364,7 +1364,7 @@ int mutex_destroy(SMutex *mutex)
 	int rv;
 	if (opts.no_threads)
 		return 0;
-	if (!mutex->enabled)
+	if (!mutex || !mutex->enabled)
 	{
 		LOG("destroy disabled mutex %p", mutex);
 
