@@ -78,7 +78,7 @@ typedef struct struct_adapter
 	int threshold;
 	int active_pids;
 	int active_demux_pids;
-	uint8_t is_t2mi;
+	int is_t2mi;
 	uint64_t tune_time;
 	char name[5];
 	char null_packets;
