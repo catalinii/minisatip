@@ -219,6 +219,16 @@ char *built_info[] =
 #else
 		"Built with netceiver",
 #endif
+#ifdef DISABLE_DDCI
+                "Built without ddci",
+#else
+                "Built with ddci",
+#endif
+#ifdef DISABLE_T2MI
+                "Built without t2mi",
+#else
+                "Built with t2mi",
+#endif
 #ifdef AXE
 		"Built for satip-axe",
 #endif
