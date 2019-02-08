@@ -183,12 +183,23 @@ int del_pid_ddci(int ddci_adapter, int ddci_pid, int pmt)
 
 int del_pid_mapping_table(int ad, int pid, int pmt)
 {
-	int ddci_pid, ddci_adapter, i;
+	int ddci_pid = -1, ddci_adapter, i;
 	int filter_id;
 	int key = (ad << 16) | pid;
 	int idx = get_index_hash(&mapping_table[0].ad_pid, mapping_table_pids, sizeof(ddci_mapping_table_t), key, key);
 	if (idx == -1)
 		LOG_AND_RETURN(-1, "%s: adapter %d pid %d not found in mapping table", __FUNCTION__, ad, pid);
+
+	for (i = 0; i < mapping_table[idx].npmt; i++)
+	{
+		if (mapping_table[idx].pmt[i] == pmt)
+			mapping_table[idx].pmt[i] = -1;
+		if (mapping_table[idx].pmt[i] >= 0)
+		{
+			LOG("%s: ad %d pid %d ddci_pid %d, pid also associated with pmt %d", __FUNCTION__, ad, pid, ddci_pid, mapping_table[idx].pmt[i]);
+			return 0;
+		}
+	}
 	ddci_pid = mapping_table[idx].ddci_pid;
 	ddci_adapter = mapping_table[idx].ddci_adapter;
 	filter_id = mapping_table[idx].filter_id;
@@ -198,27 +209,14 @@ int del_pid_mapping_table(int ad, int pid, int pmt)
 	mapping_table[idx].rewrite = 0;
 	mapping_table[idx].filter_id = -1;
 
-	int del_pid = 1;
-	for (i = 0; i < mapping_table[idx].npmt; i++)
+	SPid *p = find_pid(ddci_adapter, ddci_pid);
+	LOGM("No pmt found for ad %d pid %d ddci_pid %d, deleteing if not used %d", ad, pid, ddci_pid, p ? p->sid[0] : -2);
+	if (pid == 1)
+		del_filter(filter_id);
+	else if (p && p->sid[0] == -1)
 	{
-		if (mapping_table[idx].pmt[i] == pmt)
-			mapping_table[idx].pmt[i] = -1;
-		if (mapping_table[idx].pmt[i] >= 0)
-		{
-			LOG("%s: ad %d pid %d, pid also associated with pmt %d", __FUNCTION__, ad, pid, mapping_table[idx].pmt[i]);
-			del_pid = 0;
-		}
-	}
-	if (del_pid)
-	{
-		SPid *p = find_pid(ddci_adapter, pid);
-		LOGM("No pmt found for ad %d pid %d, deleteing if not used %d", ad, pid, p ? p->sid[0] : -2);
-		if (pid == 1)
-			del_filter(filter_id);
-		else if (p && p->sid[0] == -1)
-		{
-			mark_pid_deleted(ddci_adapter, -1, pid, NULL);
-		}
+		LOGM("Marking pid %d deleted on adapter %d (initial ad %d pid %d)", ddci_pid, ddci_adapter, ad, pid);
+		mark_pid_deleted(ddci_adapter, -1, ddci_pid, NULL);
 	}
 	return del_pid_ddci(ddci_adapter, ddci_pid, pmt);
 }
@@ -371,7 +369,7 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt)
 	d->ver = (d->ver + 1) & 0xF;
 	if (d->channels > 0)
 		d->channels--;
-	LOG("%s: deleting pmt id %d, sid %d (%X), pid %d, ddci %d", __FUNCTION__, spmt->id, spmt->sid, spmt->sid, pid, ddid);
+	LOG("%s: deleting pmt id %d, sid %d (%X), pid %d, ddci %d, name %s", __FUNCTION__, spmt->id, spmt->sid, spmt->sid, pid, ddid, spmt->name);
 	if (d->pmt[0] == pmt)
 		d->cat_processed = 0;
 
@@ -394,7 +392,7 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt)
 				}
 			if (need_delete)
 			{
-				LOG("Deleting pid %d", mapping_table[i].ad_pid & 0xFFFF);
+				LOG("Deleting pid %d, ad %d, ddci_pid %d", mapping_table[i].ad_pid & 0xFFFF, ad->id, mapping_table[i].ddci_pid);
 				del_pid_mapping_table(ad->id, mapping_table[i].ad_pid & 0xFFFF, pmt);
 			}
 		}
