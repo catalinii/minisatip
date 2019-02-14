@@ -1011,6 +1011,10 @@ void find_ddci_adapter(adapter **a)
 			sprintf(buf, "/dev/dvb/adapter%d/sec%d", i, j);
 			if (!access(buf, R_OK))
 				cnt++;
+			else
+			sprintf(buf, "/dev/dvb/adapter%d/ci%d", i, j);
+			if (!access(buf, R_OK))
+				cnt++;
 #ifdef DDCI_TEST
 			cnt = 2;
 #endif
