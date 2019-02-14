@@ -857,7 +857,7 @@ int ddci_open_device(adapter *ad)
 	if (write_fd < 0)
 	{
 		sprintf(buf, "/dev/dvb/adapter%d/ci%d", ad->pa, ad->fn);
-		write_fd = open(buf, O_WRONLY)
+		write_fd = open(buf, O_WRONLY);
 		if (write_fd < 0)
 		{
 			LOG("%s: could not open %s in WRONLY mode error %d: %s", __FUNCTION__, buf, errno, strerror(errno));
