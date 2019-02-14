@@ -856,7 +856,7 @@ int ddci_open_device(adapter *ad)
 	write_fd = open(buf, O_WRONLY);
 	if (write_fd < 0)
 	{
-		sprintf(buf, "/dev/dvb/adapter%d/sec%d", ad->pa, ad->fn);
+		sprintf(buf, "/dev/dvb/adapter%d/ci%d", ad->pa, ad->fn);
 		write_fd = open(buf, O_WRONLY)
 		if (write_fd < 0)
 		{
