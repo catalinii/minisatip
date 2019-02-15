@@ -650,7 +650,7 @@ int compare_slave_parameters(adapter *ad, transponder *tp)
 				adapter *ad2 = get_adapter(i);
 				if (!ad2)
 				{
-					LOG("adapter %d used is set for adapter %d but it is disabled, clearing");
+					LOG("adapter %d used is set for adapter %d but it is disabled, clearing", ad->id, i);
 					ad->used &= ~(1 << i);
 					continue;
 				}
