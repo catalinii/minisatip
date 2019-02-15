@@ -7,7 +7,7 @@
 #include "pmt.h"
 
 #define MAX_CA 8
-#define MAX_CAID_LEN 20
+#define MAX_CAID_LEN 30
 
 #define TABLES_RESULT_OK 0
 #define TABLES_RESULT_ERROR_RETRY 1
