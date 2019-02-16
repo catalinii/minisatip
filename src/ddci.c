@@ -328,7 +328,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 		return TABLES_RESULT_ERROR_RETRY;
 	}
 	d->ver = (d->ver + 1) & 0xF;
-	if (d->channels++) // for first PMT set transponder ID and add CAT
+	if (!d->channels++) // for first PMT set transponder ID and add CAT
 	{
 		d->tid = ad->transponder_id;
 		add_pid_mapping_table(ad->id, 1, pmt->id, d->id); // add pid 1
@@ -1017,7 +1017,7 @@ void find_ddci_adapter(adapter **a)
 			if (!access(buf, R_OK))
 				cnt++;
 			else
-			sprintf(buf, "/dev/dvb/adapter%d/ci%d", i, j);
+				sprintf(buf, "/dev/dvb/adapter%d/ci%d", i, j);
 			if (!access(buf, R_OK))
 				cnt++;
 #ifdef DDCI_TEST
