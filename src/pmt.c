@@ -1295,13 +1295,13 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque)
 
 	if (ad->pat_processed && ad->transponder_id == tid && ad->pat_ver != ver)
 	{
-		LOG("PAT new version for transponder %d, version %d", ad->transponder_id, ver);
+		LOG("PAT AD %d new version for transponder %d, version %d", ad->id, ad->transponder_id, ver);
 		new_version = 1;
 	}
 
 	if (ad->pat_processed && ad->transponder_id != tid)
 	{
-		LOG("PAT new transponder %d, version %d", ad->transponder_id, ad->pat_ver);
+		LOG("PAT AD %d new transponder %d (old %d), version %d", ad->id, tid, ad->transponder_id, ad->pat_ver);
 		clear_pmt_for_adapter(ad->id);
 		ad->pat_processed = 0;
 	}
