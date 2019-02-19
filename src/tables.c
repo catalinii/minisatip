@@ -402,9 +402,6 @@ int tables_close_device(adapter *ad)
 int tables_init()
 {
 	mutex_init(&ca_mutex);
-#ifndef DISABLE_DDCI
-	ddci_init();
-#endif
 #ifndef DISABLE_DVBCA
 	dvbca_init();
 #endif

@@ -56,7 +56,7 @@ int first_ddci = -1;
 
 #define get_ddci(i) ((i >= 0 && i < MAX_ADAPTERS && ddci_devices[i] && ddci_devices[i]->enabled) ? ddci_devices[i] : NULL)
 
-int ddci_id;
+int ddci_id = -1;
 ddci_device_t *ddci_devices[MAX_ADAPTERS];
 
 int mapping_table_pids;
@@ -306,7 +306,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 	ddci_device_t *d = get_ddci(ddid);
 	if (!d)
 	{
-		LOG("Could not find ddci device for adapter %d", ad->id);
+		LOG("Could not find ddci device for adapter %d, ddci %d", ad->id, ddid);
 		return TABLES_RESULT_ERROR_NORETRY;
 	}
 
@@ -826,6 +826,8 @@ void ddci_post_init(adapter *ad)
 	if (ad->fe_sock >= 0)
 		set_socket_thread(ad->fe_sock, get_socket_thread(ad->sock));
 	post_tune(ad);
+	if (ddci_id < 0)
+		ddci_init();
 }
 
 int ddci_open_device(adapter *ad)
@@ -1019,8 +1021,8 @@ void find_ddci_adapter(adapter **a)
 			else
 			{
 				sprintf(buf, "/dev/dvb/adapter%d/ci%d", i, j);
-  			if (!access(buf, R_OK))
-	    	  cnt++;
+				if (!access(buf, R_OK))
+					cnt++;
 			}
 #ifdef DDCI_TEST
 			cnt = 2;
