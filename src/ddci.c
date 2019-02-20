@@ -602,14 +602,22 @@ int push_ts_to_adapter(adapter *ad, unsigned char *b, int new_pid, int *ad_pos)
 int copy_ts_from_ddci_buffer(adapter *ad, ddci_device_t *d, unsigned char *b, int *ad_pos)
 {
 	int pid = PID_FROM_TS(b);
-	if (pid == 0x1FFF)
+	if (pid == 0x1FFF || pid <= 32)
 		return 0;
 
 	int idx = d->pid_mapping[pid];
-
 	if (idx == -1)
 	{
 		LOGM("DD %d pid %d not found in mapping table", d->id, pid);
+		return 0;
+	}
+
+	if (idx < 0 || idx >= mapping_table_pids)
+		LOG_AND_RETURN(0, "Invalid index %d in mapping table for DDCI %d, pid %d", idx, d->id, pid);
+
+	if (mapping_table[idx].rewrite == 0)
+	{
+		DEBUGM("%s: pid %d will not be sent back to the client", __FUNCTION__, pid);
 		return 0;
 	}
 
