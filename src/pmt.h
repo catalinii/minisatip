@@ -84,6 +84,12 @@ typedef struct struct_cw
 
 } SCW;
 
+typedef struct struct_pmt_pid
+{
+	int type;
+	int pid;
+} SPMTPid;
+
 typedef struct struct_pmt
 {
 	char enabled;
@@ -96,8 +102,8 @@ typedef struct struct_pmt
 	uint16_t caids;
 	int active_pid[MAX_ACTIVE_PIDS];
 	int active_pids;
-	int all_pid[MAX_PMT_PIDS];
-	int all_pids;
+	SPMTPid stream_pid[MAX_PMT_PIDS];
+	int stream_pids;
 	int id;
 	unsigned char pmt[MAX_PI_LEN];
 	int pmt_len;

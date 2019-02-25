@@ -912,8 +912,8 @@ int pmt_add(int i, int adapter, int sid, int pmt_pid)
 
 	pmt->active_pids = 0;
 	memset(pmt->active_pid, 0, sizeof(pmt->active_pids));
-	pmt->all_pids = 0;
-	memset(pmt->all_pid, 0, sizeof(pmt->all_pid));
+	pmt->stream_pids = 0;
+	memset(pmt->stream_pid, 0, sizeof(pmt->stream_pid));
 
 	if (i >= npmts)
 		npmts = i + 1;
@@ -1546,7 +1546,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 		pi_len = 0;
 
 	pmt->caids = 0;
-	pmt->all_pids = 0;
+	pmt->stream_pids = 0;
 
 	if (pi_len > 0)
 		find_pi(pmt, pi, pi_len);
@@ -1565,8 +1565,11 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 		else if (stype == 129)
 			isAC3 = 1;
 
-		if (pmt->all_pids < MAX_PMT_PIDS - 1)
-			pmt->all_pid[pmt->all_pids++] = spid;
+		if (pmt->stream_pids < MAX_PMT_PIDS - 1)
+		{
+			pmt->stream_pid[pmt->stream_pids].type = stype;
+			pmt->stream_pid[pmt->stream_pids++].pid = spid;
+		}
 		else
 			LOG("Too many pids for pmt %d, discarding pid %d", pmt->id, spid);
 

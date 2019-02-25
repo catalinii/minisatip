@@ -409,17 +409,36 @@ int dvbapi_send_pmt(SKey *k)
 	memset(buf, 0, sizeof(buf));
 	copy32(buf, 0, AOT_CA_PMT);
 	buf[6] = CAPMT_LIST_UPDATE;
-	//	buf[6] = CAPMT_LIST_ONLY;
 	copy16(buf, 7, k->sid);
 	buf[9] = 1;
 
 	if (network_mode)
 	{
+		int i;
+		copy32(buf, 12, 0x01820200);
 		buf[15] = k->id + opts.dvbapi_offset;
 		buf[16] = k->id + opts.dvbapi_offset;
-		copy32(buf, 12, 0x01820200);
-		memcpy(buf + 17, k->pi, k->pi_len);
-		len = 17 - 6 + k->pi_len + 2;
+		copy16(buf, 17, 0x8108); // enigma2 descriptior
+		copy32(buf, 19, 0);
+		copy16(buf, 23, k->tsid);
+		copy16(buf, 25, k->onid);
+		copy16(buf, 27, 0x8402); // PMT PID
+		copy16(buf, 29, k->pmt_pid);
+
+		memcpy(buf + 31, k->pi, k->pi_len);
+		len = 31 + k->pi_len;
+		copy16(buf, 10, len - 12);
+		for (i = 0; i < pmt->stream_pids; i++)
+		{
+			len += 5;
+			int type = pmt->stream_pid[i].type;
+			int pid = pmt->stream_pid[i].pid;
+			buf[len - 5] = type;
+			copy16(buf, len - 4, pid);
+			copy16(buf, len - 2, 0);
+			LOGM("Key %d adding stream pid %d (%X) type %d (%x)", k->id, pid, pid, type, type);
+		}
+		copy16(buf, 4, len - 6)
 	}
 	else
 	{
@@ -441,10 +460,11 @@ int dvbapi_send_pmt(SKey *k)
 		buf[33] = adapter;
 		memcpy(buf + 34, k->pi, k->pi_len);
 		len = 34 - 6 + k->pi_len + 2;
+		copy16(buf, 4, len);
+		copy16(buf, 10, len - 11);
+		len += 6;
 	}
-	copy16(buf, 4, len);
-	copy16(buf, 10, len - 11);
-	TEST_WRITE(write(sock, buf, len + 6), len + 6);
+	TEST_WRITE(write(sock, buf, len), len);
 	return 0;
 }
 
@@ -686,6 +706,8 @@ int keys_add(int i, int adapter, int pmt_id)
 	k->ver = -1;
 	k->ecms = 0;
 	k->last_dmx_stop = 0;
+	k->onid = 0;
+	k->tsid = 0;
 	memset(k->cw[0], 0, 16);
 	memset(k->cw[1], 0, 16);
 	memset(k->filter_id, -1, sizeof(k->filter_id));
@@ -766,6 +788,8 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt)
 	k->sid = pmt->sid;
 	k->adapter = ad->id;
 	k->pmt_pid = pid;
+	k->tsid = ad->transponder_id;
+	k->onid = 0;
 	k->last_dmx_stop = getTick();
 	dvbapi_send_pmt(k);
 

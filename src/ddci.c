@@ -345,10 +345,10 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 		add_pid_mapping_table(ad->id, pmt->capid[i], pmt->id, d->id);
 	}
 
-	for (i = 0; i < pmt->all_pids; i++)
+	for (i = 0; i < pmt->stream_pids; i++)
 	{
-		LOGM("DD %d adding ALL pid %d", d->id, pmt->all_pid[i]);
-		add_pid_mapping_table(ad->id, pmt->all_pid[i], pmt->id, d->id);
+		LOGM("DD %d adding ALL pid %d", d->id, pmt->stream_pid[i].pid);
+		add_pid_mapping_table(ad->id, pmt->stream_pid[i].pid, pmt->id, d->id);
 	}
 
 	update_pids(ad->id);
