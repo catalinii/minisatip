@@ -159,7 +159,9 @@ int udp_bind(char *addr, int port)
 				close(sock);
 				return -1;
 			}
-		} else {
+		}
+		else
+		{
 			LOG("udp_bind: failed: bind() on host %s port %d: error %s", addr,
 				port, strerror(errno));
 			return -1;
@@ -318,7 +320,7 @@ int tcp_connect_src(char *addr, int port, struct sockaddr_in *serv, int blocking
 
 	if (connect(sock, (struct sockaddr *)serv, sizeof(*serv)) < 0)
 	{
-		if (blocking || (!blocking && errno != EINPROGRESS))
+		if (blocking || errno != EINPROGRESS)
 		{
 			LOG("tcp_connect: failed: connect to %s:%d failed with errno %d: %s", addr,
 				port, errno, errno == 11 ? "connect timed out" : strerror(errno));
@@ -594,7 +596,7 @@ int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 	if (type & TYPE_CONNECT)
 		ss->events |= POLLOUT;
 
-	LOG("sockets_add: handle %d (type %d) returning socket index %d [%s:%d] read: %p",
+	LOG("sockets_add: handle %d (type %d) returning socket sock %d [%s:%d] read: %p",
 		ss->sock, ss->type, i, get_socket_rhost(i, ra, sizeof(ra)),
 		ntohs(ss->sa.sin_port), ss->read);
 	mutex_unlock(&ss->mutex);
@@ -622,7 +624,7 @@ int sockets_del(int sock)
 	ss->is_enabled = 0;
 	so = ss->sock;
 	ss->sock = -1; // avoid infinite loop
-	LOG("sockets_del: %d -> handle %d, sid %d, overflow bytes %d, allocated %d, used %d, unsend packets %d", sock, so, ss->sid, ss->overflow, ss->buf_alloc, ss->buf_used, (ss->wmax > 0) ? ((ss->wpos - ss->spos) % ss->wmax) : 0);
+	LOG("sockets_del: sock %d -> handle %d, sid %d, overflow bytes %d, allocated %d, used %d, unsend packets %d", sock, so, ss->sid, ss->overflow, ss->buf_alloc, ss->buf_used, (ss->wmax > 0) ? ((ss->wpos - ss->spos) % ss->wmax) : 0);
 
 	if (so >= 0)
 	{
@@ -679,8 +681,12 @@ extern int bwnotify;
 extern int64_t bwtt, bw;
 extern uint32_t writes, failed_writes;
 
+// remove __thread if your platform does not support threads.
+// also make sure to run with option -t (no threads)
+// or set EMBEDDED=1 in Makefile
+
 __thread pthread_t tid;
-__thread char *thread_name;
+__thread char thread_name[100];
 
 void *select_and_execute(void *arg)
 {
@@ -692,10 +698,13 @@ void *select_and_execute(void *arg)
 	int read_ok;
 	char ra[50];
 
+	memset(thread_name, 0, sizeof(thread_name));
 	if (arg)
-		thread_name = (char *)arg;
+	{
+		strncpy(thread_name, (char *)arg, sizeof(thread_name) - 1);
+	}
 	else
-		thread_name = "main";
+		strcpy(thread_name, "main");
 
 	tid = get_tid();
 	les = 1;
@@ -898,8 +907,10 @@ void *select_and_execute(void *arg)
 			lt = c_time;
 			i = -1;
 			while (++i < max_sock)
-				if ((ss = get_sockets(i)) && (ss->tid == tid) &&
-					(((ss->timeout_ms > 0) && (lt - ss->rtime > ss->timeout_ms) && (ss->spos == ss->wpos)) || (ss->force_close)))
+			{
+				if ((ss = get_sockets(i)) == NULL || (ss->tid != tid))
+					continue;
+				if (((ss->timeout_ms > 0) && (lt - ss->rtime > ss->timeout_ms) && (ss->spos == ss->wpos)) || (ss->force_close))
 				{
 					if (ss->timeout && !ss->force_close)
 					{
@@ -915,6 +926,7 @@ void *select_and_execute(void *arg)
 					else
 						sockets_del(i);
 				}
+			}
 		}
 	}
 
@@ -1036,9 +1048,9 @@ int get_mac_address(char *mac)
 			if ((cur->ifa_addr->sa_family == AF_LINK) && cur->ifa_addr)
 			{
 				struct sockaddr_dl *sdl = (struct sockaddr_dl *)cur->ifa_addr;
-				unsigned char *m = LLADDR(sdl);
+				unsigned char *m = (unsigned char *)LLADDR(sdl);
 				sprintf(mac, "%02x%02x%02x%02x%02x%02x", m[0], m[1], m[2], m[3], m[4], m[5]);
-				LOG("mac -> %s, interface %s", mac, cur->ifa_name);
+				LOGM("mac -> %s, interface %s", mac, cur->ifa_name);
 				if ((strcmp(cur->ifa_name, if_name) == 0))
 					break;
 			}
@@ -1123,7 +1135,7 @@ void free_all()
 void set_socket_send_buffer(int sock, int len)
 {
 	int sl;
-	int rv;
+	int rv = 0;
 	if (len <= 0)
 		return;
 // len = 8*1024; /* have a nice testing !!!! */
@@ -1141,7 +1153,7 @@ void set_socket_send_buffer(int sock, int len)
 void set_socket_receive_buffer(int sock, int len)
 {
 	socklen_t sl;
-	int rv;
+	int rv = 0;
 	if (len <= 0)
 		return;
 #ifdef SO_RCVBUFFORCE
@@ -1239,8 +1251,9 @@ int my_writev(sockets *s, const struct iovec *iov, int iiov)
 
 	if (rv != len)
 	{
-		failed_writes++;
-		DEBUGM("writev handle %d, iiov %d, len %d, rv %d, errno %d", s->sock, iiov, len, rv, errno);
+		if (rv <= 0)
+			failed_writes++;
+		DEBUGM("writev handle %d, iiov %d, len %d, rv %d, errno %d", s->sock, iiov, len, rv, _errno);
 	}
 	errno = _errno;
 	if ((rv < 0) && (_errno == EWOULDBLOCK)) // blocking
@@ -1538,4 +1551,5 @@ void sockets_set_master(int slave, int master)
 	}
 	s->tid = m->tid;
 	s->master = master;
+	LOG("sock %d is master for sock %d", s->master, s->id);
 }

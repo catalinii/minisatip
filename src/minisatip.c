@@ -22,7 +22,6 @@
 #include <errno.h>
 #include <getopt.h>
 #include <signal.h>
-#include <sys/ucontext.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -220,6 +219,16 @@ char *built_info[] =
 #else
 		"Built with netceiver",
 #endif
+#ifdef DISABLE_DDCI
+                "Built without ddci",
+#else
+                "Built with ddci",
+#endif
+#ifdef DISABLE_T2MI
+                "Built without t2mi",
+#else
+                "Built with t2mi",
+#endif
 #ifdef AXE
 		"Built for satip-axe",
 #endif
@@ -228,9 +237,9 @@ char *built_info[] =
 void print_version(int use_log)
 {
 	char buf[200];
-	int i, len = 0;
+	int i;
 	memset(buf, 0, sizeof(buf));
-	len += sprintf(buf, "%s version %s, compiled with s2api version: %04X",
+	sprintf(buf, "%s version %s, compiled with s2api version: %04X",
 				   app_name, version, LOGDVBAPIVERSION);
 	if (!use_log)
 		puts(buf);
@@ -258,7 +267,7 @@ void usage()
 #endif
 		"[-p public_host] [-r remote_rtp_host] [-R document_root] "
 #ifndef DISABLE_SATIPCLIENT
-		"[-s [DELSYS:]host[:port] "
+		"[-s [*][DELSYS:][FE_ID@][source_ip/]host[:port] "
 #endif
 		"[-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] \n "
 #ifdef AXE
@@ -286,6 +295,8 @@ Help\n\
 	* eg: -d 0:1-0  (which is the default for each adapter).\n\
 	- note: * as adapter means apply to all adapters\n\
 	- note: * before committed number enables fast-switch (only voltage/tone)\n\
+	- note: @ before committed number sets 'Any Device' diseqc address (0x00)\n\
+	- note: . before committed number sets 'LNB' diseqc address (0x11)\n\
 \n\
 * -q --diseqc-timing ADAPTER1:BEFORE_CMD1-AFTER_CMD1-AFTER_REPEATED_CMD1-AFTER_SWITCH1-AFTER_BURST1-AFTER_TONE1[,...]\n\
 \t* All timing values are in ms, default adapter values are: 15-54-15-15-15-0\n\
@@ -329,7 +340,7 @@ Help\n\
 	* eg: -l http,pmt\n\
 \n\
 * -v specifies the modules comma separated that will have increased debug level (more verbose than -l), \n\
-	* eg: -d http,pmt\n\
+	* eg: -v http,pmt\n\
 \n\
 * -L --lnb specifies the adapter and LNB parameters (low, high and switch frequency)\n\
 	* eg: -L *:9750-10600-11700 - sets all the adapters to use Universal LNB parameters (default)\n\
@@ -388,8 +399,9 @@ Help\n\
 "
 #ifndef DISABLE_SATIPCLIENT
 		"\
-* -s --satip-servers [DELSYS:][FE_ID@][source_ip/]host[:port] - specify the remote satip host and port with delivery system DELSYS, it is possible to use multiple -s \n\
-	* DELSYS - can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, isdbt, atsc, dvbcb ( - DVBC_ANNEX_B ) [default: dvbs2]\n\
+* -s --satip-servers [*][DELSYS:][FE_ID@][source_ip/]host[:port] - specify the remote satip host and port with delivery system DELSYS, it is possible to use multiple -s \n\
+	* - Use TCP if -O is not specified and UDP if -O is specified\n\
+	DELSYS - can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, isdbt, atsc, dvbcb ( - DVBC_ANNEX_B ) [default: dvbs2]\n\
 	host - the server of the satip server\n\
 	port - rtsp port for the satip server [default: 554]\n\
 	FE_ID - will be determined automatically\n\
@@ -424,7 +436,7 @@ Help\n\
 \n\
 * -t --cleanpsi clean the PSI from all CA information, the client will see the channel as clear if decrypted successfully\n\
 \n\
-* -T --threads: enables/disable multiple threads (reduces memory consumptions) (default: %s)\n\
+* -T --threads: enables/disable multiple threads (reduces memory consumption) (default: %s)\n\
 \n\
 * -u --unicable unicable_string: defines the unicable adapters (A) and their slot (S), frequency (F) and optionally the PIN for the switch:\n\
 \t* The format is: A1:S1-F1[-PIN][,A2:S2-F2[-PIN][,...]]\n\
@@ -508,11 +520,14 @@ void set_options(int argc, char *argv[])
 	opts.dvbapi_host = NULL;
 	opts.drop_encrypted = 1;
 	opts.rtsp_port = 554;
+#ifndef DISABLE_SATIPCLIENT
 	opts.satip_addpids = 1;
+#endif
 	opts.output_buffer = 512 * 1024;
 	opts.document_root = "html";
 	opts.xml_path = DESC_XML;
 	opts.th_priority = -1;
+	opts.diseqc_addr = 0x10;
 	opts.diseqc_before_cmd = 15;
 	opts.diseqc_after_cmd = 54;
 	opts.diseqc_after_repeated_cmd = 15;
@@ -614,7 +629,7 @@ void set_options(int argc, char *argv[])
 			int i;
 			memset(buf, 0, sizeof(buf));
 			strncpy(buf, optarg, sizeof(buf) - 1);
-			int la = split(arg, buf, 50, ',');
+			int la = split(arg, buf, ARRAY_SIZE(arg), ',');
 			for (i = 0; i < la; i++)
 			{
 				int level = map_intd(arg[i], loglevels, -1);
@@ -973,18 +988,17 @@ void set_options(int argc, char *argv[])
 	if (!opts.http_host)
 	{
 		opts.http_host = (char *)malloc1(MAX_HOST);
-		sprintf(opts.http_host, "%s:%d", lip, opts.http_port);
+		sprintf(opts.http_host, "%s:%u", lip, opts.http_port);
 	}
 	if (!is_log)
 		opts.log = 0;
 
-// FBC setup
-#if defined(__arm__) && defined(ENIGMA)
-	set_slave_adapters("2-7:0");
-#endif
+	// FBC setup
+	if (!access("/proc/stb/frontend/0/fbc_connect", W_OK))
+		set_slave_adapters("2-7:0");
 }
 
-#define RBUF 8000
+#define RBUF 32000
 
 int read_rtsp(sockets *s)
 {
@@ -995,7 +1009,7 @@ int read_rtsp(sockets *s)
 	char buf[2000];
 	streams *sid = get_sid(s->sid);
 
-	if (s->buf[0] == 0x24 && s->buf[1] < 2)
+	if (s->rlen > 3 && s->buf[0] == 0x24 && s->buf[1] < 2)
 	{
 		if (sid)
 			sid->rtime = s->rtime;
@@ -1005,14 +1019,24 @@ int read_rtsp(sockets *s)
 			"Received RTSP over tcp packet (sock_id %d, stream %d, rlen %d) packet len: %d, type %02X %02X discarding %s...",
 			s->id, s->sid, s->rlen, rtsp_len, s->buf[4], s->buf[5],
 			(s->rlen == rtsp_len + 4) ? "complete" : "fragment");
-		if (s->rlen == rtsp_len + 4)
+		if (s->rlen >= rtsp_len + 4)
 		{ // we did not receive the entire packet
-			s->rlen = 0;
+			memmove(s->buf, s->buf + rtsp_len + 4, s->rlen - (rtsp_len + 4));
+			s->rlen -= rtsp_len + 4;
+			if (s->rlen == 0)
+				return 0;
+		}
+		else
+		{ // handle the remaining data as next fragment
+			rtsp_len -= s->rlen - 4;
+			s->rlen = 4;
+			s->buf[2] = rtsp_len >> 8;
+			s->buf[3] = rtsp_len & 0xFF;
 			return 0;
 		}
 	}
 
-	if (s->rlen < 4 || !end_of_header((char *)s->buf + s->rlen - 4))
+	if ((s->rlen > 0) && (s->rlen < 4 || !end_of_header((char *)s->buf + s->rlen - 4)))
 	{
 		if (s->rlen > RBUF - 10)
 		{
@@ -1024,6 +1048,7 @@ int read_rtsp(sockets *s)
 		LOG(
 			"read_rtsp: read %d bytes from handle %d, sock_id %d, flags %d not ending with \\r\\n\\r\\n",
 			s->rlen, s->sock, s->id, s->flags);
+		hexdump("read_rtsp: ", s->buf, s->rlen);
 		if (s->flags & 1)
 			return 0;
 		unsigned char *new_alloc = malloc1(RBUF);
@@ -1036,8 +1061,8 @@ int read_rtsp(sockets *s)
 	rlen = s->rlen;
 	s->rlen = 0;
 
-	LOG("read RTSP (from handle %d sock_id %d, len: %d, sid %d):", s->sock,
-		s->id, s->rlen, s->sid);
+	LOG("read RTSP (from handle %d sock %d, len: %d, sid %d):", s->sock,
+		s->id, rlen, s->sid);
 	LOGM("%s", s->buf);
 
 	if ((s->type != TYPE_HTTP) && (strncasecmp((const char *)s->buf, "GET", 3) == 0))
@@ -1046,7 +1071,7 @@ int read_rtsp(sockets *s)
 		return 0;
 	}
 
-	la = split(arg, (char *)s->buf, 50, ' ');
+	la = split(arg, (char *)s->buf, ARRAY_SIZE(arg), ' ');
 	cseq = 0;
 	if (la < 2)
 		LOG_AND_RETURN(0,
@@ -1083,7 +1108,7 @@ int read_rtsp(sockets *s)
 	for (i = 0; i < la; i++)
 		if (strncasecmp("CSeq:", arg[i], 5) == 0)
 			cseq = map_int(header_parameter(arg, i), NULL);
-		else if (strncasecmp("Transport:", arg[i], 9) == 0)
+		else if (strncasecmp("Transport:", arg[i], 10) == 0)
 		{
 			transport = header_parameter(arg, i);
 
@@ -1103,9 +1128,9 @@ int read_rtsp(sockets *s)
 			if (sid)
 				sid->timeout = 0;
 		}
-		else if (strncasecmp("User-Agent:", arg[i], 10) == 0)
+		else if (strncasecmp("User-Agent:", arg[i], 11) == 0)
 			useragent = header_parameter(arg, i);
-		else if (!useragent && strncasecmp("Server:", arg[i], 10) == 0)
+		else if (!useragent && strncasecmp("Server:", arg[i], 7) == 0)
 			useragent = header_parameter(arg, i);
 
 	if ((strncasecmp(arg[0], "PLAY", 4) == 0) || (strncasecmp(arg[0], "GET", 3) == 0) || (strncasecmp(arg[0], "SETUP", 5) == 0))
@@ -1197,7 +1222,7 @@ int read_rtsp(sockets *s)
 		if (strncmp(arg[0], "DESCRIBE", 8) == 0)
 		{
 			char sbuf[1000];
-			char *rv = NULL;
+			char *rv;
 			rv = describe_streams(s, arg[1], sbuf, sizeof(sbuf));
 			if (!rv)
 			{
@@ -1209,7 +1234,7 @@ int read_rtsp(sockets *s)
 					 get_sock_shost(s->sock));
 			http_response(s, 200, buf, sbuf, cseq, 0);
 		}
-		else if (strncmp(arg[0], "OPTIONS", 8) == 0)
+		else if (strncmp(arg[0], "OPTIONS", 7) == 0)
 		{
 			//			if(!get_sid(s->sid))
 			//				http_response(s, 454, public, NULL, cseq, 0);
@@ -1241,7 +1266,7 @@ int read_http(sockets *s)
 	int is_head = 0;
 	static char *xml =
 		"<?xml version=\"1.0\"?>"
-		"<root xmlns=\"urn:schemas-upnp-org:device-1-0\" configId=\"0\">"
+		"<root xmlns=\"urn:schemas-upnp-org:device-1-0\" configId=\"1\">"
 		"<specVersion><major>1</major><minor>1</minor></specVersion>"
 		"<device><deviceType>urn:ses-com:device:SatIPServer:1</deviceType>"
 		"<friendlyName>%s</friendlyName><manufacturer>cata</manufacturer>"
@@ -1311,7 +1336,7 @@ int read_http(sockets *s)
 	LOG("read HTTP from %d sid: %d: ", s->sock, s->sid);
 	LOGM("%s", s->buf);
 
-	split(arg, (char *)s->buf, 50, ' ');
+	split(arg, (char *)s->buf, ARRAY_SIZE(arg), ' ');
 	//      LOG("args: %s -> %s -> %s",arg[0],arg[1],arg[2]);
 	if (strncmp(arg[0], "GET", 3) && strncmp(arg[0], "POST", 4) && !is_head)
 		REPLY_AND_RETURN(503);
@@ -1434,7 +1459,7 @@ int ssdp_discovery(sockets *s)
 				  "CACHE-CONTROL: max-age=1800\r\n"
 				  "LOCATION: http://%s/%s\r\n"
 				  "NT: %s\r\n"
-				  "NTS: ssdp:alive \r\n"
+				  "NTS: ssdp:alive\r\n"
 				  "SERVER: Linux/1.0 UPnP/1.1 %s/%s\r\n"
 				  "USN: uuid:%s%s\r\n"
 				  "BOOTID.UPNP.ORG: %d\r\n"
@@ -1520,7 +1545,7 @@ int ssdp_reply(sockets *s)
 		return 0;
 	}
 
-		// not my uuid
+	// not my uuid
 
 #ifdef AXE
 	axe_set_network_led(1);
@@ -1626,9 +1651,9 @@ extern int sock_signal;
 
 int main(int argc, char *argv[])
 {
-	int sock_bw, sock_satip, rv, devices;
+	int sock_bw, rv, devices;
 	main_tid = get_tid();
-	thread_name = "main";
+	strcpy(thread_name, "main");
 	set_options(argc, argv);
 	if ((rv = init_utils(argv[0])))
 	{
@@ -1691,6 +1716,7 @@ int main(int argc, char *argv[])
 #ifndef DISABLE_SATIPCLIENT
 	if (opts.satip_xml)
 	{
+		int sock_satip;
 		if (0 > (sock_satip = sockets_add(SOCK_TIMEOUT, NULL, -1, TYPE_UDP, NULL, NULL, (socket_action)satip_getxml)))
 			FAIL("sockets_add failed for satip_xml retrieval");
 
@@ -1810,7 +1836,7 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 	if (s->type != TYPE_HTTP && get_sid(s->sid) && ah && !strstr(ah, "Session") && rc != 454)
 		sprintf(sess_id, "\r\nSession: %010d", get_session_id(s->sid));
 	if (s->type != TYPE_HTTP && cseq > 0)
-		sprintf(scseq, "\r\nCseq: %d", cseq);
+		sprintf(scseq, "\r\nCSeq: %d", cseq);
 
 	if (lr > 0)
 		lresp = snprintf(resp, sizeof(resp) - 1, reply, proto, rc, d,
@@ -1854,4 +1880,4 @@ _symbols minisatip_sym[] =
 		{"uuid", VAR_STRING, uuid, 0, 0, 0},
 		{"http_port", VAR_INT, &opts.http_port, 1, 0, 0},
 		{"version", VAR_STRING, &version, 1, 0, 0},
-		{NULL, 0, NULL, 0, 0}};
+		{NULL, 0, NULL, 0, 0, 0}};

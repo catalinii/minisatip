@@ -19,7 +19,7 @@ make EXTRA_CFLAGS=....
 
 Examples:
 -------
-- In order to listen to a radio after minisatip is started open the following URL in your favourite media player:
+- In order to listen to a radio after minisatip is started open the following URL in your favorite media player:
 	- on Hotbird 13E: "http://MINISATIP_HOST:8080/?msys=dvbs&freq=11623&pol=v&sr=27500&pids=0,10750,254"
 	- Astra 19.2E: "http://MINISATIP_HOST:8080/?msys=dvbs&freq=12266&pol=h&sr=27500&pids=0,851"	
 

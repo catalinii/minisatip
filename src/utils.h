@@ -1,7 +1,7 @@
 #ifndef UTILS_H
 #define UTILS_H
 #define _GNU_SOURCE
-#include "pthread.h"
+#include <pthread.h>
 
 #include <sys/types.h>
 #include <sys/uio.h>
@@ -138,12 +138,13 @@ int64_t getTick();
 int64_t getTickUs();
 void join_thread();
 void add_join_thread(pthread_t t);
-int init_utils(char *argv0);
-void hexdump(char *log_message, void *addr, int len);
+int init_utils(char *arg0);
+void _hexdump(char *desc, void *addr, int len);
 uint32_t crc_32(const uint8_t *data, int datalen);
-void dump_packets(char *message, unsigned char *b, int len, int packet_offset);
+void _dump_packets(char *message, unsigned char *b, int len, int packet_offset);
 int get_index_hash_search(int start_pos, void *p, int max, int struct_size, uint32_t key, uint32_t value);
 int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, char *cc, int pid);
+void write_buf_to_file(char *file, uint8_t *buf, int len);
 
 // Hash function from https://stackoverflow.com/questions/664014/what-integer-hash-function-are-good-that-accepts-an-integer-hash-key
 static inline uint32_t hash(uint32_t x)
@@ -190,6 +191,13 @@ static inline int get_index_hash(void *p, int max, int struct_size, uint32_t key
 	}
 #define DEBUGM(a, ...) DEBUGL(DEFAULT_LOG, a, ##__VA_ARGS__)
 
+#define dump_packets(message, b, len, packet_offset) \
+	if (DEFAULT_LOG & opts.debug)                    \
+	_dump_packets(message, b, len, packet_offset)
+#define hexdump(message, b, len)  \
+	if (DEFAULT_LOG & opts.debug) \
+	_hexdump(message, b, len)
+
 #define LOG0(a, ...)                                \
 	{                                               \
 		_log(__FILE__, __LINE__, a, ##__VA_ARGS__); \
@@ -216,6 +224,8 @@ static inline int get_index_hash(void *p, int max, int struct_size, uint32_t key
 		int __r = snprintf((buf) + ptr, (size)-ptr, fmt); \
 		ptr = __r >= (size)-ptr ? (size)-1 : ptr + __r;   \
 	} while (0)
+
+#define strcatf(buf, ptr, fmt, ...) strlcatf(buf, sizeof(buf) - 1, ptr, fmt, ##__VA_ARGS__)
 
 #define SAFE_STRCPY(a, b)                                                  \
 	{                                                                      \
@@ -258,6 +268,8 @@ static inline int get_index_hash(void *p, int max, int struct_size, uint32_t key
 #define LOG_DVB (1 << 17)
 
 typedef ssize_t (*mywritev)(int fd, const struct iovec *io, int len);
+
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
 
 #ifdef TESTING
 

@@ -90,7 +90,8 @@ char *fe_fec[] =
 
 char *fe_modulation[] =
 	{"qpsk", "16qam", "32qam", "64qam", "128qam", "256qam", " ", // auto
-	 "8vsb", "16vsb", "8psk", "16apsk", "32apsk", "dqpsk",
+	 "8vsb", "16vsb", "8psk", "16apsk", "32apsk", "64apsk", "128apsk", "256apsk",
+	 "dqpsk",
 	 NULL};
 
 char *fe_tmode[] =
@@ -120,6 +121,10 @@ char *fe_pol[] =
 	{"none", "v", "h", "r", "l",
 	 NULL};
 
+char *fe_pls_mode[] =
+	{"root", "gold", "combo",
+	 NULL};
+
 #define make_func(a)                           \
 	char *get_##a(int i)                       \
 	{                                          \
@@ -142,6 +147,7 @@ make_func(gi);
 make_func(specinv);
 make_func(inversion);
 make_func(pol);
+make_func(pls_mode);
 
 #define INVALID_URL(a) \
 	{                  \
@@ -177,7 +183,9 @@ int detect_dvb_parameters(char *s, transponder *tp)
 	tp->diseqc = -1;
 	tp->c2tft = -1;
 	tp->ds = -1;
-	tp->plp = -1;
+	tp->plp_isi = TP_VALUE_UNSET;
+	tp->pls_mode = -1;
+	tp->pls_code = -1;
 
 	tp->pids = tp->apids = tp->dpids = tp->x_pmt = NULL;
 
@@ -192,7 +200,7 @@ int detect_dvb_parameters(char *s, transponder *tp)
 		init_dvb_parameters(tp);
 
 	LOG("detect_dvb_parameters (S)-> %s", s);
-	la = split(arg, s, 20, '&');
+	la = split(arg, s, ARRAY_SIZE(arg), '&');
 
 	for (i = 0; i < la; i++)
 	{
@@ -228,8 +236,13 @@ int detect_dvb_parameters(char *s, transponder *tp)
 			tp->c2tft = map_int(arg[i] + 6, NULL);
 		if (strncmp("ds=", arg[i], 3) == 0)
 			tp->ds = map_int(arg[i] + 3, NULL);
-		if (strncmp("plp=", arg[i], 4) == 0)
-			tp->plp = map_int(arg[i] + 4, NULL);
+		if (strncmp("plp=", arg[i], 4) == 0 ||
+			strncmp("isi=", arg[i], 4) == 0)
+			tp->plp_isi = map_int(arg[i] + 4, NULL);
+		if (strncmp("plsm=", arg[i], 5) == 0)
+			tp->pls_mode = map_int(arg[i] + 5, fe_pls_mode);
+		if (strncmp("plsc=", arg[i], 5) == 0)
+			tp->pls_code = map_int(arg[i] + 5, NULL);
 
 		if (strncmp("x_pmt=", arg[i], 6) == 0)
 			tp->x_pmt = arg[i] + 6;
@@ -248,7 +261,7 @@ int detect_dvb_parameters(char *s, transponder *tp)
 		tp->pids = (char *)def_pids;
 	}
 
-	if (tp->pids && strncmp(tp->pids, "none", 3) == 0)
+	if (tp->pids && strncmp(tp->pids, "none", 4) == 0)
 		tp->pids = "";
 
 	//      if(!msys)INVALID_URL("no msys= found in URL");
@@ -275,6 +288,9 @@ void init_dvb_parameters(transponder *tp)
 	tp->mtype = QAM_AUTO;
 	tp->plts = PILOT_AUTO;
 	tp->fec = FEC_AUTO;
+	tp->ds = TP_VALUE_UNSET;
+	tp->plp_isi = TP_VALUE_UNSET;
+	tp->pls_mode = TP_VALUE_UNSET;
 }
 
 void copy_dvb_parameters(transponder *s, transponder *d)
@@ -321,10 +337,14 @@ void copy_dvb_parameters(transponder *s, transponder *d)
 		d->diseqc = s->diseqc;
 	if (s->c2tft != -1)
 		d->c2tft = s->c2tft;
-	if (s->ds != -1)
+	if (s->ds != TP_VALUE_UNSET)
 		d->ds = s->ds;
-	if (s->plp != -1)
-		d->plp = s->plp;
+	if (s->plp_isi != TP_VALUE_UNSET)
+		d->plp_isi = s->plp_isi;
+	if (s->pls_mode != TP_VALUE_UNSET)
+		d->pls_mode = s->pls_mode;
+	if (s->pls_code != -1)
+		d->pls_code = s->pls_code;
 
 	d->x_pmt = s->x_pmt;
 	d->apids = s->apids;
@@ -506,7 +526,9 @@ int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol, int hiban
 		posu = pos / 4;
 	}
 
+	cmd.msg[1] = d->addr;
 	cmd.msg[3] = 0xf0 | (((posc << 2) & 0x0c) | (hiband ? 1 : 0) | (pol ? 2 : 0));
+	uncmd.msg[1] = d->addr;
 	uncmd.msg[3] = 0xf0 | (posu & 0x0f);
 
 	LOGM("send_diseqc fd %d, pos = %d (c %d u %d), pol = %d, hiband = %d",
@@ -554,16 +576,17 @@ int send_unicable(adapter *ad, int fd, int freq, int pos, int pol, int hiband, d
 {
 	struct dvb_diseqc_master_cmd cmd =
 		{
-			{0xe0, 0x11, 0x5a, 0x00, 0x00}, 5};
+			{0xe0, 0x10, 0x5a, 0x00, 0x00}, 5};
 	int t;
 	int committed_no = d->committed_no;
 
 	t = (freq + d->ufreq + 2) / 4 - 350;
 
+	cmd.msg[1] = d->addr;
 	cmd.msg[3] = ((t & 0x0300) >> 8) | (d->uslot << 5) | (pos ? 0x10 : 0) | (hiband ? 4 : 0) | (pol ? 8 : 0);
 	cmd.msg[4] = t & 0xff;
 
-	if (d->pin)
+	if (d->pin > 0 && d->pin < 256)
 	{
 		cmd.msg_len = 6;
 		cmd.msg[2] = 0x5C;
@@ -571,8 +594,8 @@ int send_unicable(adapter *ad, int fd, int freq, int pos, int pol, int hiband, d
 	}
 
 	LOGM(
-		"send_unicable fd %d, freq %d, ufreq %d, pos = %d, pol = %d, hiband = %d, slot %d, diseqc => %02x %02x %02x %02x %02x",
-		fd, freq, d->ufreq, pos, pol, hiband, d->uslot, cmd.msg[0],
+		"send_unicable fd %d, freq %d, ufreq %d, pos = %d, pol = %d, hiband = %d, slot %d, pin %d, diseqc => %02x %02x %02x %02x %02x",
+		fd, freq, d->ufreq, pos, pol, hiband, d->uslot, d->pin, cmd.msg[0],
 		cmd.msg[1], cmd.msg[2], cmd.msg[3], cmd.msg[4]);
 	if (ad->wakeup)
 		ad->wakeup(ad, fd, SEC_VOLTAGE_13);
@@ -612,15 +635,15 @@ int send_jess(adapter *ad, int fd, int freq, int pos, int pol, int hiband, diseq
 	cmd.msg[1] |= ((t >> 8) & 0x07);
 	cmd.msg[2] = (t & 0xff);
 	cmd.msg[3] = ((pos & 0x3f) << 2) | (pol ? 2 : 0) | (hiband ? 1 : 0);
-	if (d->pin < 256)
+	if (d->pin > 0 && d->pin < 256)
 	{
 		cmd.msg_len = 5;
 		cmd.msg[0] = 0x71;
 		cmd.msg[4] = d->pin;
 	}
 
-	LOGM("send_jess fd %d, freq %d, ufreq %d, pos = %d, pol = %d, hiband = %d, slot %d, diseqc => %02x %02x %02x %02x %02x",
-		 fd, freq, d->ufreq, pos, pol, hiband, d->uslot, cmd.msg[0],
+	LOGM("send_jess fd %d, freq %d, ufreq %d, pos = %d, pol = %d, hiband = %d, slot %d, pin %d, diseqc => %02x %02x %02x %02x %02x",
+		 fd, freq, d->ufreq, pos, pol, hiband, d->uslot, d->pin, cmd.msg[0],
 		 cmd.msg[1], cmd.msg[2], cmd.msg[3], cmd.msg[4]);
 
 	if (ad->wakeup)
@@ -716,6 +739,13 @@ int setup_switch(adapter *ad)
 
 		if (ad != master) // slave adapter
 		{
+			change_par = 0;
+			if (!master)
+				LOG_AND_RETURN(-1, "master adapter %d of adapter %d is not initialized", ad->master_source, ad->id);
+
+			if (master->old_pol != pol || master->old_hiband != hiband || master->old_diseqc != diseqc)
+				change_par = 1;
+
 			if (!master->sid_cnt && !(master->used & ~(1 << ad->id))) // the master is not used by another adapters
 				do_setup_switch = 1;
 
@@ -748,7 +778,7 @@ int setup_switch(adapter *ad)
 	return freq;
 }
 
-	//#define USE_DVBAPI3
+//#define USE_DVBAPI3
 
 #if DVBAPIVERSION < 0x0500
 #define USE_DVBAPI3
@@ -760,6 +790,23 @@ int setup_switch(adapter *ad)
 		p_cmd[iProp].u.data = (d); \
 		iProp++;                   \
 	}
+
+uint32_t pls_scrambling_index(transponder *tp)
+{
+	if (tp->pls_mode == PLS_MODE_ROOT)
+	{
+		/* convert ROOT code to GOLD code */
+		uint32_t x, g;
+		for (g = 0, x = 1; g < 0x3ffff; g++)
+		{
+			if (tp->pls_code == x)
+				return g;
+			x = (((x ^ (x >> 7)) & 1) << 17) | (x >> 1);
+		}
+		return 0x3ffff;
+	}
+	return tp->pls_code; /* GOLD code 0 (default) */
+}
 
 int dvb_tune(int aid, transponder *tp)
 {
@@ -818,7 +865,16 @@ int dvb_tune(int aid, transponder *tp)
 		ADD_PROP(DTV_PILOT, tp->plts)
 		ADD_PROP(DTV_ROLLOFF, tp->ro)
 #if DVBAPIVERSION >= 0x0502
-		ADD_PROP(DTV_STREAM_ID, tp->plp)
+		if (tp->plp_isi >= 0)
+#if DVBAPIVERSION >= 0x050b /* 5.11 */
+			ADD_PROP(DTV_STREAM_ID, tp->plp_isi)
+#else
+			//In DVBAPI < 5.11 DTV_STREAM_ID takes also the PLS Code and Mode
+			ADD_PROP(DTV_STREAM_ID, tp->plp_isi | (tp->pls_code << 8) | (tp->pls_mode << 26))
+#endif
+#endif
+#if DVBAPIVERSION >= 0x050b /* 5.11 */
+		ADD_PROP(DTV_SCRAMBLING_SEQUENCE_INDEX, pls_scrambling_index(tp))
 #endif
 
 #ifdef USE_DVBAPI3
@@ -828,7 +884,7 @@ int dvb_tune(int aid, transponder *tp)
 		fep.frequency = freq;
 #endif
 
-		LOG0("tuning to %d(%d) pol: %s (%d) sr:%d fec:%s delsys:%s mod:%s rolloff:%s pilot:%s, ts clear=%jd, ts pol=%jd",
+		LOG("tuning to %d(%d) pol: %s (%d) sr:%d fec:%s delsys:%s mod:%s rolloff:%s pilot:%s, ts clear=%jd, ts pol=%jd",
 			 tp->freq, freq, get_pol(tp->pol), tp->pol, tp->sr,
 			 fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype],
 			 fe_rolloff[tp->ro], fe_pilot[tp->plts],
@@ -849,7 +905,8 @@ int dvb_tune(int aid, transponder *tp)
 		ADD_PROP(DTV_TRANSMISSION_MODE, tp->tmode)
 		ADD_PROP(DTV_HIERARCHY, HIERARCHY_AUTO)
 #if DVBAPIVERSION >= 0x0502
-		ADD_PROP(DTV_STREAM_ID, tp->plp & 0xFF)
+		if (tp->plp_isi >= 0)
+			ADD_PROP(DTV_STREAM_ID, tp->plp_isi & 0xFF)
 #endif
 
 // old DVBAPI version 3
@@ -887,7 +944,13 @@ int dvb_tune(int aid, transponder *tp)
 		freq = freq * 1000;
 		ADD_PROP(DTV_SYMBOL_RATE, tp->sr)
 #if DVBAPIVERSION >= 0x0502
-		ADD_PROP(DTV_STREAM_ID, ((tp->ds & 0xFF) << 8) | (tp->plp & 0xFF))
+		if (tp->plp_isi >= 0)
+		{
+			int v = tp->plp_isi & 0xFF;
+			if (tp->ds >= 0)
+				v |= (tp->ds & 0xFF) << 8;
+			ADD_PROP(DTV_STREAM_ID, v);
+		}
 #endif
 		// valid for DD DVB-C2 devices
 
@@ -969,8 +1032,6 @@ int dvb_tune(int aid, transponder *tp)
 		LOG("dvbapi v3 ioctl failed, fd %d, errno %d (%s)", fd_frontend, errno, strerror(errno));
 		return -404;
 	}
-	else
-		return 0;
 #endif
 
 	return 0;
@@ -1078,7 +1139,7 @@ int dvb_demux_set_pid(adapter *a, int i_pid)
 	uint16_t p = i_pid;
 	if (ioctl(fd, DMX_ADD_PID, &p) < 0)
 	{
-		LOG0("failed to add pid %d to fd %d: errno %d, %s", p, fd, errno, strerror(errno));
+		LOG0("failed to add pid %d to fd %d maximum pids %d: errno %d, %s", p, fd, a->active_pids, errno, strerror(errno));
 		return -1;
 	}
 	LOG("AD %d setting demux filter on PID %d for fd %d", a->id, i_pid, fd);
@@ -1118,6 +1179,8 @@ int dvb_psi_read(int socket, void *buf, int len, sockets *ss, int *rb)
 	unsigned char section[4096]; // max section size
 	int r;
 	*rb = 0;
+	//	if(len < sizeof(section) * 1.1)
+	//		return 1;
 	memset(section, 0, sizeof(section));
 	r = read(socket, section + 1, sizeof(section) - 1); // section[0] = 0
 	if (r <= 0)
@@ -1158,7 +1221,7 @@ int dvb_psi_read(int socket, void *buf, int len, sockets *ss, int *rb)
 	//		copy32(section, r, crc);
 	//		r += 4;
 	//	}
-	DEBUGM("%s: len %d, read %d", __FUNCTION__, len, r);
+	DEBUGM("%s: socket %d, master %d, buf %p len %d, read %d", __FUNCTION__, socket, ss->master, buf, len, r);
 	*rb = buffer_to_ts(buf, len, section, r, &p->cc1, pid);
 
 	return 1;
@@ -1215,7 +1278,7 @@ int dvb_set_psi_filter(adapter *a, int i_pid)
 	if (p)
 		p->sock = sock;
 	else
-		LOG0("%s: ould not find pid %d", __FUNCTION__, i_pid)
+		LOG0("%s: could not find pid %d", __FUNCTION__, i_pid)
 	return fd;
 }
 

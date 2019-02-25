@@ -42,7 +42,6 @@
 #include <fcntl.h>
 #include <ctype.h>
 #include <signal.h>
-#include <sys/ucontext.h>
 #include <unistd.h>
 #include <syslog.h>
 #include <stdarg.h>
@@ -328,11 +327,6 @@ char *strip(char *s) // strip spaces from the front of a string
 	return s;
 }
 
-#define LR(s)                         \
-	{                                 \
-		LOG("map_int returns %d", s); \
-		return s;                     \
-	}
 int map_intd(char *s, char **v, int dv)
 {
 	int i, n = dv;
@@ -445,9 +439,9 @@ void set_signal_handler(char *argv0)
 		LOG("Could not set signal SIGINT");
 	}
 
-    if (sigaction(SIGTERM, &sig_action, NULL) != 0) 
+	if (sigaction(SIGTERM, &sig_action, NULL) != 0)
 	{
-		 LOG("Could not set signal SIGTERM");
+		LOG("Could not set signal SIGTERM");
 	}
 	if (signal(SIGHUP, SIG_IGN) != 0)
 	{
@@ -477,7 +471,7 @@ void print_trace(void)
 
 	size = backtrace(array, 10);
 
-	printf("Obtained %zd stack frames.\n", size);
+	printf("Obtained %zu stack frames.\n", size);
 
 	for (i = 0; i < size; i++)
 	{
@@ -612,16 +606,24 @@ mymalloc(int a, char *f, int l)
 	if (x)
 		memset(x, 0, a);
 	LOGM("%s:%d allocation_wrapper malloc allocated %d bytes at %p", f, l, a, x);
+	if (!x)
+		LOG0("Failed allocating %d bytes of memory", a)
 	return x;
 }
 
 void *myrealloc(void *p, int a, char *f, int l)
 {
-        void *x = realloc(p, a);
-        if (!p)
-                memset(x, 0, a);
-        LOGM("%s:%d allocation_wrapper realloc allocated %d bytes from %p -> %p", f, l, a, p, x);
-        return x;
+	void *x = realloc(p, a);
+	if (x)
+		memset(x, 0, a);
+	LOGM("%s:%d allocation_wrapper realloc allocated %d bytes from %p -> %p", f, l, a, p, x);
+	if (!x)
+	{
+		LOG0("Failed allocating %d bytes of memory", a)
+		if (!strcmp(f, "socketworks.c"))
+			LOG0("Try to decrease the parameters -b and/or -B")
+	}
+	return x;
 }
 
 void myfree(void *x, char *f, int l)
@@ -833,7 +835,7 @@ int snprintf_pointer(char *dest, int max_len, int type, void *p,
 		break;
 
 	case VAR_FLOAT:
-		nb = snprintf(dest, max_len, "%f", (*(float *)p) * multiplier);
+		nb = snprintf(dest, max_len, "%f", (double)((*(float *)p) * multiplier));
 		break;
 
 	case VAR_HEX:
@@ -1275,7 +1277,7 @@ int mutex_lock1(char *FILE, int line, SMutex *mutex)
 		LOGM("%s:%d Mutex not enabled %p", FILE, line, mutex);
 		return 1;
 	}
-	if (mutex && mutex->enabled && mutex->state && tid != mutex->tid)
+	if (mutex->enabled && mutex->state && tid != mutex->tid)
 	{
 		LOGM("%s:%d Locking mutex %p already locked at %s:%d tid %x", FILE,
 			 line, mutex, mutex->file, mutex->line, mutex->tid);
@@ -1362,7 +1364,7 @@ int mutex_destroy(SMutex *mutex)
 	int rv;
 	if (opts.no_threads)
 		return 0;
-	if (!mutex->enabled)
+	if (!mutex || !mutex->enabled)
 	{
 		LOG("destroy disabled mutex %p", mutex);
 
@@ -1547,21 +1549,21 @@ int init_utils(char *arg0)
 	return 0;
 }
 
-void hexdump(char *desc, void *addr, int len)
+void _hexdump(char *desc, void *addr, int len)
 {
 	int i, pos = 0, bl = (len * 6 < 100) ? 100 : len * 6;
-	unsigned char buff[17];
-	unsigned char buf[bl];
+	char buff[17];
+	char buf[bl];
 	unsigned char *pc = (unsigned char *)addr;
 
 	if (len == 0)
 	{
-		LOG("  ZERO LENGTH\n");
+		LOG("%s: ZERO LENGTH", desc);
 		return;
 	}
 	if (len < 0)
 	{
-		LOG("  NEGATIVE LENGTH: %i\n", len);
+		LOG("%s: NEGATIVE LENGTH: %i\n", desc, len);
 		return;
 	}
 	memset(buf, 0, bl - 1);
@@ -1574,14 +1576,14 @@ void hexdump(char *desc, void *addr, int len)
 		{
 			// Just don't print ASCII for the zeroth line.
 			if (i != 0)
-				pos += snprintf((char *)buf + pos, bl - pos, "  %s\n", buff);
+				strlcatf(buf, bl, pos, "  %s\n", buff);
 
 			// Output the offset.
-			pos += snprintf((char *)buf + pos, bl - pos, "  %04x ", i);
+			strlcatf(buf, bl, pos, "  %04x ", i);
 		}
 
 		// Now the hex code for the specific character.
-		pos += snprintf((char *)buf + pos, bl - pos, " %02x", pc[i]);
+		strlcatf(buf, bl, pos, " %02x", pc[i]);
 
 		// And store a printable ASCII character for later.
 		if ((pc[i] < 0x20) || (pc[i] > 0x7e))
@@ -1594,12 +1596,12 @@ void hexdump(char *desc, void *addr, int len)
 	// Pad out last line if not exactly 16 characters.
 	while ((i % 16) != 0)
 	{
-		pos += snprintf((char *)buf + pos, bl - pos, "   ");
+		strlcatf(buf, bl, pos, "   ");
 		i++;
 	}
 
 	// And print the final ASCII bit.
-	pos += snprintf((char *)buf + pos, bl - pos, "  %s\n", buff);
+	strlcatf(buf, bl, pos, "  %s\n", buff);
 	if (!desc)
 		LOG("\n%s", buf)
 	else
@@ -1720,7 +1722,7 @@ int http_client(char *url, char *request, void *callback, void *opaque)
 		LOG_AND_RETURN(1, "%s: connect to %s:%d failed", __FUNCTION__, h->host, h->port);
 	http_client_sock = sockets_add(sock, NULL, -1, TYPE_TCP | TYPE_CONNECT, (socket_action)http_client_read, (socket_action)http_client_close, (socket_action)http_client_close);
 	if (http_client_sock < 0)
-		LOG_AND_RETURN(1, "%s: socket_add failed", __FUNCTION__);
+		LOG_AND_RETURN(1, "%s: sockets_add failed", __FUNCTION__);
 	h->opaque = opaque;
 	h->action = callback;
 	set_sockets_sid(http_client_sock, id);
@@ -1780,18 +1782,18 @@ uint32_t crc_32(const uint8_t *data, int datalen)
 	uint32_t crc = 0xFFFFFFFF;
 	if (datalen < 0)
 		return crc;
+	hexdump("crc_32 ", (uint8_t *)data, datalen);
 	while (datalen--)
+	{
 		crc = (crc << 8) ^ crc_tab[((crc >> 24) ^ *data++) & 0xff];
-
+	}
 	return crc;
 }
 
-void dump_packets(char *message, unsigned char *b, int len, int packet_offset)
+void _dump_packets(char *message, unsigned char *b, int len, int packet_offset)
 {
 	int i, pid, cc;
 	uint32_t crc;
-	if ((opts.debug & LOG_DMX) == 0)
-		return;
 
 	for (i = 0; i < len; i += 188)
 	{
@@ -1810,7 +1812,7 @@ int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, char *cc,
 	while ((srclen > 0) && (len < dstsize))
 	{
 		if (dstsize - len < 188)
-			LOG_AND_RETURN(-1, "Not enough space to copy pid %d, len %d from %d, srclen %d", pid, len, dstsize,srclen)
+			LOG_AND_RETURN(-1, "Not enough space to copy pid %d, len %d from %d, srclen %d", pid, len, dstsize, srclen)
 		b = dest + len;
 		*cc = ((*cc) + 1) % 16;
 		b[0] = 0x47;
@@ -1827,10 +1829,24 @@ int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, char *cc,
 			memset(b + left + 4, -1, 184 - left);
 		if (opts.debug & DEFAULT_LOG)
 		{
-			LOG("pid %d, left -> %d, len, cc %d", pid, left, *cc);
+			LOG("pid %d, left -> %d, len %d, cc %d", pid, left, len, *cc);
 			hexdump("packet -> ", b, 188);
 		}
 		len += 188;
 	}
 	return len;
 }
+
+/*
+void write_buf_to_file(char *file, uint8_t *buf, int len)
+{
+	int x = open(file, O_RDWR);
+	if (x >= 0)
+	{
+		write(x, buf, len);
+		close(x);
+	}
+	else
+		LOG("Could not write %d bytes to %s: %d", len, file, errno);
+}
+*/
