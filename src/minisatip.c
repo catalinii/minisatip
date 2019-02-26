@@ -220,14 +220,14 @@ char *built_info[] =
 		"Built with netceiver",
 #endif
 #ifdef DISABLE_DDCI
-                "Built without ddci",
+		"Built without ddci",
 #else
-                "Built with ddci",
+		"Built with ddci",
 #endif
 #ifdef DISABLE_T2MI
-                "Built without t2mi",
+		"Built without t2mi",
 #else
-                "Built with t2mi",
+		"Built with t2mi",
 #endif
 #ifdef AXE
 		"Built for satip-axe",
@@ -240,7 +240,7 @@ void print_version(int use_log)
 	int i;
 	memset(buf, 0, sizeof(buf));
 	sprintf(buf, "%s version %s, compiled with s2api version: %04X",
-				   app_name, version, LOGDVBAPIVERSION);
+			app_name, version, LOGDVBAPIVERSION);
 	if (!use_log)
 		puts(buf);
 	else
@@ -517,7 +517,7 @@ void set_options(int argc, char *argv[])
 	opts.udp_threshold = 25;
 	opts.tcp_threshold = 50;
 	opts.dvbapi_port = 0;
-	opts.dvbapi_host = NULL;
+	memset(opts.dvbapi_host, 0, sizeof(opts.dvbapi_host));
 	opts.drop_encrypted = 1;
 	opts.rtsp_port = 554;
 #ifndef DISABLE_SATIPCLIENT
@@ -544,6 +544,7 @@ void set_options(int argc, char *argv[])
 	opts.pmt_scan = 1;
 	opts.strength_multiplier = 1;
 	opts.snr_multiplier = 1;
+
 	// set 1 to read TS packets from /dev/dvb/adapterX/demuxY instead of /dev/dvb/adapterX/dvrY
 	// set to 2 to set PSI and PES filters using different ioctl
 	opts.use_demux_device = 0;
@@ -834,16 +835,19 @@ void set_options(int argc, char *argv[])
 			LOG("%s was not compiled with DVBAPI support, please install libdvbcsa (libdvbcsa-dev in Ubuntu) and change the Makefile", app_name);
 			exit(0);
 #else
-			char *sep1 = strchr(optarg, ':');
+			char buf[100];
+			memset(buf, 0, sizeof(buf));
+			strncpy(buf, optarg, sizeof(buf));
+			char *sep1 = strchr(buf, ':');
 			if (sep1 != NULL)
 			{
 				*sep1 = 0;
-				opts.dvbapi_host = optarg;
+				strncpy(opts.dvbapi_host, buf, sizeof(opts.dvbapi_host) - 1);
 				opts.dvbapi_port = map_int(sep1 + 1, NULL);
 			}
 			else
 			{
-				opts.dvbapi_host = optarg;
+				strncpy(opts.dvbapi_host, optarg, sizeof(opts.dvbapi_host) - 1);
 				opts.dvbapi_port = 9000;
 			}
 #endif

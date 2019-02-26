@@ -428,23 +428,23 @@ int dvbapi_send_pmt(SKey *k)
 	}
 	else
 	{
-                adapter *ad = get_adapter(k->adapter);
-                int demux = 0;
-                int adapter = 0;
-                if (ad)
-                {
-                        demux = ad->fn;
-                        adapter = ad->pa;
-                }
-                LOG("Using adapter %d and demux %d for local socket (key adapter %d)", adapter, demux, k->adapter);
-                copy32(buf, 22, 0x01820200);
-                buf[25] = 1 << demux;
-                buf[26] = demux;
-                copy16(buf, 27, 0x8402);  // PMT PID
-                copy16(buf, 29, pmt->pid);
-                copy16(buf, 31, 0x8301); // ADAPTER ID, works only in newer versions (> 11500)
-                buf[33] = adapter;
-                memcpy(buf + 34, k->pi, k->pi_len);
+		adapter *ad = get_adapter(k->adapter);
+		int demux = 0;
+		int adapter = 0;
+		if (ad)
+		{
+			demux = ad->fn;
+			adapter = ad->pa;
+		}
+		LOG("Using adapter %d and demux %d for local socket (key adapter %d)", adapter, demux, k->adapter);
+		copy32(buf, 22, 0x01820200);
+		buf[25] = 1 << demux;
+		buf[26] = demux;
+		copy16(buf, 27, 0x8402); // PMT PID
+		copy16(buf, 29, pmt->pid);
+		copy16(buf, 31, 0x8301); // ADAPTER ID, works only in newer versions (> 11500)
+		buf[33] = adapter;
+		memcpy(buf + 34, k->pi, k->pi_len);
 		len = 34 + k->pi_len;
 	}
 
@@ -460,7 +460,7 @@ int dvbapi_send_pmt(SKey *k)
 		LOGM("Key %d adding stream pid %d (%X) type %d (%x)", k->id, pid, pid, type, type);
 	}
 	copy16(buf, 4, len - 6)
-	TEST_WRITE(write(sock, buf, len), len);
+		TEST_WRITE(write(sock, buf, len), len);
 	return 0;
 }
 
@@ -533,7 +533,7 @@ int connect_dvbapi(void *arg)
 
 	dvbapi_is_enabled = 0;
 
-	if (!opts.dvbapi_port || !opts.dvbapi_host)
+	if (!opts.dvbapi_port || !opts.dvbapi_host[0])
 		return 0;
 
 	if (!is_adapter_active())
