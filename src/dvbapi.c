@@ -399,7 +399,7 @@ int dvbapi_reply(sockets *s)
 int dvbapi_send_pmt(SKey *k)
 {
 	unsigned char buf[1500];
-	int len;
+	int len, i;
 	SPMT *pmt = get_pmt(k->pmt_id);
 	if (!pmt)
 		return 1;
@@ -414,7 +414,6 @@ int dvbapi_send_pmt(SKey *k)
 
 	if (network_mode)
 	{
-		int i;
 		copy32(buf, 12, 0x01820200);
 		buf[15] = k->id + opts.dvbapi_offset;
 		buf[16] = k->id + opts.dvbapi_offset;
@@ -424,46 +423,43 @@ int dvbapi_send_pmt(SKey *k)
 		copy16(buf, 25, k->onid);
 		copy16(buf, 27, 0x8402); // PMT PID
 		copy16(buf, 29, k->pmt_pid);
-
 		memcpy(buf + 31, k->pi, k->pi_len);
 		len = 31 + k->pi_len;
-		copy16(buf, 10, len - 12);
-		for (i = 0; i < pmt->stream_pids; i++)
-		{
-			len += 5;
-			int type = pmt->stream_pid[i].type;
-			int pid = pmt->stream_pid[i].pid;
-			buf[len - 5] = type;
-			copy16(buf, len - 4, pid);
-			copy16(buf, len - 2, 0);
-			LOGM("Key %d adding stream pid %d (%X) type %d (%x)", k->id, pid, pid, type, type);
-		}
-		copy16(buf, 4, len - 6)
 	}
 	else
 	{
-		adapter *ad = get_adapter(k->adapter);
-		int demux = 0;
-		int adapter = 0;
-		if (ad)
-		{
-			demux = ad->fn;
-			adapter = ad->pa;
-		}
-		LOG("Using adapter %d and demux %d for local socket (key adapter %d)", adapter, demux, k->adapter);
-		copy32(buf, 22, 0x01820200);
-		buf[25] = 1 << demux;
-		buf[26] = demux;
-		copy16(buf, 27, 0x8402);
-		copy16(buf, 29, pmt->pid);
-		copy16(buf, 31, 0x8301);
-		buf[33] = adapter;
-		memcpy(buf + 34, k->pi, k->pi_len);
-		len = 34 - 6 + k->pi_len + 2;
-		copy16(buf, 4, len);
-		copy16(buf, 10, len - 11);
-		len += 6;
+                adapter *ad = get_adapter(k->adapter);
+                int demux = 0;
+                int adapter = 0;
+                if (ad)
+                {
+                        demux = ad->fn;
+                        adapter = ad->pa;
+                }
+                LOG("Using adapter %d and demux %d for local socket (key adapter %d)", adapter, demux, k->adapter);
+                copy32(buf, 22, 0x01820200);
+                buf[25] = 1 << demux;
+                buf[26] = demux;
+                copy16(buf, 27, 0x8402);  // PMT PID
+                copy16(buf, 29, pmt->pid);
+                copy16(buf, 31, 0x8301); // ADAPTER ID, works only in newer versions (> 11500)
+                buf[33] = adapter;
+                memcpy(buf + 34, k->pi, k->pi_len);
+		len = 34 + k->pi_len;
 	}
+
+	copy16(buf, 10, len - 12);
+	for (i = 0; i < pmt->stream_pids; i++)
+	{
+		len += 5;
+		int type = pmt->stream_pid[i].type;
+		int pid = pmt->stream_pid[i].pid;
+		buf[len - 5] = type;
+		copy16(buf, len - 4, pid);
+		copy16(buf, len - 2, 0);
+		LOGM("Key %d adding stream pid %d (%X) type %d (%x)", k->id, pid, pid, type, type);
+	}
+	copy16(buf, 4, len - 6)
 	TEST_WRITE(write(sock, buf, len), len);
 	return 0;
 }
