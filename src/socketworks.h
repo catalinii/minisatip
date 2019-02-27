@@ -111,7 +111,7 @@ void set_sockets_sid(int id, int sid);
 void sockets_set_opaque(int id, void *opaque, void *opaque2, void *opaque3);
 void sockets_force_close(int id);
 void sockets_set_master(int slave, int master);
-extern __thread char *thread_name;
+extern __thread char thread_name[];
 extern __thread pthread_t tid;
 
 static inline sockets *get_sockets(int i)

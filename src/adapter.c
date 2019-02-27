@@ -35,6 +35,7 @@
 #include "dvbapi.h"
 #include "utils.h"
 #include "pmt.h"
+#include "stream.h"
 
 #ifndef DISABLE_SATIPCLIENT
 #include "satipc.h"
@@ -75,6 +76,7 @@ adapter *adapter_alloc()
 
 	/* diseqc setup */
 	ad->diseqc_param.fast = opts.diseqc_fast;
+	ad->diseqc_param.addr = opts.diseqc_addr;
 	ad->diseqc_param.committed_no = opts.diseqc_committed_no;
 	ad->diseqc_param.uncommitted_no = opts.diseqc_uncommitted_no;
 
@@ -165,7 +167,7 @@ int adapter_timeout(sockets *s)
 	}
 
 #ifndef AXE
-	int64_t rtime = getTick(), max_close = 0;
+	int64_t rtime = getTick(), max_close = rtime - ad->adapter_timeout + 2000;
 	int i;
 	if (opts.no_threads)
 	{
@@ -175,10 +177,21 @@ int adapter_timeout(sockets *s)
 			{
 				if (rtime - ad1->rtime < s->timeout_ms)
 					do_close = 0;
-				if (ad1 && max_close < ad1->rtime)
+				if (max_close < ad1->rtime)
+				{
 					max_close = ad1->rtime;
+					LOGM("max_close set to %jd for adapter %d", max_close, i);
+				}
 			}
 	}
+	for (i = 0; i < MAX_ADAPTERS; i++)
+		if (a[i] && (a[i]->master_source == ad->id) && ad->enabled && a[i]->enabled)
+		{
+			LOG("adapter %d is already used by a slave adapters %d, used %x", ad->id, a[i]->id, a[i]->used);
+			do_close = 0;
+			break;
+		}
+
 	LOG("Requested adapter %d close due to timeout %d sec, result %d max_rtime %jd",
 		s->sid, ad->adapter_timeout / 1000, do_close, max_close);
 	if (!do_close)
@@ -203,11 +216,11 @@ int close_adapter_for_socket(sockets *s)
 		ad->sock = -1;
 		s->sid = -1;
 	}
-	if (ad)
-		ad->rtime = getTick();
-	if (ad)
-		return close_adapter(aid);
-	return 1;
+	if (!ad)
+		return 1;
+
+	ad->rtime = getTick();
+	return close_adapter(aid);
 }
 
 int init_complete = 0;
@@ -217,6 +230,7 @@ int init_hw(int i)
 {
 	int64_t st, et;
 	adapter *ad;
+	int rv = 0;
 	if (i < 0 || i >= MAX_ADAPTERS)
 		return 3;
 
@@ -230,9 +244,15 @@ int init_hw(int i)
 	mutex_init(&ad->mutex);
 	mutex_lock(&ad->mutex);
 	if (is_adapter_disabled(i))
+	{
+		rv = 3;
 		goto NOK;
+	}
 	if (ad->enabled)
+	{
+		rv = 4;
 		goto NOK;
+	}
 
 	ad->sock = -1;
 	ad->id = i;
@@ -243,16 +263,21 @@ int init_hw(int i)
 
 	st = getTick();
 	if (!ad->open)
+	{
+		rv = 5;
 		goto NOK;
+	}
 
 #ifdef ENIGMA
 	if (ad->dmx_source == -1)
 		ad->dmx_source = ad->id;
 #endif
 
-	if (ad->open(ad))
+	if ((rv = ad->open(ad)))
 	{
 		init_complete = 0;
+		LOG("Opening adapter %d failed with error %d", ad->id, rv);
+		rv |= 0x600;
 		goto NOK;
 	}
 	ad->enabled = 1;
@@ -275,6 +300,7 @@ int init_hw(int i)
 				opts.adapter_buffer, i);
 			close_adapter(i);
 		}
+		rv = 7;
 		goto NOK;
 	}
 	memset(ad->buf, 0, opts.adapter_buffer + 1);
@@ -340,7 +366,7 @@ int init_hw(int i)
 	return 0;
 
 NOK:
-	LOG("opening adapter %i failed", ad->id);
+	LOG("opening adapter %i failed with exit code %d", ad->id, rv);
 	mutex_unlock(&ad->mutex);
 	return 1;
 }
@@ -386,6 +412,8 @@ int init_all_hw()
 	return num_adapters;
 }
 
+// this method needs to close the adapter otherwise the adapter will be in a half closed state
+
 int close_adapter(int na)
 {
 	adapter *ad;
@@ -402,13 +430,6 @@ int close_adapter(int na)
 		mutex_unlock(&ad->mutex);
 		return 1;
 	}
-	for (i = 0; i < MAX_ADAPTERS; i++)
-		if (a[i] && (a[i]->master_source == ad->id) && ad->enabled)
-		{
-			LOG("adapter %d is already used by a slave adapters %d, used %x", ad->id, a[i]->id, a[i]->used);
-			mutex_unlock(&ad->mutex);
-			return 1;
-		}
 
 	LOG("closing adapter %d  -> fe:%d dvr:%d, sock:%d, fe_sock:%d", na, ad->fe, ad->dvr, ad->sock, ad->fe_sock);
 	ad->enabled = 0;
@@ -426,7 +447,7 @@ int close_adapter(int na)
 		pmt_close_device(ad);
 #endif
 	ad->ca_mask = 0;
-	ad->fe = 0;
+	ad->fe = -1;
 	ad->dvr = 0;
 	ad->strength = 0;
 	ad->snr = 0;
@@ -445,6 +466,12 @@ int close_adapter(int na)
 	mutex_destroy(&ad->mutex);
 	//      if(a[na]->buf)free1(a[na]->buf);a[na]->buf=NULL;
 	LOG("done closing adapter %d", na);
+	for (i = 0; i < MAX_ADAPTERS; i++)
+		if (a[i] && (a[i]->master_source == ad->id) && ad->enabled && a[i]->enabled)
+		{
+			LOG("Slave adapter %d of adapter %d will be closed", i, ad->id);
+			request_adapter_close(a[i]);
+		}
 	return 1;
 }
 
@@ -525,7 +552,7 @@ int getAdaptersCount()
 		memset(&fe_map, -1, sizeof(fe_map));
 
 		k = 0;
-		for (i = 0; i < sizeof(order); i++)
+		for (i = 0; i < ARRAY_SIZE(order); i++)
 		{
 			int sys = order[i];
 			for (j = 0; j < ifes[sys]; j++)
@@ -623,23 +650,23 @@ int compare_slave_parameters(adapter *ad, transponder *tp)
 				adapter *ad2 = get_adapter(i);
 				if (!ad2)
 				{
-					LOG("adapter %d used is set for adapter %d but it is disabled, clearing");
+					LOG("adapter %d used is set for adapter %d but it is disabled, clearing", ad->id, i);
 					ad->used &= ~(1 << i);
 					continue;
 				}
-				if (ad2->old_pol == pol && ad2->old_hiband == hiband && ad2->old_diseqc == diseqc)
-					return 0; // slave parameters matches with the required parameters
+				if (ad2->old_pol != pol || ad2->old_hiband != hiband || ad2->old_diseqc != diseqc)
+					return 1; // slave parameters matches with the required parameters
 			}
 	}
 
 	// master adapter used by slave adapters
 	if (master)
 	{
-		if (master->old_pol == pol && master->old_hiband == hiband && master->old_diseqc == diseqc)
+		if (master->old_pol != pol || master->old_hiband != hiband || master->old_diseqc != diseqc)
 			return 1; // master parameters matches with the required parameters
 	}
 	LOGM("%s: adapter %d used %d master %d used %d (pol %d, band %d, diseqc %d) not compatible with freq %d, pol %d band %d diseqc %d", __FUNCTION__, ad->id, ad->used, master ? master->id : ad->master_source, master ? master->used : -1, ad->old_pol, ad->old_hiband, ad->old_diseqc, freq, pol, hiband, diseqc);
-	return 1;
+	return 0;
 }
 
 int get_free_adapter(transponder *tp)
@@ -651,7 +678,7 @@ int get_free_adapter(transponder *tp)
 
 	adapter *ad = a[0];
 
-	if ((fe > 0) && (fe <= sizeof(fe_map)) && (fe_map[fe - 1] >= 0))
+	if ((fe > 0) && (fe <= ARRAY_SIZE(fe_map)) && (fe_map[fe - 1] >= 0))
 	{
 		fe = fe_map[fe - 1];
 		ad = a[fe];
@@ -760,11 +787,17 @@ int set_adapter_for_stream(int sid, int aid)
 void close_adapter_for_stream(int sid, int aid)
 {
 	adapter *ad;
+	streams *s = get_sid(sid);
 	int is_slave = 1;
 	if (!(ad = get_adapter(aid)))
 		return;
 
 	mutex_lock(&ad->mutex);
+
+	if (s && s->adapter == aid)
+		s->adapter = -1;
+	else if (s && s->adapter != aid)
+		LOG("%s adapter mismatch: got %d expected %d", __FUNCTION__, s->adapter, aid);
 
 	if (ad->master_sid == sid)
 	{
@@ -773,12 +806,13 @@ void close_adapter_for_stream(int sid, int aid)
 	}
 	if (ad->sid_cnt > 0)
 		ad->sid_cnt--;
-	LOG("closed adapter %d for stream %d m:%d s:%d, restart_needed %d", aid, sid, ad->master_sid,
+	LOG("closed adapter %d for stream %d m:%d sid_cnt:%d, restart_needed %d", aid, sid, ad->master_sid,
 		ad->sid_cnt, ad->restart_needed);
 	// delete the attached PIDs as well
 	if (ad->sid_cnt == 0)
 	{
 		is_slave = 0;
+		ad->master_sid = -1;
 		mark_pids_deleted(aid, -1, NULL);
 #ifdef AXE
 		free_axe_input(ad);
@@ -815,16 +849,16 @@ int update_pids(int aid)
 	ad->updating_pids = 1;
 #ifndef DISABLE_PMT
 	for (i = 0; i < MAX_PIDS; i++)
-		if ((ad->pids[i].flags == 3))
+		if (ad->pids[i].flags == 3)
 			pmt_pid_del(ad, ad->pids[i].pid);
 
 	for (i = 0; i < MAX_PIDS; i++)
-		if ((ad->pids[i].flags == 2))
+		if (ad->pids[i].flags == 2)
 			pmt_pid_add(ad, ad->pids[i].pid, 0);
 #endif
 
 	for (i = MAX_PIDS - 1; i >= 0; i--)
-		if ((ad->pids[i].flags == 3))
+		if (ad->pids[i].flags == 3)
 		{
 			if (dp)
 				dump_pids(aid);
@@ -854,23 +888,25 @@ int update_pids(int aid)
 				dump_pids(aid);
 			dp = 0;
 			if (ad->pids[i].fd <= 0)
+			{
 				if ((ad->pids[i].fd = ad->set_pid(ad, ad->pids[i].pid)) < 0)
 				{
 
 					int new_max_pids = ad->active_pids - 2;
 					if (new_max_pids > 0)
 						opts.max_pids = new_max_pids;
-					LOG("Maximum pid filter reached, lowering the value to %d", opts.max_pids);
+					LOG0("Maximum pid filter reached, lowering the value to %d", opts.max_pids);
 					break;
 				}
+				ad->active_pids++;
+			}
 			ad->pids[i].flags = 1;
 			if (ad->pids[i].pid == 0)
 				ad->pat_processed = 0;
 			ad->pids[i].packets = 0;
-			ad->pids[i].cc = 255;
+			ad->pids[i].cc = -1;
 			ad->pids[i].cc_err = 0;
 			ad->pids[i].dec_err = 0;
-			ad->active_pids++;
 		}
 	if (ad->commit)
 		ad->commit(ad);
@@ -881,7 +917,9 @@ int update_pids(int aid)
 
 void post_tune(adapter *ad)
 {
+#if !defined(DISABLE_PMT) || !defined(DISABLE_T2MI)
 	int aid = ad->id;
+#endif
 #ifndef DISABLE_PMT
 	SPid *p = find_pid(aid, 0);
 	SPid *p_all = find_pid(aid, 8192);
@@ -922,6 +960,8 @@ int tune(int aid, int sid)
 		ad->status = -1;
 		ad->status_cnt = 0;
 		ad->wait_new_stream = 1;
+		ad->strength = 0;
+		ad->snr = 0;
 		flush_data = 1;
 		ad->is_t2mi = 0;
 		if (ad->restart_when_tune)
@@ -1041,7 +1081,7 @@ void mark_pids_deleted(int aid, int sid, char *pids) //pids==NULL -> delete all 
 		pids ? pids : "NULL");
 	if (pids)
 	{
-		la = split(arg, pids, MAX_PIDS, ',');
+		la = split(arg, pids, ARRAY_SIZE(arg), ',');
 		for (i = 0; i < la; i++)
 		{
 			pid = map_int(arg[i], NULL);
@@ -1065,7 +1105,7 @@ int mark_pid_add(int sid, int aid, int _pid)
 	int found = 0;
 	SPid *p;
 	if (!ad)
-		return 1;
+		return -1;
 	// check if the pid already exists, if yes add the sid
 	if ((p = find_pid(aid, _pid)))
 	{
@@ -1121,11 +1161,11 @@ int mark_pids_add(int sid, int aid, char *pids)
 	LOG("adding pids to adapter %d, sid %d, pids=%s", aid, sid,
 		pids ? pids : "NULL");
 
-	la = split(arg, pids, MAX_PIDS, ',');
+	la = split(arg, pids, ARRAY_SIZE(arg), ',');
 	for (i = 0; i < la; i++)
 	{
 		pid = map_intd(arg[i], NULL, -1);
-		if (pid == -1)
+		if (pid < 0 || pid > 8192)
 			continue;
 		if (mark_pid_add(sid, aid, pid) < 0)
 			return -1;
@@ -1140,11 +1180,11 @@ int compare_tunning_parameters(int aid, transponder *tp)
 	if (!ad)
 		return -1;
 
-	LOGM("new parameters: f:%d, plp:%d, diseqc:%d, pol:%d, sr:%d, mtype:%d",
-		 tp->freq, tp->plp, tp->diseqc, tp->pol, tp->sr, tp->mtype);
-	LOGM("old parameters: f:%d, plp:%d, diseqc:%d, pol:%d, sr:%d, mtype:%d",
-		 ad->tp.freq, ad->tp.plp, ad->tp.diseqc, ad->tp.pol, ad->tp.sr, ad->tp.mtype);
-	if (tp->freq != ad->tp.freq || tp->plp != ad->tp.plp || tp->diseqc != ad->tp.diseqc || (tp->pol > 0 && tp->pol != ad->tp.pol) || (tp->sr > 1000 && tp->sr != ad->tp.sr) || (tp->mtype > 0 && tp->mtype != ad->tp.mtype))
+	LOGM("new parameters: f:%d, plp/isi:%d, diseqc:%d, pol:%d, sr:%d, mtype:%d",
+		 tp->freq, tp->plp_isi, tp->diseqc, tp->pol, tp->sr, tp->mtype);
+	LOGM("old parameters: f:%d, plp/isi:%d, diseqc:%d, pol:%d, sr:%d, mtype:%d",
+		 ad->tp.freq, ad->tp.plp_isi, ad->tp.diseqc, ad->tp.pol, ad->tp.sr, ad->tp.mtype);
+	if (tp->freq != ad->tp.freq || tp->plp_isi != ad->tp.plp_isi || tp->diseqc != ad->tp.diseqc || (tp->pol > 0 && tp->pol != ad->tp.pol) || (tp->sr > 1000 && tp->sr != ad->tp.sr) || (tp->mtype > 0 && tp->mtype != ad->tp.mtype))
 
 		return 1;
 
@@ -1171,11 +1211,11 @@ int set_adapter_parameters(int aid, int sid, transponder *tp)
 		{
 			mutex_unlock(&ad->mutex);
 			LOG(
-				"secondary stream requested tune, not gonna happen ad: f:%d sr:%d pol:%d plp:%d src:%d mod %d -> \
-			new: f:%d sr:%d pol:%d plp:%d src:%d mod %d",
-				ad->tp.freq, ad->tp.sr, ad->tp.pol, ad->tp.plp,
+				"secondary stream requested tune, not gonna happen ad: f:%d sr:%d pol:%d plp/isi:%d src:%d mod %d -> \
+			new: f:%d sr:%d pol:%d plp/isi:%d src:%d mod %d",
+				ad->tp.freq, ad->tp.sr, ad->tp.pol, ad->tp.plp_isi,
 				ad->tp.diseqc, ad->tp.mtype, tp->freq, tp->sr, tp->pol,
-				tp->plp, tp->diseqc, tp->mtype);
+				tp->plp_isi, tp->diseqc, tp->mtype);
 			return -1;
 		}
 		ad->do_tune = 1;
@@ -1217,7 +1257,7 @@ int set_adapter_parameters(int aid, int sid, transponder *tp)
 	{
 		char *arg[64];
 		int i, la;
-		la = split(arg, ad->tp.x_pmt, 64, ',');
+		la = split(arg, ad->tp.x_pmt, ARRAY_SIZE(arg), ',');
 		for (i = 0; i < la; i++)
 		{
 			int pmt = map_int(arg[i], NULL);
@@ -1263,6 +1303,14 @@ get_configured_adapter1(int aid, char *file, int line)
 	return a[aid];
 }
 
+char *itoa_positive(char *dest, int val)
+{
+	dest[0] = 0;
+	if (val >= 0)
+		sprintf(dest, "%d", val);
+	return dest;
+}
+
 char *get_stream_pids(int s_id, char *dest, int max_size);
 char *
 describe_adapter(int sid, int aid, char *dad, int ld)
@@ -1271,6 +1319,7 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 	transponder *t;
 	adapter *ad;
 	streams *ss;
+	char plp_isi[10], ds[10];
 	int status = 1, strength = 255, snr = 15;
 
 	ss = get_sid(sid);
@@ -1291,16 +1340,23 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 
 	if (use_ad)
 	{
-		strength = ad->strength;
-		snr = ad->snr;
-		if (snr > 15)
-			snr = snr >> 4;
-		status = (ad->status & FE_HAS_LOCK) > 0;
+		if (ad->status < 0)
+		{
+			status = strength = snr = 0;
+		}
+		else
+		{
+			strength = ad->strength;
+			snr = ad->snr;
+			if (snr > 15)
+				snr = snr >> 4;
+			status = (ad->status & FE_HAS_LOCK) > 0;
 
-		if (strength > 255 || strength < 0)
-			strength = 1;
-		if (snr > 15 || snr < 0)
-			snr = 1;
+			if (strength > 255 || strength < 0)
+				strength = 1;
+			if (snr > 15 || snr < 0)
+				snr = 1;
+		}
 	}
 	if (t->sys == 0)
 		len = snprintf(dad, ld, "ver=1.0;src=1;tuner=%d,0,0,0,0,,,,,,,;pids=",
@@ -1309,34 +1365,32 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 		len =
 			snprintf(dad, ld,
 					 "ver=1.0;src=%d;tuner=%d,%d,%d,%d,%d,%s,%s,%s,%s,%s,%d,%s;pids=",
-					 t->diseqc, ad ? ad->tp.fe : aid + 1, strength, status, snr,
+					 t->diseqc, (ad && ad->tp.fe > 0) ? ad->tp.fe : aid + 1, strength, status, snr,
 					 t->freq / 1000, get_pol(t->pol),
 					 get_modulation(t->mtype), get_pilot(t->plts),
 					 get_rolloff(t->ro), get_delsys(t->sys), t->sr / 1000,
 					 get_fec(t->fec));
 	else if (t->sys == SYS_DVBT || t->sys == SYS_DVBT2)
 		len =
-			snprintf(dad, ld,
-					 "ver=1.1;tuner=%d,%d,%d,%d,%.2f,%d,%s,%s,%s,%s,%s,%d,%d,%d;pids=",
-					 ad ? ad->tp.fe : aid + 1, strength, status, snr,
+			snprintf(dad, ld, "ver=1.1;tuner=%d,%d,%d,%d,%.2f,%d,%s,%s,%s,%s,%s,%s,%d,%d;pids=",
+					 (ad && ad->tp.fe > 0) ? ad->tp.fe : aid + 1, strength, status, snr,
 					 (double)t->freq / 1000.0, t->bw / 1000000, get_delsys(t->sys),
 					 get_tmode(t->tmode), get_modulation(t->mtype),
-					 get_gi(t->gi), get_fec(t->fec), t->plp, t->t2id, t->sm);
+					 get_gi(t->gi), get_fec(t->fec), itoa_positive(plp_isi, t->plp_isi),
+					 t->t2id, t->sm);
 	else
 		len =
-			snprintf(dad, ld,
-					 "ver=1.2;tuner=%d,%d,%d,%d,%.2f,8,%s,%s,%d,%d,%d,%d,%s;pids=",
-					 ad ? ad->tp.fe : aid + 1, strength, status, snr,
+			snprintf(dad, ld, "ver=1.2;tuner=%d,%d,%d,%d,%.2f,8,%s,%s,%d,%d,%s,%s,%s;pids=",
+					 (ad && ad->tp.fe > 0) ? ad->tp.fe : aid + 1, strength, status, snr,
 					 (double)t->freq / 1000, get_delsys(t->sys),
-					 get_modulation(t->mtype), t->sr / 1000, t->c2tft, t->ds,
-					 t->plp, get_inversion(t->inversion));
+					 get_modulation(t->mtype), t->sr / 1000, t->c2tft, itoa_positive(ds, t->ds),
+					 itoa_positive(plp_isi, t->plp_isi), get_inversion(t->inversion));
 
 	if (use_ad)
 		len += strlen(get_stream_pids(sid, dad + len, ld - len));
 
 	if (!use_ad && (t->apids || t->pids))
-		len += snprintf(dad + len, ld - len, "%s",
-						t->pids ? t->pids : t->apids);
+		strlcatf(dad, ld, len, "%s", t->pids ? t->pids : t->apids);
 
 	LOGM("describe_adapter: sid %d, aid %d => %s", sid, aid, dad);
 
@@ -1411,12 +1465,12 @@ void set_disable(int i, int v)
 void enable_adapters(char *o)
 {
 	int i, la, st, end, j;
-	char buf[100], *arg[20], *sep;
+	char buf[1000], *arg[40], *sep;
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		set_disable(i, 1);
 	SAFE_STRCPY(buf, o);
 
-	la = split(arg, buf, sizeof(arg), ',');
+	la = split(arg, buf, ARRAY_SIZE(arg), ',');
 	for (i = 0; i < la; i++)
 	{
 		sep = strchr(arg[i], '-');
@@ -1438,10 +1492,10 @@ void enable_adapters(char *o)
 void set_unicable_adapters(char *o, int type)
 {
 	int i, la, a_id, slot, freq, pin, o13v;
-	char buf[100], *arg[20], *sep1, *sep2, *sep3;
+	char buf[1000], *arg[40], *sep1, *sep2, *sep3;
 	adapter *ad;
 	SAFE_STRCPY(buf, o);
-	la = split(arg, buf, sizeof(arg), ',');
+	la = split(arg, buf, ARRAY_SIZE(arg), ',');
 	for (i = 0; i < la; i++)
 	{
 		a_id = map_intd(arg[i], NULL, -1);
@@ -1464,25 +1518,27 @@ void set_unicable_adapters(char *o, int type)
 		if (slot < 0 || freq < 0)
 			continue;
 		sep3 = strchr(sep2 + 1, '-');
-		pin = map_intd(sep3, NULL, 0);
+		pin = TP_VALUE_UNSET;
+		if (sep3)
+			pin = map_intd(sep3 + 1, NULL, TP_VALUE_UNSET);
 
 		ad->diseqc_param.uslot = slot;
 		ad->diseqc_param.ufreq = freq;
 		ad->diseqc_param.switch_type = type;
 		ad->diseqc_param.pin = pin;
 		ad->diseqc_param.only13v = o13v;
-		LOG("Setting %s adapter %d slot %d freq %d",
-			type == SWITCH_UNICABLE ? "unicable" : "jess", a_id, slot, freq);
+		LOG("Setting %s adapter %d slot %d freq %d pin %d",
+			type == SWITCH_UNICABLE ? "unicable" : "jess", a_id, slot, freq, pin);
 	}
 }
 
 void set_diseqc_adapters(char *o)
 {
-	int i, la, a_id, fast, committed_no, uncommitted_no;
-	char buf[100], *arg[20], *sep1, *sep2;
+	int i, la, a_id, fast, addr, committed_no, uncommitted_no;
+	char buf[1000], *arg[40], *sep1, *sep2;
 	adapter *ad;
 	SAFE_STRCPY(buf, o);
-	la = split(arg, buf, sizeof(arg), ',');
+	la = split(arg, buf, ARRAY_SIZE(arg), ',');
 	for (i = 0; i < la; i++)
 	{
 		if (arg[i] && arg[i][0] == '*')
@@ -1506,8 +1562,28 @@ void set_diseqc_adapters(char *o)
 
 		if (!sep1 || !sep2)
 			continue;
-		if ((fast = (sep1[1] == '*')) != 0)
-			sep1++;
+
+		fast = 0;
+		addr = 0x10;
+		while (sep1[1] == '*' || sep1[1] == '@' || sep1[1] == '.')
+		{
+			if (sep1[1] == '*')
+			{
+				fast = 1;
+				sep1++;
+			}
+			else if (sep1[1] == '@')
+			{
+				addr = 0;
+				sep1++;
+			}
+			else if (sep1[1] == '.')
+			{
+				addr = 0x11;
+				sep1++;
+			}
+		}
+
 		committed_no = map_intd(sep1 + 1, NULL, -1);
 		uncommitted_no = map_intd(sep2 + 1, NULL, -1);
 		if (committed_no < 0 || uncommitted_no < 0)
@@ -1516,12 +1592,14 @@ void set_diseqc_adapters(char *o)
 		if (ad)
 		{
 			ad->diseqc_param.fast = fast;
+			ad->diseqc_param.addr = addr;
 			ad->diseqc_param.committed_no = committed_no;
 			ad->diseqc_param.uncommitted_no = uncommitted_no;
 		}
 		else
 		{
 			opts.diseqc_fast = fast;
+			opts.diseqc_addr = addr;
 			opts.diseqc_committed_no = committed_no;
 			opts.diseqc_uncommitted_no = uncommitted_no;
 			int j;
@@ -1529,23 +1607,24 @@ void set_diseqc_adapters(char *o)
 				if (a[j])
 				{
 					a[j]->diseqc_param.fast = fast;
+					a[j]->diseqc_param.addr = addr;
 					a[j]->diseqc_param.committed_no = committed_no;
 					a[j]->diseqc_param.uncommitted_no = uncommitted_no;
 				}
 		}
 		LOG(
-			"Setting diseqc adapter %d fast %d committed_no %d uncommitted_no %d",
-			a_id, fast, committed_no, uncommitted_no);
+			"Setting diseqc adapter %d fast %d addr 0x%02x committed_no %d uncommitted_no %d",
+			a_id, fast, addr, committed_no, uncommitted_no);
 	}
 }
 
 void set_diseqc_multi(char *o)
 {
 	int i, la, a_id, position;
-	char buf[100], *arg[20], *sep1;
+	char buf[1000], *arg[40], *sep1;
 	adapter *ad;
 	SAFE_STRCPY(buf, o);
-	la = split(arg, buf, sizeof(arg), ',');
+	la = split(arg, buf, ARRAY_SIZE(arg), ',');
 	for (i = 0; i < la; i++)
 	{
 		if (arg[i] && arg[i][0] == '*')
@@ -1594,10 +1673,10 @@ void set_diseqc_multi(char *o)
 void set_lnb_adapters(char *o)
 {
 	int i, la, a_id, lnb_low, lnb_high, lnb_switch;
-	char buf[100], *arg[20], *sep1, *sep2, *sep3;
+	char buf[1000], *arg[40], *sep1, *sep2, *sep3;
 	adapter *ad;
 	SAFE_STRCPY(buf, o);
-	la = split(arg, buf, sizeof(arg), ',');
+	la = split(arg, buf, ARRAY_SIZE(arg), ',');
 	for (i = 0; i < la; i++)
 	{
 		if (arg[i] && arg[i][0] == '*')
@@ -1667,11 +1746,11 @@ void set_diseqc_timing(char *o)
 	int i, la, a_id;
 	int before_cmd, after_cmd, after_repeated_cmd;
 	int after_switch, after_burst, after_tone;
-	char buf[2000], *arg[20];
+	char buf[2000], *arg[40];
 	char *sep1, *sep2, *sep3, *sep4, *sep5, *sep6;
 	adapter *ad;
 	SAFE_STRCPY(buf, o);
-	la = split(arg, buf, sizeof(arg), ',');
+	la = split(arg, buf, ARRAY_SIZE(arg), ',');
 	for (i = 0; i < la; i++)
 	{
 		if (arg[i] && arg[i][0] == '*')
@@ -1748,10 +1827,10 @@ void set_diseqc_timing(char *o)
 void set_slave_adapters(char *o)
 {
 	int i, j, la, a_id, a_id2, master = 0;
-	char buf[100], *arg[20], *sep, *sep2;
+	char buf[1000], *arg[40], *sep, *sep2;
 	adapter *ad;
 	SAFE_STRCPY(buf, o);
-	la = split(arg, buf, sizeof(arg), ',');
+	la = split(arg, buf, ARRAY_SIZE(arg), ',');
 	for (i = 0; i < la; i++)
 	{
 		a_id = map_intd(arg[i], NULL, -1);
@@ -1786,7 +1865,7 @@ void set_slave_adapters(char *o)
 				if (!a[master] && !is_adapter_disabled(master))
 					a[master] = adapter_alloc();
 
-				if (a[master] && a[master]->master_source == -1)
+				if (a[master] && a[master]->master_source < 0)
 				{
 					a[master]->master_source = -2; // force this adapter as master
 					ad->master_source = master;
@@ -1801,13 +1880,13 @@ void set_timeout_adapters(char *o)
 {
 	int i, j, la, a_id, a_id2;
 	int timeout = opts.adapter_timeout / 1000;
-	char buf[100], *arg[20], *sep;
+	char buf[1000], *arg[40], *sep;
 	adapter *ad;
 	SAFE_STRCPY(buf, o);
 	sep = strchr(buf, ':');
 	if (sep)
 		timeout = map_intd(sep + 1, NULL, timeout);
-	la = split(arg, buf, sizeof(arg), ',');
+	la = split(arg, buf, ARRAY_SIZE(arg), ',');
 	if (arg[0] && (arg[0][0] == '*'))
 	{
 		opts.adapter_timeout = timeout * 1000;
@@ -1851,10 +1930,10 @@ extern char *fe_delsys[];
 void set_adapters_delsys(char *o)
 {
 	int i, la, a_id, ds;
-	char buf[100], *arg[20], *sep;
+	char buf[1000], *arg[40], *sep;
 	adapter *ad;
 	SAFE_STRCPY(buf, o);
-	la = split(arg, buf, sizeof(arg), ',');
+	la = split(arg, buf, ARRAY_SIZE(arg), ',');
 	for (i = 0; i < la; i++)
 	{
 		a_id = map_intd(arg[i], NULL, -1);
@@ -1891,10 +1970,10 @@ void set_adapters_delsys(char *o)
 void set_adapter_dmxsource(char *o)
 {
 	int i, j, la, st, end, fd;
-	char buf[100], *arg[20], *sep, *seps;
+	char buf[1000], *arg[40], *sep, *seps;
 	adapter *ad;
 	SAFE_STRCPY(buf, o);
-	la = split(arg, buf, sizeof(arg), ',');
+	la = split(arg, buf, ARRAY_SIZE(arg), ',');
 	for (i = 0; i < la; i++)
 	{
 		sep = strchr(arg[i], '-');
@@ -1931,10 +2010,10 @@ void set_signal_multiplier(char *o)
 {
 	int i, la, a_id;
 	float strength_multiplier, snr_multiplier;
-	char buf[100], *arg[20], *sep1, *sep2;
+	char buf[1000], *arg[40], *sep1, *sep2;
 	adapter *ad;
 	SAFE_STRCPY(buf, o);
-	la = split(arg, buf, sizeof(arg), ',');
+	la = split(arg, buf, ARRAY_SIZE(arg), ',');
 	for (i = 0; i < la; i++)
 	{
 		if (arg[i] && arg[i][0] == '*')
@@ -1982,7 +2061,7 @@ void set_signal_multiplier(char *o)
 				}
 		}
 		LOG("Setting signal multipler for adapter %d strength_multiplier %.2f snr_multiplier %.2f",
-			a_id, strength_multiplier, snr_multiplier);
+			a_id, (double)strength_multiplier, (double)snr_multiplier);
 	}
 }
 
@@ -2005,24 +2084,29 @@ int delsys_match(adapter *ad, int del_sys)
 
 int signal_thread(sockets *s)
 {
-	int i;
+	int i, status;
 	int64_t ts, ctime;
 	adapter *ad;
 	for (i = 0; i < MAX_ADAPTERS; i++)
-		if ((ad = get_adapter_nw(i)) && ad->get_signal && (ad->fe > 0) && ad->tp.freq && (ad->status_cnt++ > 0) // make sure the kernel has updated the status
-			&& (!opts.no_threads || (ad->status < 0)))
-
-		{
-			int status = ad->status;
-			ts = getTick();
-			ad->get_signal(ad);
-			ctime = getTick();
-			if (status == -1 || (opts.log & DEFAULT_LOG))
-				LOG(
-					"get_signal%s took %jd ms for adapter %d handle %d (status: %d, ber: %d, strength:%d, snr: %d, force scan %d)",
-					(ad->new_gs == 1) ? "_new" : "", ctime - ts, ad->id, ad->fe,
-					ad->status, ad->ber, ad->strength, ad->snr, opts.force_scan);
-		}
+	{
+		if ((ad = get_adapter_nw(i)) == NULL || ad->get_signal == NULL)
+			continue;
+		if (ad->fe <= 0 || ad->tp.freq <= 0)
+			continue;
+		status = ad->status;
+		if (ad->status_cnt++ <= 0) // make sure the kernel has updated the status
+			continue;
+		if (opts.no_threads && !ad->fast_status && status >= 0)
+			continue;
+		ts = getTick();
+		ad->get_signal(ad);
+		ctime = getTick();
+		if (status < 0 || (opts.log & DEFAULT_LOG))
+			LOG(
+				"get_signal%s took %jd ms for adapter %d handle %d (status: %d, ber: %d, strength:%d, snr: %d, force scan %d)",
+				(ad->new_gs == 1) ? "_new" : "", ctime - ts, ad->id, ad->fe,
+				ad->status, ad->ber, ad->strength, ad->snr, opts.force_scan);
+	}
 	return 0;
 }
 
@@ -2095,16 +2179,16 @@ char *get_adapter_pids(int aid, char *dest, int max_size)
 			int pid = ad->pids[i].pid;
 			if (pid == 8192)
 			{
-				len = snprintf(dest, max_size, "all,");
+				strlcatf(dest, max_size, len, "all,");
 				break;
 			}
 			else
-				len += snprintf(dest + len, max_size - len, "%d,", pid);
+				strlcatf(dest, max_size, len, "%d,", pid);
 		}
 	if (len > 0)
 		dest[len - 1] = 0;
 	else
-		snprintf(dest + len, max_size - len, "none");
+		strlcatf(dest, max_size, len, "none");
 
 	return dest;
 }
@@ -2120,8 +2204,8 @@ char *get_all_delsys(int aid, char *dest, int max_size)
 
 	for (i = 0; i < MAX_DELSYS; i++)
 		if (ad->sys[i] > 0)
-			len += snprintf(dest + len, max_size - len, "%s,",
-							get_delsys(ad->sys[i]));
+			strlcatf(dest, max_size, len, "%s,",
+					 get_delsys(ad->sys[i]));
 
 	if (len > 0)
 		dest[len - 1] = 0;
@@ -2167,13 +2251,13 @@ _symbols adapters_sym[] =
 		{"ad_pol", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.pol)},
 		{"ad_sr", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, offsetof(adapter, tp.sr)},
 		{"ad_bw", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, offsetof(adapter, tp.bw)},
-		{"ad_diseqc", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.diseqc)},
+		{"ad_stream", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.plp_isi)},
 		{"ad_fe", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, fe)},
 		{"ad_master", VAR_AARRAY_UINT8, a, 1, MAX_ADAPTERS, offsetof(adapter, master_sid)},
 		{"ad_sidcount", VAR_AARRAY_UINT8, a, 1, MAX_ADAPTERS, offsetof(adapter, sid_cnt)},
 		{"ad_phyad", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, pa)},
 		{"ad_phyfd", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, fn)},
-		{"ad_sys", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.sys)},
+		{"ad_sys", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.sys)},
 		{"ad_allsys", VAR_FUNCTION_STRING, (void *)&get_all_delsys, 0, MAX_ADAPTERS, 0},
 		{"ad_pids", VAR_FUNCTION_STRING, (void *)&get_adapter_pids, 0, MAX_ADAPTERS, 0},
 		{"ad_ccerr", VAR_FUNCTION_INT, (void *)&get_adapter_ccerrs, 0, MAX_ADAPTERS, 0},
@@ -2184,4 +2268,4 @@ _symbols adapters_sym[] =
 		{"tuner_c", VAR_INT, &tuner_c, 1, 0, 0},
 		{"tuner_ac", VAR_INT, &tuner_ac, 1, 0, 0},
 		{"tuner_at", VAR_INT, &tuner_at, 1, 0, 0},
-		{NULL, 0, NULL, 0, 0}};
+		{NULL, 0, NULL, 0, 0, 0}};

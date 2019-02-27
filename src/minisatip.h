@@ -7,7 +7,7 @@
 #include "socketworks.h"
 #include "utils.h"
 
-#define VERSION_BUILD "15"
+#define VERSION_BUILD "16"
 #define CC(a, b, c) #a b #c
 #define VERSION CC(0.7., VERSION_BUILD, )
 
@@ -73,7 +73,7 @@ struct struct_opts
 	int file_line;
 	char *last_log;
 	int dvbapi_port;
-	char *dvbapi_host;
+	char dvbapi_host[100];
 	int dvbapi_offset;
 	int drop_encrypted;
 	int rtsp_port;
@@ -94,6 +94,7 @@ struct struct_opts
 	char no_threads;
 	int th_priority;
 	int diseqc_fast;
+	int diseqc_addr;
 	int diseqc_committed_no;
 	int diseqc_uncommitted_no;
 	int diseqc_before_cmd;

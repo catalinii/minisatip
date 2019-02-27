@@ -33,7 +33,8 @@
 #endif
 
 #ifdef DISABLE_LINUXDVB
-typedef enum fe_delivery_system {
+typedef enum fe_delivery_system
+{
 	SYS_UNDEFINED,
 	SYS_DVBC_ANNEX_AC,
 	SYS_DVBC_ANNEX_B,
@@ -53,7 +54,8 @@ typedef enum fe_delivery_system {
 	SYS_DVBT2,
 	SYS_TURBO,
 } fe_delivery_system_t;
-typedef enum fe_status {
+typedef enum fe_status
+{
 	FE_HAS_SIGNAL = 0x01,
 	FE_HAS_CARRIER = 0x02,
 	FE_HAS_VITERBI = 0x04,
@@ -62,7 +64,8 @@ typedef enum fe_status {
 	FE_TIMEDOUT = 0x20,
 	FE_REINIT = 0x40
 } fe_status_t;
-typedef enum fe_code_rate {
+typedef enum fe_code_rate
+{
 	FEC_NONE = 0,
 	FEC_1_2,
 	FEC_2_3,
@@ -76,18 +79,21 @@ typedef enum fe_code_rate {
 	FEC_3_5,
 	FEC_9_10,
 } fe_code_rate_t;
-typedef enum fe_rolloff {
+typedef enum fe_rolloff
+{
 	ROLLOFF_35,
 	ROLLOFF_20,
 	ROLLOFF_25,
 	ROLLOFF_AUTO,
 } fe_rolloff_t;
-typedef enum fe_pilot {
+typedef enum fe_pilot
+{
 	PILOT_ON,
 	PILOT_OFF,
 	PILOT_AUTO,
 } fe_pilot_t;
-typedef enum fe_bandwidth {
+typedef enum fe_bandwidth
+{
 	BANDWIDTH_8_MHZ,
 	BANDWIDTH_7_MHZ,
 	BANDWIDTH_6_MHZ,
@@ -96,7 +102,8 @@ typedef enum fe_bandwidth {
 	BANDWIDTH_10_MHZ,
 	BANDWIDTH_1_712_MHZ,
 } fe_bandwidth_t;
-typedef enum fe_guard_interval {
+typedef enum fe_guard_interval
+{
 	GUARD_INTERVAL_1_32,
 	GUARD_INTERVAL_1_16,
 	GUARD_INTERVAL_1_8,
@@ -106,12 +113,14 @@ typedef enum fe_guard_interval {
 	GUARD_INTERVAL_19_128,
 	GUARD_INTERVAL_19_256,
 } fe_guard_interval_t;
-typedef enum fe_spectral_inversion {
+typedef enum fe_spectral_inversion
+{
 	INVERSION_OFF,
 	INVERSION_ON,
 	INVERSION_AUTO
 } fe_spectral_inversion_t;
-typedef enum fe_transmit_mode {
+typedef enum fe_transmit_mode
+{
 	TRANSMISSION_MODE_2K,
 	TRANSMISSION_MODE_8K,
 	TRANSMISSION_MODE_AUTO,
@@ -120,13 +129,15 @@ typedef enum fe_transmit_mode {
 	TRANSMISSION_MODE_16K,
 	TRANSMISSION_MODE_32K,
 } fe_transmit_mode_t;
-typedef enum fe_type {
+typedef enum fe_type
+{
 	FE_QPSK,
 	FE_QAM,
 	FE_OFDM,
 	FE_ATSC
 } fe_type_t;
-typedef enum fe_modulation {
+typedef enum fe_modulation
+{
 	QPSK,
 	QAM_16,
 	QAM_32,
@@ -139,9 +150,19 @@ typedef enum fe_modulation {
 	PSK_8,
 	APSK_16,
 	APSK_32,
+	APSK_64,
+	APSK_128,
+	APSK_256,
 	DQPSK,
 } fe_modulation_t;
 #endif
+
+typedef enum fe_pls_mode
+{
+	PLS_MODE_ROOT,
+	PLS_MODE_GOLD,
+	PLS_MODE_COMBO,
+} fe_pls_mode_t;
 
 #if DVBAPIVERSION < 0x0505
 #define DTV_ENUM_DELSYS 44
@@ -182,6 +203,8 @@ typedef enum fe_modulation {
 #define MIN_FRQ_DVBS 950000
 #define MAX_FRQ_DVBS 2150000
 
+#define TP_VALUE_UNSET (-1)
+
 typedef struct diseqc
 {
 #define SWITCH_UNICABLE 1
@@ -189,12 +212,14 @@ typedef struct diseqc
 #define SWITCH_SLAVE 3
 	int switch_type;
 	/* parameters */
-	int uslot; // unicable/jess slot
-	int ufreq; // unicable/jess frequency
-	int pin;
-	int only13v;					  // unicable - use 13V voltage only
-	int fast;						  // don't send diseqc without position change
-	int committed_no, uncommitted_no; // diseqc info
+	int uslot;			// unicable/jess slot
+	int ufreq;			// unicable/jess frequency
+	int pin;			// unicable pin code
+	int only13v;		// unicable - use 13V voltage only
+	int fast;			// don't send diseqc without position change
+	int addr;			// diseqc address (second byte in the sequence)
+	int committed_no;   // committed switch number
+	int uncommitted_no; // uncommitted switch number
 	/* timing */
 	int before_cmd;
 	int after_cmd;
@@ -208,7 +233,7 @@ typedef struct diseqc
 
 typedef struct struct_transponder
 {
-	fe_delivery_system_t sys;
+	int sys;
 	int freq;
 	int inversion;
 	int mtype;
@@ -232,10 +257,11 @@ typedef struct struct_transponder
 
 	diseqc diseqc_param;
 
-	// DVB-C2
-	int c2tft;
-	int ds;
-	int plp;
+	int c2tft;	// DVB-C2
+	int ds;		  // DVB-C2 (data slice)
+	int plp_isi;  // DVB-T2/DVB-S2
+	int pls_mode; // DVB-S2
+	int pls_code; // DVB-S2
 
 	char *apids, *pids, *dpids, *x_pmt;
 } transponder;
@@ -269,6 +295,8 @@ int detect_dvb_parameters(char *s, transponder *tp);
 void init_dvb_parameters(transponder *tp);
 void copy_dvb_parameters(transponder *s, transponder *d);
 
+uint32_t pls_scrambling_index(transponder *tp);
+
 char *get_pilot(int i);
 char *get_rolloff(int i);
 char *get_delsys(int i);
@@ -279,6 +307,7 @@ char *get_gi(int i);
 char *get_specinv(int i);
 char *get_pol(int i);
 char *get_inversion(int i);
+char *get_pls_mode(int i);
 
 extern char *fe_delsys[];
 extern char *fe_fec[];

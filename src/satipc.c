@@ -73,7 +73,8 @@ typedef struct struct_satipc
 	int err;
 	int wp, qp;			 // written packet, queued packet
 	char ignore_packets; // ignore packets coming from satip server while tuning
-	char satip_fe, last_cmd;
+	int satip_fe;
+	char last_cmd;
 	char use_tcp;
 	char expect_reply, force_commit, want_commit, want_tune, sent_transport, force_pids;
 	int64_t last_setup, last_connect;
@@ -165,18 +166,15 @@ int satipc_reply(sockets *s)
 		if (sip->use_tcp == 0)
 		{
 			sip->use_tcp = 1;
-			if (ad)
-			{
-				LOG("adapter %d is not RTSP over TCP, switching", ad->id);
-				ad->restart_needed = 1;
-			}
+			LOG("adapter %d is not RTSP over TCP, switching", ad->id);
+			ad->restart_needed = 1;
 		}
 		sip->option_no_session = 1;
 		sip->option_no_setup = 1;
 		sip->option_no_option = 1;
 	}
 
-	la = split(arg, (char *)s->buf, 100, ' ');
+	la = split(arg, (char *)s->buf, ARRAY_SIZE(arg), ' ');
 	rc = map_int(arg[1], NULL);
 
 	if (sip->option_no_session && sip->last_cmd == RTSP_OPTIONS && !sess && sip->session[0])
@@ -356,7 +354,7 @@ int satipc_open_device(adapter *ad)
 		return 1;
 
 	int64_t ctime = getTick();
-	if ((sip->last_connect > 0) && (ctime - sip->last_connect < 30000))
+	if ((sip->last_connect > 0) && (ctime - sip->last_connect < 5000))
 		return 3;
 
 	sip->last_connect = ctime;
@@ -779,11 +777,11 @@ int satipc_del_filters(adapter *ad, int fd, int pid)
 	return 0;
 }
 
-void get_s2_url(adapter *ad, char *url)
+void get_s2_url(adapter *ad, char *url, int url_len)
 {
 #define FILL(req, val, def, met)     \
 	if ((val != def) && (val != -1)) \
-		len += sprintf(url + len, req, met);
+		strlcatf(url, url_len, len, req, met);
 	int len = 0, plts, ro;
 	transponder *tp = &ad->tp;
 	satipc *sip = get_satip(ad->id);
@@ -797,7 +795,7 @@ void get_s2_url(adapter *ad, char *url)
 	//	if (ro == ROLLOFF_AUTO)
 	//		ro = ROLLOFF_35;
 	FILL("src=%d", tp->diseqc, 0, tp->diseqc);
-	if (sip->use_fe && (sip->satip_fe > 0) && (sip->satip_fe < 128))
+	if (sip->use_fe && sip->satip_fe > 0)
 		FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
 	FILL("&freq=%d", tp->freq, 0, tp->freq / 1000);
 	FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
@@ -807,11 +805,17 @@ void get_s2_url(adapter *ad, char *url)
 	FILL("&fec=%s", tp->fec, FEC_AUTO, get_fec(tp->fec));
 	FILL("&ro=%s", ro, ROLLOFF_AUTO, get_rolloff(ro));
 	FILL("&plts=%s", plts, PILOT_AUTO, get_pilot(plts));
+	if (tp->plp_isi >= 0)
+		FILL("&isi=%d", tp->plp_isi, 0, tp->plp_isi);
+	if (tp->pls_mode >= 0)
+		FILL("&plsm=%s", tp->pls_mode, -1, get_pls_mode(tp->pls_mode));
+	if (tp->pls_code >= 0)
+		FILL("&plsc=%d", tp->pls_code, -1, tp->pls_code);
 	url[len] = 0;
 	return;
 }
 
-void get_c2_url(adapter *ad, char *url)
+void get_c2_url(adapter *ad, char *url, int url_len)
 {
 	int len = 0;
 	transponder *tp = &ad->tp;
@@ -820,7 +824,7 @@ void get_c2_url(adapter *ad, char *url)
 		return;
 	url[0] = 0;
 	FILL("freq=%.1f", tp->freq, 0, tp->freq / 1000.0);
-	if (sip->use_fe && (sip->satip_fe > 0) && (sip->satip_fe < 128))
+	if (sip->use_fe && sip->satip_fe > 0)
 		FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
 	FILL("&sr=%d", tp->sr, -1, tp->sr / 1000);
 	FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
@@ -831,12 +835,13 @@ void get_c2_url(adapter *ad, char *url)
 	FILL("&specinv=%d", tp->inversion, INVERSION_AUTO, tp->inversion);
 	FILL("&t2id=%d", tp->t2id, 0, tp->t2id);
 	FILL("&sm=%d", tp->sm, 0, tp->sm);
-	FILL("&plp=%d", tp->plp, 0, tp->plp);
+	if (tp->plp_isi >= 0)
+		FILL("&plp=%d", tp->plp_isi, 0, tp->plp_isi);
 	url[len] = 0;
 	return;
 }
 
-void get_t2_url(adapter *ad, char *url)
+void get_t2_url(adapter *ad, char *url, int url_len)
 {
 	int len = 0;
 	transponder *tp = &ad->tp;
@@ -845,7 +850,7 @@ void get_t2_url(adapter *ad, char *url)
 		return;
 	url[0] = 0;
 	FILL("freq=%.1f", tp->freq, 0, tp->freq / 1000.0);
-	if (sip->use_fe && (sip->satip_fe > 0) && (sip->satip_fe < 128))
+	if (sip->use_fe && sip->satip_fe > 0)
 		FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
 	FILL("&bw=%d", tp->bw, BANDWIDTH_AUTO, tp->bw / 1000000);
 	FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
@@ -854,8 +859,10 @@ void get_t2_url(adapter *ad, char *url)
 	FILL("&tmode=%s", tp->tmode, TRANSMISSION_MODE_AUTO, get_tmode(tp->tmode));
 	FILL("&specinv=%d", tp->inversion, INVERSION_AUTO, tp->inversion);
 	FILL("&c2tft=%d", tp->c2tft, 0, tp->c2tft);
-	FILL("&ds=%d", tp->ds, 0, tp->ds);
-	FILL("&plp=%d", tp->plp, 0, tp->plp);
+	if (tp->ds >= 0)
+		FILL("&ds=%d", tp->ds, 0, tp->ds);
+	if (tp->plp_isi >= 0)
+		FILL("&plp=%d", tp->plp_isi, 0, tp->plp_isi);
 	url[len] = 0;
 	return;
 }
@@ -866,9 +873,9 @@ int http_request(adapter *ad, char *url, char *method)
 	char buf[2048];
 	char sid[40];
 	char *qm;
+	int ptr = 0;
 	int lb, remote_socket;
 	char format[] = "%s rtsp://%s:%d/%s%s%s RTSP/1.0\r\nCSeq: %d%s\r\n\r\n";
-	__attribute__((unused)) int rv;
 	satipc *sip = get_satip(ad->id);
 	if (!sip)
 		return 0;
@@ -890,29 +897,31 @@ int http_request(adapter *ad, char *url, char *method)
 		sip->stream_id = -1;
 		sip->session[0] = 0;
 		if (sip->use_tcp)
-			sprintf(session, "\r\nTransport: RTP/AVP/TCP;interleaved=0-1");
+			strcatf(session, ptr, "\r\nTransport: RTP/AVP/TCP;interleaved=0-1");
 		else
-			sprintf(session, "\r\nTransport: RTP/AVP;unicast;client_port=%d-%d",
+			strcatf(session, ptr, "\r\nTransport: RTP/AVP;unicast;client_port=%d-%d",
 					sip->listen_rtp, sip->listen_rtp + 1);
 	}
 	else
 	{
 		if (sip->session[0])
-			sprintf(session, "\r\nSession: %s", sip->session);
+			strcatf(session, ptr, "\r\nSession: %s", sip->session);
 		else
 			session[0] = 0;
 	}
 
+	ptr = strlen(session);
+
 	if (strcmp(method, "OPTIONS") == 0)
 	{
-		sprintf(session + strlen(session), "\r\nUser-Agent: %s %s", app_name,
+		strcatf(session, ptr, "\r\nUser-Agent: %s %s", app_name,
 				version);
 		sip->last_cmd = RTSP_OPTIONS;
 	}
 
 	if (strcmp(method, "DESCRIBE") == 0)
 	{
-		sprintf(session + strlen(session), "\r\nAccept: application/sdp ");
+		strcatf(session, ptr, "\r\nAccept: application/sdp");
 		sip->last_cmd = RTSP_DESCRIBE;
 	}
 
@@ -956,22 +965,22 @@ int http_request(adapter *ad, char *url, char *method)
 	return 0;
 }
 
-void tune_url(adapter *ad, char *url)
+void tune_url(adapter *ad, char *url, int url_len)
 {
 	switch (ad->sys[0])
 	{
 	case SYS_DVBS2:
 	case SYS_DVBS:
-		get_s2_url(ad, url);
+		get_s2_url(ad, url, url_len);
 		break;
 	case SYS_DVBC2:
 	case SYS_DVBC_ANNEX_A:
-		get_c2_url(ad, url);
+		get_c2_url(ad, url, url_len);
 		break;
 	case SYS_DVBT2:
 	case SYS_DVBT:
 	case SYS_ISDBT:
-		get_t2_url(ad, url);
+		get_t2_url(ad, url, url_len);
 		break;
 	default:
 		LOG("No system specified %d", ad->sys[0]);
@@ -981,10 +990,10 @@ void tune_url(adapter *ad, char *url)
 
 void satipc_commit(adapter *ad)
 {
-	char url[400];
-	char tmp_url[400];
+	char url[1000];
+	char tmp_url[1000];
 	int send_pids = 1, send_apids = 1, send_dpids = 1;
-	int len = 0, i;
+	int len = 0;
 	satipc *sip = get_satip(ad->id);
 	if (!sip)
 		return;
@@ -1081,13 +1090,13 @@ void satipc_commit(adapter *ad)
 	}
 	if (sip->want_tune)
 	{
-		tune_url(ad, url);
+		tune_url(ad, url, sizeof(url) - 1);
 		len = strlen(url);
 		sip->ignore_packets = 1; // ignore all the packets until we get 200 from the server
 		sip->want_tune = 0;
 		sip->err = 0;
 		if (!sip->setup_pids)
-			sprintf(url + len, "&pids=none");
+			strcatf(url, len, "&pids=none");
 	}
 
 	get_adapter_pids(ad->id, tmp_url, sizeof(tmp_url));
@@ -1100,8 +1109,8 @@ void satipc_commit(adapter *ad)
 	if (send_pids)
 	{
 		if (len > 0)
-			len += sprintf(url + len, "&");
-		len += sprintf(url + len, "pids=");
+			strcatf(url, len, "&");
+		strcatf(url, len, "pids=");
 		//		get_adapter_pids(ad->id, url + len, sizeof(url) - len);
 		strncpy(url + len, tmp_url, sizeof(url) - len);
 		url[sizeof(url) - 1] = 0;
@@ -1115,10 +1124,10 @@ void satipc_commit(adapter *ad)
 	{
 		int i;
 		if (len > 0)
-			len += sprintf(url + len, "&");
-		len += sprintf(url + len, "addpids=");
+			strcatf(url, len, "&");
+		strcatf(url, len, "addpids=");
 		for (i = 0; i < sip->lap; i++)
-			len += sprintf(url + len, "%d,", sip->apid[i]);
+			strcatf(url, len, "%d,", sip->apid[i]);
 		if (sip->lap == 0)
 			get_adapter_pids(ad->id, url + len, sizeof(url) - len);
 		else
@@ -1129,11 +1138,12 @@ void satipc_commit(adapter *ad)
 
 	if (send_dpids)
 	{
+		int i;
 		if (len > 0)
-			len += sprintf(url + len, "&");
-		len += sprintf(url + len, "delpids=");
+			strcatf(url, len, "&");
+		strcatf(url, len, "delpids=");
 		for (i = 0; i < sip->ldp; i++)
-			len += sprintf(url + len, "%d,", sip->dpid[i]);
+			strcatf(url, len, "%d,", sip->dpid[i]);
 		url[--len] = 0;
 		sip->ldp = 0;
 		sip->force_commit = 0;
@@ -1196,7 +1206,7 @@ uint8_t determine_fe(adapter **a, int pos, char *csip, int sport)
 	return 1;
 }
 
-int add_satip_server(char *host, int port, int fe, int delsys, char *source_ip)
+int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip, int use_tcp)
 {
 	int i, k;
 	adapter *ad;
@@ -1261,7 +1271,7 @@ int add_satip_server(char *host, int port, int fe, int delsys, char *source_ip)
 	sip->setup_pids = opts.satip_setup_pids;
 	sip->tcp_size = 0;
 	sip->tcp_data = NULL;
-	sip->use_tcp = opts.satip_rtsp_over_tcp;
+	sip->use_tcp = use_tcp;
 
 	if (i + 1 > a_count)
 		a_count = i + 1; // update adapter counter
@@ -1274,6 +1284,7 @@ int add_satip_server(char *host, int port, int fe, int delsys, char *source_ip)
 	return sip->id;
 }
 
+// [*][DELSYS:][FE_ID@][source_ip/]host[:port]
 void find_satip_adapter(adapter **a)
 {
 	int i, la;
@@ -1282,18 +1293,26 @@ void find_satip_adapter(adapter **a)
 	char host[100];
 	char source_ip[100];
 	int port;
-	int fe, delsys;
+	int use_tcp;
+	int fe;
+	uint8_t delsys;
 
 	if (!opts.satip_servers || !opts.satip_servers[0])
 		return;
 	char satip_servers[strlen(opts.satip_servers) + 10];
 	strcpy(satip_servers, opts.satip_servers);
-	la = split(arg, satip_servers, 50, ',');
+	la = split(arg, satip_servers, ARRAY_SIZE(arg), ',');
 
 	for (i = 0; i < la; i++)
 	{
+		use_tcp = opts.satip_rtsp_over_tcp;
+
+		if (arg[i][0] == '*')
+		{
+			use_tcp = 1 - use_tcp;
+			arg[i]++;
+		}
 		sep = NULL;
-		sep1 = NULL;
 		sep2 = NULL;
 		sep1 = strchr(arg[i], ':');
 		if (sep1)
@@ -1344,7 +1363,7 @@ void find_satip_adapter(adapter **a)
 			memmove(host, end + 1, sizeof(host) - 1);
 		}
 		port = map_int(sep2, NULL);
-		add_satip_server(host, port, fe, delsys, source_ip);
+		add_satip_server(host, port, fe, delsys, source_ip, use_tcp);
 	}
 }
 
@@ -1420,7 +1439,7 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h)
 		eos = strchr(sep, '<');
 		if (eos)
 			*eos = 0;
-		la = split(arg, sep, MAX_DVBAPI_SYSTEMS, ',');
+		la = split(arg, sep, ARRAY_SIZE(arg), ',');
 		for (i = 0; i < la; i++)
 		{
 			int ds = map_intd(arg[i], satip_delsys, -1);
@@ -1445,9 +1464,9 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h)
 			disable_satip_server(s->host, s->port);
 			for (i = 0; i < i_order; i++)
 			{
-				int ds = order[i];
+				uint8_t ds = order[i];
 				for (j = 0; j < s->tuners[ds]; j++)
-					add_satip_server(s->host, s->port, fe++, ds, NULL);
+					add_satip_server(s->host, s->port, fe++, ds, NULL, opts.satip_rtsp_over_tcp);
 			}
 			getAdaptersCount();
 		}
@@ -1474,7 +1493,7 @@ int satip_getxml(void *x)
 	memset(satip_xml, 0, sizeof(satip_xml));
 	memset(sxd, 0, sizeof(sxd));
 	strncpy(satip_xml, opts.satip_xml, sizeof(satip_xml) - 1);
-	la = split(arg, satip_xml, MAX_SATIP_XML, ',');
+	la = split(arg, satip_xml, ARRAY_SIZE(arg), ',');
 	for (i = 0; i < la; i++)
 	{
 		SAFE_STRCPY(sxd[i].url, arg[i]);
@@ -1496,4 +1515,4 @@ char *init_satip_pointer(int len)
 _symbols satipc_sym[] =
 	{
 		{"ad_satip", VAR_AARRAY_STRING, satip, 1, MAX_ADAPTERS, offsetof(satipc, sip)},
-		{NULL, 0, NULL, 0, 0}};
+		{NULL, 0, NULL, 0, 0, 0}};

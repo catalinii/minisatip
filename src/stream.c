@@ -231,7 +231,6 @@ setup_stream(char *str, sockets *s)
 		int ad = sid->adapter;
 		if (!strstr(tmp_str, "addpids") && !strstr(tmp_str, "delpids"))
 		{
-			sid->adapter = -1;
 			close_adapter_for_stream(sid->sid, ad);
 		}
 	}
@@ -269,10 +268,9 @@ int start_play(streams *sid, sockets *s)
 	if (compare_tunning_parameters(sid->adapter, &sid->tp)) // close the adapter that is required to be closed
 	{
 		restart_needed_adapters(sid->adapter, sid->sid);
-		if (ad && compare_slave_parameters(ad, &sid->tp))
+		if (ad && !compare_slave_parameters(ad, &sid->tp))
 		{
 			close_adapter_for_stream(sid->sid, ad->id);
-			sid->adapter = -1;
 		}
 		ad = get_adapter(sid->adapter);
 	}
@@ -291,10 +289,9 @@ int start_play(streams *sid, sockets *s)
 		{
 			LOG("slave stream tuning to a new frequency, finding a new adapter");
 			close_adapter_for_stream(sid->sid, ad->id);
-			sid->adapter = -1;
 		}
 		a_id = get_free_adapter(&sid->tp);
-		LOG("Got adapter %d on socket %d", a_id, s->id);
+		LOG("Got adapter %d on stream %d socket %d", a_id, sid->sid, s->id);
 		if (a_id < 0)
 			return -404;
 		sid->adapter = a_id;
@@ -319,7 +316,7 @@ int start_play(streams *sid, sockets *s)
 	sid->tp.apids = sid->tp.dpids = sid->tp.pids = sid->tp.x_pmt = NULL;
 
 	ad = get_adapter(sid->adapter);
-	if (ad->do_tune)
+	if (ad && ad->do_tune)
 		s->flush_enqued_data = 1;
 
 	return tune(sid->adapter, s->sid);
@@ -422,7 +419,7 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp)
 			return 0;
 		}
 
-		l = split(arg2, arg, 10, ';');
+		l = split(arg2, arg, ARRAY_SIZE(arg2), ';');
 	}
 	//      LOG("arg2 %s %s %s",arg2[0],arg2[1],arg2[2]);
 	memset(&p, 0, sizeof(p));
@@ -496,7 +493,7 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp)
 						   p.dest, p.port);
 
 		if ((sid->rsock_id = sockets_add(sid->rsock, NULL, sid->sid, TYPE_UDP, NULL, (socket_action)close_stream_for_socket, NULL)) < 0)
-			LOG_AND_RETURN(-1, "RTP socket_add failed");
+			LOG_AND_RETURN(-1, "RTP sockets_add failed");
 
 		set_socket_send_buffer(sid->rsock, opts.output_buffer);
 
@@ -510,7 +507,7 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp)
 
 		if ((sid->rtcp_sock = sockets_add(sid->rtcp, NULL, sid->sid, TYPE_RTCP,
 										  (socket_action)rtcp_confirm, NULL, NULL)) < 0) // read rtcp
-			LOG_AND_RETURN(-1, "RTCP socket_add failed");
+			LOG_AND_RETURN(-1, "RTCP sockets_add failed");
 
 		for (i = 0; i < MAX_STREAMS; i++)
 			if ((sid2 = get_sid_for(i)) && i != sid->sid && sid2->sa.sin_port == sid->sa.sin_port && sid2->sa.sin_addr.s_addr == sid->sa.sin_addr.s_addr)
@@ -975,7 +972,7 @@ int process_dmx(sockets *s)
 	stime = getTickUs();
 
 	LOGM("process_dmx start called for adapter %d -> %d out of %d bytes read, %jd ms ago",
-		 s->sid, rlen, s->lbuf, ms_ago);
+		 ad->id, rlen, s->lbuf, ms_ago);
 
 #ifndef DISABLE_T2MI
 	if (ad->is_t2mi >= 0)
@@ -989,7 +986,7 @@ int process_dmx(sockets *s)
 	rlen = ad->rlen;
 	int packet_no_sid = check_cc(ad);
 
-	if (ad->sid_cnt == 1 && ad->master_sid >= 0 && !packet_no_sid) // we have just 1 stream, do not check the pids, send everything to the destination
+	if (ad->sid_cnt == 1 && ad->master_sid >= 0 && !packet_no_sid && !ad->null_packets) // we have just 1 stream, do not check the pids, send everything to the destination
 	{
 		sid = get_sid(ad->master_sid);
 		if (!sid || sid->enabled != 1)
@@ -1063,12 +1060,12 @@ int read_dmx(sockets *s)
 	if (ad->wait_new_stream && !ad->tune_time)
 		ad->tune_time = rtime;
 
-	if (ad && ad->wait_new_stream && (rtime - ad->tune_time < 200)) // check new transponder
+	if (ad->wait_new_stream && (rtime - ad->tune_time < 200)) // check new transponder
 	{
 		int new_rlen = check_new_transponder(ad, s->rlen);
 		if (!new_rlen)
 		{
-			LOGM("Flushing adapter buffer of %d bytes after the tune %jd ms ago", s->rlen, rtime - ad->tune_time);
+			LOGM("Flushing adapter %d buffer of %d bytes after the tune %jd ms ago", ad->id, s->rlen, rtime - ad->tune_time);
 			s->rlen = 0;
 			return 0;
 		}
@@ -1081,7 +1078,7 @@ int read_dmx(sockets *s)
 		send = 1;
 
 	LOGM("read_dmx send=%d, flush_all=%d, cnt %d called for adapter %d -> %d out of %d bytes read, %jd ms ago (%jd %jd)",
-		 send, flush_all, cnt, s->sid, s->rlen, s->lbuf, rtime - ad->rtime, rtime, ad->rtime);
+		 send, flush_all, cnt, ad->id, s->rlen, s->lbuf, rtime - ad->rtime, rtime, ad->rtime);
 
 	if (!send)
 		return 0;
@@ -1413,4 +1410,4 @@ _symbols stream_sym[] =
 		{"st_pids", VAR_FUNCTION_STRING, (void *)&get_stream_pids, 0, MAX_STREAMS, 0},
 		{"st_overflow", VAR_FUNCTION_INT, (void *)&get_stream_overflow, 0, MAX_STREAMS, 0},
 		{"st_buffered", VAR_FUNCTION_INT, (void *)&get_stream_buffered_size, 0, MAX_STREAMS, 0},
-		{NULL, 0, NULL, 0, 0}};
+		{NULL, 0, NULL, 0, 0, 0}};

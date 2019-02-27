@@ -133,6 +133,7 @@
 			myTable += "<th class='dt-right'>Pos.</th>";
 			myTable += "<th class='dt-right'>Frequency</th>";
 			myTable += "<th class='dt-right'>SR/BW</th>";
+			myTable += "<th class='dt-right'>Stream</th>";
 			myTable += "<th class='dt-right'>Signal</th>";
 			if (has_axe) {
 				myTable += "<th class='dt-right'>Packets</th>";
@@ -202,6 +203,12 @@
 				else
 					myTable += "<td class='dt-right'></td>";
 
+				// STREAM
+				var stream = state['ad_stream'][i];
+				if (parseInt(stream) <= 0)
+					stream = '';
+				myTable += "<td class='dt-right'>" + stream + " </td>";
+
 				// SIGNAL
 				var signal = "";
 				if (!ad_enabled) {
@@ -227,6 +234,7 @@
 				}
 				myTable += "<td class='dt-right'>" + signal + " </td>";
 
+				// AXE
 				if (has_axe) {
 					myTable += "<td class='dt-right'>" + state['ad_axe_pktc'][i] + " </td>";
 					myTable += "<td class='dt-right'>" + state['ad_axe_ccerr'][i] + " </td>";

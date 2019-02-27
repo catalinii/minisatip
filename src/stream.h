@@ -72,7 +72,7 @@ void dump_streams();
 streams *get_sid1(int sid, char *file, int line);
 int get_session_id(int i);
 void set_session_id(int i, int id);
-int fix_master_sid(int adapter);
+int fix_master_sid(int a_id);
 int rtcp_confirm(sockets *s);
 char *get_stream_rhost(int s_id, char *dest, int ld);
 int get_stream_rport(int s_id);
