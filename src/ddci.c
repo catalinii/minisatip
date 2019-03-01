@@ -786,9 +786,9 @@ int push_ts_to_ddci_buffer(ddci_device_t *d, unsigned char *b, int rlen)
 		d->wo = (d->wo + left) % DDCI_BUFFER;
 	}
 	// do not overwrite the data where d->ro points to
-	if (rlen > 0 && (d->ro - d->wo > 188))
+	left = d->ro - d->wo - 188;
+	if (rlen > 0 && left > 0)
 	{
-		left = d->ro - d->wo - 188;
 		if (left > rlen)
 			left = rlen;
 		memcpy(d->out + d->wo, b, left);
