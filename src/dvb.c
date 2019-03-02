@@ -1409,7 +1409,7 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys)
 
 // returns the strength and SNR between 0 .. 65535
 
-void get_signal(adapter *ad, int *status, int *ber, int *strength, int *snr)
+void get_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength, uint16_t *snr)
 {
 	*status = 0;
 	*ber = *snr = *strength = 0;
@@ -1441,7 +1441,7 @@ void get_signal(adapter *ad, int *status, int *ber, int *strength, int *snr)
 
 // returns the strength and SNR between 0 .. 65535
 
-int get_signal_new(adapter *ad, int *status, int *ber, int *strength, int *snr)
+int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength, uint16_t *snr)
 {
 #if DVBAPIVERSION >= 0x050A
 	*status = *snr = *ber = *strength = 0;
@@ -1523,8 +1523,9 @@ int get_signal_new(adapter *ad, int *status, int *ber, int *strength, int *snr)
 void dvb_get_signal(adapter *ad)
 {
 	int start = 0;
-	int strength = 0, snr = 0;
-	int status = 0, ber = 0;
+	uint16_t strength = 0, snr = 0;
+	int status = 0;
+	uint32_t ber = 0;
 
 	if (ad->strength_multiplier || ad->snr_multiplier)
 	{
