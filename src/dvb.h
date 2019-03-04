@@ -53,6 +53,7 @@ typedef enum fe_delivery_system
 	SYS_DAB,
 	SYS_DVBT2,
 	SYS_TURBO,
+	SYS_DVBC_ANNEX_C,
 } fe_delivery_system_t;
 typedef enum fe_status
 {
