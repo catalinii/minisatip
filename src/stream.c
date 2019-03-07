@@ -837,6 +837,11 @@ int check_cc(adapter *ad)
 	int pid;
 	int packet_no_sid = 0;
 	unsigned char *b;
+        
+	if (ad->buf[0] != 0x47) {
+		LOGM("%s Out Of Sync: ", __FUNCTION__);
+		return 0;
+	}
 
 	if ((p = find_pid(ad->id, 8192)))
 		return 0;
