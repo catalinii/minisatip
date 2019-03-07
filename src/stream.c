@@ -864,7 +864,7 @@ int check_cc(adapter *ad)
 			if (p->cc < 0 || p->cc > 15)
 				p->cc = cc;
 			else
-				p->cc = (p->cc + 1) % 16;
+				p->cc = (p->cc + 1) & 15;
 
 			if ((opts.debug & LOG_DMX) == LOG_DMX)
 				dump_packets("check_cc -> ", b, 188, i);
