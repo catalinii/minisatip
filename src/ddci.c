@@ -592,7 +592,6 @@ int push_ts_to_adapter(adapter *ad, unsigned char *b, int new_pid, int *ad_pos)
 	memcpy(ad->buf + new_pos, b, 188);
 	set_pid_ts(ad->buf + new_pos, new_pid);
 	set_pid_ts(b, 0x1FFF);
-	LOGM("new position found is %d", new_pos)
 	*ad_pos = new_pos;
 	return 0;
 }
@@ -674,6 +673,8 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d)
 		if (dpid != (dpid & 0x1FFF))
 			LOG("%s: mapped pid not valid %d, source pid %d adapter %d", __FUNCTION__, dpid, pid, ad->id);
 
+		dump_packets("ddci_process_ts -> DD", d->out + i, 188, i);
+
 		set_pid_ts(b, dpid);
 		io[iop].iov_base = b;
 		io[iop].iov_len = 188;
@@ -717,7 +718,7 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d)
 
 	for (i = d->ro; i != d->wo; i = (i + 188) % DDCI_BUFFER)
 	{
-		dump_packets("ddci_process_ts ->", d->out + i, 188, i);
+		dump_packets("ddci_process_ts -> AD", d->out + i, 188, i);
 		int rv = copy_ts_from_ddci_buffer(ad, d, d->out + i, &ad_pos);
 		if (!rv && (d->ro == i))
 			d->ro = (i + 188) % DDCI_BUFFER;
