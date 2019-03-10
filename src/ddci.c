@@ -45,6 +45,7 @@
 #include "utils.h"
 #include "tables.h"
 #include "ca.h"
+#include "stream.h"
 
 #define DEFAULT_LOG LOG_DVBCA
 
@@ -69,6 +70,7 @@ typedef struct ddci_mapping_table
 	int pmt[MAX_CHANNELS_ON_CI + 1];
 	int npmt;
 	int filter_id;
+	int pid_added;
 } ddci_mapping_table_t;
 
 ddci_mapping_table_t *mapping_table;
@@ -96,7 +98,7 @@ int add_pid_ddci(int ddci_adapter, int pid, int ddci_pid, int idx)
 	}
 	return -1;
 }
-int add_pid_mapping_table(int ad, int pid, int pmt, int ddci_adapter)
+int add_pid_mapping_table(int ad, int pid, int pmt, int ddci_adapter, int force_add_pid)
 {
 	int ddci_pid = 0, i;
 	int key = (ad << 16) | pid;
@@ -135,15 +137,23 @@ int add_pid_mapping_table(int ad, int pid, int pmt, int ddci_adapter)
 				break;
 			}
 		}
-	if (add_pid)
+	if (add_pid && force_add_pid)
 	{
 		if (pid != 1)
-			mark_pid_add(-1, ad, pid);
+		{
+			mapping_table[idx].pid_added = 1;
+			mark_pid_add(DDCI_SID, ad, pid);
+		}
 		else
 			mapping_table[idx].filter_id = add_filter(ad, 1, (void *)process_cat, get_ddci(ddci_adapter), FILTER_CRC);
-		mark_pid_add(-1, ddci_adapter, ddci_pid);
+	}
+	if (add_pid)
+	{
+		// add the pids to the ddci adapter
+		mark_pid_add(DDCI_SID, ddci_adapter, ddci_pid);
 		update_pids(ddci_adapter);
 	}
+
 	LOG("mapped adapter %d pid %d to %d", ad, pid, ddci_pid);
 	return ddci_pid;
 }
@@ -184,7 +194,7 @@ int del_pid_ddci(int ddci_adapter, int ddci_pid, int pmt)
 int del_pid_mapping_table(int ad, int pid, int pmt)
 {
 	int ddci_pid = -1, ddci_adapter, i;
-	int filter_id;
+	int filter_id, pid_added;
 	int key = (ad << 16) | pid;
 	int idx = get_index_hash(&mapping_table[0].ad_pid, mapping_table_pids, sizeof(ddci_mapping_table_t), key, key);
 	if (idx == -1)
@@ -203,20 +213,24 @@ int del_pid_mapping_table(int ad, int pid, int pmt)
 	ddci_pid = mapping_table[idx].ddci_pid;
 	ddci_adapter = mapping_table[idx].ddci_adapter;
 	filter_id = mapping_table[idx].filter_id;
+	pid_added = mapping_table[idx].pid_added;
 	mapping_table[idx].ad_pid = -1;
 	mapping_table[idx].ddci_adapter = -1;
 	mapping_table[idx].ddci_pid = -1;
 	mapping_table[idx].rewrite = 0;
 	mapping_table[idx].filter_id = -1;
+	mapping_table[idx].pid_added = -1;
 
 	SPid *p = find_pid(ddci_adapter, ddci_pid);
-	LOGM("No pmt found for ad %d pid %d ddci_pid %d, deleteing if not used %d", ad, pid, ddci_pid, p ? p->sid[0] : -2);
-	if (pid == 1)
+	LOGM("No pmt for ad %d pid %d ddci_pid %d, deleteing if not used %d", ad, pid, ddci_pid, p ? p->sid[0] : -2);
+	if (p)
+		mark_pid_deleted(ddci_adapter, DDCI_SID, ddci_pid, NULL);
+	if (filter_id >= 0)
 		del_filter(filter_id);
-	else if (p && p->sid[0] == -1)
+	else if (pid_added >= 0)
 	{
 		LOGM("Marking pid %d deleted on adapter %d (initial ad %d pid %d)", ddci_pid, ddci_adapter, ad, pid);
-		mark_pid_deleted(ddci_adapter, -1, ddci_pid, NULL);
+		mark_pid_deleted(ad, DDCI_SID, pid, NULL);
 	}
 	return del_pid_ddci(ddci_adapter, ddci_pid, pmt);
 }
@@ -331,24 +345,24 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 	if (!d->channels++) // for first PMT set transponder ID and add CAT
 	{
 		d->tid = ad->transponder_id;
-		add_pid_mapping_table(ad->id, 1, pmt->id, d->id); // add pid 1
+		add_pid_mapping_table(ad->id, 1, pmt->id, d->id, 1); // add pid 1
 	}
 
 	LOG("found DDCI %d for pmt %d, running channels %d", ddid, pmt->id, d->channels);
 
-	add_pid_mapping_table(ad->id, pmt->pid, pmt->id, d->id);
+	add_pid_mapping_table(ad->id, pmt->pid, pmt->id, d->id, 0);
 	set_pid_rewrite(ad->id, pmt->pid, 0); // do not send the PMT pid to the DDCI device
 
 	for (i = 0; i < pmt->caids; i++)
 	{
 		LOGM("DD %d adding ECM pid %d", d->id, pmt->capid[i]);
-		add_pid_mapping_table(ad->id, pmt->capid[i], pmt->id, d->id);
+		add_pid_mapping_table(ad->id, pmt->capid[i], pmt->id, d->id, 1);
 	}
 
 	for (i = 0; i < pmt->stream_pids; i++)
 	{
-		LOGM("DD %d adding ALL pid %d", d->id, pmt->stream_pid[i].pid);
-		add_pid_mapping_table(ad->id, pmt->stream_pid[i].pid, pmt->id, d->id);
+		LOGM("DD %d adding stream pid %d", d->id, pmt->stream_pid[i].pid);
+		add_pid_mapping_table(ad->id, pmt->stream_pid[i].pid, pmt->id, d->id, 0);
 	}
 
 	update_pids(ad->id);
@@ -673,7 +687,7 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d)
 		if (dpid != (dpid & 0x1FFF))
 			LOG("%s: mapped pid not valid %d, source pid %d adapter %d", __FUNCTION__, dpid, pid, ad->id);
 
-		dump_packets("ddci_process_ts -> DD", d->out + i, 188, i);
+		dump_packets("ddci_process_ts -> DD", b, 188, i);
 
 		set_pid_ts(b, dpid);
 		io[iop].iov_base = b;
@@ -986,7 +1000,7 @@ int process_cat(int filter, unsigned char *b, int len, void *opaque)
 	// sending EMM pids to the CAM
 	for (i = 0; i < id; i++)
 	{
-		add_pid_mapping_table(f->adapter, d->capid[i], d->pmt[0], d->id);
+		add_pid_mapping_table(f->adapter, d->capid[i], d->pmt[0], d->id, 1);
 	}
 	d->cat_processed = 1;
 	d->ncapid = id;
