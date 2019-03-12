@@ -1093,7 +1093,7 @@ void clean_psi(adapter *ad, uint8_t *b)
 	SPMT *cpmt;
 
 	p = find_pid(ad->id, pid);
-	if (!p || p->sid[0] == -1) // no need to fix this PMT as it not requested by any stream
+	if (!p || !VALID_SID(p->sid[0])) // no need to fix this PMT as it not requested by any stream
 		return;
 
 	if (!(cpmt = get_pmt(-p->pmt))) // no key associated with PMT - most likely the channel is clear
@@ -1509,7 +1509,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 		if (p)
 			p->pmt = -pmt->id;
 
-		if (ad && p && opts.clean_psi && p->sid[0] != -1)
+		if (ad && p && opts.clean_psi)
 			clean_psi(ad, b);
 
 		return 0;

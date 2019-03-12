@@ -1800,7 +1800,9 @@ void _dump_packets(char *message, unsigned char *b, int len, int packet_offset)
 		crc = crc_32(b + i + 4, 184); // skip header
 		pid = (b[i + 1] & 0x1F) * 256 + b[i + 2];
 		cc = b[i + 3] & 0xF;
-		LOG("%s: pid %d (%X) CC=%X CRC=%08X%s pos: %d packet %d : %02X %02X %02X %02X", message, pid, pid, cc, crc, (b[i + 3] & 0x80) ? "encrypted" : "", i + packet_offset, (packet_offset + i) / 188, b[i], b[i + 1], b[i + 2], b[i + 3]);
+		LOG("%s: pid %04d (%04X) CC=%X CRC=%08X%s pos: %d packet %d : [%02X %02X %02X %02X] %02X %02X %02X %02X",
+			message, pid, pid, cc, crc, (b[i + 3] & 0x80) ? "encrypted" : "", i + packet_offset, (packet_offset + i) / 188,
+			b[i], b[i + 1], b[i + 2], b[i + 3], b[i + 4], b[i + 5], b[i + 6], b[i + 7]);
 	}
 }
 

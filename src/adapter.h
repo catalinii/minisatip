@@ -63,7 +63,9 @@ typedef struct struct_adapter
 	int master_source;
 	int is_fbc;
 	uint64_t used;
-	int strength, ber, snr;					   // strength and snr have values between 0 and 255
+	uint16_t strength; // strength have values between 0 and 255
+	uint32_t ber;
+	uint16_t snr;	   // strength have values between 0 and 255
 	float strength_multiplier, snr_multiplier; // final value: strength * strength_multipler, same for snr
 	uint32_t pid_err, dec_err;				   // detect pids received but not part of any stream, decrypt errors
 	int dec_init;

@@ -73,7 +73,7 @@ struct struct_opts
 	int file_line;
 	char *last_log;
 	int dvbapi_port;
-	char *dvbapi_host;
+	char dvbapi_host[100];
 	int dvbapi_offset;
 	int drop_encrypted;
 	int rtsp_port;
