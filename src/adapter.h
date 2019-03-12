@@ -68,7 +68,6 @@ typedef struct struct_adapter
 	uint16_t snr;	   // strength have values between 0 and 255
 	float strength_multiplier, snr_multiplier; // final value: strength * strength_multipler, same for snr
 	uint32_t pid_err, dec_err;				   // detect pids received but not part of any stream, decrypt errors
-	int dec_init;
 	diseqc diseqc_param;
 	int diseqc_multi;
 	int old_diseqc;

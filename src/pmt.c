@@ -683,7 +683,7 @@ int decrypt_batch(SPMT *pmt)
 		return 1;
 	}
 	b = pmt->batch[0].data - 4;
-	pid = (b[1] & 0x1F) * 256 + b[2];
+	pid = PID_FROM_TS(b);
 	pmt->batch[pmt->blen].data = NULL;
 	pmt->batch[pmt->blen].len = 0;
 	pmt->cw->op->decrypt_stream(pmt->cw, pmt->batch, 184);
@@ -728,7 +728,7 @@ int pmt_decrypt_stream(adapter *ad)
 	for (i = 0; i < rlen; i += 188)
 	{
 		b = ad->buf + i;
-		pid = (b[1] & 0x1F) * 256 + b[2];
+		pid = PID_FROM_TS(b);
 		if (b[3] & 0x80)
 		{
 
@@ -805,7 +805,7 @@ int pmt_decrypt_stream(adapter *ad)
 			}
 			//			DEBUGM("clear encrypted flags for pid %d", pid);
 			b[3] &= 0x3F; // clear the encrypted flags
-			if (pmt->cw) ad->dec_init = 1; // Decoding initialized!
+			if (pmt->cw) pmt->active_dec = 1; // Decoding initialized!
 		}
 	}
 
@@ -819,6 +819,7 @@ int pmt_process_stream(adapter *ad)
 {
 	SPid *p;
 	int i, pid;
+	int drop_pids[MAX_PIDS];
 	uint8_t *b;
 
 	int rlen = ad->rlen;
@@ -828,7 +829,16 @@ int pmt_process_stream(adapter *ad)
 	{
 		b = ad->buf + i;
 		pid = PID_FROM_TS(b);
+		if (pid >= 0 && pid <= MAX_PIDS)
+		{
+			drop_pids[pid] = 0;
+		}
 		p = find_pid(ad->id, pid);
+		if (opts.clean_psi && p && p->pmt >= 0 && p->pmt < npmts && pmts[p->pmt] && !(pmts[p->pmt]->active_dec))
+		{
+			drop_pids[pid] = 1;
+			LOG("---> Drop pid %d", pid);
+		}
 		if (p && (p->filter != -1))
 		{
 			process_filters(ad, b, p);
@@ -842,13 +852,13 @@ int pmt_process_stream(adapter *ad)
 	tables_ca_ts(ad);
 	pmt_decrypt_stream(ad);
 
-	if (ad->ca_mask && (opts.drop_encrypted || !ad->dec_init))
+	if (ad->ca_mask && (opts.drop_encrypted || opts.clean_psi))
 	{
 		for (i = 0; i < ad->rlen; i += DVB_FRAME)
 		{
 			b = ad->buf + i;
 			pid = PID_FROM_TS(b);
-			if ((b[3] & 0x80) == 0x80)
+			if (((b[3] & 0x80) == 0x80) && drop_pids[pid])
 			{
 				if (opts.debug & (DEFAULT_LOG | LOG_DMX))
 					LOG("Marking PID %d packet %d pos %d as NULL", pid, i / 188, i);
@@ -901,6 +911,7 @@ int pmt_add(int i, int adapter, int sid, int pmt_pid)
 	pmt->id = i;
 	pmt->blen = 0;
 	pmt->enabled = 1;
+	pmt->active_dec = 0;
 	pmt->version = -1;
 	pmt->invalidated = 1;
 	pmt->skip_first = 1;
@@ -956,6 +967,7 @@ int pmt_del(int id)
 
 	aid = pmt->adapter;
 	pmt->enabled = 0;
+	pmt->active_dec = 0;
 
 	pmt->sid = 0;
 	pmt->pid = 0;
@@ -1093,7 +1105,7 @@ void clean_psi(adapter *ad, uint8_t *b)
 	SPMT *cpmt;
 
 	p = find_pid(ad->id, pid);
-	if (!p || !VALID_SID(p->sid[0])) // no need to fix this PMT as it not requested by any stream
+	if (!p || p->sid[0] == -1) // no need to fix this PMT as it not requested by any stream
 		return;
 
 	if (!(cpmt = get_pmt(-p->pmt))) // no key associated with PMT - most likely the channel is clear
@@ -1196,7 +1208,7 @@ int assemble_emm(SFilter *f, uint8_t *b)
 int assemble_normal(SFilter *f, uint8_t *b)
 {
 	int len = 0, pid;
-	pid = (b[1] & 0x1F) * 256 + b[2];
+	pid = PID_FROM_TS(b);
 	if ((b[1] & 0x40) == 0x40)
 	{
 		len = ((b[6] & 0xF) << 8) + b[7];
@@ -1246,7 +1258,7 @@ int assemble_packet(SFilter *f, uint8_t *b)
 	if ((b[0] != 0x47)) // make sure we are dealing with TS
 		return 0;
 
-	pid = (b[1] & 0x1F) * 256 + b[2];
+	pid = PID_FROM_TS(b);
 	if (f->flags & FILTER_EMM)
 		len = assemble_emm(f, b);
 	else
@@ -1509,7 +1521,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 		if (p)
 			p->pmt = -pmt->id;
 
-		if (ad && p && opts.clean_psi)
+		if (ad && p && opts.clean_psi && p->sid[0] != -1)
 			clean_psi(ad, b);
 
 		return 0;

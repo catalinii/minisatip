@@ -120,6 +120,7 @@ typedef struct struct_pmt
 	char provider[50], name[50];
 	void *opaque;
 	char skip_first;
+	int active_dec;
 	char active;  // PMT structure was already filled
 	char running; // PMT has channels running
 	uint16_t filter;
