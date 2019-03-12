@@ -1520,7 +1520,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 		if (p)
 			p->pmt = -pmt->id;
 
-		if (ad && p && opts.clean_psi && p->sid[0] != -1)
+		if (ad && p && opts.clean_psi)
 			clean_psi(ad, b);
 
 		return 0;
