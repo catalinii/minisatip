@@ -73,6 +73,7 @@ Help
 	- note: * as adapter means apply to all adapters
 
 * -E Allows encrypted stream to be sent to the client even if the decrypting is unsuccessful
+	- note: when using with '-t' only after initial decryption of the channel
  
 * -Y --delsys ADAPTER1:DELIVERY_SYSTEM1[,ADAPTER2:DELIVERY_SYSTEM2[,..]] - specify the delivery system of the adapters	
 	* eg: --delsys 1:dvbt,2:dvbs
