@@ -837,7 +837,6 @@ int pmt_process_stream(adapter *ad)
 		if (opts.clean_psi && p && p->pmt >= 0 && p->pmt < npmts && pmts[p->pmt] && !(pmts[p->pmt]->active_dec))
 		{
 			drop_pids[pid] = 1;
-			LOG("---> Drop pid %d", pid);
 		}
 		if (p && (p->filter != -1))
 		{
