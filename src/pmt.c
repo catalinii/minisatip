@@ -842,7 +842,7 @@ int pmt_process_stream(adapter *ad)
 	tables_ca_ts(ad);
 	pmt_decrypt_stream(ad);
 
-	if (ad->ca_mask && (opts.drop_encrypted || (ad->dec_init == 0)))
+	if (ad->ca_mask && (opts.drop_encrypted || !ad->dec_init))
 	{
 		for (i = 0; i < ad->rlen; i += DVB_FRAME)
 		{
