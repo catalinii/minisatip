@@ -831,7 +831,7 @@ int pmt_process_stream(adapter *ad)
 		pid = PID_FROM_TS(b);
 		if (pid >= 0 && pid <= MAX_PIDS)
 		{
-			drop_pids[pid] = 0;
+			drop_pids[pid] = 1 - opts.clean_psi;
 		}
 		p = find_pid(ad->id, pid);
 		if (opts.clean_psi && p && p->pmt >= 0 && p->pmt < npmts && pmts[p->pmt] && !(pmts[p->pmt]->active_dec))
