@@ -846,8 +846,7 @@ int check_cc(adapter *ad)
 		b = ad->buf + i;
 		pid = (b[1] & 0x1f) << 8;
 		pid |= b[2];
-		if (pid == 8191)
-			continue;
+
 		p = find_pid(ad->id, pid);
 
 		if ((!p))
