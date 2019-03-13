@@ -844,6 +844,7 @@ int check_cc(adapter *ad)
 	for (i = 0; i < ad->rlen; i += DVB_FRAME)
 	{
 		b = ad->buf + i;
+
 		pid = (b[1] & 0x1f) << 8;
 		pid |= b[2];
 
@@ -883,7 +884,7 @@ int check_cc(adapter *ad)
 			}
 			p->cc = cc;
 		}
-		if (p->sid[0] == -1)
+		if (!VALID_SID(p->sid[0]))
 			packet_no_sid++;
 #ifdef CRC_TS
 		if (p)
@@ -917,7 +918,7 @@ int check_cc(adapter *ad)
 
 int process_packet(unsigned char *b, adapter *ad)
 {
-	int j, max_pack;
+	int j, max_pack, st_id;
 	SPid *p;
 	int _pid = (b[1] & 0x1f) * 256 + b[2];
 	streams *sid;
@@ -932,15 +933,17 @@ int process_packet(unsigned char *b, adapter *ad)
 		return 0;
 	}
 
-	if (p->sid[0] == -1)
+	if (!VALID_SID(p->sid[0]))
 	{
 		return 0;
 	}
 
 	for (j = 0; j < MAX_STREAMS_PER_PID && p->sid[j] > -1; j++)
 	{
-		if ((sid = get_sid(p->sid[j])) && sid->do_play)
+		st_id = p->sid[j];
+		if (VALID_SID(st_id) && st[st_id] && st[st_id]->do_play)
 		{
+			sid = st[st_id];
 			max_pack = sid->type == STREAM_RTSP_TCP ? sid->max_iov : UDP_MAX_PACK;
 			if (sid->iiov > max_pack)
 			{
