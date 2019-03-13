@@ -857,7 +857,12 @@ int check_cc(adapter *ad)
 			packet_no_sid++;
 			continue;
 		}
+
 		p->packets++;
+
+		if (pid == 8191)
+			continue;
+
 		if (b[3] & 0x10)
 		{
 			cc_before = p->cc;
