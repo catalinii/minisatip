@@ -819,7 +819,7 @@ int pmt_process_stream(adapter *ad)
 {
 	SPid *p;
 	int i, pid;
-	int drop_pids[MAX_PIDS];
+	int drop_pids[8192];
 	uint8_t *b;
 
 	int rlen = ad->rlen;
@@ -829,10 +829,9 @@ int pmt_process_stream(adapter *ad)
 	{
 		b = ad->buf + i;
 		pid = PID_FROM_TS(b);
-		if (pid >= 0 && pid <= MAX_PIDS)
-		{
-			drop_pids[pid] = 1 - opts.clean_psi;
-		}
+		if (pid < 0 || pid > 8191)
+			pid = 8192;
+		drop_pids[pid] = 1 - opts.clean_psi;
 		p = find_pid(ad->id, pid);
 		if (opts.clean_psi && p && p->pmt >= 0 && p->pmt < npmts && pmts[p->pmt] && !(pmts[p->pmt]->active_dec))
 		{
@@ -857,6 +856,8 @@ int pmt_process_stream(adapter *ad)
 		{
 			b = ad->buf + i;
 			pid = PID_FROM_TS(b);
+			if (pid < 0 || pid > 8191)
+				pid = 8192;
 			if (((b[3] & 0x80) == 0x80) && drop_pids[pid])
 			{
 				if (opts.debug & (DEFAULT_LOG | LOG_DMX))
