@@ -1567,7 +1567,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 
 		if (pmt->stream_pids < MAX_PMT_PIDS - 1)
 		{
-			pmt->stream_pid[pmt->stream_pids].type = stype;
+			pmt->stream_pid[pmt->stream_pids++].type = stype;
 			pmt->stream_pid[pmt->stream_pids++].pid = spid;
 		}
 		else
