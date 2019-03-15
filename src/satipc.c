@@ -1096,7 +1096,11 @@ void satipc_commit(adapter *ad)
 		sip->want_tune = 0;
 		sip->err = 0;
 		if (!sip->setup_pids)
+		{
 			strcatf(url, len, "&pids=none");
+			http_request(ad, url, NULL);
+			return;
+		}
 	}
 
 	get_adapter_pids(ad->id, tmp_url, sizeof(tmp_url));
