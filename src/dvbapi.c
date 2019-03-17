@@ -62,7 +62,7 @@ uint64_t dvbapi_last_close = 0;
 
 SKey *keys[MAX_KEYS];
 SMutex keys_mutex;
-unsigned char read_buffer[1500];
+unsigned char read_buffer[8192];
 
 #define TEST_WRITE(a, xlen)                                                                                                                     \
 	{                                                                                                                                           \
