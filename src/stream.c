@@ -1106,6 +1106,8 @@ int calculate_bw(sockets *s)
 	int64_t c_time = getTick();
 	s->rtime = c_time;
 
+	if (bwtt > c_time)
+		bwtt = c_time;
 	if (c_time - bwtt > 1000)
 	{
 		bwtt = c_time;
