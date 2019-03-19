@@ -75,7 +75,7 @@ char *fe_pilot[] =
 
 char *fe_rolloff[] =
 	{"0.35", "0.20", "0.25", " ", //auto
-	 NULL};
+	 "0.15", "0.10", "0.05", NULL};
 
 char *fe_delsys[] =
 	{"undefined", "dvbc", "dvbcb", "dvbt", "dss", "dvbs", "dvbs2", "dvbh", "isdbt",
