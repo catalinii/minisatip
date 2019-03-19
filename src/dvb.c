@@ -466,6 +466,7 @@ int dvb_open_device(adapter *ad)
 			set_proc_data(ad->fn, "fbc_connect", ad->fn);
 		}
 	}
+	dvb_set_demux_source(ad);
 
 	return 0;
 }
@@ -847,8 +848,6 @@ int dvb_tune(int aid, transponder *tp)
 		//        return -1;
 	}
 
-	dvb_set_demux_source(ad);
-
 	switch (tp->sys)
 	{
 	case SYS_DVBS:
@@ -884,10 +883,10 @@ int dvb_tune(int aid, transponder *tp)
 #endif
 
 		LOG("tuning to %d(%d) pol: %s (%d) sr:%d fec:%s delsys:%s mod:%s rolloff:%s pilot:%s, ts clear=%jd, ts pol=%jd",
-			 tp->freq, freq, get_pol(tp->pol), tp->pol, tp->sr,
-			 fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype],
-			 fe_rolloff[tp->ro], fe_pilot[tp->plts],
-			 bclear, bpol)
+			tp->freq, freq, get_pol(tp->pol), tp->pol, tp->sr,
+			fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype],
+			fe_rolloff[tp->ro], fe_pilot[tp->plts],
+			bclear, bpol)
 		break;
 
 	case SYS_DVBT:
