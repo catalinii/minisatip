@@ -133,6 +133,8 @@ typedef enum fe_transmit_mode
 	TRANSMISSION_MODE_1K,
 	TRANSMISSION_MODE_16K,
 	TRANSMISSION_MODE_32K,
+	TRANSMISSION_MODE_C1,
+	TRANSMISSION_MODE_C3780,
 } fe_transmit_mode_t;
 typedef enum fe_type
 {
