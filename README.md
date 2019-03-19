@@ -150,7 +150,7 @@ Help
 * -R --document-root directory: document root for the minisatip web page and images
 
 * -s --satip-servers [~][DELSYS:][FE_ID@][source_ip/]host[:port] - specify the remote satip host and port with delivery system DELSYS, it is possible to use multiple -s 
-	* ~ When using this simbol at start the "pids=all" call is replaced with "pids=0-20"
+	* ~ When using this symbol at start the "pids=all" call is replaced with "pids=0-20"
 	* DELSYS - can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, isdbt, atsc, dvbcb ( - DVBC_ANNEX_B ) [default: dvbs2]
 	host - the server of the satip server
 	port - rtsp port for the satip server [default: 554]
