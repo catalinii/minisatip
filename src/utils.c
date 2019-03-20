@@ -51,6 +51,7 @@
 #include "utils.h"
 #include "minisatip.h"
 #include "socketworks.h"
+#include "pmt.h"
 
 #if !defined(__mips__) && !defined(NO_BACKTRACE)
 #include <execinfo.h>
