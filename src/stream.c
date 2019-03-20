@@ -844,7 +844,7 @@ int check_cc(adapter *ad)
 	for (i = 0; i < ad->rlen; i += DVB_FRAME)
 	{
 		b = ad->buf + i;
-		pid = (b[1] & 0x1f) * 256 + b[2];
+		pid = PID_FROM_TS(b);
 		p = find_pid(ad->id, pid);
 
 		if ((!p))
@@ -917,7 +917,7 @@ int process_packet(unsigned char *b, adapter *ad)
 {
 	int j, max_pack, st_id;
 	SPid *p;
-	int _pid = (b[1] & 0x1f) * 256 + b[2];
+	int _pid = PID_FROM_TS(b);
 	streams *sid;
 	int rtime = ad->rtime;
 
