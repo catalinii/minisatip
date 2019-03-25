@@ -1083,7 +1083,7 @@ int read_dmx(sockets *s)
 	if (!send)
 		return 0;
 
-	ad->flush = flush_all;
+	ad->flush = 0;
 	ls = lock_streams_for_adapter(ad->id);
 	adapter_lock(ad->id);
 	process_dmx(s);
