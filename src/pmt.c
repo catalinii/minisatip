@@ -503,6 +503,8 @@ void update_cw(SPMT *pmt)
 		return;
 	}
 	LOGM("%s: pmt %d, parity %d, CW %d", __FUNCTION__, pmt->id, pmt->parity, pmt->cw ? pmt->cw->id : -1);
+	if (pmt->cw)
+		return;
 	pmt->cw = NULL;
 	for (i = 0; i < ncws; i++)
 		if (cws[i] && cws[i]->enabled && (pmt->parity == cws[i]->parity) && (cws[i]->pmt == pmt->id || cws[i]->pmt == master->id))
