@@ -76,6 +76,7 @@ typedef struct struct_satipc
 	int satip_fe;
 	char last_cmd;
 	char use_tcp;
+	char no_pids_all;
 	char expect_reply, force_commit, want_commit, want_tune, sent_transport, force_pids;
 	int64_t last_setup, last_connect;
 	uint8_t addpids, setup_pids;
@@ -1096,7 +1097,11 @@ void satipc_commit(adapter *ad)
 		sip->want_tune = 0;
 		sip->err = 0;
 		if (!sip->setup_pids)
+		{
 			strcatf(url, len, "&pids=none");
+			http_request(ad, url, NULL);
+			return;
+		}
 	}
 
 	get_adapter_pids(ad->id, tmp_url, sizeof(tmp_url));
@@ -1104,6 +1109,11 @@ void satipc_commit(adapter *ad)
 	{
 		send_apids = send_dpids = 0;
 		send_pids = 1;
+	}
+	if (!strcmp(tmp_url, "all") && sip->no_pids_all)
+	{
+		int tmp_len = 0;
+		strcatf(tmp_url, tmp_len, "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20");
 	}
 
 	if (send_pids)
@@ -1206,7 +1216,7 @@ uint8_t determine_fe(adapter **a, int pos, char *csip, int sport)
 	return 1;
 }
 
-int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip, int use_tcp)
+int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip, int use_tcp, int no_pids_all)
 {
 	int i, k;
 	adapter *ad;
@@ -1272,6 +1282,7 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
 	sip->tcp_size = 0;
 	sip->tcp_data = NULL;
 	sip->use_tcp = use_tcp;
+	sip->no_pids_all = no_pids_all;
 
 	if (i + 1 > a_count)
 		a_count = i + 1; // update adapter counter
@@ -1284,7 +1295,7 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
 	return sip->id;
 }
 
-// [*][DELSYS:][FE_ID@][source_ip/]host[:port]
+// [*][~][DELSYS:][FE_ID@][source_ip/]host[:port]
 void find_satip_adapter(adapter **a)
 {
 	int i, la;
@@ -1294,6 +1305,7 @@ void find_satip_adapter(adapter **a)
 	char source_ip[100];
 	int port;
 	int use_tcp;
+	int no_pids_all;
 	int fe;
 	uint8_t delsys;
 
@@ -1306,10 +1318,16 @@ void find_satip_adapter(adapter **a)
 	for (i = 0; i < la; i++)
 	{
 		use_tcp = opts.satip_rtsp_over_tcp;
+		no_pids_all = 0;
 
 		if (arg[i][0] == '*')
 		{
 			use_tcp = 1 - use_tcp;
+			arg[i]++;
+		}
+		if (arg[i][0] == '~')
+		{
+			no_pids_all = 1;
 			arg[i]++;
 		}
 		sep = NULL;
@@ -1363,7 +1381,7 @@ void find_satip_adapter(adapter **a)
 			memmove(host, end + 1, sizeof(host) - 1);
 		}
 		port = map_int(sep2, NULL);
-		add_satip_server(host, port, fe, delsys, source_ip, use_tcp);
+		add_satip_server(host, port, fe, delsys, source_ip, use_tcp, no_pids_all);
 	}
 }
 
@@ -1466,7 +1484,7 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h)
 			{
 				uint8_t ds = order[i];
 				for (j = 0; j < s->tuners[ds]; j++)
-					add_satip_server(s->host, s->port, fe++, ds, NULL, opts.satip_rtsp_over_tcp);
+					add_satip_server(s->host, s->port, fe++, ds, NULL, opts.satip_rtsp_over_tcp, 0);
 			}
 			getAdaptersCount();
 		}

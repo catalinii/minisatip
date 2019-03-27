@@ -5,7 +5,13 @@
 #include "socketworks.h"
 #include "dvb.h"
 
+// MAX_STREAMS, DDCI_SID should fit in adapter->sid
 #define MAX_STREAMS 100
+// STREAMS reserved by another modules
+#define DDCI_SID (MAX_STREAMS + 1)
+
+#define VALID_SID(i) (i >= 0 && i < MAX_STREAMS)
+
 #define DVB_FRAME 188
 
 #define STREAM_HTTP 1

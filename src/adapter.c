@@ -1380,9 +1380,9 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 					 t->t2id, t->sm);
 	else
 		len =
-			snprintf(dad, ld, "ver=1.2;tuner=%d,%d,%d,%d,%.2f,8,%s,%s,%d,%d,%s,%s,%s;pids=",
+			snprintf(dad, ld, "ver=1.2;tuner=%d,%d,%d,%d,%.2f,%d,%s,%s,%d,%d,%s,%s,%s;pids=",
 					 (ad && ad->tp.fe > 0) ? ad->tp.fe : aid + 1, strength, status, snr,
-					 (double)t->freq / 1000, get_delsys(t->sys),
+					 (double)t->freq / 1000, t->bw / 1000000, get_delsys(t->sys),
 					 get_modulation(t->mtype), t->sr / 1000, t->c2tft, itoa_positive(ds, t->ds),
 					 itoa_positive(plp_isi, t->plp_isi), get_inversion(t->inversion));
 
@@ -2245,8 +2245,8 @@ _symbols adapters_sym[] =
 		{"ad_type", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS, offsetof(adapter, type)},
 		{"ad_pos", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.diseqc)},
 		{"ad_freq", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, offsetof(adapter, tp.freq)},
-		{"ad_strength", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, strength)},
-		{"ad_snr", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, snr)},
+		{"ad_strength", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, offsetof(adapter, strength)},
+		{"ad_snr", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, offsetof(adapter, snr)},
 		{"ad_ber", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, ber)},
 		{"ad_pol", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.pol)},
 		{"ad_sr", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS, offsetof(adapter, tp.sr)},

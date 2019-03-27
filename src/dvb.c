@@ -75,7 +75,7 @@ char *fe_pilot[] =
 
 char *fe_rolloff[] =
 	{"0.35", "0.20", "0.25", " ", //auto
-	 NULL};
+	 "0.15", "0.10", "0.05", NULL};
 
 char *fe_delsys[] =
 	{"undefined", "dvbc", "dvbcb", "dvbt", "dss", "dvbs", "dvbs2", "dvbh", "isdbt",
@@ -85,13 +85,12 @@ char *fe_delsys[] =
 
 char *fe_fec[] =
 	{"none", "12", "23", "34", "45", "56", "67", "78", "89", " ", //auto
-	 "35", "910", "25",
+	 "35", "910", "25", "14", "13",
 	 NULL};
 
 char *fe_modulation[] =
 	{"qpsk", "16qam", "32qam", "64qam", "128qam", "256qam", " ", // auto
-	 "8vsb", "16vsb", "8psk", "16apsk", "32apsk", "64apsk", "128apsk", "256apsk",
-	 "dqpsk",
+	 "8vsb", "16vsb", "8psk", "16apsk", "32apsk", "dqpsk", "qam_4_nr", "64apsk", "128apsk", "256apsk",
 	 NULL};
 
 char *fe_tmode[] =
@@ -467,6 +466,7 @@ int dvb_open_device(adapter *ad)
 			set_proc_data(ad->fn, "fbc_connect", ad->fn);
 		}
 	}
+	dvb_set_demux_source(ad);
 
 	return 0;
 }
@@ -848,8 +848,6 @@ int dvb_tune(int aid, transponder *tp)
 		//        return -1;
 	}
 
-	dvb_set_demux_source(ad);
-
 	switch (tp->sys)
 	{
 	case SYS_DVBS:
@@ -885,10 +883,10 @@ int dvb_tune(int aid, transponder *tp)
 #endif
 
 		LOG("tuning to %d(%d) pol: %s (%d) sr:%d fec:%s delsys:%s mod:%s rolloff:%s pilot:%s, ts clear=%jd, ts pol=%jd",
-			 tp->freq, freq, get_pol(tp->pol), tp->pol, tp->sr,
-			 fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype],
-			 fe_rolloff[tp->ro], fe_pilot[tp->plts],
-			 bclear, bpol)
+			tp->freq, freq, get_pol(tp->pol), tp->pol, tp->sr,
+			fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype],
+			fe_rolloff[tp->ro], fe_pilot[tp->plts],
+			bclear, bpol)
 		break;
 
 	case SYS_DVBT:
@@ -1409,7 +1407,7 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys)
 
 // returns the strength and SNR between 0 .. 65535
 
-void get_signal(adapter *ad, int *status, int *ber, int *strength, int *snr)
+void get_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength, uint16_t *snr)
 {
 	*status = 0;
 	*ber = *snr = *strength = 0;
@@ -1441,7 +1439,7 @@ void get_signal(adapter *ad, int *status, int *ber, int *strength, int *snr)
 
 // returns the strength and SNR between 0 .. 65535
 
-int get_signal_new(adapter *ad, int *status, int *ber, int *strength, int *snr)
+int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength, uint16_t *snr)
 {
 #if DVBAPIVERSION >= 0x050A
 	*status = *snr = *ber = *strength = 0;
@@ -1523,8 +1521,9 @@ int get_signal_new(adapter *ad, int *status, int *ber, int *strength, int *snr)
 void dvb_get_signal(adapter *ad)
 {
 	int start = 0;
-	int strength = 0, snr = 0;
-	int status = 0, ber = 0;
+	uint16_t strength = 0, snr = 0;
+	int status = 0;
+	uint32_t ber = 0;
 
 	if (ad->strength_multiplier || ad->snr_multiplier)
 	{

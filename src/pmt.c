@@ -683,7 +683,7 @@ int decrypt_batch(SPMT *pmt)
 		return 1;
 	}
 	b = pmt->batch[0].data - 4;
-	pid = (b[1] & 0x1F) * 256 + b[2];
+	pid = PID_FROM_TS(b);
 	pmt->batch[pmt->blen].data = NULL;
 	pmt->batch[pmt->blen].len = 0;
 	pmt->cw->op->decrypt_stream(pmt->cw, pmt->batch, 184);
@@ -728,7 +728,7 @@ int pmt_decrypt_stream(adapter *ad)
 	for (i = 0; i < rlen; i += 188)
 	{
 		b = ad->buf + i;
-		pid = (b[1] & 0x1F) * 256 + b[2];
+		pid = PID_FROM_TS(b);
 		if (b[3] & 0x80)
 		{
 
@@ -1092,7 +1092,7 @@ void clean_psi(adapter *ad, uint8_t *b)
 	SPMT *cpmt;
 
 	p = find_pid(ad->id, pid);
-	if (!p || p->sid[0] == -1) // no need to fix this PMT as it not requested by any stream
+	if (!p || !VALID_SID(p->sid[0])) // no need to fix this PMT as it not requested by any stream
 		return;
 
 	if (!(cpmt = get_pmt(-p->pmt))) // no key associated with PMT - most likely the channel is clear
@@ -1195,7 +1195,7 @@ int assemble_emm(SFilter *f, uint8_t *b)
 int assemble_normal(SFilter *f, uint8_t *b)
 {
 	int len = 0, pid;
-	pid = (b[1] & 0x1F) * 256 + b[2];
+	pid = PID_FROM_TS(b);
 	if ((b[1] & 0x40) == 0x40)
 	{
 		len = ((b[6] & 0xF) << 8) + b[7];
@@ -1245,7 +1245,7 @@ int assemble_packet(SFilter *f, uint8_t *b)
 	if ((b[0] != 0x47)) // make sure we are dealing with TS
 		return 0;
 
-	pid = (b[1] & 0x1F) * 256 + b[2];
+	pid = PID_FROM_TS(b);
 	if (f->flags & FILTER_EMM)
 		len = assemble_emm(f, b);
 	else
@@ -1508,7 +1508,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 		if (p)
 			p->pmt = -pmt->id;
 
-		if (ad && p && opts.clean_psi && p->sid[0] != -1)
+		if (ad && p && opts.clean_psi)
 			clean_psi(ad, b);
 
 		return 0;
