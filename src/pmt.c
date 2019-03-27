@@ -683,7 +683,7 @@ int decrypt_batch(SPMT *pmt)
 		return 1;
 	}
 	b = pmt->batch[0].data - 4;
-	pid = PID_FROM_TS(b);
+	pid = (b[1] & 0x1F) * 256 + b[2];
 	pmt->batch[pmt->blen].data = NULL;
 	pmt->batch[pmt->blen].len = 0;
 	pmt->cw->op->decrypt_stream(pmt->cw, pmt->batch, 184);
@@ -728,7 +728,7 @@ int pmt_decrypt_stream(adapter *ad)
 	for (i = 0; i < rlen; i += 188)
 	{
 		b = ad->buf + i;
-		pid = PID_FROM_TS(b);
+		pid = (b[1] & 0x1F) * 256 + b[2];
 		if (b[3] & 0x80)
 		{
 
@@ -1208,7 +1208,7 @@ int assemble_emm(SFilter *f, uint8_t *b)
 int assemble_normal(SFilter *f, uint8_t *b)
 {
 	int len = 0, pid;
-	pid = PID_FROM_TS(b);
+	pid = (b[1] & 0x1F) * 256 + b[2];
 	if ((b[1] & 0x40) == 0x40)
 	{
 		len = ((b[6] & 0xF) << 8) + b[7];
@@ -1258,7 +1258,7 @@ int assemble_packet(SFilter *f, uint8_t *b)
 	if ((b[0] != 0x47)) // make sure we are dealing with TS
 		return 0;
 
-	pid = PID_FROM_TS(b);
+	pid = (b[1] & 0x1F) * 256 + b[2];
 	if (f->flags & FILTER_EMM)
 		len = assemble_emm(f, b);
 	else
