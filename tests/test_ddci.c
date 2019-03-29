@@ -102,7 +102,7 @@ int test_copy_ts_from_ddci()
 	__attribute__((unused)) int ad_pos = 0;
 	buf[0] = buf2[0] = 0x47;
 	d.pid_mapping[1000] = 22; // forcing mapping to a different pid
-	int new_pid = add_pid_mapping_table(1, 1000, 0, 0);
+	int new_pid = add_pid_mapping_table(1, 1000, 0, 0, 0);
 	ad.rlen = 188;
 	set_pid_ts(buf, new_pid);
 	set_pid_ts(buf2, 0x1FFF);
@@ -185,8 +185,8 @@ int test_ddci_process_ts()
 	buf[0] = 0x47;
 	d.pid_mapping[1000] = 22; // forcing mapping to a different pid
 	d.pid_mapping[2000] = 22; // forcing mapping to a different pid
-	int new_pid = add_pid_mapping_table(1, 1000, 0, 0);
-	int new_pid2 = add_pid_mapping_table(1, 2000, 0, 0);
+	int new_pid = add_pid_mapping_table(1, 1000, 0, 0, 0);
+	int new_pid2 = add_pid_mapping_table(1, 2000, 0, 0, 0);
 	ad.rlen = ad.lbuf - 188; // allow just 1 packet + 1 cleared that it will be written to the socket
 	set_pid_ts(ad.buf + 188, 1000);
 
@@ -234,7 +234,7 @@ int test_create_pat()
 	ddci_devices[0] = &d;
 	int pid = 4096;
 	d.pid_mapping[pid] = 22; // forcing mapping to a different pid
-	int dpid = add_pid_mapping_table(0, pid, 0, 0);
+	int dpid = add_pid_mapping_table(0, pid, 0, 0, 0);
 	f.flags = FILTER_CRC;
 	f.id = 0;
 	f.adapter = 0;
@@ -289,8 +289,8 @@ int test_create_pmt()
 	int capid = 7068;
 	//	d.pid_mapping[pid] = 22; // forcing mapping to a different pid
 	//	d.pid_mapping[capid] = 23; // forcing mapping to a different pid
-	int dpid = add_pid_mapping_table(0, pid, 0, 0);
-	int dcapid = add_pid_mapping_table(0, capid, 0, 0);
+	int dpid = add_pid_mapping_table(0, pid, 0, 0, 0);
+	int dcapid = add_pid_mapping_table(0, capid, 0, 0, 0);
 	f.flags = FILTER_CRC;
 	f.id = 0;
 	f.adapter = 0;
