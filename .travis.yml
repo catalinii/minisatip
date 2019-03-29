@@ -8,3 +8,6 @@ before_install:
         - sudo apt-get -qqy update && sudo apt-get install libdvbcsa-dev dvb-apps libssl-dev -qqy
 script:
   - ./configure
+  - make -j 4
+  - make test
+
