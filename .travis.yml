@@ -1,29 +1,23 @@
-#
-# Basic Build Setup
-#
-
 dist: bionic
 language: c
 before_install:
-        - sudo apt-get -qqy update && sudo apt-get install libdvbcsa-dev dvb-apps libssl-dev -qqy
-        - echo -n | openssl s_client -connect https://scan.coverity.com:443 | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | sudo tee -a /etc/ssl/certs/ca-
+- sudo apt-get -qqy update && sudo apt-get install libdvbcsa-dev dvb-apps libssl-dev
+  -qqy
+- echo -n | openssl s_client -connect https://scan.coverity.com:443 | sed -ne '/-BEGIN
+  CERTIFICATE-/,/-END CERTIFICATE-/p' | sudo tee -a /etc/ssl/certs/ca-
 script:
-  - ./configure
-  - make -j 4
-  - make test
-
+- "./configure"
+- make -j 4
+- make test
 env:
   global:
-   # The next declaration is the encrypted COVERITY_SCAN_TOKEN, created
-   #   via the "travis encrypt" command using the project repo's public key
-   - secure: "j3jnc0kB+dzU5oAyIkt7rqZB2N83UC/J5nrPupXg283L64hW214rYF4SpILC7nLrGMGwJRVdgOIUkj6yYKeLkyJ0j2/kr6u2d0yFd2tBHqhvnH2SkrpJfaROZ3R/swza6QRqUw4hu6BLoeHZumWHIkpUVbrj4Lt24kFkHiW4UEhy7EEvo/q+1vHjPffmiq6WhVj2dksKWblcXbCBzhIBJQxBIDdLEEOq9G+D0dyb2iwfiL7a4FmAx+t3jrRd/1kCNyZ8MUEFFYXjo3tM6rcTkfbSb33+JovRCC4qgX4rTpV0J5OTwoj1xHwCzZ5Nv3HMdMaSSw0MdXLEKfRSRkhRAUjGRIgkg9n9YQ8OoUNiJhIlWuAVo9qoaWM+p1opcEh07iAgMDWxxuQ98Nf68ahcpA+97oz3Kk2q6R716/cp3IFdoz3WmhJMsLeEXMmBYlMTGSJNra/K2bed5kZpQmjfB0CYeuebwgDmYOIFZ7Gt0vYne3t/HpT3/986GG2yew1SmfeqrbK/FC+uJMX/zbpKRJpXmLh4EAam02Br7Ggm0uxO0lExnA6PLcOgJgMFv5rX5ugaeF4JljqMUDH05zOH+KnwiEQnH3aQ4Rcuto+lblEIMTUrbyoP4FlRGSL+pMpYYRfw7avinT3l0JU2TSr2VJFn0igIOmEFrqXtYJQVwCc="
-
+  - secure: oWjyPIiSpubG/sP5uX/P76UUL9QSXQt0IiOlMwiilfPFJ4mvybmjHi6HgmrEtw5SH/5nxFid06cexgJcelx4VT3YBXn7mhd2oab/yHle8UTPyCopgnJSBnC5dR4DEc6w2s7/Uvw8oYUxS8+V3H0fevQA5UQM717AhivHROsZOCCZ77yd3O6F932P8bEgCJkKzWkz10nKdnMZQx3q9zl8lAITnw4bBNRJXbIhUOh+r87s+eg77vLPnaNmIDPvbW/KRGUTxsIzHwtQzvkXl3+CAoPyQdlp3Q88CbZiS6y9LdxAddKcA0W8VRxRiTLYH/yS07TwNxeFf1A1N9YI3HRuine4NFSrzM9dqBrpTLddg6okgkh0wVknz1CEn2G0QaRFkNFy7z0wnBuMK3xl1ktpLscKIUN+aGE3YzNkTDc4xihsRA3ryDUM4bnyLz2iBGVn158Hv61yd4kJVK0/TGAy+pwV2xDMkPxeGM/gz8eKHrzmE0pB3HpNc98H7+P/11Ui3cpNndkKTUgFNZ0ourW0IhQwq569j+lcZPP2BrhIwnwyCYgTxHWnXFeVb6YJ3fqTlVQXGniMkj7JDow+SH576X6GAFXxPt6WQGnare40bnGqX8y9Kt7W6aPacN0V0wvUBJjP7WyjDiCerQQ6y6uOh9JPQynSf/0lr+p/rKk6bu8=
 addons:
   coverity_scan:
     project:
-      name: "catalinii/minisatip"
-      description: "minisatip"
+      name: catalinii/minisatip
+      description: minisatip
     notification_email: t_cata_2000@yahoo.com
-    build_command_prepend: ./configure
+    build_command_prepend: "./configure"
     build_command: make
     branch_pattern: master
