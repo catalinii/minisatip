@@ -23,7 +23,7 @@ addons:
     project:
       name: "catalinii/minisatip"
       description: "minisatip"
-    notification_email: catalinii@gmail.com
+    notification_email: t_cata_2000@yahoo.com
     build_command_prepend: ./configure
     build_command: make
-    branch_pattern: coverity_scan
+    branch_pattern: master
