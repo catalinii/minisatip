@@ -302,14 +302,18 @@ int test_create_pmt()
 	pmt.pid = pid;
 	strcpy(pmt.name, "TEST CHANNEL HD");
 	memcpy(pmt.pmt, pmt_sample, sizeof(pmt_sample));
-	pmt.pmt_len = sizeof(pmt_sample);
+	pmt.pmt_len = sizeof(pmt_sample) - 1;
 	psi_len = ddci_create_pmt(&d, &pmt, psi, 0);
 	cc = 1;
-	hexdump("PACK ", psi, psi_len);
+	_hexdump("PACK: ", psi, psi_len);
 	buffer_to_ts(packet, 188, psi, psi_len, &cc, 0x63);
+	_hexdump("TS: ", packet, 188);
 	int len = assemble_packet(&f, packet);
 	if (!len)
+	{
+		LOG("Assemble packet failed");
 		return 1;
+	}
 	int new_pid = packet[42] * 256 + packet[43];
 	int new_capid = packet[21] * 256 + packet[22];
 	new_pid &= 0x1FFF;
@@ -324,14 +328,14 @@ int test_create_pmt()
 int main()
 {
 	opts.log = 1;
-	strcpy(thread_name, "test");;
-	//	opts.log = LOG_DVBCA + 1;
+	opts.debug = 0;
+	strcpy(thread_name, "test");
 	find_ddci_adapter(a);
 	TEST_FUNC(test_push_ts_to_ddci(), "testing test_push_ts_to_ddci");
 	TEST_FUNC(test_copy_ts_from_ddci(), "testing test_copy_ts_from_ddci");
 	TEST_FUNC(test_ddci_process_ts(), "testing ddci_process_ts");
 	TEST_FUNC(test_create_pat(), "testing create_pat");
-	TEST_FUNC(test_create_pmt(), "testing create_pat");
+	TEST_FUNC(test_create_pmt(), "testing create_pmt");
 	fflush(stdout);
 	return 0;
 }
