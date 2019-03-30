@@ -6,6 +6,7 @@ dist: bionic
 language: c
 before_install:
         - sudo apt-get -qqy update && sudo apt-get install libdvbcsa-dev dvb-apps libssl-dev -qqy
+        - echo -n | openssl s_client -connect https://scan.coverity.com:443 | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | sudo tee -a /etc/ssl/certs/ca-
 script:
   - ./configure
   - make -j 4
@@ -16,9 +17,6 @@ env:
    # The next declaration is the encrypted COVERITY_SCAN_TOKEN, created
    #   via the "travis encrypt" command using the project repo's public key
    - secure: "j3jnc0kB+dzU5oAyIkt7rqZB2N83UC/J5nrPupXg283L64hW214rYF4SpILC7nLrGMGwJRVdgOIUkj6yYKeLkyJ0j2/kr6u2d0yFd2tBHqhvnH2SkrpJfaROZ3R/swza6QRqUw4hu6BLoeHZumWHIkpUVbrj4Lt24kFkHiW4UEhy7EEvo/q+1vHjPffmiq6WhVj2dksKWblcXbCBzhIBJQxBIDdLEEOq9G+D0dyb2iwfiL7a4FmAx+t3jrRd/1kCNyZ8MUEFFYXjo3tM6rcTkfbSb33+JovRCC4qgX4rTpV0J5OTwoj1xHwCzZ5Nv3HMdMaSSw0MdXLEKfRSRkhRAUjGRIgkg9n9YQ8OoUNiJhIlWuAVo9qoaWM+p1opcEh07iAgMDWxxuQ98Nf68ahcpA+97oz3Kk2q6R716/cp3IFdoz3WmhJMsLeEXMmBYlMTGSJNra/K2bed5kZpQmjfB0CYeuebwgDmYOIFZ7Gt0vYne3t/HpT3/986GG2yew1SmfeqrbK/FC+uJMX/zbpKRJpXmLh4EAam02Br7Ggm0uxO0lExnA6PLcOgJgMFv5rX5ugaeF4JljqMUDH05zOH+KnwiEQnH3aQ4Rcuto+lblEIMTUrbyoP4FlRGSL+pMpYYRfw7avinT3l0JU2TSr2VJFn0igIOmEFrqXtYJQVwCc="
-
-before_install:
-  - echo -n | openssl s_client -connect https://scan.coverity.com:443 | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | sudo tee -a /etc/ssl/certs/ca-
 
 addons:
   coverity_scan:
