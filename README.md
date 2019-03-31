@@ -2,6 +2,7 @@
   <img alt="Coverity Scan Build Status"
        src="https://scan.coverity.com/projects/18049/badge.svg"/>
 </a>
+[![Build Status](https://travis-ci.org/catalinii/minisatip.svg?branch=master)](https://travis-ci.org/catalinii/minisatip)
 
 # Welcome to Minisatip
 
@@ -29,6 +30,8 @@ https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item
 
 Usage:
 -------
+
+minisatip version 0.7.16, compiled with s2api version: 050B
 
 	./minisatip [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 		[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]][-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] [-R document_root] [-s [*][DELSYS:][FE_ID@][source_ip/]host[:port] [-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] 
@@ -206,7 +209,8 @@ Help
 	* 2 - use dvrX device and additionally capture PSI data from demuxX device 
 	* 3 - use demuxX device and additionally capture PSI data from demuxX device 
 
- How to compile:
+ 
+How to compile:
 ------
 
 - ./configure
