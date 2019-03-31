@@ -2,7 +2,7 @@
   <img alt="Coverity Scan Build Status"
        src="https://scan.coverity.com/projects/18049/badge.svg"/>
 </a>
-[![Build Status](https://travis-ci.org/catalinii/minisatip.svg?branch=master)](https://travis-ci.org/catalinii/minisatip)
+<img alt="Build Status" src="https://travis-ci.org/catalinii/minisatip.svg?branch=master" />
 
 # Welcome to Minisatip
 
