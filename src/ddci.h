@@ -41,3 +41,4 @@ int ddci_create_pat(ddci_device_t *d, uint8_t *b);
 int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *clean, int ver);
 
 #endif
+
