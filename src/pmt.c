@@ -500,6 +500,12 @@ void update_cw(SPMT *pmt)
 	}
 	if (!pmt->invalidated && !master->invalidated)
 	{
+		LOGM("PMT %d or pmt %d invalidated", pmt->id, pmt->master_pmt);
+		return;
+	}
+	if (pmt->cw)
+	{
+		LOGM("Valid CW for PMT %d", pmt->master_pmt);
 		return;
 	}
 	LOGM("%s: pmt %d, parity %d, CW %d", __FUNCTION__, pmt->id, pmt->parity, pmt->cw ? pmt->cw->id : -1);

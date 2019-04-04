@@ -645,7 +645,7 @@ int compare_slave_parameters(adapter *ad, transponder *tp)
 	{
 		int i;
 		for (i = 0; i < MAX_ADAPTERS; i++)
-			if (ad->used & (1 << i))
+			if (ad->used & (1L << i))
 			{
 				adapter *ad2 = get_adapter(i);
 				if (!ad2)
