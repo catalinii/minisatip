@@ -1855,6 +1855,31 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 		lr, s->id);
 	LOGM("%s", resp);
 
+	if (s->type == TYPE_HTTP && get_sid(s->sid))
+	{
+		streams *sid = get_sid(s->sid);
+
+		if (sid->start_streaming)
+		{
+			char tspacket[188];
+			int top;
+
+			if (strlen(resp) >= 184)
+				top = 4;
+			else
+				top = 188 - strlen(resp);
+
+			tspacket[0] = '\x47';
+			tspacket[1] = '\x1f';
+			tspacket[2] = '\xff';
+			tspacket[3] = '\x1a';
+			memset(&tspacket[4]  , 0xFF, top - 4);
+			memcpy(&tspacket[top], resp, 188 - top);
+			memcpy(resp, &tspacket, 188);
+			resp[188] = 0;
+		}
+	}
+
 	struct iovec iov[2];
 	iov[0].iov_base = resp;
 	iov[0].iov_len = strlen(resp);
