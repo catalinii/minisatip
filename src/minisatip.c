@@ -838,7 +838,7 @@ void set_options(int argc, char *argv[])
 #else
 			char buf[100];
 			memset(buf, 0, sizeof(buf));
-			strncpy(buf, optarg, sizeof(buf));
+			strncpy(buf, optarg, sizeof(buf) -1);
 			char *sep1 = strchr(buf, ':');
 			if (sep1 != NULL)
 			{
