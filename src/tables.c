@@ -287,6 +287,24 @@ void send_pmt_to_ca_for_device(SCA *c, adapter *ad)
 			send_pmt_to_ca(c->id, ad, pmt);
 }
 
+void tables_update_encrypted_status(adapter *ad, SPMT *pmt)
+{
+	int i;
+	int status = pmt->encrypted;
+	if (!ad)
+		return;
+	LOGM("Updating status %d for pmt %d, ad mask %08X, pmt mask %08X", status, pmt->id, ad->ca_mask, pmt->ca_mask);
+	for (i = 0; i < nca; i++)
+		if (ca[i].enabled && (ad->ca_mask & (1 << i)) && (pmt->ca_mask & (1 << i)))
+		{
+			LOGM("Updating status %d pmt %d for ca %d and adapter %d", status, pmt->id, i, ad->id);
+			if (status == TABLES_CHANNEL_ENCRYPTED && ca[i].op->ca_encrypted)
+				ca[i].op->ca_encrypted(ad, pmt);
+			else if (status == TABLES_CHANNEL_DECRYPTED && ca[i].op->ca_decrypted)
+				ca[i].op->ca_decrypted(ad, pmt);
+		}
+}
+
 void tables_add_pid(adapter *ad, SPMT *pmt, int pid)
 {
 	int i, mask;

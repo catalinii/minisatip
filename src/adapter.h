@@ -65,7 +65,7 @@ typedef struct struct_adapter
 	uint64_t used;
 	uint16_t strength; // strength have values between 0 and 255
 	uint32_t ber;
-	uint16_t snr;	   // strength have values between 0 and 255
+	uint16_t snr;							   // strength have values between 0 and 255
 	float strength_multiplier, snr_multiplier; // final value: strength * strength_multipler, same for snr
 	uint32_t pid_err, dec_err;				   // detect pids received but not part of any stream, decrypt errors
 	diseqc diseqc_param;
@@ -78,14 +78,16 @@ typedef struct struct_adapter
 	int pat_processed;
 	int wait_new_stream, wait_transponder_id;
 	int threshold;
-	int active_pids;
+	int active_pids, max_active_pids, max_pids;
 	int active_demux_pids;
 	int is_t2mi;
 	uint64_t tune_time;
 	char name[5];
 	char null_packets;
+	char drop_encrypted;
 #ifndef DISABLE_PMT
-	int transponder_id, pat_ver, pat_filter, sdt_filter;
+	int transponder_id,
+		pat_ver, pat_filter, sdt_filter;
 #endif
 #ifdef AXE
 	int fe2;

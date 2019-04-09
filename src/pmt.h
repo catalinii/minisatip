@@ -122,6 +122,9 @@ typedef struct struct_pmt
 	char skip_first;
 	char active;  // PMT structure was already filled
 	char running; // PMT has channels running
+	char encrypted;
+	int encrypted_pid;
+	int64_t grace_time;
 	uint16_t filter;
 	int clean_pos, clean_cc;
 	uint8_t *clean;
@@ -155,7 +158,7 @@ typedef struct struct_filter
 } SFilter;
 
 int register_algo(SCW_op *o);
-int send_cw(int pmt_id, int cw_type, int parity, uint8_t *cw, uint8_t *iv, int64_t expiry);
+int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv, int64_t expiry);
 
 extern int npmts;
 static inline SPMT *get_pmt(int id)
@@ -186,16 +189,16 @@ int pmt_init_device(adapter *ad);
 int tables_tune(adapter *ad);
 int delete_pmt_for_adapter(int aid);
 int pmt_tune(adapter *ad);
-int get_active_filters_for_pid(int start_filter, int aid, int pid, int flags);
+int get_active_filters_for_pid(int master_filter, int aid, int pid, int flags);
 int add_filter(int aid, int pid, void *callback, void *opaque, int flags);
-int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags, uint8_t *data, uint8_t *mask);
+int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags, uint8_t *filter, uint8_t *mask);
 int del_filter(int id);
-int set_filter_mask(int id, uint8_t *data, uint8_t *mask);
+int set_filter_mask(int id, uint8_t *filter, uint8_t *mask);
 int set_filter_flags(int id, int flags);
 int get_pid_filter(int aid, int pid);
 int get_filter_pid(int filter);
 int get_filter_adapter(int filter);
-int assemble_packet(SFilter *f, uint8_t *b1);
+int assemble_packet(SFilter *f, uint8_t *b);
 int clean_psi_buffer(uint8_t *pmt, uint8_t *clean, int clean_size);
 
 #endif

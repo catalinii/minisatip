@@ -844,6 +844,9 @@ int check_cc(adapter *ad)
 	for (i = 0; i < ad->rlen; i += DVB_FRAME)
 	{
 		b = ad->buf + i;
+		if (b[1] & 0x80)
+			continue;
+
 		pid = PID_FROM_TS(b);
 		p = find_pid(ad->id, pid);
 
