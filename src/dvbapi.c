@@ -220,7 +220,6 @@ int dvbapi_reply(sockets *s)
 						k->filter_id[fpos] = -1;
 						k->pid[fpos] = -1;
 					}
-					break;
 				}
 			}
 			if (i >= 0 && fid >= 0 && k)

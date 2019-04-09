@@ -1001,8 +1001,8 @@ void satipc_commit(adapter *ad)
 
 	url[0] = 0;
 	LOG(
-		"satipc: commit for adapter %d pids to add %d, pids to delete %d, expect_reply %d, force_commit %d want_tune %d do_tune %d, force_pids %d, sent_transport %d",
-		ad->id, sip->lap, sip->ldp, sip->expect_reply, sip->force_commit, sip->want_tune, ad->do_tune, sip->force_pids, sip->sent_transport);
+		"satipc: commit for adapter %d pids to add %d, pids to delete %d, expect_reply %d, force_commit %d want_tune %d do_tune %d, force_pids %d",
+		ad->id, sip->lap, sip->ldp, sip->expect_reply, sip->force_commit, sip->want_tune, ad->do_tune, sip->force_pids);
 
 	if (ad->do_tune && !sip->want_tune)
 	{
@@ -1096,7 +1096,7 @@ void satipc_commit(adapter *ad)
 		sip->ignore_packets = 1; // ignore all the packets until we get 200 from the server
 		sip->want_tune = 0;
 		sip->err = 0;
-		if (!sip->setup_pids && !sip->sent_transport)
+		if (!sip->setup_pids)
 		{
 			strcatf(url, len, "&pids=none");
 			http_request(ad, url, NULL);
