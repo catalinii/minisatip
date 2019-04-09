@@ -80,13 +80,13 @@ int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 				socket_action a, socket_action c, socket_action t);
 int sockets_del(int sock);
 int no_action(int s);
-void *select_and_execute(void *args);
+void *select_and_execute(void *arg);
 int get_mac_address(char *mac);
 int fill_sockaddr(struct sockaddr_in *serv, char *host, int port);
-int sockets_del_for_sid(int ad);
+int sockets_del_for_sid(int sid);
 void set_socket_buffer(int sid, unsigned char *buf, int len);
 void sockets_timeout(int i, int t);
-void set_sockets_rtime(int s, int r);
+void set_sockets_rtime(int i, int r);
 void free_all();
 void free_pack(SNPacket *p);
 void sockets_setread(int i, void *r);
