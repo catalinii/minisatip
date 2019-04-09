@@ -122,6 +122,9 @@ typedef struct struct_pmt
 	char skip_first;
 	char active;  // PMT structure was already filled
 	char running; // PMT has channels running
+	char encrypted;
+	int encrypted_pid;
+	int64_t grace_time;
 	uint16_t filter;
 	int clean_pos, clean_cc;
 	uint8_t *clean;

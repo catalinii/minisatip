@@ -108,6 +108,8 @@ adapter *adapter_alloc()
 	ad->strength_multiplier = opts.strength_multiplier;
 	ad->snr_multiplier = opts.snr_multiplier;
 
+	ad->drop_encrypted = opts.drop_encrypted;
+
 #ifndef DISABLE_PMT
 	// filter for pid 0
 	ad->pat_filter = -1;
@@ -260,6 +262,9 @@ int init_hw(int i)
 	ad->sock = -1;
 	ad->force_close = 0;
 	ad->restart_needed = 0;
+
+	if (opts.max_pids)
+		ad->max_pids = opts.max_pids;
 
 	st = getTick();
 	if (!ad->open)
@@ -878,9 +883,9 @@ int update_pids(int aid)
 	for (i = 0; i < MAX_PIDS; i++)
 		if (ad->pids[i].flags == 2)
 		{
-			if (opts.max_pids && (opts.max_pids < ad->active_pids))
+			if (ad->max_pids && (ad->max_pids < ad->active_pids))
 			{
-				LOG("maximum number of pids %d out of %d reached", ad->active_pids, opts.max_pids);
+				LOG("maximum number of pids %d out of %d reached", ad->active_pids, ad->max_pids);
 				break;
 			}
 
@@ -891,14 +896,13 @@ int update_pids(int aid)
 			{
 				if ((ad->pids[i].fd = ad->set_pid(ad, ad->pids[i].pid)) < 0)
 				{
-
-					int new_max_pids = ad->active_pids - 2;
-					if (new_max_pids > 0)
-						opts.max_pids = new_max_pids;
+					ad->max_pids = ad->max_active_pids - 1;
 					LOG0("Maximum pid filter reached, lowering the value to %d", opts.max_pids);
 					break;
 				}
 				ad->active_pids++;
+				if (ad->max_active_pids < ad->active_pids)
+					ad->max_active_pids = ad->active_pids;
 			}
 			ad->pids[i].flags = 1;
 			if (ad->pids[i].pid == 0)
