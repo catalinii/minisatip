@@ -554,7 +554,7 @@ static int ca_ca_info_callback(void *arg, uint8_t slot_id,
 	ca_device_t *d = arg;
 	LOG("%02x:%s", slot_id, __func__);
 	uint32_t i;
-	for (i = 0; i < 1 /*ca_id_count*/; i++)
+	for (i = 0; i < ca_id_count; i++)
 	{
 		LOG("  Supported CA ID: %04x for CA %d", ca_ids[i], d->id);
 		add_caid_mask(dvbca_id, d->id, ca_ids[i], 0xFFFF);
