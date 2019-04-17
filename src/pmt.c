@@ -700,7 +700,7 @@ void check_packet_encrypted(adapter *ad, uint8_t *b, char *list_of_pmts)
 
 		SPid *p = find_pid(ad->id, pid);
 		// Skip PMT pids or pids without pmt
-		if (p && p->pmt <= 0)
+		if (p && p->pmt < 0)
 			return;
 		SPMT *pmt = get_pmt_for_existing_pid(p);
 		if (!pmt)
@@ -1654,7 +1654,6 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 		if ((cp = find_pid(ad->id, spid))) // the pid is already requested by the client
 		{
 			enabled_channels++;
-			pmt->running = 1;
 			cp->pmt = pmt->master_pmt;
 		}
 	}
@@ -1780,6 +1779,8 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque)
 
 void start_pmt(SPMT *pmt, adapter *ad)
 {
+	if(pmt->id != pmt->master_pmt)
+		return;
 	LOGM("starting PMT %d master %d, pid %d, sid %d for channel: %s", pmt->id, pmt->master_pmt, pmt->pid, pmt->sid, pmt->name);
 	pmt->running = 1;
 	pmt->encrypted = 0;
@@ -1794,6 +1795,8 @@ void start_pmt(SPMT *pmt, adapter *ad)
 
 void stop_pmt(SPMT *pmt, adapter *ad)
 {
+	if(!pmt->running)
+		return;
 	LOGM("stopping PMT %d pid %d sid %d master %d for channel %s", pmt->id, pmt->pid, pmt->sid, pmt->master_pmt, pmt->name);
 	pmt->running = 0;
 	set_filter_flags(pmt->filter, 0);

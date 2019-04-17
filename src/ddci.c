@@ -447,6 +447,7 @@ int ddci_encrypted(adapter *ad, SPMT *pmt)
 	}
 	int ddid, ddpid;
 	ddpid = get_mapping_table(ad->id, pmt->pid, &ddid, NULL);
+	LOG("PMT %d, pid %d, sid %d is encrypted on adapter %d, DD %d, ddpid %d", pmt->id, pmt->pid, pmt->sid, ad->id, ddid, ddpid);
 	if (ddpid >= 0 && sid_blacklist[pmt->sid] & (1 << ddid))
 	{
 		LOG("Closing pmt %d on adapter %d, DD %d", pmt->id, ad->id, ddid);
