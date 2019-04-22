@@ -822,7 +822,7 @@ int snprintf_pointer(char *dest, int max_len, int type, void *p,
 		break;
 
 	case VAR_INT64:
-		nb = snprintf(dest, max_len, "%jd",
+		nb = snprintf(dest, max_len, "%ld",
 					  (int64_t)((*(int64_t *)p) * multiplier));
 		break;
 
@@ -1005,13 +1005,13 @@ int get_json_bandwidth(char *buf, int len)
 	mutex_lock(&bw_mutex);
 	strlcatf(buf, len, ptr, "\
 {\n\
-\"bw\":%jd,\n\
-\"tbw\":%jd,\n\
+\"bw\":%ld,\n\
+\"tbw\":%ld,\n\
 \"reads\":%u,\n\
 \"writes\":%u,\n\
 \"fwrites\":%u,\n\
-\"ns_read\":%jd,\n\
-\"tt\":%jd\n\
+\"ns_read\":%ld,\n\
+\"tt\":%ld\n\
 }",
 			 c_bw, c_tbw, c_reads, c_writes, c_failed_writes, c_ns_read, c_tt);
 	mutex_unlock(&bw_mutex);
