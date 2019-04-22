@@ -312,7 +312,6 @@ int start_play(streams *sid, sockets *s)
 	if (!sid->tp.apids && sid->tp.pids && (!sid->tp.pids[0] || !strcmp(sid->tp.pids, "0")))
 		s->flush_enqued_data = 1;
 	sid->do_play = 1;
-	sid->start_streaming = 0;
 	if (s->type != TYPE_HTTP)
 		sid->start_streaming = 0;
 	sid->tp.apids = sid->tp.dpids = sid->tp.pids = sid->tp.x_pmt = NULL;
