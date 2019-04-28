@@ -684,6 +684,27 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv, int64_t 
 	return 0;
 }
 
+int set_all_pmt_encrypted(int aid, int pid, int status, char *list_of_pmts)
+{
+	int i, j;
+	SPMT *pmt;
+	for (i = 0; i < npmts; i++)
+		if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == aid)
+		{
+			pmt = pmts[i];
+			for (j = 0; j < pmt->active_pids && pmt->active_pid[j] > 0; j++)
+			{
+				if (pmt->active_pid[j] == pid)
+				{
+					list_of_pmts[pmt->id] = status;
+					pmt->encrypted = status;
+					pmt->encrypted_pid = pid;
+				}
+			}
+		}
+	return 0;
+}
+
 void check_packet_encrypted(adapter *ad, uint8_t *b, char *list_of_pmts)
 {
 	int updated = 0;
@@ -716,11 +737,9 @@ void check_packet_encrypted(adapter *ad, uint8_t *b, char *list_of_pmts)
 			if (pmt->encrypted != TABLES_CHANNEL_ENCRYPTED)
 			{
 				level = 1;
-				list_of_pmts[pmt->id] = TABLES_CHANNEL_ENCRYPTED;
+				set_all_pmt_encrypted(ad->id, pid, TABLES_CHANNEL_ENCRYPTED, list_of_pmts);
 				updated = 1;
 			}
-			pmt->encrypted = TABLES_CHANNEL_ENCRYPTED;
-			pmt->encrypted_pid = pid;
 			LOGL(level, "decryption failed for pmt %d, cw %d, pid %d, parity %d, start %d, updated %d: [%02X %02X %02X %02X] %02X %02X %02X", pmt->id, pmt->cw ? pmt->cw->id : -1, PID_FROM_TS(b), pmt->parity, start, updated, b[0], b[1], b[2], b[3], b[start], b[start + 1], b[start + 2])
 		}
 		else
@@ -728,9 +747,8 @@ void check_packet_encrypted(adapter *ad, uint8_t *b, char *list_of_pmts)
 			if (!pmt->encrypted || (pmt->encrypted != TABLES_CHANNEL_DECRYPTED && pid == pmt->encrypted_pid))
 			{
 				LOGM("decryption worked for PMT %d, prev status %d, pid %d", pmt->id, pmt->encrypted, pmt->encrypted_pid);
-				pmt->encrypted = TABLES_CHANNEL_DECRYPTED;
-				list_of_pmts[pmt->id] = TABLES_CHANNEL_DECRYPTED;
 				updated = 1;
+				set_all_pmt_encrypted(ad->id, pid, TABLES_CHANNEL_DECRYPTED, list_of_pmts);
 			}
 			DEBUGM("decryption worked for pmt %d, cw %d, pid %d, parity %d, start %d, updated %d: %02X %02X %02X %02X %02X %02X %02X %02X", pmt->id, pmt->cw ? pmt->cw->id : -1, PID_FROM_TS(b), pmt->parity, start, updated, b[start], b[start + 1], b[start + 2], b[start + 3], b[start + 4], b[start + 5], b[start + 6], b[start + 7])
 		}
@@ -1779,8 +1797,6 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque)
 
 void start_pmt(SPMT *pmt, adapter *ad)
 {
-	if(pmt->id != pmt->master_pmt)
-		return;
 	LOGM("starting PMT %d master %d, pid %d, sid %d for channel: %s", pmt->id, pmt->master_pmt, pmt->pid, pmt->sid, pmt->name);
 	pmt->running = 1;
 	pmt->encrypted = 0;
@@ -1795,7 +1811,7 @@ void start_pmt(SPMT *pmt, adapter *ad)
 
 void stop_pmt(SPMT *pmt, adapter *ad)
 {
-	if(!pmt->running)
+	if (!pmt->running)
 		return;
 	LOGM("stopping PMT %d pid %d sid %d master %d for channel %s", pmt->id, pmt->pid, pmt->sid, pmt->master_pmt, pmt->name);
 	pmt->running = 0;
