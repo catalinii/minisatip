@@ -838,7 +838,7 @@ void set_options(int argc, char *argv[])
 #else
 			char buf[100];
 			memset(buf, 0, sizeof(buf));
-			strncpy(buf, optarg, sizeof(buf) -1);
+			strncpy(buf, optarg, sizeof(buf) - 1);
 			char *sep1 = strchr(buf, ':');
 			if (sep1 != NULL)
 			{
@@ -1256,7 +1256,7 @@ int read_rtsp(sockets *s)
 		return 0;                              \
 	}
 
-#define JSON_STATE_MAXLEN (128 * 1024)
+#define JSON_STATE_MAXLEN (256 * 1024)
 
 char uuid[100];
 int uuidi;

@@ -106,7 +106,7 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 			{
 				int slen = strlen(sbuf);
 				streams_enabled++;
-				snprintf(sbuf + slen, size - slen - 1,
+				strlcatf(sbuf, size, slen,
 						 "m=video %d RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\na=%s\r\n",
 						 ntohs(sid2->sa.sin_port), i + 1,
 						 describe_adapter(i, sid2->adapter, dad, sizeof(dad)),
@@ -128,7 +128,7 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 		else
 			return NULL;
 
-		snprintf(sbuf + slen, size - slen - 1,
+		strlcatf(sbuf, size, slen,
 				 "m=video 0 RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\nb=AS:5000\r\na=%s\r\n",
 				 s_id, tp, do_play ? "sendonly" : "inactive");
 	}
@@ -1374,10 +1374,9 @@ char *get_stream_pids(int s_id, char *dest, int max_size)
 				if (ad->pids[i].sid[j] == s_id)
 				{
 					if (ad->pids[i].pid == 8192)
-						len += snprintf(dest + len, max_size - len, "all,");
+						strlcatf(dest, max_size, len, "all,");
 					else
-						len += snprintf(dest + len, max_size - len, "%d,",
-										ad->pids[i].pid);
+						strlcatf(dest, max_size, len, "%d,", ad->pids[i].pid);
 				}
 	if (len > 0)
 	{
