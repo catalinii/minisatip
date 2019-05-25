@@ -312,7 +312,8 @@ int start_play(streams *sid, sockets *s)
 	if (!sid->tp.apids && sid->tp.pids && (!sid->tp.pids[0] || !strcmp(sid->tp.pids, "0")))
 		s->flush_enqued_data = 1;
 	sid->do_play = 1;
-	sid->start_streaming = 0;
+	if (s->type != TYPE_HTTP)
+		sid->start_streaming = 0;
 	sid->tp.apids = sid->tp.dpids = sid->tp.pids = sid->tp.x_pmt = NULL;
 
 	ad = get_adapter(sid->adapter);
@@ -349,6 +350,7 @@ int close_stream(int i)
 	}
 	mutex_lock(&st_mutex);
 	sid->enabled = 0;
+	sid->start_streaming = 0;
 	sid->timeout = 0;
 	ad = sid->adapter;
 	sid->adapter = -1;
@@ -741,7 +743,14 @@ void flush_streamb(streams *sid, unsigned char *buf, int rlen, int64_t ctime)
 	int i, rv = 0, blen, len;
 
 	if (sid->type == STREAM_HTTP)
+	{
 		rv = sockets_write(sid->rsock_id, buf, rlen);
+		if (sid->start_streaming == 0)
+		{
+			sid->start_streaming = 1;
+			LOG("Start HTTP streaming of stream %d to handle %d", sid->sid, sid->rsock);
+		}
+	}
 	else
 	{
 		int max_pack = sid->type == STREAM_RTSP_TCP ? sid->max_iov : UDP_MAX_PACK;
@@ -769,7 +778,14 @@ int flush_streami(streams *sid, int64_t ctime)
 	int rv;
 
 	if (sid->type == STREAM_HTTP)
+	{
 		rv = sockets_writev(sid->rsock_id, sid->iov, sid->iiov);
+		if (sid->start_streaming == 0)
+		{
+			sid->start_streaming = 1;
+			LOG("Start HTTP streaming of stream %d to handle %d", sid->sid, sid->rsock);
+		}
+	}
 	else
 		rv = send_rtp(sid, sid->iov, sid->iiov);
 
