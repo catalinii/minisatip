@@ -727,6 +727,9 @@ void check_packet_encrypted(adapter *ad, uint8_t *b, char *list_of_pmts)
 		if (!pmt)
 			return;
 
+		if (pmt->pid == pid)
+			return;
+
 		if (getTick() - pmt->grace_time < 0)
 			return;
 
