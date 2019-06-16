@@ -1,5 +1,6 @@
 /*
-
+Minisatip does not assume any responsability related to functionality of this code.
+It also does not include any certificates, please procure them from alternative source 
 
  */
 
@@ -69,15 +70,15 @@
 #define TS101699_APP_AI_RESOURCEID MKRID(2, 1, 2)
 #define CIPLUS_APP_AI_RESOURCEID MKRID(2, 1, 3)
 #define CIPLUS_APP_AI_RESOURCEID_MULTI MKRID(2, 1, 4)
-#define CIPLUS_APP_DVB_RESOURCEID MKRID(32, 1, 2) //host control
-#define CIPLUS_APP_DVB_RESOURCEID_TWO MKRID(32, 1, 3) //host control
+#define CIPLUS_APP_DVB_RESOURCEID MKRID(32, 1, 2)       //host control
+#define CIPLUS_APP_DVB_RESOURCEID_TWO MKRID(32, 1, 3)   //host control
 #define CIPLUS_APP_DVB_RESOURCEID_MULTI MKRID(32, 2, 1) //host control multistream
-#define CIPLUS_APP_CA_RESOURCEID MKRID(3, 1, 1) 
-#define CIPLUS_APP_CA_RESOURCEID_MULTI MKRID(3, 2, 1) 
+#define CIPLUS_APP_CA_RESOURCEID MKRID(3, 1, 1)
+#define CIPLUS_APP_CA_RESOURCEID_MULTI MKRID(3, 2, 1)
 //#define CIPLUS_APP_LOWSPEED_RESOURCEID	(DEVICE_TYPE, DEVICE_NUMBER) MKRID(96,((DEVICE_TYPE)<<2)|((DEVICE_NUMBER) & 0x03),2)
 //#define CIPLUS_APP_LOWSPEED_RESOURCEID_TWO	(DEVICE_TYPE, DEVICE_NUMBER) MKRID(96,((DEVICE_TYPE)<<2)|((DEVICE_NUMBER) & 0x03),3) //CI+ v1.3
 #define CIPLUS_APP_CC_RESOURCEID MKRID(140, 64, 1)
-#define CIPLUS_APP_CC_RESOURCEID_TWO MKRID(140, 64, 2) //CI+ v1.3
+#define CIPLUS_APP_CC_RESOURCEID_TWO MKRID(140, 64, 2)   //CI+ v1.3
 #define CIPLUS_APP_CC_RESOURCEID_THREE MKRID(140, 64, 3) //CI+ v1.3
 #define CIPLUS_APP_CC_RESOURCEID_MULTI MKRID(140, 65, 1) //CI+ v1.3 multistream
 #define CIPLUS_APP_LANG_RESOURCEID MKRID(141, 64, 1)
@@ -111,44 +112,47 @@
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 int DH_set0_pqg(DH *dh, BIGNUM *p, BIGNUM *q, BIGNUM *g)
 {
-    /* If the fields p and g in d are NULL, the corresponding input
+        /* If the fields p and g in d are NULL, the corresponding input
      * parameters MUST be non-NULL.  q may remain NULL.
      */
-    if ((dh->p == NULL && p == NULL)
-        || (dh->g == NULL && g == NULL))
-        return 0;
+        if ((dh->p == NULL && p == NULL) || (dh->g == NULL && g == NULL))
+                return 0;
 
-    if (p != NULL) {
-        BN_free(dh->p);
-        dh->p = p;
-    }
-    if (q != NULL) {
-        BN_free(dh->q);
-        dh->q = q;
-    }
-    if (g != NULL) {
-        BN_free(dh->g);
-        dh->g = g;
-    }
+        if (p != NULL)
+        {
+                BN_free(dh->p);
+                dh->p = p;
+        }
+        if (q != NULL)
+        {
+                BN_free(dh->q);
+                dh->q = q;
+        }
+        if (g != NULL)
+        {
+                BN_free(dh->g);
+                dh->g = g;
+        }
 
-    if (q != NULL) {
-        dh->length = BN_num_bits(q);
-    }
+        if (q != NULL)
+        {
+                dh->length = BN_num_bits(q);
+        }
 
-    return 1;
+        return 1;
 }
 
 void DH_get0_key(const DH *dh, const BIGNUM **pub_key, const BIGNUM **priv_key)
 {
-    if (pub_key != NULL)
-        *pub_key = dh->pub_key;
-    if (priv_key != NULL)
-        *priv_key = dh->priv_key;
+        if (pub_key != NULL)
+                *pub_key = dh->pub_key;
+        if (priv_key != NULL)
+                *priv_key = dh->priv_key;
 }
 
 void DH_set_flags(DH *dh, int flags)
 {
-    dh->flags |= flags;
+        dh->flags |= flags;
 }
 #endif
 
@@ -182,7 +186,7 @@ struct ci_buffer
 struct ci_session
 {
         /* parent */
-    	struct ca_device *ca;
+        struct ca_device *ca;
 
         /* slot index */
         uint32_t slot_index;
@@ -223,7 +227,7 @@ typedef struct ca_device
         int ca_high_bitrate_mode;
         int ca_ai_version;
         int ca_session_number;
-	int uri_mask;
+        int uri_mask;
 
         uint16_t ai_session_number;
         uint16_t mmi_session_number;
@@ -233,7 +237,7 @@ typedef struct ca_device
 
         struct ci_session session[64];
         const struct ci_resource *resources[64];
-  /*
+        /*
    * CAM module info
    */
         char ci_name[128];
@@ -244,7 +248,8 @@ typedef struct ca_device
         char *pin_match_str;
         uint8_t key[2][16], iv[2][16];
         int sp, is_ciplus, parity;
-	int try;
+        int try
+                ;
 
 } ca_device_t;
 
@@ -307,35 +312,36 @@ struct aes_xcbc_mac_ctx
 // this contains all known resource ids so we can see if the cam asks for something exotic
 uint32_t resource_ids[] =
     {/* EN50221_APP_TELETEXT_RESOURCEID, EN50221_APP_SMARTCARD_RESOURCEID(1),EN50221_APP_AUTH_RESOURCEID,EN50221_APP_EPG_RESOURCEID(1) */ //not discribed in spec - so don't need
-//     EN50221_APP_RM_RESOURCEID,
+                                                                                                                                          //     EN50221_APP_RM_RESOURCEID,
      TS101699_APP_RM_RESOURCEID,
-//     EN50221_APP_AI_RESOURCEID, 
-//     TS101699_APP_AI_RESOURCEID,
+     //     EN50221_APP_AI_RESOURCEID,
+     //     TS101699_APP_AI_RESOURCEID,
      CIPLUS_APP_AI_RESOURCEID,
-//     CIPLUS_APP_AI_RESOURCEID_MULTI,
+     //     CIPLUS_APP_AI_RESOURCEID_MULTI,
      EN50221_APP_CA_RESOURCEID,
-//     CIPLUS_APP_CA_RESOURCEID_MULTI,
-//     EN50221_APP_DVB_RESOURCEID,
+     //     CIPLUS_APP_CA_RESOURCEID_MULTI,
+     //     EN50221_APP_DVB_RESOURCEID,
      CIPLUS_APP_DVB_RESOURCEID, //host control
-//     CIPLUS_APP_DVB_RESOURCEID_TWO, //host control
-//     CIPLUS_APP_DVB_RESOURCEID_MULTI, //host control
+                                //     CIPLUS_APP_DVB_RESOURCEID_TWO, //host control
+                                //     CIPLUS_APP_DVB_RESOURCEID_MULTI, //host control
      EN50221_APP_DATETIME_RESOURCEID,
      EN50221_APP_MMI_RESOURCEID,
      EN50221_APP_LOWSPEED_RESOURCEID(1, 1), /* CIPLUS_APP_LOWSPEED_RESOURCEID(1, 1), CIPLUS_APP_LOWSPEED_RESOURCEID_TWO(1, 1), */
-//     CIPLUS_APP_CC_RESOURCEID,
+                                            //     CIPLUS_APP_CC_RESOURCEID,
      CIPLUS_APP_CC_RESOURCEID_TWO,
-//     CIPLUS_APP_CC_RESOURCEID_THREE,
-//     CIPLUS_APP_CC_RESOURCEID_MULTI,
+     //     CIPLUS_APP_CC_RESOURCEID_THREE,
+     //     CIPLUS_APP_CC_RESOURCEID_MULTI,
      CIPLUS_APP_LANG_RESOURCEID,
      CIPLUS_APP_UPGR_RESOURCEID,
      CIPLUS_APP_OPRF_RESOURCEID,
      CIPLUS_APP_SAS_RESOURCEID,
-     CIPLUS_APP_MULTISTREAM_RESOURCEID,     
-//     TS101699_APP_AMMI_RESOURCEID,
+     CIPLUS_APP_MULTISTREAM_RESOURCEID,
+     //     TS101699_APP_AMMI_RESOURCEID,
      CIPLUS_APP_AMMI_RESOURCEID};
 int resource_ids_count = sizeof(resource_ids) / 4;
 
-typedef enum {
+typedef enum
+{
         CIPLUS_DATA_RATE_72_MBPS = 0,
         CIPLUS_DATA_RATE_96_MBPS = 1,
 } ciplus13_data_rate_t;
@@ -377,7 +383,6 @@ unsigned char dh_g[256] = {/* generator */
                            0x69, 0x87, 0x83, 0x06, 0x51, 0x80, 0xa5, 0x6e, 0xa6, 0x19, 0x7d, 0x3b, 0xef, 0xfb, 0xe0, 0x4a};
 
 int dvbca_close_device(ca_device_t *c);
-
 
 ////// MISC.C
 
@@ -873,39 +878,39 @@ int dh_dhph_signature(uint8_t *out, uint8_t *nonce, uint8_t *dhph, RSA *r)
 
 int is_ca_initialized(int i)
 {
-       if (i >= 0 && i < MAX_CA && ca_devices[i] && ca_devices[i]->enabled && ca_devices[i]->init_ok)
-	   return 1;
-       return 0;
+        if (i >= 0 && i < MAX_CA && ca_devices[i] && ca_devices[i]->enabled && ca_devices[i]->init_ok)
+                return 1;
+        return 0;
 }
 
 int createCAPMT(uint8_t *b, int len, int listmgmt, uint8_t *capmt, int capmt_len)
 {
-       struct section *section = section_codec(b, len);
-       int size;
-       if (!section)
-       {
-               LOG("failed to decode section");
-               return 0;
-       }
+        struct section *section = section_codec(b, len);
+        int size;
+        if (!section)
+        {
+                LOG("failed to decode section");
+                return 0;
+        }
 
-       struct section_ext *result = section_ext_decode(section, 0);
-       if (!result)
-       {
-               LOG("failed to decode ext_section");
-               return 0;
-       }
+        struct section_ext *result = section_ext_decode(section, 0);
+        if (!result)
+        {
+                LOG("failed to decode ext_section");
+                return 0;
+        }
 
-       struct mpeg_pmt_section *pmt = mpeg_pmt_section_codec(result);
-       if (!pmt)
-       {
-               LOG("failed to decode pmt");
-               return 0;
-       }
+        struct mpeg_pmt_section *pmt = mpeg_pmt_section_codec(result);
+        if (!pmt)
+        {
+                LOG("failed to decode pmt");
+                return 0;
+        }
 
-       if ((size = en50221_ca_format_pmt((struct mpeg_pmt_section *)b, capmt, capmt_len, 0, listmgmt,
-                                                                         CA_PMT_CMD_ID_OK_DESCRAMBLING)) < 0)
-               LOG("Failed to format CA PMT object");
-       return size;
+        if ((size = en50221_ca_format_pmt((struct mpeg_pmt_section *)b, capmt, capmt_len, 0, listmgmt,
+                                          CA_PMT_CMD_ID_OK_DESCRAMBLING)) < 0)
+                LOG("Failed to format CA PMT object");
+        return size;
 }
 
 int sendCAPMT(struct en50221_app_ca *ca_resource, int ca_session_number, uint8_t *b, int len, int listmgmt)
@@ -941,35 +946,35 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt)
 
         pid = spmt->pid;
         len = spmt->pmt_len;
-	for (ca_pos = 0; ca_pos < MAX_CA_PMT; ca_pos++)
-		if ((d->pmt_id[ca_pos] == -1) || (d->pmt_id[ca_pos] == spmt->id))
+        for (ca_pos = 0; ca_pos < MAX_CA_PMT; ca_pos++)
+                if ((d->pmt_id[ca_pos] == -1) || (d->pmt_id[ca_pos] == spmt->id))
                         break;
 
-	if (ca_pos < MAX_CA_PMT)
-		d->pmt_id[ca_pos] = spmt->id;
+        if (ca_pos < MAX_CA_PMT)
+                d->pmt_id[ca_pos] = spmt->id;
         else
-		LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY, "pmt_id full for device %d", d->id);
+                LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY, "pmt_id full for device %d", d->id);
 
         ver = spmt->version;
         sid = spmt->sid;
 
-	listmgmt = CA_LIST_MANAGEMENT_ONLY;
-	for (i = 0; i < MAX_CA_PMT; i++)
-		if (d->pmt_id[i] > 0 && d->pmt_id[i] != spmt->id)
-		{
-			listmgmt = CA_LIST_MANAGEMENT_ADD;
-		}
+        listmgmt = CA_LIST_MANAGEMENT_ONLY;
+        for (i = 0; i < MAX_CA_PMT; i++)
+                if (d->pmt_id[i] > 0 && d->pmt_id[i] != spmt->id)
+                {
+                        listmgmt = CA_LIST_MANAGEMENT_ADD;
+                }
 
-	LOG("PMT CA %d pid %u (%s) len %u ver %u sid %u (%x), pos %d, %s", spmt->adapter, pid, spmt->name, len, ver, sid, sid,
-		ca_pos, listmgmt == CA_LIST_MANAGEMENT_ONLY ? "only" : "add");
+        LOG("PMT CA %d pid %u (%s) len %u ver %u sid %u (%x), pos %d, %s", spmt->adapter, pid, spmt->name, len, ver, sid, sid,
+            ca_pos, listmgmt == CA_LIST_MANAGEMENT_ONLY ? "only" : "add");
 
         if (sendCAPMT(d->ca_resource, d->ca_session_number, b, len, listmgmt))
                 LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "sendCAPMT failed");
 
         if (d->key[0][0])
-		send_cw(spmt->id, CA_ALGO_AES128_CBC, 0, d->key[0], d->iv[0], 3600); // 1 hour
+                send_cw(spmt->id, CA_ALGO_AES128_CBC, 0, d->key[0], d->iv[0], 3600); // 1 hour
         if (d->key[1][0])
-		send_cw(spmt->id, CA_ALGO_AES128_CBC, 1, d->key[1], d->iv[1], 3600);
+                send_cw(spmt->id, CA_ALGO_AES128_CBC, 1, d->key[1], d->iv[1], 3600);
 
         return 0;
 }
@@ -978,7 +983,7 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt)
 {
         ca_device_t *d = ca_devices[ad->id];
         int i, ca_pos = -1;
-	int num_pmt = 0;
+        int num_pmt = 0;
         for (i = 0; i < MAX_CA_PMT; i++)
                 if (d->pmt_id[i] == spmt->id)
                 {
@@ -987,15 +992,15 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt)
                 }
                 else if (d->pmt_id[i] > 0)
                         num_pmt++;
- 
+
         LOG("PMT CA %d DEL pid %u (%s) sid %u (%x), ver %d, pos %d, num pmt %d, %s",
-	spmt->adapter, spmt->pid, spmt->name, spmt->sid, spmt->sid, spmt->version, ca_pos, num_pmt, spmt->name);
+            spmt->adapter, spmt->pid, spmt->name, spmt->sid, spmt->sid, spmt->version, ca_pos, num_pmt, spmt->name);
         uint8_t clean[1500];
         int new_len = clean_psi_buffer(spmt->pmt, clean, sizeof(clean));
- 
+
         if (new_len < 1)
                 LOG_AND_RETURN(0, "Could not clean the PSI information for PMT %d", spmt->id);
- 
+
         if (sendCAPMT(d->ca_resource, d->ca_session_number, clean, new_len, (num_pmt > 0) ? CA_LIST_MANAGEMENT_ADD : CA_LIST_MANAGEMENT_ONLY))
                 LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "%s: sendCAPMT for clean PMT failed", __FUNCTION__);
 
@@ -1132,7 +1137,7 @@ static int element_set_hostid_from_certificate(struct cc_ctrl_data *cc_data, uns
                 LOG("malformed hostid");
                 return 0;
         }
-        LOG("%sID: %s", id==5 ? "HOST":"CICAM", hostid);
+        LOG("%sID: %s", id == 5 ? "HOST" : "CICAM", hostid);
 
         str2bin(bin_hostid, hostid, 16);
 
@@ -1450,7 +1455,7 @@ static int data_initialize(struct ci_session *session)
 
         /* set uri versions */
         memset(buf, 0, 32);
-	buf[31] = session->ca->uri_mask; //uri version bitmask, e.g. 1-3
+        buf[31] = session->ca->uri_mask; //uri version bitmask, e.g. 1-3
         LOG("uri version bitmask set to '%d'", buf[31]);
         if (!element_set(data, 29, buf, 32))
         {
@@ -1668,10 +1673,10 @@ static int certificate_validate(struct cert_ctx *ctx, X509 *cert)
 
         X509_STORE_CTX_free(store_ctx);
 
-        if(ret==1)
-          return 1;
+        if (ret == 1)
+                return 1;
         else
-         return 0;
+                return 0;
 }
 
 static X509 *certificate_load_and_check(struct cert_ctx *ctx, const char *filename)
@@ -2023,7 +2028,7 @@ static void check_new_key(ca_device_t *d, struct cc_ctrl_data *cc_data)
 
         memcpy(d->key[slot], dec, 16);
         memcpy(d->iv[slot], dec + 16, 16);
-	d->parity = slot;
+        d->parity = slot;
 
         for (i = 0; i < MAX_CA_PMT; i++)
                 if (d->pmt_id[i] != -1)
@@ -2045,7 +2050,7 @@ static int data_get_handle_new(ca_device_t *d, struct cc_ctrl_data *cc_data, uns
         //LOG("!!!!!!!!!!!!!!!!!!!! data_get_handle_new ID = %i!!!!!!!!!!!!!!!!!!!!!!!!!", id);
         switch (id)
         {
-        case 8:  /* CICAM_BrandCert */
+        case 8: /* CICAM_BrandCert */
                 /* this results in CICAM_ID when cert-chain is verified and ok */
                 if (check_ci_certificates(cc_data))
                         break;
@@ -2064,23 +2069,23 @@ static int data_get_handle_new(ca_device_t *d, struct cc_ctrl_data *cc_data, uns
                 generate_SAK_SEK(cc_data->sak, cc_data->sek, cc_data->ks_host);
                 break;
 
-        /* SAC data messages */
+                /* SAC data messages */
 
         case 28: /* key register */
                 check_new_key(d, cc_data);
                 break;
         case 25: //uri_message
-//        case 26:        /* program_number */
+                 //        case 26:        /* program_number */
                 generate_uri_confirm(cc_data, cc_data->sak);
                 break;
 
-        case 6:         /* CICAM_id */
-        case 12:        /* keyprecursor */
-        case 14:        /* DHPM */
-        case 16:        /* CICAM_DevCert */
-        case 18:        /* Signature_B */
-        case 26:        /* program_number */
-               LOG("not need to be handled id %d", id);
+        case 6:  /* CICAM_id */
+        case 12: /* keyprecursor */
+        case 14: /* DHPM */
+        case 16: /* CICAM_DevCert */
+        case 18: /* Signature_B */
+        case 26: /* program_number */
+                LOG("not need to be handled id %d", id);
                 break;
 
         default:
@@ -2212,8 +2217,8 @@ static void ci_session_sendSPDU_A(struct ca_device *ca, uint8_t tag, uint8_t *da
         if (data)
                 memcpy(ptr, data, len);
         ptr += len;
-//        LOG("==============ci_session_sendSPDU_A================ sess = %i sess_nb = %i len = %i ",ca->session,ca->session->index,len);
-//        hexdump("ci_session_sendSPDU_A  DATA ", data, (len < 50 ? len : 16));
+        //        LOG("==============ci_session_sendSPDU_A================ sess = %i sess_nb = %i len = %i ",ca->session,ca->session->index,len);
+        //        hexdump("ci_session_sendSPDU_A  DATA ", data, (len < 50 ? len : 16));
         en50221_sl_send_data(ca->sl, session_nb, data, len);
 }
 
@@ -2245,8 +2250,8 @@ static int ci_ccmgr_cc_sac_send(struct ci_session *session, const uint8_t *tag, 
         if (pos < 8)
                 return 0;
         LOG("______________________ci_ccmgr_cc_sac_send______________________");
-//	_hexdump("TAG:   ", &tag, 3);
-//	_hexdump("UNENCRYPTED:  ", data, pos);
+        //	_hexdump("TAG:   ", &tag, 3);
+        //	_hexdump("UNENCRYPTED:  ", data, pos);
 
         pos += add_padding(&data[pos], pos - 8, 16);
         BYTE16(&data[6], pos - 8); /* len in header */
@@ -2254,7 +2259,7 @@ static int ci_ccmgr_cc_sac_send(struct ci_session *session, const uint8_t *tag, 
         pos += sac_gen_auth(&data[pos], data, pos, cc_data->sak);
         sac_crypt(&data[8], &data[8], pos - 8, cc_data->sek, AES_ENCRYPT);
 
-//        _hexdump("ENCRYPTED    ",data, pos);
+        //        _hexdump("ENCRYPTED    ",data, pos);
         ci_session_sendAPDU(session, tag, data, pos);
 
         return 1;
@@ -2319,7 +2324,7 @@ static int ci_ccmgr_cc_sac_data_req(ca_device_t *d, struct ci_session *session, 
         pos += answ_len;
 
         LOG("SEND ------------ CC_SAC_DATA_CNF----------- ");
-//        _hexdump("sac_data_send", &dest[8], pos-8);  //skip serial and header
+        //        _hexdump("sac_data_send", &dest[8], pos-8);  //skip serial and header
         return ci_ccmgr_cc_sac_send(session, data_cnf_tag, dest, pos);
 }
 
@@ -2405,13 +2410,12 @@ stackthread_func(void *arg)
         int lasterror = 0;
         adapter *ad;
         sprintf(thread_name, "CA%d", d->id);
-        
-	LOG("%s: start", __func__);
 
-        
-while (d->enabled)
+        LOG("%s: start", __func__);
+
+        while (d->enabled)
         {
-                usleep(100*1000);
+                usleep(100 * 1000);
                 int error;
                 if ((error = en50221_tl_poll(d->tl)) != 0)
                 {
@@ -2422,7 +2426,7 @@ while (d->enabled)
                                     en50221_tl_get_error(d->tl));
                                 ad = get_adapter(d->id);
                                 if (ad)
-					ad->adapter_timeout = opts.adapter_timeout;
+                                        ad->adapter_timeout = opts.adapter_timeout;
                                 d->ignore_close = 0; // force device close..
                                                      //ca_init(d);
                                                      //				break;
@@ -2505,27 +2509,27 @@ static int ciplus_app_lang_message(void *arg, uint8_t slot_id, uint16_t session_
         tag = data[0] << 16 | data[1] << 8 | data[2];
 
         uint8_t data_reply_lang[3]; // ISO 639 Part 2
-        data_reply_lang[0] = 0x65; /* e */
-        data_reply_lang[1] = 0x6e; /* n */
-        data_reply_lang[2] = 0x67; /* g */
+        data_reply_lang[0] = 0x65;  /* e */
+        data_reply_lang[1] = 0x6e;  /* n */
+        data_reply_lang[2] = 0x67;  /* g */
 
         uint8_t data_reply_country[3]; // ISO 3166-1 alpha 3
-        data_reply_country[0] = 0x55; /* U */
-        data_reply_country[1] = 0x53; /* S */
-        data_reply_country[2] = 0x41; /* A */
+        data_reply_country[0] = 0x55;  /* U */
+        data_reply_country[1] = 0x53;  /* S */
+        data_reply_country[2] = 0x41;  /* A */
 
         switch (tag)
         {
         case CIPLUS_TAG_COUNTRY_ENQ: /* country enquiry */
         {
-                LOG("country answered with '%c%c%c'", data_reply_country[0],data_reply_country[1],data_reply_country[2]);
+                LOG("country answered with '%c%c%c'", data_reply_country[0], data_reply_country[1], data_reply_country[2]);
                 uint8_t tag[3] = {0x9f, 0x81, 0x01}; /* host country reply */
                 ci_session_sendAPDU(d->session, tag, data_reply_country, 3);
                 break;
         }
         case CIPLUS_TAG_LANG_ENQ: /* language enquiry */
         {
-                LOG("language answered with '%c%c%c'", data_reply_lang[0],data_reply_lang[1],data_reply_lang[2]);
+                LOG("language answered with '%c%c%c'", data_reply_lang[0], data_reply_lang[1], data_reply_lang[2]);
                 uint8_t tag[3] = {0x9f, 0x81, 0x11}; /* host language reply */
                 ci_session_sendAPDU(d->session, tag, data_reply_lang, 3);
                 break;
@@ -2535,7 +2539,6 @@ static int ciplus_app_lang_message(void *arg, uint8_t slot_id, uint16_t session_
         }
         return 0;
 }
-
 
 static int ciplus_app_sas_message(void *arg, uint8_t slot_id, uint16_t session_number, uint32_t resource_id, uint8_t *data, uint32_t data_length)
 {
@@ -2549,12 +2552,13 @@ static int ciplus_app_sas_message(void *arg, uint8_t slot_id, uint16_t session_n
         {
         case CIPLUS_TAG_SAS_CONNECT_CNF: /* */
         {
-                LOG("CI+ CA%i 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x  0x%02x", 
-		    d->id, data[3], data[4], data[5], data[6], data[7], data[8], data[9], data[10], data[11], data[12]);
-	    if(data[12]==0) {
-                uint8_t tag[3] = {0x9f, 0x9a, 0x07}; /* cam sas async msg */
-                ci_session_sendAPDU(d->session, tag, 0x00, 0);
-			    }
+                LOG("CI+ CA%i 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x  0x%02x",
+                    d->id, data[3], data[4], data[5], data[6], data[7], data[8], data[9], data[10], data[11], data[12]);
+                if (data[12] == 0)
+                {
+                        uint8_t tag[3] = {0x9f, 0x9a, 0x07}; /* cam sas async msg */
+                        ci_session_sendAPDU(d->session, tag, 0x00, 0);
+                }
                 break;
         }
         default:
@@ -2564,7 +2568,6 @@ static int ciplus_app_sas_message(void *arg, uint8_t slot_id, uint16_t session_n
         return 0;
 } /* not working, just for fun */
 
-
 static int ciplus_app_oprf_message(void *arg, uint8_t slot_id, uint16_t session_number, uint32_t resource_id, uint8_t *data, uint32_t data_length)
 {
         ca_device_t *d = arg;
@@ -2573,25 +2576,23 @@ static int ciplus_app_oprf_message(void *arg, uint8_t slot_id, uint16_t session_
         int pos, i;
         pos = sprintf(buf, " ");
 
-
-        uint8_t data_oprf_search[9]; 
+        uint8_t data_oprf_search[9];
         data_oprf_search[0] = 0x03; /* unattended mode bit=0 + length in bytes of the service types */
-        data_oprf_search[1] = 0x01; /* service MPEG-2 television (0x01) */ 
-        data_oprf_search[2] = 0x16; /* service h264 SD (0x16) */ 
-        data_oprf_search[3] = 0x19; /* service h264 HD (0x19) */ 
+        data_oprf_search[1] = 0x01; /* service MPEG-2 television (0x01) */
+        data_oprf_search[2] = 0x16; /* service h264 SD (0x16) */
+        data_oprf_search[3] = 0x19; /* service h264 HD (0x19) */
         data_oprf_search[4] = 0x02; /* length in bytes of the delivery_capability */
         data_oprf_search[5] = 0x43; /* DVB-S */
         data_oprf_search[6] = 0x79; /* DVB-S2 */
         data_oprf_search[7] = 0x01; /* length in bytes of the application_capability */
         data_oprf_search[8] = 0x00; /* System Software Update service */
 
-        uint8_t data_oprf_tune_status[64]; 
-        data_oprf_tune_status[0] = 0x01; //unprocessed descriptor_number 
+        uint8_t data_oprf_tune_status[64];
+        data_oprf_tune_status[0] = 0x01; //unprocessed descriptor_number
         data_oprf_tune_status[1] = 0x50; //signal strength
         data_oprf_tune_status[2] = 0x50; //signal quality
         data_oprf_tune_status[3] = 0x00; //status 0 - OK
-        data_oprf_tune_status[4] = 0x0d;  //lenght next part (13 bytes)
-
+        data_oprf_tune_status[4] = 0x0d; //lenght next part (13 bytes)
 
         tag = data[0] << 16 | data[1] << 8 | data[2];
 
@@ -2599,72 +2600,79 @@ static int ciplus_app_oprf_message(void *arg, uint8_t slot_id, uint16_t session_
         {
         case CIPLUS_TAG_OPERATOR_STATUS: /* operator_status 01 */
         {
-	    LOG("CAM_OPRF_operator_status_receive");
-    	    pos = sprintf(buf, " ");
-    	    for (i = 4; i < data[3]+4; i++)
-            pos += sprintf(buf + pos, "%02X ", data[i]);
-            uint8_t tag_part = 0x04; /* operator_info_req */
-         if(data[5]&0x20)  //initialised_flag - profile initialised
-	    tag_part = 0x08; /* operator_exit */
-	 if(data[5]&0x40) { 
-    	    LOG("CI+ CA%d: %s operator profile %sinitialised", d->id, buf, data[5]&0x60 ? "" : "NOT ");
-	 } else
-    	    LOG("CI+ CA%d: %s operator profile disabled", d->id, buf);
-                uint8_t tag[3] = {0x9f, 0x9c, tag_part}; 
+                LOG("CAM_OPRF_operator_status_receive");
+                pos = sprintf(buf, " ");
+                for (i = 4; i < data[3] + 4; i++)
+                        pos += sprintf(buf + pos, "%02X ", data[i]);
+                uint8_t tag_part = 0x04; /* operator_info_req */
+                if (data[5] & 0x20)      //initialised_flag - profile initialised
+                        tag_part = 0x08; /* operator_exit */
+                if (data[5] & 0x40)
+                {
+                        LOG("CI+ CA%d: %s operator profile %sinitialised", d->id, buf, data[5] & 0x60 ? "" : "NOT ");
+                }
+                else
+                        LOG("CI+ CA%d: %s operator profile disabled", d->id, buf);
+                uint8_t tag[3] = {0x9f, 0x9c, tag_part};
                 ci_session_sendAPDU(d->session, tag, 0x00, 0);
                 break;
         }
         case CIPLUS_TAG_OPERATOR_INFO: /* operator_info */
         {
-	        LOG("CAM_OPRF_operator_info_receive");
-    	    for (i = 4; i < data[3]+4; i++)
-            pos += sprintf(buf + pos, "%02X ", data[i]);
-    	    LOG("CI+ CA%d: %s", d->id, buf);
+                LOG("CAM_OPRF_operator_info_receive");
+                for (i = 4; i < data[3] + 4; i++)
+                        pos += sprintf(buf + pos, "%02X ", data[i]);
+                LOG("CI+ CA%d: %s", d->id, buf);
                 uint8_t tag[3] = {0x9f, 0x9c, 0x06}; /* operator_search_start */
                 ci_session_sendAPDU(d->session, tag, data_oprf_search, 9);
                 break;
         }
         case 0x9f9c03: /* operator_nit */
         {
-	        LOG("CAM_OPRF_operator_nit_receive");
-    	    for (i = 4; i < data[3]+4; i++)
-            pos += sprintf(buf + pos, "%02X ", data[i]);
-    	    LOG("CI+ CA%d: %s", d->id, buf);
+                LOG("CAM_OPRF_operator_nit_receive");
+                for (i = 4; i < data[3] + 4; i++)
+                        pos += sprintf(buf + pos, "%02X ", data[i]);
+                LOG("CI+ CA%d: %s", d->id, buf);
                 uint8_t tag[3] = {0x9f, 0x9c, 0x08}; /* operator_exit */
                 ci_session_sendAPDU(d->session, tag, 0x00, 0);
                 break;
         }
         case CIPLUS_TAG_OPERATOR_SEARCH_STATUS: /* operator_search_status */
         {
-	    LOG("CAM_OPRF_operator_search_status_receive");
-    	    for (i = 4; i < data[3]+4; i++)
-            pos += sprintf(buf + pos, "%02X ", data[i]);
-    	    LOG("CI+ CA%d: %s", d->id, buf);
+                LOG("CAM_OPRF_operator_search_status_receive");
+                for (i = 4; i < data[3] + 4; i++)
+                        pos += sprintf(buf + pos, "%02X ", data[i]);
+                LOG("CI+ CA%d: %s", d->id, buf);
 
                 uint8_t tag[3] = {0x9f, 0x9c, 0x02}; /* operator_nit */
-	    if(data[5]&0x02) // refresh_request_flag == 2 (urgent request)
-	        {
-	        uint8_t tag[3] = {0x9f, 0x9c, 0x06}; /* operator_search_start */
-	        ci_session_sendAPDU(d->session, tag, data_oprf_search, 9);
-	        } else 
-                ci_session_sendAPDU(d->session, tag, 0x00, 0);
-	        break;
-	}
+                if (data[5] & 0x02)                  // refresh_request_flag == 2 (urgent request)
+                {
+                        uint8_t tag[3] = {0x9f, 0x9c, 0x06}; /* operator_search_start */
+                        ci_session_sendAPDU(d->session, tag, data_oprf_search, 9);
+                }
+                else
+                        ci_session_sendAPDU(d->session, tag, 0x00, 0);
+                break;
+        }
         case CIPLUS_TAG_OPERATOR_TUNE: /* operator_tune */
         {
-	    char *pol = "H";
-	    if(data[9]&0x20) pol = "V";
-	    else if(data[9]&0x40) pol = "L";
-	    else if(data[9]&0x60) pol = "R"; 
-	        LOG("CAM_OPRF_operator_tune_receive");
-    	    for (i = 4; i < data[3]+4; i++) {
-            pos += sprintf(buf + pos, "%02X ", data[i]);
-	    data_oprf_tune_status[i+1]=data[i+2];
-		}
-    	    LOG("CI+ CA%d: %s", d->id, buf);
-	    LOG("Please TUNE to transponder %x%x%x %c", data[6],data[7],data[8],pol);
-	    //data_oprf_tune_status[13]=0xC6; //psk8 dvb-s2
-		usleep(3*1000*1000); //wait 3 secs
+                char *pol = "H";
+                if (data[9] & 0x20)
+                        pol = "V";
+                else if (data[9] & 0x40)
+                        pol = "L";
+                else if (data[9] & 0x60)
+                        pol = "R";
+                LOG("CAM_OPRF_operator_tune_receive");
+                for (i = 4; i < data[3] + 4; i++)
+                {
+                        pos += sprintf(buf + pos, "%02X ", data[i]);
+                        data_oprf_tune_status[i + 1] = data[i + 2];
+                }
+                LOG("CI+ CA%d: %s", d->id, buf);
+                LOG("Please TUNE to transponder %x%x%x %c", data[6], data[7], data[8], pol);
+                //data_oprf_tune_status[13]=0xC6; //psk8 dvb-s2
+                usleep(3 * 1000 * 1000);             //wait 3 secs
                 uint8_t tag[3] = {0x9f, 0x9c, 0x0a}; /* operator_tune_status */
                 ci_session_sendAPDU(d->session, tag, data_oprf_tune_status, 18);
                 break;
@@ -2673,17 +2681,16 @@ static int ciplus_app_oprf_message(void *arg, uint8_t slot_id, uint16_t session_
                 LOG("unknown OPRF apdu tag %03x", tag);
         }
         return 0;
-} 
-
+}
 
 static int ciplus_app_upgr_message(void *arg, uint8_t slot_id, uint16_t session_number, uint32_t resource_id, uint8_t *data, uint32_t data_length)
 {
         ca_device_t *d = arg;
-	int fd = d->fd;
-	ca_slot_info_t info;
+        int fd = d->fd;
+        ca_slot_info_t info;
 
         uint32_t tag;
-	const uint8_t answer = 0x00; // 0x00 - mean no upgrade, 0x01 - upgrade, 0x02 - ask user by mmi
+        const uint8_t answer = 0x00; // 0x00 - mean no upgrade, 0x01 - upgrade, 0x02 - ask user by mmi
 
         LOG("CAM_fw_upgrade_receive");
 
@@ -2706,11 +2713,12 @@ static int ciplus_app_upgr_message(void *arg, uint8_t slot_id, uint16_t session_
         case CIPLUS_TAG_FIRMWARE_UPGR_COMPLT: /* */
         {
                 LOG("CI+ CA%i Firmware Upgrade Complete (reset status %i)", d->id, data[4]);
-	if(data[4] < 2) { //reset requred
-                if (ioctl(fd, CA_RESET, &info))
-                    LOG_AND_RETURN(0, "%s: Could not reset ca %d", __FUNCTION__, d->id);
-                return 1;
-	}
+                if (data[4] < 2)
+                { //reset requred
+                        if (ioctl(fd, CA_RESET, &info))
+                                LOG_AND_RETURN(0, "%s: Could not reset ca %d", __FUNCTION__, d->id);
+                        return 1;
+                }
                 break;
         }
         default:
@@ -2744,16 +2752,16 @@ static int ciplus_app_ai_message(void *arg, uint8_t slot_id, uint16_t session_nu
                                               resource_id,
                                               data,
                                               data_length);
-	    break;
+                break;
         case CIPLUS_TAG_CICAM_RESET:
                 //		hexdump(data,data_length);
                 if (ioctl(fd, CA_RESET, &info))
-                    LOG_AND_RETURN(0, "%s: Could not reset ca %d", __FUNCTION__, d->id);
-	        return 1;
-		break;
-	default:
-        LOG("Received unexpected tag %x", tag);
-	} 
+                        LOG_AND_RETURN(0, "%s: Could not reset ca %d", __FUNCTION__, d->id);
+                return 1;
+                break;
+        default:
+                LOG("Received unexpected tag %x", tag);
+        }
         return -1;
 }
 
@@ -2773,7 +2781,7 @@ static int ca_session_callback(void *arg, int reason, uint8_t slot_id,
                                uint16_t session_number, uint32_t resource_id)
 {
         ca_device_t *d = arg;
-	d->session->ca = d;
+        d->session->ca = d;
 
         LOG("%s: reason %d slot_id %u session_number %u resource_id %x", __func__,
             reason, slot_id, session_number, resource_id);
@@ -2794,8 +2802,7 @@ static int ca_session_callback(void *arg, int reason, uint8_t slot_id,
                         d->ignore_close = 1;
                         d->init_ok = 0;
                 }
-                else if (resource_id == CIPLUS_APP_CC_RESOURCEID || resource_id == CIPLUS_APP_CC_RESOURCEID_TWO
-			    || resource_id == CIPLUS_APP_CC_RESOURCEID_THREE || resource_id == CIPLUS_APP_CC_RESOURCEID_MULTI)
+                else if (resource_id == CIPLUS_APP_CC_RESOURCEID || resource_id == CIPLUS_APP_CC_RESOURCEID_TWO || resource_id == CIPLUS_APP_CC_RESOURCEID_THREE || resource_id == CIPLUS_APP_CC_RESOURCEID_MULTI)
                 {
                         LOG("__________S_SCALLBACK_REASON_CLOSE____________CIPLUS_APP_CC_RESOURCEID________________________");
                 }
@@ -2837,7 +2844,7 @@ static int ca_session_callback(void *arg, int reason, uint8_t slot_id,
                         ciplus13_app_ai_data_rate_info(d, d->ca_high_bitrate_mode ? CIPLUS_DATA_RATE_96_MBPS : CIPLUS_DATA_RATE_72_MBPS);
                 }
                 else if (resource_id == EN50221_APP_CA_RESOURCEID ||
-			resource_id == CIPLUS_APP_CA_RESOURCEID)
+                         resource_id == CIPLUS_APP_CA_RESOURCEID)
                 {
                         LOG("--------------------S_SCALLBACK_REASON_CAMCONNECTED---------EN50221_APP_CA_RESOURCEID-------------------------");
                         en50221_app_ca_info_enq(d->ca_resource, session_number);
@@ -2850,8 +2857,8 @@ static int ca_session_callback(void *arg, int reason, uint8_t slot_id,
                 else if (resource_id == CIPLUS_APP_SAS_RESOURCEID)
                 {
                         LOG("--------------------S_SCALLBACK_REASON_CAMCONNECTED---------CIPLUS_APP_SAS_RESOURCEID-------------------------");
-			uint8_t data[] = {0x9f, 0x9a, 0x00, 0x08, 0x69, 0x74, 0x64, 0x74, 0x74, 0x63, 0x61, 0x00 };  //blank private_Host_application_ID
-			en50221_sl_send_data(d->sl, session_number, data, sizeof(data));
+                        uint8_t data[] = {0x9f, 0x9a, 0x00, 0x08, 0x69, 0x74, 0x64, 0x74, 0x74, 0x63, 0x61, 0x00}; //blank private_Host_application_ID
+                        en50221_sl_send_data(d->sl, session_number, data, sizeof(data));
                 }
                 else if (resource_id == CIPLUS_APP_OPRF_RESOURCEID)
                 {
@@ -2881,7 +2888,7 @@ static int ca_lookup_callback(void *arg, uint8_t slot_id,
                               uint32_t *connected_resource_id)
 {
         ca_device_t *d = arg;
-	d->session->ca = d;
+        d->session->ca = d;
 
         LOG("===================> %s: slot_id %u requested_resource_id %x", __func__, slot_id,
             requested_resource_id);
@@ -2921,21 +2928,21 @@ static int ca_lookup_callback(void *arg, uint8_t slot_id,
                 *connected_resource_id = EN50221_APP_MMI_RESOURCEID;
                 break;
         case CIPLUS_APP_CC_RESOURCEID:
-/* CI Plus Implementation Guidelines V1.0.6 (2013-10)
+                /* CI Plus Implementation Guidelines V1.0.6 (2013-10)
    5.3.1 URI version advertisement
    A Host should advertise URI v1 only when Content Control v1 is selected by the CICAM */
-		d->uri_mask = 0x1;
-		*callback_out = (en50221_sl_resource_callback)ciplus_app_cc_message;
-		*arg_out = d;
-		*connected_resource_id = requested_resource_id;
-		break;
+                d->uri_mask = 0x1;
+                *callback_out = (en50221_sl_resource_callback)ciplus_app_cc_message;
+                *arg_out = d;
+                *connected_resource_id = requested_resource_id;
+                break;
         case CIPLUS_APP_CC_RESOURCEID_TWO:
         case CIPLUS_APP_CC_RESOURCEID_THREE:
         case CIPLUS_APP_CC_RESOURCEID_MULTI:
-		d->uri_mask = 0x3;
+                d->uri_mask = 0x3;
                 *callback_out = (en50221_sl_resource_callback)ciplus_app_cc_message;
                 *arg_out = d;
-		*connected_resource_id = requested_resource_id;
+                *connected_resource_id = requested_resource_id;
                 break;
         case CIPLUS_APP_LANG_RESOURCEID:
                 *callback_out = (en50221_sl_resource_callback)ciplus_app_lang_message;
@@ -2963,7 +2970,7 @@ static int ca_lookup_callback(void *arg, uint8_t slot_id,
                 *connected_resource_id = requested_resource_id;
                 LOG("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! lookup callback for unknown resource id %x on slot %u",
                     requested_resource_id, slot_id);
-		break;
+                break;
         }
         return 0;
 }
@@ -3026,16 +3033,16 @@ static int ca_ca_info_callback(void *arg, uint8_t slot_id,
         ca_device_t *d = arg;
         LOG("%02x:%s", slot_id, __func__);
         uint32_t i;
-//if(d->try == 0) {
+        //if(d->try == 0) {
         for (i = 0; i < ca_id_count; i++)
         {
                 LOG("  Supported CA ID: %04x for CA%d", ca_ids[i], d->id);
                 add_caid_mask(dvbca_id, d->id, ca_ids[i], 0xFFFF);
         }
-//d->try = 1;
-//}
+        //d->try = 1;
+        //}
 
-	return 0;
+        return 0;
 }
 
 static int ca_ca_pmt_reply_callback(void *arg, uint8_t slot_id,
@@ -3049,12 +3056,13 @@ static int ca_ca_pmt_reply_callback(void *arg, uint8_t slot_id,
 
         LOG("%02x:%s", slot_id, __func__);
 
-	if(!reply->CA_enable_flag || reply->CA_enable != 1) {
-	    LOG("Unable to descramble. ca_enable_flag: %d, ca_enable: 0x%02x", reply->CA_enable_flag, reply->CA_enable);
-	return 0; 
-	}
+        if (!reply->CA_enable_flag || reply->CA_enable != 1)
+        {
+                LOG("Unable to descramble. ca_enable_flag: %d, ca_enable: 0x%02x", reply->CA_enable_flag, reply->CA_enable);
+                return 0;
+        }
 
-	LOG("OK descrambling");
+        LOG("OK descrambling");
 
         return 0;
 }
@@ -3078,7 +3086,7 @@ static int ca_dt_enquiry_callback(void *arg, uint8_t slot_id,
 
 static int
 ca_mmi_close_callback(void *arg, uint8_t slot_id, uint16_t session_number,
-                uint8_t cmd_id, uint8_t delay)
+                      uint8_t cmd_id, uint8_t delay)
 {
         LOG("mmi close cb received for slot %u session_num %u "
             "cmd_id 0x%02x delay %u",
@@ -3089,7 +3097,7 @@ ca_mmi_close_callback(void *arg, uint8_t slot_id, uint16_t session_number,
 
 static int
 ca_mmi_display_ctl_callback(void *arg, uint8_t slot_id, uint16_t session_number,
-                      uint8_t cmd_id, uint8_t mmi_mode)
+                            uint8_t cmd_id, uint8_t mmi_mode)
 {
         ca_device_t *d = arg;
 
@@ -3114,8 +3122,8 @@ ca_mmi_display_ctl_callback(void *arg, uint8_t slot_id, uint16_t session_number,
 
 static int
 ca_mmi_enq_callback(void *arg, uint8_t slot_id, uint16_t session_number,
-              uint8_t blind_answ, uint8_t exp_answ_len,
-              uint8_t *text, uint32_t text_size)
+                    uint8_t blind_answ, uint8_t exp_answ_len,
+                    uint8_t *text, uint32_t text_size)
 {
         ca_device_t *d = arg;
         char buffer[256];
@@ -3143,11 +3151,11 @@ ca_mmi_enq_callback(void *arg, uint8_t slot_id, uint16_t session_number,
 
 static int
 ca_mmi_menu_callback(void *arg, uint8_t slot_id, uint16_t session_number,
-               struct en50221_app_mmi_text *title,
-               struct en50221_app_mmi_text *sub_title,
-               struct en50221_app_mmi_text *bottom,
-               uint32_t item_count, struct en50221_app_mmi_text *items,
-               uint32_t item_raw_length, uint8_t *items_raw)
+                     struct en50221_app_mmi_text *title,
+                     struct en50221_app_mmi_text *sub_title,
+                     struct en50221_app_mmi_text *bottom,
+                     uint32_t item_count, struct en50221_app_mmi_text *items,
+                     uint32_t item_raw_length, uint8_t *items_raw)
 {
         ca_device_t *d = arg;
 
@@ -3162,12 +3170,12 @@ ca_mmi_menu_callback(void *arg, uint8_t slot_id, uint16_t session_number,
         }
         LOG("  bottom:   %.*s", bottom->text_length, bottom->text);
 
-	/* menu answer OK */
-	en50221_app_mmi_menu_answ(d->mmi_resource, session_number,
-				    0x01); 
+        /* menu answer OK */
+        en50221_app_mmi_menu_answ(d->mmi_resource, session_number,
+                                  0x01);
         /* enter "OK" */
-//        en50221_app_mmi_keypress(d->mmi_resource, session_number,
-//                                  0x11);
+        //        en50221_app_mmi_keypress(d->mmi_resource, session_number,
+        //                                  0x11);
         /* cancel menu */
         en50221_app_mmi_close(d->mmi_resource, session_number,
                               MMI_CLOSE_MMI_CMD_ID_IMMEDIATE, 0);
@@ -3177,11 +3185,11 @@ ca_mmi_menu_callback(void *arg, uint8_t slot_id, uint16_t session_number,
 
 static int
 ca_app_mmi_list_callback(void *arg, uint8_t slot_id, uint16_t session_num,
-                   struct en50221_app_mmi_text *title,
-                   struct en50221_app_mmi_text *sub_title,
-                   struct en50221_app_mmi_text *bottom,
-                   uint32_t item_count, struct en50221_app_mmi_text *items,
-                   uint32_t item_raw_length, uint8_t *items_raw)
+                         struct en50221_app_mmi_text *title,
+                         struct en50221_app_mmi_text *sub_title,
+                         struct en50221_app_mmi_text *bottom,
+                         uint32_t item_count, struct en50221_app_mmi_text *items,
+                         uint32_t item_raw_length, uint8_t *items_raw)
 {
         ca_device_t *d = arg;
 
@@ -3293,13 +3301,14 @@ int ca_init(ca_device_t *d)
 {
         ca_slot_info_t info;
         int64_t st = getTick();
-	__attribute__((unused)) int tries = 800; // wait up to 8s for the CAM
+        __attribute__((unused)) int tries = 800; // wait up to 8s for the CAM
         int fd = d->fd;
         d->tl = NULL;
         d->sl = NULL;
         d->slot_id = -1;
-	memset(&info, 0, sizeof(info));
-	d->try = 0;
+        memset(&info, 0, sizeof(info));
+        d->try
+                = 0;
 
         if (ioctl(fd, CA_RESET, &info))
                 LOG_AND_RETURN(0, "%s: Could not reset ca %d", __FUNCTION__, d->id);
@@ -3310,10 +3319,10 @@ int ca_init(ca_device_t *d)
                 if (ioctl(fd, CA_GET_SLOT_INFO, &info))
                         LOG_AND_RETURN(0, "%s: Could not get info1 for ca %d", __FUNCTION__, d->id);
                 usleep(10000);
-	} while ((tries-- > 0) && !(info.flags & CA_CI_MODULE_READY));
+        } while ((tries-- > 0) && !(info.flags & CA_CI_MODULE_READY));
 
         if (ioctl(fd, CA_GET_SLOT_INFO, &info))
-		LOG_AND_RETURN(0, "%s: Could not get info2 for ca %d, tries %d", __FUNCTION__, d->id, tries);
+                LOG_AND_RETURN(0, "%s: Could not get info2 for ca %d, tries %d", __FUNCTION__, d->id, tries);
 
         LOG("initializing CA, fd %d type %d flags 0x%x, after %jd ms", fd, info.type, info.flags, (getTick() - st));
 
@@ -3397,7 +3406,7 @@ int ca_init(ca_device_t *d)
         return 0;
 fail:
         close(fd);
-	d->fd = -1;
+        d->fd = -1;
         d->enabled = 0;
         return 1;
 }
@@ -3425,10 +3434,10 @@ int dvbca_init_dev(adapter *ad)
         {
                 c = ca_devices[ad->id] = malloc1(sizeof(ca_device_t));
                 if (!c)
-		{
-			close(fd);
+                {
+                        close(fd);
                         LOG_AND_RETURN(0, "Could not allocate memory for CA device %d", ad->id);
-		}
+                }
                 memset(c, 0, sizeof(ca_device_t));
         }
         c->enabled = 1;
@@ -3532,14 +3541,14 @@ int dvbca_ts(adapter *ad)
         unsigned char *buf;
         int decryptedtext_len, ciphertext_len;
         int i = 0;
-//        int op = -1, parity = -1;
+        //        int op = -1, parity = -1;
         int rlen = ad->rlen;
         if (!c->is_ciplus)
                 return 0;
         buf = ad->buf;
-//        parity = ((buf[3] & 0x40) == 0x40);
-//        LOG("parity %d, CW %02X %02X", parity, c->key[parity][0], c->key[parity][1]);
-//        parity = -1;
+        //        parity = ((buf[3] & 0x40) == 0x40);
+        //        LOG("parity %d, CW %02X %02X", parity, c->key[parity][0], c->key[parity][1]);
+        //        parity = -1;
         for (i = 0; i < rlen; i += 188)
         {
                 int adapt_len;
@@ -3549,11 +3558,11 @@ int dvbca_ts(adapter *ad)
                 if ((buf[3] & 0x80) == 0) //not crypted by AES, skip decrypt
                         continue;
 
-//                op = parity;
-//                parity = ((buf[3] & 0x40) == 0x40);
+                //                op = parity;
+                //                parity = ((buf[3] & 0x40) == 0x40);
 
-//                if (op != parity && op >= 0)
-//                        LOG("CI+ parity change %d -> %d", op, parity);
+                //                if (op != parity && op >= 0)
+                //                        LOG("CI+ parity change %d -> %d", op, parity);
                 adapt_len = 4;
 
                 if (buf[3] & 0x20)
