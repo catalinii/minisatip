@@ -135,7 +135,7 @@ void tables_ca_ts(adapter *ad)
 	}
 }
 
-void add_caid_mask(int ica, int aid, int caid, int mask)
+void add_caid_mask(int ica, int aid, int mask)
 {
 	int i;
 	adapter *ad = get_adapter(aid);
@@ -147,12 +147,11 @@ void add_caid_mask(int ica, int aid, int caid, int mask)
 	if (ca[ica].enabled)
 	{
 		for (i = 0; i < ca[ica].ad_info[aid].caids; i++)
-			if (ca[ica].ad_info[aid].caid[i] == caid && ca[ica].ad_info[aid].mask[i] == mask)
+			if (ca[ica].ad_info[aid].mask[i] == mask)
 				return;
 		i = ca[ica].ad_info[aid].caids++;
-		ca[ica].ad_info[aid].caid[i] = caid;
 		ca[ica].ad_info[aid].mask[i] = mask;
-		LOG("CA %d can handle CAID %04X mask %04X on adapter %d at position %d", ica, caid, mask, ad->id, i);
+		LOG("CA %d can handle CAID mask %04X on adapter %d at position %d", ica, mask, ad->id, i);
 	}
 	else
 		LOG("CA not enabled %d", ica);
@@ -182,13 +181,13 @@ int tables_init_ca_for_device(int i, adapter *ad)
 	return rv;
 }
 
-int match_caid(SPMT *pmt, int caid, int mask)
+int match_caid(SPMT *pmt, int mask)
 {
 	int i;
 	for (i = 0; i < pmt->caids; i++)
-		if ((pmt->caid[i] & mask) == caid)
+		if ((pmt->caid[i] & mask) == pmt->caid[i])
 		{
-			LOGM("%s: match caid %04X (%d/%d) with CA caid %04X and mask %04X", __FUNCTION__, pmt->caid[i], i, pmt->caids, caid, mask);
+			LOGM("%s: match caid %04X (%d/%d) with CA caid %04X and mask %04X", __FUNCTION__, pmt->caid[i], i, pmt->caids, mask);
 			return 1;
 		}
 	return 0;
@@ -242,9 +241,9 @@ int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt)
 	{
 		int j, send = 0;
 		for (j = 0; j < ca[i].ad_info[ad->id].caids; j++)
-			if (match_caid(pmt, ca[i].ad_info[ad->id].caid[j], ca[i].ad_info[ad->id].mask[j]))
+			if (match_caid(pmt, ca[i].ad_info[ad->id].mask[j]))
 			{
-				LOG("CAID %04X and mask %04X matched PMT %d", ca[i].ad_info[ad->id].caid[j], ca[i].ad_info[ad->id].mask[j], pmt->id);
+				LOG("CAID mask %04X matched PMT %d", ca[i].ad_info[ad->id].mask[j], pmt->id);
 				send = 1;
 				break;
 			}

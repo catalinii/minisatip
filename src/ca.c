@@ -3037,7 +3037,7 @@ static int ca_ca_info_callback(void *arg, uint8_t slot_id,
         for (i = 0; i < ca_id_count; i++)
         {
                 LOG("  Supported CA ID: %04x for CA%d", ca_ids[i], d->id);
-                add_caid_mask(dvbca_id, d->id, ca_ids[i], 0xFFFF);
+                add_caid_mask(dvbca_id, d->id, ca_ids[i]);
         }
         //d->try = 1;
         //}

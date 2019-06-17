@@ -293,9 +293,9 @@ int find_ddci_for_pmt(SPMT *pmt)
 				has_ddci = 1;
 
 			for (j = 0; j < ca[dvbca_id].ad_info[i].caids; j++)
-				if (match_caid(pmt, ca[dvbca_id].ad_info[i].caid[j], ca[dvbca_id].ad_info[i].mask[j]))
+				if (match_caid(pmt, ca[dvbca_id].ad_info[i].mask[j]))
 				{
-					LOG("DDCI %d CAID %04X and mask %04X matched PMT %d", i, ca[dvbca_id].ad_info[i].caid[j], ca[dvbca_id].ad_info[i].mask[j], pmt->id);
+					LOG("DDCI %d CAID mask %04X matched PMT %d", i, ca[dvbca_id].ad_info[i].mask[j], pmt->id);
 					if (d->channels < d->max_channels)
 						return d->id;
 					else
