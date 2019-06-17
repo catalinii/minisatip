@@ -740,8 +740,6 @@ int setup_switch(adapter *ad)
 		if (ad != master) // slave adapter
 		{
 			change_par = 0;
-			if (!master)
-				LOG_AND_RETURN(-1, "master adapter %d of adapter %d is not initialized", ad->master_source, ad->id);
 
 			if (master->old_pol != pol || master->old_hiband != hiband || master->old_diseqc != diseqc)
 				change_par = 1;
@@ -1560,10 +1558,10 @@ void dvb_get_signal(adapter *ad)
 	strength = strength >> 8;
 	snr = snr >> 8;
 
-	if (strength > 255 || strength < 0)
+	if (strength > 255)
 		strength = 255;
 
-	if (snr > 255 || snr < 0)
+	if (snr > 255)
 		snr = 255;
 
 	// keep the assignment at the end for the signal thread to get the right values as no locking is done on the adapter

@@ -164,6 +164,7 @@ int udp_bind(char *addr, int port)
 		{
 			LOG("udp_bind: failed: bind() on host %s port %d: error %s", addr,
 				port, strerror(errno));
+			close(sock);
 			return -1;
 		}
 	}
@@ -1467,7 +1468,9 @@ int flush_socket(sockets *s)
 		goto end;
 	if (s->pack)
 		p = s->pack + s->spos;
-	if (p && p->buf)
+	else
+		goto end;
+	if (p->buf)
 	{
 
 		iov[0].iov_len = p->len;

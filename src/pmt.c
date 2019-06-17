@@ -167,6 +167,7 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags, u
 	fid = add_new_lock((void **)filters, MAX_FILTERS, sizeof(SFilter), &filters_mutex);
 	if (fid == -1)
 		LOG_AND_RETURN(-1, "%s failed", __FUNCTION__);
+
 	mutex_lock(&filters_mutex);
 	f = filters[fid];
 	f->id = fid;
@@ -182,6 +183,8 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags, u
 		nfilters = fid + 1;
 
 	f->master_filter = f->id;
+
+	// this should be syncronized using filters_mutex
 
 	for (i = 0; i < nfilters; i++)
 		if (i != fid && filters[i] && filters[i]->enabled && filters[i]->adapter == aid && filters[i]->pid == pid && filters[i]->next_filter == -1)

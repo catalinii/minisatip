@@ -212,7 +212,10 @@ void close_pmt_for_ca(int i, adapter *ad, SPMT *pmt)
 int close_pmt_for_cas(adapter *ad, SPMT *pmt)
 {
 	int i;
-	if (!pmt->ca_mask)
+	if (!pmt || !pmt->ca_mask)
+		return 0;
+
+	if (!ad)
 		return 0;
 
 	LOGM("Closing pmt %d for adapter %d", pmt->id, ad->id);

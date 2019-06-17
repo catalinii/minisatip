@@ -505,27 +505,17 @@ void cert_strings(char *certfile)
         unsigned count;
         //      off_t offset;
         FILE *file;
-        FILE *output;
         char string[256];
         int n = 2; /* too short string to be usefull */
         int line = 0;
-        if (logging)
-        {
-                output = fopen(logfile, "a");
-                if (output <= 0)
-                        return;
-        }
-        else
-        {
-                output = stdout;
-        }
 
         file = fopen(certfile, "r");
         if (!file)
         {
+                LOG("Could not open certificate file %s", certfile);
                 return;
         }
-        fprintf(output, "#########################################################\n");
+        LOG("#########################################################\n");
         //      offset = 0;
         count = 0;
         do
@@ -544,7 +534,7 @@ void cert_strings(char *certfile)
                         if (count > n) /* line feed */
                         {
                                 string[count - 1] = 0;
-                                fprintf(output, "%s\n", string);
+                                LOG("%s\n", string);
                                 line++;
                         }
                         count = 0;
@@ -552,11 +542,7 @@ void cert_strings(char *certfile)
                 //              offset++;
         } while ((c != EOF) && (line < 16)); /* only frst 15 lines */
         fclose(file);
-        fprintf(output, "#########################################################\n");
-        if (logging)
-        {
-                fclose(output);
-        }
+        LOG("#########################################################\n");
         return;
 }
 
@@ -1242,8 +1228,8 @@ static void get_authdata_filename(char *dest, size_t len, unsigned int slot, cha
                         cin[i] = 95; /* underscore _ */
                 i++;
         };
-        sprintf(source, "%s/ci_auth_%d.bin", getenv("HOME"), slot);
-        sprintf(target, "%s/ci_auth_%s_%d.bin", getenv("HOME"), cin, slot);
+        snprintf(source, sizeof(source) - 1, "%s/ci_auth_%d.bin", getenv("HOME"), slot);
+        snprintf(target, sizeof(target) - 1, "%s/ci_auth_%s_%d.bin", getenv("HOME"), cin, slot);
 
         struct stat buf;
         char *linkname;
