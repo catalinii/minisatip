@@ -1218,7 +1218,8 @@ static void get_authdata_filename(char *dest, size_t len, unsigned int slot, cha
         char source[256];
         char target[256];
         /* add module name to slot authorization bin file */
-        strcpy(cin, ci_name);
+        memset(cin, 0, sizeof(cin));
+        strncpy(cin, ci_name, sizeof(cin));
         FILE *auth_bin;
         /* quickly replace blanks */
         int i = 0;
@@ -1232,13 +1233,13 @@ static void get_authdata_filename(char *dest, size_t len, unsigned int slot, cha
         snprintf(target, sizeof(target) - 1, "%s/ci_auth_%s_%d.bin", getenv("HOME"), cin, slot);
 
         struct stat buf;
-        char *linkname;
 
         if (lstat(source, &buf) == 0)
         {
-                linkname = malloc(buf.st_size + 1);
-                readlink(source, linkname, buf.st_size + 1);
-                linkname[buf.st_size] = '\0';
+
+                char linkname[4096];
+                memset(linkname, 0, sizeof(linkname));
+                readlink(source, linkname, sizeof(linkname) - 1);
                 if (strlen(linkname) > 0)
                 {
                         if (strcmp(linkname, target) != 0)
@@ -1269,8 +1270,8 @@ static void get_authdata_filename(char *dest, size_t len, unsigned int slot, cha
                       which means rename old bin file without module name
                       to new file with module name and do symlink to old one */
                                 LOG("MIGRATING %s to %s", source, target);
-                                rename(source, target);
-                                symlink(target, source);
+                                if (!rename(source, target))
+                                        symlink(target, source);
                         }
                 }
         }
@@ -1360,7 +1361,7 @@ static int write_authdata(unsigned int slot, const uint8_t *host_id, const uint8
         get_authdata_filename(filename, sizeof(filename), slot, ci_name);
 
         fd = open(filename, O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR);
-        if (fd <= 0)
+        if (fd < 0)
         {
                 LOG("cannot open %s for writing - authdata not stored", filename);
                 return 0;
@@ -1779,12 +1780,14 @@ static int check_ci_certificates(struct cc_ctrl_data *cc_data)
         {
                 /* write ci device cert to disk */
                 char ci_cert_file[64];
-                sprintf(ci_cert_file, "/%s/ci_cert_%s_%d.der", getenv("HOME"), ci_name_underscore, ci_number);
+                snprintf(ci_cert_file, sizeof(ci_cert_file) - 1, "/%s/ci_cert_%s_%d.der", getenv("HOME"), ci_name_underscore, ci_number);
                 LOG("CI%d EXTRACTING %s", ci_number, ci_cert_file);
                 int fd = open(ci_cert_file, O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR);
+                if (fd < 0)
+                        LOG_AND_RETURN(-1, "opening %s for writing failed", ci_cert_file);
                 int ret = write(fd, element_get_ptr(cc_data, 16), element_get_buf(cc_data, NULL, 16));
                 if (ret)
-                        perror("write cert");
+                        LOG("write cert failed");
                 close(fd);
                 /* display strings in der cert file */
                 cert_strings(ci_cert_file);
