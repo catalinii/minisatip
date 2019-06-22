@@ -51,6 +51,10 @@
 #include "axe.h"
 #endif
 
+#ifndef DISABLE_DVBCA
+#include "ca.h"
+#endif
+
 struct struct_opts opts;
 
 #define DEFAULT_LOG LOG_HTTP
@@ -112,6 +116,8 @@ int rtsp, http, si, si1, ssdp1;
 #define DEVICEID_OPT 'D'
 #define DEMUXDEV_OPT '1'
 #define TCPMAXPACK_OPT '2'
+#define FORCE_CI_OPT 'C'
+#define CA_PIN_OPT '3'
 
 static const struct option long_options[] =
 	{
@@ -165,6 +171,11 @@ static const struct option long_options[] =
 		{"quattro", no_argument, NULL, 'Q'},
 		{"quattro-hiband", required_argument, NULL, '8'},
 #endif
+#ifndef DISABLE_DVBCA
+		{"ci", required_argument, NULL, FORCE_CI_OPT},
+		{"ca-pin", required_argument, NULL, CA_PIN_OPT},
+#endif
+
 		{0, 0, 0, 0}};
 
 char *built_info[] =
@@ -489,6 +500,18 @@ Help\n\
 \n\
 "
 #endif
+#ifndef DISABLE_DVBCA
+		"\
+* -3 --ca-pin mapping_string: set the pin for CIs\n\
+\t* The format is: ADAPTER1:PIN,ADAPTER2-ADAPTER4:PIN\n\
+	* eg: 0:1234,2-3:4567 \n\
+\n\
+* -C --ci mapping_string: disable CI+ mode for specified adapters\n\
+\t* The format is: ADAPTER1:PIN,ADAPTER2-ADAPTER4\n\
+			* eg : 0,2-3\n\
+\n\
+"
+#endif
 		,
 		app_name,
 		ADAPTER_BUFFER,
@@ -576,7 +599,7 @@ void set_options(int argc, char *argv[])
 
 #endif
 
-	while ((opt = getopt_long(argc, argv, "fl:v:r:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:o:gy:i:q:D:NVR:S:TX:Y:OL:EP:Z:0:F:M:1:2:" AXE_OPTS, long_options, NULL)) != -1)
+	while ((opt = getopt_long(argc, argv, "fl:v:r:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:o:gy:i:q:D:NVR:S:TX:Y:OL:EP:Z:0:F:M:1:2:3:C:" AXE_OPTS, long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
 		switch (opt)
@@ -985,6 +1008,15 @@ void set_options(int argc, char *argv[])
 			opts.axe_power = atoi(optarg) + 1;
 			break;
 
+#endif
+#ifndef DISABLE_DVBCA
+		case CA_PIN_OPT:
+			set_ca_adapter_pin(optarg);
+			break;
+
+		case FORCE_CI_OPT:
+			set_ca_adapter_force_ci(optarg);
+			break;
 #endif
 		}
 	}

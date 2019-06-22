@@ -327,6 +327,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 	{
 		LOG("Skip processing pmt for ddci adapter %d", ad->id);
 		// grace time for card decrypting lower than the default grace_time
+		pmt->grace_time = getTick() + 4000;
 		return TABLES_RESULT_OK;
 	}
 
@@ -349,7 +350,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 	}
 
 	mutex_lock(&d->mutex);
-	pmt->grace_time = getTick() + 2000;
+	pmt->grace_time = getTick() + 5000;
 
 	for (i = 0; i < d->max_channels; i++)
 		if (d->pmt[i] == -1)
@@ -470,7 +471,9 @@ int ddci_encrypted(adapter *ad, SPMT *pmt)
 	ddci_device_t *d = get_ddci(ad->id);
 	if (d) // only on DDCI adapter we can understand if the channel is encrypted
 	{
-		blacklist_pmts_for_ddci(pmt, d->id);
+		char *pin_str = get_ca_pin(ad->id);
+		if (!pin_str || !pin_str[0])
+			blacklist_pmts_for_ddci(pmt, d->id);
 		return 0;
 	}
 	int ddid, ddpid;

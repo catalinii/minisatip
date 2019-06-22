@@ -243,9 +243,8 @@ typedef struct ca_device
         char ci_name[128];
 
         char cam_menu_string[64];
-        int pin_reply;
-        char *pin_str;
-        char *pin_match_str;
+        char pin_str[10];
+        char force_ci;
         uint8_t key[2][16], iv[2][16];
         int sp, is_ciplus, parity;
         int try
@@ -338,7 +337,19 @@ uint32_t resource_ids[] =
      CIPLUS_APP_MULTISTREAM_RESOURCEID,
      //     TS101699_APP_AMMI_RESOURCEID,
      CIPLUS_APP_AMMI_RESOURCEID};
+
 int resource_ids_count = sizeof(resource_ids) / 4;
+
+uint32_t resource_ids_ci[] =
+    {
+        EN50221_APP_TELETEXT_RESOURCEID, EN50221_APP_SMARTCARD_RESOURCEID(1),
+        EN50221_APP_RM_RESOURCEID, EN50221_APP_MMI_RESOURCEID,
+        EN50221_APP_LOWSPEED_RESOURCEID(1, 1), EN50221_APP_EPG_RESOURCEID(1),
+        EN50221_APP_DVB_RESOURCEID, EN50221_APP_CA_RESOURCEID,
+        EN50221_APP_DATETIME_RESOURCEID, EN50221_APP_AUTH_RESOURCEID,
+        EN50221_APP_AI_RESOURCEID, TS101699_APP_AI_RESOURCEID, CIPLUS_APP_AI_RESOURCEID};
+
+int resource_ids_ci_count = sizeof(resource_ids_ci) / 4;
 
 typedef enum
 {
@@ -2968,11 +2979,17 @@ static int ca_rm_enq_callback(void *arg, uint8_t slot_id,
                               uint16_t session_number)
 {
         ca_device_t *d = arg;
+        uint32_t *resource = resource_ids;
+        uint32_t resource_count = resource_ids_count;
+        if (d->force_ci)
+        {
+                resource = resource_ids_ci;
+                resource_count = resource_ids_ci_count;
+        }
 
-        LOG("%02x:%s  resource_count %i resource_ids %i", slot_id, __func__, resource_ids_count, resource_ids[1]);
+        LOG("%02x:%s  resource_count %i %s", slot_id, __func__, resource_count, d->force_ci ? "CI MODE" : "CI+ MODE");
 
-        if (en50221_app_rm_reply(d->rm_resource, session_number, resource_ids_count,
-                                 resource_ids))
+        if (en50221_app_rm_reply(d->rm_resource, session_number, resource_count, resource))
         {
                 LOG("%02x:Failed to send reply to ENQ", slot_id);
         }
@@ -3122,9 +3139,7 @@ ca_mmi_enq_callback(void *arg, uint8_t slot_id, uint16_t session_number,
         LOG("MMI enquiry from CAM in slot %u:  %s (%s%u digits)",
             slot_id, buffer, blind_answ ? "blind " : "", exp_answ_len);
 
-        if (d->pin_reply &&
-            (strlen((char *)d->pin_str) == exp_answ_len) &&
-            strstr((char *)buffer, d->pin_match_str))
+        if (strlen((char *)d->pin_str) == exp_answ_len)
         {
                 LOG("answering to PIN enquiry");
                 en50221_app_mmi_answ(d->mmi_resource, session_number,
@@ -3400,6 +3415,17 @@ fail:
         return 1;
 }
 
+ca_device_t *alloc_ca_device()
+{
+        ca_device_t *d = malloc1(sizeof(ca_device_t));
+        if (!d)
+        {
+                LOG_AND_RETURN(NULL, "Could not allocate memory for CA device");
+        }
+        memset(d, 0, sizeof(ca_device_t));
+        return d;
+}
+
 int dvbca_init_dev(adapter *ad)
 {
         ca_device_t *c = ca_devices[ad->id];
@@ -3421,13 +3447,12 @@ int dvbca_init_dev(adapter *ad)
                 LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "No CA device detected on adapter %d: file %s", ad->id, ca_dev_path);
         if (!c)
         {
-                c = ca_devices[ad->id] = malloc1(sizeof(ca_device_t));
+                c = ca_devices[ad->id] = alloc_ca_device();
                 if (!c)
                 {
                         close(fd);
                         LOG_AND_RETURN(0, "Could not allocate memory for CA device %d", ad->id);
                 }
-                memset(c, 0, sizeof(ca_device_t));
         }
         c->enabled = 1;
         c->ignore_close = 0;
@@ -3500,4 +3525,88 @@ void dvbca_init() // you can search the devices here and fill the ca_devices, th
         dvbca.ca_close_ca = dvbca_close;
         dvbca.ca_ts = NULL; //dvbca_ts;
         dvbca_id = add_ca(&dvbca, 0xFFFFFFFF);
+}
+
+char *get_ca_pin(int i)
+{
+        if (ca_devices[i])
+                return ca_devices[i]->pin_str;
+        return NULL;
+}
+
+void set_ca_pin(int i, char *pin)
+{
+        if (!ca_devices[i])
+                ca_devices[i] = alloc_ca_device();
+        if (!ca_devices[i])
+                return;
+        strncpy(ca_devices[i]->pin_str, pin, sizeof(ca_devices[i]->pin_str));
+}
+
+void force_ci_adapter(int i)
+{
+        if (!ca_devices[i])
+                ca_devices[i] = alloc_ca_device();
+        if (!ca_devices[i])
+                return;
+        ca_devices[i]->force_ci = 1;
+}
+
+void set_ca_adapter_force_ci(char *o)
+{
+        int i, j, la, st, end;
+        char buf[1000], *arg[40], *sep;
+        SAFE_STRCPY(buf, o);
+        la = split(arg, buf, ARRAY_SIZE(arg), ',');
+        for (i = 0; i < la; i++)
+        {
+                sep = strchr(arg[i], '-');
+
+                if (sep == NULL)
+                {
+                        st = end = map_int(arg[i], NULL);
+                }
+                else
+                {
+                        st = map_int(arg[i], NULL);
+                        end = map_int(sep + 1, NULL);
+                }
+                for (j = st; j <= end; j++)
+                {
+
+                        force_ci_adapter(j);
+                        LOG("Forcing CA %d to CI", j);
+                }
+        }
+}
+
+void set_ca_adapter_pin(char *o)
+{
+        int i, j, la, st, end;
+        char buf[1000], *arg[40], *sep, *seps;
+        SAFE_STRCPY(buf, o);
+        la = split(arg, buf, ARRAY_SIZE(arg), ',');
+        for (i = 0; i < la; i++)
+        {
+                sep = strchr(arg[i], '-');
+                seps = strchr(arg[i], ':');
+
+                if (!seps)
+                        continue;
+
+                if (sep == NULL)
+                {
+                        st = end = map_int(arg[i], NULL);
+                }
+                else
+                {
+                        st = map_int(arg[i], NULL);
+                        end = map_int(sep + 1, NULL);
+                }
+                for (j = st; j <= end; j++)
+                {
+                        set_ca_pin(j, seps + 1);
+                        LOG("Setting CA %d pin to %s", j, seps + 1);
+                }
+        }
 }
