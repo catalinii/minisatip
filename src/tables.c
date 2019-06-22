@@ -135,7 +135,7 @@ void tables_ca_ts(adapter *ad)
 	}
 }
 
-void add_caid_mask(int ica, int aid, int caid, int mask)
+void add_caid_mask(int ica, int aid, int mask)
 {
 	int i;
 	adapter *ad = get_adapter(aid);
@@ -147,12 +147,11 @@ void add_caid_mask(int ica, int aid, int caid, int mask)
 	if (ca[ica].enabled)
 	{
 		for (i = 0; i < ca[ica].ad_info[aid].caids; i++)
-			if (ca[ica].ad_info[aid].caid[i] == caid && ca[ica].ad_info[aid].mask[i] == mask)
+			if (ca[ica].ad_info[aid].mask[i] == mask)
 				return;
 		i = ca[ica].ad_info[aid].caids++;
-		ca[ica].ad_info[aid].caid[i] = caid;
 		ca[ica].ad_info[aid].mask[i] = mask;
-		LOG("CA %d can handle CAID %04X mask %04X on adapter %d at position %d", ica, caid, mask, ad->id, i);
+		LOG("CA %d can handle CAID mask %04X on adapter %d at position %d", ica, mask, ad->id, i);
 	}
 	else
 		LOG("CA not enabled %d", ica);
@@ -182,13 +181,13 @@ int tables_init_ca_for_device(int i, adapter *ad)
 	return rv;
 }
 
-int match_caid(SPMT *pmt, int caid, int mask)
+int match_caid(SPMT *pmt, int mask)
 {
 	int i;
 	for (i = 0; i < pmt->caids; i++)
-		if ((pmt->caid[i] & mask) == caid)
+		if ((pmt->caid[i] & mask) == pmt->caid[i])
 		{
-			LOGM("%s: match caid %04X (%d/%d) with CA caid %04X and mask %04X", __FUNCTION__, pmt->caid[i], i, pmt->caids, caid, mask);
+			LOGM("%s: match caid %04X (%d/%d) with CA caid %04X and mask %04X", __FUNCTION__, pmt->caid[i], i, pmt->caids, mask);
 			return 1;
 		}
 	return 0;
@@ -213,7 +212,10 @@ void close_pmt_for_ca(int i, adapter *ad, SPMT *pmt)
 int close_pmt_for_cas(adapter *ad, SPMT *pmt)
 {
 	int i;
-	if (!pmt->ca_mask)
+	if (!pmt || !pmt->ca_mask)
+		return 0;
+
+	if (!ad)
 		return 0;
 
 	LOGM("Closing pmt %d for adapter %d", pmt->id, ad->id);
@@ -242,9 +244,9 @@ int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt)
 	{
 		int j, send = 0;
 		for (j = 0; j < ca[i].ad_info[ad->id].caids; j++)
-			if (match_caid(pmt, ca[i].ad_info[ad->id].caid[j], ca[i].ad_info[ad->id].mask[j]))
+			if (match_caid(pmt, ca[i].ad_info[ad->id].mask[j]))
 			{
-				LOG("CAID %04X and mask %04X matched PMT %d", ca[i].ad_info[ad->id].caid[j], ca[i].ad_info[ad->id].mask[j], pmt->id);
+				LOG("CAID mask %04X matched PMT %d", ca[i].ad_info[ad->id].mask[j], pmt->id);
 				send = 1;
 				break;
 			}
@@ -285,6 +287,24 @@ void send_pmt_to_ca_for_device(SCA *c, adapter *ad)
 	for (i = 0; i < npmts; i++)
 		if ((pmt = get_pmt(i)) && pmt->adapter == ad->id && pmt->running)
 			send_pmt_to_ca(c->id, ad, pmt);
+}
+
+void tables_update_encrypted_status(adapter *ad, SPMT *pmt)
+{
+	int i;
+	int status = pmt->encrypted;
+	if (!ad)
+		return;
+	LOGM("Updating status %d for pmt %d, ad mask %08X, pmt mask %08X", status, pmt->id, ad->ca_mask, pmt->ca_mask);
+	for (i = 0; i < nca; i++)
+		if (ca[i].enabled && (ad->ca_mask & (1 << i)) && (pmt->ca_mask & (1 << i)))
+		{
+			LOGM("Updating status %d pmt %d for ca %d and adapter %d", status, pmt->id, i, ad->id);
+			if (status == TABLES_CHANNEL_ENCRYPTED && ca[i].op->ca_encrypted)
+				ca[i].op->ca_encrypted(ad, pmt);
+			else if (status == TABLES_CHANNEL_DECRYPTED && ca[i].op->ca_decrypted)
+				ca[i].op->ca_decrypted(ad, pmt);
+		}
 }
 
 void tables_add_pid(adapter *ad, SPMT *pmt, int pid)

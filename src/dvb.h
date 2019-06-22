@@ -53,6 +53,8 @@ typedef enum fe_delivery_system
 	SYS_DAB,
 	SYS_DVBT2,
 	SYS_TURBO,
+	SYS_DVBC_ANNEX_C,
+	SYS_DVBC2,
 } fe_delivery_system_t;
 typedef enum fe_status
 {
@@ -78,6 +80,9 @@ typedef enum fe_code_rate
 	FEC_AUTO,
 	FEC_3_5,
 	FEC_9_10,
+	FEC_2_5,
+	FEC_1_4,
+	FEC_1_3,
 } fe_code_rate_t;
 typedef enum fe_rolloff
 {
@@ -85,6 +90,9 @@ typedef enum fe_rolloff
 	ROLLOFF_20,
 	ROLLOFF_25,
 	ROLLOFF_AUTO,
+	ROLLOFF_15,
+	ROLLOFF_10,
+	ROLLOFF_5,
 } fe_rolloff_t;
 typedef enum fe_pilot
 {
@@ -128,6 +136,8 @@ typedef enum fe_transmit_mode
 	TRANSMISSION_MODE_1K,
 	TRANSMISSION_MODE_16K,
 	TRANSMISSION_MODE_32K,
+	TRANSMISSION_MODE_C1,
+	TRANSMISSION_MODE_C3780,
 } fe_transmit_mode_t;
 typedef enum fe_type
 {
@@ -150,10 +160,11 @@ typedef enum fe_modulation
 	PSK_8,
 	APSK_16,
 	APSK_32,
+	DQPSK,
+	QAM_4_NR,
 	APSK_64,
 	APSK_128,
 	APSK_256,
-	DQPSK,
 } fe_modulation_t;
 #endif
 

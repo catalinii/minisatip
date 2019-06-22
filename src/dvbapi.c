@@ -62,7 +62,7 @@ uint64_t dvbapi_last_close = 0;
 
 SKey *keys[MAX_KEYS];
 SMutex keys_mutex;
-unsigned char read_buffer[1500];
+unsigned char read_buffer[8192];
 
 #define TEST_WRITE(a, xlen)                                                                                                                     \
 	{                                                                                                                                           \
@@ -220,6 +220,7 @@ int dvbapi_reply(sockets *s)
 						k->filter_id[fpos] = -1;
 						k->pid[fpos] = -1;
 					}
+					break;
 				}
 			}
 			if (i >= 0 && fid >= 0 && k)

@@ -52,6 +52,10 @@
 int ddci_adapters;
 extern int dvbca_id;
 extern SCA ca[MAX_CA];
+extern SPMT *pmts[];
+
+// basic whitelist and blacklist for SIDs and DDCI adapters
+uint64_t sid_whitelist[65536], sid_blacklist[65536];
 
 int first_ddci = -1;
 
@@ -277,14 +281,21 @@ int find_ddci_for_pmt(SPMT *pmt)
 		if ((d = get_ddci(i)))
 		{
 			int j;
+			uint64_t mask = 1 << i;
+
+			if (sid_blacklist[pmt->sid] & mask)
+			{
+				LOG("PMT %d sid %d already blacklisted on DD %d", pmt->id, pmt->sid, d->id);
+				continue;
+			}
 			// DDCI exists but not yet initialized
 			if (!is_ca_initialized(i))
 				has_ddci = 1;
 
 			for (j = 0; j < ca[dvbca_id].ad_info[i].caids; j++)
-				if (match_caid(pmt, ca[dvbca_id].ad_info[i].caid[j], ca[dvbca_id].ad_info[i].mask[j]))
+				if (match_caid(pmt, ca[dvbca_id].ad_info[i].mask[j]))
 				{
-					LOG("DDCI %d CAID %04X and mask %04X matched PMT %d", i, ca[dvbca_id].ad_info[i].caid[j], ca[dvbca_id].ad_info[i].mask[j], pmt->id);
+					LOG("DDCI %d CAID mask %04X matched PMT %d", i, ca[dvbca_id].ad_info[i].mask[j], pmt->id);
 					if (d->channels < d->max_channels)
 						return d->id;
 					else
@@ -294,6 +305,15 @@ int find_ddci_for_pmt(SPMT *pmt)
 	if (has_ddci)
 		return -2;
 	return -1;
+}
+
+int is_pmt_running(SPMT *pmt)
+{
+	int ddid;
+	int pid = get_mapping_table(pmt->adapter, pmt->stream_pid[0].pid, &ddid, NULL);
+	if (pid == -1)
+		return 0;
+	return ddid;
 }
 
 // determine if the pids from this PMT needs to be added to the virtual adapter, also adds the PIDs to the translation table
@@ -306,10 +326,14 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 	if (get_ddci(ad->id))
 	{
 		LOG("Skip processing pmt for ddci adapter %d", ad->id);
-		return TABLES_RESULT_ERROR_NORETRY;
+		// grace time for card decrypting lower than the default grace_time
+		return TABLES_RESULT_OK;
 	}
 
-	LOG("%s: adapter %d, pmt %d, sid %d, %s", __FUNCTION__, ad->id, pmt->id, pmt->sid, pmt->name);
+	if ((ddid = is_pmt_running(pmt)))
+		LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "%s: pmt %d (master %d) already running on DDCI %d", __FUNCTION__, pmt->id, pmt->master_pmt, ddci);
+
+	LOG("%s: adapter %d, pmt %d, sid %d, blacklist %d, %s", __FUNCTION__, ad->id, pmt->id, pmt->sid, sid_blacklist[pmt->sid], pmt->name);
 	ddid = find_ddci_for_pmt(pmt);
 #ifdef DDCI_TEST
 	ddid = first_ddci;
@@ -325,6 +349,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 	}
 
 	mutex_lock(&d->mutex);
+	pmt->grace_time = getTick() + 2000;
 
 	for (i = 0; i < d->max_channels; i++)
 		if (d->pmt[i] == -1)
@@ -376,6 +401,13 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 int ddci_del_pmt(adapter *ad, SPMT *spmt)
 {
 	int ddid = 0, pid, i, pmt = spmt->id;
+
+	if (get_ddci(ad->id))
+	{
+		LOG("Skip deleting pmt for ddci adapter %d", ad->id);
+		return 0;
+	}
+
 	pid = get_mapping_table(ad->id, spmt->pid, &ddid, NULL);
 	ddci_device_t *d = get_ddci(ddid);
 	if (!d)
@@ -392,7 +424,6 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt)
 		{
 			d->pmt[i] = -1;
 			d->pmt_ver[i] = (d->pmt_ver[i] + 1) & 0xF;
-			;
 		}
 	for (i = 0; i < mapping_table_pids; i++)
 		if ((mapping_table[i].ad_pid >= 0) && (mapping_table[i].ad_pid >> 16) == ad->id)
@@ -411,6 +442,58 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt)
 			}
 		}
 	update_pids(d->id);
+	return 0;
+}
+void blacklist_pmt_for_ddci(SPMT *pmt, int ddid)
+{
+	uint64_t mask = 1 << ddid;
+	if ((sid_whitelist[pmt->sid] & mask) == 0)
+	{
+		sid_blacklist[pmt->sid] |= mask;
+		LOG("PMT %d, sid %d is blacklisted on DD %d", pmt->id, pmt->sid, ddid);
+	}
+}
+
+// once one of the PMTs sent to the CAM cannot be decrypted,
+// blacklist all PMTs that have the same master PMT with the one given as argument
+void blacklist_pmts_for_ddci(SPMT *pmt, int ddid)
+{
+	int i, master = pmt->master_pmt;
+	SPMT *p;
+	for (i = 0; i < MAX_PMT; i++)
+		if ((p = get_pmt(i)) && p->master_pmt == master)
+			blacklist_pmt_for_ddci(pmts[i], ddid);
+}
+
+int ddci_encrypted(adapter *ad, SPMT *pmt)
+{
+	ddci_device_t *d = get_ddci(ad->id);
+	if (d) // only on DDCI adapter we can understand if the channel is encrypted
+	{
+		blacklist_pmts_for_ddci(pmt, d->id);
+		return 0;
+	}
+	int ddid, ddpid;
+	ddpid = get_mapping_table(ad->id, pmt->pid, &ddid, NULL);
+	LOG("PMT %d, pid %d, sid %d is encrypted on adapter %d, DD %d, ddpid %d", pmt->id, pmt->pid, pmt->sid, ad->id, ddid, ddpid);
+	if (ddpid >= 0 && sid_blacklist[pmt->sid] & (1 << ddid))
+	{
+		LOG("Closing pmt %d on adapter %d, DD %d", pmt->id, ad->id, ddid);
+		close_pmt_for_ca(ddci_id, ad, pmt);
+	}
+	return 0;
+}
+
+int ddci_decrypted(adapter *ad, SPMT *pmt)
+{
+	ddci_device_t *d = get_ddci(ad->id);
+	if (d)
+	{
+		uint64_t mask = 1 << d->id;
+		LOG("PMT %d, sid %d is reported decrypted whitelisting on DD %d", pmt->id, pmt->sid, d->id);
+		sid_whitelist[pmt->sid] |= mask;
+		sid_blacklist[pmt->sid] &= (~mask);
+	}
 	return 0;
 }
 
@@ -771,7 +854,12 @@ void ddci_init() // you can search the devices here and fill the ddci_devices, t
 	ddci.ca_del_pmt = ddci_del_pmt;
 	ddci.ca_close_ca = ddci_close;
 	ddci.ca_ts = ddci_ts;
+	ddci.ca_encrypted = ddci_encrypted;
+	ddci.ca_decrypted = ddci_decrypted;
 	ddci_id = add_ca(&ddci, 0xFFFFFFFF);
+	LOG("Registered DDCI CA %d", ddci_id);
+	memset(sid_whitelist, 0, sizeof(sid_whitelist));
+	memset(sid_blacklist, 0, sizeof(sid_blacklist));
 }
 int ddci_set_pid(adapter *ad, int pid)
 {
@@ -846,6 +934,8 @@ void ddci_post_init(adapter *ad)
 {
 	sockets *s = get_sockets(ad->sock);
 	s->action = (socket_action)ddci_read_sec_data;
+	// force the encrypted stream to be passed to the original device
+	ad->drop_encrypted = 0;
 	if (ad->fe_sock >= 0)
 		set_socket_thread(ad->fe_sock, get_socket_thread(ad->sock));
 	post_tune(ad);

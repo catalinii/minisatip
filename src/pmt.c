@@ -71,6 +71,16 @@ static inline SCW *get_cw(int id)
 	return cws[id];
 }
 
+static inline SPMT *get_pmt_for_existing_pid(SPid *p)
+{
+	SPMT *pmt = NULL;
+	if (p && p->pmt >= 0 && p->pmt < npmts && pmts[p->pmt] && pmts[p->pmt]->enabled)
+	{
+		pmt = pmts[p->pmt];
+	}
+	return pmt;
+}
+
 int register_algo(SCW_op *o)
 {
 	int i;
@@ -157,6 +167,7 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags, u
 	fid = add_new_lock((void **)filters, MAX_FILTERS, sizeof(SFilter), &filters_mutex);
 	if (fid == -1)
 		LOG_AND_RETURN(-1, "%s failed", __FUNCTION__);
+
 	mutex_lock(&filters_mutex);
 	f = filters[fid];
 	f->id = fid;
@@ -172,6 +183,8 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags, u
 		nfilters = fid + 1;
 
 	f->master_filter = f->id;
+
+	// this should be syncronized using filters_mutex
 
 	for (i = 0; i < nfilters; i++)
 		if (i != fid && filters[i] && filters[i]->enabled && filters[i]->adapter == aid && filters[i]->pid == pid && filters[i]->next_filter == -1)
@@ -500,6 +513,12 @@ void update_cw(SPMT *pmt)
 	}
 	if (!pmt->invalidated && !master->invalidated)
 	{
+		LOGM("PMT %d or pmt %d invalidated", pmt->id, pmt->master_pmt);
+		return;
+	}
+	if (pmt->cw)
+	{
+		LOGM("Valid CW for PMT %d", pmt->master_pmt);
 		return;
 	}
 	LOGM("%s: pmt %d, parity %d, CW %d", __FUNCTION__, pmt->id, pmt->parity, pmt->cw ? pmt->cw->id : -1);
@@ -668,10 +687,84 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv, int64_t 
 	return 0;
 }
 
+int set_all_pmt_encrypted(int aid, int pid, int status, char *list_of_pmts)
+{
+	int i, j;
+	SPMT *pmt;
+	for (i = 0; i < npmts; i++)
+		if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == aid)
+		{
+			pmt = pmts[i];
+			for (j = 0; j < pmt->active_pids && pmt->active_pid[j] > 0; j++)
+			{
+				if (pmt->active_pid[j] == pid)
+				{
+					list_of_pmts[pmt->id] = status;
+					pmt->encrypted = status;
+					pmt->encrypted_pid = pid;
+				}
+			}
+		}
+	return 0;
+}
+
+void check_packet_encrypted(adapter *ad, uint8_t *b, char *list_of_pmts)
+{
+	int updated = 0;
+	if (b[1] & 0x80)
+		return;
+	if (b[0] == 0x47 && (b[1] & 0x40))
+	{
+		int pid = PID_FROM_TS(b);
+		int start = 4;
+		if (b[3] & 0x20)
+			start = 5 + b[4];
+		if (start + 3 > 188)
+			return;
+
+		SPid *p = find_pid(ad->id, pid);
+		// Skip PMT pids or pids without pmt
+		if (p && p->pmt < 0)
+			return;
+		SPMT *pmt = get_pmt_for_existing_pid(p);
+		if (!pmt)
+			return;
+
+		if (pmt->pid == pid)
+			return;
+
+		if (getTick() - pmt->grace_time < 0)
+			return;
+
+		if (b[start] != 0 || b[start + 1] != 0 || b[start + 2] != 1)
+		{
+
+			int level = DEFAULT_LOG;
+			if (pmt->encrypted != TABLES_CHANNEL_ENCRYPTED)
+			{
+				level = 1;
+				set_all_pmt_encrypted(ad->id, pid, TABLES_CHANNEL_ENCRYPTED, list_of_pmts);
+				updated = 1;
+			}
+			LOGL(level, "decryption failed for pmt %d, cw %d, pid %d, parity %d, start %d, updated %d: [%02X %02X %02X %02X] %02X %02X %02X", pmt->id, pmt->cw ? pmt->cw->id : -1, PID_FROM_TS(b), pmt->parity, start, updated, b[0], b[1], b[2], b[3], b[start], b[start + 1], b[start + 2])
+		}
+		else
+		{
+			if (!pmt->encrypted || (pmt->encrypted != TABLES_CHANNEL_DECRYPTED && pid == pmt->encrypted_pid))
+			{
+				LOGM("decryption worked for PMT %d, prev status %d, pid %d", pmt->id, pmt->encrypted, pmt->encrypted_pid);
+				updated = 1;
+				set_all_pmt_encrypted(ad->id, pid, TABLES_CHANNEL_DECRYPTED, list_of_pmts);
+			}
+			DEBUGM("decryption worked for pmt %d, cw %d, pid %d, parity %d, start %d, updated %d: %02X %02X %02X %02X %02X %02X %02X %02X", pmt->id, pmt->cw ? pmt->cw->id : -1, PID_FROM_TS(b), pmt->parity, start, updated, b[start], b[start + 1], b[start + 2], b[start + 3], b[start + 4], b[start + 5], b[start + 6], b[start + 7])
+		}
+	}
+}
+
 int decrypt_batch(SPMT *pmt)
 {
 	unsigned char *b = NULL;
-	int pid = 0, i;
+	int pid = 0;
 	if (pmt->blen <= 0)
 		return 0;
 	mutex_lock(&pmt->mutex);
@@ -683,29 +776,12 @@ int decrypt_batch(SPMT *pmt)
 		return 1;
 	}
 	b = pmt->batch[0].data - 4;
-	pid = (b[1] & 0x1F) * 256 + b[2];
+	pid = PID_FROM_TS(b);
 	pmt->batch[pmt->blen].data = NULL;
 	pmt->batch[pmt->blen].len = 0;
 	pmt->cw->op->decrypt_stream(pmt->cw, pmt->batch, 184);
 	DEBUGM("pmt: decrypted key %d, CW %d, parity %d at len %d, channel_id %d (pid %d) %p",
 		   pmt->id, pmt->cw->id, pmt->parity, pmt->blen, pmt->sid, pid, pmt->batch[0].data);
-	if (opts.log & DEFAULT_LOG)
-	{
-		for (i = 0; i < pmt->blen; i++)
-		{
-			b = pmt->batch[i].data + pmt->batch[i].len - 188;
-			if (b[0] == 0x47 && (b[1] & 0x40))
-			{
-				int start = 4;
-				if (b[3] & 0x20)
-					start = 5 + b[4];
-				if (b[start] != 0 || b[start + 1] != 0 || b[start + 2] != 1)
-					LOGM("decryption failed for pmt %d, cw %d, pid %d, parity %d, start %d, packet %d: [%02X %02X %02X %02X] %02X %02X %02X", pmt->id, pmt->cw ? pmt->cw->id : -1, PID_FROM_TS(b), pmt->parity, start, i, b[0], b[1], b[2], b[3], b[start], b[start + 1], b[start + 2])
-				else
-					DEBUGM("decryption worked for pmt %d, cw %d, pid %d, parity %d, start %d, packet %d: %02X %02X %02X %02X %02X %02X %02X %02X", pmt->id, pmt->cw ? pmt->cw->id : -1, PID_FROM_TS(b), pmt->parity, start, i, b[start], b[start + 1], b[start + 2], b[start + 3], b[start + 4], b[start + 5], b[start + 6], b[start + 7])
-			}
-		}
-	}
 	pmt->blen = 0;
 	//	memset(pmt->batch, 0, sizeof(int *) * 128);
 	mutex_unlock(&pmt->mutex);
@@ -718,9 +794,9 @@ int pmt_decrypt_stream(adapter *ad)
 	int adapt_len;
 	int batchSize = 0;
 	// max batch
-	int i = 0, mid;
+	int i = 0;
 	unsigned char *b;
-	SPid *p;
+	SPid *p = NULL;
 	int pid;
 	int cp;
 	int rlen = ad->rlen;
@@ -728,26 +804,19 @@ int pmt_decrypt_stream(adapter *ad)
 	for (i = 0; i < rlen; i += 188)
 	{
 		b = ad->buf + i;
-		pid = (b[1] & 0x1F) * 256 + b[2];
+		pid = PID_FROM_TS(b);
 		if (b[3] & 0x80)
 		{
-
 			p = find_pid(ad->id, pid);
-			if (p && p->pmt >= 0 && p->pmt < npmts && pmts[p->pmt] && pmts[p->pmt]->enabled)
-			{
-				pmt = pmts[p->pmt];
-				mid = pmt->master_pmt;
-				master = (mid >= 0 && mid < MAX_PMT && pmts[mid] && pmts[mid]->enabled) ? pmts[mid] : NULL;
-				if (!master)
-					master = pmt;
-			}
-			else
-				pmt = NULL;
+			pmt = get_pmt_for_existing_pid(p);
 			if (!pmt)
 			{
 				DEBUGM("PMT not found for pid %d, id %d, packet %d, pos %d", pid, p ? p->pmt : -3, i / 188, i);
 				continue; // cannot decrypt
 			}
+			master = get_pmt(pmt->master_pmt);
+			if (!master)
+				master = pmt;
 
 			cp = ((b[3] & 0x40) > 0);
 			if (pmt->parity == -1)
@@ -821,6 +890,7 @@ int pmt_process_stream(adapter *ad)
 	int i, pid;
 	int drop_pids[8192];
 	uint8_t *b;
+	char list_of_pmts[MAX_PMT];
 
 	int rlen = ad->rlen;
 	ad->null_packets = 0;
@@ -849,6 +919,16 @@ int pmt_process_stream(adapter *ad)
 
 	tables_ca_ts(ad);
 	pmt_decrypt_stream(ad);
+
+	memset(list_of_pmts, 0, sizeof(list_of_pmts));
+	for (i = 0; i < ad->rlen; i += DVB_FRAME)
+		check_packet_encrypted(ad, ad->buf + i, list_of_pmts);
+
+	for (i = 0; i < MAX_PMT; i++)
+		if (list_of_pmts[i])
+		{
+			tables_update_encrypted_status(ad, pmts[i]);
+		}
 
 	if (ad->ca_mask && (opts.drop_encrypted || opts.clean_psi))
 	{
@@ -1208,7 +1288,7 @@ int assemble_emm(SFilter *f, uint8_t *b)
 int assemble_normal(SFilter *f, uint8_t *b)
 {
 	int len = 0, pid;
-	pid = (b[1] & 0x1F) * 256 + b[2];
+	pid = PID_FROM_TS(b);
 	if ((b[1] & 0x40) == 0x40)
 	{
 		len = ((b[6] & 0xF) << 8) + b[7];
@@ -1258,7 +1338,7 @@ int assemble_packet(SFilter *f, uint8_t *b)
 	if ((b[0] != 0x47)) // make sure we are dealing with TS
 		return 0;
 
-	pid = (b[1] & 0x1F) * 256 + b[2];
+	pid = PID_FROM_TS(b);
 	if (f->flags & FILTER_EMM)
 		len = assemble_emm(f, b);
 	else
@@ -1611,7 +1691,6 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 		if ((cp = find_pid(ad->id, spid))) // the pid is already requested by the client
 		{
 			enabled_channels++;
-			pmt->running = 1;
 			cp->pmt = pmt->master_pmt;
 		}
 	}
@@ -1739,6 +1818,10 @@ void start_pmt(SPMT *pmt, adapter *ad)
 {
 	LOGM("starting PMT %d master %d, pid %d, sid %d for channel: %s", pmt->id, pmt->master_pmt, pmt->pid, pmt->sid, pmt->name);
 	pmt->running = 1;
+	pmt->encrypted = 0;
+	pmt->encrypted_pid = 0;
+	// give 1s to initialize decoding or override for each CA
+	pmt->grace_time = getTick() + 1000;
 	set_filter_flags(pmt->filter, FILTER_ADD_REMOVE | FILTER_CRC);
 #ifndef DISABLE_TABLES
 	send_pmt_to_cas(ad, pmt);
@@ -1747,6 +1830,8 @@ void start_pmt(SPMT *pmt, adapter *ad)
 
 void stop_pmt(SPMT *pmt, adapter *ad)
 {
+	if (!pmt->running)
+		return;
 	LOGM("stopping PMT %d pid %d sid %d master %d for channel %s", pmt->id, pmt->pid, pmt->sid, pmt->master_pmt, pmt->name);
 	pmt->running = 0;
 	set_filter_flags(pmt->filter, 0);

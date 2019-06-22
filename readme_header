@@ -1,3 +1,9 @@
+<a href="https://scan.coverity.com/projects/catalinii-minisatip">
+  <img alt="Coverity Scan Build Status"
+       src="https://scan.coverity.com/projects/18049/badge.svg"/>
+</a>
+<img alt="Build Status" src="https://travis-ci.org/catalinii/minisatip.svg?branch=master" />
+
 # Welcome to Minisatip
 
 Minisatip is a multi-threaded satip server version 1.2 that runs under Linux and it was tested with DVB-S, DVB-S2, DVB-T, DVB-T2, DVB-C, DVB-C2, ATSC and ISDB-T cards.

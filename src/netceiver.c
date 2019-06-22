@@ -447,7 +447,7 @@ void find_netcv_adapter(adapter **a)
 	sprintf(dbuf, "netceiver: adding ");
 	for (n = 0; n < nc_sys_t; n++)
 	{
-		while (nc_sys_c[map_type[i]] == 0 && i < FE_DVBS2)
+		while (i < FE_DVBS2 && nc_sys_c[map_type[i]] == 0)
 			i++;
 		nc_sys_c[map_type[i]]--;
 

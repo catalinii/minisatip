@@ -106,7 +106,7 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 			{
 				int slen = strlen(sbuf);
 				streams_enabled++;
-				snprintf(sbuf + slen, size - slen - 1,
+				strlcatf(sbuf, size, slen,
 						 "m=video %d RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\na=%s\r\n",
 						 ntohs(sid2->sa.sin_port), i + 1,
 						 describe_adapter(i, sid2->adapter, dad, sizeof(dad)),
@@ -128,7 +128,7 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 		else
 			return NULL;
 
-		snprintf(sbuf + slen, size - slen - 1,
+		strlcatf(sbuf, size, slen,
 				 "m=video 0 RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\nb=AS:5000\r\na=%s\r\n",
 				 s_id, tp, do_play ? "sendonly" : "inactive");
 	}
@@ -312,7 +312,8 @@ int start_play(streams *sid, sockets *s)
 	if (!sid->tp.apids && sid->tp.pids && (!sid->tp.pids[0] || !strcmp(sid->tp.pids, "0")))
 		s->flush_enqued_data = 1;
 	sid->do_play = 1;
-	sid->start_streaming = 0;
+	if (s->type != TYPE_HTTP)
+		sid->start_streaming = 0;
 	sid->tp.apids = sid->tp.dpids = sid->tp.pids = sid->tp.x_pmt = NULL;
 
 	ad = get_adapter(sid->adapter);
@@ -349,6 +350,7 @@ int close_stream(int i)
 	}
 	mutex_lock(&st_mutex);
 	sid->enabled = 0;
+	sid->start_streaming = 0;
 	sid->timeout = 0;
 	ad = sid->adapter;
 	sid->adapter = -1;
@@ -741,7 +743,14 @@ void flush_streamb(streams *sid, unsigned char *buf, int rlen, int64_t ctime)
 	int i, rv = 0, blen, len;
 
 	if (sid->type == STREAM_HTTP)
+	{
 		rv = sockets_write(sid->rsock_id, buf, rlen);
+		if (sid->start_streaming == 0)
+		{
+			sid->start_streaming = 1;
+			LOG("Start HTTP streaming of stream %d to handle %d", sid->sid, sid->rsock);
+		}
+	}
 	else
 	{
 		int max_pack = sid->type == STREAM_RTSP_TCP ? sid->max_iov : UDP_MAX_PACK;
@@ -769,7 +778,14 @@ int flush_streami(streams *sid, int64_t ctime)
 	int rv;
 
 	if (sid->type == STREAM_HTTP)
+	{
 		rv = sockets_writev(sid->rsock_id, sid->iov, sid->iiov);
+		if (sid->start_streaming == 0)
+		{
+			sid->start_streaming = 1;
+			LOG("Start HTTP streaming of stream %d to handle %d", sid->sid, sid->rsock);
+		}
+	}
 	else
 		rv = send_rtp(sid, sid->iov, sid->iiov);
 
@@ -844,7 +860,10 @@ int check_cc(adapter *ad)
 	for (i = 0; i < ad->rlen; i += DVB_FRAME)
 	{
 		b = ad->buf + i;
-		pid = (b[1] & 0x1f) * 256 + b[2];
+		if (b[1] & 0x80)
+			continue;
+
+		pid = PID_FROM_TS(b);
 		p = find_pid(ad->id, pid);
 
 		if ((!p))
@@ -917,7 +936,7 @@ int process_packet(unsigned char *b, adapter *ad)
 {
 	int j, max_pack, st_id;
 	SPid *p;
-	int _pid = (b[1] & 0x1f) * 256 + b[2];
+	int _pid = PID_FROM_TS(b);
 	streams *sid;
 	int rtime = ad->rtime;
 
@@ -1106,6 +1125,8 @@ int calculate_bw(sockets *s)
 	int64_t c_time = getTick();
 	s->rtime = c_time;
 
+	if (bwtt > c_time)
+		bwtt = c_time;
 	if (c_time - bwtt > 1000)
 	{
 		bwtt = c_time;
@@ -1369,10 +1390,9 @@ char *get_stream_pids(int s_id, char *dest, int max_size)
 				if (ad->pids[i].sid[j] == s_id)
 				{
 					if (ad->pids[i].pid == 8192)
-						len += snprintf(dest + len, max_size - len, "all,");
+						strlcatf(dest, max_size, len, "all,");
 					else
-						len += snprintf(dest + len, max_size - len, "%d,",
-										ad->pids[i].pid);
+						strlcatf(dest, max_size, len, "%d,", ad->pids[i].pid);
 				}
 	if (len > 0)
 	{

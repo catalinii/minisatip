@@ -75,7 +75,7 @@ char *fe_pilot[] =
 
 char *fe_rolloff[] =
 	{"0.35", "0.20", "0.25", " ", //auto
-	 NULL};
+	 "0.15", "0.10", "0.05", NULL};
 
 char *fe_delsys[] =
 	{"undefined", "dvbc", "dvbcb", "dvbt", "dss", "dvbs", "dvbs2", "dvbh", "isdbt",
@@ -85,13 +85,12 @@ char *fe_delsys[] =
 
 char *fe_fec[] =
 	{"none", "12", "23", "34", "45", "56", "67", "78", "89", " ", //auto
-	 "35", "910", "25",
+	 "35", "910", "25", "14", "13",
 	 NULL};
 
 char *fe_modulation[] =
 	{"qpsk", "16qam", "32qam", "64qam", "128qam", "256qam", " ", // auto
-	 "8vsb", "16vsb", "8psk", "16apsk", "32apsk", "64apsk", "128apsk", "256apsk",
-	 "dqpsk",
+	 "8vsb", "16vsb", "8psk", "16apsk", "32apsk", "dqpsk", "qam_4_nr", "64apsk", "128apsk", "256apsk",
 	 NULL};
 
 char *fe_tmode[] =
@@ -467,6 +466,7 @@ int dvb_open_device(adapter *ad)
 			set_proc_data(ad->fn, "fbc_connect", ad->fn);
 		}
 	}
+	dvb_set_demux_source(ad);
 
 	return 0;
 }
@@ -740,8 +740,6 @@ int setup_switch(adapter *ad)
 		if (ad != master) // slave adapter
 		{
 			change_par = 0;
-			if (!master)
-				LOG_AND_RETURN(-1, "master adapter %d of adapter %d is not initialized", ad->master_source, ad->id);
 
 			if (master->old_pol != pol || master->old_hiband != hiband || master->old_diseqc != diseqc)
 				change_par = 1;
@@ -848,8 +846,6 @@ int dvb_tune(int aid, transponder *tp)
 		//        return -1;
 	}
 
-	dvb_set_demux_source(ad);
-
 	switch (tp->sys)
 	{
 	case SYS_DVBS:
@@ -885,10 +881,10 @@ int dvb_tune(int aid, transponder *tp)
 #endif
 
 		LOG("tuning to %d(%d) pol: %s (%d) sr:%d fec:%s delsys:%s mod:%s rolloff:%s pilot:%s, ts clear=%jd, ts pol=%jd",
-			 tp->freq, freq, get_pol(tp->pol), tp->pol, tp->sr,
-			 fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype],
-			 fe_rolloff[tp->ro], fe_pilot[tp->plts],
-			 bclear, bpol)
+			tp->freq, freq, get_pol(tp->pol), tp->pol, tp->sr,
+			fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype],
+			fe_rolloff[tp->ro], fe_pilot[tp->plts],
+			bclear, bpol)
 		break;
 
 	case SYS_DVBT:
@@ -1562,10 +1558,10 @@ void dvb_get_signal(adapter *ad)
 	strength = strength >> 8;
 	snr = snr >> 8;
 
-	if (strength > 255 || strength < 0)
+	if (strength > 255)
 		strength = 255;
 
-	if (snr > 255 || snr < 0)
+	if (snr > 255)
 		snr = 255;
 
 	// keep the assignment at the end for the signal thread to get the right values as no locking is done on the adapter

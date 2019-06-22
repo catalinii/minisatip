@@ -400,7 +400,8 @@ Help\n\
 "
 #ifndef DISABLE_SATIPCLIENT
 		"\
-* -s --satip-servers [*][DELSYS:][FE_ID@][source_ip/]host[:port] - specify the remote satip host and port with delivery system DELSYS, it is possible to use multiple -s \n\
+* -s --satip-servers [~][*][DELSYS:][FE_ID@][source_ip/]host[:port] - specify the remote satip host and port with delivery system DELSYS, it is possible to use multiple -s \n\
+	* ~ When using this symbol at start the `pids=all` call is replaced with `pids=0-20`\n\
 	* - Use TCP if -O is not specified and UDP if -O is specified\n\
 	DELSYS - can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, isdbt, atsc, dvbcb ( - DVBC_ANNEX_B ) [default: dvbs2]\n\
 	host - the server of the satip server\n\
@@ -838,7 +839,7 @@ void set_options(int argc, char *argv[])
 #else
 			char buf[100];
 			memset(buf, 0, sizeof(buf));
-			strncpy(buf, optarg, sizeof(buf));
+			strncpy(buf, optarg, sizeof(buf) - 1);
 			char *sep1 = strchr(buf, ':');
 			if (sep1 != NULL)
 			{
@@ -1256,7 +1257,7 @@ int read_rtsp(sockets *s)
 		return 0;                              \
 	}
 
-#define JSON_STATE_MAXLEN (128 * 1024)
+#define JSON_STATE_MAXLEN (256 * 1024)
 
 char uuid[100];
 int uuidi;
