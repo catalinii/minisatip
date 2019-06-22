@@ -930,7 +930,7 @@ int pmt_process_stream(adapter *ad)
 			tables_update_encrypted_status(ad, pmts[i]);
 		}
 
-	if (ad->ca_mask && (opts.drop_encrypted || opts.clean_psi))
+	if (ad->ca_mask && (ad->drop_encrypted || opts.clean_psi))
 	{
 		for (i = 0; i < ad->rlen; i += DVB_FRAME)
 		{
