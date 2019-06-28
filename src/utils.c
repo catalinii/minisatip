@@ -1488,10 +1488,11 @@ int add_new_lock(void **arr, int count, int size, SMutex *mutex)
 	return -1;
 }
 
-int64_t init_tick, theTick;
+int64_t init_tick;
 
 int64_t getTick()
 { //ms
+	int64_t theTick;
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	theTick = ts.tv_nsec / 1000000;
