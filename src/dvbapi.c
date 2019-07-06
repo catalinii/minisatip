@@ -809,6 +809,21 @@ int dvbapi_init_dev(adapter *ad)
 	return TABLES_RESULT_OK;
 }
 
+int dvbapi_encrypted(adapter *ad, SPMT *pmt)
+{
+	if (!pmt->cw)
+		return 0;
+	pmt->cw->expiry = getTick() - 1000;
+	LOG("Disabling CW %d for PMT %d master %d", pmt->cw ? pmt->cw->id : -1, pmt->id, pmt->master_pmt);
+	disable_cw(pmt->master_pmt);
+	return 0;
+}
+
+int dvbapi_decrypted(adapter *ad, SPMT *pmt)
+{
+	return 0;
+}
+
 SCA_op dvbapi;
 
 void register_dvbapi()
@@ -817,6 +832,9 @@ void register_dvbapi()
 	dvbapi.ca_init_dev = dvbapi_init_dev;
 	dvbapi.ca_add_pmt = dvbapi_add_pmt;
 	dvbapi.ca_del_pmt = dvbapi_del_pmt;
+	dvbapi.ca_encrypted = dvbapi_encrypted;
+	dvbapi.ca_decrypted = dvbapi_decrypted;
+
 	dvbapi_ca = add_ca(&dvbapi, 0xFFFFFFFF);
 }
 

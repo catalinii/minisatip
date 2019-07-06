@@ -490,7 +490,7 @@ void clear_cw_for_pmt(int master_pmt, int parity)
 	ncws = i + 1;
 }
 
-void disable_cw(int master_pmt, int parity)
+void disable_cw(int master_pmt)
 {
 	SPMT *pmt = get_pmt(master_pmt);
 	if (pmt)
@@ -856,7 +856,7 @@ int pmt_decrypt_stream(adapter *ad)
 					pmt->last_parity_change = ctime;
 					master->last_parity_change = ctime;
 					pmt->parity = cp;
-					disable_cw(pmt->master_pmt, old_parity);
+					disable_cw(pmt->master_pmt);
 					update_cw(pmt);
 				}
 			}
