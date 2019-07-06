@@ -750,13 +750,15 @@ void check_packet_encrypted(adapter *ad, uint8_t *b, char *list_of_pmts)
 		}
 		else
 		{
+			int level = DEFAULT_LOG;
 			if (!pmt->encrypted || (pmt->encrypted != TABLES_CHANNEL_DECRYPTED && pid == pmt->encrypted_pid))
 			{
 				LOGM("decryption worked for PMT %d, prev status %d, pid %d", pmt->id, pmt->encrypted, pmt->encrypted_pid);
 				updated = 1;
+				level = 1;
 				set_all_pmt_encrypted(ad->id, pid, TABLES_CHANNEL_DECRYPTED, list_of_pmts);
 			}
-			DEBUGM("decryption worked for pmt %d, cw %d, pid %d, parity %d, start %d, updated %d: %02X %02X %02X %02X %02X %02X %02X %02X", pmt->id, pmt->cw ? pmt->cw->id : -1, PID_FROM_TS(b), pmt->parity, start, updated, b[start], b[start + 1], b[start + 2], b[start + 3], b[start + 4], b[start + 5], b[start + 6], b[start + 7])
+			LOGL(level, "decryption worked for pmt %d, cw %d, pid %d, parity %d, start %d, updated %d: %02X %02X %02X %02X %02X %02X %02X %02X", pmt->id, pmt->cw ? pmt->cw->id : -1, PID_FROM_TS(b), pmt->parity, start, updated, b[start], b[start + 1], b[start + 2], b[start + 3], b[start + 4], b[start + 5], b[start + 6], b[start + 7])
 		}
 	}
 }
