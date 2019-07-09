@@ -80,7 +80,7 @@ typedef struct struct_cw
 	int prio;
 	char low_prio;
 	int16_t id;
-	int64_t expiry;
+	int64_t expiry, set_time;
 
 } SCW;
 
@@ -123,7 +123,7 @@ typedef struct struct_pmt
 	char active;  // PMT structure was already filled
 	char running; // PMT has channels running
 	char encrypted;
-	int encrypted_pid;
+	int first_active_pid;
 	int64_t grace_time;
 	uint16_t filter;
 	int clean_pos, clean_cc;
@@ -201,6 +201,6 @@ int get_filter_adapter(int filter);
 int assemble_packet(SFilter *f, uint8_t *b);
 int clean_psi_buffer(uint8_t *pmt, uint8_t *clean, int clean_size);
 void disable_cw(int master_pmt);
-
+void expire_cw_for_pmt(int master_pmt, int parity, int64_t min_expiry);
 #endif
 #endif
