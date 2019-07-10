@@ -356,20 +356,16 @@ int close_stream(int i)
 	sid->adapter = -1;
 	if (sid->type == STREAM_RTSP_UDP && sid->rsock_id > 0)
 	{
+		LOG("Closing RTP sock %d handle %d", sid->rsock_id, sid->rsock);
 		sockets_del(sid->rsock_id);
-		sid->rsock_id = -1;
 	}
 	sid->rsock = -1;
 
-	/*  if(sid->pids)free(sid->pids);
-	   if(sid->apids)free(sid->apids);
-	   if(sid->dpids)free(sid->dpids);
-	   sid->pids = sid->apids = sid->dpids = NULL;
-	 */
 	mutex_destroy(&sid->mutex);
 
 	if (sid->rtcp_sock > 0 || sid->rtcp > 0)
 	{
+		LOG("Closing RTCP sock %d handle %d", sid->rtcp_sock, sid->rtcp);
 		sockets_del(sid->rtcp_sock);
 		sid->rtcp_sock = -1;
 		sid->rtcp = -1;
