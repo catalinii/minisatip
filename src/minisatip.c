@@ -1814,13 +1814,8 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 	int binary = 0;
 	char *desc1;
 	char ra[50];
-	char server[50];
-	char *reply =
-		"%s/1.0 %d %s\r\nDate: %s%s%s\r\n%s%s\r\nContent-Length: %d\r\n\r\n%s";
-	char *reply0 = "%s/1.0 %d %s\r\nDate: %s%s%s\r\n%s%s\r\n\r\n";
 	char *d;
 	char *proto;
-	char sess_id[100], scseq[100];
 
 	if (s->type == TYPE_HTTP)
 		proto = "HTTP";
@@ -1853,7 +1848,6 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 		rc = 503;
 	}
 	char resp[10000];
-	int lresp;
 	desc1 = desc;
 	resp[sizeof(resp) - 1] = 0;
 	if (!lr)
@@ -1864,23 +1858,27 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 		desc1 = "";
 	}
 
-	sess_id[0] = 0;
-	scseq[0] = 0;
-	server[0] = 0;
-
-	sprintf(server, "\r\nServer: %s/%s", app_name, version);
-
+	int lresp = 0;
+	strlcatf(resp, sizeof(resp) - 1, lresp, "%s/1.0 %d %s\r\n", proto, rc, d);
+	strlcatf(resp, sizeof(resp) - 1, lresp, "Date: %s\r\n", get_current_timestamp());
 	if (s->type != TYPE_HTTP && get_sid(s->sid) && ah && !strstr(ah, "Session") && rc != 454)
-		sprintf(sess_id, "\r\nSession: %010d", get_session_id(s->sid));
+		strlcatf(resp, sizeof(resp) - 1, lresp, "Session: %010d\r\n", get_session_id(s->sid));
 	if (s->type != TYPE_HTTP && cseq > 0)
-		sprintf(scseq, "\r\nCSeq: %d", cseq);
+		strlcatf(resp, sizeof(resp) - 1, lresp, "CSeq: %d\r\n", cseq);
+
+	strlcatf(resp, sizeof(resp) - 1, lresp, "Server: %s/%s", app_name, version);
+
+	if (rc != 454)
+		strlcatf(resp, sizeof(resp) - 1, lresp, "%s\r\n", ah);
 
 	if (lr > 0)
-		lresp = snprintf(resp, sizeof(resp) - 1, reply, proto, rc, d,
-						 get_current_timestamp(), sess_id, scseq, ah, server, lr, desc1);
+	{
+		strlcatf(resp, sizeof(resp) - 1, lresp, "Content-Length: %d\r\n\r\n", lr);
+		strlcatf(resp, sizeof(resp) - 1, lresp, "%s", desc1);
+	}
 	else
-		lresp = snprintf(resp, sizeof(resp) - 1, reply0, proto, rc, d,
-						 get_current_timestamp(), sess_id, scseq, ah, server);
+		strlcatf(resp, sizeof(resp) - 1, lresp, "\r\n");
+
 	LOG("reply %s-> %d (%s:%d) CL:%d [sock_id %d]:",
 		(lresp == sizeof(resp) - 1) ? "message truncated" : "", s->sock,
 		get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
