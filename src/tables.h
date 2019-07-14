@@ -31,7 +31,7 @@ typedef struct struct_CA_op
 
 typedef struct struct_CA_AD
 {
-	int mask[MAX_CAID_LEN];
+	int caid[MAX_CAID_LEN], mask[MAX_CAID_LEN];
 	int caids;
 
 } SCA_AD;
@@ -46,7 +46,7 @@ typedef struct struct_CA
 } SCA;
 int add_ca(SCA_op *op, int adapter_mask);
 void del_ca(SCA_op *op);
-void add_caid_mask(int ica, int aid, int mask);
+void add_caid_mask(int ica, int aid, int caid, int mask);
 void init_ca_device(SCA *c);				   //  calls table_init_device for all the devices
 int register_ca_for_adapter(int i, int aid);   // register a CA just for a device, and run tables_init_device for the CA and Adapter, if succeds, send all the opened PMTs
 int unregister_ca_for_adapter(int i, int aid); // unregister a CA just for a device
@@ -60,7 +60,7 @@ int send_pmt_to_cas(adapter *ad, SPMT *pmt);
 void close_pmt_for_ca(int i, adapter *ad, SPMT *pmt);
 int close_pmt_for_cas(adapter *ad, SPMT *pmt);
 void tables_ca_ts(adapter *ad);
-int match_caid(SPMT *pmt, int mask);
+int match_caid(SPMT *pmt, int caid, int mask);
 void tables_update_encrypted_status(adapter *ad, SPMT *pmt);
 
 #endif
