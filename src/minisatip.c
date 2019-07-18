@@ -1866,7 +1866,7 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 	if (s->type != TYPE_HTTP && cseq > 0)
 		strlcatf(resp, sizeof(resp) - 1, lresp, "CSeq: %d\r\n", cseq);
 
-	strlcatf(resp, sizeof(resp) - 1, lresp, "Server: %s/%s", app_name, version);
+	strlcatf(resp, sizeof(resp) - 1, lresp, "Server: %s/%s\r\n", app_name, version);
 
 	if (rc != 454)
 		strlcatf(resp, sizeof(resp) - 1, lresp, "%s\r\n", ah);
