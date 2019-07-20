@@ -7,9 +7,9 @@
 #include "socketworks.h"
 #include "utils.h"
 
-#define VERSION_BUILD "19"
-#define CC(a, b, c) #a b #c
-#define VERSION CC(0.7., VERSION_BUILD, )
+#ifndef VERSION
+#define VERSION "1.0-unknown"
+#endif
 
 void set_options(int argc, char *argv[]);
 

@@ -24,6 +24,13 @@ LDFLAGS += -lpthread
 
 OS := $(shell $(CC) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 2)
 ARCH := $(shell $(CC) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 1)
+TAG := $(shell git tag 2>/dev/null| tail -1)
+HASH := $(shell git log -1 --format="%h" 2>/dev/null)
+VERSION := $(TAG)-$(HASH)
+
+ifneq ($(VERSION),-)
+CFLAGS+=-DVERSION=\"$(VERSION)\"
+endif
 
 ifneq ($(OS),apple)
         LDFLAGS += -lrt
