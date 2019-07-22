@@ -2,7 +2,7 @@
 AUTOMAKE_OPTIONS = foreign
 BUILDDIR := ../build
 
-CFLAGS?=-Wall -Wno-switch -ggdb -fPIC $(EXTRA_CFLAGS) -I../src
+CFLAGS?=-Wall -Wno-switch -ggdb -fPIC $(EXTRA_CFLAGS)
 LDFLAGS?=-lpthread 
 
 OS := $(shell $(CC) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 2)
@@ -24,6 +24,7 @@ LIBS+=dvbcsa
 LIBS+=dvben50221 dvbapi ucsi
 CFLAGS += -DAXE
 #CFLAGS += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=null
+CFLAGS += -I../src
 
 CFLAGS += -DENIGMA
 CFLAGS += -DTESTING
