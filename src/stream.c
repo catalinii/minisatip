@@ -36,6 +36,7 @@
 #include <string.h>
 #include <poll.h>
 #include <fcntl.h>
+#include <sys/time.h>
 
 #include "minisatip.h"
 #include "socketworks.h"
@@ -659,9 +660,15 @@ int send_rtcp(int s_id, int64_t ctime)
 	unsigned char rtcp_buf[1600];
 	unsigned char *rtcp = rtcp_buf + 4;
 	streams *sid = get_sid(s_id);
+	unsigned long long ntp;
+	struct timeval tv;
 
 	if (!sid)
 		LOG_AND_RETURN(0, "Sid is null for s_id %d", s_id);
+
+	gettimeofday(&tv,NULL);
+	ntp=(((unsigned long long)tv.tv_sec+2208988800ULL)<<32)|
+		(((unsigned long long)tv.tv_usec<<32)/1000000ULL);
 
 	char *a = describe_adapter(s_id, sid->adapter, dad, sizeof(dad));
 	unsigned int la = strlen(a);
@@ -677,7 +684,7 @@ int send_rtcp(int s_id, int64_t ctime)
 	rtcp[2] = 0;
 	rtcp[3] = 6;
 	copy32(rtcp, 4, sid->ssrc);
-	copy32(rtcp, 8, 0);
+	copy32(rtcp, 8, (int)(ntp>>32));
 	copy32(rtcp, 12, ctime);
 	copy32(rtcp, 16, sid->wtime);
 	copy32(rtcp, 20, sid->sp);
