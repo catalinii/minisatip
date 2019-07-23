@@ -2,23 +2,21 @@
 AUTOMAKE_OPTIONS = foreign
 TARGET=minisatip
 
-$(TARGET): FORCE
-	$(MAKE) -C src
-
-clean: FORCE
-	$(MAKE) -C src $@
-	$(MAKE) -C tests $@
-
-test: FORCE
-	$(MAKE) -C src clean
-	$(MAKE) -C tests $@
-
-debug: FORCE
-	$(MAKE) -C src DEBUG=1
-	
-FORCE:
-
 # pull in dependency info for *existing* .o files
 ifneq "$(MAKECMDGOALS)" "clean"
 -include $(DEPS)
 endif
+
+$(TARGET):
+	$(MAKE) -C src
+
+clean:
+	$(MAKE) -C src $@
+	$(MAKE) -C tests $@
+
+test:
+	$(MAKE) -C src
+	$(MAKE) -C tests $@
+
+debug:
+	$(MAKE) -C src DEBUG=1

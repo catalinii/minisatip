@@ -18,9 +18,10 @@ ENIGMA=@ENIGMA@
 DDCI=0
 T2MI=0
 
-CFLAGS?=-Wall -Wno-switch -ggdb -fPIC $(EXTRA_CFLAGS) @CFLAGS@
-LDFLAGS?=@LDFLAGS@
-LDFLAGS += -lpthread
+CFLAGS?=-Wall -Wno-switch -ggdb -fPIC
+CFLAGS += $(EXTRA_CFLAGS) @CFLAGS@
+LDFLAGS += @LDFLAGS@ -lpthread
+CPPFLAGS += @CPPFLAGS@
 
 OS := $(shell $(CC) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 2)
 ARCH := $(shell $(CC) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 1)
