@@ -499,11 +499,11 @@ void expire_cw_for_pmt(int master_pmt, int parity, int64_t min_expiry)
 		{
 			SCW *cw = cws[i];
 			// CW expired
-			if(ctime > cw->expiry)
-				continue; 
+			if (ctime > cw->expiry)
+				continue;
 
 			// Wait at least min_expiry after the CW is set
-			if(!cw->set_time || ctime - cw->set_time < min_expiry)
+			if (!cw->set_time || ctime - cw->set_time < min_expiry)
 				continue;
 
 			LOG("Expiring CW %d, PMT %d, parity %d created %jd ms ago, CW: %02X %02X", i, master_pmt, cws[i]->parity, ctime - cws[i]->time, cws[i]->cw[0], cws[i]->cw[1]);
@@ -601,7 +601,7 @@ void update_cw(SPMT *pmt)
 		cw->op->set_cw(cw, master);
 		mutex_unlock(&master->mutex);
 		cw->pmt = master->id;
-		if(!cw->set_time)
+		if (!cw->set_time)
 			cw->set_time = getTick();
 	}
 	else
@@ -711,7 +711,6 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv, int64_t 
 	return 0;
 }
 
-
 #ifndef DISABLE_TABLES
 
 int set_all_pmt_encrypted(int aid, int pid, int status)
@@ -727,7 +726,6 @@ int set_all_pmt_encrypted(int aid, int pid, int status)
 		}
 	return 0;
 }
-
 
 void check_packet_encrypted(adapter *ad)
 {
@@ -759,7 +757,7 @@ void check_packet_encrypted(adapter *ad)
 			else
 			{
 				dec[pid]++;
-				DEBUGM("decryption worked for pid %d, parity %d, start %d: [%02X %02X %02X %02X] %02X %02X %02X", pid, cp, start, b[0], b[1], b[2], b[3], b[start], b[start + 1], b[start + 2])
+				DEBUGM("decryption worked for pid %d, parity %d, start %d: [%02X %02X %02X %02X] %02X %02X %02X %02X %02X %02X %02X %02X", pid, cp, start, b[0], b[1], b[2], b[3], b[start], b[start + 1], b[start + 2], b[start + 3], b[start + 4], b[start + 5], b[start + 6], b[start + 7])
 			}
 		}
 	}
@@ -775,8 +773,8 @@ void check_packet_encrypted(adapter *ad)
 				continue;
 			int64_t grace_time = pmt->grace_time - ctime;
 
-			LOGM("Found pid %d dec %d enc %d pmt %d first pid %d, grace time %jd ms", 
-				pid, dec[pid], enc[pid], pmt->id, pmt->first_active_pid, grace_time > 0 ? grace_time: 0);
+			LOGM("Found pid %d dec %d enc %d pmt %d first pid %d, grace time %jd ms",
+				 pid, dec[pid], enc[pid], pmt->id, pmt->first_active_pid, grace_time > 0 ? grace_time : 0);
 
 			if (pmt->first_active_pid != pid)
 				continue;
@@ -1682,7 +1680,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 			break;
 		}
 		int is_video = (stype == 2) || (stype == 27) || (stype == 36) || (stype == 15);
-		int is_audio = isAC3 || (stype == 3) || (stype == 4); 
+		int is_audio = isAC3 || (stype == 3) || (stype == 4);
 		if (!is_audio && !is_video)
 			continue;
 

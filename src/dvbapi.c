@@ -481,7 +481,6 @@ int dvbapi_close(sockets *s)
 				continue;
 			keys_del(i);
 		}
-	unregister_dvbapi();
 	return 0;
 }
 
@@ -550,7 +549,10 @@ int connect_dvbapi(void *arg)
 		else
 			sock = tcp_connect(opts.dvbapi_host, opts.dvbapi_port, NULL, 0);
 		if (sock < 0)
+		{
+			unregister_dvbapi();
 			LOG_AND_RETURN(0, "%s: connect to %s failed", __FUNCTION__, opts.dvbapi_host);
+		}
 		dvbapi_sock = sockets_add(sock, NULL, -1, TYPE_TCP | TYPE_CONNECT,
 								  (socket_action)dvbapi_reply, (socket_action)dvbapi_close,
 								  (socket_action)dvbapi_timeout);
@@ -644,7 +646,7 @@ int send_ecm(int filter_id, unsigned char *b, int len, void *opaque)
 	if (len > 559 + 3)
 		return -1;
 
-	if(pid > 32)
+	if (pid > 32)
 		expire_cw_for_pmt(pmt->master_pmt, k->ecm_parity[i], 10000); // expire CWs older than 10s
 
 	copy32(buf, 0, DVBAPI_FILTER_DATA);
@@ -817,7 +819,7 @@ int dvbapi_encrypted(adapter *ad, SPMT *pmt)
 	if (!pmt->cw)
 		return 0;
 	pmt->cw->expiry = getTick() - 1000;
-	LOG("Disabling CW %d, parity %d for PMT %d master %d, created %jd ms ago: %02X %02X", 
+	LOG("Disabling CW %d, parity %d for PMT %d master %d, created %jd ms ago: %02X %02X",
 		pmt->cw ? pmt->cw->id : -1, pmt->cw ? pmt->cw->parity : -1, pmt->id, pmt->master_pmt, getTick() - pmt->cw->time, pmt->cw ? pmt->cw->cw[0] : 0, pmt->cw ? pmt->cw->cw[1] : 0);
 	disable_cw(pmt->master_pmt);
 	return 0;
