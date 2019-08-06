@@ -1703,6 +1703,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 		if ((cp = find_pid(ad->id, spid))) // the pid is already requested by the client
 		{
 			enabled_channels++;
+			pmt->running = 1;
 			cp->pmt = pmt->master_pmt;
 		}
 	}
