@@ -3,6 +3,7 @@
 
 #include "adapter.h"
 
+#define API_SOCK
 #ifndef DISABLE_LINUXDVB
 #undef AOT_CA_PMT
 #include "headers.h"

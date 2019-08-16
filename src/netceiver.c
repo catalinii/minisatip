@@ -409,6 +409,10 @@ void find_netcv_adapter(adapter **a)
 	if (recv_init(opts.netcv_if, 23000))
 		LOG("Netceiver init failed");
 
+	/* Call api_sock_init to initialize the socket needed for netceiver tools */
+	if (api_sock_init(API_SOCK_NAMESPACE))
+		LOG("Netceiver API socket init failed");
+
 	sprintf(dbuf, "REEL: Search for %d Netceiver%s on %s... ",
 			opts.netcv_count, opts.netcv_count == 1 ? "" : "s", opts.netcv_if);
 	n = 0;
