@@ -409,7 +409,7 @@ int dvbapi_send_pmt(SKey *k)
 		k->pmt_pid, k->sid, k->id, sock);
 	memset(buf, 0, sizeof(buf));
 	copy32(buf, 0, AOT_CA_PMT);
-	buf[6] = CAPMT_LIST_UPDATE;
+	buf[6] = CAPMT_LIST_ONLY;
 	copy16(buf, 7, k->sid);
 	buf[9] = 1;
 
