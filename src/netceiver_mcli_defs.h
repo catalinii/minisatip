@@ -197,6 +197,7 @@ typedef struct recv_festatus
 #include "mcast.h"
 #include "recv_ccpp.h"
 #include "recv_tv.h"
+#include "api_server.h"
 #include "tca_handler.h"
 
 #endif
