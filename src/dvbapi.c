@@ -412,14 +412,15 @@ int dvbapi_send_pmt(SKey *k)
 
 	if (network_mode)
 	{
-		copy32(buf, 12, 0x01820200);
+		buf[12] = 0x01; // ca_pmt_cmd_id (ok_descrambling)
+		copy16(buf, 13, 0x8202); // demux_ca_mask_device_descriptor (deprecated)
 		buf[15] = k->id + opts.dvbapi_offset;
 		buf[16] = k->id + opts.dvbapi_offset;
-		copy16(buf, 17, 0x8108); // enigma2 descriptior
+		copy16(buf, 17, 0x8108); // enigma_namespace_descriptor
 		copy32(buf, 19, 0);
 		copy16(buf, 23, k->tsid);
 		copy16(buf, 25, k->onid);
-		copy16(buf, 27, 0x8402); // PMT PID
+		copy16(buf, 27, 0x8402); // pmt_pid_descriptor
 		copy16(buf, 29, k->pmt_pid);
 		memcpy(buf + 31, k->pi, k->pi_len);
 		len = 31 + k->pi_len;
@@ -435,12 +436,13 @@ int dvbapi_send_pmt(SKey *k)
 			adapter = ad->pa;
 		}
 		LOG("Using adapter %d and demux %d for local socket (key adapter %d)", adapter, demux, k->adapter);
-		copy32(buf, 22, 0x01820200);
+		buf[22] = 0x01; // ca_pmt_cmd_id (ok_descrambling)
+		copy16(buf, 23, 0x8202); // demux_ca_mask_device_descriptor (deprecated)
 		buf[25] = 1 << demux;
 		buf[26] = demux;
-		copy16(buf, 27, 0x8402); // PMT PID
+		copy16(buf, 27, 0x8402); // pmt_pid_descriptor
 		copy16(buf, 29, pmt->pid);
-		copy16(buf, 31, 0x8301); // ADAPTER ID, works only in newer versions (> 11500)
+		copy16(buf, 31, 0x8301); // adapter_device_descriptor, works only in newer versions (> 11500)
 		buf[33] = adapter;
 		memcpy(buf + 34, k->pi, k->pi_len);
 		len = 34 + k->pi_len;
@@ -744,7 +746,7 @@ int keys_del(int i)
 		return 0;
 	}
 	k->enabled = 0;
-	
+
 	//	buf[7] = k->demux;
 	buf[7] = i;
 	LOG("Stopping DEMUX %d, removing key %d, sock %d, pmt pid %d", buf[7], i,
