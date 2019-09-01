@@ -57,6 +57,7 @@ int enabledKeys = 0;
 int network_mode = 1;
 int dvbapi_protocol_version = DVBAPI_PROTOCOL_VERSION;
 int dvbapi_ca = -1;
+int enabled_pmts = 0;
 
 uint64_t dvbapi_last_close = 0;
 
@@ -404,12 +405,8 @@ int dvbapi_send_pmt(SKey *k)
 	SPMT *pmt = get_pmt(k->pmt_id);
 	if (!pmt)
 		return 1;
-	LOG(
-		"Sending pmt to dvbapi server for pid %d, Channel ID %04X, key %d, using socket %d",
-		k->pmt_pid, k->sid, k->id, sock);
 	memset(buf, 0, sizeof(buf));
 	copy32(buf, 0, AOT_CA_PMT);
-	buf[6] = CAPMT_LIST_UPDATE;
 	copy16(buf, 7, k->sid);
 	buf[9] = 1;
 
@@ -460,8 +457,14 @@ int dvbapi_send_pmt(SKey *k)
 		copy16(buf, len - 2, 0);
 		LOGM("Key %d adding stream pid %d (%X) type %d (%x)", k->id, pid, pid, type, type);
 	}
-	copy16(buf, 4, len - 6)
-		TEST_WRITE(write(sock, buf, len), len);
+	copy16(buf, 4, len - 6);
+
+	// make sure is ONLY is not sent by multiple threads
+	int ep = __sync_add_and_fetch(&enabled_pmts, 1);
+	buf[6] = (ep == 1) ? CAPMT_LIST_ONLY : CAPMT_LIST_ADD;
+	TEST_WRITE(write(sock, buf, len), len);
+	LOG("Sending pmt to dvbapi server for pid %d, Channel ID %04X, key %d, using socket %d (enabled pmts %d)",
+		k->pmt_pid, k->sid, k->id, sock, ep);
 	return 0;
 }
 
@@ -741,6 +744,7 @@ int keys_del(int i)
 		return 0;
 	}
 	k->enabled = 0;
+	
 	//	buf[7] = k->demux;
 	buf[7] = i;
 	LOG("Stopping DEMUX %d, removing key %d, sock %d, pmt pid %d", buf[7], i,
@@ -765,6 +769,8 @@ int keys_del(int i)
 	enabledKeys = ek;
 	if (!ek && sock > 0)
 		TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
+	if (!ek)
+		enabled_pmts = 0;
 	dvbapi_last_close = getTick();
 	mutex_destroy(&k->mutex);
 	return 0;
