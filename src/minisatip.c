@@ -1489,21 +1489,12 @@ int close_http(sockets *s)
 #undef DEFAULT_LOG
 #define DEFAULT_LOG LOG_SSDP
 
-int ssdp_discovery(sockets *s)
+int ssdp_notify(sockets *s, int alive)
 {
-	char *reply = "NOTIFY * HTTP/1.1\r\n"
-				  "HOST: %s:1900\r\n"
-				  "CACHE-CONTROL: max-age=1800\r\n"
-				  "LOCATION: http://%s/%s\r\n"
-				  "NT: %s\r\n"
-				  "NTS: ssdp:alive\r\n"
-				  "SERVER: Linux/1.0 UPnP/1.1 %s/%s\r\n"
-				  "USN: uuid:%s%s\r\n"
-				  "BOOTID.UPNP.ORG: %d\r\n"
-				  "CONFIGID.UPNP.ORG: 0\r\n"
-				  "DEVICEID.SES.COM: %d\r\n\r\n\0";
 	char buf[500], mac[15] = "00000000000000";
 	char nt[3][50];
+	int ptr = 0;
+	char *op = alive ? "Discovery" : "ByeBye";
 
 	char uuid1[] = "11223344-9999-0000-b7ae";
 	socklen_t salen;
@@ -1523,22 +1514,46 @@ int ssdp_discovery(sockets *s)
 	if (s->type != TYPE_UDP)
 		return 0;
 
-	LOGM("ssdp_discovery: bootid: %d deviceid: %d http: %s", opts.bootid,
-		 opts.device_id, opts.http_host);
+	LOGM("%s: bootid: %d deviceid: %d http: %s", __FUNCTION__,
+		 opts.bootid, opts.device_id, opts.http_host);
 
 	for (i = 0; i < 3; i++)
 	{
-		sprintf(buf, reply, opts.disc_host, opts.http_host, opts.xml_path,
-				nt[i] + 2, app_name, version, uuid, i == 1 ? "" : nt[i],
-				opts.bootid, opts.device_id);
+		strcatf(buf, ptr, "NOTIFY * HTTP/1.1\r\n");
+		strcatf(buf, ptr, "HOST: %s:1900\r\n", opts.disc_host);
+		if (alive)
+			strcatf(buf, ptr, "CACHE-CONTROL: max-age=1800\r\n");
+		strcatf(buf, ptr, "LOCATION: http://%s/%s\r\n", opts.http_host, opts.xml_path);
+		strcatf(buf, ptr, "NT: %s\r\n", nt[i] + 2);
+		strcatf(buf, ptr, "NTS: ssdp:%s\r\n", alive ? "alive" : "byebye");
+		if (alive)
+			strcatf(buf, ptr, "SERVER: Linux/1.0 UPnP/1.1 %s/%s\r\n", app_name, version);
+		strcatf(buf, ptr, "USN: uuid:%s%s\r\n", uuid, i == 1 ? "" : nt[i]);
+		strcatf(buf, ptr, "BOOTID.UPNP.ORG: %d\r\n", opts.bootid);
+		strcatf(buf, ptr, "CONFIGID.UPNP.ORG: 0\r\n");
+		if (alive)
+			strcatf(buf, ptr, "DEVICEID.SES.COM: %d", opts.device_id);
+		strcatf(buf, ptr, "\r\n\r\n");
+
 		salen = sizeof(ssdp_sa);
-		LOGM("Discovery packet %d:\n%s", i + 1, buf);
-		int wb = sendto(s->sock, buf, strlen(buf), MSG_NOSIGNAL, (const struct sockaddr *)&ssdp_sa, salen);
+		LOGM("%s packet %d:\n%s", op, i + 1, buf);
+		int wb = sendto(s->sock, buf, ptr, MSG_NOSIGNAL, (const struct sockaddr *)&ssdp_sa, salen);
 		if (wb != strlen(buf))
 			LOG("incomplete ssdp_discovery: wrote %d out of %d: error %d: %s", wb, strlen(buf), errno, strerror(errno));
+		ptr = 0;
 	}
 	s->rtime = getTick();
 	return 0;
+}
+
+int ssdp_discovery(sockets *s)
+{
+	return ssdp_notify(s, 1);
+}
+
+int ssdp_byebye(sockets *s)
+{
+	return ssdp_notify(s, 0);
 }
 
 int ssdp;
@@ -1716,10 +1731,10 @@ int main(int argc, char *argv[])
 	if ((http = tcp_listen(NULL, opts.http_port)) < 1)
 		FAIL("Could not listen on http port %d", opts.http_port);
 
-	si = sockets_add(ssdp, NULL, -1, TYPE_UDP, (socket_action)ssdp_reply, NULL,
-					 (socket_action)ssdp_discovery);
+	si = sockets_add(ssdp, NULL, -1, TYPE_UDP, (socket_action)ssdp_reply,
+					 (socket_action)ssdp_byebye, (socket_action)ssdp_discovery);
 	si1 = sockets_add(ssdp1, NULL, -1, TYPE_UDP, (socket_action)ssdp_reply,
-					  NULL, (socket_action)ssdp_discovery);
+					  (socket_action)ssdp_byebye, (socket_action)ssdp_discovery);
 	if (si < 0 || si1 < 0)
 		FAIL("sockets_add failed for ssdp");
 
