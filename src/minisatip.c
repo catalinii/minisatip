@@ -1538,8 +1538,8 @@ int ssdp_notify(sockets *s, int alive)
 		salen = sizeof(ssdp_sa);
 		LOGM("%s packet %d:\n%s", op, i + 1, buf);
 		int wb = sendto(s->sock, buf, ptr, MSG_NOSIGNAL, (const struct sockaddr *)&ssdp_sa, salen);
-		if (wb != strlen(buf))
-			LOG("incomplete ssdp_discovery: wrote %d out of %d: error %d: %s", wb, strlen(buf), errno, strerror(errno));
+		if (wb != ptr)
+			LOG("incomplete ssdp_discovery: wrote %d out of %d: error %d: %s", wb, ptr, errno, strerror(errno));
 		ptr = 0;
 	}
 	s->rtime = getTick();
