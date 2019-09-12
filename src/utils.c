@@ -525,9 +525,12 @@ becomeDaemon()
 	memset(path, 0, sizeof(path));
 	if ((f = fopen(pid_file, "rt")))
 	{
-		rv = fscanf(f, "%d", &pid);
+		char tmp_buf[10];
+		memset(tmp_buf, 0, sizeof(tmp_buf));
+		fgets(tmp_buf, sizeof(tmp_buf) - 1, f);
+		pid = atoi(tmp_buf);
 		fclose(f);
-		snprintf(buf, sizeof(buf), "/proc/%d/exe", pid);
+		snprintf(buf, sizeof(buf) - 1, "/proc/%d/exe", pid);
 
 		if (0 < readlink(buf, path, sizeof(path)) && 0 == strcmp(pn, path))
 		{

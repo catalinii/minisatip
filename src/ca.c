@@ -403,7 +403,7 @@ int get_random(unsigned char *dest, int len)
         char *urnd = "/dev/urandom";
 
         fd = open(urnd, O_RDONLY);
-        if (fd <= 0)
+        if (fd < 0)
         {
                 LOG("cannot open %s", urnd);
                 return -1;
@@ -1230,7 +1230,7 @@ static void get_authdata_filename(char *dest, size_t len, unsigned int slot, cha
         char target[256];
         /* add module name to slot authorization bin file */
         memset(cin, 0, sizeof(cin));
-        strncpy(cin, ci_name, sizeof(cin));
+        strncpy(cin, ci_name, sizeof(cin) - 1);
         FILE *auth_bin;
         /* quickly replace blanks */
         int i = 0;
@@ -1250,13 +1250,16 @@ static void get_authdata_filename(char *dest, size_t len, unsigned int slot, cha
 
                 char linkname[4096];
                 memset(linkname, 0, sizeof(linkname));
-                readlink(source, linkname, sizeof(linkname) - 1);
+                ssize_t len = readlink(source, linkname, sizeof(linkname) - 1);
+                linkname[len] = 0;
                 if (strlen(linkname) > 0)
                 {
                         if (strcmp(linkname, target) != 0)
                         {
                                 /* link doesn't point to target */
                                 auth_bin = fopen(target, "r");
+                                if (auth_bin)
+                                        fclose(auth_bin);
                                 /* correct symlink */
                                 remove(source);
                                 LOG("CORRECTING %s to %s", target, source);
@@ -1315,7 +1318,7 @@ static int get_authdata(uint8_t *host_id, uint8_t *dhsk, uint8_t *akh, unsigned 
         get_authdata_filename(filename, sizeof(filename), slot, ci_name);
 
         fd = open(filename, O_RDONLY);
-        if (fd <= 0)
+        if (fd < 0)
         {
                 LOG("cannot open %s", filename);
                 return 0;
@@ -3540,7 +3543,8 @@ void set_ca_pin(int i, char *pin)
                 ca_devices[i] = alloc_ca_device();
         if (!ca_devices[i])
                 return;
-        strncpy(ca_devices[i]->pin_str, pin, sizeof(ca_devices[i]->pin_str));
+        memset(ca_devices[i]->pin_str, 0, sizeof(ca_devices[i]->pin_str));
+        strncpy(ca_devices[i]->pin_str, pin, sizeof(ca_devices[i]->pin_str) - 1);
 }
 
 void force_ci_adapter(int i)
