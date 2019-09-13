@@ -777,7 +777,7 @@ void set_options(int argc, char *argv[])
 					sprintf(opts.playlist, "<satip:X_SATIPM3U xmlns:satip=\"urn:ses-com:satip\">%s</satip:X_SATIPM3U>\r\n", optarg);
 			}
 			else
-				LOG("playlist length is too big %d bytes", strlen(optarg));
+				LOG("playlist length is too big %zd bytes", strlen(optarg));
 			break;
 		}
 
@@ -1660,7 +1660,7 @@ int ssdp_reply(sockets *s)
 	//use ssdp (unicast) even if received to multicast address
 	LOGM("%s", buf);
 	int wb = sendto(ssdp, buf, ptr, MSG_NOSIGNAL, (const struct sockaddr *)&s->sa, salen);
-	if (wb != ptr
+	if (wb != ptr)
 		LOG("incomplete ssdp_reply: wrote %d out of %zd: error %d: %s", wb, ptr, errno, strerror(errno));
 	return 0;
 }

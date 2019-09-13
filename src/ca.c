@@ -2672,7 +2672,7 @@ static int ciplus_app_oprf_message(void *arg, uint8_t slot_id, uint16_t session_
                         data_oprf_tune_status[i + 1] = data[i + 2];
                 }
                 LOG("CI+ CA%d: %s", d->id, buf);
-                LOG("Please TUNE to transponder %x%x%x %c", data[6], data[7], data[8], pol);
+                LOG("Please TUNE to transponder %x%x%x %c", data[6], data[7], data[8], *pol);
                 //data_oprf_tune_status[13]=0xC6; //psk8 dvb-s2
                 usleep(3 * 1000 * 1000);             //wait 3 secs
                 uint8_t tag[3] = {0x9f, 0x9c, 0x0a}; /* operator_tune_status */

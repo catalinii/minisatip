@@ -154,7 +154,7 @@ STmpinfo *getFreeItemPos(uint32_t key)
 		return sinfo + i;
 	}
 	else
-		LOG("WARNING: the key %d found but not suitable pos %d enabled %d timeout %d last_updated %ld", key, i, sinfo[i].timeout, sinfo[i].last_updated);
+		LOG("WARNING: the key %d found but not suitable pos %d enabled %d timeout %d last_updated %ld", key, i, sinfo[i].enabled, sinfo[i].timeout, sinfo[i].last_updated);
 	return NULL;
 }
 
@@ -1128,7 +1128,7 @@ void process_file(void *sock, char *s, int len, char *ctype)
 	int i, io = 0, lv, le, respond = 1;
 	sockets *so = (sockets *)sock;
 	__attribute__((unused)) int rv;
-	LOG("processing_file %x len %d:", s, len);
+	LOG("processing_file %p len %d:", s, len);
 	for (i = 0; i < len; i++)
 	{
 		lv = 0;
@@ -1202,7 +1202,7 @@ char *readfile(char *fn, char *ctype, int *len)
 		LOG_AND_RETURN(NULL, "mmap failed for file %s", ffn);
 	}
 	close(fd);
-	LOG("opened %s fd %d at %x - %d bytes", ffn, fd, mem, nl);
+	LOG("opened %s fd %d at %p - %d bytes", ffn, fd, mem, nl);
 
 	*len = nl;
 	if (ctype)
@@ -1283,7 +1283,7 @@ int mutex_lock1(char *FILE, int line, SMutex *mutex)
 	}
 	if (mutex->enabled && mutex->state && tid != mutex->tid)
 	{
-		LOGM("%s:%d Locking mutex %p already locked at %s:%d tid %x", FILE,
+		LOGM("%s:%d Locking mutex %p already locked at %s:%d tid %lx", FILE,
 			 line, mutex, mutex->file, mutex->line, mutex->tid);
 		start_lock = getTick();
 	}
@@ -1293,7 +1293,7 @@ int mutex_lock1(char *FILE, int line, SMutex *mutex)
 	if (!mutex->enabled && rv == 0)
 	{
 		pthread_mutex_unlock(&mutex->mtx);
-		LOG("Mutex %x destroyed meanwhile", mutex);
+		LOG("Mutex %p destroyed meanwhile", mutex);
 		return 1;
 	}
 	if (rv != 0)

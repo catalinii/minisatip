@@ -71,7 +71,7 @@ unsigned char read_buffer[8192];
 		mutex_lock(&keys_mutex);                                                                                                                \
 		if ((x = (a)) != (xlen))                                                                                                                \
 		{                                                                                                                                       \
-			LOG("write to dvbapi socket failed (%d out of %d), closing socket %d, errno %d, error: %s", x, xlen, sock, errno, strerror(errno)); \
+			LOG("write to dvbapi socket failed (%d out of %d), closing socket %d, errno %d, error: %s", x, (int )xlen, sock, errno, strerror(errno)); \
 			dvbapi_close_socket();                                                                                                              \
 		}                                                                                                                                       \
 		mutex_unlock(&keys_mutex);                                                                                                              \

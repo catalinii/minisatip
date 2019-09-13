@@ -827,7 +827,7 @@ void close_adapter_for_stream(int sid, int aid)
 			adapter *ad2 = a[ad->master_source];
 			if (ad2)
 				ad2->used &= ~(1 << ad->id);
-			LOGM("adapter %d freed from slave adapter %d, used %d", ad2 ? ad2->id : -1, ad->id, ad2 ? ad2->used : -1);
+			LOGM("adapter %d freed from slave adapter %d, used %jd", ad2 ? ad2->id : -1, ad->id, ad2 ? ad2->used : -1);
 		}
 	}
 	else

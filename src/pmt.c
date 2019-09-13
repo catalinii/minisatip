@@ -1520,7 +1520,7 @@ void find_pi(SPMT *pmt, unsigned char *es, int len)
 		{
 			if (pmt->pi_len + es_len > sizeof(pmt->pi) - 2)
 			{
-				LOG("PI is too small %d", sizeof(pmt->pi));
+				LOG("PI is too small %zd", sizeof(pmt->pi));
 				return;
 			}
 			LOG("PI pos %d caid %04X => pid %04X (%d), index %d", pmt->pi_len, caid, capid,
@@ -1533,7 +1533,7 @@ void find_pi(SPMT *pmt, unsigned char *es, int len)
 				pmt->capid[pmt->caids++] = capid;
 			}
 			else
-				LOG("Too many CAIDs for pmt %d, discarding %04X", pmt->id, pmt->caid);
+				LOG("Too many CAIDs for pmt %d, discarding %04X", pmt->id, caid);
 		}
 	}
 	return;

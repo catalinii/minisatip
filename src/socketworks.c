@@ -1207,7 +1207,7 @@ void set_socket_thread(int s_id, pthread_t tid)
 	sockets *ss = get_sockets(s_id);
 	if (!ss)
 		return;
-	LOG("set_socket_thread: thread %x for sockets %i", tid, s_id);
+	LOG("set_socket_thread: thread %lx for sockets %i", tid, s_id);
 	ss->tid = tid;
 }
 
@@ -1505,7 +1505,7 @@ int flush_socket(sockets *s)
 end:
 	if (s->force_close && s->spos == s->wpos)
 	{
-		LOGM("SOCK %d: set timeout_ms to %d from wrwait", s->timeout_ms);
+		LOGM("SOCK %d: set timeout_ms to %d from wrwait", s->id, s->timeout_ms);
 		s->timeout_ms = 1;
 	}
 	return r;
