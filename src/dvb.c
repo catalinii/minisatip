@@ -995,7 +995,7 @@ int dvb_tune(int aid, transponder *tp)
 
 		break;
 	default:
-		LOG("tuning to unknown delsys: %s freq %s ts clear = %jd",
+		LOG("tuning to unknown delsys: %s freq %d ts clear = %jd",
 			fe_delsys[tp->sys], freq, bclear)
 		break;
 	}
@@ -1109,7 +1109,7 @@ int dvb_demux_set_pid(adapter *a, int i_pid)
 	int fd = a->dvr;
 
 	if (i_pid > 8192)
-		LOG_AND_RETURN(-1, "pid %d > 8192 for adapter %d", a->id);
+		LOG_AND_RETURN(-1, "pid %d > 8192 for adapter %d", i_pid, a->id);
 
 	if (a->active_demux_pids++ == 0)
 	{
@@ -1160,7 +1160,7 @@ int dvb_demux_del_filters(adapter *ad, int fd, int pid)
 	if (!--ad->active_demux_pids)
 	{
 		if (ioctl(fd, DMX_STOP, NULL) < 0)
-			LOG("DMX_STOP failed on PID %d FD %d: error %d %s", pid, fd, strerror(errno));
+			LOG("DMX_STOP failed on PID %d FD %d: error %d %s", pid, fd, errno, strerror(errno));
 		LOG("stopped filters on fd %d", fd);
 	}
 

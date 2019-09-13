@@ -1523,7 +1523,7 @@ void add_join_thread(pthread_t t)
 	mutex_init(&join_lock);
 	mutex_lock(&join_lock);
 	join_th[join_pos++] = t;
-	LOG("%s: pthread %x", __FUNCTION__, t);
+	LOG("%s: pthread %lx", __FUNCTION__, t);
 	mutex_unlock(&join_lock);
 }
 

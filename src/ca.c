@@ -1260,8 +1260,8 @@ static void get_authdata_filename(char *dest, size_t len, unsigned int slot, cha
                                 if (auth_bin)
                                         fclose(auth_bin);
                                 /* correct symlink */
-                                remove(source);
-                                LOG("CORRECTING %s to %s", target, source);
+                                int r = remove(source);
+                                LOG("CORRECTING %s to %s %s", target, source, r?"": "remove failed");
                                 symlink(target, source);
                         }
                 }
@@ -1273,8 +1273,8 @@ static void get_authdata_filename(char *dest, size_t len, unsigned int slot, cha
                                 /* if new file already exists and source is not symlink.
                       remove and do symlink */
                                 fclose(auth_bin);
-                                remove(source);
-                                LOG("LINKING %s to %s", target, source);
+                                int r = remove(source);
+                                LOG("LINKING %s to %s", target, source, r?"": "remove failed");
                                 symlink(target, source);
                         }
                         else
