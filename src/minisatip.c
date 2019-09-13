@@ -1581,6 +1581,7 @@ int ssdp_reply(sockets *s)
 	char buf[500];
 	char ra[50];
 	int did = 0;
+	int ptr = 0;
 
 	if (uuidi == 0)
 		ssdp_discovery(s);
@@ -1613,15 +1614,16 @@ int ssdp_reply(sockets *s)
 		rdid = strcasestr((const char *)s->buf, "DEVICEID.SES.COM:");
 		if (rdid && opts.device_id == map_int(strip(rdid + 17), NULL))
 		{
-			snprintf(buf, sizeof(buf), device_id_conflict, getlocalip(),
+			ptr = 0;
+			strcatf(buf, ptr, device_id_conflict, getlocalip(),
 					 app_name, version, opts.device_id);
 			LOG(
 				"A new device joined the network with the same Device ID:  %s, asking to change DEVICEID.SES.COM",
 				get_socket_rhost(s->id, ra, sizeof(ra)));
-			int wb = sendto(ssdp, buf, strlen(buf), MSG_NOSIGNAL,
+			int wb = sendto(ssdp, buf, ptr, MSG_NOSIGNAL,
 							(const struct sockaddr *)&s->sa, salen);
-			if (wb != strlen(buf))
-				LOG("incomplete ssdp_reply notify: wrote %d out of %d: error %d: %s", wb, strlen(buf), errno, strerror(errno));
+			if (wb != ptr)
+				LOG("incomplete ssdp_reply notify: wrote %d out of %d: error %d: %s", wb, ptr, errno, strerror(errno));
 		}
 
 		return 0;
@@ -1648,7 +1650,8 @@ int ssdp_reply(sockets *s)
 	if (strncmp((const char *)s->buf, "HTTP/1", 6) == 0)
 		LOG_AND_RETURN(0, "ssdp_reply: the message is a reply, ignoring....");
 
-	sprintf(buf, reply, get_current_timestamp(), opts.http_host, opts.xml_path,
+		ptr = 0;
+		strcatf(buf, ptr, reply, get_current_timestamp(), opts.http_host, opts.xml_path,
 			app_name, version, uuid, opts.bootid, did);
 
 	LOGM("ssdp_reply fd: %d -> %s:%d, bootid: %d deviceid: %d http: %s", ssdp,
@@ -1656,9 +1659,9 @@ int ssdp_reply(sockets *s)
 		 opts.bootid, did, opts.http_host);
 	//use ssdp (unicast) even if received to multicast address
 	LOGM("%s", buf);
-	int wb = sendto(ssdp, buf, strlen(buf), MSG_NOSIGNAL, (const struct sockaddr *)&s->sa, salen);
-	if (wb != strlen(buf))
-		LOG("incomplete ssdp_reply: wrote %d out of %d: error %d: %s", wb, strlen(buf), errno, strerror(errno));
+	int wb = sendto(ssdp, buf, ptr, MSG_NOSIGNAL, (const struct sockaddr *)&s->sa, salen);
+	if (wb != ptr
+		LOG("incomplete ssdp_reply: wrote %d out of %zd: error %d: %s", wb, ptr, errno, strerror(errno));
 	return 0;
 }
 

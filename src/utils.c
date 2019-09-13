@@ -107,7 +107,7 @@ int init_tmpinfo(int no)
 	if (os && !sinfo)
 	{
 		sinfo = os;
-		LOG_AND_RETURN(0, "%d bytes could not be re-allocated from %d", new_size, MAX_SINFO * sizeof(STmpinfo));
+		LOG_AND_RETURN(0, "%d bytes could not be re-allocated from %ld", new_size, MAX_SINFO * sizeof(STmpinfo));
 	}
 	if (!sinfo)
 		LOG_AND_RETURN(1, "Could not allocate memory for SINFO, reduce the application memory needs");
@@ -154,7 +154,7 @@ STmpinfo *getFreeItemPos(uint32_t key)
 		return sinfo + i;
 	}
 	else
-		LOG("WARNING: the key %d found but not suitable pos %d enabled %d timeout %d last_updated %d", key, i, sinfo[i].timeout, sinfo[i].last_updated);
+		LOG("WARNING: the key %d found but not suitable pos %d enabled %d timeout %d last_updated %ld", key, i, sinfo[i].timeout, sinfo[i].last_updated);
 	return NULL;
 }
 
@@ -1536,9 +1536,9 @@ void join_thread()
 	//	LOG("starting %s", __FUNCTION__);
 	for (i = 0; i < join_pos; i++)
 	{
-		LOGM("Joining thread %x", join_th[i]);
+		LOGM("Joining thread %lx", join_th[i]);
 		if ((rv = pthread_join(join_th[i], NULL)))
-			LOG("Join thread failed for %x with %d %s", join_th[i], rv,
+			LOG("Join thread failed for %lx with %d %s", join_th[i], rv,
 				strerror(rv));
 	}
 	join_pos = 0;

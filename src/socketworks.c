@@ -497,7 +497,7 @@ void sockets_lock(sockets *ss)
 	{
 		if (ss->tid != s->tid)
 		{
-			LOG("Master socket %d has different thread id than socket %d: %x != %x, closing slave socket", s->id, ss->id, s->tid, ss->tid);
+			LOG("Master socket %d has different thread id than socket %d: %lx != %lx, closing slave socket", s->id, ss->id, s->tid, ss->tid);
 			ss->force_close = 1;
 		}
 		else
@@ -712,7 +712,7 @@ void *select_and_execute(void *arg)
 	es = 0;
 	lt = getTick();
 	memset(&pf, -1, sizeof(pf));
-	LOG("Starting select_and_execute on thread ID %x, thread_name %s", tid,
+	LOG("Starting select_and_execute on thread ID %lx, thread_name %s", tid,
 		thread_name);
 	while (run_loop)
 	{

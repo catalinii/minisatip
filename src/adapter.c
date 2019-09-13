@@ -189,7 +189,7 @@ int adapter_timeout(sockets *s)
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		if (a[i] && (a[i]->master_source == ad->id) && ad->enabled && a[i]->enabled)
 		{
-			LOG("adapter %d is already used by a slave adapters %d, used %x", ad->id, a[i]->id, a[i]->used);
+			LOG("adapter %d is already used by a slave adapters %d, used %jx", ad->id, a[i]->id, a[i]->used);
 			do_close = 0;
 			break;
 		}
@@ -670,7 +670,7 @@ int compare_slave_parameters(adapter *ad, transponder *tp)
 		if (master->old_pol != pol || master->old_hiband != hiband || master->old_diseqc != diseqc)
 			return 1; // master parameters matches with the required parameters
 	}
-	LOGM("%s: adapter %d used %d master %d used %d (pol %d, band %d, diseqc %d) not compatible with freq %d, pol %d band %d diseqc %d", __FUNCTION__, ad->id, ad->used, master ? master->id : ad->master_source, master ? master->used : -1, ad->old_pol, ad->old_hiband, ad->old_diseqc, freq, pol, hiband, diseqc);
+	LOGM("%s: adapter %d used %ld master %d used %ld (pol %d, band %d, diseqc %d) not compatible with freq %d, pol %d band %d diseqc %d", __FUNCTION__, ad->id, ad->used, master ? master->id : ad->master_source, master ? master->used : -1, ad->old_pol, ad->old_hiband, ad->old_diseqc, freq, pol, hiband, diseqc);
 	return 0;
 }
 

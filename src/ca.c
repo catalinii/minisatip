@@ -1251,8 +1251,7 @@ static void get_authdata_filename(char *dest, size_t len, unsigned int slot, cha
                 char linkname[4096];
                 memset(linkname, 0, sizeof(linkname));
                 ssize_t len = readlink(source, linkname, sizeof(linkname) - 1);
-                linkname[len] = 0;
-                if (strlen(linkname) > 0)
+                if (len > 0)
                 {
                         if (strcmp(linkname, target) != 0)
                         {

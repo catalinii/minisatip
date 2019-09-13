@@ -995,8 +995,8 @@ int dvb_tune(int aid, transponder *tp)
 
 		break;
 	default:
-		LOG("tuning to unknown delsys: %s freq %s ts clear = %jd", freq,
-			fe_delsys[tp->sys], bclear)
+		LOG("tuning to unknown delsys: %s freq %s ts clear = %jd",
+			fe_delsys[tp->sys], freq, bclear)
 		break;
 	}
 
@@ -1125,7 +1125,7 @@ int dvb_demux_set_pid(adapter *a, int i_pid)
 		if (ioctl(fd, DMX_SET_PES_FILTER, &s_filter_params) < 0)
 		{
 			int ep = a->active_pids;
-			LOG0("failed setting filter on fd %d, adapter %d, errno %d (%s), enabled pids %d", fd, a->id, i_pid, errno, strerror(errno), ep);
+			LOG0("failed setting filter on fd %d, adapter %d, pid %d, errno %d (%s), enabled pids %d", fd, a->id, i_pid, errno, strerror(errno), ep);
 			return -1;
 		}
 		LOG("AD %d started setting filters for fd %d, active pids %d", a->id, fd, a->active_pids);
@@ -1149,7 +1149,7 @@ int dvb_demux_del_filters(adapter *ad, int fd, int pid)
 		LOG_AND_RETURN(0, "DMX_STOP on an invalid handle %d, pid %d", fd, pid);
 
 	if (pid > 8192)
-		LOG_AND_RETURN(-1, "pid %d > 8192 for adapter %d", ad->id);
+		LOG_AND_RETURN(-1, "pid %d > 8192 for adapter %d", pid, ad->id);
 
 	uint16_t p = pid;
 	if (ioctl(fd, DMX_REMOVE_PID, &p) < 0)
