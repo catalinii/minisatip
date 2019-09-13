@@ -1377,7 +1377,7 @@ int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt, int high_pri
 			s->overflow++;
 			if (tmpbuf)
 				free(tmpbuf);
-			LOG_AND_RETURN(0, "%s: Could not allocate memory for s->pack", __FUNCTION__, s->wmax);
+			LOG_AND_RETURN(0, "%s: Could not allocate memory for s->pack %d", __FUNCTION__, s->wmax);
 		}
 	}
 

@@ -473,8 +473,7 @@ int dvbapi_send_pmt(SKey *k)
 int dvbapi_close(sockets *s)
 {
 	int i;
-	LOG("requested dvbapi close for sock %d, sock_id %d", sock, dvbapi_sock,
-		s->sock);
+	LOG("requested dvbapi close for sock %d, sock_id %d", s->id, s->sock);
 	sock = 0;
 	dvbapi_is_enabled = 0;
 	SKey *k;
@@ -608,7 +607,7 @@ int send_ecm(int filter_id, unsigned char *b, int len, void *opaque)
 		return 0;
 	pid = get_filter_pid(filter_id);
 	if (pid == -1)
-		LOG_AND_RETURN(0, "%s: pid not found in filter", __FUNCTION__, pid);
+		LOG_AND_RETURN(0, "%s: filter not found for pid %d", __FUNCTION__, pid);
 
 	k = (void *)opaque;
 	if (!k || !k->enabled)

@@ -1661,7 +1661,7 @@ int ssdp_reply(sockets *s)
 	LOGM("%s", buf);
 	int wb = sendto(ssdp, buf, ptr, MSG_NOSIGNAL, (const struct sockaddr *)&s->sa, salen);
 	if (wb != ptr)
-		LOG("incomplete ssdp_reply: wrote %d out of %zd: error %d: %s", wb, ptr, errno, strerror(errno));
+		LOG("incomplete ssdp_reply: wrote %d out of %d: error %d: %s", wb, ptr, errno, strerror(errno));
 	return 0;
 }
 
