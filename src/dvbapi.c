@@ -418,7 +418,8 @@ int dvbapi_send_pmt(SKey *k)
 	int adapter = 0;
 	if (network_mode)
 	{
-		demux = ad->fn;
+		if (ad)
+			demux = ad->fn;
 		adapter = k->id + opts.dvbapi_offset;
 	}
 	else if (ad)
