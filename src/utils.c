@@ -532,7 +532,7 @@ becomeDaemon()
 		fclose(f);
 		snprintf(buf, sizeof(buf) - 1, "/proc/%d/exe", pid);
 
-		if (0 < readlink(buf, path, sizeof(path)) && 0 == strcmp(pn, path))
+		if (0 < readlink(buf, path, sizeof(path) - 1) && 0 == strcmp(pn, path))
 		{
 			LOG("Found %s running with pid %d, killing....", app_name, pid);
 			kill(pid, SIGINT);
