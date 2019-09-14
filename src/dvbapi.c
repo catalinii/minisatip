@@ -58,6 +58,7 @@ int network_mode = 1;
 int dvbapi_protocol_version = DVBAPI_PROTOCOL_VERSION;
 int dvbapi_ca = -1;
 int enabled_pmts = 0;
+int oscam_version;
 
 uint64_t dvbapi_last_close = 0;
 
@@ -65,16 +66,16 @@ SKey *keys[MAX_KEYS];
 SMutex keys_mutex;
 unsigned char read_buffer[8192];
 
-#define TEST_WRITE(a, xlen)                                                                                                                     \
-	{                                                                                                                                           \
-		int x;                                                                                                                                  \
-		mutex_lock(&keys_mutex);                                                                                                                \
-		if ((x = (a)) != (xlen))                                                                                                                \
-		{                                                                                                                                       \
-			LOG("write to dvbapi socket failed (%d out of %d), closing socket %d, errno %d, error: %s", x, (int )xlen, sock, errno, strerror(errno)); \
-			dvbapi_close_socket();                                                                                                              \
-		}                                                                                                                                       \
-		mutex_unlock(&keys_mutex);                                                                                                              \
+#define TEST_WRITE(a, xlen)                                                                                                                          \
+	{                                                                                                                                                \
+		int x;                                                                                                                                       \
+		mutex_lock(&keys_mutex);                                                                                                                     \
+		if ((x = (a)) != (xlen))                                                                                                                     \
+		{                                                                                                                                            \
+			LOG("write to dvbapi socket failed (%d out of %d), closing socket %d, errno %d, error: %s", x, (int)xlen, sock, errno, strerror(errno)); \
+			dvbapi_close_socket();                                                                                                                   \
+		}                                                                                                                                            \
+		mutex_unlock(&keys_mutex);                                                                                                                   \
 	}
 
 static inline SKey *get_key(int i)
@@ -157,14 +158,21 @@ int dvbapi_reply(sockets *s)
 			if (s->rlen < 6)
 				return 0;
 			dvbapi_copy16r(dvbapi_protocol_version, b, 4);
-			LOG("dvbapi: server version %d found, name = %s",
-				dvbapi_protocol_version, b + 7);
+			char *oscam_version_str = strstr((const char *)b + 7, "build r");
+			if (oscam_version_str)
+				oscam_version = map_intd(oscam_version_str + 7, NULL, 0);
+			LOG("dvbapi: server version %d, build %d, found, name = %s",
+				dvbapi_protocol_version, oscam_version, b + 7);
 			if (dvbapi_protocol_version > DVBAPI_PROTOCOL_VERSION)
 				dvbapi_protocol_version = DVBAPI_PROTOCOL_VERSION;
-
-			register_dvbapi();
 			dvbapi_is_enabled = 1;
 			pos = 6 + strlen((const char *)b + 6) + 1;
+			if (oscam_version > 0 && oscam_version < 11533)
+			{
+				LOG0("Oscam build %d (< 11553) is not supported after minisatip version 1.0.1. Upgrade your oscam binary", oscam_version);
+			}
+
+			register_dvbapi();
 			break;
 
 		case DVBAPI_DMX_SET_FILTER:
@@ -405,17 +413,49 @@ int dvbapi_send_pmt(SKey *k)
 	SPMT *pmt = get_pmt(k->pmt_id);
 	if (!pmt)
 		return 1;
+	adapter *ad = get_adapter(k->adapter);
+	int demux = 0;
+	int adapter = 0;
+	if (network_mode)
+	{
+		demux = ad->fn;
+		adapter = k->id + opts.dvbapi_offset;
+	}
+	else if (ad)
+	{
+		demux = ad->fn;
+		adapter = ad->pa;
+	}
 	memset(buf, 0, sizeof(buf));
 	copy32(buf, 0, AOT_CA_PMT);
 	copy16(buf, 7, k->sid);
 	buf[9] = 1;
 
-	if (network_mode)
+	if (oscam_version == 0 || oscam_version >= 11533)
 	{
+
 		buf[12] = 0x01; // ca_pmt_cmd_id (ok_descrambling)
+
+		copy16(buf, 13, 0x8301); // adapter_device_descriptor, works only in newer versions (> 11500)
+		buf[15] = adapter;
+		copy16(buf, 16, 0x8402); // pmt_pid_descriptor
+		copy16(buf, 18, pmt->pid);
+
+		copy16(buf, 20, 0x8601); // demux_id_descriptor
+		buf[22] = demux;
+
+		copy16(buf, 23, 0x8701); // ca_device_descriptor (caX)
+		buf[25] = demux;
+
+		memcpy(buf + 26, k->pi, k->pi_len);
+		len = 26 + k->pi_len;
+	}
+	else if (network_mode) // code for older oscam versions < 11533
+	{
+		buf[12] = 0x01;			 // ca_pmt_cmd_id (ok_descrambling)
 		copy16(buf, 13, 0x8202); // demux_ca_mask_device_descriptor (deprecated)
-		buf[15] = k->id + opts.dvbapi_offset;
-		buf[16] = k->id + opts.dvbapi_offset;
+		buf[15] = adapter;
+		buf[16] = adapter;
 		copy16(buf, 17, 0x8108); // enigma_namespace_descriptor
 		copy32(buf, 19, 0);
 		copy16(buf, 23, k->tsid);
@@ -427,16 +467,7 @@ int dvbapi_send_pmt(SKey *k)
 	}
 	else
 	{
-		adapter *ad = get_adapter(k->adapter);
-		int demux = 0;
-		int adapter = 0;
-		if (ad)
-		{
-			demux = ad->fn;
-			adapter = ad->pa;
-		}
-		LOG("Using adapter %d and demux %d for local socket (key adapter %d)", adapter, demux, k->adapter);
-		buf[22] = 0x01; // ca_pmt_cmd_id (ok_descrambling)
+		buf[22] = 0x01;			 // ca_pmt_cmd_id (ok_descrambling)
 		copy16(buf, 23, 0x8202); // demux_ca_mask_device_descriptor (deprecated)
 		buf[25] = 1 << demux;
 		buf[26] = demux;
@@ -447,7 +478,6 @@ int dvbapi_send_pmt(SKey *k)
 		memcpy(buf + 34, k->pi, k->pi_len);
 		len = 34 + k->pi_len;
 	}
-
 	copy16(buf, 10, len - 12);
 	for (i = 0; i < pmt->stream_pids; i++)
 	{
@@ -465,8 +495,8 @@ int dvbapi_send_pmt(SKey *k)
 	int ep = __sync_add_and_fetch(&enabled_pmts, 1);
 	buf[6] = (ep == 1) ? CAPMT_LIST_ONLY : CAPMT_LIST_ADD;
 	TEST_WRITE(write(sock, buf, len), len);
-	LOG("Sending pmt to dvbapi server for pid %d, Channel ID %04X, key %d, using socket %d (enabled pmts %d)",
-		k->pmt_pid, k->sid, k->id, sock, ep);
+	LOG("Sending pmt to dvbapi server for pid %d, Channel ID %04X, key %d, adapter %d, demux %d, using socket %d (enabled pmts %d)",
+		k->pmt_pid, k->sid, k->id, adapter, demux, sock, ep);
 	return 0;
 }
 
