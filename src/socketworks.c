@@ -369,10 +369,11 @@ int tcp_listen(char *addr, int port)
 	}
 	if (listen(sock, 10) < 0)
 	{
-		LOG("tcp_listen: listen(): %s", strerror(errno));
+		LOG("tcp_listen: listen() error: %s", strerror(errno));
 		close(sock);
 		return -1;
 	}
+	LOG("New TCP listening socket %d at %s:%d", sock, addr ? addr : "0:0:0:0", port);
 	return sock;
 }
 
@@ -597,7 +598,7 @@ int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 	if (type & TYPE_CONNECT)
 		ss->events |= POLLOUT;
 
-	LOG("sockets_add: handle %d (type %d) returning socket sock %d [%s:%d] read: %p",
+	LOG("sockets_add: handle socket %d (type %d) returning socket sock %d [%s:%d] read: %p",
 		ss->sock, ss->type, i, get_socket_rhost(i, ra, sizeof(ra)),
 		ntohs(ss->sa.sin_port), ss->read);
 	mutex_unlock(&ss->mutex);
