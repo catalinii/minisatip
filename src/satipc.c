@@ -312,6 +312,9 @@ void set_adapter_signal(adapter *ad, char *b, int rlen)
 	if (signal)
 	{
 		sscanf(signal + 1, "%d,%d,%d", &strength, &status, &snr);
+		// Workaround for faulty servers
+		if (strength==0 && status>0 && snr>0)
+			 strength = 1;
 		if (ad->strength != strength || ad->snr != snr)
 			LOG(
 				"satipc: Received signal status from the server for adapter %d, stength=%d status=%d snr=%d",
@@ -329,7 +332,7 @@ int satipc_rtcp_reply(sockets *s)
 	adapter *ad;
 	satipc *sip;
 	get_ad_and_sipr(s->sid, 0);
-	uint32_t rp;
+	uint32_t rp,sm;
 
 	s->rlen = 0;
 	//	LOG("satip_rtcp_reply called");
@@ -344,7 +347,27 @@ int satipc_rtcp_reply(sockets *s)
 				ad->pid_err);
 	}
 
-	set_adapter_signal(ad, (char *)b, rlen);
+	// Parse SAT>IP RTCP APP packets
+
+	for (sm=0, rp=0; sm<rlen; sm++)
+	{
+		if (b[sm]!='S' || b[sm+1]!='E' || b[sm+2]!='S' || b[sm+3]!='1')
+			continue;
+		DEBUGM("satipc: satipc_rtcp_reply SES1 match at %d", sm);
+		sm += 4;
+		if (b[sm]==0 && b[sm+1]==0)
+		{
+			rp = (b[sm+2] << 8) | b[sm+3];
+			sm += 4;
+			break;
+		}
+	}
+
+	if (rp && rlen > sm+rp)
+		set_adapter_signal(ad, (char *)b+sm, rp);
+	else
+		set_adapter_signal(ad, (char *)b, rlen);
+
 	return 0;
 }
 
