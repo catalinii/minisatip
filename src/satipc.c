@@ -312,9 +312,12 @@ void set_adapter_signal(adapter *ad, char *b, int rlen)
 	if (signal)
 	{
 		sscanf(signal + 1, "%d,%d,%d", &strength, &status, &snr);
-		// Workaround for faulty servers
+		// Workaround for faulty servers (level=0)
 		if (strength==0 && status>0 && snr>0)
 			 strength = 1;
+		// Workaround for faulty servers (quality=0)
+		if (snr==0 && strength>0 && status>0)
+			 snr = 7;
 		if (ad->strength != strength || ad->snr != snr)
 			LOG(
 				"satipc: Received signal status from the server for adapter %d, stength=%d status=%d snr=%d",
