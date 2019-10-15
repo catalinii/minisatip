@@ -313,9 +313,11 @@ void set_adapter_signal(adapter *ad, char *b, int rlen)
 	{
 		sscanf(signal + 1, "%d,%d,%d", &strength, &status, &snr);
 		// Workaround for faulty servers (level=0)
+		// Ex. XORO: "SES1...aver=1.0;src=1;tuner=1,0,1,15,10744,h,dvbs,qpsk,off,0.35,22000,56;pids=0,100,200,400,500,600,17,16"
 		if (strength==0 && status>0 && snr>0)
 			 strength = 1;
 		// Workaround for faulty servers (quality=0)
+		// Ex. AVM 6490: "SES1...Qver=1.2;src=1;tuner=1,106,1,0,538.00,8,dvbc,256qam,6900,,,,1;pids=0,118,2351,2352"
 		if (snr==0 && strength>0 && status>0)
 			 snr = 7;
 		if (ad->strength != strength || ad->snr != snr)
