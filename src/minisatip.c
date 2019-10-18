@@ -69,6 +69,7 @@ int rtsp, http, si, si1, ssdp1;
 
 #define RRTP_OPT 'r'
 #define DISABLEDVB_OPT 'N'
+#define DISABLESSDP_OPT 'A'
 #define HTTPSERVER_OPT 'w'
 #define HTTPPORT_OPT 'x'
 #define LOG_OPT 'l'
@@ -123,6 +124,7 @@ static const struct option long_options[] =
 	{
 		{"remote-rtp", required_argument, NULL, 'r'},
 		{"disable-dvb", no_argument, NULL, DISABLEDVB_OPT},
+		{"disable-ssdp", no_argument, NULL, DISABLESSDP_OPT},
 		{"device-id", required_argument, NULL, DEVICEID_OPT},
 		{"check-signal", no_argument, NULL, 'z'},
 		{"clean-psi", no_argument, NULL, 't'},
@@ -291,6 +293,8 @@ Help\n\
 * -a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means auto-detect)\n\
 	* eg: -a 1:2:3  \n\
 	- it will report 1 dvb-s2 device, 2 dvb-t2 devices and 3 dvb-c devices \n\
+\n\
+* -A --disable-ssdp disable SSDP announcement\n \
 \n\
 * -b --buffers X:Y : set the app adapter buffer to X Bytes (default: %d) and set the kernel DVB buffer to Y Bytes (default: %d) - both multiple of 188\n\
 	* eg: -b 18800:18988\n\
@@ -599,7 +603,7 @@ void set_options(int argc, char *argv[])
 
 #endif
 
-	while ((opt = getopt_long(argc, argv, "fl:v:r:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:o:gy:i:q:D:NVR:S:TX:Y:OL:EP:Z:0:F:M:1:2:3:C:" AXE_OPTS, long_options, NULL)) != -1)
+	while ((opt = getopt_long(argc, argv, "fl:v:r:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:o:gy:i:q:D:NAVR:S:TX:Y:OL:EP:Z:0:F:M:1:2:3:C:" AXE_OPTS, long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
 		switch (opt)
@@ -624,6 +628,12 @@ void set_options(int argc, char *argv[])
 		case DISABLEDVB_OPT:
 		{
 			opts.disable_dvb = 1;
+			break;
+		}
+
+		case DISABLESSDP_OPT:
+		{
+			opts.disable_ssdp = 1;
 			break;
 		}
 
@@ -1378,7 +1388,7 @@ int read_http(sockets *s)
 	if (strncmp(arg[0], "GET", 3) && strncmp(arg[0], "POST", 4) && !is_head)
 		REPLY_AND_RETURN(503);
 
-	if (uuidi == 0)
+	if (uuidi == 0 && !opts.disable_ssdp)
 		ssdp_discovery(s);
 
 	if (strcmp(arg[1], "/" DESC_XML) == 0)
@@ -1725,21 +1735,24 @@ int main(int argc, char *argv[])
 	print_version(1);
 
 	readBootID();
-	if ((ssdp = udp_bind(NULL, 1900)) < 1)
-		FAIL("SSDP: Could not bind on udp port 1900");
-	if ((ssdp1 = udp_bind(opts.disc_host, 1900)) < 1)
-		FAIL("SSDP: Could not bind on %s udp port 1900", opts.disc_host);
 	if ((rtsp = tcp_listen(NULL, opts.rtsp_port)) < 1)
 		FAIL("RTSP: Could not listen on port %d", opts.rtsp_port);
 	if ((http = tcp_listen(NULL, opts.http_port)) < 1)
 		FAIL("Could not listen on http port %d", opts.http_port);
+	if (!opts.disable_ssdp)
+	{
+		if ((ssdp = udp_bind(NULL, 1900)) < 1)
+			FAIL("SSDP: Could not bind on udp port 1900");
+		if ((ssdp1 = udp_bind(opts.disc_host, 1900)) < 1)
+			FAIL("SSDP: Could not bind on %s udp port 1900", opts.disc_host);
 
-	si = sockets_add(ssdp, NULL, -1, TYPE_UDP, (socket_action)ssdp_reply,
+		si = sockets_add(ssdp, NULL, -1, TYPE_UDP, (socket_action)ssdp_reply,
 					 (socket_action)ssdp_byebye, (socket_action)ssdp_discovery);
-	si1 = sockets_add(ssdp1, NULL, -1, TYPE_UDP, (socket_action)ssdp_reply,
+		si1 = sockets_add(ssdp1, NULL, -1, TYPE_UDP, (socket_action)ssdp_reply,
 					  (socket_action)ssdp_byebye, (socket_action)ssdp_discovery);
-	if (si < 0 || si1 < 0)
-		FAIL("sockets_add failed for ssdp");
+		if (si < 0 || si1 < 0)
+			FAIL("sockets_add failed for ssdp");
+	}
 
 	sockets_timeout(si, 60 * 1000);
 	set_sockets_rtime(si, -60 * 1000);
