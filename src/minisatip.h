@@ -109,6 +109,7 @@ struct struct_opts
 	int max_pids;
 	int max_sbuf;
 	char disable_dvb;
+	char disable_ssdp;
 	char pmt_scan;
 #ifdef AXE
 	int quattro;
