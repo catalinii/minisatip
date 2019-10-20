@@ -540,7 +540,7 @@ int streams_add()
 	ss->do_play = 0;
 	ss->iiov = 0;
 	ss->sp = ss->sb = 0;
-	memset(ss->iov, 0, sizeof(struct iovec) * (ss->max_iov + 3));
+	memset(ss->iov, 0, sizeof(struct iovec) * ss->max_iov);
 	init_dvb_parameters(&ss->tp);
 	ss->useragent[0] = 0;
 	ss->len = 0;
