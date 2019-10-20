@@ -963,7 +963,7 @@ int process_packet(unsigned char *b, adapter *ad)
 		if (VALID_SID(st_id) && st[st_id] && st[st_id]->do_play)
 		{
 			sid = st[st_id];
-			max_pack = sid->type == STREAM_RTSP_TCP ? sid->max_iov : UDP_MAX_PACK;
+			max_pack = sid->type == STREAM_RTSP_UDP ? UDP_MAX_PACK : sid->max_iov;
 			if (sid->iiov > max_pack)
 			{
 				LOG(
