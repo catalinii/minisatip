@@ -530,16 +530,7 @@ int streams_add()
 		LOG_AND_RETURN(-1, "streams_add failed");
 
 	ss = st[i];
-	if (!ss->iov || ss->max_iov < opts.tcp_max_pack)
-	{
-		if (ss->iov)
-			free1(ss->iov);
-		ss->max_iov = 0;
-		ss->iov = malloc1((opts.tcp_max_pack + 3) * sizeof(struct iovec));
-		if (!ss->iov)
-			LOG_AND_RETURN(-1, "%s: iiov allocation failed", __FUNCTION__);
-		ss->max_iov = opts.tcp_max_pack;
-	}
+	ss->max_iov = opts.tcp_max_pack > TCP_MAX_PACK ? TCP_MAX_PACK : opts.tcp_max_pack;
 	ss->enabled = 1;
 	ss->adapter = -1;
 	ss->sid = i;
@@ -666,9 +657,9 @@ int send_rtcp(int s_id, int64_t ctime)
 	if (!sid)
 		LOG_AND_RETURN(0, "Sid is null for s_id %d", s_id);
 
-	gettimeofday(&tv,NULL);
-	ntp=(((unsigned long long)tv.tv_sec+2208988800ULL)<<32)|
-		(((unsigned long long)tv.tv_usec<<32)/1000000ULL);
+	gettimeofday(&tv, NULL);
+	ntp = (((unsigned long long)tv.tv_sec + 2208988800ULL) << 32) |
+		  (((unsigned long long)tv.tv_usec << 32) / 1000000ULL);
 
 	char *a = describe_adapter(s_id, sid->adapter, dad, sizeof(dad));
 	unsigned int la = strlen(a);
@@ -684,7 +675,7 @@ int send_rtcp(int s_id, int64_t ctime)
 	rtcp[2] = 0;
 	rtcp[3] = 6;
 	copy32(rtcp, 4, sid->ssrc);
-	copy32(rtcp, 8, (int)(ntp>>32));
+	copy32(rtcp, 8, (int)(ntp >> 32));
 	copy32(rtcp, 12, ctime);
 	copy32(rtcp, 16, sid->wtime);
 	copy32(rtcp, 20, sid->sp);
@@ -963,13 +954,24 @@ int process_packet(unsigned char *b, adapter *ad)
 		if (VALID_SID(st_id) && st[st_id] && st[st_id]->do_play)
 		{
 			sid = st[st_id];
-			max_pack = sid->type == STREAM_RTSP_UDP ? UDP_MAX_PACK : sid->max_iov;
+			switch (sid->type)
+			{
+			case STREAM_RTSP_UDP:
+				max_pack = UDP_MAX_PACK;
+				break;
+			case STREAM_RTSP_TCP:
+				max_pack = sid->max_iov;
+				break;
+			default:
+				max_pack = TCP_MAX_PACK;
+			}
+
 			if (sid->iiov > max_pack)
 			{
 				LOG(
 					"ERROR: possible writing outside of allocated space iiov > %d for SID %d PID %d",
 					max_pack, sid->sid, _pid);
-				sid->iiov = 6;
+				sid->iiov = max_pack;
 			}
 			sid->iov[sid->iiov].iov_base = b;
 			sid->iov[sid->iiov++].iov_len = DVB_FRAME;
