@@ -312,6 +312,14 @@ void set_adapter_signal(adapter *ad, char *b, int rlen)
 	if (signal)
 	{
 		sscanf(signal + 1, "%d,%d,%d", &strength, &status, &snr);
+		// Workaround for faulty servers (level=0)
+		// Ex. XORO: "SES1....ver=1.0;src=1;tuner=1,0,1,15,10744,h,dvbs,qpsk,off,0.35,22000,56;pids=0,100,200,400,500,600,17,16"
+		if (strength==0 && status>0 && snr>0)
+			 strength = 1;
+		// Workaround for faulty servers (quality=0)
+		// Ex. AVM 6490: "SES1....ver=1.2;src=1;tuner=1,106,1,0,538.00,8,dvbc,256qam,6900,,,,1;pids=0,118,2351,2352"
+		if (snr==0 && strength>0 && status>0)
+			 snr = 7;
 		if (ad->strength != strength || ad->snr != snr)
 			LOG(
 				"satipc: Received signal status from the server for adapter %d, stength=%d status=%d snr=%d",
@@ -329,7 +337,7 @@ int satipc_rtcp_reply(sockets *s)
 	adapter *ad;
 	satipc *sip;
 	get_ad_and_sipr(s->sid, 0);
-	uint32_t rp;
+	uint32_t rp,sm;
 
 	s->rlen = 0;
 	//	LOG("satip_rtcp_reply called");
@@ -344,7 +352,27 @@ int satipc_rtcp_reply(sockets *s)
 				ad->pid_err);
 	}
 
-	set_adapter_signal(ad, (char *)b, rlen);
+	// Parse SAT>IP RTCP APP packets
+
+	for (sm=0, rp=0; sm<rlen; sm++)
+	{
+		if (b[sm]!='S' || b[sm+1]!='E' || b[sm+2]!='S' || b[sm+3]!='1')
+			continue;
+		DEBUGM("satipc: satipc_rtcp_reply SES1 match at %d", sm);
+		sm += 4;
+		if (b[sm]==0 && b[sm+1]==0)
+		{
+			rp = (b[sm+2] << 8) | b[sm+3];
+			sm += 4;
+			break;
+		}
+	}
+
+	if (rp && rlen > sm+rp)
+		set_adapter_signal(ad, (char *)b+sm, rp);
+	else
+		set_adapter_signal(ad, (char *)b, rlen);
+
 	return 0;
 }
 
