@@ -838,7 +838,7 @@ void get_s2_url(adapter *ad, char *url, int url_len)
 		FILL("&isi=%d", tp->plp_isi, 0, tp->plp_isi);
 	if (tp->pls_mode >= 0)
 		FILL("&plsm=%s", tp->pls_mode, -1, get_pls_mode(tp->pls_mode));
-	if (tp->pls_code >= 0)
+	if (tp->pls_code >= 0 && tp->pls_mode > 0)
 		FILL("&plsc=%d", tp->pls_code, -1, tp->pls_code);
 	url[len] = 0;
 	return;
