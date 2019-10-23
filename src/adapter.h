@@ -6,6 +6,7 @@
 typedef struct ca_device ca_device_t;
 
 #define MAX_ADAPTERS 32
+#define MAX_SOURCES 4
 #define DVR_BUFFER 30 * 1024 * 188
 
 #define ADAPTER_BUFFER 384 * DVB_FRAME // 128 * 3 > 65535
@@ -70,6 +71,7 @@ typedef struct struct_adapter
 	uint32_t pid_err, dec_err;				   // detect pids received but not part of any stream, decrypt errors
 	diseqc diseqc_param;
 	int diseqc_multi;
+	int sources_pos[MAX_SOURCES];
 	int old_diseqc;
 	int old_hiband;
 	int old_pol;
