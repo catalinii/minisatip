@@ -71,6 +71,8 @@ void find_dvb_adapter(adapter **a);
 
 adapter *adapter_alloc()
 {
+	int i;
+
 	adapter *ad = malloc1(sizeof(adapter));
 	memset(ad, 0, sizeof(adapter));
 
@@ -95,6 +97,12 @@ adapter *adapter_alloc()
 	ad->dmx_source = -1;
 	ad->master_source = -1;
 	ad->diseqc_multi = opts.diseqc_multi;
+
+	/* enable sources */
+	for (i = 0; i < MAX_SOURCES; i++)
+	{
+		ad->sources_pos[i] = 1;
+	}
 
 	/* LOF setup */
 	ad->diseqc_param.lnb_low = opts.lnb_low;
@@ -501,6 +509,12 @@ int getAdaptersCount()
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		if ((ad = a[i]))
 		{
+			// WIP: Fake selection of SRC Groups: 0:*,1:1-3,2:4
+			if (i == 1)
+				ad->sources_pos[3] = 0;
+			if (i == 2)
+				{ ad->sources_pos[0] = ad->sources_pos[1] = ad->sources_pos[2] = 0; }
+
 			if (!opts.force_sadapter && (delsys_match(ad, SYS_DVBS) || delsys_match(ad, SYS_DVBS2)))
 			{
 				ts2++;
@@ -680,6 +694,7 @@ int get_free_adapter(transponder *tp)
 	int match = 0;
 	int msys = tp->sys;
 	int fe = tp->fe;
+	int source;
 
 	adapter *ad = a[0];
 
@@ -693,9 +708,9 @@ int get_free_adapter(transponder *tp)
 
 	if (ad)
 		LOG(
-			"get free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d f:%d pol=%d sys: %s %s",
+			"get free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d src:%d f:%d pol=%d sys: %s %s",
 			tp->fe, ad->id, ad->enabled, ad->master_sid, ad->sid_cnt,
-			ad->tp.freq, ad->tp.pol, get_delsys(ad->sys[0]),
+			ad->tp.diseqc, ad->tp.freq, ad->tp.pol, get_delsys(ad->sys[0]),
 			get_delsys(ad->sys[1]))
 	else
 		LOG("get free adapter %d msys %s requested %s", fe, get_delsys(fe),
@@ -721,20 +736,28 @@ int get_free_adapter(transponder *tp)
 			if (!compare_tunning_parameters(ad->id, tp))
 				return i;
 
+	if (tp->diseqc < 1 || tp->diseqc > MAX_SOURCES)
+		source = -1;
+	else
+		source = tp->diseqc - 1;
 	for (i = 0; i < MAX_ADAPTERS; i++)
 	{
 		//first free adapter that has the same msys
 		if ((ad = get_adapter_nw(i)) && ad->sid_cnt == 0 && delsys_match(ad, msys) && !compare_slave_parameters(ad, tp))
-			return i;
+		{
+			if (source < 0 || (source >= 0 && ad->sources_pos[source]))
+				return i;
+		}
 		if (!ad && delsys_match(a[i], msys) && !compare_slave_parameters(a[i], tp)) // device is not initialized
 		{
-			if (!init_hw(i))
+			ad = a[i];
+			if ((source < 0 || (source >= 0 && ad->sources_pos[source])) && !init_hw(i))
 				return i;
 		}
 	}
 
 noadapter:
-	LOG("no adapter found for f:%d pol:%d msys:%d", tp->freq, tp->pol, tp->sys);
+	LOG("no adapter found for src:%d f:%d pol:%d msys:%d", tp->diseqc, tp->freq, tp->pol, tp->sys);
 	dump_adapters();
 	return -1;
 }
