@@ -1165,7 +1165,7 @@ void process_file(void *sock, char *s, int len, char *ctype)
 		strcpy(outp + io, "\r\n\r\n");
 		rv = sockets_write(so->id, outp, io + 4);
 		outp[io] = 0;
-		LOG("%s", outp);
+		DEBUGM("%s", outp);
 	}
 }
 
