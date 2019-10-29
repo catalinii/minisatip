@@ -495,6 +495,7 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp)
 			LOG_AND_RETURN(-1, "RTP sockets_add failed");
 
 		set_socket_send_buffer(sid->rsock, opts.output_buffer);
+		set_socket_dscp(sid->rsock, IPTOS_DSCP_EF);
 
 		if ((sid->rtcp = udp_bind_connect(NULL,
 										  opts.start_rtp + (sid->sid * 2) + 1, p.dest, p.port + 1, &sa)) < 1)
@@ -503,6 +504,7 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp)
 						   p.dest, p.port + 1);
 
 		set_linux_socket_timeout(sid->rtcp);
+		set_socket_dscp(sid->rtcp, IPTOS_DSCP_EF);
 
 		if ((sid->rtcp_sock = sockets_add(sid->rtcp, NULL, sid->sid, TYPE_RTCP,
 										  (socket_action)rtcp_confirm, NULL, NULL)) < 0) // read rtcp

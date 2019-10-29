@@ -1521,6 +1521,14 @@ void set_sockets_sid(int id, int sid)
 		LOGM("sid for socket id %d could not be set", id);
 }
 
+void set_socket_dscp(int id, int dscp)
+{
+	int d;
+
+	d = dscp & IPTOS_DSCP_MASK_VALUE;
+	setsockopt(id, IPPROTO_IP, IP_TOS, &d, sizeof(d));
+}
+
 void sockets_set_opaque(int id, void *opaque, void *opaque2, void *opaque3)
 {
 	sockets *s = get_sockets(id);
