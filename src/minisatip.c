@@ -722,8 +722,8 @@ void set_options(int argc, char *argv[])
 		{
 			sscanf(optarg, "%d:%d", &opts.adapter_buffer, &opts.dvr_buffer);
 			opts.adapter_buffer = (opts.adapter_buffer / 188) * 188;
-			if (opts.adapter_buffer < ADAPTER_BUFFER)
-				opts.adapter_buffer = ADAPTER_BUFFER;
+			if (opts.adapter_buffer < 1316)
+				opts.adapter_buffer = 1316;  // 188 * 7 = 1316
 #ifdef AXE
 			opts.dvr_buffer += 7 * 188 - 1;
 			opts.dvr_buffer -= opts.dvr_buffer % (7 * 188);
