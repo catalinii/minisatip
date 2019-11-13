@@ -1040,6 +1040,8 @@ void satipc_commit(adapter *ad)
 	if (sip->lap + sip->ldp == 0)
 		if (!sip->force_commit || !ad->tp.freq)
 			return;
+	if (sip->ldp > 0 && sip->last_connect == 0 && !sip->want_tune)
+		return;
 
 	if (sip->expect_reply)
 	{
