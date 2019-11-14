@@ -783,12 +783,25 @@ void satip_post_init(adapter *ad)
 
 int satipc_set_pid(adapter *ad, int pid)
 {
+	int i;
 	satipc *sip;
 	sip = get_satip(ad->id);
 	int aid = ad->id;
-	LOG("satipc: set_pid for adapter %d, pid %d, err %d", aid, pid, sip ? sip->err : -2);
+	LOG("satipc: set_pid for adapter %d, pid %d, err %d (lap=%d)", aid, pid, sip ? sip->err : -2, sip->lap);
 	if (!sip || sip->err) // error reported, return error
 		return 0;
+	for (i = 0; i < sip->ldp; i++)
+	{
+		if (sip->dpid[i] == pid)
+		{
+			if (i+1 == sip->ldp)
+				sip->ldp--;
+			else
+				sip->dpid[i] = sip->dpid[sip->ldp--];
+			LOGM("satipc: set_pid for pid %d already in the delete list! (ldp=%d)", pid, sip->ldp);
+			return aid + 100;
+		}
+	}
 	sip->apid[sip->lap] = pid;
 	sip->lap++;
 	return aid + 100;
@@ -796,11 +809,24 @@ int satipc_set_pid(adapter *ad, int pid)
 
 int satipc_del_filters(adapter *ad, int fd, int pid)
 {
+	int i;
 	satipc *sip = get_satip(ad->id);
 	fd -= 100;
-	LOG("satipc: del_pid for aid %d, pid %d, err %d", fd, pid, sip ? sip->err : -2);
+	LOG("satipc: del_pid for aid %d, pid %d, err %d (ldp=%d)", fd, pid, sip ? sip->err : -2, sip->ldp);
 	if (!sip || sip->err) // error reported, return error
 		return 0;
+	for (i = 0; i < sip->lap; i++)
+	{
+		if (sip->apid[i] == pid)
+		{
+			if (i+1 == sip->lap)
+				sip->lap--;
+			else
+				sip->apid[i] = sip->apid[sip->lap--];
+			LOGM("satipc: del_pid for pid %d already in the add list! (lap=%d)", pid, sip->lap);
+			return 0;
+		}
+	}
 	sip->dpid[sip->ldp] = pid;
 	sip->ldp++;
 	return 0;
