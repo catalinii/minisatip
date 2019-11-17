@@ -194,8 +194,13 @@ int satipc_reply(sockets *s)
 	}
 	else if (rc != 200)
 	{
-		LOG("marking device %d as error, rc = %d", sip->id, rc);
-		sip->err = 1;
+                if (rc != 0) // AVM Fritz!Box workaround sdp reply without header
+                {
+                        LOG("marking device %d as error, rc = %d", sip->id, rc);
+                        sip->err = 1;
+                }
+                else
+                LOG("marking device %d not as error but reply is unexpected, rc = %d", sip->id, rc);
 	}
 	sid = NULL;
 	if (rc == 200 && !sip->want_tune && sip->last_cmd == RTSP_PLAY && sip->ignore_packets)
