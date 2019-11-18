@@ -114,6 +114,8 @@ extern adapter *a[MAX_ADAPTERS];
 extern int a_count;
 extern char do_dump_pids;
 
+int64_t source_map[MAX_SOURCES];
+
 int init_hw(int i);
 int init_all_hw();
 int getAdaptersCount();
@@ -138,6 +140,7 @@ void dump_pids(int aid);
 void sort_pids(int aid);
 void enable_adapters(char *o);
 void set_unicable_adapters(char *o, int type);
+void set_sources_adapters(char *o);
 void set_diseqc_adapters(char *o);
 void set_diseqc_timing(char *o);
 void set_diseqc_multi(char *o);
