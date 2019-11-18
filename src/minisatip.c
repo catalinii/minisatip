@@ -86,6 +86,7 @@ int rtsp, http, si, si1, ssdp1;
 #define THRESHOLD_OPT 'H'
 #define ENABLE_ADAPTERS_OPT 'e'
 #define UNICABLE_OPT 'u'
+#define SOURCES_OPT 'U'
 #define JESS_OPT 'j'
 #define DISEQC_OPT 'd'
 #define DISEQC_TIMING_OPT 'q'
@@ -135,6 +136,7 @@ static const struct option long_options[] =
 		{"threshold", required_argument, NULL, 'H'},
 		{"enable-adapters", required_argument, NULL, 'e'},
 		{"unicable", required_argument, NULL, 'u'},
+		{"sources", required_argument, NULL, 'U'},
 		{"jess", required_argument, NULL, 'j'},
 		{"diseqc", required_argument, NULL, 'd'},
 		{"diseqc-timing", required_argument, NULL, 'q'},
@@ -603,7 +605,7 @@ void set_options(int argc, char *argv[])
 
 #endif
 
-	while ((opt = getopt_long(argc, argv, "fl:v:r:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:o:gy:i:q:D:NGVR:S:TX:Y:OL:EP:Z:0:F:M:1:2:3:C:" AXE_OPTS, long_options, NULL)) != -1)
+	while ((opt = getopt_long(argc, argv, "fl:v:r:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:U:j:o:gy:i:q:D:NGVR:S:TX:Y:OL:EP:Z:0:F:M:1:2:3:C:" AXE_OPTS, long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
 		switch (opt)
@@ -812,6 +814,12 @@ void set_options(int argc, char *argv[])
 		case JESS_OPT:
 		{
 			set_unicable_adapters(optarg, SWITCH_JESS);
+			break;
+		}
+
+		case SOURCES_OPT:
+		{
+			set_sources_adapters(optarg);
 			break;
 		}
 
