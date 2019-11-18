@@ -509,11 +509,10 @@ int getAdaptersCount()
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		if ((ad = a[i]))
 		{
-			// WIP: Fake selection of SRC Groups: 0:*,1:1-3,2:4
-			if (i == 1)
-				ad->sources_pos[3] = 0;
-			if (i == 2)
-				{ ad->sources_pos[0] = ad->sources_pos[1] = ad->sources_pos[2] = 0; }
+			for (j = 0; j < MAX_SOURCES; j++)
+			{
+				ad->sources_pos[j] = (source_map[j] >> i) & 1;
+			}
 
 			if (!opts.force_sadapter && (delsys_match(ad, SYS_DVBS) || delsys_match(ad, SYS_DVBS2)))
 			{
@@ -582,6 +581,18 @@ int getAdaptersCount()
 			}
 		}
 	}
+
+	LOGM("Sources assignment: ");
+	for (i = 0; i < MAX_ADAPTERS; i++)
+		if ((ad = a[i]))
+		{
+			for (j = 0; j < MAX_SOURCES; j++)
+			{
+				if (ad->sources_pos[j])
+					LOGM("  Adpater %d enabled SRC=%d", i, j+1);
+			}
+		}
+	
 	return tuner_s2 + tuner_c2 + tuner_t2 + tuner_c + tuner_t;
 }
 
@@ -1557,6 +1568,15 @@ void set_unicable_adapters(char *o, int type)
 		LOG("Setting %s adapter %d slot %d freq %d pin %d",
 			type == SWITCH_UNICABLE ? "unicable" : "jess", a_id, slot, freq, pin);
 	}
+}
+
+void set_sources_adapters(char *o)
+{
+	// Hardcoded values
+	source_map[0] = 0 | 0b1001;
+	source_map[1] = 0 | 0b0111;
+	source_map[2] = 0 | 0b1001;
+	source_map[3] = 0 | 0b0110;
 }
 
 void set_diseqc_adapters(char *o)
