@@ -630,7 +630,7 @@ int sockets_del(int sock)
 
 	if (so >= 0)
 	{
-		LOGM("sockets_del: closing socket %d", so);
+		LOGM("sockets_del: closing socket handle %d", so);
 		close(so);
 	}
 	ss->sid = -1;
@@ -659,7 +659,7 @@ int sockets_del(int sock)
 		ss->pack = NULL;
 	}
 
-	LOG("sockets_del: %d Last open socket is at index %d current_handle %d",
+	LOG("sockets_del: sock %d Last open socket is at index %d current_handle %d",
 		sock, i, so);
 	mutex_destroy(&ss->mutex);
 	mutex_lock(&s_mutex);
@@ -669,7 +669,7 @@ int sockets_del(int sock)
 	for (i = 0; i < MAX_SOCKS; i++)
 		if (s[i] && s[i]->enabled && s[i]->master == sock)
 		{
-			LOG("Closing slave socket index %d (master %d)", i, sock);
+			LOG("Closing slave socket index %d (master sock %d)", i, sock);
 			sockets_del(i);
 		}
 	return 0;
