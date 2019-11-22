@@ -696,6 +696,8 @@ void *select_and_execute(void *arg)
 	unsigned char buf[2001], *pos;
 	int err;
 	struct pollfd pf[MAX_SOCKS];
+	int prio;
+	int reorder[MAX_SOCKS];
 	int64_t lt, c_time;
 	int read_ok;
 	char ra[50];
@@ -755,7 +757,24 @@ void *select_and_execute(void *arg)
 		}
 		//              LOG("select returned %d",rv);
 		if (rv > 0)
-			while (++i < max_sock)
+		{
+			// Reorder sockets based on priority: first only DVR sockets, after all others.
+			sockets *ssi;
+			for (i = 0, prio = 0; i < MAX_SOCKS; i++)
+			{
+				reorder[i] = i;
+				ssi = s[i];
+				if (ssi && ssi->type == TYPE_DVR)
+				{
+					reorder[i]    = reorder[prio];
+					reorder[prio] = i;
+					prio++;
+				}
+			}
+			prio = -1;
+			while (++prio < max_sock)
+			{
+				i = reorder[prio];
 				if ((pf[i].fd >= 0) && pf[i].revents)
 				{
 					sockets *ss = s[i];
@@ -901,6 +920,8 @@ void *select_and_execute(void *arg)
 
 					//					ss->err = 0;
 				}
+			}
+		}
 		// checking every 60seconds for idle connections - or if select times out
 		c_time = getTick();
 		if (rv == 0 || (c_time - lt >= 200))
