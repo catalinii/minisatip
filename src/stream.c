@@ -1269,8 +1269,6 @@ void free_all_streams()
 
 	for (i = 0; i < MAX_STREAMS; i++)
 	{
-		if (st[i] && st[i]->iov)
-			free1(st[i]->iov);
 		if (st[i])
 			free1(st[i]);
 		st[i] = NULL;
