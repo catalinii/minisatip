@@ -498,7 +498,7 @@ void satip_close_device(adapter *ad)
 	sip->enabled = 0;
 }
 
-int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb)
+int satipc_read1(int socket, void *buf, int len, sockets *ss, int *rb)
 {
 	unsigned char buf1[20];
 	uint16_t seq;
@@ -533,6 +533,23 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb)
 		return 1;
 	}
 	*rb -= 12;
+	return (*rb >= 0);
+}
+
+int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb)
+{
+	int partial = 0;
+
+	satipc_read1(socket, buf, len, ss, rb);
+	partial = *rb;
+	while (partial + 1316 <= len && *rb > 0)
+	{
+		satipc_read1(socket, buf + partial, len - partial, ss, rb);
+		partial += *rb;
+	}
+	*rb = partial;
+	if (*rb > 0 && ss->type == TYPE_DVR && (opts.debug & LOG_DMX))
+		dump_packets("read ->", buf, *rb, ss->rlen);
 	return (*rb >= 0);
 }
 
