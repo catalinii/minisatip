@@ -723,7 +723,7 @@ void set_options(int argc, char *argv[])
 			sscanf(optarg, "%d:%d", &opts.adapter_buffer, &opts.dvr_buffer);
 			opts.adapter_buffer = (opts.adapter_buffer / 188) * 188;
 			if (opts.adapter_buffer < 1316)
-				opts.adapter_buffer = 1316;  // 188 * 7 = 1316
+				opts.adapter_buffer = 1316; // 188 * 7 = 1316
 #ifdef AXE
 			opts.dvr_buffer += 7 * 188 - 1;
 			opts.dvr_buffer -= opts.dvr_buffer % (7 * 188);
@@ -1264,30 +1264,28 @@ int read_rtsp(sockets *s)
 		s->flush_enqued_data = 1;
 		http_response(s, 200, buf, NULL, cseq, 0);
 	}
+	else if (strncmp(arg[0], "DESCRIBE", 8) == 0)
+	{
+		char sbuf[1000];
+		char *rv;
+		rv = describe_streams(s, arg[1], sbuf, sizeof(sbuf));
+		if (!rv)
+		{
+			http_response(s, 404, NULL, NULL, cseq, 0);
+			return 0;
+		}
+		snprintf(buf, sizeof(buf),
+				 "Content-type: application/sdp\r\nContent-Base: rtsp://%s/",
+				 get_sock_shost(s->sock));
+		http_response(s, 200, buf, sbuf, cseq, 0);
+	}
+	else if (strncmp(arg[0], "OPTIONS", 7) == 0)
+	{
+		http_response(s, 200, public, NULL, cseq, 0);
+	}
 	else
 	{
-		if (strncmp(arg[0], "DESCRIBE", 8) == 0)
-		{
-			char sbuf[1000];
-			char *rv;
-			rv = describe_streams(s, arg[1], sbuf, sizeof(sbuf));
-			if (!rv)
-			{
-				http_response(s, 404, NULL, NULL, cseq, 0);
-				return 0;
-			}
-			snprintf(buf, sizeof(buf),
-					 "Content-type: application/sdp\r\nContent-Base: rtsp://%s/",
-					 get_sock_shost(s->sock));
-			http_response(s, 200, buf, sbuf, cseq, 0);
-		}
-		else if (strncmp(arg[0], "OPTIONS", 7) == 0)
-		{
-			//			if(!get_sid(s->sid))
-			//				http_response(s, 454, public, NULL, cseq, 0);
-			//			else
-			http_response(s, 200, public, NULL, cseq, 0);
-		}
+		http_response(s, 501, public, NULL, cseq, 0);
 	}
 	return 0;
 }
@@ -1626,7 +1624,7 @@ int ssdp_reply(sockets *s)
 		{
 			ptr = 0;
 			strcatf(buf, ptr, device_id_conflict, getlocalip(),
-					 app_name, version, opts.device_id);
+					app_name, version, opts.device_id);
 			LOG(
 				"A new device joined the network with the same Device ID:  %s, asking to change DEVICEID.SES.COM",
 				get_socket_rhost(s->id, ra, sizeof(ra)));
@@ -1660,8 +1658,8 @@ int ssdp_reply(sockets *s)
 	if (strncmp((const char *)s->buf, "HTTP/1", 6) == 0)
 		LOG_AND_RETURN(0, "ssdp_reply: the message is a reply, ignoring....");
 
-		ptr = 0;
-		strcatf(buf, ptr, reply, get_current_timestamp(), opts.http_host, opts.xml_path,
+	ptr = 0;
+	strcatf(buf, ptr, reply, get_current_timestamp(), opts.http_host, opts.xml_path,
 			app_name, version, uuid, opts.bootid, did);
 
 	LOGM("ssdp_reply fd: %d -> %s:%d, bootid: %d deviceid: %d http: %s", ssdp,
@@ -1747,9 +1745,9 @@ int main(int argc, char *argv[])
 			FAIL("SSDP: Could not bind on %s udp port 1900", opts.disc_host);
 
 		si = sockets_add(ssdp, NULL, -1, TYPE_UDP, (socket_action)ssdp_reply,
-					 (socket_action)ssdp_byebye, (socket_action)ssdp_discovery);
+						 (socket_action)ssdp_byebye, (socket_action)ssdp_discovery);
 		si1 = sockets_add(ssdp1, NULL, -1, TYPE_UDP, (socket_action)ssdp_reply,
-					  (socket_action)ssdp_byebye, (socket_action)ssdp_discovery);
+						  (socket_action)ssdp_byebye, (socket_action)ssdp_discovery);
 		if (si < 0 || si1 < 0)
 			FAIL("sockets_add failed for ssdp");
 	}
@@ -1891,13 +1889,14 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 
 	int lresp = 0;
 	strlcatf(resp, sizeof(resp) - 1, lresp, "%s/1.0 %d %s\r\n", proto, rc, d);
-	strlcatf(resp, sizeof(resp) - 1, lresp, "Date: %s\r\n", get_current_timestamp());
+	if (rc != 501)
+		strlcatf(resp, sizeof(resp) - 1, lresp, "Date: %s\r\n", get_current_timestamp());
 	if (s->type != TYPE_HTTP && get_sid(s->sid) && ah && !strstr(ah, "Session") && rc != 454)
 		strlcatf(resp, sizeof(resp) - 1, lresp, "Session: %010d\r\n", get_session_id(s->sid));
 	if (s->type != TYPE_HTTP && cseq > 0)
 		strlcatf(resp, sizeof(resp) - 1, lresp, "CSeq: %d\r\n", cseq);
-
-	strlcatf(resp, sizeof(resp) - 1, lresp, "Server: %s/%s\r\n", app_name, version);
+	if (rc != 501)
+		strlcatf(resp, sizeof(resp) - 1, lresp, "Server: %s/%s\r\n", app_name, version);
 
 	if (rc != 454)
 		strlcatf(resp, sizeof(resp) - 1, lresp, "%s\r\n", ah);
