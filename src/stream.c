@@ -860,6 +860,8 @@ int check_cc(adapter *ad)
 			continue;
 
 		pid = PID_FROM_TS(b);
+		if (pid == 8191)
+			continue;
 		p = find_pid(ad->id, pid);
 
 		if ((!p))
@@ -871,9 +873,6 @@ int check_cc(adapter *ad)
 		}
 
 		p->packets++;
-
-		if (pid == 8191)
-			continue;
 
 		if (b[3] & 0x10)
 		{
