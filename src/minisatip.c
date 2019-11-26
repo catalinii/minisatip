@@ -1223,13 +1223,13 @@ int read_rtsp(sockets *s)
 							 //							opts.start_rtp, opts.start_rtp + 1,
 							 get_sock_sport(sid->rsock),
 							 get_sock_sport(sid->rtcp), get_session_id(s->sid),
-							 s_timeout, sid->sid + 1);
+							 s_timeout, sid->sid == 0 ? sid->sid + 1 : sid->sid);
 				else
 					snprintf(buf, sizeof(buf),
 							 "Transport: RTP/AVP;multicast;destination=%s;port=%d-%d\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d",
 							 ra, get_stream_rport(sid->sid),
 							 ntohs(sid->sa.sin_port) + 1,
-							 get_session_id(s->sid), s_timeout, sid->sid + 1);
+							 get_session_id(s->sid), s_timeout, sid->sid == 0 ? sid->sid + 1 : sid->sid);
 				break;
 			case STREAM_RTSP_TCP:
 				snprintf(buf, sizeof(buf),
