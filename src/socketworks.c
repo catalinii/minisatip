@@ -881,10 +881,10 @@ void *select_and_execute(void *arg)
 							continue; // do not close the RTCP socket, we might get some errors here but ignore them
 						}
 						LOG(
-							"select_and_execute[%d]: %s on socket %d (sid:%d) from %s:%d - type %s errno %d",
+							"select_and_execute[%d]: %s on socket %d (sid:%d) from %s:%d - type %s errno %d : %s",
 							i, err_str, ss->sock, ss->sid,
 							get_socket_rhost(ss->id, ra, sizeof(ra)),
-							ntohs(ss->sa.sin_port), types[ss->type], err);
+							ntohs(ss->sa.sin_port), types[ss->type], err, err_str);
 						if (err == EOVERFLOW || err == EWOULDBLOCK)
 							continue;
 						if (err == EAGAIN)
