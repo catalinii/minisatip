@@ -860,7 +860,7 @@ void *select_and_execute(void *arg)
 					{
 						char *err_str;
 						char *types[] =
-							{"udp", "tcp", "server", "http", "rtsp", "dvr"};
+							{"udp", "tcp", "server", "http", "rtsp", "dvr", "rtcp"};
 						if (rlen == 0)
 						{
 							err = 0;
@@ -876,8 +876,8 @@ void *select_and_execute(void *arg)
 						if (ss->type == TYPE_RTCP || ss->sock == SOCK_TIMEOUT)
 						{
 							LOG(
-								"ignoring error on sock_id %d handle %d type %d error %d : %s",
-								ss->id, ss->sock, ss->type, err, err_str);
+								"ignoring error on sock_id %d handle %d type %s error %d : %s",
+								ss->id, ss->sock, types[ss->type], err, err_str);
 							continue; // do not close the RTCP socket, we might get some errors here but ignore them
 						}
 						LOG(
