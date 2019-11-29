@@ -1277,6 +1277,8 @@ int read_rtsp(sockets *s)
 		snprintf(buf, sizeof(buf),
 				 "Content-type: application/sdp\r\nContent-Base: rtsp://%s/",
 				 get_sock_shost(s->sock));
+		if (!sess_id)  // Request doesn't have Session !
+			s->sid = -1;
 		http_response(s, 200, buf, sbuf, cseq, 0);
 	}
 	else if (strncmp(arg[0], "OPTIONS", 7) == 0)
