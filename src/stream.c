@@ -553,7 +553,7 @@ int streams_add()
 	ss->useragent[0] = 0;
 	ss->len = 0;
 	ss->st_sock = -1;
-	//	ss->seq = 0; // set the sequence to 0 for testing purposes - it should be random
+	ss->seq = rand(); // set the sequence to 0 for testing purposes - it should be random
 	ss->ssrc = random();
 	ss->timeout = opts.timeout_sec;
 	ss->wtime = ss->rtcp_wtime = getTick();
