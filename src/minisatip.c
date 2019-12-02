@@ -119,6 +119,7 @@ int rtsp, http, si, si1, ssdp1;
 #define TCPMAXPACK_OPT '2'
 #define FORCE_CI_OPT 'C'
 #define CA_PIN_OPT '3'
+#define IPV4_OPT '4'
 
 static const struct option long_options[] =
 	{
@@ -290,6 +291,10 @@ void usage()
 Help\n\
 -------\n\
 \n\
+* -2 --tcp-max-pack X : set the TCP data chunk size in MPEG-TS packets (188 bytes), default value is 42\n\
+\n\
+* -4 : Force TCP sockets to use IPv6\n\
+\n\
 * -a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means auto-detect)\n\
 	* eg: -a 1:2:3  \n\
 	- it will report 1 dvb-s2 device, 2 dvb-t2 devices and 3 dvb-c devices \n\
@@ -301,8 +306,6 @@ Help\n\
 \n\
 * -B X : set the app socket write buffer to X KB. \n\
 	* eg: -B 10000 - to set the socket buffer to 10MB\n\
-\n\
-* -2 --tcp-max-pack X : set the TCP data chunk size in MPEG-TS packets (188 bytes), default value is 42\n\
 \n\
 * -d --diseqc ADAPTER1:COMMITTED1-UNCOMMITTED1[,ADAPTER2:COMMITTED2-UNCOMMITTED2[,...]\n\
 \t* The first argument is the adapter number, second is the number of committed packets to send to a Diseqc 1.0 switch, third the number of uncommitted commands to sent to a Diseqc 1.1 switch\n\
@@ -548,6 +551,7 @@ void set_options(int argc, char *argv[])
 	memset(opts.dvbapi_host, 0, sizeof(opts.dvbapi_host));
 	opts.drop_encrypted = 1;
 	opts.rtsp_port = 554;
+	opts.use_ipv4_only = 1;
 #ifndef DISABLE_SATIPCLIENT
 	opts.satip_addpids = 1;
 #endif
@@ -603,7 +607,7 @@ void set_options(int argc, char *argv[])
 
 #endif
 
-	while ((opt = getopt_long(argc, argv, "fl:v:r:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:o:gy:i:q:D:NGVR:S:TX:Y:OL:EP:Z:0:F:M:1:2:3:C:" AXE_OPTS, long_options, NULL)) != -1)
+	while ((opt = getopt_long(argc, argv, "fl:v:r:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:o:gy:i:q:D:NGVR:S:TX:Y:OL:EP:Z:0:F:M:1:2:3:C:4" AXE_OPTS, long_options, NULL)) != -1)
 	{
 		//              printf("options %d %c %s\n",opt,opt,optarg);
 		switch (opt)
@@ -715,6 +719,12 @@ void set_options(int argc, char *argv[])
 		case UDPPORT_OPT:
 		{
 			opts.start_rtp = atoi(optarg);
+			break;
+		}
+
+		case IPV4_OPT:
+		{
+			opts.use_ipv4_only = 1 - opts.use_ipv4_only;
 			break;
 		}
 
@@ -1204,6 +1214,7 @@ int read_rtsp(sockets *s)
 		if (transport)
 		{
 			int s_timeout;
+			char localhost[100];
 
 			if (sid->timeout == 1)
 				sid->timeout = opts.timeout_sec;
@@ -1217,10 +1228,9 @@ int read_rtsp(sockets *s)
 				if (atoi(ra) < 224)
 					snprintf(buf, sizeof(buf),
 							 "Transport: RTP/AVP;unicast;destination=%s;source=%s;client_port=%d-%d;server_port=%d-%d\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d",
-							 ra, get_sock_shost(s->sock),
+							 ra, get_sock_shost(s->sock, localhost, sizeof(localhost)),
 							 get_stream_rport(sid->sid),
 							 get_stream_rport(sid->sid) + 1,
-							 //							opts.start_rtp, opts.start_rtp + 1,
 							 get_sock_sport(sid->rsock),
 							 get_sock_sport(sid->rtcp), get_session_id(s->sid),
 							 s_timeout, sid->sid + 1);
@@ -1228,7 +1238,7 @@ int read_rtsp(sockets *s)
 					snprintf(buf, sizeof(buf),
 							 "Transport: RTP/AVP;multicast;destination=%s;port=%d-%d\r\nSession: %010d;timeout=%d\r\ncom.ses.streamID: %d",
 							 ra, get_stream_rport(sid->sid),
-							 ntohs(sid->sa.sin_port) + 1,
+							 get_stream_rport(sid->sid) + 1,
 							 get_session_id(s->sid), s_timeout, sid->sid + 1);
 				break;
 			case STREAM_RTSP_TCP:
@@ -1267,6 +1277,7 @@ int read_rtsp(sockets *s)
 	else if (strncmp(arg[0], "DESCRIBE", 8) == 0)
 	{
 		char sbuf[1000];
+		char localhost[100];
 		char *rv;
 		rv = describe_streams(s, arg[1], sbuf, sizeof(sbuf));
 		if (!rv)
@@ -1276,7 +1287,7 @@ int read_rtsp(sockets *s)
 		}
 		snprintf(buf, sizeof(buf),
 				 "Content-type: application/sdp\r\nContent-Base: rtsp://%s/",
-				 get_sock_shost(s->sock));
+				 get_sock_shost(s->sock, localhost, sizeof(localhost)));
 		http_response(s, 200, buf, sbuf, cseq, 0);
 	}
 	else if (strncmp(arg[0], "OPTIONS", 7) == 0)
@@ -1300,7 +1311,7 @@ int read_rtsp(sockets *s)
 
 char uuid[100];
 int uuidi;
-struct sockaddr_in ssdp_sa;
+USockAddr ssdp_sa;
 
 int read_http(sockets *s)
 {
@@ -1513,7 +1524,8 @@ int ssdp_notify(sockets *s, int alive)
 		uuidi = 1;
 		get_mac_address(mac);
 		sprintf(uuid, "%s-%s", uuid1, mac);
-		fill_sockaddr(&ssdp_sa, opts.disc_host, 1900);
+		// use IPv4 only as disc_host is multicast IPv4
+		fill_sockaddr(&ssdp_sa, opts.disc_host, 1900, 1);
 	}
 	strcpy(nt[0], "::upnp:rootdevice");
 	sprintf(nt[1], "::uuid:%s", uuid);
@@ -1545,7 +1557,7 @@ int ssdp_notify(sockets *s, int alive)
 
 		salen = sizeof(ssdp_sa);
 		LOGM("%s packet %d:\n%s", op, i + 1, buf);
-		int wb = sendto(s->sock, buf, ptr, MSG_NOSIGNAL, (const struct sockaddr *)&ssdp_sa, salen);
+		int wb = sendto(s->sock, buf, ptr, MSG_NOSIGNAL, &ssdp_sa.sa, salen);
 		if (wb != ptr)
 			LOG("incomplete ssdp_discovery: wrote %d out of %d: error %d: %s", wb, ptr, errno, strerror(errno));
 		ptr = 0;
@@ -1601,8 +1613,8 @@ int ssdp_reply(sockets *s)
 	if (ruuid && strncmp(uuid, strip(ruuid + 5), strlen(uuid)) == 0)
 	{
 		LOGM("Dropping packet from the same UUID as mine (from %s:%d)",
-			 get_socket_rhost(s->id, ra, sizeof(ra)),
-			 get_socket_rport(s->id));
+			 get_sockaddr_rhost(s->sa, ra, sizeof(ra)),
+			 get_sockaddr_rport(s->sa));
 		return 0;
 	}
 
@@ -1613,7 +1625,7 @@ int ssdp_reply(sockets *s)
 #endif
 
 	LOGM("Received SSDP packet from %s:%d -> handle %d",
-		 get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
+		 get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa),
 		 s->sock);
 	LOGM("%s", s->buf);
 
@@ -1627,9 +1639,8 @@ int ssdp_reply(sockets *s)
 					app_name, version, opts.device_id);
 			LOG(
 				"A new device joined the network with the same Device ID:  %s, asking to change DEVICEID.SES.COM",
-				get_socket_rhost(s->id, ra, sizeof(ra)));
-			int wb = sendto(ssdp, buf, ptr, MSG_NOSIGNAL,
-							(const struct sockaddr *)&s->sa, salen);
+				get_sockaddr_host(s->sa, ra, sizeof(ra)));
+			int wb = sendto(ssdp, buf, ptr, MSG_NOSIGNAL, &s->sa.sa, salen);
 			if (wb != ptr)
 				LOG("incomplete ssdp_reply notify: wrote %d out of %d: error %d: %s", wb, ptr, errno, strerror(errno));
 		}
@@ -1649,7 +1660,7 @@ int ssdp_reply(sockets *s)
 		s[si].rtime = -s[si].timeout_ms;
 		LOG(
 			"Device ID conflict, changing our device id to %d, destination SAT>IP server %s",
-			opts.device_id, get_socket_rhost(s->id, ra, sizeof(ra)));
+			opts.device_id, get_sockaddr_host(s->sa, ra, sizeof(ra)));
 		readBootID();
 	}
 	else
@@ -1663,11 +1674,11 @@ int ssdp_reply(sockets *s)
 			app_name, version, uuid, opts.bootid, did);
 
 	LOGM("ssdp_reply fd: %d -> %s:%d, bootid: %d deviceid: %d http: %s", ssdp,
-		 get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
+		 get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa),
 		 opts.bootid, did, opts.http_host);
 	//use ssdp (unicast) even if received to multicast address
 	LOGM("%s", buf);
-	int wb = sendto(ssdp, buf, ptr, MSG_NOSIGNAL, (const struct sockaddr *)&s->sa, salen);
+	int wb = sendto(ssdp, buf, ptr, MSG_NOSIGNAL, &s->sa.sa, salen);
 	if (wb != ptr)
 		LOG("incomplete ssdp_reply: wrote %d out of %d: error %d: %s", wb, ptr, errno, strerror(errno));
 	return 0;
@@ -1733,15 +1744,15 @@ int main(int argc, char *argv[])
 	print_version(1);
 
 	readBootID();
-	if ((rtsp = tcp_listen(NULL, opts.rtsp_port)) < 1)
+	if ((rtsp = tcp_listen(NULL, opts.rtsp_port, opts.use_ipv4_only)) < 1)
 		FAIL("RTSP: Could not listen on port %d", opts.rtsp_port);
-	if ((http = tcp_listen(NULL, opts.http_port)) < 1)
+	if ((http = tcp_listen(NULL, opts.http_port, opts.use_ipv4_only)) < 1)
 		FAIL("Could not listen on http port %d", opts.http_port);
 	if (!opts.disable_ssdp)
 	{
-		if ((ssdp = udp_bind(NULL, 1900)) < 1)
+		if ((ssdp = udp_bind(NULL, 1900, opts.use_ipv4_only)) < 1)
 			FAIL("SSDP: Could not bind on udp port 1900");
-		if ((ssdp1 = udp_bind(opts.disc_host, 1900)) < 1)
+		if ((ssdp1 = udp_bind(opts.disc_host, 1900, 1)) < 1)
 			FAIL("SSDP: Could not bind on %s udp port 1900", opts.disc_host);
 
 		si = sockets_add(ssdp, NULL, -1, TYPE_UDP, (socket_action)ssdp_reply,
@@ -1911,7 +1922,7 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 
 	LOG("reply %s-> %d (%s:%d) CL:%d [sock_id %d]:",
 		(lresp == sizeof(resp) - 1) ? "message truncated" : "", s->sock,
-		get_socket_rhost(s->id, ra, sizeof(ra)), get_socket_rport(s->id),
+		get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa),
 		lr, s->id);
 	LOGM("%s", resp);
 

@@ -75,7 +75,7 @@ typedef struct struct_satipc
 	char ignore_packets; // ignore packets coming from satip server while tuning
 	int satip_fe;
 	char last_cmd;
-	char use_tcp;
+	char use_tcp, init_use_tcp;
 	char no_pids_all;
 	char expect_reply, force_commit, want_commit, want_tune, sent_transport, force_pids;
 	int64_t last_setup, last_connect;
@@ -350,7 +350,7 @@ int satipc_rtcp_reply(sockets *s)
 	{
 		copy32r(rp, b, 20);
 
-		if (!sip->use_tcp && ((++sip->repno % 100) == 0)) //every 20s
+		if (!sip->init_use_tcp && ((++sip->repno % 100) == 0)) //every 20s
 			LOG(
 				"satipc: rtp report, adapter %d: rtcp missing packets %d, rtp missing %d, rtp ooo %d, pid err %d",
 				ad->id, rp - sip->rcvp, sip->rtp_miss, sip->rtp_ooo,
@@ -399,14 +399,15 @@ int satipc_open_device(adapter *ad)
 	LOG("satipc: connected to SAT>IP server %s port %d %s handle %d %s %s", sip->sip,
 		sip->sport, sip->use_tcp ? "[RTSP OVER TCP]" : "", ad->fe, sip->source_ip[0] ? "from source" : "", sip->source_ip[0] ? sip->source_ip : "");
 
-	if (!sip->use_tcp)
+	sip->init_use_tcp = sip->use_tcp;
+	if (!sip->init_use_tcp)
 	{
 		sip->listen_rtp = opts.start_rtp + 1000 + ad->id * 2;
-		ad->dvr = udp_bind(NULL, sip->listen_rtp);
+		ad->dvr = udp_bind(NULL, sip->listen_rtp, opts.use_ipv4_only);
 		if (ad->dvr < 0)
 			LOG("Could not listen on port %d: err %d: %s", sip->listen_rtp, errno, strerror(errno));
 
-		sip->rtcp = udp_bind(NULL, sip->listen_rtp + 1);
+		sip->rtcp = udp_bind(NULL, sip->listen_rtp + 1, opts.use_ipv4_only);
 		if (sip->rtcp < 0)
 			LOG("Could not listen on port %d: err %d: %s", sip->listen_rtp + 1, errno, strerror(errno));
 
@@ -772,7 +773,7 @@ void satip_post_init(adapter *ad)
 	if (!sip)
 		return;
 
-	if (sip->use_tcp)
+	if (sip->init_use_tcp)
 		sockets_setread(ad->sock, satipc_tcp_read);
 	else
 	{
@@ -942,7 +943,7 @@ int http_request(adapter *ad, char *url, char *method)
 
 	session[0] = 0;
 	sid[0] = 0;
-	remote_socket = sip->use_tcp ? ad->sock : ad->fe_sock;
+	remote_socket = sip->init_use_tcp ? ad->sock : ad->fe_sock;
 
 	if (!sip->option_no_setup && !method && sip->sent_transport == 0)
 		method = "SETUP";
@@ -956,7 +957,7 @@ int http_request(adapter *ad, char *url, char *method)
 		sip->sent_transport = 1;
 		sip->stream_id = -1;
 		sip->session[0] = 0;
-		if (sip->use_tcp)
+		if (sip->init_use_tcp)
 			strcatf(session, ptr, "\r\nTransport: RTP/AVP/TCP;interleaved=0-1");
 		else
 			strcatf(session, ptr, "\r\nTransport: RTP/AVP;unicast;client_port=%d-%d",

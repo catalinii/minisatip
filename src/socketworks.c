@@ -50,41 +50,71 @@ sockets *s[MAX_SOCKS];
 int max_sock;
 SMutex s_mutex;
 
-int fill_sockaddr(struct sockaddr_in *serv, char *host, int port)
+// returns the protocol (AF_INET, AF_INET6) or 0 in case of failure
+int fill_sockaddr(USockAddr *serv, char *host, int port, int ipv4_only)
 {
-	struct hostent *h;
+	int family = 0;
+	memset(serv, 0, sizeof(*serv));
 
 	if (host)
 	{
-		h = gethostbyname(host);
-		if (h == NULL)
+		char str_port[12];
+		struct addrinfo hints;
+		struct addrinfo *result;
+		memset(&hints, 0, sizeof(struct addrinfo));
+		hints.ai_family = AF_UNSPEC; /* Allow IPv4 or IPv6 */
+		if (ipv4_only)
+			hints.ai_family = AF_INET;
+		hints.ai_socktype = SOCK_DGRAM; /* Datagram socket */
+		hints.ai_flags = AI_PASSIVE;	/* For wildcard IP address */
+		hints.ai_protocol = 0;			/* Any protocol */
+		hints.ai_canonname = NULL;
+		hints.ai_addr = NULL;
+		hints.ai_next = NULL;
+		sprintf(str_port, "%d", port);
+
+		int s = getaddrinfo(host, str_port, &hints, &result);
+		if (s != 0)
 		{
-			LOG("fill_sockaddr: gethostbyname(%s): %s", host, strerror(errno));
+			LOG("getaddrinfo failed: host %s, port %s, %s\n", host, str_port, gai_strerror(s));
 			return 0;
 		}
+		if (result != NULL)
+		{
+			memcpy(serv, result->ai_addr, result->ai_addrlen);
+			family = result->ai_family;
+		}
 	}
-	memset(serv, 0, sizeof(struct sockaddr_in));
-	serv->sin_family = AF_INET;
-	if (host)
-		memcpy(&serv->sin_addr.s_addr, h->h_addr, h->h_length);
-	else
-		serv->sin_addr.s_addr = htonl(INADDR_ANY);
-	serv->sin_port = htons(port);
-	return 1;
+	if (!family && ipv4_only) // use IPv4 only
+	{
+		family = AF_INET;
+		serv->sin.sin_addr.s_addr = htonl(INADDR_ANY);
+		serv->sin.sin_family = family;
+		serv->sin.sin_port = htons(port);
+	}
+	else if (!family) // LISTEN on IPv6 AND IPv4
+	{
+		family = AF_INET6;
+		serv->sin6.sin6_family = family;
+		serv->sin6.sin6_flowinfo = 0;
+		serv->sin6.sin6_addr = in6addr_any;
+		serv->sin6.sin6_port = htons(port);
+	}
+	return family;
 }
 
 char localip[MAX_HOST];
 char *
 getlocalip()
 {
-	//      if(localip[0]!=0)return localip;
-
-	const char *dest = opts.disc_host, *h;
+	const char *dest = opts.disc_host;
 	int port = 1900;
 
-	struct sockaddr_in serv;
+	USockAddr serv;
 
-	int sock = socket(AF_INET, SOCK_DGRAM, 0);
+	int family = fill_sockaddr(&serv, (char *)dest, port, opts.use_ipv4_only);
+
+	int sock = socket(family, SOCK_DGRAM, 0);
 
 	//Socket could not be created
 	if (sock < 0)
@@ -93,8 +123,7 @@ getlocalip()
 		return localip;
 	}
 
-	fill_sockaddr(&serv, (char *)dest, port);
-	int err = connect(sock, (const struct sockaddr *)&serv, sizeof(serv));
+	int err = connect(sock, &serv.sa, sizeof(serv));
 	if (err)
 	{
 		LOG("getlocalip: Error '%s'' during connect", strerror(errno));
@@ -102,24 +131,24 @@ getlocalip()
 	}
 	else
 	{
-		h = get_sock_shost(sock);
-		if (h)
-			SAFE_STRCPY(localip, h);
+		get_sock_shost(sock, localip, sizeof(localip));
 	}
 	close(sock);
 	return localip;
 }
 
-int udp_bind(char *addr, int port)
+int udp_bind(char *addr, int port, int ipv4_only)
 {
-	struct sockaddr_in serv;
+	USockAddr serv;
+	char localhost[100];
 	int sock, optval = 1;
 	int is_multicast = 0;
+	int family = fill_sockaddr(&serv, addr, port, ipv4_only);
 
-	if (!fill_sockaddr(&serv, addr, port))
+	if (!family)
 		return -1;
 	//	sock = socket(AF_INET, SOCK_DGRAM, 0);
-	sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	sock = socket(family, SOCK_DGRAM, IPPROTO_UDP);
 
 	if (sock < 0)
 	{
@@ -127,7 +156,7 @@ int udp_bind(char *addr, int port)
 		return -1;
 	}
 
-	if (addr && atoi(addr) >= 239)
+	if (family == AF_INET && addr && atoi(addr) >= 239)
 	{
 		struct ip_mreq mreq;
 
@@ -157,12 +186,13 @@ int udp_bind(char *addr, int port)
 	}
 #endif
 
-	if (bind(sock, (struct sockaddr *)&serv, sizeof(serv)) < 0)
+	if (bind(sock, &serv.sa, sizeof(serv)) < 0)
 	{
-		if (is_multicast)
+		if (is_multicast) // only IPv4
 		{
-			serv.sin_addr.s_addr = htonl(INADDR_ANY);
-			if (bind(sock, (struct sockaddr *)&serv, sizeof(serv)) < 0)
+			struct sockaddr_in *s = (struct sockaddr_in *)&serv;
+			s->sin_addr.s_addr = htonl(INADDR_ANY);
+			if (bind(sock, &serv.sa, sizeof(serv)) < 0)
 			{
 				LOG("udp_bind: failed: bind() on host ANY port %d: error %s", port, strerror(errno));
 				close(sock);
@@ -180,63 +210,66 @@ int udp_bind(char *addr, int port)
 
 	set_linux_socket_timeout(sock);
 
-	LOG("New UDP socket %d bound to %s:%d %s%s%s", sock, inet_ntoa(serv.sin_addr),
-		ntohs(serv.sin_port), is_multicast ? "(mcast:" : "", is_multicast ? addr : "", is_multicast ? ")" : "");
+	LOG("New UDP socket %d bound to %s:%d %s%s%s", sock, get_sockaddr_host(serv, localhost, sizeof(localhost)),
+		get_sockaddr_port(serv), is_multicast ? "(mcast:" : "", is_multicast ? addr : "", is_multicast ? ")" : "");
 	return sock;
 }
 
 int udp_bind_connect(char *src, int sport, char *dest, int dport,
-					 struct sockaddr_in *serv)
+					 USockAddr *serv)
 {
 	int sock;
-	sock = udp_bind(src, sport);
+	char localhost[100];
+	int family = fill_sockaddr(serv, dest, dport, opts.use_ipv4_only);
+	sock = udp_bind(src, sport, family == AF_INET);
 	if (sock < 0)
 		return sock;
 
-	fill_sockaddr(serv, dest, dport);
-	if (connect(sock, (struct sockaddr *)serv, sizeof(*serv)) < 0)
+	if (connect(sock, &serv->sa, sizeof(*serv)) < 0)
 	{
 		LOG("udp_bind_connect: failed: bind(): %s", strerror(errno));
 		close(sock);
 		return -1;
 	}
-	LOG("New UDP socket %d connected to %s:%d", sock, inet_ntoa(serv->sin_addr),
-		ntohs(serv->sin_port));
+	LOG("New UDP socket %d connected to %s:%d", sock,
+		get_sockaddr_host(*serv, localhost, sizeof(localhost)), get_sockaddr_port(*serv));
 
 	return sock;
 }
 
-int udp_connect(char *addr, int port, struct sockaddr_in *serv)
+int udp_connect(char *addr, int port, USockAddr *serv)
 {
-	struct sockaddr_in sv;
+	USockAddr sv;
 	int sock, optval = 1;
+	int family;
+	char localhost[100];
 
 	if (serv == NULL)
 		serv = &sv;
-	if (!fill_sockaddr(serv, addr, port))
+	if (!(family = fill_sockaddr(serv, addr, port, opts.use_ipv4_only)))
 		return -1;
-	sock = socket(AF_INET, SOCK_DGRAM, 0);
+	sock = socket(family, SOCK_DGRAM, 0);
 	if (sock < 0)
 	{
 		LOG("udp_connect failed: socket() %s", strerror(errno));
 		return -1;
 	}
 
-	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0)
+	if (family == AF_INET && setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0)
 	{
 		LOG("udp_bind: setsockopt(SO_REUSEADDR): %s", strerror(errno));
 		close(sock);
 		return -1;
 	}
 
-	if (connect(sock, (struct sockaddr *)serv, sizeof(*serv)) < 0)
+	if (connect(sock, &serv->sa, sizeof(*serv)) < 0)
 	{
 		LOG("udp_connect: failed: bind(): %s", strerror(errno));
 		close(sock);
 		return -1;
 	}
-	LOG("New UDP socket %d connected to %s:%d", sock, inet_ntoa(serv->sin_addr),
-		ntohs(serv->sin_port));
+	LOG("New UDP socket %d connected to %s:%d", sock,
+		get_sockaddr_host(*serv, localhost, sizeof(localhost)), get_sockaddr_port(*serv));
 	return sock;
 }
 
@@ -278,18 +311,19 @@ int set_linux_socket_timeout(int sockfd)
 	return 0;
 }
 
-int tcp_connect_src(char *addr, int port, struct sockaddr_in *serv, int blocking, char *src)
+int tcp_connect_src(char *addr, int port, USockAddr *serv, int blocking, char *src)
 {
-	struct sockaddr_in sv;
+	USockAddr sv;
 	int sock, optval = 1;
+	int family;
 
 	if (serv == NULL)
 		serv = &sv;
 
-	if (!fill_sockaddr(serv, addr, port))
+	if (!(family = fill_sockaddr(serv, addr, port, opts.use_ipv4_only)))
 		return -1;
 
-	sock = socket(AF_INET, SOCK_STREAM, 0);
+	sock = socket(family, SOCK_STREAM, 0);
 	if (sock < 0)
 	{
 		LOG("tcp_connect failed: socket() %s", strerror(errno));
@@ -313,13 +347,13 @@ int tcp_connect_src(char *addr, int port, struct sockaddr_in *serv, int blocking
 
 	if (src && src[0])
 	{
-		struct sockaddr_in src_add;
-		if (!fill_sockaddr(&src_add, src, 0))
+		USockAddr src_add;
+		if (!fill_sockaddr(&src_add, src, 0, family == AF_INET))
 		{
 			close(sock);
 			return -1;
 		}
-		if (bind(sock, (struct sockaddr *)&src_add, sizeof(src_add)) < 0)
+		if (bind(sock, &src_add.sa, sizeof(src_add)) < 0)
 		{
 			LOG("%s: failed: bind() on address: %s: error %s",
 				__FUNCTION__, src, strerror(errno));
@@ -328,7 +362,7 @@ int tcp_connect_src(char *addr, int port, struct sockaddr_in *serv, int blocking
 		}
 	}
 
-	if (connect(sock, (struct sockaddr *)serv, sizeof(*serv)) < 0)
+	if (connect(sock, &serv->sa, sizeof(*serv)) < 0)
 	{
 		if (blocking || errno != EINPROGRESS)
 		{
@@ -343,19 +377,20 @@ int tcp_connect_src(char *addr, int port, struct sockaddr_in *serv, int blocking
 	return sock;
 }
 
-int tcp_connect(char *addr, int port, struct sockaddr_in *serv, int blocking)
+int tcp_connect(char *addr, int port, USockAddr *serv, int blocking)
 {
 	return tcp_connect_src(addr, port, serv, blocking, NULL);
 }
-int tcp_listen(char *addr, int port)
+int tcp_listen(char *addr, int port, int ipv4_only)
 {
-	struct sockaddr_in serv;
+	USockAddr serv;
 	int sock, optval = 1;
+	int family;
 
-	if (!fill_sockaddr(&serv, addr, port))
+	if (!(family = fill_sockaddr(&serv, addr, port, ipv4_only)))
 		return -1;
 
-	sock = socket(AF_INET, SOCK_STREAM, 0);
+	sock = socket(family, SOCK_STREAM, 0);
 	if (sock < 0)
 	{
 		LOG("tcp_listen failed: socket(): %s", strerror(errno));
@@ -369,7 +404,7 @@ int tcp_listen(char *addr, int port)
 		return -1;
 	}
 
-	if (bind(sock, (struct sockaddr *)&serv, sizeof(serv)) < 0)
+	if (bind(sock, &serv.sa, sizeof(serv)) < 0)
 	{
 		LOG("tcp_listen: failed: bind() on address: %s, port %d : error %s",
 			addr ? addr : "ANY", port, strerror(errno));
@@ -382,7 +417,7 @@ int tcp_listen(char *addr, int port)
 		close(sock);
 		return -1;
 	}
-	LOG("New TCP listening socket %d at %s:%d", sock, addr ? addr : "0:0:0:0", port);
+	LOG("New TCP listening socket %d at %s:%d, family %d", sock, addr ? addr : "0:0:0:0", port, family);
 	return sock;
 }
 
@@ -422,24 +457,6 @@ int connect_local_socket(char *file, int blocking)
 	return sock;
 }
 
-char *get_sock_shost(int fd)
-{
-	struct sockaddr_in sin;
-	socklen_t len = sizeof(sin);
-	if (getsockname(fd, (struct sockaddr *)&sin, &len))
-		return "none";
-	return inet_ntoa(sin.sin_addr);
-}
-
-int get_sock_sport(int fd)
-{
-	struct sockaddr_in sin;
-	socklen_t len = sizeof(sin);
-	if (getsockname(fd, (struct sockaddr *)&sin, &len))
-		return -1;
-	return ntohs(sin.sin_port);
-}
-
 int no_action(int s)
 {
 	return 1;
@@ -448,9 +465,9 @@ int no_action(int s)
 int sockets_accept(int socket, void *buf, int len, sockets *ss)
 {
 	int new_sock, sas, ni;
-	struct sockaddr_in sa;
+	USockAddr sa;
 	sas = sizeof(sa);
-	new_sock = accept(ss->sock, (struct sockaddr *)&sa, (socklen_t *)&sas);
+	new_sock = accept(ss->sock, &sa.sa, (socklen_t *)&sas);
 	if (new_sock < 0)
 	{
 		LOG("sockets_accept: failed %d: %s", errno, strerror(errno));
@@ -484,7 +501,7 @@ int sockets_read(int socket, void *buf, int len, sockets *ss, int *rv)
 int sockets_recv(int socket, void *buf, int len, sockets *ss, int *rv)
 {
 	int slen = sizeof(ss->sa);
-	*rv = recvfrom(socket, buf, len, 0, (struct sockaddr *)&ss->sa,
+	*rv = recvfrom(socket, buf, len, 0, &ss->sa.sa,
 				   (socklen_t *)&slen);
 	return (*rv > 0);
 }
@@ -543,7 +560,7 @@ void set_sock_lock(int i, SMutex *m)
 	}
 }
 
-int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
+int sockets_add(int sock, USockAddr *sa, int sid, int type,
 				socket_action a, socket_action c, socket_action t)
 {
 	int i;
@@ -607,9 +624,9 @@ int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
 	if (type & TYPE_CONNECT)
 		ss->events |= POLLOUT;
 
-	LOG("sockets_add: handle socket %d (type %d) returning socket sock %d [%s:%d] read: %p",
-		ss->sock, ss->type, i, get_socket_rhost(i, ra, sizeof(ra)),
-		ntohs(ss->sa.sin_port), ss->read);
+	LOG("sockets_add: handle %d (type %d) returning socket sock %d [%s:%d] read: %p",
+		ss->sock, ss->type, i, get_sockaddr_host(ss->sa, ra, sizeof(ra)),
+		get_sockaddr_port(ss->sa), ss->read);
 	mutex_unlock(&ss->mutex);
 	return i;
 }
@@ -635,7 +652,8 @@ int sockets_del(int sock)
 	ss->is_enabled = 0;
 	so = ss->sock;
 	ss->sock = -1; // avoid infinite loop
-	LOG("sockets_del: sock %d -> handle %d, sid %d, overflow bytes %d, allocated %d, used %d, unsend packets %d", sock, so, ss->sid, ss->overflow, ss->buf_alloc, ss->buf_used, (ss->wmax > 0) ? ((ss->wpos - ss->spos) % ss->wmax) : 0);
+	LOG("sockets_del: sock %d -> handle %d, sid %d, overflow bytes %d, allocated %d, used %d, unsend packets %d",
+		sock, so, ss->sid, ss->overflow, ss->buf_alloc, ss->buf_used, (ss->wmax > 0) ? ((ss->wpos - ss->spos) % ss->wmax) : 0);
 
 	if (so >= 0)
 	{
@@ -892,8 +910,8 @@ void *select_and_execute(void *arg)
 						LOG(
 							"select_and_execute[%d]: %s on socket %d (sid:%d) from %s:%d - type %s errno %d",
 							i, err_str, ss->sock, ss->sid,
-							get_socket_rhost(ss->id, ra, sizeof(ra)),
-							ntohs(ss->sa.sin_port), types[ss->type], err);
+							get_sockaddr_host(ss->sa, ra, sizeof(ra)),
+							get_sockaddr_port(ss->sa), types[ss->type], err);
 						if (err == EOVERFLOW || err == EWOULDBLOCK)
 							continue;
 						if (err == EAGAIN)
@@ -1186,22 +1204,52 @@ void set_socket_pos(int sock, int pos)
 	ss->rlen = pos;
 }
 
-char *get_socket_rhost(int s_id, char *dest, int ld)
+char *get_sock_shost(int fd, char *dest, int ld)
 {
-	sockets *ss = get_sockets(s_id);
-	dest[0] = 0;
-	if (!ss)
-		return dest;
-	inet_ntop(AF_INET, &(ss->sa.sin_addr), dest, ld);
-	return dest;
+	USockAddr sin;
+	socklen_t len = sizeof(sin);
+	if (getsockname(fd, &sin.sa, &len))
+		return "none";
+	return get_sockaddr_host(sin, dest, ld);
 }
 
-int get_socket_rport(int s_id)
+int get_sock_sport(int fd)
 {
-	sockets *ss = get_sockets(s_id);
-	if (!ss)
-		return 0;
-	return ntohs(ss->sa.sin_port);
+	USockAddr sin;
+	socklen_t len = sizeof(sin);
+	if (getsockname(fd, &sin.sa, &len))
+		return -1;
+	return get_sockaddr_port(sin);
+}
+
+int get_sockaddr_port(USockAddr s)
+{
+	if (s.sa.sa_family == AF_INET)
+		return ntohs(s.sin.sin_port);
+	else if (s.sa.sa_family == AF_INET6)
+		return ntohs(s.sin6.sin6_port);
+	return 0;
+}
+
+char *get_sockaddr_host(USockAddr s, char *dest, int ld)
+{
+	void *p = (void *)&s.sin.sin_addr;
+	dest[0] = 0;
+	memset(dest, 0, ld);
+	if (s.sa.sa_family == AF_INET6)
+		p = (void *)&s.sin6.sin6_addr;
+	else if (s.sa.sa_family != AF_INET)
+		return dest;
+    inet_ntop(s.sa.sa_family, p, dest, ld);	
+	if (s.sa.sa_family == AF_INET6) // convert IPv4 in IPv6 to IPv4 address
+	{
+		if (!strncmp(dest, "::ffff:", 7))
+		{
+			memmove(dest, dest + 7, ld - 7);
+		}
+
+	}
+	return dest;
 }
 
 void get_socket_iteration(int s_id, int it)
@@ -1273,9 +1321,9 @@ int my_writev(sockets *s, const struct iovec *iov, int iiov)
 	if (rv < 0 && (errno == ECONNREFUSED || errno == EPIPE)) // close the stream int the next second
 	{
 		LOG(
-			"Connection REFUSED on socket %d (sid %d), closing the socket, remote %s:%d",
-			s->id, s->sid, get_socket_rhost(s->id, ra, sizeof(ra)),
-			get_socket_rport(s->id));
+			"Connection REFUSED on handle %d, socket %d (sid %d), closing the socket, remote %s:%d",
+			s->sock, s->id, s->sid, get_sockaddr_host(s->sa, ra, sizeof(ra)),
+			get_sockaddr_port(s->sa));
 		if (s->type != TYPE_RTCP)
 			sockets_force_close(s->id);
 	}
