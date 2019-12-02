@@ -29,7 +29,8 @@ typedef struct struct_streams
 	SMutex mutex;
 	int sid; // socket - <0 for invalid/not used, 0 for end of the list
 	int adapter;
-	struct sockaddr_in sa; //remote address - set on accept or recvfrom on udp sockets
+	USockAddr sa;    //remote address - set on accept or recvfrom on udp sockets
+	int sock;			   // remote tcp socket (http, rtsp) 
 	int rsock;			   // return socket handle, for rtsp over tcp, rtsp over udp or http
 	int rsock_id;
 	int rtcp, rtcp_sock, st_sock;
