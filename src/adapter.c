@@ -1572,11 +1572,61 @@ void set_unicable_adapters(char *o, int type)
 
 void set_sources_adapters(char *o)
 {
-	// Hardcoded values
-	source_map[0] = 0 | 0b1001;
-	source_map[1] = 0 | 0b0111;
-	source_map[2] = 0 | 0b1001;
-	source_map[3] = 0 | 0b0110;
+	int i, la, st, end, j, k, adap;
+	int64_t all = 0;
+	char buf[1000], *arg[40], *sep;
+	SAFE_STRCPY(buf, o);
+	for (i = 0; i < MAX_ADAPTERS; i++)
+		all = (all << 1) + 1;
+	la = split(arg, buf, ARRAY_SIZE(arg), ':');
+	if (la != MAX_SOURCES)
+		goto ERR;
+
+	for (i = 0; i < MAX_SOURCES; i++)
+	{
+		LOG(" la=%d strlen(split)=%d",la,strlen(arg[i]));
+		source_map[i] = 0;
+		if (arg[i] && arg[i][0] == '*')
+		{
+			if (strlen(arg[i]) != 1)
+				goto ERR;
+			source_map[i] = all;
+			continue;
+		}
+		char buf2[40], *arg2[40];
+		SAFE_STRCPY(buf2, arg[i]);
+		la = split(arg2, buf2, ARRAY_SIZE(arg2), ',');
+		for (j = 0; j < la; j++)
+		{
+			sep = strchr(arg2[j], '-');
+			if (sep == NULL)
+			{
+				adap = map_int(arg2[j], NULL);
+				if (adap < 0 || adap > MAX_ADAPTERS)
+					goto ERR;
+				source_map[i] |= 1 << adap;
+			}
+			else
+			{
+				st = map_int(arg2[j], NULL);
+				end = map_int(sep + 1, NULL);
+				if (st < 0 || end < 0 || st > MAX_ADAPTERS || end > MAX_ADAPTERS || end < st)
+					goto ERR;
+				for (k = st; k <= end; k++)
+				{
+					adap = k;
+					source_map[i] |= 1 << adap;
+				}
+			}
+		}
+	}
+	LOGM("correct sources format: `%s` ", o);
+	return;
+
+ERR:
+	for (i = 0; i < MAX_SOURCES; i++)
+		source_map[i] = all;
+	LOG("incorrect sources format: `%s` ; so using defaults for all adapters!", o);
 }
 
 void set_diseqc_adapters(char *o)
