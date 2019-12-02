@@ -1259,7 +1259,7 @@ int read_rtsp(sockets *s)
 
 			snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf) - 1,
 					 "RTP-Info: url=%s;seq=%jd;rtptime=%jd\r\nRange: npt=0.000-",
-					 arg[1], getTick(), (getTickUs() / 1000000));
+					 arg[1], sid->seq, (getTickUs() / 1000000));
 		}
 		if (buf[0] == 0 && sid->type == STREAM_HTTP)
 			snprintf(buf, sizeof(buf), "Content-Type: video/mp2t\r\nConnection: close");
