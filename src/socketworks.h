@@ -14,14 +14,20 @@ typedef struct struct_spacket
 	uint8_t *buf;
 } SNPacket;
 
+typedef union union_sockaddr {
+	struct sockaddr sa;
+	struct sockaddr_in sin;
+	struct sockaddr_in6 sin6;
+} USockAddr;
+
 typedef struct struct_sockets
 {
 	char enabled;
 	SMutex mutex;
 	char is_enabled, force_close;
-	int sock;			   // socket - <0 for invalid/not used, 0 for end of the list
-	int nonblock;		   // non-blocking i/o mode
-	struct sockaddr_in sa; //remote address - set on accept or recvfrom on udp sockets
+	int sock;	 // socket - <0 for invalid/not used, 0 for end of the list
+	int nonblock; // non-blocking i/o mode
+	USockAddr sa; //remote address - set on accept or recvfrom on udp sockets
 	socket_action action;
 	socket_action close;
 	socket_action timeout;
@@ -54,6 +60,9 @@ typedef struct struct_sockets
 	int master;
 } sockets;
 
+#define IPTOS_DSCP_EF 0xb8
+#define IPTOS_DSCP_MASK_VALUE 0xfc
+
 #define TYPE_UDP 0
 #define TYPE_TCP 1
 #define TYPE_SERVER 2
@@ -63,26 +72,29 @@ typedef struct struct_sockets
 #define TYPE_RTCP 6
 #define TYPE_NONBLOCK 256 // support for non blocking i/o mode
 #define TYPE_CONNECT 512  // support for non blocking connect -> when it is connected call write with s->rlen 0
+#define TYPE_IPV6 1024	// IPv6 support
 
 #define MAX_HOST 50
 #define SOCK_TIMEOUT -2
 char *setlocalip();
 char *getlocalip();
-int udp_connect(char *addr, int port, struct sockaddr_in *serv);
+int udp_connect(char *addr, int port, USockAddr *serv);
 int udp_bind_connect(char *src, int sport, char *dest, int dport,
-					 struct sockaddr_in *serv);
-int udp_bind(char *addr, int port);
-int tcp_connect(char *addr, int port, struct sockaddr_in *serv, int blocking);
-int tcp_connect_src(char *addr, int port, struct sockaddr_in *serv, int blocking, char *src);
-char *get_sock_shost(int fd);
+					 USockAddr *serv);
+int udp_bind(char *addr, int port, int ipv4_only);
+int tcp_connect(char *addr, int port, USockAddr *serv, int blocking);
+int tcp_connect_src(char *addr, int port, USockAddr *serv, int blocking, char *src);
+char *get_sock_shost(int fd, char *dest, int ld);
 int get_sock_sport(int fd);
-int sockets_add(int sock, struct sockaddr_in *sa, int sid, int type,
+int get_sockaddr_port(USockAddr s);
+char *get_sockaddr_host(USockAddr s, char *dest, int ld);
+int sockets_add(int sock, USockAddr *sa, int sid, int type,
 				socket_action a, socket_action c, socket_action t);
 int sockets_del(int sock);
 int no_action(int s);
 void *select_and_execute(void *arg);
 int get_mac_address(char *mac);
-int fill_sockaddr(struct sockaddr_in *serv, char *host, int port);
+int fill_sockaddr(USockAddr *serv, char *host, int port, int ipv4_only);
 int sockets_del_for_sid(int sid);
 void set_socket_buffer(int sid, unsigned char *buf, int len);
 void sockets_timeout(int i, int t);
@@ -93,12 +105,10 @@ void sockets_setread(int i, void *r);
 void set_socket_send_buffer(int sock, int len);
 void set_socket_receive_buffer(int sock, int len);
 void set_socket_pos(int sock, int pos);
-char *get_socket_rhost(int s_id, char *dest, int ld);
-int get_socket_rport(int s_id);
 void set_sock_lock(int i, SMutex *m);
 void set_socket_thread(int s_id, pthread_t tid);
 pthread_t get_socket_thread(int s_id);
-int tcp_listen(char *addr, int port);
+int tcp_listen(char *addr, int port, int ipv4_only);
 int connect_local_socket(char *file, int blocking);
 int set_linux_socket_nonblock(int sockfd);
 int set_linux_socket_timeout(int sockfd);
@@ -108,6 +118,7 @@ int sockets_write(int sock_id, void *buf, int len);
 int flush_socket(sockets *s);
 void get_socket_iteration(int s_id, int it);
 void set_sockets_sid(int id, int sid);
+void set_socket_dscp(int id, int dscp);
 void sockets_set_opaque(int id, void *opaque, void *opaque2, void *opaque3);
 void sockets_force_close(int id);
 void sockets_set_master(int slave, int master);

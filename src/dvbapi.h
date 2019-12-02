@@ -52,6 +52,7 @@ typedef struct struct_key
 	uint16_t caid, info_pid;
 	uint32_t prid;
 	int ecmtime;
+	int demux_index;
 	int id;
 	int adapter;
 	int ver;

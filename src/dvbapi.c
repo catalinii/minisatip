@@ -418,8 +418,8 @@ int dvbapi_send_pmt(SKey *k)
 	int adapter = 0;
 	if (network_mode)
 	{
-		if (ad)
-			demux = ad->fn;
+
+		demux = k->id + opts.dvbapi_offset;
 		adapter = k->id + opts.dvbapi_offset;
 	}
 	else if (ad)
@@ -431,6 +431,7 @@ int dvbapi_send_pmt(SKey *k)
 	copy32(buf, 0, AOT_CA_PMT);
 	copy16(buf, 7, k->sid);
 	buf[9] = 1;
+	k->demux_index = demux;
 
 	if (oscam_version == 0 || oscam_version >= 11533)
 	{
@@ -776,11 +777,10 @@ int keys_del(int i)
 		return 0;
 	}
 	k->enabled = 0;
+	buf[7] = k->demux_index;
 
-	//	buf[7] = k->demux;
-	buf[7] = i;
-	LOG("Stopping DEMUX %d, removing key %d, sock %d, pmt pid %d", buf[7], i,
-		sock, k->pmt_pid);
+	LOG("Stopping DEMUX %d, removing key %d, sock %d, pmt pid %d, sid %04X", buf[7], i,
+		sock, k->pmt_pid, k->sid);
 	if ((buf[7] != 255) && (sock > 0))
 		TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
 

@@ -71,7 +71,7 @@ streams *get_sid1(int sid, char *file, int line)
 
 char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 {
-	char *stream_id, dad[1000];
+	char *stream_id, dad[1000], localhost[100];
 	int i, sidf, do_play = 0, streams_enabled = 0;
 	streams *sid, *sid2;
 	int do_all = 1;
@@ -87,8 +87,8 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 
 	snprintf(sbuf, size - 1,
 			 "v=0\r\no=- %010d %010d IN IP4 %s\r\ns=SatIPServer:1 %d,%d,%d\r\nt=0 0\r\n",
-			 sidf, sidf, get_sock_shost(s->sock), tuner_s2, tuner_t + tuner_t2,
-			 tuner_c + tuner_c2);
+			 sidf, sidf, get_sock_shost(s->sock, localhost, sizeof(localhost)), 
+			 tuner_s2, tuner_t + tuner_t2, tuner_c + tuner_c2);
 	if (strchr(req, '?'))
 		do_all = 0;
 
@@ -109,7 +109,7 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 				streams_enabled++;
 				strlcatf(sbuf, size, slen,
 						 "m=video %d RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\na=%s\r\n",
-						 ntohs(sid2->sa.sin_port), i + 1,
+						 get_sockaddr_port(sid2->sa), i + 1,
 						 describe_adapter(i, sid2->adapter, dad, sizeof(dad)),
 						 sid2->do_play ? "sendonly" : "inactive");
 				if (size - slen < 10)
@@ -203,6 +203,7 @@ setup_stream(char *str, sockets *s)
 		mutex_lock(&sid->mutex);
 		set_sock_lock(s->id, &sid->mutex); // lock the mutex as the sockets_unlock will unlock it
 		s->sid = s_id;
+		sid->sock = s->sock;
 
 		if (sid->st_sock == -1)
 		{
@@ -441,7 +442,7 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp)
 	if (default_rtp)
 		SAFE_STRCPY(p.dest, default_rtp);
 	if (p.dest[0] == 0 && p.type == TYPE_UNICAST)
-		get_socket_rhost(s->id, p.dest, sizeof(p.dest) - 1);
+		get_sockaddr_host(s->sa, p.dest, sizeof(p.dest) - 1);
 	if (p.dest[0] == 0)
 		SAFE_STRCPY(p.dest, opts.disc_host);
 	if (p.port == 0)
@@ -452,7 +453,7 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp)
 	{
 		if (sid->type == STREAM_RTSP_UDP && sid->rsock >= 0)
 		{
-			int oldport = ntohs(sid->sa.sin_port);
+			int oldport = get_stream_rport(sid->sid);
 			char *oldhost = get_stream_rhost(sid->sid, ra, sizeof(ra) - 1);
 
 			if (p.port == oldport && !strcmp(p.dest, oldhost))
@@ -475,7 +476,7 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp)
 	if (sid->type == 0)
 	{
 		int i;
-		struct sockaddr_in sa;
+		USockAddr sa;
 
 		sid->type = STREAM_RTSP_UDP;
 		if (sid->rtcp_sock > 0 || sid->rtcp)
@@ -491,10 +492,11 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp)
 						   "decode_transport failed: UDP connection on rtp port to %s:%d failed",
 						   p.dest, p.port);
 
-		if ((sid->rsock_id = sockets_add(sid->rsock, NULL, sid->sid, TYPE_UDP, NULL, (socket_action)close_stream_for_socket, NULL)) < 0)
+		if ((sid->rsock_id = sockets_add(sid->rsock, &sid->sa, sid->sid, TYPE_UDP, NULL, (socket_action)close_stream_for_socket, NULL)) < 0)
 			LOG_AND_RETURN(-1, "RTP sockets_add failed");
 
 		set_socket_send_buffer(sid->rsock, opts.output_buffer);
+		set_socket_dscp(sid->rsock, IPTOS_DSCP_EF);
 
 		if ((sid->rtcp = udp_bind_connect(NULL,
 										  opts.start_rtp + (sid->sid * 2) + 1, p.dest, p.port + 1, &sa)) < 1)
@@ -503,18 +505,24 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp)
 						   p.dest, p.port + 1);
 
 		set_linux_socket_timeout(sid->rtcp);
+		set_socket_dscp(sid->rtcp, IPTOS_DSCP_EF);
 
-		if ((sid->rtcp_sock = sockets_add(sid->rtcp, NULL, sid->sid, TYPE_RTCP,
+		if ((sid->rtcp_sock = sockets_add(sid->rtcp, &sa, sid->sid, TYPE_RTCP,
 										  (socket_action)rtcp_confirm, NULL, NULL)) < 0) // read rtcp
 			LOG_AND_RETURN(-1, "RTCP sockets_add failed");
 
 		for (i = 0; i < MAX_STREAMS; i++)
-			if ((sid2 = get_sid_for(i)) && i != sid->sid && sid2->sa.sin_port == sid->sa.sin_port && sid2->sa.sin_addr.s_addr == sid->sa.sin_addr.s_addr)
+			if ((sid2 = get_sid_for(i)) && i != sid->sid && get_sockaddr_port(sid2->sa) == get_sockaddr_port(sid->sa))
 			{
-				LOG(
-					"Detected stream with the same destination as sid %d: sid %d -> %s:%d, aid: %d",
-					sid->sid, i, p.dest, p.port, sid2->adapter);
-				close_stream(i);
+				char h1[100], h2[100];
+				get_sockaddr_host(sid->sa, h1, sizeof(h1));
+				get_sockaddr_host(sid2->sa, h2, sizeof(h2));
+				if (!strncmp(h1, h2, sizeof(h1)))
+				{
+					LOG("Detected stream with the same destination as sid %d: sid %d -> %s:%d, aid: %d",
+						sid->sid, i, p.dest, p.port, sid2->adapter);
+					close_stream(i);
+				}
 			}
 	}
 
@@ -545,7 +553,7 @@ int streams_add()
 	ss->useragent[0] = 0;
 	ss->len = 0;
 	ss->st_sock = -1;
-	//	ss->seq = 0; // set the sequence to 0 for testing purposes - it should be random
+	ss->seq = rand(); // set the sequence to 0 for testing purposes - it should be random
 	ss->ssrc = random();
 	ss->timeout = opts.timeout_sec;
 	ss->wtime = ss->rtcp_wtime = getTick();
@@ -622,12 +630,12 @@ int send_rtp(streams *sid, const struct iovec *iov, int liov)
 		LOG("Start streaming for stream %d, len %d to handle %d => %s:%d",
 			sid->sid, total_len, sid->rsock,
 			get_stream_rhost(sid->sid, ra, sizeof(ra)),
-			ntohs(sid->sa.sin_port));
+			get_stream_rport(sid->sid));
 	}
 
 	DEBUGM("%s: sent %d bytes for stream %d, handle %d, sock_id %d, seq %d => %s:%d",
 		   __FUNCTION__, total_len, sid->sid, sid->rsock, sid->rsock_id, sid->seq - 1,
-		   get_stream_rhost(sid->sid, ra, sizeof(ra)), ntohs(sid->sa.sin_port));
+		   get_stream_rhost(sid->sid, ra, sizeof(ra)), get_stream_rport(sid->sid));
 
 	return rv;
 }
@@ -725,7 +733,7 @@ int send_rtcp(int s_id, int64_t ctime)
 	sid->rtcp_wtime = ctime;
 	DEBUGM("%s: sent %d bytes for stream %d, handle %d seq %d => %s:%d",
 		   __FUNCTION__, total_len, sid->sid, sid->rsock, sid->seq - 1,
-		   get_stream_rhost(sid->sid, ra, sizeof(ra)), ntohs(sid->sa.sin_port));
+		   get_stream_rhost(sid->sid, ra, sizeof(ra)), get_stream_rport(sid->sid));
 
 	//	sid->sp = 0;
 	//	sid->sb = 0;
@@ -858,6 +866,8 @@ int check_cc(adapter *ad)
 			continue;
 
 		pid = PID_FROM_TS(b);
+		if (pid == 8191)
+			continue;
 		p = find_pid(ad->id, pid);
 
 		if ((!p))
@@ -869,9 +879,6 @@ int check_cc(adapter *ad)
 		}
 
 		p->packets++;
-
-		if (pid == 8191)
-			continue;
 
 		if (b[3] & 0x10)
 		{
@@ -1228,8 +1235,8 @@ void dump_streams()
 		if ((sid = get_sid_for(i)))
 			LOG("%d|  a:%d rsock:%d type:%d play:%d remote:%s:%d", i,
 				sid->adapter, sid->rsock, sid->type, sid->do_play,
-				get_stream_rhost(i, ra, sizeof(ra)),
-				ntohs(sid->sa.sin_port));
+				get_stream_rhost(sid->sid, ra, sizeof(ra)),
+				get_stream_rport(sid->sid));
 }
 
 int lock_streams_for_adapter(int aid)
@@ -1267,8 +1274,6 @@ void free_all_streams()
 
 	for (i = 0; i < MAX_STREAMS; i++)
 	{
-		if (st[i] && st[i]->iov)
-			free1(st[i]->iov);
 		if (st[i])
 			free1(st[i]);
 		st[i] = NULL;
@@ -1357,20 +1362,19 @@ int get_streams_for_adapter(int aid)
 
 char *get_stream_rhost(int s_id, char *dest, int ld)
 {
-	streams *sid = get_sid_nw(s_id);
-	dest[0] = 0;
-	if (!sid)
-		return dest;
-	inet_ntop(AF_INET, &(sid->sa.sin_addr), dest, ld);
-	return dest;
+       streams *sid = get_sid_nw(s_id);
+       dest[0] = 0;
+       if (!sid)
+               return dest;
+       return get_sockaddr_host(sid->sa, dest, ld);
 }
 
 int get_stream_rport(int s_id)
 {
-	streams *sid = get_sid_nw(s_id);
-	if (!sid)
-		return 0;
-	return ntohs(sid->sa.sin_port);
+       streams *sid = get_sid_nw(s_id);
+       if (!sid)
+               return 0;
+       return get_sockaddr_port(sid->sa);
 }
 
 char *get_stream_pids(int s_id, char *dest, int max_size)
