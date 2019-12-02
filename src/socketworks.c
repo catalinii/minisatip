@@ -176,15 +176,6 @@ int udp_bind(char *addr, int port, int ipv4_only)
 		close(sock);
 		return -1;
 	}
-#ifdef SO_REUSEPORT
-	if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval)) < 0)
-	{
-		LOG("udp_bind failed: setsockopt(SO_REUSEPORT): %s",
-			strerror(errno));
-		close(sock);
-		return -1;
-	}
-#endif
 
 	if (bind(sock, &serv.sa, sizeof(serv)) < 0)
 	{
