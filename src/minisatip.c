@@ -462,6 +462,13 @@ Help\n\
 * -u --unicable unicable_string: defines the unicable adapters (A) and their slot (S), frequency (F) and optionally the PIN for the switch:\n\
 \t* The format is: A1:S1-F1[-PIN][,A2:S2-F2[-PIN][,...]]\n\
 	eg: 2:0-1284[-1111]\n\
+* -U --sources sources_for_adapters: select the adapters for each source\n\
+	* eg: -U 0-2:*:3:1,5,7 (no spaces between parameters)\n\
+	- In this example: for SRC=1 only 0,1,2; for SRC=2 all: for SRC=3 only 3; and for SRC=4 the 1,5,7 adapters.\n\
+	- For each position (separated by : ) you need to declare all the adapters that use this position\n\
+	- The special char * indicates all adapters for this position\n\
+	- If errors or by default all adapters have enabled all positions\n\
+\n\
 \t* When * character is used before frequency, force 13V only for setup\n\
 \n\
 * -j --jess jess_string - same format as -u \n\
