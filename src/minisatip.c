@@ -1613,8 +1613,8 @@ int ssdp_reply(sockets *s)
 	if (ruuid && strncmp(uuid, strip(ruuid + 5), strlen(uuid)) == 0)
 	{
 		LOGM("Dropping packet from the same UUID as mine (from %s:%d)",
-			 get_sockaddr_rhost(s->sa, ra, sizeof(ra)),
-			 get_sockaddr_rport(s->sa));
+			 get_sockaddr_host(s->sa, ra, sizeof(ra)),
+			 get_sockaddr_port(s->sa));
 		return 0;
 	}
 
