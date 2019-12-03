@@ -75,6 +75,7 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 	int i, sidf, do_play = 0, streams_enabled = 0;
 	streams *sid, *sid2;
 	int do_all = 1;
+	int is_ipv6 = 0;
 
 	if (s->sid == -1 && strchr(req, '?'))
 		setup_stream(req, s);
@@ -83,11 +84,13 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 	sid = get_sid(s->sid);
 	if (sid)
 		do_play = sid->do_play;
-	//	else LOG_AND_RETURN(NULL, "No session associated with sock_id %d", s->sock_id);
+
+	get_sock_shost(s->sock, localhost, sizeof(localhost));
+	is_ipv6 = strchr(localhost, ':') != NULL;
 
 	snprintf(sbuf, size - 1,
-			 "v=0\r\no=- %010d %010d IN IP4 %s\r\ns=SatIPServer:1 %d,%d,%d\r\nt=0 0\r\n",
-			 sidf, sidf, get_sock_shost(s->sock, localhost, sizeof(localhost)), 
+			 "v=0\r\no=- %010d %010d IN %s %s\r\ns=SatIPServer:1 %d,%d,%d\r\nt=0 0\r\n",
+			 sidf, sidf, is_ipv6 ? "IP6": "IP4", localhost, 
 			 tuner_s2, tuner_t + tuner_t2, tuner_c + tuner_c2);
 	if (strchr(req, '?'))
 		do_all = 0;
