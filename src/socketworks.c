@@ -77,12 +77,14 @@ int fill_sockaddr(USockAddr *serv, char *host, int port, int ipv4_only)
 		if (s != 0)
 		{
 			LOG("getaddrinfo failed: host %s, port %s, %s\n", host, str_port, gai_strerror(s));
+			freeaddrinfo(result);
 			return 0;
 		}
 		if (result != NULL)
 		{
 			memcpy(serv, result->ai_addr, result->ai_addrlen);
 			family = result->ai_family;
+			freeaddrinfo(result);
 		}
 	}
 	if (!family && ipv4_only) // use IPv4 only
