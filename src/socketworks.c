@@ -177,12 +177,10 @@ int udp_bind(char *addr, int port, int ipv4_only)
 		return -1;
 	}
 #ifdef SO_REUSEPORT
-	if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval)) < 0)
+	if ((setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval)) < 0) && (errno != ENOPROTOOPT))
 	{
-		LOG("udp_bind failed: setsockopt(SO_REUSEPORT): %s",
+		LOG("Can't set setsockopt(SO_REUSEPORT): %s",
 			strerror(errno));
-		close(sock);
-		return -1;
 	}
 #endif
 
