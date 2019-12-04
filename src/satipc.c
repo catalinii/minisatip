@@ -352,7 +352,7 @@ int satipc_rtcp_reply(sockets *s)
 
 		if (!sip->init_use_tcp && ((++sip->repno % 100) == 0)) //every 20s
 			LOG(
-				"satipc: rtp report, adapter %d: rtcp missing packets %d, rtp missing %d, rtp ooo %d, pid err %d",
+				"satipc: rtp report, adapter %d: rtcp missing packets %d, rtp missing %d, rtp ooo %d, pid unknown %d",
 				ad->id, rp - sip->rcvp, sip->rtp_miss, sip->rtp_ooo,
 				ad->pid_err);
 	}
