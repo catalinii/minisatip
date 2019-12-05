@@ -80,7 +80,7 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 	if (s->sid == -1 && strchr(req, '?'))
 		setup_stream(req, s);
 
-	sidf = get_session_id(s->sid + 1);
+	sidf = get_session_id(s->sid);
 	sid = get_sid(s->sid);
 	if (sid)
 		do_play = sid->do_play;
@@ -134,7 +134,7 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 
 		strlcatf(sbuf, size, slen,
 				 "m=video 0 RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\nb=AS:5000\r\na=%s\r\n",
-				 s_id, tp, do_play ? "sendonly" : "inactive");
+				 s_id, tp, sid->do_play ? "sendonly" : "inactive");
 	}
 	return sbuf;
 }
