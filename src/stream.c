@@ -80,7 +80,7 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 	if (s->sid == -1 && strchr(req, '?'))
 		setup_stream(req, s);
 
-	sidf = get_session_id(s->sid);
+	sidf = get_session_id(s->sid + 1);
 	sid = get_sid(s->sid);
 	if (sid)
 		do_play = sid->do_play;
