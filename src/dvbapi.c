@@ -267,9 +267,13 @@ int dvbapi_reply(sockets *s)
 				k_id, i, a_id, demux, filter, _pid, _pid);
 			if (i < MAX_KEY_FILTERS && i >= 0)
 			{
+				// Workaround to fix CC-erros with some sources
+				/*
 				del_filter(k->filter_id[i]);
 				k->filter_id[i] = -1;
 				k->pid[i] = -1;
+				*/
+				LOG("dvbapi: request to delete filter, but NOT deleting the filter!");
 			}
 
 			if (k)
