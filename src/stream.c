@@ -72,7 +72,7 @@ streams *get_sid1(int sid, char *file, int line)
 char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 {
 	char *stream_id, dad[1000], localhost[100];
-	int i, sidf, do_play = 0, streams_enabled = 0;
+	int i, sidf, __attribute__((unused)) do_play = 0, streams_enabled = 0;
 	streams *sid, *sid2;
 	int do_all = 1;
 	int is_ipv6 = 0;
