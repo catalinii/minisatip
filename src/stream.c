@@ -82,6 +82,8 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 
 	sidf = get_session_id(s->sid);
 	sid = get_sid(s->sid);
+	if (sid)
+		do_play = sid->do_play;
 
 	get_sock_shost(s->sock, localhost, sizeof(localhost));
 	is_ipv6 = strchr(localhost, ':') != NULL;
