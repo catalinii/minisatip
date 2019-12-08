@@ -603,7 +603,7 @@ void dump_pids(int aid)
 		if (p->pids[i].flags > 0)
 		{
 			if (dp)
-				LOG("Dumping pids table for adapter %d, pid errors %d", aid, p->pid_err);
+				LOG("Dumping pids table for adapter %d, pid unknown %d", aid, p->pid_err);
 			dp = 0;
 			LOG("pid %d, fd %d, packets %d, d/c errs %d/%d, flags %d, pmt %d, filter %d, sock %d, sids: %d %d %d %d %d %d %d %d",
 				p->pids[i].pid, p->pids[i].fd,
