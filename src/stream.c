@@ -72,7 +72,7 @@ streams *get_sid1(int sid, char *file, int line)
 char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 {
 	char *stream_id, dad[1000], localhost[100];
-	int i, sidf, __attribute__((unused)) do_play = 0, streams_enabled = 0;
+	int i, sidf, do_play = 0, streams_enabled = 0;
 	streams *sid, *sid2;
 	int do_all = 1;
 	int is_ipv6 = 0;
@@ -127,6 +127,7 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 		if (sid)
 		{
 			s_id = sid->sid + 1;
+			do_play = sid->do_play;
 			tp = describe_adapter(sid->sid, sid->adapter, dad, sizeof(dad));
 		}
 		else
@@ -134,7 +135,7 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 
 		strlcatf(sbuf, size, slen,
 				 "m=video 0 RTP/AVP 33\r\nc=IN IP4 0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 %s\r\nb=AS:5000\r\na=%s\r\n",
-				 s_id, tp, sid->do_play ? "sendonly" : "inactive");
+				 s_id, tp, do_play ? "sendonly" : "inactive");
 	}
 	return sbuf;
 }
