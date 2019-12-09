@@ -749,12 +749,12 @@ void check_packet_encrypted(adapter *ad)
 				start = 5 + b[4];
 			if (start + 3 > 188)
 				return;
-			if (b[start] != 0 || b[start + 1] != 0 || b[start + 2] != 1)
+			if (b[start] != 0 && (b[start + 1] != 0 || b[start + 2] != 1))
 			{
 				enc[pid]++;
 				DEBUGM("decryption failed for pid %d, parity %d, start %d: %02X %02X %02X %02X %02X %02X %02X %02X", pid, cp, start, b[start], b[start + 1], b[start + 2], b[start + 3], b[start + 4], b[start + 5], b[start + 6], b[start + 7])
 			}
-			else
+			else if (b[start] && b[start + 1] && (b[start + 2] == 1))
 			{
 				dec[pid]++;
 				DEBUGM("decryption worked for pid %d, parity %d, start %d: [%02X %02X %02X %02X] %02X %02X %02X %02X %02X %02X %02X %02X", pid, cp, start, b[0], b[1], b[2], b[3], b[start], b[start + 1], b[start + 2], b[start + 3], b[start + 4], b[start + 5], b[start + 6], b[start + 7])
