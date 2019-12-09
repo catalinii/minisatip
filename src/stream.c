@@ -127,6 +127,7 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 		if (sid)
 		{
 			s_id = sid->sid + 1;
+			do_play = sid->do_play;
 			tp = describe_adapter(sid->sid, sid->adapter, dad, sizeof(dad));
 		}
 		else
