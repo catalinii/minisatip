@@ -640,7 +640,7 @@ int send_rtp(streams *sid, const struct iovec *iov, int liov)
 		   get_stream_rhost(sid->sid, ra, sizeof(ra)), get_stream_rport(sid->sid));
 
 	sid->seq++;
-        sid->seq &= 0xFFFF; // rollover
+	sid->seq &= 0xFFFF; // rollover
 	
 	return rv;
 }
