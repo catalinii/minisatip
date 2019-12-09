@@ -406,7 +406,7 @@ int dvbapi_reply(sockets *s)
 	return 0;
 }
 
-int dvbapi_send_pmt(SKey *k)
+int dvbapi_send_pmt(SKey *k, int forceNewList)
 {
 	unsigned char buf[1500];
 	int len, i;
@@ -495,7 +495,7 @@ int dvbapi_send_pmt(SKey *k)
 
 	// make sure is ONLY is not sent by multiple threads
 	int ep = __sync_add_and_fetch(&enabled_pmts, 1);
-	buf[6] = (ep == 1) ? CAPMT_LIST_ONLY : CAPMT_LIST_ADD;
+	buf[6] = ((ep == 1) || forceNewList) ? CAPMT_LIST_ONLY : CAPMT_LIST_ADD;
 	TEST_WRITE(write(sock, buf, len), len);
 	LOG("Sending pmt to dvbapi server for pid %d, Channel ID %04X, key %d, adapter %d, demux %d, using socket %d (enabled pmts %d)",
 		k->pmt_pid, k->sid, k->id, adapter, demux, sock, ep);
@@ -799,12 +799,31 @@ int keys_del(int i)
 		if (keys[j] && keys[j]->enabled)
 			ek++;
 	enabledKeys = ek;
-	if (!ek && sock > 0)
-		TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
-	if (!ek)
-		enabled_pmts = 0;
+	if (network_mode)
+	{
+		if (!ek && sock > 0)
+			TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
+		if (!ek)
+			enabled_pmts = 0;
+	}
 	dvbapi_last_close = getTick();
 	mutex_destroy(&k->mutex);
+
+    if (!network_mode)
+	{
+		int keysEnabled = 0;
+		for (i = 0; i < MAX_KEYS; i++)
+			if (keys[i] && keys[i]->enabled)
+			{
+				k = get_key(i);
+				if (!k)
+					continue;
+				dvbapi_send_pmt(k, keysEnabled == 0 ? 1 : 0);
+				keysEnabled++;
+			}
+	}
+
+
 	return 0;
 }
 
@@ -831,7 +850,7 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt)
 	k->tsid = ad->transponder_id;
 	k->onid = 0;
 	k->last_dmx_stop = getTick();
-	dvbapi_send_pmt(k);
+	dvbapi_send_pmt(k, 0);
 
 	mutex_unlock(&k->mutex);
 	return 0;
