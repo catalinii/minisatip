@@ -1731,7 +1731,7 @@ int main(int argc, char *argv[])
 	set_options(argc, argv);
 	if ((rv = init_utils(argv[0])))
 	{
-		LOG("init_utils failed with %d", rv);
+		LOG0("init_utils failed with %d", rv);
 		return rv;
 	}
 	if (opts.daemon)
