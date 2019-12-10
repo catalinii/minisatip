@@ -406,7 +406,7 @@ int dvbapi_reply(sockets *s)
 	return 0;
 }
 
-int dvbapi_send_pmt(SKey *k, int forceNewList)
+int dvbapi_send_pmt(SKey *k)
 {
 	unsigned char buf[1500];
 	int len, i;
@@ -495,7 +495,7 @@ int dvbapi_send_pmt(SKey *k, int forceNewList)
 
 	// make sure is ONLY is not sent by multiple threads
 	int ep = __sync_add_and_fetch(&enabled_pmts, 1);
-	buf[6] = ((ep == 1) || forceNewList) ? CAPMT_LIST_ONLY : CAPMT_LIST_ADD;
+	buf[6] = (ep == 1) ? CAPMT_LIST_ONLY : CAPMT_LIST_ADD;
 	TEST_WRITE(write(sock, buf, len), len);
 	LOG("Sending pmt to dvbapi server for pid %d, Channel ID %04X, key %d, adapter %d, demux %d, using socket %d (enabled pmts %d)",
 		k->pmt_pid, k->sid, k->id, adapter, demux, sock, ep);
@@ -762,7 +762,7 @@ int keys_add(int i, int adapter, int pmt_id)
 
 int keys_del(int i)
 {
-	int j, ek;
+	int j, ek, demux_index = 0;
 	SKey *k;
 	unsigned char buf[8] =
 		{0x9F, 0x80, 0x3f, 4, 0x83, 2, 0, 0};
@@ -777,10 +777,13 @@ int keys_del(int i)
 		return 0;
 	}
 	k->enabled = 0;
-	buf[7] = k->demux_index;
+	demux_index = k->demux_index;
+	buf[7] = demux_index;
 
 	LOG("Stopping DEMUX %d, removing key %d, sock %d, pmt pid %d, sid %04X", buf[7], i,
 		sock, k->pmt_pid, k->sid);
+
+	// removes all the PMTs from k->demux_index
 	if ((buf[7] != 255) && (sock > 0))
 		TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
 
@@ -799,31 +802,25 @@ int keys_del(int i)
 		if (keys[j] && keys[j]->enabled)
 			ek++;
 	enabledKeys = ek;
-	if (network_mode)
-	{
-		if (!ek && sock > 0)
-			TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
-		if (!ek)
-			enabled_pmts = 0;
-	}
+	if (!ek && sock > 0)
+		TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
+	if (!ek)
+		enabled_pmts = 0;
 	dvbapi_last_close = getTick();
 	mutex_destroy(&k->mutex);
 
-    if (!network_mode)
+	if (enabled_pmts)
 	{
-		int keysEnabled = 0;
+		// add all the PMTs back on the same demux_index
 		for (i = 0; i < MAX_KEYS; i++)
-			if (keys[i] && keys[i]->enabled)
+			if (keys[i] && keys[i]->enabled && keys[i]->demux_index == demux_index)
 			{
 				k = get_key(i);
 				if (!k)
 					continue;
-				dvbapi_send_pmt(k, keysEnabled == 0 ? 1 : 0);
-				keysEnabled++;
+				dvbapi_send_pmt(k);
 			}
 	}
-
-
 	return 0;
 }
 
@@ -850,7 +847,7 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt)
 	k->tsid = ad->transponder_id;
 	k->onid = 0;
 	k->last_dmx_stop = getTick();
-	dvbapi_send_pmt(k, 0);
+	dvbapi_send_pmt(k);
 
 	mutex_unlock(&k->mutex);
 	return 0;
