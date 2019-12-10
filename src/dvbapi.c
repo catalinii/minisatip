@@ -791,6 +791,7 @@ int keys_del(int i)
 	k->pmt_pid = 0;
 	k->adapter = -1;
 	k->last_dmx_stop = 0;
+	k->demux_index = -1;
 	for (j = 0; j < MAX_KEY_FILTERS; j++)
 		if (k->filter_id[j] >= 0)
 			del_filter(k->filter_id[j]);
@@ -818,6 +819,7 @@ int keys_del(int i)
 				k = get_key(i);
 				if (!k)
 					continue;
+				LOG("Adding back pmt %d, key %d, demux_index %d", k->pmt_id, k->id, demux_index);
 				dvbapi_send_pmt(k);
 			}
 	}
