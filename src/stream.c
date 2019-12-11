@@ -557,7 +557,7 @@ int streams_add()
 	ss->useragent[0] = 0;
 	ss->len = 0;
 	ss->st_sock = -1;
-	ss->seq = rand(); // set the sequence to 0 for testing purposes - it should be random
+	//	ss->seq = 0; // set the sequence to 0 for testing purposes - it should be random
 	ss->ssrc = random();
 	ss->timeout = opts.timeout_sec;
 	ss->wtime = ss->rtcp_wtime = getTick();
@@ -612,7 +612,6 @@ int send_rtp(streams *sid, const struct iovec *iov, int liov)
 	copy16(rtp_h, 2, sid->seq);
 	copy32(rtp_h, 4, sid->wtime);
 	copy32(rtp_h, 8, sid->ssrc);
-	sid->seq++;
 
 	if (sid->type == STREAM_RTSP_UDP)
 	{
@@ -638,9 +637,11 @@ int send_rtp(streams *sid, const struct iovec *iov, int liov)
 	}
 
 	DEBUGM("%s: sent %d bytes for stream %d, handle %d, sock_id %d, seq %d => %s:%d",
-		   __FUNCTION__, total_len, sid->sid, sid->rsock, sid->rsock_id, sid->seq - 1,
+		   __FUNCTION__, total_len, sid->sid, sid->rsock, sid->rsock_id, sid->seq,
 		   get_stream_rhost(sid->sid, ra, sizeof(ra)), get_stream_rport(sid->sid));
 
+	sid->seq = (sid->seq + 1) & 0xFFFF; // rollover
+	
 	return rv;
 }
 
