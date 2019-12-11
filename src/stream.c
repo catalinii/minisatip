@@ -607,7 +607,7 @@ int send_rtp(streams *sid, const struct iovec *iov, int liov)
 		total_len += iov[i].iov_len;
 	
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	timestamp=(uint32_t) (90000 * ((ts.tv_sec * 1000000ll + ts.tv_nsec / 1000)/1000000ll))+(9*((ts.tv_sec * 1000000ll + ts.tv_nsec / 1000)%1000000ll))/100;	// 90 kHz Clock
+	timestamp = (uint32_t) (90000 * ((ts.tv_sec * 1000000ll + ts.tv_nsec / 1000)/1000000ll))+(9*((ts.tv_sec * 1000000ll + ts.tv_nsec / 1000)%1000000ll))/100;	// 90 kHz Clock
 	memset(&io, 0, sizeof(io));
 	rtp_buf[0] = 0x24;
 	rtp_buf[1] = 0;
