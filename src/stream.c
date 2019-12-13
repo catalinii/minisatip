@@ -598,19 +598,23 @@ int send_rtp(streams *sid, const struct iovec *iov, int liov)
 	int i, total_len = 0, rv;
 	unsigned char *rtp_h;
 	unsigned char rtp_buf[16];
+	struct timespec ts;
+	uint32_t timestamp;
 
 	rtp_h = rtp_buf + 4;
 
 	for (i = 0; i < liov; i++)
 		total_len += iov[i].iov_len;
-
+	
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	timestamp = (uint32_t) (90000 * ((ts.tv_sec * 1000000ll + ts.tv_nsec / 1000)/1000000ll))+(9*((ts.tv_sec * 1000000ll + ts.tv_nsec / 1000)%1000000ll))/100;	// 90 kHz Clock
 	memset(&io, 0, sizeof(io));
 	rtp_buf[0] = 0x24;
 	rtp_buf[1] = 0;
 	copy16(rtp_buf, 2, total_len + 12);
 	copy16(rtp_h, 0, 0x8021);
 	copy16(rtp_h, 2, sid->seq);
-	copy32(rtp_h, 4, sid->wtime);
+	copy32(rtp_h, 4, timestamp);
 	copy32(rtp_h, 8, sid->ssrc);
 
 	if (sid->type == STREAM_RTSP_UDP)
