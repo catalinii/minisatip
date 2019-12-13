@@ -72,7 +72,7 @@ streams *get_sid1(int sid, char *file, int line)
 char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 {
 	char *stream_id, dad[1000], localhost[100];
-	int i, sidf, do_play = 0, streams_enabled = 0;
+	int i, do_play = 0, streams_enabled = 0;
 	streams *sid, *sid2;
 	int do_all = 1;
 	int is_ipv6 = 0;
@@ -80,7 +80,6 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 	if (s->sid == -1 && strchr(req, '?'))
 		setup_stream(req, s);
 
-	sidf = get_session_id(s->sid);
 	sid = get_sid(s->sid);
 	if (sid)
 		do_play = sid->do_play;
@@ -89,8 +88,8 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 	is_ipv6 = strchr(localhost, ':') != NULL;
 
 	snprintf(sbuf, size - 1,
-			 "v=0\r\no=- %010d %010d IN %s %s\r\ns=SatIPServer:1 %d,%d,%d\r\nt=0 0\r\n",
-			 sidf, sidf, is_ipv6 ? "IP6": "IP4", localhost, 
+			 "v=0\r\no=- %ld %ld IN %s %s\r\ns=SatIPServer:1 %d,%d,%d\r\nt=0 0\r\n",
+			 getTick(), getTick(), is_ipv6 ? "IP6": "IP4", localhost, 
 			 tuner_s2, tuner_t + tuner_t2, tuner_c + tuner_c2);
 	if (strchr(req, '?'))
 		do_all = 0;
