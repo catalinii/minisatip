@@ -1309,7 +1309,7 @@ int read_rtsp(sockets *s)
 
 #define JSON_STATE_MAXLEN (256 * 1024)
 
-char uuid[100];
+char uuid[50];
 int uuidi;
 USockAddr ssdp_sa;
 

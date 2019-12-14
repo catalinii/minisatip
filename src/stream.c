@@ -90,7 +90,7 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 
 	snprintf(sbuf, size - 1,
 			 "v=0\r\no=- %010d %010d IN %s %s\r\ns=SatIPServer:1 %d,%d,%d\r\nt=0 0\r\n",
-			 sidf, sidf, is_ipv6 ? "IP6": "IP4", localhost, 
+			 sidf, sidf, is_ipv6 ? "IP6" : "IP4", localhost,
 			 tuner_s2, tuner_t + tuner_t2, tuner_c + tuner_c2);
 	if (strchr(req, '?'))
 		do_all = 0;
@@ -605,9 +605,9 @@ int send_rtp(streams *sid, const struct iovec *iov, int liov)
 
 	for (i = 0; i < liov; i++)
 		total_len += iov[i].iov_len;
-	
+
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	timestamp = (uint32_t) (90000 * ((ts.tv_sec * 1000000ll + ts.tv_nsec / 1000)/1000000ll))+(9*((ts.tv_sec * 1000000ll + ts.tv_nsec / 1000)%1000000ll))/100;	// 90 kHz Clock
+	timestamp = (uint32_t)(90000 * ((ts.tv_sec * 1000000ll + ts.tv_nsec / 1000) / 1000000ll)) + (9 * ((ts.tv_sec * 1000000ll + ts.tv_nsec / 1000) % 1000000ll)) / 100; // 90 kHz Clock
 	memset(&io, 0, sizeof(io));
 	rtp_buf[0] = 0x24;
 	rtp_buf[1] = 0;
@@ -645,7 +645,7 @@ int send_rtp(streams *sid, const struct iovec *iov, int liov)
 		   get_stream_rhost(sid->sid, ra, sizeof(ra)), get_stream_rport(sid->sid));
 
 	sid->seq = (sid->seq + 1) & 0xFFFF; // rollover
-	
+
 	return rv;
 }
 
@@ -1371,19 +1371,19 @@ int get_streams_for_adapter(int aid)
 
 char *get_stream_rhost(int s_id, char *dest, int ld)
 {
-       streams *sid = get_sid_nw(s_id);
-       dest[0] = 0;
-       if (!sid)
-               return dest;
-       return get_sockaddr_host(sid->sa, dest, ld);
+	streams *sid = get_sid_nw(s_id);
+	dest[0] = 0;
+	if (!sid)
+		return dest;
+	return get_sockaddr_host(sid->sa, dest, ld);
 }
 
 int get_stream_rport(int s_id)
 {
-       streams *sid = get_sid_nw(s_id);
-       if (!sid)
-               return 0;
-       return get_sockaddr_port(sid->sa);
+	streams *sid = get_sid_nw(s_id);
+	if (!sid)
+		return 0;
+	return get_sockaddr_port(sid->sa);
 }
 
 char *get_stream_pids(int s_id, char *dest, int max_size)

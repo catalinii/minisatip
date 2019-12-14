@@ -1237,14 +1237,13 @@ char *get_sockaddr_host(USockAddr s, char *dest, int ld)
 		p = (void *)&s.sin6.sin6_addr;
 	else if (s.sa.sa_family != AF_INET)
 		return dest;
-    inet_ntop(s.sa.sa_family, p, dest, ld);	
+	inet_ntop(s.sa.sa_family, p, dest, ld);
 	if (s.sa.sa_family == AF_INET6) // convert IPv4 in IPv6 to IPv4 address
 	{
 		if (!strncmp(dest, "::ffff:", 7))
 		{
 			memmove(dest, dest + 7, ld - 7);
 		}
-
 	}
 	return dest;
 }
