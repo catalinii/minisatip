@@ -194,13 +194,13 @@ int satipc_reply(sockets *s)
 	}
 	else if (rc != 200)
 	{
-                if (rc != 0) // AVM Fritz!Box workaround sdp reply without header
-                {
-                        LOG("marking device %d as error, rc = %d", sip->id, rc);
-                        sip->err = 1;
-                }
-                else
-                LOG("marking device %d not as error but reply is unexpected, rc = %d", sip->id, rc);
+		if (rc != 0) // AVM Fritz!Box workaround sdp reply without header
+		{
+			LOG("marking device %d as error, rc = %d", sip->id, rc);
+			sip->err = 1;
+		}
+		else
+			LOG("marking device %d not as error but reply is unexpected, rc = %d", sip->id, rc);
 	}
 	sid = NULL;
 	if (rc == 200 && !sip->want_tune && sip->last_cmd == RTSP_PLAY && sip->ignore_packets)
@@ -319,12 +319,12 @@ void set_adapter_signal(adapter *ad, char *b, int rlen)
 		sscanf(signal + 1, "%d,%d,%d", &strength, &status, &snr);
 		// Workaround for faulty servers (level=0)
 		// Ex. XORO: "SES1....ver=1.0;src=1;tuner=1,0,1,15,10744,h,dvbs,qpsk,off,0.35,22000,56;pids=0,100,200,400,500,600,17,16"
-		if (strength==0 && status>0 && snr>0)
-			 strength = 1;
+		if (strength == 0 && status > 0 && snr > 0)
+			strength = 1;
 		// Workaround for faulty servers (quality=0)
 		// Ex. AVM 6490: "SES1....ver=1.2;src=1;tuner=1,106,1,0,538.00,8,dvbc,256qam,6900,,,,1;pids=0,118,2351,2352"
-		if (snr==0 && strength>0 && status>0)
-			 snr = 7;
+		if (snr == 0 && strength > 0 && status > 0)
+			snr = 7;
 		if (ad->strength != strength || ad->snr != snr)
 			LOG(
 				"satipc: Received signal status from the server for adapter %d, stength=%d status=%d snr=%d",
@@ -342,7 +342,7 @@ int satipc_rtcp_reply(sockets *s)
 	adapter *ad;
 	satipc *sip;
 	get_ad_and_sipr(s->sid, 0);
-	uint32_t rp,sm;
+	uint32_t rp, sm;
 
 	s->rlen = 0;
 	//	LOG("satip_rtcp_reply called");
@@ -359,22 +359,22 @@ int satipc_rtcp_reply(sockets *s)
 
 	// Parse SAT>IP RTCP APP packets
 
-	for (sm=0, rp=0; sm<rlen; sm++)
+	for (sm = 0, rp = 0; sm < rlen; sm++)
 	{
-		if (b[sm]!='S' || b[sm+1]!='E' || b[sm+2]!='S' || b[sm+3]!='1')
+		if (b[sm] != 'S' || b[sm + 1] != 'E' || b[sm + 2] != 'S' || b[sm + 3] != '1')
 			continue;
 		DEBUGM("satipc: satipc_rtcp_reply SES1 match at %d", sm);
 		sm += 4;
-		if (b[sm]==0 && b[sm+1]==0)
+		if (b[sm] == 0 && b[sm + 1] == 0)
 		{
-			rp = (b[sm+2] << 8) | b[sm+3];
+			rp = (b[sm + 2] << 8) | b[sm + 3];
 			sm += 4;
 			break;
 		}
 	}
 
-	if (rp && rlen > sm+rp)
-		set_adapter_signal(ad, (char *)b+sm, rp);
+	if (rp && rlen > sm + rp)
+		set_adapter_signal(ad, (char *)b + sm, rp);
 	else
 		set_adapter_signal(ad, (char *)b, rlen);
 
@@ -800,7 +800,7 @@ int satipc_set_pid(adapter *ad, int pid)
 	{
 		if (sip->dpid[i] == pid)
 		{
-			if (i+1 == sip->ldp)
+			if (i + 1 == sip->ldp)
 				sip->ldp--;
 			else
 				sip->dpid[i] = sip->dpid[sip->ldp--];
@@ -825,7 +825,7 @@ int satipc_del_filters(adapter *ad, int fd, int pid)
 	{
 		if (sip->apid[i] == pid)
 		{
-			if (i+1 == sip->lap)
+			if (i + 1 == sip->lap)
 				sip->lap--;
 			else
 				sip->apid[i] = sip->apid[sip->lap--];

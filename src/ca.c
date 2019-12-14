@@ -1261,7 +1261,7 @@ static void get_authdata_filename(char *dest, size_t len, unsigned int slot, cha
                                         fclose(auth_bin);
                                 /* correct symlink */
                                 int r = remove(source);
-                                LOG("CORRECTING %s to %s %s", target, source, r?"": "(remove failed)");
+                                LOG("CORRECTING %s to %s %s", target, source, r ? "" : "(remove failed)");
                                 symlink(target, source);
                         }
                 }
@@ -1274,7 +1274,7 @@ static void get_authdata_filename(char *dest, size_t len, unsigned int slot, cha
                       remove and do symlink */
                                 fclose(auth_bin);
                                 int r = remove(source);
-                                LOG("LINKING %s to %s %s", target, source, r?"": "(remove failed)");
+                                LOG("LINKING %s to %s %s", target, source, r ? "" : "(remove failed)");
                                 symlink(target, source);
                         }
                         else
@@ -1792,8 +1792,8 @@ static int check_ci_certificates(struct cc_ctrl_data *cc_data)
         if (extract_ci_cert)
         {
                 /* write ci device cert to disk */
-                char ci_cert_file[128];
-		memset(ci_cert_file, 0, sizeof(ci_cert_file));
+                char ci_cert_file[256];
+                memset(ci_cert_file, 0, sizeof(ci_cert_file));
                 snprintf(ci_cert_file, sizeof(ci_cert_file) - 1, "/%s/ci_cert_%s_%d.der", getenv("HOME"), ci_name_underscore, ci_number);
                 LOG("CI%d EXTRACTING %s", ci_number, ci_cert_file);
                 int fd = open(ci_cert_file, O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR);
