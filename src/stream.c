@@ -89,7 +89,7 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 
 	snprintf(sbuf, size - 1,
 			 "v=0\r\no=- %010d %010d IN %s %s\r\ns=SatIPServer:1 %d,%d,%d\r\nt=0 0\r\n",
-			 sidf, sidf, is_ipv6 ? "IP6" : "IP4", localhost,
+			 getTick(), getTick(), is_ipv6 ? "IP6" : "IP4", localhost,
 			 tuner_s2, tuner_t + tuner_t2, tuner_c + tuner_c2);
 	if (strchr(req, '?'))
 		do_all = 0;
