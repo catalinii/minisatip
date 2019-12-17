@@ -1909,7 +1909,7 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 	if (rc != 501)
 		strlcatf(resp, sizeof(resp) - 1, lresp, "Server: %s/%s\r\n", app_name, version);
 
-	if (rc != 454)
+	if (rc != 454 && rc != 404)
 		strlcatf(resp, sizeof(resp) - 1, lresp, "%s\r\n", ah);
 
 	if (lr > 0)
