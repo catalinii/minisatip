@@ -1348,9 +1348,13 @@ int find_session_id(int id)
 int rtcp_confirm(sockets *s)
 {
 	streams *sid;
-	//	LOG("rtcp_confirm called for from %s:%d", inet_ntoa(s->sa.sin_addr), ntohs(s->sa.sin_port));
-	// checking just the ports and the destination
+	// char ra[50];
+	
 	sid = get_sid(s->sid);
+	//	LOG("%s called for stream %d from %s:%d",
+	//		__FUNCTION__, s->sid, get_stream_rhost(sid->sid, ra, sizeof(ra) - 1), get_stream_rport(sid->sid) + 1);
+	// checking just the ports and the destination
+
 	if (sid)
 	{
 		LOGM("Acknowledging stream %d via rtcp packet", s->sid);
