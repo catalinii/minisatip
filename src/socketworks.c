@@ -860,7 +860,7 @@ void *select_and_execute(void *arg)
 						read_ok ? "OK" : "NOK", rlen, master->rlen, master->lbuf,
 						ss->sock, ss->id, master->id, pos, master->buf, ss->iteration, master->action);
 
-					if (((master->rlen > 0) || err == EWOULDBLOCK) && master->action && (master->type != TYPE_SERVER) && rlen != 0)
+					if (((master->rlen > 0) || err == EWOULDBLOCK) && master->action && (master->type != TYPE_SERVER) && rlen > 0)
 						master->action(master);
 
 					sockets_unlock(ss);
