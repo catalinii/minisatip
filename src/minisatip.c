@@ -258,7 +258,7 @@ void print_version(int use_log)
 	if (!use_log)
 		puts(buf);
 	else
-		LOG(buf);
+		LOG0(buf);
 	for (i = 0; built_info[i]; i++)
 		LOG("%s", built_info[i]);
 }
@@ -1731,7 +1731,7 @@ int main(int argc, char *argv[])
 	set_options(argc, argv);
 	if ((rv = init_utils(argv[0])))
 	{
-		LOG("init_utils failed with %d", rv);
+		LOG0("init_utils failed with %d", rv);
 		return rv;
 	}
 	if (opts.daemon)
@@ -1816,7 +1816,9 @@ int main(int argc, char *argv[])
 #ifndef DISABLE_PMT
 	pmt_destroy();
 #endif
+	LOG0("Closing...");
 	free_all();
+	LOG0("Exit OK.");
 	if (opts.slog)
 		closelog();
 	return 0;
