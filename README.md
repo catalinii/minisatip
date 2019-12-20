@@ -188,6 +188,13 @@ Help
 	eg: 2:0-1284[-1111]
 	* When * character is used before frequency, force 13V only for setup
 
+* -U --sources sources_for_adapters: select the adapters for each source
+	* eg: -U 0-2:*:3:1,5,7 (no spaces between parameters)
+	- In this example: for SRC=1 only 0,1,2; for SRC=2 all: for SRC=3 only 3; and for SRC=4 the 1,5,7 adapters.
+	- For each position (separated by : ) you need to declare all the adapters that use this position
+	- The special char * indicates all adapters for this position
+	- If errors or by default all adapters have enabled all positions
+
 * -j --jess jess_string - same format as -u 
 
 * -w --http-host http_server[:port]: specify the host and the port (if not 80) where the xml file can be downloaded from [default: default_local_ip_address:8080] 
