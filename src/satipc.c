@@ -247,19 +247,29 @@ int satipc_reply(sockets *s)
 		sip->expect_reply = 0;
 	else
 	{
-		char *np = (char *)getItem(MAKE_ITEM(ad->id, sip->wp));
-		if (np)
+		while(sip->qp>sip->wp)
 		{
-			int len = strlen(np);
-			if (sip->session[0] && !strstr(np, "Session:"))
-				sprintf(np + len - 2, "Session: %s\r\n\r\n", sip->session);
+			char *np = (char *)getItem(MAKE_ITEM(ad->id, sip->wp));
+			if (np)
+			{
+				int len = strlen(np);
+				if (sip->qp > sip->wp+1 && !strncmp(np, "OPTIONS", 7))
+				{
+					LOG("Found multiple packets enqueued, dropping OPTIONS at %d from %d", sip->wp, sip->qp)
+					delItem(MAKE_ITEM(ad->id, sip->wp++));
+					continue;
+				}
+				if (sip->session[0] && !strstr(np, "Session:"))
+					sprintf(np + len - 2, "Session: %s\r\n\r\n", sip->session);
 
-			LOG("satipc_reply: sending next packet:\n%s", np);
-			rv = sockets_write(s->id, np, strlen(np));
-			delItem(MAKE_ITEM(ad->id, sip->wp++));
+				LOG("satipc_reply: sending next packet:\n%s", np);
+				rv = sockets_write(s->id, np, strlen(np));
+				delItem(MAKE_ITEM(ad->id, sip->wp));
+			}
+			else
+				LOG("satipc: expected element but not found %08x", MAKE_ITEM(ad->id, sip->wp));
+			sip->wp++;
 		}
-		else
-			LOG("satipc: expected element but not found %08x", MAKE_ITEM(ad->id, sip->wp));
 	}
 	if (!sip->expect_reply && (sip->wp >= sip->qp) && (sip->want_commit || sip->force_commit)) // we do not expect reply and no other events in the queue, we commit a
 	{
