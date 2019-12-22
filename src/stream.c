@@ -1353,7 +1353,6 @@ int rtcp_confirm(sockets *s)
 	sid = get_sid(s->sid);
 	//	LOG("%s called for stream %d from %s:%d",
 	//		__FUNCTION__, s->sid, get_stream_rhost(sid->sid, ra, sizeof(ra) - 1), get_stream_rport(sid->sid) + 1);
-	// checking just the ports and the destination
 
 	if (sid)
 	{
