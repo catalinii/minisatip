@@ -134,8 +134,8 @@ int satipc_reply(sockets *s)
 	__attribute__((unused)) int rv;
 	get_ad_and_sipr(s->sid, 1);
 	s->rlen = 0;
-	LOG("satipc_reply (sock %d) handle %d, adapter %d:\n%s", s->id, s->sock,
-		s->sid, s->buf);
+	LOG("satipc_reply (sock %d) handle %d, adapter %d :", s->id, s->sock, s->sid);
+	LOGM("%s", s->buf);
 
 	if ((timeout = strstr((char *)s->buf, "timeout=")))
 	{
@@ -1016,8 +1016,9 @@ int http_request(adapter *ad, char *url, char *method)
 	lb = snprintf(buf, sizeof(buf), format, method, sip->sip, sip->sport, sid,
 				  qm, url, sip->cseq++, session);
 
-	LOG("satipc_http_request (ad %d): %s to sock %d: \n%s", ad->id,
-		sip->expect_reply ? "queueing" : "sending", remote_socket, buf);
+	LOG("satipc_http_request (ad %d): %s to sock %d :", ad->id,
+		sip->expect_reply ? "queueing" : "sending", remote_socket);
+	LOGM("%s", buf);
 	if (sip->expect_reply)
 	{
 		setItem(MAKE_ITEM(ad->id, sip->qp++), (unsigned char *)buf, lb + 1, 0);

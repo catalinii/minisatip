@@ -205,7 +205,10 @@ static inline int get_index_hash(void *p, int max, int struct_size, uint32_t key
 
 #define FAIL(a, ...)               \
 	{                              \
-		LOGL(0, a, ##__VA_ARGS__); \
+		if (opts.log) {            \
+			LOGL(0, a, ##__VA_ARGS__); \
+		} else                     \
+			LOG0(a, ##__VA_ARGS__);    \
 		unlink(pid_file);          \
 		exit(1);                   \
 	}
