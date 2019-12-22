@@ -2984,6 +2984,12 @@ static int ca_rm_enq_callback(void *arg, uint8_t slot_id,
         ca_device_t *d = arg;
         uint32_t *resource = resource_ids;
         uint32_t resource_count = resource_ids_count;
+	int fd;
+	fd = open("/etc/ssl/certs/root.pem", O_RDONLY);
+	if (fd<0)
+	    d->force_ci=1;
+	else
+	    close(fd);
         if (d->force_ci)
         {
                 resource = resource_ids_ci;
