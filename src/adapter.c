@@ -71,8 +71,6 @@ void find_dvb_adapter(adapter **a);
 
 adapter *adapter_alloc()
 {
-	int i;
-
 	adapter *ad = malloc1(sizeof(adapter));
 	memset(ad, 0, sizeof(adapter));
 
@@ -97,12 +95,6 @@ adapter *adapter_alloc()
 	ad->dmx_source = -1;
 	ad->master_source = -1;
 	ad->diseqc_multi = opts.diseqc_multi;
-
-	/* enable sources */
-	for (i = 0; i < MAX_SOURCES; i++)
-	{
-		ad->sources_pos[i] = 1;
-	}
 
 	/* LOF setup */
 	ad->diseqc_param.lnb_low = opts.lnb_low;
@@ -509,11 +501,6 @@ int getAdaptersCount()
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		if ((ad = a[i]))
 		{
-			for (j = 0; j < MAX_SOURCES; j++)
-			{
-				ad->sources_pos[j] = (source_map[j] >> i) & 1;
-			}
-
 			if (!opts.force_sadapter && (delsys_match(ad, SYS_DVBS) || delsys_match(ad, SYS_DVBS2)))
 			{
 				ts2++;
@@ -581,18 +568,6 @@ int getAdaptersCount()
 			}
 		}
 	}
-
-	LOGM("Sources assignment: ");
-	for (i = 0; i < MAX_ADAPTERS; i++)
-		if ((ad = a[i]))
-		{
-			for (j = 0; j < MAX_SOURCES; j++)
-			{
-				if (ad->sources_pos[j])
-					LOGM("  Adpater %d enabled SRC=%d", i, j+1);
-			}
-		}
-	
 	return tuner_s2 + tuner_c2 + tuner_t2 + tuner_c + tuner_t;
 }
 
@@ -705,7 +680,6 @@ int get_free_adapter(transponder *tp)
 	int match = 0;
 	int msys = tp->sys;
 	int fe = tp->fe;
-	int source;
 
 	adapter *ad = a[0];
 
@@ -719,9 +693,9 @@ int get_free_adapter(transponder *tp)
 
 	if (ad)
 		LOG(
-			"get free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d src:%d f:%d pol=%d sys: %s %s",
+			"get free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d f:%d pol=%d sys: %s %s",
 			tp->fe, ad->id, ad->enabled, ad->master_sid, ad->sid_cnt,
-			ad->tp.diseqc, ad->tp.freq, ad->tp.pol, get_delsys(ad->sys[0]),
+			ad->tp.freq, ad->tp.pol, get_delsys(ad->sys[0]),
 			get_delsys(ad->sys[1]))
 	else
 		LOG("get free adapter %d msys %s requested %s", fe, get_delsys(fe),
@@ -747,28 +721,20 @@ int get_free_adapter(transponder *tp)
 			if (!compare_tunning_parameters(ad->id, tp))
 				return i;
 
-	if (tp->diseqc < 1 || tp->diseqc > MAX_SOURCES)
-		source = -1;
-	else
-		source = tp->diseqc - 1;
 	for (i = 0; i < MAX_ADAPTERS; i++)
 	{
 		//first free adapter that has the same msys
 		if ((ad = get_adapter_nw(i)) && ad->sid_cnt == 0 && delsys_match(ad, msys) && !compare_slave_parameters(ad, tp))
-		{
-			if (source < 0 || (source >= 0 && ad->sources_pos[source]))
-				return i;
-		}
+			return i;
 		if (!ad && delsys_match(a[i], msys) && !compare_slave_parameters(a[i], tp)) // device is not initialized
 		{
-			ad = a[i];
-			if ((source < 0 || (source >= 0 && ad->sources_pos[source])) && !init_hw(i))
+			if (!init_hw(i))
 				return i;
 		}
 	}
 
 noadapter:
-	LOG("no adapter found for src:%d f:%d pol:%d msys:%d", tp->diseqc, tp->freq, tp->pol, tp->sys);
+	LOG("no adapter found for f:%d pol:%d msys:%d", tp->freq, tp->pol, tp->sys);
 	dump_adapters();
 	return -1;
 }
@@ -1568,65 +1534,6 @@ void set_unicable_adapters(char *o, int type)
 		LOG("Setting %s adapter %d slot %d freq %d pin %d",
 			type == SWITCH_UNICABLE ? "unicable" : "jess", a_id, slot, freq, pin);
 	}
-}
-
-void set_sources_adapters(char *o)
-{
-	int i, la, st, end, j, k, adap;
-	int64_t all = 0;
-	char buf[1000], *arg[40], *sep;
-	SAFE_STRCPY(buf, o);
-	for (i = 0; i < MAX_ADAPTERS; i++)
-		all = (all << 1) + 1;
-	la = split(arg, buf, ARRAY_SIZE(arg), ':');
-	if (la != MAX_SOURCES)
-		goto ERR;
-
-	for (i = 0; i < MAX_SOURCES; i++)
-	{
-		LOG(" la=%d strlen(split)=%d",la,strlen(arg[i]));
-		source_map[i] = 0;
-		if (arg[i] && arg[i][0] == '*')
-		{
-			if (strlen(arg[i]) != 1)
-				goto ERR;
-			source_map[i] = all;
-			continue;
-		}
-		char buf2[40], *arg2[40];
-		SAFE_STRCPY(buf2, arg[i]);
-		la = split(arg2, buf2, ARRAY_SIZE(arg2), ',');
-		for (j = 0; j < la; j++)
-		{
-			sep = strchr(arg2[j], '-');
-			if (sep == NULL)
-			{
-				adap = map_int(arg2[j], NULL);
-				if (adap < 0 || adap > MAX_ADAPTERS)
-					goto ERR;
-				source_map[i] |= 1 << adap;
-			}
-			else
-			{
-				st = map_int(arg2[j], NULL);
-				end = map_int(sep + 1, NULL);
-				if (st < 0 || end < 0 || st > MAX_ADAPTERS || end > MAX_ADAPTERS || end < st)
-					goto ERR;
-				for (k = st; k <= end; k++)
-				{
-					adap = k;
-					source_map[i] |= 1 << adap;
-				}
-			}
-		}
-	}
-	LOGM("correct sources format: `%s` ", o);
-	return;
-
-ERR:
-	for (i = 0; i < MAX_SOURCES; i++)
-		source_map[i] = all;
-	LOG("incorrect sources format: `%s` ; so using defaults for all adapters!", o);
 }
 
 void set_diseqc_adapters(char *o)
