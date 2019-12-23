@@ -1351,15 +1351,12 @@ int rtcp_confirm(sockets *s)
 	char ra[50];
 	
 	sid = get_sid(s->sid);
-	DEBUGM("%s: called for stream %d to %s:%d",
+	LOG("%s: called for stream %d from %s:%d",
 			__FUNCTION__, s->sid, get_stream_rhost(sid->sid, ra, sizeof(ra) - 1), get_stream_rport(sid->sid) + 1);
-
-	if (sid)
-	{
-		LOGM("Acknowledging stream %d via rtcp packet", s->sid);
-		sid->rtime = s->rtime;
-	}
-	return 0;
+	if (!sid)
+		return 0;
+	LOGM("Acknowledging stream %d via rtcp packet", s->sid);
+	sid->rtime = s->rtime;
 }
 
 int get_streams_for_adapter(int aid)
