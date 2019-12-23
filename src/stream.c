@@ -77,7 +77,7 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size)
 	int do_all = 1;
 	int is_ipv6 = 0;
 
-	if (s->sid == -1 && strchr(req, '?'))
+	if (s->sid == -1 && strchr(req, '?') && !strstr(req, "?stream="))
 		setup_stream(req, s);
 
 	sidf = get_session_id(s->sid);
