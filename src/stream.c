@@ -1357,6 +1357,7 @@ int rtcp_confirm(sockets *s)
 		return 0;
 	LOGM("Acknowledging stream %d via rtcp packet", s->sid);
 	sid->rtime = s->rtime;
+	return 0;
 }
 
 int get_streams_for_adapter(int aid)
