@@ -863,8 +863,15 @@ void *select_and_execute(void *arg)
 
 					if (read_ok && rlen >= 0)
 						master->rlen += rlen;
-					else
+					else 
+					{
+						if (master->rlen > 0)
+						{
+							LOG("socket %d, handle %d, master %d, errno %d, read_ok %d, clearing buffer with len %d", 
+								ss->id, ss->sock, master->id, err, read_ok, master->rlen)
+						}
 						master->rlen = 0;
+					}
 
 					//force 0 at the end of the string
 					if (master->lbuf >= master->rlen)
@@ -875,7 +882,7 @@ void *select_and_execute(void *arg)
 						read_ok ? "OK" : "NOK", rlen, master->rlen, master->lbuf,
 						ss->sock, ss->id, master->id, pos, master->buf, ss->iteration, master->action);
 
-					if (((master->rlen > 0) || err == EWOULDBLOCK) && master->action && (master->type != TYPE_SERVER) && (rlen > 0 || ss->type == TYPE_TCP))
+					if (((master->rlen > 0) || err == EWOULDBLOCK) && master->action && (master->type != TYPE_SERVER))
 						master->action(master);
 
 					sockets_unlock(ss);
