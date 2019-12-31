@@ -870,7 +870,7 @@ void get_s2_url(adapter *ad, char *url, int url_len)
 		FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
 	FILL("&freq=%d", tp->freq, 0, tp->freq / 1000);
 	FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
-	FILL("&mtype=%s", tp->mtype, -1, get_modulation(tp->mtype));
+	FILL("&mtype=%s", tp->mtype, QAM_AUTO, get_modulation(tp->mtype));
 	FILL("&pol=%s", tp->pol, -1, get_pol(tp->pol));
 	FILL("&sr=%d", tp->sr, -1, tp->sr / 1000);
 	FILL("&fec=%s", tp->fec, FEC_AUTO, get_fec(tp->fec));
@@ -899,7 +899,7 @@ void get_c2_url(adapter *ad, char *url, int url_len)
 		FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
 	FILL("&sr=%d", tp->sr, -1, tp->sr / 1000);
 	FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
-	FILL("&mtype=%s", tp->mtype, -1, get_modulation(tp->mtype));
+	FILL("&mtype=%s", tp->mtype, QAM_AUTO, get_modulation(tp->mtype));
 	FILL("&gi=%s", tp->gi, GUARD_INTERVAL_AUTO, get_gi(tp->gi));
 	FILL("&fec=%s", tp->fec, FEC_AUTO, get_fec(tp->fec));
 	FILL("&tmode=%s", tp->tmode, TRANSMISSION_MODE_AUTO, get_tmode(tp->tmode));
