@@ -943,10 +943,8 @@ int process_packets_for_stream(streams *sid, adapter *ad)
 		{
 			LOG("stream %d, flushing intermediary stream iiov %d max_iiov %d, total_len %d", st_id, iiov - 1, max_iov, total_len);
 			// iiov was incremented previously
-			flush_stream(sid, iov, iiov - 1, rtime);
-			iiov = 1;
-			if (!max_pack)
-				iiov = 0;
+			flush_stream(sid, iov, max_pack ? iiov - 1: iiov, rtime);
+			iiov = max_pack ? 1 : 0;
 			last_rtp_header = 0;
 			rtp_pos = 0;
 			total_len = 0;
