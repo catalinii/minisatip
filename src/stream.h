@@ -19,7 +19,7 @@
 #define STREAM_RTSP_TCP 3
 
 #define UDP_MAX_PACK 7	// maximum udp rtp packets to buffer
-#define TCP_MAX_PACK 1000 // maximum tcp packets (default for TCP)
+#define TCP_MAX_PACK 42 // maximum tcp packets for a RTP header
 
 #define LEN_PIDS (MAX_PIDS * 5 + 1)
 
@@ -47,8 +47,6 @@ typedef struct struct_streams
 	transponder tp;
 	char apids[LEN_PIDS + 1], dpids[LEN_PIDS + 1], pids[LEN_PIDS + 1],
 		x_pmt[LEN_PIDS + 1];
-	struct iovec iov[TCP_MAX_PACK + 1];
-	int iiov, max_iov;
 	uint32_t sp, sb;
 	int timeout;
 	char useragent[40];

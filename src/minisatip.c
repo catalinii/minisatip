@@ -585,7 +585,7 @@ void set_options(int argc, char *argv[])
 #endif
 	opts.max_pids = 0;
 	opts.dvbapi_offset = 0; // offset for multiple dvbapi clients to the same server
-	opts.tcp_max_pack = 42;
+	opts.tcp_max_iov = 42;
 //6 * 7; // number of TS packets to fit in a RTSP over tcp packet. More than 42 can cause issues in clients such as ffmpeg
 // increasing this number reduces the number of syscalls to write data. On devices with slow CPU, this increases the bandwidth if DVBCSA, DVBAES, DVBCA, DVBAPI is not set
 // but it might make it incompatible with some clients
@@ -767,11 +767,11 @@ void set_options(int argc, char *argv[])
 
 		case TCPMAXPACK_OPT:
 		{
-			opts.tcp_max_pack = atoi(optarg);
-			if (opts.tcp_max_pack < 7)
-				opts.tcp_max_pack = 7;
-			else if (opts.tcp_max_pack > 697)
-				opts.tcp_max_pack = 697;
+			opts.tcp_max_iov = atoi(optarg);
+			if (opts.tcp_max_iov < 7)
+				opts.tcp_max_iov = 7;
+			else if (opts.tcp_max_iov > 697)
+				opts.tcp_max_iov = 697;
 			break;
 		}
 

@@ -542,7 +542,6 @@ int streams_add()
 		LOG_AND_RETURN(-1, "streams_add failed");
 
 	ss = st[i];
-	ss->max_iov = opts.tcp_max_pack > TCP_MAX_PACK ? TCP_MAX_PACK : opts.tcp_max_pack;
 	ss->enabled = 1;
 	ss->adapter = -1;
 	ss->sid = i;
@@ -550,9 +549,7 @@ int streams_add()
 	ss->rsock_id = -1;
 	ss->type = 0;
 	ss->do_play = 0;
-	ss->iiov = 0;
 	ss->sp = ss->sb = 0;
-	memset(ss->iov, 0, sizeof(struct iovec) * ss->max_iov);
 	init_dvb_parameters(&ss->tp);
 	ss->useragent[0] = 0;
 	ss->len = 0;
@@ -591,72 +588,37 @@ int64_t c_ns_read, c_tt;
 
 uint64_t last_sd;
 
-int send_rtp(streams *sid, const struct iovec *iov, int liov)
+int enqueue_rtp_header(streams *sid, struct iovec *iov, int liov, int iiov_rtp_header, char *rtp_buf)
 {
-	struct iovec io[sid->max_iov + 3];
-	char ra[50];
-	int i, total_len = 0, rv;
-	unsigned char *rtp_h;
-	unsigned char rtp_buf[16];
+	int i, total_len = 0, len = 0;
 	struct timespec ts;
 	uint32_t timestamp;
 
-	rtp_h = rtp_buf + 4;
-
-	for (i = 0; i < liov; i++)
+	for (i = iiov_rtp_header + 1; i < liov; i++)
 		total_len += iov[i].iov_len;
 
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	timestamp = (uint32_t)(90000 * ((ts.tv_sec * 1000000ll + ts.tv_nsec / 1000) / 1000000ll)) + (9 * ((ts.tv_sec * 1000000ll + ts.tv_nsec / 1000) % 1000000ll)) / 100; // 90 kHz Clock
-	memset(&io, 0, sizeof(io));
-	rtp_buf[0] = 0x24;
-	rtp_buf[1] = 0;
-	copy16(rtp_buf, 2, total_len + 12);
-	copy16(rtp_h, 0, 0x8021);
-	copy16(rtp_h, 2, sid->seq);
-	copy32(rtp_h, 4, timestamp);
-	copy32(rtp_h, 8, sid->ssrc);
 
-	if (sid->type == STREAM_RTSP_UDP)
-	{
-		io[0].iov_base = rtp_h;
-		io[0].iov_len = 12;
-	}
-	else
-	{ // RTSP over TCP
-		io[0].iov_base = rtp_buf;
-		io[0].iov_len = 16;
+	if (sid->type == STREAM_RTSP_TCP)
+	{ 
+		rtp_buf[0] = 0x24;
+		rtp_buf[1] = 0;
+		copy16(rtp_buf, 2, total_len + 12);
+		len = 4;
 	}
 
-	memcpy(&io[1], iov, liov * sizeof(struct iovec));
-	rv = sockets_writev(sid->rsock_id, io, liov + 1);
+	copy16(rtp_buf, len + 0, 0x8021);
+	copy16(rtp_buf, len + 2, sid->seq);
+	copy32(rtp_buf, len + 4, timestamp);
+	copy32(rtp_buf, len + 8, sid->ssrc);
+	len += 12;
+	iov[iiov_rtp_header].iov_base = rtp_buf;
+	iov[iiov_rtp_header].iov_len = len;
+//	LOG("Enqueue header sid %d at pos %d, iiov %d, len %d, total len %d", sid->sid, iiov_rtp_header, liov, len, total_len);
 
-	if (total_len > 0 && sid->start_streaming == 0)
-	{
-		sid->start_streaming = 1;
-		LOG("Start streaming for stream %d, len %d to handle %d => %s:%d",
-			sid->sid, total_len, sid->rsock,
-			get_stream_rhost(sid->sid, ra, sizeof(ra)),
-			get_stream_rport(sid->sid));
-	}
+	return len;
 
-	DEBUGM("%s: sent %d bytes for stream %d, handle %d, sock_id %d, seq %d => %s:%d",
-		   __FUNCTION__, total_len, sid->sid, sid->rsock, sid->rsock_id, sid->seq,
-		   get_stream_rhost(sid->sid, ra, sizeof(ra)), get_stream_rport(sid->sid));
-
-	sid->seq = (sid->seq + 1) & 0xFFFF; // rollover
-
-	return rv;
-}
-
-int send_rtpb(streams *sid, unsigned char *b, int len)
-{
-	struct iovec iov[2];
-
-	iov[0].iov_base = b;
-	iov[0].iov_len = len;
-	//      LOG("called send_rtpb %X %d",b,len);
-	return send_rtp(sid, (const struct iovec *)iov, 1);
 }
 
 int send_rtcp(int s_id, int64_t ctime)
@@ -749,56 +711,25 @@ int send_rtcp(int s_id, int64_t ctime)
 	return rv;
 }
 
-void flush_streamb(streams *sid, unsigned char *buf, int rlen, int64_t ctime)
+int flush_stream(streams *sid, struct iovec *iov, int iiov, int64_t ctime)
 {
-	int i, rv = 0, blen, len;
-
-	if (sid->type == STREAM_HTTP)
+	int rv = 0;
+	char ra[50];
+	rv = sockets_writev(sid->rsock_id, iov, iiov);
+	if (rv > 0 && sid->start_streaming == 0)
 	{
-		rv = sockets_write(sid->rsock_id, buf, rlen);
-		if (sid->start_streaming == 0)
-		{
-			sid->start_streaming = 1;
-			LOG("Start HTTP streaming of stream %d to handle %d", sid->sid, sid->rsock);
-		}
-	}
-	else
-	{
-		int max_pack = sid->type == STREAM_RTSP_TCP ? sid->max_iov : UDP_MAX_PACK;
-		blen = max_pack * DVB_FRAME;
-		for (i = 0; i < rlen; i += blen)
-		{
-			len = ((rlen - i) > blen) ? blen : (rlen - i);
-			rv += send_rtpb(sid, &buf[i], len);
-		}
+		sid->start_streaming = 1;
+		LOG("Start streaming for stream %d, len %d to handle %d => %s:%d",
+			sid->sid, rv, sid->rsock,
+			get_stream_rhost(sid->sid, ra, sizeof(ra)),
+			get_stream_rport(sid->sid));
 	}
 
-	sid->iiov = 0;
-	sid->wtime = ctime;
-	sid->len = 0;
+	DEBUGM("%s: sent %d bytes for stream %d, handle %d, sock_id %d, seq %d => %s:%d",
+		   __FUNCTION__, rv, sid->sid, sid->rsock, sid->rsock_id, sid->seq,
+		   get_stream_rhost(sid->sid, ra, sizeof(ra)), get_stream_rport(sid->sid));
 
-	if (rv > 0)
-	{
-		sid->sp++;
-		sid->sb += rlen;
-	}
-}
-
-int flush_streami(streams *sid, int64_t ctime)
-{
-	int rv;
-
-	if (sid->type == STREAM_HTTP)
-	{
-		rv = sockets_writev(sid->rsock_id, sid->iov, sid->iiov);
-		if (sid->start_streaming == 0)
-		{
-			sid->start_streaming = 1;
-			LOG("Start HTTP streaming of stream %d to handle %d", sid->sid, sid->rsock);
-		}
-	}
-	else
-		rv = send_rtp(sid, sid->iov, sid->iiov);
+	sid->seq = (sid->seq + 1) & 0xFFFF; // rollover
 
 #ifdef DEBUG
 	static int fd, freq, pid;
@@ -811,11 +742,10 @@ int flush_streami(streams *sid, int64_t ctime)
 	if (fd)
 	{
 		lseek(fd, 0, 2);
-		writev(fd, sid->iov, sid->iiov);
+		writev(fd, iov, iiov);
 		close(fd);
 	}
 #endif
-	sid->iiov = 0;
 	sid->wtime = ctime;
 	sid->len = 0;
 
@@ -942,66 +872,108 @@ int check_cc(adapter *ad)
 	return packet_no_sid;
 }
 
-int process_packet(unsigned char *b, adapter *ad)
+int process_packets_for_stream(streams *sid, adapter *ad)
 {
-	int j, max_pack, st_id;
+	int i, j, st_id = sid->sid;
 	SPid *p;
-	int _pid = PID_FROM_TS(b);
-	streams *sid;
-	int rtime = ad->rtime;
+	uint8_t *b;
+	int max_iov = opts.tcp_max_iov;
+	char pids[8193];
+	struct iovec iov[max_iov + 1];
+	char rtp_buf[16 * (max_iov + 1)];
+	int rtp_pos = 0;
+	int iiov = 1;
+	int num_enabled_pids = 0;
+	int last_rtp_header = 0;
+	int64_t rtime = ad->rtime;
+	int total_len = 0;
+	int max_pack = TCP_MAX_PACK;
 
-	p = find_pid(ad->id, _pid);
-	if (!p)
-		p = find_pid(ad->id, 8192);
+	memset(iov, 0, sizeof(iov));
+	memset(pids, 0, sizeof(pids));
 
-	if (!p)
-	{
-		return 0;
-	}
-
-	if (!VALID_SID(p->sid[0]))
-	{
-		return 0;
-	}
-
-	for (j = 0; j < MAX_STREAMS_PER_PID && p->sid[j] > -1; j++)
-	{
-		st_id = p->sid[j];
-		if (VALID_SID(st_id) && st[st_id] && st[st_id]->do_play)
+	// cache the pids for this stream
+	for (i = 0; i < MAX_PIDS; i++)
+		if (ad->pids[i].flags == 1)
 		{
-			sid = st[st_id];
-			switch (sid->type)
-			{
-			case STREAM_RTSP_UDP:
-				max_pack = UDP_MAX_PACK;
-				break;
-			case STREAM_RTSP_TCP:
-				max_pack = sid->max_iov;
-				break;
-			default:
-				max_pack = TCP_MAX_PACK;
-			}
+			p = &ad->pids[i];
+			for (j = 0; j < MAX_STREAMS_PER_PID && p->sid[j] > -1; j++)
+				if(p->sid[j] == st_id)
+				{
+					pids[p->pid] = 1; 
+					num_enabled_pids ++;
+				}
+		}
 
-			if (sid->iiov > max_pack)
-			{
-				LOG(
-					"ERROR: possible writing outside of allocated space iiov > %d for SID %d PID %d",
-					max_pack, sid->sid, _pid);
-				sid->iiov = max_pack;
-			}
-			sid->iov[sid->iiov].iov_base = b;
-			sid->iov[sid->iiov++].iov_len = DVB_FRAME;
-			if (sid->iiov >= max_pack)
-				flush_streami(sid, rtime);
+	if (sid->type == STREAM_RTSP_UDP)
+	{
+		max_pack = UDP_MAX_PACK;
+		max_iov = max_pack;
+	}
+
+	if (sid->type == STREAM_HTTP)
+	{
+		iiov = 0;
+		max_pack = 0;
+	}
+
+	for (i = 0; i < ad->rlen; i += DVB_FRAME)
+	{
+		int rtp_added = 0;
+		b = ad->buf + i;
+		if (b[0]!=0x47)
+		{
+			LOG("Non TS packet found %02X", b[0]);
+			continue;
+		}
+		int _pid = PID_FROM_TS(b);
+		if (!pids[_pid])
+			continue;
+
+		if (total_len && max_pack && (total_len / DVB_FRAME % max_pack == 0))
+		{
+			rtp_pos += enqueue_rtp_header(sid, iov, iiov, last_rtp_header, rtp_buf + rtp_pos);
+			last_rtp_header = iiov;
+			iiov++;
+			rtp_added = 1;
+		}
+
+		// unlikely: if the rtp header was just enqueued try to flush if there is not enough iiov left
+		if ((rtp_added || !max_pack) && (iiov >= max_iov - max_pack))
+		{
+			LOG("stream %d, flushing intermediary stream iiov %d max_iiov %d, total_len %d", st_id, iiov - 1, max_iov, total_len);
+			// iiov was incremented previously
+			flush_stream(sid, iov, iiov - 1, rtime);
+			iiov = 1;
+			if (!max_pack)
+				iiov = 0;
+			last_rtp_header = 0;
+			rtp_pos = 0;
+			total_len = 0;
+		}
+        
+	    	total_len += DVB_FRAME;
+		// try to increase iov_len if the previous packet ends before the currnet one
+//		if (iiov - 1 >= 0 && iov[iiov - 1].iov_base + iov[iiov - 1].iov_len == b)
+//			iov[iiov - 1].iov_len += DVB_FRAME;
+//		else 
+		{
+			iov[iiov].iov_base = b;
+			iov[iiov++].iov_len = DVB_FRAME;				
 		}
 	}
+
+	if ((sid->type == STREAM_RTSP_UDP || sid->type == STREAM_RTSP_TCP))
+		enqueue_rtp_header(sid, iov, iiov, last_rtp_header, rtp_buf + rtp_pos);
+
+	LOG("Processing done sid %d at pos %d, rtp header %d, rtp_pos %d, total_len %d, rlen %d", st_id, iiov, last_rtp_header, rtp_pos, total_len, ad->rlen);
+	flush_stream(sid, iov, iiov, rtime);
 	return 0;
 }
 
 int process_dmx(sockets *s)
 {
-	int i, dp;
-	streams *sid;
+	int i;
 	adapter *ad;
 	int64_t stime;
 	int rlen = s->rlen;
@@ -1029,33 +1001,17 @@ int process_dmx(sockets *s)
 #endif
 
 	rlen = ad->rlen;
-	int packet_no_sid = check_cc(ad);
-
-	if (ad->sid_cnt == 1 && ad->master_sid >= 0 && !packet_no_sid && !ad->null_packets) // we have just 1 stream, do not check the pids, send everything to the destination
-	{
-		sid = get_sid(ad->master_sid);
-		if (!sid || sid->enabled != 1)
-		{
-			LOG("Master SID %d not enabled ", ad->master_sid);
-			return -1;
-		}
-		flush_streamb(sid, s->buf, rlen, s->rtime);
-	}
-	else
-	{
-		for (dp = 0; dp < rlen; dp += DVB_FRAME)
-			process_packet(s->buf + dp, ad);
+	check_cc(ad);
 
 		for (i = 0; i < MAX_STREAMS; i++)
-			if ((sid = st[i]) && (sid->enabled) && sid->adapter == s->sid && sid->iiov > 0)
-				flush_streami(sid, s->rtime);
+			if (st[i] && st[i]->enabled && st[i]->adapter == ad->id)
+				process_packets_for_stream(st[i], ad);
 
 		if (s->rtime - ad->last_sort > 2000)
 		{
 			ad->last_sort = s->rtime + 60000;
 			sort_pids(s->sid);
 		}
-	}
 
 	nsecs += getTickUs() - stime;
 	reads++;
@@ -1183,6 +1139,8 @@ int calculate_bw(sockets *s)
 int stream_timeout(sockets *s)
 {
 	char ra[50];
+	struct iovec iov[10];
+	char rtp_buf[20];
 	int64_t ctime, rttime, rtime;
 	streams *sid;
 
@@ -1191,8 +1149,6 @@ int stream_timeout(sockets *s)
 
 	if ((sid = get_sid_for(s->sid)) && sid->type != STREAM_HTTP)
 	{
-		//			int active_streams = 0;
-
 		mutex_lock(&sid->mutex);
 		rttime = sid->rtcp_wtime, rtime = sid->wtime;
 
@@ -1201,7 +1157,8 @@ int stream_timeout(sockets *s)
 			LOG("no data sent for more than 1s sid: %d for %s:%d", sid->sid,
 				get_stream_rhost(sid->sid, ra, sizeof(ra)),
 				get_stream_rport(sid->sid));
-			flush_streami(sid, ctime);
+			enqueue_rtp_header(sid, iov, 1, 0, rtp_buf);
+			flush_stream(sid, iov, 1, ctime);
 		}
 		if (sid->do_play && ctime - rttime >= 200)
 			send_rtcp(sid->sid, ctime);
