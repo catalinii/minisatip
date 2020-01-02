@@ -116,7 +116,6 @@ int rtsp, http, si, si1, ssdp1;
 #define SIGNALMULTIPLIER_OPT 'M'
 #define DEVICEID_OPT 'D'
 #define DEMUXDEV_OPT '1'
-#define TCPMAXPACK_OPT '2'
 #define FORCE_CI_OPT 'C'
 #define CA_PIN_OPT '3'
 #define IPV4_OPT '4'
@@ -165,7 +164,6 @@ static const struct option long_options[] =
 		{"dmx-source", required_argument, NULL, '9'},
 		{"lnb", required_argument, NULL, 'L'},
 		{"xml", required_argument, NULL, 'X'},
-		{"tcp-max-pack", required_argument, NULL, '2'},
 		{"help", no_argument, NULL, 'h'},
 		{"version", no_argument, NULL, 'V'},
 #ifdef AXE
@@ -290,8 +288,6 @@ void usage()
 		"\t[-x http_port] [-X xml_path] [-y rtsp_port]\n\n\
 Help\n\
 -------\n\
-\n\
-* -2 --tcp-max-pack X : set the TCP data chunk size in MPEG-TS packets (188 bytes), default value is 42\n\
 \n\
 * -4 : Force TCP sockets to use IPv6\n\
 \n\
@@ -585,10 +581,7 @@ void set_options(int argc, char *argv[])
 #endif
 	opts.max_pids = 0;
 	opts.dvbapi_offset = 0; // offset for multiple dvbapi clients to the same server
-	opts.tcp_max_iov = 42;
-//6 * 7; // number of TS packets to fit in a RTSP over tcp packet. More than 42 can cause issues in clients such as ffmpeg
-// increasing this number reduces the number of syscalls to write data. On devices with slow CPU, this increases the bandwidth if DVBCSA, DVBAES, DVBCA, DVBAPI is not set
-// but it might make it incompatible with some clients
+	opts.tcp_max_iov = 1000;
 #if defined(AXE)
 	opts.max_pids = 32;
 #elif defined(__sh__)
@@ -762,16 +755,6 @@ void set_options(int argc, char *argv[])
 				opts.tcp_threshold = 0;
 			else if (opts.tcp_threshold > 200)
 				opts.tcp_threshold = 200;
-			break;
-		}
-
-		case TCPMAXPACK_OPT:
-		{
-			opts.tcp_max_iov = atoi(optarg);
-			if (opts.tcp_max_iov < 7)
-				opts.tcp_max_iov = 7;
-			else if (opts.tcp_max_iov > 697)
-				opts.tcp_max_iov = 697;
 			break;
 		}
 

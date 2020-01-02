@@ -615,7 +615,7 @@ int enqueue_rtp_header(streams *sid, struct iovec *iov, int liov, int iiov_rtp_h
 	len += 12;
 	iov[iiov_rtp_header].iov_base = rtp_buf;
 	iov[iiov_rtp_header].iov_len = len;
-//	LOG("Enqueue header sid %d at pos %d, iiov %d, len %d, total len %d", sid->sid, iiov_rtp_header, liov, len, total_len);
+	sid->seq = (sid->seq + 1) & 0xFFFF; // rollover
 
 	return len;
 
@@ -728,8 +728,6 @@ int flush_stream(streams *sid, struct iovec *iov, int iiov, int64_t ctime)
 	DEBUGM("%s: sent %d bytes for stream %d, handle %d, sock_id %d, seq %d => %s:%d",
 		   __FUNCTION__, rv, sid->sid, sid->rsock, sid->rsock_id, sid->seq,
 		   get_stream_rhost(sid->sid, ra, sizeof(ra)), get_stream_rport(sid->sid));
-
-	sid->seq = (sid->seq + 1) & 0xFFFF; // rollover
 
 #ifdef DEBUG
 	static int fd, freq, pid;
@@ -952,9 +950,9 @@ int process_packets_for_stream(streams *sid, adapter *ad)
         
 	    	total_len += DVB_FRAME;
 		// try to increase iov_len if the previous packet ends before the currnet one
-//		if (iiov - 1 >= 0 && iov[iiov - 1].iov_base + iov[iiov - 1].iov_len == b)
-//			iov[iiov - 1].iov_len += DVB_FRAME;
-//		else 
+		if (iiov - 1 >= 0 && iov[iiov - 1].iov_base + iov[iiov - 1].iov_len == b)
+			iov[iiov - 1].iov_len += DVB_FRAME;
+		else 
 		{
 			iov[iiov].iov_base = b;
 			iov[iiov++].iov_len = DVB_FRAME;				
@@ -964,7 +962,7 @@ int process_packets_for_stream(streams *sid, adapter *ad)
 	if ((sid->type == STREAM_RTSP_UDP || sid->type == STREAM_RTSP_TCP))
 		enqueue_rtp_header(sid, iov, iiov, last_rtp_header, rtp_buf + rtp_pos);
 
-	LOG("Processing done sid %d at pos %d, rtp header %d, rtp_pos %d, total_len %d, rlen %d", st_id, iiov, last_rtp_header, rtp_pos, total_len, ad->rlen);
+	LOGM("Processing done sid %d at pos %d, rtp header %d, rtp_pos %d, total_len %d, rlen %d", st_id, iiov, last_rtp_header, rtp_pos, total_len, ad->rlen);
 	flush_stream(sid, iov, iiov, rtime);
 	return 0;
 }
