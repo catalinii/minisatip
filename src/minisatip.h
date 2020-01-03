@@ -81,7 +81,6 @@ struct struct_opts
 	char *netcv_if;
 	char *playlist;
 	char *log_file;
-	int tcp_max_iov;
 	int use_ipv4_only;
 	int use_demux_device;
 	float strength_multiplier, snr_multiplier;

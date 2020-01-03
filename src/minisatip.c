@@ -581,7 +581,6 @@ void set_options(int argc, char *argv[])
 #endif
 	opts.max_pids = 0;
 	opts.dvbapi_offset = 0; // offset for multiple dvbapi clients to the same server
-	opts.tcp_max_iov = 1000;
 #if defined(AXE)
 	opts.max_pids = 32;
 #elif defined(__sh__)

@@ -20,6 +20,7 @@
 
 #define UDP_MAX_PACK 7	// maximum udp rtp packets to buffer
 #define TCP_MAX_PACK 42 // maximum tcp packets for a RTP header
+#define TCP_MAX_IOV 1008 // TCP_MAX_PACK * X < 1024
 
 #define LEN_PIDS (MAX_PIDS * 5 + 1)
 

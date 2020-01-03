@@ -875,7 +875,7 @@ int process_packets_for_stream(streams *sid, adapter *ad)
 	int i, j, st_id = sid->sid;
 	SPid *p;
 	uint8_t *b;
-	int max_iov = opts.tcp_max_iov;
+	int max_iov = TCP_MAX_IOV;
 	char pids[8193];
 	struct iovec iov[max_iov + 1];
 	char rtp_buf[16 * (max_iov + 1)];
@@ -937,7 +937,7 @@ int process_packets_for_stream(streams *sid, adapter *ad)
 		}
 
 		// unlikely: if the rtp header was just enqueued try to flush if there is not enough iiov left
-		if ((rtp_added || !max_pack) && (iiov >= max_iov - max_pack))
+		if ((rtp_added || !max_pack) && (iiov >= max_iov))
 		{
 			LOG("stream %d, flushing intermediary stream iiov %d max_iiov %d, total_len %d", st_id, iiov - 1, max_iov, total_len);
 			// iiov was incremented previously
