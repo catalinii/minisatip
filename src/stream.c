@@ -939,7 +939,7 @@ int process_packets_for_stream(streams *sid, adapter *ad)
 		// unlikely: if the rtp header was just enqueued try to flush if there is not enough iiov left
 		if ((rtp_added || !max_pack) && (iiov >= max_iov))
 		{
-			LOG("stream %d, flushing intermediary stream iiov %d max_iiov %d, total_len %d", st_id, iiov - 1, max_iov, total_len);
+			LOGM("stream %d, flushing intermediary stream iiov %d max_iiov %d, total_len %d", st_id, iiov - 1, max_iov, total_len);
 			// iiov was incremented previously
 			flush_stream(sid, iov, max_pack ? iiov - 1: iiov, rtime);
 			iiov = max_pack ? 1 : 0;
