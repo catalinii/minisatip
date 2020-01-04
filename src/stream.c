@@ -1302,10 +1302,11 @@ int rtcp_confirm(sockets *s)
 	char ra[50];
 
 	sid = get_sid(s->sid);
-	LOG("%s: called for stream %d from %s:%d",
-		__FUNCTION__, s->sid, get_stream_rhost(sid->sid, ra, sizeof(ra) - 1), get_stream_rport(sid->sid) + 1);
 	if (!sid)
 		return 0;
+	LOG("%s: called for stream %d from %s:%d",
+		__FUNCTION__, s->sid, get_stream_rhost(sid->sid, ra, sizeof(ra) - 1), get_stream_rport(sid->sid) + 1);
+
 	LOGM("Acknowledging stream %d via rtcp packet", s->sid);
 	sid->rtime = s->rtime;
 	return 0;
