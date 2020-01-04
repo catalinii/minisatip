@@ -383,6 +383,7 @@ int tcp_listen(char *addr, int port, int ipv4_only)
 	USockAddr serv;
 	int sock, optval = 1;
 	int family;
+	char sa[50];
 
 	if (!(family = fill_sockaddr(&serv, addr, port, ipv4_only)))
 		return -1;
@@ -403,8 +404,9 @@ int tcp_listen(char *addr, int port, int ipv4_only)
 
 	if (bind(sock, &serv.sa, sizeof(serv)) < 0)
 	{
-		LOG("tcp_listen: failed: bind() on address: %s, port %d : error %s",
-			addr ? addr : "ANY", port, strerror(errno));
+		LOG("tcp_listen: failed: bind() on address: %s [%s], port %d : error %s",
+			addr ? addr : "ANY", get_sockaddr_host(serv, sa, sizeof(sa)),
+			port, strerror(errno));
 		close(sock);
 		return -1;
 	}
@@ -1281,6 +1283,21 @@ pthread_t get_socket_thread(int s_id)
 }
 #undef DEFAULT_LOG
 #define DEFAULT_LOG LOG_SOCKET
+
+#ifdef __APPLE__
+struct mmsghdr
+{
+	struct msghdr msg_hdr; /* Message header */
+	unsigned int msg_len;  /* Number of bytes transmitted */
+};
+
+int sendmmsg(int rsock, struct mmsghdr *msg, int len, int t)
+{
+	int i;
+	for (i = 0; i < len; i++)
+		writev(rsock, msg[i].msg_hdr.msg_iov, msg[i].msg_hdr.msg_iovlen);
+}
+#endif
 
 int writev_udp(int rsock, struct iovec *iov, int iiov)
 {
