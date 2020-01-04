@@ -17,7 +17,7 @@
  * USA
  *
  */
-
+#define _GNU_SOURCE
 #include <errno.h>
 #include <getopt.h>
 #include <signal.h>
@@ -863,11 +863,11 @@ void *select_and_execute(void *arg)
 
 					if (read_ok && rlen >= 0)
 						master->rlen += rlen;
-					else 
+					else
 					{
 						if (master->rlen > 0)
 						{
-							LOG("socket %d, handle %d, master %d, errno %d, read_ok %d, clearing buffer with len %d", 
+							LOG("socket %d, handle %d, master %d, errno %d, read_ok %d, clearing buffer with len %d",
 								ss->id, ss->sock, master->id, err, read_ok, master->rlen)
 						}
 						master->rlen = 0;
@@ -1282,8 +1282,42 @@ pthread_t get_socket_thread(int s_id)
 #undef DEFAULT_LOG
 #define DEFAULT_LOG LOG_SOCKET
 
+int writev_udp(int rsock, struct iovec *iov, int iiov)
+{
+	struct mmsghdr msg[1024];
+	int i, j = 0, last_i = 0, retval, total_iov = 0;
+	int total_len = 0;
+	memset(msg, 0, sizeof(msg));
+
+	for (i = 0; i < iiov; i++)
+	{
+		if (iov[i].iov_len < 188)
+		{
+			if (j > 0)
+				msg[j - 1].msg_hdr.msg_iovlen = i - last_i;
+
+			msg[j].msg_hdr.msg_iov = iov + i;
+			last_i = i;
+			j++;
+		}
+	}
+	if (j > 0)
+		msg[j - 1].msg_hdr.msg_iovlen = i - last_i;
+	retval = sendmmsg(rsock, msg, j, 0);
+	if (retval == -1)
+		LOG("sendmmsg(): errno %d: %s", errno, strerror(errno))
+	else if (retval != j)
+		LOG("%d messages sent, expected %d\n", retval, j);
+
+	for (i = 0; i < retval; i++)
+		total_iov += msg[i].msg_hdr.msg_iovlen;
+	for (i = 0; i < total_iov; i++)
+		total_len += iov[i].iov_len;
+	return total_len;
+}
+
 // returns -1 or -EWOULDBLOCK
-int my_writev(sockets *s, const struct iovec *iov, int iiov)
+int my_writev(sockets *s, struct iovec *iov, int iiov)
 {
 	int rv = 0, len = 0, i;
 	char ra[50];
@@ -1299,7 +1333,12 @@ int my_writev(sockets *s, const struct iovec *iov, int iiov)
 		stime = getTick();
 
 	if (s->sock > 0)
-		rv = writev(s->sock, iov, iiov);
+	{
+		if (s->type == TYPE_UDP && len > 1450)
+			rv = writev_udp(s->sock, iov, iiov);
+		else
+			rv = writev(s->sock, iov, iiov);
+	}
 	_errno = errno;
 
 	if (opts.log & DEFAULT_LOG)

@@ -17,7 +17,6 @@
  * USA
  *
  */
-
 #include <errno.h>
 #include <getopt.h>
 #include <signal.h>
@@ -601,7 +600,7 @@ int enqueue_rtp_header(streams *sid, struct iovec *iov, int liov, int iiov_rtp_h
 	timestamp = (uint32_t)(90000 * ((ts.tv_sec * 1000000ll + ts.tv_nsec / 1000) / 1000000ll)) + (9 * ((ts.tv_sec * 1000000ll + ts.tv_nsec / 1000) % 1000000ll)) / 100; // 90 kHz Clock
 
 	if (sid->type == STREAM_RTSP_TCP)
-	{ 
+	{
 		rtp_buf[0] = 0x24;
 		rtp_buf[1] = 0;
 		copy16(rtp_buf, 2, total_len + 12);
@@ -618,7 +617,6 @@ int enqueue_rtp_header(streams *sid, struct iovec *iov, int liov, int iiov_rtp_h
 	sid->seq = (sid->seq + 1) & 0xFFFF; // rollover
 
 	return len;
-
 }
 
 int send_rtcp(int s_id, int64_t ctime)
@@ -896,17 +894,17 @@ int process_packets_for_stream(streams *sid, adapter *ad)
 		{
 			p = &ad->pids[i];
 			for (j = 0; j < MAX_STREAMS_PER_PID && p->sid[j] > -1; j++)
-				if(p->sid[j] == st_id)
+				if (p->sid[j] == st_id)
 				{
-					pids[p->pid] = 1; 
-					num_enabled_pids ++;
+					pids[p->pid] = 1;
+					num_enabled_pids++;
 				}
 		}
 
 	if (sid->type == STREAM_RTSP_UDP)
 	{
 		max_pack = UDP_MAX_PACK;
-		max_iov = max_pack;
+		//		max_iov = max_pack;
 	}
 
 	if (sid->type == STREAM_HTTP)
@@ -919,7 +917,7 @@ int process_packets_for_stream(streams *sid, adapter *ad)
 	{
 		int rtp_added = 0;
 		b = ad->buf + i;
-		if (b[0]!=0x47)
+		if (b[0] != 0x47)
 		{
 			LOG("Non TS packet found %02X", b[0]);
 			continue;
@@ -939,23 +937,23 @@ int process_packets_for_stream(streams *sid, adapter *ad)
 		// unlikely: if the rtp header was just enqueued try to flush if there is not enough iiov left
 		if ((rtp_added || !max_pack) && (iiov >= max_iov))
 		{
-			LOGM("stream %d, flushing intermediary stream iiov %d max_iiov %d, total_len %d", st_id, iiov - 1, max_iov, total_len);
+			LOG("stream %d, flushing intermediary stream iiov %d max_iiov %d, total_len %d", st_id, iiov - 1, max_iov, total_len);
 			// iiov was incremented previously
-			flush_stream(sid, iov, max_pack ? iiov - 1: iiov, rtime);
+			flush_stream(sid, iov, max_pack ? iiov - 1 : iiov, rtime);
 			iiov = max_pack ? 1 : 0;
 			last_rtp_header = 0;
 			rtp_pos = 0;
 			total_len = 0;
 		}
-        
-	    	total_len += DVB_FRAME;
+
+		total_len += DVB_FRAME;
 		// try to increase iov_len if the previous packet ends before the currnet one
 		if (iiov - 1 >= 0 && iov[iiov - 1].iov_base + iov[iiov - 1].iov_len == b)
 			iov[iiov - 1].iov_len += DVB_FRAME;
-		else 
+		else
 		{
 			iov[iiov].iov_base = b;
-			iov[iiov++].iov_len = DVB_FRAME;				
+			iov[iiov++].iov_len = DVB_FRAME;
 		}
 	}
 
@@ -999,15 +997,15 @@ int process_dmx(sockets *s)
 	rlen = ad->rlen;
 	check_cc(ad);
 
-		for (i = 0; i < MAX_STREAMS; i++)
-			if (st[i] && st[i]->enabled && st[i]->adapter == ad->id)
-				process_packets_for_stream(st[i], ad);
+	for (i = 0; i < MAX_STREAMS; i++)
+		if (st[i] && st[i]->enabled && st[i]->adapter == ad->id)
+			process_packets_for_stream(st[i], ad);
 
-		if (s->rtime - ad->last_sort > 2000)
-		{
-			ad->last_sort = s->rtime + 60000;
-			sort_pids(s->sid);
-		}
+	if (s->rtime - ad->last_sort > 2000)
+	{
+		ad->last_sort = s->rtime + 60000;
+		sort_pids(s->sid);
+	}
 
 	nsecs += getTickUs() - stime;
 	reads++;
@@ -1302,10 +1300,10 @@ int rtcp_confirm(sockets *s)
 {
 	streams *sid;
 	char ra[50];
-	
+
 	sid = get_sid(s->sid);
 	LOG("%s: called for stream %d from %s:%d",
-			__FUNCTION__, s->sid, get_stream_rhost(sid->sid, ra, sizeof(ra) - 1), get_stream_rport(sid->sid) + 1);
+		__FUNCTION__, s->sid, get_stream_rhost(sid->sid, ra, sizeof(ra) - 1), get_stream_rport(sid->sid) + 1);
 	if (!sid)
 		return 0;
 	LOGM("Acknowledging stream %d via rtcp packet", s->sid);
