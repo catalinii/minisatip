@@ -76,6 +76,7 @@ typedef struct struct_sockets
 
 #define MAX_HOST 50
 #define SOCK_TIMEOUT -2
+
 char *setlocalip();
 char *getlocalip();
 int udp_connect(char *addr, int port, USockAddr *serv);
@@ -133,5 +134,6 @@ static inline sockets *get_sockets(int i)
 	return s[i];
 }
 #define sockets_writev(sock_id, iov, iovcnt) sockets_writev_prio(sock_id, iov, iovcnt, 0)
+#define SOCKADDR_SIZE(a) ((a).sa.sa_family == AF_INET ? sizeof((a).sin) : sizeof((a).sin6))
 
 #endif

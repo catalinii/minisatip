@@ -1498,7 +1498,6 @@ int ssdp_notify(sockets *s, int alive)
 	char *op = alive ? "Discovery" : "ByeBye";
 
 	char uuid1[] = "11223344-9999-0000-b7ae";
-	socklen_t salen;
 	int i;
 	s->wtime = getTick();
 	if (uuidi == 0)
@@ -1537,9 +1536,8 @@ int ssdp_notify(sockets *s, int alive)
 			strcatf(buf, ptr, "DEVICEID.SES.COM: %d", opts.device_id);
 		strcatf(buf, ptr, "\r\n\r\n");
 
-		salen = sizeof(ssdp_sa);
 		LOGM("%s packet %d:\n%s", op, i + 1, buf);
-		int wb = sendto(s->sock, buf, ptr, MSG_NOSIGNAL, &ssdp_sa.sa, salen);
+		int wb = sendto(s->sock, buf, ptr, MSG_NOSIGNAL, &ssdp_sa.sa, SOCKADDR_SIZE(ssdp_sa));
 		if (wb != ptr)
 			LOG("incomplete ssdp_discovery: wrote %d out of %d: error %d: %s", wb, ptr, errno, strerror(errno));
 		ptr = 0;
@@ -1578,7 +1576,6 @@ int ssdp_reply(sockets *s)
 							   "ST: urn:ses-com:device:SatIPServer:1\r\n"
 							   "USER-AGENT: Linux/1.0 UPnP/1.1 %s/%s\r\n"
 							   "DEVICEID.SES.COM: %d\r\n\r\n\0";
-	socklen_t salen;
 	char *man, *man_sd, *didsescom, *ruuid, *rdid;
 	char buf[500];
 	char ra[50];
@@ -1590,7 +1587,6 @@ int ssdp_reply(sockets *s)
 
 	s->rtime = s->wtime; // consider the timeout of the discovery operation
 
-	salen = sizeof(s->sa);
 	ruuid = strcasestr((const char *)s->buf, "uuid:");
 	if (ruuid && strncmp(uuid, strip(ruuid + 5), strlen(uuid)) == 0)
 	{
@@ -1622,7 +1618,7 @@ int ssdp_reply(sockets *s)
 			LOG(
 				"A new device joined the network with the same Device ID:  %s, asking to change DEVICEID.SES.COM",
 				get_sockaddr_host(s->sa, ra, sizeof(ra)));
-			int wb = sendto(ssdp, buf, ptr, MSG_NOSIGNAL, &s->sa.sa, salen);
+			int wb = sendto(ssdp, buf, ptr, MSG_NOSIGNAL, &s->sa.sa, SOCKADDR_SIZE(s->sa));
 			if (wb != ptr)
 				LOG("incomplete ssdp_reply notify: wrote %d out of %d: error %d: %s", wb, ptr, errno, strerror(errno));
 		}
@@ -1660,7 +1656,7 @@ int ssdp_reply(sockets *s)
 		 opts.bootid, did, opts.http_host);
 	//use ssdp (unicast) even if received to multicast address
 	LOGM("%s", buf);
-	int wb = sendto(ssdp, buf, ptr, MSG_NOSIGNAL, &s->sa.sa, salen);
+	int wb = sendto(ssdp, buf, ptr, MSG_NOSIGNAL, &s->sa.sa, SOCKADDR_SIZE(s->sa));
 	if (wb != ptr)
 		LOG("incomplete ssdp_reply: wrote %d out of %d: error %d: %s", wb, ptr, errno, strerror(errno));
 	return 0;

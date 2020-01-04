@@ -125,7 +125,7 @@ getlocalip()
 		return localip;
 	}
 
-	int err = connect(sock, &serv.sa, sizeof(serv));
+	int err = connect(sock, &serv.sa, SOCKADDR_SIZE(serv));
 	if (err)
 	{
 		LOG("getlocalip: Error '%s'' during connect", strerror(errno));
@@ -183,13 +183,13 @@ int udp_bind(char *addr, int port, int ipv4_only)
 		LOG("setsockopt failed to set SO_REUSEPORT %s", strerror(errno));
 #endif
 
-	if (bind(sock, &serv.sa, sizeof(serv)) < 0)
+	if (bind(sock, &serv.sa, SOCKADDR_SIZE(serv)) < 0)
 	{
 		if (is_multicast) // only IPv4
 		{
 			struct sockaddr_in *s = (struct sockaddr_in *)&serv;
 			s->sin_addr.s_addr = htonl(INADDR_ANY);
-			if (bind(sock, &serv.sa, sizeof(serv)) < 0)
+			if (bind(sock, &serv.sa, sizeof(serv.sa)) < 0)
 			{
 				LOG("udp_bind: failed: bind() on host ANY port %d: error %s", port, strerror(errno));
 				close(sock);
@@ -222,7 +222,7 @@ int udp_bind_connect(char *src, int sport, char *dest, int dport,
 	if (sock < 0)
 		return sock;
 
-	if (connect(sock, &serv->sa, sizeof(*serv)) < 0)
+	if (connect(sock, &serv->sa, SOCKADDR_SIZE(*serv)) < 0)
 	{
 		LOG("udp_bind_connect: failed: bind(): %s", strerror(errno));
 		close(sock);
@@ -259,7 +259,7 @@ int udp_connect(char *addr, int port, USockAddr *serv)
 		return -1;
 	}
 
-	if (connect(sock, &serv->sa, sizeof(*serv)) < 0)
+	if (connect(sock, &serv->sa, SOCKADDR_SIZE(*serv)) < 0)
 	{
 		LOG("udp_connect: failed: bind(): %s", strerror(errno));
 		close(sock);
@@ -350,7 +350,7 @@ int tcp_connect_src(char *addr, int port, USockAddr *serv, int blocking, char *s
 			close(sock);
 			return -1;
 		}
-		if (bind(sock, &src_add.sa, sizeof(src_add)) < 0)
+		if (bind(sock, &src_add.sa, SOCKADDR_SIZE(src_add)) < 0)
 		{
 			LOG("%s: failed: bind() on address: %s: error %s",
 				__FUNCTION__, src, strerror(errno));
@@ -359,7 +359,7 @@ int tcp_connect_src(char *addr, int port, USockAddr *serv, int blocking, char *s
 		}
 	}
 
-	if (connect(sock, &serv->sa, sizeof(*serv)) < 0)
+	if (connect(sock, &serv->sa, SOCKADDR_SIZE(*serv)) < 0)
 	{
 		if (blocking || errno != EINPROGRESS)
 		{
@@ -402,7 +402,7 @@ int tcp_listen(char *addr, int port, int ipv4_only)
 		return -1;
 	}
 
-	if (bind(sock, &serv.sa, sizeof(serv)) < 0)
+	if (bind(sock, &serv.sa, SOCKADDR_SIZE(serv)) < 0)
 	{
 		LOG("tcp_listen: failed: bind() on address: %s [%s], port %d : error %s",
 			addr ? addr : "ANY", get_sockaddr_host(serv, sa, sizeof(sa)),
@@ -1296,6 +1296,7 @@ int sendmmsg(int rsock, struct mmsghdr *msg, int len, int t)
 	int i;
 	for (i = 0; i < len; i++)
 		writev(rsock, msg[i].msg_hdr.msg_iov, msg[i].msg_hdr.msg_iovlen);
+	return len;
 }
 #endif
 
@@ -1324,7 +1325,7 @@ int writev_udp(int rsock, struct iovec *iov, int iiov)
 	if (retval == -1)
 		LOG("sendmmsg(): errno %d: %s", errno, strerror(errno))
 	else if (retval != j)
-		LOG("%d messages sent, expected %d\n", retval, j);
+		LOG("%s: %d of out %d UDP messages sent", __FUNCTION__, retval, j);
 
 	for (i = 0; i < retval; i++)
 		total_iov += msg[i].msg_hdr.msg_iovlen;
