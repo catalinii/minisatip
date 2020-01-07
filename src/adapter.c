@@ -1371,9 +1371,8 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 					 "ver=1.0;src=%d;tuner=%d,%d,%d,%d,%d,%s,%s,%s,%s,%s,%d,%s;pids=",
 					 t->diseqc, (ad && ad->tp.fe > 0) ? ad->tp.fe : aid + 1, strength, status, snr,
 					 t->freq / 1000, get_pol(t->pol),
-					 get_modulation(t->mtype), get_pilot(t->plts),
-					 get_rolloff(t->ro), get_delsys(t->sys), t->sr / 1000,
-					 get_fec(t->fec));
+					 get_delsys(t->sys), get_modulation(t->mtype), get_pilot(t->plts),
+					 get_rolloff(t->ro), t->sr / 1000, get_fec(t->fec));
 	else if (t->sys == SYS_DVBT || t->sys == SYS_DVBT2)
 		len =
 			snprintf(dad, ld, "ver=1.1;tuner=%d,%d,%d,%d,%.2f,%d,%s,%s,%s,%s,%s,%s,%d,%d;pids=",
