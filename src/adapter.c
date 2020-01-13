@@ -320,7 +320,8 @@ int init_hw(int i)
 	ad->master_sid = -1;
 	ad->sid_cnt = 0;
 	ad->pid_err = ad->dec_err = 0;
-	ad->new_gs = 0;
+//	ad->new_gs = 0; //do not clear the detected algo
+	ad->status_cnt = 0;
 	ad->force_close = 0;
 	ad->ca_mask = 0;
 	ad->tune_time = 0;
@@ -453,7 +454,8 @@ int close_adapter(int na)
 #endif
 	ad->ca_mask = 0;
 	ad->fe = -1;
-	ad->dvr = 0;
+	ad->dvr = -1;
+	ad->dmx = -1;
 	ad->strength = 0;
 	ad->snr = 0;
 #ifndef AXE
