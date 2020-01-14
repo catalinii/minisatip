@@ -1023,7 +1023,7 @@ int read_dmx(sockets *s)
 	adapter *ad;
 	int send = 0, flush_all = 0, ls, lse;
 	int threshold = opts.udp_threshold;
-	uint64_t rtime = getTick();
+	int64_t rtime = getTick();
 
 	if (s->rlen % DVB_FRAME != 0)
 		//		s->rlen = ((int) s->rlen / DVB_FRAME) * DVB_FRAME;
