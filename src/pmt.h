@@ -69,7 +69,7 @@ typedef struct struct_cw
 {
 	char enabled;
 	unsigned char cw[32], iv[32];
-	uint64_t time;
+	int64_t time;
 	void *key;
 	int algo;
 	int16_t pmt;
