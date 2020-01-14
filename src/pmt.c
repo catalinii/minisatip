@@ -525,7 +525,7 @@ void update_cw(SPMT *pmt)
 {
 	SPMT *master = get_pmt(pmt->master_pmt);
 	SCW *cw = NULL;
-	uint64_t ctime = getTick();
+	int64_t ctime = getTick();
 	int i = 0;
 	if (!master)
 	{
@@ -642,7 +642,7 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv, int64_t 
 		if (cws[i] && cws[i]->enabled && cws[i]->pmt == master_pmt && cws[i]->parity == parity && !memcmp(cw, cws[i]->cw, cws[i]->cw_len))
 			LOG_AND_RETURN(1, "cw already exist at position %d: %02X %02X %02X %02X %02X %02X %02X %02X", i, cw[0], cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);
 
-	uint64_t ctime = getTick();
+	int64_t ctime = getTick();
 	mutex_lock(&cws_mutex);
 	for (i = 0; i < MAX_CW; i++)
 		if (!cws[i] || (!cws[i]->enabled && cws[i]->algo == algo) ||
