@@ -1570,12 +1570,14 @@ void dvb_get_signal(adapter *ad)
 	ad->status = status;
 	ad->ber = ber;
 
+#if 0 // tuning to a bad channel mess up some unicable switches
 	if (ad->status == 0 && ((ad->tp.diseqc_param.switch_type == SWITCH_JESS) || (ad->tp.diseqc_param.switch_type == SWITCH_UNICABLE)))
 	{
 		adapter_lock(ad->id);
 		setup_switch(ad);
 		adapter_unlock(ad->id);
 	}
+#endif
 }
 
 void dvb_commit(adapter *a)
