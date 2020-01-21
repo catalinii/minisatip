@@ -639,7 +639,7 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *clean, int ver)
 int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len)
 {
 	unsigned char psi[1500];
-	uint64_t ctime = getTick();
+	int64_t ctime = getTick();
 	int i, pos = 0;
 	int psi_len;
 	if (ctime - d->last_pat > 500)
