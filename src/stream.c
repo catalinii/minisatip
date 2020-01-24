@@ -923,7 +923,7 @@ int process_packets_for_stream(streams *sid, adapter *ad)
 			continue;
 		}
 		int _pid = PID_FROM_TS(b);
-		if (!pids[_pid])
+		if (!pids[_pid] && !pids[8192])
 			continue;
 
 		if (total_len && max_pack && (total_len / DVB_FRAME % max_pack == 0))
