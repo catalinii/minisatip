@@ -2100,7 +2100,7 @@ int signal_thread(sockets *s)
 		if (ad->status_cnt++ <= 0) // make sure the kernel has updated the status
 			continue;
 		// do not get the signal when the adapter is being changed
-		if (ad->mutex.mutex_state != 0)
+		if (ad->mutex.state != 0)
 			continue;
 		if (opts.no_threads && !ad->fast_status && status >= 0)
 			continue;
