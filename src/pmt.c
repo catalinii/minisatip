@@ -1836,7 +1836,7 @@ void start_pmt(SPMT *pmt, adapter *ad)
 	pmt->running = 1;
 	pmt->encrypted = 0;
 	// give 1s to initialize decoding or override for each CA
-	pmt->grace_time = getTick() + 2000;
+	pmt->grace_time = getTick() + 4000;
 	set_filter_flags(pmt->filter, FILTER_ADD_REMOVE | FILTER_CRC);
 #ifndef DISABLE_TABLES
 	send_pmt_to_cas(ad, pmt);
