@@ -192,6 +192,7 @@ setup_stream(char *str, sockets *s)
 	char tmp_str[2000];
 
 	transponder t;
+	init_dvb_parameters(&t);
 	strncpy(tmp_str, str, sizeof(tmp_str));
 	tmp_str[sizeof(tmp_str) - 1] = 0;
 	detect_dvb_parameters(str, &t);
