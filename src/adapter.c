@@ -1390,10 +1390,22 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 					 itoa_positive(plp_isi, t->plp_isi), get_inversion(t->inversion));
 
 	if (use_ad)
+	{
+		int len1 = len;
 		len += strlen(get_stream_pids(sid, dad + len, ld - len));
+		if (len == len1)
+			strlcatf(dad, ld, len, "%s", "none");
+	}
 
 	if (!use_ad && (t->apids || t->pids))
-		strlcatf(dad, ld, len, "%s", t->pids ? t->pids : t->apids);
+	{
+		if (t->pids && strstr(t->pids, "8192"))
+			strlcatf(dad, ld, len, "%s", "all");
+		else
+			strlcatf(dad, ld, len, "%s", t->pids ? t->pids : t->apids);
+	}
+	else if(!use_ad)
+		strlcatf(dad, ld, len, "%s", "none");
 
 	LOGM("describe_adapter: sid %d, aid %d => %s", sid, aid, dad);
 
