@@ -277,6 +277,7 @@ int detect_dvb_parameters(char *s, transponder *tp)
 
 void init_dvb_parameters(transponder *tp)
 {
+	LOG("%s: tp", __FUNCTION__);
 	memset(tp, 0, sizeof(transponder));
 	tp->inversion = INVERSION_AUTO;
 	tp->hprate = FEC_AUTO;
