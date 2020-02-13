@@ -309,9 +309,9 @@ int init_hw(int i)
 		goto NOK;
 	}
 	memset(ad->buf, 0, opts.adapter_buffer + 1);
+	init_dvb_parameters(&ad->tp);
 	if (!ad->failed_adapter)
 	{
-		init_dvb_parameters(&ad->tp);
 		mark_pids_deleted(i, -1, NULL);
 		update_pids(i);
 	}
