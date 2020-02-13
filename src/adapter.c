@@ -849,7 +849,7 @@ int update_pids(int aid)
 	adapter *ad;
 	ad = get_adapter(aid);
 	if (!ad || ad->updating_pids)
-		return 0;
+		return 1;
 
 	ad->updating_pids = 1;
 #ifndef DISABLE_PMT
@@ -2100,7 +2100,7 @@ int signal_thread(sockets *s)
 		if (ad->status_cnt++ <= 0) // make sure the kernel has updated the status
 			continue;
 		// do not get the signal when the adapter is being changed
-		if (ad->mutex.state != 0)
+		if (!opts.no_threads && ad->mutex.state != 0)
 			continue;
 		if (opts.no_threads && !ad->fast_status && status >= 0)
 			continue;
