@@ -1257,6 +1257,7 @@ int set_adapter_parameters(int aid, int sid, transponder *tp)
 		}
 	}
 
+#if 0 //not need atm 
 	if (ad->tp.x_pmt)
 	{
 		char *arg[64];
@@ -1276,7 +1277,8 @@ int set_adapter_parameters(int aid, int sid, transponder *tp)
 			//			cp->type |= TYPE_PMT;
 		}
 	}
-
+#endif
+	
 	if (0 && (ad->tp.apids || ad->tp.pids || ad->tp.dpids))
 		dump_pids(aid);
 	mutex_unlock(&ad->mutex);
