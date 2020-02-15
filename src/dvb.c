@@ -235,14 +235,20 @@ int detect_dvb_parameters(char *s, transponder *tp)
 			tp->c2tft = map_int(arg[i] + 6, NULL);
 		if (strncmp("ds=", arg[i], 3) == 0)
 			tp->ds = map_int(arg[i] + 3, NULL);
-		if (strncmp("plp=", arg[i], 4) == 0 ||
-			strncmp("isi=", arg[i], 4) == 0)
+		else
+			tp->ds = TP_VALUE_UNSET;
+		if (strncmp("plp=", arg[i], 4) == 0 || strncmp("isi=", arg[i], 4) == 0)
 			tp->plp_isi = map_int(arg[i] + 4, NULL);
+		else
+			tp->plp_isi = TP_VALUE_UNSET;	
 		if (strncmp("plsm=", arg[i], 5) == 0)
 			tp->pls_mode = map_int(arg[i] + 5, fe_pls_mode);
+		else
+			tp->pls_mode = TP_VALUE_UNSET;
 		if (strncmp("plsc=", arg[i], 5) == 0)
 			tp->pls_code = map_int(arg[i] + 5, NULL);
-
+		else
+			tp->pls_code = TP_VALUE_UNSET;
 		if (strncmp("x_pmt=", arg[i], 6) == 0)
 			tp->x_pmt = arg[i] + 6;
 		if (strncmp("pids=", arg[i], 5) == 0)
@@ -277,6 +283,7 @@ int detect_dvb_parameters(char *s, transponder *tp)
 
 void init_dvb_parameters(transponder *tp)
 {
+	LOG("%s: tp", __FUNCTION__);
 	memset(tp, 0, sizeof(transponder));
 	tp->inversion = INVERSION_AUTO;
 	tp->hprate = FEC_AUTO;
@@ -287,12 +294,9 @@ void init_dvb_parameters(transponder *tp)
 	tp->mtype = QAM_AUTO;
 	tp->plts = PILOT_AUTO;
 	tp->fec = FEC_AUTO;
-	tp->ds = TP_VALUE_UNSET;
-	tp->plp_isi = TP_VALUE_UNSET;
-	tp->pls_mode = TP_VALUE_UNSET;
-	tp->sys = TP_VALUE_UNSET;
-	tp->fe = TP_VALUE_UNSET;
-	tp->diseqc = TP_VALUE_UNSET;
+//	tp->ds = TP_VALUE_UNSET;
+//	tp->plp_isi = TP_VALUE_UNSET;
+//	tp->pls_mode = TP_VALUE_UNSET;
 }
 
 void copy_dvb_parameters(transponder *s, transponder *d)
