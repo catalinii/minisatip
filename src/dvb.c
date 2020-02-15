@@ -290,6 +290,9 @@ void init_dvb_parameters(transponder *tp)
 	tp->ds = TP_VALUE_UNSET;
 	tp->plp_isi = TP_VALUE_UNSET;
 	tp->pls_mode = TP_VALUE_UNSET;
+	tp->sys = TP_VALUE_UNSET;
+	tp->fe = TP_VALUE_UNSET;
+	tp->diseqc = TP_VALUE_UNSET;
 }
 
 void copy_dvb_parameters(transponder *s, transponder *d)
