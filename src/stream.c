@@ -182,6 +182,13 @@ void set_stream_parameters(int s_id, transponder *t)
 	if (!t->x_pmt)
 		t->x_pmt = sid->tp.x_pmt;
 
+	if (!t->fe)
+		t->fe = sid->tp.fe;
+	if (!t->diseqc)
+		t->diseqc = sid->tp.diseqc;
+	if (!t->plp_isi)
+		t->plp_isi = sid->tp.plp_isi;
+
 	copy_dvb_parameters(t, &sid->tp);
 }
 
