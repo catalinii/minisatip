@@ -236,20 +236,13 @@ int detect_dvb_parameters(char *s, transponder *tp)
 			tp->c2tft = map_int(arg[i] + 6, NULL);
 		if (strncmp("ds=", arg[i], 3) == 0)
 			tp->ds = map_int(arg[i] + 3, NULL);
-		else
-			tp->ds = TP_VALUE_UNSET;
-		if (strncmp("plp=", arg[i], 4) == 0 || strncmp("isi=", arg[i], 4) == 0)
+		if (strncmp("plp=", arg[i], 4) == 0 ||
+			strncmp("isi=", arg[i], 4) == 0)
 			tp->plp_isi = map_int(arg[i] + 4, NULL);
-		else
-			tp->plp_isi = TP_VALUE_UNSET;	
 		if (strncmp("plsm=", arg[i], 5) == 0)
 			tp->pls_mode = map_int(arg[i] + 5, fe_pls_mode);
-		else
-			tp->pls_mode = TP_VALUE_UNSET;
 		if (strncmp("plsc=", arg[i], 5) == 0)
 			tp->pls_code = map_int(arg[i] + 5, NULL);
-		else
-			tp->pls_code = TP_VALUE_UNSET;
 		if (strncmp("x_pmt=", arg[i], 6) == 0)
 			tp->x_pmt = arg[i] + 6;
 		if (strncmp("pids=", arg[i], 5) == 0)
