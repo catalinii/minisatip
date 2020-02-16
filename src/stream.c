@@ -144,6 +144,7 @@ void set_stream_parameters(int s_id, transponder *t)
 {
 	streams *sid;
 
+	LOG("%s", __FUNCTION__);
 	sid = get_sid(s_id);
 	if (!sid || !sid->enabled)
 		return;
@@ -182,13 +183,6 @@ void set_stream_parameters(int s_id, transponder *t)
 	if (!t->x_pmt)
 		t->x_pmt = sid->tp.x_pmt;
 
-	if (!t->fe)
-		t->fe = sid->tp.fe;
-	if (!t->diseqc)
-		t->diseqc = sid->tp.diseqc;
-	if (!t->plp_isi)
-		t->plp_isi = sid->tp.plp_isi;
-
 	copy_dvb_parameters(t, &sid->tp);
 }
 
@@ -199,10 +193,8 @@ setup_stream(char *str, sockets *s)
 	char tmp_str[2000];
 
 	transponder t;
-	init_dvb_parameters(&t);
 	strncpy(tmp_str, str, sizeof(tmp_str));
 	tmp_str[sizeof(tmp_str) - 1] = 0;
-	detect_dvb_parameters(str, &t);
 	LOG("Setup stream %d parameters, sock_id %d, handle %d", s->sid, s->id,
 		s->sock);
 	if (!get_sid(s->sid)) // create the stream
@@ -236,6 +228,7 @@ setup_stream(char *str, sockets *s)
 		LOG_AND_RETURN(NULL, "Stream %d not enabled for sock_id %d handle %d",
 					   s->sid, s->id, s->sock);
 
+	detect_dvb_parameters(str, &t);
 	set_stream_parameters(s->sid, &t);
 	sid->do_play = 0;
 
