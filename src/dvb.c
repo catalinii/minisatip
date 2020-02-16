@@ -163,6 +163,14 @@ int detect_dvb_parameters(char *s, transponder *tp)
 	char *arg[20];
 	int la, i;
 
+	while (*s > 0 && *s != '?')
+		s++;
+
+	if (*s == 0)
+		LOG_AND_RETURN(0, "no ? found in URL");
+
+	s++;
+	
 	tp->sys = -1;
 	tp->freq = -1;
 	tp->inversion = -1;
@@ -188,15 +196,8 @@ int detect_dvb_parameters(char *s, transponder *tp)
 
 	tp->pids = tp->apids = tp->dpids = tp->x_pmt = NULL;
 
-	while (*s > 0 && *s != '?')
-		s++;
-
-	if (*s == 0)
-		LOG_AND_RETURN(0, "no ? found in URL");
-
-	s++;
-	if (strstr(s, "freq="))
-		init_dvb_parameters(tp);
+//	if (strstr(s, "freq="))
+//		init_dvb_parameters(tp);
 
 	LOG("detect_dvb_parameters (S)-> %s", s);
 	la = split(arg, s, ARRAY_SIZE(arg), '&');
@@ -273,9 +274,9 @@ int detect_dvb_parameters(char *s, transponder *tp)
 	//      if(freq<10)INVALID_URL("no freq= found in URL or frequency invalid");
 	//      if((msys==SYS_DVBS || msys==SYS_DVBS2) && (pol!='H' && pol!='V'))INVALID_URL("no pol= found in URL or pol is not H or V");
 	LOG(
-		"detect_dvb_parameters (E) -> src=%d, fe=%d, freq=%d, fec=%d, sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s - apids=%s - dpids=%s x_pmt=%s",
+		"detect_dvb_parameters (E) -> src=%d, fe=%d, freq=%d, fec=%d, sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, plp_isi=%d, pids=%s - apids=%s - dpids=%s x_pmt=%s",
 		tp->diseqc, tp->fe, tp->freq, tp->fec, tp->sr, tp->pol, tp->ro,
-		tp->sys, tp->mtype, tp->plts, tp->bw, tp->inversion,
+		tp->sys, tp->mtype, tp->plts, tp->bw, tp->inversion, tp->plp_isi,
 		tp->pids ? tp->pids : "NULL", tp->apids ? tp->apids : "NULL",
 		tp->dpids ? tp->dpids : "NULL", tp->x_pmt ? tp->x_pmt : "NULL");
 	return 0;
@@ -294,17 +295,20 @@ void init_dvb_parameters(transponder *tp)
 	tp->mtype = QAM_AUTO;
 	tp->plts = PILOT_AUTO;
 	tp->fec = FEC_AUTO;
-//	tp->ds = TP_VALUE_UNSET;
-//	tp->plp_isi = TP_VALUE_UNSET;
-//	tp->pls_mode = TP_VALUE_UNSET;
+	tp->ds = TP_VALUE_UNSET;
+	tp->plp_isi = TP_VALUE_UNSET;
+	tp->pls_mode = TP_VALUE_UNSET;
+	tp->pls_code = TP_VALUE_UNSET;
+	tp->fe = TP_VALUE_UNSET;
+	tp->diseqc = TP_VALUE_UNSET;
 }
 
 void copy_dvb_parameters(transponder *s, transponder *d)
 {
 	LOG(
-		"copy_dvb_param start -> src=%d, fe=%d, freq=%d, fec=%d, sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s, apids=%s, dpids=%s x_pmt=%s",
+		"copy_dvb_param start -> src=%d, fe=%d, freq=%d, fec=%d, sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, plp_isi=%d, pids=%s, apids=%s, dpids=%s x_pmt=%s",
 		d->diseqc, d->fe, d->freq, d->fec, d->sr, d->pol, d->ro, d->sys,
-		d->mtype, d->plts, d->bw, d->inversion, d->pids ? d->pids : "NULL",
+		d->mtype, d->plts, d->bw, d->inversion, d->plp_isi, d->pids ? d->pids : "NULL",
 		d->apids ? d->apids : "NULL", d->dpids ? d->dpids : "NULL",
 		d->x_pmt ? d->x_pmt : "NULL");
 	if (s->sys != -1)
@@ -367,9 +371,9 @@ void copy_dvb_parameters(transponder *s, transponder *d)
 		d->mtype = QPSK;
 
 	LOG(
-		"copy_dvb_parameters -> src=%d, fe=%d, freq=%d, fec=%d sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s, apids=%s, dpids=%s x_pmt=%s",
+		"copy_dvb_parameters -> src=%d, fe=%d, freq=%d, fec=%d sr=%d, pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, plp_isi=%d, pids=%s, apids=%s, dpids=%s x_pmt=%s",
 		d->diseqc, d->fe, d->freq, d->fec, d->sr, d->pol, d->ro, d->sys,
-		d->mtype, d->plts, d->bw, d->inversion, d->pids ? d->pids : "NULL",
+		d->mtype, d->plts, d->bw, d->inversion, d->plp_isi, d->pids ? d->pids : "NULL",
 		d->apids ? d->apids : "NULL", d->dpids ? d->dpids : "NULL",
 		d->x_pmt ? d->x_pmt : "NULL");
 }
