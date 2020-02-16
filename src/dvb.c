@@ -243,6 +243,7 @@ int detect_dvb_parameters(char *s, transponder *tp)
 			tp->pls_mode = map_int(arg[i] + 5, fe_pls_mode);
 		if (strncmp("plsc=", arg[i], 5) == 0)
 			tp->pls_code = map_int(arg[i] + 5, NULL);
+
 		if (strncmp("x_pmt=", arg[i], 6) == 0)
 			tp->x_pmt = arg[i] + 6;
 		if (strncmp("pids=", arg[i], 5) == 0)
