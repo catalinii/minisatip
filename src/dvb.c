@@ -160,7 +160,7 @@ char def_pids[100];
 
 int detect_dvb_parameters(char *s, transponder *tp)
 {
-	char *arg[20];
+	char *arg[30];
 	int la, i;
 
 	tp->sys = -1;
