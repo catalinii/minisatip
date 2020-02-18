@@ -144,7 +144,6 @@ void set_stream_parameters(int s_id, transponder *t)
 {
 	streams *sid;
 
-	LOG("%s", __FUNCTION__);
 	sid = get_sid(s_id);
 	if (!sid || !sid->enabled)
 		return;
