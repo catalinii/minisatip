@@ -309,9 +309,9 @@ int init_hw(int i)
 		goto NOK;
 	}
 	memset(ad->buf, 0, opts.adapter_buffer + 1);
+	init_dvb_parameters(&ad->tp);
 	if (!ad->failed_adapter)
 	{
-		init_dvb_parameters(&ad->tp);
 		mark_pids_deleted(i, -1, NULL);
 		update_pids(i);
 	}
@@ -819,6 +819,7 @@ void close_adapter_for_stream(int sid, int aid)
 		is_slave = 0;
 		ad->master_sid = -1;
 		mark_pids_deleted(aid, -1, NULL);
+		init_dvb_parameters(&ad->tp);
 #ifdef AXE
 		free_axe_input(ad);
 #endif
