@@ -196,8 +196,8 @@ int detect_dvb_parameters(char *s, transponder *tp)
 
 	tp->pids = tp->apids = tp->dpids = tp->x_pmt = NULL;
 
-//	if (strstr(s, "freq="))
-//		init_dvb_parameters(tp);
+	if (strstr(s, "freq="))
+		init_dvb_parameters(tp);
 
 	LOG("detect_dvb_parameters (S)-> %s", s);
 	la = split(arg, s, ARRAY_SIZE(arg), '&');
