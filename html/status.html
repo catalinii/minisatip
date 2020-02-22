@@ -266,6 +266,13 @@
 						if (state['st_play'][j] == 0)
 							st_p = "<i>" + st_p + "</i>";
 						myTable += "<small>Pids: " + st_p + "</small><br />";
+                                                
+						// Create VLC stream URL
+						// Example: rtsp://@satip/?src=1&freq=12382&pol=H&msys=DVBS2&sr=27500&pids=0,5375,5378,116,5375,32
+						var hostArray = window.location.host.split(':');
+						myTable += "<small>rtsp://@" + hostArray[0]  + "/?src=" + state['ad_pos'][i] + "&freq=" + state['ad_freq'][i] 
++ "&pol=" + pol[state['ad_pol'][i]].replace('(', '').replace(')', '') + "&msys=" + sys[state['ad_sys'][i]].toUpperCase() + "&sr=" + state['ad_sr'][i] + "&pids="  + st_p + "</small><br />";
+						
 						if (state['st_overflow'][j] > 0)
 							myTable += "<small>Dropped: " + (state['st_overflow'][j]/1048576.0).toFixed(2) + " MB</small><br />";
 						if (state['st_buffered'][j] > 0)
