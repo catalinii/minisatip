@@ -160,7 +160,7 @@ char def_pids[100];
 
 int detect_dvb_parameters(char *s, transponder *tp)
 {
-	char *arg[20];
+	char *arg[30];
 	int la, i;
 
 	tp->sys = -1;
@@ -290,6 +290,7 @@ void init_dvb_parameters(transponder *tp)
 	tp->ds = TP_VALUE_UNSET;
 	tp->plp_isi = TP_VALUE_UNSET;
 	tp->pls_mode = TP_VALUE_UNSET;
+	tp->pls_code = TP_VALUE_UNSET;
 }
 
 void copy_dvb_parameters(transponder *s, transponder *d)
