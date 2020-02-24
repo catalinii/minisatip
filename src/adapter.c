@@ -437,13 +437,13 @@ int close_adapter(int na)
 	}
 
 	LOG("closing adapter %d  -> fe:%d dvr:%d, sock:%d, fe_sock:%d", na, ad->fe, ad->dvr, ad->sock, ad->fe_sock);
-	ad->enabled = 0;
-	if (ad->close)
-		ad->close(ad);
 	//close all streams attached to this adapter
 	//	close_streams_for_adapter (na, -1);
 	mark_pids_deleted(na, -1, NULL);
 	update_pids(na);
+	ad->enabled = 0;
+	if (ad->close)
+		ad->close(ad);
 	//      if(ad->dmx>0)close(ad->dmx);
 	if (ad->fe > 0)
 		close(ad->fe);
