@@ -715,6 +715,7 @@ extern uint32_t writes, failed_writes;
 
 __thread pthread_t tid;
 __thread char thread_name[100];
+__thread int select_timeout;
 
 void *select_and_execute(void *arg)
 {
@@ -734,6 +735,7 @@ void *select_and_execute(void *arg)
 	else
 		strcpy(thread_name, "main");
 
+	select_timeout = SELECT_TIMEOUT;
 	tid = get_tid();
 	les = 1;
 	es = 0;
@@ -773,7 +775,7 @@ void *select_and_execute(void *arg)
 		}
 		les = es;
 		//    LOG("start select");
-		if ((rv = poll(pf, max_sock, 100)) < 0)
+		if ((rv = poll(pf, max_sock, select_timeout)) < 0)
 		{
 			LOG("select_and_execute: select() error %d: %s", errno,
 				strerror(errno));

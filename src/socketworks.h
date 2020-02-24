@@ -76,6 +76,7 @@ typedef struct struct_sockets
 
 #define MAX_HOST 50
 #define SOCK_TIMEOUT -2
+#define SELECT_TIMEOUT 100
 
 char *setlocalip();
 char *getlocalip();
@@ -125,6 +126,7 @@ void sockets_force_close(int id);
 void sockets_set_master(int slave, int master);
 extern __thread char thread_name[];
 extern __thread pthread_t tid;
+extern __thread int select_timeout;
 
 static inline sockets *get_sockets(int i)
 {
