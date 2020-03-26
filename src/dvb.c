@@ -871,7 +871,8 @@ int dvb_tune(int aid, transponder *tp)
 #endif
 #endif
 #if DVBAPIVERSION >= 0x050b /* 5.11 */
-		ADD_PROP(DTV_SCRAMBLING_SEQUENCE_INDEX, pls_scrambling_index(tp))
+		if (tp->pls_mode != TP_VALUE_UNSET)
+			ADD_PROP(DTV_SCRAMBLING_SEQUENCE_INDEX, pls_scrambling_index(tp))
 #endif
 
 #ifdef USE_DVBAPI3
@@ -883,8 +884,8 @@ int dvb_tune(int aid, transponder *tp)
 
 		LOG("tuning to %d(%d) pol: %s (%d) sr:%d fec:%s delsys:%s mod:%s rolloff:%s pilot:%s, ts clear=%jd, ts pol=%jd",
 			tp->freq, freq, get_pol(tp->pol), tp->pol, tp->sr,
-			fe_fec[tp->fec], fe_delsys[tp->sys], fe_modulation[tp->mtype],
-			fe_rolloff[tp->ro], fe_pilot[tp->plts],
+			get_fec(tp->fec), get_delsys(tp->sys), get_modulation(tp->mtype),
+			get_rolloff(tp->ro), get_pilot(tp->plts),
 			bclear, bpol)
 		break;
 
@@ -927,9 +928,9 @@ int dvb_tune(int aid, transponder *tp)
 
 		LOG(
 			"tuning to %d delsys: %s bw:%d inversion:%s mod:%s fec:%s guard:%s transmission: %s, ts clear = %jd",
-			freq, fe_delsys[tp->sys], tp->bw, fe_specinv[tp->inversion],
-			fe_modulation[tp->mtype], fe_fec[tp->fec], fe_gi[tp->gi],
-			fe_tmode[tp->tmode], bclear)
+			freq, get_delsys(tp->sys), tp->bw, get_specinv(tp->inversion),
+			get_modulation(tp->mtype), get_fec(tp->fec), get_gi(tp->gi),
+			get_tmode(tp->tmode), bclear)
 		break;
 
 	case SYS_DVBC2:
@@ -960,8 +961,8 @@ int dvb_tune(int aid, transponder *tp)
 #endif
 
 		LOG("tuning to %d sr:%d specinv:%s delsys:%s mod:%s ts clear = %jd",
-			freq, tp->sr, fe_specinv[tp->inversion], fe_delsys[tp->sys],
-			fe_modulation[tp->mtype], bclear)
+			freq, tp->sr, get_specinv(tp->inversion), get_delsys(tp->sys),
+			get_modulation(tp->mtype), bclear)
 		break;
 
 	case SYS_ATSC:
@@ -973,8 +974,8 @@ int dvb_tune(int aid, transponder *tp)
 		freq = freq * 1000;
 
 		LOG("tuning to %d delsys:%s mod:%s specinv:%s ts clear = %jd", freq,
-			fe_delsys[tp->sys], fe_modulation[tp->mtype],
-			fe_specinv[tp->inversion], bclear)
+			get_delsys(tp->sys), get_modulation(tp->mtype),
+			get_specinv(tp->inversion), bclear)
 
 		break;
 
@@ -992,12 +993,12 @@ int dvb_tune(int aid, transponder *tp)
 #endif
 
 		LOG("tuning to %d delsys: %s bw:%d inversion:%s , ts clear = %jd", freq,
-			fe_delsys[tp->sys], tp->bw, fe_specinv[tp->inversion], bclear);
+			get_delsys(tp->sys), tp->bw, get_specinv(tp->inversion), bclear);
 
 		break;
 	default:
 		LOG("tuning to unknown delsys: %s freq %d ts clear = %jd",
-			fe_delsys[tp->sys], freq, bclear)
+			get_delsys(tp->sys), freq, bclear)
 		break;
 	}
 
@@ -1399,7 +1400,7 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys)
 	}
 	for (i = 0; i < nsys; i++)
 		LOG("Detected delivery system for adapter %d: %s [%d]", aid,
-			fe_delsys[sys[i]], sys[i]);
+			get_delsys(sys[i]), sys[i]);
 
 	return (fe_delivery_system_t)rv;
 }
