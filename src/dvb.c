@@ -127,7 +127,7 @@ char *fe_pls_mode[] =
 #define make_func(a)                           \
 	char *get_##a(int i)                       \
 	{                                          \
-		if (i >= 0 && i < (int)sizeof(fe_##a)) \
+		if (i >= 0 && i < (int)sizeof(fe_##a)/sizeof(fe_##a[0])) \
 		{                                      \
 			if (fe_##a[i][0] == 32)            \
 				return "";                     \
