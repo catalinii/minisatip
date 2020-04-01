@@ -1372,7 +1372,7 @@ int read_http(sockets *s)
 	s->rlen = 0;
 
 	LOG("read HTTP from %d sid: %d: ", s->sock, s->sid);
-	LOGM("%s", s->buf);
+	DEBUGM("%s", s->buf);
 
 	split(arg, (char *)s->buf, ARRAY_SIZE(arg), ' ');
 	//      LOG("args: %s -> %s -> %s",arg[0],arg[1],arg[2]);
@@ -1904,7 +1904,14 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 		(lresp == sizeof(resp) - 1) ? "message truncated" : "", s->sock,
 		get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa),
 		lr, s->id);
-	LOGM("%s", resp);
+	if (s->type == TYPE_HTTP)
+	{
+		DEBUGM("%s", resp);
+	}
+	else
+	{
+		LOGM("%s", resp);
+	}
 
 	struct iovec iov[2];
 	iov[0].iov_base = resp;
