@@ -236,7 +236,7 @@ setup_stream(char *str, sockets *s)
 		int ad = sid->adapter;
 		if (!strstr(tmp_str, "addpids") && !strstr(tmp_str, "delpids"))
 		{
-			close_adapter_for_stream(sid->sid, ad);
+			close_adapter_for_stream(sid->sid, ad, 0);
 		}
 	}
 
@@ -272,7 +272,7 @@ int start_play(streams *sid, sockets *s)
 
 	if (compare_tunning_parameters(sid->adapter, &sid->tp)) // close the adapter that is required to be closed
 	{
-		restart_needed_adapters(sid->adapter, sid->sid);
+		restart_needed_adapters(sid->adapter, sid->sid, 0);
 		if (ad && !compare_slave_parameters(ad, &sid->tp))
 		{
 			close_adapter_for_stream(sid->sid, ad->id);
@@ -293,7 +293,7 @@ int start_play(streams *sid, sockets *s)
 		if (ad)
 		{
 			LOG("slave stream tuning to a new frequency, finding a new adapter");
-			close_adapter_for_stream(sid->sid, ad->id);
+			close_adapter_for_stream(sid->sid, ad->id, 0);
 		}
 		a_id = get_free_adapter(&sid->tp);
 		LOG("Got adapter %d on stream %d socket %d", a_id, sid->sid, s->id);
@@ -383,7 +383,7 @@ int close_stream(int i)
 	}
 
 	if (ad >= 0)
-		close_adapter_for_stream(i, ad);
+		close_adapter_for_stream(i, ad, 1);
 
 	sockets_del_for_sid(i);
 
