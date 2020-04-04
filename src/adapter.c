@@ -789,7 +789,7 @@ int set_adapter_for_stream(int sid, int aid)
 	return 0;
 }
 
-void close_adapter_for_stream(int sid, int aid)
+void close_adapter_for_stream(int sid, int aid, int force)
 {
 	adapter *ad;
 	streams *s = get_sid(sid);
@@ -811,8 +811,8 @@ void close_adapter_for_stream(int sid, int aid)
 	}
 	if (ad->sid_cnt > 0)
 		ad->sid_cnt--;
-	LOG("closed adapter %d for stream %d m:%d sid_cnt:%d, restart_needed %d", aid, sid, ad->master_sid,
-		ad->sid_cnt, ad->restart_needed);
+	LOG("closed adapter %d for stream %d m:%d sid_cnt:%d, restart_needed %d, force_close %d", aid, sid, ad->master_sid,
+		ad->sid_cnt, ad->restart_needed, force);
 	// delete the attached PIDs as well
 	if (ad->sid_cnt == 0)
 	{
@@ -835,7 +835,7 @@ void close_adapter_for_stream(int sid, int aid)
 	update_pids(aid);
 	adapter_update_threshold(ad);
 	mutex_unlock(&ad->mutex);
-	if ((ad->restart_needed == 1) && !is_slave)
+	if (((ad->restart_needed == 1) || force) && !is_slave)
 	{
 		LOG("restarting adapter %d as needed", ad->id);
 		//		request_adapter_close (ad);
