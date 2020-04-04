@@ -1256,28 +1256,6 @@ int set_adapter_parameters(int aid, int sid, transponder *tp)
 			return -1;
 		}
 	}
-
-#if 0 //not need atm 
-	if (ad->tp.x_pmt)
-	{
-		char *arg[64];
-		int i, la;
-		la = split(arg, ad->tp.x_pmt, ARRAY_SIZE(arg), ',');
-		for (i = 0; i < la; i++)
-		{
-			int pmt = map_int(arg[i], NULL);
-			if (pmt <= 0)
-				continue;
-			SPid *cp = find_pid(ad->id, pmt);
-			if (!cp)
-				mark_pid_add(-1, aid, pmt);
-			cp = find_pid(ad->id, pmt);
-			if (!cp)
-				continue;
-			//			cp->type |= TYPE_PMT;
-		}
-	}
-#endif
 	
 	if (0 && (ad->tp.apids || ad->tp.pids || ad->tp.dpids))
 		dump_pids(aid);
