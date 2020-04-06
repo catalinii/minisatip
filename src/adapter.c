@@ -782,7 +782,7 @@ int set_adapter_for_stream(int sid, int aid)
 		adapter *ad2 = a[ad->master_source];
 		ad2->used |= (1 << ad->id);
 	}
-	LOG("set adapter %d for stream %d m:%d s:%d", aid, sid, ad->master_sid, ad->sid_cnt);
+	LOG("set adapter %d for sid %d m:%d s:%d", aid, sid, ad->master_sid, ad->sid_cnt);
 	adapter_update_threshold(ad);
 	mutex_unlock(&ad->mutex);
 
@@ -811,7 +811,7 @@ void close_adapter_for_stream(int sid, int aid)
 	}
 	if (ad->sid_cnt > 0)
 		ad->sid_cnt--;
-	LOG("closed adapter %d for stream %d m:%d sid_cnt:%d, restart_needed %d", aid, sid, ad->master_sid,
+	LOG("closed adapter %d for sid %d m:%d sid_cnt:%d, restart_needed %d", aid, sid, ad->master_sid,
 		ad->sid_cnt, ad->restart_needed);
 	// delete the attached PIDs as well
 	if (ad->sid_cnt == 0)
@@ -985,7 +985,7 @@ int tune(int aid, int sid)
 		post_tune(ad);
 	}
 	else
-		LOG("not tuning for SID %d (do_tune=%d, master_sid=%d)", sid,
+		LOG("not tuning for sid %d (do_tune=%d, master_sid=%d)", sid,
 			ad->do_tune, ad->master_sid);
 	if (rv < 0)
 		mark_pids_deleted(aid, sid, NULL);

@@ -195,7 +195,7 @@ setup_stream(char *str, sockets *s)
 	strncpy(tmp_str, str, sizeof(tmp_str));
 	tmp_str[sizeof(tmp_str) - 1] = 0;
 	detect_dvb_parameters(str, &t);
-	LOG("Setup stream %d parameters, sock_id %d, handle %d", s->sid, s->id,
+	LOG("Setup stream sid %d parameters, sock_id %d, handle %d", s->sid, s->id,
 		s->sock);
 	if (!get_sid(s->sid)) // create the stream
 	{
@@ -221,11 +221,11 @@ setup_stream(char *str, sockets *s)
 			set_sock_lock(sid->st_sock, &sid->mutex);
 		}
 
-		LOG("Setup stream done: sid: %d for sock %d handle %d", s_id, s->id,
+		LOG("Setup stream done: sid %d for sock %d handle %d", s_id, s->id,
 			s->sock);
 	}
 	if (!(sid = get_sid(s->sid)))
-		LOG_AND_RETURN(NULL, "Stream %d not enabled for sock_id %d handle %d",
+		LOG_AND_RETURN(NULL, "stream sid %d not enabled for sock_id %d handle %d",
 					   s->sid, s->id, s->sock);
 
 	set_stream_parameters(s->sid, &t);
@@ -261,12 +261,12 @@ int start_play(streams *sid, sockets *s)
 		//			LOG("Assuming RTSP over TCP for stream %d, most likely transport was not specified", sid->sid);
 		//			sid->type = STREAM_RTSP_TCP;
 		//			sid->rsock = s->sock;
-		LOG_AND_RETURN(-454, "No Transport header was specified, for sid %d",
+		LOG_AND_RETURN(-454, "No Transport header was specified, for stream sid %d",
 					   sid->sid);
 	}
 
 	LOG(
-		"Play for stream %d, type %d, rsock %d, adapter %d, sock_id %d, rsock_id %d, handle %d",
+		"Play for stream sid %d, type %d, rsock %d, adapter %d, sock_id %d, rsock_id %d, handle %d",
 		s->sid, sid->type, sid->rsock, sid->adapter, s->id, sid->rsock_id, s->sock);
 	ad = get_adapter(sid->adapter);
 
@@ -296,7 +296,7 @@ int start_play(streams *sid, sockets *s)
 			close_adapter_for_stream(sid->sid, ad->id);
 		}
 		a_id = get_free_adapter(&sid->tp);
-		LOG("Got adapter %d on stream %d socket %d", a_id, sid->sid, s->id);
+		LOG("Got adapter %d on sid %d socket %d", a_id, sid->sid, s->id);
 		if (a_id < 0)
 			return -404;
 		sid->adapter = a_id;
@@ -341,7 +341,7 @@ int close_stream(int i)
 {
 	int ad;
 	streams *sid;
-	LOG("closing stream %d", i);
+	LOG("closing stream sid %d", i);
 	if (i < 0 || i >= MAX_STREAMS || !st[i] || !st[i]->enabled)
 		return 0;
 
@@ -388,7 +388,7 @@ int close_stream(int i)
 	sockets_del_for_sid(i);
 
 	mutex_unlock(&st_mutex);
-	LOG("closed stream %d", i);
+	LOG("closed stream sid %d", i);
 	return 0;
 }
 
@@ -411,7 +411,7 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp)
 	{
 		if (strstr(arg, "RTP/AVP/TCP"))
 		{
-			LOG("Assuming RTSP over TCP for stream %d, arg %s", sid->sid, arg);
+			LOG("Assuming RTSP over TCP for stream sid %d, arg %s", sid->sid, arg);
 			sid->type = STREAM_RTSP_TCP;
 			sid->rsock = s->sock;
 			sid->rsock_id = s->id;
@@ -632,7 +632,7 @@ int send_rtcp(int s_id, int64_t ctime)
 	struct timeval tv;
 
 	if (!sid)
-		LOG_AND_RETURN(0, "Sid is null for s_id %d", s_id);
+		LOG_AND_RETURN(0, "Stream sid is null for s_id %d", s_id);
 
 	gettimeofday(&tv, NULL);
 	ntp = (((unsigned long long)tv.tv_sec + 2208988800ULL) << 32) |
@@ -700,7 +700,7 @@ int send_rtcp(int s_id, int64_t ctime)
 	}
 
 	sid->rtcp_wtime = ctime;
-	DEBUGM("%s: sent %d bytes for stream %d, handle %d seq %d => %s:%d",
+	DEBUGM("%s: sent %d bytes for sid %d, handle %d seq %d => %s:%d",
 		   __FUNCTION__, total_len, sid->sid, sid->rsock, sid->seq - 1,
 		   get_stream_rhost(sid->sid, ra, sizeof(ra)), get_stream_rport(sid->sid));
 
@@ -717,13 +717,13 @@ int flush_stream(streams *sid, struct iovec *iov, int iiov, int64_t ctime)
 	if (rv > 0 && sid->start_streaming == 0)
 	{
 		sid->start_streaming = 1;
-		LOG("Start streaming for stream %d, len %d to handle %d => %s:%d",
+		LOG("Start streaming for stream sid %d, len %d to handle %d => %s:%d",
 			sid->sid, rv, sid->rsock,
 			get_stream_rhost(sid->sid, ra, sizeof(ra)),
 			get_stream_rport(sid->sid));
 	}
 
-	DEBUGM("%s: sent %d bytes for stream %d, handle %d, sock_id %d, seq %d => %s:%d",
+	DEBUGM("%s: sent %d bytes for sid %d, handle %d, sock_id %d, seq %d => %s:%d",
 		   __FUNCTION__, rv, sid->sid, sid->rsock, sid->rsock_id, sid->seq,
 		   get_stream_rhost(sid->sid, ra, sizeof(ra)), get_stream_rport(sid->sid));
 
@@ -937,7 +937,7 @@ int process_packets_for_stream(streams *sid, adapter *ad)
 		// unlikely: if the rtp header was just enqueued try to flush if there is not enough iiov left
 		if ((rtp_added || !max_pack) && (iiov >= max_iov))
 		{
-			LOG("stream %d, flushing intermediary stream iiov %d max_iiov %d, total_len %d", st_id, iiov - 1, max_iov, total_len);
+			LOG("stream sid %d, flushing intermediary stream iiov %d max_iiov %d, total_len %d", st_id, iiov - 1, max_iov, total_len);
 			// iiov was incremented previously
 			flush_stream(sid, iov, max_pack ? iiov - 1 : iiov, rtime);
 			iiov = max_pack ? 1 : 0;
@@ -1161,7 +1161,7 @@ int stream_timeout(sockets *s)
 		if ((sid->timeout > 0 && (ctime - sid->rtime > sid->timeout + 10000)) || (sid->timeout == 1))
 		{
 			LOG(
-				"Stream timeout %d, closing (ctime %jd , sid->rtime %jd, sid->timeout %d)",
+				"Stream timeout sid %d, closing (ctime %jd , sid->rtime %jd, sid->timeout %d)",
 				sid->sid, ctime, sid->rtime, sid->timeout);
 			close_stream(sid->sid); // do not lock before this
 		}
@@ -1175,7 +1175,7 @@ int stream_timeout(sockets *s)
 			adapter *ad = get_adapter_nw(sid->adapter);
 			if (!ad)
 			{
-				LOG("stream %d is active but the adapter %d is closed, initializing", sid->sid, sid->adapter);
+				LOG("stream sid %d is active but the adapter %d is closed, initializing", sid->sid, sid->adapter);
 				enable_failed_adapter(sid->adapter);
 			}
 		}
@@ -1255,7 +1255,7 @@ void set_session_id(int i, int id)
 		return;
 	if (sid->ssrc != id)
 	{
-		LOG("Forcing session id %d on stream %d", id, i);
+		LOG("Forcing session id %d on stream sid %d", id, i);
 		sid->ssrc = id;
 	}
 }
@@ -1304,10 +1304,10 @@ int rtcp_confirm(sockets *s)
 	sid = get_sid(s->sid);
 	if (!sid)
 		return 0;
-	LOG("%s: called for stream %d from %s:%d",
+	LOG("%s: called for stream sid %d from %s:%d",
 		__FUNCTION__, s->sid, get_stream_rhost(sid->sid, ra, sizeof(ra) - 1), get_stream_rport(sid->sid) + 1);
 
-	LOGM("Acknowledging stream %d via rtcp packet", s->sid);
+	LOGM("Acknowledging stream sid %d via rtcp packet", s->sid);
 	sid->rtime = s->rtime;
 	return 0;
 }
