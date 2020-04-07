@@ -828,7 +828,7 @@ int satipc_del_filters(adapter *ad, int fd, int pid)
 	int i;
 	satipc *sip = get_satip(ad->id);
 	fd -= 100;
-	if (ad->is_closing) // Before a TEARDOWN command is redundant to send a "delpids" !
+	if (ad && ad->is_closing) // Before a TEARDOWN command is redundant to send a "delpids" !
 	{
 		LOGM("satipc: del_pid for pid %d not commited before a TEARDOWN", pid);
 		return 0;
