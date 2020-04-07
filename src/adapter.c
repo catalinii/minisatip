@@ -843,9 +843,9 @@ void close_adapter_for_stream(int sid, int aid, int stby)
 		close_adapter(ad->id);
 		ad->is_standby = 0;
 	}
-	if (((ad->restart_needed == 1) || force) && !is_slave)
+	if ((ad->restart_needed == 1) && !is_slave)
 	{
-		LOG("%s adapter %d as needed", force ? "closing" : "restarting", ad->id);
+		LOG("restarting adapter %d as needed", ad->id);
 		//		request_adapter_close (ad);
 		close_adapter(ad->id);
 	}
