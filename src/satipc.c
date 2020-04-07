@@ -496,6 +496,12 @@ void satip_close_device(adapter *ad)
 	satipc *sip = get_satip(ad->id);
 	if (!sip)
 		return;
+	if (ad->is_standby)
+	{
+		LOG("satip device %s:%d going to standby", sip->sip, sip->sport);
+		http_request(ad, NULL, "TEARDOWN");
+		return;
+	}
 	LOG("satip device %s:%d is closing", sip->sip, sip->sport);
 	http_request(ad, NULL, "TEARDOWN");
 	sip->session[0] = 0;
