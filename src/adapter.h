@@ -52,6 +52,7 @@ typedef struct struct_adapter
 	int master_sid; // first SID, the one that controls the tuning
 	int sid_cnt;	//number of streams
 	int sock, fe_sock;
+	int is_standby;
 	int do_tune;
 	int force_close;
 	unsigned char *buf; // 7 rtp packets = MAX_PACK, 7 frames / packet
@@ -119,7 +120,7 @@ adapter *adapter_alloc();
 int close_adapter(int na);
 int get_free_adapter(transponder *tp);
 int set_adapter_for_stream(int sid, int aid);
-void close_adapter_for_stream(int sid, int aid, int force);
+void close_adapter_for_stream(int sid, int aid, int stby);
 int set_adapter_parameters(int aid, int sid, transponder *tp);
 void mark_pids_deleted(int aid, int sid, char *pids);
 int mark_pids_add(int sid, int aid, char *pids);
