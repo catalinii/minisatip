@@ -835,14 +835,14 @@ void close_adapter_for_stream(int sid, int aid, int stby)
 		mark_pids_deleted(aid, sid, NULL);
 	update_pids(aid);
 	adapter_update_threshold(ad);
-	mutex_unlock(&ad->mutex);
-	if (stby && !is_slave && ad->type == ADAPTER_SATIP)
+	if (stby && !is_slave && ad->type == ADAPTER_SATIP && ad->sid_cnt == 0)
 	{
 		LOG("adapter %d closing for standby", ad->id);
 		ad->is_standby = 1;
 		close_adapter(ad->id);
 		ad->is_standby = 0;
 	}
+	mutex_unlock(&ad->mutex);
 	if ((ad->restart_needed == 1) && !is_slave)
 	{
 		LOG("restarting adapter %d as needed", ad->id);
