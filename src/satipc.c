@@ -828,6 +828,11 @@ int satipc_del_filters(adapter *ad, int fd, int pid)
 	int i;
 	satipc *sip = get_satip(ad->id);
 	fd -= 100;
+	if (ad->is_closing) // Before a TEARDOWN command is redundant to send a "delpids" !
+	{
+		LOGM("satipc: del_pid for pid %d not commited before a TEARDOWN", pid);
+		return 0;
+	}
 	LOG("satipc: del_pid for aid %d, pid %d, err %d (ldp=%d)", fd, pid, sip ? sip->err : -2, sip->ldp);
 	if (!sip || sip->err) // error reported, return error
 		return 0;
@@ -1083,6 +1088,11 @@ void satipc_commit(adapter *ad)
 	if (sip->lap + sip->ldp == 0)
 		if (!sip->force_commit || !ad->tp.freq)
 			return;
+	if (sip->ldp > 0 && (sip->last_cmd == RTSP_TEARDOWN || sip->last_setup < 0))
+	{
+		LOG("satipc: spurious pids to remove, clearing the dpid list");
+		sip->ldp = 0;
+	}
 
 	if (sip->expect_reply)
 	{
