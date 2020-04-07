@@ -443,8 +443,8 @@ int close_adapter(int na)
 		ad->close(ad);
 	//close all streams attached to this adapter
 	//	close_streams_for_adapter (na, -1);
-	mark_pids_deleted(na, -1, NULL);
 	ad->is_closing = 1;
+	mark_pids_deleted(na, -1, NULL);
 	update_pids(na);
 	//      if(ad->dmx>0)close(ad->dmx);
 	if (ad->fe > 0)
