@@ -260,6 +260,7 @@ int init_hw(int i)
 	ad->id = i;
 	ad->fe_sock = -1;
 	ad->sock = -1;
+	ad->is_standby = 0;
 	ad->force_close = 0;
 	ad->restart_needed = 0;
 
@@ -789,7 +790,7 @@ int set_adapter_for_stream(int sid, int aid)
 	return 0;
 }
 
-void close_adapter_for_stream(int sid, int aid, int force)
+void close_adapter_for_stream(int sid, int aid, int stby)
 {
 	adapter *ad;
 	streams *s = get_sid(sid);
@@ -811,8 +812,8 @@ void close_adapter_for_stream(int sid, int aid, int force)
 	}
 	if (ad->sid_cnt > 0)
 		ad->sid_cnt--;
-	LOG("closed adapter %d for stream %d m:%d sid_cnt:%d, restart_needed %d, force_close %d", aid, sid, ad->master_sid,
-		ad->sid_cnt, ad->restart_needed, force);
+	LOG("closed adapter %d for stream %d m:%d sid_cnt:%d, restart_needed %d, try_standby %d", aid, sid, ad->master_sid,
+		ad->sid_cnt, ad->restart_needed, stby);
 	// delete the attached PIDs as well
 	if (ad->sid_cnt == 0)
 	{
@@ -835,6 +836,13 @@ void close_adapter_for_stream(int sid, int aid, int force)
 	update_pids(aid);
 	adapter_update_threshold(ad);
 	mutex_unlock(&ad->mutex);
+	if (stby && !is_slave && ad->type == ADAPTER_SATIP)
+	{
+		LOG("adapter %d closing for standby", ad->id);
+		ad->is_standby = 1;
+		close_adapter(ad->id);
+		ad->is_standby = 0;
+	}
 	if (((ad->restart_needed == 1) || force) && !is_slave)
 	{
 		LOG("%s adapter %d as needed", force ? "closing" : "restarting", ad->id);
