@@ -837,7 +837,7 @@ void close_adapter_for_stream(int sid, int aid, int force)
 	mutex_unlock(&ad->mutex);
 	if (((ad->restart_needed == 1) || force) && !is_slave)
 	{
-		LOG("restarting adapter %d as needed", ad->id);
+		LOG("%s adapter %d as needed", force ? "closing" : "restarting", ad->id);
 		//		request_adapter_close (ad);
 		close_adapter(ad->id);
 	}
