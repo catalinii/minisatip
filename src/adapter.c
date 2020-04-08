@@ -262,6 +262,7 @@ int init_hw(int i)
 	ad->sock = -1;
 	ad->force_close = 0;
 	ad->restart_needed = 0;
+	ad->err = 0;
 
 	if (opts.max_pids)
 		ad->max_pids = opts.max_pids;
@@ -852,6 +853,11 @@ int update_pids(int aid)
 	if (!ad || ad->updating_pids)
 		return 1;
 
+	if(ad->err)
+	{
+		LOG("adapter %d in error state %d", aid, ad->err);
+		return 1;
+	}
 	ad->updating_pids = 1;
 #ifndef DISABLE_PMT
 	for (i = 0; i < MAX_PIDS; i++)

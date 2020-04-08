@@ -70,7 +70,6 @@ typedef struct struct_satipc
 	int stream_id;
 	int listen_rtp;
 	int rtcp, rtcp_sock, cseq;
-	int err;
 	int wp, qp;			 // written packet, queued packet
 	char ignore_packets; // ignore packets coming from satip server while tuning
 	int satip_fe;
@@ -197,7 +196,7 @@ int satipc_reply(sockets *s)
 		if (rc != 0) // AVM Fritz!Box workaround sdp reply without header
 		{
 			LOG("marking device %d as error, rc = %d", sip->id, rc);
-			sip->err = 1;
+			ad->err = 1;
 		}
 		else
 			LOG("marking device %d not as error but reply is unexpected, rc = %d", sip->id, rc);
@@ -225,7 +224,7 @@ int satipc_reply(sockets *s)
 			}
 		}
 
-	if (!sip->err && !sip->session[0] && sess)
+	if (!ad->err && !sip->session[0] && sess)
 	{
 		if ((es = strchr(sess, ';')))
 			*es = 0;
@@ -459,7 +458,7 @@ int satipc_open_device(adapter *ad)
 	sip->lap = 0;
 	sip->ldp = 0;
 	sip->cseq = 1;
-	sip->err = 0;
+	ad->err = 0;
 	sip->tcp_pos = sip->tcp_len = 0;
 	sip->expect_reply = 0;
 	sip->last_connect = 0;
@@ -803,8 +802,8 @@ int satipc_set_pid(adapter *ad, int pid)
 	satipc *sip;
 	sip = get_satip(ad->id);
 	int aid = ad->id;
-	LOG("satipc: set_pid for adapter %d, pid %d, err %d (lap=%d)", aid, pid, sip ? sip->err : -2, sip->lap);
-	if (!sip || sip->err) // error reported, return error
+	LOG("satipc: set_pid for adapter %d, pid %d, err %d (lap=%d)", aid, pid, sip ? ad->err : -2, sip->lap);
+	if (!sip || ad->err) // error reported, return error
 		return 0;
 	for (i = 0; i < sip->ldp; i++)
 	{
@@ -828,8 +827,8 @@ int satipc_del_filters(adapter *ad, int fd, int pid)
 	int i;
 	satipc *sip = get_satip(ad->id);
 	fd -= 100;
-	LOG("satipc: del_pid for aid %d, pid %d, err %d (ldp=%d)", fd, pid, sip ? sip->err : -2, sip->ldp);
-	if (!sip || sip->err) // error reported, return error
+	LOG("satipc: del_pid for aid %d, pid %d, err %d (ldp=%d)", fd, pid, sip ? ad->err : -2, sip->ldp);
+	if (!sip || ad->err) // error reported, return error
 		return 0;
 	for (i = 0; i < sip->lap; i++)
 	{
@@ -1166,7 +1165,8 @@ void satipc_commit(adapter *ad)
 		len = strlen(url);
 		sip->ignore_packets = 1; // ignore all the packets until we get 200 from the server
 		sip->want_tune = 0;
-		sip->err = 0;
+		ad->err = 0;
+		ad->err = 0;
 		if (!sip->setup_pids && !sip->sent_transport)
 		{
 			strcatf(url, len, "&pids=none");
@@ -1242,7 +1242,7 @@ int satipc_tune(int aid, transponder *tp)
 	get_ad_and_sipr(aid, 1);
 	LOG("satipc: tuning to freq %d, sys %d for adapter %d", ad->tp.freq / 1000,
 		ad->tp.sys, aid);
-	sip->err = 0;
+	ad->err = 0;
 	ad->strength = 0;
 	ad->status = 0;
 	ad->snr = 0;

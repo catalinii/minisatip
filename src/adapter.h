@@ -41,6 +41,7 @@ typedef struct struct_adapter
 	// flags
 
 	char slow_dev, restart_when_tune, restart_needed;
+	char err; // adapter in an error state (initialized but not working correctly)
 	int adapter_timeout;
 	char failed_adapter; // is set when the adapter was closed unexpected and needs to be re-enabled
 	char flush, updating_pids;
