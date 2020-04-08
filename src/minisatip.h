@@ -55,6 +55,14 @@ struct struct_opts
 {
 	char *rrtp;
 	char *http_host; //http-server host
+	char *rtsp_host; //rtsp-server host
+	char *datetime_compile;
+	time_t start_time;
+	char *datetime_start;
+	char *datetime_current;
+	char *time_running;
+	int run_user;
+	int run_pid;
 	char *disc_host; //discover host
 	char mac[13];
 	unsigned int log, debug, slog, start_rtp, http_port;
