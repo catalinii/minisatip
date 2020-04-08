@@ -329,7 +329,7 @@ int set_filter_flags(int id, int flags)
 				update_pids(f->adapter);
 			}
 			else
-				LOGM("pid not found or pid in use by stream %d", p ? p->sid[0] : -1);
+				LOGM("pid not found or pid in use by sid %d", p ? p->sid[0] : -1);
 		}
 	}
 	return 0;

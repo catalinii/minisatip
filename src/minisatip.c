@@ -1046,6 +1046,7 @@ int read_rtsp(sockets *s)
 	char *transport = NULL, *useragent = NULL;
 	int sess_id = 0;
 	char buf[2000];
+	char ra[50];
 	streams *sid = get_sid(s->sid);
 
 	if (s->rlen > 3 && s->buf[0] == 0x24 && s->buf[1] < 2)
@@ -1055,7 +1056,7 @@ int read_rtsp(sockets *s)
 
 		int rtsp_len = s->buf[2] * 256 + s->buf[3];
 		LOG(
-			"Received RTSP over tcp packet (sock_id %d, stream %d, rlen %d) packet len: %d, type %02X %02X discarding %s...",
+			"Received RTSP over tcp packet (sock_id %d) sid %d, rlen %d, packet len: %d, type %02X %02X discarding %s...",
 			s->id, s->sid, s->rlen, rtsp_len, s->buf[4], s->buf[5],
 			(s->rlen == rtsp_len + 4) ? "complete" : "fragment");
 		if (s->rlen >= rtsp_len + 4)
@@ -1100,9 +1101,10 @@ int read_rtsp(sockets *s)
 	rlen = s->rlen;
 	s->rlen = 0;
 
-	LOG("read RTSP (from handle %d sock %d, len: %d, sid %d):", s->sock,
-		s->id, rlen, s->sid);
-	LOGM("%s", s->buf);
+	LOG("Read RTSP (handle %d) [%s:%d] sid %d, len: %d, sock %d", s->sid,
+		get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa),
+		s->id, rlen, s->sock);
+	LOGM("MSG client >> process :\n%s", s->buf);
 
 	if ((s->type != TYPE_HTTP) && (strncasecmp((const char *)s->buf, "GET", 3) == 0))
 	{
@@ -1137,7 +1139,7 @@ int read_rtsp(sockets *s)
 	sid = get_sid(s->sid);
 	if (sid)
 	{
-		LOGM("Updating stream %d time to %jd, current time %jd", sid->sid, s->rtime, getTick());
+		LOGM("Updating sid %d time to %jd, current time %jd", sid->sid, s->rtime, getTick());
 		sid->rtime = s->rtime;
 	}
 
@@ -1300,6 +1302,7 @@ int read_http(sockets *s)
 	char *arg[50];
 	char buf[2000]; // the XML should not be larger than 1400 as it will create problems
 	char url[300];
+	char ra[50];
 	char *space;
 	int is_head = 0;
 	static char *xml =
@@ -1371,8 +1374,10 @@ int read_http(sockets *s)
 	}
 	s->rlen = 0;
 
-	LOG("read HTTP from %d sid: %d: ", s->sock, s->sid);
-	LOGM("%s", s->buf);
+	LOG("Read HTTP (handle %d) [%s:%d] sid %d, sock %d", s->sid,
+		get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa),
+		s->sid, s->sock);
+	LOGM("MSG client >> process :\n%s", s->buf);
 
 	split(arg, (char *)s->buf, ARRAY_SIZE(arg), ' ');
 	//      LOG("args: %s -> %s -> %s",arg[0],arg[1],arg[2]);
@@ -1478,7 +1483,7 @@ int close_http(sockets *s)
 		free1(s->buf);
 	s->flags = 0;
 	s->buf = NULL;
-	LOG("Requested stream close %d timeout %d type %d", s->sid,
+	LOG("Requested sid close %d timeout %d type %d", s->sid,
 		sid ? sid->timeout : -1, sid ? sid->type : -1);
 	if (sid && ((sid->type == STREAM_RTSP_UDP && sid->timeout != 0) || (sid->type == 0 && sid->timeout != 0)))
 		// Do not close rtsp udp as most likely there was no TEARDOWN at this point
@@ -1602,10 +1607,9 @@ int ssdp_reply(sockets *s)
 	axe_set_network_led(1);
 #endif
 
-	LOGM("Received SSDP packet from %s:%d -> handle %d",
-		 get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa),
-		 s->sock);
-	LOGM("%s", s->buf);
+	LOGM("Received SSDP packet (handle %d) from %s:%d", s->sock,
+		 get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa));
+	LOGM("MSG querier >> process :\n%s", s->buf);
 
 	if (strncasecmp((const char *)s->buf, "NOTIFY", 6) == 0)
 	{
@@ -1651,11 +1655,11 @@ int ssdp_reply(sockets *s)
 	strcatf(buf, ptr, reply, get_current_timestamp(), opts.http_host, opts.xml_path,
 			app_name, version, uuid, opts.bootid, did);
 
-	LOGM("ssdp_reply fd: %d -> %s:%d, bootid: %d deviceid: %d http: %s", ssdp,
+	LOGM("Send Reply SSDP packet (fd: %d) %s:%d, bootid: %d deviceid: %d http: %s", ssdp,
 		 get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa),
 		 opts.bootid, did, opts.http_host);
 	//use ssdp (unicast) even if received to multicast address
-	LOGM("%s", buf);
+	LOGM("MSG querier << process :\n%s", buf);
 	int wb = sendto(ssdp, buf, ptr, MSG_NOSIGNAL, &s->sa.sa, SOCKADDR_SIZE(s->sa));
 	if (wb != ptr)
 		LOG("incomplete ssdp_reply: wrote %d out of %d: error %d: %s", wb, ptr, errno, strerror(errno));
@@ -1900,11 +1904,11 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 	else
 		strlcatf(resp, sizeof(resp) - 1, lresp, "\r\n");
 
-	LOG("reply %s-> %d (%s:%d) CL:%d [sock_id %d]:",
-		(lresp == sizeof(resp) - 1) ? "message truncated" : "", s->sock,
+	LOG("Reply %s(handle %d) [%s:%d] content_len:%d, sock %d",
+		(lresp == sizeof(resp) - 1) ? "(message truncated) " : "", s->sock,
 		get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa),
 		lr, s->id);
-	LOGM("%s", resp);
+	LOGM("MSG client << process :\n%s", resp);
 
 	struct iovec iov[2];
 	iov[0].iov_base = resp;
