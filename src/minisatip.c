@@ -57,7 +57,7 @@
 
 struct struct_opts opts;
 
-#define DEFAULT_LOG LOG_HTTP
+#define DEFAULT_LOG LOG_GENERAL
 
 #define DESC_XML "desc.xml"
 #define PID_NAME "/var/run/%s.pid"
@@ -1037,6 +1037,9 @@ void set_options(int argc, char *argv[])
 		set_slave_adapters("2-7:0");
 }
 
+#undef DEFAULT_LOG
+#define DEFAULT_LOG LOG_RTSP
+
 #define RBUF 32000
 
 int read_rtsp(sockets *s)
@@ -1284,6 +1287,9 @@ int read_rtsp(sockets *s)
 	}
 	return 0;
 }
+
+#undef DEFAULT_LOG
+#define DEFAULT_LOG LOG_HTTP
 
 #define REPLY_AND_RETURN(c)                    \
 	{                                          \
@@ -1667,7 +1673,7 @@ int ssdp_reply(sockets *s)
 }
 
 #undef DEFAULT_LOG
-#define DEFAULT_LOG LOG_HTTP
+#define DEFAULT_LOG LOG_RTSP
 
 int new_rtsp(sockets *s)
 {
@@ -1679,6 +1685,9 @@ int new_rtsp(sockets *s)
 	return 0;
 }
 
+#undef DEFAULT_LOG
+#define DEFAULT_LOG LOG_HTTP
+
 int new_http(sockets *s)
 {
 	s->type = TYPE_HTTP;
@@ -1688,6 +1697,9 @@ int new_http(sockets *s)
 		s->nonblock = 1;
 	return 0;
 }
+
+#undef DEFAULT_LOG
+#define DEFAULT_LOG LOG_GENERAL
 
 void write_pid_file()
 {
@@ -1908,7 +1920,11 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 		(lresp == sizeof(resp) - 1) ? "(message truncated) " : "", s->sock,
 		get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa),
 		lr, s->id);
-	LOGM("MSG client << process :\n%s", resp);
+	//LOGM("MSG client << process :\n%s", resp);
+	int log_level = LOG_RTSP;
+	if (s->type == TYPE_HTTP)
+		log_level = LOG_HTTP;
+	LOGL(log_level,"MSG client << process :\n%s", resp);
 
 	struct iovec iov[2];
 	iov[0].iov_base = resp;
