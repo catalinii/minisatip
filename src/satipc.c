@@ -68,6 +68,7 @@ typedef struct struct_satipc
 	int sport;
 	char session[18];
 	int stream_id;
+	int sleep;
 	int listen_rtp;
 	int rtcp, rtcp_sock, cseq;
 	int wp, qp;			 // written packet, queued packet
@@ -463,7 +464,7 @@ int satipc_open_device(adapter *ad)
 	sip->expect_reply = 0;
 	sip->last_connect = 0;
 	sip->sent_transport = 0;
-	sip->session[0] = 0;
+	sip->sleep = 0;
 	sip->stream_id = -1;
 	sip->wp = sip->qp = sip->want_commit = 0;
 	sip->rcvp = sip->repno = 0;
@@ -495,8 +496,13 @@ void satip_close_device(adapter *ad)
 	satipc *sip = get_satip(ad->id);
 	if (!sip)
 		return;
+
 	LOG("satip device %s:%d is closing", sip->sip, sip->sport);
-	http_request(ad, NULL, "TEARDOWN");
+	if (sip->sleep)
+		LOGM("satip device %s:%d sleeping, so not sending the TEARDOWN message", sip->sip, sip->sport);
+	else
+		http_request(ad, NULL, "TEARDOWN");
+	sip->sleep = 0;
 	sip->session[0] = 0;
 	sip->sent_transport = 0;
 	if (ad->fe_sock > 0)
@@ -506,6 +512,25 @@ void satip_close_device(adapter *ad)
 	ad->fe_sock = -1;
 	sip->rtcp_sock = -1;
 	sip->enabled = 0;
+}
+
+void satip_standby_device(adapter *ad)
+{
+	satipc *sip;
+	if (!ad)
+		return;
+
+	sip = get_satip(ad->id);
+	if (!sip)
+		return;
+
+	LOG("satip device %s:%d going to standby sleep", sip->sip, sip->sport);
+	if (sip->sleep)
+		LOGM("satip device %s:%d already sleeping in standby", sip->sip, sip->sport);
+	else
+		http_request(ad, NULL, "TEARDOWN");
+	sip->sleep = 1;
+	sip->session[0] = 0;
 }
 
 int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb)
@@ -1071,8 +1096,8 @@ void satipc_commit(adapter *ad)
 
 	url[0] = 0;
 	LOG(
-		"satipc: commit for adapter %d pids to add %d, pids to delete %d, expect_reply %d, force_commit %d want_tune %d do_tune %d, force_pids %d, sent_transport %d",
-		ad->id, sip->lap, sip->ldp, sip->expect_reply, sip->force_commit, sip->want_tune, ad->do_tune, sip->force_pids, sip->sent_transport);
+		"satipc: commit for adapter %d pids to add %d, pids to delete %d, expect_reply %d, force_commit %d want_tune %d do_tune %d, force_pids %d, sent_transport %d, sleep %d",
+		ad->id, sip->lap, sip->ldp, sip->expect_reply, sip->force_commit, sip->want_tune, ad->do_tune, sip->force_pids, sip->sent_transport, sip->sleep);
 
 	if (ad->do_tune && !sip->want_tune)
 	{
@@ -1230,6 +1255,7 @@ void satipc_commit(adapter *ad)
 		sip->force_commit = 0;
 	}
 
+	sip->sleep = 0;
 	http_request(ad, url, NULL);
 
 	return;
@@ -1321,6 +1347,7 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
 	ad->tune = (Tune)satipc_tune;
 	ad->delsys = (Dvb_delsys)satipc_delsys;
 	ad->post_init = (Adapter_commit)satip_post_init;
+	ad->standby = (Device_standby)satip_standby_device;
 	ad->close = (Adapter_commit)satip_close_device;
 	ad->type = ADAPTER_SATIP;
 
