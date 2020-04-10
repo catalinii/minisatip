@@ -251,8 +251,8 @@ void print_version(int use_log)
 	char buf[200];
 	int i;
 	memset(buf, 0, sizeof(buf));
-	sprintf(buf, "%s version %s, compiled with s2api version: %04X",
-			app_name, version, LOGDVBAPIVERSION);
+	sprintf(buf, "%s version %s, compiled in %s %s, with s2api version: %04X",
+			app_name, version, __DATE__,__TIME__, LOGDVBAPIVERSION);
 	if (!use_log)
 		puts(buf);
 	else
@@ -1029,6 +1029,29 @@ void set_options(int argc, char *argv[])
 		opts.http_host = (char *)malloc1(MAX_HOST);
 		sprintf(opts.http_host, "%s:%u", lip, opts.http_port);
 	}
+
+	opts.rtsp_host = (char *)malloc1(MAX_HOST);
+	sprintf(opts.rtsp_host, "%s:%u", lip, opts.rtsp_port);
+
+	opts.datetime_compile = (char *)malloc1(64);
+	sprintf(opts.datetime_compile, "%s | %s", __DATE__, __TIME__);
+
+	time(&opts.start_time);
+	struct tm *info;
+	info = localtime(&opts.start_time);
+	opts.datetime_start = (char *)malloc1(32);
+	sprintf(opts.datetime_start, "%s ", asctime(info));
+	opts.datetime_start[24]=' ';
+	opts.datetime_start[25]='\0';
+
+	opts.datetime_current = (char *)malloc1(32);
+	sprintf(opts.datetime_current, "%s", " ");
+	opts.time_running = (char *)malloc1(32);
+	sprintf(opts.time_running, "%s", "0");
+
+	opts.run_user = (int)getuid();
+	opts.run_pid = (int)getpid();
+
 	if (!is_log)
 		opts.log = 0;
 
@@ -1373,6 +1396,24 @@ int read_http(sockets *s)
 		return 0;
 	}
 	s->rlen = 0;
+
+	time_t now;
+	struct tm *info;
+	time(&now);
+	info = localtime(&now);
+	sprintf(opts.datetime_current, "%s ", asctime(info));
+	opts.datetime_current[24]=' ';
+	opts.datetime_current[25]='\0';
+
+	double seconds = difftime(now, opts.start_time);
+	int days = seconds/60/60/24;
+	seconds -= days*24*60*60;
+	int hours = seconds/60/60;
+	seconds -= hours*60*60;
+	int mins = seconds/60;
+	seconds -= mins*60;
+	int secs = seconds;
+	sprintf(opts.time_running, "%.0d%s%02d:%02d:%02d", days, days > 0 ? "d " : "", hours, mins, secs);
 
 	LOG("Read HTTP (handle %d) [%s:%d] sid %d, sock %d", s->sid,
 		get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa),
@@ -1939,5 +1980,12 @@ _symbols minisatip_sym[] =
 		{"http_host", VAR_PSTRING, &opts.http_host, 0, 0, 0},
 		{"uuid", VAR_STRING, uuid, 0, 0, 0},
 		{"http_port", VAR_INT, &opts.http_port, 1, 0, 0},
+		{"rtsp_host", VAR_PSTRING, &opts.rtsp_host, 0, 0, 0},
+		{"datetime_compile", VAR_PSTRING, &opts.datetime_compile, 0, 0, 0},
+		{"datetime_start", VAR_PSTRING, &opts.datetime_start, 0, 0, 0},
+		{"datetime_current", VAR_PSTRING, &opts.datetime_current, 0, 0, 0},
+		{"time_running", VAR_PSTRING, &opts.time_running, 0, 0, 0},
+		{"run_user", VAR_INT, &opts.run_user, 1, 0, 0},
+		{"run_pid", VAR_INT, &opts.run_pid, 1, 0, 0},
 		{"version", VAR_STRING, &version, 1, 0, 0},
 		{NULL, 0, NULL, 0, 0, 0}};
