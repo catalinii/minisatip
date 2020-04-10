@@ -536,7 +536,7 @@ void set_options(int argc, char *argv[])
 {
 	int opt;
 	int is_log = 0;
-    int adapter_sources = 0;
+	int adapter_sources = 0;
 	char *lip;
 	memset(&opts, 0, sizeof(opts));
 	opts.log = 1;
