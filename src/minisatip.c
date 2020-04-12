@@ -1088,10 +1088,11 @@ int read_rtsp(sockets *s)
 				s->rlen, RBUF);
 			s->rlen = 0;
 		}
-		LOG(
+		LOGM(
 			"read_rtsp: read %d bytes from handle %d, sock_id %d, flags %d not ending with \\r\\n\\r\\n",
 			s->rlen, s->sock, s->id, s->flags);
-		hexdump("read_rtsp: ", s->buf, s->rlen);
+		if ((int)LOG_RTSP & opts.log)
+			hexdump("read_rtsp: ", s->buf, s->rlen);
 		if (s->flags & 1)
 			return 0;
 		unsigned char *new_alloc = malloc1(RBUF);
@@ -1920,7 +1921,6 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 		(lresp == sizeof(resp) - 1) ? "(message truncated) " : "", s->sock,
 		get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa),
 		lr, s->id);
-	//LOGM("MSG client << process :\n%s", resp);
 	int log_level = LOG_RTSP;
 	if (s->type == TYPE_HTTP)
 		log_level = LOG_HTTP;
