@@ -821,6 +821,8 @@ void close_adapter_for_stream(int sid, int aid)
 		ad->master_sid = -1;
 		mark_pids_deleted(aid, -1, NULL);
 		init_dvb_parameters(&ad->tp);
+		if (ad->standby)
+			ad->standby(ad);
 #ifdef AXE
 		free_axe_input(ad);
 #endif
