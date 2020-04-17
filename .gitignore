@@ -8,3 +8,4 @@ config.status
 Makefile
 src/Makefile
 tests/Makefile
+src/confdefs.h

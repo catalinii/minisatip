@@ -32,7 +32,6 @@
 #define FILTER_CRC 16
 #define FILTER_EMM 32
 
-#define PID_FROM_TS(b) (((b)[1] & 0x1F) * 256 + (b)[2])
 #define MAX_PI_LEN 1500
 
 typedef struct struct_batch // same as struct dvbcsa_bs_batch_s

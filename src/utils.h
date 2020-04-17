@@ -273,6 +273,7 @@ static inline int get_index_hash(void *p, int max, int struct_size, uint32_t key
 typedef ssize_t (*mywritev)(int fd, const struct iovec *io, int len);
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
+#define PID_FROM_TS(b) (((b)[1] & 0x1F) * 256 + (b)[2])
 
 #ifdef TESTING
 
