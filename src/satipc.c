@@ -1040,6 +1040,11 @@ int http_request(adapter *ad, char *url, char *method)
 
 	if (sip->stream_id != -1)
 		sprintf(sid, "stream=%d", sip->stream_id);
+	else if (!strcmp(method, "TEARDOWN"))
+	{
+		LOG("satipc_http_request (adapter %d): impossible to send TEARDOWN without specific stream!", ad->id);
+		return 0;
+	}
 
 	lb = snprintf(buf, sizeof(buf), format, method, sip->sip, sip->sport, sid,
 				  qm, url, sip->cseq++, session);
