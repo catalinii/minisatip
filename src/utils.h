@@ -112,7 +112,7 @@ void myfree(void *x, char *f, int l);
 char *header_parameter(char **arg, int i);
 char *get_current_timestamp();
 char *get_current_timestamp_log();
-void _log(char *file, int line, char *fmt, ...);
+void _log(char *file, int line, unsigned long level, char *fmt, ...);
 char *strip(char *s);
 int split(char **rv, char *s, int lrv, char sep);
 void set_signal_handler(char *argv0);
@@ -177,17 +177,22 @@ static inline int get_index_hash(void *p, int max, int struct_size, uint32_t key
 #define LOGL(level, a, ...)                             \
 	{                                                   \
 		if ((level)&opts.log)                           \
-			_log(__FILE__, __LINE__, a, ##__VA_ARGS__); \
+			_log(__FILE__, __LINE__, level, a, ##__VA_ARGS__); \
 	}
-
+#define LOG(a, ...)                                     \
+	{                                                   \
+			_log(__FILE__, __LINE__, DEFAULT_LOG, a, ##__VA_ARGS__); \
+	}
+#define LOGG(level, a, ...)                                     \
+	{                                                   \
+			_log(__FILE__, __LINE__, level, a, ##__VA_ARGS__); \
+	}
 #define LOGM(a, ...) LOGL(DEFAULT_LOG, a, ##__VA_ARGS__)
-
-#define LOG(a, ...) LOGL(1, a, ##__VA_ARGS__)
 
 #define DEBUGL(level, a, ...)                           \
 	{                                                   \
 		if ((level)&opts.debug)                         \
-			_log(__FILE__, __LINE__, a, ##__VA_ARGS__); \
+			_log(__FILE__, __LINE__, level, a, ##__VA_ARGS__); \
 	}
 #define DEBUGM(a, ...) DEBUGL(DEFAULT_LOG, a, ##__VA_ARGS__)
 
@@ -200,7 +205,7 @@ static inline int get_index_hash(void *p, int max, int struct_size, uint32_t key
 
 #define LOG0(a, ...)                                \
 	{                                               \
-		_log(__FILE__, __LINE__, a, ##__VA_ARGS__); \
+		_log(__FILE__, __LINE__, 0, a, ##__VA_ARGS__); \
 	}
 
 #define FAIL(a, ...)               \
@@ -251,24 +256,25 @@ static inline int get_index_hash(void *p, int max, int struct_size, uint32_t key
 			LOG("%-40s OK", #a);                                 \
 	}
 
-#define LOG_GENERAL 1
-#define LOG_HTTP (1 << 1)
-#define LOG_SOCKETWORKS (1 << 2)
-#define LOG_STREAM (1 << 3)
-#define LOG_ADAPTER (1 << 4)
-#define LOG_SATIPC (1 << 5)
-#define LOG_PMT (1 << 6)
-#define LOG_TABLES (1 << 7)
-#define LOG_DVBAPI (1 << 8)
-#define LOG_LOCK (1 << 9)
-#define LOG_NETCEIVER (1 << 10)
-#define LOG_DVBCA (1 << 11)
-#define LOG_AXE (1 << 12)
-#define LOG_SOCKET (1 << 13)
-#define LOG_UTILS (1 << 14)
-#define LOG_DMX (1 << 15)
-#define LOG_SSDP (1 << 16)
-#define LOG_DVB (1 << 17)
+#define LOG_GENERAL 1UL
+#define LOG_HTTP (1UL << 1)
+#define LOG_SOCKETWORKS (1UL << 2)
+#define LOG_STREAM (1UL << 3)
+#define LOG_ADAPTER (1UL << 4)
+#define LOG_SATIPC (1UL << 5)
+#define LOG_PMT (1UL << 6)
+#define LOG_TABLES (1UL << 7)
+#define LOG_DVBAPI (1UL << 8)
+#define LOG_LOCK (1UL << 9)
+#define LOG_NETCEIVER (1UL << 10)
+#define LOG_DVBCA (1UL << 11)
+#define LOG_AXE (1UL << 12)
+#define LOG_SOCKET (1UL << 13)
+#define LOG_UTILS (1UL << 14)
+#define LOG_DMX (1UL << 15)
+#define LOG_SSDP (1UL << 16)
+#define LOG_DVB (1UL << 17)
+#define LOG_RTSP (1UL << 18)
 
 typedef ssize_t (*mywritev)(int fd, const struct iovec *io, int len);
 
@@ -283,7 +289,7 @@ typedef ssize_t (*mywritev)(int fd, const struct iovec *io, int len);
 
 #ifdef UTILS_C
 char *loglevels[] =
-	{"general", "http", "socketworks", "stream", "adapter", "satipc", "pmt", "tables", "dvbapi", "lock", "netceiver", "ca", "axe", "socket", "utils", "dmx", "ssdp", "dvb", NULL};
+	{"general", "http", "socketworks", "stream", "adapter", "satipc", "pmt", "tables", "dvbapi", "lock", "netceiver", "ca", "axe", "socket", "utils", "dmx", "ssdp", "dvb", "rtsp", NULL};
 mywritev _writev = writev;
 #else
 extern char *loglevels[];

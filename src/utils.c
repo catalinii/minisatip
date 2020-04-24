@@ -351,7 +351,7 @@ int map_intd(char *s, char **v, int dv)
 		return atoi(s);
 	}
 	for (i = 0; v[i]; i++)
-		if (!strncasecmp(s, v[i], strlen(v[i])))
+		if (strlen(s) == strlen(v[i]) && !strncasecmp(s, v[i], strlen(v[i])))
 			n = i;
 	return n;
 }
@@ -675,12 +675,13 @@ char *get_current_timestamp_log(void)
 	return date_str;
 }
 
-void _log(char *file, int line, char *fmt, ...)
+void _log(char *file, int line, unsigned long level, char *fmt, ...)
 {
 	va_list arg;
 	int len = 0, len1 = 0, both = 0;
 	static int idx, times;
 	char stid[50];
+	char* lname;
 	static char output[2][2000]; // prints just the first 2000 bytes from the message
 
 	/* Check if the message should be logged */
@@ -690,10 +691,35 @@ void _log(char *file, int line, char *fmt, ...)
 	if (!opts.no_threads)
 	{
 		pthread_mutex_lock(&log_mutex);
-		snprintf(stid, sizeof(stid) - 2, " %s", thread_name);
+		snprintf(stid, sizeof(stid) - 2, "%*s", 6, thread_name);
 		stid[sizeof(stid) - 1] = 0;
 	}
 
+	switch (level)
+	{
+		case 0:			lname = "****"; break;
+		case LOG_GENERAL:	lname = "----"; break;
+		case LOG_HTTP:		lname = "HTTP"; break;
+		case LOG_SOCKETWORKS:	lname = "WORK"; break;
+		case LOG_STREAM:	lname = "STRM"; break;
+		case LOG_ADAPTER:	lname = "ADPT"; break;
+		case LOG_SATIPC:	lname = "SIPC"; break;
+		case LOG_PMT:		lname = "PMT "; break;
+		case LOG_TABLES:	lname = "TBLS"; break;
+		case LOG_DVBAPI:	lname = "DAPI"; break;
+		case LOG_LOCK:		lname = "LOCK"; break;
+		case LOG_NETCEIVER:	lname = "NETC"; break;
+		case LOG_DVBCA:		lname = "CA  "; break;
+		case LOG_AXE:		lname = "AXE "; break;
+		case LOG_SOCKET:	lname = "SOCK"; break;
+		case LOG_UTILS:		lname = "UTIL"; break;
+		case LOG_DMX:		lname = "DMX "; break;
+		case LOG_SSDP:		lname = "SSDP"; break;
+		case LOG_DVB:		lname = "DVB "; break;
+		case LOG_RTSP:		lname = "RTSP"; break;
+				default:
+					lname = "????";
+	}
 	if (!fmt)
 	{
 		printf("NULL format at %s:%d !!!!!", file, line);
@@ -707,11 +733,11 @@ void _log(char *file, int line, char *fmt, ...)
 	else if (idx < 0)
 		idx = 0;
 	if (opts.file_line && !opts.slog)
-		len1 = snprintf(output[idx], sizeof(output[0]), "[%s%s] %s:%d: ",
-						get_current_timestamp_log(), stid, file, line);
+		len1 = snprintf(output[idx], sizeof(output[0]), "[%s %s %s] %s:%d: ",
+						get_current_timestamp_log(), lname, stid, file, line);
 	else if (!opts.slog)
-		len1 = snprintf(output[idx], sizeof(output[0]), "[%s%s]: ",
-						get_current_timestamp_log(), stid);
+		len1 = snprintf(output[idx], sizeof(output[0]), "[%s %s %s]: ",
+						get_current_timestamp_log(), lname, stid);
 	else if (opts.file_line)
 	{
 		len1 = 0;
@@ -1262,7 +1288,7 @@ int mutex_init(SMutex *mutex)
 	mutex->create_time = getTick();
 	mutex->enabled = 1;
 	mutex->state = 0;
-	LOG("Mutex init %p", mutex);
+	LOG("Mutex init OK %p", mutex);
 	return 0;
 }
 

@@ -57,7 +57,7 @@
 
 struct struct_opts opts;
 
-#define DEFAULT_LOG LOG_HTTP
+#define DEFAULT_LOG LOG_GENERAL
 
 #define DESC_XML "desc.xml"
 #define PID_NAME "/var/run/%s.pid"
@@ -1080,6 +1080,9 @@ void set_options(int argc, char *argv[])
 		set_slave_adapters("2-7:0");
 }
 
+#undef DEFAULT_LOG
+#define DEFAULT_LOG LOG_RTSP
+
 #define RBUF 32000
 
 int read_rtsp(sockets *s)
@@ -1088,9 +1091,13 @@ int read_rtsp(sockets *s)
 	int cseq, la, i, rlen;
 	char *transport = NULL, *useragent = NULL;
 	int sess_id = 0;
+	int log_level = LOG_RTSP;
 	char buf[2000];
 	char ra[50];
 	streams *sid = get_sid(s->sid);
+
+	if (s->type == TYPE_HTTP)
+		log_level = LOG_HTTP;
 
 	if (s->rlen > 3 && s->buf[0] == 0x24 && s->buf[1] < 2)
 	{
@@ -1098,9 +1105,8 @@ int read_rtsp(sockets *s)
 			sid->rtime = s->rtime;
 
 		int rtsp_len = s->buf[2] * 256 + s->buf[3];
-		LOG(
-			"Received RTSP over tcp packet (sock_id %d) sid %d, rlen %d, packet len: %d, type %02X %02X discarding %s...",
-			s->id, s->sid, s->rlen, rtsp_len, s->buf[4], s->buf[5],
+		LOGG(log_level, "Received %s over tcp packet (sock_id %d) sid %d, rlen %d, packet len: %d, type %02X %02X discarding %s...",
+			s->type == TYPE_HTTP ? "HTTP" : "RTSP" , s->id, s->sid, s->rlen, rtsp_len, s->buf[4], s->buf[5],
 			(s->rlen == rtsp_len + 4) ? "complete" : "fragment");
 		if (s->rlen >= rtsp_len + 4)
 		{ // we did not receive the entire packet
@@ -1123,13 +1129,11 @@ int read_rtsp(sockets *s)
 	{
 		if (s->rlen > RBUF - 10)
 		{
-			LOG(
-				"Discarding %d bytes from the socket buffer, request > %d, consider increasing  RBUF",
+			LOG("read_rtsp: Discarding %d bytes from the socket buffer, request > %d, consider increasing  RBUF",
 				s->rlen, RBUF);
 			s->rlen = 0;
 		}
-		LOG(
-			"read_rtsp: read %d bytes from handle %d, sock_id %d, flags %d not ending with \\r\\n\\r\\n",
+		LOG("read_rtsp: read %d bytes from handle %d, sock_id %d, flags %d not ending with \\r\\n\\r\\n",
 			s->rlen, s->sock, s->id, s->flags);
 		hexdump("read_rtsp: ", s->buf, s->rlen);
 		if (s->flags & 1)
@@ -1144,10 +1148,10 @@ int read_rtsp(sockets *s)
 	rlen = s->rlen;
 	s->rlen = 0;
 
-	LOG("Read RTSP (handle %d) [%s:%d] sid %d, len: %d, sock %d", s->sid,
-		get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa),
-		s->id, rlen, s->sock);
-	LOGM("MSG client >> process :\n%s", s->buf);
+	LOGG(log_level, "Read %s (sid %d) [%s:%d] len: %d sock %d (handle %d)", s->type == TYPE_HTTP ? "HTTP" : "RTSP" ,
+		s->sid, get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa),
+		rlen, s->id, s->sock);
+	LOGL(log_level, "MSG client >> process :\n%s", s->buf);
 
 	if ((s->type != TYPE_HTTP) && (strncasecmp((const char *)s->buf, "GET", 3) == 0))
 	{
@@ -1182,7 +1186,7 @@ int read_rtsp(sockets *s)
 	sid = get_sid(s->sid);
 	if (sid)
 	{
-		LOGM("Updating sid %d time to %jd, current time %jd", sid->sid, s->rtime, getTick());
+		LOGL(log_level, "Updating sid %d time to %jd, current time %jd", sid->sid, s->rtime, getTick());
 		sid->rtime = s->rtime;
 	}
 
@@ -1328,6 +1332,9 @@ int read_rtsp(sockets *s)
 	return 0;
 }
 
+#undef DEFAULT_LOG
+#define DEFAULT_LOG LOG_HTTP
+
 #define REPLY_AND_RETURN(c)                    \
 	{                                          \
 		http_response(s, c, NULL, NULL, 0, 0); \
@@ -1346,6 +1353,7 @@ int read_http(sockets *s)
 	char buf[2000]; // the XML should not be larger than 1400 as it will create problems
 	char url[300];
 	char ra[50];
+	int log_level = LOG_RTSP;
 	char *space;
 	int is_head = 0;
 	static char *xml =
@@ -1367,12 +1375,13 @@ int read_http(sockets *s)
 		"<satip:X_SATIPCAP xmlns:satip=\"urn:ses-com:satip\">%s</satip:X_SATIPCAP>"
 		"%s"
 		"</device></root>";
+	if (s->type == TYPE_HTTP)
+		log_level = LOG_HTTP;
 	if (s->rlen < 5 || !end_of_header((char *)s->buf + s->rlen - 4))
 	{
 		if (s->rlen > RBUF - 10)
 		{
-			LOG(
-				"Discarding %d bytes from the socket buffer, request > %d, consider increasing  RBUF",
+			LOG("read_http: Discarding %d bytes from the socket buffer, request > %d, consider increasing  RBUF",
 				s->rlen, RBUF);
 			s->rlen = 0;
 		}
@@ -1435,10 +1444,10 @@ int read_http(sockets *s)
 	int secs = seconds;
 	sprintf(opts.time_running, "%.0d%s%02d:%02d:%02d", days, days > 0 ? "d " : "", hours, mins, secs);
 
-	LOG("Read HTTP (handle %d) [%s:%d] sid %d, sock %d", s->sid,
+	LOGG(log_level, "Read %s (sid %d) [%s:%d] sock %d (handle %d)", s->type == TYPE_HTTP ? "HTTP" : "RTSP", s->sid,
 		get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa),
-		s->sid, s->sock);
-	LOGM("MSG client >> process :\n%s", s->buf);
+		s->id, s->sock);
+	LOGL(log_level, "MSG client >> process :\n%s", s->buf);
 
 	split(arg, (char *)s->buf, ARRAY_SIZE(arg), ' ');
 	//      LOG("args: %s -> %s -> %s",arg[0],arg[1],arg[2]);
@@ -1539,13 +1548,18 @@ int read_http(sockets *s)
 
 int close_http(sockets *s)
 {
+	char ra[50];
+	int log_level = LOG_RTSP;
 	streams *sid = get_sid(s->sid);
+	if (s->type == TYPE_HTTP)
+		log_level = LOG_HTTP;
 	if ((s->flags & 1) && s->buf)
 		free1(s->buf);
 	s->flags = 0;
 	s->buf = NULL;
-	LOG("Requested sid close %d timeout %d type %d", s->sid,
-		sid ? sid->timeout : -1, sid ? sid->type : -1);
+	LOGG(log_level, "Requested %s close (sid %d) [%s:%d] timeout %d type %d sock %d (handle %d)", s->type == TYPE_HTTP ? "HTTP" : "RTSP",
+		s->sid, get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa),
+		sid ? sid->timeout : -1, sid ? sid->type : -1, s->id, s->sock);
 	if (sid && ((sid->type == STREAM_RTSP_UDP && sid->timeout != 0) || (sid->type == 0 && sid->timeout != 0)))
 		// Do not close rtsp udp as most likely there was no TEARDOWN at this point
 		return 0;
@@ -1728,7 +1742,7 @@ int ssdp_reply(sockets *s)
 }
 
 #undef DEFAULT_LOG
-#define DEFAULT_LOG LOG_HTTP
+#define DEFAULT_LOG LOG_RTSP
 
 int new_rtsp(sockets *s)
 {
@@ -1740,6 +1754,9 @@ int new_rtsp(sockets *s)
 	return 0;
 }
 
+#undef DEFAULT_LOG
+#define DEFAULT_LOG LOG_HTTP
+
 int new_http(sockets *s)
 {
 	s->type = TYPE_HTTP;
@@ -1749,6 +1766,9 @@ int new_http(sockets *s)
 		s->nonblock = 1;
 	return 0;
 }
+
+#undef DEFAULT_LOG
+#define DEFAULT_LOG LOG_GENERAL
 
 void write_pid_file()
 {
@@ -1769,6 +1789,9 @@ extern int sock_signal;
 int main(int argc, char *argv[])
 {
 	int sock_bw, rv, devices;
+	int i;
+	unsigned long log_it;
+	USockAddr sv;
 	main_tid = get_tid();
 	strcpy(thread_name, "main");
 	set_options(argc, argv);
@@ -1786,6 +1809,13 @@ int main(int argc, char *argv[])
 
 	print_version(1);
 
+	for (i = 1; i <= 18; i++)
+	{
+		log_it = (1UL << i);
+		LOGL(log_it,   " LOG  of the module enabled: %s", loglevels[i]);
+		DEBUGL(log_it, "DEBUG of the module enabled: %s", loglevels[i]);
+	}
+
 	readBootID();
 	if ((rtsp = tcp_listen(NULL, opts.rtsp_port, opts.use_ipv4_only)) < 1)
 		FAIL("RTSP: Could not listen on port %d", opts.rtsp_port);
@@ -1798,9 +1828,10 @@ int main(int argc, char *argv[])
 		if ((ssdp1 = udp_bind(opts.disc_host, 1900, 1)) < 1)
 			FAIL("SSDP: Could not bind on %s udp port 1900", opts.disc_host);
 
-		si = sockets_add(ssdp, NULL, -1, TYPE_UDP, (socket_action)ssdp_reply,
+		fill_sockaddr(&sv, "0.0.0.0", 1900, 1);
+		si = sockets_add(ssdp, &sv, -1, TYPE_UDP, (socket_action)ssdp_reply,
 						 (socket_action)ssdp_byebye, (socket_action)ssdp_discovery);
-		si1 = sockets_add(ssdp1, NULL, -1, TYPE_UDP, (socket_action)ssdp_reply,
+		si1 = sockets_add(ssdp1, &sv, -1, TYPE_UDP, (socket_action)ssdp_reply,
 						  (socket_action)ssdp_byebye, (socket_action)ssdp_discovery);
 		if (si < 0 || si1 < 0)
 			FAIL("sockets_add failed for ssdp");
@@ -1808,10 +1839,12 @@ int main(int argc, char *argv[])
 
 	sockets_timeout(si, 60 * 1000);
 	set_sockets_rtime(si, -60 * 1000);
-	if (0 > sockets_add(rtsp, NULL, -1, TYPE_SERVER, (socket_action)new_rtsp,
+	fill_sockaddr(&sv, "0.0.0.0", opts.rtsp_port, 1);
+	if (0 > sockets_add(rtsp, &sv, -1, TYPE_SERVER, (socket_action)new_rtsp,
 						NULL, (socket_action)close_http))
 		FAIL("sockets_add failed for rtsp");
-	if (0 > sockets_add(http, NULL, -1, TYPE_SERVER, (socket_action)new_http,
+	fill_sockaddr(&sv, "0.0.0.0", opts.http_port, 1);
+	if (0 > sockets_add(http, &sv, -1, TYPE_SERVER, (socket_action)new_http,
 						NULL, (socket_action)close_http))
 		FAIL("sockets_add failed for http");
 
@@ -1894,16 +1927,23 @@ int readBootID()
 	return opts.bootid;
 }
 
+#undef DEFAULT_LOG
+#define DEFAULT_LOG LOG_HTTP
+
 void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 {
 	int binary = 0;
 	char *desc1;
 	char ra[50];
+	int log_level = LOG_RTSP;
 	char *d;
 	char *proto;
 
 	if (s->type == TYPE_HTTP)
+	{
 		proto = "HTTP";
+		log_level = LOG_HTTP;
+	}
 	else
 		proto = "RTSP";
 
@@ -1965,11 +2005,11 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr)
 	else
 		strlcatf(resp, sizeof(resp) - 1, lresp, "\r\n");
 
-	LOG("Reply %s(handle %d) [%s:%d] content_len:%d, sock %d",
-		(lresp == sizeof(resp) - 1) ? "(message truncated) " : "", s->sock,
+	LOGG(log_level, "Reply %s %s(sid %d) [%s:%d] content_len:%d, sock %d (handle %d)", s->type == TYPE_HTTP ? "HTTP" : "RTSP" ,
+		(lresp == sizeof(resp) - 1) ? "(message truncated) " : "", s->sid,
 		get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa),
-		lr, s->id);
-	LOGM("MSG client << process :\n%s", resp);
+		lr, s->id, s->sock);
+	LOGL(log_level, "MSG client << process :\n%s", resp);
 
 	struct iovec iov[2];
 	iov[0].iov_base = resp;

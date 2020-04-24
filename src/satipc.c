@@ -401,13 +401,14 @@ int satipc_open_device(adapter *ad)
 	if ((sip->last_connect > 0) && (ctime - sip->last_connect < 5000))
 		return 3;
 
+	USockAddr sv;
 	sip->last_connect = ctime;
-	ad->fe = tcp_connect_src(sip->sip, sip->sport, NULL, 1, sip->source_ip[0] ? sip->source_ip : NULL); // blocking socket
+	ad->fe = tcp_connect_src(sip->sip, sip->sport, &sv, 1, sip->source_ip[0] ? sip->source_ip : NULL); // blocking socket
 	if (ad->fe < 0)
 		LOG_AND_RETURN(2, "could not connect to %s:%d", sip->sip, sip->sport);
 
-	LOG("satipc: connected to SAT>IP server %s port %d %s handle %d %s %s", sip->sip,
-		sip->sport, sip->use_tcp ? "[RTSP OVER TCP]" : "", ad->fe, sip->source_ip[0] ? "from source" : "", sip->source_ip[0] ? sip->source_ip : "");
+	LOG("satipc: connected to SAT>IP server %s port %d%s (socket handle %d) %s %s", sip->sip,
+		sip->sport, sip->use_tcp ? " [RTSP OVER TCP]" : "", ad->fe, sip->source_ip[0] ? "from source" : "", sip->source_ip[0] ? sip->source_ip : "");
 
 	sip->init_use_tcp = sip->use_tcp;
 	if (!sip->init_use_tcp)
@@ -421,12 +422,12 @@ int satipc_open_device(adapter *ad)
 		if (sip->rtcp < 0)
 			LOG("Could not listen on port %d: err %d: %s", sip->listen_rtp + 1, errno, strerror(errno));
 
-		ad->fe_sock = sockets_add(ad->fe, NULL, ad->id, TYPE_TCP,
+		ad->fe_sock = sockets_add(ad->fe, &sv, ad->id, TYPE_TCP,
 								  (socket_action)satipc_reply, (socket_action)satipc_close,
 								  (socket_action)satipc_timeout);
 		sip->rtcp_sock = -1;
 		if (sip->rtcp >= 0)
-			sip->rtcp_sock = sockets_add(sip->rtcp, NULL, ad->id, TYPE_TCP,
+			sip->rtcp_sock = sockets_add(sip->rtcp, &sv, ad->id, TYPE_TCP,
 										 (socket_action)satipc_rtcp_reply, (socket_action)satipc_close,
 										 NULL);
 		sockets_timeout(ad->fe_sock, 25000); // 25s
@@ -451,7 +452,7 @@ int satipc_open_device(adapter *ad)
 	{
 		ad->dvr = ad->fe;
 		ad->fe = -1;
-		ad->fe_sock = sockets_add(SOCK_TIMEOUT, NULL, ad->id, TYPE_UDP,
+		ad->fe_sock = sockets_add(SOCK_TIMEOUT, &sv, ad->id, TYPE_UDP,
 								  NULL, NULL, (socket_action)satipc_timeout);
 		sockets_timeout(ad->fe_sock, 25000); // 25s
 	}

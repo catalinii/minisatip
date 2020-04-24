@@ -207,7 +207,7 @@ int udp_bind(char *addr, int port, int ipv4_only)
 
 	set_linux_socket_timeout(sock);
 
-	LOG("New UDP socket %d bound to %s:%d %s%s%s", sock, get_sockaddr_host(serv, localhost, sizeof(localhost)),
+	LOG("New UDP bound socket %d at %s:%d %s%s%s", sock, get_sockaddr_host(serv, localhost, sizeof(localhost)),
 		get_sockaddr_port(serv), is_multicast ? "(mcast:" : "", is_multicast ? addr : "", is_multicast ? ")" : "");
 	return sock;
 }
@@ -265,7 +265,7 @@ int udp_connect(char *addr, int port, USockAddr *serv)
 		close(sock);
 		return -1;
 	}
-	LOG("New UDP socket %d connected to %s:%d", sock,
+	LOG("New UDP connected socket %d to %s:%d", sock,
 		get_sockaddr_host(*serv, localhost, sizeof(localhost)), get_sockaddr_port(*serv));
 	return sock;
 }
@@ -416,7 +416,7 @@ int tcp_listen(char *addr, int port, int ipv4_only)
 		close(sock);
 		return -1;
 	}
-	LOG("New TCP listening socket %d at %s:%d, family %d", sock, addr ? addr : "0:0:0:0", port, family);
+	LOG("New TCP listening socket %d at %s:%d, family %d", sock, get_sockaddr_host(serv, sa, sizeof(sa)), port, family);
 	return sock;
 }
 
@@ -624,9 +624,11 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type,
 	if (type & TYPE_CONNECT)
 		ss->events |= POLLOUT;
 
-	LOG("sockets_add: handle %d (type %d) returning socket sock %d [%s:%d] read: %p",
-		ss->sock, ss->type, i, get_sockaddr_host(ss->sa, ra, sizeof(ra)),
-		get_sockaddr_port(ss->sa), ss->read);
+	LOG("sockets_add: returning socket sock %d (handle %d) (type %d) [%s:%d]",
+		ss->sock, i, ss->type, get_sockaddr_host(ss->sa, ra, sizeof(ra)),
+		get_sockaddr_port(ss->sa) > 0 ? get_sockaddr_port(ss->sa) : -1);
+	LOGM("new socket sock %d (handle %d) -> read(): %p action(): %p close(): %p timeout(): %p",
+		ss->sock, i, ss->read, ss->action, ss->close, ss->timeout);
 	mutex_unlock(&ss->mutex);
 	return i;
 }
@@ -634,6 +636,7 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type,
 int sockets_del(int sock)
 {
 	int i, so;
+	char ra[50];
 	sockets *ss;
 
 	if (sock < 0 || sock >= MAX_SOCKS || !s[sock] || !s[sock]->enabled || !s[sock]->is_enabled)
@@ -652,8 +655,11 @@ int sockets_del(int sock)
 	ss->is_enabled = 0;
 	so = ss->sock;
 	ss->sock = -1; // avoid infinite loop
-	LOG("sockets_del: sock %d -> handle %d, sid %d, overflow bytes %d, allocated %d, used %d, unsend packets %d",
-		sock, so, ss->sid, ss->overflow, ss->buf_alloc, ss->buf_used, (ss->wmax > 0) ? ((ss->wpos - ss->spos) % ss->wmax) : 0);
+	LOG("sockets_del: deleting socket sock %d (handle %d) [%s:%d], sid %d, overflow bytes %d, allocated %d, used %d, unsend packets %d",
+		sock, so, get_sockaddr_host(ss->sa, ra, sizeof(ra)),
+		get_sockaddr_port(ss->sa) > 0 ? get_sockaddr_port(ss->sa) : -1, ss->sid,
+		ss->overflow, ss->buf_alloc, ss->buf_used,
+		(ss->wmax > 0) ? ((ss->wpos - ss->spos) % ss->wmax) : 0);
 
 	if (so >= 0)
 	{
@@ -686,7 +692,7 @@ int sockets_del(int sock)
 		ss->pack = NULL;
 	}
 
-	LOG("sockets_del: sock %d Last open socket is at index %d current_handle %d",
+	LOGM("sockets_del: sock %d Last open socket is at index %d current_handle %d",
 		sock, i, so);
 	mutex_destroy(&ss->mutex);
 	mutex_lock(&s_mutex);
@@ -742,7 +748,7 @@ void *select_and_execute(void *arg)
 	es = 0;
 	lt = getTick();
 	memset(&pf, -1, sizeof(pf));
-	LOG("Starting select_and_execute on thread ID %lx, thread_name %s", tid,
+	LOG("Starting select_and_execute on thread ID %lx, thread_name [%s]", tid,
 		thread_name);
 	while (run_loop)
 	{
@@ -917,7 +923,7 @@ void *select_and_execute(void *arg)
 							continue; // do not close the RTCP socket, we might get some errors here but ignore them
 						}
 						LOG(
-							"select_and_execute[%d]: %s on socket %d (sid:%d) from %s:%d - type %s errno %d",
+							"select_and_execute[%d]: %s on socket sock %d (sid %d) from %s:%d - type %s errno %d",
 							i, err_str, ss->sock, ss->sid,
 							get_sockaddr_host(ss->sa, ra, sizeof(ra)),
 							get_sockaddr_port(ss->sa), types[ss->type], err);
@@ -1273,7 +1279,7 @@ void set_socket_thread(int s_id, pthread_t tid)
 	sockets *ss = get_sockets(s_id);
 	if (!ss)
 		return;
-	LOG("set_socket_thread: thread %lx for sockets %i", tid, s_id);
+	LOG("set_socket_thread: thread %lx for socket handle %i", tid, s_id);
 	ss->tid = tid;
 }
 
