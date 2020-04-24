@@ -96,6 +96,15 @@ adapter *adapter_alloc()
 	ad->master_source = -1;
 	ad->diseqc_multi = opts.diseqc_multi;
 
+	/* enable all sources */
+	ad->debug_pos[0]='\0';
+	ad->debug_src = 0;
+	int i;
+	for (i = 0; i <= MAX_SOURCES; i++)
+	{
+		ad->sources_pos[i] = 1;
+	}
+
 	/* LOF setup */
 	ad->diseqc_param.lnb_low = opts.lnb_low;
 	ad->diseqc_param.lnb_high = opts.lnb_high;
@@ -502,6 +511,12 @@ int getAdaptersCount()
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		if ((ad = a[i]))
 		{
+			// Note: Adapter 0 uses map bit 0, and source_map uses ranges from 0..SRC-1 (SRC=0 can't be configured)
+			for (j = 0; j < MAX_SOURCES; j++)
+			{
+				ad->sources_pos[j] = (source_map[j-1] >> i) & 1;
+			}
+
 			if (!opts.force_sadapter && (delsys_match(ad, SYS_DVBS) || delsys_match(ad, SYS_DVBS2)))
 			{
 				ts2++;
@@ -569,6 +584,34 @@ int getAdaptersCount()
 			}
 		}
 	}
+	char lsrc[256];
+	for (i = 0; i < MAX_ADAPTERS; i++)
+		if ((ad = a[i]))
+		{
+			ad->debug_pos[0]='\0';
+			ad->debug_src = 0;
+			lsrc[0] = '\0';
+			for (j = 1; j <= MAX_SOURCES; j++)
+			{
+				if (ad->sources_pos[j])
+				{
+					char usrc[8];
+					sprintf(usrc, ",%d", j);
+					strcat(lsrc, usrc);
+
+					strcat(ad->debug_pos, "X");
+					ad->debug_src += (unsigned long)1 << (j - 1);
+				}
+				else
+				{
+					strcat(ad->debug_pos, ".");
+				}
+			}
+			if (strlen(lsrc) > 0)
+				lsrc[0]=' ';
+			DEBUGM("Adpater %d enabled sources:%s", i, lsrc);
+			DEBUGM("Adpater %d debug sources: %s (%lu)", i, ad->debug_pos, ad->debug_src);
+		}
 	return tuner_s2 + tuner_c2 + tuner_t2 + tuner_c + tuner_t;
 }
 
@@ -581,10 +624,10 @@ void dump_adapters()
 	LOG("Dumping adapters:");
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		if ((ad = get_adapter_nw(i)))
-			LOG("%d|f: %d sid_cnt:%d master_sid:%d master_source:%d del_sys: %s %s %s", i,
+			LOG("%d|f: %d sid_cnt:%d master_sid:%d master_source:%d del_sys: %s,%s,%s src_map: %s (%lu)", i,
 				ad->tp.freq, ad->sid_cnt, ad->master_sid, ad->master_source,
 				get_delsys(ad->sys[0]), get_delsys(ad->sys[1]),
-				get_delsys(ad->sys[2]));
+				get_delsys(ad->sys[2]), ad->debug_pos, ad->debug_src);
 	dump_streams();
 }
 
@@ -694,9 +737,9 @@ int get_free_adapter(transponder *tp)
 
 	if (ad)
 		LOG(
-			"get free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d f:%d pol=%d sys: %s %s",
+			"get free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d src:%d f:%d pol=%d sys: %s %s",
 			tp->fe, ad->id, ad->enabled, ad->master_sid, ad->sid_cnt,
-			ad->tp.freq, ad->tp.pol, get_delsys(ad->sys[0]),
+			ad->tp.diseqc, ad->tp.freq, ad->tp.pol, get_delsys(ad->sys[0]),
 			get_delsys(ad->sys[1]))
 	else
 		LOG("get free adapter %d msys %s requested %s", fe, get_delsys(fe),
@@ -711,31 +754,32 @@ int get_free_adapter(transponder *tp)
 				match = 1;
 			if (!ad->enabled || !compare_tunning_parameters(ad->id, tp))
 				match = 1;
-			if (match && !init_hw(fe))
+			if (match && ad->sources_pos[tp->diseqc] && !init_hw(fe))
 				return fe;
 		}
 		goto noadapter;
 	}
 	// provide an already existing adapter
 	for (i = 0; i < MAX_ADAPTERS; i++)
-		if ((ad = get_adapter_nw(i)) && delsys_match(ad, msys))
+		if ((ad = get_adapter_nw(i)) && delsys_match(ad, msys) && ad->sources_pos[tp->diseqc])
 			if (!compare_tunning_parameters(ad->id, tp))
 				return i;
 
 	for (i = 0; i < MAX_ADAPTERS; i++)
 	{
 		//first free adapter that has the same msys
-		if ((ad = get_adapter_nw(i)) && ad->sid_cnt == 0 && delsys_match(ad, msys) && !compare_slave_parameters(ad, tp))
+		if ((ad = get_adapter_nw(i)) && ad->sid_cnt == 0 && delsys_match(ad, msys) && !compare_slave_parameters(ad, tp) && ad->sources_pos[tp->diseqc])
 			return i;
 		if (!ad && delsys_match(a[i], msys) && !compare_slave_parameters(a[i], tp)) // device is not initialized
 		{
-			if (!init_hw(i))
+			ad = a[i];
+			if (ad->sources_pos[tp->diseqc] && !init_hw(i))
 				return i;
 		}
 	}
 
 noadapter:
-	LOG("no adapter found for f:%d pol:%d msys:%d", tp->freq, tp->pol, tp->sys);
+	LOG("no adapter found for src:%d f:%d pol:%d msys:%d", tp->diseqc, tp->freq, tp->pol, tp->sys);
 	dump_adapters();
 	return -1;
 }
@@ -1621,6 +1665,83 @@ void set_diseqc_adapters(char *o)
 			a_id, fast, addr, committed_no, uncommitted_no);
 	}
 }
+
+void set_sources_adapters(char *o)
+{
+	int i, la, lb, st, end, j, k, adap;
+	uint64_t all = 0xFFFFFFFFFFFFFFFF;
+	char buf[1024], *arg[128], *sep;
+	SAFE_STRCPY(buf, o);
+	la = split(arg, buf, ARRAY_SIZE(arg), ':');
+	if ((la == 1 && strlen(arg[0]) == 0) || la < 1 || la > MAX_SOURCES)
+		goto ERR;
+
+	LOG("Calculating adapter sources: [%s] ", o);
+	for (i = 0; i < MAX_SOURCES; i++)
+	{
+		if (i >= la)
+		{
+			LOGM(" src=%d undefined, using all", i + 1);
+			source_map[i] = all;
+			continue;
+		}
+
+		source_map[i] = 0;
+		if (arg[i] && arg[i][0] == '*')
+		{
+			if (strlen(arg[i]) != 1)
+				goto ERR;
+			source_map[i] = all;
+			char buf2[128];
+			buf2[0]='\0';
+			for (j = 0; j < MAX_ADAPTERS; j++)
+				strcat(buf2, "X");
+			LOGM(" src=%d using adapters %s (%lu)", i + 1, buf2, (unsigned long)source_map[i]);
+			continue;
+		}
+		char buf2[128], *arg2[128];
+		SAFE_STRCPY(buf2, arg[i]);
+		lb = split(arg2, buf2, ARRAY_SIZE(arg2), ',');
+		for (j = 0; j < lb; j++)
+		{
+			sep = strchr(arg2[j], '-');
+			if (sep == NULL)
+			{
+				adap = map_int(arg2[j], NULL);
+				if (adap < 0 || adap >= MAX_ADAPTERS)
+					goto ERR;
+				source_map[i] |= (unsigned long)1 << adap;
+			}
+			else
+			{
+				st = map_int(arg2[j], NULL);
+				end = map_int(sep + 1, NULL);
+				if (st < 0 || end < 0 || st >= MAX_ADAPTERS || end >= MAX_ADAPTERS || end < st)
+					goto ERR;
+				for (k = st; k <= end; k++)
+				{
+					adap = k;
+					source_map[i] |= (unsigned long)1 << adap;
+				}
+			}
+		}
+		buf2[0]='\0';
+		for (j = 0; j < MAX_ADAPTERS; j++)
+			if (source_map[i] & ((unsigned long)1 << j))
+				strcat(buf2, "X");
+			else
+				strcat(buf2, ".");
+		LOGM(" src=%d using adapters %s (%lu)", i + 1, buf2, (unsigned long)source_map[i]);
+	}
+	LOG("Adapter correct sources format parameter");
+	return;
+
+ERR:
+	for (i = 0; i < MAX_SOURCES; i++)
+		source_map[i] = all;
+	LOG("Adapter sources format parameter %s, using defaults for all adapters!", strlen(arg[0]) > 0 ? "incorrect" : "missing");
+}
+
 
 void set_diseqc_multi(char *o)
 {

@@ -190,6 +190,14 @@ Help
 
 * -j --jess jess_string - same format as -u 
 
+* -U --sources sources_for_adapters: limit the adapters to specific sources/positions
+	* eg: -U 0-2:*:3:2,6,8 (no spaces between parameters)
+	- In this example: for SRC=1 only 0,1,2; for SRC=2 all; for SRC=3 only 3; and for SRC=4 the 2,6,8 adapters are used.
+	- For each position (separated by : ) you need to declare all the adapters that use this position with no exception.
+	- The special char * indicates all adapters for this position.
+	- The number of sources range from 1 to 64; but the list can include less than 64 (in this case all are enabled for undefined sources). 
+	- By default or in case of errors all adapters have enabled all positions.
+
 * -w --http-host http_server[:port]: specify the host and the port (if not 80) where the xml file can be downloaded from [default: default_local_ip_address:8080] 
 	* eg: -w 192.168.1.1:8080 
 
