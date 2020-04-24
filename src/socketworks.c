@@ -502,7 +502,8 @@ int sockets_recv(int socket, void *buf, int len, sockets *ss, int *rv)
 	int slen = sizeof(ss->sa);
 	*rv = recvfrom(socket, buf, len, 0, &ss->sa.sa,
 				   (socklen_t *)&slen);
-	return (*rv > 0);
+	// 0 is totally acceptable for UDP
+	return (*rv >= 0);
 }
 
 int init_sock = 0;
@@ -908,7 +909,7 @@ void *select_and_execute(void *arg)
 						else
 							err_str = strerror(err);
 
-						if (ss->type == TYPE_RTCP || ss->sock == SOCK_TIMEOUT)
+						if (ss->sock == SOCK_TIMEOUT)
 						{
 							LOG(
 								"ignoring error on sock_id %d handle %d type %d error %d : %s",
