@@ -539,7 +539,9 @@ void update_cw(SPMT *pmt)
 	}
 	if (pmt->cw)
 	{
-		LOGM("Valid CW for PMT %d", pmt->master_pmt);
+		LOGM("Valid CW %d for PMT %d, validating the PMT", pmt->cw->id, pmt->master_pmt);
+		pmt->invalidated = 0;
+		master->invalidated = 0;
 		return;
 	}
 	LOGM("%s: pmt %d, parity %d, CW %d", __FUNCTION__, pmt->id, pmt->parity, pmt->cw ? pmt->cw->id : -1);
