@@ -571,7 +571,7 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb)
 	//      Some servers send KEEP-ALIVE RTP packets without valid TS payload.
 	//      Then RTP packets received without valid TS data are discarded.
 	uint8_t *b = buf;
-	if (*rb < DVB_FRAME - 12 && b[0] != 0x47)
+	if (*rb > 12 && *rb < DVB_FRAME - 12 && b[0] != 0x47)
 	{
 		LOGM("discarding RTP packet without valid TS payload (sock %d, socket_id %d) [len=%d]", socket, ss->id, *rb - 12);
 		*rb = 0;
