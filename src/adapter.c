@@ -511,10 +511,10 @@ int getAdaptersCount()
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		if ((ad = a[i]))
 		{
-			// Note: Adapter 0 uses map bit 0, and source_map uses ranges from 0..SRC-1 (SRC=0 can't be configured)
+			// Note: Adapter 0 uses map bit 0, sources_pos ranges from 0..MAX_SOURCES+1 and source_map ranges from 0..SRC-1 (SRC=0 can't be configured)
 			for (j = 0; j < MAX_SOURCES; j++)
 			{
-				ad->sources_pos[j] = (source_map[j-1] >> i) & 1;
+				ad->sources_pos[j+1] = (source_map[j] >> i) & 1;
 			}
 
 			if (!opts.force_sadapter && (delsys_match(ad, SYS_DVBS) || delsys_match(ad, SYS_DVBS2)))
