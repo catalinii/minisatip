@@ -605,6 +605,7 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type,
 	ss->lbuf = 0;
 	ss->timeout_ms = 0;
 	ss->id = i;
+	ss->flags = 0;
 	ss->sock_err = 0;
 	ss->overflow = 0;
 	ss->buf_alloc = ss->buf_used = 0;
@@ -923,6 +924,25 @@ void *select_and_execute(void *arg)
 							get_sockaddr_port(ss->sa), types[ss->type], err);
 						if (err == EOVERFLOW || err == EWOULDBLOCK)
 							continue;
+						if ((ss->flags & 2) && rlen == 0)
+						{
+							LOGM("select_and_execute[%d]: reporting that the remote client has closed the socket (rlen: %d, flags:%d)",
+							     i, ss->rlen, ss->flags);
+							ss->rlen = -1;  // This indicates that the remote end has closed the socket
+							errno = ss->action(ss);
+							ss->rlen = 0;   // Restore the value previoius to the call
+
+							if (errno < 0)
+							{
+								LOG("closing report of socket_id %d failed sid %d return err %d: %s",
+								    i, ss->sid, errno, strerror(errno));
+							}
+							else
+							{
+								LOGM("closing report of socket_id %d OK", i, ss->sid);
+								continue;
+							}
+						}
 						if (err == EAGAIN)
 						{
 							ss->err++;
@@ -1203,6 +1223,14 @@ void set_socket_receive_buffer(int sock, int len)
 	sl = sizeof(int);
 	if (!getsockopt(sock, SOL_SOCKET, SO_RCVBUF, &len, &sl))
 		LOG("receive socket buffer size is %d bytes", len);
+}
+
+void set_socket_disconnect_flag(int sock)
+{
+	sockets *ss = get_sockets(sock);
+	if (!ss)
+		return;
+	ss->flags |= 2;
 }
 
 void set_socket_pos(int sock, int pos)

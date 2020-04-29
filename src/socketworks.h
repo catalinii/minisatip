@@ -106,6 +106,7 @@ void free_pack(SNPacket *p);
 void sockets_setread(int i, void *r);
 void set_socket_send_buffer(int sock, int len);
 void set_socket_receive_buffer(int sock, int len);
+void set_socket_disconnect_flag(int sock);
 void set_socket_pos(int sock, int pos);
 void set_sock_lock(int i, SMutex *m);
 void set_socket_thread(int s_id, pthread_t tid);
