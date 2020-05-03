@@ -60,7 +60,7 @@ int fill_sockaddr(USockAddr *serv, char *host, int port, int ipv4_only)
 	{
 		char str_port[12];
 		struct addrinfo hints;
-		struct addrinfo *result;
+		struct addrinfo *result = NULL;
 		memset(&hints, 0, sizeof(struct addrinfo));
 		hints.ai_family = AF_UNSPEC; /* Allow IPv4 or IPv6 */
 		if (ipv4_only)
@@ -76,8 +76,9 @@ int fill_sockaddr(USockAddr *serv, char *host, int port, int ipv4_only)
 		int s = getaddrinfo(host, str_port, &hints, &result);
 		if (s != 0)
 		{
-			LOG("getaddrinfo failed: host %s, port %s, %s\n", host, str_port, gai_strerror(s));
-			freeaddrinfo(result);
+			LOG("getaddrinfo failed: host %s, port %s, %s", host, str_port, gai_strerror(s));
+			if(result)
+				freeaddrinfo(result);
 			return 0;
 		}
 		if (result != NULL)
@@ -896,7 +897,7 @@ void *select_and_execute(void *arg)
 					{
 						char *err_str;
 						char *types[] =
-							{"udp", "tcp", "server", "http", "rtsp", "dvr"};
+							{"udp", "tcp", "server", "http", "rtsp", "dvr", NULL, NULL};
 						if (rlen == 0)
 						{
 							err = 0;
@@ -917,10 +918,10 @@ void *select_and_execute(void *arg)
 							continue; // do not close the RTCP socket, we might get some errors here but ignore them
 						}
 						LOG(
-							"select_and_execute[%d]: %s on socket %d (sid:%d) from %s:%d - type %s errno %d",
+							"select_and_execute[%d]: %s on socket %d (sid:%d) from %s:%d - type %s (%d) errno %d",
 							i, err_str, ss->sock, ss->sid,
 							get_sockaddr_host(ss->sa, ra, sizeof(ra)),
-							get_sockaddr_port(ss->sa), types[ss->type], err);
+							get_sockaddr_port(ss->sa), types[ss->type & 0x7], ss->type, err);
 						if (err == EOVERFLOW || err == EWOULDBLOCK)
 							continue;
 						if (err == EAGAIN)
