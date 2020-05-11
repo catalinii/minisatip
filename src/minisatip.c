@@ -728,6 +728,8 @@ void set_options(int argc, char *argv[])
 		case IPV4_OPT:
 		{
 			opts.use_ipv4_only = 1 - opts.use_ipv4_only;
+			if(!opts.use_ipv4_only)
+				LOG0("IPv6 mode is enabled");
 			break;
 		}
 
