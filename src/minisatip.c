@@ -1146,9 +1146,9 @@ int read_rtsp(sockets *s)
 	rlen = s->rlen;
 	s->rlen = 0;
 
-	LOG("Read RTSP (handle %d) [%s:%d] sid %d, len: %d, sock %d", s->sid,
+	LOG("Read RTSP (sock %d, handle %d) [%s:%d] sid %d, len: %d", s->id, s->sock,
 		get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa),
-		s->id, rlen, s->sock);
+		s->sid, rlen);
 	LOGM("MSG client >> process :\n%s", s->buf);
 
 	if ((s->type != TYPE_HTTP) && (strncasecmp((const char *)s->buf, "GET", 3) == 0))
@@ -1546,8 +1546,8 @@ int close_http(sockets *s)
 		free1(s->buf);
 	s->flags = 0;
 	s->buf = NULL;
-	LOG("Requested sid close %d timeout %d type %d", s->sid,
-		sid ? sid->timeout : -1, sid ? sid->type : -1);
+	LOG("Requested sid close %d timeout %d type %d, sock %d, handle %d, timeout %d", s->sid,
+		sid ? sid->timeout : -1, sid ? sid->type : -1, s->id, s->sock, s->timeout_ms);
 	if (sid && ((sid->type == STREAM_RTSP_UDP && sid->timeout != 0) || (sid->type == 0 && sid->timeout != 0)))
 		// Do not close rtsp udp as most likely there was no TEARDOWN at this point
 		return 0;

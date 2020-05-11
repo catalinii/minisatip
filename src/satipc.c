@@ -535,6 +535,8 @@ void satip_standby_device(adapter *ad)
 		http_request(ad, NULL, "TEARDOWN");
 	sip->sleep = 1;
 	sip->session[0] = 0;
+	sip->sent_transport = 0; // send Transport: at the next tune
+	sip->lap = sip->ldp = 0;
 }
 
 int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb)
@@ -1158,7 +1160,7 @@ void satipc_commit(adapter *ad)
 	send_apids = send_apids && sip->lap > 0;
 	send_dpids = send_dpids && sip->ldp > 0;
 
-	if (getTick() - sip->last_setup < 10000 && !sip->sent_transport)
+	if (getTick() - sip->last_setup < 1000 && !sip->sent_transport)
 	{
 		LOG(
 			"satipc: last setup less than 10 seconds ago for server %s, maybe an error ?",
