@@ -1,0 +1,58 @@
+Example configuation to autostart minisatip with systemd.
+
+
+prerequisites:
+
+- minisatip binary file placed under /usr/bin/minisatip
+- html folder from minisatip source under /var/lib/minisatip
+
+
+Create 3 files in your favorite editor:
+
+
+1)
+
+/etc/systemd/system/minisatip.path
+
+[Path]
+PathExists=/dev/dvb/adapter0/frontend0
+Unit=minisatip.service
+
+[Install]
+WantedBy=sockets.target
+
+
+2) 
+
+/etc/systemd/system/minisatip.service
+
+[Unit]
+Description=Multi-threaded SAT>IP server
+After=network-online.target
+#Wants=oscam.service
+
+[Service]
+#User=minisatip
+#Group=minisatip
+WorkingDirectory=/var/lib/minisatip
+Type=simple
+EnvironmentFile=-/etc/minisatip.conf
+ExecStart=/usr/bin/minisatip -f $SERVER_ARGS
+
+[Install]
+WantedBy=multi-user.target
+
+
+3)
+
+/etc/minisatip.conf
+
+SERVER_ARGS=" -Z *:0 -M 0 -o 192.168.1.17:9000"
+
+
+
+
+After creation of the files, reload systemctl with "systemctl daemon-reload" and enable the service with "systemctl enable minisatip.service". Start the service with the following command
+"systemctl start minisatip.service" and check the status with "systemctl status minisatip.service"
+
+For troubleshooting and/or logging, use "journalctl -u minisatip.service"
