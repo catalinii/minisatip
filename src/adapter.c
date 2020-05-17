@@ -1362,7 +1362,7 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 	ss = get_sid(sid);
 
 	use_ad = 1;
-	if (!(ad = get_adapter(aid)) || (ss && !ss->do_play))
+	if (!(ad = get_adapter_nw(aid)) || (ss && !ss->do_play))
 	{
 		if (aid < 0)
 			aid = 0;
