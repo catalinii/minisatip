@@ -63,6 +63,8 @@
 int MAX_SINFO;
 char pn[256];
 
+Shttp_client *httpc[MAX_HTTPC];
+
 typedef struct tmpinfo
 {
 	unsigned char enabled;
