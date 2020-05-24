@@ -88,7 +88,8 @@ typedef struct struct_http_client
 
 #define get_httpc(i) ((i >= 0 && i < MAX_HTTPC && httpc[i] && httpc[i]->enabled) ? httpc[i] : NULL)
 
-Shttp_client *httpc[MAX_HTTPC];
+extern Shttp_client *httpc[MAX_HTTPC];
+
 int http_client(char *url, char *request, void *callback, void *opaque);
 
 unsigned char *getItem(uint32_t key);

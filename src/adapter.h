@@ -117,7 +117,7 @@ typedef struct struct_adapter
 } adapter;
 
 extern adapter *a[MAX_ADAPTERS];
-uint64_t source_map[MAX_SOURCES];
+extern uint64_t source_map[MAX_SOURCES];
 extern int a_count;
 extern char do_dump_pids;
 

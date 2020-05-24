@@ -62,6 +62,7 @@ int a_count;
 char disabled[MAX_ADAPTERS]; // disabled adapters
 int sock_signal;
 char do_dump_pids = 1;
+uint64_t source_map[MAX_SOURCES];
 
 SMutex a_mutex;
 
