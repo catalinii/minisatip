@@ -791,6 +791,8 @@ void *select_and_execute(void *arg)
 					sockets *ss = s[i];
 					if (!ss)
 						continue;
+					if(!ss->enabled)
+						continue;
 
 					c_time = getTick();
 					ss->iteration++;
@@ -987,6 +989,13 @@ void sockets_setread(int i, void *r)
 	sockets *ss = get_sockets(i);
 	if (ss)
 		ss->read = (read_action)r;
+}
+
+void sockets_setclose(int i, void *r)
+{
+	sockets *ss = get_sockets(i);
+	if (ss)
+		ss->close = (socket_action)r;
 }
 
 void sockets_setbuf(int i, char *buf, int len)

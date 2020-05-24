@@ -97,7 +97,7 @@ adapter *adapter_alloc()
 	ad->diseqc_multi = opts.diseqc_multi;
 
 	/* enable all sources */
-	ad->debug_pos[0]='\0';
+	ad->debug_pos[0] = '\0';
 	ad->debug_src = 0;
 	int i;
 	for (i = 0; i <= MAX_SOURCES; i++)
@@ -111,7 +111,6 @@ adapter *adapter_alloc()
 	ad->diseqc_param.lnb_circular = opts.lnb_circular;
 	ad->diseqc_param.lnb_switch = opts.lnb_switch;
 
-	ad->failed_adapter = 0;
 	ad->adapter_timeout = opts.adapter_timeout;
 
 	ad->strength_multiplier = opts.strength_multiplier;
@@ -234,6 +233,19 @@ int close_adapter_for_socket(sockets *s)
 	return close_adapter(aid);
 }
 
+void adapter_set_dvr(adapter *ad)
+{
+	ad->sock = sockets_add(ad->dvr, NULL, ad->id, TYPE_DVR, (socket_action)read_dmx,
+						   (socket_action)close_adapter_for_socket,
+						   (socket_action)adapter_timeout);
+	memset(ad->buf, 0, opts.adapter_buffer + 1);
+	set_socket_buffer(ad->sock, (unsigned char *)ad->buf, opts.adapter_buffer);
+	if (ad->adapter_timeout > 0)
+		sockets_timeout(ad->sock, ad->adapter_timeout);
+	if (opts.th_priority > 0)
+		set_thread_prio(get_socket_thread(ad->sock), opts.th_priority);
+}
+
 int init_complete = 0;
 int num_adapters = 0;
 
@@ -265,12 +277,10 @@ int init_hw(int i)
 		goto NOK;
 	}
 
-	ad->sock = -1;
 	ad->id = i;
 	ad->fe_sock = -1;
 	ad->sock = -1;
 	ad->force_close = 0;
-	ad->restart_needed = 0;
 	ad->err = 0;
 
 	if (opts.max_pids)
@@ -320,11 +330,9 @@ int init_hw(int i)
 	}
 	memset(ad->buf, 0, opts.adapter_buffer + 1);
 	init_dvb_parameters(&ad->tp);
-	if (!ad->failed_adapter)
-	{
-		mark_pids_deleted(i, -1, NULL);
-		update_pids(i);
-	}
+	mark_pids_deleted(i, -1, NULL);
+	update_pids(i);
+
 	if (!ad->sys[0])
 		ad->delsys(i, ad->fe, ad->sys);
 	ad->master_sid = -1;
@@ -337,19 +345,11 @@ int init_hw(int i)
 	ad->threshold = opts.udp_threshold;
 	ad->updating_pids = 0;
 	ad->wait_new_stream = 0;
-	ad->failed_adapter = 0;
 	ad->rtime = getTick();
-	ad->sock = sockets_add(ad->dvr, NULL, i, TYPE_DVR, (socket_action)read_dmx,
-						   (socket_action)close_adapter_for_socket,
-						   (socket_action)adapter_timeout);
-	memset(ad->buf, 0, opts.adapter_buffer + 1);
-	set_socket_buffer(ad->sock, (unsigned char *)ad->buf, opts.adapter_buffer);
-	if (ad->adapter_timeout > 0)
-		sockets_timeout(ad->sock, ad->adapter_timeout);
+	adapter_set_dvr(ad);
 	snprintf(ad->name, sizeof(ad->name), "AD%d", i);
-	set_socket_thread(ad->sock, start_new_thread(ad->name));
-	if (opts.th_priority > 0)
-		set_thread_prio(get_socket_thread(ad->sock), opts.th_priority);
+	ad->thread = start_new_thread(ad->name);
+	set_socket_thread(ad->sock, ad->thread);
 #ifndef DISABLE_PMT
 	pmt_init_device(ad);
 #endif
@@ -384,18 +384,6 @@ NOK:
 	LOG("opening adapter %i failed with exit code %d", ad->id, rv);
 	mutex_unlock(&ad->mutex);
 	return 1;
-}
-
-int enable_failed_adapter(int id)
-{
-	if (id < 0 || id >= MAX_ADAPTERS)
-		return 1;
-	adapter *ad = a[id];
-	if (!ad)
-		return 1;
-
-	ad->failed_adapter = 1;
-	return init_hw(id);
 }
 
 int init_all_hw()
@@ -514,7 +502,7 @@ int getAdaptersCount()
 			// Note: Adapter 0 uses map bit 0, sources_pos ranges from 0..MAX_SOURCES+1 and source_map ranges from 0..SRC-1 (SRC=0 can't be configured)
 			for (j = 0; j < MAX_SOURCES; j++)
 			{
-				ad->sources_pos[j+1] = (source_map[j] >> i) & 1;
+				ad->sources_pos[j + 1] = (source_map[j] >> i) & 1;
 			}
 
 			if (!opts.force_sadapter && (delsys_match(ad, SYS_DVBS) || delsys_match(ad, SYS_DVBS2)))
@@ -588,7 +576,7 @@ int getAdaptersCount()
 	for (i = 0; i < MAX_ADAPTERS; i++)
 		if ((ad = a[i]))
 		{
-			ad->debug_pos[0]='\0';
+			ad->debug_pos[0] = '\0';
 			ad->debug_src = 0;
 			lsrc[0] = '\0';
 			for (j = 1; j <= MAX_SOURCES; j++)
@@ -608,7 +596,7 @@ int getAdaptersCount()
 				}
 			}
 			if (strlen(lsrc) > 0)
-				lsrc[0]=' ';
+				lsrc[0] = ' ';
 			DEBUGM("Adpater %d enabled sources:%s", i, lsrc);
 			DEBUGM("Adpater %d debug sources: %s (%lu)", i, ad->debug_pos, ad->debug_src);
 		}
@@ -834,11 +822,10 @@ int set_adapter_for_stream(int sid, int aid)
 	return 0;
 }
 
-void close_adapter_for_stream(int sid, int aid)
+void close_adapter_for_stream(int sid, int aid, int close_stream)
 {
 	adapter *ad;
 	streams *s = get_sid(sid);
-	int is_slave = 1;
 	if (!(ad = get_adapter(aid)))
 		return;
 
@@ -856,16 +843,14 @@ void close_adapter_for_stream(int sid, int aid)
 	}
 	if (ad->sid_cnt > 0)
 		ad->sid_cnt--;
-	LOG("closed adapter %d for sid %d m:%d sid_cnt:%d, restart_needed %d", aid, sid, ad->master_sid,
-		ad->sid_cnt, ad->restart_needed);
+	LOG("closed adapter %d for sid %d m:%d sid_cnt:%d", aid, sid, ad->master_sid, ad->sid_cnt);
 	// delete the attached PIDs as well
 	if (ad->sid_cnt == 0)
 	{
-		is_slave = 0;
 		ad->master_sid = -1;
 		mark_pids_deleted(aid, -1, NULL);
 		init_dvb_parameters(&ad->tp);
-		if (ad->standby)
+		if (ad->standby && close_stream)
 			ad->standby(ad);
 #ifdef AXE
 		free_axe_input(ad);
@@ -883,12 +868,6 @@ void close_adapter_for_stream(int sid, int aid)
 	update_pids(aid);
 	adapter_update_threshold(ad);
 	mutex_unlock(&ad->mutex);
-	if ((ad->restart_needed == 1) && !is_slave)
-	{
-		LOG("restarting adapter %d as needed", ad->id);
-		//		request_adapter_close (ad);
-		close_adapter(ad->id);
-	}
 }
 
 int update_pids(int aid)
@@ -899,7 +878,7 @@ int update_pids(int aid)
 	if (!ad || ad->updating_pids)
 		return 1;
 
-	if(ad->err)
+	if (ad->err)
 	{
 		LOG("adapter %d in error state %d", aid, ad->err);
 		return 1;
@@ -1021,8 +1000,6 @@ int tune(int aid, int sid)
 		ad->snr = 0;
 		flush_data = 1;
 		ad->is_t2mi = 0;
-		if (ad->restart_when_tune)
-			ad->restart_needed = 1;
 		set_socket_pos(ad->sock, 0); // flush the existing buffer
 		ad->rlen = 0;
 		if (ad->sid_cnt > 1) // the master changed the frequency
@@ -1309,7 +1286,7 @@ int set_adapter_parameters(int aid, int sid, transponder *tp)
 			return -1;
 		}
 	}
-	
+
 	if (0 && (ad->tp.apids || ad->tp.pids || ad->tp.dpids))
 		dump_pids(aid);
 	mutex_unlock(&ad->mutex);
@@ -1437,7 +1414,7 @@ describe_adapter(int sid, int aid, char *dad, int ld)
 		else
 			strlcatf(dad, ld, len, "%s", t->pids ? t->pids : t->apids);
 	}
-	else if(!use_ad)
+	else if (!use_ad)
 		strlcatf(dad, ld, len, "%s", "none");
 
 	LOGM("describe_adapter: sid %d, aid %d => %s", sid, aid, dad);
@@ -1693,7 +1670,7 @@ void set_sources_adapters(char *o)
 				goto ERR;
 			source_map[i] = all;
 			char buf2[128];
-			buf2[0]='\0';
+			buf2[0] = '\0';
 			for (j = 0; j < MAX_ADAPTERS; j++)
 				strcat(buf2, "X");
 			LOGM(" src=%d using adapters %s (%lu)", i + 1, buf2, (unsigned long)source_map[i]);
@@ -1725,7 +1702,7 @@ void set_sources_adapters(char *o)
 				}
 			}
 		}
-		buf2[0]='\0';
+		buf2[0] = '\0';
 		for (j = 0; j < MAX_ADAPTERS; j++)
 			if (source_map[i] & ((unsigned long)1 << j))
 				strcat(buf2, "X");
@@ -1741,7 +1718,6 @@ ERR:
 		source_map[i] = all;
 	LOG("Adapter sources format parameter %s, using defaults for all adapters!", strlen(arg[0]) > 0 ? "incorrect" : "missing");
 }
-
 
 void set_diseqc_multi(char *o)
 {
@@ -2339,19 +2315,6 @@ char *get_all_delsys(int aid, char *dest, int max_size)
 		dest[len - 1] = 0;
 
 	return dest;
-}
-
-void restart_needed_adapters(int aid, int sid)
-{
-	adapter *ad = get_adapter(aid);
-	if (ad)
-		LOGM("starting restart_needed_adapters %d, rn: %d, sc %d, master_sid %d, sid %d", aid, ad->restart_needed, ad->sid_cnt, ad->master_sid, sid);
-
-	if (ad && ad->enabled && ad->restart_needed && ((ad->sid_cnt == 0 || ad->master_sid == sid)))
-	{
-		LOG("restart of the adapter %d requested", ad->id);
-		close_adapter(ad->id);
-	}
 }
 
 int get_adapter_ccerrs(int aid)

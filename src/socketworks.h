@@ -104,6 +104,7 @@ void set_sockets_rtime(int i, int r);
 void free_all();
 void free_pack(SNPacket *p);
 void sockets_setread(int i, void *r);
+void sockets_setclose(int i, void *r);
 void set_socket_send_buffer(int sock, int len);
 void set_socket_receive_buffer(int sock, int len);
 void set_socket_pos(int sock, int pos);

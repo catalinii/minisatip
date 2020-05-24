@@ -42,10 +42,9 @@ typedef struct struct_adapter
 	int pa, fn;
 	// flags
 
-	char slow_dev, restart_when_tune, restart_needed;
+	char slow_dev;
 	char err; // adapter in an error state (initialized but not working correctly)
 	int adapter_timeout;
-	char failed_adapter; // is set when the adapter was closed unexpected and needs to be re-enabled
 	char flush, updating_pids;
 	// physical adapter, physical frontend number
 	uint8_t sys[MAX_DELSYS];
@@ -88,9 +87,11 @@ typedef struct struct_adapter
 	int active_demux_pids;
 	int is_t2mi;
 	uint64_t tune_time;
+	pthread_t thread;
 	char name[5];
 	char null_packets;
 	char drop_encrypted;
+	char failed_adapter; // failed adapters will not be closed due to timeout nor chosen in get_free_adapters
 #ifndef DISABLE_PMT
 	int transponder_id,
 		pat_ver, pat_filter, sdt_filter;
@@ -127,7 +128,7 @@ adapter *adapter_alloc();
 int close_adapter(int na);
 int get_free_adapter(transponder *tp);
 int set_adapter_for_stream(int sid, int aid);
-void close_adapter_for_stream(int sid, int aid);
+void close_adapter_for_stream(int sid, int aid, int close_stream);
 int set_adapter_parameters(int aid, int sid, transponder *tp);
 void mark_pids_deleted(int aid, int sid, char *pids);
 int mark_pids_add(int sid, int aid, char *pids);
@@ -159,14 +160,15 @@ int get_all_pids(adapter *ad, int *pids, int lpids);
 char *get_adapter_pids(int aid, char *dest, int max_size);
 void adapter_lock1(char *FILE, int line, int aid);
 void adapter_unlock1(char *FILE, int line, int aid);
+int adapter_timeout(sockets *s);
+void adapter_set_dvr(adapter *ad);
 char is_adapter_disabled(int i);
 void set_adapters_delsys(char *o);
 void set_lnb_adapters(char *o);
 void set_signal_multiplier(char *o);
 int signal_thread(sockets *s);
+int close_adapter_for_socket(sockets *s);
 int compare_tunning_parameters(int aid, transponder *tp);
-void restart_needed_adapters(int aid, int sid);
-int enable_failed_adapter(int id);
 void request_adapter_close(adapter *ad);
 int compare_slave_parameters(adapter *ad, transponder *tp);
 #define get_adapter(a) get_adapter1(a, __FILE__, __LINE__)
