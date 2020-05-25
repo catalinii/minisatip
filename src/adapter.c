@@ -927,7 +927,12 @@ int update_pids(int aid)
 			dp = 0;
 			if (ad->pids[i].fd <= 0)
 			{
-				if ((ad->pids[i].fd = ad->set_pid(ad, ad->pids[i].pid)) < 0)
+				int pid = ad->pids[i].pid;
+				// For pids=all emulation add just the PAT pid. process_pmt will add
+				// the other pids
+				if (opts.emulate_pids_all && pid == 8192)
+					pid = 0;
+				if ((ad->pids[i].fd = ad->set_pid(ad, pid)) < 0)
 				{
 					ad->max_pids = ad->max_active_pids - 1;
 					LOG0("Maximum pid filter reached, lowering the value to %d", opts.max_pids);
@@ -1114,6 +1119,14 @@ void mark_pids_deleted(int aid, int sid, char *pids) //pids==NULL -> delete all 
 
 	LOG("deleting pids on adapter %d, sid %d, pids=%s", aid, sid,
 		pids ? pids : "NULL");
+
+	// If "delpids=all" provided, delete all the pids for this stream
+	if (pids && strstr(pids, "all"))
+	{
+		LOG("deleting all the pids on adapter %d, sid %d, pids=%s", aid, sid, pids);
+		pids = NULL;
+	}
+
 	if (pids)
 	{
 		la = split(arg, pids, ARRAY_SIZE(arg), ',');

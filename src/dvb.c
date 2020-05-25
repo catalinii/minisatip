@@ -124,17 +124,17 @@ char *fe_pls_mode[] =
 	{"root", "gold", "combo",
 	 NULL};
 
-#define make_func(a)                           \
-	char *get_##a(int i)                       \
-	{                                          \
-		if (i >= 0 && i < (int)sizeof(fe_##a)/sizeof(fe_##a[0])) \
-		{                                      \
-			if (fe_##a[i][0] == 32)            \
-				return "";                     \
-			else                               \
-				return fe_##a[i];              \
-		}                                      \
-		return "NONE";                         \
+#define make_func(a)                                               \
+	char *get_##a(int i)                                           \
+	{                                                              \
+		if (i >= 0 && i < (int)sizeof(fe_##a) / sizeof(fe_##a[0])) \
+		{                                                          \
+			if (fe_##a[i][0] == 32)                                \
+				return "";                                         \
+			else                                                   \
+				return fe_##a[i];                                  \
+		}                                                          \
+		return "NONE";                                             \
 	}
 make_func(pilot);
 make_func(rolloff);
@@ -154,9 +154,6 @@ make_func(pls_mode);
 		return 0;      \
 	}
 char def_pids[100];
-
-//#define default_pids "0,1,2,3"
-#define default_pids "8192"
 
 int detect_dvb_parameters(char *s, transponder *tp)
 {
@@ -255,7 +252,7 @@ int detect_dvb_parameters(char *s, transponder *tp)
 
 	if (tp->pids && strstr(tp->pids, "all"))
 	{
-		strcpy(def_pids, default_pids);
+		strcpy(def_pids, "8192");
 		// map pids=all to essential pids
 		tp->pids = (char *)def_pids;
 	}

@@ -930,6 +930,12 @@ int pmt_process_stream(adapter *ad)
 		{
 			process_filters(ad, b, p);
 		}
+		if (opts.emulate_pids_all && pid == 0)
+		{
+			p = find_pid(ad->id, 8192);
+			if (p)
+				process_filters(ad, b, p);
+		}
 	}
 #ifndef DISABLE_TABLES
 
@@ -1570,7 +1576,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 	int enabled_channels = 0;
 	unsigned char *pmt_b, *pi;
 	int pid, spid, stype;
-	SPid *p, *cp;
+	SPid *p, *cp, *p_all;
 	SFilter *f;
 	adapter *ad;
 	int opmt;
@@ -1630,6 +1636,8 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 	if (!(p = find_pid(ad->id, pid)))
 		return -1;
 
+	p_all = find_pid(ad->id, 8192);
+
 	pmt_len = len - 4;
 
 	pi_len = ((b[10] & 0xF) << 8) + b[11];
@@ -1676,6 +1684,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 
 		LOG("PMT pid %d - stream pid %04X (%d), type %d%s, es_len %d, pos %d, pi_len %d",
 			pid, spid, spid, stype, isAC3 ? " [AC3]" : "", es_len, i, pmt->pi_len);
+
 		if ((es_len + i + 5 > pmt_len) || (es_len < 0))
 		{
 			LOGM("pmt processing complete, es_len + i %d, len %d, es_len %d", es_len + i, pmt_len, es_len);
@@ -1713,6 +1722,19 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 	if (pmt->first_active_pid < 0)
 		pmt->first_active_pid = pmt->active_pid[0];
 
+	if (p_all && opts.emulate_pids_all)
+	{
+		int i, j;
+		for (i = 0; i < MAX_STREAMS_PER_PID; i++)
+			if (p_all->sid[i] >= 0)
+				for (j = 0; j < pmt->stream_pids; j++)
+					mark_pid_add(p_all->sid[i], ad->id, pmt->stream_pid[j].pid);
+
+		enabled_channels = 1;
+		pmt->running = 1;
+		update_pids(ad->id);
+	}
+
 	if ((pmt->pi_len > 0) && enabled_channels) // PMT contains CA descriptor and there are active pids
 	{
 #ifndef DISABLE_TABLES
@@ -1725,6 +1747,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque)
 
 	if (!pmt->running)
 		set_filter_flags(filter, 0);
+
 	mutex_unlock(&pmt->mutex);
 
 	return 0;
@@ -1857,6 +1880,35 @@ void stop_pmt(SPMT *pmt, adapter *ad)
 #endif
 }
 
+void emulate_add_all_pids(adapter *ad)
+{
+	char pids[8193];
+	SPid *p_all = find_pid(ad->id, 8192);
+	int i, j, k;
+	int updated = 0;
+	memset(pids, 0, sizeof(pids));
+	for (i = 0; i < MAX_PIDS; i++)
+		if (ad->pids[i].flags > 0 && ad->pids[i].flags < 3)
+			pids[i] = 1;
+
+	for (i = 0; i < MAX_STREAMS_PER_PID; i++)
+		if (p_all->sid[i] >= 0)
+		{
+			for (j = 0; j < MAX_PMT; j++)
+				if (pmts[j] && pmts[j]->enabled && pmts[j]->adapter == ad->id)
+					for (k = 0; k < pmts[j]->stream_pids; k++)
+						if (!pids[pmts[j]->stream_pid[k].pid])
+						{
+							LOG("%s: adding pid %d to emulate all pids", __FUNCTION__, pmts[j]->stream_pid[k].pid)
+							mark_pid_add(p_all->sid[i], ad->id, pmts[j]->stream_pid[k].pid);
+							pids[pmts[j]->stream_pid[k].pid] = 1;
+							updated = 1;
+						}
+		}
+	if (updated)
+		update_pids(ad->id);
+}
+
 void pmt_pid_add(adapter *ad, int pid, int existing)
 {
 	int i;
@@ -1867,6 +1919,12 @@ void pmt_pid_add(adapter *ad, int pid, int existing)
 	cp = find_pid(ad->id, pid);
 	if (!cp)
 		return;
+
+	if (opts.emulate_pids_all && pid == 8192)
+	{
+		emulate_add_all_pids(ad);
+		return;
+	}
 
 	cp->filter = get_pid_filter(ad->id, pid);
 

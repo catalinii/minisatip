@@ -119,6 +119,7 @@ struct struct_opts
 	char disable_dvb;
 	char disable_ssdp;
 	char pmt_scan;
+	char emulate_pids_all;
 #ifdef AXE
 	int quattro;
 	int quattro_hiband;
