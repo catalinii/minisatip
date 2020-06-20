@@ -79,7 +79,7 @@ typedef struct struct_satipc
 	char use_tcp, init_use_tcp;
 	char no_pids_all;
 	char expect_reply, force_commit, want_commit, want_tune, sent_transport, force_pids;
-	int64_t last_setup, last_connect, last_close;
+	int64_t last_setup, last_connect, last_close, last_response_sent;
 	uint8_t addpids, setup_pids;
 	unsigned char *tcp_data;
 	int tcp_size, tcp_pos, tcp_len;
@@ -319,6 +319,7 @@ void satipc_close_rtsp_socket(adapter *ad, satipc *sip)
 	sip->last_close = getTick();
 	sip->sent_transport = 0;
 	sip->expect_reply = 0;
+	sip->last_response_sent = 0;
 	sip->stream_id = -1;
 	sip->tcp_len = sip->tcp_pos = 0;
 	if (sip->init_use_tcp)
@@ -375,6 +376,14 @@ int satipc_timeout(sockets *s)
 	{
 		satipc_open_rtsp_socket(ad, sip);
 		return 0;
+	}
+
+	// restart the connection we did not receive a response for more than 10 seconds from the server
+	if (sip->expect_reply && (getTick() - sip->last_response_sent > 10000))
+	{
+		LOG("No response was received from the server for more than %jd ms, closing connection", getTick() - sip->last_response_sent > 10000);
+		sip->restart_needed = 1;
+		sockets_del(ad->sock);
 	}
 
 	if (sip->want_tune || sip->lap || sip->ldp)
@@ -539,6 +548,7 @@ int satipc_open_device(adapter *ad)
 	ad->err = 0;
 	sip->tcp_pos = sip->tcp_len = 0;
 	sip->expect_reply = 0;
+	sip->last_response_sent = 0;
 	sip->last_connect = 0;
 	sip->sent_transport = 0;
 	sip->sleep = 0;
@@ -1140,6 +1150,7 @@ int http_request(adapter *ad, char *url, char *method, int force)
 		{
 			sockets_write(remote_socket, buf, lb);
 			sip->expect_reply = 1;
+			sip->last_response_sent = getTick();
 		}
 		else
 			LOG("%s: remote socket is -1", __FUNCTION__);
