@@ -77,7 +77,7 @@ int fill_sockaddr(USockAddr *serv, char *host, int port, int ipv4_only)
 		if (s != 0)
 		{
 			LOG("getaddrinfo failed: host %s, port %s, %s", host, str_port, gai_strerror(s));
-			if(result)
+			if (result)
 				freeaddrinfo(result);
 			return 0;
 		}
@@ -791,7 +791,7 @@ void *select_and_execute(void *arg)
 					sockets *ss = s[i];
 					if (!ss)
 						continue;
-					if(!ss->enabled)
+					if (!ss->enabled)
 						continue;
 
 					c_time = getTick();
@@ -1119,7 +1119,7 @@ int sockets_del_for_sid(int sid)
 	for (i = 0; i < MAX_SOCKS; i++)
 		if ((ss = get_sockets(i)) && ss->sid >= 0 && ss->type == TYPE_RTSP && ss->sid == sid)
 		{
-			ss->sid = -1;		// make sure the stream is not closed in the future to prevent closing the stream created by another socket
+			ss->sid = -1; // make sure the stream is not closed in the future to prevent closing the stream created by another socket
 		}
 	return 0;
 }
@@ -1524,7 +1524,7 @@ int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt, int high_pri
 	// if both high_prio and flush_enqued_data are both set, no need to add to pio_pack
 	if (s->flush_enqued_data)
 	{
-		LOG("sock %d dropping enqueued stream data from %d to %d", s->id, s->wpos, (s->spos + 1) % s->wmax);
+		LOG("sock %d dropping enqueued stream data from %d to %d", s->id, (s->spos + 1) % s->wmax, s->wpos);
 		s->flush_enqued_data = 0;
 		s->wpos = (s->spos + 1) % s->wmax;
 	}

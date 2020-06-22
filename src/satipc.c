@@ -210,7 +210,6 @@ int satipc_reply(sockets *s)
 		else
 			LOG("marking device %d not as error but reply is unexpected, rc = %d", sip->id, rc);
 	}
-	sid = NULL;
 	if (rc == 200 && !sip->want_tune && sip->last_cmd == RTSP_PLAY && sip->ignore_packets)
 	{
 		LOG("accepting packets from RTSP server");
@@ -223,6 +222,7 @@ int satipc_reply(sockets *s)
 		sip->can_keep_adapter_open = 1;
 	}
 	sess = NULL;
+	sid = NULL;
 	for (i = 0; i < la; i++)
 		if (strncasecmp("Session:", arg[i], 8) == 0)
 			sess = header_parameter(arg, i);
@@ -238,7 +238,7 @@ int satipc_reply(sockets *s)
 			}
 		}
 
-	if (!ad->err && !sip->session[0] && sess)
+	if (!ad->err && sid && sess)
 	{
 		if ((es = strchr(sess, ';')))
 			*es = 0;
@@ -321,6 +321,7 @@ void satipc_close_rtsp_socket(adapter *ad, satipc *sip)
 	sip->expect_reply = 0;
 	sip->last_response_sent = 0;
 	sip->stream_id = -1;
+	sip->session[0] = 0;
 	sip->tcp_len = sip->tcp_pos = 0;
 	if (sip->init_use_tcp)
 		ad->dvr = -1;
