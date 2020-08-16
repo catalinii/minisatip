@@ -947,6 +947,7 @@ int update_pids(int aid)
 				ad->pat_processed = 0;
 			ad->pids[i].packets = 0;
 			ad->pids[i].cc = -1;
+			ad->pids[i].cc1 = -1;
 			ad->pids[i].cc_err = 0;
 			ad->pids[i].dec_err = 0;
 		}

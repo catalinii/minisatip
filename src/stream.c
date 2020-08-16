@@ -802,11 +802,15 @@ int check_cc(adapter *ad)
 		pid = PID_FROM_TS(b);
 		if (pid == 8191)
 			continue;
+
+		if ((opts.debug & LOG_DMX) == LOG_DMX)
+			_dump_packets("check_cc -> ", b, 188, i);
+
 		p = find_pid(ad->id, pid);
 
 		if ((!p))
 		{
-			LOGM("%s: pid %d not found", __FUNCTION__, pid);
+			LOGM("%s: pid %03d not found", __FUNCTION__, pid);
 			ad->pid_err++;
 			packet_no_sid++;
 			continue;
@@ -823,14 +827,11 @@ int check_cc(adapter *ad)
 			else
 				p->cc = (p->cc + 1) % 16;
 
-			if ((opts.debug & LOG_DMX) == LOG_DMX)
-				dump_packets("check_cc -> ", b, 188, i);
-
 			//	if(b[1] ==0x40 && b[2]==0) LOG("PAT TID = %d", b[8] * 256 + b[9]);
 			if (p->cc != cc)
 			{
-				LOG("PID Continuity error (adapter %d): pid: %03d, Expected CC: %X, Actual CC: %X, CC Before %X",
-					ad->id, pid, p->cc, cc, cc_before);
+				LOG("PID Continuity error (adapter %d, pos %d): pid: %03d, Expected CC: %X, Actual CC: %X, CC Before %X",
+					ad->id, i / DVB_FRAME, pid, p->cc, cc, cc_before);
 				p->cc_err++;
 			}
 			p->cc = cc;

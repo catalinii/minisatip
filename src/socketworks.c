@@ -493,7 +493,7 @@ int sockets_read(int socket, void *buf, int len, sockets *ss, int *rv)
 {
 	*rv = read(socket, buf, len);
 	if (*rv > 0 && ss->type == TYPE_DVR && (opts.debug & LOG_DMX))
-		dump_packets("read ->", buf, *rv, ss->rlen);
+		_dump_packets("read ->", buf, *rv, ss->rlen);
 
 	return (*rv > 0);
 }
