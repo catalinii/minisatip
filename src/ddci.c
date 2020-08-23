@@ -582,6 +582,79 @@ void ddci_replace_pi(int adapter, unsigned char *es, int len)
 	}
 }
 
+uint16_t YMDtoMJD(int Y, int M, int D)
+{
+	int L = (M < 3) ? 1 : 0;
+	return 14956 + D + (int)((Y - L) * 365.25) + (int)((M + 1 + L * 12) * 30.6001);
+}
+
+// Based on vdr implementation provided by Klaus Schmidinger
+int ddci_create_epg(ddci_device_t *d, SPMT *pmt, uint8_t *eit, int version)
+{
+	uint8_t *PayloadStart;
+	uint8_t *SectionStart;
+	uint8_t *DescriptorsStart;
+	static int counter[MAX_ADAPTERS];
+	memset(eit, 0xFF, 188);
+	struct tm tm_r;
+	time_t t = time(NULL) - 3600; // let's have the event start one hour in the past
+	struct tm *tm = localtime_r(&t, &tm_r);
+	uint16_t MJD = YMDtoMJD(tm->tm_year, tm->tm_mon + 1, tm->tm_mday);
+	uint8_t *p = eit;
+	// TS header:
+	*p++ = 0x47;
+	*p++ = 0x40;
+	*p++ = 0x12;
+	*p++ = 0x10 | (counter[d->id]++ & 0x0F); // continuity counter
+	*p++ = 0x00;							 // pointer field (payload unit start indicator is set)
+	// payload:
+	PayloadStart = p;
+	*p++ = 0x4E; // TID present/following event on this transponder
+	*p++ = 0xF0;
+	*p++ = 0x00; // section length
+	SectionStart = p;
+	*p++ = pmt->sid >> 8;
+	*p++ = pmt->sid & 0xFF;
+	*p++ = 0xC1 | (version << 1);
+	*p++ = 0x00;		// section number
+	*p++ = 0x00;		// last section number
+	*p++ = 0x00;		// transport stream id
+	*p++ = 0x00;		// ...
+	*p++ = 0x00;		// original network id
+	*p++ = 0x00;		// ...
+	*p++ = 0x00;		// segment last section number
+	*p++ = 0x4E;		// last table id
+	*p++ = 0x00;		// event id
+	*p++ = 0x01;		// ...
+	*p++ = MJD >> 8;	// start time
+	*p++ = MJD & 0xFF;	// ...
+	*p++ = tm->tm_hour; // ...
+	*p++ = tm->tm_min;	// ...
+	*p++ = tm->tm_sec;	// ...
+	*p++ = 0x24;		// duration (one day, should cover everything)
+	*p++ = 0x00;		// ...
+	*p++ = 0x00;		// ...
+	*p++ = 0x90;		// running status, free/CA mode
+	*p++ = 0x00;		// descriptors loop length
+	DescriptorsStart = p;
+	*p++ = 0x55; // parental descriptor tag
+	*p++ = 0x04; // descriptor length
+	*p++ = '9';	 // country code "902" ("All countries") -> EN 300 468 / 6.2.28; www.dvbservices.com/country_codes/index.php
+	*p++ = '0';
+	*p++ = '2';
+	*p++ = 0; // ParentalRating
+	// fill in lengths:
+	*(SectionStart - 1) = p - SectionStart + 4; // +4 = length of CRC
+	*(DescriptorsStart - 1) = p - DescriptorsStart;
+	// checksum
+	int crc = crc_32(PayloadStart, p - PayloadStart);
+	*p++ = crc >> 24;
+	*p++ = crc >> 16;
+	*p++ = crc >> 8;
+	*p++ = crc;
+	return 188;
+}
+
 int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *clean, int ver)
 {
 	int len = pmt->pmt_len;
@@ -661,6 +734,9 @@ int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len)
 					pos += buffer_to_ts(dst + pos, len - pos, psi, psi_len, &d->pmt_cc[i], dpid);
 				else
 					LOG("%s: could not find PMT adapter %d and pid %d to mapping table", __FUNCTION__, pmt->adapter, pmt->pid);
+				// ADD EPG as well
+				if (len - pos >= 188)
+					pos += ddci_create_epg(d, pmt, dst + pos, d->pmt_ver[i]);
 			}
 		d->last_pmt = ctime;
 	}
