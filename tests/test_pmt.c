@@ -141,7 +141,7 @@ int test_clean_psi_buffer()
 	if (process_pmt(0, f.data, len, &pmt))
 		LOG_AND_RETURN(1, "process_pmt failed");
 #if defined(__x86_64__) || defined(__i386__)
-	if (!createCAPMT(pmt.pmt, pmt.pmt_len, 1, clean, sizeof(clean)))
+	if (!createCAPMT(pmt.pmt, pmt.pmt_len, 1, clean, sizeof(clean), 0))
 		LOG_AND_RETURN(1, "createCAPMT failed");
 #endif
 	return 0;
