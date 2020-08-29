@@ -247,7 +247,8 @@ typedef struct ca_device
         char force_ci;
         uint8_t key[2][16], iv[2][16];
         int sp, is_ciplus, parity;
-        int try
+        int
+        try
                 ;
 
 } ca_device_t;
@@ -880,7 +881,7 @@ int is_ca_initialized(int i)
         return 0;
 }
 
-int createCAPMT(uint8_t *b, int len, int listmgmt, uint8_t *capmt, int capmt_len)
+int createCAPMT(uint8_t *b, int len, int listmgmt, uint8_t *capmt, int capmt_len, int reason)
 {
         struct section *section = section_codec(b, len);
         int size;
@@ -905,19 +906,19 @@ int createCAPMT(uint8_t *b, int len, int listmgmt, uint8_t *capmt, int capmt_len
         }
 
         if ((size = en50221_ca_format_pmt((struct mpeg_pmt_section *)b, capmt, capmt_len, 0, listmgmt,
-                                          CA_PMT_CMD_ID_OK_DESCRAMBLING)) < 0)
+                                          reason)) < 0)
                 LOG("Failed to format CA PMT object");
         return size;
 }
 
-int sendCAPMT(struct en50221_app_ca *ca_resource, int ca_session_number, uint8_t *b, int len, int listmgmt)
+int sendCAPMT(struct en50221_app_ca *ca_resource, int ca_session_number, uint8_t *b, int len, int listmgmt, int reason)
 {
         uint8_t capmt[8192];
         uint8_t init_b[len + 10];
         int rc;
         memset(init_b, 0, sizeof(init_b));
         memcpy(init_b, b, len);
-        int size = createCAPMT(init_b, len, listmgmt, capmt, sizeof(capmt));
+        int size = createCAPMT(init_b, len, listmgmt, capmt, sizeof(capmt), reason);
 
         if (size <= 0)
                 LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "createCAPMT failed");
@@ -965,7 +966,7 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt)
         LOG("PMT CA %d pid %u (%s) len %u ver %u sid %u (%x), pos %d, %s", spmt->adapter, pid, spmt->name, len, ver, sid, sid,
             ca_pos, listmgmt == CA_LIST_MANAGEMENT_ONLY ? "only" : "add");
 
-        if (sendCAPMT(d->ca_resource, d->ca_session_number, b, len, listmgmt))
+        if (sendCAPMT(d->ca_resource, d->ca_session_number, b, len, listmgmt, CA_PMT_CMD_ID_OK_DESCRAMBLING))
                 LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "sendCAPMT failed");
 
         if (d->key[0][0])
@@ -998,7 +999,7 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt)
         if (new_len < 1)
                 LOG_AND_RETURN(0, "Could not clean the PSI information for PMT %d", spmt->id);
 
-        if (sendCAPMT(d->ca_resource, d->ca_session_number, clean, new_len, (num_pmt > 0) ? CA_LIST_MANAGEMENT_ADD : CA_LIST_MANAGEMENT_ONLY))
+        if (sendCAPMT(d->ca_resource, d->ca_session_number, spmt->pmt, spmt->pmt_len, (num_pmt > 0) ? CA_LIST_MANAGEMENT_ADD : CA_LIST_MANAGEMENT_ONLY, CA_PMT_CMD_ID_NOT_SELECTED))
                 LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "%s: sendCAPMT for clean PMT failed", __FUNCTION__);
 
         return 0;
@@ -2984,12 +2985,12 @@ static int ca_rm_enq_callback(void *arg, uint8_t slot_id,
         ca_device_t *d = arg;
         uint32_t *resource = resource_ids;
         uint32_t resource_count = resource_ids_count;
-	int fd;
-	fd = open("/etc/ssl/certs/root.pem", O_RDONLY);
-	if (fd<0)
-	    d->force_ci=1;
-	else
-	    close(fd);
+        int fd;
+        fd = open("/etc/ssl/certs/root.pem", O_RDONLY);
+        if (fd < 0)
+                d->force_ci = 1;
+        else
+                close(fd);
         if (d->force_ci)
         {
                 resource = resource_ids_ci;
@@ -3069,7 +3070,7 @@ static int ca_ca_pmt_reply_callback(void *arg, uint8_t slot_id,
         (void)reply;
         (void)reply_size;
 
-        LOG("%02x:%s", slot_id, __func__);
+        LOG("ca_ca_pmt_reply_callback %02x:%s", slot_id, __func__);
 
         if (!reply->CA_enable_flag || reply->CA_enable != 1)
         {
@@ -3320,7 +3321,8 @@ int ca_init(ca_device_t *d)
         d->sl = NULL;
         d->slot_id = -1;
         memset(&info, 0, sizeof(info));
-        d->try
+        d->
+        try
                 = 0;
 
         if (ioctl(fd, CA_RESET, &info))
