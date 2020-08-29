@@ -999,7 +999,7 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt)
         if (new_len < 1)
                 LOG_AND_RETURN(0, "Could not clean the PSI information for PMT %d", spmt->id);
 
-        if (sendCAPMT(d->ca_resource, d->ca_session_number, spmt->pmt, spmt->pmt_len, (num_pmt > 0) ? CA_LIST_MANAGEMENT_ADD : CA_LIST_MANAGEMENT_ONLY, CA_PMT_CMD_ID_NOT_SELECTED))
+        if (sendCAPMT(d->ca_resource, d->ca_session_number, spmt->pmt, spmt->pmt_len, CA_LIST_MANAGEMENT_UPDATE, CA_PMT_CMD_ID_NOT_SELECTED))
                 LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "%s: sendCAPMT for clean PMT failed", __FUNCTION__);
 
         return 0;
