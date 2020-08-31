@@ -3315,9 +3315,6 @@ int ca_init(ca_device_t *d)
         d->sl = NULL;
         d->slot_id = -1;
         memset(&info, 0, sizeof(info));
-        d->
-        try
-                = 0;
 
         if (ioctl(fd, CA_RESET, &info))
                 LOG_AND_RETURN(0, "%s: Could not reset ca %d", __FUNCTION__, d->id);
