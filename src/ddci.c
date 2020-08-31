@@ -326,8 +326,6 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 	if (get_ddci(ad->id))
 	{
 		LOG("Skip processing pmt for ddci adapter %d", ad->id);
-		// grace time for card decrypting lower than the default grace_time
-		pmt->grace_time = getTick() + 4000;
 		return TABLES_RESULT_OK;
 	}
 
@@ -350,7 +348,6 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt)
 	}
 
 	mutex_lock(&d->mutex);
-	pmt->grace_time = getTick() + 5000;
 
 	for (i = 0; i < d->max_channels; i++)
 		if (d->pmt[i] == -1)
@@ -933,8 +930,11 @@ void ddci_init() // you can search the devices here and fill the ddci_devices, t
 	ddci.ca_del_pmt = ddci_del_pmt;
 	ddci.ca_close_ca = ddci_close;
 	ddci.ca_ts = ddci_ts;
+	/*
+	Disable detection of encrypted channels 
 	ddci.ca_encrypted = ddci_encrypted;
 	ddci.ca_decrypted = ddci_decrypted;
+	*/
 	ddci_id = add_ca(&ddci, 0xFFFFFFFF);
 	LOG("Registered DDCI CA %d", ddci_id);
 	memset(sid_whitelist, 0, sizeof(sid_whitelist));

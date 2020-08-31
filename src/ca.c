@@ -247,9 +247,6 @@ typedef struct ca_device
         char force_ci;
         uint8_t key[2][16], iv[2][16];
         int sp, is_ciplus, parity;
-        int
-        try
-                ;
 
 } ca_device_t;
 
@@ -3049,14 +3046,11 @@ static int ca_ca_info_callback(void *arg, uint8_t slot_id,
         ca_device_t *d = arg;
         LOG("%02x:%s", slot_id, __func__);
         uint32_t i;
-        //if(d->try == 0) {
         for (i = 0; i < ca_id_count; i++)
         {
                 LOG("  Supported CA ID: %04x for CA%d", ca_ids[i], d->id);
                 add_caid_mask(dvbca_id, d->id, ca_ids[i], 0xFFFF);
         }
-        //d->try = 1;
-        //}
 
         return 0;
 }
