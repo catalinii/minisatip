@@ -995,6 +995,9 @@ int process_dmx(sockets *s)
 #endif
 
 	rlen = ad->rlen;
+#ifndef AXE
+	check_cc(ad);
+#endif
 
 	for (i = 0; i < MAX_STREAMS; i++)
 		if (st[i] && st[i]->enabled && st[i]->adapter == ad->id)
