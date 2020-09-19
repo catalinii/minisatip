@@ -278,7 +278,7 @@ void usage()
 		"\n\t./%s [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] \n\
 	\t[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]]"
 #ifndef DISABLE_DVBAPI
-		"[-o oscam_host:dvbapi_port] "
+		"[-o oscam_host:dvbapi_port,offset] "
 #endif
 		"[-p public_host] [-r remote_rtp_host] [-R document_root] "
 #ifndef DISABLE_SATIPCLIENT
@@ -891,9 +891,20 @@ void set_options(int argc, char *argv[])
 			LOG("%s was not compiled with DVBAPI support, please install libdvbcsa (libdvbcsa-dev in Ubuntu) and change the Makefile", app_name);
 			exit(0);
 #else
+			if (sizeof(optarg)>99) {
+				LOG("-o argument too long", app_name);
+				exit(1);
+			}
 			char buf[100];
 			memset(buf, 0, sizeof(buf));
 			strncpy(buf, optarg, sizeof(buf) - 1);
+			char *sep2 = strchr(buf, ',');
+			if (sep2 != NULL)
+			{
+				*sep2 = 0;
+				opts.dvbapi_offset = map_int(sep2 + 1, NULL);
+				strncpy(buf, optarg, sizeof(optarg) - 1 - strlen(sep2));
+			}
 			char *sep1 = strchr(buf, ':');
 			if (sep1 != NULL)
 			{
@@ -903,7 +914,7 @@ void set_options(int argc, char *argv[])
 			}
 			else
 			{
-				strncpy(opts.dvbapi_host, optarg, sizeof(opts.dvbapi_host) - 1);
+				strncpy(opts.dvbapi_host, buf, sizeof(opts.dvbapi_host) - 1);
 				opts.dvbapi_port = 9000;
 			}
 #endif
