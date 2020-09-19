@@ -818,6 +818,8 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d)
 	int iop = 0, iomax = ad->rlen / 188;
 	int pid, dpid, i, ddci, rewrite;
 	struct iovec io[iomax];
+	unsigned char psi[MAX_CHANNELS_ON_CI * 1500];
+
 	if (mutex_lock(&d->mutex))
 		return 0;
 	if (!d->enabled)
@@ -858,7 +860,6 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d)
 	// write the TS to the DDCI handle
 	if (iop > 0)
 	{
-		unsigned char psi[MAX_CHANNELS_ON_CI * 1500];
 		int psi_len = ddci_add_psi(d, psi, sizeof(psi) - 1);
 		hexdump("PSI -> ", psi, psi_len);
 		if (psi_len > 0)
