@@ -2374,4 +2374,5 @@ _symbols adapters_sym[] =
 		{"tuner_c", VAR_INT, &tuner_c, 1, 0, 0},
 		{"tuner_ac", VAR_INT, &tuner_ac, 1, 0, 0},
 		{"tuner_at", VAR_INT, &tuner_at, 1, 0, 0},
+		{"ad_disabled", VAR_ARRAY_INT8, disabled, 1, MAX_ADAPTERS, 0},
 		{NULL, 0, NULL, 0, 0, 0}};

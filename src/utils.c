@@ -919,6 +919,8 @@ int get_json_state(char *buf, int len)
 				strlcatf(buf, len, ptr, "[");
 				for (off = 0; off < p->len; off++)
 				{
+					if (off > 0)
+						strlcatf(buf, len, ptr, ",");
 					if (string)
 					{
 						int len2 = snprintf_pointer(escape, sizeof(escape) - 1, p->type, ((char *)p->addr) + off + p->skip, p->multiplier);

@@ -175,6 +175,7 @@
 					sysimg = tmpimg[0];
 
 				var ad_enabled = state['ad_enabled'][i];
+				var ad_disabled = state['ad_disabled'][i];
 				var ad_type = state['ad_type'][i];
 				var ad_sys = state['ad_sys'][i];
 
@@ -182,6 +183,7 @@
 					myTable += "<td class='dt-right enabled'><img src='" + sysimg + ".png' title='" + csys + "' /><br />";
 				else
 					myTable += "<td class='dt-right disabled'>" + state['ad_allsys'][i];
+
 
 				if (ad_type == 1 || ad_type == 3) {
 					// myTable += "<small>(" + state['ad_phyad'][i] + "," + state['ad_phyfd'][i] +")</small>";
@@ -218,7 +220,10 @@
 				// SIGNAL
 				var signal = "";
 				if (!ad_enabled) {
-					signal = "<small>OFFLINE</small>";
+					if (ad_disabled)
+						signal = "<small>DISABLED</small>";
+					else
+						signal = "<small>OFFLINE</small>";
 				} else {
 					var sig = parseInt(state['ad_strength'][i] / 2.55);
 					var sig0 = Math.max(0, sig - 10);
@@ -272,19 +277,19 @@
 						if (state['st_play'][j] == 0)
 							st_p = "<i>" + st_p + "</i>";
 						myTable += "<small>Pids: " + st_p + "</small><br />";
-                                                
+
 						// Create VLC stream URL
 						// Example: rtsp://@satip/?src=1&freq=12382&pol=H&msys=DVBS2&sr=27500&pids=0,5375,5378,116,5375,32
 						var hostArray = window.location.host.split(':');
 						myTable += "<small><a href=" + '"' + "rtsp://@" + state['rtsp_host'] + "/?src=" + state['ad_pos'][i] + "&freq=" + state['ad_freq'][i]
-+ "&pol=" + pol[state['ad_pol'][i]].replace('(', '').replace(')', '') + "&msys=" + sys[state['ad_sys'][i]].toUpperCase() + "&sr=" + state['ad_sr'][i] + "&pids="  + st_p + '"' + ">RTSP Link</a></small><br />";
+							+ "&pol=" + pol[state['ad_pol'][i]].replace('(', '').replace(')', '') + "&msys=" + sys[state['ad_sys'][i]].toUpperCase() + "&sr=" + state['ad_sr'][i] + "&pids=" + st_p + '"' + ">RTSP Link</a></small><br />";
 						myTable += "<small><a href=" + '"' + "http://" + hostArray[0] + ":" + hostArray[1] + "/?src=" + state['ad_pos'][i] + "&freq=" + state['ad_freq'][i]
-+ "&pol=" + pol[state['ad_pol'][i]].replace('(', '').replace(')', '') + "&msys=" + sys[state['ad_sys'][i]].toUpperCase() + "&sr=" + state['ad_sr'][i] + "&pids="  + st_p + '"' + ">HTTP Link</a></small><br />";
+							+ "&pol=" + pol[state['ad_pol'][i]].replace('(', '').replace(')', '') + "&msys=" + sys[state['ad_sys'][i]].toUpperCase() + "&sr=" + state['ad_sr'][i] + "&pids=" + st_p + '"' + ">HTTP Link</a></small><br />";
 
 						if (state['st_overflow'][j] > 0)
-							myTable += "<small>Dropped: " + (state['st_overflow'][j]/1048576.0).toFixed(2) + " MB</small><br />";
+							myTable += "<small>Dropped: " + (state['st_overflow'][j] / 1048576.0).toFixed(2) + " MB</small><br />";
 						if (state['st_buffered'][j] > 0)
-							myTable += "<small>Buffered: " + (state['st_buffered'][j]/1048576.0).toFixed(2) + " MB</small><br />";
+							myTable += "<small>Buffered: " + (state['st_buffered'][j] / 1048576.0).toFixed(2) + " MB</small><br />";
 					}
 				}
 				myTable += "</td>";
