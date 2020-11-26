@@ -47,6 +47,8 @@
 #include "pmt.h"
 #include <dvbcsa/dvbcsa.h>
 
+#define DEFAULT_LOG LOG_DVBCA
+
 void dvbcsa_create_key(SCW *cw)
 {
 	cw->key = dvbcsa_bs_key_alloc();
