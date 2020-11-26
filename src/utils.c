@@ -1266,7 +1266,7 @@ int mutex_init(SMutex *mutex)
 	mutex->create_time = getTick();
 	mutex->enabled = 1;
 	mutex->state = 0;
-	LOG("Mutex init %p", mutex);
+	LOG("Mutex init OK %p", mutex);
 	return 0;
 }
 
