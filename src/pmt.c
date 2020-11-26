@@ -1904,6 +1904,17 @@ void emulate_add_all_pids(adapter *ad)
 							pids[pmts[j]->stream_pid[k].pid] = 1;
 							updated = 1;
 						}
+
+			int forced_pids[] = {EMU_PIDS_ALL_ENFORCED_PIDS_LIST};
+			int i_forced = sizeof(forced_pids);
+			for (j = 0; j < i_forced; j++)
+			{
+				int fpid = forced_pids[j];
+				LOG("%s: adding (enforced) pid %d to emulate all pids", __FUNCTION__, fpid);
+				mark_pid_add(p_all->sid[i], ad->id, fpid);
+				updated = 1;
+			}
+
 		}
 	if (updated)
 		update_pids(ad->id);
