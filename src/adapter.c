@@ -2345,6 +2345,19 @@ int get_adapter_ccerrs(int aid)
 	return cc;
 }
 
+int get_adapter_decerrs(int aid)
+{
+	int i, dec = 0;
+	adapter *ad = get_adapter_nw(aid);
+	if (!ad)
+		return 0;
+
+	for (i = 0; i < 2; i++)
+		if (ad->pids[i].flags == 1)
+			dec += ad->pids[i].dec_err;
+	return dec;
+}
+
 _symbols adapters_sym[] =
 	{
 		{"ad_enabled", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS, offsetof(adapter, enabled)},
@@ -2367,6 +2380,7 @@ _symbols adapters_sym[] =
 		{"ad_allsys", VAR_FUNCTION_STRING, (void *)&get_all_delsys, 0, MAX_ADAPTERS, 0},
 		{"ad_pids", VAR_FUNCTION_STRING, (void *)&get_adapter_pids, 0, MAX_ADAPTERS, 0},
 		{"ad_ccerr", VAR_FUNCTION_INT, (void *)&get_adapter_ccerrs, 0, MAX_ADAPTERS, 0},
+		{"ad_decerr", VAR_FUNCTION_INT, (void *)&get_adapter_decerrs, 0, MAX_ADAPTERS, 0},
 		{"tuner_s2", VAR_INT, &tuner_s2, 1, 0, 0},
 		{"tuner_t2", VAR_INT, &tuner_t2, 1, 0, 0},
 		{"tuner_c2", VAR_INT, &tuner_c2, 1, 0, 0},

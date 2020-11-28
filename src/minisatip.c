@@ -2022,6 +2022,8 @@ _symbols minisatip_sym[] =
 		{"has_pmt", VAR_INT, &has_pmt, 1, 0, 0},
 		{"http_host", VAR_PSTRING, &opts.http_host, 0, 0, 0},
 		{"uuid", VAR_STRING, uuid, 0, 0, 0},
+		{"bootid", VAR_INT, &opts.bootid, 0, 0, 0},
+		{"deviceid", VAR_INT, &opts.device_id, 0, 0, 0},
 		{"http_port", VAR_INT, &opts.http_port, 1, 0, 0},
 		{"rtsp_host", VAR_PSTRING, &opts.rtsp_host, 0, 0, 0},
 		{"datetime_compile", VAR_PSTRING, &opts.datetime_compile, 0, 0, 0},
