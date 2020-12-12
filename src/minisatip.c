@@ -892,7 +892,7 @@ void set_options(int argc, char *argv[])
 			exit(0);
 #else
 			if (sizeof(optarg)>99) {
-				LOG("-o argument too long", app_name);
+				LOG("-o argument too long: %s", optarg);
 				exit(1);
 			}
 			char buf[100];
