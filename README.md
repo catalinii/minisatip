@@ -26,31 +26,33 @@ Please use https://minisatip.org/forum/ for any questions.
 In order to speed up the investigation of an issue, please provide the full log and a link to the application that is not working.
 
 If you like minisatip and you want to support the development of the project please make a donation: 
-https://www.paypal.com/donate?hosted_button_id=YMSMEHSFXXJ2C
+https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item_name=minisatip&currency_code=EUR&bn=PP-DonationsBF:btn_donateCC_LG.gif:NonHostedGuest
 
 Usage:
 -------
 
-minisatip version 1.0.0-32bd1c1, compiled with s2api version: 050B
+minisatip version 1.0.4-9c20531, compiled in Dec 12 2020 11:30:51, with s2api version: 050B
 
 	./minisatip [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
-		[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]][-o oscam_host:dvbapi_port] [-p public_host] [-r remote_rtp_host] [-R document_root] [-s [*][DELSYS:][FE_ID@][source_ip/]host[:port] [-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] 
+		[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]][-o oscam_host:dvbapi_port,offset] [-p public_host] [-r remote_rtp_host] [-R document_root] [-s [*][DELSYS:][FE_ID@][source_ip/]host[:port] [-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] 
  	[-x http_port] [-X xml_path] [-y rtsp_port]
 
 Help
 -------
 
+* -4 : Force TCP sockets to use IPv6
+
 * -a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means auto-detect)
 	* eg: -a 1:2:3  
 	- it will report 1 dvb-s2 device, 2 dvb-t2 devices and 3 dvb-c devices 
 
+* -A --disable-ssdp disable SSDP announcement
+ 
 * -b --buffers X:Y : set the app adapter buffer to X Bytes (default: 72192) and set the kernel DVB buffer to Y Bytes (default: 5775360) - both multiple of 188
 	* eg: -b 18800:18988
 
 * -B X : set the app socket write buffer to X KB. 
 	* eg: -B 10000 - to set the socket buffer to 10MB
-
-* -2 --tcp-max-pack X : set the TCP data chunk size in MPEG-TS packets (188 bytes), default value is 42
 
 * -d --diseqc ADAPTER1:COMMITTED1-UNCOMMITTED1[,ADAPTER2:COMMITTED2-UNCOMMITTED2[,...]
 	* The first argument is the adapter number, second is the number of committed packets to send to a Diseqc 1.0 switch, third the number of uncommitted commands to sent to a Diseqc 1.1 switch
@@ -96,6 +98,8 @@ Help
 	* eg: -H 5:50 - set thresholds to 5ms (UDP) and 50ms (TCP)
 
 * -i --priority prio: set the DVR thread priority to prio 
+
+* -k Emulate pids=all when the hardware does not support it, on enigma boxes is enabled by default 
 
 * -l specifies the modules comma separated that will have increased verbosity, 
 	logging to stdout in foreground mode or in /tmp/minisatip.log when a daemon
@@ -192,10 +196,10 @@ Help
 
 * -U --sources sources_for_adapters: limit the adapters to specific sources/positions
 	* eg: -U 0-2:*:3:2,6,8 (no spaces between parameters)
-	- In this example: for SRC=1 only 0,1,2; for SRC=2 all; for SRC=3 only 3; and for SRC=4 the 2,6,8 adapters are used.
+	- In this example: for SRC=1 only 0,1,2; for SRC=2 all: for SRC=3 only 3; and for SRC=4 the 2,6,8 adapters are used.
 	- For each position (separated by : ) you need to declare all the adapters that use this position with no exception.
 	- The special char * indicates all adapters for this position.
-	- The number of sources range from 1 to 64; but the list can include less than 64 (in this case all are enabled for undefined sources). 
+	- The number of sources range from 1 to 64; but the list can include less than 64 (in this case all are enabled for undefined sources).
 	- By default or in case of errors all adapters have enabled all positions.
 
 * -w --http-host http_server[:port]: specify the host and the port (if not 80) where the xml file can be downloaded from [default: default_local_ip_address:8080] 
