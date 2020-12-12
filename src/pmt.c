@@ -1906,7 +1906,7 @@ void emulate_add_all_pids(adapter *ad)
 						}
 
 			int forced_pids[] = {EMU_PIDS_ALL_ENFORCED_PIDS_LIST};
-			int i_forced = sizeof(forced_pids);
+			int i_forced = sizeof(forced_pids) / sizeof(int);
 			for (j = 0; j < i_forced; j++)
 			{
 				int fpid = forced_pids[j];
