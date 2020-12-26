@@ -18,112 +18,99 @@
  *
  */
 
-#include <stdint.h>
-#include <string.h>
-#include <stdlib.h>
-#include <math.h>
-#include <sys/types.h>
-#include <sys/ioctl.h>
-#include <time.h>
-#include <stdio.h>
-#include <errno.h>
-#include <unistd.h>
 #include <arpa/inet.h>
+#include <ctype.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <math.h>
+#include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
-#include <sys/socket.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/ioctl.h>
-#include <net/if.h>
-#include <fcntl.h>
-#include <ctype.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <time.h>
+#include <unistd.h>
 
 #include "dvb.h"
-#include "socketworks.h"
 #include "minisatip.h"
+#include "socketworks.h"
 #include "t2mi.h"
-#include "utils.h"
 #include "tables.h"
+#include "utils.h"
 
 #define DEFAULT_LOG LOG_STREAM
 
 t2mi_device_t *t2[MAX_ADAPTERS];
 
-t2mi_device_t *get_or_alloc_t2mi(int id)
-{
-	if (t2[id])
-		return t2[id];
+t2mi_device_t *get_or_alloc_t2mi(int id) {
+    if (t2[id])
+        return t2[id];
 
-	if (id < 0 || id >= MAX_ADAPTERS)
-		return NULL;
+    if (id < 0 || id >= MAX_ADAPTERS)
+        return NULL;
 
-	LOG("Allocating t2mi for device %d", id);
-	t2[id] = malloc1(sizeof(t2mi_device_t));
-	return t2[id];
+    LOG("Allocating t2mi for device %d", id);
+    t2[id] = malloc1(sizeof(t2mi_device_t));
+    return t2[id];
 }
 
-void detect_t2mi(adapter *ad)
-{
-	int i, pid;
-	int rlen = ad->rlen;
-	uint8_t *b;
+void detect_t2mi(adapter *ad) {
+    int i, pid;
+    int rlen = ad->rlen;
+    uint8_t *b;
 
-	for (i = 0; i < rlen; i += DVB_FRAME)
-	{
-		b = ad->buf + i;
-		pid = PID_FROM_TS(b);
-		if (pid != T2MI_PID)
-		{
-			ad->is_t2mi = -1; // no t2mi
-			return;
-		}
-	}
-	for (i = 0; i < rlen; i += DVB_FRAME)
-	{
-		b = ad->buf + i;
-		pid = PID_FROM_TS(b);
-		if (pid == T2MI_PID)
-		{
-			ad->is_t2mi = 1; // t2mi
-			return;
-		}
-	}
+    for (i = 0; i < rlen; i += DVB_FRAME) {
+        b = ad->buf + i;
+        pid = PID_FROM_TS(b);
+        if (pid != T2MI_PID) {
+            ad->is_t2mi = -1; // no t2mi
+            return;
+        }
+    }
+    for (i = 0; i < rlen; i += DVB_FRAME) {
+        b = ad->buf + i;
+        pid = PID_FROM_TS(b);
+        if (pid == T2MI_PID) {
+            ad->is_t2mi = 1; // t2mi
+            return;
+        }
+    }
 }
 
 // unpack t2mi stream
-void t2mi_process_t2mi(t2mi_device_t *t, adapter *ad, uint8_t *b)
-{
+void t2mi_process_t2mi(t2mi_device_t *t, adapter *ad, uint8_t *b) {}
+
+int t2mi_process_ts(adapter *ad) {
+    int i, pid;
+    int rlen = ad->rlen;
+    uint8_t *b;
+
+    if (ad->is_t2mi == 0)
+        detect_t2mi(ad);
+
+    if (ad->is_t2mi <= 0)
+        return 0;
+
+    t2mi_device_t *t = get_or_alloc_t2mi(ad->id);
+    for (i = 0; i < rlen; i += DVB_FRAME) {
+        b = ad->buf + i;
+        pid = PID_FROM_TS(b);
+        if (pid == T2MI_PID)
+            t2mi_process_t2mi(t, ad, b);
+    }
+    return 0;
 }
 
-int t2mi_process_ts(adapter *ad)
-{
-	int i, pid;
-	int rlen = ad->rlen;
-	uint8_t *b;
-
-	if (ad->is_t2mi == 0)
-		detect_t2mi(ad);
-
-	if (ad->is_t2mi <= 0)
-		return 0;
-
-	t2mi_device_t *t = get_or_alloc_t2mi(ad->id);
-	for (i = 0; i < rlen; i += DVB_FRAME)
-	{
-		b = ad->buf + i;
-		pid = PID_FROM_TS(b);
-		if (pid == T2MI_PID)
-			t2mi_process_t2mi(t, ad, b);
-	}
-	return 0;
-}
-
-void free_t2mi()
-{
-	int i;
-	for(i=0;i<MAX_ADAPTERS;i++)
-	if(t2[i])
-	{
-		free1(t2[i]);
-		t2[i] = NULL;
-	}
+void free_t2mi() {
+    int i;
+    for (i = 0; i < MAX_ADAPTERS; i++)
+        if (t2[i]) {
+            free1(t2[i]);
+            t2[i] = NULL;
+        }
 }

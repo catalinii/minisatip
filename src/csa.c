@@ -18,76 +18,62 @@
  *
  */
 
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
-#include <math.h>
-#include <sys/types.h>
-#include <sys/ioctl.h>
-#include <time.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <errno.h>
-#include <unistd.h>
+#include "adapter.h"
+#include "dvb.h"
+#include "minisatip.h"
+#include "pmt.h"
+#include "socketworks.h"
+#include "tables.h"
+#include "utils.h"
 #include <arpa/inet.h>
+#include <ctype.h>
+#include <dvbcsa/dvbcsa.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <math.h>
+#include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
-#include <sys/socket.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/ioctl.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
-#include <net/if.h>
-#include <fcntl.h>
-#include <ctype.h>
-#include "utils.h"
-#include "dvb.h"
-#include "socketworks.h"
-#include "minisatip.h"
-#include "adapter.h"
-#include "tables.h"
-#include "pmt.h"
-#include <dvbcsa/dvbcsa.h>
+#include <sys/types.h>
+#include <time.h>
+#include <unistd.h>
 
 #define DEFAULT_LOG LOG_DVBCA
 
-void dvbcsa_create_key(SCW *cw)
-{
-	cw->key = dvbcsa_bs_key_alloc();
+void dvbcsa_create_key(SCW *cw) { cw->key = dvbcsa_bs_key_alloc(); }
+
+void dvbcsa_delete_key(SCW *cw) { dvbcsa_key_free(cw->key); }
+
+int dvbcsa_batch_size() {
+    int batchSize = dvbcsa_bs_batch_size();
+    return batchSize;
 }
 
-void dvbcsa_delete_key(SCW *cw)
-{
-	dvbcsa_key_free(cw->key);
+void dvbcsa_set_cw(SCW *cw, SPMT *pmt) {
+    dvbcsa_bs_key_set((unsigned char *)cw->cw, cw->key);
 }
 
-int dvbcsa_batch_size()
-{
-	int batchSize = dvbcsa_bs_batch_size();
-	return batchSize;
-}
-
-void dvbcsa_set_cw(SCW *cw, SPMT *pmt)
-{
-	dvbcsa_bs_key_set((unsigned char *)cw->cw, cw->key);
-}
-
-void dvbcsa_decrypt_stream(SCW *cw, SPMT_batch *batch, int max_len)
-{
-	if (cw->key)
-		dvbcsa_bs_decrypt((const struct dvbcsa_bs_key_s *)cw->key,
-						  (const struct dvbcsa_bs_batch_s *)batch, max_len);
-	else
-		LOG("%s: cw->key is null", __FUNCTION__);
+void dvbcsa_decrypt_stream(SCW *cw, SPMT_batch *batch, int max_len) {
+    if (cw->key)
+        dvbcsa_bs_decrypt((const struct dvbcsa_bs_key_s *)cw->key,
+                          (const struct dvbcsa_bs_batch_s *)batch, max_len);
+    else
+        LOG("%s: cw->key is null", __FUNCTION__);
 }
 
 SCW_op csa_op = {.algo = CA_ALGO_DVBCSA,
-				 .create_cw = (Create_CW)dvbcsa_create_key,
-				 .delete_cw = (Delete_CW)dvbcsa_delete_key,
-				 .batch_size = dvbcsa_batch_size,
-				 .set_cw = (Set_CW)dvbcsa_set_cw,
-				 .stop_cw = NULL,
-				 .decrypt_stream = (Decrypt_Stream)dvbcsa_decrypt_stream};
+                 .create_cw = (Create_CW)dvbcsa_create_key,
+                 .delete_cw = (Delete_CW)dvbcsa_delete_key,
+                 .batch_size = dvbcsa_batch_size,
+                 .set_cw = (Set_CW)dvbcsa_set_cw,
+                 .stop_cw = NULL,
+                 .decrypt_stream = (Decrypt_Stream)dvbcsa_decrypt_stream};
 
-void init_algo_csa()
-{
-	register_algo(&csa_op);
-}
+void init_algo_csa() { register_algo(&csa_op); }
