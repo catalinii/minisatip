@@ -2024,6 +2024,28 @@ int pmt_tune(adapter *ad)
 	return 0;
 }
 
+int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id) 
+{
+        int i = 0, pos = 0;
+        for (i =0;i<pmt->stream_pids && pos + 5 + pmt->pi_len < len;i++)
+        {
+                capmt[pos++] = pmt->stream_pid[i].type;
+                copy16(capmt, pos, pmt->stream_pid[i].pid);
+                pos += 2;
+                copy16(capmt, pos, pmt->pi_len + 1);
+                pos += 2;
+
+                // append the stream descriptors
+                if (pmt->pi_len)
+                {
+                        capmt[pos++] = cmd_id;
+                        memcpy(capmt + pos, pmt->pi, pmt->pi_len);
+                        pos += pmt->pi_len;
+                }
+        }
+        return pos;
+}
+
 char *get_channel_for_adapter(int aid, char *dest, int max_size)
 {
 	int i, len;

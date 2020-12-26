@@ -487,8 +487,6 @@ int axe_setup_switch(adapter *ad)
 		if (diseqc_param->switch_type == SWITCH_UNICABLE ||
 			diseqc_param->switch_type == SWITCH_JESS)
 		{
-			input = ad->dmx_source < 0 ? 0 : ad->dmx_source;
-		} else {
 			input = ad->master_source < 0 ? 0 : ad->master_source;
 		}
 		frontend_fd = ad->fe;
@@ -916,35 +914,6 @@ void free_axe_input(adapter *ad)
 			ad2->axe_used &= ~(1 << ad->id);
 			LOGM("axe: free input %d : %04x", ad2->id, ad2->axe_used);
 		}
-	}
-}
-
-// deprecate this for set_slave_adapters
-void set_link_adapters(char *o)
-{
-	int i, la, a_id, b_id;
-	char buf[1000], *arg[40], *sep1;
-
-	strncpy(buf, o, sizeof(buf) - 1);
-	buf[sizeof(buf) - 1] = '\0';
-	la = split(arg, buf, ARRAY_SIZE(arg), ',');
-	for (i = 0; i < la; i++)
-	{
-		a_id = map_intd(arg[i], NULL, -1);
-		if (a_id < 0 || a_id >= MAX_ADAPTERS)
-			continue;
-		sep1 = strchr(arg[i], ':');
-		if (!sep1)
-			continue;
-		b_id = map_intd(sep1 + 1, NULL, -1);
-		if (b_id < 0 || b_id >= MAX_ADAPTERS)
-			continue;
-		if (a_id == b_id || (a[a_id] && (a[a_id]->master_source >= 0)))
-			continue;
-		if (!a[b_id])
-			a[b_id] = adapter_alloc();
-		a[b_id]->master_source = a_id;
-		LOG("Setting adapter %d as master for adapter %d", a_id, b_id);
 	}
 }
 

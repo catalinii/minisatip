@@ -170,9 +170,9 @@ int dvbapi_reply(sockets *s)
 			if (oscam_version > 0 && oscam_version < 11533)
 			{
 				LOG0("Oscam build %d (< 11553) is not supported after minisatip version 1.0.1. Upgrade your oscam binary", oscam_version);
+			} else { 
+				register_dvbapi();
 			}
-
-			register_dvbapi();
 			break;
 
 		case DVBAPI_DMX_SET_FILTER:
@@ -408,8 +408,9 @@ int dvbapi_reply(sockets *s)
 
 int dvbapi_send_pmt(SKey *k)
 {
-	unsigned char buf[1500];
-	int len, i;
+	unsigned char buf[2500];
+	int len;
+	int cmd_id = 1; // ca_pmt_cmd_id (ok_descrambling)
 	SPMT *pmt = get_pmt(k->pmt_id);
 	if (!pmt)
 		return 1;
@@ -418,7 +419,6 @@ int dvbapi_send_pmt(SKey *k)
 	int adapter = 0;
 	if (network_mode)
 	{
-
 		demux = k->id + opts.dvbapi_offset;
 		adapter = k->id + opts.dvbapi_offset;
 	}
@@ -436,7 +436,7 @@ int dvbapi_send_pmt(SKey *k)
 	if (oscam_version == 0 || oscam_version >= 11533)
 	{
 
-		buf[12] = 0x01; // ca_pmt_cmd_id (ok_descrambling)
+		buf[12] = cmd_id; 
 
 		copy16(buf, 13, 0x8301); // adapter_device_descriptor, works only in newer versions (> 11500)
 		buf[15] = adapter;
@@ -452,45 +452,8 @@ int dvbapi_send_pmt(SKey *k)
 		memcpy(buf + 26, k->pi, k->pi_len);
 		len = 26 + k->pi_len;
 	}
-	else if (network_mode) // code for older oscam versions < 11533
-	{
-		buf[12] = 0x01;			 // ca_pmt_cmd_id (ok_descrambling)
-		copy16(buf, 13, 0x8202); // demux_ca_mask_device_descriptor (deprecated)
-		buf[15] = adapter;
-		buf[16] = adapter;
-		copy16(buf, 17, 0x8108); // enigma_namespace_descriptor
-		copy32(buf, 19, 0);
-		copy16(buf, 23, k->tsid);
-		copy16(buf, 25, k->onid);
-		copy16(buf, 27, 0x8402); // pmt_pid_descriptor
-		copy16(buf, 29, k->pmt_pid);
-		memcpy(buf + 31, k->pi, k->pi_len);
-		len = 31 + k->pi_len;
-	}
-	else
-	{
-		buf[22] = 0x01;			 // ca_pmt_cmd_id (ok_descrambling)
-		copy16(buf, 23, 0x8202); // demux_ca_mask_device_descriptor (deprecated)
-		buf[25] = 1 << demux;
-		buf[26] = demux;
-		copy16(buf, 27, 0x8402); // pmt_pid_descriptor
-		copy16(buf, 29, pmt->pid);
-		copy16(buf, 31, 0x8301); // adapter_device_descriptor, works only in newer versions (> 11500)
-		buf[33] = adapter;
-		memcpy(buf + 34, k->pi, k->pi_len);
-		len = 34 + k->pi_len;
-	}
 	copy16(buf, 10, len - 12);
-	for (i = 0; i < pmt->stream_pids; i++)
-	{
-		len += 5;
-		int type = pmt->stream_pid[i].type;
-		int pid = pmt->stream_pid[i].pid;
-		buf[len - 5] = type;
-		copy16(buf, len - 4, pid);
-		copy16(buf, len - 2, 0);
-		LOGM("Key %d adding stream pid %d (%X) type %d (%x)", k->id, pid, pid, type, type);
-	}
+	len += CAPMT_add_PMT(buf + len, sizeof(buf) - len, pmt, cmd_id);
 	copy16(buf, 4, len - 6);
 
 	// make sure is ONLY is not sent by multiple threads

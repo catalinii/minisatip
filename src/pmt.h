@@ -201,5 +201,6 @@ int assemble_packet(SFilter *f, uint8_t *b);
 int clean_psi_buffer(uint8_t *pmt, uint8_t *clean, int clean_size);
 void disable_cw(int master_pmt);
 void expire_cw_for_pmt(int master_pmt, int parity, int64_t min_expiry);
+int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id);
 #endif
 #endif

@@ -140,17 +140,17 @@ int test_clean_psi_buffer()
 
 	if (process_pmt(0, f.data, len, &pmt))
 		LOG_AND_RETURN(1, "process_pmt failed");
-#if defined(__x86_64__) || defined(__i386__)
-	if (!createCAPMT(pmt.pmt, pmt.pmt_len, 1, clean, sizeof(clean), 0))
+	len = createCAPMT(&pmt, NULL, 1, clean, sizeof(clean), 0);
+	if (len <= 0)
 		LOG_AND_RETURN(1, "createCAPMT failed");
-#endif
+	hexdump("CAPMT: ", clean, len);
 	return 0;
 }
 
 int main()
 {
 	opts.log = 1;
-	opts.debug = 0;
+	opts.debug = 255;
 	strcpy(thread_name, "test");
 	TEST_FUNC(test_clean_psi_buffer_only(), "testing test_clean_psi_buffer_only");
 	TEST_FUNC(test_clean_psi_buffer(), "testing test_clean_psi_buffer");

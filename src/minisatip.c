@@ -107,7 +107,6 @@ int rtsp, http, si, si1, ssdp1;
 #define DROP_ENCRYPTED_OPT 'E'
 #define UDPPORT_OPT 'P'
 #define ADAPTERTIMEOUT_OPT 'Z'
-#define LINK_OPT '7'
 #define QUATTRO_OPT 'Q'
 #define QUATTRO_HIBAND_OPT '8'
 #define AXE_POWER 'W'
@@ -121,6 +120,7 @@ int rtsp, http, si, si1, ssdp1;
 #define CA_PIN_OPT '3'
 #define IPV4_OPT '4'
 #define NO_PIDS_ALL 'k'
+#define CA_MULTIPLE_PMT 'c'
 
 static const struct option long_options[] =
 	{
@@ -170,7 +170,6 @@ static const struct option long_options[] =
 		{"help", no_argument, NULL, 'h'},
 		{"version", no_argument, NULL, 'V'},
 #ifdef AXE
-		{"link-adapters", required_argument, NULL, '7'},
 		{"free-inputs", required_argument, NULL, ABSOLUTE_SRC},
 		{"quattro", no_argument, NULL, 'Q'},
 		{"quattro-hiband", required_argument, NULL, '8'},
@@ -178,6 +177,7 @@ static const struct option long_options[] =
 #ifndef DISABLE_DVBCA
 		{"ci", required_argument, NULL, FORCE_CI_OPT},
 		{"ca-pin", required_argument, NULL, CA_PIN_OPT},
+		{"multiple-pmt", no_argument, NULL, CA_MULTIPLE_PMT},
 #endif
 
 		{0, 0, 0, 0}};
@@ -494,10 +494,6 @@ Help\n\
 \n "
 #ifdef AXE
 		"\
-* -7 --link-adapters mapping_string: link adapters (identical src,lo/hi,h/v)\n\
-\t* The format is: M1:S1[,M2:S2] - master:slave\n\
-	* eg: 0:1,0:2,0:3 \n\
-\n\
 * -A --free-inputs mapping_string: absolute source mapping for free input mode\n\
 \t* The format is: SRC1:INP1:DISEQC1[,SRC2:INP2:DISEQC2]\n\
 	* SRC: source number (src argument for SAT>IP minus 1 - 0-31)\n\
@@ -524,6 +520,10 @@ Help\n\
 \n\
 * -C --ci mapping_string: disable CI+ mode for specified adapters\n\
 \t* The format is: ADAPTER1:PIN,ADAPTER2-ADAPTER4\n\
+			* eg : 0,2-3\n\
+\n\
+* -c --quirks adapter_list: Enable 2 PMTs inside of the same CAPMT to double the number of decrypted channels\n\
+\t* The format is: ADAPTER1[[,ADAPTER2]-ADAPTERN]\n\
 			* eg : 0,2-3\n\
 \n\
 "
@@ -1031,10 +1031,6 @@ void set_options(int argc, char *argv[])
 		}
 		break;
 #ifdef AXE
-		case LINK_OPT:
-			set_link_adapters(optarg);
-			break;
-
 		case ABSOLUTE_SRC:
 			set_absolute_src(optarg);
 			break;
@@ -1060,6 +1056,13 @@ void set_options(int argc, char *argv[])
 		case FORCE_CI_OPT:
 			set_ca_adapter_force_ci(optarg);
 			break;
+
+		case CA_MULTIPLE_PMT:
+			set_ca_multiple_pmt(optarg);
+			break;
+
+
+
 #endif
 		}
 	}
