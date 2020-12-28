@@ -55,6 +55,7 @@
 extern adapter *a[MAX_ADAPTERS];
 extern SPMT *pmts[MAX_PMT];
 void remove_and_sort_pmt_ids(ca_device_t *d, SPMT *pmt);
+int pmt_add(int i, int adapter, int sid, int pmt_pid);
 void get_2_pmt_to_process(ca_device_t *d, SPMT *pmt, SPMT **other,
                           int *listmgmt);
 

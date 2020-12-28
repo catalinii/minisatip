@@ -176,7 +176,7 @@ static const struct option long_options[] = {
 #ifndef DISABLE_DVBCA
     {"ci", required_argument, NULL, FORCE_CI_OPT},
     {"ca-pin", required_argument, NULL, CA_PIN_OPT},
-    {"multiple-pmt", no_argument, NULL, CA_MULTIPLE_PMT},
+    {"multiple-pmt", required_argument, NULL, CA_MULTIPLE_PMT},
 #endif
 
     {0, 0, 0, 0}};
