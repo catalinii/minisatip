@@ -274,7 +274,7 @@ int find_ddci_for_pmt(SPMT *pmt) {
                 continue;
             }
             // DDCI exists but not yet initialized
-            if (!is_ca_initialized(i))
+            if (is_ca_initializing(i))
                 has_ddci = 1;
 
             for (j = 0; j < ca[dvbca_id].ad_info[i].caids; j++)

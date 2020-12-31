@@ -283,7 +283,7 @@ int init_hw(int i) {
 
 #ifdef ENIGMA
     if (ad->dmx_source == -1)
-        ad->dmx_source = ad->id;
+        ad->dmx_source = ad->fn;
 #endif
 
     if ((rv = ad->open(ad))) {
@@ -1943,39 +1943,6 @@ void set_adapters_delsys(char *o) {
 
         LOG("Setting delivery system for adapter %d to %s and %s", a_id,
             get_delsys(ad->sys[0]), get_delsys(ad->sys[1]));
-    }
-}
-
-void set_adapter_dmxsource(char *o) {
-    int i, j, la, st, end, fd;
-    char buf[1000], *arg[40], *sep, *seps;
-    adapter *ad;
-    SAFE_STRCPY(buf, o);
-    la = split(arg, buf, ARRAY_SIZE(arg), ',');
-    for (i = 0; i < la; i++) {
-        sep = strchr(arg[i], '-');
-        seps = strchr(arg[i], ':');
-
-        if (!seps)
-            continue;
-
-        fd = map_intd(seps + 1, NULL, -1);
-
-        if (sep == NULL) {
-            st = end = map_int(arg[i], NULL);
-            set_disable(st, 0);
-        } else {
-            st = map_int(arg[i], NULL);
-            end = map_int(sep + 1, NULL);
-        }
-        for (j = st; j <= end; j++) {
-            if (!a[j])
-                a[j] = adapter_alloc();
-
-            ad = a[j];
-            ad->dmx_source = fd;
-            LOG("Setting frontend %d for adapter %d", fd, j);
-        }
     }
 }
 

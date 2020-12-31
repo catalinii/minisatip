@@ -136,12 +136,6 @@ int test_clean_psi_buffer() {
         LOG_AND_RETURN(1, "assemble_packet failed");
     LOG("Assemble packet returned %d", len);
 
-    if (process_pmt(0, f.data, len, &pmt))
-        LOG_AND_RETURN(1, "process_pmt failed");
-    len = createCAPMT(&pmt, NULL, 1, clean, sizeof(clean), 0);
-    if (len <= 0)
-        LOG_AND_RETURN(1, "createCAPMT failed");
-    hexdump("CAPMT: ", clean, len);
     return 0;
 }
 

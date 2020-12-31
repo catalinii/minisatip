@@ -77,7 +77,7 @@ int rtsp, http, si, si1, ssdp1;
 #define LOGFILE_OPT 'F'
 #define HELP_OPT 'h'
 #define PLAYLIST_OPT 'p'
-#define DVBS2_ADAPTERS_OPT 'a'
+#define ADAPTERS_OPT 'a'
 #define CLEANPSI_OPT 't'
 #define MAC_OPT 'm'
 #define FOREGROUND_OPT 'f'
@@ -102,7 +102,6 @@ int rtsp, http, si, si1, ssdp1;
 #define DOCUMENTROOT_OPT 'R'
 #define XML_OPT 'X'
 #define THREADS_OPT 'T'
-#define DMXSOURCE_OPT '9'
 #define LNB_OPT 'L'
 #define DROP_ENCRYPTED_OPT 'E'
 #define UDPPORT_OPT 'P'
@@ -119,64 +118,71 @@ int rtsp, http, si, si1, ssdp1;
 #define FORCE_CI_OPT 'C'
 #define CA_PIN_OPT '3'
 #define IPV4_OPT '4'
-#define NO_PIDS_ALL 'k'
-#define CA_MULTIPLE_PMT 'c'
+#define NO_PIDS_ALL_OPT 'k'
+#define CA_MULTIPLE_PMT_OPT 'c'
 
 static const struct option long_options[] = {
-    {"remote-rtp", required_argument, NULL, 'r'},
+    {"adapters", required_argument, NULL, ADAPTERS_OPT},
+    {"adapter-timeout", required_argument, NULL, ADAPTERTIMEOUT_OPT},
+    {"app-buffer", required_argument, NULL, APPBUFFER_OPT},
+    {"buffer", required_argument, NULL, DVRBUFFER_OPT},
+    {"clean-psi", no_argument, NULL, CLEANPSI_OPT},
+    {"delsys", required_argument, NULL, DELSYS_OPT},
+    {"debug", required_argument, NULL, DEBUG_OPT},
+    {"device-id", required_argument, NULL, DEVICEID_OPT},
+    {"demux-dev", required_argument, NULL, DEMUXDEV_OPT},
     {"disable-dvb", no_argument, NULL, DISABLEDVB_OPT},
     {"disable-ssdp", no_argument, NULL, DISABLESSDP_OPT},
-    {"device-id", required_argument, NULL, DEVICEID_OPT},
-    {"check-signal", no_argument, NULL, 'z'},
-    {"clean-psi", no_argument, NULL, 't'},
-    {"log", no_argument, NULL, 'l'},
-    {"debug", no_argument, NULL, 'v'},
-    {"logfile", required_argument, NULL, 'F'},
-    {"buffer", required_argument, NULL, 'b'},
-    {"threshold", required_argument, NULL, 'H'},
-    {"enable-adapters", required_argument, NULL, 'e'},
-    {"unicable", required_argument, NULL, 'u'},
-    {"jess", required_argument, NULL, 'j'},
-    {"sources", required_argument, NULL, 'U'},
-    {"diseqc", required_argument, NULL, 'd'},
-    {"diseqc-timing", required_argument, NULL, 'q'},
+    {"diseqc", required_argument, NULL, DISEQC_OPT},
+    {"diseqc-timing", required_argument, NULL, DISEQC_TIMING_OPT},
     {"diseqc-multi", required_argument, NULL, DISEQC_MULTI},
-    {"adapter-timeout", required_argument, NULL, 'Z'},
-    {"demux-dev", required_argument, NULL, DEMUXDEV_OPT},
-
+    {"document-root", required_argument, NULL, DOCUMENTROOT_OPT},
+    {"drop-encrypted", no_argument, NULL, DROP_ENCRYPTED_OPT},
+    {"enable-adapters", required_argument, NULL, ENABLE_ADAPTERS_OPT},
+    {"foreground", no_argument, NULL, FOREGROUND_OPT},
+    {"http-port", required_argument, NULL, HTTPPORT_OPT},
+    {"http-host", required_argument, NULL, HTTPSERVER_OPT},
+    {"ipv6", no_argument, NULL, IPV4_OPT},
+    {"jess", required_argument, NULL, JESS_OPT},
+    {"lnb", required_argument, NULL, LNB_OPT},
+    {"log", required_argument, NULL, LOG_OPT},
+    {"logfile", required_argument, NULL, LOGFILE_OPT},
+    {"mac", required_argument, NULL, MAC_OPT},
+    {"multiplier", required_argument, NULL, SIGNALMULTIPLIER_OPT},
+    {"no-all-pids", required_argument, NULL, NO_PIDS_ALL_OPT},
+    {"priority", required_argument, NULL, PRIORITY_OPT},
+    {"playlist", required_argument, NULL, PLAYLIST_OPT},
+    {"remote-rtp", required_argument, NULL, RRTP_OPT},
+    {"rtsp-port", required_argument, NULL, RTSPPORT_OPT},
+    {"syslog", no_argument, NULL, SYSLOG_OPT},
+    {"slave", required_argument, NULL, SLAVE_OPT},
+    {"sources", required_argument, NULL, SOURCES_OPT},
+    {"threads", no_argument, NULL, THREADS_OPT},
+    {"threshold", required_argument, NULL, THRESHOLD_OPT},
+    {"udp", required_argument, NULL, UDPPORT_OPT},
+    {"unicable", required_argument, NULL, UNICABLE_OPT},
+    {"xml", required_argument, NULL, XML_OPT},
+    {"help", no_argument, NULL, HELP_OPT},
 #ifndef DISABLE_DVBAPI
-    {"dvbapi", required_argument, NULL, 'o'},
+    {"dvbapi", required_argument, NULL, DVBAPI_OPT},
 #endif
 #ifndef DISABLE_SATIPCLIENT
-    {"satip-servers", required_argument, NULL, 's'},
-    {"satip-tcp", no_argument, NULL, 'O'},
+    {"satip-servers", required_argument, NULL, SATIPCLIENT_OPT},
+    {"satip-tcp", no_argument, NULL, SATIP_TCP_OPT},
     {"satip-xml", required_argument, NULL, SATIPXML_OPT},
 #endif
 #ifndef DISABLE_NETCVCLIENT
-    {"netceiver", required_argument, NULL, 'n'},
+    {"netceiver", required_argument, NULL, NETCVCLIENT_OPT},
 #endif
-    {"rtsp-port", required_argument, NULL, 'y'},
-    {"http-port", required_argument, NULL, 'x'},
-    {"http-host", required_argument, NULL, 'w'},
-    {"slave", required_argument, NULL, 'S'},
-    {"delsys", required_argument, NULL, 'Y'},
-    {"priority", required_argument, NULL, 'i'},
-    {"document-root", required_argument, NULL, 'R'},
-    {"threads", no_argument, NULL, 'T'},
-    {"dmx-source", required_argument, NULL, '9'},
-    {"lnb", required_argument, NULL, 'L'},
-    {"xml", required_argument, NULL, 'X'},
-    {"help", no_argument, NULL, 'h'},
-    {"version", no_argument, NULL, 'V'},
 #ifdef AXE
     {"free-inputs", required_argument, NULL, ABSOLUTE_SRC},
-    {"quattro", no_argument, NULL, 'Q'},
-    {"quattro-hiband", required_argument, NULL, '8'},
+    {"quattro", no_argument, NULL, QUATTRO_OPT},
+    {"quattro-hiband", required_argument, NULL, QUATTRO_HIBAND_OPT},
 #endif
 #ifndef DISABLE_DVBCA
-    {"ci", required_argument, NULL, FORCE_CI_OPT},
     {"ca-pin", required_argument, NULL, CA_PIN_OPT},
-    {"multiple-pmt", required_argument, NULL, CA_MULTIPLE_PMT},
+    {"ci", required_argument, NULL, FORCE_CI_OPT},
+    {"multiple-pmt", required_argument, NULL, CA_MULTIPLE_PMT_OPT},
 #endif
 
     {0, 0, 0, 0}};
@@ -291,7 +297,7 @@ Help\n\
 \n\
 * -4 : Force TCP sockets to use IPv6\n\
 \n\
-* -a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means auto-detect)\n\
+* -a --adapters x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means auto-detect)\n\
 	* eg: -a 1:2:3  \n\
 	- it will report 1 dvb-s2 device, 2 dvb-t2 devices and 3 dvb-c devices \n\
 \n\
@@ -329,19 +335,16 @@ Help\n\
 	* eg: --delsys 0:dvbt,1:dvbs\n\
 	- specifies adapter 0 as a DVBT device, adapter 1 as DVB-S, which overrides the system detection of the adapter\n\
 \n\
-* --dmx-source ADAPTER1:FRONTENDX - specifies the frontend number specified as argument for DMX_SET_SOURCE \n\
-	* eg: --dmx-source 0:1 - enables DMX_SET_SOURCE ioctl call with parameter 1 for adapter 0\n\
-\n\
 * -e --enable-adapters list_of_enabled adapters: enable only specified adapters\n\
 	* eg: -e 0-2,5,7 (no spaces between parameters)\n\
 	- keep in mind that the first adapters are the local ones starting with 0 after that are the satip adapters \n\
 	if you have 3 local dvb cards 0-2 will be the local adapters, 3,4, ... will be the satip servers specified with argument -s\n\
 \n\
-* -f foreground, otherwise run in background\n\
+* -f foreground: otherwise run in background\n\
 \n\
-* -F --logfile log_file, output the debug/log information to  log_file when running in background (option -f not used), default /tmp/minisatip.log\n\
+* -F --logfile log_file: output the debug/log information to  log_file when running in background (option -f not used), default /tmp/minisatip.log\n\
 \n\
-* -g use syslog instead stdout for logging, multiple -g - print to stderr as well\n\
+* -g --syslog: use syslog instead stdout for logging, multiple -g - print to stderr as well\n\
 \n\
 * -H --threshold X:Y : set the write time threshold to X (UDP) / Y (TCP)  milliseconds. \n\
 	* eg: -H 5:50 - set thresholds to 5ms (UDP) and 50ms (TCP)\n\
@@ -363,10 +366,10 @@ Help\n\
 	* eg: -L *:10750-10750-10750 - sets the parameters for Sky NZ LNB using 10750 Mhz\n\
 	* eg: -L 0:10750-10750-10750,1:9750-10600-11700 - adapter 0 has a SKY NZ LNB, adapter 1 has an Universal LNB\n\
 \n\
-* -m xx: simulate xx as local mac address, generates UUID based on mac\n\
+* -m --mac xx: simulate xx as local mac address, generates UUID based on mac\n\
 	* eg: -m 001122334455 \n\
 \n\
-* -M multiplies the strength and snr of the DVB adapter with the specified values\n\
+* -M --multiplier: multiplies the strength and snr of the DVB adapter with the specified values\n\
 	* If the snr or the strength multipliers are set to 0, minisatip will override the value received from the adapter and will report always full signal 100%% \n\
 	* eg: -M 4-6:1.2-1.3 - multiplies the strength with 1.2 and the snr with 1.3 for adapter 4, 5 and 6\n\
 	* eg: -M *:1.5-1.6 - multiplies the strength with 1.5 and the snr with 1.6 for all adapters\n\
@@ -399,7 +402,7 @@ Help\n\
 "
 #endif
         "\
-* -p url: specify playlist url using X_SATIPM3U header \n\
+* -p --playlist url: specify playlist url using X_SATIPM3U header \n\
 	* eg: -p http://192.168.2.3:8080/playlist\n\
 	- this will add X_SATIPM3U tag into the satip description xml\n\
 \n\
@@ -519,9 +522,12 @@ Help\n\
 \t* The format is: ADAPTER1:PIN,ADAPTER2-ADAPTER4\n\
 			* eg : 0,2-3\n\
 \n\
-* -c --quirks adapter_list: Enable 2 PMTs inside of the same CAPMT to double the number of decrypted channels\n\
-\t* The format is: ADAPTER1[[,ADAPTER2]-ADAPTERN]\n\
-			* eg : 0,2-3\n\
+* -c --multiple-pmt adapter_list:maximum_number_of_channels_supported: Enable 2 PMTs inside of the same CAPMT to double the number of decrypted channels\n\
+\t* The format is: ADAPTER1[[,ADAPTER2]-ADAPTERN]:[MAX_CHANNELS]\n\
+			* eg : 0,2-3:1\n\
+The adapters 0,2-3 will support maximum of 1 CAPMT (2 channels).\n\
+Official CAMs support 1 or 2 channels, with this option this is extended to 2 or 4\n\
+By default every CAM supports 4 channels\n\
 \n\
 "
 #endif
@@ -529,6 +535,21 @@ Help\n\
         app_name, ADAPTER_BUFFER, DVR_BUFFER, modules,
         opts.no_threads ? "DISABLED" : "ENABLED");
     exit(1);
+}
+
+void get_short_opts(char *short_opts, const struct option *long_options) {
+    int i = 0;
+    while (long_options[i].name) {
+        *short_opts++ = long_options[i].val;
+        if (long_options[i].has_arg == required_argument)
+            *short_opts++ = ':';
+        else if (long_options[i].has_arg == optional_argument) {
+            *short_opts++ = ':';
+            *short_opts++ = ':';
+        }
+        i++;
+    }
+    *short_opts++ = 0;
 }
 
 void set_options(int argc, char *argv[]) {
@@ -605,18 +626,12 @@ void set_options(int argc, char *argv[]) {
 #ifdef AXE
     opts.no_threads = 1;
     opts.document_root = "/usr/share/minisatip/html";
-#define AXE_OPTS "7:QW:8:A:"
-#else
-#define AXE_OPTS ""
-
 #endif
+    char short_opts[200];
+    get_short_opts(short_opts, long_options);
 
-    while (
-        (opt = getopt_long(argc, argv,
-                           "fl:v:r:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:U:o:gy:i:q:"
-                           "D:NGVR:S:TX:Y:OL:EP:Z:0:F:M:1:2:3:C:4k" AXE_OPTS,
-                           long_options, NULL)) != -1) {
-        //              printf("options %d %c %s\n",opt,opt,optarg);
+    while ((opt = getopt_long_only(argc, argv, short_opts, long_options,
+                                   NULL)) != -1) {
         switch (opt) {
         case FOREGROUND_OPT: {
             opts.daemon = 0;
@@ -752,7 +767,7 @@ void set_options(int argc, char *argv[]) {
             break;
         }
 
-        case DVBS2_ADAPTERS_OPT: {
+        case ADAPTERS_OPT: {
             sscanf(optarg, "%d:%d:%d", &opts.force_sadapter,
                    &opts.force_tadapter, &opts.force_cadapter);
             break;
@@ -763,7 +778,7 @@ void set_options(int argc, char *argv[]) {
             break;
         }
 
-        case NO_PIDS_ALL: {
+        case NO_PIDS_ALL_OPT: {
             opts.emulate_pids_all = 1;
             break;
         }
@@ -784,11 +799,6 @@ void set_options(int argc, char *argv[]) {
 
         case ENABLE_ADAPTERS_OPT: {
             enable_adapters(optarg);
-            break;
-        }
-
-        case DMXSOURCE_OPT: {
-            set_adapter_dmxsource(optarg);
             break;
         }
 
@@ -1018,7 +1028,7 @@ void set_options(int argc, char *argv[]) {
             set_ca_adapter_force_ci(optarg);
             break;
 
-        case CA_MULTIPLE_PMT:
+        case CA_MULTIPLE_PMT_OPT:
             set_ca_multiple_pmt(optarg);
             break;
 

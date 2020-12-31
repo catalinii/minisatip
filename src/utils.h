@@ -280,6 +280,10 @@ typedef ssize_t (*mywritev)(int fd, const struct iovec *io, int len);
 
 #ifdef TESTING
 
+#define ASSERT(cond)                                                           \
+    if (!(cond))                                                               \
+    LOG_AND_RETURN(1, "%s:%d Test failed in function %s", __FILE__, __LINE__,  \
+                   __FUNCTION__)
 #define writev(a, b, c) _writev(a, b, c)
 
 #endif

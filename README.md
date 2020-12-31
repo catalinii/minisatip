@@ -31,7 +31,7 @@ https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item
 Usage:
 -------
 
-minisatip version 1.0.4-06fae51, compiled in Dec 23 2020 18:48:06, with s2api version: 050B
+minisatip version 1.0.4-530cd08, compiled in Dec 30 2020 17:47:25, with s2api version: 050B
 
 	./minisatip [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 		[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]][-o oscam_host:dvbapi_port,offset] [-p public_host] [-r remote_rtp_host] [-R document_root] [-s [*][DELSYS:][FE_ID@][source_ip/]host[:port] [-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] 
@@ -42,7 +42,7 @@ Help
 
 * -4 : Force TCP sockets to use IPv6
 
-* -a x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means auto-detect)
+* -a --adapters x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means auto-detect)
 	* eg: -a 1:2:3  
 	- it will report 1 dvb-s2 device, 2 dvb-t2 devices and 3 dvb-c devices 
 
@@ -80,19 +80,16 @@ Help
 	* eg: --delsys 0:dvbt,1:dvbs
 	- specifies adapter 0 as a DVBT device, adapter 1 as DVB-S, which overrides the system detection of the adapter
 
-* --dmx-source ADAPTER1:FRONTENDX - specifies the frontend number specified as argument for DMX_SET_SOURCE 
-	* eg: --dmx-source 0:1 - enables DMX_SET_SOURCE ioctl call with parameter 1 for adapter 0
-
 * -e --enable-adapters list_of_enabled adapters: enable only specified adapters
 	* eg: -e 0-2,5,7 (no spaces between parameters)
 	- keep in mind that the first adapters are the local ones starting with 0 after that are the satip adapters 
 	if you have 3 local dvb cards 0-2 will be the local adapters, 3,4, ... will be the satip servers specified with argument -s
 
-* -f foreground, otherwise run in background
+* -f foreground: otherwise run in background
 
-* -F --logfile log_file, output the debug/log information to  log_file when running in background (option -f not used), default /tmp/minisatip.log
+* -F --logfile log_file: output the debug/log information to  log_file when running in background (option -f not used), default /tmp/minisatip.log
 
-* -g use syslog instead stdout for logging, multiple -g - print to stderr as well
+* -g --syslog: use syslog instead stdout for logging, multiple -g - print to stderr as well
 
 * -H --threshold X:Y : set the write time threshold to X (UDP) / Y (TCP)  milliseconds. 
 	* eg: -H 5:50 - set thresholds to 5ms (UDP) and 50ms (TCP)
@@ -114,10 +111,10 @@ Help
 	* eg: -L *:10750-10750-10750 - sets the parameters for Sky NZ LNB using 10750 Mhz
 	* eg: -L 0:10750-10750-10750,1:9750-10600-11700 - adapter 0 has a SKY NZ LNB, adapter 1 has an Universal LNB
 
-* -m xx: simulate xx as local mac address, generates UUID based on mac
+* -m --mac xx: simulate xx as local mac address, generates UUID based on mac
 	* eg: -m 001122334455 
 
-* -M multiplies the strength and snr of the DVB adapter with the specified values
+* -M --multiplier: multiplies the strength and snr of the DVB adapter with the specified values
 	* If the snr or the strength multipliers are set to 0, minisatip will override the value received from the adapter and will report always full signal 100% 
 	* eg: -M 4-6:1.2-1.3 - multiplies the strength with 1.2 and the snr with 1.3 for adapter 4, 5 and 6
 	* eg: -M *:1.5-1.6 - multiplies the strength with 1.5 and the snr with 1.6 for all adapters
@@ -137,7 +134,7 @@ Help
 	* eg: -o /tmp/camd.socket 
 	/tmp/camd.socket is the local socket that can be used 
 
-* -p url: specify playlist url using X_SATIPM3U header 
+* -p --playlist url: specify playlist url using X_SATIPM3U header 
 	* eg: -p http://192.168.2.3:8080/playlist
 	- this will add X_SATIPM3U tag into the satip description xml
 
@@ -229,9 +226,12 @@ Help
 	* The format is: ADAPTER1:PIN,ADAPTER2-ADAPTER4
 			* eg : 0,2-3
 
-* -c --quirks adapter_list: Enable 2 PMTs inside of the same CAPMT to double the number of decrypted channels
-	* The format is: ADAPTER1[[,ADAPTER2]-ADAPTERN]
-			* eg : 0,2-3
+* -c --multiple-pmt adapter_list:maximum_number_of_channels_supported: Enable 2 PMTs inside of the same CAPMT to double the number of decrypted channels
+	* The format is: ADAPTER1[[,ADAPTER2]-ADAPTERN]:[MAX_CHANNELS]
+			* eg : 0,2-3:1
+The adapters 0,2-3 will support maximum of 1 CAPMT (2 channels).
+Official CAMs support 1 or 2 channels, with this option this is extended to 2 or 4
+By default every CAM supports 4 channels
 
 How to compile:
 ------

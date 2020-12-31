@@ -54,76 +54,80 @@
 
 extern adapter *a[MAX_ADAPTERS];
 extern SPMT *pmts[MAX_PMT];
-void remove_and_sort_pmt_ids(ca_device_t *d, SPMT *pmt);
+void remove_pmt_from_device(ca_device_t *d, SPMT *pmt);
 int pmt_add(int i, int adapter, int sid, int pmt_pid);
-void get_2_pmt_to_process(ca_device_t *d, SPMT *pmt, SPMT **other,
-                          int *listmgmt);
+SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple);
+int get_active_capmts(ca_device_t *d);
+int get_enabled_pmts_for_ca(ca_device_t *d);
 
 typedef struct ca_device {
     int enabled;
-    int pmt_id[MAX_CA_PMT], enabled_pmts;
-
+    SCAPMT capmt[MAX_CA_PMT];
+    int max_ca_pmt, multiple_pmt;
 } ca_device_t;
+ca_device_t d;
 
-int test_quirks() {
-    int listmgmt = -1;
-    SPMT *other;
+int test_multiple_pmt() {
     // id, adapter, sid, pmt_pid
     pmt_add(0, 0, 100, 100);
     pmt_add(1, 0, 200, 200);
-    pmt_add(2, 0, 100, 300);
+    pmt_add(2, 0, 300, 300);
     pmt_add(3, 0, 400, 400);
-    ca_device_t d;
-    memset(&d, 0, sizeof(d));
-    d.enabled = 1;
 
-    d.pmt_id[0] = -1;
-    d.pmt_id[1] = 2;
-    d.pmt_id[2] = 0;
-    d.pmt_id[3] = 1;
-    d.enabled_pmts = 2;
-    remove_and_sort_pmt_ids(&d, get_pmt(2));
-    if (d.pmt_id[0] == -1 || d.pmt_id[1] == -1)
-        LOG_AND_RETURN(
-            1,
-            "Sorting not performed correctly: expected first 2 PMT id "
-            "%d %d to be >= 0",
-            d.pmt_id[0], d.pmt_id[1]);
+    add_pmt_to_capmt(&d, get_pmt(0), 1);
+    add_pmt_to_capmt(&d, get_pmt(1), 1);
+    ASSERT(get_active_capmts(&d) == 1);
+    remove_pmt_from_device(&d, get_pmt(0));
+    ASSERT(get_enabled_pmts_for_ca(&d) == 1);
+    ASSERT(PMT_ID_IS_VALID(d.capmt[0].pmt_id) &&
+           !PMT_ID_IS_VALID(d.capmt[0].other_id));
 
-    if (d.pmt_id[2] != -1 || d.pmt_id[3] != -1)
-        LOG_AND_RETURN(
-            1,
-            "Sorting not performed correctly: last 2 PMTs to be not set: %d %d",
-            d.pmt_id[0], d.pmt_id[1]);
+    ASSERT(add_pmt_to_capmt(&d, get_pmt(2), 0) == NULL);
 
-    d.enabled_pmts = 1;
-    remove_and_sort_pmt_ids(&d, get_pmt(d.pmt_id[1]));
-    d.enabled_pmts = 2;
-    get_2_pmt_to_process(&d, get_pmt(0), &other, &listmgmt);
-    if (listmgmt != CA_LIST_MANAGEMENT_ONLY)
-        LOG_AND_RETURN(1, "List mgmt should not ONLY");
+    return 0;
+}
 
-    if (other != get_pmt(1))
-        LOG_AND_RETURN(1, "Expected the other PMT to be set correctly");
+int test_create_capmt() {
+    uint8_t clean[1500];
+    pmt_add(5, 0, 500, 500);
+    pmt_add(6, 0, 600, 600);
+    add_pmt_to_capmt(&d, get_pmt(5), 1);
+    add_pmt_to_capmt(&d, get_pmt(6), 1);
+    SPMT *pmt = get_pmt(5);
+    pmt->stream_pids = 2;
+    pmt->stream_pid[0].pid = 501;
+    pmt->stream_pid[0].type = 2;
+    pmt->stream_pid[0].pid = 502;
+    pmt->stream_pid[0].type = 3;
 
-    d.enabled_pmts = 3;
-    get_2_pmt_to_process(&d, get_pmt(2), &other, &listmgmt);
-    if (listmgmt != CA_LIST_MANAGEMENT_ADD)
-        LOG_AND_RETURN(1, "List mgmt should not ADD");
+    pmt = get_pmt(6);
+    pmt->stream_pids = 2;
+    pmt->stream_pid[0].pid = 601;
+    pmt->stream_pid[0].type = 2;
+    pmt->stream_pid[0].pid = 602;
+    pmt->stream_pid[0].type = 3;
 
-    if (other != NULL)
-        LOG_AND_RETURN(
-            1,
-            "Expected the other PMT to be set correctly for the second case");
-
+    int len = create_capmt(d.capmt, 1, clean, sizeof(clean), 0);
+    if (len <= 0)
+        LOG_AND_RETURN(1, "createCAPMT failed");
+    hexdump("CAPMT: ", clean, len);
     return 0;
 }
 
 int main() {
     opts.log = 1;
     opts.debug = 255;
+
     strcpy(thread_name, "test");
-    TEST_FUNC(test_quirks(), "testing CA quirks");
+    memset(&d, 0, sizeof(d));
+    memset(d.capmt, -1, sizeof(d.capmt));
+    d.enabled = 1;
+    d.multiple_pmt = 1;
+    d.max_ca_pmt = 1;
+
+    TEST_FUNC(test_multiple_pmt(), "testing CA multiple pmt");
+    memset(d.capmt, -1, sizeof(d.capmt));
+    TEST_FUNC(test_create_capmt(), "testing CA creating multiple pmt");
     fflush(stdout);
     return 0;
 }
