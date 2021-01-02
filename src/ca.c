@@ -850,7 +850,7 @@ int is_ca_initializing(int i) {
 int get_max_pmt_for_ca(int i) {
     if (i >= 0 && i < MAX_CA && ca_devices[i] && ca_devices[i]->enabled)
         return (ca_devices[i]->multiple_pmt + 1) * ca_devices[i]->max_ca_pmt;
-    return 0;
+    return MAX_CA_PMT;
 }
 
 int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
@@ -3433,7 +3433,7 @@ int dvbca_init_dev(adapter *ad) {
 #ifdef ENIGMA
     sprintf(ca_dev_path, "/dev/ci%d", ad->pa);
 #else
-    sprintf(ca_dev_path, "/dev/dvb/adapter%d/ca0", ad->pa);
+    sprintf(ca_dev_path, "/dev/dvb/adapter%d/ca%d", ad->pa, ad->fn);
 #endif
     fd = open(ca_dev_path, O_RDWR);
     if (fd < 0)
