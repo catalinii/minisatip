@@ -991,6 +991,8 @@ int ddci_read_sec_data(sockets *s) {
 }
 
 void ddci_post_init(adapter *ad) {
+    ddci_device_t *d = ddci_devices[ad->id];
+    d->max_channels = get_max_pmt_for_ca(ad->id);
     sockets *s = get_sockets(ad->sock);
     s->action = (socket_action)ddci_read_sec_data;
     // force the encrypted stream to be passed to the original device

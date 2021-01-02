@@ -23,4 +23,5 @@ void set_ca_adapter_pin(char *o);
 void set_ca_adapter_force_ci(char *o);
 char *get_ca_pin(int i);
 void set_ca_multiple_pmt(char *o);
+int get_max_pmt_for_ca(int i);
 #endif

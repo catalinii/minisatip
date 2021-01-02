@@ -847,6 +847,12 @@ int is_ca_initializing(int i) {
     return 0;
 }
 
+int get_max_pmt_for_ca(int i) {
+    if (i >= 0 && i < MAX_CA && ca_devices[i] && ca_devices[i]->enabled)
+        return (ca_devices[i]->multiple_pmt + 1) * ca_devices[i]->max_ca_pmt;
+    return 0;
+}
+
 int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
                  int cmd_id) {
     int pos = 0;
@@ -952,12 +958,18 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
     listmgmt = get_active_capmts(d) == 1 ? CA_LIST_MANAGEMENT_ONLY
                                          : CA_LIST_MANAGEMENT_ADD;
 
+    // if adding new PMT to existing CAPMT use _UPDATE
+    if (listmgmt == CA_LIST_MANAGEMENT_ADD && PMT_ID_IS_VALID(capmt->pmt_id) &&
+        PMT_ID_IS_VALID(capmt->other_id))
+        listmgmt = CA_LIST_MANAGEMENT_UPDATE;
     LOG("PMT CA %d pid %u (%s) ver %u sid %u (%x), enabled_pmts %d, "
         "%s, PMTS to be send %d %d",
         spmt->adapter, pid, spmt->name, ver, sid, sid,
         get_enabled_pmts_for_ca(d),
-        listmgmt == CA_LIST_MANAGEMENT_ONLY ? "only" : "add", capmt->pmt_id,
-        capmt->other_id);
+        listmgmt == CA_LIST_MANAGEMENT_ONLY
+            ? "only"
+            : listmgmt == CA_LIST_MANAGEMENT_ADD ? "add" : "update",
+        capmt->pmt_id, capmt->other_id);
 
     if (send_capmt(d->ca_resource, d->ca_session_number, capmt, listmgmt,
                    CA_PMT_CMD_ID_OK_DESCRAMBLING))
