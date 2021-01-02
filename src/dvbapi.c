@@ -430,25 +430,24 @@ int dvbapi_send_pmt(SKey *k) {
     buf[9] = 1;
     k->demux_index = demux;
 
-    if (oscam_version == 0 || oscam_version >= 11533) {
+    buf[12] = cmd_id;
 
-        buf[12] = cmd_id;
+    copy16(buf, 13, 0x8301); // adapter_device_descriptor, works only in
+                             // newer versions (> 11500)
+    buf[15] = adapter;
+    copy16(buf, 16, 0x8402); // pmt_pid_descriptor
+    copy16(buf, 18, pmt->pid);
 
-        copy16(buf, 13, 0x8301); // adapter_device_descriptor, works only in
-                                 // newer versions (> 11500)
-        buf[15] = adapter;
-        copy16(buf, 16, 0x8402); // pmt_pid_descriptor
-        copy16(buf, 18, pmt->pid);
+    copy16(buf, 20, 0x8601); // demux_id_descriptor
+    buf[22] = demux;
 
-        copy16(buf, 20, 0x8601); // demux_id_descriptor
-        buf[22] = demux;
+    copy16(buf, 23, 0x8701); // ca_device_descriptor (caX)
+    buf[25] = demux;
 
-        copy16(buf, 23, 0x8701); // ca_device_descriptor (caX)
-        buf[25] = demux;
+    memcpy(buf + 26, k->pi, k->pi_len); // CA description
+    len = 26 + k->pi_len;
 
-        memcpy(buf + 26, k->pi, k->pi_len);
-        len = 26 + k->pi_len;
-    }
+    // Pids associated with the PMT
     copy16(buf, 10, len - 12);
     int i;
     for (i = 0; i < pmt->stream_pids; i++) {
