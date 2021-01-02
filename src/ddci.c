@@ -261,7 +261,7 @@ int ddci_close_all() {
 int ddci_close(adapter *a) { return 0; }
 
 int find_ddci_for_pmt(SPMT *pmt) {
-    int i, has_ddci = 0;
+    int i, retry = 0;
     ddci_device_t *d;
     for (i = 0; i < MAX_ADAPTERS; i++)
         if ((d = get_ddci(i))) {
@@ -275,7 +275,7 @@ int find_ddci_for_pmt(SPMT *pmt) {
             }
             // DDCI exists but not yet initialized
             if (is_ca_initializing(i))
-                has_ddci = 1;
+                retry = 1;
 
             for (j = 0; j < ca[dvbca_id].ad_info[i].caids; j++)
                 if (match_caid(pmt, ca[dvbca_id].ad_info[i].caid[j],
@@ -285,14 +285,16 @@ int find_ddci_for_pmt(SPMT *pmt) {
                         ca[dvbca_id].ad_info[i].mask[j], pmt->id);
                     if (d->channels < d->max_channels)
                         return d->id;
-                    else
+                    else {
                         LOG("DDCI %d has already %d channels running (max %d)",
                             d->id, d->channels, d->max_channels);
+                        retry = 1;
+                    }
                 }
         }
-    if (has_ddci)
-        return -2;
-    return -1;
+    if (retry)
+        return -TABLES_RESULT_ERROR_RETRY;
+    return -TABLES_RESULT_ERROR_NORETRY;
 }
 
 int is_pmt_running(SPMT *pmt) {
@@ -327,8 +329,8 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
 #ifdef DDCI_TEST
     ddid = first_ddci;
 #endif
-    if (ddid == -2)
-        LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY, "DDCI not ready yet");
+    if (ddid < 0)
+        LOG_AND_RETURN(-ddid, "DDCI not ready or busy at the moment");
 
     ddci_device_t *d = get_ddci(ddid);
     if (!d) {
