@@ -450,7 +450,18 @@ int dvbapi_send_pmt(SKey *k) {
         len = 26 + k->pi_len;
     }
     copy16(buf, 10, len - 12);
-    len += CAPMT_add_PMT(buf + len, sizeof(buf) - len, pmt, cmd_id);
+    int i;
+    for (i = 0; i < pmt->stream_pids; i++) {
+        len += 5;
+        int type = pmt->stream_pid[i].type;
+        int pid = pmt->stream_pid[i].pid;
+        buf[len - 5] = type;
+        copy16(buf, len - 4, pid);
+        copy16(buf, len - 2, 0);
+        LOGM("Key %d adding stream pid %d (%X) type %d (%x)", k->id, pid, pid,
+             type, type);
+    }
+
     copy16(buf, 4, len - 6);
 
     // make sure is ONLY is not sent by multiple threads
