@@ -53,7 +53,7 @@ SCA ca[MAX_CA];
 int nca;
 SMutex ca_mutex;
 
-int add_ca(SCA_op *op, int adapter_mask) {
+int add_ca(SCA_op *op, uint64_t adapter_mask) {
     int i, new_ca;
     del_ca(op);
     for (i = 0; i < MAX_CA; i++)
@@ -148,7 +148,7 @@ void add_caid_mask(int ica, int aid, int caid, int mask) {
 }
 
 int tables_init_ca_for_device(int i, adapter *ad) {
-    int mask = (1 << i);
+    uint64_t mask = (1 << i);
     int rv = 0;
     if (i < 0 || i >= nca)
         return 0;
@@ -180,7 +180,7 @@ int match_caid(SPMT *pmt, int caid, int mask) {
 }
 
 void close_pmt_for_ca(int i, adapter *ad, SPMT *pmt) {
-    int mask = 1 << i;
+    uint64_t mask = 1 << i;
     if (!ad)
         ad = get_adapter(pmt->adapter);
     if (!ad)
@@ -209,14 +209,14 @@ int close_pmt_for_cas(adapter *ad, SPMT *pmt) {
 }
 
 void disable_pmt_for_ca(int i, SPMT *pmt) {
-    int mask = 1 << i;
+    uint64_t mask = 1 << i;
     if (ca[i].enabled && (pmt->ca_mask & mask)) {
         pmt->disabled_ca_mask |= mask;
     }
 }
 
 int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt) {
-    int mask;
+    uint64_t mask;
     int rv = 0, result = 0;
     mask = 1 << i;
 
@@ -295,7 +295,7 @@ void tables_update_encrypted_status(adapter *ad, SPMT *pmt) {
 }
 
 void tables_add_pid(adapter *ad, SPMT *pmt, int pid) {
-    int i, mask;
+    uint64_t i, mask;
     for (i = 0; i < nca; i++) {
         mask = 1 << i;
         if (ca[i].enabled && (pmt->ca_mask & mask) && ca[i].op->ca_add_pid)
@@ -304,7 +304,7 @@ void tables_add_pid(adapter *ad, SPMT *pmt, int pid) {
 }
 
 void tables_del_pid(adapter *ad, SPMT *pmt, int pid) {
-    int mask, i;
+    uint64_t mask, i;
     for (i = 0; i < nca; i++) {
         mask = 1 << i;
         if (ca[i].enabled && (pmt->ca_mask & mask) && ca[i].op->ca_del_pid)
@@ -314,7 +314,7 @@ void tables_del_pid(adapter *ad, SPMT *pmt, int pid) {
 
 int register_ca_for_adapter(int i, int aid) {
     adapter *ad = get_adapter(aid);
-    int mask, rv;
+    uint64_t mask, rv;
     if (i < 0 || i >= nca)
         return 1;
     if (!ad)
@@ -333,7 +333,7 @@ int register_ca_for_adapter(int i, int aid) {
 
 int unregister_ca_for_adapter(int i, int aid) {
     adapter *ad = get_adapter(aid);
-    int mask;
+    uint64_t mask;
     if (i < 0 || i >= nca)
         return 1;
     if (!ad)
@@ -361,7 +361,7 @@ int tables_init_device(adapter *ad) {
 }
 
 void init_ca_device(SCA *c) {
-    int i, init_cm;
+    uint64_t i, init_cm;
     adapter *ad;
     if (!c->op->ca_add_pmt)
         return;
@@ -378,7 +378,7 @@ void init_ca_device(SCA *c) {
 }
 
 int tables_close_device(adapter *ad) {
-    int i, mask = 1;
+    uint64_t i, mask = 1;
     int rv = 0;
 
     for (i = 0; i < nca; i++) {

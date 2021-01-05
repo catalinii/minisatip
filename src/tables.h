@@ -37,11 +37,11 @@ typedef struct struct_CA_AD {
 typedef struct struct_CA {
     uint8_t enabled;
     SCA_op *op;
-    int adapter_mask; // 1 << x, means enabled for adapter X
+    uint64_t adapter_mask; // 1 << x, means enabled for adapter X
     int id;
     SCA_AD ad_info[MAX_ADAPTERS];
 } SCA;
-int add_ca(SCA_op *op, int adapter_mask);
+int add_ca(SCA_op *op, uint64_t adapter_mask);
 void del_ca(SCA_op *op);
 void add_caid_mask(int ica, int aid, int caid, int mask);
 void init_ca_device(SCA *c); //  calls table_init_device for all the devices

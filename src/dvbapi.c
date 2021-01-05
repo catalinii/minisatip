@@ -789,6 +789,12 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt) {
     SKey *k = NULL;
     SPid *p;
     int key, pid = pmt->pid;
+
+    if (ad->type == ADAPTER_CI) {
+        LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
+                       "%s: Disabling dvbapi on DDCI adapter %d", __FUNCTION__,
+                       ad->id);
+    }
     p = find_pid(ad->id, pid);
     if (!p)
         LOG("%s: could not find %d on adapter %d", __FUNCTION__, pid, ad->id);

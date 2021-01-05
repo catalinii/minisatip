@@ -45,6 +45,7 @@
 #define DEV_FRONTEND "/dev/dvb/adapter%d/frontend%d"
 #define DEV_DEMUX "/dev/dvb/adapter%d/demux%d"
 #define DEV_DVR "/dev/dvb/adapter%d/dvr%d"
+#define DEV_SEC "/dev/dvb/adapter%d/sec%d"
 
 #ifdef ENIGMA
 #ifndef DMX_SET_SOURCE
@@ -1545,6 +1546,14 @@ void find_dvb_adapter(adapter **a) {
             sprintf(buf, DEV_DVR, i, j);
             if (!access(buf, R_OK))
                 cnt++;
+
+            // currently only independent CAMs (TBS, DD) have sec%d devices
+            // do not use them as DVB adapters too
+            sprintf(buf, DEV_SEC, i, j);
+            if (!access(buf, W_OK)) {
+                LOG("%s device found, this is a DDCI device", buf);
+                continue;
+            }
 
             if (cnt == 3) {
                 //				if (is_adapter_disabled(na))

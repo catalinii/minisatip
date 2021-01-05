@@ -33,6 +33,10 @@ ifneq ($(VERSION),-)
 CFLAGS+=-DVERSION=\"$(VERSION)\"
 endif
 
+ifeq ($(OS),x86_64-linux-gnu)
+DDCI=1
+endif
+
 ifneq ($(OS),apple)
         LDFLAGS += -lrt
 else

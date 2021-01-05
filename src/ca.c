@@ -3428,7 +3428,7 @@ int dvbca_init_dev(adapter *ad) {
     if (c && c->enabled)
         return TABLES_RESULT_OK;
 
-    if (ad->type != ADAPTER_DVB)
+    if (ad->type != ADAPTER_DVB && ad->type != ADAPTER_CI)
         return TABLES_RESULT_ERROR_NORETRY;
 #ifdef ENIGMA
     sprintf(ca_dev_path, "/dev/ci%d", ad->pa);

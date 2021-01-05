@@ -1006,6 +1006,23 @@ void ddci_post_init(adapter *ad) {
         ddci_init();
 }
 
+int set_property(int fd, uint32_t cmd, uint32_t data) {
+    struct dtv_property p;
+    struct dtv_properties c;
+    int ret;
+
+    p.cmd = cmd;
+    c.num = 1;
+    c.props = &p;
+    p.u.data = data;
+    ret = ioctl(fd, FE_SET_PROPERTY, &c);
+    if (ret < 0) {
+        LOGM("FE_SET_PROPERTY command %d returned %d\n", cmd, errno);
+        return -1;
+    }
+    return 0;
+}
+
 int ddci_open_device(adapter *ad) {
     char buf[100];
     int read_fd, write_fd;
@@ -1051,6 +1068,11 @@ int ddci_open_device(adapter *ad) {
         ad->fe = -1;
         return 1;
     }
+    // set input bitrate for TBS devices to 100Mbits/s
+#define MODULATOR_INPUT_BITRATE 33
+    set_property(write_fd, MODULATOR_INPUT_BITRATE, 100);
+    set_linux_socket_nonblock(read_fd);
+    set_linux_socket_nonblock(write_fd);
 #else
     int fd[2];
     if (pipe(fd) == -1) {
@@ -1069,7 +1091,7 @@ int ddci_open_device(adapter *ad) {
     // NULL); 	if(ad->fe_sock < 0) 		LOG_AND_RETURN(ad->fe_sock,
     // "Failed to add sockets for the DDCI device");
     ad->dvr = read_fd;
-    ad->type = ADAPTER_DVB;
+    ad->type = ADAPTER_CI;
     ad->dmx = -1;
     ad->sys[0] = 0;
     ad->adapter_timeout = 0;
@@ -1213,7 +1235,7 @@ void find_ddci_adapter(adapter **a) {
                 ad->get_signal = (Device_signal)NULL;
                 ad->set_pid = (Set_pid)ddci_set_pid;
                 ad->del_filters = (Del_filters)ddci_del_filters;
-                ad->type = ADAPTER_DVB;
+                ad->type = ADAPTER_CI;
 
                 ddci_adapters++;
                 na++;

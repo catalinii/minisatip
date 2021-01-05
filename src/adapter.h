@@ -29,6 +29,7 @@ typedef uint8_t (*Dvb_delsys)(int aid, int fd, uint8_t *sys);
 #define ADAPTER_DVB 1
 #define ADAPTER_SATIP 2
 #define ADAPTER_NETCV 3
+#define ADAPTER_CI 4
 
 #define MAX_DELSYS 10
 
