@@ -54,18 +54,13 @@ void dvbaes_create_key(SCW *cw) { cw->key = malloc1(sizeof(AES_KEY)); }
 
 void dvbaes_delete_key(SCW *cw) { free1(cw->key); }
 
-int dvbaes_batch_size() // make sure the number is divisible by 7
-{
-    return 128; // process 64 packets at a time
-}
-
 void dvbaes_set_cw(SCW *cw, SPMT *pmt) {
     AES_set_decrypt_key(cw->cw, 128, (AES_KEY *)cw->key);
 }
 
-void dvbaes_decrypt_stream(SCW *cw, SPMT_batch *batch, int max_len) {
+void dvbaes_decrypt_stream(SCW *cw, SPMT_batch *batch, int batch_len) {
     int i, j, len;
-    for (i = 0; i < max_len && batch[i].data; i++) {
+    for (i = 0; i < batch_len; i++) {
         len = (batch[i].len / 16) * 16;
         for (j = 0; j < len; j++)
             AES_ecb_encrypt(batch[i].data + j, batch[i].data + j,
@@ -76,7 +71,6 @@ void dvbaes_decrypt_stream(SCW *cw, SPMT_batch *batch, int max_len) {
 SCW_op aes_op = {.algo = CA_ALGO_AES128_ECB,
                  .create_cw = (Create_CW)dvbaes_create_key,
                  .delete_cw = (Delete_CW)dvbaes_delete_key,
-                 .batch_size = dvbaes_batch_size,
                  .set_cw = (Set_CW)dvbaes_set_cw,
                  .stop_cw = NULL,
                  .decrypt_stream = (Decrypt_Stream)dvbaes_decrypt_stream};
@@ -113,10 +107,10 @@ int decrypt(void *context, unsigned char *ciphertext, int ciphertext_len,
     return plaintext_len;
 }
 
-void dvbaes_cbc_decrypt_stream(SCW *cw, SPMT_batch *batch, int max_len) {
+void dvbaes_cbc_decrypt_stream(SCW *cw, SPMT_batch *batch, int batch_len) {
     int i, len;
     uint8_t decryptedtext[300]; //, ciphertext[300];
-    for (i = 0; i < max_len && batch[i].data; i++) {
+    for (i = 0; i < batch_len; i++) {
 
         // memset(decryptedtext, 0, sizeof(decryptedtext));
         //		memset(ciphertext, 0, sizeof(ciphertext));
@@ -135,7 +129,6 @@ void dvbaes_cbc_decrypt_stream(SCW *cw, SPMT_batch *batch, int max_len) {
 SCW_op aes_cbc_op = {.algo = CA_ALGO_AES128_CBC,
                      .create_cw = (Create_CW)dvbaes_cbc_create_key,
                      .delete_cw = (Delete_CW)dvbaes_cbc_delete_key,
-                     .batch_size = dvbaes_batch_size,
                      .set_cw = (Set_CW)dvbaes_cbc_set_cw,
                      .stop_cw = (Set_CW)dvbaes_cbc_stop_cw,
                      .decrypt_stream =

@@ -240,7 +240,7 @@ int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt) {
             pmt->ca_mask |= mask;
         else if (result == TABLES_RESULT_ERROR_NORETRY)
             pmt->disabled_ca_mask |= mask;
-        pmt->invalidated = 1;
+        disable_cw(pmt->id);
         rv += (1 - result);
         LOGM("In processing PMT %d, ca %d, CA matched %d, ca_pmt_add returned "
              "%d, "

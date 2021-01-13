@@ -853,6 +853,32 @@ int get_max_pmt_for_ca(int i) {
     return MAX_CA_PMT;
 }
 
+void send_cw_to_all_pmts(ca_device_t *d, int parity) {
+    int i;
+    for (i = 0; i < d->max_ca_pmt; i++) {
+        if (PMT_ID_IS_VALID(d->capmt[i].pmt_id)) {
+            send_cw(d->capmt[i].pmt_id, CA_ALGO_AES128_CBC, parity,
+                    d->key[parity], d->iv[parity], 3720);
+        }
+        if (PMT_ID_IS_VALID(d->capmt[i].other_id)) {
+            send_cw(d->capmt[i].other_id, CA_ALGO_AES128_CBC, parity,
+                    d->key[parity], d->iv[parity], 3720);
+        }
+    }
+}
+
+void disable_cws_for_all_pmts(ca_device_t *d) {
+    int i;
+    for (i = 0; i < d->max_ca_pmt; i++) {
+        if (PMT_ID_IS_VALID(d->capmt[i].pmt_id)) {
+            disable_cw(d->capmt[i].pmt_id);
+        }
+        if (PMT_ID_IS_VALID(d->capmt[i].other_id)) {
+            disable_cw(d->capmt[i].other_id);
+        }
+    }
+}
+
 int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
                  int cmd_id) {
     int pos = 0;
@@ -2011,16 +2037,8 @@ static void check_new_key(ca_device_t *d, struct cc_ctrl_data *cc_data) {
     memcpy(d->iv[slot], dec + 16, 16);
     d->parity = slot;
 
-    for (i = 0; i < d->max_ca_pmt; i++) {
-        if (PMT_ID_IS_VALID(d->capmt[i].pmt_id)) {
-            send_cw(d->capmt[i].pmt_id, CA_ALGO_AES128_CBC, slot, d->key[slot],
-                    d->iv[slot], 3720);
-        }
-        if (PMT_ID_IS_VALID(d->capmt[i].other_id)) {
-            send_cw(d->capmt[i].other_id, CA_ALGO_AES128_CBC, slot,
-                    d->key[slot], d->iv[slot], 3720);
-        }
-    }
+    send_cw_to_all_pmts(d, slot);
+
     d->is_ciplus = 1;
 
     /* reset */
@@ -2272,6 +2290,8 @@ static int ci_ccmgr_cc_sac_data_req(ca_device_t *d, struct ci_session *session,
         LOG("check_auth of message failed");
         return 0;
     }
+
+    disable_cws_for_all_pmts(d);
 
     serial = UINT32(&data[rp], 4);
     LOG("serial sac data req: %d", serial);

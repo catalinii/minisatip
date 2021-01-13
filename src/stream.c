@@ -1016,7 +1016,7 @@ int process_dmx(sockets *s) {
 int read_dmx(sockets *s) {
     static int cnt;
     adapter *ad;
-    int send = 0, flush_all = 0, ls, lse;
+    int send = 0, force_send = 0, ls, lse;
     int threshold = opts.udp_threshold;
     int64_t rtime = getTick();
 
@@ -1036,15 +1036,14 @@ int read_dmx(sockets *s) {
 
     threshold = ad->threshold;
 
-    // flush buffers every 50ms or the first 1000 packets (for PAT and PMT
-    // processing)
-    if (rtime - ad->rtime > threshold) {
-        flush_all = 1; // flush everything that we've read so far
+    if (rtime - ad->rtime > threshold)
         send = 1;
-    }
+
+    if (rtime - ad->rtime > 4 * threshold)
+        force_send = 1;
 
     if (s->lbuf - s->rlen <= 7 * DVB_FRAME)
-        send = 1;
+        force_send = 1;
 
     if (ad->wait_new_stream && !ad->tune_time)
         ad->tune_time = rtime;
@@ -1066,15 +1065,20 @@ int read_dmx(sockets *s) {
     ad->wait_new_stream = 0;
 
     if (ad->flush)
-        send = 1;
+        force_send = 1;
 
-    LOGM("read_dmx send=%d, flush_all=%d, cnt %d called for adapter %d -> %d "
+#ifndef DISABLE_PMT
+    if (!force_send && wait_pusi(ad, s->rlen))
+        send = 0;
+#endif
+
+    LOGM("read_dmx send=%d, force_send=%d, cnt %d called for adapter %d -> %d "
          "out "
          "of %d bytes read, %jd ms ago (%jd %jd)",
-         send, flush_all, cnt, ad->id, s->rlen, s->lbuf, rtime - ad->rtime,
+         send, force_send, cnt, ad->id, s->rlen, s->lbuf, rtime - ad->rtime,
          rtime, ad->rtime);
 
-    if (!send)
+    if (!send && !force_send)
         return 0;
 
     ad->flush = 0;

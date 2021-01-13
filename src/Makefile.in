@@ -149,7 +149,7 @@ LDFLAGS+=$(LDFLAGS-1)
 OBJS := $(patsubst %.c, $(BUILDDIR)/%.o, $(SOURCES))
 DEPS=$(OBJS:.o=.d)
 
-$(TARGET): $(DEPS) $(OBJS)
+$(TARGET): $(DEPS) $(OBJS) $(SOURCES)
 	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LDFLAGS)
 
 $(BUILDDIR)/%.d : %.c

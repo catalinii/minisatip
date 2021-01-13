@@ -51,27 +51,37 @@ void dvbcsa_create_key(SCW *cw) { cw->key = dvbcsa_bs_key_alloc(); }
 
 void dvbcsa_delete_key(SCW *cw) { dvbcsa_key_free(cw->key); }
 
-int dvbcsa_batch_size() {
-    int batchSize = dvbcsa_bs_batch_size();
-    return batchSize;
-}
-
 void dvbcsa_set_cw(SCW *cw, SPMT *pmt) {
     dvbcsa_bs_key_set((unsigned char *)cw->cw, cw->key);
 }
 
-void dvbcsa_decrypt_stream(SCW *cw, SPMT_batch *batch, int max_len) {
-    if (cw->key)
+void copy_batch(struct dvbcsa_bs_batch_s *d, SPMT_batch *s, int len) {
+    int i = 0;
+    for (i = 0; i < len; i++) {
+        d[i].data = s[i].data;
+        d[i].len = s[i].len;
+    }
+    d[i].data = 0;
+    d[i].len = 0;
+}
+
+void dvbcsa_decrypt_stream(SCW *cw, SPMT_batch *batch, int batch_len) {
+    int batch_size = dvbcsa_bs_batch_size();
+    struct dvbcsa_bs_batch_s b[batch_size + 1];
+    int i;
+    for (i = 0; i < batch_len; i += batch_size) {
+        int len = batch_len - i;
+        if (len > batch_size)
+            len = batch_size;
+        copy_batch(b, batch + i, len);
         dvbcsa_bs_decrypt((const struct dvbcsa_bs_key_s *)cw->key,
-                          (const struct dvbcsa_bs_batch_s *)batch, max_len);
-    else
-        LOG("%s: cw->key is null", __FUNCTION__);
+                          (const struct dvbcsa_bs_batch_s *)b, 184);
+    }
 }
 
 SCW_op csa_op = {.algo = CA_ALGO_DVBCSA,
                  .create_cw = (Create_CW)dvbcsa_create_key,
                  .delete_cw = (Delete_CW)dvbcsa_delete_key,
-                 .batch_size = dvbcsa_batch_size,
                  .set_cw = (Set_CW)dvbcsa_set_cw,
                  .stop_cw = NULL,
                  .decrypt_stream = (Decrypt_Stream)dvbcsa_decrypt_stream};

@@ -23,7 +23,7 @@ LIBS+=crypto dl pthread
 LIBS+=dvbcsa
 LIBS+=dvben50221 dvbapi ucsi
 CFLAGS += -DAXE
-#CFLAGS += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=null
+CFLAGS += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=null
 CFLAGS += -I../src
 
 CFLAGS += -DENIGMA

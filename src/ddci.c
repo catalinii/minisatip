@@ -997,8 +997,6 @@ void ddci_post_init(adapter *ad) {
     d->max_channels = get_max_pmt_for_ca(ad->id);
     sockets *s = get_sockets(ad->sock);
     s->action = (socket_action)ddci_read_sec_data;
-    // force the encrypted stream to be passed to the original device
-    ad->drop_encrypted = 0;
     if (ad->fe_sock >= 0)
         set_socket_thread(ad->fe_sock, get_socket_thread(ad->sock));
     post_tune(ad);
@@ -1236,6 +1234,7 @@ void find_ddci_adapter(adapter **a) {
                 ad->set_pid = (Set_pid)ddci_set_pid;
                 ad->del_filters = (Del_filters)ddci_del_filters;
                 ad->type = ADAPTER_CI;
+                ad->drop_encrypted = 0;
 
                 ddci_adapters++;
                 na++;

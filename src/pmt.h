@@ -44,7 +44,7 @@ typedef void (*Create_CW)(void *);
 typedef void (*Delete_CW)(void *);
 typedef int (*Batch_size)(void);
 typedef void (*Set_CW)(void *cw, void *pmt);
-typedef void (*Decrypt_Stream)(void *cw, SPMT_batch *batch, int batch_len);
+typedef void (*Decrypt_Stream)(void *cw, SPMT_batch *batch, int len);
 
 typedef int (*filter_function)(int filter, void *buf, int len, void *opaque);
 
@@ -52,7 +52,6 @@ typedef struct struct_pmt_op {
     int algo;
     Create_CW create_cw;
     Delete_CW delete_cw;
-    Batch_size batch_size;
     Set_CW set_cw, stop_cw;
     Decrypt_Stream decrypt_stream;
 } SCW_op;
@@ -73,8 +72,6 @@ typedef struct struct_cw {
     char adapter;
     char parity;
     char cw_len;
-    int prio;
-    char low_prio;
     int16_t id;
     int64_t expiry, set_time;
 
@@ -105,9 +102,8 @@ typedef struct struct_pmt {
     int pi_len;
     int blen;
     int ca_mask, disabled_ca_mask;
-    SPMT_batch batch[MAX_BATCH_SIZE + 2];
-    int8_t parity, invalidated;
-    int64_t last_parity_change;
+    SPMT_batch *batch;
+    int8_t parity, update_cw;
     int16_t master_pmt; //  the pmt that contains the same pids as this PMT
     SCW *cw;
     SPid *p;
@@ -201,5 +197,11 @@ int clean_psi_buffer(uint8_t *pmt, uint8_t *clean, int clean_size);
 void disable_cw(int master_pmt);
 void expire_cw_for_pmt(int master_pmt, int parity, int64_t min_expiry);
 int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id);
+int pmt_add(int i, int adapter, int sid, int pmt_pid);
+int test_decrypt_packet(SCW *cw, SPMT_batch *batch, int len);
+void init_algo();
+void update_cw(SPMT *pmt, SPMT_batch *start, int len);
+int pmt_decrypt_stream(adapter *ad);
+int wait_pusi(adapter *ad, int len);
 #endif
 #endif

@@ -55,7 +55,6 @@
 extern adapter *a[MAX_ADAPTERS];
 extern SPMT *pmts[MAX_PMT];
 void remove_pmt_from_device(ca_device_t *d, SPMT *pmt);
-int pmt_add(int i, int adapter, int sid, int pmt_pid);
 SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple);
 int get_active_capmts(ca_device_t *d);
 int get_enabled_pmts_for_ca(ca_device_t *d);

@@ -117,6 +117,11 @@ adapter *adapter_alloc() {
 
     ad->drop_encrypted = opts.drop_encrypted;
 
+    if (!ad->buf) {
+        ad->lbuf = opts.adapter_buffer;
+        ad->buf = malloc1(ad->lbuf + 10);
+    }
+
 #ifndef DISABLE_PMT
     // filter for pid 0
     ad->pat_filter = -1;
@@ -295,21 +300,6 @@ int init_hw(int i) {
     ad->enabled = 1;
 
     if (!ad->buf) {
-        ad->lbuf = opts.adapter_buffer;
-        ad->buf = malloc1(ad->lbuf + 10);
-    }
-    if (!ad->buf) {
-        LOG("memory allocation failed for %d bytes failed, adapter %d, trying "
-            "%d "
-            "bytes",
-            opts.adapter_buffer, i, ADAPTER_BUFFER);
-        opts.adapter_buffer = ADAPTER_BUFFER;
-        ad->buf = malloc1(opts.adapter_buffer + 10);
-        if (!ad->buf) {
-            LOG("memory allocation failed for %d bytes failed, adapter %d",
-                opts.adapter_buffer, i);
-            close_adapter(i);
-        }
         rv = 7;
         goto NOK;
     }
