@@ -886,6 +886,9 @@ int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
     SPMT *other = get_pmt(ca->other_id);
     int version = ca->version++;
 
+    if(!pmt)
+        LOG_AND_RETURN(1, "%s: PMT %d not found", __FUNCTION__, ca->pmt_id);
+
     capmt[pos++] = listmgmt;
     copy16(capmt, pos, pmt->sid);
     pos += 2;
@@ -977,6 +980,9 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
                        d->id);
 
     first = get_pmt(capmt->pmt_id);
+    if(!first)
+        LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "First PMT not found from capmt %d",
+                       capmt->pmt_id);
     pid = spmt->pid;
     ver = capmt->version;
     sid = first->sid;
@@ -1147,7 +1153,7 @@ static int element_set(struct cc_ctrl_data *cc_data, unsigned int id,
     e->size = size;
     e->valid = 1;
 
-    LOG("_element_set_ stored %d with len %d", id, size);
+    LOGM("_element_set_ stored %d with len %d", id, size);
     //       hexdump("DATA: ", (void *)data, size);
     return 1;
 }
@@ -2091,7 +2097,7 @@ static int data_get_handle_new(ca_device_t *d, struct cc_ctrl_data *cc_data,
     case 16: /* CICAM_DevCert */
     case 18: /* Signature_B */
     case 26: /* program_number */
-        LOG("not need to be handled id %d", id);
+        LOGM("not need to be handled id %d", id);
         break;
 
     default:
@@ -2141,7 +2147,7 @@ static int data_get_loop(ca_device_t *d, struct cc_ctrl_data *cc_data,
         dt_len |= data[pos++];
         if (pos + dt_len > datalen)
             return 0;
-        LOG("set element(dt_id) %d dt_len = %i", dt_id, dt_len);
+        LOGM("set element(dt_id) %d dt_len = %i", dt_id, dt_len);
         //                hexdump("data_get_loop: ", (void *)&data[pos],
         //                dt_len);
         element_set(cc_data, dt_id, &data[pos], dt_len);
@@ -2166,7 +2172,7 @@ static int data_req_loop(struct cc_ctrl_data *cc_data, unsigned char *dest,
 
     for (i = 0; i < items; i++) {
         dt_id = *data++;
-        LOG("req element %d", dt_id);
+        LOGM("req element %d", dt_id);
         data_req_handle_new(
             cc_data,
             dt_id); /* check if there is any action needed before we answer */
@@ -2241,7 +2247,7 @@ void ci_ccmgr_cc_open_cnf(struct ci_session *session) {
     const uint8_t bitmap = 0x01;
 
     data_initialize(session);
-    LOG("SEND ------------ CC_OPEN_CNF----------- ");
+    LOGM("SEND ------------ CC_OPEN_CNF----------- ");
     ci_session_sendAPDU(session, tag, &bitmap, 1);
 }
 
@@ -2294,7 +2300,7 @@ static int ci_ccmgr_cc_sac_data_req(ca_device_t *d, struct ci_session *session,
     disable_cws_for_all_pmts(d);
 
     serial = UINT32(&data[rp], 4);
-    LOG("serial sac data req: %d", serial);
+    LOGM("serial sac data req: %d", serial);
 
     /* skip serial & header */
     rp += 8;
@@ -2324,7 +2330,7 @@ static int ci_ccmgr_cc_sac_data_req(ca_device_t *d, struct ci_session *session,
     }
     pos += answ_len;
 
-    LOG("SEND ------------ CC_SAC_DATA_CNF----------- ");
+    LOGM("SEND ------------ CC_SAC_DATA_CNF----------- ");
     //        _hexdump("sac_data_send", &dest[8], pos-8);  //skip serial and
     //        header
     return ci_ccmgr_cc_sac_send(session, data_cnf_tag, dest, pos);
@@ -2355,7 +2361,7 @@ static void ci_ccmgr_cc_sync_req(struct ci_session *session,
                                  const uint8_t *data, unsigned int len) {
     const uint8_t tag[3] = {0x9f, 0x90, 0x06};
     const uint8_t status = 0x00; /* OK */
-    LOG("SEND ------------ CC_SYNC_CNF----------- ");
+    LOGM("SEND ------------ CC_SYNC_CNF----------- ");
     ci_session_sendAPDU(session, tag, &status, 1);
 }
 
@@ -2398,7 +2404,7 @@ static int ci_ccmgr_cc_data_req(ca_device_t *d, struct ci_session *session,
 
     answ_len += 2;
 
-    LOG("SEND ------------ CC_DATA_CNF----------- ");
+    LOGM("SEND ------------ CC_DATA_CNF----------- ");
     ci_session_sendAPDU(session, cc_data_cnf_tag, dest, answ_len);
 
     return 1;
@@ -2785,16 +2791,16 @@ static int ca_session_callback(void *arg, int reason, uint8_t slot_id,
     ca_device_t *d = arg;
     d->session->ca = d;
 
-    LOG("%s: reason %d slot_id %u session_number %u resource_id %x", __func__,
+    LOGM("%s: reason %d slot_id %u session_number %u resource_id %x", __func__,
         reason, slot_id, session_number, resource_id);
 
     switch (reason) {
     case S_SCALLBACK_REASON_CAMCONNECTING: // 0
-        LOG("%02x:CAM connecting to resource %08x, session_number %i", slot_id,
+        LOGM("%02x:CAM connecting to resource %08x, session_number %i", slot_id,
             resource_id, session_number);
         break;
     case S_SCALLBACK_REASON_CLOSE: // 5
-        LOG("%02x:Connection to resource %08x, session_number %i closed",
+        LOGM("%02x:Connection to resource %08x, session_number %i closed",
             slot_id, resource_id, session_number);
 
         if (resource_id == EN50221_APP_CA_RESOURCEID) {
@@ -2815,16 +2821,16 @@ static int ca_session_callback(void *arg, int reason, uint8_t slot_id,
         break;
 
     case S_SCALLBACK_REASON_TC_CONNECT: // 6
-        LOG("%02x:Host originated transport connection %i resource 0x%08x "
+        LOGM("%02x:Host originated transport connection %i resource 0x%08x "
             "connected",
             slot_id, resource_id, session_number);
         break;
     case S_SCALLBACK_REASON_TC_CAMCONNECT: // 7
-        LOG("%02x:CAM originated transport connection %i connected", slot_id,
+        LOGM("%02x:CAM originated transport connection %i connected", slot_id,
             session_number);
         break;
     case S_SCALLBACK_REASON_CAMCONNECTED: // 1
-        LOG("%02x:CAM successfully connected to resource %08x, session_number "
+        LOGM("%02x:CAM successfully connected to resource %08x, session_number "
             "%i",
             slot_id, resource_id, session_number);
 
@@ -2903,7 +2909,7 @@ static int ca_lookup_callback(void *arg, uint8_t slot_id,
     ca_device_t *d = arg;
     d->session->ca = d;
 
-    LOG("===================> %s: slot_id %u requested_resource_id %x",
+    LOGM("===================> %s: slot_id %u requested_resource_id %x",
         __func__, slot_id, requested_resource_id);
 
     switch (requested_resource_id) {
@@ -3054,7 +3060,6 @@ static int ca_ca_info_callback(void *arg, uint8_t slot_id,
                                uint16_t *ca_ids) {
     (void)session_number;
     ca_device_t *d = arg;
-    LOG("%02x:%s", slot_id, __func__);
     uint32_t i;
 
     d->init_ok = 1;
@@ -3093,8 +3098,8 @@ static int ca_dt_enquiry_callback(void *arg, uint8_t slot_id,
                                   uint8_t response_interval) {
     ca_device_t *d = arg;
 
-    LOG("%02x:%s", slot_id, __func__);
-    LOG("  response_interval:%i", response_interval);
+    LOGM("%02x:%s", slot_id, __func__);
+    LOGM("  response_interval:%i", response_interval);
 
     if (en50221_app_datetime_send(d->dt_resource, session_number, time(NULL),
                                   -1)) {

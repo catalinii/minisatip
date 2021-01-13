@@ -266,7 +266,7 @@ int find_ddci_for_pmt(SPMT *pmt) {
     for (i = 0; i < MAX_ADAPTERS; i++)
         if ((d = get_ddci(i))) {
             int j;
-            uint64_t mask = 1 << i;
+            uint64_t mask = 1ULL << i;
 
             if (sid_blacklist[pmt->sid] & mask) {
                 LOG("PMT %d sid %d already blacklisted on DD %d", pmt->id,
@@ -315,9 +315,12 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
 
     if (get_ddci(ad->id)) {
         LOG("Skip processing pmt for ddci adapter %d", ad->id);
+        // grace time for card decrypting lower than the default grace_time
+        pmt->grace_time = getTick() + 1500;
         return TABLES_RESULT_OK;
     }
 
+    pmt->grace_time = getTick() + 2000;
     if ((ddid = is_pmt_running(pmt)))
         LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
                        "%s: pmt %d (master %d) already running on DDCI %d",
@@ -330,7 +333,9 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     ddid = first_ddci;
 #endif
     if (ddid < 0)
-        LOG_AND_RETURN(-ddid, "DDCI not ready or busy at the moment");
+        LOG_AND_RETURN(-ddid, "DDCI not ready or busy at the moment: %s",
+                       ddid == -TABLES_RESULT_ERROR_NORETRY ? "no retry"
+                                                            : "retry");
 
     ddci_device_t *d = get_ddci(ddid);
     if (!d) {
@@ -433,7 +438,7 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
     return 0;
 }
 void blacklist_pmt_for_ddci(SPMT *pmt, int ddid) {
-    uint64_t mask = 1 << ddid;
+    uint64_t mask = 1ULL << ddid;
     if ((sid_whitelist[pmt->sid] & mask) == 0) {
         sid_blacklist[pmt->sid] |= mask;
         LOG("PMT %d, sid %d is blacklisted on DD %d", pmt->id, pmt->sid, ddid);
@@ -464,7 +469,7 @@ int ddci_encrypted(adapter *ad, SPMT *pmt) {
     ddpid = get_mapping_table(ad->id, pmt->pid, &ddid, NULL);
     LOG("PMT %d, pid %d, sid %d is encrypted on adapter %d, DD %d, ddpid %d",
         pmt->id, pmt->pid, pmt->sid, ad->id, ddid, ddpid);
-    if (ddpid >= 0 && sid_blacklist[pmt->sid] & (1 << ddid)) {
+    if (ddpid >= 0 && sid_blacklist[pmt->sid] & (1ULL << ddid)) {
         LOG("Closing pmt %d on adapter %d, DD %d", pmt->id, ad->id, ddid);
         close_pmt_for_ca(ddci_id, ad, pmt);
     }
@@ -474,7 +479,7 @@ int ddci_encrypted(adapter *ad, SPMT *pmt) {
 int ddci_decrypted(adapter *ad, SPMT *pmt) {
     ddci_device_t *d = get_ddci(ad->id);
     if (d) {
-        uint64_t mask = 1 << d->id;
+        uint64_t mask = 1ULL << d->id;
         LOG("PMT %d, sid %d is reported decrypted whitelisting on DD %d",
             pmt->id, pmt->sid, d->id);
         sid_whitelist[pmt->sid] |= mask;
@@ -920,11 +925,9 @@ void ddci_init() // you can search the devices here and fill the ddci_devices,
     ddci.ca_del_pmt = ddci_del_pmt;
     ddci.ca_close_ca = ddci_close;
     ddci.ca_ts = ddci_ts;
-    /*
-    Disable detection of encrypted channels
     ddci.ca_encrypted = ddci_encrypted;
     ddci.ca_decrypted = ddci_decrypted;
-    */
+
     ddci_id = add_ca(&ddci, 0xFFFFFFFF);
     LOG("Registered DDCI CA %d", ddci_id);
     memset(sid_whitelist, 0, sizeof(sid_whitelist));
@@ -1083,11 +1086,11 @@ int ddci_open_device(adapter *ad) {
 #endif
     mutex_lock(&d->mutex);
     ad->fe = write_fd;
-    // create a sockets for buffering
+    // creating a non blocking socket for buffering -- not working
     ad->fe_sock = -1;
-    //	ad->fe_sock = sockets_add(ad->fe, NULL, ad->id, TYPE_TCP, NULL, NULL,
-    // NULL); 	if(ad->fe_sock < 0) 		LOG_AND_RETURN(ad->fe_sock,
-    // "Failed to add sockets for the DDCI device");
+//    ad->fe_sock = sockets_add(ad->fe, NULL, ad->id, TYPE_TCP, NULL, NULL, NULL); 	
+//    if(ad->fe_sock < 0) 		
+//        LOG_AND_RETURN(ad->fe_sock, "Failed to add sockets for the DDCI device");
     ad->dvr = read_fd;
     ad->type = ADAPTER_CI;
     ad->dmx = -1;
