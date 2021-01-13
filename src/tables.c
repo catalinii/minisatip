@@ -148,7 +148,7 @@ void add_caid_mask(int ica, int aid, int caid, int mask) {
 }
 
 int tables_init_ca_for_device(int i, adapter *ad) {
-    uint64_t mask = (1 << i);
+    uint64_t mask = (1ULL << i);
     int rv = 0;
     if (i < 0 || i >= nca)
         return 0;
@@ -180,7 +180,7 @@ int match_caid(SPMT *pmt, int caid, int mask) {
 }
 
 void close_pmt_for_ca(int i, adapter *ad, SPMT *pmt) {
-    uint64_t mask = 1 << i;
+    uint64_t mask = 1ULL << i;
     if (!ad)
         ad = get_adapter(pmt->adapter);
     if (!ad)
@@ -209,7 +209,7 @@ int close_pmt_for_cas(adapter *ad, SPMT *pmt) {
 }
 
 void disable_pmt_for_ca(int i, SPMT *pmt) {
-    uint64_t mask = 1 << i;
+    uint64_t mask = 1ULL << i;
     if (ca[i].enabled && (pmt->ca_mask & mask)) {
         pmt->disabled_ca_mask |= mask;
     }
@@ -218,7 +218,7 @@ void disable_pmt_for_ca(int i, SPMT *pmt) {
 int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt) {
     uint64_t mask;
     int rv = 0, result = 0;
-    mask = 1 << i;
+    mask = 1ULL << i;
 
     if (ca[i].enabled && (ad->ca_mask & mask) && ca[i].op->ca_add_pmt &&
         !(pmt->disabled_ca_mask & mask) && !(pmt->ca_mask & mask)) {
@@ -282,8 +282,8 @@ void tables_update_encrypted_status(adapter *ad, SPMT *pmt) {
     LOGM("Updating status %d for pmt %d, ad mask %08X, pmt mask %08X", status,
          pmt->id, ad->ca_mask, pmt->ca_mask);
     for (i = 0; i < nca; i++)
-        if (ca[i].enabled && (ad->ca_mask & (1 << i)) &&
-            (pmt->ca_mask & (1 << i))) {
+        if (ca[i].enabled && (ad->ca_mask & (1ULL << i)) &&
+            (pmt->ca_mask & (1ULL << i))) {
             LOGM("Updating status %d pmt %d for ca %d and adapter %d", status,
                  pmt->id, i, ad->id);
             if (status == TABLES_CHANNEL_ENCRYPTED && ca[i].op->ca_encrypted)
@@ -297,7 +297,7 @@ void tables_update_encrypted_status(adapter *ad, SPMT *pmt) {
 void tables_add_pid(adapter *ad, SPMT *pmt, int pid) {
     uint64_t i, mask;
     for (i = 0; i < nca; i++) {
-        mask = 1 << i;
+        mask = 1ULL << i;
         if (ca[i].enabled && (pmt->ca_mask & mask) && ca[i].op->ca_add_pid)
             ca[i].op->ca_add_pid(ad, pmt, pid);
     }
@@ -306,7 +306,7 @@ void tables_add_pid(adapter *ad, SPMT *pmt, int pid) {
 void tables_del_pid(adapter *ad, SPMT *pmt, int pid) {
     uint64_t mask, i;
     for (i = 0; i < nca; i++) {
-        mask = 1 << i;
+        mask = 1ULL << i;
         if (ca[i].enabled && (pmt->ca_mask & mask) && ca[i].op->ca_del_pid)
             ca[i].op->ca_del_pid(ad, pmt, pid);
     }
@@ -320,7 +320,7 @@ int register_ca_for_adapter(int i, int aid) {
     if (!ad)
         return 1;
 
-    mask = (1 << ad->id);
+    mask = (1ULL << ad->id);
     if ((ca[i].adapter_mask & mask) == 0) {
         ca[i].adapter_mask |= mask;
         rv = tables_init_ca_for_device(i, ad);
@@ -339,9 +339,9 @@ int unregister_ca_for_adapter(int i, int aid) {
     if (!ad)
         return 1;
 
-    mask = (1 << ad->id);
+    mask = (1ULL << ad->id);
     ca[i].adapter_mask &= ~mask;
-    mask = (1 << i);
+    mask = (1ULL << i);
     if (ad->ca_mask & mask) {
         if (ca[i].op->ca_close_dev)
             ca[i].op->ca_close_dev(ad);

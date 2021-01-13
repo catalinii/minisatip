@@ -553,7 +553,7 @@ int getAdaptersCount() {
                     strcat(lsrc, usrc);
 
                     strcat(ad->debug_pos, "X");
-                    ad->debug_src += (unsigned long)1 << (j - 1);
+                    ad->debug_src += (unsigned long)1ULL << (j - 1);
                 } else {
                     strcat(ad->debug_pos, ".");
                 }
@@ -650,14 +650,14 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
     if (ad && ad->used) {
         int i;
         for (i = 0; i < MAX_ADAPTERS; i++)
-            if (ad->used & (1L << i)) {
+            if (ad->used & (1ULL << i)) {
                 adapter *ad2 = get_adapter(i);
                 if (!ad2) {
                     LOG("adapter %d used is set for adapter %d but it is "
                         "disabled, "
                         "clearing",
                         ad->id, i);
-                    ad->used &= ~(1 << i);
+                    ad->used &= ~(1ULL << i);
                     continue;
                 }
                 if (ad2->old_pol != pol || ad2->old_hiband != hiband ||
@@ -782,7 +782,7 @@ int set_adapter_for_stream(int sid, int aid) {
 
     if (ad->master_source >= 0 && ad->master_source < MAX_ADAPTERS) {
         adapter *ad2 = a[ad->master_source];
-        ad2->used |= (1 << ad->id);
+        ad2->used |= (1ULL << ad->id);
     }
     LOG("set adapter %d for sid %d m:%d s:%d", aid, sid, ad->master_sid,
         ad->sid_cnt);
@@ -827,7 +827,7 @@ void close_adapter_for_stream(int sid, int aid, int close_stream) {
         if ((ad->master_source >= 0) && (ad->master_source < MAX_ADAPTERS)) {
             adapter *ad2 = a[ad->master_source];
             if (ad2)
-                ad2->used &= ~(1 << ad->id);
+                ad2->used &= ~(1ULL << ad->id);
             LOGM("adapter %d freed from slave adapter %d, used %jd",
                  ad2 ? ad2->id : -1, ad->id, ad2 ? ad2->used : -1);
         }
@@ -1596,7 +1596,7 @@ void set_sources_adapters(char *o) {
                 adap = map_int(arg2[j], NULL);
                 if (adap < 0 || adap >= MAX_ADAPTERS)
                     goto ERR;
-                source_map[i] |= (unsigned long)1 << adap;
+                source_map[i] |= (unsigned long)1ULL << adap;
             } else {
                 st = map_int(arg2[j], NULL);
                 end = map_int(sep + 1, NULL);
@@ -1605,13 +1605,13 @@ void set_sources_adapters(char *o) {
                     goto ERR;
                 for (k = st; k <= end; k++) {
                     adap = k;
-                    source_map[i] |= (unsigned long)1 << adap;
+                    source_map[i] |= (unsigned long)1ULL << adap;
                 }
             }
         }
         buf2[0] = '\0';
         for (j = 0; j < MAX_ADAPTERS; j++)
-            if (source_map[i] & ((unsigned long)1 << j))
+            if (source_map[i] & ((unsigned long)1ULL << j))
                 strcat(buf2, "X");
             else
                 strcat(buf2, ".");
