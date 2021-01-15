@@ -22,10 +22,10 @@ PMT=0
 LIBS+=crypto dl pthread
 LIBS+=dvbcsa
 LIBS+=dvben50221 dvbapi ucsi
-CFLAGS += -DAXE
 CFLAGS += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=null
 CFLAGS += -I../src
-
+CFLAGS += -D_GNU_SOURCE
+CFLAGS += -DAXE
 CFLAGS += -DENIGMA
 CFLAGS += -DTESTING
 CFLAGS += -DDDCI_TEST

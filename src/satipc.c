@@ -17,7 +17,6 @@
  * USA
  *
  */
-#define _GNU_SOURCE
 
 #include "satipc.h"
 #include "ca.h"
