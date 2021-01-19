@@ -805,7 +805,7 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
     adapter *ad2 = get_adapter(d->id);
     int rlen = ad->rlen;
     int bytes = 0;
-    int iop = 0, iomax = ad->rlen / 188;
+    int iop = 0, iomax = ad->rlen / 188 + 100;
     int pid, dpid, i, ddci, rewrite;
     struct iovec io[iomax];
     unsigned char psi[MAX_CHANNELS_ON_CI * 1500];
