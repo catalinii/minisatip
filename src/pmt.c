@@ -642,8 +642,8 @@ void update_cw(SPMT *pmt, SPMT_batch *start, int len) {
             cws[i]->pmt == pmt->id) {
             if (ctime > cws[i]->expiry)
                 continue;
-            if (validated &&
-                !test_decrypt_packet(cws[i], pmt->batch, pmt->blen)) {
+            if (len &&
+                !test_decrypt_packet(cws[i], start, len)) {
                 LOGM("correct CW found (len %d): %s", len,
                      cw_to_string(cws[i], buf));
                 cw = cws[i];
