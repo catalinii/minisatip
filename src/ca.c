@@ -886,7 +886,7 @@ int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
     SPMT *other = get_pmt(ca->other_id);
     int version = ca->version++;
 
-    if(!pmt)
+    if (!pmt)
         LOG_AND_RETURN(1, "%s: PMT %d not found", __FUNCTION__, ca->pmt_id);
 
     capmt[pos++] = listmgmt;
@@ -980,9 +980,9 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
                        d->id);
 
     first = get_pmt(capmt->pmt_id);
-    if(!first)
-        LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "First PMT not found from capmt %d",
-                       capmt->pmt_id);
+    if (!first)
+        LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
+                       "First PMT not found from capmt %d", capmt->pmt_id);
     pid = spmt->pid;
     ver = capmt->version;
     sid = first->sid;
@@ -2792,16 +2792,16 @@ static int ca_session_callback(void *arg, int reason, uint8_t slot_id,
     d->session->ca = d;
 
     LOGM("%s: reason %d slot_id %u session_number %u resource_id %x", __func__,
-        reason, slot_id, session_number, resource_id);
+         reason, slot_id, session_number, resource_id);
 
     switch (reason) {
     case S_SCALLBACK_REASON_CAMCONNECTING: // 0
         LOGM("%02x:CAM connecting to resource %08x, session_number %i", slot_id,
-            resource_id, session_number);
+             resource_id, session_number);
         break;
     case S_SCALLBACK_REASON_CLOSE: // 5
         LOGM("%02x:Connection to resource %08x, session_number %i closed",
-            slot_id, resource_id, session_number);
+             slot_id, resource_id, session_number);
 
         if (resource_id == EN50221_APP_CA_RESOURCEID) {
             LOG("_________S_SCALLBACK_REASON_CLOSE___________EN50221_APP_CA_"
@@ -2822,17 +2822,17 @@ static int ca_session_callback(void *arg, int reason, uint8_t slot_id,
 
     case S_SCALLBACK_REASON_TC_CONNECT: // 6
         LOGM("%02x:Host originated transport connection %i resource 0x%08x "
-            "connected",
-            slot_id, resource_id, session_number);
+             "connected",
+             slot_id, resource_id, session_number);
         break;
     case S_SCALLBACK_REASON_TC_CAMCONNECT: // 7
         LOGM("%02x:CAM originated transport connection %i connected", slot_id,
-            session_number);
+             session_number);
         break;
     case S_SCALLBACK_REASON_CAMCONNECTED: // 1
         LOGM("%02x:CAM successfully connected to resource %08x, session_number "
-            "%i",
-            slot_id, resource_id, session_number);
+             "%i",
+             slot_id, resource_id, session_number);
 
         if (resource_id == EN50221_APP_RM_RESOURCEID) {
             LOG("--------------------S_SCALLBACK_REASON_CAMCONNECTED---------"
@@ -2910,7 +2910,7 @@ static int ca_lookup_callback(void *arg, uint8_t slot_id,
     d->session->ca = d;
 
     LOGM("===================> %s: slot_id %u requested_resource_id %x",
-        __func__, slot_id, requested_resource_id);
+         __func__, slot_id, requested_resource_id);
 
     switch (requested_resource_id) {
     case EN50221_APP_RM_RESOURCEID:

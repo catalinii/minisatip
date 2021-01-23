@@ -1452,7 +1452,7 @@ int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
 // converts the strength and SNR between 0 .. 255 after multiplying with
 // *_multiplier
 
-void dvb_get_signal(adapter *ad) {
+int dvb_get_signal(adapter *ad) {
     int start = 0;
     uint16_t strength = 0, snr = 0;
     int status = 0;
@@ -1511,15 +1511,16 @@ void dvb_get_signal(adapter *ad) {
         setup_switch(ad);
         adapter_unlock(ad->id);
     }
+    return 0;
 }
 
-void dvb_commit(adapter *a) { return; }
+int dvb_commit(adapter *a) { return 0; }
 
-void dvb_close(adapter *a) {
+int dvb_close(adapter *a) {
     if (a->dmx >= 0)
         close(a->dmx);
     a->dmx = -1;
-    return;
+    return 0;
 }
 
 void find_dvb_adapter(adapter **a) {
@@ -1570,24 +1571,24 @@ void find_dvb_adapter(adapter **a) {
                 ad->pa = i;
                 ad->fn = j;
 
-                ad->open = (Open_device)dvb_open_device;
+                ad->open = dvb_open_device;
                 if (opts.use_demux_device == USE_DVR) {
-                    ad->set_pid = (Set_pid)dvb_set_pid;
-                    ad->del_filters = (Del_filters)dvb_del_filters;
+                    ad->set_pid = dvb_set_pid;
+                    ad->del_filters = dvb_del_filters;
                 } else if (opts.use_demux_device == USE_DEMUX) {
-                    ad->set_pid = (Set_pid)dvb_demux_set_pid;
-                    ad->del_filters = (Del_filters)dvb_demux_del_filters;
+                    ad->set_pid = dvb_demux_set_pid;
+                    ad->del_filters = dvb_demux_del_filters;
                 } else if (opts.use_demux_device >= USE_PES_FILTERS_AND_DVR) {
-                    ad->set_pid = (Set_pid)dvb_set_psi_pes_filter;
-                    ad->del_filters = (Del_filters)dvb_del_psi_filters;
+                    ad->set_pid = dvb_set_psi_pes_filter;
+                    ad->del_filters = dvb_del_psi_filters;
                 }
 
-                ad->commit = (Adapter_commit)dvb_commit;
-                ad->tune = (Tune)dvb_tune;
-                ad->delsys = (Dvb_delsys)dvb_delsys;
+                ad->commit = dvb_commit;
+                ad->tune = dvb_tune;
+                ad->delsys = dvb_delsys;
                 ad->post_init = NULL;
-                ad->close = (Adapter_commit)dvb_close;
-                ad->get_signal = (Device_signal)dvb_get_signal;
+                ad->close = dvb_close;
+                ad->get_signal = dvb_get_signal;
                 ad->type = ADAPTER_DVB;
 
                 if (ad->pa == 0) {

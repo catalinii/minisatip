@@ -83,6 +83,22 @@ typedef struct struct_http_client {
     int id;
 } Shttp_client;
 
+typedef struct hash_item {
+    uint16_t len;
+    uint16_t max_size;
+    uint8_t is_alloc;
+    int64_t key;
+    void *data;
+} SHashItem;
+
+typedef struct hash_table {
+    int len;
+    int size;
+    SHashItem *items;
+    int64_t conflicts;
+    SMutex mutex;
+} SHashTable;
+
 #define MAX_HTTPC 100
 
 #define get_httpc(i)                                                           \
@@ -93,18 +109,28 @@ extern Shttp_client *httpc[MAX_HTTPC];
 
 int http_client(char *url, char *request, void *callback, void *opaque);
 
-unsigned char *getItem(uint32_t key);
-int getItemLen(uint32_t key);
-int setItem(uint32_t key, unsigned char *data, int len, int pos);
-int delItem(uint32_t key);
-int delItemMask(uint32_t key, uint32_t mask);
-int delItemP(void *p);
+// Hash Table implementation:
+// it holds the key (int32) and the value (void *) of specified size
+// The data is allocated inside of the hash_item and resized if needed
+// put will actually copy the data from the argument to the hash_item.data
+// the value 0 means unused (do not set a key with value 0)
+#define HASH_ITEM_ENABLED(h) (h.len)
+#define FOREACH_ITEM(h, a)                                                     \
+    for (i = 0; i < (h)->size; i++)                                            \
+        if (HASH_ITEM_ENABLED((h)->items[i]) && (a = (h)->items[i].data))
+
+int create_hash_table(SHashTable *hash, int no);
+void copy_hash_table(SHashTable *s, SHashTable *d);
+void free_hash(SHashTable *hash);
+void *getItem(SHashTable *hash, uint32_t key);
+int getItemLen(SHashTable *hash, uint32_t key);
+#define setItem(a, b, c, d) _setItem(a, b, c, d, 1)
+int _setItem(SHashTable *hash, uint32_t key, void *data, int len, int copy);
+int delItem(SHashTable *hash, uint32_t key);
+int delItemP(SHashTable *hash, void *p);
+int getItemSize(SHashTable *hash, uint32_t key);
+int setItemLen(SHashTable *hash, uint32_t key, int len);
 int split(char **rv, char *s, int lrv, char sep);
-int setItemSize(uint32_t key, uint32_t max_size);
-int setItemTimeout(uint32_t key, int tmout);
-int setItem(uint32_t key, unsigned char *data, int len, int pos);
-int getItemSize(uint32_t key);
-int setItemLen(uint32_t key, int len);
 int map_int(char *s, char **v);
 int map_intd(char *s, char **v, int dv);
 int map_float(char *s, int mul);
@@ -149,29 +175,6 @@ int get_index_hash_search(int start_pos, void *p, int max, int struct_size,
 int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, char *cc,
                  int pid);
 void write_buf_to_file(char *file, uint8_t *buf, int len);
-
-// Hash function from
-// https://stackoverflow.com/questions/664014/what-integer-hash-function-are-good-that-accepts-an-integer-hash-key
-static inline uint32_t hash(uint32_t x) {
-    x = ((x >> 16) ^ x) * 0x45d9f3b;
-    x = ((x >> 16) ^ x) * 0x45d9f3b;
-    x = (x >> 16) ^ x;
-    return x;
-}
-
-static inline int get_index_hash(void *p, int max, int struct_size,
-                                 uint32_t key, uint32_t value) {
-    int pos = hash(key) % max;
-    extern int64_t hash_calls;
-    if (*(uint32_t *)(p + struct_size * pos) == value)
-        return pos;
-    pos = (pos * hash(key >> 16)) %
-          max; // most likely a composite key (x << 16 + y)
-    if (*(uint32_t *)(p + struct_size * pos) == value)
-        return pos;
-    hash_calls++;
-    return get_index_hash_search(pos, p, max, struct_size, key, value);
-}
 
 #define mutex_lock(m) mutex_lock1(__FILE__, __LINE__, m)
 #define mutex_unlock(m) mutex_unlock1(__FILE__, __LINE__, m)

@@ -1055,8 +1055,8 @@ int pmt_add(int i, int adapter, int sid, int pmt_pid) {
     pmt->blen = 0;
     if (!pmt->batch) {
         int len = sizeof(pmt->batch[0]) * (opts.adapter_buffer / 188 + 10);
-        pmt->batch = malloc1(len);
-        LOGM("Allocation batch with size %d at %p", len);
+        pmt->batch = malloc(len);
+        LOGM("Allocation batch with size %d at %p", len, pmt->batch);
         if (!pmt->batch)
             return -1;
     }

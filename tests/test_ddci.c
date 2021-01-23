@@ -60,15 +60,20 @@ int test_push_ts_to_ddci() {
     d.enabled = 1;
     d.out = malloc1(DDCI_BUFFER + 10);
     d.wo = DDCI_BUFFER - 188;
-    d.ro = 188;
+    memset(d.ro, -1, sizeof(d.ro));
+    d.ro[0] = 188;
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[0] = &d;
-    if (push_ts_to_ddci_buffer(&d, buf, 376) != 188)
-        LOG_AND_RETURN(1, "push 376 bytes when 188 are left in the buffer");
-    if (push_ts_to_ddci_buffer(&d, buf, 188) != 188)
-        LOG_AND_RETURN(1, "push 188 bytes when 0 bytes are left in the buffer");
-    d.ro = d.wo = 0;
-    if (push_ts_to_ddci_buffer(&d, buf, 376) != 0)
+    push_ts_to_ddci_buffer(&d, buf, 376);
+    if (d.ro[0] != 376)
+        LOG_AND_RETURN(1, "test drop a packet when pushing 2 with wrap");
+    push_ts_to_ddci_buffer(&d, buf, 376);
+    if (d.ro[0] != 752 || d.wo!= 564)
+        LOG_AND_RETURN(1, "test dropping 2 packets without wrapping");
+    d.ro[0] = 752;
+    d.wo = 0;
+    push_ts_to_ddci_buffer(&d, buf, 376);
+    if (d.wo != 376 || d.ro[0] != 752)
         LOG_AND_RETURN(1, "push 376 bytes");
     free1(d.out);
     return 0;
@@ -76,6 +81,7 @@ int test_push_ts_to_ddci() {
 
 int test_copy_ts_from_ddci() {
     ddci_device_t d;
+    ddci_mapping_table_t *m;
     adapter ad;
     uint8_t buf[188 * 10], buf2[188 * 10];
     memset(&d, 0, sizeof(d));
@@ -85,7 +91,7 @@ int test_copy_ts_from_ddci() {
     d.id = 0;
     d.enabled = 1;
     d.out = malloc1(DDCI_BUFFER + 10);
-    memset(d.pid_mapping, -1, sizeof(d.pid_mapping));
+    create_hash_table(&d.mapping, 30);
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[0] = &d;
 
@@ -94,39 +100,40 @@ int test_copy_ts_from_ddci() {
     ad.buf = buf2;
     ad.lbuf = sizeof(buf2);
     a[1] = &ad;
+    int pid = 1000;
     __attribute__((unused)) int ad_pos = 0;
     buf[0] = buf2[0] = 0x47;
-    d.pid_mapping[1000] = 22; // forcing mapping to a different pid
-    int new_pid = add_pid_mapping_table(1, 1000, 0, 0, 0);
+    add_pid_mapping_table(2, pid, 9, &d,
+                          0); // forcing mapping to a different pid
+    add_pid_mapping_table(1, pid, 0, &d, 0);
+    m = get_pid_mapping_allddci(1, pid);
+    ASSERT(m != NULL);
+    int new_pid = m->ddci_pid;
+    ASSERT(new_pid == 1001);
     ad.rlen = 188;
     set_pid_ts(buf, new_pid);
     set_pid_ts(buf2, 0x1FFF);
 
-    if (copy_ts_from_ddci_buffer(&ad, &d, buf, &ad_pos))
+    if (push_ts_to_adapter(&ad, buf, pid, &ad_pos))
         LOG_AND_RETURN(1, "could not copy the packet to the adapter");
     if (PID_FROM_TS(buf2) != 1000)
-        LOG_AND_RETURN(1, "found pid %d expected %d", PID_FROM_TS(buf2), 1000);
+        LOG_AND_RETURN(1, "found pid %d expected %d", PID_FROM_TS(buf2), pid);
     if (PID_FROM_TS(buf) != 0x1FFF)
         LOG_AND_RETURN(1, "PID from the DDCI buffer not marked correctly %d",
                        PID_FROM_TS(buf));
 
     set_pid_ts(buf, new_pid);
-    if (copy_ts_from_ddci_buffer(&ad, &d, buf, &ad_pos))
+    if (push_ts_to_adapter(&ad, buf, pid, &ad_pos))
         LOG_AND_RETURN(1, "could not copy the packet to the adapter");
     if (ad.rlen != 376)
         LOG_AND_RETURN(1, "rlen not marked correctly %d", ad.rlen);
     ad.rlen = ad.lbuf;
     set_pid_ts(buf, new_pid);
-    if (1 != copy_ts_from_ddci_buffer(&ad, &d, buf, &ad_pos))
+    if (1 != push_ts_to_adapter(&ad, buf, pid, &ad_pos))
         LOG_AND_RETURN(1, "buffer full not returned correctly");
 
-    set_pid_ts(buf, 1200);
-    if (0 != copy_ts_from_ddci_buffer(&ad, &d, buf, &ad_pos))
-        LOG_AND_RETURN(1, "invalid pid not returned correctly");
-    if (PID_FROM_TS(buf) != 1200)
-        LOG_AND_RETURN(1, "invalid pid buffer pid not set correctly",
-                       PID_FROM_TS(buf));
     free1(d.out);
+    free_hash(&d.mapping);
     return 0;
 }
 
@@ -164,7 +171,7 @@ int test_ddci_process_ts() {
     d.id = 0;
     d.enabled = 1;
     d.out = malloc1(DDCI_BUFFER + 10);
-    memset(d.pid_mapping, -1, sizeof(d.pid_mapping));
+    create_hash_table(&d.mapping, 30);
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[0] = &d;
     mutex_init(&d.mutex);
@@ -179,17 +186,17 @@ int test_ddci_process_ts() {
     a[0]->enabled = 1;
     a[1] = &ad;
     buf[0] = 0x47;
-    d.pid_mapping[1000] = 22; // forcing mapping to a different pid
-    d.pid_mapping[2000] = 22; // forcing mapping to a different pid
-    int new_pid = add_pid_mapping_table(1, 1000, 0, 0, 0);
-    int new_pid2 = add_pid_mapping_table(1, 2000, 0, 0, 0);
+    add_pid_mapping_table(5, 1000, 0, &d, 0);
+    add_pid_mapping_table(5, 2000, 0, &d, 0);
+    int new_pid = add_pid_mapping_table(1, 1000, 0, &d, 0);
+    int new_pid2 = add_pid_mapping_table(1, 2000, 0, &d, 0);
     ad.rlen = ad.lbuf - 188; // allow just 1 packet + 1 cleared that it will be
                              // written to the socket
     set_pid_ts(ad.buf + 188, 1000);
-
-    d.ro = DDCI_BUFFER - 188;          // 1 packet before end of buffer
-    d.wo = 188 * 2;                    // 2 after end of the buffer
-    set_pid_ts(d.out + d.ro, new_pid); // first packet, expected 1000
+    memset(d.ro, -1, sizeof(d.ro));
+    d.ro[1] = DDCI_BUFFER - 188;          // 1 packet before end of buffer
+    d.wo = 188 * 2;                       // 2 after end of the buffer
+    set_pid_ts(d.out + d.ro[1], new_pid); // first packet, expected 1000
     set_pid_ts(d.out, new_pid2);
     set_pid_ts(d.out + 188, new_pid2);
     expected_pid = new_pid;
@@ -208,10 +215,11 @@ int test_ddci_process_ts() {
     if (ad.rlen != ad.lbuf)
         LOG_AND_RETURN(1, "adapter buffer length mismatch %d != %d", ad.rlen,
                        ad.lbuf);
-    if (d.ro != 188 && d.wo != 188 * 2)
+    if (d.ro[1] != 188 && d.wo != 188 * 2)
         LOG_AND_RETURN(1, "indexes in DDCI devices set wrong ro %d wo %d", d.ro,
                        d.wo);
     free1(d.out);
+    free_hash(&d.mapping);
     return 0;
 }
 extern SPMT *pmts[MAX_PMT];
@@ -227,14 +235,12 @@ int test_create_pat() {
     memset(&d, 0, sizeof(d));
     d.id = 0;
     d.enabled = 1;
-    d.wo = DDCI_BUFFER - 188;
-    d.ro = 188;
-    memset(d.pid_mapping, -1, sizeof(d.pid_mapping));
+    create_hash_table(&d.mapping, 30);
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[0] = &d;
     int pid = 4096;
-    d.pid_mapping[pid] = 22; // forcing mapping to a different pid
-    int dpid = add_pid_mapping_table(0, pid, 0, 0, 0);
+    add_pid_mapping_table(9, pid, 0, &d, 0);
+    int dpid = add_pid_mapping_table(0, pid, 0, &d, 0);
     f.flags = FILTER_CRC;
     f.id = 0;
     f.adapter = 0;
@@ -257,6 +263,7 @@ int test_create_pat() {
         LOG_AND_RETURN(1, "PAT pid %d != mapping table pid %d", new_pid, dpid);
     if (new_sid != pmt.sid)
         LOG_AND_RETURN(1, "PAT sid %d != pmt sid %d", new_sid, pmt.sid);
+    free_hash(&d.mapping);
     return 0;
 }
 
@@ -280,17 +287,13 @@ int test_create_pmt() {
     memset(&pmt, 0, sizeof(pmt));
     d.id = 0;
     d.enabled = 1;
-    d.wo = DDCI_BUFFER - 188;
-    d.ro = 188;
-    memset(d.pid_mapping, -1, sizeof(d.pid_mapping));
+    create_hash_table(&d.mapping, 30);
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[0] = &d;
     int pid = 1023;
     int capid = 7068;
-    //	d.pid_mapping[pid] = 22; // forcing mapping to a different pid
-    //	d.pid_mapping[capid] = 23; // forcing mapping to a different pid
-    int dpid = add_pid_mapping_table(0, pid, 0, 0, 0);
-    int dcapid = add_pid_mapping_table(0, capid, 0, 0, 0);
+    int dpid = add_pid_mapping_table(0, pid, 0, &d, 0);
+    int dcapid = add_pid_mapping_table(0, capid, 0, &d, 0);
     f.flags = FILTER_CRC;
     f.id = 0;
     f.adapter = 0;
@@ -323,6 +326,7 @@ int test_create_pmt() {
     if (new_capid != dcapid)
         LOG_AND_RETURN(1, "PMT PSI pid %04X != mapping table pid %04X",
                        new_capid, dcapid);
+    free_hash(&d.mapping);
     return 0;
 }
 

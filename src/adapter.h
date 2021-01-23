@@ -15,17 +15,6 @@ typedef struct ca_device ca_device_t;
 #define RTSP_OPTIONS 3
 #define RTSP_TEARDOWN 4
 #define RTSP_DESCRIBE 5
-
-typedef int (*Set_pid)(void *ad, int i_pid);
-typedef int (*Del_filters)(void *ad, int fd, int pid);
-typedef int (*Adapter_commit)(void *ad);
-typedef int (*Open_device)(void *ad);
-typedef int (*Device_signal)(void *ad);
-typedef int (*Device_wakeup)(void *ad, int fd, int voltage);
-typedef int (*Device_standby)(void *ad);
-typedef int (*Tune)(int aid, transponder *tp);
-typedef uint8_t (*Dvb_delsys)(int aid, int fd, uint8_t *sys);
-
 #define ADAPTER_DVB 1
 #define ADAPTER_SATIP 2
 #define ADAPTER_NETCV 3
@@ -33,7 +22,8 @@ typedef uint8_t (*Dvb_delsys)(int aid, int fd, uint8_t *sys);
 
 #define MAX_DELSYS 10
 
-typedef struct struct_adapter {
+typedef struct struct_adapter adapter;
+struct struct_adapter {
     char enabled;
     SMutex mutex;
     char type; // available on the system
@@ -47,7 +37,7 @@ typedef struct struct_adapter {
     int adapter_timeout;
     char flush, updating_pids;
     // physical adapter, physical frontend number
-    uint8_t sys[MAX_DELSYS];
+    fe_delivery_system_t sys[MAX_DELSYS];
     transponder tp;
     SPid pids[MAX_PIDS];
     int ca_mask;
@@ -108,17 +98,19 @@ typedef struct struct_adapter {
     int axe_used;
 #endif
 
-    Set_pid set_pid;
-    Del_filters del_filters;
-    Adapter_commit commit;
-    Open_device open;
-    Tune tune;
-    Dvb_delsys delsys;
-    Device_signal get_signal;
-    Device_wakeup wakeup;
-    Device_standby standby;
-    Adapter_commit post_init, close;
-} adapter;
+    int (*set_pid)(adapter *ad, int i_pid);
+    int (*del_filters)(adapter *ad, int fd, int pid);
+    int (*open)(adapter *ad);
+    int (*post_init)(adapter *ad);
+    int (*commit)(adapter *ad);
+    int (*get_signal)(adapter *ad);
+    int (*wakeup)(adapter *ad, int fd, int voltage);
+    int (*standby)(adapter *ad);
+    int (*tune)(int aid, transponder *tp);
+    fe_delivery_system_t (*delsys)(int aid, int fd, fe_delivery_system_t *sys);
+    int (*close)(adapter *ad);
+    void (*free)(adapter *ad);
+};
 
 extern adapter *a[MAX_ADAPTERS];
 extern uint64_t source_map[MAX_SOURCES];

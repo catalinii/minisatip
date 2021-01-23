@@ -1404,6 +1404,8 @@ void free_all_adapters() {
 
     for (i = 0; i < MAX_ADAPTERS; i++)
         if (a[i]) {
+            if (a[i]->free)
+                a[i]->free(a[i]);
             if (a[i]->buf)
                 free1(a[i]->buf);
             free(a[i]);

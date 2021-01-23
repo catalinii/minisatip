@@ -57,225 +57,237 @@
 #define DEFAULT_LOG LOG_UTILS
 
 #define MAX_DATA 1500 // 16384
-int MAX_SINFO;
+#define UNUSED_KEY 0
+
 char pn[256];
 
 Shttp_client *httpc[MAX_HTTPC];
 
-typedef struct tmpinfo {
-    unsigned char enabled;
-    int len;
-    int64_t key;
-    uint16_t id;
-    int max_size;
-    int timeout;
-    int64_t last_updated;
-    unsigned char *data;
-} STmpinfo;
-STmpinfo *sinfo;
-
 SMutex utils_mutex;
 
-int64_t hash_calls, hash_conflicts;
+// Hash function from
+// https://stackoverflow.com/questions/664014/what-integer-hash-function-are-good-that-accepts-an-integer-hash-key
+static inline uint32_t hash_func(uint32_t x) {
+    x = ((x >> 16) ^ x) * 0x45d9f3b;
+    x = ((x >> 16) ^ x) * 0x45d9f3b;
+    x = (x >> 16) ^ x;
+    return x;
+}
 
-int get_index_hash_search(int start_pos, void *p, int max, int struct_size,
-                          uint32_t key, uint32_t value) {
+int get_index_hash(SHashTable *hash, uint32_t key) {
     int pos;
-    //	LOG("pos => %d key %d", start_pos, key);
-    for (pos = start_pos; pos < max; pos++) {
-        hash_conflicts++;
-        if (*(uint32_t *)(p + struct_size * pos) == value)
+    int start_pos = hash_func(key) % hash->size;
+
+    pos = start_pos;
+    do {
+        if (HASH_ITEM_ENABLED(hash->items[pos]) && hash->items[pos].key == key)
             return pos;
-    }
-    for (pos = 0; pos < start_pos; pos++) {
-        hash_conflicts++;
-        if (*(uint32_t *)(p + struct_size * pos) == value)
-            return pos;
-    }
+        if (!HASH_ITEM_ENABLED(hash->items[pos]))
+            break;
+        pos = (pos + 1) % hash->size;
+    } while (pos != start_pos);
+
     return -1;
 }
 
-int init_tmpinfo(int no) {
-    void *os = sinfo;
-    int new_size = no * sizeof(STmpinfo);
-    sinfo = realloc(sinfo, new_size);
-    if (os && !sinfo) {
-        sinfo = os;
-        LOG_AND_RETURN(0, "%d bytes could not be re-allocated from %ld",
-                       new_size, MAX_SINFO * sizeof(STmpinfo));
+int create_hash_table(SHashTable *hash, int no) {
+    memset(hash, 0, sizeof(SHashTable));
+    hash->items = malloc(no * sizeof(SHashItem));
+    if (!hash->items) {
+        LOG_AND_RETURN(1, "Could not allocate Hash Items %d", no);
     }
-    if (!sinfo)
-        LOG_AND_RETURN(1, "Could not allocate memory for SINFO, reduce the "
-                          "application memory needs");
-    memset(sinfo + MAX_SINFO, 0, (no - MAX_SINFO) * sizeof(STmpinfo));
-    MAX_SINFO = no;
+    memset(hash->items, 0, no * sizeof(SHashItem));
+    hash->size = no;
+    mutex_init(&hash->mutex);
     return 0;
 }
 
-STmpinfo *getItemPos(uint32_t key) {
-    int i =
-        get_index_hash(&sinfo[0].key, MAX_SINFO, sizeof(STmpinfo), key, key);
-    if (i == -1)
-        return NULL;
-    if (sinfo[i].enabled && sinfo[i].key == key)
-        return sinfo + i;
-    return NULL;
+void *getItem(SHashTable *hash, uint32_t key) {
+    int i, locking = 0;
+    void *result = NULL;
+    if (hash->mutex.state > 0) {
+        locking = 1;
+        mutex_lock(&hash->mutex);
+    }
+
+    i = get_index_hash(hash, key);
+    result = i >= 0 ? hash->items[i].data : NULL;
+    if (locking)
+        mutex_unlock(&hash->mutex);
+    return result;
 }
 
-STmpinfo *getFreeItemPos(uint32_t key) {
-    int i, ek = 0;
-    int64_t tick = getTick();
-    uint32_t mask = 0xFF000000;
-    for (i = 0; i < MAX_SINFO; i++)
-        if (sinfo[i].enabled && ((key & mask) == (sinfo[i].key & mask)))
-            ek++;
+int getItemLen(SHashTable *hash, uint32_t key) {
+    int i, locking = 0;
+    int result = 0;
+    if (hash->mutex.state > 0) {
+        locking = 1;
+        mutex_lock(&hash->mutex);
+    }
 
-    if (ek > 0.8 * MAX_SINFO)
-        LOG_AND_RETURN(NULL, "dynamic capacity for %jX exhausted", key & mask);
-
-    // getItemPos is called before getFreeItemPos, no need to check if the
-    // element with that key already exists
-    i = get_index_hash(&sinfo[0].key, MAX_SINFO, sizeof(STmpinfo), key, 0);
-    if (i == -1)
-        LOG_AND_RETURN(NULL, "Could not find free element for key %d", key);
-
-    if (!sinfo[i].enabled ||
-        (sinfo[i].timeout &&
-         (tick - sinfo[i].last_updated > sinfo[i].timeout))) {
-        sinfo[i].id = i;
-        sinfo[i].timeout = 0;
-        LOGM("Requested new Item for key %jX, returning %d (enabled %d "
-             "last_updated %jd timeout %d tick %jd)",
-             key, i, sinfo[i].enabled, sinfo[i].last_updated, sinfo[i].timeout,
-             tick);
-        return sinfo + i;
-    } else
-        LOG("WARNING: the key %d found but not suitable pos %d enabled %d "
-            "timeout "
-            "%d last_updated %ld",
-            key, i, sinfo[i].enabled, sinfo[i].timeout, sinfo[i].last_updated);
-    return NULL;
+    i = get_index_hash(hash, key);
+    result = i >= 0 ? hash->items[i].len : 0;
+    if (locking)
+        mutex_unlock(&hash->mutex);
+    return result;
 }
 
-unsigned char *getItem(uint32_t key) {
-    STmpinfo *s = getItemPos(key);
-    if (s)
-        s->last_updated = getTick();
-    return s ? s->data : NULL;
+int getItemSize(SHashTable *hash, uint32_t key) {
+    int i, locking = 0;
+    int result = 0;
+    if (hash->mutex.state > 0) {
+        locking = 1;
+        mutex_lock(&hash->mutex);
+    }
+
+    i = get_index_hash(hash, key);
+    result = i >= 0 ? hash->items[i].max_size : 0;
+    if (locking)
+        mutex_unlock(&hash->mutex);
+    return result;
 }
 
-int getItemLen(uint32_t key) {
-    STmpinfo *s = getItemPos(key);
-    return s ? s->len : 0;
-}
-
-int getItemSize(uint32_t key) {
-    STmpinfo *s = getItemPos(key);
-    if (!s)
+// copy = 1 - do allocation and copy content
+// is_alloc = 1 - memory allocated
+int setItemSize(SHashItem *s, uint32_t max_size, int copy) {
+    if (s->max_size >= max_size && s->is_alloc == copy)
         return 0;
-    return s->max_size;
-}
-
-int setItemLen(uint32_t key, int len) {
-    STmpinfo *s = getItemPos(key);
-    if (!s || (len > s->max_size))
-        return 1;
-    s->len = len;
-    return 0;
-}
-
-int setItemSize(uint32_t key, uint32_t max_size) {
-    STmpinfo *s = getItemPos(key);
-    if (!s)
-        return -1;
-    if (s->max_size == max_size)
-        return 0;
-    s->max_size = max_size;
-    if (s->data)
+    if (s->is_alloc)
         free1(s->data);
-    s->data = malloc1(s->max_size + 100);
-    if (!s->data)
-        return -1;
+    s->is_alloc = 0;
+    if (copy) {
+        s->data = malloc1(max_size + 10);
+        if (!s->data)
+            LOG_AND_RETURN(-1, "%s: Could not resize from %d to %d",
+                           __FUNCTION__, s->max_size, max_size);
+        s->is_alloc = 1;
+    }
+    s->max_size = max_size;
+
     return 0;
 }
 
-int setItemTimeout(uint32_t key, int tmout) {
-    STmpinfo *s = getItemPos(key);
-    if (!s)
-        return -1;
-    s->timeout = tmout;
-    if (!s->data)
-        return -1;
-    return 0;
-}
-
-int setItem(uint32_t key, unsigned char *data, int len,
-            int pos) // pos = -1 -> append, owerwrite the existing key
-{
-    STmpinfo *s = getItemPos(key);
+int _setItem(SHashTable *hash, uint32_t key, void *data, int len, int copy) {
+    mutex_lock(&hash->mutex);
+    SHashItem *s = NULL;
+    int i = get_index_hash(hash, key);
+    if (i >= 0)
+        s = hash->items + i;
     if (!s) {
-        s = getFreeItemPos(key);
+        // Add new element
+        int start_pos = hash_func(key) % hash->size;
+        int pos;
+        pos = start_pos;
+        do {
+            if (!HASH_ITEM_ENABLED(hash->items[pos])) {
+                s = hash->items + pos;
+                break;
+            }
+            hash->conflicts++;
+            pos = (pos + 1) % hash->size;
+        } while (pos != start_pos);
     }
-    if (!s)
+
+    if (!s) {
+        mutex_unlock(&hash->mutex);
         LOG_AND_RETURN(-1, "%s failed for key %jx", __FUNCTION__, key);
-
-    if (s->max_size == 0)
-        s->max_size = MAX_DATA + 10;
-    if (!s->data)
-        s->data = malloc1(s->max_size);
-    if (!s->data)
-        return -1;
-    s->enabled = 1;
-    s->key = key;
-    s->last_updated = getTick();
-    if (pos == -1)
-        pos = s->len;
-    if (pos + len >=
-        s->max_size) // make sure we do not overflow the data buffer
-    {
-        LOG("Overflow detected for item %jx, pos %d, size to be added %d, "
-            "max_size "
-            "%d",
-            key, pos, len, s->max_size);
-        len = s->max_size - pos;
     }
-    s->len = pos + len;
-    memcpy(s->data + pos, data, len);
+
+    if (setItemSize(s, len, copy)) {
+        mutex_unlock(&hash->mutex);
+        return 1;
+    }
+
+    s->key = key;
+    s->len = len;
+    if (copy)
+        memcpy(s->data, data, len);
+    else
+        s->data = data;
+
+    if (++hash->len > hash->size / 2) {
+        int new_size = hash->size * 2;
+        SHashTable ht;
+
+        // Do not fail, hash table full will fail before this code.
+        if (create_hash_table(&ht, new_size))
+            LOG_AND_RETURN(0, "Resizing hash_table at %p from %d to %d", hash,
+                           hash->size, new_size);
+        copy_hash_table(hash, &ht);
+        free_hash(hash);
+        memcpy(hash, &ht, sizeof(SHashTable));
+    }
+    mutex_unlock(&hash->mutex);
     return 0;
 }
 
-int delItem(uint32_t key) {
-    STmpinfo *s = getItemPos(key);
-    if (!s)
-        return 0;
-    s->enabled = 0;
-    s->len = 0;
-    s->key = 0;
-    LOGM("Deleted Item Pos %d", s->id);
-    return 0;
-}
-
-int delItemMask(uint32_t key, uint32_t mask) {
+void copy_hash_table(SHashTable *s, SHashTable *d) {
     int i;
-    for (i = 0; i < MAX_SINFO; i++)
-        if (sinfo[i].enabled && ((sinfo[i].key & mask) == key)) {
-            STmpinfo *s = &sinfo[i];
-            s->enabled = 0;
-            s->len = 0;
-            LOGM("Deleted Item key %jx, pos %d (key %jx, mask %jx)", s->key,
-                 s->id, key, mask);
-            s->key = 0;
+    for (i = 0; i < s->size; i++)
+        if (HASH_ITEM_ENABLED(s->items[i])) {
+            _setItem(d, s->items[i].key, s->items[i].data, s->items[i].len, 0);
+            int di = get_index_hash(d, s->items[i].key);
+            if (di == -1)
+                continue;
+            memcpy(d->items + di, s->items + i, sizeof(SHashItem));
+            memset(s->items + i, 0, sizeof(SHashItem));
         }
+}
 
+int delItem(SHashTable *hash, uint32_t key) {
+    mutex_lock(&hash->mutex);
+
+    int empty = get_index_hash(hash, key);
+    if (empty == -1) {
+        mutex_unlock(&hash->mutex);
+        return 0;
+    }
+    int pos;
+    for (pos = (empty + 1) % hash->size; HASH_ITEM_ENABLED(hash->items[pos]);
+         pos = (pos + 1) % hash->size) {
+        int k = hash_func(hash->items[pos].key) % hash->size;
+        if ((pos > empty && (k <= empty || k > pos)) ||
+            (pos < empty && (k <= empty && k > pos))) {
+            SHashItem it;
+            memcpy(&it, hash->items + empty, sizeof(hash->items[0]));
+            memcpy(hash->items + empty, hash->items + pos,
+                   sizeof(hash->items[0]));
+            memcpy(hash->items + pos, &it, sizeof(hash->items[0]));
+            empty = pos;
+        }
+    }
+    SHashItem *s = hash->items + empty;
+    hash->len--;
+    s->len = 0;
+    s->key = UNUSED_KEY;
+    LOGM("Deleted Item Pos %d", empty);
+    mutex_unlock(&hash->mutex);
     return 0;
 }
 
-int delItemP(void *p) {
+int delItemP(SHashTable *hash, void *p) {
     int i;
-    for (i = 0; i < MAX_SINFO; i++)
-        if (sinfo[i].enabled && sinfo[i].data == p)
-            delItem(sinfo[i].key);
+    for (i = 0; i < hash->size; i++)
+        if (HASH_ITEM_ENABLED(hash->items[i]) && hash->items[i].data == p)
+            delItem(hash, hash->items[i].key);
     return 0;
+}
+
+void free_hash(SHashTable *hash) {
+    int i;
+    mutex_lock(&hash->mutex);
+    for (i = 0; i < hash->size; i++)
+        if (hash->items[i].is_alloc) {
+            free(hash->items[i].data);
+        }
+    void *items = hash->items;
+    free(items);
+    hash->items = NULL;
+    hash->size = 0;
+    mutex_unlock(&hash->mutex);
+    mutex_destroy(&hash->mutex);
+    memset(hash, 0, sizeof(SHashItem));
+    return;
 }
 
 int split(char **rv, char *s, int lrv, char sep) {
@@ -341,7 +353,8 @@ int map_intd(char *s, char **v, int dv) {
     return n;
 }
 
-char *header_parameter(char **arg, int i) // get the value of a header parameter
+char *header_parameter(char **arg,
+                       int i) // get the value of a header parameter
 {
     int len = strlen(arg[i]);
     char *result;
@@ -534,7 +547,8 @@ becomeDaemon() {
         close(fd);
 
     close(STDIN_FILENO); /* Reopen standard fd's to /dev/null */
-    //	chdir ("/tmp");				 /* Change to root directory */
+    //	chdir ("/tmp");				 /* Change to root
+    // directory */
 
     fdi = open("/dev/null", O_RDWR);
     memset(buf, 0, sizeof(buf));
@@ -632,8 +646,8 @@ void _log(char *file, int line, char *fmt, ...) {
     int len = 0, len1 = 0, both = 0;
     static int idx, times;
     char stid[50];
-    static char
-        output[2][2000]; // prints just the first 2000 bytes from the message
+    static char output[2][2000]; // prints just the first 2000 bytes from
+                                 // the message
 
     /* Check if the message should be logged */
     opts.last_log = fmt;
@@ -1063,8 +1077,8 @@ void process_file(void *sock, char *s, int len, char *ctype) {
     outp[io] = 0;
     if (respond)
         http_response(so, 200, ctype, outp, 0,
-                      0); // sending back the response with Content-Length if
-                          // output < 8192
+                      0); // sending back the response with Content-Length
+                          // if output < 8192
     else {
         strcpy(outp + io, "\r\n\r\n");
         rv = sockets_write(so->id, outp, io + 4);
@@ -1128,8 +1142,8 @@ char *readfile(char *fn, char *ctype, int *len) {
         else if (endswith(fn, "2.json")) // debug
             strcpy(ctype, "Content-type: application/json");
         else if (endswith(fn, "json"))
-            strcpy(ctype,
-                   "Cache-Control: no-cache\r\nContent-type: application/json");
+            strcpy(ctype, "Cache-Control: no-cache\r\nContent-type: "
+                          "application/json");
         else if (endswith(fn, "m3u"))
             strcpy(ctype,
                    "Cache-Control: no-cache\r\nContent-type: video/x-mpegurl");
@@ -1207,7 +1221,8 @@ int mutex_lock1(char *FILE, int line, SMutex *mutex) {
             prev_line = mutex->line;
         }
         LOGL(ms > 1000 ? 1 : DEFAULT_LOG,
-             "%s:%d Locked %p after %ld ms, previously locked at: %s, line %d",
+             "%s:%d Locked %p after %ld ms, previously locked at: %s, line "
+             "%d",
              FILE, line, mutex, ms, prev_file, prev_line);
     }
     mutex->file = FILE;
@@ -1279,11 +1294,6 @@ int mutex_destroy(SMutex *mutex) {
             __FUNCTION__, mutex, rv, strerror(rv));
 
     LOG("Destroying mutex %p", mutex);
-    //	if ((rv = pthread_mutex_destroy(&mutex->mtx)))
-    //	{
-    //		LOG("mutex destroy %p failed with error %d %s", mutex, rv,
-    // strerror(rv)); 		mutex->enabled = 1; 		return 1;
-    //	}
     return 0;
 }
 
@@ -1413,10 +1423,7 @@ void join_thread() {
 }
 
 int init_utils(char *arg0) {
-    int rv;
     set_signal_handler(arg0);
-    if ((rv = init_tmpinfo(100)))
-        return rv;
     return 0;
 }
 
@@ -1513,7 +1520,8 @@ int http_client_del(int i) {
 int http_client_close(sockets *s) {
     Shttp_client *h = get_httpc(s->sid);
     if (!h) {
-        LOG("HTTP Client record not found for sockets id %d, http client id %d",
+        LOG("HTTP Client record not found for sockets id %d, http client "
+            "id %d",
             s->id, s->sid);
         return 1;
     }
@@ -1527,7 +1535,8 @@ int http_client_close(sockets *s) {
 void http_client_read(sockets *s) {
     Shttp_client *h = get_httpc(s->sid);
     if (!h) {
-        LOG("HTTP Client record not found for sockets id %d, http client id %d",
+        LOG("HTTP Client record not found for sockets id %d, http client "
+            "id %d",
             s->id, s->sid);
         return;
     }
@@ -1660,7 +1669,8 @@ void _dump_packets(char *message, unsigned char *b, int len,
         crc = crc_32(b + i + 4, 184); // skip header
         pid = PID_FROM_TS(b + i);
         cc = b[i + 3] & 0xF;
-        LOG("%s: pid %04d (%04X) CC=%X CRC=%08X%s pos: %d packet %d : [%02X "
+        LOG("%s: pid %04d (%04X) CC=%X CRC=%08X%s pos: %d packet %d : "
+            "[%02X "
             "%02X "
             "%02X %02X] %02X %02X %02X %02X",
             message, pid, pid, cc, crc, (b[i + 3] & 0x80) ? "encrypted" : "",
@@ -1676,10 +1686,10 @@ int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, char *cc,
 
     while ((srclen > 0) && (len < dstsize)) {
         if (dstsize - len < 188)
-            LOG_AND_RETURN(
-                -1,
-                "Not enough space to copy pid %d, len %d from %d, srclen %d",
-                pid, len, dstsize, srclen)
+            LOG_AND_RETURN(-1,
+                           "Not enough space to copy pid %d, len %d from "
+                           "%d, srclen %d",
+                           pid, len, dstsize, srclen)
         b = dest + len;
         *cc = ((*cc) + 1) % 16;
         b[0] = 0x47;

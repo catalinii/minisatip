@@ -138,7 +138,10 @@ int axe_open_device(adapter *ad) {
     return 0;
 }
 
-void axe_post_init(adapter *ad) { sockets_setread(ad->sock, axe_read); }
+int axe_post_init(adapter *ad) {
+    sockets_setread(ad->sock, axe_read);
+    return 0;
+}
 
 static void axe_stv0900_i2c_4(const char *name, int pa, int v) {
     char buf[64];
@@ -186,17 +189,17 @@ static void axe_pls_isi(adapter *ad, transponder *tp) {
     }
 }
 
-void axe_wakeup(void *_ad, int fe_fd, int voltage) {
+int axe_wakeup(adapter *_ad, int fe_fd, int voltage) {
     int i, mask;
     adapter *a;
     if (opts.axe_power < 2)
-        return;
+        return 0;
     for (i = 0; i < 4; i++) {
         a = get_adapter(i);
         if (a == NULL || is_adapter_disabled(i))
             continue;
         if (a->old_pol >= 0)
-            return;
+            return 0;
     }
     LOG("AXE wakeup");
     for (i = mask = 0; i < 4; i++) {
@@ -222,6 +225,7 @@ void axe_wakeup(void *_ad, int fe_fd, int voltage) {
             LOG("axe_wakeup: FE_SET_VOLTAGE failed fd %d: %s", a->fe,
                 strerror(errno));
     }
+    return 0;
 }
 
 static inline int extra_quattro(int input, int diseqc, int *equattro) {
@@ -703,7 +707,7 @@ fe_delivery_system_t axe_delsys(int aid, int fd, fe_delivery_system_t *sys) {
     return SYS_DVBS2;
 }
 
-void axe_get_signal(adapter *ad) {
+int axe_get_signal(adapter *ad) {
     int strength = 0, snr = 0, tmp;
     int status = 0, ber = 0;
     get_signal(ad, &status, &ber, &strength, &snr);
@@ -731,9 +735,10 @@ void axe_get_signal(adapter *ad) {
         axe_setup_switch(ad);
         adapter_unlock(ad->id);
     }
+    return 0;
 }
 
-void axe_commit(adapter *a) { return; }
+int axe_commit(adapter *a) { return 0; }
 
 int axe_close(adapter *a2) {
     adapter *c;
@@ -806,16 +811,16 @@ void find_axe_adapter(adapter **a) {
                 ad->pa = i;
                 ad->fn = j;
 
-                ad->open = (Open_device)axe_open_device;
-                ad->set_pid = (Set_pid)axe_set_pid;
-                ad->del_filters = (Del_filters)axe_del_filters;
-                ad->commit = (Adapter_commit)axe_commit;
-                ad->tune = (Tune)axe_tune;
-                ad->delsys = (Dvb_delsys)axe_delsys;
-                ad->post_init = (Adapter_commit)axe_post_init;
-                ad->close = (Adapter_commit)axe_close;
-                ad->get_signal = (Device_signal)axe_get_signal;
-                ad->wakeup = (Device_wakeup)axe_wakeup;
+                ad->open = axe_open_device;
+                ad->set_pid = axe_set_pid;
+                ad->del_filters = axe_del_filters;
+                ad->commit = axe_commit;
+                ad->tune = axe_tune;
+                ad->delsys = axe_delsys;
+                ad->post_init = axe_post_init;
+                ad->close = axe_close;
+                ad->get_signal = axe_get_signal;
+                ad->wakeup = axe_wakeup;
                 ad->type = ADAPTER_DVB;
                 ad->fast_status = 1;
                 close(fd);

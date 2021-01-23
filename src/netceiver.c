@@ -456,14 +456,14 @@ void find_netcv_adapter(adapter **a) {
         ad->ber = 0;
 
         /* register callback functions in adapter structure */
-        ad->open = (Open_device)netcv_open_device;
-        ad->set_pid = (Set_pid)netcv_set_pid;
-        ad->del_filters = (Del_filters)netcv_del_pid;
-        ad->commit = (Adapter_commit)netcv_commit;
-        ad->tune = (Tune)netcv_tune;
-        ad->delsys = (Dvb_delsys)netcv_delsys;
-        ad->post_init = (Adapter_commit)NULL;
-        ad->close = (Adapter_commit)netcv_close;
+        ad->open = netcv_open_device;
+        ad->set_pid = netcv_set_pid;
+        ad->del_filters = netcv_del_pid;
+        ad->commit = netcv_commit;
+        ad->tune = netcv_tune;
+        ad->delsys = netcv_delsys;
+        ad->post_init = NULL;
+        ad->close = netcv_close;
         ad->type = ADAPTER_NETCV;
 
         /* register delivery system type */

@@ -46,11 +46,10 @@
 
 #define TCP_DATA_SIZE ((ADAPTER_BUFFER / 1316) * (1316 + 16) * 3)
 #define TCP_DATA_MAX (TCP_DATA_SIZE * 8)
-#define SATIPC_ITEM (0x30000000)
-#define MAKE_ITEM(a, b) ((SATIPC_ITEM | (a << 16) | (b)))
+#define MAKE_ITEM(a, b) ((a << 16) | (b))
 
 extern char *fe_delsys[];
-void satip_post_init(adapter *ad);
+int satip_post_init(adapter *ad);
 
 #define DEFAULT_LOG LOG_SATIPC
 
@@ -86,6 +85,7 @@ typedef struct struct_satipc {
     uint16_t rtp_seq;
     char static_config;
     int num_describe;
+    SHashTable requests;
     // Bit Fields
     unsigned int
         rtsp_socket_closed : 1; // is set when the adapter was closed
@@ -128,7 +128,7 @@ satipc *get_satip1(int aid, char *file, int line) {
 
 int http_request(adapter *ad, char *url, char *method, int force);
 
-void satipc_commit(adapter *ad);
+int satipc_commit(adapter *ad);
 void set_adapter_signal(adapter *ad, char *b, int rlen);
 
 int satipc_reply(sockets *s) {
@@ -256,14 +256,15 @@ int satipc_reply(sockets *s) {
         sip->expect_reply = 0;
     else {
         while (sip->qp > sip->wp) {
-            char *np = (char *)getItem(MAKE_ITEM(ad->id, sip->wp));
+            char *np =
+                (char *)getItem(&sip->requests, MAKE_ITEM(ad->id, sip->wp));
             if (np) {
                 int len = strlen(np);
                 if (sip->qp > sip->wp + 1 && !strncmp(np, "OPTIONS", 7)) {
                     LOG("Found multiple packets enqueued, dropping OPTIONS at "
                         "%d from %d",
                         sip->wp, sip->qp)
-                    delItem(MAKE_ITEM(ad->id, sip->wp++));
+                    delItem(&sip->requests, MAKE_ITEM(ad->id, sip->wp++));
                     continue;
                 }
                 if (sip->session[0] && !strstr(np, "Session:"))
@@ -271,7 +272,7 @@ int satipc_reply(sockets *s) {
 
                 LOG("satipc_reply: sending next packet:\n%s", np);
                 rv = sockets_write(s->id, np, strlen(np));
-                delItem(MAKE_ITEM(ad->id, sip->wp));
+                delItem(&sip->requests, MAKE_ITEM(ad->id, sip->wp));
             } else
                 LOG("satipc: expected element but not found %08x",
                     MAKE_ITEM(ad->id, sip->wp));
@@ -563,10 +564,10 @@ int satipc_open_device(adapter *ad) {
     return 0;
 }
 
-void satip_close_device(adapter *ad) {
+int satip_close_device(adapter *ad) {
     satipc *sip = get_satip(ad->id);
     if (!sip)
-        return;
+        return 0;
 
     LOG("satip device %s:%d is closing", sip->sip, sip->sport);
     if (sip->sleep) {
@@ -584,16 +585,17 @@ void satip_close_device(adapter *ad) {
     ad->fe_sock = -1;
     sip->rtcp_sock = -1;
     sip->enabled = 0;
+    return 0;
 }
 
-void satip_standby_device(adapter *ad) {
+int satip_standby_device(adapter *ad) {
     satipc *sip;
     if (!ad)
-        return;
+        return 0;
 
     sip = get_satip(ad->id);
     if (!sip)
-        return;
+        return 0;
 
     LOG("satip device %s:%d going to standby sleep", sip->sip, sip->sport);
     if (sip->sleep) {
@@ -611,6 +613,7 @@ void satip_standby_device(adapter *ad) {
         sip->restart_needed = 1;
         sockets_del(ad->sock);
     }
+    return 0;
 }
 
 int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
@@ -873,14 +876,14 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb) {
     return (*rb >= 0);
 }
 
-void satip_post_init(adapter *ad) {
+int satip_post_init(adapter *ad) {
     satipc *sip;
     if (!ad)
-        return;
+        return 0;
 
     sip = get_satip(ad->id);
     if (!sip)
-        return;
+        return 0;
 
     if (sip->init_use_tcp)
         sockets_setread(ad->sock, satipc_tcp_read);
@@ -897,6 +900,7 @@ void satip_post_init(adapter *ad) {
         http_request(ad, NULL, "OPTIONS", 0);
     else if (sip->force_commit)
         satipc_commit(ad);
+    return 0;
 }
 
 int satipc_set_pid(adapter *ad, int pid) {
@@ -1119,7 +1123,8 @@ int http_request(adapter *ad, char *url, char *method, int force) {
         sip->expect_reply && !force ? "queueing" : "sending", remote_socket);
     LOGM("MSG process >> server :\n%s", buf);
     if (sip->expect_reply && !force) {
-        setItem(MAKE_ITEM(ad->id, sip->qp++), (unsigned char *)buf, lb + 1, 0);
+        setItem(&sip->requests, MAKE_ITEM(ad->id, sip->qp++),
+                (unsigned char *)buf, lb + 1);
     } else {
         sip->wp = sip->qp = 0;
         if (remote_socket >= 0) {
@@ -1153,14 +1158,14 @@ void tune_url(adapter *ad, char *url, int url_len) {
     }
 }
 
-void satipc_commit(adapter *ad) {
+int satipc_commit(adapter *ad) {
     char url[1000];
     char tmp_url[1000];
     int send_pids = 1, send_apids = 1, send_dpids = 1;
     int len = 0;
     satipc *sip = get_satip(ad->id);
     if (!sip)
-        return;
+        return 0;
 
     url[0] = 0;
     LOG("satipc: commit for adapter %d freq %d, pids to add %d, pids to delete "
@@ -1171,22 +1176,22 @@ void satipc_commit(adapter *ad) {
         sip->sent_transport, sip->sleep, sip->rtsp_socket_closed);
 
     if (sip->rtsp_socket_closed)
-        return;
+        return 0;
 
     if (!ad->tp.freq)
-        return;
+        return 0;
 
     if (ad->do_tune && !sip->want_tune) {
         sip->lap = sip->ldp = 0;
-        return;
+        return 0;
     }
     if (sip->lap + sip->ldp == 0)
         if (!sip->force_commit)
-            return;
+            return 0;
 
     if (sip->expect_reply) {
         sip->want_commit = 1;
-        return;
+        return 0;
     }
 
     if (!sip->addpids) {
@@ -1215,7 +1220,7 @@ void satipc_commit(adapter *ad) {
             "an "
             "error ?",
             sip->sip);
-        return;
+        return 0;
     }
 
     if (ad->do_tune &&
@@ -1259,7 +1264,7 @@ void satipc_commit(adapter *ad) {
         if (!sip->setup_pids && !sip->sent_transport) {
             strcatf(url, len, "&pids=none");
             http_request(ad, url, NULL, 0);
-            return;
+            return 0;
         }
     }
 
@@ -1318,7 +1323,7 @@ void satipc_commit(adapter *ad) {
     sip->sleep = 0;
     http_request(ad, url, NULL, 0);
 
-    return;
+    return 0;
 }
 
 int satipc_tune(int aid, transponder *tp) {
@@ -1373,6 +1378,11 @@ uint8_t determine_fe(adapter **a, int pos, char *csip, int sport) {
     return 1;
 }
 
+void satipc_free(adapter *ad) {
+    satipc *sip = satip[ad->id];
+    free_hash(&sip->requests);
+}
+
 int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
                      int use_tcp, int no_pids_all) {
     int i, k;
@@ -1398,15 +1408,16 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
     sip = satip[i];
     ad = a[i];
     mutex_lock(&ad->mutex);
-    ad->open = (Open_device)satipc_open_device;
-    ad->set_pid = (Set_pid)satipc_set_pid;
-    ad->del_filters = (Del_filters)satipc_del_filters;
-    ad->commit = (Adapter_commit)satipc_commit;
-    ad->tune = (Tune)satipc_tune;
-    ad->delsys = (Dvb_delsys)satipc_delsys;
-    ad->post_init = (Adapter_commit)satip_post_init;
-    ad->standby = (Device_standby)satip_standby_device;
-    ad->close = (Adapter_commit)satip_close_device;
+    ad->open = satipc_open_device;
+    ad->set_pid = satipc_set_pid;
+    ad->del_filters = satipc_del_filters;
+    ad->commit = satipc_commit;
+    ad->tune = satipc_tune;
+    ad->delsys = satipc_delsys;
+    ad->post_init = satip_post_init;
+    ad->standby = satip_standby_device;
+    ad->close = satip_close_device;
+    ad->free = satipc_free;
     ad->type = ADAPTER_SATIP;
 
     for (k = 0; k < 10; k++)
@@ -1438,6 +1449,7 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
     sip->tcp_data = NULL;
     sip->use_tcp = use_tcp;
     sip->no_pids_all = no_pids_all;
+    create_hash_table(&sip->requests, 10);
 
     if (i + 1 > a_count)
         a_count = i + 1; // update adapter counter

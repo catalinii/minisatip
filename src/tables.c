@@ -210,7 +210,10 @@ int close_pmt_for_cas(adapter *ad, SPMT *pmt) {
 
 void disable_pmt_for_ca(int i, SPMT *pmt) {
     uint64_t mask = 1ULL << i;
-    if (ca[i].enabled && (pmt->ca_mask & mask)) {
+    if(i>=MAX_CA || i<0)
+        return;
+    if (ca[i].enabled) {
+        close_pmt_for_ca(i, NULL, pmt);
         pmt->disabled_ca_mask |= mask;
     }
 }
@@ -361,7 +364,8 @@ int tables_init_device(adapter *ad) {
 }
 
 void init_ca_device(SCA *c) {
-    uint64_t i, init_cm;
+    uint64_t init_cm;
+    int i;
     adapter *ad;
     if (!c->op->ca_add_pmt)
         return;
