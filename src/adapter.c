@@ -688,7 +688,12 @@ int get_free_adapter(transponder *tp) {
     int msys = tp->sys;
     int fe = tp->fe;
 
-    adapter *ad = a[0];
+    adapter *ad = a[0]; // If none is found then the first is the default!
+    for (i = 0; i < MAX_ADAPTERS; i++)
+        if (a[i] && a[i]->enabled) {
+            ad = a[i];
+            break;
+        }
 
     if ((fe > 0) && (fe <= ARRAY_SIZE(fe_map)) && (fe_map[fe - 1] >= 0)) {
         fe = fe_map[fe - 1];
@@ -1181,7 +1186,7 @@ int compare_tunning_parameters(int aid, transponder *tp) {
     if (tp->freq != ad->tp.freq || tp->plp_isi != ad->tp.plp_isi ||
         tp->diseqc != ad->tp.diseqc || (tp->pol > 0 && tp->pol != ad->tp.pol) ||
         (tp->sr > 1000 && tp->sr != ad->tp.sr) ||
-        (tp->mtype != 6 && tp->mtype != ad->tp.mtype))
+        (tp->mtype != 6 && ad->tp.mtype != 6 && tp->mtype != ad->tp.mtype))
 
         return 1;
 
