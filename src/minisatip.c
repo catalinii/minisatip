@@ -169,7 +169,10 @@ static const struct option long_options[] =
 		{"xml", required_argument, NULL, 'X'},
 		{"help", no_argument, NULL, 'h'},
 		{"version", no_argument, NULL, 'V'},
-#ifdef AXE
+#if defined(GXAPI)
+		{"ts-config", required_argument, NULL, ABSOLUTE_SRC},
+		{"no-dvr-verify", no_argument, NULL, '8'},
+#elif defined(AXE)
 		{"link-adapters", required_argument, NULL, '7'},
 		{"free-inputs", required_argument, NULL, ABSOLUTE_SRC},
 		{"quattro", no_argument, NULL, 'Q'},
@@ -247,15 +250,24 @@ char *built_info[] =
 #ifdef AXE
 		"Built for satip-axe",
 #endif
+#ifdef GXAPI
+		"Built for GXAPI",
+#endif
 		NULL};
+
+#ifdef GXAPI
+#define USE_API "dvbapi"
+#else
+#define USE_API "s2api"
+#endif
 
 void print_version(int use_log)
 {
 	char buf[200];
 	int i;
 	memset(buf, 0, sizeof(buf));
-	sprintf(buf, "%s version %s, compiled in %s %s, with s2api version: %04X",
-			app_name, version, __DATE__, __TIME__, LOGDVBAPIVERSION);
+	sprintf(buf, "%s version %s, compiled in %s %s, with %s version: %04X",
+		app_name, version, __DATE__, __TIME__,  USE_API, LOGDVBAPIVERSION);
 	if (!use_log)
 		puts(buf);
 	else
@@ -492,7 +504,21 @@ Help\n\
 	* 2 - use dvrX device and additionally capture PSI data from demuxX device \n\
 	* 3 - use demuxX device and additionally capture PSI data from demuxX device \n\
 \n "
-#ifdef AXE
+#if defined(GXAPI)
+		"\
+* -A --ts-config mapping_num: set a 5-bit mask in decimal. (default: 0)\n\
+	* bit 0   - 0 - TS parallel interface, 1 - TS serial interface\n\
+	* bit 1   - select TS; 0 - FRONTEND, 1 - OTHER\n\
+	* bit 2-3 - input TS; 0 - DEMUX_TS1, 1 - DEMUX_TS2, 2 - DEMUX_TS3\n\
+	*           3 - DEMUX_SDRAM\n\
+	* eg: -A 5, set TS serial and DEMUX_TS2\n\
+	* bit 5   - use for Combo receiver (16 + 4 bits)\n\
+	* eg: -A 21, (16 + 5), set TS serial and DEMUX_TS2 for external demod\n\
+\n\
+* -8 --no-dvr-verify ignore check work DVR socket.\n\
+\n\
+"
+#elif defined(AXE)
 		"\
 * -7 --link-adapters mapping_string: link adapters (identical src,lo/hi,h/v)\n\
 \t* The format is: M1:S1[,M2:S2] - master:slave\n\
@@ -534,6 +560,39 @@ Help\n\
 		DVR_BUFFER, modules, opts.no_threads ? "DISABLED" : "ENABLED");
 	exit(1);
 }
+
+#ifdef GXAPI
+#define GXCFG_FILE	"/home/gx/etc/config.conf"
+#define LINE_MAX	1024
+static char gxlocalip[MAX_HOST];
+
+static char *gx_getlocalip(void)
+{
+	char opt[32] = { 0, }, str[256] = { 0, };
+	char buf[LINE_MAX] = { 0, };
+	FILE *fp;
+
+	memset(gxlocalip, 0, sizeof(gxlocalip));
+
+	fp = fopen(GXCFG_FILE, "r");
+	if(fp) {
+		while (fgets(buf, sizeof(buf), fp) != NULL) {
+			if(sscanf(buf, "%[^=]=\"%[^\"]\"", opt, str) < 2)
+				continue;
+
+			if(opt[0] == '#')
+				continue;
+
+			if((str[0] != 0) && !strncmp("LOCAL_IP", opt, 8)) {
+				strncpy(gxlocalip, str, sizeof(gxlocalip));
+				break;
+			}
+		}
+		fclose(fp);
+	}
+	return gxlocalip;
+}
+#endif
 
 void set_options(int argc, char *argv[])
 {
@@ -598,20 +657,27 @@ void set_options(int argc, char *argv[])
 	opts.dvbapi_offset = 0; // offset for multiple dvbapi clients to the same server
 #if defined(AXE)
 	opts.max_pids = 32;
+#elif defined(GXAPI)
+	opts.max_pids = 30;
 #elif defined(__sh__)
 	opts.max_pids = 20; // allow oscam to use couple of pids as well
 #endif
 
-#ifdef NO_BACKTRACE
+#if defined(NO_BACKTRACE)
 	opts.no_threads = 1;
 #endif
-#ifdef AXE
+#if defined(AXE)
 	opts.no_threads = 1;
 	opts.document_root = "/usr/share/minisatip/html";
 #define AXE_OPTS "7:QW:8:A:"
+#elif defined(GXAPI)
+	opts.ts_config = 0;
+	opts.no_dvr_verify = 0;
+	opts.no_threads = 1;
+	opts.document_root = "/usr/share/minisatip/html";
+#define AXE_OPTS "8A:"
 #else
 #define AXE_OPTS ""
-
 #endif
 
 	while ((opt = getopt_long(argc, argv, "fl:v:r:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:U:o:gy:i:q:D:NGVR:S:TX:Y:OL:EP:Z:0:F:M:1:2:3:C:4k" AXE_OPTS, long_options, NULL)) != -1)
@@ -1019,7 +1085,15 @@ void set_options(int argc, char *argv[])
 				LOG("Demux device can be 0-3 and not %d", o);
 		}
 		break;
-#ifdef AXE
+#if defined(GXAPI)
+		case QUATTRO_HIBAND_OPT:
+			opts.no_dvr_verify = 1;
+			break;
+
+		case ABSOLUTE_SRC:
+			opts.ts_config = atoi(optarg) & 0x1f;
+			break;
+#elif defined(AXE)
 		case LINK_OPT:
 			set_link_adapters(optarg);
 			break;
@@ -1054,6 +1128,10 @@ void set_options(int argc, char *argv[])
 	}
 
 	lip = getlocalip();
+#ifdef GXAPI
+	if(!lip[0])
+		lip = gx_getlocalip();
+#endif
 	if (!opts.http_host)
 	{
 		opts.http_host = (char *)malloc1(MAX_HOST);
@@ -1590,7 +1668,7 @@ int ssdp_notify(sockets *s, int alive)
 	sprintf(nt[1], "::uuid:%s", uuid);
 	strcpy(nt[2], "::urn:ses-com:device:SatIPServer:1");
 
-	if (s->type != TYPE_UDP)
+	if (s->type != TYPE_SSDP)
 		return 0;
 
 	LOGM("%s: bootid: %d deviceid: %d http: %s", __FUNCTION__,
@@ -1810,9 +1888,9 @@ int main(int argc, char *argv[])
 		if ((ssdp1 = udp_bind(opts.disc_host, 1900, 1)) < 1)
 			FAIL("SSDP: Could not bind on %s udp port 1900", opts.disc_host);
 
-		si = sockets_add(ssdp, NULL, -1, TYPE_UDP, (socket_action)ssdp_reply,
+		si = sockets_add(ssdp, NULL, -1, TYPE_SSDP, (socket_action)ssdp_reply,
 						 (socket_action)ssdp_byebye, (socket_action)ssdp_discovery);
-		si1 = sockets_add(ssdp1, NULL, -1, TYPE_UDP, (socket_action)ssdp_reply,
+		si1 = sockets_add(ssdp1, NULL, -1, TYPE_SSDP, (socket_action)ssdp_reply,
 						  (socket_action)ssdp_byebye, (socket_action)ssdp_discovery);
 		if (si < 0 || si1 < 0)
 			FAIL("sockets_add failed for ssdp");

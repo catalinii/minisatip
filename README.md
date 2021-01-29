@@ -225,6 +225,19 @@ Help
 	* The format is: ADAPTER1:PIN,ADAPTER2-ADAPTER4
 			* eg : 0,2-3
 
+GXAPI
+-----
+* -A --ts-config mapping_num: set a 5-bit mask in decimal. (default: 0)
+	* bit 0   - 0 - TS parallel interface, 1 - TS serial interface
+	* bit 1   - select TS; 0 - FRONTEND, 1 - OTHER
+	* bit 2-3 - input TS; 0 - DEMUX_TS1, 1 - DEMUX_TS2, 2 - DEMUX_TS3
+	*           3 - DEMUX_SDRAM
+	* eg: -A 5, set TS serial and DEMUX_TS2
+	* bit 5   - use for Combo receiver (16 + 4 bits)
+	* eg: -A 21, (16 + 5), set TS serial and DEMUX_TS2 for external demod
+
+* -8 --no-dvr-verify ignore check work DVR socket.
+
 How to compile:
 ------
 

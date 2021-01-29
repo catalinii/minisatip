@@ -70,6 +70,7 @@ typedef struct struct_sockets
 #define TYPE_RTSP 4
 #define TYPE_DVR 5
 #define TYPE_RTCP 6
+#define TYPE_SSDP 7
 #define TYPE_NONBLOCK 256 // support for non blocking i/o mode
 #define TYPE_CONNECT 512  // support for non blocking connect -> when it is connected call write with s->rlen 0
 #define TYPE_IPV6 1024	// IPv6 support

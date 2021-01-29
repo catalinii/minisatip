@@ -489,8 +489,48 @@ int sockets_accept(int socket, void *buf, int len, sockets *ss)
 	return 1;
 }
 
+#ifdef GXAPI
+#include "adapter.h"
+int gx_read_ts(void *buf, int len, sockets *ss)
+{
+	int aid = ss->sid;
+	int ret = 0;
+	unsigned int EventRet = 0;
+	GxDemuxProperty_FilterRead DmxFilterRead;
+	adapter *ad = get_adapter(aid);
+
+	ret = GxAVWaitEvents(ad->dvr, ad->module, EVENT_DEMUX0_FILTRATE_TS_END, 1000000, &EventRet);
+	if(ret < 0) {
+		LOG("GXAPI TS read: GxAVWaitEvents Problem...");
+		return -1;
+	}
+
+	DmxFilterRead.filter_id = ad->muxfilter.filter_id;
+	DmxFilterRead.buffer    = buf;
+	DmxFilterRead.max_size  = len;
+
+	ret = GxAVGetProperty(ad->dvr, ad->module, GxDemuxPropertyID_FilterRead,
+			(void*)&DmxFilterRead, sizeof(GxDemuxProperty_FilterRead));
+	if(ret < 0)
+	{
+		LOG("GXAPI TS read: GxDemuxProperty_FilterRead Failed...");
+		return -1;
+	}
+
+	if(DmxFilterRead.read_size < 0)
+		DmxFilterRead.read_size = 0;
+
+	return DmxFilterRead.read_size;
+}
+#endif
+
 int sockets_read(int socket, void *buf, int len, sockets *ss, int *rv)
 {
+#ifdef GXAPI
+	if(ss->type == TYPE_DVR)
+		*rv = gx_read_ts(buf, len, ss);
+	else
+#endif
 	*rv = read(socket, buf, len);
 	if (*rv > 0 && ss->type == TYPE_DVR && (opts.debug & LOG_DMX))
 		_dump_packets("read ->", buf, *rv, ss->rlen);
@@ -617,7 +657,7 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type,
 	ss->prio_pack.len = 0;
 	ss->read = (read_action)sockets_read;
 	ss->lock = NULL;
-	if (ss->type == TYPE_UDP || ss->type == TYPE_RTCP)
+	if (ss->type == TYPE_UDP || ss->type == TYPE_RTCP  || ss->type == TYPE_SSDP)
 		ss->read = (read_action)sockets_recv;
 	else if (ss->type == TYPE_SERVER)
 		ss->read = (read_action)sockets_accept;
@@ -899,7 +939,7 @@ void *select_and_execute(void *arg)
 					{
 						char *err_str;
 						char *types[] =
-							{"udp", "tcp", "server", "http", "rtsp", "dvr", NULL, NULL};
+							{"udp", "tcp", "server", "http", "rtsp", "dvr", "ssdp", NULL};
 						if (rlen == 0)
 						{
 							err = 0;
@@ -912,7 +952,11 @@ void *select_and_execute(void *arg)
 						else
 							err_str = strerror(err);
 
-						if (ss->sock == SOCK_TIMEOUT)
+						if (ss->sock == SOCK_TIMEOUT
+#ifdef GXAPI
+										|| (opts.no_dvr_verify && ss->type == TYPE_DVR)
+#endif
+										|| ss->type == TYPE_SSDP)
 						{
 							LOG(
 								"ignoring error on sock_id %d handle %d type %d error %d : %s",
@@ -1312,6 +1356,24 @@ int sendmmsg(int rsock, struct mmsghdr *msg, int len, int t)
 }
 #endif
 
+#ifdef GXAPI
+#ifdef OLD_GX_UCLIBC
+struct mmsghdr
+{
+	struct msghdr msg_hdr;  /* Actual message header.  */
+	unsigned int msg_len;   /* Number of received or sent bytes for the entry.  */
+};
+#endif
+
+int gx_sendmmsg(int rsock, struct mmsghdr *msg, int len, int t)
+{
+	int i;
+	for (i = 0; i < len; i++)
+		writev(rsock, msg[i].msg_hdr.msg_iov, msg[i].msg_hdr.msg_iovlen);
+	return len;
+}
+#endif
+
 int writev_udp(int rsock, struct iovec *iov, int iiov)
 {
 	struct mmsghdr msg[1024];
@@ -1333,7 +1395,11 @@ int writev_udp(int rsock, struct iovec *iov, int iiov)
 	}
 	if (j > 0)
 		msg[j - 1].msg_hdr.msg_iovlen = i - last_i;
+#ifdef GXAPI
+	retval = gx_sendmmsg(rsock, msg, j, 0);
+#else
 	retval = sendmmsg(rsock, msg, j, 0);
+#endif
 	if (retval == -1)
 		LOG("sendmmsg(): errno %d: %s", errno, strerror(errno))
 	else if (retval != j)
@@ -1364,7 +1430,7 @@ int my_writev(sockets *s, struct iovec *iov, int iiov)
 
 	if (s->sock > 0)
 	{
-		if (s->type == TYPE_UDP && len > 1450)
+		if ((s->type == TYPE_UDP || s->type == TYPE_SSDP) && len > 1450)
 			rv = writev_udp(s->sock, iov, iiov);
 		else
 			rv = writev(s->sock, iov, iiov);

@@ -120,7 +120,10 @@ struct struct_opts
 	char disable_ssdp;
 	char pmt_scan;
 	char emulate_pids_all;
-#ifdef AXE
+#if defined(GXAPI)
+	int ts_config;
+	int no_dvr_verify;
+#elif defined(AXE)
 	int quattro;
 	int quattro_hiband;
 	int axe_unicinp[4];

@@ -406,6 +406,26 @@ int dvbapi_reply(sockets *s)
 	return 0;
 }
 
+#if defined(GXAPI) && defined(OLD_GX_UCLIBC)
+#include <assert.h>
+static pthread_mutex_t sync_lock = PTHREAD_MUTEX_INITIALIZER;
+int __gx_sync_add_and_fetch(int *ptr, int add)
+{
+	int i, ret;
+
+	i = pthread_mutex_lock (&sync_lock);
+	assert (i == 0);
+
+	*ptr += add;
+	ret = *ptr;
+
+	i = pthread_mutex_unlock (&sync_lock);
+	assert (i == 0);
+
+	return ret;
+}
+#endif
+
 int dvbapi_send_pmt(SKey *k)
 {
 	unsigned char buf[1500];
@@ -494,7 +514,11 @@ int dvbapi_send_pmt(SKey *k)
 	copy16(buf, 4, len - 6);
 
 	// make sure is ONLY is not sent by multiple threads
+#if defined(GXAPI) && defined(OLD_GX_UCLIBC)
+	int ep = __gx_sync_add_and_fetch(&enabled_pmts, 1);
+#else
 	int ep = __sync_add_and_fetch(&enabled_pmts, 1);
+#endif
 	buf[6] = (ep == 1) ? CAPMT_LIST_ONLY : CAPMT_LIST_ADD;
 	TEST_WRITE(write(sock, buf, len), len);
 	LOG("Sending pmt to dvbapi server for pid %d, Channel ID %04X, key %d, adapter %d, demux %d, using socket %d (enabled pmts %d)",

@@ -42,6 +42,7 @@ satipc="SatIP Client:\t\t\t\t "
 static="Static:\t\t\t\t\t "
 dvbapi="dvbapi:\t\t\t\t\t "
 axe="axe:\t\t\t\t\t "
+gxapi="gxapi:\t\t\t\t\t "
 enigma="enigma:\t\t\t\t\t "
 LINUXDVB=0
 DVBCA=0
@@ -51,6 +52,7 @@ NETCVCLIENT=0
 SATIPCLIENT=0
 STATIC=0
 AXE=0
+GXAPI=0
 ENIGMA=0
 DVBAPI=0
 
@@ -218,6 +220,20 @@ else
 FM="$FM\n$axe disabled"
 fi
 
+AC_ARG_ENABLE([gxapi],
+  [AS_HELP_STRING([--enable-gxapi],
+  [enable compilation for NationalChip gx6605s: KOQIT K1MINI])])
+
+AS_IF([test "x$enable_gxapi" = "xyes"], [
+GXAPI=1
+])
+
+if test "$GXAPI" = "1"; then
+FM="$FM\n$gxapi enabled"
+else
+FM="$FM\n$gxapi disabled"
+fi
+
 AC_ARG_ENABLE([enigma],
   [AS_HELP_STRING([--enable-enigma],
   [enable compilation for enigma boxes])])
@@ -243,6 +259,7 @@ AC_SUBST(SATIPCLIENT)
 AC_SUBST(STATIC)
 AC_SUBST(DVBAPI)
 AC_SUBST(AXE)
+AC_SUBST(GXAPI)
 AC_SUBST(ENIGMA)
 
 AC_CONFIG_FILES([src/Makefile])

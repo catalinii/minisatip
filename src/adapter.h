@@ -33,12 +33,32 @@ typedef uint8_t (*Dvb_delsys)(int aid, int fd,
 
 #define MAX_DELSYS 10
 
+#ifdef GXAPI
+#include <avapi.h>
+#include <gxav_module_property.h>
+#include <gxav_demux_propertytypes.h>
+#include <gxav_event_type.h>
+#endif
+
 typedef struct struct_adapter
 {
 	char enabled;
 	SMutex mutex;
 	char type; // available on the system
 	int fe, dmx, dvr;
+
+#ifdef GXAPI
+#define DEMUX_SLOT_MAX 32 /* 32 - gx6605s, 64 - gx6622, gx3211... */
+	int gx_sys;
+	int gx_ts_config;
+	int ret_prop;
+	int module;
+	int demux_lock;
+	GxDemuxProperty_Slot muxslot;
+	GxDemuxProperty_Filter muxfilter;
+	GxDemuxProperty_Slot slot[DEMUX_SLOT_MAX];
+#endif
+
 	int pa, fn;
 	// flags
 

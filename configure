@@ -625,6 +625,7 @@ ac_includes_default="\
 ac_header_list=
 ac_subst_vars='LTLIBOBJS
 ENIGMA
+GXAPI
 AXE
 DVBAPI
 STATIC
@@ -699,6 +700,7 @@ enable_satipc
 enable_static
 enable_dvbapi
 enable_axe
+enable_gxapi
 enable_enigma
 '
       ac_precious_vars='build_alias
@@ -1339,6 +1341,8 @@ Optional Features:
   --enable-static         enable static compilation
   --disable-dvbapi        disable dvbapi protocol support
   --enable-axe            enable compilation for axe: Inverto IDL400
+  --enable-gxapi          enable compilation for NationalChip gx6605s: KOQIT
+                          K1MINI
   --enable-enigma         enable compilation for enigma boxes
 
 Optional Packages:
@@ -3973,6 +3977,7 @@ satipc="SatIP Client:\t\t\t\t "
 static="Static:\t\t\t\t\t "
 dvbapi="dvbapi:\t\t\t\t\t "
 axe="axe:\t\t\t\t\t "
+gxapi="gxapi:\t\t\t\t\t "
 enigma="enigma:\t\t\t\t\t "
 LINUXDVB=0
 DVBCA=0
@@ -3982,6 +3987,7 @@ NETCVCLIENT=0
 SATIPCLIENT=0
 STATIC=0
 AXE=0
+GXAPI=0
 ENIGMA=0
 DVBAPI=0
 
@@ -4270,6 +4276,24 @@ if test "$AXE" = "1"; then
 FM="$FM\n$axe enabled"
 else
 FM="$FM\n$axe disabled"
+fi
+
+# Check whether --enable-gxapi was given.
+if test "${enable_gxapi+set}" = set; then :
+  enableval=$enable_gxapi;
+fi
+
+
+if test "x$enable_gxapi" = "xyes"; then :
+
+GXAPI=1
+
+fi
+
+if test "$GXAPI" = "1"; then
+FM="$FM\n$gxapi enabled"
+else
+FM="$FM\n$gxapi disabled"
 fi
 
 # Check whether --enable-enigma was given.

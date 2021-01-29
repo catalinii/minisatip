@@ -14,6 +14,7 @@ STATIC=@STATIC@
 DVBAPI=@DVBAPI@
 LINUXDVB=@LINUXDVB@
 AXE=@AXE@
+GXAPI=@GXAPI@
 ENIGMA=@ENIGMA@
 DDCI=0
 T2MI=0
@@ -78,6 +79,11 @@ TABLES=1
 PMT=1
 else
 CFLAGS+=-DDISABLE_DVBCA
+endif
+
+ifeq ($(GXAPI),1)
+SOURCES+=avapi.c
+CFLAGS+=-DGXAPI -I./gxapi/include
 endif
 
 ifeq ($(PMT),1)

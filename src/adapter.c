@@ -255,6 +255,9 @@ int init_hw(int i)
 	int64_t st, et;
 	adapter *ad;
 	int rv = 0;
+#ifdef GXAPI
+	int j = 0;
+#endif
 	if (i < 0 || i >= MAX_ADAPTERS)
 		return 3;
 
@@ -283,6 +286,19 @@ int init_hw(int i)
 	ad->sock = -1;
 	ad->force_close = 0;
 	ad->err = 0;
+#ifdef GXAPI
+	ad->gx_ts_config = opts.ts_config & 0x1f;
+	ad->ret_prop = -1;
+	ad->module = -1;
+	ad->demux_lock = 0;
+	ad->gx_sys = -1;
+	memset(&ad->muxslot, 0, sizeof(GxDemuxProperty_Slot));
+	memset(&ad->muxfilter, 0, sizeof(GxDemuxProperty_Filter));
+	for(j = 0; j < DEMUX_SLOT_MAX; j++) {
+		memset(&ad->slot[j], 0, sizeof(GxDemuxProperty_Slot));
+		ad->slot[j].slot_id = -1;
+	}
+#endif
 
 	if (opts.max_pids)
 		ad->max_pids = opts.max_pids;
@@ -444,6 +460,13 @@ int close_adapter(int na)
 	if (ad->close)
 		ad->close(ad);
 	//      if(ad->dmx>0)close(ad->dmx);
+#ifdef GXAPI
+	if(ad->module > 0)
+		GxAVCloseModule(ad->dvr, ad->module);
+	if(ad->dvr > 0)
+		GxAVDestroyDevice(ad->dvr);
+	ad->module = -1;
+#endif
 	if (ad->fe > 0)
 		close(ad->fe);
 #ifndef DISABLE_PMT
@@ -1179,6 +1202,10 @@ int mark_pid_add(int sid, int aid, int _pid)
 	for (i = 0; i < MAX_PIDS; i++)
 		if (ad->pids[i].flags <= 0)
 		{
+#ifdef GXAPI
+			if(sid < 0)
+				continue;
+#endif
 			ad->pids[i].flags = 2;
 			ad->pids[i].pid = _pid;
 			ad->pids[i].sid[0] = sid;

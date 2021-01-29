@@ -243,6 +243,23 @@ setup_stream(char *str, sockets *s)
 	return sid;
 }
 
+#ifdef GXAPI
+static int gx_check_ts_lock(adapter *ad)
+{
+	int ret = -1;
+	GxDemuxProperty_TSLockQuery ts_lock_status = { TS_SYNC_UNLOCKED };
+
+	ret = GxAVGetProperty(ad->dvr, ad->module, GxDemuxPropertyID_TSLockQuery,
+				&ts_lock_status, sizeof(GxDemuxProperty_TSLockQuery));
+	if(ret < 0)
+	{
+		printf("TS: GxDemuxPropertyID_TSLockQuery Problem...\n");
+		LOG_AND_RETURN(0, "GXAPI TS: GxDemuxPropertyID_TSLockQuery Problem...");
+	}
+	return ((ts_lock_status.ts_lock == TS_SYNC_LOCKED) ? 1 : 0);
+}
+#endif
+
 int start_play(streams *sid, sockets *s)
 {
 	int a_id;
@@ -299,6 +316,12 @@ int start_play(streams *sid, sockets *s)
 		if (a_id < 0)
 			return -404;
 		sid->adapter = a_id;
+#ifdef GXAPI
+		if ((s->type == TYPE_DVR) && !gx_check_ts_lock(ad))
+		{
+			LOG_AND_RETURN(-454, "No TS locked for sid %d!!!", sid->sid);
+		}
+#endif
 		set_adapter_for_stream(sid->sid, a_id);
 	}
 	if (set_adapter_parameters(sid->adapter, s->sid, &sid->tp) < 0)
@@ -781,6 +804,10 @@ int check_new_transponder(adapter *ad, int rlen)
 	return 0;
 }
 
+#ifdef GXAPI
+extern int find_slot(adapter *ad, int pid);
+#endif
+
 int check_cc(adapter *ad)
 {
 	int i;
@@ -800,6 +827,10 @@ int check_cc(adapter *ad)
 			continue;
 
 		pid = PID_FROM_TS(b);
+#ifdef GXAPI
+		if(find_slot(ad, pid) < 0)
+			continue;
+#endif
 		if (pid == 8191)
 			continue;
 
