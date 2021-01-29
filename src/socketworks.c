@@ -1222,13 +1222,16 @@ struct mmsghdr {
     struct msghdr msg_hdr; /* Message header */
     unsigned int msg_len;  /* Number of bytes transmitted */
 };
+#endif
 
-int sendmmsg(int rsock, struct mmsghdr *msg, int len, int t) {
+#if defined(__APPLE__) || defined(AXE)
+int sendmmsg0(int rsock, struct mmsghdr *msg, int len, int t) {
     int i;
     for (i = 0; i < len; i++)
         writev(rsock, msg[i].msg_hdr.msg_iov, msg[i].msg_hdr.msg_iovlen);
     return len;
 }
+#define sendmmsg(a,b,c,d) sendmmsg0(a,b,c,d)
 #endif
 
 int writev_udp(int rsock, struct iovec *iov, int iiov) {
