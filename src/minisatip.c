@@ -562,39 +562,6 @@ Help\n\
 	exit(1);
 }
 
-#ifdef GXAPI
-#define GXCFG_FILE	"/home/gx/etc/config.conf"
-#define LINE_MAX	1024
-static char gxlocalip[MAX_HOST];
-
-static char *gx_getlocalip(void)
-{
-	char opt[32] = { 0, }, str[256] = { 0, };
-	char buf[LINE_MAX] = { 0, };
-	FILE *fp;
-
-	memset(gxlocalip, 0, sizeof(gxlocalip));
-
-	fp = fopen(GXCFG_FILE, "r");
-	if(fp) {
-		while (fgets(buf, sizeof(buf), fp) != NULL) {
-			if(sscanf(buf, "%[^=]=\"%[^\"]\"", opt, str) < 2)
-				continue;
-
-			if(opt[0] == '#')
-				continue;
-
-			if((str[0] != 0) && !strncmp("LOCAL_IP", opt, 8)) {
-				strncpy(gxlocalip, str, sizeof(gxlocalip));
-				break;
-			}
-		}
-		fclose(fp);
-	}
-	return gxlocalip;
-}
-#endif
-
 void set_options(int argc, char *argv[])
 {
 	int opt;
@@ -1129,10 +1096,6 @@ void set_options(int argc, char *argv[])
 	}
 
 	lip = getlocalip();
-#ifdef GXAPI
-	if(!lip[0])
-		lip = gx_getlocalip();
-#endif
 	if (!opts.http_host)
 	{
 		opts.http_host = (char *)malloc1(MAX_HOST);
