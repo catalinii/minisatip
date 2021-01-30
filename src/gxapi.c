@@ -45,3 +45,27 @@ int gx_read_ts(void *buf, int len, sockets *ss)
 
 	return DmxFilterRead.read_size;
 }
+
+int gx_get_dvb_mode(int sys)
+{
+	switch (sys)
+	{
+	case SYS_DVBS:
+	case SYS_DVBS2:
+		return 1;
+	case SYS_DVBT:
+	case SYS_DVBT2:
+		return 2;
+	case SYS_DVBC2:
+	case SYS_DVBC_ANNEX_A:
+		return 3;
+	case SYS_ATSC:
+	case SYS_DVBC_ANNEX_B:
+		return 4;
+	case SYS_ISDBT:
+		return 5;
+	default:
+		return -1;
+	}
+	return -1;
+}
