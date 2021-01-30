@@ -169,10 +169,11 @@ static const struct option long_options[] =
 		{"xml", required_argument, NULL, 'X'},
 		{"help", no_argument, NULL, 'h'},
 		{"version", no_argument, NULL, 'V'},
-#if defined(GXAPI)
+#ifdef GXAPI
 		{"ts-config", required_argument, NULL, ABSOLUTE_SRC},
 		{"no-dvr-verify", no_argument, NULL, '8'},
-#elif defined(AXE)
+#endif
+#ifdef AXE
 		{"link-adapters", required_argument, NULL, '7'},
 		{"free-inputs", required_argument, NULL, ABSOLUTE_SRC},
 		{"quattro", no_argument, NULL, 'Q'},
@@ -631,21 +632,22 @@ void set_options(int argc, char *argv[])
 	opts.max_pids = 20; // allow oscam to use couple of pids as well
 #endif
 
-#if defined(NO_BACKTRACE)
+#ifdef NO_BACKTRACE
 	opts.no_threads = 1;
 #endif
-#if defined(AXE)
+#ifdef AXE
 	opts.no_threads = 1;
 	opts.document_root = "/usr/share/minisatip/html";
 #define AXE_OPTS "7:QW:8:A:"
-#elif defined(GXAPI)
+#else
+#define AXE_OPTS ""
+#endif
+
+#ifdef GXAPI
 	opts.ts_config = 0;
 	opts.no_dvr_verify = 0;
 	opts.no_threads = 1;
 	opts.document_root = "/usr/share/minisatip/html";
-#define AXE_OPTS "8A:"
-#else
-#define AXE_OPTS ""
 #endif
 
 	while ((opt = getopt_long(argc, argv, "fl:v:r:a:td:w:p:s:n:hB:b:H:m:p:e:x:u:j:U:o:gy:i:q:D:NGVR:S:TX:Y:OL:EP:Z:0:F:M:1:2:3:C:4k" AXE_OPTS, long_options, NULL)) != -1)
@@ -1053,7 +1055,7 @@ void set_options(int argc, char *argv[])
 				LOG("Demux device can be 0-3 and not %d", o);
 		}
 		break;
-#if defined(GXAPI)
+#ifdef GXAPI
 		case QUATTRO_HIBAND_OPT:
 			opts.no_dvr_verify = 1;
 			break;
@@ -1061,7 +1063,8 @@ void set_options(int argc, char *argv[])
 		case ABSOLUTE_SRC:
 			opts.ts_config = atoi(optarg) & 0x1f;
 			break;
-#elif defined(AXE)
+#endif
+#ifdef AXE
 		case LINK_OPT:
 			set_link_adapters(optarg);
 			break;
