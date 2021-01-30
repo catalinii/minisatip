@@ -788,10 +788,6 @@ int check_new_transponder(adapter *ad, int rlen)
 	return 0;
 }
 
-#ifdef GXAPI
-extern int find_slot(adapter *ad, int pid);
-#endif
-
 int check_cc(adapter *ad)
 {
 	int i;

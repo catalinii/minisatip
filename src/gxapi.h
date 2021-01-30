@@ -18,6 +18,8 @@ typedef enum _FRONTEND_MODE
 	DTMB,
 } FRONTEND_MODE;
 
+extern int find_slot(adapter *ad, int pid);
+
 int gx_check_ts_lock(adapter *ad);
 
 int gx_read_ts(void *buf, int len, sockets *ss);
