@@ -397,7 +397,6 @@ struct diseqc_cmd
 	uint32_t wait;
 };
 
-#ifndef GXAPI
 // based on enigma2 fbc.cpp, setProcData
 void set_proc_data(int adapter, char *name, int val)
 {
@@ -415,9 +414,6 @@ void set_proc_data(int adapter, char *name, int val)
 		LOG("setProcData open failed, %s: %m", filename);
 	}
 }
-#else
-#define TS_DEMUX_IN_GATE  (188 * 200)
-#endif
 
 void dvb_set_demux_source(adapter *ad)
 {
@@ -441,6 +437,7 @@ void dvb_set_demux_source(adapter *ad)
 			close(dmx);
 	}
 #elif defined(GXAPI)
+#define TS_DEMUX_IN_GATE  (188 * 200)
 	GxDemuxProperty_ConfigDemux demux = { 0 };
 
 	LOG("GXAPI MUXTS: Open DVB device - TS source %d, ts select %d, stream mode %d\n", (ad->gx_ts_config >> 2) & 0x03, (ad->gx_ts_config >> 1) & 0x01, ad->gx_ts_config & 0x01);
