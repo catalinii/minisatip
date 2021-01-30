@@ -82,7 +82,7 @@ CFLAGS+=-DDISABLE_DVBCA
 endif
 
 ifeq ($(GXAPI),1)
-SOURCES+=avapi.c
+SOURCES+=avapi.c gxapi.c
 CFLAGS+=-DGXAPI -I./gxapi/include
 endif
 

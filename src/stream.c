@@ -43,6 +43,7 @@
 #include "dvb.h"
 #include "adapter.h"
 #include "t2mi.h"
+#include "gxapi.h"
 
 #include "pmt.h"
 
@@ -242,23 +243,6 @@ setup_stream(char *str, sockets *s)
 
 	return sid;
 }
-
-#ifdef GXAPI
-static int gx_check_ts_lock(adapter *ad)
-{
-	int ret = -1;
-	GxDemuxProperty_TSLockQuery ts_lock_status = { TS_SYNC_UNLOCKED };
-
-	ret = GxAVGetProperty(ad->dvr, ad->module, GxDemuxPropertyID_TSLockQuery,
-				&ts_lock_status, sizeof(GxDemuxProperty_TSLockQuery));
-	if(ret < 0)
-	{
-		printf("TS: GxDemuxPropertyID_TSLockQuery Problem...\n");
-		LOG_AND_RETURN(0, "GXAPI TS: GxDemuxPropertyID_TSLockQuery Problem...");
-	}
-	return ((ts_lock_status.ts_lock == TS_SYNC_LOCKED) ? 1 : 0);
-}
-#endif
 
 int start_play(streams *sid, sockets *s)
 {
