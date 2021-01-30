@@ -164,9 +164,6 @@ char def_pids[255];
 char def_pids[100];
 #endif
 
-//#define default_pids "0,1,2,3"
-#define default_pids "8192"
-
 #ifdef GXAPI
 int get_dvb_mode(int sys)
 {
@@ -290,7 +287,7 @@ int detect_dvb_parameters(char *s, transponder *tp)
 
 	if (tp->pids && strstr(tp->pids, "all"))
 	{
-		strcpy(def_pids, default_pids);
+		strcpy(def_pids, "8192");
 		// map pids=all to essential pids
 		tp->pids = (char *)def_pids;
 	}
