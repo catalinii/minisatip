@@ -504,7 +504,7 @@ Help\n\
 	* 2 - use dvrX device and additionally capture PSI data from demuxX device \n\
 	* 3 - use demuxX device and additionally capture PSI data from demuxX device \n\
 \n "
-#if defined(GXAPI)
+#ifdef GXAPI
 		"\
 * -A --ts-config mapping_num: set a 5-bit mask in decimal. (default: 0)\n\
 	* bit 0   - 0 - TS parallel interface, 1 - TS serial interface\n\
@@ -518,7 +518,8 @@ Help\n\
 * -8 --no-dvr-verify ignore check work DVR socket.\n\
 \n\
 "
-#elif defined(AXE)
+#endif
+#ifdef AXE
 		"\
 * -7 --link-adapters mapping_string: link adapters (identical src,lo/hi,h/v)\n\
 \t* The format is: M1:S1[,M2:S2] - master:slave\n\

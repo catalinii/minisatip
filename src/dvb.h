@@ -54,7 +54,7 @@ typedef enum _FRONTEND_MODE
 } FRONTEND_MODE;
 #endif
 
-#if defined(DISABLE_LINUXDVB)
+#ifdef DISABLE_LINUXDVB
 typedef enum fe_delivery_system
 {
 	SYS_UNDEFINED,
