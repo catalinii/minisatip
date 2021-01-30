@@ -35,23 +35,6 @@
 #error minisatip requires Linux DVB driver API version 5.0 or higher!
 #endif
 
-#ifdef GXAPI
-typedef enum _FRONTEND_MODE
-{
-	DVBS2_NORMAL,
-	DVBS2_BLIND,
-	DVBT_AUTO_MODE,
-	DVBT_NORMAL,
-	DVBT2_BASE,
-	DVBT2_LITE,
-	DVBT2_BASE_LITE,
-	DVBC_J83A,
-	DVBC_J83B,
-	DTMB_C,
-	DTMB,
-} FRONTEND_MODE;
-#endif
-
 #ifdef DISABLE_LINUXDVB
 typedef enum fe_delivery_system
 {

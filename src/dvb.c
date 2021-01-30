@@ -45,6 +45,7 @@
 #define DEFAULT_LOG LOG_DVB
 
 #ifdef GXAPI
+#include "gxapi.h"
 #define DEV_FRONTEND "/dev/dvb%d.frontend%d"
 int gx_sys = -1;
 #else
