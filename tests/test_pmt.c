@@ -184,12 +184,14 @@ int test_decrypt() {
     send_cw(0, CA_ALGO_DVBCSA, 0, cw_invalid, NULL, 25);
 
     SPMT_batch batch[1] = {{.data = packet, .len = sizeof(packet)}};
-    ASSERT(0 != test_decrypt_packet(cws[0], batch, 1));
-    ASSERT(0 == test_decrypt_packet(cws[1], batch, 1));
+    ASSERT(0 != test_decrypt_packet(cws[0], batch, 1),
+           "test_decrypt_packet expected to fail");
+    ASSERT(0 == test_decrypt_packet(cws[1], batch, 1),
+           "test_decrypt_packet expected to work");
 
     pmt_decrypt_stream(a[0]);
     uint8_t *b = a[0]->buf + (max_len - 1) * sizeof(packet);
-    ASSERT(b[4] + b[5] + b[6] == 1);
+    ASSERT(b[4] + b[5] + b[6] == 1, "MPEG header expected");
     hexdump("adapter buffer ", a[0]->buf, 188);
     free(a[0]->buf);
     free(a[0]);
@@ -221,9 +223,9 @@ int test_wait_pusi() {
     a[0]->buf[2 * 188 + 3] = 0x80;
     a[0]->buf[2 * 188 + 1] |= 0x40;
 
-    ASSERT(wait_pusi(a[0], 1 * 188) == 0);
-    ASSERT(wait_pusi(a[0], 2 * 188) == 1);
-    ASSERT(wait_pusi(a[0], 3 * 188) == 0);
+    ASSERT(wait_pusi(a[0], 1 * 188) == 0, "wait_pusi failed");
+    ASSERT(wait_pusi(a[0], 2 * 188) == 1, "getItem should not fail");
+    ASSERT(wait_pusi(a[0], 3 * 188) == 0, "getItem should not fail");
     free(a[0]->buf);
     free(a[0]);
     a[0] = NULL;

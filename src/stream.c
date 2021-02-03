@@ -826,8 +826,9 @@ int check_cc(adapter *ad) {
             if (p->cc != cc) {
                 LOG("PID Continuity error (adapter %d, pos %d): pid: %03d, "
                     "Expected "
-                    "CC: %X, Actual CC: %X, CC Before %X",
-                    ad->id, i / DVB_FRAME, pid, p->cc, cc, cc_before);
+                    "CC: %X, Actual CC: %X, CC Before %X %s",
+                    ad->id, i / DVB_FRAME, pid, p->cc, cc, cc_before,
+                    (b[3] & 0x80) ? "encrypted" : "");
                 p->cc_err++;
             }
             p->cc = cc;
@@ -979,6 +980,10 @@ int process_dmx(sockets *s) {
          "%jd ms ago",
          ad->id, rlen, s->lbuf, ms_ago);
 
+#ifndef AXE
+    check_cc(ad);
+#endif
+
 #ifndef DISABLE_T2MI
     if (ad->is_t2mi >= 0)
         t2mi_process_ts(ad);
@@ -989,9 +994,6 @@ int process_dmx(sockets *s) {
 #endif
 
     rlen = ad->rlen;
-#ifndef AXE
-    check_cc(ad);
-#endif
 
     for (i = 0; i < MAX_STREAMS; i++)
         if (st[i] && st[i]->enabled && st[i]->adapter == ad->id)

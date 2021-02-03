@@ -642,8 +642,7 @@ void update_cw(SPMT *pmt, SPMT_batch *start, int len) {
             cws[i]->pmt == pmt->id) {
             if (ctime > cws[i]->expiry)
                 continue;
-            if (len &&
-                !test_decrypt_packet(cws[i], start, len)) {
+            if (len && !test_decrypt_packet(cws[i], start, len)) {
                 LOGM("correct CW found (len %d): %s", len,
                      cw_to_string(cws[i], buf));
                 cw = cws[i];
@@ -1054,7 +1053,7 @@ int pmt_add(int i, int adapter, int sid, int pmt_pid) {
     pmt->update_cw = 1;
     pmt->blen = 0;
     if (!pmt->batch) {
-        int len = sizeof(pmt->batch[0]) * (opts.adapter_buffer / 188 + 10);
+        int len = sizeof(pmt->batch[0]) * (opts.adapter_buffer / 188 + 100);
         pmt->batch = malloc(len);
         LOGM("Allocation batch with size %d at %p", len, pmt->batch);
         if (!pmt->batch)
@@ -1248,7 +1247,7 @@ void clean_psi(adapter *ad, uint8_t *b) {
                                     // likely the channel is clear
         return;
 
-    if (!(cpmt->cw) || !cpmt->running) {
+    if (!(cpmt->cw) || !cpmt->state) {
         //		mark_pid_null(b);
         return;
     }
@@ -1628,7 +1627,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
 
     if (pmt->version == ver) {
 #ifndef DISABLE_TABLES
-        if (ad && pmt->pi_len && pmt->running && ad->ca_mask)
+        if (ad && pmt->pi_len && pmt->state && ad->ca_mask)
             send_pmt_to_cas(ad, pmt);
 #endif
         // just for testing purposes
@@ -1739,7 +1738,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
                            spid))) // the pid is already requested by the client
         {
             enabled_channels++;
-            pmt->running = 1;
+            pmt->state = PMT_RUNNING;
             cp->pmt = pmt->master_pmt;
         }
     }
@@ -1755,7 +1754,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
                     mark_pid_add(p_all->sid[i], ad->id, pmt->stream_pid[j].pid);
 
         enabled_channels = 1;
-        pmt->running = 1;
+        pmt->state = PMT_RUNNING;
         update_pids(ad->id);
     }
 
@@ -1770,7 +1769,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
 #endif
     }
 
-    if (!pmt->running)
+    if (!pmt->state)
         set_filter_flags(filter, 0);
 
     mutex_unlock(&pmt->mutex);
@@ -1880,26 +1879,29 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque) {
 void start_pmt(SPMT *pmt, adapter *ad) {
     LOGM("starting PMT %d master %d, pid %d, sid %d for channel: %s", pmt->id,
          pmt->master_pmt, pmt->pid, pmt->sid, pmt->name);
-    pmt->running = 1;
+    pmt->state = PMT_STARTING;
+    // give 2s to initialize decoding or override for each CA
     pmt->encrypted = 0;
-    // give 1s to initialize decoding or override for each CA
     pmt->grace_time = getTick() + 2000;
+
     set_filter_flags(pmt->filter, FILTER_ADD_REMOVE | FILTER_CRC);
 #ifndef DISABLE_TABLES
     send_pmt_to_cas(ad, pmt);
 #endif
+    pmt->state = PMT_RUNNING;
 }
 
 void stop_pmt(SPMT *pmt, adapter *ad) {
-    if (!pmt->running)
+    if (!pmt->state)
         return;
     LOGM("stopping PMT %d pid %d sid %d master %d for channel %s", pmt->id,
          pmt->pid, pmt->sid, pmt->master_pmt, pmt->name);
-    pmt->running = 0;
+    pmt->state = PMT_STOPPING;
     set_filter_flags(pmt->filter, 0);
 #ifndef DISABLE_TABLES
     close_pmt_for_cas(ad, pmt);
 #endif
+    pmt->state = PMT_STOPPED;
 }
 
 void emulate_add_all_pids(adapter *ad) {
@@ -1965,7 +1967,7 @@ void pmt_pid_add(adapter *ad, int pid, int existing) {
         if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == ad->id &&
             pmts[i]->master_pmt == pmt_id) {
             pmt = pmts[i];
-            if (!pmt->running)
+            if (!pmt->state)
                 start_pmt(pmt, ad);
 #ifndef DISABLE_TABLES
             tables_add_pid(ad, pmt, pid);
@@ -1994,7 +1996,7 @@ void pmt_pid_del(adapter *ad, int pid) {
 
     for (i = 0; i < npmts; i++)
         if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == ad->id &&
-            pmts[i]->master_pmt == pmt->master_pmt && pmts[i]->running)
+            pmts[i]->master_pmt == pmt->master_pmt && pmts[i]->state)
 #ifndef DISABLE_TABLES
             tables_del_pid(ad, pmts[i], pid);
 #endif
@@ -2011,7 +2013,7 @@ void pmt_pid_del(adapter *ad, int pid) {
 
     if (!ep) {
         for (i = 0; i < npmts; i++)
-            if (pmts[i] && pmts[i]->enabled && pmts[i]->running &&
+            if (pmts[i] && pmts[i]->enabled && pmts[i]->state &&
                 pmts[i]->adapter == ad->id &&
                 pmts[i]->master_pmt == pmt->master_pmt)
                 stop_pmt(pmts[i], ad);
@@ -2075,7 +2077,7 @@ char *get_channel_for_adapter(int aid, char *dest, int max_size) {
 
     for (i = 0; i < npmts; i++)
         if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == aid &&
-            pmts[i]->running && pmts[i]->name[0]) {
+            pmts[i]->state && pmts[i]->name[0]) {
             len +=
                 snprintf(dest + len, max_size - len - 1, "%s,", pmts[i]->name);
         }
@@ -2121,8 +2123,7 @@ _symbols pmt_sym[] = {
     {"pmt_name", VAR_AARRAY_STRING, pmts, 1, MAX_PMT, offsetof(SPMT, name)},
     {"pmt_pid", VAR_AARRAY_INT, pmts, 1, MAX_PMT, offsetof(SPMT, pid)},
     {"pmt_sid", VAR_AARRAY_INT, pmts, 1, MAX_PMT, offsetof(SPMT, sid)},
-    {"pmt_running", VAR_AARRAY_UINT8, pmts, 1, MAX_PMT,
-     offsetof(SPMT, running)},
+    {"pmt_running", VAR_AARRAY_UINT8, pmts, 1, MAX_PMT, offsetof(SPMT, state)},
     {"ad_channel", VAR_FUNCTION_STRING, (void *)&get_channel_for_adapter, 0,
      MAX_ADAPTERS, 0},
 

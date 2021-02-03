@@ -240,7 +240,7 @@ typedef struct ca_device {
 } ca_device_t;
 
 int dvbca_id;
-static struct ca_device *ca_devices[MAX_ADAPTERS];
+ca_device_t *ca_devices[MAX_ADAPTERS];
 
 struct cc_ctrl_data {
 
@@ -884,7 +884,7 @@ int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
     int pos = 0;
     SPMT *pmt = get_pmt(ca->pmt_id);
     SPMT *other = get_pmt(ca->other_id);
-    int version = ca->version++;
+    int version = ca->version;
 
     if (!pmt)
         LOG_AND_RETURN(1, "%s: PMT %d not found", __FUNCTION__, ca->pmt_id);
@@ -938,20 +938,26 @@ int get_enabled_pmts_for_ca(ca_device_t *d) {
 
 SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple) {
     int ca_pos;
+    SCAPMT *res = NULL;
     for (ca_pos = 0; ca_pos < d->max_ca_pmt; ca_pos++) {
         if (d->capmt[ca_pos].pmt_id == -1) {
             d->capmt[ca_pos].pmt_id = pmt->id;
-            return d->capmt + ca_pos;
+            res = d->capmt + ca_pos;
+            break;
         }
         if (multiple && d->capmt[ca_pos].other_id == -1) {
             d->capmt[ca_pos].other_id = pmt->id;
-            return d->capmt + ca_pos;
+            res = d->capmt + ca_pos;
+            break;
         }
     }
 
-    LOG("CA %d all channels used %d, multiple allowed %d", d->id, d->max_ca_pmt,
-        multiple)
-    return NULL;
+    if (res) {
+        res->version = (res->version + 1) & 0xF;
+    } else
+        LOG("CA %d all channels used %d, multiple allowed %d", d->id,
+            d->max_ca_pmt, multiple)
+    return res;
 }
 
 int get_active_capmts(ca_device_t *d) {
@@ -985,7 +991,7 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
                        "First PMT not found from capmt %d", capmt->pmt_id);
     pid = spmt->pid;
     ver = capmt->version;
-    sid = first->sid;
+    sid = spmt->sid;
 
     listmgmt = get_active_capmts(d) == 1 ? CA_LIST_MANAGEMENT_ONLY
                                          : CA_LIST_MANAGEMENT_ADD;
@@ -994,14 +1000,14 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
     if (listmgmt == CA_LIST_MANAGEMENT_ADD && PMT_ID_IS_VALID(capmt->pmt_id) &&
         PMT_ID_IS_VALID(capmt->other_id))
         listmgmt = CA_LIST_MANAGEMENT_UPDATE;
-    LOG("PMT CA %d pid %u (%s) ver %u sid %u (%x), enabled_pmts %d, "
-        "%s, PMTS to be send %d %d",
-        spmt->adapter, pid, spmt->name, ver, sid, sid,
+    LOG("PMT CA %d pmt %d pid %u (%s) ver %u sid %u (%x), enabled_pmts %d, "
+        "%s, PMTS to be send %d %d, pos",
+        spmt->adapter, spmt->id, pid, spmt->name, ver, sid, sid,
         get_enabled_pmts_for_ca(d),
         listmgmt == CA_LIST_MANAGEMENT_ONLY
-            ? "only"
-            : listmgmt == CA_LIST_MANAGEMENT_ADD ? "add" : "update",
-        capmt->pmt_id, capmt->other_id);
+            ? "ONLY"
+            : listmgmt == CA_LIST_MANAGEMENT_ADD ? "ADD" : "UPDATE",
+        capmt->pmt_id, capmt->other_id, capmt - d->capmt);
 
     if (send_capmt(d->ca_resource, d->ca_session_number, capmt, listmgmt,
                    CA_PMT_CMD_ID_OK_DESCRAMBLING))
@@ -1027,10 +1033,13 @@ void remove_pmt_from_device(ca_device_t *d, SPMT *pmt) {
             if (PMT_ID_IS_VALID(d->capmt[i].other_id)) {
                 d->capmt[i].pmt_id = d->capmt[i].other_id;
                 d->capmt[i].other_id = PMT_INVALID;
+                d->capmt[i].version++;
             }
         }
-        if (d->capmt[i].other_id == pmt->id)
+        if (d->capmt[i].other_id == pmt->id) {
             d->capmt[i].other_id = PMT_INVALID;
+            d->capmt[i].version++;
+        }
     }
     return;
 }
@@ -1047,9 +1056,11 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt) {
     ca_device_t *d = ca_devices[ad->id];
 
     SCAPMT *capmt = get_capmt_for_pmt(d, spmt);
+    if (!capmt)
+        LOG_AND_RETURN(0, "CAPMT not found for pmt %d", spmt->id);
 
-    LOG("PMT CA %d DEL pid %u (%s) sid %u (%x), ver %d, name: %s",
-        spmt->adapter, spmt->pid, spmt->name, spmt->sid, spmt->sid,
+    LOG("PMT CA %d DEL pmt %d pid %u (%s) sid %u (%x), ver %d, name: %s",
+        spmt->adapter, spmt->id, spmt->pid, spmt->name, spmt->sid, spmt->sid,
         capmt->version, spmt->name);
     // Delete the old CAPMT
     if (send_capmt(d->ca_resource, d->ca_session_number, capmt,

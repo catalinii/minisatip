@@ -20,6 +20,7 @@
 #define _GNU_SOURCE
 #define _FILE_OFFSET_BITS 64
 
+#include "ca.h"
 #include "ddci.h"
 #include "dvb.h"
 #include "minisatip.h"
@@ -53,8 +54,187 @@
 
 extern ddci_device_t *ddci_devices[MAX_ADAPTERS];
 extern adapter *a[MAX_ADAPTERS];
+extern SPMT *pmts[MAX_PMT];
+extern int npmts;
+extern int dvbca_id;
+extern ca_device_t *ca_devices[MAX_ADAPTERS];
+extern SHashTable channels;
+
+typedef struct ca_device {
+    int enabled;
+    SCAPMT capmt[MAX_CA_PMT];
+    int max_ca_pmt, multiple_pmt;
+    int fd;
+    int slot_id;
+    int tc;
+    int id;
+    int ignore_close;
+    int init_ok;
+} ca_device_t;
+
+void create_pmt(SPMT *pmt, int id, int ad, int sid, int pid1, int pid2,
+                int caid1, int caid2) {
+    memset(pmt, 0, sizeof(*pmt));
+    pmt->id = id;
+    pmt->sid = sid;
+    pmt->adapter = ad;
+    pmt->pid = id * 1000;
+    pmt->stream_pid[0].pid = pid1;
+    pmt->stream_pid[0].type = 2;
+    pmt->stream_pid[1].pid = pid2;
+    pmt->stream_pid[0].type = 6;
+    pmt->active_pids = 2;
+    pmt->caid[0] = caid1;
+    pmt->capid[0] = caid1;
+    pmt->caid[1] = caid2;
+    pmt->capid[1] = caid2;
+    pmt->caids = 2;
+    pmts[id] = pmt;
+    if (npmts <= id) {
+        npmts = id + 1;
+    }
+}
+
+void create_adapter(adapter *ad, int id) {
+    memset(ad, 0, sizeof(adapter));
+    ad->enabled = 1;
+    ad->id = id;
+    a[id] = ad;
+}
+
+int test_channels() {
+    SHashTable h;
+    int i;
+    Sddci_channel c, *t;
+    memset(&h, 0, sizeof(h));
+    create_hash_table(&h, 10);
+    memset(&c, 0, sizeof(c));
+    c.sid = 200;
+    c.ddci[1].ddci = 1;
+    c.ddcis = 1;
+    setItem(&h, c.sid, &c, sizeof(c));
+    save_channels(&h, "/tmp/minisatip.channels");
+    free_hash(&h);
+    create_hash_table(&h, 10);
+    load_channels(&h, "/tmp/minisatip.channels");
+    ASSERT(getItem(&h, 200) != NULL, "Saved SID not found in table");
+    int ch = 0;
+    FOREACH_ITEM(&h, t) { ch++; }
+    ASSERT(ch == 1, "Expected one channel after loading");
+    free_hash(&h);
+    return 0;
+}
+
+int test_add_del_pmt() {
+    int i;
+    SPMT pmt0, pmt1, pmt2, pmt3;
+    ddci_device_t d0, d1;
+    ca_device_t ca0, ca1;
+    adapter ad, a0, a1;
+
+    create_adapter(&ad, 8);
+    create_adapter(&a0, 0);
+    create_adapter(&a1, 1);
+
+    create_pmt(&pmt0, 0, 8, 100, 101, 102, 0x100, 0x1800);
+    create_pmt(&pmt1, 1, 8, 200, 201, 202, 0x100, 0x500);
+    create_pmt(&pmt2, 2, 8, 300, 301, 302, 0x500, 0x100);
+    create_pmt(&pmt3, 3, 8, 400, 401, 402, 0x600, 0x601);
+    memset(&d0, 0, sizeof(d0));
+    memset(&d1, 0, sizeof(d1));
+    memset(&d0.pmt, -1, sizeof(d0.pmt));
+    memset(&d1.pmt, -1, sizeof(d1.pmt));
+    d0.id = 0;
+    d1.id = 1;
+    d0.enabled = d1.enabled = 1;
+    ddci_devices[0] = &d0;
+    ddci_devices[1] = &d1;
+    create_hash_table(&d0.mapping, 30);
+    create_hash_table(&d1.mapping, 30);
+    create_hash_table(&channels, 30);
+
+    dvbca_init();
+    // DD 0 - 0x100, DD 1 - 0x500
+    add_caid_mask(dvbca_id, 0, 0x100, 0xFFFF);
+    add_caid_mask(dvbca_id, 1, 0x500, 0xFFFF);
+    memset(&ca0, 0, sizeof(ca0));
+    memset(&ca1, 0, sizeof(ca1));
+    ca0.id = 0;
+    ca1.id = 1;
+    ca0.enabled = ca1.enabled = 1;
+    ca0.init_ok = 0;
+    ca1.init_ok = 1;
+    d0.max_channels = d1.max_channels = 1;
+    ca_devices[0] = &ca0;
+    ca_devices[1] = &ca1;
+    // No matching DDCI
+    ASSERT(ddci_process_pmt(&ad, &pmt3) == TABLES_RESULT_ERROR_RETRY,
+           "DDCI not ready, expected retry");
+
+    ca0.init_ok = 1;
+    ASSERT(ddci_process_pmt(&ad, &pmt3) == TABLES_RESULT_ERROR_NORETRY,
+           "DDCI ready, expected no retry");
+
+    // One matching channel
+    ASSERT(ddci_process_pmt(&ad, &pmt0) == TABLES_RESULT_OK,
+           "DDCI matching DD 0");
+    ASSERT(d0.pmt[0] == 0, "PMT 0 using DDCI 0");
+
+    ASSERT(ddci_process_pmt(&ad, &pmt1) == TABLES_RESULT_OK,
+           "DDCI matching DD 1");
+    ASSERT(d1.pmt[0] == 1, "PMT 1 using DDCI 1");
+    d0.max_channels = d1.max_channels = 2;
+
+    // Multiple PMTs
+    ASSERT(ddci_process_pmt(&ad, &pmt2) == TABLES_RESULT_OK,
+           "DDCI matching DD 0 for second PMT");
+    ASSERT(d0.pmt[1] == 2, "PMT 2 using DDCI 0");
+    blacklist_pmt_for_ddci(&pmt2, 0);
+    ddci_del_pmt(&ad, &pmt2);
+
+    // make sure we still have pids enabled from the first PMT
+    int ec = 0, j, k;
+    ddci_mapping_table_t *m;
+    int pmt_pids[MAX_ADAPTERS];
+    memset(pmt_pids, 0, sizeof(pmt_pids));
+    for (k = 0; k < 2; k++) {
+        FOREACH_ITEM(&ddci_devices[k]->mapping, m) {
+            ec++;
+            for (j = 0; j < m->npmt; j++)
+                if (m->pmt[j] >= 0)
+                    pmt_pids[m->pmt[j]]++;
+        }
+    }
+    ASSERT(ec > 3, "Deleted Pids from the previously added PMT");
+    ASSERT(pmt_pids[0] > 0, "PMT 0 expected to have pids");
+    ASSERT(pmt_pids[1] > 0, "PMT 1 expected to have pids");
+    ASSERT(pmt_pids[2] == 0, "PMT 2 expected to NOT have pids");
+
+    ASSERT(ddci_process_pmt(&ad, &pmt2) == TABLES_RESULT_OK,
+           "DDCI matching DD 1 for second PMT");
+    ASSERT(d1.pmt[1] == 2, "PMT 2 using DDCI 1");
+    blacklist_pmt_for_ddci(&pmt2, 0);
+    ddci_del_pmt(&ad, &pmt2);
+    ASSERT(ddci_process_pmt(&ad, &pmt2) == TABLES_RESULT_ERROR_NORETRY,
+           "DDCI should be blacklisted on all DDCIs");
+
+    ddci_del_pmt(&ad, &pmt1);
+    ddci_del_pmt(&ad, &pmt0);
+    dump_mapping_table();
+    ec = 0;
+    FOREACH_ITEM(&d0.mapping, m) { ec++; }
+    FOREACH_ITEM(&d1.mapping, m) { ec++; }
+    ASSERT(ec == 0, "No pid should be enabled");
+    free_hash(&d0.mapping);
+    free_hash(&d1.mapping);
+    free_hash(&channels);
+
+    return 0;
+}
+
 int test_push_ts_to_ddci() {
     ddci_device_t d;
+    adapter ad;
     uint8_t buf[188 * 10];
     d.id = 0;
     d.enabled = 1;
@@ -64,11 +244,12 @@ int test_push_ts_to_ddci() {
     d.ro[0] = 188;
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[0] = &d;
+    create_adapter(&ad, 0);
     push_ts_to_ddci_buffer(&d, buf, 376);
     if (d.ro[0] != 376)
         LOG_AND_RETURN(1, "test drop a packet when pushing 2 with wrap");
     push_ts_to_ddci_buffer(&d, buf, 376);
-    if (d.ro[0] != 752 || d.wo!= 564)
+    if (d.ro[0] != 752 || d.wo != 564)
         LOG_AND_RETURN(1, "test dropping 2 packets without wrapping");
     d.ro[0] = 752;
     d.wo = 0;
@@ -85,7 +266,6 @@ int test_copy_ts_from_ddci() {
     adapter ad;
     uint8_t buf[188 * 10], buf2[188 * 10];
     memset(&d, 0, sizeof(d));
-    memset(&ad, 0, sizeof(ad));
     memset(buf, 0, sizeof(buf));
     memset(buf2, 0, sizeof(buf2));
     d.id = 0;
@@ -95,11 +275,9 @@ int test_copy_ts_from_ddci() {
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[0] = &d;
 
-    ad.id = 1;
-    ad.enabled = 1;
+    create_adapter(&ad, 1);
     ad.buf = buf2;
     ad.lbuf = sizeof(buf2);
-    a[1] = &ad;
     int pid = 1000;
     __attribute__((unused)) int ad_pos = 0;
     buf[0] = buf2[0] = 0x47;
@@ -107,9 +285,9 @@ int test_copy_ts_from_ddci() {
                           0); // forcing mapping to a different pid
     add_pid_mapping_table(1, pid, 0, &d, 0);
     m = get_pid_mapping_allddci(1, pid);
-    ASSERT(m != NULL);
+    ASSERT(m != NULL, "Pid not found in mapping table");
     int new_pid = m->ddci_pid;
-    ASSERT(new_pid == 1001);
+    ASSERT(new_pid == 1001, "Unexpected pid found after conflict");
     ad.rlen = 188;
     set_pid_ts(buf, new_pid);
     set_pid_ts(buf2, 0x1FFF);
@@ -162,11 +340,10 @@ int xwritev(int fd, const struct iovec *io, int len) {
 
 int test_ddci_process_ts() {
     ddci_device_t d;
-    adapter ad;
     uint8_t buf[188 * 10];
     int i;
+    adapter ad;
     memset(&d, 0, sizeof(d));
-    memset(&ad, 0, sizeof(ad));
     memset(buf, 0, sizeof(buf));
     d.id = 0;
     d.enabled = 1;
@@ -175,8 +352,7 @@ int test_ddci_process_ts() {
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[0] = &d;
     mutex_init(&d.mutex);
-    ad.id = 1;
-    ad.enabled = 1;
+    create_adapter(&ad, 1);
     ad.buf = buf;
     ad.lbuf = sizeof(buf);
     for (i = 0; i < ad.lbuf; i += 188) {
@@ -190,8 +366,8 @@ int test_ddci_process_ts() {
     add_pid_mapping_table(5, 2000, 0, &d, 0);
     int new_pid = add_pid_mapping_table(1, 1000, 0, &d, 0);
     int new_pid2 = add_pid_mapping_table(1, 2000, 0, &d, 0);
-    ad.rlen = ad.lbuf - 188; // allow just 1 packet + 1 cleared that it will be
-                             // written to the socket
+    ad.rlen = ad.lbuf - 188; // allow just 1 packet + 1 cleared that it will
+                             // be written to the socket
     set_pid_ts(ad.buf + 188, 1000);
     memset(d.ro, -1, sizeof(d.ro));
     d.ro[1] = DDCI_BUFFER - 188;          // 1 packet before end of buffer
@@ -222,8 +398,6 @@ int test_ddci_process_ts() {
     free_hash(&d.mapping);
     return 0;
 }
-extern SPMT *pmts[MAX_PMT];
-extern int npmts;
 int test_create_pat() {
     ddci_device_t d;
     uint8_t psi[188];
@@ -232,6 +406,10 @@ int test_create_pat() {
     char cc;
     int psi_len;
     SFilter f;
+    adapter ad;
+    memset(&pmt, 0, sizeof(pmt));
+    create_adapter(&ad, 0);
+
     memset(&d, 0, sizeof(d));
     d.id = 0;
     d.enabled = 1;
@@ -331,10 +509,11 @@ int test_create_pmt() {
 }
 
 int main() {
-    opts.log = 1;
+    opts.log = 65535;
     opts.debug = 0;
     strcpy(thread_name, "test");
-    find_ddci_adapter(a);
+    TEST_FUNC(test_channels(), "testing test_channels");
+    TEST_FUNC(test_add_del_pmt(), "testing adding and removing pmts");
     TEST_FUNC(test_push_ts_to_ddci(), "testing test_push_ts_to_ddci");
     TEST_FUNC(test_copy_ts_from_ddci(), "testing test_copy_ts_from_ddci");
     TEST_FUNC(test_ddci_process_ts(), "testing ddci_process_ts");

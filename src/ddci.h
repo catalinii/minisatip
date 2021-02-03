@@ -1,6 +1,7 @@
 #ifndef DDCI_H
 #define DDCI_H
 #include "adapter.h"
+#include "pmt.h"
 #include "tables.h"
 
 // number of pids for each ddci adapter to be stored in the mapping table
@@ -18,7 +19,6 @@ typedef struct ddci_device {
     int max_channels;
     int pmt[MAX_CHANNELS_ON_CI + 1];
     int pmt_ver[MAX_CHANNELS_ON_CI + 1];
-    int del_pmt[MAX_CHANNELS_ON_CI + 1];
     int cat_processed;
     int capid[MAX_CA_PIDS + 1];
     int ncapid;
@@ -46,6 +46,18 @@ typedef struct ddci_mapping_table {
     int pid_added;
 } ddci_mapping_table_t;
 
+typedef struct ddci_channel {
+    struct SDDCI {
+        uint8_t ddci;
+        uint64_t blacklisted_until;
+    } ddci[MAX_ADAPTERS];
+    int ddcis;
+    int pos;
+    int sid;
+    char name[50];
+
+} Sddci_channel;
+
 void find_ddci_adapter(adapter **a);
 void ddci_init();
 int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
@@ -57,4 +69,9 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d);
 int ddci_create_pat(ddci_device_t *d, uint8_t *b);
 int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *clean, int ver);
 ddci_mapping_table_t *get_pid_mapping_allddci(int ad, int pid);
+void save_channels(SHashTable *ch, char *file);
+void load_channels(SHashTable *ch, char *file);
+int ddci_process_pmt(adapter *ad, SPMT *pmt);
+void blacklist_pmt_for_ddci(SPMT *pmt, int ddid);
+int ddci_del_pmt(adapter *ad, SPMT *spmt);
 #endif

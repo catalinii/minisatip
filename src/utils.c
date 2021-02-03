@@ -91,7 +91,10 @@ int get_index_hash(SHashTable *hash, uint32_t key) {
 }
 
 int create_hash_table(SHashTable *hash, int no) {
+    if (hash->init == 1)
+        return 0;
     memset(hash, 0, sizeof(SHashTable));
+    hash->init = 1;
     hash->items = malloc(no * sizeof(SHashItem));
     if (!hash->items) {
         LOG_AND_RETURN(1, "Could not allocate Hash Items %d", no);
@@ -205,6 +208,10 @@ int _setItem(SHashTable *hash, uint32_t key, void *data, int len, int copy) {
     else
         s->data = data;
 
+    if (hash->resize) {
+        mutex_unlock(&hash->mutex);
+        return 0;
+    }
     if (++hash->len > hash->size / 2) {
         int new_size = hash->size * 2;
         SHashTable ht;
@@ -213,9 +220,12 @@ int _setItem(SHashTable *hash, uint32_t key, void *data, int len, int copy) {
         if (create_hash_table(&ht, new_size))
             LOG_AND_RETURN(0, "Resizing hash_table at %p from %d to %d", hash,
                            hash->size, new_size);
+        hash->resize = 1;
+        ht.resize = 1;
         copy_hash_table(hash, &ht);
         free_hash(hash);
         memcpy(hash, &ht, sizeof(SHashTable));
+        hash->resize = 0;
     }
     mutex_unlock(&hash->mutex);
     return 0;
@@ -275,6 +285,9 @@ int delItemP(SHashTable *hash, void *p) {
 
 void free_hash(SHashTable *hash) {
     int i;
+    if (hash->init != 1)
+        return;
+
     mutex_lock(&hash->mutex);
     for (i = 0; i < hash->size; i++)
         if (hash->items[i].is_alloc) {

@@ -47,14 +47,13 @@
 #include <linux/dvb/ca.h>
 
 #define DEFAULT_LOG LOG_DVBCA
+#define CONFIG_FILE "ddci.conf"
 
 int ddci_adapters;
 extern int dvbca_id;
 extern SCA ca[MAX_CA];
 extern SPMT *pmts[];
-
-// basic whitelist and blacklist for SIDs and DDCI adapters
-uint64_t sid_whitelist[65536], sid_blacklist[65536];
+SHashTable channels;
 
 int first_ddci = -1;
 
@@ -151,7 +150,8 @@ int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
         mark_pid_add(DDCI_SID, d->id, ddci_pid);
     }
 
-    LOG("mapped adapter %d pid %d to %d", ad, pid, ddci_pid);
+    LOG("mapped adapter %d (%d) pid %d (%d) to %d, pmt %d", ad, m->ad, pid,
+        m->pid, ddci_pid, pmt);
     return ddci_pid;
 }
 
@@ -165,6 +165,22 @@ ddci_mapping_table_t *get_pid_mapping_allddci(int ad, int pid) {
                 return m;
         }
     return NULL;
+}
+
+void dump_mapping_table() {
+    int i, j;
+    LOGM("Mapping Table for all devices");
+    for (j = 0; j < MAX_ADAPTERS; j++)
+        if (ddci_devices[j] && ddci_devices[j]->enabled) {
+            ddci_mapping_table_t *m;
+            FOREACH_ITEM(&ddci_devices[j]->mapping, m) {
+                LOGM("DD %d, ddpid %d, adapter %d pid %d, rewrite %d: %d %d "
+                     "%d %d",
+                     m->ddci, m->ddci_pid, m->ad, m->pid, m->rewrite, m->pmt[0],
+                     m->pmt[1], m->pmt[2], m->pmt[3]);
+            }
+        }
+    return;
 }
 
 int set_pid_rewrite(ddci_device_t *d, int ad, int pid, int rewrite) {
@@ -182,7 +198,7 @@ int del_pmt_mapping_table(ddci_device_t *d, int ad, int pmt) {
     ddci_mapping_table_t *m;
     FOREACH_ITEM(&d->mapping, m)
     if (m->ad == ad) {
-
+        int pid_used = 0;
         for (j = 0; j < m->npmt; j++) {
             if (m->pmt[j] == pmt)
                 m->pmt[j] = -1;
@@ -190,9 +206,11 @@ int del_pmt_mapping_table(ddci_device_t *d, int ad, int pmt) {
                 LOG("%s: ad %d pid %d ddci_pid %d, pid also associated with "
                     "pmt %d",
                     __FUNCTION__, ad, m->pid, m->ddci_pid, m->pmt[j]);
-                continue;
+                pid_used = 1;
             }
         }
+        if (pid_used)
+            continue;
         ddci_pid = m->ddci_pid;
         filter_id = m->filter_id;
         pid_added = m->pid_added;
@@ -200,8 +218,7 @@ int del_pmt_mapping_table(ddci_device_t *d, int ad, int pmt) {
         to_del[n++] = pid;
 
         SPid *p = find_pid(d->id, ddci_pid);
-        LOGM("No pmt for ad %d pid %d ddci_pid %d, deleteing if not used %d",
-             ad, pid, ddci_pid, p ? p->sid[0] : -2);
+        LOG("Deleting ad %d pmt %d pid %d ddci_pid %d", ad, pmt, pid, ddci_pid);
         if (p)
             mark_pid_deleted(d->id, DDCI_SID, ddci_pid, NULL);
         if (filter_id >= 0)
@@ -241,22 +258,18 @@ int ddci_close_all() {
 
 int ddci_close(adapter *a) { return 0; }
 
-int find_ddci_for_pmt(SPMT *pmt) {
-    int i, retry = 0;
+// return 0 if
+int create_channel_for_pmt(Sddci_channel *c, SPMT *pmt) {
+    int i;
     ddci_device_t *d;
+    memset(c, 0, sizeof(*c));
     for (i = 0; i < MAX_ADAPTERS; i++)
         if ((d = get_ddci(i))) {
             int j;
-            uint64_t mask = 1ULL << i;
 
-            if (sid_blacklist[pmt->sid] & mask) {
-                LOG("PMT %d sid %d already blacklisted on DD %d", pmt->id,
-                    pmt->sid, d->id);
-                continue;
-            }
             // DDCI exists but not yet initialized
             if (is_ca_initializing(i))
-                retry = 1;
+                return TABLES_RESULT_ERROR_RETRY;
 
             for (j = 0; j < ca[dvbca_id].ad_info[i].caids; j++)
                 if (match_caid(pmt, ca[dvbca_id].ad_info[i].caid[j],
@@ -264,18 +277,53 @@ int find_ddci_for_pmt(SPMT *pmt) {
                     LOG("DDCI %d CAID %04X and mask %04X matched PMT %d", i,
                         ca[dvbca_id].ad_info[i].caid[j],
                         ca[dvbca_id].ad_info[i].mask[j], pmt->id);
-                    if (d->channels < d->max_channels)
-                        return d->id;
-                    else {
-                        LOG("DDCI %d has already %d channels running (max %d)",
-                            d->id, d->channels, d->max_channels);
-                        retry = 1;
-                    }
+                    c->ddci[c->ddcis].blacklisted_until = 0;
+                    c->ddci[c->ddcis++].ddci = i;
+                    c->sid = pmt->sid;
+                    strncpy(c->name, pmt->name, sizeof(c->name));
                 }
         }
+    return 0;
+}
+
+int find_ddci_for_pmt(Sddci_channel *c, SPMT *pmt) {
+    int ctime = getTick();
+    int ddid = -100;
+    int retry = 0;
+
+    // search always from the beginning when the PMT is started
+
+    // continue where we left off
+    for (c->pos = 0; c->pos < c->ddcis; c->pos++) {
+        ddid = c->ddci[c->pos].ddci;
+        ddci_device_t *d = get_ddci(ddid);
+        if (!d) {
+            LOG("DDID %d not enabled", ddid);
+        }
+        if (is_ca_initializing(ddid)) {
+            LOG("DD %d is initializing", ddid);
+            retry = 1;
+
+        } else if (ctime > c->ddci[c->pos].blacklisted_until) {
+            if (d && d->channels < d->max_channels)
+                break;
+            else
+                LOG("DDCI %d cannot be used for PMT %d, pid %d (used "
+                    "channels "
+                    "%d max %d)",
+                    ddid, pmt->id, pmt->pid, d ? d->channels : -1,
+                    d ? d->max_channels : -1);
+
+            ddid = -1;
+        } else
+            LOG("PMT %d blacklisted on DD %d for another %jd s", pmt->id,
+                c->ddci[c->pos].ddci,
+                (c->ddci[c->pos].blacklisted_until - ctime) / 1000);
+        ddid = -100;
+    }
     if (retry)
         return -TABLES_RESULT_ERROR_RETRY;
-    return -TABLES_RESULT_ERROR_NORETRY;
+    return ddid;
 }
 
 int is_pmt_running(SPMT *pmt) {
@@ -292,30 +340,44 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     int i, ddid = 0;
     int add_pmt = 0;
     int rv = TABLES_RESULT_ERROR_NORETRY;
+    Sddci_channel *channel;
 
     if (get_ddci(ad->id)) {
         LOG("Skip processing pmt for ddci adapter %d", ad->id);
         // grace time for card decrypting lower than the default grace_time
-        pmt->grace_time = getTick() + 1500;
+        pmt->grace_time = getTick() + 2500;
         return TABLES_RESULT_OK;
     }
 
-    pmt->grace_time = getTick() + 2000;
     if ((ddid = is_pmt_running(pmt)))
         LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
                        "%s: pmt %d (master %d) already running on DDCI %d",
                        __FUNCTION__, pmt->id, pmt->master_pmt, ddci);
 
-    LOG("%s: adapter %d, pmt %d, sid %d, blacklist %d, %s", __FUNCTION__,
-        ad->id, pmt->id, pmt->sid, sid_blacklist[pmt->sid], pmt->name);
-    ddid = find_ddci_for_pmt(pmt);
-#ifdef DDCI_TEST
-    ddid = first_ddci;
-#endif
-    if (ddid < 0)
-        LOG_AND_RETURN(-ddid, "DDCI not ready or busy at the moment: %s",
-                       ddid == -TABLES_RESULT_ERROR_NORETRY ? "no retry"
-                                                            : "retry");
+    LOG("%s: adapter %d, pmt %d, sid %d %s", __FUNCTION__, ad->id, pmt->id,
+        pmt->sid, pmt->name);
+
+    channel = getItem(&channels, pmt->sid);
+    if (!channel) {
+        Sddci_channel c;
+        int result = create_channel_for_pmt(&c, pmt);
+        if (result)
+            LOG_AND_RETURN(result, "DDCI not ready or busy at the moment: %s",
+                           result == TABLES_RESULT_ERROR_NORETRY ? "no retry"
+                                                                 : "retry");
+        if (c.ddcis == 0)
+            LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
+                           "no suitable DDCI found");
+        setItem(&channels, pmt->sid, &c, sizeof(c));
+        channel = getItem(&channels, pmt->sid);
+        if (!channel)
+            LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
+                           "Could not allocate channel");
+    }
+
+    ddid = find_ddci_for_pmt(channel, pmt);
+    if (ddid == -TABLES_RESULT_ERROR_RETRY)
+        return -ddid;
 
     ddci_device_t *d = get_ddci(ddid);
     if (!d) {
@@ -343,6 +405,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     {
         d->tid = ad->transponder_id;
         add_pid_mapping_table(ad->id, 1, pmt->id, d, 1); // add pid 1
+        set_pid_rewrite(d, ad->id, 1, 0);
     }
 
     LOG("found DDCI %d for pmt %d, running channels %d", ddid, pmt->id,
@@ -365,6 +428,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     update_pids(ad->id);
     update_pids(d->id);
     rv = TABLES_RESULT_OK;
+    dump_mapping_table();
 
     mutex_unlock(&d->mutex);
     return rv;
@@ -381,9 +445,12 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
     }
 
     ddci_mapping_table_t *m = get_pid_mapping_allddci(ad->id, spmt->pid);
-    if (!m)
-        LOG_AND_RETURN(0, "%s: pid mapping for adapter %d and pid %d not found",
-                       __FUNCTION__, ad->id, spmt->id);
+    if (!m) {
+        dump_mapping_table();
+        LOG_AND_RETURN(
+            0, "%s: pid mapping for adapter %d, pmt %d and pid %d not found",
+            __FUNCTION__, ad->id, spmt->id, spmt->pid);
+    }
     ddci_device_t *d = get_ddci(m->ddci);
     if (!d)
         LOG_AND_RETURN(0, "%s: ddci %d already disabled", __FUNCTION__,
@@ -400,29 +467,25 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
     for (i = 0; i < d->max_channels; i++)
         if (d->pmt[i] == pmt) {
             d->pmt[i] = -1;
-            d->pmt_ver[i] = (d->pmt_ver[i] + 1) & 0xF;
         }
 
     del_pmt_mapping_table(d, ad->id, pmt);
     update_pids(d->id);
+    dump_mapping_table();
     return 0;
 }
 void blacklist_pmt_for_ddci(SPMT *pmt, int ddid) {
-    uint64_t mask = 1ULL << ddid;
-    ddci_device_t *d = get_ddci(ddid);
-    int i;
+    Sddci_channel *channel = getItem(&channels, pmt->sid);
+    if (!channel)
+        return;
 
-    if ((sid_whitelist[pmt->sid] & mask) == 0) {
-        sid_blacklist[pmt->sid] |= mask;
-        for (i = 0; i < d->max_channels; i++)
-            if (d->del_pmt[i] == -1)
-                break;
-        if (i != d->max_channels) {
-            d->del_pmt[i] = pmt->id;
-        }
+    if (channel->pos >= channel->ddcis)
+        return;
+    // blacklist this channel for this DDCI for 5s
+    channel->ddci[channel->pos].blacklisted_until = getTick() + 15000;
 
-        LOG("PMT %d, sid %d is blacklisted on DD %d", pmt->id, pmt->sid, ddid);
-    }
+    LOG("PMT %d, pid %d, sid %d is blacklisted on DD %d (pmt %d)", pmt->id,
+        pmt->pid, pmt->sid, ddid, pmt->id);
 }
 
 // once one of the PMTs sent to the CAM cannot be decrypted,
@@ -440,13 +503,16 @@ void blacklist_pmts_for_ddci(SPMT *pmt, int ddid) {
 void delete_blacklisted_pmt(ddci_device_t *d, adapter *ad) {
     int i;
     SPMT *pmt;
+    Sddci_channel *channel;
+    uint64_t ctime = getTick();
     for (i = 0; i < d->max_channels; i++)
-        if ((pmt = get_pmt(d->del_pmt[i])) && (pmt->adapter == ad->id)) {
-            LOG("PMT %d, pid %d, sid %d is encrypted on adapter %d, DD %d",
-                pmt->id, pmt->pid, pmt->sid, ad->id, d->id);
-
+        if ((pmt = get_pmt(d->pmt[i])) && (pmt->adapter == ad->id) &&
+            (channel = getItem(&channels, pmt->sid)) &&
+            (channel->pos < channel->ddcis) &&
+            (channel->ddci[channel->pos].blacklisted_until > ctime)) {
+            LOG("PMT %d, pid %d, sid %d is encrypted on DD %d", pmt->id,
+                pmt->pid, pmt->sid, d->id);
             close_pmt_for_ca(ddci_id, ad, pmt);
-            d->del_pmt[i] = -1;
         }
 }
 
@@ -465,11 +531,8 @@ int ddci_encrypted(adapter *ad, SPMT *pmt) {
 int ddci_decrypted(adapter *ad, SPMT *pmt) {
     ddci_device_t *d = get_ddci(ad->id);
     if (d) {
-        uint64_t mask = 1ULL << d->id;
         LOG("PMT %d, sid %d is reported decrypted whitelisting on DD %d",
             pmt->id, pmt->sid, d->id);
-        sid_whitelist[pmt->sid] |= mask;
-        sid_blacklist[pmt->sid] &= (~mask);
     }
     return 0;
 }
@@ -704,9 +767,9 @@ int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len) {
                     pos += buffer_to_ts(dst + pos, len - pos, psi, psi_len,
                                         &d->pmt_cc[i], m->ddci_pid);
                 else
-                    LOG("%s: could not find PMT adapter %d and pid %d to "
+                    LOG("%s: could not find PMT %d adapter %d and pid %d to "
                         "mapping table",
-                        __FUNCTION__, pmt->adapter, pmt->pid);
+                        __FUNCTION__, d->pmt[i], pmt->adapter, pmt->pid);
                 // ADD EPG as well
                 if (len - pos >= 188)
                     pos += ddci_create_epg(d, pmt, dst + pos, d->pmt_ver[i]);
@@ -897,30 +960,31 @@ void ddci_init() // you can search the devices here and fill the ddci_devices,
 
     ddci_id = add_ca(&ddci, 0xFFFFFFFF);
     LOG("Registered DDCI CA %d", ddci_id);
-    memset(sid_whitelist, 0, sizeof(sid_whitelist));
-    memset(sid_blacklist, 0, sizeof(sid_blacklist));
 }
 int ddci_set_pid(adapter *ad, int pid) {
-    LOG("%s: ddci %d add pid %d", __FUNCTION__, ad->id, pid);
+    LOGM("%s: ddci %d add pid %d", __FUNCTION__, ad->id, pid);
     return 100;
 }
 
 int ddci_del_filters(adapter *ad, int fd, int pid) {
-    LOG("%s: ddci %d del pid %d", __FUNCTION__, ad->id, pid);
+    LOGM("%s: ddci %d del pid %d", __FUNCTION__, ad->id, pid);
     return 0;
 }
 
 void advance_read_offset(ddci_device_t *d, int rlen) {
     int i;
-    for (i = 0; i < MAX_ADAPTERS; i++)
+    for (i = 0; i < MAX_ADAPTERS; i++) {
+        if (!get_adapter_nw(i))
+            d->ro[i] = -1;
         if (d->ro[i] >= 0) {
             if (((d->ro[i] > d->wo) && (d->ro[i] <= d->wo + rlen)) ||
                 ((d->ro[i] < d->wo) &&
                  (d->ro[i] + DDCI_BUFFER <= d->wo + rlen))) {
-                LOG("DDCI %d , dropping packets for adapter %d", d->id, i);
+                LOG("DDCI %d, dropping packets for adapter %d", d->id, i);
                 d->ro[i] = (d->wo + rlen + 188) % DDCI_BUFFER;
             }
         }
+    }
 }
 
 // copy the entire len to the ddci buffer and advance read offset
@@ -1059,7 +1123,6 @@ int ddci_open_device(adapter *ad) {
     ad->sys[0] = 0;
     ad->adapter_timeout = 0;
     memset(d->pmt, -1, sizeof(d->pmt));
-    memset(d->del_pmt, -1, sizeof(d->pmt));
     d->ncapid = 0;
     d->max_channels = MAX_CHANNELS_ON_CI;
     d->channels = 0;
@@ -1098,9 +1161,11 @@ int process_cat(int filter, unsigned char *b, int len, void *opaque) {
     if (d->cat_processed)
         return 0;
 
+    d->cat_processed = 1;
+
     cat_len -= 9;
     b += 8;
-    LOGM("CAT DDCI %d len %d", d->id, cat_len);
+    LOG("CAT DDCI %d len %d", d->id, cat_len);
     if (cat_len > 1500)
         return 0;
 
@@ -1114,7 +1179,7 @@ int process_cat(int filter, unsigned char *b, int len, void *opaque) {
         if (++id < MAX_CA_PIDS)
             d->capid[id] = (b[i + 4] & 0x1F) * 256 + b[i + 5];
 
-        LOGM("CAT pos %d caid %d, pid %d", id, caid, d->capid[id]);
+        LOG("CAT pos %d caid %d, pid %d", id, caid, d->capid[id]);
     }
     id++;
 
@@ -1143,9 +1208,60 @@ int process_cat(int filter, unsigned char *b, int len, void *opaque) {
     return 0;
 }
 
+void save_channels(SHashTable *ch, char *file) {
+    int i, j;
+    Sddci_channel *c;
+    FILE *f = fopen(file, "wt");
+    if (!f)
+        return;
+    FOREACH_ITEM(ch, c) {
+        fprintf(f, "%d:    ", c->sid);
+        for (j = 0; j < c->ddcis; j++)
+            fprintf(f, "%s%d", j ? "," : "", c->ddci[j].ddci);
+        fprintf(f, " # %s\n", c->name);
+    }
+    fclose(f);
+}
+void load_channels(SHashTable *ch, char *file) {
+    Sddci_channel c;
+    char line[100];
+    FILE *f = fopen(file, "rt");
+    if (!f)
+        return;
+    while (fgets(line, sizeof(line), f)) {
+        memset(&c, 0, sizeof(c));
+        c.sid = map_int(line, NULL);
+        if (!c.sid)
+            continue;
+
+        char *x = strchr(line, '#');
+        if (x)
+            *x = 0;
+        char *cc = strstr(line, ":");
+        if (!cc)
+            continue;
+        char *arg[MAX_ADAPTERS];
+        int la = split(arg, cc + 1, ARRAY_SIZE(arg), ',');
+        int i = 0;
+        for (i = 0; i < la; i++) {
+            int v = map_intd(arg[i], NULL, -1);
+            if (v != -1)
+                c.ddci[c.ddcis++].ddci = v;
+        }
+        setItem(ch, c.sid, &c, sizeof(c));
+    }
+    fclose(f);
+}
+
 void ddci_free(adapter *ad) {
     ddci_device_t *d = ddci_devices[ad->id];
+    if (!d)
+        return;
     free_hash(&d->mapping);
+    if (channels.size) {
+        save_channels(&channels, CONFIG_FILE);
+        free_hash(&channels);
+    }
 }
 
 void find_ddci_adapter(adapter **a) {
@@ -1207,6 +1323,10 @@ void find_ddci_adapter(adapter **a) {
                 ad->type = ADAPTER_CI;
                 ad->drop_encrypted = 0;
                 ad->free = ddci_free;
+                if (channels.size == 0) {
+                    create_hash_table(&channels, 100);
+                    load_channels(&channels, CONFIG_FILE);
+                }
 
                 ddci_adapters++;
                 na++;

@@ -34,6 +34,11 @@
 
 #define MAX_PI_LEN 1500
 
+#define PMT_STOPPED 0
+#define PMT_STARTING 1
+#define PMT_RUNNING 2
+#define PMT_STOPPING 3
+
 typedef struct struct_batch // same as struct dvbcsa_bs_batch_s
 {
     unsigned char *data; /* pointer to payload */
@@ -110,8 +115,9 @@ typedef struct struct_pmt {
     char provider[50], name[50];
     void *opaque;
     char skip_first;
-    char active;  // PMT structure was already filled
-    char running; // PMT has channels running
+    char active; // PMT structure was already filled
+    char state;  // PMT state (PMT_STOPPED, PMT_STARTING, PMT_RUNNING,
+                 // PMT_STOPPING)
     char encrypted;
     int first_active_pid;
     int64_t grace_time;

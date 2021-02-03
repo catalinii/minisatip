@@ -97,7 +97,7 @@ void del_ca(SCA_op *op) {
                         ad->ca_mask &= ~mask;
                 }
                 for (k = 0; k < npmts; k++) // delete ca_mask for all the PMTs
-                    if (pmts[k] && pmts[k]->enabled && pmts[k]->running &&
+                    if (pmts[k] && pmts[k]->enabled && pmts[k]->state &&
                         (pmts[k]->ca_mask & mask))
                         pmts[k]->ca_mask &= ~mask;
             }
@@ -210,7 +210,7 @@ int close_pmt_for_cas(adapter *ad, SPMT *pmt) {
 
 void disable_pmt_for_ca(int i, SPMT *pmt) {
     uint64_t mask = 1ULL << i;
-    if(i>=MAX_CA || i<0)
+    if (i >= MAX_CA || i < 0)
         return;
     if (ca[i].enabled) {
         close_pmt_for_ca(i, NULL, pmt);
@@ -236,16 +236,18 @@ int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt) {
                 break;
             }
         result = TABLES_RESULT_ERROR_NORETRY;
-        if (send || ca[i].ad_info[ad->id].caids == 0)
+        if (send || ca[i].ad_info[ad->id].caids == 0) {
             result = ca[i].op->ca_add_pmt(ad, pmt);
+        }
 
-        if (result == TABLES_RESULT_OK)
+        if (result == TABLES_RESULT_OK) {
             pmt->ca_mask |= mask;
-        else if (result == TABLES_RESULT_ERROR_NORETRY)
+        } else if (result == TABLES_RESULT_ERROR_NORETRY)
             pmt->disabled_ca_mask |= mask;
         disable_cw(pmt->id);
         rv += (1 - result);
-        LOGM("In processing PMT %d, ca %d, CA matched %d, ca_pmt_add returned "
+        LOGM("In processing PMT %d, ca %d, CA matched %d, ca_pmt_add "
+             "returned "
              "%d, "
              "new ca_mask %d new disabled_ca_mask %d",
              pmt->id, i, send, result, pmt->ca_mask, pmt->disabled_ca_mask);
@@ -273,7 +275,7 @@ void send_pmt_to_ca_for_device(SCA *c, adapter *ad) {
     SPMT *pmt;
     int i;
     for (i = 0; i < npmts; i++)
-        if ((pmt = get_pmt(i)) && pmt->adapter == ad->id && pmt->running)
+        if ((pmt = get_pmt(i)) && pmt->adapter == ad->id && pmt->state)
             send_pmt_to_ca(c->id, ad, pmt);
 }
 
