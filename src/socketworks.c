@@ -1558,11 +1558,11 @@ void set_socket_dscp(int id, int dscp, int prio) {
     int d;
 
     d = dscp & IPTOS_DSCP_MASK_VALUE;
-    if(setsockopt(id, IPPROTO_IP, IP_TOS, &d, sizeof(d)))
+    if (setsockopt(id, IPPROTO_IP, IP_TOS, &d, sizeof(d)))
         LOG("%s: setsockopt IP_TOS failed", __FUNCTION__);
 
     d = prio;
-    if(setsockopt(id, SOL_SOCKET, SO_PRIORITY, &d, sizeof(d)))
+    if (setsockopt(id, SOL_SOCKET, SO_PRIORITY, &d, sizeof(d)))
         LOG("%s: setsockopt SO_PRIORITY failed", __FUNCTION__);
 }
 

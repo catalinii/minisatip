@@ -77,9 +77,10 @@ int test_multiple_pmt() {
     add_pmt_to_capmt(&d, get_pmt(1), 1);
     ASSERT(get_active_capmts(&d) == 1, "expected number of capmt ahould be 1");
     remove_pmt_from_device(&d, get_pmt(0));
-    ASSERT(get_enabled_pmts_for_ca(&d) == 1, "expected capmt should be 1" );
+    ASSERT(get_enabled_pmts_for_ca(&d) == 1, "expected capmt should be 1");
     ASSERT(PMT_ID_IS_VALID(d.capmt[0].pmt_id) &&
-           !PMT_ID_IS_VALID(d.capmt[0].other_id), "only first PMT should be active");
+               !PMT_ID_IS_VALID(d.capmt[0].other_id),
+           "only first PMT should be active");
 
     ASSERT(add_pmt_to_capmt(&d, get_pmt(2), 0) == NULL, "failed adding PMT");
 

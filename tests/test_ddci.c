@@ -220,7 +220,7 @@ int test_add_del_pmt() {
 
     ddci_del_pmt(&ad, &pmt1);
     ddci_del_pmt(&ad, &pmt0);
-    dump_mapping_table();
+
     ec = 0;
     FOREACH_ITEM(&d0.mapping, m) { ec++; }
     FOREACH_ITEM(&d1.mapping, m) { ec++; }

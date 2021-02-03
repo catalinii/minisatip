@@ -286,8 +286,7 @@ typedef ssize_t (*mywritev)(int fd, const struct iovec *io, int len);
 
 #define ASSERT(cond, msg)                                                      \
     if (!(cond))                                                               \
-    LOG_AND_RETURN(1, "%s:%d %s: %s", __FILE__, __LINE__,  \
-                   __FUNCTION__, msg)
+    LOG_AND_RETURN(1, "%s:%d %s: %s", __FILE__, __LINE__, __FUNCTION__, msg)
 
 #define writev(a, b, c) _writev(a, b, c)
 

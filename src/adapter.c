@@ -463,6 +463,7 @@ int getAdaptersCount() {
                     SYS_DVBC2, SYS_ATSC, SYS_DVBC_ANNEX_B};
 
     memset(&ifes, 0, sizeof(ifes));
+    memset(&fes, 0, sizeof(fes));
 
     if (opts.force_sadapter)
         tuner_s2 = opts.force_sadapter;
@@ -873,8 +874,8 @@ int update_pids(int aid) {
             if (ad->pids[i].fd > 0) {
                 if (ad->active_pids > 0)
                     ad->active_pids--;
-		if(ad->del_filters)
-	            ad->del_filters(ad, ad->pids[i].fd, ad->pids[i].pid);
+                if (ad->del_filters)
+                    ad->del_filters(ad, ad->pids[i].fd, ad->pids[i].pid);
             }
             ad->pids[i].fd = 0;
             ad->pids[i].filter = -1;
@@ -899,7 +900,8 @@ int update_pids(int aid) {
                 // add the other pids
                 if (opts.emulate_pids_all && pid == 8192)
                     pid = 0;
-                if (ad->set_pid && (ad->pids[i].fd = ad->set_pid(ad, pid)) < 0) {
+                if (ad->set_pid &&
+                    (ad->pids[i].fd = ad->set_pid(ad, pid)) < 0) {
                     ad->max_pids = ad->max_active_pids - 1;
                     LOG0("Maximum pid filter reached, lowering the value to %d",
                          opts.max_pids);

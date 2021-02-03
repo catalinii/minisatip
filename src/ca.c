@@ -549,6 +549,8 @@ int aes_xcbc_mac_init(struct aes_xcbc_mac_ctx *ctx, const uint8_t *key) {
     AES_KEY aes_key;
     int y, x;
 
+    memset(&aes_key, 0, sizeof(aes_key));
+
     AES_set_encrypt_key(key, 128, &aes_key);
 
     for (y = 0; y < 3; y++) {
@@ -1599,6 +1601,7 @@ static int generate_SAK_SEK(uint8_t *sak, uint8_t *sek,
     int i;
 
     /* key derivation of sak & sek */
+    memset(&key, 0, sizeof(key));
 
     AES_set_encrypt_key(key_data, 128, &key);
 
@@ -1621,6 +1624,7 @@ static int sac_crypt(uint8_t *dst, const uint8_t *src, unsigned int len,
     AES_KEY key;
 
     /* AES_ENCRYPT is '1' */
+    memset(&key, 0, sizeof(key));
 
     if (encrypt)
         AES_set_encrypt_key(key_data, 128, &key);
@@ -2014,6 +2018,7 @@ static void check_new_key(ca_device_t *d, struct cc_ctrl_data *cc_data) {
     uint8_t *kp;
     uint8_t slot;
     unsigned int i;
+    memset(&aes_ctx, 0, sizeof(aes_ctx));
 
     /* check for keyprecursor */
     if (!element_valid(cc_data, 12)) {

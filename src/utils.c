@@ -215,6 +215,7 @@ int _setItem(SHashTable *hash, uint32_t key, void *data, int len, int copy) {
     if (++hash->len > hash->size / 2) {
         int new_size = hash->size * 2;
         SHashTable ht;
+        ht.init = 0;
 
         // Do not fail, hash table full will fail before this code.
         if (create_hash_table(&ht, new_size))
