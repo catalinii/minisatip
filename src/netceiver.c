@@ -336,7 +336,7 @@ int netcv_commit(adapter *ad) {
         SN->want_commit = 0;
     }
 
-    return;
+    return 0;
 }
 
 int netcv_tune(int aid, transponder *tp) {
