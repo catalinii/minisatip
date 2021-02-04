@@ -1186,7 +1186,7 @@ int compare_tunning_parameters(int aid, transponder *tp) {
     LOGM("old parameters: f:%d, plp/isi:%d, diseqc:%d, pol:%d, sr:%d, mtype:%d",
          ad->tp.freq, ad->tp.plp_isi, ad->tp.diseqc, ad->tp.pol, ad->tp.sr,
          ad->tp.mtype);
-    if (tp->freq != ad->tp.freq || tp->plp_isi != ad->tp.plp_isi ||
+    if ((abs(tp->freq - ad->tp.freq) > 1000) || tp->plp_isi != ad->tp.plp_isi ||
         tp->diseqc != ad->tp.diseqc || (tp->pol > 0 && tp->pol != ad->tp.pol) ||
         (tp->sr > 1000 && tp->sr != ad->tp.sr) ||
         (tp->mtype != 6 && ad->tp.mtype != 6 && tp->mtype != ad->tp.mtype))
