@@ -127,7 +127,7 @@ int netcv_del_pid(adapter *ad, int fd, int pid) {
     return 0;
 }
 
-void netcv_commit(adapter *ad) {
+int netcv_commit(adapter *ad) {
     int i;
 
     int m_pos = 0;
@@ -336,7 +336,7 @@ void netcv_commit(adapter *ad) {
         SN->want_commit = 0;
     }
 
-    return;
+    return 0;
 }
 
 int netcv_tune(int aid, transponder *tp) {
