@@ -127,7 +127,7 @@ int netcv_del_pid(adapter *ad, int fd, int pid) {
     return 0;
 }
 
-int netcv_commit(adapter *ad) {
+void netcv_commit(adapter *ad) {
     int i;
 
     int m_pos = 0;
