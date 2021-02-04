@@ -844,6 +844,11 @@ void check_packet_encrypted(adapter *ad) {
             if (grace_time > 0)
                 continue;
 
+            // prevent going from decrypted to encrypted potentially caused by
+            // small glitches
+            if (pmt->encrypted == TABLES_CHANNEL_DECRYPTED)
+                continue;
+
             set_all_pmt_encrypted(ad->id, pid,
                                   enc[pid] > 0 ? TABLES_CHANNEL_ENCRYPTED
                                                : TABLES_CHANNEL_DECRYPTED);
@@ -1173,6 +1178,15 @@ SPMT *get_pmt_for_sid(int aid, int sid) {
     return NULL;
 }
 
+SPMT *get_pmt_for_sid_pid(int aid, int sid, int pid) {
+    int i;
+    for (i = 0; i < npmts; i++)
+        if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == aid &&
+            pmts[i]->sid == sid && pmts[i]->pid == pid)
+            return pmts[i];
+    return NULL;
+}
+
 int clean_psi_buffer(uint8_t *pmt, uint8_t *clean, int clean_size) {
     uint8_t *n, *o;
     int nlen = 0, i, j, es_len, desc_len;
@@ -1469,7 +1483,7 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque) {
         LOG("Adapter %d, PMT sid %d (%04X), pid %d", ad->id, sid, sid, pid);
 
         if (new_version)
-            new_pmt = !get_pmt_for_sid(ad->id, sid);
+            new_pmt = !get_pmt_for_sid_pid(ad->id, sid, pid);
 
         if (sid > 0 && new_pmt) {
             int pmt_id = pmt_add(-1, ad->id, sid, pid);

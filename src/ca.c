@@ -1074,6 +1074,9 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt) {
     remove_pmt_from_device(d, spmt);
     if (PMT_ID_IS_VALID(capmt->pmt_id) || PMT_ID_IS_VALID(capmt->other_id)) {
         int capmt_id = 0;
+        SPMT *pmt = get_pmt(capmt->pmt_id);
+        if (pmt)
+            pmt->grace_time = getTick() + 2000;
         LOG("Re-sending the CAPMT for PMT %d or %d", d->capmt[capmt_id].pmt_id,
             d->capmt[capmt_id].other_id);
         int listmgmt = get_active_capmts(d) == 1 ? CA_LIST_MANAGEMENT_ONLY
