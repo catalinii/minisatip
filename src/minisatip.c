@@ -523,9 +523,9 @@ Help\n\
 			* eg : 0,2-3\n\
 \n\
 * -c --multiple-pmt adapter_list:maximum_number_of_channels_supported: Enable 2 PMTs inside of the same CAPMT to double the number of decrypted channels\n\
-\t* The format is: ADAPTER1[[,ADAPTER2]-ADAPTERN]:[MAX_CHANNELS]\n\
-			* eg : 0,2-3:1\n\
-The adapters 0,2-3 will support maximum of 1 CAPMT (2 channels).\n\
+\t* The format is: ADAPTER1:MAX_CHANNELS[-CAID1[-CAID2]...,ADAPTER2:MAX_CHANNELS[-CAID3[-CAID4]...]\n\
+			* eg : 0:1-100\n\
+The DDCI adapters 0 will support maximum of 1 CAPMT (2 channels) and will use CAID1. If CAID is not specified it will use CAMs CAIDs\n\
 Official CAMs support 1 or 2 channels, with this option this is extended to 2 or 4\n\
 By default every CAM supports 4 channels\n\
 \n\

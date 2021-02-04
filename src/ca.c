@@ -199,6 +199,8 @@ typedef struct ca_device {
     int id;
     int ignore_close;
     int init_ok;
+    uint16_t caid[MAX_CAID];
+    uint32_t caids;
 
     pthread_t stackthread;
 
@@ -3077,10 +3079,17 @@ static int ca_ca_info_callback(void *arg, uint8_t slot_id,
     (void)session_number;
     ca_device_t *d = arg;
     uint32_t i;
+    int overwritten = 0;
 
     d->init_ok = 1;
+    if (d->caids) {
+        ca_ids = d->caid;
+        ca_id_count = d->caids;
+        overwritten = 1;
+    }
     for (i = 0; i < ca_id_count; i++) {
-        LOG("  Supported CA ID: %04x for CA%d", ca_ids[i], d->id);
+        LOG("   %s CA ID: %04x for CA%d", overwritten ? "Forced" : "Supported",
+            ca_ids[i], d->id);
         add_caid_mask(dvbca_id, d->id, ca_ids[i], 0xFFFF);
     }
 
@@ -3631,34 +3640,33 @@ void set_ca_adapter_pin(char *o) {
 }
 
 void set_ca_multiple_pmt(char *o) {
-    int i, j, la, st, end;
+    int i, la, ddci;
     char buf[1000], *arg[40], *sep, *seps;
     SAFE_STRCPY(buf, o);
     la = split(arg, buf, ARRAY_SIZE(arg), ',');
     for (i = 0; i < la; i++) {
-        sep = strchr(arg[i], '-');
-        seps = strchr(arg[i], ':');
+        sep = strchr(arg[i], ':');
 
-        if (!seps)
+        if (!sep)
             continue;
 
-        int max_ca_pmt = atoi(seps + 1);
+        int max_ca_pmt = atoi(sep + 1);
 
-        if (sep == NULL) {
-            st = end = map_int(arg[i], NULL);
-        } else {
-            st = map_int(arg[i], NULL);
-            end = map_int(sep + 1, NULL);
-        }
-        for (j = st; j <= end; j++) {
-            if (!ca_devices[j])
-                ca_devices[j] = alloc_ca_device();
-            if (!ca_devices[j])
-                return;
-            ca_devices[j]->multiple_pmt = 1;
-            ca_devices[j]->max_ca_pmt = max_ca_pmt;
-            LOG("Forcing CA %d to use multiple PMTs with maximum channels %d",
-                j, max_ca_pmt);
+        ddci = map_intd(arg[i], NULL, -1);
+        if (!ca_devices[ddci])
+            ca_devices[ddci] = alloc_ca_device();
+        if (!ca_devices[ddci])
+            return;
+        ca_devices[ddci]->multiple_pmt = 1;
+        ca_devices[ddci]->max_ca_pmt = max_ca_pmt;
+        LOG("Forcing CA %d to use multiple PMTs with maximum channels %d", ddci,
+            max_ca_pmt);
+        seps = sep;
+        while ((seps = strchr(seps + 1, '-'))) {
+            int caid = strtoul(seps + 1, NULL, 16);
+            if (caid > 0)
+                ca_devices[ddci]->caid[ca_devices[ddci]->caids++] = caid;
+            LOG("Forcing CA %d to use CAID %04X", ddci, caid);
         }
     }
 }

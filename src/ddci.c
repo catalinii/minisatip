@@ -32,6 +32,7 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
@@ -1211,9 +1212,24 @@ int process_cat(int filter, unsigned char *b, int len, void *opaque) {
 void save_channels(SHashTable *ch, char *file) {
     int i, j;
     Sddci_channel *c;
+    struct stat buf;
+    if (!stat(file, &buf)) {
+        LOG("%s already exists, not saving", file);
+        return;
+    }
+
     FILE *f = fopen(file, "wt");
     if (!f)
         return;
+    fprintf(f, "# Format: SID: DDCI1,DDCI2\n");
+    fprintf(f, "# Use # for comments\n");
+    fprintf(f, "# To decrypt channel with sid SID it will try in order DDCI1 "
+               "then DDCI2\n");
+    fprintf(f, "# To prevent the SID from using any DDCI, include an empty "
+               "list (eg: SID: )\n");
+    fprintf(f, "# When a new channel it will be used, minisatip will determine "
+               "the matching DDCIs based on their reported CA IDs\n");
+
     FOREACH_ITEM(ch, c) {
         fprintf(f, "%d:    ", c->sid);
         for (j = 0; j < c->ddcis; j++)
@@ -1224,33 +1240,45 @@ void save_channels(SHashTable *ch, char *file) {
 }
 void load_channels(SHashTable *ch, char *file) {
     Sddci_channel c;
-    char line[100];
+    char line[1000];
+
     FILE *f = fopen(file, "rt");
+    int channels = 0;
+    int pos = 0;
     if (!f)
         return;
     while (fgets(line, sizeof(line), f)) {
+        char buf[1000];
         memset(&c, 0, sizeof(c));
-        c.sid = map_int(line, NULL);
-        if (!c.sid)
-            continue;
-
         char *x = strchr(line, '#');
         if (x)
             *x = 0;
         char *cc = strstr(line, ":");
         if (!cc)
             continue;
+
+        c.sid = map_int(line, NULL);
+        if (!c.sid)
+            continue;
+        cc = strip(cc + 1);
+
         char *arg[MAX_ADAPTERS];
-        int la = split(arg, cc + 1, ARRAY_SIZE(arg), ',');
+        int la = split(arg, cc, ARRAY_SIZE(arg), ',');
         int i = 0;
+        channels++;
+        pos = 0;
         for (i = 0; i < la; i++) {
             int v = map_intd(arg[i], NULL, -1);
-            if (v != -1)
+            if (v != -1) {
                 c.ddci[c.ddcis++].ddci = v;
+                strcatf(buf, pos, "%s%d", i ? "," : "", v);
+            }
         }
+        LOGM("Adding channel %d: DDCIs: %s", c.sid, buf);
         setItem(ch, c.sid, &c, sizeof(c));
     }
     fclose(f);
+    LOG("Loaded %d channels from %s", channels, file);
 }
 
 void ddci_free(adapter *ad) {

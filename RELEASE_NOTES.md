@@ -1,5 +1,7 @@
 
 Version 1.0.X
+- Added ddci.conf to configure the channel assignments for independent CAMs
+- Added support for TBS 6900
 - For axe, use -S instead of -7 or --dmx-source 
 - Remove support for oscam version < 11553
 - Add multiple_pmt (-c option) to enable packing multiple PMTs in the same CAPMT that is sent to the cam. If the CAM supports just 1 or 2 channels, enabling this option will allow decrypting more channels. Still in testing

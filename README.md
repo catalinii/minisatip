@@ -6,7 +6,7 @@
 
 # Welcome to Minisatip
 
-Minisatip is a multi-threaded satip server version 1.2 that runs under Linux and it was tested with DVB-S, DVB-S2, DVB-T, DVB-T2, DVB-C, DVB-C2, ATSC and ISDB-T cards.
+Minisatip is a multi-threaded satip server version 1.2 that runs under Linux and it was tested with DVB-S, DVB-S2, DVB-T, DVB-T2, DVB-C, DVB-C2, ATSC and ISDB-T cards. More details about supported hardware: https://github.com/catalinii/minisatip/blob/master/Supported_Hardware.md
 
 The protocol specification can be found at: 
 http://satip.info/sites/satip/files/resource/satip_specification_version_1_2_2.pdf
@@ -31,7 +31,7 @@ https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item
 Usage:
 -------
 
-minisatip version 1.0.4-530cd08, compiled in Dec 30 2020 17:47:25, with s2api version: 050B
+minisatip version 1.0.4-da99a96, compiled in Feb  3 2021 16:35:57, with s2api version: 050B
 
 	./minisatip [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 		[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]][-o oscam_host:dvbapi_port,offset] [-p public_host] [-r remote_rtp_host] [-R document_root] [-s [*][DELSYS:][FE_ID@][source_ip/]host[:port] [-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] 
@@ -48,7 +48,7 @@ Help
 
 * -A --disable-ssdp disable SSDP announcement
  
-* -b --buffers X:Y : set the app adapter buffer to X Bytes (default: 72192) and set the kernel DVB buffer to Y Bytes (default: 5775360) - both multiple of 188
+* -b --buffers X:Y : set the app adapter buffer to X Bytes (default: 376000) and set the kernel DVB buffer to Y Bytes (default: 5775360) - both multiple of 188
 	* eg: -b 18800:18988
 
 * -B X : set the app socket write buffer to X KB. 
@@ -227,9 +227,9 @@ Help
 			* eg : 0,2-3
 
 * -c --multiple-pmt adapter_list:maximum_number_of_channels_supported: Enable 2 PMTs inside of the same CAPMT to double the number of decrypted channels
-	* The format is: ADAPTER1[[,ADAPTER2]-ADAPTERN]:[MAX_CHANNELS]
-			* eg : 0,2-3:1
-The adapters 0,2-3 will support maximum of 1 CAPMT (2 channels).
+	* The format is: ADAPTER1:MAX_CHANNELS[-CAID1[-CAID2]...,ADAPTER2:MAX_CHANNELS[-CAID3[-CAID4]...]
+			* eg : 0:1-100
+The DDCI adapters 0 will support maximum of 1 CAPMT (2 channels) and will use CAID1. If CAID is not specified it will use CAMs CAIDs
 Official CAMs support 1 or 2 channels, with this option this is extended to 2 or 4
 By default every CAM supports 4 channels
 
