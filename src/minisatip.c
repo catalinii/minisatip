@@ -301,7 +301,7 @@ Help\n\
 	* eg: -a 1:2:3  \n\
 	- it will report 1 dvb-s2 device, 2 dvb-t2 devices and 3 dvb-c devices \n\
 \n\
-* -A --disable-ssdp disable SSDP announcement\n \
+* -G --disable-ssdp disable SSDP announcement\n \
 \n\
 * -b --buffers X:Y : set the app adapter buffer to X Bytes (default: %d) and set the kernel DVB buffer to Y Bytes (default: %d) - both multiple of 188\n\
 	* eg: -b 18800:18988\n\
