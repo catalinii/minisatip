@@ -39,6 +39,8 @@
 #define PMT_RUNNING 2
 #define PMT_STOPPING 3
 
+#define PMT_GRACE_TIME 2000
+
 typedef struct struct_batch // same as struct dvbcsa_bs_batch_s
 {
     unsigned char *data; /* pointer to payload */
@@ -109,6 +111,7 @@ typedef struct struct_pmt {
     int ca_mask, disabled_ca_mask;
     SPMT_batch *batch;
     int8_t parity, update_cw;
+    uint64_t last_update_cw;
     int16_t master_pmt; //  the pmt that contains the same pids as this PMT
     SCW *cw;
     SPid *p;
@@ -120,7 +123,7 @@ typedef struct struct_pmt {
                  // PMT_STOPPING)
     char encrypted;
     int first_active_pid;
-    int64_t grace_time;
+    int64_t grace_time, start_time;
     uint16_t filter;
     int clean_pos, clean_cc;
     uint8_t *clean;
@@ -206,7 +209,7 @@ int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id);
 int pmt_add(int i, int adapter, int sid, int pmt_pid);
 int test_decrypt_packet(SCW *cw, SPMT_batch *batch, int len);
 void init_algo();
-void update_cw(SPMT *pmt, SPMT_batch *start, int len);
+void update_cw(SPMT *pmt);
 int pmt_decrypt_stream(adapter *ad);
 int wait_pusi(adapter *ad, int len);
 #endif

@@ -156,6 +156,10 @@ int logging = 0;
 char logfile[256];
 int extract_ci_cert = 0;
 
+char *listmgmt_str[] = {"CA_LIST_MANAGEMENT_MORE", "CA_LIST_MANAGEMENT_FIRST",
+                        "CA_LIST_MANAGEMENT_LAST", "CA_LIST_MANAGEMENT_ONLY",
+                        "CA_LIST_MANAGEMENT_ADD",  "CA_LIST_MANAGEMENT_UPDATE"};
+
 uint32_t datatype_sizes[MAX_ELEMENTS] = {
     0,   50,  0,  0, 0, 8,  8,  0, 0, 0, 0,  0, 32, 256, 256, 0, 0,
     256, 256, 32, 8, 8, 32, 32, 0, 8, 2, 32, 1, 32, 1,   0,   32};
@@ -958,9 +962,15 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple) {
 
     if (res) {
         res->version = (res->version + 1) & 0xF;
-    } else
+    } else {
         LOG("CA %d all channels used %d, multiple allowed %d", d->id,
-            d->max_ca_pmt, multiple)
+            d->max_ca_pmt, multiple);
+        for (ca_pos = 0; ca_pos < d->max_ca_pmt; ca_pos++) {
+            LOG("CAPMT %d pmts %d %d", ca_pos, d->capmt[ca_pos].pmt_id,
+                d->capmt[ca_pos].other_id);
+        }
+    }
+
     return res;
 }
 
@@ -986,8 +996,8 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
 
     SCAPMT *capmt = add_pmt_to_capmt(d, spmt, d->multiple_pmt);
     if (!capmt)
-        LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY, "pmt_id full for device %d",
-                       d->id);
+        LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY,
+                       "No free slots to add PMT %d to CA %d", spmt->id, d->id);
 
     first = get_pmt(capmt->pmt_id);
     if (!first)
@@ -1007,11 +1017,8 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
     LOG("PMT CA %d pmt %d pid %u (%s) ver %u sid %u (%x), enabled_pmts %d, "
         "%s, PMTS to be send %d %d, pos",
         spmt->adapter, spmt->id, pid, spmt->name, ver, sid, sid,
-        get_enabled_pmts_for_ca(d),
-        listmgmt == CA_LIST_MANAGEMENT_ONLY
-            ? "ONLY"
-            : listmgmt == CA_LIST_MANAGEMENT_ADD ? "ADD" : "UPDATE",
-        capmt->pmt_id, capmt->other_id, capmt - d->capmt);
+        get_enabled_pmts_for_ca(d), listmgmt_str[listmgmt], capmt->pmt_id,
+        capmt->other_id, capmt - d->capmt);
 
     if (send_capmt(d->ca_resource, d->ca_session_number, capmt, listmgmt,
                    CA_PMT_CMD_ID_OK_DESCRAMBLING))
@@ -1074,13 +1081,11 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt) {
     remove_pmt_from_device(d, spmt);
     if (PMT_ID_IS_VALID(capmt->pmt_id) || PMT_ID_IS_VALID(capmt->other_id)) {
         int capmt_id = 0;
-        SPMT *pmt = get_pmt(capmt->pmt_id);
-        if (pmt)
-            pmt->grace_time = getTick() + 2000;
-        LOG("Re-sending the CAPMT for PMT %d or %d", d->capmt[capmt_id].pmt_id,
-            d->capmt[capmt_id].other_id);
         int listmgmt = get_active_capmts(d) == 1 ? CA_LIST_MANAGEMENT_ONLY
                                                  : CA_LIST_MANAGEMENT_ADD;
+        LOG("Re-sending the CAPMT for PMT %d or %d, %s",
+            d->capmt[capmt_id].pmt_id, d->capmt[capmt_id].other_id,
+            listmgmt_str[listmgmt]);
         if (send_capmt(d->ca_resource, d->ca_session_number, capmt, listmgmt,
                        CA_PMT_CMD_ID_OK_DESCRAMBLING))
             LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,

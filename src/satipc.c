@@ -603,6 +603,7 @@ int satip_standby_device(adapter *ad) {
              sip->sport);
     } else
         http_request(ad, NULL, "TEARDOWN", 1);
+    ad->err = 0;
     sip->sleep = 1;
     sip->session[0] = 0;
     sip->sent_transport = 0; // send Transport: at the next tune

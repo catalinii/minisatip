@@ -346,7 +346,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     if (get_ddci(ad->id)) {
         LOG("Skip processing pmt for ddci adapter %d", ad->id);
         // grace time for card decrypting lower than the default grace_time
-        pmt->grace_time = getTick() + 2500;
+        pmt->grace_time = 2500;
         return TABLES_RESULT_OK;
     }
 
