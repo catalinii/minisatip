@@ -709,6 +709,17 @@ void update_cw(SPMT *pmt) {
     }
 }
 
+void dump_cws() {
+    int i;
+    char buf[200];
+    uint64_t ctime = getTick();
+    LOG("List of CWs");
+    for (i = 0; i < ncws; i++)
+        if (cws[i] && cws[i]->enabled && cws[i]->expiry > ctime) {
+            LOG("CW %d: %s", cws[i]->id, cw_to_string(cws[i], buf));
+        }
+}
+
 int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
             int64_t expiry) {
     char buf[300];
@@ -739,6 +750,7 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
             break;
     if (i == MAX_CW) {
         LOG("CWS is full %d", i);
+        dump_cws();
         mutex_unlock(&cws_mutex);
         return 1;
     }

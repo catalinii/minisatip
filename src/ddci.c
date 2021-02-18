@@ -342,11 +342,26 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     int add_pmt = 0;
     int rv = TABLES_RESULT_ERROR_NORETRY;
     Sddci_channel *channel;
+    ddci_device_t *d;
 
-    if (get_ddci(ad->id)) {
+    if ((d = get_ddci(ad->id))) {
         LOG("Skip processing pmt for ddci adapter %d", ad->id);
         // grace time for card decrypting lower than the default grace_time
-        pmt->grace_time = 2500;
+        pmt->grace_time = 10000;
+        pmt->start_time = getTick();
+        SPMT *dpmt;
+
+        // set the name of the PMT from the DDCI to the original pmt
+        for (i = 0; i < d->max_channels; i++)
+            if ((dpmt = get_pmt(d->pmt[i]))) {
+                if (dpmt->sid == pmt->sid) {
+                    ddci_mapping_table_t *m = get_ddci_pid(d, pmt->pid);
+                    if (m->pid == dpmt->pid) {
+                        strcpy(pmt->name, dpmt->name);
+                    }
+                }
+            }
+
         return TABLES_RESULT_OK;
     }
 
@@ -355,8 +370,8 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
                        "%s: pmt %d (master %d) already running on DDCI %d",
                        __FUNCTION__, pmt->id, pmt->master_pmt, ddci);
 
-    LOG("%s: adapter %d, pmt %d, sid %d %s", __FUNCTION__, ad->id, pmt->id,
-        pmt->sid, pmt->name);
+    LOG("%s: adapter %d, pmt %d, pid %d, sid %d, name: %s", __FUNCTION__,
+        ad->id, pmt->id, pmt->pid, pmt->sid, pmt->name);
 
     channel = getItem(&channels, pmt->sid);
     if (!channel) {
@@ -380,7 +395,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     if (ddid == -TABLES_RESULT_ERROR_RETRY)
         return -ddid;
 
-    ddci_device_t *d = get_ddci(ddid);
+    d = get_ddci(ddid);
     if (!d) {
         LOG("Could not find ddci device for adapter %d, ddci %d", ad->id, ddid);
         return TABLES_RESULT_ERROR_NORETRY;
@@ -520,20 +535,15 @@ void delete_blacklisted_pmt(ddci_device_t *d, adapter *ad) {
 int ddci_encrypted(adapter *ad, SPMT *pmt) {
     ddci_device_t *d = get_ddci(ad->id);
     if (d) // only on DDCI adapter we can understand if the channel is encrypted
-    {
-        char *pin_str = get_ca_pin(ad->id);
-        if (!pin_str || !pin_str[0])
-            blacklist_pmts_for_ddci(pmt, d->id);
-        return 0;
-    }
+        blacklist_pmts_for_ddci(pmt, d->id);
     return 0;
 }
 
 int ddci_decrypted(adapter *ad, SPMT *pmt) {
     ddci_device_t *d = get_ddci(ad->id);
     if (d) {
-        LOG("PMT %d, sid %d is reported decrypted whitelisting on DD %d",
-            pmt->id, pmt->sid, d->id);
+        LOG("PMT %d, sid %d is reported decrypted on DD %d", pmt->id, pmt->sid,
+            d->id);
     }
     return 0;
 }
@@ -622,7 +632,7 @@ uint16_t YMDtoMJD(int Y, int M, int D) {
 }
 
 // Based on vdr implementation provided by Klaus Schmidinger
-int ddci_create_epg(ddci_device_t *d, SPMT *pmt, uint8_t *eit, int version) {
+int ddci_create_epg(ddci_device_t *d, int sid, uint8_t *eit, int version) {
     uint8_t *PayloadStart;
     uint8_t *SectionStart;
     uint8_t *DescriptorsStart;
@@ -646,8 +656,8 @@ int ddci_create_epg(ddci_device_t *d, SPMT *pmt, uint8_t *eit, int version) {
     *p++ = 0xF0;
     *p++ = 0x00; // section length
     SectionStart = p;
-    *p++ = pmt->sid >> 8;
-    *p++ = pmt->sid & 0xFF;
+    *p++ = sid >> 8;
+    *p++ = sid & 0xFF;
     *p++ = 0xC1 | (version << 1);
     *p++ = 0x00;        // section number
     *p++ = 0x00;        // last section number
@@ -759,7 +769,7 @@ int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len) {
 
     if (ctime - d->last_pmt > 100) {
         SPMT *pmt;
-        for (i = 0; i < MAX_CHANNELS_ON_CI; i++)
+        for (i = 0; i < MAX_CHANNELS_ON_CI; i++) {
             if ((pmt = get_pmt(d->pmt[i]))) {
                 psi_len = ddci_create_pmt(d, pmt, psi, d->pmt_ver[i]);
                 ddci_mapping_table_t *m =
@@ -773,8 +783,13 @@ int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len) {
                         __FUNCTION__, d->pmt[i], pmt->adapter, pmt->pid);
                 // ADD EPG as well
                 if (len - pos >= 188)
-                    pos += ddci_create_epg(d, pmt, dst + pos, d->pmt_ver[i]);
+                    pos +=
+                        ddci_create_epg(d, pmt->sid, dst + pos, d->pmt_ver[i]);
             }
+            if (len - pos >= 188)
+                pos += ddci_create_epg(d, MAKE_SID_FOR_CA(d->id, i), dst + pos,
+                                       d->pmt_ver[i]);
+        }
         d->last_pmt = ctime;
     }
     return pos;

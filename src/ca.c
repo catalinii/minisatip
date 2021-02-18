@@ -898,7 +898,7 @@ int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
         LOG_AND_RETURN(1, "%s: PMT %d not found", __FUNCTION__, ca->pmt_id);
 
     capmt[pos++] = listmgmt;
-    copy16(capmt, pos, pmt->sid);
+    copy16(capmt, pos, ca->sid);
     pos += 2;
     capmt[pos++] = ((version & 0xF) << 1);
     capmt[pos++] = 0; // PI LEN 2 bytes, set 0
@@ -983,6 +983,14 @@ int get_active_capmts(ca_device_t *d) {
     return active;
 }
 
+// Sending _LIST, _MORE and _LAST leads to decryption issues on some CAMs
+// (existing channels are restarted) This method tries to send _ONLY for the
+// first PMT or when the sid changes (when 2 PMTs are packed inside the same
+// CAPMT) and uses just _UPDATE to update the existing and new CAPMT According
+// to the docs _ADD should be used for new CAPMTs but _UPDATE with a new sid
+// works To not leak sids, the first channel will have the original SID (some
+// CAMs do not like this), the other ones a fixed SID
+
 int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
     ca_device_t *d = ca_devices[ad->id];
     uint16_t pid, sid, ver;
@@ -1008,15 +1016,27 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
     sid = spmt->sid;
 
     listmgmt = get_active_capmts(d) == 1 ? CA_LIST_MANAGEMENT_ONLY
-                                         : CA_LIST_MANAGEMENT_ADD;
+                                         : CA_LIST_MANAGEMENT_UPDATE;
+    if (listmgmt == CA_LIST_MANAGEMENT_ONLY) {
+        if (capmt->sid == first->sid)
+            listmgmt = CA_LIST_MANAGEMENT_UPDATE;
+        capmt->sid = first->sid;
+        int i;
+        for (i = 0; i < d->max_ca_pmt; i++) {
+            int sid = MAKE_SID_FOR_CA(d->id, i);
+            if (capmt != d->capmt + i) {
+                if (capmt->sid == sid)
+                    d->capmt[i].sid = MAKE_SID_FOR_CA(d->id, MAX_CA_PMT);
+                else
+                    d->capmt[i].sid = sid;
+            }
+        }
+    }
 
-    // if adding new PMT to existing CAPMT use _UPDATE
-    if (listmgmt == CA_LIST_MANAGEMENT_ADD && PMT_ID_IS_VALID(capmt->pmt_id) &&
-        PMT_ID_IS_VALID(capmt->other_id))
-        listmgmt = CA_LIST_MANAGEMENT_UPDATE;
-    LOG("PMT CA %d pmt %d pid %u (%s) ver %u sid %u (%x), enabled_pmts %d, "
+    LOG("PMT CA %d pmt %d pid %u (%s) ver %u sid %u (%d), "
+        "enabled_pmts %d, "
         "%s, PMTS to be send %d %d, pos",
-        spmt->adapter, spmt->id, pid, spmt->name, ver, sid, sid,
+        spmt->adapter, spmt->id, pid, spmt->name, ver, sid, capmt->sid,
         get_enabled_pmts_for_ca(d), listmgmt_str[listmgmt], capmt->pmt_id,
         capmt->other_id, capmt - d->capmt);
 
@@ -1065,35 +1085,25 @@ SCAPMT *get_capmt_for_pmt(ca_device_t *d, SPMT *pmt) {
 
 int dvbca_del_pmt(adapter *ad, SPMT *spmt) {
     ca_device_t *d = ca_devices[ad->id];
+    int listmgmt = -1;
 
     SCAPMT *capmt = get_capmt_for_pmt(d, spmt);
     if (!capmt)
         LOG_AND_RETURN(0, "CAPMT not found for pmt %d", spmt->id);
 
-    LOG("PMT CA %d DEL pmt %d pid %u (%s) sid %u (%x), ver %d, name: %s",
-        spmt->adapter, spmt->id, spmt->pid, spmt->name, spmt->sid, spmt->sid,
-        capmt->version, spmt->name);
-    // Delete the old CAPMT
-    if (send_capmt(d->ca_resource, d->ca_session_number, capmt,
-                   CA_LIST_MANAGEMENT_UPDATE, CA_PMT_CMD_ID_NOT_SELECTED))
-        LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
-                       "%s: send_capmt for clean PMT failed", __FUNCTION__);
     remove_pmt_from_device(d, spmt);
-    if (PMT_ID_IS_VALID(capmt->pmt_id) || PMT_ID_IS_VALID(capmt->other_id)) {
-        int capmt_id = 0;
-        int listmgmt = get_active_capmts(d) == 1 ? CA_LIST_MANAGEMENT_ONLY
-                                                 : CA_LIST_MANAGEMENT_ADD;
-        LOG("Re-sending the CAPMT for PMT %d or %d, %s",
-            d->capmt[capmt_id].pmt_id, d->capmt[capmt_id].other_id,
-            listmgmt_str[listmgmt]);
+    if (PMT_ID_IS_VALID(capmt->pmt_id)) {
+        listmgmt = CA_LIST_MANAGEMENT_UPDATE;
         if (send_capmt(d->ca_resource, d->ca_session_number, capmt, listmgmt,
                        CA_PMT_CMD_ID_OK_DESCRAMBLING))
             LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
-                           "%s: send_capmt failed for pmt ids %d and %d",
-                           __FUNCTION__, d->capmt[capmt_id].pmt_id,
-                           d->capmt[capmt_id].other_id)
+                           "%s: send_capmt failed for pmt ids %d", __FUNCTION__,
+                           capmt->pmt_id)
     }
-
+    LOG("PMT CA %d DEL pmt %d pid %u, sid %u (%u), ver %d, %s name: %s",
+        spmt->adapter, spmt->id, spmt->pid, spmt->sid, capmt->sid,
+        capmt->version, listmgmt >= 0 ? listmgmt_str[listmgmt] : "NO UPDATE",
+        spmt->name);
     return 0;
 }
 
