@@ -149,7 +149,7 @@ static const struct option long_options[] = {
     {"logfile", required_argument, NULL, LOGFILE_OPT},
     {"mac", required_argument, NULL, MAC_OPT},
     {"multiplier", required_argument, NULL, SIGNALMULTIPLIER_OPT},
-    {"no-all-pids", required_argument, NULL, NO_PIDS_ALL_OPT},
+    {"no-all-pids", no_argument, NULL, NO_PIDS_ALL_OPT},
     {"priority", required_argument, NULL, PRIORITY_OPT},
     {"playlist", required_argument, NULL, PLAYLIST_OPT},
     {"remote-rtp", required_argument, NULL, RRTP_OPT},
