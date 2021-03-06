@@ -726,10 +726,9 @@ int flush_stream(streams *sid, struct iovec *iov, int iiov, int64_t ctime) {
         get_stream_rhost(sid->sid, ra, sizeof(ra)), get_stream_rport(sid->sid));
 
 #ifdef DEBUG
-    static int fd, freq, pid;
-    unsigned char *b, fn[50];
+    static int fd;
+    char fn[50];
     sprintf(fn, "freq=%d.ts", sid->tp.freq / 1000);
-    SPid *p;
     fd = open(fn, O_WRONLY);
     if (fd < 0)
         fd = open(fn, O_CREAT | O_WRONLY, 0666);
