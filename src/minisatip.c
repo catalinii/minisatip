@@ -682,7 +682,7 @@ void set_options(int argc, char *argv[]) {
             strncpy(buf, optarg, sizeof(buf) - 1);
             int la = split(arg, buf, ARRAY_SIZE(arg), ',');
             for (i = 0; i < la; i++) {
-                int level = map_intd(arg[i], loglevels, -1);
+                int level = maps_intd(arg[i], loglevels, -1);
                 if (level == -1) {
                     if (!strcmp(arg[i], "-l")) {
                         LOG("The LOG option has changed, please run "

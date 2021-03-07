@@ -134,6 +134,7 @@ int setItemLen(SHashTable *hash, uint32_t key, int len);
 int split(char **rv, char *s, int lrv, char sep);
 int map_int(char *s, char **v);
 int map_intd(char *s, char **v, int dv);
+int maps_intd(char *s, char **v, int dv);
 int map_float(char *s, int mul);
 void *mymalloc(int a, char *f, int l);
 void *myrealloc(void *p, int a, char *f, int l);

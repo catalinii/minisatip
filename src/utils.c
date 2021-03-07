@@ -367,6 +367,31 @@ int map_intd(char *s, char **v, int dv) {
     return n;
 }
 
+int maps_intd(char *s, char **v, int dv) {
+    int i, n = dv;
+
+    if (s == NULL) {
+        LOG_AND_RETURN(dv, "maps_intd: s=>NULL, v=%p, %s %s", v,
+                       v ? v[0] : "NULL", v ? v[1] : "NULL");
+    }
+
+    s = strip(s);
+
+    if (!*s)
+        LOG_AND_RETURN(dv, "maps_intd: s is empty");
+
+    if (v == NULL) {
+        if (s[0] != '+' && s[0] != '-' && (s[0] < '0' || s[0] > '9'))
+            LOG_AND_RETURN(dv, "maps_intd: s not a number: %s, v=%p, %s %s", s,
+                           v, v ? v[0] : "NULL", v ? v[1] : "NULL");
+        return atoi(s);
+    }
+    for (i = 0; v[i]; i++)
+        if (strlen(s) <= strlen(v[i]) && !strncasecmp(s, v[i], strlen(v[i])))
+            n = i;
+    return n;
+}
+
 char *header_parameter(char **arg,
                        int i) // get the value of a header parameter
 {
