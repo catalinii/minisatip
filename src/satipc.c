@@ -64,7 +64,9 @@ typedef struct struct_satipc {
     char source_ip[20]; // source ip address
     int sport;
     char session[18];
+    char uncommitted_session[18];
     int stream_id;
+    int uncommitted_sid;
     int sleep;
     int listen_rtp;
     int rtcp, rtcp_sock, cseq;
@@ -241,6 +243,10 @@ int satipc_reply(sockets *s) {
 
         if (sid && sip->stream_id == -1)
             sip->stream_id = map_int(sid, NULL);
+        if (sip->stream_id > 0 && sip->uncommitted_sid >= 0) {
+            sip->uncommitted_sid = sip->stream_id;
+            memcpy(sip->uncommitted_session, sip->session, sizeof(sip->uncommitted_session));
+        }
 
         sip->expect_reply = 0;
         sip->force_commit = 1;
@@ -318,6 +324,7 @@ void satipc_close_rtsp_socket(adapter *ad, satipc *sip) {
     sip->expect_reply = 0;
     sip->last_response_sent = 0;
     sip->stream_id = -1;
+    sip->uncommitted_sid = -1;
     sip->session[0] = 0;
     sip->tcp_len = sip->tcp_pos = 0;
     if (sip->init_use_tcp)
@@ -548,6 +555,7 @@ int satipc_open_device(adapter *ad) {
     sip->sent_transport = 0;
     sip->sleep = 0;
     sip->stream_id = -1;
+    sip->uncommitted_sid = -1;
     sip->wp = sip->qp = sip->want_commit = 0;
     sip->rcvp = sip->repno = 0;
     sip->rtp_miss = sip->rtp_ooo = 0;
@@ -1067,6 +1075,7 @@ int http_request(adapter *ad, char *url, char *method, int force) {
         sip->last_setup = getTick();
         sip->sent_transport = 1;
         sip->stream_id = -1;
+        sip->uncommitted_sid = -1;
         sip->session[0] = 0;
         if (sip->init_use_tcp)
             strcatf(session, ptr, "\r\nTransport: RTP/AVP/TCP;interleaved=0-1");
@@ -1110,6 +1119,7 @@ int http_request(adapter *ad, char *url, char *method, int force) {
     if (sip->stream_id != -1)
         sprintf(sid, "stream=%d", sip->stream_id);
     else if (!strcmp(method, "TEARDOWN")) {
+        sip->uncommitted_sid = 0;
         LOG("satipc_http_request (adapter %d): impossible to send TEARDOWN "
             "without "
             "specific stream!",
@@ -1195,6 +1205,17 @@ int satipc_commit(adapter *ad) {
         return 0;
     }
 
+    if (sip->uncommitted_sid > 0)
+    {
+        // Last TEARDOWN is not sended, so be can continue using the last session
+        sip->stream_id = sip->uncommitted_sid;
+        memcpy(sip->session, sip->uncommitted_session, sizeof(sip->session));
+        sip->sent_transport = 1;
+        sip->uncommitted_sid = -1;
+        LOG("satipc: recovering sid %d session %s for server %s",
+            sip->stream_id, sip->session, sip->sip);
+    }
+
     if (!sip->addpids) {
         send_apids = 0;
         send_dpids = 0;
@@ -1216,11 +1237,11 @@ int satipc_commit(adapter *ad) {
     send_apids = send_apids && sip->lap > 0;
     send_dpids = send_dpids && sip->ldp > 0;
 
-    if (getTick() - sip->last_setup < 1000 && !sip->sent_transport) {
-        LOG("satipc: last setup less than 10 seconds ago for server %s, maybe "
+    if (getTick() - sip->last_setup < 5000 && !sip->sent_transport && sip->last_cmd != RTSP_TEARDOWN) {
+        LOG("satipc: last setup less than 5 seconds ago for server %s, maybe "
             "an "
-            "error ?",
-            sip->sip);
+            "error ? (uncommitted_sid: %d, last_cmd: %u)",
+            sip->sip, sip->uncommitted_sid, sip->last_cmd);
         return 0;
     }
 
