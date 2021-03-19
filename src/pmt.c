@@ -88,9 +88,42 @@ static inline int get_adaptation_len(uint8_t *b) {
     return adapt_len;
 }
 
-void mark_pid_null(uint8_t *b) {
+static inline int get_has_pcr(uint8_t *b) {
+    if ((b[3] & 0x20) == 0 || b[4] == 0)
+        return 0;
+    if ((b[5] & 0x10) == 0)
+        return 0;
+    else
+        return 1;
+}
+
+static inline void mark_pid_null(uint8_t *b) {
     b[1] |= 0x1F;
     b[2] |= 0xFF;
+}
+
+static inline void mark_pcr_only(uint8_t *b) { // Generate a clean packet with only the Adaptation field header and no payload
+    if ((b[3] & 0x10) == 0) // No payload
+        return; 
+
+    // Convert the Payload Data in Adaptation Stuffing
+    int i;
+    int payload = get_adaptation_len(b);
+    for (i=0; i+payload < 188; i++)
+        b[payload + i] = 0xFF;
+    b[4] += i; // Update the Adaptation field size
+
+    // Clean the header
+    b[1] &= 0x3F; // Remove TEI & PUSI
+        // b[1] &= 0x7F; // Remove TEI
+        // b[1] &= 0xBF; // Remove PUSI
+    b[3] &= 0x2F; // Set TSC not scrambled & Remove payload flag
+        //b[3] &= 0x3F // Set TSC not scrambled
+        //b[3] &= 0xEF // Remove payload flag
+    b[5] |= 0x80; // Set the Discontinuity indicator
+    b[5] &= 0x9f; // Clear Random access indicator & ES priority indicator
+        //b[5] &= 0xBF; // Clear Random access indicator
+        //b[5] &= 0xDF; // Clear ES priority indicator
 }
 
 int register_algo(SCW_op *o) {
@@ -917,13 +950,19 @@ void mark_pids_null(adapter *ad) {
     for (i = 0; i < ad->rlen; i += DVB_FRAME) {
         uint8_t *b = ad->buf + i;
         int pid = PID_FROM_TS(b);
-        if (pid == 0x1FFF)
+        if (pid == 0x1FFF && ad->drop_encrypted) // When no drop encrypted content pass NULLs too!
             continue;
         if ((b[3] & 0x80) == 0x80) {
             if (opts.debug & (DEFAULT_LOG | LOG_DMX))
                 LOG("Marking PID %d packet %d pos %d as NULL", pid, i / 188, i);
             if (ad->ca_mask && ad->drop_encrypted)
-                mark_pid_null(b);
+            {
+                // Instead of remove ALL packets, when the packet has a PCR remove all payload and pass it
+                if (get_has_pcr(b)) // It has PCR
+                    mark_pcr_only(b);
+                else
+                    mark_pid_null(b);
+            }
 
             ad->dec_err++;
             ad->null_packets = 1;
