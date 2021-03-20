@@ -950,7 +950,7 @@ void mark_pids_null(adapter *ad) {
     for (i = 0; i < ad->rlen; i += DVB_FRAME) {
         uint8_t *b = ad->buf + i;
         int pid = PID_FROM_TS(b);
-        if (pid == 0x1FFF && ad->drop_encrypted) // When no drop encrypted content pass NULLs too!
+        if (pid == 0x1FFF)
             continue;
         if ((b[3] & 0x80) == 0x80) {
             if (opts.debug & (DEFAULT_LOG | LOG_DMX))
