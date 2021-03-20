@@ -104,7 +104,10 @@ static inline void mark_pid_null(uint8_t *b) {
 
 static inline void mark_pcr_only(uint8_t *b) { // Generate a clean packet with only the Adaptation field header and no payload
     if ((b[3] & 0x10) == 0) // No payload
-        return; 
+    {
+       mark_pid_null(b); 
+       return; 
+    }
 
     // Convert the Payload Data in Adaptation Stuffing
     int i;
