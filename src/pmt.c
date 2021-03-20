@@ -1905,7 +1905,10 @@ void emulate_add_all_pids(adapter *ad) {
                             updated = 1;
                         }
 
-            int forced_pids[] = {EMU_PIDS_ALL_ENFORCED_PIDS_LIST};
+            int *forced_pids;
+            int list_plain[]     = {EMU_PIDS_ALL_ENFORCED_PIDS_LIST};
+            int list_with_null[] = {EMU_PIDS_ALL_ENFORCED_WITH_NULL};
+            forced_pids = (ad->drop_encrypted) ? list_plain : list_with_null;
             int i_forced = sizeof(forced_pids) / sizeof(int);
             for (j = 0; j < i_forced; j++) {
                 int fpid = forced_pids[j];
