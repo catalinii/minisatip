@@ -1040,7 +1040,8 @@ int read_dmx(sockets *s) {
     if (rtime - ad->rtime > threshold)
         send = 1;
 
-    if (rtime - ad->rtime > 4 * threshold)
+    // No wait more than the PCR interval (around 40ms for DVB)
+    if ((rtime - ad->rtime > 40) || (rtime - ad->rtime > 4 * threshold))
         force_send = 1;
 
     if (s->lbuf - s->rlen <= 7 * DVB_FRAME)
