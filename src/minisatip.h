@@ -12,7 +12,7 @@
 #endif
 
 #define EMU_PIDS_ALL_ENFORCED_PIDS_LIST 1, 16, 17, 18, 20, 21
-#define EMU_PIDS_ALL_ENFORCED_WITH_NULL 1, 16, 17, 18, 20, 21, 8181
+#define EMU_PIDS_ALL_ENFORCED_WITH_NULL 1, 16, 17, 18, 20, 21, 8191
 
 void set_options(int argc, char *argv[]);
 
