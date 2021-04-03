@@ -48,7 +48,7 @@ Help
 
 * -A --disable-ssdp disable SSDP announcement
  
-* -b --buffers X:Y : set the app adapter buffer to X Bytes (default: 376000) and set the kernel DVB buffer to Y Bytes (default: 5775360) - both multiple of 188
+* -b --buffer X:Y : set the app adapter buffer to X Bytes (default: 376000) and set the kernel DVB buffer to Y Bytes (default: 5775360) - both multiple of 188
 	* eg: -b 18800:18988
 
 * -B X : set the app socket write buffer to X KB. 
