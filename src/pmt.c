@@ -62,6 +62,9 @@ SFilter *filters[MAX_FILTERS];
 SMutex filters_mutex;
 int nfilters;
 
+char *listmgmt_str[] = {"CLM_MORE", "CLM_FIRST", "CLM_LAST",
+                        "CLM_ONLY", "CLM_ADD",   "CLM_UPDATE"};
+
 static inline SCW *get_cw(int id) {
     if (id < 0 || id >= MAX_CW || !cws[id] || !cws[id]->enabled)
         return NULL;
@@ -1591,7 +1594,8 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
 
     if (pmt->version == ver) {
 #ifndef DISABLE_TABLES
-        if (ad && pmt->pi_len && pmt->state && ad->ca_mask)
+        if (ad && pmt->pi_len && pmt->state && ad->ca_mask &&
+            pmt->master_pmt == pmt->id)
             send_pmt_to_cas(ad, pmt);
 #endif
         // just for testing purposes
@@ -1726,7 +1730,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
                                                // and there are active pids
     {
 #ifndef DISABLE_TABLES
-        if (pmt->sid > 0)
+        if (pmt->sid > 0 && pmt->master_pmt == pmt->id)
             start_pmt(pmt, ad);
         else
             LOG("PMT %d, SID is 0, not running ca_action", pid);
@@ -1907,9 +1911,8 @@ void emulate_add_all_pids(adapter *ad) {
 }
 
 void pmt_pid_add(adapter *ad, int pid, int existing) {
-    int i;
     SPid *cp;
-    SPMT *pmt;
+    SPMT *pmt = NULL;
     if (!ad)
         return;
     cp = find_pid(ad->id, pid);
@@ -1926,17 +1929,20 @@ void pmt_pid_add(adapter *ad, int pid, int existing) {
     int pmt_id = get_master_pmt_for_pid(ad->id, pid);
     if (pmt_id >= 0)
         cp->pmt = pmt_id;
+    pmt = get_pmt(pmt_id);
+    if (!pmt) {
+        LOGM("PMT %d not found when adding pid %d on adapter %d", pmt_id, pid,
+             ad->id);
+        return;
+    }
 
-    for (i = 0; i < npmts; i++)
-        if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == ad->id &&
-            pmts[i]->master_pmt == pmt_id) {
-            pmt = pmts[i];
-            if (!pmt->state)
-                start_pmt(pmt, ad);
+    // Add start only the MASTER_PMT
+    if (!pmt->state) {
+        start_pmt(pmt, ad);
 #ifndef DISABLE_TABLES
-            tables_add_pid(ad, pmt, pid);
+        tables_add_pid(ad, pmt, pid);
 #endif
-        }
+    }
 }
 
 void pmt_pid_del(adapter *ad, int pid) {
@@ -1958,10 +1964,10 @@ void pmt_pid_del(adapter *ad, int pid) {
     else
         return;
 
+#ifndef DISABLE_TABLES
     for (i = 0; i < npmts; i++)
         if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == ad->id &&
             pmts[i]->master_pmt == pmt->master_pmt && pmts[i]->state)
-#ifndef DISABLE_TABLES
             tables_del_pid(ad, pmts[i], pid);
 #endif
 
@@ -1975,13 +1981,9 @@ void pmt_pid_del(adapter *ad, int pid) {
             ep++;
         }
 
-    if (!ep) {
-        for (i = 0; i < npmts; i++)
-            if (pmts[i] && pmts[i]->enabled && pmts[i]->state &&
-                pmts[i]->adapter == ad->id &&
-                pmts[i]->master_pmt == pmt->master_pmt)
-                stop_pmt(pmts[i], ad);
-    }
+    // stop only master PMT
+    if (!ep)
+        stop_pmt(pmt, ad);
 }
 
 int pmt_init_device(adapter *ad) {

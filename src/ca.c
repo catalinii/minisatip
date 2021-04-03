@@ -156,9 +156,7 @@ int logging = 0;
 char logfile[256];
 int extract_ci_cert = 0;
 
-char *listmgmt_str[] = {"CA_LIST_MANAGEMENT_MORE", "CA_LIST_MANAGEMENT_FIRST",
-                        "CA_LIST_MANAGEMENT_LAST", "CA_LIST_MANAGEMENT_ONLY",
-                        "CA_LIST_MANAGEMENT_ADD",  "CA_LIST_MANAGEMENT_UPDATE"};
+extern char *listmgmt_str[];
 
 uint32_t datatype_sizes[MAX_ELEMENTS] = {
     0,   50,  0,  0, 0, 8,  8,  0, 0, 0, 0,  0, 32, 256, 256, 0, 0,
@@ -1015,11 +1013,10 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
     ver = capmt->version;
     sid = spmt->sid;
 
-    listmgmt = get_active_capmts(d) == 1 ? CA_LIST_MANAGEMENT_ONLY
-                                         : CA_LIST_MANAGEMENT_UPDATE;
-    if (listmgmt == CA_LIST_MANAGEMENT_ONLY) {
+    listmgmt = get_active_capmts(d) == 1 ? CLM_ONLY : CLM_UPDATE;
+    if (listmgmt == CLM_ONLY) {
         if (capmt->sid == first->sid)
-            listmgmt = CA_LIST_MANAGEMENT_UPDATE;
+            listmgmt = CLM_UPDATE;
         capmt->sid = first->sid;
         int i;
         for (i = 0; i < d->max_ca_pmt; i++) {
@@ -1093,7 +1090,7 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt) {
 
     remove_pmt_from_device(d, spmt);
     if (PMT_ID_IS_VALID(capmt->pmt_id)) {
-        listmgmt = CA_LIST_MANAGEMENT_UPDATE;
+        listmgmt = CLM_UPDATE;
         if (send_capmt(d->ca_resource, d->ca_session_number, capmt, listmgmt,
                        CA_PMT_CMD_ID_OK_DESCRAMBLING))
             LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,

@@ -41,6 +41,18 @@
 
 #define PMT_GRACE_TIME 2000
 
+#define CLM_MORE 0x00
+#define CLM_FIRST 0x01
+#define CLM_LAST 0x02
+#define CLM_ONLY 0x03
+#define CLM_ADD 0x04
+#define CLM_UPDATE 0x05
+
+#define CMD_ID_OK_DESCRAMBLING 0x01
+#define CMD_ID_OK_MMI 0x02
+#define CMD_ID_QUERY 0x03
+#define CMD_ID_NOT_SELECTED 0x04
+
 typedef struct struct_batch // same as struct dvbcsa_bs_batch_s
 {
     unsigned char *data; /* pointer to payload */

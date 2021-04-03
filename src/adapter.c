@@ -2182,7 +2182,7 @@ _symbols adapters_sym[] = {
      offsetof(adapter, tp.bw)},
     {"ad_stream", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS,
      offsetof(adapter, tp.plp_isi)},
-    {"ad_fe", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, fe)},
+    {"ad_fe", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.fe)},
     {"ad_master", VAR_AARRAY_UINT8, a, 1, MAX_ADAPTERS,
      offsetof(adapter, master_sid)},
     {"ad_sidcount", VAR_AARRAY_UINT8, a, 1, MAX_ADAPTERS,
