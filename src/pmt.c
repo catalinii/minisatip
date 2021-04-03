@@ -1562,7 +1562,7 @@ int get_master_pmt_for_pid(int aid, int pid) {
 }
 
 int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
-    int pi_len = 0, isAC3, pmt_len = 0, i, es_len, ver;
+    int pi_len = 0, isAC3, pmt_len = 0, i, es_len, ver, pcr_pid = 0;
     int enabled_channels = 0;
     unsigned char *pmt_b, *pi;
     int pid, spid, stype;
@@ -1628,15 +1628,16 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     pmt_len = len - 4;
 
     pi_len = ((b[10] & 0xF) << 8) + b[11];
+    pcr_pid = ((b[8] & 0x1F) << 8) + b[9];
 
     pmt->sid = b[3] * 256 + b[4];
     pmt->version = ver;
 
     mutex_lock(&pmt->mutex);
-    LOG("new PMT %d AD %d, pid: %04X (%d), len %d, pi_len %d, ver %d, sid "
+    LOG("new PMT %d AD %d, pid: %04X (%d), len %d, pi_len %d, ver %d, pcr %d, sid "
         "%04X "
         "(%d) %s %s",
-        pmt->id, ad->id, pid, pid, pmt_len, pi_len, ver, pmt->sid, pmt->sid,
+        pmt->id, ad->id, pid, pid, pmt_len, pi_len, ver, pcr_pid, pmt->sid, pmt->sid,
         pmt->name[0] ? "channel:" : "", pmt->name);
     pi = b + 12;
     pmt_b = pi + pi_len;
@@ -1663,6 +1664,8 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
             isAC3 = is_ac3_es(pmt_b + i + 5, es_len);
         else if (stype == 129)
             isAC3 = 1;
+        if (pcr_pid == spid)
+            pcr_pid = 0;
 
         if (pmt->stream_pids < MAX_PMT_PIDS - 1) {
             pmt->stream_pid[pmt->stream_pids].type = stype;
@@ -1709,6 +1712,16 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
             pmt->state = PMT_RUNNING;
             cp->pmt = pmt->master_pmt;
         }
+    }
+    // Add the PCR pid if it's independent
+    if (pcr_pid > 0 && pcr_pid < 8191)
+    {
+        if (pmt->stream_pids < MAX_PMT_PIDS - 1) {
+            pmt->stream_pid[pmt->stream_pids].type = 0;
+            pmt->stream_pid[pmt->stream_pids++].pid = pcr_pid;
+            LOG("added independent PCR pid %d for pmt %d", pcr_pid, pmt->id);
+        } else
+            LOG("Too many pids for pmt %d, discarding prc_pid %d", pmt->id, pcr_pid);
     }
 
     if (pmt->first_active_pid < 0)
@@ -1896,7 +1909,10 @@ void emulate_add_all_pids(adapter *ad) {
                             updated = 1;
                         }
 
-            int forced_pids[] = {EMU_PIDS_ALL_ENFORCED_PIDS_LIST};
+            int *forced_pids;
+            int list_plain[]     = {EMU_PIDS_ALL_ENFORCED_PIDS_LIST};
+            int list_with_null[] = {EMU_PIDS_ALL_ENFORCED_WITH_NULL};
+            forced_pids = (ad->drop_encrypted) ? list_plain : list_with_null;
             int i_forced = sizeof(forced_pids) / sizeof(int);
             for (j = 0; j < i_forced; j++) {
                 int fpid = forced_pids[j];
