@@ -1760,6 +1760,8 @@ extern int sock_signal;
 
 int main(int argc, char *argv[]) {
     int sock_bw, rv, devices;
+    int i;
+    unsigned long log_it;
     main_tid = get_tid();
     strcpy(thread_name, "main");
     set_options(argc, argv);
@@ -1776,6 +1778,12 @@ int main(int argc, char *argv[]) {
                 LOG_DAEMON);
 
     print_version(1);
+
+    for (i = 0; loglevels[i]; i++) {
+        log_it = (1UL << i);
+        LOGL(log_it,   " LOG  of the module enabled: %s", loglevels[i]);
+        DEBUGL(log_it, "DEBUG of the module enabled: %s", loglevels[i]);
+    }
 
     readBootID();
     if ((rtsp = tcp_listen(NULL, opts.rtsp_port, opts.use_ipv4_only)) < 1)
