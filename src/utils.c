@@ -387,7 +387,7 @@ int maps_intd(char *s, char **v, int dv) {
         return atoi(s);
     }
     for (i = 0; v[i]; i++)
-        if (strlen(s) <= strlen(v[i]) && !strncasecmp(s, v[i], strlen(v[i])))
+        if (strncasecmp(s, v[i], strlen(s) == 0)
             n = i;
     return n;
 }
