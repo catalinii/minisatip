@@ -46,8 +46,20 @@
 
 #define TCP_DATA_SIZE ((ADAPTER_BUFFER / 1316) * (1316 + 16) * 3)
 #define TCP_DATA_MAX (TCP_DATA_SIZE * 8)
-#define MAX_RTP_MSG 25  // max number of UDP datagrams (with 1316 bytes of payload) to be read at one time
 #define MAKE_ITEM(a, b) ((a << 16) | (b))
+
+#if defined(__APPLE__) || defined(AXE)
+#define MAX_RTP_MSG 1   // read 1 UDP datagrams at one time (no recvmmsg() support!)
+int recvmmsg0(int sockfd, struct mmsghdr *msgvec, unsigned int vlen) {
+    if (vlen < 1)
+        return 0;
+    msgvec->msg_len = readv(sockfd, msgvec->msg_hdr.msg_iov, msgvec->msg_hdr.msg_iovlen);
+    return 1;
+}
+#define recvmmsg(a,b,c,d,e) recvmmsg0(a,b,c)
+#else
+#define MAX_RTP_MSG 25  // max number of UDP datagrams (with 1316 bytes of payload) to be read at one time
+#endif
 
 extern char *fe_delsys[];
 int satip_post_init(adapter *ad);
@@ -623,6 +635,8 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
     uint8_t buf1[20 * MAX_RTP_MSG];
     int i, rr, num_msg = 0, size_msg = 0;
     int force_ok = 0;
+    int check_holes = 0;
+    void *holes[MAX_RTP_MSG];
     struct mmsghdr messages[MAX_RTP_MSG] = {0};
     struct iovec iovs[(MAX_RTP_MSG * 2) + 1] = {0};  // RTP Header + Payload (up to 1316 bytes) for each UDP datagram
     uint16_t seq;
@@ -640,17 +654,19 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
             break;
         }
 
-        struct iovec *iov = &iovs[i * 2];   // stripping out RTP header, to leave continous payload data over the same buffer
-        iov[0].iov_base = buf1 + (i * 20);
+        struct iovec *iov = &iovs[i * 2];    // stripping out RTP header, to leave continous payload data over the same buffer
+        iov[0].iov_base = buf1 + (i * 20);   // RTP header slice
         iov[0].iov_len  = 12;
-        iov[1].iov_base = buf  + (i * 1316);
-        iov[1].iov_len  = (size_msg % 1316) ? : 1316;
+        iov[1].iov_base = buf  + (i * 1316); // PAYLOAD slice in the READ BUFFER
+        iov[1].iov_len  = 1316;
         iov[2].iov_base = NULL;
         iov[2].iov_len  = 0;
 
         struct mmsghdr *msg = &messages[i];
         msg->msg_hdr.msg_iov = iov;
         msg->msg_hdr.msg_iovlen = 2;
+
+        holes[i] = NULL;
     }
 
     *rb = 0;
@@ -671,7 +687,7 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
     // Loop over all datagrams received
     ad = get_adapter(ss->sid);
     uint8_t *bf1 = buf1;
-    for (i = rr - 1; i >= 0; i--) {  // loop in reverse order (i = 0; i < rr; i++)
+    for (i = 0; i < rr; i++) {
         struct mmsghdr *msg = &messages[i];
         struct iovec *iov = &iovs[i * 2];
         int dlen = 0;
@@ -714,21 +730,35 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
 
         }
 
-        // Clear empty unused buffer space
+        // Clear empty unused buffer space (after all it will be removed)
         if (dlen < iov[1].iov_len) {
             int ss = (188 * (dlen / 188));
-            if ( i + 1 < rr ) {  // process only if not in the last multibuffer slice
-                // copy data until the end of the buffer over the empty space to free the hole
-                uint8_t *eb = iovs[1].iov_base + size_msg;       // current end of the read buffer
-                uint8_t *sb = iov[1].iov_base + ss;              // end of the valid read data
-                uint8_t *ib = iov[1].iov_base + iov[1].iov_len;  // end of the iovec slice
-                memmove(sb, ib, eb - ib );  // skip just the hole of the chunk 
-            }
-            size_msg -= iov[1].iov_len - ss;
-            iov[1].iov_len = ss;
+            // memset(iov[1].iov_base + ss, 0xFF, iov[1].iov_len - ss);  // Not necessary
+            holes[i] = iov[1].iov_base + ss;
+            check_holes = 1;
         }
         *rb += iov[1].iov_len;
         bf1 += 20;
+    }
+
+    // Remove holes if they exist
+    if (check_holes && *rb > 0) {
+        for (i = rr - 1; i >= 0; i--) {  // loop in reverse order (i = 0; i < rr; i++)
+            if (holes[i] == NULL)
+                continue;
+
+            struct iovec *iov = &iovs[i * 2];
+            int hole_size = iov[1].iov_len - (holes[i] - iov[1].iov_base);
+
+            if ( i + 1 < rr ) {  // move data only if not in the last multibuffer slice (in this case only adjust the end)
+                // copy data until the end of the buffer over the empty space to free the hole
+                uint8_t *eb = iovs[1].iov_base + *rb;  // current end of the read buffer
+                uint8_t *sb = holes[i];                // end of the valid read data
+                uint8_t *ib = holes[i] + hole_size;    // end of the iovec slice
+                memmove(sb, ib, eb - ib );  // skip just the hole of the chunk 
+            }
+            *rb -= hole_size;
+        }
     }
 
     return (force_ok || (*rb >= 0));
