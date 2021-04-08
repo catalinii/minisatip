@@ -1952,16 +1952,18 @@ void emulate_add_all_pids(adapter *ad) {
                         }
 
             int *forced_pids;
-            int list_plain[]     = {EMU_PIDS_ALL_ENFORCED_PIDS_LIST};
-            int list_with_null[] = {EMU_PIDS_ALL_ENFORCED_WITH_NULL};
-            forced_pids = (ad->drop_encrypted) ? list_plain : list_with_null;
-            int i_forced = sizeof(forced_pids) / sizeof(int);
+            int forced_pids[] = {EMU_PIDS_ALL_ENFORCED_PIDS_LIST};
             for (j = 0; j < i_forced; j++) {
                 int fpid = forced_pids[j];
                 LOG("%s: adding (enforced) pid %d to emulate all pids",
                     __FUNCTION__, fpid);
                 mark_pid_add(p_all->sid[i], ad->id, fpid);
                 updated = 1;
+            }
+            if (!ad->drop_encrypted) {
+                LOG("%s: adding (enforced) pid 8191 (NULL) too",
+                    __FUNCTION__);
+                mark_pid_add(p_all->sid[i], ad->id, 8191);
             }
         }
     if (updated)
