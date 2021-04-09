@@ -133,7 +133,7 @@ CFLAGS-$(AXE) += -DAXE
 
 CFLAGS-$(ENIGMA) += -DENIGMA
 CFLAGS-$(EMBEDDED) += -DNO_BACKTRACE
-CFLAGS-$(DEBUG) += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=null -static-libasan -static-libubsan -static-liblsan
+CFLAGS-$(DEBUG) += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=undefined -static-libasan -static-libubsan -static-liblsan
 
 
 ifeq ($(STATIC),1)
