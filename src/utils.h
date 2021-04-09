@@ -135,6 +135,7 @@ int split(char **rv, char *s, int lrv, char sep);
 int map_int(char *s, char **v);
 int map_intd(char *s, char **v, int dv);
 int map_float(char *s, int mul);
+int check_strs(char *s, char **v, int dv);
 void *mymalloc(int a, char *f, int l);
 void *myrealloc(void *p, int a, char *f, int l);
 void myfree(void *x, char *f, int l);

@@ -367,6 +367,28 @@ int map_intd(char *s, char **v, int dv) {
     return n;
 }
 
+int check_strs(char *s, char **v, int dv) {
+    int i, n = dv;
+
+    if (s == NULL) {
+        LOG_AND_RETURN(dv, "check_strs: s=>NULL, v=%p, %s %s", v,
+                       v ? v[0] : "NULL", v ? v[1] : "NULL");
+    }
+    if (v == NULL) {
+        LOG_AND_RETURN(dv, "check_strs: v is empty");
+    }
+
+    s = strip(s);
+
+    if (!*s)
+        LOG_AND_RETURN(dv, "check_strs: s is empty");
+
+    for (i = 0; v[i]; i++)
+        if (strncasecmp(s, v[i], strlen(s)) == 0)
+            n = i;
+    return n;
+}
+
 char *header_parameter(char **arg,
                        int i) // get the value of a header parameter
 {
