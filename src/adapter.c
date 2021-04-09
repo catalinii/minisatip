@@ -712,6 +712,8 @@ int get_free_adapter(transponder *tp) {
         LOG("get free adapter %d msys %s requested %s", fe, get_delsys(fe),
             get_delsys(msys));
 
+    dump_adapters();
+
     if (fe >= 0) {
         if (ad && delsys_match(ad, msys)) {
             match = 0;
@@ -743,6 +745,18 @@ int get_free_adapter(transponder *tp) {
             ad = a[i];
             if (ad->sources_pos[tp->diseqc] && !init_hw(i))
                 return i;
+        }
+    }
+
+    // No regular tuners available, check for slave tuners
+    for (i = 0; i < MAX_ADAPTERS; i++) {
+        // first free slave adapter that has the same msys
+        if ((ad = get_adapter_nw(i)) && ad->sid_cnt == 0 &&
+            delsys_match(ad, msys) && compare_slave_parameters(ad, tp) &&
+            ad->sources_pos[tp->diseqc])
+        {
+            LOGM("get free adapter found slave adapter %d", i);
+            return i;
         }
     }
 
