@@ -226,10 +226,10 @@ typedef struct diseqc {
 } diseqc;
 
 typedef struct struct_transponder {
-    int sys;
+    uint8_t sys;
     int freq;
     int inversion;
-    int mtype;
+    uint8_t mtype;
     int fe;
 
     // DVB-T
