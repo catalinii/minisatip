@@ -37,7 +37,7 @@
 #define PMT_STOPPED 0
 #define PMT_STARTING 1
 #define PMT_RUNNING 2
-#define PMT_STOPPING 3
+#define PMT_STOPPING 0
 
 #define PMT_GRACE_TIME 2000
 
