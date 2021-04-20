@@ -965,7 +965,10 @@ void mark_pids_null(adapter *ad) {
             {
                 // Instead of remove ALL packets, when the packet has a PCR remove all payload and pass it
                 if (get_has_pcr(b)) // It has PCR
+                {
                     mark_pcr_only(b);
+                    ad->flush = 1;
+                }
                 else
                     mark_pid_null(b);
             }
