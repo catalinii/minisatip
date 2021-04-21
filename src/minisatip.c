@@ -97,6 +97,7 @@ int rtsp, http, si, si1, ssdp1;
 #define RTSPPORT_OPT 'y'
 #define SATIPCLIENT_OPT 's'
 #define NETCVCLIENT_OPT 'n'
+#define NAME_APP_OPT 'I'
 #define PRIORITY_OPT 'i'
 #define SATIP_TCP_OPT 'O'
 #define DOCUMENTROOT_OPT 'R'
@@ -140,6 +141,7 @@ static const struct option long_options[] = {
     {"drop-encrypted", no_argument, NULL, DROP_ENCRYPTED_OPT},
     {"enable-adapters", required_argument, NULL, ENABLE_ADAPTERS_OPT},
     {"foreground", no_argument, NULL, FOREGROUND_OPT},
+    {"name-app", required_argument, NULL, NAME_APP_OPT},
     {"http-port", required_argument, NULL, HTTPPORT_OPT},
     {"http-host", required_argument, NULL, HTTPSERVER_OPT},
     {"ipv6", no_argument, NULL, IPV4_OPT},
@@ -291,7 +293,7 @@ void usage() {
 #ifdef AXE
         "[-7 M1:S1[,M2:S2]] [-A SRC1:INP1:DISEQC1[,SRC2:INP2:DISEQC2]]\n\n"
 #endif
-        "\t[-x http_port] [-X xml_path] [-y rtsp_port]\n\n\
+        "\t[-x http_port] [-X xml_path] [-y rtsp_port] [-I name_service]\n\n\
 Help\n\
 -------\n\
 \n\
@@ -349,6 +351,8 @@ Help\n\
 \n\
 * -H --threshold X:Y : set the write time threshold to X (UDP) / Y (TCP)  milliseconds. \n\
 	* eg: -H 5:50 - set thresholds to 5ms (UDP) and 50ms (TCP)\n\
+\n\
+* -I --name-app specificies an alternative Service Name\n\
 \n\
 * -i --priority prio: set the DVR thread priority to prio \n\
 \n\
@@ -660,6 +664,11 @@ void set_options(int argc, char *argv[]) {
 
         case DEVICEID_OPT: {
             opts.device_id = atoi(optarg);
+            break;
+        }
+
+        case NAME_APP_OPT: {
+            opts.name_app = optarg;
             break;
         }
 
@@ -1467,7 +1476,7 @@ int read_http(sockets *s) {
             0)
             strcpy(adapters, "DVBS2-0,");
         adapters[strlen(adapters) - 1] = 0;
-        snprintf(buf, sizeof(buf), xml, app_name, app_name, app_name, uuid,
+        snprintf(buf, sizeof(buf), xml, (opts.name_app)? opts.name_app : app_name, app_name, app_name, uuid,
                  opts.http_host, adapters, opts.playlist ? opts.playlist : "");
         sprintf(headers,
                 "Cache-Control: no-cache\r\nContent-type: "
@@ -1992,6 +2001,7 @@ int has_pmt = 0;
 _symbols minisatip_sym[] = {
     {"has_axe", VAR_INT, &has_axe, 1, 0, 0},
     {"has_pmt", VAR_INT, &has_pmt, 1, 0, 0},
+    {"name_app", VAR_PSTRING, &opts.name_app, 0, 0, 0},
     {"http_host", VAR_PSTRING, &opts.http_host, 0, 0, 0},
     {"uuid", VAR_STRING, uuid, 0, 0, 0},
     {"bootid", VAR_INT, &opts.bootid, 1, 0, 0},
