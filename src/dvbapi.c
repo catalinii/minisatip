@@ -732,6 +732,14 @@ int keys_add(int i, int adapter, int pmt_id) {
     return i;
 }
 
+int get_enabled_keys() {
+    int i, ek = 0;
+    for (i = 0; i < MAX_KEYS; i++)
+        if (keys[i] && keys[i]->enabled)
+            ek++;
+    return ek;
+}
+
 int keys_del(int i) {
     int j, pmt_pid, sid;
     SKey *k;
@@ -744,8 +752,10 @@ int keys_del(int i) {
         mutex_unlock(&k->mutex);
         return 0;
     }
-
-    dvbapi_send_pmt(k, CMD_ID_NOT_SELECTED);
+    // current key is not disabled
+    int ek = get_enabled_keys() - 1;
+    if (ek > 0)
+        dvbapi_send_pmt(k, CMD_ID_NOT_SELECTED);
     pmt_pid = k->pmt_pid;
     sid = k->sid;
 
@@ -762,21 +772,9 @@ int keys_del(int i) {
 
     k->hops = k->caid = k->info_pid = k->prid = k->ecmtime = 0;
     dvbapi_last_close = getTick();
-    int ek = __sync_add_and_fetch(&enabledKeys, -1);
-    ek = 0;
-    for (j = 0; j < MAX_KEYS; j++)
-        if (keys[j] && keys[j]->enabled)
-            ek++;
+
     LOG("Stopped key %d, active keys %d, sock %d, pmt pid %d, sid %04X", i, ek,
         sock, pmt_pid, sid);
-    // oscam leaks connections if the socket is not closed.
-    // sending DVBAPI_AOT_CA_STOP resolves the issue only for tcp mode (not for
-    // local socket)
-    if (!ek) {
-        LOG("No active keys, closing the dvbapi socket %d", dvbapi_sock);
-        if (sock >= 0)
-            sockets_force_close(dvbapi_sock);
-    }
 
     mutex_destroy(&k->mutex);
 

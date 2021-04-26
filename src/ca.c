@@ -3103,9 +3103,11 @@ static int ca_ca_info_callback(void *arg, uint8_t slot_id,
         overwritten = 1;
     }
     for (i = 0; i < ca_id_count; i++) {
+        uint8_t *b = (uint8_t *)&ca_ids[i];
+        int caid = b[1] * 256 + b[0];
         LOG("   %s CA ID: %04x for CA%d", overwritten ? "Forced" : "Supported",
-            ca_ids[i], d->id);
-        add_caid_mask(dvbca_id, d->id, ca_ids[i], 0xFFFF);
+            caid, d->id);
+        add_caid_mask(dvbca_id, d->id, caid, 0xFFFF);
     }
 
     return 0;

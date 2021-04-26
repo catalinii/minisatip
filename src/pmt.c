@@ -1389,7 +1389,7 @@ int assemble_packet(SFilter *f, uint8_t *b) {
     b = f->data;
     if ((len > 0) && (f->flags & FILTER_CRC)) // check the crc for PAT and PMT
     {
-        int current_crc;
+        uint32_t current_crc;
         if (len < 4 || len > FILTER_PACKET_SIZE)
             LOG_AND_RETURN(
                 0,
