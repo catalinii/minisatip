@@ -53,6 +53,7 @@ extern char app_name[], version[];
 
 struct struct_opts {
     char *rrtp;
+    char *name_app;
     char *http_host; // http-server host
     char *rtsp_host; // rtsp-server host
     char *datetime_compile;
