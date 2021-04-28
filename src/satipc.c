@@ -684,6 +684,14 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
 
     size_msg -= (num_msg - rr) * 1316;  // update the theoretical total size of the read buffer
 
+    // It checks if the read is full, because in that case there is a high
+    // probability that there are still pending packets in the buffer, so then
+    // the output buffer will be flushed to avoid waiting at the next read.
+    if (num_msg > 1 && rr == num_msg) {
+        DEBUGM("satipc_read: read full, so flushing output");
+        ad->flush = 1;
+    }
+
     // Loop over all datagrams received
     ad = get_adapter(ss->sid);
     uint8_t *bf1 = buf1;
