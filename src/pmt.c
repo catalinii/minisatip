@@ -967,7 +967,7 @@ void mark_pids_null(adapter *ad) {
                 if (get_has_pcr(b)) // It has PCR
                 {
                     mark_pcr_only(b);
-                    ad->flush = 1;
+                    // ad->flush = 1; // Not necessary as process_packets_for_stream() flush all packets.
                 }
                 else
                     mark_pid_null(b);
