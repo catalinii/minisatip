@@ -13,6 +13,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - name: dvbcsa
+      run: apt-get install -y -f libdvbcsa-dev
     - name: configure
       run: ./configure
     - name: make
