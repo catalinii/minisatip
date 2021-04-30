@@ -1,4 +1,4 @@
-name: C/C++ CI
+name: Coverity
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [ master ]
 
 jobs:
-  latest:
+  coverity:
     runs-on: ubuntu-latest
     steps:
       - name: Install libraries
