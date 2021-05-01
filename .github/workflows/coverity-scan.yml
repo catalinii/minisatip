@@ -26,11 +26,6 @@ jobs:
         env:
           TOKEN: ${{ secrets.COVERITY_SCAN_TOKEN }}
 
-      - name: Fixed world writable dirs
-        run: |
-          chmod go-w $HOME
-          sudo chmod -R go-w /usr/share
-
       - name: Configure
         run: ./configure
 
