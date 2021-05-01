@@ -10,6 +10,7 @@ jobs:
   coverity:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v2
       - name: Install libraries
         run: |
           set -x
