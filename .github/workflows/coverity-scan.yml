@@ -13,6 +13,8 @@ jobs:
       - name: Install libraries
         run: |
           set -x
+          pwd
+          ls
           sudo apt-get update
           sudo apt-get install libssl-dev dvb-apps libdvbcsa-dev
 
