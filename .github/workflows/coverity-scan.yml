@@ -40,7 +40,7 @@ jobs:
           curl \
             --form project=MINISATIP \
             --form token=$TOKEN \
-            --form email=t_cata_2000@yahoo.com \
+            --form email='reply+AB6SAEPNLEJSCE2WJ37GDNF6TC2NXEVBNHHDIEHQTY@reply.github.com' \
             --form file=@MINISATIP.tgz \
             --form version=trunk \
             --form description="`./minisatip -v`" \
