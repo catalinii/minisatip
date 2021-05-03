@@ -13,8 +13,8 @@ jobs:
     container: catalinii/minisatip-build-image:latest
     steps:
     - uses: actions/checkout@v2
-      - name: Configure ARM
-        run: |
-         ./configure --enable-enigma --enable-staging --host=arm-linux-gnueabihf
-         make
+    - name: Configure ARM
+      run: |
+       ./configure --enable-enigma --enable-staging --host=arm-linux-gnueabihf
+       make
 
