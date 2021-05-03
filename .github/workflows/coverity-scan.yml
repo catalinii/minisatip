@@ -9,17 +9,12 @@ on:
 jobs:
   coverity:
     runs-on: ubuntu-latest
+    container: catalinii/minisatip-build-image:latest
     steps:
       - uses: actions/checkout@v2
-      - name: Install libraries
-        run: |
-          set -x
-          ls -al
-          sudo apt-get update
-          sudo apt-get install dvb-apps libdvbcsa-dev
 
       - name: Configure
-        run: ./configure
+        run: ./configure --with-mcli=/vdr-plugin-mcli/
 
       - name: Download Coverity Build Tool
         run: |
