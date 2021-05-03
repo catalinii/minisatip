@@ -14,6 +14,6 @@ jobs:
     - uses: actions/checkout@v2
     - name: Configure ARM
       run: |
-       ./configure --enable-enigma --enable-staging --host=arm-linux-gnueabihf --disable-dvbaes --disable-dvbcsa
+       ./configure --enable-enigma --enable-static --host=arm-linux-gnueabihf --disable-dvbaes --disable-dvbca
        make
 
