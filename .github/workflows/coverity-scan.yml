@@ -38,7 +38,7 @@ jobs:
             --form email='reply+AB6SAEPNLEJSCE2WJ37GDNF6TC2NXEVBNHHDIEHQTY@reply.github.com' \
             --form file=@MINISATIP.tgz \
             --form version=trunk \
-            --form description="`./minisatip -v`" \
+            --form description="`git log -1 --pretty=format:%h`" \
             https://scan.coverity.com/builds?project=MINISATIP
         env:
           TOKEN: ${{ secrets.COVERITY_SCAN_TOKEN }}
