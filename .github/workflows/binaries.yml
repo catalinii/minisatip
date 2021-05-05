@@ -18,7 +18,7 @@ jobs:
       run: |
        ./configure --enable-enigma --enable-static --host=arm-linux-gnueabihf --disable-dvbaes --disable-dvbca
        make
-       apt-get install zip
+       apt-get install -f -y zip
        zip -9 -r /minisatip_arm.zip minisatip html
     - name: Bump version and push tag/create release point
       uses: anothrNick/github-tag-action@1.35.0
