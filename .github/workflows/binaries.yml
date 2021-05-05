@@ -14,12 +14,19 @@ jobs:
     - uses: actions/checkout@v2
       with:
         fetch-depth: '0'
-    - name: Configure ARM
+    - name: Build ARM
       run: |
        ./configure --enable-enigma --enable-static --host=arm-linux-gnueabihf --disable-dvbaes --disable-dvbca
        make
-       apt-get install -f -y zip
        zip -9 -r /minisatip_arm.zip minisatip html
+
+     - name: Build AXE
+      run: |
+       make clean
+       ./configure --enable-static --host=sh4-linux --disable-dvbaes --disable-dvbca
+       make PMT=0
+       zip -9 -r /minisatip_axe.zip minisatip html
+
     - name: Bump version and push tag/create release point
       uses: anothrNick/github-tag-action@1.35.0
       env:
