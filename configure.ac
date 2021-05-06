@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.4])
-AC_INIT(minisatip, 0.7, https://github.com/catalinii/minisatip)
+AC_INIT(minisatip, 1.1, https://github.com/catalinii/minisatip)
 AC_CONFIG_SRCDIR([src/minisatip.h])
 #AC_CONFIG_HEADERS([config.h])
 
