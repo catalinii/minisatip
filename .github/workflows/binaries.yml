@@ -1,9 +1,7 @@
 name: Binaries
 on:
   push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
+    branches: [ 0.7 ]
 
 jobs:
   build:
