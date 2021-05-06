@@ -22,6 +22,10 @@
 
 #define LEN_PIDS (MAX_PIDS * 5 + 1)
 
+#ifndef PID_FROM_TS 
+#define PID_FROM_TS(b) (((b)[1] & 0x1F) * 256 + (b)[2])
+#endif
+
 typedef struct struct_streams
 {
 	char enabled;
