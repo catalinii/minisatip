@@ -754,8 +754,9 @@ int keys_del(int i) {
     }
     // current key is not disabled
     int ek = get_enabled_keys() - 1;
-    if (ek > 0)
+    if (ek > 0 || oscam_version>= 11692) {
         dvbapi_send_pmt(k, CMD_ID_NOT_SELECTED);
+    }
     pmt_pid = k->pmt_pid;
     sid = k->sid;
 
