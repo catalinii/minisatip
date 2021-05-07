@@ -18,11 +18,12 @@ jobs:
 
       - name: Download Coverity Build Tool
         run: |
-          wget -q https://scan.coverity.com/download/cxx/linux64 --post-data "token=$TOKEN&project=MINISATIP" -O cov-analysis-linux64.tar.gz
+          wget -q https://scan.coverity.com/download/cxx/linux64 --post-data "token=$TOKEN&project=$PROJECT" -O cov-analysis-linux64.tar.gz
           mkdir cov-analysis-linux64
           tar xzf cov-analysis-linux64.tar.gz --strip 1 -C cov-analysis-linux64
         env:
           TOKEN: ${{ secrets.COVERITY_SCAN_TOKEN }}
+          PROJECT: minisatip2
 
       - name: Build with cov-build
         run: |
@@ -34,12 +35,13 @@ jobs:
         run: |
           tar czvf MINISATIP.tgz cov-int
           curl \
-            --form project=MINISATIP \
+            --form project=$PROJECT \
             --form token=$TOKEN \
             --form email='reply+AB6SAEPNLEJSCE2WJ37GDNF6TC2NXEVBNHHDIEHQTY@reply.github.com' \
             --form file=@MINISATIP.tgz \
             --form version=trunk \
             --form description="`git log -1 --pretty=format:%h`" \
-            https://scan.coverity.com/builds?project=MINISATIP
+            https://scan.coverity.com/builds?project=$PROJECT
         env:
           TOKEN: ${{ secrets.COVERITY_SCAN_TOKEN }}
+          PROJECT: minisatip2
