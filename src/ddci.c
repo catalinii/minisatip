@@ -421,7 +421,6 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     {
         d->tid = ad->transponder_id;
         add_pid_mapping_table(ad->id, 1, pmt->id, d, 1); // add pid 1
-        set_pid_rewrite(d, ad->id, 1, 0);
     }
 
     LOG("found DDCI %d for pmt %d, running channels %d", ddid, pmt->id,
