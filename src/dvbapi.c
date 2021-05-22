@@ -732,17 +732,11 @@ int keys_add(int i, int adapter, int pmt_id) {
     return i;
 }
 
-int get_enabled_keys() {
-    int i, ek = 0;
-    for (i = 0; i < MAX_KEYS; i++)
-        if (keys[i] && keys[i]->enabled)
-            ek++;
-    return ek;
-}
-
 int keys_del(int i) {
-    int j, pmt_pid, sid;
+    int pmt_pid, sid;
+    unsigned char buf[8] = {0x9F, 0x80, 0x3f, 4, 0x83, 2, 0, 0};
     SKey *k;
+    char *msg = "";
     k = get_key(i);
     if (!k)
         return 0;
@@ -753,10 +747,27 @@ int keys_del(int i) {
         return 0;
     }
     // current key is not disabled
-    int ek = get_enabled_keys() - 1;
-    if (ek > 0 || oscam_version>= 11692) {
+    int j, ek = 0, ed = 0;
+    for (j = 0; j < MAX_KEYS; j++)
+        if (i != j && keys[j] && keys[j]->enabled) {
+            ek++;
+            if (k->demux_index == keys[i]->demux_index)
+                ed++;
+        }
+    if (!ek) {
+        buf[7] = 0xFF;
+	msg = "ALL";
+        TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
+    } else if (!ed) {
+        buf[7] = k->demux_index;
+	msg = "DEMUX";
+        TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
+    } else { // only local socket mode where multiple channels are connected to
+             // the same demux
+	msg = "PMT";
         dvbapi_send_pmt(k, CMD_ID_NOT_SELECTED);
     }
+
     pmt_pid = k->pmt_pid;
     sid = k->sid;
 
@@ -774,8 +785,8 @@ int keys_del(int i) {
     k->hops = k->caid = k->info_pid = k->prid = k->ecmtime = 0;
     dvbapi_last_close = getTick();
 
-    LOG("Stopped key %d, active keys %d, sock %d, pmt pid %d, sid %04X", i, ek,
-        sock, pmt_pid, sid);
+    LOG("Stopped key %d, active keys %d, sock %d, pmt pid %d, sid %04X, op %s", i, ek,
+        sock, pmt_pid, sid, msg);
 
     mutex_destroy(&k->mutex);
 
