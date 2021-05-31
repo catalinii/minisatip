@@ -129,7 +129,6 @@ typedef struct struct_pmt {
     SPid *p;
     char provider[50], name[50];
     void *opaque;
-    char skip_first;
     char active; // PMT structure was already filled
     char state;  // PMT state (PMT_STOPPED, PMT_STARTING, PMT_RUNNING,
                  // PMT_STOPPING)

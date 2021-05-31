@@ -1061,7 +1061,6 @@ int pmt_add(int i, int adapter, int sid, int pmt_pid) {
     }
     pmt->enabled = 1;
     pmt->version = -1;
-    pmt->skip_first = 1;
     pmt->active = 0;
     pmt->cw = NULL;
     pmt->opaque = NULL;
@@ -1484,12 +1483,7 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque) {
 
         if (sid > 0 && !existing_pmt) {
             int pmt_id = pmt_add(-1, ad->id, sid, pid);
-            SPid *p = find_pid(ad->id, pid);
             SPMT *pmt = get_pmt(pmt_id);
-            if (pmt && p) // already added PMTs are processed first
-            {
-                pmt->skip_first = 0;
-            }
             memset(new_filter, 0, sizeof(new_filter));
             memset(new_mask, 0, sizeof(new_mask));
             new_filter[1] = b[i];
@@ -1570,7 +1564,7 @@ void find_pi(SPMT *pmt, unsigned char *es, int len) {
                 LOG("PI is too small %zd", sizeof(pmt->pi));
                 return;
             }
-            LOG("PI pos %d caid %04X => pid %04X (%d), index %d", pmt->pi_len,
+            LOG("PMT %d PI pos %d caid %04X => pid %04X (%d), index %d", pmt->id, pmt->pi_len,
                 caid, capid, capid, pmt->caids);
             memcpy(pmt->pi + pmt->pi_len, es + i, es_len);
             pmt->pi_len += es_len;
@@ -1622,10 +1616,6 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
 
     if (!pmt || !pmt->enabled) {
         LOG("PMT %d does not exist", pmt ? pmt->id : -1);
-        return 0;
-    }
-    if (pmt->skip_first) {
-        pmt->skip_first = 0;
         return 0;
     }
 
@@ -1783,6 +1773,9 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         pmt->state = PMT_RUNNING;
         update_pids(ad->id);
     }
+    if (pmt->pi_len && pmt->master_pmt != pmt->id) {
+	find_pi(get_pmt(pmt->master_pmt), pmt->pi, pmt->pi_len);
+    } 
 
     if ((pmt->pi_len > 0) && enabled_channels) // PMT contains CA descriptor
                                                // and there are active pids
