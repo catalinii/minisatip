@@ -21,7 +21,7 @@ The latest binaries for embedded platforms: https://minisatip.org/forum/viewtopi
 
 Contact
 -------
-Please use https://minisatip.org/forum/ for any questions.
+Please use https://minisatip.org/forum/ for any question or join slack: https://join.slack.com/t/minisatip/shared_invite/zt-rms717g0-SQR25SFs8RH9JlVZV4II7A 
 
 In order to speed up the investigation of an issue, please provide the full log and a link to the application that is not working.
 
@@ -31,11 +31,11 @@ https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item
 Usage:
 -------
 
-minisatip version 1.0.4-da99a96, compiled in Feb  3 2021 16:35:57, with s2api version: 050B
+minisatip version v1.1.6-76e53d1, compiled in Jun  4 2021 16:58:12, with s2api version: 050B
 
 	./minisatip [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 		[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]][-o oscam_host:dvbapi_port,offset] [-p public_host] [-r remote_rtp_host] [-R document_root] [-s [*][DELSYS:][FE_ID@][source_ip/]host[:port] [-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] 
- 	[-x http_port] [-X xml_path] [-y rtsp_port]
+ 	[-x http_port] [-X xml_path] [-y rtsp_port] [-I name_service]
 
 Help
 -------
@@ -46,7 +46,7 @@ Help
 	* eg: -a 1:2:3  
 	- it will report 1 dvb-s2 device, 2 dvb-t2 devices and 3 dvb-c devices 
 
-* -A --disable-ssdp disable SSDP announcement
+* -G --disable-ssdp disable SSDP announcement
  
 * -b --buffer X:Y : set the app adapter buffer to X Bytes (default: 376000) and set the kernel DVB buffer to Y Bytes (default: 5775360) - both multiple of 188
 	* eg: -b 18800:18988
@@ -75,7 +75,7 @@ Help
 	- note: * as adapter means apply to all adapters
 
 * -E Allows encrypted stream to be sent to the client even if the decrypting is unsuccessful
-	- note: when pids=all is emulated this pass NULLs too
+ 	- note: when pids=all is emulated this pass NULLs too
 
 * -Y --delsys ADAPTER1:DELIVERY_SYSTEM1[,ADAPTER2:DELIVERY_SYSTEM2[,..]] - specify the delivery system of the adapters (0 is the first adapter)	
 	* eg: --delsys 0:dvbt,1:dvbs
@@ -94,6 +94,8 @@ Help
 
 * -H --threshold X:Y : set the write time threshold to X (UDP) / Y (TCP)  milliseconds. 
 	* eg: -H 5:50 - set thresholds to 5ms (UDP) and 50ms (TCP)
+
+* -I --name-app specificies an alternative Service Name
 
 * -i --priority prio: set the DVR thread priority to prio 
 

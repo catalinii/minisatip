@@ -69,8 +69,7 @@ typedef struct struct_key {
     int ver;
     int ecms;
     int program_id; // pmt sid
-    unsigned char *pi, cardsystem[64], reader[64], from[64], protocol[64];
-    int pi_len;
+    unsigned char cardsystem[64], reader[64], from[64], protocol[64];
     int parity;
     int blen;
     int tsid, onid;

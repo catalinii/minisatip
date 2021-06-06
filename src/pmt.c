@@ -105,31 +105,33 @@ static inline void mark_pid_null(uint8_t *b) {
     b[2] |= 0xFF;
 }
 
-static inline void mark_pcr_only(uint8_t *b) { // Generate a clean packet with only the Adaptation field header and no payload
+static inline void
+mark_pcr_only(uint8_t *b) { // Generate a clean packet with only the Adaptation
+                            // field header and no payload
     if ((b[3] & 0x10) == 0) // No payload
     {
-       mark_pid_null(b); 
-       return; 
+        mark_pid_null(b);
+        return;
     }
 
     // Convert the Payload Data in Adaptation Stuffing
     int i;
     int payload = get_adaptation_len(b);
-    for (i=0; i+payload < 188; i++)
+    for (i = 0; i + payload < 188; i++)
         b[payload + i] = 0xFF;
     b[4] += i; // Update the Adaptation field size
 
     // Clean the header
     b[1] &= 0x3F; // Remove TEI & PUSI
-        // b[1] &= 0x7F; // Remove TEI
-        // b[1] &= 0xBF; // Remove PUSI
+                  // b[1] &= 0x7F; // Remove TEI
+                  // b[1] &= 0xBF; // Remove PUSI
     b[3] &= 0x2F; // Set TSC not scrambled & Remove payload flag
-        //b[3] &= 0x3F // Set TSC not scrambled
-        //b[3] &= 0xEF // Remove payload flag
+                  // b[3] &= 0x3F // Set TSC not scrambled
+                  // b[3] &= 0xEF // Remove payload flag
     b[5] |= 0x80; // Set the Discontinuity indicator
     b[5] &= 0x9f; // Clear Random access indicator & ES priority indicator
-        //b[5] &= 0xBF; // Clear Random access indicator
-        //b[5] &= 0xDF; // Clear ES priority indicator
+                  // b[5] &= 0xBF; // Clear Random access indicator
+                  // b[5] &= 0xDF; // Clear ES priority indicator
 }
 
 int register_algo(SCW_op *o) {
@@ -961,15 +963,15 @@ void mark_pids_null(adapter *ad) {
         if ((b[3] & 0x80) == 0x80) {
             if (opts.debug & (DEFAULT_LOG | LOG_DMX))
                 LOG("Marking PID %d packet %d pos %d as NULL", pid, i / 188, i);
-            if (ad->ca_mask && ad->drop_encrypted)
-            {
-                // Instead of remove ALL packets, when the packet has a PCR remove all payload and pass it
+            if (ad->ca_mask && ad->drop_encrypted) {
+                // Instead of remove ALL packets, when the packet has a PCR
+                // remove all payload and pass it
                 if (get_has_pcr(b)) // It has PCR
                 {
                     mark_pcr_only(b);
-                    // ad->flush = 1; // Not necessary as process_packets_for_stream() flush all packets.
-                }
-                else
+                    // ad->flush = 1; // Not necessary as
+                    // process_packets_for_stream() flush all packets.
+                } else
                     mark_pid_null(b);
             }
 
@@ -1521,16 +1523,11 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque) {
     return 0;
 }
 
-int pi_exist(int ecapid, int ecaid, unsigned char *es, int len) {
-    int es_len, caid, capid;
+int pmt_caid_exist(SPMT *pmt, uint16_t caid, uint16_t capid) {
     int i;
 
-    for (i = 0; i < len; i += es_len) // reading program info
-    {
-        es_len = es[i + 1] + 2;
-        caid = es[i + 2] * 256 + es[i + 3];
-        capid = (es[i + 4] & 0x1F) * 256 + es[i + 5];
-        if (caid == ecaid && capid == ecapid)
+    for (i = 0; i < pmt->caids; i++) {
+        if (caid == pmt->caid[i] && capid == pmt->capid[i])
             return 1;
     }
     return 0;
@@ -1547,7 +1544,21 @@ int is_ac3_es(unsigned char *es, int len) {
     return isAC3;
 }
 
-void find_pi(SPMT *pmt, unsigned char *es, int len) {
+void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid) {
+    if (!pmt_caid_exist(pmt, caid, capid)) {
+        LOG("PMT %d PI pos %d caid %04X => pid %04X (%d), index %d", pmt->id,
+            pmt->caids + 1, caid, capid, capid, pmt->caids);
+        if (pmt->caids < MAX_CAID - 1) {
+            pmt->caid[pmt->caids] = caid;
+            pmt->capid[pmt->caids++] = capid;
+        } else
+            LOG("Too many CAIDs for pmt %d, discarding %04X", pmt->id, caid);
+    } else
+        LOGM("%s: CAID %d CAPID %d already exists in PMT %d", __FUNCTION__,
+             caid, capid, pmt->id);
+}
+
+void pmt_add_caids(SPMT *pmt, unsigned char *es, int len) {
 
     int es_len, caid, capid;
     int i;
@@ -1559,22 +1570,7 @@ void find_pi(SPMT *pmt, unsigned char *es, int len) {
             continue;
         caid = es[i + 2] * 256 + es[i + 3];
         capid = (es[i + 4] & 0x1F) * 256 + es[i + 5];
-        if (!pi_exist(capid, caid, pmt->pi, pmt->pi_len)) {
-            if (pmt->pi_len + es_len > sizeof(pmt->pi) - 2) {
-                LOG("PI is too small %zd", sizeof(pmt->pi));
-                return;
-            }
-            LOG("PMT %d PI pos %d caid %04X => pid %04X (%d), index %d", pmt->id, pmt->pi_len,
-                caid, capid, capid, pmt->caids);
-            memcpy(pmt->pi + pmt->pi_len, es + i, es_len);
-            pmt->pi_len += es_len;
-            if (pmt->caids < MAX_CAID - 1) {
-                pmt->caid[pmt->caids] = caid;
-                pmt->capid[pmt->caids++] = capid;
-            } else
-                LOG("Too many CAIDs for pmt %d, discarding %04X", pmt->id,
-                    caid);
-        }
+        pmt_add_caid(pmt, caid, capid);
     }
     return;
 }
@@ -1629,7 +1625,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
 
     if (pmt->version == ver) {
 #ifndef DISABLE_TABLES
-        if (ad && pmt->pi_len && pmt->state && ad->ca_mask &&
+        if (ad && pmt->caids && pmt->state && ad->ca_mask &&
             pmt->master_pmt == pmt->id)
             send_pmt_to_cas(ad, pmt);
 #endif
@@ -1649,11 +1645,9 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         return 0;
     }
 
-    memset(pmt->pi, 0, sizeof(pmt->pi));
     memset(pmt->pmt, 0, sizeof(pmt->pmt));
     memcpy(pmt->pmt, b, len);
     pmt->pmt_len = len;
-    pmt->pi_len = 0;
 
     if (!(p = find_pid(ad->id, pid)))
         return -1;
@@ -1669,11 +1663,12 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     pmt->version = ver;
 
     mutex_lock(&pmt->mutex);
-    LOG("new PMT %d AD %d, pid: %04X (%d), len %d, pi_len %d, ver %d, pcr %d, sid "
+    LOG("new PMT %d AD %d, pid: %04X (%d), len %d, pi_len %d, ver %d, pcr %d, "
+        "sid "
         "%04X "
         "(%d) %s %s",
-        pmt->id, ad->id, pid, pid, pmt_len, pi_len, ver, pcr_pid, pmt->sid, pmt->sid,
-        pmt->name[0] ? "channel:" : "", pmt->name);
+        pmt->id, ad->id, pid, pid, pmt_len, pi_len, ver, pcr_pid, pmt->sid,
+        pmt->sid, pmt->name[0] ? "channel:" : "", pmt->name);
     pi = b + 12;
     pmt_b = pi + pi_len;
 
@@ -1684,7 +1679,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     pmt->stream_pids = 0;
 
     if (pi_len > 0)
-        find_pi(pmt, pi, pi_len);
+        pmt_add_caids(pmt, pi, pi_len);
 
     es_len = 0;
     pmt->active_pids = 0;
@@ -1710,9 +1705,9 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
 
         LOG("PMT pid %d - stream pid %04X (%d), type %d%s, es_len %d, pos "
             "%d, "
-            "pi_len %d",
+            "caids %d",
             pid, spid, spid, stype, isAC3 ? " [AC3]" : "", es_len, i,
-            pmt->pi_len);
+            pmt->caids);
 
         if ((es_len + i + 5 > pmt_len) || (es_len < 0)) {
             LOGM("pmt processing complete, es_len + i %d, len %d, es_len %d",
@@ -1729,7 +1724,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         if (pmt->first_active_pid < 0 && is_video)
             pmt->first_active_pid = spid;
 
-        find_pi(pmt, pmt_b + i + 5, es_len);
+        pmt_add_caids(pmt, pmt_b + i + 5, es_len);
 
         opmt = get_master_pmt_for_pid(ad->id, spid);
         if (opmt != -1 && opmt != pmt->master_pmt) {
@@ -1749,14 +1744,14 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         }
     }
     // Add the PCR pid if it's independent
-    if (pcr_pid > 0 && pcr_pid < 8191)
-    {
+    if (pcr_pid > 0 && pcr_pid < 8191) {
         if (pmt->stream_pids < MAX_PMT_PIDS - 1) {
             pmt->stream_pid[pmt->stream_pids].type = 0;
             pmt->stream_pid[pmt->stream_pids++].pid = pcr_pid;
             LOG("added independent PCR pid %d for pmt %d", pcr_pid, pmt->id);
         } else
-            LOG("Too many pids for pmt %d, discarding prc_pid %d", pmt->id, pcr_pid);
+            LOG("Too many pids for pmt %d, discarding prc_pid %d", pmt->id,
+                pcr_pid);
     }
 
     if (pmt->first_active_pid < 0)
@@ -1773,12 +1768,15 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         pmt->state = PMT_RUNNING;
         update_pids(ad->id);
     }
-    if (pmt->pi_len && pmt->master_pmt != pmt->id) {
-	find_pi(get_pmt(pmt->master_pmt), pmt->pi, pmt->pi_len);
-    } 
+    SPMT *master = get_pmt(pmt->master_pmt);
+    if (pmt->caids && master && master != pmt) {
+        int i;
+        for (i = 0; i < pmt->caids; i++)
+            pmt_add_caid(master, pmt->caid[i], pmt->capid[i]);
+    }
 
-    if ((pmt->pi_len > 0) && enabled_channels) // PMT contains CA descriptor
-                                               // and there are active pids
+    if ((pmt->caids > 0) && enabled_channels) // PMT contains CA descriptor
+                                              // and there are active pids
     {
 #ifndef DISABLE_TABLES
         if (pmt->sid > 0 && pmt->master_pmt == pmt->id)
@@ -1957,8 +1955,7 @@ void emulate_add_all_pids(adapter *ad) {
                 updated = 1;
             }
             if (!ad->drop_encrypted) {
-                LOG("%s: adding (enforced) pid 8191 (NULL) too",
-                    __FUNCTION__);
+                LOG("%s: adding (enforced) pid 8191 (NULL) too", __FUNCTION__);
                 mark_pid_add(p_all->sid[i], ad->id, 8191);
             }
         }
@@ -2069,21 +2066,36 @@ int pmt_tune(adapter *ad) {
     return 0;
 }
 
+int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf) {
+    int i, len = 0;
+    for (i = 0; i < pmt->caids; i++) {
+        buf[len] = 0x09;
+        buf[len + 1] = 0x04;
+        copy16(buf, len + 2, pmt->caid[i]);
+        copy16(buf, len + 4, pmt->capid[i]);
+        len += 6;
+        LOG("PMT %d added caid %04X, pid %04X, pos %d", pmt->id, pmt->caid[i],
+            pmt->capid[i], len);
+    }
+    return len;
+}
+
 int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id) {
     int i = 0, pos = 0;
-    for (i = 0; i < pmt->stream_pids && pos + 5 + pmt->pi_len < len; i++) {
+    for (i = 0; i < pmt->stream_pids; i++) {
         capmt[pos++] = pmt->stream_pid[i].type;
         copy16(capmt, pos, pmt->stream_pid[i].pid);
         pos += 2;
-        copy16(capmt, pos, pmt->pi_len + 1);
+        int pi_len_pos = pos, pi_len = 0;
         pos += 2;
 
         // append the stream descriptors
-        if (pmt->pi_len) {
+        if (pmt->caids) {
             capmt[pos++] = cmd_id;
-            memcpy(capmt + pos, pmt->pi, pmt->pi_len);
-            pos += pmt->pi_len;
+            pi_len = pmt_add_ca_descriptor(pmt, capmt + pos);
+            pos += pi_len;
         }
+        copy16(capmt, pi_len_pos, pi_len + 1);
     }
     return pos;
 }

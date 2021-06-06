@@ -117,8 +117,6 @@ typedef struct struct_pmt {
     int id;
     unsigned char pmt[MAX_PI_LEN];
     int pmt_len;
-    unsigned char pi[MAX_PI_LEN];
-    int pi_len;
     int blen;
     int ca_mask, disabled_ca_mask;
     SPMT_batch *batch;
@@ -223,5 +221,6 @@ void init_algo();
 void update_cw(SPMT *pmt);
 int pmt_decrypt_stream(adapter *ad);
 int wait_pusi(adapter *ad, int len);
+int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf);
 #endif
 #endif

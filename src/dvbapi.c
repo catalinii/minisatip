@@ -454,8 +454,7 @@ int dvbapi_send_pmt(SKey *k, int cmd_id) {
     copy16(buf, 23, 0x8701); // ca_device_descriptor (caX)
     buf[25] = demux;
 
-    memcpy(buf + 26, k->pi, k->pi_len); // CA description
-    len = 26 + k->pi_len;
+    len = 26 + pmt_add_ca_descriptor(pmt, buf + 26); // CA description
 
     // Pids associated with the PMT
     copy16(buf, 10, len - 12);
@@ -756,15 +755,15 @@ int keys_del(int i) {
         }
     if (!ek) {
         buf[7] = 0xFF;
-	msg = "ALL";
+        msg = "ALL";
         TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
     } else if (!ed) {
         buf[7] = k->demux_index;
-	msg = "DEMUX";
+        msg = "DEMUX";
         TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
     } else { // only local socket mode where multiple channels are connected to
              // the same demux
-	msg = "PMT";
+        msg = "PMT";
         dvbapi_send_pmt(k, CMD_ID_NOT_SELECTED);
     }
 
@@ -785,8 +784,8 @@ int keys_del(int i) {
     k->hops = k->caid = k->info_pid = k->prid = k->ecmtime = 0;
     dvbapi_last_close = getTick();
 
-    LOG("Stopped key %d, active keys %d, sock %d, pmt pid %d, sid %04X, op %s", i, ek,
-        sock, pmt_pid, sid, msg);
+    LOG("Stopped key %d, active keys %d, sock %d, pmt pid %d, sid %04X, op %s",
+        i, ek, sock, pmt_pid, sid, msg);
 
     mutex_destroy(&k->mutex);
 
@@ -813,8 +812,6 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt) {
         LOG_AND_RETURN(1, "Could not add key for pmt %d", pmt->id);
     mutex_lock(&k->mutex);
     pmt->opaque = k;
-    k->pi_len = pmt->pi_len;
-    k->pi = pmt->pi;
     k->sid = pmt->sid;
     k->adapter = ad->id;
     k->pmt_pid = pid;
