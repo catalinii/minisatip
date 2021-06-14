@@ -331,15 +331,14 @@ int is_pmt_running(SPMT *pmt) {
     ddci_mapping_table_t *m =
         get_pid_mapping_allddci(pmt->adapter, pmt->stream_pid[0].pid);
     if (!m)
-        return 0;
+        return -1;
     return m->ddci;
 }
 
 // determine if the pids from this PMT needs to be added to the virtual adapter,
 // also adds the PIDs to the translation table
 int ddci_process_pmt(adapter *ad, SPMT *pmt) {
-    int i, ddid = 0;
-    int add_pmt = 0;
+    int i, ddid = -1;
     int rv = TABLES_RESULT_ERROR_NORETRY;
     Sddci_channel *channel;
     ddci_device_t *d;
@@ -365,13 +364,10 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
         return TABLES_RESULT_OK;
     }
 
-    if ((ddid = is_pmt_running(pmt)))
-        LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
-                       "%s: pmt %d (master %d) already running on DDCI %d",
-                       __FUNCTION__, pmt->id, pmt->master_pmt, ddci);
+    ddid = is_pmt_running(pmt);
 
-    LOG("%s: adapter %d, pmt %d, pid %d, sid %d, name: %s", __FUNCTION__,
-        ad->id, pmt->id, pmt->pid, pmt->sid, pmt->name);
+    LOG("%s: adapter %d, pmt %d, pid %d, sid %d, ddid %d, name: %s",
+        __FUNCTION__, ad->id, pmt->id, pmt->pid, pmt->sid, ddid, pmt->name);
 
     channel = getItem(&channels, pmt->sid);
     if (!channel) {
@@ -391,7 +387,8 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
                            "Could not allocate channel");
     }
 
-    ddid = find_ddci_for_pmt(channel, pmt);
+    if (ddid == -1)
+        ddid = find_ddci_for_pmt(channel, pmt);
     if (ddid == -TABLES_RESULT_ERROR_RETRY)
         return -ddid;
 
@@ -402,20 +399,27 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     }
 
     mutex_lock(&d->mutex);
+    int pos = -1;
 
     for (i = 0; i < d->max_channels; i++)
-        if (d->pmt[i] == -1) {
-            d->pmt[i] = pmt->id;
-            d->pmt_ver[i] = (d->pmt_ver[i] + 1) & 0xF;
-            add_pmt = 1;
-            break;
-        }
+        if (d->pmt[i] == pmt->id)
+            pos = i;
 
-    if (!add_pmt) {
+    if (pos == -1) {
+        for (i = 0; i < d->max_channels; i++)
+            if (d->pmt[i] == -1)
+                pos = i;
+    }
+
+    if (pos == -1) {
         LOG("No free slot found for pmt %d on DDCI %d", pmt->id, d->id);
         mutex_unlock(&d->mutex);
         return TABLES_RESULT_ERROR_RETRY;
     }
+
+    d->pmt[pos] = pmt->id;
+    d->pmt_ver[pos] = (d->pmt_ver[pos] + 1) & 0xF;
+
     d->ver = (d->ver + 1) & 0xF;
     if (!d->channels++) // for first PMT set transponder ID and add CAT
     {
@@ -698,61 +702,73 @@ int ddci_create_epg(ddci_device_t *d, int sid, uint8_t *eit, int version) {
     return 188;
 }
 
-int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *clean, int ver) {
-    int len = pmt->pmt_len;
-    int pid = pmt->pid, pi_len, pmt_len;
-    int es_len, i, spid, dpid;
-    uint8_t *b, *pi, *pmt_b;
-    clean[0] = 0;
-    b = clean + 1;
-    memcpy(b, pmt->pmt, len);
-    pi_len = ((b[10] & 0xF) << 8) + b[11];
-    pmt_len = pmt->pmt_len - 4;
+int safe_get_pid_mapping(ddci_device_t *d, int aid, int pid) {
+    ddci_mapping_table_t *m = get_pid_mapping(d, aid, pid);
+    if (m)
+        return m->ddci_pid;
+    return pid;
+}
 
-    b[5] = (0xC0 & b[5]) | (ver << 1);
-    pi = b + 12;
-    pmt_b = pi + pi_len;
+int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
+                    int ver) {
+    int pid = pmt->pid, pi_len = 0, i;
+    uint8_t *b = new_pmt, *start_pmt, *start_pi_len;
+    memset(new_pmt, 0, pmt_size);
 
-    if (pi_len > pmt_len)
-        pi_len = 0;
+    *b++ = 0;
+    *b++ = 0x02;
+    *b++ = 0; // len
+    *b++ = 0;
+    start_pmt = b;
+    copy16(b, 0, pmt->sid);
+    b += 2;
+    *b++ = (ver << 1);
+    *b++ = 0;    // section number
+    *b++ = 0;    // last section number
+    *b++ = 0xFF; // PCR PID
+    *b++ = 0xFF;
 
-    if (pi_len > 0)
-        ddci_replace_pi(d, pmt->adapter, pi, pi_len);
+    start_pi_len = b;
 
-    LOGM("%s: PMT %d AD %d, pid: %04X (%d), ver %d, pmt_len %d, pi_len %d, "
-         "total_len %d, sid %04X (%d) %s %s",
-         __FUNCTION__, pmt->id, pmt->adapter, pid, pid, ver, pmt_len, pi_len,
-         pmt_len - pi_len - 13, pmt->sid, pmt->sid,
+    *b++ = 0; // PI LEN
+    *b++ = 0;
+
+    LOGM("%s: PMT %d AD %d, pid: %04X (%d), ver %d, sid %04X (%d) %s %s",
+         __FUNCTION__, pmt->id, pmt->adapter, pid, pid, ver, pmt->sid, pmt->sid,
          pmt->name[0] ? "channel:" : "", pmt->name);
 
-    es_len = 0;
-    for (i = 0; i < pmt_len - pi_len - 13; i += (es_len) + 5) // reading streams
-    {
-        es_len = (pmt_b[i + 3] & 0xF) * 256 + pmt_b[i + 4];
-        spid = (pmt_b[i + 1] & 0x1F) * 256 + pmt_b[i + 2];
-        dpid = spid;
-        ddci_mapping_table_t *m = get_pid_mapping(d, pmt->adapter, spid);
-        if (m)
-            dpid = m->ddci_pid;
-
-        pmt_b[i + 1] &= 0xE0; //~0x1F
-        pmt_b[i + 1] |= (dpid >> 8);
-        pmt_b[i + 2] = dpid & 0xFF;
-
-        LOGM("DDCI: PMT pid %d - stream pid %d -> %d es_len %d, pos %d", pid,
-             spid, dpid, es_len, i);
-        if ((es_len + i + 5 > pmt_len) || (es_len < 0)) {
-            LOGM("pmt processing complete, es_len + i %d, len %d, es_len %d",
-                 es_len + i, pmt_len, es_len);
-            break;
-        }
-
-        ddci_replace_pi(d, pmt->adapter, pmt_b + i + 5, es_len);
+    // Add CA IDs and CA Pids
+    for (i = 0; i < pmt->caids; i++) {
+        *b++ = 0x09;
+        *b++ = 0x04;
+        copy16(b, 0, pmt->caid[i]);
+        copy16(b, 2, safe_get_pid_mapping(d, pmt->adapter, pmt->capid[i]));
+        pi_len += 6;
+        b += 4;
+        LOGM("%s: pmt %d added caid %04X, pid %04X", __FUNCTION__, pmt->id,
+             pmt->caid[i], pmt->capid[i]);
     }
+    copy16(start_pi_len, 0, pi_len);
 
-    uint32_t crc = crc_32(b, pmt_len);
-    copy32(b, pmt_len, crc);
-    return pmt_len + 4 + 1;
+    // Add Stream pids
+    // Add CA IDs and CA Pids
+    for (i = 0; i < pmt->stream_pids; i++) {
+        *b++ = pmt->stream_pid[i].type;
+        copy16(b, 0,
+               safe_get_pid_mapping(d, pmt->adapter, pmt->stream_pid[i].pid));
+        b += 2;
+        *b++ = 0;
+        *b++ = 0;
+        LOGM("%s: pmt %d added pid %04X, type %02X", __FUNCTION__, pmt->id,
+             pmt->stream_pid[i].pid, pmt->stream_pid[i].type);
+    }
+    // set the length (b + 4 bytes from crc)
+    copy16(start_pmt, -2, 4 + b - start_pmt);
+
+    uint32_t crc = crc_32(new_pmt + 1, b - new_pmt - 1);
+    copy32(b, 0, crc);
+    b += 4;
+    return b - new_pmt;
 }
 
 int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len) {
@@ -770,7 +786,8 @@ int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len) {
         SPMT *pmt;
         for (i = 0; i < MAX_CHANNELS_ON_CI; i++) {
             if ((pmt = get_pmt(d->pmt[i]))) {
-                psi_len = ddci_create_pmt(d, pmt, psi, d->pmt_ver[i]);
+                psi_len =
+                    ddci_create_pmt(d, pmt, psi, sizeof(psi), d->pmt_ver[i]);
                 ddci_mapping_table_t *m =
                     get_pid_mapping(d, pmt->adapter, pmt->pid);
                 if (m)
