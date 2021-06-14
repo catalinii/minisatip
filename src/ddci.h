@@ -67,7 +67,8 @@ int push_ts_to_ddci_buffer(ddci_device_t *d, unsigned char *b, int rlen);
 void set_pid_ts(unsigned char *b, int pid);
 int ddci_process_ts(adapter *ad, ddci_device_t *d);
 int ddci_create_pat(ddci_device_t *d, uint8_t *b);
-int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *clean, int ver);
+int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
+                    int ver);
 ddci_mapping_table_t *get_pid_mapping_allddci(int ad, int pid);
 void save_channels(SHashTable *ch, char *file);
 void load_channels(SHashTable *ch, char *file);

@@ -696,7 +696,8 @@ int get_free_adapter(transponder *tp) {
             break;
         }
 
-    if ((fe > 0) && (fe <= ARRAY_SIZE(fe_map)) && (fe_map[fe - 1] >= 0)) {
+    if ((fe > 0) && (fe <= ARRAY_SIZE(fe_map)) && (fe_map[fe - 1] >= 0) &&
+        (fe_map[fe - 1] < MAX_ADAPTERS)) {
         fe = fe_map[fe - 1];
         ad = a[fe];
     } else
@@ -753,8 +754,7 @@ int get_free_adapter(transponder *tp) {
         // first free slave adapter that has the same msys
         if ((ad = get_adapter_nw(i)) && ad->sid_cnt == 0 &&
             delsys_match(ad, msys) && compare_slave_parameters(ad, tp) &&
-            ad->sources_pos[tp->diseqc])
-        {
+            ad->sources_pos[tp->diseqc]) {
             LOGM("get free adapter found slave adapter %d", i);
             return i;
         }

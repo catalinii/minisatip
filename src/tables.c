@@ -133,7 +133,7 @@ void add_caid_mask(int ica, int aid, int caid, int mask) {
         LOG("%s: No adapter %d found ", __FUNCTION__, aid);
         return;
     }
-    if (ca[ica].enabled) {
+    if (ca[ica].enabled && ca[ica].ad_info[aid].caids < MAX_CAID_LEN) {
         for (i = 0; i < ca[ica].ad_info[aid].caids; i++)
             if (ca[ica].ad_info[aid].caid[i] == caid &&
                 ca[ica].ad_info[aid].mask[i] == mask)
@@ -144,7 +144,8 @@ void add_caid_mask(int ica, int aid, int caid, int mask) {
         LOG("CA %d can handle CAID %04X mask %04X on adapter %d at position %d",
             ica, caid, mask, ad->id, i);
     } else
-        LOG("CA not enabled %d", ica);
+        LOG("CA not enabled %d or too many added CAIDs %d", ica,
+            ca[ica].ad_info[aid].caids);
 }
 
 int tables_init_ca_for_device(int i, adapter *ad) {
@@ -247,9 +248,7 @@ int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt) {
         disable_cw(pmt->id);
         rv += (1 - result);
         LOGM("In processing PMT %d, ca %d, CA matched %d, ca_pmt_add "
-             "returned "
-             "%d, "
-             "new ca_mask %d new disabled_ca_mask %d",
+             "returned %d, new ca_mask %d new disabled_ca_mask %d",
              pmt->id, i, send, result, pmt->ca_mask, pmt->disabled_ca_mask);
     }
     return rv;
@@ -265,9 +264,14 @@ int send_pmt_to_cas(adapter *ad, SPMT *pmt) {
         return 0;
     }
 
+    LOG("Sending PMT %d to all CAs: ad_ca_mask %X, "
+        "pmt_ca_mask %X, disabled_ca_mask %X",
+        pmt->id, ad ? ad->ca_mask : -2, pmt->ca_mask, pmt->disabled_ca_mask);
     for (i = 0; i < nca; i++)
         if (ca[i].enabled)
             rv += send_pmt_to_ca(i, ad, pmt);
+    if (pmt->state == PMT_STARTING)
+        pmt->state = PMT_RUNNING;
     return rv;
 }
 

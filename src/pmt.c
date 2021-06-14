@@ -1070,6 +1070,7 @@ int pmt_add(int i, int adapter, int sid, int pmt_pid) {
     pmt->ca_mask = pmt->disabled_ca_mask = 0;
     pmt->name[0] = pmt->provider[0] = 0;
     pmt->clean_pos = pmt->clean_cc = 0;
+    pmt->caids = 0;
 
     pmt->active_pids = 0;
     memset(pmt->active_pid, 0, sizeof(pmt->active_pids));
@@ -1551,6 +1552,8 @@ void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid) {
         if (pmt->caids < MAX_CAID - 1) {
             pmt->caid[pmt->caids] = caid;
             pmt->capid[pmt->caids++] = capid;
+            pmt->ca_mask = 0; // force sending the PMT to all CAs
+            pmt->disabled_ca_mask = 0;
         } else
             LOG("Too many CAIDs for pmt %d, discarding %04X", pmt->id, caid);
     } else
@@ -1670,21 +1673,17 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         pmt->id, ad->id, pid, pid, pmt_len, pi_len, ver, pcr_pid, pmt->sid,
         pmt->sid, pmt->name[0] ? "channel:" : "", pmt->name);
     pi = b + 12;
-    pmt_b = pi + pi_len;
+    pmt_b = b + 3;
 
-    if (pi_len > pmt_len)
-        pi_len = 0;
-
-    pmt->caids = 0;
     pmt->stream_pids = 0;
 
-    if (pi_len > 0)
+    if (pi_len > 0 && pi_len < pmt_len)
         pmt_add_caids(pmt, pi, pi_len);
 
     es_len = 0;
     pmt->active_pids = 0;
     pmt->active = 1;
-    for (i = 0; i < pmt_len - pi_len - 12; i += (es_len) + 5) // reading streams
+    for (i = 9 + pi_len; i < pmt_len - 4; i += (es_len) + 5) // reading streams
     {
         es_len = (pmt_b[i + 3] & 0xF) * 256 + pmt_b[i + 4];
         stype = pmt_b[i];
@@ -1729,7 +1728,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         opmt = get_master_pmt_for_pid(ad->id, spid);
         if (opmt != -1 && opmt != pmt->master_pmt) {
             pmt->master_pmt = opmt;
-            LOG("master pmt %d set for pmt %d", opmt, pmt->id);
+            LOG("PMT %d, master pmt set to %d", pmt->id, opmt);
         }
 
         if (pmt->active_pids < MAX_ACTIVE_PIDS - 1)
@@ -1738,6 +1737,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         if ((cp = find_pid(ad->id,
                            spid))) // the pid is already requested by the client
         {
+            LOGM("PMT %d found enabled pid %d", pmt->id, spid);
             enabled_channels++;
             pmt->state = PMT_RUNNING;
             cp->pmt = pmt->master_pmt;
@@ -1779,10 +1779,8 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
                                               // and there are active pids
     {
 #ifndef DISABLE_TABLES
-        if (pmt->sid > 0 && pmt->master_pmt == pmt->id)
-            start_pmt(pmt, ad);
-        else
-            LOG("PMT %d, SID is 0, not running ca_action", pid);
+        if (pmt->sid > 0 && master)
+            start_pmt(master, ad);
 #endif
     }
 
@@ -1900,12 +1898,10 @@ void start_pmt(SPMT *pmt, adapter *ad) {
     // give 2s to initialize decoding or override for each CA
     pmt->encrypted = 0;
     pmt->start_time = getTick();
-
+    // do not call send_pmt_to_cas to allow all the slave PMTs to be read
+    // when the master PMT is being sent next time, it will actually making it
+    // to all CAs
     set_filter_flags(pmt->filter, FILTER_ADD_REMOVE | FILTER_CRC);
-#ifndef DISABLE_TABLES
-    send_pmt_to_cas(ad, pmt);
-#endif
-    pmt->state = PMT_RUNNING;
 }
 
 void stop_pmt(SPMT *pmt, adapter *ad) {
@@ -2132,6 +2128,15 @@ void free_all_pmts(void) {
     mutex_destroy(&pmts_mutex);
 }
 
+void free_filters() {
+    int i;
+    for (i = 0; i < MAX_FILTERS; i++)
+        if (filters[i]) {
+            mutex_destroy(&filters[i]->mutex);
+            free(filters[i]);
+        }
+}
+
 int pmt_init() {
     mutex_init(&pmts_mutex);
     mutex_init(&cws_mutex);
@@ -2146,6 +2151,8 @@ int pmt_destroy() {
 #ifndef DISABLE_TABLES
     tables_destroy();
 #endif
+    free_all_pmts();
+    free_filters();
     mutex_destroy(&cws_mutex);
     mutex_destroy(&pmts_mutex);
     return 0;

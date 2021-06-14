@@ -46,6 +46,14 @@
 
 #ifndef DISABLE_LINUXDVB
 
+// satip-axe support DVB-S2X: https://github.com/perexg/satip-axe/issues/126
+#ifndef DTV_SCRAMBLING_SEQUENCE_INDEX
+#define DTV_SCRAMBLING_SEQUENCE_INDEX 70
+#endif
+#ifndef DTV_STREAM_ID
+#define DTV_STREAM_ID 42
+#endif
+
 void get_signal(adapter *ad, int *status, int *ber, int *strength, int *snr);
 int send_jess(adapter *ad, int fd, int freq, int pos, int pol, int hiband,
               diseqc *d);
@@ -524,6 +532,7 @@ int axe_tune(int aid, transponder *tp) {
     adapter *ad = get_adapter(aid);
     ssize_t drv;
     char buf[1316];
+    char plp_desc[1024];
 
     int64_t bclear, bpol;
     int iProp = 0;
@@ -566,6 +575,8 @@ int axe_tune(int aid, transponder *tp) {
     switch (tp->sys) {
     case SYS_DVBS:
     case SYS_DVBS2:
+        plp_desc[0] = 0;
+        int len = 0;
 
         bpol = getTick();
         freq = axe_setup_switch(ad);
@@ -574,19 +585,18 @@ int axe_tune(int aid, transponder *tp) {
 
         ADD_PROP(DTV_SYMBOL_RATE, tp->sr)
         ADD_PROP(DTV_INNER_FEC, tp->fec)
-#if DVBAPIVERSION >= 0x0502
-        if (tp->plp_isi >= 0)
+        if (tp->plp_isi >= 0) {
             ADD_PROP(DTV_STREAM_ID, tp->plp_isi & 0xFF)
-#endif
-#if DVBAPIVERSION >= 0x050b /* 5.11 */
+            strcatf(plp_desc, len, "stream_id = %d", tp->plp_isi & 0xFF);
+        }
         ADD_PROP(DTV_SCRAMBLING_SEQUENCE_INDEX, pls_scrambling_index(tp))
-#endif
+        strcatf(plp_desc, len, "sequence_index = %d", pls_scrambling_index(tp));
 
         LOG("tuning to %d(%d) pol: %s (%d) sr:%d fec:%s delsys:%s mod:%s "
-            "rolloff:%s pilot:%s, ts clear=%jd, ts pol=%jd",
+            "rolloff:%s pilot:%s, ts clear=%jd, ts pol=%jd %s",
             tp->freq, freq, get_pol(tp->pol), tp->pol, tp->sr, fe_fec[tp->fec],
             fe_delsys[tp->sys], fe_modulation[tp->mtype], "auto", "auto",
-            bclear, bpol)
+            bclear, bpol, plp_desc)
         break;
 
     case SYS_DVBT:
