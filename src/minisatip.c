@@ -30,6 +30,7 @@
 #include <getopt.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <net/if.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -70,6 +71,8 @@ int rtsp, http, si, si1, ssdp1;
 #define RRTP_OPT 'r'
 #define DISABLEDVB_OPT 'N'
 #define DISABLESSDP_OPT 'G'
+#define BIND_OPT 'V'
+#define BIND_DEV_OPT 'J'
 #define HTTPSERVER_OPT 'w'
 #define HTTPPORT_OPT 'x'
 #define LOG_OPT 'l'
@@ -127,6 +130,8 @@ static const struct option long_options[] = {
     {"adapter-timeout", required_argument, NULL, ADAPTERTIMEOUT_OPT},
     {"app-buffer", required_argument, NULL, APPBUFFER_OPT},
     {"buffer", required_argument, NULL, DVRBUFFER_OPT},
+    {"bind", required_argument, NULL, BIND_OPT},
+    {"bind-dev", required_argument, NULL, BIND_DEV_OPT},
     {"clean-psi", no_argument, NULL, CLEANPSI_OPT},
     {"delsys", required_argument, NULL, DELSYS_OPT},
     {"debug", required_argument, NULL, DEBUG_OPT},
@@ -496,6 +501,9 @@ Help\n\
 	* 1 - use demuxX device \n\
 	* 2 - use dvrX device and additionally capture PSI data from demuxX device \n\
 	* 3 - use demuxX device and additionally capture PSI data from demuxX device \n\
+* -V --bind address: address for listening (all services)\n\
+* -J --bind-dev device: device name for binding (all services)\n\
+        * beware that only works with 1 device. loopback may not work!\n\
 \n "
 #ifdef AXE
         "\
@@ -675,6 +683,16 @@ void set_options(int argc, char *argv[]) {
         case HTTPSERVER_OPT: {
             //                              int i=0;
             opts.http_host = optarg;
+            break;
+        }
+
+        case BIND_OPT: {
+            opts.bind = optarg;
+            break;
+        }
+
+        case BIND_DEV_OPT: {
+            opts.bind_dev = optarg;
             break;
         }
 
@@ -1796,15 +1814,25 @@ int main(int argc, char *argv[]) {
     }
 
     readBootID();
-    if ((rtsp = tcp_listen(NULL, opts.rtsp_port, opts.use_ipv4_only)) < 1)
+    if ((rtsp = tcp_listen(opts.bind, opts.rtsp_port, opts.use_ipv4_only)) < 1)
         FAIL("RTSP: Could not listen on port %d", opts.rtsp_port);
-    if ((http = tcp_listen(NULL, opts.http_port, opts.use_ipv4_only)) < 1)
+    if ((http = tcp_listen(opts.bind, opts.http_port, opts.use_ipv4_only)) < 1)
         FAIL("Could not listen on http port %d", opts.http_port);
     if (!opts.disable_ssdp) {
-        if ((ssdp = udp_bind(NULL, 1900, opts.use_ipv4_only)) < 1)
+        if ((ssdp = udp_bind(opts.bind, 1900, opts.use_ipv4_only)) < 1)
             FAIL("SSDP: Could not bind on udp port 1900");
         if ((ssdp1 = udp_bind(opts.disc_host, 1900, 1)) < 1)
             FAIL("SSDP: Could not bind on %s udp port 1900", opts.disc_host);
+	if (opts.bind_dev) {
+		struct ifreq ifr;
+		memset(&ifr, 0, sizeof(ifr));
+		snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), opts.bind_dev);
+  	    	if (setsockopt(ssdp, SOL_SOCKET, SO_BINDTODEVICE, (void *)&ifr, sizeof(ifr)) < 0)
+			LOG("SSDP: Failed to set SO_BINDTODEVICE to %s", opts.bind_dev);
+  	    	if (setsockopt(ssdp1, SOL_SOCKET, SO_BINDTODEVICE, (void *)&ifr, sizeof(ifr)) < 0)
+			LOG("SSDP: Failed to set SO_BINDTODEVICE to %s", opts.bind_dev);
+		LOG("SSDP: Bound to device %s", opts.bind_dev);
+	}
 
         si = sockets_add(ssdp, NULL, -1, TYPE_UDP, (socket_action)ssdp_reply,
                          (socket_action)ssdp_byebye,

@@ -56,6 +56,8 @@ struct struct_opts {
     char *name_app;
     char *http_host; // http-server host
     char *rtsp_host; // rtsp-server host
+    char *bind; // bind address
+    char *bind_dev; // bind device
     char *datetime_compile;
     time_t start_time;
     char *datetime_start;
