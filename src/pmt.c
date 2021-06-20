@@ -2123,6 +2123,7 @@ void free_all_pmts(void) {
             mutex_destroy(&pmts[i]->mutex);
             free(pmts[i]->batch);
             free(pmts[i]);
+	    pmts[i] = NULL;
         }
     }
     mutex_destroy(&pmts_mutex);

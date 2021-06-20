@@ -48,7 +48,7 @@
 #define TCP_DATA_MAX (TCP_DATA_SIZE * 8)
 #define MAKE_ITEM(a, b) ((a << 16) | (b))
 
-#if defined(__APPLE__) || defined(AXE)
+#if defined(__APPLE__) || defined(__SH4__)
 #define MAX_RTP_MSG 1   // read 1 UDP datagrams at one time (no recvmmsg() support!)
 int recvmmsg0(int sockfd, struct mmsghdr *msgvec, unsigned int vlen) {
     if (vlen < 1)
