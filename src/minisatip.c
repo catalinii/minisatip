@@ -1067,7 +1067,7 @@ void set_options(int argc, char *argv[]) {
     lip = getlocalip();
     if (!opts.http_host) {
         opts.http_host = (char *)malloc1(MAX_HOST);
-        sprintf(opts.http_host, "%s:%u", lip, opts.http_port);
+        sprintf(opts.http_host, "%s:%d", lip, opts.http_port);
     }
 
     opts.rtsp_host = (char *)malloc1(MAX_HOST);
