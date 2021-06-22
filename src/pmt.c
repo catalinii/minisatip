@@ -854,7 +854,7 @@ int set_pmt_encrypted(SPMT *pmt, int status) {
     if (getTick() - pmt->start_time < 500)
         return 0;
 
-    LOGM("updating status %d, time since start %jd grace_time %d", status,
+    LOGM("updating status %d, time since start %jd grace_time %ld", status,
          getTick() - pmt->start_time, pmt->grace_time);
 
     pmt->grace_time = 0;
