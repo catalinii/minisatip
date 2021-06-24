@@ -36,6 +36,7 @@ After=network-online.target
 #Group=minisatip
 WorkingDirectory=/var/lib/minisatip
 Type=simple
+ExecStartPre=/usr/bin/sleep 30
 EnvironmentFile=-/etc/minisatip.conf
 ExecStart=/usr/bin/minisatip -f $SERVER_ARGS
 
