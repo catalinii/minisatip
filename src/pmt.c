@@ -686,8 +686,8 @@ void update_cw(SPMT *pmt) {
     for (i = 0; i < ncws; i++)
         if (cws[i] && cws[i]->enabled && pmt->parity == cws[i]->parity &&
             cws[i]->pmt == pmt->id) {
-            if (ctime > cws[i]->expiry)
-                continue;
+            if (ctime > cws[i]->expiry && (!old_cw || (old_cw && old_cw->id != cws[i]->id)))
+                continue;  // Don't check old keys except if it's the previous one.
             if (len && !test_decrypt_packet(cws[i], start, len)) {
                 LOGM("correct CW found (len %d): %s", len,
                      cw_to_string(cws[i], buf));
