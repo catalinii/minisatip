@@ -473,13 +473,13 @@ int dvbapi_send_pmt(SKey *k, int cmd_id) {
     copy16(buf, 4, len - 6);
 
     buf[6] = listmgmt;
-    if (sock >= 0)
-        TEST_WRITE(write(sock, buf, len), len);
-    mutex_unlock(&keys_mutex);
-    LOG("Sending pmt %d to dvbapi server for pid %d, Channel ID %04X, key %d, "
-        "adapter %d, demux %d, using socket %d (%s)",
-        k->pmt_id, k->pmt_pid, k->sid, k->id, adapter, demux, sock,
-        listmgmt_str[listmgmt]);
+    if (sock > 0) {
+       LOG("Sending pmt %d to dvbapi server for pid %d, Channel ID %04X, key %d, "
+           "adapter %d, demux %d, using socket %d (%s)",
+           k->pmt_id, k->pmt_pid, k->sid, k->id, adapter, demux, sock,
+           listmgmt_str[listmgmt]);
+       TEST_WRITE(write(sock, buf, len), len);
+    }
     return 0;
 }
 
@@ -663,7 +663,8 @@ int send_ecm(int filter_id, unsigned char *b, int len, void *opaque) {
     buf[5] = filter;
     memcpy(buf + 6, b, len);
     //	hexdump("ecm: ", buf, len + 6);
-    TEST_WRITE(write(sock, buf, len + 6), len + 6);
+    if (sock > 0)
+      TEST_WRITE(write(sock, buf, len + 6), len + 6);
     return 0;
 }
 
@@ -756,11 +757,13 @@ int keys_del(int i) {
     if (!ek) {
         buf[7] = 0xFF;
         msg = "ALL";
-        TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
+        if (sock > 0)
+           TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
     } else if (!ed) {
         buf[7] = k->demux_index;
         msg = "DEMUX";
-        TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
+        if (sock > 0)
+           TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
     } else { // only local socket mode where multiple channels are connected to
              // the same demux
         msg = "PMT";
