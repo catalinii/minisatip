@@ -300,7 +300,7 @@ void free_hash(SHashTable *hash) {
     hash->size = 0;
     mutex_unlock(&hash->mutex);
     mutex_destroy(&hash->mutex);
-    memset(hash, 0, sizeof(SHashItem));
+    memset(hash, 0, sizeof(SHashTable));
     return;
 }
 
