@@ -1032,7 +1032,7 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
 
     LOG("PMT CA %d pmt %d pid %u (%s) ver %u sid %u (%d), "
         "enabled_pmts %d, "
-        "%s, PMTS to be send %d %d, pos",
+        "%s, PMTS to be send %d %d, pos %d",
         spmt->adapter, spmt->id, pid, spmt->name, ver, sid, capmt->sid,
         get_enabled_pmts_for_ca(d), listmgmt_str[listmgmt], capmt->pmt_id,
         capmt->other_id, capmt - d->capmt);

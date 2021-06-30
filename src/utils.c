@@ -298,8 +298,8 @@ void free_hash(SHashTable *hash) {
     free(items);
     hash->items = NULL;
     hash->size = 0;
-    mutex_unlock(&hash->mutex);
-    mutex_destroy(&hash->mutex);
+    //mutex_unlock(&hash->mutex);
+    mutex_destroy(&hash->mutex); // unlock and destroy mutex
     memset(hash, 0, sizeof(SHashTable));
     return;
 }

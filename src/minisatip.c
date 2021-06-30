@@ -1071,7 +1071,7 @@ void set_options(int argc, char *argv[]) {
     }
 
     opts.rtsp_host = (char *)malloc1(MAX_HOST);
-    sprintf(opts.rtsp_host, "%s:%u", lip, opts.rtsp_port);
+    sprintf(opts.rtsp_host, "%s:%d", lip, opts.rtsp_port);
 
     opts.datetime_compile = (char *)malloc1(64);
     sprintf(opts.datetime_compile, "%s | %s", __DATE__, __TIME__);

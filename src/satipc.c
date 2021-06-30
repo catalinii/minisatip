@@ -1369,7 +1369,6 @@ int satipc_commit(adapter *ad) {
             1; // ignore all the packets until we get 200 from the server
         sip->want_tune = 0;
         ad->err = 0;
-        ad->err = 0;
         if (!sip->setup_pids && !sip->sent_transport) {
             strcatf(url, len, "&pids=none");
             http_request(ad, url, NULL, 0);
