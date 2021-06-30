@@ -872,7 +872,6 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
     char rtp_buf[16 * (max_iov + 1)];
     int rtp_pos = 0;
     int iiov = 1;
-    int num_enabled_pids = 0;
     int last_rtp_header = 0;
     int64_t rtime = ad->rtime;
     int total_len = 0;
@@ -888,7 +887,6 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
             for (j = 0; j < MAX_STREAMS_PER_PID && p->sid[j] > -1; j++)
                 if (p->sid[j] == st_id) {
                     pids[p->pid] = 1;
-                    num_enabled_pids++;
                 }
         }
 
