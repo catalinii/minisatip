@@ -63,7 +63,7 @@ void ddci_init();
 int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
                           int force_add_pid);
 int push_ts_to_adapter(adapter *ad, unsigned char *b, int new_pid, int *ad_pos);
-int push_ts_to_ddci_buffer(ddci_device_t *d, unsigned char *b, int rlen);
+int push_ts_to_ddci_buffer(ddci_device_t *d, unsigned char *b, int len);
 void set_pid_ts(unsigned char *b, int pid);
 int ddci_process_ts(adapter *ad, ddci_device_t *d);
 int ddci_create_pat(ddci_device_t *d, uint8_t *b);
