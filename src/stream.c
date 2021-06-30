@@ -224,7 +224,7 @@ streams *setup_stream(char *str, sockets *s) {
 
     if (sid->adapter >= 0 &&
         !strncasecmp((const char *)s->buf, "SETUP", 5)) // SETUP after PLAY
-    {Variable 'num_enabled_pids' is modified but its new value is never used.
+    {
         int ad = sid->adapter;
         if (!strstr(tmp_str, "addpids") && !strstr(tmp_str, "delpids")) {
             close_adapter_for_stream(sid->sid, ad, 0);
@@ -862,7 +862,7 @@ int check_cc(adapter *ad) {
     return packet_no_sid;
 }
 
-int process_packets_for_stream(streams *sid, adapter *ad) {Variable 'num_enabled_pids' is modified but its new value is never used.
+int process_packets_for_stream(streams *sid, adapter *ad) {
     int i, j, st_id = sid->sid;
     SPid *p;
     uint8_t *b;
