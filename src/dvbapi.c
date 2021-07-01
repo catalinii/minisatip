@@ -473,6 +473,7 @@ int dvbapi_send_pmt(SKey *k, int cmd_id) {
     copy16(buf, 4, len - 6);
 
     buf[6] = listmgmt;
+    mutex_unlock(&keys_mutex);
     if (sock > 0) {
        LOG("Sending pmt %d to dvbapi server for pid %d, Channel ID %04X, key %d, "
            "adapter %d, demux %d, using socket %d (%s)",
