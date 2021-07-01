@@ -19,7 +19,7 @@ typedef struct ca_pmt {
 int ca_init(ca_device_t *d);
 void dvbca_init();
 int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
-                 int reason);
+                 int cmd_id);
 int is_ca_initializing(int i);
 void set_ca_adapter_pin(char *o);
 void set_ca_adapter_force_ci(char *o);
