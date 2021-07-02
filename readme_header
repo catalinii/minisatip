@@ -1,8 +1,7 @@
-<a href="https://scan.coverity.com/projects/catalinii-minisatip">
+<a href="https://scan.coverity.com/projects/minisatip2">
   <img alt="Coverity Scan Build Status"
-       src="https://scan.coverity.com/projects/18049/badge.svg"/>
+       src="https://scan.coverity.com/projects/23090/badge.svg"/>
 </a>
-<img alt="Build Status" src="https://travis-ci.org/catalinii/minisatip.svg?branch=master" />
 
 # Welcome to Minisatip
 
