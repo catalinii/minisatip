@@ -1501,7 +1501,8 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque) {
             else
                 LOG("could not add PMT pid %d sid %d (%X) for processing", pid,
                     sid, sid);
-            seen_pmts[pmt_id] = 1;
+	    if(pmt_id >= 0)
+            	seen_pmts[pmt_id] = 1;
         }
     }
 
