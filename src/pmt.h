@@ -18,7 +18,7 @@
 
 #define MAX_PMT 256
 #define MAX_CW 80
-#define MAX_CW_TIME 25000 // 25s
+#define MAX_CW_TIME 45000 // 45s
 #define MAX_BATCH_SIZE 128
 
 #define FILTER_SIZE 16 // based on DMX_FILTER_SIZE
