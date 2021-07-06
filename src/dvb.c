@@ -96,7 +96,7 @@ char *fe_gi[] = {"132",  "116",   "18",    "14",    " ", // auto
 char *fe_hierarchy[] = {"HIERARCHY_NONE", "HIERARCHY_1",    "HIERARCHY_2",
                         "HIERARCHY_4",    "HIERARCHY_AUTO", NULL};
 
-char *fe_specinv[] = {"off", "on", " ", // auto
+char *fe_specinv[] = {"0", "1", " ", // auto
                       NULL};
 
 char *fe_inversion[] = {"0", "1", " ", // auto
