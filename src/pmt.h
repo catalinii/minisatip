@@ -96,10 +96,21 @@ typedef struct struct_cw {
 
 } SCW;
 
-typedef struct struct_pmt_pid {
+typedef struct struct_stream_pid {
     int type;
     int pid;
-} SPMTPid;
+    int desc_len;
+    uint8_t desc[256];
+    char is_audio : 1;
+    char is_video : 1;
+} SStreamPid;
+
+typedef struct struct_pmt_ca {
+    int id;
+    int pid;
+    int private_data_len;
+    uint8_t private_data[256];
+} SPMTCA;
 
 typedef struct struct_pmt {
     char enabled;
@@ -108,11 +119,9 @@ typedef struct struct_pmt {
     int pid;
     int adapter;
     int version;
-    uint16_t caid[MAX_CAID], capid[MAX_CAID];
+    SPMTCA ca[MAX_CAID];
     uint16_t caids;
-    int active_pid[MAX_ACTIVE_PIDS];
-    int active_pids;
-    SPMTPid stream_pid[MAX_PMT_PIDS];
+    SStreamPid stream_pid[MAX_PMT_PIDS];
     int stream_pids;
     int id;
     unsigned char pmt[MAX_PI_LEN];

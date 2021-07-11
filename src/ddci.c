@@ -435,8 +435,8 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
                     0); // do not send the PMT pid to the DDCI device
 
     for (i = 0; i < pmt->caids; i++) {
-        LOGM("DD %d adding ECM pid %d", d->id, pmt->capid[i]);
-        add_pid_mapping_table(ad->id, pmt->capid[i], pmt->id, d, 1);
+        LOGM("DD %d adding ECM pid %d", d->id, pmt->ca[i].pid);
+        add_pid_mapping_table(ad->id, pmt->ca[i].pid, pmt->id, d, 1);
     }
 
     for (i = 0; i < pmt->stream_pids; i++) {
@@ -739,26 +739,30 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
 
     // Add CA IDs and CA Pids
     for (i = 0; i < pmt->caids; i++) {
+        int private_data_len = pmt->ca[i].private_data_len;
         *b++ = 0x09;
-        *b++ = 0x04;
-        copy16(b, 0, pmt->caid[i]);
-        copy16(b, 2, safe_get_pid_mapping(d, pmt->adapter, pmt->capid[i]));
-        pi_len += 6;
-        b += 4;
+        *b++ = 0x04 + private_data_len;
+        copy16(b, 0, pmt->ca[i].id);
+        copy16(b, 2, safe_get_pid_mapping(d, pmt->adapter, pmt->ca[i].pid));
+        memcpy(b + 4, pmt->ca[i].private_data, private_data_len);
+        pi_len += 6 + private_data_len;
+        b += 4 + private_data_len;
         LOGM("%s: pmt %d added caid %04X, pid %04X", __FUNCTION__, pmt->id,
-             pmt->caid[i], pmt->capid[i]);
+             pmt->ca[i].id, pmt->ca[i].pid);
     }
     copy16(start_pi_len, 0, pi_len);
 
     // Add Stream pids
     // Add CA IDs and CA Pids
     for (i = 0; i < pmt->stream_pids; i++) {
-        *b++ = pmt->stream_pid[i].type;
-        copy16(b, 0,
+        *b = pmt->stream_pid[i].type;
+        copy16(b, 1,
                safe_get_pid_mapping(d, pmt->adapter, pmt->stream_pid[i].pid));
-        b += 2;
-        *b++ = 0;
-        *b++ = 0;
+        int desc_len = pmt->stream_pid[i].desc_len;
+        copy16(b, 3, desc_len);
+        memcpy(b + 5, pmt->stream_pid[i].desc, desc_len);
+        b += desc_len + 5;
+
         LOGM("%s: pmt %d added pid %04X, type %02X", __FUNCTION__, pmt->id,
              pmt->stream_pid[i].pid, pmt->stream_pid[i].type);
     }

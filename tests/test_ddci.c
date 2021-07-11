@@ -85,10 +85,10 @@ void create_pmt(SPMT *pmt, int id, int ad, int sid, int pid1, int pid2,
     pmt->stream_pid[1].pid = pid2;
     pmt->stream_pid[0].type = 6;
     pmt->stream_pids = 2;
-    pmt->caid[0] = caid1;
-    pmt->capid[0] = caid1;
-    pmt->caid[1] = caid2;
-    pmt->capid[1] = caid2;
+    pmt->ca[0].id = caid1;
+    pmt->ca[0].pid = caid1;
+    pmt->ca[1].id = caid2;
+    pmt->ca[1].pid = caid2;
     pmt->caids = 2;
     pmts[id] = pmt;
     if (npmts <= id) {
@@ -219,8 +219,8 @@ int test_add_del_pmt() {
     int c = pmt2.caids++;
     pmt2.stream_pid[s].pid = 0xFF;
     pmt2.stream_pid[s].type = 2;
-    pmt2.caid[c] = 0x502;
-    pmt2.capid[c] = 0xFE;
+    pmt2.ca[c].id = 0x502;
+    pmt2.ca[c].pid = 0xFE;
 
     ASSERT(ddci_process_pmt(&ad, &pmt2) == TABLES_RESULT_OK,
            "DDCI matching DD 1 for adding again the PMT");
@@ -498,11 +498,20 @@ int test_create_pmt() {
     strcpy(pmt.name, "TEST CHANNEL HD");
     pmt.pmt_len = 0;
     pmt.caids = 1;
-    pmt.caid[0] = 0x100;
-    pmt.capid[0] = capid;
-    pmt.stream_pids = 1;
+    pmt.ca[0].id = 0x100;
+    pmt.ca[0].pid = capid;
+    pmt.ca[0].private_data_len = 2;
+    pmt.ca[0].private_data[0] = 1;
+    pmt.ca[0].private_data[1] = 2;
+    pmt.stream_pids = 2;
     pmt.stream_pid[0].type = 0x1B;
     pmt.stream_pid[0].pid = pid;
+    pmt.stream_pid[0].desc_len = 2;
+    pmt.stream_pid[0].desc[0] = 0x54;
+    pmt.stream_pid[0].desc[1] = 0;
+    pmt.stream_pid[1].type = 3;
+    pmt.stream_pid[1].pid = 0x55;
+
     psi_len = ddci_create_pmt(&d, &pmt, psi, sizeof(psi), 0);
     cc = 1;
     _hexdump("PACK: ", psi, psi_len);
@@ -513,7 +522,7 @@ int test_create_pmt() {
         LOG("Assemble packet failed");
         return 1;
     }
-    int new_pid = packet[24] * 256 + packet[25];
+    int new_pid = packet[26] * 256 + packet[27];
     int new_capid = packet[21] * 256 + packet[22];
     new_pid &= 0x1FFF;
     new_capid &= 0x1FFF;
@@ -528,6 +537,7 @@ int test_create_pmt() {
     new_pmt.enabled = 1;
     f.adapter = 0;
     f.next_filter = -1;
+    f.pid = 0x99;
     new_pmt.version = 1;
     adapter ad;
     ad.id = 0;
