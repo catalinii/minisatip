@@ -96,9 +96,6 @@ char *fe_gi[] = {"132",  "116",   "18",    "14",    " ", // auto
 char *fe_hierarchy[] = {"HIERARCHY_NONE", "HIERARCHY_1",    "HIERARCHY_2",
                         "HIERARCHY_4",    "HIERARCHY_AUTO", NULL};
 
-char *fe_specinv[] = {"off", "on", " ", // auto
-                      NULL};
-
 char *fe_inversion[] = {"0", "1", " ", // auto
                         NULL};
 
@@ -123,7 +120,6 @@ make_func(fec);
 make_func(modulation);
 make_func(tmode);
 make_func(gi);
-make_func(specinv);
 make_func(inversion);
 make_func(pol);
 make_func(pls_mode);

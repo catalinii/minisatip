@@ -45,7 +45,6 @@ extern char *fe_modulation[];
 extern char *fe_tmode[];
 extern char *fe_gi[];
 extern char *fe_hierarchy[];
-extern char *fe_specinv[];
 extern char *fe_pol[];
 
 int netcv_close(adapter *ad) {
