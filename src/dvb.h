@@ -301,7 +301,6 @@ char *get_fec(int i);
 char *get_modulation(int i);
 char *get_tmode(int i);
 char *get_gi(int i);
-char *get_specinv(int i);
 char *get_pol(int i);
 char *get_inversion(int i);
 char *get_pls_mode(int i);

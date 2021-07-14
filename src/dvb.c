@@ -96,7 +96,7 @@ char *fe_gi[] = {"132",  "116",   "18",    "14",    " ", // auto
 char *fe_hierarchy[] = {"HIERARCHY_NONE", "HIERARCHY_1",    "HIERARCHY_2",
                         "HIERARCHY_4",    "HIERARCHY_AUTO", NULL};
 
-char *fe_specinv[] = {"0", "1", " ", // auto
+char *fe_specinv[] = {"off", "on", " ", // auto
                       NULL};
 
 char *fe_inversion[] = {"0", "1", " ", // auto
@@ -874,7 +874,7 @@ int dvb_tune(int aid, transponder *tp) {
 
         LOG("tuning to %d delsys: %s bw:%d inversion:%s mod:%s fec:%s guard:%s "
             "transmission: %s, ts clear = %jd",
-            freq, get_delsys(tp->sys), tp->bw, get_specinv(tp->inversion),
+            freq, get_delsys(tp->sys), tp->bw, get_inversion(tp->inversion),
             get_modulation(tp->mtype), get_fec(tp->fec), get_gi(tp->gi),
             get_tmode(tp->tmode), bclear)
         break;
@@ -906,7 +906,7 @@ int dvb_tune(int aid, transponder *tp) {
 #endif
 
         LOG("tuning to %d sr:%d specinv:%s delsys:%s mod:%s ts clear = %jd",
-            freq, tp->sr, get_specinv(tp->inversion), get_delsys(tp->sys),
+            freq, tp->sr, get_inversion(tp->inversion), get_delsys(tp->sys),
             get_modulation(tp->mtype), bclear)
         break;
 
@@ -920,7 +920,7 @@ int dvb_tune(int aid, transponder *tp) {
 
         LOG("tuning to %d delsys:%s mod:%s specinv:%s ts clear = %jd", freq,
             get_delsys(tp->sys), get_modulation(tp->mtype),
-            get_specinv(tp->inversion), bclear)
+            get_inversion(tp->inversion), bclear)
 
         break;
 
@@ -938,7 +938,7 @@ int dvb_tune(int aid, transponder *tp) {
 #endif
 
         LOG("tuning to %d delsys: %s bw:%d inversion:%s , ts clear = %jd", freq,
-            get_delsys(tp->sys), tp->bw, get_specinv(tp->inversion), bclear);
+            get_delsys(tp->sys), tp->bw, get_inversion(tp->inversion), bclear);
 
         break;
     default:
