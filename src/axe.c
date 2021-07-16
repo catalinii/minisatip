@@ -619,7 +619,7 @@ int axe_tune(int aid, transponder *tp) {
 
         LOG("tuning to %d delsys: %s bw:%d inversion:%s mod:%s fec:%s guard:%s "
             "transmission: %s, ts clear = %jd",
-            freq, fe_delsys[tp->sys], tp->bw, fe_specinv[tp->inversion],
+            freq, fe_delsys[tp->sys], tp->bw, fe_inversion[tp->inversion],
             fe_modulation[tp->mtype], fe_fec[tp->fec], fe_gi[tp->gi],
             fe_tmode[tp->tmode], bclear)
         break;
@@ -643,7 +643,7 @@ int axe_tune(int aid, transponder *tp) {
         // valid for DD DVB-C2 devices
 
         LOG("tuning to %d sr:%d specinv:%s delsys:%s mod:%s ts clear = %jd",
-            freq, tp->sr, fe_specinv[tp->inversion], fe_delsys[tp->sys],
+            freq, tp->sr, fe_inversion[tp->inversion], fe_delsys[tp->sys],
             fe_modulation[tp->mtype], bclear)
         break;
 
