@@ -204,7 +204,7 @@ int satipc_reply(sockets *s) {
     if (rc == 404)
         sip->restart_needed = 1;
 
-//quirk for Gainatech Netstream 4C when fe=1 is in the URL
+//quirk for Gainatech EyeTV Netstream 4C when fe=1 is in the URL
     if (rc == 503)
         if (ad->sys[0] == SYS_DVBC_ANNEX_A || ad->sys[0] == SYS_DVBC2)
             sip->satip_fe = 0;
