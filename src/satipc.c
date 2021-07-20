@@ -210,8 +210,6 @@ int satipc_reply(sockets *s) {
 //quirk for Aurora client missing mtype
         if(ad->tp.mtype == QAM_AUTO)
                 ad->tp.mtype = QAM_256;
-        else
-                ad->tp.mtype = QAM_64;
     }
 
     if (rc == 404)
