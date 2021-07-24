@@ -201,6 +201,17 @@ int satipc_reply(sockets *s) {
         sip->session[0])
         rc = 454;
 
+//Fritzbox did reply 408 when mtype is missing
+    if (rc == 408) {
+        sip->want_tune = 1;
+        sip->want_commit = 1;
+        sip->force_commit = 1;
+        sip->last_setup = -10000;
+//quirk for Aurora client missing mtype
+        if(ad->tp.mtype == QAM_AUTO)
+                ad->tp.mtype = QAM_256;
+    }
+
     if (rc == 404)
         sip->restart_needed = 1;
 
