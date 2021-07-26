@@ -640,6 +640,8 @@ void set_options(int argc, char *argv[]) {
     opts.no_threads = 1;
     opts.document_root = "/usr/share/minisatip/html";
 #endif
+
+    opts.name_app = app_name;
     char short_opts[200];
     get_short_opts(short_opts, long_options);
 
