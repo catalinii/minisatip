@@ -403,8 +403,8 @@ Help\n\
 #endif
 #ifndef DISABLE_DVBAPI
         "\
-* -o --dvbapi host:port - specify the hostname and port for the dvbapi server (oscam). Port 9000 is set by default (if not specified) \n\
-	* eg: -o 192.168.9.9:9000 \n\
+* -o --dvbapi host:port,offset - specify the hostname and port for the dvbapi server (oscam). Port 9000 is set by default (if not specified) \n\
+	* eg: -o 192.168.9.9:9000 or -o 192.168.9.9:9999,2  with offset if multiple dvbapi clients use the same server\n\
 	192.168.9.9 is the host where oscam is running and 9000 is the port configured in dvbapi section in oscam.conf.\n\
 	* eg: -o /tmp/camd.socket \n\
 	/tmp/camd.socket is the local socket that can be used \n\
