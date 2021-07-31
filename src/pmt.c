@@ -782,6 +782,12 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
     if (!op)
         LOG_AND_RETURN(3, "op not found for algo %d", algo);
 
+    for (i = 0; i < MAX_CW; i++)
+        if (cws[i] && cws[i]->enabled && cws[i]->pmt == master_pmt &&
+            cws[i]->parity == parity && !memcmp(cw, cws[i]->cw, cws[i]->cw_len))
+            LOG_AND_RETURN(1, "cw already exist at position %d: %s " i,
+                           cw_to_string(cws[i], buf));
+
     int64_t ctime = getTick();
     mutex_lock(&cws_mutex);
     for (i = 0; i < MAX_CW; i++)
