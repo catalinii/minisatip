@@ -538,11 +538,14 @@ int test_create_pmt() {
     f.adapter = 0;
     f.next_filter = -1;
     f.pid = 0x99;
+    f.enabled = 1;
     new_pmt.version = 1;
     adapter ad;
     ad.id = 0;
     ad.enabled = 1;
     a[0] = &ad;
+    ad.pids[0].pid = 0x99;
+    ad.pids[0].flags=1;
     process_pmt(0, psi + 1, psi_len, &new_pmt);
     filters[0] = NULL;
     ASSERT(new_pmt.stream_pids == pmt.stream_pids,
