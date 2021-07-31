@@ -1749,7 +1749,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
 
         int is_video =
             (stype == 2) || (stype == 27) || (stype == 36) || (stype == 15);
-        int is_audio = isAC3 || (stype == 3) || (stype == 4);
+        int is_audio = isAC3 || (stype == 3) || (stype == 4) || (stype == 17);
 
         int stream_pid_id = -1;
 

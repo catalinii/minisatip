@@ -1325,6 +1325,7 @@ int mutex_destroy(SMutex *mutex) {
         LOG("%s: pthread_mutex_unlock 1 failed for %p with error %d %s",
             __FUNCTION__, mutex, rv, strerror(rv));
 
+    // coverity[use : FALSE]
     if ((rv = pthread_mutex_unlock(&mutex->mtx)) != 1 && rv != 0)
         LOG("%s: pthread_mutex_unlock 2 failed for %p with error %d %s",
             __FUNCTION__, mutex, rv, strerror(rv));
@@ -1400,6 +1401,7 @@ int add_new_lock(void **arr, int count, int size, SMutex *mutex) {
                 memset(sa[i], 0, size);
             }
             mutex_init(&sa[i]->mutex);
+            // coverity[use : FALSE]
             mutex_lock(&sa[i]->mutex);
             sa[i]->enabled = 1;
             mutex_unlock(mutex);

@@ -201,8 +201,24 @@ int satipc_reply(sockets *s) {
         sip->session[0])
         rc = 454;
 
+//Fritzbox did reply 408 when mtype is missing
+    if (rc == 408) {
+        sip->want_tune = 1;
+        sip->want_commit = 1;
+        sip->force_commit = 1;
+        sip->last_setup = -10000;
+//quirk for Aurora client missing mtype
+        if(ad->tp.mtype == QAM_AUTO)
+                ad->tp.mtype = QAM_256;
+    }
+
     if (rc == 404)
         sip->restart_needed = 1;
+
+//quirk for Geniatech EyeTV Netstream 4C when fe=x is in the URL
+    if (rc == 503)
+        if (ad->sys[0] == SYS_DVBC_ANNEX_A || ad->sys[0] == SYS_DVBC2)
+            sip->satip_fe = 0;
 
     if (rc == 454 || rc == 503 || rc == 405) {
         sip->sent_transport = 0;

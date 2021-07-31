@@ -1365,7 +1365,7 @@ char *describe_adapter(int sid, int aid, char *dad, int ld) {
             (double)t->freq / 1000, t->bw / 1000000, get_delsys(t->sys),
             get_modulation(t->mtype), t->sr / 1000, t->c2tft,
             itoa_positive(ds, t->ds), itoa_positive(plp_isi, t->plp_isi),
-            get_specinv(t->inversion));
+            get_inversion(t->inversion));
 
     if (use_ad) {
         int len1 = len;

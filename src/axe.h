@@ -4,6 +4,8 @@
 #include <linux/dvb/dmx.h>
 #include <linux/dvb/frontend.h>
 
+extern char *fe_inversion[];
+
 typedef struct fe_frontend_status fe_frontend_status_t;
 
 struct fe_frontend_status {
