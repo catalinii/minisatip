@@ -2122,13 +2122,15 @@ int pmt_tune(adapter *ad) {
 int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf) {
     int i, len = 0;
     for (i = 0; i < pmt->caids; i++) {
+        int private_data_len = pmt->ca[i].private_data_len;
         buf[len] = 0x09;
-        buf[len + 1] = 0x04;
+        buf[len + 1] = 0x04 + private_data_len;
         copy16(buf, len + 2, pmt->ca[i].id);
         copy16(buf, len + 4, pmt->ca[i].pid);
-        len += 6;
-        LOG("PMT %d added caid %04X, pid %04X, pos %d", pmt->id, pmt->ca[i].id,
-            pmt->ca[i].pid, len);
+        memcpy(buf + len + 6, pmt->ca[i].private_data, private_data_len);
+        len += 6 + private_data_len;
+        LOGM("PMT %d added caid %04X, pid %04X, pos %d", pmt->id, pmt->ca[i].id,
+             pmt->ca[i].pid, len);
     }
     return len;
 }
