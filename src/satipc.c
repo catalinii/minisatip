@@ -49,16 +49,20 @@
 #define MAKE_ITEM(a, b) ((a << 16) | (b))
 
 #if defined(__APPLE__) || defined(__SH4__)
-#define MAX_RTP_MSG 1   // read 1 UDP datagrams at one time (no recvmmsg() support!)
+#define MAX_RTP_MSG                                                            \
+    1 // read 1 UDP datagrams at one time (no recvmmsg() support!)
 int recvmmsg0(int sockfd, struct mmsghdr *msgvec, unsigned int vlen) {
     if (vlen < 1)
         return 0;
-    msgvec->msg_len = readv(sockfd, msgvec->msg_hdr.msg_iov, msgvec->msg_hdr.msg_iovlen);
+    msgvec->msg_len =
+        readv(sockfd, msgvec->msg_hdr.msg_iov, msgvec->msg_hdr.msg_iovlen);
     return 1;
 }
-#define recvmmsg(a,b,c,d,e) recvmmsg0(a,b,c)
+#define recvmmsg(a, b, c, d, e) recvmmsg0(a, b, c)
 #else
-#define MAX_RTP_MSG 25  // max number of UDP datagrams (with 1316 bytes of payload) to be read at one time
+#define MAX_RTP_MSG                                                            \
+    25 // max number of UDP datagrams (with 1316 bytes of payload) to be read at
+       // one time
 #endif
 
 extern char *fe_delsys[];
@@ -201,21 +205,21 @@ int satipc_reply(sockets *s) {
         sip->session[0])
         rc = 454;
 
-//Fritzbox did reply 408 when mtype is missing
+    // Fritzbox did reply 408 when mtype is missing
     if (rc == 408) {
         sip->want_tune = 1;
         sip->want_commit = 1;
         sip->force_commit = 1;
         sip->last_setup = -10000;
-//quirk for Aurora client missing mtype
-        if(ad->tp.mtype == QAM_AUTO)
-                ad->tp.mtype = QAM_256;
+        // quirk for Aurora client missing mtype
+        if (ad->tp.mtype == QAM_AUTO)
+            ad->tp.mtype = QAM_256;
     }
 
     if (rc == 404)
         sip->restart_needed = 1;
 
-//quirk for Geniatech EyeTV Netstream 4C when fe=x is in the URL
+    // quirk for Geniatech EyeTV Netstream 4C when fe=x is in the URL
     if (rc == 503)
         if (ad->sys[0] == SYS_DVBC_ANNEX_A || ad->sys[0] == SYS_DVBC2)
             sip->satip_fe = 0;
@@ -277,10 +281,11 @@ int satipc_reply(sockets *s) {
         satipc_commit(ad);
         return 0;
     }
-    LOG("wp %d qp %d, expect_reply %d, want_tune %d, force_commit %d, want "
+    LOG("satipc %d wp %d qp %d, expect_reply %d, want_tune %d, force_commit "
+        "%d, want "
         "commit %d",
-        sip->wp, sip->qp, sip->expect_reply, sip->want_tune, sip->force_commit,
-        sip->want_commit);
+        sip->id, sip->wp, sip->qp, sip->expect_reply, sip->want_tune,
+        sip->force_commit, sip->want_commit);
     if (sip->wp >= sip->qp)
         sip->expect_reply = 0;
     else {
@@ -406,7 +411,7 @@ int satipc_timeout(sockets *s) {
     if (sip->expect_reply && (getTick() - sip->last_response_sent > 10000)) {
         LOG("No response was received from the server for more than %jd ms, "
             "closing connection",
-            getTick() - sip->last_response_sent > 10000);
+            getTick() - sip->last_response_sent);
         sip->restart_needed = 1;
         sockets_del(ad->sock);
     }
@@ -646,7 +651,8 @@ int satip_standby_device(adapter *ad) {
     return 0;
 }
 
-//  This function uses recvmmsg() syscall to read from the socket [1 .. MAX_RTP_MSG] RTP datagrams in one shot
+//  This function uses recvmmsg() syscall to read from the socket [1 ..
+//  MAX_RTP_MSG] RTP datagrams in one shot
 int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
     uint8_t buf1[20 * MAX_RTP_MSG];
     int i, rr, num_msg = 0, size_msg = 0;
@@ -654,7 +660,8 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
     int check_holes = 0;
     void *holes[MAX_RTP_MSG];
     struct mmsghdr messages[MAX_RTP_MSG] = {0};
-    struct iovec iovs[(MAX_RTP_MSG * 2) + 1] = {0};  // RTP Header + Payload (up to 1316 bytes) for each UDP datagram
+    struct iovec iovs[(MAX_RTP_MSG * 2) + 1] = {
+        0}; // RTP Header + Payload (up to 1316 bytes) for each UDP datagram
     uint16_t seq;
     adapter *ad;
     satipc *sip;
@@ -664,19 +671,22 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
     for (i = 0; i < MAX_RTP_MSG && size_msg < len; i++) {
         num_msg++;
         size_msg += 1316;
-        if (size_msg > len) {  // Insufficient space to receive a 7*188 Bytes TS packet
+        if (size_msg >
+            len) { // Insufficient space to receive a 7*188 Bytes TS packet
             size_msg -= 1316;
             num_msg--;
             break;
         }
 
-        struct iovec *iov = &iovs[i * 2];    // stripping out RTP header, to leave continous payload data over the same buffer
-        iov[0].iov_base = buf1 + (i * 20);   // RTP header slice
-        iov[0].iov_len  = 12;
-        iov[1].iov_base = buf  + (i * 1316); // PAYLOAD slice in the READ BUFFER
-        iov[1].iov_len  = 1316;
+        struct iovec *iov =
+            &iovs[i * 2]; // stripping out RTP header, to leave continous
+                          // payload data over the same buffer
+        iov[0].iov_base = buf1 + (i * 20); // RTP header slice
+        iov[0].iov_len = 12;
+        iov[1].iov_base = buf + (i * 1316); // PAYLOAD slice in the READ BUFFER
+        iov[1].iov_len = 1316;
         iov[2].iov_base = NULL;
-        iov[2].iov_len  = 0;
+        iov[2].iov_len = 0;
 
         struct mmsghdr *msg = &messages[i];
         msg->msg_hdr.msg_iov = iov;
@@ -698,7 +708,8 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
         return 0;
     }
 
-    size_msg -= (num_msg - rr) * 1316;  // update the theoretical total size of the read buffer
+    size_msg -= (num_msg - rr) *
+                1316; // update the theoretical total size of the read buffer
 
     // It checks if the read is full, because in that case there is a high
     // probability that there are still pending packets in the buffer, so then
@@ -715,7 +726,7 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
         struct mmsghdr *msg = &messages[i];
         struct iovec *iov = &iovs[i * 2];
         int dlen = 0;
-        
+
         if (msg->msg_len > 0) {
             sip->rcvp++;
 
@@ -735,8 +746,9 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
                 dlen = 0;
 
             // Workaround for some poor SAT>IP servers (ex. XORO).
-            //      Some servers send KEEP-ALIVE RTP packets without valid TS payload.
-            //      Then RTP packets received without valid TS data are discarded.
+            //      Some servers send KEEP-ALIVE RTP packets without valid TS
+            //      payload. Then RTP packets received without valid TS data are
+            //      discarded.
             uint8_t *b = iov[1].iov_base;
             if (dlen > 0 && dlen < DVB_FRAME && b[0] != 0x47) {
                 LOGM("discarding RTP packet without valid TS payload (sock %d, "
@@ -751,13 +763,13 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
                 force_ok = 1;
                 dlen = 0;
             }
-
         }
 
         // Clear empty unused buffer space (after all it will be removed)
         if (dlen < iov[1].iov_len) {
             int ss = (188 * (dlen / 188));
-            // memset(iov[1].iov_base + ss, 0xFF, iov[1].iov_len - ss);  // Not necessary
+            // memset(iov[1].iov_base + ss, 0xFF, iov[1].iov_len - ss);  // Not
+            // necessary
             holes[i] = iov[1].iov_base + ss;
             check_holes = 1;
         }
@@ -767,19 +779,23 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
 
     // Remove holes if they exist
     if (check_holes && *rb > 0) {
-        for (i = rr - 1; i >= 0; i--) {  // loop in reverse order (i = 0; i < rr; i++)
+        for (i = rr - 1; i >= 0;
+             i--) { // loop in reverse order (i = 0; i < rr; i++)
             if (holes[i] == NULL)
                 continue;
 
             struct iovec *iov = &iovs[i * 2];
             int hole_size = iov[1].iov_len - (holes[i] - iov[1].iov_base);
 
-            if ( i + 1 < rr ) {  // move data only if not in the last multibuffer slice (in this case only adjust the end)
-                // copy data until the end of the buffer over the empty space to free the hole
-                uint8_t *eb = iovs[1].iov_base + *rb;  // current end of the read buffer
-                uint8_t *sb = holes[i];                // end of the valid read data
-                uint8_t *ib = holes[i] + hole_size;    // end of the iovec slice
-                memmove(sb, ib, eb - ib );  // skip just the hole of the chunk 
+            if (i + 1 < rr) { // move data only if not in the last multibuffer
+                              // slice (in this case only adjust the end)
+                // copy data until the end of the buffer over the empty space to
+                // free the hole
+                uint8_t *eb =
+                    iovs[1].iov_base + *rb; // current end of the read buffer
+                uint8_t *sb = holes[i];     // end of the valid read data
+                uint8_t *ib = holes[i] + hole_size; // end of the iovec slice
+                memmove(sb, ib, eb - ib); // skip just the hole of the chunk
             }
             *rb -= hole_size;
         }
