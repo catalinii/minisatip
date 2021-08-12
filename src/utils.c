@@ -677,7 +677,7 @@ char *get_current_timestamp_log(void) {
     return date_str;
 }
 
-void _log(char *file, int line, char *fmt, ...) {
+void _log(const char *file, int line, const char *fmt, ...) {
     va_list arg;
     int len = 0, len1 = 0, both = 0;
     static int idx, times;
@@ -686,7 +686,7 @@ void _log(char *file, int line, char *fmt, ...) {
                                  // the message
 
     /* Check if the message should be logged */
-    opts.last_log = fmt;
+    opts.last_log = (char *)fmt;
 
     stid[0] = 0;
     if (!opts.no_threads) {

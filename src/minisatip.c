@@ -65,7 +65,7 @@ struct struct_opts opts;
 char version[] = VERSION;
 char app_name[] = "minisatip";
 char pid_file[50];
-char public[] = "Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN";
+char public_str[] = "Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN";
 int rtsp, http, si, si1, ssdp1;
 
 #define RRTP_OPT 'r'
@@ -1339,9 +1339,9 @@ int read_rtsp(sockets *s) {
                  get_sock_shost(s->sock, localhost, sizeof(localhost)));
         http_response(s, 200, buf, sbuf, cseq, 0);
     } else if (strncmp(arg[0], "OPTIONS", 7) == 0) {
-        http_response(s, 200, public, NULL, cseq, 0);
+        http_response(s, 200, public_str, NULL, cseq, 0);
     } else {
-        http_response(s, 501, public, NULL, cseq, 0);
+        http_response(s, 501, public_str, NULL, cseq, 0);
     }
     return 0;
 }
@@ -1943,7 +1943,7 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr) {
         proto = "RTSP";
 
     if (!ah || !ah[0])
-        ah = public;
+        ah = public_str;
     if (!desc)
         desc = "";
     if (rc == 200)

@@ -541,11 +541,14 @@ int satipc_open_device(adapter *ad) {
         ad->fe_sock = sockets_add(
             ad->fe, NULL, ad->id, TYPE_TCP, (socket_action)satipc_reply,
             (socket_action)satipc_close, (socket_action)satipc_timeout);
+        set_sock_lock(ad->fe_sock, &ad->mutex);
         sip->rtcp_sock = -1;
-        if (sip->rtcp >= 0)
+        if (sip->rtcp >= 0) {
             sip->rtcp_sock = sockets_add(sip->rtcp, NULL, ad->id, TYPE_TCP,
                                          (socket_action)satipc_rtcp_reply,
                                          (socket_action)satipc_close, NULL);
+            set_sock_lock(sip->rtcp_sock, &ad->mutex);
+        }
         sockets_timeout(ad->fe_sock, 25000); // 25s
         if (ad->dvr >= 0)
             set_socket_receive_buffer(ad->dvr, opts.dvr_buffer);
@@ -569,6 +572,7 @@ int satipc_open_device(adapter *ad) {
         ad->fe_sock = sockets_add(SOCK_TIMEOUT, NULL, ad->id, TYPE_UDP, NULL,
                                   NULL, (socket_action)satipc_timeout);
         sockets_timeout(ad->fe_sock, 25000); // 25s
+        set_sock_lock(ad->fe_sock, &ad->mutex);
     }
     sip->session[0] = 0;
     sip->lap = 0;

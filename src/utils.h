@@ -49,7 +49,7 @@ typedef int64_t (*get_data_int64)(int p);
 typedef char *(*get_data_string)(int p, char *dest, int max_len);
 
 typedef struct struct_symbols {
-    char *name;
+    const char *name;
     int type;
     void *addr;
     float multiplier; // multiply the value of the variable
@@ -142,7 +142,7 @@ void myfree(void *x, char *f, int l);
 char *header_parameter(char **arg, int i);
 char *get_current_timestamp();
 char *get_current_timestamp_log();
-void _log(char *file, int line, char *fmt, ...);
+void _log(const char *file, int line, const char *fmt, ...);
 char *strip(char *s);
 int split(char **rv, char *s, int lrv, char sep);
 void set_signal_handler(char *argv0);
