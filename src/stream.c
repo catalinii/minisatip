@@ -552,6 +552,7 @@ int streams_add() {
     ss->st_sock = -1;
     //	ss->seq = 0; // set the sequence to 0 for testing purposes - it should
     // be random
+    /* coverity[DC.WEAK_CRYPTO] */
     ss->ssrc = random();
     ss->timeout = opts.timeout_sec;
     ss->wtime = ss->rtcp_wtime = getTick();
