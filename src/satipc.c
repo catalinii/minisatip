@@ -378,6 +378,7 @@ void satipc_open_rtsp_socket(adapter *ad, satipc *sip) {
             ad->fe = sock;
         adapter_set_dvr(ad);
         satip_post_init(ad);
+        LOG("satipc %d, reopened rtsp with handle %d", sip->id, sock);
     }
 }
 
@@ -417,7 +418,9 @@ int satipc_timeout(sockets *s) {
     }
 
     if (sip->want_tune || sip->lap || sip->ldp) {
-        LOG("no timeout will be performed as we have operations in queue");
+        LOG("satipc %d no timeout will be performed as we have operations in "
+            "queue",
+            sip->id);
         return 0;
     }
     LOG("satipc: Sent keep-alive to the satip server %s:%d, adapter %d, "
@@ -541,13 +544,11 @@ int satipc_open_device(adapter *ad) {
         ad->fe_sock = sockets_add(
             ad->fe, NULL, ad->id, TYPE_TCP, (socket_action)satipc_reply,
             (socket_action)satipc_close, (socket_action)satipc_timeout);
-        set_sock_lock(ad->fe_sock, &ad->mutex);
         sip->rtcp_sock = -1;
         if (sip->rtcp >= 0) {
             sip->rtcp_sock = sockets_add(sip->rtcp, NULL, ad->id, TYPE_TCP,
                                          (socket_action)satipc_rtcp_reply,
                                          (socket_action)satipc_close, NULL);
-            set_sock_lock(sip->rtcp_sock, &ad->mutex);
         }
         sockets_timeout(ad->fe_sock, 25000); // 25s
         if (ad->dvr >= 0)
@@ -1330,6 +1331,7 @@ int satipc_commit(adapter *ad) {
         sip->lap = sip->ldp = 0;
         return 0;
     }
+
     if (sip->lap + sip->ldp == 0)
         if (!sip->force_commit)
             return 0;
@@ -1338,6 +1340,8 @@ int satipc_commit(adapter *ad) {
         sip->want_commit = 1;
         return 0;
     }
+
+    mutex_lock(&ad->mutex);
 
     if (!sip->addpids) {
         send_apids = 0;
@@ -1365,6 +1369,7 @@ int satipc_commit(adapter *ad) {
             "an "
             "error ?",
             sip->sip);
+        mutex_unlock(&ad->mutex);
         return 0;
     }
 
@@ -1385,7 +1390,7 @@ int satipc_commit(adapter *ad) {
         send_dpids = 0;
     }
 
-    if (sip->force_pids && (send_pids + send_apids + send_dpids == 0)) {
+    if (sip->force_pids) {
         send_pids = 1;
         send_apids = 0;
         send_dpids = 0;
@@ -1408,6 +1413,7 @@ int satipc_commit(adapter *ad) {
         if (!sip->setup_pids && !sip->sent_transport) {
             strcatf(url, len, "&pids=none");
             http_request(ad, url, NULL, 0);
+            mutex_unlock(&ad->mutex);
             return 0;
         }
     }
@@ -1466,6 +1472,7 @@ int satipc_commit(adapter *ad) {
 
     sip->sleep = 0;
     http_request(ad, url, NULL, 0);
+    mutex_unlock(&ad->mutex);
 
     return 0;
 }
