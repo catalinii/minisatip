@@ -72,6 +72,7 @@ int satip_post_init(adapter *ad);
 
 typedef struct struct_satipc {
     char enabled;
+    SMutex mutex;
     int id;
     int lap, ldp;            // number of pids to add, number of pids to delete
     uint16_t apid[MAX_PIDS]; // pids to add
@@ -1341,7 +1342,7 @@ int satipc_commit(adapter *ad) {
         return 0;
     }
 
-    mutex_lock(&ad->mutex);
+    mutex_lock(&sip->mutex);
 
     if (!sip->addpids) {
         send_apids = 0;
@@ -1369,7 +1370,7 @@ int satipc_commit(adapter *ad) {
             "an "
             "error ?",
             sip->sip);
-        mutex_unlock(&ad->mutex);
+        mutex_unlock(&sip->mutex);
         return 0;
     }
 
@@ -1413,7 +1414,7 @@ int satipc_commit(adapter *ad) {
         if (!sip->setup_pids && !sip->sent_transport) {
             strcatf(url, len, "&pids=none");
             http_request(ad, url, NULL, 0);
-            mutex_unlock(&ad->mutex);
+            mutex_unlock(&sip->mutex);
             return 0;
         }
     }
@@ -1472,7 +1473,7 @@ int satipc_commit(adapter *ad) {
 
     sip->sleep = 0;
     http_request(ad, url, NULL, 0);
-    mutex_unlock(&ad->mutex);
+    mutex_unlock(&sip->mutex);
 
     return 0;
 }
@@ -1558,6 +1559,7 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
 
     sip = satip[i];
     ad = a[i];
+    mutex_init(&sip->mutex);
     mutex_lock(&ad->mutex);
     ad->open = satipc_open_device;
     ad->set_pid = satipc_set_pid;
