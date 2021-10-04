@@ -847,14 +847,14 @@ int dh_dhph_signature(uint8_t *out, uint8_t *nonce, uint8_t *dhph, RSA *r) {
 }
 
 int is_ca_initializing(int i) {
-    if (i >= 0 && i < MAX_CA && ca_devices[i] && ca_devices[i]->enabled &&
+    if (i >= 0 && i < MAX_ADAPTERS && ca_devices[i] && ca_devices[i]->enabled &&
         !ca_devices[i]->init_ok)
         return 1;
     return 0;
 }
 
 int get_max_pmt_for_ca(int i) {
-    if (i >= 0 && i < MAX_CA && ca_devices[i] && ca_devices[i]->enabled)
+    if (i >= 0 && i < MAX_ADAPTERS && ca_devices[i] && ca_devices[i]->enabled)
         return (ca_devices[i]->multiple_pmt + 1) * ca_devices[i]->max_ca_pmt;
     return MAX_CA_PMT;
 }
