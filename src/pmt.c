@@ -1070,6 +1070,7 @@ int pmt_add(int i, int adapter, int sid, int pmt_pid) {
     pmt->enabled = 1;
     pmt->version = -1;
     pmt->active = 0;
+    pmt->state = PMT_STOPPED;
     pmt->cw = NULL;
     pmt->opaque = NULL;
     pmt->first_active_pid = -1;
@@ -1632,7 +1633,7 @@ int get_master_pmt_for_pid(int aid, int pid) {
     int i, j;
     SPMT *pmt;
     for (i = 0; i < npmts; i++)
-        if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == aid) {
+        if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == aid && pmts[i]->master_pmt == i) {
             pmt = pmts[i];
             DEBUGM("searching pid %d ad %d in pmt %d, active pids %d", pid, aid,
                    pmt->id, pmt->stream_pids);
@@ -1659,7 +1660,6 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     SPid *p, *cp, *p_all;
     SFilter *f;
     adapter *ad;
-    int opmt;
     SPMT *pmt = (void *)opaque;
 
     if (b[0] != 2)
@@ -1752,6 +1752,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         int is_audio = isAC3 || (stype == 3) || (stype == 4) || (stype == 17);
 
         int stream_pid_id = -1;
+        int opmt = get_master_pmt_for_pid(ad->id, spid);
 
         if (pmt->stream_pids < MAX_PMT_PIDS - 1) {
             stream_pid_id = pmt->stream_pids;
@@ -1784,7 +1785,6 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         if (stream_pid_id > 0)
             pmt_add_descriptors(pmt, stream_pid_id, pmt_b + i + 5, es_len);
 
-        opmt = get_master_pmt_for_pid(ad->id, spid);
         if (opmt != -1 && opmt != pmt->master_pmt) {
             pmt->master_pmt = opmt;
             LOG("PMT %d, master pmt set to %d", pmt->id, opmt);
