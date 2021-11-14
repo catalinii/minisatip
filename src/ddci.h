@@ -55,7 +55,7 @@ typedef struct ddci_channel {
     int pos;
     int sid;
     char name[50];
-
+    char locked;
 } Sddci_channel;
 
 void find_ddci_adapter(adapter **a);

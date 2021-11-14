@@ -537,6 +537,11 @@ void delete_blacklisted_pmt(ddci_device_t *d, adapter *ad) {
 
 int ddci_encrypted(adapter *ad, SPMT *pmt) {
     ddci_device_t *d = get_ddci(ad->id);
+    Sddci_channel *channel = getItem(&channels, pmt->sid);
+    if(channel && channel->locked) {
+        LOG("PMT %d sid %d is encrypted and locked, keeping active", pmt->id, pmt->sid);
+        return 0;
+    }
     if (d) // only on DDCI adapter we can understand if the channel is encrypted
         blacklist_pmts_for_ddci(pmt, d->id);
     return 0;
@@ -1295,6 +1300,7 @@ void load_channels(SHashTable *ch, char *file) {
         c.sid = map_int(line, NULL);
         if (!c.sid)
             continue;
+        c.locked = 1;
         cc = strip(cc + 1);
 
         char *arg[MAX_ADAPTERS];
