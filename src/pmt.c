@@ -1716,6 +1716,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
 
     pmt->sid = b[3] * 256 + b[4];
     pmt->version = ver;
+    pmt->pcr_pid = pcr_pid;
 
     mutex_lock(&pmt->mutex);
     LOG("new PMT %d AD %d, pid: %04X (%d), len %d, pi_len %d, ver %d, pcr %d, "

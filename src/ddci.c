@@ -352,7 +352,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
 
         // set the name of the PMT from the DDCI to the original pmt
         for (i = 0; i < d->max_channels; i++)
-            if ((dpmt = get_pmt(d->pmt[i]))) {
+            if ((dpmt = get_pmt(d->pmt[i].id))) {
                 if (dpmt->sid == pmt->sid) {
                     ddci_mapping_table_t *m = get_ddci_pid(d, pmt->pid);
                     if (m->pid == dpmt->pid) {
@@ -402,12 +402,12 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     int pos = -1;
 
     for (i = 0; i < d->max_channels; i++)
-        if (d->pmt[i] == pmt->id)
+        if (d->pmt[i].id == pmt->id)
             pos = i;
 
     if (pos == -1) {
         for (i = 0; i < d->max_channels; i++)
-            if (d->pmt[i] == -1)
+            if (d->pmt[i].id == -1)
                 pos = i;
     }
 
@@ -417,8 +417,8 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
         return TABLES_RESULT_ERROR_RETRY;
     }
 
-    d->pmt[pos] = pmt->id;
-    d->pmt_ver[pos] = (d->pmt_ver[pos] + 1) & 0xF;
+    d->pmt[pos].id = pmt->id;
+    d->pmt[pos].ver = (d->pmt[pos].ver + 1) & 0xF;
 
     d->ver = (d->ver + 1) & 0xF;
     if (!d->channels++) // for first PMT set transponder ID and add CAT
@@ -440,8 +440,13 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     }
 
     for (i = 0; i < pmt->stream_pids; i++) {
-        LOGM("DD %d adding stream pid %d", d->id, pmt->stream_pid[i].pid);
-        add_pid_mapping_table(ad->id, pmt->stream_pid[i].pid, pmt->id, d, 0);
+        LOGM("DD %d adding stream pid %d %s", d->id, pmt->stream_pid[i].pid, pmt->stream_pid[i].pid == pmt->pcr_pid? "PCR":"");
+
+        int ddci_pid = add_pid_mapping_table(ad->id, pmt->stream_pid[i].pid, pmt->id, d, 0);
+        // map the PCR pid as well
+        if (pmt->stream_pid[i].pid == pmt->pcr_pid) {
+            d->pmt[pos].pcr_pid = ddci_pid;
+        }
     }
 
     update_pids(ad->id);
@@ -480,12 +485,12 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
     LOG("%s: deleting pmt id %d, sid %d (%X), pid %d, ddci %d, name %s",
         __FUNCTION__, spmt->id, spmt->sid, spmt->sid, m->ddci_pid, m->ddci,
         spmt->name);
-    if (d->pmt[0] == pmt)
+    if (d->pmt[0].id == pmt)
         d->cat_processed = 0;
 
     for (i = 0; i < d->max_channels; i++)
-        if (d->pmt[i] == pmt) {
-            d->pmt[i] = -1;
+        if (d->pmt[i].id == pmt) {
+            d->pmt[i].id = -1;
         }
 
     del_pmt_mapping_table(d, ad->id, pmt);
@@ -525,7 +530,7 @@ void delete_blacklisted_pmt(ddci_device_t *d, adapter *ad) {
     Sddci_channel *channel;
     uint64_t ctime = getTick();
     for (i = 0; i < d->max_channels; i++)
-        if ((pmt = get_pmt(d->pmt[i])) && (pmt->adapter == ad->id) &&
+        if ((pmt = get_pmt(d->pmt[i].id)) && (pmt->adapter == ad->id) &&
             (channel = getItem(&channels, pmt->sid)) &&
             (channel->pos < channel->ddcis) &&
             (channel->ddci[channel->pos].blacklisted_until > ctime)) {
@@ -581,7 +586,7 @@ int ddci_create_pat(ddci_device_t *d, uint8_t *b) {
     b[12] = 0x10;
     len = 13;
     for (i = 0; i < MAX_CHANNELS_ON_CI; i++)
-        if ((pmt = get_pmt(d->pmt[i]))) {
+        if ((pmt = get_pmt(d->pmt[i].id))) {
             ddci_mapping_table_t *m =
                 get_pid_mapping(d, pmt->adapter, pmt->pid);
             if (!m) {
@@ -715,7 +720,7 @@ int safe_get_pid_mapping(ddci_device_t *d, int aid, int pid) {
 }
 
 int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
-                    int ver) {
+                    int ver, int pcr_pid) {
     int pid = pmt->pid, pi_len = 0, i;
     uint8_t *b = new_pmt, *start_pmt, *start_pi_len;
     memset(new_pmt, 0, pmt_size);
@@ -730,8 +735,8 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
     *b++ = (ver << 1);
     *b++ = 0;    // section number
     *b++ = 0;    // last section number
-    *b++ = 0xFF; // PCR PID
-    *b++ = 0xFF;
+    *b++ = 0xE0 | ((pcr_pid >> 8) & 0xFF); // PCR PID
+    *b++ = pcr_pid & 0xFF;                 // PCR PID
 
     start_pi_len = b;
 
@@ -794,26 +799,26 @@ int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len) {
     if (ctime - d->last_pmt > 100) {
         SPMT *pmt;
         for (i = 0; i < MAX_CHANNELS_ON_CI; i++) {
-            if ((pmt = get_pmt(d->pmt[i]))) {
+            if ((pmt = get_pmt(d->pmt[i].id))) {
                 psi_len =
-                    ddci_create_pmt(d, pmt, psi, sizeof(psi), d->pmt_ver[i]);
+                    ddci_create_pmt(d, pmt, psi, sizeof(psi), d->pmt[i].ver, d->pmt[i].pcr_pid);
                 ddci_mapping_table_t *m =
                     get_pid_mapping(d, pmt->adapter, pmt->pid);
                 if (m)
                     pos += buffer_to_ts(dst + pos, len - pos, psi, psi_len,
-                                        &d->pmt_cc[i], m->ddci_pid);
+                                        &d->pmt[i].cc, m->ddci_pid);
                 else
                     LOG("%s: could not find PMT %d adapter %d and pid %d to "
                         "mapping table",
-                        __FUNCTION__, d->pmt[i], pmt->adapter, pmt->pid);
+                        __FUNCTION__, d->pmt[i].id, pmt->adapter, pmt->pid);
                 // ADD EPG as well
                 if (len - pos >= 188)
                     pos +=
-                        ddci_create_epg(d, pmt->sid, dst + pos, d->pmt_ver[i]);
+                        ddci_create_epg(d, pmt->sid, dst + pos, d->pmt[i].ver);
             }
             if (len - pos >= 188)
                 pos += ddci_create_epg(d, MAKE_SID_FOR_CA(d->id, i), dst + pos,
-                                       d->pmt_ver[i]);
+                                       d->pmt[i].ver);
         }
         d->last_pmt = ctime;
     }
@@ -1239,7 +1244,7 @@ int process_cat(int filter, unsigned char *b, int len, void *opaque) {
 
     // sending EMM pids to the CAM
     for (i = 0; i < id; i++) {
-        add_pid_mapping_table(f->adapter, d->capid[i], d->pmt[0], d, 1);
+        add_pid_mapping_table(f->adapter, d->capid[i], d->pmt[0].id, d, 1);
     }
     d->cat_processed = 1;
     d->ncapid = id;

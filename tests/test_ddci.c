@@ -179,17 +179,17 @@ int test_add_del_pmt() {
     // One matching channel
     ASSERT(ddci_process_pmt(&ad, &pmt0) == TABLES_RESULT_OK,
            "DDCI matching DD 0");
-    ASSERT(d0.pmt[0] == 0, "PMT 0 using DDCI 0");
+    ASSERT(d0.pmt[0].id == 0, "PMT 0 using DDCI 0");
 
     ASSERT(ddci_process_pmt(&ad, &pmt1) == TABLES_RESULT_OK,
            "DDCI matching DD 1");
-    ASSERT(d1.pmt[0] == 1, "PMT 1 using DDCI 1");
+    ASSERT(d1.pmt[0].id == 1, "PMT 1 using DDCI 1");
     d0.max_channels = d1.max_channels = 2;
 
     // Multiple PMTs
     ASSERT(ddci_process_pmt(&ad, &pmt2) == TABLES_RESULT_OK,
            "DDCI matching DD 0 for second PMT");
-    ASSERT(d0.pmt[1] == 2, "PMT 2 using DDCI 0");
+    ASSERT(d0.pmt[1].id == 2, "PMT 2 using DDCI 0");
     blacklist_pmt_for_ddci(&pmt2, 0);
     ddci_del_pmt(&ad, &pmt2);
 
@@ -213,7 +213,7 @@ int test_add_del_pmt() {
 
     ASSERT(ddci_process_pmt(&ad, &pmt2) == TABLES_RESULT_OK,
            "DDCI matching DD 1 for second PMT");
-    ASSERT(d1.pmt[1] == 2, "PMT 2 using DDCI 1");
+    ASSERT(d1.pmt[1].id == 2, "PMT 2 using DDCI 1");
 
     int s = pmt2.stream_pids++;
     int c = pmt2.caids++;
@@ -441,7 +441,7 @@ int test_create_pat() {
     f.flags = FILTER_CRC;
     f.id = 0;
     f.adapter = 0;
-    d.pmt[0] = 1;   // set to pmt 1
+    d.pmt[0].id = 1;   // set to pmt 1
     pmts[1] = &pmt; // enable pmt 1
     npmts = 2;
     pmt.enabled = 1;
@@ -489,7 +489,7 @@ int test_create_pmt() {
     f.id = 0;
     f.adapter = 0;
     filters[0] = &f;
-    d.pmt[0] = 1;   // set to pmt 1
+    d.pmt[0].id = 1;   // set to pmt 1
     pmts[1] = &pmt; // enable pmt 1
     npmts = 2;
     pmt.enabled = 1;
@@ -512,7 +512,7 @@ int test_create_pmt() {
     pmt.stream_pid[1].type = 3;
     pmt.stream_pid[1].pid = 0x55;
 
-    psi_len = ddci_create_pmt(&d, &pmt, psi, sizeof(psi), 0);
+    psi_len = ddci_create_pmt(&d, &pmt, psi, sizeof(psi), 0, 8191);
     cc = 1;
     _hexdump("PACK: ", psi, psi_len);
     buffer_to_ts(packet, 188, psi, psi_len, &cc, 0x63);

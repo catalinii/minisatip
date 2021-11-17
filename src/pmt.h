@@ -117,6 +117,7 @@ typedef struct struct_pmt {
     SMutex mutex;
     int sid;
     int pid;
+    int pcr_pid;
     int adapter;
     int version;
     SPMTCA ca[MAX_CAID];

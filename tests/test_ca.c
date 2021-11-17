@@ -63,6 +63,15 @@ typedef struct ca_device {
     int enabled;
     SCAPMT capmt[MAX_CA_PMT];
     int max_ca_pmt, multiple_pmt;
+    int fd;
+    int slot_id;
+    int tc;
+    int id;
+    int ignore_close;
+    int init_ok;
+    uint16_t caid[MAX_CAID];
+    uint32_t caids;
+
 } ca_device_t;
 ca_device_t d;
 
