@@ -421,10 +421,15 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     d->pmt[pos].ver = (d->pmt[pos].ver + 1) & 0xF;
 
     d->ver = (d->ver + 1) & 0xF;
-    if (!d->channels++) // for first PMT set transponder ID and add CAT
-    {
+    if(!d->channels++) { // for first PMT set transponder ID
         d->tid = ad->transponder_id;
+    }
+                
+    if (!get_pid_mapping(d, pmt->adapter, 1)) // if the CAT is not mapped, add it
+    {
+        LOG("Mapping CAT to PMT %d from transponder %d, DDCI transponder %d", pmt->id, ad->transponder_id, d->tid)
         add_pid_mapping_table(ad->id, 1, pmt->id, d, 1); // add pid 1
+        d->cat_processed = 0;
     }
 
     LOG("found DDCI %d for pmt %d, running channels %d, max_channels %d", ddid, pmt->id,
@@ -485,8 +490,6 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
     LOG("%s: deleting pmt id %d, sid %d (%X), pid %d, ddci %d, name %s",
         __FUNCTION__, spmt->id, spmt->sid, spmt->sid, m->ddci_pid, m->ddci,
         spmt->name);
-    if (d->pmt[0].id == pmt)
-        d->cat_processed = 0;
 
     for (i = 0; i < d->max_channels; i++)
         if (d->pmt[i].id == pmt) {
@@ -1222,8 +1225,9 @@ int process_cat(int filter, unsigned char *b, int len, void *opaque) {
         if (b[i] != 9)
             continue;
         caid = b[i + 2] * 256 + b[i + 3];
-        if (++id < MAX_CA_PIDS)
-            d->capid[id] = (b[i + 4] & 0x1F) * 256 + b[i + 5];
+        if (id < MAX_CA_PIDS) {
+            d->capid[id++] = (b[i + 4] & 0x1F) * 256 + b[i + 5];
+        }
 
         LOG("CAT pos %d caid %d, pid %d", id, caid, d->capid[id]);
     }

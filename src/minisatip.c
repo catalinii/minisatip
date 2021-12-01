@@ -594,7 +594,7 @@ void set_options(int argc, char *argv[]) {
 #ifndef DISABLE_SATIPCLIENT
     opts.satip_addpids = 1;
 #endif
-    opts.output_buffer = 512 * 1024;
+    opts.output_buffer = 2 * 1024 * 1024;
     opts.document_root = "html";
     opts.xml_path = DESC_XML;
     opts.th_priority = -1;
