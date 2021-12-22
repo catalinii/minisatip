@@ -580,7 +580,7 @@ int ddci_create_pat(ddci_device_t *d, uint8_t *b) {
     b[2] = 0xb0;
     b[3] = 0; // len
     copy16(b, 4, d->tid);
-    b[6] = 0xC0 | (d->ver << 1);
+    b[6] = 0xC1 | (d->ver << 1);
     b[7] = b[8] = 0;
     // Channel ID 0
     b[9] = b[10] = 0;
@@ -735,7 +735,7 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
     start_pmt = b;
     copy16(b, 0, pmt->sid);
     b += 2;
-    *b++ = (ver << 1);
+    *b++ = (ver << 1) | 0x01;
     *b++ = 0;    // section number
     *b++ = 0;    // last section number
     *b++ = 0xE0 | ((pcr_pid >> 8) & 0xFF); // PCR PID
