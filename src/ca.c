@@ -2859,6 +2859,14 @@ static int ca_session_callback(void *arg, int reason, uint8_t slot_id,
             LOG("--------------------S_SCALLBACK_REASON_CAMCONNECTED---------"
                 "CIPLUS_"
                 "APP_OPRF_RESOURCEID-------------------------");
+        } else if (resource_id == CIPLUS_APP_LANG_RESOURCEID) {
+            uint8_t data_reply_lang[7] = { 0x9F, 0x81, 0x11, 0x03, 0x65, 0x6e, 0x67 }; //eng 
+            uint8_t data_reply_country[7]= { 0x9F, 0x81, 0x01, 0x03, 0x55, 0x53, 0x41 }; //USA 
+            en50221_sl_send_data(d->sl, session_number, data_reply_country, 7);
+            en50221_sl_send_data(d->sl, session_number, data_reply_lang, 7);
+            LOG("--------------------S_SCALLBACK_REASON_CAMCONNECTED---------"
+                "CIPLUS_"
+                "APP_LANG_RESOURCEID-------------------------");
         }
         d->ignore_close = 1;
         break;
