@@ -340,6 +340,234 @@ void copy_dvb_parameters(transponder *s, transponder *d) {
         d->x_pmt ? d->x_pmt : "NULL");
 }
 
+// This function provides an scale factor for dB to percentage conversion,
+// based on the modulation. The top is the standard OK signal value in dB.
+float get_db_snr_map(transponder *tp) {
+    float db_map;
+    int top = 10; // Default factor 1.0: dB value ==> % (3dB => 3%)
+
+    switch (tp->sys) {
+
+    case SYS_DVBC_ANNEX_AC:
+    case SYS_DVBC_ANNEX_B:
+    case SYS_DVBC_ANNEX_C: /* not sure, to be tested */
+        switch (tp->mtype) {
+
+        case QAM_256:
+            top = DVB_C__QAM_256__FEC_NONE;
+            break;
+
+        case QAM_64:
+            top = DVB_C__QAM_64___FEC_NONE;
+            break;
+
+        default:
+            top = DVB_C__OTHER;
+            LOG("get_db_snr_map -> Mudulation SNR scale mapping DVB-C not tested !!");
+        }
+        break;
+
+    case SYS_DVBS:
+        switch (tp->mtype) {
+
+        case QPSK:
+            switch (tp->fec) {
+
+            case FEC_1_2:
+                top = DVB_S__QPSK__FEC_1_2;
+                break;
+
+            case FEC_2_3:
+                top = DVB_S__QPSK__FEC_2_3;
+                break;
+
+            case FEC_3_4:
+                top = DVB_S__QPSK__FEC_3_4;
+                break;
+
+            case FEC_5_6:
+                top = DVB_S__QPSK__FEC_5_6;
+                break;
+
+            case FEC_7_8:
+                top = DVB_S__QPSK__FEC_7_8;
+                break;
+
+            default:
+                top = DVB_S__OTHER;
+            }
+
+        default:
+            top = DVB_S__OTHER;
+            LOG("get_db_snr_map -> Mudulation SNR scale mapping DVB-S not tested !!");
+        }
+        break;
+
+    case SYS_DVBS2:
+        switch (tp->mtype) {
+
+        case QPSK:
+        switch (tp->fec) {
+
+            case FEC_1_2:
+                top = DVB_S2_QPSK__FEC_1_2;
+                break;
+
+            case FEC_2_3:
+                top = DVB_S2_QPSK__FEC_2_3;
+                break;
+
+            case FEC_3_4:
+                top = DVB_S2_QPSK__FEC_3_4;
+                break;
+
+            case FEC_5_6:
+                top = DVB_S2_QPSK__FEC_5_6;
+                break;
+
+            case FEC_8_9:
+                top = DVB_S2_QPSK__FEC_8_9;
+                break;
+
+            case FEC_9_10:
+                top = DVB_S2_QPSK__FEC_9_10;
+                break;
+
+            default:
+                top = DVB_S2_OTHER;
+            }
+
+        case PSK_8:
+        switch (tp->fec) {
+
+            case FEC_2_3:
+                top = DVB_S2_PSK_8_FEC_2_3;
+                break;
+
+            case FEC_3_4:
+                top = DVB_S2_PSK_8_FEC_3_4;
+                break;
+
+            case FEC_5_6:
+                top = DVB_S2_PSK_8_FEC_5_6;
+                break;
+
+            case FEC_8_9:
+                top = DVB_S2_PSK_8_FEC_8_9;
+                break;
+
+            default:
+                top = DVB_S2_PSK_8_OTHER;
+            }
+
+        default:
+            top = DVB_S2_OTHER;
+            LOG("get_db_snr_map -> Mudulation SNR scale mapping DVB-S2 not tested !!");
+        }
+        break;
+
+    case SYS_DVBT:
+    case SYS_DVBT2: /* not sure, to be tested */
+        switch (tp->mtype) {
+
+        case QPSK:
+        switch (tp->fec) {
+
+            case FEC_1_2:
+                top = DVB_T__QPSK__FEC_1_2;
+                break;
+
+            case FEC_2_3:
+                top = DVB_T__QPSK__FEC_2_3;
+                break;
+
+            case FEC_3_4:
+                top = DVB_T__QPSK__FEC_3_4;
+                break;
+
+            case FEC_5_6:
+                top = DVB_T__QPSK__FEC_5_6;
+                break;
+
+            case FEC_7_8:
+                top = DVB_T__QPSK__FEC_7_8;
+                break;
+
+            default:
+                top = DVB_T__QPSK_OTHER;
+            }
+
+        case QAM_16:
+        switch (tp->fec) {
+
+            case FEC_1_2:
+                top = DVB_T__QAM16_FEC_1_2;
+                break;
+
+            case FEC_2_3:
+                top = DVB_T__QAM16_FEC_2_3;
+                break;
+
+            case FEC_3_4:
+                top = DVB_T__QAM16_FEC_3_4;
+                break;
+
+            case FEC_5_6:
+                top = DVB_T__QAM16_FEC_5_6;
+                break;
+
+            case FEC_7_8:
+                top = DVB_T__QAM16_FEC_7_8;
+                break;
+
+            default:
+                top = DVB_T__QAM16_OTHER;
+            }
+
+        case QAM_64:
+        switch (tp->fec) {
+
+            case FEC_1_2:
+                top = DVB_T__QAM64_FEC_1_2;
+                break;
+
+            case FEC_2_3:
+                top = DVB_T__QAM64_FEC_2_3;
+                break;
+
+            case FEC_3_4:
+                top = DVB_T__QAM64_FEC_3_4;
+                break;
+
+            case FEC_5_6:
+                top = DVB_T__QAM64_FEC_5_6;
+                break;
+
+            case FEC_7_8:
+                top = DVB_T__QAM64_FEC_7_8;
+                break;
+
+            default:
+                top = DVB_T__QAM64_OTHER;
+            }
+
+        default:
+            top = DVB_T__QAM64_OTHER;
+            LOG("get_db_snr_map -> Mudulation SNR scale mapping DVB-T not tested !!");
+        }
+        break;
+
+    default:
+        LOG("get_db_snr_map -> Mudulation SNR scale mapping unkown !!");
+    }
+
+    db_map = top / 10.0; // top is dB*10
+    LOGM("get_db_snr_map -> src=%d, fe=%d, msys=%d, mtype=%d, fec=%d, db_map=%f",
+         tp->diseqc, tp->fe, tp->sys, tp->mtype, tp->fec, db_map);
+
+    return db_map;
+}
+
 #ifndef DISABLE_LINUXDVB
 
 struct diseqc_cmd {
@@ -971,6 +1199,8 @@ int dvb_tune(int aid, transponder *tp) {
     }
 #endif
 
+    ad->db_snr_map = get_db_snr_map(&ad->tp);
+
     return 0;
 }
 
@@ -1409,9 +1639,8 @@ int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
         snrd = enum_cmdargs[1].u.st.stat[0].uvalue;
     } else if (enum_cmdargs[1].u.st.stat[0].scale == FE_SCALE_DECIBEL) {
         snr_s = "dB";
-        init_snr = enum_cmdargs[1].u.st.stat[0].svalue; // dB / 1000
-        snrd =
-            init_snr * 65535.0 / (100 * 1000); // dB value ==> %  ( 3 dB => 3%)
+        init_snr = enum_cmdargs[1].u.st.stat[0].svalue; // dB * 1000
+        snrd = init_snr * 65535.0 / (100 * 1000 * ad->db_snr_map);
     }
     //	else if (enum_cmdargs[1].u.st.stat[0].scale == 0)
     //		err |= 2;
