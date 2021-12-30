@@ -988,7 +988,6 @@ int tune(int aid, int sid) {
         ad->wait_new_stream = 1;
         ad->strength = 0;
         ad->snr = 0;
-        ad->db_snr_map = 1.0;
         flush_data = 1;
         ad->is_t2mi = 0;
         set_socket_pos(ad->sock, 0); // flush the existing buffer
