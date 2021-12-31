@@ -159,6 +159,88 @@ typedef enum fe_pls_mode {
     PLS_MODE_COMBO,
 } fe_pls_mode_t;
 
+// dB scale * 10 for Integer conversion
+typedef enum dvb_snr_table {
+    DVB_C__QAM_64___FEC_NONE =  300 ,
+    DVB_C__QAM_256__FEC_NONE =  340 ,
+    DVB_C__OTHER             =  360 ,
+
+    DVB_S__QPSK__FEC_1_2     =   70 ,
+    DVB_S__QPSK__FEC_2_3     =   90 ,
+    DVB_S__QPSK__FEC_3_4     =  100 ,
+    DVB_S__QPSK__FEC_5_6     =  110 ,
+    DVB_S__QPSK__FEC_7_8     =  120 ,
+    DVB_S__OTHER             =  150 ,
+
+    DVB_S2_QPSK__FEC_1_2     =   90 ,
+    DVB_S2_QPSK__FEC_2_3     =  110 ,
+    DVB_S2_QPSK__FEC_3_4     =  120 ,
+    DVB_S2_QPSK__FEC_5_6     =  120 ,
+    DVB_S2_QPSK__FEC_8_9     =  130 ,
+    DVB_S2_QPSK__FEC_9_10    =  135 ,
+    DVB_S2_OTHER             =  150 ,
+
+    DVB_S2_PSK_8_FEC_2_3     =  145 ,
+    DVB_S2_PSK_8_FEC_3_4     =  160 ,
+    DVB_S2_PSK_8_FEC_5_6     =  175 ,
+    DVB_S2_PSK_8_FEC_8_9     =  190 ,
+    DVB_S2_PSK_8_OTHER       =  210 ,
+
+    DVB_T__QPSK__FEC_1_2     =   41 ,
+    DVB_T__QPSK__FEC_2_3     =   61 ,
+    DVB_T__QPSK__FEC_3_4     =   72 ,
+    DVB_T__QPSK__FEC_5_6     =   85 ,
+    DVB_T__QPSK__FEC_7_8     =   92 ,
+    DVB_T__QPSK_OTHER        =  110 ,
+
+    DVB_T__QAM16_FEC_1_2     =   98 ,
+    DVB_T__QAM16_FEC_2_3     =  121 ,
+    DVB_T__QAM16_FEC_3_4     =  134 ,
+    DVB_T__QAM16_FEC_5_6     =  148 ,
+    DVB_T__QAM16_FEC_7_8     =  157 ,
+    DVB_T__QAM16_OTHER       =  180 ,
+
+    DVB_T__QAM64_FEC_1_2     =  140 ,
+    DVB_T__QAM64_FEC_2_3     =  199 ,
+    DVB_T__QAM64_FEC_3_4     =  249 ,
+    DVB_T__QAM64_FEC_5_6     =  213 ,
+    DVB_T__QAM64_FEC_7_8     =  220 ,
+    DVB_T__QAM64_OTHER       =  250 ,
+
+    /* Table 2.12 - Memoryless Rayleigh channel K=0 - EBU Tech 3348 */
+    DVB_T2_QPSK__FEC_1_2     =   28 ,
+    DVB_T2_QPSK__FEC_3_5     =   47 ,
+    DVB_T2_QPSK__FEC_2_3     =   59 ,
+    DVB_T2_QPSK__FEC_3_4     =   76 ,
+    DVB_T2_QPSK__FEC_4_5     =   89 ,
+    DVB_T2_QPSK__FEC_5_6     =   98 ,
+    DVB_T2_QPSK_OTHER        =  110 ,
+
+    DVB_T2_QAM16_FEC_1_2     =   81 ,
+    DVB_T2_QAM16_FEC_3_5     =  101 ,
+    DVB_T2_QAM16_FEC_2_3     =  115 ,
+    DVB_T2_QAM16_FEC_3_4     =  133 ,
+    DVB_T2_QAM16_FEC_4_5     =  147 ,
+    DVB_T2_QAM16_FEC_5_6     =  156 ,
+    DVB_T2_QAM16_OTHER       =  180 ,
+
+    DVB_T2_QAM64_FEC_1_2     =  126 ,
+    DVB_T2_QAM64_FEC_3_5     =  147 ,
+    DVB_T2_QAM64_FEC_2_3     =  162 ,
+    DVB_T2_QAM64_FEC_3_4     =  182 ,
+    DVB_T2_QAM64_FEC_4_5     =  197 ,
+    DVB_T2_QAM64_FEC_5_6     =  207 ,
+    DVB_T2_QAM64_OTHER       =  230 ,
+
+    DVB_T2_QAM256_FEC_1_2    =  165 ,
+    DVB_T2_QAM256_FEC_3_5    =  190 ,
+    DVB_T2_QAM256_FEC_2_3    =  206 ,
+    DVB_T2_QAM256_FEC_3_4    =  229 ,
+    DVB_T2_QAM256_FEC_4_5    =  246 ,
+    DVB_T2_QAM256_FEC_5_6    =  256 ,
+    DVB_T2_QAM256_OTHER      =  280 ,
+} dvb_snr_table_t;
+
 #if DVBAPIVERSION < 0x0505
 #define DTV_ENUM_DELSYS 44
 #define SYS_DVBC_ANNEX_A SYS_DVBC_ANNEX_AC
@@ -292,6 +374,7 @@ int detect_dvb_parameters(char *s, transponder *tp);
 void init_dvb_parameters(transponder *tp);
 void copy_dvb_parameters(transponder *s, transponder *d);
 
+float get_db_snr_map(transponder *tp);
 uint32_t pls_scrambling_index(transponder *tp);
 
 char *get_pilot(int i);

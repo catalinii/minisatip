@@ -58,9 +58,9 @@ struct struct_adapter {
     uint16_t strength; // strength have values between 0 and 255
     uint32_t ber;
     uint16_t snr; // strength have values between 0 and 255
-    float strength_multiplier,
-        snr_multiplier;        // final value: strength *
-                               // strength_multipler, same for snr
+    float strength_multiplier, // final value: strength * strength_multipler,
+          snr_multiplier;      // same for snr
+    float db_snr_map;          // modulation scale value for dB SNR conversion
     uint32_t pid_err, dec_err; // detect pids received but not part of any
                                // stream, decrypt errors
     diseqc diseqc_param;
