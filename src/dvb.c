@@ -344,7 +344,7 @@ void copy_dvb_parameters(transponder *s, transponder *d) {
 // based on the modulation. The top is the standard OK signal value in dB.
 float get_db_snr_map(transponder *tp) {
     float db_map;
-    int top = 10; // Default factor 1.0: dB value ==> % (3dB => 3%)
+    int top = 800; // Default factor: 80dB value ==> 100%
 
     switch (tp->sys) {
 
@@ -356,14 +356,13 @@ float get_db_snr_map(transponder *tp) {
         case QAM_256:
             top = DVB_C__QAM_256__FEC_NONE;
             break;
-
         case QAM_64:
             top = DVB_C__QAM_64___FEC_NONE;
             break;
 
         default:
             top = DVB_C__OTHER;
-            LOG("get_db_snr_map -> Mudulation SNR scale mapping DVB-C not tested !!");
+            LOG("get_db_snr_map -> DVB-C modulation SNR scale not tested!!");
         }
         break;
 
@@ -376,30 +375,26 @@ float get_db_snr_map(transponder *tp) {
             case FEC_1_2:
                 top = DVB_S__QPSK__FEC_1_2;
                 break;
-
             case FEC_2_3:
                 top = DVB_S__QPSK__FEC_2_3;
                 break;
-
             case FEC_3_4:
                 top = DVB_S__QPSK__FEC_3_4;
                 break;
-
             case FEC_5_6:
                 top = DVB_S__QPSK__FEC_5_6;
                 break;
-
             case FEC_7_8:
                 top = DVB_S__QPSK__FEC_7_8;
                 break;
 
             default:
                 top = DVB_S__OTHER;
+                LOG("get_db_snr_map -> DVB-S modulation SNR scale not tested!!");
             }
 
         default:
-            top = DVB_S__OTHER;
-            LOG("get_db_snr_map -> Mudulation SNR scale mapping DVB-S not tested !!");
+            LOG("get_db_snr_map -> DVB-S modulation SNR scale unkown!!");
         }
         break;
 
@@ -412,29 +407,25 @@ float get_db_snr_map(transponder *tp) {
             case FEC_1_2:
                 top = DVB_S2_QPSK__FEC_1_2;
                 break;
-
             case FEC_2_3:
                 top = DVB_S2_QPSK__FEC_2_3;
                 break;
-
             case FEC_3_4:
                 top = DVB_S2_QPSK__FEC_3_4;
                 break;
-
             case FEC_5_6:
                 top = DVB_S2_QPSK__FEC_5_6;
                 break;
-
             case FEC_8_9:
                 top = DVB_S2_QPSK__FEC_8_9;
                 break;
-
             case FEC_9_10:
                 top = DVB_S2_QPSK__FEC_9_10;
                 break;
 
             default:
                 top = DVB_S2_OTHER;
+                LOG("get_db_snr_map -> DVB-S2 modulation SNR scale not tested!!");
             }
 
         case PSK_8:
@@ -443,31 +434,27 @@ float get_db_snr_map(transponder *tp) {
             case FEC_2_3:
                 top = DVB_S2_PSK_8_FEC_2_3;
                 break;
-
             case FEC_3_4:
                 top = DVB_S2_PSK_8_FEC_3_4;
                 break;
-
             case FEC_5_6:
                 top = DVB_S2_PSK_8_FEC_5_6;
                 break;
-
             case FEC_8_9:
                 top = DVB_S2_PSK_8_FEC_8_9;
                 break;
 
             default:
                 top = DVB_S2_PSK_8_OTHER;
+                LOG("get_db_snr_map -> DVB-S2 modulation SNR scale not tested!!");
             }
 
         default:
-            top = DVB_S2_OTHER;
-            LOG("get_db_snr_map -> Mudulation SNR scale mapping DVB-S2 not tested !!");
+            LOG("get_db_snr_map -> DVB-S2 modulation SNR scale unkown!!");
         }
         break;
 
     case SYS_DVBT:
-    case SYS_DVBT2: /* not sure, to be tested */
         switch (tp->mtype) {
 
         case QPSK:
@@ -476,25 +463,22 @@ float get_db_snr_map(transponder *tp) {
             case FEC_1_2:
                 top = DVB_T__QPSK__FEC_1_2;
                 break;
-
             case FEC_2_3:
                 top = DVB_T__QPSK__FEC_2_3;
                 break;
-
             case FEC_3_4:
                 top = DVB_T__QPSK__FEC_3_4;
                 break;
-
             case FEC_5_6:
                 top = DVB_T__QPSK__FEC_5_6;
                 break;
-
             case FEC_7_8:
                 top = DVB_T__QPSK__FEC_7_8;
                 break;
 
             default:
                 top = DVB_T__QPSK_OTHER;
+                LOG("get_db_snr_map -> DVB-T modulation SNR scale not tested!!");
             }
 
         case QAM_16:
@@ -503,25 +487,22 @@ float get_db_snr_map(transponder *tp) {
             case FEC_1_2:
                 top = DVB_T__QAM16_FEC_1_2;
                 break;
-
             case FEC_2_3:
                 top = DVB_T__QAM16_FEC_2_3;
                 break;
-
             case FEC_3_4:
                 top = DVB_T__QAM16_FEC_3_4;
                 break;
-
             case FEC_5_6:
                 top = DVB_T__QAM16_FEC_5_6;
                 break;
-
             case FEC_7_8:
                 top = DVB_T__QAM16_FEC_7_8;
                 break;
 
             default:
                 top = DVB_T__QAM16_OTHER;
+                LOG("get_db_snr_map -> DVB-T modulation SNR scale not tested!!");
             }
 
         case QAM_64:
@@ -530,35 +511,147 @@ float get_db_snr_map(transponder *tp) {
             case FEC_1_2:
                 top = DVB_T__QAM64_FEC_1_2;
                 break;
-
             case FEC_2_3:
                 top = DVB_T__QAM64_FEC_2_3;
                 break;
-
             case FEC_3_4:
                 top = DVB_T__QAM64_FEC_3_4;
                 break;
-
             case FEC_5_6:
                 top = DVB_T__QAM64_FEC_5_6;
                 break;
-
             case FEC_7_8:
                 top = DVB_T__QAM64_FEC_7_8;
                 break;
 
             default:
                 top = DVB_T__QAM64_OTHER;
+                LOG("get_db_snr_map -> DVB-T modulation SNR scale not tested!!");
             }
 
         default:
-            top = DVB_T__QAM64_OTHER;
-            LOG("get_db_snr_map -> Mudulation SNR scale mapping DVB-T not tested !!");
+            LOG("get_db_snr_map -> DVB-T modulation SNR scale unkown!!");
+        }
+        break;
+
+    case SYS_DVBT2:
+        switch (tp->mtype) {
+
+        case QPSK:
+        switch (tp->fec) {
+
+            case FEC_1_2:
+                top = DVB_T2_QPSK__FEC_1_2;
+                break;
+            case FEC_3_5:
+                top = DVB_T2_QPSK__FEC_3_5;
+                break;
+            case FEC_2_3:
+                top = DVB_T2_QPSK__FEC_2_3;
+                break;
+            case FEC_3_4:
+                top = DVB_T2_QPSK__FEC_3_4;
+                break;
+            case FEC_4_5:
+                top = DVB_T2_QPSK__FEC_4_5;
+                break;
+            case FEC_5_6:
+                top = DVB_T2_QPSK__FEC_5_6;
+                break;
+
+            default:
+                top = DVB_T2_QPSK_OTHER;
+                LOG("get_db_snr_map -> DVB-T2 modulation SNR scale not tested!!");
+            }
+
+        case QAM_16:
+        switch (tp->fec) {
+
+            case FEC_1_2:
+                top = DVB_T2_QAM16_FEC_1_2;
+                break;
+            case FEC_3_5:
+                top = DVB_T2_QAM16_FEC_3_5;
+                break;
+            case FEC_2_3:
+                top = DVB_T2_QAM16_FEC_2_3;
+                break;
+            case FEC_3_4:
+                top = DVB_T2_QAM16_FEC_3_4;
+                break;
+            case FEC_4_5:
+                top = DVB_T2_QAM16_FEC_4_5;
+                break;
+            case FEC_5_6:
+                top = DVB_T2_QAM16_FEC_5_6;
+                break;
+
+            default:
+                top = DVB_T2_QAM16_OTHER;
+                LOG("get_db_snr_map -> DVB-T2 modulation SNR scale not tested!!");
+            }
+
+        case QAM_64:
+        switch (tp->fec) {
+
+            case FEC_1_2:
+                top = DVB_T2_QAM64_FEC_1_2;
+                break;
+            case FEC_3_5:
+                top = DVB_T2_QAM64_FEC_3_5;
+                break;
+            case FEC_2_3:
+                top = DVB_T2_QAM64_FEC_2_3;
+                break;
+            case FEC_3_4:
+                top = DVB_T2_QAM64_FEC_3_4;
+                break;
+            case FEC_4_5:
+                top = DVB_T2_QAM64_FEC_4_5;
+                break;
+            case FEC_5_6:
+                top = DVB_T2_QAM64_FEC_5_6;
+                break;
+
+            default:
+                top = DVB_T2_QAM64_OTHER;
+                LOG("get_db_snr_map -> DVB-T2 modulation SNR scale not tested!!");
+            }
+
+        case QAM_256:
+        switch (tp->fec) {
+
+            case FEC_1_2:
+                top = DVB_T2_QAM256_FEC_1_2;
+                break;
+            case FEC_3_5:
+                top = DVB_T2_QAM256_FEC_3_5;
+                break;
+            case FEC_2_3:
+                top = DVB_T2_QAM256_FEC_2_3;
+                break;
+            case FEC_3_4:
+                top = DVB_T2_QAM256_FEC_3_4;
+                break;
+            case FEC_4_5:
+                top = DVB_T2_QAM256_FEC_4_5;
+                break;
+            case FEC_5_6:
+                top = DVB_T2_QAM256_FEC_5_6;
+                break;
+
+            default:
+                top = DVB_T2_QAM256_OTHER;
+                LOG("get_db_snr_map -> DVB-T2 modulation SNR scale not tested!!");
+            }
+
+        default:
+            LOG("get_db_snr_map -> DVB-T2 modulation SNR scale unkown!!");
         }
         break;
 
     default:
-        LOG("get_db_snr_map -> Mudulation SNR scale mapping unkown !!");
+        LOG("get_db_snr_map -> Modulation SNR scale unkown!!");
     }
 
     db_map = top / 10.0; // top is dB*10
