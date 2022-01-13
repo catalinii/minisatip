@@ -350,7 +350,6 @@ float get_db_snr_map(transponder *tp) {
 
     case SYS_DVBC_ANNEX_AC:
     case SYS_DVBC_ANNEX_B:
-    case SYS_DVBC_ANNEX_C: /* not sure, to be tested */
         switch (tp->mtype) {
 
         case QAM_256:
