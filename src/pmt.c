@@ -1246,8 +1246,8 @@ int clean_psi_buffer(uint8_t *pmt, uint8_t *clean, int clean_size) {
     return nlen + 3;
 }
 
-void clean_psi(adapter *ad, uint8_t *b) {
-    int pid = PID_FROM_TS(b);
+void clean_psi(adapter *ad, uint8_t *b, int pid) {
+    //int pid = PID_FROM_TS(b);  // Note: b pointer isn't the start of the TS packet !! 
     int pmt_len;
     int clean_size = 1500;
     uint8_t *clean, *pmt;
@@ -1255,6 +1255,7 @@ void clean_psi(adapter *ad, uint8_t *b) {
     SPMT *cpmt;
 
     p = find_pid(ad->id, pid);
+    DEBUGM("clean_psi(): ad=%d pid=%d find_pid=%s", ad->id, pid, p? "ok":"null");
     if (!p || !VALID_SID(p->sid[0])) // no need to fix this PMT as it not
                                      // requested by any stream
         return;
@@ -1690,7 +1691,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
             p->pmt = -pmt->id;
 
         if (ad && p && opts.clean_psi)
-            clean_psi(ad, b);
+            clean_psi(ad, b, pid);
 
         return 0;
     }
