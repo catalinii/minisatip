@@ -1932,7 +1932,7 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque) {
             continue;
         }
         //if (opts.clean_psi)  // TODO: Patch the SDT table
-        //    b[3] &= 0x0F; // Clears the CA flag of the service
+        //    b[3] &= 0xEF; // Clears the CA flag of the service
         for (j = 5; j < desc_loop_len; j += desc_len) {
             unsigned char *c = b + j;
             desc_len = c[1];
