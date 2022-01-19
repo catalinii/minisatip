@@ -31,7 +31,6 @@ alternative source
 #include <libdvben50221/en50221_app_datetime.h>
 #include <libdvben50221/en50221_app_dvb.h>
 #include <libdvben50221/en50221_app_epg.h>
-#include <libdvben50221/en50221_app_lowspeed.h>
 #include <libdvben50221/en50221_app_mmi.h>
 #include <libdvben50221/en50221_app_rm.h>
 #include <libdvben50221/en50221_app_smartcard.h>
@@ -75,10 +74,6 @@ alternative source
 #define CIPLUS_APP_CA_RESOURCEID MKRID(3, 1, 1)
 #define TS103205_APP_CA_RESOURCEID MKRID(3, 2, 1)
 #define TS103205_APP_MMI_RESOURCEID MKRID(64, 2, 1)
-//#define CIPLUS_APP_LOWSPEED_RESOURCEID	(DEVICE_TYPE, DEVICE_NUMBER)
-// MKRID(96,((DEVICE_TYPE)<<2)|((DEVICE_NUMBER) & 0x03),2) #define
-// CIPLUS_APP_LOWSPEED_RESOURCEID_TWO	(DEVICE_TYPE, DEVICE_NUMBER)
-// MKRID(96,((DEVICE_TYPE)<<2)|((DEVICE_NUMBER) & 0x03),3) //CI+ v1.3
 #define CIPLUS_APP_CC_RESOURCEID MKRID(140, 64, 1)
 #define CIPLUS_APP_CC_RESOURCEID_TWO MKRID(140, 64, 2)   // CI+ v1.3
 #define CIPLUS_APP_CC_RESOURCEID_THREE MKRID(140, 64, 3) // CI+ v1.3
@@ -319,8 +314,7 @@ uint32_t resource_ids[] = {
     // MMI
     EN50221_APP_MMI_RESOURCEID,
     TS103205_APP_MMI_RESOURCEID, // Multi-stream
-    // LSC
-    EN50221_APP_LOWSPEED_RESOURCEID(1, 1),
+    // Low Speed Communication is not supported
     // Content Control
     CIPLUS_APP_CC_RESOURCEID,
     CIPLUS_APP_CC_RESOURCEID_TWO,
@@ -347,7 +341,6 @@ uint32_t resource_ids_ci[] = {EN50221_APP_TELETEXT_RESOURCEID,
                               EN50221_APP_SMARTCARD_RESOURCEID(1),
                               EN50221_APP_RM_RESOURCEID,
                               EN50221_APP_MMI_RESOURCEID,
-                              EN50221_APP_LOWSPEED_RESOURCEID(1, 1),
                               EN50221_APP_EPG_RESOURCEID(1),
                               EN50221_APP_DVB_RESOURCEID,
                               EN50221_APP_CA_RESOURCEID,
