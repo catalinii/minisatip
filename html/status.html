@@ -366,18 +366,21 @@
 						var snr = parseInt(state['ad_snr'][i] / 2.55);
 					else
 						var snr = parseInt(state['ad_snr'][i] / 0.15);
-						
-						var snrdb = "16.5"; //ad_db value needs to go here
-					
-						//SNR progressbar color scaling
-						var snr_color;
-						if (snr<=25 && snr>=0) snr_color="progress-1";
-						if (snr<=42 && snr>25) snr_color="progress-2";
-						if (snr<=60 && snr>42) snr_color="progress-3";
-						if (snr<=80 && snr>60) snr_color="progress-4";
-						if (snr<=100 && snr>80) snr_color="progress-5";
+						var snrdb = parseInt(state['ad_db'][i] / 0.1);
 
-						signal += "<div class='level'><div class='db'>" + snrdb + "dB</div>SNR <progress class='psnr " + snr_color + "' value='" + snr + "' max='100' />" + snr + "%</div><br />";
+						if (snrdb >= 65535) // "65535" is the MAX_DB value
+							signal += "<div class='level'>SNR <progress class='psnr " + snr_color + "' value='" + snr + "' max='100' />" + snr + "%</div><br />";
+						else {
+							//SNR progressbar color scaling
+							var snr_color;
+							if (snr<=25 && snr>=0) snr_color="progress-1";
+							if (snr<=42 && snr>25) snr_color="progress-2";
+							if (snr<=60 && snr>42) snr_color="progress-3";
+							if (snr<=80 && snr>60) snr_color="progress-4";
+							if (snr<=100 && snr>80) snr_color="progress-5";
+
+							signal += "<div class='level'><div class='db'>" + snrdb + "dB</div>SNR <progress class='psnr " + snr_color + "' value='" + snr + "' max='100' />" + snr + "%</div><br />";
+						}
 
 					var ber = state['ad_ber'][i];
 					if (ber > 0)
