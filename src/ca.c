@@ -898,7 +898,7 @@ int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
     capmt[pos++] = listmgmt;
     copy16(capmt, pos, ca->sid);
     pos += 2;
-    capmt[pos++] = ((version & 0xF) << 1);
+    capmt[pos++] = ((version & 0xF) << 1) | 0x1;
     capmt[pos++] = 0; // PI LEN 2 bytes, set 0
     capmt[pos++] = 0;
 
