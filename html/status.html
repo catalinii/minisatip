@@ -366,11 +366,12 @@
 						var snr = parseInt(state['ad_snr'][i] / 2.55);
 					else
 						var snr = parseInt(state['ad_snr'][i] / 0.15);
-						var snrdb = parseInt(state['ad_db'][i] / 0.1);
+						var snrdb = parseInt(state['ad_db'][i]);
 
 						if (snrdb >= 65535) // "65535" is the MAX_DB value
 							signal += "<div class='level'>SNR <progress class='psnr " + snr_color + "' value='" + snr + "' max='100' />" + snr + "%</div><br />";
 						else {
+							snrdb = snrdb / 0.1;
 							//SNR progressbar color scaling
 							var snr_color;
 							if (snr<=25 && snr>=0) snr_color="progress-1";
