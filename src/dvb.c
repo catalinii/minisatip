@@ -1700,9 +1700,10 @@ void get_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
 // returns the strength and SNR between 0 .. 65535
 
 int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
-                   uint16_t *snr) {
+                   uint16_t *snr, uint16_t *db) {
 #if DVBAPIVERSION >= 0x050A
     *status = *snr = *ber = *strength = 0;
+    *db = 65535;
     int64_t strengthd = 0, snrd = 0, init_strength = 0, init_snr = 0;
     float tf;
     char *strength_s = "(none)", *snr_s = "(none)";
@@ -1748,6 +1749,8 @@ int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
             snrd = tf;
         else
             snrd = 65535;
+        init_snr = init_snr / 100;
+        *db = (int)init_snr;
     }
     //	else if (enum_cmdargs[1].u.st.stat[0].scale == 0)
     //		err |= 2;
@@ -1761,9 +1764,9 @@ int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
 
     LOGM(
         "get_signal_new adapter %d: status %d, strength %jd %s -> %jd, snr %jd "
-        "%s -> %jd, BER: %d, err %d",
+        "%s -> %jd, BER: %d, dB: %hu, err %d",
         ad->id, *status, init_strength, strength_s, strengthd, init_snr, snr_s,
-        snrd, *ber, err);
+        snrd, *ber, *db, err);
 
     if (err)
         return err;
@@ -1786,13 +1789,13 @@ int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
 
 int dvb_get_signal(adapter *ad) {
     int start = 0;
-    uint16_t strength = 0, snr = 0;
+    uint16_t strength = 0, snr = 0, dbvalue = 65535;
     int status = 0;
     uint32_t ber = 0;
 
     if (ad->strength_multiplier || ad->snr_multiplier) {
         if (ad->new_gs == 0) {
-            int new_gs = get_signal_new(ad, &status, &ber, &strength, &snr);
+            int new_gs = get_signal_new(ad, &status, &ber, &strength, &snr, &dbvalue);
             if (!new_gs)
                 ad->new_gs = NEW_SIGNAL;
             else
@@ -1801,7 +1804,7 @@ int dvb_get_signal(adapter *ad) {
         }
 
         if (!start && ad->new_gs == NEW_SIGNAL)
-            get_signal_new(ad, &status, &ber, &strength, &snr);
+            get_signal_new(ad, &status, &ber, &strength, &snr, &dbvalue);
 
         if (ad->new_gs == OLD_SIGNAL)
             get_signal(ad, &status, &ber, &strength, &snr);
@@ -1832,6 +1835,7 @@ int dvb_get_signal(adapter *ad) {
     // keep the assignment at the end for the signal thread to get the right
     // values as no locking is done on the adapter
     ad->snr = snr;
+    ad->db = dbvalue;
     ad->strength = strength;
     ad->status = status;
     ad->ber = ber;
