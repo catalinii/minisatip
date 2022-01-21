@@ -28,7 +28,7 @@ ARCH := $(shell $(CC) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 1)
 MINOR := $(shell git tag --points-at HEAD | cut -d. -f3 | tail -1)
 CFLAGS+=-DMINOR=\"$(MINOR)\"
 
-ifeq ($(OS),x86_64-linux-gnu)
+ifeq ($(OS),linux)
 DDCI=1
 endif
 
