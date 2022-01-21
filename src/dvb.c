@@ -1750,6 +1750,8 @@ int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
         else
             snrd = 65535;
         init_snr = init_snr / 100;
+        if (init_snr > 999)
+            init_snr = 999; // No more than 99.9 dB
         *db = (int)init_snr;
     }
     //	else if (enum_cmdargs[1].u.st.stat[0].scale == 0)
