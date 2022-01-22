@@ -99,9 +99,21 @@ int test_hash_table() {
 
     return 0;
 }
+
+int test_mkdir_recursive() {
+    const char *dir = "/tmp/minisatip/test";
+    mkdir_recursive(dir);
+    
+    struct stat sb;
+    ASSERT(stat(dir, &sb) == 0 && S_ISDIR(sb.st_mode), "stat should report that directory exists");
+
+    return 0;
+}
+
 int main() {
     opts.log = 255;
     strcpy(thread_name, "test");
     TEST_FUNC(test_hash_table(), "testing hash table");
+    TEST_FUNC(test_mkdir_recursive(), "testing directory creation");
     return 0;
 }

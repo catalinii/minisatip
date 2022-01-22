@@ -1323,9 +1323,9 @@ static void get_authdata_filename(char *dest, size_t len, unsigned int slot,
             cin[i] = 95; /* underscore _ */
         i++;
     };
-    snprintf(source, sizeof(source) - 1, "%s/ci_auth_%d.bin", getenv("HOME"),
+    snprintf(source, sizeof(source) - 1, "%s/ci_auth_%d.bin", opts.cache_dir,
              slot);
-    snprintf(target, sizeof(target) - 1, "%s/ci_auth_%s_%d.bin", getenv("HOME"),
+    snprintf(target, sizeof(target) - 1, "%s/ci_auth_%s_%d.bin", opts.cache_dir,
              cin, slot);
 
     struct stat buf;
@@ -1377,7 +1377,7 @@ static void get_authdata_filename(char *dest, size_t len, unsigned int slot,
         }
         /* else do nothing to prevent stranded symlinks */
     }
-    snprintf(dest, len, "%s/ci_auth_%s_%d.bin", getenv("HOME"), cin, slot);
+    snprintf(dest, len, "%s/ci_auth_%s_%d.bin", opts.cache_dir, cin, slot);
 }
 
 static int get_authdata(uint8_t *host_id, uint8_t *dhsk, uint8_t *akh,
@@ -1837,7 +1837,7 @@ static int check_ci_certificates(struct cc_ctrl_data *cc_data) {
         char ci_cert_file[256];
         memset(ci_cert_file, 0, sizeof(ci_cert_file));
         snprintf(ci_cert_file, sizeof(ci_cert_file) - 1,
-                 "/%s/ci_cert_%s_%d.der", getenv("HOME"), ci_name_underscore,
+                 "%s/ci_cert_%s_%d.der", opts.cache_dir, ci_name_underscore,
                  ci_number);
         LOG("CI%d EXTRACTING %s", ci_number, ci_cert_file);
         int fd =

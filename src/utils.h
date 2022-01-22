@@ -177,6 +177,7 @@ int get_index_hash_search(int start_pos, void *p, int max, int struct_size,
 int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, char *cc,
                  int pid);
 void write_buf_to_file(char *file, uint8_t *buf, int len);
+void mkdir_recursive(const char *path);
 
 #define mutex_lock(m) mutex_lock1(__FILE__, __LINE__, m)
 #define mutex_unlock(m) mutex_unlock1(__FILE__, __LINE__, m)

@@ -48,7 +48,7 @@
 #include <linux/dvb/ca.h>
 
 #define DEFAULT_LOG LOG_DVBCA
-#define CONFIG_FILE "ddci.conf"
+#define CONFIG_FILE_NAME "ddci.conf"
 
 int ddci_adapters;
 extern int dvbca_id;
@@ -1258,16 +1258,20 @@ int process_cat(int filter, unsigned char *b, int len, void *opaque) {
     return 0;
 }
 
-void save_channels(SHashTable *ch, char *file) {
+void save_channels(SHashTable *ch) {
     int i, j;
     Sddci_channel *c;
     struct stat buf;
-    if (!stat(file, &buf)) {
-        LOG("%s already exists, not saving", file);
+
+    char ddci_conf_path[256];
+    snprintf(ddci_conf_path, sizeof(ddci_conf_path) - 1, "%s/%s", opts.cache_dir, CONFIG_FILE_NAME);
+
+    if (!stat(ddci_conf_path, &buf)) {
+        LOG("%s already exists, not saving", ddci_conf_path);
         return;
     }
 
-    FILE *f = fopen(file, "wt");
+    FILE *f = fopen(ddci_conf_path, "wt");
     if (!f)
         return;
     fprintf(f, "# Format: SID: DDCI1,DDCI2\n");
@@ -1287,11 +1291,13 @@ void save_channels(SHashTable *ch, char *file) {
     }
     fclose(f);
 }
-void load_channels(SHashTable *ch, char *file) {
+void load_channels(SHashTable *ch) {
+    char ddci_conf_path[256];
+    snprintf(ddci_conf_path, sizeof(ddci_conf_path) - 1, "%s/%s", opts.cache_dir, CONFIG_FILE_NAME);
+
+    FILE *f = fopen(ddci_conf_path, "rt");
     Sddci_channel c;
     char line[1000];
-
-    FILE *f = fopen(file, "rt");
     int channels = 0;
     int pos = 0;
     if (!f)
@@ -1328,7 +1334,7 @@ void load_channels(SHashTable *ch, char *file) {
         setItem(ch, c.sid, &c, sizeof(c));
     }
     fclose(f);
-    LOG("Loaded %d channels from %s", channels, file);
+    LOG("Loaded %d channels from %s", channels, ddci_conf_path);
 }
 
 void ddci_free(adapter *ad) {
@@ -1337,7 +1343,7 @@ void ddci_free(adapter *ad) {
         return;
     free_hash(&d->mapping);
     if (channels.size) {
-        save_channels(&channels, CONFIG_FILE);
+        save_channels(&channels);
         free_hash(&channels);
     }
 }
@@ -1403,7 +1409,7 @@ void find_ddci_adapter(adapter **a) {
                 ad->free = ddci_free;
                 if (channels.size == 0) {
                     create_hash_table(&channels, 100);
-                    load_channels(&channels, CONFIG_FILE);
+                    load_channels(&channels);
                 }
 
                 ddci_adapters++;

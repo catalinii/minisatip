@@ -124,6 +124,7 @@ int rtsp, http, si, si1, ssdp1;
 #define IPV4_OPT '4'
 #define NO_PIDS_ALL_OPT 'k'
 #define CA_MULTIPLE_PMT_OPT 'c'
+#define CACHE_DIR_OPT 'z'
 
 static const struct option long_options[] = {
     {"adapters", required_argument, NULL, ADAPTERS_OPT},
@@ -132,6 +133,7 @@ static const struct option long_options[] = {
     {"buffer", required_argument, NULL, DVRBUFFER_OPT},
     {"bind", required_argument, NULL, BIND_OPT},
     {"bind-dev", required_argument, NULL, BIND_DEV_OPT},
+    {"cache-dir", required_argument, NULL, 0}, // no short
     {"clean-psi", no_argument, NULL, CLEANPSI_OPT},
     {"delsys", required_argument, NULL, DELSYS_OPT},
     {"debug", required_argument, NULL, DEBUG_OPT},
@@ -315,6 +317,9 @@ Help\n\
 \n\
 * -B X : set the app socket write buffer to X KB. \n\
 	* eg: -B 10000 - to set the socket buffer to 10MB\n\
+\n\
+* -z --cache-dir dir : set the app cache directory to dir. The directory will be created if it doesn't exist. \n\
+	* defaults to /var/cache/minisatip \n\
 \n\
 * -d --diseqc ADAPTER1:COMMITTED1-UNCOMMITTED1[,ADAPTER2:COMMITTED2-UNCOMMITTED2[,...]\n\
 \t* The first argument is the adapter number, second is the number of committed packets to send to a Diseqc 1.0 switch, third the number of uncommitted commands to sent to a Diseqc 1.1 switch\n\
@@ -596,6 +601,7 @@ void set_options(int argc, char *argv[]) {
 #endif
     opts.output_buffer = 2 * 1024 * 1024;
     opts.document_root = "html";
+    opts.cache_dir = "/var/cache/minisatip";
     opts.xml_path = DESC_XML;
     opts.th_priority = -1;
     opts.diseqc_addr = 0x10;
@@ -1005,6 +1011,10 @@ void set_options(int argc, char *argv[]) {
 
         case DOCUMENTROOT_OPT:
             opts.document_root = optarg;
+            break;
+
+        case CACHE_DIR_OPT:
+            opts.cache_dir = optarg;
             break;
 
         case THREADS_OPT:
@@ -1815,6 +1825,7 @@ int main(int argc, char *argv[]) {
         DEBUGL(log_it, "DEBUG of the module enabled: %s", loglevels[i]);
     }
 
+    mkdir_recursive(opts.cache_dir);
     readBootID();
     if ((rtsp = tcp_listen(opts.bind, opts.rtsp_port, opts.use_ipv4_only)) < 1)
         FAIL("RTSP: Could not listen on port %d", opts.rtsp_port);
@@ -1911,7 +1922,9 @@ int main(int argc, char *argv[]) {
 int readBootID() {
     int did = 0;
     opts.bootid = 0;
-    FILE *f = fopen("bootid", "rt");
+    char bootid_path[256];
+    snprintf(bootid_path, sizeof(bootid_path) - 1, "%s/bootid", opts.cache_dir);
+    FILE *f = fopen(bootid_path, "rt");
     __attribute__((unused)) int rv;
     if (f) {
         rv = fscanf(f, "%d %d", &opts.bootid, &did);
@@ -1922,7 +1935,7 @@ int readBootID() {
     opts.bootid++;
     if (opts.device_id < 1)
         opts.device_id = 1;
-    f = fopen("bootid", "wt");
+    f = fopen(bootid_path, "wt");
     if (f) {
         fprintf(f, "%d %d", opts.bootid, opts.device_id);
         fclose(f);

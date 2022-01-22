@@ -121,6 +121,7 @@ struct struct_opts {
     char disable_ssdp;
     char pmt_scan;
     char emulate_pids_all;
+    char *cache_dir;
 #ifdef AXE
     int quattro;
     int quattro_hiband;

@@ -53,6 +53,9 @@ Help
 * -B X : set the app socket write buffer to X KB. 
 	* eg: -B 10000 - to set the socket buffer to 10MB
 
+* -z --cache-dir dir : set the app cache directory to dir. The directory will be created if it doesn't exist. 
+	* defaults to /var/cache/minisati
+
 * -d --diseqc ADAPTER1:COMMITTED1-UNCOMMITTED1[,ADAPTER2:COMMITTED2-UNCOMMITTED2[,...]
 	* The first argument is the adapter number, second is the number of committed packets to send to a Diseqc 1.0 switch, third the number of uncommitted commands to sent to a Diseqc 1.1 switch
 	The higher number between the committed and uncommitted will be sent first.
@@ -264,4 +267,3 @@ Examples:
 	- Astra 19.2E, Kika HD: "rtsp://MINISATIP_HOST:554/?src=1&freq=11347&pol=v&ro=0.35&msys=dvbs2&mtype=8psk&plts=on&sr=22000&fec=23&pids=0,17,18,6600,6610,6620,6630"
 
 - msys can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, atsc, isdbt, dvbcb ( - DVBC_ANNEX_B )
-
