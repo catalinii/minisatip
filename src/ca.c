@@ -1307,15 +1307,12 @@ static uint8_t *element_get_ptr(struct cc_ctrl_data *cc_data, unsigned int id) {
     return e->data;
 }
 
-static void get_authdata_filename(char *dest, size_t len, unsigned int slot,
+void get_authdata_filename(char *dest, size_t len, unsigned int slot,
                                   char *ci_name) {
     char cin[128];
-    char source[256];
-    char target[256];
     /* add module name to slot authorization bin file */
     memset(cin, 0, sizeof(cin));
     strncpy(cin, ci_name, sizeof(cin) - 1);
-    FILE *auth_bin;
     /* quickly replace blanks */
     int i = 0;
     while (cin[i] != 0) {
@@ -1323,60 +1320,7 @@ static void get_authdata_filename(char *dest, size_t len, unsigned int slot,
             cin[i] = 95; /* underscore _ */
         i++;
     };
-    snprintf(source, sizeof(source) - 1, "%s/ci_auth_%d.bin", opts.cache_dir,
-             slot);
-    snprintf(target, sizeof(target) - 1, "%s/ci_auth_%s_%d.bin", opts.cache_dir,
-             cin, slot);
 
-    struct stat buf;
-
-    if (lstat(source, &buf) == 0) {
-
-        char linkname[4096];
-        memset(linkname, 0, sizeof(linkname));
-        ssize_t len = readlink(source, linkname, sizeof(linkname) - 1);
-        if (len > 0) {
-            if (strcmp(linkname, target) != 0) {
-                /* link doesn't point to target */
-                auth_bin = fopen(target, "r");
-                if (auth_bin)
-                    fclose(auth_bin);
-                /* correct symlink */
-                int r = remove(source);
-                LOG("CORRECTING %s to %s %s", target, source,
-                    r ? "" : "(remove failed)");
-                symlink(target, source);
-            }
-        } else {
-            auth_bin = fopen(target, "r");
-            if (auth_bin) {
-                /* if new file already exists and source is not symlink.
-        remove and do symlink */
-                fclose(auth_bin);
-                int r = remove(source);
-                LOG("LINKING %s to %s %s", target, source,
-                    r ? "" : "(remove failed)");
-                symlink(target, source);
-            } else {
-                /* target doesn't exist needs migration...
-        which means rename old bin file without module name
-        to new file with module name and do symlink to old one */
-                LOG("MIGRATING %s to %s", source, target);
-                if (!rename(source, target))
-                    symlink(target, source);
-            }
-        }
-    } else {
-        auth_bin = fopen(target, "r");
-        if (auth_bin) {
-            /* if new file already exists and source is nit there
-          simply do symlink */
-            fclose(auth_bin);
-            LOG("LINKING %s to %s", target, source);
-            symlink(target, source);
-        }
-        /* else do nothing to prevent stranded symlinks */
-    }
     snprintf(dest, len, "%s/ci_auth_%s_%d.bin", opts.cache_dir, cin, slot);
 }
 
