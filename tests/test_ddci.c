@@ -114,10 +114,10 @@ int test_channels() {
     c.ddci[1].ddci = 1;
     c.ddcis = 1;
     setItem(&h, c.sid, &c, sizeof(c));
-    save_channels(&h, "/tmp/minisatip.channels");
+    save_channels(&h);
     free_hash(&h);
     create_hash_table(&h, 10);
-    load_channels(&h, "/tmp/minisatip.channels");
+    load_channels(&h);
     ASSERT(getItem(&h, 200) != NULL, "Saved SID not found in table");
     int ch = 0;
     FOREACH_ITEM(&h, t) { ch++; }
@@ -561,6 +561,7 @@ int test_create_pmt() {
 int main() {
     opts.log = 65535;
     opts.debug = 0;
+    opts.cache_dir = "/tmp";
     strcpy(thread_name, "test");
     TEST_FUNC(test_channels(), "testing test_channels");
     TEST_FUNC(test_add_del_pmt(), "testing adding and removing pmts");

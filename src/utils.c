@@ -30,6 +30,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <math.h>
 #include <net/if.h>
 #include <netdb.h>
@@ -1749,6 +1750,25 @@ int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, char *cc,
         len += 188;
     }
     return len;
+}
+
+// http://nion.modprobe.de/blog/archives/357-Recursive-directory-creation.html
+void mkdir_recursive(const char *path) {
+    char tmp[PATH_MAX];
+    char *p = NULL;
+    size_t len;
+
+    snprintf(tmp, sizeof(tmp),"%s",path);
+    len = strlen(tmp);
+    if (tmp[len - 1] == '/')
+        tmp[len - 1] = 0;
+    for (p = tmp + 1; *p; p++)
+        if (*p == '/') {
+            *p = 0;
+            mkdir(tmp, S_IRWXU);
+            *p = '/';
+        }
+    mkdir(tmp, S_IRWXU);
 }
 
 /*

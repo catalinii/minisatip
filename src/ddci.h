@@ -78,8 +78,8 @@ int ddci_create_pat(ddci_device_t *d, uint8_t *b);
 int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
                     int ver, int pcr_pid);
 ddci_mapping_table_t *get_pid_mapping_allddci(int ad, int pid);
-void save_channels(SHashTable *ch, char *file);
-void load_channels(SHashTable *ch, char *file);
+void save_channels(SHashTable *ch);
+void load_channels(SHashTable *ch);
 int ddci_process_pmt(adapter *ad, SPMT *pmt);
 void blacklist_pmt_for_ddci(SPMT *pmt, int ddid);
 int ddci_del_pmt(adapter *ad, SPMT *spmt);

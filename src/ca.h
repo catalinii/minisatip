@@ -26,4 +26,6 @@ void set_ca_adapter_force_ci(char *o);
 char *get_ca_pin(int i);
 void set_ca_multiple_pmt(char *o);
 int get_max_pmt_for_ca(int i);
+void get_authdata_filename(char *dest, size_t len, unsigned int slot, 
+                           char *ci_name);
 #endif

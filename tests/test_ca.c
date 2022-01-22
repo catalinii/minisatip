@@ -123,9 +123,21 @@ int test_create_capmt() {
     return 0;
 }
 
+int test_get_authdata_filename() {
+    const char *expected_file_name = "/tmp/ci_auth_Conax_CSP_CIPLUS_CAM_4.bin";
+    char actual_filename[FILENAME_MAX];
+    get_authdata_filename(actual_filename, sizeof(actual_filename), 4, "Conax CSP CIPLUS CAM");
+    LOG("Expected file name: %s", expected_file_name)
+    LOG("File name: %s", actual_filename);
+    ASSERT(strcmp(actual_filename, expected_file_name) == 0, "Auth data filename mismatch");
+
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
+    opts.cache_dir = "/tmp";
 
     strcpy(thread_name, "test");
     memset(&d, 0, sizeof(d));
@@ -137,6 +149,7 @@ int main() {
     TEST_FUNC(test_multiple_pmt(), "testing CA multiple pmt");
     memset(d.capmt, -1, sizeof(d.capmt));
     TEST_FUNC(test_create_capmt(), "testing CA creating multiple pmt");
+    TEST_FUNC(test_get_authdata_filename(), "testing filename helper function");
     fflush(stdout);
     return 0;
 }
