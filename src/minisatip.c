@@ -133,7 +133,7 @@ static const struct option long_options[] = {
     {"buffer", required_argument, NULL, DVRBUFFER_OPT},
     {"bind", required_argument, NULL, BIND_OPT},
     {"bind-dev", required_argument, NULL, BIND_DEV_OPT},
-    {"cache-dir", required_argument, NULL, 0}, // no short
+    {"cache-dir", required_argument, NULL, CACHE_DIR_OPT},
     {"clean-psi", no_argument, NULL, CLEANPSI_OPT},
     {"delsys", required_argument, NULL, DELSYS_OPT},
     {"debug", required_argument, NULL, DEBUG_OPT},
