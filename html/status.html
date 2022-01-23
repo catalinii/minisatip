@@ -247,6 +247,30 @@
 		    "&mtype=8vsb", "&mtype=16vsb", "&mtype=8psk", "&mtype=16apsk", "&mtype=32apsk", "&mtype=dqpsk",  "&mtype=qam_4_nr",
 		    "&mtype=64apsk", "&mtype=128apsk", "&mtype=256apsk"];
 
+		function getAdapterIcon(ad_type, ad_allsys, ad_sys, available_systems) {
+			if (ad_type < 4) {
+				// Normal DVB adapters
+				var csys = '';
+
+				if (ad_sys == 0) {
+					// If the adapter is not active, use the first advertised system
+					parts = ad_allsys.split(',');
+
+					if (parts.length > 0) {
+						csys = parts[0];
+					}
+				} else {
+					// Otherwise use the currently active system
+					csys = available_systems[ad_sys];
+				}
+
+				return '<img src="' + csys + '.png" title="' + csys + '" />';
+			} else {
+				// Standalone CI adapters
+				return '<img src="dvbci.png" title="CI" />';
+			}
+		}
+
 		function getTable(state) {
 
 			if (!state)
@@ -288,32 +312,20 @@
 				myTable += "<td class='dt-right'>" + i + "</td>";
 
 				// STATUS
-				var csys = "";
-				if (state['ad_sys'][i] == 0)
-					csys = state['ad_allsys'][i];
-				else
-					csys = sys[state['ad_sys'][i]];
-
-				var tmpimg = csys.split(',');
-				var sysimg = csys;
-				if (tmpimg.length > 0)
-					sysimg = tmpimg[0];
-
 				var ad_enabled = state['ad_enabled'][i];
 				var ad_disabled = state['ad_disabled'][i];
 				var ad_type = state['ad_type'][i];
+				var ad_allsys = state['ad_allsys'][i];
 				var ad_sys = state['ad_sys'][i];
 
 				if (ad_enabled)
-					myTable += "<td class='dt-right enabled'><img src='" + sysimg + ".png' title='" + csys + "' /><br />";
+					myTable += "<td class='dt-right enabled'>" + getAdapterIcon(ad_type, ad_allsys, ad_sys, sys);
 				else
 					myTable += "<td class='dt-right disabled'>" + state['ad_allsys'][i];
 
 
-				if (ad_type == 1 || ad_type == 3) {
-					// myTable += "<small>(" + state['ad_phyad'][i] + "," + state['ad_phyfd'][i] +")</small>";
-				} else {
-					myTable += "<small>(" + state['ad_satip'][i] + ")</small>";
+				if (ad_type == 2) {
+					myTable += "<br /><small>(" + state['ad_satip'][i] + ")</small>";
 				}
 				myTable += "</td>";
 
@@ -324,14 +336,14 @@
 					myTable += "<td class='dt-right'></td>";
 
 				// FREQUENCY
-				if (ad_enabled)
+				if (ad_enabled && ad_type < 4)
 					myTable += "<td class='dt-right'>" + state['ad_freq'][i] + " " + pol[state['ad_pol'][i]] + "</td>";
 				else
 					myTable += "<td class='dt-right'></td>";
 
-				if (ad_enabled && (ad_sys == 0 || ad_sys == 1 || ad_sys == 2 || ad_sys == 5 || ad_sys == 6 || ad_sys == 18 || ad_sys == 19))
+				if (ad_enabled && ad_type < 4 && (ad_sys == 0 || ad_sys == 1 || ad_sys == 2 || ad_sys == 5 || ad_sys == 6 || ad_sys == 18 || ad_sys == 19))
 					myTable += "<td class='dt-right'>" + state['ad_sr'][i] + "</td>";
-				else if (ad_enabled)
+				else if (ad_enabled && ad_type < 4)
 					myTable += "<td class='dt-right'>" + state['ad_bw'][i] / 1000 + "MHZ</td>";
 				else
 					myTable += "<td class='dt-right'></td>";
@@ -349,6 +361,8 @@
 						signal = "<small>DISABLED</small>";
 					else
 						signal = "<small>OFFLINE</small>";
+				} else if (ad_type == 4) {
+					// It doesn't make sense to display signal strength for CI adapters
 				} else {
 					var sig = parseInt(state['ad_strength'][i] / 2.55);
 					
