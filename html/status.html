@@ -319,15 +319,13 @@
 				var ad_sys = state['ad_sys'][i];
 
 				if (ad_enabled)
-					myTable += "<td class='dt-right enabled'>" + getAdapterIcon(ad_type, ad_allsys, ad_sys, sys) + "<br />";
+					myTable += "<td class='dt-right enabled'>" + getAdapterIcon(ad_type, ad_allsys, ad_sys, sys);
 				else
 					myTable += "<td class='dt-right disabled'>" + state['ad_allsys'][i];
 
 
-				if (ad_type == 1 || ad_type == 3) {
-					// myTable += "<small>(" + state['ad_phyad'][i] + "," + state['ad_phyfd'][i] +")</small>";
-				} else {
-					myTable += "<small>(" + state['ad_satip'][i] + ")</small>";
+				if (ad_type == 2) {
+					myTable += "<br /><small>(" + state['ad_satip'][i] + ")</small>";
 				}
 				myTable += "</td>";
 
@@ -338,14 +336,14 @@
 					myTable += "<td class='dt-right'></td>";
 
 				// FREQUENCY
-				if (ad_enabled)
+				if (ad_enabled && ad_type < 4)
 					myTable += "<td class='dt-right'>" + state['ad_freq'][i] + " " + pol[state['ad_pol'][i]] + "</td>";
 				else
 					myTable += "<td class='dt-right'></td>";
 
-				if (ad_enabled && (ad_sys == 0 || ad_sys == 1 || ad_sys == 2 || ad_sys == 5 || ad_sys == 6 || ad_sys == 18 || ad_sys == 19))
+				if (ad_enabled && ad_type < 4 && (ad_sys == 0 || ad_sys == 1 || ad_sys == 2 || ad_sys == 5 || ad_sys == 6 || ad_sys == 18 || ad_sys == 19))
 					myTable += "<td class='dt-right'>" + state['ad_sr'][i] + "</td>";
-				else if (ad_enabled)
+				else if (ad_enabled && ad_type < 4)
 					myTable += "<td class='dt-right'>" + state['ad_bw'][i] / 1000 + "MHZ</td>";
 				else
 					myTable += "<td class='dt-right'></td>";
@@ -363,6 +361,8 @@
 						signal = "<small>DISABLED</small>";
 					else
 						signal = "<small>OFFLINE</small>";
+				} else if (ad_type == 4) {
+					// It doesn't make sense to display signal strength for CI adapters
 				} else {
 					var sig = parseInt(state['ad_strength'][i] / 2.55);
 					
