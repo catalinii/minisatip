@@ -20,6 +20,8 @@ typedef struct ca_device ca_device_t;
 #define ADAPTER_NETCV 3
 #define ADAPTER_CI 4
 
+#define MAX_DB 65535
+
 #define MAX_DELSYS 10
 
 typedef struct struct_adapter adapter;
@@ -58,6 +60,7 @@ struct struct_adapter {
     uint16_t strength; // strength have values between 0 and 255
     uint32_t ber;
     uint16_t snr; // strength have values between 0 and 255
+    uint16_t db;  // if MAX_DB then no value, else value is dB*10 of the adapter
     float strength_multiplier, // final value: strength * strength_multipler,
           snr_multiplier;      // same for snr
     float db_snr_map;          // modulation scale value for dB SNR conversion

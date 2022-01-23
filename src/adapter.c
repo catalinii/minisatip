@@ -278,6 +278,8 @@ int init_hw(int i) {
     ad->force_close = 0;
     ad->err = 0;
 
+    ad->db = MAX_DB;
+
     if (opts.max_pids)
         ad->max_pids = opts.max_pids;
 
@@ -430,6 +432,7 @@ int close_adapter(int na) {
     ad->dvr = 0;
     ad->strength = 0;
     ad->snr = 0;
+    ad->db = MAX_DB;
     ad->db_snr_map = 1.0;
 #ifndef AXE
     ad->old_diseqc = -1;
@@ -988,6 +991,7 @@ int tune(int aid, int sid) {
         ad->wait_new_stream = 1;
         ad->strength = 0;
         ad->snr = 0;
+        ad->db = MAX_DB;
         flush_data = 1;
         ad->is_t2mi = 0;
         set_socket_pos(ad->sock, 0); // flush the existing buffer
@@ -2190,6 +2194,7 @@ _symbols adapters_sym[] = {
     {"ad_strength", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS,
      offsetof(adapter, strength)},
     {"ad_snr", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, offsetof(adapter, snr)},
+    {"ad_db", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, offsetof(adapter, db)},
     {"ad_ber", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, ber)},
     {"ad_pol", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.pol)},
     {"ad_sr", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS,
