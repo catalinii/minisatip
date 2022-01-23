@@ -369,6 +369,7 @@
 
 					var snrdb = parseInt(state['ad_db'][i]);
 					
+					//SNR progressbar color scaling
 					var snr_color;
 					if (snr<=25 && snr>=0) snr_color="progress-1";
 					if (snr<=42 && snr>25) snr_color="progress-2";
@@ -380,9 +381,6 @@
 						signal += "<div class='level'>SNR <progress class='psnr " + snr_color + "' value='" + snr + "' max='100' />" + snr + "%</div><br />";
 					else {
 						snrdb = snrdb / 10;
-						//SNR progressbar color scaling
-
-
 						signal += "<div class='level'><div class='db'>" + snrdb + "dB</div>SNR <progress class='psnr " + snr_color + "' value='" + snr + "' max='100' />" + snr + "%</div><br />";
 					}
 
