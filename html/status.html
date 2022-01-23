@@ -247,6 +247,30 @@
 		    "&mtype=8vsb", "&mtype=16vsb", "&mtype=8psk", "&mtype=16apsk", "&mtype=32apsk", "&mtype=dqpsk",  "&mtype=qam_4_nr",
 		    "&mtype=64apsk", "&mtype=128apsk", "&mtype=256apsk"];
 
+		function getAdapterIcon(ad_type, ad_allsys, ad_sys, available_systems) {
+			if (ad_type < 4) {
+				// Normal DVB adapters
+				var csys = '';
+
+				if (ad_sys == 0) {
+					// If the adapter is not active, use the first advertised system
+					parts = ad_allsys.split(',');
+
+					if (parts.length > 0) {
+						csys = parts[0];
+					}
+				} else {
+					// Otherwise use the currently active system
+					csys = available_systems[ad_sys];
+				}
+
+				return '<img src="' + csys + '.png" title="' + csys + '" />';
+			} else {
+				// Standalone CI adapters
+				return '<img src="dvbci.png" title="CI" />';
+			}
+		}
+
 		function getTable(state) {
 
 			if (!state)
@@ -288,24 +312,14 @@
 				myTable += "<td class='dt-right'>" + i + "</td>";
 
 				// STATUS
-				var csys = "";
-				if (state['ad_sys'][i] == 0)
-					csys = state['ad_allsys'][i];
-				else
-					csys = sys[state['ad_sys'][i]];
-
-				var tmpimg = csys.split(',');
-				var sysimg = csys;
-				if (tmpimg.length > 0)
-					sysimg = tmpimg[0];
-
 				var ad_enabled = state['ad_enabled'][i];
 				var ad_disabled = state['ad_disabled'][i];
 				var ad_type = state['ad_type'][i];
+				var ad_allsys = state['ad_allsys'][i];
 				var ad_sys = state['ad_sys'][i];
 
 				if (ad_enabled)
-					myTable += "<td class='dt-right enabled'><img src='" + sysimg + ".png' title='" + csys + "' /><br />";
+					myTable += "<td class='dt-right enabled'>" + getAdapterIcon(ad_type, ad_allsys, ad_sys, sys) + "<br />";
 				else
 					myTable += "<td class='dt-right disabled'>" + state['ad_allsys'][i];
 
