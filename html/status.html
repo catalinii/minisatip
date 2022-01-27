@@ -200,8 +200,32 @@
 			background-color: #4eb725;
 		}
 
-	</style>
+		.dark-mode {
+			background: #000;
+			color: #fff !important;
+		}
 
+		.dark-mode #pintervall {
+			background: #fff;
+		}
+
+		.dark-mode table.dataTable tbody tr {
+			background-color: #000 !important;
+			color: #fff !important;
+		}
+
+		.dark-mode table.dataTable.stripe tbody tr.odd, .dark-mode table.dataTable.display tbody tr.odd {
+			background-color: #151515 !important;
+		}
+
+		.dark-mode .dataTable.hover tbody tr:hover, .dark-mode table.dataTable.display tbody tr:hover {
+			background-color: #151515 !important;
+		}
+
+		.dark-mode table.dataTable.order-column tbody tr>.sorting_1, .dark-mode table.dataTable.order-column tbody tr>.sorting_2, .dark-mode table.dataTable.order-column tbody tr>.sorting_3, .dark-mode table.dataTable.display tbody tr>.sorting_1, .dark-mode table.dataTable.display tbody tr>.sorting_2, .dark-mode table.dataTable.display tbody tr>.sorting_3 {
+			background-color: #151515 !important;
+		}
+	</style>
 	<script type="text/javascript" language="javascript" src="jquery-3.2.1.min.js"></script>
 	<script type="text/javascript" language="javascript" src="jquery.dataTables.min.js"></script>
 </head>
@@ -220,13 +244,42 @@
 				<td class="upperbar">
 					<button id="stats">Stats ON</button>
 				</td>
+
+				<td class="separator" />
+				<td class="upperbar">
+					<button id="darkModeBtn" onClick="DarkMode()">Dark Mode</button>
+				</td>
+
 				<td class="separator" />
 				<td id="statsarea" class="upperbar" />
+
 			</tr>
 		</tbody>
 	</table>
 
 	<div id="table" />
+
+	<script stype="text/javascript">
+		var body = document.querySelector("body");
+		var button = document.getElementById("darkModeBtn");
+			if(localStorage.getItem("darkMode") == "enabled"){
+				body.classList.add("dark-mode");
+				body.classList.add("dark-mode");
+				button.innerText="Light Mode";
+			}
+			button.addEventListener("click", function(){
+			if(body.classList.contains("dark-mode")){
+				body.classList.remove("dark-mode");
+				button.innerText="Dark Mode";
+				localStorage.setItem('darkMode', 'disabled');
+			}else{
+				body.classList.add("dark-mode");
+				button.innerText="Light Mode";
+				localStorage.setItem('darkMode', 'enabled');
+			}
+
+			});
+	</script>
 
 	<script type="text/javascript">
 		function getDebug(data) {
