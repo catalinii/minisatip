@@ -688,6 +688,12 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
     return 0;
 }
 
+int source_enabled_for_adapter(adapter *ad, transponder *tp) {
+    if (tp->sys != SYS_DVBS && tp->sys != SYS_DVBS2)
+        return 1;
+    return ad->sources_pos[tp->diseqc];
+}
+
 int get_free_adapter(transponder *tp) {
     int i;
     int match = 0;
@@ -727,7 +733,7 @@ int get_free_adapter(transponder *tp) {
                 match = 1;
             if (!ad->enabled || !compare_tunning_parameters(ad->id, tp))
                 match = 1;
-            if (match && ad->sources_pos[tp->diseqc] && !init_hw(fe))
+            if (match && source_enabled_for_adapter(ad, tp) && !init_hw(fe))
                 return fe;
         }
         goto noadapter;
@@ -735,7 +741,7 @@ int get_free_adapter(transponder *tp) {
     // provide an already existing adapter
     for (i = 0; i < MAX_ADAPTERS; i++)
         if ((ad = get_adapter_nw(i)) && delsys_match(ad, msys) &&
-            ad->sources_pos[tp->diseqc])
+            source_enabled_for_adapter(ad, tp))
             if (!compare_tunning_parameters(ad->id, tp))
                 return i;
 
@@ -743,13 +749,13 @@ int get_free_adapter(transponder *tp) {
         // first free adapter that has the same msys
         if ((ad = get_adapter_nw(i)) && ad->sid_cnt == 0 &&
             delsys_match(ad, msys) && !compare_slave_parameters(ad, tp) &&
-            ad->sources_pos[tp->diseqc])
+            source_enabled_for_adapter(ad, tp))
             return i;
         if (!ad && delsys_match(a[i], msys) &&
             !compare_slave_parameters(a[i], tp)) // device is not initialized
         {
             ad = a[i];
-            if (ad->sources_pos[tp->diseqc] && !init_hw(i))
+            if (source_enabled_for_adapter(ad, tp) && !init_hw(i))
                 return i;
         }
     }
@@ -759,7 +765,7 @@ int get_free_adapter(transponder *tp) {
         // first free slave adapter that has the same msys
         if ((ad = get_adapter_nw(i)) && ad->sid_cnt == 0 &&
             delsys_match(ad, msys) && compare_slave_parameters(ad, tp) &&
-            ad->sources_pos[tp->diseqc]) {
+            source_enabled_for_adapter(ad, tp)) {
             LOGM("get free adapter found slave adapter %d", i);
             return i;
         }
