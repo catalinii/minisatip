@@ -281,7 +281,7 @@ int create_channel_for_pmt(Sddci_channel *c, SPMT *pmt) {
                     c->ddci[c->ddcis].blacklisted_until = 0;
                     c->ddci[c->ddcis++].ddci = i;
                     c->sid = pmt->sid;
-                    strncpy(c->name, pmt->name, sizeof(c->name));
+                    strncpy(c->name, pmt->name, sizeof(c->name) - 1);
                 }
         }
     return 0;
@@ -314,8 +314,6 @@ int find_ddci_for_pmt(Sddci_channel *c, SPMT *pmt) {
                     "%d max %d)",
                     ddid, pmt->id, pmt->pid, d ? d->channels : -1,
                     d ? d->max_channels : -1);
-
-            ddid = -1;
         } else
             LOG("PMT %d blacklisted on DD %d for another %jd s", pmt->id,
                 c->ddci[c->pos].ddci,
@@ -421,19 +419,21 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     d->pmt[pos].ver = (d->pmt[pos].ver + 1) & 0xF;
 
     d->ver = (d->ver + 1) & 0xF;
-    if(!d->channels++) { // for first PMT set transponder ID
+    if (!d->channels++) { // for first PMT set transponder ID
         d->tid = ad->transponder_id;
     }
-                
-    if (!get_pid_mapping(d, pmt->adapter, 1)) // if the CAT is not mapped, add it
+
+    if (!get_pid_mapping(d, pmt->adapter,
+                         1)) // if the CAT is not mapped, add it
     {
-        LOG("Mapping CAT to PMT %d from transponder %d, DDCI transponder %d", pmt->id, ad->transponder_id, d->tid)
+        LOG("Mapping CAT to PMT %d from transponder %d, DDCI transponder %d",
+            pmt->id, ad->transponder_id, d->tid)
         add_pid_mapping_table(ad->id, 1, pmt->id, d, 1); // add pid 1
         d->cat_processed = 0;
     }
 
-    LOG("found DDCI %d for pmt %d, running channels %d, max_channels %d", ddid, pmt->id,
-        d->channels, d->max_channels);
+    LOG("found DDCI %d for pmt %d, running channels %d, max_channels %d", ddid,
+        pmt->id, d->channels, d->max_channels);
 
     add_pid_mapping_table(ad->id, pmt->pid, pmt->id, d, 0);
     set_pid_rewrite(d, ad->id, pmt->pid,
@@ -445,9 +445,11 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     }
 
     for (i = 0; i < pmt->stream_pids; i++) {
-        LOGM("DD %d adding stream pid %d %s", d->id, pmt->stream_pid[i].pid, pmt->stream_pid[i].pid == pmt->pcr_pid? "PCR":"");
+        LOGM("DD %d adding stream pid %d %s", d->id, pmt->stream_pid[i].pid,
+             pmt->stream_pid[i].pid == pmt->pcr_pid ? "PCR" : "");
 
-        int ddci_pid = add_pid_mapping_table(ad->id, pmt->stream_pid[i].pid, pmt->id, d, 0);
+        int ddci_pid = add_pid_mapping_table(ad->id, pmt->stream_pid[i].pid,
+                                             pmt->id, d, 0);
         // map the PCR pid as well
         if (pmt->stream_pid[i].pid == pmt->pcr_pid) {
             d->pmt[pos].pcr_pid = ddci_pid;
@@ -546,8 +548,9 @@ void delete_blacklisted_pmt(ddci_device_t *d, adapter *ad) {
 int ddci_encrypted(adapter *ad, SPMT *pmt) {
     ddci_device_t *d = get_ddci(ad->id);
     Sddci_channel *channel = getItem(&channels, pmt->sid);
-    if(channel && channel->locked) {
-        LOG("PMT %d sid %d is encrypted and locked, keeping active", pmt->id, pmt->sid);
+    if (channel && channel->locked) {
+        LOG("PMT %d sid %d is encrypted and locked, keeping active", pmt->id,
+            pmt->sid);
         return 0;
     }
     if (d) // only on DDCI adapter we can understand if the channel is encrypted
@@ -736,8 +739,8 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
     copy16(b, 0, pmt->sid);
     b += 2;
     *b++ = (ver << 1) | 0x01;
-    *b++ = 0;    // section number
-    *b++ = 0;    // last section number
+    *b++ = 0;                              // section number
+    *b++ = 0;                              // last section number
     *b++ = 0xE0 | ((pcr_pid >> 8) & 0xFF); // PCR PID
     *b++ = pcr_pid & 0xFF;                 // PCR PID
 
@@ -803,8 +806,8 @@ int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len) {
         SPMT *pmt;
         for (i = 0; i < MAX_CHANNELS_ON_CI; i++) {
             if ((pmt = get_pmt(d->pmt[i].id))) {
-                psi_len =
-                    ddci_create_pmt(d, pmt, psi, sizeof(psi), d->pmt[i].ver, d->pmt[i].pcr_pid);
+                psi_len = ddci_create_pmt(d, pmt, psi, sizeof(psi),
+                                          d->pmt[i].ver, d->pmt[i].pcr_pid);
                 ddci_mapping_table_t *m =
                     get_pid_mapping(d, pmt->adapter, pmt->pid);
                 if (m)
@@ -869,8 +872,10 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
 
     if (mutex_lock(&d->mutex))
         return 0;
-    if (!d->enabled)
+    if (!d->enabled) {
+        mutex_unlock(&d->mutex);
         return 0;
+    }
 
     if (!ad2) {
         mutex_unlock(&d->mutex);
@@ -1058,6 +1063,9 @@ int ddci_read_sec_data(sockets *s) {
     }
     // copy the processed data to d->out buffer
     adapter *ad = get_adapter(s->sid);
+    if (!ad) {
+        return 0;
+    }
     ddci_device_t *d = get_ddci(s->sid);
     b = ad->buf;
     int left = 0, rlen = ad->rlen;
@@ -1112,8 +1120,10 @@ int ddci_open_device(adapter *ad) {
         }
 
         d = ddci_devices[ad->id] = malloc1(sizeof(ddci_device_t));
-        if (!d)
+        if (!d) {
+            free(out);
             return -1;
+        }
         mutex_init(&d->mutex);
         d->id = ad->id;
         memset(out, -1, DDCI_BUFFER + 10);
@@ -1146,8 +1156,12 @@ int ddci_open_device(adapter *ad) {
     // set input bitrate for TBS devices to 100Mbits/s
 #define MODULATOR_INPUT_BITRATE 33
     //    set_property(write_fd, MODULATOR_INPUT_BITRATE, 100);
-    set_linux_socket_nonblock(read_fd);
-    set_linux_socket_nonblock(write_fd);
+    int err;
+    if ((err = set_linux_socket_nonblock(read_fd)))
+        LOG("Failed to set socket %d nonblocking: %d", write_fd, err);
+
+    if ((err = set_linux_socket_nonblock(write_fd)))
+        LOG("Failed to set socket %d nonblocking: %d", write_fd, err);
 #else
     int fd[2];
     if (pipe(fd) == -1) {
@@ -1264,7 +1278,8 @@ void save_channels(SHashTable *ch) {
     struct stat buf;
 
     char ddci_conf_path[256];
-    snprintf(ddci_conf_path, sizeof(ddci_conf_path) - 1, "%s/%s", opts.cache_dir, CONFIG_FILE_NAME);
+    snprintf(ddci_conf_path, sizeof(ddci_conf_path) - 1, "%s/%s",
+             opts.cache_dir, CONFIG_FILE_NAME);
 
     if (!stat(ddci_conf_path, &buf)) {
         LOG("%s already exists, not saving", ddci_conf_path);
@@ -1293,7 +1308,8 @@ void save_channels(SHashTable *ch) {
 }
 void load_channels(SHashTable *ch) {
     char ddci_conf_path[256];
-    snprintf(ddci_conf_path, sizeof(ddci_conf_path) - 1, "%s/%s", opts.cache_dir, CONFIG_FILE_NAME);
+    snprintf(ddci_conf_path, sizeof(ddci_conf_path) - 1, "%s/%s",
+             opts.cache_dir, CONFIG_FILE_NAME);
 
     FILE *f = fopen(ddci_conf_path, "rt");
     Sddci_channel c;
