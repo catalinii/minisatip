@@ -98,7 +98,7 @@ typedef struct struct_satipc {
     uint8_t addpids, setup_pids;
     unsigned char *tcp_data;
     int tcp_size, tcp_pos, tcp_len;
-    char use_fe, option_no_session, option_no_setup, option_no_option;
+    char option_no_session, option_no_setup, option_no_option;
     uint32_t rcvp, repno, rtp_miss, rtp_ooo; // rtp statstics
     uint16_t rtp_seq;
     char static_config;
@@ -1117,7 +1117,7 @@ void get_s2_url(adapter *ad, char *url, int url_len) {
     //	if (ro == ROLLOFF_AUTO)
     //		ro = ROLLOFF_35;
     FILL("src=%d", tp->diseqc, 0, tp->diseqc);
-    if (sip->use_fe && sip->satip_fe > 0)
+    if (sip->satip_fe > 0)
         FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
     FILL("&freq=%d", tp->freq, 0, tp->freq / 1000);
     FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
@@ -1145,7 +1145,7 @@ void get_c2_url(adapter *ad, char *url, int url_len) {
         return;
     url[0] = 0;
     FILL("freq=%.1f", tp->freq, 0, tp->freq / 1000.0);
-    if (sip->use_fe && sip->satip_fe > 0)
+    if (sip->satip_fe > 0)
         FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
     FILL("&sr=%d", tp->sr, -1, tp->sr / 1000);
     FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
@@ -1170,7 +1170,7 @@ void get_t2_url(adapter *ad, char *url, int url_len) {
         return;
     url[0] = 0;
     FILL("freq=%.1f", tp->freq, 0, tp->freq / 1000.0);
-    if (sip->use_fe && sip->satip_fe > 0)
+    if (sip->satip_fe > 0)
         FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
     FILL("&bw=%d", tp->bw, BANDWIDTH_AUTO, tp->bw / 1000000);
     FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
@@ -1490,13 +1490,10 @@ int satipc_tune(int aid, transponder *tp) {
     ad->snr = 0;
     sip->want_commit = 0;
     sip->want_tune = 1;
-    sip->ignore_packets =
-        1; // ignore all the packets until we get 200 from the server
+    // ignore all the packets until we get 200 from the server
+    sip->ignore_packets = 1;
     sip->lap = 0;
     sip->ldp = 0;
-    sip->use_fe = 0;
-    if (tp->fe > 0)
-        sip->use_fe = 1;
     if (sip->restart_when_tune) {
         if (!sip->rtsp_socket_closed) {
             LOG("Restart needed for satip adapter %d", sip->id);
@@ -1514,20 +1511,6 @@ int satipc_tune(int aid, transponder *tp) {
 
 fe_delivery_system_t satipc_delsys(int aid, int fd, fe_delivery_system_t *sys) {
     return 0;
-}
-
-uint8_t determine_fe(adapter **a, int pos, char *csip, int sport) {
-    int i = pos;
-    while (i > 0) {
-        i--;
-        adapter *ad = a[i];
-        satipc *sip = satip[i];
-        if (!ad || !sip)
-            continue;
-        if (sport == sip->sport && !strcmp(sip->sip, csip))
-            return sip->satip_fe + 1;
-    }
-    return 1;
 }
 
 void satipc_free(adapter *ad) {
@@ -1594,8 +1577,6 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
         ad->sys[1] = SYS_DVBT;
     if (ad->sys[0] == SYS_DVBC2)
         ad->sys[1] = SYS_DVBC_ANNEX_A;
-    if (sip->satip_fe == -1)
-        sip->satip_fe = determine_fe(a, i, sip->sip, sip->sport);
     sip->addpids = opts.satip_addpids;
     sip->setup_pids = opts.satip_setup_pids;
     sip->tcp_size = 0;
