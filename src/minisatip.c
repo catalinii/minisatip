@@ -287,15 +287,15 @@ void usage() {
 
     printf(
         "\n\t./%s [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] \n\
-	\t[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]]"
+\t[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]] \n\t"
 #ifndef DISABLE_DVBAPI
-        "[-o oscam_host:dvbapi_port,offset] "
+        "[-o [~]oscam_host:dvbapi_port[,offset] "
 #endif
         "[-p public_host] [-r remote_rtp_host] [-R document_root] "
 #ifndef DISABLE_SATIPCLIENT
-        "[-s [~][*][DELSYS:][FE_ID@][source_ip/]host[:port] "
+        "[-s [*][DELSYS:][FE_ID@][source_ip/]host[:port] "
 #endif
-        "[-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w "
+        "\n\t[-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w "
         "http_server[:port]] \n "
 #ifdef AXE
         "[-7 M1:S1[,M2:S2]] [-A SRC1:INP1:DISEQC1[,SRC2:INP2:DISEQC2]]\n\n"
