@@ -293,7 +293,7 @@ void usage() {
 #endif
         "[-p public_host] [-r remote_rtp_host] [-R document_root] "
 #ifndef DISABLE_SATIPCLIENT
-        "[-s [*][DELSYS:][FE_ID@][source_ip/]host[:port] "
+        "[-s [~][*][DELSYS:][FE_ID@][source_ip/]host[:port] "
 #endif
         "[-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w "
         "http_server[:port]] \n "
