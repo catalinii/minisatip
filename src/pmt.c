@@ -961,10 +961,17 @@ int pmt_decrypt_stream(adapter *ad) {
 
 void mark_pids_null(adapter *ad) {
     int i;
+    int pids_all = 0;
+
+    if (ad->drop_encrypted && opts.pids_all_no_dec) { // Check (one time) if pids=all is activated
+        SPid *p = find_pid(ad->id, 8192);
+        if (p)
+            pids_all = 1;
+    }
     for (i = 0; i < ad->rlen; i += DVB_FRAME) {
         uint8_t *b = ad->buf + i;
         int pid = PID_FROM_TS(b);
-        if (pid == 0x1FFF)
+        if (pid == 0x1FFF || pids_all) // When pids=all don't drop encrypted packets
             continue;
         if ((b[3] & 0x80) == 0x80) {
             if (opts.debug & (DEFAULT_LOG | LOG_DMX))

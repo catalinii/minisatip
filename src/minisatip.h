@@ -85,6 +85,7 @@ struct struct_opts {
     char dvbapi_host[100];
     int dvbapi_offset;
     int drop_encrypted;
+    int pids_all_no_dec;
     int rtsp_port;
     uint8_t netcv_count;
     char *netcv_if;

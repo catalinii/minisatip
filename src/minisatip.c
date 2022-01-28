@@ -408,7 +408,8 @@ Help\n\
 #endif
 #ifndef DISABLE_DVBAPI
         "\
-* -o --dvbapi host:port,offset - specify the hostname and port for the dvbapi server (oscam). Port 9000 is set by default (if not specified) \n\
+* -o --dvbapi [~]host:port,offset - specify the hostname and port for the dvbapi server (oscam). Port 9000 is set by default (if not specified) \n\
+	* [~] This symbol at the beginning indicates that in all `pids=all` requests the filtering of unencrypted packets must be disabled (useful when not using -E).\n\
 	* eg: -o 192.168.9.9:9000 or -o 192.168.9.9:9999,2  with offset if multiple dvbapi clients use the same server\n\
 	192.168.9.9 is the host where oscam is running and 9000 is the port configured in dvbapi section in oscam.conf.\n\
 	* eg: -o /tmp/camd.socket \n\
@@ -594,6 +595,7 @@ void set_options(int argc, char *argv[]) {
     opts.dvbapi_port = 0;
     memset(opts.dvbapi_host, 0, sizeof(opts.dvbapi_host));
     opts.drop_encrypted = 1;
+    opts.pids_all_no_dec = 0;
     opts.rtsp_port = 554;
     opts.use_ipv4_only = 1;
 #ifndef DISABLE_SATIPCLIENT
@@ -909,6 +911,11 @@ void set_options(int argc, char *argv[]) {
             char buf[100];
             memset(buf, 0, sizeof(buf));
             strncpy(buf, optarg, sizeof(buf) - 1);
+            if (buf[0] == '~')
+            {
+                opts.pids_all_no_dec = 1;
+                memmove(&buf[0], &buf[1], sizeof(buf) - 1);
+            }
             char *sep2 = strchr(buf, ',');
             if (sep2 != NULL) {
                 *sep2 = 0;
