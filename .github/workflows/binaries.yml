@@ -1,0 +1,53 @@
+name: Binaries
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    container: catalinii/minisatip-build-image:latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: '0'
+    - name: Build ARM
+      run: |
+       ./configure --enable-enigma --enable-static --host=arm-linux-gnueabihf --disable-dvbaes --disable-dvbca
+       make
+       zip -9 -r /minisatip_arm.zip minisatip html
+
+    - name: Build AXE
+      run: |
+       make clean
+       ./configure --disable-dvbapi --enable-static --host=sh4-linux --disable-dvbaes --disable-dvbca --enable-axe
+       make PMT=0
+       zip -9 -r /minisatip_axe.zip minisatip html
+
+    - name: Build MIPS
+      run: |
+       make clean
+       ./configure --enable-static --host=mipsel-tuxbox-linux-gnu --disable-dvbca --disable-dvbaes --enable-enigma
+       make
+       zip -9 -r /minisatip_mips.zip minisatip html
+
+
+    - name: Bump version and push tag/create release point
+      uses: anothrNick/github-tag-action@1.35.0
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        WITH_V: true
+        DEFAULT_BUMP: patch
+      id: bump_version
+    - name: Upload binary to release
+      uses: svenstaro/upload-release-action@v1-release
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: /minisatip*zip
+        file_glob: true
+        tag: ${{ steps.bump_version.outputs.new_tag }}
+        overwrite: true
+
+
+

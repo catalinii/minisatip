@@ -25,17 +25,8 @@ CPPFLAGS += @CPPFLAGS@
 
 OS := $(shell $(CC) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 2)
 ARCH := $(shell $(CC) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 1)
-TAG := $(shell git tag 2>/dev/null| tail -1)
-HASH := $(shell git log -1 --format="%h" 2>/dev/null)
-VERSION := $(TAG)-$(HASH)
-
-ifneq ($(VERSION),-)
-CFLAGS+=-DVERSION=\"$(VERSION)\"
-endif
-
-ifeq ($(OS),x86_64-linux-gnu)
-DDCI=1
-endif
+MINOR := $(shell git tag --points-at HEAD | cut -d. -f3 | tail -1)
+CFLAGS+=-DMINOR=\"$(MINOR)\"
 
 ifneq ($(OS),apple)
         LDFLAGS += -lrt
@@ -80,6 +71,9 @@ LIBS+=dvben50221 dvbapi ucsi
 SOURCES+=ca.c
 TABLES=1
 PMT=1
+ifeq ($(OS),linux)
+DDCI=1
+endif
 else
 CFLAGS+=-DDISABLE_DVBCA
 endif
@@ -133,7 +127,7 @@ CFLAGS-$(AXE) += -DAXE
 
 CFLAGS-$(ENIGMA) += -DENIGMA
 CFLAGS-$(EMBEDDED) += -DNO_BACKTRACE
-CFLAGS-$(DEBUG) += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=null -static-libasan -static-libubsan -static-liblsan
+CFLAGS-$(DEBUG) += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=undefined -static-libasan -static-libubsan -static-liblsan
 
 
 ifeq ($(STATIC),1)

@@ -63,14 +63,13 @@ typedef struct struct_key {
     uint16_t caid, info_pid;
     uint32_t prid;
     int ecmtime;
-    int demux_index;
+    int demux_index, adapter_index;
     int id;
     int adapter;
     int ver;
     int ecms;
     int program_id; // pmt sid
-    unsigned char *pi, cardsystem[64], reader[64], from[64], protocol[64];
-    int pi_len;
+    unsigned char cardsystem[64], reader[64], from[64], protocol[64];
     int parity;
     int blen;
     int tsid, onid;

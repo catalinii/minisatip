@@ -7,9 +7,8 @@
 #include "stream.h"
 #include "utils.h"
 
-#ifndef VERSION
-#define VERSION "1.0-unknown"
-#endif
+#define MAJOR "1.1."
+#define VERSION (MAJOR MINOR)
 
 #define EMU_PIDS_ALL_ENFORCED_PIDS_LIST 1, 16, 17, 18, 20, 21
 
@@ -53,8 +52,11 @@ extern char app_name[], version[];
 
 struct struct_opts {
     char *rrtp;
+    char *name_app;
     char *http_host; // http-server host
     char *rtsp_host; // rtsp-server host
+    char *bind; // bind address
+    char *bind_dev; // bind device
     char *datetime_compile;
     time_t start_time;
     char *datetime_start;
@@ -119,7 +121,7 @@ struct struct_opts {
     char disable_ssdp;
     char pmt_scan;
     char emulate_pids_all;
-    char ca_quirks;
+    char *cache_dir;
 #ifdef AXE
     int quattro;
     int quattro_hiband;

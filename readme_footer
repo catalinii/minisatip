@@ -20,11 +20,11 @@ make EXTRA_CFLAGS=....
 Examples:
 -------
 - In order to listen to a radio after minisatip is started open the following URL in your favorite media player:
-	- on Hotbird 13E: "http://MINISATIP_HOST:8080/?msys=dvbs&freq=11623&pol=v&sr=27500&pids=0,10750,254"
-	- Astra 19.2E: "http://MINISATIP_HOST:8080/?msys=dvbs&freq=12266&pol=h&sr=27500&pids=0,851"	
+	- on Hotbird 13E: `http://MINISATIP_HOST:8080/?msys=dvbs&freq=11623&pol=v&sr=27500&pids=0,10750,254`
+	- Astra 19.2E: `http://MINISATIP_HOST:8080/?msys=dvbs&freq=12266&pol=h&sr=27500&pids=0,851`
 
 - Television FTA programs:
-	- Astra 19.2E, Kika HD: "rtsp://MINISATIP_HOST:554/?src=1&freq=11347&pol=v&ro=0.35&msys=dvbs2&mtype=8psk&plts=on&sr=22000&fec=23&pids=0,17,18,6600,6610,6620,6630"
+	- Astra 19.2E, Kika HD: `http://MINISATIP_HOST:554/?src=1&freq=11347&pol=v&ro=0.35&msys=dvbs2&mtype=8psk&plts=on&sr=22000&fec=23&pids=0,17,18,6600,6610,6620,6630`
 
 - msys can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, atsc, isdbt, dvbcb ( - DVBC_ANNEX_B )
 

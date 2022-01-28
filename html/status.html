@@ -77,11 +77,157 @@
 			font-size: 1.5em;
 			font-family: "Lucida Console", Monaco, monospace;
 		}
-	</style>
 
+		/* Progress bar releated styling */	
+
+		.pstr,
+		.psnr {
+			animation: fadeIn 0.5s;
+			-webkit-animation: fadeIn 0.5s;
+			-moz-animation: fadeIn 0.5s;
+			-o-animation: fadeIn 0.5s;
+			-ms-animation: fadeIn 0.5s;
+		}
+
+		@keyframes fadeIn {
+			0% {
+				opacity: 0.7;
+			}
+			100% {
+				opacity: 1;
+			}
+		}
+
+		@-moz-keyframes fadeIn {
+			0% {
+				opacity: 0.7;
+			}
+			100% {
+				opacity: 1;
+			}
+		}
+
+		@-webkit-keyframes fadeIn {
+			0% {
+				opacity: 0.7;
+			}
+			100% {
+				opacity: 1;
+			}
+		}
+
+		@-o-keyframes fadeIn {
+			0% {
+				opacity: 0.7;
+			}
+			100% {
+				opacity: 1;
+			}
+		}
+
+		@-ms-keyframes fadeIn {
+			0% {
+				opacity: 0.7;
+			}
+			100% {
+				opacity: 1;
+			}
+		}
+
+		.db {
+			position: absolute;
+			display: inline-block;
+			margin-left: 48px;
+			margin-top: 1px;
+			z-index: 10;
+			background-color: rgba(60, 60, 60, 0.15);
+			opacity: 0.8;
+			color: #000;
+			width: 45px;
+			text-align: center;
+			font-size: 9pt
+		}
+
+		progress {
+			height: 14px;
+			width: 80px;
+			margin-right: 3px;
+			border: 1px solid #999;
+			background-color: #eaeaea;
+			border-radius:2px;
+		}
+
+		progress::-webkit-progress-bar {
+			background-color: #eaeaea;
+			border-radius: 0px !important;
+		}
+		progress::-webkit-progress-value {
+			border-right:1px solid #999;
+		}
+		progress::-moz-progress-bar{
+			border-right:1px solid #999;
+		}
+
+		.progress-1::-webkit-progress-value {
+			background-color: #fd5252;
+		}
+		.progress-2::-webkit-progress-value {
+			background-color: #fdb352;
+		}		
+		.progress-3::-webkit-progress-value {
+			background-color: #e3d802;
+		}
+		.progress-4::-webkit-progress-value {
+			background-color: #bae302;
+		}		
+		.progress-5::-webkit-progress-value {
+			background-color: #4eb725;
+		}
+
+		.progress-1::-moz-progress-bar {
+			background-color: #fd5252;
+		}
+		.progress-2::-moz-progress-bar {
+			background-color: #fdb352;
+		}		
+		.progress-3::-moz-progress-bar {
+			background-color: #e3d802;
+		}
+		.progress-4::-moz-progress-bar {
+			background-color: #bae302;
+		}		
+		.progress-5::-moz-progress-bar {
+			background-color: #4eb725;
+		}
+
+		.dark-mode {
+			background: #000;
+			color: #fff !important;
+		}
+
+		.dark-mode #pintervall {
+			background: #fff;
+		}
+
+		.dark-mode table.dataTable tbody tr {
+			background-color: #000 !important;
+			color: #fff !important;
+		}
+
+		.dark-mode table.dataTable.stripe tbody tr.odd, .dark-mode table.dataTable.display tbody tr.odd {
+			background-color: #151515 !important;
+		}
+
+		.dark-mode .dataTable.hover tbody tr:hover, .dark-mode table.dataTable.display tbody tr:hover {
+			background-color: #151515 !important;
+		}
+
+		.dark-mode table.dataTable.order-column tbody tr>.sorting_1, .dark-mode table.dataTable.order-column tbody tr>.sorting_2, .dark-mode table.dataTable.order-column tbody tr>.sorting_3, .dark-mode table.dataTable.display tbody tr>.sorting_1, .dark-mode table.dataTable.display tbody tr>.sorting_2, .dark-mode table.dataTable.display tbody tr>.sorting_3 {
+			background-color: #151515 !important;
+		}
+	</style>
 	<script type="text/javascript" language="javascript" src="jquery-3.2.1.min.js"></script>
 	<script type="text/javascript" language="javascript" src="jquery.dataTables.min.js"></script>
-	<script type="text/javascript" language="javascript" src="jquery.pBar.min.js"></script>
 </head>
 
 <body>
@@ -98,13 +244,42 @@
 				<td class="upperbar">
 					<button id="stats">Stats ON</button>
 				</td>
+
+				<td class="separator" />
+				<td class="upperbar">
+					<button id="darkModeBtn" onClick="DarkMode()">Dark Mode</button>
+				</td>
+
 				<td class="separator" />
 				<td id="statsarea" class="upperbar" />
+
 			</tr>
 		</tbody>
 	</table>
 
 	<div id="table" />
+
+	<script stype="text/javascript">
+		var body = document.querySelector("body");
+		var button = document.getElementById("darkModeBtn");
+			if(localStorage.getItem("darkMode") == "enabled"){
+				body.classList.add("dark-mode");
+				body.classList.add("dark-mode");
+				button.innerText="Light Mode";
+			}
+			button.addEventListener("click", function(){
+			if(body.classList.contains("dark-mode")){
+				body.classList.remove("dark-mode");
+				button.innerText="Dark Mode";
+				localStorage.setItem('darkMode', 'disabled');
+			}else{
+				body.classList.add("dark-mode");
+				button.innerText="Light Mode";
+				localStorage.setItem('darkMode', 'enabled');
+			}
+
+			});
+	</script>
 
 	<script type="text/javascript">
 		function getDebug(data) {
@@ -121,6 +296,33 @@
 
 		var pol = ["", "(V)", "(H)", "(R)", "(L)"];
 		var sys = ["", "dvbc", "dvbcb", "dvbt", "dss", "dvbs", "dvbs2", "dvbh", "isdbt", "isdbs", "isdbc", "atsc", "atscmh", "dmbth", "cmmb", "dab", "dvbt2", "turbo", "dvbcc", "dvbc2"];
+                var mtype = ["&mtype=qpsk", "&mtype=16qam", "&mtype=32qam", "&mtype=64qam", "&mtype=128qam", "&mtype=256qam", "", // auto
+		    "&mtype=8vsb", "&mtype=16vsb", "&mtype=8psk", "&mtype=16apsk", "&mtype=32apsk", "&mtype=dqpsk",  "&mtype=qam_4_nr",
+		    "&mtype=64apsk", "&mtype=128apsk", "&mtype=256apsk"];
+
+		function getAdapterIcon(ad_type, ad_allsys, ad_sys, available_systems) {
+			if (ad_type < 4) {
+				// Normal DVB adapters
+				var csys = '';
+
+				if (ad_sys == 0) {
+					// If the adapter is not active, use the first advertised system
+					parts = ad_allsys.split(',');
+
+					if (parts.length > 0) {
+						csys = parts[0];
+					}
+				} else {
+					// Otherwise use the currently active system
+					csys = available_systems[ad_sys];
+				}
+
+				return '<img src="' + csys + '.png" title="' + csys + '" />';
+			} else {
+				// Standalone CI adapters
+				return '<img src="dvbci.png" title="CI" />';
+			}
+		}
 
 		function getTable(state) {
 
@@ -163,32 +365,20 @@
 				myTable += "<td class='dt-right'>" + i + "</td>";
 
 				// STATUS
-				var csys = "";
-				if (state['ad_sys'][i] == 0)
-					csys = state['ad_allsys'][i];
-				else
-					csys = sys[state['ad_sys'][i]];
-
-				var tmpimg = csys.split(',');
-				var sysimg = csys;
-				if (tmpimg.length > 0)
-					sysimg = tmpimg[0];
-
 				var ad_enabled = state['ad_enabled'][i];
 				var ad_disabled = state['ad_disabled'][i];
 				var ad_type = state['ad_type'][i];
+				var ad_allsys = state['ad_allsys'][i];
 				var ad_sys = state['ad_sys'][i];
 
 				if (ad_enabled)
-					myTable += "<td class='dt-right enabled'><img src='" + sysimg + ".png' title='" + csys + "' /><br />";
+					myTable += "<td class='dt-right enabled'>" + getAdapterIcon(ad_type, ad_allsys, ad_sys, sys);
 				else
 					myTable += "<td class='dt-right disabled'>" + state['ad_allsys'][i];
 
 
-				if (ad_type == 1 || ad_type == 3) {
-					// myTable += "<small>(" + state['ad_phyad'][i] + "," + state['ad_phyfd'][i] +")</small>";
-				} else {
-					myTable += "<small>(" + state['ad_satip'][i] + ")</small>";
+				if (ad_type == 2) {
+					myTable += "<br /><small>(" + state['ad_satip'][i] + ")</small>";
 				}
 				myTable += "</td>";
 
@@ -199,14 +389,14 @@
 					myTable += "<td class='dt-right'></td>";
 
 				// FREQUENCY
-				if (ad_enabled)
+				if (ad_enabled && ad_type < 4)
 					myTable += "<td class='dt-right'>" + state['ad_freq'][i] + " " + pol[state['ad_pol'][i]] + "</td>";
 				else
 					myTable += "<td class='dt-right'></td>";
 
-				if (ad_enabled && (ad_sys == 0 || ad_sys == 1 || ad_sys == 2 || ad_sys == 5 || ad_sys == 6 || ad_sys == 18 || ad_sys == 19))
+				if (ad_enabled && ad_type < 4 && (ad_sys == 0 || ad_sys == 1 || ad_sys == 2 || ad_sys == 5 || ad_sys == 6 || ad_sys == 18 || ad_sys == 19))
 					myTable += "<td class='dt-right'>" + state['ad_sr'][i] + "</td>";
-				else if (ad_enabled)
+				else if (ad_enabled && ad_type < 4)
 					myTable += "<td class='dt-right'>" + state['ad_bw'][i] / 1000 + "MHZ</td>";
 				else
 					myTable += "<td class='dt-right'></td>";
@@ -224,24 +414,49 @@
 						signal = "<small>DISABLED</small>";
 					else
 						signal = "<small>OFFLINE</small>";
+				} else if (ad_type == 4) {
+					// It doesn't make sense to display signal strength for CI adapters
 				} else {
 					var sig = parseInt(state['ad_strength'][i] / 2.55);
-					var sig0 = Math.max(0, sig - 10);
-					signal = "<div class='level'>STR <div class='pBar' data-from='" + sig0 + "' data-to='" + sig + "'></div> " + sig + "%</div><br />";
+					
+					//STR progressbar color scaling
+					var str_color;
+					if (sig<=25 && sig>=0) str_color="progress-1";
+					if (sig<=42 && sig>25) str_color="progress-2";
+					if (sig<=60 && sig>42) str_color="progress-3";
+					if (sig<=80 && sig>60) str_color="progress-4";
+					if (sig<=100 && sig>80) str_color="progress-5";					
+
+					signal = "<div class='level'>STR <progress class='pstr " + str_color + "' value='" + sig + "' max='100' />" + sig + "%</div><br />";
 
 					if (ad_type == 1 || ad_type == 3)
 						var snr = parseInt(state['ad_snr'][i] / 2.55);
 					else
 						var snr = parseInt(state['ad_snr'][i] / 0.15);
-					var snr0 = Math.max(0, snr - 10);
-					signal += "<div class='level'>SNR <div class='pBar' data-from='" + snr0 + "' data-to='" + snr + "'></div> " + snr + "%</div><br />";
+
+					var snrdb = parseInt(state['ad_db'][i]);
+					
+					//SNR progressbar color scaling
+					var snr_color;
+					if (snr<=25 && snr>=0) snr_color="progress-1";
+					if (snr<=42 && snr>25) snr_color="progress-2";
+					if (snr<=60 && snr>42) snr_color="progress-3";
+					if (snr<=80 && snr>60) snr_color="progress-4";
+					if (snr<=100 && snr>80) snr_color="progress-5";
+					
+					if (snrdb >= 65535) // "65535" is the MAX_DB value
+						signal += "<div class='level'>SNR <progress class='psnr " + snr_color + "' value='" + snr + "' max='100' />" + snr + "%</div><br />";
+					else {
+						snrdb = snrdb / 10;
+						signal += "<div class='level'><div class='db'>" + snrdb + "dB</div>SNR <progress class='psnr " + snr_color + "' value='" + snr + "' max='100' />" + snr + "%</div><br />";
+					}
 
 					var ber = state['ad_ber'][i];
 					if (ber > 0)
-						signal += "<div class='level'>BER <div class='pBar' data-from='" + ber + "' data-to='" + ber + "' data-color='red'></div> " + ber + "</div><br />";
+						signal += "<div class='level'>BER <progress class='pber progress-1' value='" + ber + "' max='1000' />" + ber + "</div><br />";
 					var ccerr = state['ad_ccerr'][i];
 					if (ccerr > 0)
-						signal += "<div class='level'>CC <div class='pBar' data-from='" + ccerr + "' data-to='" + ccerr + "' data-color='red'></div> " + ccerr + "</div><br />";
+						signal += "<div class='level'>CC <progress class='pcc progress-1' value='" + ccerr + "' max='1000' />" + ccerr + "</div><br />";
 				}
 				myTable += "<td class='dt-right'>" + signal + " </td>";
 
@@ -281,10 +496,10 @@
 						// Create VLC stream URL
 						// Example: rtsp://@satip/?src=1&freq=12382&pol=H&msys=DVBS2&sr=27500&pids=0,5375,5378,116,5375,32
 						var hostArray = window.location.host.split(':');
-						myTable += "<small><a href=" + '"' + "rtsp://@" + state['rtsp_host'] + "/?src=" + state['ad_pos'][i] + "&freq=" + state['ad_freq'][i]
-							+ "&pol=" + pol[state['ad_pol'][i]].replace('(', '').replace(')', '') + "&msys=" + sys[state['ad_sys'][i]].toUpperCase() + "&sr=" + state['ad_sr'][i] + "&pids=" + st_p + '"' + ">RTSP Link</a></small><br />";
-						myTable += "<small><a href=" + '"' + "http://" + hostArray[0] + ":" + hostArray[1] + "/?src=" + state['ad_pos'][i] + "&freq=" + state['ad_freq'][i]
-							+ "&pol=" + pol[state['ad_pol'][i]].replace('(', '').replace(')', '') + "&msys=" + sys[state['ad_sys'][i]].toUpperCase() + "&sr=" + state['ad_sr'][i] + "&pids=" + st_p + '"' + ">HTTP Link</a></small><br />";
+						myTable += "<small><a href=" + '"' + "rtsp://@" + state['rtsp_host'] + "/?fe=" + state['ad_fe'][i] + "&src=" + state['ad_pos'][i] + "&freq=" + state['ad_freq'][i]
+							+ "&pol=" + pol[state['ad_pol'][i]].replace('(', '').replace(')', '') + "&msys=" + sys[state['ad_sys'][i]].toUpperCase() + mtype[state['ad_mtype'][i]] + "&sr=" + state['ad_sr'][i] + "&pids=" + st_p + '"' + ">RTSP Link</a></small><br />";
+						myTable += "<small><a href=" + '"' + "http://" + hostArray[0] + ":" + hostArray[1] + "/?fe=" + state['ad_fe'][i] + "&src=" + state['ad_pos'][i] + "&freq=" + state['ad_freq'][i]
+							+ "&pol=" + pol[state['ad_pol'][i]].replace('(', '').replace(')', '') + "&msys=" + sys[state['ad_sys'][i]].toUpperCase() + mtype[state['ad_mtype'][i]] + "&sr=" + state['ad_sr'][i] + "&pids=" + st_p + '"' + ">HTTP Link</a></small><br />";
 
 						if (state['st_overflow'][j] > 0)
 							myTable += "<small>Dropped: " + (state['st_overflow'][j] / 1048576.0).toFixed(2) + " MB</small><br />";
@@ -318,7 +533,7 @@
 			myTable += "<li><B>Minisatip Version:</B> " + state['version'] + "  --  <B>Build date/time:</B> " + state['datetime_compile'] + "</li>"
 			myTable += "<li><B>Current Time:</B> " + state['datetime_current'] + " -- <B>Start Time:</B> " + state['datetime_start'] + " -- <B>Running Time:</B> " + state['time_running'] + "</span></li>"
 			myTable += "<li><B>RTSP address:</B> " + state['rtsp_host'] + " -- <B>UUID:</B> " + state['uuid'] + " -- <B>BOOTID:</B> " + state['bootid'] + " -- <B>DEVICE-ID:</B> " + state['deviceid'] + "</li>"
-			myTable += "<li><B>Process ID:</B> " + state['run_pid'] + " -- <B>Run as ID:</B> " + state['run_user'] + "</span></li>"
+			myTable += "<li><B>Service Name:</B> " + state['name_app'] + " -- <B>Process ID:</B> " + state['run_pid'] + " -- <B>Run as ID:</B> " + state['run_user'] + "</span></li>"
 			myTable += "</ul></div>"
 
 			return myTable;
@@ -374,7 +589,7 @@
 					"emptyTable": "No tuner found/active"
 				}
 			});
-			$(".pBar").pBar();
+
 		}
 
 		function getData() {

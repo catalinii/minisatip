@@ -55,7 +55,6 @@ int enabledKeys = 0;
 int network_mode = 1;
 int dvbapi_protocol_version = DVBAPI_PROTOCOL_VERSION;
 int dvbapi_ca = -1;
-int enabled_pmts = 0;
 int oscam_version;
 
 uint64_t dvbapi_last_close = 0;
@@ -63,6 +62,7 @@ uint64_t dvbapi_last_close = 0;
 SKey *keys[MAX_KEYS];
 SMutex keys_mutex;
 unsigned char read_buffer[8192];
+extern char *listmgmt_str[];
 
 #define TEST_WRITE(a, xlen)                                                    \
     {                                                                          \
@@ -407,13 +407,14 @@ int dvbapi_reply(sockets *s) {
     return 0;
 }
 
-int dvbapi_send_pmt(SKey *k) {
+int dvbapi_send_pmt(SKey *k, int cmd_id) {
     unsigned char buf[2500];
     int len;
-    int cmd_id = 1; // ca_pmt_cmd_id (ok_descrambling)
+    int listmgmt = CLM_UPDATE;
     SPMT *pmt = get_pmt(k->pmt_id);
     if (!pmt)
         return 1;
+    mutex_lock(&keys_mutex);
     adapter *ad = get_adapter(k->adapter);
     int demux = 0;
     int adapter = 0;
@@ -424,11 +425,20 @@ int dvbapi_send_pmt(SKey *k) {
         demux = ad->fn;
         adapter = ad->pa;
     }
+
+    if (cmd_id == CMD_ID_OK_DESCRAMBLING) {
+        listmgmt = CLM_ONLY;
+        int i;
+        for (i = 0; i < MAX_KEYS; i++)
+            if (keys[i] && i != k->id && keys[i]->enabled)
+                listmgmt = CLM_ADD;
+    }
     memset(buf, 0, sizeof(buf));
     copy32(buf, 0, AOT_CA_PMT);
     copy16(buf, 7, k->sid);
     buf[9] = 1;
     k->demux_index = demux;
+    k->adapter_index = adapter;
 
     buf[12] = cmd_id;
 
@@ -444,8 +454,7 @@ int dvbapi_send_pmt(SKey *k) {
     copy16(buf, 23, 0x8701); // ca_device_descriptor (caX)
     buf[25] = demux;
 
-    memcpy(buf + 26, k->pi, k->pi_len); // CA description
-    len = 26 + k->pi_len;
+    len = 26 + pmt_add_ca_descriptor(pmt, buf + 26); // CA description
 
     // Pids associated with the PMT
     copy16(buf, 10, len - 12);
@@ -463,20 +472,22 @@ int dvbapi_send_pmt(SKey *k) {
 
     copy16(buf, 4, len - 6);
 
-    // make sure is ONLY is not sent by multiple threads
-    int ep = __sync_add_and_fetch(&enabled_pmts, 1);
-    buf[6] = (ep == 1) ? CAPMT_LIST_ONLY : CAPMT_LIST_ADD;
-    TEST_WRITE(write(sock, buf, len), len);
-    LOG("Sending pmt to dvbapi server for pid %d, Channel ID %04X, key %d, "
-        "adapter %d, demux %d, using socket %d (enabled pmts %d)",
-        k->pmt_pid, k->sid, k->id, adapter, demux, sock, ep);
+    buf[6] = listmgmt;
+    mutex_unlock(&keys_mutex);
+    if (sock > 0) {
+       LOG("Sending pmt %d to dvbapi server for pid %d, Channel ID %04X, key %d, "
+           "adapter %d, demux %d, using socket %d (%s)",
+           k->pmt_id, k->pmt_pid, k->sid, k->id, adapter, demux, sock,
+           listmgmt_str[listmgmt]);
+       TEST_WRITE(write(sock, buf, len), len);
+    }
     return 0;
 }
 
 int dvbapi_close(sockets *s) {
     int i;
     LOG("requested dvbapi close for sock %d, sock_id %d", s->id, s->sock);
-    sock = 0;
+    sock = -1;
     dvbapi_is_enabled = 0;
     SKey *k;
     for (i = 0; i < MAX_KEYS; i++)
@@ -490,7 +501,8 @@ int dvbapi_close(sockets *s) {
 }
 
 int dvbapi_timeout(sockets *s) {
-    //	if (!enabledKeys)return 1; // close dvbapi connection
+    //    if (!enabledKeys)
+    //        return 1; // close dvbapi connection
     return 0;
 }
 
@@ -652,7 +664,8 @@ int send_ecm(int filter_id, unsigned char *b, int len, void *opaque) {
     buf[5] = filter;
     memcpy(buf + 6, b, len);
     //	hexdump("ecm: ", buf, len + 6);
-    TEST_WRITE(write(sock, buf, len + 6), len + 6);
+    if (sock > 0)
+      TEST_WRITE(write(sock, buf, len + 6), len + 6);
     return 0;
 }
 
@@ -696,6 +709,8 @@ int keys_add(int i, int adapter, int pmt_id) {
     k->sid = pmt->sid;
     k->pmt_id = pmt_id;
     k->adapter = adapter;
+    k->adapter_index = -1;
+    k->demux_index = -1;
     k->id = i;
     k->blen = 0;
     k->enabled = 1;
@@ -711,7 +726,7 @@ int keys_add(int i, int adapter, int pmt_id) {
     memset(k->demux, -1, sizeof(k->demux));
     mutex_unlock(&k->mutex);
     invalidate_adapter(adapter);
-    enabledKeys++;
+    __sync_add_and_fetch(&enabledKeys, 1);
     LOG("returning new key %d for adapter %d, pmt %d pid %d sid %04X", i,
         adapter, pmt->id, pmt->pid, k->sid);
 
@@ -719,9 +734,10 @@ int keys_add(int i, int adapter, int pmt_id) {
 }
 
 int keys_del(int i) {
-    int j, ek, demux_index = 0;
-    SKey *k;
+    int pmt_pid, sid;
     unsigned char buf[8] = {0x9F, 0x80, 0x3f, 4, 0x83, 2, 0, 0};
+    SKey *k;
+    char *msg = "";
     k = get_key(i);
     if (!k)
         return 0;
@@ -731,53 +747,52 @@ int keys_del(int i) {
         mutex_unlock(&k->mutex);
         return 0;
     }
-    k->enabled = 0;
-    demux_index = k->demux_index;
-    buf[7] = demux_index;
+    // current key is not disabled
+    int j, ek = 0, ed = 0;
+    for (j = 0; j < MAX_KEYS; j++)
+        if (i != j && keys[j] && keys[j]->enabled) {
+            ek++;
+            if (k->demux_index == keys[i]->demux_index)
+                ed++;
+        }
+    if (!ek) {
+        buf[7] = 0xFF;
+        msg = "ALL";
+        if (sock > 0)
+           TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
+    } else if (!ed) {
+        buf[7] = k->demux_index;
+        msg = "DEMUX";
+        if (sock > 0)
+           TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
+    } else { // only local socket mode where multiple channels are connected to
+             // the same demux
+        msg = "PMT";
+        dvbapi_send_pmt(k, CMD_ID_NOT_SELECTED);
+    }
 
-    LOG("Stopping DEMUX %d, removing key %d, sock %d, pmt pid %d, sid %04X",
-        buf[7], i, sock, k->pmt_pid, k->sid);
-
-    // removes all the PMTs from k->demux_index
-    if ((buf[7] != 255) && (sock > 0))
-        TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
+    pmt_pid = k->pmt_pid;
+    sid = k->sid;
 
     k->sid = 0;
     k->pmt_pid = 0;
     k->adapter = -1;
     k->last_dmx_stop = 0;
     k->demux_index = -1;
+    k->adapter_index = -1;
+    k->enabled = 0;
     for (j = 0; j < MAX_KEY_FILTERS; j++)
         if (k->filter_id[j] >= 0)
             del_filter(k->filter_id[j]);
 
-    ek = 0;
     k->hops = k->caid = k->info_pid = k->prid = k->ecmtime = 0;
-    buf[7] = 0xFF;
-    for (j = 0; j < MAX_KEYS; j++)
-        if (keys[j] && keys[j]->enabled)
-            ek++;
-    enabledKeys = ek;
-    if (!ek && sock > 0)
-        TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
-    if (!ek)
-        enabled_pmts = 0;
     dvbapi_last_close = getTick();
+
+    LOG("Stopped key %d, active keys %d, sock %d, pmt pid %d, sid %04X, op %s",
+        i, ek, sock, pmt_pid, sid, msg);
+
     mutex_destroy(&k->mutex);
 
-    if (enabled_pmts) {
-        // add all the PMTs back on the same demux_index
-        for (i = 0; i < MAX_KEYS; i++)
-            if (keys[i] && keys[i]->enabled &&
-                keys[i]->demux_index == demux_index) {
-                k = get_key(i);
-                if (!k)
-                    continue;
-                LOG("Adding back pmt %d, key %d, demux_index %d", k->pmt_id,
-                    k->id, demux_index);
-                dvbapi_send_pmt(k);
-            }
-    }
     return 0;
 }
 
@@ -801,15 +816,13 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt) {
         LOG_AND_RETURN(1, "Could not add key for pmt %d", pmt->id);
     mutex_lock(&k->mutex);
     pmt->opaque = k;
-    k->pi_len = pmt->pi_len;
-    k->pi = pmt->pi;
     k->sid = pmt->sid;
     k->adapter = ad->id;
     k->pmt_pid = pid;
     k->tsid = ad->transponder_id;
     k->onid = 0;
     k->last_dmx_stop = getTick();
-    dvbapi_send_pmt(k);
+    dvbapi_send_pmt(k, CMD_ID_OK_DESCRAMBLING);
 
     mutex_unlock(&k->mutex);
     return 0;

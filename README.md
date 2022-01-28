@@ -1,8 +1,7 @@
-<a href="https://scan.coverity.com/projects/catalinii-minisatip">
+<a href="https://scan.coverity.com/projects/minisatip2">
   <img alt="Coverity Scan Build Status"
-       src="https://scan.coverity.com/projects/18049/badge.svg"/>
+       src="https://scan.coverity.com/projects/23090/badge.svg"/>
 </a>
-<img alt="Build Status" src="https://travis-ci.org/catalinii/minisatip.svg?branch=master" />
 
 # Welcome to Minisatip
 
@@ -21,21 +20,21 @@ The latest binaries for embedded platforms: https://minisatip.org/forum/viewtopi
 
 Contact
 -------
-Please use https://minisatip.org/forum/ for any questions.
+Please use https://minisatip.org/forum/ for any question or join slack: https://join.slack.com/t/minisatip/shared_invite/zt-rms717g0-SQR25SFs8RH9JlVZV4II7A 
 
 In order to speed up the investigation of an issue, please provide the full log and a link to the application that is not working.
 
 If you like minisatip and you want to support the development of the project please make a donation: 
-https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item_name=minisatip&currency_code=EUR&bn=PP-DonationsBF:btn_donateCC_LG.gif:NonHostedGuest
+https://paypal.me/minisatip
 
 Usage:
 -------
 
-minisatip version 1.0.4-da99a96, compiled in Feb  3 2021 16:35:57, with s2api version: 050B
+minisatip version v1.1.8-24d77e4, compiled in Jun 15 2021 20:36:32, with s2api version: 050B
 
 	./minisatip [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 		[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]][-o oscam_host:dvbapi_port,offset] [-p public_host] [-r remote_rtp_host] [-R document_root] [-s [*][DELSYS:][FE_ID@][source_ip/]host[:port] [-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] 
- 	[-x http_port] [-X xml_path] [-y rtsp_port]
+ 	[-x http_port] [-X xml_path] [-y rtsp_port] [-I name_service]
 
 Help
 -------
@@ -46,13 +45,16 @@ Help
 	* eg: -a 1:2:3  
 	- it will report 1 dvb-s2 device, 2 dvb-t2 devices and 3 dvb-c devices 
 
-* -A --disable-ssdp disable SSDP announcement
+* -G --disable-ssdp disable SSDP announcement
  
-* -b --buffers X:Y : set the app adapter buffer to X Bytes (default: 376000) and set the kernel DVB buffer to Y Bytes (default: 5775360) - both multiple of 188
+* -b --buffer X:Y : set the app adapter buffer to X Bytes (default: 376000) and set the kernel DVB buffer to Y Bytes (default: 5775360) - both multiple of 188
 	* eg: -b 18800:18988
 
 * -B X : set the app socket write buffer to X KB. 
 	* eg: -B 10000 - to set the socket buffer to 10MB
+
+* -z --cache-dir dir : set the app cache directory to dir. The directory will be created if it doesn't exist. 
+	* defaults to /var/cache/minisati
 
 * -d --diseqc ADAPTER1:COMMITTED1-UNCOMMITTED1[,ADAPTER2:COMMITTED2-UNCOMMITTED2[,...]
 	* The first argument is the adapter number, second is the number of committed packets to send to a Diseqc 1.0 switch, third the number of uncommitted commands to sent to a Diseqc 1.1 switch
@@ -75,7 +77,8 @@ Help
 	- note: * as adapter means apply to all adapters
 
 * -E Allows encrypted stream to be sent to the client even if the decrypting is unsuccessful
- 
+ 	- note: when pids=all is emulated this pass NULLs too
+
 * -Y --delsys ADAPTER1:DELIVERY_SYSTEM1[,ADAPTER2:DELIVERY_SYSTEM2[,..]] - specify the delivery system of the adapters (0 is the first adapter)	
 	* eg: --delsys 0:dvbt,1:dvbs
 	- specifies adapter 0 as a DVBT device, adapter 1 as DVB-S, which overrides the system detection of the adapter
@@ -93,6 +96,8 @@ Help
 
 * -H --threshold X:Y : set the write time threshold to X (UDP) / Y (TCP)  milliseconds. 
 	* eg: -H 5:50 - set thresholds to 5ms (UDP) and 50ms (TCP)
+
+* -I --name-app specificies an alternative Service Name
 
 * -i --priority prio: set the DVR thread priority to prio 
 
@@ -262,4 +267,3 @@ Examples:
 	- Astra 19.2E, Kika HD: "rtsp://MINISATIP_HOST:554/?src=1&freq=11347&pol=v&ro=0.35&msys=dvbs2&mtype=8psk&plts=on&sr=22000&fec=23&pids=0,17,18,6600,6610,6620,6630"
 
 - msys can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, atsc, isdbt, dvbcb ( - DVBC_ANNEX_B )
-

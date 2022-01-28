@@ -114,6 +114,7 @@ adapter *adapter_alloc() {
 
     ad->strength_multiplier = opts.strength_multiplier;
     ad->snr_multiplier = opts.snr_multiplier;
+    ad->db_snr_map = 1.0;
 
     ad->drop_encrypted = opts.drop_encrypted;
 
@@ -277,6 +278,8 @@ int init_hw(int i) {
     ad->force_close = 0;
     ad->err = 0;
 
+    ad->db = MAX_DB;
+
     if (opts.max_pids)
         ad->max_pids = opts.max_pids;
 
@@ -429,6 +432,8 @@ int close_adapter(int na) {
     ad->dvr = 0;
     ad->strength = 0;
     ad->snr = 0;
+    ad->db = MAX_DB;
+    ad->db_snr_map = 1.0;
 #ifndef AXE
     ad->old_diseqc = -1;
     ad->old_hiband = -1;
@@ -683,6 +688,12 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
     return 0;
 }
 
+int source_enabled_for_adapter(adapter *ad, transponder *tp) {
+    if (tp->sys != SYS_DVBS && tp->sys != SYS_DVBS2)
+        return 1;
+    return ad->sources_pos[tp->diseqc];
+}
+
 int get_free_adapter(transponder *tp) {
     int i;
     int match = 0;
@@ -696,7 +707,8 @@ int get_free_adapter(transponder *tp) {
             break;
         }
 
-    if ((fe > 0) && (fe <= ARRAY_SIZE(fe_map)) && (fe_map[fe - 1] >= 0)) {
+    if ((fe > 0) && (fe <= ARRAY_SIZE(fe_map)) && (fe_map[fe - 1] >= 0) &&
+        (fe_map[fe - 1] < MAX_ADAPTERS)) {
         fe = fe_map[fe - 1];
         ad = a[fe];
     } else
@@ -712,6 +724,8 @@ int get_free_adapter(transponder *tp) {
         LOG("get free adapter %d msys %s requested %s", fe, get_delsys(fe),
             get_delsys(msys));
 
+    dump_adapters();
+
     if (fe >= 0) {
         if (ad && delsys_match(ad, msys)) {
             match = 0;
@@ -719,7 +733,7 @@ int get_free_adapter(transponder *tp) {
                 match = 1;
             if (!ad->enabled || !compare_tunning_parameters(ad->id, tp))
                 match = 1;
-            if (match && ad->sources_pos[tp->diseqc] && !init_hw(fe))
+            if (match && source_enabled_for_adapter(ad, tp) && !init_hw(fe))
                 return fe;
         }
         goto noadapter;
@@ -727,7 +741,7 @@ int get_free_adapter(transponder *tp) {
     // provide an already existing adapter
     for (i = 0; i < MAX_ADAPTERS; i++)
         if ((ad = get_adapter_nw(i)) && delsys_match(ad, msys) &&
-            ad->sources_pos[tp->diseqc])
+            source_enabled_for_adapter(ad, tp))
             if (!compare_tunning_parameters(ad->id, tp))
                 return i;
 
@@ -735,14 +749,25 @@ int get_free_adapter(transponder *tp) {
         // first free adapter that has the same msys
         if ((ad = get_adapter_nw(i)) && ad->sid_cnt == 0 &&
             delsys_match(ad, msys) && !compare_slave_parameters(ad, tp) &&
-            ad->sources_pos[tp->diseqc])
+            source_enabled_for_adapter(ad, tp))
             return i;
         if (!ad && delsys_match(a[i], msys) &&
             !compare_slave_parameters(a[i], tp)) // device is not initialized
         {
             ad = a[i];
-            if (ad->sources_pos[tp->diseqc] && !init_hw(i))
+            if (source_enabled_for_adapter(ad, tp) && !init_hw(i))
                 return i;
+        }
+    }
+
+    // No regular tuners available, check for slave tuners
+    for (i = 0; i < MAX_ADAPTERS; i++) {
+        // first free slave adapter that has the same msys
+        if ((ad = get_adapter_nw(i)) && ad->sid_cnt == 0 &&
+            delsys_match(ad, msys) && compare_slave_parameters(ad, tp) &&
+            source_enabled_for_adapter(ad, tp)) {
+            LOGM("get free adapter found slave adapter %d", i);
+            return i;
         }
     }
 
@@ -972,6 +997,7 @@ int tune(int aid, int sid) {
         ad->wait_new_stream = 1;
         ad->strength = 0;
         ad->snr = 0;
+        ad->db = MAX_DB;
         flush_data = 1;
         ad->is_t2mi = 0;
         set_socket_pos(ad->sock, 0); // flush the existing buffer
@@ -2174,6 +2200,7 @@ _symbols adapters_sym[] = {
     {"ad_strength", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS,
      offsetof(adapter, strength)},
     {"ad_snr", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, offsetof(adapter, snr)},
+    {"ad_db", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, offsetof(adapter, db)},
     {"ad_ber", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, ber)},
     {"ad_pol", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.pol)},
     {"ad_sr", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS,
@@ -2182,14 +2209,16 @@ _symbols adapters_sym[] = {
      offsetof(adapter, tp.bw)},
     {"ad_stream", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS,
      offsetof(adapter, tp.plp_isi)},
-    {"ad_fe", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, fe)},
+    {"ad_fe", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.fe)},
     {"ad_master", VAR_AARRAY_UINT8, a, 1, MAX_ADAPTERS,
      offsetof(adapter, master_sid)},
     {"ad_sidcount", VAR_AARRAY_UINT8, a, 1, MAX_ADAPTERS,
      offsetof(adapter, sid_cnt)},
     {"ad_phyad", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, pa)},
     {"ad_phyfd", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, fn)},
-    {"ad_sys", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.sys)},
+    {"ad_sys", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.sys)},
+    {"ad_mtype", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS,
+     offsetof(adapter, tp.mtype)},
     {"ad_allsys", VAR_FUNCTION_STRING, (void *)&get_all_delsys, 0, MAX_ADAPTERS,
      0},
     {"ad_pids", VAR_FUNCTION_STRING, (void *)&get_adapter_pids, 0, MAX_ADAPTERS,

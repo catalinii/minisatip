@@ -49,7 +49,7 @@ typedef int64_t (*get_data_int64)(int p);
 typedef char *(*get_data_string)(int p, char *dest, int max_len);
 
 typedef struct struct_symbols {
-    char *name;
+    const char *name;
     int type;
     void *addr;
     float multiplier; // multiply the value of the variable
@@ -135,13 +135,14 @@ int split(char **rv, char *s, int lrv, char sep);
 int map_int(char *s, char **v);
 int map_intd(char *s, char **v, int dv);
 int map_float(char *s, int mul);
+int check_strs(char *s, char **v, int dv);
 void *mymalloc(int a, char *f, int l);
 void *myrealloc(void *p, int a, char *f, int l);
 void myfree(void *x, char *f, int l);
 char *header_parameter(char **arg, int i);
 char *get_current_timestamp();
 char *get_current_timestamp_log();
-void _log(char *file, int line, char *fmt, ...);
+void _log(const char *file, int line, const char *fmt, ...);
 char *strip(char *s);
 int split(char **rv, char *s, int lrv, char sep);
 void set_signal_handler(char *argv0);
@@ -176,6 +177,7 @@ int get_index_hash_search(int start_pos, void *p, int max, int struct_size,
 int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, char *cc,
                  int pid);
 void write_buf_to_file(char *file, uint8_t *buf, int len);
+void mkdir_recursive(const char *path);
 
 #define mutex_lock(m) mutex_lock1(__FILE__, __LINE__, m)
 #define mutex_unlock(m) mutex_unlock1(__FILE__, __LINE__, m)

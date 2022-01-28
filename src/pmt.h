@@ -17,8 +17,8 @@
 #define CA_MODE_CBC 1
 
 #define MAX_PMT 256
-#define MAX_CW 80
-#define MAX_CW_TIME 25000 // 25s
+#define MAX_CW 200
+#define MAX_CW_TIME 45000 // 45s
 #define MAX_BATCH_SIZE 128
 
 #define FILTER_SIZE 16 // based on DMX_FILTER_SIZE
@@ -40,6 +40,18 @@
 #define PMT_STOPPING 3
 
 #define PMT_GRACE_TIME 2000
+
+#define CLM_MORE 0x00
+#define CLM_FIRST 0x01
+#define CLM_LAST 0x02
+#define CLM_ONLY 0x03
+#define CLM_ADD 0x04
+#define CLM_UPDATE 0x05
+
+#define CMD_ID_OK_DESCRAMBLING 0x01
+#define CMD_ID_OK_MMI 0x02
+#define CMD_ID_QUERY 0x03
+#define CMD_ID_NOT_SELECTED 0x04
 
 typedef struct struct_batch // same as struct dvbcsa_bs_batch_s
 {
@@ -84,29 +96,37 @@ typedef struct struct_cw {
 
 } SCW;
 
-typedef struct struct_pmt_pid {
+typedef struct struct_stream_pid {
     int type;
     int pid;
-} SPMTPid;
+    int desc_len;
+    uint8_t desc[256];
+    char is_audio : 1;
+    char is_video : 1;
+} SStreamPid;
+
+typedef struct struct_pmt_ca {
+    int id;
+    int pid;
+    int private_data_len;
+    uint8_t private_data[256];
+} SPMTCA;
 
 typedef struct struct_pmt {
     char enabled;
     SMutex mutex;
     int sid;
     int pid;
+    int pcr_pid;
     int adapter;
     int version;
-    uint16_t caid[MAX_CAID], capid[MAX_CAID];
+    SPMTCA ca[MAX_CAID];
     uint16_t caids;
-    int active_pid[MAX_ACTIVE_PIDS];
-    int active_pids;
-    SPMTPid stream_pid[MAX_PMT_PIDS];
+    SStreamPid stream_pid[MAX_PMT_PIDS];
     int stream_pids;
     int id;
     unsigned char pmt[MAX_PI_LEN];
     int pmt_len;
-    unsigned char pi[MAX_PI_LEN];
-    int pi_len;
     int blen;
     int ca_mask, disabled_ca_mask;
     SPMT_batch *batch;
@@ -117,7 +137,6 @@ typedef struct struct_pmt {
     SPid *p;
     char provider[50], name[50];
     void *opaque;
-    char skip_first;
     char active; // PMT structure was already filled
     char state;  // PMT state (PMT_STOPPED, PMT_STARTING, PMT_RUNNING,
                  // PMT_STOPPING)
@@ -207,10 +226,12 @@ void disable_cw(int master_pmt);
 void expire_cw_for_pmt(int master_pmt, int parity, int64_t min_expiry);
 int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id);
 int pmt_add(int i, int adapter, int sid, int pmt_pid);
-int test_decrypt_packet(SCW *cw, SPMT_batch *batch, int len);
+int test_decrypt_packet(SCW *cw, SPMT_batch *start, int len);
 void init_algo();
 void update_cw(SPMT *pmt);
 int pmt_decrypt_stream(adapter *ad);
 int wait_pusi(adapter *ad, int len);
+int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf);
+void free_filters();
 #endif
 #endif

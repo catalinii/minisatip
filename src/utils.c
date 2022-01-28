@@ -30,6 +30,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <math.h>
 #include <net/if.h>
 #include <netdb.h>
@@ -298,9 +299,9 @@ void free_hash(SHashTable *hash) {
     free(items);
     hash->items = NULL;
     hash->size = 0;
-    mutex_unlock(&hash->mutex);
-    mutex_destroy(&hash->mutex);
-    memset(hash, 0, sizeof(SHashItem));
+    //mutex_unlock(&hash->mutex);
+    mutex_destroy(&hash->mutex); // unlock and destroy mutex
+    memset(hash, 0, sizeof(SHashTable));
     return;
 }
 
@@ -363,6 +364,28 @@ int map_intd(char *s, char **v, int dv) {
     }
     for (i = 0; v[i]; i++)
         if (!strncasecmp(s, v[i], strlen(v[i])))
+            n = i;
+    return n;
+}
+
+int check_strs(char *s, char **v, int dv) {
+    int i, n = dv;
+
+    if (s == NULL) {
+        LOG_AND_RETURN(dv, "check_strs: s=>NULL, v=%p, %s %s", v,
+                       v ? v[0] : "NULL", v ? v[1] : "NULL");
+    }
+    if (v == NULL) {
+        LOG_AND_RETURN(dv, "check_strs: v is empty");
+    }
+
+    s = strip(s);
+
+    if (!*s)
+        LOG_AND_RETURN(dv, "check_strs: s is empty");
+
+    for (i = 0; v[i]; i++)
+        if (strncasecmp(s, v[i], strlen(s)) == 0)
             n = i;
     return n;
 }
@@ -655,7 +678,7 @@ char *get_current_timestamp_log(void) {
     return date_str;
 }
 
-void _log(char *file, int line, char *fmt, ...) {
+void _log(const char *file, int line, const char *fmt, ...) {
     va_list arg;
     int len = 0, len1 = 0, both = 0;
     static int idx, times;
@@ -664,7 +687,7 @@ void _log(char *file, int line, char *fmt, ...) {
                                  // the message
 
     /* Check if the message should be logged */
-    opts.last_log = fmt;
+    opts.last_log = (char *)fmt;
 
     stid[0] = 0;
     if (!opts.no_threads) {
@@ -1303,6 +1326,7 @@ int mutex_destroy(SMutex *mutex) {
         LOG("%s: pthread_mutex_unlock 1 failed for %p with error %d %s",
             __FUNCTION__, mutex, rv, strerror(rv));
 
+    // coverity[use : FALSE]
     if ((rv = pthread_mutex_unlock(&mutex->mtx)) != 1 && rv != 0)
         LOG("%s: pthread_mutex_unlock 2 failed for %p with error %d %s",
             __FUNCTION__, mutex, rv, strerror(rv));
@@ -1378,6 +1402,7 @@ int add_new_lock(void **arr, int count, int size, SMutex *mutex) {
                 memset(sa[i], 0, size);
             }
             mutex_init(&sa[i]->mutex);
+            // coverity[use : FALSE]
             mutex_lock(&sa[i]->mutex);
             sa[i]->enabled = 1;
             mutex_unlock(mutex);
@@ -1725,6 +1750,25 @@ int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, char *cc,
         len += 188;
     }
     return len;
+}
+
+// http://nion.modprobe.de/blog/archives/357-Recursive-directory-creation.html
+void mkdir_recursive(const char *path) {
+    char tmp[PATH_MAX];
+    char *p = NULL;
+    size_t len;
+
+    snprintf(tmp, sizeof(tmp),"%s",path);
+    len = strlen(tmp);
+    if (tmp[len - 1] == '/')
+        tmp[len - 1] = 0;
+    for (p = tmp + 1; *p; p++)
+        if (*p == '/') {
+            *p = 0;
+            mkdir(tmp, S_IRWXU);
+            *p = '/';
+        }
+    mkdir(tmp, S_IRWXU);
 }
 
 /*

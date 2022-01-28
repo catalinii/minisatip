@@ -156,9 +156,7 @@ int logging = 0;
 char logfile[256];
 int extract_ci_cert = 0;
 
-char *listmgmt_str[] = {"CA_LIST_MANAGEMENT_MORE", "CA_LIST_MANAGEMENT_FIRST",
-                        "CA_LIST_MANAGEMENT_LAST", "CA_LIST_MANAGEMENT_ONLY",
-                        "CA_LIST_MANAGEMENT_ADD",  "CA_LIST_MANAGEMENT_UPDATE"};
+extern char *listmgmt_str[];
 
 uint32_t datatype_sizes[MAX_ELEMENTS] = {
     0,   50,  0,  0, 0, 8,  8,  0, 0, 0, 0,  0, 32, 256, 256, 0, 0,
@@ -849,14 +847,14 @@ int dh_dhph_signature(uint8_t *out, uint8_t *nonce, uint8_t *dhph, RSA *r) {
 }
 
 int is_ca_initializing(int i) {
-    if (i >= 0 && i < MAX_CA && ca_devices[i] && ca_devices[i]->enabled &&
+    if (i >= 0 && i < MAX_ADAPTERS && ca_devices[i] && ca_devices[i]->enabled &&
         !ca_devices[i]->init_ok)
         return 1;
     return 0;
 }
 
 int get_max_pmt_for_ca(int i) {
-    if (i >= 0 && i < MAX_CA && ca_devices[i] && ca_devices[i]->enabled)
+    if (i >= 0 && i < MAX_ADAPTERS && ca_devices[i] && ca_devices[i]->enabled)
         return (ca_devices[i]->multiple_pmt + 1) * ca_devices[i]->max_ca_pmt;
     return MAX_CA_PMT;
 }
@@ -1015,11 +1013,10 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
     ver = capmt->version;
     sid = spmt->sid;
 
-    listmgmt = get_active_capmts(d) == 1 ? CA_LIST_MANAGEMENT_ONLY
-                                         : CA_LIST_MANAGEMENT_UPDATE;
-    if (listmgmt == CA_LIST_MANAGEMENT_ONLY) {
+    listmgmt = get_active_capmts(d) == 1 ? CLM_ONLY : CLM_UPDATE;
+    if (listmgmt == CLM_ONLY) {
         if (capmt->sid == first->sid)
-            listmgmt = CA_LIST_MANAGEMENT_UPDATE;
+            listmgmt = CLM_UPDATE;
         capmt->sid = first->sid;
         int i;
         for (i = 0; i < d->max_ca_pmt; i++) {
@@ -1035,7 +1032,7 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
 
     LOG("PMT CA %d pmt %d pid %u (%s) ver %u sid %u (%d), "
         "enabled_pmts %d, "
-        "%s, PMTS to be send %d %d, pos",
+        "%s, PMTS to be send %d %d, pos %ld",
         spmt->adapter, spmt->id, pid, spmt->name, ver, sid, capmt->sid,
         get_enabled_pmts_for_ca(d), listmgmt_str[listmgmt], capmt->pmt_id,
         capmt->other_id, capmt - d->capmt);
@@ -1093,7 +1090,7 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt) {
 
     remove_pmt_from_device(d, spmt);
     if (PMT_ID_IS_VALID(capmt->pmt_id)) {
-        listmgmt = CA_LIST_MANAGEMENT_UPDATE;
+        listmgmt = CLM_UPDATE;
         if (send_capmt(d->ca_resource, d->ca_session_number, capmt, listmgmt,
                        CA_PMT_CMD_ID_OK_DESCRAMBLING))
             LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
@@ -1310,15 +1307,12 @@ static uint8_t *element_get_ptr(struct cc_ctrl_data *cc_data, unsigned int id) {
     return e->data;
 }
 
-static void get_authdata_filename(char *dest, size_t len, unsigned int slot,
+void get_authdata_filename(char *dest, size_t len, unsigned int slot,
                                   char *ci_name) {
     char cin[128];
-    char source[256];
-    char target[256];
     /* add module name to slot authorization bin file */
     memset(cin, 0, sizeof(cin));
     strncpy(cin, ci_name, sizeof(cin) - 1);
-    FILE *auth_bin;
     /* quickly replace blanks */
     int i = 0;
     while (cin[i] != 0) {
@@ -1326,61 +1320,8 @@ static void get_authdata_filename(char *dest, size_t len, unsigned int slot,
             cin[i] = 95; /* underscore _ */
         i++;
     };
-    snprintf(source, sizeof(source) - 1, "%s/ci_auth_%d.bin", getenv("HOME"),
-             slot);
-    snprintf(target, sizeof(target) - 1, "%s/ci_auth_%s_%d.bin", getenv("HOME"),
-             cin, slot);
 
-    struct stat buf;
-
-    if (lstat(source, &buf) == 0) {
-
-        char linkname[4096];
-        memset(linkname, 0, sizeof(linkname));
-        ssize_t len = readlink(source, linkname, sizeof(linkname) - 1);
-        if (len > 0) {
-            if (strcmp(linkname, target) != 0) {
-                /* link doesn't point to target */
-                auth_bin = fopen(target, "r");
-                if (auth_bin)
-                    fclose(auth_bin);
-                /* correct symlink */
-                int r = remove(source);
-                LOG("CORRECTING %s to %s %s", target, source,
-                    r ? "" : "(remove failed)");
-                symlink(target, source);
-            }
-        } else {
-            auth_bin = fopen(target, "r");
-            if (auth_bin) {
-                /* if new file already exists and source is not symlink.
-        remove and do symlink */
-                fclose(auth_bin);
-                int r = remove(source);
-                LOG("LINKING %s to %s %s", target, source,
-                    r ? "" : "(remove failed)");
-                symlink(target, source);
-            } else {
-                /* target doesn't exist needs migration...
-        which means rename old bin file without module name
-        to new file with module name and do symlink to old one */
-                LOG("MIGRATING %s to %s", source, target);
-                if (!rename(source, target))
-                    symlink(target, source);
-            }
-        }
-    } else {
-        auth_bin = fopen(target, "r");
-        if (auth_bin) {
-            /* if new file already exists and source is nit there
-          simply do symlink */
-            fclose(auth_bin);
-            LOG("LINKING %s to %s", target, source);
-            symlink(target, source);
-        }
-        /* else do nothing to prevent stranded symlinks */
-    }
-    snprintf(dest, len, "%s/ci_auth_%s_%d.bin", getenv("HOME"), cin, slot);
+    snprintf(dest, len, "%s/ci_auth_%s_%d.bin", opts.cache_dir, cin, slot);
 }
 
 static int get_authdata(uint8_t *host_id, uint8_t *dhsk, uint8_t *akh,
@@ -1840,7 +1781,7 @@ static int check_ci_certificates(struct cc_ctrl_data *cc_data) {
         char ci_cert_file[256];
         memset(ci_cert_file, 0, sizeof(ci_cert_file));
         snprintf(ci_cert_file, sizeof(ci_cert_file) - 1,
-                 "/%s/ci_cert_%s_%d.der", getenv("HOME"), ci_name_underscore,
+                 "%s/ci_cert_%s_%d.der", opts.cache_dir, ci_name_underscore,
                  ci_number);
         LOG("CI%d EXTRACTING %s", ci_number, ci_cert_file);
         int fd =
@@ -3106,9 +3047,11 @@ static int ca_ca_info_callback(void *arg, uint8_t slot_id,
         overwritten = 1;
     }
     for (i = 0; i < ca_id_count; i++) {
+        uint8_t *b = (uint8_t *)&ca_ids[i];
+        int caid = b[1] * 256 + b[0];
         LOG("   %s CA ID: %04x for CA%d", overwritten ? "Forced" : "Supported",
-            ca_ids[i], d->id);
-        add_caid_mask(dvbca_id, d->id, ca_ids[i], 0xFFFF);
+            caid, d->id);
+        add_caid_mask(dvbca_id, d->id, caid, 0xFFFF);
     }
 
     return 0;

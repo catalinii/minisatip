@@ -110,7 +110,7 @@ char *getlocalip() {
 
     int family = fill_sockaddr(&serv, (char *)dest, port, opts.use_ipv4_only);
 
-    int sock = socket(family, SOCK_DGRAM, 0);
+    int sock = socket(family, SOCK_DGRAM, IPPROTO_IP);
 
     // Socket could not be created
     if (sock < 0) {
@@ -138,7 +138,7 @@ int udp_bind(char *addr, int port, int ipv4_only) {
 
     if (!family)
         return -1;
-    //	sock = socket(AF_INET, SOCK_DGRAM, 0);
+    //	sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
     sock = socket(family, SOCK_DGRAM, IPPROTO_UDP);
 
     if (sock < 0) {
@@ -228,7 +228,7 @@ int udp_connect(char *addr, int port, USockAddr *serv) {
         serv = &sv;
     if (!(family = fill_sockaddr(serv, addr, port, opts.use_ipv4_only)))
         return -1;
-    sock = socket(family, SOCK_DGRAM, 0);
+    sock = socket(family, SOCK_DGRAM, IPPROTO_IP);
     if (sock < 0) {
         LOG("udp_connect failed: socket() %s", strerror(errno));
         return -1;
@@ -299,7 +299,7 @@ int tcp_connect_src(char *addr, int port, USockAddr *serv, int blocking,
     if (!(family = fill_sockaddr(serv, addr, port, opts.use_ipv4_only)))
         return -1;
 
-    sock = socket(family, SOCK_STREAM, 0);
+    sock = socket(family, SOCK_STREAM, IPPROTO_IP);
     if (sock < 0) {
         LOG("tcp_connect failed: socket() %s", strerror(errno));
         return -1;
@@ -362,7 +362,7 @@ int tcp_listen(char *addr, int port, int ipv4_only) {
     if (!(family = fill_sockaddr(&serv, addr, port, ipv4_only)))
         return -1;
 
-    sock = socket(family, SOCK_STREAM, 0);
+    sock = socket(family, SOCK_STREAM, IPPROTO_IP);
     if (sock < 0) {
         LOG("tcp_listen failed: socket(): %s", strerror(errno));
         return -1;
@@ -396,7 +396,7 @@ int connect_local_socket(char *file, int blocking) {
     struct sockaddr_un serv;
     int sock;
 
-    sock = socket(AF_LOCAL, SOCK_STREAM, 0);
+    sock = socket(AF_LOCAL, SOCK_STREAM, IPPROTO_IP);
     if (sock < 0) {
         LOG("tcp_connect failed: socket() %s", strerror(errno));
         return -1;
@@ -1224,7 +1224,7 @@ struct mmsghdr {
 };
 #endif
 
-#if defined(__APPLE__) || defined(AXE)
+#if defined(__APPLE__) || defined(__SH4__)
 int sendmmsg0(int rsock, struct mmsghdr *msg, int len, int t) {
     int i;
     for (i = 0; i < len; i++)

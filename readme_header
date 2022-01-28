@@ -1,8 +1,7 @@
-<a href="https://scan.coverity.com/projects/catalinii-minisatip">
+<a href="https://scan.coverity.com/projects/minisatip2">
   <img alt="Coverity Scan Build Status"
-       src="https://scan.coverity.com/projects/18049/badge.svg"/>
+       src="https://scan.coverity.com/projects/23090/badge.svg"/>
 </a>
-<img alt="Build Status" src="https://travis-ci.org/catalinii/minisatip.svg?branch=master" />
 
 # Welcome to Minisatip
 
@@ -21,13 +20,13 @@ The latest binaries for embedded platforms: https://minisatip.org/forum/viewtopi
 
 Contact
 -------
-Please use https://minisatip.org/forum/ for any questions.
+Please use https://minisatip.org/forum/ for any question or join slack: https://join.slack.com/t/minisatip/shared_invite/zt-rms717g0-SQR25SFs8RH9JlVZV4II7A 
 
 In order to speed up the investigation of an issue, please provide the full log and a link to the application that is not working.
 
 If you like minisatip and you want to support the development of the project please make a donation: 
-https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=7UWQ7FXSABUH8&item_name=minisatip&currency_code=EUR&bn=PP-DonationsBF:btn_donateCC_LG.gif:NonHostedGuest
+https://paypal.me/minisatip
 
 Usage:
 -------
-
+(Message automatically generated from "minisatip --help")

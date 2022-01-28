@@ -48,6 +48,23 @@
 #define TCP_DATA_MAX (TCP_DATA_SIZE * 8)
 #define MAKE_ITEM(a, b) ((a << 16) | (b))
 
+#if defined(__APPLE__) || defined(__SH4__)
+#define MAX_RTP_MSG                                                            \
+    1 // read 1 UDP datagrams at one time (no recvmmsg() support!)
+int recvmmsg0(int sockfd, struct mmsghdr *msgvec, unsigned int vlen) {
+    if (vlen < 1)
+        return 0;
+    msgvec->msg_len =
+        readv(sockfd, msgvec->msg_hdr.msg_iov, msgvec->msg_hdr.msg_iovlen);
+    return 1;
+}
+#define recvmmsg(a, b, c, d, e) recvmmsg0(a, b, c)
+#else
+#define MAX_RTP_MSG                                                            \
+    25 // max number of UDP datagrams (with 1316 bytes of payload) to be read at
+       // one time
+#endif
+
 extern char *fe_delsys[];
 int satip_post_init(adapter *ad);
 
@@ -55,6 +72,7 @@ int satip_post_init(adapter *ad);
 
 typedef struct struct_satipc {
     char enabled;
+    SMutex mutex;
     int id;
     int lap, ldp;            // number of pids to add, number of pids to delete
     uint16_t apid[MAX_PIDS]; // pids to add
@@ -82,7 +100,7 @@ typedef struct struct_satipc {
     uint8_t addpids, setup_pids;
     unsigned char *tcp_data;
     int tcp_size, tcp_pos, tcp_len;
-    char use_fe, option_no_session, option_no_setup, option_no_option;
+    char option_no_session, option_no_setup, option_no_option;
     uint32_t rcvp, repno, rtp_miss, rtp_ooo; // rtp statstics
     uint16_t rtp_seq;
     char static_config;
@@ -190,8 +208,24 @@ int satipc_reply(sockets *s) {
         sip->session[0])
         rc = 454;
 
+    // Fritzbox did reply 408 when mtype is missing
+    if (rc == 408) {
+        sip->want_tune = 1;
+        sip->want_commit = 1;
+        sip->force_commit = 1;
+        sip->last_setup = -10000;
+        // quirk for Aurora client missing mtype
+        if (ad->tp.mtype == QAM_AUTO)
+            ad->tp.mtype = QAM_256;
+    }
+
     if (rc == 404)
         sip->restart_needed = 1;
+
+    // quirk for Geniatech EyeTV Netstream 4C when fe=x is in the URL
+    if (rc == 503)
+        if (ad->sys[0] == SYS_DVBC_ANNEX_A || ad->sys[0] == SYS_DVBC2)
+            sip->satip_fe = 0;
 
     if (rc == 454 || rc == 503 || rc == 405) {
         sip->sent_transport = 0;
@@ -254,10 +288,11 @@ int satipc_reply(sockets *s) {
         satipc_commit(ad);
         return 0;
     }
-    LOG("wp %d qp %d, expect_reply %d, want_tune %d, force_commit %d, want "
+    LOG("satipc %d wp %d qp %d, expect_reply %d, want_tune %d, force_commit "
+        "%d, want "
         "commit %d",
-        sip->wp, sip->qp, sip->expect_reply, sip->want_tune, sip->force_commit,
-        sip->want_commit);
+        sip->id, sip->wp, sip->qp, sip->expect_reply, sip->want_tune,
+        sip->force_commit, sip->want_commit);
     if (sip->wp >= sip->qp)
         sip->expect_reply = 0;
     else {
@@ -351,6 +386,7 @@ void satipc_open_rtsp_socket(adapter *ad, satipc *sip) {
             ad->fe = sock;
         adapter_set_dvr(ad);
         satip_post_init(ad);
+        LOG("satipc %d, reopened rtsp with handle %d", sip->id, sock);
     }
 }
 
@@ -384,13 +420,15 @@ int satipc_timeout(sockets *s) {
     if (sip->expect_reply && (getTick() - sip->last_response_sent > 10000)) {
         LOG("No response was received from the server for more than %jd ms, "
             "closing connection",
-            getTick() - sip->last_response_sent > 10000);
+            getTick() - sip->last_response_sent);
         sip->restart_needed = 1;
         sockets_del(ad->sock);
     }
 
     if (sip->want_tune || sip->lap || sip->ldp) {
-        LOG("no timeout will be performed as we have operations in queue");
+        LOG("satipc %d no timeout will be performed as we have operations in "
+            "queue",
+            sip->id);
         return 0;
     }
     LOG("satipc: Sent keep-alive to the satip server %s:%d, adapter %d, "
@@ -515,10 +553,11 @@ int satipc_open_device(adapter *ad) {
             ad->fe, NULL, ad->id, TYPE_TCP, (socket_action)satipc_reply,
             (socket_action)satipc_close, (socket_action)satipc_timeout);
         sip->rtcp_sock = -1;
-        if (sip->rtcp >= 0)
+        if (sip->rtcp >= 0) {
             sip->rtcp_sock = sockets_add(sip->rtcp, NULL, ad->id, TYPE_TCP,
                                          (socket_action)satipc_rtcp_reply,
                                          (socket_action)satipc_close, NULL);
+        }
         sockets_timeout(ad->fe_sock, 25000); // 25s
         if (ad->dvr >= 0)
             set_socket_receive_buffer(ad->dvr, opts.dvr_buffer);
@@ -542,6 +581,7 @@ int satipc_open_device(adapter *ad) {
         ad->fe_sock = sockets_add(SOCK_TIMEOUT, NULL, ad->id, TYPE_UDP, NULL,
                                   NULL, (socket_action)satipc_timeout);
         sockets_timeout(ad->fe_sock, 25000); // 25s
+        set_sock_lock(ad->fe_sock, &ad->mutex);
     }
     sip->session[0] = 0;
     sip->lap = 0;
@@ -625,51 +665,157 @@ int satip_standby_device(adapter *ad) {
     return 0;
 }
 
+//  This function uses recvmmsg() syscall to read from the socket [1 ..
+//  MAX_RTP_MSG] RTP datagrams in one shot
 int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
-    unsigned char buf1[20];
+    uint8_t buf1[20 * MAX_RTP_MSG];
+    int i, rr, num_msg = 0, size_msg = 0;
+    int force_ok = 0;
+    int check_holes = 0;
+    void *holes[MAX_RTP_MSG];
+    struct mmsghdr messages[MAX_RTP_MSG] = {0};
+    struct iovec iovs[(MAX_RTP_MSG * 2) + 1] = {
+        0}; // RTP Header + Payload (up to 1316 bytes) for each UDP datagram
     uint16_t seq;
     adapter *ad;
     satipc *sip;
     get_ad_and_sipr(ss->sid, 0);
-    struct iovec iov[3] = {{.iov_base = buf1, .iov_len = 12},
-                           {.iov_base = buf, .iov_len = len},
-                           {NULL, 0}};
-    *rb = readv(socket, iov, 2); // stripping rtp header
-    if (*rb > 0) {
-        ad = get_adapter(ss->sid);
-        sip->rcvp++;
 
-        copy16r(seq, buf1, 2);
-        if (sip->rtp_seq == 0xFFFF)
-            sip->rtp_seq = seq;
-        if (seq > sip->rtp_seq)
-            sip->rtp_miss++;
-        else if (seq < sip->rtp_seq)
-            sip->rtp_ooo++;
-        sip->rtp_seq = (seq + 1) & 0xFFFF;
-    }
-    if (!ad)
-        ad = get_adapter(ss->sid);
+    // Prepare receiving multibuffer
+    for (i = 0; i < MAX_RTP_MSG && size_msg < len; i++) {
+        num_msg++;
+        size_msg += 1316;
+        if (size_msg >
+            len) { // Insufficient space to receive a 7*188 Bytes TS packet
+            size_msg -= 1316;
+            num_msg--;
+            break;
+        }
 
-    // Workaround for some poor SAT>IP servers (ex. XORO).
-    //      Some servers send KEEP-ALIVE RTP packets without valid TS payload.
-    //      Then RTP packets received without valid TS data are discarded.
-    uint8_t *b = buf;
-    if (*rb > 12 && *rb < DVB_FRAME - 12 && b[0] != 0x47) {
-        LOGM("discarding RTP packet without valid TS payload (sock %d, "
-             "socket_id "
-             "%d) [len=%d]",
-             socket, ss->id, *rb - 12);
-        *rb = 0;
-        return 1;
+        struct iovec *iov =
+            &iovs[i * 2]; // stripping out RTP header, to leave continous
+                          // payload data over the same buffer
+        iov[0].iov_base = buf1 + (i * 20); // RTP header slice
+        iov[0].iov_len = 12;
+        iov[1].iov_base = buf + (i * 1316); // PAYLOAD slice in the READ BUFFER
+        iov[1].iov_len = 1316;
+        iov[2].iov_base = NULL;
+        iov[2].iov_len = 0;
+
+        struct mmsghdr *msg = &messages[i];
+        msg->msg_hdr.msg_iov = iov;
+        msg->msg_hdr.msg_iovlen = 2;
+
+        holes[i] = NULL;
     }
 
-    if (ad && sip->ignore_packets) {
-        *rb = 0;
-        return 1;
+    *rb = 0;
+
+    if (size_msg <= 0) {
+        LOG("satipc_read: Error allocating memory!")
+        return 0;
     }
-    *rb -= 12;
-    return (*rb >= 0);
+
+    rr = recvmmsg(socket, messages, num_msg, MSG_DONTWAIT, NULL);
+    if (rr <= 0) {
+        DEBUGM("satipc_read: read error or zero datagrams")
+        return 0;
+    }
+
+    size_msg -= (num_msg - rr) *
+                1316; // update the theoretical total size of the read buffer
+
+    // It checks if the read is full, because in that case there is a high
+    // probability that there are still pending packets in the buffer, so then
+    // the output buffer will be flushed to avoid waiting at the next read.
+    if (num_msg > 1 && rr == num_msg) {
+        DEBUGM("satipc_read: read full, so flushing output");
+        ad->flush = 1;
+    }
+
+    // Loop over all datagrams received
+    ad = get_adapter(ss->sid);
+    uint8_t *bf1 = buf1;
+    for (i = 0; i < rr; i++) {
+        struct mmsghdr *msg = &messages[i];
+        struct iovec *iov = &iovs[i * 2];
+        int dlen = 0;
+
+        if (msg->msg_len > 0) {
+            sip->rcvp++;
+
+            copy16r(seq, bf1, 2);
+            if (sip->rtp_seq == 0xFFFF)
+                sip->rtp_seq = seq;
+            if (seq > sip->rtp_seq)
+                sip->rtp_miss++;
+            else if (seq < sip->rtp_seq)
+                sip->rtp_ooo++;
+            sip->rtp_seq = (seq + 1) & 0xFFFF;
+
+            dlen = msg->msg_len - 12;
+
+            // Free incomplete or erroneous reads
+            if (dlen < 0 || dlen > 1316)
+                dlen = 0;
+
+            // Workaround for some poor SAT>IP servers (ex. XORO).
+            //      Some servers send KEEP-ALIVE RTP packets without valid TS
+            //      payload. Then RTP packets received without valid TS data are
+            //      discarded.
+            uint8_t *b = iov[1].iov_base;
+            if (dlen > 0 && dlen < DVB_FRAME && b[0] != 0x47) {
+                LOGM("discarding RTP packet without valid TS payload (sock %d, "
+                     "socket_id "
+                     "%d) [len=%d]",
+                     socket, ss->id, dlen);
+                force_ok = 1;
+                dlen = 0;
+            }
+
+            if (ad && sip->ignore_packets) {
+                force_ok = 1;
+                dlen = 0;
+            }
+        }
+
+        // Clear empty unused buffer space (after all it will be removed)
+        if (dlen < iov[1].iov_len) {
+            int ss = (188 * (dlen / 188));
+            // memset(iov[1].iov_base + ss, 0xFF, iov[1].iov_len - ss);  // Not
+            // necessary
+            holes[i] = iov[1].iov_base + ss;
+            check_holes = 1;
+        }
+        *rb += iov[1].iov_len;
+        bf1 += 20;
+    }
+
+    // Remove holes if they exist
+    if (check_holes && *rb > 0) {
+        for (i = rr - 1; i >= 0;
+             i--) { // loop in reverse order (i = 0; i < rr; i++)
+            if (holes[i] == NULL)
+                continue;
+
+            struct iovec *iov = &iovs[i * 2];
+            int hole_size = iov[1].iov_len - (holes[i] - iov[1].iov_base);
+
+            if (i + 1 < rr) { // move data only if not in the last multibuffer
+                              // slice (in this case only adjust the end)
+                // copy data until the end of the buffer over the empty space to
+                // free the hole
+                uint8_t *eb =
+                    iovs[1].iov_base + *rb; // current end of the read buffer
+                uint8_t *sb = holes[i];     // end of the valid read data
+                uint8_t *ib = holes[i] + hole_size; // end of the iovec slice
+                memmove(sb, ib, eb - ib); // skip just the hole of the chunk
+            }
+            *rb -= hole_size;
+        }
+    }
+
+    return (force_ok || (*rb >= 0));
 }
 
 int process_rtsp_tcp(sockets *ss, unsigned char *rtsp, int rtsp_len, void *buf,
@@ -979,7 +1125,7 @@ void get_s2_url(adapter *ad, char *url, int url_len) {
     //	if (ro == ROLLOFF_AUTO)
     //		ro = ROLLOFF_35;
     FILL("src=%d", tp->diseqc, 0, tp->diseqc);
-    if (sip->use_fe && sip->satip_fe > 0)
+    if (sip->satip_fe > 0)
         FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
     FILL("&freq=%d", tp->freq, 0, tp->freq / 1000);
     FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
@@ -1007,7 +1153,7 @@ void get_c2_url(adapter *ad, char *url, int url_len) {
         return;
     url[0] = 0;
     FILL("freq=%.1f", tp->freq, 0, tp->freq / 1000.0);
-    if (sip->use_fe && sip->satip_fe > 0)
+    if (sip->satip_fe > 0)
         FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
     FILL("&sr=%d", tp->sr, -1, tp->sr / 1000);
     FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
@@ -1032,7 +1178,7 @@ void get_t2_url(adapter *ad, char *url, int url_len) {
         return;
     url[0] = 0;
     FILL("freq=%.1f", tp->freq, 0, tp->freq / 1000.0);
-    if (sip->use_fe && sip->satip_fe > 0)
+    if (sip->satip_fe > 0)
         FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
     FILL("&bw=%d", tp->bw, BANDWIDTH_AUTO, tp->bw / 1000000);
     FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
@@ -1196,6 +1342,7 @@ int satipc_commit(adapter *ad) {
         sip->lap = sip->ldp = 0;
         return 0;
     }
+
     if (sip->lap + sip->ldp == 0)
         if (!sip->force_commit)
             return 0;
@@ -1204,6 +1351,8 @@ int satipc_commit(adapter *ad) {
         sip->want_commit = 1;
         return 0;
     }
+
+    mutex_lock(&sip->mutex);
 
     if (sip->uncommitted_sid > 0)
     {
@@ -1242,6 +1391,7 @@ int satipc_commit(adapter *ad) {
             "an "
             "error ? (uncommitted_sid: %d, last_cmd: %u)",
             sip->sip, sip->uncommitted_sid, sip->last_cmd);
+        mutex_unlock(&sip->mutex);
         return 0;
     }
 
@@ -1262,7 +1412,7 @@ int satipc_commit(adapter *ad) {
         send_dpids = 0;
     }
 
-    if (sip->force_pids && (send_pids + send_apids + send_dpids == 0)) {
+    if (sip->force_pids) {
         send_pids = 1;
         send_apids = 0;
         send_dpids = 0;
@@ -1282,10 +1432,10 @@ int satipc_commit(adapter *ad) {
             1; // ignore all the packets until we get 200 from the server
         sip->want_tune = 0;
         ad->err = 0;
-        ad->err = 0;
         if (!sip->setup_pids && !sip->sent_transport) {
             strcatf(url, len, "&pids=none");
             http_request(ad, url, NULL, 0);
+            mutex_unlock(&sip->mutex);
             return 0;
         }
     }
@@ -1344,6 +1494,7 @@ int satipc_commit(adapter *ad) {
 
     sip->sleep = 0;
     http_request(ad, url, NULL, 0);
+    mutex_unlock(&sip->mutex);
 
     return 0;
 }
@@ -1360,13 +1511,10 @@ int satipc_tune(int aid, transponder *tp) {
     ad->snr = 0;
     sip->want_commit = 0;
     sip->want_tune = 1;
-    sip->ignore_packets =
-        1; // ignore all the packets until we get 200 from the server
+    // ignore all the packets until we get 200 from the server
+    sip->ignore_packets = 1;
     sip->lap = 0;
     sip->ldp = 0;
-    sip->use_fe = 0;
-    if (tp->fe > 0)
-        sip->use_fe = 1;
     if (sip->restart_when_tune) {
         if (!sip->rtsp_socket_closed) {
             LOG("Restart needed for satip adapter %d", sip->id);
@@ -1384,20 +1532,6 @@ int satipc_tune(int aid, transponder *tp) {
 
 fe_delivery_system_t satipc_delsys(int aid, int fd, fe_delivery_system_t *sys) {
     return 0;
-}
-
-uint8_t determine_fe(adapter **a, int pos, char *csip, int sport) {
-    int i = pos;
-    while (i > 0) {
-        i--;
-        adapter *ad = a[i];
-        satipc *sip = satip[i];
-        if (!ad || !sip)
-            continue;
-        if (sport == sip->sport && !strcmp(sip->sip, csip))
-            return sip->satip_fe + 1;
-    }
-    return 1;
 }
 
 void satipc_free(adapter *ad) {
@@ -1429,6 +1563,7 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
 
     sip = satip[i];
     ad = a[i];
+    mutex_init(&sip->mutex);
     mutex_lock(&ad->mutex);
     ad->open = satipc_open_device;
     ad->set_pid = satipc_set_pid;
@@ -1463,8 +1598,6 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
         ad->sys[1] = SYS_DVBT;
     if (ad->sys[0] == SYS_DVBC2)
         ad->sys[1] = SYS_DVBC_ANNEX_A;
-    if (sip->satip_fe == -1)
-        sip->satip_fe = determine_fe(a, i, sip->sip, sip->sport);
     sip->addpids = opts.satip_addpids;
     sip->setup_pids = opts.satip_setup_pids;
     sip->tcp_size = 0;

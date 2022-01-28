@@ -552,6 +552,7 @@ int streams_add() {
     ss->st_sock = -1;
     //	ss->seq = 0; // set the sequence to 0 for testing purposes - it should
     // be random
+    /* coverity[DC.WEAK_CRYPTO] */
     ss->ssrc = random();
     ss->timeout = opts.timeout_sec;
     ss->wtime = ss->rtcp_wtime = getTick();
@@ -872,7 +873,6 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
     char rtp_buf[16 * (max_iov + 1)];
     int rtp_pos = 0;
     int iiov = 1;
-    int num_enabled_pids = 0;
     int last_rtp_header = 0;
     int64_t rtime = ad->rtime;
     int total_len = 0;
@@ -888,7 +888,6 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
             for (j = 0; j < MAX_STREAMS_PER_PID && p->sid[j] > -1; j++)
                 if (p->sid[j] == st_id) {
                     pids[p->pid] = 1;
-                    num_enabled_pids++;
                 }
         }
 
@@ -992,8 +991,6 @@ int process_dmx(sockets *s) {
     pmt_process_stream(ad);
 #endif
 
-    rlen = ad->rlen;
-
     for (i = 0; i < MAX_STREAMS; i++)
         if (st[i] && st[i]->enabled && st[i]->adapter == ad->id)
             process_packets_for_stream(st[i], ad);
@@ -1040,7 +1037,8 @@ int read_dmx(sockets *s) {
     if (rtime - ad->rtime > threshold)
         send = 1;
 
-    if (rtime - ad->rtime > 4 * threshold)
+    // No wait more than the PCR interval (around 40ms for DVB)
+    if ((rtime - ad->rtime > 40) || (rtime - ad->rtime > 4 * threshold))
         force_send = 1;
 
     if (s->lbuf - s->rlen <= 7 * DVB_FRAME)

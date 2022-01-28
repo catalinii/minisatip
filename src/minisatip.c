@@ -30,6 +30,7 @@
 #include <getopt.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <net/if.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -64,12 +65,14 @@ struct struct_opts opts;
 char version[] = VERSION;
 char app_name[] = "minisatip";
 char pid_file[50];
-char public[] = "Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN";
+char public_str[] = "Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN";
 int rtsp, http, si, si1, ssdp1;
 
 #define RRTP_OPT 'r'
 #define DISABLEDVB_OPT 'N'
 #define DISABLESSDP_OPT 'G'
+#define BIND_OPT 'V'
+#define BIND_DEV_OPT 'J'
 #define HTTPSERVER_OPT 'w'
 #define HTTPPORT_OPT 'x'
 #define LOG_OPT 'l'
@@ -97,6 +100,7 @@ int rtsp, http, si, si1, ssdp1;
 #define RTSPPORT_OPT 'y'
 #define SATIPCLIENT_OPT 's'
 #define NETCVCLIENT_OPT 'n'
+#define NAME_APP_OPT 'I'
 #define PRIORITY_OPT 'i'
 #define SATIP_TCP_OPT 'O'
 #define DOCUMENTROOT_OPT 'R'
@@ -120,12 +124,16 @@ int rtsp, http, si, si1, ssdp1;
 #define IPV4_OPT '4'
 #define NO_PIDS_ALL_OPT 'k'
 #define CA_MULTIPLE_PMT_OPT 'c'
+#define CACHE_DIR_OPT 'z'
 
 static const struct option long_options[] = {
     {"adapters", required_argument, NULL, ADAPTERS_OPT},
     {"adapter-timeout", required_argument, NULL, ADAPTERTIMEOUT_OPT},
     {"app-buffer", required_argument, NULL, APPBUFFER_OPT},
     {"buffer", required_argument, NULL, DVRBUFFER_OPT},
+    {"bind", required_argument, NULL, BIND_OPT},
+    {"bind-dev", required_argument, NULL, BIND_DEV_OPT},
+    {"cache-dir", required_argument, NULL, CACHE_DIR_OPT},
     {"clean-psi", no_argument, NULL, CLEANPSI_OPT},
     {"delsys", required_argument, NULL, DELSYS_OPT},
     {"debug", required_argument, NULL, DEBUG_OPT},
@@ -140,6 +148,7 @@ static const struct option long_options[] = {
     {"drop-encrypted", no_argument, NULL, DROP_ENCRYPTED_OPT},
     {"enable-adapters", required_argument, NULL, ENABLE_ADAPTERS_OPT},
     {"foreground", no_argument, NULL, FOREGROUND_OPT},
+    {"name-app", required_argument, NULL, NAME_APP_OPT},
     {"http-port", required_argument, NULL, HTTPPORT_OPT},
     {"http-host", required_argument, NULL, HTTPSERVER_OPT},
     {"ipv6", no_argument, NULL, IPV4_OPT},
@@ -149,7 +158,7 @@ static const struct option long_options[] = {
     {"logfile", required_argument, NULL, LOGFILE_OPT},
     {"mac", required_argument, NULL, MAC_OPT},
     {"multiplier", required_argument, NULL, SIGNALMULTIPLIER_OPT},
-    {"no-all-pids", required_argument, NULL, NO_PIDS_ALL_OPT},
+    {"no-all-pids", no_argument, NULL, NO_PIDS_ALL_OPT},
     {"priority", required_argument, NULL, PRIORITY_OPT},
     {"playlist", required_argument, NULL, PLAYLIST_OPT},
     {"remote-rtp", required_argument, NULL, RRTP_OPT},
@@ -278,20 +287,20 @@ void usage() {
 
     printf(
         "\n\t./%s [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] \n\
-	\t[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]]"
+\t[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]] \n\t"
 #ifndef DISABLE_DVBAPI
-        "[-o oscam_host:dvbapi_port,offset] "
+        "[-o [~]oscam_host:dvbapi_port[,offset] "
 #endif
         "[-p public_host] [-r remote_rtp_host] [-R document_root] "
 #ifndef DISABLE_SATIPCLIENT
         "[-s [*][DELSYS:][FE_ID@][source_ip/]host[:port] "
 #endif
-        "[-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w "
+        "\n\t[-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w "
         "http_server[:port]] \n "
 #ifdef AXE
         "[-7 M1:S1[,M2:S2]] [-A SRC1:INP1:DISEQC1[,SRC2:INP2:DISEQC2]]\n\n"
 #endif
-        "\t[-x http_port] [-X xml_path] [-y rtsp_port]\n\n\
+        "\t[-x http_port] [-X xml_path] [-y rtsp_port] [-I name_service]\n\n\
 Help\n\
 -------\n\
 \n\
@@ -303,11 +312,14 @@ Help\n\
 \n\
 * -G --disable-ssdp disable SSDP announcement\n \
 \n\
-* -b --buffers X:Y : set the app adapter buffer to X Bytes (default: %d) and set the kernel DVB buffer to Y Bytes (default: %d) - both multiple of 188\n\
+* -b --buffer X:Y : set the app adapter buffer to X Bytes (default: %d) and set the kernel DVB buffer to Y Bytes (default: %d) - both multiple of 188\n\
 	* eg: -b 18800:18988\n\
 \n\
 * -B X : set the app socket write buffer to X KB. \n\
 	* eg: -B 10000 - to set the socket buffer to 10MB\n\
+\n\
+* -z --cache-dir dir : set the app cache directory to dir. The directory will be created if it doesn't exist. \n\
+	* defaults to /var/cache/minisatip \n\
 \n\
 * -d --diseqc ADAPTER1:COMMITTED1-UNCOMMITTED1[,ADAPTER2:COMMITTED2-UNCOMMITTED2[,...]\n\
 \t* The first argument is the adapter number, second is the number of committed packets to send to a Diseqc 1.0 switch, third the number of uncommitted commands to sent to a Diseqc 1.1 switch\n\
@@ -330,6 +342,7 @@ Help\n\
 	- note: * as adapter means apply to all adapters\n\
 \n\
 * -E Allows encrypted stream to be sent to the client even if the decrypting is unsuccessful\n \
+	- note: when pids=all is emulated this pass NULLs too\n\
 \n\
 * -Y --delsys ADAPTER1:DELIVERY_SYSTEM1[,ADAPTER2:DELIVERY_SYSTEM2[,..]] - specify the delivery system of the adapters (0 is the first adapter)	\n\
 	* eg: --delsys 0:dvbt,1:dvbs\n\
@@ -348,6 +361,8 @@ Help\n\
 \n\
 * -H --threshold X:Y : set the write time threshold to X (UDP) / Y (TCP)  milliseconds. \n\
 	* eg: -H 5:50 - set thresholds to 5ms (UDP) and 50ms (TCP)\n\
+\n\
+* -I --name-app specificies an alternative Service Name\n\
 \n\
 * -i --priority prio: set the DVR thread priority to prio \n\
 \n\
@@ -393,8 +408,8 @@ Help\n\
 #endif
 #ifndef DISABLE_DVBAPI
         "\
-* -o --dvbapi host:port - specify the hostname and port for the dvbapi server (oscam). Port 9000 is set by default (if not specified) \n\
-	* eg: -o 192.168.9.9:9000 \n\
+* -o --dvbapi host:port,offset - specify the hostname and port for the dvbapi server (oscam). Port 9000 is set by default (if not specified) \n\
+	* eg: -o 192.168.9.9:9000 or -o 192.168.9.9:9999,2  with offset if multiple dvbapi clients use the same server\n\
 	192.168.9.9 is the host where oscam is running and 9000 is the port configured in dvbapi section in oscam.conf.\n\
 	* eg: -o /tmp/camd.socket \n\
 	/tmp/camd.socket is the local socket that can be used \n\
@@ -419,17 +434,17 @@ Help\n\
 #ifndef DISABLE_SATIPCLIENT
         "\
 * -s --satip-servers [~][*][DELSYS:][FE_ID@][source_ip/]host[:port] - specify the remote satip host and port with delivery system DELSYS, it is possible to use multiple -s \n\
-	* ~ When using this symbol at start the `pids=all` call is replaced with `pids=0-20`\n\
-	* - Use TCP if -O is not specified and UDP if -O is specified\n\
-	DELSYS - can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, isdbt, atsc, dvbcb ( - DVBC_ANNEX_B ) [default: dvbs2]\n\
-	host - the server of the satip server\n\
-	port - rtsp port for the satip server [default: 554]\n\
-	FE_ID - will be determined automatically\n\
-	eg: -s 192.168.1.2 -s dvbt:192.168.1.3:554 -s dvbc:192.168.1.4\n\
+	* [~] When using this symbol at start the `pids=all` call is replaced with `pids=0-20`\n\
+	* [*] Use TCP if -O is not specified and UDP if -O is specified\n\
+	* DELSYS - can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, isdbt, atsc, dvbcb ( - DVBC_ANNEX_B ) [default: dvbs2]\n\
+	* host - the server of the satip server\n\
+	* port - rtsp port for the satip server [default: 554]\n\
+	* FE_ID - will be determined automatically\n\
+	* eg: -s 192.168.1.2 -s dvbt:192.168.1.3:554 -s dvbc:192.168.1.4\n\
 	- specifies 1 dvbs2 (and dvbs)satip server with address 192.168.1.2:554\n\
 	- specifies 1 dvbt satip server  with address 192.168.1.3:554\n\
 	- specifies 1 dvbc satip server  with address 192.168.1.4:554\n\
-	eg: -s dvbt:2@192.168.1.100/192.168.1.2:555\n\
+	* eg: -s dvbt:2@192.168.1.100/192.168.1.2:555\n\
 	- specifies 1 dvbt adapter to satip server with address 192.168.1.2, port 555. The client will use fe=2 (indicating adapter 2 on the server) and will connect from IP address 192.168.1.100\n\
 	address 192.168.1.100 needs to be assigned to an interface on the server running minisatip.\n\
 	This feature is useful for AVM FRITZ!WLAN Repeater\n\
@@ -440,7 +455,7 @@ Help\n\
 * -O --satip-tcp Use RTSP over TCP instead of UDP for data transport \n\
 "
 #endif
-        " \
+        "\
 * -S --slave ADAPTER1,ADAPTER2-ADAPTER4[,..]:MASTER - specify slave adapters	\n\
 	* Allows specifying bonded adapters (multiple adapters connected with a splitter to the same LNB)\n\
 	* This feature is used by FBC receivers and AXE to specify the source input of the adapter\n\
@@ -466,10 +481,10 @@ Help\n\
 * -j --jess jess_string - same format as -u \n\
 \n\
 * -U --sources sources_for_adapters: limit the adapters to specific sources/positions\n\
-	* eg: -U 0-2:*:3:2,6,8 (no spaces between parameters)\n\
-	- In this example: for SRC=1 only 0,1,2; for SRC=2 all: for SRC=3 only 3; and for SRC=4 the 2,6,8 adapters are used.\n\
-	- For each position (separated by : ) you need to declare all the adapters that use this position with no exception.\n\
-	- The special char * indicates all adapters for this position.\n\
+	* eg: -U 0-2:*:~:2,6,8 (no spaces between parameters)\n\
+	- In this example: for SRC=1 only 0,1,2; for SRC=2 all: for SRC=3 none; and for SRC=4 the 2,6,8 adapters are used.\n\
+	- For each position (separated by : ) you need to declare all the adapters (or none) that use this position with no exception.\n\
+	- The special char * indicates all adapters for this position. The char ~ indicates none.\n\
 	- The number of sources range from 1 to 64; but the list can include less than 64 (in this case all are enabled for undefined sources).\n\
 	- By default or in case of errors all adapters have enabled all positions.\n\
 \n\
@@ -491,6 +506,9 @@ Help\n\
 	* 1 - use demuxX device \n\
 	* 2 - use dvrX device and additionally capture PSI data from demuxX device \n\
 	* 3 - use demuxX device and additionally capture PSI data from demuxX device \n\
+* -V --bind address: address for listening (all services)\n\
+* -J --bind-dev device: device name for binding (all services)\n\
+        * beware that only works with 1 device. loopback may not work!\n\
 \n "
 #ifdef AXE
         "\
@@ -581,8 +599,9 @@ void set_options(int argc, char *argv[]) {
 #ifndef DISABLE_SATIPCLIENT
     opts.satip_addpids = 1;
 #endif
-    opts.output_buffer = 512 * 1024;
+    opts.output_buffer = 2 * 1024 * 1024;
     opts.document_root = "html";
+    opts.cache_dir = "/var/cache/minisatip";
     opts.xml_path = DESC_XML;
     opts.th_priority = -1;
     opts.diseqc_addr = 0x10;
@@ -627,6 +646,8 @@ void set_options(int argc, char *argv[]) {
     opts.no_threads = 1;
     opts.document_root = "/usr/share/minisatip/html";
 #endif
+
+    opts.name_app = app_name;
     char short_opts[200];
     get_short_opts(short_opts, long_options);
 
@@ -662,9 +683,24 @@ void set_options(int argc, char *argv[]) {
             break;
         }
 
+        case NAME_APP_OPT: {
+            opts.name_app = optarg;
+            break;
+        }
+
         case HTTPSERVER_OPT: {
             //                              int i=0;
             opts.http_host = optarg;
+            break;
+        }
+
+        case BIND_OPT: {
+            opts.bind = optarg;
+            break;
+        }
+
+        case BIND_DEV_OPT: {
+            opts.bind_dev = optarg;
             break;
         }
 
@@ -682,7 +718,7 @@ void set_options(int argc, char *argv[]) {
             strncpy(buf, optarg, sizeof(buf) - 1);
             int la = split(arg, buf, ARRAY_SIZE(arg), ',');
             for (i = 0; i < la; i++) {
-                int level = map_intd(arg[i], loglevels, -1);
+                int level = check_strs(arg[i], loglevels, -1);
                 if (level == -1) {
                     if (!strcmp(arg[i], "-l")) {
                         LOG("The LOG option has changed, please run "
@@ -977,6 +1013,10 @@ void set_options(int argc, char *argv[]) {
             opts.document_root = optarg;
             break;
 
+        case CACHE_DIR_OPT:
+            opts.cache_dir = optarg;
+            break;
+
         case THREADS_OPT:
             opts.no_threads = 1 - opts.no_threads;
             break;
@@ -1043,7 +1083,7 @@ void set_options(int argc, char *argv[]) {
     }
 
     opts.rtsp_host = (char *)malloc1(MAX_HOST);
-    sprintf(opts.rtsp_host, "%s:%u", lip, opts.rtsp_port);
+    sprintf(opts.rtsp_host, "%s:%d", lip, opts.rtsp_port);
 
     opts.datetime_compile = (char *)malloc1(64);
     sprintf(opts.datetime_compile, "%s | %s", __DATE__, __TIME__);
@@ -1309,9 +1349,9 @@ int read_rtsp(sockets *s) {
                  get_sock_shost(s->sock, localhost, sizeof(localhost)));
         http_response(s, 200, buf, sbuf, cseq, 0);
     } else if (strncmp(arg[0], "OPTIONS", 7) == 0) {
-        http_response(s, 200, public, NULL, cseq, 0);
+        http_response(s, 200, public_str, NULL, cseq, 0);
     } else {
-        http_response(s, 501, public, NULL, cseq, 0);
+        http_response(s, 501, public_str, NULL, cseq, 0);
     }
     return 0;
 }
@@ -1466,7 +1506,7 @@ int read_http(sockets *s) {
             0)
             strcpy(adapters, "DVBS2-0,");
         adapters[strlen(adapters) - 1] = 0;
-        snprintf(buf, sizeof(buf), xml, app_name, app_name, app_name, uuid,
+        snprintf(buf, sizeof(buf), xml, (opts.name_app)? opts.name_app : app_name, app_name, app_name, uuid,
                  opts.http_host, adapters, opts.playlist ? opts.playlist : "");
         sprintf(headers,
                 "Cache-Control: no-cache\r\nContent-type: "
@@ -1760,6 +1800,8 @@ extern int sock_signal;
 
 int main(int argc, char *argv[]) {
     int sock_bw, rv, devices;
+    int i;
+    unsigned long log_it;
     main_tid = get_tid();
     strcpy(thread_name, "main");
     set_options(argc, argv);
@@ -1777,16 +1819,33 @@ int main(int argc, char *argv[]) {
 
     print_version(1);
 
+    for (i = 0; loglevels[i]; i++) {
+        log_it = (1UL << i);
+        LOGL(log_it,   " LOG  of the module enabled: %s", loglevels[i]);
+        DEBUGL(log_it, "DEBUG of the module enabled: %s", loglevels[i]);
+    }
+
+    mkdir_recursive(opts.cache_dir);
     readBootID();
-    if ((rtsp = tcp_listen(NULL, opts.rtsp_port, opts.use_ipv4_only)) < 1)
+    if ((rtsp = tcp_listen(opts.bind, opts.rtsp_port, opts.use_ipv4_only)) < 1)
         FAIL("RTSP: Could not listen on port %d", opts.rtsp_port);
-    if ((http = tcp_listen(NULL, opts.http_port, opts.use_ipv4_only)) < 1)
+    if ((http = tcp_listen(opts.bind, opts.http_port, opts.use_ipv4_only)) < 1)
         FAIL("Could not listen on http port %d", opts.http_port);
     if (!opts.disable_ssdp) {
-        if ((ssdp = udp_bind(NULL, 1900, opts.use_ipv4_only)) < 1)
+        if ((ssdp = udp_bind(opts.bind, 1900, opts.use_ipv4_only)) < 1)
             FAIL("SSDP: Could not bind on udp port 1900");
         if ((ssdp1 = udp_bind(opts.disc_host, 1900, 1)) < 1)
             FAIL("SSDP: Could not bind on %s udp port 1900", opts.disc_host);
+	if (opts.bind_dev) {
+		struct ifreq ifr;
+		memset(&ifr, 0, sizeof(ifr));
+		snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "%s", opts.bind_dev);
+  	    	if (setsockopt(ssdp, SOL_SOCKET, SO_BINDTODEVICE, (void *)&ifr, sizeof(ifr)) < 0)
+			LOG("SSDP: Failed to set SO_BINDTODEVICE to %s", opts.bind_dev);
+  	    	if (setsockopt(ssdp1, SOL_SOCKET, SO_BINDTODEVICE, (void *)&ifr, sizeof(ifr)) < 0)
+			LOG("SSDP: Failed to set SO_BINDTODEVICE to %s", opts.bind_dev);
+		LOG("SSDP: Bound to device %s", opts.bind_dev);
+	}
 
         si = sockets_add(ssdp, NULL, -1, TYPE_UDP, (socket_action)ssdp_reply,
                          (socket_action)ssdp_byebye,
@@ -1863,7 +1922,9 @@ int main(int argc, char *argv[]) {
 int readBootID() {
     int did = 0;
     opts.bootid = 0;
-    FILE *f = fopen("bootid", "rt");
+    char bootid_path[256];
+    snprintf(bootid_path, sizeof(bootid_path) - 1, "%s/bootid", opts.cache_dir);
+    FILE *f = fopen(bootid_path, "rt");
     __attribute__((unused)) int rv;
     if (f) {
         rv = fscanf(f, "%d %d", &opts.bootid, &did);
@@ -1874,7 +1935,7 @@ int readBootID() {
     opts.bootid++;
     if (opts.device_id < 1)
         opts.device_id = 1;
-    f = fopen("bootid", "wt");
+    f = fopen(bootid_path, "wt");
     if (f) {
         fprintf(f, "%d %d", opts.bootid, opts.device_id);
         fclose(f);
@@ -1895,7 +1956,7 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr) {
         proto = "RTSP";
 
     if (!ah || !ah[0])
-        ah = public;
+        ah = public_str;
     if (!desc)
         desc = "";
     if (rc == 200)
@@ -1983,6 +2044,7 @@ int has_pmt = 0;
 _symbols minisatip_sym[] = {
     {"has_axe", VAR_INT, &has_axe, 1, 0, 0},
     {"has_pmt", VAR_INT, &has_pmt, 1, 0, 0},
+    {"name_app", VAR_PSTRING, &opts.name_app, 0, 0, 0},
     {"http_host", VAR_PSTRING, &opts.http_host, 0, 0, 0},
     {"uuid", VAR_STRING, uuid, 0, 0, 0},
     {"bootid", VAR_INT, &opts.bootid, 1, 0, 0},
