@@ -409,7 +409,7 @@ Help\n\
 #ifndef DISABLE_DVBAPI
         "\
 * -o --dvbapi [~]host:port,offset - specify the hostname and port for the dvbapi server (oscam). Port 9000 is set by default (if not specified) \n\
-	* [~] When using this symbol at start of a `pids=all` request the filtering out of encrypted packets is disabled (useful when not using -E).\n\
+	* [~] This symbol at the beginning indicates that in all `pids=all` requests the filtering of unencrypted packets must be disabled (useful when not using -E).\n\
 	* eg: -o 192.168.9.9:9000 or -o 192.168.9.9:9999,2  with offset if multiple dvbapi clients use the same server\n\
 	192.168.9.9 is the host where oscam is running and 9000 is the port configured in dvbapi section in oscam.conf.\n\
 	* eg: -o /tmp/camd.socket \n\
