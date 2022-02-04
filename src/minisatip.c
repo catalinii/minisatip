@@ -295,15 +295,15 @@ void usage() {
 
     printf(
         "\n\t./%s [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] \n\
-	\t[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]]"
+\t[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]] \n\t"
 #ifndef DISABLE_DVBAPI
-        "[-o oscam_host:dvbapi_port,offset] "
+        "[-o [~]oscam_host:dvbapi_port[,offset] "
 #endif
         "[-p public_host] [-r remote_rtp_host] [-R document_root] "
 #ifndef DISABLE_SATIPCLIENT
         "[-s [*][DELSYS:][FE_ID@][source_ip/]host[:port] "
 #endif
-        "[-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w "
+        "\n\t[-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w "
         "http_server[:port]] \n "
 #ifdef AXE
         "[-7 M1:S1[,M2:S2]] [-A SRC1:INP1:DISEQC1[,SRC2:INP2:DISEQC2]]\n\n"
@@ -425,7 +425,8 @@ Help\n\
 #endif
 #ifndef DISABLE_DVBAPI
         "\
-* -o --dvbapi host:port,offset - specify the hostname and port for the dvbapi server (oscam). Port 9000 is set by default (if not specified) \n\
+* -o --dvbapi [~]host:port,offset - specify the hostname and port for the dvbapi server (oscam). Port 9000 is set by default (if not specified) \n\
+	* [~] This symbol at the beginning indicates that in all `pids=all` requests the filtering of unencrypted packets must be disabled (useful when not using -E).\n\
 	* eg: -o 192.168.9.9:9000 or -o 192.168.9.9:9999,2  with offset if multiple dvbapi clients use the same server\n\
 	192.168.9.9 is the host where oscam is running and 9000 is the port configured in dvbapi section in oscam.conf.\n\
 	* eg: -o /tmp/camd.socket \n\
@@ -451,17 +452,17 @@ Help\n\
 #ifndef DISABLE_SATIPCLIENT
         "\
 * -s --satip-servers [~][*][DELSYS:][FE_ID@][source_ip/]host[:port] - specify the remote satip host and port with delivery system DELSYS, it is possible to use multiple -s \n\
-	* ~ When using this symbol at start the `pids=all` call is replaced with `pids=0-20`\n\
-	* - Use TCP if -O is not specified and UDP if -O is specified\n\
-	DELSYS - can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, isdbt, atsc, dvbcb ( - DVBC_ANNEX_B ) [default: dvbs2]\n\
-	host - the server of the satip server\n\
-	port - rtsp port for the satip server [default: 554]\n\
-	FE_ID - will be determined automatically\n\
-	eg: -s 192.168.1.2 -s dvbt:192.168.1.3:554 -s dvbc:192.168.1.4\n\
+	* [~] When using this symbol at start the `pids=all` call is replaced with `pids=0-20`\n\
+	* [*] Use TCP if -O is not specified and UDP if -O is specified\n\
+	* DELSYS - can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, isdbt, atsc, dvbcb ( - DVBC_ANNEX_B ) [default: dvbs2]\n\
+	* host - the server of the satip server\n\
+	* port - rtsp port for the satip server [default: 554]\n\
+	* FE_ID - will be determined automatically\n\
+	* eg: -s 192.168.1.2 -s dvbt:192.168.1.3:554 -s dvbc:192.168.1.4\n\
 	- specifies 1 dvbs2 (and dvbs)satip server with address 192.168.1.2:554\n\
 	- specifies 1 dvbt satip server  with address 192.168.1.3:554\n\
 	- specifies 1 dvbc satip server  with address 192.168.1.4:554\n\
-	eg: -s dvbt:2@192.168.1.100/192.168.1.2:555\n\
+	* eg: -s dvbt:2@192.168.1.100/192.168.1.2:555\n\
 	- specifies 1 dvbt adapter to satip server with address 192.168.1.2, port 555. The client will use fe=2 (indicating adapter 2 on the server) and will connect from IP address 192.168.1.100\n\
 	address 192.168.1.100 needs to be assigned to an interface on the server running minisatip.\n\
 	This feature is useful for AVM FRITZ!WLAN Repeater\n\
@@ -472,7 +473,7 @@ Help\n\
 * -O --satip-tcp Use RTSP over TCP instead of UDP for data transport \n\
 "
 #endif
-        " \
+        "\
 * -S --slave ADAPTER1,ADAPTER2-ADAPTER4[,..]:MASTER - specify slave adapters	\n\
 	* Allows specifying bonded adapters (multiple adapters connected with a splitter to the same LNB)\n\
 	* This feature is used by FBC receivers and AXE to specify the source input of the adapter\n\
@@ -498,10 +499,10 @@ Help\n\
 * -j --jess jess_string - same format as -u \n\
 \n\
 * -U --sources sources_for_adapters: limit the adapters to specific sources/positions\n\
-	* eg: -U 0-2:*:3:2,6,8 (no spaces between parameters)\n\
-	- In this example: for SRC=1 only 0,1,2; for SRC=2 all: for SRC=3 only 3; and for SRC=4 the 2,6,8 adapters are used.\n\
-	- For each position (separated by : ) you need to declare all the adapters that use this position with no exception.\n\
-	- The special char * indicates all adapters for this position.\n\
+	* eg: -U 0-2:*:~:2,6,8 (no spaces between parameters)\n\
+	- In this example: for SRC=1 only 0,1,2; for SRC=2 all: for SRC=3 none; and for SRC=4 the 2,6,8 adapters are used.\n\
+	- For each position (separated by : ) you need to declare all the adapters (or none) that use this position with no exception.\n\
+	- The special char * indicates all adapters for this position. The char ~ indicates none.\n\
 	- The number of sources range from 1 to 64; but the list can include less than 64 (in this case all are enabled for undefined sources).\n\
 	- By default or in case of errors all adapters have enabled all positions.\n\
 \n\
@@ -611,6 +612,7 @@ void set_options(int argc, char *argv[]) {
     opts.dvbapi_port = 0;
     memset(opts.dvbapi_host, 0, sizeof(opts.dvbapi_host));
     opts.drop_encrypted = 1;
+    opts.pids_all_no_dec = 0;
     opts.rtsp_port = 554;
     opts.use_ipv4_only = 1;
 #ifndef DISABLE_SATIPCLIENT
@@ -931,6 +933,11 @@ void set_options(int argc, char *argv[]) {
             char buf[100];
             memset(buf, 0, sizeof(buf));
             strncpy(buf, optarg, sizeof(buf) - 1);
+            if (buf[0] == '~')
+            {
+                opts.pids_all_no_dec = 1;
+                memmove(&buf[0], &buf[1], sizeof(buf) - 1);
+            }
             char *sep2 = strchr(buf, ',');
             if (sep2 != NULL) {
                 *sep2 = 0;
