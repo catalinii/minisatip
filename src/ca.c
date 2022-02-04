@@ -2913,6 +2913,7 @@ static int ca_lookup_callback(void *arg, uint8_t slot_id,
                               void **arg_out, uint32_t *connected_resource_id) {
     ca_device_t *d = arg;
     d->session->ca = d;
+    *connected_resource_id = requested_resource_id;
 
     LOGM("===================> %s: slot_id %u requested_resource_id %x",
          __func__, slot_id, requested_resource_id);
@@ -2922,34 +2923,28 @@ static int ca_lookup_callback(void *arg, uint8_t slot_id,
     case TS101699_APP_RM_RESOURCEID:
         *callback_out = (en50221_sl_resource_callback)en50221_app_rm_message;
         *arg_out = d->rm_resource;
-        *connected_resource_id = EN50221_APP_RM_RESOURCEID;
         break;
     case CIPLUS_APP_AI_RESOURCEID:
         *callback_out = (en50221_sl_resource_callback)ciplus_app_ai_message;
         *arg_out = d;
-        *connected_resource_id = CIPLUS_APP_AI_RESOURCEID;
         break;
     case EN50221_APP_AI_RESOURCEID:
     case TS101699_APP_AI_RESOURCEID:
         *callback_out = (en50221_sl_resource_callback)en50221_app_ai_message;
         *arg_out = d->ai_resource;
-        *connected_resource_id = requested_resource_id;
         break;
     case EN50221_APP_CA_RESOURCEID:
         *callback_out = (en50221_sl_resource_callback)en50221_app_ca_message;
         *arg_out = d->ca_resource;
-        *connected_resource_id = EN50221_APP_CA_RESOURCEID;
         break;
     case EN50221_APP_DATETIME_RESOURCEID:
         *callback_out =
             (en50221_sl_resource_callback)en50221_app_datetime_message;
         *arg_out = d->dt_resource;
-        *connected_resource_id = EN50221_APP_DATETIME_RESOURCEID;
         break;
     case EN50221_APP_MMI_RESOURCEID:
         *callback_out = (en50221_sl_resource_callback)en50221_app_mmi_message;
         *arg_out = d->mmi_resource;
-        *connected_resource_id = EN50221_APP_MMI_RESOURCEID;
         break;
     case CIPLUS_APP_CC_RESOURCEID:
         /* CI Plus Implementation Guidelines V1.0.6 (2013-10)
@@ -2959,7 +2954,6 @@ static int ca_lookup_callback(void *arg, uint8_t slot_id,
         d->uri_mask = 0x1;
         *callback_out = (en50221_sl_resource_callback)ciplus_app_cc_message;
         *arg_out = d;
-        *connected_resource_id = requested_resource_id;
         break;
     case CIPLUS_APP_CC_RESOURCEID_TWO:
     case TS103205_APP_CC_RESOURCEID_THREE:
@@ -2967,35 +2961,29 @@ static int ca_lookup_callback(void *arg, uint8_t slot_id,
         d->uri_mask = 0x3;
         *callback_out = (en50221_sl_resource_callback)ciplus_app_cc_message;
         *arg_out = d;
-        *connected_resource_id = requested_resource_id;
         break;
     case CIPLUS_APP_LANG_RESOURCEID:
         *callback_out = (en50221_sl_resource_callback)ciplus_app_lang_message;
         *arg_out = d;
-        *connected_resource_id = requested_resource_id;
         break;
     case CIPLUS_APP_UPGR_RESOURCEID:
         *callback_out = (en50221_sl_resource_callback)ciplus_app_upgr_message;
         *arg_out = d;
-        *connected_resource_id = requested_resource_id;
         break;
     case CIPLUS_APP_SAS_RESOURCEID:
         *callback_out = (en50221_sl_resource_callback)ciplus_app_sas_message;
         *arg_out = d;
-        *connected_resource_id = requested_resource_id;
         break;
     case CIPLUS_APP_OPRF_RESOURCEID:
     case TS103205_APP_OPRF_TWO_RESOURCEID:
     case TS103205_APP_OPRF_THREE_RESOURCEID:
         *callback_out = (en50221_sl_resource_callback)ciplus_app_oprf_message;
         *arg_out = d;
-        *connected_resource_id = requested_resource_id;
         break;
     default:
         *callback_out =
             (en50221_sl_resource_callback)en50221_app_unknown_message;
         *arg_out = d;
-        *connected_resource_id = requested_resource_id;
         LOG("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! lookup callback for "
             "unknown resource id %x on slot %u",
             requested_resource_id, slot_id);
