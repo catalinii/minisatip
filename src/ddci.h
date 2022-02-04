@@ -35,6 +35,7 @@ typedef struct ddci_device {
     uint64_t last_pat, last_pmt;
     int tid, ver;
     char pat_cc;
+    char disable_cat;
     SHashTable mapping;
 } ddci_device_t;
 
@@ -83,4 +84,5 @@ void load_channels(SHashTable *ch);
 int ddci_process_pmt(adapter *ad, SPMT *pmt);
 void blacklist_pmt_for_ddci(SPMT *pmt, int ddid);
 int ddci_del_pmt(adapter *ad, SPMT *spmt);
+void disable_cat_adapters(char *o);
 #endif

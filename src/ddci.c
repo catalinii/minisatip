@@ -1105,30 +1105,36 @@ int set_property(int fd, uint32_t cmd, uint32_t data) {
     return 0;
 }
 
+ddci_device_t *ddci_alloc(int id) {
+    unsigned char *out;
+    out = malloc1(DDCI_BUFFER + 10);
+    ddci_device_t *d;
+    if (!out) {
+        LOG_AND_RETURN(NULL,
+                       "%s: could not allocated memory for the output "
+                       "buffer for adapter %d",
+                       __FUNCTION__, id);
+    }
+
+    d = ddci_devices[id] = malloc1(sizeof(ddci_device_t));
+    if (!d) {
+        free(out);
+        return NULL;
+    }
+    mutex_init(&d->mutex);
+    d->id = id;
+    memset(out, -1, DDCI_BUFFER + 10);
+    d->out = out;
+    create_hash_table(&d->mapping, 100);
+    return d;
+}
+
 int ddci_open_device(adapter *ad) {
     char buf[100];
     int read_fd, write_fd;
     ddci_device_t *d = ddci_devices[ad->id];
-    if (!d) {
-        unsigned char *out;
-        out = malloc1(DDCI_BUFFER + 10);
-        if (!out) {
-            LOG_AND_RETURN(1,
-                           "%s: could not allocated memory for the output "
-                           "buffer for adapter %d",
-                           __FUNCTION__, ad->id);
-        }
-
-        d = ddci_devices[ad->id] = malloc1(sizeof(ddci_device_t));
-        if (!d) {
-            free(out);
-            return -1;
-        }
-        mutex_init(&d->mutex);
-        d->id = ad->id;
-        memset(out, -1, DDCI_BUFFER + 10);
-        d->out = out;
-        create_hash_table(&d->mapping, 100);
+    if (!d && !(d = ddci_alloc(ad->id))) {
+        return -1;
     }
     LOG("DDCI opening [%d] adapter %d and frontend %d", ad->id, ad->pa, ad->fn);
     sprintf(buf, "/dev/dvb/adapter%d/sec%d", ad->pa, ad->fn);
@@ -1221,10 +1227,8 @@ int process_cat(int filter, unsigned char *b, int len, void *opaque) {
         LOG_AND_RETURN(0, "DDCI %d no longer enabled, not processing PAT",
                        d->id);
 
-    if (d->cat_processed)
+    if (d->cat_processed || d->disable_cat)
         return 0;
-
-    d->cat_processed = 1;
 
     cat_len -= 9;
     b += 8;
@@ -1351,6 +1355,35 @@ void load_channels(SHashTable *ch) {
     }
     fclose(f);
     LOG("Loaded %d channels from %s", channels, ddci_conf_path);
+}
+
+void disable_cat_adapters(char *o) {
+    int i, la, st, end, j;
+    char buf[1000], *arg[40], *sep;
+    SAFE_STRCPY(buf, o);
+
+    la = split(arg, buf, ARRAY_SIZE(arg), ',');
+    for (i = 0; i < la; i++) {
+        sep = strchr(arg[i], '-');
+        if (sep == NULL) {
+            st = map_int(arg[i], NULL);
+            ddci_device_t *d = ddci_alloc(st);
+            if (d) {
+                LOG("Disable passing the CAT to DDCI %d", d->id);
+                d->disable_cat = 1;
+            }
+        } else {
+            st = map_int(arg[i], NULL);
+            end = map_int(sep + 1, NULL);
+            for (j = st; j <= end; j++) {
+                ddci_device_t *d = ddci_alloc(j);
+                if (d) {
+                    LOG("Disable passing the CAT to DDCI %d", d->id);
+                    d->disable_cat = 1;
+                }
+            }
+        }
+    }
 }
 
 void ddci_free(adapter *ad) {

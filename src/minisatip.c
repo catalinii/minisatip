@@ -28,9 +28,9 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
+#include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
-#include <net/if.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -54,6 +54,10 @@
 
 #ifndef DISABLE_DVBCA
 #include "ca.h"
+#endif
+
+#ifndef DISABLE_DDCI
+#include "ddci.h"
 #endif
 
 struct struct_opts opts;
@@ -125,6 +129,7 @@ int rtsp, http, si, si1, ssdp1;
 #define NO_PIDS_ALL_OPT 'k'
 #define CA_MULTIPLE_PMT_OPT 'c'
 #define CACHE_DIR_OPT 'z'
+#define DISABLE_CAT_OPT '5'
 
 static const struct option long_options[] = {
     {"adapters", required_argument, NULL, ADAPTERS_OPT},
@@ -172,6 +177,9 @@ static const struct option long_options[] = {
     {"unicable", required_argument, NULL, UNICABLE_OPT},
     {"xml", required_argument, NULL, XML_OPT},
     {"help", no_argument, NULL, HELP_OPT},
+#ifndef DISABLE_DDCI
+    {"disable-cat", required_argument, NULL, DISABLE_CAT_OPT},
+#endif
 #ifndef DISABLE_DVBAPI
     {"dvbapi", required_argument, NULL, DVBAPI_OPT},
 #endif
@@ -399,6 +407,15 @@ Help\n\
 	- required for some Unicable LNBs \n\
 \n\
 "
+#ifndef DISABLE_DDCI
+        "\
+* -5 --disable-cat ADAPTER1,ADAPTER2-ADAPTER4\n\
+	* eg: -5 1-3,4 \n\
+	- disable passing the CAT to the DDCI device 1,2,3 and 4 \n\
+\n\
+"
+#endif
+
 #ifndef DISABLE_NETCVCLIENT
         "\
 * -n --netceiver if:count: use network interface <if> (default vlan4) and look for <count> netceivers\n\
@@ -878,7 +895,12 @@ void set_options(int argc, char *argv[]) {
             set_slave_adapters(optarg);
             break;
         }
-
+#ifndef DISABLE_DDCI
+        case DISABLE_CAT_OPT: {
+            disable_cat_adapters(optarg);
+            break;
+        }
+#endif
         case ADAPTERTIMEOUT_OPT: {
             set_timeout_adapters(optarg);
             break;
@@ -1506,8 +1528,10 @@ int read_http(sockets *s) {
             0)
             strcpy(adapters, "DVBS2-0,");
         adapters[strlen(adapters) - 1] = 0;
-        snprintf(buf, sizeof(buf), xml, (opts.name_app)? opts.name_app : app_name, app_name, app_name, uuid,
-                 opts.http_host, adapters, opts.playlist ? opts.playlist : "");
+        snprintf(buf, sizeof(buf), xml,
+                 (opts.name_app) ? opts.name_app : app_name, app_name, app_name,
+                 uuid, opts.http_host, adapters,
+                 opts.playlist ? opts.playlist : "");
         sprintf(headers,
                 "Cache-Control: no-cache\r\nContent-type: "
                 "text/xml\r\nX-SATIP-RTSP-Port: %d\r\nConnection: close",
@@ -1821,7 +1845,7 @@ int main(int argc, char *argv[]) {
 
     for (i = 0; loglevels[i]; i++) {
         log_it = (1UL << i);
-        LOGL(log_it,   " LOG  of the module enabled: %s", loglevels[i]);
+        LOGL(log_it, " LOG  of the module enabled: %s", loglevels[i]);
         DEBUGL(log_it, "DEBUG of the module enabled: %s", loglevels[i]);
     }
 
@@ -1836,16 +1860,18 @@ int main(int argc, char *argv[]) {
             FAIL("SSDP: Could not bind on udp port 1900");
         if ((ssdp1 = udp_bind(opts.disc_host, 1900, 1)) < 1)
             FAIL("SSDP: Could not bind on %s udp port 1900", opts.disc_host);
-	if (opts.bind_dev) {
-		struct ifreq ifr;
-		memset(&ifr, 0, sizeof(ifr));
-		snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "%s", opts.bind_dev);
-  	    	if (setsockopt(ssdp, SOL_SOCKET, SO_BINDTODEVICE, (void *)&ifr, sizeof(ifr)) < 0)
-			LOG("SSDP: Failed to set SO_BINDTODEVICE to %s", opts.bind_dev);
-  	    	if (setsockopt(ssdp1, SOL_SOCKET, SO_BINDTODEVICE, (void *)&ifr, sizeof(ifr)) < 0)
-			LOG("SSDP: Failed to set SO_BINDTODEVICE to %s", opts.bind_dev);
-		LOG("SSDP: Bound to device %s", opts.bind_dev);
-	}
+        if (opts.bind_dev) {
+            struct ifreq ifr;
+            memset(&ifr, 0, sizeof(ifr));
+            snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "%s", opts.bind_dev);
+            if (setsockopt(ssdp, SOL_SOCKET, SO_BINDTODEVICE, (void *)&ifr,
+                           sizeof(ifr)) < 0)
+                LOG("SSDP: Failed to set SO_BINDTODEVICE to %s", opts.bind_dev);
+            if (setsockopt(ssdp1, SOL_SOCKET, SO_BINDTODEVICE, (void *)&ifr,
+                           sizeof(ifr)) < 0)
+                LOG("SSDP: Failed to set SO_BINDTODEVICE to %s", opts.bind_dev);
+            LOG("SSDP: Bound to device %s", opts.bind_dev);
+        }
 
         si = sockets_add(ssdp, NULL, -1, TYPE_UDP, (socket_action)ssdp_reply,
                          (socket_action)ssdp_byebye,
