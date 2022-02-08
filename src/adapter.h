@@ -62,15 +62,13 @@ struct struct_adapter {
     uint16_t snr; // strength have values between 0 and 255
     uint16_t db;  // if MAX_DB then no value, else value is dB*10 of the adapter
     float strength_multiplier, // final value: strength * strength_multipler,
-          snr_multiplier;      // same for snr
+        snr_multiplier;        // same for snr
     float db_snr_map;          // modulation scale value for dB SNR conversion
     uint32_t pid_err, dec_err; // detect pids received but not part of any
                                // stream, decrypt errors
     diseqc diseqc_param;
     int diseqc_multi;
-    int sources_pos[MAX_SOURCES + 1]; // includes SRC=0 used internally only
-    char debug_pos[MAX_SOURCES + 1];
-    uint64_t debug_src;
+    int8_t absolute_table[MAX_SOURCES];
     int old_diseqc;
     int old_hiband;
     int old_pol;
@@ -116,8 +114,8 @@ struct struct_adapter {
 };
 
 extern adapter *a[MAX_ADAPTERS];
-extern uint64_t source_map[MAX_SOURCES];
 extern int a_count;
+extern char absolute_switch;
 extern char do_dump_pids;
 
 int init_hw(int i);
@@ -170,6 +168,8 @@ int close_adapter_for_socket(sockets *s);
 int compare_tunning_parameters(int aid, transponder *tp);
 void request_adapter_close(adapter *ad);
 int compare_slave_parameters(adapter *ad, transponder *tp);
+int get_absolute_source_for_adapter(int aid, int src, int sys);
+void set_absolute_src(char *o);
 #define get_adapter(a) get_adapter1(a, __FILE__, __LINE__)
 #define get_configured_adapter(a) get_configured_adapter1(a, __FILE__, __LINE__)
 #define get_adapter_nw(aid)                                                    \

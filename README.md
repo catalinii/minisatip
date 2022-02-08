@@ -29,11 +29,13 @@ https://paypal.me/minisatip
 
 Usage:
 -------
-
-minisatip version v1.1.8-24d77e4, compiled in Jun 15 2021 20:36:32, with s2api version: 050B
+(Message automatically generated from "minisatip --help")
+minisatip version 1.1.67, compiled in Feb  5 2022 23:02:57, with s2api version: 050B
 
 	./minisatip [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
-		[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]][-o oscam_host:dvbapi_port,offset] [-p public_host] [-r remote_rtp_host] [-R document_root] [-s [*][DELSYS:][FE_ID@][source_ip/]host[:port] [-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] 
+	[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]] 
+	[-o [~]oscam_host:dvbapi_port[,offset] [-p public_host] [-r remote_rtp_host] [-R document_root] [-s [*][DELSYS:][FE_ID@][source_ip/]host[:port] 
+	[-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] 
  	[-x http_port] [-X xml_path] [-y rtsp_port] [-I name_service]
 
 Help
@@ -54,7 +56,7 @@ Help
 	* eg: -B 10000 - to set the socket buffer to 10MB
 
 * -z --cache-dir dir : set the app cache directory to dir. The directory will be created if it doesn't exist. 
-	* defaults to /var/cache/minisati
+	* defaults to /var/cache/minisatip 
 
 * -d --diseqc ADAPTER1:COMMITTED1-UNCOMMITTED1[,ADAPTER2:COMMITTED2-UNCOMMITTED2[,...]
 	* The first argument is the adapter number, second is the number of committed packets to send to a Diseqc 1.0 switch, third the number of uncommitted commands to sent to a Diseqc 1.1 switch
@@ -133,8 +135,13 @@ Help
 	- turns off power management for all adapters (recommended instead of --adapter-timeout 0-32:0) 
 	- required for some Unicable LNBs 
 
-* -o --dvbapi host:port - specify the hostname and port for the dvbapi server (oscam). Port 9000 is set by default (if not specified) 
-	* eg: -o 192.168.9.9:9000 
+* -5 --disable-cat ADAPTER1,ADAPTER2-ADAPTER4
+	* eg: -5 1-3,4 
+	- disable passing the CAT to the DDCI device 1,2,3 and 4 
+
+* -o --dvbapi [~]host:port,offset - specify the hostname and port for the dvbapi server (oscam). Port 9000 is set by default (if not specified) 
+	* [~] This symbol at the beginning indicates that in all `pids=all` requests the filtering of unencrypted packets must be disabled (useful when not using -E).
+	* eg: -o 192.168.9.9:9000 or -o 192.168.9.9:9999,2  with offset if multiple dvbapi clients use the same server
 	192.168.9.9 is the host where oscam is running and 9000 is the port configured in dvbapi section in oscam.conf.
 	* eg: -o /tmp/camd.socket 
 	/tmp/camd.socket is the local socket that can be used 
@@ -153,17 +160,17 @@ Help
 * -R --document-root directory: document root for the minisatip web page and images
 
 * -s --satip-servers [~][*][DELSYS:][FE_ID@][source_ip/]host[:port] - specify the remote satip host and port with delivery system DELSYS, it is possible to use multiple -s 
-	* ~ When using this symbol at start the `pids=all` call is replaced with `pids=0-20`
-	* - Use TCP if -O is not specified and UDP if -O is specified
-	DELSYS - can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, isdbt, atsc, dvbcb ( - DVBC_ANNEX_B ) [default: dvbs2]
-	host - the server of the satip server
-	port - rtsp port for the satip server [default: 554]
-	FE_ID - will be determined automatically
-	eg: -s 192.168.1.2 -s dvbt:192.168.1.3:554 -s dvbc:192.168.1.4
+	* [~] When using this symbol at start the `pids=all` call is replaced with `pids=0-20`
+	* [*] Use TCP if -O is not specified and UDP if -O is specified
+	* DELSYS - can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, isdbt, atsc, dvbcb ( - DVBC_ANNEX_B ) [default: dvbs2]
+	* host - the server of the satip server
+	* port - rtsp port for the satip server [default: 554]
+	* FE_ID - will be determined automatically
+	* eg: -s 192.168.1.2 -s dvbt:192.168.1.3:554 -s dvbc:192.168.1.4
 	- specifies 1 dvbs2 (and dvbs)satip server with address 192.168.1.2:554
 	- specifies 1 dvbt satip server  with address 192.168.1.3:554
 	- specifies 1 dvbc satip server  with address 192.168.1.4:554
-	eg: -s dvbt:2@192.168.1.100/192.168.1.2:555
+	* eg: -s dvbt:2@192.168.1.100/192.168.1.2:555
 	- specifies 1 dvbt adapter to satip server with address 192.168.1.2, port 555. The client will use fe=2 (indicating adapter 2 on the server) and will connect from IP address 192.168.1.100
 	address 192.168.1.100 needs to be assigned to an interface on the server running minisatip.
 	This feature is useful for AVM FRITZ!WLAN Repeater
@@ -172,7 +179,7 @@ Help
 	eg: --satip-xml http://localhost:8080/desc.xml 
 
 * -O --satip-tcp Use RTSP over TCP instead of UDP for data transport 
- * -S --slave ADAPTER1,ADAPTER2-ADAPTER4[,..]:MASTER - specify slave adapters	
+* -S --slave ADAPTER1,ADAPTER2-ADAPTER4[,..]:MASTER - specify slave adapters	
 	* Allows specifying bonded adapters (multiple adapters connected with a splitter to the same LNB)
 	* This feature is used by FBC receivers and AXE to specify the source input of the adapter
 	Only one adapter needs to be master all others needs to have this parameter specified
@@ -196,14 +203,6 @@ Help
 
 * -j --jess jess_string - same format as -u 
 
-* -U --sources sources_for_adapters: limit the adapters to specific sources/positions
-	* eg: -U 0-2:*:3:2,6,8 (no spaces between parameters)
-	- In this example: for SRC=1 only 0,1,2; for SRC=2 all: for SRC=3 only 3; and for SRC=4 the 2,6,8 adapters are used.
-	- For each position (separated by : ) you need to declare all the adapters that use this position with no exception.
-	- The special char * indicates all adapters for this position.
-	- The number of sources range from 1 to 64; but the list can include less than 64 (in this case all are enabled for undefined sources).
-	- By default or in case of errors all adapters have enabled all positions.
-
 * -w --http-host http_server[:port]: specify the host and the port (if not 80) where the xml file can be downloaded from [default: default_local_ip_address:8080] 
 	* eg: -w 192.168.1.1:8080 
 
@@ -222,8 +221,19 @@ Help
 	* 1 - use demuxX device 
 	* 2 - use dvrX device and additionally capture PSI data from demuxX device 
 	* 3 - use demuxX device and additionally capture PSI data from demuxX device 
+* -V --bind address: address for listening (all services)
+* -J --bind-dev device: device name for binding (all services)
+        * beware that only works with 1 device. loopback may not work!
 
- * -3 --ca-pin mapping_string: set the pin for CIs
+* -A --virtual-diseqc mapping_string: absolute source mapping for virtual diseqc mode
+	* The format is: SRC1:INP1:DISEQC1[,SRC2:INP2:DISEQC2]
+	* SRC: source number (src argument for SAT>IP minus 1 - 0-31)
+	* INP: coaxial input (0-3)
+	* DISEQC: diseqc position (0-15)
+	* eg: 13E,19.2E on inputs 0&1 and 23.5E,28.2E on inputs 2&3:
+		-A 0:0:0,0:1:0,1:0:0,1:1:1,2:2:0,2:3:0,3:2:1,3:2:2
+
+* -3 --ca-pin mapping_string: set the pin for CIs
 	* The format is: ADAPTER1:PIN,ADAPTER2-ADAPTER4:PIN
 	* eg: 0:1234,2-3:4567 
 
@@ -260,10 +270,11 @@ make EXTRA_CFLAGS=....
 Examples:
 -------
 - In order to listen to a radio after minisatip is started open the following URL in your favorite media player:
-	- on Hotbird 13E: "http://MINISATIP_HOST:8080/?msys=dvbs&freq=11623&pol=v&sr=27500&pids=0,10750,254"
-	- Astra 19.2E: "http://MINISATIP_HOST:8080/?msys=dvbs&freq=12266&pol=h&sr=27500&pids=0,851"	
+	- on Hotbird 13E: `http://MINISATIP_HOST:8080/?msys=dvbs&freq=11623&pol=v&sr=27500&pids=0,10750,254`
+	- Astra 19.2E: `http://MINISATIP_HOST:8080/?msys=dvbs&freq=12266&pol=h&sr=27500&pids=0,851`
 
 - Television FTA programs:
-	- Astra 19.2E, Kika HD: "rtsp://MINISATIP_HOST:554/?src=1&freq=11347&pol=v&ro=0.35&msys=dvbs2&mtype=8psk&plts=on&sr=22000&fec=23&pids=0,17,18,6600,6610,6620,6630"
+	- Astra 19.2E, Kika HD: `http://MINISATIP_HOST:554/?src=1&freq=11347&pol=v&ro=0.35&msys=dvbs2&mtype=8psk&plts=on&sr=22000&fec=23&pids=0,17,18,6600,6610,6620,6630`
 
 - msys can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, atsc, isdbt, dvbcb ( - DVBC_ANNEX_B )
+

@@ -1,6 +1,6 @@
 #! /bin/bash
 rm src/minisatip.o
-gcc -c src/minisatip.c -o src/minisatip.o
+gcc -c src/minisatip.c -DMINOR=\"67\"  -o src/minisatip.o
 make 
 cat readme_header > README.md
 ./minisatip -h | grep -v 'Built with' >> README.md

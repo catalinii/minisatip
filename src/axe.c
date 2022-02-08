@@ -304,9 +304,6 @@ int axe_tune_check(adapter *ad, transponder *tp, diseqc *diseqc_param,
     return 1;
 }
 
-int absolute_switch;
-int absolute_table[32][4];
-
 int axe_setup_switch(adapter *ad) {
     int frontend_fd = ad->fe;
     transponder *tp = &ad->tp;
@@ -332,10 +329,11 @@ int axe_setup_switch(adapter *ad) {
         if (!opts.quattro || extra_quattro(input, diseqc, &equattro)) {
             if (equattro > 0)
                 diseqc = equattro - 1;
-            if (absolute_switch && diseqc >= 0 && diseqc < 32) {
+            if (absolute_switch && diseqc >= 0 && diseqc < MAX_SOURCES) {
                 /* reuse input */
                 for (aid = 0; aid < 4; aid++) {
-                    pos = absolute_table[diseqc][aid];
+                    pos =
+                        get_absolute_source_for_adapter(aid, tp->diseqc, SYS_DVBS);
                     if (pos <= 0)
                         continue;
                     pos--;
@@ -353,7 +351,8 @@ int axe_setup_switch(adapter *ad) {
                 /* find free input */
                 if (aid >= 4) {
                     for (aid = 0; aid < 4; aid++) {
-                        pos = absolute_table[diseqc][aid];
+                        pos = get_absolute_source_for_adapter(aid, tp->diseqc,
+                                                              SYS_DVBS);
                         if (pos <= 0)
                             continue;
                         pos--;
@@ -860,40 +859,6 @@ void free_axe_input(adapter *ad) {
             ad2->axe_used &= ~(1 << ad->id);
             LOGM("axe: free input %d : %04x", ad2->id, ad2->axe_used);
         }
-    }
-}
-
-void set_absolute_src(char *o) {
-    int i, la, src, inp, pos;
-    char buf[1000], *arg[40], *inps, *poss;
-
-    strncpy(buf, o, sizeof(buf) - 1);
-    buf[sizeof(buf) - 1] = '\0';
-    la = split(arg, buf, ARRAY_SIZE(arg), ',');
-    for (i = 0; i < la; i++) {
-        inps = strchr(arg[i], ':');
-        if (!inps)
-            continue;
-        inps++;
-        poss = strchr(inps, ':');
-        if (!poss)
-            continue;
-        poss++;
-
-        src = map_intd(arg[i], NULL, -1);
-        inp = map_intd(inps, NULL, -1);
-        pos = map_intd(poss, NULL, -1);
-
-        if (src < 0 || src > 31)
-            continue;
-        if (inp < 0 || inp > 3)
-            continue;
-        if (pos < 0 || pos >= 15)
-            continue;
-        LOG("Setting source %d (src=%d) to input %d position %d", src, src + 1,
-            inp, pos);
-        absolute_table[src][inp] = pos + 1;
-        absolute_switch = 1;
     }
 }
 

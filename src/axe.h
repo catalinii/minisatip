@@ -95,7 +95,6 @@ int axe_wakeup(adapter *ad, int fe_fd, int voltage);
 void find_axe_adapter(adapter **a);
 int axe_setup_switch(adapter *ad);
 void free_axe_input(adapter *ad);
-void set_absolute_src(char *o);
 void set_link_adapters(char *o);
 
 #endif

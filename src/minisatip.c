@@ -94,7 +94,6 @@ int rtsp, http, si, si1, ssdp1;
 #define ENABLE_ADAPTERS_OPT 'e'
 #define UNICABLE_OPT 'u'
 #define JESS_OPT 'j'
-#define SOURCES_OPT 'U'
 #define DISEQC_OPT 'd'
 #define DISEQC_TIMING_OPT 'q'
 #define SLAVE_OPT 'S'
@@ -170,13 +169,13 @@ static const struct option long_options[] = {
     {"rtsp-port", required_argument, NULL, RTSPPORT_OPT},
     {"syslog", no_argument, NULL, SYSLOG_OPT},
     {"slave", required_argument, NULL, SLAVE_OPT},
-    {"sources", required_argument, NULL, SOURCES_OPT},
     {"threads", no_argument, NULL, THREADS_OPT},
     {"threshold", required_argument, NULL, THRESHOLD_OPT},
     {"udp", required_argument, NULL, UDPPORT_OPT},
     {"unicable", required_argument, NULL, UNICABLE_OPT},
     {"xml", required_argument, NULL, XML_OPT},
     {"help", no_argument, NULL, HELP_OPT},
+    {"virtual-diseqc", required_argument, NULL, ABSOLUTE_SRC},
 #ifndef DISABLE_DDCI
     {"disable-cat", required_argument, NULL, DISABLE_CAT_OPT},
 #endif
@@ -192,7 +191,6 @@ static const struct option long_options[] = {
     {"netceiver", required_argument, NULL, NETCVCLIENT_OPT},
 #endif
 #ifdef AXE
-    {"free-inputs", required_argument, NULL, ABSOLUTE_SRC},
     {"quattro", no_argument, NULL, QUATTRO_OPT},
     {"quattro-hiband", required_argument, NULL, QUATTRO_HIBAND_OPT},
 #endif
@@ -498,14 +496,6 @@ Help\n\
 \n\
 * -j --jess jess_string - same format as -u \n\
 \n\
-* -U --sources sources_for_adapters: limit the adapters to specific sources/positions\n\
-	* eg: -U 0-2:*:~:2,6,8 (no spaces between parameters)\n\
-	- In this example: for SRC=1 only 0,1,2; for SRC=2 all: for SRC=3 none; and for SRC=4 the 2,6,8 adapters are used.\n\
-	- For each position (separated by : ) you need to declare all the adapters (or none) that use this position with no exception.\n\
-	- The special char * indicates all adapters for this position. The char ~ indicates none.\n\
-	- The number of sources range from 1 to 64; but the list can include less than 64 (in this case all are enabled for undefined sources).\n\
-	- By default or in case of errors all adapters have enabled all positions.\n\
-\n\
 * -w --http-host http_server[:port]: specify the host and the port (if not 80) where the xml file can be downloaded from [default: default_local_ip_address:8080] \n\
 	* eg: -w 192.168.1.1:8080 \n\
 \n\
@@ -527,17 +517,17 @@ Help\n\
 * -V --bind address: address for listening (all services)\n\
 * -J --bind-dev device: device name for binding (all services)\n\
         * beware that only works with 1 device. loopback may not work!\n\
-\n "
-#ifdef AXE
-        "\
-* -A --free-inputs mapping_string: absolute source mapping for free input mode\n\
-\t* The format is: SRC1:INP1:DISEQC1[,SRC2:INP2:DISEQC2]\n\
+\n\
+* -A --virtual-diseqc mapping_string: absolute source mapping for virtual diseqc mode\n\
+\t* The format is: SRC1:AD1:DISEQC1[,SRC2:INP2:DISEQC2]\n\
 	* SRC: source number (src argument for SAT>IP minus 1 - 0-31)\n\
-	* INP: coaxial input (0-3)\n\
+	* AD1: coaxial input (0-3) - for AXE is the physical input\n\
 	* DISEQC: diseqc position (0-15)\n\
 	* eg: 13E,19.2E on inputs 0&1 and 23.5E,28.2E on inputs 2&3:\n\
 		-A 0:0:0,0:1:0,1:0:0,1:1:1,2:2:0,2:3:0,3:2:1,3:2:2\n\
-\n\
+\n"
+#ifdef AXE
+        "\
 * -W --power num: power to all inputs (0 = only active inputs, 1 = all inputs)\n\
 \n\
 * -Q --quattro  quattro LNB config (H/H,H/V,L/H,L/V)\n\
@@ -591,7 +581,6 @@ void get_short_opts(char *short_opts, const struct option *long_options) {
 void set_options(int argc, char *argv[]) {
     int opt;
     int is_log = 0;
-    int adapter_sources = 0;
     char *lip;
     memset(&opts, 0, sizeof(opts));
     opts.log = 1;
@@ -872,12 +861,6 @@ void set_options(int argc, char *argv[]) {
             break;
         }
 
-        case SOURCES_OPT: {
-            adapter_sources = 1;
-            set_sources_adapters(optarg);
-            break;
-        }
-
         case DISEQC_TIMING_OPT: {
             set_diseqc_timing(optarg);
             break;
@@ -933,8 +916,7 @@ void set_options(int argc, char *argv[]) {
             char buf[100];
             memset(buf, 0, sizeof(buf));
             strncpy(buf, optarg, sizeof(buf) - 1);
-            if (buf[0] == '~')
-            {
+            if (buf[0] == '~') {
                 opts.pids_all_no_dec = 1;
                 memmove(&buf[0], &buf[1], sizeof(buf) - 1);
             }
@@ -1070,11 +1052,11 @@ void set_options(int argc, char *argv[]) {
             else
                 LOG("Demux device can be 0-3 and not %d", o);
         } break;
-#ifdef AXE
+
         case ABSOLUTE_SRC:
             set_absolute_src(optarg);
             break;
-
+#ifdef AXE
         case QUATTRO_OPT:
             opts.quattro = 1;
             break;
@@ -1135,8 +1117,6 @@ void set_options(int argc, char *argv[]) {
 
     if (!is_log)
         opts.log = 0;
-    if (!adapter_sources)
-        set_sources_adapters("");
 
     // FBC setup
     if (!access("/proc/stb/frontend/0/fbc_connect", W_OK))

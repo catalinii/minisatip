@@ -62,8 +62,7 @@ int a_count;
 char disabled[MAX_ADAPTERS]; // disabled adapters
 int sock_signal;
 char do_dump_pids = 1;
-uint64_t source_map[MAX_SOURCES];
-
+char absolute_switch;
 SMutex a_mutex;
 
 int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2, tuner_at, tuner_ac;
@@ -95,14 +94,6 @@ adapter *adapter_alloc() {
     ad->dmx_source = -1;
     ad->master_source = -1;
     ad->diseqc_multi = opts.diseqc_multi;
-
-    /* enable all sources */
-    ad->debug_pos[0] = '\0';
-    ad->debug_src = 0;
-    int i;
-    for (i = 0; i <= MAX_SOURCES; i++) {
-        ad->sources_pos[i] = 1;
-    }
 
     /* LOF setup */
     ad->diseqc_param.lnb_low = opts.lnb_low;
@@ -478,13 +469,6 @@ int getAdaptersCount() {
         tuner_c = opts.force_cadapter;
     for (i = 0; i < MAX_ADAPTERS; i++)
         if ((ad = a[i])) {
-            // Note: Adapter 0 uses map bit 0, sources_pos ranges from
-            // 0..MAX_SOURCES+1 and source_map ranges from 0..SRC-1 (SRC=0 can't
-            // be configured)
-            for (j = 0; j < MAX_SOURCES; j++) {
-                ad->sources_pos[j + 1] = (source_map[j] >> i) & 1;
-            }
-
             if (!opts.force_sadapter &&
                 (delsys_match(ad, SYS_DVBS) || delsys_match(ad, SYS_DVBS2))) {
                 ts2++;
@@ -546,46 +530,38 @@ int getAdaptersCount() {
             }
         }
     }
-    char lsrc[256];
-    for (i = 0; i < MAX_ADAPTERS; i++)
-        if ((ad = a[i])) {
-            ad->debug_pos[0] = '\0';
-            ad->debug_src = 0;
-            lsrc[0] = '\0';
-            for (j = 1; j <= MAX_SOURCES; j++) {
-                if (ad->sources_pos[j]) {
-                    char usrc[8];
-                    sprintf(usrc, ",%d", j);
-                    strcat(lsrc, usrc);
-
-                    strcat(ad->debug_pos, "X");
-                    ad->debug_src += (unsigned long)1ULL << (j - 1);
-                } else {
-                    strcat(ad->debug_pos, ".");
-                }
-            }
-            if (strlen(lsrc) > 0)
-                lsrc[0] = ' ';
-            DEBUGM("Adpater %d enabled sources:%s", i, lsrc);
-            DEBUGM("Adpater %d debug sources: %s (%lu)", i, ad->debug_pos,
-                   ad->debug_src);
-        }
     return tuner_s2 + tuner_c2 + tuner_t2 + tuner_c + tuner_t;
+}
+
+char *dump_absolute_table(adapter *ad, char *buf, int lb) {
+    int i, len = 0;
+
+    if (!absolute_switch)
+        return "";
+    strlcatf(buf, lb, len, " Sources Table: ");
+    for (i = 0; i < MAX_SOURCES; i++)
+        if (ad->absolute_table[i] > 0) {
+            strlcatf(buf, lb, len, "%d->%d, ", i, ad->absolute_table[i]);
+        }
+    return buf;
 }
 
 void dump_adapters() {
     int i;
     adapter *ad;
+    char buf[1024];
     if (!opts.log)
         return;
+    memset(buf, 0, sizeof(buf));
     LOG("Dumping adapters:");
     for (i = 0; i < MAX_ADAPTERS; i++)
         if ((ad = get_adapter_nw(i)))
             LOG("%d|f: %d sid_cnt:%d master_sid:%d master_source:%d del_sys: "
-                "%s,%s,%s src_map: %s (%lu)",
+                "%s,%s,%s %s",
                 i, ad->tp.freq, ad->sid_cnt, ad->master_sid, ad->master_source,
                 get_delsys(ad->sys[0]), get_delsys(ad->sys[1]),
-                get_delsys(ad->sys[2]), ad->debug_pos, ad->debug_src);
+                get_delsys(ad->sys[2]),
+                dump_absolute_table(ad, buf, sizeof(buf)));
     dump_streams();
 }
 
@@ -689,9 +665,28 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
 }
 
 int source_enabled_for_adapter(adapter *ad, transponder *tp) {
+    if (!absolute_switch)
+        return 1;
     if (tp->sys != SYS_DVBS && tp->sys != SYS_DVBS2)
         return 1;
-    return ad->sources_pos[tp->diseqc];
+#ifdef AXE
+    return 1;
+#endif
+    return ad->absolute_table[tp->diseqc - 1];
+}
+
+int get_absolute_source_for_adapter(int aid, int src, int sys) {
+    if (!a[aid])
+        return -1;
+    if (!absolute_switch)
+        return src;
+    if (sys != SYS_DVBS && sys != SYS_DVBS2)
+        return src;
+    if (src <= 0)
+        return src;
+    LOG("Mapping adapter %d src %d to src %d", aid, src,
+        a[aid]->absolute_table[src - 1]);
+    return a[aid]->absolute_table[src - 1];
 }
 
 int get_free_adapter(transponder *tp) {
@@ -1213,7 +1208,9 @@ int compare_tunning_parameters(int aid, transponder *tp) {
          ad->tp.freq, ad->tp.plp_isi, ad->tp.diseqc, ad->tp.pol, ad->tp.sr,
          ad->tp.mtype);
     if ((abs(tp->freq - ad->tp.freq) > 1000) || tp->plp_isi != ad->tp.plp_isi ||
-        tp->diseqc != ad->tp.diseqc || (tp->pol > 0 && tp->pol != ad->tp.pol) ||
+        get_absolute_source_for_adapter(aid, tp->diseqc, tp->sys) !=
+            ad->tp.diseqc ||
+        (tp->pol > 0 && tp->pol != ad->tp.pol) ||
         (tp->sr > 1000 && tp->sr != ad->tp.sr) ||
         (tp->mtype != 6 && ad->tp.mtype != 6 && tp->mtype != ad->tp.mtype))
 
@@ -1257,6 +1254,8 @@ int set_adapter_parameters(int aid, int sid, transponder *tp) {
     }
 
     copy_dvb_parameters(tp, &ad->tp);
+    ad->tp.diseqc =
+        get_absolute_source_for_adapter(ad->id, ad->tp.diseqc, ad->tp.sys);
 
     if (ad->tp.pids) // pids can be specified in SETUP and then followed by a
                      // delpids in PLAY, make sure the behaviour is right
@@ -1279,8 +1278,6 @@ int set_adapter_parameters(int aid, int sid, transponder *tp) {
         }
     }
 
-    if (0 && (ad->tp.apids || ad->tp.pids || ad->tp.dpids))
-        dump_pids(aid);
     mutex_unlock(&ad->mutex);
     return 0;
 }
@@ -1593,75 +1590,41 @@ void set_diseqc_adapters(char *o) {
     }
 }
 
-void set_sources_adapters(char *o) {
-    int i, la, lb, st, end, j, k, adap;
-    uint64_t all = 0xFFFFFFFFFFFFFFFF;
-    char buf[1024], *arg[128], *sep;
-    SAFE_STRCPY(buf, o);
-    la = split(arg, buf, ARRAY_SIZE(arg), ':');
-    if ((la == 1 && strlen(arg[0]) == 0) || la < 1 || la > MAX_SOURCES)
-        goto ERR;
+void set_absolute_src(char *o) {
+    int i, la, src, inp, pos;
+    char buf[1000], *arg[40], *inps, *poss;
+    adapter *ad;
 
-    LOG("Calculating adapter sources: [%s] ", o);
-    for (i = 0; i < MAX_SOURCES; i++) {
-        if (i >= la) {
-            LOGM(" src=%d undefined, using all", i + 1);
-            source_map[i] = all;
+    strncpy(buf, o, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+    la = split(arg, buf, ARRAY_SIZE(arg), ',');
+    for (i = 0; i < la; i++) {
+        inps = strchr(arg[i], ':');
+        if (!inps)
             continue;
-        }
+        inps++;
+        poss = strchr(inps, ':');
+        if (!poss)
+            continue;
+        poss++;
 
-        source_map[i] = 0;
-        if (arg[i] && arg[i][0] == '*') {
-            if (strlen(arg[i]) != 1)
-                goto ERR;
-            source_map[i] = all;
-            char buf2[128];
-            buf2[0] = '\0';
-            for (j = 0; j < MAX_ADAPTERS; j++)
-                strcat(buf2, "X");
-            LOGM(" src=%d using adapters %s (%lu)", i + 1, buf2,
-                 (unsigned long)source_map[i]);
+        src = map_intd(arg[i], NULL, -1);
+        inp = map_intd(inps, NULL, -1);
+        pos = map_intd(poss, NULL, -1);
+
+        if (src < 0 || src >= MAX_SOURCES)
             continue;
-        }
-        char buf2[128], *arg2[128];
-        SAFE_STRCPY(buf2, arg[i]);
-        lb = split(arg2, buf2, ARRAY_SIZE(arg2), ',');
-        for (j = 0; j < lb; j++) {
-            sep = strchr(arg2[j], '-');
-            if (sep == NULL) {
-                adap = map_int(arg2[j], NULL);
-                if (adap < 0 || adap >= MAX_ADAPTERS)
-                    goto ERR;
-                source_map[i] |= (unsigned long)1ULL << adap;
-            } else {
-                st = map_int(arg2[j], NULL);
-                end = map_int(sep + 1, NULL);
-                if (st < 0 || end < 0 || st >= MAX_ADAPTERS ||
-                    end >= MAX_ADAPTERS || end < st)
-                    goto ERR;
-                for (k = st; k <= end; k++) {
-                    adap = k;
-                    source_map[i] |= (unsigned long)1ULL << adap;
-                }
-            }
-        }
-        buf2[0] = '\0';
-        for (j = 0; j < MAX_ADAPTERS; j++)
-            if (source_map[i] & ((unsigned long)1ULL << j))
-                strcat(buf2, "X");
-            else
-                strcat(buf2, ".");
-        LOGM(" src=%d using adapters %s (%lu)", i + 1, buf2,
-             (unsigned long)source_map[i]);
+        if (pos < 0 || pos >= 15)
+            continue;
+        LOG("Setting source %d (src=%d) to input %d position %d", src, src + 1,
+            inp, pos);
+        if (!a[inp])
+            a[inp] = adapter_alloc();
+        ad = a[inp];
+
+        ad->absolute_table[src] = pos + 1;
+        absolute_switch = 1;
     }
-    LOG("Adapter correct sources format parameter");
-    return;
-
-ERR:
-    for (i = 0; i < MAX_SOURCES; i++)
-        source_map[i] = all;
-    LOG("Adapter sources format parameter %s, using defaults for all adapters!",
-        strlen(arg[0]) > 0 ? "incorrect" : "missing");
 }
 
 void set_diseqc_multi(char *o) {
