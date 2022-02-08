@@ -31,7 +31,6 @@ alternative source
 #include <libdvben50221/en50221_app_datetime.h>
 #include <libdvben50221/en50221_app_dvb.h>
 #include <libdvben50221/en50221_app_epg.h>
-#include <libdvben50221/en50221_app_lowspeed.h>
 #include <libdvben50221/en50221_app_mmi.h>
 #include <libdvben50221/en50221_app_rm.h>
 #include <libdvben50221/en50221_app_smartcard.h>
@@ -69,27 +68,27 @@ alternative source
 #define TS101699_APP_AI_RESOURCEID MKRID(2, 1, 2)
 #define CIPLUS_APP_AI_RESOURCEID MKRID(2, 1, 3)
 #define CIPLUS_APP_AI_RESOURCEID_MULTI MKRID(2, 1, 4)
-#define CIPLUS_APP_DVB_RESOURCEID MKRID(32, 1, 2)     // host control
-#define CIPLUS_APP_DVB_RESOURCEID_TWO MKRID(32, 1, 3) // host control
-#define CIPLUS_APP_DVB_RESOURCEID_MULTI                                        \
-    MKRID(32, 2, 1) // host control multistream
+#define TS103205_APP_AI_RESOURCE_ID MKRID(2, 1, 5)
+#define CIPLUS_APP_DVB_RESOURCEID MKRID(32, 1, 2)
+#define TS103205_APP_DVB_RESOURCEID MKRID(32, 1, 3)
+#define TS103205_APP_DVB_MULTISTREAM_RESOURCEID MKRID(32, 2, 1)
 #define CIPLUS_APP_CA_RESOURCEID MKRID(3, 1, 1)
-#define CIPLUS_APP_CA_RESOURCEID_MULTI MKRID(3, 2, 1)
-//#define CIPLUS_APP_LOWSPEED_RESOURCEID	(DEVICE_TYPE, DEVICE_NUMBER)
-// MKRID(96,((DEVICE_TYPE)<<2)|((DEVICE_NUMBER) & 0x03),2) #define
-// CIPLUS_APP_LOWSPEED_RESOURCEID_TWO	(DEVICE_TYPE, DEVICE_NUMBER)
-// MKRID(96,((DEVICE_TYPE)<<2)|((DEVICE_NUMBER) & 0x03),3) //CI+ v1.3
+#define TS103205_APP_CA_MULTISTREAM_RESOURCEID MKRID(3, 2, 1)
+#define TS103205_APP_MMI_RESOURCEID MKRID(64, 2, 1)
 #define CIPLUS_APP_CC_RESOURCEID MKRID(140, 64, 1)
-#define CIPLUS_APP_CC_RESOURCEID_TWO MKRID(140, 64, 2)   // CI+ v1.3
-#define CIPLUS_APP_CC_RESOURCEID_THREE MKRID(140, 64, 3) // CI+ v1.3
-#define CIPLUS_APP_CC_RESOURCEID_MULTI MKRID(140, 65, 1) // CI+ v1.3 multistream
+#define CIPLUS_APP_CC_RESOURCEID_TWO MKRID(140, 64, 2)
+#define TS103205_APP_CC_RESOURCEID_THREE MKRID(140, 64, 4)
+#define TS103205_APP_CC_MULTISTREAM_RESOURCEID MKRID(140, 65, 1)
 #define CIPLUS_APP_LANG_RESOURCEID MKRID(141, 64, 1)
 #define CIPLUS_APP_UPGR_RESOURCEID MKRID(142, 64, 1)
 #define CIPLUS_APP_OPRF_RESOURCEID MKRID(143, 64, 1)
-#define CIPLUS_APP_MULTISTREAM_RESOURCEID MKRID(144, 1, 1)
+#define TS103205_APP_OPRF_TWO_RESOURCEID MKRID(143, 64, 2)
+#define TS103205_APP_OPRF_THREE_RESOURCEID MKRID(143, 64, 3)
+#define TS103205_APP_MULTISTREAM_RESOURCEID MKRID(144, 1, 1)
 #define CIPLUS_APP_SAS_RESOURCEID MKRID(150, 64, 1)
 #define TS101699_APP_AMMI_RESOURCEID MKRID(65, 1, 1)
 #define CIPLUS_APP_AMMI_RESOURCEID MKRID(65, 1, 2)
+#define TS103205_APP_AMMI_RESOURCEID MKRID(65, 2, 1)
 
 #define CIPLUS_TAG_CC_OPEN_REQ 0x9f9001
 #define CIPLUS_TAG_CC_OPEN_CNF 0x9f9002
@@ -298,34 +297,51 @@ struct aes_xcbc_mac_ctx {
 
 // this contains all known resource ids so we can see if the cam asks for
 // something exotic
-uint32_t resource_ids[] =
-    {/* EN50221_APP_TELETEXT_RESOURCEID, EN50221_APP_SMARTCARD_RESOURCEID(1),EN50221_APP_AUTH_RESOURCEID,EN50221_APP_EPG_RESOURCEID(1) */ //not discribed in spec - so don't need
-                                                                                                                                          //     EN50221_APP_RM_RESOURCEID,
-     TS101699_APP_RM_RESOURCEID,
-     //     EN50221_APP_AI_RESOURCEID,
-     //     TS101699_APP_AI_RESOURCEID,
-     CIPLUS_APP_AI_RESOURCEID,
-     //     CIPLUS_APP_AI_RESOURCEID_MULTI,
-     EN50221_APP_CA_RESOURCEID,
-     //     CIPLUS_APP_CA_RESOURCEID_MULTI,
-     //     EN50221_APP_DVB_RESOURCEID,
-     CIPLUS_APP_DVB_RESOURCEID, //host control
-                                //     CIPLUS_APP_DVB_RESOURCEID_TWO, //host control
-                                //     CIPLUS_APP_DVB_RESOURCEID_MULTI, //host control
-     EN50221_APP_DATETIME_RESOURCEID,
-     EN50221_APP_MMI_RESOURCEID,
-     EN50221_APP_LOWSPEED_RESOURCEID(1, 1), /* CIPLUS_APP_LOWSPEED_RESOURCEID(1, 1), CIPLUS_APP_LOWSPEED_RESOURCEID_TWO(1, 1), */
-                                            //     CIPLUS_APP_CC_RESOURCEID,
-     CIPLUS_APP_CC_RESOURCEID_TWO,
-     //     CIPLUS_APP_CC_RESOURCEID_THREE,
-     //     CIPLUS_APP_CC_RESOURCEID_MULTI,
-     CIPLUS_APP_LANG_RESOURCEID,
-     CIPLUS_APP_UPGR_RESOURCEID,
-     CIPLUS_APP_OPRF_RESOURCEID,
-     CIPLUS_APP_SAS_RESOURCEID,
-     CIPLUS_APP_MULTISTREAM_RESOURCEID,
-     //     TS101699_APP_AMMI_RESOURCEID,
-     CIPLUS_APP_AMMI_RESOURCEID};
+uint32_t resource_ids[] = {
+    // Resource Manager
+    EN50221_APP_RM_RESOURCEID,
+    TS101699_APP_RM_RESOURCEID,
+    // Application Information
+    EN50221_APP_AI_RESOURCEID,
+    TS101699_APP_AI_RESOURCEID,
+    CIPLUS_APP_AI_RESOURCEID,
+    TS103205_APP_AI_RESOURCE_ID,
+    // Conditional Access Support
+    EN50221_APP_CA_RESOURCEID,
+    //TS103205_APP_CA_MULTISTREAM_RESOURCEID, // Multi-stream
+    // Host Control
+    EN50221_APP_DVB_RESOURCEID,
+    CIPLUS_APP_DVB_RESOURCEID,
+    TS103205_APP_DVB_RESOURCEID,
+    //TS103205_APP_DVB_MULTISTREAM_RESOURCEID, // Multi-stream
+    // Date-Time
+    EN50221_APP_DATETIME_RESOURCEID,
+    // MMI
+    EN50221_APP_MMI_RESOURCEID,
+    TS103205_APP_MMI_RESOURCEID, // Multi-stream
+    // Low Speed Communication is not supported
+    // Content Control
+    CIPLUS_APP_CC_RESOURCEID,
+    CIPLUS_APP_CC_RESOURCEID_TWO,
+    TS103205_APP_CC_RESOURCEID_THREE,
+    //TS103205_APP_CC_MULTISTREAM_RESOURCEID, // Multi-stream
+    // Host Lang & Country
+    CIPLUS_APP_LANG_RESOURCEID,
+    // CICAM Upgrade
+    CIPLUS_APP_UPGR_RESOURCEID,
+    // Operator Profile
+    CIPLUS_APP_OPRF_RESOURCEID,
+    TS103205_APP_OPRF_TWO_RESOURCEID,
+    TS103205_APP_OPRF_THREE_RESOURCEID,
+    // SAS
+    CIPLUS_APP_SAS_RESOURCEID,
+    // Application MMI
+    TS101699_APP_AMMI_RESOURCEID,
+    CIPLUS_APP_AMMI_RESOURCEID,
+    //TS103205_APP_AMMI_RESOURCEID, // Multi-stream
+    // Multi-stream capability,
+    //TS103205_APP_MULTISTREAM_RESOURCEID
+};
 
 int resource_ids_count = sizeof(resource_ids) / 4;
 
@@ -333,7 +349,6 @@ uint32_t resource_ids_ci[] = {EN50221_APP_TELETEXT_RESOURCEID,
                               EN50221_APP_SMARTCARD_RESOURCEID(1),
                               EN50221_APP_RM_RESOURCEID,
                               EN50221_APP_MMI_RESOURCEID,
-                              EN50221_APP_LOWSPEED_RESOURCEID(1, 1),
                               EN50221_APP_EPG_RESOURCEID(1),
                               EN50221_APP_DVB_RESOURCEID,
                               EN50221_APP_CA_RESOURCEID,
@@ -2786,10 +2801,12 @@ static int ca_session_callback(void *arg, int reason, uint8_t slot_id,
             d->ignore_close = 1;
             d->init_ok = 0;
         } else if (resource_id == CIPLUS_APP_CC_RESOURCEID ||
-                   resource_id == CIPLUS_APP_CC_RESOURCEID_TWO ||
-                   resource_id == CIPLUS_APP_CC_RESOURCEID_THREE ||
-                   resource_id == CIPLUS_APP_CC_RESOURCEID_MULTI) {
+                   resource_id == CIPLUS_APP_CC_RESOURCEID_TWO) {
             LOG("__________S_SCALLBACK_REASON_CLOSE____________CIPLUS_APP_CC_"
+                "RESOURCEID________________________");
+        } else if (resource_id == TS103205_APP_CC_RESOURCEID_THREE ||
+                   resource_id == TS103205_APP_CC_MULTISTREAM_RESOURCEID) {
+            LOG("__________S_SCALLBACK_REASON_CLOSE____________TS103205_APP_CC_"
                 "RESOURCEID________________________");
         } else if (resource_id == EN50221_APP_MMI_RESOURCEID) {
             LOG("_________S_SCALLBACK_REASON_CLOSE____________EN50221_APP_MMI_"
@@ -2823,7 +2840,8 @@ static int ca_session_callback(void *arg, int reason, uint8_t slot_id,
                 "APP_AI_RESOURCEID-------------------------");
             d->ai_session_number = session_number;
             en50221_app_ai_enquiry(d->ai_resource, session_number);
-        } else if (resource_id == CIPLUS_APP_AI_RESOURCEID) {
+        } else if (resource_id == CIPLUS_APP_AI_RESOURCEID ||
+                   resource_id == TS103205_APP_AI_RESOURCE_ID) {
             LOG("--------------------S_SCALLBACK_REASON_CAMCONNECTED---------"
                 "CIPLUS_"
                 "APP_AI_RESOURCEID-------------------------");
@@ -2855,7 +2873,9 @@ static int ca_session_callback(void *arg, int reason, uint8_t slot_id,
                 0x64, 0x74, 0x74, 0x63, 0x61, 0x00}; // blank
                                                      // private_Host_application_ID
             en50221_sl_send_data(d->sl, session_number, data, sizeof(data));
-        } else if (resource_id == CIPLUS_APP_OPRF_RESOURCEID) {
+        } else if (resource_id == CIPLUS_APP_OPRF_RESOURCEID ||
+                   resource_id == TS103205_APP_OPRF_TWO_RESOURCEID ||
+                   resource_id == TS103205_APP_OPRF_THREE_RESOURCEID) {
             LOG("--------------------S_SCALLBACK_REASON_CAMCONNECTED---------"
                 "CIPLUS_"
                 "APP_OPRF_RESOURCEID-------------------------");
@@ -2942,8 +2962,8 @@ static int ca_lookup_callback(void *arg, uint8_t slot_id,
         *connected_resource_id = requested_resource_id;
         break;
     case CIPLUS_APP_CC_RESOURCEID_TWO:
-    case CIPLUS_APP_CC_RESOURCEID_THREE:
-    case CIPLUS_APP_CC_RESOURCEID_MULTI:
+    case TS103205_APP_CC_RESOURCEID_THREE:
+    case TS103205_APP_CC_MULTISTREAM_RESOURCEID:
         d->uri_mask = 0x3;
         *callback_out = (en50221_sl_resource_callback)ciplus_app_cc_message;
         *arg_out = d;
@@ -2965,6 +2985,8 @@ static int ca_lookup_callback(void *arg, uint8_t slot_id,
         *connected_resource_id = requested_resource_id;
         break;
     case CIPLUS_APP_OPRF_RESOURCEID:
+    case TS103205_APP_OPRF_TWO_RESOURCEID:
+    case TS103205_APP_OPRF_THREE_RESOURCEID:
         *callback_out = (en50221_sl_resource_callback)ciplus_app_oprf_message;
         *arg_out = d;
         *connected_resource_id = requested_resource_id;
