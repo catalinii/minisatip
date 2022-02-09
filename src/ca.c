@@ -216,6 +216,8 @@ typedef struct ca_device {
     struct en50221_app_datetime *dt_resource;
     struct en50221_app_mmi *mmi_resource;
 
+    int ca_high_bitrate_mode;
+    int ca_ai_version;
     int ca_session_number;
     int uri_mask;
 
@@ -1120,6 +1122,11 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt) {
 static int ciplus13_app_ai_data_rate_info(ca_device_t *d,
                                           ciplus13_data_rate_t rate) {
     uint8_t data[] = {0x9f, 0x80, 0x24, 0x01, (uint8_t)rate};
+
+    /* only version 3 (CI+ 1.3) supports data_rate_info -  no it isn't, 1.2
+     * support too*/
+    if (d->ca_ai_version < 2)
+        return 0;
 
     LOG("setting CI+ CAM data rate to %s Mbps", rate ? "96" : "72");
 
@@ -2827,23 +2834,25 @@ static int ca_session_callback(void *arg, int reason, uint8_t slot_id,
                 "APP_RM_RESOURCEID-------------------------");
             en50221_app_rm_enq(d->rm_resource, session_number);
         } else if (resource_id == EN50221_APP_AI_RESOURCEID ||
-                   resource_id == TS101699_APP_AI_RESOURCEID ||
-                   resource_id == CIPLUS_APP_AI_RESOURCEID ||
-                   resource_id == TS103205_APP_AI_RESOURCE_ID) {
+                   resource_id == TS101699_APP_AI_RESOURCEID) {
             LOG("--------------------S_SCALLBACK_REASON_CAMCONNECTED---------"
                 "EN50221_"
                 "APP_AI_RESOURCEID-------------------------");
             d->ai_session_number = session_number;
             en50221_app_ai_enquiry(d->ai_resource, session_number);
-
-            // Signal high bitrate support to CI+ CAMS
-            if (!d->force_ci) {
-                ciplus13_app_ai_data_rate_info(d, CIPLUS_DATA_RATE_96_MBPS);
-            }
-        } else if (resource_id == EN50221_APP_DATETIME_RESOURCEID) {
+        } else if (resource_id == CIPLUS_APP_AI_RESOURCEID ||
+                   resource_id == TS103205_APP_AI_RESOURCE_ID) {
             LOG("--------------------S_SCALLBACK_REASON_CAMCONNECTED---------"
-                "EN50221_"
-                "APP_DATETIME_RESOURCEID-------------------------");
+                "CIPLUS_"
+                "APP_AI_RESOURCEID-------------------------");
+            d->ca_ai_version = resource_id & 0x3f;
+            d->ai_session_number = session_number;
+            d->ca_high_bitrate_mode =
+                1; // 96 MBPS now (should get from command line)
+            en50221_app_ai_enquiry(d->ai_resource, session_number);
+            ciplus13_app_ai_data_rate_info(d, d->ca_high_bitrate_mode
+                                                  ? CIPLUS_DATA_RATE_96_MBPS
+                                                  : CIPLUS_DATA_RATE_72_MBPS);
         } else if (resource_id == EN50221_APP_CA_RESOURCEID ||
                    resource_id == CIPLUS_APP_CA_RESOURCEID) {
             LOG("--------------------S_SCALLBACK_REASON_CAMCONNECTED---------"
@@ -3472,6 +3481,7 @@ int dvbca_init_dev(adapter *ad) {
     c->ignore_close = 0;
     c->fd = fd;
     c->id = ad->id;
+    c->ca_high_bitrate_mode = 0;
     c->stackthread = 0;
     c->init_ok = 0;
     memset(c->capmt, -1, sizeof(c->capmt));
