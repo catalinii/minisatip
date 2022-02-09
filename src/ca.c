@@ -216,8 +216,6 @@ typedef struct ca_device {
     struct en50221_app_datetime *dt_resource;
     struct en50221_app_mmi *mmi_resource;
 
-    int ca_high_bitrate_mode;
-    int ca_ai_version;
     int ca_session_number;
     int uri_mask;
 
@@ -1122,11 +1120,6 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt) {
 static int ciplus13_app_ai_data_rate_info(ca_device_t *d,
                                           ciplus13_data_rate_t rate) {
     uint8_t data[] = {0x9f, 0x80, 0x24, 0x01, (uint8_t)rate};
-
-    /* only version 3 (CI+ 1.3) supports data_rate_info -  no it isn't, 1.2
-     * support too*/
-    if (d->ca_ai_version < 2)
-        return 0;
 
     LOG("setting CI+ CAM data rate to %s Mbps", rate ? "96" : "72");
 
@@ -2834,32 +2827,30 @@ static int ca_session_callback(void *arg, int reason, uint8_t slot_id,
                 "APP_RM_RESOURCEID-------------------------");
             en50221_app_rm_enq(d->rm_resource, session_number);
         } else if (resource_id == EN50221_APP_AI_RESOURCEID ||
-                   resource_id == TS101699_APP_AI_RESOURCEID) {
+                   resource_id == TS101699_APP_AI_RESOURCEID ||
+                   resource_id == CIPLUS_APP_AI_RESOURCEID ||
+                   resource_id == TS103205_APP_AI_RESOURCE_ID) {
             LOG("--------------------S_SCALLBACK_REASON_CAMCONNECTED---------"
                 "EN50221_"
                 "APP_AI_RESOURCEID-------------------------");
             d->ai_session_number = session_number;
             en50221_app_ai_enquiry(d->ai_resource, session_number);
-        } else if (resource_id == CIPLUS_APP_AI_RESOURCEID ||
-                   resource_id == TS103205_APP_AI_RESOURCE_ID) {
+
+            // Signal high bitrate support to CI+ CAMS
+            if (!d->force_ci) {
+                ciplus13_app_ai_data_rate_info(d, CIPLUS_DATA_RATE_96_MBPS);
+            }
+        } else if (resource_id == EN50221_APP_DATETIME_RESOURCEID) {
             LOG("--------------------S_SCALLBACK_REASON_CAMCONNECTED---------"
-                "CIPLUS_"
-                "APP_AI_RESOURCEID-------------------------");
-            d->ca_ai_version = resource_id & 0x3f;
-            d->ai_session_number = session_number;
-            d->ca_high_bitrate_mode =
-                1; // 96 MBPS now (should get from command line)
-            en50221_app_ai_enquiry(d->ai_resource, session_number);
-            ciplus13_app_ai_data_rate_info(d, d->ca_high_bitrate_mode
-                                                  ? CIPLUS_DATA_RATE_96_MBPS
-                                                  : CIPLUS_DATA_RATE_72_MBPS);
+                "EN50221_"
+                "APP_DATETIME_RESOURCEID-------------------------");
         } else if (resource_id == EN50221_APP_CA_RESOURCEID ||
                    resource_id == CIPLUS_APP_CA_RESOURCEID) {
             LOG("--------------------S_SCALLBACK_REASON_CAMCONNECTED---------"
                 "EN50221_"
                 "APP_CA_RESOURCEID-------------------------");
-            en50221_app_ca_info_enq(d->ca_resource, session_number);
             d->ca_session_number = session_number;
+            en50221_app_ca_info_enq(d->ca_resource, session_number);
         } else if (resource_id == EN50221_APP_MMI_RESOURCEID) {
             LOG("--------------------S_SCALLBACK_REASON_CAMCONNECTED---------"
                 "EN50221_"
@@ -2913,6 +2904,7 @@ static int ca_lookup_callback(void *arg, uint8_t slot_id,
                               void **arg_out, uint32_t *connected_resource_id) {
     ca_device_t *d = arg;
     d->session->ca = d;
+    *connected_resource_id = requested_resource_id;
 
     LOGM("===================> %s: slot_id %u requested_resource_id %x",
          __func__, slot_id, requested_resource_id);
@@ -2922,34 +2914,28 @@ static int ca_lookup_callback(void *arg, uint8_t slot_id,
     case TS101699_APP_RM_RESOURCEID:
         *callback_out = (en50221_sl_resource_callback)en50221_app_rm_message;
         *arg_out = d->rm_resource;
-        *connected_resource_id = EN50221_APP_RM_RESOURCEID;
         break;
     case CIPLUS_APP_AI_RESOURCEID:
         *callback_out = (en50221_sl_resource_callback)ciplus_app_ai_message;
         *arg_out = d;
-        *connected_resource_id = CIPLUS_APP_AI_RESOURCEID;
         break;
     case EN50221_APP_AI_RESOURCEID:
     case TS101699_APP_AI_RESOURCEID:
         *callback_out = (en50221_sl_resource_callback)en50221_app_ai_message;
         *arg_out = d->ai_resource;
-        *connected_resource_id = requested_resource_id;
         break;
     case EN50221_APP_CA_RESOURCEID:
         *callback_out = (en50221_sl_resource_callback)en50221_app_ca_message;
         *arg_out = d->ca_resource;
-        *connected_resource_id = EN50221_APP_CA_RESOURCEID;
         break;
     case EN50221_APP_DATETIME_RESOURCEID:
         *callback_out =
             (en50221_sl_resource_callback)en50221_app_datetime_message;
         *arg_out = d->dt_resource;
-        *connected_resource_id = EN50221_APP_DATETIME_RESOURCEID;
         break;
     case EN50221_APP_MMI_RESOURCEID:
         *callback_out = (en50221_sl_resource_callback)en50221_app_mmi_message;
         *arg_out = d->mmi_resource;
-        *connected_resource_id = EN50221_APP_MMI_RESOURCEID;
         break;
     case CIPLUS_APP_CC_RESOURCEID:
         /* CI Plus Implementation Guidelines V1.0.6 (2013-10)
@@ -2959,7 +2945,6 @@ static int ca_lookup_callback(void *arg, uint8_t slot_id,
         d->uri_mask = 0x1;
         *callback_out = (en50221_sl_resource_callback)ciplus_app_cc_message;
         *arg_out = d;
-        *connected_resource_id = requested_resource_id;
         break;
     case CIPLUS_APP_CC_RESOURCEID_TWO:
     case TS103205_APP_CC_RESOURCEID_THREE:
@@ -2967,35 +2952,29 @@ static int ca_lookup_callback(void *arg, uint8_t slot_id,
         d->uri_mask = 0x3;
         *callback_out = (en50221_sl_resource_callback)ciplus_app_cc_message;
         *arg_out = d;
-        *connected_resource_id = requested_resource_id;
         break;
     case CIPLUS_APP_LANG_RESOURCEID:
         *callback_out = (en50221_sl_resource_callback)ciplus_app_lang_message;
         *arg_out = d;
-        *connected_resource_id = requested_resource_id;
         break;
     case CIPLUS_APP_UPGR_RESOURCEID:
         *callback_out = (en50221_sl_resource_callback)ciplus_app_upgr_message;
         *arg_out = d;
-        *connected_resource_id = requested_resource_id;
         break;
     case CIPLUS_APP_SAS_RESOURCEID:
         *callback_out = (en50221_sl_resource_callback)ciplus_app_sas_message;
         *arg_out = d;
-        *connected_resource_id = requested_resource_id;
         break;
     case CIPLUS_APP_OPRF_RESOURCEID:
     case TS103205_APP_OPRF_TWO_RESOURCEID:
     case TS103205_APP_OPRF_THREE_RESOURCEID:
         *callback_out = (en50221_sl_resource_callback)ciplus_app_oprf_message;
         *arg_out = d;
-        *connected_resource_id = requested_resource_id;
         break;
     default:
         *callback_out =
             (en50221_sl_resource_callback)en50221_app_unknown_message;
         *arg_out = d;
-        *connected_resource_id = requested_resource_id;
         LOG("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! lookup callback for "
             "unknown resource id %x on slot %u",
             requested_resource_id, slot_id);
@@ -3493,7 +3472,6 @@ int dvbca_init_dev(adapter *ad) {
     c->ignore_close = 0;
     c->fd = fd;
     c->id = ad->id;
-    c->ca_high_bitrate_mode = 0;
     c->stackthread = 0;
     c->init_ok = 0;
     memset(c->capmt, -1, sizeof(c->capmt));
