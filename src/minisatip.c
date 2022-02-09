@@ -1595,7 +1595,7 @@ int close_http(sockets *s) {
 
 int ssdp_notify(sockets *s, int alive) {
     char buf[500], mac[15] = "00000000000000";
-    char nt[3][50];
+    char nt[3][60];
     int ptr = 0;
     char *op = alive ? "Discovery" : "ByeBye";
 
