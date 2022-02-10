@@ -1544,6 +1544,7 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
     ad = a[i];
     mutex_init(&sip->mutex);
     mutex_lock(&ad->mutex);
+    ad->id = i;
     ad->open = satipc_open_device;
     ad->set_pid = satipc_set_pid;
     ad->del_filters = satipc_del_filters;

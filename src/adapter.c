@@ -1616,8 +1616,8 @@ void set_absolute_src(char *o) {
             continue;
         if (pos < 0 || pos >= 15)
             continue;
-        LOG("Setting source %d (src=%d) to input %d position %d", src, src + 1,
-            inp, pos);
+        LOG("Setting source %d (src=%d) to adapter %d position %d", src,
+            src + 1, inp, pos);
         if (!a[inp])
             a[inp] = adapter_alloc();
         ad = a[inp];

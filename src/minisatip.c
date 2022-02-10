@@ -520,10 +520,10 @@ Help\n\
 \n\
 * -A --virtual-diseqc mapping_string: absolute source mapping for virtual diseqc mode\n\
 \t* The format is: SRC1:AD1:DISEQC1[,SRC2:INP2:DISEQC2]\n\
-	* SRC: source number (src argument for SAT>IP minus 1 - 0-31)\n\
-	* AD1: coaxial input (0-3) - for AXE is the physical input\n\
-	* DISEQC: diseqc position (0-15)\n\
-	* eg: 13E,19.2E on inputs 0&1 and 23.5E,28.2E on inputs 2&3:\n\
+       * SRC: satellite position requested by clients (src argument for SAT>IP request minus 1, range: 0-63) (MAX_ADAPTERS 64)\n\
+       * ADAP: internal adapter (see -a and -e) (range: 0-63) (MAX_SOURCES 64)\n\
+       * DISEQC: target diseqc position of the adapter (range: 0-15) (or more if your adapter supports it)\n\
+	   * eg: 13E,19.2E on inputs 0&1 and 23.5E,28.2E on inputs 2&3:\n\
 		-A 0:0:0,0:1:0,1:0:0,1:1:1,2:2:0,2:3:0,3:2:1,3:2:2\n\
 \n"
 #ifdef AXE
@@ -1515,8 +1515,7 @@ int read_http(sockets *s) {
             0)
             strcpy(adapters, "DVBS2-0,");
         adapters[strlen(adapters) - 1] = 0;
-        snprintf(buf, sizeof(buf), xml,
-                 (opts.name_app) ? opts.name_app : app_name, app_name, app_name,
+        snprintf(buf, sizeof(buf), xml, opts.name_app, app_name, opts.name_app,
                  uuid, opts.http_host, adapters,
                  opts.playlist ? opts.playlist : "");
         sprintf(headers,
@@ -1640,8 +1639,8 @@ int ssdp_notify(sockets *s, int alive) {
         strcatf(buf, ptr, "NT: %s\r\n", nt[i] + 2);
         strcatf(buf, ptr, "NTS: ssdp:%s\r\n", alive ? "alive" : "byebye");
         if (alive)
-            strcatf(buf, ptr, "SERVER: Linux/1.0 UPnP/1.1 %s/%s\r\n", app_name,
-                    version);
+            strcatf(buf, ptr, "SERVER: Linux/1.0 UPnP/1.1 %s/%s\r\n",
+                    opts.name_app, version);
         strcatf(buf, ptr, "USN: uuid:%s%s\r\n", uuid, i == 1 ? "" : nt[i]);
         strcatf(buf, ptr, "BOOTID.UPNP.ORG: %d\r\n", opts.bootid);
         strcatf(buf, ptr, "CONFIGID.UPNP.ORG: 0\r\n");
@@ -1717,7 +1716,7 @@ int ssdp_reply(sockets *s) {
         rdid = strcasestr((const char *)s->buf, "DEVICEID.SES.COM:");
         if (rdid && opts.device_id == map_int(strip(rdid + 17), NULL)) {
             ptr = 0;
-            strcatf(buf, ptr, device_id_conflict, getlocalip(), app_name,
+            strcatf(buf, ptr, device_id_conflict, getlocalip(), opts.name_app,
                     version, opts.device_id);
             LOG("A new device joined the network with the same Device ID:  %s, "
                 "asking to change DEVICEID.SES.COM",
@@ -1758,7 +1757,7 @@ int ssdp_reply(sockets *s) {
 
     ptr = 0;
     strcatf(buf, ptr, reply, get_current_timestamp(), opts.http_host,
-            opts.xml_path, app_name, version, uuid, opts.bootid, did);
+            opts.xml_path, opts.name_app, version, uuid, opts.bootid, did);
 
     LOGM("Send Reply SSDP packet (fd: %d) %s:%d, bootid: %d deviceid: %d http: "
          "%s",
