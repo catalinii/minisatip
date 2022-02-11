@@ -316,7 +316,7 @@ uint32_t resource_ids[] = {
     EN50221_APP_DATETIME_RESOURCEID,
     // MMI
     EN50221_APP_MMI_RESOURCEID,
-    TS103205_APP_MMI_RESOURCEID, // Multi-stream
+    // TS103205_APP_MMI_RESOURCEID, // Multi-stream
     // Low Speed Communication is not supported
     // Content Control
     CIPLUS_APP_CC_RESOURCEID,
