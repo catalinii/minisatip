@@ -316,7 +316,7 @@ uint32_t resource_ids[] = {
     EN50221_APP_DATETIME_RESOURCEID,
     // MMI
     EN50221_APP_MMI_RESOURCEID,
-    TS103205_APP_MMI_RESOURCEID, // Multi-stream
+    // TS103205_APP_MMI_RESOURCEID, // Multi-stream
     // Low Speed Communication is not supported
     // Content Control
     CIPLUS_APP_CC_RESOURCEID,
@@ -2831,19 +2831,20 @@ static int ca_session_callback(void *arg, int reason, uint8_t slot_id,
                    resource_id == CIPLUS_APP_AI_RESOURCEID ||
                    resource_id == TS103205_APP_AI_RESOURCE_ID) {
             LOG("--------------------S_SCALLBACK_REASON_CAMCONNECTED---------"
-                "EN50221_"
                 "APP_AI_RESOURCEID-------------------------");
+            int ai_version = resource_id & 0x3f;
+            LOG("CAM requested version %d of the Application Information resource", ai_version)
             d->ai_session_number = session_number;
+
+            // Versions 1 and 2 of the Application Information resource only
+            // expects us to make an inquiry
             en50221_app_ai_enquiry(d->ai_resource, session_number);
 
-            // Signal high bitrate support to CI+ CAMS
-            if (!d->force_ci) {
+            // Announce 96 Mbps data rate support to CAMs implementing version
+            // 3 or newer of the Application Information resource
+            if (ai_version >= 3) {
                 ciplus13_app_ai_data_rate_info(d, CIPLUS_DATA_RATE_96_MBPS);
             }
-        } else if (resource_id == EN50221_APP_DATETIME_RESOURCEID) {
-            LOG("--------------------S_SCALLBACK_REASON_CAMCONNECTED---------"
-                "EN50221_"
-                "APP_DATETIME_RESOURCEID-------------------------");
         } else if (resource_id == EN50221_APP_CA_RESOURCEID ||
                    resource_id == CIPLUS_APP_CA_RESOURCEID) {
             LOG("--------------------S_SCALLBACK_REASON_CAMCONNECTED---------"
