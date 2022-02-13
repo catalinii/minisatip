@@ -30,7 +30,7 @@ https://paypal.me/minisatip
 Usage:
 -------
 (Message automatically generated from "minisatip --help")
-minisatip version 1.1.67, compiled in Feb  5 2022 23:02:57, with s2api version: 050B
+minisatip version 1.1.77, compiled in Feb 12 2022 21:24:25, with s2api version: 050B
 
 	./minisatip [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 	[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]] 
@@ -226,12 +226,16 @@ Help
         * beware that only works with 1 device. loopback may not work!
 
 * -A --virtual-diseqc mapping_string: absolute source mapping for virtual diseqc mode
-	* The format is: SRC1:INP1:DISEQC1[,SRC2:INP2:DISEQC2]
-	* SRC: source number (src argument for SAT>IP minus 1 - 0-31)
-	* INP: coaxial input (0-3)
-	* DISEQC: diseqc position (0-15)
-	* eg: 13E,19.2E on inputs 0&1 and 23.5E,28.2E on inputs 2&3:
+	* The format is: SRC1[-END1]:AD1:DISEQC1[,SRC2:INP2:DISEQC2]
+       * SRC: satellite position requested by clients (src argument for SAT>IP request minus 1, range: 0-63) (MAX_ADAPTERS 64)
+       * END: end of the range for the position requested by clients (end argument for SAT>IP request minus 1, range: 0-63) (MAX_ADAPTERS 64)
+       * ADAP: internal adapter (see -a and -e) (range: 0-63) (MAX_SOURCES 64)
+       * DISEQC: target diseqc position of the adapter (range: 0-15) (or more if your adapter supports it)
+	   * eg: 13E,19.2E on inputs 0&1 and 23.5E,28.2E on inputs 2&3:
 		-A 0:0:0,0:1:0,1:0:0,1:1:1,2:2:0,2:3:0,3:2:1,3:2:2
+	   * eg: 13E,19.2E on adapter 0 and 23.5E,28.2E on adapter 2&3 (source 0,1):
+		-A 0-1:0:0,2-3:1:0
+	* Note: Option -A is not compatible with clients requesting fe= (tvheadend)
 
 * -3 --ca-pin mapping_string: set the pin for CIs
 	* The format is: ADAPTER1:PIN,ADAPTER2-ADAPTER4:PIN

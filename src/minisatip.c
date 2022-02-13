@@ -519,12 +519,16 @@ Help\n\
         * beware that only works with 1 device. loopback may not work!\n\
 \n\
 * -A --virtual-diseqc mapping_string: absolute source mapping for virtual diseqc mode\n\
-\t* The format is: SRC1:AD1:DISEQC1[,SRC2:INP2:DISEQC2]\n\
+\t* The format is: SRC1[-END1]:AD1:DISEQC1[,SRC2:INP2:DISEQC2]\n\
        * SRC: satellite position requested by clients (src argument for SAT>IP request minus 1, range: 0-63) (MAX_ADAPTERS 64)\n\
+       * END: end of the range for the position requested by clients (end argument for SAT>IP request minus 1, range: 0-63) (MAX_ADAPTERS 64)\n\
        * ADAP: internal adapter (see -a and -e) (range: 0-63) (MAX_SOURCES 64)\n\
        * DISEQC: target diseqc position of the adapter (range: 0-15) (or more if your adapter supports it)\n\
 	   * eg: 13E,19.2E on inputs 0&1 and 23.5E,28.2E on inputs 2&3:\n\
 		-A 0:0:0,0:1:0,1:0:0,1:1:1,2:2:0,2:3:0,3:2:1,3:2:2\n\
+	   * eg: 13E,19.2E on adapter 0 and 23.5E,28.2E on adapter 2&3 (source 0,1):\n\
+		-A 0-1:0:0,2-3:1:0\n\
+\t* Note: Option -A is not compatible with clients requesting fe= (tvheadend)\n\
 \n"
 #ifdef AXE
         "\

@@ -728,7 +728,7 @@ int get_free_adapter(transponder *tp) {
                 match = 1;
             if (!ad->enabled || !compare_tunning_parameters(ad->id, tp))
                 match = 1;
-            if (match && source_enabled_for_adapter(ad, tp) && !init_hw(fe))
+            if (match && !init_hw(fe))
                 return fe;
         }
         goto noadapter;
@@ -1254,8 +1254,11 @@ int set_adapter_parameters(int aid, int sid, transponder *tp) {
     }
 
     copy_dvb_parameters(tp, &ad->tp);
-    ad->tp.diseqc =
-        get_absolute_source_for_adapter(ad->id, ad->tp.diseqc, ad->tp.sys);
+    // FE= is not specified by the client
+    if (ad->tp.fe < 1) {
+        ad->tp.diseqc =
+            get_absolute_source_for_adapter(ad->id, ad->tp.diseqc, ad->tp.sys);
+    }
 
     if (ad->tp.pids) // pids can be specified in SETUP and then followed by a
                      // delpids in PLAY, make sure the behaviour is right
