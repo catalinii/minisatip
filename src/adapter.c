@@ -1591,8 +1591,8 @@ void set_diseqc_adapters(char *o) {
 }
 
 void set_absolute_src(char *o) {
-    int i, la, src, inp, pos;
-    char buf[1000], *arg[40], *inps, *poss;
+    int i, la, src, inp, pos, range;
+    char buf[1000], *arg[40], *inps, *poss, *ranges;
     adapter *ad;
 
     strncpy(buf, o, sizeof(buf) - 1);
@@ -1612,17 +1612,30 @@ void set_absolute_src(char *o) {
         inp = map_intd(inps, NULL, -1);
         pos = map_intd(poss, NULL, -1);
 
+        range = src;
+        ranges = strchr(arg[i], '-');
+        if (ranges && ranges < inps) {
+            range = map_intd(ranges + 1, NULL, -1);
+        }
+
         if (src < 0 || src >= MAX_SOURCES)
+            continue;
+        if (range < 0 || range >= MAX_SOURCES)
             continue;
         if (pos < 0 || pos >= 15)
             continue;
-        LOG("Setting source %d (src=%d) to adapter %d position %d", src,
-            src + 1, inp, pos);
-        if (!a[inp])
-            a[inp] = adapter_alloc();
-        ad = a[inp];
+        int cnt = 1;
+        while (src <= range) {
+            LOG("Setting source %d (src=%d) to adapter %d position %d", src,
+                src + 1, inp, pos + cnt - 1);
+            if (!a[inp])
+                a[inp] = adapter_alloc();
+            ad = a[inp];
 
-        ad->absolute_table[src] = pos + 1;
+            ad->absolute_table[src] = pos + cnt;
+            src++;
+            cnt++;
+        }
         absolute_switch = 1;
     }
 }
