@@ -2820,9 +2820,9 @@ static int ca_session_callback(void *arg, int reason, uint8_t slot_id,
              "%i",
              slot_id, resource_id, session_number);
 
-        if (resource_id == EN50221_APP_RM_RESOURCEID) {
+        if (resource_id == EN50221_APP_RM_RESOURCEID ||
+            resource_id == TS101699_APP_RM_RESOURCEID) {
             LOG("--------------------S_SCALLBACK_REASON_CAMCONNECTED---------"
-                "EN50221_"
                 "APP_RM_RESOURCEID-------------------------");
             en50221_app_rm_enq(d->rm_resource, session_number);
         } else if (resource_id == EN50221_APP_AI_RESOURCEID ||
