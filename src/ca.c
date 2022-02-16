@@ -1137,7 +1137,6 @@ int ca_ai_callback(void *arg, uint8_t slot_id, uint16_t session_number,
     LOG("  Manufacturer code: %04x", manufacturer_code);
     LOG("  Menu string: %.*s", menu_string_length, menu_string);
 
-    d->ai_session_number = session_number;
     memcpy(d->ci_name, menu_string, menu_string_length);
     return 0;
 }
