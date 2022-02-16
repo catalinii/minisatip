@@ -218,7 +218,7 @@ typedef struct ca_device {
     int ca_session_number;
     int uri_mask;
 
-    uint16_t ai_session_number;
+    int ai_session_number;
 
     struct list_head *txq;
     struct list_head *mmiq;
@@ -3357,6 +3357,9 @@ int ca_init(ca_device_t *d) {
         LOG("failed to create session layer");
         goto fail;
     }
+
+    d->ai_session_number = -1;
+    d->ca_session_number = -1;
 
     // create the sendfuncs
     d->sf.arg = d->sl;
