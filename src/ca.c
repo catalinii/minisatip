@@ -236,6 +236,13 @@ typedef struct ca_device {
     uint8_t key[2][16], iv[2][16];
     int sp, is_ciplus, parity;
 
+    /*
+     * CAM date time handling
+     */
+    int datetime_session_number;
+    uint8_t datetime_response_interval;
+	time_t datetime_next_send;
+
 } ca_device_t;
 
 int dvbca_id;
@@ -411,6 +418,7 @@ unsigned char dh_g[256] =
      0xef, 0xfb, 0xe0, 0x4a};
 
 int dvbca_close_device(ca_device_t *c);
+static int ca_send_datetime(ca_device_t *d);
 
 ////// MISC.C
 
@@ -2401,6 +2409,8 @@ void *stackthread_func(void *arg) {
 
     while (d->enabled) {
         usleep(100 * 1000);
+
+        // Check for slot errors
         int error;
         if ((error = en50221_tl_poll(d->tl)) != 0) {
             if (error != lasterror && en50221_tl_get_error(d->tl) != -7) {
@@ -2415,6 +2425,14 @@ void *stackthread_func(void *arg) {
                                      //				break;
             }
             lasterror = error;
+        }
+
+        // Send regular date/time updates to the CAM
+        if (d->datetime_session_number != -1 &&
+            d->datetime_response_interval &&
+            time(NULL) > d->datetime_next_send)
+        {
+            ca_send_datetime(d);
         }
     }
 
@@ -2847,6 +2865,11 @@ static int ca_session_callback(void *arg, int reason, uint8_t slot_id,
                 "APP_CA_RESOURCEID-------------------------");
             d->ca_session_number = session_number;
             en50221_app_ca_info_enq(d->ca_resource, session_number);
+        } else if (resource_id == EN50221_APP_DATETIME_RESOURCEID)  {
+            LOG("--------------------S_SCALLBACK_REASON_CAMCONNECTED---------"
+                "EN50221_"
+                "APP_DATETIME_RESOURCEID-------------------------");
+            d->datetime_session_number = session_number;
         } else if (resource_id == EN50221_APP_MMI_RESOURCEID) {
             LOG("--------------------S_SCALLBACK_REASON_CAMCONNECTED---------"
                 "EN50221_"
@@ -3092,10 +3115,8 @@ static int ca_dt_enquiry_callback(void *arg, uint8_t slot_id,
     LOGM("%02x:%s", slot_id, __func__);
     LOGM("  response_interval:%i", response_interval);
 
-    if (en50221_app_datetime_send(d->dt_resource, session_number, time(NULL),
-                                  -1)) {
-        LOG("%02x:Failed to send datetime", slot_id);
-    }
+    d->datetime_response_interval = response_interval;
+    ca_send_datetime(d);
 
     return 0;
 }
@@ -3301,6 +3322,19 @@ static int ca_mmi_flush_download_callback(void *arg, uint8_t slot_id,
     return 0;
 }
 
+static int ca_send_datetime(ca_device_t *d) {
+    time_t now = time(NULL);
+
+    if (en50221_app_datetime_send(d->dt_resource, d->datetime_session_number,
+                                  now, -1)) {
+        LOG("%02x: Failed to send datetime update", d->slot_id)
+    }
+
+    d->datetime_next_send = now + d->datetime_response_interval;
+
+    return 0;
+}
+
 int ca_init(ca_device_t *d) {
     ca_slot_info_t info;
     int64_t st = getTick();
@@ -3360,6 +3394,7 @@ int ca_init(ca_device_t *d) {
 
     d->ai_session_number = -1;
     d->ca_session_number = -1;
+    d->datetime_session_number = -1;
 
     // create the sendfuncs
     d->sf.arg = d->sl;
@@ -3377,6 +3412,8 @@ int ca_init(ca_device_t *d) {
     d->dt_resource = en50221_app_datetime_create(&d->sf);
     en50221_app_datetime_register_enquiry_callback(d->dt_resource,
                                                    ca_dt_enquiry_callback, d);
+    d->datetime_response_interval = 0;
+    d->datetime_next_send = 0;
 
     d->ai_resource = en50221_app_ai_create(&d->sf);
     en50221_app_ai_register_callback(d->ai_resource, ca_ai_callback, d);
