@@ -219,7 +219,6 @@ typedef struct ca_device {
     int uri_mask;
 
     uint16_t ai_session_number;
-    uint16_t mmi_session_number;
 
     struct list_head *txq;
     struct list_head *mmiq;
