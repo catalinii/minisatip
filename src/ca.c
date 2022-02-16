@@ -72,7 +72,6 @@ alternative source
 #define CIPLUS_APP_DVB_RESOURCEID MKRID(32, 1, 2)
 #define TS103205_APP_DVB_RESOURCEID MKRID(32, 1, 3)
 #define TS103205_APP_DVB_MULTISTREAM_RESOURCEID MKRID(32, 2, 1)
-#define CIPLUS_APP_CA_RESOURCEID MKRID(3, 1, 1)
 #define TS103205_APP_CA_MULTISTREAM_RESOURCEID MKRID(3, 2, 1)
 #define TS103205_APP_MMI_RESOURCEID MKRID(64, 2, 1)
 #define CIPLUS_APP_CC_RESOURCEID MKRID(140, 64, 1)
@@ -2844,8 +2843,7 @@ static int ca_session_callback(void *arg, int reason, uint8_t slot_id,
             if (ai_version >= 3) {
                 ciplus13_app_ai_data_rate_info(d, CIPLUS_DATA_RATE_96_MBPS);
             }
-        } else if (resource_id == EN50221_APP_CA_RESOURCEID ||
-                   resource_id == CIPLUS_APP_CA_RESOURCEID) {
+        } else if (resource_id == EN50221_APP_CA_RESOURCEID) {
             LOG("--------------------S_SCALLBACK_REASON_CAMCONNECTED---------"
                 "EN50221_"
                 "APP_CA_RESOURCEID-------------------------");
