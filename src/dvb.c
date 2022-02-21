@@ -1676,9 +1676,10 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys) {
 // returns the strength and SNR between 0 .. 65535
 
 void get_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
-                uint16_t *snr) {
+                uint16_t *snr, uint16_t *db) {
     *status = 0;
     *ber = *snr = *strength = 0;
+    *db = 65535;
 
     if (ad->fe > 0 && ioctl(ad->fe, FE_READ_STATUS, status) < 0) {
         LOG("ad %d ioctl fd %d FE_READ_STATUS failed, error %d (%s)", ad->id,
@@ -1704,6 +1705,29 @@ void get_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
                 ad->fe, errno, strerror(errno));
         }
     }
+
+#ifdef ENIGMA
+    // In Enigma2 STRENGTH:[0..100] and SNR:dB*1000
+    int64_t strengthd = 0, snrd = 0, init_snr = 0;
+    float tf;
+
+    strengthd = (*strength * 65535) / 100.0;
+
+    init_snr = *snr;
+    tf = init_snr * 65535.0 / (1000 * ad->db_snr_map);
+    if (tf < 65535.0)
+        snrd = tf;
+    else
+        snrd = 65535;
+    init_snr = init_snr / 100;
+    if (init_snr > 999)
+        init_snr = 999; // No more than 99.9 dB
+
+    *db = (int)init_snr;
+    *strength = (int)strengthd;
+    *snr = (int)snrd;
+#endif
+
     LOGM("get_signal adapter %d: status %d, strength %d, snr %d, BER: %d",
          ad->id, *status, *strength, *snr, *ber);
 }
@@ -1755,7 +1779,7 @@ int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
     } else if (enum_cmdargs[1].u.st.stat[0].scale == FE_SCALE_DECIBEL) {
         snr_s = "dB";
         init_snr = enum_cmdargs[1].u.st.stat[0].svalue; // dB * 1000
-        tf = init_snr * 65535.0 / (100 * 1000 * ad->db_snr_map);
+        tf = init_snr * 65535.0 / (1000 * ad->db_snr_map);
         if (tf < 65535.0)
             snrd = tf;
         else
@@ -1821,7 +1845,7 @@ int dvb_get_signal(adapter *ad) {
             get_signal_new(ad, &status, &ber, &strength, &snr, &dbvalue);
 
         if (ad->new_gs == OLD_SIGNAL)
-            get_signal(ad, &status, &ber, &strength, &snr);
+            get_signal(ad, &status, &ber, &strength, &snr, &dbvalue);
     } else {
         status = 1;
         LOGM("Signal is not retrieved from the adapter as both signal "
