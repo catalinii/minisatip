@@ -170,21 +170,25 @@ typedef enum dvb_snr_table {
     DVB_S__QPSK__FEC_3_4     =  100 ,
     DVB_S__QPSK__FEC_5_6     =  110 ,
     DVB_S__QPSK__FEC_7_8     =  120 ,
-    DVB_S__OTHER             =  150 ,
+    DVB_S__OTHER             =  130 ,  /* Calculated */
 
     DVB_S2_QPSK__FEC_1_2     =   90 ,
     DVB_S2_QPSK__FEC_2_3     =  110 ,
     DVB_S2_QPSK__FEC_3_4     =  120 ,
+    DVB_S2_QPSK__FEC_4_5     =  130 ,  /* Calculated */
     DVB_S2_QPSK__FEC_5_6     =  120 ,
     DVB_S2_QPSK__FEC_8_9     =  130 ,
     DVB_S2_QPSK__FEC_9_10    =  135 ,
-    DVB_S2_OTHER             =  150 ,
+    DVB_S2_OTHER             =  130 ,  /* Calculated */
 
+    DVB_S2_PSK_8_FEC_1_2     =  128 ,  /* Calculated */
     DVB_S2_PSK_8_FEC_2_3     =  145 ,
     DVB_S2_PSK_8_FEC_3_4     =  160 ,
+    DVB_S2_PSK_8_FEC_4_5     =  180 ,  /* Deduced */
     DVB_S2_PSK_8_FEC_5_6     =  175 ,
     DVB_S2_PSK_8_FEC_8_9     =  190 ,
-    DVB_S2_PSK_8_OTHER       =  210 ,
+    DVB_S2_PSK_8_FEC_9_10    =  200 ,  /* Deduced */
+    DVB_S2_PSK_8_OTHER       =  180 ,  /* Deduced */
 
     DVB_T__QPSK__FEC_1_2     =   41 ,
     DVB_T__QPSK__FEC_2_3     =   61 ,
