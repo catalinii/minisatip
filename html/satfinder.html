@@ -1,0 +1,405 @@
+<html>
+<head>
+<title>Minisatip satfinder</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<script type="text/javascript" language="javascript" src="jquery-3.2.1.min.js"></script>
+<style>
+@media only screen and (max-device-width: 768px) {
+	body{
+	margin:0;
+	width:500px;}
+
+	.tuner_button, .mute_button{
+		padding:20px !important;
+		border: 2px solid #444 !important;
+	}
+	.left, .res{
+		font-size:0.9em;
+		display:inline-block;
+		font-size:18pt;
+
+	}
+	.left{
+		font-weight:bold;
+		border-right: 2px solid #dcdcdc;
+				padding:15px;
+	}
+	.cnt{
+
+		margin-bottom:-2px;
+		border:2px solid #dcdcdc;
+		width:99%;
+		vertical-align:middle;
+
+	}
+	.left{
+		width:200px;
+	}
+	progress {
+		height: 32px;
+		border-radius: 2px;
+		border:2px solid #666;
+		width: 120px;
+	}
+	progress::-webkit-progress-value {
+		border-right: 2px solid #666;
+	}
+	progress::-moz-progress-bar {
+		border-right: 2px solid #666;
+	}
+	.tuner_button, .mute_button{
+		padding:12px;
+		font-size:16pt;
+	}
+}
+@media only screen and (min-device-width: 769px) {
+	.left{
+		font-weight:bold;
+		border-right: 1px solid #dcdcdc;
+		padding:8px;
+	}
+	.cnt{
+
+		margin-bottom:-1px;
+		border:1px solid #dcdcdc;
+		width:99%;
+		vertical-align:middle;
+
+	}
+	.left, .res{
+		width:150px;
+		display:inline-block;
+		font-size:10pt;	
+		
+	}
+	progress::-webkit-progress-value {
+		border-right: 1px solid #666;
+	}
+	progress::-moz-progress-bar {
+		border-right: 1px solid #666;
+	}
+	progress{
+		border-radius: 2px;
+		border:1px solid #666;
+			width: 70px;
+	}
+	.tuner_button, .mute_button{
+		padding:5px;
+		font-size:12pt !important;
+	}
+}
+
+body {
+	padding: 5px;
+	font-family: Tahoma, Geneva, sans-serif;
+}
+li {
+	font-size: 0.7em;
+	list-style-type: none;
+	text-align: center;
+}
+a {
+	font-size: 8pt;
+}
+.tuner_button {
+	cursor: pointer;
+}
+/* Additional styling*/
+
+.tuner_button {
+	border: 1px solid #666;
+	border-radius: 2px;
+	height: 20px;
+	display: inline-block;
+	margin-right: 3px;
+	margin-bottom: 2px;
+}
+.tuner_button img {
+	width: 55px;
+	height: auto;
+}
+.mute_button{
+	float:left;
+	height:20px;
+	width:25px;
+	margin-right: 3px;
+	margin-bottom: 2px;
+	border-radius: 2px;
+	border: 1px solid #666;
+	background-color:#efefef;
+	opacity:0.55;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ctitle%3Emute%3C/title%3E%3Cg id='mute'%3E%3Cpath d='M21.29,1.29,17.86,4.73a2.52,2.52,0,0,0-3.8-1.3L8.7,7H5A1,1,0,0,0,4,8v8a1,1,0,0,0,1,1h.59l-4.3,4.29a1,1,0,0,0,1.42,1.42C9.05,16.36,8.29,17,8.7,17c5.7,3.8,5.73,4,6.76,4A2.54,2.54,0,0,0,18,18.46v-11l4.71-4.7A1,1,0,0,0,21.29,1.29Zm-6.12,3.8a.55.55,0,0,1,.83.45v1l-6,6V8.54ZM6,15V9H8C8,15.81,8.53,15,6,15Zm10,3.46a.55.55,0,0,1-.83.45L10,15.46c0-.1-.46.42,6-6.05Z'/%3E%3C/g%3E%3C/svg%3E");
+	background-size:contain;
+	cursor:pointer;
+	background-repeat:no-repeat;
+	background-position: center;
+}
+.unmuted{
+	background-color:#dadada !important;
+	opacity:1 !important;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ctitle%3Ehigh audio%3C/title%3E%3Cg id='high_audio' data-name='high audio'%3E%3Cpath d='M11.46,3c-1,0-1,.13-6.76,4H1A1,1,0,0,0,0,8v8a1,1,0,0,0,1,1H4.7l5.36,3.57A2.54,2.54,0,0,0,14,18.46V5.54A2.54,2.54,0,0,0,11.46,3ZM2,9H4v6H2Zm10,9.46a.55.55,0,0,1-.83.45L6,15.46V8.54l5.17-3.45a.55.55,0,0,1,.83.45Z'/%3E%3Cpath d='M16.83,9.17a1,1,0,0,0-1.42,1.42,2,2,0,0,1,0,2.82,1,1,0,0,0,.71,1.71C17.5,15.12,19.16,11.5,16.83,9.17Z'/%3E%3Cpath d='M19,7.05a1,1,0,0,0-1.41,1.41,5,5,0,0,1,0,7.08,1,1,0,0,0,.7,1.7C19.9,17.24,23.09,11.19,19,7.05Z'/%3E%3Cpath d='M21.07,4.93a1,1,0,0,0-1.41,1.41,8,8,0,0,1,0,11.32,1,1,0,0,0,1.41,1.41A10,10,0,0,0,21.07,4.93Z'/%3E%3C/g%3E%3C/svg%3E");
+	background-size:contain;
+}
+.active {
+	background-color: #dadada;
+}
+.inactive {
+	opacity: 0.55;
+	background-color: #efefef;
+}
+/* Progress bar releated styling */
+.pstr,.psnr {
+	animation: fadeIn 0.5s;
+	-webkit-animation: fadeIn 0.5s;
+	-moz-animation: fadeIn 0.5s;
+	-o-animation: fadeIn 0.5s;
+	-ms-animation: fadeIn 0.5s;
+}
+@keyframes fadeIn {
+	0% {
+		opacity: 0.7;
+	}
+	100% {
+		opacity: 1;
+	}
+}
+@-moz-keyframes fadeIn {
+	0% {
+		opacity: 0.7;
+	}
+	100% {
+		opacity: 1;
+	}
+}
+@-webkit-keyframes fadeIn {
+	0% {
+		opacity: 0.7;
+	}
+	100% {
+		opacity: 1;
+	}
+}
+@-o-keyframes fadeIn {
+	0% {
+		opacity: 0.7;
+	}
+	100% {
+		opacity: 1;
+	}
+}
+@-ms-keyframes fadeIn {
+	0% {
+		opacity: 0.7;
+	}
+	100% {
+		opacity: 1;
+	}
+}
+progress {
+	margin-right: 3px;
+	background-color: #eaeaea;
+}
+progress::-webkit-progress-bar {
+	background-color: #eaeaea;
+	border-radius: 0px !important;
+}
+.progress-1::-webkit-progress-value {
+	background-color: #fd5252;
+}
+.progress-2::-webkit-progress-value {
+	background-color: #fdb352;
+}
+.progress-3::-webkit-progress-value {
+	background-color: #e3d802;
+}
+.progress-4::-webkit-progress-value {
+	background-color: #bae302;
+}
+.progress-5::-webkit-progress-value {
+	background-color: #4eb725;
+}
+.progress-1::-moz-progress-bar {
+	background-color: #fd5252;
+}
+.progress-2::-moz-progress-bar {
+	background-color: #fdb352;
+}
+.progress-3::-moz-progress-bar {
+	background-color: #e3d802;
+}
+.progress-4::-moz-progress-bar {
+	background-color: #bae302;
+}
+.progress-5::-moz-progress-bar {
+	background-color: #4eb725;
+}
+	.nod{
+		display:none !important;
+	}
+</style>
+</head>
+<body>
+	<div data-role="page" id="mainPage">
+
+		<div id="contentContainer">
+			<div id="mainContent" class="ui-corner-all">
+			<div class="mute_button" ></div>
+			<div class="tuner_list">
+			
+			</div>
+
+					<div class="cnt"><div class="left">Tuner:</div>
+						<div class="tuner res"></div>
+					</div>
+					<div class="cnt"><div class="left">Pos./Frequency:</div>
+						<div class="pos_freq res"></div>
+					</div>
+					<div class="cnt"><div class="left">STR:</div>
+						<div class="str res"></div>
+					</div>
+					<div class="cnt">
+					<div class="left" >SNR:</div>
+						<div class="snr res"></div>
+					</div>
+					<div class="cnt">
+					<div class="left" >CC:</div>
+						<div class="cc res"></div>
+					</div>
+
+			</div>
+		</div>
+		
+		<div id="footer">
+			<p class="serverdata"></p>
+			<p style="text-align:center"><a onclick="document.location.href='/" href="/">Show status page</a></p>
+		</div>
+
+    <script>
+var sys = ["", "dvbc", "dvbcb", "dvbt", "dss", "dvbs", "dvbs2", "dvbh", "isdbt", "isdbs", "isdbc", "atsc", "atscmh", "dmbth", "cmmb", "dab", "dvbt2", "turbo", "dvbcc", "dvbc2"];
+var mtype = ["&mtype=qpsk", "&mtype=16qam", "&mtype=32qam", "&mtype=64qam", "&mtype=128qam", "&mtype=256qam", "", // auto
+    "&mtype=8vsb", "&mtype=16vsb", "&mtype=8psk", "&mtype=16apsk", "&mtype=32apsk", "&mtype=dqpsk", "&mtype=qam_4_nr",
+    "&mtype=64apsk", "&mtype=128apsk", "&mtype=256apsk"
+];
+$(document).ready(function() {
+
+  $('.mute_button').click(function() {
+    $(this).toggleClass("unmuted");
+  });
+  
+    $.getJSON("state.json", function(state) {
+
+        var sysvar = "<li>Minisatip satfinder</li>";
+        sysvar += "<li><B>Minisatip Version:</B> " + state['version'] + "  --  <B>Build date/time:</B> " + state['datetime_compile'] + "</li>"
+        sysvar += "</ul></div>"
+
+        $(".serverdata").html(sysvar);
+    }).fail(function() {
+        console.log("Can not read data");
+    });
+});
+
+let a = new AudioContext()
+
+function k(w, x, y) {
+    console.log("Audio played:" + w, "Hz:" + x, "ms:" + y)
+    v = a.createOscillator()
+    u = a.createGain()
+    v.connect(u)
+    v.frequency.value = x
+    v.type = "square"
+    u.connect(a.destination)
+    u.gain.value = w * 0.01
+    v.start(a.currentTime)
+    v.stop(a.currentTime + y * 0.001)
+}
+var tuner = 0; //set default tuner
+function set_tuner(tuner_index) {
+    tuner = tuner_index;
+}
+
+setInterval(function() {
+    $.getJSON("state.json", function(data) {
+
+
+        var tuner_data = "";
+        var tuner_status;
+        $.each(data.ad_type, function(index, value) {
+
+            if (value != 0) {
+                if (data.ad_enabled[index] == 1) tuner_status = "enabled";
+                else tuner_status = "disabled";
+                var sysimg
+                if (data.ad_sys[index] != 0) sysimg = '<img src="' + sys[data.ad_sys[index]] + '.png"/>';
+                else sysimg = "";
+                var activity;
+                if (tuner == index) {
+                    activity = "active";
+                } else activity = "inactive";
+                tuner_data += "<div class='tuner_button " + activity + "' onclick='set_tuner(" + index + ");'>" + index + " " + sysimg + " " + tuner_status + "</div>"
+            }
+
+        });
+
+        $("div.tuner_list").html(tuner_data);
+
+
+        var sig = parseInt(data.ad_strength[tuner] / 2.55);
+
+        if (data.ad_type[tuner] == 1 || ad_type[tuner] == 3)
+            var snr = parseInt(data.ad_snr[tuner] / 2.55);
+        else
+            var snr = parseInt(data.ad_snr[tuner] / 0.15);
+			var snrdb;
+		if (data.ad_db[tuner] >= 65535){
+			snrdb = "";
+			snr_hide="nod";
+		}
+			else {
+				snrdb = data.ad_db[tuner] / 10;
+				snr_hide="";
+			}
+        var x = 500 + snr * 6;
+if ( $( ".mute_button" ).is( ".unmuted" ) ) {
+ 
+        if (snr > 0){
+
+			k(8, x, 100);
+
+		} 
+ 
+}		
+
+        var str_color;
+        if (sig <= 25 && sig >= 0) str_color = "progress-1";
+        if (sig <= 42 && sig > 25) str_color = "progress-2";
+        if (sig <= 60 && sig > 42) str_color = "progress-3";
+        if (sig <= 80 && sig > 60) str_color = "progress-4";
+        if (sig <= 100 && sig > 80) str_color = "progress-5";
+        signal_str = "<div class='level'><progress class='pstr " + str_color + "' value='" + sig + "' max='100' />" + sig + "%</div>";
+        $(".str").html(signal_str);
+        var snr_color;
+        if (snr <= 25 && snr >= 0) snr_color = "progress-1";
+        if (snr <= 42 && snr > 25) snr_color = "progress-2";
+        if (snr <= 60 && snr > 42) snr_color = "progress-3";
+        if (snr <= 80 && snr > 60) snr_color = "progress-4";
+        if (snr <= 100 && snr > 80) snr_color = "progress-5";
+
+        signal_snr = "<div class='level'><progress class='psnr " + snr_color + "' value='" + snr + "' max='100' />" + snr + "% <span class='" + snr_hide + "'>" + snrdb + "dB</span></div>";
+        $(".snr").html(signal_snr);
+        $(".cc").html(data.ad_ccerr[tuner]);
+        $(".tuner").html(tuner);
+        var pol = "";
+        if (data.ad_pol[tuner] == 1) pol = "V";
+        if (data.ad_pol[tuner] == 2) pol = "H";
+        if (data.ad_pol[tuner] == 3) pol = "R";
+        if (data.ad_pol[tuner] == 4) pol = "L";
+        if ((data.ad_pos[tuner]) != "0") $(".pos_freq").html(data.ad_pos[tuner] + " " + data.ad_freq[tuner] + pol);
+        else $(".pos_freq").html("inactive");
+    }).fail(function() {
+        console.log("Can not read data");
+    });
+}, 1000);
+    </script> 
+	</div>
+</body>
+</html>
