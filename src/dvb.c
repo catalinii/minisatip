@@ -387,6 +387,10 @@ float get_db_snr_map(transponder *tp) {
                 top = DVB_S__QPSK__FEC_7_8;
                 break;
 
+            case FEC_AUTO:
+                top = DVB_S__OTHER;
+                break;
+
             default:
                 top = DVB_S__OTHER;
                 LOG("get_db_snr_map -> DVB-S modulation SNR scale not "
@@ -414,6 +418,9 @@ float get_db_snr_map(transponder *tp) {
             case FEC_3_4:
                 top = DVB_S2_QPSK__FEC_3_4;
                 break;
+            case FEC_4_5:
+                top = DVB_S2_QPSK__FEC_4_5;
+                break;
             case FEC_5_6:
                 top = DVB_S2_QPSK__FEC_5_6;
                 break;
@@ -422,6 +429,10 @@ float get_db_snr_map(transponder *tp) {
                 break;
             case FEC_9_10:
                 top = DVB_S2_QPSK__FEC_9_10;
+                break;
+
+            case FEC_AUTO:
+                top = DVB_S2_OTHER;
                 break;
 
             default:
@@ -434,17 +445,30 @@ float get_db_snr_map(transponder *tp) {
         case PSK_8:
             switch (tp->fec) {
 
+            case FEC_1_2:
+                top = DVB_S2_PSK_8_FEC_1_2;
+                break;
             case FEC_2_3:
                 top = DVB_S2_PSK_8_FEC_2_3;
                 break;
             case FEC_3_4:
                 top = DVB_S2_PSK_8_FEC_3_4;
                 break;
+            case FEC_4_5:
+                top = DVB_S2_PSK_8_FEC_4_5;
+                break;
             case FEC_5_6:
                 top = DVB_S2_PSK_8_FEC_5_6;
                 break;
             case FEC_8_9:
                 top = DVB_S2_PSK_8_FEC_8_9;
+                break;
+            case FEC_9_10:
+                top = DVB_S2_PSK_8_FEC_9_10;
+                break;
+
+            case FEC_AUTO:
+                top = DVB_S2_PSK_8_OTHER;
                 break;
 
             default:
