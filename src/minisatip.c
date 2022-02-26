@@ -193,6 +193,7 @@ static const struct option long_options[] = {
 #ifdef AXE
     {"quattro", no_argument, NULL, QUATTRO_OPT},
     {"quattro-hiband", required_argument, NULL, QUATTRO_HIBAND_OPT},
+    {"power", required_argument, NULL, AXE_POWER},
 #endif
 #ifndef DISABLE_DVBCA
     {"ca-pin", required_argument, NULL, CA_PIN_OPT},
