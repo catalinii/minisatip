@@ -68,11 +68,10 @@ alternative source
 #define TS101699_APP_AI_RESOURCEID MKRID(2, 1, 2)
 #define CIPLUS_APP_AI_RESOURCEID MKRID(2, 1, 3)
 #define CIPLUS_APP_AI_RESOURCEID_MULTI MKRID(2, 1, 4)
-#define TS103205_APP_AI_RESOURCE_ID MKRID(2, 1, 5)
+#define BLUEBOOK_A173_2_APP_AI_RESOURCE_ID MKRID(2, 1, 5)
 #define CIPLUS_APP_DVB_RESOURCEID MKRID(32, 1, 2)
 #define TS103205_APP_DVB_RESOURCEID MKRID(32, 1, 3)
 #define TS103205_APP_DVB_MULTISTREAM_RESOURCEID MKRID(32, 2, 1)
-#define CIPLUS_APP_CA_RESOURCEID MKRID(3, 1, 1)
 #define TS103205_APP_CA_MULTISTREAM_RESOURCEID MKRID(3, 2, 1)
 #define TS103205_APP_MMI_RESOURCEID MKRID(64, 2, 1)
 #define CIPLUS_APP_CC_RESOURCEID MKRID(140, 64, 1)
@@ -303,7 +302,6 @@ uint32_t resource_ids[] = {
     EN50221_APP_AI_RESOURCEID,
     TS101699_APP_AI_RESOURCEID,
     CIPLUS_APP_AI_RESOURCEID,
-    TS103205_APP_AI_RESOURCE_ID,
     // Conditional Access Support
     EN50221_APP_CA_RESOURCEID,
     //TS103205_APP_CA_MULTISTREAM_RESOURCEID, // Multi-stream
@@ -2821,15 +2819,15 @@ static int ca_session_callback(void *arg, int reason, uint8_t slot_id,
              "%i",
              slot_id, resource_id, session_number);
 
-        if (resource_id == EN50221_APP_RM_RESOURCEID) {
+        if (resource_id == EN50221_APP_RM_RESOURCEID ||
+            resource_id == TS101699_APP_RM_RESOURCEID) {
             LOG("--------------------S_SCALLBACK_REASON_CAMCONNECTED---------"
-                "EN50221_"
                 "APP_RM_RESOURCEID-------------------------");
             en50221_app_rm_enq(d->rm_resource, session_number);
         } else if (resource_id == EN50221_APP_AI_RESOURCEID ||
                    resource_id == TS101699_APP_AI_RESOURCEID ||
                    resource_id == CIPLUS_APP_AI_RESOURCEID ||
-                   resource_id == TS103205_APP_AI_RESOURCE_ID) {
+                   resource_id == BLUEBOOK_A173_2_APP_AI_RESOURCE_ID) {
             LOG("--------------------S_SCALLBACK_REASON_CAMCONNECTED---------"
                 "APP_AI_RESOURCEID-------------------------");
             int ai_version = resource_id & 0x3f;
@@ -2845,8 +2843,7 @@ static int ca_session_callback(void *arg, int reason, uint8_t slot_id,
             if (ai_version >= 3) {
                 ciplus13_app_ai_data_rate_info(d, CIPLUS_DATA_RATE_96_MBPS);
             }
-        } else if (resource_id == EN50221_APP_CA_RESOURCEID ||
-                   resource_id == CIPLUS_APP_CA_RESOURCEID) {
+        } else if (resource_id == EN50221_APP_CA_RESOURCEID) {
             LOG("--------------------S_SCALLBACK_REASON_CAMCONNECTED---------"
                 "EN50221_"
                 "APP_CA_RESOURCEID-------------------------");
