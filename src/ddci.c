@@ -1247,7 +1247,7 @@ int process_cat(int filter, unsigned char *b, int len, void *opaque) {
             d->capid[id++] = (b[i + 4] & 0x1F) * 256 + b[i + 5];
         }
 
-        LOG("CAT pos %d caid %d, pid %d", id, caid, d->capid[id]);
+        LOG("CAT pos %d caid %04X, pid %d", id, caid, d->capid[id]);
     }
     id++;
 
