@@ -1562,7 +1562,7 @@ int is_ac3_es(unsigned char *es, int len) {
 void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid, uint8_t *data,
                   int len) {
     if (pmt_caid_exist(pmt, caid, capid)) {
-        LOGM("%s: CAID %d CAPID %d already exists in PMT %d", __FUNCTION__,
+        LOGM("%s: CAID %04X CAPID %d already exists in PMT %d", __FUNCTION__,
              caid, capid, pmt->id);
         return;
     }

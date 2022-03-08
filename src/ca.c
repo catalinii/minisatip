@@ -1133,8 +1133,8 @@ int ca_ai_callback(void *arg, uint8_t slot_id, uint16_t session_number,
 
     LOG("%02x:%s", slot_id, __func__);
     LOG("  Application type: %02x", application_type);
-    LOG("  Application manufacturer: %04x", application_manufacturer);
-    LOG("  Manufacturer code: %04x", manufacturer_code);
+    LOG("  Application manufacturer: %04X", application_manufacturer);
+    LOG("  Manufacturer code: %04X", manufacturer_code);
     LOG("  Menu string: %.*s", menu_string_length, menu_string);
 
     d->ai_session_number = session_number;
@@ -3056,7 +3056,7 @@ static int ca_ca_info_callback(void *arg, uint8_t slot_id,
     for (i = 0; i < ca_id_count; i++) {
         uint8_t *b = (uint8_t *)&ca_ids[i];
         int caid = b[1] * 256 + b[0];
-        LOG("   %s CA ID: %04x for CA%d", overwritten ? "Forced" : "Supported",
+        LOG("   %s CA ID: %04X for CA%d", overwritten ? "Forced" : "Supported",
             caid, d->id);
         add_caid_mask(dvbca_id, d->id, caid, 0xFFFF);
     }
