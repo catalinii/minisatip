@@ -666,7 +666,10 @@ void update_cw(SPMT *pmt) {
     int i = 0;
     SPMT_batch start[10];
     int len = fill_packet_start_indicator(pmt->batch, pmt->blen, start, 9);
-    int validated = (len > 1);
+    int validated = 1;
+
+    if (len <= 0)
+        validated = 0;
 
     // If no CW exists and we can validate the CW, try to find one again
     // Helps for CI+ case
@@ -716,9 +719,9 @@ void update_cw(SPMT *pmt) {
         }
 
     LOGL(old_cw == cw ? DEFAULT_LOG : 1,
-         "found CW: %d %sfor %s PMT %d, old cw %d, packets %d, parity %d, pid "
+         "found CW: %d %s for %s PMT %d, old cw %d, packets %d, parity %d, pid "
          "%d: %s",
-         cw ? cw->id : -1, validated ? "[validated] " : "", pmt->name, pmt->id,
+         cw ? cw->id : -1, validated ? "[validated]" : "[pending]", pmt->name, pmt->id,
          old_cw ? old_cw->id : -1, pmt->blen, pmt->parity, pmt->pid,
          cw_to_string(cw, buf));
 
@@ -747,17 +750,19 @@ void update_cw(SPMT *pmt) {
                         cw_to_string(cws[i], buf));
                 }
         }
-    }
+    } else {
+        if (opts.debug & LOG_PMT)
+            dump_cws();
 }
 
 void dump_cws() {
     int i;
     char buf[200];
     uint64_t ctime = getTick();
-    LOG("List of CWs");
+    LOG("List of CWs:");
     for (i = 0; i < ncws; i++)
         if (cws[i] && cws[i]->enabled && cws[i]->expiry > ctime) {
-            LOG("CW %d: %s", cws[i]->id, cw_to_string(cws[i], buf));
+            LOG("* CW %d: %s", cws[i]->id, cw_to_string(cws[i], buf));
         }
 }
 
