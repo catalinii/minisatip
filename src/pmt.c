@@ -659,6 +659,17 @@ int fill_packet_start_indicator(SPMT_batch *all, int max_all, SPMT_batch *start,
     return s;
 }
 
+void dump_cws() {
+    int i;
+    char buf[200];
+    uint64_t ctime = getTick();
+    LOG("List of CWs:");
+    for (i = 0; i < ncws; i++)
+        if (cws[i] && cws[i]->enabled && cws[i]->expiry > ctime) {
+            LOG("* CW %d: %s", cws[i]->id, cw_to_string(cws[i], buf));
+        }
+}
+
 void update_cw(SPMT *pmt) {
     SCW *cw = NULL, *old_cw = pmt->cw;
     char buf[300];
@@ -753,17 +764,6 @@ void update_cw(SPMT *pmt) {
     } else {
         if (opts.debug & LOG_PMT)
             dump_cws();
-}
-
-void dump_cws() {
-    int i;
-    char buf[200];
-    uint64_t ctime = getTick();
-    LOG("List of CWs:");
-    for (i = 0; i < ncws; i++)
-        if (cws[i] && cws[i]->enabled && cws[i]->expiry > ctime) {
-            LOG("* CW %d: %s", cws[i]->id, cw_to_string(cws[i], buf));
-        }
 }
 
 int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
