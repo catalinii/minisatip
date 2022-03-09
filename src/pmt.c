@@ -677,10 +677,7 @@ void update_cw(SPMT *pmt) {
     int i = 0;
     SPMT_batch start[10];
     int len = fill_packet_start_indicator(pmt->batch, pmt->blen, start, 9);
-    int validated = 1;
-
-    if (len <= 0)
-        validated = 0;
+    int validated = (len > 0);
 
     // If no CW exists and we can validate the CW, try to find one again
     // Helps for CI+ case
