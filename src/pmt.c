@@ -764,6 +764,7 @@ void update_cw(SPMT *pmt) {
     } else {
         if (opts.debug & LOG_PMT)
             dump_cws();
+    }
 }
 
 int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
