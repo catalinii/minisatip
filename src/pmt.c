@@ -729,7 +729,7 @@ void update_cw(SPMT *pmt) {
     LOGL(old_cw == cw ? DEFAULT_LOG : 1,
          "found CW: %d %s for %s PMT %d, old cw %d, packets %d, parity %d, pid "
          "%d: %s",
-         cw ? cw->id : -1, validated ? "[validated]" : "[pending]", pmt->name, pmt->id,
+         cw ? cw->id : -1, validated ? "[validated]" : "[not validated]", pmt->name, pmt->id,
          old_cw ? old_cw->id : -1, pmt->blen, pmt->parity, pmt->pid,
          cw_to_string(cw, buf));
 
