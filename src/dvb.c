@@ -774,21 +774,16 @@ int dvb_open_device(adapter *ad) {
     return 0;
 }
 
-void msleep(long ms) {
-    if (ms > 0)
-        usleep(ms * 1000);
-}
-
 void diseqc_cmd(int fd, int times, char *str, struct dvb_diseqc_master_cmd *cmd,
                 diseqc *d) {
     int i;
-    msleep(d->before_cmd);
+    sleep_msec(d->before_cmd);
     for (i = 0; i < times; i++) {
         if (ioctl(fd, FE_DISEQC_SEND_MASTER_CMD, cmd) == -1)
             LOG("send_diseqc: FE_DISEQC_SEND_MASTER_CMD %s failed for fd %d: "
                 "%s",
                 str, fd, strerror(errno));
-        msleep(i > 0 ? d->after_repeated_cmd : d->after_cmd);
+        sleep_msec(i > 0 ? d->after_repeated_cmd : d->after_cmd);
     }
 }
 
@@ -851,7 +846,7 @@ int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol,
         if (!uncommitted_first)
             diseqc_cmd(fd, uncommitted_no, "uncommitted", &uncmd, d);
 
-        msleep(d->after_switch);
+        sleep_msec(d->after_switch);
 
         if (ioctl(fd, FE_DISEQC_SEND_BURST,
                   (pos & 1) ? SEC_MINI_B : SEC_MINI_A) == -1)
@@ -859,13 +854,13 @@ int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol,
                 strerror(errno));
     }
 
-    msleep(d->after_burst);
+    sleep_msec(d->after_burst);
 
     if (ioctl(fd, FE_SET_TONE, hiband ? SEC_TONE_ON : SEC_TONE_OFF) == -1)
         LOG("send_diseqc: FE_SET_TONE failed for fd %d: %s", fd,
             strerror(errno));
 
-    msleep(d->after_tone);
+    sleep_msec(d->after_tone);
 
     return 0;
 }
@@ -903,7 +898,7 @@ int send_unicable(adapter *ad, int fd, int freq, int pos, int pol, int hiband,
         if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
             LOG("send_unicable: FE_SET_TONE failed for fd %d: %s", fd,
                 strerror(errno));
-        msleep(d->after_tone);
+        sleep_msec(d->after_tone);
     }
     if (!d->only13v && ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18) == -1)
         LOG("send_unicable: FE_SET_VOLTAGE failed for fd %d: %s", fd,
@@ -950,7 +945,7 @@ int send_jess(adapter *ad, int fd, int freq, int pos, int pol, int hiband,
         if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
             LOG("send_jess: FE_SET_TONE failed for fd %d: %s", fd,
                 strerror(errno));
-        msleep(d->after_tone);
+        sleep_msec(d->after_tone);
     }
 
     if (!d->only13v && ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18) == -1)

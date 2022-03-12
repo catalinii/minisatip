@@ -323,7 +323,7 @@ int netcv_commit(adapter *ad) {
 
             m_pids[i].pid = -1;
             /* call recv_pids of libmcli to set the active PIDs */
-            usleep(10000);
+            sleep_msec(10);
             if (recv_pids(SN->ncv_rec, m_pids))
                 LOG("netceiver: seting PIDs failed");
         } else {
@@ -397,7 +397,7 @@ void find_netcv_adapter(adapter **a) {
             opts.netcv_count == 1 ? "" : "s", opts.netcv_if);
     n = 0;
     do {
-        usleep(250000);
+        sleep_msec(250);
         sprintf(dbuf + strlen(dbuf), "##");
         nc_list = nc_get_list();
     } while (nc_list->nci_num < opts.netcv_count && n++ < 19);
