@@ -997,6 +997,13 @@ void mark_pids_null(adapter *ad) {
             if (p)
                 p->dec_err++;
         }
+        else if (pid > 0x001F && pid < 0x1FFF && ad->ca_mask) {
+            SPid *p = find_pid(ad->id, pid);
+            if (p && !p->is_decrypted) {
+                p->is_decrypted = 1;
+                p->dec_err = 0; // When starting to decrypt reset the counter of decoding errors
+            }
+        }
     }
 }
 
@@ -1809,6 +1816,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
             enabled_channels++;
             pmt->state = PMT_RUNNING;
             cp->pmt = pmt->master_pmt;
+            cp->is_decrypted = 0;
         }
     }
     // Add the PCR pid if it's independent
