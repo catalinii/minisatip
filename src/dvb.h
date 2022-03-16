@@ -355,6 +355,7 @@ typedef struct struct_pid {
                  // tune is called, 3 disable when tune is called
     int packets; // how many packets for this pid arrived, used to sort the pids
     int dec_err; // decrypt errors, continuity counters
+    uint8_t is_decrypted;  // Set when first decrypted
     int16_t pmt, filter;
     char cc, cc1;
     int sock; // sock_id
