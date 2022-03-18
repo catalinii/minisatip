@@ -757,6 +757,9 @@ void update_cw(SPMT *pmt) {
                     LOG("Expiring CW %d for pmt %d: %s", cws[i]->id, pmt->id,
                         cw_to_string(cws[i], buf));
                 }
+        } else {
+            if (opts.debug & LOG_PMT)
+                dump_cws();
         }
     } else {
         if (opts.debug & LOG_PMT)
