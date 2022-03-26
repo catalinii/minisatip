@@ -649,7 +649,7 @@ int fill_packet_start_indicator(SPMT_batch *all, int max_all, SPMT_batch *start,
                                 int max_start) {
     int i = 0, s = 0;
     for (i = 0; i < max_all; i++) {
-        if (all[i].data[1] & 0xC0 == 0x40) {
+        if ((all[i].data[1] & 0xC0) == 0x40) {
             start[s].data = all[i].data;
             start[s++].len = all[i].len;
             if (s >= max_start)
