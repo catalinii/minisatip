@@ -742,8 +742,10 @@ void *select_and_execute(void *arg) {
 
                     c_time = getTick();
                     ss->iteration++;
+                    ss->revents = pf[i].revents;
 
-                    DEBUGM("event on socket index %d handle %d type %d spos %d "
+                    DEBUGM("event on socket index %d handle %d type %d "
+                           "spos %d "
                            "wpos %d "
                            "(poll fd: %d, events: %d, revents: %d)",
                            i, ss->sock, ss->type, ss->spos, ss->wpos, pf[i].fd,
@@ -1231,7 +1233,7 @@ int sendmmsg0(int rsock, struct mmsghdr *msg, int len, int t) {
         writev(rsock, msg[i].msg_hdr.msg_iov, msg[i].msg_hdr.msg_iovlen);
     return len;
 }
-#define sendmmsg(a,b,c,d) sendmmsg0(a,b,c,d)
+#define sendmmsg(a, b, c, d) sendmmsg0(a, b, c, d)
 #endif
 
 int writev_udp(int rsock, struct iovec *iov, int iiov) {

@@ -219,11 +219,6 @@ char *built_info[] = {
 #else
     "Built with dvbapi",
 #endif
-#ifdef DISABLE_DVBAES
-    "Built without AES (OpenSSL)",
-#else
-    "Built with AES (OpenSSL)",
-#endif
 #ifdef DISABLE_TABLES
     "Built without tables processing",
 #else

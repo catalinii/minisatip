@@ -631,7 +631,6 @@ STATIC
 SATIPCLIENT
 NETCVCLIENT
 EMBEDDED
-DVBAES
 DVBCA
 DVBCSA
 LINUXDVB
@@ -690,7 +689,6 @@ ac_user_opts='
 enable_option_checking
 enable_linuxdvb
 enable_dvbca
-enable_dvbaes
 enable_dvbcsa
 enable_netcv
 with_mcli
@@ -1331,8 +1329,8 @@ Optional Features:
   --disable-FEATURE       do not include FEATURE (same as --enable-FEATURE=no)
   --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
   --disable-linuxdvb      disable linux dvb support
-  --disable-dvbca         disable dvbca support (decrypting using CI)
-  --disable-dvbaes        disable AES support (decrypting using openssl)
+  --disable-dvbca         disable Common Interface (CI) support (relies on
+                          openssl)
   --disable-dvbcsa        disable dvbcsa support (decrypting with dvbcsa)
   --disable-netcv         disable NETCEIVER support
   --disable-satipc        disable satip client support
@@ -3965,7 +3963,7 @@ done
 FM="\nminisatip configuration\n\n"
 linux_dvb="Linux DVB:\t\t\t\t "
 dvb_csa="DVBCSA (needs libdvbcsa):\t\t "
-openssl="OpenSSL (AES as part of DVBAPI):\t "
+CI="Common Interface (CI)\t\t\t "
 dvb_ca="Common Interface (needs DVBEN50221):\t "
 emb="Embedded system:\t\t\t "
 netcv="Netceiver support:\t\t\t "
@@ -3976,7 +3974,6 @@ axe="axe:\t\t\t\t\t "
 enigma="enigma:\t\t\t\t\t "
 LINUXDVB=0
 DVBCA=0
-DVBAES=0
 DVBCSA=0
 NETCVCLIENT=0
 SATIPCLIENT=0
@@ -4027,14 +4024,14 @@ fi
 
 if test "x$enable_dvbca" != "xno"; then :
 
-{ $as_echo "$as_me:${as_lineno-$LINENO}:  == Checking DVBEN50221 == " >&5
-$as_echo "$as_me:  == Checking DVBEN50221 == " >&6;}
-for ac_header in libdvben50221/en50221_app_dvb.h
+{ $as_echo "$as_me:${as_lineno-$LINENO}:  == Checking OpenSSL == " >&5
+$as_echo "$as_me:  == Checking OpenSSL == " >&6;}
+for ac_header in openssl/aes.h
 do :
-  ac_fn_c_check_header_mongrel "$LINENO" "libdvben50221/en50221_app_dvb.h" "ac_cv_header_libdvben50221_en50221_app_dvb_h" "$ac_includes_default"
-if test "x$ac_cv_header_libdvben50221_en50221_app_dvb_h" = xyes; then :
+  ac_fn_c_check_header_mongrel "$LINENO" "openssl/aes.h" "ac_cv_header_openssl_aes_h" "$ac_includes_default"
+if test "x$ac_cv_header_openssl_aes_h" = xyes; then :
   cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBDVBEN50221_EN50221_APP_DVB_H 1
+#define HAVE_OPENSSL_AES_H 1
 _ACEOF
  DVBCA=1
 else
@@ -4047,42 +4044,9 @@ done
 fi
 
 if test "$DVBCA" = "1"; then
-FM="$FM\n$dvb_ca enabled"
+FM="$FM\n$CI enabled"
 else
-FM="$FM\n$dvb_ca disabled"
-fi
-
-# Check whether --enable-dvbaes was given.
-if test "${enable_dvbaes+set}" = set; then :
-  enableval=$enable_dvbaes;
-fi
-
-
-if test "x$enable_dvbaes" != "xno"; then :
-
-{ $as_echo "$as_me:${as_lineno-$LINENO}:  == Checking OpenSSL == " >&5
-$as_echo "$as_me:  == Checking OpenSSL == " >&6;}
-for ac_header in openssl/aes.h
-do :
-  ac_fn_c_check_header_mongrel "$LINENO" "openssl/aes.h" "ac_cv_header_openssl_aes_h" "$ac_includes_default"
-if test "x$ac_cv_header_openssl_aes_h" = xyes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_OPENSSL_AES_H 1
-_ACEOF
- DVBAES=1
-else
-  DVBAES=0
-fi
-
-done
-
-
-fi
-
-if test "$DVBAES" = "1"; then
-FM="$FM\n$openssl enabled"
-else
-FM="$FM\n$openssl disabled"
+FM="$FM\n$CI disabled"
 fi
 
 { $as_echo "$as_me:${as_lineno-$LINENO}:  == Checking Embedded == " >&5
@@ -4302,7 +4266,6 @@ fi
 
 
 
-
 ac_config_files="$ac_config_files src/Makefile"
 
 ac_config_files="$ac_config_files tests/Makefile"
@@ -4440,6 +4403,7 @@ DEFS=`sed -n "$ac_script" confdefs.h`
 
 ac_libobjs=
 ac_ltlibobjs=
+U=
 for ac_i in : $LIBOBJS; do test "x$ac_i" = x: && continue
   # 1. Remove the extension, and $U if already installed.
   ac_script='s/\$U\././;s/\.o$//;s/\.obj$//'

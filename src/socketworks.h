@@ -43,7 +43,7 @@ typedef struct struct_sockets {
     int iteration;
     int err;
     int flags; // 1 - buf is allocated dynamically
-    int events;
+    int events, revents;
     int64_t last_poll;
     pthread_t tid;
     SMutex *lock;

@@ -34,7 +34,7 @@ AC_CHECK_FUNCS([bzero clock_gettime dup2 gethostbyname gettimeofday inet_ntoa me
 FM="\nminisatip configuration\n\n"
 linux_dvb="Linux DVB:\t\t\t\t "
 dvb_csa="DVBCSA (needs libdvbcsa):\t\t "
-openssl="OpenSSL (AES as part of DVBAPI):\t "
+CI="Common Interface (CI)\t\t\t "
 dvb_ca="Common Interface (needs DVBEN50221):\t "
 emb="Embedded system:\t\t\t "
 netcv="Netceiver support:\t\t\t "
@@ -45,7 +45,6 @@ axe="axe:\t\t\t\t\t "
 enigma="enigma:\t\t\t\t\t "
 LINUXDVB=0
 DVBCA=0
-DVBAES=0
 DVBCSA=0
 NETCVCLIENT=0
 SATIPCLIENT=0
@@ -72,32 +71,17 @@ fi
 
 AC_ARG_ENABLE([dvbca],
   [AS_HELP_STRING([--disable-dvbca],
-  [disable dvbca support (decrypting using CI)])])
+  [disable Common Interface (CI) support (relies on openssl)])])
 
 AS_IF([test "x$enable_dvbca" != "xno"], [
-AC_MSG_NOTICE([ == Checking DVBEN50221 == ])
-AC_CHECK_HEADERS([libdvben50221/en50221_app_dvb.h],[DVBCA=1],[DVBCA=0])
+AC_MSG_NOTICE([ == Checking OpenSSL == ])
+AC_CHECK_HEADERS([openssl/aes.h],[DVBCA=1],[DVBCA=0])
 ])
 
 if test "$DVBCA" = "1"; then
-FM="$FM\n$dvb_ca enabled"
+FM="$FM\n$CI enabled"
 else
-FM="$FM\n$dvb_ca disabled"
-fi
-
-AC_ARG_ENABLE([dvbaes],
-  [AS_HELP_STRING([--disable-dvbaes],
-  [disable AES support (decrypting using openssl)])])
-
-AS_IF([test "x$enable_dvbaes" != "xno"], [
-AC_MSG_NOTICE([ == Checking OpenSSL == ])
-AC_CHECK_HEADERS([openssl/aes.h],[DVBAES=1],[DVBAES=0])
-])
-
-if test "$DVBAES" = "1"; then
-FM="$FM\n$openssl enabled"
-else
-FM="$FM\n$openssl disabled"
+FM="$FM\n$CI disabled"
 fi
 
 AC_MSG_NOTICE([ == Checking Embedded == ])
@@ -236,7 +220,6 @@ fi
 AC_SUBST(LINUXDVB)
 AC_SUBST(DVBCSA)
 AC_SUBST(DVBCA)
-AC_SUBST(DVBAES)
 AC_SUBST(EMBEDDED)
 AC_SUBST(NETCVCLIENT)
 AC_SUBST(SATIPCLIENT)
