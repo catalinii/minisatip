@@ -48,6 +48,7 @@ alternative source
 
 #define MAX_ELEMENTS 33
 #define MAX_PAIRS 10
+#define MAX_SESSIONS 64
 #define DEFAULT_LOG LOG_DVBCA
 
 #define EN50221_APP_RM_RESOURCEID MKRID(1, 1, 1)
@@ -140,11 +141,9 @@ struct element {
     int valid;
 };
 
-struct ci_buffer {
-    size_t size;
-    unsigned char data[];
+struct ca_session {
+    struct struct_application_handler *handler;
 };
-
 struct cc_ctrl_data {
     /* ci+ credentials */
     struct element elements[MAX_ELEMENTS];
@@ -179,7 +178,6 @@ struct ca_device {
     int fd, sock;
     int slot_id;
     char is_active;
-    int tc;
     int id;
     int ignore_close;
     int init_ok;
@@ -191,6 +189,7 @@ struct ca_device {
     // Session Numbers: as all the objects are stored inside of the ca_device,
     // don't store data inside of the sessions
     int session_number;
+    struct ca_session sessions[MAX_SESSIONS];
 
     int uri_mask;
 
@@ -306,7 +305,7 @@ int populate_resources(ca_device_t *d, int *resource_ids);
 int ca_write_apdu_session(ca_device_t *d, int session_number, int resource,
                           const void *data, int len);
 int ca_write_apdu(ca_device_t *d, int resource, const void *data, int len);
-int find_session_for_resource(int resource);
+int find_session_for_resource(ca_device_t *d, int resource);
 int asn_1_decode(int *length, unsigned char *asn_1_array);
 
 ////// MISC.C
@@ -814,7 +813,8 @@ int send_capmt(ca_device_t *d, SCAPMT *ca, int listmgmt, int reason) {
     if (size <= 0)
         LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "create_capmt failed");
 
-    int session_number = find_session_for_resource(EN50221_APP_CA_RESOURCEID);
+    int session_number =
+        find_session_for_resource(d, EN50221_APP_CA_RESOURCEID);
 
     ca_write_apdu_session(d, session_number, TAG_CA_PMT, capmt, size);
     return 0;
@@ -2437,7 +2437,7 @@ static int ca_send_datetime(ca_device_t *d) {
     msg[4] = ((mm / 10) << 4) | (mm % 10);
     msg[5] = ((ss / 10) << 4) | (ss % 10);
     int session_number =
-        find_session_for_resource(EN50221_APP_DATETIME_RESOURCEID);
+        find_session_for_resource(d, EN50221_APP_DATETIME_RESOURCEID);
     ca_write_apdu_session(d, session_number, TAG_DATE_TIME, msg, 6);
     d->datetime_next_send = tv + d->datetime_response_interval;
     LOG("Sending time to CA %d, response interval: %d", d->id,
@@ -2751,11 +2751,11 @@ struct struct_application_handler application_handler[] = {
     // TS103205_APP_MULTISTREAM_RESOURCEID
 };
 
-int find_session_for_resource(int resource) {
+int find_session_for_resource(ca_device_t *d, int resource) {
     int i;
-    for (i = 1;
-         i < sizeof(application_handler) / sizeof(application_handler[0]); i++)
-        if (resource == application_handler[i].resource)
+    for (i = 1; i < MAX_SESSIONS; i++)
+        if (d->sessions[i].handler &&
+            resource == d->sessions[i].handler->resource)
             return i;
     return -1;
 }
@@ -2881,8 +2881,8 @@ int ca_write_tpdu(ca_device_t *d, int tag, uint8_t *buf, int len) {
 
     int written = write(d->fd, p_data, i_size);
     if (written != i_size) {
-        LOG("incomplete write to CA %d fd %d, expected %d got %d, errno %d", d->id, d->fd,
-            i_size, written, errno);
+        LOG("incomplete write to CA %d fd %d, expected %d got %d, errno %d",
+            d->id, d->fd, i_size, written, errno);
         return 1;
     }
     return 0;
@@ -2911,7 +2911,7 @@ int ca_write_spdu(ca_device_t *d, int session_number, unsigned char tag,
 
     LOG("%s: CA %d, session %d, name %s, write tag %02X, data length %d",
         __FUNCTION__, d->id, session_number,
-        application_handler[session_number].name, tag, ptr - pkt);
+        d->sessions[session_number].handler->name, tag, ptr - pkt);
     if (ptr > pkt)
         _hexdump("Session data: ", pkt, ptr - pkt);
     return ca_write_tpdu(d, T_DATA_LAST, pkt, ptr - pkt);
@@ -2932,7 +2932,7 @@ int ca_write_apdu_session(ca_device_t *d, int session_number, int tag,
         memcpy(pkt + 3 + l, data, len);
     LOG("ca_write_apdu: CA %d, session %d, name %s, write tag %06X, data "
         "length %d",
-        d->id, session_number, application_handler[session_number].name, tag,
+        d->id, session_number, d->sessions[session_number].handler->name, tag,
         len);
     return ca_write_spdu(d, session_number, ST_SESSION_NUMBER, 0, 0, pkt,
                          len + 3 + l);
@@ -3047,12 +3047,12 @@ int ca_read_apdu(ca_device_t *d, uint8_t *buf, int buf_len) {
         data += 3 + llen;
         LOG("%s: CA %d, session %d, name %s, read tag %06X, data length %d",
             __FUNCTION__, d->id, session_number,
-            application_handler[session_number].name, tag, len);
+            d->sessions[session_number].handler->name, tag, len);
 
         if (len > 0)
             _hexdump("data: ", data, len);
 
-        application_handler[d->session_number].callback(d, tag, data, len);
+        d->sessions[d->session_number].handler->callback(d, tag, data, len);
 
         i += 3 + llen + len;
     }
@@ -3066,6 +3066,7 @@ int ca_read(sockets *s) {
     uint32_t resource_identifier;
     int session_id = -1;
     ca_device_t *d = ca_devices[s->sid];
+    char pkt[6];
     int len, status = 0;
     _hexdump("CAREAD:   ", data, s->rlen);
     int tag = data[0];
@@ -3075,18 +3076,34 @@ int ca_read(sockets *s) {
     switch (tag) {
     case ST_OPEN_SESSION_REQUEST:
         copy32r(resource_identifier, data, 2);
-        session_id = find_session_for_resource(resource_identifier);
+
+        for (session_id = 1; session_id < MAX_SESSIONS; session_id++)
+            if (!d->sessions[session_id].handler)
+                break;
         status = 0;
-        if (session_id == -1)
-            session_id = 0xF0;
-        char pkt[6];
+        if (session_id == MAX_SESSIONS)
+            status = 0xF0;
+        else {
+            int k;
+            for (k = 1; k < sizeof(application_handler) /
+                                sizeof(application_handler[0]);
+                 k++)
+                if (application_handler[k].resource == resource_identifier) {
+                    d->sessions[session_id].handler = application_handler + k;
+                    break;
+                }
+            if (!d->sessions[session_id].handler)
+                status = 0xF0;
+        }
+        LOG("Found session_id %d for resource %06X, application %p", session_id,
+            resource_identifier, d->sessions[session_id].handler);
         pkt[0] = status;
         memcpy(pkt + 1, data + 2, 4);
         d->session_number = session_id;
         ca_write_spdu(d, session_id, ST_OPEN_SESSION_RESPONSE, pkt, 5, NULL, 0);
-        if (application_handler[session_id].create)
-            application_handler[session_id].create(d, session_id,
-                                                   resource_identifier);
+        if (!status && d->sessions[session_id].handler->create)
+            d->sessions[session_id].handler->create(d, session_id,
+                                                    resource_identifier);
 
         break;
 
@@ -3094,13 +3111,14 @@ int ca_read(sockets *s) {
         // closing the CI session
         copy16r(resource_identifier, data, 2);
         int ca_session_number =
-            find_session_for_resource(EN50221_APP_CA_RESOURCEID);
+            find_session_for_resource(d, EN50221_APP_CA_RESOURCEID);
         if (resource_identifier == ca_session_number) {
             d->ignore_close = 1;
             d->init_ok = 0;
         }
         LOG("Received close session %s",
-            application_handler[resource_identifier].name);
+            d->sessions[resource_identifier].handler->name);
+        d->sessions[resource_identifier].handler = NULL;
         break;
     case ST_SESSION_NUMBER:
         copy16r(d->session_number, data, 1 + llen);
