@@ -2420,7 +2420,7 @@ static int CIPLUS_APP_UPGR_handler(ca_device_t *d, int tag, uint8_t *data,
 } /* works now, be careful!!! just in case upgrade disabled */
 
 static int ca_send_datetime(ca_device_t *d) {
-    unsigned char msg[6];
+    unsigned char msg[5];
     time_t tv = time(NULL);
     uint16_t mjd = tv / 86400 + 40587; // mjd 01.01.1970 is 40587
     tv %= 86400;
@@ -2430,16 +2430,15 @@ static int ca_send_datetime(ca_device_t *d) {
     tv %= 60;
     uint8_t ss = tv;
 
-    msg[0] = 5; // not using offset
-    msg[1] = (mjd >> 8) & 0xff;
-    msg[2] = mjd & 0xff;
-    msg[3] = ((hh / 10) << 4) | (hh % 10);
-    msg[4] = ((mm / 10) << 4) | (mm % 10);
-    msg[5] = ((ss / 10) << 4) | (ss % 10);
+    msg[0] = (mjd >> 8) & 0xff;
+    msg[1] = mjd & 0xff;
+    msg[2] = ((hh / 10) << 4) | (hh % 10);
+    msg[3] = ((mm / 10) << 4) | (mm % 10);
+    msg[4] = ((ss / 10) << 4) | (ss % 10);
     int session_number =
         find_session_for_resource(d, EN50221_APP_DATETIME_RESOURCEID);
-    ca_write_apdu_session(d, session_number, TAG_DATE_TIME, msg, 6);
-    d->datetime_next_send = tv + d->datetime_response_interval;
+    ca_write_apdu_session(d, session_number, TAG_DATE_TIME, msg, 5);
+    d->datetime_next_send = time(NULL) + d->datetime_response_interval;
     LOG("Sending time to CA %d, response interval: %d", d->id,
         d->datetime_response_interval)
     return 0;
@@ -3129,11 +3128,6 @@ int ca_read(sockets *s) {
 
     s->rlen = 0;
 
-    // Send regular date/time updates to the CAM
-    if (d->datetime_response_interval && time(NULL) > d->datetime_next_send) {
-        ca_send_datetime(d);
-    }
-
     return 0;
 }
 
@@ -3144,7 +3138,15 @@ int ca_close(sockets *s) {
 
 int ca_timeout(sockets *s) {
     ca_device_t *d = ca_devices[s->sid];
-    ca_write_tpdu(d, T_RCV, NULL, 0);
+    // Send regular date/time updates to the CAM
+    if (d->datetime_response_interval && (time(NULL) > d->datetime_next_send)) {
+        ca_send_datetime(d);
+    }
+#ifndef ENIGMA
+    else {
+        ca_write_tpdu(d, T_RCV, NULL, 0);
+    }
+#endif
     return 0;
 }
 
@@ -3174,10 +3176,10 @@ int ca_init_enigma(ca_device_t *d) {
     ioctl(fd, 0);
 
     d->sock = sockets_add(fd, NULL, d->id, TYPE_TCP, (socket_action)ca_read,
-                          (socket_action)ca_close, (socket_action)NULL);
+                          (socket_action)ca_close, (socket_action)ca_timeout);
     if (d->sock < 0)
         LOG_AND_RETURN(0, "%s: sockets_add failed", __FUNCTION__);
-
+    sockets_timeout(d->sock, 1000);
     sockets_setread(d->sock, ca_read_enigma);
     return 0;
 }

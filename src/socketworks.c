@@ -677,7 +677,7 @@ __thread int select_timeout;
 
 void *select_and_execute(void *arg) {
     int i, rv, rlen, les, es, pos_len;
-    unsigned char buf[2001], *pos;
+    unsigned char buf[10240], *pos;
     int err;
     struct pollfd pf[MAX_SOCKS];
     int64_t lt, c_time;
