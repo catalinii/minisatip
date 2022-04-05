@@ -48,7 +48,6 @@ alternative source
 
 #define MAX_ELEMENTS 33
 #define MAX_PAIRS 10
-#define MAX_SESSIONS 64
 #define DEFAULT_LOG LOG_DVBCA
 
 #define EN50221_APP_RM_RESOURCEID MKRID(1, 1, 1)
@@ -129,6 +128,7 @@ int extract_ci_cert = 0;
 
 extern char *listmgmt_str[];
 typedef struct ca_device ca_device_t;
+typedef struct ca_session ca_session_t;
 
 uint32_t datatype_sizes[MAX_ELEMENTS] = {
     0,   50,  0,  0, 0, 8,  8,  0, 0, 0, 0,  0, 32, 256, 256, 0, 0,
@@ -141,8 +141,18 @@ struct element {
     int valid;
 };
 
+struct struct_application_handler {
+    int resource;
+    char *name;
+    int (*callback)(ca_session_t *session, int resource, uint8_t *buffer,
+                    int len);
+    int (*create)(ca_session_t *session, int resource);
+};
+
 struct ca_session {
-    struct struct_application_handler *handler;
+    struct struct_application_handler handler;
+    ca_device_t *ca;
+    int session_id;
 };
 struct cc_ctrl_data {
     /* ci+ credentials */
@@ -185,11 +195,7 @@ struct ca_device {
     uint32_t caids;
 
     struct cc_ctrl_data private_data;
-
-    // Session Numbers: as all the objects are stored inside of the ca_device,
-    // don't store data inside of the sessions
-    int session_number;
-    struct ca_session sessions[MAX_SESSIONS];
+    ca_session_t sessions[MAX_SESSIONS];
 
     int uri_mask;
 
@@ -234,14 +240,6 @@ struct aes_xcbc_mac_ctx {
     uint8_t IV[16];
     AES_KEY key;
     int buflen;
-};
-
-struct struct_application_handler {
-    int resource;
-    char *name;
-    int (*callback)(struct ca_device *d, int resource, uint8_t *buffer,
-                    int len);
-    int (*create)(struct ca_device *d, int session_id, int resource);
 };
 
 typedef enum {
@@ -302,10 +300,8 @@ unsigned char dh_g[256] =
 int dvbca_close_device(ca_device_t *c);
 static int ca_send_datetime(ca_device_t *d);
 int populate_resources(ca_device_t *d, int *resource_ids);
-int ca_write_apdu_session(ca_device_t *d, int session_number, int resource,
-                          const void *data, int len);
-int ca_write_apdu(ca_device_t *d, int resource, const void *data, int len);
-int find_session_for_resource(ca_device_t *d, int resource);
+int ca_write_apdu(ca_session_t *s, int resource, const void *data, int len);
+ca_session_t *find_session_for_resource(ca_device_t *d, int resource);
 int asn_1_decode(int *length, unsigned char *asn_1_array);
 
 ////// MISC.C
@@ -737,6 +733,8 @@ int dh_dhph_signature(uint8_t *out, uint8_t *nonce, uint8_t *dhph, RSA *r) {
     return 0;
 }
 
+void ca_request_close(ca_device_t *d) { sockets_force_close(d->sock); }
+
 int is_ca_initializing(int i) {
     if (i >= 0 && i < MAX_ADAPTERS && ca_devices[i] && ca_devices[i]->enabled &&
         !ca_devices[i]->init_ok)
@@ -813,10 +811,11 @@ int send_capmt(ca_device_t *d, SCAPMT *ca, int listmgmt, int reason) {
     if (size <= 0)
         LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "create_capmt failed");
 
-    int session_number =
+    ca_session_t *session =
         find_session_for_resource(d, EN50221_APP_CA_RESOURCEID);
-
-    ca_write_apdu_session(d, session_number, TAG_CA_PMT, capmt, size);
+    if (!session)
+        LOG_AND_RETURN(1, "Unable to find CA session for device %d", d->id);
+    ca_write_apdu(session, TAG_CA_PMT, capmt, size);
     return 0;
 }
 
@@ -991,11 +990,11 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt) {
     return 0;
 }
 
-static int ciplus13_app_ai_data_rate_info(ca_device_t *d,
+static int ciplus13_app_ai_data_rate_info(ca_session_t *s,
                                           ciplus13_data_rate_t rate) {
     LOG("setting CI+ CAM data rate to %s Mbps", rate ? "96" : "72");
 
-    ca_write_apdu(d, CI_DATA_RATE_INFO, &rate, sizeof(rate));
+    ca_write_apdu(s, CI_DATA_RATE_INFO, &rate, sizeof(rate));
     return 0;
 }
 
@@ -2012,17 +2011,17 @@ static int data_req_loop(ca_device_t *d, unsigned char *dest,
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-void ci_ccmgr_cc_open_cnf(ca_device_t *d) {
+void ci_ccmgr_cc_open_cnf(ca_session_t *session) {
     const uint8_t bitmap = 0x01;
 
-    data_initialize(d);
+    data_initialize(session->ca);
     LOGM("SEND ------------ CC_OPEN_CNF----------- ");
-    ca_write_apdu(d, 0x9f9002, &bitmap, 1);
+    ca_write_apdu(session, 0x9f9002, &bitmap, 1);
 }
 
-static int ci_ccmgr_cc_sac_send(ca_device_t *d, uint32_t tag, uint8_t *data,
-                                unsigned int pos) {
-    struct cc_ctrl_data *cc_data = &d->private_data;
+static int ci_ccmgr_cc_sac_send(ca_session_t *session, uint32_t tag,
+                                uint8_t *data, unsigned int pos) {
+    struct cc_ctrl_data *cc_data = &session->ca->private_data;
     if (pos < 8)
         return 0;
     LOG("______________________ci_ccmgr_cc_sac_send______________________");
@@ -2036,13 +2035,14 @@ static int ci_ccmgr_cc_sac_send(ca_device_t *d, uint32_t tag, uint8_t *data,
     sac_crypt(&data[8], &data[8], pos - 8, cc_data->sek, AES_ENCRYPT);
 
     //        _hexdump("ENCRYPTED    ",data, pos);
-    ca_write_apdu(d, tag, data, pos);
+    ca_write_apdu(session, tag, data, pos);
 
     return 1;
 }
 
-static int ci_ccmgr_cc_sac_data_req(ca_device_t *d, const uint8_t *data,
+static int ci_ccmgr_cc_sac_data_req(ca_session_t *session, const uint8_t *data,
                                     unsigned int len) {
+    ca_device_t *d = session->ca;
     struct cc_ctrl_data *cc_data = &d->private_data;
     uint32_t data_cnf_tag = 0x9f9008;
     uint8_t dest[2048];
@@ -2102,10 +2102,10 @@ static int ci_ccmgr_cc_sac_data_req(ca_device_t *d, const uint8_t *data,
     LOGM("SEND ------------ CC_SAC_DATA_CNF----------- ");
     //        _hexdump("sac_data_send", &dest[8], pos-8);  //skip serial and
     //        header
-    return ci_ccmgr_cc_sac_send(d, data_cnf_tag, dest, pos);
+    return ci_ccmgr_cc_sac_send(session, data_cnf_tag, dest, pos);
 }
 
-static void ci_ccmgr_cc_sac_sync_req(ca_device_t *d, const uint8_t *data,
+static void ci_ccmgr_cc_sac_sync_req(ca_session_t *session, const uint8_t *data,
                                      unsigned int len) {
     int sync_cnf_tag = 0x9f9010;
     uint8_t dest[64];
@@ -2123,18 +2123,19 @@ static void ci_ccmgr_cc_sac_sync_req(ca_device_t *d, const uint8_t *data,
     dest[pos++] = 0;
 
     LOG("SEND ------------ CC_SAC_SYNC_CNF----------- ");
-    ci_ccmgr_cc_sac_send(d, sync_cnf_tag, dest, pos);
+    ci_ccmgr_cc_sac_send(session, sync_cnf_tag, dest, pos);
 }
 
-static void ci_ccmgr_cc_sync_req(ca_device_t *d, const uint8_t *data,
+static void ci_ccmgr_cc_sync_req(ca_session_t *session, const uint8_t *data,
                                  unsigned int len) {
     const uint8_t status = 0x00; /* OK */
     LOGM("SEND ------------ CC_SYNC_CNF----------- ");
-    ca_write_apdu(d, 0x9f9006, &status, 1);
+    ca_write_apdu(session, 0x9f9006, &status, 1);
 }
 
-static int ci_ccmgr_cc_data_req(ca_device_t *d, const uint8_t *data,
+static int ci_ccmgr_cc_data_req(ca_session_t *session, const uint8_t *data,
                                 unsigned int len) {
+    ca_device_t *d = session->ca;
     struct cc_ctrl_data *cc_data = &d->private_data;
     uint8_t dest[2048 * 2];
     int dt_nr;
@@ -2172,48 +2173,46 @@ static int ci_ccmgr_cc_data_req(ca_device_t *d, const uint8_t *data,
     answ_len += 2;
 
     LOGM("SEND ------------ CC_DATA_CNF----------- ");
-    ca_write_apdu(d, 0x9f9004, dest, answ_len);
+    ca_write_apdu(session, 0x9f9004, dest, answ_len);
 
     return 1;
 }
 
-static int CIPLUS_APP_CC_create(ca_device_t *d, int session_number,
-                                int resource_id) {
+static int CIPLUS_APP_CC_create(ca_session_t *session, int resource_id) {
     /* CI Plus Implementation Guidelines V1.0.6 (2013-10)
 5.3.1 URI version advertisement
 A Host should advertise URI v1 only when Content Control v1 is selected
 by the CICAM */
+    ca_device_t *d = session->ca;
     if (resource_id == CIPLUS_APP_CC_RESOURCEID)
         d->uri_mask = 1;
     else
         d->uri_mask = 3;
     return 0;
 }
-static int CIPLUS_APP_CC_handler(ca_device_t *d, int tag, uint8_t *data,
+static int CIPLUS_APP_CC_handler(ca_session_t *session, int tag, uint8_t *data,
                                  int len) {
-    int session_number = d->session_number;
-
     LOG("RECV ciplus cc msg CAM%i, session_num %u, tag %x len %i dt_id %i",
-        d->id, session_number, tag, len, data[2]);
+        session->ca->id, session->session_id, tag, len, data[2]);
     // printf(" RECV DATA:   ");
     // hexdump(data,len<33?len:32);
 
     switch (tag) {
 
     case CIPLUS_TAG_CC_OPEN_REQ: // 01
-        ci_ccmgr_cc_open_cnf(d);
+        ci_ccmgr_cc_open_cnf(session);
         break;
     case CIPLUS_TAG_CC_DATA_REQ: // 03
-        ci_ccmgr_cc_data_req(d, data, len);
+        ci_ccmgr_cc_data_req(session, data, len);
         break;
     case CIPLUS_TAG_CC_SYNC_REQ: // 05
-        ci_ccmgr_cc_sync_req(d, data, len);
+        ci_ccmgr_cc_sync_req(session, data, len);
         break;
     case CIPLUS_TAG_CC_SAC_DATA_REQ: // 07
-        ci_ccmgr_cc_sac_data_req(d, data, len);
+        ci_ccmgr_cc_sac_data_req(session, data, len);
         break;
     case CIPLUS_TAG_CC_SAC_SYNC_REQ: // 09
-        ci_ccmgr_cc_sac_sync_req(d, data, len);
+        ci_ccmgr_cc_sac_sync_req(session, data, len);
         break;
     default:
         LOG("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! unknown cc "
@@ -2225,8 +2224,8 @@ static int CIPLUS_APP_CC_handler(ca_device_t *d, int tag, uint8_t *data,
     return 0;
 }
 
-static int CIPLUS_APP_LANG_handler(ca_device_t *d, int tag, uint8_t *data,
-                                   int data_length) {
+static int CIPLUS_APP_LANG_handler(ca_session_t *session, int tag,
+                                   uint8_t *data, int data_length) {
     LOG("host_lang&country_receive");
     //        if (data_length)
     //                hexdump(data, data_length);
@@ -2247,7 +2246,7 @@ static int CIPLUS_APP_LANG_handler(ca_device_t *d, int tag, uint8_t *data,
         LOG("country answered with '%c%c%c'", data_reply_country[0],
             data_reply_country[1], data_reply_country[2]);
         /* host country reply */
-        ca_write_apdu(d, 0x9f8101, data_reply_country, 3);
+        ca_write_apdu(session, 0x9f8101, data_reply_country, 3);
         break;
     }
     case CIPLUS_TAG_LANG_ENQ: /* language enquiry */
@@ -2255,7 +2254,7 @@ static int CIPLUS_APP_LANG_handler(ca_device_t *d, int tag, uint8_t *data,
         LOG("language answered with '%c%c%c'", data_reply_lang[0],
             data_reply_lang[1], data_reply_lang[2]);
         /* host language reply */
-        ca_write_apdu(d, 0x9f8111, data_reply_lang, 3);
+        ca_write_apdu(session, 0x9f8111, data_reply_lang, 3);
         break;
     }
     default:
@@ -2264,7 +2263,7 @@ static int CIPLUS_APP_LANG_handler(ca_device_t *d, int tag, uint8_t *data,
     return 0;
 }
 
-static int CIPLUS_APP_SAS_handler(ca_device_t *d, int tag, uint8_t *data,
+static int CIPLUS_APP_SAS_handler(ca_session_t *session, int tag, uint8_t *data,
                                   int data_length) {
     hexdump("CIPLUS_APP_SAS_handler", data, data_length);
 
@@ -2272,7 +2271,7 @@ static int CIPLUS_APP_SAS_handler(ca_device_t *d, int tag, uint8_t *data,
     case CIPLUS_TAG_SAS_CONNECT_CNF: /* */
     {
         if (data[8] == 0) {
-            ca_write_apdu(d, 0x9f9a07, 0x00, 0);
+            ca_write_apdu(session, 0x9f9a07, 0x00, 0);
         }
         break;
     }
@@ -2283,8 +2282,9 @@ static int CIPLUS_APP_SAS_handler(ca_device_t *d, int tag, uint8_t *data,
     return 0;
 } /* not working, just for fun */
 
-static int CIPLUS_APP_OPRF_handler(ca_device_t *d, int tag, uint8_t *data,
-                                   int data_length) {
+static int CIPLUS_APP_OPRF_handler(ca_session_t *session, int tag,
+                                   uint8_t *data, int data_length) {
+    ca_device_t *d = session->ca;
     char buf[400];
     int pos, i;
     pos = sprintf(buf, " ");
@@ -2322,20 +2322,20 @@ static int CIPLUS_APP_OPRF_handler(ca_device_t *d, int tag, uint8_t *data,
                 data[1] & 0x60 ? "" : "NOT ");
         } else
             LOG("CI+ CA%d: operator profile disabled", d->id);
-        ca_write_apdu(d, 0x9f9c00 | tag_part, 0x00, 0);
+        ca_write_apdu(session, 0x9f9c00 | tag_part, 0x00, 0);
         break;
     }
     case CIPLUS_TAG_OPERATOR_INFO: /* operator_info */
     {
         LOG("CAM_OPRF_operator_info_receive");
-        ca_write_apdu(d, 0x9f9c06, data_oprf_search, 9);
+        ca_write_apdu(session, 0x9f9c06, data_oprf_search, 9);
         break;
     }
     case 0x9f9c03: /* operator_nit */
     {
         LOG("CAM_OPRF_operator_nit_receive");
         /* operator_exit */
-        ca_write_apdu(d, 0x9f9c08, 0x00, 0);
+        ca_write_apdu(session, 0x9f9c08, 0x00, 0);
         break;
     }
     case CIPLUS_TAG_OPERATOR_SEARCH_STATUS: /* operator_search_status */
@@ -2345,9 +2345,9 @@ static int CIPLUS_APP_OPRF_handler(ca_device_t *d, int tag, uint8_t *data,
         if (data[1] & 0x02) // refresh_request_flag == 2 (urgent request)
         {
             /* operator_search_start */
-            ca_write_apdu(d, 0x9f9c06, data_oprf_search, 9);
+            ca_write_apdu(session, 0x9f9c06, data_oprf_search, 9);
         } else /* operator_nit */
-            ca_write_apdu(d, 0x9f9c02, 0x00, 0);
+            ca_write_apdu(session, 0x9f9c02, 0x00, 0);
         break;
     }
     case CIPLUS_TAG_OPERATOR_TUNE: /* operator_tune */
@@ -2369,7 +2369,7 @@ static int CIPLUS_APP_OPRF_handler(ca_device_t *d, int tag, uint8_t *data,
             *pol);
         // data_oprf_tune_status[13]=0xC6; //psk8 dvb-s2
         sleep_msec(3 * 1000); // wait 3 secs
-        ca_write_apdu(d, 0x9f9c0a, data_oprf_tune_status, 18);
+        ca_write_apdu(session, 0x9f9c0a, data_oprf_tune_status, 18);
         break;
     }
     default:
@@ -2378,8 +2378,9 @@ static int CIPLUS_APP_OPRF_handler(ca_device_t *d, int tag, uint8_t *data,
     return 0;
 }
 
-static int CIPLUS_APP_UPGR_handler(ca_device_t *d, int tag, uint8_t *data,
-                                   int data_length) {
+static int CIPLUS_APP_UPGR_handler(ca_session_t *session, int tag,
+                                   uint8_t *data, int data_length) {
+    ca_device_t *d = session->ca;
     int fd = d->fd;
     ca_slot_info_t info;
 
@@ -2393,7 +2394,7 @@ static int CIPLUS_APP_UPGR_handler(ca_device_t *d, int tag, uint8_t *data,
     {
         LOG("CI+ CA%i Firmware Upgrade Command detected... ", d->id);
         /* cam firmware update reply */
-        ca_write_apdu(d, 0x9f9d02, &answer, 1);
+        ca_write_apdu(session, 0x9f9d02, &answer, 1);
         break;
     }
     case CIPLUS_TAG_FIRMWARE_UPGR_PRGRS: /* */
@@ -2414,7 +2415,7 @@ static int CIPLUS_APP_UPGR_handler(ca_device_t *d, int tag, uint8_t *data,
         break;
     }
     default:
-        LOG("unknown fw upgrade apdu tag %03x", tag);
+        LOG("unknown fw upgrade apdu tag %06X", tag);
     }
     return 0;
 } /* works now, be careful!!! just in case upgrade disabled */
@@ -2435,39 +2436,39 @@ static int ca_send_datetime(ca_device_t *d) {
     msg[2] = ((hh / 10) << 4) | (hh % 10);
     msg[3] = ((mm / 10) << 4) | (mm % 10);
     msg[4] = ((ss / 10) << 4) | (ss % 10);
-    int session_number =
+    ca_session_t *s =
         find_session_for_resource(d, EN50221_APP_DATETIME_RESOURCEID);
-    ca_write_apdu_session(d, session_number, TAG_DATE_TIME, msg, 5);
+    if (s)
+        ca_write_apdu(s, TAG_DATE_TIME, msg, 5);
     d->datetime_next_send = time(NULL) + d->datetime_response_interval;
-    LOG("Sending time to CA %d, response interval: %d", d->id,
-        d->datetime_response_interval)
+    LOG("Sending time to CA %d to session %d, response interval: %d", d->id,
+        s->session_id, d->datetime_response_interval)
     return 0;
 }
 
-int APP_empty(struct ca_device *d, int resource, uint8_t *buffer, int len) {
+int APP_empty(ca_session_t *session, int resource, uint8_t *buffer, int len) {
     LOG("Got unhandled resource %06X", resource);
     return 0;
 }
 
-static int APP_RM_create(ca_device_t *d, int session_number, int resource_id) {
-    LOG("--------------------S_SCALLBACK_REASON_CAMCONNECTED---------"
-        "APP_RM_RESOURCEID-------------------------");
-    ca_write_apdu(d, TAG_PROFILE_ENQUIRY, NULL, 0);
+static int APP_RM_create(ca_session_t *session, int resource_id) {
+    LOG("RM Created");
+    ca_write_apdu(session, TAG_PROFILE_ENQUIRY, NULL, 0);
     return 0;
 }
 
-int APP_RM_handler(struct ca_device *d, int resource, uint8_t *buffer,
+int APP_RM_handler(ca_session_t *session, int resource, uint8_t *buffer,
                    int len) {
     int resource_ids[100], rlen;
     switch (resource) {
     case TAG_PROFILE:
-        ca_write_apdu(d, TAG_PROFILE_CHANGE, NULL, 0);
+        ca_write_apdu(session, TAG_PROFILE_CHANGE, NULL, 0);
         break;
     case TAG_PROFILE_ENQUIRY:
         // do we really need this to force CI only mode ?
-        rlen = populate_resources(d, resource_ids);
+        rlen = populate_resources(session->ca, resource_ids);
 
-        ca_write_apdu(d, TAG_PROFILE, resource_ids, rlen * 4);
+        ca_write_apdu(session, TAG_PROFILE, resource_ids, rlen * 4);
         break;
     default:
         LOG("unexpected tag in ResourceManagerHandle (0x%x)", resource);
@@ -2475,29 +2476,28 @@ int APP_RM_handler(struct ca_device *d, int resource, uint8_t *buffer,
     return 0;
 }
 
-static int APP_AI_create(ca_device_t *d, int session_number, int resource_id) {
+static int APP_AI_create(ca_session_t *session, int resource_id) {
     int ai_version = resource_id & 0x3f;
     LOG("%s: CAM requested version %d of the Application Information resource",
         __FUNCTION__, ai_version);
 
     // Versions 1 and 2 of the Application Information resource only
     // expects us to make an inquiry
-    ca_write_apdu(d, TAG_APP_INFO_ENQUIRY, NULL, 0);
+    ca_write_apdu(session, TAG_APP_INFO_ENQUIRY, NULL, 0);
 
     // Announce 96 Mbps data rate support to CAMs implementing version
     // 3 or newer of the Application Information resource
     if (ai_version >= 3) {
-        ciplus13_app_ai_data_rate_info(d, CIPLUS_DATA_RATE_96_MBPS);
+        ciplus13_app_ai_data_rate_info(session, CIPLUS_DATA_RATE_96_MBPS);
     }
     return 0;
 }
 
-static int CIPLUS_APP_AI_handler(ca_device_t *d, int resource_id, uint8_t *data,
-                                 int data_length) {
-    int session_number = d->session_number;
-
+static int CIPLUS_APP_AI_handler(ca_session_t *session, int resource_id,
+                                 uint8_t *data, int data_length) {
+    ca_device_t *d = session->ca;
     LOG("RECV ciplus AI msg CA %u, session_num %u, resource_id %x", d->id,
-        session_number, resource_id);
+        session->session_id, resource_id);
 
     switch (resource_id) {
     case CIPLUS_TAG_APP_INFO:
@@ -2528,13 +2528,15 @@ static int CIPLUS_APP_AI_handler(ca_device_t *d, int resource_id, uint8_t *data,
     return 0;
 }
 
-static int APP_CA_create(ca_device_t *d, int session_number, int resource_id) {
+static int APP_CA_create(ca_session_t *session, int resource_id) {
     LOG("%s", __FUNCTION__);
-    ca_write_apdu(d, TAG_CA_INFO_ENQUIRY, NULL, 0);
+    ca_write_apdu(session, TAG_CA_INFO_ENQUIRY, NULL, 0);
     return 0;
 }
 
-int APP_CA_handler(struct ca_device *d, int resource, uint8_t *data, int len) {
+int APP_CA_handler(ca_session_t *session, int resource, uint8_t *data,
+                   int len) {
+    ca_device_t *d = session->ca;
     int i, overwritten = 0, caid_count = len / 2;
 
     switch (resource) {
@@ -2558,12 +2560,13 @@ int APP_CA_handler(struct ca_device *d, int resource, uint8_t *data, int len) {
     return 0;
 }
 
-int APP_DateTime_handler(struct ca_device *d, int resource, uint8_t *buffer,
+int APP_DateTime_handler(ca_session_t *session, int resource, uint8_t *buffer,
                          int len) {
+    ca_device_t *d = session->ca;
     switch (resource) {
     case TAG_DATE_TIME_ENQUIRY:
         if (buffer)
-            d->datetime_response_interval = *buffer;
+            d->datetime_response_interval = buffer[0];
         break;
     default:
         LOG("unexpected tag in %s (0x%x)", __FUNCTION__, resource);
@@ -2572,7 +2575,7 @@ int APP_DateTime_handler(struct ca_device *d, int resource, uint8_t *buffer,
     return 0;
 }
 
-int ca_app_mmi_answ(ca_device_t *d, uint8_t answ_id, uint8_t *text,
+int ca_app_mmi_answ(ca_session_t *session, uint8_t answ_id, uint8_t *text,
                     uint32_t text_count) {
     uint8_t buf[10 + text_count];
     int len = 1 + text_count;
@@ -2582,19 +2585,20 @@ int ca_app_mmi_answ(ca_device_t *d, uint8_t answ_id, uint8_t *text,
     if (text_count > 0) {
         memcpy(buf + 1, text, text_count);
     }
-    return ca_write_apdu(d, TAG_ANSWER, buf, len);
+    return ca_write_apdu(session, TAG_ANSWER, buf, len);
 }
 
-int ca_app_mmi_menu_answ(ca_device_t *d, uint8_t answ_id) {
-    return ca_write_apdu(d, TAG_MENU_ANSWER, &answ_id, 1);
+int ca_app_mmi_menu_answ(ca_session_t *session, uint8_t answ_id) {
+    return ca_write_apdu(session, TAG_MENU_ANSWER, &answ_id, 1);
 }
 
-int ca_app_mmi_close(ca_device_t *d, uint8_t answ_id) {
-    return ca_write_apdu(d, TAG_CLOSE_MMI, &answ_id, 1);
+int ca_app_mmi_close(ca_session_t *session, uint8_t answ_id) {
+    return ca_write_apdu(session, TAG_CLOSE_MMI, &answ_id, 1);
 }
 
-int APP_MMI_handler(struct ca_device *d, int resource, uint8_t *buffer,
+int APP_MMI_handler(ca_session_t *session, int resource, uint8_t *buffer,
                     int len) {
+    ca_device_t *d = session->ca;
     hexdump("Got MMI: ", buffer, len);
     switch (resource) {
     case TAG_DISPLAY_CONTROL: {
@@ -2604,9 +2608,9 @@ int APP_MMI_handler(struct ca_device *d, int resource, uint8_t *buffer,
 
             LOG("mmi display ctl cb received for CA %u session_num %u "
                 "cmd_id 0x%02x mmi_mode %u",
-                d->id, d->session_number, cmd_id, mmi_mode);
+                d->id, session->session_id, cmd_id, mmi_mode);
             uint8_t data[] = {MMI_DISPLAY_REPLY_ID_MMI_MODE_ACK, mmi_mode};
-            ca_write_apdu(d, TAG_DISPLAY_REPLY, data, sizeof(data));
+            ca_write_apdu(session, TAG_DISPLAY_REPLY, data, sizeof(data));
         }
         break;
     }
@@ -2626,11 +2630,11 @@ int APP_MMI_handler(struct ca_device *d, int resource, uint8_t *buffer,
 
         if (strlen((char *)d->pin_str) == answer_length) {
             LOG("answering to PIN enquiry");
-            ca_app_mmi_answ(d, MMI_ANSW_ID_ANSWER, (uint8_t *)d->pin_str,
+            ca_app_mmi_answ(session, MMI_ANSW_ID_ANSWER, (uint8_t *)d->pin_str,
                             answer_length);
         }
 
-        ca_app_mmi_close(d, MMI_CLOSE_MMI_CMD_ID_IMMEDIATE);
+        ca_app_mmi_close(session, MMI_CLOSE_MMI_CMD_ID_IMMEDIATE);
 
         break;
     }
@@ -2651,21 +2655,21 @@ int APP_MMI_handler(struct ca_device *d, int resource, uint8_t *buffer,
             int textlen;
             if ((data + 3) > max)
                 break;
-            DEBUGM("[UI] text tag: %02x %02x %02x", data[0], data[1], data[2]);
+            DEBUGM("[%d] text tag: %02x %02x %02x", data[0], data[1], data[2]);
             data += 3;
             data += asn_1_decode(&textlen, data);
-            DEBUGM("[UI] %d bytes text", textlen);
+            DEBUGM("[%d] %d bytes text", textlen);
             if ((data + textlen) > max)
                 break;
             char str[textlen + 1];
             memcpy(str, data, textlen);
             str[textlen] = '\0';
-            LOG("[UI] %s", str);
+            LOG("[UI %d] %s", i, str);
             data += textlen;
         }
-        ca_app_mmi_menu_answ(d, 0x01);
+        ca_app_mmi_menu_answ(session, 0x01);
         /* cancel menu */
-        ca_app_mmi_close(d, MMI_CLOSE_MMI_CMD_ID_IMMEDIATE);
+        ca_app_mmi_close(session, MMI_CLOSE_MMI_CMD_ID_IMMEDIATE);
 
         break;
     }
@@ -2677,21 +2681,21 @@ int APP_MMI_handler(struct ca_device *d, int resource, uint8_t *buffer,
     return 0;
 }
 
-static int APP_SAS_create(ca_device_t *d, int session_number, int resource_id) {
+static int APP_SAS_create(ca_session_t *session, int resource_id) {
     LOG("%s-------------------------", __FUNCTION__);
     uint8_t data[] = {0x69, 0x74, 0x64, 0x74, 0x74, 0x63, 0x61, 0x00};
     // private_Host_application_ID
-    ca_write_apdu(d, 0x9f9a00, data, sizeof(data));
+    ca_write_apdu(session, 0x9f9a00, data, sizeof(data));
     return 0;
 }
 
-static int APP_LANG_create(ca_device_t *d, int session_number,
-                           int resource_id) {
+static int APP_LANG_create(ca_session_t *session, int resource_id) {
     uint8_t data_reply_lang[] = {0x65, 0x6e, 0x67};    // eng
     uint8_t data_reply_country[] = {0x55, 0x53, 0x41}; // USA
     LOG("%s: Sending language to the CAM", __FUNCTION__);
-    ca_write_apdu(d, 0x9F8101, data_reply_country, sizeof(data_reply_country));
-    ca_write_apdu(d, 0x9F8111, data_reply_lang, sizeof(data_reply_lang));
+    ca_write_apdu(session, 0x9F8101, data_reply_country,
+                  sizeof(data_reply_country));
+    ca_write_apdu(session, 0x9F8111, data_reply_lang, sizeof(data_reply_lang));
     return 0;
 }
 
@@ -2700,7 +2704,6 @@ static int APP_LANG_create(ca_device_t *d, int session_number,
 // this contains all known resource ids so we can see if the cam asks for
 // something exotic
 struct struct_application_handler application_handler[] = {
-    DEFAPP(0, NULL, NULL), // 0 is reserved
     // Resource Manager
     DEFAPP(EN50221_APP_RM_RESOURCEID, APP_RM_handler, APP_RM_create),
     DEFAPP(TS101699_APP_RM_RESOURCEID, APP_RM_handler, APP_RM_create),
@@ -2750,13 +2753,37 @@ struct struct_application_handler application_handler[] = {
     // TS103205_APP_MULTISTREAM_RESOURCEID
 };
 
-int find_session_for_resource(ca_device_t *d, int resource) {
+ca_session_t *new_session(ca_device_t *d, int resource) {
+    int i, session_id;
+    ca_session_t *s;
+    for (session_id = 0; session_id < MAX_SESSIONS; session_id++)
+        if (!d->sessions[session_id].handler.resource)
+            break;
+    if (session_id == MAX_SESSIONS)
+        LOG_AND_RETURN(NULL, "Could not allocate a new session id for CA %d",
+                       d->id);
+    s = d->sessions + session_id;
+    memset(&s->handler, 0, sizeof(s->handler));
+    s->handler.resource = resource;
+    s->ca = d;
+    s->session_id = session_id + 1;
+
+    for (i = 0;
+         i < sizeof(application_handler) / sizeof(application_handler[0]); i++)
+        if (application_handler[i].resource == resource) {
+            memcpy(&s->handler, application_handler + i, sizeof(s->handler));
+            break;
+        }
+
+    return d->sessions + session_id;
+}
+
+ca_session_t *find_session_for_resource(ca_device_t *d, int resource) {
     int i;
     for (i = 1; i < MAX_SESSIONS; i++)
-        if (d->sessions[i].handler &&
-            resource == d->sessions[i].handler->resource)
-            return i;
-    return -1;
+        if (resource == d->sessions[i].handler.resource)
+            return d->sessions + i;
+    return NULL;
 }
 
 int populate_resources(ca_device_t *d, int *resource_ids) {
@@ -2875,7 +2902,7 @@ int ca_write_tpdu(ca_device_t *d, int tag, uint8_t *buf, int len) {
     }
 
     if (tag != T_RCV || buf != NULL) {
-        _hexdump("Writing to CA: ", p_data, i_size);
+        hexdump("Writing to CA: ", p_data, i_size);
     }
 
     int written = write(d->fd, p_data, i_size);
@@ -2908,17 +2935,16 @@ int ca_write_spdu(ca_device_t *d, int session_number, unsigned char tag,
 
     ptr += alen;
 
-    LOG("%s: CA %d, session %d, name %s, write tag %02X, data length %d",
-        __FUNCTION__, d->id, session_number,
-        d->sessions[session_number].handler->name, tag, ptr - pkt);
+    DEBUGM("%s: CA %d, session %d, name %s, write tag %02X, data length %d",
+           __FUNCTION__, d->id, session_number,
+           d->sessions[session_number - 1].handler.name, tag, ptr - pkt);
     if (ptr > pkt)
         _hexdump("Session data: ", pkt, ptr - pkt);
     return ca_write_tpdu(d, T_DATA_LAST, pkt, ptr - pkt);
 }
 
 // write an APDU using the current session
-int ca_write_apdu_session(ca_device_t *d, int session_number, int tag,
-                          const void *data, int len) {
+int ca_write_apdu(ca_session_t *s, int tag, const void *data, int len) {
     unsigned char pkt[len + 3 + 4];
     int l;
 
@@ -2931,15 +2957,11 @@ int ca_write_apdu_session(ca_device_t *d, int session_number, int tag,
         memcpy(pkt + 3 + l, data, len);
     LOG("ca_write_apdu: CA %d, session %d, name %s, write tag %06X, data "
         "length %d",
-        d->id, session_number, d->sessions[session_number].handler->name, tag,
-        len);
-    return ca_write_spdu(d, session_number, ST_SESSION_NUMBER, 0, 0, pkt,
+        s->ca->id, s->session_id, s->handler.name, tag, len);
+    return ca_write_spdu(s->ca, s->session_id, ST_SESSION_NUMBER, 0, 0, pkt,
                          len + 3 + l);
 }
 
-int ca_write_apdu(ca_device_t *d, int resource, const void *data, int len) {
-    return ca_write_apdu_session(d, d->session_number, resource, data, len);
-}
 // reads a TPDU from the CAM. This is called only on DVBCA path
 int ca_read_tpdu(int socket, void *buf, int buf_len, sockets *ss, int *rb) {
     static int i;
@@ -2951,7 +2973,7 @@ int ca_read_tpdu(int socket, void *buf, int buf_len, sockets *ss, int *rb) {
     unsigned char *d;
     len = read(c->fd, data, sizeof(data));
     if (len > 0 && !((len == 6) && data[5] == 0)) {
-        _hexdump("READ TPDU: ", data, len);
+        hexdump("READ TPDU: ", data, len);
     }
     d = data;
     /* taken from the dvb-apps */
@@ -3031,12 +3053,12 @@ int ca_read_tpdu(int socket, void *buf, int buf_len, sockets *ss, int *rb) {
 // application
 // this function reads multiple APDUs for the same session and calls the
 // application handler for each
-int ca_read_apdu(ca_device_t *d, uint8_t *buf, int buf_len) {
+int ca_read_apdu(ca_session_t *session, uint8_t *buf, int buf_len) {
     int i = 0;
     uint8_t *data = buf;
     int llen, len;
     int tag;
-    int session_number = d->session_number;
+    int session_number = session->session_id;
     _hexdump("APDU", buf, buf_len);
     while (i < buf_len) {
         data = buf + i;
@@ -3045,13 +3067,13 @@ int ca_read_apdu(ca_device_t *d, uint8_t *buf, int buf_len) {
         // data points to the actual APDU data
         data += 3 + llen;
         LOG("%s: CA %d, session %d, name %s, read tag %06X, data length %d",
-            __FUNCTION__, d->id, session_number,
-            d->sessions[session_number].handler->name, tag, len);
+            __FUNCTION__, session->ca->id, session_number,
+            session->handler.name, tag, len);
 
         if (len > 0)
-            _hexdump("data: ", data, len);
+            hexdump("data: ", data, len);
 
-        d->sessions[d->session_number].handler->callback(d, tag, data, len);
+        session->handler.callback(session, tag, data, len);
 
         i += 3 + llen + len;
     }
@@ -3075,54 +3097,43 @@ int ca_read(sockets *s) {
     switch (tag) {
     case ST_OPEN_SESSION_REQUEST:
         copy32r(resource_identifier, data, 2);
-
-        for (session_id = 1; session_id < MAX_SESSIONS; session_id++)
-            if (!d->sessions[session_id].handler)
-                break;
+        ca_session_t *session = new_session(d, resource_identifier);
         status = 0;
-        if (session_id == MAX_SESSIONS)
+        if (!session)
             status = 0xF0;
-        else {
-            int k;
-            for (k = 1; k < sizeof(application_handler) /
-                                sizeof(application_handler[0]);
-                 k++)
-                if (application_handler[k].resource == resource_identifier) {
-                    d->sessions[session_id].handler = application_handler + k;
-                    break;
-                }
-            if (!d->sessions[session_id].handler)
-                status = 0xF0;
-        }
-        LOG("Found session_id %d for resource %06X, application %p", session_id,
-            resource_identifier, d->sessions[session_id].handler);
+        LOG("Found session_id %d for resource %06X, application %p",
+            session->session_id, resource_identifier, session->handler);
         pkt[0] = status;
-        memcpy(pkt + 1, data + 2, 4);
-        d->session_number = session_id;
-        ca_write_spdu(d, session_id, ST_OPEN_SESSION_RESPONSE, pkt, 5, NULL, 0);
-        if (!status && d->sessions[session_id].handler->create)
-            d->sessions[session_id].handler->create(d, session_id,
-                                                    resource_identifier);
+        copy32(pkt, 1, resource_identifier);
+        ca_write_spdu(d, session->session_id, ST_OPEN_SESSION_RESPONSE, pkt, 5,
+                      NULL, 0);
+        if (!status && session->handler.create)
+            session->handler.create(session, resource_identifier);
 
         break;
 
     case ST_CLOSE_SESSION_REQUEST:
         // closing the CI session
-        copy16r(resource_identifier, data, 2);
-        int ca_session_number =
+        copy16r(session_id, data, 2);
+        session = d->sessions + session_id - 1;
+        ca_session_t *ca_session =
             find_session_for_resource(d, EN50221_APP_CA_RESOURCEID);
-        if (resource_identifier == ca_session_number) {
+        if (ca_session && session_id == ca_session->session_id) {
             d->ignore_close = 1;
             d->init_ok = 0;
         }
-        LOG("Received close session %s",
-            d->sessions[resource_identifier].handler->name);
-        d->sessions[resource_identifier].handler = NULL;
+        LOG("Received close session %s", session->handler.name);
+        memset(&session->handler, 0, sizeof(session->handler));
+        pkt[0] = 0; // status
+        copy16(pkt, 1, session_id);
+        ca_write_spdu(d, session_id, ST_CLOSE_SESSION_RESPONSE, pkt, 3, NULL,
+                      0);
         break;
     case ST_SESSION_NUMBER:
-        copy16r(d->session_number, data, 1 + llen);
-        LOG("got ST_SESSION_NUMBER for session_id %d", d->session_number);
-        ca_read_apdu(d, data + i, s->rlen - i);
+        copy16r(session_id, data, 1 + llen);
+        LOG("got ST_SESSION_NUMBER for session_id %d", session_id);
+        session = d->sessions + session_id - 1;
+        ca_read_apdu(session, data + i, s->rlen - i);
         break;
     }
 

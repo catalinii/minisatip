@@ -3,7 +3,7 @@
 #include "adapter.h"
 #include "tables.h"
 #define MAX_CA_PMT 4
-#define MAX_SESSIONS 10
+#define MAX_SESSIONS 64
 #define PMT_INVALID -1
 #define PMT_ID_IS_VALID(x) (x > PMT_INVALID)
 
