@@ -24,15 +24,6 @@ alternative source
 #include <time.h>
 #include <unistd.h>
 
-#include <openssl/aes.h>
-#include <openssl/conf.h>
-#include <openssl/err.h>
-#include <openssl/evp.h>
-#include <openssl/pem.h>
-#include <openssl/sha.h>
-#include <openssl/x509.h>
-#include <openssl/x509v3.h>
-
 #include "adapter.h"
 #include "ca.h"
 #include "dvb.h"
@@ -46,8 +37,6 @@ alternative source
 
 #include "utils.h"
 
-#define MAX_ELEMENTS 33
-#define MAX_PAIRS 10
 #define DEFAULT_LOG LOG_DVBCA
 
 #define EN50221_APP_RM_RESOURCEID MKRID(1, 1, 1)
@@ -81,166 +70,18 @@ alternative source
 #define CIPLUS_APP_AMMI_RESOURCEID MKRID(65, 1, 2)
 #define TS103205_APP_AMMI_RESOURCEID MKRID(65, 2, 1)
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-int DH_set0_pqg(DH *dh, BIGNUM *p, BIGNUM *q, BIGNUM *g) {
-    /* If the fields p and g in d are NULL, the corresponding input
-     * parameters MUST be non-NULL.  q may remain NULL.
-     */
-    if ((dh->p == NULL && p == NULL) || (dh->g == NULL && g == NULL))
-        return 0;
-
-    if (p != NULL) {
-        BN_free(dh->p);
-        dh->p = p;
-    }
-    if (q != NULL) {
-        BN_free(dh->q);
-        dh->q = q;
-    }
-    if (g != NULL) {
-        BN_free(dh->g);
-        dh->g = g;
-    }
-
-    if (q != NULL) {
-        dh->length = BN_num_bits(q);
-    }
-
-    return 1;
-}
-
-void DH_get0_key(const DH *dh, const BIGNUM **pub_key,
-                 const BIGNUM **priv_key) {
-    if (pub_key != NULL)
-        *pub_key = dh->pub_key;
-    if (priv_key != NULL)
-        *priv_key = dh->priv_key;
-}
-
-void DH_set_flags(DH *dh, int flags) { dh->flags |= flags; }
-#endif
-
 char ci_name_underscore[128];
 int ci_number;
 int logging = 0;
 char logfile[256];
 int extract_ci_cert = 0;
 
-extern char *listmgmt_str[];
-typedef struct ca_device ca_device_t;
-typedef struct ca_session ca_session_t;
-
 uint32_t datatype_sizes[MAX_ELEMENTS] = {
     0,   50,  0,  0, 0, 8,  8,  0, 0, 0, 0,  0, 32, 256, 256, 0, 0,
     256, 256, 32, 8, 8, 32, 32, 0, 8, 2, 32, 1, 32, 1,   0,   32};
 
-struct element {
-    uint8_t *data;
-    uint32_t size;
-    /* buffer valid */
-    int valid;
-};
-
-struct struct_application_handler {
-    int resource;
-    char *name;
-    int (*callback)(ca_session_t *session, int resource, uint8_t *buffer,
-                    int len);
-    int (*create)(ca_session_t *session, int resource);
-};
-
-struct ca_session {
-    struct struct_application_handler handler;
-    ca_device_t *ca;
-    int session_id;
-};
-struct cc_ctrl_data {
-    /* ci+ credentials */
-    struct element elements[MAX_ELEMENTS];
-
-    /* DHSK */
-    uint8_t dhsk[256];
-
-    /* KS_host */
-    uint8_t ks_host[32];
-
-    /* derived keys */
-    uint8_t sek[16];
-    uint8_t sak[16];
-
-    /* AKH checks - module performs 5 tries to get correct AKH */
-    unsigned int akh_index;
-
-    /* authentication data */
-    uint8_t dh_exp[256];
-
-    /* certificates */
-    struct cert_ctx *cert_ctx;
-
-    /* private key of device-cert */
-    RSA *rsa_device_key;
-};
-
-struct ca_device {
-    int enabled;
-    SCAPMT capmt[MAX_CA_PMT];
-    int max_ca_pmt, multiple_pmt;
-    int fd, sock;
-    int slot_id;
-    char is_active;
-    int id;
-    int ignore_close;
-    int init_ok;
-    uint16_t caid[MAX_CAID];
-    uint32_t caids;
-
-    struct cc_ctrl_data private_data;
-    ca_session_t sessions[MAX_SESSIONS];
-
-    int uri_mask;
-
-    struct list_head *txq;
-    struct list_head *mmiq;
-
-    /*
-     * CAM module info
-     */
-    char ci_name[128];
-
-    char cam_menu_string[64];
-    char pin_str[10];
-    char force_ci;
-    uint8_t key[2][16], iv[2][16];
-    int sp, is_ciplus, parity;
-
-    /*
-     * CAM date time handling
-     */
-    uint8_t datetime_response_interval;
-    time_t datetime_next_send;
-};
-
 int dvbca_id;
 ca_device_t *ca_devices[MAX_ADAPTERS];
-
-struct cert_ctx {
-    X509_STORE *store;
-
-    /* Host */
-    X509 *cust_cert;
-    X509 *device_cert;
-
-    /* Module */
-    X509 *ci_cust_cert;
-    X509 *ci_device_cert;
-};
-
-struct aes_xcbc_mac_ctx {
-    uint8_t K[3][16];
-    uint8_t IV[16];
-    AES_KEY key;
-    int buflen;
-};
 
 typedef enum {
     CIPLUS_DATA_RATE_72_MBPS = 0,
@@ -297,7 +138,6 @@ unsigned char dh_g[256] =
      0x69, 0x87, 0x83, 0x06, 0x51, 0x80, 0xa5, 0x6e, 0xa6, 0x19, 0x7d, 0x3b,
      0xef, 0xfb, 0xe0, 0x4a};
 
-int dvbca_close_device(ca_device_t *c);
 static int ca_send_datetime(ca_device_t *d);
 int populate_resources(ca_device_t *d, int *resource_ids);
 int ca_write_apdu(ca_session_t *s, int resource, const void *data, int len);
@@ -433,305 +273,6 @@ void cert_strings(char *certfile) {
 }
 
 /// END MISC
-
-///// AES_XCBC_MAC
-
-int aes_xcbc_mac_init(struct aes_xcbc_mac_ctx *ctx, const uint8_t *key) {
-    AES_KEY aes_key;
-    int y, x;
-
-    memset(&aes_key, 0, sizeof(aes_key));
-
-    AES_set_encrypt_key(key, 128, &aes_key);
-
-    for (y = 0; y < 3; y++) {
-        for (x = 0; x < 16; x++)
-            ctx->K[y][x] = y + 1;
-        AES_ecb_encrypt(ctx->K[y], ctx->K[y], &aes_key, 1);
-    }
-
-    /* setup K1 */
-    AES_set_encrypt_key(ctx->K[0], 128, &ctx->key);
-
-    memset(ctx->IV, 0, 16);
-    ctx->buflen = 0;
-
-    return 0;
-}
-
-int aes_xcbc_mac_process(struct aes_xcbc_mac_ctx *ctx, const uint8_t *in,
-                         unsigned int len) {
-    while (len) {
-        if (ctx->buflen == 16) {
-            AES_ecb_encrypt(ctx->IV, ctx->IV, &ctx->key, 1);
-            ctx->buflen = 0;
-        }
-        ctx->IV[ctx->buflen++] ^= *in++;
-        --len;
-    }
-
-    return 0;
-}
-
-int aes_xcbc_mac_done(struct aes_xcbc_mac_ctx *ctx, uint8_t *out) {
-    int i;
-
-    if (ctx->buflen == 16) {
-        /* K2 */
-        for (i = 0; i < 16; i++)
-            ctx->IV[i] ^= ctx->K[1][i];
-    } else {
-        ctx->IV[ctx->buflen] ^= 0x80;
-        /* K3 */
-        for (i = 0; i < 16; i++)
-            ctx->IV[i] ^= ctx->K[2][i];
-    }
-
-    AES_ecb_encrypt(ctx->IV, ctx->IV, &ctx->key, 1);
-    memcpy(out, ctx->IV, 16);
-
-    return 0;
-}
-
-////// END_AES_XCBC_MAC
-////// DH_RSA_MISC
-
-static int pkcs_1_mgf1(const uint8_t *seed, unsigned long seedlen,
-                       uint8_t *mask, unsigned long masklen) {
-    unsigned long hLen, x;
-    uint32_t counter;
-    uint8_t *buf;
-
-    /* get hash output size */
-    hLen = 20; /* SHA1 */
-
-    /* allocate memory */
-    buf = malloc(hLen);
-    if (buf == NULL) {
-        LOG("error mem");
-        return -1;
-    }
-
-    /* start counter */
-    counter = 0;
-
-    while (masklen > 0) {
-        /* handle counter */
-        BYTE32(buf, counter);
-        ++counter;
-
-        /* get hash of seed || counter */
-        unsigned char buffer[0x18];
-        memcpy(buffer, seed, seedlen);
-        memcpy(buffer + 0x14, buf, 4);
-        SHA1(buffer, 0x18, buf);
-
-        /* store it */
-        for (x = 0; x < hLen && masklen > 0; x++, masklen--)
-            *mask++ = buf[x];
-    }
-
-    free(buf);
-    return 0;
-}
-
-static int pkcs_1_pss_encode(const uint8_t *msghash, unsigned int msghashlen,
-                             unsigned long saltlen,
-                             unsigned long modulus_bitlen, uint8_t *out,
-                             unsigned int outlen) {
-    unsigned char *DB, *mask, *salt, *hash;
-    unsigned long x, y, hLen, modulus_len;
-    int err = -1;
-    unsigned char *hashbuf;
-    unsigned int hashbuflen;
-
-    hLen = 20; /* SHA1 */
-    modulus_len = (modulus_bitlen >> 3) + (modulus_bitlen & 7 ? 1 : 0);
-
-    /* allocate ram for DB/mask/salt/hash of size modulus_len */
-    DB = malloc(modulus_len);
-    mask = malloc(modulus_len);
-    salt = malloc(modulus_len);
-    hash = malloc(modulus_len);
-
-    hashbuflen = 8 + msghashlen + saltlen;
-    hashbuf = malloc(hashbuflen);
-
-    if (!(DB && mask && salt && hash && hashbuf)) {
-        LOG("out of memory");
-        goto LBL_ERR;
-    }
-
-    /* generate random salt */
-    if (saltlen > 0) {
-        if (get_random(salt, saltlen) != (long)saltlen) {
-            LOG("rnd failed");
-            goto LBL_ERR;
-        }
-    }
-
-    /* M = (eight) 0x00 || msghash || salt, hash = H(M) */
-    memset(hashbuf, 0, 8);
-    memcpy(hashbuf + 8, msghash, msghashlen);
-    memcpy(hashbuf + 8 + msghashlen, salt, saltlen);
-    SHA1(hashbuf, hashbuflen, hash);
-
-    /* generate DB = PS || 0x01 || salt, PS == modulus_len - saltlen - hLen - 2
-     * zero bytes */
-    x = 0;
-    memset(DB + x, 0, modulus_len - saltlen - hLen - 2);
-    x += modulus_len - saltlen - hLen - 2;
-    DB[x++] = 0x01;
-    memcpy(DB + x, salt, saltlen);
-    x += saltlen;
-
-    err = pkcs_1_mgf1(hash, hLen, mask, modulus_len - hLen - 1);
-    if (err)
-        goto LBL_ERR;
-
-    /* xor against DB */
-    for (y = 0; y < (modulus_len - hLen - 1); y++)
-        DB[y] ^= mask[y];
-
-    /* output is DB || hash || 0xBC */
-    if (outlen < modulus_len) {
-        err = -1;
-        LOG("error overflow");
-        goto LBL_ERR;
-    }
-
-    /* DB len = modulus_len - hLen - 1 */
-    y = 0;
-    memcpy(out + y, DB, modulus_len - hLen - 1);
-    y += modulus_len - hLen - 1;
-
-    /* hash */
-    memcpy(out + y, hash, hLen);
-    y += hLen;
-
-    /* 0xBC */
-    out[y] = 0xBC;
-
-    /* now clear the 8*modulus_len - modulus_bitlen most significant bits */
-    out[0] &= 0xFF >> ((modulus_len << 3) - (modulus_bitlen - 1));
-
-    err = 0;
-LBL_ERR:
-    free(hashbuf);
-    free(hash);
-    free(salt);
-    free(mask);
-    free(DB);
-
-    return err;
-}
-
-/* DH */
-
-int dh_gen_exp(uint8_t *dest, int dest_len, uint8_t *dh_g, int dh_g_len,
-               uint8_t *dh_p, int dh_p_len) {
-    DH *dh;
-    BIGNUM *p, *g;
-    const BIGNUM *priv_key;
-    int len;
-    unsigned int gap;
-
-    dh = DH_new();
-
-    p = BN_bin2bn(dh_p, dh_p_len, 0);
-    g = BN_bin2bn(dh_g, dh_g_len, 0);
-    DH_set0_pqg(dh, p, NULL, g);
-    DH_set_flags(dh, DH_FLAG_NO_EXP_CONSTTIME);
-
-    DH_generate_key(dh);
-
-    DH_get0_key(dh, NULL, &priv_key);
-    len = BN_num_bytes(priv_key);
-    if (len > dest_len) {
-        LOG("len > dest_len");
-        return -1;
-    }
-
-    gap = dest_len - len;
-    memset(dest, 0, gap);
-    BN_bn2bin(priv_key, &dest[gap]);
-
-    DH_free(dh);
-
-    return 0;
-}
-
-/* dest = base ^ exp % mod */
-int dh_mod_exp(uint8_t *dest, int dest_len, uint8_t *base, int base_len,
-               uint8_t *mod, int mod_len, uint8_t *exp, int exp_len) {
-    BIGNUM *bn_dest, *bn_base, *bn_exp, *bn_mod;
-    BN_CTX *ctx;
-    int len;
-    unsigned int gap;
-
-    bn_base = BN_bin2bn(base, base_len, NULL);
-    bn_exp = BN_bin2bn(exp, exp_len, NULL);
-    bn_mod = BN_bin2bn(mod, mod_len, NULL);
-    ctx = BN_CTX_new();
-
-    bn_dest = BN_new();
-    BN_mod_exp(bn_dest, bn_base, bn_exp, bn_mod, ctx);
-    BN_CTX_free(ctx);
-
-    len = BN_num_bytes(bn_dest);
-    if (len > dest_len) {
-        LOG("len > dest_len");
-        return -1;
-    }
-
-    gap = dest_len - len;
-    memset(dest, 0, gap);
-    BN_bn2bin(bn_dest, &dest[gap]);
-
-    BN_free(bn_dest);
-    BN_free(bn_mod);
-    BN_free(bn_exp);
-    BN_free(bn_base);
-
-    return 0;
-}
-
-int dh_dhph_signature(uint8_t *out, uint8_t *nonce, uint8_t *dhph, RSA *r) {
-    unsigned char dest[302];
-    uint8_t hash[20];
-    unsigned char dbuf[256];
-
-    dest[0x00] = 0x00; /* version */
-    dest[0x01] = 0x00;
-    dest[0x02] = 0x08; /* len (bits) */
-    dest[0x03] = 0x01; /* version data */
-
-    dest[0x04] = 0x01; /* msg_label */
-    dest[0x05] = 0x00;
-    dest[0x06] = 0x08; /* len (bits) */
-    dest[0x07] = 0x02; /* message data */
-
-    dest[0x08] = 0x02; /* auth_nonce */
-    dest[0x09] = 0x01;
-    dest[0x0a] = 0x00; /* len (bits) */
-    memcpy(&dest[0x0b], nonce, 32);
-
-    dest[0x2b] = 0x04; /* DHPH - DH public key host */
-    dest[0x2c] = 0x08;
-    dest[0x2d] = 0x00; /* len (bits) */
-    memcpy(&dest[0x2e], dhph, 256);
-
-    SHA1(dest, 0x12e, hash);
-
-    if (pkcs_1_pss_encode(hash, 20, 20, 0x800, dbuf, sizeof(dbuf))) {
-        LOG("pss encode failed");
-        return -1;
-    }
-
-    RSA_private_encrypt(sizeof(dbuf), dbuf, out, r, RSA_NO_PADDING);
-
-    return 0;
-}
 
 void ca_request_close(ca_device_t *d) { sockets_force_close(d->sock); }
 
@@ -883,8 +424,14 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
     int listmgmt;
     SPMT *first = NULL;
 
+#ifndef ENIGMA
     if (!d)
         return TABLES_RESULT_ERROR_NORETRY;
+#else
+    if (!d && ca_devices[0])
+        d = ca_devices[0];
+#endif
+
     if (!d->init_ok)
         LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY, "CAM not yet initialized");
 
@@ -1440,149 +987,6 @@ static int sac_crypt(uint8_t *dst, const uint8_t *src, unsigned int len,
     AES_cbc_encrypt(src, dst, len, &key, iv, encrypt);
 
     return 0;
-}
-
-static int verify_cb(int ok, X509_STORE_CTX *ctx) {
-    if (X509_STORE_CTX_get_error(ctx) == X509_V_ERR_CERT_NOT_YET_VALID) {
-        time_t now = time(NULL);
-        struct tm *t = localtime(&now);
-        if (t->tm_year < 2015) {
-            LOG("seems our rtc is wrong - ignore!");
-            return 1;
-        }
-    }
-
-    if (X509_STORE_CTX_get_error(ctx) == X509_V_ERR_CERT_HAS_EXPIRED)
-        return 1;
-    return 0;
-}
-
-static RSA *rsa_privatekey_open(const char *filename) {
-    FILE *fp;
-    RSA *r = NULL;
-
-    fp = fopen(filename, "r");
-    if (!fp) {
-        LOG("can not open %s", filename);
-        return NULL;
-    }
-
-    PEM_read_RSAPrivateKey(fp, &r, NULL, NULL);
-    if (!r) {
-        LOG("read error");
-    }
-
-    fclose(fp);
-
-    return r;
-}
-
-static X509 *certificate_open(const char *filename) {
-    FILE *fp;
-    X509 *cert;
-
-    fp = fopen(filename, "r");
-    if (!fp) {
-        LOG("can not open %s", filename);
-        return NULL;
-    }
-
-    cert = PEM_read_X509(fp, NULL, NULL, NULL);
-    if (!cert) {
-        LOG("can not read cert");
-    }
-
-    fclose(fp);
-
-    return cert;
-}
-
-static int certificate_validate(struct cert_ctx *ctx, X509 *cert) {
-    X509_STORE_CTX *store_ctx;
-    int ret;
-
-    store_ctx = X509_STORE_CTX_new();
-
-    X509_STORE_CTX_init(store_ctx, ctx->store, cert, NULL);
-    X509_STORE_CTX_set_verify_cb(store_ctx, verify_cb);
-    X509_STORE_CTX_set_flags(store_ctx, X509_V_FLAG_IGNORE_CRITICAL);
-
-    ret = X509_verify_cert(store_ctx);
-
-    if (ret != 1) {
-        LOG("%s",
-            X509_verify_cert_error_string(X509_STORE_CTX_get_error(store_ctx)));
-    }
-
-    X509_STORE_CTX_free(store_ctx);
-
-    if (ret == 1)
-        return 1;
-    else
-        return 0;
-}
-
-static X509 *certificate_load_and_check(struct cert_ctx *ctx,
-                                        const char *filename) {
-    X509 *cert;
-
-    if (!ctx->store) {
-        /* we assume this is the first certificate added - so its root-ca */
-        ctx->store = X509_STORE_new();
-        if (!ctx->store) {
-            LOG("can not create cert_store");
-            exit(-1);
-        }
-
-        if (X509_STORE_load_locations(ctx->store, filename, NULL) != 1) {
-            LOG("load of first certificate (root_ca) failed");
-            exit(-1);
-        }
-
-        return NULL;
-    }
-
-    cert = certificate_open(filename);
-    if (!cert) {
-        LOG("can not open certificate %s", filename);
-        return NULL;
-    }
-
-    if (!certificate_validate(ctx, cert)) {
-        LOG("can not vaildate certificate");
-        X509_free(cert);
-        return NULL;
-    }
-
-    /* push into store - create a chain */
-    if (X509_STORE_load_locations(ctx->store, filename, NULL) != 1) {
-        LOG("load of certificate failed");
-        X509_free(cert);
-        return NULL;
-    }
-
-    return cert;
-}
-
-static X509 *certificate_import_and_check(struct cert_ctx *ctx,
-                                          const uint8_t *data, int len) {
-    X509 *cert;
-
-    cert = d2i_X509(NULL, &data, len);
-    if (!cert) {
-        LOG("can not read certificate");
-        return NULL;
-    }
-
-    if (!certificate_validate(ctx, cert)) {
-        LOG("can not vaildate certificate");
-        X509_free(cert);
-        return NULL;
-    }
-
-    X509_STORE_add_cert(ctx->store, cert);
-
-    return cert;
 }
 
 static X509 *import_ci_certificates(struct cc_ctrl_data *cc_data,
@@ -2193,7 +1597,7 @@ by the CICAM */
 static int CIPLUS_APP_CC_handler(ca_session_t *session, int tag, uint8_t *data,
                                  int len) {
     LOG("RECV ciplus cc msg CAM%i, session_num %u, tag %x len %i dt_id %i",
-        session->ca->id, session->session_id, tag, len, data[2]);
+        session->ca->id, session->session_number, tag, len, data[2]);
     // printf(" RECV DATA:   ");
     // hexdump(data,len<33?len:32);
 
@@ -2226,7 +1630,6 @@ static int CIPLUS_APP_CC_handler(ca_session_t *session, int tag, uint8_t *data,
 
 static int CIPLUS_APP_LANG_handler(ca_session_t *session, int tag,
                                    uint8_t *data, int data_length) {
-    LOG("host_lang&country_receive");
     //        if (data_length)
     //                hexdump(data, data_length);
 
@@ -2381,9 +1784,6 @@ static int CIPLUS_APP_OPRF_handler(ca_session_t *session, int tag,
 static int CIPLUS_APP_UPGR_handler(ca_session_t *session, int tag,
                                    uint8_t *data, int data_length) {
     ca_device_t *d = session->ca;
-    int fd = d->fd;
-    ca_slot_info_t info;
-
     const uint8_t answer = 0x00; // 0x00 - mean no upgrade, 0x01 - upgrade,
                                  // 0x02 - ask user by mmi
 
@@ -2407,10 +1807,7 @@ static int CIPLUS_APP_UPGR_handler(ca_session_t *session, int tag,
         LOG("CI+ CA%i Firmware Upgrade Complete (reset status %i)", d->id,
             data[4]);
         if (data[4] < 2) { // reset requred
-            if (ioctl(fd, CA_RESET, &info))
-                LOG_AND_RETURN(0, "%s: Could not reset ca %d", __FUNCTION__,
-                               d->id);
-            return 1;
+            ca_request_close(d);
         }
         break;
     }
@@ -2442,7 +1839,7 @@ static int ca_send_datetime(ca_device_t *d) {
         ca_write_apdu(s, TAG_DATE_TIME, msg, 5);
     d->datetime_next_send = time(NULL) + d->datetime_response_interval;
     LOG("Sending time to CA %d to session %d, response interval: %d", d->id,
-        s->session_id, d->datetime_response_interval)
+        s->session_number, d->datetime_response_interval)
     return 0;
 }
 
@@ -2497,7 +1894,7 @@ static int CIPLUS_APP_AI_handler(ca_session_t *session, int resource_id,
                                  uint8_t *data, int data_length) {
     ca_device_t *d = session->ca;
     LOG("RECV ciplus AI msg CA %u, session_num %u, resource_id %x", d->id,
-        session->session_id, resource_id);
+        session->session_number, resource_id);
 
     switch (resource_id) {
     case CIPLUS_TAG_APP_INFO:
@@ -2529,8 +1926,18 @@ static int CIPLUS_APP_AI_handler(ca_session_t *session, int resource_id,
 }
 
 static int APP_CA_create(ca_session_t *session, int resource_id) {
+    ca_device_t *d = session->ca;
     LOG("%s", __FUNCTION__);
     ca_write_apdu(session, TAG_CA_INFO_ENQUIRY, NULL, 0);
+    d->init_ok = 1;
+    return 0;
+}
+
+static int APP_CA_close(ca_session_t *session) {
+    ca_device_t *d = session->ca;
+    LOG("%s", __FUNCTION__);
+    d->init_ok = 0;
+    d->is_ciplus = 0;
     return 0;
 }
 
@@ -2608,7 +2015,7 @@ int APP_MMI_handler(ca_session_t *session, int resource, uint8_t *buffer,
 
             LOG("mmi display ctl cb received for CA %u session_num %u "
                 "cmd_id 0x%02x mmi_mode %u",
-                d->id, session->session_id, cmd_id, mmi_mode);
+                d->id, session->session_number, cmd_id, mmi_mode);
             uint8_t data[] = {MMI_DISPLAY_REPLY_ID_MMI_MODE_ACK, mmi_mode};
             ca_write_apdu(session, TAG_DISPLAY_REPLY, data, sizeof(data));
         }
@@ -2650,15 +2057,16 @@ int APP_MMI_handler(ca_session_t *session, int resource, uint8_t *buffer,
             n = 0;
         else
             n++;
-        LOG("MMI menu from CAM in the slot %u: %d items", d->id, n);
+        LOG("CA %d ======= MMI menu =======", d->id, n);
         for (i = 0; i < (n + 3); ++i) {
             int textlen;
             if ((data + 3) > max)
                 break;
-            DEBUGM("[%d] text tag: %02x %02x %02x", data[0], data[1], data[2]);
+            DEBUGM("[%d] text tag: %02x %02x %02x", i, data[0], data[1],
+                   data[2]);
             data += 3;
             data += asn_1_decode(&textlen, data);
-            DEBUGM("[%d] %d bytes text", textlen);
+            DEBUGM("[%d] %d bytes text", i, textlen);
             if ((data + textlen) > max)
                 break;
             char str[textlen + 1];
@@ -2667,6 +2075,7 @@ int APP_MMI_handler(ca_session_t *session, int resource, uint8_t *buffer,
             LOG("[UI %d] %s", i, str);
             data += textlen;
         }
+        LOG("======================")
         ca_app_mmi_menu_answ(session, 0x01);
         /* cancel menu */
         ca_app_mmi_close(session, MMI_CLOSE_MMI_CMD_ID_IMMEDIATE);
@@ -2700,7 +2109,9 @@ static int APP_LANG_create(ca_session_t *session, int resource_id) {
 }
 
 #define DEFAPP(a, b, c)                                                        \
-    { .resource = a, .name = #a, .callback = b, .create = c }
+    { .resource = a, .name = #a, .callback = b, .create = c, .close = NULL }
+#define DEFAPP4(a, b, c, d)                                                    \
+    { .resource = a, .name = #a, .callback = b, .create = c, .close = d }
 // this contains all known resource ids so we can see if the cam asks for
 // something exotic
 struct struct_application_handler application_handler[] = {
@@ -2712,7 +2123,8 @@ struct struct_application_handler application_handler[] = {
     DEFAPP(TS101699_APP_AI_RESOURCEID, CIPLUS_APP_AI_handler, APP_AI_create),
     DEFAPP(CIPLUS_APP_AI_RESOURCEID, CIPLUS_APP_AI_handler, APP_AI_create),
     // Conditional Access Support
-    DEFAPP(EN50221_APP_CA_RESOURCEID, APP_CA_handler, APP_CA_create),
+    DEFAPP4(EN50221_APP_CA_RESOURCEID, APP_CA_handler, APP_CA_create,
+            APP_CA_close),
     // TS103205_APP_CA_MULTISTREAM_RESOURCEID, // Multi-stream
     // Host Control - Does not seem like other apps are annoucing it
     DEFAPP(EN50221_APP_DVB_RESOURCEID, APP_empty, NULL),
@@ -2754,19 +2166,19 @@ struct struct_application_handler application_handler[] = {
 };
 
 ca_session_t *new_session(ca_device_t *d, int resource) {
-    int i, session_id;
+    int i, session_number;
     ca_session_t *s;
-    for (session_id = 0; session_id < MAX_SESSIONS; session_id++)
-        if (!d->sessions[session_id].handler.resource)
+    for (session_number = 0; session_number < MAX_SESSIONS; session_number++)
+        if (!d->sessions[session_number].handler.resource)
             break;
-    if (session_id == MAX_SESSIONS)
+    if (session_number == MAX_SESSIONS)
         LOG_AND_RETURN(NULL, "Could not allocate a new session id for CA %d",
                        d->id);
-    s = d->sessions + session_id;
+    s = d->sessions + session_number;
     memset(&s->handler, 0, sizeof(s->handler));
     s->handler.resource = resource;
     s->ca = d;
-    s->session_id = session_id + 1;
+    s->session_number = session_number + 1;
 
     for (i = 0;
          i < sizeof(application_handler) / sizeof(application_handler[0]); i++)
@@ -2775,7 +2187,7 @@ ca_session_t *new_session(ca_device_t *d, int resource) {
             break;
         }
 
-    return d->sessions + session_id;
+    return d->sessions + session_number;
 }
 
 ca_session_t *find_session_for_resource(ca_device_t *d, int resource) {
@@ -2847,18 +2259,19 @@ int ca_write_tpdu(ca_device_t *d, int tag, uint8_t *buf, int len) {
 
     int written = write(d->fd, buf, len);
     if (written != len) {
-        LOG("incomplete write to CA %d fd %d, expected %d got %d, errno %d",
-            d->id, d->fd, len, written, errno);
+        LOG("incomplete write to CA %d fd %d, expected %d got %d, errno %d %s",
+            d->id, d->fd, len, written, errno, strerror(errno));
         return 1;
     }
     return 0;
 #else
     uint8_t p_data[10 + len];
     int i_size;
-    int connection_id = d->slot_id + 1;
+    int slot_id = 0;
+    int connection_id = slot_id + 1;
 
     i_size = 0;
-    p_data[0] = d->slot_id;
+    p_data[0] = slot_id;
     p_data[1] = connection_id;
     p_data[2] = tag;
 
@@ -2907,8 +2320,8 @@ int ca_write_tpdu(ca_device_t *d, int tag, uint8_t *buf, int len) {
 
     int written = write(d->fd, p_data, i_size);
     if (written != i_size) {
-        LOG("incomplete write to CA %d fd %d, expected %d got %d, errno %d",
-            d->id, d->fd, i_size, written, errno);
+        LOG("incomplete write to CA %d fd %d, expected %d got %d, errno %d %s",
+            d->id, d->fd, i_size, written, errno, strerror(errno));
         return 1;
     }
     return 0;
@@ -2939,7 +2352,7 @@ int ca_write_spdu(ca_device_t *d, int session_number, unsigned char tag,
            __FUNCTION__, d->id, session_number,
            d->sessions[session_number - 1].handler.name, tag, ptr - pkt);
     if (ptr > pkt)
-        _hexdump("Session data: ", pkt, ptr - pkt);
+        _hexdump("SPDU data: ", pkt, ptr - pkt);
     return ca_write_tpdu(d, T_DATA_LAST, pkt, ptr - pkt);
 }
 
@@ -2957,8 +2370,8 @@ int ca_write_apdu(ca_session_t *s, int tag, const void *data, int len) {
         memcpy(pkt + 3 + l, data, len);
     LOG("ca_write_apdu: CA %d, session %d, name %s, write tag %06X, data "
         "length %d",
-        s->ca->id, s->session_id, s->handler.name, tag, len);
-    return ca_write_spdu(s->ca, s->session_id, ST_SESSION_NUMBER, 0, 0, pkt,
+        s->ca->id, s->session_number, s->handler.name, tag, len);
+    return ca_write_spdu(s->ca, s->session_number, ST_SESSION_NUMBER, 0, 0, pkt,
                          len + 3 + l);
 }
 
@@ -3010,8 +2423,9 @@ int ca_read_tpdu(int socket, void *buf, int buf_len, sockets *ss, int *rb) {
 
         switch (tpdu_tag) {
         case T_CTC_REPLY:
-            LOG("Got CTC Replay (slot %d)", c->slot_id);
+            DEBUGM("Got CTC Replay (CA %d)", c->id);
             ca_write_tpdu(c, T_DATA_LAST, NULL, 0);
+            c->is_active = 1;
 
             break;
         case T_DELETE_TC:
@@ -3033,14 +2447,13 @@ int ca_read_tpdu(int socket, void *buf, int buf_len, sockets *ss, int *rb) {
             break;
         case T_SB: {
             if (d[0] & 0x80) {
-                LOGM("->data ready (%d)\n", c->slot_id);
                 // send the RCV and ask for the data
                 ca_write_tpdu(c, T_RCV, NULL, 0);
             }
             break;
         }
         default:
-            printf("unhandled tpdu_tag 0x%0x\n", tpdu_tag);
+            LOG("unhandled tpdu_tag 0x%0x\n", tpdu_tag);
         }
         // skip over the consumed data
         d += asn_data_length;
@@ -3049,7 +2462,7 @@ int ca_read_tpdu(int socket, void *buf, int buf_len, sockets *ss, int *rb) {
     return 1;
 }
 
-// Session data contains the application data and the session_id for that
+// Session data contains the application data and the session_number for that
 // application
 // this function reads multiple APDUs for the same session and calls the
 // application handler for each
@@ -3058,7 +2471,7 @@ int ca_read_apdu(ca_session_t *session, uint8_t *buf, int buf_len) {
     uint8_t *data = buf;
     int llen, len;
     int tag;
-    int session_number = session->session_id;
+    int session_number = session->session_number;
     _hexdump("APDU", buf, buf_len);
     while (i < buf_len) {
         data = buf + i;
@@ -3085,7 +2498,7 @@ int ca_read_apdu(ca_session_t *session, uint8_t *buf, int buf_len) {
 int ca_read(sockets *s) {
     unsigned char *data = s->buf;
     uint32_t resource_identifier;
-    int session_id = -1;
+    int session_number = -1;
     ca_device_t *d = ca_devices[s->sid];
     char pkt[6];
     int len, status = 0;
@@ -3093,6 +2506,8 @@ int ca_read(sockets *s) {
     int tag = data[0];
     int llen = asn_1_decode(&len, data + 1);
     int i = 1 + llen + len;
+    // prevent device close
+    d->ignore_close = 1;
 
     switch (tag) {
     case ST_OPEN_SESSION_REQUEST:
@@ -3101,12 +2516,13 @@ int ca_read(sockets *s) {
         status = 0;
         if (!session)
             status = 0xF0;
-        LOG("Found session_id %d for resource %06X, application %p",
-            session->session_id, resource_identifier, session->handler);
+        LOG("Found session_number %d for resource %06X, name %s, status %02X",
+            session->session_number, resource_identifier, session->handler.name,
+            status);
         pkt[0] = status;
         copy32(pkt, 1, resource_identifier);
-        ca_write_spdu(d, session->session_id, ST_OPEN_SESSION_RESPONSE, pkt, 5,
-                      NULL, 0);
+        ca_write_spdu(d, session->session_number, ST_OPEN_SESSION_RESPONSE, pkt,
+                      5, NULL, 0);
         if (!status && session->handler.create)
             session->handler.create(session, resource_identifier);
 
@@ -3114,26 +2530,27 @@ int ca_read(sockets *s) {
 
     case ST_CLOSE_SESSION_REQUEST:
         // closing the CI session
-        copy16r(session_id, data, 2);
-        session = d->sessions + session_id - 1;
-        ca_session_t *ca_session =
-            find_session_for_resource(d, EN50221_APP_CA_RESOURCEID);
-        if (ca_session && session_id == ca_session->session_id) {
-            d->ignore_close = 1;
-            d->init_ok = 0;
-        }
+        copy16r(session_number, data, 2);
+        session = d->sessions + session_number - 1;
         LOG("Received close session %s", session->handler.name);
+        if (session->handler.close)
+            session->handler.close(session);
+
         memset(&session->handler, 0, sizeof(session->handler));
         pkt[0] = 0; // status
-        copy16(pkt, 1, session_id);
-        ca_write_spdu(d, session_id, ST_CLOSE_SESSION_RESPONSE, pkt, 3, NULL,
-                      0);
+        copy16(pkt, 1, session_number);
+        ca_write_spdu(d, session_number, ST_CLOSE_SESSION_RESPONSE, pkt, 3,
+                      NULL, 0);
         break;
     case ST_SESSION_NUMBER:
-        copy16r(session_id, data, 1 + llen);
-        LOG("got ST_SESSION_NUMBER for session_id %d", session_id);
-        session = d->sessions + session_id - 1;
-        ca_read_apdu(session, data + i, s->rlen - i);
+        copy16r(session_number, data, 1 + llen);
+        DEBUGM("got ST_SESSION_NUMBER for session_number %d", session_number);
+        session = d->sessions + session_number - 1;
+        if (session->handler.resource == 0) {
+            LOG("CA %d: session %d is not registered", d->id, session_number)
+        } else {
+            ca_read_apdu(session, data + i, s->rlen - i);
+        }
         break;
     }
 
@@ -3143,7 +2560,13 @@ int ca_read(sockets *s) {
 }
 
 int ca_close(sockets *s) {
-    LOG("requested ca close for sock %d, sock_id %d", s->id, s->sock);
+    ca_device_t *c = ca_devices[s->sid];
+    LOG("closing CA device %d, fd %d", c->id, c->fd);
+    c->fd = -1;
+    c->is_active = 0;
+    // cleanup
+    EVP_cleanup();
+    ERR_free_strings();
     return 0;
 }
 
@@ -3155,7 +2578,11 @@ int ca_timeout(sockets *s) {
     }
 #ifndef ENIGMA
     else {
-        ca_write_tpdu(d, T_RCV, NULL, 0);
+        if (d->is_active == 0) {
+            ca_write_tpdu(d, T_CREATE_TC, NULL, 0);
+        } else {
+            ca_write_tpdu(d, T_RCV, NULL, 0);
+        }
     }
 #endif
     return 0;
@@ -3182,7 +2609,6 @@ int ca_read_enigma(int socket, void *buf, int len, sockets *ss, int *rb) {
 // initializes the enigma CA
 int ca_init_enigma(ca_device_t *d) {
     int fd = d->fd;
-    d->is_ciplus = 0;
 
     ioctl(fd, 0);
 
@@ -3192,6 +2618,8 @@ int ca_init_enigma(ca_device_t *d) {
         LOG_AND_RETURN(0, "%s: sockets_add failed", __FUNCTION__);
     sockets_timeout(d->sock, 1000);
     sockets_setread(d->sock, ca_read_enigma);
+    LOG("initializing CA %d, fd %d sock %d", d->id, fd, d->sock);
+
     return 0;
 }
 
@@ -3201,8 +2629,6 @@ int ca_init_en50221(ca_device_t *d) {
     int64_t st = getTick();
     __attribute__((unused)) int tries = 800; // wait up to 8s for the CAM
     int fd = d->fd;
-    d->slot_id = -1;
-    d->is_ciplus = 0;
     memset(&info, 0, sizeof(info));
     if (ioctl(fd, CA_RESET, &info))
         LOG_AND_RETURN(0, "%s: Could not reset ca %d", __FUNCTION__, d->id);
@@ -3220,7 +2646,7 @@ int ca_init_en50221(ca_device_t *d) {
         LOG_AND_RETURN(0, "%s: Could not get info2 for ca %d, tries %d",
                        __FUNCTION__, d->id, tries);
 
-    LOG("initializing CA, fd %d type %d flags 0x%x, after %jd ms", fd,
+    LOG("initializing CA %d, fd %d type %d flags 0x%x, after %jd ms", d->id, fd,
         info.type, info.flags, (getTick() - st));
 
     if (info.type != CA_CI_LINK) {
@@ -3232,13 +2658,14 @@ int ca_init_en50221(ca_device_t *d) {
         LOG("CA module not present or not ready");
         goto fail;
     }
-    d->slot_id = 0;
     ca_write_tpdu(d, T_CREATE_TC, NULL, 0);
 
     d->sock = sockets_add(fd, NULL, d->id, TYPE_TCP, (socket_action)ca_read,
                           (socket_action)ca_close, (socket_action)ca_timeout);
-    if (d->sock < 0)
-        LOG_AND_RETURN(0, "%s: sockets_add failed", __FUNCTION__);
+    if (d->sock < 0) {
+        LOG("%s: sockets_add failed", __FUNCTION__);
+        goto fail;
+    }
     sockets_timeout(d->sock, 1000);
     sockets_setread(d->sock, ca_read_tpdu);
 
@@ -3282,7 +2709,7 @@ int dvbca_init_dev(adapter *ad) {
     if (ad->type != ADAPTER_DVB && ad->type != ADAPTER_CI)
         return TABLES_RESULT_ERROR_NORETRY;
 #ifdef ENIGMA
-    sprintf(ca_dev_path, "/dev/ci%d", ad->pa);
+    sprintf(ca_dev_path, "/dev/ci%d", ad->id);
 #else
     sprintf(ca_dev_path, "/dev/dvb/adapter%d/ca%d", ad->pa, ad->fn);
 #endif
@@ -3300,13 +2727,12 @@ int dvbca_init_dev(adapter *ad) {
                            ad->id);
         }
     }
-    c->enabled = 1;
     c->ignore_close = 0;
     c->fd = fd;
     c->id = ad->id;
-    c->slot_id = ad->pa;
     c->init_ok = 0;
     c->is_active = 0;
+    c->enabled = 1;
 
     memset(c->capmt, -1, sizeof(c->capmt));
     memset(c->key[0], 0, sizeof(c->key[0]));
@@ -3324,28 +2750,19 @@ int dvbca_init_dev(adapter *ad) {
 #else
     if (ca_init_en50221(c)) {
 #endif
-        dvbca_close_device(c);
+        sockets_del(c->sock);
         return TABLES_RESULT_ERROR_NORETRY;
     }
+    set_socket_thread(c->sock, ad->thread);
     return TABLES_RESULT_OK;
 }
 
-int dvbca_close_device(ca_device_t *c) {
-    LOG("closing CA device %d, fd %d", c->id, c->fd);
-    c->enabled = 0;
-    // cleanup
-    if (c->fd >= 0)
-        close(c->fd);
-    EVP_cleanup();
-    ERR_free_strings();
-    return 0;
-}
 int dvbca_close_dev(adapter *ad) {
     ca_device_t *c = ca_devices[ad->id];
     if (c && c->enabled &&
         !c->ignore_close) // do not close the CA unless in a bad state
     {
-        dvbca_close_device(c);
+        sockets_del(c->sock);
     }
     return 1;
 }
@@ -3354,17 +2771,33 @@ int dvbca_close() {
     int i;
     for (i = 0; i < MAX_ADAPTERS; i++)
         if (ca_devices[i] && ca_devices[i]->enabled) {
-            dvbca_close_device(ca_devices[i]);
+            sockets_del(ca_devices[i]->sock);
         }
     return 0;
 }
 
 SCA_op dvbca;
 
-void dvbca_init() // you can search the devices here and fill the ca_devices,
-                  // then open them here (for example independent CA devices),
-                  // or use dvbca_init_dev to open them (like in this module)
+int ca_reconnect(void *arg) {
+    int i;
+    for (i = 0; i < MAX_ADAPTERS; i++)
+        if (ca_devices[i] && ca_devices[i]->enabled &&
+            ca_devices[i]->fd == -1) {
+            LOG("Trying to reconnect to CA %d", i);
+            adapter *a = get_adapter(i);
+            if (a)
+                dvbca_init_dev(a);
+        }
+    return 0;
+}
+
+void dvbca_init() // you can search the devices here and fill the
+                  // ca_devices, then open them here (for example
+                  // independent CA devices), or use dvbca_init_dev to open
+                  // them (like in this module)
 {
+    int poller_sock;
+    extern int sock_signal;
     memset(&dvbca, 0, sizeof(dvbca));
     dvbca.ca_init_dev = dvbca_init_dev;
     dvbca.ca_close_dev = dvbca_close_dev;
@@ -3373,6 +2806,10 @@ void dvbca_init() // you can search the devices here and fill the ca_devices,
     dvbca.ca_close_ca = dvbca_close;
     dvbca.ca_ts = NULL; // dvbca_ts;
     dvbca_id = add_ca(&dvbca, 0xFFFFFFFF);
+    poller_sock = sockets_add(SOCK_TIMEOUT, NULL, -1, TYPE_UDP, NULL, NULL,
+                              (socket_action)ca_reconnect);
+    sockets_timeout(poller_sock, 1000); // try to connect every 1s
+    set_socket_thread(poller_sock, get_socket_thread(sock_signal));
 }
 
 char *get_ca_pin(int i) {

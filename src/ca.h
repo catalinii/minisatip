@@ -1,11 +1,14 @@
 #ifndef CA_H
 #define CA_H
 #include "adapter.h"
+#include "aes.h"
 #include "tables.h"
 #define MAX_CA_PMT 4
 #define MAX_SESSIONS 64
 #define PMT_INVALID -1
 #define PMT_ID_IS_VALID(x) (x > PMT_INVALID)
+#define MAX_ELEMENTS 33
+#define MAX_PAIRS 10
 
 #define SIZE_INDICATOR 0x80
 #define T_SB 0x80
@@ -105,6 +108,94 @@ typedef struct ca_pmt {
     int version;
     int sid;
 } SCAPMT;
+
+extern char *listmgmt_str[];
+typedef struct ca_device ca_device_t;
+typedef struct ca_session ca_session_t;
+
+struct struct_application_handler {
+    int resource;
+    char *name;
+    int (*callback)(ca_session_t *session, int resource, uint8_t *buffer,
+                    int len);
+    int (*create)(ca_session_t *session, int resource);
+    int (*close)(ca_session_t *session);
+};
+
+struct ca_session {
+    struct struct_application_handler handler;
+    ca_device_t *ca;
+    int session_number;
+};
+
+struct element {
+    uint8_t *data;
+    uint32_t size;
+    /* buffer valid */
+    int valid;
+};
+
+struct cc_ctrl_data {
+    /* ci+ credentials */
+    struct element elements[MAX_ELEMENTS];
+
+    /* DHSK */
+    uint8_t dhsk[256];
+
+    /* KS_host */
+    uint8_t ks_host[32];
+
+    /* derived keys */
+    uint8_t sek[16];
+    uint8_t sak[16];
+
+    /* AKH checks - module performs 5 tries to get correct AKH */
+    unsigned int akh_index;
+
+    /* authentication data */
+    uint8_t dh_exp[256];
+
+    /* certificates */
+    struct cert_ctx *cert_ctx;
+
+    /* private key of device-cert */
+    RSA *rsa_device_key;
+};
+
+struct ca_device {
+    int enabled;
+    SCAPMT capmt[MAX_CA_PMT];
+    int max_ca_pmt, multiple_pmt;
+    int fd, sock;
+    char is_active;
+    int id;
+    int ignore_close;
+    int init_ok;
+    uint16_t caid[MAX_CAID];
+    uint32_t caids;
+
+    struct cc_ctrl_data private_data;
+    ca_session_t sessions[MAX_SESSIONS];
+
+    int uri_mask;
+
+    /*
+     * CAM module info
+     */
+    char ci_name[128];
+
+    char cam_menu_string[64];
+    char pin_str[10];
+    char force_ci;
+    uint8_t key[2][16], iv[2][16];
+    int sp, is_ciplus, parity;
+
+    /*
+     * CAM date time handling
+     */
+    uint8_t datetime_response_interval;
+    time_t datetime_next_send;
+};
 
 int ca_init(ca_device_t *d);
 void dvbca_init();
