@@ -117,13 +117,20 @@ void dvbaes_cbc_decrypt_stream(SCW *cw, SPMT_batch *batch, int batch_len) {
         //		memset(ciphertext, 0, sizeof(ciphertext));
         //		memcpy(ciphertext, batch[i].data, batch[i].len);
         len = (batch[i].len / 16 + 1) * 16;
-        len = decrypt(cw->key, /*ciphertext*/ batch[i].data, len, cw->cw,
-                      cw->iv, decryptedtext);
-        if (len > batch[i].len)
-            len = batch[i].len;
+        if (len > sizeof(decryptedtext)) {
+            LOG("WARNING: requested AES decryption of a large payload with "
+                "size %d",
+                len);
+            len = sizeof(decryptedtext) / 16 * 16;
+        }
+        LOG("len %d", len);
+        int new_len = decrypt(cw->key, /*ciphertext*/ batch[i].data, len,
+                              cw->cw, cw->iv, decryptedtext);
+        if (new_len > batch[i].len)
+            new_len = batch[i].len;
 
-        if (len > 0)
-            memcpy(batch[i].data, decryptedtext, len);
+        if (new_len > 0)
+            memcpy(batch[i].data, decryptedtext, new_len);
     }
 }
 

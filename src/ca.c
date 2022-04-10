@@ -278,7 +278,7 @@ void ca_request_close(ca_device_t *d) { sockets_force_close(d->sock); }
 
 int is_ca_initializing(int i) {
     if (i >= 0 && i < MAX_ADAPTERS && ca_devices[i] && ca_devices[i]->enabled &&
-        !ca_devices[i]->init_ok)
+        ca_devices[i]->state != CA_STATE_INITIALIZED)
         return 1;
     return 0;
 }
@@ -432,7 +432,7 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
         d = ca_devices[0];
 #endif
 
-    if (!d->init_ok)
+    if (d->state != CA_STATE_INITIALIZED)
         LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY, "CAM not yet initialized");
 
     SCAPMT *capmt = add_pmt_to_capmt(d, spmt, d->multiple_pmt);
@@ -1270,8 +1270,6 @@ static void check_new_key(ca_device_t *d, struct cc_ctrl_data *cc_data) {
 
     send_cw_to_all_pmts(d, slot);
 
-    d->is_ciplus = 1;
-
     /* reset */
     element_invalidate(cc_data, 12);
     element_invalidate(cc_data, 28);
@@ -1926,18 +1924,13 @@ static int CIPLUS_APP_AI_handler(ca_session_t *session, int resource_id,
 }
 
 static int APP_CA_create(ca_session_t *session, int resource_id) {
-    ca_device_t *d = session->ca;
-    LOG("%s", __FUNCTION__);
     ca_write_apdu(session, TAG_CA_INFO_ENQUIRY, NULL, 0);
-    d->init_ok = 1;
     return 0;
 }
 
 static int APP_CA_close(ca_session_t *session) {
     ca_device_t *d = session->ca;
-    LOG("%s", __FUNCTION__);
-    d->init_ok = 0;
-    d->is_ciplus = 0;
+    d->state = CA_STATE_ACTIVE;
     return 0;
 }
 
@@ -1948,7 +1941,7 @@ int APP_CA_handler(ca_session_t *session, int resource, uint8_t *data,
 
     switch (resource) {
     case TAG_CA_INFO:
-        d->init_ok = 1;
+        d->state = CA_STATE_INITIALIZED;
         if (d->caids) {
             data = (uint8_t *)d->caid;
             caid_count = d->caids;
@@ -2425,7 +2418,6 @@ int ca_read_tpdu(int socket, void *buf, int buf_len, sockets *ss, int *rb) {
         case T_CTC_REPLY:
             DEBUGM("Got CTC Replay (CA %d)", c->id);
             ca_write_tpdu(c, T_DATA_LAST, NULL, 0);
-            c->is_active = 1;
 
             break;
         case T_DELETE_TC:
@@ -2507,7 +2499,8 @@ int ca_read(sockets *s) {
     int llen = asn_1_decode(&len, data + 1);
     int i = 1 + llen + len;
     // prevent device close
-    d->ignore_close = 1;
+    if (d->state == CA_STATE_INACTIVE)
+        d->state = CA_STATE_ACTIVE;
 
     switch (tag) {
     case ST_OPEN_SESSION_REQUEST:
@@ -2563,7 +2556,7 @@ int ca_close(sockets *s) {
     ca_device_t *c = ca_devices[s->sid];
     LOG("closing CA device %d, fd %d", c->id, c->fd);
     c->fd = -1;
-    c->is_active = 0;
+    c->state = CA_STATE_INACTIVE;
     // cleanup
     EVP_cleanup();
     ERR_free_strings();
@@ -2578,7 +2571,7 @@ int ca_timeout(sockets *s) {
     }
 #ifndef ENIGMA
     else {
-        if (d->is_active == 0) {
+        if (d->state == CA_STATE_INACTIVE) {
             ca_write_tpdu(d, T_CREATE_TC, NULL, 0);
         } else {
             ca_write_tpdu(d, T_RCV, NULL, 0);
@@ -2727,11 +2720,9 @@ int dvbca_init_dev(adapter *ad) {
                            ad->id);
         }
     }
-    c->ignore_close = 0;
     c->fd = fd;
     c->id = ad->id;
-    c->init_ok = 0;
-    c->is_active = 0;
+    c->state = CA_STATE_INACTIVE;
     c->enabled = 1;
 
     memset(c->capmt, -1, sizeof(c->capmt));
@@ -2760,7 +2751,7 @@ int dvbca_init_dev(adapter *ad) {
 int dvbca_close_dev(adapter *ad) {
     ca_device_t *c = ca_devices[ad->id];
     if (c && c->enabled &&
-        !c->ignore_close) // do not close the CA unless in a bad state
+        c->state == CA_STATE_INACTIVE) // do not close the CA unless in a bad state
     {
         sockets_del(c->sock);
     }

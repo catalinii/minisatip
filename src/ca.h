@@ -100,6 +100,11 @@
 #define MAKE_SID_FOR_CA(id, idx) (id * 100 + idx)
 #define MKRID(CLASS, TYPE, VERSION)                                            \
     ((((CLASS)&0xffff) << 16) | (((TYPE)&0x3ff) << 6) | ((VERSION)&0x3f))
+
+#define CA_STATE_INACTIVE 0
+#define CA_STATE_ACTIVE 1
+#define CA_STATE_INITIALIZED 2
+
 // Contains informations needed to send a CAPMT
 // If multiple_pmt is 0, other_id will be PMT_INVALID
 typedef struct ca_pmt {
@@ -167,10 +172,8 @@ struct ca_device {
     SCAPMT capmt[MAX_CA_PMT];
     int max_ca_pmt, multiple_pmt;
     int fd, sock;
-    char is_active;
     int id;
-    int ignore_close;
-    int init_ok;
+    int state;
     uint16_t caid[MAX_CAID];
     uint32_t caids;
 
@@ -188,7 +191,7 @@ struct ca_device {
     char pin_str[10];
     char force_ci;
     uint8_t key[2][16], iv[2][16];
-    int sp, is_ciplus, parity;
+    int sp, parity;
 
     /*
      * CAM date time handling
