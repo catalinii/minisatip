@@ -146,27 +146,6 @@ int asn_1_decode(int *length, unsigned char *asn_1_array);
 
 ////// MISC.C
 
-int get_random(unsigned char *dest, int len) {
-    int fd;
-    char *urnd = "/dev/urandom";
-
-    fd = open(urnd, O_RDONLY);
-    if (fd < 0) {
-        LOG("cannot open %s", urnd);
-        return -1;
-    }
-
-    if (read(fd, dest, len) != len) {
-        LOG("cannot read from %s", urnd);
-        close(fd);
-        return -2;
-    }
-
-    close(fd);
-
-    return len;
-}
-
 int add_padding(uint8_t *dest, unsigned int len, unsigned int blocklen) {
     uint8_t padding = 0x80;
     int count = 0;
@@ -202,33 +181,6 @@ void str2bin(uint8_t *dst, char *data, int len) {
     for (i = 0; i < len; i += 2)
         *dst++ = (get_bin_from_nibble(data[i]) << 4) |
                  get_bin_from_nibble(data[i + 1]);
-}
-
-uint32_t UINT32(const unsigned char *in, unsigned int len) {
-    uint32_t val = 0;
-    unsigned int i;
-
-    for (i = 0; i < len; i++) {
-        val <<= 8;
-        val |= *in++;
-    }
-
-    return val;
-}
-
-int BYTE32(unsigned char *dest, uint32_t val) {
-    *dest++ = val >> 24;
-    *dest++ = val >> 16;
-    *dest++ = val >> 8;
-    *dest++ = val;
-
-    return 4;
-}
-
-int BYTE16(unsigned char *dest, uint16_t val) {
-    *dest++ = val >> 8;
-    *dest++ = val;
-    return 2;
 }
 
 void cert_strings(char *certfile) {
@@ -274,7 +226,10 @@ void cert_strings(char *certfile) {
 
 /// END MISC
 
-void ca_request_close(ca_device_t *d) { sockets_force_close(d->sock); }
+void ca_request_close(ca_device_t *d) {
+    LOG("Requesting CA %d close", d->id);
+    sockets_force_close(d->sock);
+}
 
 int is_ca_initializing(int i) {
     if (i >= 0 && i < MAX_ADAPTERS && ca_devices[i] && ca_devices[i]->enabled &&
@@ -541,7 +496,7 @@ static int ciplus13_app_ai_data_rate_info(ca_session_t *s,
                                           ciplus13_data_rate_t rate) {
     LOG("setting CI+ CAM data rate to %s Mbps", rate ? "96" : "72");
 
-    ca_write_apdu(s, CI_DATA_RATE_INFO, &rate, sizeof(rate));
+    ca_write_apdu(s, CI_DATA_RATE_INFO, &rate, 1);
     return 0;
 }
 
@@ -1431,7 +1386,7 @@ static int ci_ccmgr_cc_sac_send(ca_session_t *session, uint32_t tag,
     //	_hexdump("UNENCRYPTED:  ", data, pos);
 
     pos += add_padding(&data[pos], pos - 8, 16);
-    BYTE16(&data[6], pos - 8); /* len in header */
+    copy16(data, 6, pos - 8); /* len in header */
 
     pos += sac_gen_auth(&data[pos], data, pos, cc_data->sak);
     sac_crypt(&data[8], &data[8], pos - 8, cc_data->sek, AES_ENCRYPT);
@@ -1470,7 +1425,7 @@ static int ci_ccmgr_cc_sac_data_req(ca_session_t *session, const uint8_t *data,
 
     disable_cws_for_all_pmts(d);
 
-    serial = UINT32(&data[rp], 4);
+    copy32r(serial, data, rp);
     LOGM("serial sac data req: %d", serial);
 
     /* skip serial & header */
@@ -1488,8 +1443,9 @@ static int ci_ccmgr_cc_sac_data_req(ca_session_t *session, const uint8_t *data,
     dt_nr = data[rp++];
 
     /* create answer */
-    pos += BYTE32(&dest[pos], serial);
-    pos += BYTE32(&dest[pos], 0x01000000);
+    copy32(dest, pos, serial);
+    copy32(dest, pos + 4, 0x01000000);
+    pos += 8;
 
     dest[pos++] = id_bitmask;
     dest[pos++] = dt_nr; /* dt_nbr */
@@ -1516,10 +1472,11 @@ static void ci_ccmgr_cc_sac_sync_req(ca_session_t *session, const uint8_t *data,
 
     //      hexdump("cc_sac_sync_req: ", (void *)data, len);
 
-    serial = UINT32(data, 4);
+    copy32r(serial, data, 0);
 
-    pos += BYTE32(&dest[pos], serial);
-    pos += BYTE32(&dest[pos], 0x01000000);
+    copy32(dest, pos, serial);
+    copy32(dest, pos + 4, 0x01000000);
+    pos += 8;
 
     /* status OK */
     dest[pos++] = 0;
@@ -1594,8 +1551,8 @@ by the CICAM */
 }
 static int CIPLUS_APP_CC_handler(ca_session_t *session, int tag, uint8_t *data,
                                  int len) {
-    LOG("RECV ciplus cc msg CAM%i, session_num %u, tag %x len %i dt_id %i",
-        session->ca->id, session->session_number, tag, len, data[2]);
+    LOG("RECV ciplus cc msg CAM%i, session_num %u, tag %x len %i dt_id %d",
+        session->ca->id, session->session_number, tag, len, len ? data[2] : -1);
     // printf(" RECV DATA:   ");
     // hexdump(data,len<33?len:32);
 
@@ -1915,7 +1872,8 @@ static int CIPLUS_APP_AI_handler(ca_session_t *session, int resource_id,
     case CIPLUS_TAG_CICAM_RESET:
         hexdump("CIPLUS_TAG_CICAM_RESET", data, data_length);
         LOG("CA %d Reset requested", d->id);
-        // TODO: close the CA device
+
+        ca_request_close(d);
         break;
     default:
         LOG("unexpected tag in %s (0x%x)", __FUNCTION__, resource_id);
@@ -2313,8 +2271,12 @@ int ca_write_tpdu(ca_device_t *d, int tag, uint8_t *buf, int len) {
 
     int written = write(d->fd, p_data, i_size);
     if (written != i_size) {
+        int err = errno;
         LOG("incomplete write to CA %d fd %d, expected %d got %d, errno %d %s",
             d->id, d->fd, i_size, written, errno, strerror(errno));
+        // this signals the CAM was removed
+        if (written == -1 && err == EIO)
+            ca_request_close(d);
         return 1;
     }
     return 0;
@@ -2392,6 +2354,7 @@ int ca_read_tpdu(int socket, void *buf, int buf_len, sockets *ss, int *rb) {
         if ((length_field_len = asn_1_decode(&asn_data_length, d + 1)) < 0) {
             LOG("Received data with invalid asn from module on device %d",
                 c->id);
+            _hexdump("INVALID LENGTH: ", data, len);
             break;
         }
 
@@ -2400,6 +2363,7 @@ int ca_read_tpdu(int socket, void *buf, int buf_len, sockets *ss, int *rb) {
             LOG("Received data with invalid length from module on device "
                 "%d",
                 c->id);
+            _hexdump("INVALID LENGTH: ", data, len);
             break;
         }
 
@@ -2661,6 +2625,8 @@ int ca_init_en50221(ca_device_t *d) {
     }
     sockets_timeout(d->sock, 1000);
     sockets_setread(d->sock, ca_read_tpdu);
+    sockets *ss = get_sockets(d->sock);
+    ss->events |= POLLERR;
 
     return 0;
 fail:
@@ -2696,7 +2662,7 @@ int dvbca_init_dev(adapter *ad) {
     int fd;
     char ca_dev_path[100];
 
-    if (c && c->enabled)
+    if (c && c->state == CA_STATE_INITIALIZED)
         return TABLES_RESULT_OK;
 
     if (ad->type != ADAPTER_DVB && ad->type != ADAPTER_CI)
@@ -2724,6 +2690,7 @@ int dvbca_init_dev(adapter *ad) {
     c->id = ad->id;
     c->state = CA_STATE_INACTIVE;
     c->enabled = 1;
+    c->sock = -1;
 
     memset(c->capmt, -1, sizeof(c->capmt));
     memset(c->key[0], 0, sizeof(c->key[0]));
@@ -2741,7 +2708,7 @@ int dvbca_init_dev(adapter *ad) {
 #else
     if (ca_init_en50221(c)) {
 #endif
-        sockets_del(c->sock);
+        ca_request_close(c);
         return TABLES_RESULT_ERROR_NORETRY;
     }
     set_socket_thread(c->sock, ad->thread);
@@ -2751,9 +2718,10 @@ int dvbca_init_dev(adapter *ad) {
 int dvbca_close_dev(adapter *ad) {
     ca_device_t *c = ca_devices[ad->id];
     if (c && c->enabled &&
-        c->state == CA_STATE_INACTIVE) // do not close the CA unless in a bad state
+        c->state ==
+            CA_STATE_INACTIVE) // do not close the CA unless in a bad state
     {
-        sockets_del(c->sock);
+        ca_request_close(c);
     }
     return 1;
 }
@@ -2771,13 +2739,12 @@ SCA_op dvbca;
 
 int ca_reconnect(void *arg) {
     int i;
+    extern adapter *a[];
     for (i = 0; i < MAX_ADAPTERS; i++)
         if (ca_devices[i] && ca_devices[i]->enabled &&
             ca_devices[i]->fd == -1) {
             LOG("Trying to reconnect to CA %d", i);
-            adapter *a = get_adapter(i);
-            if (a)
-                dvbca_init_dev(a);
+            dvbca_init_dev(a[i]);
         }
     return 0;
 }

@@ -275,7 +275,7 @@ int pkcs_1_mgf1(const uint8_t *seed, unsigned long seedlen, uint8_t *mask,
 
     while (masklen > 0) {
         /* handle counter */
-        BYTE32(buf, counter);
+        copy32(buf, 0, counter);
         ++counter;
 
         /* get hash of seed || counter */
