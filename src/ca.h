@@ -82,8 +82,12 @@
 #define CIPLUS_TAG_CC_DATA_REQ 0x9f9003
 #define CIPLUS_TAG_CC_DATA_CNF 0x9f9004
 #define CIPLUS_TAG_CC_SYNC_REQ 0x9f9005
+#define CIPLUS_TAG_CC_SYNC_CNF 0x9F9006
 #define CIPLUS_TAG_CC_SAC_DATA_REQ 0x9f9007
+#define CIPLUS_TAG_CC_SAC_DATA_CNF 0x9F9008
 #define CIPLUS_TAG_CC_SAC_SYNC_REQ 0x9f9009
+#define CIPLUS_TAG_CC_SAC_SYNC_CNF 0x9F9010
+
 #define CIPLUS_TAG_APP_INFO 0x9f8021
 #define CIPLUS_TAG_CICAM_RESET 0x9f8023
 #define CIPLUS_TAG_COUNTRY_ENQ 0x9f8100
@@ -131,6 +135,7 @@ struct ca_session {
     struct struct_application_handler handler;
     ca_device_t *ca;
     int session_number;
+    int ai_version;
 };
 
 struct element {

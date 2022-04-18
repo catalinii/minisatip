@@ -1373,7 +1373,7 @@ void ci_ccmgr_cc_open_cnf(ca_session_t *session) {
 
     data_initialize(session->ca);
     LOGM("SEND ------------ CC_OPEN_CNF----------- ");
-    ca_write_apdu(session, 0x9f9002, &bitmap, 1);
+    ca_write_apdu(session, CIPLUS_TAG_CC_OPEN_CNF, &bitmap, 1);
 }
 
 static int ci_ccmgr_cc_sac_send(ca_session_t *session, uint32_t tag,
@@ -1401,7 +1401,7 @@ static int ci_ccmgr_cc_sac_data_req(ca_session_t *session, const uint8_t *data,
                                     unsigned int len) {
     ca_device_t *d = session->ca;
     struct cc_ctrl_data *cc_data = &d->private_data;
-    uint32_t data_cnf_tag = 0x9f9008;
+    uint32_t data_cnf_tag = CIPLUS_TAG_CC_SAC_DATA_CNF;
     uint8_t dest[2048];
     uint8_t tmp[len];
     int id_bitmask, dt_nr;
@@ -1465,7 +1465,7 @@ static int ci_ccmgr_cc_sac_data_req(ca_session_t *session, const uint8_t *data,
 
 static void ci_ccmgr_cc_sac_sync_req(ca_session_t *session, const uint8_t *data,
                                      unsigned int len) {
-    int sync_cnf_tag = 0x9f9010;
+    int sync_cnf_tag = CIPLUS_TAG_CC_SAC_SYNC_CNF;
     uint8_t dest[64];
     unsigned int serial;
     int pos = 0;
@@ -1489,7 +1489,7 @@ static void ci_ccmgr_cc_sync_req(ca_session_t *session, const uint8_t *data,
                                  unsigned int len) {
     const uint8_t status = 0x00; /* OK */
     LOGM("SEND ------------ CC_SYNC_CNF----------- ");
-    ca_write_apdu(session, 0x9f9006, &status, 1);
+    ca_write_apdu(session, CIPLUS_TAG_CC_SYNC_CNF, &status, 1);
 }
 
 static int ci_ccmgr_cc_data_req(ca_session_t *session, const uint8_t *data,
@@ -1532,7 +1532,7 @@ static int ci_ccmgr_cc_data_req(ca_session_t *session, const uint8_t *data,
     answ_len += 2;
 
     LOGM("SEND ------------ CC_DATA_CNF----------- ");
-    ca_write_apdu(session, 0x9f9004, dest, answ_len);
+    ca_write_apdu(session, CIPLUS_TAG_CC_DATA_CNF, dest, answ_len);
 
     return 1;
 }
@@ -1819,7 +1819,6 @@ int APP_RM_handler(ca_session_t *session, int resource, uint8_t *buffer,
     case TAG_PROFILE_ENQUIRY:
         // do we really need this to force CI only mode ?
         rlen = populate_resources(session->ca, resource_ids);
-
         ca_write_apdu(session, TAG_PROFILE, resource_ids, rlen * 4);
         break;
     default:
@@ -1829,7 +1828,7 @@ int APP_RM_handler(ca_session_t *session, int resource, uint8_t *buffer,
 }
 
 static int APP_AI_create(ca_session_t *session, int resource_id) {
-    int ai_version = resource_id & 0x3f;
+    session->ai_version = resource_id & 0x3f;
     LOG("%s: CAM requested version %d of the Application Information resource",
         __FUNCTION__, ai_version);
 
@@ -1837,11 +1836,6 @@ static int APP_AI_create(ca_session_t *session, int resource_id) {
     // expects us to make an inquiry
     ca_write_apdu(session, TAG_APP_INFO_ENQUIRY, NULL, 0);
 
-    // Announce 96 Mbps data rate support to CAMs implementing version
-    // 3 or newer of the Application Information resource
-    if (ai_version >= 3) {
-        ciplus13_app_ai_data_rate_info(session, CIPLUS_DATA_RATE_96_MBPS);
-    }
     return 0;
 }
 
@@ -1866,8 +1860,12 @@ static int CIPLUS_APP_AI_handler(ca_session_t *session, int resource_id,
         memcpy(d->ci_name, data + 6, dl);
         if (dl > 0)
             d->ci_name[dl] = '\0'; // NOSONAR
-        LOG("  Menu string: %s (%d)", d->ci_name, dl);
-
+        LOG("  CAM Name: %s (%d)", d->ci_name, dl);
+        // Announce 96 Mbps data rate support to CAMs implementing version
+        // 3 or newer of the Application Information resource
+        if (session->ai_version >= 3) {
+            ciplus13_app_ai_data_rate_info(session, CIPLUS_DATA_RATE_96_MBPS);
+        }
         break;
     case CIPLUS_TAG_CICAM_RESET:
         hexdump("CIPLUS_TAG_CICAM_RESET", data, data_length);
