@@ -58,7 +58,6 @@ typedef struct ddci_mapping_table {
 typedef struct ddci_channel {
     struct SDDCI {
         uint8_t ddci;
-        uint64_t blacklisted_until;
     } ddci[MAX_ADAPTERS];
     int ddcis;
     int pos;
