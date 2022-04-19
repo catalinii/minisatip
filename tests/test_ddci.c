@@ -187,9 +187,23 @@ int test_add_del_pmt() {
     d0.max_channels = d1.max_channels = 2;
 
     // Multiple PMTs
+    Sddci_channel c;
+    memset(&c, 0, sizeof(c));
+    c.sid = pmt2.sid;
+    c.locked = 1;
+    c.ddci[c.ddcis++].ddci = 1;
+    setItem(&channels, c.sid, &c, sizeof(c));
+
+    int s = pmt2.stream_pids++;
+    int c2 = pmt2.caids++;
+    pmt2.stream_pid[s].pid = 0xFF;
+    pmt2.stream_pid[s].type = 2;
+    pmt2.ca[c2].id = 0x502;
+    pmt2.ca[c2].pid = 0xFE;
+
     ASSERT(ddci_process_pmt(&ad, &pmt2) == TABLES_RESULT_OK,
            "DDCI matching DD 0 for second PMT");
-    ASSERT(d0.pmt[1].id == 2, "PMT 2 using DDCI 0");
+    ASSERT(d1.pmt[1].id == 2, "PMT 2 using DDCI 1");
 
     // make sure we still have pids enabled from the first PMT
     int ec = 0, j, k;
@@ -209,20 +223,6 @@ int test_add_del_pmt() {
     ASSERT(pmt_pids[1] > 0, "PMT 1 expected to have pids");
     ASSERT(pmt_pids[2] > 0, "PMT 2 expected to have pids");
 
-    ASSERT(ddci_process_pmt(&ad, &pmt2) == TABLES_RESULT_OK,
-           "DDCI matching DD 1 for second PMT");
-    ASSERT(d1.pmt[1].id == 2, "PMT 2 using DDCI 1");
-
-    int s = pmt2.stream_pids++;
-    int c = pmt2.caids++;
-    pmt2.stream_pid[s].pid = 0xFF;
-    pmt2.stream_pid[s].type = 2;
-    pmt2.ca[c].id = 0x502;
-    pmt2.ca[c].pid = 0xFE;
-
-    ASSERT(ddci_process_pmt(&ad, &pmt2) == TABLES_RESULT_OK,
-           "DDCI matching DD 1 for adding again the PMT");
-
     m = get_pid_mapping_allddci(ad.id, 0xFF);
     ASSERT(m != NULL, "Newly added pid not found in mapping table");
     m = get_pid_mapping_allddci(ad.id, 0xFE);
@@ -230,6 +230,7 @@ int test_add_del_pmt() {
 
     ddci_del_pmt(&ad, &pmt1);
     ddci_del_pmt(&ad, &pmt0);
+    ddci_del_pmt(&ad, &pmt2);
 
     ec = 0;
     FOREACH_ITEM(&d0.mapping, m) { ec++; }
