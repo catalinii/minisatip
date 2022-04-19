@@ -278,7 +278,6 @@ int create_channel_for_pmt(Sddci_channel *c, SPMT *pmt) {
                     LOG("DDCI %d CAID %04X and mask %04X matched PMT %d", i,
                         ca[dvbca_id].ad_info[i].caid[j],
                         ca[dvbca_id].ad_info[i].mask[j], pmt->id);
-                    c->ddci[c->ddcis].blacklisted_until = 0;
                     c->ddci[c->ddcis++].ddci = i;
                     c->sid = pmt->sid;
                     strncpy(c->name, pmt->name, sizeof(c->name) - 1);
@@ -288,7 +287,6 @@ int create_channel_for_pmt(Sddci_channel *c, SPMT *pmt) {
 }
 
 int find_ddci_for_pmt(Sddci_channel *c, SPMT *pmt) {
-    int ctime = getTick();
     int ddid = -100;
     int retry = 0;
 
@@ -305,7 +303,7 @@ int find_ddci_for_pmt(Sddci_channel *c, SPMT *pmt) {
             LOG("DD %d is initializing", ddid);
             retry = 1;
 
-        } else if (ctime > c->ddci[c->pos].blacklisted_until) {
+        } else {
             if (d && d->channels < d->max_channels)
                 break;
             else
@@ -314,10 +312,7 @@ int find_ddci_for_pmt(Sddci_channel *c, SPMT *pmt) {
                     "%d max %d)",
                     ddid, pmt->id, pmt->pid, d ? d->channels : -1,
                     d ? d->max_channels : -1);
-        } else
-            LOG("PMT %d blacklisted on DD %d for another %jd s", pmt->id,
-                c->ddci[c->pos].ddci,
-                (c->ddci[c->pos].blacklisted_until - ctime) / 1000);
+        }
         ddid = -100;
     }
     if (retry)
@@ -503,70 +498,6 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
     dump_mapping_table();
     return 0;
 }
-void blacklist_pmt_for_ddci(SPMT *pmt, int ddid) {
-    Sddci_channel *channel = getItem(&channels, pmt->sid);
-    if (!channel)
-        return;
-
-    if (channel->pos >= channel->ddcis)
-        return;
-    // blacklist this channel for this DDCI for 5s
-    channel->ddci[channel->pos].blacklisted_until = getTick() + 15000;
-
-    LOG("PMT %d, pid %d, sid %d is blacklisted on DD %d (pmt %d)", pmt->id,
-        pmt->pid, pmt->sid, ddid, pmt->id);
-}
-
-// once one of the PMTs sent to the CAM cannot be decrypted,
-// blacklist all PMTs that have the same master PMT with the one given as
-// argument
-void blacklist_pmts_for_ddci(SPMT *pmt, int ddid) {
-    int i, master = pmt->master_pmt;
-    SPMT *p;
-    for (i = 0; i < MAX_PMT; i++)
-        if ((p = get_pmt(i)) && p->master_pmt == master)
-            blacklist_pmt_for_ddci(pmts[i], ddid);
-}
-
-// delete the blacklisted PMTs from the adapter thread owning the PMT
-void delete_blacklisted_pmt(ddci_device_t *d, adapter *ad) {
-    int i;
-    SPMT *pmt;
-    Sddci_channel *channel;
-    uint64_t ctime = getTick();
-    for (i = 0; i < d->max_channels; i++)
-        if ((pmt = get_pmt(d->pmt[i].id)) && (pmt->adapter == ad->id) &&
-            (channel = getItem(&channels, pmt->sid)) &&
-            (channel->pos < channel->ddcis) &&
-            (channel->ddci[channel->pos].blacklisted_until > ctime)) {
-            LOG("PMT %d, pid %d, sid %d is encrypted on DD %d", pmt->id,
-                pmt->pid, pmt->sid, d->id);
-            close_pmt_for_ca(ddci_id, ad, pmt);
-        }
-}
-
-int ddci_encrypted(adapter *ad, SPMT *pmt) {
-    ddci_device_t *d = get_ddci(ad->id);
-    Sddci_channel *channel = getItem(&channels, pmt->sid);
-    if (channel && channel->locked) {
-        LOG("PMT %d sid %d is encrypted and locked, keeping active", pmt->id,
-            pmt->sid);
-        return 0;
-    }
-    if (d) // only on DDCI adapter we can understand if the channel is encrypted
-        blacklist_pmts_for_ddci(pmt, d->id);
-    return 0;
-}
-
-int ddci_decrypted(adapter *ad, SPMT *pmt) {
-    ddci_device_t *d = get_ddci(ad->id);
-    if (d) {
-        LOG("PMT %d, sid %d is reported decrypted on DD %d", pmt->id, pmt->sid,
-            d->id);
-    }
-    return 0;
-}
-
 void set_pid_ts(unsigned char *b, int pid) {
     pid &= 0x1FFF;
     b[1] &= 0xE0;
@@ -978,8 +909,6 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
         d->ro[ad->id] = i;
     }
 
-    delete_blacklisted_pmt(d, ad);
-
     mutex_unlock(&d->mutex);
     return 0;
 }
@@ -1009,8 +938,6 @@ void ddci_init() // you can search the devices here and fill the ddci_devices,
     ddci.ca_del_pmt = ddci_del_pmt;
     ddci.ca_close_ca = ddci_close;
     ddci.ca_ts = ddci_ts;
-    ddci.ca_encrypted = ddci_encrypted;
-    ddci.ca_decrypted = ddci_decrypted;
 
     ddci_id = add_ca(&ddci, 0xFFFFFFFF);
     LOG("Registered DDCI CA %d", ddci_id);
