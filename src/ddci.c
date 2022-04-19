@@ -139,10 +139,9 @@ int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
             }
         }
     if (add_pid && force_add_pid) {
-        if (pid != 1) {
-            m->pid_added = 1;
-            mark_pid_add(DDCI_SID, ad, pid);
-        } else
+        m->pid_added = 1;
+        mark_pid_add(DDCI_SID, ad, pid);
+        if (pid == 1)
             m->filter_id =
                 add_filter(ad, 1, (void *)process_cat, d, FILTER_CRC);
     }
@@ -224,7 +223,7 @@ int del_pmt_mapping_table(ddci_device_t *d, int ad, int pmt) {
             mark_pid_deleted(d->id, DDCI_SID, ddci_pid, NULL);
         if (filter_id >= 0)
             del_filter(filter_id);
-        else if (pid_added >= 0) {
+        if (pid_added >= 0) {
             LOGM("Marking pid %d deleted on adapter %d (initial ad %d pid %d)",
                  ddci_pid, d->id, ad, pid);
             mark_pid_deleted(ad, DDCI_SID, pid, NULL);
@@ -586,6 +585,7 @@ int ddci_create_epg(ddci_device_t *d, int sid, uint8_t *eit, int version) {
     uint8_t *PayloadStart;
     uint8_t *SectionStart;
     uint8_t *DescriptorsStart;
+    uint8_t ver = (version & 0x0F);
     static int counter[MAX_ADAPTERS];
     memset(eit, 0xFF, 188);
     struct tm tm_r;
@@ -608,7 +608,7 @@ int ddci_create_epg(ddci_device_t *d, int sid, uint8_t *eit, int version) {
     SectionStart = p;
     *p++ = sid >> 8;
     *p++ = sid & 0xFF;
-    *p++ = 0xC1 | (version << 1);
+    *p++ = 0xC1 | (ver << 1);
     *p++ = 0x00;        // section number
     *p++ = 0x00;        // last section number
     *p++ = 0x00;        // transport stream id
@@ -1163,7 +1163,7 @@ int process_cat(int filter, unsigned char *b, int len, void *opaque) {
     if (cat_len > 1500)
         return 0;
 
-    id = -1;
+    id = 0;
     for (i = 0; i < cat_len; i += es_len) // reading program info
     {
         es_len = b[i + 1] + 2;
@@ -1174,16 +1174,15 @@ int process_cat(int filter, unsigned char *b, int len, void *opaque) {
             d->capid[id++] = (b[i + 4] & 0x1F) * 256 + b[i + 5];
         }
 
-        LOG("CAT pos %d caid %04X, pid %d", id, caid, d->capid[id]);
+        LOG("CAT pos %d caid %04X, pid %d", id, caid, d->capid[id - 1]);
     }
-    id++;
 
     add_cat = 1;
     mutex_lock(&d->mutex);
     for (i = 0; i < id; i++)
         if (get_ddci_pid(d, d->capid[i])) {
             add_cat = 0;
-            LOGM("CAT pid %d already in use, skipping CAT", d->capid[i]);
+            LOG("CAT pid %d already in use, skipping CAT", d->capid[i]);
             break;
         }
     if (!add_cat) {

@@ -190,8 +190,6 @@ int test_add_del_pmt() {
     ASSERT(ddci_process_pmt(&ad, &pmt2) == TABLES_RESULT_OK,
            "DDCI matching DD 0 for second PMT");
     ASSERT(d0.pmt[1].id == 2, "PMT 2 using DDCI 0");
-    blacklist_pmt_for_ddci(&pmt2, 0);
-    ddci_del_pmt(&ad, &pmt2);
 
     // make sure we still have pids enabled from the first PMT
     int ec = 0, j, k;
@@ -209,7 +207,7 @@ int test_add_del_pmt() {
     ASSERT(ec > 3, "Deleted Pids from the previously added PMT");
     ASSERT(pmt_pids[0] > 0, "PMT 0 expected to have pids");
     ASSERT(pmt_pids[1] > 0, "PMT 1 expected to have pids");
-    ASSERT(pmt_pids[2] == 0, "PMT 2 expected to NOT have pids");
+    ASSERT(pmt_pids[2] > 0, "PMT 2 expected to have pids");
 
     ASSERT(ddci_process_pmt(&ad, &pmt2) == TABLES_RESULT_OK,
            "DDCI matching DD 1 for second PMT");
@@ -229,10 +227,6 @@ int test_add_del_pmt() {
     ASSERT(m != NULL, "Newly added pid not found in mapping table");
     m = get_pid_mapping_allddci(ad.id, 0xFE);
     ASSERT(m != NULL, "Newly added capid not found in mapping table");
-    blacklist_pmt_for_ddci(&pmt2, 0);
-    ddci_del_pmt(&ad, &pmt2);
-    ASSERT(ddci_process_pmt(&ad, &pmt2) == TABLES_RESULT_ERROR_NORETRY,
-           "DDCI should be blacklisted on all DDCIs");
 
     ddci_del_pmt(&ad, &pmt1);
     ddci_del_pmt(&ad, &pmt0);
@@ -441,8 +435,8 @@ int test_create_pat() {
     f.flags = FILTER_CRC;
     f.id = 0;
     f.adapter = 0;
-    d.pmt[0].id = 1;   // set to pmt 1
-    pmts[1] = &pmt; // enable pmt 1
+    d.pmt[0].id = 1; // set to pmt 1
+    pmts[1] = &pmt;  // enable pmt 1
     npmts = 2;
     pmt.enabled = 1;
     pmt.sid = 0x66;
@@ -489,8 +483,8 @@ int test_create_pmt() {
     f.id = 0;
     f.adapter = 0;
     filters[0] = &f;
-    d.pmt[0].id = 1;   // set to pmt 1
-    pmts[1] = &pmt; // enable pmt 1
+    d.pmt[0].id = 1; // set to pmt 1
+    pmts[1] = &pmt;  // enable pmt 1
     npmts = 2;
     pmt.enabled = 1;
     pmt.sid = 0x66;
@@ -545,7 +539,7 @@ int test_create_pmt() {
     ad.enabled = 1;
     a[0] = &ad;
     ad.pids[0].pid = 0x99;
-    ad.pids[0].flags=1;
+    ad.pids[0].flags = 1;
     process_pmt(0, psi + 1, psi_len, &new_pmt);
     filters[0] = NULL;
     ASSERT(new_pmt.stream_pids == pmt.stream_pids,
