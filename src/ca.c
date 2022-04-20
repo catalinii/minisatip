@@ -233,6 +233,7 @@ void ca_request_close(ca_device_t *d) {
 
 int is_ca_initializing(int i) {
     if (i >= 0 && i < MAX_ADAPTERS && ca_devices[i] && ca_devices[i]->enabled &&
+        ca_devices[i]->state != CA_STATE_INACTIVE &&
         ca_devices[i]->state != CA_STATE_INITIALIZED)
         return 1;
     return 0;
@@ -1886,6 +1887,7 @@ static int APP_CA_create(ca_session_t *session, int resource_id) {
 
 static int APP_CA_close(ca_session_t *session) {
     ca_device_t *d = session->ca;
+    LOG("Closed the CA session for CA %d", d->id);
     d->state = CA_STATE_ACTIVE;
     return 0;
 }
@@ -2066,19 +2068,13 @@ static int APP_LANG_create(ca_session_t *session, int resource_id) {
 struct struct_application_handler application_handler[] = {
     // Resource Manager
     DEFAPP(EN50221_APP_RM_RESOURCEID, APP_RM_handler, APP_RM_create),
-    DEFAPP(TS101699_APP_RM_RESOURCEID, APP_RM_handler, APP_RM_create),
     // Application Information
     DEFAPP(EN50221_APP_AI_RESOURCEID, CIPLUS_APP_AI_handler, APP_AI_create),
-    DEFAPP(TS101699_APP_AI_RESOURCEID, CIPLUS_APP_AI_handler, APP_AI_create),
-    DEFAPP(CIPLUS_APP_AI_RESOURCEID, CIPLUS_APP_AI_handler, APP_AI_create),
     // Conditional Access Support
     DEFAPP4(EN50221_APP_CA_RESOURCEID, APP_CA_handler, APP_CA_create,
             APP_CA_close),
-    // TS103205_APP_CA_MULTISTREAM_RESOURCEID, // Multi-stream
-    // Host Control - Does not seem like other apps are annoucing it
+    // Host Control
     DEFAPP(EN50221_APP_DVB_RESOURCEID, APP_empty, NULL),
-    DEFAPP(CIPLUS_APP_DVB_RESOURCEID, APP_empty, NULL),
-    DEFAPP(TS103205_APP_DVB_RESOURCEID, APP_empty, NULL),
     // TS103205_APP_DVB_MULTISTREAM_RESOURCEID, // Multi-stream
     // Date-Time
     DEFAPP(EN50221_APP_DATETIME_RESOURCEID, APP_DateTime_handler, NULL),
@@ -2086,6 +2082,18 @@ struct struct_application_handler application_handler[] = {
     DEFAPP(EN50221_APP_MMI_RESOURCEID, APP_MMI_handler, NULL),
     // TS103205_APP_MMI_RESOURCEID, // Multi-stream
     // Low Speed Communication is not supported
+
+    // CI+ Resources
+
+    // Resource Manager
+    DEFAPP(TS101699_APP_RM_RESOURCEID, APP_RM_handler, APP_RM_create),
+    // Application Information
+    DEFAPP(TS101699_APP_AI_RESOURCEID, CIPLUS_APP_AI_handler, APP_AI_create),
+    DEFAPP(CIPLUS_APP_AI_RESOURCEID, CIPLUS_APP_AI_handler, APP_AI_create),
+    // TS103205_APP_CA_MULTISTREAM_RESOURCEID, // Multi-stream
+    // Host Control
+    DEFAPP(CIPLUS_APP_DVB_RESOURCEID, APP_empty, NULL),
+    DEFAPP(TS103205_APP_DVB_RESOURCEID, APP_empty, NULL),
     // Content Control
     DEFAPP(CIPLUS_APP_CC_RESOURCEID, CIPLUS_APP_CC_handler,
            CIPLUS_APP_CC_create),
@@ -2153,7 +2161,7 @@ int populate_resources(ca_device_t *d, int *resource_ids) {
          i < sizeof(application_handler) / sizeof(application_handler[0]);
          i++) {
         int resource = application_handler[i].resource;
-        if (d->force_ci && resource == CIPLUS_APP_CC_RESOURCEID) {
+        if (d->force_ci && resource == TS101699_APP_RM_RESOURCEID) {
             break;
         }
         resource_ids[i] = htonl(resource);
@@ -2264,7 +2272,7 @@ int ca_write_tpdu(ca_device_t *d, int tag, uint8_t *buf, int len) {
     }
 
     if (tag != T_DATA_LAST || buf != NULL) {
-        _hexdump("WRITE TPDU: ", p_data, i_size);
+        hexdump("WRITE TPDU: ", p_data, i_size);
     }
 
     int written = write(d->fd, p_data, i_size);
@@ -2305,7 +2313,7 @@ int ca_write_spdu(ca_device_t *d, int session_number, unsigned char tag,
            __FUNCTION__, d->id, session_number,
            d->sessions[session_number - 1].handler.name, tag, ptr - pkt);
     if (ptr > pkt)
-        _hexdump("WRITE SPDU: ", pkt, ptr - pkt);
+        hexdump("WRITE SPDU: ", pkt, ptr - pkt);
     return ca_write_tpdu(d, T_DATA_LAST, pkt, ptr - pkt);
 }
 
@@ -2339,7 +2347,7 @@ int ca_read_tpdu(int socket, void *buf, int buf_len, sockets *ss, int *rb) {
     unsigned char *d;
     len = read(c->fd, data, sizeof(data));
     if (len > 0 && !((len == 6) && data[5] == 0)) {
-        _hexdump("READ TPDU: ", data, len);
+        hexdump("READ TPDU: ", data, len);
     }
     d = data;
     /* taken from the dvb-apps */
@@ -2426,7 +2434,7 @@ int ca_read_apdu(ca_session_t *session, uint8_t *buf, int buf_len) {
     int llen, len;
     int tag;
     int session_number = session->session_number;
-    _hexdump("APDU", buf, buf_len);
+    hexdump("APDU", buf, buf_len);
     while (i < buf_len) {
         data = buf + i;
         llen = asn_1_decode(&len, data + 3);
@@ -2456,7 +2464,7 @@ int ca_read(sockets *s) {
     ca_device_t *d = ca_devices[s->sid];
     char pkt[6];
     int len, status = 0;
-    _hexdump("CAREAD:   ", data, s->rlen);
+    hexdump("CAREAD", data, s->rlen);
     int tag = data[0];
     int llen = asn_1_decode(&len, data + 1);
     int i = 1 + llen + len;

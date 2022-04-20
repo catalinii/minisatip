@@ -123,7 +123,6 @@ void dvbaes_cbc_decrypt_stream(SCW *cw, SPMT_batch *batch, int batch_len) {
                 len);
             len = sizeof(decryptedtext) / 16 * 16;
         }
-        LOG("len %d", len);
         int new_len = decrypt(cw->key, /*ciphertext*/ batch[i].data, len,
                               cw->cw, cw->iv, decryptedtext);
         if (new_len > batch[i].len)
