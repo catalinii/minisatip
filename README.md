@@ -13,7 +13,7 @@ It is very lightweight (designed for embedded systems with memory and processing
 
 The application is designed to stream the requested data to multiple clients (even with one dvb card) in the same time while opening different pids.
 
-It is tested on x86_64, x86, ARM and MIPS platforms and it requires DVBAPI 5. Supported protocols are RTSP (both tcp and udp), HTTP (port 8080) and SSDP (as specified in the SAT>IP documentation). On top of that, it supports dvbapi protocol implemented by oscam (requires dvbcsa library) to decrypt channels using an official subscription and support dvbca protocol (requires dvben50221 library) for dvb cards with CA hardware. In order to enable/disable features, please edit the Makefile. 
+It is tested on x86_64, x86, ARM and MIPS platforms and it requires DVBAPI 5. Supported protocols are RTSP (both tcp and udp), HTTP (port 8080) and SSDP (as specified in the SAT>IP documentation). On top of that, it supports dvbapi protocol implemented by oscam (requires dvbcsa library) to decrypt channels using an official subscription and support dvbca protocol (requires libssl-dev library) for dvb cards with CA hardware. In order to enable/disable features, please edit the Makefile. 
 
 The application shows also a status page by default at the address: http://IP:8080 
 The latest binaries for embedded platforms: https://minisatip.org/forum/viewtopic.php?f=5&t=371 
@@ -27,10 +27,21 @@ In order to speed up the investigation of an issue, please provide the full log 
 If you like minisatip and you want to support the development of the project please make a donation: 
 https://paypal.me/minisatip
 
+Compilation:
+-------
+./configure
+make
+
+Cross-Compilation Example:
+-------
+export PATH=$PATH:/usr/src/mipsel-tuxbox-linux-gnu/bin/
+./configure --host=mipsel-tuxbox-linux-gnu
+make
+
 Usage:
 -------
 (Message automatically generated from "minisatip --help")
-minisatip version 1.1.77, compiled in Feb 12 2022 21:24:25, with s2api version: 050B
+minisatip version 1.1.90, compiled in Apr 18 2022 16:36:48, with s2api version: 050B
 
 	./minisatip [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 	[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]] 
