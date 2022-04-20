@@ -1830,7 +1830,7 @@ int APP_RM_handler(ca_session_t *session, int resource, uint8_t *buffer,
 static int APP_AI_create(ca_session_t *session, int resource_id) {
     session->ai_version = resource_id & 0x3f;
     LOG("%s: CAM requested version %d of the Application Information resource",
-        __FUNCTION__, ai_version);
+        __FUNCTION__, session->ai_version);
 
     // Versions 1 and 2 of the Application Information resource only
     // expects us to make an inquiry
@@ -2149,16 +2149,16 @@ ca_session_t *find_session_for_resource(ca_device_t *d, int resource) {
 
 int populate_resources(ca_device_t *d, int *resource_ids) {
     int i;
-    for (i = 1;
+    for (i = 0;
          i < sizeof(application_handler) / sizeof(application_handler[0]);
          i++) {
         int resource = application_handler[i].resource;
         if (d->force_ci && resource == CIPLUS_APP_CC_RESOURCEID) {
             break;
         }
-        resource_ids[i - 1] = htonl(resource);
+        resource_ids[i] = htonl(resource);
     }
-    return i - 1;
+    return i;
 }
 
 /* from dvb-apps */
@@ -2263,8 +2263,8 @@ int ca_write_tpdu(ca_device_t *d, int tag, uint8_t *buf, int len) {
         break;
     }
 
-    if (tag != T_RCV || buf != NULL) {
-        hexdump("Writing to CA: ", p_data, i_size);
+    if (tag != T_DATA_LAST || buf != NULL) {
+        _hexdump("WRITE TPDU: ", p_data, i_size);
     }
 
     int written = write(d->fd, p_data, i_size);
@@ -2305,7 +2305,7 @@ int ca_write_spdu(ca_device_t *d, int session_number, unsigned char tag,
            __FUNCTION__, d->id, session_number,
            d->sessions[session_number - 1].handler.name, tag, ptr - pkt);
     if (ptr > pkt)
-        _hexdump("SPDU data: ", pkt, ptr - pkt);
+        _hexdump("WRITE SPDU: ", pkt, ptr - pkt);
     return ca_write_tpdu(d, T_DATA_LAST, pkt, ptr - pkt);
 }
 
@@ -2339,7 +2339,7 @@ int ca_read_tpdu(int socket, void *buf, int buf_len, sockets *ss, int *rb) {
     unsigned char *d;
     len = read(c->fd, data, sizeof(data));
     if (len > 0 && !((len == 6) && data[5] == 0)) {
-        hexdump("READ TPDU: ", data, len);
+        _hexdump("READ TPDU: ", data, len);
     }
     d = data;
     /* taken from the dvb-apps */
@@ -2527,6 +2527,7 @@ int ca_close(sockets *s) {
 
 int ca_timeout(sockets *s) {
     ca_device_t *d = ca_devices[s->sid];
+    s->rtime = getTick();
     // Send regular date/time updates to the CAM
     if (d->datetime_response_interval && (time(NULL) > d->datetime_next_send)) {
         ca_send_datetime(d);
@@ -2536,7 +2537,7 @@ int ca_timeout(sockets *s) {
         if (d->state == CA_STATE_INACTIVE) {
             ca_write_tpdu(d, T_CREATE_TC, NULL, 0);
         } else {
-            ca_write_tpdu(d, T_RCV, NULL, 0);
+            ca_write_tpdu(d, T_DATA_LAST, NULL, 0);
         }
     }
 #endif
@@ -2646,12 +2647,15 @@ ca_device_t *alloc_ca_device() {
 
 void flush_handle(int fd) {
     uint8_t buf[1024];
+    uint64_t start = getTick();
     int flags = fcntl(fd, F_GETFL);
     if (!(flags & O_NONBLOCK) && (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1))
         LOG("Failed to set the handle %d as non blocking", fd);
 
+    // Flush for max 1s
     while (read(fd, buf, 256) > 0)
-        ;
+        if (getTick() - start > 1000)
+            break;
     if (!(flags & O_NONBLOCK) && (fcntl(fd, F_SETFL, flags) == -1))
         LOG("Failed to set the handle %d as blocking", fd);
 }
