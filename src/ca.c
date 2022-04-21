@@ -1793,8 +1793,8 @@ static int ca_send_datetime(ca_device_t *d) {
         find_session_for_resource(d, EN50221_APP_DATETIME_RESOURCEID);
     if (s)
         ca_write_apdu(s, TAG_DATE_TIME, msg, 5);
-    d->datetime_next_send = time(NULL) + d->datetime_response_interval;
-    LOG("Sending time to CA %d to session %d, response interval: %d", d->id,
+    d->datetime_next_send = getTick() + d->datetime_response_interval;
+    LOG("Sending time to CA %d to session %jd, response interval: %jd", d->id,
         s->session_number, d->datetime_response_interval)
     return 0;
 }
@@ -1923,8 +1923,9 @@ int APP_DateTime_handler(ca_session_t *session, int resource, uint8_t *buffer,
     ca_device_t *d = session->ca;
     switch (resource) {
     case TAG_DATE_TIME_ENQUIRY:
-        if (buffer)
-            d->datetime_response_interval = buffer[0];
+        if (buffer) {
+            d->datetime_response_interval = buffer[0] * 1000;
+        }
         break;
     default:
         LOG("unexpected tag in %s (0x%x)", __FUNCTION__, resource);
@@ -2536,10 +2537,6 @@ int ca_close(sockets *s) {
 int ca_timeout(sockets *s) {
     ca_device_t *d = ca_devices[s->sid];
     s->rtime = getTick();
-    // Send regular date/time updates to the CAM
-    if (d->datetime_response_interval && (time(NULL) > d->datetime_next_send)) {
-        ca_send_datetime(d);
-    }
 #ifndef ENIGMA
     else {
         if (d->state == CA_STATE_INACTIVE) {
@@ -2756,128 +2753,141 @@ int ca_reconnect(void *arg) {
             LOG("Trying to reconnect to CA %d", i);
             dvbca_init_dev(a[i]);
         }
-    return 0;
-}
 
-void dvbca_init() // you can search the devices here and fill the
-                  // ca_devices, then open them here (for example
-                  // independent CA devices), or use dvbca_init_dev to open
-                  // them (like in this module)
-{
-    int poller_sock;
-    extern int sock_signal;
-    memset(&dvbca, 0, sizeof(dvbca));
-    dvbca.ca_init_dev = dvbca_init_dev;
-    dvbca.ca_close_dev = dvbca_close_dev;
-    dvbca.ca_add_pmt = dvbca_process_pmt;
-    dvbca.ca_del_pmt = dvbca_del_pmt;
-    dvbca.ca_close_ca = dvbca_close;
-    dvbca.ca_ts = NULL; // dvbca_ts;
-    dvbca_id = add_ca(&dvbca, 0xFFFFFFFF);
-    poller_sock = sockets_add(SOCK_TIMEOUT, NULL, -1, TYPE_UDP, NULL, NULL,
-                              (socket_action)ca_reconnect);
-    sockets_timeout(poller_sock, 1000); // try to connect every 1s
-    set_socket_thread(poller_sock, get_socket_thread(sock_signal));
-}
-
-char *get_ca_pin(int i) {
-    if (ca_devices[i])
-        return ca_devices[i]->pin_str;
-    return NULL;
-}
-
-void set_ca_pin(int i, char *pin) {
-    if (!ca_devices[i])
-        ca_devices[i] = alloc_ca_device();
-    if (!ca_devices[i])
-        return;
-    memset(ca_devices[i]->pin_str, 0, sizeof(ca_devices[i]->pin_str));
-    strncpy(ca_devices[i]->pin_str, pin, sizeof(ca_devices[i]->pin_str) - 1);
-}
-
-void force_ci_adapter(int i) {
-    if (!ca_devices[i])
-        ca_devices[i] = alloc_ca_device();
-    if (!ca_devices[i])
-        return;
-    ca_devices[i]->force_ci = 1;
-}
-
-void set_ca_adapter_force_ci(char *o) {
-    int i, j, la, st, end;
-    char buf[1000], *arg[40], *sep;
-    SAFE_STRCPY(buf, o);
-    la = split(arg, buf, ARRAY_SIZE(arg), ',');
-    for (i = 0; i < la; i++) {
-        sep = strchr(arg[i], '-');
-
-        if (sep == NULL) {
-            st = end = map_int(arg[i], NULL);
-        } else {
-            st = map_int(arg[i], NULL);
-            end = map_int(sep + 1, NULL);
+    for (i = 0; i < MAX_ADAPTERS; i++)
+        if (ca_devices[i] && ca_devices[i]->enabled &&
+            ca_devices[i]->state == CA_STATE_INITIALIZED) {
+            {
+                // Send regular date/time updates to the CAM
+                if (d->datetime_response_interval &&
+                    (getTick() > d->datetime_next_send)) {
+                    ca_send_datetime(d);
+                }
+            }
+            return 0;
         }
-        for (j = st; j <= end; j++) {
 
-            force_ci_adapter(j);
-            LOG("Forcing CA %d to CI", j);
-        }
+    void dvbca_init() // you can search the devices here and fill the
+                      // ca_devices, then open them here (for example
+                      // independent CA devices), or use dvbca_init_dev to open
+                      // them (like in this module)
+    {
+        int poller_sock;
+        extern int sock_signal;
+        memset(&dvbca, 0, sizeof(dvbca));
+        dvbca.ca_init_dev = dvbca_init_dev;
+        dvbca.ca_close_dev = dvbca_close_dev;
+        dvbca.ca_add_pmt = dvbca_process_pmt;
+        dvbca.ca_del_pmt = dvbca_del_pmt;
+        dvbca.ca_close_ca = dvbca_close;
+        dvbca.ca_ts = NULL; // dvbca_ts;
+        dvbca_id = add_ca(&dvbca, 0xFFFFFFFF);
+        poller_sock = sockets_add(SOCK_TIMEOUT, NULL, -1, TYPE_UDP, NULL, NULL,
+                                  (socket_action)ca_reconnect);
+        sockets_timeout(poller_sock, 1000); // try to connect every 1s
+        pthread_t tid = start_new_thread("CA_poll");
+        set_socket_thread(poller_sock, tid);
     }
-}
 
-void set_ca_adapter_pin(char *o) {
-    int i, j, la, st, end;
-    char buf[1000], *arg[40], *sep, *seps;
-    SAFE_STRCPY(buf, o);
-    la = split(arg, buf, ARRAY_SIZE(arg), ',');
-    for (i = 0; i < la; i++) {
-        sep = strchr(arg[i], '-');
-        seps = strchr(arg[i], ':');
-
-        if (!seps)
-            continue;
-
-        if (sep == NULL) {
-            st = end = map_int(arg[i], NULL);
-        } else {
-            st = map_int(arg[i], NULL);
-            end = map_int(sep + 1, NULL);
-        }
-        for (j = st; j <= end; j++) {
-            set_ca_pin(j, seps + 1);
-            LOG("Setting CA %d pin to %s", j, seps + 1);
-        }
+    char *get_ca_pin(int i) {
+        if (ca_devices[i])
+            return ca_devices[i]->pin_str;
+        return NULL;
     }
-}
 
-void set_ca_multiple_pmt(char *o) {
-    int i, la, ddci;
-    char buf[1000], *arg[40], *sep, *seps;
-    SAFE_STRCPY(buf, o);
-    la = split(arg, buf, ARRAY_SIZE(arg), ',');
-    for (i = 0; i < la; i++) {
-        sep = strchr(arg[i], ':');
-
-        if (!sep)
-            continue;
-
-        int max_ca_pmt = atoi(sep + 1);
-
-        ddci = map_intd(arg[i], NULL, -1);
-        if (!ca_devices[ddci])
-            ca_devices[ddci] = alloc_ca_device();
-        if (!ca_devices[ddci])
+    void set_ca_pin(int i, char *pin) {
+        if (!ca_devices[i])
+            ca_devices[i] = alloc_ca_device();
+        if (!ca_devices[i])
             return;
-        ca_devices[ddci]->multiple_pmt = 1;
-        ca_devices[ddci]->max_ca_pmt = max_ca_pmt;
-        LOG("Forcing CA %d to use multiple PMTs with maximum channels %d", ddci,
-            max_ca_pmt);
-        seps = sep;
-        while ((seps = strchr(seps + 1, '-'))) {
-            int caid = strtoul(seps + 1, NULL, 16);
-            if (caid > 0)
-                ca_devices[ddci]->caid[ca_devices[ddci]->caids++] = caid;
-            LOG("Forcing CA %d to use CAID %04X", ddci, caid);
+        memset(ca_devices[i]->pin_str, 0, sizeof(ca_devices[i]->pin_str));
+        strncpy(ca_devices[i]->pin_str, pin,
+                sizeof(ca_devices[i]->pin_str) - 1);
+    }
+
+    void force_ci_adapter(int i) {
+        if (!ca_devices[i])
+            ca_devices[i] = alloc_ca_device();
+        if (!ca_devices[i])
+            return;
+        ca_devices[i]->force_ci = 1;
+    }
+
+    void set_ca_adapter_force_ci(char *o) {
+        int i, j, la, st, end;
+        char buf[1000], *arg[40], *sep;
+        SAFE_STRCPY(buf, o);
+        la = split(arg, buf, ARRAY_SIZE(arg), ',');
+        for (i = 0; i < la; i++) {
+            sep = strchr(arg[i], '-');
+
+            if (sep == NULL) {
+                st = end = map_int(arg[i], NULL);
+            } else {
+                st = map_int(arg[i], NULL);
+                end = map_int(sep + 1, NULL);
+            }
+            for (j = st; j <= end; j++) {
+
+                force_ci_adapter(j);
+                LOG("Forcing CA %d to CI", j);
+            }
         }
     }
-}
+
+    void set_ca_adapter_pin(char *o) {
+        int i, j, la, st, end;
+        char buf[1000], *arg[40], *sep, *seps;
+        SAFE_STRCPY(buf, o);
+        la = split(arg, buf, ARRAY_SIZE(arg), ',');
+        for (i = 0; i < la; i++) {
+            sep = strchr(arg[i], '-');
+            seps = strchr(arg[i], ':');
+
+            if (!seps)
+                continue;
+
+            if (sep == NULL) {
+                st = end = map_int(arg[i], NULL);
+            } else {
+                st = map_int(arg[i], NULL);
+                end = map_int(sep + 1, NULL);
+            }
+            for (j = st; j <= end; j++) {
+                set_ca_pin(j, seps + 1);
+                LOG("Setting CA %d pin to %s", j, seps + 1);
+            }
+        }
+    }
+
+    void set_ca_multiple_pmt(char *o) {
+        int i, la, ddci;
+        char buf[1000], *arg[40], *sep, *seps;
+        SAFE_STRCPY(buf, o);
+        la = split(arg, buf, ARRAY_SIZE(arg), ',');
+        for (i = 0; i < la; i++) {
+            sep = strchr(arg[i], ':');
+
+            if (!sep)
+                continue;
+
+            int max_ca_pmt = atoi(sep + 1);
+
+            ddci = map_intd(arg[i], NULL, -1);
+            if (!ca_devices[ddci])
+                ca_devices[ddci] = alloc_ca_device();
+            if (!ca_devices[ddci])
+                return;
+            ca_devices[ddci]->multiple_pmt = 1;
+            ca_devices[ddci]->max_ca_pmt = max_ca_pmt;
+            LOG("Forcing CA %d to use multiple PMTs with maximum channels %d",
+                ddci, max_ca_pmt);
+            seps = sep;
+            while ((seps = strchr(seps + 1, '-'))) {
+                int caid = strtoul(seps + 1, NULL, 16);
+                if (caid > 0)
+                    ca_devices[ddci]->caid[ca_devices[ddci]->caids++] = caid;
+                LOG("Forcing CA %d to use CAID %04X", ddci, caid);
+            }
+        }
+    }

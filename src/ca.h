@@ -201,8 +201,8 @@ struct ca_device {
     /*
      * CAM date time handling
      */
-    uint8_t datetime_response_interval;
-    time_t datetime_next_send;
+    uint64_t datetime_response_interval;
+    uint64_t datetime_next_send;
 };
 
 int ca_init(ca_device_t *d);
