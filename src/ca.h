@@ -186,6 +186,8 @@ struct ca_device {
     ca_session_t sessions[MAX_SESSIONS];
 
     int uri_mask;
+    char force_ci;
+    char linked_adapter;
 
     /*
      * CAM module info
@@ -194,7 +196,6 @@ struct ca_device {
 
     char cam_menu_string[64];
     char pin_str[10];
-    char force_ci;
     uint8_t key[2][16], iv[2][16];
     int sp, parity;
 

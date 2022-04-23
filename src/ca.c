@@ -366,13 +366,66 @@ int get_active_capmts(ca_device_t *d) {
     return active;
 }
 
+void set_input_ci(int ci, int adapter) {
+    char filename[100];
+    char val = 'A' + adapter;
+    sprintf(filename, "/proc/stb/tsmux/ci%d_input", ci);
+    LOG("%s: %s -> %c", __FUNCTION__, filename, val);
+    FILE *fp = fopen(filename, "w");
+    if (fp) {
+        fprintf(fp, "%c", val);
+        fclose(fp);
+    } else {
+        LOG("%s open failed, %s", __FUNCTION__, filename);
+    }
+}
+
+void set_tuner_input(int ci, int adapter) {
+    char filename[100];
+    char val[] = "CI0";
+    if (adapter == -1)
+        return;
+    if (ci == -1) {
+        val[0] = 'A' + adapter;
+        val[1] = 0;
+    } else
+        val[2] = '0' + ci;
+
+    sprintf(filename, "/proc/stb/tsmux/input%d", adapter);
+    LOG("%s: %s -> %s", __FUNCTION__, filename, val);
+    FILE *fp = fopen(filename, "w");
+    if (fp) {
+        fprintf(fp, "%s", val);
+        fclose(fp);
+    } else {
+        LOG("%s:  open failed, %s", __FUNCTION__, filename);
+    }
+}
+
+ca_device_t *find_dvbca_for_pmt(SPMT *pmt) {
+    ca_device_t *d;
+    extern SCA ca[MAX_CA];
+    int i, j;
+
+    for (i = 0; i < MAX_ADAPTERS; i++)
+        if (ca_devices[i] && ca_devices[i]->state == CA_STATE_INITIALIZED) {
+            d = ca_devices[i];
+            for (j = 0; j < ca[dvbca_id].ad_info[i].caids; j++)
+                if (match_caid(pmt, ca[dvbca_id].ad_info[i].caid[j],
+                               ca[dvbca_id].ad_info[i].mask[j])) {
+                    LOG("Found CA %d for PMT %d, ", i, pmt->id);
+                    return d;
+                }
+        }
+    return NULL;
+}
 // Sending _LIST, _MORE and _LAST leads to decryption issues on some CAMs
 // (existing channels are restarted) This method tries to send _ONLY for the
 // first PMT or when the sid changes (when 2 PMTs are packed inside the same
-// CAPMT) and uses just _UPDATE to update the existing and new CAPMT According
-// to the docs _ADD should be used for new CAPMTs but _UPDATE with a new sid
-// works To not leak sids, the first channel will have the original SID (some
-// CAMs do not like this), the other ones a fixed SID
+// CAPMT) and uses just _UPDATE to update the existing and new CAPMT
+// According to the docs _ADD should be used for new CAPMTs but _UPDATE with
+// a new sid works To not leak sids, the first channel will have the
+// original SID (some CAMs do not like this), the other ones a fixed SID
 
 int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
     ca_device_t *d = ca_devices[ad->id];
@@ -380,13 +433,22 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
     int listmgmt;
     SPMT *first = NULL;
 
-#ifndef ENIGMA
+#ifdef ENIGMA
+    // detach the CI from the previous adapter
+    if (d->linked_adapter != ad->id) {
+        set_tuner_input(-1, d->linked_adapter);
+    }
+    // enigma allows attaching the CI to the adapter that needs it
+    d = find_dvbca_for_pmt(spmt);
     if (!d)
         return TABLES_RESULT_ERROR_NORETRY;
-#else
-    if (!d && ca_devices[0])
-        d = ca_devices[0];
+
+    set_tuner_input(d->id, ad->id);
+    set_input_ci(d->id, ad->id);
+    d->linked_adapter = ad->id;
 #endif
+    if (!d)
+        return TABLES_RESULT_ERROR_NORETRY;
 
     if (d->state != CA_STATE_INITIALIZED)
         LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY, "CAM not yet initialized");
@@ -462,11 +524,19 @@ void remove_pmt_from_device(ca_device_t *d, SPMT *pmt) {
     return;
 }
 
-SCAPMT *get_capmt_for_pmt(ca_device_t *d, SPMT *pmt) {
-    int i;
-    for (i = 0; i < d->max_ca_pmt; i++)
-        if (d->capmt[i].pmt_id == pmt->id || d->capmt[i].other_id == pmt->id)
-            return d->capmt + i;
+SCAPMT *get_capmt_for_pmt(SPMT *pmt, ca_device_t **output) {
+    ca_device_t *d;
+    int i, j;
+    for (i = 0; i < MAX_ADAPTERS; i++)
+        if ((d = ca_devices[i]) &&
+            (d->enabled && d->state == CA_STATE_INITIALIZED)) {
+            for (j = 0; j < d->max_ca_pmt; j++)
+                if (d->capmt[j].pmt_id == pmt->id ||
+                    d->capmt[j].other_id == pmt->id) {
+                    *output = d;
+                    return d->capmt + j;
+                }
+        }
     return NULL;
 }
 
@@ -474,7 +544,7 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt) {
     ca_device_t *d = ca_devices[ad->id];
     int listmgmt = -1;
 
-    SCAPMT *capmt = get_capmt_for_pmt(d, spmt);
+    SCAPMT *capmt = get_capmt_for_pmt(spmt, &d);
     if (!capmt)
         LOG_AND_RETURN(0, "CAPMT not found for pmt %d", spmt->id);
 
@@ -1794,7 +1864,7 @@ static int ca_send_datetime(ca_device_t *d) {
     if (s)
         ca_write_apdu(s, TAG_DATE_TIME, msg, 5);
     d->datetime_next_send = getTick() + d->datetime_response_interval;
-    LOG("Sending time to CA %d to session %jd, response interval: %jd", d->id,
+    LOG("Sending time to CA %d to session %d, response interval: %jd", d->id,
         s->session_number, d->datetime_response_interval)
     return 0;
 }
@@ -2535,15 +2605,13 @@ int ca_close(sockets *s) {
 }
 
 int ca_timeout(sockets *s) {
-    ca_device_t *d = ca_devices[s->sid];
     s->rtime = getTick();
 #ifndef ENIGMA
-    else {
-        if (d->state == CA_STATE_INACTIVE) {
-            ca_write_tpdu(d, T_CREATE_TC, NULL, 0);
-        } else {
-            ca_write_tpdu(d, T_DATA_LAST, NULL, 0);
-        }
+    ca_device_t *d = ca_devices[s->sid];
+    if (d->state == CA_STATE_INACTIVE) {
+        ca_write_tpdu(d, T_CREATE_TC, NULL, 0);
+    } else {
+        ca_write_tpdu(d, T_DATA_LAST, NULL, 0);
     }
 #endif
     return 0;
@@ -2759,135 +2827,134 @@ int ca_reconnect(void *arg) {
             ca_devices[i]->state == CA_STATE_INITIALIZED) {
             {
                 // Send regular date/time updates to the CAM
-                if (d->datetime_response_interval &&
-                    (getTick() > d->datetime_next_send)) {
-                    ca_send_datetime(d);
+                if (ca_devices[i]->datetime_response_interval &&
+                    (getTick() > ca_devices[i]->datetime_next_send)) {
+                    ca_send_datetime(ca_devices[i]);
                 }
             }
-            return 0;
         }
+    return 0;
+}
 
-    void dvbca_init() // you can search the devices here and fill the
-                      // ca_devices, then open them here (for example
-                      // independent CA devices), or use dvbca_init_dev to open
-                      // them (like in this module)
-    {
-        int poller_sock;
-        extern int sock_signal;
-        memset(&dvbca, 0, sizeof(dvbca));
-        dvbca.ca_init_dev = dvbca_init_dev;
-        dvbca.ca_close_dev = dvbca_close_dev;
-        dvbca.ca_add_pmt = dvbca_process_pmt;
-        dvbca.ca_del_pmt = dvbca_del_pmt;
-        dvbca.ca_close_ca = dvbca_close;
-        dvbca.ca_ts = NULL; // dvbca_ts;
-        dvbca_id = add_ca(&dvbca, 0xFFFFFFFF);
-        poller_sock = sockets_add(SOCK_TIMEOUT, NULL, -1, TYPE_UDP, NULL, NULL,
-                                  (socket_action)ca_reconnect);
-        sockets_timeout(poller_sock, 1000); // try to connect every 1s
-        pthread_t tid = start_new_thread("CA_poll");
-        set_socket_thread(poller_sock, tid);
+void dvbca_init() // you can search the devices here and fill the
+                  // ca_devices, then open them here (for example
+                  // independent CA devices), or use dvbca_init_dev to open
+                  // them (like in this module)
+{
+    int poller_sock;
+    memset(&dvbca, 0, sizeof(dvbca));
+    dvbca.ca_init_dev = dvbca_init_dev;
+    dvbca.ca_close_dev = dvbca_close_dev;
+    dvbca.ca_add_pmt = dvbca_process_pmt;
+    dvbca.ca_del_pmt = dvbca_del_pmt;
+    dvbca.ca_close_ca = dvbca_close;
+    dvbca.ca_ts = NULL; // dvbca_ts;
+    dvbca_id = add_ca(&dvbca, 0xFFFFFFFF);
+    poller_sock = sockets_add(SOCK_TIMEOUT, NULL, -1, TYPE_UDP, NULL, NULL,
+                              (socket_action)ca_reconnect);
+    sockets_timeout(poller_sock, 1000); // try to connect every 1s
+    pthread_t tid = start_new_thread("CA_poll");
+    set_socket_thread(poller_sock, tid);
+}
+
+char *get_ca_pin(int i) {
+    if (ca_devices[i])
+        return ca_devices[i]->pin_str;
+    return NULL;
+}
+
+void set_ca_pin(int i, char *pin) {
+    if (!ca_devices[i])
+        ca_devices[i] = alloc_ca_device();
+    if (!ca_devices[i])
+        return;
+    memset(ca_devices[i]->pin_str, 0, sizeof(ca_devices[i]->pin_str));
+    strncpy(ca_devices[i]->pin_str, pin, sizeof(ca_devices[i]->pin_str) - 1);
+}
+
+void force_ci_adapter(int i) {
+    if (!ca_devices[i])
+        ca_devices[i] = alloc_ca_device();
+    if (!ca_devices[i])
+        return;
+    ca_devices[i]->force_ci = 1;
+}
+
+void set_ca_adapter_force_ci(char *o) {
+    int i, j, la, st, end;
+    char buf[1000], *arg[40], *sep;
+    SAFE_STRCPY(buf, o);
+    la = split(arg, buf, ARRAY_SIZE(arg), ',');
+    for (i = 0; i < la; i++) {
+        sep = strchr(arg[i], '-');
+
+        if (sep == NULL) {
+            st = end = map_int(arg[i], NULL);
+        } else {
+            st = map_int(arg[i], NULL);
+            end = map_int(sep + 1, NULL);
+        }
+        for (j = st; j <= end; j++) {
+
+            force_ci_adapter(j);
+            LOG("Forcing CA %d to CI", j);
+        }
     }
+}
 
-    char *get_ca_pin(int i) {
-        if (ca_devices[i])
-            return ca_devices[i]->pin_str;
-        return NULL;
+void set_ca_adapter_pin(char *o) {
+    int i, j, la, st, end;
+    char buf[1000], *arg[40], *sep, *seps;
+    SAFE_STRCPY(buf, o);
+    la = split(arg, buf, ARRAY_SIZE(arg), ',');
+    for (i = 0; i < la; i++) {
+        sep = strchr(arg[i], '-');
+        seps = strchr(arg[i], ':');
+
+        if (!seps)
+            continue;
+
+        if (sep == NULL) {
+            st = end = map_int(arg[i], NULL);
+        } else {
+            st = map_int(arg[i], NULL);
+            end = map_int(sep + 1, NULL);
+        }
+        for (j = st; j <= end; j++) {
+            set_ca_pin(j, seps + 1);
+            LOG("Setting CA %d pin to %s", j, seps + 1);
+        }
     }
+}
 
-    void set_ca_pin(int i, char *pin) {
-        if (!ca_devices[i])
-            ca_devices[i] = alloc_ca_device();
-        if (!ca_devices[i])
+void set_ca_multiple_pmt(char *o) {
+    int i, la, ddci;
+    char buf[1000], *arg[40], *sep, *seps;
+    SAFE_STRCPY(buf, o);
+    la = split(arg, buf, ARRAY_SIZE(arg), ',');
+    for (i = 0; i < la; i++) {
+        sep = strchr(arg[i], ':');
+
+        if (!sep)
+            continue;
+
+        int max_ca_pmt = atoi(sep + 1);
+
+        ddci = map_intd(arg[i], NULL, -1);
+        if (!ca_devices[ddci])
+            ca_devices[ddci] = alloc_ca_device();
+        if (!ca_devices[ddci])
             return;
-        memset(ca_devices[i]->pin_str, 0, sizeof(ca_devices[i]->pin_str));
-        strncpy(ca_devices[i]->pin_str, pin,
-                sizeof(ca_devices[i]->pin_str) - 1);
-    }
-
-    void force_ci_adapter(int i) {
-        if (!ca_devices[i])
-            ca_devices[i] = alloc_ca_device();
-        if (!ca_devices[i])
-            return;
-        ca_devices[i]->force_ci = 1;
-    }
-
-    void set_ca_adapter_force_ci(char *o) {
-        int i, j, la, st, end;
-        char buf[1000], *arg[40], *sep;
-        SAFE_STRCPY(buf, o);
-        la = split(arg, buf, ARRAY_SIZE(arg), ',');
-        for (i = 0; i < la; i++) {
-            sep = strchr(arg[i], '-');
-
-            if (sep == NULL) {
-                st = end = map_int(arg[i], NULL);
-            } else {
-                st = map_int(arg[i], NULL);
-                end = map_int(sep + 1, NULL);
-            }
-            for (j = st; j <= end; j++) {
-
-                force_ci_adapter(j);
-                LOG("Forcing CA %d to CI", j);
-            }
+        ca_devices[ddci]->multiple_pmt = 1;
+        ca_devices[ddci]->max_ca_pmt = max_ca_pmt;
+        LOG("Forcing CA %d to use multiple PMTs with maximum channels %d", ddci,
+            max_ca_pmt);
+        seps = sep;
+        while ((seps = strchr(seps + 1, '-'))) {
+            int caid = strtoul(seps + 1, NULL, 16);
+            if (caid > 0)
+                ca_devices[ddci]->caid[ca_devices[ddci]->caids++] = caid;
+            LOG("Forcing CA %d to use CAID %04X", ddci, caid);
         }
     }
-
-    void set_ca_adapter_pin(char *o) {
-        int i, j, la, st, end;
-        char buf[1000], *arg[40], *sep, *seps;
-        SAFE_STRCPY(buf, o);
-        la = split(arg, buf, ARRAY_SIZE(arg), ',');
-        for (i = 0; i < la; i++) {
-            sep = strchr(arg[i], '-');
-            seps = strchr(arg[i], ':');
-
-            if (!seps)
-                continue;
-
-            if (sep == NULL) {
-                st = end = map_int(arg[i], NULL);
-            } else {
-                st = map_int(arg[i], NULL);
-                end = map_int(sep + 1, NULL);
-            }
-            for (j = st; j <= end; j++) {
-                set_ca_pin(j, seps + 1);
-                LOG("Setting CA %d pin to %s", j, seps + 1);
-            }
-        }
-    }
-
-    void set_ca_multiple_pmt(char *o) {
-        int i, la, ddci;
-        char buf[1000], *arg[40], *sep, *seps;
-        SAFE_STRCPY(buf, o);
-        la = split(arg, buf, ARRAY_SIZE(arg), ',');
-        for (i = 0; i < la; i++) {
-            sep = strchr(arg[i], ':');
-
-            if (!sep)
-                continue;
-
-            int max_ca_pmt = atoi(sep + 1);
-
-            ddci = map_intd(arg[i], NULL, -1);
-            if (!ca_devices[ddci])
-                ca_devices[ddci] = alloc_ca_device();
-            if (!ca_devices[ddci])
-                return;
-            ca_devices[ddci]->multiple_pmt = 1;
-            ca_devices[ddci]->max_ca_pmt = max_ca_pmt;
-            LOG("Forcing CA %d to use multiple PMTs with maximum channels %d",
-                ddci, max_ca_pmt);
-            seps = sep;
-            while ((seps = strchr(seps + 1, '-'))) {
-                int caid = strtoul(seps + 1, NULL, 16);
-                if (caid > 0)
-                    ca_devices[ddci]->caid[ca_devices[ddci]->caids++] = caid;
-                LOG("Forcing CA %d to use CAID %04X", ddci, caid);
-            }
-        }
-    }
+}
