@@ -1804,7 +1804,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         // is video stream
         if (pmt->first_active_pid < 0 && is_video)
             pmt->first_active_pid = spid;
-        if (stream_pid_id > 0)
+        if (stream_pid_id >= 0)
             pmt_add_descriptors(pmt, stream_pid_id, pmt_b + i + 5, es_len);
 
         if (opmt != -1 && opmt != pmt->master_pmt) {
