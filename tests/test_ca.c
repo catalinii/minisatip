@@ -29,7 +29,6 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <libdvben50221/en50221_app_ca.h>
 #include <math.h>
 #include <net/if.h>
 #include <netdb.h>

@@ -1205,13 +1205,11 @@ int process_cat(int filter, unsigned char *b, int len, void *opaque) {
 void save_channels(SHashTable *ch) {
     int i, j;
     Sddci_channel *c;
-    struct stat buf;
-
     char ddci_conf_path[256];
     snprintf(ddci_conf_path, sizeof(ddci_conf_path) - 1, "%s/%s",
              opts.cache_dir, CONFIG_FILE_NAME);
 
-    if (!stat(ddci_conf_path, &buf)) {
+    if (!access(ddci_conf_path, R_OK)) {
         LOG("%s already exists, not saving", ddci_conf_path);
         return;
     }
