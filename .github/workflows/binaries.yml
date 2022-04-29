@@ -14,7 +14,7 @@ jobs:
         fetch-depth: '0'
     - name: Build ARM
       run: |
-       ./configure --enable-enigma --enable-static --host=arm-linux-gnueabihf --disable-dvbaes --disable-dvbca
+       ./configure --enable-static --host=arm-linux-gnueabihf
        make
        zip -9 -r /minisatip_arm.zip minisatip html
 
@@ -28,7 +28,7 @@ jobs:
     - name: Build MIPS
       run: |
        make clean
-       ./configure --enable-static --host=mipsel-tuxbox-linux-gnu --disable-dvbca --disable-dvbaes --enable-enigma
+       ./configure --enable-static --host=mipsel-tuxbox-linux-gnu
        make
        zip -9 -r /minisatip_mips.zip minisatip html
 

@@ -61,18 +61,6 @@ extern ca_device_t *ca_devices[MAX_ADAPTERS];
 extern SHashTable channels;
 extern SFilter *filters[MAX_FILTERS];
 
-typedef struct ca_device {
-    int enabled;
-    SCAPMT capmt[MAX_CA_PMT];
-    int max_ca_pmt, multiple_pmt;
-    int fd;
-    int slot_id;
-    int tc;
-    int id;
-    int ignore_close;
-    int init_ok;
-} ca_device_t;
-
 void create_pmt(SPMT *pmt, int id, int ad, int sid, int pid1, int pid2,
                 int caid1, int caid2) {
     memset(pmt, 0, sizeof(*pmt));
@@ -163,8 +151,8 @@ int test_add_del_pmt() {
     ca0.id = 0;
     ca1.id = 1;
     ca0.enabled = ca1.enabled = 1;
-    ca0.init_ok = 0;
-    ca1.init_ok = 1;
+    ca0.state = CA_STATE_ACTIVE;
+    ca1.state = CA_STATE_INITIALIZED;
     d0.max_channels = d1.max_channels = 1;
     ca_devices[0] = &ca0;
     ca_devices[1] = &ca1;
@@ -172,7 +160,7 @@ int test_add_del_pmt() {
     ASSERT(ddci_process_pmt(&ad, &pmt3) == TABLES_RESULT_ERROR_RETRY,
            "DDCI not ready, expected retry");
 
-    ca0.init_ok = 1;
+    ca0.state = CA_STATE_INITIALIZED;
     ASSERT(ddci_process_pmt(&ad, &pmt3) == TABLES_RESULT_ERROR_NORETRY,
            "DDCI ready, expected no retry");
 

@@ -148,7 +148,7 @@ int register_algo(SCW_op *o) {
 #ifndef DISABLE_DVBCSA
 void init_algo_csa();
 #endif
-#ifndef DISABLE_DVBAES
+#ifndef DISABLE_DVBCA
 void init_algo_aes();
 #endif
 
@@ -159,7 +159,7 @@ type_algo_init_func algo_init_func[] = {
 #ifndef DISABLE_DVBCSA
     &init_algo_csa,
 #endif
-#ifndef DISABLE_DVBAES
+#ifndef DISABLE_DVBCA
     &init_algo_aes,
 #endif
     NULL};

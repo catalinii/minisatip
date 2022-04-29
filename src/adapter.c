@@ -280,10 +280,8 @@ int init_hw(int i) {
         goto NOK;
     }
 
-#ifdef ENIGMA
-    if (ad->dmx_source == -1)
+    if (opts.enigma && ad->dmx_source == -1)
         ad->dmx_source = ad->fn;
-#endif
 
     if ((rv = ad->open(ad))) {
         init_complete = 0;

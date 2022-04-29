@@ -299,7 +299,7 @@ void free_hash(SHashTable *hash) {
     free(items);
     hash->items = NULL;
     hash->size = 0;
-    //mutex_unlock(&hash->mutex);
+    // mutex_unlock(&hash->mutex);
     mutex_destroy(&hash->mutex); // unlock and destroy mutex
     memset(hash, 0, sizeof(SHashTable));
     return;
@@ -1758,7 +1758,7 @@ void mkdir_recursive(const char *path) {
     char *p = NULL;
     size_t len;
 
-    snprintf(tmp, sizeof(tmp),"%s",path);
+    snprintf(tmp, sizeof(tmp), "%s", path);
     len = strlen(tmp);
     if (tmp[len - 1] == '/')
         tmp[len - 1] = 0;
@@ -1777,7 +1777,8 @@ void sleep_msec(uint32_t msec) {
     struct timespec req_ts;
     req_ts.tv_sec = msec / 1000;
     req_ts.tv_nsec = (msec % 1000) * 1000000L;
-    int32_t olderrno = errno; // Some OS (especially MacOSX) seem to set errno to ETIMEDOUT when sleeping
+    int32_t olderrno = errno; // Some OS (especially MacOSX) seem to set errno
+                              // to ETIMEDOUT when sleeping
 
     while (1) {
         /* Sleep for the time specified in req_ts. If interrupted by a
@@ -1791,6 +1792,27 @@ void sleep_msec(uint32_t msec) {
             break; // Some other error; bail out.
     }
     errno = olderrno;
+}
+
+int get_random(unsigned char *dest, int len) {
+    int fd;
+    char *urnd = "/dev/urandom";
+
+    fd = open(urnd, O_RDONLY);
+    if (fd < 0) {
+        LOG("cannot open %s", urnd);
+        return -1;
+    }
+
+    if (read(fd, dest, len) != len) {
+        LOG("cannot read from %s", urnd);
+        close(fd);
+        return -2;
+    }
+
+    close(fd);
+
+    return len;
 }
 
 /*

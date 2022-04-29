@@ -6,7 +6,6 @@ TARGET:=../minisatip
 CC=@CC@
 EMBEDDED=@EMBEDDED@
 DVBCSA=@DVBCSA@
-DVBAES=@DVBAES@
 DVBCA=@DVBCA@
 SATIPCLIENT=@SATIPCLIENT@
 NETCVCLIENT=@NETCVCLIENT@
@@ -14,7 +13,6 @@ STATIC=@STATIC@
 DVBAPI=@DVBAPI@
 LINUXDVB=@LINUXDVB@
 AXE=@AXE@
-ENIGMA=@ENIGMA@
 DDCI=0
 T2MI=0
 
@@ -32,7 +30,7 @@ ifneq ($(OS),apple)
         LDFLAGS += -lrt
 else
 	LINUXDVB=0
-	DVBAES=0
+	DVBCA=0
 	NETCVCLIENT=0
 endif
 
@@ -40,15 +38,6 @@ SOURCES=minisatip.c socketworks.c stream.c adapter.c utils.c
 
 TABLES=0
 PMT=0
-
-ifeq ($(DVBAES),1)
-LIBS+=crypto
-LDFLAGS-$(STATIC)+=-ldl
-SOURCES+=aes.c
-PMT=1
-else
-CFLAGS+=-DDISABLE_DVBAES
-endif
 
 ifeq ($(DVBCSA),1)
 LIBS+=dvbcsa
@@ -67,8 +56,8 @@ CFLAGS+=-DDISABLE_DVBAPI
 endif
 
 ifeq ($(DVBCA),1)
-LIBS+=dvben50221 dvbapi ucsi
-SOURCES+=ca.c
+LIBS+=crypto
+SOURCES+=ca.c aes.c
 TABLES=1
 PMT=1
 ifeq ($(OS),linux)
@@ -125,7 +114,6 @@ endif
 SOURCES-$(AXE) += axe.c
 CFLAGS-$(AXE) += -DAXE
 
-CFLAGS-$(ENIGMA) += -DENIGMA
 CFLAGS-$(EMBEDDED) += -DNO_BACKTRACE
 CFLAGS-$(DEBUG) += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=undefined -static-libasan -static-libubsan -static-liblsan
 

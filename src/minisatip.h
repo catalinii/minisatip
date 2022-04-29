@@ -7,7 +7,7 @@
 #include "stream.h"
 #include "utils.h"
 
-#define MAJOR "1.1."
+#define MAJOR "1.2."
 #define VERSION (MAJOR MINOR)
 
 #define EMU_PIDS_ALL_ENFORCED_PIDS_LIST 1, 16, 17, 18, 20, 21
@@ -55,8 +55,8 @@ struct struct_opts {
     char *name_app;
     char *http_host; // http-server host
     char *rtsp_host; // rtsp-server host
-    char *bind; // bind address
-    char *bind_dev; // bind device
+    char *bind;      // bind address
+    char *bind_dev;  // bind device
     char *datetime_compile;
     time_t start_time;
     char *datetime_start;
@@ -94,6 +94,7 @@ struct struct_opts {
     int use_ipv4_only;
     int use_demux_device;
     float strength_multiplier, snr_multiplier;
+    char enigma;
 #ifndef DISABLE_SATIPCLIENT
     char *satip_servers;
     char *satip_xml;
