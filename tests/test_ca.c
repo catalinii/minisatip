@@ -59,20 +59,6 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple);
 int get_active_capmts(ca_device_t *d);
 int get_enabled_pmts_for_ca(ca_device_t *d);
 
-typedef struct ca_device {
-    int enabled;
-    SCAPMT capmt[MAX_CA_PMT];
-    int max_ca_pmt, multiple_pmt;
-    int fd;
-    int slot_id;
-    int tc;
-    int id;
-    int ignore_close;
-    int init_ok;
-    uint16_t caid[MAX_CAID];
-    uint32_t caids;
-
-} ca_device_t;
 ca_device_t d;
 
 int test_multiple_pmt() {
@@ -126,10 +112,12 @@ int test_create_capmt() {
 int test_get_authdata_filename() {
     const char *expected_file_name = "/tmp/ci_auth_Conax_CSP_CIPLUS_CAM_4.bin";
     char actual_filename[FILENAME_MAX];
-    get_authdata_filename(actual_filename, sizeof(actual_filename), 4, "Conax CSP CIPLUS CAM");
+    get_authdata_filename(actual_filename, sizeof(actual_filename), 4,
+                          "Conax CSP CIPLUS CAM");
     LOG("Expected file name: %s", expected_file_name)
     LOG("File name: %s", actual_filename);
-    ASSERT(strcmp(actual_filename, expected_file_name) == 0, "Auth data filename mismatch");
+    ASSERT(strcmp(actual_filename, expected_file_name) == 0,
+           "Auth data filename mismatch");
 
     return 0;
 }

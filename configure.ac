@@ -50,7 +50,6 @@ NETCVCLIENT=0
 SATIPCLIENT=0
 STATIC=0
 AXE=0
-ENIGMA=0
 DVBAPI=0
 
 AC_ARG_ENABLE([linuxdvb],
@@ -202,21 +201,6 @@ else
 FM="$FM\n$axe disabled"
 fi
 
-AC_ARG_ENABLE([enigma],
-  [AS_HELP_STRING([--enable-enigma],
-  [enable compilation for enigma boxes])])
-
-AS_IF([test "x$enable_enigma" = "xyes"], [
-ENIGMA=1
-])
-
-if test "$ENIGMA" = "1"; then
-FM="$FM\n$enigma enabled"
-else
-FM="$FM\n$enigma disabled"
-fi
-
-
 AC_SUBST(LINUXDVB)
 AC_SUBST(DVBCSA)
 AC_SUBST(DVBCA)
@@ -226,7 +210,6 @@ AC_SUBST(SATIPCLIENT)
 AC_SUBST(STATIC)
 AC_SUBST(DVBAPI)
 AC_SUBST(AXE)
-AC_SUBST(ENIGMA)
 
 AC_CONFIG_FILES([src/Makefile])
 AC_CONFIG_FILES([tests/Makefile])

@@ -13,7 +13,6 @@ STATIC=@STATIC@
 DVBAPI=@DVBAPI@
 LINUXDVB=@LINUXDVB@
 AXE=@AXE@
-ENIGMA=@ENIGMA@
 DDCI=0
 T2MI=0
 
@@ -115,7 +114,6 @@ endif
 SOURCES-$(AXE) += axe.c
 CFLAGS-$(AXE) += -DAXE
 
-CFLAGS-$(ENIGMA) += -DENIGMA
 CFLAGS-$(EMBEDDED) += -DNO_BACKTRACE
 CFLAGS-$(DEBUG) += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=undefined -static-libasan -static-libubsan -static-liblsan
 

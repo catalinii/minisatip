@@ -47,7 +47,6 @@
 #define DEV_DVR "/dev/dvb/adapter%d/dvr%d"
 #define DEV_SEC "/dev/dvb/adapter%d/sec%d"
 
-#ifdef ENIGMA
 #ifndef DMX_SET_SOURCE
 /**
  * DMX_SET_SOURCE and dmx_source enum removed on 4.14 kernel
@@ -64,7 +63,6 @@ enum dmx_source {
     DMX_SOURCE_DVR3
 };
 #define DMX_SET_SOURCE _IOW('o', 49, enum dmx_source)
-#endif
 #endif
 
 char *fe_pilot[] = {"on", "off", " ", // auto
@@ -1725,27 +1723,27 @@ void get_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
         }
     }
 
-#ifdef ENIGMA
-    // In Enigma2 STRENGTH:[0..100] and SNR:dB*1000
-    int64_t strengthd = 0, snrd = 0, init_snr = 0;
-    float tf;
+    if (opts.enigma) {
+        // In Enigma2 STRENGTH:[0..100] and SNR:dB*1000
+        int64_t strengthd = 0, snrd = 0, init_snr = 0;
+        float tf;
 
-    strengthd = (*strength * 65535) / 100.0;
+        strengthd = (*strength * 65535) / 100.0;
 
-    init_snr = *snr;
-    tf = init_snr * 65535.0 / (1000 * ad->db_snr_map);
-    if (tf < 65535.0)
-        snrd = tf;
-    else
-        snrd = 65535;
-    init_snr = init_snr / 100;
-    if (init_snr > 999)
-        init_snr = 999; // No more than 99.9 dB
+        init_snr = *snr;
+        tf = init_snr * 65535.0 / (1000 * ad->db_snr_map);
+        if (tf < 65535.0)
+            snrd = tf;
+        else
+            snrd = 65535;
+        init_snr = init_snr / 100;
+        if (init_snr > 999)
+            init_snr = 999; // No more than 99.9 dB
 
-    *db = (int)init_snr;
-    *strength = (int)strengthd;
-    *snr = (int)snrd;
-#endif
+        *db = (int)init_snr;
+        *strength = (int)strengthd;
+        *snr = (int)snrd;
+    }
 
     LOGM("get_signal adapter %d: status %d, strength %d, snr %d, BER: %d",
          ad->id, *status, *strength, *snr, *ber);

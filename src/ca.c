@@ -413,7 +413,7 @@ ca_device_t *find_dvbca_for_pmt(SPMT *pmt) {
             for (j = 0; j < ca[dvbca_id].ad_info[i].caids; j++)
                 if (match_caid(pmt, ca[dvbca_id].ad_info[i].caid[j],
                                ca[dvbca_id].ad_info[i].mask[j])) {
-                    LOG("Found CA %d for PMT %d, ", i, pmt->id);
+                    LOG("Found CA %d for PMT %d", i, pmt->id);
                     return d;
                 }
         }
@@ -433,20 +433,21 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
     int listmgmt;
     SPMT *first = NULL;
 
-#ifdef ENIGMA
-    // detach the CI from the previous adapter
-    if (d->linked_adapter != ad->id) {
-        set_tuner_input(-1, d->linked_adapter);
-    }
-    // enigma allows attaching the CI to the adapter that needs it
-    d = find_dvbca_for_pmt(spmt);
-    if (!d)
-        return TABLES_RESULT_ERROR_NORETRY;
+    if (opts.enigma) {
+        // detach the CI from the previous adapter
+        if (d->linked_adapter != ad->id) {
+            set_tuner_input(-1, d->linked_adapter);
+        }
+        // enigma allows attaching the CI to the adapter that needs it
+        d = find_dvbca_for_pmt(spmt);
+        if (!d)
+            return TABLES_RESULT_ERROR_NORETRY;
 
-    set_tuner_input(d->id, ad->id);
-    set_input_ci(d->id, ad->id);
-    d->linked_adapter = ad->id;
-#endif
+        set_tuner_input(d->id, ad->id);
+        set_input_ci(d->id, ad->id);
+        d->linked_adapter = ad->id;
+    }
+
     if (!d)
         return TABLES_RESULT_ERROR_NORETRY;
 
@@ -2283,16 +2284,17 @@ int asn_1_encode(int length, uint8_t *asn_1_array) {
 // to the CA device For dvbca codepath, this wraps the session data into a TPDU
 // and sends it to the device.
 int ca_write_tpdu(ca_device_t *d, int tag, uint8_t *buf, int len) {
-#ifdef ENIGMA
+    if (opts.enigma) {
 
-    int written = write(d->fd, buf, len);
-    if (written != len) {
-        LOG("incomplete write to CA %d fd %d, expected %d got %d, errno %d %s",
-            d->id, d->fd, len, written, errno, strerror(errno));
-        return 1;
+        int written = write(d->fd, buf, len);
+        if (written != len) {
+            LOG("incomplete write to CA %d fd %d, expected %d got %d, errno %d "
+                "%s",
+                d->id, d->fd, len, written, errno, strerror(errno));
+            return 1;
+        }
+        return 0;
     }
-    return 0;
-#else
     uint8_t p_data[10 + len];
     int i_size;
     int slot_id = 0;
@@ -2357,8 +2359,6 @@ int ca_write_tpdu(ca_device_t *d, int tag, uint8_t *buf, int len) {
         return 1;
     }
     return 0;
-
-#endif
 }
 
 // writes session data to the CAM.
@@ -2606,14 +2606,14 @@ int ca_close(sockets *s) {
 
 int ca_timeout(sockets *s) {
     s->rtime = getTick();
-#ifndef ENIGMA
-    ca_device_t *d = ca_devices[s->sid];
-    if (d->state == CA_STATE_INACTIVE) {
-        ca_write_tpdu(d, T_CREATE_TC, NULL, 0);
-    } else {
-        ca_write_tpdu(d, T_DATA_LAST, NULL, 0);
+    if (!opts.enigma) {
+        ca_device_t *d = ca_devices[s->sid];
+        if (d->state == CA_STATE_INACTIVE) {
+            ca_write_tpdu(d, T_CREATE_TC, NULL, 0);
+        } else {
+            ca_write_tpdu(d, T_DATA_LAST, NULL, 0);
+        }
     }
-#endif
     return 0;
 }
 
@@ -2734,7 +2734,7 @@ void flush_handle(int fd) {
 }
 int dvbca_init_dev(adapter *ad) {
     ca_device_t *c = ca_devices[ad->id];
-    int fd;
+    int fd, result = 0;
     char ca_dev_path[100];
 
     if (c && c->state == CA_STATE_INITIALIZED)
@@ -2742,11 +2742,10 @@ int dvbca_init_dev(adapter *ad) {
 
     if (ad->type != ADAPTER_DVB && ad->type != ADAPTER_CI)
         return TABLES_RESULT_ERROR_NORETRY;
-#ifdef ENIGMA
-    sprintf(ca_dev_path, "/dev/ci%d", ad->id);
-#else
     sprintf(ca_dev_path, "/dev/dvb/adapter%d/ca%d", ad->pa, ad->fn);
-#endif
+    if (opts.enigma) {
+        sprintf(ca_dev_path, "/dev/ci%d", ad->id);
+    }
     fd = open(ca_dev_path, O_RDWR);
     if (fd < 0)
         LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
@@ -2778,14 +2777,16 @@ int dvbca_init_dev(adapter *ad) {
             c->force_ci = 0;
         }
     }
-#ifdef ENIGMA
-    if (ca_init_enigma(c)) {
-#else
-    if (ca_init_en50221(c)) {
-#endif
+
+    if (opts.enigma)
+        result = ca_init_enigma(c);
+    else
+        result = ca_init_en50221(c);
+    if (result) {
         ca_request_close(c);
         return TABLES_RESULT_ERROR_NORETRY;
     }
+
     set_socket_thread(c->sock, ad->thread);
     return TABLES_RESULT_OK;
 }

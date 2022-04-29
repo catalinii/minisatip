@@ -634,10 +634,6 @@ void set_options(int argc, char *argv[]) {
     // /dev/dvb/adapterX/dvrY set to 2 to set PSI and PES filters using
     // different ioctl
     opts.use_demux_device = 0;
-#if defined(ENIGMA)
-    opts.use_demux_device = 2;
-    opts.emulate_pids_all = 1;
-#endif
     opts.max_pids = 0;
     opts.dvbapi_offset =
         0; // offset for multiple dvbapi clients to the same server
@@ -1085,6 +1081,14 @@ void set_options(int argc, char *argv[]) {
 
 #endif
         }
+    }
+    if (access("/etc/enigma2/settings", F_OK) == 0) {
+        opts.enigma = 1;
+    }
+
+    if (opts.enigma) {
+        opts.use_demux_device = 2;
+        opts.emulate_pids_all = 1;
     }
 
     lip = getlocalip();

@@ -624,7 +624,6 @@ ac_includes_default="\
 
 ac_header_list=
 ac_subst_vars='LTLIBOBJS
-ENIGMA
 AXE
 DVBAPI
 STATIC
@@ -697,7 +696,6 @@ enable_satipc
 enable_static
 enable_dvbapi
 enable_axe
-enable_enigma
 '
       ac_precious_vars='build_alias
 host_alias
@@ -1337,7 +1335,6 @@ Optional Features:
   --enable-static         enable static compilation
   --disable-dvbapi        disable dvbapi protocol support
   --enable-axe            enable compilation for axe: Inverto IDL400
-  --enable-enigma         enable compilation for enigma boxes
 
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
@@ -3979,7 +3976,6 @@ NETCVCLIENT=0
 SATIPCLIENT=0
 STATIC=0
 AXE=0
-ENIGMA=0
 DVBAPI=0
 
 # Check whether --enable-linuxdvb was given.
@@ -4235,26 +4231,6 @@ FM="$FM\n$axe enabled"
 else
 FM="$FM\n$axe disabled"
 fi
-
-# Check whether --enable-enigma was given.
-if test "${enable_enigma+set}" = set; then :
-  enableval=$enable_enigma;
-fi
-
-
-if test "x$enable_enigma" = "xyes"; then :
-
-ENIGMA=1
-
-fi
-
-if test "$ENIGMA" = "1"; then
-FM="$FM\n$enigma enabled"
-else
-FM="$FM\n$enigma disabled"
-fi
-
-
 
 
 
