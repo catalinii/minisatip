@@ -1730,7 +1730,7 @@ void get_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
     int64_t strengthd = 0, snrd = 0, init_snr = 0;
     float tf;
 
-    strengthd = (*strength * 65535) / 100.0;
+    strengthd = *strength * 655.35;
 
     init_snr = *snr;
     tf = init_snr * 65535.0 / (1000 * ad->db_snr_map);
