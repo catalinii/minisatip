@@ -399,8 +399,10 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
 
     if (pos == -1) {
         for (i = 0; i < d->max_channels; i++)
-            if (d->pmt[i].id == -1)
+            if (d->pmt[i].id == -1) {
                 pos = i;
+		break;
+	    }
     }
 
     if (pos == -1) {

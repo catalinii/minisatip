@@ -29,7 +29,7 @@ alternative source
 #include "dvb.h"
 #include "dvbapi.h"
 #include "minisatip.h"
-#include "pmt.h"
+#include "tables.h"
 #include "poll.h"
 #include "search.h"
 #include "socketworks.h"

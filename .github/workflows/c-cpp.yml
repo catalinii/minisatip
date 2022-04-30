@@ -13,10 +13,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: dvbcsa
-      run: sudo apt-get install -y -f libdvbcsa-dev
+    - name: dependencies
+      run: sudo apt-get install -y -f libdvbcsa-dev libssl-dev
     - name: configure
-      run: ./configure
+      run: ./configure --with-mcli=/vdr-plugin-mcli/
     - name: make
       run: make EXTRA_CFLAGS=-Werror
     - name: make test

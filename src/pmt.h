@@ -1,4 +1,3 @@
-#ifndef DISABLE_PMT
 #ifndef PMT_H
 #define PMT_H
 #include "adapter.h"
@@ -233,5 +232,4 @@ int pmt_decrypt_stream(adapter *ad);
 int wait_pusi(adapter *ad, int len);
 int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf);
 void free_filters();
-#endif
 #endif

@@ -2,7 +2,7 @@
 #define CA_H
 #include "adapter.h"
 #include "aes.h"
-#include "tables.h"
+#include "pmt.h"
 #define MAX_CA_PMT 4
 #define MAX_SESSIONS 64
 #define PMT_INVALID -1

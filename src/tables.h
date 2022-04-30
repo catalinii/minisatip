@@ -7,7 +7,6 @@
 #include "pmt.h"
 
 #define MAX_CA 8
-#define MAX_CAID_LEN 30
 
 #define TABLES_RESULT_OK 0
 #define TABLES_RESULT_ERROR_RETRY 1
@@ -29,7 +28,7 @@ typedef struct struct_CA_op {
 } SCA_op;
 
 typedef struct struct_CA_AD {
-    int caid[MAX_CAID_LEN], mask[MAX_CAID_LEN];
+    int caid[MAX_CAID], mask[MAX_CAID];
     int caids;
 
 } SCA_AD;

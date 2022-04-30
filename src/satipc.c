@@ -20,7 +20,7 @@
 #define _GNU_SOURCE
 
 #include "satipc.h"
-#include "ca.h"
+#include "pmt.h"
 #include "dvb.h"
 #include "dvbapi.h"
 #include "minisatip.h"
