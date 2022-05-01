@@ -2,6 +2,8 @@ name: Binaries
 on:
   push:
     branches: [ master ]
+  pull_request:
+    branches: [ master ]
 
 jobs:
   build:
@@ -35,6 +37,7 @@ jobs:
 
     - name: Bump version and push tag/create release point
       uses: anothrNick/github-tag-action@1.35.0
+      if: ${{ github.event_name == 'push' }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         WITH_V: true
@@ -42,6 +45,7 @@ jobs:
       id: bump_version
     - name: Upload binary to release
       uses: svenstaro/upload-release-action@v1-release
+      if: ${{ github.event_name == 'push' }}
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
         file: /minisatip*zip

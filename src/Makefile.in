@@ -57,6 +57,7 @@ endif
 
 ifeq ($(DVBCA),1)
 LIBS+=crypto
+LDFLAGS += -ldl
 SOURCES+=ca.c aes.c
 TABLES=1
 PMT=1

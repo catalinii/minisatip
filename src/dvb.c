@@ -20,7 +20,7 @@
 
 #include "dvb.h"
 #include "adapter.h"
-#include "ca.h"
+#include "pmt.h"
 #include "minisatip.h"
 #include "utils.h"
 #include <arpa/inet.h>

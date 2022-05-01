@@ -133,7 +133,7 @@ void add_caid_mask(int ica, int aid, int caid, int mask) {
         LOG("%s: No adapter %d found ", __FUNCTION__, aid);
         return;
     }
-    if (ca[ica].enabled && ca[ica].ad_info[aid].caids < MAX_CAID_LEN) {
+    if (ca[ica].enabled && ca[ica].ad_info[aid].caids < MAX_CAID) {
         for (i = 0; i < ca[ica].ad_info[aid].caids; i++)
             if (ca[ica].ad_info[aid].caid[i] == caid &&
                 ca[ica].ad_info[aid].mask[i] == mask)

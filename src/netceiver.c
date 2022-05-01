@@ -37,6 +37,10 @@ SNetceiver *sn[MAX_ADAPTERS];
 int handle_ts(unsigned char *buffer, size_t len, void *p);
 int handle_ten(tra_t *ten, void *p);
 
+// Missing from libvdr-mcli.so, controls the debugging messages
+int m_debugmask = 0;
+int m_logskipmask = 0;
+
 extern char *fe_pilot[];
 extern char *fe_rolloff[];
 extern char *fe_delsys[];
