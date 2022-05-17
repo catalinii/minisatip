@@ -970,7 +970,7 @@ void set_sockets_rtime(int i, int r) {
     if (ss)
         ss->rtime = r;
 }
-#ifndef __APPLE__
+#ifdef __linux__
 
 int get_mac_address(char *mac) {
     struct ifreq ifr;
