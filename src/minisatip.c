@@ -1851,6 +1851,7 @@ int main(int argc, char *argv[]) {
         if ((ssdp1 = udp_bind(opts.disc_host, 1900, 1)) < 1)
             FAIL("SSDP: Could not bind on %s udp port 1900", opts.disc_host);
         if (opts.bind_dev) {
+#if defined(SO_BINDTODEVICE)
             struct ifreq ifr;
             memset(&ifr, 0, sizeof(ifr));
             snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "%s", opts.bind_dev);
@@ -1861,6 +1862,9 @@ int main(int argc, char *argv[]) {
                            sizeof(ifr)) < 0)
                 LOG("SSDP: Failed to set SO_BINDTODEVICE to %s", opts.bind_dev);
             LOG("SSDP: Bound to device %s", opts.bind_dev);
+#else
+            LOG("SSDP: Binding to device with SO_BINDTODEVICE not supported!");
+#endif
         }
 
         si = sockets_add(ssdp, NULL, -1, TYPE_UDP, (socket_action)ssdp_reply,
