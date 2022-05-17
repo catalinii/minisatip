@@ -851,11 +851,12 @@ int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol,
     if (ad->wakeup)
         ad->wakeup(ad, fd, pol ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13);
 
+    // Send commands at 18V
+    if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18) == -1)
+        LOG("send_diseqc: FE_SET_VOLTAGE failed for fd %d: %s", fd,
+            strerror(errno));
     if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
         LOG("send_diseqc: FE_SET_TONE failed for fd %d: %s", fd,
-            strerror(errno));
-    if (ioctl(fd, FE_SET_VOLTAGE, pol ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13) == -1)
-        LOG("send_diseqc: FE_SET_VOLTAGE failed for fd %d: %s", fd,
             strerror(errno));
 
     if (!d->fast || pos_change) {
@@ -878,6 +879,11 @@ int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol,
 
     sleep_msec(d->after_burst);
 
+    // Select target voltage
+    if (ioctl(fd, FE_SET_VOLTAGE, pol ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13) == -1)
+        LOG("send_diseqc: FE_SET_VOLTAGE failed for fd %d: %s", fd,
+            strerror(errno));
+    // Select target tone
     if (ioctl(fd, FE_SET_TONE, hiband ? SEC_TONE_ON : SEC_TONE_OFF) == -1)
         LOG("send_diseqc: FE_SET_TONE failed for fd %d: %s", fd,
             strerror(errno));
