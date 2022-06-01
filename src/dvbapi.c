@@ -752,7 +752,7 @@ int keys_del(int i) {
     for (j = 0; j < MAX_KEYS; j++)
         if (i != j && keys[j] && keys[j]->enabled) {
             ek++;
-            if (k->demux_index == keys[i]->demux_index)
+            if (k->demux_index == keys[j]->demux_index)
                 ed++;
         }
     if (!ek) {
