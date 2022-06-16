@@ -6,7 +6,7 @@
 #include <sys/socket.h>
 
 // MAX_STREAMS, DDCI_SID should fit in adapter->sid
-#define MAX_STREAMS 100
+#define MAX_STREAMS 256
 // STREAMS reserved by another modules
 #define DDCI_SID (MAX_STREAMS + 1)
 

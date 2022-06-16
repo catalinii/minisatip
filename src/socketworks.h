@@ -1,6 +1,6 @@
 #ifndef SOCKETWORKS_H
 #define SOCKETWORKS_H
-#define MAX_SOCKS 300
+#define MAX_SOCKS 1024
 #include "utils.h"
 #include <netinet/in.h>
 #include <sys/socket.h>
