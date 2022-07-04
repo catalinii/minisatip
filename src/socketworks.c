@@ -563,6 +563,7 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
     ss->id = i;
     ss->sock_err = 0;
     ss->overflow = 0;
+    ss->overflow_packets = 0;
     ss->buf_alloc = ss->buf_used = 0;
     ss->iteration = 0;
     ss->spos = ss->wpos = 0;
@@ -1455,19 +1456,20 @@ int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt,
     }
 
     s->buf_used++;
-    LOGM(
-        "SOCK %d it %d: queueing %d bytes at %d (out of %d) send pos %d [A:%d, "
-        "U:%d]",
-        s->id, s->iteration, len, s->wpos, s->wmax, s->spos, s->buf_alloc,
-        s->buf_used);
+    LOGL((s->buf_used % 100 == 0) ? DEFAULT_LOG : 1,
+         "SOCK %d it %d: queueing %d bytes at %d (out of %d) send pos %d [A:%d, "
+         "U:%d]",
+         s->id, s->iteration, len, s->wpos, s->wmax, s->spos, s->buf_alloc,
+         s->buf_used);
 
     if (s->spos ==
         ((s->wpos + 1) % s->wmax)) // the queue is full, start overwriting
     {
         s->overflow += len;
-        if ((s->overflow < 100) || ((s->overflow % 100) == 0) ||
+        s->overflow_packets++;
+        if ((s->overflow_packets < 100) || ((s->overflow_packets % 100) == 0) ||
             (opts.log & DEFAULT_LOG))
-            LOG("sock %d: overflow %d bytes it %d", s->id, s->overflow,
+            LOG("Insufficient bandwidth: sock %d: overflow %d bytes it %d", s->id, s->overflow,
                 s->iteration);
 
         if (tmpbuf)
@@ -1481,6 +1483,7 @@ int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt,
         pos += iov[i].iov_len;
     }
     p->len = pos;
+    s->buffered_bytes += pos;
     s->wpos = (s->wpos + 1) % s->wmax;
 
     if (tmpbuf)
@@ -1498,7 +1501,7 @@ int sockets_write(int sock_id, void *buf, int len) {
 
 int flush_socket(sockets *s) {
     struct iovec iov[2];
-    int r = 1, rv;
+    int r = 1, rv = 0;
     SNPacket *p = NULL;
 
     memset(iov, 0, sizeof(iov));
@@ -1509,7 +1512,6 @@ int flush_socket(sockets *s) {
     else
         goto end;
     if (p->buf) {
-
         iov[0].iov_len = p->len;
         iov[0].iov_base = p->buf;
         rv = my_writev(s, iov, 1);
@@ -1519,6 +1521,7 @@ int flush_socket(sockets *s) {
                 (s->wpos - s->spos + s->wmax) % s->wmax, rv, p->len - rv);
             memmove(p->buf, p->buf + rv, p->len - rv);
             p->len -= rv;
+            s->buffered_bytes -= rv;
             return 1;
         } else {
             if (rv != p->len)
@@ -1527,8 +1530,10 @@ int flush_socket(sockets *s) {
     }
     LOGM("SOCK %d: flushed %d out of %d (%d bytes)", s->id, s->spos, s->wpos,
          p ? p->len : -1);
-    if (!s->prio_pack.len)
+    if (!s->prio_pack.len) {
         s->spos = (s->spos + 1) % s->wmax;
+        s->buffered_bytes -= p->len;
+    }
     else { // makes sure http response (prio_pack) is sent next
         SNPacket tmp;
         memcpy(&tmp, p, sizeof(tmp));
@@ -1603,4 +1608,13 @@ void sockets_set_master(int slave, int master) {
     s->tid = m->tid;
     s->master = master;
     LOG("sock %d is master for sock %d", s->master, s->id);
+}
+
+int64_t get_sock_buffered_bytes() {
+    uint64_t r = 0;
+    int i;
+    for (i = 0; i < MAX_SOCKS; i++)
+        if (s[i] && s[i]->enabled)
+            r += s[i]->buffered_bytes;
+    return r;
 }

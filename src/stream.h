@@ -92,7 +92,7 @@ int unlock_streams_for_adapter(int aid);
 #define get_sid_nw(i)                                                          \
     ((i >= 0 && i < MAX_STREAMS && st[i] && st[i]->enabled) ? st[i] : NULL)
 
-extern int64_t c_tbw, c_bw;
+extern int64_t c_tbw, c_bw, c_bw_dmx;
 extern uint32_t c_reads, c_writes, c_failed_writes;
 extern int64_t c_ns_read, c_tt;
 

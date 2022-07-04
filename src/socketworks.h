@@ -53,7 +53,8 @@ typedef struct struct_sockets {
     SNPacket prio_pack; // http_responses have higher priority
     int flush_enqued_data;
     int spos, wmax, wpos;
-    int overflow, buf_alloc, buf_used;
+    int overflow, buf_alloc, buf_used, overflow_packets;
+    int64_t buffered_bytes;
     // if != -1 points to the master socket which holds the buffer and the
     // action function. Useful when the DVR buffer comes from different file
     // handles
@@ -129,6 +130,7 @@ void set_socket_dscp(int id, int dscp, int prio);
 void sockets_set_opaque(int id, void *opaque, void *opaque2, void *opaque3);
 void sockets_force_close(int id);
 void sockets_set_master(int slave, int master);
+int64_t get_sock_buffered_bytes();
 extern __thread char thread_name[];
 extern __thread pthread_t tid;
 extern __thread int select_timeout;

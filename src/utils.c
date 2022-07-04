@@ -987,6 +987,7 @@ int get_json_bandwidth(char *buf, int len) {
     strlcatf(buf, len, ptr, "\
 {\n\
 \"bw\":%jd,\n\
+\"dmx\":%jd,\n\
 \"tbw\":%jd,\n\
 \"reads\":%u,\n\
 \"writes\":%u,\n\
@@ -994,7 +995,7 @@ int get_json_bandwidth(char *buf, int len) {
 \"ns_read\":%jd,\n\
 \"tt\":%jd\n\
 }",
-             c_bw, c_tbw, c_reads, c_writes, c_failed_writes, c_ns_read, c_tt);
+             c_bw, c_bw_dmx, c_tbw, c_reads, c_writes, c_failed_writes, c_ns_read, c_tt);
     mutex_unlock(&bw_mutex);
     return ptr;
 }
