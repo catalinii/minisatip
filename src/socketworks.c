@@ -1227,7 +1227,7 @@ struct mmsghdr {
 };
 #endif
 
-#if defined(__APPLE__) || defined(__SH4__)
+#if defined(__APPLE__) || defined(__SH4__) || defined(NEEDS_SENDMMSG_SHIM)
 int sendmmsg0(int rsock, struct mmsghdr *msg, int len, int t) {
     int i;
     for (i = 0; i < len; i++)
