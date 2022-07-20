@@ -8,39 +8,25 @@ on:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
+    container: catalinii/minisatip-build-image:latest
 
     steps:
     - uses: actions/checkout@v2
-    - name: dvbcsa
-      run: sudo apt-get install -y -f libdvbcsa-dev curl libssl-dev
     - name: configure
       run: ./configure
     - name: make
-      run: make EXTRA_CFLAGS=-Werror
+      run: make
     - name: make test
       run: make test;make clean
-    - name: Download Coverity Build Tool
-      run: |
-          wget -q https://scan.coverity.com/download/cxx/linux64 --post-data "token=$TOKEN&project=$PROJECT" -O cov-analysis-linux64.tar.gz
-          mkdir cov-analysis-linux64
-          tar xzf cov-analysis-linux64.tar.gz --strip 1 -C cov-analysis-linux64
-      env:
-          TOKEN: ${{ secrets.COVERITY_SCAN_TOKEN }}
-          PROJECT: minisatip2
 
-    - name: Build with cov-build
+    - name: Coverity Scan
       run: |
-          export PATH=`pwd`/cov-analysis-linux64/bin:$PATH
-          cov-build --dir cov-int make
-
-    - name: Submit the result to Coverity Scan
-      run: |
+          /cov-analysis-linux64/bin/cov-build --dir cov-int make
           tar czvf MINISATIP.tgz cov-int
           curl \
             --form project=$PROJECT \
-            --form token=$TOKEN \
+            --form token=$(cat /etc/coverity) \
             --form email='reply+AB6SAEPNLEJSCE2WJ37GDNF6TC2NXEVBNHHDIEHQTY@reply.github.com' \
             --form file=@MINISATIP.tgz \
             --form version=trunk \
