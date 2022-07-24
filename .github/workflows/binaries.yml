@@ -7,9 +7,9 @@ on:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
     container: catalinii/minisatip-build-image:latest
+    
     steps:
     - uses: actions/checkout@v2
       with:
