@@ -459,10 +459,7 @@ int axe_setup_switch(adapter *ad) {
         }
     } else {
         aid = ad->id & 3;
-        if (diseqc_param->switch_type == SWITCH_UNICABLE ||
-            diseqc_param->switch_type == SWITCH_JESS) {
-            input = ad->master_source < 0 ? 0 : ad->master_source;
-        }
+        input = ad->master_source < 0 ? 0 : ad->master_source;
         frontend_fd = ad->fe;
         ad = axe_use_adapter(input);
         if (ad == NULL) {
