@@ -667,9 +667,6 @@ int source_enabled_for_adapter(adapter *ad, transponder *tp) {
         return 1;
     if (tp->sys != SYS_DVBS && tp->sys != SYS_DVBS2)
         return 1;
-#ifdef AXE
-    return 1;
-#endif
     return ad->absolute_table[tp->diseqc - 1];
 }
 
