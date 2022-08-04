@@ -732,6 +732,7 @@ int axe_get_signal(adapter *ad) {
     // Lock the adapter while doing changes
     adapter_lock(ad->id);
     ad->snr = snr;
+    ad->db = db;
     ad->strength = strength;
     ad->status = status;
     ad->ber = ber;
