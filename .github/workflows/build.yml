@@ -1,0 +1,27 @@
+name: Build
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: catalinii/minisatip-build-image:latest
+    
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: '0'
+#
+    - name: Build all disabled
+      run: |
+       ./configure --disable-linuxdvb --disable-dvbca --disable-dvbcsa --disable-netcv --disable-satipc --disable-dvbapi
+       make
+
+    - name: Build all enabled
+      run: |
+       make clean
+       ./configure --enable-linuxdvb --enable-dvbca --enable-netcv --enable-satipc --enable-dvbapi --enable-axe
+       make
