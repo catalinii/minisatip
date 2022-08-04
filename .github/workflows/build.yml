@@ -8,20 +8,29 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: catalinii/minisatip-build-image:latest
+    container: ubuntu:22.04
     
     steps:
     - uses: actions/checkout@v2
       with:
         fetch-depth: '0'
-#
+
+    - name: Install build essentials
+      run: |
+        apt-get -y update
+        apt-get -y install build-essential
+
     - name: Build all disabled
       run: |
        ./configure --disable-linuxdvb --disable-dvbca --disable-dvbcsa --disable-netcv --disable-satipc --disable-dvbapi
        make
 
+    - name: Install additional build dependencies
+      run: |
+        apt-get -y install libdvbcsa-dev libssl-dev
+
     - name: Build all enabled
       run: |
        make clean
-       ./configure --enable-linuxdvb --enable-dvbca --enable-netcv --enable-satipc --enable-dvbapi --enable-axe
+       ./configure --enable-linuxdvb --enable-dvbca --enable-dvbcsa --enable-netcv --enable-satipc --enable-dvbapi --enable-axe
        make
