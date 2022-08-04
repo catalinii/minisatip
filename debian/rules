@@ -1,0 +1,18 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@ --with vdrplugin
+
+execute_after_override_dh_install:
+	chmod 644 debian/minisatip/usr/share/minisatip/html/status.html
+
+override_dh_clean:
+	dh_clean Makefile config.log config.status src/Makefile \
+	tests/Makefile
+
+override_dh_install:
+	dh_install
+
+	chmod 644 debian/minisatip/usr/share/minisatip/html/status.html
+
+override_dh_auto_test:

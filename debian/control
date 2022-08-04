@@ -1,0 +1,23 @@
+Source: minisatip-dmo
+Section: video
+Priority: optional
+Maintainer: Christian Marillat <marillat@deb-multimedia.org>
+Bugs: mailto:marillat@deb-multimedia.org
+Homepage: https://minisatip.org/
+Standards-Version: 4.6.1
+Build-Depends: debhelper-compat (= 13), libdvbcsa-dev, libssl-dev, dvb-apps,
+ vdr-dev (>= 2.4.7~)
+
+Package: minisatip
+Architecture: any
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}, lsb-base, dvb-apps, node-jquery
+Suggests: ${vdr:Depends}, tvheadend, vlc
+Description: SAT>IP server using local DVB-S2, DVB-C, DVB-T or ATSC cards
+ Minisatip is a multi-threaded satip server version 1.2 that runs under
+ Linux and it was tested with DVB-S, DVB-S2, DVB-T, DVB-T2, DVB-C, DVB-C2,
+ ATSC and ISDB-T cards.
+ .
+ The application is designed to stream the requested data to multiple
+ clients (even with one dvb card) in the same time while opening different
+ pids.
