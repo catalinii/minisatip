@@ -727,8 +727,9 @@ int axe_get_signal(adapter *ad) {
     if (tmp <= 15)
         tmp = 0;
     snr = tmp;
-    // keep the assignment at the end for the signal thread to get the right
-    // values as no locking is done on the adapter
+
+    // Lock the adapter while doing changes
+    adapter_lock(ad->id);
     ad->snr = snr;
     ad->strength = strength;
     ad->status = status;
@@ -737,10 +738,10 @@ int axe_get_signal(adapter *ad) {
     if (ad->status == 0 &&
         ((ad->tp.diseqc_param.switch_type == SWITCH_JESS) ||
          (ad->tp.diseqc_param.switch_type == SWITCH_UNICABLE))) {
-        adapter_lock(ad->id);
         axe_setup_switch(ad);
-        adapter_unlock(ad->id);
     }
+
+    adapter_unlock(ad->id);
     return 0;
 }
 
