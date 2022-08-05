@@ -453,11 +453,20 @@ void set_adapter_signal(adapter *ad, char *b, int rlen) {
         // "SES1....ver=1.2;src=1;tuner=1,106,1,0,538.00,8,dvbc,256qam,6900,,,,1;pids=0,118,2351,2352"
         if (snr == 0 && strength > 0 && status > 0)
             snr = 7;
+
+        // Ignore server signal strength if multipliers are set to 0
+        if (!ad->strength_multiplier && !ad->snr_multiplier) {
+            LOG("satipc: Ignoring server signal status since both strength_multiplier and snr_multiplier are 0");
+            strength = 255;
+            snr = 15;
+        }
+
         if (ad->strength != strength || ad->snr != snr)
             LOG("satipc: Received signal status from the server for adapter "
                 "%d, "
                 "stength=%d status=%d snr=%d",
                 ad->id, strength, status, snr);
+
         ad->strength = strength;
         ad->status = status ? FE_HAS_LOCK : 0;
         ad->snr = snr;
