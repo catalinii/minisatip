@@ -1887,8 +1887,8 @@ int dvb_get_signal(adapter *ad) {
     if (snr > 255)
         snr = 255;
 
-    // keep the assignment at the end for the signal thread to get the right
-    // values as no locking is done on the adapter
+    // Lock the adapter while doing changes
+    adapter_lock(ad->id);
     ad->snr = snr;
     ad->db = dbvalue;
     ad->strength = strength;
@@ -1898,10 +1898,10 @@ int dvb_get_signal(adapter *ad) {
     if (ad->status == 0 &&
         ((ad->tp.diseqc_param.switch_type == SWITCH_JESS) ||
          (ad->tp.diseqc_param.switch_type == SWITCH_UNICABLE))) {
-        adapter_lock(ad->id);
         setup_switch(ad);
-        adapter_unlock(ad->id);
     }
+
+    adapter_unlock(ad->id);
     return 0;
 }
 

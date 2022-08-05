@@ -714,8 +714,9 @@ fe_delivery_system_t axe_delsys(int aid, int fd, fe_delivery_system_t *sys) {
 }
 
 int axe_get_signal(adapter *ad) {
-    int strength = 0, snr = 0, db = 0, tmp;
-    int status = 0, ber = 0;
+    uint16_t strength = 0, snr = 0, db = 0, tmp;
+    int status = 0;
+    uint32_t ber = 0;
     get_signal(ad, &status, &ber, &strength, &snr, &db);
 
     strength = strength * 240 / 24000;
@@ -727,9 +728,11 @@ int axe_get_signal(adapter *ad) {
     if (tmp <= 15)
         tmp = 0;
     snr = tmp;
-    // keep the assignment at the end for the signal thread to get the right
-    // values as no locking is done on the adapter
+
+    // Lock the adapter while doing changes
+    adapter_lock(ad->id);
     ad->snr = snr;
+    ad->db = db;
     ad->strength = strength;
     ad->status = status;
     ad->ber = ber;
@@ -737,10 +740,10 @@ int axe_get_signal(adapter *ad) {
     if (ad->status == 0 &&
         ((ad->tp.diseqc_param.switch_type == SWITCH_JESS) ||
          (ad->tp.diseqc_param.switch_type == SWITCH_UNICABLE))) {
-        adapter_lock(ad->id);
         axe_setup_switch(ad);
-        adapter_unlock(ad->id);
     }
+
+    adapter_unlock(ad->id);
     return 0;
 }
 
