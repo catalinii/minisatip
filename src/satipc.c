@@ -1485,9 +1485,6 @@ int satipc_tune(int aid, transponder *tp) {
     LOG("satipc: tuning to freq %d, sys %d for adapter %d", ad->tp.freq / 1000,
         ad->tp.sys, aid);
     ad->err = 0;
-    ad->strength = 0;
-    ad->status = 0;
-    ad->snr = 0;
     sip->want_commit = 0;
     sip->want_tune = 1;
     // ignore all the packets until we get 200 from the server

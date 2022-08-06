@@ -1330,7 +1330,8 @@ char *describe_adapter(int sid, int aid, char *dad, int ld) {
 
     if (use_ad) {
         if (ad->status < 0) {
-            status = strength = snr = 0;
+            status = 255;
+	    snr = 15;
         } else {
             strength = ad->strength;
             snr = ad->snr;
