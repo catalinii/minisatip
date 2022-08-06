@@ -1171,7 +1171,7 @@ int dvb_tune(int aid, transponder *tp) {
 #endif
 #endif
 #if DVBAPIVERSION >= 0x050b /* 5.11 */
-        if (tp->pls_mode != TP_VALUE_UNSET)
+        if (tp->pls_code >= 0)  // Use Gold plp_mode by default if plsc specified
             ADD_PROP(DTV_SCRAMBLING_SEQUENCE_INDEX, pls_scrambling_index(tp))
 #endif
 
