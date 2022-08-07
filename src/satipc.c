@@ -435,41 +435,41 @@ int satipc_timeout(sockets *s) {
 }
 
 void set_adapter_signal(adapter *ad, char *b, int rlen) {
-    int strength, status, snr;
+    int strength, status, quality;
     char *tun, *signal = NULL;
 
     tun = strstr((const char *)b, "tuner=");
     if (tun)
         signal = strchr(tun, ',');
     if (signal) {
-        sscanf(signal + 1, "%d,%d,%d", &strength, &status, &snr);
+        sscanf(signal + 1, "%d,%d,%d", &strength, &status, &quality);
         // Workaround for faulty servers (level=0)
         // Ex. XORO:
         // "SES1....ver=1.0;src=1;tuner=1,0,1,15,10744,h,dvbs,qpsk,off,0.35,22000,56;pids=0,100,200,400,500,600,17,16"
-        if (strength == 0 && status > 0 && snr > 0)
+        if (strength == 0 && status > 0 && quality > 0)
             strength = 1;
         // Workaround for faulty servers (quality=0)
         // Ex. AVM 6490:
         // "SES1....ver=1.2;src=1;tuner=1,106,1,0,538.00,8,dvbc,256qam,6900,,,,1;pids=0,118,2351,2352"
-        if (snr == 0 && strength > 0 && status > 0)
-            snr = 7;
+        if (quality == 0 && strength > 0 && status > 0)
+            quality = 7;
 
         // Ignore server signal strength if multipliers are set to 0
         if (!ad->strength_multiplier && !ad->snr_multiplier) {
             LOG("satipc: Ignoring server signal status since both strength_multiplier and snr_multiplier are 0");
-            strength = 255;
-            snr = 15;
+            strength = SATIP_MAX_STRENGTH;
+            quality = SATIP_MAX_QUALITY;
         }
 
-        if (ad->strength != strength || ad->snr != snr)
+        if (ad->strength != strength || ad->snr != quality)
             LOG("satipc: Received signal status from the server for adapter "
                 "%d, "
-                "stength=%d status=%d snr=%d",
-                ad->id, strength, status, snr);
+                "stength=%d status=%d quality=%d",
+                ad->id, strength, status, quality);
 
         ad->strength = strength;
         ad->status = status ? FE_HAS_LOCK : 0;
-        ad->snr = snr;
+        ad->snr = quality;
     }
 }
 
