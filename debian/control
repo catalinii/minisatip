@@ -5,8 +5,8 @@ Maintainer: Christian Marillat <marillat@deb-multimedia.org>
 Bugs: mailto:marillat@deb-multimedia.org
 Homepage: https://minisatip.org/
 Standards-Version: 4.6.1
-Build-Depends: debhelper-compat (= 13), libdvbcsa-dev, libssl-dev, dvb-apps,
- vdr-dev (>= 2.4.7~)
+Build-Depends: debhelper-compat (= 12), libdvbcsa-dev, libssl-dev, dvb-apps,
+ vdr-dev (>= 2.4)
 
 Package: minisatip
 Architecture: any
