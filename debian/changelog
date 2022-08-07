@@ -1,3 +1,9 @@
+minisatip-dmo (1.2.10-dmo2) unstable; urgency=medium
+
+  * Start with systemd minisatip as minisatip user.
+
+ -- Christian Marillat <marillat@deb-multimedia.org>  Thu, 04 Aug 2022 19:36:26 +0200
+
 minisatip-dmo (1.2.10-dmo1) unstable; urgency=medium
 
   * New upstream release.

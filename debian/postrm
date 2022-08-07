@@ -1,0 +1,25 @@
+#!/bin/sh
+
+set -e
+
+case "$1" in
+    purge)
+    deluser --quiet --system minisatip
+    if [ -d /var/lib/minisatip ]; then
+        dpkg-statoverride --remove /var/lib/minisatip
+        rm -rf /var/lib/minisatip
+    fi
+    ;;
+
+    remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+    ;;
+
+    *)
+        echo "postrm called with unknown argument '$1'" >&2
+        exit 1
+    ;;
+esac
+
+#DEBHELPER#
+
+exit 0
