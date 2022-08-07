@@ -1,0 +1,8 @@
+.debhelper
+autoreconf.*
+debhelper-build-stamp
+minisatip
+files
+minisatip.debhelper.log
+minisatip.postrm.debhelper
+minisatip.substvars
