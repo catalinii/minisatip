@@ -14,7 +14,7 @@ else
 	LINUXDVB=0
 endif
 
-SOURCES=test_ca.c test_pmt.c test_ddci.c test_utils.c test_socketworks.c
+SOURCES=test_ca.c test_pmt.c test_ddci.c test_dvb.c test_utils.c test_socketworks.c
 
 TABLES=0
 PMT=0
