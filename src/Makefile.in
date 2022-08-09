@@ -17,6 +17,7 @@ DDCI=0
 T2MI=0
 
 CFLAGS?=-Wall -Wno-switch -ggdb -fPIC
+CFLAGS += -I../src
 CFLAGS += $(EXTRA_CFLAGS) @CFLAGS@
 LDFLAGS += @LDFLAGS@ -lpthread
 CPPFLAGS += @CPPFLAGS@
