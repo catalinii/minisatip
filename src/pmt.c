@@ -26,6 +26,8 @@
 #include "socketworks.h"
 #include "tables.h"
 #include "utils.h"
+#include "utils/ticks.h"
+
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <errno.h>

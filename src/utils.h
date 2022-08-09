@@ -1,8 +1,11 @@
 #ifndef UTILS_H
 #define UTILS_H
 #define _GNU_SOURCE
-#include <pthread.h>
 
+#include "utils/logging/logging.h"
+#include "utils/mutex.h"
+
+#include <pthread.h>
 #include <stdint.h>
 #include <sys/types.h>
 #include <sys/uio.h>
@@ -56,16 +59,6 @@ typedef struct struct_symbols {
     int len;
     int skip;
 } _symbols;
-
-typedef struct struct_mutex {
-    int enabled;
-    pthread_mutex_t mtx;
-    int state;
-    int line;
-    pthread_t tid;
-    int64_t lock_time, create_time;
-    char *file;
-} SMutex;
 
 struct struct_http_client;
 typedef int (*http_client_action)(void *s, int len, void *opaque,
@@ -141,8 +134,6 @@ void *myrealloc(void *p, int a, char *f, int l);
 void myfree(void *x, char *f, int l);
 char *header_parameter(char **arg, int i);
 char *get_current_timestamp();
-char *get_current_timestamp_log();
-void _log(const char *file, int line, const char *fmt, ...);
 char *strip(char *s);
 int split(char **rv, char *s, int lrv, char sep);
 void set_signal_handler(char *argv0);
@@ -154,18 +145,11 @@ int get_json_bandwidth(char *buf, int len);
 void process_file(void *sock, char *s, int len, char *ctype);
 int closefile(char *mem, int len);
 
-int mutex_init(SMutex *mutex);
-int mutex_lock1(char *FILE, int line, SMutex *mutex);
-int mutex_unlock1(char *FILE, int line, SMutex *mutex);
-int mutex_destroy(SMutex *mutex);
-void clean_mutexes();
 pthread_t start_new_thread(char *name);
 pthread_t get_tid();
 void set_thread_prio(pthread_t tid, int prio);
 
 int add_new_lock(void **arr, int count, int size, SMutex *mutex);
-int64_t getTick();
-int64_t getTickUs();
 void join_thread();
 void add_join_thread(pthread_t t);
 int init_utils(char *arg0);
@@ -181,31 +165,6 @@ void mkdir_recursive(const char *path);
 void sleep_msec(uint32_t msec);
 int get_random(unsigned char *dest, int len);
 
-#define mutex_lock(m) mutex_lock1(__FILE__, __LINE__, m)
-#define mutex_unlock(m) mutex_unlock1(__FILE__, __LINE__, m)
-//#define proxy_log(level, fmt, ...) _proxy_log(level, fmt"\n", ##__VA_ARGS__)
-
-//#define LOG(a,...) {opts.last_log=a;if(opts.log){int
-// x=getTick();printf(CC([%d.%03d]:
-//,a,\n),x/1000,x%1000,##__VA_ARGS__);fflush(stdout);};} #define LOG(a,...)
-//{opts.last_log=a;if(opts.log){printf(CC([%s]:\x20,a,\n),get_current_timestamp_log(),##__VA_ARGS__);fflush(stdout);};}
-#define LOGL(level, a, ...)                                                    \
-    {                                                                          \
-        if ((level)&opts.log)                                                  \
-            _log(__FILE__, __LINE__, a, ##__VA_ARGS__);                        \
-    }
-
-#define LOGM(a, ...) LOGL(DEFAULT_LOG, a, ##__VA_ARGS__)
-
-#define LOG(a, ...) LOGL(1, a, ##__VA_ARGS__)
-
-#define DEBUGL(level, a, ...)                                                  \
-    {                                                                          \
-        if ((level)&opts.debug)                                                \
-            _log(__FILE__, __LINE__, a, ##__VA_ARGS__);                        \
-    }
-#define DEBUGM(a, ...) DEBUGL(DEFAULT_LOG, a, ##__VA_ARGS__)
-
 #define dump_packets(message, b, len, packet_offset)                           \
     if (DEFAULT_LOG & opts.debug)                                              \
     _dump_packets(message, b, len, packet_offset)
@@ -213,23 +172,6 @@ int get_random(unsigned char *dest, int len);
     if (DEFAULT_LOG & opts.debug)                                              \
     _hexdump(message, b, len)
 
-#define LOG0(a, ...)                                                           \
-    { _log(__FILE__, __LINE__, a, ##__VA_ARGS__); }
-
-#define FAIL(a, ...)                                                           \
-    {                                                                          \
-        if (opts.log) {                                                        \
-            LOGL(0, a, ##__VA_ARGS__);                                         \
-        } else                                                                 \
-            LOG0(a, ##__VA_ARGS__);                                            \
-        unlink(pid_file);                                                      \
-        exit(1);                                                               \
-    }
-#define LOG_AND_RETURN(rc, a, ...)                                             \
-    {                                                                          \
-        LOG(a, ##__VA_ARGS__);                                                 \
-        return rc;                                                             \
-    }
 #define malloc1(a) mymalloc(a, __FILE__, __LINE__)
 #define free1(a) myfree(a, __FILE__, __LINE__)
 #define realloc1(a, b) myrealloc(a, b, __FILE__, __LINE__)
@@ -262,24 +204,6 @@ int get_random(unsigned char *dest, int len);
             LOG("%-40s OK", #a);                                               \
     }
 
-#define LOG_GENERAL 1
-#define LOG_HTTP (1 << 1)
-#define LOG_SOCKETWORKS (1 << 2)
-#define LOG_STREAM (1 << 3)
-#define LOG_ADAPTER (1 << 4)
-#define LOG_SATIPC (1 << 5)
-#define LOG_PMT (1 << 6)
-#define LOG_TABLES (1 << 7)
-#define LOG_DVBAPI (1 << 8)
-#define LOG_LOCK (1 << 9)
-#define LOG_NETCEIVER (1 << 10)
-#define LOG_DVBCA (1 << 11)
-#define LOG_AXE (1 << 12)
-#define LOG_SOCKET (1 << 13)
-#define LOG_UTILS (1 << 14)
-#define LOG_DMX (1 << 15)
-#define LOG_SSDP (1 << 16)
-#define LOG_DVB (1 << 17)
 
 typedef ssize_t (*mywritev)(int fd, const struct iovec *io, int len);
 

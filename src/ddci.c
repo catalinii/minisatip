@@ -45,6 +45,7 @@
 #include "stream.h"
 #include "tables.h"
 #include "utils.h"
+#include "utils/ticks.h"
 #include <linux/dvb/ca.h>
 
 #define DEFAULT_LOG LOG_DVBCA
