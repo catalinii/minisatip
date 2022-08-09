@@ -136,10 +136,11 @@ $(TARGET): $(DEPS) $(OBJS) $(SOURCES)
 	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LDFLAGS)
 
 $(BUILDDIR)/%.d : %.c
-	@mkdir -p $(BUILDDIR)
+	@mkdir -p $(dir $@)
 	@$(CC) $(CFLAGS) -MM $(basename $*).c | sed -e 's@^\(.*\)\.o:@\1.d \1.o:@' > $@
 
 $(BUILDDIR)/%.o : %.c
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $*.c -o $@
 
 all: $(TARGET)
