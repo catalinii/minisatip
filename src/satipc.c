@@ -25,6 +25,7 @@
 #include "dvbapi.h"
 #include "minisatip.h"
 #include "utils.h"
+#include "utils/hash_table.h"
 #include "utils/ticks.h"
 
 #include <arpa/inet.h>

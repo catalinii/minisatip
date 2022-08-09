@@ -35,7 +35,7 @@ else
 	NETCVCLIENT=0
 endif
 
-SOURCES=minisatip.c socketworks.c stream.c adapter.c utils.c utils/logging/logging.c utils/mutex.c utils/ticks.c
+SOURCES=minisatip.c socketworks.c stream.c adapter.c utils.c utils/logging/logging.c utils/hash_table.c utils/mutex.c utils/ticks.c
 
 TABLES=0
 PMT=0

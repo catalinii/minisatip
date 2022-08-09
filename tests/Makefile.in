@@ -14,7 +14,14 @@ else
 	LINUXDVB=0
 endif
 
-SOURCES=test_ca.c test_pmt.c test_ddci.c test_dvb.c test_utils.c test_socketworks.c
+SOURCES=\
+	test_ca.c \
+	test_pmt.c \
+	test_ddci.c \
+	test_dvb.c \
+	test_utils.c \
+	test_socketworks.c \
+	utils/test_hash_table.c
 
 MAIN_SOURCES=$(shell find ../src -type f -iname '*.c')
 
