@@ -24,6 +24,7 @@
 #include "dvb.h"
 #include "dvbapi.h"
 #include "minisatip.h"
+#include "httpc.h"
 #include "utils.h"
 #include "utils/hash_table.h"
 #include "utils/ticks.h"

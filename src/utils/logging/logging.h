@@ -3,6 +3,8 @@
 
 #define _GNU_SOURCE
 
+#include "opts.h"
+
 #include <stdint.h>
 
 void _log(const char *file, int line, const char *fmt, ...);

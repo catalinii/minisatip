@@ -60,32 +60,6 @@ typedef struct struct_symbols {
     int skip;
 } _symbols;
 
-struct struct_http_client;
-typedef int (*http_client_action)(void *s, int len, void *opaque,
-                                  struct struct_http_client *h);
-
-typedef struct struct_http_client {
-    char enabled;
-    SMutex mutex;
-    int state;
-    http_client_action action;
-    void *opaque;
-    char host[200];
-    char req[200];
-    int port;
-    int id;
-} Shttp_client;
-
-#define MAX_HTTPC 100
-
-#define get_httpc(i)                                                           \
-    ((i >= 0 && i < MAX_HTTPC && httpc[i] && httpc[i]->enabled) ? httpc[i]     \
-                                                                : NULL)
-
-extern Shttp_client *httpc[MAX_HTTPC];
-
-int http_client(char *url, char *request, void *callback, void *opaque);
-
 int split(char **rv, char *s, int lrv, char sep);
 int map_int(char *s, char **v);
 int map_intd(char *s, char **v, int dv);
