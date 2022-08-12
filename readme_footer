@@ -28,6 +28,13 @@ make EXTRA_CFLAGS="-DNEEDS_SENDMMSG_SHIM"
 The above command is useful if you're getting errors like "sendmmsg(): errno 
 38: Function not implemented" (usually only concerns really old systems).
 
+Building a Debian package:
+-------
+
+```bash
+dpkg-buildpackage -b -us -uc
+```
+
 Examples:
 -------
 - In order to listen to a radio after minisatip is started open the following URL in your favorite media player:
