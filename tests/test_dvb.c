@@ -22,6 +22,7 @@
 #include "dvb.h"
 #include "minisatip.h"
 #include "utils.h"
+#include "utils/testing.h"
 
 #include <string.h>
 #include <linux/dvb/frontend.h>

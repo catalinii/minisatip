@@ -194,30 +194,13 @@ int get_random(unsigned char *dest, int len);
         a[x - 1] = 0;                                                          \
     }
 
-#define TEST_FUNC(a, str, ...)                                                 \
-    {                                                                          \
-        int _tmp_var;                                                          \
-        if ((_tmp_var = (a))) {                                                \
-            LOG(#a " failed with message: " str, ##__VA_ARGS__);               \
-            return _tmp_var;                                                   \
-        } else                                                                 \
-            LOG("%-40s OK", #a);                                               \
-    }
-
-
 typedef ssize_t (*mywritev)(int fd, const struct iovec *io, int len);
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
 #define PID_FROM_TS(b) (((b)[1] & 0x1F) * 256 + (b)[2])
 
 #ifdef TESTING
-
-#define ASSERT(cond, msg)                                                      \
-    if (!(cond))                                                               \
-    LOG_AND_RETURN(1, "%s:%d %s: %s", __FILE__, __LINE__, __FUNCTION__, msg)
-
 #define writev(a, b, c) _writev(a, b, c)
-
 #endif
 
 #ifdef UTILS_C

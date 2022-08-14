@@ -25,6 +25,7 @@
 #include "minisatip.h"
 #include "socketworks.h"
 #include "utils.h"
+#include "utils/testing.h"
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <errno.h>
