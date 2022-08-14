@@ -11,3 +11,4 @@ tests/Makefile
 src/confdefs.h
 .vscode
 autom4te.cache
+build/test
