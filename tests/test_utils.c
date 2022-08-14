@@ -40,7 +40,7 @@ int test_mkdir_recursive() {
 
 int main() {
     opts.log = 255;
-    strcpy(thread_name, "test");
+    strcpy(thread_name, "test_utils");
     TEST_FUNC(test_mkdir_recursive(), "testing directory creation");
     return 0;
 }

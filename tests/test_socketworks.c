@@ -139,7 +139,7 @@ int test_socket_writev_prio_flush() {
 
 int main() {
     opts.log = 1; // LOG_UTILS | LOG_SOCKET;
-    strcpy(thread_name, "test");
+    strcpy(thread_name, "test_socketworks");
     ;
     _writev = writev;
     int fd[2];

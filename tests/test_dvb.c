@@ -72,6 +72,7 @@ int test_detect_dvb_parameters_roll_off() {
 int main() {
   opts.log = 1;
   opts.debug = 255;
+  strcpy(thread_name, "test_dvb");
 
   TEST_FUNC(test_detect_dvb_parameters_general(), "test detect_dvb_parameters with general parameters");
   TEST_FUNC(test_detect_dvb_parameters_roll_off(), "test detect_dvb_parameters roll-off parsing");

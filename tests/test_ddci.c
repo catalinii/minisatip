@@ -547,7 +547,7 @@ int main() {
     opts.log = 65535;
     opts.debug = 0;
     opts.cache_dir = "/tmp";
-    strcpy(thread_name, "test");
+    strcpy(thread_name, "test_ddci");
     TEST_FUNC(test_channels(), "testing test_channels");
     TEST_FUNC(test_add_del_pmt(), "testing adding and removing pmts");
     TEST_FUNC(test_push_ts_to_ddci(), "testing test_push_ts_to_ddci");
