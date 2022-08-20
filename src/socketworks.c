@@ -42,6 +42,7 @@
 #include "socketworks.h"
 #include "t2mi.h"
 #include "utils.h"
+#include "utils/ticks.h"
 
 #define DEFAULT_LOG LOG_SOCKETWORKS
 

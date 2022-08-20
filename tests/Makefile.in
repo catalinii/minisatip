@@ -14,7 +14,16 @@ else
 	LINUXDVB=0
 endif
 
-SOURCES=test_ca.c test_pmt.c test_ddci.c test_dvb.c test_utils.c test_socketworks.c
+SOURCES=\
+	test_ca.c \
+	test_pmt.c \
+	test_ddci.c \
+	test_dvb.c \
+	test_utils.c \
+	test_socketworks.c \
+	utils/test_hash_table.c
+
+MAIN_SOURCES=$(shell find ../src -type f -iname '*.c')
 
 TABLES=0
 PMT=0
@@ -39,12 +48,12 @@ test: $(BINS)
 	@echo "Tests completed successfully"
 
 $(BUILDDIR)/%.d : %.c
-	@mkdir -p $(BUILDDIR)
+	@mkdir -p $(dir $@)
 	@$(CC) $(CFLAGS) -MM $(basename $*).c | sed -e 's@^\(.*\)\.o:@\1.d \1.o:@' > $@
 
 $(BUILDDIR)/% : %.c
-	@mkdir -p $(BUILDDIR)
-	$(CC) $(CFLAGS) $*.c ../src/*c -o $(BUILDDIR)/test $(LDFLAGS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $*.c $(MAIN_SOURCES) -o $(BUILDDIR)/test $(LDFLAGS)
 	@echo "Running $@"
 	@$(BUILDDIR)/test
 	@rm -f $(BUILDDIR)/test

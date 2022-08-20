@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2020 Catalin Toda <catalinii@yahoo.com>
+ * Copyright (C) 2014-2022 Catalin Toda <catalinii@yahoo.com> et al
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,30 +17,27 @@
  * USA
  *
  */
-#define _GNU_SOURCE
-#define _FILE_OFFSET_BITS 64
+#include "utils/ticks.h"
 
-#include "utils.h"
-#include "utils/testing.h"
-#include "opts.h"
-#include <string.h>
-#include <sys/stat.h>
+#include <time.h>
 
-extern __thread char thread_name[100];
+int64_t init_tick;
 
-int test_mkdir_recursive() {
-    const char *dir = "/tmp/minisatip/test";
-    mkdir_recursive(dir);
-    
-    struct stat sb;
-    ASSERT(stat(dir, &sb) == 0 && S_ISDIR(sb.st_mode), "stat should report that directory exists");
-
-    return 0;
+int64_t getTick() { // ms
+    int64_t theTick;
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    theTick = ts.tv_nsec / 1000000;
+    theTick += ts.tv_sec * 1000;
+    if (init_tick == 0)
+        init_tick = theTick;
+    return theTick - init_tick;
 }
 
-int main() {
-    opts.log = 255;
-    strcpy(thread_name, "test_utils");
-    TEST_FUNC(test_mkdir_recursive(), "testing directory creation");
-    return 0;
+int64_t getTickUs() {
+    int64_t utime;
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    utime = ((int64_t)ts.tv_sec) * 1000000 + ts.tv_nsec / 1000;
+    return utime;
 }

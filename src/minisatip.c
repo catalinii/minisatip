@@ -24,6 +24,8 @@
 #include "pmt.h"
 #include "socketworks.h"
 #include "stream.h"
+#include "utils/ticks.h"
+
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>

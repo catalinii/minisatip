@@ -25,6 +25,7 @@
 #include "minisatip.h"
 #include "socketworks.h"
 #include "utils.h"
+#include "utils/testing.h"
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <errno.h>
@@ -235,7 +236,7 @@ int test_wait_pusi() {
 int main() {
     opts.log = 255;
     opts.debug = 255;
-    strcpy(thread_name, "test");
+    strcpy(thread_name, "test_pmt");
     TEST_FUNC(test_wait_pusi(), "testing decrypt");
     TEST_FUNC(test_decrypt(), "testing decrypt");
     TEST_FUNC(test_clean_psi_buffer_only(),

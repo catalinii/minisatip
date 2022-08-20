@@ -3,6 +3,7 @@
 #include "adapter.h"
 #include "pmt.h"
 #include "tables.h"
+#include "utils/hash_table.h"
 
 // number of pids for each ddci adapter to be stored in the mapping table
 #define MAX_CHANNELS_ON_CI 4

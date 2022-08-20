@@ -36,6 +36,7 @@ alternative source
 #include <linux/dvb/ca.h>
 
 #include "utils.h"
+#include "utils/ticks.h"
 
 #define DEFAULT_LOG LOG_DVBCA
 

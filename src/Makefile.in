@@ -17,6 +17,7 @@ DDCI=0
 T2MI=0
 
 CFLAGS?=-Wall -Wno-switch -ggdb -fPIC
+CFLAGS += -I../src
 CFLAGS += $(EXTRA_CFLAGS) @CFLAGS@
 LDFLAGS += @LDFLAGS@ -lpthread
 CPPFLAGS += @CPPFLAGS@
@@ -34,7 +35,17 @@ else
 	NETCVCLIENT=0
 endif
 
-SOURCES=minisatip.c socketworks.c stream.c adapter.c utils.c
+SOURCES=\
+	minisatip.c \
+	socketworks.c \
+	stream.c \
+	adapter.c \
+	httpc.c \
+	utils.c \
+	utils/logging/logging.c \
+	utils/hash_table.c \
+	utils/mutex.c \
+	utils/ticks.c
 
 TABLES=0
 PMT=0
@@ -136,10 +147,11 @@ $(TARGET): $(DEPS) $(OBJS) $(SOURCES)
 	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LDFLAGS)
 
 $(BUILDDIR)/%.d : %.c
-	@mkdir -p $(BUILDDIR)
+	@mkdir -p $(dir $@)
 	@$(CC) $(CFLAGS) -MM $(basename $*).c | sed -e 's@^\(.*\)\.o:@\1.d \1.o:@' > $@
 
 $(BUILDDIR)/%.o : %.c
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $*.c -o $@
 
 all: $(TARGET)

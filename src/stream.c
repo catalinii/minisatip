@@ -42,8 +42,8 @@
 #include "socketworks.h"
 #include "stream.h"
 #include "t2mi.h"
-
 #include "pmt.h"
+#include "utils/ticks.h"
 
 #define DEFAULT_LOG LOG_STREAM
 
