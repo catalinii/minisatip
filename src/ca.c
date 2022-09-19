@@ -2459,6 +2459,8 @@ int ca_read_tpdu(int socket, void *buf, int buf_len, sockets *ss, int *rb) {
         switch (tpdu_tag) {
         case T_CTC_REPLY:
             DEBUGM("Got CTC Replay (CA %d)", c->id);
+            if (c->state == CA_STATE_INACTIVE)
+                c->state = CA_STATE_ACTIVE;
             ca_write_tpdu(c, T_DATA_LAST, NULL, 0);
 
             break;
