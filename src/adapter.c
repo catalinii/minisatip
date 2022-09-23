@@ -2200,6 +2200,14 @@ _symbols adapters_sym[] = {
     {"ad_sys", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.sys)},
     {"ad_mtype", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS,
      offsetof(adapter, tp.mtype)},
+
+    {"ad_t2id", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.t2id)},
+    {"ad_c2tft", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.c2tft)},
+    {"ad_plp", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.ds)},
+    {"ad_plsc", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.pls_code)},
+    {"ad_sm", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.sm)},
+    {"ad_gi", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.gi)},
+
     {"ad_allsys", VAR_FUNCTION_STRING, (void *)&get_all_delsys, 0, MAX_ADAPTERS,
      0},
     {"ad_pids", VAR_FUNCTION_STRING, (void *)&get_adapter_pids, 0, MAX_ADAPTERS,
