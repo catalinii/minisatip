@@ -2230,6 +2230,7 @@ ca_session_t *find_session_for_resource(ca_device_t *d, int resource) {
 
 int populate_resources(ca_device_t *d, int *resource_ids) {
     int i;
+    LOG("Populating %s resources", d->force_ci?"CI":"CI+");
     for (i = 0;
          i < sizeof(application_handler) / sizeof(application_handler[0]);
          i++) {
@@ -2777,7 +2778,7 @@ int dvbca_init_dev(adapter *ad) {
 
     if (!c->force_ci) {
         if (access("/etc/ssl/certs/root.pem", F_OK) != 0) {
-            c->force_ci = 0;
+            c->force_ci = 1;
         }
     }
 
