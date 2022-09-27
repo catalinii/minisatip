@@ -73,7 +73,7 @@ int first_ddci = -1;
 int ddci_id = -1;
 ddci_device_t *ddci_devices[MAX_ADAPTERS];
 
-int process_cat(int filter, unsigned char *b, int len, void *opaque);
+int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque);
 
 // get mapping from ddci, ddci_pid
 ddci_mapping_table_t *get_ddci_pid(ddci_device_t *d, int dpid) {
@@ -144,7 +144,7 @@ int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
         mark_pid_add(DDCI_SID, ad, pid);
         if (pid == 1)
             m->filter_id =
-                add_filter(ad, 1, (void *)process_cat, d, FILTER_CRC);
+                add_filter(ad, 1, (void *)ddci_process_cat, d, FILTER_CRC);
     }
     if (add_pid) {
         // add the pids to the ddci adapter
@@ -1141,7 +1141,7 @@ fe_delivery_system_t ddci_delsys(int aid, int fd, fe_delivery_system_t *sys) {
     return 0;
 }
 
-int process_cat(int filter, unsigned char *b, int len, void *opaque) {
+int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque) {
     int cat_len = 0, i, es_len = 0, caid, add_cat = 1;
     ddci_device_t *d = (ddci_device_t *)opaque;
     cat_len = len - 4; // remove crc

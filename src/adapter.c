@@ -948,16 +948,19 @@ void post_tune(adapter *ad) {
     int aid = ad->id;
 #endif
 #ifndef DISABLE_PMT
-    SPid *p = find_pid(aid, 0);
     SPid *p_all = find_pid(aid, 8192);
-    if ((!p || p->flags == 3) &&
-        (!p_all || p_all->flags == 3)) // add pid 0 if not explicitly added
-    {
-        LOG("Adding pid 0 to the list of pids as not explicitly added for "
-            "adapter "
-            "%d",
-            aid);
-        mark_pid_add(-1, aid, 0);
+    if(!p_all || p_all->flags == 3) { // add pids if not explicitly added
+        int pid, ppid = 0;
+        int pids[] = {0, 1, 16, 18}; // pids not added by the PMT module
+        for(ppid=0;ppid < sizeof(pids)/sizeof(int);ppid++) {
+            pid = pids[ppid];
+            SPid *p = find_pid(aid, pid);
+            if (!p || p->flags == 3)
+            {
+                LOG("Adding pid %d to the list of pids as not explicitly added for adapter %d", aid);
+                mark_pid_add(-1, aid, pid);
+            }
+        }
     }
     pmt_tune(ad);
 #endif

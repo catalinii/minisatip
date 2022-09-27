@@ -23,7 +23,8 @@
 
 int64_t init_tick;
 
-int64_t getTick() { // ms
+// return timestamp in ms
+int64_t getTick() {
     int64_t theTick;
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
