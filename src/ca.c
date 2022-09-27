@@ -29,10 +29,10 @@ alternative source
 #include "dvb.h"
 #include "dvbapi.h"
 #include "minisatip.h"
-#include "tables.h"
 #include "poll.h"
 #include "search.h"
 #include "socketworks.h"
+#include "tables.h"
 #include <linux/dvb/ca.h>
 
 #include "utils.h"
@@ -2230,7 +2230,7 @@ ca_session_t *find_session_for_resource(ca_device_t *d, int resource) {
 
 int populate_resources(ca_device_t *d, int *resource_ids) {
     int i;
-    LOG("Populating %s resources", d->force_ci?"CI":"CI+");
+    LOG("Populating %s resources", d->force_ci ? "CI" : "CI+");
     for (i = 0;
          i < sizeof(application_handler) / sizeof(application_handler[0]);
          i++) {

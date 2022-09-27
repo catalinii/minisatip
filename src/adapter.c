@@ -949,15 +949,17 @@ void post_tune(adapter *ad) {
 #endif
 #ifndef DISABLE_PMT
     SPid *p_all = find_pid(aid, 8192);
-    if(!p_all || p_all->flags == 3) { // add pids if not explicitly added
+    if (!p_all || p_all->flags == 3) { // add pids if not explicitly added
         int pid, ppid = 0;
         int pids[] = {0, 1, 16, 18}; // pids not added by the PMT module
-        for(ppid=0;ppid < sizeof(pids)/sizeof(int);ppid++) {
+        for (ppid = 0; ppid < sizeof(pids) / sizeof(int); ppid++) {
             pid = pids[ppid];
             SPid *p = find_pid(aid, pid);
-            if (!p || p->flags == 3)
-            {
-                LOG("Adding pid %d to the list of pids as not explicitly added for adapter %d", aid);
+            if (!p || p->flags == 3) {
+                LOG("Adding pid %d to the list of pids as not explicitly added "
+                    "for "
+                    "adapter %d",
+                    aid);
                 mark_pid_add(-1, aid, pid);
             }
         }
@@ -1335,8 +1337,8 @@ char *describe_adapter(int sid, int aid, char *dad, int ld) {
     if (use_ad) {
         if (ad->status < 0) {
             status = 1;
-	    snr = 15;
-	    strength = 255;
+            snr = 15;
+            strength = 255;
         } else {
             strength = ad->strength;
             snr = ad->snr;

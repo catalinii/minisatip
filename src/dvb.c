@@ -20,8 +20,8 @@
 
 #include "dvb.h"
 #include "adapter.h"
-#include "pmt.h"
 #include "minisatip.h"
+#include "pmt.h"
 #include "utils.h"
 #include "utils/ticks.h"
 
@@ -1172,8 +1172,8 @@ int dvb_tune(int aid, transponder *tp) {
                      tp->plp_isi | (tp->pls_code << 8) | (tp->pls_mode << 26))
 #endif
 #endif
-#if DVBAPIVERSION >= 0x050b /* 5.11 */
-        if (tp->pls_code >= 0)  // Use Gold plp_mode by default if plsc specified
+#if DVBAPIVERSION >= 0x050b    /* 5.11 */
+        if (tp->pls_code >= 0) // Use Gold plp_mode by default if plsc specified
             ADD_PROP(DTV_SCRAMBLING_SEQUENCE_INDEX, pls_scrambling_index(tp))
 #endif
 
@@ -1372,8 +1372,8 @@ int dvb_set_pid(adapter *a, int i_pid) {
         return -1;
     }
 
-    LOG("AD %d [demux %d %d], setting filter on PID %d for fd %d [%jd ms]", a->id, hw,
-        ad, i_pid, fd, getTick() - ctime);
+    LOG("AD %d [demux %d %d], setting filter on PID %d for fd %d [%jd ms]",
+        a->id, hw, ad, i_pid, fd, getTick() - ctime);
 
     SPid *p = find_pid(a->id, i_pid);
     if (p)
@@ -1390,7 +1390,8 @@ int dvb_del_filters(adapter *ad, int fd, int pid) {
         LOG0("DMX_STOP failed on PID %d FD %d: error %d %s", pid, fd, errno,
              strerror(errno))
     else
-        LOG("clearing filter on PID %d FD %d [%jd ms]", pid, fd, getTick() - ctime);
+        LOG("clearing filter on PID %d FD %d [%jd ms]", pid, fd,
+            getTick() - ctime);
 
     SPid *p = find_pid(ad->id, pid);
     if (!p)
@@ -1442,7 +1443,8 @@ int dvb_demux_set_pid(adapter *a, int i_pid) {
              fd, a->active_pids, errno, strerror(errno));
         return -1;
     }
-    LOG("AD %d setting demux filter on PID %d for fd %d [%jd ms]", a->id, i_pid, fd, getTick() - ctime);
+    LOG("AD %d setting demux filter on PID %d for fd %d [%jd ms]", a->id, i_pid,
+        fd, getTick() - ctime);
 
     return fd;
 }
@@ -1468,8 +1470,8 @@ int dvb_demux_del_filters(adapter *ad, int fd, int pid) {
         LOG("stopped filters on fd %d", fd);
     }
 
-    LOG("clearing demux filter on PID %d FD %d, active_pids %d [%jd ms]", pid, fd,
-        ad->active_pids, getTick() - ctime);
+    LOG("clearing demux filter on PID %d FD %d, active_pids %d [%jd ms]", pid,
+        fd, ad->active_pids, getTick() - ctime);
     return 0;
 }
 
@@ -1563,8 +1565,8 @@ int dvb_set_psi_filter(adapter *a, int i_pid) {
         return -1;
     }
 
-    LOG("AD %d [demux %d %d], setting PSI filter on PID %d for fd %d [%jd ms]", a->id,
-        hw, ad, i_pid, fd, getTick() - ctime);
+    LOG("AD %d [demux %d %d], setting PSI filter on PID %d for fd %d [%jd ms]",
+        a->id, hw, ad, i_pid, fd, getTick() - ctime);
 
     int sock = sockets_add(fd, NULL, a->id, TYPE_DVR, NULL, NULL, NULL);
     if (sock < 0) {
@@ -1590,8 +1592,8 @@ int dvb_is_psi(adapter *ad, int pid) {
     if (fid < 0)
         return 0;
     SFilter *f = get_filter(fid);
-    if(f && (f->flags & FILTER_ADD_REMOVE))
-	return 0;
+    if (f && (f->flags & FILTER_ADD_REMOVE))
+        return 0;
     return 1;
 #endif
     return 0;
