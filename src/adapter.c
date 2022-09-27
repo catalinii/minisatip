@@ -957,9 +957,8 @@ void post_tune(adapter *ad) {
             SPid *p = find_pid(aid, pid);
             if (!p || p->flags == 3) {
                 LOG("Adding pid %d to the list of pids as not explicitly added "
-                    "for "
-                    "adapter %d",
-                    aid);
+                    "for adapter %d",
+                    pid, aid);
                 mark_pid_add(-1, aid, pid);
             }
         }
