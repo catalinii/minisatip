@@ -131,6 +131,17 @@ make_func(pls_mode);
     }
 char def_pids[100];
 
+uint32_t pls_scrambling_index(transponder *tp) {
+    /* convert ROOT code to GOLD code */
+    uint32_t x, g;
+    for (g = 0, x = 1; g < 0x3ffff; g++) {
+        if (tp->pls_code == x)
+            return g;
+        x = (((x ^ (x >> 7)) & 1) << 17) | (x >> 1);
+    }
+    return 0x3ffff;
+}
+
 int detect_dvb_parameters(char *s, transponder *tp) {
     char *arg[30];
     int la, i;
@@ -228,6 +239,9 @@ int detect_dvb_parameters(char *s, transponder *tp) {
         // map pids=all to essential pids
         tp->pids = (char *)def_pids;
     }
+
+    if (tp->pls_mode == PLS_MODE_ROOT)
+        tp->pls_code = pls_scrambling_index(tp);
 
     if (tp->pids && strncmp(tp->pids, "none", 4) == 0)
         tp->pids = "";
@@ -1100,20 +1114,6 @@ int setup_switch(adapter *ad) {
         iProp++;                                                               \
     }
 
-uint32_t pls_scrambling_index(transponder *tp) {
-    if (tp->pls_mode == PLS_MODE_ROOT) {
-        /* convert ROOT code to GOLD code */
-        uint32_t x, g;
-        for (g = 0, x = 1; g < 0x3ffff; g++) {
-            if (tp->pls_code == x)
-                return g;
-            x = (((x ^ (x >> 7)) & 1) << 17) | (x >> 1);
-        }
-        return 0x3ffff;
-    }
-    return tp->pls_code; /* GOLD code 0 (default) */
-}
-
 int dvb_tune(int aid, transponder *tp) {
     int64_t bclear, bpol;
     int iProp = 0;
@@ -1174,7 +1174,7 @@ int dvb_tune(int aid, transponder *tp) {
 #endif
 #if DVBAPIVERSION >= 0x050b    /* 5.11 */
         if (tp->pls_code >= 0) // Use Gold plp_mode by default if plsc specified
-            ADD_PROP(DTV_SCRAMBLING_SEQUENCE_INDEX, pls_scrambling_index(tp))
+            ADD_PROP(DTV_SCRAMBLING_SEQUENCE_INDEX, tp->pls_code)
 #endif
 
 #ifdef USE_DVBAPI3

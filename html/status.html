@@ -496,13 +496,38 @@
 						// Create VLC stream URL
 						// Example: rtsp://@satip/?src=1&freq=12382&pol=H&msys=DVBS2&sr=27500&pids=0,5375,5378,116,5375,32
 						var hostArray = window.location.host.split(':');
-						dvbs_params = ""
-						if ((ad_sys == 5 || ad_sys == 6))
-						dvbs_params = "&src=" + state['ad_pos'][i] + "&pol=" + pol[state['ad_pol'][i]].replace('(', '').replace(')', '')
-						myTable += "<small><a href=" + '"' + "rtsp://@" + state['rtsp_host'] + "/?fe=" + state['ad_fe'][i] + dvbs_params + "&freq=" + state['ad_freq'][i]
-							+ "&msys=" + sys[state['ad_sys'][i]].toUpperCase() + mtype[state['ad_mtype'][i]] + "&sr=" + state['ad_sr'][i] + "&pids=" + st_p + '"' + ">RTSP Link</a></small><br />";
-						myTable += "<small><a href=" + '"' + "http://" + hostArray[0] + ":" + hostArray[1] + "/?fe=" + state['ad_fe'][i] + dvbs_params + "&freq=" + state['ad_freq'][i]
-							+ "&msys=" + sys[state['ad_sys'][i]].toUpperCase() + mtype[state['ad_mtype'][i]] + "&sr=" + state['ad_sr'][i] + "&pids=" + st_p + '"' + ">HTTP Link</a></small><br />";
+						params = ""
+						switch(ad_sys) {
+							// DVB-C
+							case 1: params += "&sr=" + state['ad_sr'][i]
+								break		
+							// DVB-T
+							case 3: params += "&bw=" + state['ad_bw'][i] + "&gi=" + state['ad_gi'][i]
+								break
+							// DVB-S2 Multi-stream
+							case 6: if (state['ad_plp'][i] > 0) {
+								params += "&isi=" + state['ad_plp'][i] + "&plsc=" + state['ad_plsc'][i] + "&plsm=gold" 
+							}
+							// DVB-S/DVB-S2
+							case 5: {
+								params += "&src=" + state['ad_pos'][i] + "&pol=" + pol[state['ad_pol'][i]].replace('(', '').replace(')', '')
+								break
+							}
+							// DVB-C2
+							case 19: {
+								params += "&plp=" + state['ad_plp'][i] + "&c2tft=" + pol[state['ad_c2tft'][i]] + "&ds=" + pol[state['ad_ds'][i]] + "&sr=" + state['ad_sr'][i]
+								break;
+							}
+							// DVB-T2
+							case 16: {
+								params += "&plp=" + state['ad_plp'][i] + "&t2id=" + pol[state['ad_t2id'][i]] + "&t2id=" + pol[state['ad_sm'][i]]
+								break;
+							}
+						}
+						myTable += "<small><a href=" + '"' + "rtsp://@" + state['rtsp_host'] + "/?fe=" + state['ad_fe'][i] + params + "&freq=" + state['ad_freq'][i]
+							+ "&msys=" + sys[state['ad_sys'][i]].toUpperCase() + mtype[state['ad_mtype'][i]] + "&pids=" + st_p + '"' + ">RTSP Link</a></small><br />";
+						myTable += "<small><a href=" + '"' + "http://" + hostArray[0] + ":" + hostArray[1] + "/?fe=" + state['ad_fe'][i] + params + "&freq=" + state['ad_freq'][i]
+							+ "&msys=" + sys[state['ad_sys'][i]].toUpperCase() + mtype[state['ad_mtype'][i]] + "&pids=" + st_p + '"' + ">HTTP Link</a></small><br />";
 
 						if (state['st_overflow'][j] > 0)
 							myTable += "<small>Dropped: " + (state['st_overflow'][j] / 1048576.0).toFixed(2) + " MB</small><br />";
