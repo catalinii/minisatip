@@ -23,6 +23,8 @@
 #include "dvb.h"
 #include "minisatip.h"
 #include "utils.h"
+#include "api/symbols.h"
+#include "api/variables.h"
 #include "utils/ticks.h"
 
 #include <arpa/inet.h>

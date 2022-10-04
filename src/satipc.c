@@ -26,6 +26,8 @@
 #include "minisatip.h"
 #include "httpc.h"
 #include "utils.h"
+#include "api/symbols.h"
+#include "api/variables.h"
 #include "utils/hash_table.h"
 #include "utils/ticks.h"
 

@@ -24,6 +24,8 @@
 #include "pmt.h"
 #include "socketworks.h"
 #include "stream.h"
+#include "api/symbols.h"
+#include "api/variables.h"
 #include "utils/ticks.h"
 
 #include <arpa/inet.h>

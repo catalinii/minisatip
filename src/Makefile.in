@@ -42,6 +42,8 @@ SOURCES=\
 	adapter.c \
 	httpc.c \
 	utils.c \
+	api/symbols.c \
+	api/variables.c \
 	utils/logging/logging.c \
 	utils/hash_table.c \
 	utils/mutex.c \
