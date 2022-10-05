@@ -61,11 +61,7 @@ int get_random(unsigned char *dest, int len);
 #define strlcatf(buf, size, ptr, fmt...)                                       \
     do {                                                                       \
         int __r = snprintf((buf) + ptr, (size)-ptr, fmt);                      \
-        ptr += __r;                                                            \
-        if (ptr >= (size)) {                                                   \
-            LOG("%s buffer size too small (%d)", __FUNCTION__, size);          \
-            ptr = (size)-1;                                                    \
-        }                                                                      \
+        ptr = __r >= (size)-ptr ? (size)-1 : ptr + __r;                        \
     } while (0)
 
 #define strcatf(buf, ptr, fmt, ...)                                            \

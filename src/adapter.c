@@ -121,7 +121,6 @@ adapter *adapter_alloc() {
     // filter for pid 0
     ad->pat_filter = -1;
     ad->sdt_filter = -1;
-    ad->cache_pmts = 1;
 #endif
     return ad;
 }
@@ -2182,11 +2181,9 @@ int get_adapter_fe(int aid) {
     if (!ad)
         return 0;
     fe = ad->tp.fe;
-    if (fe == 0)
-        return 0;
 
     for (i = 0; i < sizeof(fe_map) / sizeof(fe_map[0]); i++)
-        if (fe_map[i] == fe - 1)
+        if (fe_map[i] == fe)
             return i + 1;
     return -1;
 }

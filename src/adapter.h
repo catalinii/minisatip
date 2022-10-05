@@ -23,7 +23,6 @@ typedef struct ca_device ca_device_t;
 #define MAX_DB 65535
 
 #define MAX_DELSYS 10
-#define MAX_PMT_FOR_ADAPTER 255
 
 typedef struct struct_adapter adapter;
 struct struct_adapter {
@@ -91,10 +90,6 @@ struct struct_adapter {
                          // nor chosen in get_free_adapters
 #ifndef DISABLE_PMT
     int transponder_id, pat_ver, pat_filter, sdt_filter;
-    // keeps the PMTs that are present in the PAT
-    int active_pmt[MAX_PMT_FOR_ADAPTER];
-    int active_pmts;
-    int cache_pmts;
 #endif
 #ifdef AXE
     int fe2;

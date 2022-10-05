@@ -96,8 +96,8 @@ void del_ca(SCA_op *op) {
                     if ((ad = get_adapter_nw(k)))
                         ad->ca_mask &= ~mask;
                 }
-                for (k = 0; k < MAX_PMT; k++) // delete ca_mask for all the PMTs
-                    if (pmts[k] && pmts[k]->enabled &&
+                for (k = 0; k < npmts; k++) // delete ca_mask for all the PMTs
+                    if (pmts[k] && pmts[k]->enabled && pmts[k]->state &&
                         (pmts[k]->ca_mask & mask))
                         pmts[k]->ca_mask &= ~mask;
             }
@@ -275,6 +275,14 @@ int send_pmt_to_cas(adapter *ad, SPMT *pmt) {
     return rv;
 }
 
+void send_pmt_to_ca_for_device(SCA *c, adapter *ad) {
+    SPMT *pmt;
+    int i;
+    for (i = 0; i < npmts; i++)
+        if ((pmt = get_pmt(i)) && pmt->adapter == ad->id && pmt->state)
+            send_pmt_to_ca(c->id, ad, pmt);
+}
+
 void tables_update_encrypted_status(adapter *ad, SPMT *pmt) {
     int i;
     int status = pmt->encrypted;
@@ -313,6 +321,45 @@ void tables_del_pid(adapter *ad, SPMT *pmt, int pid) {
     }
 }
 
+int register_ca_for_adapter(int i, int aid) {
+    adapter *ad = get_adapter(aid);
+    uint64_t mask, rv;
+    if (i < 0 || i >= nca)
+        return 1;
+    if (!ad)
+        return 1;
+
+    mask = (1ULL << ad->id);
+    if ((ca[i].adapter_mask & mask) == 0) {
+        ca[i].adapter_mask |= mask;
+        rv = tables_init_ca_for_device(i, ad);
+        if (rv)
+            send_pmt_to_ca_for_device(&ca[i], ad);
+        return 0;
+    }
+    return 2;
+}
+
+int unregister_ca_for_adapter(int i, int aid) {
+    adapter *ad = get_adapter(aid);
+    uint64_t mask;
+    if (i < 0 || i >= nca)
+        return 1;
+    if (!ad)
+        return 1;
+
+    mask = (1ULL << ad->id);
+    ca[i].adapter_mask &= ~mask;
+    mask = (1ULL << i);
+    if (ad->ca_mask & mask) {
+        if (ca[i].op->ca_close_dev)
+            ca[i].op->ca_close_dev(ad);
+        ad->ca_mask &= ~mask;
+        LOG("Unregistering CA %d for adapter %d", i, ad->id);
+    }
+    return 0;
+}
+
 int tables_init_device(adapter *ad) {
     int i;
     int rv = 0;
@@ -323,6 +370,7 @@ int tables_init_device(adapter *ad) {
 }
 
 void init_ca_device(SCA *c) {
+    uint64_t init_cm;
     int i;
     adapter *ad;
     if (!c->op->ca_add_pmt)
@@ -330,7 +378,12 @@ void init_ca_device(SCA *c) {
 
     for (i = 0; i < MAX_ADAPTERS; i++)
         if ((ad = get_adapter_nw(i))) {
+            init_cm = ad->ca_mask;
+            //			tables_init_device(ad);
             tables_init_ca_for_device(c->id, ad);
+            if (init_cm != ad->ca_mask) {
+                send_pmt_to_ca_for_device(c, ad);
+            }
         }
 }
 
