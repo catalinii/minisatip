@@ -365,6 +365,7 @@ void satipc_close_rtsp_socket(adapter *ad, satipc *sip) {
         ad->fe = -1;
     ad->sock = -1;
     sip->wp = sip->qp = 0;
+    sip->option_no_option = 0;  // Clear this flag from any previous connection
 }
 
 void satipc_open_rtsp_socket(adapter *ad, satipc *sip) {
@@ -583,6 +584,8 @@ int satipc_open_device(adapter *ad) {
         }
     } else {
         ad->dvr = ad->fe;
+        if (ad->dvr >= 0)
+            set_socket_receive_buffer(ad->dvr, opts.dvr_buffer);
         ad->fe = -1;
         ad->fe_sock = sockets_add(SOCK_TIMEOUT, NULL, ad->id, TYPE_UDP, NULL,
                                   NULL, (socket_action)satipc_timeout);
@@ -614,6 +617,7 @@ int satipc_open_device(adapter *ad) {
     sip->enabled = 1;
     sip->rtsp_socket_closed = 0;
     sip->last_close = 0;
+    sip->option_no_option = 0;  // Clear this flag from any previous connection
     return 0;
 }
 
@@ -1053,7 +1057,6 @@ int satip_post_init(adapter *ad) {
     }
 
     sockets_setclose(ad->sock, satipc_close_rtsp);
-    set_socket_thread(ad->fe_sock, ad->thread);
     set_socket_thread(ad->fe_sock, ad->thread);
 
     if (!sip->option_no_option)

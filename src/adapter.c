@@ -948,6 +948,7 @@ void post_tune(adapter *ad) {
 #if !defined(DISABLE_PMT) || !defined(DISABLE_T2MI)
     int aid = ad->id;
 #endif
+    LOGM("adapter post_tune: aid %d", aid);
 #ifndef DISABLE_PMT
     SPid *p_all = find_pid(aid, 8192);
     if (!p_all || p_all->flags == 3) { // add pids if not explicitly added
@@ -977,6 +978,8 @@ void post_tune(adapter *ad) {
 int tune(int aid, int sid) {
     adapter *ad = get_adapter(aid);
     int rv = 0, flush_data = 0;
+
+    LOGM("adapter tune: sid %d aid %d => sock: %d ", sid, aid, ad ? ad->sock : -1);
 
     if (!ad)
         return -400;
