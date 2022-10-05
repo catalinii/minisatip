@@ -23,6 +23,8 @@
 #include "dvb.h"
 #include "minisatip.h"
 #include "utils.h"
+#include "utils/ticks.h"
+
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <errno.h>
@@ -54,7 +56,7 @@
 #define DTV_STREAM_ID 42
 #endif
 
-void get_signal(adapter *ad, int *status, int *ber, int *strength, int *snr);
+void get_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength, uint16_t *snr, uint16_t *db);
 int send_jess(adapter *ad, int fd, int freq, int pos, int pol, int hiband,
               diseqc *d);
 int send_unicable(adapter *ad, int fd, int freq, int pos, int pol, int hiband,
@@ -459,10 +461,7 @@ int axe_setup_switch(adapter *ad) {
         }
     } else {
         aid = ad->id & 3;
-        if (diseqc_param->switch_type == SWITCH_UNICABLE ||
-            diseqc_param->switch_type == SWITCH_JESS) {
-            input = ad->master_source < 0 ? 0 : ad->master_source;
-        }
+        input = ad->master_source < 0 ? 0 : ad->master_source;
         frontend_fd = ad->fe;
         ad = axe_use_adapter(input);
         if (ad == NULL) {
@@ -717,9 +716,10 @@ fe_delivery_system_t axe_delsys(int aid, int fd, fe_delivery_system_t *sys) {
 }
 
 int axe_get_signal(adapter *ad) {
-    int strength = 0, snr = 0, tmp;
-    int status = 0, ber = 0;
-    get_signal(ad, &status, &ber, &strength, &snr);
+    uint16_t strength = 0, snr = 0, db = 0, tmp;
+    int status = 0;
+    uint32_t ber = 0;
+    get_signal(ad, &status, &ber, &strength, &snr, &db);
 
     strength = strength * 240 / 24000;
     if (strength > 240)
@@ -730,9 +730,11 @@ int axe_get_signal(adapter *ad) {
     if (tmp <= 15)
         tmp = 0;
     snr = tmp;
-    // keep the assignment at the end for the signal thread to get the right
-    // values as no locking is done on the adapter
+
+    // Lock the adapter while doing changes
+    adapter_lock(ad->id);
     ad->snr = snr;
+    ad->db = db;
     ad->strength = strength;
     ad->status = status;
     ad->ber = ber;
@@ -740,10 +742,10 @@ int axe_get_signal(adapter *ad) {
     if (ad->status == 0 &&
         ((ad->tp.diseqc_param.switch_type == SWITCH_JESS) ||
          (ad->tp.diseqc_param.switch_type == SWITCH_UNICABLE))) {
-        adapter_lock(ad->id);
         axe_setup_switch(ad);
-        adapter_unlock(ad->id);
     }
+
+    adapter_unlock(ad->id);
     return 0;
 }
 

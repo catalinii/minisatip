@@ -20,9 +20,11 @@
 
 #include "dvb.h"
 #include "adapter.h"
-#include "pmt.h"
 #include "minisatip.h"
+#include "pmt.h"
 #include "utils.h"
+#include "utils/ticks.h"
+
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <errno.h>
@@ -129,6 +131,17 @@ make_func(pls_mode);
     }
 char def_pids[100];
 
+uint32_t pls_scrambling_index(transponder *tp) {
+    /* convert ROOT code to GOLD code */
+    uint32_t x, g;
+    for (g = 0, x = 1; g < 0x3ffff; g++) {
+        if (tp->pls_code == x)
+            return g;
+        x = (((x ^ (x >> 7)) & 1) << 17) | (x >> 1);
+    }
+    return 0x3ffff;
+}
+
 int detect_dvb_parameters(char *s, transponder *tp) {
     char *arg[30];
     int la, i;
@@ -226,6 +239,9 @@ int detect_dvb_parameters(char *s, transponder *tp) {
         // map pids=all to essential pids
         tp->pids = (char *)def_pids;
     }
+
+    if (tp->pls_mode == PLS_MODE_ROOT)
+        tp->pls_code = pls_scrambling_index(tp);
 
     if (tp->pids && strncmp(tp->pids, "none", 4) == 0)
         tp->pids = "";
@@ -1104,20 +1120,6 @@ int setup_switch(adapter *ad) {
         iProp++;                                                               \
     }
 
-uint32_t pls_scrambling_index(transponder *tp) {
-    if (tp->pls_mode == PLS_MODE_ROOT) {
-        /* convert ROOT code to GOLD code */
-        uint32_t x, g;
-        for (g = 0, x = 1; g < 0x3ffff; g++) {
-            if (tp->pls_code == x)
-                return g;
-            x = (((x ^ (x >> 7)) & 1) << 17) | (x >> 1);
-        }
-        return 0x3ffff;
-    }
-    return tp->pls_code; /* GOLD code 0 (default) */
-}
-
 int dvb_tune(int aid, transponder *tp) {
     int64_t bclear, bpol;
     int iProp = 0;
@@ -1176,9 +1178,9 @@ int dvb_tune(int aid, transponder *tp) {
                      tp->plp_isi | (tp->pls_code << 8) | (tp->pls_mode << 26))
 #endif
 #endif
-#if DVBAPIVERSION >= 0x050b /* 5.11 */
-        if (tp->pls_mode != TP_VALUE_UNSET)
-            ADD_PROP(DTV_SCRAMBLING_SEQUENCE_INDEX, pls_scrambling_index(tp))
+#if DVBAPIVERSION >= 0x050b    /* 5.11 */
+        if (tp->pls_code >= 0) // Use Gold plp_mode by default if plsc specified
+            ADD_PROP(DTV_SCRAMBLING_SEQUENCE_INDEX, tp->pls_code)
 #endif
 
 #ifdef USE_DVBAPI3
@@ -1344,6 +1346,7 @@ int dvb_set_pid(adapter *a, int i_pid) {
     char buf[100];
     int fd;
     int hw, ad;
+    uint64_t ctime = getTick();
 
     hw = a->pa;
     ad = a->fn;
@@ -1375,8 +1378,8 @@ int dvb_set_pid(adapter *a, int i_pid) {
         return -1;
     }
 
-    LOG("AD %d [demux %d %d], setting filter on PID %d for fd %d", a->id, hw,
-        ad, i_pid, fd);
+    LOG("AD %d [dvr %d %d], setting filter on PID %d for fd %d [%jd ms]", a->id,
+        hw, ad, i_pid, fd, getTick() - ctime);
 
     SPid *p = find_pid(a->id, i_pid);
     if (p)
@@ -1386,13 +1389,15 @@ int dvb_set_pid(adapter *a, int i_pid) {
 }
 
 int dvb_del_filters(adapter *ad, int fd, int pid) {
+    uint64_t ctime = getTick();
     if (fd < 0)
         LOG_AND_RETURN(0, "DMX_STOP on an invalid handle %d, pid %d", fd, pid);
     if (ioctl(fd, DMX_STOP, NULL) < 0)
         LOG0("DMX_STOP failed on PID %d FD %d: error %d %s", pid, fd, errno,
              strerror(errno))
     else
-        LOG("clearing filter on PID %d FD %d", pid, fd);
+        LOG("clearing filter on PID %d FD %d [%jd ms]", pid, fd,
+            getTick() - ctime);
 
     SPid *p = find_pid(ad->id, pid);
     if (!p)
@@ -1410,6 +1415,7 @@ int dvb_del_filters(adapter *ad, int fd, int pid) {
 
 int dvb_demux_set_pid(adapter *a, int i_pid) {
     int fd = a->dvr;
+    int64_t ctime = getTick();
 
     if (i_pid > 8192)
         LOG_AND_RETURN(-1, "pid %d > 8192 for adapter %d", i_pid, a->id);
@@ -1432,8 +1438,9 @@ int dvb_demux_set_pid(adapter *a, int i_pid) {
                  fd, a->id, i_pid, errno, strerror(errno), ep);
             return -1;
         }
-        LOG("AD %d started setting filters for fd %d, active pids %d", a->id,
-            fd, a->active_pids);
+        LOG("AD %d [dvr %d %d], setting filter on PID %d for fd %d, active "
+            "pids %d",
+            a->id, fd, a->active_pids);
         return fd;
     }
 
@@ -1443,12 +1450,14 @@ int dvb_demux_set_pid(adapter *a, int i_pid) {
              fd, a->active_pids, errno, strerror(errno));
         return -1;
     }
-    LOG("AD %d setting demux filter on PID %d for fd %d", a->id, i_pid, fd);
+    LOG("AD %d [demux %d %d], setting filter on PID %d for fd %d [%jd ms]",
+        a->id, a->pa, a->fn, i_pid, fd, getTick() - ctime);
 
     return fd;
 }
 
 int dvb_demux_del_filters(adapter *ad, int fd, int pid) {
+    int64_t ctime = getTick();
     if (fd < 0)
         LOG_AND_RETURN(0, "DMX_STOP on an invalid handle %d, pid %d", fd, pid);
 
@@ -1468,8 +1477,8 @@ int dvb_demux_del_filters(adapter *ad, int fd, int pid) {
         LOG("stopped filters on fd %d", fd);
     }
 
-    LOG("clearing demux filter on PID %d FD %d, active_pids %d", pid, fd,
-        ad->active_pids);
+    LOG("clearing demux filter on PID %d FD %d, active_pids %d [%jd ms]", pid,
+        fd, ad->active_pids, getTick() - ctime);
     return 0;
 }
 
@@ -1533,6 +1542,7 @@ int dvb_set_psi_filter(adapter *a, int i_pid) {
     char buf[100];
     int fd;
     int hw, ad;
+    int64_t ctime = getTick();
 
     hw = a->pa;
     ad = a->fn;
@@ -1562,8 +1572,8 @@ int dvb_set_psi_filter(adapter *a, int i_pid) {
         return -1;
     }
 
-    LOG("AD %d [demux %d %d], setting PSI filter on PID %d for fd %d", a->id,
-        hw, ad, i_pid, fd);
+    LOG("AD %d [demux %d %d], setting PSI filter on PID %d for fd %d [%jd ms]",
+        a->id, hw, ad, i_pid, fd, getTick() - ctime);
 
     int sock = sockets_add(fd, NULL, a->id, TYPE_DVR, NULL, NULL, NULL);
     if (sock < 0) {
@@ -1585,8 +1595,13 @@ int dvb_is_psi(adapter *ad, int pid) {
     if (pid < 32)
         return 1;
 #ifndef DISABLE_PMT
-    if (get_pid_filter(ad->id, pid) >= 0)
-        return 1;
+    int fid = get_pid_filter(ad->id, pid);
+    if (fid < 0)
+        return 0;
+    SFilter *f = get_filter(fid);
+    if (f && (f->flags & FILTER_ADD_REMOVE))
+        return 0;
+    return 1;
 #endif
     return 0;
 }
@@ -1893,8 +1908,8 @@ int dvb_get_signal(adapter *ad) {
     if (snr > 255)
         snr = 255;
 
-    // keep the assignment at the end for the signal thread to get the right
-    // values as no locking is done on the adapter
+    // Lock the adapter while doing changes
+    adapter_lock(ad->id);
     ad->snr = snr;
     ad->db = dbvalue;
     ad->strength = strength;
@@ -1904,10 +1919,10 @@ int dvb_get_signal(adapter *ad) {
     if (ad->status == 0 &&
         ((ad->tp.diseqc_param.switch_type == SWITCH_JESS) ||
          (ad->tp.diseqc_param.switch_type == SWITCH_UNICABLE))) {
-        adapter_lock(ad->id);
         setup_switch(ad);
-        adapter_unlock(ad->id);
     }
+
+    adapter_unlock(ad->id);
     return 0;
 }
 

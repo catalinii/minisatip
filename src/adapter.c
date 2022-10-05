@@ -36,6 +36,7 @@
 #include "socketworks.h"
 #include "stream.h"
 #include "utils.h"
+#include "utils/ticks.h"
 
 #ifndef DISABLE_SATIPCLIENT
 #include "satipc.h"
@@ -118,6 +119,7 @@ adapter *adapter_alloc() {
     // filter for pid 0
     ad->pat_filter = -1;
     ad->sdt_filter = -1;
+    ad->cache_pmts = 1;
 #endif
     return ad;
 }
@@ -667,9 +669,6 @@ int source_enabled_for_adapter(adapter *ad, transponder *tp) {
         return 1;
     if (tp->sys != SYS_DVBS && tp->sys != SYS_DVBS2)
         return 1;
-#ifdef AXE
-    return 1;
-#endif
     return ad->absolute_table[tp->diseqc - 1];
 }
 
@@ -950,16 +949,20 @@ void post_tune(adapter *ad) {
     int aid = ad->id;
 #endif
 #ifndef DISABLE_PMT
-    SPid *p = find_pid(aid, 0);
     SPid *p_all = find_pid(aid, 8192);
-    if ((!p || p->flags == 3) &&
-        (!p_all || p_all->flags == 3)) // add pid 0 if not explicitly added
-    {
-        LOG("Adding pid 0 to the list of pids as not explicitly added for "
-            "adapter "
-            "%d",
-            aid);
-        mark_pid_add(-1, aid, 0);
+    if (!p_all || p_all->flags == 3) { // add pids if not explicitly added
+        int pid, ppid = 0;
+        int pids[] = {0, 1, 16, 18}; // pids not added by the PMT module
+        for (ppid = 0; ppid < sizeof(pids) / sizeof(int); ppid++) {
+            pid = pids[ppid];
+            SPid *p = find_pid(aid, pid);
+            if (!p || p->flags == 3) {
+                LOG("Adding pid %d to the list of pids as not explicitly added "
+                    "for adapter %d",
+                    pid, aid);
+                mark_pid_add(-1, aid, pid);
+            }
+        }
     }
     pmt_tune(ad);
 #endif
@@ -1333,7 +1336,9 @@ char *describe_adapter(int sid, int aid, char *dad, int ld) {
 
     if (use_ad) {
         if (ad->status < 0) {
-            status = strength = snr = 0;
+            status = 1;
+            snr = 15;
+            strength = 255;
         } else {
             strength = ad->strength;
             snr = ad->snr;
@@ -2166,6 +2171,21 @@ int get_adapter_decerrs(int aid) {
     return dec;
 }
 
+int get_adapter_fe(int aid) {
+    int i, fe;
+    adapter *ad = get_adapter_nw(aid);
+    if (!ad)
+        return 0;
+    fe = ad->tp.fe;
+    if (fe == 0)
+        return 0;
+
+    for (i = 0; i < sizeof(fe_map) / sizeof(fe_map[0]); i++)
+        if (fe_map[i] == fe - 1)
+            return i + 1;
+    return -1;
+}
+
 _symbols adapters_sym[] = {
     {"ad_enabled", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS,
      offsetof(adapter, enabled)},
@@ -2186,7 +2206,7 @@ _symbols adapters_sym[] = {
      offsetof(adapter, tp.bw)},
     {"ad_stream", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS,
      offsetof(adapter, tp.plp_isi)},
-    {"ad_fe", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.fe)},
+    {"ad_fe", VAR_FUNCTION_INT, (void *)&get_adapter_fe, 0, MAX_ADAPTERS, 0},
     {"ad_master", VAR_AARRAY_UINT8, a, 1, MAX_ADAPTERS,
      offsetof(adapter, master_sid)},
     {"ad_sidcount", VAR_AARRAY_UINT8, a, 1, MAX_ADAPTERS,
@@ -2196,6 +2216,16 @@ _symbols adapters_sym[] = {
     {"ad_sys", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.sys)},
     {"ad_mtype", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS,
      offsetof(adapter, tp.mtype)},
+
+    {"ad_t2id", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.t2id)},
+    {"ad_c2tft", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS,
+     offsetof(adapter, tp.c2tft)},
+    {"ad_plp", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.ds)},
+    {"ad_plsc", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS,
+     offsetof(adapter, tp.pls_code)},
+    {"ad_sm", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.sm)},
+    {"ad_gi", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.gi)},
+
     {"ad_allsys", VAR_FUNCTION_STRING, (void *)&get_all_delsys, 0, MAX_ADAPTERS,
      0},
     {"ad_pids", VAR_FUNCTION_STRING, (void *)&get_adapter_pids, 0, MAX_ADAPTERS,

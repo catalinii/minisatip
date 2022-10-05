@@ -1,0 +1,6 @@
+[Path]
+PathExists=/dev/dvb/adapter0/frontend0
+Unit=minisatip.service
+
+[Install]
+WantedBy=sockets.target

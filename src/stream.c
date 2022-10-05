@@ -42,8 +42,8 @@
 #include "socketworks.h"
 #include "stream.h"
 #include "t2mi.h"
-
 #include "pmt.h"
+#include "utils/ticks.h"
 
 #define DEFAULT_LOG LOG_STREAM
 
@@ -575,11 +575,11 @@ close_streams_for_adapter(int ad, int except) {
     return 0;
 }
 
-int64_t tbw, bw, bwtt;
+int64_t tbw, bw, bwtt, bw_dmx;
 uint32_t reads, writes, failed_writes;
 int64_t nsecs;
 
-int64_t c_tbw, c_bw;
+int64_t c_tbw, c_bw, c_bw_dmx;
 uint32_t c_reads, c_writes, c_failed_writes;
 int64_t c_ns_read, c_tt;
 
@@ -964,6 +964,7 @@ int process_dmx(sockets *s) {
     int64_t stime;
     int rlen = s->rlen;
     s->rlen = 0;
+    bw_dmx += rlen;
 
     ad = get_adapter(s->sid);
     if (!ad)
@@ -1095,8 +1096,8 @@ int read_dmx(sockets *s) {
 
 int calculate_bw(sockets *s) {
     int64_t c_time = getTick();
-    s->rtime = c_time;
 
+    s->rtime = c_time;
     if (bwtt > c_time)
         bwtt = c_time;
     if (c_time - bwtt > 1000) {
@@ -1104,24 +1105,25 @@ int calculate_bw(sockets *s) {
         tbw += bw;
         if (!reads)
             reads = 1;
-        if (bw > 2000) {
+        if (bw > 2000 || bw_dmx > 2000) {
             mutex_init(&bw_mutex);
             mutex_lock(&bw_mutex);
             c_bw = bw / 1024;
+            c_bw_dmx = bw_dmx / 1024;
             c_tbw = tbw / 1024576;
             c_ns_read = nsecs / reads;
             c_reads = reads;
             c_writes = writes;
             c_failed_writes = failed_writes;
             c_tt = nsecs / 1000;
-            LOG("BW %jdKB/s, Total BW: %jd MB, ns/read %jd, r: %d, w: %d fw: "
-                "%d, tt: "
-                "%jd ms",
-                c_bw, c_tbw, c_ns_read, c_reads, c_writes, c_failed_writes,
-                c_tt);
+            LOG("BW %jd KB/s, DMX %jd KB/s, Buffered %jd MB, Total BW: %jd MB, ns/read %jd, r: %d, w: %d fw: "
+                "%d, tt: %jd ms",
+                c_bw, c_bw_dmx, get_sock_buffered_bytes() / 1048576, c_tbw, c_ns_read, c_reads, c_writes, 
+                c_failed_writes, c_tt);
             mutex_unlock(&bw_mutex);
         }
         bw = 0;
+        bw_dmx = 0;
         failed_writes = 0;
         nsecs = 0;
         reads = 0;

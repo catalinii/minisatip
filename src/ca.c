@@ -29,13 +29,14 @@ alternative source
 #include "dvb.h"
 #include "dvbapi.h"
 #include "minisatip.h"
-#include "tables.h"
 #include "poll.h"
 #include "search.h"
 #include "socketworks.h"
+#include "tables.h"
 #include <linux/dvb/ca.h>
 
 #include "utils.h"
+#include "utils/ticks.h"
 
 #define DEFAULT_LOG LOG_DVBCA
 
@@ -402,6 +403,15 @@ void set_tuner_input(int ci, int adapter) {
     }
 }
 
+int any_ca_initializing() {
+    int i;
+    for (i = 0; i < MAX_ADAPTERS; i++)
+        if (is_ca_initializing(i))
+            return 1;
+
+    return 0;
+}
+
 ca_device_t *find_dvbca_for_pmt(SPMT *pmt) {
     ca_device_t *d;
     extern SCA ca[MAX_CA];
@@ -438,10 +448,15 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
         if (d->linked_adapter != ad->id) {
             set_tuner_input(-1, d->linked_adapter);
         }
+
         // enigma allows attaching the CI to the adapter that needs it
         d = find_dvbca_for_pmt(spmt);
-        if (!d)
-            return TABLES_RESULT_ERROR_NORETRY;
+        if (!d) {
+            if (any_ca_initializing())
+                return TABLES_RESULT_ERROR_RETRY;
+            else
+                return TABLES_RESULT_ERROR_NORETRY;
+        }
 
         set_tuner_input(d->id, ad->id);
         set_input_ci(d->id, ad->id);
@@ -2229,6 +2244,7 @@ ca_session_t *find_session_for_resource(ca_device_t *d, int resource) {
 
 int populate_resources(ca_device_t *d, int *resource_ids) {
     int i;
+    LOG("Populating %s resources", d->force_ci ? "CI" : "CI+");
     for (i = 0;
          i < sizeof(application_handler) / sizeof(application_handler[0]);
          i++) {
@@ -2458,6 +2474,8 @@ int ca_read_tpdu(int socket, void *buf, int buf_len, sockets *ss, int *rb) {
         switch (tpdu_tag) {
         case T_CTC_REPLY:
             DEBUGM("Got CTC Replay (CA %d)", c->id);
+            if (c->state == CA_STATE_INACTIVE)
+                c->state = CA_STATE_ACTIVE;
             ca_write_tpdu(c, T_DATA_LAST, NULL, 0);
 
             break;
@@ -2774,7 +2792,7 @@ int dvbca_init_dev(adapter *ad) {
 
     if (!c->force_ci) {
         if (access("/etc/ssl/certs/root.pem", F_OK) != 0) {
-            c->force_ci = 0;
+            c->force_ci = 1;
         }
     }
 

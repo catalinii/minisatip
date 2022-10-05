@@ -45,6 +45,7 @@
 #include "stream.h"
 #include "tables.h"
 #include "utils.h"
+#include "utils/ticks.h"
 #include <linux/dvb/ca.h>
 
 #define DEFAULT_LOG LOG_DVBCA
@@ -72,7 +73,7 @@ int first_ddci = -1;
 int ddci_id = -1;
 ddci_device_t *ddci_devices[MAX_ADAPTERS];
 
-int process_cat(int filter, unsigned char *b, int len, void *opaque);
+int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque);
 
 // get mapping from ddci, ddci_pid
 ddci_mapping_table_t *get_ddci_pid(ddci_device_t *d, int dpid) {
@@ -143,7 +144,7 @@ int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
         mark_pid_add(DDCI_SID, ad, pid);
         if (pid == 1)
             m->filter_id =
-                add_filter(ad, 1, (void *)process_cat, d, FILTER_CRC);
+                add_filter(ad, 1, (void *)ddci_process_cat, d, FILTER_CRC);
     }
     if (add_pid) {
         // add the pids to the ddci adapter
@@ -401,8 +402,8 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
         for (i = 0; i < d->max_channels; i++)
             if (d->pmt[i].id == -1) {
                 pos = i;
-		break;
-	    }
+                break;
+            }
     }
 
     if (pos == -1) {
@@ -1129,6 +1130,8 @@ int ddci_open_device(adapter *ad) {
     d->last_pmt = d->last_pat = 0;
     d->tid = d->ver = 0;
     d->enabled = 1;
+    // Do not cache PMTs for DDCI
+    ad->cache_pmts = 0;
     ad->enabled = 1;
     mutex_unlock(&d->mutex);
     LOG("opened DDCI adapter %d fe:%d dvr:%d", ad->id, ad->fe, ad->dvr);
@@ -1140,7 +1143,7 @@ fe_delivery_system_t ddci_delsys(int aid, int fd, fe_delivery_system_t *sys) {
     return 0;
 }
 
-int process_cat(int filter, unsigned char *b, int len, void *opaque) {
+int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque) {
     int cat_len = 0, i, es_len = 0, caid, add_cat = 1;
     ddci_device_t *d = (ddci_device_t *)opaque;
     cat_len = len - 4; // remove crc
@@ -1185,6 +1188,7 @@ int process_cat(int filter, unsigned char *b, int len, void *opaque) {
         if (get_ddci_pid(d, d->capid[i])) {
             add_cat = 0;
             LOG("CAT pid %d already in use, skipping CAT", d->capid[i]);
+            d->cat_processed = 1;
             break;
         }
     if (!add_cat) {

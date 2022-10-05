@@ -14,10 +14,6 @@
 #include <time.h>
 #define DVBAPIVERSION 0x0500
 #define LOGDVBAPIVERSION 0x0000
-
-#ifndef MSG_NOSIGNAL
-#define MSG_NOSIGNAL 0
-#endif
 #endif
 
 #ifndef DISABLE_LINUXDVB

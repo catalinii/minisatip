@@ -15,7 +15,7 @@
 #define CA_MODE_ECB 0
 #define CA_MODE_CBC 1
 
-#define MAX_PMT 256
+#define MAX_PMT 25600
 #define MAX_CW 200
 #define MAX_CW_TIME 45000 // 45s
 #define MAX_BATCH_SIZE 128
@@ -37,6 +37,7 @@
 #define PMT_STARTING 1
 #define PMT_RUNNING 2
 #define PMT_STOPPING 3
+#define PMT_CACHED 4
 
 #define PMT_GRACE_TIME 2000
 
@@ -136,7 +137,6 @@ typedef struct struct_pmt {
     SPid *p;
     char provider[50], name[50];
     void *opaque;
-    char active; // PMT structure was already filled
     char state;  // PMT state (PMT_STOPPED, PMT_STARTING, PMT_RUNNING,
                  // PMT_STOPPING)
     char encrypted;
@@ -232,4 +232,5 @@ int pmt_decrypt_stream(adapter *ad);
 int wait_pusi(adapter *ad, int len);
 int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf);
 void free_filters();
+void stop_pmt(SPMT *pmt, adapter *ad);
 #endif

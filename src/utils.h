@@ -1,8 +1,11 @@
 #ifndef UTILS_H
 #define UTILS_H
 #define _GNU_SOURCE
-#include <pthread.h>
 
+#include "utils/logging/logging.h"
+#include "utils/mutex.h"
+
+#include <pthread.h>
 #include <stdint.h>
 #include <sys/types.h>
 #include <sys/uio.h>
@@ -57,80 +60,6 @@ typedef struct struct_symbols {
     int skip;
 } _symbols;
 
-typedef struct struct_mutex {
-    int enabled;
-    pthread_mutex_t mtx;
-    int state;
-    int line;
-    pthread_t tid;
-    int64_t lock_time, create_time;
-    char *file;
-} SMutex;
-
-struct struct_http_client;
-typedef int (*http_client_action)(void *s, int len, void *opaque,
-                                  struct struct_http_client *h);
-
-typedef struct struct_http_client {
-    char enabled;
-    SMutex mutex;
-    int state;
-    http_client_action action;
-    void *opaque;
-    char host[200];
-    char req[200];
-    int port;
-    int id;
-} Shttp_client;
-
-typedef struct hash_item {
-    uint16_t len;
-    uint16_t max_size;
-    uint8_t is_alloc;
-    int64_t key;
-    void *data;
-} SHashItem;
-
-typedef struct hash_table {
-    char init, resize;
-    int len;
-    int size;
-    SHashItem *items;
-    int64_t conflicts;
-    SMutex mutex;
-} SHashTable;
-
-#define MAX_HTTPC 100
-
-#define get_httpc(i)                                                           \
-    ((i >= 0 && i < MAX_HTTPC && httpc[i] && httpc[i]->enabled) ? httpc[i]     \
-                                                                : NULL)
-
-extern Shttp_client *httpc[MAX_HTTPC];
-
-int http_client(char *url, char *request, void *callback, void *opaque);
-
-// Hash Table implementation:
-// it holds the key (int32) and the value (void *) of specified size
-// The data is allocated inside of the hash_item and resized if needed
-// put will actually copy the data from the argument to the hash_item.data
-// the value 0 means unused (do not set a key with value 0)
-#define HASH_ITEM_ENABLED(h) (h.len)
-#define FOREACH_ITEM(h, a)                                                     \
-    for (i = 0; i < (h)->size; i++)                                            \
-        if (HASH_ITEM_ENABLED((h)->items[i]) && (a = (h)->items[i].data))
-
-int create_hash_table(SHashTable *hash, int no);
-void copy_hash_table(SHashTable *s, SHashTable *d);
-void free_hash(SHashTable *hash);
-void *getItem(SHashTable *hash, uint32_t key);
-int getItemLen(SHashTable *hash, uint32_t key);
-#define setItem(a, b, c, d) _setItem(a, b, c, d, 1)
-int _setItem(SHashTable *hash, uint32_t key, void *data, int len, int copy);
-int delItem(SHashTable *hash, uint32_t key);
-int delItemP(SHashTable *hash, void *p);
-int getItemSize(SHashTable *hash, uint32_t key);
-int setItemLen(SHashTable *hash, uint32_t key, int len);
 int split(char **rv, char *s, int lrv, char sep);
 int map_int(char *s, char **v);
 int map_intd(char *s, char **v, int dv);
@@ -141,8 +70,6 @@ void *myrealloc(void *p, int a, char *f, int l);
 void myfree(void *x, char *f, int l);
 char *header_parameter(char **arg, int i);
 char *get_current_timestamp();
-char *get_current_timestamp_log();
-void _log(const char *file, int line, const char *fmt, ...);
 char *strip(char *s);
 int split(char **rv, char *s, int lrv, char sep);
 void set_signal_handler(char *argv0);
@@ -154,57 +81,23 @@ int get_json_bandwidth(char *buf, int len);
 void process_file(void *sock, char *s, int len, char *ctype);
 int closefile(char *mem, int len);
 
-int mutex_init(SMutex *mutex);
-int mutex_lock1(char *FILE, int line, SMutex *mutex);
-int mutex_unlock1(char *FILE, int line, SMutex *mutex);
-int mutex_destroy(SMutex *mutex);
-void clean_mutexes();
 pthread_t start_new_thread(char *name);
 pthread_t get_tid();
 void set_thread_prio(pthread_t tid, int prio);
 
 int add_new_lock(void **arr, int count, int size, SMutex *mutex);
-int64_t getTick();
-int64_t getTickUs();
 void join_thread();
 void add_join_thread(pthread_t t);
 int init_utils(char *arg0);
 void _hexdump(char *desc, void *addr, int len);
 uint32_t crc_32(const uint8_t *data, int datalen);
 void _dump_packets(char *message, unsigned char *b, int len, int packet_offset);
-int get_index_hash_search(int start_pos, void *p, int max, int struct_size,
-                          uint32_t key, uint32_t value);
 int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, char *cc,
                  int pid);
 void write_buf_to_file(char *file, uint8_t *buf, int len);
 void mkdir_recursive(const char *path);
 void sleep_msec(uint32_t msec);
 int get_random(unsigned char *dest, int len);
-
-#define mutex_lock(m) mutex_lock1(__FILE__, __LINE__, m)
-#define mutex_unlock(m) mutex_unlock1(__FILE__, __LINE__, m)
-//#define proxy_log(level, fmt, ...) _proxy_log(level, fmt"\n", ##__VA_ARGS__)
-
-//#define LOG(a,...) {opts.last_log=a;if(opts.log){int
-// x=getTick();printf(CC([%d.%03d]:
-//,a,\n),x/1000,x%1000,##__VA_ARGS__);fflush(stdout);};} #define LOG(a,...)
-//{opts.last_log=a;if(opts.log){printf(CC([%s]:\x20,a,\n),get_current_timestamp_log(),##__VA_ARGS__);fflush(stdout);};}
-#define LOGL(level, a, ...)                                                    \
-    {                                                                          \
-        if ((level)&opts.log)                                                  \
-            _log(__FILE__, __LINE__, a, ##__VA_ARGS__);                        \
-    }
-
-#define LOGM(a, ...) LOGL(DEFAULT_LOG, a, ##__VA_ARGS__)
-
-#define LOG(a, ...) LOGL(1, a, ##__VA_ARGS__)
-
-#define DEBUGL(level, a, ...)                                                  \
-    {                                                                          \
-        if ((level)&opts.debug)                                                \
-            _log(__FILE__, __LINE__, a, ##__VA_ARGS__);                        \
-    }
-#define DEBUGM(a, ...) DEBUGL(DEFAULT_LOG, a, ##__VA_ARGS__)
 
 #define dump_packets(message, b, len, packet_offset)                           \
     if (DEFAULT_LOG & opts.debug)                                              \
@@ -213,23 +106,6 @@ int get_random(unsigned char *dest, int len);
     if (DEFAULT_LOG & opts.debug)                                              \
     _hexdump(message, b, len)
 
-#define LOG0(a, ...)                                                           \
-    { _log(__FILE__, __LINE__, a, ##__VA_ARGS__); }
-
-#define FAIL(a, ...)                                                           \
-    {                                                                          \
-        if (opts.log) {                                                        \
-            LOGL(0, a, ##__VA_ARGS__);                                         \
-        } else                                                                 \
-            LOG0(a, ##__VA_ARGS__);                                            \
-        unlink(pid_file);                                                      \
-        exit(1);                                                               \
-    }
-#define LOG_AND_RETURN(rc, a, ...)                                             \
-    {                                                                          \
-        LOG(a, ##__VA_ARGS__);                                                 \
-        return rc;                                                             \
-    }
 #define malloc1(a) mymalloc(a, __FILE__, __LINE__)
 #define free1(a) myfree(a, __FILE__, __LINE__)
 #define realloc1(a, b) myrealloc(a, b, __FILE__, __LINE__)
@@ -237,7 +113,11 @@ int get_random(unsigned char *dest, int len);
 #define strlcatf(buf, size, ptr, fmt...)                                       \
     do {                                                                       \
         int __r = snprintf((buf) + ptr, (size)-ptr, fmt);                      \
-        ptr = __r >= (size)-ptr ? (size)-1 : ptr + __r;                        \
+        ptr += __r;                                                            \
+        if (ptr >= (size)) {                                                   \
+            LOG("%s buffer size too small (%d)", __FUNCTION__, size);          \
+            ptr = (size)-1;                                                    \
+        }                                                                      \
     } while (0)
 
 #define strcatf(buf, ptr, fmt, ...)                                            \
@@ -252,48 +132,13 @@ int get_random(unsigned char *dest, int len);
         a[x - 1] = 0;                                                          \
     }
 
-#define TEST_FUNC(a, str, ...)                                                 \
-    {                                                                          \
-        int _tmp_var;                                                          \
-        if ((_tmp_var = (a))) {                                                \
-            LOG(#a " failed with message: " str, ##__VA_ARGS__);               \
-            return _tmp_var;                                                   \
-        } else                                                                 \
-            LOG("%-40s OK", #a);                                               \
-    }
-
-#define LOG_GENERAL 1
-#define LOG_HTTP (1 << 1)
-#define LOG_SOCKETWORKS (1 << 2)
-#define LOG_STREAM (1 << 3)
-#define LOG_ADAPTER (1 << 4)
-#define LOG_SATIPC (1 << 5)
-#define LOG_PMT (1 << 6)
-#define LOG_TABLES (1 << 7)
-#define LOG_DVBAPI (1 << 8)
-#define LOG_LOCK (1 << 9)
-#define LOG_NETCEIVER (1 << 10)
-#define LOG_DVBCA (1 << 11)
-#define LOG_AXE (1 << 12)
-#define LOG_SOCKET (1 << 13)
-#define LOG_UTILS (1 << 14)
-#define LOG_DMX (1 << 15)
-#define LOG_SSDP (1 << 16)
-#define LOG_DVB (1 << 17)
-
 typedef ssize_t (*mywritev)(int fd, const struct iovec *io, int len);
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
 #define PID_FROM_TS(b) (((b)[1] & 0x1F) * 256 + (b)[2])
 
 #ifdef TESTING
-
-#define ASSERT(cond, msg)                                                      \
-    if (!(cond))                                                               \
-    LOG_AND_RETURN(1, "%s:%d %s: %s", __FILE__, __LINE__, __FUNCTION__, msg)
-
 #define writev(a, b, c) _writev(a, b, c)
-
 #endif
 
 #ifdef UTILS_C

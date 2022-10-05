@@ -1,0 +1,3 @@
+minisatip		usr/bin
+html/*			usr/share/minisatip/html
+debian/minisatip.conf	etc

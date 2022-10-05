@@ -71,11 +71,6 @@ int netcv_close(adapter *ad) {
     close(SN->pwfd);
     close(ad->dvr);
 
-    ad->strength = 0;
-    ad->status = 0;
-    ad->snr = 0;
-    ad->ber = 0;
-
     return 0;
 }
 
@@ -306,11 +301,6 @@ int netcv_commit(adapter *ad) {
         /* call recv_tune of libmcli */
         if (recv_tune(SN->ncv_rec, type, m_pos, &m_sec, &m_fep, m_pids) != 0)
             LOG("netceiver: Tuning receiver failed");
-
-        ad->strength = 0;
-        ad->status = 0;
-        ad->snr = 0;
-        ad->ber = 0;
 
         SN->want_tune = 0;
     }

@@ -1,21 +1,39 @@
 How to compile:
 ------
 
-- ./configure
+```bash
+./configure
+```
 
-Configures minisatip for the current system (use ./configure --help for options)
+Configures minisatip for the current system (use `./configure --help` for options)
 
-To cross compile, use something like (static compilation), considering that mips-openwrt-linux-musl-gcc is the gcc executable for that platform:
+To cross compile, use something like (static compilation), considering that `mips-openwrt-linux-musl-gcc` is the gcc executable for that platform:
 
-- ./configure --host=mips-openwrt-linux-musl --enable-static
+```bash
+./configure --host=mips-openwrt-linux-musl --enable-static
+```
 
-To compiles the application
+To compile the application:
 
-- make
+```
+make
+```
 
-To add custom compilation flags you can use:
+To add custom compilation flags you can use for example:
 
-make EXTRA_CFLAGS=....
+```bash
+make EXTRA_CFLAGS="-DNEEDS_SENDMMSG_SHIM"
+```
+
+The above command is useful if you're getting errors like "sendmmsg(): errno 
+38: Function not implemented" (usually only concerns really old systems).
+
+Building a Debian package:
+-------
+
+```bash
+dpkg-buildpackage -b -us -uc
+```
 
 Examples:
 -------
@@ -27,4 +45,3 @@ Examples:
 	- Astra 19.2E, Kika HD: `http://MINISATIP_HOST:554/?src=1&freq=11347&pol=v&ro=0.35&msys=dvbs2&mtype=8psk&plts=on&sr=22000&fec=23&pids=0,17,18,6600,6610,6620,6630`
 
 - msys can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, atsc, isdbt, dvbcb ( - DVBC_ANNEX_B )
-
