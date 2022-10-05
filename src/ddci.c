@@ -1130,6 +1130,8 @@ int ddci_open_device(adapter *ad) {
     d->last_pmt = d->last_pat = 0;
     d->tid = d->ver = 0;
     d->enabled = 1;
+    // Do not cache PMTs for DDCI
+    ad->cache_pmts = 0;
     ad->enabled = 1;
     mutex_unlock(&d->mutex);
     LOG("opened DDCI adapter %d fe:%d dvr:%d", ad->id, ad->fe, ad->dvr);
@@ -1186,6 +1188,7 @@ int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque) {
         if (get_ddci_pid(d, d->capid[i])) {
             add_cat = 0;
             LOG("CAT pid %d already in use, skipping CAT", d->capid[i]);
+            d->cat_processed = 1;
             break;
         }
     if (!add_cat) {

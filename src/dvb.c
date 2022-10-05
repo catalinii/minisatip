@@ -1372,8 +1372,8 @@ int dvb_set_pid(adapter *a, int i_pid) {
         return -1;
     }
 
-    LOG("AD %d [demux %d %d], setting filter on PID %d for fd %d [%jd ms]",
-        a->id, hw, ad, i_pid, fd, getTick() - ctime);
+    LOG("AD %d [dvr %d %d], setting filter on PID %d for fd %d [%jd ms]", a->id,
+        hw, ad, i_pid, fd, getTick() - ctime);
 
     SPid *p = find_pid(a->id, i_pid);
     if (p)
@@ -1432,8 +1432,9 @@ int dvb_demux_set_pid(adapter *a, int i_pid) {
                  fd, a->id, i_pid, errno, strerror(errno), ep);
             return -1;
         }
-        LOG("AD %d started setting filters for fd %d, active pids %d", a->id,
-            fd, a->active_pids);
+        LOG("AD %d [dvr %d %d], setting filter on PID %d for fd %d, active "
+            "pids %d",
+            a->id, fd, a->active_pids);
         return fd;
     }
 
@@ -1443,8 +1444,8 @@ int dvb_demux_set_pid(adapter *a, int i_pid) {
              fd, a->active_pids, errno, strerror(errno));
         return -1;
     }
-    LOG("AD %d setting demux filter on PID %d for fd %d [%jd ms]", a->id, i_pid,
-        fd, getTick() - ctime);
+    LOG("AD %d [demux %d %d], setting filter on PID %d for fd %d [%jd ms]",
+        a->id, a->pa, a->fn, i_pid, fd, getTick() - ctime);
 
     return fd;
 }

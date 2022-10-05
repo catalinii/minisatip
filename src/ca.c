@@ -403,6 +403,15 @@ void set_tuner_input(int ci, int adapter) {
     }
 }
 
+int any_ca_initializing() {
+    int i;
+    for (i = 0; i < MAX_ADAPTERS; i++)
+        if (is_ca_initializing(i))
+            return 1;
+
+    return 0;
+}
+
 ca_device_t *find_dvbca_for_pmt(SPMT *pmt) {
     ca_device_t *d;
     extern SCA ca[MAX_CA];
@@ -439,10 +448,15 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
         if (d->linked_adapter != ad->id) {
             set_tuner_input(-1, d->linked_adapter);
         }
+
         // enigma allows attaching the CI to the adapter that needs it
         d = find_dvbca_for_pmt(spmt);
-        if (!d)
-            return TABLES_RESULT_ERROR_NORETRY;
+        if (!d) {
+            if (any_ca_initializing())
+                return TABLES_RESULT_ERROR_RETRY;
+            else
+                return TABLES_RESULT_ERROR_NORETRY;
+        }
 
         set_tuner_input(d->id, ad->id);
         set_input_ci(d->id, ad->id);

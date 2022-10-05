@@ -476,11 +476,12 @@ int dvbapi_send_pmt(SKey *k, int cmd_id) {
     buf[6] = listmgmt;
     mutex_unlock(&keys_mutex);
     if (sock > 0) {
-       LOG("Sending pmt %d to dvbapi server for pid %d, Channel ID %04X, key %d, "
-           "adapter %d, demux %d, using socket %d (%s)",
-           k->pmt_id, k->pmt_pid, k->sid, k->id, adapter, demux, sock,
-           listmgmt_str[listmgmt]);
-       TEST_WRITE(write(sock, buf, len), len);
+        LOG("Sending pmt %d to dvbapi server for pid %d, Channel ID %04X, key "
+            "%d, "
+            "adapter %d, demux %d, using socket %d (%s)",
+            k->pmt_id, k->pmt_pid, k->sid, k->id, adapter, demux, sock,
+            listmgmt_str[listmgmt]);
+        TEST_WRITE(write(sock, buf, len), len);
     }
     return 0;
 }
@@ -666,7 +667,7 @@ int send_ecm(int filter_id, unsigned char *b, int len, void *opaque) {
     memcpy(buf + 6, b, len);
     //	hexdump("ecm: ", buf, len + 6);
     if (sock > 0)
-      TEST_WRITE(write(sock, buf, len + 6), len + 6);
+        TEST_WRITE(write(sock, buf, len + 6), len + 6);
     return 0;
 }
 
@@ -760,12 +761,12 @@ int keys_del(int i) {
         buf[7] = 0xFF;
         msg = "ALL";
         if (sock > 0)
-           TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
+            TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
     } else if (!ed) {
         buf[7] = k->demux_index;
         msg = "DEMUX";
         if (sock > 0)
-           TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
+            TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
     } else { // only local socket mode where multiple channels are connected to
              // the same demux
         msg = "PMT";
@@ -799,7 +800,6 @@ int keys_del(int i) {
 
 int dvbapi_add_pmt(adapter *ad, SPMT *pmt) {
     SKey *k = NULL;
-    SPid *p;
     int key, pid = pmt->pid;
 
     if (ad->type == ADAPTER_CI) {
@@ -807,9 +807,6 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt) {
                        "%s: Disabling dvbapi on DDCI adapter %d", __FUNCTION__,
                        ad->id);
     }
-    p = find_pid(ad->id, pid);
-    if (!p)
-        LOG("%s: could not find %d on adapter %d", __FUNCTION__, pid, ad->id);
 
     key = keys_add(-1, ad->id, pmt->id);
     k = get_key(key);

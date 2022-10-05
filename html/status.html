@@ -78,7 +78,7 @@
 			font-family: "Lucida Console", Monaco, monospace;
 		}
 
-		/* Progress bar releated styling */	
+		/* Progress bar releated styling */
 
 		.pstr,
 		.psnr {
@@ -93,6 +93,7 @@
 			0% {
 				opacity: 0.7;
 			}
+
 			100% {
 				opacity: 1;
 			}
@@ -102,6 +103,7 @@
 			0% {
 				opacity: 0.7;
 			}
+
 			100% {
 				opacity: 1;
 			}
@@ -111,6 +113,7 @@
 			0% {
 				opacity: 0.7;
 			}
+
 			100% {
 				opacity: 1;
 			}
@@ -120,6 +123,7 @@
 			0% {
 				opacity: 0.7;
 			}
+
 			100% {
 				opacity: 1;
 			}
@@ -129,6 +133,7 @@
 			0% {
 				opacity: 0.7;
 			}
+
 			100% {
 				opacity: 1;
 			}
@@ -154,32 +159,38 @@
 			margin-right: 3px;
 			border: 1px solid #999;
 			background-color: #eaeaea;
-			border-radius:2px;
+			border-radius: 2px;
 		}
 
 		progress::-webkit-progress-bar {
 			background-color: #eaeaea;
 			border-radius: 0px !important;
 		}
+
 		progress::-webkit-progress-value {
-			border-right:1px solid #999;
+			border-right: 1px solid #999;
 		}
-		progress::-moz-progress-bar{
-			border-right:1px solid #999;
+
+		progress::-moz-progress-bar {
+			border-right: 1px solid #999;
 		}
 
 		.progress-1::-webkit-progress-value {
 			background-color: #fd5252;
 		}
+
 		.progress-2::-webkit-progress-value {
 			background-color: #fdb352;
-		}		
+		}
+
 		.progress-3::-webkit-progress-value {
 			background-color: #e3d802;
 		}
+
 		.progress-4::-webkit-progress-value {
 			background-color: #bae302;
-		}		
+		}
+
 		.progress-5::-webkit-progress-value {
 			background-color: #4eb725;
 		}
@@ -187,15 +198,19 @@
 		.progress-1::-moz-progress-bar {
 			background-color: #fd5252;
 		}
+
 		.progress-2::-moz-progress-bar {
 			background-color: #fdb352;
-		}		
+		}
+
 		.progress-3::-moz-progress-bar {
 			background-color: #e3d802;
 		}
+
 		.progress-4::-moz-progress-bar {
 			background-color: #bae302;
-		}		
+		}
+
 		.progress-5::-moz-progress-bar {
 			background-color: #4eb725;
 		}
@@ -214,15 +229,22 @@
 			color: #fff !important;
 		}
 
-		.dark-mode table.dataTable.stripe tbody tr.odd, .dark-mode table.dataTable.display tbody tr.odd {
+		.dark-mode table.dataTable.stripe tbody tr.odd,
+		.dark-mode table.dataTable.display tbody tr.odd {
 			background-color: #151515 !important;
 		}
 
-		.dark-mode .dataTable.hover tbody tr:hover, .dark-mode table.dataTable.display tbody tr:hover {
+		.dark-mode .dataTable.hover tbody tr:hover,
+		.dark-mode table.dataTable.display tbody tr:hover {
 			background-color: #151515 !important;
 		}
 
-		.dark-mode table.dataTable.order-column tbody tr>.sorting_1, .dark-mode table.dataTable.order-column tbody tr>.sorting_2, .dark-mode table.dataTable.order-column tbody tr>.sorting_3, .dark-mode table.dataTable.display tbody tr>.sorting_1, .dark-mode table.dataTable.display tbody tr>.sorting_2, .dark-mode table.dataTable.display tbody tr>.sorting_3 {
+		.dark-mode table.dataTable.order-column tbody tr>.sorting_1,
+		.dark-mode table.dataTable.order-column tbody tr>.sorting_2,
+		.dark-mode table.dataTable.order-column tbody tr>.sorting_3,
+		.dark-mode table.dataTable.display tbody tr>.sorting_1,
+		.dark-mode table.dataTable.display tbody tr>.sorting_2,
+		.dark-mode table.dataTable.display tbody tr>.sorting_3 {
 			background-color: #151515 !important;
 		}
 	</style>
@@ -262,23 +284,23 @@
 	<script stype="text/javascript">
 		var body = document.querySelector("body");
 		var button = document.getElementById("darkModeBtn");
-			if(localStorage.getItem("darkMode") == "enabled"){
-				body.classList.add("dark-mode");
-				body.classList.add("dark-mode");
-				button.innerText="Light Mode";
-			}
-			button.addEventListener("click", function(){
-			if(body.classList.contains("dark-mode")){
+		if (localStorage.getItem("darkMode") == "enabled") {
+			body.classList.add("dark-mode");
+			body.classList.add("dark-mode");
+			button.innerText = "Light Mode";
+		}
+		button.addEventListener("click", function () {
+			if (body.classList.contains("dark-mode")) {
 				body.classList.remove("dark-mode");
-				button.innerText="Dark Mode";
+				button.innerText = "Dark Mode";
 				localStorage.setItem('darkMode', 'disabled');
-			}else{
+			} else {
 				body.classList.add("dark-mode");
-				button.innerText="Light Mode";
+				button.innerText = "Light Mode";
 				localStorage.setItem('darkMode', 'enabled');
 			}
 
-			});
+		});
 	</script>
 
 	<script type="text/javascript">
@@ -296,9 +318,9 @@
 
 		var pol = ["", "(V)", "(H)", "(R)", "(L)"];
 		var sys = ["", "dvbc", "dvbcb", "dvbt", "dss", "dvbs", "dvbs2", "dvbh", "isdbt", "isdbs", "isdbc", "atsc", "atscmh", "dmbth", "cmmb", "dab", "dvbt2", "turbo", "dvbcc", "dvbc2"];
-                var mtype = ["&mtype=qpsk", "&mtype=16qam", "&mtype=32qam", "&mtype=64qam", "&mtype=128qam", "&mtype=256qam", "", // auto
-		    "&mtype=8vsb", "&mtype=16vsb", "&mtype=8psk", "&mtype=16apsk", "&mtype=32apsk", "&mtype=dqpsk",  "&mtype=qam_4_nr",
-		    "&mtype=64apsk", "&mtype=128apsk", "&mtype=256apsk"];
+		var mtype = ["&mtype=qpsk", "&mtype=16qam", "&mtype=32qam", "&mtype=64qam", "&mtype=128qam", "&mtype=256qam", "", // auto
+			"&mtype=8vsb", "&mtype=16vsb", "&mtype=8psk", "&mtype=16apsk", "&mtype=32apsk", "&mtype=dqpsk", "&mtype=qam_4_nr",
+			"&mtype=64apsk", "&mtype=128apsk", "&mtype=256apsk"];
 
 		function getAdapterIcon(ad_type, ad_allsys, ad_sys, available_systems) {
 			if (ad_type < 4) {
@@ -418,14 +440,14 @@
 					// It doesn't make sense to display signal strength for CI adapters
 				} else {
 					var sig = parseInt(state['ad_strength'][i] / 2.55);
-					
+
 					//STR progressbar color scaling
 					var str_color;
-					if (sig<=25 && sig>=0) str_color="progress-1";
-					if (sig<=42 && sig>25) str_color="progress-2";
-					if (sig<=60 && sig>42) str_color="progress-3";
-					if (sig<=80 && sig>60) str_color="progress-4";
-					if (sig<=100 && sig>80) str_color="progress-5";					
+					if (sig <= 25 && sig >= 0) str_color = "progress-1";
+					if (sig <= 42 && sig > 25) str_color = "progress-2";
+					if (sig <= 60 && sig > 42) str_color = "progress-3";
+					if (sig <= 80 && sig > 60) str_color = "progress-4";
+					if (sig <= 100 && sig > 80) str_color = "progress-5";
 
 					signal = "<div class='level'>STR <progress class='pstr " + str_color + "' value='" + sig + "' max='100' />" + sig + "%</div><br />";
 
@@ -435,15 +457,15 @@
 						var snr = parseInt(state['ad_snr'][i] / 0.15);
 
 					var snrdb = parseInt(state['ad_db'][i]);
-					
+
 					//SNR progressbar color scaling
 					var snr_color;
-					if (snr<=25 && snr>=0) snr_color="progress-1";
-					if (snr<=42 && snr>25) snr_color="progress-2";
-					if (snr<=60 && snr>42) snr_color="progress-3";
-					if (snr<=80 && snr>60) snr_color="progress-4";
-					if (snr<=100 && snr>80) snr_color="progress-5";
-					
+					if (snr <= 25 && snr >= 0) snr_color = "progress-1";
+					if (snr <= 42 && snr > 25) snr_color = "progress-2";
+					if (snr <= 60 && snr > 42) snr_color = "progress-3";
+					if (snr <= 80 && snr > 60) snr_color = "progress-4";
+					if (snr <= 100 && snr > 80) snr_color = "progress-5";
+
 					if (snrdb >= 65535) // "65535" is the MAX_DB value
 						signal += "<div class='level'>SNR <progress class='psnr " + snr_color + "' value='" + snr + "' max='100' />" + snr + "%</div><br />";
 					else {
@@ -497,16 +519,16 @@
 						// Example: rtsp://@satip/?src=1&freq=12382&pol=H&msys=DVBS2&sr=27500&pids=0,5375,5378,116,5375,32
 						var hostArray = window.location.host.split(':');
 						params = ""
-						switch(ad_sys) {
+						switch (ad_sys) {
 							// DVB-C
 							case 1: params += "&sr=" + state['ad_sr'][i]
-								break		
+								break
 							// DVB-T
 							case 3: params += "&bw=" + state['ad_bw'][i] + "&gi=" + state['ad_gi'][i]
 								break
 							// DVB-S2 Multi-stream
 							case 6: if (state['ad_plp'][i] > 0) {
-								params += "&isi=" + state['ad_plp'][i] + "&plsc=" + state['ad_plsc'][i] + "&plsm=gold" 
+								params += "&isi=" + state['ad_plp'][i] + "&plsc=" + state['ad_plsc'][i] + "&plsm=gold"
 							}
 							// DVB-S/DVB-S2
 							case 5: {
@@ -524,9 +546,14 @@
 								break;
 							}
 						}
-						myTable += "<small><a href=" + '"' + "rtsp://@" + state['rtsp_host'] + "/?fe=" + state['ad_fe'][i] + params + "&freq=" + state['ad_freq'][i]
+
+						var fe = ""
+						if (state['ad_fe'][i] != 0) {
+							fe = "&fe=" + state['ad_fe'][i]
+						}
+						myTable += "<small><a href=" + '"' + "rtsp://@" + state['rtsp_host'] + "/?freq=" + state['ad_freq'][i] + fe + params
 							+ "&msys=" + sys[state['ad_sys'][i]].toUpperCase() + mtype[state['ad_mtype'][i]] + "&pids=" + st_p + '"' + ">RTSP Link</a></small><br />";
-						myTable += "<small><a href=" + '"' + "http://" + hostArray[0] + ":" + hostArray[1] + "/?fe=" + state['ad_fe'][i] + params + "&freq=" + state['ad_freq'][i]
+						myTable += "<small><a href=" + '"' + "http://" + hostArray[0] + ":" + hostArray[1] + "/?freq=" + state['ad_freq'][i] + fe + params
 							+ "&msys=" + sys[state['ad_sys'][i]].toUpperCase() + mtype[state['ad_mtype'][i]] + "&pids=" + st_p + '"' + ">HTTP Link</a></small><br />";
 
 						if (state['st_overflow'][j] > 0)
