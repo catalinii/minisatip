@@ -346,6 +346,18 @@
 			}
 		}
 
+		function getCaState(ca_state) {
+			switch (ca_state) {
+				case 2:
+					return 'Initialized';
+				case 1:
+					return 'Active';
+				case 0:
+				default:
+					return 'Inactive';
+			}
+		}
+
 		function getTable(state) {
 
 			if (!state)
@@ -566,7 +578,7 @@
 
 				// CRYPT
 				myTable += "<td class=''><small>";
-				for (var j = 0; j < max_keys; j++)
+				for (var j = 0; j < max_keys; j++) {
 					if (state['key_enabled'][j] == 1 && state['key_adapter'][j] == i) {
 						myTable += "CHANNEL: " + state['key_channel'][j] + "<br />";
 						myTable += "SYSTEM: " + state['key_cardsystem'][j] + "<br />";
@@ -575,6 +587,14 @@
 						myTable += "READER: " + state['key_reader'][j] + "<br />";
 						myTable += "IP: " + state['key_from'][j] + " (" + state['key_protocol'][j] + ")<br /><br />";
 					}
+				}
+
+				if (state['ca_enabled'][i] == 1) {
+					myTable += '<b>CAM:</b> ' + state['ca_ci_name'][i] + '<br />';
+					myTable += '<b>State:</b> ' + getCaState(state['ca_state'][i]) + '<br />';
+					myTable += '<b>Supported CAIDs:</b> ' + state['ca_caids'][i] + '<br />';
+				}
+
 				var decerr = state['ad_decerr'][i];
 				if (decerr > 0)
 					myTable += "DEC-ERRORS: " + decerr + "<br />";
