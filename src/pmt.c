@@ -973,13 +973,16 @@ int pmt_decrypt_stream(adapter *ad) {
 }
 
 void start_active_pmts(adapter *ad) {
-    int i;
+    int i, no_pmt = 0;
     uint8_t pids[8192];
     memset(pids, 0, sizeof(pids));
 
     for (i = 0; i < MAX_PIDS; i++)
-        if ((ad->pids[i].flags == 1))
+        if ((ad->pids[i].flags == 1)) {
             pids[ad->pids[i].pid] = 1;
+            if (ad->pids[i].pmt < 0)
+                no_pmt = 1;
+        }
 
     for (i = 0; i < ad->active_pmts; i++) {
         SPMT *pmt = get_pmt(ad->active_pmt[i]);
@@ -1004,12 +1007,16 @@ void start_active_pmts(adapter *ad) {
                 if (ad->ca_mask)
                     send_pmt_to_cas(ad, pmt);
 #endif
-
+                if (no_pmt) {
+                    SPid *p = find_pid(ad->id, pmt->stream_pid[j].pid);
+                    if (p)
+                        p->pmt = pmt->id;
+                }
                 break;
             }
         // non master PMTs should not be started
         if (pmt->state == PMT_RUNNING && !is_active) {
-            LOG("XXX stopping started PMT %d: %s", pmt->id, pmt->name);
+            LOG("Stopping started PMT %d: %s", pmt->id, pmt->name);
             stop_pmt(pmt, ad);
         }
     }
@@ -1055,8 +1062,8 @@ void mark_pids_null(adapter *ad) {
             SPid *p = find_pid(ad->id, pid);
             if (p && !p->is_decrypted) {
                 p->is_decrypted = 1;
-                p->dec_err = 0; // When starting to decrypt reset the counter of
-                                // decoding errors
+                p->dec_err = 0; // When starting to decrypt reset the
+                                // counter of decoding errors
             }
         }
     }
@@ -1227,6 +1234,8 @@ int cache_pmt_for_adapter(int aid) {
 int clear_pmt_for_adapter(int aid) {
     uint8_t filter[FILTER_SIZE], mask[FILTER_SIZE];
     adapter *ad = get_adapter(aid);
+    if (!ad)
+        return;
     if (ad->cache_pmts)
         cache_pmt_for_adapter(aid);
     else
@@ -1339,8 +1348,8 @@ int clean_psi_buffer(uint8_t *pmt, uint8_t *clean, int clean_size) {
 }
 
 void clean_psi(adapter *ad, uint8_t *b, int pid) {
-    // int pid = PID_FROM_TS(b);  // Note: b pointer isn't the start of the TS
-    // packet !!
+    // int pid = PID_FROM_TS(b);  // Note: b pointer isn't the start of the
+    // TS packet !!
     int pmt_len;
     int clean_size = 1500;
     uint8_t *clean, *pmt;
@@ -1700,7 +1709,8 @@ void pmt_add_descriptor(SPMT *pmt, int stream_id, unsigned char *desc) {
     }
     // make sure the desc can fit the new descriptor
     if (sizeof(sp->desc) < new_desc_len + sp->desc_len) {
-        LOGM("ERROR: PMT %d pid %d descriptor %d (new len %d) will not fit and "
+        LOGM("ERROR: PMT %d pid %d descriptor %d (new len %d) will not fit "
+             "and "
              "be discarded",
              pmt->pid, sp->pid, new_desc_id, desc[1]);
         return;
@@ -1814,7 +1824,8 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     pmt->pcr_pid = pcr_pid;
 
     mutex_lock(&pmt->mutex);
-    LOG("new PMT %d AD %d, pid: %04X (%d), len %d, pi_len %d, ver %d, pcr %d, "
+    LOG("new PMT %d AD %d, pid: %04X (%d), len %d, pi_len %d, ver %d, pcr "
+        "%d, "
         "sid "
         "%04X "
         "(%d) %s %s",
@@ -1883,13 +1894,6 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         if (opmt != -1 && opmt != pmt->master_pmt) {
             pmt->master_pmt = opmt;
             LOG("PMT %d, master pmt set to %d", pmt->id, opmt);
-        }
-
-        if ((cp = find_pid(ad->id,
-                           spid))) // the pid is already requested by the client
-        {
-            cp->pmt = pmt->master_pmt;
-            cp->is_decrypted = 0;
         }
     }
     // Add the PCR pid if it's independent
@@ -2039,8 +2043,8 @@ void start_pmt(SPMT *pmt, adapter *ad) {
     pmt->encrypted = 0;
     pmt->start_time = getTick();
     // do not call send_pmt_to_cas to allow all the slave PMTs to be read
-    // when the master PMT is being sent next time, it will actually making it
-    // to all CAs
+    // when the master PMT is being sent next time, it will actually making
+    // it to all CAs
     set_filter_flags(pmt->filter, FILTER_ADD_REMOVE | FILTER_CRC);
 }
 
