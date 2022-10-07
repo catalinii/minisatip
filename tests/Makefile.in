@@ -19,6 +19,7 @@ SOURCES=\
 	test_pmt.c \
 	test_ddci.c \
 	test_dvb.c \
+	test_minisatip.c \
 	test_utils.c \
 	test_socketworks.c \
 	utils/test_hash_table.c
