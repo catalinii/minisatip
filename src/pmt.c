@@ -967,7 +967,7 @@ int pmt_decrypt_stream(adapter *ad) {
 
     // decrypt everything that's left
     for (i = 0; i < pmt_ids; i++)
-        if (pmts[pmt_id[i]]->blen > 0)
+        if (pmts[pmt_id[i]] && pmts[pmt_id[i]]->blen > 0)
             decrypt_batch(pmts[i]);
     return 0;
 }
