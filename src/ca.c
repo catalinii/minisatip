@@ -35,6 +35,8 @@ alternative source
 #include "tables.h"
 #include <linux/dvb/ca.h>
 
+#include "api/symbols.h"
+#include "api/variables.h"
 #include "utils.h"
 #include "utils/ticks.h"
 
@@ -82,7 +84,6 @@ uint32_t datatype_sizes[MAX_ELEMENTS] = {
     256, 256, 32, 8, 8, 32, 32, 0, 8, 2, 32, 1, 32, 1,   0,   32};
 
 int dvbca_id;
-ca_device_t *ca_devices[MAX_ADAPTERS];
 
 typedef enum {
     CIPLUS_DATA_RATE_72_MBPS = 0,
@@ -2977,3 +2978,34 @@ void set_ca_multiple_pmt(char *o) {
         }
     }
 }
+
+char *get_ca_caids_string(int i, char *dest, int max_len) {
+    if (!ca_devices[i])
+        ca_devices[i] = alloc_ca_device();
+    if (!ca_devices[i])
+        return NULL;
+    
+    int k, len;
+    dest[0] = 0;
+    len = 0;
+
+    for (k = 0; k < ca_devices[i]->caids; k++) {
+        strlcatf(dest, max_len, len, "%04X, ", ca_devices[i]->caid[k]);
+    }
+
+    // Remove last ", "
+    if (len > 1) {
+        dest[len - 1] = 0;
+        dest[len - 2] = 0;
+    }
+
+    return dest;
+}
+
+_symbols ca_sym[] = {
+    {"ca_enabled", VAR_AARRAY_INT8, ca_devices, 1, MAX_ADAPTERS, offsetof(ca_device_t, enabled)},
+    {"ca_state", VAR_AARRAY_INT8, ca_devices, 1, MAX_ADAPTERS, offsetof(ca_device_t, state)},
+    {"ca_caids", VAR_FUNCTION_STRING, (void *)&get_ca_caids_string, 0, MAX_ADAPTERS, 0},
+    {"ca_ci_name", VAR_AARRAY_STRING, ca_devices, 1, MAX_ADAPTERS, offsetof(ca_device_t, ci_name)},
+    {NULL, 0, NULL, 0, 0, 0}
+};

@@ -206,6 +206,9 @@ struct ca_device {
     uint64_t datetime_next_send;
 };
 
+ca_device_t *ca_devices[MAX_ADAPTERS];
+
+ca_device_t *alloc_ca_device();
 int ca_init(ca_device_t *d);
 void dvbca_init();
 int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
@@ -218,4 +221,6 @@ void set_ca_multiple_pmt(char *o);
 int get_max_pmt_for_ca(int i);
 void get_authdata_filename(char *dest, size_t len, unsigned int slot,
                            char *ci_name);
+char *get_ca_caids_string(int i, char *dest, int max_len);
+
 #endif

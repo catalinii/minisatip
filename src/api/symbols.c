@@ -25,6 +25,9 @@
 
 // Define all symbols
 _symbols *sym[] = {adapters_sym, stream_sym, minisatip_sym,
+#ifndef DISABLE_DVBCA
+                   ca_sym,
+#endif
 #ifndef DISABLE_DVBAPI
                    dvbapi_sym,
 #endif

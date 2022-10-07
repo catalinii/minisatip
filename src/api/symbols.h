@@ -14,6 +14,9 @@ typedef struct struct_symbols {
 extern _symbols adapters_sym[];
 extern _symbols minisatip_sym[];
 extern _symbols stream_sym[];
+#ifndef DISABLE_DVBCA
+extern _symbols ca_sym[];
+#endif
 #ifndef DISABLE_DVBAPI
 extern _symbols dvbapi_sym[];
 #endif
