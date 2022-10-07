@@ -206,7 +206,7 @@ struct ca_device {
     uint64_t datetime_next_send;
 };
 
-ca_device_t *ca_devices[MAX_ADAPTERS];
+extern ca_device_t *ca_devices[];
 
 ca_device_t *alloc_ca_device();
 int ca_init(ca_device_t *d);

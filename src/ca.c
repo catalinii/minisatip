@@ -84,6 +84,7 @@ uint32_t datatype_sizes[MAX_ELEMENTS] = {
     256, 256, 32, 8, 8, 32, 32, 0, 8, 2, 32, 1, 32, 1,   0,   32};
 
 int dvbca_id;
+ca_device_t *ca_devices[MAX_ADAPTERS];
 
 typedef enum {
     CIPLUS_DATA_RATE_72_MBPS = 0,
