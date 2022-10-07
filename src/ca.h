@@ -181,6 +181,7 @@ struct ca_device {
     int state;
     uint16_t caid[MAX_CAID];
     uint32_t caids;
+    int has_forced_caids;
 
     struct cc_ctrl_data private_data;
     ca_session_t sessions[MAX_SESSIONS];
