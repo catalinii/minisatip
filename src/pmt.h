@@ -137,8 +137,8 @@ typedef struct struct_pmt {
     SPid *p;
     char provider[50], name[50];
     void *opaque;
-    char state; // PMT state (PMT_STOPPED, PMT_STARTING, PMT_RUNNING,
-                // PMT_STOPPING)
+    char state;  // PMT state (PMT_STOPPED, PMT_STARTING, PMT_RUNNING,
+                 // PMT_STOPPING)
     char encrypted;
     int first_active_pid;
     int64_t grace_time, start_time;
@@ -207,7 +207,7 @@ int pmt_destroy();
 void start_pmt(SPMT *pmt, adapter *ad);
 int pmt_init_device(adapter *ad);
 int tables_tune(adapter *ad);
-void delete_pmt_for_adapter(int aid);
+int delete_pmt_for_adapter(int aid);
 int pmt_tune(adapter *ad);
 int get_active_filters_for_pid(int master_filter, int aid, int pid, int flags);
 int add_filter(int aid, int pid, void *callback, void *opaque, int flags);

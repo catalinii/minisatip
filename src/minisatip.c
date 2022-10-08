@@ -20,12 +20,12 @@
 
 #include "minisatip.h"
 #include "adapter.h"
-#include "api/symbols.h"
-#include "api/variables.h"
 #include "dvb.h"
 #include "pmt.h"
 #include "socketworks.h"
 #include "stream.h"
+#include "api/symbols.h"
+#include "api/variables.h"
 #include "utils/ticks.h"
 
 #include <arpa/inet.h>
@@ -568,16 +568,15 @@ By default every CAM supports 4 channels\n\
     exit(1);
 }
 
-char *get_command_line_string(int argc, char *argv[]) {
+char* get_command_line_string(int argc, char *argv[]) {
     int i;
     size_t len = argc;
 
-    for (i = 0; i < argc; i++) {
-        len += strlen(argv[i]) + 1;
+    for(i = 0; i < argc; i++) {
+        len += strlen(argv[i]);
     }
 
     char *dest = malloc1(len);
-    memset(dest, 0, sizeof(len));
     for (i = 0; i < argc; i++) {
         strcat(dest, argv[i]);
         if (i != argc - 1) {

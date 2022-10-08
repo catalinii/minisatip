@@ -1879,12 +1879,11 @@ static int ca_send_datetime(ca_device_t *d) {
     msg[4] = ((ss / 10) << 4) | (ss % 10);
     ca_session_t *s =
         find_session_for_resource(d, EN50221_APP_DATETIME_RESOURCEID);
-    if (s) {
-        LOG("Sending time to CA %d to session %d, response interval: %jd",
-            d->id, s->session_number, d->datetime_response_interval)
+    if (s)
         ca_write_apdu(s, TAG_DATE_TIME, msg, 5);
-    }
     d->datetime_next_send = getTick() + d->datetime_response_interval;
+    LOG("Sending time to CA %d to session %d, response interval: %jd", d->id,
+        s->session_number, d->datetime_response_interval)
     return 0;
 }
 
@@ -2104,7 +2103,7 @@ int APP_MMI_handler(ca_session_t *session, int resource, uint8_t *buffer,
             n = 0;
         else
             n++;
-        LOG("CA %d ======= MMI menu =======", d->id);
+        LOG("CA %d ======= MMI menu =======", d->id, n);
         for (i = 0; i < (n + 3); ++i) {
             int textlen;
             if ((data + 3) > max)
@@ -2405,7 +2404,7 @@ int ca_write_spdu(ca_device_t *d, int session_number, unsigned char tag,
 
     ptr += alen;
 
-    DEBUGM("%s: CA %d, session %d, name %s, write tag %02X, data length %ld",
+    DEBUGM("%s: CA %d, session %d, name %s, write tag %02X, data length %d",
            __FUNCTION__, d->id, session_number,
            d->sessions[session_number - 1].handler.name, tag, ptr - pkt);
     if (ptr > pkt)
@@ -2578,8 +2577,8 @@ int ca_read(sockets *s) {
         if (!session)
             status = 0xF0;
         LOG("Found session_number %d for resource %06X, name %s, status %02X",
-            session ? session->session_number : -1, resource_identifier,
-            session->handler.name, status);
+            session->session_number, resource_identifier, session->handler.name,
+            status);
         pkt[0] = status;
         copy32(pkt, 1, resource_identifier);
         ca_write_spdu(d, session->session_number, ST_OPEN_SESSION_RESPONSE, pkt,
@@ -2654,6 +2653,11 @@ int ca_read_enigma(int socket, void *buf, int len, sockets *ss, int *rb) {
     if (rl > 0) {
         *rb = rl;
     }
+    if (0 && ss->revents && POLLPRI) {
+        LOG("Got POLLPRI for sock %d, sock_id %d, closing CI", ss->id,
+            ss->sock);
+        return 0;
+    }
     return 1;
 }
 
@@ -2661,8 +2665,7 @@ int ca_read_enigma(int socket, void *buf, int len, sockets *ss, int *rb) {
 int ca_init_enigma(ca_device_t *d) {
     int fd = d->fd;
 
-    if (ioctl(fd, 0))
-        LOG("CA %d reset failed", d->id);
+    ioctl(fd, 0);
 
     d->sock = sockets_add(fd, NULL, d->id, TYPE_TCP, (socket_action)ca_read,
                           (socket_action)ca_close, (socket_action)ca_timeout);
@@ -2990,7 +2993,7 @@ char *get_ca_caids_string(int i, char *dest, int max_len) {
         ca_devices[i] = alloc_ca_device();
     if (!ca_devices[i])
         return NULL;
-
+    
     int k, len;
     dest[0] = 0;
     len = 0;
@@ -3008,12 +3011,10 @@ char *get_ca_caids_string(int i, char *dest, int max_len) {
     return dest;
 }
 
-_symbols ca_sym[] = {{"ca_enabled", VAR_AARRAY_INT8, ca_devices, 1,
-                      MAX_ADAPTERS, offsetof(ca_device_t, enabled)},
-                     {"ca_state", VAR_AARRAY_INT8, ca_devices, 1, MAX_ADAPTERS,
-                      offsetof(ca_device_t, state)},
-                     {"ca_caids", VAR_FUNCTION_STRING,
-                      (void *)&get_ca_caids_string, 0, MAX_ADAPTERS, 0},
-                     {"ca_ci_name", VAR_AARRAY_STRING, ca_devices, 1,
-                      MAX_ADAPTERS, offsetof(ca_device_t, ci_name)},
-                     {NULL, 0, NULL, 0, 0, 0}};
+_symbols ca_sym[] = {
+    {"ca_enabled", VAR_AARRAY_INT8, ca_devices, 1, MAX_ADAPTERS, offsetof(ca_device_t, enabled)},
+    {"ca_state", VAR_AARRAY_INT8, ca_devices, 1, MAX_ADAPTERS, offsetof(ca_device_t, state)},
+    {"ca_caids", VAR_FUNCTION_STRING, (void *)&get_ca_caids_string, 0, MAX_ADAPTERS, 0},
+    {"ca_ci_name", VAR_AARRAY_STRING, ca_devices, 1, MAX_ADAPTERS, offsetof(ca_device_t, ci_name)},
+    {NULL, 0, NULL, 0, 0, 0}
+};

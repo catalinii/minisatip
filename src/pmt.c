@@ -20,14 +20,14 @@
 
 #include "pmt.h"
 #include "adapter.h"
-#include "api/symbols.h"
-#include "api/variables.h"
 #include "dvb.h"
 #include "dvbapi.h"
 #include "minisatip.h"
 #include "socketworks.h"
 #include "tables.h"
 #include "utils.h"
+#include "api/symbols.h"
+#include "api/variables.h"
 #include "utils/ticks.h"
 
 #include <arpa/inet.h>
@@ -1174,58 +1174,6 @@ void mark_pids_null(adapter *ad) {
     }
 }
 
-void emulate_add_all_pids(adapter *ad) {
-    char pids[8193];
-    SPid *p_all = find_pid(ad->id, 8192);
-    int i, j, k;
-    int updated = 0;
-
-    if (!opts.emulate_pids_all)
-        return;
-
-    if (!p_all)
-        return;
-    memset(pids, 0, sizeof(pids));
-    for (i = 0; i < MAX_PIDS; i++)
-        if (ad->pids[i].flags > 0 && ad->pids[i].flags < 3)
-            pids[i] = 1;
-
-    for (i = 0; i < MAX_STREAMS_PER_PID; i++)
-        if (p_all->sid[i] >= 0) {
-            for (j = 0; j < ad->active_pmts; j++) {
-                SPMT *pmt = get_pmt(ad->active_pmt[j]);
-                if (!pmt)
-                    continue;
-
-                for (k = 0; k < pmt->stream_pids; k++)
-                    if (!pids[pmt->stream_pid[k].pid]) {
-                        LOG("%s: adding pid %d to emulate all pids",
-                            __FUNCTION__, pmt->stream_pid[k].pid)
-                        mark_pid_add(p_all->sid[i], ad->id,
-                                     pmt->stream_pid[k].pid);
-                        pids[pmt->stream_pid[k].pid] = 1;
-                        updated = 1;
-                    }
-            }
-
-            int forced_pids[] = {EMU_PIDS_ALL_ENFORCED_PIDS_LIST};
-            int i_forced = sizeof(forced_pids) / sizeof(int);
-            for (j = 0; j < i_forced; j++) {
-                int fpid = forced_pids[j];
-                LOG("%s: adding (enforced) pid %d to emulate all pids",
-                    __FUNCTION__, fpid);
-                mark_pid_add(p_all->sid[i], ad->id, fpid);
-                updated = 1;
-            }
-            if (!ad->drop_encrypted) {
-                LOG("%s: adding (enforced) pid 8191 (NULL) too", __FUNCTION__);
-                mark_pid_add(p_all->sid[i], ad->id, 8191);
-            }
-        }
-    if (updated)
-        update_pids(ad->id);
-}
-
 int pmt_process_stream(adapter *ad) {
     SPid *p;
     int i, pid;
@@ -1248,7 +1196,6 @@ int pmt_process_stream(adapter *ad) {
         }
     }
 #ifndef DISABLE_TABLES
-    emulate_add_all_pids(ad);
     start_active_pmts(ad);
 
     if (ad->ca_mask == 0) // no CA enabled on this adapter
@@ -1389,7 +1336,7 @@ int cache_pmt_for_adapter(int aid) {
     return 0;
 }
 
-void clear_pmt_for_adapter(int aid) {
+int clear_pmt_for_adapter(int aid) {
     uint8_t filter[FILTER_SIZE], mask[FILTER_SIZE];
     adapter *ad = get_adapter(aid);
     if (!ad)
@@ -1411,19 +1358,18 @@ void clear_pmt_for_adapter(int aid) {
         set_filter_flags(ad->sdt_filter, FILTER_PERMANENT | FILTER_CRC);
     }
     ad->active_pmts = 0;
-    return;
+    return 0;
 }
 
-void delete_pmt_for_adapter(int aid) {
+int delete_pmt_for_adapter(int aid) {
     int i, pmt;
     adapter *ad = get_adapter(aid);
-    if (!ad)
-        return;
     for (i = 0; i < ad->active_pmts; i++) {
         pmt = ad->active_pmt[i];
         if (get_pmt(pmt))
             pmt_del(pmt);
     }
+    return 0;
 }
 
 SPMT *get_pmt_for_sid(int aid, int sid) {
@@ -1926,7 +1872,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     int pi_len = 0, isAC3, pmt_len = 0, i, es_len, ver, pcr_pid = 0;
     unsigned char *pmt_b, *pi;
     int pid, spid, stype;
-    SPid *p;
+    SPid *p, *cp, *p_all;
     SFilter *f;
     adapter *ad;
     SPMT *pmt = (void *)opaque;
@@ -1970,6 +1916,8 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
 
     if (!(p = find_pid(ad->id, pid)))
         return -1;
+
+    p_all = find_pid(ad->id, 8192);
 
     pmt_len = len - 4;
 
@@ -2067,6 +2015,15 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     if (pmt->first_active_pid < 0)
         pmt->first_active_pid = pmt->stream_pid[0].pid;
 
+    if (p_all && opts.emulate_pids_all) {
+        int i, j;
+        for (i = 0; i < MAX_STREAMS_PER_PID; i++)
+            if (p_all->sid[i] >= 0)
+                for (j = 0; j < pmt->stream_pids; j++)
+                    mark_pid_add(p_all->sid[i], ad->id, pmt->stream_pid[j].pid);
+
+        update_pids(ad->id);
+    }
     SPMT *master = get_pmt(pmt->master_pmt);
     if (pmt->caids && master && master != pmt) {
         int i;
@@ -2209,6 +2166,49 @@ void stop_pmt(SPMT *pmt, adapter *ad) {
     pmt->state = PMT_STOPPED;
 }
 
+void emulate_add_all_pids(adapter *ad) {
+    char pids[8193];
+    SPid *p_all = find_pid(ad->id, 8192);
+    int i, j, k;
+    int updated = 0;
+    memset(pids, 0, sizeof(pids));
+    for (i = 0; i < MAX_PIDS; i++)
+        if (ad->pids[i].flags > 0 && ad->pids[i].flags < 3)
+            pids[i] = 1;
+
+    for (i = 0; i < MAX_STREAMS_PER_PID; i++)
+        if (p_all->sid[i] >= 0) {
+            for (j = 0; j < ad->active_pmts; j++) {
+                SPMT *pmt = get_pmt(ad->active_pmt[j]);
+                for (k = 0; k < pmt->stream_pids; k++)
+                    if (!pids[pmt->stream_pid[k].pid]) {
+                        LOG("%s: adding pid %d to emulate all pids",
+                            __FUNCTION__, pmt->stream_pid[k].pid)
+                        mark_pid_add(p_all->sid[i], ad->id,
+                                     pmt->stream_pid[k].pid);
+                        pids[pmt->stream_pid[k].pid] = 1;
+                        updated = 1;
+                    }
+            }
+
+            int forced_pids[] = {EMU_PIDS_ALL_ENFORCED_PIDS_LIST};
+            int i_forced = sizeof(forced_pids) / sizeof(int);
+            for (j = 0; j < i_forced; j++) {
+                int fpid = forced_pids[j];
+                LOG("%s: adding (enforced) pid %d to emulate all pids",
+                    __FUNCTION__, fpid);
+                mark_pid_add(p_all->sid[i], ad->id, fpid);
+                updated = 1;
+            }
+            if (!ad->drop_encrypted) {
+                LOG("%s: adding (enforced) pid 8191 (NULL) too", __FUNCTION__);
+                mark_pid_add(p_all->sid[i], ad->id, 8191);
+            }
+        }
+    if (updated)
+        update_pids(ad->id);
+}
+
 void pmt_pid_add(adapter *ad, int pid, int existing) {
     SPid *cp;
     SPMT *pmt = NULL;
@@ -2217,6 +2217,11 @@ void pmt_pid_add(adapter *ad, int pid, int existing) {
     cp = find_pid(ad->id, pid);
     if (!cp)
         return;
+
+    if (opts.emulate_pids_all && pid == 8192) {
+        emulate_add_all_pids(ad);
+        return;
+    }
 
     cp->filter = get_pid_filter(ad->id, pid);
 
