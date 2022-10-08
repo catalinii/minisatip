@@ -22,11 +22,11 @@
 #define UTILS_C
 
 #include "utils.h"
+#include "api/variables.h"
 #include "dvb.h"
 #include "minisatip.h"
 #include "pmt.h"
 #include "socketworks.h"
-#include "api/variables.h"
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <errno.h>
@@ -803,10 +803,12 @@ void mkdir_recursive(const char *path) {
     for (p = tmp + 1; *p; p++)
         if (*p == '/') {
             *p = 0;
-            mkdir(tmp, S_IRWXU);
+            if (mkdir(tmp, S_IRWXU))
+                LOG("mkdir %s failed", tmp);
             *p = '/';
         }
-    mkdir(tmp, S_IRWXU);
+    if (mkdir(tmp, S_IRWXU))
+        LOG("mkdir %s failed", tmp);
 }
 
 // https://trac.streamboard.tv/oscam/browser/trunk/oscam-time.c#L172
