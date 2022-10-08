@@ -333,26 +333,16 @@ int get_enabled_pmts_for_ca(ca_device_t *d) {
 SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple) {
     int ca_pos;
     SCAPMT *res = NULL;
-
     for (ca_pos = 0; ca_pos < d->max_ca_pmt; ca_pos++) {
-        if (d->capmt[ca_pos].pmt_id == pmt->id ||
-            d->capmt[ca_pos].other_id == pmt->id) {
+        if (d->capmt[ca_pos].pmt_id == -1) {
+            d->capmt[ca_pos].pmt_id = pmt->id;
             res = d->capmt + ca_pos;
             break;
         }
-    }
-    if (!res) {
-        for (ca_pos = 0; ca_pos < d->max_ca_pmt; ca_pos++) {
-            if (d->capmt[ca_pos].pmt_id == -1) {
-                d->capmt[ca_pos].pmt_id = pmt->id;
-                res = d->capmt + ca_pos;
-                break;
-            }
-            if (multiple && d->capmt[ca_pos].other_id == -1) {
-                d->capmt[ca_pos].other_id = pmt->id;
-                res = d->capmt + ca_pos;
-                break;
-            }
+        if (multiple && d->capmt[ca_pos].other_id == -1) {
+            d->capmt[ca_pos].other_id = pmt->id;
+            res = d->capmt + ca_pos;
+            break;
         }
     }
 

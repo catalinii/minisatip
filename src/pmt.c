@@ -722,7 +722,7 @@ void cw_decrypt_stream(SCW *cw, SPMT_batch *batch, int len) {
 int test_decrypt_packet(SCW *cw, SPMT_batch *start, int len) {
     uint8_t data[len * 188 + 10];
     int i = 0, pos = 0;
-    LOGM("Testing len %d, CW: %s", len, cw_to_string(cw, (char *)data));
+    LOGM("Testing len %d, CW: %s", i, cw_to_string(cw, (char *)data));
     SPMT_batch batch[len + 1];
     for (i = 0; i < len; i++) {
         hexdump("test_decrypt_packet before: ", start[i].data, start[i].len);
@@ -1072,13 +1072,15 @@ int pmt_decrypt_stream(adapter *ad) {
 }
 
 void start_active_pmts(adapter *ad) {
-    int i;
-    SPid *pids[8192];
+    int i, no_pmt = 0;
+    uint8_t pids[8192];
     memset(pids, 0, sizeof(pids));
 
     for (i = 0; i < MAX_PIDS; i++)
         if ((ad->pids[i].flags == 1)) {
-            pids[ad->pids[i].pid] = ad->pids + i;
+            pids[ad->pids[i].pid] = 1;
+            if (ad->pids[i].pmt < 0)
+                no_pmt = 1;
         }
 
     for (i = 0; i < ad->active_pmts; i++) {
@@ -1088,7 +1090,7 @@ void start_active_pmts(adapter *ad) {
         if (!pmt->caids)
             continue;
         int is_active = 0;
-        int j, first = 0;
+        int j;
         for (j = 0; j < pmt->stream_pids; j++)
             // for all audio and video streams start the PMT containing them
             if ((pmt->stream_pid[j].is_audio || pmt->stream_pid[j].is_video) &&
@@ -1098,20 +1100,18 @@ void start_active_pmts(adapter *ad) {
                     pmt->id, pmt->stream_pid[j].pid);
                 is_active = 1;
 #ifndef DISABLE_TABLES
-                if (!first) {
-                    first = 1;
-                    if (pmt->state == PMT_STOPPED) {
-                        start_pmt(pmt, ad);
-                    }
-                    if (ad->ca_mask)
-                        send_pmt_to_cas(ad, pmt);
+                if (pmt->state == PMT_STOPPED) {
+                    start_pmt(pmt, ad);
                 }
+                if (ad->ca_mask)
+                    send_pmt_to_cas(ad, pmt);
 #endif
-                SPid *p = pids[pmt->stream_pid[j].pid];
-                if (p && p->pmt < 0) {
-                    p->pmt = pmt->id;
-                    p->is_decrypted = 0;
+                if (no_pmt) {
+                    SPid *p = find_pid(ad->id, pmt->stream_pid[j].pid);
+                    if (p)
+                        p->pmt = pmt->id;
                 }
+                break;
             }
         // non master PMTs should not be started
         if (pmt->state == PMT_RUNNING && !is_active) {
@@ -2354,8 +2354,8 @@ char *get_channel_for_adapter(int aid, char *dest, int max_size) {
     for (i = 0; i < ad->active_pmts; i++) {
         int p = ad->active_pmt[i];
         SPMT *pmt = get_pmt(p);
-        if (pmt && pmt->state == PMT_RUNNING && pmt->name[0])
-            strlcatf(dest, max_size, pos, "%s,", pmt->name);
+        if (pmt && pmt->name[0])
+            strlcatf(dest, max_size, pos, "%s,", pmts[i]->name);
     }
 
     if (pos > 0)
