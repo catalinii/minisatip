@@ -35,6 +35,8 @@ alternative source
 #include "tables.h"
 #include <linux/dvb/ca.h>
 
+#include "api/symbols.h"
+#include "api/variables.h"
 #include "utils.h"
 #include "utils/ticks.h"
 
@@ -1981,21 +1983,27 @@ static int APP_CA_close(ca_session_t *session) {
 int APP_CA_handler(ca_session_t *session, int resource, uint8_t *data,
                    int len) {
     ca_device_t *d = session->ca;
-    int i, overwritten = 0, caid_count = len / 2;
+    int i = 0, caid_count = len / 2;
 
     switch (resource) {
     case TAG_CA_INFO:
         d->state = CA_STATE_INITIALIZED;
-        if (d->caids) {
+
+        // Ignore CAM reported values if user has forced specific CAIDs
+        if (d->has_forced_caids) {
             data = (uint8_t *)d->caid;
             caid_count = d->caids;
-            overwritten = 1;
+        } else {
+            d->caids = caid_count;
         }
         for (i = 0; i < caid_count; i++) {
             int caid = (data[i * 2 + 0] << 8) | data[i * 2 + 1];
             LOG("   %s CA ID: %04X for CA%d",
-                overwritten ? "Forced" : "Supported", caid, d->id);
+                d->has_forced_caids ? "Forced" : "Supported", caid, d->id);
             add_caid_mask(dvbca_id, d->id, caid, 0xFFFF);
+            if (!d->has_forced_caids) {
+                d->caid[i] = caid;
+            }
         }
         break;
     default:
@@ -2971,9 +2979,42 @@ void set_ca_multiple_pmt(char *o) {
         seps = sep;
         while ((seps = strchr(seps + 1, '-'))) {
             int caid = strtoul(seps + 1, NULL, 16);
-            if (caid > 0)
+            if (caid > 0) {
                 ca_devices[ddci]->caid[ca_devices[ddci]->caids++] = caid;
+                ca_devices[ddci]->has_forced_caids = 1;
+            }
             LOG("Forcing CA %d to use CAID %04X", ddci, caid);
         }
     }
 }
+
+char *get_ca_caids_string(int i, char *dest, int max_len) {
+    if (!ca_devices[i])
+        ca_devices[i] = alloc_ca_device();
+    if (!ca_devices[i])
+        return NULL;
+    
+    int k, len;
+    dest[0] = 0;
+    len = 0;
+
+    for (k = 0; k < ca_devices[i]->caids; k++) {
+        strlcatf(dest, max_len, len, "%04X, ", ca_devices[i]->caid[k]);
+    }
+
+    // Remove last ", "
+    if (len > 1) {
+        dest[len - 1] = 0;
+        dest[len - 2] = 0;
+    }
+
+    return dest;
+}
+
+_symbols ca_sym[] = {
+    {"ca_enabled", VAR_AARRAY_INT8, ca_devices, 1, MAX_ADAPTERS, offsetof(ca_device_t, enabled)},
+    {"ca_state", VAR_AARRAY_INT8, ca_devices, 1, MAX_ADAPTERS, offsetof(ca_device_t, state)},
+    {"ca_caids", VAR_FUNCTION_STRING, (void *)&get_ca_caids_string, 0, MAX_ADAPTERS, 0},
+    {"ca_ci_name", VAR_AARRAY_STRING, ca_devices, 1, MAX_ADAPTERS, offsetof(ca_device_t, ci_name)},
+    {NULL, 0, NULL, 0, 0, 0}
+};

@@ -9,6 +9,7 @@
 struct struct_opts {
     char *rrtp;
     char *name_app;
+    char *command_line;
     char *http_host; // http-server host
     char *rtsp_host; // rtsp-server host
     char *bind;      // bind address

@@ -346,6 +346,18 @@
 			}
 		}
 
+		function getCaState(ca_state) {
+			switch (ca_state) {
+				case 2:
+					return 'Initialized';
+				case 1:
+					return 'Active';
+				case 0:
+				default:
+					return 'Inactive';
+			}
+		}
+
 		function getTable(state) {
 
 			if (!state)
@@ -566,7 +578,7 @@
 
 				// CRYPT
 				myTable += "<td class=''><small>";
-				for (var j = 0; j < max_keys; j++)
+				for (var j = 0; j < max_keys; j++) {
 					if (state['key_enabled'][j] == 1 && state['key_adapter'][j] == i) {
 						myTable += "CHANNEL: " + state['key_channel'][j] + "<br />";
 						myTable += "SYSTEM: " + state['key_cardsystem'][j] + "<br />";
@@ -575,6 +587,14 @@
 						myTable += "READER: " + state['key_reader'][j] + "<br />";
 						myTable += "IP: " + state['key_from'][j] + " (" + state['key_protocol'][j] + ")<br /><br />";
 					}
+				}
+
+				if (state['ca_enabled'][i] == 1) {
+					myTable += '<b>CAM:</b> ' + state['ca_ci_name'][i] + '<br />';
+					myTable += '<b>State:</b> ' + getCaState(state['ca_state'][i]) + '<br />';
+					myTable += '<b>Supported CAIDs:</b> ' + state['ca_caids'][i] + '<br />';
+				}
+
 				var decerr = state['ad_decerr'][i];
 				if (decerr > 0)
 					myTable += "DEC-ERRORS: " + decerr + "<br />";
@@ -589,6 +609,7 @@
 			myTable += "<li><B>Current Time:</B> " + state['datetime_current'] + " -- <B>Start Time:</B> " + state['datetime_start'] + " -- <B>Running Time:</B> " + state['time_running'] + "</span></li>"
 			myTable += "<li><B>RTSP address:</B> " + state['rtsp_host'] + " -- <B>UUID:</B> " + state['uuid'] + " -- <B>BOOTID:</B> " + state['bootid'] + " -- <B>DEVICE-ID:</B> " + state['deviceid'] + "</li>"
 			myTable += "<li><B>Service Name:</B> " + state['name_app'] + " -- <B>Process ID:</B> " + state['run_pid'] + " -- <B>Run as ID:</B> " + state['run_user'] + "</span></li>"
+			myTable += "<li><b>Command line:</b> " + state['command_line'] + "</li>"
 			myTable += "<p style='text-align:center'><a href='satfinder.html'>Show satfinder page</a></p>";
 			myTable += "</ul></div>"
 

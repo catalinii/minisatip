@@ -24,6 +24,8 @@
 #include "pmt.h"
 #include "socketworks.h"
 #include "stream.h"
+#include "api/symbols.h"
+#include "api/variables.h"
 #include "utils/ticks.h"
 
 #include <arpa/inet.h>
@@ -565,6 +567,25 @@ By default every CAM supports 4 channels\n\
     exit(1);
 }
 
+char* get_command_line_string(int argc, char *argv[]) {
+    int i;
+    size_t len = argc;
+
+    for(i = 0; i < argc; i++) {
+        len += strlen(argv[i]);
+    }
+
+    char *dest = malloc1(len);
+    for (i = 0; i < argc; i++) {
+        strcat(dest, argv[i]);
+        if (i != argc - 1) {
+            strcat(dest, " ");
+        }
+    }
+
+    return dest;
+}
+
 void get_short_opts(char *short_opts, const struct option *long_options) {
     int i = 0;
     while (long_options[i].name) {
@@ -585,6 +606,7 @@ void set_options(int argc, char *argv[]) {
     int is_log = 0;
     char *lip;
     memset(&opts, 0, sizeof(opts));
+    opts.command_line = get_command_line_string(argc, argv);
     opts.log = 1;
     opts.debug = 0;
     opts.file_line = 0;
@@ -1834,6 +1856,7 @@ int main(int argc, char *argv[]) {
                 LOG_DAEMON);
 
     print_version(1);
+    LOG("Command line: %s", opts.command_line);
 
     for (i = 0; loglevels[i]; i++) {
         log_it = (1UL << i);
@@ -1933,6 +1956,7 @@ int main(int argc, char *argv[]) {
 #endif
     LOG0("Closing...");
     free_all();
+    free(opts.command_line);
     LOG0("Exit OK.");
     if (opts.slog)
         closelog();
@@ -2080,4 +2104,5 @@ _symbols minisatip_sym[] = {
     {"run_user", VAR_INT, &opts.run_user, 1, 0, 0},
     {"run_pid", VAR_INT, &opts.run_pid, 1, 0, 0},
     {"version", VAR_STRING, &version, 1, 0, 0},
+    {"command_line", VAR_PSTRING, &opts.command_line, 1, 0, 0},
     {NULL, 0, NULL, 0, 0, 0}};

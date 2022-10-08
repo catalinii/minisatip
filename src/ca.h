@@ -181,6 +181,7 @@ struct ca_device {
     int state;
     uint16_t caid[MAX_CAID];
     uint32_t caids;
+    int has_forced_caids;
 
     struct cc_ctrl_data private_data;
     ca_session_t sessions[MAX_SESSIONS];
@@ -206,6 +207,9 @@ struct ca_device {
     uint64_t datetime_next_send;
 };
 
+extern ca_device_t *ca_devices[];
+
+ca_device_t *alloc_ca_device();
 int ca_init(ca_device_t *d);
 void dvbca_init();
 int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
@@ -218,4 +222,6 @@ void set_ca_multiple_pmt(char *o);
 int get_max_pmt_for_ca(int i);
 void get_authdata_filename(char *dest, size_t len, unsigned int slot,
                            char *ci_name);
+char *get_ca_caids_string(int i, char *dest, int max_len);
+
 #endif

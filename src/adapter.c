@@ -36,6 +36,8 @@
 #include "socketworks.h"
 #include "stream.h"
 #include "utils.h"
+#include "api/symbols.h"
+#include "api/variables.h"
 #include "utils/ticks.h"
 
 #ifndef DISABLE_SATIPCLIENT

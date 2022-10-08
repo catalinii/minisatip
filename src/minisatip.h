@@ -14,6 +14,7 @@
 #define EMU_PIDS_ALL_ENFORCED_PIDS_LIST 1, 16, 17, 18, 20, 21
 
 void set_options(int argc, char *argv[]);
+char* get_command_line_string(int argc, char *argv[]);
 
 extern char pid_file[];
 extern char app_name[], version[];

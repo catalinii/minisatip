@@ -26,7 +26,10 @@
 #include "socketworks.h"
 #include "tables.h"
 #include "utils.h"
+#include "api/symbols.h"
+#include "api/variables.h"
 #include "utils/ticks.h"
+
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <errno.h>

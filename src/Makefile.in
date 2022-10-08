@@ -16,7 +16,7 @@ AXE=@AXE@
 DDCI=0
 T2MI=0
 
-CFLAGS?=-Wall -Wno-switch -ggdb -fPIC
+CFLAGS?=-Wall -Wno-switch -ggdb -fPIC -fno-common
 CFLAGS += -I../src
 CFLAGS += $(EXTRA_CFLAGS) @CFLAGS@
 LDFLAGS += @LDFLAGS@ -lpthread
@@ -42,6 +42,8 @@ SOURCES=\
 	adapter.c \
 	httpc.c \
 	utils.c \
+	api/symbols.c \
+	api/variables.c \
 	utils/logging/logging.c \
 	utils/hash_table.c \
 	utils/mutex.c \

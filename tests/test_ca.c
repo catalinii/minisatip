@@ -122,6 +122,34 @@ int test_get_authdata_filename() {
     return 0;
 }
 
+int test_get_ca_caids_string() {
+    char caid_string[64];
+    ca_devices[0] = alloc_ca_device();
+    
+    // No CAIDs
+    ca_devices[0]->caids = 0;
+    get_ca_caids_string(0, caid_string, 64);
+    LOG("CAID string: %s", caid_string);
+    ASSERT(strcmp(caid_string, "") == 0, "invalid empty CAID string");
+
+    // One CAID
+    ca_devices[0]->caids = 1;
+    ca_devices[0]->caid[0] = 0x0B00;
+    get_ca_caids_string(0, caid_string, 64);
+    LOG("CAID string: %s", caid_string);
+    ASSERT(strcmp(caid_string, "0B00") == 0, "invalid single CAID string");
+
+    // Multiple CAIDs
+    ca_devices[0]->caids = 3;
+    ca_devices[0]->caid[1] = 0x0B01;
+    ca_devices[0]->caid[2] = 0x0B02;
+    get_ca_caids_string(0, caid_string, 64);
+    LOG("CAID string: %s", caid_string);
+    ASSERT(strcmp(caid_string, "0B00, 0B01, 0B02") == 0, "invalid single CAID string");
+
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -134,6 +162,7 @@ int main() {
     d.multiple_pmt = 1;
     d.max_ca_pmt = 1;
 
+    TEST_FUNC(test_get_ca_caids_string(), "testing CAID string generation");
     TEST_FUNC(test_multiple_pmt(), "testing CA multiple pmt");
     memset(d.capmt, -1, sizeof(d.capmt));
     TEST_FUNC(test_create_capmt(), "testing CA creating multiple pmt");
