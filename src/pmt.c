@@ -104,9 +104,106 @@ static inline int get_has_pcr(uint8_t *b) {
         return 1;
 }
 
+static inline int get_has_pusi(uint8_t *b) {
+    if ((b[1] & 0x40) == 0)
+        return 0;
+    else
+        return 1;
+}
+
+static inline int get_has_pes_header(uint8_t *b) {
+    if (!get_has_pusi(b))
+        return 0;
+
+    // Check it's not scrambled and it has payload
+    if ((b[3] & 0xd0) != 0x10)
+        return 0;
+
+    // Check if payload is a PES Header
+    int pesheader = get_adaptation_len(b);
+    if (b[pesheader] != 0x00 || b[pesheader+1] != 0x00 || b[pesheader+2] != 0x01)
+        return 0;
+
+    return pesheader;
+}
+
+static inline int get_streamid(uint8_t *b) {
+    int pesheader = get_has_pes_header(b);
+    if (pesheader == 0)
+        return 0;
+
+    return b[pesheader+3];
+}
+
+static inline uint64_t get_pts_dts(uint8_t *b) {
+    int pesheader = get_has_pes_header(b);
+    if (pesheader == 0)
+        return 0;
+
+    uint64_t tts = 0xFFFFFFFFFFFFFFFF;
+
+    if ((b[pesheader+7] & 0x80) != 0x80) // No PTS or DTS indicator
+        return tts;
+
+    int offset = pesheader+9; // PTS position
+
+    if ((b[pesheader+7] & 0xc0) == 0xc0) {
+        // PTS and DTS present, get DTS as packet time instead of PTS
+        offset += 5;
+    }
+
+    //LOGM("pmt: PTS detection: pesheader=%d,offset=%d %2x %2x,%2x %2x,%2x", pesheader,offset,b[offset+0],b[offset+1],b[offset+2],b[offset+3],b[offset+4]);
+    tts  = (b[offset+0] & 0x0e) >> 1;
+    tts <<= 8;
+    tts  |= b[offset+1];
+    tts <<= 7;
+    tts |= (b[offset+2] & 0xfe) >> 1;
+    tts <<= 8;
+    tts  |= b[offset+3];
+    tts <<= 7;
+    tts |= (b[offset+4] & 0xfe) >> 1;
+
+    return tts;
+}
+
 static inline void mark_pid_null(uint8_t *b) {
     b[1] |= 0x1F;
     b[2] |= 0xFF;
+}
+
+static inline void
+mark_padding_header(uint8_t *b) { // Generate a clean packet without any payload
+    if ((b[3] & 0x10) == 0) // No Payload...
+    {
+        b[3] &= 0x3F;  // clean encrypted bits and pass it
+        return;
+    }
+
+    // Convert the Payload Data in Adaptation Stuffing
+    int i;
+    int payload = get_adaptation_len(b);
+    // Case     4: No previous Adaptation field
+    //         >5: Previous Adaptation field
+    //      >=184: Adaptation field complete
+    if (payload < 184) {
+        for (i = 0; i + payload < 188; i++)
+            b[payload + i] = 0xFF;
+
+        b[4] = i + payload - 5;
+
+        if (payload < 5) {
+            b[5] = 0;   // Set clean Adaptation field header
+        }
+    }
+
+    // Adjust the TS header
+    b[1] &= 0x3F; // Remove TEI & PUSI
+                  //  b[1] &= 0x7F; // Remove TEI
+                  //  b[1] &= 0xBF; // Remove PUSI
+    b[3] &= 0x2F; // Set TSC not scrambled & Remove payload flag
+                  //  b[3] &= 0x3F; // Set TSC not scrambled
+                  //  b[3] &= 0xEF; // Remove payload flag
+    b[3] |= 0x20; // Set Adaptation field only
 }
 
 static inline void
@@ -125,17 +222,17 @@ mark_pcr_only(uint8_t *b) { // Generate a clean packet with only the Adaptation
         b[payload + i] = 0xFF;
     b[4] += i; // Update the Adaptation field size
 
-    // Clean the header
+    // Adjust the TS header
     b[1] &= 0x3F; // Remove TEI & PUSI
-                  // b[1] &= 0x7F; // Remove TEI
-                  // b[1] &= 0xBF; // Remove PUSI
+                  //  b[1] &= 0x7F; // Remove TEI
+                  //  b[1] &= 0xBF; // Remove PUSI
     b[3] &= 0x2F; // Set TSC not scrambled & Remove payload flag
-                  // b[3] &= 0x3F // Set TSC not scrambled
-                  // b[3] &= 0xEF // Remove payload flag
+                  //  b[3] &= 0x3F  // Set TSC not scrambled
+                  //  b[3] &= 0xEF  // Remove payload flag
     b[5] |= 0x80; // Set the Discontinuity indicator
     b[5] &= 0x9f; // Clear Random access indicator & ES priority indicator
-                  // b[5] &= 0xBF; // Clear Random access indicator
-                  // b[5] &= 0xDF; // Clear ES priority indicator
+                  //  b[5] &= 0xBF; // Clear Random access indicator
+                  //  b[5] &= 0xDF; // Clear ES priority indicator
 }
 
 int register_algo(SCW_op *o) {
@@ -1041,11 +1138,12 @@ void mark_pids_null(adapter *ad) {
             pids_all) // When pids=all don't drop encrypted packets
             continue;
         if ((b[3] & 0x80) == 0x80) {
+            SPid *p = find_pid(ad->id, pid);
             if (opts.debug & (DEFAULT_LOG | LOG_DMX))
                 LOG("Marking PID %d packet %d pos %d as NULL", pid, i / 188, i);
-            if (ad->ca_mask && ad->drop_encrypted) {
+            if (ad->ca_mask && ad->drop_encrypted == 1) {
                 // Instead of remove ALL packets, when the packet has a PCR
-                // remove all payload and pass it
+                // remove all payload of this packet and pass it (remove others)
                 if (get_has_pcr(b)) // It has PCR
                 {
                     mark_pcr_only(b);
@@ -1054,10 +1152,15 @@ void mark_pids_null(adapter *ad) {
                 } else
                     mark_pid_null(b);
             }
+            //  OR
+            else if (ad->ca_mask && ad->drop_encrypted == 2) {
+                // For ALL encrypted packets, clean all payload and convert it
+                // to TS header stuffing preserving the rest of header data
+                mark_padding_header(b);
+            }
 
             ad->dec_err++;
             ad->null_packets = 1;
-            SPid *p = find_pid(ad->id, pid);
             if (p)
                 p->dec_err++;
         } else if (pid > 0x001F && pid < 0x1FFF && ad->ca_mask) {
