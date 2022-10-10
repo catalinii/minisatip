@@ -348,7 +348,7 @@ Help\n\
 	- note: * as adapter means apply to all adapters\n\
 \n\
 * -E Allows encrypted stream to be sent to the client even if the decrypting is unsuccessful\n \
-       Duplicating it (-E -E) all unencrypted packets are send as stuffing TS packets. Usefull for regular player clients.\n\
+       Duplicating it (-E -E) all undecrypted packets are send as stuffing TS packets. Usefull for regular player clients.\n\
 	- note: when pids=all is emulated this pass NULLs too\n\
 \n\
 * -Y --delsys ADAPTER1:DELIVERY_SYSTEM1[,ADAPTER2:DELIVERY_SYSTEM2[,..]] - specify the delivery system of the adapters (0 is the first adapter)	\n\
