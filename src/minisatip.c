@@ -348,6 +348,7 @@ Help\n\
 	- note: * as adapter means apply to all adapters\n\
 \n\
 * -E Allows encrypted stream to be sent to the client even if the decrypting is unsuccessful\n \
+       Duplicating it (-E -E) all undecrypted packets are send as stuffing TS packets. Usefull for regular player clients.\n\
 	- note: when pids=all is emulated this pass NULLs too\n\
 \n\
 * -Y --delsys ADAPTER1:DELIVERY_SYSTEM1[,ADAPTER2:DELIVERY_SYSTEM2[,..]] - specify the delivery system of the adapters (0 is the first adapter)	\n\
@@ -1054,7 +1055,7 @@ void set_options(int argc, char *argv[]) {
             break;
 
         case DROP_ENCRYPTED_OPT:
-            opts.drop_encrypted = 1 - opts.drop_encrypted;
+            opts.drop_encrypted = (opts.drop_encrypted == 0) ? 2 : (opts.drop_encrypted - 1);
             break;
 
         case XML_OPT:
