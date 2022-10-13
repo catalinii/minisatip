@@ -589,7 +589,8 @@
 					}
 				}
 
-				if (state['ca_enabled'][i] == 1) {
+				// CA support is optional so the keys may not be present in the state
+				if (state['ca_enabled'] !== undefined && state['ca_enabled'][i] == 1) {
 					myTable += '<b>CAM:</b> ' + state['ca_ci_name'][i] + '<br />';
 					myTable += '<b>State:</b> ' + getCaState(state['ca_state'][i]) + '<br />';
 					myTable += '<b>Supported CAIDs:</b> ' + state['ca_caids'][i] + '<br />';
