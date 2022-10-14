@@ -41,7 +41,7 @@ make
 Usage:
 -------
 (Message automatically generated from "minisatip --help")
-minisatip version 1.1.90, compiled in Apr 18 2022 16:36:48, with s2api version: 050B
+minisatip version 1.2.34, compiled in Oct 14 2022 09:24:48, with s2api version: 050B
 
 	./minisatip [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 	[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]] 
@@ -90,7 +90,8 @@ Help
 	- note: * as adapter means apply to all adapters
 
 * -E Allows encrypted stream to be sent to the client even if the decrypting is unsuccessful
- 	- note: when pids=all is emulated this pass NULLs too
+	Duplicating it (-E -E) all undecrypted packets are send as stuffing TS packets. Usefull for regular player clients.
+	- note: when pids=all is emulated this pass NULLs too
 
 * -Y --delsys ADAPTER1:DELIVERY_SYSTEM1[,ADAPTER2:DELIVERY_SYSTEM2[,..]] - specify the delivery system of the adapters (0 is the first adapter)	
 	* eg: --delsys 0:dvbt,1:dvbs
@@ -266,21 +267,39 @@ By default every CAM supports 4 channels
 How to compile:
 ------
 
-- ./configure
+```bash
+./configure
+```
 
-Configures minisatip for the current system (use ./configure --help for options)
+Configures minisatip for the current system (use `./configure --help` for options)
 
-To cross compile, use something like (static compilation), considering that mips-openwrt-linux-musl-gcc is the gcc executable for that platform:
+To cross compile, use something like (static compilation), considering that `mips-openwrt-linux-musl-gcc` is the gcc executable for that platform:
 
-- ./configure --host=mips-openwrt-linux-musl --enable-static
+```bash
+./configure --host=mips-openwrt-linux-musl --enable-static
+```
 
-To compiles the application
+To compile the application:
 
-- make
+```
+make
+```
 
-To add custom compilation flags you can use:
+To add custom compilation flags you can use for example:
 
-make EXTRA_CFLAGS=....
+```bash
+make EXTRA_CFLAGS="-DNEEDS_SENDMMSG_SHIM"
+```
+
+The above command is useful if you're getting errors like "sendmmsg(): errno 
+38: Function not implemented" (usually only concerns really old systems).
+
+Building a Debian package:
+-------
+
+```bash
+dpkg-buildpackage -b -us -uc
+```
 
 Examples:
 -------
@@ -292,4 +311,3 @@ Examples:
 	- Astra 19.2E, Kika HD: `http://MINISATIP_HOST:554/?src=1&freq=11347&pol=v&ro=0.35&msys=dvbs2&mtype=8psk&plts=on&sr=22000&fec=23&pids=0,17,18,6600,6610,6620,6630`
 
 - msys can be one of: dvbs, dvbs2, dvbt, dvbt2, dvbc, dvbc2, atsc, isdbt, dvbcb ( - DVBC_ANNEX_B )
-
