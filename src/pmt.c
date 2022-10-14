@@ -1085,17 +1085,12 @@ void start_active_pmts(adapter *ad) {
         SPMT *pmt = get_pmt(ad->active_pmt[i]);
         if (!pmt)
             continue;
-        if (!pmt->caids)
-            continue;
         int is_active = 0;
         int j, first = 0;
         for (j = 0; j < pmt->stream_pids; j++)
             // for all audio and video streams start the PMT containing them
             if ((pmt->stream_pid[j].is_audio || pmt->stream_pid[j].is_video) &&
                 pids[pmt->stream_pid[j].pid] && pmt->id == pmt->master_pmt) {
-                LOG("Found PMT %d active with pid %d while processing the "
-                    "PAT",
-                    pmt->id, pmt->stream_pid[j].pid);
                 is_active = 1;
 #ifndef DISABLE_TABLES
                 if (!first) {
@@ -1103,14 +1098,16 @@ void start_active_pmts(adapter *ad) {
                     if (pmt->state == PMT_STOPPED) {
                         start_pmt(pmt, ad);
                     }
-                    if (ad->ca_mask)
-                        send_pmt_to_cas(ad, pmt);
+                    send_pmt_to_cas(ad, pmt);
                 }
 #endif
                 SPid *p = pids[pmt->stream_pid[j].pid];
                 if (p && p->pmt < 0) {
                     p->pmt = pmt->id;
                     p->is_decrypted = 0;
+                    LOG("Found PMT %d active with pid %d while processing the "
+                        "PAT",
+                        pmt->id, pmt->stream_pid[j].pid);
                 }
             }
         // non master PMTs should not be started
@@ -2219,24 +2216,6 @@ void pmt_pid_add(adapter *ad, int pid, int existing) {
         return;
 
     cp->filter = get_pid_filter(ad->id, pid);
-
-    int pmt_id = get_master_pmt_for_pid(ad, pid);
-    if (pmt_id >= 0)
-        cp->pmt = pmt_id;
-    pmt = get_pmt(pmt_id);
-    if (!pmt) {
-        LOGM("PMT %d not found when adding pid %d on adapter %d", pmt_id, pid,
-             ad->id);
-        return;
-    }
-
-    // Add start only the MASTER_PMT
-    if (!pmt->state) {
-        start_pmt(pmt, ad);
-#ifndef DISABLE_TABLES
-        tables_add_pid(ad, pmt, pid);
-#endif
-    }
 }
 
 void pmt_pid_del(adapter *ad, int pid) {

@@ -264,12 +264,16 @@ int send_pmt_to_cas(adapter *ad, SPMT *pmt) {
         return 0;
     }
 
-    LOG("Sending PMT %d to all CAs: ad_ca_mask %X, "
-        "pmt_ca_mask %X, disabled_ca_mask %X",
-        pmt->id, ad ? ad->ca_mask : -2, pmt->ca_mask, pmt->disabled_ca_mask);
-    for (i = 0; i < nca; i++)
-        if (ca[i].enabled)
-            rv += send_pmt_to_ca(i, ad, pmt);
+    if (pmt->caids > 0) {
+        LOG("Sending PMT %d to all CAs: ad_ca_mask %X, "
+            "pmt_ca_mask %X, disabled_ca_mask %X",
+            pmt->id, ad ? ad->ca_mask : -2, pmt->ca_mask,
+            pmt->disabled_ca_mask);
+        for (i = 0; i < nca; i++)
+            if (ca[i].enabled)
+                rv += send_pmt_to_ca(i, ad, pmt);
+    }
+
     if (pmt->state == PMT_STARTING)
         pmt->state = PMT_RUNNING;
     return rv;
