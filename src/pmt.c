@@ -121,8 +121,7 @@ static inline int get_has_pes_header(uint8_t *b) {
 
     // Check if payload is a PES Header
     int pesheader = get_adaptation_len(b);
-    if (b[pesheader] != 0x00 || b[pesheader + 1] != 0x00 ||
-        b[pesheader + 2] != 0x01)
+    if (b[pesheader] != 0x00 || b[pesheader+1] != 0x00 || b[pesheader+2] != 0x01)
         return 0;
 
     return pesheader;
@@ -133,7 +132,7 @@ static inline int get_streamid(uint8_t *b) {
     if (pesheader == 0)
         return 0;
 
-    return b[pesheader + 3];
+    return b[pesheader+3];
 }
 
 static inline uint64_t get_pts_dts(uint8_t *b) {
@@ -143,27 +142,26 @@ static inline uint64_t get_pts_dts(uint8_t *b) {
 
     uint64_t tts = 0xFFFFFFFFFFFFFFFF;
 
-    if ((b[pesheader + 7] & 0x80) != 0x80) // No PTS or DTS indicator
+    if ((b[pesheader+7] & 0x80) != 0x80) // No PTS or DTS indicator
         return tts;
 
-    int offset = pesheader + 9; // PTS position
+    int offset = pesheader+9; // PTS position
 
-    if ((b[pesheader + 7] & 0xc0) == 0xc0) {
+    if ((b[pesheader+7] & 0xc0) == 0xc0) {
         // PTS and DTS present, get DTS as packet time instead of PTS
         offset += 5;
     }
 
-    // LOGM("pmt: PTS detection: pesheader=%d,offset=%d %2x %2x,%2x %2x,%2x",
-    // pesheader,offset,b[offset+0],b[offset+1],b[offset+2],b[offset+3],b[offset+4]);
-    tts = (b[offset + 0] & 0x0e) >> 1;
+    //LOGM("pmt: PTS detection: pesheader=%d,offset=%d %2x %2x,%2x %2x,%2x", pesheader,offset,b[offset+0],b[offset+1],b[offset+2],b[offset+3],b[offset+4]);
+    tts  = (b[offset+0] & 0x0e) >> 1;
     tts <<= 8;
-    tts |= b[offset + 1];
+    tts  |= b[offset+1];
     tts <<= 7;
-    tts |= (b[offset + 2] & 0xfe) >> 1;
+    tts |= (b[offset+2] & 0xfe) >> 1;
     tts <<= 8;
-    tts |= b[offset + 3];
+    tts  |= b[offset+3];
     tts <<= 7;
-    tts |= (b[offset + 4] & 0xfe) >> 1;
+    tts |= (b[offset+4] & 0xfe) >> 1;
 
     return tts;
 }
@@ -175,9 +173,9 @@ static inline void mark_pid_null(uint8_t *b) {
 
 static inline void
 mark_padding_header(uint8_t *b) { // Generate a clean packet without any payload
-    if ((b[3] & 0x10) == 0)       // No Payload...
+    if ((b[3] & 0x10) == 0) // No Payload...
     {
-        b[3] &= 0x3F; // clean encrypted bits and pass it
+        b[3] &= 0x3F;  // clean encrypted bits and pass it
         return;
     }
 
@@ -194,7 +192,7 @@ mark_padding_header(uint8_t *b) { // Generate a clean packet without any payload
         b[4] = i + payload - 5;
 
         if (payload < 5) {
-            b[5] = 0; // Set clean Adaptation field header
+            b[5] = 0;   // Set clean Adaptation field header
         }
     }
 
@@ -1439,18 +1437,6 @@ SPMT *get_pmt_for_sid(int aid, int sid) {
     return NULL;
 }
 
-SPMT *get_all_pmt_for_sid(int aid, int sid) {
-    int i;
-    adapter *ad = get_adapter(aid);
-    if (!ad)
-        return NULL;
-    for (i = 0; i < npmts; i++)
-        if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == aid &&
-            pmts[i]->sid == sid)
-            return pmts[i];
-    return NULL;
-}
-
 SPMT *get_pmt_for_sid_pid(int aid, int sid, int pid) {
     int i;
     for (i = 0; i < npmts; i++)
@@ -2142,6 +2128,10 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque) {
     adapter *ad = (void *)opaque;
     tsid = sdt[3] * 256 + sdt[4];
 
+    // make sure the PAT is processed first and the PMTs are created
+    if (ad->transponder_id != tsid)
+        return 0;
+
     memset(new_filter, 0, sizeof(new_filter));
     memset(new_mask, 0, sizeof(new_mask));
     new_filter[1] = sdt[3];
@@ -2154,9 +2144,9 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque) {
     set_filter_flags(filter, FILTER_PERMANENT | FILTER_REVERSE | FILTER_CRC);
     sdt_len = (sdt[1] & 0xF) * 256 + sdt[2];
     i = 11;
-    LOGM("Processing SDT for transponder %d (%x) with length %d, sdt[5] "
-         "%02X",
-         tsid, tsid, sdt_len, sdt[5]);
+    LOG("Processing SDT for transponder %d (%x) with length %d, sdt[5] "
+        "%02X",
+        tsid, tsid, sdt_len, sdt[5]);
 
     for (i = 11; i < sdt_len - 1; i += desc_loop_len) {
         b = sdt + i;
@@ -2164,7 +2154,7 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque) {
         status = b[3] >> 4;
         desc_loop_len = (b[3] & 0xF) * 256 + b[4];
         desc_loop_len += 5;
-        pmt = get_all_pmt_for_sid(ad->id, sid);
+        pmt = get_pmt_for_sid(ad->id, sid);
         LOGM("Detected service ID %d (%X) status:%d CA:%d, pos %d len %d", sid,
              sid, (status >> 1), (status & 0x1), i, desc_loop_len);
         if (!pmt) {
@@ -2175,7 +2165,7 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque) {
             unsigned char *c = b + j;
             desc_len = c[1];
             desc_len += 2;
-            if (c[0] == 0x48 && !pmt->name[0]) {
+            if (c[0] == 0x48) {
                 int name_size = sizeof(pmt->name) - 1;
                 c += 3;
                 copy_en300468_string(pmt->provider, name_size, (char *)c + 1,
