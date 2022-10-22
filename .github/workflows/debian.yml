@@ -1,0 +1,33 @@
+name: Debian packages
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: '0'
+    - name: Configure working directory as git safe.directory
+      run: |
+        git config --global --add safe.directory /__w/minisatip/minisatip
+
+    - name: Install build dependencies
+      run: |
+        sudo apt-get -y install build-essential dpkg-dev libdvbcsa-dev libssl-dev debhelper-compat vdr-dev
+
+    - name: Build Debian package
+      run: |
+        ./debian/gen_changelog debian/changelog unstable $(git describe --tags | sed 's/v//') $(git rev-parse --short HEAD)
+        dpkg-buildpackage -b -us -uc
+
+    - name: Archive the built package
+      uses: actions/upload-artifact@v3
+      with:
+        name: minisatip-deb
+        path: ../*.deb
