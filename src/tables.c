@@ -261,6 +261,9 @@ int send_pmt_to_cas(adapter *ad, SPMT *pmt) {
              "pmt_ca_mask %X, disabled_ca_mask %X",
              pmt->id, ad ? ad->ca_mask : -2, pmt->ca_mask,
              pmt->disabled_ca_mask);
+
+        if (pmt->state == PMT_STARTING)
+            pmt->state = PMT_RUNNING;
         return 0;
     }
 

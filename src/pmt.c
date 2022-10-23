@@ -2218,7 +2218,6 @@ void stop_pmt(SPMT *pmt, adapter *ad) {
 
 void pmt_pid_add(adapter *ad, int pid, int existing) {
     SPid *cp;
-    SPMT *pmt = NULL;
     if (!ad)
         return;
     cp = find_pid(ad->id, pid);
