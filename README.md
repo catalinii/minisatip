@@ -31,8 +31,10 @@ Compilation:
 -------
 ./configure
 make
+
 Or run script install-minisatip.sh
-sudo chmod +x minisatip.sh && sudo ./minisatip.sh
+
+>sudo chmod +x minisatip.sh && sudo ./minisatip.sh<
 
 Cross-Compilation Example:
 -------
