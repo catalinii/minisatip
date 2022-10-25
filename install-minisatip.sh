@@ -1,7 +1,7 @@
 #!/bin/sh
 cd /home
 #clone new folder
-git clone https://github.com/catalinii/minisatip.git
+git clone https://github.com/dnmnhat/minisatip.git
 # move to new folder
 cd minisatip/
 # configure minisatip
