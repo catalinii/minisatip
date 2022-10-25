@@ -34,7 +34,12 @@ make
 
 Or run script install-minisatip.sh
 
->sudo chmod +x minisatip.sh && sudo ./minisatip.sh<
+>sudo chmod +x minisatip.sh && sudo ./minisatip.sh
+
+Autostart after system reboot:
+>sudo crontab -e
+Add line
+>@reboot sleep 10 && cd /home/minisatip && sudo ./minisatip -k
 
 Cross-Compilation Example:
 -------
