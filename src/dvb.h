@@ -346,7 +346,7 @@ typedef struct struct_pid {
     int fd;      // fd for this demux
     int cc_err;  // counter errors
     // stream id - one more to set it -1
-    signed char sid[MAX_STREAMS_PER_PID];
+    int16_t sid[MAX_STREAMS_PER_PID];
     char flags;  // 0 - disabled , 1 enabled, 2 - will be enabled next tune when
                  // tune is called, 3 disable when tune is called
     int packets; // how many packets for this pid arrived, used to sort the pids
