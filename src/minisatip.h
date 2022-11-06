@@ -8,8 +8,7 @@
 #include "stream.h"
 #include "utils.h"
 
-#define MAJOR "1.2."
-#define VERSION (MAJOR MINOR)
+#define VERSION (MAJOR MINOR "~" REVISION)
 
 #define EMU_PIDS_ALL_ENFORCED_PIDS_LIST 1, 16, 17, 18, 20, 21
 

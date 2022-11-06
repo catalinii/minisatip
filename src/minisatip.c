@@ -133,6 +133,9 @@ int rtsp, http, si, si1, ssdp1;
 #define CA_MULTIPLE_PMT_OPT 'c'
 #define CACHE_DIR_OPT 'z'
 #define DISABLE_CAT_OPT '5'
+// Options that don't have a short option available
+#define LONG_OPT_ONLY_START 1024
+#define VERSION_OPT (LONG_OPT_ONLY_START + 1)
 
 static const struct option long_options[] = {
     {"adapters", required_argument, NULL, ADAPTERS_OPT},
@@ -180,6 +183,7 @@ static const struct option long_options[] = {
     {"xml", required_argument, NULL, XML_OPT},
     {"help", no_argument, NULL, HELP_OPT},
     {"virtual-diseqc", required_argument, NULL, ABSOLUTE_SRC},
+    {"version", no_argument, NULL, VERSION_OPT},
 #ifndef DISABLE_DDCI
     {"disable-cat", required_argument, NULL, DISABLE_CAT_OPT},
 #endif
@@ -268,7 +272,7 @@ char *built_info[] = {
 #endif
     NULL};
 
-void print_version(int use_log) {
+void print_version(int use_log, int print_built_info) {
     char buf[200];
     int i;
     memset(buf, 0, sizeof(buf));
@@ -278,14 +282,17 @@ void print_version(int use_log) {
         puts(buf);
     else
         LOG0(buf);
-    for (i = 0; built_info[i]; i++)
-        LOG("%s", built_info[i]);
+
+    if (print_built_info) {
+        for (i = 0; built_info[i]; i++)
+            LOG("%s", built_info[i]);
+    }
 }
 
 void usage() {
     char modules[1000];
     int len = 0, i;
-    print_version(0);
+    print_version(0, 1);
 
     for (i = 0; loglevels[i]; i++)
         len += sprintf(modules + len, "%s,", loglevels[i]);
@@ -779,6 +786,11 @@ void set_options(int argc, char *argv[]) {
 
         case HELP_OPT: {
             usage();
+            exit(0);
+        }
+
+        case VERSION_OPT: {
+            print_version(0, 0);
             exit(0);
         }
 
@@ -1857,7 +1869,7 @@ int main(int argc, char *argv[]) {
                     (opts.slog > 1 ? LOG_PERROR : 0),
                 LOG_DAEMON);
 
-    print_version(1);
+    print_version(1, 1);
     LOG("Command line: %s", opts.command_line);
 
     for (i = 0; loglevels[i]; i++) {
