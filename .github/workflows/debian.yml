@@ -26,7 +26,7 @@ jobs:
         mkdir -p build
         rsync -a --exclude=build . build
         cd build
-        ./debian/gen_changelog debian/changelog unstable $(git describe --tags | sed 's/v//') $(git rev-parse --short HEAD)
+        ./debian/gen_changelog unstable $(git describe --tags | sed 's/v//') $(git rev-parse --short HEAD) > debian/changelog
         dpkg-buildpackage -b -us -uc
 
     - name: Archive the built package

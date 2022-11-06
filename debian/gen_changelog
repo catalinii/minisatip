@@ -5,23 +5,21 @@
 #
 
 # Arguments
-CHANGELOG=$1
-DIST=$2
-VER=$3
-REVISION=$4
+DIST=$1
+VER=$2
+REVISION=$3
 
 # Defaults
-[ -z "$CHANGELOG"     ] && CHANGELOG=$(dirname "$0")/../debian/changelog
 [ -z "$DEBEMAIL"      ] && DEBEMAIL="dummy@example.com"
 [ -z "$DEBFULLNAME"   ] && DEBFULLNAME="Minisatip maintainers"
 [ -z "$DIST"          ] && DIST=unstable
 
 # Output
 NOW=$(date -R)
-echo >"${CHANGELOG}"  "minisatip (${VER}-${REVISION}) ${DIST}; urgency=low"
-echo >>"${CHANGELOG}"
-echo >>"${CHANGELOG}" "  * The full changelog(s) can be found at "
-echo >>"${CHANGELOG}" "    https://github.com/catalinii/minisatip/releases"
-echo >>"${CHANGELOG}" "    https://github.com/catalinii/minisatip"
-echo >>"${CHANGELOG}"
-echo >>"${CHANGELOG}" " -- ${DEBFULLNAME} <${DEBEMAIL}>  ${NOW}"
+echo "minisatip (${VER}-${REVISION}) ${DIST}; urgency=low"
+echo ""
+echo "  * The full changelog(s) can be found at "
+echo "    https://github.com/catalinii/minisatip/releases"
+echo "    https://github.com/catalinii/minisatip"
+echo ""
+echo " -- ${DEBFULLNAME} <${DEBEMAIL}>  ${NOW}"
