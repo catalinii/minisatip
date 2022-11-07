@@ -37,7 +37,7 @@ jobs:
 
     - name: Bump version and push tag/create release point
       uses: anothrNick/github-tag-action@1.35.0
-      if: ${{ github.event_name == 'push' }}
+      if: ${{ github.event_name == 'push' && github.repository_owner == 'catalinii' }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         WITH_V: true
@@ -45,13 +45,10 @@ jobs:
       id: bump_version
     - name: Upload binary to release
       uses: svenstaro/upload-release-action@v1-release
-      if: ${{ github.event_name == 'push' }}
+      if: ${{ github.event_name == 'push' && github.repository_owner == 'catalinii' }}
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
         file: /minisatip*zip
         file_glob: true
         tag: ${{ steps.bump_version.outputs.new_tag }}
         overwrite: true
-
-
-
