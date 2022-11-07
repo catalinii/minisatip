@@ -1,0 +1,25 @@
+#!/bin/sh
+#
+# Create a skeleton Debian package changelog file. Inspired by 
+# https://github.com/tvheadend/tvheadend/blob/master/support/changelog
+#
+
+# Arguments
+DIST=$1
+VER=$2
+REVISION=$3
+
+# Defaults
+[ -z "$DEBEMAIL"      ] && DEBEMAIL="dummy@example.com"
+[ -z "$DEBFULLNAME"   ] && DEBFULLNAME="Minisatip maintainers"
+[ -z "$DIST"          ] && DIST=unstable
+
+# Output
+NOW=$(date -R)
+echo "minisatip (${VER}-${REVISION}) ${DIST}; urgency=low"
+echo ""
+echo "  * The full changelog(s) can be found at "
+echo "    https://github.com/catalinii/minisatip/releases"
+echo "    https://github.com/catalinii/minisatip"
+echo ""
+echo " -- ${DEBFULLNAME} <${DEBEMAIL}>  ${NOW}"

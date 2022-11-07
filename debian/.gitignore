@@ -6,3 +6,4 @@ files
 minisatip.debhelper.log
 minisatip.postrm.debhelper
 minisatip.substvars
+changelog

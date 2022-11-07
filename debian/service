@@ -1,13 +1,13 @@
 [Unit]
-Description=Multi-threaded SAT>IP server
+Description=minisatip - a multi-threaded SAT>IP server
 After=network-online.target
-#Wants=oscam.service
 
 [Service]
+Type=simple
+AmbientCapabilities=CAP_NET_BIND_SERVICE
 User=minisatip
 Group=minisatip
 WorkingDirectory=/var/lib/minisatip
-Type=simple
 EnvironmentFile=-/etc/minisatip.conf
 ExecStart=/usr/bin/minisatip -f $SERVER_ARGS
 
