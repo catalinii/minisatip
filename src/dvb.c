@@ -1589,13 +1589,8 @@ int dvb_is_psi(adapter *ad, int pid) {
     if (pid < 32)
         return 1;
 #ifndef DISABLE_PMT
-    int fid = get_pid_filter(ad->id, pid);
-    if (fid < 0)
-        return 0;
-    SFilter *f = get_filter(fid);
-    if (f && (f->flags & FILTER_ADD_REMOVE))
-        return 0;
-    return 1;
+    if (get_pid_filter(ad->id, pid) >= 0)
+        return 1;
 #endif
     return 0;
 }

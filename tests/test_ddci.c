@@ -474,8 +474,9 @@ int test_create_pmt() {
     f.id = 0;
     f.adapter = 0;
     filters[0] = &f;
-    d.pmt[0].id = 1; // set to pmt 1
-    pmts[1] = &pmt;  // enable pmt 1
+    pmt.id = 1;
+    d.pmt[0].id = pmt.id; // set to pmt 1
+    pmts[pmt.id] = &pmt;  // enable pmt 1
     npmts = 2;
     pmt.enabled = 1;
     pmt.sid = 0x66;
@@ -531,6 +532,8 @@ int test_create_pmt() {
     a[0] = &ad;
     ad.pids[0].pid = 0x99;
     ad.pids[0].flags = 1;
+    ad.active_pmts = 1;
+    ad.active_pmt[0] = pmt.id;
     process_pmt(0, psi + 1, psi_len, &new_pmt);
     filters[0] = NULL;
     ASSERT(new_pmt.stream_pids == pmt.stream_pids,
