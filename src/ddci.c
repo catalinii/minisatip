@@ -426,6 +426,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
         LOG("Mapping CAT to PMT %d from transponder %d, DDCI transponder %d",
             pmt->id, ad->transponder_id, d->tid)
         add_pid_mapping_table(ad->id, 1, pmt->id, d, 1);  // add pid 1
+        add_pid_mapping_table(ad->id, 18, pmt->id, d, 1); // add pid 18
         d->cat_processed = 0;
     }
 
