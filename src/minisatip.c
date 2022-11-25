@@ -1572,7 +1572,9 @@ int read_http(sockets *s) {
         char *buf = malloc1(JSON_STATE_MAXLEN);
         int len = get_json_state(buf, JSON_STATE_MAXLEN);
         http_response(s, 200,
-                      "Content-Type: application/json\r\nConnection: close",
+                      "Content-Type: application/json\r\n"
+                      "Connection: close\r\n"
+                      "Access-Control-Allow-Origin: *",
                       buf, 0, len);
         free(buf);
         return 0;
@@ -1582,7 +1584,9 @@ int read_http(sockets *s) {
         char buf[1024];
         int len = get_json_bandwidth(buf, sizeof(buf));
         http_response(s, 200,
-                      "Content-Type: application/json\r\nConnection: close",
+                      "Content-Type: application/json\r\n"
+                      "Connection: close\r\n"
+                      "Access-Control-Allow-Origin: *",
                       buf, 0, len);
         return 0;
     }
