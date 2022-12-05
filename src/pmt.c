@@ -1907,11 +1907,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     pmt_add_active_pmt(ad, pmt->id);
 
     if (pmt->version == ver) {
-        // just for testing purposes
-        p = find_pid(pmt->adapter, pid);
-        if (p)
-            p->pmt = -pmt->id;
-
+        // Already processed
         return 0;
     } else
         // In case of PMT update, just stop the PMT before processing the
