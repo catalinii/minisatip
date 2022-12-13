@@ -18,8 +18,8 @@
 #define STREAM_RTSP_UDP 2
 #define STREAM_RTSP_TCP 3
 
-#define UDP_MAX_PACK 7 // maximum udp rtp packets to buffer
-#define TCP_MAX_PACK 42 // maximum tcp packets for a RTP header
+#define UDP_MAX_PACK 7   // maximum udp rtp packets to buffer
+#define TCP_MAX_PACK 42  // maximum tcp packets for a RTP header
 #define TCP_MAX_IOV 1008 // TCP_MAX_PACK * X < 1024
 
 #define LEN_PIDS (MAX_PIDS * 5 + 1)
@@ -88,7 +88,8 @@ int lock_streams_for_adapter(int aid);
 int unlock_streams_for_adapter(int aid);
 
 #define get_sid(a) get_sid1(a, __FILE__, __LINE__)
-#define get_sid_for(i) ((st[i] && st[i]->enabled) ? st[i] : NULL)
+#define get_sid_for(i)                                                         \
+    ((i >= 0 && i < MAX_STREAMS && st[i] && st[i]->enabled) ? st[i] : NULL)
 #define get_sid_nw(i)                                                          \
     ((i >= 0 && i < MAX_STREAMS && st[i] && st[i]->enabled) ? st[i] : NULL)
 

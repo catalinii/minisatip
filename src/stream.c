@@ -37,14 +37,14 @@
 #include <unistd.h>
 
 #include "adapter.h"
+#include "api/symbols.h"
+#include "api/variables.h"
 #include "dvb.h"
 #include "minisatip.h"
+#include "pmt.h"
 #include "socketworks.h"
 #include "stream.h"
 #include "t2mi.h"
-#include "pmt.h"
-#include "api/symbols.h"
-#include "api/variables.h"
 #include "utils/ticks.h"
 
 #define DEFAULT_LOG LOG_STREAM
@@ -1118,10 +1118,11 @@ int calculate_bw(sockets *s) {
             c_writes = writes;
             c_failed_writes = failed_writes;
             c_tt = nsecs / 1000;
-            LOG("BW %jd KB/s, DMX %jd KB/s, Buffered %jd MB, Total BW: %jd MB, ns/read %jd, r: %d, w: %d fw: "
+            LOG("BW %jd KB/s, DMX %jd KB/s, Buffered %jd MB, Total BW: %jd MB, "
+                "ns/read %jd, r: %d, w: %d fw: "
                 "%d, tt: %jd ms",
-                c_bw, c_bw_dmx, get_sock_buffered_bytes() / 1048576, c_tbw, c_ns_read, c_reads, c_writes, 
-                c_failed_writes, c_tt);
+                c_bw, c_bw_dmx, get_sock_buffered_bytes() / 1048576, c_tbw,
+                c_ns_read, c_reads, c_writes, c_failed_writes, c_tt);
             mutex_unlock(&bw_mutex);
         }
         bw = 0;
@@ -1145,7 +1146,7 @@ int stream_timeout(sockets *s) {
     ctime = getTick();
     s->rtime = ctime;
 
-    if ((sid = get_sid_for(s->sid)) && sid->type != STREAM_HTTP) {
+    if ((sid = get_sid(s->sid)) && sid->type != STREAM_HTTP) {
         mutex_lock(&sid->mutex);
         rttime = sid->rtcp_wtime, rtime = sid->wtime;
 
