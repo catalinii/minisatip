@@ -88,8 +88,6 @@ int lock_streams_for_adapter(int aid);
 int unlock_streams_for_adapter(int aid);
 
 #define get_sid(a) get_sid1(a, __FILE__, __LINE__)
-#define get_sid_for(i)                                                         \
-    ((i >= 0 && i < MAX_STREAMS && st[i] && st[i]->enabled) ? st[i] : NULL)
 #define get_sid_nw(i)                                                          \
     ((i >= 0 && i < MAX_STREAMS && st[i] && st[i]->enabled) ? st[i] : NULL)
 

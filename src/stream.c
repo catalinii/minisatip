@@ -103,7 +103,7 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size) {
 
     if (do_all) {
         for (i = 0; i < MAX_STREAMS; i++)
-            if ((sid2 = get_sid_for(i))) {
+            if ((sid2 = get_sid_nw(i))) {
                 int slen = strlen(sbuf);
                 streams_enabled++;
                 strlcatf(sbuf, size, slen,
@@ -514,7 +514,7 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp) {
             LOG_AND_RETURN(-1, "RTCP sockets_add failed");
 
         for (i = 0; i < MAX_STREAMS; i++)
-            if ((sid2 = get_sid_for(i)) && i != sid->sid &&
+            if ((sid2 = get_sid_nw(i)) && i != sid->sid &&
                 get_sockaddr_port(sid2->sa) == get_sockaddr_port(sid->sa)) {
                 char h1[100], h2[100];
                 get_sockaddr_host(sid->sa, h1, sizeof(h1));
@@ -571,7 +571,7 @@ close_streams_for_adapter(int ad, int except) {
     if (ad < 0)
         return 0;
     for (i = 0; i < MAX_STREAMS; i++)
-        if ((sid = get_sid_for(i)) && sid->adapter == ad)
+        if ((sid = get_sid_nw(i)) && sid->adapter == ad)
             if (except < 0 || except != i)
                 close_stream(i);
     return 0;
@@ -1181,7 +1181,7 @@ void dump_streams() {
         return;
     LOG("Dumping streams:");
     for (i = 0; i < MAX_STREAMS; i++)
-        if ((sid = get_sid_for(i)))
+        if ((sid = get_sid_nw(i)))
             LOG("%d|  a:%d rsock:%d type:%d play:%d remote:%s:%d", i,
                 sid->adapter, sid->rsock, sid->type, sid->do_play,
                 get_stream_rhost(sid->sid, ra, sizeof(ra)),
@@ -1192,9 +1192,9 @@ int lock_streams_for_adapter(int aid) {
     streams *sid;
     int i = 0, ls = 0;
     for (i = 0; i < MAX_STREAMS; i++)
-        if ((sid = get_sid_for(i)) && sid->adapter == aid) {
+        if ((sid = get_sid_nw(i)) && sid->adapter == aid) {
             mutex_lock(&sid->mutex);
-            if ((sid = get_sid_for(i)) && (sid->adapter != aid))
+            if ((sid = get_sid_nw(i)) && (sid->adapter != aid))
                 mutex_unlock(&sid->mutex);
             else
                 ls++;
@@ -1206,7 +1206,7 @@ int unlock_streams_for_adapter(int aid) {
     streams *sid;
     int i = 0, ls = 0;
     for (i = MAX_STREAMS - 1; i >= 0; i--)
-        if ((sid = get_sid_for(i)) && sid->adapter == aid) {
+        if ((sid = get_sid_nw(i)) && sid->adapter == aid) {
             mutex_unlock(&sid->mutex);
             ls++;
         }
@@ -1251,7 +1251,7 @@ int fix_master_sid(int a_id) {
     if (ad->sid_cnt < 1)
         return 0;
     for (i = 0; i < MAX_STREAMS; i++)
-        if ((sid = get_sid_for(i)) && sid->adapter == a_id) {
+        if ((sid = get_sid_nw(i)) && sid->adapter == a_id) {
             LOG("fix master_sid to %d for adapter %d", sid->sid, a_id);
             ad->master_sid = i;
         }
@@ -1262,7 +1262,7 @@ int find_session_id(int id) {
     int i;
     streams *sid;
     for (i = 0; i < MAX_STREAMS; i++)
-        if ((sid = get_sid_for(i)) && sid->ssrc == id) {
+        if ((sid = get_sid_nw(i)) && sid->ssrc == id) {
             sid->rtime = getTick();
             LOG("recovered session id from a closed connection, sid %d , id: "
                 "%d",
@@ -1292,7 +1292,7 @@ int get_streams_for_adapter(int aid) {
     int i, sa = 0;
     streams *sid;
     for (i = 0; i < MAX_STREAMS; i++)
-        if ((sid = get_sid_for(i)) && sid->adapter == aid)
+        if ((sid = get_sid_nw(i)) && sid->adapter == aid)
             sa++;
     return sa;
 }
