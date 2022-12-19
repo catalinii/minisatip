@@ -8,8 +8,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: ubuntu:22.04
-    
+    strategy:
+      matrix:
+        image: ['debian:10', 'debian:11', 'ubuntu:18.04', 'ubuntu:20.04', 'ubuntu:22.04']
+    container: ${{ matrix.image }}
     steps:
     - uses: actions/checkout@v2
       with:
