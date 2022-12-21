@@ -3,8 +3,8 @@
 
 #define _GNU_SOURCE
 
-#include <time.h>
 #include <stdint.h>
+#include <time.h>
 
 struct struct_opts {
     char *rrtp;

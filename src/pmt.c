@@ -1092,6 +1092,7 @@ void start_active_pmts(adapter *ad) {
             continue;
         int is_active = 0;
         int j, first = 0;
+        int pmt_started = 0;
         for (j = 0; j < pmt->stream_pids; j++)
             // for all audio and video streams start the PMT containing them
             if ((pmt->stream_pid[j].is_audio || pmt->stream_pid[j].is_video) &&
@@ -1102,6 +1103,7 @@ void start_active_pmts(adapter *ad) {
                     first = 1;
                     if (pmt->state == PMT_STOPPED) {
                         start_pmt(pmt, ad);
+                        pmt_started = 1;
                     }
                     send_pmt_to_cas(ad, pmt);
                 }
@@ -1113,6 +1115,10 @@ void start_active_pmts(adapter *ad) {
                     LOGM("Found PMT %d active with pid %d while processing the "
                          "PAT",
                          pmt->id, pmt->stream_pid[j].pid);
+#ifndef DISABLE_TABLES
+                    if (!pmt_started)
+                        tables_add_pid(ad, pmt, p->pid);
+#endif
                 }
             }
         // non master PMTs should not be started
@@ -2316,9 +2322,15 @@ int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf) {
     return len;
 }
 
-int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id) {
+int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
+                  int added_only) {
     int i = 0, pos = 0;
     for (i = 0; i < pmt->stream_pids; i++) {
+        if (added_only && !find_pid(pmt->adapter, pmt->stream_pid[i].pid)) {
+            LOGM("%s: skipping pmt %d (ad %d) pid %d from CAPMT", __FUNCTION__,
+                 pmt->id, pmt->adapter, pmt->stream_pid[i].pid);
+            continue;
+        }
         capmt[pos++] = pmt->stream_pid[i].type;
         copy16(capmt, pos, pmt->stream_pid[i].pid);
         pos += 2;

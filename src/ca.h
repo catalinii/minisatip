@@ -214,12 +214,13 @@ ca_device_t *alloc_ca_device();
 int ca_init(ca_device_t *d);
 void dvbca_init();
 int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
-                 int cmd_id);
+                 int cmd_id, int added_only);
 int is_ca_initializing(int i);
 void set_ca_adapter_pin(char *o);
 void set_ca_adapter_force_ci(char *o);
 char *get_ca_pin(int i);
 void set_ca_multiple_pmt(char *o);
+int get_ca_multiple_pmt(int i);
 int get_max_pmt_for_ca(int i);
 void get_authdata_filename(char *dest, size_t len, unsigned int slot,
                            char *ci_name);

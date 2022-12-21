@@ -102,7 +102,7 @@ int test_create_capmt() {
     pmt->stream_pid[0].pid = 602;
     pmt->stream_pid[0].type = 3;
 
-    int len = create_capmt(d.capmt, 1, clean, sizeof(clean), 0);
+    int len = create_capmt(d.capmt, 1, clean, sizeof(clean), 0, 0);
     if (len <= 0)
         LOG_AND_RETURN(1, "createCAPMT failed");
     hexdump("CAPMT: ", clean, len);
@@ -125,7 +125,7 @@ int test_get_authdata_filename() {
 int test_get_ca_caids_string() {
     char caid_string[64];
     ca_devices[0] = alloc_ca_device();
-    
+
     // No CAIDs
     ca_devices[0]->caids = 0;
     get_ca_caids_string(0, caid_string, 64);
@@ -145,7 +145,8 @@ int test_get_ca_caids_string() {
     ca_devices[0]->caid[2] = 0x0B02;
     get_ca_caids_string(0, caid_string, 64);
     LOG("CAID string: %s", caid_string);
-    ASSERT(strcmp(caid_string, "0B00, 0B01, 0B02") == 0, "invalid single CAID string");
+    ASSERT(strcmp(caid_string, "0B00, 0B01, 0B02") == 0,
+           "invalid single CAID string");
 
     return 0;
 }

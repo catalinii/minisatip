@@ -248,6 +248,12 @@ int get_max_pmt_for_ca(int i) {
     return MAX_CA_PMT;
 }
 
+int get_ca_multiple_pmt(int i) {
+    if (i >= 0 && i < MAX_ADAPTERS && ca_devices[i] && ca_devices[i]->enabled)
+        return ca_devices[i]->multiple_pmt;
+    return 0;
+}
+
 void send_cw_to_all_pmts(ca_device_t *d, int parity) {
     int i;
     for (i = 0; i < d->max_ca_pmt; i++) {
@@ -275,7 +281,7 @@ void disable_cws_for_all_pmts(ca_device_t *d) {
 }
 
 int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
-                 int cmd_id) {
+                 int cmd_id, int added_only) {
     int pos = 0;
     SPMT *pmt = get_pmt(ca->pmt_id);
     SPMT *other = get_pmt(ca->other_id);
@@ -291,9 +297,10 @@ int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
     capmt[pos++] = 0; // PI LEN 2 bytes, set 0
     capmt[pos++] = 0;
 
-    pos += CAPMT_add_PMT(capmt + pos, capmt_len - pos, pmt, cmd_id);
+    pos += CAPMT_add_PMT(capmt + pos, capmt_len - pos, pmt, cmd_id, added_only);
     if (other) {
-        pos += CAPMT_add_PMT(capmt + pos, capmt_len - pos, other, cmd_id);
+        pos += CAPMT_add_PMT(capmt + pos, capmt_len - pos, other, cmd_id,
+                             added_only);
     }
 
     return pos;
@@ -305,7 +312,8 @@ int send_capmt(ca_device_t *d, SCAPMT *ca, int listmgmt, int reason) {
     uint8_t capmt[8192];
     memset(capmt, 0, sizeof(capmt));
 
-    int size = create_capmt(ca, listmgmt, capmt, sizeof(capmt), reason);
+    int size = create_capmt(ca, listmgmt, capmt, sizeof(capmt), reason,
+                            d->multiple_pmt);
     hexdump("CAPMT: ", capmt, size);
 
     if (size <= 0)
@@ -334,6 +342,7 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple) {
     int ca_pos;
     SCAPMT *res = NULL;
 
+    // check if the PMT is already added (happening on PMT update)
     for (ca_pos = 0; ca_pos < d->max_ca_pmt; ca_pos++) {
         if (d->capmt[ca_pos].pmt_id == pmt->id ||
             d->capmt[ca_pos].other_id == pmt->id) {
@@ -341,6 +350,7 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple) {
             break;
         }
     }
+    // add the pmt to the CI
     if (!res) {
         for (ca_pos = 0; ca_pos < d->max_ca_pmt; ca_pos++) {
             if (d->capmt[ca_pos].pmt_id == -1) {
@@ -2846,6 +2856,12 @@ int dvbca_close() {
     return 0;
 }
 
+int dvbca_add_pid(adapter *ad, SPMT *pmt, int pid) {
+    LOG("PMT %d, pid %d was added, invalidating pmt", pmt->id, pid);
+    pmt->version = -1;
+    return 0;
+}
+
 SCA_op dvbca;
 
 int ca_reconnect(void *arg) {
@@ -2884,6 +2900,7 @@ void dvbca_init() // you can search the devices here and fill the
     dvbca.ca_add_pmt = dvbca_process_pmt;
     dvbca.ca_del_pmt = dvbca_del_pmt;
     dvbca.ca_close_ca = dvbca_close;
+    dvbca.ca_add_pid = dvbca_add_pid;
     dvbca.ca_ts = NULL; // dvbca_ts;
     dvbca_id = add_ca(&dvbca, 0xFFFFFFFF);
     poller_sock = sockets_add(SOCK_TIMEOUT, NULL, -1, TYPE_UDP, NULL, NULL,

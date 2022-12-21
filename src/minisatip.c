@@ -1067,7 +1067,8 @@ void set_options(int argc, char *argv[]) {
             break;
 
         case DROP_ENCRYPTED_OPT:
-            opts.drop_encrypted = (opts.drop_encrypted == 0) ? 2 : (opts.drop_encrypted - 1);
+            opts.drop_encrypted =
+                (opts.drop_encrypted == 0) ? 2 : (opts.drop_encrypted - 1);
             break;
 
         case XML_OPT:
