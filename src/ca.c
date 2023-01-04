@@ -253,11 +253,11 @@ void send_cw_to_all_pmts(ca_device_t *d, int parity) {
     for (i = 0; i < d->max_ca_pmt; i++) {
         if (PMT_ID_IS_VALID(d->capmt[i].pmt_id)) {
             send_cw(d->capmt[i].pmt_id, CA_ALGO_AES128_CBC, parity,
-                    d->key[parity], d->iv[parity], 3720);
+                    d->key[parity], d->iv[parity], 3720, NULL);
         }
         if (PMT_ID_IS_VALID(d->capmt[i].other_id)) {
             send_cw(d->capmt[i].other_id, CA_ALGO_AES128_CBC, parity,
-                    d->key[parity], d->iv[parity], 3720);
+                    d->key[parity], d->iv[parity], 3720, NULL);
         }
     }
 }
@@ -522,10 +522,11 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
         LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "send_capmt failed");
 
     if (d->key[0][0])
-        send_cw(spmt->id, CA_ALGO_AES128_CBC, 0, d->key[0], d->iv[0],
-                3600); // 1 hour
+        send_cw(spmt->id, CA_ALGO_AES128_CBC, 0, d->key[0], d->iv[0], 3600,
+                NULL); // 1 hour
     if (d->key[1][0])
-        send_cw(spmt->id, CA_ALGO_AES128_CBC, 1, d->key[1], d->iv[1], 3600);
+        send_cw(spmt->id, CA_ALGO_AES128_CBC, 1, d->key[1], d->iv[1], 3600,
+                NULL);
 
     return 0;
 }

@@ -179,10 +179,11 @@ int test_decrypt() {
     }
     a[0]->rlen = max_len * sizeof(packet);
     init_algo();
-    send_cw(0, CA_ALGO_DVBCSA, 0, cw_invalid, NULL, 25);
-    send_cw(0, CA_ALGO_DVBCSA, 0, cw0, NULL, 25);
-    send_cw(0, CA_ALGO_DVBCSA, 1, cw1, NULL, 25);
-    send_cw(0, CA_ALGO_DVBCSA, 0, cw_invalid, NULL, 25);
+    uint8_t ecm = 0;
+    send_cw(0, CA_ALGO_DVBCSA, 0, cw_invalid, NULL, 25, &ecm);
+    send_cw(0, CA_ALGO_DVBCSA, 0, cw0, NULL, 25, &ecm);
+    send_cw(0, CA_ALGO_DVBCSA, 1, cw1, NULL, 25, &ecm);
+    send_cw(0, CA_ALGO_DVBCSA, 0, cw_invalid, NULL, 25, &ecm);
 
     SPMT_batch batch[1] = {{.data = packet, .len = sizeof(packet)}};
     ASSERT(0 != test_decrypt_packet(cws[0], batch, 1),
