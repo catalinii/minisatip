@@ -625,11 +625,13 @@ char *cw_to_string(SCW *cw, char *buf) {
     }
     int64_t ctime = getTick();
     sprintf(buf,
-            "id %d, parity %d, pmt %d, time %jd ms ago, expiry in %jd ms, "
+            "id %d, parity %d, pmt %d,%s time %jd ms ago, expiry in "
+            "%jd ms, "
             "CW: %02X %02X %02X %02X %02X %02X %02X %02X",
-            cw->id, cw->parity, cw->pmt, ctime - cw->time, cw->expiry - ctime,
-            cw->cw[0], cw->cw[1], cw->cw[2], cw->cw[3], cw->cw[4], cw->cw[5],
-            cw->cw[6], cw->cw[7]);
+            cw->id, cw->parity, cw->pmt,
+            cw->opaque && *(uint8_t *)cw->opaque ? " ICAM," : "",
+            ctime - cw->time, cw->expiry - ctime, cw->cw[0], cw->cw[1],
+            cw->cw[2], cw->cw[3], cw->cw[4], cw->cw[5], cw->cw[6], cw->cw[7]);
     if (cw->iv[0])
         sprintf(buf + strlen(buf),
                 ", IV: %02X %02X %02X %02X %02X %02X %02X %02X", cw->iv[0],
@@ -871,7 +873,7 @@ void update_cw(SPMT *pmt) {
 }
 
 int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
-            int64_t expiry) {
+            int64_t expiry, void *opaque) {
     char buf[300];
     int i, master_pmt;
     SCW_op *op = get_op_for_algo(algo);
@@ -933,6 +935,7 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
     c->cw_len = 16;
     c->time = getTick();
     c->set_time = 0;
+    c->opaque = opaque;
     if (expiry == 0)
         c->expiry = c->time + MAX_CW_TIME;
     else

@@ -77,6 +77,7 @@ typedef struct struct_key {
         demux[MAX_KEY_FILTERS], pid[MAX_KEY_FILTERS],
         ecm_parity[MAX_KEY_FILTERS];
     int64_t last_parity_change;
+    unsigned char icam_ecm;
 } SKey;
 
 void init_dvbapi();

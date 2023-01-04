@@ -93,7 +93,7 @@ typedef struct struct_cw {
     char cw_len;
     int16_t id;
     int64_t expiry, set_time;
-
+    void *opaque;
 } SCW;
 
 typedef struct struct_stream_pid {
@@ -176,7 +176,7 @@ typedef struct struct_filter {
 
 int register_algo(SCW_op *o);
 int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
-            int64_t expiry);
+            int64_t expiry, void *opaque);
 
 extern int npmts;
 static inline SPMT *get_pmt(int id) {

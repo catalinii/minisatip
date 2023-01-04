@@ -20,7 +20,6 @@
 
 #include "tables.h"
 #include "adapter.h"
-#include "ca.h"
 #include "dvb.h"
 #include "dvbapi.h"
 #include "minisatip.h"
@@ -45,6 +44,10 @@
 
 #ifndef DISABLE_DDCI
 #include "ddci.h"
+#endif
+
+#ifndef DISABLE_DVBCA
+#include "ca.h"
 #endif
 
 #define DEFAULT_LOG LOG_TABLES
