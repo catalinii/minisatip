@@ -2748,7 +2748,8 @@ ca_device_t *alloc_ca_device() {
         LOG_AND_RETURN(NULL, "Could not allocate memory for CA device");
     }
     memset(d, 0, sizeof(ca_device_t));
-    d->max_ca_pmt = MAX_CA_PMT;
+    // maximum 1 channel per CA
+    d->max_ca_pmt = DEFAULT_CA_PMT;
     return d;
 }
 

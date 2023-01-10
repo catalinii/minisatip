@@ -1457,11 +1457,12 @@ int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt,
     }
 
     s->buf_used++;
-    LOGL((s->buf_used % 100 == 0) ? DEFAULT_LOG : 1,
-         "SOCK %d it %d: queueing %d bytes at %d (out of %d) send pos %d [A:%d, "
-         "U:%d]",
-         s->id, s->iteration, len, s->wpos, s->wmax, s->spos, s->buf_alloc,
-         s->buf_used);
+    LOGL(
+        (s->buf_used % 1000 == 0) ? DEFAULT_LOG : 1,
+        "SOCK %d it %d: queueing %d bytes at %d (out of %d) send pos %d [A:%d, "
+        "U:%d]",
+        s->id, s->iteration, len, s->wpos, s->wmax, s->spos, s->buf_alloc,
+        s->buf_used);
 
     if (s->spos ==
         ((s->wpos + 1) % s->wmax)) // the queue is full, start overwriting
@@ -1470,8 +1471,8 @@ int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt,
         s->overflow_packets++;
         if ((s->overflow_packets < 100) || ((s->overflow_packets % 100) == 0) ||
             (opts.log & DEFAULT_LOG))
-            LOG("Insufficient bandwidth: sock %d: overflow %d bytes it %d", s->id, s->overflow,
-                s->iteration);
+            LOG("Insufficient bandwidth: sock %d: overflow %d bytes it %d",
+                s->id, s->overflow, s->iteration);
 
         if (tmpbuf)
             free(tmpbuf);
@@ -1534,8 +1535,7 @@ int flush_socket(sockets *s) {
     if (!s->prio_pack.len) {
         s->spos = (s->spos + 1) % s->wmax;
         s->buffered_bytes -= p->len;
-    }
-    else { // makes sure http response (prio_pack) is sent next
+    } else { // makes sure http response (prio_pack) is sent next
         SNPacket tmp;
         memcpy(&tmp, p, sizeof(tmp));
         memcpy(p, &s->prio_pack, sizeof(tmp));

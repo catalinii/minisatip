@@ -1110,9 +1110,9 @@ void start_active_pmts(adapter *ad) {
                 if (p && p->pmt < 0) {
                     p->pmt = pmt->id;
                     p->is_decrypted = 0;
-                    LOG("Found PMT %d active with pid %d while processing the "
-                        "PAT",
-                        pmt->id, pmt->stream_pid[j].pid);
+                    LOGM("Found PMT %d active with pid %d while processing the "
+                         "PAT",
+                         pmt->id, pmt->stream_pid[j].pid);
                 }
             }
         // non master PMTs should not be started
@@ -1971,7 +1971,9 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
             clean_psi(ad, b, pid);
 
         return 0;
-    }
+    } else
+        // In case of PMT update, just stop the PMT before processing the update
+        stop_pmt(pmt, ad);
 
     if (!ad) {
         LOG("Adapter %d does not exist", pmt->adapter);
