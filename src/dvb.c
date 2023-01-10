@@ -1733,12 +1733,21 @@ void get_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
         }
     }
 
-    if (opts.enigma) {
-        // In Enigma2 STRENGTH:[0..100] and SNR:dB*1000
-        int64_t strengthd = 0, snrd = 0, init_snr = 0;
-        float tf;
+    if (ad->force_strength_mode == 1) {
+        // STRENGTH: [0..100]
+        int64_t strengthd = 0;
 
         strengthd = (*strength * 65535) / 100.0;
+
+        *strength = (int)strengthd;
+    } else if (ad->force_strength_mode == 2) {
+        ; // TODO
+    }
+
+    if (ad->force_snr_mode == 2) {
+        // SNR: dB*1000
+        int64_t snrd = 0, init_snr = 0;
+        float tf;
 
         init_snr = *snr;
         tf = init_snr * 65535.0 / (1000 * ad->db_snr_map);
@@ -1751,8 +1760,9 @@ void get_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
             init_snr = 999; // No more than 99.9 dB
 
         *db = (int)init_snr;
-        *strength = (int)strengthd;
         *snr = (int)snrd;
+    } else if (ad->force_snr_mode == 1) {
+        ; // TODO
     }
 
     LOGM("get_signal adapter %d: status %d, strength %d, snr %d, BER: %d",
@@ -1794,7 +1804,10 @@ int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
                          // for Signal/Noise (actually, 0 to 65535)
     } else if (enum_cmdargs[0].u.st.stat[0].scale == FE_SCALE_DECIBEL) {
         strength_s = "dBm";
-        init_strength = enum_cmdargs[0].u.st.stat[0].svalue; // dBm / 1000
+        init_strength =
+            enum_cmdargs[0]
+                .u.st.stat[0]
+                .svalue; // dBm / 1000
         strengthd = (init_strength + 100 * 1000) * 65535.0 /
                     (100 * 1000); // dBm value + 100 ==> %  ( -97 dBm => 3%)
     } else if (enum_cmdargs[0].u.st.stat[0].scale == 0)
@@ -1802,10 +1815,12 @@ int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
 
     if (enum_cmdargs[1].u.st.stat[0].scale == FE_SCALE_RELATIVE) {
         snr_s = "%";
-        snrd = enum_cmdargs[1].u.st.stat[0].uvalue;
+        snrd =
+            enum_cmdargs[1].u.st.stat[0].uvalue;
     } else if (enum_cmdargs[1].u.st.stat[0].scale == FE_SCALE_DECIBEL) {
         snr_s = "dB";
-        init_snr = enum_cmdargs[1].u.st.stat[0].svalue; // dB * 1000
+        init_snr =
+            enum_cmdargs[1].u.st.stat[0].svalue; // dB * 1000
         tf = init_snr * 65535.0 / (1000 * ad->db_snr_map);
         if (tf < 65535.0)
             snrd = tf;

@@ -108,6 +108,8 @@ adapter *adapter_alloc() {
 
     ad->strength_multiplier = opts.strength_multiplier;
     ad->snr_multiplier = opts.snr_multiplier;
+    ad->force_strength_mode = 0;
+    ad->force_snr_mode = 0;
     ad->db_snr_map = 1.0;
 
     ad->drop_encrypted = opts.drop_encrypted;
@@ -1962,6 +1964,7 @@ void set_adapters_delsys(char *o) {
 void set_signal_multiplier(char *o) {
     int i, la, a_id;
     float strength_multiplier, snr_multiplier;
+    char force_strength_mode, force_snr_mode;
     char buf[1000], *arg[40], *sep1, *sep2;
     adapter *ad;
     SAFE_STRCPY(buf, o);
@@ -1986,14 +1989,28 @@ void set_signal_multiplier(char *o) {
         if (!sep1 || !sep2)
             continue;
 
-        strength_multiplier = strtod(sep1 + 1, NULL);
-        snr_multiplier = strtod(sep2 + 1, NULL);
+        if (sep1[1]=='#' || sep1[1]=='@') {
+            force_strength_mode = sep1[1]=='#'? 1 : 2;
+            strength_multiplier = strtod(sep1 + 2, NULL);
+        } else {
+            force_strength_mode = 0;
+            strength_multiplier = strtod(sep1 + 1, NULL);
+        }
+        if (sep2[1]=='#' || sep2[1]=='@') {
+            force_snr_mode = sep2[1]=='#'? 1 : 2;
+            snr_multiplier = strtod(sep2 + 2, NULL);
+        } else {
+            force_snr_mode = 0;
+            snr_multiplier = strtod(sep2 + 1, NULL);
+        }
         if (strength_multiplier < 0 || snr_multiplier < 0)
             continue;
 
         if (ad) {
             ad->strength_multiplier = strength_multiplier;
             ad->snr_multiplier = snr_multiplier;
+            ad->force_strength_mode = force_strength_mode;
+            ad->force_snr_mode = force_snr_mode;
         } else {
             opts.strength_multiplier = strength_multiplier;
             opts.snr_multiplier = snr_multiplier;
@@ -2004,9 +2021,13 @@ void set_signal_multiplier(char *o) {
                     a[j]->snr_multiplier = snr_multiplier;
                 }
         }
-        LOG("Setting signal multipler for adapter %d strength_multiplier %.2f "
+        LOG("Setting signal multipler for adapter %d%s%s "
+            "strength_multiplier %.2f "
             "snr_multiplier %.2f",
-            a_id, (double)strength_multiplier, (double)snr_multiplier);
+            a_id,
+            force_strength_mode>0? (force_strength_mode>1? " (forced strength decibel)" : " (forced strength relative)") : "",
+            force_snr_mode>0? (force_snr_mode>1? " (forced snr decibel)" : " (forced snr relative)") : "",
+            (double)strength_multiplier, (double)snr_multiplier);
     }
 }
 
