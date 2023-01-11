@@ -497,8 +497,9 @@ int test_create_pmt() {
     pmt.stream_pid[0].desc[1] = 0;
     pmt.stream_pid[1].type = 3;
     pmt.stream_pid[1].pid = 0x55;
+    ddci_pmt_t dp = {.ver = 0, .pcr_pid = 8191};
 
-    psi_len = ddci_create_pmt(&d, &pmt, psi, sizeof(psi), 0, 8191);
+    psi_len = ddci_create_pmt(&d, &pmt, psi, sizeof(psi), &dp);
     cc = 1;
     _hexdump("PACK: ", psi, psi_len);
     buffer_to_ts(packet, 188, psi, psi_len, &cc, 0x63);
@@ -525,7 +526,7 @@ int test_create_pmt() {
     f.next_filter = -1;
     f.pid = 0x99;
     f.enabled = 1;
-    new_pmt.version = 1;
+    new_pmt.version = 0;
     adapter ad;
     ad.id = 0;
     ad.enabled = 1;
@@ -536,11 +537,13 @@ int test_create_pmt() {
     ad.active_pmt[0] = pmt.id;
     process_pmt(0, psi + 1, psi_len, &new_pmt);
     filters[0] = NULL;
-    ASSERT(new_pmt.stream_pids == pmt.stream_pids,
-           "Number of streampids does not matches between generated PMT and "
-           "read PMT");
-    ASSERT(new_pmt.caids == pmt.caids, "Number of caids does not matches "
-                                       "between generated PMT and read PMT");
+    ASSERT_EQUAL(
+        pmt.stream_pids, new_pmt.stream_pids,
+        "Number of streampids does not matches between generated PMT and "
+        "read PMT");
+    ASSERT_EQUAL(pmt.caids, new_pmt.caids,
+                 "Number of caids does not matches "
+                 "between generated PMT and read PMT");
 
     free_hash(&d.mapping);
     return 0;
