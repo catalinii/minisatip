@@ -1866,11 +1866,15 @@ int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
     if (enum_cmdargs[1].u.st.stat[0].scale == FE_SCALE_RELATIVE) {
         snr_s = "%";
         snrd =
-            enum_cmdargs[1].u.st.stat[0].uvalue;
+            enum_cmdargs[1]
+                .u.st.stat[0]
+                .uvalue;
     } else if (enum_cmdargs[1].u.st.stat[0].scale == FE_SCALE_DECIBEL) {
         snr_s = "dB";
         init_snr =
-            enum_cmdargs[1].u.st.stat[0].svalue; // dB * 1000
+            enum_cmdargs[1]
+                .u.st.stat[0]
+                .svalue; // dB * 1000
         *db = (int)get_snr_decibels(&init_snr, ad->db_snr_map);
     }
     //	else if (enum_cmdargs[1].u.st.stat[0].scale == 0)
