@@ -1964,7 +1964,7 @@ void set_signal_multiplier(char *o) {
     int i, la, a_id;
     float strength_multiplier, snr_multiplier;
     char force_tuner_signal = TUNER_FORCE_NO;
-    char force_str[32];
+    char force_str[128];
     char buf[1000], *arg[40], *sep1, *sep2;
     adapter *ad;
     SAFE_STRCPY(buf, o);
