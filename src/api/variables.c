@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2022 Catalin Toda <catalinii@yahoo.com>, 
+ * Copyright (C) 2014-2022 Catalin Toda <catalinii@yahoo.com>,
                            Sam Stenvall <neggelandia@gmail.com>,
                            et al.
  *
@@ -21,9 +21,9 @@
  */
 #include "api/variables.h"
 #include "api/symbols.h"
+#include "utils.h"
 #include "utils/logging/logging.h"
 #include "utils/mutex.h"
-#include "utils.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -183,8 +183,6 @@ int escape_json_string(char *dest, int dl, char *src, int sl) {
     return j;
 }
 
-
-
 int get_json_state(char *buf, int len) {
     int ptr = 0, first = 1, i, j, off, string;
     _symbols *p;
@@ -299,7 +297,7 @@ int get_json_state(char *buf, int len) {
 extern SMutex bw_mutex;
 
 // TODO: Refactor this so these re-declarations aren't needed
-extern int64_t c_tbw, c_bw, c_bw_dmx;
+extern int64_t c_tbw, c_bw, c_bw_dmx, c_buffered, c_dropped;
 extern uint32_t c_reads, c_writes, c_failed_writes;
 extern int64_t c_ns_read, c_tt;
 
@@ -317,8 +315,11 @@ int get_json_bandwidth(char *buf, int len) {
 \"fwrites\":%u,\n\
 \"ns_read\":%jd,\n\
 \"tt\":%jd\n\
+\"buffered\":%jd\n\
+\"dropped\":%jd\n\
 }",
-             c_bw, c_bw_dmx, c_tbw, c_reads, c_writes, c_failed_writes, c_ns_read, c_tt);
+             c_bw, c_bw_dmx, c_tbw, c_reads, c_writes, c_failed_writes,
+             c_ns_read, c_tt, c_buffered, c_dropped);
     mutex_unlock(&bw_mutex);
     return ptr;
 }

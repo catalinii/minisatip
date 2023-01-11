@@ -130,7 +130,6 @@ void set_socket_dscp(int id, int dscp, int prio);
 void sockets_set_opaque(int id, void *opaque, void *opaque2, void *opaque3);
 void sockets_force_close(int id);
 void sockets_set_master(int slave, int master);
-int64_t get_sock_buffered_bytes();
 extern __thread char thread_name[];
 extern __thread pthread_t tid;
 extern __thread int select_timeout;

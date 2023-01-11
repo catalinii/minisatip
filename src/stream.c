@@ -577,13 +577,12 @@ close_streams_for_adapter(int ad, int except) {
     return 0;
 }
 
-int64_t tbw, bw, bwtt, bw_dmx;
+int64_t tbw, bw, bwtt, bw_dmx, buffered_bytes, dropped_bytes;
 uint32_t reads, writes, failed_writes;
 int64_t nsecs;
 
-int64_t c_tbw, c_bw, c_bw_dmx;
+int64_t c_tbw, c_bw, c_bw_dmx, c_buffered, c_tt, c_dropped, c_ns_read;
 uint32_t c_reads, c_writes, c_failed_writes;
-int64_t c_ns_read, c_tt;
 
 uint64_t last_sd;
 
@@ -1118,11 +1117,13 @@ int calculate_bw(sockets *s) {
             c_writes = writes;
             c_failed_writes = failed_writes;
             c_tt = nsecs / 1000;
-            LOG("BW %jd KB/s, DMX %jd KB/s, Buffered %jd MB, Total BW: %jd MB, "
-                "ns/read %jd, r: %d, w: %d fw: "
-                "%d, tt: %jd ms",
-                c_bw, c_bw_dmx, get_sock_buffered_bytes() / 1048576, c_tbw,
-                c_ns_read, c_reads, c_writes, c_failed_writes, c_tt);
+            c_buffered = buffered_bytes;
+            c_dropped = dropped_bytes;
+            LOG("BW %jd KB/s, DMX %jd KB/s, Buffered %.1f MB, Dropped: %.1f "
+                "MB, ns/read %jd, r: %d, w: %d fw: %d, tt: %jd ms",
+                c_bw, c_bw_dmx, 1.0 * c_buffered / 1048576,
+                1.0 * c_dropped / 1048576, c_ns_read, c_reads, c_writes,
+                c_failed_writes, c_tt);
             mutex_unlock(&bw_mutex);
         }
         bw = 0;
@@ -1131,6 +1132,8 @@ int calculate_bw(sockets *s) {
         nsecs = 0;
         reads = 0;
         writes = 0;
+        buffered_bytes = 0;
+        dropped_bytes = 0;
     }
     join_thread();
     return 0;

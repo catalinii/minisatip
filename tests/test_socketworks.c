@@ -94,12 +94,8 @@ int test_socket_writev_prio() {
     iov[0].iov_base = "p";
     iov[0].iov_len = 1;
     sockets_writev_prio(id, iov, 1, 1);
-    int k = 300;
-    while (!flush_socket(ss))
-        if (!k--)
-            break;
-    if (k <= 0)
-        LOG_AND_RETURN(1, "flush_socket caused infinite loop k = %d", k);
+    flush_socket(ss);
+    flush_socket(ss);
     if (3 != (rv = read(read_fd, buf, sizeof(buf))))
         LOG_AND_RETURN(2, "read unexpected number of bytes %d", rv);
     if (strcmp(buf, "0p1"))
@@ -124,16 +120,62 @@ int test_socket_writev_prio_flush() {
     ss->flush_enqued_data = 1;
     sockets_writev_prio(id, iov, 1, 1);
     sockets_write(id, "2", 1);
-    int k = 300;
-    while (!flush_socket(ss))
-        if (!k--)
-            break;
-    if (k <= 0)
-        LOG_AND_RETURN(1, "flush_socket caused infinite loop k = %d", k);
+    flush_socket(ss);
     if (3 != (rv = read(read_fd, buf, sizeof(buf))))
         LOG_AND_RETURN(2, "read unexpected number of bytes %d", rv);
     if (strcmp(buf, "0p2"))
         LOG_AND_RETURN(2, "unexpected result: 0p1 != %s", buf);
+    return 0;
+}
+
+uint8_t test_buf[1000];
+int buf_pos;
+int to_write;
+
+// simulates a write to the buffer
+// assumes all data to write is less than the buffer size
+ssize_t writev_test(int rsock, const struct iovec *iov, int iiov) {
+    int i;
+    int left = to_write;
+    int old_pos = buf_pos;
+    for (i = 0; i < iiov; i++) {
+        int w = (left < iov[i].iov_len) ? left : iov[i].iov_len;
+        memcpy(test_buf + buf_pos, iov[i].iov_base, w);
+        left -= w;
+        buf_pos += w;
+    }
+    return buf_pos - old_pos;
+}
+
+int test_socket_buffering() {
+    struct iovec iov[2];
+    char buf[255];
+    int i;
+    for (i = 0; i < sizeof(buf); i++)
+        buf[i] = i & 0xFF;
+
+    memset(&iov, 0, sizeof(iov));
+    sockets *ss = s[id];
+    ss->wpos = 2;
+    ss->spos = 2;
+    _writev = writev_test;
+    // test writing flushing multiple packets at once
+    to_write = 1;
+    for (i = 0; i < 10; i++) {
+        sockets_write(id, buf + i * 10, 10);
+        LOG("wrote packet %d: spos %d wpos %d", i, ss->spos, ss->wpos);
+    }
+    // trigger partial write
+    to_write = 47;
+    flush_socket(ss);
+    flush_socket(ss);
+
+    for (i = 0; i < 90; i++) {
+        char message[100];
+        sprintf(message, "Invalid value found in the buffer at position %d", i);
+        ASSERT(test_buf[i] == (i & 0xFF), message);
+    }
+
     return 0;
 }
 
@@ -155,6 +197,7 @@ int main() {
     TEST_FUNC(test_socket_writev_prio(), "testing socket_writev_prio");
     TEST_FUNC(test_socket_writev_prio_flush(),
               "testing socket_writev_prio with flushing the queue");
+    TEST_FUNC(test_socket_buffering(), "testing socket buffering and flushing");
     fflush(stdout);
     free_all();
     return 0;
