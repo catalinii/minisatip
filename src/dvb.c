@@ -1930,11 +1930,11 @@ int dvb_get_signal(adapter *ad) {
         if (!start && ad->new_gs == NEW_SIGNAL)
             get_signal_new(ad, &status, &ber, &strength, &snr, &dbvalue);
 
-        if (ad->new_gs == OLD_SIGNAL)
+        if (ad->new_gs == OLD_SIGNAL) {
             get_signal(ad, &status, &ber, &strength, &snr, &dbvalue);
-
-        if (ad->force_tuner_signal != TUNER_FORCE_NO)
-            adapt_signal(ad, &status, &ber, &strength, &snr, &dbvalue);
+            if (ad->force_tuner_signal != TUNER_FORCE_NO)
+                adapt_signal(ad, &status, &ber, &strength, &snr, &dbvalue);
+        }
     } else {
         status = 1;
         LOGM("Signal is not retrieved from the adapter as both signal "
