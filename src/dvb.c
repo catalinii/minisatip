@@ -1712,7 +1712,7 @@ int64_t get_strength_decibels(int64_t init_strength) {
 int64_t get_strength_percent(int64_t init_strength) {
     int64_t strength_pc;
 
-    strength_pc = (init_strength * 65535) / 100.0;
+    strength_pc = init_strength * 655.35; // (X * 65535) / 100.0
 
     return strength_pc;
 }
@@ -1735,7 +1735,7 @@ int64_t get_snr_decibels(int64_t init_snr, int64_t* snrd, float db_snr_map) {
 int64_t get_snr_percent(int64_t init_snr) {
     int64_t snr_pc;
 
-    snr_pc = (init_snr * 65535) / 100.0;
+    snr_pc = init_snr * 655.35; // (X * 65535) / 100.0
 
     return snr_pc;
 }
