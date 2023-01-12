@@ -666,7 +666,7 @@ int sockets_del(int sock) {
 int run_loop = 1;
 extern pthread_t main_tid;
 extern int bwnotify;
-extern int64_t bwtt, bw, buffered_bytes;
+extern int64_t bwtt, bw, buffered_bytes, dropped_bytes;
 extern uint32_t writes, failed_writes;
 
 // remove __thread if your platform does not support threads.
@@ -1388,6 +1388,7 @@ int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt,
             tmpbuf = malloc1(len);
             if (!tmpbuf) {
                 s->overflow += len - rv;
+                dropped_bytes += len - rv;
                 LOG_AND_RETURN(0, "%s: Could not allocate %d bytes for tmpbuf",
                                __FUNCTION__, len);
             }
@@ -1447,6 +1448,7 @@ int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt,
     } else if (i < 0) {
         LOG("overflow p is %p, buf %p", p, p ? p->buf : NULL);
         s->overflow += len;
+        dropped_bytes += len;
         if (tmpbuf)
             free(tmpbuf);
         return 0;
@@ -1464,6 +1466,7 @@ int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt,
         ((s->wpos + 1) % s->wmax)) // the queue is full, start overwriting
     {
         s->overflow += len;
+        dropped_bytes += len;
         s->overflow_packets++;
         if ((s->overflow_packets < 100) || ((s->overflow_packets % 100) == 0) ||
             (opts.log & DEFAULT_LOG))
