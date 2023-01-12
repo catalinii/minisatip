@@ -402,9 +402,9 @@ Help\n\
 	* If the snr or the strength multipliers are set to 0, minisatip will override the value received from the adapter and will report always full signal 100%% \n\
 	* eg: -M 4-6:1.2-1.3 - multiplies the strength with 1.2 and the snr with 1.3 for adapter 4, 5 and 6\n\
 	* eg: -M *:1.5-1.6 - multiplies the strength with 1.5 and the snr with 1.6 for all adapters\n\
-	* [#] This symbol forces to read values as percentage\n\
-	* [@] This symbol forces to read values as decibels\n\
-	* eg: -M *:#1.0-@1.0 - not multiply the strength but force it as percentage and for the snr interpret it as decibels\n\
+	* [%] This symbol forces to read values as percentage\n\
+	* [#] This symbol forces to read values as decibels\n\
+	* eg: -M *:%1.0-#1.0 - not multiply the strength but force it as percentage and for the snr interpret it as decibels\n\
 \n\
 * -N --disable-dvb disable DVB adapter detection\n \
 \n\
