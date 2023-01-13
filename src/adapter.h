@@ -15,10 +15,17 @@ typedef struct ca_device ca_device_t;
 #define RTSP_OPTIONS 3
 #define RTSP_TEARDOWN 4
 #define RTSP_DESCRIBE 5
+
 #define ADAPTER_DVB 1
 #define ADAPTER_SATIP 2
 #define ADAPTER_NETCV 3
 #define ADAPTER_CI 4
+
+#define TUNER_FORCE_NO 0
+#define TUNER_FORCE_STRENGTH_PERCENT 1
+#define TUNER_FORCE_STRENGTH_DECIBEL 2
+#define TUNER_FORCE_SNR_PERCENT 4
+#define TUNER_FORCE_SNR_DECIBEL 8
 
 #define MAX_DB 65535
 
@@ -64,6 +71,7 @@ struct struct_adapter {
     uint16_t db;  // if MAX_DB then no value, else value is dB*10 of the adapter
     float strength_multiplier, // final value: strength * strength_multipler,
         snr_multiplier;        // same for snr
+    char force_tuner_signal;   // Values: TUNER_FORCE_*
     float db_snr_map;          // modulation scale value for dB SNR conversion
     uint32_t pid_err, dec_err; // detect pids received but not part of any
                                // stream, decrypt errors

@@ -108,6 +108,7 @@ adapter *adapter_alloc() {
 
     ad->strength_multiplier = opts.strength_multiplier;
     ad->snr_multiplier = opts.snr_multiplier;
+    ad->force_tuner_signal = TUNER_FORCE_NO;
     ad->db_snr_map = 1.0;
 
     ad->drop_encrypted = opts.drop_encrypted;
@@ -1962,6 +1963,8 @@ void set_adapters_delsys(char *o) {
 void set_signal_multiplier(char *o) {
     int i, la, a_id;
     float strength_multiplier, snr_multiplier;
+    char force_tuner_signal = TUNER_FORCE_NO;
+    char force_str[128];
     char buf[1000], *arg[40], *sep1, *sep2;
     adapter *ad;
     SAFE_STRCPY(buf, o);
@@ -1986,14 +1989,25 @@ void set_signal_multiplier(char *o) {
         if (!sep1 || !sep2)
             continue;
 
-        strength_multiplier = strtod(sep1 + 1, NULL);
-        snr_multiplier = strtod(sep2 + 1, NULL);
+        if (sep1[1]=='%' || sep1[1]=='#') {
+            force_tuner_signal |= sep1[1]=='%'? TUNER_FORCE_STRENGTH_PERCENT : TUNER_FORCE_STRENGTH_DECIBEL;
+            strength_multiplier = strtod(sep1 + 2, NULL);
+        } else {
+            strength_multiplier = strtod(sep1 + 1, NULL);
+        }
+        if (sep2[1]=='%' || sep2[1]=='#') {
+            force_tuner_signal |= sep2[1]=='%'? TUNER_FORCE_SNR_PERCENT : TUNER_FORCE_SNR_DECIBEL;
+            snr_multiplier = strtod(sep2 + 2, NULL);
+        } else {
+            snr_multiplier = strtod(sep2 + 1, NULL);
+        }
         if (strength_multiplier < 0 || snr_multiplier < 0)
             continue;
 
         if (ad) {
             ad->strength_multiplier = strength_multiplier;
             ad->snr_multiplier = snr_multiplier;
+            ad->force_tuner_signal = force_tuner_signal;
         } else {
             opts.strength_multiplier = strength_multiplier;
             opts.snr_multiplier = snr_multiplier;
@@ -2004,9 +2018,18 @@ void set_signal_multiplier(char *o) {
                     a[j]->snr_multiplier = snr_multiplier;
                 }
         }
-        LOG("Setting signal multipler for adapter %d strength_multiplier %.2f "
+        if (force_tuner_signal) {
+            sprintf(force_str, " (forcing driver:%s%s%s%s)",
+                (force_tuner_signal & TUNER_FORCE_STRENGTH_PERCENT) > 0 ? " strength_in_percentage" : "",
+                (force_tuner_signal & TUNER_FORCE_STRENGTH_DECIBEL) > 0 ? " strength_in_decibels"   : "",
+                (force_tuner_signal & TUNER_FORCE_SNR_PERCENT)      > 0 ? " snr_in_percentage"      : "",
+                (force_tuner_signal & TUNER_FORCE_SNR_DECIBEL)      > 0 ? " snr_in_decibels"        : "");
+        } else force_str[0] = '\0';
+        LOG("Setting signal multipler for adapter %d%s "
+            "strength_multiplier %.2f "
             "snr_multiplier %.2f",
-            a_id, (double)strength_multiplier, (double)snr_multiplier);
+            a_id, force_str,
+            (double)strength_multiplier, (double)snr_multiplier);
     }
 }
 
