@@ -20,14 +20,14 @@
 #define _GNU_SOURCE
 
 #include "satipc.h"
-#include "pmt.h"
-#include "dvb.h"
-#include "dvbapi.h"
-#include "minisatip.h"
-#include "httpc.h"
-#include "utils.h"
 #include "api/symbols.h"
 #include "api/variables.h"
+#include "dvb.h"
+#include "dvbapi.h"
+#include "httpc.h"
+#include "minisatip.h"
+#include "pmt.h"
+#include "utils.h"
 #include "utils/hash_table.h"
 #include "utils/ticks.h"
 
@@ -367,7 +367,7 @@ void satipc_close_rtsp_socket(adapter *ad, satipc *sip) {
         ad->fe = -1;
     ad->sock = -1;
     sip->wp = sip->qp = 0;
-    sip->option_no_option = 0;  // Clear this flag from any previous connection
+    sip->option_no_option = 0; // Clear this flag from any previous connection
 }
 
 void satipc_open_rtsp_socket(adapter *ad, satipc *sip) {
@@ -418,9 +418,10 @@ int satipc_timeout(sockets *s) {
     // restart the connection we did not receive a response for more than 10
     // seconds from the server
     if (sip->expect_reply && (getTick() - sip->last_response_sent > 10000)) {
-        LOG("No response was received from the server for more than %jd ms, "
+        LOG("satipc %d: no response was received from the server for more than "
+            "%jd ms, "
             "closing connection",
-            getTick() - sip->last_response_sent);
+            sip->id, getTick() - sip->last_response_sent);
         sip->restart_needed = 1;
         sockets_del(ad->sock);
     }
@@ -463,7 +464,8 @@ void set_adapter_signal(adapter *ad, char *b, int rlen) {
 
         // Ignore server signal strength if multipliers are set to 0
         if (!ad->strength_multiplier && !ad->snr_multiplier) {
-            LOG("satipc: Ignoring server signal status since both strength_multiplier and snr_multiplier are 0");
+            LOG("satipc: Ignoring server signal status since both "
+                "strength_multiplier and snr_multiplier are 0");
             strength = SATIP_MAX_STRENGTH;
             quality = SATIP_MAX_QUALITY;
         }
@@ -568,8 +570,6 @@ int satipc_open_device(adapter *ad) {
                                          (socket_action)satipc_close, NULL);
         }
         sockets_timeout(ad->fe_sock, 25000); // 25s
-        if (ad->dvr >= 0)
-            set_socket_receive_buffer(ad->dvr, opts.dvr_buffer);
         if (ad->fe_sock < 0 || sip->rtcp_sock < 0 || ad->dvr < 0 ||
             sip->rtcp < 0) {
             if (sip->rtcp_sock >= 0)
@@ -586,8 +586,6 @@ int satipc_open_device(adapter *ad) {
         }
     } else {
         ad->dvr = ad->fe;
-        if (ad->dvr >= 0)
-            set_socket_receive_buffer(ad->dvr, opts.dvr_buffer);
         ad->fe = -1;
         ad->fe_sock = sockets_add(SOCK_TIMEOUT, NULL, ad->id, TYPE_UDP, NULL,
                                   NULL, (socket_action)satipc_timeout);
@@ -619,7 +617,7 @@ int satipc_open_device(adapter *ad) {
     sip->enabled = 1;
     sip->rtsp_socket_closed = 0;
     sip->last_close = 0;
-    sip->option_no_option = 0;  // Clear this flag from any previous connection
+    sip->option_no_option = 0; // Clear this flag from any previous connection
     return 0;
 }
 
