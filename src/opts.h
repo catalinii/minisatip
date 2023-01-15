@@ -36,6 +36,7 @@ struct struct_opts {
     int tcp_threshold;
     int force_scan;
     int clean_psi;
+    int resend_ecm;
     int file_line;
     char *last_log;
     int dvbapi_port;

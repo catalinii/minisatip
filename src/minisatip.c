@@ -136,6 +136,7 @@ int rtsp, http, si, si1, ssdp1;
 // Options that don't have a short option available
 #define LONG_OPT_ONLY_START 1024
 #define VERSION_OPT (LONG_OPT_ONLY_START + 1)
+#define RESENDECM_OPT (LONG_OPT_ONLY_START + 2)
 
 static const struct option long_options[] = {
     {"adapters", required_argument, NULL, ADAPTERS_OPT},
@@ -146,6 +147,7 @@ static const struct option long_options[] = {
     {"bind-dev", required_argument, NULL, BIND_DEV_OPT},
     {"cache-dir", required_argument, NULL, CACHE_DIR_OPT},
     {"clean-psi", no_argument, NULL, CLEANPSI_OPT},
+    {"resend-ecm", no_argument, NULL, RESENDECM_OPT},
     {"delsys", required_argument, NULL, DELSYS_OPT},
     {"debug", required_argument, NULL, DEBUG_OPT},
     {"device-id", required_argument, NULL, DEVICEID_OPT},
@@ -440,6 +442,7 @@ Help\n\
 	192.168.9.9 is the host where oscam is running and 9000 is the port configured in dvbapi section in oscam.conf.\n\
 	* eg: -o /tmp/camd.socket \n\
 	/tmp/camd.socket is the local socket that can be used \n\
+* --resend-ecm When a key is invalid resend the same ECM to the server.\n\
 \n\
 "
 #endif
@@ -476,7 +479,7 @@ Help\n\
 	address 192.168.1.100 needs to be assigned to an interface on the server running minisatip.\n\
 	This feature is useful for AVM FRITZ!WLAN Repeater\n\
 	\n\
-*  --satip-xml <URL> Use the xml retrieved from a satip server to configure satip adapters \n\
+* -6 --satip-xml <URL> Use the xml retrieved from a satip server to configure satip adapters \n\
 	eg: --satip-xml http://localhost:8080/desc.xml \n\
 \n\
 * -O --satip-tcp Use RTSP over TCP instead of UDP for data transport \n\
@@ -856,6 +859,11 @@ void set_options(int argc, char *argv[]) {
 
         case CLEANPSI_OPT: {
             opts.clean_psi = 1;
+            break;
+        }
+
+        case RESENDECM_OPT: {
+            opts.resend_ecm = 1;
             break;
         }
 
