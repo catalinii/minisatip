@@ -643,7 +643,7 @@ int send_ecm(int filter_id, unsigned char *b, int len, void *opaque) {
         k->ecm_parity[i] = -1;
 
     if ((b[0] == 0x80 || b[0] == 0x81) && (b[0] & 1) == k->ecm_parity[i])
-        if !(opts.resend_ecm && (getTick() - k->last_ecm > 1000))
+        if (!(opts.resend_ecm && (getTick() - k->last_ecm > 1000)))
             return 0;
 
     old_parity = k->ecm_parity[i];
