@@ -130,7 +130,7 @@ int rtsp, http, si, si1, ssdp1;
 #define CA_PIN_OPT '3'
 #define IPV4_OPT '4'
 #define NO_PIDS_ALL_OPT 'k'
-#define CA_MULTIPLE_PMT_OPT 'c'
+#define CA_CHANNELS_OPT 'c'
 #define CACHE_DIR_OPT 'z'
 #define DISABLE_CAT_OPT '5'
 // Options that don't have a short option available
@@ -206,7 +206,7 @@ static const struct option long_options[] = {
 #ifndef DISABLE_DVBCA
     {"ca-pin", required_argument, NULL, CA_PIN_OPT},
     {"ci", required_argument, NULL, FORCE_CI_OPT},
-    {"multiple-pmt", required_argument, NULL, CA_MULTIPLE_PMT_OPT},
+    {"ca-channels", required_argument, NULL, CA_CHANNELS_OPT},
 #endif
 
     {0, 0, 0, 0}};
@@ -563,12 +563,13 @@ Help\n\
 \t* The format is: ADAPTER1:PIN,ADAPTER2-ADAPTER4\n\
 			* eg : 0,2-3\n\
 \n\
-* -c --multiple-pmt adapter_list:maximum_number_of_channels_supported: Enable 2 PMTs inside of the same CAPMT to double the number of decrypted channels\n\
-\t* The format is: ADAPTER1:MAX_CHANNELS[-CAID1[-CAID2]...,ADAPTER2:MAX_CHANNELS[-CAID3[-CAID4]...]\n\
-			* eg : 0:1-100\n\
-The DDCI adapters 0 will support maximum of 1 CAPMT (2 channels) and will use CAID1. If CAID is not specified it will use CAMs CAIDs\n\
+* -c --ca-channels adapter_list:maximum_number_of_channels_supported: Specify the number of channels supported by the CAM and override the CAIDs\n\
+\t* The format is: ADAPTER1:[*]MAX_CHANNELS[-CAID1[-CAID2]...,ADAPTER2:MAX_CHANNELS[-CAID3[-CAID4]...] \n\
+\t\t * before the MAX_CHANNELS enable 2 PMTs inside of the same CAPMT to double the number of decrypted channels\n\
+			* eg : 0:*1-100\n\
+The DDCI adapters 0 will support maximum of 1 CAPMT (2 channels because of *) and will use CAID1. If CAID is not specified it will use CAMs CAIDs\n\
 Official CAMs support 1 or 2 channels, with this option this is extended to 2 or 4\n\
-By default every CAM supports 4 channels\n\
+By default every CAM supports 1 channels\n\
 \n\
 "
 #endif
@@ -1117,8 +1118,8 @@ void set_options(int argc, char *argv[]) {
             set_ca_adapter_force_ci(optarg);
             break;
 
-        case CA_MULTIPLE_PMT_OPT:
-            set_ca_multiple_pmt(optarg);
+        case CA_CHANNELS_OPT:
+            set_ca_channels(optarg);
             break;
 
 #endif

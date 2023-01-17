@@ -2980,7 +2980,7 @@ void set_ca_adapter_pin(char *o) {
     }
 }
 
-void set_ca_multiple_pmt(char *o) {
+void set_ca_channels(char *o) {
     int i, la, ddci;
     char buf[1000], *arg[40], *sep, *seps;
     SAFE_STRCPY(buf, o);
@@ -2990,6 +2990,11 @@ void set_ca_multiple_pmt(char *o) {
 
         if (!sep)
             continue;
+        int multiple_pmt = 0;
+        if (sep[1] == '*') {
+            sep++;
+            multiple_pmt = 1;
+        }
 
         int max_ca_pmt = atoi(sep + 1);
 
@@ -2998,10 +3003,10 @@ void set_ca_multiple_pmt(char *o) {
             ca_devices[ddci] = alloc_ca_device();
         if (!ca_devices[ddci])
             return;
-        ca_devices[ddci]->multiple_pmt = 1;
+        ca_devices[ddci]->multiple_pmt = multiple_pmt;
         ca_devices[ddci]->max_ca_pmt = max_ca_pmt;
-        LOG("Forcing CA %d to use multiple PMTs with maximum channels %d", ddci,
-            max_ca_pmt);
+        LOG("Forcing CA %d to use%s maximum channels %d", ddci,
+            multiple_pmt ? "multiple PMTs with" : "", max_ca_pmt);
         seps = sep;
         while ((seps = strchr(seps + 1, '-'))) {
             int caid = strtoul(seps + 1, NULL, 16);
