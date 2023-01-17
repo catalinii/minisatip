@@ -963,7 +963,6 @@ int process_dmx(sockets *s) {
     int64_t stime;
     int rlen = s->rlen;
     s->rlen = 0;
-    bw_dmx += rlen;
 
     ad = get_adapter(s->sid);
     if (!ad)
@@ -973,6 +972,8 @@ int process_dmx(sockets *s) {
     ad->rtime = s->rtime;
     ad->rlen = rlen;
     stime = getTickUs();
+    if (ad->type != ADAPTER_CI)
+        bw_dmx += rlen;
 
     LOGM("process_dmx start called for adapter %d -> %d out of %d bytes read, "
          "%jd ms ago",
