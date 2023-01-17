@@ -1218,7 +1218,7 @@ int compare_tunning_parameters(int aid, transponder *tp) {
         get_absolute_source_for_adapter(aid, tp->diseqc, tp->sys) !=
             ad->tp.diseqc ||
         (tp->pol > 0 && tp->pol != ad->tp.pol) ||
-        (tp->sr > 1000 && tp->sr != ad->tp.sr) ||
+        (tp->sr > 1000 && ad->tp.sr > 1000 && tp->sr != ad->tp.sr) ||
         (tp->mtype != 6 && ad->tp.mtype != 6 && tp->mtype != ad->tp.mtype))
 
         return 1;
