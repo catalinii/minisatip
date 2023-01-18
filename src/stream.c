@@ -413,6 +413,8 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp) {
             memcpy(&sid->sa, &s->sa, sizeof(s->sa));
             if (!set_linux_socket_nonblock(s->sock))
                 s->nonblock = 1;
+            if (opts.output_buffer > 0)
+                set_socket_send_buffer(s->sock, opts.output_buffer);
             return 0;
         }
 
@@ -492,6 +494,8 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp) {
                              (socket_action)close_stream_for_socket, NULL)) < 0)
             LOG_AND_RETURN(-1, "RTP sockets_add failed");
 
+        if (opts.output_buffer > 0)
+            set_socket_send_buffer(sid->rsock, opts.output_buffer);
         set_socket_dscp(sid->rsock, IPTOS_DSCP_EF, 7);
 
         if ((sid->rtcp =

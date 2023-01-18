@@ -136,6 +136,8 @@ int rtsp, http, si, si1, ssdp1;
 // Options that don't have a short option available
 #define LONG_OPT_ONLY_START 1024
 #define VERSION_OPT (LONG_OPT_ONLY_START + 1)
+#define SATIPC_RECV_BUFFER_OPT (LONG_OPT_ONLY_START + 3)
+#define CLIENT_SEND_BUFFER_OPT (LONG_OPT_ONLY_START + 4)
 
 static const struct option long_options[] = {
     {"adapters", required_argument, NULL, ADAPTERS_OPT},
@@ -146,6 +148,7 @@ static const struct option long_options[] = {
     {"bind-dev", required_argument, NULL, BIND_DEV_OPT},
     {"cache-dir", required_argument, NULL, CACHE_DIR_OPT},
     {"clean-psi", no_argument, NULL, CLEANPSI_OPT},
+    {"client-send-buffer", required_argument, NULL, CLIENT_SEND_BUFFER_OPT},
     {"delsys", required_argument, NULL, DELSYS_OPT},
     {"debug", required_argument, NULL, DEBUG_OPT},
     {"device-id", required_argument, NULL, DEVICEID_OPT},
@@ -194,6 +197,7 @@ static const struct option long_options[] = {
     {"satip-servers", required_argument, NULL, SATIPCLIENT_OPT},
     {"satip-tcp", no_argument, NULL, SATIP_TCP_OPT},
     {"satip-xml", required_argument, NULL, SATIPXML_OPT},
+    {"satip-receive-buffer", required_argument, NULL, SATIPC_RECV_BUFFER_OPT},
 #endif
 #ifndef DISABLE_NETCVCLIENT
     {"netceiver", required_argument, NULL, NETCVCLIENT_OPT},
@@ -330,6 +334,11 @@ Help\n\
 \n\
 * -B X : set the app socket write buffer to X KB. \n\
 	* eg: -B 10000 - to set the socket buffer to 10MB\n\
+\n\
+* --client-send-buffer X : set the socket write buffer for client connections to X KB. \n\
+	- The default value is 0, corresponding to use the kernel default value\n\
+	* eg: --satip-receive-buffer  100 - to set the socket buffer to 100KB\n\
+	* eg: --satip-receive-buffer 1024 - to set the socket buffer to 1MB\n\
 \n\
 * -z --cache-dir dir : set the app cache directory to dir. The directory will be created if it doesn't exist. \n\
 	* defaults to /var/cache/minisatip \n\
@@ -480,6 +489,12 @@ Help\n\
 	eg: --satip-xml http://localhost:8080/desc.xml \n\
 \n\
 * -O --satip-tcp Use RTSP over TCP instead of UDP for data transport \n\
+\n\
+* --satip-receive-buffer X : set the socket read buffer for connecting to SAT>IP servers to X KB. \n\
+	- The default value is 0, corresponding to use the kernel default value\n\
+	* eg: --satip-receive-buffer  350 - to set the socket buffer to 350KB\n\
+	* eg: --satip-receive-buffer 1024 - to set the socket buffer to 1MB\n\
+\n\
 "
 #endif
         "\
@@ -644,7 +659,6 @@ void set_options(int argc, char *argv[]) {
 #ifndef DISABLE_SATIPCLIENT
     opts.satip_addpids = 1;
 #endif
-    opts.output_buffer = 2 * 1024 * 1024;
     opts.document_root = "html";
     opts.cache_dir = "/var/cache/minisatip";
     opts.xml_path = DESC_XML;
@@ -836,6 +850,12 @@ void set_options(int argc, char *argv[]) {
             break;
         }
 
+        case CLIENT_SEND_BUFFER_OPT: {
+            int val = atoi(optarg);
+            opts.output_buffer = val * 1024;
+            break;
+        }
+
         case THRESHOLD_OPT: {
             sscanf(optarg, "%d:%d", &opts.udp_threshold, &opts.tcp_threshold);
             if (opts.udp_threshold < 0)
@@ -986,6 +1006,7 @@ void set_options(int argc, char *argv[]) {
         case SATIPCLIENT_OPT:
         case SATIPXML_OPT:
         case SATIP_TCP_OPT:
+        case CLIENT_SEND_BUFFER_OPT:
 
             LOG("%s was not compiled with satip client support, please change "
                 "the "
@@ -1027,6 +1048,11 @@ void set_options(int argc, char *argv[]) {
 
         case SATIP_TCP_OPT:
             opts.satip_rtsp_over_tcp = 1;
+            break;
+
+        case SATIPC_RECV_BUFFER_OPT:
+            int val = atoi(optarg);
+            opts.satipc_buffer = val * 1024;
             break;
 #endif
         case NETCVCLIENT_OPT: {
