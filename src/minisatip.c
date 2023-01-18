@@ -1050,10 +1050,11 @@ void set_options(int argc, char *argv[]) {
             opts.satip_rtsp_over_tcp = 1;
             break;
 
-        case SATIPC_RECV_BUFFER_OPT:
+        case SATIPC_RECV_BUFFER_OPT: {
             int val = atoi(optarg);
             opts.satipc_buffer = val * 1024;
             break;
+	}
 #endif
         case NETCVCLIENT_OPT: {
 #ifdef DISABLE_NETCVCLIENT
