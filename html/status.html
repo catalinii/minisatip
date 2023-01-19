@@ -601,7 +601,7 @@
 
 				var decerr = state['ad_decerr'][i];
 				var decerrpre = oldstate['ad_decerr'][i];
-                decerrpre = (decerr - decerrpre < 0) ? decerr : decerr - decerrpre;
+				decerrpre = (decerr - decerrpre < 0) ? decerr : decerr - decerrpre;
 				if (decerr > 0)
 					myTable += "DEC-ERRORS: " + decerr + " (" + decerrpre + ")<br />";
 				myTable += "</small></td></tr>";
@@ -648,8 +648,8 @@
 		}
 
 		function renewTable(data) {
-            if (oldData == null)
-                oldData = Object.assign({}, data);
+			if (oldData == null)
+				oldData = Object.assign({}, data);
 			if (table)
 				table.destroy();
 			document.title = "Minisatip/" + data['version'] + " on " + data['http_host'];
@@ -675,7 +675,7 @@
 					"emptyTable": "No tuner found/active"
 				}
 			});
-            oldData = Object.assign({}, data);
+			oldData = Object.assign({}, data);
 		}
 
 		function getData() {
