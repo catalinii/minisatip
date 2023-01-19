@@ -1006,7 +1006,7 @@ void set_options(int argc, char *argv[]) {
         case SATIPCLIENT_OPT:
         case SATIPXML_OPT:
         case SATIP_TCP_OPT:
-        case CLIENT_SEND_BUFFER_OPT:
+        case SATIPC_RECV_BUFFER_OPT:
 
             LOG("%s was not compiled with satip client support, please change "
                 "the "
