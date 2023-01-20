@@ -30,6 +30,7 @@ struct struct_opts {
     int device_id;
     int bootid;
     int dvr_buffer;
+    int satipc_buffer;
     int adapter_buffer;
     int output_buffer;
     int udp_threshold;
