@@ -358,7 +358,7 @@
 			}
 		}
 
-		function getTable(state) {
+		function getTable(state, oldstate) {
 
 			if (!state)
 				return '';
@@ -489,8 +489,10 @@
 					if (ber > 0)
 						signal += "<div class='level'>BER <progress class='pber progress-1' value='" + ber + "' max='1000' />" + ber + "</div><br />";
 					var ccerr = state['ad_ccerr'][i];
+					var ccerrpre = oldstate['ad_ccerr'][i];
+					ccerrpre = (ccerr - ccerrpre < 0) ? ccerr : ccerr - ccerrpre;
 					if (ccerr > 0)
-						signal += "<div class='level'>CC <progress class='pcc progress-1' value='" + ccerr + "' max='1000' />" + ccerr + "</div><br />";
+						signal += "<div class='level'>CC <progress class='pcc progress-1' value='" + ccerrpre + "' max='100' />" + ccerr + "</div><br />";
 				}
 				myTable += "<td class='dt-right'>" + signal + " </td>";
 
@@ -597,8 +599,10 @@
 				}
 
 				var decerr = state['ad_decerr'][i];
+				var decerrpre = oldstate['ad_decerr'][i];
+				decerrpre = (decerr - decerrpre < 0) ? decerr : decerr - decerrpre;
 				if (decerr > 0)
-					myTable += "DEC-ERRORS: " + decerr + "<br />";
+					myTable += "DEC-ERRORS: " + decerr + " (" + decerrpre + ")<br />";
 				myTable += "</small></td></tr>";
 			}
 
@@ -623,6 +627,7 @@
 		var stats = 0;
 		var statsrefresh;
 		var table = null;
+		var oldData = null;
 
 		var hashTag = location.hash;
 		if (typeof hashTag.split('#')[1] !== "undefined") {
@@ -642,10 +647,12 @@
 		}
 
 		function renewTable(data) {
+			if (oldData == null)
+				oldData = Object.assign({}, data);
 			if (table)
 				table.destroy();
 			document.title = "Minisatip/" + data['version'] + " on " + data['http_host'];
-			$('#table').html(getTable(data));
+			$('#table').html(getTable(data, oldData));
 			table = $('#myTable').DataTable({
 				"paging": false,
 				"bFilter": false,
@@ -667,7 +674,7 @@
 					"emptyTable": "No tuner found/active"
 				}
 			});
-
+			oldData = Object.assign({}, data);
 		}
 
 		function getData() {

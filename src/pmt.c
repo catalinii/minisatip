@@ -1078,7 +1078,7 @@ int pmt_decrypt_stream(adapter *ad) {
 
 void start_active_pmts(adapter *ad) {
     int i;
-    SPid *pids[8192];
+    SPid *pids[8193];
     memset(pids, 0, sizeof(pids));
 
     for (i = 0; i < MAX_PIDS; i++)
