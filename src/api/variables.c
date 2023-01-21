@@ -314,8 +314,8 @@ int get_json_bandwidth(char *buf, int len) {
 \"writes\":%u,\n\
 \"fwrites\":%u,\n\
 \"ns_read\":%jd,\n\
-\"tt\":%jd\n\
-\"buffered\":%jd\n\
+\"tt\":%jd,\n\
+\"buffered\":%jd,\n\
 \"dropped\":%jd\n\
 }",
              c_bw, c_bw_dmx, c_tbw, c_reads, c_writes, c_failed_writes,
