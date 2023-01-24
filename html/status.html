@@ -510,17 +510,15 @@
 				}
 				for (var j = 0; j < max_streams; j++) {
 					if (state['st_enabled'][j] == 1 && state['st_adapter'][j] == i) {
-						var st_rh = state['st_rhost'][j] + ":" + state['st_rport'][j];
+						var st_rh = state['st_rhost'][j] + ":" + state['st_rport'][j] + " (" + state['st_proto'][j] + ")";
 						if (state['ad_master'][i] == j)
 							st_rh = "<b>" + st_rh + "</b>";
 						if (state['st_play'][j] == 0)
 							st_rh = "<i>" + st_rh + "</i>";
-						myTable += st_rh + "<br />";
+						myTable += "<hr>" + st_rh + "<br />";
 						if (state['st_useragent'][j] != "")
 							myTable += "<small>Client: " + state['st_useragent'][j] + "</small><br />";
 					}
-				}
-				for (var j = 0; j < max_streams; j++) {
 					if (state['st_enabled'][j] == 1 && state['st_adapter'][j] == i) {
 						var st_p = state['st_pids'][j];
 						if (state['ad_master'][i] == j)
