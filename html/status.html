@@ -508,7 +508,8 @@
 				if (state['has_pmt']) {
 					myTable += "<b>" + state['ad_channel'][i] + "</b><br>";
 					var st_pmt = state['ad_pmt'][i];
-					myTable += "<small>PMT: " + st_pmt + "</small><br />";
+					if (st_pmt != "")
+						myTable += "<small>PMT: " + st_pmt + "</small><br />";
 				}
 				for (var j = 0; j < max_streams; j++) {
 					if (state['st_enabled'][j] == 1 && state['st_adapter'][j] == i) {
