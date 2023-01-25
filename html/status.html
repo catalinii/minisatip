@@ -370,20 +370,20 @@
 			var has_axe = state['has_axe'];
 
 			var myTable = "<table id='myTable' class='display cell-border compact' cellspacing='0' width='100%'>";
-			myTable += "<thead><tr><th style='style=width:30px;max-width:40px'>Tun.</th>";
-			myTable += "<th style='style=width:110px;max-width:135px' class=''>Status</th>";
-			myTable += "<th style='style=width:30px;max-width:35px' class='dt-right'>Pos</th>";
-			myTable += "<th style='style=width:75px;max-width:90px' class='dt-right'>Frequency</th>";
-			myTable += "<th style='style=width:50px;max-width:60px' class='dt-right'>SR/BW</th>";
-			myTable += "<th style='style=width:50px;max-width:60px' class='dt-right'>PLP</th>";
-			myTable += "<th style='style=width:100px;max-width:150px' class='dt-right'>Signal</th>";
+			myTable += "<thead><tr><th style='width:30px;max-width:40px'>Tun.</th>";
+			myTable += "<th style='width:110px;max-width:135px' class=''>Status</th>";
+			myTable += "<th style='width:30px;max-width:35px' class='dt-right'>Pos</th>";
+			myTable += "<th style='width:75px;max-width:90px' class='dt-right'>Frequency</th>";
+			myTable += "<th style='width:50px;max-width:60px' class='dt-right'>SR/BW</th>";
+			myTable += "<th style='width:50px;max-width:60px' class='dt-right'>PLP</th>";
+			myTable += "<th style='width:100px;max-width:150px' class='dt-right'>Signal</th>";
 			if (has_axe) {
 				myTable += "<th class='dt-right'>Packets</th>";
 				myTable += "<th class='dt-right'>CC Errors</th>";
 				myTable += "<th class='dt-right'>Coax Cable</th>";
 			}
-			myTable += "<th style='style=width:120px' class='dt-left'>Streams</th>";
-			myTable += "<th style='style=width:100px;max-width:130px' class='dt-left'>Cryptinfo</th>";
+			myTable += "<th style='width:120px;max-width:100%' class='dt-left'>Streams</th>";
+			myTable += "<th style='width:100px;max-width:130px' class='dt-left'>Cryptinfo</th>";
 			myTable += "</tr></thead><tbody>";
 
 			for (var i = 0; i < max_adapters; i++) {
