@@ -31,7 +31,6 @@ typedef struct ddci_device {
     ddci_pmt_t pmt[MAX_CHANNELS_ON_CI + 1];
     int cat_processed;
     int capid[MAX_CA_PIDS + 1];
-    int ncapid;
     unsigned char *out;
     int ro[MAX_ADAPTERS], wo; // read offset per adapter
     uint64_t last_pat, last_pmt;

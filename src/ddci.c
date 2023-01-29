@@ -1152,7 +1152,6 @@ int ddci_open_device(adapter *ad) {
     ad->sys[0] = 0;
     ad->adapter_timeout = 0;
     memset(d->pmt, -1, sizeof(d->pmt));
-    d->ncapid = 0;
     d->max_channels = MAX_CHANNELS_ON_CI;
     d->channels = 0;
     d->wo = 0;
@@ -1231,7 +1230,6 @@ int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque) {
         add_pid_mapping_table(f->adapter, d->capid[i], d->pmt[0].id, d, 1);
     }
     d->cat_processed = 1;
-    d->ncapid = id;
     mutex_unlock(&d->mutex);
     update_pids(f->adapter);
     update_pids(d->id);
