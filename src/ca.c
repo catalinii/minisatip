@@ -75,8 +75,6 @@ alternative source
 
 char ci_name_underscore[128];
 int ci_number;
-int logging = 0;
-char logfile[256];
 int extract_ci_cert = 0;
 
 uint32_t datatype_sizes[MAX_ELEMENTS] = {
@@ -2908,12 +2906,6 @@ void dvbca_init() // you can search the devices here and fill the
     sockets_timeout(poller_sock, 1000); // try to connect every 1s
     pthread_t tid = start_new_thread("CA_poll");
     set_socket_thread(poller_sock, tid);
-}
-
-char *get_ca_pin(int i) {
-    if (ca_devices[i])
-        return ca_devices[i]->pin_str;
-    return NULL;
 }
 
 void set_ca_pin(int i, char *pin) {

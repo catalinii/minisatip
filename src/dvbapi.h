@@ -46,7 +46,6 @@
          // start working with the updated list
 
 #define MAX_KEYS 255
-#define MAX_PMT_DATA 1880
 #define MAX_KEY_FILTERS 20
 typedef struct struct_key {
     char enabled;
@@ -54,7 +53,6 @@ typedef struct struct_key {
     int pmt_id;
     int algo;
     unsigned char cw[2][16];
-    uint32_t cw_time[2];
     int key_len;
     int sid;
     int pmt_pid;
@@ -68,7 +66,6 @@ typedef struct struct_key {
     int adapter;
     int ver;
     int ecms;
-    int program_id; // pmt sid
     unsigned char cardsystem[64], reader[64], from[64], protocol[64];
     int parity;
     int blen;
@@ -76,22 +73,13 @@ typedef struct struct_key {
     int filter_id[MAX_KEY_FILTERS], filter[MAX_KEY_FILTERS],
         demux[MAX_KEY_FILTERS], pid[MAX_KEY_FILTERS],
         ecm_parity[MAX_KEY_FILTERS];
-    int64_t last_parity_change;
     unsigned char icam_ecm;
 } SKey;
 
 void init_dvbapi();
-int have_dvbapi();
-int dvbapi_enabled();
 int send_ecm(int filter_id, unsigned char *b, int len, void *opaque);
-int batch_size();
-int decrypt_stream(adapter *ad, void *arg);
 int keys_add(int i, int adapter, int pmt_id);
 int keys_del(int i);
-int dvbapi_process_pmt(unsigned char *b, adapter *ad);
-void dvbapi_pid_add(adapter *a, int pid, SPid *cp, int existing);
-void dvbapi_pid_del(adapter *a, int pid, SPid *cp);
-void dvbapi_delete_keys_for_adapter(int aid);
 void register_dvbapi();
 void unregister_dvbapi();
 void send_client_info(sockets *s);

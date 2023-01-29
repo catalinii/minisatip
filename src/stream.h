@@ -41,7 +41,6 @@ typedef struct struct_streams {
     int64_t wtime;
     int64_t rtime; // stream timeout
     int64_t rtcp_wtime;
-    int64_t last_init_hw;
     int do_play;
     int start_streaming;
     transponder tp;

@@ -42,7 +42,6 @@ uint32_t crc_32(const uint8_t *data, int datalen);
 void _dump_packets(char *message, unsigned char *b, int len, int packet_offset);
 int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, char *cc,
                  int pid);
-void write_buf_to_file(char *file, uint8_t *buf, int len);
 void mkdir_recursive(const char *path);
 void sleep_msec(uint32_t msec);
 int get_random(unsigned char *dest, int len);

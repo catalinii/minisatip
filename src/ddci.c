@@ -246,17 +246,6 @@ int ddci_close_dev(adapter *ad) {
 }
 SCA_op ddci;
 
-void ddci_close_device(ddci_device_t *c) {}
-
-int ddci_close_all() {
-    int i;
-    for (i = 0; i < MAX_ADAPTERS; i++)
-        if (ddci_devices[i] && ddci_devices[i]->enabled) {
-            ddci_close_device(ddci_devices[i]);
-        }
-    return 0;
-}
-
 int ddci_close(adapter *a) { return 0; }
 
 // return 0 if
@@ -551,31 +540,6 @@ int ddci_create_pat(ddci_device_t *d, uint8_t *b) {
     sprintf(buf, "PAT Created CRC %08X: ", crc);
     hexdump(buf, b + 1, len1 - 1);
     return len;
-}
-
-void ddci_replace_pi(ddci_device_t *d, int adapter, unsigned char *es,
-                     int len) {
-
-    int es_len, capid;
-    int i;
-
-    for (i = 0; i < len; i += es_len) // reading program info
-    {
-        es_len = es[i + 1] + 2;
-        if (es[i] != 9)
-            continue;
-        capid = (es[i + 4] & 0x1F) * 256 + es[i + 5];
-        ddci_mapping_table_t *m = get_pid_mapping(d, adapter, capid);
-        int dpid = capid;
-
-        if (m)
-            dpid = m->ddci_pid;
-
-        es[i + 4] &= 0xE0; //~0x1F
-        es[i + 4] |= (dpid >> 8);
-        es[i + 5] = dpid & 0xFF;
-        LOGM("%s: CA pid %d -> pid %d", __FUNCTION__, capid, dpid)
-    }
 }
 
 uint16_t YMDtoMJD(int Y, int M, int D) {
@@ -1045,23 +1009,6 @@ int ddci_post_init(adapter *ad) {
     post_tune(ad);
     if (ddci_id < 0)
         ddci_init();
-    return 0;
-}
-
-int set_property(int fd, uint32_t cmd, uint32_t data) {
-    struct dtv_property p;
-    struct dtv_properties c;
-    int ret;
-
-    p.cmd = cmd;
-    c.num = 1;
-    c.props = &p;
-    p.u.data = data;
-    ret = ioctl(fd, FE_SET_PROPERTY, &c);
-    if (ret < 0) {
-        LOGM("FE_SET_PROPERTY command %d returned %d\n", cmd, errno);
-        return -1;
-    }
     return 0;
 }
 

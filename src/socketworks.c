@@ -219,40 +219,6 @@ int udp_bind_connect(char *src, int sport, char *dest, int dport,
     return sock;
 }
 
-int udp_connect(char *addr, int port, USockAddr *serv) {
-    USockAddr sv;
-    int sock, optval = 1;
-    int family;
-    char localhost[100];
-
-    if (serv == NULL)
-        serv = &sv;
-    if (!(family = fill_sockaddr(serv, addr, port, opts.use_ipv4_only)))
-        return -1;
-    sock = socket(family, SOCK_DGRAM, IPPROTO_IP);
-    if (sock < 0) {
-        LOG("udp_connect failed: socket() %s", strerror(errno));
-        return -1;
-    }
-
-    if (family == AF_INET && setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval,
-                                        sizeof(optval)) < 0) {
-        LOG("udp_bind: setsockopt(SO_REUSEADDR): %s", strerror(errno));
-        close(sock);
-        return -1;
-    }
-
-    if (connect(sock, &serv->sa, SOCKADDR_SIZE(*serv)) < 0) {
-        LOG("udp_connect: failed: bind(): %s", strerror(errno));
-        close(sock);
-        return -1;
-    }
-    LOG("New UDP socket %d connected to %s:%d", sock,
-        get_sockaddr_host(*serv, localhost, sizeof(localhost)),
-        get_sockaddr_port(*serv));
-    return sock;
-}
-
 int set_linux_socket_nonblock(int sockfd) {
     int flags = fcntl(sockfd, F_GETFL, 0);
     return fcntl(sockfd, F_SETFL, flags | O_NONBLOCK);
@@ -427,8 +393,6 @@ int connect_local_socket(char *file, int blocking) {
     return sock;
 }
 
-int no_action(int s) { return 1; }
-
 int sockets_accept(int socket, void *buf, int len, sockets *ss) {
     int new_sock, sas, ni;
     USockAddr sa;
@@ -467,8 +431,6 @@ int sockets_recv(int socket, void *buf, int len, sockets *ss, int *rv) {
     // 0 is totally acceptable for UDP
     return (*rv >= 0);
 }
-
-int init_sock = 0;
 
 void sockets_lock(sockets *ss) {
     int rv;
@@ -945,14 +907,6 @@ void sockets_setclose(int i, void *r) {
     sockets *ss = get_sockets(i);
     if (ss)
         ss->close = (socket_action)r;
-}
-
-void sockets_setbuf(int i, char *buf, int len) {
-    sockets *ss = get_sockets(i);
-    if (ss) {
-        ss->buf = (unsigned char *)buf;
-        ss->lbuf = len;
-    }
 }
 
 void sockets_timeout(int i, int t) {
@@ -1631,15 +1585,6 @@ void set_socket_dscp(int id, int dscp, int prio) {
 #else
     LOG("%s: setsockopt SO_PRIORITY not implemented", __FUNCTION__);
 #endif
-}
-
-void sockets_set_opaque(int id, void *opaque, void *opaque2, void *opaque3) {
-    sockets *s = get_sockets(id);
-    if (s) {
-        s->opaque = opaque;
-        s->opaque2 = opaque2;
-        s->opaque3 = opaque3;
-    }
 }
 
 // does not flush all the buffers before close, but ensures the socket will be

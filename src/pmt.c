@@ -69,12 +69,6 @@ int nfilters;
 char *listmgmt_str[] = {"CLM_MORE", "CLM_FIRST", "CLM_LAST",
                         "CLM_ONLY", "CLM_ADD",   "CLM_UPDATE"};
 
-static inline SCW *get_cw(int id) {
-    if (id < 0 || id >= MAX_CW || !cws[id] || !cws[id]->enabled)
-        return NULL;
-    return cws[id];
-}
-
 static inline SPMT *get_pmt_for_existing_pid(SPid *p) {
     SPMT *pmt = NULL;
     if (p && p->pmt >= 0 && p->pmt < npmts && pmts[p->pmt] &&
@@ -102,70 +96,6 @@ static inline int get_has_pcr(uint8_t *b) {
         return 0;
     else
         return 1;
-}
-
-static inline int get_has_pusi(uint8_t *b) {
-    if ((b[1] & 0x40) == 0)
-        return 0;
-    else
-        return 1;
-}
-
-static inline int get_has_pes_header(uint8_t *b) {
-    if (!get_has_pusi(b))
-        return 0;
-
-    // Check it's not scrambled and it has payload
-    if ((b[3] & 0xd0) != 0x10)
-        return 0;
-
-    // Check if payload is a PES Header
-    int pesheader = get_adaptation_len(b);
-    if (b[pesheader] != 0x00 || b[pesheader + 1] != 0x00 ||
-        b[pesheader + 2] != 0x01)
-        return 0;
-
-    return pesheader;
-}
-
-static inline int get_streamid(uint8_t *b) {
-    int pesheader = get_has_pes_header(b);
-    if (pesheader == 0)
-        return 0;
-
-    return b[pesheader + 3];
-}
-
-static inline uint64_t get_pts_dts(uint8_t *b) {
-    int pesheader = get_has_pes_header(b);
-    if (pesheader == 0)
-        return 0;
-
-    uint64_t tts = 0xFFFFFFFFFFFFFFFF;
-
-    if ((b[pesheader + 7] & 0x80) != 0x80) // No PTS or DTS indicator
-        return tts;
-
-    int offset = pesheader + 9; // PTS position
-
-    if ((b[pesheader + 7] & 0xc0) == 0xc0) {
-        // PTS and DTS present, get DTS as packet time instead of PTS
-        offset += 5;
-    }
-
-    // LOGM("pmt: PTS detection: pesheader=%d,offset=%d %2x %2x,%2x %2x,%2x",
-    // pesheader,offset,b[offset+0],b[offset+1],b[offset+2],b[offset+3],b[offset+4]);
-    tts = (b[offset + 0] & 0x0e) >> 1;
-    tts <<= 8;
-    tts |= b[offset + 1];
-    tts <<= 7;
-    tts |= (b[offset + 2] & 0xfe) >> 1;
-    tts <<= 8;
-    tts |= b[offset + 3];
-    tts <<= 7;
-    tts |= (b[offset + 4] & 0xfe) >> 1;
-
-    return tts;
 }
 
 static inline void mark_pid_null(uint8_t *b) {
@@ -609,12 +539,6 @@ int get_filter_pid(int filter) {
     SFilter *f = get_filter(filter);
     if (f)
         return f->pid;
-    return -1;
-}
-int get_filter_adapter(int filter) {
-    SFilter *f = get_filter(filter);
-    if (f)
-        return f->adapter;
     return -1;
 }
 
@@ -1432,20 +1356,6 @@ void delete_pmt_for_adapter(int aid) {
         if (get_pmt(pmt))
             pmt_del(pmt);
     }
-}
-
-SPMT *get_pmt_for_sid(int aid, int sid) {
-    int i;
-    adapter *ad = get_adapter(aid);
-    if (!ad)
-        return NULL;
-    for (i = 0; i < ad->active_pmts; i++) {
-        int p = ad->active_pmt[i];
-        SPMT *pmt = get_pmt(p);
-        if (pmt && pmt->sid == sid)
-            return pmt;
-    }
-    return NULL;
 }
 
 SPMT *get_all_pmt_for_sid(int aid, int sid) {

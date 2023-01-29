@@ -51,7 +51,6 @@
 #include <unistd.h>
 
 #define TCP_DATA_SIZE ((ADAPTER_BUFFER / 1316) * (1316 + 16) * 3)
-#define TCP_DATA_MAX (TCP_DATA_SIZE * 8)
 #define MAKE_ITEM(a, b) ((a << 16) | (b))
 
 #if defined(__APPLE__) || defined(__SH4__)
@@ -140,14 +139,6 @@ satipc *get_satip1(int aid, char *file, int line) {
         sip = get_satip(id);                                                   \
         if (!ad || !sip)                                                       \
             return val;                                                        \
-    }
-
-#define get_ad_and_sip(id)                                                     \
-    {                                                                          \
-        ad = get_adapter(id);                                                  \
-        sip = get_satip(id);                                                   \
-        if (!ad || !sip)                                                       \
-            return;                                                            \
     }
 
 int http_request(adapter *ad, char *url, char *method, int force);

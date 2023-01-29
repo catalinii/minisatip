@@ -41,7 +41,6 @@ struct struct_adapter {
     int pa, fn;
     // flags
 
-    char slow_dev;
     char err; // adapter in an error state (initialized but not working
               // correctly)
     int adapter_timeout;
@@ -95,8 +94,7 @@ struct struct_adapter {
     char name[5];
     char null_packets;
     char drop_encrypted;
-    char failed_adapter; // failed adapters will not be closed due to timeout
-                         // nor chosen in get_free_adapters
+
 #ifndef DISABLE_PMT
     int transponder_id, pat_ver, pat_filter, sdt_filter;
     // keeps the PMTs that are present in the PAT
@@ -155,15 +153,11 @@ void dump_pids(int aid);
 void sort_pids(int aid);
 void enable_adapters(char *o);
 void set_unicable_adapters(char *o, int type);
-void set_sources_adapters(char *o);
 void set_diseqc_adapters(char *o);
 void set_diseqc_timing(char *o);
 void set_diseqc_multi(char *o);
 void set_slave_adapters(char *o);
 void set_timeout_adapters(char *o);
-void set_adapter_dmxsource(char *o);
-void reset_pids_type(int aid, int clear_pat);
-void reset_ecm_type_for_pmt(int aid, int pmt);
 int delsys_match(adapter *ad, int del_sys);
 int get_enabled_pids(adapter *ad, int *pids, int lpids);
 int get_all_pids(adapter *ad, int *pids, int lpids);
@@ -184,7 +178,6 @@ int compare_slave_parameters(adapter *ad, transponder *tp);
 int get_absolute_source_for_adapter(int aid, int src, int sys);
 void set_absolute_src(char *o);
 #define get_adapter(a) get_adapter1(a, __FILE__, __LINE__)
-#define get_configured_adapter(a) get_configured_adapter1(a, __FILE__, __LINE__)
 #define get_adapter_nw(aid)                                                    \
     ((aid >= 0 && aid < MAX_ADAPTERS && a[aid] && a[aid]->enabled) ? a[aid]    \
                                                                    : NULL)

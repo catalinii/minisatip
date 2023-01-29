@@ -196,7 +196,6 @@ struct ca_device {
      */
     char ci_name[128];
 
-    char cam_menu_string[64];
     char pin_str[10];
     uint8_t key[2][16], iv[2][16];
     int sp, parity;
@@ -211,14 +210,12 @@ struct ca_device {
 extern ca_device_t *ca_devices[];
 
 ca_device_t *alloc_ca_device();
-int ca_init(ca_device_t *d);
 void dvbca_init();
 int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
                  int cmd_id, int added_only);
 int is_ca_initializing(int i);
 void set_ca_adapter_pin(char *o);
 void set_ca_adapter_force_ci(char *o);
-char *get_ca_pin(int i);
 void set_ca_channels(char *o);
 int get_ca_multiple_pmt(int i);
 int get_max_pmt_for_ca(int i);

@@ -37,12 +37,8 @@ int create_hash_table(SHashTable *hash, int no);
 void copy_hash_table(SHashTable *s, SHashTable *d);
 void free_hash(SHashTable *hash);
 void *getItem(SHashTable *hash, uint32_t key);
-int getItemLen(SHashTable *hash, uint32_t key);
 #define setItem(a, b, c, d) _setItem(a, b, c, d, 1)
 int _setItem(SHashTable *hash, uint32_t key, void *data, int len, int copy);
 int delItem(SHashTable *hash, uint32_t key);
-int delItemP(SHashTable *hash, void *p);
-int getItemSize(SHashTable *hash, uint32_t key);
-int setItemLen(SHashTable *hash, uint32_t key, int len);
 
 #endif

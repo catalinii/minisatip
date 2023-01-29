@@ -124,11 +124,6 @@ make_func(inversion);
 make_func(pol);
 make_func(pls_mode);
 
-#define INVALID_URL(a)                                                         \
-    {                                                                          \
-        LOG(a);                                                                \
-        return 0;                                                              \
-    }
 char def_pids[100];
 
 uint32_t pls_scrambling_index(transponder *tp) {
@@ -723,7 +718,6 @@ float get_db_snr_map(transponder *tp) {
 
 struct diseqc_cmd {
     struct dvb_diseqc_master_cmd cmd;
-    uint32_t wait;
 };
 
 // based on enigma2 fbc.cpp, setProcData

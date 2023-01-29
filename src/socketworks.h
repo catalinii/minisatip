@@ -54,7 +54,6 @@ typedef struct struct_sockets {
     int flush_enqued_data;
     int spos, wmax, wpos;
     int overflow, buf_alloc, buf_used, overflow_packets;
-    int64_t buffered_bytes;
     // if != -1 points to the master socket which holds the buffer and the
     // action function. Useful when the DVR buffer comes from different file
     // handles
@@ -81,9 +80,7 @@ typedef struct struct_sockets {
 #define SOCK_TIMEOUT -2
 #define SELECT_TIMEOUT 100
 
-char *setlocalip();
 char *getlocalip();
-int udp_connect(char *addr, int port, USockAddr *serv);
 int udp_bind_connect(char *src, int sport, char *dest, int dport,
                      USockAddr *serv);
 int udp_bind(char *addr, int port, int ipv4_only);
@@ -97,7 +94,6 @@ char *get_sockaddr_host(USockAddr s, char *dest, int ld);
 int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
                 socket_action c, socket_action t);
 int sockets_del(int sock);
-int no_action(int s);
 void *select_and_execute(void *arg);
 int get_mac_address(char *mac);
 int fill_sockaddr(USockAddr *serv, char *host, int port, int ipv4_only);
@@ -127,7 +123,6 @@ int flush_socket(sockets *s);
 void get_socket_iteration(int s_id, int it);
 void set_sockets_sid(int id, int sid);
 void set_socket_dscp(int id, int dscp, int prio);
-void sockets_set_opaque(int id, void *opaque, void *opaque2, void *opaque3);
 void sockets_force_close(int id);
 void sockets_set_master(int slave, int master);
 extern __thread char thread_name[];

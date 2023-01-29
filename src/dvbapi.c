@@ -51,7 +51,6 @@
 
 #define DEFAULT_LOG LOG_DVBAPI
 
-const int64_t DVBAPI_ITEM = 0x1000000000000;
 int dvbapi_sock = -1;
 int sock;
 int dvbapi_is_enabled = 0;
@@ -859,14 +858,6 @@ void unregister_dvbapi() {
     LOG("unregistering dvbapi as the socket is closed");
     del_ca(&dvbapi);
     dvbapi_ca = -1;
-}
-
-void dvbapi_delete_keys_for_adapter(int aid) {
-    int i;
-    SKey *k;
-    for (i = 0; i < MAX_KEYS; i++)
-        if ((k = get_key(i)) && k->adapter == aid)
-            keys_del(i);
 }
 
 char *get_channel_for_key(int key, char *dest, int max_size) {

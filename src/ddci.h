@@ -7,7 +7,6 @@
 
 // number of pids for each ddci adapter to be stored in the mapping table
 #define MAX_CHANNELS_ON_CI 4
-#define PIDS_FOR_ADAPTER 128
 #define MAX_CA_PIDS 20
 
 #define DDCI_BUFFER (100000 * 188)
@@ -83,7 +82,6 @@ ddci_mapping_table_t *get_pid_mapping_allddci(int ad, int pid);
 void save_channels(SHashTable *ch);
 void load_channels(SHashTable *ch);
 int ddci_process_pmt(adapter *ad, SPMT *pmt);
-void blacklist_pmt_for_ddci(SPMT *pmt, int ddid);
 int ddci_del_pmt(adapter *ad, SPMT *spmt);
 void disable_cat_adapters(char *o);
 #endif

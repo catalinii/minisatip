@@ -82,36 +82,6 @@ void *getItem(SHashTable *hash, uint32_t key) {
     return result;
 }
 
-int getItemLen(SHashTable *hash, uint32_t key) {
-    int i, locking = 0;
-    int result = 0;
-    if (hash->mutex.state > 0) {
-        locking = 1;
-        mutex_lock(&hash->mutex);
-    }
-
-    i = get_index_hash(hash, key);
-    result = i >= 0 ? hash->items[i].len : 0;
-    if (locking)
-        mutex_unlock(&hash->mutex);
-    return result;
-}
-
-int getItemSize(SHashTable *hash, uint32_t key) {
-    int i, locking = 0;
-    int result = 0;
-    if (hash->mutex.state > 0) {
-        locking = 1;
-        mutex_lock(&hash->mutex);
-    }
-
-    i = get_index_hash(hash, key);
-    result = i >= 0 ? hash->items[i].max_size : 0;
-    if (locking)
-        mutex_unlock(&hash->mutex);
-    return result;
-}
-
 // copy = 1 - do allocation and copy content
 // is_alloc = 1 - memory allocated
 int setItemSize(SHashItem *s, uint32_t max_size, int copy) {
@@ -234,14 +204,6 @@ int delItem(SHashTable *hash, uint32_t key) {
     s->len = 0;
     s->key = UNUSED_KEY;
     mutex_unlock(&hash->mutex);
-    return 0;
-}
-
-int delItemP(SHashTable *hash, void *p) {
-    int i;
-    for (i = 0; i < hash->size; i++)
-        if (HASH_ITEM_ENABLED(hash->items[i]) && hash->items[i].data == p)
-            delItem(hash, hash->items[i].key);
     return 0;
 }
 

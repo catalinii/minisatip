@@ -60,8 +60,6 @@
 
 char pn[256];
 
-SMutex utils_mutex;
-
 int split(char **rv, char *s, int lrv, char sep) {
     int i = 0, j = 0;
 

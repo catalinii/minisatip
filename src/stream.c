@@ -586,8 +586,6 @@ int64_t nsecs;
 int64_t c_tbw, c_bw, c_bw_dmx, c_buffered, c_tt, c_dropped, c_ns_read;
 uint32_t c_reads, c_writes, c_failed_writes;
 
-uint64_t last_sd;
-
 int enqueue_rtp_header(streams *sid, struct iovec *iov, int liov,
                        int iiov_rtp_header, char *rtp_buf) {
     int i, total_len = 0, len = 0;

@@ -61,7 +61,6 @@ typedef struct struct_batch // same as struct dvbcsa_bs_batch_s
 
 typedef void (*Create_CW)(void *);
 typedef void (*Delete_CW)(void *);
-typedef int (*Batch_size)(void);
 typedef void (*Set_CW)(void *cw, void *pmt);
 typedef void (*Decrypt_Stream)(void *cw, SPMT_batch *batch, int len);
 
@@ -206,7 +205,6 @@ int pmt_init();
 int pmt_destroy();
 void start_pmt(SPMT *pmt, adapter *ad);
 int pmt_init_device(adapter *ad);
-int tables_tune(adapter *ad);
 void delete_pmt_for_adapter(int aid);
 int pmt_tune(adapter *ad);
 int get_active_filters_for_pid(int master_filter, int aid, int pid, int flags);
@@ -218,11 +216,9 @@ int set_filter_mask(int id, uint8_t *filter, uint8_t *mask);
 int set_filter_flags(int id, int flags);
 int get_pid_filter(int aid, int pid);
 int get_filter_pid(int filter);
-int get_filter_adapter(int filter);
 int assemble_packet(SFilter *f, uint8_t *b);
 int clean_psi_buffer(uint8_t *pmt, uint8_t *clean, int clean_size);
 void disable_cw(int master_pmt);
-void expire_cw_for_pmt(int master_pmt, int parity, int64_t min_expiry);
 int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
                   int added_only);
 int pmt_add(int i, int adapter, int sid, int pmt_pid);
