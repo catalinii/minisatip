@@ -20,7 +20,6 @@
 #include "hash_table.h"
 #include "utils/logging/logging.h"
 #include "utils.h"
-#include "opts.h"
 
 #include <stdlib.h>
 #include <string.h>

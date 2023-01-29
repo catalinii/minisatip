@@ -5,40 +5,32 @@ alternative source
 
  */
 
-#include <arpa/inet.h>
-#include <ctype.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <math.h>
-#include <net/if.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/ioctl.h>
-#include <sys/socket.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <time.h>
-#include <unistd.h>
-
 #include "adapter.h"
 #include "ca.h"
-#include "dvb.h"
-#include "dvbapi.h"
 #include "minisatip.h"
 #include "poll.h"
 #include "search.h"
 #include "socketworks.h"
 #include "tables.h"
 #include <linux/dvb/ca.h>
-
 #include "api/symbols.h"
 #include "api/variables.h"
 #include "utils.h"
 #include "utils/ticks.h"
+
+#include <ctype.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/ioctl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <time.h>
+#include <unistd.h>
 
 #define DEFAULT_LOG LOG_DVBCA
 

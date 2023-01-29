@@ -17,25 +17,6 @@
  * USA
  *
  */
-#include <arpa/inet.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <getopt.h>
-#include <net/if.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <poll.h>
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/ioctl.h>
-#include <sys/socket.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <time.h>
-#include <unistd.h>
-
 #include "adapter.h"
 #include "api/symbols.h"
 #include "api/variables.h"
@@ -44,8 +25,15 @@
 #include "pmt.h"
 #include "socketworks.h"
 #include "stream.h"
-#include "t2mi.h"
 #include "utils/ticks.h"
+
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <time.h>
 
 #define DEFAULT_LOG LOG_STREAM
 

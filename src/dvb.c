@@ -25,21 +25,12 @@
 #include "utils.h"
 #include "utils/ticks.h"
 
-#include <arpa/inet.h>
-#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <math.h>
-#include <net/if.h>
-#include <netdb.h>
-#include <netinet/in.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/ioctl.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <time.h>
 #include <unistd.h>
 
 #define DEFAULT_LOG LOG_DVB

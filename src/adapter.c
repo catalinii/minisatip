@@ -18,20 +18,8 @@
  *
  */
 
-#include <fcntl.h>
-#include <poll.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/types.h>
-#include <time.h>
-#include <unistd.h>
-//#include <linux/ioctl.h>
-#include <sys/ioctl.h>
-
 #include "adapter.h"
 #include "dvb.h"
-#include "dvbapi.h"
 #include "pmt.h"
 #include "socketworks.h"
 #include "stream.h"
@@ -39,6 +27,11 @@
 #include "api/symbols.h"
 #include "api/variables.h"
 #include "utils/ticks.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #ifndef DISABLE_SATIPCLIENT
 #include "satipc.h"
@@ -55,8 +48,6 @@
 #ifndef DISABLE_DDCI
 #include "ddci.h"
 #endif
-
-#include "t2mi.h"
 
 #define DEFAULT_LOG LOG_ADAPTER
 

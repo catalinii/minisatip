@@ -22,8 +22,6 @@
 #include "api/variables.h"
 #include "api/symbols.h"
 #include "utils.h"
-#include "utils/logging/logging.h"
-#include "utils/mutex.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>

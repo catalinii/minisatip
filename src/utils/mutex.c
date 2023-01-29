@@ -20,7 +20,6 @@
 #include "utils/mutex.h"
 #include "utils/logging/logging.h"
 #include "utils/ticks.h"
-#include "opts.h"
 #include <string.h>
 
 #undef DEFAULT_LOG

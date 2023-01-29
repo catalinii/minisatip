@@ -18,8 +18,6 @@
  *
  */
 #include "utils/logging/logging.h"
-#include "opts.h"
-#include "utils.h"
 
 #include <pthread.h>
 #include <stdarg.h>

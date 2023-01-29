@@ -22,7 +22,6 @@
 #include "adapter.h"
 #include "api/symbols.h"
 #include "api/variables.h"
-#include "dvb.h"
 #include "minisatip.h"
 #include "pmt.h"
 #include "socketworks.h"
@@ -30,23 +29,11 @@
 #include "utils.h"
 #include "utils/ticks.h"
 
-#include <arpa/inet.h>
-#include <ctype.h>
 #include <errno.h>
-#include <fcntl.h>
-#include <math.h>
-#include <net/if.h>
-#include <netdb.h>
-#include <netinet/in.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/ioctl.h>
-#include <sys/socket.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <time.h>
 #include <unistd.h>
 
 #define DEFAULT_LOG LOG_DVBAPI

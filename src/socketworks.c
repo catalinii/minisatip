@@ -18,15 +18,18 @@
  *
  */
 #define _GNU_SOURCE
+
+#include "socketworks.h"
+#include "utils.h"
+#include "utils/ticks.h"
+
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <getopt.h>
 #include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <poll.h>
-#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,14 +38,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/un.h>
-#include <time.h>
 #include <unistd.h>
-
-#include "minisatip.h"
-#include "socketworks.h"
-#include "t2mi.h"
-#include "utils.h"
-#include "utils/ticks.h"
 
 #define DEFAULT_LOG LOG_SOCKETWORKS
 
