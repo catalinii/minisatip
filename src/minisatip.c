@@ -136,6 +136,7 @@ int rtsp, http, si, si1, ssdp1;
 // Options that don't have a short option available
 #define LONG_OPT_ONLY_START 1024
 #define VERSION_OPT (LONG_OPT_ONLY_START + 1)
+#define SENDALLECM_OPT (LONG_OPT_ONLY_START + 2)
 #define SATIPC_RECV_BUFFER_OPT (LONG_OPT_ONLY_START + 3)
 #define CLIENT_SEND_BUFFER_OPT (LONG_OPT_ONLY_START + 4)
 
@@ -148,6 +149,7 @@ static const struct option long_options[] = {
     {"bind-dev", required_argument, NULL, BIND_DEV_OPT},
     {"cache-dir", required_argument, NULL, CACHE_DIR_OPT},
     {"clean-psi", no_argument, NULL, CLEANPSI_OPT},
+    {"send-all-ecm", no_argument, NULL, SENDALLECM_OPT},
     {"client-send-buffer", required_argument, NULL, CLIENT_SEND_BUFFER_OPT},
     {"delsys", required_argument, NULL, DELSYS_OPT},
     {"debug", required_argument, NULL, DEBUG_OPT},
@@ -449,6 +451,7 @@ Help\n\
 	192.168.9.9 is the host where oscam is running and 9000 is the port configured in dvbapi section in oscam.conf.\n\
 	* eg: -o /tmp/camd.socket \n\
 	/tmp/camd.socket is the local socket that can be used \n\
+* --send-all-ecm Pass all received ECM to the DVBAPI server. Warning: This option may overload your server. Use with caution. Not necessary for regular use.\n\
 \n\
 "
 #endif
@@ -485,7 +488,7 @@ Help\n\
 	address 192.168.1.100 needs to be assigned to an interface on the server running minisatip.\n\
 	This feature is useful for AVM FRITZ!WLAN Repeater\n\
 	\n\
-*  --satip-xml <URL> Use the xml retrieved from a satip server to configure satip adapters \n\
+* -6 --satip-xml <URL> Use the xml retrieved from a satip server to configure satip adapters \n\
 	eg: --satip-xml http://localhost:8080/desc.xml \n\
 \n\
 * -O --satip-tcp Use RTSP over TCP instead of UDP for data transport \n\
@@ -877,6 +880,11 @@ void set_options(int argc, char *argv[]) {
 
         case CLEANPSI_OPT: {
             opts.clean_psi = 1;
+            break;
+        }
+
+        case SENDALLECM_OPT: {
+            opts.send_all_ecm = 1;
             break;
         }
 
