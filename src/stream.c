@@ -1318,6 +1318,25 @@ int get_stream_rport(int s_id) {
     return get_sockaddr_port(sid->sa);
 }
 
+char *get_stream_protocol(int s_id, char *dest, int max_size) {
+    int len = 0;
+    streams *s = get_sid_nw(s_id);
+    dest[0] = 0;
+
+    if (!s)
+        return dest;
+
+    if (s->type == STREAM_HTTP)
+        strlcatf(dest, max_size, len, "HTTP");
+    else if (s->type == STREAM_RTSP_UDP)
+        strlcatf(dest, max_size, len, "RTP/UDP");
+    else if (s->type == STREAM_RTSP_TCP)
+        strlcatf(dest, max_size, len, "RTP/TCP");
+    else
+        strlcatf(dest, max_size, len, "unkown");  // RTP/MCAST ?
+    return dest;
+}
+
 char *get_stream_pids(int s_id, char *dest, int max_size) {
     int len = 0;
     int i, j;
@@ -1380,6 +1399,8 @@ _symbols stream_sym[] = {
     {"st_rhost", VAR_FUNCTION_STRING, (void *)&get_stream_rhost, 0, MAX_STREAMS,
      0},
     {"st_rport", VAR_FUNCTION_INT, (void *)&get_stream_rport, 0, MAX_STREAMS,
+     0},
+    {"st_proto", VAR_FUNCTION_STRING, (void *)&get_stream_protocol, 0, MAX_STREAMS,
      0},
     {"st_pids", VAR_FUNCTION_STRING, (void *)&get_stream_pids, 0, MAX_STREAMS,
      0},

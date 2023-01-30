@@ -2368,6 +2368,26 @@ char *get_channel_for_adapter(int aid, char *dest, int max_size) {
     return dest;
 }
 
+char *get_pmt_for_adapter(int aid, char *dest, int max_size) {
+    int i, pos = 0;
+    adapter *ad;
+    dest[0] = 0;
+    ad = get_adapter_nw(aid);
+    if (!ad)
+        return dest;
+
+    for (i = 0; i < ad->active_pmts; i++) {
+        int p = ad->active_pmt[i];
+        SPMT *pmt = get_pmt(p);
+        if (pmt && pmt->state == PMT_RUNNING)
+            strlcatf(dest, max_size, pos, "%d,", pmt->pid);
+    }
+
+    if (pos > 0)
+        dest[pos - 1] = 0;
+    return dest;
+}
+
 void free_all_pmts(void) {
     int i;
     for (i = 0; i < MAX_PMT; i++) {
@@ -2411,7 +2431,9 @@ int pmt_destroy() {
     return 0;
 }
 
-_symbols pmt_sym[] = {{"ad_channel", VAR_FUNCTION_STRING,
-                       (void *)&get_channel_for_adapter, 0, MAX_ADAPTERS, 0},
-
-                      {NULL, 0, NULL, 0, 0, 0}};
+_symbols pmt_sym[] = {
+    {"ad_channel", VAR_FUNCTION_STRING, (void *)&get_channel_for_adapter, 0,
+     MAX_ADAPTERS, 0},
+    {"ad_pmt", VAR_FUNCTION_STRING, (void *)&get_pmt_for_adapter, 0, MAX_STREAMS,
+     0},
+    {NULL, 0, NULL, 0, 0, 0}};
