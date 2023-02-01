@@ -486,8 +486,10 @@
 					}
 
 					var ber = state['ad_ber'][i];
+					var berpre = oldstate['ad_ber'][i];
+					berpre = (ber - berpre < 0) ? ber : ber - berpre;
 					if (ber > 0)
-						signal += "<div class='level'>BER <progress class='pber progress-1' value='" + ber + "' max='1000' />" + ber + "</div><br />";
+						signal += "<div class='level'>BER <progress class='pber progress-1' value='" + berpre + "' max='100' />" + ber + "</div><br />";
 					var ccerr = state['ad_ccerr'][i];
 					var ccerrpre = oldstate['ad_ccerr'][i];
 					ccerrpre = (ccerr - ccerrpre < 0) ? ccerr : ccerr - ccerrpre;
