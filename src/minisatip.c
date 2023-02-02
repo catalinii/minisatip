@@ -637,6 +637,10 @@ void set_options(int argc, char *argv[]) {
     int is_log = 0;
     char *lip;
     memset(&opts, 0, sizeof(opts));
+    if (access("/etc/enigma2/settings", F_OK) == 0) {
+        opts.enigma = 1;
+    }
+
     opts.command_line = get_command_line_string(argc, argv);
     opts.log = 1;
     opts.debug = 0;
@@ -684,10 +688,11 @@ void set_options(int argc, char *argv[]) {
     opts.strength_multiplier = 1;
     opts.snr_multiplier = 1;
 
-    // set 1 to read TS packets from /dev/dvb/adapterX/demuxY instead of
-    // /dev/dvb/adapterX/dvrY set to 2 to set PSI and PES filters using
-    // different ioctl
-    opts.use_demux_device = 0;
+    opts.use_demux_device = USE_DVR;
+    if (opts.enigma) {
+        opts.use_demux_device = USE_PES_FILTERS_AND_DEMUX;
+        opts.emulate_pids_all = 1;
+    }
     opts.max_pids = 0;
     opts.dvbapi_offset =
         0; // offset for multiple dvbapi clients to the same server
@@ -1062,7 +1067,7 @@ void set_options(int argc, char *argv[]) {
             int val = atoi(optarg);
             opts.satipc_buffer = val * 1024;
             break;
-	}
+        }
 #endif
         case NETCVCLIENT_OPT: {
 #ifdef DISABLE_NETCVCLIENT
@@ -1159,14 +1164,6 @@ void set_options(int argc, char *argv[]) {
 
 #endif
         }
-    }
-    if (access("/etc/enigma2/settings", F_OK) == 0) {
-        opts.enigma = 1;
-    }
-
-    if (opts.enigma) {
-        opts.use_demux_device = 2;
-        opts.emulate_pids_all = 1;
     }
 
     lip = getlocalip();
@@ -2059,11 +2056,14 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr) {
     else
         proto = "RTSP";
 
-    // Check if the request is a "reGET" (successive non-standard HTTP request while streaming)
-    // Used when one HTTP client wants to change pids with a new GET request. This doesn't interrupts the streaming.
+    // Check if the request is a "reGET" (successive non-standard HTTP request
+    // while streaming) Used when one HTTP client wants to change pids with a
+    // new GET request. This doesn't interrupts the streaming.
     if (s->type == TYPE_HTTP && s->iteration > 1 && rc == 200) {
-        LOG("Reply hidden because another GET while streaming (handle %d) [%s:%d] iteration:%d, sock %d", s->sock,
-            get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa), s->iteration, s->id);
+        LOG("Reply hidden because another GET while streaming (handle %d) "
+            "[%s:%d] iteration:%d, sock %d",
+            s->sock, get_sockaddr_host(s->sa, ra, sizeof(ra)),
+            get_sockaddr_port(s->sa), s->iteration, s->id);
         return;
     }
 

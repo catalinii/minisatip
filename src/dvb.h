@@ -9,7 +9,7 @@
 #endif
 
 #ifdef DISABLE_LINUXDVB
-//#include <linux/types.h>
+// #include <linux/types.h>
 #include <stdint.h>
 #include <time.h>
 #define DVBAPIVERSION 0x0500
@@ -157,88 +157,88 @@ typedef enum fe_pls_mode {
 
 // dB scale * 10 for Integer conversion
 typedef enum dvb_snr_table {
-    DVB_C__QAM_64___FEC_NONE =  300 ,
-    DVB_C__QAM_256__FEC_NONE =  340 ,
-    DVB_C__OTHER             =  360 ,
+    DVB_C__QAM_64___FEC_NONE = 300,
+    DVB_C__QAM_256__FEC_NONE = 340,
+    DVB_C__OTHER = 360,
 
-    DVB_S__QPSK__FEC_1_2     =   70 ,
-    DVB_S__QPSK__FEC_2_3     =   90 ,
-    DVB_S__QPSK__FEC_3_4     =  100 ,
-    DVB_S__QPSK__FEC_5_6     =  110 ,
-    DVB_S__QPSK__FEC_7_8     =  120 ,
-    DVB_S__OTHER             =  130 ,  /* Calculated */
+    DVB_S__QPSK__FEC_1_2 = 70,
+    DVB_S__QPSK__FEC_2_3 = 90,
+    DVB_S__QPSK__FEC_3_4 = 100,
+    DVB_S__QPSK__FEC_5_6 = 110,
+    DVB_S__QPSK__FEC_7_8 = 120,
+    DVB_S__OTHER = 130, /* Calculated */
 
-    DVB_S2_QPSK__FEC_1_2     =   90 ,
-    DVB_S2_QPSK__FEC_2_3     =  110 ,
-    DVB_S2_QPSK__FEC_3_4     =  120 ,
-    DVB_S2_QPSK__FEC_4_5     =  130 ,  /* Calculated */
-    DVB_S2_QPSK__FEC_5_6     =  120 ,
-    DVB_S2_QPSK__FEC_8_9     =  130 ,
-    DVB_S2_QPSK__FEC_9_10    =  135 ,
-    DVB_S2_OTHER             =  130 ,  /* Calculated */
+    DVB_S2_QPSK__FEC_1_2 = 90,
+    DVB_S2_QPSK__FEC_2_3 = 110,
+    DVB_S2_QPSK__FEC_3_4 = 120,
+    DVB_S2_QPSK__FEC_4_5 = 130, /* Calculated */
+    DVB_S2_QPSK__FEC_5_6 = 120,
+    DVB_S2_QPSK__FEC_8_9 = 130,
+    DVB_S2_QPSK__FEC_9_10 = 135,
+    DVB_S2_OTHER = 130, /* Calculated */
 
-    DVB_S2_PSK_8_FEC_1_2     =  128 ,  /* Calculated */
-    DVB_S2_PSK_8_FEC_2_3     =  145 ,
-    DVB_S2_PSK_8_FEC_3_4     =  160 ,
-    DVB_S2_PSK_8_FEC_4_5     =  180 ,  /* Deduced */
-    DVB_S2_PSK_8_FEC_5_6     =  175 ,
-    DVB_S2_PSK_8_FEC_8_9     =  190 ,
-    DVB_S2_PSK_8_FEC_9_10    =  200 ,  /* Deduced */
-    DVB_S2_PSK_8_OTHER       =  180 ,  /* Deduced */
+    DVB_S2_PSK_8_FEC_1_2 = 128, /* Calculated */
+    DVB_S2_PSK_8_FEC_2_3 = 145,
+    DVB_S2_PSK_8_FEC_3_4 = 160,
+    DVB_S2_PSK_8_FEC_4_5 = 180, /* Deduced */
+    DVB_S2_PSK_8_FEC_5_6 = 175,
+    DVB_S2_PSK_8_FEC_8_9 = 190,
+    DVB_S2_PSK_8_FEC_9_10 = 200, /* Deduced */
+    DVB_S2_PSK_8_OTHER = 180,    /* Deduced */
 
-    DVB_T__QPSK__FEC_1_2     =   41 ,
-    DVB_T__QPSK__FEC_2_3     =   61 ,
-    DVB_T__QPSK__FEC_3_4     =   72 ,
-    DVB_T__QPSK__FEC_5_6     =   85 ,
-    DVB_T__QPSK__FEC_7_8     =   92 ,
-    DVB_T__QPSK_OTHER        =  110 ,
+    DVB_T__QPSK__FEC_1_2 = 41,
+    DVB_T__QPSK__FEC_2_3 = 61,
+    DVB_T__QPSK__FEC_3_4 = 72,
+    DVB_T__QPSK__FEC_5_6 = 85,
+    DVB_T__QPSK__FEC_7_8 = 92,
+    DVB_T__QPSK_OTHER = 110,
 
-    DVB_T__QAM16_FEC_1_2     =   98 ,
-    DVB_T__QAM16_FEC_2_3     =  121 ,
-    DVB_T__QAM16_FEC_3_4     =  134 ,
-    DVB_T__QAM16_FEC_5_6     =  148 ,
-    DVB_T__QAM16_FEC_7_8     =  157 ,
-    DVB_T__QAM16_OTHER       =  180 ,
+    DVB_T__QAM16_FEC_1_2 = 98,
+    DVB_T__QAM16_FEC_2_3 = 121,
+    DVB_T__QAM16_FEC_3_4 = 134,
+    DVB_T__QAM16_FEC_5_6 = 148,
+    DVB_T__QAM16_FEC_7_8 = 157,
+    DVB_T__QAM16_OTHER = 180,
 
-    DVB_T__QAM64_FEC_1_2     =  140 ,
-    DVB_T__QAM64_FEC_2_3     =  199 ,
-    DVB_T__QAM64_FEC_3_4     =  249 ,
-    DVB_T__QAM64_FEC_5_6     =  213 ,
-    DVB_T__QAM64_FEC_7_8     =  220 ,
-    DVB_T__QAM64_OTHER       =  250 ,
+    DVB_T__QAM64_FEC_1_2 = 140,
+    DVB_T__QAM64_FEC_2_3 = 199,
+    DVB_T__QAM64_FEC_3_4 = 249,
+    DVB_T__QAM64_FEC_5_6 = 213,
+    DVB_T__QAM64_FEC_7_8 = 220,
+    DVB_T__QAM64_OTHER = 250,
 
     /* Table 2.12 - Memoryless Rayleigh channel K=0 - EBU Tech 3348 */
-    DVB_T2_QPSK__FEC_1_2     =   28 ,
-    DVB_T2_QPSK__FEC_3_5     =   47 ,
-    DVB_T2_QPSK__FEC_2_3     =   59 ,
-    DVB_T2_QPSK__FEC_3_4     =   76 ,
-    DVB_T2_QPSK__FEC_4_5     =   89 ,
-    DVB_T2_QPSK__FEC_5_6     =   98 ,
-    DVB_T2_QPSK_OTHER        =  110 ,
+    DVB_T2_QPSK__FEC_1_2 = 28,
+    DVB_T2_QPSK__FEC_3_5 = 47,
+    DVB_T2_QPSK__FEC_2_3 = 59,
+    DVB_T2_QPSK__FEC_3_4 = 76,
+    DVB_T2_QPSK__FEC_4_5 = 89,
+    DVB_T2_QPSK__FEC_5_6 = 98,
+    DVB_T2_QPSK_OTHER = 110,
 
-    DVB_T2_QAM16_FEC_1_2     =   81 ,
-    DVB_T2_QAM16_FEC_3_5     =  101 ,
-    DVB_T2_QAM16_FEC_2_3     =  115 ,
-    DVB_T2_QAM16_FEC_3_4     =  133 ,
-    DVB_T2_QAM16_FEC_4_5     =  147 ,
-    DVB_T2_QAM16_FEC_5_6     =  156 ,
-    DVB_T2_QAM16_OTHER       =  180 ,
+    DVB_T2_QAM16_FEC_1_2 = 81,
+    DVB_T2_QAM16_FEC_3_5 = 101,
+    DVB_T2_QAM16_FEC_2_3 = 115,
+    DVB_T2_QAM16_FEC_3_4 = 133,
+    DVB_T2_QAM16_FEC_4_5 = 147,
+    DVB_T2_QAM16_FEC_5_6 = 156,
+    DVB_T2_QAM16_OTHER = 180,
 
-    DVB_T2_QAM64_FEC_1_2     =  126 ,
-    DVB_T2_QAM64_FEC_3_5     =  147 ,
-    DVB_T2_QAM64_FEC_2_3     =  162 ,
-    DVB_T2_QAM64_FEC_3_4     =  182 ,
-    DVB_T2_QAM64_FEC_4_5     =  197 ,
-    DVB_T2_QAM64_FEC_5_6     =  207 ,
-    DVB_T2_QAM64_OTHER       =  230 ,
+    DVB_T2_QAM64_FEC_1_2 = 126,
+    DVB_T2_QAM64_FEC_3_5 = 147,
+    DVB_T2_QAM64_FEC_2_3 = 162,
+    DVB_T2_QAM64_FEC_3_4 = 182,
+    DVB_T2_QAM64_FEC_4_5 = 197,
+    DVB_T2_QAM64_FEC_5_6 = 207,
+    DVB_T2_QAM64_OTHER = 230,
 
-    DVB_T2_QAM256_FEC_1_2    =  165 ,
-    DVB_T2_QAM256_FEC_3_5    =  190 ,
-    DVB_T2_QAM256_FEC_2_3    =  206 ,
-    DVB_T2_QAM256_FEC_3_4    =  229 ,
-    DVB_T2_QAM256_FEC_4_5    =  246 ,
-    DVB_T2_QAM256_FEC_5_6    =  256 ,
-    DVB_T2_QAM256_OTHER      =  280 ,
+    DVB_T2_QAM256_FEC_1_2 = 165,
+    DVB_T2_QAM256_FEC_3_5 = 190,
+    DVB_T2_QAM256_FEC_2_3 = 206,
+    DVB_T2_QAM256_FEC_3_4 = 229,
+    DVB_T2_QAM256_FEC_4_5 = 246,
+    DVB_T2_QAM256_FEC_5_6 = 256,
+    DVB_T2_QAM256_OTHER = 280,
 } dvb_snr_table_t;
 
 #if DVBAPIVERSION < 0x0505
@@ -268,10 +268,14 @@ typedef enum dvb_snr_table {
 #define MAX_STREAMS_PER_PID 16
 #endif
 
-#define USE_DVR 0
-#define USE_DEMUX 1
-#define USE_PES_FILTERS_AND_DVR 2
-#define USE_PES_FILTERS_AND_DEMUX 3
+#define USE_DVR 0   // Always use DVR device for the stream
+#define USE_DEMUX 1 // Always use the DEMUX device for the stream
+#define USE_PES_FILTERS_AND_DVR                                                \
+    2 // Use PES filters for PSI pids (0-32 + pmts) and DVR DEVICE for
+      // video/audio data
+#define USE_PES_FILTERS_AND_DEMUX                                              \
+    3 // Use PES filters for PSI pids (0-32 + pmts) and DEMUX DEVICE for
+      // video/audio data - this is how enigma2 get TS data
 
 #define MIN_FRQ_DVBT 174000
 #define MAX_FRQ_DVBT 858000
@@ -351,7 +355,7 @@ typedef struct struct_pid {
                  // tune is called, 3 disable when tune is called
     int packets; // how many packets for this pid arrived, used to sort the pids
     int dec_err; // decrypt errors, continuity counters
-    uint8_t is_decrypted;  // Set when first decrypted
+    uint8_t is_decrypted; // Set when first decrypted
     int16_t pmt, filter;
     char cc, cc1;
     int sock; // sock_id
