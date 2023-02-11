@@ -16,7 +16,7 @@ AXE=@AXE@
 DDCI=0
 T2MI=0
 
-CFLAGS?=-Wall -Wno-switch -ggdb -fPIC -fno-common
+CFLAGS?=-Wall -Wno-switch -ggdb -fPIC -fno-common -Warray-bounds -O2
 CFLAGS += -I../src
 CFLAGS += $(EXTRA_CFLAGS) @CFLAGS@
 LDFLAGS += @LDFLAGS@ -lpthread
@@ -131,7 +131,7 @@ SOURCES-$(AXE) += axe.c
 CFLAGS-$(AXE) += -DAXE
 
 CFLAGS-$(EMBEDDED) += -DNO_BACKTRACE
-CFLAGS-$(DEBUG) += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=undefined -static-libasan -static-libubsan -static-liblsan
+CFLAGS-$(DEBUG) += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=undefined -static-libasan -static-libubsan -static-liblsan -fstack-protector-all
 
 
 ifeq ($(STATIC),1)

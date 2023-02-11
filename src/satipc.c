@@ -275,8 +275,7 @@ int satipc_reply(sockets *s) {
     if (!ad->err && sid && sess) {
         if ((es = strchr(sess, ';')))
             *es = 0;
-        strncpy(sip->session, sess, sizeof(sip->session));
-        sip->session[sizeof(sip->session) - 1] = 0;
+        safe_strncpy(sip->session, sess);
         LOG("satipc: session set for adapter %d to %s", ad->id, sip->session);
 
         if (sid && sip->stream_id == -1)
@@ -1456,8 +1455,7 @@ int satipc_commit(adapter *ad) {
             strcatf(url, len, "&");
         strcatf(url, len, "pids=");
         //		get_adapter_pids(ad->id, url + len, sizeof(url) - len);
-        strncpy(url + len, tmp_url, sizeof(url) - len);
-        url[sizeof(url) - 1] = 0;
+        _strncpy(url + len, tmp_url, sizeof(url) - len);
         sip->lap = 0;
         sip->ldp = 0;
         sip->force_commit = 0;
@@ -1577,16 +1575,14 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
     for (k = 0; k < 10; k++)
         ad->sys[k] = 0;
 
-    memset(sip->sip, 0, sizeof(sip->sip));
     ad->sys[0] = ad->tp.sys = delsys;
-    strncpy(sip->sip, host, sizeof(sip->sip) - 1);
+    safe_strncpy(sip->sip, host);
     sip->satip_fe = fe;
     sip->static_config = 1;
     sip->sport = port;
     sip->source_ip[0] = 0;
     if (source_ip) {
-        memset(sip->source_ip, 0, sizeof(sip->source_ip));
-        strncpy(sip->source_ip, source_ip, sizeof(sip->source_ip) - 1);
+        safe_strncpy(sip->source_ip, source_ip);
     }
 
     if (ad->sys[0] == SYS_DVBS2)
@@ -1632,7 +1628,7 @@ void find_satip_adapter(adapter **a) {
     if (!opts.satip_servers || !opts.satip_servers[0])
         return;
     char satip_servers[strlen(opts.satip_servers) + 10];
-    strcpy(satip_servers, opts.satip_servers);
+    safe_strncpy(satip_servers, opts.satip_servers);
     la = split(arg, satip_servers, ARRAY_SIZE(arg), ',');
 
     for (i = 0; i < la; i++) {
@@ -1675,9 +1671,8 @@ void find_satip_adapter(adapter **a) {
             sep = "dvbs2";
         if (!sep2)
             sep2 = "554";
-        memset(host, 0, sizeof(host));
         delsys = map_int(sep, fe_delsys);
-        strncpy(host, sep1, sizeof(host) - 1);
+        safe_strncpy(host, sep1);
         fe = -1;
         source_ip[0] = 0;
         char *pos_at = strchr(host, '@');
@@ -1687,8 +1682,7 @@ void find_satip_adapter(adapter **a) {
         }
         if (strchr(host, '/')) {
             char *end = strchr(host, '/');
-            memset(source_ip, 0, sizeof(source_ip));
-            strncpy(source_ip, host, end - host);
+            _strncpy(source_ip, host, end - host);
             memmove(host, end + 1, sizeof(host) - 1);
         }
         port = map_int(sep2, NULL);
@@ -1741,8 +1735,7 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h) {
         char order[MAX_DVBAPI_SYSTEMS];
         int i_order = 0;
         int i, j, la;
-        memset(s->host, 0, sizeof(s->host));
-        strncpy(s->host, h->host, sizeof(s->host) - 1);
+        safe_strncpy(s->host, h->host);
         s->port = 554;
         sep = strstr(s->xml, "X-SATIP-RTSP-Port:");
         if (sep) {
@@ -1799,7 +1792,7 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h) {
         LOG("too much data from the satip server for URL %s", s->url);
         return;
     }
-    strncpy(s->xml + strlen(s->xml), data, len);
+    _strncpy(s->xml + strlen(s->xml), data, len);
     DEBUGM("%s: %s", __FUNCTION__, s->xml);
 }
 
@@ -1809,12 +1802,11 @@ int satip_getxml(void *x) {
     char satip_xml[1000];
     if (!opts.satip_xml)
         return 1;
-    memset(satip_xml, 0, sizeof(satip_xml));
     memset(sxd, 0, sizeof(sxd));
-    strncpy(satip_xml, opts.satip_xml, sizeof(satip_xml) - 1);
+    safe_strncpy(satip_xml, opts.satip_xml);
     la = split(arg, satip_xml, ARRAY_SIZE(arg), ',');
     for (i = 0; i < la; i++) {
-        SAFE_STRCPY(sxd[i].url, arg[i]);
+        safe_strncpy(sxd[i].url, arg[i]);
         http_client(sxd[i].url, "", satip_getxml_data, &sxd[i]);
     }
     return 0;

@@ -194,7 +194,7 @@ void set_signal_handler(char *argv0) {
     sigemptyset(&sig_action.sa_mask);
 
     memset(pn, 0, sizeof(pn));
-    strncpy(pn, argv0, sizeof(pn) - 1);
+    safe_strncpy(pn, argv0);
 
     sig_action.sa_flags = SA_SIGINFO | SA_ONSTACK;
 
@@ -283,7 +283,7 @@ void posix_signal_handler(int sig, siginfo_t *siginfo, ucontext_t *ctx) {
 
 int /* Returns 0 on success, -1 on error */
 becomeDaemon() {
-    int maxfd, fd, fdi, fdo, pid;
+    int maxfd, fd, fdi, fdo, pid = -1;
     __attribute__((unused)) int rv;
     struct stat sb;
     FILE *f;
@@ -295,8 +295,8 @@ becomeDaemon() {
     if ((f = fopen(pid_file, "rt"))) {
         char tmp_buf[10];
         memset(tmp_buf, 0, sizeof(tmp_buf));
-        fgets(tmp_buf, sizeof(tmp_buf) - 1, f);
-        pid = atoi(tmp_buf);
+        if (fgets(tmp_buf, sizeof(tmp_buf), f))
+            pid = atoi(tmp_buf);
         fclose(f);
         snprintf(buf, sizeof(buf) - 1, "/proc/%d/exe", pid);
 
@@ -347,7 +347,7 @@ becomeDaemon() {
     fdi = open("/dev/null", O_RDWR);
     memset(buf, 0, sizeof(buf));
     snprintf(buf, sizeof(buf) - 1, "%s", opts.log_file);
-    SAFE_STRCPY(log_file, buf);
+    safe_strncpy(log_file, buf);
     if (fdi != STDIN_FILENO) /* 'fdi' should be 0 */
     {
         if (fdi >= 0)
@@ -853,6 +853,14 @@ int get_random(unsigned char *dest, int len) {
     close(fd);
 
     return len;
+}
+
+void _strncpy(char *a, char *b, int n) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-truncation"
+    strncpy(a, b, n);
+    a[n - 1] = 0;
+#pragma GCC diagnostic pop
 }
 
 /*
