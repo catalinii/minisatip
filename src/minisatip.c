@@ -722,8 +722,7 @@ void set_options(int argc, char *argv[]) {
             break;
         }
         case MAC_OPT: {
-            strncpy(opts.mac, optarg, 12);
-            opts.mac[12] = 0;
+            safe_strncpy(opts.mac, optarg);
             break;
         }
         case RRTP_OPT: {
@@ -778,7 +777,7 @@ void set_options(int argc, char *argv[]) {
             char *arg[50];
             int i;
             memset(buf, 0, sizeof(buf));
-            strncpy(buf, optarg, sizeof(buf) - 1);
+            safe_strncpy(buf, optarg);
             int la = split(arg, buf, ARRAY_SIZE(arg), ',');
             for (i = 0; i < la; i++) {
                 int level = check_strs(arg[i], loglevels, -1);
@@ -986,7 +985,7 @@ void set_options(int argc, char *argv[]) {
             }
             char buf[100];
             memset(buf, 0, sizeof(buf));
-            strncpy(buf, optarg, sizeof(buf) - 1);
+            safe_strncpy(buf, optarg);
             if (buf[0] == '~') {
                 opts.pids_all_no_dec = 1;
                 memmove(&buf[0], &buf[1], sizeof(buf) - 1);
@@ -995,15 +994,15 @@ void set_options(int argc, char *argv[]) {
             if (sep2 != NULL) {
                 *sep2 = 0;
                 opts.dvbapi_offset = map_int(sep2 + 1, NULL);
-                strncpy(buf, optarg, sizeof(optarg) - 1 - strlen(sep2));
+                _strncpy(buf, optarg, sizeof(optarg) - 1 - strlen(sep2));
             }
             char *sep1 = strchr(buf, ':');
             if (sep1 != NULL) {
                 *sep1 = 0;
-                strncpy(opts.dvbapi_host, buf, sizeof(opts.dvbapi_host) - 1);
+                safe_strncpy(opts.dvbapi_host, buf);
                 opts.dvbapi_port = map_int(sep1 + 1, NULL);
             } else {
-                strncpy(opts.dvbapi_host, buf, sizeof(opts.dvbapi_host) - 1);
+                safe_strncpy(opts.dvbapi_host, buf);
                 opts.dvbapi_port = 9000;
             }
 #endif
@@ -1343,7 +1342,7 @@ int read_rtsp(sockets *s) {
         }
 
         if (useragent)
-            strncpy(sid->useragent, useragent, sizeof(sid->useragent) - 1);
+            safe_strncpy(sid->useragent, useragent);
 
         if ((strncasecmp(arg[0], "PLAY", 4) == 0) ||
             (strncasecmp(arg[0], "GET", 3) == 0))

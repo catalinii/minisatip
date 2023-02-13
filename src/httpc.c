@@ -114,7 +114,7 @@ int http_client(char *url, char *request, void *callback, void *opaque) {
     h = get_httpc(id);
     if (!h)
         LOG_AND_RETURN(1, "Could not add http client");
-    strncpy(h->host, url + 7, sizeof(h->host) - 1);
+    safe_strncpy(h->host, url + 7);
     h->port = 80;
     sep = strchr(h->host, ':');
     if (sep) {
@@ -143,7 +143,7 @@ int http_client(char *url, char *request, void *callback, void *opaque) {
     h->opaque = opaque;
     h->action = callback;
     set_sockets_sid(http_client_sock, id);
-    strncpy(h->req, req, sizeof(h->req) - 1);
+    safe_strncpy(h->req, req);
     sockets_timeout(http_client_sock, 2000); // 2s timeout
     LOGM("%s url %s using handle %d s_id %d", __FUNCTION__, url, sock,
          http_client_sock);

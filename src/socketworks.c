@@ -404,7 +404,7 @@ int connect_local_socket(char *file, int blocking) {
     }
     memset(&serv, 0, sizeof(serv));
     serv.sun_family = AF_LOCAL;
-    strncpy(serv.sun_path, file, sizeof(serv.sun_path) - 1);
+    safe_strncpy(serv.sun_path, file);
 
     set_linux_socket_timeout(sock);
 
@@ -688,7 +688,7 @@ void *select_and_execute(void *arg) {
 
     memset(thread_name, 0, sizeof(thread_name));
     if (arg) {
-        strncpy(thread_name, (char *)arg, sizeof(thread_name) - 1);
+        safe_strncpy(thread_name, (char *)arg);
     } else
         strcpy(thread_name, "main");
 
@@ -976,7 +976,7 @@ int get_mac_address(char *mac) {
 
     if (opts.mac[0]) {
         // simulate mac address
-        strncpy(mac, opts.mac, 13);
+        _strncpy(mac, opts.mac, 13);
         return 0;
     }
     int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
@@ -1019,7 +1019,7 @@ int get_mac_address(char *mac) {
 
     if (opts.mac[0]) {
         // simulate mac address
-        strncpy(mac, opts.mac, 13);
+        _strncpy(mac, opts.mac, 13);
         return 0;
     }
     memset(mac, 0, 3 * 6);

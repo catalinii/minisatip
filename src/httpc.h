@@ -2,8 +2,8 @@
 #define HTTPC_H
 #define _GNU_SOURCE
 
-#include "utils/mutex.h"
 #include "socketworks.h"
+#include "utils/mutex.h"
 
 #define MAX_HTTPC 100
 
@@ -17,7 +17,7 @@ typedef struct struct_http_client {
     int state;
     http_client_action action;
     void *opaque;
-    char host[200];
+    char host[64];
     char req[200];
     int port;
     int id;

@@ -46,6 +46,7 @@ void write_buf_to_file(char *file, uint8_t *buf, int len);
 void mkdir_recursive(const char *path);
 void sleep_msec(uint32_t msec);
 int get_random(unsigned char *dest, int len);
+void _strncpy(char *a, char *b, int len);
 
 #define dump_packets(message, b, len, packet_offset)                           \
     if (DEFAULT_LOG & opts.debug)                                              \
@@ -71,14 +72,7 @@ int get_random(unsigned char *dest, int len);
 #define strcatf(buf, ptr, fmt, ...)                                            \
     strlcatf(buf, sizeof(buf) - 1, ptr, fmt, ##__VA_ARGS__)
 
-#define SAFE_STRCPY(a, b)                                                      \
-    {                                                                          \
-        int x = sizeof(a);                                                     \
-        if (x < 10)                                                            \
-            LOG("sizeof %d is too small at %s:%d", x, __FILE__, __LINE__);     \
-        strncpy(a, b, x - 1);                                                  \
-        a[x - 1] = 0;                                                          \
-    }
+#define safe_strncpy(a, b) _strncpy(a, b, sizeof(a))
 
 typedef ssize_t (*mywritev)(int fd, const struct iovec *io, int len);
 

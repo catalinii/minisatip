@@ -786,7 +786,7 @@ void get_authdata_filename(char *dest, size_t len, unsigned int slot,
     char cin[128];
     /* add module name to slot authorization bin file */
     memset(cin, 0, sizeof(cin));
-    strncpy(cin, ci_name, sizeof(cin) - 1);
+    safe_strncpy(cin, ci_name);
     /* quickly replace blanks */
     int i = 0;
     while (cin[i] != 0) {
@@ -2922,7 +2922,7 @@ void set_ca_pin(int i, char *pin) {
     if (!ca_devices[i])
         return;
     memset(ca_devices[i]->pin_str, 0, sizeof(ca_devices[i]->pin_str));
-    strncpy(ca_devices[i]->pin_str, pin, sizeof(ca_devices[i]->pin_str) - 1);
+    safe_strncpy(ca_devices[i]->pin_str, pin);
 }
 
 void force_ci_adapter(int i) {
@@ -2935,8 +2935,8 @@ void force_ci_adapter(int i) {
 
 void set_ca_adapter_force_ci(char *o) {
     int i, j, la, st, end;
-    char buf[1000], *arg[40], *sep;
-    SAFE_STRCPY(buf, o);
+    char buf[strlen(o) + 1], *arg[40], *sep;
+    safe_strncpy(buf, o);
     la = split(arg, buf, ARRAY_SIZE(arg), ',');
     for (i = 0; i < la; i++) {
         sep = strchr(arg[i], '-');
@@ -2957,8 +2957,8 @@ void set_ca_adapter_force_ci(char *o) {
 
 void set_ca_adapter_pin(char *o) {
     int i, j, la, st, end;
-    char buf[1000], *arg[40], *sep, *seps;
-    SAFE_STRCPY(buf, o);
+    char buf[strlen(o) + 1], *arg[40], *sep, *seps;
+    safe_strncpy(buf, o);
     la = split(arg, buf, ARRAY_SIZE(arg), ',');
     for (i = 0; i < la; i++) {
         sep = strchr(arg[i], '-');
@@ -2982,8 +2982,8 @@ void set_ca_adapter_pin(char *o) {
 
 void set_ca_channels(char *o) {
     int i, la, ddci;
-    char buf[1000], *arg[40], *sep, *seps;
-    SAFE_STRCPY(buf, o);
+    char buf[strlen(o) + 1], *arg[40], *sep, *seps;
+    safe_strncpy(buf, o);
     la = split(arg, buf, ARRAY_SIZE(arg), ',');
     for (i = 0; i < la; i++) {
         sep = strchr(arg[i], ':');
