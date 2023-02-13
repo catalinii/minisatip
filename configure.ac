@@ -201,6 +201,29 @@ else
 FM="$FM\n$axe disabled"
 fi
 
+ac_save_CFLAGS="$CFLAGS"
+CFLAGS="$CFLAGS -fstrict-flex-arrays"
+
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([],
+  [[int i = 1; (void) i;]])],
+  [enable_strict_flex_array=1], [enable_strict_flex_array=0])
+
+AS_IF([test $enable_strict_flex_array -eq 0],
+  [CFLAGS="$ac_save_CFLAGS"])
+
+ac_save_CFLAGS="$CFLAGS"
+CFLAGS="$CFLAGS -fsanitize=bounds -fsanitize-trap=all"
+
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([],
+  [[int i = 1; (void) i;]])],
+  [enable_bounds_check=1], [enable_bounds_check=0])
+
+AS_IF([test $enable_bounds_check -eq 0],
+  [CFLAGS="$ac_save_CFLAGS"])
+
+FM="$FM\nCCFLAGS\t\t$CFLAGS"
+
+
 AC_SUBST(LINUXDVB)
 AC_SUBST(DVBCSA)
 AC_SUBST(DVBCA)

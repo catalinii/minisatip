@@ -58,7 +58,7 @@ typedef struct struct_streams {
 typedef struct struct_rtp_prop {
     int type;
     int port;
-    char dest[50];
+    char dest[64];
     int ttl;
 } rtp_prop;
 

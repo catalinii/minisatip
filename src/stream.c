@@ -145,25 +145,21 @@ void set_stream_parameters(int s_id, transponder *t) {
     if (!sid || !sid->enabled)
         return;
     if (t->apids && t->apids[0] >= '0' && t->apids[0] <= '9') {
-        strncpy(sid->apids, t->apids, LEN_PIDS);
+        _strncpy(sid->apids, t->apids, LEN_PIDS);
         t->apids = sid->apids;
-        sid->apids[LEN_PIDS] = 0;
     }
     if (t->dpids && t->dpids[0] >= '0' && t->dpids[0] <= '9') {
-        strncpy(sid->dpids, t->dpids, LEN_PIDS);
+        _strncpy(sid->dpids, t->dpids, LEN_PIDS);
         t->dpids = sid->dpids;
-        sid->dpids[LEN_PIDS] = 0;
     }
     if (t->pids && t->pids[0] >= '0' && t->pids[0] <= '9') {
-        strncpy(sid->pids, t->pids, LEN_PIDS);
+        _strncpy(sid->pids, t->pids, LEN_PIDS);
         t->pids = sid->pids;
-        sid->pids[LEN_PIDS] = 0;
     }
 
     if (t->x_pmt && t->x_pmt[0] >= '0' && t->x_pmt[0] <= '9') {
-        strncpy(sid->x_pmt, t->x_pmt, LEN_PIDS);
+        _strncpy(sid->x_pmt, t->x_pmt, LEN_PIDS);
         t->x_pmt = sid->x_pmt;
-        sid->x_pmt[LEN_PIDS] = 0;
     }
 
     if (!t->apids)
@@ -183,7 +179,7 @@ streams *setup_stream(char *str, sockets *s) {
     char tmp_str[2000];
 
     transponder t;
-    strncpy(tmp_str, str, sizeof(tmp_str));
+    safe_strncpy(tmp_str, str);
     tmp_str[sizeof(tmp_str) - 1] = 0;
     detect_dvb_parameters(str, &t);
     LOG("Setup stream sid %d parameters, sock_id %d, handle %d", s->sid, s->id,
@@ -435,14 +431,14 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp) {
         if (strncmp("port=", arg2[l], 5) == 0)
             p.port = atoi(arg2[l] + 5);
         if (strncmp("destination=", arg2[l], 12) == 0)
-            SAFE_STRCPY(p.dest, arg2[l] + 12);
+            safe_strncpy(p.dest, arg2[l] + 12);
     }
     if (default_rtp)
-        SAFE_STRCPY(p.dest, default_rtp);
-    if (p.dest[0] == 0 && p.type == TYPE_UNICAST)
+        safe_strncpy(p.dest, default_rtp);
+    if (!p.dest[0] && p.type == TYPE_UNICAST)
         get_sockaddr_host(s->sa, p.dest, sizeof(p.dest) - 1);
-    if (p.dest[0] == 0)
-        SAFE_STRCPY(p.dest, opts.disc_host);
+    if (!p.dest[0])
+        safe_strncpy(p.dest, opts.disc_host);
     if (p.port == 0)
         p.port = start_rtp;
     LOG("decode_transport ->type %d, ttl %d new socket to: %s:%d", p.type,
