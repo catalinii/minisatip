@@ -28,6 +28,7 @@
 #include "minisatip.h"
 #include "pmt.h"
 #include "utils.h"
+#include "utils/alloc.h"
 #include "utils/hash_table.h"
 #include "utils/ticks.h"
 
@@ -878,7 +879,7 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb) {
            sip->tcp_pos, sip->tcp_len, sip->tcp_size, len);
     if (!sip->tcp_data) {
         sip->tcp_size = TCP_DATA_SIZE;
-        sip->tcp_data = malloc1(sip->tcp_size + 3);
+        sip->tcp_data = _malloc(sip->tcp_size + 3);
         if (!sip->tcp_data)
             LOG_AND_RETURN(-1, "Cannot alloc memory for tcp_data with size %d",
                            sip->tcp_size);
@@ -1545,7 +1546,7 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
             if (!a[i])
                 a[i] = adapter_alloc();
             if (!satip[i]) {
-                satip[i] = malloc1(sizeof(satipc));
+                satip[i] = _malloc(sizeof(satipc));
                 if (satip[i])
                     memset(satip[i], 0, sizeof(satipc));
             }
@@ -1813,7 +1814,7 @@ int satip_getxml(void *x) {
 }
 
 char *init_satip_pointer(int len) {
-    char *p = malloc1(len);
+    char *p = _malloc(len);
     if (p)
         p[0] = 0;
     else

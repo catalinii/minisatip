@@ -42,6 +42,7 @@
 #include "socketworks.h"
 #include "t2mi.h"
 #include "utils.h"
+#include "utils/alloc.h"
 #include "utils/ticks.h"
 
 #define DEFAULT_LOG LOG_SOCKETWORKS
@@ -633,15 +634,15 @@ int sockets_del(int sock) {
     ss->lock = NULL;
     ss->master = -1;
     if ((ss->flags & 1) && ss->buf)
-        free1(ss->buf);
+        _free(ss->buf);
     if (ss->pack) {
         int i;
         for (i = 0; i < ss->wmax; i++)
             if (ss->pack[i].buf) {
-                free1(ss->pack[i].buf);
+                _free(ss->pack[i].buf);
                 ss->pack[i].buf = NULL;
             }
-        free1(ss->pack);
+        _free(ss->pack);
         ss->pack = NULL;
     }
 
@@ -1076,7 +1077,7 @@ void free_pack(SNPacket *p) {
     if (!p)
         return;
     if (p->buf)
-        free1(p->buf);
+        _free(p->buf);
     p->size = 0;
     p->buf = NULL;
     p->len = 0;
@@ -1092,11 +1093,11 @@ void free_all() {
         if (s[i]->pack) {
             for (j = 0; j < s[i]->wmax; j++)
                 free_pack(&s[i]->pack[j]);
-            free1(s[i]->pack);
+            _free(s[i]->pack);
         }
         free_pack(&s[i]->prio_pack);
         if (s[i])
-            free(s[i]);
+            _free(s[i]);
         s[i] = NULL;
     }
     free_all_streams();
@@ -1107,6 +1108,7 @@ void free_all() {
 #ifndef DISABLE_T2MI
     free_t2mi();
 #endif
+    free_alloc();
 }
 
 void set_socket_send_buffer(int sock, int len) {
@@ -1332,7 +1334,7 @@ int my_writev(sockets *s, struct iovec *iov, int iiov) {
 int alloc_snpacket(SNPacket *p, int len) {
     if (!p->buf || (p->size < len)) {
         int newlen = (len < 1500) ? 1500 : len + 10;
-        void *mem = realloc1(p->buf, newlen);
+        void *mem = _realloc(p->buf, newlen);
         if (mem) {
             p->buf = mem;
             p->size = newlen;
@@ -1385,7 +1387,7 @@ int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt,
             rv = 0;
 
         if (rv >= 0) {
-            tmpbuf = malloc1(len);
+            tmpbuf = _malloc(len);
             if (!tmpbuf) {
                 s->overflow += len - rv;
                 dropped_bytes += len - rv;
@@ -1406,11 +1408,11 @@ int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt,
     }
 
     if (!s->pack) {
-        s->pack = malloc1(s->wmax * sizeof(SNPacket));
+        s->pack = _malloc(s->wmax * sizeof(SNPacket));
         if (!s->pack) {
             s->overflow++;
             if (tmpbuf)
-                free(tmpbuf);
+                _free(tmpbuf);
             LOG_AND_RETURN(0, "%s: Could not allocate memory for s->pack %d",
                            __FUNCTION__, s->wmax);
         }
@@ -1422,7 +1424,7 @@ int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt,
     if (high_prio && !s->flush_enqued_data && s->spos != s->wpos) {
         int rv = socket_enque_highprio(s, iov, iovcnt);
         if (tmpbuf)
-            free(tmpbuf);
+            _free(tmpbuf);
         return rv;
     }
     // if we need the user tuned to a new freq, drop all the data that is in
@@ -1450,7 +1452,7 @@ int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt,
         s->overflow += len;
         dropped_bytes += len;
         if (tmpbuf)
-            free(tmpbuf);
+            _free(tmpbuf);
         return 0;
     }
 
@@ -1474,7 +1476,7 @@ int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt,
                 s->overflow / 1048576.0);
 
         if (tmpbuf)
-            free(tmpbuf);
+            _free(tmpbuf);
         return 0;
     }
 
@@ -1488,7 +1490,7 @@ int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt,
     s->wpos = (s->wpos + 1) % s->wmax;
 
     if (tmpbuf)
-        free(tmpbuf);
+        _free(tmpbuf);
 
     return 0;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2022 Catalin Toda <catalinii@yahoo.com>, 
+ * Copyright (C) 2014-2022 Catalin Toda <catalinii@yahoo.com>,
                            Sam Stenvall <neggelandia@gmail.com>,
                            et al.
  *
@@ -24,7 +24,7 @@
 #include "stdlib.h"
 
 // Define all symbols
-_symbols *sym[] = {adapters_sym, stream_sym, minisatip_sym,
+_symbols *sym[] = {adapters_sym, stream_sym, minisatip_sym, alloc_sym,
 #ifndef DISABLE_DVBCA
                    ca_sym,
 #endif
@@ -40,4 +40,5 @@ _symbols *sym[] = {adapters_sym, stream_sym, minisatip_sym,
 #ifdef AXE
                    axe_sym,
 #endif
+
                    NULL};

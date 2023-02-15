@@ -47,6 +47,7 @@ SOURCES=\
 	api/symbols.c \
 	api/variables.c \
 	utils/logging/logging.c \
+	utils/alloc.c \
 	utils/hash_table.c \
 	utils/mutex.c \
 	utils/ticks.c

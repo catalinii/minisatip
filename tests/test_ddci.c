@@ -26,6 +26,7 @@
 #include "minisatip.h"
 #include "socketworks.h"
 #include "utils.h"
+#include "utils/alloc.h"
 #include "utils/testing.h"
 #include "utils/ticks.h"
 #include <arpa/inet.h>
@@ -58,32 +59,20 @@ extern ddci_device_t *ddci_devices[MAX_ADAPTERS];
 extern adapter *a[MAX_ADAPTERS];
 extern SPMT *pmts[MAX_PMT];
 extern int npmts;
-extern int dvbca_id;
+extern SCA_op dvbca;
 extern ca_device_t *ca_devices[MAX_ADAPTERS];
 extern SHashTable channels;
 extern SFilter *filters[MAX_FILTERS];
 
-void create_pmt(SPMT *pmt, int id, int ad, int sid, int pid1, int pid2,
-                int caid1, int caid2) {
-    memset(pmt, 0, sizeof(*pmt));
-    pmt->id = id;
-    pmt->sid = sid;
-    pmt->adapter = ad;
-    pmt->pid = id * 1000;
-    pmt->stream_pid[0].pid = pid1;
-    pmt->stream_pid[0].type = 2;
-    pmt->stream_pid[1].pid = pid2;
-    pmt->stream_pid[0].type = 6;
-    pmt->stream_pids = 2;
-    pmt->ca[0].id = caid1;
-    pmt->ca[0].pid = caid1;
-    pmt->ca[1].id = caid2;
-    pmt->ca[1].pid = caid2;
-    pmt->caids = 2;
-    pmts[id] = pmt;
-    if (npmts <= id) {
-        npmts = id + 1;
-    }
+SPMT *create_pmt(int ad, int sid, int pid1, int pid2, int caid1, int caid2) {
+    int pmt_id = pmt_add(ad, sid, 1000, 10);
+    SPMT *pmt = get_pmt(pmt_id);
+    pmt->pid = pmt_id * 1000;
+    pmt_add_stream_pid(pmt, pid1, 2, 0, 1, 0);
+    pmt_add_stream_pid(pmt, pid2, 6, 1, 0, 0);
+    pmt_add_caid(pmt, caid1, caid1, NULL, 0);
+    pmt_add_caid(pmt, caid2, caid2, NULL, 0);
+    return pmt;
 }
 
 void create_adapter(adapter *ad, int id) {
@@ -118,7 +107,7 @@ int test_channels() {
 
 int test_add_del_pmt() {
     int i;
-    SPMT pmt0, pmt1, pmt2, pmt3;
+    SPMT *pmt0, *pmt1, *pmt2, *pmt3;
     ddci_device_t d0, d1;
     ca_device_t ca0, ca1;
     adapter ad, a0, a1;
@@ -127,10 +116,10 @@ int test_add_del_pmt() {
     create_adapter(&a0, 0);
     create_adapter(&a1, 1);
 
-    create_pmt(&pmt0, 0, 8, 100, 101, 102, 0x100, 0x1800);
-    create_pmt(&pmt1, 1, 8, 200, 201, 202, 0x100, 0x500);
-    create_pmt(&pmt2, 2, 8, 300, 301, 302, 0x500, 0x100);
-    create_pmt(&pmt3, 3, 8, 400, 401, 402, 0x600, 0x601);
+    pmt0 = create_pmt(8, 100, 101, 102, 0x100, 0x1800);
+    pmt1 = create_pmt(8, 200, 201, 202, 0x100, 0x500);
+    pmt2 = create_pmt(8, 300, 301, 302, 0x500, 0x100);
+    pmt3 = create_pmt(8, 400, 401, 402, 0x600, 0x601);
     memset(&d0, 0, sizeof(d0));
     memset(&d1, 0, sizeof(d1));
     memset(&d0.pmt, -1, sizeof(d0.pmt));
@@ -144,7 +133,7 @@ int test_add_del_pmt() {
     create_hash_table(&d1.mapping, 30);
     create_hash_table(&channels, 30);
 
-    dvbca_init();
+    int dvbca_id = add_ca(&dvbca, 0xFFFFFFFF);
     // DD 0 - 0x100, DD 1 - 0x500
     add_caid_mask(dvbca_id, 0, 0x100, 0xFFFF);
     add_caid_mask(dvbca_id, 1, 0x500, 0xFFFF);
@@ -159,19 +148,19 @@ int test_add_del_pmt() {
     ca_devices[0] = &ca0;
     ca_devices[1] = &ca1;
     // No matching DDCI
-    ASSERT(ddci_process_pmt(&ad, &pmt3) == TABLES_RESULT_ERROR_RETRY,
+    ASSERT(ddci_process_pmt(&ad, pmt3) == TABLES_RESULT_ERROR_RETRY,
            "DDCI not ready, expected retry");
 
     ca0.state = CA_STATE_INITIALIZED;
-    ASSERT(ddci_process_pmt(&ad, &pmt3) == TABLES_RESULT_ERROR_NORETRY,
+    ASSERT(ddci_process_pmt(&ad, pmt3) == TABLES_RESULT_ERROR_NORETRY,
            "DDCI ready, expected no retry");
 
     // One matching channel
-    ASSERT(ddci_process_pmt(&ad, &pmt0) == TABLES_RESULT_OK,
+    ASSERT(ddci_process_pmt(&ad, pmt0) == TABLES_RESULT_OK,
            "DDCI matching DD 0");
     ASSERT(d0.pmt[0].id == 0, "PMT 0 using DDCI 0");
 
-    ASSERT(ddci_process_pmt(&ad, &pmt1) == TABLES_RESULT_OK,
+    ASSERT(ddci_process_pmt(&ad, pmt1) == TABLES_RESULT_OK,
            "DDCI matching DD 1");
     ASSERT(d1.pmt[0].id == 1, "PMT 1 using DDCI 1");
     d0.max_channels = d1.max_channels = 2;
@@ -179,19 +168,15 @@ int test_add_del_pmt() {
     // Multiple PMTs
     Sddci_channel c;
     memset(&c, 0, sizeof(c));
-    c.sid = pmt2.sid;
+    c.sid = pmt2->sid;
     c.locked = 1;
     c.ddci[c.ddcis++].ddci = 1;
     setItem(&channels, c.sid, &c, sizeof(c));
 
-    int s = pmt2.stream_pids++;
-    int c2 = pmt2.caids++;
-    pmt2.stream_pid[s].pid = 0xFF;
-    pmt2.stream_pid[s].type = 2;
-    pmt2.ca[c2].id = 0x502;
-    pmt2.ca[c2].pid = 0xFE;
+    pmt_add_stream_pid(pmt2, 0xFF, 2, 0, 1, 0);
+    pmt_add_caid(pmt2, 0x502, 0xFE, NULL, 0);
 
-    ASSERT(ddci_process_pmt(&ad, &pmt2) == TABLES_RESULT_OK,
+    ASSERT(ddci_process_pmt(&ad, pmt2) == TABLES_RESULT_OK,
            "DDCI matching DD 0 for second PMT");
     ASSERT(d1.pmt[1].id == 2, "PMT 2 using DDCI 1");
 
@@ -218,10 +203,9 @@ int test_add_del_pmt() {
     m = get_pid_mapping_allddci(ad.id, 0xFE);
     ASSERT(m != NULL, "Newly added capid not found in mapping table");
 
-    ddci_del_pmt(&ad, &pmt1);
-    ddci_del_pmt(&ad, &pmt0);
-    ddci_del_pmt(&ad, &pmt2);
-
+    ddci_del_pmt(&ad, pmt1);
+    ddci_del_pmt(&ad, pmt0);
+    ddci_del_pmt(&ad, pmt2);
     ec = 0;
     FOREACH_ITEM(&d0.mapping, m) { ec++; }
     FOREACH_ITEM(&d1.mapping, m) { ec++; }
@@ -230,17 +214,15 @@ int test_add_del_pmt() {
     free_hash(&d1.mapping);
     free_hash(&channels);
     free_filters();
-
     return 0;
 }
-
 int test_push_ts_to_ddci() {
     ddci_device_t d;
     adapter ad;
     uint8_t buf[188 * 10];
     d.id = 0;
     d.enabled = 1;
-    d.out = malloc1(DDCI_BUFFER + 10);
+    d.out = _malloc(DDCI_BUFFER + 10);
     d.wo = DDCI_BUFFER - 188;
     memset(d.ro, -1, sizeof(d.ro));
     d.ro[0] = 188;
@@ -258,7 +240,7 @@ int test_push_ts_to_ddci() {
     push_ts_to_ddci_buffer(&d, buf, 376);
     if (d.wo != 376 || d.ro[0] != 752)
         LOG_AND_RETURN(1, "push 376 bytes");
-    free1(d.out);
+    _free(d.out);
     return 0;
 }
 
@@ -272,7 +254,7 @@ int test_copy_ts_from_ddci() {
     memset(buf2, 0, sizeof(buf2));
     d.id = 0;
     d.enabled = 1;
-    d.out = malloc1(DDCI_BUFFER + 10);
+    d.out = _malloc(DDCI_BUFFER + 10);
     create_hash_table(&d.mapping, 30);
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[0] = &d;
@@ -312,7 +294,7 @@ int test_copy_ts_from_ddci() {
     if (1 != push_ts_to_adapter(&ad, buf, pid, &ad_pos))
         LOG_AND_RETURN(1, "buffer full not returned correctly");
 
-    free1(d.out);
+    _free(d.out);
     free_hash(&d.mapping);
     return 0;
 }
@@ -349,7 +331,7 @@ int test_ddci_process_ts() {
     memset(buf, 0, sizeof(buf));
     d.id = 0;
     d.enabled = 1;
-    d.out = malloc1(DDCI_BUFFER + 10);
+    d.out = _malloc(DDCI_BUFFER + 10);
     create_hash_table(&d.mapping, 30);
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[0] = &d;
@@ -364,6 +346,7 @@ int test_ddci_process_ts() {
     a[0]->enabled = 1;
     a[1] = &ad;
     buf[0] = 0x47;
+    SPMT *save = pmts[0];
     pmts[0] = NULL;
     add_pid_mapping_table(5, 1000, 0, &d, 0);
     add_pid_mapping_table(5, 2000, 0, &d, 0);
@@ -398,40 +381,37 @@ int test_ddci_process_ts() {
     if (d.ro[1] != 188 && d.wo != 188 * 2)
         LOG_AND_RETURN(1, "indexes in DDCI devices set wrong ro %d wo %d", d.ro,
                        d.wo);
-    free1(d.out);
+    _free(d.out);
     free_hash(&d.mapping);
+    pmts[0] = save;
     return 0;
 }
 int test_create_pat() {
     ddci_device_t d;
     uint8_t psi[188];
     uint8_t packet[188];
-    SPMT pmt;
+    int pid = 4096;
+    int pmt_id = pmt_add(0, 0x66, pid, 0);
     char cc;
     int psi_len;
     SFilter f;
     adapter ad;
-    memset(&pmt, 0, sizeof(pmt));
     create_adapter(&ad, 0);
 
     memset(&d, 0, sizeof(d));
     d.id = 0;
     d.enabled = 1;
+    SPMT *pmt = get_pmt(pmt_id);
     create_hash_table(&d.mapping, 30);
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[0] = &d;
-    int pid = 4096;
+
     add_pid_mapping_table(9, pid, 0, &d, 0);
     int dpid = add_pid_mapping_table(0, pid, 0, &d, 0);
     f.flags = FILTER_CRC;
     f.id = 0;
     f.adapter = 0;
-    d.pmt[0].id = 1; // set to pmt 1
-    pmts[1] = &pmt;  // enable pmt 1
-    npmts = 2;
-    pmt.enabled = 1;
-    pmt.sid = 0x66;
-    pmt.pid = pid;
+    d.pmt[0].id = pmt->id;
     psi_len = ddci_create_pat(&d, psi);
     cc = 1;
     buffer_to_ts(packet, 188, psi, psi_len, &cc, 0);
@@ -443,8 +423,8 @@ int test_create_pat() {
     new_pid &= 0x1FFF;
     if (new_pid != dpid)
         LOG_AND_RETURN(1, "PAT pid %d != mapping table pid %d", new_pid, dpid);
-    if (new_sid != pmt.sid)
-        LOG_AND_RETURN(1, "PAT sid %d != pmt sid %d", new_sid, pmt.sid);
+    if (new_sid != pmt->sid)
+        LOG_AND_RETURN(1, "PAT sid %d != pmt sid %d", new_sid, pmt->sid);
     free_hash(&d.mapping);
     return 0;
 }
@@ -453,13 +433,11 @@ int test_create_pmt() {
     ddci_device_t d;
     uint8_t psi[188];
     uint8_t packet[188];
-
-    SPMT pmt;
+    adapter ad;
     char cc;
     int psi_len;
     SFilter f;
     memset(&d, 0, sizeof(d));
-    memset(&pmt, 0, sizeof(pmt));
     d.id = 0;
     d.enabled = 1;
     a[0] = 0;
@@ -467,39 +445,25 @@ int test_create_pmt() {
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[0] = &d;
     int pid = 1023;
-    int capid = 7068;
+    int capid = 0x100;
     int dpid = add_pid_mapping_table(0, pid, 0, &d, 0);
     int dcapid = add_pid_mapping_table(0, capid, 0, &d, 0);
     f.flags = FILTER_CRC;
     f.id = 0;
     f.adapter = 0;
+    f.pid = pid;
+    f.next_filter = -1;
+    f.enabled = 1;
     filters[0] = &f;
-    pmt.id = 1;
-    d.pmt[0].id = pmt.id; // set to pmt 1
-    pmts[pmt.id] = &pmt;  // enable pmt 1
-    npmts = 2;
-    pmt.enabled = 1;
-    pmt.sid = 0x66;
-    pmt.pid = pid;
-    strcpy(pmt.name, "TEST CHANNEL HD");
-    pmt.pmt_len = 0;
-    pmt.caids = 1;
-    pmt.ca[0].id = 0x100;
-    pmt.ca[0].pid = capid;
-    pmt.ca[0].private_data_len = 2;
-    pmt.ca[0].private_data[0] = 1;
-    pmt.ca[0].private_data[1] = 2;
-    pmt.stream_pids = 2;
-    pmt.stream_pid[0].type = 0x1B;
-    pmt.stream_pid[0].pid = pid;
-    pmt.stream_pid[0].desc_len = 2;
-    pmt.stream_pid[0].desc[0] = 0x54;
-    pmt.stream_pid[0].desc[1] = 0;
-    pmt.stream_pid[1].type = 3;
-    pmt.stream_pid[1].pid = 0x55;
+    SPMT *pmt = create_pmt(0, 0x66, pid, 0x55, 0x100, 0x500);
+    d.pmt[0].id = pmt->id; // set to pmt 1
+    pmt->pid = pid - 1;
+    pmt->version = 0;
+    strcpy(pmt->name, "TEST CHANNEL HD");
+    pmt->pmt_len = 0;
     ddci_pmt_t dp = {.ver = 0, .pcr_pid = 8191};
 
-    psi_len = ddci_create_pmt(&d, &pmt, psi, sizeof(psi), &dp);
+    psi_len = ddci_create_pmt(&d, pmt, psi, sizeof(psi), &dp);
     cc = 1;
     _hexdump("PACK: ", psi, psi_len);
     buffer_to_ts(packet, 188, psi, psi_len, &cc, 0x63);
@@ -509,7 +473,7 @@ int test_create_pmt() {
         LOG("Assemble packet failed");
         return 1;
     }
-    int new_pid = packet[26] * 256 + packet[27];
+    int new_pid = packet[30] * 256 + packet[31];
     int new_capid = packet[21] * 256 + packet[22];
     new_pid &= 0x1FFF;
     new_capid &= 0x1FFF;
@@ -519,29 +483,24 @@ int test_create_pmt() {
     if (new_capid != dcapid)
         LOG_AND_RETURN(1, "PMT PSI pid %04X != mapping table pid %04X",
                        new_capid, dcapid);
-    SPMT new_pmt;
-    memset(&new_pmt, 0, sizeof(pmt));
-    new_pmt.enabled = 1;
-    f.adapter = 0;
-    f.next_filter = -1;
-    f.pid = 0x99;
-    f.enabled = 1;
-    new_pmt.version = 0;
-    adapter ad;
+
+    SPMT *new_pmt = get_pmt(pmt_add(0, 200, 200, psi_len));
     ad.id = 0;
     ad.enabled = 1;
     a[0] = &ad;
-    ad.pids[0].pid = 0x99;
+    ad.pids[0].pid = pid;
     ad.pids[0].flags = 1;
+
     ad.active_pmts = 1;
-    ad.active_pmt[0] = pmt.id;
-    process_pmt(0, psi + 1, psi_len, &new_pmt);
+    ad.active_pmt[0] = pmt->id;
+
+    process_pmt(0, psi + 1, psi_len, new_pmt);
     filters[0] = NULL;
     ASSERT_EQUAL(
-        pmt.stream_pids, new_pmt.stream_pids,
+        pmt->stream_pids, new_pmt->stream_pids,
         "Number of streampids does not matches between generated PMT and "
         "read PMT");
-    ASSERT_EQUAL(pmt.caids, new_pmt.caids,
+    ASSERT_EQUAL(pmt->caids, new_pmt->caids,
                  "Number of caids does not matches "
                  "between generated PMT and read PMT");
 
@@ -554,6 +513,7 @@ int main() {
     opts.debug = 0;
     opts.cache_dir = "/tmp";
     strcpy(thread_name, "test_ddci");
+    init_alloc();
     TEST_FUNC(test_channels(), "testing test_channels");
     TEST_FUNC(test_add_del_pmt(), "testing adding and removing pmts");
     TEST_FUNC(test_push_ts_to_ddci(), "testing test_push_ts_to_ddci");
@@ -561,6 +521,8 @@ int main() {
     TEST_FUNC(test_ddci_process_ts(), "testing ddci_process_ts");
     TEST_FUNC(test_create_pat(), "testing create_pat");
     TEST_FUNC(test_create_pmt(), "testing create_pmt");
+    free_all_pmts();
+    free_alloc();
     fflush(stdout);
     return 0;
 }

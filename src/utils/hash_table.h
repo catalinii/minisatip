@@ -26,6 +26,8 @@ typedef struct hash_table {
     SHashItem *items;
     int64_t conflicts;
     SMutex mutex;
+    char *file;
+    int line;
 } SHashTable;
 
 #define HASH_ITEM_ENABLED(h) (h.len)
@@ -33,16 +35,21 @@ typedef struct hash_table {
     for (i = 0; i < (h)->size; i++)                                            \
         if (HASH_ITEM_ENABLED((h)->items[i]) && (a = (h)->items[i].data))
 
-int create_hash_table(SHashTable *hash, int no);
+int _create_hash_table(SHashTable *hash, int no, char *f, int l);
 void copy_hash_table(SHashTable *s, SHashTable *d);
 void free_hash(SHashTable *hash);
-void *getItem(SHashTable *hash, uint32_t key);
-int getItemLen(SHashTable *hash, uint32_t key);
+void *getItem(SHashTable *hash, uint64_t key);
+int getItemLen(SHashTable *hash, uint64_t key);
 #define setItem(a, b, c, d) _setItem(a, b, c, d, 1)
-int _setItem(SHashTable *hash, uint32_t key, void *data, int len, int copy);
-int delItem(SHashTable *hash, uint32_t key);
+int _setItem(SHashTable *hash, uint64_t key, void *data, int len, int copy);
+int delItem(SHashTable *hash, uint64_t key);
 int delItemP(SHashTable *hash, void *p);
-int getItemSize(SHashTable *hash, uint32_t key);
-int setItemLen(SHashTable *hash, uint32_t key, int len);
+int getItemSize(SHashTable *hash, uint64_t key);
+int setItemLen(SHashTable *hash, uint64_t key, int len);
+
+void init_alloc();
+void free_alloc();
+
+#define create_hash_table(a, b) _create_hash_table(a, b, __FILE__, __LINE__)
 
 #endif

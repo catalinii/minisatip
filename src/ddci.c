@@ -45,6 +45,7 @@
 #include "stream.h"
 #include "tables.h"
 #include "utils.h"
+#include "utils/alloc.h"
 #include "utils/ticks.h"
 #include <linux/dvb/ca.h>
 
@@ -322,7 +323,7 @@ int find_ddci_for_pmt(Sddci_channel *c, SPMT *pmt) {
 
 int is_pmt_running(SPMT *pmt) {
     ddci_mapping_table_t *m =
-        get_pid_mapping_allddci(pmt->adapter, pmt->stream_pid[0].pid);
+        get_pid_mapping_allddci(pmt->adapter, pmt->stream_pid[0]->pid);
     if (!m)
         return -1;
     return m->ddci;
@@ -438,18 +439,18 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
                     0); // do not send the PMT pid to the DDCI device
 
     for (i = 0; i < pmt->caids; i++) {
-        LOGM("DD %d adding ECM pid %d", d->id, pmt->ca[i].pid);
-        add_pid_mapping_table(ad->id, pmt->ca[i].pid, pmt->id, d, 1);
+        LOGM("DD %d adding ECM pid %d", d->id, pmt->ca[i]->pid);
+        add_pid_mapping_table(ad->id, pmt->ca[i]->pid, pmt->id, d, 1);
     }
 
     for (i = 0; i < pmt->stream_pids; i++) {
-        LOGM("DD %d adding stream pid %d %s", d->id, pmt->stream_pid[i].pid,
-             pmt->stream_pid[i].pid == pmt->pcr_pid ? "PCR" : "");
+        LOGM("DD %d adding stream pid %d %s", d->id, pmt->stream_pid[i]->pid,
+             pmt->stream_pid[i]->pid == pmt->pcr_pid ? "PCR" : "");
 
-        int ddci_pid = add_pid_mapping_table(ad->id, pmt->stream_pid[i].pid,
+        int ddci_pid = add_pid_mapping_table(ad->id, pmt->stream_pid[i]->pid,
                                              pmt->id, d, 0);
         // map the PCR pid as well
-        if (pmt->stream_pid[i].pid == pmt->pcr_pid) {
+        if (pmt->stream_pid[i]->pid == pmt->pcr_pid) {
             d->pmt[pos].pcr_pid = ddci_pid;
         }
     }
@@ -690,16 +691,16 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
 
     // Add CA IDs and CA Pids
     for (i = 0; i < pmt->caids; i++) {
-        int private_data_len = pmt->ca[i].private_data_len;
+        int private_data_len = pmt->ca[i]->private_data_len;
         *b++ = 0x09;
         *b++ = 0x04 + private_data_len;
-        copy16(b, 0, pmt->ca[i].id);
-        copy16(b, 2, safe_get_pid_mapping(d, pmt->adapter, pmt->ca[i].pid));
-        memcpy(b + 4, pmt->ca[i].private_data, private_data_len);
+        copy16(b, 0, pmt->ca[i]->id);
+        copy16(b, 2, safe_get_pid_mapping(d, pmt->adapter, pmt->ca[i]->pid));
+        memcpy(b + 4, pmt->ca[i]->private_data, private_data_len);
         pi_len += 6 + private_data_len;
         b += 4 + private_data_len;
         LOGM("%s: pmt %d added caid %04X, pid %04X", __FUNCTION__, pmt->id,
-             pmt->ca[i].id, pmt->ca[i].pid);
+             pmt->ca[i]->id, pmt->ca[i]->pid);
     }
     copy16(start_pi_len, 0, pi_len);
 
@@ -709,7 +710,7 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
 
         if (get_ca_multiple_pmt(pmt->adapter)) {
             // Do not map any pids that are not requested by the client
-            SPid *p = find_pid(pmt->adapter, pmt->stream_pid[i].pid);
+            SPid *p = find_pid(pmt->adapter, pmt->stream_pid[i]->pid);
             if (!p) {
                 p = find_pid(pmt->adapter, 8192); // all pids are requested
             }
@@ -723,21 +724,21 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
             }
             if (is_added == 0) {
                 LOGM("%s: adapter %d pid %d not requested by the client",
-                     __FUNCTION__, pmt->adapter, pmt->stream_pid[i].pid);
+                     __FUNCTION__, pmt->adapter, pmt->stream_pid[i]->pid);
                 continue;
             }
         }
 
-        *b = pmt->stream_pid[i].type;
+        *b = pmt->stream_pid[i]->type;
         copy16(b, 1,
-               safe_get_pid_mapping(d, pmt->adapter, pmt->stream_pid[i].pid));
-        int desc_len = pmt->stream_pid[i].desc_len;
+               safe_get_pid_mapping(d, pmt->adapter, pmt->stream_pid[i]->pid));
+        int desc_len = pmt->stream_pid[i]->desc_len;
         copy16(b, 3, desc_len);
-        memcpy(b + 5, pmt->stream_pid[i].desc, desc_len);
+        memcpy(b + 5, pmt->stream_pid[i]->desc, desc_len);
         b += desc_len + 5;
 
         LOGM("%s: pmt %d added pid %04X, type %02X", __FUNCTION__, pmt->id,
-             pmt->stream_pid[i].pid, pmt->stream_pid[i].type);
+             pmt->stream_pid[i]->pid, pmt->stream_pid[i]->type);
     }
     // set the length (b + 4 bytes from crc)
     copy16(start_pmt, -2, 4 + b - start_pmt);
@@ -1067,7 +1068,7 @@ int set_property(int fd, uint32_t cmd, uint32_t data) {
 
 ddci_device_t *ddci_alloc(int id) {
     unsigned char *out;
-    out = malloc1(DDCI_BUFFER + 10);
+    out = _malloc(DDCI_BUFFER + 10);
     ddci_device_t *d;
     if (!out) {
         LOG_AND_RETURN(NULL,
@@ -1076,9 +1077,9 @@ ddci_device_t *ddci_alloc(int id) {
                        __FUNCTION__, id);
     }
 
-    d = ddci_devices[id] = malloc1(sizeof(ddci_device_t));
+    d = ddci_devices[id] = _malloc(sizeof(ddci_device_t));
     if (!d) {
-        free(out);
+        _free(out);
         return NULL;
     }
     mutex_init(&d->mutex);
@@ -1159,8 +1160,6 @@ int ddci_open_device(adapter *ad) {
     d->last_pmt = d->last_pat = 0;
     d->tid = d->ver = 0;
     d->enabled = 1;
-    // Do not cache PMTs for DDCI
-    ad->cache_pmts = 0;
     ad->enabled = 1;
     mutex_unlock(&d->mutex);
     LOG("opened DDCI adapter %d fe:%d dvr:%d", ad->id, ad->fe, ad->dvr);

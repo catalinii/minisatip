@@ -13,7 +13,7 @@
 #define EMU_PIDS_ALL_ENFORCED_PIDS_LIST 1, 16, 17, 18, 20, 21
 
 void set_options(int argc, char *argv[]);
-char* get_command_line_string(int argc, char *argv[]);
+char *get_command_line_string(int argc, char *argv[]);
 
 extern char pid_file[];
 extern char app_name[], version[];
@@ -42,15 +42,14 @@ extern char app_name[], version[];
 
 #define copy32r(v, a, i)                                                       \
     {                                                                          \
-        v = ((a[i] & 0xFF) << 24) | ((a[i + 1] & 0xFF) << 16) |                \
-            ((a[i + 2] & 0xFF) << 8) | (a[i + 3] & 0xFF);                      \
+        v = ((unsigned int)a[i] << 24) | ((unsigned int)a[i + 1] << 16) |      \
+            ((unsigned int)a[i + 2] << 8) | (unsigned int)a[i + 3];            \
     }
 #define copy32rr(v, a, i)                                                      \
     {                                                                          \
-        v = ((a[i + 3] & 0xFF) << 24) | ((a[i + 2] & 0xFF) << 16) |            \
-            ((a[i + 1] & 0xFF) << 8) | (a[i] & 0xFF);                          \
+        v = ((unsigned int)a[i + 3] << 24) | ((unsigned int)a[i + 2] << 16) |  \
+            ((unsigned int)a[i + 1] << 8) | (unsigned int)a[i];                \
     }
-
 int ssdp_discovery(sockets *s);
 int readBootID();
 void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr);

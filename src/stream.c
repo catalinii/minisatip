@@ -45,6 +45,7 @@
 #include "socketworks.h"
 #include "stream.h"
 #include "t2mi.h"
+#include "utils/alloc.h"
 #include "utils/ticks.h"
 
 #define DEFAULT_LOG LOG_STREAM
@@ -1220,7 +1221,7 @@ void free_all_streams() {
 
     for (i = 0; i < MAX_STREAMS; i++) {
         if (st[i])
-            free1(st[i]);
+            _free(st[i]);
         st[i] = NULL;
     }
 }

@@ -10,7 +10,7 @@
 #define PIDS_FOR_ADAPTER 128
 #define MAX_CA_PIDS 64
 
-#define DDCI_BUFFER (100000 * 188)
+#define DDCI_BUFFER (20000 * 188)
 
 // keeps PMT informations for the channels that are enabled on this ddci_device
 typedef struct ddci_pmt {
