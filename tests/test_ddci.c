@@ -517,12 +517,38 @@ int main() {
     TEST_FUNC(test_channels(), "testing test_channels");
     TEST_FUNC(test_add_del_pmt(), "testing adding and removing pmts");
     TEST_FUNC(test_push_ts_to_ddci(), "testing test_push_ts_to_ddci");
-    TEST_FUNC(test_copy_ts_from_ddci(), "testing test_copy_ts_from_ddci");
-    TEST_FUNC(test_ddci_process_ts(), "testing ddci_process_ts");
-    TEST_FUNC(test_create_pat(), "testing create_pat");
-    TEST_FUNC(test_create_pmt(), "testing create_pmt");
-    free_all_pmts();
-    free_alloc();
-    fflush(stdout);
-    return 0;
+    LOG("Assemble packet failed");
+    return 1;
 }
+int new_pid = packet[30] * 256 + packet[31];
+int new_capid = packet[21] * 256 + packet[22];
+new_pid &= 0x1FFF;
+new_capid &= 0x1FFF;
+if (new_pid != dpid)
+    LOG_AND_RETURN(1, "PMT stream pid %04X != mapping table pid %04X", new_pid,
+                   dpid);
+if (new_capid != dcapid)
+    LOG_AND_RETURN(1, "PMT PSI pid %04X != mapping table pid %04X", new_capid,
+                   dcapid);
+
+SPMT *new_pmt = get_pmt(pmt_add(0, 200, 200, psi_len));
+ad.id = 0;
+ad.enabled = 1;
+a[0] = &ad;
+ad.pids[0].pid = pid;
+ad.pids[0].flags = 1;
+
+ad.active_pmts = 1;
+ad.active_pmt[0] = pmt->id;
+
+process_pmt(0, psi + 1, psi_len, new_pmt);
+filters[0] = NULL;
+ASSERT_EQUAL(pmt->stream_pids, new_pmt->stream_pids,
+             "Number of streampids does not matches between generated PMT and "
+             "read PMT");
+ASSERT_EQUAL(pmt->caids, new_pmt->caids,
+             "Number of caids does not matches "
+             "between generated PMT and read PMT");
+
+free_hash(&d.mapping);
+return 0;
