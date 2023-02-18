@@ -101,17 +101,12 @@ int getItemLen(SHashTable *hash, uint64_t key) {
 }
 
 int getItemSize(SHashTable *hash, uint64_t key) {
-    int i, locking = 0;
+    int i;
     int result = 0;
-    if (hash->mutex.state > 0) {
-        locking = 1;
-        mutex_lock(&hash->mutex);
-    }
-
+    mutex_lock(&hash->mutex);
     i = get_index_hash(hash, key);
     result = i >= 0 ? hash->items[i].max_size : 0;
-    if (locking)
-        mutex_unlock(&hash->mutex);
+    mutex_unlock(&hash->mutex);
     return result;
 }
 
@@ -183,11 +178,11 @@ int _setItem(SHashTable *hash, uint64_t key, void *data, int len, int copy) {
         ht.init = 0;
 
         // Do not fail, hash table full will fail before this code.
-        if (_create_hash_table(&ht, new_size, hash->file, hash->line)){
+        if (_create_hash_table(&ht, new_size, hash->file, hash->line)) {
             LOG_AND_RETURN(0, "Resizing hash_table at %p from %d to %d", hash,
                            hash->size, new_size);
-	    mutex_unlock(&hash->mutex);
-	}
+            mutex_unlock(&hash->mutex);
+        }
         hash->resize = 1;
         ht.resize = 1;
         copy_hash_table(hash, &ht);

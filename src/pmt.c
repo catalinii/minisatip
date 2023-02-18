@@ -1365,13 +1365,17 @@ int pmt_del(int id) {
     pmt->adapter = -1;
 
     for (i = 0; i < pmt->caids; i++)
-        if (pmt->ca[i])
+        if (pmt->ca[i]) {
             _free(pmt->ca[i]);
+            pmt->ca[i] = NULL;
+        }
     pmt->caids = 0;
 
     for (i = 0; i < pmt->stream_pids; i++)
-        if (pmt->stream_pid[i])
+        if (pmt->stream_pid[i]) {
             _free(pmt->stream_pid[i]);
+            pmt->stream_pid[i] = NULL;
+        }
 
     pmt->stream_pids = 0;
 
@@ -2115,7 +2119,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     if (pcr_pid > 0 && pcr_pid < 8191)
         pmt_add_stream_pid(pmt, pcr_pid, 0, 0, 0, 0);
 
-    if (pmt->first_active_pid < 0)
+    if ((pmt->first_active_pid < 0) && pmt->stream_pid[0])
         pmt->first_active_pid = pmt->stream_pid[0]->pid;
 
     SPMT *master = get_pmt(pmt->master_pmt);
