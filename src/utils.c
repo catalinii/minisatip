@@ -27,6 +27,7 @@
 #include "minisatip.h"
 #include "pmt.h"
 #include "socketworks.h"
+#include "utils/alloc.h"
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <errno.h>
@@ -369,37 +370,6 @@ becomeDaemon() {
 
     return 0;
 }
-
-void *mymalloc(int a, char *f, int l) {
-    void *x = malloc(a);
-    if (x)
-        memset(x, 0, a);
-    LOGM("%s:%d allocation_wrapper malloc allocated %d bytes at %p", f, l, a,
-         x);
-    if (!x)
-        LOG0("Failed allocating %d bytes of memory", a)
-    return x;
-}
-
-void *myrealloc(void *p, int a, char *f, int l) {
-    void *x = realloc(p, a);
-    if (x)
-        memset(x, 0, a);
-    LOGM("%s:%d allocation_wrapper realloc allocated %d bytes from %p -> %p", f,
-         l, a, p, x);
-    if (!x) {
-        LOG0("Failed allocating %d bytes of memory", a)
-        if (!strcmp(f, "socketworks.c"))
-            LOG0("Try to decrease the parameters -b and/or -B")
-    }
-    return x;
-}
-
-void myfree(void *x, char *f, int l) {
-    LOGM("%s:%d allocation_wrapper free called with argument %p", f, l, x);
-    free(x);
-}
-
 char *get_current_timestamp(void) {
     static char date_str[200];
     time_t date;
@@ -576,7 +546,7 @@ int add_new_lock(void **arr, int count, int size, SMutex *mutex) {
     for (i = 0; i < count; i++)
         if (!sa[i] || !sa[i]->enabled) {
             if (!sa[i]) {
-                sa[i] = malloc1(size);
+                sa[i] = _malloc(size);
                 if (!sa[i]) {
                     mutex_unlock(mutex);
                     LOG("Could not allocate memory for %p index %d", arr, i);

@@ -42,6 +42,7 @@
 #include "t2mi.h"
 #include "tables.h"
 #include "utils.h"
+#include "utils/alloc.h"
 
 #define DEFAULT_LOG LOG_STREAM
 
@@ -55,7 +56,7 @@ t2mi_device_t *get_or_alloc_t2mi(int id) {
         return NULL;
 
     LOG("Allocating t2mi for device %d", id);
-    t2[id] = malloc1(sizeof(t2mi_device_t));
+    t2[id] = _malloc(sizeof(t2mi_device_t));
     return t2[id];
 }
 
@@ -110,7 +111,7 @@ void free_t2mi() {
     int i;
     for (i = 0; i < MAX_ADAPTERS; i++)
         if (t2[i]) {
-            free1(t2[i]);
+            _free(t2[i]);
             t2[i] = NULL;
         }
 }

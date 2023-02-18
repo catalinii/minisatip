@@ -18,9 +18,10 @@
  *
  */
 #include "hash_table.h"
-#include "utils/logging/logging.h"
-#include "utils.h"
 #include "opts.h"
+#include "utils.h"
+#include "utils/alloc.h"
+#include "utils/logging/logging.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -29,14 +30,14 @@
 
 // Hash function from
 // https://stackoverflow.com/questions/664014/what-integer-hash-function-are-good-that-accepts-an-integer-hash-key
-static inline uint32_t hash_func(uint32_t x) {
-    x = ((x >> 16) ^ x) * 0x45d9f3b;
-    x = ((x >> 16) ^ x) * 0x45d9f3b;
-    x = (x >> 16) ^ x;
+static inline uint64_t hash_func(uint64_t x) {
+    x = (x ^ (x >> 30)) * UINT64_C(0xbf58476d1ce4e5b9);
+    x = (x ^ (x >> 27)) * UINT64_C(0x94d049bb133111eb);
+    x = x ^ (x >> 31);
     return x;
 }
 
-int get_index_hash(SHashTable *hash, uint32_t key) {
+int get_index_hash(SHashTable *hash, uint64_t key) {
     int pos;
     int start_pos = hash_func(key) % hash->size;
 
@@ -52,22 +53,24 @@ int get_index_hash(SHashTable *hash, uint32_t key) {
     return -1;
 }
 
-int create_hash_table(SHashTable *hash, int no) {
+int _create_hash_table(SHashTable *hash, int no, char *file, int line) {
     if (hash->init == 1)
         return 0;
     memset(hash, 0, sizeof(SHashTable));
-    hash->init = 1;
-    hash->items = malloc(no * sizeof(SHashItem));
+    hash->items = malloc1(no * sizeof(SHashItem), hash->file, hash->line, 1);
     if (!hash->items) {
         LOG_AND_RETURN(1, "Could not allocate Hash Items %d", no);
     }
     memset(hash->items, 0, no * sizeof(SHashItem));
     hash->size = no;
+    hash->init = 1;
+    hash->file = file;
+    hash->line = line;
     mutex_init(&hash->mutex);
     return 0;
 }
 
-void *getItem(SHashTable *hash, uint32_t key) {
+void *getItem(SHashTable *hash, uint64_t key) {
     int i, locking = 0;
     void *result = NULL;
     if (hash->mutex.state > 0) {
@@ -82,7 +85,7 @@ void *getItem(SHashTable *hash, uint32_t key) {
     return result;
 }
 
-int getItemLen(SHashTable *hash, uint32_t key) {
+int getItemLen(SHashTable *hash, uint64_t key) {
     int i, locking = 0;
     int result = 0;
     if (hash->mutex.state > 0) {
@@ -97,7 +100,7 @@ int getItemLen(SHashTable *hash, uint32_t key) {
     return result;
 }
 
-int getItemSize(SHashTable *hash, uint32_t key) {
+int getItemSize(SHashTable *hash, uint64_t key) {
     int i, locking = 0;
     int result = 0;
     if (hash->mutex.state > 0) {
@@ -114,14 +117,14 @@ int getItemSize(SHashTable *hash, uint32_t key) {
 
 // copy = 1 - do allocation and copy content
 // is_alloc = 1 - memory allocated
-int setItemSize(SHashItem *s, uint32_t max_size, int copy) {
+int setItemSize(SHashTable *hash, SHashItem *s, uint32_t max_size, int copy) {
     if (s->max_size >= max_size && s->is_alloc == copy)
         return 0;
     if (s->is_alloc)
-        free1(s->data);
+        _free(s->data);
     s->is_alloc = 0;
     if (copy) {
-        s->data = malloc1(max_size + 10);
+        s->data = malloc1(max_size + 10, hash->file, hash->line, 1);
         if (!s->data)
             LOG_AND_RETURN(-1, "%s: Could not resize from %d to %d",
                            __FUNCTION__, s->max_size, max_size);
@@ -132,7 +135,7 @@ int setItemSize(SHashItem *s, uint32_t max_size, int copy) {
     return 0;
 }
 
-int _setItem(SHashTable *hash, uint32_t key, void *data, int len, int copy) {
+int _setItem(SHashTable *hash, uint64_t key, void *data, int len, int copy) {
     mutex_lock(&hash->mutex);
     SHashItem *s = NULL;
     int i = get_index_hash(hash, key);
@@ -158,7 +161,7 @@ int _setItem(SHashTable *hash, uint32_t key, void *data, int len, int copy) {
         LOG_AND_RETURN(-1, "%s failed for key %jx", __FUNCTION__, key);
     }
 
-    if (setItemSize(s, len, copy)) {
+    if (setItemSize(hash, s, len, copy)) {
         mutex_unlock(&hash->mutex);
         return 1;
     }
@@ -180,9 +183,11 @@ int _setItem(SHashTable *hash, uint32_t key, void *data, int len, int copy) {
         ht.init = 0;
 
         // Do not fail, hash table full will fail before this code.
-        if (create_hash_table(&ht, new_size))
+        if (_create_hash_table(&ht, new_size, hash->file, hash->line)){
             LOG_AND_RETURN(0, "Resizing hash_table at %p from %d to %d", hash,
                            hash->size, new_size);
+	    mutex_unlock(&hash->mutex);
+	}
         hash->resize = 1;
         ht.resize = 1;
         copy_hash_table(hash, &ht);
@@ -207,7 +212,7 @@ void copy_hash_table(SHashTable *s, SHashTable *d) {
         }
 }
 
-int delItem(SHashTable *hash, uint32_t key) {
+int delItem(SHashTable *hash, uint64_t key) {
     mutex_lock(&hash->mutex);
 
     int empty = get_index_hash(hash, key);
@@ -253,10 +258,10 @@ void free_hash(SHashTable *hash) {
     mutex_lock(&hash->mutex);
     for (i = 0; i < hash->size; i++)
         if (hash->items[i].is_alloc) {
-            free(hash->items[i].data);
+            _free(hash->items[i].data);
         }
     void *items = hash->items;
-    free(items);
+    _free(items);
     hash->items = NULL;
     hash->size = 0;
     // mutex_unlock(&hash->mutex);

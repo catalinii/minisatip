@@ -25,6 +25,7 @@
 #include "minisatip.h"
 #include "socketworks.h"
 #include "utils.h"
+#include "utils/alloc.h"
 #include "utils/testing.h"
 #include <arpa/inet.h>
 #include <ctype.h>
@@ -84,23 +85,27 @@ int test_multiple_pmt() {
 
 int test_create_capmt() {
     uint8_t clean[1500];
-    pmt_add(5, 0, 500, 500);
-    pmt_add(6, 0, 600, 600);
-    add_pmt_to_capmt(&d, get_pmt(5), 1);
-    add_pmt_to_capmt(&d, get_pmt(6), 1);
-    SPMT *pmt = get_pmt(5);
+    int p1 = pmt_add(0, 500, 500, 0);
+    int p2 = pmt_add(0, 600, 600, 0);
+    add_pmt_to_capmt(&d, get_pmt(p1), 1);
+    add_pmt_to_capmt(&d, get_pmt(p2), 1);
+    SPMT *pmt = get_pmt(p1);
     pmt->stream_pids = 2;
-    pmt->stream_pid[0].pid = 501;
-    pmt->stream_pid[0].type = 2;
-    pmt->stream_pid[0].pid = 502;
-    pmt->stream_pid[0].type = 3;
+    pmt->stream_pid[0] = _malloc(sizeof(SStreamPid));
+    pmt->stream_pid[0]->pid = 501;
+    pmt->stream_pid[0]->type = 2;
+    pmt->stream_pid[0]->pid = 502;
+    pmt->stream_pid[0]->type = 3;
+    pmt->stream_pid[1] = _malloc(sizeof(SStreamPid));
 
-    pmt = get_pmt(6);
+    pmt = get_pmt(p2);
     pmt->stream_pids = 2;
-    pmt->stream_pid[0].pid = 601;
-    pmt->stream_pid[0].type = 2;
-    pmt->stream_pid[0].pid = 602;
-    pmt->stream_pid[0].type = 3;
+    pmt->stream_pid[0] = _malloc(sizeof(SStreamPid));
+    pmt->stream_pid[0]->pid = 601;
+    pmt->stream_pid[0]->type = 2;
+    pmt->stream_pid[0]->pid = 602;
+    pmt->stream_pid[0]->type = 3;
+    pmt->stream_pid[1] = _malloc(sizeof(SStreamPid));
 
     int len = create_capmt(d.capmt, 1, clean, sizeof(clean), 0, 0);
     if (len <= 0)

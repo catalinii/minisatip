@@ -15,9 +15,6 @@ int map_int(char *s, char **v);
 int map_intd(char *s, char **v, int dv);
 int map_float(char *s, int mul);
 int check_strs(char *s, char **v, int dv);
-void *mymalloc(int a, char *f, int l);
-void *myrealloc(void *p, int a, char *f, int l);
-void myfree(void *x, char *f, int l);
 char *header_parameter(char **arg, int i);
 char *get_current_timestamp();
 char *strip(char *s);
@@ -54,10 +51,6 @@ void _strncpy(char *a, char *b, int len);
 #define hexdump(message, b, len)                                               \
     if (DEFAULT_LOG & opts.debug)                                              \
     _hexdump(message, b, len)
-
-#define malloc1(a) mymalloc(a, __FILE__, __LINE__)
-#define free1(a) myfree(a, __FILE__, __LINE__)
-#define realloc1(a, b) myrealloc(a, b, __FILE__, __LINE__)
 
 #define strlcatf(buf, size, ptr, fmt...)                                       \
     do {                                                                       \

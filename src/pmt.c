@@ -28,6 +28,7 @@
 #include "socketworks.h"
 #include "tables.h"
 #include "utils.h"
+#include "utils/alloc.h"
 #include "utils/ticks.h"
 
 #include <arpa/inet.h>
@@ -487,6 +488,14 @@ int set_filter_flags(int id, int flags) {
     return 0;
 }
 
+int set_filter_opaque(int id, void *opaque) {
+    SFilter *f = get_filter(id);
+    if (!f)
+        LOG_AND_RETURN(1, "Filter %d not found", id)
+    f->opaque = opaque;
+    return 0;
+}
+
 int set_filter_mask(int id, uint8_t *filter, uint8_t *mask) {
     SFilter *f = get_filter(id);
     if (f) {
@@ -914,7 +923,7 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
     }
 
     if (!cws[i]) {
-        cws[i] = malloc1(sizeof(SCW));
+        cws[i] = _malloc(sizeof(SCW));
         if (!cws[i]) {
             LOG("CWS: could not allocate memory");
             mutex_unlock(&cws_mutex);
@@ -1085,7 +1094,6 @@ void start_active_pmts(adapter *ad) {
         if ((ad->pids[i].flags == 1)) {
             pids[ad->pids[i].pid] = ad->pids + i;
         }
-
     for (i = 0; i < ad->active_pmts; i++) {
         SPMT *pmt = get_pmt(ad->active_pmt[i]);
         if (!pmt)
@@ -1095,8 +1103,9 @@ void start_active_pmts(adapter *ad) {
         int pmt_started = 0;
         for (j = 0; j < pmt->stream_pids; j++)
             // for all audio and video streams start the PMT containing them
-            if ((pmt->stream_pid[j].is_audio || pmt->stream_pid[j].is_video) &&
-                pids[pmt->stream_pid[j].pid] && pmt->id == pmt->master_pmt) {
+            if ((pmt->stream_pid[j]->is_audio ||
+                 pmt->stream_pid[j]->is_video) &&
+                pids[pmt->stream_pid[j]->pid] && pmt->id == pmt->master_pmt) {
                 is_active = 1;
 #ifndef DISABLE_TABLES
                 if (!first) {
@@ -1108,13 +1117,13 @@ void start_active_pmts(adapter *ad) {
                     send_pmt_to_cas(ad, pmt);
                 }
 #endif
-                SPid *p = pids[pmt->stream_pid[j].pid];
+                SPid *p = pids[pmt->stream_pid[j]->pid];
                 if (p && p->pmt < 0) {
                     p->pmt = pmt->id;
                     p->is_decrypted = 0;
                     LOGM("Found PMT %d active with pid %d while processing the "
                          "PAT",
-                         pmt->id, pmt->stream_pid[j].pid);
+                         pmt->id, pmt->stream_pid[j]->pid);
 #ifndef DISABLE_TABLES
                     if (!pmt_started)
                         tables_add_pid(ad, pmt, p->pid);
@@ -1206,12 +1215,12 @@ void emulate_add_all_pids(adapter *ad) {
                     continue;
 
                 for (k = 0; k < pmt->stream_pids; k++)
-                    if (!pids[pmt->stream_pid[k].pid]) {
+                    if (!pids[pmt->stream_pid[k]->pid]) {
                         LOG("%s: adding pid %d to emulate all pids",
-                            __FUNCTION__, pmt->stream_pid[k].pid)
+                            __FUNCTION__, pmt->stream_pid[k]->pid)
                         mark_pid_add(p_all->sid[i], ad->id,
-                                     pmt->stream_pid[k].pid);
-                        pids[pmt->stream_pid[k].pid] = 1;
+                                     pmt->stream_pid[k]->pid);
+                        pids[pmt->stream_pid[k]->pid] = 1;
                         updated = 1;
                     }
             }
@@ -1272,23 +1281,11 @@ int pmt_process_stream(adapter *ad) {
     return 0;
 }
 
-int pmt_add(int i, int adapter, int sid, int pmt_pid) {
+int pmt_add(int adapter, int sid, int pmt_pid, int pmt_len) {
 
     SPMT *pmt;
-    if (i == -1)
-        i = add_new_lock((void **)pmts, MAX_PMT, sizeof(SPMT), &pmts_mutex);
-    else {
-        if (pmts[i])
-            mutex_lock(&pmts[i]->mutex);
-        else {
-            pmts[i] = malloc1(sizeof(SPMT));
-            if (!pmts[i])
-                LOG_AND_RETURN(-1, "Could not allocate memory for the pmt %d",
-                               i);
-            mutex_init(&pmts[i]->mutex);
-            mutex_lock(&pmts[i]->mutex);
-        }
-    }
+    int i = add_new_lock((void **)pmts, MAX_PMT, sizeof(SPMT) + pmt_len,
+                         &pmts_mutex);
     if (i == -1 || !pmts[i]) {
         LOG_AND_RETURN(-1, "PMT buffer is full, could not add new pmts");
     }
@@ -1305,10 +1302,11 @@ int pmt_add(int i, int adapter, int sid, int pmt_pid) {
     pmt->grace_time = PMT_GRACE_TIME;
     pmt->start_time = 0;
     pmt->blen = 0;
+    pmt->pmt_len = pmt_len;
     pmt->last_update_cw = 0;
     if (!pmt->batch) {
         int len = sizeof(pmt->batch[0]) * (opts.adapter_buffer / 188 + 100);
-        pmt->batch = malloc(len);
+        pmt->batch = _malloc(len);
         LOGM("Allocation batch with size %d at %p", len, pmt->batch);
         if (!pmt->batch)
             return -1;
@@ -1324,15 +1322,12 @@ int pmt_add(int i, int adapter, int sid, int pmt_pid) {
     pmt->clean_pos = pmt->clean_cc = 0;
     pmt->caids = 0;
 
-    pmt->stream_pids = 0;
-    memset(pmt->stream_pid, 0, sizeof(pmt->stream_pid));
-
     if (i >= npmts)
         npmts = i + 1;
 
     mutex_unlock(&pmt->mutex);
-    LOG("returning new pmt %d for adapter %d, pmt pid %d sid %d %04X", i,
-        adapter, pmt_pid, sid, sid);
+    LOG("returning new pmt %d for adapter %d, pmt pid %d, sid %d %04X, len %d",
+        i, adapter, pmt_pid, sid, sid, pmt_len);
 
     return i;
 }
@@ -1369,6 +1364,17 @@ int pmt_del(int id) {
     pmt->pid = 0;
     pmt->adapter = -1;
 
+    for (i = 0; i < pmt->caids; i++)
+        if (pmt->ca[i])
+            _free(pmt->ca[i]);
+    pmt->caids = 0;
+
+    for (i = 0; i < pmt->stream_pids; i++)
+        if (pmt->stream_pid[i])
+            _free(pmt->stream_pid[i]);
+
+    pmt->stream_pids = 0;
+
     i = MAX_PMT;
     while (--i >= 0)
         if (pmts[i] && pmts[i]->enabled)
@@ -1379,20 +1385,26 @@ int pmt_del(int id) {
     return 0;
 }
 
-int cache_pmt_for_adapter(int aid) {
+void cache_pmt_for_adapter(adapter *ad, SPMT *pmt) {
+    if (!pmt)
+        return;
+    int i;
+#ifndef DISABLE_TABLES
+    close_pmt_for_cas(ad, pmt);
+#endif
+    pmt->state = PMT_CACHED;
+    pmt->disabled_ca_mask = 0;
+    pmt->ca_mask = 0;
+    for (i = 0; i < ad->active_pmts; i++)
+        if (ad->active_pmt[i] == pmt->id)
+            ad->active_pmt[i] = -1;
+}
+
+int cache_pmts_for_adapter(int aid) {
     int i;
     adapter *ad = get_adapter(aid);
     for (i = 0; i < ad->active_pmts; i++) {
-        SPMT *pmt = get_pmt(ad->active_pmt[i]);
-        if (pmt) {
-#ifndef DISABLE_TABLES
-            close_pmt_for_cas(ad, pmt);
-#endif
-            pmt->state = PMT_CACHED;
-            ad->active_pmt[i] = -1;
-            pmt->disabled_ca_mask = 0;
-            pmt->ca_mask = 0;
-        }
+        cache_pmt_for_adapter(ad, get_pmt(ad->active_pmt[i]));
     }
     return 0;
 }
@@ -1402,10 +1414,7 @@ void clear_pmt_for_adapter(int aid) {
     adapter *ad = get_adapter(aid);
     if (!ad)
         return;
-    if (ad->cache_pmts)
-        cache_pmt_for_adapter(aid);
-    else
-        delete_pmt_for_adapter(aid);
+    cache_pmts_for_adapter(aid);
     delete_filter_for_adapter(aid);
     if (ad) {
         ad->pat_processed = 0;
@@ -1420,18 +1429,6 @@ void clear_pmt_for_adapter(int aid) {
     }
     ad->active_pmts = 0;
     return;
-}
-
-void delete_pmt_for_adapter(int aid) {
-    int i, pmt;
-    adapter *ad = get_adapter(aid);
-    if (!ad)
-        return;
-    for (i = 0; i < ad->active_pmts; i++) {
-        pmt = ad->active_pmt[i];
-        if (get_pmt(pmt))
-            pmt_del(pmt);
-    }
 }
 
 SPMT *get_pmt_for_sid(int aid, int sid) {
@@ -1551,7 +1548,7 @@ void clean_psi(adapter *ad, uint8_t *b, int pid) {
         return;
     }
     if (!cpmt->clean)
-        cpmt->clean = malloc1(clean_size + 10);
+        cpmt->clean = _malloc(clean_size + 10);
     clean = cpmt->clean;
 
     pmt_len = cpmt->pmt_len;
@@ -1701,6 +1698,22 @@ int assemble_packet(SFilter *f, uint8_t *b) {
     return len;
 }
 
+void pmt_add_active_pmt(adapter *ad, int pmt_id) {
+    // Add the pmt to the list of active PMTs if not already added
+    SPMT *pmt = get_pmt(pmt_id);
+    if (!pmt)
+        return;
+    int is_added = 0, i;
+    for (i = 0; i < ad->active_pmts; i++)
+        if (ad->active_pmt[i] == pmt_id)
+            is_added = 1;
+    if (!is_added) {
+        ad->active_pmt[ad->active_pmts++] = pmt_id;
+        if (pmt->state == PMT_CACHED)
+            pmt->state = PMT_STOPPED;
+    }
+}
+
 int process_pat(int filter, unsigned char *b, int len, void *opaque) {
     int pat_len = 0, i, tid = 0, pid, sid, ver;
     adapter *ad = (adapter *)opaque;
@@ -1766,7 +1779,8 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque) {
         sid = b[i] * 256 + b[i + 1];
         pid = (b[i + 2] & 0x1F) * 256 + b[i + 3];
         existing_pmt = get_pmt_for_sid_pid(ad->id, sid, pid);
-        LOG("Adapter %d, PMT sid %d (%04X), pid %d", ad->id, sid, sid, pid);
+        LOG("Adapter %d, PMT %d sid %d (%04X), pid %d", ad->id,
+            existing_pmt ? existing_pmt->id : -1, sid, sid, pid);
 
         if (new_version && existing_pmt)
             seen_pmts[existing_pmt->id] = 1;
@@ -1775,10 +1789,8 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque) {
             int pmt_id = -1;
             if (existing_pmt) {
                 pmt_id = existing_pmt->id;
-                existing_pmt->state = PMT_STOPPED;
-            } else
-                pmt_id = pmt_add(-1, ad->id, sid, pid);
-            ad->active_pmt[ad->active_pmts++] = pmt_id;
+                pmt_add_active_pmt(ad, pmt_id);
+            }
             SPMT *pmt = get_pmt(pmt_id);
             memset(new_filter, 0, sizeof(new_filter));
             memset(new_mask, 0, sizeof(new_mask));
@@ -1786,14 +1798,10 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque) {
             new_mask[1] = 0xFF;
             new_filter[2] = b[i + 1];
             new_mask[2] = 0xFF;
-            if (pmt)
-                pmt->filter = add_filter_mask(
-                    ad->id, pid, (void *)process_pmt, pmt,
-                    (existing_pmt == NULL) ? FILTER_ADD_REMOVE | FILTER_CRC : 0,
-                    new_filter, new_mask);
-            else
-                LOG("could not add PMT pid %d sid %d (%X) for processing", pid,
-                    sid, sid);
+            add_filter_mask(
+                ad->id, pid, (void *)process_pmt, pmt,
+                (existing_pmt == NULL) ? FILTER_ADD_REMOVE | FILTER_CRC : 0,
+                new_filter, new_mask);
             if (pmt_id >= 0)
                 seen_pmts[pmt_id] = 1;
         }
@@ -1803,13 +1811,16 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque) {
         for (i = 0; i < npmts; i++)
             if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == ad->id &&
                 seen_pmts[i] == 0) {
-                LOG("Deleting PMT %d (%s) and filter %d as it is not "
-                    "present "
-                    "in the "
-                    "new PAT",
+                LOG("Caching PMT %d (%s) and filter %d as it is not "
+                    "present in the new PAT",
                     i, pmts[i]->name, pmts[i]->filter);
-                del_filter(pmts[i]->filter);
-                pmt_del(i);
+                if (ad->type == ADAPTER_CI) {
+                    // Do not cache PMTs for CI adapters as they are being
+                    // re-generated very often (on channel change)
+                    del_filter(pmts[i]->filter);
+                    pmt_del(i);
+                } else
+                    cache_pmt_for_adapter(ad, pmts[i]);
             }
     }
 
@@ -1822,7 +1833,7 @@ int pmt_caid_exist(SPMT *pmt, uint16_t caid, uint16_t capid) {
     int i;
 
     for (i = 0; i < pmt->caids; i++) {
-        if (caid == pmt->ca[i].id && capid == pmt->ca[i].pid)
+        if (caid == pmt->ca[i]->id && capid == pmt->ca[i]->pid)
             return 1;
     }
     return 0;
@@ -1853,29 +1864,35 @@ void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid, uint8_t *data,
 
     LOG("PMT %d PI pos %d caid %04X => pid %04X (%d), index %d", pmt->id,
         pmt->caids + 1, caid, capid, capid, pmt->caids);
+    if (ensure_allocated((void **)pmt->ca + pmt->caids, sizeof(SPMTCA), 1, len,
+                         1))
+        return;
 
-    pmt->ca[pmt->caids].id = caid;
-    pmt->ca[pmt->caids].pid = capid;
-    pmt->ca[pmt->caids].private_data_len = len;
-    if (len > sizeof(pmt->ca[pmt->caids].private_data)) {
-        LOG("PMT %d CAID %04x PID %d, private data too large %d", pmt->id, caid,
-            capid, len);
-        pmt->ca[pmt->caids].private_data_len =
-            sizeof(pmt->ca[pmt->caids].private_data);
-    }
-    memcpy(pmt->ca[pmt->caids].private_data, data,
-           pmt->ca[pmt->caids].private_data_len);
+    pmt->ca[pmt->caids]->id = caid;
+    pmt->ca[pmt->caids]->pid = capid;
+    pmt->ca[pmt->caids]->private_data_len = len;
+    memcpy(pmt->ca[pmt->caids]->private_data, data,
+           pmt->ca[pmt->caids]->private_data_len);
     pmt->caids++;
     pmt->ca_mask = 0; // force sending the PMT to all CAs
     pmt->disabled_ca_mask = 0;
 }
 
 void pmt_add_descriptor(SPMT *pmt, int stream_id, unsigned char *desc) {
-    SStreamPid *sp = pmt->stream_pid + stream_id;
     int i, es_len;
     int new_desc_id = desc[0];
     int new_desc_len = desc[1] + 2;
 
+    // allocate memory for the streampid and descriptor
+    if (ensure_allocated(
+            (void **)pmt->stream_pid + stream_id, sizeof(SStreamPid), 1,
+            pmt->stream_pid[stream_id]
+                ? new_desc_len + pmt->stream_pid[stream_id]->desc_len
+                : new_desc_len,
+            20))
+        return;
+
+    SStreamPid *sp = pmt->stream_pid[stream_id];
     // do not add an already existing descriptor
     for (i = 0; i < sp->desc_len; i += es_len + 2) {
         es_len = sp->desc[i + 1];
@@ -1886,14 +1903,7 @@ void pmt_add_descriptor(SPMT *pmt, int stream_id, unsigned char *desc) {
             return;
         }
     }
-    // make sure the desc can fit the new descriptor
-    if (sizeof(sp->desc) < new_desc_len + sp->desc_len) {
-        LOGM("ERROR: PMT %d pid %d descriptor %d (new len %d) will not fit "
-             "and "
-             "be discarded",
-             pmt->pid, sp->pid, new_desc_id, desc[1]);
-        return;
-    }
+
     memcpy(sp->desc + sp->desc_len, desc, new_desc_len);
     sp->desc_len += new_desc_len;
 }
@@ -1927,10 +1937,10 @@ int get_master_pmt_for_pid(adapter *ad, int pid) {
             DEBUGM("searching pid %d ad %d in pmt %d, active pids %d", pid,
                    ad->id, pmt->id, pmt->stream_pids);
             for (j = 0; j < pmt->stream_pids; j++) {
-                DEBUGM("comparing with pid %d", pmt->stream_pid[j].pid);
-                if (pmt->stream_pid[j].pid == pid &&
-                    (pmt->stream_pid[j].is_video ||
-                     pmt->stream_pid[j].is_audio)) {
+                DEBUGM("comparing with pid %d", pmt->stream_pid[j]->pid);
+                if (pmt->stream_pid[j]->pid == pid &&
+                    (pmt->stream_pid[j]->is_video ||
+                     pmt->stream_pid[j]->is_audio)) {
                     LOGM("%s: ad %d found pid %d in master pmt %d",
                          __FUNCTION__, ad->id, pid, pmt->master_pmt);
                     return pmt->master_pmt;
@@ -1942,30 +1952,64 @@ int get_master_pmt_for_pid(adapter *ad, int pid) {
     return -1;
 }
 
+int pmt_add_stream_pid(SPMT *pmt, int pid, int type, int is_audio, int is_video,
+                       int es_len) {
+    if (pmt->stream_pids >= MAX_PMT_PIDS)
+        LOG_AND_RETURN(-1, "PMT %d, max number of stream pids reached (%d)",
+                       pmt->id, pmt->stream_pids);
+
+    if (ensure_allocated((void **)pmt->stream_pid + pmt->stream_pids,
+                         sizeof(SStreamPid), 1, es_len, 8))
+        LOG_AND_RETURN(-1,
+                       "PMT %d: could not allocate memory for stream pid %d",
+                       pmt->id, pid);
+    pmt->stream_pid[pmt->stream_pids]->type = type;
+    pmt->stream_pid[pmt->stream_pids]->pid = pid;
+    pmt->stream_pid[pmt->stream_pids]->is_audio = is_audio;
+    pmt->stream_pid[pmt->stream_pids]->is_video = is_video;
+    return pmt->stream_pids++;
+}
+
 int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     int pi_len = 0, isAC3, pmt_len = 0, i, es_len, ver, pcr_pid = 0;
     unsigned char *pmt_b, *pi;
-    int pid, spid, stype;
+    int pid, spid, stype, sid;
     SPid *p;
     SFilter *f;
-    adapter *ad;
+    adapter *ad = NULL;
     SPMT *pmt = (void *)opaque;
 
     if (b[0] != 2)
         return 0;
 
+    pid = get_filter_pid(filter);
+    ver = (b[5] & 0x3e) >> 1;
+    sid = b[3] * 256 + b[4];
+
+    f = get_filter(filter);
+    if (f)
+        ad = get_adapter(f->adapter);
+    if (!ad) {
+        LOG("Adapter %d does not exist", pmt->adapter);
+        return 0;
+    }
+
+    if (!pmt) {
+        pmt = get_pmt(pmt_add(f->adapter, sid, pid, len));
+        set_filter_opaque(filter, pmt);
+    }
+
     if (!pmt || !pmt->enabled) {
         LOG("PMT %d does not exist", pmt ? pmt->id : -1);
         return 0;
     }
+    pmt->filter = filter;
 
-    pid = get_filter_pid(filter);
-    ad = get_adapter(pmt->adapter);
-    ver = (b[5] & 0x3e) >> 1;
-
-    f = get_filter(filter);
-    if (f && f->adapter != pmt->adapter)
-        LOG("Adapter mismatch %d != %d", f->adapter, pmt->adapter);
+    if (pmt->pmt_len < len) {
+        pmt = _realloc(pmt, sizeof(SPMT) + len);
+        pmts[pmt->id] = pmt;
+    }
+    pmt_add_active_pmt(ad, pmt->id);
 
     if (pmt->version == ver) {
         // just for testing purposes
@@ -1978,17 +2022,12 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
 
         return 0;
     } else
-        // In case of PMT update, just stop the PMT before processing the update
+        // In case of PMT update, just stop the PMT before processing the
+        // update
         stop_pmt(pmt, ad);
 
-    if (!ad) {
-        LOG("Adapter %d does not exist", pmt->adapter);
-        return 0;
-    }
-
-    memset(pmt->pmt, 0, sizeof(pmt->pmt));
-    memcpy(pmt->pmt, b, len);
     pmt->pmt_len = len;
+    memcpy(pmt->pmt, b, len);
 
     if (!(p = find_pid(ad->id, pid)))
         return -1;
@@ -1998,7 +2037,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     pi_len = ((b[10] & 0xF) << 8) + b[11];
     pcr_pid = ((b[8] & 0x1F) << 8) + b[9];
 
-    pmt->sid = b[3] * 256 + b[4];
+    pmt->sid = sid;
     pmt->version = ver;
     pmt->pcr_pid = pcr_pid;
 
@@ -2040,12 +2079,9 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         int opmt = get_master_pmt_for_pid(ad, spid);
 
         if (pmt->stream_pids < MAX_PMT_PIDS - 1) {
-            stream_pid_id = pmt->stream_pids;
-            pmt->stream_pid[pmt->stream_pids].type = stype;
-            pmt->stream_pid[pmt->stream_pids].pid = spid;
-            pmt->stream_pid[pmt->stream_pids].is_audio = is_audio;
-            pmt->stream_pid[pmt->stream_pids].is_video = is_video;
-            pmt->stream_pids++;
+            stream_pid_id = pmt_add_stream_pid(pmt, spid, stype, is_audio,
+                                               is_video, es_len);
+
         } else
             LOG("Too many pids for pmt %d, discarding pid %d", pmt->id, spid);
 
@@ -2076,25 +2112,19 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         }
     }
     // Add the PCR pid if it's independent
-    if (pcr_pid > 0 && pcr_pid < 8191) {
-        if (pmt->stream_pids < MAX_PMT_PIDS - 1) {
-            pmt->stream_pid[pmt->stream_pids].type = 0;
-            pmt->stream_pid[pmt->stream_pids++].pid = pcr_pid;
-            LOG("added independent PCR pid %d for pmt %d", pcr_pid, pmt->id);
-        } else
-            LOG("Too many pids for pmt %d, discarding prc_pid %d", pmt->id,
-                pcr_pid);
-    }
+    if (pcr_pid > 0 && pcr_pid < 8191)
+        pmt_add_stream_pid(pmt, pcr_pid, 0, 0, 0, 0);
 
     if (pmt->first_active_pid < 0)
-        pmt->first_active_pid = pmt->stream_pid[0].pid;
+        pmt->first_active_pid = pmt->stream_pid[0]->pid;
 
     SPMT *master = get_pmt(pmt->master_pmt);
     if (pmt->caids && master && master != pmt) {
         int i;
         for (i = 0; i < pmt->caids; i++)
-            pmt_add_caid(master, pmt->ca[i].id, pmt->ca[i].pid,
-                         pmt->ca[i].private_data, pmt->ca[i].private_data_len);
+            pmt_add_caid(master, pmt->ca[i]->id, pmt->ca[i]->pid,
+                         pmt->ca[i]->private_data,
+                         pmt->ca[i]->private_data_len);
     }
 
     if (!pmt->state)
@@ -2267,11 +2297,11 @@ void pmt_pid_del(adapter *ad, int pid) {
 
     ep = 0;
     for (i = 0; i < pmt->stream_pids; i++)
-        if (pmt->stream_pid[i].pid != pid &&
-            (p = find_pid(ad->id, pmt->stream_pid[i].pid)) &&
+        if (pmt->stream_pid[i]->pid != pid &&
+            (p = find_pid(ad->id, pmt->stream_pid[i]->pid)) &&
             (p->flags == 1 || p->flags == 2)) {
             LOGM("found active pid %d for pmt id %d, pid %d",
-                 pmt->stream_pid[i].pid, pmt->id, pmt->pid);
+                 pmt->stream_pid[i]->pid, pmt->id, pmt->pid);
             ep++;
         }
 
@@ -2309,15 +2339,15 @@ int pmt_tune(adapter *ad) {
 int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf) {
     int i, len = 0;
     for (i = 0; i < pmt->caids; i++) {
-        int private_data_len = pmt->ca[i].private_data_len;
+        int private_data_len = pmt->ca[i]->private_data_len;
         buf[len] = 0x09;
         buf[len + 1] = 0x04 + private_data_len;
-        copy16(buf, len + 2, pmt->ca[i].id);
-        copy16(buf, len + 4, pmt->ca[i].pid);
-        memcpy(buf + len + 6, pmt->ca[i].private_data, private_data_len);
+        copy16(buf, len + 2, pmt->ca[i]->id);
+        copy16(buf, len + 4, pmt->ca[i]->pid);
+        memcpy(buf + len + 6, pmt->ca[i]->private_data, private_data_len);
         len += 6 + private_data_len;
-        LOGM("PMT %d added caid %04X, pid %04X, pos %d", pmt->id, pmt->ca[i].id,
-             pmt->ca[i].pid, len);
+        LOGM("PMT %d added caid %04X, pid %04X, pos %d", pmt->id,
+             pmt->ca[i]->id, pmt->ca[i]->pid, len);
     }
     return len;
 }
@@ -2326,13 +2356,13 @@ int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
                   int added_only) {
     int i = 0, pos = 0;
     for (i = 0; i < pmt->stream_pids; i++) {
-        if (added_only && !find_pid(pmt->adapter, pmt->stream_pid[i].pid)) {
+        if (added_only && !find_pid(pmt->adapter, pmt->stream_pid[i]->pid)) {
             LOGM("%s: skipping pmt %d (ad %d) pid %d from CAPMT", __FUNCTION__,
-                 pmt->id, pmt->adapter, pmt->stream_pid[i].pid);
+                 pmt->id, pmt->adapter, pmt->stream_pid[i]->pid);
             continue;
         }
-        capmt[pos++] = pmt->stream_pid[i].type;
-        copy16(capmt, pos, pmt->stream_pid[i].pid);
+        capmt[pos++] = pmt->stream_pid[i]->type;
+        copy16(capmt, pos, pmt->stream_pid[i]->pid);
         pos += 2;
         int pi_len_pos = pos, pi_len = 0;
         pos += 2;
@@ -2388,13 +2418,23 @@ char *get_pmt_for_adapter(int aid, char *dest, int max_size) {
     return dest;
 }
 
-void free_all_pmts(void) {
-    int i;
+void free_all_pmts() {
+    int i, j;
     for (i = 0; i < MAX_PMT; i++) {
         if (pmts[i]) {
             mutex_destroy(&pmts[i]->mutex);
-            free(pmts[i]->batch);
-            free(pmts[i]);
+            for (j = 0; j < pmts[i]->caids; j++)
+                if (pmts[i]->ca[j])
+                    _free(pmts[i]->ca[j]);
+            pmts[i]->caids = 0;
+
+            for (j = 0; j < pmts[i]->stream_pids; j++)
+                if (pmts[i]->stream_pid[j])
+                    _free(pmts[i]->stream_pid[j]);
+            pmts[i]->stream_pids = 0;
+
+            _free(pmts[i]->batch);
+            _free(pmts[i]);
             pmts[i] = NULL;
         }
     }
@@ -2406,7 +2446,7 @@ void free_filters() {
     for (i = 0; i < MAX_FILTERS; i++)
         if (filters[i]) {
             mutex_destroy(&filters[i]->mutex);
-            free(filters[i]);
+            _free(filters[i]);
         }
 }
 
@@ -2431,9 +2471,8 @@ int pmt_destroy() {
     return 0;
 }
 
-_symbols pmt_sym[] = {
-    {"ad_channel", VAR_FUNCTION_STRING, (void *)&get_channel_for_adapter, 0,
-     MAX_ADAPTERS, 0},
-    {"ad_pmt", VAR_FUNCTION_STRING, (void *)&get_pmt_for_adapter, 0, MAX_STREAMS,
-     0},
-    {NULL, 0, NULL, 0, 0, 0}};
+_symbols pmt_sym[] = {{"ad_channel", VAR_FUNCTION_STRING,
+                       (void *)&get_channel_for_adapter, 0, MAX_ADAPTERS, 0},
+                      {"ad_pmt", VAR_FUNCTION_STRING,
+                       (void *)&get_pmt_for_adapter, 0, MAX_STREAMS, 0},
+                      {NULL, 0, NULL, 0, 0, 0}};

@@ -33,6 +33,7 @@ alternative source
 #include "search.h"
 #include "socketworks.h"
 #include "tables.h"
+#include "utils/alloc.h"
 #include <linux/dvb/ca.h>
 
 #include "api/symbols.h"
@@ -494,7 +495,8 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
     SCAPMT *capmt = add_pmt_to_capmt(d, spmt, d->multiple_pmt);
     if (!capmt)
         LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY,
-                       "No free slots to add PMT %d to CA %d", spmt->id, d->id);
+                       "No free slots to add PMT %d to CA %d", spmt->id,
+                       d->id);
 
     first = get_pmt(capmt->pmt_id);
     if (!first)
@@ -625,7 +627,7 @@ static void element_invalidate(struct cc_ctrl_data *cc_data, unsigned int id) {
 
     e = element_get(cc_data, id);
     if (e) {
-        free(e->data);
+        _free(e->data);
         memset(e, 0, sizeof(struct element));
     }
 }
@@ -651,8 +653,8 @@ static int element_set(struct cc_ctrl_data *cc_data, unsigned int id,
         return 0;
     }
 
-    free(e->data);
-    e->data = malloc(size);
+    _free(e->data);
+    e->data = _malloc(size);
     memcpy(e->data, data, size);
     e->size = size;
     e->valid = 1;
@@ -2753,7 +2755,7 @@ fail:
 }
 
 ca_device_t *alloc_ca_device() {
-    ca_device_t *d = malloc1(sizeof(ca_device_t));
+    ca_device_t *d = _malloc(sizeof(ca_device_t));
     if (!d) {
         LOG_AND_RETURN(NULL, "Could not allocate memory for CA device");
     }
@@ -2862,7 +2864,15 @@ int dvbca_add_pid(adapter *ad, SPMT *pmt, int pid) {
     return 0;
 }
 
-SCA_op dvbca;
+SCA_op dvbca = {
+    .ca_init_dev = dvbca_init_dev,
+    .ca_close_dev = dvbca_close_dev,
+    .ca_add_pmt = dvbca_process_pmt,
+    .ca_del_pmt = dvbca_del_pmt,
+    .ca_close_ca = dvbca_close,
+    .ca_add_pid = dvbca_add_pid,
+    .ca_ts = NULL,
+};
 
 int ca_reconnect(void *arg) {
     int i;
@@ -2894,14 +2904,6 @@ void dvbca_init() // you can search the devices here and fill the
                   // them (like in this module)
 {
     int poller_sock;
-    memset(&dvbca, 0, sizeof(dvbca));
-    dvbca.ca_init_dev = dvbca_init_dev;
-    dvbca.ca_close_dev = dvbca_close_dev;
-    dvbca.ca_add_pmt = dvbca_process_pmt;
-    dvbca.ca_del_pmt = dvbca_del_pmt;
-    dvbca.ca_close_ca = dvbca_close;
-    dvbca.ca_add_pid = dvbca_add_pid;
-    dvbca.ca_ts = NULL; // dvbca_ts;
     dvbca_id = add_ca(&dvbca, 0xFFFFFFFF);
     poller_sock = sockets_add(SOCK_TIMEOUT, NULL, -1, TYPE_UDP, NULL, NULL,
                               (socket_action)ca_reconnect);

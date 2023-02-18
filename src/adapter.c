@@ -27,6 +27,7 @@
 #include <time.h>
 #include <unistd.h>
 // #include <linux/ioctl.h>
+#include "utils/alloc.h"
 #include <sys/ioctl.h>
 
 #include "adapter.h"
@@ -73,7 +74,7 @@ char fe_map[2 * MAX_ADAPTERS];
 void find_dvb_adapter(adapter **a);
 
 adapter *adapter_alloc() {
-    adapter *ad = malloc1(sizeof(adapter));
+    adapter *ad = _malloc(sizeof(adapter));
     memset(ad, 0, sizeof(adapter));
 
     /* diseqc setup */
@@ -115,14 +116,13 @@ adapter *adapter_alloc() {
 
     if (!ad->buf) {
         ad->lbuf = opts.adapter_buffer;
-        ad->buf = malloc1(ad->lbuf + 10);
+        ad->buf = _malloc(ad->lbuf + 10);
     }
 
 #ifndef DISABLE_PMT
     // filter for pid 0
     ad->pat_filter = -1;
     ad->sdt_filter = -1;
-    ad->cache_pmts = 1;
 #endif
     return ad;
 }
@@ -441,7 +441,6 @@ int close_adapter(int na) {
         set_sockets_sid(sock, -1);
     }
     mutex_destroy(&ad->mutex);
-    //      if(a[na]->buf)free1(a[na]->buf);a[na]->buf=NULL;
     LOG("done closing adapter %d", na);
     for (i = 0; i < MAX_ADAPTERS; i++)
         if (a[i] && (a[i]->master_source == ad->id) && ad->enabled &&
@@ -1446,8 +1445,8 @@ void free_all_adapters() {
             if (a[i]->free)
                 a[i]->free(a[i]);
             if (a[i]->buf)
-                free1(a[i]->buf);
-            free(a[i]);
+                _free(a[i]->buf);
+            _free(a[i]);
             a[i] = NULL;
         }
 

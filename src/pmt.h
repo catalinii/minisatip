@@ -99,17 +99,17 @@ typedef struct struct_cw {
 typedef struct struct_stream_pid {
     int type;
     int pid;
-    int desc_len;
-    uint8_t desc[256];
     char is_audio : 1;
     char is_video : 1;
+    int desc_len;
+    uint8_t desc[];
 } SStreamPid;
 
 typedef struct struct_pmt_ca {
     int id;
     int pid;
     int private_data_len;
-    uint8_t private_data[256];
+    uint8_t private_data[];
 } SPMTCA;
 
 typedef struct struct_pmt {
@@ -120,13 +120,11 @@ typedef struct struct_pmt {
     int pcr_pid;
     int adapter;
     int version;
-    SPMTCA ca[MAX_CAID];
     uint16_t caids;
-    SStreamPid stream_pid[MAX_PMT_PIDS];
+    SPMTCA *ca[MAX_CAID];
     int stream_pids;
+    SStreamPid *stream_pid[MAX_PMT_PIDS];
     int id;
-    unsigned char pmt[MAX_PI_LEN];
-    int pmt_len;
     int blen;
     int ca_mask, disabled_ca_mask;
     SPMT_batch *batch;
@@ -145,6 +143,8 @@ typedef struct struct_pmt {
     uint16_t filter;
     int clean_pos, clean_cc;
     uint8_t *clean;
+    int pmt_len; // dynamic array
+    unsigned char pmt[];
 } SPMT;
 
 // filters can be setup for specific pids and masks
@@ -207,7 +207,6 @@ int pmt_destroy();
 void start_pmt(SPMT *pmt, adapter *ad);
 int pmt_init_device(adapter *ad);
 int tables_tune(adapter *ad);
-void delete_pmt_for_adapter(int aid);
 int pmt_tune(adapter *ad);
 int get_active_filters_for_pid(int master_filter, int aid, int pid, int flags);
 int add_filter(int aid, int pid, void *callback, void *opaque, int flags);
@@ -216,6 +215,7 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
 int del_filter(int id);
 int set_filter_mask(int id, uint8_t *filter, uint8_t *mask);
 int set_filter_flags(int id, int flags);
+int set_filter_opaque(int id, void *opaque);
 int get_pid_filter(int aid, int pid);
 int get_filter_pid(int filter);
 int get_filter_adapter(int filter);
@@ -225,7 +225,7 @@ void disable_cw(int master_pmt);
 void expire_cw_for_pmt(int master_pmt, int parity, int64_t min_expiry);
 int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
                   int added_only);
-int pmt_add(int i, int adapter, int sid, int pmt_pid);
+int pmt_add(int adapter, int sid, int pmt_pid, int len);
 int test_decrypt_packet(SCW *cw, SPMT_batch *start, int len);
 void init_algo();
 void update_cw(SPMT *pmt);
@@ -234,4 +234,9 @@ int wait_pusi(adapter *ad, int len);
 int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf);
 void free_filters();
 void stop_pmt(SPMT *pmt, adapter *ad);
+int pmt_add_stream_pid(SPMT *pmt, int pid, int type, int is_audio, int is_video,
+                       int es_len);
+void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid, uint8_t *data,
+                  int len);
+void free_all_pmts();
 #endif

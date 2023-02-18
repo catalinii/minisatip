@@ -433,7 +433,7 @@ void find_netcv_adapter(adapter **a) {
         if (!a[na])
             a[na] = adapter_alloc();
         if (!sn[na])
-            sn[na] = malloc1(sizeof(SNetceiver));
+            sn[na] = _malloc(sizeof(SNetceiver));
 
         ad = a[na];
         ad->pa = 0;

@@ -28,6 +28,7 @@
 #include "socketworks.h"
 #include "tables.h"
 #include "utils.h"
+#include "utils/alloc.h"
 #include "utils/ticks.h"
 
 #include <arpa/inet.h>
@@ -465,8 +466,8 @@ int dvbapi_send_pmt(SKey *k, int cmd_id) {
     int i;
     for (i = 0; i < pmt->stream_pids; i++) {
         len += 5;
-        int type = pmt->stream_pid[i].type;
-        int pid = pmt->stream_pid[i].pid;
+        int type = pmt->stream_pid[i]->type;
+        int pid = pmt->stream_pid[i]->pid;
         buf[len - 5] = type;
         copy16(buf, len - 4, pid);
         copy16(buf, len - 2, 0);
@@ -642,7 +643,8 @@ int send_ecm(int filter_id, unsigned char *b, int len, void *opaque) {
     if ((getTick() - k->last_ecm > 1000) && !valid_cw)
         k->ecm_parity[i] = -1;
 
-    if (!opts.send_all_ecm && (b[0] == 0x80 || b[0] == 0x81) && (b[0] & 1) == k->ecm_parity[i])
+    if (!opts.send_all_ecm && (b[0] == 0x80 || b[0] == 0x81) &&
+        (b[0] & 1) == k->ecm_parity[i])
         return 0;
 
     old_parity = k->ecm_parity[i];
@@ -696,7 +698,7 @@ int keys_add(int i, int adapter, int pmt_id) {
         if (keys[i])
             mutex_lock(&keys[i]->mutex);
         else {
-            keys[i] = malloc1(sizeof(SKey));
+            keys[i] = _malloc(sizeof(SKey));
             if (!keys[i])
                 LOG_AND_RETURN(-1, "Could not allocate memory for the key %d",
                                i);
@@ -887,7 +889,7 @@ void free_all_keys(void) {
     for (i = 0; i < MAX_KEYS; i++) {
         if (keys[i]) {
             mutex_destroy(&keys[i]->mutex);
-            free(keys[i]);
+            _free(keys[i]);
         }
     }
     mutex_destroy(&keys_mutex);
