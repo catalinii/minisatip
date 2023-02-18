@@ -709,13 +709,13 @@ int get_free_adapter(transponder *tp) {
         fe = -1;
 
     if (ad)
-        LOG("get free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d src:%d f:%d "
+        LOG("get _free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d src:%d f:%d "
             "pol=%d sys: %s %s",
             tp->fe, ad->id, ad->enabled, ad->master_sid, ad->sid_cnt,
             ad->tp.diseqc, ad->tp.freq, ad->tp.pol, get_delsys(ad->sys[0]),
             get_delsys(ad->sys[1]))
     else
-        LOG("get free adapter %d msys %s requested %s", fe, get_delsys(fe),
+        LOG("get _free adapter %d msys %s requested %s", fe, get_delsys(fe),
             get_delsys(msys));
 
     dump_adapters();
@@ -740,7 +740,7 @@ int get_free_adapter(transponder *tp) {
                 return i;
 
     for (i = 0; i < MAX_ADAPTERS; i++) {
-        // first free adapter that has the same msys
+        // first _free adapter that has the same msys
         if ((ad = get_adapter_nw(i)) && ad->sid_cnt == 0 &&
             delsys_match(ad, msys) && !compare_slave_parameters(ad, tp) &&
             source_enabled_for_adapter(ad, tp))
@@ -756,11 +756,11 @@ int get_free_adapter(transponder *tp) {
 
     // No regular tuners available, check for slave tuners
     for (i = 0; i < MAX_ADAPTERS; i++) {
-        // first free slave adapter that has the same msys
+        // first _free slave adapter that has the same msys
         if ((ad = get_adapter_nw(i)) && ad->sid_cnt == 0 &&
             delsys_match(ad, msys) && compare_slave_parameters(ad, tp) &&
             source_enabled_for_adapter(ad, tp)) {
-            LOGM("get free adapter found slave adapter %d", i);
+            LOGM("get _free adapter found slave adapter %d", i);
             return i;
         }
     }
@@ -853,7 +853,7 @@ void close_adapter_for_stream(int sid, int aid, int close_stream) {
             adapter *ad2 = a[ad->master_source];
             if (ad2)
                 ad2->used &= ~(1ULL << ad->id);
-            LOGM("adapter %d freed from slave adapter %d, used %jd",
+            LOGM("adapter %d _freed from slave adapter %d, used %jd",
                  ad2 ? ad2->id : -1, ad->id, ad2 ? ad2->used : -1);
         }
     } else

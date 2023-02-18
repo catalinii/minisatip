@@ -408,7 +408,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     }
 
     if (pos == -1) {
-        LOG("No free slot found for pmt %d on DDCI %d", pmt->id, d->id);
+        LOG("No _free slot found for pmt %d on DDCI %d", pmt->id, d->id);
         mutex_unlock(&d->mutex);
         return TABLES_RESULT_ERROR_RETRY;
     }
@@ -632,7 +632,7 @@ int ddci_create_epg(ddci_device_t *d, int sid, uint8_t *eit, int version) {
     *p++ = 0x24;        // duration (one day, should cover everything)
     *p++ = 0x00;        // ...
     *p++ = 0x00;        // ...
-    *p++ = 0x90;        // running status, free/CA mode
+    *p++ = 0x90;        // running status, _free/CA mode
     *p++ = 0x00;        // descriptors loop length
     DescriptorsStart = p;
     *p++ = 0x55; // parental descriptor tag

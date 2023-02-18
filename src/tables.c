@@ -67,7 +67,7 @@ int add_ca(SCA_op *op, uint64_t adapter_mask) {
             mutex_unlock(&ca_mutex);
         }
     if (i == MAX_CA)
-        LOG_AND_RETURN(0, "No free CA slots for %p", ca);
+        LOG_AND_RETURN(0, "No _free CA slots for %p", ca);
     new_ca = i;
 
     ca[new_ca].enabled = 1;

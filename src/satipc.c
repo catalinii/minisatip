@@ -817,7 +817,7 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
             if (i + 1 < rr) { // move data only if not in the last multibuffer
                               // slice (in this case only adjust the end)
                 // copy data until the end of the buffer over the empty space to
-                // free the hole
+                // _free the hole
                 uint8_t *eb =
                     iovs[1].iov_base + *rb; // current end of the read buffer
                 uint8_t *sb = holes[i];     // end of the valid read data

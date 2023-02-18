@@ -352,7 +352,7 @@ int axe_setup_switch(adapter *ad) {
                         continue;
                     break;
                 }
-                /* find free input */
+                /* find _free input */
                 if (aid >= 4) {
                     for (aid = 0; aid < 4; aid++) {
                         pos = get_absolute_source_for_adapter(aid, tp->diseqc,
@@ -861,7 +861,7 @@ void free_axe_input(adapter *ad) {
         ad2 = get_configured_adapter(aid);
         if (ad2) {
             ad2->axe_used &= ~(1 << ad->id);
-            LOGM("axe: free input %d : %04x", ad2->id, ad2->axe_used);
+            LOGM("axe: _free input %d : %04x", ad2->id, ad2->axe_used);
         }
     }
 }
