@@ -18,9 +18,9 @@
  *
  */
 #include "utils/mutex.h"
+#include "opts.h"
 #include "utils/logging/logging.h"
 #include "utils/ticks.h"
-#include "opts.h"
 #include <string.h>
 
 #undef DEFAULT_LOG
@@ -46,7 +46,7 @@ int mutex_init(SMutex *mutex) {
     mutex->create_time = getTick();
     mutex->enabled = 1;
     mutex->state = 0;
-    LOG("Mutex init OK %p", mutex);
+    LOGM("Mutex init OK %p", mutex);
     return 0;
 }
 

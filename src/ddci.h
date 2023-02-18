@@ -4,6 +4,7 @@
 #include "pmt.h"
 #include "tables.h"
 #include "utils/hash_table.h"
+#include "utils/fifo.h"
 
 // number of pids for each ddci adapter to be stored in the mapping table
 #define MAX_CHANNELS_ON_CI 4
@@ -31,13 +32,13 @@ typedef struct ddci_device {
     ddci_pmt_t pmt[MAX_CHANNELS_ON_CI + 1];
     int cat_processed;
     int capid[MAX_CA_PIDS];
-    unsigned char *out;
-    int ro[MAX_ADAPTERS], wo; // read offset per adapter
+    uint64_t read_index[MAX_ADAPTERS]; // read index per adapter
     uint64_t last_pat, last_pmt;
     int tid, ver;
     char pat_cc;
     char disable_cat;
     SHashTable mapping;
+    SFIFO fifo;
 } ddci_device_t;
 
 // Use a hash table to store mapping_table entries
@@ -71,8 +72,7 @@ void find_ddci_adapter(adapter **a);
 void ddci_init();
 int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
                           int force_add_pid);
-int push_ts_to_adapter(adapter *ad, unsigned char *b, int new_pid, int *ad_pos);
-int push_ts_to_ddci_buffer(ddci_device_t *d, unsigned char *b, int len);
+int push_ts_to_adapter(ddci_device_t *d, adapter *ad, uint16_t *mapping);
 void set_pid_ts(unsigned char *b, int pid);
 int ddci_process_ts(adapter *ad, ddci_device_t *d);
 int ddci_create_pat(ddci_device_t *d, uint8_t *b);
