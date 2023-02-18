@@ -1363,15 +1363,22 @@ int pmt_del(int id) {
     pmt->sid = 0;
     pmt->pid = 0;
     pmt->adapter = -1;
+    if (pmt->filter >= 0)
+        del_filter(pmt->filter);
+    pmt->filter = -1;
 
     for (i = 0; i < pmt->caids; i++)
-        if (pmt->ca[i])
+        if (pmt->ca[i]) {
             _free(pmt->ca[i]);
+            pmt->ca[i] = NULL;
+        }
     pmt->caids = 0;
 
     for (i = 0; i < pmt->stream_pids; i++)
-        if (pmt->stream_pid[i])
+        if (pmt->stream_pid[i]) {
             _free(pmt->stream_pid[i]);
+            pmt->stream_pid[i] = NULL;
+        }
 
     pmt->stream_pids = 0;
 
@@ -1398,6 +1405,10 @@ void cache_pmt_for_adapter(adapter *ad, SPMT *pmt) {
     for (i = 0; i < ad->active_pmts; i++)
         if (ad->active_pmt[i] == pmt->id)
             ad->active_pmt[i] = -1;
+
+    if (pmt->filter >= 0)
+        del_filter(pmt->filter);
+    pmt->filter = -1;
 }
 
 int cache_pmts_for_adapter(int aid) {
@@ -1792,16 +1803,18 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque) {
                 pmt_add_active_pmt(ad, pmt_id);
             }
             SPMT *pmt = get_pmt(pmt_id);
-            memset(new_filter, 0, sizeof(new_filter));
-            memset(new_mask, 0, sizeof(new_mask));
-            new_filter[1] = b[i];
-            new_mask[1] = 0xFF;
-            new_filter[2] = b[i + 1];
-            new_mask[2] = 0xFF;
-            add_filter_mask(
-                ad->id, pid, (void *)process_pmt, pmt,
-                (existing_pmt == NULL) ? FILTER_ADD_REMOVE | FILTER_CRC : 0,
-                new_filter, new_mask);
+            if (pmt && (pmt->filter >= 0)) {
+                memset(new_filter, 0, sizeof(new_filter));
+                memset(new_mask, 0, sizeof(new_mask));
+                new_filter[1] = b[i];
+                new_mask[1] = 0xFF;
+                new_filter[2] = b[i + 1];
+                new_mask[2] = 0xFF;
+                add_filter_mask(
+                    ad->id, pid, (void *)process_pmt, pmt,
+                    (existing_pmt == NULL) ? FILTER_ADD_REMOVE | FILTER_CRC : 0,
+                    new_filter, new_mask);
+            }
             if (pmt_id >= 0)
                 seen_pmts[pmt_id] = 1;
         }
@@ -1817,7 +1830,6 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque) {
                 if (ad->type == ADAPTER_CI) {
                     // Do not cache PMTs for CI adapters as they are being
                     // re-generated very often (on channel change)
-                    del_filter(pmts[i]->filter);
                     pmt_del(i);
                 } else
                     cache_pmt_for_adapter(ad, pmts[i]);
@@ -2115,7 +2127,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     if (pcr_pid > 0 && pcr_pid < 8191)
         pmt_add_stream_pid(pmt, pcr_pid, 0, 0, 0, 0);
 
-    if (pmt->first_active_pid < 0)
+    if ((pmt->first_active_pid < 0) && pmt->stream_pid[0])
         pmt->first_active_pid = pmt->stream_pid[0]->pid;
 
     SPMT *master = get_pmt(pmt->master_pmt);

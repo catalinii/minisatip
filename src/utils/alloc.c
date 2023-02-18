@@ -117,14 +117,16 @@ int _ensure_allocated(void **x, int struct_size, int pointer_size,
             LOG("%s:%d expected to find pointer %p in allocation table", file,
                 line, x);
         do__realloc = 1;
-        new_size = ((ensure_length / min_elements) + 1) * min_elements;
     }
-    if (s && s->current_size >= ensure_length)
+    if (s && s->current_size >= ensure_length) {
+        LOGM("requested size %d is alreqdy allocated %d (%d bytes)",
+             ensure_length, s->current_size, s->size_bytes);
         return 0;
+    }
 
+    new_size = ((ensure_length / min_elements) + 1) * min_elements;
     if (s && s->current_size < ensure_length) {
         do__realloc = 1;
-        new_size = 2 * s->current_size;
         current_size = s->current_size;
     }
     if (do__realloc) {

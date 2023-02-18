@@ -495,8 +495,7 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
     SCAPMT *capmt = add_pmt_to_capmt(d, spmt, d->multiple_pmt);
     if (!capmt)
         LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY,
-                       "No free slots to add PMT %d to CA %d", spmt->id,
-                       d->id);
+                       "No free slots to add PMT %d to CA %d", spmt->id, d->id);
 
     first = get_pmt(capmt->pmt_id);
     if (!first)
@@ -2670,8 +2669,6 @@ int ca_timeout(sockets *s) {
 // reads session data on enigma devices. Handles specific issues (such as
 // reading 0 bytes) and adds only the session data to sockets buffer
 int ca_read_enigma(int socket, void *buf, int len, sockets *ss, int *rb) {
-    static int i;
-    i += 1;
     int rl = read(socket, buf, len);
     *rb = 0;
     if (rl > 0) {
