@@ -1803,7 +1803,7 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque) {
                 pmt_add_active_pmt(ad, pmt_id);
             }
             SPMT *pmt = get_pmt(pmt_id);
-            if (pmt && (pmt->filter >= 0)) {
+            if (pmt && (pmt->filter == -1)) {
                 memset(new_filter, 0, sizeof(new_filter));
                 memset(new_mask, 0, sizeof(new_mask));
                 new_filter[1] = b[i];

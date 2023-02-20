@@ -50,7 +50,8 @@ SOURCES=\
 	utils/alloc.c \
 	utils/hash_table.c \
 	utils/mutex.c \
-	utils/ticks.c
+	utils/ticks.c \
+	utils/fifo.c
 
 TABLES=0
 PMT=0

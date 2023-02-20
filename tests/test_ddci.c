@@ -216,33 +216,6 @@ int test_add_del_pmt() {
     free_filters();
     return 0;
 }
-int test_push_ts_to_ddci() {
-    ddci_device_t d;
-    adapter ad;
-    uint8_t buf[188 * 10];
-    d.id = 0;
-    d.enabled = 1;
-    d.out = _malloc(DDCI_BUFFER + 10);
-    d.wo = DDCI_BUFFER - 188;
-    memset(d.ro, -1, sizeof(d.ro));
-    d.ro[0] = 188;
-    memset(ddci_devices, 0, sizeof(ddci_devices));
-    ddci_devices[0] = &d;
-    create_adapter(&ad, 0);
-    push_ts_to_ddci_buffer(&d, buf, 376);
-    if (d.ro[0] != 376)
-        LOG_AND_RETURN(1, "test drop a packet when pushing 2 with wrap");
-    push_ts_to_ddci_buffer(&d, buf, 376);
-    if (d.ro[0] != 752 || d.wo != 564)
-        LOG_AND_RETURN(1, "test dropping 2 packets without wrapping");
-    d.ro[0] = 752;
-    d.wo = 0;
-    push_ts_to_ddci_buffer(&d, buf, 376);
-    if (d.wo != 376 || d.ro[0] != 752)
-        LOG_AND_RETURN(1, "push 376 bytes");
-    _free(d.out);
-    return 0;
-}
 
 int test_copy_ts_from_ddci() {
     ddci_device_t d;
@@ -254,8 +227,8 @@ int test_copy_ts_from_ddci() {
     memset(buf2, 0, sizeof(buf2));
     d.id = 0;
     d.enabled = 1;
-    d.out = _malloc(DDCI_BUFFER + 10);
     create_hash_table(&d.mapping, 30);
+    create_fifo(&d.fifo, DDCI_BUFFER);
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[0] = &d;
 
@@ -275,27 +248,18 @@ int test_copy_ts_from_ddci() {
     ad.rlen = 188;
     set_pid_ts(buf, new_pid);
     set_pid_ts(buf2, 0x1FFF);
+    fifo_push(&d.fifo, buf, 188);
+    uint16_t mapping[8192];
+    memset(mapping, 0, sizeof(mapping));
+    mapping[new_pid] = pid;
 
-    if (push_ts_to_adapter(&ad, buf, pid, &ad_pos))
+    if (push_ts_to_adapter(&d, &ad, mapping))
         LOG_AND_RETURN(1, "could not copy the packet to the adapter");
-    if (PID_FROM_TS(buf2) != 1000)
+    if (PID_FROM_TS(buf2) != pid)
         LOG_AND_RETURN(1, "found pid %d expected %d", PID_FROM_TS(buf2), pid);
-    if (PID_FROM_TS(buf) != 0x1FFF)
-        LOG_AND_RETURN(1, "PID from the DDCI buffer not marked correctly %d",
-                       PID_FROM_TS(buf));
 
-    set_pid_ts(buf, new_pid);
-    if (push_ts_to_adapter(&ad, buf, pid, &ad_pos))
-        LOG_AND_RETURN(1, "could not copy the packet to the adapter");
-    if (ad.rlen != 376)
-        LOG_AND_RETURN(1, "rlen not marked correctly %d", ad.rlen);
-    ad.rlen = ad.lbuf;
-    set_pid_ts(buf, new_pid);
-    if (1 != push_ts_to_adapter(&ad, buf, pid, &ad_pos))
-        LOG_AND_RETURN(1, "buffer full not returned correctly");
-
-    _free(d.out);
     free_hash(&d.mapping);
+    free_fifo(&d.fifo);
     return 0;
 }
 
@@ -306,10 +270,10 @@ int xwritev(int fd, const struct iovec *io, int len) {
     unsigned char *b = io[0].iov_base;
     LOGM("called writev with len %d, first pid %d", len, PID_FROM_TS(b));
     did_write = 1;
-    if (len != 1) {
+    if (len < 2) {
         is_err = 1;
         LOG_AND_RETURN(
-            -1, "writev did not receive proper arguments, expected 1, got %d",
+            -1, "writev did not receive proper arguments, expected 2, got %d",
             len);
     }
 
@@ -325,42 +289,42 @@ int xwritev(int fd, const struct iovec *io, int len) {
 int test_ddci_process_ts() {
     ddci_device_t d;
     uint8_t buf[188 * 10];
+    uint8_t fifo[188 * 3];
     int i;
-    adapter ad;
+    adapter ad, ad2;
     memset(&d, 0, sizeof(d));
     memset(buf, 0, sizeof(buf));
-    d.id = 0;
+    memset(fifo, 0, sizeof(fifo));
+    d.id = 2;
     d.enabled = 1;
-    d.out = _malloc(DDCI_BUFFER + 10);
+    create_fifo(&d.fifo, DDCI_BUFFER);
     create_hash_table(&d.mapping, 30);
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[0] = &d;
     mutex_init(&d.mutex);
     create_adapter(&ad, 1);
+    create_adapter(&ad2, 2);
     ad.buf = buf;
     ad.lbuf = sizeof(buf);
     for (i = 0; i < ad.lbuf; i += 188) {
         buf[i] = 0x47;
         set_pid_ts(buf + i, 2121); // unmapped pid
     }
-    a[0]->enabled = 1;
-    a[1] = &ad;
-    buf[0] = 0x47;
+
     SPMT *save = pmts[0];
     pmts[0] = NULL;
     add_pid_mapping_table(5, 1000, 0, &d, 0);
     add_pid_mapping_table(5, 2000, 0, &d, 0);
     int new_pid = add_pid_mapping_table(1, 1000, 0, &d, 0);
     int new_pid2 = add_pid_mapping_table(1, 2000, 0, &d, 0);
-    ad.rlen = ad.lbuf - 188; // allow just 1 packet + 1 cleared that it will
-                             // be written to the socket
-    set_pid_ts(ad.buf + 188, 1000);
-    memset(d.ro, -1, sizeof(d.ro));
-    d.ro[1] = DDCI_BUFFER - 188;          // 1 packet before end of buffer
-    d.wo = 188 * 2;                       // 2 after end of the buffer
-    set_pid_ts(d.out + d.ro[1], new_pid); // first packet, expected 1000
-    set_pid_ts(d.out, new_pid2);
-    set_pid_ts(d.out + 188, new_pid2);
+    ad.rlen = ad.lbuf - 188; // allow just 2 packets
+    set_pid_ts(buf, 1000);
+    set_pid_ts(buf + 2 * 188, 2000);
+    memset(d.read_index, 0, sizeof(d.read_index));
+    set_pid_ts(fifo, new_pid); // first packet, expected 1000
+    set_pid_ts(fifo + 188, new_pid2);
+    set_pid_ts(fifo + 376, new_pid2);
+    fifo_push(&d.fifo, fifo, sizeof(fifo));
     expected_pid = new_pid;
     _writev = (mywritev)&xwritev;
     d.last_pmt = getTick(); // prevent adding PMT/EPG
@@ -369,20 +333,14 @@ int test_ddci_process_ts() {
         LOG_AND_RETURN(1, "is_err is set");
     if (!did_write)
         LOG_AND_RETURN(1, "no writev called");
-    if (PID_FROM_TS(ad.buf + 188) != 1000)
+    if (PID_FROM_TS(ad.buf) != 1000)
         LOG_AND_RETURN(1, "expected pid 1000 in the adapter buffer, got %d",
-                       PID_FROM_TS(ad.buf + 188));
-    if (PID_FROM_TS(ad.buf + ad.lbuf - 188) != 2000)
+                       PID_FROM_TS(ad.buf));
+    if (PID_FROM_TS(ad.buf + 2 * 188) != 2000)
         LOG_AND_RETURN(1, "expected pid 2000 in the adapter buffer, got %d",
-                       PID_FROM_TS(ad.buf + ad.lbuf - 188));
-    if (ad.rlen != ad.lbuf)
-        LOG_AND_RETURN(1, "adapter buffer length mismatch %d != %d", ad.rlen,
-                       ad.lbuf);
-    if (d.ro[1] != 188 && d.wo != 188 * 2)
-        LOG_AND_RETURN(1, "indexes in DDCI devices set wrong ro %d wo %d", d.ro,
-                       d.wo);
-    _free(d.out);
+                       PID_FROM_TS(ad.buf + 2 * 188));
     free_hash(&d.mapping);
+    free_fifo(&d.fifo);
     pmts[0] = save;
     return 0;
 }
@@ -516,7 +474,6 @@ int main() {
     init_alloc();
     TEST_FUNC(test_channels(), "testing test_channels");
     TEST_FUNC(test_add_del_pmt(), "testing adding and removing pmts");
-    TEST_FUNC(test_push_ts_to_ddci(), "testing test_push_ts_to_ddci");
     TEST_FUNC(test_copy_ts_from_ddci(), "testing test_copy_ts_from_ddci");
     TEST_FUNC(test_ddci_process_ts(), "testing ddci_process_ts");
     TEST_FUNC(test_create_pat(), "testing create_pat");

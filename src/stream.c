@@ -905,7 +905,7 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
         int rtp_added = 0;
         b = ad->buf + i;
         if (b[0] != 0x47) {
-            LOG("Non TS packet found %02X", b[0]);
+            LOG("Non TS packet found %02X, pos %d", b[0], i / DVB_FRAME);
             continue;
         }
         int _pid = PID_FROM_TS(b);
