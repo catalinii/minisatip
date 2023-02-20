@@ -934,17 +934,18 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
     c->pmt = master_pmt;
     c->cw_len = 16;
     c->time = getTick();
-    if (parity == pmt->parity && pmt->cw && pmt->last_update_cw > 0) {
-        LOG("CW %d for PMT %d (%s) Warning! New CW using the current parity",
-            c->id, pmt_id, pmt->name);
-        c->time = pmt->cw->time - 1000; // We set the time before the active CW
-    }
     c->set_time = 0;
     c->opaque = opaque;
     if (expiry == 0)
         c->expiry = c->time + MAX_CW_TIME;
     else
         c->expiry = c->time + expiry * 1000;
+
+    if (parity == pmt->parity && pmt->cw && pmt->last_update_cw > 0) {
+        LOG("CW %d for PMT %d (%s) Warning! New CW using the current parity",
+            c->id, pmt_id, pmt->name);
+        c->time = pmt->cw->time - 1000; // We set the time before the active CW
+    }
 
     if (algo < 2)
         c->cw_len = 8;
