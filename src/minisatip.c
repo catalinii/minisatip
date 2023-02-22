@@ -1166,7 +1166,11 @@ void set_options(int argc, char *argv[]) {
         }
     }
 
-    lip = getlocalip();
+    if (!opts.bind)
+        lip = getlocalip();
+    else
+        lip = opts.bind;
+
     if (!opts.http_host) {
         opts.http_host = (char *)_malloc(MAX_HOST);
         sprintf(opts.http_host, "%s:%u", lip, opts.http_port);
@@ -1174,6 +1178,8 @@ void set_options(int argc, char *argv[]) {
 
     opts.rtsp_host = (char *)_malloc(MAX_HOST);
     sprintf(opts.rtsp_host, "%s:%d", lip, opts.rtsp_port);
+
+    LOG("Listening configuration RTSP:%s HTTP:%s (bind address: %s)", opts.rtsp_host ? opts.rtsp_host : "(null)", opts.http_host ? opts.http_host : "(null)", opts.bind ? opts.bind : "(null)");
 
     opts.datetime_compile = (char *)_malloc(64);
     sprintf(opts.datetime_compile, "%s | %s", __DATE__, __TIME__);
@@ -1799,7 +1805,7 @@ int ssdp_reply(sockets *s) {
         rdid = strcasestr((const char *)s->buf, "DEVICEID.SES.COM:");
         if (rdid && opts.device_id == map_int(strip(rdid + 17), NULL)) {
             ptr = 0;
-            strcatf(buf, ptr, device_id_conflict, getlocalip(), opts.name_app,
+            strcatf(buf, ptr, device_id_conflict, opts.bind ? opts.bind : getlocalip(), opts.name_app,
                     version, opts.device_id);
             LOG("A new device joined the network with the same Device ID:  %s, "
                 "asking to change DEVICEID.SES.COM",
