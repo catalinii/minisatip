@@ -947,6 +947,8 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
         }
     }
 
+    //    if (iiov == 0)
+    //        return 0;
     if ((sid->type == STREAM_RTSP_UDP || sid->type == STREAM_RTSP_TCP))
         enqueue_rtp_header(sid, iov, iiov, last_rtp_header, rtp_buf + rtp_pos);
 
@@ -1330,7 +1332,7 @@ char *get_stream_protocol(int s_id, char *dest, int max_size) {
     else if (s->type == STREAM_RTSP_TCP)
         strlcatf(dest, max_size, len, "RTP/TCP");
     else
-        strlcatf(dest, max_size, len, "unkown");  // RTP/MCAST ?
+        strlcatf(dest, max_size, len, "unkown"); // RTP/MCAST ?
     return dest;
 }
 
@@ -1374,16 +1376,13 @@ int get_stream_overflow(int s_id) {
 }
 
 int get_stream_buffered_size(int s_id) {
-    int i, bytes = 0;
     streams *sid = get_sid_nw(s_id);
     if (!sid)
         return 0;
     sockets *s = get_sockets(sid->rsock_id);
-    if (!s || s->spos == s->wpos || !s->pack)
+    if (!s)
         return 0;
-    for (i = s->spos; i != s->wpos; i = (i + 1) % s->wmax)
-        bytes += s->pack[i].len;
-    return bytes;
+    return fifo_used(&s->fifo);
 }
 _symbols stream_sym[] = {
     {"st_enabled", VAR_AARRAY_INT8, st, 1, MAX_STREAMS,
@@ -1397,8 +1396,8 @@ _symbols stream_sym[] = {
      0},
     {"st_rport", VAR_FUNCTION_INT, (void *)&get_stream_rport, 0, MAX_STREAMS,
      0},
-    {"st_proto", VAR_FUNCTION_STRING, (void *)&get_stream_protocol, 0, MAX_STREAMS,
-     0},
+    {"st_proto", VAR_FUNCTION_STRING, (void *)&get_stream_protocol, 0,
+     MAX_STREAMS, 0},
     {"st_pids", VAR_FUNCTION_STRING, (void *)&get_stream_pids, 0, MAX_STREAMS,
      0},
     {"st_overflow", VAR_FUNCTION_INT, (void *)&get_stream_overflow, 0,

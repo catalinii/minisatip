@@ -30,10 +30,9 @@
 #define LEN_SIZE 4
 
 int _create_fifo(SFIFO *f, int no, char *file, int line) {
-    if (f->init == 1)
+    if (f->size > 0)
         return 0;
     memset(f, 0, sizeof(SFIFO));
-    f->init = 1;
     f->file = file;
     f->line = line;
     f->data = malloc1(no, file, line, 1);
@@ -45,7 +44,7 @@ int _create_fifo(SFIFO *f, int no, char *file, int line) {
 }
 
 void free_fifo(SFIFO *f) {
-    if (f->init != 1)
+    if (f->size <= 0)
         return;
 
     _free(f->data);
@@ -115,11 +114,11 @@ uint32_t fifo_peek(SFIFO *fifo, void **dst, unsigned int len,
                    unsigned int relative_offset) {
     unsigned int size = fifo->size;
     uint32_t l;
-    uint32_t off = (fifo->read_index + relative_offset);
 
     if (fifo->read_index + relative_offset > fifo->write_index)
         return 0;
 
+    uint32_t off = (fifo->read_index + relative_offset) % size;
     l = min(len, size - off);
     *dst = fifo->data + off;
     return l;
@@ -135,28 +134,31 @@ int fifo_push_record(SFIFO *fifo, void *src, uint32_t len) {
     uint8_t *data = fifo->data;
     uint32_t off = fifo->read_index;
     uint32_t size = fifo->size;
-    data[(off + 3) % size] = (len >> 24) & 0xFF;
-    data[(off + 2) % size] = (len >> 16) & 0xFF;
-    data[(off + 1) % size] = (len >> 8) & 0xFF;
-    data[(off + 0) % size] = len & 0xFF;
+    data[(off + 0) % size] = (len >> 24) & 0xFF;
+    data[(off + 1) % size] = (len >> 16) & 0xFF;
+    data[(off + 2) % size] = (len >> 8) & 0xFF;
+    data[(off + 3) % size] = len & 0xFF;
     fifo->write_index += 4;
 
     r += fifo_push_force(fifo, src, len, 0);
     return r;
 }
 
+uint32_t fifo_peek_32(SFIFO *fifo, uint64_t offset) {
+    uint8_t *data = fifo->data;
+    if (fifo->write_index - offset < LEN_SIZE)
+        return 0;
+    uint32_t size = fifo->size;
+    return ((unsigned int)data[(offset + 0) % size] << 24) |
+           ((unsigned int)data[(offset + 1) % size] << 16) |
+           ((unsigned int)data[(offset + 2) % size] << 8) |
+           (unsigned int)data[(offset + 3) % size];
+}
+
 // pops a record only if len >= record size. pops 4 bytes which stores the
 // record length then pops the record itself.
 uint32_t fifo_peek_record_size(SFIFO *fifo) {
-    uint8_t *data = fifo->data;
-    uint32_t off = fifo->read_index;
-    if (fifo->write_index - fifo->read_index < LEN_SIZE)
-        return 0;
-    uint32_t size = fifo->size;
-    return ((unsigned int)data[(off + 3) % size] << 24) |
-           ((unsigned int)data[(off + 2) % size] << 16) |
-           ((unsigned int)data[(off + 1) % size] << 8) |
-           (unsigned int)data[(off + 0) % size];
+    return fifo_peek_32(fifo, fifo->read_index);
 }
 
 // returns 0 if not enough

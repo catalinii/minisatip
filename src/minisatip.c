@@ -335,8 +335,8 @@ Help\n\
 * -b --buffer X:Y : set the app adapter buffer to X Bytes (default: %d) and set the kernel DVB buffer to Y Bytes (default: %d) - both multiple of 188\n\
 	* eg: -b 18800:18988\n\
 \n\
-* -B X : set the app socket write buffer to X KB. \n\
-	* eg: -B 10000 - to set the socket buffer to 10MB\n\
+* -B X : set the app socket write buffer to X MB. \n\
+	* eg: -B 10 - to set the socket buffer to 10MB (default value)\n\
 \n\
 * --client-send-buffer X : set the socket write buffer for client connections to X KB. \n\
 	- The default value is 0, corresponding to use the kernel default value\n\
@@ -684,7 +684,7 @@ void set_options(int argc, char *argv[]) {
     opts.lnb_high = (10600 * 1000UL);
     opts.lnb_circular = (10750 * 1000UL);
     opts.lnb_switch = (11700 * 1000UL);
-    opts.max_sbuf = 100;
+    opts.max_sbuf = 10;
     opts.pmt_scan = 1;
     opts.strength_multiplier = 1;
     opts.snr_multiplier = 1;
@@ -1179,7 +1179,10 @@ void set_options(int argc, char *argv[]) {
     opts.rtsp_host = (char *)_malloc(MAX_HOST);
     sprintf(opts.rtsp_host, "%s:%d", lip, opts.rtsp_port);
 
-    LOG("Listening configuration RTSP:%s HTTP:%s (bind address: %s)", opts.rtsp_host ? opts.rtsp_host : "(null)", opts.http_host ? opts.http_host : "(null)", opts.bind ? opts.bind : "(null)");
+    LOG("Listening configuration RTSP:%s HTTP:%s (bind address: %s)",
+        opts.rtsp_host ? opts.rtsp_host : "(null)",
+        opts.http_host ? opts.http_host : "(null)",
+        opts.bind ? opts.bind : "(null)");
 
     opts.datetime_compile = (char *)_malloc(64);
     sprintf(opts.datetime_compile, "%s | %s", __DATE__, __TIME__);
@@ -1805,7 +1808,8 @@ int ssdp_reply(sockets *s) {
         rdid = strcasestr((const char *)s->buf, "DEVICEID.SES.COM:");
         if (rdid && opts.device_id == map_int(strip(rdid + 17), NULL)) {
             ptr = 0;
-            strcatf(buf, ptr, device_id_conflict, opts.bind ? opts.bind : getlocalip(), opts.name_app,
+            strcatf(buf, ptr, device_id_conflict,
+                    opts.bind ? opts.bind : getlocalip(), opts.name_app,
                     version, opts.device_id);
             LOG("A new device joined the network with the same Device ID:  %s, "
                 "asking to change DEVICEID.SES.COM",

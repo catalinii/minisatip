@@ -12,7 +12,6 @@
 // to a handle)
 
 typedef struct fifo {
-    char init;
     char *file;
     int line;
     uint64_t read_index;
@@ -28,6 +27,10 @@ static inline int fifo_available(SFIFO *f) {
 }
 
 static inline int fifo_used(SFIFO *f) { return f->write_index - f->read_index; }
+static inline void fifo_skip_bytes(SFIFO *f, uint32_t len) {
+    if(f->size > 0)
+        f->read_index += len;
+}
 
 int fifo_push_force(SFIFO *fifo, void *src, unsigned int len, int force);
 
@@ -39,6 +42,8 @@ uint32_t fifo_peek(SFIFO *fifo, void **dst, unsigned int len,
 int fifo_push_record(SFIFO *fifo, void *src, uint32_t len);
 
 uint32_t fifo_pop_record(SFIFO *fifo, void *dst, uint32_t len);
+uint32_t fifo_peek_32(SFIFO *fifo, uint64_t offset);
+uint32_t fifo_peek_record_size(SFIFO *fifo);
 
 #define create_fifo(f, x) _create_fifo(f, x, __FILE__, __LINE__)
 #define fifo_push(a, b, c) fifo_push_force(a, b, c, 0)

@@ -41,7 +41,7 @@ make
 Usage:
 -------
 (Message automatically generated from "minisatip --help")
-minisatip version 1.2.34, compiled in Oct 14 2022 09:24:48, with s2api version: 050B
+minisatip version 1.2.~4b5ed89, compiled in Feb 22 2023 08:21:17, with s2api version: 050B
 
 	./minisatip [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 	[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]] 
@@ -65,6 +65,11 @@ Help
 
 * -B X : set the app socket write buffer to X KB. 
 	* eg: -B 10000 - to set the socket buffer to 10MB
+
+* --client-send-buffer X : set the socket write buffer for client connections to X KB. 
+	- The default value is 0, corresponding to use the kernel default value
+	* eg: --satip-receive-buffer  100 - to set the socket buffer to 100KB
+	* eg: --satip-receive-buffer 1024 - to set the socket buffer to 1MB
 
 * -z --cache-dir dir : set the app cache directory to dir. The directory will be created if it doesn't exist. 
 	* defaults to /var/cache/minisatip 
@@ -90,7 +95,7 @@ Help
 	- note: * as adapter means apply to all adapters
 
 * -E Allows encrypted stream to be sent to the client even if the decrypting is unsuccessful
-	Duplicating it (-E -E) all undecrypted packets are send as stuffing TS packets. Usefull for regular player clients.
+        Duplicating it (-E -E) all undecrypted packets are send as stuffing TS packets. Usefull for regular player clients.
 	- note: when pids=all is emulated this pass NULLs too
 
 * -Y --delsys ADAPTER1:DELIVERY_SYSTEM1[,ADAPTER2:DELIVERY_SYSTEM2[,..]] - specify the delivery system of the adapters (0 is the first adapter)	
@@ -137,6 +142,9 @@ Help
 	* If the snr or the strength multipliers are set to 0, minisatip will override the value received from the adapter and will report always full signal 100% 
 	* eg: -M 4-6:1.2-1.3 - multiplies the strength with 1.2 and the snr with 1.3 for adapter 4, 5 and 6
 	* eg: -M *:1.5-1.6 - multiplies the strength with 1.5 and the snr with 1.6 for all adapters
+	* [%] This symbol forces to read values as percentage
+	* [#] This symbol forces to read values as decibels
+	* eg: -M *:%1.0-#1.0 - not multiply the strength but force it as percentage and for the snr interpret it as decibels
 
 * -N --disable-dvb disable DVB adapter detection
  
@@ -157,6 +165,7 @@ Help
 	192.168.9.9 is the host where oscam is running and 9000 is the port configured in dvbapi section in oscam.conf.
 	* eg: -o /tmp/camd.socket 
 	/tmp/camd.socket is the local socket that can be used 
+* --send-all-ecm Pass all received ECM to the DVBAPI server. Warning: This option may overload your server. Use with caution. Not necessary for regular use.
 
 * -p --playlist url: specify playlist url using X_SATIPM3U header 
 	* eg: -p http://192.168.2.3:8080/playlist
@@ -187,10 +196,16 @@ Help
 	address 192.168.1.100 needs to be assigned to an interface on the server running minisatip.
 	This feature is useful for AVM FRITZ!WLAN Repeater
 	
-*  --satip-xml <URL> Use the xml retrieved from a satip server to configure satip adapters 
+* -6 --satip-xml <URL> Use the xml retrieved from a satip server to configure satip adapters 
 	eg: --satip-xml http://localhost:8080/desc.xml 
 
 * -O --satip-tcp Use RTSP over TCP instead of UDP for data transport 
+
+* --satip-receive-buffer X : set the socket read buffer for connecting to SAT>IP servers to X KB. 
+	- The default value is 0, corresponding to use the kernel default value
+	* eg: --satip-receive-buffer  350 - to set the socket buffer to 350KB
+	* eg: --satip-receive-buffer 1024 - to set the socket buffer to 1MB
+
 * -S --slave ADAPTER1,ADAPTER2-ADAPTER4[,..]:MASTER - specify slave adapters	
 	* Allows specifying bonded adapters (multiple adapters connected with a splitter to the same LNB)
 	* This feature is used by FBC receivers and AXE to specify the source input of the adapter
@@ -257,12 +272,13 @@ Help
 	* The format is: ADAPTER1:PIN,ADAPTER2-ADAPTER4
 			* eg : 0,2-3
 
-* -c --multiple-pmt adapter_list:maximum_number_of_channels_supported: Enable 2 PMTs inside of the same CAPMT to double the number of decrypted channels
-	* The format is: ADAPTER1:MAX_CHANNELS[-CAID1[-CAID2]...,ADAPTER2:MAX_CHANNELS[-CAID3[-CAID4]...]
-			* eg : 0:1-100
-The DDCI adapters 0 will support maximum of 1 CAPMT (2 channels) and will use CAID1. If CAID is not specified it will use CAMs CAIDs
+* -c --ca-channels adapter_list:maximum_number_of_channels_supported: Specify the number of channels supported by the CAM and override the CAIDs
+	* The format is: ADAPTER1:[*]MAX_CHANNELS[-CAID1[-CAID2]...,ADAPTER2:MAX_CHANNELS[-CAID3[-CAID4]...] 
+		 * before the MAX_CHANNELS enable 2 PMTs inside of the same CAPMT to double the number of decrypted channels
+			* eg : 0:*1-100
+The DDCI adapters 0 will support maximum of 1 CAPMT (2 channels because of *) and will use CAID1. If CAID is not specified it will use CAMs CAIDs
 Official CAMs support 1 or 2 channels, with this option this is extended to 2 or 4
-By default every CAM supports 4 channels
+By default every CAM supports 1 channels
 
 How to compile:
 ------

@@ -15,7 +15,8 @@ void free_alloc();
 #define _malloc(a) malloc1(a, __FILE__, __LINE__, 1)
 #define _free(a) free1(a, __FILE__, __LINE__, 1)
 #define _realloc(a, b) realloc1(a, b, __FILE__, __LINE__, 1)
-#define ensure_allocated(a, b, c, d, e)                                        \
-    _ensure_allocated(a, b, c, d, e, __FILE__, __LINE__)
+#define ensure_allocated(p, struct_size, pointer_size, len, min_elements)      \
+    _ensure_allocated(p, struct_size, pointer_size, len, min_elements,         \
+                      __FILE__, __LINE__)
 
 #endif
