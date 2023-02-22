@@ -360,7 +360,6 @@
 
 		function getMemInfo(mem_info) {
 			var all_mem = 0
-			var module_mem = {}
 			var line_mem = {}
 			var i = 0
 			while (i < mem_info.length) {
@@ -369,30 +368,24 @@
 					var file = myArray[0]
 					var line = myArray[1]
 					var size = parseInt(myArray[2])
-					if (!(file in module_mem)) {
-						module_mem[file] = size
-					} else {
-						module_mem[file] += size
-					}
+					var count = parseInt(myArray[3])
+
 					var key = [file, line].join(':')
 					if (!(key in line_mem)) {
-						line_mem[key] = [size, 1]
+						line_mem[key] = [size, count]
 					} else {
 						var s, n
 						[s, n] = line_mem[key]
-						line_mem[key] = [s + size, n + 1]
+						line_mem[key] = [s + size, n + count]
 					}
 
 					all_mem += size
-
 				}
 				i++;
 			}
-			console.log(module_mem)
 			console.log(line_mem)
 			let all_mb = all_mem / 1048576
-			let s_mb = module_mem["socketworks.c"] / 1048576
-			return `Using ${all_mb.toPrecision(4)} MB, socketworks ${s_mb.toPrecision(4)} MB`
+			return `Using ${all_mb.toPrecision(4)} MB`
 
 		}
 

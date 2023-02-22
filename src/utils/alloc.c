@@ -21,6 +21,7 @@
 #include "api/variables.h"
 #include "utils/hash_table.h"
 #include "utils/logging/logging.h"
+#include "utils/ticks.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -73,7 +74,6 @@ void *malloc1(int a, char *f, int l, int record) {
         memset(x, 0, a);
     if (!mem_alloc_table.init)
         return x;
-    alloc_sym[0].len = mem_alloc_table.size;
     if (record) {
         record_allocation(NULL, x, a, a, a, 1, 0, f, l);
     }
@@ -158,16 +158,52 @@ int _ensure_allocated(void **x, int struct_size, int pointer_size,
 void init_alloc() { create_hash_table(&mem_alloc_table, 100); }
 void free_alloc() { free_hash(&mem_alloc_table); }
 
+struct mem_allocation {
+    char *file;
+    int line;
+    int count;
+    uint64_t sum;
+};
+
+#define MAX_MEM_INFO 100
+struct mem_allocation mem_info[MAX_MEM_INFO];
+
 char *get_alloc_info(int id, char *dest, int max_size) {
+    static uint64_t last_update;
+    int i, j = 0;
+    SMEMALLOC *s;
     dest[0] = 0;
-    if (mem_alloc_table.items[id].len > 0) {
-        SMEMALLOC *s = (SMEMALLOC *)mem_alloc_table.items[id].data;
-        snprintf(dest, max_size, "%s:%d:%d", s->file, s->line, s->size_bytes);
+    if (getTick() - last_update > 1000) {
+        last_update = getTick();
+        mutex_lock(&mem_alloc_table.mutex);
+        memset(mem_info, 0, sizeof(mem_info));
+        FOREACH_ITEM(&mem_alloc_table, s) {
+            for (j = 0; j < MAX_MEM_INFO; j++) {
+                if (mem_info[j].file == s->file &&
+                    mem_info[j].line == s->line) {
+                    break;
+                }
+                if (mem_info[j].file == NULL && mem_info[j].line == 0)
+                    break;
+            }
+            if (j >= MAX_MEM_INFO) {
+                LOG("Increase MAX_MEM_INFO from %d", MAX_MEM_INFO);
+                break;
+            }
+            mem_info[j].file = s->file;
+            mem_info[j].line = s->line;
+            mem_info[j].count++;
+            mem_info[j].sum += s->size_bytes;
+        }
+        mutex_unlock(&mem_alloc_table.mutex);
     }
+    if ((id >= 0) && (id < MAX_MEM_INFO) && mem_info[id].file)
+        snprintf(dest, max_size, "%s:%d:%jd:%d", mem_info[id].file,
+                 mem_info[id].line, mem_info[id].sum, mem_info[id].count);
 
     return dest;
 }
 
 _symbols alloc_sym[] = {
-    {"alloc", VAR_FUNCTION_STRING, (void *)&get_alloc_info, 0, 1, 0},
+    {"alloc", VAR_FUNCTION_STRING, (void *)&get_alloc_info, 0, MAX_MEM_INFO, 0},
     {NULL, 0, NULL, 0, 0, 0}};
