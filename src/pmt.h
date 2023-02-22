@@ -140,7 +140,7 @@ typedef struct struct_pmt {
     char encrypted;
     int first_active_pid;
     int64_t grace_time, start_time;
-    uint16_t filter;
+    int filter;
     int clean_pos, clean_cc;
     uint8_t *clean;
     int pmt_len; // dynamic array
