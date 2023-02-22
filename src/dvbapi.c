@@ -879,7 +879,7 @@ char *get_channel_for_key(int key, char *dest, int max_size) {
     if (k)
         pmt = get_pmt(k->pmt_id);
     if (pmt)
-        _strncpy(dest, pmt->name, max_size - 1);
+        _strncpy(dest, (char *)pmt->name, max_size - 1);
 
     return dest;
 }

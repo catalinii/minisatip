@@ -133,7 +133,7 @@ typedef struct struct_pmt {
     int16_t master_pmt; //  the pmt that contains the same pids as this PMT
     SCW *cw;
     SPid *p;
-    char provider[50], name[50];
+    uint8_t provider[50], name[50];
     void *opaque;
     char state; // PMT state (PMT_STOPPED, PMT_STARTING, PMT_RUNNING,
                 // PMT_STOPPING)

@@ -973,9 +973,9 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
         ncws = i + 1;
 
     mutex_unlock(&cws_mutex);
-    LOG("CW %d for PMT %d (%s), master %d, pid %d, for %s parity, %s", c->id, pmt_id,
-        pmt->name, master_pmt, pmt->pid,
-        c->parity != pmt->parity ? "next":"current", cw_to_string(c, buf));
+    LOG("CW %d for PMT %d (%s), master %d, pid %d, for %s parity, %s", c->id,
+        pmt_id, pmt->name, master_pmt, pmt->pid,
+        c->parity != pmt->parity ? "next" : "current", cw_to_string(c, buf));
     return 0;
 }
 
@@ -2155,9 +2155,9 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     return 0;
 }
 
-void copy_en300468_string(char *dest, int dest_len, char *src, int len) {
+void copy_en300468_string(uint8_t *dest, int dest_len, uint8_t *src, int len) {
     int start = (src[0] < 0x20) ? 1 : 0;
-    int charset = 0;
+    uint32_t charset = 0;
     int i;
     if (src[0] == 0x10)
         start += 2;
@@ -2239,10 +2239,9 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque) {
             if (c[0] == 0x48 && !pmt->name[0]) {
                 int name_size = sizeof(pmt->name) - 1;
                 c += 3;
-                copy_en300468_string(pmt->provider, name_size, (char *)c + 1,
-                                     c[0]);
+                copy_en300468_string(pmt->provider, name_size, c + 1, c[0]);
                 c += c[0] + 1;
-                copy_en300468_string(pmt->name, name_size, (char *)c + 1, c[0]);
+                copy_en300468_string(pmt->name, name_size, c + 1, c[0]);
                 LOG("SDT PMT %d: name %s provider %s, sid: %d (%X)", pmt->id,
                     pmt->name, pmt->provider, sid, sid);
             }

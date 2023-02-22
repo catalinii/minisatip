@@ -585,15 +585,17 @@ void dump_pids(int aid) {
                     "pids: %d",
                     aid, p->pid_err);
             dp = 0;
-            LOG("pid %d, fd %d, packets %d, d/c errs %d/%d, flags %d, pmt %d, "
+            LOG("pid %d, fd %d, packets %d, d/c/c2 errs %d/%d/%d, flags %d, "
+                "pmt %d, "
                 "filter "
-                "%d, sock %d, sids: %d %d %d %d %d %d %d %d",
+                "%d, sock %d, p2 %d, sids: %d %d %d %d %d %d %d %d",
                 p->pids[i].pid, p->pids[i].fd, p->pids[i].packets,
-                p->pids[i].dec_err, p->pids[i].cc_err, p->pids[i].flags,
-                p->pids[i].pmt, p->pids[i].filter, p->pids[i].sock,
-                p->pids[i].sid[0], p->pids[i].sid[1], p->pids[i].sid[2],
-                p->pids[i].sid[3], p->pids[i].sid[4], p->pids[i].sid[5],
-                p->pids[i].sid[6], p->pids[i].sid[7]);
+                p->pids[i].dec_err, p->pids[i].cc_err, p->pids[i].cc_err2,
+                p->pids[i].flags, p->pids[i].pmt, p->pids[i].filter,
+                p->pids[i].sock, p->pids[i].packets2, p->pids[i].sid[0],
+                p->pids[i].sid[1], p->pids[i].sid[2], p->pids[i].sid[3],
+                p->pids[i].sid[4], p->pids[i].sid[5], p->pids[i].sid[6],
+                p->pids[i].sid[7]);
         }
 }
 
@@ -934,9 +936,12 @@ int update_pids(int aid) {
             if (ad->pids[i].pid == 0)
                 ad->pat_processed = 0;
             ad->pids[i].packets = 0;
+            ad->pids[i].packets2 = 0;
             ad->pids[i].cc = -1;
             ad->pids[i].cc1 = -1;
+            ad->pids[i].cc2 = -1;
             ad->pids[i].cc_err = 0;
+            ad->pids[i].cc_err2 = 0;
             ad->pids[i].dec_err = 0;
         }
     if (ad->commit)

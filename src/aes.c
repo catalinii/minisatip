@@ -110,7 +110,7 @@ int decrypt(void *context, unsigned char *ciphertext, int ciphertext_len,
 
 void dvbaes_cbc_decrypt_stream(SCW *cw, SPMT_batch *batch, int batch_len) {
     int i, len;
-    uint8_t decryptedtext[300]; //, ciphertext[300];
+    uint8_t decryptedtext[400];
     for (i = 0; i < batch_len; i++) {
 
         // memset(decryptedtext, 0, sizeof(decryptedtext));

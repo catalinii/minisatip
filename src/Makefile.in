@@ -133,7 +133,7 @@ SOURCES-$(AXE) += axe.c
 CFLAGS-$(AXE) += -DAXE
 
 CFLAGS-$(EMBEDDED) += -DNO_BACKTRACE
-CFLAGS-$(DEBUG) += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=undefined -static-libasan -static-libubsan -static-liblsan -fstack-protector-all
+CFLAGS-$(DEBUG) += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=undefined -static-libasan -static-libubsan -static-liblsan -fstack-protector-all -O0
 
 
 ifeq ($(STATIC),1)
