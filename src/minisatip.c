@@ -90,7 +90,6 @@ int rtsp, http, si, si1, ssdp1;
 #define HELP_OPT 'h'
 #define PLAYLIST_OPT 'p'
 #define ADAPTERS_OPT 'a'
-#define CLEANPSI_OPT 't'
 #define MAC_OPT 'm'
 #define FOREGROUND_OPT 'f'
 #define DVRBUFFER_OPT 'b'
@@ -149,7 +148,6 @@ static const struct option long_options[] = {
     {"bind", required_argument, NULL, BIND_OPT},
     {"bind-dev", required_argument, NULL, BIND_DEV_OPT},
     {"cache-dir", required_argument, NULL, CACHE_DIR_OPT},
-    {"clean-psi", no_argument, NULL, CLEANPSI_OPT},
     {"send-all-ecm", no_argument, NULL, SENDALLECM_OPT},
     {"client-send-buffer", required_argument, NULL, CLIENT_SEND_BUFFER_OPT},
     {"delsys", required_argument, NULL, DELSYS_OPT},
@@ -880,11 +878,6 @@ void set_options(int argc, char *argv[]) {
         case ADAPTERS_OPT: {
             sscanf(optarg, "%d:%d:%d", &opts.force_sadapter,
                    &opts.force_tadapter, &opts.force_cadapter);
-            break;
-        }
-
-        case CLEANPSI_OPT: {
-            opts.clean_psi = 1;
             break;
         }
 

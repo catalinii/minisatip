@@ -143,8 +143,6 @@ typedef struct struct_pmt {
     int filter;
     int clean_pos, clean_cc;
     uint8_t *clean;
-    int pmt_len; // dynamic array
-    unsigned char pmt[];
 } SPMT;
 
 // filters can be setup for specific pids and masks
@@ -220,12 +218,11 @@ int get_pid_filter(int aid, int pid);
 int get_filter_pid(int filter);
 int get_filter_adapter(int filter);
 int assemble_packet(SFilter *f, uint8_t *b);
-int clean_psi_buffer(uint8_t *pmt, uint8_t *clean, int clean_size);
 void disable_cw(int master_pmt);
 void expire_cw_for_pmt(int master_pmt, int parity, int64_t min_expiry);
 int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
                   int added_only);
-int pmt_add(int adapter, int sid, int pmt_pid, int len);
+int pmt_add(int adapter, int sid, int pmt_pid);
 int test_decrypt_packet(SCW *cw, SPMT_batch *start, int len);
 void init_algo();
 void update_cw(SPMT *pmt);

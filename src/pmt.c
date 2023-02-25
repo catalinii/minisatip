@@ -1288,11 +1288,10 @@ int pmt_process_stream(adapter *ad) {
     return 0;
 }
 
-int pmt_add(int adapter, int sid, int pmt_pid, int pmt_len) {
+int pmt_add(int adapter, int sid, int pmt_pid) {
 
     SPMT *pmt;
-    int i = add_new_lock((void **)pmts, MAX_PMT, sizeof(SPMT) + pmt_len,
-                         &pmts_mutex);
+    int i = add_new_lock((void **)pmts, MAX_PMT, sizeof(SPMT), &pmts_mutex);
     if (i == -1 || !pmts[i]) {
         LOG_AND_RETURN(-1, "PMT buffer is full, could not add new pmts");
     }
@@ -1309,7 +1308,6 @@ int pmt_add(int adapter, int sid, int pmt_pid, int pmt_len) {
     pmt->grace_time = PMT_GRACE_TIME;
     pmt->start_time = 0;
     pmt->blen = 0;
-    pmt->pmt_len = pmt_len;
     pmt->last_update_cw = 0;
     pmt->filter = -1;
     if (!pmt->batch) {
@@ -1334,8 +1332,8 @@ int pmt_add(int adapter, int sid, int pmt_pid, int pmt_len) {
         npmts = i + 1;
 
     mutex_unlock(&pmt->mutex);
-    LOG("returning new pmt %d for adapter %d, pmt pid %d, sid %d %04X, len %d",
-        i, adapter, pmt_pid, sid, sid, pmt_len);
+    LOG("returning new pmt %d for adapter %d, pmt pid %d, sid %d %04X", i,
+        adapter, pmt_pid, sid, sid);
 
     return i;
 }
@@ -1483,124 +1481,6 @@ SPMT *get_pmt_for_sid_pid(int aid, int sid, int pid) {
             pmts[i]->sid == sid && pmts[i]->pid == pid)
             return pmts[i];
     return NULL;
-}
-
-int clean_psi_buffer(uint8_t *pmt, uint8_t *clean, int clean_size) {
-    uint8_t *n, *o;
-    int nlen = 0, i, j, es_len, desc_len;
-    uint32_t crc;
-    memset(clean, -1, clean_size);
-    memcpy(clean, pmt, 12);
-    int pi_len = ((pmt[10] & 0xF) << 8) + pmt[11];
-    int pmt_len = ((pmt[1] & 0xF) << 8) + pmt[2];
-    int ver = (clean[5] & 0x3e) >> 1;
-    ver = (ver + 1) & 0xF;
-    clean[5] = (0xC0 & clean[5]) | (ver << 1);
-    n = clean;
-    o = pmt + pi_len + 12;
-    nlen = 12;
-    n[10] &= 0xF0; // pi_len => 0
-    n[11] &= 0x0;
-    if (pi_len > 1500)
-        LOG_AND_RETURN(0, "Program Info Length is too big %d", pi_len);
-
-    for (i = 0; i < pmt_len - pi_len - 17; i += (es_len) + 5) // reading streams
-    {
-        uint8_t *t = o + i;
-        int init_len = nlen + 5;
-        es_len = (o[i + 3] & 0xF) * 256 + o[i + 4];
-        DEBUGM("es: copy 5 bytes from %d -> %d : %02X %02X %02X %02X %02X", i,
-               nlen, t[0], t[1], t[2], t[3], t[4]);
-        memcpy(n + nlen, o + i, 5);
-        nlen += 5;
-        for (j = 0; j < es_len; j += desc_len) // reading program info
-        {
-            desc_len = o[i + 5 + j + 1] + 2;
-            if (o[i + 5 + j] != 9) {
-                t = o + i + 5 + j;
-                DEBUGM("desc copy %d bytes from %d -> %d : %02X %02X %02X",
-                       desc_len, i + 5 + j, nlen, t[0], t[1], t[2]);
-                memcpy(n + nlen, o + i + 5 + j, desc_len);
-                nlen += desc_len;
-            }
-        }
-        int nes_len = nlen - init_len;
-        DEBUGM("clean_psi: setting the new es_len %d at position %d", nes_len,
-               init_len - 2);
-        n[init_len - 2] = (n[init_len - 2] & 0xF0) | ((nes_len >> 8) & 0xF);
-        n[init_len - 1] = (nes_len)&0xFF;
-    }
-    nlen += 4 - 3;
-    DEBUGM("new len is %d, old len is %d", nlen, pmt_len);
-    n[1] &= 0xF0;
-    n[1] |= (nlen >> 8);
-    n[2] = nlen & 0xFF;
-    n[5] ^= 0x3F; // change version
-
-    crc = crc_32(n, nlen - 1);
-    copy32(n, nlen - 1, crc);
-    return nlen + 3;
-}
-
-void clean_psi(adapter *ad, uint8_t *b, int pid) {
-    // int pid = PID_FROM_TS(b);  // Note: b pointer isn't the start of the
-    // TS packet !!
-    int pmt_len;
-    int clean_size = 1500;
-    uint8_t *clean, *pmt;
-    SPid *p;
-    SPMT *cpmt;
-
-    p = find_pid(ad->id, pid);
-    DEBUGM("clean_psi(): ad=%d pid=%d find_pid=%s", ad->id, pid,
-           p ? "ok" : "null");
-    if (!p || !VALID_SID(p->sid[0])) // no need to fix this PMT as it not
-                                     // requested by any stream
-        return;
-
-    if (!(cpmt = get_pmt(-p->pmt))) // no key associated with PMT - most
-                                    // likely the channel is clear
-        return;
-
-    if (!(cpmt->cw) || !cpmt->state) {
-        //		mark_pid_null(b);
-        return;
-    }
-    if (!cpmt->clean)
-        cpmt->clean = _malloc(clean_size + 10);
-    clean = cpmt->clean;
-
-    pmt_len = cpmt->pmt_len;
-    pmt = cpmt->pmt;
-
-    if (!clean) {
-        //		mark_pid_null(b);
-        return;
-    }
-
-    if (pmt) // populate clean psi
-    {
-        clean_psi_buffer(pmt, clean, clean_size);
-    }
-
-    if (clean) {
-        pmt_len = ((clean[1] & 0xF) << 8) + clean[2];
-        if (b[1] & 0x40)
-            cpmt->clean_pos = 0;
-        if (cpmt->clean_pos > pmt_len || cpmt->clean_pos < 0) {
-            mark_pid_null(b);
-            return;
-        }
-        if (cpmt->clean_pos == 0) {
-            memcpy(b + 5, clean, 183);
-            cpmt->clean_pos = 183;
-        } else {
-            memcpy(b + 4, clean + cpmt->clean_pos, 184);
-            cpmt->clean_pos += 184;
-        }
-        cpmt->clean_cc = (cpmt->clean_cc + 1) & 0xF;
-        b[3] = (b[3] & 0xF0) | cpmt->clean_cc;
-    }
 }
 
 int getEMMlen(unsigned char *b, int len) {
@@ -2015,7 +1895,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     }
 
     if (!pmt) {
-        pmt = get_pmt(pmt_add(f->adapter, sid, pid, len));
+        pmt = get_pmt(pmt_add(f->adapter, sid, pid));
         set_filter_opaque(filter, pmt);
     }
 
@@ -2024,11 +1904,6 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         return 0;
     }
     pmt->filter = filter;
-
-    if (pmt->pmt_len < len) {
-        pmt = _realloc(pmt, sizeof(SPMT) + len);
-        pmts[pmt->id] = pmt;
-    }
     pmt_add_active_pmt(ad, pmt->id);
 
     if (pmt->version == ver) {
@@ -2037,17 +1912,11 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         if (p)
             p->pmt = -pmt->id;
 
-        if (ad && p && opts.clean_psi)
-            clean_psi(ad, b, pid);
-
         return 0;
     } else
         // In case of PMT update, just stop the PMT before processing the
         // update
         stop_pmt(pmt, ad);
-
-    pmt->pmt_len = len;
-    memcpy(pmt->pmt, b, len);
 
     if (!(p = find_pid(ad->id, pid)))
         return -1;

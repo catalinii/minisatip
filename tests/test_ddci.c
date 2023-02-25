@@ -65,7 +65,7 @@ extern SHashTable channels;
 extern SFilter *filters[MAX_FILTERS];
 
 SPMT *create_pmt(int ad, int sid, int pid1, int pid2, int caid1, int caid2) {
-    int pmt_id = pmt_add(ad, sid, 1000, 10);
+    int pmt_id = pmt_add(ad, sid, 1000);
     SPMT *pmt = get_pmt(pmt_id);
     pmt->pid = pmt_id * 1000;
     pmt_add_stream_pid(pmt, pid1, 2, 0, 1, 0);
@@ -349,7 +349,7 @@ int test_create_pat() {
     uint8_t psi[188];
     uint8_t packet[188];
     int pid = 4096;
-    int pmt_id = pmt_add(0, 0x66, pid, 0);
+    int pmt_id = pmt_add(0, 0x66, pid);
     char cc;
     int psi_len;
     SFilter f;
@@ -417,8 +417,7 @@ int test_create_pmt() {
     d.pmt[0].id = pmt->id; // set to pmt 1
     pmt->pid = pid - 1;
     pmt->version = 0;
-    strcpy(pmt->name, "TEST CHANNEL HD");
-    pmt->pmt_len = 0;
+    strcpy((char *)pmt->name, "TEST CHANNEL HD");
     ddci_pmt_t dp = {.ver = 0, .pcr_pid = 8191};
 
     psi_len = ddci_create_pmt(&d, pmt, psi, sizeof(psi), &dp);
@@ -442,7 +441,7 @@ int test_create_pmt() {
         LOG_AND_RETURN(1, "PMT PSI pid %04X != mapping table pid %04X",
                        new_capid, dcapid);
 
-    SPMT *new_pmt = get_pmt(pmt_add(0, 200, 200, psi_len));
+    SPMT *new_pmt = get_pmt(pmt_add(0, 200, 200));
     ad.id = 0;
     ad.enabled = 1;
     a[0] = &ad;

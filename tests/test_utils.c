@@ -43,6 +43,7 @@ int test_mkdir_recursive() {
 int test_fifo() {
     SFIFO f;
     char buf[] = {0, 1, 2, 3, 4, 5};
+    memset(&f, 0, sizeof(f));
     create_fifo(&f, 10);
     f.write_index = 5;
     f.read_index = 5;

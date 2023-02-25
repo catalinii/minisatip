@@ -36,7 +36,6 @@ struct struct_opts {
     int udp_threshold;
     int tcp_threshold;
     int force_scan;
-    int clean_psi;
     int send_all_ecm;
     int file_line;
     char *last_log;

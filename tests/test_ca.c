@@ -63,11 +63,11 @@ int get_enabled_pmts_for_ca(ca_device_t *d);
 ca_device_t d;
 
 int test_multiple_pmt() {
-    // id, adapter, sid, pmt_pid
-    pmt_add(0, 0, 100, 100);
-    pmt_add(1, 0, 200, 200);
-    pmt_add(2, 0, 300, 300);
-    pmt_add(3, 0, 400, 400);
+    // adapter, sid, pmt_pid
+    pmt_add(0, 100, 100);
+    pmt_add(0, 200, 200);
+    pmt_add(0, 300, 300);
+    pmt_add(0, 400, 400);
 
     add_pmt_to_capmt(&d, get_pmt(0), 1);
     add_pmt_to_capmt(&d, get_pmt(1), 1);
@@ -85,8 +85,8 @@ int test_multiple_pmt() {
 
 int test_create_capmt() {
     uint8_t clean[1500];
-    int p1 = pmt_add(0, 500, 500, 0);
-    int p2 = pmt_add(0, 600, 600, 0);
+    int p1 = pmt_add(0, 500, 500);
+    int p2 = pmt_add(0, 600, 600);
     add_pmt_to_capmt(&d, get_pmt(p1), 1);
     add_pmt_to_capmt(&d, get_pmt(p2), 1);
     SPMT *pmt = get_pmt(p1);
