@@ -863,6 +863,55 @@ int check_cc(adapter *ad) {
     return packet_no_sid;
 }
 
+void check_cc2(adapter *ad) {
+    int i;
+    char cc, cc_before;
+    SPid *p;
+    int pid;
+    unsigned char *b;
+
+    if ((p = find_pid(ad->id, 8192)))
+        return;
+
+    for (i = 0; i < ad->rlen; i += DVB_FRAME) {
+        b = ad->buf + i;
+        if (b[1] & 0x80)
+            continue;
+
+        pid = PID_FROM_TS(b);
+        if (pid == 8191)
+            continue;
+
+        if ((opts.debug & LOG_DMX) == LOG_DMX)
+            _dump_packets("check_cc2 -> ", b, 188, i);
+
+        p = find_pid(ad->id, pid);
+        if (!p)
+            continue;
+
+        p->packets2++;
+
+        if (b[3] & 0x10) {
+            cc_before = p->cc2;
+            cc = b[3] & 0xF;
+            if (p->cc2 < 0 || p->cc2 > 15)
+                p->cc2 = cc;
+            else
+                p->cc2 = (p->cc2 + 1) % 16;
+
+            if (p->cc2 != cc) {
+                LOGM("PID Continuity error post-processing (adapter %d, pos "
+                     "%d): pid: %03d, Expected CC: %X, Actual CC: %X, CC "
+                     "Before %X %s",
+                     ad->id, i / DVB_FRAME, pid, p->cc2, cc, cc_before,
+                     (b[3] & 0x80) ? "encrypted" : "");
+                p->cc_err2++;
+            }
+            p->cc2 = cc;
+        }
+    }
+}
+
 int process_packets_for_stream(streams *sid, adapter *ad) {
     int i, j, st_id = sid->sid;
     SPid *p;
@@ -993,6 +1042,10 @@ int process_dmx(sockets *s) {
 
 #ifndef DISABLE_TABLES
     pmt_process_stream(ad);
+#endif
+
+#ifndef AXE
+    check_cc2(ad);
 #endif
 
     for (i = 0; i < MAX_STREAMS; i++)

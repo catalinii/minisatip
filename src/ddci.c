@@ -282,7 +282,7 @@ int create_channel_for_pmt(Sddci_channel *c, SPMT *pmt) {
                         ca[dvbca_id].ad_info[i].mask[j], pmt->id);
                     c->ddci[c->ddcis++].ddci = i;
                     c->sid = pmt->sid;
-                    safe_strncpy(c->name, pmt->name);
+                    safe_strncpy(c->name, (char *)pmt->name);
                 }
         }
     return 0;
@@ -351,7 +351,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
                 if (dpmt->sid == pmt->sid) {
                     ddci_mapping_table_t *m = get_ddci_pid(d, pmt->pid);
                     if (m->pid == dpmt->pid) {
-                        safe_strncpy(pmt->name, dpmt->name);
+                        safe_strncpy((char *)pmt->name, (char *)dpmt->name);
                     }
                 }
             }
