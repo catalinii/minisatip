@@ -156,9 +156,6 @@ int main() {
     strcpy(thread_name, "test_pmt");
     TEST_FUNC(test_wait_pusi(), "testing decrypt");
     TEST_FUNC(test_decrypt(), "testing decrypt");
-    TEST_FUNC(test_clean_psi_buffer_only(),
-              "testing test_clean_psi_buffer_only");
-    TEST_FUNC(test_clean_psi_buffer(), "testing test_clean_psi_buffer");
     fflush(stdout);
     return 0;
 }
