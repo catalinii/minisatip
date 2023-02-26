@@ -36,7 +36,7 @@ typedef struct struct_sockets {
     int rlen;
     int timeout_ms;
     int id; // socket id
-    int iteration;
+    uint64_t iteration;
     int err;
     int flags; // 1 - buf is allocated dynamically
     int events, revents;
@@ -118,7 +118,7 @@ int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt,
                         int high_prio);
 int sockets_write(int sock_id, void *buf, int len);
 int flush_socket(sockets *s);
-void get_socket_iteration(int s_id, int it);
+void set_socket_iteration(int s_id, uint64_t it);
 void set_sockets_sid(int id, int sid);
 void set_socket_dscp(int id, int dscp, int prio);
 void sockets_set_opaque(int id, void *opaque, void *opaque2, void *opaque3);

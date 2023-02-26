@@ -1031,7 +1031,7 @@ int tune(int aid, int sid) {
     }
     if (flush_data) {
         ad->tune_time = getTick();
-        get_socket_iteration(ad->sock, 0);
+        set_socket_iteration(ad->sock, 0);
     }
     ad->do_tune = 0;
     mutex_unlock(&ad->mutex);

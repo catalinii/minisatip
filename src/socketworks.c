@@ -827,7 +827,7 @@ void *select_and_execute(void *arg) {
 
                     DEBUGM("Read %s %d (rlen:%d/total:%d) bytes from %d [s: %d "
                            "m: %d] -> "
-                           "%p (buf: %p) - iteration %d action %p",
+                           "%p (buf: %p) - iteration %jd action %p",
                            read_ok ? "OK" : "NOK", rlen, master->rlen,
                            master->lbuf, ss->sock, ss->id, master->id, pos,
                            master->buf, ss->iteration, master->action);
@@ -1169,7 +1169,7 @@ char *get_sockaddr_host(USockAddr s, char *dest, int ld) {
     return dest;
 }
 
-void get_socket_iteration(int s_id, int it) {
+void set_socket_iteration(int s_id, uint64_t it) {
     sockets *ss = get_sockets(s_id);
     if (!ss)
         return;
@@ -1425,9 +1425,10 @@ int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt,
         return 0;
     }
     if (copied + offset != len)
-        LOG("Unhandled sock %d data: copied %d offset %d len %d", s->id, copied, offset, len);
+        LOG("Unhandled sock %d data: copied %d offset %d len %d", s->id, copied,
+            offset, len);
     LOGM("got %d bytes, offset %d, rv %d, buffered %d bytes - used %d", len,
-        offset, rv, copied, fifo_used(&s->fifo));
+         offset, rv, copied, fifo_used(&s->fifo));
     s->buffered_bytes += copied;
     buffered_bytes += copied;
     return offset;

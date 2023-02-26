@@ -2065,7 +2065,7 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr) {
     // new GET request. This doesn't interrupts the streaming.
     if (s->type == TYPE_HTTP && s->iteration > 1 && rc == 200) {
         LOG("Reply hidden because another GET while streaming (handle %d) "
-            "[%s:%d] iteration:%d, sock %d",
+            "[%s:%d] iteration:%jd, sock %d",
             s->sock, get_sockaddr_host(s->sa, ra, sizeof(ra)),
             get_sockaddr_port(s->sa), s->iteration, s->id);
         return;
