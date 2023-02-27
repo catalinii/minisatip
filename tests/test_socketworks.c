@@ -200,7 +200,7 @@ int test_socket_buffering() {
 
 int main() {
     opts.log = 1; // LOG_UTILS | LOG_SOCKET;
-    strcpy(thread_name, "test_socketworks");
+    strcpy(thread_info[thread_index].thread_name, "test_socketworks");
     init_alloc();
     _writev = writev;
     int fd[2];
