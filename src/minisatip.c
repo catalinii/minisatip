@@ -1899,7 +1899,9 @@ int main(int argc, char *argv[]) {
     int i;
     unsigned long log_it;
     main_tid = get_tid();
-    strcpy(thread_name, "main");
+    thread_index = 0;
+    thread_info[thread_index].tid = main_tid;
+    strcpy(thread_info[thread_index].thread_name, "main");
     init_alloc();
     set_options(argc, argv);
     if ((rv = init_utils(argv[0]))) {

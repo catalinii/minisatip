@@ -25,27 +25,27 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
-#include <syslog.h>
 #include <sys/time.h>
+#include <syslog.h>
 
 pthread_mutex_t log_mutex;
-extern __thread char thread_name[];
+SThreadInfo thread_info[135];
+__thread int thread_index;
 
 void _log(const char *file, int line, const char *fmt, ...) {
     va_list arg;
     int len = 0, len1 = 0, both = 0;
     static int idx, times;
-    char stid[50];
+    char stid[102];
     static char output[2][2000]; // prints just the first 2000 bytes from
                                  // the message
 
     /* Check if the message should be logged */
-    opts.last_log = (char *)fmt;
-
     stid[0] = 0;
     if (!opts.no_threads) {
         pthread_mutex_lock(&log_mutex);
-        snprintf(stid, sizeof(stid) - 2, " %s", thread_name);
+        snprintf(stid, sizeof(stid) - 1, " %s",
+                 thread_info[thread_index].thread_name);
         stid[sizeof(stid) - 1] = 0;
     }
 

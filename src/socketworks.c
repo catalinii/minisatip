@@ -665,9 +665,23 @@ extern uint32_t writes, failed_writes;
 // also make sure to run with option -t (no threads)
 // or set EMBEDDED=1 in Makefile
 
-__thread pthread_t tid;
-__thread char thread_name[100];
 __thread int select_timeout;
+SMutex thread_mutex;
+
+int get_thread_index() {
+    int i;
+    mutex_init(&thread_mutex);
+    mutex_lock(&thread_mutex);
+    for (i = 0; i < MAX_THREAD_INFO; i++)
+        if (thread_info[i].tid == 0) {
+            thread_info[i].tid = 1;
+            break;
+        }
+    mutex_unlock(&thread_mutex);
+    if (i == MAX_THREAD_INFO)
+        return -1;
+    return i;
+}
 
 void *select_and_execute(void *arg) {
     int i, rv, rlen, les, es, pos_len;
@@ -675,23 +689,35 @@ void *select_and_execute(void *arg) {
     int err;
     struct pollfd pf[MAX_SOCKS];
     int64_t lt, c_time;
+    pthread_t tid;
     int read_ok;
     char ra[50];
 
-    memset(thread_name, 0, sizeof(thread_name));
+    if (arg != NULL) // main thread is called with arg == NULL
+        thread_index = get_thread_index();
+    if (thread_index == -1) {
+        _log(__FILE__, __LINE__,
+             "Too many threads, increase MAX_THREAD_INFO from %d",
+             MAX_THREAD_INFO);
+        return NULL;
+    }
+
+    memset(thread_info[thread_index].thread_name, 0,
+           sizeof(thread_info[thread_index].thread_name));
     if (arg) {
-        safe_strncpy(thread_name, (char *)arg);
+        safe_strncpy(thread_info[thread_index].thread_name, (char *)arg);
     } else
-        strcpy(thread_name, "main");
+        strcpy(thread_info[thread_index].thread_name, "main");
 
     select_timeout = SELECT_TIMEOUT;
     tid = get_tid();
+    thread_info[thread_index].tid = tid;
     les = 1;
     es = 0;
     lt = getTick();
     memset(&pf, -1, sizeof(pf));
     LOG("Starting select_and_execute on thread ID %lx, thread_name %s", tid,
-        thread_name);
+        thread_info[thread_index].thread_name);
     while (run_loop) {
         c_time = getTick();
         es = 0;
@@ -714,7 +740,7 @@ void *select_and_execute(void *arg) {
         i = -1;
         if (les == 0 && es == 0 && tid != main_tid) {
             LOG("No enabled sockets for Thread ID %lx name %s ... exiting ",
-                tid, thread_name);
+                tid, thread_info[thread_index].thread_name);
             break;
         }
         les = es;
@@ -918,6 +944,7 @@ void *select_and_execute(void *arg) {
         LOG("The main loop ended, run_loop = %d", run_loop)
     else
         add_join_thread(tid);
+    thread_info[thread_index].tid = 0;
 
     return NULL;
 }
