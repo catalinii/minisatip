@@ -27,8 +27,6 @@
 #include <string.h>
 #include <sys/stat.h>
 
-extern __thread char thread_name[100];
-
 int test_mkdir_recursive() {
     const char *dir = "/tmp/minisatip/test";
     mkdir_recursive(dir);
@@ -85,7 +83,7 @@ int test_fifo() {
 
 int main() {
     opts.log = 255;
-    strcpy(thread_name, "test_utils");
+    strcpy(thread_info[thread_index].thread_name, "test_utils");
     TEST_FUNC(test_mkdir_recursive(), "testing directory creation");
     TEST_FUNC(test_fifo(), "testing fifo");
     return 0;

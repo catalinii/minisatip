@@ -24,8 +24,6 @@
 #include "opts.h"
 #include <string.h>
 
-extern __thread char thread_name[100];
-
 #define MAX_HASH 100
 #define KEY_FOR_INDEX(i) (i)
 
@@ -69,7 +67,7 @@ int test_hash_table() {
 
 int main() {
     opts.log = 255;
-    strcpy(thread_name, "test_hash_table");
+    strcpy(thread_info[thread_index].thread_name, "test_hash_table");
     TEST_FUNC(test_hash_table(), "testing hash table");
     return 0;
 }

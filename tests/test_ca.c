@@ -161,7 +161,7 @@ int main() {
     opts.debug = 255;
     opts.cache_dir = "/tmp";
 
-    strcpy(thread_name, "test_ca");
+    strcpy(thread_info[thread_index].thread_name, "test_ca");
     memset(&d, 0, sizeof(d));
     memset(d.capmt, -1, sizeof(d.capmt));
     d.enabled = 1;
