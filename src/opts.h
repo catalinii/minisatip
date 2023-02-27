@@ -38,7 +38,6 @@ struct struct_opts {
     int force_scan;
     int send_all_ecm;
     int file_line;
-    char *last_log;
     int dvbapi_port;
     char dvbapi_host[100];
     int dvbapi_offset;
