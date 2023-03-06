@@ -389,6 +389,9 @@
 
 		}
 
+		function formatPids(pids) {
+			return pids.replaceAll(',', ', ');
+		}
 
 		function getTable(state, oldstate) {
 
@@ -548,70 +551,76 @@
 					if (st_pmt != "")
 						myTable += "<small>PMT: " + st_pmt + "</small><br />";
 				}
-				for (var j = 0; j < max_streams; j++) {
-					if (state['st_enabled'][j] == 1 && state['st_adapter'][j] == i) {
-						var st_rh = state['st_rhost'][j] + ":" + state['st_rport'][j] + " (" + state['st_proto'][j] + ")";
-						if (state['ad_master'][i] == j)
-							st_rh = "<b>" + st_rh + "</b>";
-						if (state['st_play'][j] == 0)
-							st_rh = "<i>" + st_rh + "</i>";
-						myTable += "<hr>" + st_rh + "<br />";
-						if (state['st_useragent'][j] != "")
-							myTable += "<small>Client: " + state['st_useragent'][j] + "</small><br />";
-					}
-					if (state['st_enabled'][j] == 1 && state['st_adapter'][j] == i) {
-						var st_p = state['st_pids'][j];
-						if (state['ad_master'][i] == j)
-							st_p = "" + st_p + "";
-						if (state['st_play'][j] == 0)
-							st_p = "<i>" + st_p + "</i>";
-						myTable += "<small>Pids: " + st_p + "</small><br />";
 
-						// Create VLC stream URL
-						// Example: rtsp://@satip/?src=1&freq=12382&pol=H&msys=DVBS2&sr=27500&pids=0,5375,5378,116,5375,32
-						var hostArray = window.location.host.split(':');
-						params = ""
-						switch (ad_sys) {
-							// DVB-C
-							case 1: params += "&sr=" + state['ad_sr'][i]
-								break
-							// DVB-T
-							case 3: params += "&bw=" + state['ad_bw'][i] + "&gi=" + state['ad_gi'][i]
-								break
-							// DVB-S2 Multi-stream
-							case 6: if (state['ad_plp'][i] > 0) {
-								params += "&isi=" + state['ad_plp'][i] + "&plsc=" + state['ad_plsc'][i] + "&plsm=gold"
-							}
-							// DVB-S/DVB-S2
-							case 5: {
-								params += "&src=" + state['ad_pos'][i] + "&sr=" + state['ad_sr'][i] + "&pol=" + pol[state['ad_pol'][i]].replace('(', '').replace(')', '')
-								break
-							}
-							// DVB-C2
-							case 19: {
-								params += "&plp=" + state['ad_plp'][i] + "&c2tft=" + pol[state['ad_c2tft'][i]] + "&ds=" + pol[state['ad_ds'][i]] + "&sr=" + state['ad_sr'][i]
-								break;
-							}
-							// DVB-T2
-							case 16: {
-								params += "&plp=" + state['ad_plp'][i] + "&t2id=" + pol[state['ad_t2id'][i]] + "&t2id=" + pol[state['ad_sm'][i]]
-								break;
-							}
+				if (ad_type == 4) {
+					// Show PIDs on the adapter level for CI adapters
+					myTable += "<small>Pids: " + formatPids(state['ad_pids'][i]) + "</small><br />";
+				} else {
+					for (var j = 0; j < max_streams; j++) {
+						if (state['st_enabled'][j] == 1 && state['st_adapter'][j] == i) {
+							var st_rh = state['st_rhost'][j] + ":" + state['st_rport'][j] + " (" + state['st_proto'][j] + ")";
+							if (state['ad_master'][i] == j)
+								st_rh = "<b>" + st_rh + "</b>";
+							if (state['st_play'][j] == 0)
+								st_rh = "<i>" + st_rh + "</i>";
+							myTable += "<hr>" + st_rh + "<br />";
+							if (state['st_useragent'][j] != "")
+								myTable += "<small>Client: " + state['st_useragent'][j] + "</small><br />";
 						}
+						if (state['st_enabled'][j] == 1 && state['st_adapter'][j] == i) {
+							var st_p = state['st_pids'][j];
+							if (state['ad_master'][i] == j)
+								st_p = "" + st_p + "";
+							if (state['st_play'][j] == 0)
+								st_p = "<i>" + st_p + "</i>";
+							myTable += "<small>Pids: " + formatPids(st_p) + "</small><br />";
 
-						var fe = ""
-						if (state['ad_fe'][i] != 0) {
-							fe = "&fe=" + state['ad_fe'][i]
+							// Create VLC stream URL
+							// Example: rtsp://@satip/?src=1&freq=12382&pol=H&msys=DVBS2&sr=27500&pids=0,5375,5378,116,5375,32
+							var hostArray = window.location.host.split(':');
+							params = ""
+							switch (ad_sys) {
+								// DVB-C
+								case 1: params += "&sr=" + state['ad_sr'][i]
+									break
+								// DVB-T
+								case 3: params += "&bw=" + state['ad_bw'][i] + "&gi=" + state['ad_gi'][i]
+									break
+								// DVB-S2 Multi-stream
+								case 6: if (state['ad_plp'][i] > 0) {
+									params += "&isi=" + state['ad_plp'][i] + "&plsc=" + state['ad_plsc'][i] + "&plsm=gold"
+								}
+								// DVB-S/DVB-S2
+								case 5: {
+									params += "&src=" + state['ad_pos'][i] + "&sr=" + state['ad_sr'][i] + "&pol=" + pol[state['ad_pol'][i]].replace('(', '').replace(')', '')
+									break
+								}
+								// DVB-C2
+								case 19: {
+									params += "&plp=" + state['ad_plp'][i] + "&c2tft=" + pol[state['ad_c2tft'][i]] + "&ds=" + pol[state['ad_ds'][i]] + "&sr=" + state['ad_sr'][i]
+									break;
+								}
+								// DVB-T2
+								case 16: {
+									params += "&plp=" + state['ad_plp'][i] + "&t2id=" + pol[state['ad_t2id'][i]] + "&t2id=" + pol[state['ad_sm'][i]]
+									break;
+								}
+							}
+
+							var fe = ""
+							if (state['ad_fe'][i] != 0) {
+								fe = "&fe=" + state['ad_fe'][i]
+							}
+							myTable += "<small><a href=" + '"' + "rtsp://@" + state['rtsp_host'] + "/?freq=" + state['ad_freq'][i] + fe + params
+								+ "&msys=" + sys[state['ad_sys'][i]].toUpperCase() + mtype[state['ad_mtype'][i]] + "&pids=" + st_p + '"' + ">RTSP Link</a></small><br />";
+							myTable += "<small><a href=" + '"' + "http://" + hostArray[0] + ":" + hostArray[1] + "/?freq=" + state['ad_freq'][i] + fe + params
+								+ "&msys=" + sys[state['ad_sys'][i]].toUpperCase() + mtype[state['ad_mtype'][i]] + "&pids=" + st_p + '"' + ">HTTP Link</a></small><br />";
+
+							if (state['st_overflow'][j] > 0)
+								myTable += "<small>Dropped: " + (state['st_overflow'][j] / 1048576.0).toFixed(2) + " MB</small><br />";
+							if (state['st_buffered'][j] > 0)
+								myTable += "<small>Buffered: " + (state['st_buffered'][j] / 1048576.0).toFixed(2) + " MB</small><br />";
 						}
-						myTable += "<small><a href=" + '"' + "rtsp://@" + state['rtsp_host'] + "/?freq=" + state['ad_freq'][i] + fe + params
-							+ "&msys=" + sys[state['ad_sys'][i]].toUpperCase() + mtype[state['ad_mtype'][i]] + "&pids=" + st_p + '"' + ">RTSP Link</a></small><br />";
-						myTable += "<small><a href=" + '"' + "http://" + hostArray[0] + ":" + hostArray[1] + "/?freq=" + state['ad_freq'][i] + fe + params
-							+ "&msys=" + sys[state['ad_sys'][i]].toUpperCase() + mtype[state['ad_mtype'][i]] + "&pids=" + st_p + '"' + ">HTTP Link</a></small><br />";
-
-						if (state['st_overflow'][j] > 0)
-							myTable += "<small>Dropped: " + (state['st_overflow'][j] / 1048576.0).toFixed(2) + " MB</small><br />";
-						if (state['st_buffered'][j] > 0)
-							myTable += "<small>Buffered: " + (state['st_buffered'][j] / 1048576.0).toFixed(2) + " MB</small><br />";
 					}
 				}
 				myTable += "</td>";
