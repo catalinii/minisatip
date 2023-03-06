@@ -2072,16 +2072,6 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque) {
     adapter *ad = (void *)opaque;
     tsid = sdt[3] * 256 + sdt[4];
 
-    memset(new_filter, 0, sizeof(new_filter));
-    memset(new_mask, 0, sizeof(new_mask));
-    new_filter[1] = sdt[3];
-    new_mask[1] = 0xFF;
-    new_filter[2] = sdt[4];
-    new_mask[2] = 0xFF;
-    new_filter[3] = (sdt[5] & 0x3E);
-    new_mask[3] = 0x3E;
-    set_filter_mask(filter, new_filter, new_mask);
-    set_filter_flags(filter, FILTER_PERMANENT | FILTER_REVERSE | FILTER_CRC);
     sdt_len = (sdt[1] & 0xF) * 256 + sdt[2];
     i = 11;
     LOGM("Processing SDT for transponder %d (%x) with length %d, sdt[5] "
