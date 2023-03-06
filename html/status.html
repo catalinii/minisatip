@@ -540,7 +540,10 @@
 				// STREAMS
 				myTable += "<td class='dt-left'>";
 				if (state['has_pmt']) {
-					myTable += "<b>" + state['ad_channel'][i] + "</b><br>";
+					if (state['ad_channel'][i]) {
+						myTable += "<b>" + state['ad_channel'][i] + "</b><br>";
+					}
+					
 					var st_pmt = state['ad_pmt'][i];
 					if (st_pmt != "")
 						myTable += "<small>PMT: " + st_pmt + "</small><br />";
