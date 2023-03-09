@@ -2064,7 +2064,6 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque) {
     int i, j, tsid, sdt_len, sid, desc_loop_len, desc_len, status;
     SPMT *pmt;
     unsigned char *b;
-    uint8_t new_filter[FILTER_SIZE], new_mask[FILTER_SIZE];
 
     if (sdt[0] != 0x42)
         return 0;
