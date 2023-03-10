@@ -708,8 +708,7 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
     // Add Stream pids
     // Add CA IDs and CA Pids
     for (i = 0; i < pmt->stream_pids; i++) {
-
-        if (get_ca_multiple_pmt(pmt->adapter)) {
+        if (get_ca_multiple_pmt(d->id)) {
             // Do not map any pids that are not requested by the client
             SPid *p = find_pid(pmt->adapter, pmt->stream_pid[i]->pid);
             if (!p) {
