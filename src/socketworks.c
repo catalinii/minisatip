@@ -673,8 +673,8 @@ int get_thread_index() {
     mutex_init(&thread_mutex);
     mutex_lock(&thread_mutex);
     for (i = 0; i < MAX_THREAD_INFO; i++)
-        if (thread_info[i].tid == 0) {
-            thread_info[i].tid = 1;
+        if (thread_info[i].enabled == 0) {
+            thread_info[i].enabled = 1;
             break;
         }
     mutex_unlock(&thread_mutex);
@@ -944,7 +944,7 @@ void *select_and_execute(void *arg) {
         LOG("The main loop ended, run_loop = %d", run_loop)
     else
         add_join_thread(tid);
-    thread_info[thread_index].tid = 0;
+    thread_info[thread_index].enabled = 0;
 
     return NULL;
 }

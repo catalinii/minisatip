@@ -16,6 +16,7 @@ uint32_t crc_32(const uint8_t *data, int datalen);
 
 #define MAX_THREAD_INFO 135 // 128 + 7
 typedef struct {
+    char enabled;
     pthread_t tid;
     char thread_name[100];
     char *last_log;
