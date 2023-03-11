@@ -893,7 +893,8 @@ void *select_and_execute(void *arg) {
                             get_sockaddr_host(ss->sa, ra, sizeof(ra)),
                             get_sockaddr_port(ss->sa), types[ss->type & 0x7],
                             ss->type, err);
-                        if (err == EOVERFLOW || err == EWOULDBLOCK)
+                        if (err == EOVERFLOW || err == EWOULDBLOCK ||
+                            err == EINTR)
                             continue;
                         if (err == EAGAIN) {
                             ss->err++;
