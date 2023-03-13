@@ -555,31 +555,6 @@ int ddci_create_pat(ddci_device_t *d, uint8_t *b) {
     return len;
 }
 
-void ddci_replace_pi(ddci_device_t *d, int adapter, unsigned char *es,
-                     int len) {
-
-    int es_len, capid;
-    int i;
-
-    for (i = 0; i < len; i += es_len) // reading program info
-    {
-        es_len = es[i + 1] + 2;
-        if (es[i] != 9)
-            continue;
-        capid = (es[i + 4] & 0x1F) * 256 + es[i + 5];
-        ddci_mapping_table_t *m = get_pid_mapping(d, adapter, capid);
-        int dpid = capid;
-
-        if (m)
-            dpid = m->ddci_pid;
-
-        es[i + 4] &= 0xE0; //~0x1F
-        es[i + 4] |= (dpid >> 8);
-        es[i + 5] = dpid & 0xFF;
-        LOGM("%s: CA pid %d -> pid %d", __FUNCTION__, capid, dpid)
-    }
-}
-
 uint16_t YMDtoMJD(int Y, int M, int D) {
     int L = (M < 3) ? 1 : 0;
     return 14956 + D + (int)((Y - L) * 365.25) +
