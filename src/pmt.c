@@ -1284,6 +1284,7 @@ int pmt_process_stream(adapter *ad) {
     mark_pids_null(ad);
 
 #endif
+    adapter_commit(ad);
 
     return 0;
 }
@@ -2082,7 +2083,7 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque) {
         LOGM("Detected service ID %d (%X) status:%d CA:%d, pos %d len %d", sid,
              sid, (status >> 1), (status & 0x1), i, desc_loop_len);
         if (!pmt) {
-            LOG("%s: no PMT found for sid %d (%X)", __FUNCTION__, sid, sid);
+            DEBUGM("%s: no PMT found for sid %d (%X)", __FUNCTION__, sid, sid);
             continue;
         }
         for (j = 5; j < desc_loop_len; j += desc_len) {

@@ -317,6 +317,7 @@ int init_hw(int i) {
     ad->threshold = opts.udp_threshold;
     ad->updating_pids = 0;
     ad->wait_new_stream = 0;
+    ad->pids_updates = 0;
     ad->rtime = getTick();
     adapter_set_dvr(ad);
     snprintf(ad->name, sizeof(ad->name), "AD%d", i);
@@ -819,6 +820,15 @@ int set_adapter_for_stream(int sid, int aid) {
     return 0;
 }
 
+void adapter_commit(adapter *ad) {
+    if (!ad->commit)
+        return;
+    if (!ad->pids_updates)
+        return;
+    ad->pids_updates = 0;
+    ad->commit(ad);
+}
+
 void close_adapter_for_stream(int sid, int aid, int close_stream) {
     adapter *ad;
     streams *s = get_sid(sid);
@@ -848,9 +858,7 @@ void close_adapter_for_stream(int sid, int aid, int close_stream) {
         init_dvb_parameters(&ad->tp);
         if (ad->standby && close_stream)
             ad->standby(ad);
-#ifdef AXE
-        free_axe_input(ad);
-#endif
+
         if ((ad->master_source >= 0) && (ad->master_source < MAX_ADAPTERS)) {
             adapter *ad2 = a[ad->master_source];
             if (ad2)
@@ -862,6 +870,8 @@ void close_adapter_for_stream(int sid, int aid, int close_stream) {
         mark_pids_deleted(aid, sid, NULL);
     update_pids(aid);
     adapter_update_threshold(ad);
+    adapter_commit(ad);
+
     mutex_unlock(&ad->mutex);
 }
 
@@ -944,10 +954,9 @@ int update_pids(int aid) {
             ad->pids[i].cc_err2 = 0;
             ad->pids[i].dec_err = 0;
         }
-    if (ad->commit)
-        ad->commit(ad);
 
     ad->updating_pids = 0;
+    ad->pids_updates++;
     return 0;
 }
 
@@ -1033,6 +1042,7 @@ int tune(int aid, int sid) {
         ad->tune_time = getTick();
         set_socket_iteration(ad->sock, 0);
     }
+    adapter_commit(ad);
     ad->do_tune = 0;
     mutex_unlock(&ad->mutex);
     return rv;

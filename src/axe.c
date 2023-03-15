@@ -19,12 +19,12 @@
  */
 
 #include "adapter.h"
+#include "api/symbols.h"
+#include "api/variables.h"
 #include "ca.h"
 #include "dvb.h"
 #include "minisatip.h"
 #include "utils.h"
-#include "api/symbols.h"
-#include "api/variables.h"
 #include "utils/ticks.h"
 
 #include <arpa/inet.h>
@@ -58,7 +58,8 @@
 #define DTV_STREAM_ID 42
 #endif
 
-void get_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength, uint16_t *snr, uint16_t *db);
+void get_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
+                uint16_t *snr, uint16_t *db);
 int send_jess(adapter *ad, int fd, int freq, int pos, int pol, int hiband,
               diseqc *d);
 int send_unicable(adapter *ad, int fd, int freq, int pos, int pol, int hiband,
@@ -336,8 +337,8 @@ int axe_setup_switch(adapter *ad) {
             if (absolute_switch && diseqc >= 0 && diseqc < MAX_SOURCES) {
                 /* reuse input */
                 for (aid = 0; aid < 4; aid++) {
-                    pos =
-                        get_absolute_source_for_adapter(aid, tp->diseqc, SYS_DVBS);
+                    pos = get_absolute_source_for_adapter(aid, tp->diseqc,
+                                                          SYS_DVBS);
                     if (pos <= 0)
                         continue;
                     pos--;
@@ -836,6 +837,7 @@ void find_axe_adapter(adapter **a) {
                 ad->wakeup = axe_wakeup;
                 ad->type = ADAPTER_DVB;
                 ad->fast_status = 1;
+                ad->standby = free_axe_input;
                 close(fd);
                 na++;
                 a_count = na; // update adapter counter
@@ -853,7 +855,7 @@ void find_axe_adapter(adapter **a) {
             a[na]->pa = a[na]->fn = -1;
 }
 
-void free_axe_input(adapter *ad) {
+int free_axe_input(adapter *ad) {
     int aid;
     adapter *ad2;
 
@@ -864,6 +866,7 @@ void free_axe_input(adapter *ad) {
             LOGM("axe: _free input %d : %04x", ad2->id, ad2->axe_used);
         }
     }
+    return 0;
 }
 
 static char *axe_vdevice_read(int aid, char *buf, size_t buflen) {
