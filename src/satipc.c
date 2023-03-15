@@ -90,26 +90,24 @@ typedef struct struct_satipc {
     int sport;
     char session[18];
     int stream_id;
-    int sleep;
     int listen_rtp;
     int rtcp, rtcp_sock, cseq;
-    int wp, qp;          // written packet, queued packet
     char ignore_packets; // ignore packets coming from satip server while tuning
     int satip_fe;
     char last_cmd;
     char use_tcp, init_use_tcp;
     char no_pids_all;
-    char expect_reply, force_commit, want_commit, want_tune, sent_transport,
-        force_pids;
+    char state;
     int64_t last_setup, last_connect, last_close, last_response_sent;
     uint8_t addpids, setup_pids;
     unsigned char *tcp_data;
     int tcp_size, tcp_pos, tcp_len;
-    char option_no_session, option_no_setup, option_no_option;
+    char option_no_setup, option_no_option;
     uint32_t rcvp, repno, rtp_miss, rtp_ooo; // rtp statstics
     uint16_t rtp_seq;
     char static_config;
     int num_describe;
+    int timeout_ms;
     SHashTable requests;
     // Bit Fields
     unsigned int
@@ -122,6 +120,12 @@ typedef struct struct_satipc {
                                             // can be restarted
     unsigned int restart_when_tune : 1;
     unsigned int restart_needed : 1;
+    unsigned int expect_reply : 1;
+
+    unsigned int want_commit : 1;
+    unsigned int want_tune : 1;
+    unsigned int force_pids : 1;
+    unsigned int sent_transport : 1;
 } satipc;
 
 satipc *satip[MAX_ADAPTERS];
@@ -153,111 +157,46 @@ satipc *get_satip1(int aid, char *file, int line) {
 
 int http_request(adapter *ad, char *url, char *method, int force);
 
-int satipc_commit(adapter *ad);
+int satipc_request(adapter *ad);
 void set_adapter_signal(adapter *ad, char *b, int rlen);
 
-int satipc_reply(sockets *s) {
-    int rlen = s->rlen;
-    adapter *ad;
-    satipc *sip;
-    char *arg[100], *sess, *es, *sid, *timeout, *sep;
-    int la, i, rc;
-    __attribute__((unused)) int rv;
-    get_ad_and_sipr(s->sid, 1);
-    s->rlen = 0;
-    sip->keep_adapter_open = 0;
-    LOG("satipc_reply (adapter %d): receiving from handle %d, sock %d", s->sid,
-        s->sock, s->id);
-    LOGM("MSG process << server :\n%s", s->buf);
-
-    if ((timeout = strstr((char *)s->buf, "timeout="))) {
-        int tmout;
-        timeout += strlen("timeout=");
-        tmout = map_intd(timeout, NULL, 30);
-        sockets_timeout(ad->fe_sock, tmout * 500); // 2 times 30s
-    }
-
-    sess = strstr((char *)s->buf, "Session:");
-
-    if (sip->last_cmd == RTSP_DESCRIBE) {
-        set_adapter_signal(ad, (char *)s->buf, rlen);
-    }
-
-    sep = strstr((char *)s->buf, "minisatip");
+void handle_client_capabilities(satipc *sip, char *buf) {
+    char *sep = strstr(buf, "minisatip");
     if (sep) {
-        sip->option_no_session = 1;
         sip->option_no_setup = 1;
         sip->option_no_option = 1;
+        sip->addpids = 1;
     }
-    sep = strstr((char *)s->buf, "enigma");
+    sep = strstr(buf, "enigma");
     if (sep && !sip->restart_when_tune) {
         LOG("Setting adapter %d to restart every time the transponder is "
             "changed",
-            ad->id);
+            sip->id);
         sip->restart_when_tune = 1;
         if (sip->use_tcp == 0) {
             sip->use_tcp = 1;
             sip->init_use_tcp = 1;
             sip->restart_needed = 1;
-            LOG("adapter %d is not RTSP over TCP, switching", ad->id);
+            LOG("adapter %d is not RTSP over TCP, switching", sip->id);
         }
-        sip->option_no_session = 1;
         sip->option_no_setup = 1;
         sip->option_no_option = 1;
     }
+}
 
-    la = split(arg, (char *)s->buf, ARRAY_SIZE(arg), ' ');
-    rc = map_int(arg[1], NULL);
+// This could be the response of a both SETUP or PLAY
+int satipc_handle_setup(adapter *ad, satipc *sip, char *buf) {
+    char *arg[100], *sess, *es, *sid, *timeout;
+    int la, i;
 
-    if (sip->option_no_session && sip->last_cmd == RTSP_OPTIONS && !sess &&
-        sip->session[0])
-        rc = 454;
-
-    // Fritzbox did reply 408 when mtype is missing
-    if (rc == 408) {
-        sip->want_tune = 1;
-        sip->want_commit = 1;
-        sip->force_commit = 1;
-        sip->last_setup = -10000;
-        // quirk for Aurora client missing mtype
-        if (ad->tp.mtype == QAM_AUTO)
-            ad->tp.mtype = QAM_256;
+    if ((timeout = strstr(buf, "timeout="))) {
+        int tmout;
+        timeout += strlen("timeout=");
+        tmout = map_intd(timeout, NULL, 30);
+        sockets_timeout(ad->fe_sock, tmout * 500); // 2 times 30s
+        sip->timeout_ms = tmout * 1000;
     }
-
-    if (rc == 404)
-        sip->restart_needed = 1;
-
-    // quirk for Geniatech EyeTV Netstream 4C when fe=x is in the URL
-    if (rc == 503)
-        if (ad->sys[0] == SYS_DVBC_ANNEX_A || ad->sys[0] == SYS_DVBC2)
-            sip->satip_fe = 0;
-
-    if (rc == 454 || rc == 503 || rc == 405) {
-        sip->sent_transport = 0;
-        sip->want_tune = 1;
-        sip->want_commit = 1;
-        sip->force_commit = 1;
-        sip->last_setup = -10000;
-    } else if (rc != 200) {
-        if (rc != 0) // AVM Fritz!Box workaround sdp reply without header
-        {
-            LOG("marking device %d as error, rc = %d", sip->id, rc);
-            ad->err = 1;
-        } else
-            LOG("marking device %d not as error but reply is unexpected, rc = "
-                "%d",
-                sip->id, rc);
-    }
-    if (rc == 200 && !sip->want_tune && sip->last_cmd == RTSP_PLAY &&
-        sip->ignore_packets) {
-        LOG("accepting packets from RTSP server");
-        sip->ignore_packets = 0;
-        ad->wait_new_stream = 1;
-    }
-
-    if (rc == 200 && !sip->want_tune && sip->last_cmd == RTSP_PLAY) {
-        sip->can_keep_adapter_open = 1;
-    }
+    la = split(arg, buf, ARRAY_SIZE(arg), ' ');
     sess = NULL;
     sid = NULL;
     for (i = 0; i < la; i++)
@@ -265,13 +204,6 @@ int satipc_reply(sockets *s) {
             sess = header_parameter(arg, i);
         else if (strncasecmp("com.ses.streamID:", arg[i], 17) == 0)
             sid = header_parameter(arg, i);
-        else if (strncasecmp("Server:", arg[i], 7) == 0) {
-            char *ua = header_parameter(arg, i);
-            if (!strncmp(ua, app_name, strlen(app_name))) {
-                sip->addpids = 1;
-                sip->setup_pids = 1;
-            }
-        }
 
     if (!ad->err && sid && sess) {
         if ((es = strchr(sess, ';')))
@@ -281,68 +213,119 @@ int satipc_reply(sockets *s) {
 
         if (sid && sip->stream_id == -1)
             sip->stream_id = map_int(sid, NULL);
-
-        sip->expect_reply = 0;
-        sip->force_commit = 1;
-        //		http_request(ad, NULL, "PLAY");
-        satipc_commit(ad);
-        return 0;
     }
-    LOG("satipc %d wp %d qp %d, expect_reply %d, want_tune %d, force_commit "
-        "%d, want "
-        "commit %d",
-        sip->id, sip->wp, sip->qp, sip->expect_reply, sip->want_tune,
-        sip->force_commit, sip->want_commit);
-    if (sip->wp >= sip->qp)
-        sip->expect_reply = 0;
-    else {
-        while (sip->qp > sip->wp) {
-            char *np =
-                (char *)getItem(&sip->requests, MAKE_ITEM(ad->id, sip->wp));
-            if (np) {
-                int len = strlen(np);
-                if (sip->qp > sip->wp + 1 && !strncmp(np, "OPTIONS", 7)) {
-                    LOG("Found multiple packets enqueued, dropping OPTIONS at "
-                        "%d from %d",
-                        sip->wp, sip->qp)
-                    delItem(&sip->requests, MAKE_ITEM(ad->id, sip->wp++));
-                    continue;
-                }
-                if (sip->session[0] && !strstr(np, "Session:"))
-                    sprintf(np + len - 2, "Session: %s\r\n\r\n", sip->session);
+    return 0;
+}
 
-                LOG("satipc_reply: sending next packet:\n%s", np);
-                rv = sockets_write(s->id, np, strlen(np));
-                delItem(&sip->requests, MAKE_ITEM(ad->id, sip->wp));
-            } else
-                LOG("satipc: expected element but not found %08x",
-                    MAKE_ITEM(ad->id, sip->wp));
-            sip->wp++;
+// Handle the response of PLAY
+int satipc_handle_play(adapter *ad, satipc *sip) {
+    if (sip->ignore_packets) {
+        LOG("accepting packets from RTSP server");
+        sip->ignore_packets = 0;
+        ad->wait_new_stream = 1;
+    }
+
+    if (!sip->want_tune && sip->last_cmd == RTSP_PLAY) {
+        sip->can_keep_adapter_open = 1;
+    }
+    return 0;
+}
+
+int satipc_reply(sockets *s) {
+    int rlen = s->rlen;
+    adapter *ad;
+    satipc *sip;
+    char *arg[100], *sep;
+    int is_transport = 0;
+    int rc = 999;
+    __attribute__((unused)) int rv;
+    get_ad_and_sipr(s->sid, 1);
+
+    memset(arg, 0, sizeof(arg));
+    s->rlen = 0;
+    sip->keep_adapter_open = 0;
+
+    sep = strchr((char *)s->buf, ' ');
+    if (sep)
+        rc = map_intd(sep + 1, NULL, 998);
+
+    LOGM("MSG process << server :\n%s", s->buf);
+    LOG("satipc_reply (adapter %d): receiving from handle %d, sock %d, "
+        "code %d",
+        s->sid, s->sock, s->id, rc);
+
+    is_transport = strstr((char *)s->buf, "Transport:") != NULL;
+    handle_client_capabilities(sip, (char *)s->buf);
+
+    if (sip->last_cmd == RTSP_DESCRIBE) {
+        set_adapter_signal(ad, (char *)s->buf, rlen);
+    }
+
+    sip->expect_reply = 0;
+
+    // Fritzbox did reply 408 when mtype is missing
+    if (rc == 408) {
+        sip->state = SATIP_STATE_OPTIONS;
+        sip->last_setup = -10000;
+        // quirk for Aurora client missing mtype
+        if (ad->tp.mtype == QAM_AUTO)
+            ad->tp.mtype = QAM_256;
+    }
+
+    if (rc == 404) {
+        sip->state = SATIP_STATE_OPTIONS;
+    }
+
+    // quirk for Geniatech EyeTV Netstream 4C when fe=x is in the URL
+    if (rc == 503)
+        if (ad->sys[0] == SYS_DVBC_ANNEX_A || ad->sys[0] == SYS_DVBC2)
+            sip->satip_fe = 0;
+
+    if (rc == 454 || rc == 503 || rc == 405) {
+        sip->state = SATIP_STATE_OPTIONS;
+        sip->last_setup = -10000;
+    } else if (rc != 200) {
+        if (rc != 0) // AVM Fritz!Box workaround sdp reply without header
+        {
+            LOG("marking device %d as error, rc = %d", sip->id, rc);
+            ad->err = 1;
+        } else
+            LOG("marking device %d not as error but reply is unexpected, "
+                "rc = "
+                "%d",
+                sip->id, rc);
+    }
+    LOG("satipc %d, expect_reply %d, want_tune %d want commit %d", sip->id,
+        sip->expect_reply, sip->want_tune, sip->want_commit);
+
+    if (rc == 200) {
+        if (is_transport)
+            satipc_handle_setup(ad, sip, (char *)s->buf);
+
+        switch (sip->state) {
+        case SATIP_STATE_SETUP:
+            sip->state = SATIP_STATE_PLAY;
+            break;
+        case SATIP_STATE_PLAY:
+            satipc_handle_play(ad, sip);
+            break;
+        case SATIP_STATE_TEARDOWN:
+            if (sip->last_cmd == RTSP_TEARDOWN)
+                sip->state = SATIP_STATE_INACTIVE;
+            break;
+        case SATIP_STATE_OPTIONS:
+            sip->state = SATIP_STATE_SETUP;
         }
     }
-    if (!sip->expect_reply && (sip->wp >= sip->qp) &&
-        (sip->want_commit ||
-         sip->force_commit)) // we do not expect reply and no other events in
-                             // the queue, we commit a
-    {
-        satipc_commit(ad);
-    }
 
-    if (!sip->expect_reply &&
-        (sip->last_cmd == RTSP_PLAY || sip->last_cmd == RTSP_DESCRIBE) &&
-        !ad->strength) {
-        sip->num_describe++;
-        if (sip->num_describe < 4 && sip->num_describe >= 0)
-            http_request(ad, NULL, "DESCRIBE", 0);
-        else
-            sip->num_describe = 0;
-    }
+    satipc_request(ad);
 
     return 0;
 }
 
 int satipc_close(sockets *s) {
-    LOG("satip_close called for adapter %d, socket_id %d, handle %d timeout %d",
+    LOG("satip_close called for adapter %d, socket_id %d, handle %d "
+        "timeout %d",
         s->sid, s->id, s->sock, s->timeout_ms);
     close_adapter(s->sid);
     return 0;
@@ -350,10 +333,10 @@ int satipc_close(sockets *s) {
 
 void satipc_close_rtsp_socket(adapter *ad, satipc *sip) {
     sip->restart_needed = 0;
+    sip->state = SATIP_STATE_DISCONNECTED;
     sip->rtsp_socket_closed = 1;
     sip->want_tune = 1;
-    sip->force_commit = 1;
-    sip->force_pids = 1;
+    sip->want_commit = 1;
     sip->last_close = getTick();
     sip->sent_transport = 0;
     sip->expect_reply = 0;
@@ -366,8 +349,6 @@ void satipc_close_rtsp_socket(adapter *ad, satipc *sip) {
     else
         ad->fe = -1;
     ad->sock = -1;
-    sip->wp = sip->qp = 0;
-    sip->option_no_option = 0; // Clear this flag from any previous connection
 }
 
 void satipc_open_rtsp_socket(adapter *ad, satipc *sip) {
@@ -395,13 +376,17 @@ int satipc_close_rtsp(sockets *s) {
     satipc *sip;
     get_ad_and_sipr(s->sid, 1);
     LOG("adapter %d satip rtsp sock %d, handle %d, keep_open %d, "
-        "restart_needed "
-        "%d",
+        "restart_needed %d",
         s->sid, s->id, s->sock, sip->keep_adapter_open, sip->restart_needed);
     if (sip->keep_adapter_open || sip->restart_needed) {
         satipc_close_rtsp_socket(ad, sip);
     } else
         close_adapter_for_socket(s);
+    return 0;
+}
+
+int satipc_send_options(adapter *ad) {
+    http_request(ad, NULL, "OPTIONS", 0);
     return 0;
 }
 
@@ -417,17 +402,21 @@ int satipc_timeout(sockets *s) {
 
     // restart the connection we did not receive a response for more than 10
     // seconds from the server
-    if (sip->expect_reply && (getTick() - sip->last_response_sent > 10000)) {
-        LOG("satipc %d: no response was received from the server for more than "
+    if (sip->expect_reply &&
+        (getTick() - sip->last_response_sent > sip->timeout_ms)) {
+        LOG("satipc %d: no response was received from the server for more "
+            "than "
             "%jd ms, "
             "closing connection",
             sip->id, getTick() - sip->last_response_sent);
         sip->restart_needed = 1;
         sockets_del(ad->sock);
+        sip->state = SATIP_STATE_DISCONNECTED;
     }
 
     if (sip->want_tune || sip->lap || sip->ldp) {
-        LOG("satipc %d no timeout will be performed as we have operations in "
+        LOG("satipc %d no timeout will be performed as we have operations "
+            "in "
             "queue",
             sip->id);
         return 0;
@@ -436,8 +425,9 @@ int satipc_timeout(sockets *s) {
         "socket_id %d, handle %d, timeout %d",
         ad ? sip->sip : NULL, ad ? sip->sport : 0, s->sid, s->id, s->sock,
         s->timeout_ms);
-    if (sip->wp == sip->qp)
-        http_request(ad, NULL, "OPTIONS", 0);
+
+    satipc_send_options(ad);
+
     s->rtime = getTick();
     return 0;
 }
@@ -471,7 +461,8 @@ void set_adapter_signal(adapter *ad, char *b, int rlen) {
         }
 
         if (ad->strength != strength || ad->snr != quality)
-            LOG("satipc: Received signal status from the server for adapter "
+            LOG("satipc: Received signal status from the server for "
+                "adapter "
                 "%d, "
                 "stength=%d status=%d quality=%d",
                 ad->id, strength, status, quality);
@@ -497,7 +488,8 @@ int satipc_rtcp_reply(sockets *s) {
         copy32r(rp, b, 20);
 
         if (!sip->init_use_tcp && ((++sip->repno % 100) == 0)) // every 20s
-            LOG("satipc: rtp report, adapter %d: rtcp missing packets %d, rtp "
+            LOG("satipc: rtp report, adapter %d: rtcp missing packets %d, "
+                "rtp "
                 "missing %d, rtp ooo %d, pid unknown %d",
                 ad->id, rp - sip->rcvp, sip->rtp_miss, sip->rtp_ooo,
                 ad->pid_err);
@@ -606,22 +598,21 @@ int satipc_open_device(adapter *ad) {
     sip->last_response_sent = 0;
     sip->last_connect = 0;
     sip->sent_transport = 0;
-    sip->sleep = 0;
     sip->stream_id = -1;
-    sip->wp = sip->qp = sip->want_commit = 0;
+    sip->want_commit = 0;
     sip->rcvp = sip->repno = 0;
     sip->rtp_miss = sip->rtp_ooo = 0;
     sip->rtp_seq = 0xFFFF;
     sip->ignore_packets = 1;
     sip->num_describe = 0;
-    sip->force_commit = 0;
     sip->force_pids = 0;
     sip->last_setup = -10000;
     sip->last_cmd = 0;
     sip->enabled = 1;
     sip->rtsp_socket_closed = 0;
     sip->last_close = 0;
-    sip->option_no_option = 0; // Clear this flag from any previous connection
+    sip->timeout_ms = 30000;
+    sip->state = SATIP_STATE_OPTIONS;
     return 0;
 }
 
@@ -631,14 +622,10 @@ int satip_close_device(adapter *ad) {
         return 0;
 
     LOG("satip device %s:%d is closing", sip->sip, sip->sport);
-    if (sip->sleep) {
-        LOGM("satip device %s:%d sleeping, so not sending the TEARDOWN message",
-             sip->sip, sip->sport);
-    } else
-        http_request(ad, NULL, "TEARDOWN", 1);
-    sip->sleep = 0;
-    sip->session[0] = 0;
-    sip->sent_transport = 0;
+    if (sip->state == SATIP_STATE_PLAY) {
+        sip->state = SATIP_STATE_TEARDOWN;
+        satipc_request(ad);
+    }
     if (ad->fe_sock > 0)
         sockets_del(ad->fe_sock);
     if (sip->rtcp_sock > 0)
@@ -646,6 +633,7 @@ int satip_close_device(adapter *ad) {
     ad->fe_sock = -1;
     sip->rtcp_sock = -1;
     sip->enabled = 0;
+    sip->state = SATIP_STATE_DISCONNECTED;
     return 0;
 }
 
@@ -658,14 +646,12 @@ int satip_standby_device(adapter *ad) {
     if (!sip)
         return 0;
 
-    LOG("satip device %s:%d going to standby sleep", sip->sip, sip->sport);
-    if (sip->sleep) {
-        LOGM("satip device %s:%d already sleeping in standby", sip->sip,
-             sip->sport);
-    } else
-        http_request(ad, NULL, "TEARDOWN", 1);
+    LOG("satip device %s:%d going to standby", sip->sip, sip->sport);
+    if (sip->state == SATIP_STATE_PLAY) {
+        sip->state = SATIP_STATE_TEARDOWN;
+        satipc_request(ad);
+    }
     ad->err = 0;
-    sip->sleep = 1;
     sip->session[0] = 0;
     sip->sent_transport = 0; // send Transport: at the next tune
     sip->lap = sip->ldp = 0;
@@ -674,6 +660,7 @@ int satip_standby_device(adapter *ad) {
         // Force close the previous RTSP socket
         sip->restart_needed = 1;
         sockets_del(ad->sock);
+        sip->state = SATIP_STATE_DISCONNECTED;
     }
     return 0;
 }
@@ -739,8 +726,9 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
                 1316; // update the theoretical total size of the read buffer
 
     // It checks if the read is full, because in that case there is a high
-    // probability that there are still pending packets in the buffer, so then
-    // the output buffer will be flushed to avoid waiting at the next read.
+    // probability that there are still pending packets in the buffer, so
+    // then the output buffer will be flushed to avoid waiting at the next
+    // read.
     if (num_msg > 1 && rr == num_msg) {
         DEBUGM("satipc_read: read full, so flushing output");
         ad->flush = 1;
@@ -773,12 +761,13 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
                 dlen = 0;
 
             // Workaround for some poor SAT>IP servers (ex. XORO).
-            //      Some servers send KEEP-ALIVE RTP packets without valid TS
-            //      payload. Then RTP packets received without valid TS data are
-            //      discarded.
+            //      Some servers send KEEP-ALIVE RTP packets without valid
+            //      TS payload. Then RTP packets received without valid TS
+            //      data are discarded.
             uint8_t *b = iov[1].iov_base;
             if (dlen > 0 && dlen < DVB_FRAME && b[0] != 0x47) {
-                LOGM("discarding RTP packet without valid TS payload (sock %d, "
+                LOGM("discarding RTP packet without valid TS payload (sock "
+                     "%d, "
                      "socket_id "
                      "%d) [len=%d]",
                      socket, ss->id, dlen);
@@ -795,8 +784,8 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
         // Clear empty unused buffer space (after all it will be removed)
         if (dlen < iov[1].iov_len) {
             int ss = (188 * (dlen / 188));
-            // memset(iov[1].iov_base + ss, 0xFF, iov[1].iov_len - ss);  // Not
-            // necessary
+            // memset(iov[1].iov_base + ss, 0xFF, iov[1].iov_len - ss);  //
+            // Not necessary
             holes[i] = iov[1].iov_base + ss;
             check_holes = 1;
         }
@@ -816,8 +805,8 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
 
             if (i + 1 < rr) { // move data only if not in the last multibuffer
                               // slice (in this case only adjust the end)
-                // copy data until the end of the buffer over the empty space to
-                // _free the hole
+                // copy data until the end of the buffer over the empty
+                // space to _free the hole
                 uint8_t *eb =
                     iovs[1].iov_base + *rb; // current end of the read buffer
                 uint8_t *sb = holes[i];     // end of the valid read data
@@ -888,8 +877,8 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb) {
 
     //	if (sip->tcp_len == sip->tcp_size && sip->tcp_pos == 0)
     //	{
-    //		LOG("Probably the buffer needs to be increased, as it is full");
-    //		sip->tcp_len = 0;
+    //		LOG("Probably the buffer needs to be increased, as it is
+    // full"); 		sip->tcp_len = 0;
     //	}
     if (sip->tcp_len == sip->tcp_size && sip->tcp_pos) {
         int nl = sip->tcp_len - sip->tcp_pos;
@@ -905,7 +894,8 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb) {
         tmp_len = read(socket, sip->tcp_data + sip->tcp_len, expected_len);
         err = errno;
 
-        DEBUGM("read %d (from %d) from rtsp socket %d (id %d) [%02X %02X, %02X "
+        DEBUGM("read %d (from %d) from rtsp socket %d (id %d) [%02X %02X, "
+               "%02X "
                "%02X]",
                tmp_len, sip->tcp_size - sip->tcp_len, socket, ss->id, tmp_b[0],
                tmp_b[1], tmp_b[2], tmp_b[3]);
@@ -921,7 +911,8 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb) {
         sip->tcp_data[sip->tcp_len + tmp_len] = 0;
     } else if (len > 65535) {
         tmp_b = sip->tcp_data + sip->tcp_pos;
-        LOGM("buffer is full, skipping read, %d, pos %d [%02X %02X, %02X %02X]",
+        LOGM("buffer is full, skipping read, %d, pos %d [%02X %02X, %02X "
+             "%02X]",
              sip->tcp_size, sip->tcp_pos, tmp_b[0], tmp_b[1], tmp_b[2],
              tmp_b[3]);
     }
@@ -982,10 +973,12 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb) {
                 skipped_bytes = 0;
             }
             nlnl = (unsigned char *)strstr((char *)rtsp, "\r\n\r\n");
-            //			LOG("found RTSP nlnl %d, len %d", nlnl - rtsp,
+            //			LOG("found RTSP nlnl %d, len %d", nlnl -
+            // rtsp,
             // sip->tcp_len);
             if (nlnl > sip->tcp_data + sip->tcp_len) {
-                LOGM("Unlikely, found newline after the end of string, tcp_pos "
+                LOGM("Unlikely, found newline after the end of string, "
+                     "tcp_pos "
                      "%d",
                      sip->tcp_pos);
                 nlnl = NULL;
@@ -1001,10 +994,10 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb) {
                 nlnl += icl;
             }
             if (!nlnl) {
-                LOGM(
-                    "End of rtsp rtsp message not found in this block, pos %d, "
-                    "tcp_pos %d, len %d, size %d",
-                    pos, sip->tcp_pos, len, sip->tcp_size);
+                LOGM("End of rtsp rtsp message not found in this block, "
+                     "pos %d, "
+                     "tcp_pos %d, len %d, size %d",
+                     pos, sip->tcp_pos, len, sip->tcp_size);
                 break;
             } else if (nlnl > sip->tcp_data + sip->tcp_len) {
                 LOGM("Found newline after the end of string, tcp_pos %d",
@@ -1021,7 +1014,8 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb) {
             tmp_sock.id = ss->id;
             tmp_char = rtsp[bytes + 4];
             rtsp[bytes + 4] = 0;
-            LOGM("sending %d bytes to satipc_reply, cl %d, pos %d, tcp_len %d, "
+            LOGM("sending %d bytes to satipc_reply, cl %d, pos %d, tcp_len "
+                 "%d, "
                  "left "
                  "%d",
                  bytes + 4, icl, sip->tcp_pos - bytes - 4, sip->tcp_len, pos);
@@ -1063,10 +1057,8 @@ int satip_post_init(adapter *ad) {
     sockets_setclose(ad->sock, satipc_close_rtsp);
     set_socket_thread(ad->fe_sock, ad->thread);
 
-    if (!sip->option_no_option)
-        http_request(ad, NULL, "OPTIONS", 0);
-    else if (sip->force_commit)
-        satipc_commit(ad);
+    sip->state = SATIP_STATE_OPTIONS;
+    satipc_request(ad);
     return 0;
 }
 
@@ -1110,7 +1102,8 @@ int satipc_del_filters(adapter *ad, int fd, int pid) {
                 sip->lap--;
             else
                 sip->apid[i] = sip->apid[sip->lap--];
-            LOGM("satipc: del_pid for pid %d already in the add list! (lap=%d)",
+            LOGM("satipc: del_pid for pid %d already in the add list! "
+                 "(lap=%d)",
                  pid, sip->lap);
             return 0;
         }
@@ -1219,17 +1212,16 @@ int http_request(adapter *ad, char *url, char *method, int force) {
     if (!sip)
         return 0;
 
+    if (sip->expect_reply) {
+        LOG("%s: not sending method %d: url %s", __FUNCTION__, method, url);
+        return 0;
+    }
+
     session[0] = 0;
     sid[0] = 0;
     remote_socket = sip->init_use_tcp ? ad->sock : ad->fe_sock;
 
-    if (!sip->option_no_setup && !method && sip->sent_transport == 0)
-        method = "SETUP";
-
-    if (!method)
-        method = "PLAY";
-
-    if (sip->sent_transport == 0 && (method[0] == 'S' || method[0] == 'P')) {
+    if (!sip->sent_transport && (method[0] == 'S' || method[0] == 'P')) {
         sip->last_setup = getTick();
         sip->sent_transport = 1;
         sip->stream_id = -1;
@@ -1240,12 +1232,9 @@ int http_request(adapter *ad, char *url, char *method, int force) {
             strcatf(session, ptr,
                     "\r\nTransport: RTP/AVP;unicast;client_port=%d-%d",
                     sip->listen_rtp, sip->listen_rtp + 1);
-    } else {
-        if (sip->session[0])
-            strcatf(session, ptr, "\r\nSession: %s", sip->session);
-        else
-            session[0] = 0;
     }
+    if (sip->session[0])
+        strcatf(session, ptr, "\r\nSession: %s", sip->session);
 
     ptr = strlen(session);
 
@@ -1275,32 +1264,20 @@ int http_request(adapter *ad, char *url, char *method, int force) {
 
     if (sip->stream_id != -1)
         sprintf(sid, "stream=%d", sip->stream_id);
-    else if (!strcmp(method, "TEARDOWN")) {
-        LOG("satipc_http_request (adapter %d): impossible to send TEARDOWN "
-            "without "
-            "specific stream!",
-            ad->id);
-        return 0;
-    }
 
     lb = snprintf(buf, sizeof(buf), format, method, sip->sip, sip->sport, sid,
                   qm, url, sip->cseq++, session);
 
-    LOG("satipc_http_request (adapter %d): %s to sock %d", ad->id,
-        sip->expect_reply && !force ? "queueing" : "sending", remote_socket);
+    LOG("satipc_http_request (adapter %d): sock %d: %s %s", ad->id,
+        remote_socket, method, url);
     LOGM("MSG process >> server :\n%s", buf);
-    if (sip->expect_reply && !force) {
-        setItem(&sip->requests, MAKE_ITEM(ad->id, sip->qp++),
-                (unsigned char *)buf, lb + 1);
-    } else {
-        sip->wp = sip->qp = 0;
-        if (remote_socket >= 0) {
-            sockets_write(remote_socket, buf, lb);
-            sip->expect_reply = 1;
-            sip->last_response_sent = getTick();
-        } else
-            LOG("%s: remote socket is -1", __FUNCTION__);
-    }
+
+    if (remote_socket >= 0) {
+        sockets_write(remote_socket, buf, lb);
+        sip->expect_reply = 1;
+        sip->last_response_sent = getTick();
+    } else
+        LOG("%s: remote socket is -1", __FUNCTION__);
     return 0;
 }
 
@@ -1325,124 +1302,47 @@ void tune_url(adapter *ad, char *url, int url_len) {
     }
 }
 
-int satipc_commit(adapter *ad) {
+// Sends the SETUP command and force sending the transport
+
+int satipc_send_setup(adapter *ad, satipc *sip) {
     char url[1000];
+    tune_url(ad, url, sizeof(url) - 1);
+    int len = strlen(url);
+
+    // ignore all the packets until we handle 200 for the next PLAY
+    sip->ignore_packets = 1;
+    // ask the next PLAY command to send the pids
+    sip->want_tune = 0;
+    sip->want_commit = 1;
+
+    sip->sent_transport = 0;
+    ad->err = 0;
+    sip->lap = sip->ldp = 0;
+    sip->force_pids = 1;
+    strcatf(url, len, "&pids=none");
+    http_request(ad, url, "SETUP", 0);
+    return 0;
+}
+
+void satipc_get_pids(adapter *ad, satipc *sip, char *url, int size) {
     char tmp_url[1000];
-    int send_pids = 1, send_apids = 1, send_dpids = 1;
+    int send_pids = 0;
     int len = 0;
-    satipc *sip = get_satip(ad->id);
-    if (!sip)
-        return 0;
 
-    url[0] = 0;
-    LOG("satipc: commit for adapter %d freq %d, pids to add %d, pids to delete "
-        "%d, expect_reply %d, force_commit %d want_tune %d do_tune %d, "
-        "force_pids %d, sent_transport %d, sleep %d, closed_rtsp %d",
-        ad->id, ad->tp.freq, sip->lap, sip->ldp, sip->expect_reply,
-        sip->force_commit, sip->want_tune, ad->do_tune, sip->force_pids,
-        sip->sent_transport, sip->sleep, sip->rtsp_socket_closed);
-
-    if (sip->rtsp_socket_closed)
-        return 0;
-
-    if (!ad->tp.freq)
-        return 0;
-
-    if (ad->do_tune && !sip->want_tune) {
-        sip->lap = sip->ldp = 0;
-        return 0;
-    }
-
-    if (sip->lap + sip->ldp == 0)
-        if (!sip->force_commit)
-            return 0;
-
-    if (sip->expect_reply) {
-        sip->want_commit = 1;
-        return 0;
-    }
-
-    mutex_lock(&sip->mutex);
-
-    if (!sip->addpids) {
-        send_apids = 0;
-        send_dpids = 0;
-    }
-
-    if (!sip->sent_transport) {
-        send_apids = 0;
-        send_dpids = 0;
-        if (!sip->setup_pids)
-            send_pids = 0;
-    }
-
-    if (sip->force_commit && sip->sent_transport)
+    // Use pids= when tuning to a new freq
+    if (sip->want_tune)
         send_pids = 1;
 
-    if (send_apids && send_pids)
-        send_pids = 0;
-
-    send_apids = send_apids && sip->lap > 0;
-    send_dpids = send_dpids && sip->ldp > 0;
-
-    if (getTick() - sip->last_setup < 1000 && !sip->sent_transport) {
-        LOG("satipc: last setup less than 10 seconds ago for server %s, maybe "
-            "an "
-            "error ?",
-            sip->sip);
-        mutex_unlock(&sip->mutex);
-        return 0;
-    }
-
-    if (ad->do_tune &&
-        sip->want_tune) // subsequent PLAY command should have pids
-    {
+    if (sip->lap && sip->ldp)
         send_pids = 1;
-        send_apids = 0;
-        send_dpids = 0;
-    }
-
-    if (sip->sent_transport == 0)
-        sip->want_tune = 1;
-
-    if (!sip->sent_transport && sip->option_no_setup) {
-        send_pids = 1;
-        send_apids = 0;
-        send_dpids = 0;
-    }
 
     if (sip->force_pids) {
         send_pids = 1;
-        send_apids = 0;
-        send_dpids = 0;
-    }
-
-    sip->want_commit = 0;
-    if (sip->want_tune + send_pids + send_apids + send_dpids == 0) {
-        LOG("satipc: nothing to commit");
-        sip->force_commit = 0;
-        if (sip->last_cmd == RTSP_SETUP && !sip->setup_pids)
-            send_apids = 1; // force send addpids=
-    }
-    if (sip->want_tune) {
-        tune_url(ad, url, sizeof(url) - 1);
-        len = strlen(url);
-        sip->ignore_packets =
-            1; // ignore all the packets until we get 200 from the server
-        sip->want_tune = 0;
-        ad->err = 0;
-        if (!sip->setup_pids && !sip->sent_transport) {
-            strcatf(url, len, "&pids=none");
-            http_request(ad, url, NULL, 0);
-            mutex_unlock(&sip->mutex);
-            return 0;
-        }
+        sip->force_pids = 0;
     }
 
     get_adapter_pids(ad->id, tmp_url, sizeof(tmp_url));
-    if ((send_apids || send_dpids) &&
-        (!strcmp(tmp_url, "all") || !strcmp(tmp_url, "none"))) {
-        send_apids = send_dpids = 0;
+    if ((!strcmp(tmp_url, "all") || !strcmp(tmp_url, "none"))) {
         send_pids = 1;
     }
     if (!strcmp(tmp_url, "all") && sip->no_pids_all) {
@@ -1452,51 +1352,168 @@ int satipc_commit(adapter *ad) {
     }
 
     if (send_pids) {
-        if (len > 0)
-            strcatf(url, len, "&");
-        strcatf(url, len, "pids=");
-        //		get_adapter_pids(ad->id, url + len, sizeof(url) - len);
-        _strncpy(url + len, tmp_url, sizeof(url) - len);
+        strlcatf(url, size, len, "pids=");
+        _strncpy(url + len, tmp_url, size - len);
         sip->lap = 0;
         sip->ldp = 0;
-        sip->force_commit = 0;
-        sip->force_pids = 0;
+        return;
     }
 
-    if (send_apids) {
+    if (sip->lap) {
         int i;
-        if (len > 0)
-            strcatf(url, len, "&");
-        strcatf(url, len, "addpids=");
+        strlcatf(url, size, len, "addpids=");
         for (i = 0; i < sip->lap; i++)
-            strcatf(url, len, "%d,", sip->apid[i]);
-        if (sip->lap == 0)
-            get_adapter_pids(ad->id, url + len, sizeof(url) - len);
-        else
-            url[--len] = 0;
+            strlcatf(url, size, len, "%d,", sip->apid[i]);
+        url[--len] = 0;
         sip->lap = 0;
-        sip->force_commit = 0;
     }
 
-    if (send_dpids) {
+    if (sip->ldp) {
         int i;
-        if (len > 0)
-            strcatf(url, len, "&");
-        strcatf(url, len, "delpids=");
+        strlcatf(url, size, len, "delpids=");
         for (i = 0; i < sip->ldp; i++)
-            strcatf(url, len, "%d,", sip->dpid[i]);
+            strlcatf(url, size, len, "%d,", sip->dpid[i]);
         url[--len] = 0;
         sip->ldp = 0;
-        sip->force_commit = 0;
+    }
+    return;
+}
+int satipc_send_play(adapter *ad) {
+    char url[1000];
+    satipc *sip = get_satip(ad->id);
+    int len = 0;
+
+    url[0] = 0;
+    if (sip->want_tune + sip->lap + sip->ldp + sip->force_pids == 0)
+        LOG_AND_RETURN(0, "adapter %d: Nothing to commit", ad->id);
+
+    if (sip->want_tune || !sip->sent_transport) {
+        tune_url(ad, url, sizeof(url) - 1);
+        sip->ignore_packets = 1;
+
+        len = strlen(url);
+        strcatf(url, len, "&");
     }
 
-    sip->sleep = 0;
-    http_request(ad, url, NULL, 0);
+    satipc_get_pids(ad, sip, url + len, sizeof(url) - len);
+    sip->want_tune = 0;
+    http_request(ad, url, "PLAY", 0);
+    return 0;
+}
+int satipc_send_teardown(adapter *ad, satipc *sip) {
+    if (sip->stream_id != -1) {
+        http_request(ad, NULL, "TEARDOWN", 0);
+    } else
+        LOG("Unable to send TEARDOWN for adapter %d (stream_id %d)", ad->id,
+            sip->stream_id);
+    return 0;
+}
+
+int satipc_send_describe(adapter *ad, satipc *sip) {
+    // Use describe to get the signal of the adapter
+    if (sip->expect_reply || ad->strength || sip->state != SATIP_STATE_PLAY)
+        return 0;
+
+    sip->num_describe++;
+    if (sip->num_describe < 4 && sip->num_describe >= 0)
+        http_request(ad, NULL, "DESCRIBE", 0);
+    else
+        sip->num_describe = 0;
+
+    return 0;
+}
+// The following flags are used to make a decision upon the request:
+// - want_tune: if new tuning parameters are set
+// - want_commit: pids or tuning parameters have changed
+// -
+int satipc_request(adapter *ad) {
+    int err = 0;
+    satipc *sip = get_satip(ad->id);
+    if (!sip)
+        return 0;
+
+    LOG("satipc: request for adapter %d freq %d, pids to add %d, pids to "
+        "delete %d, expect_reply %d, want_tune %d, sent_transport %d, "
+        "closed_rtsp %d",
+        ad->id, ad->tp.freq, sip->lap, sip->ldp, sip->expect_reply,
+        sip->want_tune, sip->sent_transport, sip->rtsp_socket_closed);
+
+    if (sip->rtsp_socket_closed)
+        return 0;
+
+    if (ad->tp.freq == 0)
+        return 0;
+
+    if (!ad->sid_cnt &&
+        (sip->state == SATIP_STATE_SETUP || sip->state == SATIP_STATE_PLAY))
+        return 0;
+
+    mutex_lock(&sip->mutex);
+    if (sip->expect_reply) {
+        mutex_unlock(&sip->mutex);
+        return 0;
+    }
+
+    // set the init parameters
+    if (sip->state == SATIP_STATE_OPTIONS) {
+        sip->sent_transport = 0;
+        sip->stream_id = -1;
+        sip->session[0] = 0;
+        sip->want_tune = 1;
+        sip->want_commit = 1;
+    }
+
+    if (sip->state == SATIP_STATE_OPTIONS && sip->option_no_option)
+        sip->state = SATIP_STATE_SETUP;
+
+    // PLAY contains the setup details as well
+    if (sip->state == SATIP_STATE_SETUP && sip->option_no_setup) {
+        sip->state = SATIP_STATE_PLAY;
+    }
+
+    switch (sip->state) {
+    case SATIP_STATE_OPTIONS:
+        err = satipc_send_options(ad);
+        break;
+
+    case SATIP_STATE_SETUP:
+        err = satipc_send_setup(ad, sip);
+        break;
+
+    case SATIP_STATE_PLAY:
+        err = satipc_send_play(ad);
+        break;
+
+    case SATIP_STATE_TEARDOWN:
+        err = satipc_send_teardown(ad, sip);
+        break;
+    }
+
+    if (err) {
+        mutex_unlock(&sip->mutex);
+        return 0;
+    }
+
+    satipc_send_describe(ad, sip);
+
     mutex_unlock(&sip->mutex);
 
     return 0;
 }
 
+int satipc_commit(adapter *ad) {
+    satipc *sip = get_satip(ad->id);
+    if (!sip)
+        return 0;
+
+    LOG("satipc: commit on freq %d, sys %d for adapter %d (expect reply "
+        "%d)",
+        ad->tp.freq / 1000, ad->tp.sys, ad->id, sip->expect_reply);
+
+    sip->want_commit = 1;
+
+    return satipc_request(ad);
+}
 int satipc_tune(int aid, transponder *tp) {
     adapter *ad;
     satipc *sip;
@@ -1514,13 +1531,19 @@ int satipc_tune(int aid, transponder *tp) {
         if (!sip->rtsp_socket_closed) {
             LOG("Restart needed for satip adapter %d", sip->id);
             // Force close the previous RTSP socket
-            http_request(ad, NULL, "TEARDOWN", 1);
+            sip->state = SATIP_STATE_TEARDOWN;
+            satipc_request(ad);
             sip->restart_needed = 1;
             sockets_del(ad->sock);
+            sip->state = SATIP_STATE_DISCONNECTED;
         }
         // Start a new rtsp socket
         satipc_open_rtsp_socket(ad, sip);
     }
+    // if TEARDOWN has been already sent and session was destroyed, re-start the
+    // session
+    if (sip->state == SATIP_STATE_INACTIVE)
+        sip->state = SATIP_STATE_OPTIONS;
 
     return 0;
 }
@@ -1592,8 +1615,8 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
         ad->sys[1] = SYS_DVBT;
     if (ad->sys[0] == SYS_DVBC2)
         ad->sys[1] = SYS_DVBC_ANNEX_A;
-    sip->addpids = opts.satip_addpids;
-    sip->setup_pids = opts.satip_setup_pids;
+    sip->addpids = 1;
+    sip->setup_pids = 0;
     sip->tcp_size = 0;
     sip->tcp_data = NULL;
     sip->use_tcp = use_tcp;
@@ -1603,7 +1626,8 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
     if (i + 1 > a_count)
         a_count = i + 1; // update adapter counter
 
-    LOG("AD%d: Satip device %s port %d delsys %d: %s %s, fe %d, total number "
+    LOG("AD%d: Satip device %s port %d delsys %d: %s %s, fe %d, total "
+        "number "
         "of "
         "devices %d",
         ad->id, sip->sip, sip->sport, ad->sys[0], get_delsys(ad->sys[0]),

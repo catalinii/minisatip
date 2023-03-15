@@ -55,7 +55,7 @@ struct struct_opts {
 #ifndef DISABLE_SATIPCLIENT
     char *satip_servers;
     char *satip_xml;
-    uint8_t satip_addpids, satip_setup_pids, satip_rtsp_over_tcp;
+    uint8_t satip_rtsp_over_tcp;
 #endif
     char *document_root;
     char *xml_path;

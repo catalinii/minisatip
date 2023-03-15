@@ -662,9 +662,6 @@ void set_options(int argc, char *argv[]) {
     opts.pids_all_no_dec = 0;
     opts.rtsp_port = 554;
     opts.use_ipv4_only = 1;
-#ifndef DISABLE_SATIPCLIENT
-    opts.satip_addpids = 1;
-#endif
     opts.document_root = "html";
     opts.cache_dir = "/var/cache/minisatip";
     opts.xml_path = DESC_XML;
