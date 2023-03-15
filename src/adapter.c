@@ -1091,7 +1091,7 @@ void mark_pid_deleted(int aid, int sid, int _pid, SPid *p) {
     if (sort) {
         for (j = 0; j < MAX_STREAMS_PER_PID - 1; j++)
             if (p->sid[j + 1] > p->sid[j]) {
-                unsigned char t = p->sid[j];
+                int16_t t = p->sid[j];
                 p->sid[j] = p->sid[j + 1];
                 p->sid[j + 1] = t;
             }
