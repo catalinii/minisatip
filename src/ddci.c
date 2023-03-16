@@ -810,6 +810,16 @@ int push_ts_to_adapter(ddci_device_t *d, adapter *ad, uint16_t *mapping) {
         popped += len;
         int pid = PID_FROM_TS(ad->buf + i);
         int dpid = mapping[pid];
+
+        // pid is not recognised mapped to this adapter, ignore it
+        if (dpid == 0) {
+            DEBUGM("Skipping pid %d, ddci_pid %d on adapter %d DDCI %d", pid,
+                   dpid, ad->id, d->id);
+            set_pid_ts(ad->buf + i, 0x1FFF);
+            i -= DVB_FRAME;
+            continue;
+        }
+
         set_pid_ts(ad->buf + i, dpid);
         if (i >= ad->rlen)
             ad->rlen = i + DVB_FRAME;
@@ -866,9 +876,12 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
         mutex_unlock(&d->mutex);
         return 0;
     }
+    // Reset to write index to prevent reading old data from the FIFO
+    if (d->read_index[ad->id] == 0)
+        d->read_index[ad->id] = d->fifo.write_index;
 
-    // step 1 - fill the IO with TS packets and change the PID as required by
-    // mapping table
+    // step 1 - fill the IO with TS packets and change the PID as
+    // required by mapping table
     for (i = 0; i < rlen; i += 188) {
         b = ad->buf + i;
         if (b[0] != 0x47)
