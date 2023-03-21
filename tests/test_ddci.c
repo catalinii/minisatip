@@ -387,6 +387,79 @@ int test_create_pat() {
     return 0;
 }
 
+int test_create_sdt() {
+    // Create an adapter
+    adapter ad;
+    create_adapter(&ad, 0);
+
+    // Create a DDCI device
+    ddci_device_t d;
+    memset(&d, 0, sizeof(d));
+    d.id = 0;
+    d.enabled = 1;
+    memset(&d.pmt, -1, sizeof(d.pmt));
+    create_hash_table(&d.mapping, 30);
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[0] = &d;
+
+    // Create two PMTs (SID 0x100 and 0x101)
+    int pid1 = 4096;
+    int pid2 = 4097;
+    int sid1 = 0x100;
+    int sid2 = 0x101;
+    int pmt_id1 = pmt_add(ad.id, sid1, pid1);
+    int pmt_id2 = pmt_add(ad.id, sid2, pid2);
+    add_pid_mapping_table(ad.id, pid1, pmt_id1, &d, 0);
+    add_pid_mapping_table(ad.id, pid2, pmt_id2, &d, 0);
+    d.pmt[0].id = pmt_id1;
+    d.pmt[1].id = pmt_id2;
+
+    /*ASSERT(ddci_process_pmt(&ad, pmt1) == TABLES_RESULT_OK,
+           "Adding PMT1 to DD");
+    ASSERT(ddci_process_pmt(&ad, pmt2) == TABLES_RESULT_OK,
+           "Adding PMT2 to DD");*/
+
+    // Create the SDT
+    uint8_t sdt[188];
+    memset(&sdt, 0, sizeof(sdt));
+    int sdt_len = ddci_create_sdt(&d, sdt);
+    LOG("SDT length: %d", sdt_len);
+    _hexdump("SDT", sdt, sdt_len);
+
+    // Create the TS packet
+    SFilter f;
+    f.flags = FILTER_CRC;
+    f.id = 0;
+    f.adapter = 0;
+    uint8_t packet[188];
+    char cc = 1;
+    int ts_len = buffer_to_ts(packet, 188, sdt, sdt_len, &cc, 17);
+    LOG("TS length: %d", ts_len);
+    _hexdump("TS", packet, ts_len);
+    int len = assemble_packet(&f, packet);
+    LOG("Packet length %d", len);
+    if (!len)
+        return 1;
+
+    // Check that the SDT contains two services with running status = 4 and 
+    // free CA mode = 1
+    int sdt_sid1 = (packet[16] << 8) + packet[17];
+    int sdt_running_status1 = packet[19] >> 5;
+    int sdt_free_CA_mode1 = (packet[19] & (1 << 4)) > 0;
+    ASSERT(sdt_sid1 == 0x100, "SDT SID 1 != 0x100");
+    ASSERT(sdt_running_status1 == 4, "SDT SID 1 running_status != 4");
+    ASSERT(sdt_free_CA_mode1 != 0, "SDT SID 1 free_CA_mode != 1");
+    int sdt_sid2 = (packet[21] << 8) + packet[22];
+    int sdt_running_status2 = packet[24] >> 5;
+    int sdt_free_CA_mode2 = (packet[24] & (1 << 4)) > 0;
+    ASSERT(sdt_sid2 == 0x101, "SDT SID 1 != 0x101");
+    ASSERT(sdt_running_status2 == 4, "SDT SID 1 running_status != 4");
+    ASSERT(sdt_free_CA_mode2 != 0, "SDT SID 1 free_CA_mode != 1");
+
+    free_hash(&d.mapping);
+    return 0;
+}
+
 int test_create_pmt() {
     ddci_device_t d;
     uint8_t psi[188];
@@ -476,6 +549,7 @@ int main() {
     TEST_FUNC(test_copy_ts_from_ddci(), "testing test_copy_ts_from_ddci");
     TEST_FUNC(test_ddci_process_ts(), "testing ddci_process_ts");
     TEST_FUNC(test_create_pat(), "testing create_pat");
+    TEST_FUNC(test_create_sdt(), "testing create_sdt");
     TEST_FUNC(test_create_pmt(), "testing create_pmt");
     free_all_pmts();
     free_alloc();

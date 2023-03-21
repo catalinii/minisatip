@@ -422,13 +422,12 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
         d->tid = ad->transponder_id;
     }
 
-    if (!get_pid_mapping(d, pmt->adapter,
-                         1)) // if the CAT is not mapped, add it
+    // if the CAT is not mapped, add it
+    if (!get_pid_mapping(d, pmt->adapter, 1)) 
     {
         LOG("Mapping CAT to PMT %d from transponder %d, DDCI transponder %d",
             pmt->id, ad->transponder_id, d->tid)
-        add_pid_mapping_table(ad->id, 1, pmt->id, d, 1);  // add pid 1
-        add_pid_mapping_table(ad->id, 17, pmt->id, d, 1); // add pid 17
+        add_pid_mapping_table(ad->id, 1, pmt->id, d, 1);
         d->cat_processed = 0;
     }
 
@@ -553,6 +552,67 @@ int ddci_create_pat(ddci_device_t *d, uint8_t *b) {
     sprintf(buf, "PAT Created CRC %08X: ", crc);
     hexdump(buf, b + 1, len1 - 1);
     return len;
+}
+
+int ddci_create_sdt(ddci_device_t *d, uint8_t *sdt) {
+    uint8_t *b = sdt;
+
+    *b++ = 0x00;
+    // Payload
+    uint8_t *payload_start = b;
+    *b++ = 0x42; // table_id, current transport stream
+    // section_syntax_indicator, reserved_future_use, reserved, section_length
+    *b++ = 0xF0; // 11110000
+    *b++ = 0x00; // 00000000
+    uint8_t *section_start = b;
+    // transport_stream_id
+    copy16(b, 0, 1);
+    b += 2;
+    // reserved, version_number, current_next_indicator
+    *b++ = 0xC1 | (d->ver << 1);
+    // section_number, last_section_number
+    copy16(b, 0, 0);
+    b += 2;
+    // original_network_id, reserved_future_use
+    copy16(b, 0, 0);
+    b += 2;
+    // reserved_future_use
+    *b++ = 0x00;
+    // describe each service
+    int i;
+    SPMT *pmt;
+    for (i = 0; i < MAX_CHANNELS_ON_CI; i++) {
+        if ((pmt = get_pmt(d->pmt[i].id))) {
+            LOG("Adding PMT %d to SDT, sid %d", d->pmt[i].id, pmt->sid);
+            ddci_mapping_table_t *m =
+                get_pid_mapping(d, pmt->adapter, pmt->pid);
+            if (!m) {
+                LOG("adapter %d pid %d not found in the mapping table",
+                    pmt->adapter, pmt->pid);
+                continue;
+            }
+
+            // service_id
+            copy16(b, 0, pmt->sid);
+            b += 2;
+            // reserved_future_use, EIT_schedule_flag,
+            // EIT_present_following_flag
+            *b++ = 0x00;
+            // running_status, free_CA_mode, descriptors_length
+            uint8_t r = 4 << 5; // running_status = 4
+            r ^= 1 << 4;        // free_CA_mode = 1
+            *b++ = r;
+            *b++ = 0x00;
+        }
+    }
+    // calculate section_length
+    *(section_start - 1) = b - section_start + 4;
+    // checksum
+    int crc = crc_32(payload_start, b - payload_start);
+    copy32(b, 0, crc);
+    b += 4;
+
+    return b - sdt;
 }
 
 uint16_t YMDtoMJD(int Y, int M, int D) {
@@ -737,12 +797,22 @@ int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len) {
     int64_t ctime = getTick();
     int i, pos = 0;
     int psi_len;
+
+    // Add PAT
     if (ctime - d->last_pat > 500) {
         psi_len = ddci_create_pat(d, psi);
         pos += buffer_to_ts(dst + pos, len - pos, psi, psi_len, &d->pat_cc, 0);
         d->last_pat = ctime;
     }
 
+    // Add SDT
+    if (ctime - d->last_sdt > 500) {
+        psi_len = ddci_create_sdt(d, psi);
+        pos += buffer_to_ts(dst + pos, len - pos, psi, psi_len, &d->sdt_cc, 17);
+        d->last_sdt = ctime;
+    }
+
+    // Add PMTs
     if (ctime - d->last_pmt > 100) {
         SPMT *pmt;
         for (i = 0; i < MAX_CHANNELS_ON_CI; i++) {

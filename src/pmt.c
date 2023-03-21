@@ -1576,7 +1576,7 @@ int assemble_packet(SFilter *f, uint8_t *b) {
         len = assemble_normal(f, b);
 
     b = f->data;
-    if ((len > 0) && (f->flags & FILTER_CRC)) // check the crc for PAT and PMT
+    if ((len > 0) && (f->flags & FILTER_CRC)) // check the crc for tables
     {
         uint32_t current_crc;
         if (len < 4 || len > FILTER_PACKET_SIZE)
