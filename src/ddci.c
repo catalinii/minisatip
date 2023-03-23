@@ -583,7 +583,7 @@ int ddci_create_sdt(ddci_device_t *d, uint8_t *sdt) {
     SPMT *pmt;
     for (i = 0; i < MAX_CHANNELS_ON_CI; i++) {
         if ((pmt = get_pmt(d->pmt[i].id))) {
-            LOG("Adding PMT %d to SDT, sid %d", d->pmt[i].id, pmt->sid);
+            LOGM("Adding PMT %d to SDT, sid %d", d->pmt[i].id, pmt->sid);
             ddci_mapping_table_t *m =
                 get_pid_mapping(d, pmt->adapter, pmt->pid);
             if (!m) {
