@@ -622,7 +622,7 @@ uint16_t YMDtoMJD(int Y, int M, int D) {
 }
 
 // Based on vdr implementation provided by Klaus Schmidinger
-int ddci_create_epg(ddci_device_t *d, int sid, uint8_t *eit, int version) {
+int ddci_create_eit(ddci_device_t *d, int sid, uint8_t *eit, int version) {
     uint8_t *PayloadStart;
     uint8_t *SectionStart;
     uint8_t *DescriptorsStart;
@@ -830,10 +830,10 @@ int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len) {
                 // ADD EPG as well
                 if (len - pos >= 188)
                     pos +=
-                        ddci_create_epg(d, pmt->sid, dst + pos, d->pmt[i].ver);
+                        ddci_create_eit(d, pmt->sid, dst + pos, d->pmt[i].ver);
             }
             if (len - pos >= 188)
-                pos += ddci_create_epg(d, MAKE_SID_FOR_CA(d->id, i), dst + pos,
+                pos += ddci_create_eit(d, MAKE_SID_FOR_CA(d->id, i), dst + pos,
                                        d->pmt[i].ver);
         }
         d->last_pmt = ctime;
