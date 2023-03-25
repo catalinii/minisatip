@@ -320,7 +320,9 @@ int test_ddci_process_ts() {
     ad.rlen = ad.lbuf - 188; // allow just 2 packets
     set_pid_ts(buf, 1000);
     set_pid_ts(buf + 2 * 188, 2000);
-    memset(d.read_index, 0, sizeof(d.read_index));
+    // Prevents resetting read_index to write_index
+    d.read_index[1] = d.read_index[2] = d.fifo.write_index = 188;
+
     set_pid_ts(fifo, new_pid); // first packet, expected 1000
     set_pid_ts(fifo + 188, new_pid2);
     set_pid_ts(fifo + 376, new_pid2);
@@ -441,7 +443,7 @@ int test_create_sdt() {
     if (!len)
         return 1;
 
-    // Check that the SDT contains two services with running status = 4 and 
+    // Check that the SDT contains two services with running status = 4 and
     // free CA mode = 1
     int sdt_sid1 = (packet[16] << 8) + packet[17];
     int sdt_running_status1 = packet[19] >> 5;
