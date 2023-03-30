@@ -1325,7 +1325,6 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
     pmt->first_active_pid = -1;
     pmt->ca_mask = pmt->disabled_ca_mask = 0;
     pmt->name[0] = pmt->provider[0] = 0;
-    pmt->clean_pos = pmt->clean_cc = 0;
     pmt->caids = 0;
 
     if (i >= npmts)

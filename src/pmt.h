@@ -141,8 +141,6 @@ typedef struct struct_pmt {
     int first_active_pid;
     int64_t grace_time, start_time;
     int filter;
-    int clean_pos, clean_cc;
-    uint8_t *clean;
 } SPMT;
 
 // filters can be setup for specific pids and masks
