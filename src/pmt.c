@@ -964,9 +964,9 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
         ncws = i + 1;
 
     mutex_unlock(&cws_mutex);
-    LOG("CW %d for PMT %d (%s), master %d, pid %d, for %s parity, %s", c->id, pmt_id,
-        pmt->name, master_pmt, pmt->pid,
-        c->parity != pmt->parity ? "next":"current", cw_to_string(c, buf));
+    LOG("CW %d for PMT %d (%s), master %d, pid %d, for %s parity, %s", c->id,
+        pmt_id, pmt->name, master_pmt, pmt->pid,
+        c->parity != pmt->parity ? "next" : "current", cw_to_string(c, buf));
     return 0;
 }
 
@@ -2114,16 +2114,16 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
 
 void copy_en300468_string(char *dest, int dest_len, char *src, int len) {
     int start = (src[0] < 0x20) ? 1 : 0;
-    int charset = 0;
+    uint32_t charset = 0;
     int i;
     if (src[0] == 0x10)
         start += 2;
 
     if (src[0] < 0x20)
-        charset = src[0];
+        charset = (uint8_t)src[0];
 
     for (i = start; (i < len) && (--dest_len > 0); i++) {
-        int c = (unsigned char)src[i];
+        int c = (uint8_t)src[i];
         c |= (charset << 8);
 
         switch (c) { // default latin -> charset = 0
@@ -2438,9 +2438,8 @@ int pmt_destroy() {
     return 0;
 }
 
-_symbols pmt_sym[] = {
-    {"ad_channel", VAR_FUNCTION_STRING, (void *)&get_channel_for_adapter, 0,
-     MAX_ADAPTERS, 0},
-    {"ad_pmt", VAR_FUNCTION_STRING, (void *)&get_pmt_for_adapter, 0, MAX_STREAMS,
-     0},
-    {NULL, 0, NULL, 0, 0, 0}};
+_symbols pmt_sym[] = {{"ad_channel", VAR_FUNCTION_STRING,
+                       (void *)&get_channel_for_adapter, 0, MAX_ADAPTERS, 0},
+                      {"ad_pmt", VAR_FUNCTION_STRING,
+                       (void *)&get_pmt_for_adapter, 0, MAX_STREAMS, 0},
+                      {NULL, 0, NULL, 0, 0, 0}};
