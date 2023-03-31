@@ -543,7 +543,7 @@ int test_create_pmt() {
 }
 
 int main() {
-    opts.log = 65535;
+    opts.log = 65535 ^ LOG_LOCK ^ LOG_UTILS;
     opts.debug = 0;
     opts.cache_dir = "/tmp";
     strcpy(thread_info[thread_index].thread_name, "test_ddci");
