@@ -8,7 +8,6 @@
 
 // number of pids for each ddci adapter to be stored in the mapping table
 #define MAX_CHANNELS_ON_CI 4
-#define PIDS_FOR_ADAPTER 128
 #define MAX_CA_PIDS 64
 
 #define DDCI_BUFFER (20000 * 188)
