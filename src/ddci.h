@@ -6,8 +6,9 @@
 #include "utils/hash_table.h"
 #include "utils/fifo.h"
 
-// number of pids for each ddci adapter to be stored in the mapping table
-#define MAX_CHANNELS_ON_CI 4
+// Maximum number of PMTs (channels) supported per adapter
+#define MAX_CHANNELS_ON_CI 8
+// Maximum number of CA PIDs supported per adapters
 #define MAX_CA_PIDS 64
 
 #define DDCI_BUFFER (20000 * 188)

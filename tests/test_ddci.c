@@ -361,6 +361,7 @@ int test_create_pat() {
     memset(&d, 0, sizeof(d));
     d.id = 0;
     d.enabled = 1;
+    d.max_channels = 1;
     SPMT *pmt = get_pmt(pmt_id);
     create_hash_table(&d.mapping, 30);
     memset(ddci_devices, 0, sizeof(ddci_devices));
@@ -399,6 +400,7 @@ int test_create_sdt() {
     memset(&d, 0, sizeof(d));
     d.id = 0;
     d.enabled = 1;
+    d.max_channels = 2;
     memset(&d.pmt, -1, sizeof(d.pmt));
     create_hash_table(&d.mapping, 30);
     memset(ddci_devices, 0, sizeof(ddci_devices));

@@ -133,7 +133,7 @@ int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
             add_pmt = 0;
     }
     if (add_pmt)
-        for (i = 0; i < MAX_CHANNELS_ON_CI; i++) {
+        for (i = 0; i < d->max_channels; i++) {
             if (m->pmt[i] < 0) {
                 m->pmt[i] = pmt;
                 if (i >= m->npmt)
@@ -526,7 +526,7 @@ int ddci_create_pat(ddci_device_t *d, uint8_t *b) {
     b[11] = 0x00;
     b[12] = 0x10;
     len = 13;
-    for (i = 0; i < MAX_CHANNELS_ON_CI; i++)
+    for (i = 0; i < d->max_channels; i++)
         if ((pmt = get_pmt(d->pmt[i].id))) {
             ddci_mapping_table_t *m =
                 get_pid_mapping(d, pmt->adapter, pmt->pid);
@@ -581,7 +581,7 @@ int ddci_create_sdt(ddci_device_t *d, uint8_t *sdt) {
     // describe each service
     int i;
     SPMT *pmt;
-    for (i = 0; i < MAX_CHANNELS_ON_CI; i++) {
+    for (i = 0; i < d->max_channels; i++) {
         if ((pmt = get_pmt(d->pmt[i].id))) {
             LOGM("Adding PMT %d to SDT, sid %d", d->pmt[i].id, pmt->sid);
             ddci_mapping_table_t *m =
@@ -810,7 +810,7 @@ int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len) {
     // Add PMTs
     if (ctime - d->last_pmt > 100) {
         SPMT *pmt;
-        for (i = 0; i < MAX_CHANNELS_ON_CI; i++) {
+        for (i = 0; i < d->max_channels; i++) {
             if ((pmt = get_pmt(d->pmt[i].id))) {
                 psi_len = ddci_create_pmt(d, pmt, psi, sizeof(psi), d->pmt + i);
                 ddci_mapping_table_t *m =
@@ -1045,7 +1045,13 @@ int ddci_read_sec_data(sockets *s) {
 
 int ddci_post_init(adapter *ad) {
     ddci_device_t *d = ddci_devices[ad->id];
+
+    // Cap max_channels to MAX_CHANNELS_ON_CI
     d->max_channels = get_max_pmt_for_ca(ad->id);
+    if (d->max_channels > MAX_CHANNELS_ON_CI) {
+        d->max_channels = MAX_CHANNELS_ON_CI;
+    }
+    
     sockets *s = get_sockets(ad->sock);
     s->action = (socket_action)ddci_read_sec_data;
     if (ad->fe_sock >= 0)
