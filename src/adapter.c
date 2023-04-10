@@ -855,9 +855,9 @@ void close_adapter_for_stream(int sid, int aid, int close_stream) {
     if (ad->sid_cnt == 0) {
         ad->master_sid = -1;
         mark_pids_deleted(aid, -1, NULL);
-        init_dvb_parameters(&ad->tp);
         if (ad->standby && close_stream)
             ad->standby(ad);
+        init_dvb_parameters(&ad->tp);
 
         if ((ad->master_source >= 0) && (ad->master_source < MAX_ADAPTERS)) {
             adapter *ad2 = a[ad->master_source];

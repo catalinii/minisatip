@@ -250,9 +250,10 @@ int satipc_reply(sockets *s) {
         rc = map_intd(sep + 1, NULL, 998);
 
     LOGM("MSG process << server :\n%s", s->buf);
-    LOG("satipc_reply (adapter %d): receiving from handle %d, sock %d, "
+    LOG("satipc_reply (adapter %d, state %d): receiving from handle %d, sock "
+        "%d, "
         "code %d",
-        s->sid, s->sock, s->id, rc);
+        s->sid, sip->state, s->sock, s->id, rc);
 
     is_transport = strstr((char *)s->buf, "Transport:") != NULL;
     handle_client_capabilities(sip, (char *)s->buf);
@@ -1432,16 +1433,18 @@ int satipc_request(adapter *ad) {
     if (!sip)
         return 0;
 
-    LOG("satipc: request for adapter %d freq %d, pids to add %d, pids to "
-        "delete %d, expect_reply %d, want_tune %d, sent_transport %d, "
-        "closed_rtsp %d",
-        ad->id, ad->tp.freq, sip->lap, sip->ldp, sip->expect_reply,
+    LOG("satipc: request for adapter %d, state %d, freq %d, pids to add %d, "
+        "pids to delete %d, expect_reply %d, want_tune %d, "
+        "sent_transport %d, closed_rtsp %d",
+        ad->id, sip->state, ad->tp.freq, sip->lap, sip->ldp, sip->expect_reply,
         sip->want_tune, sip->sent_transport, sip->rtsp_socket_closed);
 
     if (sip->rtsp_socket_closed)
         return 0;
 
-    if (ad->tp.freq == 0)
+    if ((ad->tp.freq == 0) &&
+        ((sip->state == SATIP_STATE_OPTIONS) ||
+         (sip->state == SATIP_STATE_SETUP) || (sip->state == SATIP_STATE_PLAY)))
         return 0;
 
     if (!ad->sid_cnt &&
