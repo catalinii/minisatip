@@ -879,8 +879,11 @@ int update_pids(int aid) {
     int i, dp = 1;
     adapter *ad;
     ad = get_adapter(aid);
-    if (!ad || ad->updating_pids)
+    if (!ad || ad->updating_pids) {
+        LOG("ad %d [%d], another update_pids is in progress skipping", aid,
+            ad ? ad->id : -1);
         return 1;
+    }
 
     if (ad->err) {
         LOG("adapter %d in error state %d", aid, ad->err);
@@ -1144,9 +1147,6 @@ void mark_pids_deleted(int aid, int sid,
 
     for (i = 0; i < MAX_PIDS; i++)
         mark_pid_deleted(aid, sid, ad->pids[i].pid, &ad->pids[i]);
-    //	if(sid == -1)
-    //		reset_pids_type(aid);
-    dump_pids(aid);
 }
 
 int mark_pid_add(int sid, int aid, int _pid) {
@@ -1215,7 +1215,6 @@ int mark_pids_add(int sid, int aid, char *pids) {
         if (mark_pid_add(sid, aid, pid) < 0)
             return -1;
     }
-    dump_pids(aid);
     return 0;
 }
 

@@ -1420,7 +1420,6 @@ int read_rtsp(sockets *s) {
         if (get_sid(s->sid))
             sprintf(buf, "Session: %010d", get_session_id(s->sid));
         close_stream(s->sid);
-        s->flush_enqued_data = 1;
         http_response(s, 200, buf, NULL, cseq, 0);
     } else if (strncmp(arg[0], "DESCRIBE", 8) == 0) {
         char sbuf[1000];

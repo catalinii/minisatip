@@ -340,7 +340,7 @@ int close_stream_for_socket(sockets *s) {
 int close_stream(int i) {
     int ad;
     streams *sid;
-    LOG("closing stream sid %d", i);
+    LOG("closing stream %d", i);
     if (i < 0 || i >= MAX_STREAMS || !st[i] || !st[i]->enabled)
         return 0;
 
@@ -352,6 +352,7 @@ int close_stream(int i) {
         return 0;
     }
     mutex_lock(&st_mutex);
+    sockets_set_flush_enqued_data(sid->rsock_id);
     sid->enabled = 0;
     sid->start_streaming = 0;
     sid->timeout = 0;
@@ -383,7 +384,7 @@ int close_stream(int i) {
     sockets_del_for_sid(i);
 
     mutex_unlock(&st_mutex);
-    LOG("closed stream sid %d", i);
+    LOG("closed stream %d", i);
     return 0;
 }
 

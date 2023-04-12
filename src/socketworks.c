@@ -1395,6 +1395,28 @@ int copy_iovec_to_fifo(SFIFO *fifo, int offset, struct iovec *iov, int iovcnt) {
     return available - fifo_available(fifo);
 }
 
+// if we need the user tuned to a new freq, drop all the data that is in
+// the buffer if both high_prio and flush_enqued_data are both set, no
+// need to add to pio_pack
+void flush_enqued_data_if_neededf_needed(sockets *s) {
+    if (!s->flush_enqued_data)
+        return;
+
+    int off = find_next_rtsp_header(&s->fifo);
+    if (off >= 0) {
+        LOG("sock %d dropping %jd enqueued bytes (offset %d)", s->id,
+            s->fifo.write_index - (s->fifo.read_index + off), off);
+        s->fifo.write_index = s->fifo.read_index + off;
+    }
+    s->flush_enqued_data = 0;
+}
+
+void sockets_set_flush_enqued_data(int i) {
+    sockets *s = get_sockets(i);
+    if (s)
+        s->flush_enqued_data = 1;
+}
+
 int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt,
                         int high_prio) {
     int i, len = 0, offset = 0, rv = 0;
@@ -1426,18 +1448,8 @@ int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt,
     if (high_prio && !s->flush_enqued_data && (fifo_used(&s->fifo) > 0)) {
         return socket_enque_highprio(s, iov, iovcnt);
     }
-    // if we need the user tuned to a new freq, drop all the data that is in
-    // the buffer if both high_prio and flush_enqued_data are both set, no
-    // need to add to pio_pack
-    if (s->flush_enqued_data) {
-        int off = find_next_rtsp_header(&s->fifo);
-        if (off >= 0) {
-            LOG("sock %d dropping %jd enqueued bytes (offset %d)", s->id,
-                s->fifo.write_index - (s->fifo.read_index + off), off);
-            s->fifo.write_index = s->fifo.read_index + off;
-        }
-        s->flush_enqued_data = 0;
-    }
+
+    flush_enqued_data_if_neededf_needed(s);
 
     // buffer unwritten data to FIFO
     int copied = copy_iovec_to_fifo(&s->fifo, offset, iov, iovcnt);
@@ -1539,6 +1551,7 @@ int flush_socket_prio(sockets *s) {
 }
 
 int flush_socket(sockets *s) {
+    flush_enqued_data_if_neededf_needed(s);
     if (s->force_close || s->prio_data_len) {
         return flush_socket_prio(s);
     }
