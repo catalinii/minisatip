@@ -459,7 +459,8 @@ int dvbapi_send_pmt(SKey *k, int cmd_id) {
     copy16(buf, 23, 0x8701); // ca_device_descriptor (caX)
     buf[25] = demux;
 
-    len = 26 + pmt_add_ca_descriptor(pmt, buf + 26); // CA description
+    len =
+        26 + pmt_add_ca_descriptor(pmt, buf + 26, dvbapi_ca); // CA description
 
     // Pids associated with the PMT
     copy16(buf, 10, len - 12);

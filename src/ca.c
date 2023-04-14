@@ -281,6 +281,34 @@ void disable_cws_for_all_pmts(ca_device_t *d) {
     }
 }
 
+int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
+                  int added_only, int ca_id) {
+    int i = 0, pos = 0;
+    for (i = 0; i < pmt->stream_pids; i++) {
+        if (added_only && !find_pid(pmt->adapter, pmt->stream_pid[i]->pid)) {
+            LOGM("%s: skipping pmt %d (ad %d) pid %d from CAPMT", __FUNCTION__,
+                 pmt->id, pmt->adapter, pmt->stream_pid[i]->pid);
+            continue;
+        }
+        if (!pmt->stream_pid[i]->is_audio && !pmt->stream_pid[i]->is_video)
+            continue;
+        capmt[pos++] = pmt->stream_pid[i]->type;
+        copy16(capmt, pos, pmt->stream_pid[i]->pid);
+        pos += 2;
+        int pi_len_pos = pos, pi_len = 0;
+        pos += 2;
+
+        // append the stream descriptors
+        if (pmt->caids) {
+            capmt[pos++] = cmd_id;
+            pi_len = pmt_add_ca_descriptor(pmt, capmt + pos, ca_id);
+            pos += pi_len;
+        }
+        copy16(capmt, pi_len_pos, pi_len + 1);
+    }
+    return pos;
+}
+
 int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
                  int cmd_id, int added_only) {
     int pos = 0;
@@ -298,10 +326,11 @@ int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
     capmt[pos++] = 0; // PI LEN 2 bytes, set 0
     capmt[pos++] = 0;
 
-    pos += CAPMT_add_PMT(capmt + pos, capmt_len - pos, pmt, cmd_id, added_only);
+    pos += CAPMT_add_PMT(capmt + pos, capmt_len - pos, pmt, cmd_id, added_only,
+                         dvbca_id);
     if (other) {
         pos += CAPMT_add_PMT(capmt + pos, capmt_len - pos, other, cmd_id,
-                             added_only);
+                             added_only, dvbca_id);
     }
 
     return pos;
