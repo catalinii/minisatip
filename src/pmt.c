@@ -2313,10 +2313,16 @@ int pmt_tune(adapter *ad) {
     return 0;
 }
 
-int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf) {
+int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf, int ca_id) {
     int i, len = 0;
     for (i = 0; i < pmt->caids; i++) {
-        int private_data_len = pmt->ca[i].private_data_len;
+#ifndef DISABLE_TABLES
+        if (!match_ca_caid(ca_id, pmt->adapter, pmt->ca[i].id)){
+            LOGM("SCA %d cannot handle CAID %04X, skipping", ca_id, pmt->ca[i].id);
+            continue;
+        }
+#endif
+	int private_data_len = pmt->ca[i].private_data_len;
         buf[len] = 0x09;
         buf[len + 1] = 0x04 + private_data_len;
         copy16(buf, len + 2, pmt->ca[i].id);
@@ -2327,32 +2333,6 @@ int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf) {
              pmt->ca[i].pid, len);
     }
     return len;
-}
-
-int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
-                  int added_only) {
-    int i = 0, pos = 0;
-    for (i = 0; i < pmt->stream_pids; i++) {
-        if (added_only && !find_pid(pmt->adapter, pmt->stream_pid[i].pid)) {
-            LOGM("%s: skipping pmt %d (ad %d) pid %d from CAPMT", __FUNCTION__,
-                 pmt->id, pmt->adapter, pmt->stream_pid[i].pid);
-            continue;
-        }
-        capmt[pos++] = pmt->stream_pid[i].type;
-        copy16(capmt, pos, pmt->stream_pid[i].pid);
-        pos += 2;
-        int pi_len_pos = pos, pi_len = 0;
-        pos += 2;
-
-        // append the stream descriptors
-        if (pmt->caids) {
-            capmt[pos++] = cmd_id;
-            pi_len = pmt_add_ca_descriptor(pmt, capmt + pos);
-            pos += pi_len;
-        }
-        copy16(capmt, pi_len_pos, pi_len + 1);
-    }
-    return pos;
 }
 
 char *get_channel_for_adapter(int aid, char *dest, int max_size) {
