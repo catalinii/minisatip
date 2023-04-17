@@ -2042,21 +2042,19 @@ int APP_CA_handler(ca_session_t *session, int resource, uint8_t *data,
         d->state = CA_STATE_INITIALIZED;
 
         // Ignore CAM reported values if user has forced specific CAIDs
-        if (d->has_forced_caids) {
-            data = (uint8_t *)d->caid;
-            caid_count = d->caids;
-        } else {
-            d->caids = caid_count;
-        }
-        for (i = 0; i < caid_count; i++) {
-            int caid = (data[i * 2 + 0] << 8) | data[i * 2 + 1];
-            LOG("   %s CA ID: %04X for CA%d",
-                d->has_forced_caids ? "Forced" : "Supported", caid, d->id);
-            add_caid_mask(dvbca_id, d->id, caid, 0xFFFF);
-            if (!d->has_forced_caids) {
-                d->caid[i] = caid;
+        if (!d->has_forced_caids) {
+            d->caids = 0;
+            for (i = 0; i < caid_count; i++) {
+                int caid = (data[i * 2 + 0] << 8) | data[i * 2 + 1];
+                d->caid[d->caids++] = caid;
             }
         }
+        for (i = 0; i < d->caids; i++) {
+            int caid = d->caid[i];
+            LOG("   Supported CA ID: %04X for CA%d", caid, d->id);
+            add_caid_mask(dvbca_id, d->id, caid, 0xFFFF);
+        }
+
         break;
     default:
         LOG("%s: unexpected tag (0x%x)", __FUNCTION__, resource);

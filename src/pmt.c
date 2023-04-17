@@ -2213,8 +2213,9 @@ int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf, int ca_id) {
     int i, len = 0;
     for (i = 0; i < pmt->caids; i++) {
 #ifndef DISABLE_TABLES
-        if (!match_ca_caid(ca_id, pmt->adapter, pmt->ca[i]->id)){
-            LOGM("SCA %d cannot handle CAID %04X, skipping", ca_id, pmt->ca[i]->id);
+        if (!match_ca_caid(ca_id, pmt->adapter, pmt->ca[i]->id)) {
+            DEBUGM("SCA %d cannot handle CAID %04X, skipping", ca_id,
+                   pmt->ca[i]->id);
             continue;
         }
 #endif
