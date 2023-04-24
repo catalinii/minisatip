@@ -1079,6 +1079,16 @@ int pmt_decrypt_stream(adapter *ad) {
                 pmt->parity = cp;
                 disable_cw(pmt->id);
             }
+            if (!pmt->batch) {
+                int len =
+                    sizeof(pmt->batch[0]) * (opts.adapter_buffer / 188 + 100);
+                pmt->batch = alloca(len);
+                if (!pmt->batch) {
+                    LOG0("Failed to allocate batch with size %d in the stack",
+                         len);
+                }
+            }
+
             pmt->batch[pmt->blen].data = b;
             pmt->batch[pmt->blen++].len = 188;
             pmt_id[pmt_ids++] = pmt->id;
@@ -1086,9 +1096,12 @@ int pmt_decrypt_stream(adapter *ad) {
     }
 
     // decrypt everything that's left
-    for (i = 0; i < pmt_ids; i++)
+    for (i = 0; i < pmt_ids; i++) {
         if (pmts[pmt_id[i]] && pmts[pmt_id[i]]->blen > 0)
             decrypt_batch(pmts[pmt_id[i]]);
+        if (pmts[pmt_id[i]] && pmts[pmt_id[i]]->batch != NULL)
+            pmts[pmt_id[i]]->batch = NULL;
+    }
     return 0;
 }
 
@@ -1311,13 +1324,6 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
     pmt->blen = 0;
     pmt->last_update_cw = 0;
     pmt->filter = -1;
-    if (!pmt->batch) {
-        int len = sizeof(pmt->batch[0]) * (opts.adapter_buffer / 188 + 100);
-        pmt->batch = _malloc(len);
-        LOGM("Allocation batch with size %d at %p", len, pmt->batch);
-        if (!pmt->batch)
-            return -1;
-    }
     pmt->enabled = 1;
     pmt->version = -1;
     pmt->state = PMT_STOPPED;
