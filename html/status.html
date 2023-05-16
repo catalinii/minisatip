@@ -389,8 +389,8 @@
 
 		}
 
-		function formatPids(pids) {
-			return pids.replaceAll(',', ', ');
+		function formatCommaSeparated(str) {
+			return str.replaceAll(',', ', ');
 		}
 
 		function getTable(state, oldstate) {
@@ -544,17 +544,17 @@
 				myTable += "<td class='dt-left'>";
 				if (state['has_pmt']) {
 					if (state['ad_channel'][i]) {
-						myTable += "<b>" + state['ad_channel'][i] + "</b><br>";
+						myTable += "<b>" + formatCommaSeparated(state['ad_channel'][i]) + "</b><br>";
 					}
 					
 					var st_pmt = state['ad_pmt'][i];
 					if (st_pmt != "")
-						myTable += "<small>PMT: " + st_pmt + "</small><br />";
+						myTable += "<small>PMT: " + formatCommaSeparated(st_pmt) + "</small><br />";
 				}
 
 				if (ad_type == 4) {
 					// Show PIDs on the adapter level for CI adapters
-					myTable += "<small>Pids: " + formatPids(state['ad_pids'][i]) + "</small><br />";
+					myTable += "<small>Pids: " + formatCommaSeparated(state['ad_pids'][i]) + "</small><br />";
 				} else {
 					for (var j = 0; j < max_streams; j++) {
 						if (state['st_enabled'][j] == 1 && state['st_adapter'][j] == i) {
@@ -573,7 +573,7 @@
 								st_p = "" + st_p + "";
 							if (state['st_play'][j] == 0)
 								st_p = "<i>" + st_p + "</i>";
-							myTable += "<small>Pids: " + formatPids(st_p) + "</small><br />";
+							myTable += "<small>Pids: " + formatCommaSeparated(st_p) + "</small><br />";
 
 							// Create VLC stream URL
 							// Example: rtsp://@satip/?src=1&freq=12382&pol=H&msys=DVBS2&sr=27500&pids=0,5375,5378,116,5375,32
