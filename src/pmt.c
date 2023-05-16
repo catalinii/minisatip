@@ -2027,7 +2027,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     return 0;
 }
 
-void copy_en300468_string(char *dest, int dest_len, char *src, int len) {
+void copy_en300468_string(char *dest, int dest_len, unsigned char *src, int len) {
     int start = (src[0] < 0x20) ? 1 : 0;
     uint32_t charset = 0;
     int i;
@@ -2038,7 +2038,7 @@ void copy_en300468_string(char *dest, int dest_len, char *src, int len) {
         charset = src[0];
 
     for (i = start; (i < len) && (--dest_len > 0); i++) {
-        int c = (unsigned char)src[i];
+        int c = src[i];
         c |= (charset << 8);
 
         switch (c) { // default latin -> charset = 0
@@ -2100,10 +2100,10 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque) {
             if (c[0] == 0x48 && !pmt->name[0]) {
                 int name_size = sizeof(pmt->name) - 1;
                 c += 3;
-                copy_en300468_string(pmt->provider, name_size, (char *)c + 1,
+                copy_en300468_string(pmt->provider, name_size, c + 1,
                                      c[0]);
                 c += c[0] + 1;
-                copy_en300468_string(pmt->name, name_size, (char *)c + 1, c[0]);
+                copy_en300468_string(pmt->name, name_size, c + 1, c[0]);
                 LOG("SDT PMT %d: name %s provider %s, sid: %d (%X)", pmt->id,
                     pmt->name, pmt->provider, sid, sid);
             }
