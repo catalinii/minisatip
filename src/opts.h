@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include <time.h>
 
-struct struct_opts {
+typedef struct struct_opts {
     char *rrtp;
     char *name_app;
     char *command_line;
@@ -89,7 +89,10 @@ struct struct_opts {
     int axe_unicinp[4];
     int axe_power;
 #endif
-};
-extern struct struct_opts opts;
+} struct_opts_t;
+
+void parse_dvbapi_opt(char *optarg, struct_opts_t *optz);
+
+extern struct_opts_t opts;
 
 #endif
