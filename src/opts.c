@@ -29,13 +29,13 @@ void parse_dvbapi_opt(char *optarg, struct_opts_t *optz) {
     safe_strncpy(buf, optarg);
     if (buf[0] == '~') {
         optz->pids_all_no_dec = 1;
-        memmove(&buf[0], &buf[1], sizeof(buf) - 1);
+        memmove(buf, buf + 1, strlen(buf));
     }
     char *sep2 = strchr(buf, ',');
     if (sep2 != NULL) {
         *sep2 = 0;
         optz->dvbapi_offset = map_int(sep2 + 1, NULL);
-        _strncpy(buf, optarg, sizeof(optarg) - 1 - strlen(sep2));
+        memmove(buf, buf, strlen(buf) - 1 - strlen(sep2));
     }
     char *sep1 = strchr(buf, ':');
     if (sep1 != NULL) {
