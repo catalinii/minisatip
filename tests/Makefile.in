@@ -15,6 +15,7 @@ else
 endif
 
 SOURCES=\
+	test_opts.c \
 	test_ca.c \
 	test_pmt.c \
 	test_ddci.c \
