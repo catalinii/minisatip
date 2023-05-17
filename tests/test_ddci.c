@@ -85,7 +85,7 @@ void create_adapter(adapter *ad, int id) {
 int test_channels() {
     SHashTable h;
     int i;
-    Sddci_channel c1, c2, *t;
+    Sddci_channel c1, c2, c3, *t;
     memset(&h, 0, sizeof(h));
     create_hash_table(&h, 10);
 
@@ -104,6 +104,12 @@ int test_channels() {
     c2.ddcis = 2;
     setItem(&h, c2.sid, &c2, sizeof(c2));
 
+    // Add a third channel (SID 400) that cannot be decoded by any adapter
+    memset(&c3, 0, sizeof(c3));
+    c3.sid = 400;
+    c3.ddcis = 0;
+    setItem(&h, c3.sid, &c3, sizeof(c3));
+
     // Save and reload the table
     save_channels(&h);
     free_hash(&h);
@@ -113,9 +119,10 @@ int test_channels() {
     // Check the contents
     ASSERT(getItem(&h, 200) != NULL, "Saved SID 200 not found in table");
     ASSERT(getItem(&h, 300) != NULL, "Saved SID 300 not found in table");
+    ASSERT(getItem(&h, 400) != NULL, "Saved SID 400 not found in table");
     int ch = 0;
     FOREACH_ITEM(&h, t) { ch++; }
-    ASSERT(ch == 2, "Expected two channels after loading");
+    ASSERT(ch == 3, "Expected two channels after loading");
     free_hash(&h);
     return 0;
 }
