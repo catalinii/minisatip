@@ -970,10 +970,7 @@ void set_options(int argc, char *argv[]) {
                 app_name);
             exit(0);
 #else
-            if (sizeof(optarg) > 99) {
-                LOG("-o argument too long: %s", optarg);
-                exit(1);
-            }
+
             char buf[100];
             memset(buf, 0, sizeof(buf));
             safe_strncpy(buf, optarg);
