@@ -62,7 +62,6 @@ typedef struct ddci_channel {
         uint8_t ddci;
     } ddci[MAX_ADAPTERS];
     int ddcis;
-    int pos;
     int sid;
     char name[50];
     char locked;

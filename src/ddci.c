@@ -292,11 +292,9 @@ int find_ddci_for_pmt(Sddci_channel *c, SPMT *pmt) {
     int ddid = -100;
     int retry = 0;
 
-    // search always from the beginning when the PMT is started
-
-    // continue where we left off
-    for (c->pos = 0; c->pos < c->ddcis; c->pos++) {
-        ddid = c->ddci[c->pos].ddci;
+    int i = 0;
+    for (i = 0; i < c->ddcis; i++) {
+        ddid = c->ddci[i].ddci;
         ddci_device_t *d = get_ddci(ddid);
         if (!d) {
             LOG("DDID %d not enabled", ddid);
