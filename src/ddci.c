@@ -1278,14 +1278,15 @@ void load_channels(SHashTable *ch) {
              opts.cache_dir, CONFIG_FILE_NAME);
 
     FILE *f = fopen(ddci_conf_path, "rt");
-    Sddci_channel c;
     char line[1000];
     int channels = 0;
-    int pos = 0;
     if (!f)
         return;
     while (fgets(line, sizeof(line), f)) {
+        int pos = 0;
         char buf[1000];
+        memset(buf, 0, sizeof(buf));
+        Sddci_channel c;
         memset(&c, 0, sizeof(c));
         char *x = strchr(line, '#');
         if (x)
@@ -1304,7 +1305,6 @@ void load_channels(SHashTable *ch) {
         int la = split(arg, cc, ARRAY_SIZE(arg), ',');
         int i = 0;
         channels++;
-        pos = 0;
         for (i = 0; i < la; i++) {
             int v = map_intd(arg[i], NULL, -1);
             if (v != -1) {
