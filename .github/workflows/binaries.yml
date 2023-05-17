@@ -31,7 +31,6 @@ jobs:
       run: |
        make clean
        ./configure --disable-dvbapi --enable-static --host=sh4-linux --disable-dvbaes --disable-dvbca --enable-axe
-       make PMT=0
        zip -9 -r /minisatip_axe.zip minisatip html
 
     - name: Build MIPS
