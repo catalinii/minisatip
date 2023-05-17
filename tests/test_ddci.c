@@ -85,22 +85,37 @@ void create_adapter(adapter *ad, int id) {
 int test_channels() {
     SHashTable h;
     int i;
-    Sddci_channel c, *t;
+    Sddci_channel c1, c2, *t;
     memset(&h, 0, sizeof(h));
     create_hash_table(&h, 10);
-    memset(&c, 0, sizeof(c));
-    c.sid = 200;
-    c.ddci[1].ddci = 1;
-    c.ddcis = 1;
-    setItem(&h, c.sid, &c, sizeof(c));
+
+    // Add one channel (SID 200) that can be decoded by DDCI 1
+    memset(&c1, 0, sizeof(c1));
+    c1.sid = 200;
+    c1.ddci[0].ddci = 1;
+    c1.ddcis = 1;
+    setItem(&h, c1.sid, &c1, sizeof(c1));
+
+    // Add a second channel (SID 300) that can be decoded by both DDCI 1 and 2
+    memset(&c2, 0, sizeof(c2));
+    c2.sid = 300;
+    c2.ddci[0].ddci = 1;
+    c2.ddci[1].ddci = 2;
+    c2.ddcis = 2;
+    setItem(&h, c2.sid, &c2, sizeof(c2));
+
+    // Save and reload the table
     save_channels(&h);
     free_hash(&h);
     create_hash_table(&h, 10);
     load_channels(&h);
-    ASSERT(getItem(&h, 200) != NULL, "Saved SID not found in table");
+
+    // Check the contents
+    ASSERT(getItem(&h, 200) != NULL, "Saved SID 200 not found in table");
+    ASSERT(getItem(&h, 300) != NULL, "Saved SID 300 not found in table");
     int ch = 0;
     FOREACH_ITEM(&h, t) { ch++; }
-    ASSERT(ch == 1, "Expected one channel after loading");
+    ASSERT(ch == 2, "Expected two channels after loading");
     free_hash(&h);
     return 0;
 }
