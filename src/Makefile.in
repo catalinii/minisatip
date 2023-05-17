@@ -43,6 +43,7 @@ SOURCES=\
 	stream.c \
 	adapter.c \
 	httpc.c \
+	opts.c \
 	utils.c \
 	api/symbols.c \
 	api/variables.c \

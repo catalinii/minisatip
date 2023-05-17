@@ -970,29 +970,7 @@ void set_options(int argc, char *argv[]) {
                 app_name);
             exit(0);
 #else
-
-            char buf[100];
-            memset(buf, 0, sizeof(buf));
-            safe_strncpy(buf, optarg);
-            if (buf[0] == '~') {
-                opts.pids_all_no_dec = 1;
-                memmove(&buf[0], &buf[1], sizeof(buf) - 1);
-            }
-            char *sep2 = strchr(buf, ',');
-            if (sep2 != NULL) {
-                *sep2 = 0;
-                opts.dvbapi_offset = map_int(sep2 + 1, NULL);
-                _strncpy(buf, optarg, sizeof(optarg) - 1 - strlen(sep2));
-            }
-            char *sep1 = strchr(buf, ':');
-            if (sep1 != NULL) {
-                *sep1 = 0;
-                safe_strncpy(opts.dvbapi_host, buf);
-                opts.dvbapi_port = map_int(sep1 + 1, NULL);
-            } else {
-                safe_strncpy(opts.dvbapi_host, buf);
-                opts.dvbapi_port = 9000;
-            }
+            parse_dvbapi_opt(optarg, &opts);
 #endif
             break;
         }
