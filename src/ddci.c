@@ -288,36 +288,57 @@ int create_channel_for_pmt(Sddci_channel *c, SPMT *pmt) {
     return 0;
 }
 
+/**
+ * Find the DDCI device that should be used to handle the specified PMT. The
+ * first suitable device is returned. If a suitable device is found but the
+ * device is still initializing, -1 is returned. If no suitable device is found,
+ * -2 is returned.
+ */
 int find_ddci_for_pmt(Sddci_channel *c, SPMT *pmt) {
-    int ddid = -100;
-    int retry = 0;
+    int ddid = -100; // -100 means we didn't find a suitable device
 
     int i = 0;
     for (i = 0; i < c->ddcis; i++) {
-        ddid = c->ddci[i].ddci;
-        ddci_device_t *d = get_ddci(ddid);
+        int candidate = c->ddci[i].ddci;
+        ddci_device_t *d = get_ddci(candidate);
         if (!d) {
-            LOG("DDID %d not enabled", ddid);
+            LOG("%s: DDCI %d not enabled, skipping", __FUNCTION__, candidate);
+            continue;
         }
-        if (is_ca_initializing(ddid)) {
-            LOG("DD %d is initializing", ddid);
-            retry = 1;
 
-        } else {
-            if (d && d->channels < d->max_channels)
-                break;
-            else
-                LOG("DDCI %d cannot be used for PMT %d, pid %d (used "
-                    "channels "
-                    "%d max %d)",
-                    ddid, pmt->id, pmt->pid, d ? d->channels : -1,
-                    d ? d->max_channels : -1);
+        if (d->channels >= d->max_channels) {
+            LOG("%s: DDCI %d cannot be used for PMT %d, pid %d, sid, %d (used "
+                "channels "
+                "%d max %d), skipping",
+                __FUNCTION__, candidate, pmt->id, pmt->pid, pmt->sid,
+                d ? d->channels : -1, d ? d->max_channels : -1);
+            continue;
         }
-        ddid = -100;
+
+        ddid = candidate;
+        break;
     }
-    if (retry)
+
+    if (ddid == -100) {
+        // Distinguish between otherwise not found and deliberately not assigned
+        if (c->ddcis == 0) {
+            LOG("%s: no suitable DDCI found for PMT %d (sid %d): not mapped to "
+                "any DDCI "
+                "device in ddci.conf",
+                __FUNCTION__, pmt->id, pmt->sid);
+        } else {
+            LOG("%s: no suitable DDCI found for PMT %d (sid %d)", __FUNCTION__,
+                pmt->id, pmt->sid);
+        }
+
+        return -TABLES_RESULT_ERROR_NORETRY;
+    } else if (is_ca_initializing(ddid)) {
+        LOG("%s: DDCI %d is initializing, retrying", __FUNCTION__, ddid);
         return -TABLES_RESULT_ERROR_RETRY;
-    return ddid;
+    } else {
+        LOG("%s: Using DDCI %d", __FUNCTION__, ddid);
+        return ddid;
+    }
 }
 
 int is_pmt_running(SPMT *pmt) {
@@ -380,10 +401,14 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
                            "Could not allocate channel");
     }
 
+    // Determine which DDCI should handle this PMT
     if (ddid == -1)
         ddid = find_ddci_for_pmt(channel, pmt);
+    // Negative return values are used to distinguish from valid return values (>= 0)    
     if (ddid == -TABLES_RESULT_ERROR_RETRY)
-        return -ddid;
+        return TABLES_RESULT_ERROR_RETRY;
+    else if (ddid == -TABLES_RESULT_ERROR_NORETRY)
+        return TABLES_RESULT_ERROR_NORETRY;
 
     d = get_ddci(ddid);
     if (!d) {

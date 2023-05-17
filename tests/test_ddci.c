@@ -129,7 +129,7 @@ int test_channels() {
 
 int test_add_del_pmt() {
     int i;
-    SPMT *pmt0, *pmt1, *pmt2, *pmt3;
+    SPMT *pmt0, *pmt1, *pmt2, *pmt3, *pmt4;
     ddci_device_t d0, d1;
     ca_device_t ca0, ca1;
     adapter ad, a0, a1;
@@ -142,6 +142,7 @@ int test_add_del_pmt() {
     pmt1 = create_pmt(8, 200, 201, 202, 0x100, 0x500);
     pmt2 = create_pmt(8, 300, 301, 302, 0x500, 0x100);
     pmt3 = create_pmt(8, 400, 401, 402, 0x600, 0x601);
+    pmt4 = create_pmt(8, 500, 501, 502, 0x500, 0x500);
     memset(&d0, 0, sizeof(d0));
     memset(&d1, 0, sizeof(d1));
     memset(&d0.pmt, -1, sizeof(d0.pmt));
@@ -154,6 +155,14 @@ int test_add_del_pmt() {
     create_hash_table(&d0.mapping, 30);
     create_hash_table(&d1.mapping, 30);
     create_hash_table(&channels, 30);
+
+    // Save a channel for pmt4, we'll check that it is not assigned to 
+    // any DDCI adapter even though its CAID matches etc.
+    Sddci_channel c4;
+    memset(&c4, 0, sizeof(c4));
+    c4.sid = pmt4->sid;
+    c4.ddcis = 0;
+    setItem(&channels, c4.sid, &c4, sizeof(c4));
 
     int dvbca_id = add_ca(&dvbca, 0xFFFFFFFF);
     // DD 0 - 0x100, DD 1 - 0x500
@@ -176,6 +185,9 @@ int test_add_del_pmt() {
     ca0.state = CA_STATE_INITIALIZED;
     ASSERT(ddci_process_pmt(&ad, pmt3) == TABLES_RESULT_ERROR_NORETRY,
            "DDCI ready, expected no retry");
+
+    ASSERT(ddci_process_pmt(&ad, pmt4) == TABLES_RESULT_ERROR_NORETRY,
+           "Channel not assigned to any DDCI adapter, expected no retry");
 
     // One matching channel
     ASSERT(ddci_process_pmt(&ad, pmt0) == TABLES_RESULT_OK,
