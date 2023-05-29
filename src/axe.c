@@ -19,7 +19,6 @@
  */
 
 #include "adapter.h"
-#include "ca.h"
 #include "dvb.h"
 #include "minisatip.h"
 #include "utils.h"
