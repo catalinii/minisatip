@@ -36,3 +36,10 @@ jobs:
        make clean
        ./configure --enable-linuxdvb --enable-dvbca --enable-dvbcsa --enable-netcv --enable-satipc --enable-dvbapi --enable-axe
        make
+
+    - name: Build with --enable-axe, without libssl-dev
+      run: |
+       apt-get -y remove --purge libssl-dev
+       make clean
+       ./configure --enable-axe --enable-dvbapi --enable-dvbcsa --disable-dvbca --disable-dvbaes --disable-netcv
+       make
