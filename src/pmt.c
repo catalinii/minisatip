@@ -1089,7 +1089,7 @@ void start_active_pmts(adapter *ad) {
     memset(pids, 0, sizeof(pids));
 
     for (i = 0; i < MAX_PIDS; i++)
-        if ((ad->pids[i].flags == 1)) {
+        if (ad->pids[i].flags == 1) {
             pids[ad->pids[i].pid] = ad->pids + i;
         }
 
