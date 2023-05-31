@@ -607,7 +607,7 @@ int enqueue_rtp_header(streams *sid, struct iovec *iov, int liov,
         len = 4;
     }
 
-    copy16(rtp_buf, len + 0, (uint16_t)0x8021);
+    copy16(rtp_buf, len + 0, (uint32_t)0x8021);
     copy16(rtp_buf, len + 2, sid->seq);
     copy32(rtp_buf, len + 4, timestamp);
     copy32(rtp_buf, len + 8, sid->ssrc);
