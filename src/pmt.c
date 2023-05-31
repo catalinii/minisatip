@@ -2172,7 +2172,7 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque) {
     set_filter_flags(filter, FILTER_PERMANENT | FILTER_REVERSE | FILTER_CRC);
     sdt_len = (sdt[1] & 0xF) * 256 + sdt[2];
     i = 11;
-    LOGM("Processing SDT for transponder %d (%x) with length %d, sdt[5] "
+    DEBUGM("Processing SDT for transponder %d (%x) with length %d, sdt[5] "
          "%02X",
          tsid, tsid, sdt_len, sdt[5]);
 
@@ -2183,7 +2183,7 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque) {
         desc_loop_len = (b[3] & 0xF) * 256 + b[4];
         desc_loop_len += 5;
         pmt = get_all_pmt_for_sid(ad->id, sid);
-        LOGM("Detected service ID %d (%X) status:%d CA:%d, pos %d len %d", sid,
+        DEBUGM("Detected service ID %d (%X) status:%d CA:%d, pos %d len %d", sid,
              sid, (status >> 1), (status & 0x1), i, desc_loop_len);
         if (!pmt) {
             LOG("%s: no PMT found for sid %d (%X)", __FUNCTION__, sid, sid);
