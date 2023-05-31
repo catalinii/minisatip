@@ -1728,10 +1728,10 @@ static int CIPLUS_APP_LANG_handler(ca_session_t *session, int tag,
     //        if (data_length)
     //                hexdump(data, data_length);
 
-    uint8_t data_reply_lang[3]; // ISO 639 Part 2
-    data_reply_lang[0] = 0x65;  /* e */
-    data_reply_lang[1] = 0x6e;  /* n */
-    data_reply_lang[2] = 0x67;  /* g */
+    uint8_t data_reply_lang[3];    // ISO 639 Part 2
+    data_reply_lang[0] = 0x65;     /* e */
+    data_reply_lang[1] = 0x6e;     /* n */
+    data_reply_lang[2] = 0x67;     /* g */
 
     uint8_t data_reply_country[3]; // ISO 3166-1 alpha 3
     data_reply_country[0] = 0x55;  /* U */
@@ -2700,6 +2700,17 @@ int ca_read_enigma(int socket, void *buf, int len, sockets *ss, int *rb) {
     *rb = 0;
     if (rl > 0) {
         *rb = rl;
+        if (ss->events & ~POLLPRI) {
+            ss->events |= POLLPRI;
+        }
+        return 1;
+    }
+    if (ss->revents == POLLPRI) {
+        ca_device_t *d = ca_devices[ss->sid];
+        if (d->state != CA_STATE_INACTIVE) {
+            d->state = CA_STATE_INACTIVE;
+        }
+        ss->events = POLLIN;
     }
     return 1;
 }
