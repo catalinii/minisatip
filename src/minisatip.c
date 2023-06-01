@@ -139,10 +139,12 @@ int rtsp, http, si, si1, ssdp1;
 #define SENDALLECM_OPT (LONG_OPT_ONLY_START + 2)
 #define SATIPC_RECV_BUFFER_OPT (LONG_OPT_ONLY_START + 3)
 #define CLIENT_SEND_BUFFER_OPT (LONG_OPT_ONLY_START + 4)
+#define ADAPTER_RESTRICTIONS_OPT (LONG_OPT_ONLY_START + 5)
 
 static const struct option long_options[] = {
     {"adapters", required_argument, NULL, ADAPTERS_OPT},
     {"adapter-timeout", required_argument, NULL, ADAPTERTIMEOUT_OPT},
+    {"adapter-restrictions", required_argument, NULL, ADAPTER_RESTRICTIONS_OPT},
     {"app-buffer", required_argument, NULL, APPBUFFER_OPT},
     {"buffer", required_argument, NULL, DVRBUFFER_OPT},
     {"bind", required_argument, NULL, BIND_OPT},
@@ -328,6 +330,10 @@ Help\n\
 * -a --adapters x:y:z simulate x DVB-S2, y DVB-T2 and z DVB-C adapters on this box (0 means auto-detect)\n\
 	* eg: -a 1:2:3  \n\
 	- it will report 1 dvb-s2 device, 2 dvb-t2 devices and 3 dvb-c devices \n\
+\n\
+* --adapter-restrictions ADAPTER1[-END1]:MAX-SERVICES:MAX-PIDS:MAX-BANDWITH[,...]: sets requirements of the adapter\n\
+	* eg: --adapter-restrictions 1-2:8:-1:-1,3:-1:20:-1,4-6:3:20:20000\n\
+\t* Note: -1 indicates no limit (default value for all adapters)\n\
 \n\
 * -G --disable-ssdp disable SSDP announcement\n \
 \n\
@@ -958,6 +964,11 @@ void set_options(int argc, char *argv[]) {
 #endif
         case ADAPTERTIMEOUT_OPT: {
             set_timeout_adapters(optarg);
+            break;
+        }
+
+        case ADAPTER_RESTRICTIONS_OPT: {
+            set_restrictions_adapters(optarg);
             break;
         }
 

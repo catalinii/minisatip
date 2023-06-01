@@ -111,6 +111,10 @@ adapter *adapter_alloc() {
     ad->force_tuner_signal = TUNER_FORCE_NO;
     ad->db_snr_map = 1.0;
 
+    ad->max_services = -1;
+    ad->max_runpids = -1;
+    ad->max_bandwith = -1;
+
     ad->drop_encrypted = opts.drop_encrypted;
 
     if (!ad->buf) {
@@ -560,11 +564,17 @@ void dump_adapters() {
     for (i = 0; i < MAX_ADAPTERS; i++)
         if ((ad = get_adapter_nw(i)))
             LOG("%d|f: %d sid_cnt:%d master_sid:%d master_source:%d del_sys: "
-                "%s,%s,%s %s",
+                "%s,%s,%s %s / services:%d pids:%d bandwith:%d (of MAX %d:%d:%d)",
                 i, ad->tp.freq, ad->sid_cnt, ad->master_sid, ad->master_source,
                 get_delsys(ad->sys[0]), get_delsys(ad->sys[1]),
                 get_delsys(ad->sys[2]),
-                dump_absolute_table(ad, buf, sizeof(buf)));
+                dump_absolute_table(ad, buf, sizeof(buf)),
+                get_channels_for_adapter(ad),
+                ad->active_pids,
+                ad->adapter_dmx_bandwith,
+                ad->max_services,
+                ad->max_runpids,
+                ad->max_bandwith);
     dump_streams();
 }
 
@@ -737,14 +747,16 @@ int get_free_adapter(transponder *tp) {
     for (i = 0; i < MAX_ADAPTERS; i++)
         if ((ad = get_adapter_nw(i)) && delsys_match(ad, msys) &&
             source_enabled_for_adapter(ad, tp))
-            if (!compare_tunning_parameters(ad->id, tp))
+            if (!compare_tunning_parameters(ad->id, tp) &&
+                check_adapter_restrictions(ad, ad->max_services, ad->max_runpids, ad->max_bandwith) > 0)
                 return i;
 
     for (i = 0; i < MAX_ADAPTERS; i++) {
         // first free adapter that has the same msys
         if ((ad = get_adapter_nw(i)) && ad->sid_cnt == 0 &&
             delsys_match(ad, msys) && !compare_slave_parameters(ad, tp) &&
-            source_enabled_for_adapter(ad, tp))
+            source_enabled_for_adapter(ad, tp) &&
+            check_adapter_restrictions(ad, ad->max_services, ad->max_runpids, ad->max_bandwith) > 0)
             return i;
         if (!ad && delsys_match(a[i], msys) &&
             !compare_slave_parameters(a[i], tp)) // device is not initialized
@@ -760,7 +772,8 @@ int get_free_adapter(transponder *tp) {
         // first free slave adapter that has the same msys
         if ((ad = get_adapter_nw(i)) && ad->sid_cnt == 0 &&
             delsys_match(ad, msys) && compare_slave_parameters(ad, tp) &&
-            source_enabled_for_adapter(ad, tp)) {
+            source_enabled_for_adapter(ad, tp) &&
+            check_adapter_restrictions(ad, ad->max_services, ad->max_runpids, ad->max_bandwith) > 0) {
             LOGM("get free adapter found slave adapter %d", i);
             return i;
         }
@@ -1225,6 +1238,23 @@ int compare_tunning_parameters(int aid, transponder *tp) {
         return 1;
 
     return 0;
+}
+
+// It checks the current state of the adapter to grant the required restrictions
+int check_adapter_restrictions(adapter *ad, int services, int pids, int bandwith) {
+    if (!ad)
+        return -1;
+
+    if ((services > 0) && (get_channels_for_adapter(ad) + 1 > services))
+        return 0;
+    if ((pids > 0) && (ad->active_pids + 2 > pids))
+        return 0;
+    if ((bandwith > 0) && (ad->adapter_dmx_bandwith + 1000 > bandwith))
+        return 0;
+
+    LOG("Adapter %d passed check restrictions services:%d pids:%d bandwith:%d", ad->id, services, pids, bandwith);
+
+    return 1;
 }
 
 int set_adapter_parameters(int aid, int sid, transponder *tp) {
@@ -1919,6 +1949,62 @@ void set_timeout_adapters(char *o) {
             ad->adapter_timeout = timeout * 1000;
 
             LOG("Set timeout for adapter %d to %d", j, ad->adapter_timeout);
+        }
+    }
+}
+
+void set_restrictions_adapters(char *o) {
+    int i, la, adap, serv, pids, bandw, range;
+    char buf[strlen(o) + 1], *arg[40], *servs, *pidss, *bandws, *ranges;
+    adapter *ad;
+
+    LOG("Set restrictions for adapter: %s", o);
+
+    safe_strncpy(buf, o);
+    buf[sizeof(buf) - 1] = '\0';
+    la = split(arg, buf, ARRAY_SIZE(arg), ',');
+    for (i = 0; i < la; i++) {
+        servs = strchr(arg[i], ':');
+        if (!servs)
+            continue;
+        servs++;
+        pidss = strchr(servs, ':');
+        if (!pidss)
+            continue;
+        pidss++;
+        bandws = strchr(pidss, ':');
+        if (!bandws)
+            continue;
+        bandws++;
+
+        adap = map_intd(arg[i], NULL, -1);
+        serv = map_intd(servs, NULL, -1);
+        pids = map_intd(pidss, NULL, -1);
+        bandw = map_intd(bandws, NULL, -1);
+
+        range = adap;
+        ranges = strchr(arg[i], '-');
+        if (ranges && ranges < servs) {
+            range = map_intd(ranges + 1, NULL, -1);
+        }
+
+        LOG("Set restrictions for adapter: adap=%d serv=%d pids=%d bandw=%d range=%d", adap,serv,pids,bandw,range);
+
+        if (adap <= 0 || adap > MAX_ADAPTERS)
+            continue;
+        if (range <= 0 || range > MAX_ADAPTERS)
+            continue;
+        while (adap <= range) {
+            if (!a[adap])
+                a[adap] = adapter_alloc();
+            ad = a[adap];
+            ad->max_services = serv;
+            ad->max_runpids = pids;
+            ad->max_bandwith = bandw;
+            ad->id = adap;
+            LOG("%d Setting restrictions to adapter %d : max-services=%d max-pids=%d max-bandwidth=%d",
+                ad->id, adap, ad->max_services, ad->max_runpids, ad->max_bandwith);
+            adap++;
         }
     }
 }

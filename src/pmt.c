@@ -2374,6 +2374,22 @@ char *get_pmt_for_adapter(int aid, char *dest, int max_size) {
     return dest;
 }
 
+int get_channels_for_adapter(adapter *ad) {
+    int i;
+    int num_ch = 0;
+    if (!ad)
+        return num_ch;
+
+    for (i = 0; i < ad->active_pmts; i++) {
+        int p = ad->active_pmt[i];
+        SPMT *pmt = get_pmt(p);
+        if (pmt && pmt->state == PMT_RUNNING)
+            num_ch++;
+    }
+
+    return num_ch;
+}
+
 void free_all_pmts(void) {
     int i;
     for (i = 0; i < MAX_PMT; i++) {
