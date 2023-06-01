@@ -1964,8 +1964,6 @@ void set_restrictions_adapters(char *o) {
     char buf[strlen(o) + 1], *arg[40], *servs, *pidss, *bandws, *ranges;
     adapter *ad;
 
-    LOG("Set restrictions for adapter: %s", o);
-
     safe_strncpy(buf, o);
     buf[sizeof(buf) - 1] = '\0';
     la = split(arg, buf, ARRAY_SIZE(arg), ',');
@@ -1993,8 +1991,6 @@ void set_restrictions_adapters(char *o) {
         if (ranges && ranges < servs) {
             range = map_intd(ranges + 1, NULL, -1);
         }
-
-        LOG("Set restrictions for adapter: adap=%d serv=%d pids=%d bandw=%d range=%d", adap,serv,pids,bandw,range);
 
         if (adap <= 0 || adap > MAX_ADAPTERS)
             continue;
