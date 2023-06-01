@@ -238,10 +238,10 @@ int addr2line(char const *const program_name, void const *const addr) {
 }
 
 void print_trace(void) {
+#if !defined(NO_BACKTRACE)
     void *array[10];
     size_t size;
     size_t i;
-#if !defined(NO_BACKTRACE)
 
     size = backtrace(array, 10);
 
