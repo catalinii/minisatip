@@ -56,6 +56,12 @@
 #include "ddci.h"
 #endif
 
+#ifdef DISABLE_PMT
+int get_channels_for_adapter(adapter *ad) {
+    return 0;
+}
+#endif
+
 #include "t2mi.h"
 
 #define DEFAULT_LOG LOG_ADAPTER
