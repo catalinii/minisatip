@@ -209,8 +209,13 @@ int detect_dvb_parameters(char *s, transponder *tp) {
             tp->gi = map_int(arg[i] + 3, fe_gi);
         if (strncmp("tmode=", arg[i], 6) == 0)
             tp->tmode = map_int(arg[i] + 6, fe_tmode);
-        if (strncmp("bw=", arg[i], 3) == 0)
+        if (strncmp("bw=", arg[i], 3) == 0) {
             tp->bw = map_float(arg[i] + 3, 1000000);
+            if (tp->bw < 0 || tp->bw > 100000000)  // Fix clients that send bw=8000 !
+                tp->bw = map_float(arg[i] + 3, 1000);
+            if (tp->bw < 0 || tp->bw > 100000000)  // Fix clients that send bw=8000000 !
+                tp->bw = map_float(arg[i] + 3, 1);
+        }
         if (strncmp("specinv=", arg[i], 8) == 0)
             tp->inversion = map_int(arg[i] + 8, NULL);
         if (strncmp("c2tft=", arg[i], 6) == 0)
