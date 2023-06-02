@@ -650,7 +650,7 @@ char *cw_to_string(SCW *cw, char *buf) {
 }
 
 void clear_cw_for_pmt(int master_pmt, int parity) {
-    int i, dcw = 0;
+    int i;
     int64_t ctime = getTick();
     for (i = 0; i < ncws; i++)
         if (cws[i] && cws[i]->enabled && cws[i]->pmt == master_pmt &&
@@ -660,7 +660,6 @@ void clear_cw_for_pmt(int master_pmt, int parity) {
             if (cws[i]->op->stop_cw)
                 cws[i]->op->stop_cw(cws[i], get_pmt(master_pmt));
             cws[i]->enabled = 0;
-            dcw++;
         }
     i = MAX_CW;
     while (--i >= 0)
@@ -1111,7 +1110,7 @@ void start_active_pmts(adapter *ad) {
     memset(pids, 0, sizeof(pids));
 
     for (i = 0; i < MAX_PIDS; i++)
-        if ((ad->pids[i].flags == 1)) {
+        if (ad->pids[i].flags == 1) {
             pids[ad->pids[i].pid] = ad->pids + i;
         }
     for (i = 0; i < ad->active_pmts; i++) {
