@@ -1139,7 +1139,7 @@ int calculate_bw(sockets *s) {
                     ad->local_bw_dmx  = 0;
 #undef DEFAULT_LOG
 #define DEFAULT_LOG LOG_ADAPTER
-                    LOGM("BW adapter %d: %d KB/s", ad->id, ad->adapter_dmx_bandwith);
+                    LOGM("BW of adapter %d: %d KB/s", ad->id, ad->adapter_dmx_bandwith);
 #undef DEFAULT_LOG
 #define DEFAULT_LOG LOG_STREAM
                 }
