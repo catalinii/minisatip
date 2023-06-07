@@ -69,12 +69,6 @@ int nfilters;
 char *listmgmt_str[] = {"CLM_MORE", "CLM_FIRST", "CLM_LAST",
                         "CLM_ONLY", "CLM_ADD",   "CLM_UPDATE"};
 
-static inline SCW *get_cw(int id) {
-    if (id < 0 || id >= MAX_CW || !cws[id] || !cws[id]->enabled)
-        return NULL;
-    return cws[id];
-}
-
 static inline SPMT *get_pmt_for_existing_pid(SPid *p) {
     SPMT *pmt = NULL;
     if (p && p->pmt >= 0 && p->pmt < npmts && pmts[p->pmt] &&
@@ -104,70 +98,6 @@ static inline int get_has_pcr(uint8_t *b) {
         return 1;
 }
 
-static inline int get_has_pusi(uint8_t *b) {
-    if ((b[1] & 0x40) == 0)
-        return 0;
-    else
-        return 1;
-}
-
-static inline int get_has_pes_header(uint8_t *b) {
-    if (!get_has_pusi(b))
-        return 0;
-
-    // Check it's not scrambled and it has payload
-    if ((b[3] & 0xd0) != 0x10)
-        return 0;
-
-    // Check if payload is a PES Header
-    int pesheader = get_adaptation_len(b);
-    if (b[pesheader] != 0x00 || b[pesheader + 1] != 0x00 ||
-        b[pesheader + 2] != 0x01)
-        return 0;
-
-    return pesheader;
-}
-
-static inline int get_streamid(uint8_t *b) {
-    int pesheader = get_has_pes_header(b);
-    if (pesheader == 0)
-        return 0;
-
-    return b[pesheader + 3];
-}
-
-static inline uint64_t get_pts_dts(uint8_t *b) {
-    int pesheader = get_has_pes_header(b);
-    if (pesheader == 0)
-        return 0;
-
-    uint64_t tts = 0xFFFFFFFFFFFFFFFF;
-
-    if ((b[pesheader + 7] & 0x80) != 0x80) // No PTS or DTS indicator
-        return tts;
-
-    int offset = pesheader + 9; // PTS position
-
-    if ((b[pesheader + 7] & 0xc0) == 0xc0) {
-        // PTS and DTS present, get DTS as packet time instead of PTS
-        offset += 5;
-    }
-
-    // LOGM("pmt: PTS detection: pesheader=%d,offset=%d %2x %2x,%2x %2x,%2x",
-    // pesheader,offset,b[offset+0],b[offset+1],b[offset+2],b[offset+3],b[offset+4]);
-    tts = (b[offset + 0] & 0x0e) >> 1;
-    tts <<= 8;
-    tts |= b[offset + 1];
-    tts <<= 7;
-    tts |= (b[offset + 2] & 0xfe) >> 1;
-    tts <<= 8;
-    tts |= b[offset + 3];
-    tts <<= 7;
-    tts |= (b[offset + 4] & 0xfe) >> 1;
-
-    return tts;
-}
-
 static inline void mark_pid_null(uint8_t *b) {
     b[1] |= 0x1F;
     b[2] |= 0xFF;
@@ -177,7 +107,7 @@ static inline void
 mark_padding_header(uint8_t *b) { // Generate a clean packet without any payload
     if ((b[3] & 0x10) == 0)       // No Payload...
     {
-        b[3] &= 0x3F; // clean encrypted bits and pass it
+        b[3] &= 0x3F;             // clean encrypted bits and pass it
         return;
     }
 
@@ -2172,8 +2102,8 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque) {
     sdt_len = (sdt[1] & 0xF) * 256 + sdt[2];
     i = 11;
     DEBUGM("Processing SDT for transponder %d (%x) with length %d, sdt[5] "
-         "%02X",
-         tsid, tsid, sdt_len, sdt[5]);
+           "%02X",
+           tsid, tsid, sdt_len, sdt[5]);
 
     for (i = 11; i < sdt_len - 1; i += desc_loop_len) {
         b = sdt + i;
@@ -2182,8 +2112,8 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque) {
         desc_loop_len = (b[3] & 0xF) * 256 + b[4];
         desc_loop_len += 5;
         pmt = get_all_pmt_for_sid(ad->id, sid);
-        DEBUGM("Detected service ID %d (%X) status:%d CA:%d, pos %d len %d", sid,
-             sid, (status >> 1), (status & 0x1), i, desc_loop_len);
+        DEBUGM("Detected service ID %d (%X) status:%d CA:%d, pos %d len %d",
+               sid, sid, (status >> 1), (status & 0x1), i, desc_loop_len);
         if (!pmt) {
             LOG("%s: no PMT found for sid %d (%X)", __FUNCTION__, sid, sid);
             continue;
@@ -2316,12 +2246,13 @@ int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf, int ca_id) {
     int i, len = 0;
     for (i = 0; i < pmt->caids; i++) {
 #ifndef DISABLE_TABLES
-        if (!match_ca_caid(ca_id, pmt->adapter, pmt->ca[i].id)){
-            LOGM("SCA %d cannot handle CAID %04X, skipping", ca_id, pmt->ca[i].id);
+        if (!match_ca_caid(ca_id, pmt->adapter, pmt->ca[i].id)) {
+            LOGM("SCA %d cannot handle CAID %04X, skipping", ca_id,
+                 pmt->ca[i].id);
             continue;
         }
 #endif
-	int private_data_len = pmt->ca[i].private_data_len;
+        int private_data_len = pmt->ca[i].private_data_len;
         buf[len] = 0x09;
         buf[len + 1] = 0x04 + private_data_len;
         copy16(buf, len + 2, pmt->ca[i].id);

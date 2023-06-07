@@ -20,7 +20,7 @@ jobs:
     - name: Install build essentials
       run: |
         apt-get -y update
-        apt-get -y install build-essential
+        DEBIAN_FRONTEND=noninteractive apt-get -y install build-essential git clang
 
     - name: Build all disabled
       run: |
@@ -29,12 +29,21 @@ jobs:
 
     - name: Install additional build dependencies
       run: |
-        apt-get -y install libdvbcsa-dev libssl-dev
+        DEBIAN_FRONTEND=noninteractive apt-get -y install libdvbcsa-dev libssl-dev zlib1g-dev libxml2-dev
+        git clone https://github.com/vdr-projects/libnetceiver/
+        cd libnetceiver/ && make install
+        cd ..
 
     - name: Build all enabled
       run: |
        make clean
-       ./configure --enable-linuxdvb --enable-dvbca --enable-dvbcsa --enable-netcv --enable-satipc --enable-dvbapi --enable-axe
+       ./configure --enable-linuxdvb --enable-dvbca --enable-dvbcsa --enable-netcv --enable-dvbapi --enable-axe
+       make
+
+    - name: Build clang
+      run: |
+       make clean
+       ./configure --enable-linuxdvb --enable-dvbca --enable-dvbcsa --enable-netcv --enable-dvbapi --enable-axe CC=clang
        make
 
     - name: Build with --enable-axe, without libssl-dev
