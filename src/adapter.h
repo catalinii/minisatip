@@ -183,7 +183,7 @@ void set_signal_multiplier(char *o);
 int signal_thread(sockets *s);
 int close_adapter_for_socket(sockets *s);
 int compare_tunning_parameters(int aid, transponder *tp);
-int check_adapter_restrictions(adapter *ad, int services, int pids, int bandwith);
+int check_adapter_restrictions(adapter *ad);
 void request_adapter_close(adapter *ad);
 int compare_slave_parameters(adapter *ad, transponder *tp);
 int get_absolute_source_for_adapter(int aid, int src, int sys);

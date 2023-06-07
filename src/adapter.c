@@ -56,12 +56,6 @@
 #include "ddci.h"
 #endif
 
-#ifdef DISABLE_PMT
-int get_channels_for_adapter(adapter *ad) {
-    return 0;
-}
-#endif
-
 #include "t2mi.h"
 
 #define DEFAULT_LOG LOG_ADAPTER
@@ -575,7 +569,11 @@ void dump_adapters() {
                 get_delsys(ad->sys[0]), get_delsys(ad->sys[1]),
                 get_delsys(ad->sys[2]),
                 dump_absolute_table(ad, buf, sizeof(buf)),
+#ifndef DISABLE_PMT
                 get_channels_for_adapter(ad),
+#else
+                -1,
+#endif
                 ad->active_pids,
                 ad->adapter_dmx_bandwith,
                 ad->max_services,
@@ -754,7 +752,7 @@ int get_free_adapter(transponder *tp) {
         if ((ad = get_adapter_nw(i)) && delsys_match(ad, msys) &&
             source_enabled_for_adapter(ad, tp))
             if (!compare_tunning_parameters(ad->id, tp) &&
-                check_adapter_restrictions(ad, ad->max_services, ad->max_runpids, ad->max_bandwith) > 0)
+                check_adapter_restrictions(ad) > 0)
                 return i;
 
     for (i = 0; i < MAX_ADAPTERS; i++) {
@@ -762,7 +760,7 @@ int get_free_adapter(transponder *tp) {
         if ((ad = get_adapter_nw(i)) && ad->sid_cnt == 0 &&
             delsys_match(ad, msys) && !compare_slave_parameters(ad, tp) &&
             source_enabled_for_adapter(ad, tp) &&
-            check_adapter_restrictions(ad, ad->max_services, ad->max_runpids, ad->max_bandwith) > 0)
+            check_adapter_restrictions(ad) > 0)
             return i;
         if (!ad && delsys_match(a[i], msys) &&
             !compare_slave_parameters(a[i], tp)) // device is not initialized
@@ -779,7 +777,7 @@ int get_free_adapter(transponder *tp) {
         if ((ad = get_adapter_nw(i)) && ad->sid_cnt == 0 &&
             delsys_match(ad, msys) && compare_slave_parameters(ad, tp) &&
             source_enabled_for_adapter(ad, tp) &&
-            check_adapter_restrictions(ad, ad->max_services, ad->max_runpids, ad->max_bandwith) > 0) {
+            check_adapter_restrictions(ad) > 0) {
             LOGM("get free adapter found slave adapter %d", i);
             return i;
         }
@@ -1247,18 +1245,20 @@ int compare_tunning_parameters(int aid, transponder *tp) {
 }
 
 // It checks the current state of the adapter to grant the required restrictions
-int check_adapter_restrictions(adapter *ad, int services, int pids, int bandwith) {
+int check_adapter_restrictions(adapter *ad) {
     if (!ad)
         return -1;
 
-    if ((services > 0) && (get_channels_for_adapter(ad) + 1 > services))
+#ifndef DISABLE_PMT
+    if ((ad->max_services > 0) && (get_channels_for_adapter(ad) + 1 > ad->max_services))
         return 0;
-    if ((pids > 0) && (ad->active_pids + 2 > pids))
+#endif
+    if ((ad->max_runpids  > 0) && (ad->active_pids + 2 > ad->max_runpids))
         return 0;
-    if ((bandwith > 0) && (ad->adapter_dmx_bandwith + 1000 > bandwith))
+    if ((ad->max_bandwith > 0) && (ad->adapter_dmx_bandwith + 1000 > ad->max_bandwith))
         return 0;
 
-    LOG("Adapter %d passed check restrictions services:%d pids:%d bandwith:%d", ad->id, services, pids, bandwith);
+    LOG("Adapter %d passed check restrictions services:%d pids:%d bandwith:%d", ad->id, ad->max_services, ad->max_runpids, ad->max_bandwith);
 
     return 1;
 }
