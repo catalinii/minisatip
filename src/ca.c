@@ -2483,9 +2483,7 @@ int ca_write_apdu(ca_session_t *s, int tag, const void *data, int len) {
 
 // reads a TPDU from the CAM. This is called only on DVBCA path
 int ca_read_tpdu(int socket, void *buf, int buf_len, sockets *ss, int *rb) {
-    static int i;
     ca_device_t *c = ca_devices[ss->sid];
-    i += 1;
     *rb = 0;
     uint8_t data[4096];
     int len;

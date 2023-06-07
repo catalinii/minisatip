@@ -28,6 +28,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include "utils/alloc.h"
 
 #define DEFAULT_LOG LOG_NETCEIVER
 

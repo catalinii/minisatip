@@ -13,24 +13,6 @@ AC_PROG_CC
 # FIXME: Replace `main' with a function in `-lrt':
 AC_CHECK_LIB([rt], [main])
 
-# Checks for header files.
-AC_CHECK_HEADERS([arpa/inet.h fcntl.h netdb.h netinet/in.h stdint.h stdlib.h string.h sys/ioctl.h sys/socket.h sys/time.h syslog.h unistd.h])
-
-# Checks for typedefs, structures, and compiler characteristics.
-AC_TYPE_INT16_T
-AC_TYPE_INT64_T
-AC_TYPE_INT8_T
-AC_TYPE_SIZE_T
-AC_TYPE_UINT16_T
-AC_TYPE_UINT32_T
-AC_TYPE_UINT64_T
-AC_TYPE_UINT8_T
-
-# Checks for library functions.
-AC_FUNC_MALLOC
-AC_FUNC_MMAP
-AC_CHECK_FUNCS([bzero clock_gettime dup2 gethostbyname gettimeofday inet_ntoa memset munmap socket strchr strerror strncasecmp strstr])
-
 FM="\nminisatip configuration\n\n"
 linux_dvb="Linux DVB:\t\t\t\t "
 dvb_csa="DVBCSA (needs libdvbcsa):\t\t "
@@ -114,24 +96,17 @@ AC_ARG_ENABLE([netcv],
 AS_IF([test "x$enable_netcv" != "xno"], [
 AC_MSG_NOTICE([ == Checking NETCVCLIENT == ])
 
-mcli_dir="../../vdr-mcli-plugin"
 xml2_dir="/usr/include/libxml2"
-
-AC_ARG_WITH([mcli],
-  [AS_HELP_STRING([--with-mcli],
-  [specify vdr-mcli-plugin directory default=../../vdr-mcli-plugin])],
-  [mcli_dir=$with_mcli])
 
 AC_ARG_WITH([xml2],
   [AS_HELP_STRING([--with-xml2],
   [specify libxml2 directory default=/usr/include/libxml2])],
   [xml2_dir=$with_xml2])
   
-CFLAGS="-I. -I$mcli_dir/mcast/client -I$mcli_dir/mcast/common -L$mcli_dir/mcast/client -I$xml2_dir"
-CPPFLAGS="-I. -I$mcli_dir/mcast/client -I$mcli_dir/mcast/common -L$mcli_dir/mcast/client -I$xml2_dir"
+CFLAGS="-I$xml2_dir"
 
 cd src
-AC_CHECK_HEADERS([netceiver.h],[NETCVCLIENT=1],[NETCVCLIENT=0])
+AC_CHECK_HEADERS([libnetceiver/netcv/headers.h],[NETCVCLIENT=1],[NETCVCLIENT=0])
 cd ..
 ])
 
