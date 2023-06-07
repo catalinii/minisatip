@@ -972,8 +972,10 @@ int process_dmx(sockets *s) {
     ad->rtime = s->rtime;
     ad->rlen = rlen;
     stime = getTickUs();
-    if (ad->type != ADAPTER_CI)
+    if (ad->type != ADAPTER_CI) {
         bw_dmx += rlen;
+        ad->local_bw_dmx += rlen;
+    }
 
     LOGM("process_dmx start called for adapter %d -> %d out of %d bytes read, "
          "%jd ms ago",
@@ -1096,6 +1098,9 @@ int read_dmx(sockets *s) {
 
 int calculate_bw(sockets *s) {
     int64_t c_time = getTick();
+    int i;
+    streams *sid;
+    adapter *ad;
 
     s->rtime = c_time;
     if (bwtt > c_time)
@@ -1125,6 +1130,21 @@ int calculate_bw(sockets *s) {
                 c_failed_writes, c_tt);
             mutex_unlock(&bw_mutex);
         }
+
+        for (i = 0; i < MAX_STREAMS; i++)
+            if ((sid = get_sid_nw(i))) {
+                ad = get_adapter_nw(sid->adapter);
+                if (ad && ad->local_bw_dmx > 0) {
+                    ad->adapter_dmx_bandwith = ad->local_bw_dmx / 1024;
+                    ad->local_bw_dmx  = 0;
+#undef DEFAULT_LOG
+#define DEFAULT_LOG LOG_ADAPTER
+                    LOGM("BW adapter %d: %d KB/s", ad->id, ad->adapter_dmx_bandwith);
+#undef DEFAULT_LOG
+#define DEFAULT_LOG LOG_STREAM
+                }
+            }
+
         bw = 0;
         bw_dmx = 0;
         failed_writes = 0;

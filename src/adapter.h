@@ -90,7 +90,8 @@ struct struct_adapter {
     int active_pids, max_active_pids, max_pids;
     int active_demux_pids;
     int active_services;
-    int adapter_dmx_bandwith; // TODO: pending to calculate!
+    int adapter_dmx_bandwith; // Current bandwith in KB/s
+    int64_t local_bw_dmx;
     int max_services, max_runpids, max_bandwith;
     int is_t2mi;
     uint64_t tune_time;

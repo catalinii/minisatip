@@ -1255,7 +1255,7 @@ int check_adapter_restrictions(adapter *ad) {
 #endif
     if ((ad->max_runpids  > 0) && (ad->active_pids + 2 > ad->max_runpids))
         return 0;
-    if ((ad->max_bandwith > 0) && (ad->adapter_dmx_bandwith + 1000 > ad->max_bandwith))
+    if ((ad->max_bandwith > 0) && ((ad->adapter_dmx_bandwith * 8) + 1000 > ad->max_bandwith))
         return 0;
 
     LOG("Adapter %d passed check restrictions services:%d pids:%d bandwith:%d", ad->id, ad->max_services, ad->max_runpids, ad->max_bandwith);
