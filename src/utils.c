@@ -826,11 +826,8 @@ int get_random(unsigned char *dest, int len) {
 }
 
 void _strncpy(char *a, char *b, int n) {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wstringop-truncation"
     strncpy(a, b, n);
     a[n - 1] = 0;
-#pragma GCC diagnostic pop
 }
 
 /*

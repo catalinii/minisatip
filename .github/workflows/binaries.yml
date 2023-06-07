@@ -1,9 +1,9 @@
 name: Binaries
 on:
   push:
-    branches: [ master ]
+    branches: [ master, next ]
   pull_request:
-    branches: [ master ]
+    branches: [ master, next ]
 
 jobs:
   build:
@@ -16,29 +16,29 @@ jobs:
         fetch-depth: '0'
     - name: Build x64
       run: |
-       ./configure --enable-static
+       ./configure --enable-static CC="clang -static" --disable-netcv
        make DDCI=1
        zip -9 -r /minisatip_x64.zip minisatip html
 
     - name: Build ARM
       run: |
        make clean
-       ./configure --enable-static --host=arm-linux-gnueabihf
+       ./configure --disable-netcv --enable-static --host=arm-linux-gnueabihf CC="clang -target arm-linux-gnueabihf -static"
        make
        zip -9 -r /minisatip_arm.zip minisatip html
 
     - name: Build AXE
       run: |
        make clean
-       ./configure --disable-dvbapi --enable-static --host=sh4-linux --disable-dvbaes --disable-dvbca --enable-axe
+       ./configure --disable-netcv --disable-dvbapi --enable-static --host=sh4-linux --disable-dvbaes --disable-dvbca --enable-axe
        make PMT=0
        zip -9 -r /minisatip_axe.zip minisatip html
 
     - name: Build MIPS
       run: |
        make clean
-       ./configure --enable-static --host=mipsel-tuxbox-linux-gnu
-       make
+       ./configure --disable-netcv --enable-static --host=mipsel-linux-gnu CC="zig cc -target mipsel-linux-gnueabihf.2.34 -static"
+       make EXTRA_CFLAGS="-I/sysroot/mipsel/include -L/sysroot/mipsel/lib" EMBEDDED=1
        zip -9 -r /minisatip_mips.zip minisatip html
 
 
