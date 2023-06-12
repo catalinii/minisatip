@@ -1439,6 +1439,16 @@ char uuid[50];
 int uuidi;
 USockAddr ssdp_sa;
 
+void generate_uuid() {
+    char mac[15] = "00000000000000";
+    char uuid1[] = "11223344-9999-0000-b7ae";
+    if (uuidi == 0) {
+        uuidi = 1;
+        get_mac_address(mac);
+        sprintf(uuid, "%s-%s", uuid1, mac);
+    }
+}
+
 int read_http(sockets *s) {
     char *arg[50];
     char buf[2000]; // the XML should not be larger than 1400 as it will create
@@ -1550,6 +1560,8 @@ int read_http(sockets *s) {
 
     if (uuidi == 0 && !opts.disable_ssdp)
         ssdp_discovery(s);
+    else
+        generate_uuid();
 
     if (strcmp(arg[1], "/" DESC_XML) == 0) {
         extern int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2, tuner_at,
@@ -1670,18 +1682,15 @@ int close_http(sockets *s) {
 #define DEFAULT_LOG LOG_SSDP
 
 int ssdp_notify(sockets *s, int alive) {
-    char buf[500], mac[15] = "00000000000000";
+    char buf[500];
     char nt[3][60];
     int ptr = 0;
     char *op = alive ? "Discovery" : "ByeBye";
 
-    char uuid1[] = "11223344-9999-0000-b7ae";
     int i;
     s->wtime = getTick();
     if (uuidi == 0) {
-        uuidi = 1;
-        get_mac_address(mac);
-        sprintf(uuid, "%s-%s", uuid1, mac);
+        generate_uuid();
         // use IPv4 only as disc_host is multicast IPv4
         fill_sockaddr(&ssdp_sa, opts.disc_host, 1900, 1);
     }
@@ -1939,7 +1948,8 @@ int main(int argc, char *argv[]) {
                           (socket_action)ssdp_discovery);
         if (si < 0 || si1 < 0)
             FAIL("sockets_add failed for ssdp");
-    }
+    } else
+        generate_uuid();
 
     sockets_timeout(si, 60 * 1000);
     set_sockets_rtime(si, -60 * 1000);
