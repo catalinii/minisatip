@@ -79,6 +79,7 @@ int ci_number;
 int logging = 0;
 char logfile[256];
 int extract_ci_cert = 0;
+int has_ci = 0;
 
 uint32_t datatype_sizes[MAX_ELEMENTS] = {
     0,   50,  0,  0, 0, 8,  8,  0, 0, 0, 0,  0, 32, 256, 256, 0, 0,
@@ -496,11 +497,6 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
     SPMT *first = NULL;
 
     if (opts.enigma) {
-        // detach the CI from the previous adapter
-        if (d->linked_adapter != ad->id) {
-            set_tuner_input(-1, d->linked_adapter);
-        }
-
         // enigma allows attaching the CI to the adapter that needs it
         d = find_dvbca_for_pmt(spmt);
         if (!d) {
@@ -510,6 +506,10 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
                 return TABLES_RESULT_ERROR_NORETRY;
         }
 
+        // detach the CI from the previous adapter
+        if (d->linked_adapter != ad->id) {
+            set_tuner_input(-1, d->linked_adapter);
+        }
         set_tuner_input(d->id, ad->id);
         set_input_ci(d->id, ad->id);
         d->linked_adapter = ad->id;
@@ -2717,8 +2717,7 @@ int ca_read_enigma(int socket, void *buf, int len, sockets *ss, int *rb) {
 int ca_init_enigma(ca_device_t *d) {
     int fd = d->fd;
 
-    if (ioctl(fd, 0))
-        LOG("CA %d reset failed", d->id);
+    ioctl(fd, 0);
 
     d->sock = sockets_add(fd, NULL, d->id, TYPE_TCP, (socket_action)ca_read,
                           (socket_action)ca_close, (socket_action)ca_timeout);
@@ -2827,10 +2826,16 @@ int dvbca_init_dev(adapter *ad) {
         sprintf(ca_dev_path, "/dev/ci%d", ad->id);
     }
     fd = open(ca_dev_path, O_RDWR);
-    if (fd < 0)
+    if (fd < 0) {
+        if (opts.enigma && has_ci) {
+            LOG_AND_RETURN(TABLES_RESULT_OK,
+                           "No CA device detected on adapter %d: enabling "
+                           "already registered CAs");
+        }
         LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
                        "No CA device detected on adapter %d: file %s", ad->id,
                        ca_dev_path);
+    }
     flush_handle(fd);
     if (!c) {
         c = ca_devices[ad->id] = alloc_ca_device();
@@ -2866,6 +2871,8 @@ int dvbca_init_dev(adapter *ad) {
         ca_request_close(c);
         return TABLES_RESULT_ERROR_NORETRY;
     }
+
+    has_ci = 1;
 
     set_socket_thread(c->sock, ad->thread);
     return TABLES_RESULT_OK;
