@@ -6,7 +6,7 @@
 #define API_SOCK
 #ifndef DISABLE_LINUXDVB
 #undef AOT_CA_PMT
-#include "headers.h"
+#include "libnetceiver/netcv/headers.h"
 #else
 #include "netceiver_mcli_defs.h"
 #endif

@@ -104,7 +104,7 @@ endif
 
 ifeq ($(NETCVCLIENT),1)
 SOURCES+=netceiver.c
-LDFLAGS+=-lmcli -lxml2
+LDFLAGS+=-lnetceiver -lxml2
 else
 CFLAGS+=-DDISABLE_NETCVCLIENT
 endif
@@ -136,7 +136,6 @@ CFLAGS-$(DEBUG) += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -f
 
 
 ifeq ($(STATIC),1)
-	CFLAGS+=-static
 	LDFLAGS+=$(addsuffix .a,$(addprefix -l:lib,$(LIBS)))
 else
 	LDFLAGS+=$(addprefix -l,$(LIBS))

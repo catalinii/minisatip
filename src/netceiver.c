@@ -338,7 +338,7 @@ int netcv_tune(int aid, transponder *tp) {
         return 1;
 
     SN->want_tune =
-        1; // we do not tune right now, just set the flag for netcv_commit
+        1;      // we do not tune right now, just set the flag for netcv_commit
     SN->want_commit = 0;
     SN->lp = 0; // make sure number of active pids is 0 after tuning
     return 0;

@@ -265,7 +265,7 @@ int test_push_ts_to_ddci() {
 int test_copy_ts_from_ddci() {
     ddci_device_t d;
     ddci_mapping_table_t *m;
-    adapter ad;
+    adapter ad, ad0;
     uint8_t buf[188 * 10], buf2[188 * 10];
     memset(&d, 0, sizeof(d));
     memset(buf, 0, sizeof(buf));
@@ -278,6 +278,7 @@ int test_copy_ts_from_ddci() {
     ddci_devices[0] = &d;
 
     create_adapter(&ad, 1);
+    create_adapter(&ad0, 0);
     ad.buf = buf2;
     ad.lbuf = sizeof(buf2);
     int pid = 1000;
@@ -344,7 +345,7 @@ int test_ddci_process_ts() {
     ddci_device_t d;
     uint8_t buf[188 * 10];
     int i;
-    adapter ad;
+    adapter ad, ad0;
     memset(&d, 0, sizeof(d));
     memset(buf, 0, sizeof(buf));
     d.id = 0;
@@ -354,6 +355,7 @@ int test_ddci_process_ts() {
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[0] = &d;
     mutex_init(&d.mutex);
+    create_adapter(&ad0, 0);
     create_adapter(&ad, 1);
     ad.buf = buf;
     ad.lbuf = sizeof(buf);
@@ -498,6 +500,8 @@ int test_create_pmt() {
     pmt.stream_pid[1].type = 3;
     pmt.stream_pid[1].pid = 0x55;
     ddci_pmt_t dp = {.ver = 0, .pcr_pid = 8191};
+    ca_devices[0] = NULL;
+    ca_devices[1] = NULL;
 
     psi_len = ddci_create_pmt(&d, &pmt, psi, sizeof(psi), &dp);
     cc = 1;
