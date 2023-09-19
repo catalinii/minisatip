@@ -27,6 +27,7 @@
 #include <time.h>
 #include <unistd.h>
 // #include <linux/ioctl.h>
+#include "utils/alloc.h"
 #include <sys/ioctl.h>
 
 #include "adapter.h"
@@ -73,7 +74,7 @@ char fe_map[2 * MAX_ADAPTERS];
 void find_dvb_adapter(adapter **a);
 
 adapter *adapter_alloc() {
-    adapter *ad = malloc1(sizeof(adapter));
+    adapter *ad = _malloc(sizeof(adapter));
     memset(ad, 0, sizeof(adapter));
 
     /* diseqc setup */
@@ -119,14 +120,13 @@ adapter *adapter_alloc() {
 
     if (!ad->buf) {
         ad->lbuf = opts.adapter_buffer;
-        ad->buf = malloc1(ad->lbuf + 10);
+        ad->buf = _malloc(ad->lbuf + 10);
     }
 
 #ifndef DISABLE_PMT
     // filter for pid 0
     ad->pat_filter = -1;
     ad->sdt_filter = -1;
-    ad->cache_pmts = 1;
 #endif
     return ad;
 }
@@ -321,6 +321,7 @@ int init_hw(int i) {
     ad->threshold = opts.udp_threshold;
     ad->updating_pids = 0;
     ad->wait_new_stream = 0;
+    ad->pids_updates = 0;
     ad->rtime = getTick();
     adapter_set_dvr(ad);
     snprintf(ad->name, sizeof(ad->name), "AD%d", i);
@@ -445,7 +446,6 @@ int close_adapter(int na) {
         set_sockets_sid(sock, -1);
     }
     mutex_destroy(&ad->mutex);
-    //      if(a[na]->buf)free1(a[na]->buf);a[na]->buf=NULL;
     LOG("done closing adapter %d", na);
     for (i = 0; i < MAX_ADAPTERS; i++)
         if (a[i] && (a[i]->master_source == ad->id) && ad->enabled &&
@@ -600,15 +600,17 @@ void dump_pids(int aid) {
                     "pids: %d",
                     aid, p->pid_err);
             dp = 0;
-            LOG("pid %d, fd %d, packets %d, d/c errs %d/%d, flags %d, pmt %d, "
+            LOG("pid %d, fd %d, packets %d, d/c/c2 errs %d/%d/%d, flags %d, "
+                "pmt %d, "
                 "filter "
-                "%d, sock %d, sids: %d %d %d %d %d %d %d %d",
+                "%d, sock %d, p2 %d, sids: %d %d %d %d %d %d %d %d",
                 p->pids[i].pid, p->pids[i].fd, p->pids[i].packets,
-                p->pids[i].dec_err, p->pids[i].cc_err, p->pids[i].flags,
-                p->pids[i].pmt, p->pids[i].filter, p->pids[i].sock,
-                p->pids[i].sid[0], p->pids[i].sid[1], p->pids[i].sid[2],
-                p->pids[i].sid[3], p->pids[i].sid[4], p->pids[i].sid[5],
-                p->pids[i].sid[6], p->pids[i].sid[7]);
+                p->pids[i].dec_err, p->pids[i].cc_err, p->pids[i].cc_err2,
+                p->pids[i].flags, p->pids[i].pmt, p->pids[i].filter,
+                p->pids[i].sock, p->pids[i].packets2, p->pids[i].sid[0],
+                p->pids[i].sid[1], p->pids[i].sid[2], p->pids[i].sid[3],
+                p->pids[i].sid[4], p->pids[i].sid[5], p->pids[i].sid[6],
+                p->pids[i].sid[7]);
         }
 }
 
@@ -724,13 +726,13 @@ int get_free_adapter(transponder *tp) {
         fe = -1;
 
     if (ad)
-        LOG("get free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d src:%d f:%d "
+        LOG("get _free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d src:%d f:%d "
             "pol=%d sys: %s %s",
             tp->fe, ad->id, ad->enabled, ad->master_sid, ad->sid_cnt,
             ad->tp.diseqc, ad->tp.freq, ad->tp.pol, get_delsys(ad->sys[0]),
             get_delsys(ad->sys[1]))
     else
-        LOG("get free adapter %d msys %s requested %s", fe, get_delsys(fe),
+        LOG("get _free adapter %d msys %s requested %s", fe, get_delsys(fe),
             get_delsys(msys));
 
     dump_adapters();
@@ -756,7 +758,7 @@ int get_free_adapter(transponder *tp) {
                 return i;
 
     for (i = 0; i < MAX_ADAPTERS; i++) {
-        // first free adapter that has the same msys
+        // first _free adapter that has the same msys
         if ((ad = get_adapter_nw(i)) && ad->sid_cnt == 0 &&
             delsys_match(ad, msys) && !compare_slave_parameters(ad, tp) &&
             source_enabled_for_adapter(ad, tp) &&
@@ -773,12 +775,12 @@ int get_free_adapter(transponder *tp) {
 
     // No regular tuners available, check for slave tuners
     for (i = 0; i < MAX_ADAPTERS; i++) {
-        // first free slave adapter that has the same msys
+        // first _free slave adapter that has the same msys
         if ((ad = get_adapter_nw(i)) && ad->sid_cnt == 0 &&
             delsys_match(ad, msys) && compare_slave_parameters(ad, tp) &&
             source_enabled_for_adapter(ad, tp) &&
             check_adapter_restrictions(ad) > 0) {
-            LOGM("get free adapter found slave adapter %d", i);
+            LOGM("get _free adapter found slave adapter %d", i);
             return i;
         }
     }
@@ -835,6 +837,15 @@ int set_adapter_for_stream(int sid, int aid) {
     return 0;
 }
 
+void adapter_commit(adapter *ad) {
+    if (!ad->commit)
+        return;
+    if (!ad->pids_updates)
+        return;
+    ad->pids_updates = 0;
+    ad->commit(ad);
+}
+
 void close_adapter_for_stream(int sid, int aid, int close_stream) {
     adapter *ad;
     streams *s = get_sid(sid);
@@ -861,23 +872,23 @@ void close_adapter_for_stream(int sid, int aid, int close_stream) {
     if (ad->sid_cnt == 0) {
         ad->master_sid = -1;
         mark_pids_deleted(aid, -1, NULL);
-        init_dvb_parameters(&ad->tp);
         if (ad->standby && close_stream)
             ad->standby(ad);
-#ifdef AXE
-        free_axe_input(ad);
-#endif
+        init_dvb_parameters(&ad->tp);
+
         if ((ad->master_source >= 0) && (ad->master_source < MAX_ADAPTERS)) {
             adapter *ad2 = a[ad->master_source];
             if (ad2)
                 ad2->used &= ~(1ULL << ad->id);
-            LOGM("adapter %d freed from slave adapter %d, used %jd",
+            LOGM("adapter %d _freed from slave adapter %d, used %jd",
                  ad2 ? ad2->id : -1, ad->id, ad2 ? ad2->used : -1);
         }
     } else
         mark_pids_deleted(aid, sid, NULL);
     update_pids(aid);
     adapter_update_threshold(ad);
+    adapter_commit(ad);
+
     mutex_unlock(&ad->mutex);
 }
 
@@ -885,8 +896,11 @@ int update_pids(int aid) {
     int i, dp = 1;
     adapter *ad;
     ad = get_adapter(aid);
-    if (!ad || ad->updating_pids)
+    if (!ad || ad->updating_pids) {
+        LOG("ad %d [%d], another update_pids is in progress skipping", aid,
+            ad ? ad->id : -1);
         return 1;
+    }
 
     if (ad->err) {
         LOG("adapter %d in error state %d", aid, ad->err);
@@ -952,15 +966,17 @@ int update_pids(int aid) {
             if (ad->pids[i].pid == 0)
                 ad->pat_processed = 0;
             ad->pids[i].packets = 0;
+            ad->pids[i].packets2 = 0;
             ad->pids[i].cc = -1;
             ad->pids[i].cc1 = -1;
+            ad->pids[i].cc2 = -1;
             ad->pids[i].cc_err = 0;
+            ad->pids[i].cc_err2 = 0;
             ad->pids[i].dec_err = 0;
         }
-    if (ad->commit)
-        ad->commit(ad);
 
     ad->updating_pids = 0;
+    ad->pids_updates++;
     return 0;
 }
 
@@ -1044,8 +1060,9 @@ int tune(int aid, int sid) {
     }
     if (flush_data) {
         ad->tune_time = getTick();
-        get_socket_iteration(ad->sock, 0);
+        set_socket_iteration(ad->sock, 0);
     }
+    adapter_commit(ad);
     ad->do_tune = 0;
     mutex_unlock(&ad->mutex);
     return rv;
@@ -1147,9 +1164,6 @@ void mark_pids_deleted(int aid, int sid,
 
     for (i = 0; i < MAX_PIDS; i++)
         mark_pid_deleted(aid, sid, ad->pids[i].pid, &ad->pids[i]);
-    //	if(sid == -1)
-    //		reset_pids_type(aid);
-    dump_pids(aid);
 }
 
 int mark_pid_add(int sid, int aid, int _pid) {
@@ -1218,7 +1232,6 @@ int mark_pids_add(int sid, int aid, char *pids) {
         if (mark_pid_add(sid, aid, pid) < 0)
             return -1;
     }
-    dump_pids(aid);
     return 0;
 }
 
@@ -1482,8 +1495,8 @@ void free_all_adapters() {
             if (a[i]->free)
                 a[i]->free(a[i]);
             if (a[i]->buf)
-                free1(a[i]->buf);
-            free(a[i]);
+                _free(a[i]->buf);
+            _free(a[i]);
             a[i] = NULL;
         }
 

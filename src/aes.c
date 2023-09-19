@@ -17,7 +17,6 @@
  * USA
  *
  */
-
 #include "openssl/aes.h"
 #include "adapter.h"
 #include "aes.h"
@@ -27,6 +26,7 @@
 #include "socketworks.h"
 #include "tables.h"
 #include "utils.h"
+#include "utils/alloc.h"
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <errno.h>
@@ -51,9 +51,9 @@
 
 #define DEFAULT_LOG LOG_PMT
 
-void dvbaes_create_key(SCW *cw) { cw->key = malloc1(sizeof(AES_KEY)); }
+void dvbaes_create_key(SCW *cw) { cw->key = _malloc(sizeof(AES_KEY)); }
 
-void dvbaes_delete_key(SCW *cw) { free1(cw->key); }
+void dvbaes_delete_key(SCW *cw) { _free(cw->key); }
 
 void dvbaes_set_cw(SCW *cw, SPMT *pmt) {
     AES_set_decrypt_key(cw->cw, 128, (AES_KEY *)cw->key);
@@ -110,7 +110,7 @@ int decrypt(void *context, unsigned char *ciphertext, int ciphertext_len,
 
 void dvbaes_cbc_decrypt_stream(SCW *cw, SPMT_batch *batch, int batch_len) {
     int i, len;
-    uint8_t decryptedtext[300]; //, ciphertext[300];
+    uint8_t decryptedtext[400];
     for (i = 0; i < batch_len; i++) {
 
         // memset(decryptedtext, 0, sizeof(decryptedtext));
@@ -263,7 +263,7 @@ int pkcs_1_mgf1(const uint8_t *seed, unsigned long seedlen, uint8_t *mask,
     hLen = 20; /* SHA1 */
 
     /* allocate memory */
-    buf = malloc(hLen);
+    buf = _malloc(hLen);
     if (buf == NULL) {
         LOG("error mem");
         return -1;
@@ -288,7 +288,7 @@ int pkcs_1_mgf1(const uint8_t *seed, unsigned long seedlen, uint8_t *mask,
             *mask++ = buf[x];
     }
 
-    free(buf);
+    _free(buf);
     return 0;
 }
 
@@ -305,13 +305,13 @@ int pkcs_1_pss_encode(const uint8_t *msghash, unsigned int msghashlen,
     modulus_len = (modulus_bitlen >> 3) + (modulus_bitlen & 7 ? 1 : 0);
 
     /* allocate ram for DB/mask/salt/hash of size modulus_len */
-    DB = malloc(modulus_len);
-    mask = malloc(modulus_len);
-    salt = malloc(modulus_len);
-    hash = malloc(modulus_len);
+    DB = _malloc(modulus_len);
+    mask = _malloc(modulus_len);
+    salt = _malloc(modulus_len);
+    hash = _malloc(modulus_len);
 
     hashbuflen = 8 + msghashlen + saltlen;
-    hashbuf = malloc(hashbuflen);
+    hashbuf = _malloc(hashbuflen);
 
     if (!(DB && mask && salt && hash && hashbuf)) {
         LOG("out of memory");
@@ -373,11 +373,11 @@ int pkcs_1_pss_encode(const uint8_t *msghash, unsigned int msghashlen,
 
     err = 0;
 LBL_ERR:
-    free(hashbuf);
-    free(hash);
-    free(salt);
-    free(mask);
-    free(DB);
+    _free(hashbuf);
+    _free(hash);
+    _free(salt);
+    _free(mask);
+    _free(DB);
 
     return err;
 }

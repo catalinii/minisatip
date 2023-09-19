@@ -33,6 +33,7 @@ alternative source
 #include "search.h"
 #include "socketworks.h"
 #include "tables.h"
+#include "utils/alloc.h"
 #include <linux/dvb/ca.h>
 
 #include "api/symbols.h"
@@ -78,6 +79,7 @@ int ci_number;
 int logging = 0;
 char logfile[256];
 int extract_ci_cert = 0;
+int has_ci = 0;
 
 uint32_t datatype_sizes[MAX_ELEMENTS] = {
     0,   50,  0,  0, 0, 8,  8,  0, 0, 0, 0,  0, 32, 256, 256, 0, 0,
@@ -284,15 +286,15 @@ int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
                   int added_only, int ca_id) {
     int i = 0, pos = 0;
     for (i = 0; i < pmt->stream_pids; i++) {
-        if (added_only && !find_pid(pmt->adapter, pmt->stream_pid[i].pid)) {
+        if (added_only && !find_pid(pmt->adapter, pmt->stream_pid[i]->pid)) {
             LOGM("%s: skipping pmt %d (ad %d) pid %d from CAPMT", __FUNCTION__,
-                 pmt->id, pmt->adapter, pmt->stream_pid[i].pid);
+                 pmt->id, pmt->adapter, pmt->stream_pid[i]->pid);
             continue;
         }
-        if (!pmt->stream_pid[i].is_audio && !pmt->stream_pid[i].is_video)
+        if (!pmt->stream_pid[i]->is_audio && !pmt->stream_pid[i]->is_video)
             continue;
-        capmt[pos++] = pmt->stream_pid[i].type;
-        copy16(capmt, pos, pmt->stream_pid[i].pid);
+        capmt[pos++] = pmt->stream_pid[i]->type;
+        copy16(capmt, pos, pmt->stream_pid[i]->pid);
         pos += 2;
         int pi_len_pos = pos, pi_len = 0;
         pos += 2;
@@ -495,11 +497,6 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
     SPMT *first = NULL;
 
     if (opts.enigma) {
-        // detach the CI from the previous adapter
-        if (d->linked_adapter != ad->id) {
-            set_tuner_input(-1, d->linked_adapter);
-        }
-
         // enigma allows attaching the CI to the adapter that needs it
         d = find_dvbca_for_pmt(spmt);
         if (!d) {
@@ -509,6 +506,10 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
                 return TABLES_RESULT_ERROR_NORETRY;
         }
 
+        // detach the CI from the previous adapter
+        if (d->linked_adapter != ad->id) {
+            set_tuner_input(-1, d->linked_adapter);
+        }
         set_tuner_input(d->id, ad->id);
         set_input_ci(d->id, ad->id);
         d->linked_adapter = ad->id;
@@ -654,7 +655,7 @@ static void element_invalidate(struct cc_ctrl_data *cc_data, unsigned int id) {
 
     e = element_get(cc_data, id);
     if (e) {
-        free(e->data);
+        _free(e->data);
         memset(e, 0, sizeof(struct element));
     }
 }
@@ -680,8 +681,8 @@ static int element_set(struct cc_ctrl_data *cc_data, unsigned int id,
         return 0;
     }
 
-    free(e->data);
-    e->data = malloc(size);
+    _free(e->data);
+    e->data = _malloc(size);
     memcpy(e->data, data, size);
     e->size = size;
     e->valid = 1;
@@ -2041,21 +2042,19 @@ int APP_CA_handler(ca_session_t *session, int resource, uint8_t *data,
         d->state = CA_STATE_INITIALIZED;
 
         // Ignore CAM reported values if user has forced specific CAIDs
-        if (d->has_forced_caids) {
-            data = (uint8_t *)d->caid;
-            caid_count = d->caids;
-        } else {
-            d->caids = caid_count;
-        }
-        for (i = 0; i < caid_count; i++) {
-            int caid = (data[i * 2 + 0] << 8) | data[i * 2 + 1];
-            LOG("   %s CA ID: %04X for CA%d",
-                d->has_forced_caids ? "Forced" : "Supported", caid, d->id);
-            add_caid_mask(dvbca_id, d->id, caid, 0xFFFF);
-            if (!d->has_forced_caids) {
-                d->caid[i] = caid;
+        if (!d->has_forced_caids) {
+            d->caids = 0;
+            for (i = 0; i < caid_count; i++) {
+                int caid = (data[i * 2 + 0] << 8) | data[i * 2 + 1];
+                d->caid[d->caids++] = caid;
             }
         }
+        for (i = 0; i < d->caids; i++) {
+            int caid = d->caid[i];
+            LOG("   Supported CA ID: %04X for CA%d", caid, d->id);
+            add_caid_mask(dvbca_id, d->id, caid, 0xFFFF);
+        }
+
         break;
     default:
         LOG("%s: unexpected tag (0x%x)", __FUNCTION__, resource);
@@ -2484,9 +2483,7 @@ int ca_write_apdu(ca_session_t *s, int tag, const void *data, int len) {
 
 // reads a TPDU from the CAM. This is called only on DVBCA path
 int ca_read_tpdu(int socket, void *buf, int buf_len, sockets *ss, int *rb) {
-    static int i;
     ca_device_t *c = ca_devices[ss->sid];
-    i += 1;
     *rb = 0;
     uint8_t data[4096];
     int len;
@@ -2697,8 +2694,6 @@ int ca_timeout(sockets *s) {
 // reads session data on enigma devices. Handles specific issues (such as
 // reading 0 bytes) and adds only the session data to sockets buffer
 int ca_read_enigma(int socket, void *buf, int len, sockets *ss, int *rb) {
-    static int i;
-    i += 1;
     int rl = read(socket, buf, len);
     *rb = 0;
     if (rl > 0) {
@@ -2722,8 +2717,7 @@ int ca_read_enigma(int socket, void *buf, int len, sockets *ss, int *rb) {
 int ca_init_enigma(ca_device_t *d) {
     int fd = d->fd;
 
-    if (ioctl(fd, 0))
-        LOG("CA %d reset failed", d->id);
+    ioctl(fd, 0);
 
     d->sock = sockets_add(fd, NULL, d->id, TYPE_TCP, (socket_action)ca_read,
                           (socket_action)ca_close, (socket_action)ca_timeout);
@@ -2793,7 +2787,7 @@ fail:
 }
 
 ca_device_t *alloc_ca_device() {
-    ca_device_t *d = malloc1(sizeof(ca_device_t));
+    ca_device_t *d = _malloc(sizeof(ca_device_t));
     if (!d) {
         LOG_AND_RETURN(NULL, "Could not allocate memory for CA device");
     }
@@ -2832,10 +2826,16 @@ int dvbca_init_dev(adapter *ad) {
         sprintf(ca_dev_path, "/dev/ci%d", ad->id);
     }
     fd = open(ca_dev_path, O_RDWR);
-    if (fd < 0)
+    if (fd < 0) {
+        if (opts.enigma && has_ci) {
+            LOG_AND_RETURN(TABLES_RESULT_OK,
+                           "No CA device detected on adapter %d: enabling "
+                           "already registered CAs");
+        }
         LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
                        "No CA device detected on adapter %d: file %s", ad->id,
                        ca_dev_path);
+    }
     flush_handle(fd);
     if (!c) {
         c = ca_devices[ad->id] = alloc_ca_device();
@@ -2872,6 +2872,8 @@ int dvbca_init_dev(adapter *ad) {
         return TABLES_RESULT_ERROR_NORETRY;
     }
 
+    has_ci = 1;
+
     set_socket_thread(c->sock, ad->thread);
     return TABLES_RESULT_OK;
 }
@@ -2902,7 +2904,15 @@ int dvbca_add_pid(adapter *ad, SPMT *pmt, int pid) {
     return 0;
 }
 
-SCA_op dvbca;
+SCA_op dvbca = {
+    .ca_init_dev = dvbca_init_dev,
+    .ca_close_dev = dvbca_close_dev,
+    .ca_add_pmt = dvbca_process_pmt,
+    .ca_del_pmt = dvbca_del_pmt,
+    .ca_close_ca = dvbca_close,
+    .ca_add_pid = dvbca_add_pid,
+    .ca_ts = NULL,
+};
 
 int ca_reconnect(void *arg) {
     int i;
@@ -2934,14 +2944,6 @@ void dvbca_init() // you can search the devices here and fill the
                   // them (like in this module)
 {
     int poller_sock;
-    memset(&dvbca, 0, sizeof(dvbca));
-    dvbca.ca_init_dev = dvbca_init_dev;
-    dvbca.ca_close_dev = dvbca_close_dev;
-    dvbca.ca_add_pmt = dvbca_process_pmt;
-    dvbca.ca_del_pmt = dvbca_del_pmt;
-    dvbca.ca_close_ca = dvbca_close;
-    dvbca.ca_add_pid = dvbca_add_pid;
-    dvbca.ca_ts = NULL; // dvbca_ts;
     dvbca_id = add_ca(&dvbca, 0xFFFFFFFF);
     poller_sock = sockets_add(SOCK_TIMEOUT, NULL, -1, TYPE_UDP, NULL, NULL,
                               (socket_action)ca_reconnect);

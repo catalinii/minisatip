@@ -25,6 +25,7 @@
 #include "minisatip.h"
 #include "socketworks.h"
 #include "utils.h"
+#include "utils/alloc.h"
 #include "utils/testing.h"
 #include <arpa/inet.h>
 #include <ctype.h>
@@ -62,11 +63,11 @@ int get_enabled_pmts_for_ca(ca_device_t *d);
 ca_device_t d;
 
 int test_multiple_pmt() {
-    // id, adapter, sid, pmt_pid
-    pmt_add(0, 0, 100, 100);
-    pmt_add(1, 0, 200, 200);
-    pmt_add(2, 0, 300, 300);
-    pmt_add(3, 0, 400, 400);
+    // adapter, sid, pmt_pid
+    pmt_add(0, 100, 100);
+    pmt_add(0, 200, 200);
+    pmt_add(0, 300, 300);
+    pmt_add(0, 400, 400);
 
     add_pmt_to_capmt(&d, get_pmt(0), 1);
     add_pmt_to_capmt(&d, get_pmt(1), 1);
@@ -84,23 +85,27 @@ int test_multiple_pmt() {
 
 int test_create_capmt() {
     uint8_t clean[1500];
-    pmt_add(5, 0, 500, 500);
-    pmt_add(6, 0, 600, 600);
-    add_pmt_to_capmt(&d, get_pmt(5), 1);
-    add_pmt_to_capmt(&d, get_pmt(6), 1);
-    SPMT *pmt = get_pmt(5);
+    int p1 = pmt_add(0, 500, 500);
+    int p2 = pmt_add(0, 600, 600);
+    add_pmt_to_capmt(&d, get_pmt(p1), 1);
+    add_pmt_to_capmt(&d, get_pmt(p2), 1);
+    SPMT *pmt = get_pmt(p1);
     pmt->stream_pids = 2;
-    pmt->stream_pid[0].pid = 501;
-    pmt->stream_pid[0].type = 2;
-    pmt->stream_pid[0].pid = 502;
-    pmt->stream_pid[0].type = 3;
+    pmt->stream_pid[0] = _malloc(sizeof(SStreamPid));
+    pmt->stream_pid[0]->pid = 501;
+    pmt->stream_pid[0]->type = 2;
+    pmt->stream_pid[0]->pid = 502;
+    pmt->stream_pid[0]->type = 3;
+    pmt->stream_pid[1] = _malloc(sizeof(SStreamPid));
 
-    pmt = get_pmt(6);
+    pmt = get_pmt(p2);
     pmt->stream_pids = 2;
-    pmt->stream_pid[0].pid = 601;
-    pmt->stream_pid[0].type = 2;
-    pmt->stream_pid[0].pid = 602;
-    pmt->stream_pid[0].type = 3;
+    pmt->stream_pid[0] = _malloc(sizeof(SStreamPid));
+    pmt->stream_pid[0]->pid = 601;
+    pmt->stream_pid[0]->type = 2;
+    pmt->stream_pid[0]->pid = 602;
+    pmt->stream_pid[0]->type = 3;
+    pmt->stream_pid[1] = _malloc(sizeof(SStreamPid));
 
     int len = create_capmt(d.capmt, 1, clean, sizeof(clean), 0, 0);
     if (len <= 0)
@@ -156,7 +161,7 @@ int main() {
     opts.debug = 255;
     opts.cache_dir = "/tmp";
 
-    strcpy(thread_name, "test_ca");
+    strcpy(thread_info[thread_index].thread_name, "test_ca");
     memset(&d, 0, sizeof(d));
     memset(d.capmt, -1, sizeof(d.capmt));
     d.enabled = 1;

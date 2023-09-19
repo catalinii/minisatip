@@ -46,6 +46,7 @@ struct struct_adapter {
               // correctly)
     int adapter_timeout;
     char flush, updating_pids;
+    int pids_updates;
     // physical adapter, physical frontend number
     fe_delivery_system_t sys[MAX_DELSYS];
     transponder tp;
@@ -106,7 +107,6 @@ struct struct_adapter {
     // keeps the PMTs that are present in the PAT
     int active_pmt[MAX_PMT_FOR_ADAPTER];
     int active_pmts;
-    int cache_pmts;
 #endif
 #ifdef AXE
     int fe2;
@@ -120,12 +120,17 @@ struct struct_adapter {
     int (*del_filters)(adapter *ad, int fd, int pid);
     int (*open)(adapter *ad);
     int (*post_init)(adapter *ad);
+    // called after tune/set_pid/standby when the satip client completed all the
+    // commands
     int (*commit)(adapter *ad);
     int (*get_signal)(adapter *ad);
     int (*wakeup)(adapter *ad, int fd, int voltage);
+    // called when all the streams are closed
     int (*standby)(adapter *ad);
+    // called when new tuning arguments are set
     int (*tune)(int aid, transponder *tp);
     fe_delivery_system_t (*delsys)(int aid, int fd, fe_delivery_system_t *sys);
+    // called when the adapter is closed
     int (*close)(adapter *ad);
     void (*free)(adapter *ad);
 };
@@ -189,6 +194,7 @@ void request_adapter_close(adapter *ad);
 int compare_slave_parameters(adapter *ad, transponder *tp);
 int get_absolute_source_for_adapter(int aid, int src, int sys);
 void set_absolute_src(char *o);
+void adapter_commit(adapter *ad);
 #define get_adapter(a) get_adapter1(a, __FILE__, __LINE__)
 #define get_configured_adapter(a) get_configured_adapter1(a, __FILE__, __LINE__)
 #define get_adapter_nw(aid)                                                    \

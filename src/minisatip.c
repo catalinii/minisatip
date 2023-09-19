@@ -26,6 +26,7 @@
 #include "pmt.h"
 #include "socketworks.h"
 #include "stream.h"
+#include "utils/alloc.h"
 #include "utils/ticks.h"
 
 #include <arpa/inet.h>
@@ -89,7 +90,6 @@ int rtsp, http, si, si1, ssdp1;
 #define HELP_OPT 'h'
 #define PLAYLIST_OPT 'p'
 #define ADAPTERS_OPT 'a'
-#define CLEANPSI_OPT 't'
 #define MAC_OPT 'm'
 #define FOREGROUND_OPT 'f'
 #define DVRBUFFER_OPT 'b'
@@ -150,7 +150,6 @@ static const struct option long_options[] = {
     {"bind", required_argument, NULL, BIND_OPT},
     {"bind-dev", required_argument, NULL, BIND_DEV_OPT},
     {"cache-dir", required_argument, NULL, CACHE_DIR_OPT},
-    {"clean-psi", no_argument, NULL, CLEANPSI_OPT},
     {"send-all-ecm", no_argument, NULL, SENDALLECM_OPT},
     {"client-send-buffer", required_argument, NULL, CLIENT_SEND_BUFFER_OPT},
     {"delsys", required_argument, NULL, DELSYS_OPT},
@@ -340,8 +339,8 @@ Help\n\
 * -b --buffer X:Y : set the app adapter buffer to X Bytes (default: %d) and set the kernel DVB buffer to Y Bytes (default: %d) - both multiple of 188\n\
 	* eg: -b 18800:18988\n\
 \n\
-* -B X : set the app socket write buffer to X KB. \n\
-	* eg: -B 10000 - to set the socket buffer to 10MB\n\
+* -B X : set the app socket write buffer to X MB. \n\
+	* eg: -B 10 - to set the socket buffer to 10MB (default value)\n\
 \n\
 * --client-send-buffer X : set the socket write buffer for client connections to X KB. \n\
 	- The default value is 0, corresponding to use the kernel default value\n\
@@ -611,7 +610,7 @@ char *get_command_line_string(int argc, char *argv[]) {
         len += strlen(argv[i]) + 1;
     }
 
-    char *dest = malloc1(len);
+    char *dest = _malloc(len);
     memset(dest, 0, sizeof(len));
     for (i = 0; i < argc; i++) {
         strcat(dest, argv[i]);
@@ -669,9 +668,6 @@ void set_options(int argc, char *argv[]) {
     opts.pids_all_no_dec = 0;
     opts.rtsp_port = 554;
     opts.use_ipv4_only = 1;
-#ifndef DISABLE_SATIPCLIENT
-    opts.satip_addpids = 1;
-#endif
     opts.document_root = "html";
     opts.cache_dir = "/var/cache/minisatip";
     opts.xml_path = DESC_XML;
@@ -689,7 +685,7 @@ void set_options(int argc, char *argv[]) {
     opts.lnb_high = (10600 * 1000UL);
     opts.lnb_circular = (10750 * 1000UL);
     opts.lnb_switch = (11700 * 1000UL);
-    opts.max_sbuf = 100;
+    opts.max_sbuf = 10;
     opts.pmt_scan = 1;
     opts.strength_multiplier = 1;
     opts.snr_multiplier = 1;
@@ -888,11 +884,6 @@ void set_options(int argc, char *argv[]) {
             break;
         }
 
-        case CLEANPSI_OPT: {
-            opts.clean_psi = 1;
-            break;
-        }
-
         case SENDALLECM_OPT: {
             opts.send_all_ecm = 1;
             break;
@@ -905,7 +896,7 @@ void set_options(int argc, char *argv[]) {
 
         case PLAYLIST_OPT: {
             if (strlen(optarg) < 1000) {
-                opts.playlist = malloc1(strlen(optarg) + 200);
+                opts.playlist = _malloc(strlen(optarg) + 200);
                 if (opts.playlist)
                     sprintf(opts.playlist,
                             "<satip:X_SATIPM3U "
@@ -1157,11 +1148,11 @@ void set_options(int argc, char *argv[]) {
         lip = opts.bind;
 
     if (!opts.http_host) {
-        opts.http_host = (char *)malloc1(MAX_HOST);
+        opts.http_host = (char *)_malloc(MAX_HOST);
         sprintf(opts.http_host, "%s:%u", lip, opts.http_port);
     }
 
-    opts.rtsp_host = (char *)malloc1(MAX_HOST);
+    opts.rtsp_host = (char *)_malloc(MAX_HOST);
     sprintf(opts.rtsp_host, "%s:%d", lip, opts.rtsp_port);
 
     LOG("Listening configuration RTSP:%s HTTP:%s (bind address: %s)",
@@ -1169,20 +1160,20 @@ void set_options(int argc, char *argv[]) {
         opts.http_host ? opts.http_host : "(null)",
         opts.bind ? opts.bind : "(null)");
 
-    opts.datetime_compile = (char *)malloc(64);
+    opts.datetime_compile = (char *)_malloc(64);
     sprintf(opts.datetime_compile, "%s | %s", __DATE__, __TIME__);
 
     time(&opts.start_time);
     struct tm *info;
     info = localtime(&opts.start_time);
-    opts.datetime_start = (char *)malloc1(32);
+    opts.datetime_start = (char *)_malloc(32);
     sprintf(opts.datetime_start, "%s ", asctime(info));
     opts.datetime_start[24] = ' ';
     opts.datetime_start[25] = '\0';
 
-    opts.datetime_current = (char *)malloc1(32);
+    opts.datetime_current = (char *)_malloc(32);
     sprintf(opts.datetime_current, "%s", " ");
-    opts.time_running = (char *)malloc1(32);
+    opts.time_running = (char *)_malloc(32);
     sprintf(opts.time_running, "%s", "0");
 
     opts.run_user = (int)getuid();
@@ -1246,7 +1237,7 @@ int read_rtsp(sockets *s) {
         hexdump("read_rtsp: ", s->buf, s->rlen);
         if (s->flags & 1)
             return 0;
-        unsigned char *new_alloc = malloc1(RBUF);
+        unsigned char *new_alloc = _malloc(RBUF);
         memcpy(new_alloc, s->buf, s->rlen);
         s->buf = new_alloc;
         s->flags = s->flags | 1;
@@ -1415,7 +1406,6 @@ int read_rtsp(sockets *s) {
         if (get_sid(s->sid))
             sprintf(buf, "Session: %010d", get_session_id(s->sid));
         close_stream(s->sid);
-        s->flush_enqued_data = 1;
         http_response(s, 200, buf, NULL, cseq, 0);
     } else if (strncmp(arg[0], "DESCRIBE", 8) == 0) {
         char sbuf[1000];
@@ -1495,7 +1485,7 @@ int read_http(sockets *s) {
         }
         if (s->flags & 1)
             return 0;
-        unsigned char *new_alloc = malloc1(RBUF);
+        unsigned char *new_alloc = _malloc(RBUF);
         memcpy(new_alloc, s->buf, s->rlen);
         set_socket_buffer(s->id, new_alloc, RBUF);
         s->flags = s->flags | 1;
@@ -1600,14 +1590,14 @@ int read_http(sockets *s) {
     }
 
     if (strcmp(arg[1], "/state.json") == 0) {
-        char *buf = malloc1(JSON_STATE_MAXLEN);
+        char *buf = _malloc(JSON_STATE_MAXLEN);
         int len = get_json_state(buf, JSON_STATE_MAXLEN);
         http_response(s, 200,
                       "Content-Type: application/json\r\n"
                       "Connection: close\r\n"
                       "Access-Control-Allow-Origin: *",
                       buf, 0, len);
-        free(buf);
+        _free(buf);
         return 0;
     }
 
@@ -1660,7 +1650,7 @@ int read_http(sockets *s) {
 int close_http(sockets *s) {
     streams *sid = get_sid(s->sid);
     if ((s->flags & 1) && s->buf)
-        free1(s->buf);
+        _free(s->buf);
     s->flags = 0;
     s->buf = NULL;
     LOG("Requested sid close %d timeout %d type %d, sock %d, handle %d, "
@@ -1891,7 +1881,10 @@ int main(int argc, char *argv[]) {
     int i;
     unsigned long log_it;
     main_tid = get_tid();
-    strcpy(thread_name, "main");
+    thread_index = 0;
+    thread_info[thread_index].tid = main_tid;
+    strcpy(thread_info[thread_index].thread_name, "main");
+    init_alloc();
     set_options(argc, argv);
     if ((rv = init_utils(argv[0]))) {
         LOG0("init_utils failed with %d", rv);
@@ -2006,7 +1999,7 @@ int main(int argc, char *argv[]) {
 #endif
     LOG0("Closing...");
     free_all();
-    free(opts.command_line);
+    _free(opts.command_line);
     LOG0("Exit OK.");
     if (opts.slog)
         closelog();
@@ -2056,7 +2049,7 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr) {
     // new GET request. This doesn't interrupts the streaming.
     if (s->type == TYPE_HTTP && s->iteration > 1 && rc == 200) {
         LOG("Reply hidden because another GET while streaming (handle %d) "
-            "[%s:%d] iteration:%d, sock %d",
+            "[%s:%d] iteration:%jd, sock %d",
             s->sock, get_sockaddr_host(s->sa, ra, sizeof(ra)),
             get_sockaddr_port(s->sa), s->iteration, s->id);
         return;

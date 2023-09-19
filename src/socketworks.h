@@ -2,17 +2,12 @@
 #define SOCKETWORKS_H
 #define MAX_SOCKS 1024
 #include "utils.h"
+#include "utils/fifo.h"
 #include <netinet/in.h>
 #include <sys/socket.h>
 
 typedef int (*socket_action)(void *s);
 typedef int (*read_action)(int, void *, size_t, void *, int *);
-
-typedef struct struct_spacket {
-    int len;
-    int size;
-    uint8_t *buf;
-} SNPacket;
 
 typedef union union_sockaddr {
     struct sockaddr sa;
@@ -41,7 +36,7 @@ typedef struct struct_sockets {
     int rlen;
     int timeout_ms;
     int id; // socket id
-    int iteration;
+    uint64_t iteration;
     int err;
     int flags; // 1 - buf is allocated dynamically
     int events, revents;
@@ -49,11 +44,11 @@ typedef struct struct_sockets {
     pthread_t tid;
     SMutex *lock;
     int sock_err;
-    SNPacket *pack;
-    SNPacket prio_pack; // http_responses have higher priority
+    SFIFO fifo;
+    int prio_data_len;
+    uint8_t *prio_data; // http_responses have higher priority
     int flush_enqued_data;
-    int spos, wmax, wpos;
-    int overflow, buf_alloc, buf_used, overflow_packets;
+    int overflow;
     int64_t buffered_bytes;
     // if != -1 points to the master socket which holds the buffer and the
     // action function. Useful when the DVR buffer comes from different file
@@ -106,7 +101,6 @@ void set_socket_buffer(int sid, unsigned char *buf, int len);
 void sockets_timeout(int i, int t);
 void set_sockets_rtime(int i, int r);
 void free_all();
-void free_pack(SNPacket *p);
 void sockets_setread(int i, void *r);
 void sockets_setclose(int i, void *r);
 void set_socket_send_buffer(int sock, int len);
@@ -124,12 +118,14 @@ int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt,
                         int high_prio);
 int sockets_write(int sock_id, void *buf, int len);
 int flush_socket(sockets *s);
-void get_socket_iteration(int s_id, int it);
+void set_socket_iteration(int s_id, uint64_t it);
 void set_sockets_sid(int id, int sid);
 void set_socket_dscp(int id, int dscp, int prio);
 void sockets_set_opaque(int id, void *opaque, void *opaque2, void *opaque3);
 void sockets_force_close(int id);
 void sockets_set_master(int slave, int master);
+int copy_iovec_to_fifo(SFIFO *fifo, int offset, struct iovec *iov, int iovcnt);
+void sockets_set_flush_enqued_data(int id);
 extern __thread char thread_name[];
 extern __thread pthread_t tid;
 extern __thread int select_timeout;

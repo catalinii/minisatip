@@ -23,8 +23,6 @@
 #include <stdio.h>
 #include <string.h>
 
-extern __thread char thread_name[100];
-
 void _reset_dvbapi_opts() {
     opts.pids_all_no_dec = 0;
     opts.dvbapi_offset = 0;
@@ -94,7 +92,7 @@ int test_parse_dvbapi_opt() {
 
 int main() {
     opts.log = 255;
-    strcpy(thread_name, "test_opts");
+    strcpy(thread_info[thread_index].thread_name, "test_opts");
     TEST_FUNC(test_parse_dvbapi_opt(), "parse_dvbapi_offset() failed");
     return 0;
 }

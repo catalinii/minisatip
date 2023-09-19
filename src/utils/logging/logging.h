@@ -6,12 +6,23 @@
 #include "opts.h"
 
 #include <stdint.h>
+#include <sys/types.h>
 
 void _log(const char *file, int line, const char *fmt, ...);
 void _dump_packets(char *message, unsigned char *b, int len, int packet_offset);
 void _hexdump(char *desc, void *addr, int len);
 char *get_current_timestamp_log();
 uint32_t crc_32(const uint8_t *data, int datalen);
+
+#define MAX_THREAD_INFO 135 // 128 + 7
+typedef struct {
+    char enabled;
+    pthread_t tid;
+    char thread_name[100];
+    char *last_log;
+} SThreadInfo;
+extern SThreadInfo thread_info[MAX_THREAD_INFO];
+extern __thread int thread_index;
 
 #define LOG_GENERAL 1
 #define LOG_HTTP (1 << 1)
@@ -34,6 +45,7 @@ uint32_t crc_32(const uint8_t *data, int datalen);
 
 #define LOGL(level, a, ...)                                                    \
     {                                                                          \
+        thread_info[thread_index].last_log = a;                                \
         if ((level)&opts.log)                                                  \
             _log(__FILE__, __LINE__, a, ##__VA_ARGS__);                        \
     }
@@ -44,13 +56,17 @@ uint32_t crc_32(const uint8_t *data, int datalen);
 
 #define DEBUGL(level, a, ...)                                                  \
     {                                                                          \
+        thread_info[thread_index].last_log = a;                                \
         if ((level)&opts.debug)                                                \
             _log(__FILE__, __LINE__, a, ##__VA_ARGS__);                        \
     }
 #define DEBUGM(a, ...) DEBUGL(DEFAULT_LOG, a, ##__VA_ARGS__)
 
 #define LOG0(a, ...)                                                           \
-    { _log(__FILE__, __LINE__, a, ##__VA_ARGS__); }
+    {                                                                          \
+        thread_info[thread_index].last_log = a;                                \
+        _log(__FILE__, __LINE__, a, ##__VA_ARGS__);                            \
+    }
 
 #define FAIL(a, ...)                                                           \
     {                                                                          \

@@ -67,7 +67,7 @@ int add_ca(SCA_op *op, uint64_t adapter_mask) {
             mutex_unlock(&ca_mutex);
         }
     if (i == MAX_CA)
-        LOG_AND_RETURN(0, "No free CA slots for %p", ca);
+        LOG_AND_RETURN(0, "No _free CA slots for %p", ca);
     new_ca = i;
 
     ca[new_ca].enabled = 1;
@@ -175,9 +175,9 @@ int tables_init_ca_for_device(int i, adapter *ad) {
 int match_caid(SPMT *pmt, int caid, int mask) {
     int i;
     for (i = 0; i < pmt->caids; i++)
-        if ((pmt->ca[i].id & mask) == caid) {
+        if ((pmt->ca[i]->id & mask) == caid) {
             LOGM("%s: match caid %04X (%d/%d) with CA caid %04X and mask %04X",
-                 __FUNCTION__, pmt->ca[i].id, i, pmt->caids, caid, mask);
+                 __FUNCTION__, pmt->ca[i]->id, i, pmt->caids, caid, mask);
             return 1;
         }
     return 0;

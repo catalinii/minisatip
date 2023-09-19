@@ -36,10 +36,8 @@ typedef struct struct_opts {
     int udp_threshold;
     int tcp_threshold;
     int force_scan;
-    int clean_psi;
     int send_all_ecm;
     int file_line;
-    char *last_log;
     int dvbapi_port;
     char dvbapi_host[100];
     int dvbapi_offset;
@@ -57,7 +55,7 @@ typedef struct struct_opts {
 #ifndef DISABLE_SATIPCLIENT
     char *satip_servers;
     char *satip_xml;
-    uint8_t satip_addpids, satip_setup_pids, satip_rtsp_over_tcp;
+    uint8_t satip_rtsp_over_tcp;
 #endif
     char *document_root;
     char *xml_path;

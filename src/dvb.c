@@ -1106,7 +1106,7 @@ int setup_switch(adapter *ad) {
     return freq;
 }
 
-//#define USE_DVBAPI3
+// #define USE_DVBAPI3
 
 #if DVBAPIVERSION < 0x0500
 #define USE_DVBAPI3
@@ -1477,7 +1477,7 @@ int dvb_demux_del_filters(adapter *ad, int fd, int pid) {
     }
 
     LOG("clearing demux filter on PID %d FD %d, active_pids %d [%jd ms]", pid,
-        fd, ad->active_pids, getTick() - ctime);
+        fd, ad->active_demux_pids, getTick() - ctime);
     return 0;
 }
 
@@ -1709,7 +1709,7 @@ int64_t get_strength_decibels(int64_t init_strength) {
     int64_t strength_db;
 
     strength_db = (init_strength + 100 * 1000) * 65535.0 /
-                (100 * 1000); // dBm value + 100 ==> %  ( -97 dBm => 3%)
+                  (100 * 1000); // dBm value + 100 ==> %  ( -97 dBm => 3%)
 
     return strength_db;
 }
@@ -1722,7 +1722,7 @@ int64_t get_strength_percent(int64_t init_strength) {
     return strength_pc;
 }
 
-int64_t get_snr_decibels(int64_t init_snr, int64_t* snrd, float db_snr_map) {
+int64_t get_snr_decibels(int64_t init_snr, int64_t *snrd, float db_snr_map) {
     float tf;
 
     tf = init_snr * 65535.0 / (1000 * db_snr_map);
@@ -1748,14 +1748,14 @@ int64_t get_snr_percent(int64_t init_snr) {
 // recalculate the values of strength and SNR
 
 void adapt_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
-                uint16_t *snr, uint16_t *db) {
+                  uint16_t *snr, uint16_t *db) {
 
     int64_t strength_init = *strength;
-    int64_t strength_new  = *strength;
+    int64_t strength_new = *strength;
     int64_t snr_init = *snr;
-    int64_t snr_new  = *snr;
+    int64_t snr_new = *snr;
     int64_t db_init = *db;
-    int64_t db_new  = *db;
+    int64_t db_new = *db;
 
     if (ad->force_tuner_signal & TUNER_FORCE_STRENGTH_PERCENT) {
         // STRENGTH: [0..100]
@@ -1769,18 +1769,18 @@ void adapt_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
 
     if (ad->force_tuner_signal & TUNER_FORCE_SNR_PERCENT) {
         // SNR: [0..100]
-        db_new  = 65535;
+        db_new = 65535;
         snr_new = get_snr_percent(snr_init);
     }
 
     if (ad->force_tuner_signal & TUNER_FORCE_SNR_DECIBEL) {
         // SNR: [dB * 1000]
-        db_new  = get_snr_decibels(snr_init, &snr_new, ad->db_snr_map);
+        db_new = get_snr_decibels(snr_init, &snr_new, ad->db_snr_map);
     }
 
     *strength = (int)strength_new;
     *snr = (int)snr_new;
-    *db  = (int)db_new;
+    *db = (int)db_new;
 
     LOGM("adapt_signal adapter %d: strength %d (raw: %lld),"
          "snr %d (raw: %lld), dB %d (raw: %lld)",
@@ -1858,26 +1858,17 @@ int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
                          // for Signal/Noise (actually, 0 to 65535)
     } else if (enum_cmdargs[0].u.st.stat[0].scale == FE_SCALE_DECIBEL) {
         strength_s = "dBm";
-        init_strength =
-            enum_cmdargs[0]
-                .u.st.stat[0]
-                .svalue; // dBm / 1000
+        init_strength = enum_cmdargs[0].u.st.stat[0].svalue; // dBm / 1000
         strengthd = get_strength_decibels(init_strength);
     } else if (enum_cmdargs[0].u.st.stat[0].scale == 0)
         err |= 1;
 
     if (enum_cmdargs[1].u.st.stat[0].scale == FE_SCALE_RELATIVE) {
         snr_s = "%";
-        snrd =
-            enum_cmdargs[1]
-                .u.st.stat[0]
-                .uvalue;
+        snrd = enum_cmdargs[1].u.st.stat[0].uvalue;
     } else if (enum_cmdargs[1].u.st.stat[0].scale == FE_SCALE_DECIBEL) {
         snr_s = "dB";
-        init_snr =
-            enum_cmdargs[1]
-                .u.st.stat[0]
-                .svalue; // dB * 1000
+        init_snr = enum_cmdargs[1].u.st.stat[0].svalue; // dB * 1000
         *db = (int)get_snr_decibels(init_snr, &snrd, ad->db_snr_map);
     }
     //	else if (enum_cmdargs[1].u.st.stat[0].scale == 0)

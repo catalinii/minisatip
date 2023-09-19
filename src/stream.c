@@ -45,6 +45,7 @@
 #include "socketworks.h"
 #include "stream.h"
 #include "t2mi.h"
+#include "utils/alloc.h"
 #include "utils/ticks.h"
 
 #define DEFAULT_LOG LOG_STREAM
@@ -339,7 +340,7 @@ int close_stream_for_socket(sockets *s) {
 int close_stream(int i) {
     int ad;
     streams *sid;
-    LOG("closing stream sid %d", i);
+    LOG("closing stream %d", i);
     if (i < 0 || i >= MAX_STREAMS || !st[i] || !st[i]->enabled)
         return 0;
 
@@ -351,6 +352,7 @@ int close_stream(int i) {
         return 0;
     }
     mutex_lock(&st_mutex);
+    sockets_set_flush_enqued_data(sid->rsock_id);
     sid->enabled = 0;
     sid->start_streaming = 0;
     sid->timeout = 0;
@@ -382,7 +384,7 @@ int close_stream(int i) {
     sockets_del_for_sid(i);
 
     mutex_unlock(&st_mutex);
-    LOG("closed stream sid %d", i);
+    LOG("closed stream %d", i);
     return 0;
 }
 
@@ -862,6 +864,55 @@ int check_cc(adapter *ad) {
     return packet_no_sid;
 }
 
+void check_cc2(adapter *ad) {
+    int i;
+    char cc, cc_before;
+    SPid *p;
+    int pid;
+    unsigned char *b;
+
+    if ((p = find_pid(ad->id, 8192)))
+        return;
+
+    for (i = 0; i < ad->rlen; i += DVB_FRAME) {
+        b = ad->buf + i;
+        if (b[1] & 0x80)
+            continue;
+
+        pid = PID_FROM_TS(b);
+        if (pid == 8191)
+            continue;
+
+        if ((opts.debug & LOG_DMX) == LOG_DMX)
+            _dump_packets("check_cc2 -> ", b, 188, i);
+
+        p = find_pid(ad->id, pid);
+        if (!p)
+            continue;
+
+        p->packets2++;
+
+        if (b[3] & 0x10) {
+            cc_before = p->cc2;
+            cc = b[3] & 0xF;
+            if (p->cc2 < 0 || p->cc2 > 15)
+                p->cc2 = cc;
+            else
+                p->cc2 = (p->cc2 + 1) % 16;
+
+            if (p->cc2 != cc) {
+                LOGM("PID Continuity error post-processing (adapter %d, pos "
+                     "%d): pid: %03d, Expected CC: %X, Actual CC: %X, CC "
+                     "Before %X %s",
+                     ad->id, i / DVB_FRAME, pid, p->cc2, cc, cc_before,
+                     (b[3] & 0x80) ? "encrypted" : "");
+                p->cc_err2++;
+            }
+            p->cc2 = cc;
+        }
+    }
+}
+
 int process_packets_for_stream(streams *sid, adapter *ad) {
     int i, j, st_id = sid->sid;
     SPid *p;
@@ -904,7 +955,7 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
         int rtp_added = 0;
         b = ad->buf + i;
         if (b[0] != 0x47) {
-            LOG("Non TS packet found %02X", b[0]);
+            LOG("Non TS packet found %02X, pos %d", b[0], i / DVB_FRAME);
             continue;
         }
         int _pid = PID_FROM_TS(b);
@@ -946,6 +997,8 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
         }
     }
 
+    //    if (iiov == 0)
+    //        return 0;
     if ((sid->type == STREAM_RTSP_UDP || sid->type == STREAM_RTSP_TCP))
         enqueue_rtp_header(sid, iov, iiov, last_rtp_header, rtp_buf + rtp_pos);
 
@@ -992,6 +1045,10 @@ int process_dmx(sockets *s) {
 
 #ifndef DISABLE_TABLES
     pmt_process_stream(ad);
+#endif
+
+#ifndef AXE
+    check_cc2(ad);
 #endif
 
     for (i = 0; i < MAX_STREAMS; i++)
@@ -1240,7 +1297,7 @@ void free_all_streams() {
 
     for (i = 0; i < MAX_STREAMS; i++) {
         if (st[i])
-            free1(st[i]);
+            _free(st[i]);
         st[i] = NULL;
     }
 }
@@ -1349,7 +1406,7 @@ char *get_stream_protocol(int s_id, char *dest, int max_size) {
     else if (s->type == STREAM_RTSP_TCP)
         strlcatf(dest, max_size, len, "RTP/TCP");
     else
-        strlcatf(dest, max_size, len, "unkown");  // RTP/MCAST ?
+        strlcatf(dest, max_size, len, "unkown"); // RTP/MCAST ?
     return dest;
 }
 
@@ -1393,16 +1450,13 @@ int get_stream_overflow(int s_id) {
 }
 
 int get_stream_buffered_size(int s_id) {
-    int i, bytes = 0;
     streams *sid = get_sid_nw(s_id);
     if (!sid)
         return 0;
     sockets *s = get_sockets(sid->rsock_id);
-    if (!s || s->spos == s->wpos || !s->pack)
+    if (!s)
         return 0;
-    for (i = s->spos; i != s->wpos; i = (i + 1) % s->wmax)
-        bytes += s->pack[i].len;
-    return bytes;
+    return fifo_used(&s->fifo);
 }
 _symbols stream_sym[] = {
     {"st_enabled", VAR_AARRAY_INT8, st, 1, MAX_STREAMS,
@@ -1416,8 +1470,8 @@ _symbols stream_sym[] = {
      0},
     {"st_rport", VAR_FUNCTION_INT, (void *)&get_stream_rport, 0, MAX_STREAMS,
      0},
-    {"st_proto", VAR_FUNCTION_STRING, (void *)&get_stream_protocol, 0, MAX_STREAMS,
-     0},
+    {"st_proto", VAR_FUNCTION_STRING, (void *)&get_stream_protocol, 0,
+     MAX_STREAMS, 0},
     {"st_pids", VAR_FUNCTION_STRING, (void *)&get_stream_pids, 0, MAX_STREAMS,
      0},
     {"st_overflow", VAR_FUNCTION_INT, (void *)&get_stream_overflow, 0,
