@@ -824,7 +824,7 @@ int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len) {
                         __FUNCTION__, d->pmt[i].id, pmt->adapter, pmt->pid);
 
                 // Add an EIT table for each channel
-                psi_len = ddci_create_eit(d, pmt->sid, dst + pos, d->pmt[i].ver);
+                psi_len = ddci_create_eit(d, pmt->sid, psi, d->pmt[i].ver);
                 pos += buffer_to_ts(dst + pos, len - pos, psi, psi_len, &d->eit_cc, 18);
             }
         }

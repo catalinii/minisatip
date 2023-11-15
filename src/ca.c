@@ -1728,10 +1728,10 @@ static int CIPLUS_APP_LANG_handler(ca_session_t *session, int tag,
     //        if (data_length)
     //                hexdump(data, data_length);
 
-    uint8_t data_reply_lang[3];    // ISO 639 Part 2
-    data_reply_lang[0] = 0x65;     /* e */
-    data_reply_lang[1] = 0x6e;     /* n */
-    data_reply_lang[2] = 0x67;     /* g */
+    uint8_t data_reply_lang[3]; // ISO 639 Part 2
+    data_reply_lang[0] = 0x65;  /* e */
+    data_reply_lang[1] = 0x6e;  /* n */
+    data_reply_lang[2] = 0x67;  /* g */
 
     uint8_t data_reply_country[3]; // ISO 3166-1 alpha 3
     data_reply_country[0] = 0x55;  /* U */
@@ -2830,7 +2830,8 @@ int dvbca_init_dev(adapter *ad) {
         if (opts.enigma && has_ci) {
             LOG_AND_RETURN(TABLES_RESULT_OK,
                            "No CA device detected on adapter %d: enabling "
-                           "already registered CAs");
+                           "already registered CAs",
+                           ad->id);
         }
         LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
                        "No CA device detected on adapter %d: file %s", ad->id,
