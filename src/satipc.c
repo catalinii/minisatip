@@ -108,7 +108,6 @@ typedef struct struct_satipc {
     char static_config;
     int num_describe;
     int timeout_ms;
-    SHashTable requests;
     // Bit Fields
     unsigned int
         rtsp_socket_closed : 1; // is set when the adapter was closed
@@ -1555,10 +1554,7 @@ fe_delivery_system_t satipc_delsys(int aid, int fd, fe_delivery_system_t *sys) {
     return 0;
 }
 
-void satipc_free(adapter *ad) {
-    satipc *sip = satip[ad->id];
-    free_hash(&sip->requests);
-}
+void satipc_free(adapter *ad) {}
 
 int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
                      int use_tcp, int no_pids_all) {
@@ -1624,7 +1620,6 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
     sip->tcp_data = NULL;
     sip->use_tcp = use_tcp;
     sip->no_pids_all = no_pids_all;
-    create_hash_table(&sip->requests, 10);
 
     if (i + 1 > a_count)
         a_count = i + 1; // update adapter counter
