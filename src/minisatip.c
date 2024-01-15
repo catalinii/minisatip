@@ -281,7 +281,7 @@ void print_version(int use_log, int print_built_info) {
     char buf[200];
     int i;
     memset(buf, 0, sizeof(buf));
-    sprintf(buf, "%s version %s, compiled in %s %s, with s2api version: %04X",
+    sprintf(buf, "%s version %s, compiled on %s %s, with s2api version: %04X",
             app_name, version, __DATE__, __TIME__, LOGDVBAPIVERSION);
     if (!use_log)
         puts(buf);
