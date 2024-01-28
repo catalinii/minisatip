@@ -18,8 +18,8 @@ It is tested on x86_64, x86, ARM and MIPS platforms and it requires DVBAPI 5. Su
 The application shows also a status page by default at the address: http://IP:8080 
 The latest binaries for embedded platforms: https://minisatip.org/forum/viewtopic.php?f=5&t=371 
 
-Contact
--------
+## Contact
+
 Please use https://minisatip.org/forum/ for any question or join slack: https://join.slack.com/t/minisatip/shared_invite/zt-rms717g0-SQR25SFs8RH9JlVZV4II7A 
 
 In order to speed up the investigation of an issue, please provide the full log and a link to the application that is not working.
@@ -27,20 +27,10 @@ In order to speed up the investigation of an issue, please provide the full log 
 If you like minisatip and you want to support the development of the project please make a donation: 
 https://paypal.me/minisatip
 
-Compilation:
--------
-./configure
-make
+## Usage:
 
-Cross-Compilation Example:
--------
-export PATH=$PATH:/usr/src/mipsel-tuxbox-linux-gnu/bin/
-./configure --host=mipsel-tuxbox-linux-gnu
-make
-
-Usage:
--------
-(Message automatically generated from "minisatip --help")
+(Message automatically generated from `minisatip --help`)
+```
 minisatip version 1.2.~4b5ed89, compiled in Feb 22 2023 08:21:17, with s2api version: 050B
 
 	./minisatip [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
@@ -276,12 +266,13 @@ Help
 	* The format is: ADAPTER1:[*]MAX_CHANNELS[-CAID1[-CAID2]...,ADAPTER2:MAX_CHANNELS[-CAID3[-CAID4]...] 
 		 * before the MAX_CHANNELS enable 2 PMTs inside of the same CAPMT to double the number of decrypted channels
 			* eg : 0:*1-100
+
 The DDCI adapters 0 will support maximum of 1 CAPMT (2 channels because of *) and will use CAID1. If CAID is not specified it will use CAMs CAIDs
 Official CAMs support 1 or 2 channels, with this option this is extended to 2 or 4
 By default every CAM supports 1 channels
+```
 
-How to compile:
-------
+## How to compile:
 
 ```bash
 ./configure
@@ -297,7 +288,7 @@ To cross compile, use something like (static compilation), considering that `mip
 
 To compile the application:
 
-```
+```bash
 make
 ```
 
@@ -307,18 +298,16 @@ To add custom compilation flags you can use for example:
 make EXTRA_CFLAGS="-DNEEDS_SENDMMSG_SHIM"
 ```
 
-The above command is useful if you're getting errors like "sendmmsg(): errno 
-38: Function not implemented" (usually only concerns really old systems).
+The above command is useful if you're getting errors like `sendmmsg(): errno 38: Function not implemented` (usually only concerns really old systems).
 
-Building a Debian package:
--------
+## Building a Debian package:
 
 ```bash
 dpkg-buildpackage -b -us -uc
 ```
 
-Examples:
--------
+## Examples:
+
 - In order to listen to a radio after minisatip is started open the following URL in your favorite media player:
 	- on Hotbird 13E: `http://MINISATIP_HOST:8080/?msys=dvbs&freq=11623&pol=v&sr=27500&pids=0,10750,254`
 	- Astra 19.2E: `http://MINISATIP_HOST:8080/?msys=dvbs&freq=12266&pol=h&sr=27500&pids=0,851`
