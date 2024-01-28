@@ -1,5 +1,6 @@
-How to compile:
-------
+```
+
+## How to compile:
 
 ```bash
 ./configure
@@ -15,7 +16,7 @@ To cross compile, use something like (static compilation), considering that `mip
 
 To compile the application:
 
-```
+```bash
 make
 ```
 
@@ -25,18 +26,16 @@ To add custom compilation flags you can use for example:
 make EXTRA_CFLAGS="-DNEEDS_SENDMMSG_SHIM"
 ```
 
-The above command is useful if you're getting errors like "sendmmsg(): errno 
-38: Function not implemented" (usually only concerns really old systems).
+The above command is useful if you're getting errors like `sendmmsg(): errno 38: Function not implemented` (usually only concerns really old systems).
 
-Building a Debian package:
--------
+## Building a Debian package:
 
 ```bash
 dpkg-buildpackage -b -us -uc
 ```
 
-Examples:
--------
+## Examples:
+
 - In order to listen to a radio after minisatip is started open the following URL in your favorite media player:
 	- on Hotbird 13E: `http://MINISATIP_HOST:8080/?msys=dvbs&freq=11623&pol=v&sr=27500&pids=0,10750,254`
 	- Astra 19.2E: `http://MINISATIP_HOST:8080/?msys=dvbs&freq=12266&pol=h&sr=27500&pids=0,851`
