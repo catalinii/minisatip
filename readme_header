@@ -18,8 +18,8 @@ It is tested on x86_64, x86, ARM and MIPS platforms and it requires DVBAPI 5. Su
 The application shows also a status page by default at the address: http://IP:8080 
 The latest binaries for embedded platforms: https://minisatip.org/forum/viewtopic.php?f=5&t=371 
 
-Contact
--------
+## Contact
+
 Please use https://minisatip.org/forum/ for any question or join slack: https://join.slack.com/t/minisatip/shared_invite/zt-rms717g0-SQR25SFs8RH9JlVZV4II7A 
 
 In order to speed up the investigation of an issue, please provide the full log and a link to the application that is not working.
@@ -27,17 +27,7 @@ In order to speed up the investigation of an issue, please provide the full log 
 If you like minisatip and you want to support the development of the project please make a donation: 
 https://paypal.me/minisatip
 
-Compilation:
--------
-./configure
-make
+## Usage:
 
-Cross-Compilation Example:
--------
-export PATH=$PATH:/usr/src/mipsel-tuxbox-linux-gnu/bin/
-./configure --host=mipsel-tuxbox-linux-gnu
-make
-
-Usage:
--------
-(Message automatically generated from "minisatip --help")
+(Message automatically generated from `minisatip --help`)
+```
