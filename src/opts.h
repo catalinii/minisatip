@@ -12,7 +12,8 @@ typedef struct struct_opts {
     char *command_line;
     char *http_host; // http-server host
     char *rtsp_host; // rtsp-server host
-    char *bind;      // bind address
+    char *bind;      // bind address (RTSP + SSDP)
+    char *bind_http; // bind address (HTTP)
     char *bind_dev;  // bind device
     char *datetime_compile;
     time_t start_time;
