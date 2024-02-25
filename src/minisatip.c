@@ -81,6 +81,7 @@ int rtsp, http, si, si1, ssdp1;
 #define DISABLEDVB_OPT 'N'
 #define DISABLESSDP_OPT 'G'
 #define BIND_OPT 'V'
+#define BIND_HTTP_OPT 'U'
 #define BIND_DEV_OPT 'J'
 #define HTTPSERVER_OPT 'w'
 #define HTTPPORT_OPT 'x'
@@ -146,6 +147,7 @@ static const struct option long_options[] = {
     {"app-buffer", required_argument, NULL, APPBUFFER_OPT},
     {"buffer", required_argument, NULL, DVRBUFFER_OPT},
     {"bind", required_argument, NULL, BIND_OPT},
+    {"bind-http", required_argument, NULL, BIND_HTTP_OPT},
     {"bind-dev", required_argument, NULL, BIND_DEV_OPT},
     {"cache-dir", required_argument, NULL, CACHE_DIR_OPT},
     {"send-all-ecm", no_argument, NULL, SENDALLECM_OPT},
@@ -542,7 +544,8 @@ Help\n\
 	* 1 - use demuxX device \n\
 	* 2 - use dvrX device and additionally capture PSI data from demuxX device \n\
 	* 3 - use demuxX device and additionally capture PSI data from demuxX device \n\
-* -V --bind address: address for listening (all services)\n\
+* -V --bind address: address for listening (RTSP + SSDP) \n\
+* -U --bind-http address: address for listening (HTTP)\n\
 * -J --bind-dev device: device name for binding (all services)\n\
         * beware that only works with 1 device. loopback may not work!\n\
 \n\
@@ -754,6 +757,11 @@ void set_options(int argc, char *argv[]) {
 
         case BIND_OPT: {
             opts.bind = optarg;
+            break;
+        }
+
+        case BIND_HTTP_OPT: {
+            opts.bind_http = optarg;
             break;
         }
 
@@ -1144,10 +1152,11 @@ void set_options(int argc, char *argv[]) {
     opts.rtsp_host = (char *)_malloc(MAX_HOST);
     sprintf(opts.rtsp_host, "%s:%d", lip, opts.rtsp_port);
 
-    LOG("Listening configuration RTSP:%s HTTP:%s (bind address: %s)",
+    LOG("Listening configuration RTSP:%s (bind address: %s), HTTP:%s (bind address: %s)",
         opts.rtsp_host ? opts.rtsp_host : "(null)",
+        opts.bind ? opts.bind : "(null)",
         opts.http_host ? opts.http_host : "(null)",
-        opts.bind ? opts.bind : "(null)");
+        opts.bind_http ? opts.bind_http : opts.bind ? opts.bind : "(null)");
 
     opts.datetime_compile = (char *)_malloc(64);
     sprintf(opts.datetime_compile, "%s | %s", __DATE__, __TIME__);
@@ -1900,7 +1909,7 @@ int main(int argc, char *argv[]) {
     readBootID();
     if ((rtsp = tcp_listen(opts.bind, opts.rtsp_port, opts.use_ipv4_only)) < 1)
         FAIL("RTSP: Could not listen on port %d", opts.rtsp_port);
-    if ((http = tcp_listen(opts.bind, opts.http_port, opts.use_ipv4_only)) < 1)
+    if ((http = tcp_listen(opts.bind_http, opts.http_port, opts.use_ipv4_only)) < 1)
         FAIL("Could not listen on http port %d", opts.http_port);
     if (!opts.disable_ssdp) {
         if ((ssdp = udp_bind(opts.bind, 1900, opts.use_ipv4_only)) < 1)
