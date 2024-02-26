@@ -238,7 +238,7 @@ Help
 	* 1 - use demuxX device 
 	* 2 - use dvrX device and additionally capture PSI data from demuxX device 
 	* 3 - use demuxX device and additionally capture PSI data from demuxX device 
-* -V --bind address: address for listeningg (RTSP + SSDP)
+* -V --bind address: address for listening (RTSP + SSDP)
 * -U --bind-http address: address for listening (HTTP)
 * -J --bind-dev device: device name for binding (all services)
         * beware that only works with 1 device. loopback may not work!
