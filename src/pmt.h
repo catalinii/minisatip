@@ -225,6 +225,7 @@ void update_cw(SPMT *pmt);
 int pmt_decrypt_stream(adapter *ad);
 int wait_pusi(adapter *ad, int len);
 int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf, int sca_id);
+int get_channels_for_adapter(adapter *ad);
 void free_filters();
 void stop_pmt(SPMT *pmt, adapter *ad);
 int pmt_add_stream_pid(SPMT *pmt, int pid, int type, int is_audio, int is_video,

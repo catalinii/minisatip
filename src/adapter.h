@@ -90,6 +90,10 @@ struct struct_adapter {
     int threshold;
     int active_pids, max_active_pids, max_pids;
     int active_demux_pids;
+    int active_services;
+    int adapter_dmx_bandwith; // Current bandwith in KB/s
+    int64_t local_bw_dmx;
+    int max_services, max_runpids, max_bandwith;
     int is_t2mi;
     uint64_t tune_time;
     pthread_t thread;
@@ -166,6 +170,7 @@ void set_diseqc_timing(char *o);
 void set_diseqc_multi(char *o);
 void set_slave_adapters(char *o);
 void set_timeout_adapters(char *o);
+void set_restrictions_adapters(char *o);
 void set_adapter_dmxsource(char *o);
 void reset_pids_type(int aid, int clear_pat);
 void reset_ecm_type_for_pmt(int aid, int pmt);
@@ -184,6 +189,7 @@ void set_signal_multiplier(char *o);
 int signal_thread(sockets *s);
 int close_adapter_for_socket(sockets *s);
 int compare_tunning_parameters(int aid, transponder *tp);
+int check_adapter_restrictions(adapter *ad);
 void request_adapter_close(adapter *ad);
 int compare_slave_parameters(adapter *ad, transponder *tp);
 int get_absolute_source_for_adapter(int aid, int src, int sys);

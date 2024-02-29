@@ -1965,7 +1965,7 @@ void copy_en300468_string(char *dest, int dest_len, unsigned char *src,
         start += 2;
 
     if (src[0] < 0x20)
-        charset = src[0];
+        charset = (uint8_t)src[0];
 
     for (i = start; (i < len) && (--dest_len > 0); i++) {
         int c = src[i];
@@ -2207,6 +2207,22 @@ char *get_pmt_for_adapter(int aid, char *dest, int max_size) {
     if (pos > 0)
         dest[pos - 1] = 0;
     return dest;
+}
+
+int get_channels_for_adapter(adapter *ad) {
+    int i;
+    int num_ch = 0;
+    if (!ad)
+        return num_ch;
+
+    for (i = 0; i < ad->active_pmts; i++) {
+        int p = ad->active_pmt[i];
+        SPMT *pmt = get_pmt(p);
+        if (pmt && pmt->state == PMT_RUNNING)
+            num_ch++;
+    }
+
+    return num_ch;
 }
 
 void free_all_pmts() {
