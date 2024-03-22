@@ -1183,6 +1183,9 @@ void set_options(int argc, char *argv[]) {
     // FBC setup
     if (!access("/proc/stb/frontend/0/fbc_connect", W_OK))
         set_slave_adapters("2-7:0");
+
+    // Generate the static SAT>IP UUID
+    generate_uuid(&opts);
 }
 
 #define RBUF 32000
@@ -1434,8 +1437,6 @@ int read_rtsp(sockets *s) {
 
 #define JSON_STATE_MAXLEN (256 * 1024)
 
-char uuid[50];
-int uuidi;
 USockAddr ssdp_sa;
 
 int read_http(sockets *s) {
@@ -1547,7 +1548,7 @@ int read_http(sockets *s) {
     if (strncmp(arg[0], "GET", 3) && strncmp(arg[0], "POST", 4) && !is_head)
         REPLY_AND_RETURN(503);
 
-    if (uuidi == 0 && !opts.disable_ssdp)
+    if (!opts.disable_ssdp)
         ssdp_discovery(s);
 
     if (strcmp(arg[1], "/" DESC_XML) == 0) {
@@ -1577,7 +1578,7 @@ int read_http(sockets *s) {
             strcpy(adapters, "DVBS2-0,");
         adapters[strlen(adapters) - 1] = 0;
         snprintf(buf, sizeof(buf), xml, opts.name_app, app_name, opts.name_app,
-                 uuid, opts.http_host, adapters,
+                 opts.uuid, opts.http_host, adapters,
                  opts.playlist ? opts.playlist : "");
         sprintf(headers,
                 "Cache-Control: no-cache\r\nContent-type: "
@@ -1669,23 +1670,18 @@ int close_http(sockets *s) {
 #define DEFAULT_LOG LOG_SSDP
 
 int ssdp_notify(sockets *s, int alive) {
-    char buf[500], mac[15] = "00000000000000";
+    char buf[500];
     char nt[3][60];
     int ptr = 0;
     char *op = alive ? "Discovery" : "ByeBye";
 
-    char uuid1[] = "11223344-9999-0000-b7ae";
     int i;
     s->wtime = getTick();
-    if (uuidi == 0) {
-        uuidi = 1;
-        get_mac_address(mac);
-        sprintf(uuid, "%s-%s", uuid1, mac);
-        // use IPv4 only as disc_host is multicast IPv4
-        fill_sockaddr(&ssdp_sa, opts.disc_host, 1900, 1);
-    }
+
+    // use IPv4 only as disc_host is multicast IPv4
+    fill_sockaddr(&ssdp_sa, opts.disc_host, 1900, 1);
     strcpy(nt[0], "::upnp:rootdevice");
-    sprintf(nt[1], "::uuid:%s", uuid);
+    sprintf(nt[1], "::uuid:%s", opts.uuid);
     strcpy(nt[2], "::urn:ses-com:device:SatIPServer:1");
 
     if (s->type != TYPE_UDP)
@@ -1706,7 +1702,7 @@ int ssdp_notify(sockets *s, int alive) {
         if (alive)
             strcatf(buf, ptr, "SERVER: Linux/1.0 UPnP/1.1 %s/%s\r\n",
                     opts.name_app, version);
-        strcatf(buf, ptr, "USN: uuid:%s%s\r\n", uuid, i == 1 ? "" : nt[i]);
+        strcatf(buf, ptr, "USN: uuid:%s%s\r\n", opts.uuid, i == 1 ? "" : nt[i]);
         strcatf(buf, ptr, "BOOTID.UPNP.ORG: %d\r\n", opts.bootid);
         strcatf(buf, ptr, "CONFIGID.UPNP.ORG: 0\r\n");
         if (alive)
@@ -1725,7 +1721,15 @@ int ssdp_notify(sockets *s, int alive) {
     return 0;
 }
 
-int ssdp_discovery(sockets *s) { return ssdp_notify(s, 1); }
+int ssdp_discovery_sent = 0;
+int ssdp_discovery(sockets *s) {
+    // Send discovery once only
+    if (!ssdp_discovery_sent) {
+        ssdp_discovery_sent = 1;
+        return ssdp_notify(s, 1);
+    }
+    return 0;
+}
 
 int ssdp_byebye(sockets *s) { return ssdp_notify(s, 0); }
 
@@ -1754,13 +1758,13 @@ int ssdp_reply(sockets *s) {
     int did = 0;
     int ptr = 0;
 
-    if (uuidi == 0)
+    if (!opts.disable_ssdp)
         ssdp_discovery(s);
 
     s->rtime = s->wtime; // consider the timeout of the discovery operation
 
     ruuid = strcasestr((const char *)s->buf, "uuid:");
-    if (ruuid && strncmp(uuid, strip(ruuid + 5), strlen(uuid)) == 0) {
+    if (ruuid && strncmp(opts.uuid, strip(ruuid + 5), strlen(opts.uuid)) == 0) {
         LOGM("Dropping packet from the same UUID as mine (from %s:%d)",
              get_sockaddr_host(s->sa, ra, sizeof(ra)),
              get_sockaddr_port(s->sa));
@@ -1823,7 +1827,7 @@ int ssdp_reply(sockets *s) {
 
     ptr = 0;
     strcatf(buf, ptr, reply, get_current_timestamp(), opts.http_host,
-            opts.xml_path, opts.name_app, version, uuid, opts.bootid, did);
+            opts.xml_path, opts.name_app, version, opts.uuid, opts.bootid, did);
 
     LOGM("Send Reply SSDP packet (fd: %d) %s:%d, bootid: %d deviceid: %d http: "
          "%s",
@@ -2144,7 +2148,7 @@ _symbols minisatip_sym[] = {
     {"has_pmt", VAR_INT, &has_pmt, 1, 0, 0},
     {"name_app", VAR_PSTRING, &opts.name_app, 0, 0, 0},
     {"http_host", VAR_PSTRING, &opts.http_host, 0, 0, 0},
-    {"uuid", VAR_STRING, uuid, 0, 0, 0},
+    {"uuid", VAR_STRING, &opts.uuid, 0, 0, 0},
     {"bootid", VAR_INT, &opts.bootid, 1, 0, 0},
     {"deviceid", VAR_INT, &opts.device_id, 1, 0, 0},
     {"http_port", VAR_INT, &opts.http_port, 1, 0, 0},
