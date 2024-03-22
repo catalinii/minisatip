@@ -19,8 +19,10 @@
  */
 
 #include "opts.h"
+#include "socketworks.h"
 #include "utils.h"
 #include "utils/logging/logging.h"
+#include <stdio.h>
 #include <string.h>
 
 void parse_dvbapi_opt(char *optarg, struct_opts_t *optz) {
@@ -59,4 +61,11 @@ void parse_dvbapi_opt(char *optarg, struct_opts_t *optz) {
     if (optz->pids_all_no_dec) {
         LOG("Not filtering out encrypted packets from pids=all streams");
     }
+}
+
+void generate_uuid(struct_opts_t *optz) {
+    char uuid1[] = "11223344-9999-0000-b7ae";
+    char mac[15] = "00000000000000";
+    get_mac_address(mac);
+    sprintf(optz->uuid, "%s-%s", uuid1, mac);
 }
