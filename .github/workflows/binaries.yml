@@ -30,7 +30,7 @@ jobs:
     - name: Build AXE
       run: |
        make clean
-       ./configure --disable-netcv --disable-dvbapi --enable-static --host=sh4-linux --disable-dvbaes --disable-dvbca --enable-axe
+       ./configure --disable-netcv --disable-dvbapi --enable-static --host=sh4-linux --disable-dvbca --enable-axe
        make PMT=0
        zip -9 -r /minisatip_axe.zip minisatip html
 
