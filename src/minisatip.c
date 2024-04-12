@@ -1437,8 +1437,6 @@ int read_rtsp(sockets *s) {
 
 #define JSON_STATE_MAXLEN (256 * 1024)
 
-USockAddr ssdp_sa;
-
 int read_http(sockets *s) {
     char *arg[50];
     char buf[2000]; // the XML should not be larger than 1400 as it will create
@@ -1678,6 +1676,7 @@ int ssdp_notify(sockets *s, int alive) {
     int i;
     s->wtime = getTick();
 
+    USockAddr ssdp_sa;
     // use IPv4 only as disc_host is multicast IPv4
     fill_sockaddr(&ssdp_sa, opts.disc_host, 1900, 1);
     strcpy(nt[0], "::upnp:rootdevice");
