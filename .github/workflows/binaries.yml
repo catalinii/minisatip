@@ -41,6 +41,15 @@ jobs:
        make EXTRA_CFLAGS="-I/sysroot/mipsel/include -L/sysroot/mipsel/lib" EMBEDDED=1
        zip -9 -r /minisatip_mips.zip minisatip html
 
+    - name: Archive built binaries
+      uses: actions/upload-artifact@v4
+      with:
+        name: minisatip
+        path: |
+          /minisatip_x64.zip
+          /minisatip_arm.zip
+          /minisatip_axe.zip
+          /minisatip_mips.zip
 
     - name: Bump version and push tag/create release point
       uses: anothrNick/github-tag-action@1.35.0
