@@ -309,6 +309,7 @@ int init_hw(int i) {
         ad->delsys(i, ad->fe, ad->sys);
     ad->master_sid = -1;
     ad->sid_cnt = 0;
+    ad->nosid_cnt = 0;
     ad->pid_err = ad->dec_err = 0;
     ad->new_gs = 0;
     ad->force_close = 0;

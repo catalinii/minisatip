@@ -31,6 +31,7 @@ typedef struct ca_device ca_device_t;
 
 #define MAX_DELSYS 10
 #define MAX_PMT_FOR_ADAPTER 255
+#define MAX_NOSID 3000
 
 typedef struct struct_adapter adapter;
 struct struct_adapter {
@@ -54,6 +55,7 @@ struct struct_adapter {
     int ca_mask;
     int master_sid; // first SID, the one that controls the tuning
     int sid_cnt;    // number of streams
+    int nosid_cnt;
     int sock, fe_sock;
     int do_tune;
     int force_close;

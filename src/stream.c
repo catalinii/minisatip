@@ -1090,6 +1090,19 @@ int read_dmx(sockets *s) {
         return 0;
     }
 
+    LOG("adapter %d sid_cnt %d nosid_cnt %d", ad->id, ad->sid_cnt, ad->nosid_cnt);
+    if (ad->sid_cnt < 1) {
+        ad->nosid_cnt++;
+        if (ad->nosid_cnt > MAX_NOSID){
+            ad->nosid_cnt = 0;
+            request_adapter_close(ad);
+        }
+        s->rlen = 0;
+        return 0;
+    }
+    else
+        ad->nosid_cnt = 0;
+
     threshold = ad->threshold;
 
     if (rtime - ad->rtime > threshold)
