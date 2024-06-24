@@ -1224,9 +1224,9 @@ int get_lnb_int_freq(transponder *tp, diseqc *diseqc_param) {
 
     if (tp->pol > 2 && diseqc_param->lnb_circular > 0)
         return (freq - diseqc_param->lnb_circular);
-    if (freq < diseqc_param->lnb_switch)
-        return (freq - diseqc_param->lnb_low);
-    return (freq - diseqc_param->lnb_high);
+    if (diseqc_param->lnb_switch > 0 && freq > diseqc_param->lnb_switch)
+        return (freq - diseqc_param->lnb_high);
+    return abs(freq - diseqc_param->lnb_low);
 }
 
 int compare_tunning_parameters(int aid, transponder *tp) {
