@@ -169,6 +169,8 @@ void set_timeout_adapters(char *o);
 void set_adapter_dmxsource(char *o);
 void reset_pids_type(int aid, int clear_pat);
 void reset_ecm_type_for_pmt(int aid, int pmt);
+int get_lnb_hiband(transponder *tp, diseqc *diseqc_param);
+int get_lnb_int_freq(transponder *tp, diseqc *diseqc_param);
 int delsys_match(adapter *ad, int del_sys);
 int get_enabled_pids(adapter *ad, int *pids, int lpids);
 int get_all_pids(adapter *ad, int *pids, int lpids);

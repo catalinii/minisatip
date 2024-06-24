@@ -1030,17 +1030,7 @@ int setup_switch(adapter *ad) {
 
     frontend_fd = master->fe;
 
-    if (tp->pol > 2 && tp->diseqc_param.lnb_circular > 0) {
-        freq = (freq - tp->diseqc_param.lnb_circular);
-        hiband = 0;
-    } else if (freq < tp->diseqc_param.lnb_switch) {
-        freq = (freq - tp->diseqc_param.lnb_low);
-        hiband = 0;
-    } else {
-        freq = (freq - tp->diseqc_param.lnb_high);
-        hiband = 1;
-    }
-
+    // Send the appropriate commands to setup the LNB/switch
     if (tp->diseqc_param.switch_type == SWITCH_UNICABLE) {
         freq = send_unicable(ad, frontend_fd, freq / 1000, diseqc, pol, hiband,
                              &tp->diseqc_param);
@@ -1050,6 +1040,9 @@ int setup_switch(adapter *ad) {
                          &tp->diseqc_param);
         hiband = pol = 0; // do not care about polarity and hiband on Unicable
     } else {
+        freq = get_lnb_int_freq(tp, &tp->diseqc_param);
+        hiband = get_lnb_hiband(tp, &tp->diseqc_param);
+
         int do_setup_switch = 0;
         int change_par = 0;
         if (ad->old_pol != pol || ad->old_hiband != hiband ||
