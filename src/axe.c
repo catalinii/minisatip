@@ -273,28 +273,10 @@ adapter *axe_use_adapter(int input) {
     return ad;
 }
 
-int axe_get_hiband(transponder *tp, diseqc *diseqc_param) {
-    if (tp->pol > 2 && diseqc_param->lnb_circular > 0)
-        return 0;
-    if (tp->freq < diseqc_param->lnb_switch)
-        return 0;
-    return 1;
-}
-
-int axe_get_freq(transponder *tp, diseqc *diseqc_param) {
-    int freq = tp->freq;
-
-    if (tp->pol > 2 && diseqc_param->lnb_circular > 0)
-        return (freq - diseqc_param->lnb_circular);
-    if (freq < diseqc_param->lnb_switch)
-        return (freq - diseqc_param->lnb_low);
-    return (freq - diseqc_param->lnb_high);
-}
-
 int axe_tune_check(adapter *ad, transponder *tp, diseqc *diseqc_param,
                    int diseqc) {
     int pol = (tp->pol - 1) & 1;
-    int hiband = axe_get_hiband(tp, diseqc_param);
+    int hiband = get_lnb_hiband(tp, diseqc_param);
     LOGM(
         "axe: tune check for adapter %d, pol %d/%d, hiband %d/%d, diseqc %d/%d",
         ad->id, ad->old_pol, pol, ad->old_hiband, hiband, ad->old_diseqc,
@@ -416,8 +398,8 @@ int axe_setup_switch(adapter *ad) {
             if (master >= 0) {
                 input = master;
                 diseqc_param = &adm->diseqc_param;
-                hiband = axe_get_hiband(tp, diseqc_param);
-                freq = axe_get_freq(tp, diseqc_param);
+                hiband = get_lnb_hiband(tp, diseqc_param);
+                freq = get_lnb_int_freq(tp, diseqc_param);
                 if (!axe_tune_check(adm, tp, diseqc_param, diseqc)) {
                     send_diseqc(adm, adm->fe2, diseqc,
                                 adm->old_diseqc != diseqc, pol, hiband,
@@ -429,7 +411,7 @@ int axe_setup_switch(adapter *ad) {
                 goto axe;
             }
         } else if (opts.quattro) {
-            hiband = axe_get_hiband(tp, diseqc_param);
+            hiband = get_lnb_hiband(tp, diseqc_param);
             if (opts.quattro_hiband == 1 && hiband) {
                 LOG("axe_fe: hiband is not allowed for quattro config (adapter "
                     "%d)",
@@ -450,8 +432,8 @@ int axe_setup_switch(adapter *ad) {
             }
             adm->old_diseqc = diseqc = 0;
             diseqc_param = &adm->diseqc_param;
-            hiband = axe_get_hiband(tp, diseqc_param);
-            freq = axe_get_freq(tp, diseqc_param);
+            hiband = get_lnb_hiband(tp, diseqc_param);
+            freq = get_lnb_int_freq(tp, diseqc_param);
             if (!axe_tune_check(adm, tp, diseqc_param, 0)) {
                 send_diseqc(adm, adm->fe2, 0, 0, pol, hiband, diseqc_param);
                 adm->old_pol = pol;
@@ -476,8 +458,8 @@ int axe_setup_switch(adapter *ad) {
             ad->fe2);
     }
 
-    hiband = axe_get_hiband(tp, diseqc_param);
-    freq = axe_get_freq(tp, diseqc_param);
+    hiband = get_lnb_hiband(tp, diseqc_param);
+    freq = get_lnb_int_freq(tp, diseqc_param);
 
     if (diseqc_param->switch_type == SWITCH_UNICABLE) {
         freq = send_unicable(ad, ad->fe2, freq / 1000, diseqc, pol, hiband,

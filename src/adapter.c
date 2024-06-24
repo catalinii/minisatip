@@ -619,15 +619,8 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
     // master adapter is used by other
     int diseqc = (tp->diseqc > 0) ? tp->diseqc - 1 : 0;
     int pol = (tp->pol - 1) & 1;
-    int hiband = 0;
+    int hiband = get_lnb_hiband(tp, &tp->diseqc_param);
     int freq = tp->freq;
-
-    if (tp->pol > 2 && tp->diseqc_param.lnb_circular > 0)
-        hiband = 0;
-    else if (freq < tp->diseqc_param.lnb_switch)
-        hiband = 0;
-    else
-        hiband = 1;
 
     if (ad->master_source >= 0 && ad->master_source < MAX_ADAPTERS)
         master = a[ad->master_source];
@@ -1216,6 +1209,24 @@ int mark_pids_add(int sid, int aid, char *pids) {
             return -1;
     }
     return 0;
+}
+
+int get_lnb_hiband(transponder *tp, diseqc *diseqc_param) {
+    if (tp->pol > 2 && diseqc_param->lnb_circular > 0)
+        return 0;
+    if (tp->freq < diseqc_param->lnb_switch)
+        return 0;
+    return 1;
+}
+
+int get_lnb_int_freq(transponder *tp, diseqc *diseqc_param) {
+    int freq = tp->freq;
+
+    if (tp->pol > 2 && diseqc_param->lnb_circular > 0)
+        return (freq - diseqc_param->lnb_circular);
+    if (freq < diseqc_param->lnb_switch)
+        return (freq - diseqc_param->lnb_low);
+    return (freq - diseqc_param->lnb_high);
 }
 
 int compare_tunning_parameters(int aid, transponder *tp) {
