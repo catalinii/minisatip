@@ -404,8 +404,11 @@ Help\n\
 \n\
 * -L --lnb specifies the adapter and LNB parameters (low, high and switch frequency)\n\
 	* eg: -L *:9750-10600-11700 - sets all the adapters to use Universal LNB parameters (default)\n\
-	* eg: -L *:10750-10750-10750 - sets the parameters for Sky NZ LNB using 10750 Mhz\n\
-	* eg: -L 0:10750-10750-10750,1:9750-10600-11700 - adapter 0 has a SKY NZ LNB, adapter 1 has an Universal LNB\n\
+	* eg: -L *:10750-0-0 - sets all adapters to use 10750 MHz Ku-band LNB parameters (e.g. Sky NZ)\n\
+	* eg: -L *:5150-0-0 - sets all adapters to use 5150 MHz C-band LNB parameters\n\
+	* eg: -L 0:10750-0-0,1:9750-10600-11700 - adapter 0 has a SKY NZ LNB, adapter 1 has an Universal LNB\n\
+	\n\
+	For backward-compatibility reasons, linear LNB parameters may also be specified as *:5150-5150-5150 instead of *:5150-0-0\n\
 \n\
 * -m --mac xx: simulate xx as local mac address, generates UUID based on mac\n\
 	* eg: -m 001122334455 \n\
