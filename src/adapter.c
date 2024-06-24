@@ -1214,9 +1214,9 @@ int mark_pids_add(int sid, int aid, char *pids) {
 int get_lnb_hiband(transponder *tp, diseqc *diseqc_param) {
     if (tp->pol > 2 && diseqc_param->lnb_circular > 0)
         return 0;
-    if (tp->freq < diseqc_param->lnb_switch)
-        return 0;
-    return 1;
+    if (diseqc_param->lnb_switch > 0 && tp->freq > diseqc_param->lnb_switch)
+        return 1;
+    return 0;
 }
 
 int get_lnb_int_freq(transponder *tp, diseqc *diseqc_param) {
