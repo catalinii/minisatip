@@ -60,7 +60,7 @@ jobs:
         DEFAULT_BUMP: patch
       id: bump_version
     - name: Upload binary to release
-      uses: svenstaro/upload-release-action@v1-release
+      uses: svenstaro/upload-release-action@v2
       if: ${{ github.event_name == 'push' && github.repository_owner == 'catalinii' }}
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
