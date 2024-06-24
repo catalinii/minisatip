@@ -21,7 +21,6 @@
 #include "adapter.h"
 #include "api/symbols.h"
 #include "api/variables.h"
-#include "ca.h"
 #include "dvb.h"
 #include "minisatip.h"
 #include "utils.h"
