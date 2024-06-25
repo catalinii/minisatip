@@ -979,6 +979,11 @@ static int data_initialize(ca_device_t *d) {
         LOG("can not set host_id elements");
     }
 
+    uint8_t csuv = 0x00;
+    if (!element_set(&d->private_data, 49, &csuv, 1)) {
+        LOG("can not set csuv elements");
+    }
+
     return 1;
 }
 /* content_control commands */
