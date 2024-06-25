@@ -81,9 +81,14 @@ char logfile[256];
 int extract_ci_cert = 0;
 int has_ci = 0;
 
+// See Annex A (normative): Parameters exchanged in APDUs
 uint32_t datatype_sizes[MAX_ELEMENTS] = {
-    0,   50,  0,  0, 0, 8,  8,  0, 0, 0, 0,  0, 32, 256, 256, 0, 0,
-    256, 256, 32, 8, 8, 32, 32, 0, 8, 2, 32, 1, 32, 1,   0,   32};
+    0,  0,   0,   0,  0, 8,   8,   0,  0, 0,  0, 0, // 0-11
+    32, 256, 256, 0,  0, 256, 256, 32,              // 12-19
+    8,  8,   32,  32, 0, 8,   2,   32, 1, 32,       // 20-29
+    1,  0,   32,  0,  1, 1,   0,   1,  1, 0,  1,    // 30-40
+    1,  1,   0,   0,  0, 0,   0,   0,  1, 1,  1,    // 41-51
+    4,  0,   1,   0};                               // 52-55
 
 int dvbca_id;
 ca_device_t *ca_devices[MAX_ADAPTERS];
