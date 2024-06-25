@@ -233,6 +233,7 @@ int axe_wakeup(adapter *_ad, int fe_fd, int voltage) {
         ad = get_adapter(i);
         if (ad == NULL || is_adapter_disabled(i))
             continue;
+        LOG("axe_wakeup: waking adapter %d, fd %d", i, ad->fe);
         if (ioctl(ad->fe, FE_SET_VOLTAGE, voltage) == -1)
             LOG("axe_wakeup: FE_SET_VOLTAGE failed fd %d: %s", ad->fe,
                 strerror(errno));
