@@ -8,7 +8,7 @@
 #define MAX_SESSIONS 64
 #define PMT_INVALID -1
 #define PMT_ID_IS_VALID(x) (x > PMT_INVALID)
-#define MAX_ELEMENTS 33
+#define MAX_ELEMENTS 56
 #define MAX_PAIRS 10
 
 #define SIZE_INDICATOR 0x80
