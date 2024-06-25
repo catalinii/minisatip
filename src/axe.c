@@ -203,14 +203,14 @@ static void axe_pls_isi(adapter *ad, transponder *tp) {
 
 int axe_wakeup(adapter *_ad, int fe_fd, int voltage) {
     int i, mask;
-    adapter *a;
+    adapter *ad;
     if (opts.axe_power < 2)
         return 0;
     for (i = 0; i < 4; i++) {
-        a = get_adapter(i);
-        if (a == NULL || is_adapter_disabled(i))
+        ad = get_adapter(i);
+        if (ad == NULL || is_adapter_disabled(i))
             continue;
-        if (a->old_pol >= 0)
+        if (ad->old_pol >= 0)
             return 0;
     }
     LOG("AXE wakeup");
@@ -230,11 +230,11 @@ int axe_wakeup(adapter *_ad, int fe_fd, int voltage) {
     for (i = 0; i < 4 && mask; i++) {
         if (((1 << i) & mask) == 0)
             continue;
-        a = get_adapter(i);
+        ad = get_adapter(i);
         if (a == NULL || is_adapter_disabled(i))
             continue;
-        if (ioctl(a->fe, FE_SET_VOLTAGE, voltage) == -1)
-            LOG("axe_wakeup: FE_SET_VOLTAGE failed fd %d: %s", a->fe,
+        if (ioctl(ad->fe, FE_SET_VOLTAGE, voltage) == -1)
+            LOG("axe_wakeup: FE_SET_VOLTAGE failed fd %d: %s", ad->fe,
                 strerror(errno));
     }
     return 0;
