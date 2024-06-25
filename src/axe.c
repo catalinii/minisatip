@@ -231,7 +231,7 @@ int axe_wakeup(adapter *_ad, int fe_fd, int voltage) {
         if (((1 << i) & mask) == 0)
             continue;
         ad = get_adapter(i);
-        if (a == NULL || is_adapter_disabled(i))
+        if (ad == NULL || is_adapter_disabled(i))
             continue;
         if (ioctl(ad->fe, FE_SET_VOLTAGE, voltage) == -1)
             LOG("axe_wakeup: FE_SET_VOLTAGE failed fd %d: %s", ad->fe,
@@ -661,31 +661,30 @@ int axe_tune(int aid, transponder *tp) {
     return 0;
 }
 
-int axe_set_pid(adapter *a, int i_pid) {
-    if (i_pid > 8192 || a == NULL)
+int axe_set_pid(adapter *ad, int i_pid) {
+    if (i_pid > 8192 || ad == NULL)
         LOG_AND_RETURN(-1, "pid %d > 8192 for ADAPTER %d", i_pid,
-                       a ? a->id : -1);
-    if (axe_dmxts_add_pid(a->dvr, i_pid) < 0) {
-        LOG("failed setting filter on PID %d for ADAPTER %d (%s)", i_pid, a->id,
+                       ad ? ad->id : -1);
+    if (axe_dmxts_add_pid(ad->dvr, i_pid) < 0) {
+        LOG("failed setting filter on PID %d for ADAPTER %d (%s)", i_pid, ad->id,
             strerror(errno));
         return -1;
     }
-    LOG("setting filter on PID %d for ADAPTER %d", i_pid, a->id);
-    return ((a->id + 1) << 16) | i_pid;
+    LOG("setting filter on PID %d for ADAPTER %d", i_pid, ad->id);
+    return ((ad->id + 1) << 16) | i_pid;
 }
 
 int axe_del_filters(adapter *ad, int fd, int pid) {
-    adapter *a = get_adapter((fd >> 16) - 1);
     if (a == NULL)
         return 0; /* closed */
     if ((fd & 0xffff) != pid)
         LOG_AND_RETURN(0, "AXE PID remove on an invalid handle %d, pid %d", fd,
                        pid);
-    if (axe_dmxts_remove_pid(a->dvr, pid) < 0)
-        LOG("AXE PID remove failed on PID %d ADAPTER %d: %s", pid, a->pa,
+    if (axe_dmxts_remove_pid(ad->dvr, pid) < 0)
+        LOG("AXE PID remove failed on PID %d ADAPTER %d: %s", pid, ad->pa,
             strerror(errno))
     else
-        LOG("clearing filters on PID %d ADAPTER %d", pid, a->pa);
+        LOG("clearing filters on PID %d ADAPTER %d", pid, ad->pa);
     return 0;
 }
 
