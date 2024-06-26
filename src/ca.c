@@ -143,6 +143,23 @@ unsigned char dh_g[256] =
      0x69, 0x87, 0x83, 0x06, 0x51, 0x80, 0xa5, 0x6e, 0xa6, 0x19, 0x7d, 0x3b,
      0xef, 0xfb, 0xe0, 0x4a};
 
+typedef struct opfr_operator_tune_descr {
+    double freq;
+    char pol;
+    double pos;
+    char east_west;
+    char delsys[8];
+    char mod[8];
+    double sr;
+    char fec[4];
+} opfr_operator_tune_descr_t;
+
+// EN 300 468, tables 36, 38, and 41
+const char en300468_fec_map[12][4] = {"",    "1/2", "2/3", "3/4",  "5/6", "7/8",
+                                      "8/9", "3/5", "4/5", "9/10", "",    ""};
+const char en300468_pol_map[] = {'H', 'V', 'L', 'R'};
+const char en300468_mod_map[4][8] = {"auto", "QPSK", "8PSK", "16QAM"};
+
 static int ca_send_datetime(ca_device_t *d);
 int populate_resources(ca_device_t *d, int *resource_ids);
 int ca_write_apdu(ca_session_t *s, int resource, const void *data, int len);
@@ -1780,94 +1797,116 @@ static int CIPLUS_APP_SAS_handler(ca_session_t *session, int tag, uint8_t *data,
     return 0;
 } /* not working, just for fun */
 
+static void parse_operator_tune_descriptor(const uint8_t *descr,
+                                           opfr_operator_tune_descr_t *out) {
+    // Frequency
+    char freq_buf[9];
+    sprintf(freq_buf, "%02X%02X%02X%02X", descr[2], descr[3], descr[4],
+            descr[5]);
+    out->freq = strtod(freq_buf, NULL) / 100;
+
+    // Orbital position, and polarity
+    char orb_buf[5];
+    sprintf(orb_buf, "%02X%02X", descr[6], descr[7]);
+    out->pos = strtod(orb_buf, NULL) / 10;
+    out->pol = (descr[8] & 0x60) >> 5;
+    out->east_west = descr[8] & (1 << 7) ? 'E' : 'W';
+
+    // Delivery system and modulation
+    strcpy(out->delsys, (descr[8] & (1 << 2)) ? "DVB-S2" : "DVB-S");
+    int mod = (descr[8] & 0x03);
+    strcpy(out->mod, en300468_mod_map[mod]);
+
+    // Symbol rate and FEC
+    char sr_buf[9];
+    sprintf(sr_buf, "%02X%02X%02X%02X", descr[9], descr[10], descr[11],
+            (descr[12] >> 4));
+    out->sr = strtod(sr_buf, NULL) / 100;
+    int fec = descr[12] & 0x0F;
+    strcpy(out->fec, en300468_fec_map[fec]);
+}
+
 static int CIPLUS_APP_OPRF_handler(ca_session_t *session, int tag,
                                    uint8_t *data, int data_length) {
-    ca_device_t *d = session->ca;
-    char buf[400];
-    int pos, i;
-    pos = sprintf(buf, " ");
     hexdump("CIPLUS_APP_OPRF_handler", data, data_length);
 
-    uint8_t data_oprf_search[9];
-    data_oprf_search[0] = 0x03; /* unattended mode bit=0 + length in bytes
-                                   of the service types */
-    data_oprf_search[1] = 0x01; /* service MPEG-2 television (0x01) */
-    data_oprf_search[2] = 0x16; /* service h264 SD (0x16) */
-    data_oprf_search[3] = 0x19; /* service h264 HD (0x19) */
-    data_oprf_search[4] = 0x02; /* length in bytes of the delivery_capability */
-    data_oprf_search[5] = 0x43; /* DVB-S */
-    data_oprf_search[6] = 0x79; /* DVB-S2 */
-    data_oprf_search[7] =
-        0x01; /* length in bytes of the application_capability */
-    data_oprf_search[8] = 0x00; /* System Software Update service */
+    uint8_t data_oprf_search_start[] = {
+        0x06, // unattended mode + service types length
+        0x01, // advertise support for MPEG-2/H.264/HEVC TV and radio
+        0x02, 0x16, 0x19, 0x1F, 0x20,
+        0x04, // delivery capability length
+        0x43, // DVB-S
+        0x79, // DVB-S2
+        0x7F,
+        0x17, // DVB-S2X
+        0x00, // application capability length
+    };
 
-    uint8_t data_oprf_tune_status[64];
-    data_oprf_tune_status[0] = 0x01; // unprocessed descriptor_number
-    data_oprf_tune_status[1] = 0x50; // signal strength
-    data_oprf_tune_status[2] = 0x50; // signal quality
-    data_oprf_tune_status[3] = 0x00; // status 0 - OK
-    data_oprf_tune_status[4] = 0x0d; // lenght next part (13 bytes)
+    uint8_t data_oprf_tune_status[] = {
+        0xFF, // descruptor number
+        0x00, // signal strength and quality
+        0x00,
+        (0x03 << 4), // status + 4 bit length
+        0x00,        // length (last 8 bits)
+    };
 
     switch (tag) {
-    case CIPLUS_TAG_OPERATOR_STATUS: /* operator_status 01 */
-    {
-        LOG("CAM_OPRF_operator_status_receive");
-        uint8_t tag_part = 0x04; /* operator_info_req */
-        if (data[1] & 0x20)      // initialised_flag - profile initialised
-            tag_part = 0x08;     /* operator_exit */
-        if (data[1] & 0x40) {
-            LOG("CI+ CA%d: operator profile %s initialised", d->id,
-                data[1] & 0x60 ? "" : "NOT ");
-        } else
-            LOG("CI+ CA%d: operator profile disabled", d->id);
-        ca_write_apdu(session, 0x9f9c00 | tag_part, 0x00, 0);
-        break;
-    }
-    case CIPLUS_TAG_OPERATOR_INFO: /* operator_info */
-    {
-        LOG("CAM_OPRF_operator_info_receive");
-        ca_write_apdu(session, 0x9f9c06, data_oprf_search, 9);
-        break;
-    }
-    case 0x9f9c03: /* operator_nit */
-    {
-        LOG("CAM_OPRF_operator_nit_receive");
-        /* operator_exit */
-        ca_write_apdu(session, 0x9f9c08, 0x00, 0);
-        break;
-    }
-    case CIPLUS_TAG_OPERATOR_SEARCH_STATUS: /* operator_search_status */
-    {
-        LOG("CAM_OPRF_operator_search_status_receive");
+    case CIPLUS_TAG_OPERATOR_STATUS:
+    case CIPLUS_TAG_OPERATOR_SEARCH_STATUS: {
+        // Parse the status and log some information
+        const char *apdu_name = tag == CIPLUS_TAG_OPERATOR_STATUS
+                                    ? "operator_status"
+                                    : "operator_search_status";
+        int info_version = data[0] >> 5;
+        int profile_type = data[1] >> 6;
+        int initialized_flag = (data[1] & (1 << 5)) > 0;
+        int refresh_request_flag = data[1] & 0x3;
+        int error_flag = data[2] >> 4;
 
-        if (data[1] & 0x02) // refresh_request_flag == 2 (urgent request)
-        {
-            /* operator_search_start */
-            ca_write_apdu(session, 0x9f9c06, data_oprf_search, 9);
-        } else /* operator_nit */
-            ca_write_apdu(session, 0x9f9c02, 0x00, 0);
+        LOG("Received %s APDU: \n"
+            "  info version:    %d\n"
+            "  profile type:    %d\n"
+            "  initialized:     %d\n"
+            "  refresh request: %d\n"
+            "  error:           %d\n",
+            apdu_name, info_version, profile_type, initialized_flag,
+            refresh_request_flag, error_flag);
+
+        // Initiate operator_search_start if profile is uninitialized
+        if (!initialized_flag) {
+            LOG("Initializing operator_search_start since profile is not "
+                "initialized yet");
+            ca_write_apdu(session, CIPLUS_TAG_OPERATOR_SEARCH_START,
+                          data_oprf_search_start,
+                          sizeof(data_oprf_search_start));
+        }
         break;
     }
-    case CIPLUS_TAG_OPERATOR_TUNE: /* operator_tune */
-    {
-        char *pol = "H";
-        if (data[5] & 0x20)
-            pol = "V";
-        else if (data[5] & 0x40)
-            pol = "L";
-        else if (data[5] & 0x60)
-            pol = "R";
-        LOG("CAM_OPRF_operator_tune_receive");
-        for (i = 0; i < data_length; i++) {
-            pos += sprintf(buf + pos, "%02X ", data[i]);
-            data_oprf_tune_status[i + 5] = data[i + 2];
+    case CIPLUS_TAG_OPERATOR_TUNE: {
+        // Loop through the descriptors
+        int descr_len = data[1];
+        LOG("Received operator_tune APDU with %d descriptor bytes", descr_len);
+
+        uint8_t *descr;
+        int i;
+        for (i = 0; i < descr_len; i += 13) {
+            // Parse the descriptor
+            descr = data + 2 + i;
+            opfr_operator_tune_descr_t parsed_descr;
+            parse_operator_tune_descriptor(descr, &parsed_descr);
+
+            // Log the details about the transponders that should be tuned
+            LOG("CAM wants to tune to the following transponder: "
+                "%.2f%c @ %.1f%c, %s %s, SR %.2f, FEC %s",
+                parsed_descr.freq, parsed_descr.pol, parsed_descr.pos,
+                parsed_descr.east_west, parsed_descr.delsys, parsed_descr.mod,
+                parsed_descr.sr, parsed_descr.fec);
         }
-        LOG("CI+ CA%d: %s", d->id, buf);
-        LOG("Please TUNE to transponder %x%x%x %c", data[2], data[3], data[4],
-            *pol);
-        // data_oprf_tune_status[13]=0xC6; //psk8 dvb-s2
-        sleep_msec(3 * 1000); // wait 3 secs
-        ca_write_apdu(session, 0x9f9c0a, data_oprf_tune_status, 18);
+
+        // Send an operator_tune_status response saying we failed to tune. The
+        // user will have to tune manually.
+        ca_write_apdu(session, CIPLUS_TAG_OPERATOR_TUNE_STATUS,
+                      data_oprf_tune_status, sizeof(data_oprf_tune_status));
         break;
     }
     default:
