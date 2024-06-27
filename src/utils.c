@@ -599,7 +599,9 @@ int init_utils(char *arg0) {
 }
 
 void _hexdump(char *desc, void *addr, int len) {
-    int i, pos = 0, bl = (len * 6 < 100) ? 100 : len * 6;
+    // Each character needs roughly 5 bytes to print. Worst case scenario is 
+    // that one character ends up on a new line, requiring 74 bytes to print.
+    int i, pos = 0, bl = (len * 5) + 74;
     char buff[17];
     char buf[bl];
     unsigned char *pc = (unsigned char *)addr;
