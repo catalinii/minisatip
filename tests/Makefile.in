@@ -24,7 +24,8 @@ SOURCES=\
 	test_minisatip.c \
 	test_utils.c \
 	test_socketworks.c \
-	utils/test_hash_table.c
+	utils/test_hash_table.c \
+	utils/test_utils.c
 
 MAIN_SOURCES=$(shell find ../src -type f -iname '*.c')
 
