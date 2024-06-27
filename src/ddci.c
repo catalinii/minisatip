@@ -1230,11 +1230,11 @@ int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque) {
         caid = b[i + 2] * 256 + b[i + 3];
         if (id < MAX_CA_PIDS) {
             d->capid[id] = (b[i + 4] & 0x1F) * 256 + b[i + 5];
+            LOG("CAT pos %d caid %04X, pid %d", id, caid, d->capid[id]);
         } else {
             LOG("MAX_CA_PIDS (%d) reached for adapter %d", MAX_CA_PIDS, d->id);
         }
 
-        LOG("CAT pos %d caid %04X, pid %d", id, caid, d->capid[id]);
         id++;
     }
 
