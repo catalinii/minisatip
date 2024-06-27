@@ -54,11 +54,12 @@ void _strncpy(char *a, char *b, int len);
 
 #define strlcatf(buf, size, ptr, fmt...)                                       \
     do {                                                                       \
-        int __r = snprintf((buf) + ptr, (size)-ptr, fmt);                      \
+        int __r = snprintf((buf) + ptr, (size) - ptr, fmt);                    \
         ptr += __r;                                                            \
         if (ptr >= (size)) {                                                   \
-            LOG("%s buffer size too small (%d)", __FUNCTION__, size);          \
-            ptr = (size)-1;                                                    \
+            LOG("%s:%d buffer size too small (%d)", __FUNCTION__, __LINE__,    \
+                size);                                                         \
+            ptr = (size) - 1;                                                  \
         }                                                                      \
     } while (0)
 
