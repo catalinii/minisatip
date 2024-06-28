@@ -301,6 +301,12 @@ make EXTRA_CFLAGS="-DNEEDS_SENDMMSG_SHIM"
 
 The above command is useful if you're getting errors like `sendmmsg(): errno 38: Function not implemented` (usually only concerns really old systems).
 
+To make a debug build (useful if minisatip crashes and you want to diagnose the issue):
+
+```bash
+make debug
+```
+
 ## Building a Debian package:
 
 ```bash
