@@ -134,8 +134,12 @@ SOURCES-$(AXE) += axe.c
 CFLAGS-$(AXE) += -DAXE
 
 CFLAGS-$(EMBEDDED) += -DNO_BACKTRACE
-CFLAGS-$(DEBUG) += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=undefined -static-libasan -static-libubsan -static-liblsan -fstack-protector-all
 
+ifeq ($(DEBUG),1)
+CFLAGS += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=undefined -static-libasan -static-libubsan -static-liblsan -fstack-protector-all
+else
+CFLAGS += -O2
+endif
 
 ifeq ($(STATIC),1)
 	LDFLAGS+=$(addsuffix .a,$(addprefix -l:lib,$(LIBS)))
@@ -165,10 +169,6 @@ all: $(TARGET)
 
 clean:
 	rm -rf $(BUILDDIR) $(TARGET) >> /dev/null
-
-debug: 
-	CFLAGS+=-fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=null
-	@(MAKE) all
 
 # pull in dependency info for *existing* .o files
 ifneq "$(MAKECMDGOALS)" "clean"
