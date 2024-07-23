@@ -1882,16 +1882,20 @@ static int CIPLUS_APP_OPRF_handler(ca_session_t *session, int tag,
             apdu_name, info_version, profile_type, initialized_flag,
             refresh_request_flag, error_flag);
 
-        // Initiate operator_search_start if profile is uninitialized
-        if (!initialized_flag) {
-            LOG("Initializing operator_search_start since profile is not "
+        // Request information if profile is uninitialized
+        if (tag == CIPLUS_TAG_OPERATOR_STATUS && !initialized_flag) {
+            LOG("Initializing operator_info_req since profile is not "
                 "initialized yet");
-            ca_write_apdu(session, CIPLUS_TAG_OPERATOR_SEARCH_START,
-                          data_oprf_search_start,
-                          sizeof(data_oprf_search_start));
+            ca_write_apdu(session, CIPLUS_TAG_OPERATOR_INFO_REQ, NULL, 0);
         }
         break;
     }
+    case CIPLUS_TAG_OPERATOR_INFO:
+        LOG("Received operator_info APDU");
+        // Initiate a profile search
+        ca_write_apdu(session, CIPLUS_TAG_OPERATOR_SEARCH_START,
+                      data_oprf_search_start, sizeof(data_oprf_search_start));
+        break;
     case CIPLUS_TAG_OPERATOR_TUNE: {
         // Loop through the descriptors
         int descr_len = data[1];
