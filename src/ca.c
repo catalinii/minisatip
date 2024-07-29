@@ -1890,12 +1890,31 @@ static int CIPLUS_APP_OPRF_handler(ca_session_t *session, int tag,
         }
         break;
     }
-    case CIPLUS_TAG_OPERATOR_INFO:
-        LOG("Received operator_info APDU");
+    case CIPLUS_TAG_OPERATOR_INFO: {
+        // Parse and log the most relevant parts of the operator info
+        int info_valid = (data[0] & (1 << 3)) > 0;
+        int info_version = data[0] & 0x07;
+        int cicam_original_network_id = (data[1] << 8) + data[2];
+        char lang_code[4] = {0};
+        strncpy(lang_code, (char *)data + 10, 3);
+        char *profile_name = _malloc(data[13]);
+        strncpy(profile_name, (char *)data + 14, data[13]);
+
+        LOG("Received operator_info APDU: \n"
+            "  info valid:                  %d\n"
+            "  info version:                %d\n"
+            "  cicam original network id:   %d\n"
+            "  language code:               %s\n"
+            "  profile_name:                %s\n",
+            info_valid, info_version, cicam_original_network_id, lang_code,
+            profile_name);
+
         // Initiate a profile search
         ca_write_apdu(session, CIPLUS_TAG_OPERATOR_SEARCH_START,
                       data_oprf_search_start, sizeof(data_oprf_search_start));
+        _free(profile_name);
         break;
+    }
     case CIPLUS_TAG_OPERATOR_TUNE: {
         // Loop through the descriptors
         int descr_len = data[1];
