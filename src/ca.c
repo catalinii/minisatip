@@ -1819,7 +1819,8 @@ static void parse_operator_tune_descriptor(const uint8_t *descr,
     char orb_buf[5];
     sprintf(orb_buf, "%02X%02X", descr[6], descr[7]);
     out->pos = strtod(orb_buf, NULL) / 10;
-    out->pol = (descr[8] & 0x60) >> 5;
+    int pol = (descr[8] & 0x60) >> 5;
+    out->pol = en300468_pol_map[pol];
     out->east_west = descr[8] & (1 << 7) ? 'E' : 'W';
 
     // Delivery system and modulation
