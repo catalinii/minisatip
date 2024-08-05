@@ -1914,7 +1914,9 @@ int main(int argc, char *argv[]) {
         DEBUGL(log_it, "DEBUG of the module enabled: %s", loglevels[i]);
     }
 
-    mkdir_recursive(opts.cache_dir);
+    if (mkdir_recursive(opts.cache_dir) == -1) {
+        FAIL("Failed to create cache directory %s", opts.cache_dir);
+    }
     readBootID();
     if ((rtsp = tcp_listen(opts.bind, opts.rtsp_port, opts.use_ipv4_only)) < 1)
         FAIL("RTSP: Could not listen on port %d", opts.rtsp_port);
