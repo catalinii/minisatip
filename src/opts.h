@@ -24,7 +24,6 @@ typedef struct struct_opts {
     int run_user;
     int run_pid;
     char *disc_host; // discover host
-    char mac[13];
     char uuid[UUID_STR_LEN];
     unsigned int log, debug, slog, start_rtp, http_port;
     int timeout_sec;

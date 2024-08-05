@@ -92,7 +92,6 @@ int rtsp, http, si, si1, ssdp1;
 #define HELP_OPT 'h'
 #define PLAYLIST_OPT 'p'
 #define ADAPTERS_OPT 'a'
-#define MAC_OPT 'm'
 #define FOREGROUND_OPT 'f'
 #define DVRBUFFER_OPT 'b'
 #define APPBUFFER_OPT 'B'
@@ -174,7 +173,6 @@ static const struct option long_options[] = {
     {"lnb", required_argument, NULL, LNB_OPT},
     {"log", required_argument, NULL, LOG_OPT},
     {"logfile", required_argument, NULL, LOGFILE_OPT},
-    {"mac", required_argument, NULL, MAC_OPT},
     {"multiplier", required_argument, NULL, SIGNALMULTIPLIER_OPT},
     {"no-all-pids", no_argument, NULL, NO_PIDS_ALL_OPT},
     {"priority", required_argument, NULL, PRIORITY_OPT},
@@ -308,7 +306,7 @@ void usage() {
 
     printf(
         "\n\t./%s [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] \n\
-\t[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]] \n\t"
+\t[-[uj] A1:S1-F1[-PIN]] [-P port] [-l module1[,module2]] [-v module1[,module2]] \n\t"
 #ifndef DISABLE_DVBAPI
         "[-o [~]oscam_host:dvbapi_port[,offset] "
 #endif
@@ -410,9 +408,6 @@ Help\n\
 	* eg: -L 0:10750-0-0,1:9750-10600-11700 - adapter 0 has a SKY NZ LNB, adapter 1 has an Universal LNB\n\
 	\n\
 	For backward-compatibility reasons, linear LNB parameters may also be specified as *:5150-5150-5150 instead of *:5150-0-0\n\
-\n\
-* -m --mac xx: simulate xx as local mac address, generates UUID based on mac\n\
-	* eg: -m 001122334455 \n\
 \n\
 * -M --multiplier: multiplies the strength and snr of the DVB adapter with the specified values\n\
 	* If the snr or the strength multipliers are set to 0, minisatip will override the value received from the adapter and will report always full signal 100%% \n\
@@ -722,10 +717,6 @@ void set_options(int argc, char *argv[]) {
         switch (opt) {
         case FOREGROUND_OPT: {
             opts.daemon = 0;
-            break;
-        }
-        case MAC_OPT: {
-            safe_strncpy(opts.mac, optarg);
             break;
         }
         case RRTP_OPT: {
