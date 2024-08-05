@@ -94,7 +94,6 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
 int sockets_del(int sock);
 int no_action(int s);
 void *select_and_execute(void *arg);
-int get_mac_address(char *mac);
 int fill_sockaddr(USockAddr *serv, char *host, int port, int ipv4_only);
 int sockets_del_for_sid(int sid);
 void set_socket_buffer(int sid, unsigned char *buf, int len);
