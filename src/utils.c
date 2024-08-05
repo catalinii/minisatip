@@ -52,6 +52,8 @@
 #include <syslog.h>
 #include <time.h>
 #include <unistd.h>
+#include <dirent.h>
+#include <errno.h>
 
 #if !defined(__mips__) && !defined(NO_BACKTRACE)
 #include <execinfo.h>
@@ -763,11 +765,13 @@ int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, char *cc,
 }
 
 // http://nion.modprobe.de/blog/archives/357-Recursive-directory-creation.html
-void mkdir_recursive(const char *path) {
+int mkdir_recursive(const char *path) {
     char tmp[PATH_MAX];
     char *p = NULL;
     size_t len;
 
+    // Try to create the directory. We don't care at this point if the mkdir() 
+    // calls fail
     snprintf(tmp, sizeof(tmp), "%s", path);
     len = strlen(tmp);
     if (tmp[len - 1] == '/')
@@ -775,12 +779,19 @@ void mkdir_recursive(const char *path) {
     for (p = tmp + 1; *p; p++)
         if (*p == '/') {
             *p = 0;
-            if (mkdir(tmp, S_IRWXU))
-                LOG("mkdir %s failed", tmp);
+            mkdir(tmp, S_IRWXU);
             *p = '/';
         }
-    if (mkdir(tmp, S_IRWXU))
-        LOG("mkdir %s failed", tmp);
+    mkdir(tmp, S_IRWXU);
+
+    // Attempt to open the directory to verify we can write to it
+    DIR *dir = opendir(path);
+    if (!dir) {
+        return -1;
+    }
+
+    closedir(dir);
+    return 0;
 }
 
 // https://trac.streamboard.tv/oscam/browser/trunk/oscam-time.c#L172
