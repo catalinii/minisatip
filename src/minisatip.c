@@ -28,6 +28,7 @@
 #include "stream.h"
 #include "utils/alloc.h"
 #include "utils/ticks.h"
+#include "utils/uuid.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -1186,9 +1187,6 @@ void set_options(int argc, char *argv[]) {
     // FBC setup
     if (!access("/proc/stb/frontend/0/fbc_connect", W_OK))
         set_slave_adapters("2-7:0");
-
-    // Generate the static SAT>IP UUID
-    generate_uuid(&opts);
 }
 
 #define RBUF 32000
@@ -2021,23 +2019,33 @@ int readBootID() {
     opts.bootid = 0;
     opts.device_id = 0;
     char bootid_path[256];
+
+    // Read existing values
     snprintf(bootid_path, sizeof(bootid_path) - 1, "%s/bootid", opts.cache_dir);
     FILE *f = fopen(bootid_path, "rt");
     __attribute__((unused)) int rv;
     if (f) {
-        rv = fscanf(f, "%d %d", &opts.bootid, &opts.device_id);
+        rv = fscanf(f, "%d %d %s", &opts.bootid, &opts.device_id, opts.uuid);
         fclose(f);
     }
+
+    // Increment bootid and set defaults if values are missing
     opts.bootid++;
     if (opts.device_id < 1) {
         opts.device_id = 1;
     }
+    if (!strcmp(opts.uuid, "")) {
+        uuid4_generate(opts.uuid);
+    }
+
+    // Store new values
     f = fopen(bootid_path, "wt");
     if (f) {
-        fprintf(f, "%d %d", opts.bootid, opts.device_id);
+        fprintf(f, "%d %d %s", opts.bootid, opts.device_id, opts.uuid);
         fclose(f);
     }
-    LOG("Running with bootid %d, device_id %d", opts.bootid, opts.device_id);
+    LOG("Running with bootid %d, device_id %d, UUID %s", opts.bootid,
+        opts.device_id, opts.uuid);
     return opts.bootid;
 }
 

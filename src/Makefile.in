@@ -49,10 +49,11 @@ SOURCES=\
 	api/variables.c \
 	utils/logging/logging.c \
 	utils/alloc.c \
+	utils/fifo.c \
 	utils/hash_table.c \
 	utils/mutex.c \
 	utils/ticks.c \
-	utils/fifo.c
+	utils/uuid.c
 
 TABLES=0
 PMT=0

@@ -3,6 +3,7 @@
 
 #define _GNU_SOURCE
 
+#include "utils/uuid.h"
 #include <stdint.h>
 #include <time.h>
 
@@ -24,7 +25,7 @@ typedef struct struct_opts {
     int run_pid;
     char *disc_host; // discover host
     char mac[13];
-    char uuid[50];
+    char uuid[UUID_STR_LEN];
     unsigned int log, debug, slog, start_rtp, http_port;
     int timeout_sec;
     int force_sadapter, force_tadapter, force_cadapter;
@@ -92,7 +93,6 @@ typedef struct struct_opts {
 } struct_opts_t;
 
 void parse_dvbapi_opt(char *optarg, struct_opts_t *optz);
-void generate_uuid(struct_opts_t *optz);
 
 extern struct_opts_t opts;
 
