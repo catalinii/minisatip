@@ -2015,26 +2015,26 @@ int main(int argc, char *argv[]) {
 #endif
 
 int readBootID() {
-    int did = 0;
     opts.bootid = 0;
+    opts.device_id = 0;
     char bootid_path[256];
     snprintf(bootid_path, sizeof(bootid_path) - 1, "%s/bootid", opts.cache_dir);
     FILE *f = fopen(bootid_path, "rt");
     __attribute__((unused)) int rv;
     if (f) {
-        rv = fscanf(f, "%d %d", &opts.bootid, &did);
+        rv = fscanf(f, "%d %d", &opts.bootid, &opts.device_id);
         fclose(f);
-        if (opts.device_id < 1)
-            opts.device_id = did;
     }
     opts.bootid++;
-    if (opts.device_id < 1)
+    if (opts.device_id < 1) {
         opts.device_id = 1;
+    }
     f = fopen(bootid_path, "wt");
     if (f) {
         fprintf(f, "%d %d", opts.bootid, opts.device_id);
         fclose(f);
     }
+    LOG("Running with bootid %d, device_id %d", opts.bootid, opts.device_id);
     return opts.bootid;
 }
 
