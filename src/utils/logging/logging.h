@@ -70,10 +70,7 @@ extern __thread int thread_index;
 
 #define FAIL(a, ...)                                                           \
     {                                                                          \
-        if (opts.log) {                                                        \
-            LOGL(0, a, ##__VA_ARGS__);                                         \
-        } else                                                                 \
-            LOG0(a, ##__VA_ARGS__);                                            \
+        LOG0(a, ##__VA_ARGS__);                                            \
         unlink(pid_file);                                                      \
         exit(1);                                                               \
     }
