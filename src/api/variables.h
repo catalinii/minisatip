@@ -44,6 +44,7 @@
 
 #define JSON_STATE_MAXLEN (256 * 1024)
 #define JSON_BANDWIDTH_MAXLEN 1024
+#define JSON_STRING_MAXLEN 1024
 
 typedef int (*get_data_int)(int p);
 typedef int64_t (*get_data_int64)(int p);
@@ -57,7 +58,7 @@ void *get_var_address(char *var, float *multiplier, int *type, void *storage,
                       int ls);
 
 int escape_json_string(char *dest, int dl, char *src, int sl);
-int get_json_state(char *buf, int len);
+int get_json_state(char *buf, int len, char *sbuf, int slen);
 int get_json_bandwidth(char *buf, int len);
 
 #endif
