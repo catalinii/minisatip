@@ -1438,8 +1438,6 @@ int read_rtsp(sockets *s) {
         return 0;                                                              \
     }
 
-#define JSON_STATE_MAXLEN (256 * 1024)
-
 int read_http(sockets *s) {
     char *arg[50];
     char buf[2000]; // the XML should not be larger than 1400 as it will create
@@ -1602,13 +1600,14 @@ int read_http(sockets *s) {
     }
 
     if (strcmp(arg[1], "/bandwidth.json") == 0) {
-        char buf[1024];
-        int len = get_json_bandwidth(buf, sizeof(buf));
+        char *buf = _malloc(JSON_BANDWIDTH_MAXLEN);
+        int len = get_json_bandwidth(buf, JSON_BANDWIDTH_MAXLEN);
         http_response(s, 200,
                       "Content-Type: application/json\r\n"
                       "Connection: close\r\n"
                       "Access-Control-Allow-Origin: *",
                       buf, 0, len);
+        _free(buf);
         return 0;
     }
 

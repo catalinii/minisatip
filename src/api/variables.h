@@ -42,6 +42,9 @@
 
 #define VAR_LENGTH 20
 
+#define JSON_STATE_MAXLEN (256 * 1024)
+#define JSON_BANDWIDTH_MAXLEN 1024
+
 typedef int (*get_data_int)(int p);
 typedef int64_t (*get_data_int64)(int p);
 typedef char *(*get_data_string)(int p, char *dest, int max_len);
