@@ -1589,13 +1589,17 @@ int read_http(sockets *s) {
 
     if (strcmp(arg[1], "/state.json") == 0) {
         char *buf = _malloc(JSON_STATE_MAXLEN);
-        int len = get_json_state(buf, JSON_STATE_MAXLEN);
+        char *sbuf = _malloc(JSON_STRING_MAXLEN);
+        memset(sbuf, 0, JSON_STRING_MAXLEN);
+        int len =
+            get_json_state(buf, JSON_STATE_MAXLEN, sbuf, JSON_STRING_MAXLEN);
         http_response(s, 200,
                       "Content-Type: application/json\r\n"
                       "Connection: close\r\n"
                       "Access-Control-Allow-Origin: *",
                       buf, 0, len);
         _free(buf);
+        _free(sbuf);
         return 0;
     }
 

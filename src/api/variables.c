@@ -183,12 +183,10 @@ int escape_json_string(char *dest, int dl, char *src, int sl) {
     return j;
 }
 
-int get_json_state(char *buf, int len) {
+int get_json_state(char *buf, int len, char *sbuf, int slen) {
     int ptr = 0, first = 1, i, j, off, string;
     _symbols *p;
-    char escape[200]; // string variable max len
 
-    memset(escape, 0, sizeof(escape));
     strlcatf(buf, len, ptr, "{\n");
     for (i = 0; sym[i] != NULL; i++) {
         for (j = 0; sym[i][j].name; j++) {
@@ -207,10 +205,10 @@ int get_json_state(char *buf, int len) {
             if (p->type < VAR_ARRAY) {
                 if (string) {
                     int len2 =
-                        snprintf_pointer(escape, sizeof(escape) - 1, p->type,
+                        snprintf_pointer(sbuf, slen - 1, p->type,
                                          p->addr, p->multiplier);
                     ptr +=
-                        escape_json_string(buf + ptr, len - ptr, escape, len2);
+                        escape_json_string(buf + ptr, len - ptr, sbuf, len2);
                 } else
                     ptr += snprintf_pointer(buf + ptr, len - ptr, p->type,
                                             p->addr, p->multiplier);
@@ -221,9 +219,9 @@ int get_json_state(char *buf, int len) {
                         strlcatf(buf, len, ptr, ",");
                     if (string) {
                         int len2 = snprintf_pointer(
-                            escape, sizeof(escape) - 1, p->type,
+                            sbuf, slen - 1, p->type,
                             ((char *)p->addr) + off + p->skip, p->multiplier);
-                        ptr += escape_json_string(buf + ptr, len - ptr, escape,
+                        ptr += escape_json_string(buf + ptr, len - ptr, sbuf,
                                                   len2);
                     } else
                         ptr += snprintf_pointer(
@@ -239,9 +237,9 @@ int get_json_state(char *buf, int len) {
                         strlcatf(buf, len, ptr, ",");
                     if (string) {
                         int len2 = snprintf_pointer(
-                            escape, sizeof(escape) - 1, p->type,
+                            sbuf, slen - 1, p->type,
                             p1[off] ? p1[off] + p->skip : zero, p->multiplier);
-                        ptr += escape_json_string(buf + ptr, len - ptr, escape,
+                        ptr += escape_json_string(buf + ptr, len - ptr, sbuf,
                                                   len2);
                     } else
                         ptr += snprintf_pointer(
@@ -275,12 +273,11 @@ int get_json_state(char *buf, int len) {
                 get_data_string funs = (get_data_string)p->addr;
                 strlcatf(buf, len, ptr, "[");
                 for (off = 0; off < p->len; off++) {
-                    memset(escape, 0, sizeof(escape));
-                    funs(off, escape, sizeof(escape) - 1);
+                    memset(sbuf, 0, slen);
+                    funs(off, sbuf, slen - 1);
                     if (off > 0)
                         strlcatf(buf, len, ptr, ",");
-                    ptr += escape_json_string(buf + ptr, len - ptr, escape,
-                                              strlen(escape));
+                    ptr += escape_json_string(buf + ptr, len - ptr, sbuf, slen);
                 }
                 strlcatf(buf, len, ptr, "]");
                 //				LOG("func_str -> %s", buf);
