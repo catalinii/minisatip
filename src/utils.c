@@ -492,8 +492,6 @@ char *readfile(char *fn, char *ctype, int *len) {
                           "text/html\r\nConnection: close");
         else if (endswith(fn, "xml"))
             strcpy(ctype, "Cache-Control: no-cache\r\nContent-type: text/xml");
-        else if (endswith(fn, "2.json")) // debug
-            strcpy(ctype, "Content-type: application/json");
         else if (endswith(fn, "json"))
             strcpy(ctype, "Cache-Control: no-cache\r\nContent-type: "
                           "application/json");
