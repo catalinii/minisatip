@@ -277,7 +277,8 @@ int get_json_state(char *buf, int len, char *sbuf, int slen) {
                     funs(off, sbuf, slen - 1);
                     if (off > 0)
                         strlcatf(buf, len, ptr, ",");
-                    ptr += escape_json_string(buf + ptr, len - ptr, sbuf, slen);
+                    ptr += escape_json_string(buf + ptr, len - ptr, sbuf,
+                                              strlen(sbuf));
                 }
                 strlcatf(buf, len, ptr, "]");
                 //				LOG("func_str -> %s", buf);
