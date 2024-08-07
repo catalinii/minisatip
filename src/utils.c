@@ -489,12 +489,12 @@ char *readfile(char *fn, char *ctype, int *len) {
                           "text/javascript\r\nConnection: close");
         else if (endswith(fn, "htm") || endswith(fn, "html"))
             strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: "
-                          "text/html\r\nConnection: close");
+                          "text/html; charset=utf-8\r\nConnection: close");
         else if (endswith(fn, "xml"))
             strcpy(ctype, "Cache-Control: no-cache\r\nContent-type: text/xml");
         else if (endswith(fn, "json"))
             strcpy(ctype, "Cache-Control: no-cache\r\nContent-type: "
-                          "application/json");
+                          "application/json; charset=utf-8");
         else if (endswith(fn, "m3u"))
             strcpy(ctype,
                    "Cache-Control: no-cache\r\nContent-type: video/x-mpegurl");
