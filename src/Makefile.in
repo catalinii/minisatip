@@ -47,6 +47,7 @@ SOURCES=\
 	utils.c \
 	api/symbols.c \
 	api/variables.c \
+	utils/dvb/dvb_support.c \
 	utils/logging/logging.c \
 	utils/alloc.c \
 	utils/fifo.c \
