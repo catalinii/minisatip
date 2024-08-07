@@ -29,6 +29,7 @@
 #include "tables.h"
 #include "utils.h"
 #include "utils/alloc.h"
+#include "utils/dvb/dvb_support.h"
 #include "utils/ticks.h"
 
 #include <arpa/inet.h>
@@ -1956,43 +1957,6 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     return 0;
 }
 
-void copy_en300468_string(char *dest, int dest_len, unsigned char *src,
-                          int len) {
-    int start = (src[0] < 0x20) ? 1 : 0;
-    uint32_t charset = 0;
-    int i;
-    if (src[0] == 0x10)
-        start += 2;
-
-    if (src[0] < 0x20)
-        charset = src[0];
-
-    for (i = start; (i < len) && (--dest_len > 0); i++) {
-        int c = src[i];
-        c |= (charset << 8);
-
-        switch (c) { // default latin -> charset = 0
-        case 0x80 ... 0x85:
-        case 0x88 ... 0x89:
-        case 0x8B ... 0x9F:
-        case 0x8A:
-        case 0x1680 ... 0x1685: // ISO/IEC 10646 [16]
-        case 0x1688 ... 0x1689:
-        case 0x168B ... 0x169F:
-        case 0x168A:
-            *dest++ = '\n';
-            continue;
-        case 0x86 ... 0x87: // ignore emphasis
-            continue;
-        case 0xC2:
-        case 0x16E0:
-            continue;
-        }
-        *dest++ = src[i];
-    }
-    *dest = 0;
-}
-
 int process_sdt(int filter, unsigned char *sdt, int len, void *opaque) {
     int i, j, tsid, sdt_len, sid, desc_loop_len, desc_len, status;
     SPMT *pmt;
@@ -2030,9 +1994,9 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque) {
             if (c[0] == 0x48 && !pmt->name[0]) {
                 int name_size = sizeof(pmt->name) - 1;
                 c += 3;
-                copy_en300468_string(pmt->provider, name_size, c + 1, c[0]);
+                dvb_get_string(pmt->provider, name_size, c + 1, c[0]);
                 c += c[0] + 1;
-                copy_en300468_string(pmt->name, name_size, c + 1, c[0]);
+                dvb_get_string(pmt->name, name_size, c + 1, c[0]);
                 LOG("SDT PMT %d: name %s provider %s, sid: %d (%X)", pmt->id,
                     pmt->name, pmt->provider, sid, sid);
             }
