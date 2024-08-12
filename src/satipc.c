@@ -236,7 +236,7 @@ int satipc_reply(sockets *s) {
     satipc *sip;
     char *arg[100], *sep;
     int is_transport = 0;
-    int rc = 999;
+    int rc = 0;
     __attribute__((unused)) int rv;
     get_ad_and_sipr(s->sid, 1);
 
@@ -246,7 +246,7 @@ int satipc_reply(sockets *s) {
 
     sep = strchr((char *)s->buf, ' ');
     if (sep)
-        rc = map_intd(sep + 1, NULL, 998);
+        rc = map_intd(sep + 1, NULL, 0);
 
     LOGM("MSG process << server :\n%s", s->buf);
     LOG("satipc_reply (adapter %d, state %d): receiving from handle %d, sock "
