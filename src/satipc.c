@@ -244,9 +244,10 @@ int satipc_reply(sockets *s) {
     s->rlen = 0;
     sip->keep_adapter_open = 0;
 
-    sep = strchr((char *)s->buf, ' ');
+    // Parse RTSP return code
+    sep = strstr((char *)s->buf, "RTSP/1.0");
     if (sep)
-        rc = map_intd(sep + 1, NULL, 0);
+        rc = map_intd(sep + 9, NULL, 0);
 
     LOGM("MSG process << server :\n%s", s->buf);
     LOG("satipc_reply (adapter %d, state %d): receiving from handle %d, sock "
