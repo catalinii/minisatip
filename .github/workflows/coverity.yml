@@ -9,25 +9,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: catalinii/minisatip-build-image:latest
-
     steps:
     - uses: actions/checkout@v4
-    - name: configure
-      run: ./configure
-    - name: Coverity Scan
-      run: |
-          make clean
-          /cov-analysis-linux64/bin/cov-build --dir cov-int make
-          tar czvf MINISATIP.tgz cov-int
-          curl \
-            --form project=$PROJECT \
-            --form token=$(cat /etc/coverity) \
-            --form email='reply+AB6SAEPNLEJSCE2WJ37GDNF6TC2NXEVBNHHDIEHQTY@reply.github.com' \
-            --form file=@MINISATIP.tgz \
-            --form version=trunk \
-            --form description="`git log -1 --pretty=format:%h`" \
-            https://scan.coverity.com/builds?project=$PROJECT
-      env:
-          TOKEN: ${{ secrets.COVERITY_SCAN_TOKEN }}
-          PROJECT: minisatip2
+    - uses: vapier/coverity-scan-action@v1
+      with:
+        project: minisatip2
+        token: ${{ secrets.COVERITY_SCAN_TOKEN }}
+        email: reply+AB6SAEPNLEJSCE2WJ37GDNF6TC2NXEVBNHHDIEHQTY@reply.github.com
