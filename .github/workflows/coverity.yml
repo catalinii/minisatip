@@ -9,6 +9,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+    - name: Install build tools and dependencies
+      run: DEBIAN_FRONTEND=noninteractive sudo apt-get -y install build-essential libdvbcsa-dev libssl-dev zlib1g-dev libxml2-dev
+    - name: configure
+      run: ./configure
     - uses: vapier/coverity-scan-action@v1
       with:
         project: minisatip2
