@@ -1,0 +1,37 @@
+name: Binaries-manual-MIPS
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: '0'
+    - uses: goto-bus-stop/setup-zig@v2
+
+    - name: Install build tools and dependencies
+      run: DEBIAN_FRONTEND=noninteractive sudo apt-get -y install zip
+
+    - name: Build MIPS-MUSL
+      run: |
+       ./configure --disable-netcv --enable-static --host=mipsel-linux-musl CC="zig cc -target mipsel-linux-musl -static -Wno-error=date-time"
+       make EXTRA_CFLAGS="-I/sysroot/mipsel/include -L/sysroot/mipsel/lib" EMBEDDED=1
+       zip -9 -r /tmp/minisatip_mips-musl.zip minisatip html
+
+    - name: Build MIPS-GNU
+      run: |
+       make clean
+       ./configure --disable-netcv --enable-static --host=mipsel-linux-gnu CC="zig cc -target mipsel-linux-gnueabihf.2.30 -static -Wno-error=date-time"
+       make EXTRA_CFLAGS="-I/sysroot/mipsel/include -L/sysroot/mipsel/lib" EMBEDDED=1
+       zip -9 -r /tmp/minisatip_mips-gnu.zip minisatip html
+
+    - name: Archive built binaries
+      uses: actions/upload-artifact@v4
+      with:
+        name: minisatip
+        path: |
+          /tmp/minisatip_mips-musl.zip
+          /tmp/minisatip_mips-gnu.zip
