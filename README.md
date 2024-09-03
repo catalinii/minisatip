@@ -135,6 +135,7 @@ Help
 	* [%] This symbol forces to read values as percentage
 	* [#] This symbol forces to read values as decibels
 	* eg: -M *:%1.0-#1.0 - not multiply the strength but force it as percentage and for the snr interpret it as decibels
+	* Zero values will disable drive polling, and this may solve CC errors with some hardware/drivers (eg: -M *:0-0)
 
 * -N --disable-dvb disable DVB adapter detection
  
