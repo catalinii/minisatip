@@ -5,22 +5,23 @@
 
 # Welcome to Minisatip
 
-Minisatip is a multi-threaded satip server version 1.2 that runs under Linux and it was tested with DVB-S, DVB-S2, DVB-T, DVB-T2, DVB-C, DVB-C2, ATSC and ISDB-T cards. More details about supported hardware: https://github.com/catalinii/minisatip/blob/master/Supported_Hardware.md
+Minisatip is a multi-threaded satip server version 1.2 that runs under Linux and it was tested with DVB-S, DVB-S2, DVB-T, DVB-T2, DVB-C, DVB-C2, ATSC and ISDB-T cards. More details about supported hardware: [Supported_Hardware.md](https://github.com/catalinii/minisatip/blob/master/Supported_Hardware.md)
 
-The protocol specification can be found at: 
-http://satip.info/sites/satip/files/resource/satip_specification_version_1_2_2.pdf
+The protocol specification can be found at: [docs/satip_specification_version_1_2_2.pdf](https://github.com/catalinii/minisatip/blob/master/docs/satip_specification_version_1_2_2.pdf)\
+(original file downloaded from http://satip.info/sites/satip/files/resource/satip_specification_version_1_2_2.pdf and now offline).
+
 It is very lightweight (designed for embedded systems with memory and processing constrains), does not need any additional libraries for basic functionality and can be used by existing satip clients like: Tvheadend, DVBViewer, vdr, VideoLAN or Android/iOS applications. Minisatip can act as a satip client as well in order to connect to satip servers from different networks.
 
 The application is designed to stream the requested data to multiple clients (even with one dvb card) in the same time while opening different pids.
 
 It is tested on x86_64, x86, ARM and MIPS platforms and it requires DVBAPI 5. Supported protocols are RTSP (both tcp and udp), HTTP (port 8080) and SSDP (as specified in the SAT>IP documentation). On top of that, it supports dvbapi protocol implemented by oscam (requires dvbcsa library) to decrypt channels using an official subscription and support dvbca protocol (requires libssl-dev library) for dvb cards with CA hardware. In order to enable/disable features, please edit the Makefile. 
 
-The application shows also a status page by default at the address: http://IP:8080 
-The latest binaries for embedded platforms: https://minisatip.org/forum/viewtopic.php?f=5&t=371 
+The application shows also a status page by default at the address: http://IP:8080 \
+The latest binaries for embedded platforms: [https://minisatip.org/forum/binaries](https://minisatip.org/forum/viewtopic.php?f=5&t=371) 
 
 ## Contact
 
-Please use https://minisatip.org/forum/ for any question or join slack: https://join.slack.com/t/minisatip/shared_invite/zt-rms717g0-SQR25SFs8RH9JlVZV4II7A 
+Please use https://minisatip.org/forum/ for any question or join [Slack](https://join.slack.com/t/minisatip/shared_invite/zt-rms717g0-SQR25SFs8RH9JlVZV4II7A) 
 
 In order to speed up the investigation of an issue, please provide the full log and a link to the application that is not working.
 
