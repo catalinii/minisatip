@@ -1889,6 +1889,7 @@ int main(int argc, char *argv[]) {
     }
     if (opts.daemon)
         becomeDaemon();
+    LOG("Running mode: %s", opts.daemon ? "background" : "foreground");
     if (opts.slog)
         openlog(app_name,
                 LOG_NDELAY | LOG_NOWAIT | LOG_PID |
