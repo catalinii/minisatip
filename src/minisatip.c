@@ -2031,7 +2031,7 @@ int readBootID() {
         uuid4_generate(opts.uuid);
     }
 
-    if (opts.device_id < 1) {
+    if (opts.device_id < local_device_id) {
         opts.device_id = local_device_id;
     }
 
