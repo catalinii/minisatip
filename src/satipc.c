@@ -250,10 +250,9 @@ int satipc_reply(sockets *s) {
         rc = map_intd(sep + 9, NULL, 0);
 
     LOGM("MSG process << server :\n%s", s->buf);
-    LOG("satipc_reply (adapter %d, state %d): receiving from handle %d, sock "
-        "%d, "
-        "code %d",
-        s->sid, sip->state, s->sock, s->id, rc);
+    LOG("satipc_reply (adapter %d): sock %d (receiving from handle %d, state %d): "
+        "[[ code %d ]]",
+        s->sid, s->sock, s->id, sip->state, rc);
 
     is_transport = strstr((char *)s->buf, "Transport:") != NULL;
     handle_client_capabilities(sip, (char *)s->buf);
@@ -647,7 +646,7 @@ int satip_standby_device(adapter *ad) {
     if (!sip)
         return 0;
 
-    LOG("satip device %s:%d going to standby", sip->sip, sip->sport);
+    LOG("satip device %s:%d going to standby (expect_reply %d)", sip->sip, sip->sport, sip->expect_reply);
     if (sip->state == SATIP_STATE_PLAY) {
         sip->state = SATIP_STATE_TEARDOWN;
         satipc_request(ad);
@@ -1269,7 +1268,7 @@ int http_request(adapter *ad, char *url, char *method, int force) {
     lb = snprintf(buf, sizeof(buf), format, method, sip->sip, sip->sport, sid,
                   qm, url, sip->cseq++, session);
 
-    LOG("satipc_http_request (adapter %d): sock %d: %s %s", ad->id,
+    LOG("satipc_http_request (adapter %d): sock %d: [[ %s %s ]]", ad->id,
         remote_socket, method, url);
     LOGM("MSG process >> server :\n%s", buf);
 
@@ -1435,9 +1434,10 @@ int satipc_request(adapter *ad) {
 
     LOG("satipc: request for adapter %d, state %d, freq %d, pids to add %d, "
         "pids to delete %d, expect_reply %d, want_tune %d, "
+        "last_cmd %d, "
         "sent_transport %d, closed_rtsp %d",
         ad->id, sip->state, ad->tp.freq, sip->lap, sip->ldp, sip->expect_reply,
-        sip->want_tune, sip->sent_transport, sip->rtsp_socket_closed);
+        sip->want_tune, sip->last_cmd, sip->sent_transport, sip->rtsp_socket_closed);
 
     if (sip->rtsp_socket_closed)
         return 0;
@@ -1521,8 +1521,8 @@ int satipc_tune(int aid, transponder *tp) {
     adapter *ad;
     satipc *sip;
     get_ad_and_sipr(aid, 1);
-    LOG("satipc: tuning to freq %d, sys %d for adapter %d", ad->tp.freq / 1000,
-        ad->tp.sys, aid);
+    LOG("satipc: tuning to freq %d, sys %d for adapter %d (state %d, expect_reply %d)", ad->tp.freq / 1000,
+        ad->tp.sys, aid, sip->state, sip->expect_reply);
     ad->err = 0;
     sip->want_commit = 0;
     sip->want_tune = 1;
