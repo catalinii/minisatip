@@ -654,7 +654,7 @@ void set_options(int argc, char *argv[]) {
     opts.timeout_sec = 30000;
     opts.adapter_timeout = 30000;
     opts.daemon = 1;
-    opts.device_id = 1;
+    opts.device_id = 0;
     opts.dvr_buffer = DVR_BUFFER;
     opts.adapter_buffer = ADAPTER_BUFFER;
     opts.udp_threshold = 25;
@@ -2010,7 +2010,7 @@ int main(int argc, char *argv[]) {
 
 int readBootID() {
     opts.bootid = 0;
-    opts.device_id = 0;
+    int local_device_id = 0;
     char bootid_path[256];
 
     // Read existing values
@@ -2018,17 +2018,21 @@ int readBootID() {
     FILE *f = fopen(bootid_path, "rt");
     __attribute__((unused)) int rv;
     if (f) {
-        rv = fscanf(f, "%d %d %s", &opts.bootid, &opts.device_id, opts.uuid);
+        rv = fscanf(f, "%d %d %s", &opts.bootid, &local_device_id, opts.uuid);
         fclose(f);
     }
 
     // Increment bootid and set defaults if values are missing
     opts.bootid++;
-    if (opts.device_id < 1) {
-        opts.device_id = 1;
+    if (local_device_id < 1) {
+        local_device_id = 1;
     }
     if (!strcmp(opts.uuid, "")) {
         uuid4_generate(opts.uuid);
+    }
+
+    if (opts.device_id < 1) {
+        opts.device_id = local_device_id;
     }
 
     // Store new values
