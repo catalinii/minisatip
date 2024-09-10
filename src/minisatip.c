@@ -1244,7 +1244,7 @@ int read_rtsp(sockets *s) {
     LOG("Read RTSP (sock %d, handle %d) [%s:%d] sid %d, len: %d", s->id,
         s->sock, get_sockaddr_host(s->sa, ra, sizeof(ra)),
         get_sockaddr_port(s->sa), s->sid, rlen);
-    LOGM("MSG client >> process :\n%s", s->buf);
+    LOGM("MSG client >> process :\n%s", s->buf); //LOGM->LOG
 
     if ((s->type != TYPE_HTTP) &&
         (strncasecmp((const char *)s->buf, "GET", 3) == 0)) {
