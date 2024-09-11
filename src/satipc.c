@@ -249,7 +249,7 @@ int satipc_reply(sockets *s) {
     if (sep)
         rc = map_intd(sep + 9, NULL, 0);
 
-    LOGM("MSG process << server :\n%s", s->buf);
+    LOGM("MSG process << server :\n%s", s->buf); //LOGM->LOG
     LOG("satipc_reply (adapter %d): sock %d (receiving from handle %d, state %d): "
         "[[ code %d ]]",
         s->sid, s->sock, s->id, sip->state, rc);
@@ -295,8 +295,8 @@ int satipc_reply(sockets *s) {
                 "%d",
                 sip->id, rc);
     }
-    LOG("satipc %d, expect_reply %d, want_tune %d want commit %d", sip->id,
-        sip->expect_reply, sip->want_tune, sip->want_commit);
+    LOG("satipc %d, expect_reply %d, want_tune %d want commit %d, state %d", sip->id,
+        sip->expect_reply, sip->want_tune, sip->want_commit, sip->state);
 
     if (rc == 200) {
         if (is_transport)
@@ -1270,7 +1270,7 @@ int http_request(adapter *ad, char *url, char *method, int force) {
 
     LOG("satipc_http_request (adapter %d): sock %d: [[ %s %s ]]", ad->id,
         remote_socket, method, url);
-    LOGM("MSG process >> server :\n%s", buf);
+    LOGM("MSG process >> server :\n%s", buf); //LOGM->LOG
 
     if (remote_socket >= 0) {
         sockets_write(remote_socket, buf, lb);
@@ -1443,7 +1443,7 @@ int satipc_request(adapter *ad) {
         return 0;
 
     if ((ad->tp.freq == 0) &&
-        ((sip->state == SATIP_STATE_OPTIONS) ||
+        ((sip->state == SATIP_STATE_OPTIONS) || (sip->state == SATIP_STATE_INACTIVE) ||
          (sip->state == SATIP_STATE_SETUP) || (sip->state == SATIP_STATE_PLAY)))
         return 0;
 
@@ -1456,6 +1456,10 @@ int satipc_request(adapter *ad) {
         mutex_unlock(&sip->mutex);
         return 0;
     }
+
+    // if TEARDOWN has been recently received then re-start the session
+    if (sip->state == SATIP_STATE_INACTIVE && sip->last_cmd == RTSP_TEARDOWN)
+        sip->state = SATIP_STATE_SETUP;
 
     // set the init parameters
     if (sip->state == SATIP_STATE_OPTIONS) {
@@ -1474,6 +1478,7 @@ int satipc_request(adapter *ad) {
         sip->state = SATIP_STATE_PLAY;
     }
 
+    LOGM("satipc: for adapter %d, executing state %d", ad->id, sip->state);
     switch (sip->state) {
     case SATIP_STATE_OPTIONS:
         err = satipc_send_options(ad);
