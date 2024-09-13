@@ -273,7 +273,8 @@ int satipc_reply(sockets *s) {
     }
 
     if (rc == 404) {
-        sip->state = SATIP_STATE_OPTIONS;
+        LOG("satipc %d: Ocuppied server, can't use it", s->sid);
+        sip->state = SATIP_STATE_INACTIVE;
     }
 
     // quirk for Geniatech EyeTV Netstream 4C when fe=x is in the URL
