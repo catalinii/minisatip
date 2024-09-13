@@ -50,5 +50,5 @@ jobs:
       run: |
        apt-get -y remove --purge libssl-dev
        make clean
-       ./configure --enable-axe --enable-dvbapi --enable-dvbcsa --disable-dvbca --disable-dvbaes --disable-netcv
+       ./configure --enable-axe --enable-dvbapi --enable-dvbcsa --disable-dvbca --disable-netcv
        make
