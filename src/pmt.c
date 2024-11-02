@@ -1637,7 +1637,7 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque) {
                 new_mask[2] = 0xFF;
                 add_filter_mask(
                     ad->id, pid, (void *)process_pmt, pmt,
-                    (existing_pmt == NULL) ? FILTER_ADD_REMOVE | FILTER_CRC : 0,
+                    opts.pmt_scan && (existing_pmt == NULL) ? FILTER_ADD_REMOVE | FILTER_CRC : 0,
                     new_filter, new_mask);
             }
             if (pmt_id >= 0)

@@ -134,6 +134,7 @@ int rtsp, http, si, si1, ssdp1;
 #define CA_CHANNELS_OPT 'c'
 #define CACHE_DIR_OPT 'z'
 #define DISABLE_CAT_OPT '5'
+#define DISABLE_PMT_SCAN '9'
 // Options that don't have a short option available
 #define LONG_OPT_ONLY_START 1024
 #define VERSION_OPT (LONG_OPT_ONLY_START + 1)
@@ -189,6 +190,7 @@ static const struct option long_options[] = {
     {"help", no_argument, NULL, HELP_OPT},
     {"virtual-diseqc", required_argument, NULL, ABSOLUTE_SRC},
     {"version", no_argument, NULL, VERSION_OPT},
+    {"disable-pmt-scan", no_argument, NULL, DISABLE_PMT_SCAN},
 #ifndef DISABLE_DDCI
     {"disable-cat", required_argument, NULL, DISABLE_CAT_OPT},
 #endif
@@ -560,6 +562,9 @@ Help\n\
 	   * eg: 13E,19.2E on adapter 0 and 23.5E,28.2E on adapter 2&3 (source 0,1):\n\
 		-A 0-1:0:0,2-3:1:0\n\
 \t* Note: Option -A is not compatible with clients requesting fe= (tvheadend)\n\
+\n\
+* -9 --disable-pmt-scan: Disables scanning PMTs and only reads the PMTs that are requested by the client\n\
+\t* Provides more reliable decrypting for channels included in multiple providers\n\
 \n"
 #ifdef AXE
         "\
@@ -1063,7 +1068,6 @@ void set_options(int argc, char *argv[]) {
         }
 
         case PRIORITY_OPT:
-
             opts.th_priority = map_int(optarg, NULL);
             break;
 
@@ -1104,6 +1108,11 @@ void set_options(int argc, char *argv[]) {
         case ABSOLUTE_SRC:
             set_absolute_src(optarg);
             break;
+
+        case DISABLE_PMT_SCAN:
+            opts.pmt_scan = 1 - opts.pmt_scan;
+            break;
+
 #ifdef AXE
         case QUATTRO_OPT:
             opts.quattro = 1;
