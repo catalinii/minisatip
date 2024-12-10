@@ -387,7 +387,7 @@ int tables_destroy() {
     int i;
     for (i = 0; i < nca; i++) {
         if (ca[i].enabled && ca[i].op->ca_close_ca)
-            ca[i].op->ca_close_ca(&ca[i]);
+            ca[i].op->ca_close_ca();
     }
     return 0;
 }
