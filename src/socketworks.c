@@ -709,8 +709,10 @@ void *select_and_execute(void *arg) {
     } else
         strcpy(thread_info[thread_index].thread_name, "main");
 
-    select_timeout = SELECT_TIMEOUT;
     tid = get_tid();
+    pthread_setname_np(tid, thread_info[thread_index].thread_name);
+
+    select_timeout = SELECT_TIMEOUT;
     thread_info[thread_index].tid = tid;
     les = 1;
     es = 0;
