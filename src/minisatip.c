@@ -2024,6 +2024,8 @@ int readBootID() {
 
     // Read existing values
     snprintf(bootid_path, sizeof(bootid_path) - 1, "%s/bootid", opts.cache_dir);
+    LOG("Initial values bootid %d, device_id %d, UUID %s (reading new from %s)", opts.bootid,
+        opts.device_id, opts.uuid, bootid_path);
     FILE *f = fopen(bootid_path, "rt");
     __attribute__((unused)) int rv;
     if (f) {
