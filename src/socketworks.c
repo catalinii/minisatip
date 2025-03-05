@@ -702,15 +702,14 @@ void *select_and_execute(void *arg) {
         return NULL;
     }
 
+    tid = get_tid();
     memset(thread_info[thread_index].thread_name, 0,
            sizeof(thread_info[thread_index].thread_name));
     if (arg) {
         safe_strncpy(thread_info[thread_index].thread_name, (char *)arg);
+        pthread_setname_np(tid, thread_info[thread_index].thread_name);
     } else
         strcpy(thread_info[thread_index].thread_name, "main");
-
-    tid = get_tid();
-    pthread_setname_np(tid, thread_info[thread_index].thread_name);
 
     select_timeout = SELECT_TIMEOUT;
     thread_info[thread_index].tid = tid;
