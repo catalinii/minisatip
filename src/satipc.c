@@ -1318,7 +1318,6 @@ int satipc_send_setup(adapter *ad, satipc *sip) {
     sip->sent_transport = 0;
     ad->err = 0;
     sip->lap = sip->ldp = 0;
-    sip->force_pids = 1;
     strcatf(url, len, "&pids=none");
     http_request(ad, url, "SETUP", 0);
     return 0;
@@ -1329,17 +1328,9 @@ void satipc_get_pids(adapter *ad, satipc *sip, char *url, int size) {
     int send_pids = 0;
     int len = 0;
 
-    // Use pids= when tuning to a new freq
-    if (sip->want_tune)
+    // Use pids= only when forced to use pids=
+    if (sip->force_pids)
         send_pids = 1;
-
-    if (sip->lap && sip->ldp)
-        send_pids = 1;
-
-    if (sip->force_pids) {
-        send_pids = 1;
-        sip->force_pids = 0;
-    }
 
     get_adapter_pids(ad->id, tmp_url, sizeof(tmp_url));
     if ((!strcmp(tmp_url, "all") || !strcmp(tmp_url, "none"))) {
