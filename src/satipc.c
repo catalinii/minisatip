@@ -1332,6 +1332,10 @@ void satipc_get_pids(adapter *ad, satipc *sip, char *url, int size) {
     if (sip->force_pids)
         send_pids = 1;
 
+    if (!sip->lap && !sip->ldp)
+        send_pids = 1;
+
+
     get_adapter_pids(ad->id, tmp_url, sizeof(tmp_url));
     if ((!strcmp(tmp_url, "all") || !strcmp(tmp_url, "none"))) {
         send_pids = 1;
