@@ -1562,6 +1562,8 @@ int flush_socket_all(sockets *s) {
 
     if (s->spos == s->wpos)
         return 0;
+    if (!s->pack)
+	return 0;
 
     memset(&iov, 0, sizeof(iov));
     spos = s->spos;
