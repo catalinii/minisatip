@@ -718,7 +718,7 @@ void _dump_packets(char *message, unsigned char *b, int len,
         crc = crc_32(b + i + 4, 184); // skip header
         pid = PID_FROM_TS(b + i);
         cc = b[i + 3] & 0xF;
-        LOG("%s: pid %04d (%04X) CC=%X CRC=%08X%s pos: %d packet %d : "
+        LOG("%s: pid %04d (%04X) CC=%X CRC=%08X %s pos: %d packet %d : "
             "[%02X "
             "%02X "
             "%02X %02X] %02X %02X %02X %02X",
