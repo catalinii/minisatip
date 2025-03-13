@@ -1706,7 +1706,7 @@ void find_satip_adapter(adapter **a) {
         }
         if (strchr(host, '/')) {
             char *end = strchr(host, '/');
-            _strncpy(source_ip, host, end - host);
+            _strncpy(source_ip, host, end - host + 1);
             memmove(host, end + 1, sizeof(host) - 1);
         }
         port = map_int(sep2, NULL);
