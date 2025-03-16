@@ -113,6 +113,7 @@ adapter *adapter_alloc() {
     ad->db_snr_map = 1.0;
 
     ad->drop_encrypted = opts.drop_encrypted;
+    ad->legacy_dvbapi = opts.legacy_dvbapi;
 
     if (!ad->buf) {
         ad->lbuf = opts.adapter_buffer;
@@ -310,7 +311,6 @@ int init_hw(int i) {
     ad->master_sid = -1;
     ad->sid_cnt = 0;
     ad->pid_err = ad->dec_err = 0;
-    ad->new_gs = 0;
     ad->force_close = 0;
     ad->ca_mask = 0;
     ad->tune_time = 0;
@@ -2069,6 +2069,40 @@ void set_signal_multiplier(char *o) {
     }
 }
 
+void set_adapters_legacy_dvbapi(char *o) {
+    int i, la, a_id;
+    char buf[strlen(o) + 1], *arg[40];
+    adapter *ad;
+    safe_strncpy(buf, o);
+    la = split(arg, buf, ARRAY_SIZE(arg), ',');
+    for (i = 0; i < la; i++) {
+        if (arg[i] && arg[i][0] == '*') {
+            ad = NULL;
+            a_id = -1;
+        } else {
+            a_id = map_intd(arg[i], NULL, -1);
+            if (a_id < 0 || a_id >= MAX_ADAPTERS)
+                continue;
+
+            if (!a[a_id])
+                a[a_id] = adapter_alloc();
+            ad = a[a_id];
+        }
+
+        if (ad) {
+            ad->legacy_dvbapi = 1;
+            LOG("Enabling legacy DVBAPI for adapter %d", a_id);
+        } else {
+            opts.legacy_dvbapi = 1;
+            int j;
+            for (j = 0; j < MAX_ADAPTERS; j++)
+                if (a[j])
+                    a[j]->legacy_dvbapi = 1;
+            LOG("Enabling legacy DVBAPI for all adapters");
+        }
+    }
+}
+
 int delsys_match(adapter *ad, int del_sys) {
     int i;
     if (!ad)
@@ -2110,7 +2144,7 @@ int signal_thread(sockets *s) {
             LOG("get_signal%s took %jd ms for adapter %d handle %d (status: "
                 "%d, ber: "
                 "%d, strength:%d, snr: %d, force scan %d)",
-                (ad->new_gs == 1) ? "_new" : "", ctime - ts, ad->id, ad->fe,
+                (ad->legacy_dvbapi == 1) ? "_old" : "_new", ctime - ts, ad->id, ad->fe,
                 ad->status, ad->ber, ad->strength, ad->snr, opts.force_scan);
     }
     return 0;

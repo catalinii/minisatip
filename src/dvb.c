@@ -1782,7 +1782,7 @@ void adapt_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
 
 // returns the strength and SNR between 0 .. 65535
 
-void get_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
+void get_signal_old(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
                 uint16_t *snr, uint16_t *db) {
     *status = 0;
     *ber = *snr = *strength = 0;
@@ -1813,7 +1813,7 @@ void get_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
         }
     }
 
-    LOGM("get_signal adapter %d: status %d, strength %d, snr %d, BER: %d",
+    LOGM("get_signal_old adapter %d: status %d, strength %d, snr %d, BER: %d",
          ad->id, *status, *strength, *snr, *ber);
 }
 
@@ -1894,34 +1894,19 @@ int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
 #endif
 }
 
-#define NEW_SIGNAL 1
-#define OLD_SIGNAL 2
-
 // converts the strength and SNR between 0 .. 255 after multiplying with
 // *_multiplier
 
 int dvb_get_signal(adapter *ad) {
-    int start = 0;
     uint16_t strength = 0, snr = 0, dbvalue = 65535;
     int status = 0;
     uint32_t ber = 0;
 
     if (ad->strength_multiplier || ad->snr_multiplier) {
-        if (ad->new_gs == 0) {
-            int new_gs =
-                get_signal_new(ad, &status, &ber, &strength, &snr, &dbvalue);
-            if (!new_gs)
-                ad->new_gs = NEW_SIGNAL;
-            else
-                ad->new_gs = OLD_SIGNAL;
-            start = 1;
-        }
-
-        if (!start && ad->new_gs == NEW_SIGNAL)
+        if (ad->legacy_dvbapi == 0) {
             get_signal_new(ad, &status, &ber, &strength, &snr, &dbvalue);
-
-        if (ad->new_gs == OLD_SIGNAL) {
-            get_signal(ad, &status, &ber, &strength, &snr, &dbvalue);
+        } else {
+            get_signal_old(ad, &status, &ber, &strength, &snr, &dbvalue);
             if (ad->force_tuner_signal != TUNER_FORCE_NO)
                 adapt_signal(ad, &status, &ber, &strength, &snr, &dbvalue);
         }
