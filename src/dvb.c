@@ -1854,8 +1854,6 @@ int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
         init_strength = enum_cmdargs[0].u.st.stat[0].svalue; // dBm / 1000
         strengthd = get_strength_decibels(init_strength);
     }
-    //  else if (enum_cmdargs[0].u.st.stat[0].scale == FE_SCALE_NOT_AVAILABLE)
-    //      err |= 1;
 
     if (enum_cmdargs[1].u.st.stat[0].scale == FE_SCALE_RELATIVE) {
         snr_s = "%";
@@ -1865,8 +1863,6 @@ int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
         init_snr = enum_cmdargs[1].u.st.stat[0].svalue; // dB * 1000
         *db = (int)get_snr_decibels(init_snr, &snrd, ad->db_snr_map);
     }
-    //	else if (enum_cmdargs[1].u.st.stat[0].scale == FE_SCALE_NOT_AVAILABLE)
-    //	    err |= 2;
 
     *ber = enum_cmdargs[2].u.st.stat[0].uvalue & 0x7FFF;
     if (ad->fe > 0 && ioctl(ad->fe, FE_READ_STATUS, status) < 0) {
