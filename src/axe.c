@@ -57,7 +57,7 @@
 #define DTV_STREAM_ID 42
 #endif
 
-void get_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
+void get_signal_old(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
                 uint16_t *snr, uint16_t *db);
 int send_jess(adapter *ad, int fd, int freq, int pos, int pol, int hiband,
               diseqc *d);
@@ -703,7 +703,7 @@ int axe_get_signal(adapter *ad) {
     uint16_t strength = 0, snr = 0, db = 0, tmp;
     int status = 0;
     uint32_t ber = 0;
-    get_signal(ad, &status, &ber, &strength, &snr, &db);
+    get_signal_old(ad, &status, &ber, &strength, &snr, &db);
 
     strength = strength * 240 / 24000;
     if (strength > 240)
