@@ -43,6 +43,7 @@ typedef struct struct_opts {
     int dvbapi_port;
     char dvbapi_host[100];
     int dvbapi_offset;
+    int legacy_dvbapi;
     int drop_encrypted;
     int pids_all_no_dec;
     int rtsp_port;

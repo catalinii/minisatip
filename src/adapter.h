@@ -60,7 +60,7 @@ struct struct_adapter {
     unsigned char *buf; // 7 rtp packets = MAX_PACK, 7 frames / packet
     int64_t rtime;
     int64_t last_sort;
-    int new_gs;
+    int legacy_dvbapi;
     int status, status_cnt, fast_status;
     int dmx_source;
     int master_source;
@@ -183,6 +183,7 @@ char is_adapter_disabled(int i);
 void set_adapters_delsys(char *o);
 void set_lnb_adapters(char *o);
 void set_signal_multiplier(char *o);
+void set_adapters_legacy_dvbapi(char *o);
 int signal_thread(sockets *s);
 int close_adapter_for_socket(sockets *s);
 int compare_tunning_parameters(int aid, transponder *tp);
