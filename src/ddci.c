@@ -377,10 +377,9 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
         return TABLES_RESULT_OK;
     }
 
-    ddid = is_pmt_running(pmt);
 
-    LOG("%s: adapter %d, pmt %d, pid %d, sid %d, ddid %d, name: %s",
-        __FUNCTION__, ad->id, pmt->id, pmt->pid, pmt->sid, ddid, pmt->name);
+    LOG("%s: adapter %d, pmt %d, pid %d, sid %d, name: %s",
+        __FUNCTION__, ad->id, pmt->id, pmt->pid, pmt->sid, pmt->name);
 
     channel = getItem(&channels, pmt->sid);
     if (!channel) {
@@ -401,6 +400,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     }
 
     // Determine which DDCI should handle this PMT
+    ddid = is_pmt_running(pmt);
     if (ddid == -1)
         ddid = find_ddci_for_pmt(channel, pmt);
     // Negative return values are used to distinguish from valid return values (>= 0)    
