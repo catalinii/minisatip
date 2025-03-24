@@ -357,7 +357,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     ddci_device_t *d;
 
     if ((d = get_ddci(ad->id))) {
-        LOG("Skip processing pmt for ddci adapter %d", ad->id);
+        LOG("Skip processing PMT %d for DDCI adapter %d", pmt->id, ad->id);
         // grace time for card decrypting lower than the default grace_time
         pmt->grace_time = 20000;
         pmt->start_time = getTick();
@@ -491,7 +491,7 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
     int i, pmt = spmt->id;
 
     if (get_ddci(ad->id)) {
-        LOG("Skip deleting pmt for ddci adapter %d", ad->id);
+        LOG("Skip deleting PMT %d for DDCI adapter %d", spmt->id, ad->id);
         return 0;
     }
 
