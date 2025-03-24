@@ -1992,9 +1992,10 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque) {
             desc_len = c[1];
             desc_len += 2;
             if (c[0] == 0x48 && !pmt->name[0]) {
+                int provider_size = sizeof(pmt->provider) - 1;
                 int name_size = sizeof(pmt->name) - 1;
                 c += 3;
-                dvb_get_string(pmt->provider, name_size, c + 1, c[0]);
+                dvb_get_string(pmt->provider, provider_size, c + 1, c[0]);
                 c += c[0] + 1;
                 dvb_get_string(pmt->name, name_size, c + 1, c[0]);
                 LOG("SDT PMT %d: name %s provider %s, sid: %d (%X)", pmt->id,
