@@ -488,7 +488,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
 // if the PMT is used by the adapter, the pids will be removed from the
 // translation table
 int ddci_del_pmt(adapter *ad, SPMT *spmt) {
-    int i, pmt = spmt->id;
+    int i;
 
     if (get_ddci(ad->id)) {
         LOG("Skip deleting PMT %d for DDCI adapter %d", spmt->id, ad->id);
@@ -514,11 +514,11 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
         spmt->name);
 
     for (i = 0; i < d->max_channels; i++)
-        if (d->pmt[i].id == pmt) {
+        if (d->pmt[i].id == spmt->id) {
             d->pmt[i].id = -1;
         }
 
-    del_pmt_mapping_table(d, ad->id, pmt);
+    del_pmt_mapping_table(d, ad->id, spmt->id);
     update_pids(d->id);
     dump_mapping_table();
     return 0;
