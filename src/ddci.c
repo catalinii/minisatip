@@ -353,7 +353,6 @@ int is_pmt_running(SPMT *pmt) {
 // also adds the PIDs to the translation table
 int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     int i, ddid = -1;
-    int rv = TABLES_RESULT_ERROR_NORETRY;
     Sddci_channel *channel;
     ddci_device_t *d;
 
@@ -480,11 +479,10 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
 
     update_pids(ad->id);
     update_pids(d->id);
-    rv = TABLES_RESULT_OK;
     dump_mapping_table();
 
     mutex_unlock(&d->mutex);
-    return rv;
+    return TABLES_RESULT_OK;
 }
 
 // if the PMT is used by the adapter, the pids will be removed from the
