@@ -1635,14 +1635,14 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque) {
         for (i = 0; i < npmts; i++)
             if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == ad->id &&
                 seen_pmts[i] == 0) {
-                LOG("Caching PMT %d (%s) and filter %d as it is not "
-                    "present in the new PAT",
-                    i, pmts[i]->name, pmts[i]->filter);
                 if (ad->type == ADAPTER_CI) {
                     // Do not cache PMTs for CI adapters as they are being
                     // re-generated very often (on channel change)
                     pmt_del(i);
                 } else
+                    LOG("Caching PMT %d (%s) and filter %d as it is not "
+                        "present in the new PAT",
+                        i, pmts[i]->name, pmts[i]->filter);
                     cache_pmt_for_adapter(ad, pmts[i]);
             }
     }
