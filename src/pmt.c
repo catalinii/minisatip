@@ -86,8 +86,6 @@ static inline int get_adaptation_len(uint8_t *b) {
         adapt_len = (b[4] < 183) ? b[4] + 5 : 188;
     } else
         adapt_len = 4;
-    if (adapt_len > 188)
-        adapt_len = 188;
     return adapt_len;
 }
 
@@ -1445,44 +1443,30 @@ int assemble_emm(SFilter *f, uint8_t *b) {
     return len;
 }
 
-int assemble_normal(SFilter *f, uint8_t *b) {
-    int len = 0, pid;
-    pid = PID_FROM_TS(b);
-    if ((b[1] & 0x40) == 0x40) {
-        len = ((b[6] & 0xF) << 8) + b[7];
-        len = len + 8 - 5; // byte 8 - 5 bytes that we skip
-        f->len = 0;
-        memset(f->data, 0, FILTER_PACKET_SIZE);
-    }
-    if ((len > 1500 || len < 0))
-        LOG_AND_RETURN(
-            0,
-            "assemble_packet: len %d not valid for pid %d [%02X %02X "
-            "%02X %02X %02X %02X]",
-            len, pid, b[3], b[4], b[5], b[6], b[7], b[8]);
 
-    if (len > 183) {
-        memcpy(f->data + f->len, b + 5, 183);
-        f->len += 183;
-        return 0;
-    } else if (len > 0) {
-        memcpy(f->data + f->len, b + 5, len);
-        f->len += len;
-    } else // pmt_len == 0 - next part from the pmt
-    {
-        if (f->len + 184 > FILTER_PACKET_SIZE) {
-            LOG("%s: data too large %d", __FUNCTION__, f->len + 184);
-            f->len = 0;
-            return 0;
-        }
-        memcpy(f->data + f->len, b + 4, 184);
-        f->len += 184;
-        len = ((f->data[1] & 0xF) << 8) + f->data[2];
-        len += 3;
-        if (f->len < len)
-            return 0;
+int assemble_normal(SFilter *f, uint8_t *b) {
+    int pid = PID_FROM_TS(b);
+    int start = get_adaptation_len(b);
+    if ((b[1] & 0x40) == 0x40) {
+        f->len = 0;
+        f->pos = 0;
+        memset(f->data, 0, FILTER_PACKET_SIZE);
+        start += 1; // advance over the first 0
     }
-    return len;
+    int left = 188 - start;
+    if (f->pos > FILTER_PACKET_SIZE )
+        LOG_AND_RETURN(0, "assemble_packet: len %d not valid for pid %d [%02X %02X %02X %02X %02X %02X]",
+            f->pos, pid, b[0], b[1], b[2], b[3], b[4], b[5]);
+    
+    memcpy(f->data + f->pos, b + start, left);
+    f->pos += left;
+
+    f->len = ((f->data[1] & 0xF) << 8) + f->data[2];
+    f->len += 3;
+    
+    if (f->pos < f->len)
+        return 0;
+    return f->len;
 }
 
 int assemble_packet(SFilter *f, uint8_t *b) {

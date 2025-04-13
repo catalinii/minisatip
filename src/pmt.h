@@ -161,6 +161,7 @@ typedef struct struct_filter {
     int adapter;
     void *opaque;
     int len, mask_len;
+    int pos;
     char match;
     filter_function callback;
     unsigned char filter[FILTER_SIZE];
