@@ -272,8 +272,8 @@ int satipc_reply(sockets *s) {
             ad->tp.mtype = QAM_256;
     }
 
-    if (rc == 404) {
-        sip->state = SATIP_STATE_OPTIONS;
+    if (rc == 404 && (strstr((char *)s->buf, "minisatip") != NULL)) {
+        rc = 503; // Hack the response from minisatip!
     }
 
     // quirk for Geniatech EyeTV Netstream 4C when fe=x is in the URL
@@ -282,7 +282,8 @@ int satipc_reply(sockets *s) {
             sip->satip_fe = 0;
 
     if (rc == 454 || rc == 503 || rc == 405) {
-        sip->state = SATIP_STATE_OPTIONS;
+        LOG("satipc %d: Ocuppied server, can't use it", s->sid);
+        sip->state = SATIP_STATE_INACTIVE;
         sip->last_setup = -10000;
     } else if (rc != 200) {
         if (rc != 0) // AVM Fritz!Box workaround sdp reply without header
