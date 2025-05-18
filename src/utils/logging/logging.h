@@ -1,8 +1,6 @@
 #ifndef LOGGING_H
 #define LOGGING_H
 
-#define _GNU_SOURCE
-
 #include "opts.h"
 
 #include <stdint.h>
@@ -19,7 +17,7 @@ typedef struct {
     char enabled;
     pthread_t tid;
     char thread_name[100];
-    char *last_log;
+    const char *last_log;
 } SThreadInfo;
 extern SThreadInfo thread_info[MAX_THREAD_INFO];
 extern __thread int thread_index;

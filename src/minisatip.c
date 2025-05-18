@@ -219,7 +219,7 @@ static const struct option long_options[] = {
 
     {0, 0, 0, 0}};
 
-char *built_info[] = {
+const char *built_info[] = {
 #ifdef DISABLE_DVBCSA
     "Built without dvbcsa",
 #else
@@ -612,7 +612,7 @@ char *get_command_line_string(int argc, char *argv[]) {
         len += strlen(argv[i]) + 1;
     }
 
-    char *dest = _malloc(len);
+    char *dest = (char *)_malloc(len);
     memset(dest, 0, sizeof(len));
     for (i = 0; i < argc; i++) {
         strcat(dest, argv[i]);
@@ -653,7 +653,7 @@ void set_options(int argc, char *argv[]) {
     opts.debug = 0;
     opts.file_line = 0;
     opts.log_file = "/tmp/minisatip.log";
-    opts.disc_host = "239.255.255.250";
+    opts.disc_host = (char *)"239.255.255.250";
     opts.start_rtp = 5500;
     opts.http_port = 8080;
     opts.timeout_sec = 30000;
@@ -899,7 +899,7 @@ void set_options(int argc, char *argv[]) {
 
         case PLAYLIST_OPT: {
             if (strlen(optarg) < 1000) {
-                opts.playlist = _malloc(strlen(optarg) + 200);
+                opts.playlist = (char *)_malloc(strlen(optarg) + 200);
                 if (opts.playlist)
                     sprintf(opts.playlist,
                             "<satip:X_SATIPM3U "
@@ -1187,7 +1187,7 @@ void set_options(int argc, char *argv[]) {
 
     // FBC setup
     if (!access("/proc/stb/frontend/0/fbc_connect", W_OK))
-        set_slave_adapters("2-7:0");
+        set_slave_adapters((char *)"2-7:0");
 }
 
 #define RBUF 32000
@@ -1240,7 +1240,7 @@ int read_rtsp(sockets *s) {
         hexdump("read_rtsp: ", s->buf, s->rlen);
         if (s->flags & 1)
             return 0;
-        unsigned char *new_alloc = _malloc(RBUF);
+        unsigned char *new_alloc = (unsigned char *)_malloc(RBUF);
         memcpy(new_alloc, s->buf, s->rlen);
         s->buf = new_alloc;
         s->flags = s->flags | 1;
@@ -1445,7 +1445,7 @@ int read_http(sockets *s) {
     char ra[50];
     char *space;
     int is_head = 0;
-    static char *xml =
+    static const char *xml =
         "<?xml version=\"1.0\"?>"
         "<root xmlns=\"urn:schemas-upnp-org:device-1-0\" configId=\"1\">"
         "<specVersion><major>1</major><minor>1</minor></specVersion>"
@@ -1482,7 +1482,7 @@ int read_http(sockets *s) {
         }
         if (s->flags & 1)
             return 0;
-        unsigned char *new_alloc = _malloc(RBUF);
+        unsigned char *new_alloc = (unsigned char *)_malloc(RBUF);
         memcpy(new_alloc, s->buf, s->rlen);
         set_socket_buffer(s->id, new_alloc, RBUF);
         s->flags = s->flags | 1;
@@ -1491,7 +1491,7 @@ int read_http(sockets *s) {
     url[0] = 0;
     space = strchr((char *)s->buf, ' ');
     if (space) {
-        int i = 0;
+        unsigned int i = 0;
         space++;
         while (space[i] && space[i] != ' ') {
             url[i] = space[i];
@@ -1587,15 +1587,15 @@ int read_http(sockets *s) {
     }
 
     if (strcmp(arg[1], "/state.json") == 0) {
-        char *buf = _malloc(JSON_STATE_MAXLEN);
-        char *sbuf = _malloc(JSON_STRING_MAXLEN);
+        char *buf = (char *)_malloc(JSON_STATE_MAXLEN);
+        char *sbuf = (char *)_malloc(JSON_STRING_MAXLEN);
         memset(sbuf, 0, JSON_STRING_MAXLEN);
         int len =
             get_json_state(buf, JSON_STATE_MAXLEN, sbuf, JSON_STRING_MAXLEN);
         http_response(s, 200,
-                      "Content-Type: application/json; charset=utf-8\r\n"
+                      (char *)("Content-Type: application/json; charset=utf-8\r\n"
                       "Connection: close\r\n"
-                      "Access-Control-Allow-Origin: *",
+                      "Access-Control-Allow-Origin: *"),
                       buf, 0, len);
         _free(buf);
         _free(sbuf);
@@ -1603,12 +1603,12 @@ int read_http(sockets *s) {
     }
 
     if (strcmp(arg[1], "/bandwidth.json") == 0) {
-        char *buf = _malloc(JSON_BANDWIDTH_MAXLEN);
+        char *buf = (char *)_malloc(JSON_BANDWIDTH_MAXLEN);
         int len = get_json_bandwidth(buf, JSON_BANDWIDTH_MAXLEN);
-        http_response(s, 200,
+        http_response(s, 200, (char *)(
                       "Content-Type: application/json; charset=utf-8\r\n"
                       "Connection: close\r\n"
-                      "Access-Control-Allow-Origin: *",
+                      "Access-Control-Allow-Origin: *"),
                       buf, 0, len);
         _free(buf);
         return 0;
@@ -1617,7 +1617,7 @@ int read_http(sockets *s) {
     // process file from html directory, the images are just sent back
 
     if (!strcmp(arg[1], "/"))
-        arg[1] = "/status.html";
+        arg[1] = (char *)"/status.html";
 
     if (!strchr(arg[1] + 1, '/') && !strstr(arg[1], "..")) {
         char ctype[500];
@@ -1676,7 +1676,7 @@ int ssdp_notify(sockets *s, int alive) {
     char buf[500];
     char nt[3][60];
     int ptr = 0;
-    char *op = alive ? "Discovery" : "ByeBye";
+    const char *op = alive ? "Discovery" : "ByeBye";
 
     int i;
     s->wtime = getTick();
@@ -1739,7 +1739,7 @@ int ssdp_byebye(sockets *s) { return ssdp_notify(s, 0); }
 
 int ssdp;
 int ssdp_reply(sockets *s) {
-    char *reply = "HTTP/1.1 200 OK\r\n"
+    const char *reply = "HTTP/1.1 200 OK\r\n"
                   "CACHE-CONTROL: max-age=1800\r\n"
                   "DATE: %s\r\n"
                   "EXT:\r\n"
@@ -1750,7 +1750,7 @@ int ssdp_reply(sockets *s) {
                   "BOOTID.UPNP.ORG: %d\r\n"
                   "CONFIGID.UPNP.ORG: 0\r\n"
                   "DEVICEID.SES.COM: %d\r\n\r\n\0";
-    char *device_id_conflict = "M-SEARCH * HTTP/1.1\r\n"
+    const char *device_id_conflict = "M-SEARCH * HTTP/1.1\r\n"
                                "HOST: %s:1900\r\n"
                                "MAN: \"ssdp:discover\"\r\n"
                                "ST: urn:ses-com:device:SatIPServer:1\r\n"
@@ -1767,7 +1767,7 @@ int ssdp_reply(sockets *s) {
 
     s->rtime = s->wtime; // consider the timeout of the discovery operation
 
-    ruuid = strcasestr((const char *)s->buf, "uuid:");
+    ruuid = strcasestr((char *)s->buf, "uuid:");
     if (ruuid && strncmp(opts.uuid, strip(ruuid + 5), strlen(opts.uuid)) == 0) {
         LOGM("Dropping packet from the same UUID as mine (from %s:%d)",
              get_sockaddr_host(s->sa, ra, sizeof(ra)),
@@ -1786,7 +1786,7 @@ int ssdp_reply(sockets *s) {
     LOGM("MSG querier >> process :\n%s", s->buf);
 
     if (strncasecmp((const char *)s->buf, "NOTIFY", 6) == 0) {
-        rdid = strcasestr((const char *)s->buf, "DEVICEID.SES.COM:");
+        rdid = strcasestr((char *)s->buf, "DEVICEID.SES.COM:");
         if (rdid && opts.device_id == map_int(strip(rdid + 17), NULL)) {
             ptr = 0;
             strcatf(buf, ptr, device_id_conflict,
@@ -1806,9 +1806,9 @@ int ssdp_reply(sockets *s) {
         return 0;
     }
 
-    man = strcasestr((const char *)s->buf, "MAN");
-    man_sd = strcasestr((const char *)s->buf, "ssdp:discover");
-    if ((didsescom = strcasestr((const char *)s->buf, "DEVICEID.SES.COM:")))
+    man = strcasestr((char *)s->buf, "MAN");
+    man_sd = strcasestr((char *)s->buf, "ssdp:discover");
+    if ((didsescom = strcasestr((char *)s->buf, "DEVICEID.SES.COM:")))
         did = map_int(didsescom + 17, NULL);
 
     if (man && man_sd && didsescom && (s->rtime < 15000) &&
@@ -1968,7 +1968,7 @@ int main(int argc, char *argv[]) {
         FAIL("sockets_add failed for signal thread");
 
     if (!opts.no_threads) {
-        set_socket_thread(sock_signal, start_new_thread("signal"));
+        set_socket_thread(sock_signal, start_new_thread((char *)"signal"));
         sockets_timeout(sock_signal, 300); // 300 ms
     } else
         sockets_timeout(sock_signal, 1000); // 1 sec
@@ -2061,8 +2061,8 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr) {
     int binary = 0;
     char *desc1;
     char ra[50];
-    char *d;
-    char *proto;
+    const char *d;
+    const char *proto;
 
     if (s->type == TYPE_HTTP)
         proto = "HTTP";
@@ -2083,7 +2083,7 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr) {
     if (!ah || !ah[0])
         ah = public_str;
     if (!desc)
-        desc = "";
+        desc = (char *)"";
     if (rc == 200)
         d = "OK";
     else if (rc == 400)
@@ -2111,7 +2111,7 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr) {
         lr = strlen(desc);
     else {
         binary = 1;
-        desc1 = "";
+        desc1 = (char *)"";
     }
 
     int lresp = 0;

@@ -32,7 +32,7 @@ SHashTable mem_alloc_table;
 
 typedef struct struct_memory_allocation {
     void *data;
-    char *file;
+    const char *file;
     int line;
     int struct_size;
     int pointer_size;
@@ -43,7 +43,7 @@ typedef struct struct_memory_allocation {
 static __thread int running;
 
 int record_allocation(void *old, void *x, int size_bytes, int current_size,
-                      int min_len, int pointer_size, int struct_size, char *f,
+                      int min_len, int pointer_size, int struct_size, const char *f,
                       int l) {
     int rv = 0;
     if (running)
@@ -51,7 +51,7 @@ int record_allocation(void *old, void *x, int size_bytes, int current_size,
     // prevent hash table from calling record_allocation multiple times
     running = 1;
     if (old) {
-        SMEMALLOC *s = getItem(&mem_alloc_table, (uintptr_t)old);
+        SMEMALLOC *s = (SMEMALLOC *)getItem(&mem_alloc_table, (uintptr_t)old);
         if (s)
             rv = s->size_bytes;
         delItem(&mem_alloc_table, (uintptr_t)old);
@@ -59,16 +59,16 @@ int record_allocation(void *old, void *x, int size_bytes, int current_size,
     SMEMALLOC s = {.data = x,
                    .file = f,
                    .line = l,
-                   .size_bytes = size_bytes,
+                   .struct_size = struct_size,
+                   .pointer_size = pointer_size,
                    .current_size = current_size,
                    .min_size = min_len,
-                   .pointer_size = pointer_size,
-                   .struct_size = struct_size};
+                   .size_bytes = size_bytes};
     _setItem(&mem_alloc_table, (uintptr_t)x, &s, sizeof(s), 1);
     running = 0;
     return rv;
 }
-void *malloc1(int a, char *f, int l, int record) {
+void *malloc1(int a, const char *f, int l, int record) {
     void *x = malloc(a);
     if (x)
         memset(x, 0, a);
@@ -83,14 +83,14 @@ void *malloc1(int a, char *f, int l, int record) {
     return x;
 }
 
-void *realloc1(void *p, int a, char *f, int l, int record) {
+void *realloc1(void *p, int a, const char *f, int l, int record) {
     int old_mem = 0;
     void *x = realloc(p, a);
     if (record) {
         old_mem = record_allocation(p, x, a, a, a, 1, 0, f, l);
     }
-    LOGM("%s:%d realloc allocated %d bytes from %d: %p -> %p", f, l, a, old_mem,
-         p, x);
+    LOGM("%s:%d realloc allocated %d bytes from %d: %p", f, l, a, old_mem,
+         x);
     if (!x) {
         LOG0("Failed allocating %d bytes of memory", a)
         if (!strcmp(f, "socketworks.c"))
@@ -99,7 +99,7 @@ void *realloc1(void *p, int a, char *f, int l, int record) {
     return x;
 }
 
-void free1(void *x, char *f, int l) {
+void free1(void *x, const char *f, int l) {
     LOGM("%s:%d free called with argument %p", f, l, x);
     if (mem_alloc_table.init)
         delItem(&mem_alloc_table, (uintptr_t)x);
@@ -111,7 +111,7 @@ int _ensure_allocated(void **x, int struct_size, int pointer_size,
                       int line) {
     int do__realloc = 0, new_size = 0, current_size = 0;
     void *result = NULL;
-    SMEMALLOC *s = getItem(&mem_alloc_table, (uintptr_t)*x);
+    SMEMALLOC *s = (SMEMALLOC *)getItem(&mem_alloc_table, (uintptr_t)*x);
     if (!*x || !s) {
         if (*x)
             LOG("%s:%d expected to find pointer %p in allocation table", file,
@@ -141,7 +141,7 @@ int _ensure_allocated(void **x, int struct_size, int pointer_size,
                            cs, ns);
 
         if (current_size > 0 || !*x) {
-            memset(result + cs, 0, ns - cs);
+            memset((char *)result + cs, 0, ns - cs);
         }
         record_allocation(*x, result, ns, new_size, min_elements, pointer_size,
                           struct_size, file, line);
@@ -159,7 +159,7 @@ void init_alloc() { create_hash_table(&mem_alloc_table, 100); }
 void free_alloc() { free_hash(&mem_alloc_table); }
 
 struct mem_allocation {
-    char *file;
+    const char *file;
     int line;
     int count;
     uint64_t sum;

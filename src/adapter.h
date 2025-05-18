@@ -153,7 +153,7 @@ int update_pids(int aid);
 int tune(int aid, int sid);
 void post_tune(adapter *ad);
 SPid *find_pid(int aid, int p);
-adapter *get_adapter1(int aid, char *file, int line);
+adapter *get_adapter1(int aid, const char *file, int line);
 adapter *get_configured_adapter1(int aid, char *file, int line);
 char *describe_adapter(int sid, int aid, char *dad, int ld);
 void dump_pids(int aid);

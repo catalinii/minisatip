@@ -1,8 +1,6 @@
 #ifndef OPTS_H
 #define OPTS_H
 
-#define _GNU_SOURCE
-
 #include "utils/uuid.h"
 #include <stdint.h>
 #include <time.h>
@@ -49,7 +47,7 @@ typedef struct struct_opts {
     uint8_t netcv_count;
     char *netcv_if;
     char *playlist;
-    char *log_file;
+    const char *log_file;
     int use_ipv4_only;
     int use_demux_device;
     float strength_multiplier, snr_multiplier;
@@ -59,8 +57,8 @@ typedef struct struct_opts {
     char *satip_xml;
     uint8_t satip_rtsp_over_tcp;
 #endif
-    char *document_root;
-    char *xml_path;
+    const char *document_root;
+    const char *xml_path;
     char no_threads;
     int th_priority;
     int diseqc_fast;
@@ -82,7 +80,7 @@ typedef struct struct_opts {
     char disable_ssdp;
     char pmt_scan;
     char emulate_pids_all;
-    char *cache_dir;
+    const char *cache_dir;
 #ifdef AXE
     int quattro;
     int quattro_hiband;

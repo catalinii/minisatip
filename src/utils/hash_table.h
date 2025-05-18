@@ -1,6 +1,5 @@
 #ifndef HASH_TABLE_H
 #define HASH_TABLE_H
-#define _GNU_SOURCE
 
 #include "utils/mutex.h"
 #include <stdint.h>
@@ -15,7 +14,7 @@ typedef struct hash_item {
     uint16_t len;
     uint16_t max_size;
     uint8_t is_alloc;
-    int64_t key;
+    uint64_t key;
     void *data;
 } SHashItem;
 
@@ -26,16 +25,16 @@ typedef struct hash_table {
     SHashItem *items;
     int64_t conflicts;
     SMutex mutex;
-    char *file;
+    const char *file;
     int line;
 } SHashTable;
 
 #define HASH_ITEM_ENABLED(h) (h.len)
 #define FOREACH_ITEM(h, a)                                                     \
     for (i = 0; i < (h)->size; i++)                                            \
-        if (HASH_ITEM_ENABLED((h)->items[i]) && (a = (h)->items[i].data))
+        if (HASH_ITEM_ENABLED((h)->items[i]) && (a = (SMEMALLOC *)(h)->items[i].data))
 
-int _create_hash_table(SHashTable *hash, int no, char *f, int l);
+int _create_hash_table(SHashTable *hash, int no, const char *f, int l);
 void copy_hash_table(SHashTable *s, SHashTable *d);
 void free_hash(SHashTable *hash);
 void *getItem(SHashTable *hash, uint64_t key);

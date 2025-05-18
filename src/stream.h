@@ -74,7 +74,7 @@ int stream_timeout(sockets *s);
 int close_streams_for_adapter(int ad, int except);
 int close_stream(int i);
 void dump_streams();
-streams *get_sid1(int sid, char *file, int line);
+streams *get_sid1(int sid, const char *file, int line);
 int get_session_id(int i);
 void set_session_id(int i, int id);
 int fix_master_sid(int a_id);

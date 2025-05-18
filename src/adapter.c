@@ -74,7 +74,7 @@ char fe_map[2 * MAX_ADAPTERS];
 void find_dvb_adapter(adapter **a);
 
 adapter *adapter_alloc() {
-    adapter *ad = _malloc(sizeof(adapter));
+    adapter *ad = (adapter *)_malloc(sizeof(adapter));
     memset(ad, 0, sizeof(adapter));
 
     /* diseqc setup */
@@ -116,7 +116,7 @@ adapter *adapter_alloc() {
 
     if (!ad->buf) {
         ad->lbuf = opts.adapter_buffer;
-        ad->buf = _malloc(ad->lbuf + 10);
+        ad->buf = (unsigned char *)_malloc(ad->lbuf + 10);
     }
 
 #ifndef DISABLE_PMT
@@ -453,8 +453,10 @@ int close_adapter(int na) {
 }
 
 int getAdaptersCount() {
-    int i, j, k;
+    int j, k;
     adapter *ad;
+    uint32_t i;
+
     int ts2 = 0, tc2 = 0, tt2 = 0, tc = 0, tt = 0, tac = 0, tat = 0;
     int fes[MAX_DVBAPI_SYSTEMS][MAX_ADAPTERS];
     int ifes[MAX_DVBAPI_SYSTEMS];
@@ -540,7 +542,7 @@ char *dump_absolute_table(adapter *ad, char *buf, int lb) {
     int i, len = 0;
 
     if (!absolute_switch)
-        return "";
+        return (char *)"";
     strlcatf(buf, lb, len, " Sources Table: ");
     for (i = 0; i < MAX_SOURCES; i++)
         if (ad->absolute_table[i] > 0) {
@@ -697,7 +699,7 @@ int get_free_adapter(transponder *tp) {
             break;
         }
 
-    if ((fe > 0) && (fe <= ARRAY_SIZE(fe_map)) && (fe_map[fe - 1] >= 0) &&
+    if ((fe > 0) && (fe <= (int )ARRAY_SIZE(fe_map)) && (fe_map[fe - 1] >= 0) &&
         (fe_map[fe - 1] < MAX_ADAPTERS)) {
         fe = fe_map[fe - 1];
         ad = a[fe];
@@ -964,7 +966,8 @@ void post_tune(adapter *ad) {
 #ifndef DISABLE_PMT
     SPid *p_all = find_pid(aid, 8192);
     if (!p_all || p_all->flags == 3) { // add pids if not explicitly added
-        int pid, ppid = 0;
+        int pid;
+        uint32_t ppid = 0;
         int pids[] = {0, 1, 16, 18}; // pids not added by the PMT module
         for (ppid = 0; ppid < sizeof(pids) / sizeof(int); ppid++) {
             pid = pids[ppid];
@@ -1317,7 +1320,7 @@ int set_adapter_parameters(int aid, int sid, transponder *tp) {
     return 0;
 }
 
-adapter *get_adapter1(int aid, char *file, int line) {
+adapter *get_adapter1(int aid, const char *file, int line) {
     if (aid < 0 || aid >= MAX_ADAPTERS || !a[aid] || !a[aid]->enabled) {
         LOG("%s:%d: get_adapter returns NULL for adapter_id %d", file, line,
             aid);
@@ -1358,7 +1361,7 @@ char *describe_adapter(int sid, int aid, char *dad, int ld) {
         if (aid < 0)
             aid = 0;
         if (!ss)
-            return "";
+            return (char *)"";
         t = &ss->tp;
         use_ad = 0;
     } else
@@ -1971,7 +1974,7 @@ void set_adapters_delsys(char *o) {
             a[a_id] = adapter_alloc();
 
         ad = a[a_id];
-        ad->sys[0] = ds;
+        ad->sys[0] = (fe_delivery_system_t )ds;
 
         if (ad->sys[0] == SYS_DVBS2)
             ad->sys[1] = SYS_DVBS;
@@ -2236,7 +2239,8 @@ int get_adapter_decerrs(int aid) {
 }
 
 int get_adapter_fe(int aid) {
-    int i, fe;
+    int fe;
+    uint32_t i;
     adapter *ad = get_adapter_nw(aid);
     if (!ad)
         return 0;

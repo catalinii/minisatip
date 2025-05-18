@@ -158,7 +158,7 @@ void *get_var_address(char *var, float *multiplier, int *type, void *storage,
                 } else if (sym[i][j].type == VAR_FUNCTION_STRING) {
                     off = map_intd(var + strlen(sym[i][j].name), NULL, 0);
                     get_data_string funs = (get_data_string)sym[i][j].addr;
-                    funs(off, storage, ls);
+                    funs(off, (char *)storage, ls);
                     return storage;
                 }
             }

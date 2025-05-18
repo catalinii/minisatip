@@ -17,7 +17,6 @@
  * USA
  *
  */
-#define _GNU_SOURCE
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -457,7 +456,7 @@ int sockets_accept(int socket, void *buf, int len, sockets *ss) {
 int sockets_read(int socket, void *buf, int len, sockets *ss, int *rv) {
     *rv = read(socket, buf, len);
     if (*rv > 0 && ss->type == TYPE_DVR && (opts.debug & LOG_DMX))
-        _dump_packets("read ->", buf, *rv, ss->rlen);
+        _dump_packets("read ->", (unsigned char *)buf, *rv, ss->rlen);
 
     return (*rv > 0);
 }
@@ -866,8 +865,8 @@ void *select_and_execute(void *arg) {
                     sockets_unlock(ss);
 
                     if (!read_ok && ss->type != TYPE_SERVER) {
-                        char *err_str;
-                        char *types[] = {"udp",  "tcp", "server", "http",
+                        const char *err_str;
+                        const char *types[] = {"udp",  "tcp", "server", "http",
                                          "rtsp", "dvr", NULL,     NULL};
                         if (rlen == 0) {
                             err = 0;
@@ -1084,7 +1083,7 @@ char *get_sock_shost(int fd, char *dest, int ld) {
     USockAddr sin;
     socklen_t len = sizeof(sin);
     if (getsockname(fd, &sin.sa, &len))
-        return "none";
+        return (char *)"none";
     return get_sockaddr_host(sin, dest, ld);
 }
 
@@ -1297,9 +1296,9 @@ int find_next_rtsp_header(SFIFO *fifo) {
 
 // copies the data from a iov structure to the fifo, starting with offset
 // if offset is 0 the entire data is copied.
-int copy_iovec_to_fifo(SFIFO *fifo, int offset, struct iovec *iov, int iovcnt) {
+int copy_iovec_to_fifo(SFIFO *fifo, u_int32_t offset, struct iovec *iov, int iovcnt) {
     int len = 0, i;
-    uint64_t available;
+    int64_t available;
     int size = opts.max_sbuf * 1048576;
 
     if (create_fifo(fifo, size))
@@ -1313,7 +1312,7 @@ int copy_iovec_to_fifo(SFIFO *fifo, int offset, struct iovec *iov, int iovcnt) {
 
     for (i = 0; i < iovcnt; i++) {
         if (offset < iov[i].iov_len) {
-            fifo_push(fifo, iov[i].iov_base + offset, iov[i].iov_len - offset);
+            fifo_push(fifo, (char *)(iov[i].iov_base) + offset, iov[i].iov_len - offset);
         }
         offset = (offset > iov[i].iov_len) ? offset - iov[i].iov_len : 0;
     }
@@ -1344,7 +1343,7 @@ void sockets_set_flush_enqued_data(int i) {
 
 int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt,
                         int high_prio) {
-    int i, len = 0, offset = 0, rv = 0;
+    int i, len = 0, rv = 0, offset = 0;
     sockets *s = get_sockets(sock_id);
     if (!s)
         return -1;
@@ -1377,7 +1376,7 @@ int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt,
     flush_enqued_data_if_neededf_needed(s);
 
     // buffer unwritten data to FIFO
-    int copied = copy_iovec_to_fifo(&s->fifo, offset, iov, iovcnt);
+    int copied = copy_iovec_to_fifo(&s->fifo, (uint32_t)offset, iov, iovcnt);
     if (!copied) {
         if ((s->overflow == 0) || (opts.log & DEFAULT_LOG))
             LOG("Insufficient bandwidth: sock %d: overflow %d bytes, total "
@@ -1417,7 +1416,7 @@ int flush_socket_all(sockets *s, int used) {
     iov[0].iov_len = fifo_peek(&s->fifo, &iov[0].iov_base, used, 0);
     i = 1;
     // the entire FIFO can be read using 2 pointers
-    if (iov[0].iov_len < used) {
+    if (iov[0].iov_len < (uint32_t)used) {
         iov[1].iov_len = fifo_peek(&s->fifo, &iov[1].iov_base,
                                    used - iov[0].iov_len, iov[0].iov_len);
         i++;

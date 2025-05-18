@@ -1,6 +1,5 @@
 #ifndef FIFO_H
 #define FIFO_H
-#define _GNU_SOURCE
 
 #include "utils/mutex.h"
 #include <stdint.h>
@@ -12,7 +11,7 @@
 // to a handle)
 
 typedef struct fifo {
-    char *file;
+    const char *file;
     int line;
     uint64_t read_index;
     uint64_t write_index;
@@ -20,7 +19,7 @@ typedef struct fifo {
     void *data;
 } SFIFO;
 
-int _create_fifo(SFIFO *f, int no, char *file, int line);
+int _create_fifo(SFIFO *f, int no, const char *file, int line);
 void free_fifo(SFIFO *f);
 static inline int fifo_available(SFIFO *f) {
     return f->size - (f->write_index - f->read_index);

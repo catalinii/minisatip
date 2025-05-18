@@ -53,7 +53,7 @@ int mutex_init(SMutex *mutex) {
 __thread SMutex *mutexes[100];
 __thread int imtx = 0;
 
-int mutex_lock1(char *FILE, int line, SMutex *mutex) {
+int mutex_lock1(const char *FILE, int line, SMutex *mutex) {
     int rv;
     int64_t start_lock = 0;
     if (opts.no_threads)
@@ -81,7 +81,7 @@ int mutex_lock1(char *FILE, int line, SMutex *mutex) {
     }
     if (start_lock > 0) {
         uint64_t ms = getTick() - start_lock;
-        char *prev_file = "none";
+        const char *prev_file = "none";
         int prev_line = -1;
         if (mutex && mutex->enabled && mutex->file) {
             prev_file = mutex->file;
@@ -101,7 +101,7 @@ int mutex_lock1(char *FILE, int line, SMutex *mutex) {
     mutexes[imtx++] = mutex;
     return 0;
 }
-int mutex_unlock1(char *FILE, int line, SMutex *mutex) {
+int mutex_unlock1(const char *FILE, int line, SMutex *mutex) {
     int rv = -1;
     if (opts.no_threads)
         return 0;

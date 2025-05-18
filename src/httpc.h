@@ -1,6 +1,5 @@
 #ifndef HTTPC_H
 #define HTTPC_H
-#define _GNU_SOURCE
 
 #include "socketworks.h"
 #include "utils/mutex.h"

@@ -114,10 +114,10 @@ char *get_current_timestamp_log(void) {
     struct tm *t;
 
     if (gettimeofday(&tv, NULL))
-        return "01/01 00:00:20";
+        return (char *)"01/01 00:00:20";
     t = localtime(&tv.tv_sec);
     if (!t)
-        return "01/01 00:00:20";
+        return (char *)"01/01 00:00:20";
     snprintf(date_str, sizeof(date_str), "%02d/%02d %02d:%02d:%02d.%03d",
              t->tm_mday, t->tm_mon + 1, t->tm_hour, t->tm_min, t->tm_sec,
              (int)(tv.tv_usec / 1000));

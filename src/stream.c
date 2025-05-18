@@ -60,7 +60,7 @@ streams *get_stream(int i) {
                                                                   : NULL;
 }
 
-streams *get_sid1(int sid, char *file, int line) {
+streams *get_sid1(int sid, const char *file, int line) {
     if (sid < 0 || sid >= MAX_STREAMS || !st[sid] || st[sid]->enabled == 0) {
         LOG("%s:%d get_sid returns NULL for s_id = %d", file, line, sid);
         return NULL;

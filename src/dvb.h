@@ -334,7 +334,7 @@ typedef struct struct_transponder {
     int pol;
     int diseqc;
 
-    diseqc diseqc_param;
+    struct diseqc diseqc_param;
 
     int c2tft;    // DVB-C2
     int ds;       // DVB-C2 (data slice)

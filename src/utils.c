@@ -17,7 +17,6 @@
  * USA
  *
  */
-#define _GNU_SOURCE
 #define _FILE_OFFSET_BITS 64
 #define UTILS_C
 
@@ -376,13 +375,13 @@ char *get_current_timestamp(void) {
     static char date_str[200];
     time_t date;
     struct tm *t;
-    char *day[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
-    char *month[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    const char *day[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+    const char *month[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
                      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
     time(&date);
     t = gmtime(&date);
     if (!t)
-        return "Fri, Sat Jan 1 00:00:20 2000 GMT";
+        return (char *)"Fri, Sat Jan 1 00:00:20 2000 GMT";
     snprintf(date_str, sizeof(date_str), "%s, %s %d %02d:%02d:%02d %d GMT",
              day[t->tm_wday], month[t->tm_mon], t->tm_mday, t->tm_hour,
              t->tm_min, t->tm_sec, t->tm_year + 1900);
@@ -390,7 +389,7 @@ char *get_current_timestamp(void) {
 }
 
 int endswith(char *src, char *with) {
-    int lw = strlen(with);
+    uint32_t lw = strlen(with);
     if (strlen(src) > lw && !strcmp(src + strlen(src) - lw, with))
         return 1;
     return 0;
@@ -399,7 +398,8 @@ int endswith(char *src, char *with) {
 // replace $VAR$ with it's value and write the output to the socket
 void process_file(void *sock, char *s, int len, char *ctype) {
     char outp[8300];
-    int i, io = 0, lv, le, respond = 1;
+    int i, lv, le, respond = 1;
+    uint32_t io = 0;
     sockets *so = (sockets *)sock;
     __attribute__((unused)) int rv;
     LOG("processing_file %p len %d:", s, len);
@@ -417,7 +417,7 @@ void process_file(void *sock, char *s, int len, char *ctype) {
         if (io > sizeof(outp) - 100) {
             if (respond) {
                 http_response(
-                    so, 200, ctype, "", 0,
+                    so, 200, ctype, (char *)"", 0,
                     0); // sending back the response without Content-Length
                 respond = 0;
             }
@@ -464,7 +464,7 @@ char *readfile(char *fn, char *ctype, int *len) {
         return NULL;
     }
     nl = sb.st_size;
-    mem = mmap(0, nl, PROT_READ, MAP_SHARED, fd, 0);
+    mem = (char *)mmap(0, nl, PROT_READ, MAP_SHARED, fd, 0);
     if (mem == MAP_FAILED) {
         close(fd);
         LOG_AND_RETURN(NULL, "mmap failed for file %s", ffn);
@@ -475,27 +475,27 @@ char *readfile(char *fn, char *ctype, int *len) {
     *len = nl;
     if (ctype) {
         ctype[0] = 0;
-        if (endswith(fn, "png"))
+        if (endswith(fn, (char *)"png"))
             strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: "
                           "image/png\r\nConnection: close");
-        else if (endswith(fn, "jpg") || endswith(fn, "jpeg"))
+        else if (endswith(fn, (char *)"jpg") || endswith(fn, (char *)"jpeg"))
             strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: "
                           "image/jpeg\r\nConnection: close");
-        else if (endswith(fn, "css"))
+        else if (endswith(fn, (char *)"css"))
             strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: "
                           "text/css\r\nConnection: close");
-        else if (endswith(fn, "js"))
+        else if (endswith(fn, (char *)"js"))
             strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: "
                           "text/javascript\r\nConnection: close");
-        else if (endswith(fn, "htm") || endswith(fn, "html"))
+        else if (endswith(fn, (char *)"htm") || endswith(fn, (char *)"html"))
             strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: "
                           "text/html; charset=utf-8\r\nConnection: close");
-        else if (endswith(fn, "xml"))
+        else if (endswith(fn, (char *)"xml"))
             strcpy(ctype, "Cache-Control: no-cache\r\nContent-type: text/xml");
-        else if (endswith(fn, "json"))
+        else if (endswith(fn, (char *)"json"))
             strcpy(ctype, "Cache-Control: no-cache\r\nContent-type: "
                           "application/json; charset=utf-8");
-        else if (endswith(fn, "m3u"))
+        else if (endswith(fn, (char *)"m3u"))
             strcpy(ctype,
                    "Cache-Control: no-cache\r\nContent-type: video/x-mpegurl");
         else
@@ -546,7 +546,7 @@ int add_new_lock(void **arr, int count, int size, SMutex *mutex) {
     for (i = 0; i < count; i++)
         if (!sa[i] || !sa[i]->enabled) {
             if (!sa[i]) {
-                sa[i] = _malloc(size);
+                sa[i] = (struct struct_array *)_malloc(size);
                 if (!sa[i]) {
                     mutex_unlock(mutex);
                     LOG("Could not allocate memory for %p index %d", arr, i);
@@ -598,7 +598,7 @@ int init_utils(char *arg0) {
     return 0;
 }
 
-void _hexdump(char *desc, void *addr, int len) {
+void _hexdump(const char *desc, void *addr, int len) {
     // Each character needs roughly 5 bytes to print. Worst case scenario is 
     // that one character ends up on a new line, requiring 74 bytes to print.
     int i, pos = 0, bl = (len * 5) + 74;
@@ -709,7 +709,7 @@ uint32_t crc_32(const uint8_t *data, int datalen) {
     return crc;
 }
 
-void _dump_packets(char *message, unsigned char *b, int len,
+void _dump_packets(const char *message, unsigned char *b, int len,
                    int packet_offset) {
     int i, pid, cc;
     uint32_t crc;
@@ -817,7 +817,7 @@ void sleep_msec(uint32_t msec) {
 
 int get_random(unsigned char *dest, int len) {
     int fd;
-    char *urnd = "/dev/urandom";
+    const char *urnd = "/dev/urandom";
 
     fd = open(urnd, O_RDONLY);
     if (fd < 0) {

@@ -1,8 +1,6 @@
 #ifndef MINISATIP_H
 #define MINISATIP_H
 
-#define _GNU_SOURCE
-
 #include "opts.h"
 #include "socketworks.h"
 #include "stream.h"

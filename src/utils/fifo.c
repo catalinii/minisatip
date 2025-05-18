@@ -29,7 +29,7 @@
 #define min(a, b) (a < b) ? a : b
 #define LEN_SIZE 4
 
-int _create_fifo(SFIFO *f, int no, char *file, int line) {
+int _create_fifo(SFIFO *f, int no, const char *file, int line) {
     if (f->size > 0)
         return 0;
     memset(f, 0, sizeof(SFIFO));
@@ -70,8 +70,8 @@ int fifo_push_force(SFIFO *fifo, void *src, unsigned int len, int force) {
     uint32_t off = fifo->write_index % size;
     uint32_t l = min(len, size - off);
 
-    memcpy(fifo->data + off, src, l);
-    memcpy(fifo->data, src + l, len - l);
+    memcpy((char *)fifo->data + off, src, l);
+    memcpy(fifo->data, (char *)src + l, len - l);
     fifo->write_index += len;
     return len;
 }
@@ -100,8 +100,8 @@ uint32_t fifo_pop_offset(SFIFO *fifo, void *dst, unsigned int len,
     uint32_t off = *offset % size;
     l = min(len, size - off);
 
-    memcpy(dst, fifo->data + off, l);
-    memcpy(dst + l, fifo->data, len - l);
+    memcpy(dst, (char *)fifo->data + off, l);
+    memcpy((char *)dst + l, fifo->data, len - l);
     *offset += len;
     return len;
 }
@@ -120,7 +120,7 @@ uint32_t fifo_peek(SFIFO *fifo, void **dst, unsigned int len,
 
     uint32_t off = (fifo->read_index + relative_offset) % size;
     l = min(len, size - off);
-    *dst = fifo->data + off;
+    *dst = (char *)fifo->data + off;
     return l;
 }
 
@@ -131,7 +131,7 @@ int fifo_push_record(SFIFO *fifo, void *src, uint32_t len) {
     if (fifo_available(fifo) < len + LEN_SIZE)
         return 0;
     int r = 0;
-    uint8_t *data = fifo->data;
+    uint8_t *data = (uint8_t *)fifo->data;
     uint32_t off = fifo->read_index;
     uint32_t size = fifo->size;
     data[(off + 0) % size] = (len >> 24) & 0xFF;
@@ -145,7 +145,7 @@ int fifo_push_record(SFIFO *fifo, void *src, uint32_t len) {
 }
 
 uint32_t fifo_peek_32(SFIFO *fifo, uint64_t offset) {
-    uint8_t *data = fifo->data;
+    uint8_t *data = (uint8_t *)fifo->data;
     if (fifo->write_index - offset < LEN_SIZE)
         return 0;
     uint32_t size = fifo->size;
