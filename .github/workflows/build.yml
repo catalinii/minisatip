@@ -37,18 +37,18 @@ jobs:
     - name: Build all enabled
       run: |
        make clean
-       ./configure --enable-linuxdvb --enable-dvbca --enable-dvbcsa --enable-netcv --enable-dvbapi --enable-axe
+       ./configure --enable-linuxdvb --enable-dvbca --enable-dvbcsa --enable-netcv --enable-dvbapi
        make
 
     - name: Build clang
       run: |
        make clean
-       ./configure --enable-linuxdvb --enable-dvbca --enable-dvbcsa --enable-netcv --enable-dvbapi --enable-axe CC=clang
+       ./configure --enable-linuxdvb --enable-dvbca --enable-dvbcsa --enable-netcv --enable-dvbapi CC=clang
        make
 
-    - name: Build with --enable-axe, without libssl-dev
+    - name: Build without libssl-dev
       run: |
        apt-get -y remove --purge libssl-dev
        make clean
-       ./configure --enable-axe --enable-dvbapi --enable-dvbcsa --disable-dvbca --disable-netcv
+       ./configure --enable-dvbapi --enable-dvbcsa --disable-dvbca --disable-netcv
        make

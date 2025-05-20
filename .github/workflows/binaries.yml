@@ -27,17 +27,10 @@ jobs:
        make
        zip -9 -r /minisatip_arm.zip minisatip html
 
-    - name: Build AXE
-      run: |
-       make clean
-       ./configure --enable-static --host=sh4-linux --disable-netcv --disable-dvbca --enable-axe --enable-dvbapi --enable-dvbcsa
-       make
-       zip -9 -r /minisatip_axe.zip minisatip html
-
     - name: Build MIPS
       run: |
        make clean
-       ./configure --disable-netcv --enable-static --host=mipsel-linux-gnu CC="zig cc -target mipsel-linux-gnueabihf.2.34 -static"
+       ./configure --disable-netcv --enable-static --host=mipsel-linux-gnu CC="zig c++ -target mipsel-linux-gnueabihf.2.34 -static"
        make EXTRA_CFLAGS="-I/sysroot/mipsel/include -L/sysroot/mipsel/lib" EMBEDDED=1
        zip -9 -r /minisatip_mips.zip minisatip html
 
