@@ -68,7 +68,7 @@ SFilter *filters[MAX_FILTERS];
 SMutex filters_mutex;
 int nfilters;
 
-char *listmgmt_str[] = {"CLM_MORE", "CLM_FIRST", "CLM_LAST",
+const char *listmgmt_str[] = {"CLM_MORE", "CLM_FIRST", "CLM_LAST",
                         "CLM_ONLY", "CLM_ADD",   "CLM_UPDATE"};
 
 static inline SPMT *get_pmt_for_existing_pid(SPid *p) {
@@ -259,7 +259,7 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
     f->id = fid;
     f->opaque = opaque;
     f->pid = pid;
-    f->callback = callback;
+    f->callback = (filter_function )callback;
     f->flags = 0;
     f->len = 0;
     f->next_filter = -1;
@@ -662,7 +662,8 @@ void cw_decrypt_stream(SCW *cw, SPMT_batch *batch, int len) {
 // Return 0 if the packet was decrypted successfully, 1 otherwise
 int test_decrypt_packet(SCW *cw, SPMT_batch *start, int len) {
     uint8_t data[len * 188 + 10];
-    int i = 0, pos = 0;
+    int i = 0; 
+    uint32_t pos = 0;
     LOGM("Testing len %d, CW: %s", len, cw_to_string(cw, (char *)data));
     SPMT_batch batch[len + 1];
     for (i = 0; i < len; i++) {
@@ -704,7 +705,7 @@ int fill_packet_start_indicator(SPMT_batch *all, int max_all, SPMT_batch *start,
 void dump_cws() {
     int i;
     char buf[200];
-    uint64_t ctime = getTick();
+    int64_t ctime = getTick();
     LOG("List of CWs:");
     for (i = 0; i < ncws; i++)
         if (cws[i] && cws[i]->enabled && cws[i]->expiry > ctime) {
@@ -781,7 +782,7 @@ void update_cw(SPMT *pmt) {
         pmt->update_cw = 1;
     pmt->cw = NULL;
     if (cw) {
-        uint64_t ctime = getTick();
+        int64_t ctime = getTick();
         mutex_lock(&pmt->mutex);
         pmt->cw = cw;
         mutex_unlock(&pmt->mutex);
@@ -851,7 +852,7 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
     }
 
     if (!cws[i]) {
-        cws[i] = _malloc(sizeof(SCW));
+        cws[i] = (SCW *)_malloc(sizeof(SCW));
         if (!cws[i]) {
             LOG("CWS: could not allocate memory");
             mutex_unlock(&cws_mutex);
@@ -1010,7 +1011,7 @@ int pmt_decrypt_stream(adapter *ad) {
             if (!pmt->batch) {
                 int len =
                     sizeof(pmt->batch[0]) * (opts.adapter_buffer / 188 + 100);
-                pmt->batch = alloca(len);
+                pmt->batch = (SPMT_batch *)alloca(len);
                 if (!pmt->batch) {
                     LOG0("Failed to allocate batch with size %d in the stack",
                          len);
@@ -1798,7 +1799,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     SPid *p;
     SFilter *f;
     adapter *ad = NULL;
-    SPMT *pmt = (void *)opaque;
+    SPMT *pmt = (SPMT *)opaque;
 
     if (b[0] != 2)
         return 0;
@@ -1949,7 +1950,7 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque) {
     if (sdt[0] != 0x42)
         return 0;
 
-    adapter *ad = (void *)opaque;
+    adapter *ad = (adapter *)opaque;
     tsid = sdt[3] * 256 + sdt[4];
 
     sdt_len = (sdt[1] & 0xF) * 256 + sdt[2];

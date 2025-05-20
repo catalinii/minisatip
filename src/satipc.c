@@ -17,8 +17,6 @@
  * USA
  *
  */
-#define _GNU_SOURCE
-
 #include "satipc.h"
 #include "api/symbols.h"
 #include "api/variables.h"
@@ -72,7 +70,7 @@ int recvmmsg0(int sockfd, struct mmsghdr *msgvec, unsigned int vlen) {
        // one time
 #endif
 
-extern char *fe_delsys[];
+extern const char *fe_delsys[];
 int satip_post_init(adapter *ad);
 
 #define DEFAULT_LOG LOG_SATIPC
@@ -129,7 +127,7 @@ typedef struct struct_satipc {
 
 satipc *satip[MAX_ADAPTERS];
 
-satipc *get_satip1(int aid, char *file, int line) {
+satipc *get_satip1(int aid, const char *file, int line) {
     if (aid < 0 || aid >= MAX_ADAPTERS || !satip[aid] || !satip[aid]->enabled) {
         LOG("%s:%d: %s returns NULL for id %d", file, line, __FUNCTION__, aid);
         return NULL;
@@ -154,7 +152,7 @@ satipc *get_satip1(int aid, char *file, int line) {
             return;                                                            \
     }
 
-int http_request(adapter *ad, char *url, char *method, int force);
+int http_request(adapter *ad, char *url, const char *method, int force);
 
 int satipc_request(adapter *ad);
 void set_adapter_signal(adapter *ad, char *b, int rlen);
@@ -386,7 +384,7 @@ int satipc_close_rtsp(sockets *s) {
 }
 
 int satipc_send_options(adapter *ad) {
-    http_request(ad, NULL, "OPTIONS", 0);
+    http_request(ad, NULL, (char *)"OPTIONS", 0);
     return 0;
 }
 
@@ -436,7 +434,7 @@ void set_adapter_signal(adapter *ad, char *b, int rlen) {
     int strength, status, quality;
     char *tun, *signal = NULL;
 
-    tun = strstr((const char *)b, "tuner=");
+    tun = strstr(b, "tuner=");
     if (tun)
         signal = strchr(tun, ',');
     if (signal) {
@@ -479,7 +477,8 @@ int satipc_rtcp_reply(sockets *s) {
     adapter *ad;
     satipc *sip;
     get_ad_and_sipr(s->sid, 0);
-    uint32_t rp, sm;
+    int rp;
+    int sm;
 
     s->rlen = 0;
     sip->rtsp_socket_closed = 0;
@@ -697,7 +696,7 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
                           // payload data over the same buffer
         iov[0].iov_base = buf1 + (i * 20); // RTP header slice
         iov[0].iov_len = 12;
-        iov[1].iov_base = buf + (i * 1316); // PAYLOAD slice in the READ BUFFER
+        iov[1].iov_base = (char *)buf + (i * 1316); // PAYLOAD slice in the READ BUFFER
         iov[1].iov_len = 1316;
         iov[2].iov_base = NULL;
         iov[2].iov_len = 0;
@@ -764,7 +763,7 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
             //      Some servers send KEEP-ALIVE RTP packets without valid
             //      TS payload. Then RTP packets received without valid TS
             //      data are discarded.
-            uint8_t *b = iov[1].iov_base;
+            uint8_t *b = (uint8_t *)iov[1].iov_base;
             if (dlen > 0 && dlen < DVB_FRAME && b[0] != 0x47) {
                 LOGM("discarding RTP packet without valid TS payload (sock "
                      "%d, "
@@ -782,11 +781,11 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
         }
 
         // Clear empty unused buffer space (after all it will be removed)
-        if (dlen < iov[1].iov_len) {
+        if (dlen < (int )iov[1].iov_len) {
             int ss = (188 * (dlen / 188));
             // memset(iov[1].iov_base + ss, 0xFF, iov[1].iov_len - ss);  //
             // Not necessary
-            holes[i] = iov[1].iov_base + ss;
+            holes[i] = (char *)iov[1].iov_base + ss;
             check_holes = 1;
         }
         *rb += iov[1].iov_len;
@@ -801,16 +800,16 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
                 continue;
 
             struct iovec *iov = &iovs[i * 2];
-            int hole_size = iov[1].iov_len - (holes[i] - iov[1].iov_base);
+            int hole_size = iov[1].iov_len - ((uint8_t *)holes[i] - (uint8_t *)iov[1].iov_base);
 
             if (i + 1 < rr) { // move data only if not in the last multibuffer
                               // slice (in this case only adjust the end)
                 // copy data until the end of the buffer over the empty
                 // space to _free the hole
                 uint8_t *eb =
-                    iovs[1].iov_base + *rb; // current end of the read buffer
-                uint8_t *sb = holes[i];     // end of the valid read data
-                uint8_t *ib = holes[i] + hole_size; // end of the iovec slice
+                    (uint8_t *)iovs[1].iov_base + *rb; // current end of the read buffer
+                uint8_t *sb = (uint8_t *)holes[i];     // end of the valid read data
+                uint8_t *ib = (uint8_t *)holes[i] + hole_size; // end of the iovec slice
                 memmove(sb, ib, eb - ib); // skip just the hole of the chunk
             }
             *rb -= hole_size;
@@ -868,7 +867,7 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb) {
            sip->tcp_pos, sip->tcp_len, sip->tcp_size, len);
     if (!sip->tcp_data) {
         sip->tcp_size = TCP_DATA_SIZE;
-        sip->tcp_data = _malloc(sip->tcp_size + 3);
+        sip->tcp_data = (uint8_t *)_malloc(sip->tcp_size + 3);
         if (!sip->tcp_data)
             LOG_AND_RETURN(-1, "Cannot alloc memory for tcp_data with size %d",
                            sip->tcp_size);
@@ -962,7 +961,8 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb) {
             }
             sip->tcp_pos += rtsp_len + 4;
             DEBUGM("ad %d processed %d, socket %d", ad->id, rtsp_len, socket);
-            pos += process_rtsp_tcp(ss, rtsp, rtsp_len, buf + pos, len - pos);
+            char *bpos = (char *)buf + pos;
+            pos += process_rtsp_tcp(ss, rtsp, rtsp_len, (void *)bpos, len - pos);
             *rb = pos;
         } else if (!strncmp((char *)rtsp, "RTSP", 4)) {
             unsigned char *nlnl, *cl;
@@ -1032,9 +1032,6 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb) {
         sip->tcp_pos = sip->tcp_len = 0;
     DEBUGM("%s: returning %d bytes", __FUNCTION__, *rb);
 
-    if ((*rb > 0) && (opts.debug & LOG_DMX))
-        dump_packets("satip_read ->", buf, *rb, buf - (void *)ad->buf);
-
     return (*rb >= 0);
 }
 
@@ -1048,13 +1045,13 @@ int satip_post_init(adapter *ad) {
         return 0;
 
     if (sip->init_use_tcp)
-        sockets_setread(ad->sock, satipc_tcp_read);
+        sockets_setread(ad->sock, (void *)satipc_tcp_read);
     else {
-        sockets_setread(ad->sock, satipc_read);
+        sockets_setread(ad->sock, (void *)satipc_read);
         set_socket_thread(sip->rtcp_sock, get_socket_thread(ad->sock));
     }
 
-    sockets_setclose(ad->sock, satipc_close_rtsp);
+    sockets_setclose(ad->sock, (void *)satipc_close_rtsp);
     set_socket_thread(ad->fe_sock, ad->thread);
 
     sip->state = SATIP_STATE_OPTIONS;
@@ -1200,11 +1197,11 @@ void get_t2_url(adapter *ad, char *url, int url_len) {
     return;
 }
 
-int http_request(adapter *ad, char *url, char *method, int force) {
+int http_request(adapter *ad, char *url, const char *method, int force) {
     char session[200];
     char buf[2048];
     char sid[40];
-    char *qm;
+    const char *qm;
     int ptr = 0;
     int lb, remote_socket;
     char format[] = "%s rtsp://%s:%d/%s%s%s RTSP/1.0\r\nCSeq: %d%s\r\n\r\n";
@@ -1260,7 +1257,7 @@ int http_request(adapter *ad, char *url, char *method, int force) {
         qm = "";
 
     if (!url)
-        url = "";
+        url = (char *)"";
 
     if (sip->stream_id != -1)
         sprintf(sid, "stream=%d", sip->stream_id);
@@ -1552,7 +1549,7 @@ int satipc_tune(int aid, transponder *tp) {
 }
 
 fe_delivery_system_t satipc_delsys(int aid, int fd, fe_delivery_system_t *sys) {
-    return 0;
+    return (fe_delivery_system_t )0;
 }
 
 void satipc_free(adapter *ad) {}
@@ -1569,7 +1566,7 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
             if (!a[i])
                 a[i] = adapter_alloc();
             if (!satip[i]) {
-                satip[i] = _malloc(sizeof(satipc));
+                satip[i] = (satipc *)_malloc(sizeof(satipc));
                 if (satip[i])
                     memset(satip[i], 0, sizeof(satipc));
             }
@@ -1597,9 +1594,10 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
     ad->type = ADAPTER_SATIP;
 
     for (k = 0; k < 10; k++)
-        ad->sys[k] = 0;
+        ad->sys[k] = (fe_delivery_system_t )0;
 
-    ad->sys[0] = ad->tp.sys = delsys;
+    ad->sys[0] = (fe_delivery_system_t )delsys;
+    ad->tp.sys = (fe_delivery_system_t )delsys;
     safe_strncpy(sip->sip, host);
     sip->satip_fe = fe;
     sip->static_config = 1;
@@ -1672,7 +1670,7 @@ void find_satip_adapter(adapter **a) {
         sep1 = strchr(arg[i], ':');
         if (sep1)
             sep2 = strchr(sep1 + 1, ':');
-        if (map_intd(arg[i], fe_delsys, -1) != -1)
+        if (map_intd(arg[i], (char **)fe_delsys, -1) != -1)
             sep = arg[i];
 
         if (sep1)
@@ -1692,10 +1690,10 @@ void find_satip_adapter(adapter **a) {
         }
 
         if (!sep)
-            sep = "dvbs2";
+            sep = (char *)"dvbs2";
         if (!sep2)
-            sep2 = "554";
-        delsys = map_int(sep, fe_delsys);
+            sep2 = (char *)"554";
+        delsys = map_int(sep, (char **)fe_delsys);
         safe_strncpy(host, sep1);
         fe = -1;
         source_ip[0] = 0;
@@ -1745,7 +1743,7 @@ typedef struct satip_xml_data {
 } Ssatip_xml_data;
 
 Ssatip_xml_data sxd[MAX_SATIP_XML];
-char *satip_delsys[] = {
+const char *satip_delsys[] = {
     "undefined", "DVBC",  "ATSCC", "DVBT",  "DSS",    "DVBS",  "DVBS2", "DVBH",
     "ISDBT",     "ISDBS", "ISDBC", "ATSCT", "ATSCMH", "DMBTH", "CMMB",  "DAB",
     "DVBT2",     "TURBO", "DVBCC", "DVBC2", NULL,     NULL,    NULL,    NULL};
@@ -1778,11 +1776,11 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h) {
             *eos = 0;
         la = split(arg, sep, ARRAY_SIZE(arg), ',');
         for (i = 0; i < la; i++) {
-            int ds = map_intd(arg[i], satip_delsys, -1);
+            int ds = map_intd(arg[i], (char **)satip_delsys, -1);
             sep = strchr(arg[i], '-');
             int t = map_intd(sep ? sep + 1 : NULL, NULL, -1);
             if (ds < 0 || ds >= MAX_DVBAPI_SYSTEMS || t < 0 ||
-                i_order >= sizeof(order)) {
+                i_order >= (int )sizeof(order)) {
                 LOG("Could not determine the delivery system for %s (%d) "
                     "tuners %d, "
                     "order %d",
@@ -1831,13 +1829,13 @@ int satip_getxml(void *x) {
     la = split(arg, satip_xml, ARRAY_SIZE(arg), ',');
     for (i = 0; i < la; i++) {
         safe_strncpy(sxd[i].url, arg[i]);
-        http_client(sxd[i].url, "", satip_getxml_data, &sxd[i]);
+        http_client(sxd[i].url, "", (void *)satip_getxml_data, &sxd[i]);
     }
     return 0;
 }
 
 char *init_satip_pointer(int len) {
-    char *p = _malloc(len);
+    char *p = (char *)_malloc(len);
     if (p)
         p[0] = 0;
     else

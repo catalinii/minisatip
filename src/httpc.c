@@ -100,7 +100,7 @@ void http_client_read(sockets *s) {
     return;
 }
 
-int http_client(char *url, char *request, void *callback, void *opaque) {
+int http_client(char *url, const char *request, void *callback, void *opaque) {
     Shttp_client *h;
     int id;
     char *req;

@@ -117,7 +117,8 @@ int dvbapi_reply(sockets *s) {
     unsigned char *b = s->buf;
     SKey *k;
     int change_endianness = 0;
-    unsigned int op, _pid;
+    unsigned int op;
+    int _pid;
     int k_id, a_id = 0, pos = 0;
     int demux, filter;
 
@@ -157,12 +158,12 @@ int dvbapi_reply(sockets *s) {
 
         switch (op) {
 
-        case DVBAPI_SERVER_INFO:
+        case DVBAPI_SERVER_INFO: {
 
             if (s->rlen < 6)
                 return 0;
             dvbapi_copy16r(dvbapi_protocol_version, b, 4);
-            char *oscam_version_str = strstr((const char *)b + 7, "build r");
+            char *oscam_version_str = strstr((char *)b + 7, "build r");
             if (oscam_version_str)
                 oscam_version = map_intd(oscam_version_str + 7, NULL, 0);
             LOG("dvbapi: server version %d, build %d, found, name = %s",
@@ -180,6 +181,7 @@ int dvbapi_reply(sockets *s) {
                 register_dvbapi();
             }
             break;
+        }
 
         case DVBAPI_DMX_SET_FILTER: {
             SKey *k;
@@ -620,7 +622,7 @@ int send_ecm(int filter_id, unsigned char *b, int len, void *opaque) {
     if (pid == -1)
         LOG_AND_RETURN(0, "%s: filter not found for pid %d", __FUNCTION__, pid);
 
-    k = (void *)opaque;
+    k = (SKey *)opaque;
     if (!k || !k->enabled)
         LOG_AND_RETURN(0, "%s: key is null pid %d and filter %d", __FUNCTION__,
                        pid, filter_id);
@@ -699,7 +701,7 @@ int keys_add(int i, int adapter, int pmt_id) {
         if (keys[i])
             mutex_lock(&keys[i]->mutex);
         else {
-            keys[i] = _malloc(sizeof(SKey));
+            keys[i] = (SKey *)_malloc(sizeof(SKey));
             if (!keys[i])
                 LOG_AND_RETURN(-1, "Could not allocate memory for the key %d",
                                i);
@@ -747,7 +749,7 @@ int keys_del(int i) {
     int pmt_pid, sid;
     unsigned char buf[8] = {0x9F, 0x80, 0x3f, 4, 0x83, 2, 0, 0};
     SKey *k;
-    char *msg = "";
+    const char *msg = "";
     k = get_key(i);
     if (!k)
         return 0;

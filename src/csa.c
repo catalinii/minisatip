@@ -51,18 +51,18 @@ void dvbcsa_bs_key_set_ecm(unsigned char ecm, const dvbcsa_cw_t cw,
                            struct dvbcsa_bs_key_s *key) __attribute__((weak));
 void dvbcsa_create_key(SCW *cw) { cw->key = dvbcsa_bs_key_alloc(); }
 
-void dvbcsa_delete_key(SCW *cw) { dvbcsa_key_free(cw->key); }
+void dvbcsa_delete_key(SCW *cw) { dvbcsa_key_free((dvbcsa_key_s *)cw->key); }
 
 void dvbcsa_set_cw(SCW *cw, SPMT *pmt) {
     unsigned char ecm = *(unsigned char *)cw->opaque;
     if (!dvbcsa_bs_key_set_ecm) {
-        dvbcsa_bs_key_set((unsigned char *)cw->cw, cw->key);
+        dvbcsa_bs_key_set((unsigned char *)cw->cw, (dvbcsa_bs_key_s *)cw->key);
         if (ecm)
             LOGL(1, "minisatip required libdvbcsa with ICAM support. Please "
                     "see https://github.com/catalinii/minisatip/issues/1003 "
                     "for more details");
     } else {
-        dvbcsa_bs_key_set_ecm(ecm, (unsigned char *)cw->cw, cw->key);
+        dvbcsa_bs_key_set_ecm(ecm, (unsigned char *)cw->cw, (struct dvbcsa_bs_key_s *)cw->key);
     }
 }
 

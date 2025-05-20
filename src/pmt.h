@@ -83,7 +83,7 @@ typedef struct struct_internal_op {
 typedef struct struct_cw {
     char enabled;
     unsigned char cw[32], iv[32];
-    int64_t time;
+    int64_t time, expiry;
     void *key;
     int algo;
     int16_t pmt;
@@ -92,7 +92,7 @@ typedef struct struct_cw {
     char parity;
     char cw_len;
     int16_t id;
-    int64_t expiry, set_time;
+    int64_t set_time;
     void *opaque;
 } SCW;
 

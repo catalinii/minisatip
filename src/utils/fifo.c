@@ -128,7 +128,7 @@ uint32_t fifo_peek(SFIFO *fifo, void **dst, unsigned int len,
 // fifo then the entire packet if there is space availble. If no space is
 // available returns 0
 int fifo_push_record(SFIFO *fifo, void *src, uint32_t len) {
-    if (fifo_available(fifo) < len + LEN_SIZE)
+    if (fifo_available(fifo) < (int )(len + LEN_SIZE))
         return 0;
     int r = 0;
     uint8_t *data = (uint8_t *)fifo->data;

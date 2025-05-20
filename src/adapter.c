@@ -1950,7 +1950,7 @@ void set_timeout_adapters(char *o) {
     }
 }
 
-extern char *fe_delsys[];
+extern const char *fe_delsys[];
 void set_adapters_delsys(char *o) {
     int i, la, a_id, ds;
     char buf[strlen(o) + 1], *arg[40], *sep;
@@ -1968,7 +1968,7 @@ void set_adapters_delsys(char *o) {
                 "adapter_number:delivery_system\n example: 2:dvbs2");
             return;
         }
-        ds = map_intd(sep + 1, fe_delsys, 0);
+        ds = map_intd(sep + 1, (char **)fe_delsys, 0);
 
         if (!a[a_id])
             a[a_id] = adapter_alloc();
@@ -2119,7 +2119,7 @@ int signal_thread(sockets *s) {
     return 0;
 }
 
-void adapter_lock1(char *FILE, int line, int aid) {
+void adapter_lock1(const char *FILE, int line, int aid) {
     adapter *ad;
     ad = get_adapter_nw(aid);
     if (!ad)
@@ -2127,7 +2127,7 @@ void adapter_lock1(char *FILE, int line, int aid) {
     mutex_lock1(FILE, line, &ad->mutex);
 }
 
-void adapter_unlock1(char *FILE, int line, int aid) {
+void adapter_unlock1(const char *FILE, int line, int aid) {
     adapter *ad;
     ad = get_adapter_nw(aid);
     if (!ad)

@@ -160,7 +160,7 @@ typedef struct opfr_operator_tune_descr {
 } opfr_operator_tune_descr_t;
 
 // EN 300 468, tables 36, 38, and 41
-const char en300468_fec_map[12][4] = {"",    "1/2", "2/3", "3/4",  "5/6", "7/8",
+const char en300468_fec_map[12][5] = {"",    "1/2", "2/3", "3/4",  "5/6", "7/8",
                                       "8/9", "3/5", "4/5", "9/10", "",    ""};
 const char en300468_pol_map[] = {'H', 'V', 'L', 'R'};
 const char en300468_mod_map[4][8] = {"auto", "QPSK", "8PSK", "16QAM"};
@@ -212,7 +212,7 @@ void str2bin(uint8_t *dst, char *data, int len) {
 
 void cert_strings(char *certfile) {
     int c;
-    unsigned count;
+    int count;
     //      off_t offset;
     FILE *file;
     char string[256];
@@ -704,7 +704,7 @@ static int element_set(struct cc_ctrl_data *cc_data, unsigned int id,
     }
 
     _free(e->data);
-    e->data = _malloc(size);
+    e->data = (uint8_t *)_malloc(size);
     memcpy(e->data, data, size);
     e->size = size;
     e->valid = 1;
@@ -896,8 +896,6 @@ static int write_authdata(unsigned int slot, const uint8_t *host_id,
     unsigned int entries;
     unsigned int i;
 
-    int ret = 0;
-
     for (entries = 0; entries < MAX_PAIRS; entries++) {
         int offset = (8 + 256 + 32) * entries;
         if (!get_authdata(&buf[offset], &buf[offset + 8],
@@ -924,17 +922,20 @@ static int write_authdata(unsigned int slot, const uint8_t *host_id,
     /* store new entry first */
     if (write(fd, host_id, 8) != 8) {
         LOG("error in write");
-        goto end;
+        close(fd);
+	return 0;
     }
 
     if (write(fd, dhsk, 256) != 256) {
         LOG("error in write");
-        goto end;
+        close(fd);
+	return 0;
     }
 
     if (write(fd, akh, 32) != 32) {
         LOG("error in write");
-        goto end;
+        close(fd);
+	return 0;
     }
 
     /* skip the last one if exists */
@@ -945,15 +946,14 @@ static int write_authdata(unsigned int slot, const uint8_t *host_id,
         int offset = (8 + 256 + 32) * i;
         if (write(fd, &buf[offset], (8 + 256 + 32)) != (8 + 256 + 32)) {
             LOG("error in write");
-            goto end;
+            close(fd);
+	    return 0;
         }
     }
 
-    ret = 1;
-end:
     close(fd);
 
-    return ret;
+    return 1;
 }
 
 static int data_initialize(ca_device_t *d) {
@@ -1258,7 +1258,7 @@ static int restart_dh_challenge(struct cc_ctrl_data *cc_data) {
     LOG(".... rechecking ...");
 
     if (!cc_data->cert_ctx) {
-        ctx = calloc(1, sizeof(struct cert_ctx));
+        ctx = (cert_ctx *)calloc(1, sizeof(struct cert_ctx));
         cc_data->cert_ctx = ctx;
     } else {
         ctx = cc_data->cert_ctx;
@@ -1899,7 +1899,7 @@ static int CIPLUS_APP_OPRF_handler(ca_session_t *session, int tag,
         int cicam_original_network_id = (data[1] << 8) + data[2];
         char lang_code[4] = {0};
         strncpy(lang_code, (char *)data + 10, 3);
-        char *profile_name = _malloc(data[13]);
+        char *profile_name = (char *)_malloc(data[13]);
         strncpy(profile_name, (char *)data + 14, data[13]);
 
         LOG("Received operator_info APDU: \n"
@@ -2061,7 +2061,7 @@ static int CIPLUS_APP_AI_handler(ca_session_t *session, int resource_id,
         session->session_number, resource_id);
 
     switch (resource_id) {
-    case CIPLUS_TAG_APP_INFO:
+    case CIPLUS_TAG_APP_INFO: {
 
         hexdump("CIPLUS_TAG_APP_INFO", data, data_length);
         LOG("  Application type: %02x", data[0]);
@@ -2082,12 +2082,14 @@ static int CIPLUS_APP_AI_handler(ca_session_t *session, int resource_id,
             ciplus13_app_ai_data_rate_info(session, CIPLUS_DATA_RATE_96_MBPS);
         }
         break;
-    case CIPLUS_TAG_CICAM_RESET:
+    }
+    case CIPLUS_TAG_CICAM_RESET: {
         hexdump("CIPLUS_TAG_CICAM_RESET", data, data_length);
         LOG("CA %d Reset requested", d->id);
 
         ca_request_close(d);
         break;
+    }
     default:
         LOG("unexpected tag in %s (0x%x)", __FUNCTION__, resource_id);
     }
@@ -2109,7 +2111,8 @@ static int APP_CA_close(ca_session_t *session) {
 int APP_CA_handler(ca_session_t *session, int resource, uint8_t *data,
                    int len) {
     ca_device_t *d = session->ca;
-    int i = 0, caid_count = len / 2;
+    uint32_t i = 0;
+    uint32_t caid_count = len / 2;
 
     switch (resource) {
     case TAG_CA_INFO:
@@ -2184,9 +2187,9 @@ int APP_MMI_handler(ca_session_t *session, int resource, uint8_t *buffer,
         if (cmd_id == MMI_DISPLAY_CONTROL_CMD_ID_SET_MMI_MODE) {
 
             LOG("mmi display ctl cb received for CA %u session_num %u "
-                "cmd_id 0x%02x mmi_mode %u",
+                "cmd_id 0x%02x mmi_mode %d",
                 d->id, session->session_number, cmd_id, mmi_mode);
-            uint8_t data[] = {MMI_DISPLAY_REPLY_ID_MMI_MODE_ACK, mmi_mode};
+            uint8_t data[] = {MMI_DISPLAY_REPLY_ID_MMI_MODE_ACK, (uint8_t )mmi_mode};
             ca_write_apdu(session, TAG_DISPLAY_REPLY, data, sizeof(data));
         }
         break;
@@ -2342,7 +2345,8 @@ struct struct_application_handler application_handler[] = {
 };
 
 ca_session_t *new_session(ca_device_t *d, int resource) {
-    int i, session_number;
+    uint32_t i;
+    int session_number;
     ca_session_t *s;
     for (session_number = 0; session_number < MAX_SESSIONS; session_number++)
         if (!d->sessions[session_number].handler.resource)
@@ -2375,7 +2379,7 @@ ca_session_t *find_session_for_resource(ca_device_t *d, int resource) {
 }
 
 int populate_resources(ca_device_t *d, int *resource_ids) {
-    int i;
+    uint32_t i;
     LOG("Populating %s resources", d->force_ci ? "CI" : "CI+");
     for (i = 0;
          i < sizeof(application_handler) / sizeof(application_handler[0]);
@@ -2623,7 +2627,7 @@ int ca_read_tpdu(int socket, void *buf, int buf_len, sockets *ss, int *rb) {
             break;
         case T_DATA_MORE:
         case T_DATA_LAST:
-            memcpy(buf + *rb, d, asn_data_length);
+            memcpy((char *)buf + *rb, d, asn_data_length);
             *rb += asn_data_length;
             break;
         case T_SB: {
@@ -2687,14 +2691,15 @@ int ca_read(sockets *s) {
     int tag = data[0];
     int llen = asn_1_decode(&len, data + 1);
     int i = 1 + llen + len;
+    ca_session_t *session;
     // prevent device close
     if (d->state == CA_STATE_INACTIVE)
         d->state = CA_STATE_ACTIVE;
 
     switch (tag) {
-    case ST_OPEN_SESSION_REQUEST:
+    case ST_OPEN_SESSION_REQUEST: {
         copy32r(resource_identifier, data, 2);
-        ca_session_t *session = new_session(d, resource_identifier);
+        session = new_session(d, resource_identifier);
         status = 0;
         if (!session)
             status = 0xF0;
@@ -2709,8 +2714,9 @@ int ca_read(sockets *s) {
             session->handler.create(session, resource_identifier);
 
         break;
+    }
 
-    case ST_CLOSE_SESSION_REQUEST:
+    case ST_CLOSE_SESSION_REQUEST: {
         // closing the CI session
         copy16r(session_number, data, 2);
         session = d->sessions + session_number - 1;
@@ -2724,7 +2730,8 @@ int ca_read(sockets *s) {
         ca_write_spdu(d, session_number, ST_CLOSE_SESSION_RESPONSE, pkt, 3,
                       NULL, 0);
         break;
-    case ST_SESSION_NUMBER:
+    }
+    case ST_SESSION_NUMBER: {
         copy16r(session_number, data, 1 + llen);
         DEBUGM("got ST_SESSION_NUMBER for session_number %d", session_number);
         session = d->sessions + session_number - 1;
@@ -2734,6 +2741,7 @@ int ca_read(sockets *s) {
             ca_read_apdu(session, data + i, s->rlen - i);
         }
         break;
+    }
     }
 
     s->rlen = 0;
@@ -2798,7 +2806,7 @@ int ca_init_enigma(ca_device_t *d) {
     if (d->sock < 0)
         LOG_AND_RETURN(0, "%s: sockets_add failed", __FUNCTION__);
     sockets_timeout(d->sock, 1000);
-    sockets_setread(d->sock, ca_read_enigma);
+    sockets_setread(d->sock, (void *)ca_read_enigma);
     LOG("initializing CA %d, fd %d sock %d", d->id, fd, d->sock);
 
     return 0;
@@ -2832,36 +2840,31 @@ int ca_init_en50221(ca_device_t *d) {
 
     if (info.type != CA_CI_LINK) {
         LOG("incompatible CA interface");
-        goto fail;
+        return 1;
     }
 
     if (!(info.flags & CA_CI_MODULE_READY)) {
         LOG("CA module not present or not ready");
-        goto fail;
+        return 1;
     }
     ca_write_tpdu(d, T_CREATE_TC, NULL, 0);
 
     d->sock = sockets_add(fd, NULL, d->id, TYPE_TCP, (socket_action)ca_read,
                           (socket_action)ca_close, (socket_action)ca_timeout);
     if (d->sock < 0) {
-        LOG("%s: sockets_add failed", __FUNCTION__);
-        goto fail;
+        LOG("%s:8 sockets_add failed", __FUNCTION__);
+        return 1;
     }
     sockets_timeout(d->sock, 1000);
-    sockets_setread(d->sock, ca_read_tpdu);
+    sockets_setread(d->sock, (void *)ca_read_tpdu);
     sockets *ss = get_sockets(d->sock);
     ss->events |= POLLERR;
 
     return 0;
-fail:
-    close(fd);
-    d->fd = -1;
-    d->enabled = 0;
-    return 1;
 }
 
 ca_device_t *alloc_ca_device() {
-    ca_device_t *d = _malloc(sizeof(ca_device_t));
+    ca_device_t *d = (ca_device_t *)_malloc(sizeof(ca_device_t));
     if (!d) {
         LOG_AND_RETURN(NULL, "Could not allocate memory for CA device");
     }
@@ -2923,7 +2926,6 @@ int dvbca_init_dev(adapter *ad) {
     c->fd = fd;
     c->id = ad->id;
     c->state = CA_STATE_INACTIVE;
-    c->enabled = 1;
     c->sock = -1;
 
     memset(c->capmt, -1, sizeof(c->capmt));
@@ -2944,10 +2946,14 @@ int dvbca_init_dev(adapter *ad) {
         result = ca_init_en50221(c);
     if (result) {
         ca_request_close(c);
+	close(c->fd);
+	c->fd = -1;
+	c->enabled = 0;
         return TABLES_RESULT_ERROR_NORETRY;
     }
 
     has_ci = 1;
+    c->enabled = 1;
 
     set_socket_thread(c->sock, ad->thread);
     return TABLES_RESULT_OK;
@@ -2980,13 +2986,13 @@ int dvbca_add_pid(adapter *ad, SPMT *pmt, int pid) {
 }
 
 SCA_op dvbca = {
-    .ca_init_dev = dvbca_init_dev,
-    .ca_close_dev = dvbca_close_dev,
+    .ca_add_pid = dvbca_add_pid,
     .ca_add_pmt = dvbca_process_pmt,
     .ca_del_pmt = dvbca_del_pmt,
-    .ca_close_ca = dvbca_close,
-    .ca_add_pid = dvbca_add_pid,
+    .ca_init_dev = dvbca_init_dev,
+    .ca_close_dev = dvbca_close_dev,
     .ca_ts = NULL,
+    .ca_close_ca = dvbca_close,
 };
 
 int ca_reconnect(void *arg) {
@@ -3023,7 +3029,7 @@ void dvbca_init() // you can search the devices here and fill the
     poller_sock = sockets_add(SOCK_TIMEOUT, NULL, -1, TYPE_UDP, NULL, NULL,
                               (socket_action)ca_reconnect);
     sockets_timeout(poller_sock, 1000); // try to connect every 1s
-    pthread_t tid = start_new_thread("CA_poll");
+    pthread_t tid = start_new_thread((char *)"CA_poll");
     set_socket_thread(poller_sock, tid);
 }
 
@@ -3142,7 +3148,8 @@ char *get_ca_caids_string(int i, char *dest, int max_len) {
     if (!ca_devices[i])
         return NULL;
 
-    int k, len;
+    int len;
+    uint32_t k;
     dest[0] = 0;
     len = 0;
 

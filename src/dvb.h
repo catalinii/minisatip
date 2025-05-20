@@ -383,21 +383,21 @@ void copy_dvb_parameters(transponder *s, transponder *d);
 float get_db_snr_map(transponder *tp);
 uint32_t pls_scrambling_index(transponder *tp);
 
-char *get_pilot(int i);
-char *get_rolloff(int i);
-char *get_delsys(int i);
-char *get_fec(int i);
-char *get_modulation(int i);
-char *get_tmode(int i);
-char *get_gi(int i);
-char *get_pol(int i);
-char *get_inversion(int i);
-char *get_pls_mode(int i);
+const char *get_pilot(int i);
+const char *get_rolloff(int i);
+const char *get_delsys(int i);
+const char *get_fec(int i);
+const char *get_modulation(int i);
+const char *get_tmode(int i);
+const char *get_gi(int i);
+const char *get_pol(int i);
+const char *get_inversion(int i);
+const char *get_pls_mode(int i);
 
-extern char *fe_delsys[];
-extern char *fe_fec[];
-extern char *fe_tmode[];
-extern char *fe_modulation[];
-extern char *fe_gi[];
+extern const char *fe_delsys[];
+extern const char *fe_fec[];
+extern const char *fe_tmode[];
+extern const char *fe_modulation[];
+extern const char *fe_gi[];
 
 #endif /*  */

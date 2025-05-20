@@ -128,7 +128,7 @@ typedef struct ca_session ca_session_t;
 
 struct struct_application_handler {
     int resource;
-    char *name;
+    const char *name;
     int (*callback)(ca_session_t *session, int resource, uint8_t *buffer,
                     int len);
     int (*create)(ca_session_t *session, int resource);
@@ -208,7 +208,7 @@ struct ca_device {
      * CAM date time handling
      */
     uint64_t datetime_response_interval;
-    uint64_t datetime_next_send;
+    int64_t datetime_next_send;
 };
 
 extern ca_device_t *ca_devices[];

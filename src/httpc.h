@@ -28,7 +28,7 @@ typedef struct struct_http_client {
 
 extern Shttp_client *httpc[MAX_HTTPC];
 
-int http_client(char *url, char *request, void *callback, void *opaque);
+int http_client(char *url, const char *request, void *callback, void *opaque);
 int http_client_add();
 int http_client_del(int i);
 int http_client_close(sockets *s);

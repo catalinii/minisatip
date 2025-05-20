@@ -989,7 +989,7 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
         // try to increase iov_len if the previous packet ends before the
         // currnet one
         if (iiov - 1 >= 0 &&
-            iov[iiov - 1].iov_base + iov[iiov - 1].iov_len == b)
+            ((uint8_t *)iov[iiov - 1].iov_base + iov[iiov - 1].iov_len) == b)
             iov[iiov - 1].iov_len += DVB_FRAME;
         else {
             iov[iiov].iov_base = b;

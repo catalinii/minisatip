@@ -51,7 +51,7 @@
 
 #define DEFAULT_LOG LOG_PMT
 
-void dvbaes_create_key(SCW *cw) { cw->key = _malloc(sizeof(AES_KEY)); }
+void dvbaes_create_key(SCW *cw) { cw->key = (uint8_t *)_malloc(sizeof(AES_KEY)); }
 
 void dvbaes_delete_key(SCW *cw) { _free(cw->key); }
 
@@ -109,7 +109,8 @@ int decrypt(void *context, unsigned char *ciphertext, int ciphertext_len,
 }
 
 void dvbaes_cbc_decrypt_stream(SCW *cw, SPMT_batch *batch, int batch_len) {
-    int i, len;
+    int i;
+    uint32_t len;
     uint8_t decryptedtext[400];
     for (i = 0; i < batch_len; i++) {
 
@@ -125,7 +126,7 @@ void dvbaes_cbc_decrypt_stream(SCW *cw, SPMT_batch *batch, int batch_len) {
         }
         int new_len = decrypt(cw->key, /*ciphertext*/ batch[i].data, len,
                               cw->cw, cw->iv, decryptedtext);
-        if (new_len > batch[i].len)
+        if (new_len > (int )batch[i].len)
             new_len = batch[i].len;
 
         if (new_len > 0)
@@ -263,7 +264,7 @@ int pkcs_1_mgf1(const uint8_t *seed, unsigned long seedlen, uint8_t *mask,
     hLen = 20; /* SHA1 */
 
     /* allocate memory */
-    buf = _malloc(hLen);
+    buf = (uint8_t *)_malloc(hLen);
     if (buf == NULL) {
         LOG("error mem");
         return -1;
@@ -305,13 +306,13 @@ int pkcs_1_pss_encode(const uint8_t *msghash, unsigned int msghashlen,
     modulus_len = (modulus_bitlen >> 3) + (modulus_bitlen & 7 ? 1 : 0);
 
     /* allocate ram for DB/mask/salt/hash of size modulus_len */
-    DB = _malloc(modulus_len);
-    mask = _malloc(modulus_len);
-    salt = _malloc(modulus_len);
-    hash = _malloc(modulus_len);
+    DB = (uint8_t *)_malloc(modulus_len);
+    mask = (uint8_t *)_malloc(modulus_len);
+    salt = (uint8_t *)_malloc(modulus_len);
+    hash = (uint8_t *)_malloc(modulus_len);
 
     hashbuflen = 8 + msghashlen + saltlen;
-    hashbuf = _malloc(hashbuflen);
+    hashbuf = (uint8_t *)_malloc(hashbuflen);
 
     if (!(DB && mask && salt && hash && hashbuf)) {
         LOG("out of memory");

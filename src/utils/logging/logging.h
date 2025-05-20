@@ -7,8 +7,8 @@
 #include <sys/types.h>
 
 void _log(const char *file, int line, const char *fmt, ...);
-void _dump_packets(char *message, unsigned char *b, int len, int packet_offset);
-void _hexdump(char *desc, void *addr, int len);
+void _dump_packets(const char *message, unsigned char *b, int len, int packet_offset);
+void _hexdump(const char *desc, void *addr, int len);
 char *get_current_timestamp_log();
 uint32_t crc_32(const uint8_t *data, int datalen);
 

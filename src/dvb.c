@@ -67,45 +67,45 @@ enum dmx_source {
 #define DMX_SET_SOURCE _IOW('o', 49, enum dmx_source)
 #endif
 
-char *fe_pilot[] = {"on", "off", " ", // auto
+const char *fe_pilot[] = {"on", "off", " ", // auto
                     NULL};
 
-char *fe_rolloff[] = {"0.35", "0.20", "0.25", " ", // auto
+const char *fe_rolloff[] = {"0.35", "0.20", "0.25", " ", // auto
                       "0.15", "0.10", "0.05", NULL};
 
-char *fe_delsys[] = {"undefined", "dvbc",  "dvbcb", "dvbt",  "dss",   "dvbs",
+const char *fe_delsys[] = {"undefined", "dvbc",  "dvbcb", "dvbt",  "dss",   "dvbs",
                      "dvbs2",     "dvbh",  "isdbt", "isdbs", "isdbc", "atsc",
                      "atscmh",    "dmbth", "cmmb",  "dab",   "dvbt2", "turbo",
                      "dvbcc",     "dvbc2", NULL};
 
-char *fe_fec[] = {"none", "12",  "23", "34", "45", "56",
+const char *fe_fec[] = {"none", "12",  "23", "34", "45", "56",
                   "67",   "78",  "89", " ", // auto
                   "35",   "910", "25", "14", "13", NULL};
 
-char *fe_modulation[] = {
+const char *fe_modulation[] = {
     "qpsk",   "16qam",   "32qam",   "64qam",  "128qam", "256qam", " ", // auto
     "8vsb",   "16vsb",   "8psk",    "16apsk", "32apsk", "dqpsk",  "qam_4_nr",
     "64apsk", "128apsk", "256apsk", NULL};
 
-char *fe_tmode[] = {"2k", "8k", " ", // auto
+const char *fe_tmode[] = {"2k", "8k", " ", // auto
                     "4k", "1k", "16k", "32k", "c1", "c3780", NULL};
 
-char *fe_gi[] = {"132",  "116",   "18",    "14",    " ", // auto
+const char *fe_gi[] = {"132",  "116",   "18",    "14",    " ", // auto
                  "1128", "19128", "19256", "pn420", "pn595", "pn945", NULL};
 
-char *fe_hierarchy[] = {"HIERARCHY_NONE", "HIERARCHY_1",    "HIERARCHY_2",
+const char *fe_hierarchy[] = {"HIERARCHY_NONE", "HIERARCHY_1",    "HIERARCHY_2",
                         "HIERARCHY_4",    "HIERARCHY_AUTO", NULL};
 
-char *fe_inversion[] = {"0", "1", " ", // auto
+const char *fe_inversion[] = {"0", "1", " ", // auto
                         NULL};
 
-char *fe_pol[] = {"none", "v", "h", "r", "l", NULL};
+const char *fe_pol[] = {"none", "v", "h", "r", "l", NULL};
 
-char *fe_pls_mode[] = {"root", "gold", "combo", NULL};
+const char *fe_pls_mode[] = {"root", "gold", "combo", NULL};
 
 #define make_func(a)                                                           \
-    char *get_##a(int i) {                                                     \
-        if (i >= 0 && i < (int)sizeof(fe_##a) / sizeof(fe_##a[0])) {           \
+    const char *get_##a(int i) {                                                     \
+        if (i >= 0 && i < (int)(sizeof(fe_##a) / sizeof(fe_##a[0]))) {           \
             if (fe_##a[i][0] == 32)                                            \
                 return "";                                                     \
             else                                                               \
@@ -133,7 +133,8 @@ char def_pids[100];
 
 uint32_t pls_scrambling_index(transponder *tp) {
     /* convert ROOT code to GOLD code */
-    uint32_t x, g;
+    uint32_t g;
+    int x;
     for (g = 0, x = 1; g < 0x3ffff; g++) {
         if (tp->pls_code == x)
             return g;
@@ -186,11 +187,11 @@ int detect_dvb_parameters(char *s, transponder *tp) {
 
     for (i = 0; i < la; i++) {
         if (strncmp("msys=", arg[i], 5) == 0)
-            tp->sys = map_int(arg[i] + 5, fe_delsys);
+            tp->sys = map_int(arg[i] + 5, (char **)fe_delsys);
         if (strncmp("freq=", arg[i], 5) == 0)
             tp->freq = map_float(arg[i] + 5, 1000);
         if (strncmp("pol=", arg[i], 4) == 0)
-            tp->pol = map_int(arg[i] + 4, fe_pol);
+            tp->pol = map_int(arg[i] + 4, (char **)fe_pol);
         if (strncmp("sr=", arg[i], 3) == 0)
             tp->sr = map_int(arg[i] + 3, NULL) * 1000;
         if (strncmp("fe=", arg[i], 3) == 0)
@@ -198,17 +199,17 @@ int detect_dvb_parameters(char *s, transponder *tp) {
         if (strncmp("src=", arg[i], 4) == 0)
             tp->diseqc = map_int(arg[i] + 4, NULL);
         if (strncmp("ro=", arg[i], 3) == 0)
-            tp->ro = map_int(arg[i] + 3, fe_rolloff);
+            tp->ro = map_int(arg[i] + 3, (char **)fe_rolloff);
         if (strncmp("mtype=", arg[i], 6) == 0)
-            tp->mtype = map_int(arg[i] + 6, fe_modulation);
+            tp->mtype = map_int(arg[i] + 6, (char **)fe_modulation);
         if (strncmp("fec=", arg[i], 4) == 0)
-            tp->fec = map_int(arg[i] + 4, fe_fec);
+            tp->fec = map_int(arg[i] + 4, (char **)fe_fec);
         if (strncmp("plts=", arg[i], 5) == 0)
-            tp->plts = map_int(arg[i] + 5, fe_pilot);
+            tp->plts = map_int(arg[i] + 5, (char **)fe_pilot);
         if (strncmp("gi=", arg[i], 3) == 0)
-            tp->gi = map_int(arg[i] + 3, fe_gi);
+            tp->gi = map_int(arg[i] + 3, (char **)fe_gi);
         if (strncmp("tmode=", arg[i], 6) == 0)
-            tp->tmode = map_int(arg[i] + 6, fe_tmode);
+            tp->tmode = map_int(arg[i] + 6, (char **)fe_tmode);
         if (strncmp("bw=", arg[i], 3) == 0) {
             tp->bw = map_float(arg[i] + 3, 1000000);
             if (tp->bw < 0 || tp->bw > 100000000)  // Fix clients that send bw=8000 !
@@ -225,7 +226,7 @@ int detect_dvb_parameters(char *s, transponder *tp) {
         if (strncmp("plp=", arg[i], 4) == 0 || strncmp("isi=", arg[i], 4) == 0)
             tp->plp_isi = map_int(arg[i] + 4, NULL);
         if (strncmp("plsm=", arg[i], 5) == 0)
-            tp->pls_mode = map_int(arg[i] + 5, fe_pls_mode);
+            tp->pls_mode = map_int(arg[i] + 5, (char **)fe_pls_mode);
         if (strncmp("plsc=", arg[i], 5) == 0)
             tp->pls_code = map_int(arg[i] + 5, NULL);
 
@@ -249,7 +250,7 @@ int detect_dvb_parameters(char *s, transponder *tp) {
         tp->pls_code = pls_scrambling_index(tp);
 
     if (tp->pids && strncmp(tp->pids, "none", 4) == 0)
-        tp->pids = "";
+        tp->pids = (char *)"";
 
     //      if(!msys)INVALID_URL("no msys= found in URL");
     //      if(freq<10)INVALID_URL("no freq= found in URL or frequency
@@ -732,7 +733,7 @@ struct diseqc_cmd {
 };
 
 // based on enigma2 fbc.cpp, setProcData
-void set_proc_data(int adapter, char *name, int val) {
+void set_proc_data(int adapter, const char *name, int val) {
     char filename[100];
     sprintf(filename, "/proc/stb/frontend/%d/%s", adapter, name);
     LOG("setProcData %s -> %d", filename, val);
@@ -817,7 +818,7 @@ int dvb_open_device(adapter *ad) {
     return 0;
 }
 
-void diseqc_cmd(int fd, int times, char *str, struct dvb_diseqc_master_cmd *cmd,
+void diseqc_cmd(int fd, int times, const char *str, struct dvb_diseqc_master_cmd *cmd,
                 diseqc *d) {
     int i;
     sleep_msec(d->before_cmd);
@@ -1524,7 +1525,7 @@ int dvb_psi_read(int socket, void *buf, int len, sockets *ss, int *rb) {
     //	}
     DEBUGM("%s: socket %d, master %d, buf %p len %d, read %d", __FUNCTION__,
            socket, ss->master, buf, len, r);
-    *rb = buffer_to_ts(buf, len, section, r, &p->cc1, pid);
+    *rb = buffer_to_ts((uint8_t *)buf, len, section, r, &p->cc1, pid);
 
     return 1;
 }
@@ -1573,7 +1574,7 @@ int dvb_set_psi_filter(adapter *a, int i_pid) {
         close(fd);
         return -1;
     }
-    sockets_setread(sock, dvb_psi_read);
+    sockets_setread(sock, (void *)dvb_psi_read);
     sockets_set_master(sock, a->sock);
     SPid *p = find_pid(a->id, i_pid);
     if (p)
@@ -1620,14 +1621,15 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys) {
     struct dvb_frontend_info fe_info;
 
     static struct dtv_property enum_cmdargs[] = {
-        {.cmd = DTV_ENUM_DELSYS, .u.data = 0},
+        {.cmd = DTV_ENUM_DELSYS},
     };
+    enum_cmdargs[0].u.data = 0;
     static struct dtv_properties enum_cmdseq = {
         .num = sizeof(enum_cmdargs) / sizeof(struct dtv_property),
         .props = enum_cmdargs};
 
     for (i = 0; i < 10; i++)
-        sys[i] = 0;
+        sys[i] = (fe_delivery_system_t )0;
     if (ioctl(fd, FE_GET_PROPERTY, &enum_cmdseq) < 0) {
         LOG("unable to query frontend, perhaps DVB-API < 5.5 ?");
         //	return 0;
@@ -1651,7 +1653,7 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys) {
         case FE_OFDM:
 #if DVBAPIVERSION >= 0x0501
             if (fe_info.caps & FE_CAN_2G_MODULATION)
-                sys[idx++] = SYS_DVBT2;
+                sys[idx++] = (fe_delivery_system_t )SYS_DVBT2;
 #endif
 
             sys[idx++] = SYS_DVBT;
@@ -1676,18 +1678,18 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys) {
                      (FE_CAN_QAM_64 | FE_CAN_QAM_256 | FE_CAN_QAM_AUTO))
                 sys[idx++] = SYS_DVBC_ANNEX_B;
             else
-                return 0;
+                return (fe_delivery_system_t )0;
 
             break;
         default:
             LOG("no available delivery system for adapter %d", aid);
-            return 0;
+            return (fe_delivery_system_t )0;
         }
         nsys = idx;
         rv = sys[0];
     } else {
         for (i = 0; i < nsys; i++) {
-            sys[i] = enum_cmdargs[0].u.buffer.data[i];
+            sys[i] = (fe_delivery_system_t ) enum_cmdargs[0].u.buffer.data[i];
         }
         rv = enum_cmdargs[0].u.buffer.data[0];
     }
@@ -1825,13 +1827,16 @@ int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
     *status = *snr = *ber = *strength = 0;
     *db = 65535;
     int64_t strengthd = 0, snrd = 0, init_strength = 0, init_snr = 0;
-    char *strength_s = "(none)", *snr_s = "(none)";
+    const char *strength_s = "(none)", *snr_s = "(none)";
     int err = 0;
     static struct dtv_property enum_cmdargs[] = {
-        {.cmd = DTV_STAT_SIGNAL_STRENGTH, .u.data = 0},
-        {.cmd = DTV_STAT_CNR, .u.data = 0},
-        {.cmd = DTV_STAT_ERROR_BLOCK_COUNT, .u.data = 0},
+        {.cmd = DTV_STAT_SIGNAL_STRENGTH},
+        {.cmd = DTV_STAT_CNR},
+        {.cmd = DTV_STAT_ERROR_BLOCK_COUNT},
     };
+    enum_cmdargs[0].u.data = 0;
+    enum_cmdargs[1].u.data = 0;
+    enum_cmdargs[2].u.data = 0;
     static struct dtv_properties enum_cmdseq = {
         .num = sizeof(enum_cmdargs) / sizeof(struct dtv_property),
         .props = enum_cmdargs};

@@ -107,7 +107,7 @@ void free1(void *x, const char *f, int l) {
 }
 
 int _ensure_allocated(void **x, int struct_size, int pointer_size,
-                      int ensure_length, int min_elements, char *file,
+                      int ensure_length, int min_elements, const char *file,
                       int line) {
     int do__realloc = 0, new_size = 0, current_size = 0;
     void *result = NULL;

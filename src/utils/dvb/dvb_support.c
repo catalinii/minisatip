@@ -65,7 +65,7 @@ static inline int encode_utf8(unsigned int c, char *outb, int outleft)
   }
 }
 
-static inline size_t conv_utf8(const uint8_t *src, size_t srclen,
+static inline int64_t conv_utf8(const uint8_t *src, size_t srclen,
                                char *dst, size_t *dstlen)
 {
   while (srclen>0 && (*dstlen)>0) {
@@ -86,7 +86,7 @@ static inline size_t conv_utf8(const uint8_t *src, size_t srclen,
   return 0;
 }
 
-static inline size_t conv_6937(const uint8_t *src, size_t srclen,
+static inline int64_t conv_6937(const uint8_t *src, size_t srclen,
                               char *dst, size_t *dstlen)
 {
   while (srclen>0 && (*dstlen)>0) {
@@ -146,7 +146,7 @@ static inline size_t conv_6937(const uint8_t *src, size_t srclen,
   return 0;
 }
 
-static inline size_t conv_UCS2(const uint8_t *src, size_t srclen,char *dst, size_t *dstlen)
+static inline int64_t conv_UCS2(const uint8_t *src, size_t srclen,char *dst, size_t *dstlen)
 {
   while (srclen>0 && (*dstlen)>0){
     uint16_t uc = *src<<8|*(src+1);
@@ -177,7 +177,7 @@ static inline size_t conv_UCS2(const uint8_t *src, size_t srclen,char *dst, size
   return 0;
 }
 
-static inline size_t conv_8859(int conv,
+static inline int64_t conv_8859(int conv,
                               const uint8_t *src, size_t srclen,
                               char *dst, size_t *dstlen)
 {
@@ -219,7 +219,7 @@ static inline size_t conv_8859(int conv,
   return 0;
 }
 
-static inline size_t dvb_convert(int conv,
+static inline int64_t dvb_convert(int conv,
                           const uint8_t *src, size_t srclen,
                           char *dst, size_t *dstlen)
 {

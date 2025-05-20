@@ -61,6 +61,12 @@ SHashTable channels;
 
 int first_ddci = -1;
 
+#undef FOREACH_ITEM
+#define FOREACH_ITEM(h, a)                                                     \
+    for (i = 0; i < (h)->size; i++)                                            \
+        if (HASH_ITEM_ENABLED((h)->items[i]) && (a = (ddci_mapping_table_t *)(h)->items[i].data))
+
+
 #define get_ddci(i)                                                            \
     ((i >= 0 && i < MAX_ADAPTERS && ddci_devices[i] &&                         \
       ddci_devices[i]->enabled)                                                \
@@ -104,7 +110,7 @@ int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
                           int force_add_pid) {
     int ddci_pid = 0, i;
     ddci_mapping_table_t *m;
-    m = getItem(&d->mapping, MAKE_KEY(ad, pid));
+    m = (ddci_mapping_table_t *)getItem(&d->mapping, MAKE_KEY(ad, pid));
     if (!m) {
         ddci_mapping_table_t n;
         memset(&n, -1, sizeof(n));
@@ -114,7 +120,7 @@ int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
         n.rewrite = 1;
         n.ddci = d->id;
         setItem(&d->mapping, MAKE_KEY(ad, pid), &n, sizeof(n));
-        m = getItem(&d->mapping, MAKE_KEY(ad, pid));
+        m = (ddci_mapping_table_t *)getItem(&d->mapping, MAKE_KEY(ad, pid));
     }
 
     if (!m)
@@ -259,7 +265,8 @@ int ddci_close_all() {
     return 0;
 }
 
-int ddci_close(adapter *a) { return 0; }
+int ddci_close() { return 0; }
+int ddci_close_adapter(adapter *a) { return 0; }
 
 // return 0 if
 int create_channel_for_pmt(Sddci_channel *c, SPMT *pmt) {
@@ -383,7 +390,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     LOG("%s: adapter %d, pmt %d, pid %d, sid %d, ddid %d, name: %s",
         __FUNCTION__, ad->id, pmt->id, pmt->pid, pmt->sid, ddid, pmt->name);
 
-    channel = getItem(&channels, pmt->sid);
+    channel = (ddci_channel *)getItem(&channels, pmt->sid);
     if (!channel) {
         Sddci_channel c;
         int result = create_channel_for_pmt(&c, pmt);
@@ -395,7 +402,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
             LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
                            "no suitable DDCI found");
         setItem(&channels, pmt->sid, &c, sizeof(c));
-        channel = getItem(&channels, pmt->sid);
+        channel = (ddci_channel *)getItem(&channels, pmt->sid);
         if (!channel)
             LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
                            "Could not allocate channel");
@@ -573,7 +580,7 @@ int ddci_create_pat(ddci_device_t *d, uint8_t *b) {
          len1);
     char buf[500];
     sprintf(buf, "PAT Created CRC %08X: ", crc);
-    hexdump(buf, b + 1, len1 - 1);
+    hexdump((const char *)buf, b + 1, len1 - 1);
     return len;
 }
 
@@ -955,7 +962,7 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
 
         set_pid_ts(b, dpid);
         // bundle packets to stay under MAX_IOV
-        if (iop - 1 >= 0 && io[iop - 1].iov_base + io[iop - 1].iov_len == b)
+        if (iop - 1 >= 0 && ((uint8_t *)io[iop - 1].iov_base + io[iop - 1].iov_len == b))
             io[iop - 1].iov_len += DVB_FRAME;
         else {
             io[iop].iov_base = b;
@@ -989,9 +996,9 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
     }
     // mark the written TS packets as 8191 (0x1FFF)
     for (i = 0; i < iop; i++) {
-        int j;
+        uint32_t j;
         for (j = 0; j < io[i].iov_len; j += 188)
-            set_pid_ts(io[i].iov_base + j, 0x1FFF);
+            set_pid_ts((uint8_t *)io[i].iov_base + j, 0x1FFF);
     }
 
     // move back TS packets from the DDCI out buffer to the adapter buffer
@@ -1061,7 +1068,7 @@ int ddci_read_sec_data(sockets *s) {
         LOG("dropping %d bytes for ddci_adapter %d", left, d->id);
     LOGM("pushed %d bytes to the adapter buffer from %d [write_index %jd]",
          left, rlen, d->fifo.write_index);
-    dump_packets("DDCI ->FIFO ", d->fifo.data, 188, 0);
+    dump_packets("DDCI ->FIFO ", (uint8_t *)d->fifo.data, 188, 0);
     dump_packets("SOURCE ", b, 188, 0);
     return 0;
 }
@@ -1105,7 +1112,7 @@ int set_property(int fd, uint32_t cmd, uint32_t data) {
 ddci_device_t *ddci_alloc(int id) {
     ddci_device_t *d;
 
-    d = ddci_devices[id] = _malloc(sizeof(ddci_device_t));
+    d = ddci_devices[id] = (ddci_device_t *)_malloc(sizeof(ddci_device_t));
     if (!d) {
         return NULL;
     }
@@ -1176,7 +1183,7 @@ int ddci_open_device(adapter *ad) {
     ad->dvr = read_fd;
     ad->type = ADAPTER_CI;
     ad->dmx = -1;
-    ad->sys[0] = 0;
+    ad->sys[0] = (fe_delivery_system_t )0;
     ad->adapter_timeout = 0;
     memset(d->pmt, -1, sizeof(d->pmt));
     d->max_channels = MAX_CHANNELS_ON_CI;
@@ -1193,7 +1200,7 @@ int ddci_open_device(adapter *ad) {
 }
 
 fe_delivery_system_t ddci_delsys(int aid, int fd, fe_delivery_system_t *sys) {
-    return 0;
+    return (fe_delivery_system_t )0;
 }
 
 int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque) {
@@ -1287,12 +1294,14 @@ void save_channels(SHashTable *ch) {
     fprintf(f, "# When a new channel it will be used, minisatip will determine "
                "the matching DDCIs based on their reported CA IDs\n");
 
-    FOREACH_ITEM(ch, c) {
-        fprintf(f, "%d:    ", c->sid);
-        for (j = 0; j < c->ddcis; j++)
-            fprintf(f, "%s%d", j ? "," : "", c->ddci[j].ddci);
-        fprintf(f, " # %s\n", c->name);
-    }
+    for (i = 0; i < ch->size; i++)                                            \
+        if (HASH_ITEM_ENABLED(ch->items[i]) && (c = (Sddci_channel *)ch->items[i].data))   
+        {
+            fprintf(f, "%d:    ", c->sid);
+            for (j = 0; j < c->ddcis; j++)
+                fprintf(f, "%s%d", j ? "," : "", c->ddci[j].ddci);
+            fprintf(f, " # %s\n", c->name);
+        }
     fclose(f);
 }
 void load_channels(SHashTable *ch) {
@@ -1434,7 +1443,7 @@ void find_ddci_adapter(adapter **a) {
                 ad->tune = NULL;
                 ad->delsys = ddci_delsys;
                 ad->post_init = ddci_post_init;
-                ad->close = ddci_close;
+                ad->close = ddci_close_adapter;
                 ad->get_signal = NULL;
                 ad->set_pid = ddci_set_pid;
                 ad->del_filters = ddci_del_filters;

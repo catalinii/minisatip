@@ -320,8 +320,8 @@ void tables_update_encrypted_status(adapter *ad, SPMT *pmt) {
 }
 
 void tables_add_pid(adapter *ad, SPMT *pmt, int pid) {
-    uint64_t i, mask;
-    for (i = 0; i < nca; i++) {
+    uint64_t mask;
+    for (int i = 0; i < nca; i++) {
         mask = 1ULL << i;
         if (ca[i].enabled && (pmt->ca_mask & mask) && ca[i].op->ca_add_pid)
             ca[i].op->ca_add_pid(ad, pmt, pid);
@@ -329,8 +329,8 @@ void tables_add_pid(adapter *ad, SPMT *pmt, int pid) {
 }
 
 void tables_del_pid(adapter *ad, SPMT *pmt, int pid) {
-    uint64_t mask, i;
-    for (i = 0; i < nca; i++) {
+    uint64_t mask;
+    for (int i = 0; i < nca; i++) {
         mask = 1ULL << i;
         if (ca[i].enabled && (pmt->ca_mask & mask) && ca[i].op->ca_del_pid)
             ca[i].op->ca_del_pid(ad, pmt, pid);
@@ -359,10 +359,10 @@ void init_ca_device(SCA *c) {
 }
 
 int tables_close_device(adapter *ad) {
-    uint64_t i, mask = 1;
+    uint64_t mask = 1;
     int rv = 0;
 
-    for (i = 0; i < nca; i++) {
+    for (int i = 0; i < nca; i++) {
         if (ca[i].enabled && (ad->ca_mask & mask) && ca[i].op->ca_close_dev) {
             ca[i].op->ca_close_dev(ad);
         }
