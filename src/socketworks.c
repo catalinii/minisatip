@@ -39,7 +39,6 @@
 
 #include "minisatip.h"
 #include "socketworks.h"
-#include "t2mi.h"
 #include "utils.h"
 #include "utils/alloc.h"
 #include "utils/ticks.h"
@@ -1032,9 +1031,6 @@ void free_all() {
     free_all_adapters();
 #ifndef DISABLE_DVBAPI
     free_all_keys();
-#endif
-#ifndef DISABLE_T2MI
-    free_t2mi();
 #endif
     free_alloc();
 }

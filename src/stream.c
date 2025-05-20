@@ -44,7 +44,6 @@
 #include "pmt.h"
 #include "socketworks.h"
 #include "stream.h"
-#include "t2mi.h"
 #include "utils/alloc.h"
 #include "utils/ticks.h"
 
@@ -304,7 +303,7 @@ int start_play(streams *sid, sockets *s) {
     if (set_adapter_parameters(sid->adapter, s->sid, &sid->tp) < 0)
         return -404;
 
-    if (!opts.no_threads && get_socket_thread(sid->st_sock) == get_tid()) {
+    if (get_socket_thread(sid->st_sock) == get_tid()) {
         ad = get_adapter(sid->adapter);
 
         // the stream timeout thread will be running in the same thread with the
@@ -1032,22 +1031,13 @@ int process_dmx(sockets *s) {
          "%jd ms ago",
          ad->id, rlen, s->lbuf, ms_ago);
 
-#ifndef AXE
     check_cc(ad);
-#endif
-
-#ifndef DISABLE_T2MI
-    if (ad->is_t2mi >= 0)
-        t2mi_process_ts(ad);
-#endif
 
 #ifndef DISABLE_TABLES
     pmt_process_stream(ad);
 #endif
 
-#ifndef AXE
     check_cc2(ad);
-#endif
 
     for (i = 0; i < MAX_STREAMS; i++)
         if (st[i] && st[i]->enabled && st[i]->adapter == ad->id)

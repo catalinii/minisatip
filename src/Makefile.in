@@ -3,8 +3,7 @@ AUTOMAKE_OPTIONS = foreign
 BUILDDIR := ../build
 TARGET:=../minisatip
 
-CC=@CC@
-EMBEDDED=@EMBEDDED@
+CXX=@CXX@
 DVBCSA=@DVBCSA@
 DVBCA=@DVBCA@
 SATIPCLIENT=@SATIPCLIENT@
@@ -12,22 +11,20 @@ NETCVCLIENT=@NETCVCLIENT@
 STATIC=@STATIC@
 DVBAPI=@DVBAPI@
 LINUXDVB=@LINUXDVB@
-AXE=@AXE@
 DDCI=0
-T2MI=0
 
-CFLAGS?=-Wall -Wno-switch -ggdb -fPIC -fno-common -Warray-bounds
-CFLAGS += -I../src
-CFLAGS += $(EXTRA_CFLAGS) @CFLAGS@
+CXXFLAGS?=-Wall -Wno-switch -ggdb -fPIC -fno-common -Warray-bounds
+CXXFLAGS += -I../src
+CXXFLAGS += $(EXTRA_CFLAGS) @CFLAGS@
 LDFLAGS += @LDFLAGS@ -lpthread
 CPPFLAGS += @CPPFLAGS@
 
-OS := $(shell $(CC) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 2)
-ARCH := $(shell $(CC) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 1)
+OS := $(shell $(CXX) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 2)
+ARCH := $(shell $(CXX) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 1)
 MAJOR := 1.3.
 MINOR := $(shell git tag --points-at HEAD | cut -d. -f3 | tail -1)
 REVISION := $(shell git rev-parse --short HEAD)
-CFLAGS+=-DMAJOR=\"$(MAJOR)\" -DMINOR=\"$(MINOR)\" -DREVISION=\"$(REVISION)\"
+CXXFLAGS+=-DMAJOR=\"$(MAJOR)\" -DMINOR=\"$(MINOR)\" -DREVISION=\"$(REVISION)\"
 
 ifneq ($(OS),apple)
         LDFLAGS += -lrt
@@ -64,7 +61,7 @@ LIBS+=dvbcsa
 SOURCES+=csa.c
 PMT=1
 else
-CFLAGS+=-DDISABLE_DVBCSA
+CXXFLAGS+=-DDISABLE_DVBCSA
 endif
 
 ifeq ($(DVBAPI),1)
@@ -72,7 +69,7 @@ SOURCES+=dvbapi.c
 TABLES=1
 PMT=1
 else
-CFLAGS+=-DDISABLE_DVBAPI
+CXXFLAGS+=-DDISABLE_DVBAPI
 endif
 
 ifeq ($(DVBCA),1)
@@ -85,62 +82,51 @@ ifeq ($(OS),linux)
 DDCI=1
 endif
 else
-CFLAGS+=-DDISABLE_DVBCA
+CXXFLAGS+=-DDISABLE_DVBCA
 endif
 
 ifeq ($(PMT),1)
 SOURCES+=pmt.c
 else
-CFLAGS+=-DDISABLE_PMT
+CXXFLAGS+=-DDISABLE_PMT
 endif
 
 ifeq ($(TABLES),1)
 SOURCES+=tables.c
 else
-CFLAGS+=-DDISABLE_TABLES
+CXXFLAGS+=-DDISABLE_TABLES
 endif
 
 ifeq ($(SATIPCLIENT),1)
 SOURCES+=satipc.c
 else
-CFLAGS+=-DDISABLE_SATIPCLIENT
+CXXFLAGS+=-DDISABLE_SATIPCLIENT
 endif
 
 ifeq ($(NETCVCLIENT),1)
 SOURCES+=netceiver.c
 LDFLAGS+=-lnetceiver -lxml2
 else
-CFLAGS+=-DDISABLE_NETCVCLIENT
+CXXFLAGS+=-DDISABLE_NETCVCLIENT
 endif
 
 ifeq ($(LINUXDVB),1)
 SOURCES+=dvb.c
 else
-CFLAGS+=-DDISABLE_LINUXDVB
+CXXFLAGS+=-DDISABLE_LINUXDVB
 SOURCES+=dvb.c
 endif
 
 ifeq ($(DDCI),1)
 SOURCES+=ddci.c
 else
-CFLAGS+=-DDISABLE_DDCI
+CXXFLAGS+=-DDISABLE_DDCI
 endif
-
-ifeq ($(T2MI),1)
-SOURCES+= t2mi.c
-else
-CFLAGS+=-DDISABLE_T2MI
-endif
-
-SOURCES-$(AXE) += axe.c
-CFLAGS-$(AXE) += -DAXE
-
-CFLAGS-$(EMBEDDED) += -DNO_BACKTRACE
 
 ifeq ($(DEBUG),1)
-CFLAGS += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=undefined -static-libasan -static-libubsan -static-liblsan -fstack-protector-all
+CXXFLAGS += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=undefined -static-libasan -static-libubsan -static-liblsan -fstack-protector-all
 else
-CFLAGS += -O2
+CXXFLAGS += -O2
 endif
 
 ifeq ($(STATIC),1)
@@ -150,22 +136,22 @@ else
 endif
 
 SOURCES+=$(SOURCES-1)
-CFLAGS+=$(CFLAGS-1)
+CXXFLAGS+=$(CFLAGS-1)
 LDFLAGS+=$(LDFLAGS-1)
 
 OBJS := $(patsubst %.c, $(BUILDDIR)/%.o, $(SOURCES))
 DEPS=$(OBJS:.o=.d)
 
 $(TARGET): $(DEPS) $(OBJS) $(SOURCES)
-	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(LDFLAGS)
 
 $(BUILDDIR)/%.d : %.c
 	@mkdir -p $(dir $@)
-	@$(CC) $(CFLAGS) -MM $(basename $*).c | sed -e 's@^\(.*\)\.o:@\1.d \1.o:@' > $@
+	@$(CXX) $(CXXFLAGS) -MM $(basename $*).c | sed -e 's@^\(.*\)\.o:@\1.d \1.o:@' > $@
 
 $(BUILDDIR)/%.o : %.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $*.c -o $@
+	$(CXX) $(CXXFLAGS) -c $*.c -o $@
 
 all: $(TARGET)
 

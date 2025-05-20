@@ -30,8 +30,6 @@ int mutex_init(SMutex *mutex) {
     int rv;
     pthread_mutexattr_t attr;
 
-    if (opts.no_threads)
-        return 0;
     if (mutex->enabled)
         return 1;
 
@@ -56,8 +54,6 @@ __thread int imtx = 0;
 int mutex_lock1(const char *FILE, int line, SMutex *mutex) {
     int rv;
     int64_t start_lock = 0;
-    if (opts.no_threads)
-        return 0;
 
     if (!mutex || !mutex->enabled) {
         LOGM("%s:%d Mutex not enabled %p", FILE, line, mutex);
@@ -103,9 +99,6 @@ int mutex_lock1(const char *FILE, int line, SMutex *mutex) {
 }
 int mutex_unlock1(const char *FILE, int line, SMutex *mutex) {
     int rv = -1;
-    if (opts.no_threads)
-        return 0;
-
     if (!mutex || mutex->enabled) {
         LOGM("%s:%d Unlocking mutex %p", FILE, line, mutex);
         if (mutex) {
@@ -136,8 +129,6 @@ int mutex_unlock1(const char *FILE, int line, SMutex *mutex) {
 
 int mutex_destroy(SMutex *mutex) {
     int rv;
-    if (opts.no_threads)
-        return 0;
     if (!mutex || !mutex->enabled) {
         LOG("destroy disabled mutex %p", mutex);
 
@@ -168,8 +159,6 @@ int mutex_destroy(SMutex *mutex) {
 void clean_mutexes() {
     int i;
     if (!imtx)
-        return;
-    if (opts.no_threads)
         return;
     //	LOG("mutex_leak: unlock %d mutexes", imtx);
     for (i = imtx - 1; i >= 0; i--) {

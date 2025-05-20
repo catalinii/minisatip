@@ -54,7 +54,7 @@
 #include <dirent.h>
 #include <errno.h>
 
-#if !defined(__mips__) && !defined(NO_BACKTRACE)
+#if !defined(__mips__)
 #include <execinfo.h>
 #endif
 
@@ -240,7 +240,6 @@ int addr2line(char const *const program_name, void const *const addr) {
 }
 
 void print_trace(void) {
-#if !defined(NO_BACKTRACE)
     void *array[10];
     size_t size;
     size_t i;
@@ -254,9 +253,6 @@ void print_trace(void) {
         if (addr2line(pn, array[i]))
             printf("\n");
     }
-#else
-    printf(" No backtrace defined\n");
-#endif
 }
 
 extern int run_loop;
@@ -512,9 +508,6 @@ pthread_t get_tid() { return pthread_self(); }
 pthread_t start_new_thread(char *name) {
     pthread_t tid;
     int rv;
-    if (opts.no_threads)
-        return get_tid();
-
     if ((rv = pthread_create(&tid, NULL, &select_and_execute, name))) {
         LOG("Failed to create thread: %s, error %d %s", name, rv, strerror(rv));
         return get_tid();

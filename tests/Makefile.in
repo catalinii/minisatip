@@ -2,11 +2,11 @@
 AUTOMAKE_OPTIONS = foreign
 BUILDDIR := ../build
 
-CFLAGS?=-Wall -Wno-switch -ggdb -fPIC $(EXTRA_CFLAGS)
+CXXFLAGS?=-Wall -Wno-switch -ggdb -fPIC $(EXTRA_CFLAGS)
 LDFLAGS?=-lpthread 
 
-OS := $(shell $(CC) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 2)
-ARCH := $(shell $(CC) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 1)
+OS := $(shell $(CXX) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 2)
+ARCH := $(shell $(CXX) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 1)
 
 ifneq ($(UNAME_S),apple)
         LDFLAGS += -lrt
@@ -34,15 +34,14 @@ PMT=0
 
 LIBS+=crypto dl pthread
 LIBS+=dvbcsa
-CFLAGS += -DAXE
-CFLAGS += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=null
-CFLAGS += -I../src
+CXXFLAGS += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=null
+CXXFLAGS += -I../src
 
-CFLAGS += -DENIGMA
-CFLAGS += -DTESTING
-CFLAGS += -DDDCI_TEST
-CFLAGS += -DDISABLE_NETCVCLIENT
-CFLAGS += -DMAJOR=\"tests\" -DMINOR=\"tests\" -DREVISION=\"tests\"
+CXXFLAGS += -DENIGMA
+CXXFLAGS += -DTESTING
+CXXFLAGS += -DDDCI_TEST
+CXXFLAGS += -DDISABLE_NETCVCLIENT
+CXXFLAGS += -DMAJOR=\"tests\" -DMINOR=\"tests\" -DREVISION=\"tests\"
 
 LDFLAGS+=$(addprefix -l,$(LIBS))
 
@@ -53,11 +52,11 @@ test: $(BINS)
 
 $(BUILDDIR)/%.d : %.c
 	@mkdir -p $(dir $@)
-	@$(CC) $(CFLAGS) -MM $(basename $*).c | sed -e 's@^\(.*\)\.o:@\1.d \1.o:@' > $@
+	@$(CXX) $(CXXFLAGS) -MM $(basename $*).c | sed -e 's@^\(.*\)\.o:@\1.d \1.o:@' > $@
 
 $(BUILDDIR)/% : %.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $*.c $(MAIN_SOURCES) -o $(BUILDDIR)/test $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $*.c $(MAIN_SOURCES) -o $(BUILDDIR)/test $(LDFLAGS)
 	@echo "Running $@"
 	@$(BUILDDIR)/test
 	@rm -f $(BUILDDIR)/test

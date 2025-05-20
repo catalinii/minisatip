@@ -54,10 +54,6 @@
 #include "satipc.h"
 #endif
 
-#ifdef AXE
-#include "axe.h"
-#endif
-
 #ifndef DISABLE_DVBCA
 #include "ca.h"
 #endif
@@ -118,9 +114,6 @@ int rtsp, http, si, si1, ssdp1;
 #define DROP_ENCRYPTED_OPT 'E'
 #define UDPPORT_OPT 'P'
 #define ADAPTERTIMEOUT_OPT 'Z'
-#define QUATTRO_OPT 'Q'
-#define QUATTRO_HIBAND_OPT '8'
-#define AXE_POWER 'W'
 #define ABSOLUTE_SRC 'A'
 #define SATIPXML_OPT '6'
 #define DISEQC_MULTI '0'
@@ -206,11 +199,6 @@ static const struct option long_options[] = {
 #ifndef DISABLE_NETCVCLIENT
     {"netceiver", required_argument, NULL, NETCVCLIENT_OPT},
 #endif
-#ifdef AXE
-    {"quattro", no_argument, NULL, QUATTRO_OPT},
-    {"quattro-hiband", required_argument, NULL, QUATTRO_HIBAND_OPT},
-    {"power", required_argument, NULL, AXE_POWER},
-#endif
 #ifndef DISABLE_DVBCA
     {"ca-pin", required_argument, NULL, CA_PIN_OPT},
     {"ci", required_argument, NULL, FORCE_CI_OPT},
@@ -255,11 +243,6 @@ const char *built_info[] = {
 #else
     "Built with linux dvb client",
 #endif
-#ifdef NO_BACKTRACE
-    "Built without backtrace",
-#else
-    "Built with backtrace",
-#endif
 #ifdef DISABLE_NETCVCLIENT
     "Built without netceiver",
 #else
@@ -269,14 +252,6 @@ const char *built_info[] = {
     "Built without ddci",
 #else
     "Built with ddci",
-#endif
-#ifdef DISABLE_T2MI
-    "Built without t2mi",
-#else
-    "Built with t2mi",
-#endif
-#ifdef AXE
-    "Built for satip-axe",
 #endif
     NULL};
 
@@ -318,9 +293,6 @@ void usage() {
 #endif
         "\n\t[-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w "
         "http_server[:port]] \n "
-#ifdef AXE
-        "[-7 M1:S1[,M2:S2]] [-A SRC1:INP1:DISEQC1[,SRC2:INP2:DISEQC2]]\n\n"
-#endif
         "\t[-x http_port] [-X xml_path] [-y rtsp_port] [-I name_service]\n\n\
 Help\n\
 -------\n\
@@ -506,7 +478,7 @@ Help\n\
         "\
 * -S --slave ADAPTER1,ADAPTER2-ADAPTER4[,..]:MASTER - specify slave adapters	\n\
 	* Allows specifying bonded adapters (multiple adapters connected with a splitter to the same LNB)\n\
-	* This feature is used by FBC receivers and AXE to specify the source input of the adapter\n\
+	* This feature is used by FBC receivers to specify the source input of the adapter\n\
 	Only one adapter needs to be master all others needs to have this parameter specified\n\
 	eg: -S 1-2:0\n\
 	- specifies adapter 1 to 2 as slave, in this case adapter 0 is the master that controls the LNB\n\
@@ -566,18 +538,6 @@ Help\n\
 * -9 --disable-pmt-scan: Disables scanning PMTs and only reads the PMTs that are requested by the client\n\
 \t* Provides more reliable decrypting for channels included in multiple providers\n\
 \n"
-#ifdef AXE
-        "\
-* -W --power num: power to all inputs (0 = only active inputs, 1 = all inputs)\n\
-\n\
-* -Q --quattro  quattro LNB config (H/H,H/V,L/H,L/V)\n\
-\n\
-* -8 --quattro-hiband hiband\n\
-	* if hiband is 0, do not allow hiband\n\
-	* if hiband is 1, allow hiband\n\
-\n\
-"
-#endif
 #ifndef DISABLE_DVBCA
         "\
 * -3 --ca-pin mapping_string: set the pin for CIs\n\
@@ -600,7 +560,7 @@ By default every CAM supports 1 channels\n\
 #endif
         ,
         app_name, ADAPTER_BUFFER, DVR_BUFFER, modules,
-        opts.no_threads ? "DISABLED" : "ENABLED");
+        "ENABLED");
     exit(1);
 }
 
@@ -700,19 +660,6 @@ void set_options(int argc, char *argv[]) {
     opts.max_pids = 0;
     opts.dvbapi_offset =
         0; // offset for multiple dvbapi clients to the same server
-#if defined(AXE)
-    opts.max_pids = 32;
-#elif defined(__sh__)
-    opts.max_pids = 20; // allow oscam to use couple of pids as well
-#endif
-
-#ifdef NO_BACKTRACE
-    opts.no_threads = 1;
-#endif
-#ifdef AXE
-    opts.no_threads = 1;
-    opts.document_root = "/usr/share/minisatip/html";
-#endif
 
     opts.name_app = app_name;
     char short_opts[200];
@@ -846,10 +793,6 @@ void set_options(int argc, char *argv[]) {
             opts.adapter_buffer = (opts.adapter_buffer / 188) * 188;
             if (opts.adapter_buffer < 1316)
                 opts.adapter_buffer = 1316; // 188 * 7 = 1316
-#ifdef AXE
-            opts.dvr_buffer += 7 * 188 - 1;
-            opts.dvr_buffer -= opts.dvr_buffer % (7 * 188);
-#endif
             if (opts.dvr_buffer == 0)
                 opts.dvr_buffer = DVR_BUFFER;
 
@@ -1079,10 +1022,6 @@ void set_options(int argc, char *argv[]) {
             opts.cache_dir = optarg;
             break;
 
-        case THREADS_OPT:
-            opts.no_threads = 1 - opts.no_threads;
-            break;
-
         case DROP_ENCRYPTED_OPT:
             opts.drop_encrypted =
                 (opts.drop_encrypted == 0) ? 2 : (opts.drop_encrypted - 1);
@@ -1113,20 +1052,6 @@ void set_options(int argc, char *argv[]) {
             opts.pmt_scan = 1 - opts.pmt_scan;
             break;
 
-#ifdef AXE
-        case QUATTRO_OPT:
-            opts.quattro = 1;
-            break;
-
-        case QUATTRO_HIBAND_OPT:
-            opts.quattro_hiband = atoi(optarg) + 1;
-            break;
-
-        case AXE_POWER:
-            opts.axe_power = atoi(optarg) + 1;
-            break;
-
-#endif
 #ifndef DISABLE_DVBCA
         case CA_PIN_OPT:
             set_ca_adapter_pin(optarg);
@@ -1777,10 +1702,6 @@ int ssdp_reply(sockets *s) {
 
     // not my uuid
 
-#ifdef AXE
-    axe_set_network_led(1);
-#endif
-
     LOGM("Received SSDP packet (handle %d) from %s:%d", s->sock,
          get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa));
     LOGM("MSG querier >> process :\n%s", s->buf);
@@ -1967,11 +1888,8 @@ int main(int argc, char *argv[]) {
                                        NULL, (socket_action)signal_thread)))
         FAIL("sockets_add failed for signal thread");
 
-    if (!opts.no_threads) {
-        set_socket_thread(sock_signal, start_new_thread((char *)"signal"));
-        sockets_timeout(sock_signal, 300); // 300 ms
-    } else
-        sockets_timeout(sock_signal, 1000); // 1 sec
+    set_socket_thread(sock_signal, start_new_thread((char *)"signal"));
+    sockets_timeout(sock_signal, 300); // 300 ms
 
     if (0 > (sock_bw = sockets_add(SOCK_TIMEOUT, NULL, -1, TYPE_UDP, NULL, NULL,
                                    (socket_action)calculate_bw)))
@@ -2155,11 +2073,6 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr) {
     sockets_writev_prio(s->id, iov, binary ? 2 : 1, 1);
 }
 
-#ifdef AXE
-int has_axe = 1;
-#else
-int has_axe = 0;
-#endif
 #ifndef DISABLE_PMT
 int has_pmt = 1;
 #else
@@ -2167,7 +2080,6 @@ int has_pmt = 0;
 #endif
 
 _symbols minisatip_sym[] = {
-    {"has_axe", VAR_INT, &has_axe, 1, 0, 0},
     {"has_pmt", VAR_INT, &has_pmt, 1, 0, 0},
     {"name_app", VAR_PSTRING, &opts.name_app, 0, 0, 0},
     {"http_host", VAR_PSTRING, &opts.http_host, 0, 0, 0},

@@ -59,7 +59,6 @@ typedef struct struct_opts {
 #endif
     const char *document_root;
     const char *xml_path;
-    char no_threads;
     int th_priority;
     int diseqc_fast;
     int diseqc_addr;

@@ -41,7 +41,7 @@ int test_hash_table() {
     ASSERT(NULL == getItem(&h, KEY_FOR_INDEX(0)),
            "getItem is expected to fail after delete");
     for (i = 1; i < MAX_HASH; i++) {
-        int *p = getItem(&h, KEY_FOR_INDEX(i));
+        int *p = (int *)getItem(&h, KEY_FOR_INDEX(i));
         ASSERT(p != NULL, "getItem should not fail");
         ASSERT(i == *p, "getItem should return the correct key");
         ASSERT(0 == delItem(&h, KEY_FOR_INDEX(i)),

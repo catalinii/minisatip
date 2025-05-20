@@ -55,6 +55,13 @@
 
 #define DEFAULT_LOG LOG_DVBCA
 
+#undef FOREACH_ITEM
+#define FOREACH_ITEM(h, a)                                                     \
+    for (i = 0; i < (h)->size; i++)                                            \
+        if (HASH_ITEM_ENABLED((h)->items[i]) && (a = (ddci_mapping_table_t *)(h)->items[i].data))
+
+
+
 extern ddci_device_t *ddci_devices[MAX_ADAPTERS];
 extern adapter *a[MAX_ADAPTERS];
 extern SPMT *pmts[MAX_PMT];
@@ -121,7 +128,13 @@ int test_channels() {
     ASSERT(getItem(&h, 300) != NULL, "Saved SID 300 not found in table");
     ASSERT(getItem(&h, 400) != NULL, "Saved SID 400 not found in table");
     int ch = 0;
-    FOREACH_ITEM(&h, t) { ch++; }
+    
+    for (i = 0; i < h.size; i++) 
+        if (HASH_ITEM_ENABLED(h.items[i]))
+            ch++;
+    
+
+
     ASSERT(ch == 3, "Expected two channels after loading");
     free_hash(&h);
     return 0;
@@ -302,7 +315,7 @@ int is_err = 0;
 int expected_pid = 0;
 int did_write = 0;
 int xwritev(int fd, const struct iovec *io, int len) {
-    unsigned char *b = io[0].iov_base;
+    unsigned char *b = (unsigned char *)io[0].iov_base;
     LOGM("called writev with len %d, first pid %d", len, PID_FROM_TS(b));
     did_write = 1;
     if (len < 2) {

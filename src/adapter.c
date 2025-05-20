@@ -49,15 +49,9 @@
 #include "netceiver.h"
 #endif
 
-#ifdef AXE
-#include "axe.h"
-#endif
-
 #ifndef DISABLE_DDCI
 #include "ddci.h"
 #endif
-
-#include "t2mi.h"
 
 #define DEFAULT_LOG LOG_ADAPTER
 
@@ -142,9 +136,6 @@ void find_adapters() {
 #ifndef DISABLE_NETCVCLIENT
     find_netcv_adapter(a);
 #endif
-#ifdef AXE
-    find_axe_adapter(a);
-#endif
 #ifndef DISABLE_DDCI
     find_ddci_adapter(a);
 #endif
@@ -174,21 +165,8 @@ int adapter_timeout(sockets *s) {
         return 0;
     }
 
-#ifndef AXE
     int64_t rtime = getTick(), max_close = rtime - ad->adapter_timeout + 2000;
     int i;
-    if (opts.no_threads) {
-        adapter *ad1;
-        for (i = 0; i < MAX_ADAPTERS; i++)
-            if ((ad1 = get_adapter_nw(i))) {
-                if (rtime - ad1->rtime < s->timeout_ms)
-                    do_close = 0;
-                if (max_close < ad1->rtime) {
-                    max_close = ad1->rtime;
-                    LOGM("max_close set to %jd for adapter %d", max_close, i);
-                }
-            }
-    }
     for (i = 0; i < MAX_ADAPTERS; i++)
         if (a[i] && (a[i]->master_source == ad->id) && ad->enabled &&
             a[i]->enabled) {
@@ -203,7 +181,6 @@ int adapter_timeout(sockets *s) {
         s->sid, ad->adapter_timeout / 1000, do_close, max_close);
     if (!do_close)
         s->rtime = max_close;
-#endif
     return do_close;
 }
 
@@ -429,11 +406,9 @@ int close_adapter(int na) {
     ad->snr = 0;
     ad->db = MAX_DB;
     ad->db_snr_map = 1.0;
-#ifndef AXE
     ad->old_diseqc = -1;
     ad->old_hiband = -1;
     ad->old_pol = -1;
-#endif
     sock = ad->sock;
     ad->sock = -1;
     if (sock >= 0) // avoid locking the socket after the adapter
@@ -959,7 +934,7 @@ int update_pids(int aid) {
 }
 
 void post_tune(adapter *ad) {
-#if !defined(DISABLE_PMT) || !defined(DISABLE_T2MI)
+#if !defined(DISABLE_PMT)
     int aid = ad->id;
     LOGM("adapter post_tune: aid %d", aid);
 #endif
@@ -981,12 +956,6 @@ void post_tune(adapter *ad) {
         }
     }
     pmt_tune(ad);
-#endif
-#ifndef DISABLE_T2MI
-    SPid *p_t2mi = find_pid(aid, T2MI_PID);
-    if (!p_t2mi) {
-        mark_pid_add(-1, aid, T2MI_PID);
-    }
 #endif
 }
 
@@ -2102,9 +2071,7 @@ int signal_thread(sockets *s) {
             0) // make sure the kernel has updated the status
             continue;
         // do not get the signal when the adapter is being changed
-        if (!opts.no_threads && ad->mutex.state != 0)
-            continue;
-        if (opts.no_threads && !ad->fast_status && status >= 0)
+        if (ad->mutex.state != 0)
             continue;
         ts = getTick();
         ad->get_signal(ad);

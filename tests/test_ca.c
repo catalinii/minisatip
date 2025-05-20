@@ -91,21 +91,21 @@ int test_create_capmt() {
     add_pmt_to_capmt(&d, get_pmt(p2), 1);
     SPMT *pmt = get_pmt(p1);
     pmt->stream_pids = 2;
-    pmt->stream_pid[0] = _malloc(sizeof(SStreamPid));
+    pmt->stream_pid[0] = (SStreamPid *) _malloc(sizeof(SStreamPid));
     pmt->stream_pid[0]->pid = 501;
     pmt->stream_pid[0]->type = 2;
     pmt->stream_pid[0]->pid = 502;
     pmt->stream_pid[0]->type = 3;
-    pmt->stream_pid[1] = _malloc(sizeof(SStreamPid));
+    pmt->stream_pid[1] = (SStreamPid *)_malloc(sizeof(SStreamPid));
 
     pmt = get_pmt(p2);
     pmt->stream_pids = 2;
-    pmt->stream_pid[0] = _malloc(sizeof(SStreamPid));
+    pmt->stream_pid[0] = (SStreamPid *)_malloc(sizeof(SStreamPid));
     pmt->stream_pid[0]->pid = 601;
     pmt->stream_pid[0]->type = 2;
     pmt->stream_pid[0]->pid = 602;
     pmt->stream_pid[0]->type = 3;
-    pmt->stream_pid[1] = _malloc(sizeof(SStreamPid));
+    pmt->stream_pid[1] = (SStreamPid *)_malloc(sizeof(SStreamPid));
 
     int len = create_capmt(d.capmt, 1, clean, sizeof(clean), 0, 0);
     if (len <= 0)

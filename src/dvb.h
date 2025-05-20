@@ -262,11 +262,7 @@ typedef enum dvb_snr_table {
 
 #define MAX_PIDS 128
 #define MAX_DVBAPI_SYSTEMS 22
-#ifdef NO_BACKTRACE
-#define MAX_STREAMS_PER_PID 8
-#else
 #define MAX_STREAMS_PER_PID 16
-#endif
 
 #define USE_DVR 0   // Always use DVR device for the stream
 #define USE_DEMUX 1 // Always use the DEMUX device for the stream

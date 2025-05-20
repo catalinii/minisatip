@@ -42,17 +42,14 @@ void _log(const char *file, int line, const char *fmt, ...) {
 
     /* Check if the message should be logged */
     stid[0] = 0;
-    if (!opts.no_threads) {
-        pthread_mutex_lock(&log_mutex);
-        snprintf(stid, sizeof(stid) - 1, " %s",
-                 thread_info[thread_index].thread_name);
-        stid[sizeof(stid) - 1] = 0;
-    }
+    pthread_mutex_lock(&log_mutex);
+    snprintf(stid, sizeof(stid) - 1, " %s",
+        thread_info[thread_index].thread_name);
+    stid[sizeof(stid) - 1] = 0;
 
     if (!fmt) {
         printf("NULL format at %s:%d !!!!!", file, line);
-        if (!opts.no_threads)
-            pthread_mutex_unlock(&log_mutex);
+        pthread_mutex_unlock(&log_mutex);
         return;
     }
     idx = 1 - idx;
@@ -104,8 +101,7 @@ void _log(const char *file, int line, const char *fmt, ...) {
             puts(output[idx]);
     }
     fflush(stdout);
-    if (!opts.no_threads)
-        pthread_mutex_unlock(&log_mutex);
+    pthread_mutex_unlock(&log_mutex);
 }
 
 char *get_current_timestamp_log(void) {

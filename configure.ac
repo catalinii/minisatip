@@ -7,7 +7,7 @@ AC_CONFIG_SRCDIR([src/minisatip.h])
 #AC_CONFIG_HEADERS([config.h])
 
 # Checks for programs.
-AC_PROG_CC
+AC_PROG_CXX
 
 # Checks for libraries.
 # FIXME: Replace `main' with a function in `-lrt':
@@ -31,7 +31,6 @@ DVBCSA=0
 NETCVCLIENT=0
 SATIPCLIENT=0
 STATIC=0
-AXE=0
 DVBAPI=0
 
 AC_ARG_ENABLE([linuxdvb],
@@ -65,14 +64,6 @@ else
 FM="$FM\n$CI disabled"
 fi
 
-AC_MSG_NOTICE([ == Checking Embedded == ])
-AC_CHECK_FUNCS([backtrace],[EMBEDDED=0],[EMBEDDED=1])
-if test "$EMBEDDED" = "1"; then
-FM="$FM\n$emb enabled"
-else
-FM="$FM\n$emb disabled"
-fi
-
 AC_ARG_ENABLE([dvbcsa],
   [AS_HELP_STRING([--disable-dvbcsa],
   [disable dvbcsa support (decrypting with dvbcsa)])])
@@ -103,7 +94,7 @@ AC_ARG_WITH([xml2],
   [specify libxml2 directory default=/usr/include/libxml2])],
   [xml2_dir=$with_xml2])
   
-CFLAGS="-I$xml2_dir"
+CXXFLAGS="-I$xml2_dir"
 
 cd src
 AC_CHECK_HEADERS([libnetceiver/netcv/headers.h],[NETCVCLIENT=1],[NETCVCLIENT=0])
@@ -114,7 +105,7 @@ if test "$NETCVCLIENT" = "1"; then
 FM="$FM\n$netcv enabled"
 else
 FM="$FM\n$netcv disabled"
-CFLAGS=
+CXXFLAGS=
 CPPFLAGS=
 fi
 
@@ -162,52 +153,36 @@ FM="$FM\n$dvbapi disabled"
 fi
 
 
-AC_ARG_ENABLE([axe],
-  [AS_HELP_STRING([--enable-axe],
-  [enable compilation for axe: Inverto IDL400])])
-
-AS_IF([test "x$enable_axe" = "xyes"], [
-AXE=1
-])
-  
-if test "$AXE" = "1"; then
-FM="$FM\n$axe enabled"
-else
-FM="$FM\n$axe disabled"
-fi
-
-ac_save_CFLAGS="$CFLAGS"
-CFLAGS="$CFLAGS -fstrict-flex-arrays"
+ac_save_CXXFLAGS="$CFLAGS"
+CXXFLAGS="$CFLAGS -fstrict-flex-arrays"
 
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([],
   [[int i = 1; (void) i;]])],
   [enable_strict_flex_array=1], [enable_strict_flex_array=0])
 
 AS_IF([test $enable_strict_flex_array -eq 0],
-  [CFLAGS="$ac_save_CFLAGS"])
+  [CXXFLAGS="$ac_save_CFLAGS"])
 
-ac_save_CFLAGS="$CFLAGS"
-CFLAGS="$CFLAGS -fsanitize=bounds -fsanitize-trap=all"
+ac_save_CXXFLAGS="$CFLAGS"
+CXXFLAGS="$CFLAGS -fsanitize=bounds -fsanitize-trap=all"
 
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([],
   [[int i = 1; (void) i;]])],
   [enable_bounds_check=1], [enable_bounds_check=0])
 
 AS_IF([test $enable_bounds_check -eq 0],
-  [CFLAGS="$ac_save_CFLAGS"])
+  [CXXFLAGS="$ac_save_CFLAGS"])
 
-FM="$FM\nCCFLAGS\t\t$CFLAGS"
+FM="$FM\nCCXXFLAGS\t\t$CFLAGS"
 
 
 AC_SUBST(LINUXDVB)
 AC_SUBST(DVBCSA)
 AC_SUBST(DVBCA)
-AC_SUBST(EMBEDDED)
 AC_SUBST(NETCVCLIENT)
 AC_SUBST(SATIPCLIENT)
 AC_SUBST(STATIC)
 AC_SUBST(DVBAPI)
-AC_SUBST(AXE)
 
 AC_CONFIG_FILES([src/Makefile])
 AC_CONFIG_FILES([tests/Makefile])

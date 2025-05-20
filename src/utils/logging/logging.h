@@ -34,7 +34,6 @@ extern __thread int thread_index;
 #define LOG_LOCK (1 << 9)
 #define LOG_NETCEIVER (1 << 10)
 #define LOG_DVBCA (1 << 11)
-#define LOG_AXE (1 << 12)
 #define LOG_SOCKET (1 << 13)
 #define LOG_UTILS (1 << 14)
 #define LOG_DMX (1 << 15)

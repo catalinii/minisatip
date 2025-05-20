@@ -24,9 +24,6 @@ extern _symbols dvbapi_sym[];
 #ifndef DISABLE_SATIPCLIENT
 extern _symbols satipc_sym[];
 #endif
-#ifdef AXE
-extern _symbols axe_sym[];
-#endif
 #ifndef DISABLE_PMT
 extern _symbols pmt_sym[];
 #endif
