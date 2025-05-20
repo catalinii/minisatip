@@ -43,7 +43,7 @@ jobs:
     - name: Build clang
       run: |
        make clean
-       ./configure --enable-linuxdvb --enable-dvbca --enable-dvbcsa --enable-netcv --enable-dvbapi CC=clang
+       ./configure --enable-linuxdvb --enable-dvbca --enable-dvbcsa --enable-netcv --enable-dvbapi CC=clang++
        make
 
     - name: Build without libssl-dev
