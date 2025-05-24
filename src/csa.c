@@ -27,7 +27,13 @@
 #include "utils.h"
 #include <arpa/inet.h>
 #include <ctype.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
 #include <dvbcsa/dvbcsa.h>
+#ifdef __cplusplus
+}
+#endif
 #include <errno.h>
 #include <fcntl.h>
 #include <math.h>

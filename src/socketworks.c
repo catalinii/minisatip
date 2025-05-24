@@ -426,9 +426,9 @@ int connect_local_socket(char *file, int blocking) {
     return sock;
 }
 
-int no_action(int s) { return 1; }
+int no_action(int s __attribute__((unused))) { return 1; }
 
-int sockets_accept(int socket, void *buf, int len, sockets *ss) {
+int sockets_accept(int socket __attribute__((unused)), void *buf __attribute__((unused)), size_t len __attribute__((unused)), sockets *ss) {
     int new_sock, sas, ni;
     USockAddr sa;
     sas = sizeof(sa);
@@ -452,7 +452,7 @@ int sockets_accept(int socket, void *buf, int len, sockets *ss) {
     return 1;
 }
 
-int sockets_read(int socket, void *buf, int len, sockets *ss, int *rv) {
+int sockets_read(int socket, void *buf, size_t len, sockets *ss, int *rv) {
     *rv = read(socket, buf, len);
     if (*rv > 0 && ss->type == TYPE_DVR && (opts.debug & LOG_DMX))
         _dump_packets("read ->", (unsigned char *)buf, *rv, ss->rlen);
@@ -460,7 +460,7 @@ int sockets_read(int socket, void *buf, int len, sockets *ss, int *rv) {
     return (*rv > 0);
 }
 
-int sockets_recv(int socket, void *buf, int len, sockets *ss, int *rv) {
+int sockets_recv(int socket, void *buf, size_t len, sockets *ss, int *rv) {
     int slen = sizeof(ss->sa);
     *rv = recvfrom(socket, buf, len, 0, &ss->sa.sa, (socklen_t *)&slen);
     // 0 is totally acceptable for UDP
@@ -573,7 +573,7 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
     if (ss->type == TYPE_UDP || ss->type == TYPE_RTCP)
         ss->read = (read_action)sockets_recv;
     else if (ss->type == TYPE_SERVER)
-        ss->read = (read_action)sockets_accept;
+        ss->read = (read_action)(void *)sockets_accept;
     ss->events = POLLIN | POLLPRI;
     if (type & TYPE_CONNECT)
         ss->events |= POLLOUT;

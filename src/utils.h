@@ -36,7 +36,7 @@ int init_utils(char *arg0);
 void _hexdump(const char *desc, void *addr, int len);
 uint32_t crc_32(const uint8_t *data, int datalen);
 void _dump_packets(const char *message, unsigned char *b, int len, int packet_offset);
-int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, char *cc,
+int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, int16_t *cc,
                  int pid);
 void write_buf_to_file(char *file, uint8_t *buf, int len);
 int mkdir_recursive(const char *path);

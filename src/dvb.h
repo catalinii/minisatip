@@ -354,7 +354,7 @@ typedef struct struct_pid {
     int dec_err;           // decrypt errors, continuity counters
     uint8_t is_decrypted;  // Set when first decrypted
     int16_t pmt, filter;
-    char cc, cc1, cc2;
+    int16_t cc, cc1, cc2;
     int sock; // sock_id
 #ifdef CRC_TS
     uint32_t crc;

@@ -100,7 +100,7 @@ void http_client_read(sockets *s) {
     return;
 }
 
-int http_client(char *url, const char *request, void *callback, void *opaque) {
+int http_client(char *url, void *callback, void *opaque) {
     Shttp_client *h;
     int id;
     char *req;
@@ -135,7 +135,7 @@ int http_client(char *url, const char *request, void *callback, void *opaque) {
         LOG_AND_RETURN(1, "%s: connect to %s:%d failed", __FUNCTION__, h->host,
                        h->port);
     http_client_sock = sockets_add(sock, NULL, -1, TYPE_TCP | TYPE_CONNECT,
-                                   (socket_action)http_client_read,
+                                   (socket_action)(void *)http_client_read,
                                    (socket_action)http_client_close,
                                    (socket_action)http_client_close);
     if (http_client_sock < 0)

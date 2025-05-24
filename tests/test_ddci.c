@@ -401,7 +401,7 @@ int test_create_pat() {
     uint8_t packet[188];
     int pid = 4096;
     int pmt_id = pmt_add(0, 0x66, pid);
-    char cc;
+    int16_t cc;
     int psi_len;
     SFilter f;
     adapter ad;
@@ -485,7 +485,7 @@ int test_create_sdt() {
     f.id = 0;
     f.adapter = 0;
     uint8_t packet[188];
-    char cc = 1;
+    int16_t cc = 1;
     int ts_len = buffer_to_ts(packet, 188, sdt, sdt_len, &cc, 17);
     LOG("TS length: %d", ts_len);
     _hexdump("TS", packet, ts_len);
@@ -518,7 +518,7 @@ int test_create_pmt() {
     uint8_t psi[188];
     uint8_t packet[188];
     adapter ad;
-    char cc;
+    int16_t cc;
     int psi_len;
     SFilter f;
     memset(&d, 0, sizeof(d));
