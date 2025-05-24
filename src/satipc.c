@@ -1829,7 +1829,7 @@ int satip_getxml(void *x) {
     la = split(arg, satip_xml, ARRAY_SIZE(arg), ',');
     for (i = 0; i < la; i++) {
         safe_strncpy(sxd[i].url, arg[i]);
-        http_client(sxd[i].url, "", (void *)satip_getxml_data, &sxd[i]);
+        http_client(sxd[i].url, (void *)satip_getxml_data, &sxd[i]);
     }
     return 0;
 }

@@ -272,7 +272,8 @@ void posix_signal_handler(int sig, siginfo_t *siginfo, ucontext_t *ctx) {
     sp = ctx->uc_mcontext.pr;
     ip = ctx->uc_mcontext.pc;
 #endif
-    printf("RECEIVED SIGNAL %d - SP=%lX IP=%lX\n", sig, (long unsigned int)sp,
+
+printf("RECEIVED SIGNAL %d (%d) - SP=%lX IP=%lX\n", sig, siginfo->si_code, (long unsigned int)sp,
            (long unsigned int)ip);
 
     print_trace();
@@ -721,7 +722,7 @@ void _dump_packets(const char *message, unsigned char *b, int len,
     }
 }
 
-int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, char *cc,
+int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, int16_t *cc,
                  int pid) {
     int pos = 0, left = 0, len = 0;
     uint8_t *b;

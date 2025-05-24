@@ -18,7 +18,7 @@ typedef struct ddci_pmt {
     int id;
     int ver;
     int pcr_pid;
-    char cc;
+    int16_t cc;
     uint32_t crc;
 } ddci_pmt_t;
 
@@ -35,7 +35,7 @@ typedef struct ddci_device {
     uint64_t read_index[MAX_ADAPTERS]; // read index per adapter
     uint64_t last_pat, last_sdt, last_pmt;
     int tid, ver;
-    char pat_cc, sdt_cc, eit_cc;
+    int16_t pat_cc, sdt_cc, eit_cc;
     char disable_cat;
     SHashTable mapping;
     SFIFO fifo;

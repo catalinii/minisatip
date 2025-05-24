@@ -64,7 +64,7 @@ char absolute_switch;
 SMutex a_mutex;
 
 int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2, tuner_at, tuner_ac;
-char fe_map[2 * MAX_ADAPTERS];
+int16_t fe_map[2 * MAX_ADAPTERS];
 void find_dvb_adapter(adapter **a);
 
 adapter *adapter_alloc() {
@@ -2057,7 +2057,7 @@ int delsys_match(adapter *ad, int del_sys) {
     return 0;
 }
 
-int signal_thread(sockets *s) {
+int signal_thread(sockets *s __attribute__((unused))) {
     int i, status;
     int64_t ts, ctime;
     adapter *ad;
