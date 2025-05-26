@@ -58,12 +58,12 @@ int read_fd, id;
 int test_socket_enque_highprio() {
     sockets *ss = s[id];
     struct iovec iov[2];
-    iov[0].iov_base = "test1";
+    iov[0].iov_base = (void *)"test1";
     iov[0].iov_len = 5;
-    iov[1].iov_base = "test2";
+    iov[1].iov_base = (void *)"test2";
     iov[1].iov_len = 5;
     socket_enque_highprio(ss, iov, 2);
-    iov[0].iov_base = "test3";
+    iov[0].iov_base = (void *)"test3";
     socket_enque_highprio(ss, iov, 1);
     if (strncmp((char *)ss->prio_data, "test1test2test3", ss->prio_data_len))
         LOG_AND_RETURN(1, "expected != the actual result: %s len %d",
@@ -87,13 +87,13 @@ int test_socket_writev_flush_enqued() {
     // flush enqued data (everything after 0x24 is not written)
     ss->fifo.write_index = 1;
     ss->fifo.read_index = 0; // trigger buffering
-    char *data = ss->fifo.data;
+    char *data = (char *)ss->fifo.data;
     data[0] = '0';
-    sockets_write(id, "1", 1);
+    sockets_write(id, (void *)"1", 1);
     sockets_write(id, start_rtsp_frame, sizeof(start_rtsp_frame));
     sockets_write(id, buf, sizeof(buf) / 2);
     ss->flush_enqued_data = 1;
-    sockets_write(id, "2", 1);
+    sockets_write(id, (void *)"2", 1);
     flush_socket(ss);
     if (3 != (rv = read(read_fd, buf, sizeof(buf))))
         LOG_AND_RETURN(2, "read unexpected number of bytes %d", rv);
@@ -151,7 +151,7 @@ int test_socket_buffering() {
 
     ASSERT_EQUAL(ss->overflow, 10, "Expected overflow");
     // prio data
-    iov[0].iov_base = "XYZ";
+    iov[0].iov_base = (void *)"XYZ";
     iov[0].iov_len = 3;
     sockets_writev_prio(id, iov, 1, 1);
     _hexdump("buffered data: ", ss->fifo.data, 100);
