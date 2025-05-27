@@ -1,5 +1,5 @@
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
 
 /*
  * DVB String conversion according to EN 300 468, Annex A

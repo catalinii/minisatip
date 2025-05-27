@@ -1170,11 +1170,14 @@ void set_options(int argc, char *argv[]) {
     opts.rtsp_host = (char *)_malloc(MAX_HOST);
     sprintf(opts.rtsp_host, "%s:%d", lip, opts.rtsp_port);
 
-    LOG("Listening configuration RTSP:%s (bind address: %s), HTTP:%s (bind address: %s)",
+    LOG("Listening configuration RTSP:%s (bind address: %s), HTTP:%s (bind "
+        "address: %s)",
         opts.rtsp_host ? opts.rtsp_host : "(null)",
         opts.bind ? opts.bind : "(null)",
         opts.http_host ? opts.http_host : "(null)",
-        opts.bind_http ? opts.bind_http : opts.bind ? opts.bind : "(null)");
+        opts.bind_http ? opts.bind_http
+        : opts.bind    ? opts.bind
+                       : "(null)");
 
     opts.datetime_compile = (char *)_malloc(64);
     sprintf(opts.datetime_compile, "%s | %s", __DATE__, __TIME__);
@@ -1266,7 +1269,7 @@ int read_rtsp(sockets *s) {
     LOG("Read RTSP (sock %d, handle %d) [%s:%d] sid %d, len: %d", s->id,
         s->sock, get_sockaddr_host(s->sa, ra, sizeof(ra)),
         get_sockaddr_port(s->sa), s->sid, rlen);
-    LOGM("MSG client >> process :\n%s", s->buf); //LOGM->LOG
+    LOGM("MSG client >> process :\n%s", s->buf); // LOGM->LOG
 
     if ((s->type != TYPE_HTTP) &&
         (strncasecmp((const char *)s->buf, "GET", 3) == 0)) {
@@ -1933,7 +1936,8 @@ int main(int argc, char *argv[]) {
     readBootID();
     if ((rtsp = tcp_listen(opts.bind, opts.rtsp_port, opts.use_ipv4_only)) < 1)
         FAIL("RTSP: Could not listen on port %d", opts.rtsp_port);
-    if ((http = tcp_listen(opts.bind_http, opts.http_port, opts.use_ipv4_only)) < 1)
+    if ((http = tcp_listen(opts.bind_http, opts.http_port,
+                           opts.use_ipv4_only)) < 1)
         FAIL("Could not listen on http port %d", opts.http_port);
     if (!opts.disable_ssdp) {
         if ((ssdp = udp_bind(opts.bind, 1900, opts.use_ipv4_only)) < 1)
@@ -2065,8 +2069,8 @@ int readBootID() {
         fprintf(f, "%d %d %s", opts.bootid, opts.device_id, opts.uuid);
         fclose(f);
     }
-    LOG("Running with bootid %d, device_id %d, UUID %s",
-        opts.bootid, opts.device_id, opts.uuid);
+    LOG("Running with bootid %d, device_id %d, UUID %s", opts.bootid,
+        opts.device_id, opts.uuid);
     return opts.bootid;
 }
 

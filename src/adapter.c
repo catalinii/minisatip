@@ -2144,8 +2144,9 @@ int signal_thread(sockets *s) {
             LOG("get_signal%s took %jd ms for adapter %d handle %d (status: "
                 "%d, ber: "
                 "%d, strength:%d, snr: %d, force scan %d)",
-                (ad->legacy_dvbapi == 1) ? "_old" : "_new", ctime - ts, ad->id, ad->fe,
-                ad->status, ad->ber, ad->strength, ad->snr, opts.force_scan);
+                (ad->legacy_dvbapi == 1) ? "_old" : "_new", ctime - ts, ad->id,
+                ad->fe, ad->status, ad->ber, ad->strength, ad->snr,
+                opts.force_scan);
     }
     return 0;
 }

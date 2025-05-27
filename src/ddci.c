@@ -377,9 +377,8 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
         return TABLES_RESULT_OK;
     }
 
-
-    LOG("%s: adapter %d, pmt %d, pid %d, sid %d, name: %s",
-        __FUNCTION__, ad->id, pmt->id, pmt->pid, pmt->sid, pmt->name);
+    LOG("%s: adapter %d, pmt %d, pid %d, sid %d, name: %s", __FUNCTION__,
+        ad->id, pmt->id, pmt->pid, pmt->sid, pmt->name);
 
     channel = getItem(&channels, pmt->sid);
     if (!channel) {
@@ -403,7 +402,8 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     ddid = is_pmt_running(pmt);
     if (ddid == -1)
         ddid = find_ddci_for_pmt(channel, pmt);
-    // Negative return values are used to distinguish from valid return values (>= 0)    
+    // Negative return values are used to distinguish from valid return values
+    // (>= 0)
     if (ddid == -TABLES_RESULT_ERROR_RETRY)
         return TABLES_RESULT_ERROR_RETRY;
     else if (ddid == -TABLES_RESULT_ERROR_NORETRY)
@@ -445,8 +445,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     }
 
     // if the CAT is not mapped, add it
-    if (!get_pid_mapping(d, pmt->adapter, 1)) 
-    {
+    if (!get_pid_mapping(d, pmt->adapter, 1)) {
         LOG("Mapping CAT to PMT %d from transponder %d, DDCI transponder %d",
             pmt->id, ad->transponder_id, d->tid)
         add_pid_mapping_table(ad->id, 1, pmt->id, d, 1);
@@ -650,7 +649,7 @@ int ddci_create_eit(ddci_device_t *d, int sid, uint8_t *eit, int version) {
         time(NULL) - 3600; // let's have the event start one hour in the past
     struct tm *tm = localtime_r(&t, &tm_r);
     uint16_t MJD = YMDtoMJD(tm->tm_year, tm->tm_mon + 1, tm->tm_mday);
-    
+
     uint8_t *p = eit;
 
     *p++ = 0x00; // pointer field (payload unit start indicator is set)
@@ -665,17 +664,17 @@ int ddci_create_eit(ddci_device_t *d, int sid, uint8_t *eit, int version) {
     copy16(p, 0, sid);
     p += 2;
     *p++ = 0xC1 | ((version & 0x0F) << 1);
-    *p++ = 0x00;        // section number
-    *p++ = 0x00;        // last section number
-    *p++ = 0x00;        // transport stream id
-    *p++ = 0x00;        // ...
-    *p++ = 0x00;        // original network id
-    *p++ = 0x00;        // ...
-    *p++ = 0x00;        // segment last section number
-    *p++ = 0x4E;        // last table id
-    *p++ = 0x00;        // event id
-    *p++ = 0x01;        // ...
-    copy16(p, 0, MJD);  // start time
+    *p++ = 0x00;       // section number
+    *p++ = 0x00;       // last section number
+    *p++ = 0x00;       // transport stream id
+    *p++ = 0x00;       // ...
+    *p++ = 0x00;       // original network id
+    *p++ = 0x00;       // ...
+    *p++ = 0x00;       // segment last section number
+    *p++ = 0x4E;       // last table id
+    *p++ = 0x00;       // event id
+    *p++ = 0x01;       // ...
+    copy16(p, 0, MJD); // start time
     p += 2;
     *p++ = tm->tm_hour; // ...
     *p++ = tm->tm_min;  // ...
@@ -686,7 +685,7 @@ int ddci_create_eit(ddci_device_t *d, int sid, uint8_t *eit, int version) {
     uint8_t r = 4 << 5; // running_status = 4
     r ^= 1 << 4;        // free_CA_mode = 1
     *p++ = r;
-    *p++ = 0x00;        // descriptors_length
+    *p++ = 0x00; // descriptors_length
     uint8_t *DescriptorsStart = p;
     *p++ = 0x55; // parental descriptor tag
     *p++ = 0x04; // descriptor length
@@ -846,7 +845,8 @@ int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len) {
 
                 // Add an EIT table for each channel
                 psi_len = ddci_create_eit(d, pmt->sid, psi, d->pmt[i].ver);
-                pos += buffer_to_ts(dst + pos, len - pos, psi, psi_len, &d->eit_cc, 18);
+                pos += buffer_to_ts(dst + pos, len - pos, psi, psi_len,
+                                    &d->eit_cc, 18);
             }
         }
         d->last_pmt = ctime;
@@ -1072,7 +1072,7 @@ int ddci_post_init(adapter *ad) {
     if (d->max_channels > MAX_CHANNELS_ON_CI) {
         d->max_channels = MAX_CHANNELS_ON_CI;
     }
-    
+
     sockets *s = get_sockets(ad->sock);
     s->action = (socket_action)ddci_read_sec_data;
     if (ad->fe_sock >= 0)

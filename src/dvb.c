@@ -211,9 +211,11 @@ int detect_dvb_parameters(char *s, transponder *tp) {
             tp->tmode = map_int(arg[i] + 6, fe_tmode);
         if (strncmp("bw=", arg[i], 3) == 0) {
             tp->bw = map_float(arg[i] + 3, 1000000);
-            if (tp->bw < 0 || tp->bw > 100000000)  // Fix clients that send bw=8000 !
+            if (tp->bw < 0 ||
+                tp->bw > 100000000) // Fix clients that send bw=8000 !
                 tp->bw = map_float(arg[i] + 3, 1000);
-            if (tp->bw < 0 || tp->bw > 100000000)  // Fix clients that send bw=8000000 !
+            if (tp->bw < 0 ||
+                tp->bw > 100000000) // Fix clients that send bw=8000000 !
                 tp->bw = map_float(arg[i] + 3, 1);
         }
         if (strncmp("specinv=", arg[i], 8) == 0)
@@ -1783,7 +1785,7 @@ void adapt_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
 // returns the strength and SNR between 0 .. 65535
 
 void get_signal_old(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
-                uint16_t *snr, uint16_t *db) {
+                    uint16_t *snr, uint16_t *db) {
     *status = 0;
     *ber = *snr = *strength = 0;
     *db = 65535;

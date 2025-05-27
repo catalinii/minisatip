@@ -153,8 +153,8 @@ typedef struct ca_slot_info {
 
 #define CA_MAX_SLOTS 16
 typedef struct {
-  ca_caps_t cap;
-  ca_slot_info_t info[CA_MAX_SLOTS];
+    ca_caps_t cap;
+    ca_slot_info_t info[CA_MAX_SLOTS];
 } recv_cacaps_t;
 
 typedef struct recv_festatus {

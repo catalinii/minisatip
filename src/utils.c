@@ -30,6 +30,7 @@
 #include "utils/alloc.h"
 #include <arpa/inet.h>
 #include <ctype.h>
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -52,8 +53,6 @@
 #include <syslog.h>
 #include <time.h>
 #include <unistd.h>
-#include <dirent.h>
-#include <errno.h>
 
 #if !defined(__mips__) && !defined(NO_BACKTRACE)
 #include <execinfo.h>
@@ -599,7 +598,7 @@ int init_utils(char *arg0) {
 }
 
 void _hexdump(char *desc, void *addr, int len) {
-    // Each character needs roughly 5 bytes to print. Worst case scenario is 
+    // Each character needs roughly 5 bytes to print. Worst case scenario is
     // that one character ends up on a new line, requiring 74 bytes to print.
     int i, pos = 0, bl = (len * 5) + 74;
     char buff[17];
@@ -768,7 +767,7 @@ int mkdir_recursive(const char *path) {
     char *p = NULL;
     size_t len;
 
-    // Try to create the directory. We don't care at this point if the mkdir() 
+    // Try to create the directory. We don't care at this point if the mkdir()
     // calls fail
     snprintf(tmp, sizeof(tmp), "%s", path);
     len = strlen(tmp);

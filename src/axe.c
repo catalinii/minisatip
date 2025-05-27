@@ -58,7 +58,7 @@
 #endif
 
 void get_signal_old(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
-                uint16_t *snr, uint16_t *db);
+                    uint16_t *snr, uint16_t *db);
 int send_jess(adapter *ad, int fd, int freq, int pos, int pol, int hiband,
               diseqc *d);
 int send_unicable(adapter *ad, int fd, int freq, int pos, int pol, int hiband,
@@ -667,8 +667,8 @@ int axe_set_pid(adapter *ad, int i_pid) {
         LOG_AND_RETURN(-1, "pid %d > 8192 for ADAPTER %d", i_pid,
                        ad ? ad->id : -1);
     if (axe_dmxts_add_pid(ad->dvr, i_pid) < 0) {
-        LOG("failed setting filter on PID %d for ADAPTER %d (%s)", i_pid, ad->id,
-            strerror(errno));
+        LOG("failed setting filter on PID %d for ADAPTER %d (%s)", i_pid,
+            ad->id, strerror(errno));
         return -1;
     }
     LOG("setting filter on PID %d for ADAPTER %d", i_pid, ad->id);

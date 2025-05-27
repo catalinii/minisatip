@@ -3,8 +3,8 @@
 #include "adapter.h"
 #include "pmt.h"
 #include "tables.h"
-#include "utils/hash_table.h"
 #include "utils/fifo.h"
+#include "utils/hash_table.h"
 
 // Maximum number of PMTs (channels) supported per adapter
 #define MAX_CHANNELS_ON_CI 8

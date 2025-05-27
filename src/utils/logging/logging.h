@@ -46,7 +46,7 @@ extern __thread int thread_index;
 #define LOGL(level, a, ...)                                                    \
     {                                                                          \
         thread_info[thread_index].last_log = a;                                \
-        if ((level)&opts.log)                                                  \
+        if ((level) & opts.log)                                                \
             _log(__FILE__, __LINE__, a, ##__VA_ARGS__);                        \
     }
 
@@ -57,7 +57,7 @@ extern __thread int thread_index;
 #define DEBUGL(level, a, ...)                                                  \
     {                                                                          \
         thread_info[thread_index].last_log = a;                                \
-        if ((level)&opts.debug)                                                \
+        if ((level) & opts.debug)                                              \
             _log(__FILE__, __LINE__, a, ##__VA_ARGS__);                        \
     }
 #define DEBUGM(a, ...) DEBUGL(DEFAULT_LOG, a, ##__VA_ARGS__)
@@ -70,7 +70,7 @@ extern __thread int thread_index;
 
 #define FAIL(a, ...)                                                           \
     {                                                                          \
-        LOG0(a, ##__VA_ARGS__);                                            \
+        LOG0(a, ##__VA_ARGS__);                                                \
         unlink(pid_file);                                                      \
         exit(1);                                                               \
     }
