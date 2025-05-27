@@ -35,9 +35,10 @@ void add_join_thread(pthread_t t);
 int init_utils(char *arg0);
 void _hexdump(const char *desc, void *addr, int len);
 uint32_t crc_32(const uint8_t *data, int datalen);
-void _dump_packets(const char *message, unsigned char *b, int len, int packet_offset);
-int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, int16_t *cc,
-                 int pid);
+void _dump_packets(const char *message, unsigned char *b, int len,
+                   int packet_offset);
+int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen,
+                 int16_t *cc, int pid);
 void write_buf_to_file(char *file, uint8_t *buf, int len);
 int mkdir_recursive(const char *path);
 void sleep_msec(uint32_t msec);
@@ -55,7 +56,7 @@ void _strncpy(char *a, char *b, int len);
     do {                                                                       \
         int __r = snprintf((buf) + ptr, (size) - ptr, fmt);                    \
         ptr += __r;                                                            \
-        if (ptr >= (int) (size)) {                                                   \
+        if (ptr >= (int)(size)) {                                              \
             LOG("%s:%d buffer size too small (%d)", __FUNCTION__, __LINE__,    \
                 size);                                                         \
             ptr = (size) - 1;                                                  \
@@ -63,7 +64,7 @@ void _strncpy(char *a, char *b, int len);
     } while (0)
 
 #define strcatf(buf, ptr, fmt, ...)                                            \
-    strlcatf(buf, (int) (sizeof(buf) - 1), ptr, fmt, ##__VA_ARGS__)
+    strlcatf(buf, (int)(sizeof(buf) - 1), ptr, fmt, ##__VA_ARGS__)
 
 #define safe_strncpy(a, b) _strncpy(a, b, sizeof(a))
 
@@ -77,10 +78,11 @@ typedef ssize_t (*mywritev)(int fd, const struct iovec *io, int len);
 #endif
 
 #ifdef UTILS_C
-const char *loglevels[] = {"general",   "http", "socketworks", "stream", "adapter",
-                     "satipc",    "pmt",  "tables",      "dvbapi", "lock",
-                     "netceiver", "ca",   "axe",         "socket", "utils",
-                     "dmx",       "ssdp", "dvb",         NULL};
+const char *loglevels[] = {"general", "http",   "socketworks", "stream",
+                           "adapter", "satipc", "pmt",         "tables",
+                           "dvbapi",  "lock",   "netceiver",   "ca",
+                           "axe",     "socket", "utils",       "dmx",
+                           "ssdp",    "dvb",    NULL};
 mywritev _writev = writev;
 #else
 extern char *loglevels[];

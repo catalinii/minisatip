@@ -204,11 +204,9 @@ int get_json_state(char *buf, int len, char *sbuf, int slen) {
             }
             if (p->type < VAR_ARRAY) {
                 if (string) {
-                    int len2 =
-                        snprintf_pointer(sbuf, slen - 1, p->type,
-                                         p->addr, p->multiplier);
-                    ptr +=
-                        escape_json_string(buf + ptr, len - ptr, sbuf, len2);
+                    int len2 = snprintf_pointer(sbuf, slen - 1, p->type,
+                                                p->addr, p->multiplier);
+                    ptr += escape_json_string(buf + ptr, len - ptr, sbuf, len2);
                 } else
                     ptr += snprintf_pointer(buf + ptr, len - ptr, p->type,
                                             p->addr, p->multiplier);

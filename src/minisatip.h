@@ -25,12 +25,12 @@ extern char app_name[], version[];
         a[i] = ((v) >> 24) & 0xFF;                                             \
         a[i + 1] = ((v) >> 16) & 0xFF;                                         \
         a[i + 2] = ((v) >> 8) & 0xFF;                                          \
-        a[i + 3] = (v)&0xFF;                                                   \
+        a[i + 3] = (v) & 0xFF;                                                 \
     }
 #define copy16(a, i, v)                                                        \
     {                                                                          \
         a[i] = ((v) >> 8) & 0xFF;                                              \
-        a[i + 1] = (v)&0xFF;                                                   \
+        a[i + 1] = (v) & 0xFF;                                                 \
     }
 
 #define copy16r(v, a, i)                                                       \

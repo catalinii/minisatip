@@ -69,7 +69,7 @@ SMutex filters_mutex;
 int nfilters;
 
 const char *listmgmt_str[] = {"CLM_MORE", "CLM_FIRST", "CLM_LAST",
-                        "CLM_ONLY", "CLM_ADD",   "CLM_UPDATE"};
+                              "CLM_ONLY", "CLM_ADD",   "CLM_UPDATE"};
 
 static inline SPMT *get_pmt_for_existing_pid(SPid *p) {
     SPMT *pmt = NULL;
@@ -107,7 +107,7 @@ static inline void
 mark_padding_header(uint8_t *b) { // Generate a clean packet without any payload
     if ((b[3] & 0x10) == 0)       // No Payload...
     {
-        b[3] &= 0x3F;             // clean encrypted bits and pass it
+        b[3] &= 0x3F; // clean encrypted bits and pass it
         return;
     }
 
@@ -259,7 +259,7 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
     f->id = fid;
     f->opaque = opaque;
     f->pid = pid;
-    f->callback = (filter_function )callback;
+    f->callback = (filter_function)callback;
     f->flags = 0;
     f->len = 0;
     f->next_filter = -1;
@@ -662,7 +662,7 @@ void cw_decrypt_stream(SCW *cw, SPMT_batch *batch, int len) {
 // Return 0 if the packet was decrypted successfully, 1 otherwise
 int test_decrypt_packet(SCW *cw, SPMT_batch *start, int len) {
     uint8_t data[len * 188 + 10];
-    int i = 0; 
+    int i = 0;
     uint32_t pos = 0;
     LOGM("Testing len %d, CW: %s", len, cw_to_string(cw, (char *)data));
     SPMT_batch batch[len + 1];
@@ -1458,7 +1458,6 @@ int assemble_emm(SFilter *f, uint8_t *b) {
     return len;
 }
 
-
 int assemble_normal(SFilter *f, uint8_t *b) {
     int pid = PID_FROM_TS(b);
     int start = get_adaptation_len(b);
@@ -1469,16 +1468,18 @@ int assemble_normal(SFilter *f, uint8_t *b) {
         start += 1; // advance over the first 0
     }
     int left = 188 - start;
-    if (f->pos > FILTER_PACKET_SIZE )
-        LOG_AND_RETURN(0, "assemble_packet: len %d not valid for pid %d [%02X %02X %02X %02X %02X %02X]",
-            f->pos, pid, b[0], b[1], b[2], b[3], b[4], b[5]);
-    
+    if (f->pos > FILTER_PACKET_SIZE)
+        LOG_AND_RETURN(0,
+                       "assemble_packet: len %d not valid for pid %d [%02X "
+                       "%02X %02X %02X %02X %02X]",
+                       f->pos, pid, b[0], b[1], b[2], b[3], b[4], b[5]);
+
     memcpy(f->data + f->pos, b + start, left);
     f->pos += left;
 
     f->len = ((f->data[1] & 0xF) << 8) + f->data[2];
     f->len += 3;
-    
+
     if (f->pos < f->len)
         return 0;
     return f->len;
@@ -1620,10 +1621,11 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque) {
                 new_mask[1] = 0xFF;
                 new_filter[2] = b[i + 1];
                 new_mask[2] = 0xFF;
-                add_filter_mask(
-                    ad->id, pid, (void *)process_pmt, pmt,
-                    opts.pmt_scan && (existing_pmt == NULL) ? FILTER_ADD_REMOVE | FILTER_CRC : 0,
-                    new_filter, new_mask);
+                add_filter_mask(ad->id, pid, (void *)process_pmt, pmt,
+                                opts.pmt_scan && (existing_pmt == NULL)
+                                    ? FILTER_ADD_REMOVE | FILTER_CRC
+                                    : 0,
+                                new_filter, new_mask);
             }
             if (pmt_id >= 0)
                 seen_pmts[pmt_id] = 1;

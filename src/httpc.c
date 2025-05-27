@@ -141,7 +141,7 @@ int http_client(char *url, void *callback, void *opaque) {
     if (http_client_sock < 0)
         LOG_AND_RETURN(1, "%s: sockets_add failed", __FUNCTION__);
     h->opaque = opaque;
-    h->action = (http_client_action )callback;
+    h->action = (http_client_action)callback;
     set_sockets_sid(http_client_sock, id);
     safe_strncpy(h->req, req);
     sockets_timeout(http_client_sock, 2000); // 2s timeout

@@ -247,8 +247,9 @@ int satipc_reply(sockets *s) {
     if (sep)
         rc = map_intd(sep + 9, NULL, 0);
 
-    LOGM("MSG process << server :\n%s", s->buf); //LOGM->LOG
-    LOG("satipc_reply (adapter %d): sock %d (receiving from handle %d, state %d): "
+    LOGM("MSG process << server :\n%s", s->buf); // LOGM->LOG
+    LOG("satipc_reply (adapter %d): sock %d (receiving from handle %d, state "
+        "%d): "
         "[[ code %d ]]",
         s->sid, s->sock, s->id, sip->state, rc);
 
@@ -293,8 +294,9 @@ int satipc_reply(sockets *s) {
                 "%d",
                 sip->id, rc);
     }
-    LOG("satipc %d, expect_reply %d, want_tune %d want commit %d, state %d", sip->id,
-        sip->expect_reply, sip->want_tune, sip->want_commit, sip->state);
+    LOG("satipc %d, expect_reply %d, want_tune %d want commit %d, state %d",
+        sip->id, sip->expect_reply, sip->want_tune, sip->want_commit,
+        sip->state);
 
     if (rc == 200) {
         if (is_transport)
@@ -645,7 +647,8 @@ int satip_standby_device(adapter *ad) {
     if (!sip)
         return 0;
 
-    LOG("satip device %s:%d going to standby (expect_reply %d)", sip->sip, sip->sport, sip->expect_reply);
+    LOG("satip device %s:%d going to standby (expect_reply %d)", sip->sip,
+        sip->sport, sip->expect_reply);
     if (sip->state == SATIP_STATE_PLAY) {
         sip->state = SATIP_STATE_TEARDOWN;
         satipc_request(ad);
@@ -696,7 +699,8 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
                           // payload data over the same buffer
         iov[0].iov_base = buf1 + (i * 20); // RTP header slice
         iov[0].iov_len = 12;
-        iov[1].iov_base = (char *)buf + (i * 1316); // PAYLOAD slice in the READ BUFFER
+        iov[1].iov_base =
+            (char *)buf + (i * 1316); // PAYLOAD slice in the READ BUFFER
         iov[1].iov_len = 1316;
         iov[2].iov_base = NULL;
         iov[2].iov_len = 0;
@@ -781,7 +785,7 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
         }
 
         // Clear empty unused buffer space (after all it will be removed)
-        if (dlen < (int )iov[1].iov_len) {
+        if (dlen < (int)iov[1].iov_len) {
             int ss = (188 * (dlen / 188));
             // memset(iov[1].iov_base + ss, 0xFF, iov[1].iov_len - ss);  //
             // Not necessary
@@ -800,16 +804,18 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
                 continue;
 
             struct iovec *iov = &iovs[i * 2];
-            int hole_size = iov[1].iov_len - ((uint8_t *)holes[i] - (uint8_t *)iov[1].iov_base);
+            int hole_size = iov[1].iov_len -
+                            ((uint8_t *)holes[i] - (uint8_t *)iov[1].iov_base);
 
             if (i + 1 < rr) { // move data only if not in the last multibuffer
                               // slice (in this case only adjust the end)
                 // copy data until the end of the buffer over the empty
                 // space to _free the hole
-                uint8_t *eb =
-                    (uint8_t *)iovs[1].iov_base + *rb; // current end of the read buffer
-                uint8_t *sb = (uint8_t *)holes[i];     // end of the valid read data
-                uint8_t *ib = (uint8_t *)holes[i] + hole_size; // end of the iovec slice
+                uint8_t *eb = (uint8_t *)iovs[1].iov_base +
+                              *rb; // current end of the read buffer
+                uint8_t *sb = (uint8_t *)holes[i]; // end of the valid read data
+                uint8_t *ib =
+                    (uint8_t *)holes[i] + hole_size; // end of the iovec slice
                 memmove(sb, ib, eb - ib); // skip just the hole of the chunk
             }
             *rb -= hole_size;
@@ -962,7 +968,8 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb) {
             sip->tcp_pos += rtsp_len + 4;
             DEBUGM("ad %d processed %d, socket %d", ad->id, rtsp_len, socket);
             char *bpos = (char *)buf + pos;
-            pos += process_rtsp_tcp(ss, rtsp, rtsp_len, (void *)bpos, len - pos);
+            pos +=
+                process_rtsp_tcp(ss, rtsp, rtsp_len, (void *)bpos, len - pos);
             *rb = pos;
         } else if (!strncmp((char *)rtsp, "RTSP", 4)) {
             unsigned char *nlnl, *cl;
@@ -1267,7 +1274,7 @@ int http_request(adapter *ad, char *url, const char *method, int force) {
 
     LOG("satipc_http_request (adapter %d): sock %d: [[ %s %s ]]", ad->id,
         remote_socket, method, url);
-    LOGM("MSG process >> server :\n%s", buf); //LOGM->LOG
+    LOGM("MSG process >> server :\n%s", buf); // LOGM->LOG
 
     if (remote_socket >= 0) {
         sockets_write(remote_socket, buf, lb);
@@ -1331,7 +1338,6 @@ void satipc_get_pids(adapter *ad, satipc *sip, char *url, int size) {
 
     if (!sip->lap && !sip->ldp)
         send_pids = 1;
-
 
     get_adapter_pids(ad->id, tmp_url, sizeof(tmp_url));
     if ((!strcmp(tmp_url, "all") || !strcmp(tmp_url, "none"))) {
@@ -1429,13 +1435,15 @@ int satipc_request(adapter *ad) {
         "last_cmd %d, "
         "sent_transport %d, closed_rtsp %d",
         ad->id, sip->state, ad->tp.freq, sip->lap, sip->ldp, sip->expect_reply,
-        sip->want_tune, sip->last_cmd, sip->sent_transport, sip->rtsp_socket_closed);
+        sip->want_tune, sip->last_cmd, sip->sent_transport,
+        sip->rtsp_socket_closed);
 
     if (sip->rtsp_socket_closed)
         return 0;
 
     if ((ad->tp.freq == 0) &&
-        ((sip->state == SATIP_STATE_OPTIONS) || (sip->state == SATIP_STATE_INACTIVE) ||
+        ((sip->state == SATIP_STATE_OPTIONS) ||
+         (sip->state == SATIP_STATE_INACTIVE) ||
          (sip->state == SATIP_STATE_SETUP) || (sip->state == SATIP_STATE_PLAY)))
         return 0;
 
@@ -1518,8 +1526,9 @@ int satipc_tune(int aid, transponder *tp) {
     adapter *ad;
     satipc *sip;
     get_ad_and_sipr(aid, 1);
-    LOG("satipc: tuning to freq %d, sys %d for adapter %d (state %d, expect_reply %d)", ad->tp.freq / 1000,
-        ad->tp.sys, aid, sip->state, sip->expect_reply);
+    LOG("satipc: tuning to freq %d, sys %d for adapter %d (state %d, "
+        "expect_reply %d)",
+        ad->tp.freq / 1000, ad->tp.sys, aid, sip->state, sip->expect_reply);
     ad->err = 0;
     sip->want_commit = 0;
     sip->want_tune = 1;
@@ -1549,7 +1558,7 @@ int satipc_tune(int aid, transponder *tp) {
 }
 
 fe_delivery_system_t satipc_delsys(int aid, int fd, fe_delivery_system_t *sys) {
-    return (fe_delivery_system_t )0;
+    return (fe_delivery_system_t)0;
 }
 
 void satipc_free(adapter *ad) {}
@@ -1594,10 +1603,10 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
     ad->type = ADAPTER_SATIP;
 
     for (k = 0; k < 10; k++)
-        ad->sys[k] = (fe_delivery_system_t )0;
+        ad->sys[k] = (fe_delivery_system_t)0;
 
-    ad->sys[0] = (fe_delivery_system_t )delsys;
-    ad->tp.sys = (fe_delivery_system_t )delsys;
+    ad->sys[0] = (fe_delivery_system_t)delsys;
+    ad->tp.sys = (fe_delivery_system_t)delsys;
     safe_strncpy(sip->sip, host);
     sip->satip_fe = fe;
     sip->static_config = 1;
@@ -1780,7 +1789,7 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h) {
             sep = strchr(arg[i], '-');
             int t = map_intd(sep ? sep + 1 : NULL, NULL, -1);
             if (ds < 0 || ds >= MAX_DVBAPI_SYSTEMS || t < 0 ||
-                i_order >= (int )sizeof(order)) {
+                i_order >= (int)sizeof(order)) {
                 LOG("Could not determine the delivery system for %s (%d) "
                     "tuners %d, "
                     "order %d",

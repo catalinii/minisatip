@@ -123,7 +123,8 @@ void set_socket_dscp(int id, int dscp, int prio);
 void sockets_set_opaque(int id, void *opaque, void *opaque2, void *opaque3);
 void sockets_force_close(int id);
 void sockets_set_master(int slave, int master);
-int copy_iovec_to_fifo(SFIFO *fifo, uint32_t offset, struct iovec *iov, int iovcnt);
+int copy_iovec_to_fifo(SFIFO *fifo, uint32_t offset, struct iovec *iov,
+                       int iovcnt);
 void sockets_set_flush_enqued_data(int id);
 extern __thread char thread_name[];
 extern __thread pthread_t tid;

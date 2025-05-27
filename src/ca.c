@@ -923,19 +923,19 @@ static int write_authdata(unsigned int slot, const uint8_t *host_id,
     if (write(fd, host_id, 8) != 8) {
         LOG("error in write");
         close(fd);
-	return 0;
+        return 0;
     }
 
     if (write(fd, dhsk, 256) != 256) {
         LOG("error in write");
         close(fd);
-	return 0;
+        return 0;
     }
 
     if (write(fd, akh, 32) != 32) {
         LOG("error in write");
         close(fd);
-	return 0;
+        return 0;
     }
 
     /* skip the last one if exists */
@@ -947,7 +947,7 @@ static int write_authdata(unsigned int slot, const uint8_t *host_id,
         if (write(fd, &buf[offset], (8 + 256 + 32)) != (8 + 256 + 32)) {
             LOG("error in write");
             close(fd);
-	    return 0;
+            return 0;
         }
     }
 
@@ -2189,7 +2189,8 @@ int APP_MMI_handler(ca_session_t *session, int resource, uint8_t *buffer,
             LOG("mmi display ctl cb received for CA %u session_num %u "
                 "cmd_id 0x%02x mmi_mode %d",
                 d->id, session->session_number, cmd_id, mmi_mode);
-            uint8_t data[] = {MMI_DISPLAY_REPLY_ID_MMI_MODE_ACK, (uint8_t )mmi_mode};
+            uint8_t data[] = {MMI_DISPLAY_REPLY_ID_MMI_MODE_ACK,
+                              (uint8_t)mmi_mode};
             ca_write_apdu(session, TAG_DISPLAY_REPLY, data, sizeof(data));
         }
         break;
@@ -2946,9 +2947,9 @@ int dvbca_init_dev(adapter *ad) {
         result = ca_init_en50221(c);
     if (result) {
         ca_request_close(c);
-	close(c->fd);
-	c->fd = -1;
-	c->enabled = 0;
+        close(c->fd);
+        c->fd = -1;
+        c->enabled = 0;
         return TABLES_RESULT_ERROR_NORETRY;
     }
 

@@ -68,7 +68,8 @@ void dvbcsa_set_cw(SCW *cw, SPMT *pmt) {
                     "see https://github.com/catalinii/minisatip/issues/1003 "
                     "for more details");
     } else {
-        dvbcsa_bs_key_set_ecm(ecm, (unsigned char *)cw->cw, (struct dvbcsa_bs_key_s *)cw->key);
+        dvbcsa_bs_key_set_ecm(ecm, (unsigned char *)cw->cw,
+                              (struct dvbcsa_bs_key_s *)cw->key);
     }
 }
 

@@ -44,7 +44,7 @@ void _log(const char *file, int line, const char *fmt, ...) {
     stid[0] = 0;
     pthread_mutex_lock(&log_mutex);
     snprintf(stid, sizeof(stid) - 1, " %s",
-        thread_info[thread_index].thread_name);
+             thread_info[thread_index].thread_name);
     stid[sizeof(stid) - 1] = 0;
 
     if (!fmt) {

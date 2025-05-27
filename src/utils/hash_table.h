@@ -32,7 +32,8 @@ typedef struct hash_table {
 #define HASH_ITEM_ENABLED(h) (h.len)
 #define FOREACH_ITEM(h, a)                                                     \
     for (i = 0; i < (h)->size; i++)                                            \
-        if (HASH_ITEM_ENABLED((h)->items[i]) && (a = (SMEMALLOC *)(h)->items[i].data))
+        if (HASH_ITEM_ENABLED((h)->items[i]) &&                                \
+            (a = (SMEMALLOC *)(h)->items[i].data))
 
 int _create_hash_table(SHashTable *hash, int no, const char *f, int l);
 void copy_hash_table(SHashTable *s, SHashTable *d);

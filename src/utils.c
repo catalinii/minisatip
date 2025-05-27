@@ -29,6 +29,7 @@
 #include "utils/alloc.h"
 #include <arpa/inet.h>
 #include <ctype.h>
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -51,8 +52,6 @@
 #include <syslog.h>
 #include <time.h>
 #include <unistd.h>
-#include <dirent.h>
-#include <errno.h>
 
 #if !defined(__mips__)
 #include <execinfo.h>
@@ -273,8 +272,8 @@ void posix_signal_handler(int sig, siginfo_t *siginfo, ucontext_t *ctx) {
     ip = ctx->uc_mcontext.pc;
 #endif
 
-printf("RECEIVED SIGNAL %d (%d) - SP=%lX IP=%lX\n", sig, siginfo->si_code, (long unsigned int)sp,
-           (long unsigned int)ip);
+    printf("RECEIVED SIGNAL %d (%d) - SP=%lX IP=%lX\n", sig, siginfo->si_code,
+           (long unsigned int)sp, (long unsigned int)ip);
 
     print_trace();
     exit(1);
@@ -374,7 +373,7 @@ char *get_current_timestamp(void) {
     struct tm *t;
     const char *day[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
     const char *month[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+                           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
     time(&date);
     t = gmtime(&date);
     if (!t)
@@ -593,7 +592,7 @@ int init_utils(char *arg0) {
 }
 
 void _hexdump(const char *desc, void *addr, int len) {
-    // Each character needs roughly 5 bytes to print. Worst case scenario is 
+    // Each character needs roughly 5 bytes to print. Worst case scenario is
     // that one character ends up on a new line, requiring 74 bytes to print.
     int i, pos = 0, bl = (len * 5) + 74;
     char buff[17];
@@ -722,8 +721,8 @@ void _dump_packets(const char *message, unsigned char *b, int len,
     }
 }
 
-int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen, int16_t *cc,
-                 int pid) {
+int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen,
+                 int16_t *cc, int pid) {
     int pos = 0, left = 0, len = 0;
     uint8_t *b;
 
@@ -762,7 +761,7 @@ int mkdir_recursive(const char *path) {
     char *p = NULL;
     size_t len;
 
-    // Try to create the directory. We don't care at this point if the mkdir() 
+    // Try to create the directory. We don't care at this point if the mkdir()
     // calls fail
     snprintf(tmp, sizeof(tmp), "%s", path);
     len = strlen(tmp);

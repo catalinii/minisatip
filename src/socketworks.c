@@ -428,7 +428,9 @@ int connect_local_socket(char *file, int blocking) {
 
 int no_action(int s __attribute__((unused))) { return 1; }
 
-int sockets_accept(int socket __attribute__((unused)), void *buf __attribute__((unused)), size_t len __attribute__((unused)), sockets *ss) {
+int sockets_accept(int socket __attribute__((unused)),
+                   void *buf __attribute__((unused)),
+                   size_t len __attribute__((unused)), sockets *ss) {
     int new_sock, sas, ni;
     USockAddr sa;
     sas = sizeof(sa);
@@ -866,7 +868,7 @@ void *select_and_execute(void *arg) {
                     if (!read_ok && ss->type != TYPE_SERVER) {
                         const char *err_str;
                         const char *types[] = {"udp",  "tcp", "server", "http",
-                                         "rtsp", "dvr", NULL,     NULL};
+                                               "rtsp", "dvr", NULL,     NULL};
                         if (rlen == 0) {
                             err = 0;
                             err_str = "Close";
@@ -1292,7 +1294,8 @@ int find_next_rtsp_header(SFIFO *fifo) {
 
 // copies the data from a iov structure to the fifo, starting with offset
 // if offset is 0 the entire data is copied.
-int copy_iovec_to_fifo(SFIFO *fifo, u_int32_t offset, struct iovec *iov, int iovcnt) {
+int copy_iovec_to_fifo(SFIFO *fifo, u_int32_t offset, struct iovec *iov,
+                       int iovcnt) {
     int len = 0, i;
     int64_t available;
     int size = opts.max_sbuf * 1048576;
@@ -1308,7 +1311,8 @@ int copy_iovec_to_fifo(SFIFO *fifo, u_int32_t offset, struct iovec *iov, int iov
 
     for (i = 0; i < iovcnt; i++) {
         if (offset < iov[i].iov_len) {
-            fifo_push(fifo, (char *)(iov[i].iov_base) + offset, iov[i].iov_len - offset);
+            fifo_push(fifo, (char *)(iov[i].iov_base) + offset,
+                      iov[i].iov_len - offset);
         }
         offset = (offset > iov[i].iov_len) ? offset - iov[i].iov_len : 0;
     }

@@ -22,13 +22,13 @@
 
 #define _GNU_SOURCE
 #include "netceiver.h"
+#include "utils/alloc.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <ifaddrs.h>
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include "utils/alloc.h"
 
 #define DEFAULT_LOG LOG_NETCEIVER
 

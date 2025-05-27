@@ -27,7 +27,7 @@ static inline int fifo_available(SFIFO *f) {
 
 static inline int fifo_used(SFIFO *f) { return f->write_index - f->read_index; }
 static inline void fifo_skip_bytes(SFIFO *f, uint32_t len) {
-    if(f->size > 0)
+    if (f->size > 0)
         f->read_index += len;
 }
 

@@ -57,7 +57,8 @@ int _create_hash_table(SHashTable *hash, int no, const char *file, int line) {
     if (hash->init == 1)
         return 0;
     memset(hash, 0, sizeof(SHashTable));
-    hash->items = (SHashItem *)malloc1(no * sizeof(SHashItem), hash->file, hash->line, 1);
+    hash->items =
+        (SHashItem *)malloc1(no * sizeof(SHashItem), hash->file, hash->line, 1);
     if (!hash->items) {
         LOG_AND_RETURN(1, "Could not allocate Hash Items %d", no);
     }

@@ -7,7 +7,8 @@
 #include <sys/types.h>
 
 void _log(const char *file, int line, const char *fmt, ...);
-void _dump_packets(const char *message, unsigned char *b, int len, int packet_offset);
+void _dump_packets(const char *message, unsigned char *b, int len,
+                   int packet_offset);
 void _hexdump(const char *desc, void *addr, int len);
 char *get_current_timestamp_log();
 uint32_t crc_32(const uint8_t *data, int datalen);
@@ -43,7 +44,7 @@ extern __thread int thread_index;
 #define LOGL(level, a, ...)                                                    \
     {                                                                          \
         thread_info[thread_index].last_log = a;                                \
-        if ((level)&opts.log)                                                  \
+        if ((level) & opts.log)                                                \
             _log(__FILE__, __LINE__, a, ##__VA_ARGS__);                        \
     }
 
@@ -54,7 +55,7 @@ extern __thread int thread_index;
 #define DEBUGL(level, a, ...)                                                  \
     {                                                                          \
         thread_info[thread_index].last_log = a;                                \
-        if ((level)&opts.debug)                                                \
+        if ((level) & opts.debug)                                              \
             _log(__FILE__, __LINE__, a, ##__VA_ARGS__);                        \
     }
 #define DEBUGM(a, ...) DEBUGL(DEFAULT_LOG, a, ##__VA_ARGS__)
@@ -67,7 +68,7 @@ extern __thread int thread_index;
 
 #define FAIL(a, ...)                                                           \
     {                                                                          \
-        LOG0(a, ##__VA_ARGS__);                                            \
+        LOG0(a, ##__VA_ARGS__);                                                \
         unlink(pid_file);                                                      \
         exit(1);                                                               \
     }

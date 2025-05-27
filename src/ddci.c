@@ -64,8 +64,8 @@ int first_ddci = -1;
 #undef FOREACH_ITEM
 #define FOREACH_ITEM(h, a)                                                     \
     for (i = 0; i < (h)->size; i++)                                            \
-        if (HASH_ITEM_ENABLED((h)->items[i]) && (a = (ddci_mapping_table_t *)(h)->items[i].data))
-
+        if (HASH_ITEM_ENABLED((h)->items[i]) &&                                \
+            (a = (ddci_mapping_table_t *)(h)->items[i].data))
 
 #define get_ddci(i)                                                            \
     ((i >= 0 && i < MAX_ADAPTERS && ddci_devices[i] &&                         \
@@ -411,7 +411,8 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     // Determine which DDCI should handle this PMT
     if (ddid == -1)
         ddid = find_ddci_for_pmt(channel, pmt);
-    // Negative return values are used to distinguish from valid return values (>= 0)    
+    // Negative return values are used to distinguish from valid return values
+    // (>= 0)
     if (ddid == -TABLES_RESULT_ERROR_RETRY)
         return TABLES_RESULT_ERROR_RETRY;
     else if (ddid == -TABLES_RESULT_ERROR_NORETRY)
@@ -453,8 +454,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     }
 
     // if the CAT is not mapped, add it
-    if (!get_pid_mapping(d, pmt->adapter, 1)) 
-    {
+    if (!get_pid_mapping(d, pmt->adapter, 1)) {
         LOG("Mapping CAT to PMT %d from transponder %d, DDCI transponder %d",
             pmt->id, ad->transponder_id, d->tid)
         add_pid_mapping_table(ad->id, 1, pmt->id, d, 1);
@@ -659,7 +659,7 @@ int ddci_create_eit(ddci_device_t *d, int sid, uint8_t *eit, int version) {
         time(NULL) - 3600; // let's have the event start one hour in the past
     struct tm *tm = localtime_r(&t, &tm_r);
     uint16_t MJD = YMDtoMJD(tm->tm_year, tm->tm_mon + 1, tm->tm_mday);
-    
+
     uint8_t *p = eit;
 
     *p++ = 0x00; // pointer field (payload unit start indicator is set)
@@ -674,17 +674,17 @@ int ddci_create_eit(ddci_device_t *d, int sid, uint8_t *eit, int version) {
     copy16(p, 0, sid);
     p += 2;
     *p++ = 0xC1 | ((version & 0x0F) << 1);
-    *p++ = 0x00;        // section number
-    *p++ = 0x00;        // last section number
-    *p++ = 0x00;        // transport stream id
-    *p++ = 0x00;        // ...
-    *p++ = 0x00;        // original network id
-    *p++ = 0x00;        // ...
-    *p++ = 0x00;        // segment last section number
-    *p++ = 0x4E;        // last table id
-    *p++ = 0x00;        // event id
-    *p++ = 0x01;        // ...
-    copy16(p, 0, MJD);  // start time
+    *p++ = 0x00;       // section number
+    *p++ = 0x00;       // last section number
+    *p++ = 0x00;       // transport stream id
+    *p++ = 0x00;       // ...
+    *p++ = 0x00;       // original network id
+    *p++ = 0x00;       // ...
+    *p++ = 0x00;       // segment last section number
+    *p++ = 0x4E;       // last table id
+    *p++ = 0x00;       // event id
+    *p++ = 0x01;       // ...
+    copy16(p, 0, MJD); // start time
     p += 2;
     *p++ = tm->tm_hour; // ...
     *p++ = tm->tm_min;  // ...
@@ -695,7 +695,7 @@ int ddci_create_eit(ddci_device_t *d, int sid, uint8_t *eit, int version) {
     uint8_t r = 4 << 5; // running_status = 4
     r ^= 1 << 4;        // free_CA_mode = 1
     *p++ = r;
-    *p++ = 0x00;        // descriptors_length
+    *p++ = 0x00; // descriptors_length
     uint8_t *DescriptorsStart = p;
     *p++ = 0x55; // parental descriptor tag
     *p++ = 0x04; // descriptor length
@@ -855,7 +855,8 @@ int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len) {
 
                 // Add an EIT table for each channel
                 psi_len = ddci_create_eit(d, pmt->sid, psi, d->pmt[i].ver);
-                pos += buffer_to_ts(dst + pos, len - pos, psi, psi_len, &d->eit_cc, 18);
+                pos += buffer_to_ts(dst + pos, len - pos, psi, psi_len,
+                                    &d->eit_cc, 18);
             }
         }
         d->last_pmt = ctime;
@@ -962,7 +963,8 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
 
         set_pid_ts(b, dpid);
         // bundle packets to stay under MAX_IOV
-        if (iop - 1 >= 0 && ((uint8_t *)io[iop - 1].iov_base + io[iop - 1].iov_len == b))
+        if (iop - 1 >= 0 &&
+            ((uint8_t *)io[iop - 1].iov_base + io[iop - 1].iov_len == b))
             io[iop - 1].iov_len += DVB_FRAME;
         else {
             io[iop].iov_base = b;
@@ -1081,7 +1083,7 @@ int ddci_post_init(adapter *ad) {
     if (d->max_channels > MAX_CHANNELS_ON_CI) {
         d->max_channels = MAX_CHANNELS_ON_CI;
     }
-    
+
     sockets *s = get_sockets(ad->sock);
     s->action = (socket_action)ddci_read_sec_data;
     if (ad->fe_sock >= 0)
@@ -1183,7 +1185,7 @@ int ddci_open_device(adapter *ad) {
     ad->dvr = read_fd;
     ad->type = ADAPTER_CI;
     ad->dmx = -1;
-    ad->sys[0] = (fe_delivery_system_t )0;
+    ad->sys[0] = (fe_delivery_system_t)0;
     ad->adapter_timeout = 0;
     memset(d->pmt, -1, sizeof(d->pmt));
     d->max_channels = MAX_CHANNELS_ON_CI;
@@ -1200,7 +1202,7 @@ int ddci_open_device(adapter *ad) {
 }
 
 fe_delivery_system_t ddci_delsys(int aid, int fd, fe_delivery_system_t *sys) {
-    return (fe_delivery_system_t )0;
+    return (fe_delivery_system_t)0;
 }
 
 int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque) {
@@ -1294,9 +1296,9 @@ void save_channels(SHashTable *ch) {
     fprintf(f, "# When a new channel it will be used, minisatip will determine "
                "the matching DDCIs based on their reported CA IDs\n");
 
-    for (i = 0; i < ch->size; i++)                                            \
-        if (HASH_ITEM_ENABLED(ch->items[i]) && (c = (Sddci_channel *)ch->items[i].data))   
-        {
+    for (i = 0; i < ch->size; i++)
+        if (HASH_ITEM_ENABLED(ch->items[i]) &&
+            (c = (Sddci_channel *)ch->items[i].data)) {
             fprintf(f, "%d:    ", c->sid);
             for (j = 0; j < c->ddcis; j++)
                 fprintf(f, "%s%d", j ? "," : "", c->ddci[j].ddci);

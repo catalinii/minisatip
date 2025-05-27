@@ -68,19 +68,19 @@ enum dmx_source {
 #endif
 
 const char *fe_pilot[] = {"on", "off", " ", // auto
-                    NULL};
+                          NULL};
 
 const char *fe_rolloff[] = {"0.35", "0.20", "0.25", " ", // auto
-                      "0.15", "0.10", "0.05", NULL};
+                            "0.15", "0.10", "0.05", NULL};
 
-const char *fe_delsys[] = {"undefined", "dvbc",  "dvbcb", "dvbt",  "dss",   "dvbs",
-                     "dvbs2",     "dvbh",  "isdbt", "isdbs", "isdbc", "atsc",
-                     "atscmh",    "dmbth", "cmmb",  "dab",   "dvbt2", "turbo",
-                     "dvbcc",     "dvbc2", NULL};
+const char *fe_delsys[] = {
+    "undefined", "dvbc",  "dvbcb", "dvbt",  "dss",   "dvbs",   "dvbs2",
+    "dvbh",      "isdbt", "isdbs", "isdbc", "atsc",  "atscmh", "dmbth",
+    "cmmb",      "dab",   "dvbt2", "turbo", "dvbcc", "dvbc2",  NULL};
 
 const char *fe_fec[] = {"none", "12",  "23", "34", "45", "56",
-                  "67",   "78",  "89", " ", // auto
-                  "35",   "910", "25", "14", "13", NULL};
+                        "67",   "78",  "89", " ", // auto
+                        "35",   "910", "25", "14", "13", NULL};
 
 const char *fe_modulation[] = {
     "qpsk",   "16qam",   "32qam",   "64qam",  "128qam", "256qam", " ", // auto
@@ -88,24 +88,25 @@ const char *fe_modulation[] = {
     "64apsk", "128apsk", "256apsk", NULL};
 
 const char *fe_tmode[] = {"2k", "8k", " ", // auto
-                    "4k", "1k", "16k", "32k", "c1", "c3780", NULL};
+                          "4k", "1k", "16k", "32k", "c1", "c3780", NULL};
 
-const char *fe_gi[] = {"132",  "116",   "18",    "14",    " ", // auto
-                 "1128", "19128", "19256", "pn420", "pn595", "pn945", NULL};
+const char *fe_gi[] = {"132",   "116",   "18",    "14",    " ", // auto
+                       "1128",  "19128", "19256", "pn420", "pn595",
+                       "pn945", NULL};
 
 const char *fe_hierarchy[] = {"HIERARCHY_NONE", "HIERARCHY_1",    "HIERARCHY_2",
-                        "HIERARCHY_4",    "HIERARCHY_AUTO", NULL};
+                              "HIERARCHY_4",    "HIERARCHY_AUTO", NULL};
 
 const char *fe_inversion[] = {"0", "1", " ", // auto
-                        NULL};
+                              NULL};
 
 const char *fe_pol[] = {"none", "v", "h", "r", "l", NULL};
 
 const char *fe_pls_mode[] = {"root", "gold", "combo", NULL};
 
 #define make_func(a)                                                           \
-    const char *get_##a(int i) {                                                     \
-        if (i >= 0 && i < (int)(sizeof(fe_##a) / sizeof(fe_##a[0]))) {           \
+    const char *get_##a(int i) {                                               \
+        if (i >= 0 && i < (int)(sizeof(fe_##a) / sizeof(fe_##a[0]))) {         \
             if (fe_##a[i][0] == 32)                                            \
                 return "";                                                     \
             else                                                               \
@@ -212,9 +213,11 @@ int detect_dvb_parameters(char *s, transponder *tp) {
             tp->tmode = map_int(arg[i] + 6, (char **)fe_tmode);
         if (strncmp("bw=", arg[i], 3) == 0) {
             tp->bw = map_float(arg[i] + 3, 1000000);
-            if (tp->bw < 0 || tp->bw > 100000000)  // Fix clients that send bw=8000 !
+            if (tp->bw < 0 ||
+                tp->bw > 100000000) // Fix clients that send bw=8000 !
                 tp->bw = map_float(arg[i] + 3, 1000);
-            if (tp->bw < 0 || tp->bw > 100000000)  // Fix clients that send bw=8000000 !
+            if (tp->bw < 0 ||
+                tp->bw > 100000000) // Fix clients that send bw=8000000 !
                 tp->bw = map_float(arg[i] + 3, 1);
         }
         if (strncmp("specinv=", arg[i], 8) == 0)
@@ -818,8 +821,8 @@ int dvb_open_device(adapter *ad) {
     return 0;
 }
 
-void diseqc_cmd(int fd, int times, const char *str, struct dvb_diseqc_master_cmd *cmd,
-                diseqc *d) {
+void diseqc_cmd(int fd, int times, const char *str,
+                struct dvb_diseqc_master_cmd *cmd, diseqc *d) {
     int i;
     sleep_msec(d->before_cmd);
     for (i = 0; i < times; i++) {
@@ -1629,7 +1632,7 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys) {
         .props = enum_cmdargs};
 
     for (i = 0; i < 10; i++)
-        sys[i] = (fe_delivery_system_t )0;
+        sys[i] = (fe_delivery_system_t)0;
     if (ioctl(fd, FE_GET_PROPERTY, &enum_cmdseq) < 0) {
         LOG("unable to query frontend, perhaps DVB-API < 5.5 ?");
         //	return 0;
@@ -1653,7 +1656,7 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys) {
         case FE_OFDM:
 #if DVBAPIVERSION >= 0x0501
             if (fe_info.caps & FE_CAN_2G_MODULATION)
-                sys[idx++] = (fe_delivery_system_t )SYS_DVBT2;
+                sys[idx++] = (fe_delivery_system_t)SYS_DVBT2;
 #endif
 
             sys[idx++] = SYS_DVBT;
@@ -1678,18 +1681,18 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys) {
                      (FE_CAN_QAM_64 | FE_CAN_QAM_256 | FE_CAN_QAM_AUTO))
                 sys[idx++] = SYS_DVBC_ANNEX_B;
             else
-                return (fe_delivery_system_t )0;
+                return (fe_delivery_system_t)0;
 
             break;
         default:
             LOG("no available delivery system for adapter %d", aid);
-            return (fe_delivery_system_t )0;
+            return (fe_delivery_system_t)0;
         }
         nsys = idx;
         rv = sys[0];
     } else {
         for (i = 0; i < nsys; i++) {
-            sys[i] = (fe_delivery_system_t ) enum_cmdargs[0].u.buffer.data[i];
+            sys[i] = (fe_delivery_system_t)enum_cmdargs[0].u.buffer.data[i];
         }
         rv = enum_cmdargs[0].u.buffer.data[0];
     }

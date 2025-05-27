@@ -674,7 +674,7 @@ int get_free_adapter(transponder *tp) {
             break;
         }
 
-    if ((fe > 0) && (fe <= (int )ARRAY_SIZE(fe_map)) && (fe_map[fe - 1] >= 0) &&
+    if ((fe > 0) && (fe <= (int)ARRAY_SIZE(fe_map)) && (fe_map[fe - 1] >= 0) &&
         (fe_map[fe - 1] < MAX_ADAPTERS)) {
         fe = fe_map[fe - 1];
         ad = a[fe];
@@ -1943,7 +1943,7 @@ void set_adapters_delsys(char *o) {
             a[a_id] = adapter_alloc();
 
         ad = a[a_id];
-        ad->sys[0] = (fe_delivery_system_t )ds;
+        ad->sys[0] = (fe_delivery_system_t)ds;
 
         if (ad->sys[0] == SYS_DVBS2)
             ad->sys[1] = SYS_DVBS;

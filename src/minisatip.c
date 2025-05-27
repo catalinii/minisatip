@@ -559,8 +559,7 @@ By default every CAM supports 1 channels\n\
 "
 #endif
         ,
-        app_name, ADAPTER_BUFFER, DVR_BUFFER, modules,
-        "ENABLED");
+        app_name, ADAPTER_BUFFER, DVR_BUFFER, modules, "ENABLED");
     exit(1);
 }
 
@@ -1082,11 +1081,14 @@ void set_options(int argc, char *argv[]) {
     opts.rtsp_host = (char *)_malloc(MAX_HOST);
     sprintf(opts.rtsp_host, "%s:%d", lip, opts.rtsp_port);
 
-    LOG("Listening configuration RTSP:%s (bind address: %s), HTTP:%s (bind address: %s)",
+    LOG("Listening configuration RTSP:%s (bind address: %s), HTTP:%s (bind "
+        "address: %s)",
         opts.rtsp_host ? opts.rtsp_host : "(null)",
         opts.bind ? opts.bind : "(null)",
         opts.http_host ? opts.http_host : "(null)",
-        opts.bind_http ? opts.bind_http : opts.bind ? opts.bind : "(null)");
+        opts.bind_http ? opts.bind_http
+        : opts.bind    ? opts.bind
+                       : "(null)");
 
     opts.datetime_compile = (char *)_malloc(64);
     sprintf(opts.datetime_compile, "%s | %s", __DATE__, __TIME__);
@@ -1178,7 +1180,7 @@ int read_rtsp(sockets *s) {
     LOG("Read RTSP (sock %d, handle %d) [%s:%d] sid %d, len: %d", s->id,
         s->sock, get_sockaddr_host(s->sa, ra, sizeof(ra)),
         get_sockaddr_port(s->sa), s->sid, rlen);
-    LOGM("MSG client >> process :\n%s", s->buf); //LOGM->LOG
+    LOGM("MSG client >> process :\n%s", s->buf); // LOGM->LOG
 
     if ((s->type != TYPE_HTTP) &&
         (strncasecmp((const char *)s->buf, "GET", 3) == 0)) {
@@ -1517,11 +1519,12 @@ int read_http(sockets *s) {
         memset(sbuf, 0, JSON_STRING_MAXLEN);
         int len =
             get_json_state(buf, JSON_STATE_MAXLEN, sbuf, JSON_STRING_MAXLEN);
-        http_response(s, 200,
-                      (char *)("Content-Type: application/json; charset=utf-8\r\n"
-                      "Connection: close\r\n"
-                      "Access-Control-Allow-Origin: *"),
-                      buf, 0, len);
+        http_response(
+            s, 200,
+            (char *)("Content-Type: application/json; charset=utf-8\r\n"
+                     "Connection: close\r\n"
+                     "Access-Control-Allow-Origin: *"),
+            buf, 0, len);
         _free(buf);
         _free(sbuf);
         return 0;
@@ -1530,11 +1533,12 @@ int read_http(sockets *s) {
     if (strcmp(arg[1], "/bandwidth.json") == 0) {
         char *buf = (char *)_malloc(JSON_BANDWIDTH_MAXLEN);
         int len = get_json_bandwidth(buf, JSON_BANDWIDTH_MAXLEN);
-        http_response(s, 200, (char *)(
-                      "Content-Type: application/json; charset=utf-8\r\n"
-                      "Connection: close\r\n"
-                      "Access-Control-Allow-Origin: *"),
-                      buf, 0, len);
+        http_response(
+            s, 200,
+            (char *)("Content-Type: application/json; charset=utf-8\r\n"
+                     "Connection: close\r\n"
+                     "Access-Control-Allow-Origin: *"),
+            buf, 0, len);
         _free(buf);
         return 0;
     }
@@ -1665,22 +1669,22 @@ int ssdp_byebye(sockets *s) { return ssdp_notify(s, 0); }
 int ssdp;
 int ssdp_reply(sockets *s) {
     const char *reply = "HTTP/1.1 200 OK\r\n"
-                  "CACHE-CONTROL: max-age=1800\r\n"
-                  "DATE: %s\r\n"
-                  "EXT:\r\n"
-                  "LOCATION: http://%s/%s\r\n"
-                  "SERVER: Linux/1.0 UPnP/1.1 %s/%s\r\n"
-                  "ST: urn:ses-com:device:SatIPServer:1\r\n"
-                  "USN: uuid:%s::urn:ses-com:device:SatIPServer:1\r\n"
-                  "BOOTID.UPNP.ORG: %d\r\n"
-                  "CONFIGID.UPNP.ORG: 0\r\n"
-                  "DEVICEID.SES.COM: %d\r\n\r\n\0";
+                        "CACHE-CONTROL: max-age=1800\r\n"
+                        "DATE: %s\r\n"
+                        "EXT:\r\n"
+                        "LOCATION: http://%s/%s\r\n"
+                        "SERVER: Linux/1.0 UPnP/1.1 %s/%s\r\n"
+                        "ST: urn:ses-com:device:SatIPServer:1\r\n"
+                        "USN: uuid:%s::urn:ses-com:device:SatIPServer:1\r\n"
+                        "BOOTID.UPNP.ORG: %d\r\n"
+                        "CONFIGID.UPNP.ORG: 0\r\n"
+                        "DEVICEID.SES.COM: %d\r\n\r\n\0";
     const char *device_id_conflict = "M-SEARCH * HTTP/1.1\r\n"
-                               "HOST: %s:1900\r\n"
-                               "MAN: \"ssdp:discover\"\r\n"
-                               "ST: urn:ses-com:device:SatIPServer:1\r\n"
-                               "USER-AGENT: Linux/1.0 UPnP/1.1 %s/%s\r\n"
-                               "DEVICEID.SES.COM: %d\r\n\r\n\0";
+                                     "HOST: %s:1900\r\n"
+                                     "MAN: \"ssdp:discover\"\r\n"
+                                     "ST: urn:ses-com:device:SatIPServer:1\r\n"
+                                     "USER-AGENT: Linux/1.0 UPnP/1.1 %s/%s\r\n"
+                                     "DEVICEID.SES.COM: %d\r\n\r\n\0";
     char *man, *man_sd, *didsescom, *ruuid, *rdid;
     char buf[500];
     char ra[50];
@@ -1841,7 +1845,8 @@ int main(int argc, char *argv[]) {
     readBootID();
     if ((rtsp = tcp_listen(opts.bind, opts.rtsp_port, opts.use_ipv4_only)) < 1)
         FAIL("RTSP: Could not listen on port %d", opts.rtsp_port);
-    if ((http = tcp_listen(opts.bind_http, opts.http_port, opts.use_ipv4_only)) < 1)
+    if ((http = tcp_listen(opts.bind_http, opts.http_port,
+                           opts.use_ipv4_only)) < 1)
         FAIL("Could not listen on http port %d", opts.http_port);
     if (!opts.disable_ssdp) {
         if ((ssdp = udp_bind(opts.bind, 1900, opts.use_ipv4_only)) < 1)
@@ -1970,8 +1975,8 @@ int readBootID() {
         fprintf(f, "%d %d %s", opts.bootid, opts.device_id, opts.uuid);
         fclose(f);
     }
-    LOG("Running with bootid %d, device_id %d, UUID %s",
-        opts.bootid, opts.device_id, opts.uuid);
+    LOG("Running with bootid %d, device_id %d, UUID %s", opts.bootid,
+        opts.device_id, opts.uuid);
     return opts.bootid;
 }
 

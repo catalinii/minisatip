@@ -43,8 +43,8 @@ typedef struct struct_memory_allocation {
 static __thread int running;
 
 int record_allocation(void *old, void *x, int size_bytes, int current_size,
-                      int min_len, int pointer_size, int struct_size, const char *f,
-                      int l) {
+                      int min_len, int pointer_size, int struct_size,
+                      const char *f, int l) {
     int rv = 0;
     if (running)
         return 0;
@@ -89,8 +89,7 @@ void *realloc1(void *p, int a, const char *f, int l, int record) {
     if (record) {
         old_mem = record_allocation(p, x, a, a, a, 1, 0, f, l);
     }
-    LOGM("%s:%d realloc allocated %d bytes from %d: %p", f, l, a, old_mem,
-         x);
+    LOGM("%s:%d realloc allocated %d bytes from %d: %p", f, l, a, old_mem, x);
     if (!x) {
         LOG0("Failed allocating %d bytes of memory", a)
         if (!strcmp(f, "socketworks.c"))

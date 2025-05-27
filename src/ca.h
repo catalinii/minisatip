@@ -107,7 +107,7 @@
 
 #define MAKE_SID_FOR_CA(id, idx) (id * 100 + idx)
 #define MKRID(CLASS, TYPE, VERSION)                                            \
-    ((((CLASS)&0xffff) << 16) | (((TYPE)&0x3ff) << 6) | ((VERSION)&0x3f))
+    ((((CLASS) & 0xffff) << 16) | (((TYPE) & 0x3ff) << 6) | ((VERSION) & 0x3f))
 
 #define CA_STATE_INACTIVE 0
 #define CA_STATE_ACTIVE 1

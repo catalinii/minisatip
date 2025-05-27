@@ -51,7 +51,9 @@
 
 #define DEFAULT_LOG LOG_PMT
 
-void dvbaes_create_key(SCW *cw) { cw->key = (uint8_t *)_malloc(sizeof(AES_KEY)); }
+void dvbaes_create_key(SCW *cw) {
+    cw->key = (uint8_t *)_malloc(sizeof(AES_KEY));
+}
 
 void dvbaes_delete_key(SCW *cw) { _free(cw->key); }
 
@@ -126,7 +128,7 @@ void dvbaes_cbc_decrypt_stream(SCW *cw, SPMT_batch *batch, int batch_len) {
         }
         int new_len = decrypt(cw->key, /*ciphertext*/ batch[i].data, len,
                               cw->cw, cw->iv, decryptedtext);
-        if (new_len > (int )batch[i].len)
+        if (new_len > (int)batch[i].len)
             new_len = batch[i].len;
 
         if (new_len > 0)
