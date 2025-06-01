@@ -155,6 +155,34 @@ void init_algo_aes() {
     register_algo(&aes_cbc_op);
 }
 
+int compute_sha256_multi(struct sha_vec *inputs, size_t count,
+                         uint8_t *output) {
+    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+    if (!ctx) {
+        return 1;
+    }
+
+    if (EVP_DigestInit_ex(ctx, EVP_sha256(), NULL) != 1) {
+        EVP_MD_CTX_free(ctx);
+        return 1;
+    }
+
+    for (size_t i = 0; i < count; ++i) {
+        if (EVP_DigestUpdate(ctx, inputs[i].buf, inputs[i].len) != 1) {
+            EVP_MD_CTX_free(ctx);
+            return 1;
+        }
+    }
+
+    if (EVP_DigestFinal_ex(ctx, output, NULL) != 1) {
+        EVP_MD_CTX_free(ctx);
+        return 1;
+    }
+
+    EVP_MD_CTX_free(ctx);
+    return 0;
+}
+
 ///// AES_XCBC_MAC
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L

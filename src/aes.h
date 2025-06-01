@@ -29,6 +29,12 @@ struct aes_xcbc_mac_ctx {
     int buflen;
 };
 
+struct sha_vec {
+    uint8_t *buf;
+    size_t len;
+};
+
+int compute_sha256_multi(struct sha_vec *inputs, size_t count, uint8_t *output);
 int aes_xcbc_mac_init(struct aes_xcbc_mac_ctx *ctx, const uint8_t *key);
 int aes_xcbc_mac_process(struct aes_xcbc_mac_ctx *ctx, const uint8_t *in,
                          unsigned int len);

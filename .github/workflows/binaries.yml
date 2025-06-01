@@ -16,21 +16,21 @@ jobs:
         fetch-depth: '0'
     - name: Build x64
       run: |
-       ./configure --enable-static CC="clang++ -static" --disable-netcv
+       ./configure --enable-static CXX="clang++ -static" --disable-netcv
        make DDCI=1
        zip -9 -r /minisatip_x64.zip minisatip html
 
     - name: Build ARM
       run: |
        make clean
-       ./configure --disable-netcv --enable-static --host=arm-linux-gnueabihf CC="clang++ -target arm-linux-gnueabihf -static"
+       ./configure --disable-netcv --enable-static --host=arm-linux-gnueabihf CXX="clang++ -target arm-linux-gnueabihf -static"
        make
        zip -9 -r /minisatip_arm.zip minisatip html
 
     - name: Build MIPS
       run: |
        make clean
-       ./configure --disable-netcv --enable-static --host=mipsel-linux-gnu CC="zig c++ -target mipsel-linux-gnueabihf.2.34 -static"
+       ./configure --disable-netcv --enable-static --host=mipsel-linux-gnu CXX="zig c++ -target mipsel-linux-gnueabihf.2.34 -static"
        make EXTRA_CFLAGS="-I/sysroot/mipsel/include -L/sysroot/mipsel/lib" EMBEDDED=1
        zip -9 -r /minisatip_mips.zip minisatip html
 

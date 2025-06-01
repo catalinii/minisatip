@@ -1044,18 +1044,12 @@ static void generate_key_seed(struct cc_ctrl_data *cc_data) {
     /* this is triggered by new ns_module */
 
     /* generate new key_seed -> SEK/SAK key derivation */
+    sha_vec input[] = {
+        {element_get_ptr(cc_data, 22), element_get_buf(cc_data, NULL, 22)},
+        {element_get_ptr(cc_data, 20), element_get_buf(cc_data, NULL, 20)},
+        {element_get_ptr(cc_data, 21), element_get_buf(cc_data, NULL, 21)}};
 
-    SHA256_CTX sha;
-
-    SHA256_Init(&sha);
-    SHA256_Update(&sha, &cc_data->dhsk[240], 16);
-    SHA256_Update(&sha, element_get_ptr(cc_data, 22),
-                  element_get_buf(cc_data, NULL, 22));
-    SHA256_Update(&sha, element_get_ptr(cc_data, 20),
-                  element_get_buf(cc_data, NULL, 20));
-    SHA256_Update(&sha, element_get_ptr(cc_data, 21),
-                  element_get_buf(cc_data, NULL, 21));
-    SHA256_Final(cc_data->ks_host, &sha);
+    compute_sha256_multi(input, 3, cc_data->ks_host);
 }
 
 static void generate_ns_host(struct cc_ctrl_data *cc_data)
@@ -1190,15 +1184,13 @@ static int check_ci_certificates(struct cc_ctrl_data *cc_data) {
 
 static int generate_akh(struct cc_ctrl_data *cc_data) {
     uint8_t akh[32];
-    SHA256_CTX sha;
+    sha_vec input[] = {
+        {element_get_ptr(cc_data, 6), element_get_buf(cc_data, NULL, 6)},
+        {element_get_ptr(cc_data, 5), element_get_buf(cc_data, NULL, 5)},
+        {cc_data->dhsk, 256}};
 
-    SHA256_Init(&sha);
-    SHA256_Update(&sha, element_get_ptr(cc_data, 6),
-                  element_get_buf(cc_data, NULL, 6));
-    SHA256_Update(&sha, element_get_ptr(cc_data, 5),
-                  element_get_buf(cc_data, NULL, 5));
-    SHA256_Update(&sha, cc_data->dhsk, 256);
-    SHA256_Final(akh, &sha);
+    if (compute_sha256_multi(input, 3, akh))
+        return 1;
 
     element_set(cc_data, 22, akh, sizeof(akh));
 
@@ -1320,21 +1312,18 @@ static int restart_dh_challenge(struct cc_ctrl_data *cc_data) {
 
 static int generate_uri_confirm(struct cc_ctrl_data *cc_data,
                                 const uint8_t *sak) {
-    SHA256_CTX sha;
     uint8_t uck[32];
     uint8_t uri_confirm[32];
+    sha_vec input1[] = {{(uint8_t *)sak, 16}};
 
     /* calculate UCK (uri confirmation key) */
-    SHA256_Init(&sha);
-    SHA256_Update(&sha, sak, 16);
-    SHA256_Final(uck, &sha);
+    compute_sha256_multi(input1, 1, uck);
 
     /* calculate uri_confirm */
-    SHA256_Init(&sha);
-    SHA256_Update(&sha, element_get_ptr(cc_data, 25),
-                  element_get_buf(cc_data, NULL, 25));
-    SHA256_Update(&sha, uck, 32);
-    SHA256_Final(uri_confirm, &sha);
+    sha_vec input2[] = {
+        {element_get_ptr(cc_data, 25), element_get_buf(cc_data, NULL, 25)},
+        {uck, 32}};
+    compute_sha256_multi(input2, 2, uri_confirm);
 
     element_set(cc_data, 27, uri_confirm, 32);
 
