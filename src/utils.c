@@ -240,10 +240,11 @@ int addr2line(char const *const program_name, void const *const addr) {
 
 void print_trace(void) {
     void *array[10];
-    size_t size;
+    size_t size = 0;
     size_t i;
-
+#ifdef backtrace
     size = backtrace(array, 10);
+#endif
 
     printf("Obtained %zu stack frames.\n", size);
 

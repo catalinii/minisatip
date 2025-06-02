@@ -20,7 +20,6 @@
 
 #ifndef DISABLE_NETCVCLIENT
 
-#define _GNU_SOURCE
 #include "netceiver.h"
 #include "utils/alloc.h"
 #include <errno.h>

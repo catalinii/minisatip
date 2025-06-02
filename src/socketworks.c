@@ -17,6 +17,10 @@
  * USA
  *
  */
+#ifndef _GNU_SOURCE
+// zip c++ needs this
+#define _GNU_SOURCE
+#endif
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -36,6 +40,7 @@
 #include <sys/un.h>
 #include <time.h>
 #include <unistd.h>
+#include <sys/prctl.h>
 
 #include "minisatip.h"
 #include "socketworks.h"
@@ -707,7 +712,7 @@ void *select_and_execute(void *arg) {
            sizeof(thread_info[thread_index].thread_name));
     if (arg) {
         safe_strncpy(thread_info[thread_index].thread_name, (char *)arg);
-        pthread_setname_np(tid, thread_info[thread_index].thread_name);
+        prctl(PR_SET_NAME, thread_info[thread_index].thread_name, 0, 0, 0);
     } else
         strcpy(thread_info[thread_index].thread_name, "main");
 
