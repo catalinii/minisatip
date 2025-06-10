@@ -204,7 +204,7 @@ char *get_alloc_info(int id, char *dest, int max_size) {
     return dest;
 }
 
-long int get_allocated_memory() {
+uint64_t get_allocated_memory() {
     SMEMALLOC *s;
     int i = 0;
     long int max_mem = 0;
