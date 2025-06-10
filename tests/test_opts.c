@@ -18,10 +18,13 @@
  *
  */
 
+#include "adapter.h"
 #include "opts.h"
 #include "utils/testing.h"
 #include <stdio.h>
 #include <string.h>
+
+extern adapter *a[MAX_ADAPTERS];
 
 void _reset_dvbapi_opts() {
     opts.pids_all_no_dec = 0;
@@ -90,9 +93,26 @@ int test_parse_dvbapi_opt() {
     return 0;
 }
 
+int test_set_slave_adapters() {
+    int i;
+    set_slave_adapters("0-1:0,2-3:2");
+
+    for (i = 0; i < 4; i++) {
+        LOG("adapter %d master %d", a[i]->id, a[i]->master_source);
+    }
+
+    ASSERT(a[0]->master_source == 0, "adapter 0 master != 0");
+    ASSERT(a[1]->master_source == 0, "adapter 1 master != 0");
+    ASSERT(a[2]->master_source == 2, "adapter 2 master != 2");
+    ASSERT(a[3]->master_source == 2, "adapter 3 master != 2");
+       
+    return 0;
+}
+
 int main() {
     opts.log = 255;
     strcpy(thread_info[thread_index].thread_name, "test_opts");
     TEST_FUNC(test_parse_dvbapi_opt(), "parse_dvbapi_offset() failed");
+    TEST_FUNC(test_set_slave_adapters(), "test_set_slave_adapters() failed");
     return 0;
 }

@@ -1890,9 +1890,7 @@ void set_slave_adapters(char *o) {
                 if (!a[master])
                     a[master] = adapter_alloc();
 
-                if (a[master] && a[master]->master_source < 0) {
-                    a[master]->master_source =
-                        -2; // force this adapter as master
+                if (a[master]) {
                     ad->master_source = master;
                     LOG("Setting master adapter %d for adapter %d",
                         ad->master_source, j);
