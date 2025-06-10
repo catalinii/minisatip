@@ -1887,7 +1887,7 @@ void set_slave_adapters(char *o) {
                 continue;
 
             if (master >= 0 && master < MAX_ADAPTERS) {
-                if (!a[master] && !is_adapter_disabled(master))
+                if (!a[master])
                     a[master] = adapter_alloc();
 
                 if (a[master] && a[master]->master_source < 0) {
