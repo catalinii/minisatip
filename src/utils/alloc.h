@@ -10,6 +10,7 @@ int _ensure_allocated(void **x, int struct_size, int pointer_size,
 
 void init_alloc();
 void free_alloc();
+long int get_allocated_memory();
 
 #define _malloc(a) malloc1(a, __FILE__, __LINE__, 1)
 #define _free(a) free1(a, __FILE__, __LINE__)

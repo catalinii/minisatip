@@ -203,6 +203,14 @@ char *get_alloc_info(int id, char *dest, int max_size) {
     return dest;
 }
 
+long int get_allocated_memory() {
+    SMEMALLOC *s;
+    int i = 0;
+    long int max_mem = 0;
+    FOREACH_ITEM(&mem_alloc_table, s) { max_mem += s->size_bytes; }
+    return max_mem;
+}
+
 _symbols alloc_sym[] = {
     {"alloc", VAR_FUNCTION_STRING, (void *)&get_alloc_info, 0, MAX_MEM_INFO, 0},
     {NULL, 0, NULL, 0, 0, 0}};

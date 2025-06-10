@@ -1166,10 +1166,10 @@ int calculate_bw(sockets *s) {
             c_buffered = buffered_bytes;
             c_dropped = dropped_bytes;
             LOG("BW %jd KB/s, DMX %jd KB/s, Buffered %.1f MB, Dropped: %.1f "
-                "MB, ns/read %jd, r: %d, w: %d fw: %d, tt: %jd ms",
+                "MB, ns/read %jd, r: %d, w: %d fw: %d, tt: %jd ms, memory %jd",
                 c_bw, c_bw_dmx, 1.0 * c_buffered / 1048576,
                 1.0 * c_dropped / 1048576, c_ns_read, c_reads, c_writes,
-                c_failed_writes, c_tt);
+                c_failed_writes, c_tt, get_allocated_memory());
             mutex_unlock(&bw_mutex);
         }
         bw = 0;
