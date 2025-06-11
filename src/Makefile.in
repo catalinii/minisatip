@@ -35,37 +35,37 @@ else
 endif
 
 SOURCES=\
-	minisatip.c \
-	socketworks.c \
-	stream.c \
-	adapter.c \
-	httpc.c \
-	opts.c \
-	utils.c \
-	api/symbols.c \
-	api/variables.c \
-	utils/dvb/dvb_support.c \
-	utils/logging/logging.c \
-	utils/alloc.c \
-	utils/fifo.c \
-	utils/hash_table.c \
-	utils/mutex.c \
-	utils/ticks.c \
-	utils/uuid.c
+	minisatip.cpp \
+	socketworks.cpp \
+	stream.cpp \
+	adapter.cpp \
+	httpc.cpp \
+	opts.cpp \
+	utils.cpp \
+	api/symbols.cpp \
+	api/variables.cpp \
+	utils/dvb/dvb_support.cpp \
+	utils/logging/logging.cpp \
+	utils/alloc.cpp \
+	utils/fifo.cpp \
+	utils/hash_table.cpp \
+	utils/mutex.cpp \
+	utils/ticks.cpp \
+	utils/uuid.cpp
 
 TABLES=0
 PMT=0
 
 ifeq ($(DVBCSA),1)
 LIBS+=dvbcsa
-SOURCES+=csa.c
+SOURCES+=csa.cpp
 PMT=1
 else
 CXXFLAGS+=-DDISABLE_DVBCSA
 endif
 
 ifeq ($(DVBAPI),1)
-SOURCES+=dvbapi.c
+SOURCES+=dvbapi.cpp
 TABLES=1
 PMT=1
 else
@@ -75,7 +75,7 @@ endif
 ifeq ($(DVBCA),1)
 LIBS+=crypto
 LDFLAGS += -ldl
-SOURCES+=ca.c aes.c
+SOURCES+=ca.cpp aes.cpp
 TABLES=1
 PMT=1
 ifeq ($(OS),linux)
@@ -86,39 +86,39 @@ CXXFLAGS+=-DDISABLE_DVBCA
 endif
 
 ifeq ($(PMT),1)
-SOURCES+=pmt.c
+SOURCES+=pmt.cpp
 else
 CXXFLAGS+=-DDISABLE_PMT
 endif
 
 ifeq ($(TABLES),1)
-SOURCES+=tables.c
+SOURCES+=tables.cpp
 else
 CXXFLAGS+=-DDISABLE_TABLES
 endif
 
 ifeq ($(SATIPCLIENT),1)
-SOURCES+=satipc.c
+SOURCES+=satipc.cpp
 else
 CXXFLAGS+=-DDISABLE_SATIPCLIENT
 endif
 
 ifeq ($(NETCVCLIENT),1)
-SOURCES+=netceiver.c
+SOURCES+=netceiver.cpp
 LDFLAGS+=-lnetceiver -lxml2
 else
 CXXFLAGS+=-DDISABLE_NETCVCLIENT
 endif
 
 ifeq ($(LINUXDVB),1)
-SOURCES+=dvb.c
+SOURCES+=dvb.cpp
 else
 CXXFLAGS+=-DDISABLE_LINUXDVB
-SOURCES+=dvb.c
+SOURCES+=dvb.cpp
 endif
 
 ifeq ($(DDCI),1)
-SOURCES+=ddci.c
+SOURCES+=ddci.cpp
 else
 CXXFLAGS+=-DDISABLE_DDCI
 endif
@@ -139,19 +139,19 @@ SOURCES+=$(SOURCES-1)
 CXXFLAGS+=$(CFLAGS-1)
 LDFLAGS+=$(LDFLAGS-1)
 
-OBJS := $(patsubst %.c, $(BUILDDIR)/%.o, $(SOURCES))
+OBJS := $(patsubst %.cpp, $(BUILDDIR)/%.o, $(SOURCES))
 DEPS=$(OBJS:.o=.d)
 
 $(TARGET): $(DEPS) $(OBJS) $(SOURCES)
 	$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(LDFLAGS)
 
-$(BUILDDIR)/%.d : %.c
+$(BUILDDIR)/%.d : %.cpp
 	@mkdir -p $(dir $@)
-	@$(CXX) $(CXXFLAGS) -MM $(basename $*).c | sed -e 's@^\(.*\)\.o:@\1.d \1.o:@' > $@
+	@$(CXX) $(CXXFLAGS) -MM $(basename $*).cpp | sed -e 's@^\(.*\)\.o:@\1.d \1.o:@' > $@
 
-$(BUILDDIR)/%.o : %.c
+$(BUILDDIR)/%.o : %.cpp
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $*.c -o $@
+	$(CXX) $(CXXFLAGS) -c $*.cpp -o $@
 
 all: $(TARGET)
 

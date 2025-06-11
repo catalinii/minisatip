@@ -30,7 +30,7 @@ jobs:
     - name: Build MIPS
       run: |
        make clean
-       ./configure --disable-netcv --enable-static --host=mipsel-linux-gnu
+       ./configure --disable-netcv --enable-static --host=mipsel-linux-gnu CXX="zig c++ -target mipsel-linux"
        make EXTRA_CFLAGS="-I/sysroot/mipsel/include -L/sysroot/mipsel/lib"
        zip -9 -r /minisatip_mips.zip minisatip html
 

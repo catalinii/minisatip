@@ -15,19 +15,19 @@ else
 endif
 
 SOURCES=\
-	test_adapter.c \
-	test_opts.c \
-	test_ca.c \
-	test_pmt.c \
-	test_ddci.c \
-	test_dvb.c \
-	test_minisatip.c \
-	test_utils.c \
-	test_socketworks.c \
-	utils/test_hash_table.c \
-	utils/test_utils.c
+	test_adapter.cpp \
+	test_opts.cpp \
+	test_ca.cpp \
+	test_pmt.cpp \
+	test_ddci.cpp \
+	test_dvb.cpp \
+	test_minisatip.cpp \
+	test_utils.cpp \
+	test_socketworks.cpp \
+	utils/test_hash_table.cpp \
+	utils/test_utils.cpp
 
-MAIN_SOURCES=$(shell find ../src -type f -iname '*.c')
+MAIN_SOURCES=$(shell find ../src -type f -iname '*.cpp')
 
 TABLES=0
 PMT=0
@@ -45,18 +45,18 @@ CXXFLAGS += -DMAJOR=\"tests\" -DMINOR=\"tests\" -DREVISION=\"tests\"
 
 LDFLAGS+=$(addprefix -l,$(LIBS))
 
-BINS := $(patsubst %.c, $(BUILDDIR)/%, $(SOURCES))
+BINS := $(patsubst %.cpp, $(BUILDDIR)/%, $(SOURCES))
 
 test: $(BINS)
 	@echo "Tests completed successfully"
 
-$(BUILDDIR)/%.d : %.c
+$(BUILDDIR)/%.d : %.cpp
 	@mkdir -p $(dir $@)
 	@$(CXX) $(CXXFLAGS) -MM $(basename $*).c | sed -e 's@^\(.*\)\.o:@\1.d \1.o:@' > $@
 
-$(BUILDDIR)/% : %.c
+$(BUILDDIR)/% : %.cpp
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) $*.c $(MAIN_SOURCES) -o $(BUILDDIR)/test $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $*.cpp $(MAIN_SOURCES) -o $(BUILDDIR)/test $(LDFLAGS)
 	@echo "Running $@"
 	@$(BUILDDIR)/test
 	@rm -f $(BUILDDIR)/test
