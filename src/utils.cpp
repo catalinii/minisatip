@@ -835,6 +835,35 @@ void _strncpy(char *a, char *b, int n) {
     a[n - 1] = 0;
 }
 
+/**
+ * Checks if the given buffer contains a valid RTSP header.
+ *
+ * @param buf The buffer containing the data to be checked.
+ * @param len The length of the buffer.
+ * @return 1 if the buffer contains a valid RTSP header, 0 otherwise.
+ */
+ int is_rtsp_header(char *buf, int len) {
+    if (strncmp(buf, "RTSP/1.", 7))
+        return 0;
+
+    char *nlnl = strstr(buf, "\r\n\r\n");
+    if (!nlnl)
+        return 0;
+    char *cl = strcasestr(buf, "Content-Length:");
+    if (!cl)
+        return 1;
+
+    int icl = map_intd(cl + 15, NULL, 0);
+
+    if (buf + len >= nlnl +icl + 4)
+        return 1;
+
+    return 0;
+}
+
+
+
+
 /*
 void write_buf_to_file(char *file, uint8_t *buf, int len)
 {

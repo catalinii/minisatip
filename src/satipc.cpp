@@ -236,13 +236,16 @@ int satipc_reply(sockets *s) {
     int rlen = s->rlen;
     adapter *ad;
     satipc *sip;
-    char *arg[100], *sep;
+    char *sep;
     int is_transport = 0;
     int rc = 0;
     __attribute__((unused)) int rv;
     get_ad_and_sipr(s->sid, 1);
 
-    memset(arg, 0, sizeof(arg));
+    if (!is_rtsp_header((char *)s->buf, s->rlen)){
+        LOG("satipc: RTSP header not complete\n%s", s->buf);
+        return 0;
+    }
     s->rlen = 0;
     sip->keep_adapter_open = 0;
 
