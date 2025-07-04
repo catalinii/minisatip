@@ -979,6 +979,8 @@ int pmt_decrypt_stream(adapter *ad) {
 
     for (i = 0; i < rlen; i += DVB_FRAME) {
         b = ad->buf + i;
+        if (b[0] != 0x47)
+            continue;
         pid = PID_FROM_TS(b);
         if (b[3] & 0x80) {
             p = find_pid(ad->id, pid);
@@ -1203,6 +1205,10 @@ int pmt_process_stream(adapter *ad) {
 
     for (i = 0; i < rlen; i += DVB_FRAME) {
         b = ad->buf + i;
+        if (b[0] != 0x47) {
+            DEBUGM("Non-ts packet %d, pos %d", i / 188, i);
+            continue;
+        }
         pid = PID_FROM_TS(b);
         p = find_pid(ad->id, pid);
         if (p && (p->filter != -1)) {
@@ -1469,7 +1475,7 @@ int assemble_normal(SFilter *f, uint8_t *b) {
         start += 1; // advance over the first 0
     }
     int left = 188 - start;
-    if (f->pos > FILTER_PACKET_SIZE)
+    if ((f->pos + left > FILTER_PACKET_SIZE) || (left < 4))
         LOG_AND_RETURN(0,
                        "assemble_packet: len %d not valid for pid %d [%02X "
                        "%02X %02X %02X %02X %02X]",
@@ -1489,9 +1495,6 @@ int assemble_normal(SFilter *f, uint8_t *b) {
 int assemble_packet(SFilter *f, uint8_t *b) {
     int len = 0, pid;
     uint32_t crc;
-
-    if ((b[0] != 0x47)) // make sure we are dealing with TS
-        return 0;
 
     pid = PID_FROM_TS(b);
     if (f->flags & FILTER_EMM)

@@ -1165,12 +1165,8 @@ int read_rtsp(sockets *s) {
             "ending with \\r\\n\\r\\n",
             s->rlen, s->sock, s->id, s->flags);
         hexdump("read_rtsp: ", s->buf, s->rlen);
-        if (s->flags & 1)
-            return 0;
-        unsigned char *new_alloc = (unsigned char *)_malloc(RBUF);
-        memcpy(new_alloc, s->buf, s->rlen);
-        s->buf = new_alloc;
-        s->flags = s->flags | 1;
+        set_socket_new_buffer(s->id, RBUF);
+
         return 0;
     }
 

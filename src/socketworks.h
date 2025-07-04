@@ -96,6 +96,7 @@ int no_action(int s);
 void *select_and_execute(void *arg);
 int fill_sockaddr(USockAddr *serv, char *host, int port, int ipv4_only);
 int sockets_del_for_sid(int sid);
+void set_socket_new_buffer(int sid, int len);
 void set_socket_buffer(int sid, unsigned char *buf, int len);
 void sockets_timeout(int i, int t);
 void set_sockets_rtime(int i, int r);

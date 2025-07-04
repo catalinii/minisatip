@@ -34,13 +34,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/un.h>
 #include <time.h>
 #include <unistd.h>
-#include <sys/prctl.h>
 
 #include "minisatip.h"
 #include "socketworks.h"
@@ -689,7 +689,7 @@ int get_thread_index() {
 }
 
 void *select_and_execute(void *arg) {
-    int i, rv, rlen, les, es, pos_len;
+    int i, rv, rlen, les, es, pos_len, old_rlen;
     unsigned char buf[10240], *pos;
     int err;
     struct pollfd pf[MAX_SOCKS];
@@ -821,6 +821,7 @@ void *select_and_execute(void *arg) {
 
                     pos = master->buf + master->rlen;
                     pos_len = master->lbuf - master->rlen;
+                    old_rlen = master->rlen;
 
                     if (ss->read)
                         read_ok = ss->read(ss->sock, pos, pos_len, ss, &rlen);
@@ -858,10 +859,10 @@ void *select_and_execute(void *arg) {
                         master->buf[master->rlen] = 0;
 
                     DEBUGM("Read %s %d (rlen:%d/total:%d) bytes from %d [s: %d "
-                           "m: %d] -> "
-                           "%p (buf: %p) - iteration %jd action %p",
+                           "m: %d] -> old pos %d (buf: %p) - iteration %jd "
+                           "action %p",
                            read_ok ? "OK" : "NOK", rlen, master->rlen,
-                           master->lbuf, ss->sock, ss->id, master->id, pos,
+                           master->lbuf, ss->sock, ss->id, master->id, old_rlen,
                            master->buf, ss->iteration, master->action);
 
                     if (((master->rlen > 0) || err == EWOULDBLOCK) &&
@@ -1007,7 +1008,29 @@ int sockets_del_for_sid(int sid) {
     return 0;
 }
 
-void set_socket_buffer(int sid, unsigned char *buf, int len) {
+void set_socket_new_buffer(int sid, int len) {
+    uint8_t *buf = NULL;
+    sockets *ss = get_sockets(sid);
+    if (!ss)
+        return;
+
+    if (ss->flags & 1) {
+        return;
+    }
+
+    buf = ss->buf;
+
+    ss->buf = (uint8_t *)_malloc(len);
+    if (!ss->buf) {
+        ss->buf = buf;
+        return;
+    }
+    ss->lbuf = len;
+    memcpy(ss->buf, buf, ss->rlen);
+    ss->flags = ss->flags | 1;
+}
+
+void set_socket_buffer(int sid, uint8_t *buf, int len) {
     sockets *ss = get_sockets(sid);
     if (!ss)
         return;
