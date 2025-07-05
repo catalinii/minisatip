@@ -104,7 +104,7 @@ typedef struct struct_satipc {
     uint8_t addpids, setup_pids;
     unsigned char *tcp_data;
     int tcp_size, tcp_pos, tcp_len;
-    char option_no_setup, option_no_option;
+    char option_no_setup;
     uint32_t rcvp, repno, rtp_miss, rtp_ooo; // rtp statstics
     uint16_t rtp_seq;
     char static_config;
@@ -127,7 +127,6 @@ typedef struct struct_satipc {
     unsigned int want_tune : 1;
     unsigned int force_pids : 1;
     unsigned int sent_transport : 1;
-    uint8_t *rtsp_buffer;
 } satipc;
 
 satipc *satip[MAX_ADAPTERS];
@@ -166,7 +165,6 @@ void handle_client_capabilities(satipc *sip, char *buf) {
     char *sep = strstr(buf, "minisatip");
     if (sep) {
         sip->option_no_setup = 1;
-        sip->option_no_option = 1;
         sip->addpids = 1;
     }
     sep = strstr(buf, "enigma");
@@ -182,7 +180,6 @@ void handle_client_capabilities(satipc *sip, char *buf) {
             LOG("adapter %d is not RTSP over TCP, switching", sip->id);
         }
         sip->option_no_setup = 1;
-        sip->option_no_option = 1;
     }
 }
 
@@ -274,7 +271,7 @@ int satipc_reply(sockets *s) {
 
     // Fritzbox did reply 408 when mtype is missing
     if (rc == 408) {
-        sip->state = SATIP_STATE_OPTIONS;
+        sip->state = SATIP_STATE_SETUP;
         sip->last_setup = -10000;
         // quirk for Aurora client missing mtype
         if (ad->tp.mtype == QAM_AUTO)
@@ -282,7 +279,7 @@ int satipc_reply(sockets *s) {
     }
 
     if (rc == 404) {
-        sip->state = SATIP_STATE_OPTIONS;
+        sip->state = SATIP_STATE_SETUP;
     }
 
     // quirk for Geniatech EyeTV Netstream 4C when fe=x is in the URL
@@ -291,7 +288,7 @@ int satipc_reply(sockets *s) {
             sip->satip_fe = 0;
 
     if (rc == 454 || rc == 503 || rc == 405) {
-        sip->state = SATIP_STATE_OPTIONS;
+        sip->state = SATIP_STATE_SETUP;
         sip->last_setup = -10000;
     } else if (rc != 200) {
         if (rc != 0) // AVM Fritz!Box workaround sdp reply without header
@@ -323,8 +320,6 @@ int satipc_reply(sockets *s) {
             if (sip->last_cmd == RTSP_TEARDOWN)
                 sip->state = SATIP_STATE_INACTIVE;
             break;
-        case SATIP_STATE_OPTIONS:
-            sip->state = SATIP_STATE_SETUP;
         }
     }
 
@@ -623,7 +618,7 @@ int satipc_open_device(adapter *ad) {
     sip->rtsp_socket_closed = 0;
     sip->last_close = 0;
     sip->timeout_ms = 30000;
-    sip->state = SATIP_STATE_OPTIONS;
+    sip->state = SATIP_STATE_SETUP;
     return 0;
 }
 
@@ -1071,7 +1066,7 @@ int satip_post_init(adapter *ad) {
     sockets_setclose(ad->sock, (void *)satipc_close_rtsp);
     set_socket_thread(ad->fe_sock, ad->thread);
 
-    sip->state = SATIP_STATE_OPTIONS;
+    sip->state = SATIP_STATE_SETUP;
     satipc_request(ad);
     return 0;
 }
@@ -1331,7 +1326,6 @@ int satipc_send_setup(adapter *ad, satipc *sip) {
 
     sip->sent_transport = 0;
     ad->err = 0;
-    sip->lap = sip->ldp = 0;
     strcatf(url, len, "&pids=none");
     http_request(ad, url, "SETUP", 0);
     return 0;
@@ -1452,8 +1446,7 @@ int satipc_request(adapter *ad) {
         return 0;
 
     if ((ad->tp.freq == 0) &&
-        ((sip->state == SATIP_STATE_OPTIONS) ||
-         (sip->state == SATIP_STATE_INACTIVE) ||
+         ((sip->state == SATIP_STATE_INACTIVE) ||
          (sip->state == SATIP_STATE_SETUP) || (sip->state == SATIP_STATE_PLAY)))
         return 0;
 
@@ -1472,16 +1465,13 @@ int satipc_request(adapter *ad) {
         sip->state = SATIP_STATE_SETUP;
 
     // set the init parameters
-    if (sip->state == SATIP_STATE_OPTIONS) {
+    if (sip->state == SATIP_STATE_SETUP) {
         sip->sent_transport = 0;
         sip->stream_id = -1;
         sip->session[0] = 0;
         sip->want_tune = 1;
         sip->want_commit = 1;
     }
-
-    if (sip->state == SATIP_STATE_OPTIONS && sip->option_no_option)
-        sip->state = SATIP_STATE_SETUP;
 
     // PLAY contains the setup details as well
     if (sip->state == SATIP_STATE_SETUP && sip->option_no_setup) {
@@ -1490,10 +1480,6 @@ int satipc_request(adapter *ad) {
 
     LOGM("satipc: for adapter %d, executing state %d", ad->id, sip->state);
     switch (sip->state) {
-    case SATIP_STATE_OPTIONS:
-        err = satipc_send_options(ad);
-        break;
-
     case SATIP_STATE_SETUP:
         err = satipc_send_setup(ad, sip);
         break;
@@ -1562,7 +1548,7 @@ int satipc_tune(int aid, transponder *tp) {
     // if TEARDOWN has been already sent and session was destroyed, re-start the
     // session
     if (sip->state == SATIP_STATE_INACTIVE)
-        sip->state = SATIP_STATE_OPTIONS;
+        sip->state = SATIP_STATE_SETUP;
 
     return 0;
 }
