@@ -127,6 +127,7 @@ typedef struct struct_satipc {
     unsigned int want_tune : 1;
     unsigned int force_pids : 1;
     unsigned int sent_transport : 1;
+    uint8_t *rtsp_buffer;
 } satipc;
 
 satipc *satip[MAX_ADAPTERS];
@@ -236,13 +237,18 @@ int satipc_reply(sockets *s) {
     int rlen = s->rlen;
     adapter *ad;
     satipc *sip;
-    char *arg[100], *sep;
+    char *sep;
     int is_transport = 0;
     int rc = 0;
     __attribute__((unused)) int rv;
     get_ad_and_sipr(s->sid, 1);
 
-    memset(arg, 0, sizeof(arg));
+    if (!is_rtsp_header((char *)s->buf, s->rlen)) {
+        set_socket_new_buffer(s->id, 10240);
+        LOG("satipc: RTSP header not complete: %d id %d\n%s", s->rlen, s->id,
+            s->buf);
+        return 0;
+    }
     s->rlen = 0;
     sip->keep_adapter_open = 0;
 
