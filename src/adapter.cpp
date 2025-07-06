@@ -152,7 +152,7 @@ int adapter_timeout(sockets *s) {
         return 1;
 
     if (ad->adapter_timeout == 0) {
-        LOG("keeping the adapter %d open as the initialization is slow",
+        LOG("Keeping adapter %d open as the initialization is slow",
             ad->id);
         s->rtime = getTick();
         return 0;
@@ -161,7 +161,7 @@ int adapter_timeout(sockets *s) {
     if (get_streams_for_adapter(ad->id) > 0) {
         ad->rtime = getTick();
         s->rtime = ad->rtime;
-        LOG("Keeping the adapter %d open as there are active streams", ad->id);
+        LOG("Keeping adapter %d open as there are active streams", ad->id);
         return 0;
     }
 
