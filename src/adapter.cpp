@@ -158,6 +158,12 @@ int adapter_timeout(sockets *s) {
         return 0;
     }
 
+    if (ad->type == ADAPTER_CI) {
+        LOG("Keeping adapter %d open as it's a CI device", ad->id);
+        s->rtime = getTick();
+        return 0;
+    }
+
     if (get_streams_for_adapter(ad->id) > 0) {
         ad->rtime = getTick();
         s->rtime = ad->rtime;
