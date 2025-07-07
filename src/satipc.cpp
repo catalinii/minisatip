@@ -240,10 +240,9 @@ int satipc_reply(sockets *s) {
     __attribute__((unused)) int rv;
     get_ad_and_sipr(s->sid, 1);
 
-    if (!is_rtsp_header((char *)s->buf, s->rlen)) {
+    if (!is_rtsp_http_header((char *)s->buf, s->rlen)) {
         set_socket_new_buffer(s->id, 10240);
-        LOG("satipc: RTSP header not complete: %d id %d\n%s", s->rlen, s->id,
-            s->buf);
+        LOG("satipc: RTSP header not complete: %d\n%s", s->id, s->buf);
         return 0;
     }
     s->rlen = 0;

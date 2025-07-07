@@ -842,8 +842,8 @@ void _strncpy(char *a, char *b, int n) {
  * @param len The length of the buffer.
  * @return 1 if the buffer contains a valid RTSP header, 0 otherwise.
  */
-int is_rtsp_header(char *buf, int len) {
-    if (strncmp(buf, "RTSP/1.", 7))
+int is_rtsp_http_header(char *buf, int len) {
+    if (strncmp(buf, "RTSP/1.", 7) && strncmp(buf, "HTTP/1.", 7))
         return 0;
 
     char *nlnl = strstr(buf, "\r\n\r\n");

@@ -86,9 +86,9 @@ int test_is_rtsp_header() {
        char header1[] = "RTSP/1.0 200 OK\r\n\r\n";
        char header2[] = "RTSP/1.0 200 OK\r\nContent-Length: 23\r\n\r\n";
        char header3[] = "RTSP/1.0 200 OK\r\nContent-Length: 4\r\n\r\ntest";
-       ASSERT_EQUAL(1, is_rtsp_header(header1, sizeof(header1)), "Expected 1 for header1");
-       ASSERT_EQUAL(0, is_rtsp_header(header2, sizeof(header2)), "Expected 0 for header2");
-       ASSERT_EQUAL(1, is_rtsp_header(header3, sizeof(header3)), "Expected 1 for header3");
+       ASSERT_EQUAL(1, is_rtsp_http_header(header1, sizeof(header1)), "Expected 1 for header1");
+       ASSERT_EQUAL(0, is_rtsp_http_header(header2, sizeof(header2)), "Expected 0 for header2");
+       ASSERT_EQUAL(1, is_rtsp_http_header(header3, sizeof(header3)), "Expected 1 for header3");
        return 0;
 
 }
