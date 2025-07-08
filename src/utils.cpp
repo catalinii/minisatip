@@ -183,10 +183,6 @@ int map_float(char *s, int mul) {
 
 int map_int(char *s, char **v) { return map_intd(s, v, 0); }
 
-int end_of_header(char *buf) {
-    return buf[0] == 0x0d && buf[1] == 0x0a && buf[2] == 0x0d && buf[3] == 0x0a;
-}
-
 void posix_signal_handler(int sig, siginfo_t *siginfo, ucontext_t *ctx);
 void set_signal_handler(char *argv0) {
     struct sigaction sig_action = {};

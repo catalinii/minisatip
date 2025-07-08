@@ -20,7 +20,6 @@ char *strip(char *s);
 int split(char **rv, char *s, int lrv, char sep);
 void set_signal_handler(char *argv0);
 int becomeDaemon();
-int end_of_header(char *buf);
 char *readfile(char *fn, char *ctype, int *len);
 void process_file(void *sock, char *s, int len, char *ctype);
 int closefile(char *mem, int len);
