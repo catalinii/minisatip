@@ -1320,7 +1320,6 @@ int satipc_send_setup(adapter *ad, satipc *sip) {
 
     sip->sent_transport = 0;
     ad->err = 0;
-    sip->lap = sip->ldp = 0;
     strcatf(url, len, "&pids=none");
     http_request(ad, url, "SETUP", 0);
     return 0;
