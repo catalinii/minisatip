@@ -1160,8 +1160,8 @@ int read_rtsp(sockets *s) {
                 s->rlen, RBUF);
             s->rlen = 0;
         }
+        LOG("RTSP header not complete: %d\n%s", s->id, s->buf);
         set_socket_new_buffer(s->id, RBUF);
-
         return 0;
     }
 
@@ -1398,7 +1398,8 @@ int read_http(sockets *s) {
                 s->rlen, RBUF);
             s->rlen = 0;
         }
-	set_socket_new_buffer(s->id, RBUF);
+        LOG("HTTP header not complete: %d\n%s", s->id, s->buf);
+        set_socket_new_buffer(s->id, RBUF);
         return 0;
     }
     url[0] = 0;
