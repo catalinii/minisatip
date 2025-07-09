@@ -310,7 +310,8 @@ int satipc_reply(sockets *s) {
 
         switch (sip->state) {
         case SATIP_STATE_SETUP:
-            sip->state = SATIP_STATE_PLAY;
+            if (sip->last_cmd == RTSP_SETUP)
+                sip->state = SATIP_STATE_PLAY;
             break;
         case SATIP_STATE_PLAY:
             satipc_handle_play(ad, sip);
