@@ -20,7 +20,6 @@ char *strip(char *s);
 int split(char **rv, char *s, int lrv, char sep);
 void set_signal_handler(char *argv0);
 int becomeDaemon();
-int end_of_header(char *buf);
 char *readfile(char *fn, char *ctype, int *len);
 void process_file(void *sock, char *s, int len, char *ctype);
 int closefile(char *mem, int len);
@@ -44,7 +43,9 @@ int mkdir_recursive(const char *path);
 void sleep_msec(uint32_t msec);
 int get_random(unsigned char *dest, int len);
 void _strncpy(char *a, char *b, int len);
-int is_rtsp_header(char *buf, int len);
+int is_rtsp_response(char *buf, int len);
+int is_rtsp_request(char *buf, int len);
+int is_http_request(char *buf, int len);
 
 #define dump_packets(message, b, len, packet_offset)                           \
     if (DEFAULT_LOG & opts.debug)                                              \

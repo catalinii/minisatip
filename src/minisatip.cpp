@@ -1152,8 +1152,8 @@ int read_rtsp(sockets *s) {
         }
     }
 
-    if ((s->rlen > 0) &&
-        (s->rlen < 4 || !end_of_header((char *)s->buf + s->rlen - 4))) {
+    if (!is_rtsp_request((char *)s->buf, s->rlen) &&
+        !is_http_request((char *)s->buf, s->rlen)) {
         if (s->rlen > RBUF - 10) {
             LOG("Discarding %d bytes from the socket buffer, request > %d, "
                 "consider "
@@ -1161,12 +1161,8 @@ int read_rtsp(sockets *s) {
                 s->rlen, RBUF);
             s->rlen = 0;
         }
-        LOG("read_rtsp: read %d bytes from handle %d, sock_id %d, flags %d not "
-            "ending with \\r\\n\\r\\n",
-            s->rlen, s->sock, s->id, s->flags);
-        hexdump("read_rtsp: ", s->buf, s->rlen);
+        LOG("RTSP header not complete: %d\n%s", s->id, s->buf);
         set_socket_new_buffer(s->id, RBUF);
-
         return 0;
     }
 
@@ -1395,7 +1391,7 @@ int read_http(sockets *s) {
         "xmlns:satip=\"urn:ses-com:satip\">%s</satip:X_SATIPCAP>"
         "%s"
         "</device></root>";
-    if (s->rlen < 5 || !end_of_header((char *)s->buf + s->rlen - 4)) {
+    if (!is_http_request((char *)s->buf, s->rlen)) {
         if (s->rlen > RBUF - 10) {
             LOG("Discarding %d bytes from the socket buffer, request > %d, "
                 "consider "
@@ -1403,12 +1399,8 @@ int read_http(sockets *s) {
                 s->rlen, RBUF);
             s->rlen = 0;
         }
-        if (s->flags & 1)
-            return 0;
-        unsigned char *new_alloc = (unsigned char *)_malloc(RBUF);
-        memcpy(new_alloc, s->buf, s->rlen);
-        set_socket_buffer(s->id, new_alloc, RBUF);
-        s->flags = s->flags | 1;
+        LOG("HTTP header not complete: %d\n%s", s->id, s->buf);
+        set_socket_new_buffer(s->id, RBUF);
         return 0;
     }
     url[0] = 0;
@@ -1576,10 +1568,6 @@ int read_http(sockets *s) {
 
 int close_http(sockets *s) {
     streams *sid = get_sid(s->sid);
-    if ((s->flags & 1) && s->buf)
-        _free(s->buf);
-    s->flags = 0;
-    s->buf = NULL;
     LOG("Requested sid close %d timeout %d type %d, sock %d, handle %d, "
         "timeout "
         "%d",
