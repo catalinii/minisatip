@@ -1152,7 +1152,8 @@ int read_rtsp(sockets *s) {
         }
     }
 
-    if (!is_rtsp_http_header((char *)s->buf, s->rlen)) {
+    if (!is_rtsp_request((char *)s->buf, s->rlen) &&
+        !is_http_request((char *)s->buf, s->rlen)) {
         if (s->rlen > RBUF - 10) {
             LOG("Discarding %d bytes from the socket buffer, request > %d, "
                 "consider "
@@ -1390,7 +1391,7 @@ int read_http(sockets *s) {
         "xmlns:satip=\"urn:ses-com:satip\">%s</satip:X_SATIPCAP>"
         "%s"
         "</device></root>";
-    if (!is_rtsp_http_header((char *)s->buf, s->rlen)) {
+    if (!is_http_request((char *)s->buf, s->rlen)) {
         if (s->rlen > RBUF - 10) {
             LOG("Discarding %d bytes from the socket buffer, request > %d, "
                 "consider "

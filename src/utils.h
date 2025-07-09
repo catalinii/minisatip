@@ -43,7 +43,9 @@ int mkdir_recursive(const char *path);
 void sleep_msec(uint32_t msec);
 int get_random(unsigned char *dest, int len);
 void _strncpy(char *a, char *b, int len);
-int is_rtsp_http_header(char *buf, int len);
+int is_rtsp_response(char *buf, int len);
+int is_rtsp_request(char *buf, int len);
+int is_http_request(char *buf, int len);
 
 #define dump_packets(message, b, len, packet_offset)                           \
     if (DEFAULT_LOG & opts.debug)                                              \

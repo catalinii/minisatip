@@ -240,7 +240,7 @@ int satipc_reply(sockets *s) {
     __attribute__((unused)) int rv;
     get_ad_and_sipr(s->sid, 1);
 
-    if (!is_rtsp_http_header((char *)s->buf, s->rlen)) {
+    if (!is_rtsp_response((char *)s->buf, s->rlen)) {
         set_socket_new_buffer(s->id, 10240);
         LOG("satipc: RTSP header not complete: %d\n%s", s->id, s->buf);
         return 0;
@@ -1445,7 +1445,7 @@ int satipc_request(adapter *ad) {
         return 0;
 
     if ((ad->tp.freq == 0) &&
-         ((sip->state == SATIP_STATE_INACTIVE) ||
+        ((sip->state == SATIP_STATE_INACTIVE) ||
          (sip->state == SATIP_STATE_SETUP) || (sip->state == SATIP_STATE_PLAY)))
         return 0;
 

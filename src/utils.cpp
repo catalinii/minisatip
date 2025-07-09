@@ -832,14 +832,20 @@ void _strncpy(char *a, char *b, int n) {
 }
 
 /**
- * Checks if the given buffer contains a valid RTSP header.
+ * Checks if the given buffer contains a valid RTSP/HTTP header.
  *
  * @param buf The buffer containing the data to be checked.
  * @param len The length of the buffer.
  * @return 1 if the buffer contains a valid RTSP header, 0 otherwise.
  */
-int is_rtsp_http_header(char *buf, int len) {
-    if (strncmp(buf, "RTSP/1.", 7) && strncmp(buf, "HTTP/1.", 7))
+int is_rtsp_http_header(char *buf, int len, const char *start[], int lstart) {
+    int has_start = 0;
+    for (int i = 0; i < lstart; i++) {
+        if (!strncmp(buf, start[i], strlen(start[i])))
+            has_start = 1;
+    }
+
+    if (!has_start)
         return 0;
 
     char *nlnl = strstr(buf, "\r\n\r\n");
@@ -855,6 +861,22 @@ int is_rtsp_http_header(char *buf, int len) {
         return 1;
 
     return 0;
+}
+
+int is_rtsp_response(char *buf, int len) {
+    const char *start[] = {"RTSP/1."};
+    return is_rtsp_http_header(buf, len, start, 1);
+}
+
+int is_http_request(char *buf, int len) {
+    const char *start[] = {"GET ", "HEAD "};
+    return is_rtsp_http_header(buf, len, start, 2);
+}
+
+int is_rtsp_request(char *buf, int len) {
+    const char *start[] = {"OPTIONS ", "DESCRIBE ", "SETUP ", "PLAY ",
+                           "TEARDOWN "};
+    return is_rtsp_http_header(buf, len, start, 5);
 }
 
 /*
