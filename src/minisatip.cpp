@@ -1324,11 +1324,13 @@ int read_rtsp(sockets *s) {
                      "Content-Type: video/mp2t\r\nConnection: close");
         http_response(s, 200, buf, NULL, cseq, 0);
     } else if (strncmp(arg[0], "TEARDOWN", 8) == 0) {
-        buf[0] = 0;
-        if (get_sid(s->sid))
+        if (get_sid(s->sid)) {
+            buf[0] = 0;
             sprintf(buf, "Session: %010d", get_session_id(s->sid));
-        close_stream(s->sid);
-        http_response(s, 200, buf, NULL, cseq, 0);
+            close_stream(s->sid);
+            http_response(s, 200, buf, NULL, cseq, 0);
+        } else
+            http_response(s, 454, NULL, NULL, cseq, 0);
     } else if (strncmp(arg[0], "DESCRIBE", 8) == 0) {
         char sbuf[1000];
         char localhost[100];
