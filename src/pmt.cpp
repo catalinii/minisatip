@@ -1224,8 +1224,10 @@ int pmt_process_stream(adapter *ad) {
     emulate_add_all_pids(ad);
     start_active_pmts(ad);
 
-    if (ad->ca_mask == 0) // no CA enabled on this adapter
+    if (ad->ca_mask == 0) { // no CA enabled on this adapter
+        adapter_commit(ad);
         return 0;
+    }
 
     tables_ca_ts(ad);
     pmt_decrypt_stream(ad);

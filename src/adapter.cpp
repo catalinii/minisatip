@@ -152,8 +152,7 @@ int adapter_timeout(sockets *s) {
         return 1;
 
     if (ad->adapter_timeout == 0) {
-        LOG("Keeping adapter %d open as the initialization is slow",
-            ad->id);
+        LOG("Keeping adapter %d open as the initialization is slow", ad->id);
         s->rtime = getTick();
         return 0;
     }
@@ -799,8 +798,11 @@ int set_adapter_for_stream(int sid, int aid) {
 void adapter_commit(adapter *ad) {
     if (!ad->commit)
         return;
-    if (!ad->pids_updates)
+    if (!ad->pids_updates) {
+        LOGM("skipping committing adapter %d as no pids were updated", ad->id);
         return;
+    }
+    LOGM("adapter_commit for adapter %d", ad->id);
     ad->pids_updates = 0;
     ad->commit(ad);
 }
@@ -866,6 +868,7 @@ int update_pids(int aid) {
         return 1;
     }
     ad->updating_pids = 1;
+    LOGM("Updating pids for adapter %d", ad->id);
 #ifndef DISABLE_PMT
     for (i = 0; i < MAX_PIDS; i++)
         if (ad->pids[i].flags == 3)

@@ -421,9 +421,8 @@ int satipc_timeout(sockets *s) {
 
     if (sip->want_tune || sip->lap || sip->ldp) {
         LOG("satipc %d no timeout will be performed as we have operations "
-            "in "
-            "queue",
-            sip->id);
+            "in queue tune %d lap %d ldp %d",
+            sip->id, sip->want_tune, sip->lap, sip->ldp);
         return 0;
     }
     LOG("satipc: Sent keep-alive to the satip server %s:%d, adapter %d, "
@@ -1508,7 +1507,7 @@ int satipc_request(adapter *ad) {
 int satipc_commit(adapter *ad) {
     satipc *sip = get_satip(ad->id);
     if (!sip)
-        return 0;
+        LOG_AND_RETURN(0, "No satip client found for adapter %d", ad->id);
 
     LOG("satipc: commit on freq %d, sys %d for adapter %d (expect reply "
         "%d)",
