@@ -799,7 +799,8 @@ void adapter_commit(adapter *ad) {
     if (!ad->commit)
         return;
     if (!ad->pids_updates) {
-        LOGM("skipping committing adapter %d as no pids were updated", ad->id);
+        DEBUGM("skipping committing adapter %d as no pids were updated",
+               ad->id);
         return;
     }
     LOGM("adapter_commit for adapter %d", ad->id);
