@@ -5,23 +5,21 @@
 
 # Welcome to Minisatip
 
-Minisatip is a multi-threaded satip server version 1.2 that runs under Linux and it was tested with DVB-S, DVB-S2, DVB-T, DVB-T2, DVB-C, DVB-C2, ATSC and ISDB-T cards. More details about supported hardware: [Supported_Hardware.md](https://github.com/catalinii/minisatip/blob/master/Supported_Hardware.md)
+Minisatip is a multi-threaded satip server version 1.2 that runs under Linux and it was tested with DVB-S, DVB-S2, DVB-T, DVB-T2, DVB-C, DVB-C2, ATSC and ISDB-T cards. More details about supported hardware: https://github.com/catalinii/minisatip/blob/master/Supported_Hardware.md
 
-The protocol specification can be found at: [docs/satip_specification_version_1_2_2.pdf](https://github.com/catalinii/minisatip/blob/master/docs/satip_specification_version_1_2_2.pdf)\
-(original file downloaded from http://satip.info/sites/satip/files/resource/satip_specification_version_1_2_2.pdf and now offline).
-
+The protocol specification can be found at: 
+http://satip.info/sites/satip/files/resource/satip_specification_version_1_2_2.pdf
 It is very lightweight (designed for embedded systems with memory and processing constrains), does not need any additional libraries for basic functionality and can be used by existing satip clients like: Tvheadend, DVBViewer, vdr, VideoLAN or Android/iOS applications. Minisatip can act as a satip client as well in order to connect to satip servers from different networks.
 
 The application is designed to stream the requested data to multiple clients (even with one dvb card) in the same time while opening different pids.
 
 It is tested on x86_64, x86, ARM and MIPS platforms and it requires DVBAPI 5. Supported protocols are RTSP (both tcp and udp), HTTP (port 8080) and SSDP (as specified in the SAT>IP documentation). On top of that, it supports dvbapi protocol implemented by oscam (requires dvbcsa library) to decrypt channels using an official subscription and support dvbca protocol (requires libssl-dev library) for dvb cards with CA hardware. In order to enable/disable features, please edit the Makefile. 
 
-The application shows also a status page by default at the address: http://IP:8080 \
-The latest binaries for embedded platforms: [https://minisatip.org/forum/binaries](https://minisatip.org/forum/viewtopic.php?f=5&t=371) 
+The application shows also a status page by default at the address: http://IP:8080 
 
 ## Contact
 
-Please use https://minisatip.org/forum/ for any question or join [Slack](https://join.slack.com/t/minisatip/shared_invite/zt-rms717g0-SQR25SFs8RH9JlVZV4II7A) 
+Please use girhub issues for any question or join slack: https://join.slack.com/t/minisatip/shared_invite/zt-rms717g0-SQR25SFs8RH9JlVZV4II7A 
 
 In order to speed up the investigation of an issue, please provide the full log and a link to the application that is not working.
 
@@ -32,10 +30,10 @@ https://paypal.me/minisatip
 
 (Message automatically generated from `minisatip --help`)
 ```
-minisatip version 1.2.~4b5ed89, compiled in Feb 22 2023 08:21:17, with s2api version: 050B
+minisatip version v2.0.0-beta.13~5514d7d, compiled on Jul 10 2025 16:40:49, with s2api version: 050C
 
 	./minisatip [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
-	[-[uj] A1:S1-F1[-PIN]] [-m mac] [-P port] [-l module1[,module2]] [-v module1[,module2]] 
+	[-[uj] A1:S1-F1[-PIN]] [-P port] [-l module1[,module2]] [-v module1[,module2]] 
 	[-o [~]oscam_host:dvbapi_port[,offset] [-p public_host] [-r remote_rtp_host] [-R document_root] [-s [*][DELSYS:][FE_ID@][source_ip/]host[:port] 
 	[-u A1:S1-F1[-PIN]] [-L A1:low-high-switch] [-w http_server[:port]] 
  	[-x http_port] [-X xml_path] [-y rtsp_port] [-I name_service]
@@ -54,8 +52,8 @@ Help
 * -b --buffer X:Y : set the app adapter buffer to X Bytes (default: 376000) and set the kernel DVB buffer to Y Bytes (default: 5775360) - both multiple of 188
 	* eg: -b 18800:18988
 
-* -B X : set the app socket write buffer to X KB. 
-	* eg: -B 10000 - to set the socket buffer to 10MB
+* -B X : set the app socket write buffer to X MB. 
+	* eg: -B 10 - to set the socket buffer to 10MB (default value)
 
 * --client-send-buffer X : set the socket write buffer for client connections to X KB. 
 	- The default value is 0, corresponding to use the kernel default value
@@ -123,11 +121,11 @@ Help
 
 * -L --lnb specifies the adapter and LNB parameters (low, high and switch frequency)
 	* eg: -L *:9750-10600-11700 - sets all the adapters to use Universal LNB parameters (default)
-	* eg: -L *:10750-10750-10750 - sets the parameters for Sky NZ LNB using 10750 Mhz
-	* eg: -L 0:10750-10750-10750,1:9750-10600-11700 - adapter 0 has a SKY NZ LNB, adapter 1 has an Universal LNB
-
-* -m --mac xx: simulate xx as local mac address, generates UUID based on mac
-	* eg: -m 001122334455 
+	* eg: -L *:10750-0-0 - sets all adapters to use 10750 MHz Ku-band LNB parameters (e.g. Sky NZ)
+	* eg: -L *:5150-0-0 - sets all adapters to use 5150 MHz C-band LNB parameters
+	* eg: -L 0:10750-0-0,1:9750-10600-11700 - adapter 0 has a SKY NZ LNB, adapter 1 has an Universal LNB
+	
+	For backward-compatibility reasons, linear LNB parameters may also be specified as *:5150-5150-5150 instead of *:5150-0-0
 
 * -M --multiplier: multiplies the strength and snr of the DVB adapter with the specified values
 	* If the snr or the strength multipliers are set to 0, minisatip will override the value received from the adapter and will report always full signal 100% 
@@ -200,7 +198,7 @@ Help
 
 * -S --slave ADAPTER1,ADAPTER2-ADAPTER4[,..]:MASTER - specify slave adapters	
 	* Allows specifying bonded adapters (multiple adapters connected with a splitter to the same LNB)
-	* This feature is used by FBC receivers and AXE to specify the source input of the adapter
+	* This feature is used by FBC receivers to specify the source input of the adapter
 	Only one adapter needs to be master all others needs to have this parameter specified
 	eg: -S 1-2:0
 	- specifies adapter 1 to 2 as slave, in this case adapter 0 is the master that controls the LNB
@@ -240,7 +238,7 @@ Help
 	* 1 - use demuxX device 
 	* 2 - use dvrX device and additionally capture PSI data from demuxX device 
 	* 3 - use demuxX device and additionally capture PSI data from demuxX device 
-* -V --bind address: address for listening (RTSP + SSDP)
+* -V --bind address: address for listening (RTSP + SSDP) 
 * -U --bind-http address: address for listening (HTTP)
 * -J --bind-dev device: device name for binding (all services)
         * beware that only works with 1 device. loopback may not work!
@@ -257,6 +255,9 @@ Help
 		-A 0-1:0:0,2-3:1:0
 	* Note: Option -A is not compatible with clients requesting fe= (tvheadend)
 
+* -9 --disable-pmt-scan: Disables scanning PMTs and only reads the PMTs that are requested by the client
+	* Provides more reliable decrypting for channels included in multiple providers
+
 * -3 --ca-pin mapping_string: set the pin for CIs
 	* The format is: ADAPTER1:PIN,ADAPTER2-ADAPTER4:PIN
 	* eg: 0:1234,2-3:4567 
@@ -269,10 +270,10 @@ Help
 	* The format is: ADAPTER1:[*]MAX_CHANNELS[-CAID1[-CAID2]...,ADAPTER2:MAX_CHANNELS[-CAID3[-CAID4]...] 
 		 * before the MAX_CHANNELS enable 2 PMTs inside of the same CAPMT to double the number of decrypted channels
 			* eg : 0:*1-100
-
 The DDCI adapters 0 will support maximum of 1 CAPMT (2 channels because of *) and will use CAID1. If CAID is not specified it will use CAMs CAIDs
 Official CAMs support 1 or 2 channels, with this option this is extended to 2 or 4
 By default every CAM supports 1 channels
+
 ```
 
 ## How to compile:
@@ -303,11 +304,16 @@ make EXTRA_CFLAGS="-DNEEDS_SENDMMSG_SHIM"
 
 The above command is useful if you're getting errors like `sendmmsg(): errno 38: Function not implemented` (usually only concerns really old systems).
 
-To make a debug build (useful if minisatip crashes and you want to diagnose the issue):
+## Contributing
 
+
+Ensure clang-format and pre-commit are installed
 ```bash
-make debug
+pip3 install pre-commit
+pre-commit install
+apt-get install clang-format
 ```
+
 
 ## Building a Debian package:
 

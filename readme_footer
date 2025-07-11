@@ -28,6 +28,17 @@ make EXTRA_CFLAGS="-DNEEDS_SENDMMSG_SHIM"
 
 The above command is useful if you're getting errors like `sendmmsg(): errno 38: Function not implemented` (usually only concerns really old systems).
 
+## Contributing
+
+
+Ensure clang-format and pre-commit are installed
+```bash
+pip3 install pre-commit
+pre-commit install
+apt-get install clang-format
+```
+
+
 ## Building a Debian package:
 
 ```bash

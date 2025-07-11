@@ -6,7 +6,7 @@
 #include "stream.h"
 #include "utils.h"
 
-#define VERSION (MAJOR MINOR "~" REVISION)
+#define VERSION (TAG "~" REVISION)
 
 #define EMU_PIDS_ALL_ENFORCED_PIDS_LIST 1, 16, 17, 18, 20, 21
 
@@ -34,9 +34,13 @@ extern char app_name[], version[];
     }
 
 #define copy16r(v, a, i)                                                       \
-    { v = ((a[i] & 0xFF) << 8) | a[i + 1]; }
+    {                                                                          \
+        v = ((a[i] & 0xFF) << 8) | a[i + 1];                                   \
+    }
 #define copy16rr(v, a, i)                                                      \
-    { v = ((a[i + 1] & 0xFF) << 8) | a[i]; }
+    {                                                                          \
+        v = ((a[i + 1] & 0xFF) << 8) | a[i];                                   \
+    }
 
 #define copy32r(v, a, i)                                                       \
     {                                                                          \
