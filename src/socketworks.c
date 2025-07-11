@@ -630,6 +630,8 @@ int sockets_del(int sock) {
     ss->master = -1;
     if ((ss->flags & 1) && ss->buf)
         _free(ss->buf);
+    ss->flags = 0;
+    ss->buf = NULL;
     if (ss->prio_data) {
         _free(ss->prio_data);
         ss->prio_data = NULL;

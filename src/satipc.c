@@ -292,8 +292,7 @@ int satipc_reply(sockets *s) {
             ad->err = 1;
         } else
             LOG("marking device %d not as error but reply is unexpected, "
-                "rc = "
-                "%d",
+                "rc = %d",
                 sip->id, rc);
     }
     LOG("satipc %d, expect_reply %d, want_tune %d want commit %d, state %d",
@@ -655,7 +654,6 @@ int satip_standby_device(adapter *ad) {
         satipc_request(ad);
     }
     ad->err = 0;
-    sip->session[0] = 0;
     sip->sent_transport = 0; // send Transport: at the next tune
     sip->lap = sip->ldp = 0;
     if (sip->restart_when_tune) {
@@ -1402,6 +1400,9 @@ int satipc_send_teardown(adapter *ad, satipc *sip) {
     } else
         LOG("Unable to send TEARDOWN for adapter %d (stream_id %d)", ad->id,
             sip->stream_id);
+    sip->session[0] = 0;
+    sip->stream_id = -1;
+    sip->sent_transport = 0;
     return 0;
 }
 
