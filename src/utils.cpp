@@ -869,7 +869,7 @@ int is_rtsp_response(char *buf, int len) {
 }
 
 int is_http_request(char *buf, int len) {
-    const char *start[] = {"GET ", "HEAD "};
+    const char *start[] = {"GET ", "HEAD ", "POST "};
     return is_rtsp_http_header(buf, len, start, 2);
 }
 
