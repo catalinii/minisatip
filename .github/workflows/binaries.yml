@@ -28,10 +28,11 @@ jobs:
        zip -9 -r /minisatip_arm.zip minisatip html
 
     - name: Build MIPS
+      # ./configure won't automatically pick up some libraries so we need to enable features manually
       run: |
        make clean
-       ./configure --disable-netcv --enable-static --host=mipsel-linux-gnu CXX="zig c++ -target mipsel-linux"
-       make EXTRA_CFLAGS="-I/sysroot/mipsel/include -L/sysroot/mipsel/lib"
+       ./configure --disable-netcv --enable-dvbca --enable-dvbcsa --enable-static --host=mipsel-linux-gnu CXX="zig c++ -target mipsel-linux"
+       make EXTRA_CXXFLAGS="-I/sysroot/mipsel/include -L/sysroot/mipsel/lib"
        zip -9 -r /minisatip_mips.zip minisatip html
 
     - name: Archive built binaries
