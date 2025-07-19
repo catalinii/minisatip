@@ -2283,9 +2283,9 @@ static int APP_LANG_create(ca_session_t *session, int resource_id) {
 }
 
 #define DEFAPP(a, b, c)                                                        \
-    { .resource = a, .name = #a, .callback = b, .create = c, .close = NULL }
+    {.resource = a, .name = #a, .callback = b, .create = c, .close = NULL}
 #define DEFAPP4(a, b, c, d)                                                    \
-    { .resource = a, .name = #a, .callback = b, .create = c, .close = d }
+    {.resource = a, .name = #a, .callback = b, .create = c, .close = d}
 // this contains all known resource ids so we can see if the cam asks for
 // something exotic
 struct struct_application_handler application_handler[] = {
@@ -3026,7 +3026,7 @@ void dvbca_init() // you can search the devices here and fill the
                   // them (like in this module)
 {
     int poller_sock;
-    dvbca_id = add_ca(&dvbca, 0xFFFFFFFF);
+    dvbca_id = add_ca(&dvbca);
     poller_sock = sockets_add(SOCK_TIMEOUT, NULL, -1, TYPE_UDP, NULL, NULL,
                               (socket_action)ca_reconnect);
     sockets_timeout(poller_sock, 1000); // try to connect every 1s
