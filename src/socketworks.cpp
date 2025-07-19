@@ -752,14 +752,17 @@ void *select_and_execute(void *arg) {
             break;
         }
         les = es;
-        //    LOG("start select");
-        if ((rv = poll(pf, max_sock, select_timeout)) < 0) {
+
+        // Poll, retrying if we get interrupted with EINTR
+        do {
+            rv = poll(pf, max_sock, select_timeout);
+        } while (rv < 0 && errno == EINTR);
+
+        if (rv < 0) {
             LOG("select_and_execute: select() error %d: %s", errno,
                 strerror(errno));
             continue;
-        }
-        //              LOG("select returned %d",rv);
-        if (rv > 0)
+        } else if (rv > 0) {
             while (++i < max_sock)
                 if ((pf[i].fd >= 0) && pf[i].revents) {
                     sockets *ss = s[i];
@@ -918,6 +921,7 @@ void *select_and_execute(void *arg) {
 
                     //					ss->err = 0;
                 }
+        }
         // checking every 60seconds for idle connections - or if select times
         // out
         c_time = getTick();
