@@ -1036,7 +1036,7 @@ void ddci_init() // you can search the devices here and fill the ddci_devices,
     ddci.ca_close_ca = ddci_close;
     ddci.ca_ts = ddci_ts;
 
-    ddci_id = add_ca(&ddci, 0xFFFFFFFF);
+    ddci_id = add_ca(&ddci);
     LOG("Registered DDCI CA %d", ddci_id);
 }
 int ddci_set_pid(adapter *ad, int pid) {

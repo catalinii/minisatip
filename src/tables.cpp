@@ -56,7 +56,7 @@ SCA ca[MAX_CA];
 int nca;
 SMutex ca_mutex;
 
-int add_ca(SCA_op *op, uint64_t adapter_mask) {
+int add_ca(SCA_op *op) {
     int i, new_ca;
     del_ca(op);
     for (i = 0; i < MAX_CA; i++)
@@ -71,7 +71,6 @@ int add_ca(SCA_op *op, uint64_t adapter_mask) {
     new_ca = i;
 
     ca[new_ca].enabled = 1;
-    ca[new_ca].adapter_mask = adapter_mask;
     ca[new_ca].id = new_ca;
     ca[new_ca].op = op;
     memset(ca[new_ca].ad_info, 0, sizeof(ca[new_ca].ad_info));
@@ -157,9 +156,7 @@ int tables_init_ca_for_device(int i, adapter *ad) {
     if (i < 0 || i >= nca)
         return 0;
 
-    if ((ca[i].adapter_mask & mask) &&
-        !(ad->ca_mask & mask)) // CA registered and not already initialized
-    {
+    if (!(ad->ca_mask & mask)) {
         if (ca[i].enabled && ca[i].op->ca_init_dev) {
             if (ca[i].op->ca_init_dev(ad) == TABLES_RESULT_OK) {
                 LOGM("CA %d will handle adapter %d", i, ad->id);

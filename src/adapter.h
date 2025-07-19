@@ -5,7 +5,7 @@
 
 typedef struct ca_device ca_device_t;
 
-#define MAX_ADAPTERS 64
+#define MAX_ADAPTERS 100
 #define MAX_SOURCES 64
 #define DVR_BUFFER 30 * 1024 * 188
 

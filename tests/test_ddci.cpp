@@ -58,9 +58,8 @@
 #undef FOREACH_ITEM
 #define FOREACH_ITEM(h, a)                                                     \
     for (i = 0; i < (h)->size; i++)                                            \
-        if (HASH_ITEM_ENABLED((h)->items[i]) && (a = (ddci_mapping_table_t *)(h)->items[i].data))
-
-
+        if (HASH_ITEM_ENABLED((h)->items[i]) &&                                \
+            (a = (ddci_mapping_table_t *)(h)->items[i].data))
 
 extern ddci_device_t *ddci_devices[MAX_ADAPTERS];
 extern adapter *a[MAX_ADAPTERS];
@@ -128,12 +127,10 @@ int test_channels() {
     ASSERT(getItem(&h, 300) != NULL, "Saved SID 300 not found in table");
     ASSERT(getItem(&h, 400) != NULL, "Saved SID 400 not found in table");
     int ch = 0;
-    
-    for (i = 0; i < h.size; i++) 
+
+    for (i = 0; i < h.size; i++)
         if (HASH_ITEM_ENABLED(h.items[i]))
             ch++;
-    
-
 
     ASSERT(ch == 3, "Expected two channels after loading");
     free_hash(&h);
@@ -169,7 +166,7 @@ int test_add_del_pmt() {
     create_hash_table(&d1.mapping, 30);
     create_hash_table(&channels, 30);
 
-    // Save a channel for pmt4, we'll check that it is not assigned to 
+    // Save a channel for pmt4, we'll check that it is not assigned to
     // any DDCI adapter even though its CAID matches etc.
     Sddci_channel c4;
     memset(&c4, 0, sizeof(c4));
@@ -177,7 +174,7 @@ int test_add_del_pmt() {
     c4.ddcis = 0;
     setItem(&channels, c4.sid, &c4, sizeof(c4));
 
-    int dvbca_id = add_ca(&dvbca, 0xFFFFFFFF);
+    int dvbca_id = add_ca(&dvbca);
     // DD 0 - 0x100, DD 1 - 0x500
     add_caid_mask(dvbca_id, 0, 0x100, 0xFFFF);
     add_caid_mask(dvbca_id, 1, 0x500, 0xFFFF);

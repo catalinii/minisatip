@@ -857,7 +857,7 @@ void register_dvbapi() {
     dvbapi.ca_add_pmt = dvbapi_add_pmt;
     dvbapi.ca_del_pmt = dvbapi_del_pmt;
 
-    dvbapi_ca = add_ca(&dvbapi, 0xFFFFFFFF);
+    dvbapi_ca = add_ca(&dvbapi);
 }
 
 void unregister_dvbapi() {
