@@ -1,14 +1,14 @@
 name: Binaries
 on:
   push:
-    branches: [ master, next ]
+    branches: [ 1.3, next ]
   pull_request:
-    branches: [ master, next ]
+    branches: [ 1.3, next ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: catalinii/minisatip-build-image:latest
+    container: catalinii/minisatip-build-image:minisatip_1.3
     
     steps:
     - uses: actions/checkout@v4
