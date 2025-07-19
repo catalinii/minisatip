@@ -317,7 +317,7 @@ Help\n\
 	* eg: --satip-receive-buffer 1024 - to set the socket buffer to 1MB\n\
 \n\
 * -z --cache-dir dir : set the app cache directory to dir. The directory will be created if it doesn't exist. \n\
-	* defaults to /var/cache/minisatip \n\
+	* defaults to /var/cache/minisatip (/var/lib/minisatip on Enigma) \n\
 \n\
 * -d --diseqc ADAPTER1:COMMITTED1-UNCOMMITTED1[,ADAPTER2:COMMITTED2-UNCOMMITTED2[,...]\n\
 \t* The first argument is the adapter number, second is the number of committed packets to send to a Diseqc 1.0 switch, third the number of uncommitted commands to sent to a Diseqc 1.1 switch\n\
@@ -630,7 +630,15 @@ void set_options(int argc, char *argv[]) {
     opts.rtsp_port = 554;
     opts.use_ipv4_only = 1;
     opts.document_root = "html";
-    opts.cache_dir = "/var/cache/minisatip";
+
+    // Since /var/cache is on a tmpfs on Enigma we need to use a different
+    // default, since the contents are supposed to be persisted across boots
+    if (opts.enigma) {
+        opts.cache_dir = "/var/lib/minisatip";
+    } else {
+        opts.cache_dir = "/var/cache/minisatip";
+    }
+
     opts.xml_path = DESC_XML;
     opts.th_priority = -1;
     opts.diseqc_addr = 0x10;
