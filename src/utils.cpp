@@ -836,6 +836,8 @@ void _strncpy(char *a, char *b, int n) {
  *
  * @param buf The buffer containing the data to be checked.
  * @param len The length of the buffer.
+ * @param start list of valid strings the header can start with
+ * @param lstart the length of the "start" array
  * @return 1 if the buffer contains a valid RTSP header, 0 otherwise.
  */
 int is_rtsp_http_header(char *buf, int len, const char *start[], int lstart) {
@@ -855,12 +857,14 @@ int is_rtsp_http_header(char *buf, int len, const char *start[], int lstart) {
     if (!cl)
         return 1;
 
+    // When RTP/TCP is used on SAT>IP adapters, responses are 4 bytes larger 
+    // than expected, so we just check that the specified content length fits 
+    // within the buffer, not that the length matches exactly.
     int icl = map_intd(cl + 15, NULL, 0);
+    if (nlnl + icl > buf + len)
+        return 0;
 
-    if (buf + len >= nlnl + icl + 4)
-        return 1;
-
-    return 0;
+    return 1;
 }
 
 int is_rtsp_response(char *buf, int len) {
