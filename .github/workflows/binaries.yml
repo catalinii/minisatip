@@ -19,34 +19,34 @@ jobs:
         version: 0.13.0
     - name: Build x64
       run: |
-       ./configure --disable-netcv --enable-static CXX="clang++ -static"
-       make DDCI=1
-       file minisatip
-       zip -9 -r /minisatip_x64.zip minisatip html
+        ./configure --disable-netcv --enable-static CXX="clang++ -static"
+        make DDCI=1
+        file minisatip
+        zip -9 -r /minisatip_x64.zip minisatip html
 
     - name: Build ARM
       run: |
-       make clean
-       ./configure --disable-netcv --enable-static --host=arm-linux-gnueabihf CXX="clang++ -target arm-linux-gnueabihf -static"
-       make
-       file minisatip
-       zip -9 -r /minisatip_arm.zip minisatip html
+        make clean
+        ./configure --disable-netcv --enable-static --host=arm-linux-gnueabihf CXX="clang++ -target arm-linux-gnueabihf -static"
+        make
+        file minisatip
+        zip -9 -r /minisatip_arm.zip minisatip html
 
     - name: Build MIPS
       run: |
-       make clean
-       ./configure --disable-netcv --enable-static --host=mipsel-linux-gnu CXX="zig c++ -target mipsel-linux-gnueabihf"
-       make
-       file minisatip
-       zip -9 -r /minisatip_mips.zip minisatip html
+        make clean
+        ./configure --disable-netcv --enable-static --host=mipsel-linux-gnu CXX="zig c++ -target mipsel-linux-gnueabihf"
+        make
+        file minisatip
+        zip -9 -r /minisatip_mips.zip minisatip html
 
     - name: Build MIPS (musl)
       run: |
-       make clean
-       ./configure --disable-netcv --enable-static --host=mipsel-linux-gnu CXX="zig c++ -target mipsel-linux-musl"
-       make
-       file minisatip
-       zip -9 -r /minisatip_mips_musl.zip minisatip html
+        make clean
+        ./configure --disable-netcv --enable-static --host=mipsel-linux-gnu CXX="zig c++ -target mipsel-linux-musl"
+        make
+        file minisatip
+        zip -9 -r /minisatip_mips_musl.zip minisatip html
 
     - name: Archive built binaries
       uses: actions/upload-artifact@v4
