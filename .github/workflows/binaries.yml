@@ -33,8 +33,8 @@ jobs:
     - name: Build MIPS
       run: |
        make clean
-       ./configure --disable-netcv --enable-static --host=mipsel-linux-gnu CXX="zig c++ -target mipsel-linux"
-       make EXTRA_CFLAGS="-I/usr/mipsel-linux-gnu/include -L/usr/mipsel-linux-gnu/lib"
+       ./configure --disable-netcv --enable-static --host=mipsel-linux-gnu CXX="zig c++ -target mipsel-linux-gnueabihf"
+       make
        zip -9 -r /minisatip_mips.zip minisatip html
 
     - name: Archive built binaries
