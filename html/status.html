@@ -409,7 +409,7 @@
 			myTable += "<th style='width:30px;max-width:35px' class='dt-right'>Pos</th>";
 			myTable += "<th style='width:75px;max-width:90px' class='dt-right'>Frequency</th>";
 			myTable += "<th style='width:50px;max-width:60px' class='dt-right'>SR/BW</th>";
-			myTable += "<th style='width:50px;max-width:60px' class='dt-right'>PLP</th>";
+			myTable += "<th style='width:50px;max-width:60px' class='dt-right'>Modulation</th>";
 			myTable += "<th style='width:100px;max-width:150px' class='dt-right'>Signal</th>";
 			myTable += "<th style='width:120px;max-width:100%' class='dt-left'>Streams</th>";
 			myTable += "<th style='width:100px;max-width:130px' class='dt-left'>Cryptinfo</th>";
@@ -466,11 +466,8 @@
 				else
 					myTable += "<td class='dt-right'></td>";
 
-				// STREAM
-				var stream = state['ad_stream'][i];
-				if (parseInt(stream) <= 0)
-					stream = '';
-				myTable += "<td class='dt-right'>" + stream + " </td>";
+				// MTYPE
+				myTable += "<td class='dt-right'>" + mtype[state['ad_mtype'][i]].toUpperCase() + " </td>";
 
 				// SIGNAL
 				var signal = "";
