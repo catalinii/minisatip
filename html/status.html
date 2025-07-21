@@ -318,9 +318,9 @@
 
 		var pol = ["", "(V)", "(H)", "(R)", "(L)"];
 		var sys = ["", "dvbc", "dvbcb", "dvbt", "dss", "dvbs", "dvbs2", "dvbh", "isdbt", "isdbs", "isdbc", "atsc", "atscmh", "dmbth", "cmmb", "dab", "dvbt2", "turbo", "dvbcc", "dvbc2"];
-		var mtype = ["&mtype=qpsk", "&mtype=16qam", "&mtype=32qam", "&mtype=64qam", "&mtype=128qam", "&mtype=256qam", "", // auto
-			"&mtype=8vsb", "&mtype=16vsb", "&mtype=8psk", "&mtype=16apsk", "&mtype=32apsk", "&mtype=dqpsk", "&mtype=qam_4_nr",
-			"&mtype=64apsk", "&mtype=128apsk", "&mtype=256apsk"];
+		var mtype = ["qpsk", "16qam", "32qam", "64qam", "128qam", "256qam", "", // auto
+			"8vsb", "16vsb", "8psk", "16apsk", "32apsk", "dqpsk", "qam_4_nr",
+			"64apsk", "128apsk", "256apsk"];
 
 		function getAdapterIcon(ad_type, ad_allsys, ad_sys, available_systems) {
 			if (ad_type < 4) {
@@ -601,9 +601,9 @@
 								fe = "&fe=" + state['ad_fe'][i]
 							}
 							myTable += "<small><a href=" + '"' + "rtsp://@" + state['rtsp_host'] + "/?freq=" + state['ad_freq'][i] + fe + params
-								+ "&msys=" + sys[state['ad_sys'][i]].toUpperCase() + mtype[state['ad_mtype'][i]] + "&pids=" + st_p + '"' + ">RTSP Link</a></small><br />";
+								+ "&msys=" + sys[state['ad_sys'][i]].toUpperCase() + "&mtype=" + mtype[state['ad_mtype'][i]] + "&pids=" + st_p + '"' + ">RTSP Link</a></small><br />";
 							myTable += "<small><a href=" + '"' + "http://" + hostArray[0] + ":" + hostArray[1] + "/?freq=" + state['ad_freq'][i] + fe + params
-								+ "&msys=" + sys[state['ad_sys'][i]].toUpperCase() + mtype[state['ad_mtype'][i]] + "&pids=" + st_p + '"' + ">HTTP Link</a></small><br />";
+								+ "&msys=" + sys[state['ad_sys'][i]].toUpperCase() + "&mtype=" + mtype[state['ad_mtype'][i]] + "&pids=" + st_p + '"' + ">HTTP Link</a></small><br />";
 
 							if (state['st_overflow'][j] > 0)
 								myTable += "<small>Dropped: " + (state['st_overflow'][j] / 1048576.0).toFixed(2) + " MB</small><br />";
