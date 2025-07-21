@@ -441,7 +441,9 @@
 
 
 				if (ad_type == 2) {
-					myTable += "<br /><small>(" + state['ad_satip'][i] + ")</small>";
+					const satip_source_address = state['ad_satip'][i]
+					const satip_protocol_string = state['ad_satip_use_tcp'][i] === 1 ? 'RTP/TCP' : 'RTP/UDP'
+					myTable += "<br /><small>(" + satip_source_address + " @ " + satip_protocol_string + ")</small>";
 				}
 				myTable += "</td>";
 
