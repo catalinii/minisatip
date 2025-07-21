@@ -318,9 +318,9 @@
 
 		var pol = ["", "(V)", "(H)", "(R)", "(L)"];
 		var sys = ["", "dvbc", "dvbcb", "dvbt", "dss", "dvbs", "dvbs2", "dvbh", "isdbt", "isdbs", "isdbc", "atsc", "atscmh", "dmbth", "cmmb", "dab", "dvbt2", "turbo", "dvbcc", "dvbc2"];
-		var mtype = ["&mtype=qpsk", "&mtype=16qam", "&mtype=32qam", "&mtype=64qam", "&mtype=128qam", "&mtype=256qam", "", // auto
-			"&mtype=8vsb", "&mtype=16vsb", "&mtype=8psk", "&mtype=16apsk", "&mtype=32apsk", "&mtype=dqpsk", "&mtype=qam_4_nr",
-			"&mtype=64apsk", "&mtype=128apsk", "&mtype=256apsk"];
+		var mtype = ["qpsk", "16qam", "32qam", "64qam", "128qam", "256qam", "", // auto
+			"8vsb", "16vsb", "8psk", "16apsk", "32apsk", "dqpsk", "qam_4_nr",
+			"64apsk", "128apsk", "256apsk"];
 
 		function getAdapterIcon(ad_type, ad_allsys, ad_sys, available_systems) {
 			if (ad_type < 4) {
@@ -393,6 +393,14 @@
 			return str.replaceAll(',', ', ');
 		}
 
+		function formatPids(pids_str) {
+			return pids_str
+				.split(',')
+				.map(pid => parseInt(pid, 10))
+				.sort((a, b) => a - b)
+				.join(', ')
+		}
+
 		function getTable(state, oldstate) {
 
 			if (!state)
@@ -409,7 +417,7 @@
 			myTable += "<th style='width:30px;max-width:35px' class='dt-right'>Pos</th>";
 			myTable += "<th style='width:75px;max-width:90px' class='dt-right'>Frequency</th>";
 			myTable += "<th style='width:50px;max-width:60px' class='dt-right'>SR/BW</th>";
-			myTable += "<th style='width:50px;max-width:60px' class='dt-right'>PLP</th>";
+			myTable += "<th style='width:50px;max-width:60px' class='dt-right'>Modulation</th>";
 			myTable += "<th style='width:100px;max-width:150px' class='dt-right'>Signal</th>";
 			myTable += "<th style='width:120px;max-width:100%' class='dt-left'>Streams</th>";
 			myTable += "<th style='width:100px;max-width:130px' class='dt-left'>Cryptinfo</th>";
@@ -441,7 +449,9 @@
 
 
 				if (ad_type == 2) {
-					myTable += "<br /><small>(" + state['ad_satip'][i] + ")</small>";
+					const satip_source_address = state['ad_satip'][i]
+					const satip_protocol_string = state['ad_satip_use_tcp'][i] === 1 ? 'RTP/TCP' : 'RTP/UDP'
+					myTable += "<br /><small>(" + satip_source_address + " @ " + satip_protocol_string + ")</small>";
 				}
 				myTable += "</td>";
 
@@ -464,11 +474,8 @@
 				else
 					myTable += "<td class='dt-right'></td>";
 
-				// STREAM
-				var stream = state['ad_stream'][i];
-				if (parseInt(stream) <= 0)
-					stream = '';
-				myTable += "<td class='dt-right'>" + stream + " </td>";
+				// MTYPE
+				myTable += "<td class='dt-right'>" + mtype[state['ad_mtype'][i]].toUpperCase() + " </td>";
 
 				// SIGNAL
 				var signal = "";
@@ -541,7 +548,7 @@
 
 				if (ad_type == 4) {
 					// Show PIDs on the adapter level for CI adapters
-					myTable += "<small>Pids: " + formatCommaSeparated(state['ad_pids'][i]) + "</small><br />";
+					myTable += "<small>Pids: " + formatPids(state['ad_pids'][i]) + "</small><br />";
 				} else {
 					for (var j = 0; j < max_streams; j++) {
 						if (state['st_enabled'][j] == 1 && state['st_adapter'][j] == i) {
@@ -560,7 +567,7 @@
 								st_p = "" + st_p + "";
 							if (state['st_play'][j] == 0)
 								st_p = "<i>" + st_p + "</i>";
-							myTable += "<small>Pids: " + formatCommaSeparated(st_p) + "</small><br />";
+							myTable += "<small>Pids: " + formatPids(st_p) + "</small><br />";
 
 							// Create VLC stream URL
 							// Example: rtsp://@satip/?src=1&freq=12382&pol=H&msys=DVBS2&sr=27500&pids=0,5375,5378,116,5375,32
@@ -599,9 +606,9 @@
 								fe = "&fe=" + state['ad_fe'][i]
 							}
 							myTable += "<small><a href=" + '"' + "rtsp://@" + state['rtsp_host'] + "/?freq=" + state['ad_freq'][i] + fe + params
-								+ "&msys=" + sys[state['ad_sys'][i]].toUpperCase() + mtype[state['ad_mtype'][i]] + "&pids=" + st_p + '"' + ">RTSP Link</a></small><br />";
+								+ "&msys=" + sys[state['ad_sys'][i]].toUpperCase() + "&mtype=" + mtype[state['ad_mtype'][i]] + "&pids=" + st_p + '"' + ">RTSP Link</a></small><br />";
 							myTable += "<small><a href=" + '"' + "http://" + hostArray[0] + ":" + hostArray[1] + "/?freq=" + state['ad_freq'][i] + fe + params
-								+ "&msys=" + sys[state['ad_sys'][i]].toUpperCase() + mtype[state['ad_mtype'][i]] + "&pids=" + st_p + '"' + ">HTTP Link</a></small><br />";
+								+ "&msys=" + sys[state['ad_sys'][i]].toUpperCase() + "&mtype=" + mtype[state['ad_mtype'][i]] + "&pids=" + st_p + '"' + ">HTTP Link</a></small><br />";
 
 							if (state['st_overflow'][j] > 0)
 								myTable += "<small>Dropped: " + (state['st_overflow'][j] / 1048576.0).toFixed(2) + " MB</small><br />";
