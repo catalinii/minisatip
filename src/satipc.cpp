@@ -1850,4 +1850,6 @@ char *init_satip_pointer(int len) {
 
 _symbols satipc_sym[] = {{"ad_satip", VAR_AARRAY_STRING, satip, 1, MAX_ADAPTERS,
                           offsetof(satipc, sip)},
+                         {"ad_satip_use_tcp", VAR_AARRAY_UINT8, satip, 1, MAX_ADAPTERS,
+                          offsetof(satipc, use_tcp)},
                          {NULL, 0, NULL, 0, 0, 0}};
