@@ -95,6 +95,7 @@ AC_ARG_WITH([xml2],
   [xml2_dir=$with_xml2])
   
 CXXFLAGS="-I$xml2_dir"
+CFLAGS="-I$xml2_dir"
 
 cd src
 AC_CHECK_HEADERS([libnetceiver/netcv/headers.h],[NETCVCLIENT=1],[NETCVCLIENT=0])
