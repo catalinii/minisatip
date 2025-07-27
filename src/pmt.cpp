@@ -1365,6 +1365,8 @@ void cache_pmt_for_adapter(adapter *ad, SPMT *pmt) {
 int cache_pmts_for_adapter(int aid) {
     int i;
     adapter *ad = get_adapter(aid);
+    if (!ad)
+        return -1;
     for (i = 0; i < ad->active_pmts; i++) {
         cache_pmt_for_adapter(ad, get_pmt(ad->active_pmt[i]));
     }

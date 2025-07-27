@@ -180,9 +180,9 @@ int _setItem(SHashTable *hash, uint64_t key, void *data, int len, int copy) {
 
         // Do not fail, hash table full will fail before this code.
         if (_create_hash_table(&ht, new_size, hash->file, hash->line)) {
+            mutex_unlock(&hash->mutex);
             LOG_AND_RETURN(0, "Resizing hash_table at %p from %d to %d", hash,
                            hash->size, new_size);
-            mutex_unlock(&hash->mutex);
         }
         hash->resize = 1;
         ht.resize = 1;

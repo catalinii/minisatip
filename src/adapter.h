@@ -65,7 +65,7 @@ struct struct_adapter {
     int dmx_source;
     int master_source;
     int is_fbc;
-    uint64_t used;
+    uint8_t used[MAX_ADAPTERS];
     uint16_t strength; // strength have values between 0 and 255
     uint32_t ber;
     uint16_t snr; // strength have values between 0 and 255

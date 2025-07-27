@@ -156,7 +156,7 @@ typedef struct opfr_operator_tune_descr {
     char delsys[8];
     char mod[8];
     double sr;
-    char fec[4];
+    char fec[5];
 } opfr_operator_tune_descr_t;
 
 // EN 300 468, tables 36, 38, and 41
@@ -1571,7 +1571,7 @@ static int ci_ccmgr_cc_sac_data_req(ca_session_t *session, const uint8_t *data,
     uint32_t data_cnf_tag = CIPLUS_TAG_CC_SAC_DATA_CNF;
     uint8_t dest[2048];
     uint8_t tmp[len];
-    int id_bitmask, dt_nr;
+    uint8_t id_bitmask, dt_nr;
     unsigned int serial;
     int answ_len;
     int pos = 0;
@@ -1995,7 +1995,7 @@ static int ca_send_datetime(ca_device_t *d) {
     tv %= 3600;
     uint8_t mm = tv / 60;
     tv %= 60;
-    uint8_t ss = tv;
+    uint8_t ss = (uint8_t)tv;
 
     msg[0] = (mjd >> 8) & 0xff;
     msg[1] = mjd & 0xff;
@@ -2239,7 +2239,13 @@ int APP_MMI_handler(ca_session_t *session, int resource, uint8_t *buffer,
             DEBUGM("[%d] text tag: %02x %02x %02x", i, data[0], data[1],
                    data[2]);
             data += 3;
-            data += asn_1_decode(&textlen, data);
+            int llen = asn_1_decode(&textlen, data);
+            if (llen < 0) {
+                LOG("CA %d asn_1_decode failed: %02X %02X %02X", d->id, data[0],
+                    data[1], data[2]);
+                break;
+            }
+            data += llen;
             DEBUGM("[%d] %d bytes text", i, textlen);
             if ((data + textlen) > max)
                 break;
@@ -2662,6 +2668,11 @@ int ca_read_apdu(ca_session_t *session, uint8_t *buf, int buf_len) {
     while (i < buf_len) {
         data = buf + i;
         llen = asn_1_decode(&len, data + 3);
+        if (llen < 0) {
+            LOG("Invalid APDU length %02X %02X %02X", data[3], data[4],
+                data[5]);
+            return 1;
+        }
         tag = (data[0] << 16) | (data[1] << 8) | data[2];
         // data points to the actual APDU data
         data += 3 + llen;
@@ -2697,6 +2708,12 @@ int ca_read(sockets *s) {
     if (d->state == CA_STATE_INACTIVE)
         d->state = CA_STATE_ACTIVE;
 
+    if (llen < 0) {
+        s->rlen = 0;
+        LOG("Invalid SPDU length %02X %02X %02X", data[1], data[2], data[3]);
+        return 0;
+    }
+
     switch (tag) {
     case ST_OPEN_SESSION_REQUEST: {
         copy32r(resource_identifier, data, 2);
@@ -2709,8 +2726,8 @@ int ca_read(sockets *s) {
             session->handler.name, status);
         pkt[0] = status;
         copy32(pkt, 1, resource_identifier);
-        ca_write_spdu(d, session->session_number, ST_OPEN_SESSION_RESPONSE, pkt,
-                      5, NULL, 0);
+        ca_write_spdu(d, session ? session->session_number : -1,
+                      ST_OPEN_SESSION_RESPONSE, pkt, 5, NULL, 0);
         if (!status && session->handler.create)
             session->handler.create(session, resource_identifier);
 

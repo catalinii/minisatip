@@ -175,8 +175,8 @@ int adapter_timeout(sockets *s) {
     for (i = 0; i < MAX_ADAPTERS; i++)
         if (a[i] && (a[i]->master_source == ad->id) && ad->enabled &&
             a[i]->enabled) {
-            LOG("adapter %d is already used by a slave adapters %d, used %jx",
-                ad->id, a[i]->id, a[i]->used);
+            LOG("adapter %d is already used by a slave adapters %d", ad->id,
+                a[i]->id);
             do_close = 0;
             break;
         }
@@ -590,7 +590,8 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
     if (!ad)
         return 0;
     // is not a slave and does not have a slave adapter
-    if ((ad->master_source < 0) && !ad->used)
+    if ((ad->master_source < 0) &&
+        is_byte_array_empty(ad->used, sizeof(ad->used)))
         return 0;
     // is slave and the switch is UNICABLE/JESS - we do not care about pol and
     // band
@@ -609,17 +610,17 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
 
     // master adapter used by slave adapters, check slave parameters if they
     // match
-    if (ad && ad->used) {
+    if (ad && !is_byte_array_empty(ad->used, sizeof(ad->used))) {
         int i;
         for (i = 0; i < MAX_ADAPTERS; i++)
-            if (ad->used & (1ULL << i)) {
+            if (ad->used[i]) {
                 adapter *ad2 = get_adapter(i);
                 if (!ad2) {
                     LOG("adapter %d used is set for adapter %d but it is "
                         "disabled, "
                         "clearing",
                         ad->id, i);
-                    ad->used &= ~(1ULL << i);
+                    ad->used[i] = 0;
                     continue;
                 }
                 if (ad2->old_pol != pol || ad2->old_hiband != hiband ||
@@ -635,10 +636,9 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
             master->old_diseqc != diseqc)
             return 1; // master parameters matches with the required parameters
     }
-    LOGM("%s: adapter %d used %ld master %d used %ld (pol %d, band %d, diseqc "
+    LOGM("%s: adapter %d master %d (pol %d, band %d, diseqc "
          "%d) not compatible with freq %d, pol %d band %d diseqc %d",
-         __FUNCTION__, ad->id, ad->used,
-         master ? master->id : ad->master_source, master ? master->used : -1,
+         __FUNCTION__, ad->id, master ? master->id : ad->master_source,
          ad->old_pol, ad->old_hiband, ad->old_diseqc, freq, pol, hiband,
          diseqc);
     return 0;
@@ -785,7 +785,7 @@ int set_adapter_for_stream(int sid, int aid) {
 
     if (ad->master_source >= 0 && ad->master_source < MAX_ADAPTERS) {
         adapter *ad2 = a[ad->master_source];
-        ad2->used |= (1ULL << ad->id);
+        ad2->used[ad->id] = 1;
     }
     LOG("set adapter %d for sid %d m:%d s:%d", aid, sid, ad->master_sid,
         ad->sid_cnt);
@@ -841,9 +841,9 @@ void close_adapter_for_stream(int sid, int aid, int close_stream) {
         if ((ad->master_source >= 0) && (ad->master_source < MAX_ADAPTERS)) {
             adapter *ad2 = a[ad->master_source];
             if (ad2)
-                ad2->used &= ~(1ULL << ad->id);
-            LOGM("adapter %d _freed from slave adapter %d, used %jd",
-                 ad2 ? ad2->id : -1, ad->id, ad2 ? ad2->used : -1);
+                ad2->used[ad->id] = 0;
+            LOGM("adapter %d _freed from slave adapter %d", ad2 ? ad2->id : -1,
+                 ad->id);
         }
     } else
         mark_pids_deleted(aid, sid, NULL);
@@ -2111,41 +2111,6 @@ void adapter_unlock1(const char *FILE, int line, int aid) {
         return;
     mutex_unlock1(FILE, line, &ad->mutex);
 }
-
-#if 0
-// unused
-int get_enabled_pids(adapter *ad, int *pids, int lpids)
-{
-	int ep = 0, i;
-
-	for (i = 0; i < MAX_PIDS; i++)
-	{
-		if (ad->pids[i].flags == 1 || ad->pids[i].flags == 2) // enabled or needed to be added
-			pids[ep++] = ad->pids[i].pid;
-		if (ep >= lpids)
-			break;
-	}
-
-	return ep;
-}
-
-// unused
-int get_all_pids(adapter *ad, int *pids, int lpids)
-{
-	int ep = 0, i;
-
-	for (i = 0; i < MAX_PIDS; i++)
-	{
-		if ((ad->pids[i].flags > 0) && (ad->pids[i].flags < 4))
-			pids[ep++] = ad->pids[i].pid;
-		if (ep >= lpids)
-			break;
-	}
-
-	return ep;
-}
-
-#endif
 
 char *get_adapter_pids(int aid, char *dest, int max_size) {
     int len = 0;
