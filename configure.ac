@@ -95,6 +95,7 @@ AC_ARG_WITH([xml2],
   [xml2_dir=$with_xml2])
   
 CXXFLAGS="-I$xml2_dir"
+CFLAGS="-I$xml2_dir"
 
 cd src
 AC_CHECK_HEADERS([libnetceiver/netcv/headers.h],[NETCVCLIENT=1],[NETCVCLIENT=0])
@@ -173,7 +174,7 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([],
 AS_IF([test $enable_bounds_check -eq 0],
   [CXXFLAGS="$ac_save_CFLAGS"])
 
-FM="$FM\nCCXXFLAGS\t\t$CFLAGS"
+FM="$FM\nCXXFLAGS\t\t$CFLAGS"
 
 
 AC_SUBST(LINUXDVB)
