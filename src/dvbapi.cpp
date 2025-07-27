@@ -506,6 +506,8 @@ int dvbapi_close(sockets *s) {
                 continue;
             keys_del(i);
         }
+
+    unregister_dvbapi();
     return 0;
 }
 
@@ -568,7 +570,6 @@ int connect_dvbapi(void *arg) {
         } else
             sock = tcp_connect(opts.dvbapi_host, opts.dvbapi_port, NULL, 0);
         if (sock < 0) {
-            unregister_dvbapi();
             LOG_AND_RETURN(0, "%s: connect to %s failed", __FUNCTION__,
                            opts.dvbapi_host);
         }
@@ -818,6 +819,12 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt) {
                        ad->id);
     }
 
+    if (sock < 0) {
+        LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY,
+                       "%s: dvbapi socket is not open, adapter %d, pmt %d",
+                       __FUNCTION__, ad->id, pmt->id);
+    }
+
     key = keys_add(-1, ad->id, pmt->id);
     k = get_key(key);
     if (!k)
@@ -839,6 +846,7 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt) {
 int dvbapi_del_pmt(adapter *ad, SPMT *pmt) {
     SKey *k = (SKey *)pmt->opaque;
     keys_del(k->id);
+    pmt->opaque = NULL;
     LOG("%s: deleted key %d, PMT pid %d, sid %d (%X), PMT %d", __FUNCTION__,
         k->id, pmt->pid, pmt->sid, pmt->sid, pmt->id);
     return 0;
