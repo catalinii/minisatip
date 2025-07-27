@@ -174,7 +174,7 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([],
 AS_IF([test $enable_bounds_check -eq 0],
   [CXXFLAGS="$ac_save_CFLAGS"])
 
-FM="$FM\nCCXXFLAGS\t\t$CFLAGS"
+FM="$FM\nCXXFLAGS\t\t$CFLAGS"
 
 
 AC_SUBST(LINUXDVB)
