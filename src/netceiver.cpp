@@ -43,11 +43,11 @@ int m_logskipmask = 0;
 
 extern char *fe_pilot[];
 extern char *fe_rolloff[];
-extern char *fe_delsys[];
-extern char *fe_fec[];
-extern char *fe_modulation[];
-extern char *fe_tmode[];
-extern char *fe_gi[];
+extern const char *fe_delsys[];
+extern const char *fe_fec[];
+extern const char *fe_modulation[];
+extern const char *fe_tmode[];
+extern const char *fe_gi[];
 extern char *fe_hierarchy[];
 extern char *fe_pol[];
 
@@ -163,6 +163,7 @@ int netcv_commit(adapter *ad) {
         switch (tp->sys) {
         case SYS_DVBS:
         case SYS_DVBS2:
+	    {
             m_pos = 1800 + map_pos[tp->diseqc];
 
             memset(&m_sec, 0, sizeof(recv_sec_t));
@@ -214,6 +215,7 @@ int netcv_commit(adapter *ad) {
             // unreachable code
             //			m_fep.u.qpsk.fec_inner |= (tp->ro << 24);
             //			break;
+	    }
 
         case SYS_DVBC_ANNEX_A:
             m_pos = 0xfff; /* not sure, to be tested */
