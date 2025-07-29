@@ -6,8 +6,6 @@
 #include "stream.h"
 #include "utils.h"
 
-#define VERSION (TAG "~" REVISION)
-
 #define EMU_PIDS_ALL_ENFORCED_PIDS_LIST 1, 16, 17, 18, 20, 21
 
 void set_options(int argc, char *argv[]);
