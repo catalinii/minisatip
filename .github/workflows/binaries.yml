@@ -25,6 +25,7 @@ jobs:
 
       # We must bump the version before we build so the version number becomes correct.
     - name: Bump version and push tag/create release point
+      id: bump_version
       uses: anothrNick/github-tag-action@1.35.0
       if: ${{ github.event_name == 'push' && github.repository_owner == 'catalinii' }}
       env:
@@ -74,7 +75,6 @@ jobs:
           /minisatip_mips.zip
           /minisatip_mips_musl.zip
 
-      id: bump_version
     - name: Upload binary to release
       uses: svenstaro/upload-release-action@v2
       if: ${{ github.event_name == 'push' && github.repository_owner == 'catalinii' }}
