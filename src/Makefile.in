@@ -21,9 +21,8 @@ CPPFLAGS += @CPPFLAGS@
 
 OS := $(shell $(CXX) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 2)
 ARCH := $(shell $(CXX) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 1)
-TAG := $(shell git describe --abbrev=0 --tags)
-REVISION := $(shell git rev-parse --short HEAD)
-CXXFLAGS+=-DTAG=\"$(TAG)\" -DREVISION=\"$(REVISION)\"
+VERSION := $(shell ../tools/determine_version.sh)
+CXXFLAGS+=-DVERSION=\"$(VERSION)\"
 
 ifneq ($(OS),apple)
         LDFLAGS += -lrt
