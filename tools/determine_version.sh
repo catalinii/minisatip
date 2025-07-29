@@ -7,7 +7,7 @@ REVISION=$(git rev-parse --short HEAD)
 PR=${PR:-}
 
 if [ -n "$PR" ]; then
-  echo "$TAG+PR$PR-$REVISION"
+  echo "$TAG+PR$PR~$REVISION"
 else
-  echo "$TAG-$REVISION"
+  echo "$TAG~$REVISION"
 fi
