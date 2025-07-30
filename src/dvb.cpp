@@ -152,18 +152,18 @@ int detect_dvb_parameters(char *s, transponder *tp) {
     tp->freq = -1;
     tp->inversion = -1;
     tp->hprate = -1;
-    tp->tmode = -1;
-    tp->gi = -1;
+    tp->tmode = (fe_transmit_mode_t) -1;
+    tp->gi = (fe_guard_interval_t)(fe_guard_interval_t) -1;
     tp->bw = -1;
     tp->sm = -1;
     tp->t2id = -1;
     tp->fe = -1;
     tp->ro = -1;
-    tp->mtype = -1;
+    tp->mtype = (fe_modulation_t) -1;
     tp->plts = -1;
-    tp->fec = -1;
-    tp->sr = -1;
-    tp->pol = -1;
+    tp->fec = (fe_code_rate_t) -1;
+    tp->sr = (fe_sec_voltage_t) -1;
+    tp->pol = (fe_sec_voltage_t) -1;
     tp->diseqc = -1;
     tp->c2tft = -1;
     tp->ds = -1;
@@ -192,7 +192,7 @@ int detect_dvb_parameters(char *s, transponder *tp) {
         if (strncmp("freq=", arg[i], 5) == 0)
             tp->freq = map_float(arg[i] + 5, 1000);
         if (strncmp("pol=", arg[i], 4) == 0)
-            tp->pol = map_int(arg[i] + 4, (char **)fe_pol);
+            tp->pol = (fe_sec_voltage_t) map_int(arg[i] + 4, (char **)fe_pol);
         if (strncmp("sr=", arg[i], 3) == 0)
             tp->sr = map_int(arg[i] + 3, NULL) * 1000;
         if (strncmp("fe=", arg[i], 3) == 0)
@@ -202,15 +202,15 @@ int detect_dvb_parameters(char *s, transponder *tp) {
         if (strncmp("ro=", arg[i], 3) == 0)
             tp->ro = map_int(arg[i] + 3, (char **)fe_rolloff);
         if (strncmp("mtype=", arg[i], 6) == 0)
-            tp->mtype = map_int(arg[i] + 6, (char **)fe_modulation);
+            tp->mtype = (fe_modulation_t) map_int(arg[i] + 6, (char **)fe_modulation);
         if (strncmp("fec=", arg[i], 4) == 0)
-            tp->fec = map_int(arg[i] + 4, (char **)fe_fec);
+            tp->fec = (fe_code_rate_t) map_int(arg[i] + 4, (char **)fe_fec);
         if (strncmp("plts=", arg[i], 5) == 0)
             tp->plts = map_int(arg[i] + 5, (char **)fe_pilot);
         if (strncmp("gi=", arg[i], 3) == 0)
-            tp->gi = map_int(arg[i] + 3, (char **)fe_gi);
+            tp->gi = (fe_guard_interval_t) map_int(arg[i] + 3, (char **)fe_gi);
         if (strncmp("tmode=", arg[i], 6) == 0)
-            tp->tmode = map_int(arg[i] + 6, (char **)fe_tmode);
+            tp->tmode = (fe_transmit_mode_t) map_int(arg[i] + 6, (char **)fe_tmode);
         if (strncmp("bw=", arg[i], 3) == 0) {
             tp->bw = map_float(arg[i] + 3, 1000000);
             if (tp->bw < 0 ||
