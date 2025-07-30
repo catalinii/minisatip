@@ -13,7 +13,7 @@ DVBAPI=@DVBAPI@
 LINUXDVB=@LINUXDVB@
 DDCI=0
 
-CXXFLAGS?=-Wall -Wno-date-time -Wno-switch -g -fPIC -fno-common -Warray-bounds
+CXXFLAGS?=-Wall -Wno-date-time -Wno-switch -g -fPIC -fno-common -fno-omit-frame-pointer -Warray-bounds
 CXXFLAGS += -I../src
 CXXFLAGS += $(EXTRA_CFLAGS) @CFLAGS@
 LDFLAGS += @LDFLAGS@ -lpthread
@@ -122,7 +122,7 @@ CXXFLAGS+=-DDISABLE_DDCI
 endif
 
 ifeq ($(DEBUG),1)
-CXXFLAGS += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=undefined -static-libasan -static-libubsan -static-liblsan -fstack-protector-all
+CXXFLAGS += -fsanitize=address -fsanitize=leak -fsanitize=undefined -static-libasan -static-libubsan -static-liblsan -fstack-protector-all
 else
 CXXFLAGS += -O2
 endif
