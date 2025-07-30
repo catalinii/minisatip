@@ -327,7 +327,7 @@ typedef struct struct_transponder {
     int plts;
     fe_code_rate_t fec;
     int sr;
-    fe_sec_voltage_t pol;
+    int pol;
     int diseqc;
 
     struct diseqc diseqc_param;

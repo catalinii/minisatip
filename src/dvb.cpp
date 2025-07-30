@@ -162,8 +162,8 @@ int detect_dvb_parameters(char *s, transponder *tp) {
     tp->mtype = (fe_modulation_t) -1;
     tp->plts = -1;
     tp->fec = (fe_code_rate_t) -1;
-    tp->sr = (fe_sec_voltage_t) -1;
-    tp->pol = (fe_sec_voltage_t) -1;
+    tp->sr = -1;
+    tp->pol = -1;
     tp->diseqc = -1;
     tp->c2tft = -1;
     tp->ds = -1;
@@ -192,7 +192,7 @@ int detect_dvb_parameters(char *s, transponder *tp) {
         if (strncmp("freq=", arg[i], 5) == 0)
             tp->freq = map_float(arg[i] + 5, 1000);
         if (strncmp("pol=", arg[i], 4) == 0)
-            tp->pol = (fe_sec_voltage_t) map_int(arg[i] + 4, (char **)fe_pol);
+            tp->pol = map_int(arg[i] + 4, (char **)fe_pol);
         if (strncmp("sr=", arg[i], 3) == 0)
             tp->sr = map_int(arg[i] + 3, NULL) * 1000;
         if (strncmp("fe=", arg[i], 3) == 0)
