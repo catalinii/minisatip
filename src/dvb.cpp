@@ -153,7 +153,7 @@ int detect_dvb_parameters(char *s, transponder *tp) {
     tp->inversion = -1;
     tp->hprate = -1;
     tp->tmode = (fe_transmit_mode_t) -1;
-    tp->gi = (fe_guard_interval_t)(fe_guard_interval_t) -1;
+    tp->gi = (fe_guard_interval_t) -1;
     tp->bw = -1;
     tp->sm = -1;
     tp->t2id = -1;
