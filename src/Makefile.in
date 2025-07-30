@@ -13,7 +13,7 @@ DVBAPI=@DVBAPI@
 LINUXDVB=@LINUXDVB@
 DDCI=0
 
-CXXFLAGS?=-Wall -Wno-date-time -Wno-switch -ggdb -fPIC -fno-common -Warray-bounds
+CXXFLAGS?=-Wall -Wno-date-time -Wno-switch -g -fPIC -fno-common -Warray-bounds
 CXXFLAGS += -I../src
 CXXFLAGS += $(EXTRA_CFLAGS) @CFLAGS@
 LDFLAGS += @LDFLAGS@ -lpthread
