@@ -46,6 +46,7 @@ void _strncpy(char *a, char *b, int len);
 int is_rtsp_response(char *buf, int len);
 int is_rtsp_request(char *buf, int len);
 int is_http_request(char *buf, int len);
+int is_byte_array_empty(uint8_t *b, int len);
 
 #define dump_packets(message, b, len, packet_offset)                           \
     if (DEFAULT_LOG & opts.debug)                                              \

@@ -1219,7 +1219,7 @@ int http_request(adapter *ad, char *url, const char *method, int force) {
         return 0;
 
     if (sip->expect_reply) {
-        LOG("%s: not sending method %d: url %s", __FUNCTION__, method, url);
+        LOG("%s: not sending method %s: url %s", __FUNCTION__, method, url);
         return 0;
     }
 
@@ -1381,6 +1381,9 @@ int satipc_send_play(adapter *ad) {
     char url[1000];
     satipc *sip = get_satip(ad->id);
     int len = 0;
+
+    if (!sip)
+        return 0;
 
     url[0] = 0;
     if (sip->want_tune + sip->lap + sip->ldp + sip->force_pids == 0)

@@ -1064,10 +1064,15 @@ int setup_switch(adapter *ad) {
                 master->old_diseqc != diseqc)
                 change_par = 1;
 
+            uint8_t old_used_slave =
+                master->used[ad->id]; // save the old used flag
+            master->used[ad->id] = 0;
+
             if (!master->sid_cnt &&
-                !(master->used &
-                  ~(1 << ad->id))) // the master is not used by another adapters
+                is_byte_array_empty(master->used, sizeof(master->used)))
                 do_setup_switch = 1;
+
+            master->used[ad->id] = old_used_slave; // restore the old used
 
             if (change_par && !do_setup_switch) {
                 LOG("Slave adapter %d wants to change the paramters of the "
@@ -1436,7 +1441,7 @@ int dvb_demux_set_pid(adapter *a, int i_pid) {
         }
         LOG("AD %d [dvr %d %d], setting filter on PID %d for fd %d, active "
             "pids %d",
-            a->id, fd, a->active_pids);
+            a->id, i_pid, fd, a->active_pids);
         return fd;
     }
 

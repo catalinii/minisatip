@@ -857,8 +857,8 @@ int is_rtsp_http_header(char *buf, int len, const char *start[], int lstart) {
     if (!cl)
         return 1;
 
-    // When RTP/TCP is used on SAT>IP adapters, responses are 4 bytes larger 
-    // than expected, so we just check that the specified content length fits 
+    // When RTP/TCP is used on SAT>IP adapters, responses are 4 bytes larger
+    // than expected, so we just check that the specified content length fits
     // within the buffer, not that the length matches exactly.
     int icl = map_intd(cl + 15, NULL, 0);
     if (nlnl + icl > buf + len)
@@ -883,16 +883,10 @@ int is_rtsp_request(char *buf, int len) {
     return is_rtsp_http_header(buf, len, start, 5);
 }
 
-/*
-void write_buf_to_file(char *file, uint8_t *buf, int len)
-{
-        int x = open(file, O_RDWR);
-        if (x >= 0)
-        {
-                write(x, buf, len);
-                close(x);
-        }
-        else
-                LOG("Could not write %d bytes to %s: %d", len, file, errno);
+int is_byte_array_empty(uint8_t *b, int len) {
+    for (int i = 0; i < len; i++) {
+        if (b[i] != 0)
+            return 0;
+    }
+    return 1;
 }
-*/
