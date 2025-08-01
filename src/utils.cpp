@@ -53,8 +53,9 @@
 #include <time.h>
 #include <unistd.h>
 
-#if !defined(__mips__)
-#include <execinfo.h>
+#ifndef DISABLE_STACKTRACE
+#include <iostream>
+#include <stacktrace>
 #endif
 
 #define DEFAULT_LOG LOG_UTILS
@@ -227,28 +228,13 @@ void set_signal_handler(char *argv0) {
     }
 }
 
-int addr2line(char const *const program_name, void const *const addr) {
-    char addr2line_cmd[512] = {0};
-
-    sprintf(addr2line_cmd, "addr2line -f -p -e %.256s %p", program_name, addr);
-    return system(addr2line_cmd);
-}
-
 void print_trace(void) {
-    void *array[10];
-    size_t size = 0;
-    size_t i;
-#ifdef backtrace
-    size = backtrace(array, 10);
+#ifndef DISABLE_STACKTRACE
+    const std::stacktrace trace = std::stacktrace::current();
+    LOG0("Stack trace:\n%s", std::to_string(trace).c_str());
+#else
+    LOG("No stacktrace support compiled in");
 #endif
-
-    printf("Obtained %zu stack frames.\n", size);
-
-    for (i = 0; i < size; i++) {
-        printf("%p : ", array[i]);
-        if (addr2line(pn, array[i]))
-            printf("\n");
-    }
 }
 
 extern int run_loop;

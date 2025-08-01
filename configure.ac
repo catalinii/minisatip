@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.4])
-AC_INIT(minisatip, 1.1, https://github.com/catalinii/minisatip)
+AC_INIT(minisatip, 2.0, https://github.com/catalinii/minisatip)
 AC_CONFIG_SRCDIR([src/minisatip.h])
 #AC_CONFIG_HEADERS([config.h])
 
@@ -25,6 +25,7 @@ static="Static:\t\t\t\t\t "
 dvbapi="dvbapi:\t\t\t\t\t "
 axe="axe:\t\t\t\t\t "
 enigma="enigma:\t\t\t\t\t "
+cxx23="C++23:\t\t\t\t\t "
 LINUXDVB=0
 DVBCA=0
 DVBCSA=0
@@ -32,6 +33,7 @@ NETCVCLIENT=0
 SATIPCLIENT=0
 STATIC=0
 DVBAPI=0
+CXX23=0
 
 AC_ARG_ENABLE([linuxdvb],
   [AS_HELP_STRING([--disable-linuxdvb],
@@ -41,7 +43,7 @@ AS_IF([test "x$enable_linuxdvb" != "xno"], [
 AC_MSG_NOTICE([ == Checking LINUX DVB == ])
 AC_CHECK_HEADERS([linux/dvb/frontend.h],[LINUXDVB=1],[LINUXDVB=0])
 LINUXDVB=1
-]) 
+])
 
 if test "$LINUXDVB" = "1"; then
 FM="$FM\n$linux_dvb enabled"
@@ -80,6 +82,18 @@ FM="$FM\n$dvb_csa disabled"
 fi
 
 
+AC_MSG_NOTICE([ == Checking C++ 23 == ])
+ac_save_CXXFLAGS="$CXXFLAGS"
+CXXFLAGS="$CXXFLAGS -std=c++23"
+AC_CHECK_HEADERS([stacktrace],[CXX23=1],[CXX23=0])
+
+if test "$CXX23" = "1"; then
+FM="$FM\n$cxx23 enabled"
+else
+FM="$FM\n$cxx23 disabled"
+CXXFLAGS="$ac_save_CXXFLAGS"
+fi
+
 AC_ARG_ENABLE([netcv],
   [AS_HELP_STRING([--disable-netcv],
   [disable NETCEIVER support])])
@@ -93,7 +107,7 @@ AC_ARG_WITH([xml2],
   [AS_HELP_STRING([--with-xml2],
   [specify libxml2 directory default=/usr/include/libxml2])],
   [xml2_dir=$with_xml2])
-  
+
 CXXFLAGS="-I$xml2_dir"
 CFLAGS="-I$xml2_dir"
 
@@ -132,7 +146,7 @@ AC_ARG_ENABLE([static],
 AS_IF([test "x$enable_static" = "xyes"], [
 STATIC=1
 ])
-  
+
 if test "$STATIC" = "1"; then
 FM="$FM\n$static enabled"
 else
@@ -184,6 +198,7 @@ AC_SUBST(NETCVCLIENT)
 AC_SUBST(SATIPCLIENT)
 AC_SUBST(STATIC)
 AC_SUBST(DVBAPI)
+AC_SUBST(CXX23)
 
 AC_CONFIG_FILES([src/Makefile])
 AC_CONFIG_FILES([tests/Makefile])

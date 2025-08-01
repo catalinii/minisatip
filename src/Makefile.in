@@ -11,6 +11,7 @@ NETCVCLIENT=@NETCVCLIENT@
 STATIC=@STATIC@
 DVBAPI=@DVBAPI@
 LINUXDVB=@LINUXDVB@
+CXX23=@CXX23@
 DDCI=0
 
 CXXFLAGS?=-Wall -Wno-date-time -Wno-switch -ggdb -fPIC -fno-common -Warray-bounds
@@ -120,6 +121,14 @@ SOURCES+=ddci.cpp
 else
 CXXFLAGS+=-DDISABLE_DDCI
 endif
+
+ifeq ($(CXX23),1)
+LIBS+=stdc++exp
+CXXFLAGS+=-std=c++23
+else
+CXXFLAGS+=-DDISABLE_STACKTRACE
+endif
+
 
 ifeq ($(DEBUG),1)
 CXXFLAGS += -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=undefined -static-libasan -static-libubsan -static-liblsan -fstack-protector-all
