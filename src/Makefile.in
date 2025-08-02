@@ -103,7 +103,7 @@ endif
 
 ifeq ($(NETCVCLIENT),1)
 SOURCES+=netceiver.cpp
-LDFLAGS+=-lnetceiver -lxml2
+LDFLAGS+=-lnetceiver -lxml2 -llzma -lz
 else
 CXXFLAGS+=-DDISABLE_NETCVCLIENT
 endif
@@ -129,6 +129,7 @@ endif
 
 ifeq ($(STATIC),1)
 	LDFLAGS+=$(addsuffix .a,$(addprefix -l:lib,$(LIBS)))
+	LDFLAGS+=-static
 else
 	LDFLAGS+=$(addprefix -l,$(LIBS))
 endif
