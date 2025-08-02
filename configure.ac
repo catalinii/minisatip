@@ -8,6 +8,7 @@ AC_CONFIG_SRCDIR([src/minisatip.h])
 
 # Checks for programs.
 AC_PROG_CXX
+AC_LANG(C++)
 
 # Checks for libraries.
 # FIXME: Replace `main' with a function in `-lrt':
@@ -85,7 +86,9 @@ fi
 AC_MSG_NOTICE([ == Checking C++ 23 == ])
 ac_save_CXXFLAGS="$CXXFLAGS"
 CXXFLAGS="$CXXFLAGS -std=c++23"
-AC_CHECK_HEADERS([stacktrace],[CXX23=1],[CXX23=0])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <stacktrace>]], [[std::stacktrace st = std::stacktrace::current();]])],
+                      [CXX23=1],
+                      [AC_MSG_WARN([C++23 stacktrace not available.])])
 
 if test "$CXX23" = "1"; then
 FM="$FM\n$cxx23 enabled"

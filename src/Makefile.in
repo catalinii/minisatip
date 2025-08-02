@@ -16,7 +16,7 @@ DDCI=0
 
 CXXFLAGS?=-Wall -Wno-date-time -Wno-switch -ggdb -fPIC -fno-common -Warray-bounds
 CXXFLAGS += -I../src
-CXXFLAGS += $(EXTRA_CFLAGS) @CFLAGS@
+CXXFLAGS += $(EXTRA_CXXFLAGS) @CXXFLAGS@
 LDFLAGS += @LDFLAGS@ -lpthread
 CPPFLAGS += @CPPFLAGS@
 
@@ -144,7 +144,7 @@ else
 endif
 
 SOURCES+=$(SOURCES-1)
-CXXFLAGS+=$(CFLAGS-1)
+CXXFLAGS+=$(CXXFLAGS-1)
 LDFLAGS+=$(LDFLAGS-1)
 
 OBJS := $(patsubst %.cpp, $(BUILDDIR)/%.o, $(SOURCES))
