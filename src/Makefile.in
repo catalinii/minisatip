@@ -124,7 +124,7 @@ endif
 ifeq ($(DEBUG),1)
 CXXFLAGS += -fsanitize=address -fsanitize=leak -fsanitize=undefined -static-libasan -static-libubsan -static-liblsan -fstack-protector-all
 else
-CXXFLAGS += -O2
+CXXFLAGS += -O1
 endif
 
 ifeq ($(STATIC),1)
