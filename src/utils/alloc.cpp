@@ -87,6 +87,7 @@ void *realloc1(void *p, int a, const char *f, int l, int record) {
     int old_mem = 0;
     void *x = realloc(p, a);
     if (record) {
+	// TODO FIX: warning: pointer 'p' may be used after 'void* realloc(void*, size_t)' [-Wuse-after-free]
         old_mem = record_allocation(p, x, a, a, a, 1, 0, f, l);
     }
     LOGM("%s:%d realloc allocated %d bytes from %d: %p", f, l, a, old_mem, x);

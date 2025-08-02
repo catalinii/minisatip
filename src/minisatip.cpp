@@ -1011,7 +1011,7 @@ void set_options(int argc, char *argv[]) {
             }
 
             // default interface is vlan4 as it is used on the REEL
-            opts.netcv_if = "vlan4";
+            opts.netcv_if = (char*) "vlan4";
             opts.netcv_count = map_int(optarg, NULL);
 #endif
             break;

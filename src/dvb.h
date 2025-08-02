@@ -311,13 +311,13 @@ typedef struct struct_transponder {
     int sys;
     int freq;
     int inversion;
-    int mtype;
+    fe_modulation_t mtype;
     int fe;
 
     // DVB-T
     int hprate;
-    int tmode;
-    int gi;
+    fe_transmit_mode_t tmode;
+    fe_guard_interval_t gi;
     int bw;
     int sm;
     int t2id;
@@ -325,7 +325,7 @@ typedef struct struct_transponder {
     // DVB-S2
     int ro;
     int plts;
-    int fec;
+    fe_code_rate_t fec;
     int sr;
     int pol;
     int diseqc;
