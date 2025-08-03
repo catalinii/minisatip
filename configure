@@ -3052,12 +3052,12 @@ CXXFLAGS="-I$xml2_dir"
 CFLAGS="-I$xml2_dir"
 
 cd src
-       for ac_header in libnetceiver/netcv/headers.h
+       for ac_header in libnetceiver/netcv/defs.h
 do :
-  ac_fn_cxx_check_header_compile "$LINENO" "libnetceiver/netcv/headers.h" "ac_cv_header_libnetceiver_netcv_headers_h" "$ac_includes_default"
-if test "x$ac_cv_header_libnetceiver_netcv_headers_h" = xyes
+  ac_fn_cxx_check_header_compile "$LINENO" "libnetceiver/netcv/defs.h" "ac_cv_header_libnetceiver_netcv_defs_h" "$ac_includes_default"
+if test "x$ac_cv_header_libnetceiver_netcv_defs_h" = xyes
 then :
-  printf "%s\n" "#define HAVE_LIBNETCEIVER_NETCV_HEADERS_H 1" >>confdefs.h
+  printf "%s\n" "#define HAVE_LIBNETCEIVER_NETCV_DEFS_H 1" >>confdefs.h
  NETCVCLIENT=1
 else $as_nop
   NETCVCLIENT=0

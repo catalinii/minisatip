@@ -115,7 +115,7 @@ CXXFLAGS="-I$xml2_dir"
 CFLAGS="-I$xml2_dir"
 
 cd src
-AC_CHECK_HEADERS([libnetceiver/netcv/headers.h],[NETCVCLIENT=1],[NETCVCLIENT=0])
+AC_CHECK_HEADERS([libnetceiver/netcv/defs.h],[NETCVCLIENT=1],[NETCVCLIENT=0])
 cd ..
 ])
 
