@@ -16,7 +16,8 @@ jobs:
       run: DEBIAN_FRONTEND=noninteractive sudo apt-get -y install build-essential libdvbcsa-dev libssl-dev zlib1g-dev libxml2-dev
     - name: configure
       run: ./configure
-    - uses: vapier/coverity-scan-action@v1
+
+    - uses: Jalle19/coverity-scan-action@error-handling
       with:
         project: minisatip2
         token: ${{ secrets.COVERITY_SCAN_TOKEN }}
