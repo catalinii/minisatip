@@ -934,9 +934,13 @@ int decrypt_batch(SPMT *pmt) {
     int i;
     SCW *old_cw = pmt->cw;
 
-    if (pmt->blen <= 0)
-        return 0;
     mutex_lock(&pmt->mutex);
+
+    if (pmt->blen <= 0) {
+        mutex_unlock(&pmt->mutex);
+        return 0;
+    }
+
     update_cw(pmt);
 
     set_pmt_encrypted(pmt, pmt->cw ? TABLES_CHANNEL_DECRYPTED
