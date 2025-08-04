@@ -1190,14 +1190,20 @@ int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque) {
         LOG_AND_RETURN(0, "DDCI %d no longer enabled, not processing PAT",
                        d->id);
 
-    if (d->cat_processed || d->disable_cat)
+    mutex_lock(&d->mutex);
+
+    if (d->cat_processed || d->disable_cat) {
+        mutex_unlock(&d->mutex);
         return 0;
+    }
 
     cat_len -= 9;
     b += 8;
     LOG("CAT DDCI %d len %d", d->id, cat_len);
-    if (cat_len > 1500)
+    if (cat_len > 1500) {
+        mutex_unlock(&d->mutex);
         return 0;
+    }
 
     id = 0;
     for (i = 0; i < cat_len; i += es_len) // reading program info
@@ -1217,7 +1223,7 @@ int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque) {
     }
 
     add_cat = 1;
-    mutex_lock(&d->mutex);
+
     for (i = 0; i < id; i++)
         if (get_ddci_pid(d, d->capid[i])) {
             add_cat = 0;
