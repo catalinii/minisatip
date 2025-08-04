@@ -311,7 +311,7 @@ int del_filter(int id) {
     int i, pid;
     int adapter = -1;
     LOG("deleting filter %d", id);
-    if (id < 0 || id >= MAX_FILTERS || !filters[id] || !filters[id]->enabled)
+    if (id < 0 || id >= MAX_FILTERS || !filters[id])
         return 0;
 
     f = filters[id];
