@@ -3,9 +3,7 @@ name: Coverity Scan
 on:
   push:
     branches: [ master ]
-  pull_request:
-    branches: [ master ]
-
+  # We can't run on pull request because the secret token is not available there
 
 jobs:
   build:
