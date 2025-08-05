@@ -53,13 +53,10 @@
 #define DEFAULT_LOG LOG_DVBCA
 #define CONFIG_FILE_NAME "ddci.conf"
 
-int ddci_adapters;
 extern int dvbca_id;
 extern SCA ca[MAX_CA];
 extern SPMT *pmts[];
 SHashTable channels;
-
-int first_ddci = -1;
 
 #undef FOREACH_ITEM
 #define FOREACH_ITEM(h, a)                                                     \
@@ -253,17 +250,6 @@ int ddci_close_dev(adapter *ad) {
     return TABLES_RESULT_OK;
 }
 SCA_op ddci;
-
-void ddci_close_device(ddci_device_t *c) {}
-
-int ddci_close_all() {
-    int i;
-    for (i = 0; i < MAX_ADAPTERS; i++)
-        if (ddci_devices[i] && ddci_devices[i]->enabled) {
-            ddci_close_device(ddci_devices[i]);
-        }
-    return 0;
-}
 
 int ddci_close() { return 0; }
 int ddci_close_adapter(adapter *a) { return 0; }
@@ -1094,23 +1080,6 @@ int ddci_post_init(adapter *ad) {
     return 0;
 }
 
-int set_property(int fd, uint32_t cmd, uint32_t data) {
-    struct dtv_property p;
-    struct dtv_properties c;
-    int ret;
-
-    p.cmd = cmd;
-    c.num = 1;
-    c.props = &p;
-    p.u.data = data;
-    ret = ioctl(fd, FE_SET_PROPERTY, &c);
-    if (ret < 0) {
-        LOGM("FE_SET_PROPERTY command %d returned %d\n", cmd, errno);
-        return -1;
-    }
-    return 0;
-}
-
 ddci_device_t *ddci_alloc(int id) {
     ddci_device_t *d;
 
@@ -1399,7 +1368,6 @@ void find_ddci_adapter(adapter **a) {
     int cnt;
     int i = 0, j = 0;
 
-    ddci_adapters = 0;
     adapter *ad;
     if (opts.disable_dvb) {
         LOG("DVBCI device detection disabled");
@@ -1457,13 +1425,10 @@ void find_ddci_adapter(adapter **a) {
                     load_channels(&channels);
                 }
 
-                ddci_adapters++;
                 na++;
                 a_count = na; // update adapter counter
                 if (na == MAX_ADAPTERS)
                     return;
-                if (first_ddci == -1)
-                    first_ddci = na - 1;
 #ifdef DDCI_TEST
                 return;
 #endif
