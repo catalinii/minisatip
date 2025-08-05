@@ -711,7 +711,6 @@ enable_linuxdvb
 enable_dvbca
 enable_dvbcsa
 enable_netcv
-with_xml2
 enable_satipc
 enable_static
 enable_dvbapi
@@ -1351,12 +1350,6 @@ Optional Features:
   --disable-satipc        disable satip client support
   --enable-static         enable static compilation
   --disable-dvbapi        disable dvbapi protocol support
-
-Optional Packages:
-  --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
-  --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
-  --with-xml2             specify libxml2 directory
-                          default=/usr/include/libxml2
 
 Some influential environment variables:
   CXX         C++ compiler command
@@ -3032,26 +3025,18 @@ then :
 fi
 
 
+
 if test "x$enable_netcv" != "xno"
 then :
 
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}:  == Checking NETCVCLIENT == " >&5
 printf "%s\n" "$as_me:  == Checking NETCVCLIENT == " >&6;}
 
+ac_save_CXXFLAGS="$CXXFLAGS"
 xml2_dir="/usr/include/libxml2"
-
-
-# Check whether --with-xml2 was given.
-if test ${with_xml2+y}
-then :
-  withval=$with_xml2; xml2_dir=$with_xml2
-fi
-
-
-CXXFLAGS="-I$xml2_dir"
+CXXFLAGS="$CXXFLAGS -I$xml2_dir"
 CFLAGS="-I$xml2_dir"
 
-cd src
        for ac_header in libnetceiver/netcv/defs.h
 do :
   ac_fn_cxx_check_header_compile "$LINENO" "libnetceiver/netcv/defs.h" "ac_cv_header_libnetceiver_netcv_defs_h" "$ac_includes_default"
@@ -3064,7 +3049,6 @@ else $as_nop
 fi
 
 done
-cd ..
 
 fi
 
@@ -3072,8 +3056,8 @@ if test "$NETCVCLIENT" = "1"; then
 FM="$FM\n$netcv enabled"
 else
 FM="$FM\n$netcv disabled"
-CXXFLAGS=
-CPPFLAGS=
+CXXFLAGS="$ac_save_CXXFLAGS"
+CFLAGS=
 fi
 
 
@@ -3138,8 +3122,8 @@ FM="$FM\n$dvbapi disabled"
 fi
 
 
-ac_save_CXXFLAGS="$CFLAGS"
-CXXFLAGS="$CFLAGS -fstrict-flex-arrays"
+ac_save_CXXFLAGS="$CXXFLAGS"
+CXXFLAGS="$CXXFLAGS -fstrict-flex-arrays"
 
 cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
@@ -3162,11 +3146,11 @@ rm -f core conftest.err conftest.$ac_objext conftest.beam conftest.$ac_ext
 
 if test $enable_strict_flex_array -eq 0
 then :
-  CXXFLAGS="$ac_save_CFLAGS"
+  CXXFLAGS="$ac_save_CXXFLAGS"
 fi
 
-ac_save_CXXFLAGS="$CFLAGS"
-CXXFLAGS="$CFLAGS -fsanitize=bounds -fsanitize-trap=all"
+ac_save_CXXFLAGS="$CXXFLAGS"
+CXXFLAGS="$CXXFLAGS -fsanitize=bounds -fsanitize-trap=all"
 
 cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
@@ -3189,10 +3173,10 @@ rm -f core conftest.err conftest.$ac_objext conftest.beam conftest.$ac_ext
 
 if test $enable_bounds_check -eq 0
 then :
-  CXXFLAGS="$ac_save_CFLAGS"
+  CXXFLAGS="$ac_save_CXXFLAGS"
 fi
 
-FM="$FM\nCXXFLAGS\t\t$CFLAGS"
+FM="$FM\nCXXFLAGS\t\t$CXXFLAGS"
 
 
 

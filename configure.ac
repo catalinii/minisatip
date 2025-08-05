@@ -101,30 +101,24 @@ AC_ARG_ENABLE([netcv],
   [AS_HELP_STRING([--disable-netcv],
   [disable NETCEIVER support])])
 
+
 AS_IF([test "x$enable_netcv" != "xno"], [
 AC_MSG_NOTICE([ == Checking NETCVCLIENT == ])
 
+ac_save_CXXFLAGS="$CXXFLAGS"
 xml2_dir="/usr/include/libxml2"
-
-AC_ARG_WITH([xml2],
-  [AS_HELP_STRING([--with-xml2],
-  [specify libxml2 directory default=/usr/include/libxml2])],
-  [xml2_dir=$with_xml2])
-
-CXXFLAGS="-I$xml2_dir"
+CXXFLAGS="$CXXFLAGS -I$xml2_dir"
 CFLAGS="-I$xml2_dir"
 
-cd src
 AC_CHECK_HEADERS([libnetceiver/netcv/defs.h],[NETCVCLIENT=1],[NETCVCLIENT=0])
-cd ..
 ])
 
 if test "$NETCVCLIENT" = "1"; then
 FM="$FM\n$netcv enabled"
 else
 FM="$FM\n$netcv disabled"
-CXXFLAGS=
-CPPFLAGS=
+CXXFLAGS="$ac_save_CXXFLAGS"
+CFLAGS=
 fi
 
 
@@ -171,27 +165,27 @@ FM="$FM\n$dvbapi disabled"
 fi
 
 
-ac_save_CXXFLAGS="$CFLAGS"
-CXXFLAGS="$CFLAGS -fstrict-flex-arrays"
+ac_save_CXXFLAGS="$CXXFLAGS"
+CXXFLAGS="$CXXFLAGS -fstrict-flex-arrays"
 
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([],
   [[int i = 1; (void) i;]])],
   [enable_strict_flex_array=1], [enable_strict_flex_array=0])
 
 AS_IF([test $enable_strict_flex_array -eq 0],
-  [CXXFLAGS="$ac_save_CFLAGS"])
+  [CXXFLAGS="$ac_save_CXXFLAGS"])
 
-ac_save_CXXFLAGS="$CFLAGS"
-CXXFLAGS="$CFLAGS -fsanitize=bounds -fsanitize-trap=all"
+ac_save_CXXFLAGS="$CXXFLAGS"
+CXXFLAGS="$CXXFLAGS -fsanitize=bounds -fsanitize-trap=all"
 
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([],
   [[int i = 1; (void) i;]])],
   [enable_bounds_check=1], [enable_bounds_check=0])
 
 AS_IF([test $enable_bounds_check -eq 0],
-  [CXXFLAGS="$ac_save_CFLAGS"])
+  [CXXFLAGS="$ac_save_CXXFLAGS"])
 
-FM="$FM\nCXXFLAGS\t\t$CFLAGS"
+FM="$FM\nCXXFLAGS\t\t$CXXFLAGS"
 
 
 AC_SUBST(LINUXDVB)
