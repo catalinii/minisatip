@@ -26,7 +26,7 @@ static="Static:\t\t\t\t\t "
 dvbapi="dvbapi:\t\t\t\t\t "
 axe="axe:\t\t\t\t\t "
 enigma="enigma:\t\t\t\t\t "
-cxx23="C++23:\t\t\t\t\t "
+cxx23="C++23 stacktrace:\t\t\t "
 LINUXDVB=0
 DVBCA=0
 DVBCSA=0
@@ -35,6 +35,11 @@ SATIPCLIENT=0
 STATIC=0
 DVBAPI=0
 CXX23=0
+
+AC_MSG_NOTICE([ == Checking C++ 23 == ])
+CXXFLAGS="-std=c++23"
+AC_CHECK_HEADERS([dvbcsa/dvbcsa.h],[],[CXXFLAGS=])
+
 
 AC_ARG_ENABLE([linuxdvb],
   [AS_HELP_STRING([--disable-linuxdvb],
@@ -83,9 +88,7 @@ FM="$FM\n$dvb_csa disabled"
 fi
 
 
-AC_MSG_NOTICE([ == Checking C++ 23 == ])
-ac_save_CXXFLAGS="$CXXFLAGS"
-CXXFLAGS="$CXXFLAGS -std=c++23"
+AC_MSG_NOTICE([ == Checking stacktrace support == ])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <stacktrace>]], [[std::stacktrace st = std::stacktrace::current();]])],
                       [CXX23=1],
                       [AC_MSG_WARN([C++23 stacktrace not available.])])
@@ -94,7 +97,6 @@ if test "$CXX23" = "1"; then
 FM="$FM\n$cxx23 enabled"
 else
 FM="$FM\n$cxx23 disabled"
-CXXFLAGS="$ac_save_CXXFLAGS"
 fi
 
 AC_ARG_ENABLE([netcv],
@@ -185,7 +187,7 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([],
 AS_IF([test $enable_bounds_check -eq 0],
   [CXXFLAGS="$ac_save_CXXFLAGS"])
 
-FM="$FM\nCXXFLAGS\t\t$CXXFLAGS"
+FM="$FM\nCXXFLAGS\t\t\t\t  $CXXFLAGS"
 
 
 AC_SUBST(LINUXDVB)

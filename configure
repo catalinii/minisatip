@@ -2847,7 +2847,7 @@ static="Static:\t\t\t\t\t "
 dvbapi="dvbapi:\t\t\t\t\t "
 axe="axe:\t\t\t\t\t "
 enigma="enigma:\t\t\t\t\t "
-cxx23="C++23:\t\t\t\t\t "
+cxx23="C++23 stacktrace:\t\t\t "
 LINUXDVB=0
 DVBCA=0
 DVBCSA=0
@@ -2857,13 +2857,9 @@ STATIC=0
 DVBAPI=0
 CXX23=0
 
-# Check whether --enable-linuxdvb was given.
-if test ${enable_linuxdvb+y}
-then :
-  enableval=$enable_linuxdvb;
-fi
-
-
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}:  == Checking C++ 23 == " >&5
+printf "%s\n" "$as_me:  == Checking C++ 23 == " >&6;}
+CXXFLAGS="-std=c++23"
 ac_header= ac_cache=
 for ac_item in $ac_header_cxx_list
 do
@@ -2893,6 +2889,27 @@ then :
 printf "%s\n" "#define STDC_HEADERS 1" >>confdefs.h
 
 fi
+       for ac_header in dvbcsa/dvbcsa.h
+do :
+  ac_fn_cxx_check_header_compile "$LINENO" "dvbcsa/dvbcsa.h" "ac_cv_header_dvbcsa_dvbcsa_h" "$ac_includes_default"
+if test "x$ac_cv_header_dvbcsa_dvbcsa_h" = xyes
+then :
+  printf "%s\n" "#define HAVE_DVBCSA_DVBCSA_H 1" >>confdefs.h
+
+else $as_nop
+  CXXFLAGS=
+fi
+
+done
+
+
+# Check whether --enable-linuxdvb was given.
+if test ${enable_linuxdvb+y}
+then :
+  enableval=$enable_linuxdvb;
+fi
+
+
 if test "x$enable_linuxdvb" != "xno"
 then :
 
@@ -2987,10 +3004,8 @@ FM="$FM\n$dvb_csa disabled"
 fi
 
 
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}:  == Checking C++ 23 == " >&5
-printf "%s\n" "$as_me:  == Checking C++ 23 == " >&6;}
-ac_save_CXXFLAGS="$CXXFLAGS"
-CXXFLAGS="$CXXFLAGS -std=c++23"
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}:  == Checking stacktrace support == " >&5
+printf "%s\n" "$as_me:  == Checking stacktrace support == " >&6;}
 cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 #include <stacktrace>
@@ -3015,7 +3030,6 @@ if test "$CXX23" = "1"; then
 FM="$FM\n$cxx23 enabled"
 else
 FM="$FM\n$cxx23 disabled"
-CXXFLAGS="$ac_save_CXXFLAGS"
 fi
 
 # Check whether --enable-netcv was given.
@@ -3176,7 +3190,7 @@ then :
   CXXFLAGS="$ac_save_CXXFLAGS"
 fi
 
-FM="$FM\nCXXFLAGS\t\t$CXXFLAGS"
+FM="$FM\nCXXFLAGS\t\t\t\t  $CXXFLAGS"
 
 
 
