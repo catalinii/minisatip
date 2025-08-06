@@ -87,15 +87,17 @@ AC_ARG_ENABLE([netcv],
 AS_IF([test "x$enable_netcv" != "xno"], [
 AC_MSG_NOTICE([ == Checking NETCVCLIENT == ])
 
-xml2_dir="/usr/include/libxml2"
+xml2_include=$(xml2-config --cflags)
+
+AC_MSG_RESULT([xml2_include=$xml2_include])
 
 AC_ARG_WITH([xml2],
   [AS_HELP_STRING([--with-xml2],
   [specify libxml2 directory default=/usr/include/libxml2])],
-  [xml2_dir=$with_xml2])
+  [xml2_include=-I$with_xml2])
   
-CXXFLAGS="-I$xml2_dir"
-CFLAGS="-I$xml2_dir"
+CXXFLAGS="$xml2_include"
+CFLAGS="$xml2_include"
 
 cd src
 AC_CHECK_HEADERS([libnetceiver/netcv/headers.h],[NETCVCLIENT=1],[NETCVCLIENT=0])
