@@ -11,7 +11,7 @@ jobs:
     container: catalinii/minisatip-build-image:latest
     env:
       PR: ${{ github.event.number }}
-    
+
     steps:
     - uses: actions/checkout@v4
       with:

@@ -2,12 +2,13 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.4])
-AC_INIT(minisatip, 1.1, https://github.com/catalinii/minisatip)
+AC_INIT(minisatip, 2.0, https://github.com/catalinii/minisatip)
 AC_CONFIG_SRCDIR([src/minisatip.h])
 #AC_CONFIG_HEADERS([config.h])
 
 # Checks for programs.
 AC_PROG_CXX
+AC_LANG(C++)
 
 # Checks for libraries.
 # FIXME: Replace `main' with a function in `-lrt':
@@ -25,6 +26,7 @@ static="Static:\t\t\t\t\t "
 dvbapi="dvbapi:\t\t\t\t\t "
 axe="axe:\t\t\t\t\t "
 enigma="enigma:\t\t\t\t\t "
+cxx23="C++23 stacktrace:\t\t\t "
 LINUXDVB=0
 DVBCA=0
 DVBCSA=0
@@ -32,6 +34,21 @@ NETCVCLIENT=0
 SATIPCLIENT=0
 STATIC=0
 DVBAPI=0
+CXX23=0
+
+NO_23=0
+
+AC_MSG_NOTICE([ == Checking C++ 23 == ])
+CXXFLAGS="-std=c++23"
+AC_CHECK_HEADERS([dvbcsa/dvbcsa.h],[],[NO_23=1])
+
+if test "$NO_23" = "1"; then
+    AC_MSG_NOTICE([ == Checking C++ 20 == ])
+    CXXFLAGS="-std=c++20"
+    AC_CHECK_HEADERS([dvbcsa/dvbcsa.h],[],[CXXFLAGS="-std=c++2a"])  # gcc 9
+fi
+
+AC_MSG_NOTICE([ == Using C++ standard $CXXFLAGS == ])
 
 AC_ARG_ENABLE([linuxdvb],
   [AS_HELP_STRING([--disable-linuxdvb],
@@ -41,7 +58,7 @@ AS_IF([test "x$enable_linuxdvb" != "xno"], [
 AC_MSG_NOTICE([ == Checking LINUX DVB == ])
 AC_CHECK_HEADERS([linux/dvb/frontend.h],[LINUXDVB=1],[LINUXDVB=0])
 LINUXDVB=1
-]) 
+])
 
 if test "$LINUXDVB" = "1"; then
 FM="$FM\n$linux_dvb enabled"
@@ -80,34 +97,42 @@ FM="$FM\n$dvb_csa disabled"
 fi
 
 
+AC_MSG_NOTICE([ == Checking stacktrace support == ])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <stacktrace>]], [[std::stacktrace st = std::stacktrace::current();]])],
+                      [CXX23=1],
+                      [AC_MSG_WARN([C++23 stacktrace not available.])])
+
+if test "$CXX23" = "1"; then
+FM="$FM\n$cxx23 enabled"
+else
+FM="$FM\n$cxx23 disabled"
+fi
+
 AC_ARG_ENABLE([netcv],
   [AS_HELP_STRING([--disable-netcv],
   [disable NETCEIVER support])])
 
+
 AS_IF([test "x$enable_netcv" != "xno"], [
 AC_MSG_NOTICE([ == Checking NETCVCLIENT == ])
 
-xml2_dir="/usr/include/libxml2"
+ac_save_CXXFLAGS="$CXXFLAGS"
+xml2_include=$(xml2-config --cflags)
 
-AC_ARG_WITH([xml2],
-  [AS_HELP_STRING([--with-xml2],
-  [specify libxml2 directory default=/usr/include/libxml2])],
-  [xml2_dir=$with_xml2])
-  
-CXXFLAGS="-I$xml2_dir"
-CFLAGS="-I$xml2_dir"
+AC_MSG_RESULT([xml2_include=$xml2_include])
 
-cd src
-AC_CHECK_HEADERS([libnetceiver/netcv/headers.h],[NETCVCLIENT=1],[NETCVCLIENT=0])
-cd ..
+CXXFLAGS="$CXXFLAGS $xml2_include"
+CFLAGS="$xml2_include"
+
+AC_CHECK_HEADERS([libnetceiver/netcv/defs.h],[NETCVCLIENT=1],[NETCVCLIENT=0])
 ])
 
 if test "$NETCVCLIENT" = "1"; then
 FM="$FM\n$netcv enabled"
 else
 FM="$FM\n$netcv disabled"
-CXXFLAGS=
-CPPFLAGS=
+CXXFLAGS="$ac_save_CXXFLAGS"
+CFLAGS=
 fi
 
 
@@ -132,7 +157,7 @@ AC_ARG_ENABLE([static],
 AS_IF([test "x$enable_static" = "xyes"], [
 STATIC=1
 ])
-  
+
 if test "$STATIC" = "1"; then
 FM="$FM\n$static enabled"
 else
@@ -154,27 +179,27 @@ FM="$FM\n$dvbapi disabled"
 fi
 
 
-ac_save_CXXFLAGS="$CFLAGS"
-CXXFLAGS="$CFLAGS -fstrict-flex-arrays"
+ac_save_CXXFLAGS="$CXXFLAGS"
+CXXFLAGS="$CXXFLAGS -fstrict-flex-arrays"
 
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([],
   [[int i = 1; (void) i;]])],
   [enable_strict_flex_array=1], [enable_strict_flex_array=0])
 
 AS_IF([test $enable_strict_flex_array -eq 0],
-  [CXXFLAGS="$ac_save_CFLAGS"])
+  [CXXFLAGS="$ac_save_CXXFLAGS"])
 
-ac_save_CXXFLAGS="$CFLAGS"
-CXXFLAGS="$CFLAGS -fsanitize=bounds -fsanitize-trap=all"
+ac_save_CXXFLAGS="$CXXFLAGS"
+CXXFLAGS="$CXXFLAGS -fsanitize=bounds -fsanitize-trap=all"
 
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([],
   [[int i = 1; (void) i;]])],
   [enable_bounds_check=1], [enable_bounds_check=0])
 
 AS_IF([test $enable_bounds_check -eq 0],
-  [CXXFLAGS="$ac_save_CFLAGS"])
+  [CXXFLAGS="$ac_save_CXXFLAGS"])
 
-FM="$FM\nCXXFLAGS\t\t$CFLAGS"
+FM="$FM\nCXXFLAGS\t\t\t\t  $CXXFLAGS"
 
 
 AC_SUBST(LINUXDVB)
@@ -184,6 +209,7 @@ AC_SUBST(NETCVCLIENT)
 AC_SUBST(SATIPCLIENT)
 AC_SUBST(STATIC)
 AC_SUBST(DVBAPI)
+AC_SUBST(CXX23)
 
 AC_CONFIG_FILES([src/Makefile])
 AC_CONFIG_FILES([tests/Makefile])
