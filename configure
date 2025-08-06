@@ -3047,9 +3047,13 @@ then :
 printf "%s\n" "$as_me:  == Checking NETCVCLIENT == " >&6;}
 
 ac_save_CXXFLAGS="$CXXFLAGS"
-xml2_dir="/usr/include/libxml2"
-CXXFLAGS="$CXXFLAGS -I$xml2_dir"
-CFLAGS="-I$xml2_dir"
+xml2_include=$(xml2-config --cflags)
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: xml2_include=$xml2_include" >&5
+printf "%s\n" "xml2_include=$xml2_include" >&6; }
+
+CXXFLAGS="$CXXFLAGS $xml2_include"
+CFLAGS="$xml2_include"
 
        for ac_header in libnetceiver/netcv/defs.h
 do :

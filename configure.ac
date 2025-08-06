@@ -108,9 +108,12 @@ AS_IF([test "x$enable_netcv" != "xno"], [
 AC_MSG_NOTICE([ == Checking NETCVCLIENT == ])
 
 ac_save_CXXFLAGS="$CXXFLAGS"
-xml2_dir="/usr/include/libxml2"
-CXXFLAGS="$CXXFLAGS -I$xml2_dir"
-CFLAGS="-I$xml2_dir"
+xml2_include=$(xml2-config --cflags)
+
+AC_MSG_RESULT([xml2_include=$xml2_include])
+
+CXXFLAGS="$CXXFLAGS $xml2_include"
+CFLAGS="$xml2_include"
 
 AC_CHECK_HEADERS([libnetceiver/netcv/defs.h],[NETCVCLIENT=1],[NETCVCLIENT=0])
 ])
