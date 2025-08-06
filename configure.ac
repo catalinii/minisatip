@@ -36,10 +36,19 @@ STATIC=0
 DVBAPI=0
 CXX23=0
 
+NO_23=0
+
 AC_MSG_NOTICE([ == Checking C++ 23 == ])
 CXXFLAGS="-std=c++23"
-AC_CHECK_HEADERS([dvbcsa/dvbcsa.h],[],[CXXFLAGS=])
+AC_CHECK_HEADERS([dvbcsa/dvbcsa.h],[],[NO_23=1])
 
+if test "$NO_23" = "1"; then
+    AC_MSG_NOTICE([ == Checking C++ 20 == ])
+    CXXFLAGS="-std=c++20"
+    AC_CHECK_HEADERS([dvbcsa/dvbcsa.h],[],[CXXFLAGS="-std=c++2a"])  # gcc 9
+fi
+
+AC_MSG_NOTICE([ == Using C++ standard $CXXFLAGS == ])
 
 AC_ARG_ENABLE([linuxdvb],
   [AS_HELP_STRING([--disable-linuxdvb],

@@ -2857,6 +2857,8 @@ STATIC=0
 DVBAPI=0
 CXX23=0
 
+NO_23=0
+
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}:  == Checking C++ 23 == " >&5
 printf "%s\n" "$as_me:  == Checking C++ 23 == " >&6;}
 CXXFLAGS="-std=c++23"
@@ -2897,11 +2899,31 @@ then :
   printf "%s\n" "#define HAVE_DVBCSA_DVBCSA_H 1" >>confdefs.h
 
 else $as_nop
-  CXXFLAGS=
+  NO_23=1
 fi
 
 done
 
+if test "$NO_23" = "1"; then
+    { printf "%s\n" "$as_me:${as_lineno-$LINENO}:  == Checking C++ 20 == " >&5
+printf "%s\n" "$as_me:  == Checking C++ 20 == " >&6;}
+    CXXFLAGS="-std=c++20"
+           for ac_header in dvbcsa/dvbcsa.h
+do :
+  ac_fn_cxx_check_header_compile "$LINENO" "dvbcsa/dvbcsa.h" "ac_cv_header_dvbcsa_dvbcsa_h" "$ac_includes_default"
+if test "x$ac_cv_header_dvbcsa_dvbcsa_h" = xyes
+then :
+  printf "%s\n" "#define HAVE_DVBCSA_DVBCSA_H 1" >>confdefs.h
+
+else $as_nop
+  CXXFLAGS="-std=c++2a"
+fi
+
+done  # gcc 9
+fi
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}:  == Using C++ standard $CXXFLAGS == " >&5
+printf "%s\n" "$as_me:  == Using C++ standard $CXXFLAGS == " >&6;}
 
 # Check whether --enable-linuxdvb was given.
 if test ${enable_linuxdvb+y}

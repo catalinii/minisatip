@@ -126,7 +126,7 @@ ifeq ($(CXX23),1)
 LIBS+=stdc++exp
 CXXFLAGS+=-std=c++23
 else
-CXXFLAGS+=-DDISABLE_STACKTRACE -std=gnu++20
+CXXFLAGS+=-DDISABLE_STACKTRACE
 endif
 
 
