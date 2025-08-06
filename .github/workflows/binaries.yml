@@ -60,10 +60,10 @@ jobs:
         file minisatip
         zip -9 -r /minisatip_arm-debug.zip minisatip html
 
-    - name: Build MIPS (musl)
+    - name: Build MIPS
       run: |
         make clean
-        ./configure CFLAGS="-I/usr/mipsel-linux-gnueabihf/include" LDFLAGS="-L/usr/mipsel-linux-gnueabihf/lib" --disable-netcv --enable-static --host=mipsel-linux-gnu CXX="zig c++ -target mipsel-linux-musl"
+        ./configure --disable-netcv --enable-static --host=mipsel-linux-gnu CXX="zig c++ -target mipsel-linux-gnueabihf -I/usr/mipsel-linux-gnueabihf/include -L/usr/mipsel-linux-gnueabihf/lib"
         make
         file minisatip
         zip -9 -r /minisatip_mips_musl.zip minisatip html
