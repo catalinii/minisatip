@@ -522,7 +522,7 @@ int handle_ts(unsigned char *buffer, size_t len, void *p) {
 
     /* simple data format check */
     if (buffer[0] != 0x47 || len % 188 != 0) {
-        LOG("netceiver: TS data mallformed: buf[0]=0x%02x len=%lu", buffer[0],
+        LOG("netceiver: TS data malformed: buf[0]=0x%02x len=%lu", buffer[0],
             len);
         return len;
     }
