@@ -127,6 +127,7 @@ int netcv_del_pid(adapter *ad, int fd, int pid) {
 
 int netcv_commit(adapter *ad) {
     int i;
+    LOG("netceiver: call netcv_commit for adapter %d want_tune=%d", ad->id, SN->want_tune);
 
     int m_pos = 0;
     fe_type_t type = (fe_type_t) 0;
@@ -155,6 +156,7 @@ int netcv_commit(adapter *ad) {
     /* tune receiver to a new frequency / tranponder */
     if (SN->want_tune) {
         transponder *tp = &ad->tp;
+        LOG("netceiver: netcv_commit tune tp->sys=%d", tp->sys);
 
         int map_pos[] = {0, 192, 130, 282,
                          -50}; // Default sat positions: 19.2E, 13E, 28.2E, 5W
@@ -336,6 +338,7 @@ int netcv_commit(adapter *ad) {
 
 int netcv_tune(int aid, transponder *tp) {
     adapter *ad = get_adapter(aid);
+    LOG("netceiver: called netcv_tune for adapter %d", ad->id);
     if (!ad)
         return 1;
 
