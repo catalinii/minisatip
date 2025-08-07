@@ -1064,6 +1064,9 @@ void start_active_pmts(adapter *ad) {
                         pmt_started = 1;
                     }
                     send_pmt_to_cas(ad, pmt);
+
+                    if (pmt->state == PMT_STARTING)
+                        pmt->state = PMT_RUNNING;
                 }
 #endif
                 SPid *p = pids[pmt->stream_pid[j]->pid];
