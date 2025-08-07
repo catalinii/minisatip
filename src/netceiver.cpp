@@ -297,6 +297,10 @@ int netcv_commit(adapter *ad) {
                 tp->tmode, tp->gi, tp->bw, tp->sm, tp->t2id);
 
             break;
+
+	default:
+            LOG("netceiver: adapter %d tuning not supported for type %d", tp->sys)
+            break;
         }
 
         memset(m_pids, 0, sizeof(m_pids));
