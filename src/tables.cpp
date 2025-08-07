@@ -276,8 +276,6 @@ int send_pmt_to_cas(adapter *ad, SPMT *pmt) {
              pmt->id, ad ? ad->ca_mask : -2, pmt->ca_mask,
              pmt->disabled_ca_mask);
 
-        if (pmt->state == PMT_STARTING)
-            pmt->state = PMT_RUNNING;
         return 0;
     }
 
@@ -291,8 +289,6 @@ int send_pmt_to_cas(adapter *ad, SPMT *pmt) {
                 rv += send_pmt_to_ca(i, ad, pmt);
     }
 
-    if (pmt->state == PMT_STARTING)
-        pmt->state = PMT_RUNNING;
     return rv;
 }
 
