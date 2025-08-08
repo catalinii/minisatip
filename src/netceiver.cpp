@@ -150,7 +150,11 @@ int netcv_commit(adapter *ad) {
         if (!SN->ncv_rec)
             SN->err = 1;
 
-        // SN->want_tune = 0; // wait until netcv_tune triggers the tuning
+        /* looks like worked in the past but found need to be
+         * disabled 2025-08-08 - in case issues will be reported this needs to
+         * be toggled by option to cover both use cases
+        SN->want_tune = 0; // wait until netcv_tune triggers the tuning
+         */
     }
 
     /* tune receiver to a new frequency / tranponder */
