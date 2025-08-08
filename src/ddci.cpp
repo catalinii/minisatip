@@ -362,7 +362,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
             if ((dpmt = get_pmt(d->pmt[i].id))) {
                 if (dpmt->sid == pmt->sid) {
                     ddci_mapping_table_t *m = get_ddci_pid(d, pmt->pid);
-                    if (m->pid == dpmt->pid) {
+                    if (m && m->pid == dpmt->pid) {
                         safe_strncpy(pmt->name, dpmt->name);
                     }
                 }
