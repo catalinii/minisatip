@@ -24,10 +24,8 @@ CPPFLAGS += @CPPFLAGS@
 
 OS := $(shell $(CC) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 2)
 ARCH := $(shell $(CC) -v 2>&1 | grep Target | sed 's/Target: //' | cut -d- -f 1)
-MAJOR := 1.3.
-MINOR := $(shell git tag --points-at HEAD | cut -d. -f3 | tail -1)
-REVISION := $(shell git rev-parse --short HEAD)
-CFLAGS+=-DMAJOR=\"$(MAJOR)\" -DMINOR=\"$(MINOR)\" -DREVISION=\"$(REVISION)\"
+VERSION := $(shell ../tools/determine_version.sh)
+CFLAGS+=-DVERSION=\"$(VERSION)\"
 
 ifneq ($(OS),apple)
         LDFLAGS += -lrt
