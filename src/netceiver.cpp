@@ -298,7 +298,7 @@ int netcv_commit(adapter *ad) {
 
             break;
 
-	default:
+        default:
             LOG("netceiver: adapter %d tuning not supported for type %d", tp->sys)
             break;
         }
