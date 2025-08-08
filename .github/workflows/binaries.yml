@@ -19,6 +19,19 @@ jobs:
     - name: Mark workspace as safe for git usage
       # actions/checkout normally handles this, but not when using a container
       run: git config --system --add safe.directory "$GITHUB_WORKSPACE"
+
+      # We must bump the version before we build so the version number becomes correct.
+    - name: Bump version and push tag/create release point
+      id: bump_version
+      uses: anothrNick/github-tag-action@1.73.0
+      if: ${{ github.event_name == 'push' && github.repository_owner == 'catalinii' }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        WITH_V: true
+        DEFAULT_BUMP: patch
+        # Look for latest tag in this branch only
+        TAG_CONTEXT: branch    
+
     - name: Build x64
       run: |
        ./configure --enable-static CC="clang -static" --disable-netcv
@@ -55,17 +68,7 @@ jobs:
           /minisatip_arm.zip
           /minisatip_axe.zip
           /minisatip_mips.zip
-
-    - name: Bump version and push tag/create release point
-      uses: anothrNick/github-tag-action@1.73.0
-      if: ${{ github.event_name == 'push' && github.repository_owner == 'catalinii' }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        WITH_V: true
-        DEFAULT_BUMP: patch
-        # Look for latest tag in this branch only
-        TAG_CONTEXT: branch
-      id: bump_version
+      
     - name: Upload binary to release
       uses: svenstaro/upload-release-action@v2
       if: ${{ github.event_name == 'push' && github.repository_owner == 'catalinii' }}
