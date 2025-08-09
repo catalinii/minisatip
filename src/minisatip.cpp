@@ -109,7 +109,6 @@ int rtsp, http, si, si1, ssdp1;
 #define SATIP_TCP_OPT 'O'
 #define DOCUMENTROOT_OPT 'R'
 #define XML_OPT 'X'
-#define THREADS_OPT 'T'
 #define LNB_OPT 'L'
 #define DROP_ENCRYPTED_OPT 'E'
 #define UDPPORT_OPT 'P'
@@ -175,7 +174,6 @@ static const struct option long_options[] = {
     {"rtsp-port", required_argument, NULL, RTSPPORT_OPT},
     {"syslog", no_argument, NULL, SYSLOG_OPT},
     {"slave", required_argument, NULL, SLAVE_OPT},
-    {"threads", no_argument, NULL, THREADS_OPT},
     {"threshold", required_argument, NULL, THRESHOLD_OPT},
     {"udp", required_argument, NULL, UDPPORT_OPT},
     {"unicable", required_argument, NULL, UNICABLE_OPT},
@@ -489,10 +487,6 @@ Help\n\
 	eg: -S 2-4:0,5-7:1\n\
 	- adapters 2,3,4 use physical input A to tune, while 1,5,6,7 uses input B to tune, adapter 0 and 1 are masters\n\
 \n\
-* -t --cleanpsi clean the PSI from all CA information, the client will see the channel as clear if decrypted successfully\n\
-\n\
-* -T --threads: enables/disable multiple threads (reduces memory consumption) (default: %s)\n\
-\n\
 * -u --unicable unicable_string: defines the unicable adapters (A) and their slot (S), frequency (F) and optionally the PIN for the switch:\n\
 \t* The format is: A1:S1-F1[-PIN][,A2:S2-F2[-PIN][,...]]\n\
 	eg: 2:0-1284[-1111]\n\
@@ -559,7 +553,7 @@ By default every CAM supports 1 channels\n\
 "
 #endif
         ,
-        app_name, ADAPTER_BUFFER, DVR_BUFFER, modules, "ENABLED");
+        app_name, ADAPTER_BUFFER, DVR_BUFFER, modules);
     exit(1);
 }
 
@@ -1011,7 +1005,7 @@ void set_options(int argc, char *argv[]) {
             }
 
             // default interface is vlan4 as it is used on the REEL
-            opts.netcv_if = (char*) "vlan4";
+            opts.netcv_if = (char *)"vlan4";
             opts.netcv_count = map_int(optarg, NULL);
 #endif
             break;
