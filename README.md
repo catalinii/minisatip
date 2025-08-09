@@ -19,7 +19,7 @@ The application shows also a status page by default at the address: http://IP:80
 
 ## Contact
 
-Please use GitHub issues for any question or join slack: https://join.slack.com/t/minisatip/shared_invite/zt-rms717g0-SQR25SFs8RH9JlVZV4II7A 
+Please use github for any question: https://github.com/catalinii/minisatip/discussions
 
 In order to speed up the investigation of an issue, please provide the full log and a link to the application that is not working.
 
@@ -30,7 +30,7 @@ https://paypal.me/minisatip
 
 (Message automatically generated from `minisatip --help`)
 ```
-minisatip version v2.0.0-beta.13~5514d7d, compiled on Jul 10 2025 16:40:49, with s2api version: 050C
+minisatip version v2.0.19~7def250, compiled on Aug  9 2025 11:02:04, with s2api version: 050C
 
 	./minisatip [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 	[-[uj] A1:S1-F1[-PIN]] [-P port] [-l module1[,module2]] [-v module1[,module2]] 
@@ -61,7 +61,7 @@ Help
 	* eg: --satip-receive-buffer 1024 - to set the socket buffer to 1MB
 
 * -z --cache-dir dir : set the app cache directory to dir. The directory will be created if it doesn't exist. 
-	* defaults to /var/cache/minisatip 
+	* defaults to /var/cache/minisatip (/var/lib/minisatip on Enigma) 
 
 * -d --diseqc ADAPTER1:COMMITTED1-UNCOMMITTED1[,ADAPTER2:COMMITTED2-UNCOMMITTED2[,...]
 	* The first argument is the adapter number, second is the number of committed packets to send to a Diseqc 1.0 switch, third the number of uncommitted commands to sent to a Diseqc 1.1 switch
@@ -208,10 +208,6 @@ Help
 	- all 8 adapters use physical input A to tune
 	eg: -S 2-4:0,5-7:1
 	- adapters 2,3,4 use physical input A to tune, while 1,5,6,7 uses input B to tune, adapter 0 and 1 are masters
-
-* -t --cleanpsi clean the PSI from all CA information, the client will see the channel as clear if decrypted successfully
-
-* -T --threads: enables/disable multiple threads (reduces memory consumption) (default: ENABLED)
 
 * -u --unicable unicable_string: defines the unicable adapters (A) and their slot (S), frequency (F) and optionally the PIN for the switch:
 	* The format is: A1:S1-F1[-PIN][,A2:S2-F2[-PIN][,...]]

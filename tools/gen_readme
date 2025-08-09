@@ -1,5 +1,5 @@
 #! /bin/bash
-make 
+make $*
 cat readme_header > README.md
 ./minisatip -h | grep -v 'Built with' >> README.md
 cat readme_footer >> README.md
