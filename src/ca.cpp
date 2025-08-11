@@ -1854,14 +1854,6 @@ static int CIPLUS_APP_OPRF_handler(ca_session_t *session, int tag,
         0x01; /* length in bytes of the application_capability */
     data_oprf_search[8] = 0x00; /* System Software Update service */
 
-    uint8_t data_oprf_tune_status[] = {
-        0xFF, // descruptor number
-        0x00, // signal strength and quality
-        0x00,
-        (0x00 << 4), // status 0 + 4 bit length
-        0x00,        // length (last 8 bits)
-    };
-
     switch (tag) {
     case CIPLUS_TAG_OPERATOR_STATUS:
     case CIPLUS_TAG_OPERATOR_SEARCH_STATUS: {
@@ -1940,6 +1932,17 @@ static int CIPLUS_APP_OPRF_handler(ca_session_t *session, int tag,
 
         // Send an operator_tune_status response saying we failed to tune. The
         // user will have to tune manually.
+        uint8_t data_oprf_tune_status[5 + 13] = {
+            0xFF, // descruptor number
+            0x64, // signal strength and quality
+            0x64,
+            (0x00 < 4), // status 0 + 4 bit length
+            0x16,        // descriptor length (13 bytes, one descriptor)
+        };
+
+        memcpy(data_oprf_tune_status + 5, descr, 13);
+        hexdump("data_oprf_tune_status", data_oprf_tune_status, sizeof(data_oprf_tune_status));
+
         ca_write_apdu(session, CIPLUS_TAG_OPERATOR_TUNE_STATUS,
                       data_oprf_tune_status, sizeof(data_oprf_tune_status));
         break;
