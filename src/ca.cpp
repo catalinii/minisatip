@@ -1932,15 +1932,13 @@ static int CIPLUS_APP_OPRF_handler(ca_session_t *session, int tag,
 
         // Send an operator_tune_status response saying we failed to tune. The
         // user will have to tune manually.
-        uint8_t data_oprf_tune_status[5 + 13] = {
-            0xFF, // descruptor number
-            0x64, // signal strength and quality
-            0x64,
-            (0x00 < 4), // status 0 + 4 bit length
-            0x16,        // descriptor length (13 bytes, one descriptor)
-        };
-
+        uint8_t data_oprf_tune_status[18] = {0};
+        data_oprf_tune_status[0] = 0xFF; // descruptor number
+        data_oprf_tune_status[1] = data_oprf_tune_status[2] = 0x64;
+        data_oprf_tune_status[3] = (0x00 << 4);
+        data_oprf_tune_status[4] = 0x16; // 13 bytes
         memcpy(data_oprf_tune_status + 5, descr, 13);
+        
         hexdump("data_oprf_tune_status", data_oprf_tune_status, sizeof(data_oprf_tune_status));
 
         ca_write_apdu(session, CIPLUS_TAG_OPERATOR_TUNE_STATUS,
