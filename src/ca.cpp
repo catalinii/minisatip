@@ -159,6 +159,9 @@ typedef struct opfr_operator_tune_descr {
     char fec[5];
 } opfr_operator_tune_descr_t;
 
+uint8_t data_oprf_tune_status[18] = {0};
+int tune_status_pending = 0;
+
 // EN 300 468, tables 36, 38, and 41
 const char en300468_fec_map[12][5] = {"",    "1/2", "2/3", "3/4",  "5/6", "7/8",
                                       "8/9", "3/5", "4/5", "9/10", "",    ""};
@@ -589,6 +592,16 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
     if (d->key[1][0])
         send_cw(spmt->id, CA_ALGO_AES128_CBC, 1, d->key[1], d->iv[1], 3600,
                 NULL);
+
+    // Send operator_tune_status
+    if (tune_status_pending) {
+        ca_session_t *session =
+            find_session_for_resource(d, CIPLUS_APP_OPRF_RESOURCEID);
+        if (!session)
+            LOG_AND_RETURN(1, "Unable to find operator profile session for device %d", d->id);
+        ca_write_apdu(session, CIPLUS_TAG_OPERATOR_TUNE_STATUS,
+                      data_oprf_tune_status, sizeof(data_oprf_tune_status));
+    }
 
     return 0;
 }
@@ -1932,17 +1945,15 @@ static int CIPLUS_APP_OPRF_handler(ca_session_t *session, int tag,
 
         // Send an operator_tune_status response saying we failed to tune. The
         // user will have to tune manually.
-        uint8_t data_oprf_tune_status[18] = {0};
         data_oprf_tune_status[0] = 0xFF; // descruptor number
         data_oprf_tune_status[1] = data_oprf_tune_status[2] = 0x64;
         data_oprf_tune_status[3] = (0x00 << 4);
         data_oprf_tune_status[4] = 0x16; // 13 bytes
         memcpy(data_oprf_tune_status + 5, descr, 13);
-        
-        hexdump("data_oprf_tune_status", data_oprf_tune_status, sizeof(data_oprf_tune_status));
 
-        ca_write_apdu(session, CIPLUS_TAG_OPERATOR_TUNE_STATUS,
-                      data_oprf_tune_status, sizeof(data_oprf_tune_status));
+        LOG("Will send operator_tune_status once the next CA PMT is sent");
+        tune_status_pending = 1;
+
         break;
     }
     default:
