@@ -1858,7 +1858,7 @@ static int CIPLUS_APP_OPRF_handler(ca_session_t *session, int tag,
         0xFF, // descruptor number
         0x00, // signal strength and quality
         0x00,
-        (0x03 << 4), // status + 4 bit length
+        (0x00 << 4), // status 0 + 4 bit length
         0x00,        // length (last 8 bits)
     };
 
