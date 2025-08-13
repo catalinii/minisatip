@@ -1832,7 +1832,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     if (f)
         ad = get_adapter(f->adapter);
     if (!ad) {
-        LOG("Adapter %d does not exist", pmt->adapter);
+        LOG("Adapter %d does not exist", f->adapter);
         return 0;
     }
 
