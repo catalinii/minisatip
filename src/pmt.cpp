@@ -1859,8 +1859,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     if (!(p = find_pid(ad->id, pid)))
         return -1;
 
-    pmt_len = len - 4;
-
+    pmt_len = ((b[1] & 0xF) << 8) + b[2];
     pi_len = ((b[10] & 0xF) << 8) + b[11];
     pcr_pid = ((b[8] & 0x1F) << 8) + b[9];
 
