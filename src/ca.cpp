@@ -159,6 +159,9 @@ typedef struct opfr_operator_tune_descr {
     char fec[5];
 } opfr_operator_tune_descr_t;
 
+uint8_t data_oprf_tune_status[18] = {0};
+int tune_status_pending = 0;
+
 // EN 300 468, tables 36, 38, and 41
 const char en300468_fec_map[12][5] = {"",    "1/2", "2/3", "3/4",  "5/6", "7/8",
                                       "8/9", "3/5", "4/5", "9/10", "",    ""};
@@ -589,6 +592,18 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
     if (d->key[1][0])
         send_cw(spmt->id, CA_ALGO_AES128_CBC, 1, d->key[1], d->iv[1], 3600,
                 NULL);
+
+    // Send operator_tune_status
+    if (tune_status_pending) {
+        ca_session_t *session =
+            find_session_for_resource(d, CIPLUS_APP_OPRF_RESOURCEID);
+        if (!session)
+            LOG_AND_RETURN(1, "Unable to find operator profile session for device %d", d->id);
+        ca_write_apdu(session, CIPLUS_TAG_OPERATOR_TUNE_STATUS,
+                      data_oprf_tune_status, sizeof(data_oprf_tune_status));
+
+        tune_status_pending = 0;
+    }
 
     return 0;
 }
@@ -1842,8 +1857,8 @@ static int CIPLUS_APP_OPRF_handler(ca_session_t *session, int tag,
     hexdump("CIPLUS_APP_OPRF_handler", data, data_length);
 
     uint8_t data_oprf_search[9];
-    data_oprf_search[0] = 0x03; /* unattended mode bit=0 + length in bytes
-                                   of the service types */
+    data_oprf_search[0] = (0 << 7) | 0x03; /* unattended mode bit=0 + length in bytes
+                                              of the service types */
     data_oprf_search[1] = 0x01; /* service MPEG-2 television (0x01) */
     data_oprf_search[2] = 0x16; /* service h264 SD (0x16) */
     data_oprf_search[3] = 0x19; /* service h264 HD (0x19) */
@@ -1853,14 +1868,6 @@ static int CIPLUS_APP_OPRF_handler(ca_session_t *session, int tag,
     data_oprf_search[7] =
         0x01; /* length in bytes of the application_capability */
     data_oprf_search[8] = 0x00; /* System Software Update service */
-
-    uint8_t data_oprf_tune_status[] = {
-        0xFF, // descruptor number
-        0x00, // signal strength and quality
-        0x00,
-        (0x03 << 4), // status + 4 bit length
-        0x00,        // length (last 8 bits)
-    };
 
     switch (tag) {
     case CIPLUS_TAG_OPERATOR_STATUS:
@@ -1923,8 +1930,9 @@ static int CIPLUS_APP_OPRF_handler(ca_session_t *session, int tag,
         LOG("Received operator_tune APDU with %d descriptor bytes", descr_len);
 
         uint8_t *descr;
+        int descr_num;
         int i;
-        for (i = 0; i < descr_len; i += 13) {
+        for (i = 0, descr_num = -1; i < descr_len; i += 13, descr_num += 1) {
             // Parse the descriptor
             descr = data + 2 + i;
             opfr_operator_tune_descr_t parsed_descr;
@@ -1938,10 +1946,17 @@ static int CIPLUS_APP_OPRF_handler(ca_session_t *session, int tag,
                 parsed_descr.sr, parsed_descr.fec);
         }
 
-        // Send an operator_tune_status response saying we failed to tune. The
-        // user will have to tune manually.
-        ca_write_apdu(session, CIPLUS_TAG_OPERATOR_TUNE_STATUS,
-                      data_oprf_tune_status, sizeof(data_oprf_tune_status));
+        // Store an operator_tune_status response and send it later when we 
+        // send the first CA PMT to the CAM
+        data_oprf_tune_status[0] = descr_num;
+        data_oprf_tune_status[1] = data_oprf_tune_status[2] = 0x64;
+        data_oprf_tune_status[3] = (0x00 << 4);
+        data_oprf_tune_status[4] = 13;
+        memcpy(data_oprf_tune_status + 5, descr, 13);
+
+        LOG("Will send operator_tune_status with descriptor %d once the next CA PMT is sent", descr_num);
+        tune_status_pending = 1;
+
         break;
     }
     default:
