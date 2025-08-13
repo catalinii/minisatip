@@ -601,6 +601,8 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
             LOG_AND_RETURN(1, "Unable to find operator profile session for device %d", d->id);
         ca_write_apdu(session, CIPLUS_TAG_OPERATOR_TUNE_STATUS,
                       data_oprf_tune_status, sizeof(data_oprf_tune_status));
+
+        tune_status_pending = 0;
     }
 
     return 0;
@@ -1855,8 +1857,8 @@ static int CIPLUS_APP_OPRF_handler(ca_session_t *session, int tag,
     hexdump("CIPLUS_APP_OPRF_handler", data, data_length);
 
     uint8_t data_oprf_search[9];
-    data_oprf_search[0] = 0x03; /* unattended mode bit=0 + length in bytes
-                                   of the service types */
+    data_oprf_search[0] = (0 << 7) | 0x03; /* unattended mode bit=0 + length in bytes
+                                              of the service types */
     data_oprf_search[1] = 0x01; /* service MPEG-2 television (0x01) */
     data_oprf_search[2] = 0x16; /* service h264 SD (0x16) */
     data_oprf_search[3] = 0x19; /* service h264 HD (0x19) */
@@ -1928,8 +1930,9 @@ static int CIPLUS_APP_OPRF_handler(ca_session_t *session, int tag,
         LOG("Received operator_tune APDU with %d descriptor bytes", descr_len);
 
         uint8_t *descr;
+        int descr_num;
         int i;
-        for (i = 0; i < descr_len; i += 13) {
+        for (i = 0, descr_num = -1; i < descr_len; i += 13, descr_num += 1) {
             // Parse the descriptor
             descr = data + 2 + i;
             opfr_operator_tune_descr_t parsed_descr;
@@ -1943,15 +1946,15 @@ static int CIPLUS_APP_OPRF_handler(ca_session_t *session, int tag,
                 parsed_descr.sr, parsed_descr.fec);
         }
 
-        // Send an operator_tune_status response saying we failed to tune. The
-        // user will have to tune manually.
-        data_oprf_tune_status[0] = 0xFF; // descruptor number
+        // Store an operator_tune_status response and send it later when we 
+        // send the first CA PMT to the CAM
+        data_oprf_tune_status[0] = descr_num;
         data_oprf_tune_status[1] = data_oprf_tune_status[2] = 0x64;
         data_oprf_tune_status[3] = (0x00 << 4);
-        data_oprf_tune_status[4] = 0x16; // 13 bytes
+        data_oprf_tune_status[4] = 13;
         memcpy(data_oprf_tune_status + 5, descr, 13);
 
-        LOG("Will send operator_tune_status once the next CA PMT is sent");
+        LOG("Will send operator_tune_status with descriptor %d once the next CA PMT is sent", descr_num);
         tune_status_pending = 1;
 
         break;
