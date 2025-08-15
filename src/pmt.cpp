@@ -371,7 +371,7 @@ int get_pid_filter(int aid, int pid) {
     for (i = 0; i < nfilters; i++)
         if (filters[i] && filters[i]->enabled && filters[i]->adapter == aid &&
             filters[i]->pid == pid) {
-            LOGM("found filter %d for pid %d, master %d (%d)", i, pid,
+            LOGM("found filter %d for pid %d, master %d (max filters %d)", i, pid,
                  filters[i]->master_filter, nfilters);
             return filters[i]->master_filter;
         }
