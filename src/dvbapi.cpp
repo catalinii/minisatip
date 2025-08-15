@@ -610,6 +610,7 @@ void send_client_info(sockets *s) {
 
 int send_ecm(int filter_id, unsigned char *b, int len, void *opaque) {
     SKey *k = NULL;
+    SFilter *f;
     SPMT *pmt, *master;
     uint8_t buf[1600];
     int i, pid;
@@ -619,9 +620,11 @@ int send_ecm(int filter_id, unsigned char *b, int len, void *opaque) {
 
     if (!dvbapi_is_enabled)
         return 0;
-    pid = get_filter_pid(filter_id);
-    if (pid == -1)
-        LOG_AND_RETURN(0, "%s: filter not found for pid %d", __FUNCTION__, pid);
+    f = get_filter(filter_id);
+    if (!f)
+        LOG_AND_RETURN(0, "%s: filter %d not found", __FUNCTION__, filter_id);
+
+    pid = f->pid;
 
     k = (SKey *)opaque;
     if (!k || !k->enabled)
