@@ -362,7 +362,7 @@ int del_filter(int id) {
     f->enabled = 0;
     mutex_unlock(&filters_mutex);
     mutex_destroy(&f->mutex);
-    LOG("deleted filter %d, ad %d, pid %d, max filters %d", id, adapter, pid,
+    LOG("deleted filter %d, ad %d, pid %d, num filters %d", id, adapter, pid,
         nfilters);
     return 0;
 }
@@ -371,7 +371,7 @@ int get_pid_filter(int aid, int pid) {
     for (i = 0; i < nfilters; i++)
         if (filters[i] && filters[i]->enabled && filters[i]->adapter == aid &&
             filters[i]->pid == pid) {
-            LOGM("found filter %d for pid %d, master %d (%d)", i, pid,
+            LOGM("found filter %d for pid %d, master %d (num filters %d)", i, pid,
                  filters[i]->master_filter, nfilters);
             return filters[i]->master_filter;
         }
@@ -394,7 +394,7 @@ int get_active_filters_for_pid(int master_filter, int aid, int pid, int flags) {
 int set_filter_flags(int id, int flags) {
     SFilter *f = get_filter(id);
     if (!f)
-        LOG_AND_RETURN(1, "Filter %d not found", id)
+        LOG_AND_RETURN(1, "%s: filter %d not found", __FUNCTION__, id)
     f->flags = flags;
     if (flags & FILTER_ADD_REMOVE) {
         SPid *p = find_pid(f->adapter, f->pid);
@@ -420,7 +420,7 @@ int set_filter_flags(int id, int flags) {
 int set_filter_opaque(int id, void *opaque) {
     SFilter *f = get_filter(id);
     if (!f)
-        LOG_AND_RETURN(1, "Filter %d not found", id)
+        LOG_AND_RETURN(1, "%s: filter %d not found", __FUNCTION__, id)
     f->opaque = opaque;
     return 0;
 }
@@ -432,7 +432,7 @@ int set_filter_mask(int id, uint8_t *filter, uint8_t *mask) {
         memcpy(f->mask, mask, sizeof(f->mask));
         f->mask_len = get_mask_len(f->mask, sizeof(f->mask));
     } else
-        LOGM("Filter %d not found", id);
+        LOGM("%s: filter %d not found", __FUNCTION__, id);
     return f ? 0 : 1;
 }
 
@@ -541,19 +541,6 @@ void process_filters(adapter *ad, unsigned char *b, SPid *p) {
         }
         f = get_filter(f->next_filter);
     }
-}
-
-int get_filter_pid(int filter) {
-    SFilter *f = get_filter(filter);
-    if (f)
-        return f->pid;
-    return -1;
-}
-int get_filter_adapter(int filter) {
-    SFilter *f = get_filter(filter);
-    if (f)
-        return f->adapter;
-    return -1;
 }
 
 char *cw_to_string(SCW *cw, char *buf) {
@@ -1070,7 +1057,13 @@ void start_active_pmts(adapter *ad) {
                         start_pmt(pmt, ad);
                         pmt_started = 1;
                     }
-                    send_pmt_to_cas(ad, pmt);
+
+                    if (ad->ca_mask != (pmt->disabled_ca_mask | pmt->ca_mask)) {
+                        send_pmt_to_cas(ad, pmt);
+                    }
+
+                    if (pmt->state == PMT_STARTING)
+                        pmt->state = PMT_RUNNING;
                 }
 #endif
                 SPid *p = pids[pmt->stream_pid[j]->pid];
@@ -1625,8 +1618,9 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque) {
                 pmt_id = existing_pmt->id;
                 pmt_add_active_pmt(ad, pmt_id);
             }
+            // Add filter if the PMT doesn't have one
             SPMT *pmt = get_pmt(pmt_id);
-            if (!pmt || (pmt->filter == -1)) {
+            if (pmt && (pmt->filter == -1)) {
                 memset(new_filter, 0, sizeof(new_filter));
                 memset(new_mask, 0, sizeof(new_mask));
                 new_filter[1] = b[i];
@@ -1818,17 +1812,17 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     if (b[0] != 2)
         return 0;
 
-    pid = get_filter_pid(filter);
+    f = get_filter(filter);
+    if (!filter)
+        LOG_AND_RETURN(0, "%s: filter %d not found", __FUNCTION__, filter);
+
+    pid = f->pid;
     ver = (b[5] & 0x3e) >> 1;
     sid = b[3] * 256 + b[4];
 
-    f = get_filter(filter);
-    if (f)
-        ad = get_adapter(f->adapter);
-    if (!ad) {
-        LOG("Adapter %d does not exist", pmt->adapter);
-        return 0;
-    }
+    ad = get_adapter(f->adapter);
+    if (!ad)
+        LOG_AND_RETURN(0, "Adapter %d does not exist", f->adapter);
 
     if (!pmt) {
         pmt = get_pmt(pmt_add(f->adapter, sid, pid));
@@ -1853,8 +1847,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     if (!(p = find_pid(ad->id, pid)))
         return -1;
 
-    pmt_len = len - 4;
-
+    pmt_len = ((b[1] & 0xF) << 8) + b[2];
     pi_len = ((b[10] & 0xF) << 8) + b[11];
     pcr_pid = ((b[8] & 0x1F) << 8) + b[9];
 
@@ -1863,12 +1856,12 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     pmt->pcr_pid = pcr_pid;
 
     mutex_lock(&pmt->mutex);
-    LOG("new PMT %d AD %d, pid: %04X (%d), len %d, pi_len %d, ver %d, pcr "
+    LOG("new PMT %d AD %d, pid: %04X (%d), filter %d, len %d, pi_len %d, ver %d, pcr "
         "%d, "
         "sid "
         "%04X "
         "(%d) %s %s",
-        pmt->id, ad->id, pid, pid, pmt_len, pi_len, ver, pcr_pid, pmt->sid,
+        pmt->id, ad->id, pid, pid, filter, pmt_len, pi_len, ver, pcr_pid, pmt->sid,
         pmt->sid, pmt->name[0] ? "channel:" : "", pmt->name);
     pi = b + 12;
     pmt_b = b + 3;

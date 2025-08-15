@@ -270,17 +270,6 @@ int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt) {
 
 int send_pmt_to_cas(adapter *ad, SPMT *pmt) {
     int i, rv = 1;
-    if (!ad || (ad->ca_mask == (pmt->disabled_ca_mask | pmt->ca_mask))) {
-        LOGM("PMT %d does not require to be sent to any CA: ad_ca_mask %X, "
-             "pmt_ca_mask %X, disabled_ca_mask %X",
-             pmt->id, ad ? ad->ca_mask : -2, pmt->ca_mask,
-             pmt->disabled_ca_mask);
-
-        if (pmt->state == PMT_STARTING)
-            pmt->state = PMT_RUNNING;
-        return 0;
-    }
-
     if (pmt->caids > 0) {
         LOG("Sending PMT %d to all CAs: ad_ca_mask %X, "
             "pmt_ca_mask %X, disabled_ca_mask %X",
@@ -291,8 +280,6 @@ int send_pmt_to_cas(adapter *ad, SPMT *pmt) {
                 rv += send_pmt_to_ca(i, ad, pmt);
     }
 
-    if (pmt->state == PMT_STARTING)
-        pmt->state = PMT_RUNNING;
     return rv;
 }
 
