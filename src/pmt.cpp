@@ -362,7 +362,7 @@ int del_filter(int id) {
     f->enabled = 0;
     mutex_unlock(&filters_mutex);
     mutex_destroy(&f->mutex);
-    LOG("deleted filter %d, ad %d, pid %d, max filters %d", id, adapter, pid,
+    LOG("deleted filter %d, ad %d, pid %d, num filters %d", id, adapter, pid,
         nfilters);
     return 0;
 }
@@ -371,7 +371,7 @@ int get_pid_filter(int aid, int pid) {
     for (i = 0; i < nfilters; i++)
         if (filters[i] && filters[i]->enabled && filters[i]->adapter == aid &&
             filters[i]->pid == pid) {
-            LOGM("found filter %d for pid %d, master %d (%d)", i, pid,
+            LOGM("found filter %d for pid %d, master %d (num filters %d)", i, pid,
                  filters[i]->master_filter, nfilters);
             return filters[i]->master_filter;
         }
