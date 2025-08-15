@@ -214,8 +214,6 @@ int set_filter_mask(int id, uint8_t *filter, uint8_t *mask);
 int set_filter_flags(int id, int flags);
 int set_filter_opaque(int id, void *opaque);
 int get_pid_filter(int aid, int pid);
-int get_filter_pid(int filter);
-int get_filter_adapter(int filter);
 int assemble_packet(SFilter *f, uint8_t *b);
 void disable_cw(int master_pmt);
 void expire_cw_for_pmt(int master_pmt, int parity, int64_t min_expiry);
