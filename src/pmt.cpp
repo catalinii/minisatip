@@ -394,7 +394,7 @@ int get_active_filters_for_pid(int master_filter, int aid, int pid, int flags) {
 int set_filter_flags(int id, int flags) {
     SFilter *f = get_filter(id);
     if (!f)
-        LOG_AND_RETURN(1, "Filter %d not found", id)
+        LOG_AND_RETURN(1, "%s: filter %d not found", __FUNCTION__, id)
     f->flags = flags;
     if (flags & FILTER_ADD_REMOVE) {
         SPid *p = find_pid(f->adapter, f->pid);
@@ -420,7 +420,7 @@ int set_filter_flags(int id, int flags) {
 int set_filter_opaque(int id, void *opaque) {
     SFilter *f = get_filter(id);
     if (!f)
-        LOG_AND_RETURN(1, "Filter %d not found", id)
+        LOG_AND_RETURN(1, "%s: filter %d not found", __FUNCTION__, id)
     f->opaque = opaque;
     return 0;
 }
@@ -432,7 +432,7 @@ int set_filter_mask(int id, uint8_t *filter, uint8_t *mask) {
         memcpy(f->mask, mask, sizeof(f->mask));
         f->mask_len = get_mask_len(f->mask, sizeof(f->mask));
     } else
-        LOGM("Filter %d not found", id);
+        LOGM("%s: filter %d not found", __FUNCTION__, id);
     return f ? 0 : 1;
 }
 
@@ -541,19 +541,6 @@ void process_filters(adapter *ad, unsigned char *b, SPid *p) {
         }
         f = get_filter(f->next_filter);
     }
-}
-
-int get_filter_pid(int filter) {
-    SFilter *f = get_filter(filter);
-    if (f)
-        return f->pid;
-    return -1;
-}
-int get_filter_adapter(int filter) {
-    SFilter *f = get_filter(filter);
-    if (f)
-        return f->adapter;
-    return -1;
 }
 
 char *cw_to_string(SCW *cw, char *buf) {
@@ -1824,17 +1811,17 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     if (b[0] != 2)
         return 0;
 
-    pid = get_filter_pid(filter);
+    f = get_filter(filter);
+    if (!f)
+        LOG_AND_RETURN(0, "%s: filter %d not found", __FUNCTION__, filter);
+
+    pid = f->pid;
     ver = (b[5] & 0x3e) >> 1;
     sid = b[3] * 256 + b[4];
 
-    f = get_filter(filter);
-    if (f)
-        ad = get_adapter(f->adapter);
-    if (!ad) {
-        LOG("Adapter %d does not exist", f->adapter);
-        return 0;
-    }
+    ad = get_adapter(f->adapter);
+    if (!ad)
+        LOG_AND_RETURN(0, "Adapter %d does not exist", f->adapter);
 
     if (!pmt) {
         pmt = get_pmt(pmt_add(f->adapter, sid, pid));
