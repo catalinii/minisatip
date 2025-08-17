@@ -235,6 +235,14 @@ void dump_filters(int aid) {
                 filters[i]->mask[2], filters[i]->mask[3]);
 }
 
+void reset_filter_data(SFilter *f) {
+    f->len = 0;
+    // Position must be reset, otherwise residual data may be returned 
+    // when the filter is re-assigned to another PMT
+    f->pos = 0;
+    memset(f->data, 0, FILTER_PACKET_SIZE);
+}
+
 int add_filter(int aid, int pid, void *callback, void *opaque, int flags) {
     uint8_t filter[FILTER_SIZE], mask[FILTER_SIZE];
     memset(filter, 0, sizeof(filter));
@@ -261,7 +269,7 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
     f->pid = pid;
     f->callback = (filter_function)callback;
     f->flags = 0;
-    f->len = 0;
+    reset_filter_data(f);
     f->next_filter = -1;
     f->adapter = aid;
 
@@ -1443,8 +1451,7 @@ int getEMMlen(unsigned char *b, int len) {
 int assemble_emm(SFilter *f, uint8_t *b) {
     int len = 0;
     if (b[4] == 0 && (b[5] >= 0x82 && b[5] <= 0x8F)) {
-        f->len = 0;
-        memset(f->data, 0, FILTER_PACKET_SIZE);
+        reset_filter_data(f);
         memcpy(f->data + f->len, b + 5, 183);
         f->len += 183;
     } else {
@@ -1470,9 +1477,7 @@ int assemble_normal(SFilter *f, uint8_t *b) {
     int pid = PID_FROM_TS(b);
     int start = get_adaptation_len(b);
     if ((b[1] & 0x40) == 0x40) {
-        f->len = 0;
-        f->pos = 0;
-        memset(f->data, 0, FILTER_PACKET_SIZE);
+        reset_filter_data(f);
         start += 1; // advance over the first 0
     }
     int left = 188 - start;
