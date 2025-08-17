@@ -1997,8 +1997,8 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque) {
 }
 
 void start_pmt(SPMT *pmt, adapter *ad) {
-    LOGM("starting PMT %d master %d, pid %d, sid %d for channel: %s", pmt->id,
-         pmt->master_pmt, pmt->pid, pmt->sid, pmt->name);
+    LOGM("starting PMT %d master %d, pid %d, sid %d, filter %d for channel: %s", pmt->id,
+         pmt->master_pmt, pmt->pid, pmt->sid, pmt->filter, pmt->name);
     pmt->state = PMT_STARTING;
     // give 2s to initialize decoding or override for each CA
     pmt->encrypted = 0;
@@ -2012,8 +2012,8 @@ void start_pmt(SPMT *pmt, adapter *ad) {
 void stop_pmt(SPMT *pmt, adapter *ad) {
     if (!pmt->state)
         return;
-    LOGM("stopping PMT %d pid %d sid %d master %d for channel %s", pmt->id,
-         pmt->pid, pmt->sid, pmt->master_pmt, pmt->name);
+    LOGM("stopping PMT %d pid %d sid %d master %d filter %d for channel %s", pmt->id,
+         pmt->pid, pmt->sid, pmt->master_pmt, pmt->filter, pmt->name);
     pmt->state = PMT_STOPPING;
     set_filter_flags(pmt->filter, 0);
 #ifndef DISABLE_TABLES
