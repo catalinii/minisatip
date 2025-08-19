@@ -2916,7 +2916,7 @@ then :
   printf "%s\n" "#define HAVE_DVBCSA_DVBCSA_H 1" >>confdefs.h
 
 else $as_nop
-  CXXFLAGS="-std=c++2a"
+  CXXFLAGS="-std=c++17"
 fi
 
 done  # gcc 9
