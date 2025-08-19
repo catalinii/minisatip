@@ -726,19 +726,6 @@ int flush_stream(streams *sid, struct iovec *iov, int iiov, int64_t ctime) {
         __FUNCTION__, rv, sid->sid, sid->rsock, sid->rsock_id, sid->seq,
         get_stream_rhost(sid->sid, ra, sizeof(ra)), get_stream_rport(sid->sid));
 
-#ifdef DEBUG
-    static int fd;
-    char fn[50];
-    sprintf(fn, "freq=%d.ts", sid->tp.freq / 1000);
-    fd = open(fn, O_WRONLY);
-    if (fd < 0)
-        fd = open(fn, O_CREAT | O_WRONLY, 0666);
-    if (fd) {
-        lseek(fd, 0, 2);
-        writev(fd, iov, iiov);
-        close(fd);
-    }
-#endif
     sid->wtime = ctime;
     sid->len = 0;
 
