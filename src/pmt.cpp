@@ -1199,8 +1199,8 @@ void emulate_add_all_pids(adapter *ad) {
         update_pids(ad->id);
 }
 
-void stream_statistics(adapter *ad) {
 #ifdef DEBUG
+void stream_statistics(adapter *ad) {
     int rlen = ad->rlen;
     for (int i = 0; i < rlen; i += DVB_FRAME) {
         uint8_t *b = ad->buf + i;
@@ -1231,8 +1231,29 @@ void stream_statistics(adapter *ad) {
 
         (*pmt->local_start)[key] += 1;
     }
-#endif
 }
+
+void print_stream_statistics(SPMT *pmt) {
+    int max_value = 0;
+    uint64_t max_key = 0;
+    if (!pmt->global_start)
+        return;
+    uint64_t multiplier = (getTick() - pmt->start_time) / 10000;
+    for (const auto &[key, value] : *pmt->local_start) {
+        if (value > multiplier) {
+            (*pmt->global_start)[key] += value / multiplier;
+        }
+    }
+    for (const auto &[key, value] : *pmt->global_start) {
+        LOG("**** PMT %d, global key %" PRIx64 " packets per 10s interval %d",
+            pmt->id, key, value);
+    }
+    pmt->local_start->clear();
+}
+#else
+inline void stream_statistics(adapter *ad) {}
+inline void print_stream_statistics(SPMT *pmt) {}
+#endif
 
 int pmt_process_stream(adapter *ad) {
     SPid *p;
@@ -2065,24 +2086,7 @@ void stop_pmt(SPMT *pmt, adapter *ad) {
     close_pmt_for_cas(ad, pmt);
 #endif
     pmt->state = PMT_STOPPED;
-#ifdef DEBUG
-    int max_value = 0;
-    uint64_t max_key = 0;
-    if (!pmt->global_start)
-        return;
-    uint64_t multiplier = (getTick() - pmt->start_time) / 10000;
-    for (const auto &[key, value] : *pmt->local_start) {
-        if (value > multiplier) {
-            (*pmt->global_start)[key] += value / multiplier;
-        }
-    }
-    for (const auto &[key, value] : *pmt->global_start) {
-        LOG("**** PMT %d, global key %" PRIx64 " packets per 10s interval %d",
-            pmt->id, key, value);
-    }
-    pmt->local_start->clear();
-
-#endif
+    print_stream_statistics(pmt);
 }
 
 void pmt_pid_add(adapter *ad, int pid, int existing) {
