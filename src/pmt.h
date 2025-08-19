@@ -2,6 +2,7 @@
 #define PMT_H
 #include "adapter.h"
 #include "dvb.h"
+#include <unordered_map>
 
 #define MAX_CAID 20
 #define MAX_ACTIVE_PIDS 20
@@ -141,6 +142,7 @@ typedef struct struct_pmt {
     int first_active_pid;
     int64_t grace_time, start_time;
     int filter;
+    std::unordered_map<uint64_t, int> *global_start, *local_start;
 } SPMT;
 
 // filters can be setup for specific pids and masks

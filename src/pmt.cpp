@@ -36,6 +36,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <math.h>
 #include <net/if.h>
 #include <netdb.h>
@@ -954,7 +955,6 @@ int decrypt_batch(SPMT *pmt) {
          pmt->blen, pmt->sid, pid);
     for (i = 0; i < pmt->blen; i++)
         pmt->batch[i].data[3] &= 0x3F; // clear the encrypted flags
-
     pmt->blen = 0;
 
     //	memset(pmt->batch, 0, sizeof(int *) * 128);
@@ -1200,6 +1200,62 @@ void emulate_add_all_pids(adapter *ad) {
         update_pids(ad->id);
 }
 
+#ifdef DEBUG
+void stream_statistics(adapter *ad) {
+    int rlen = ad->rlen;
+    for (int i = 0; i < rlen; i += DVB_FRAME) {
+        uint8_t *b = ad->buf + i;
+        int pid = PID_FROM_TS(b);
+        if ((b[1] & 0x40) == 0)
+            continue;
+
+        b += get_adaptation_len(b);
+
+        if ((b[0] | b[1] | b[2]) != 1)
+            continue;
+
+        uint64_t key = 0;
+
+        for (int j = 0; j < 8; j++) {
+            key = (key << 8) | b[j];
+        }
+
+        SPid *p = find_pid(ad->id, pid);
+        SPMT *pmt = p ? get_pmt(p->pmt) : NULL;
+
+        if (!pmt)
+            continue;
+        if (!pmt->global_start) {
+            pmt->global_start = new std::unordered_map<uint64_t, int>();
+            pmt->local_start = new std::unordered_map<uint64_t, int>();
+        }
+
+        (*pmt->local_start)[key] += 1;
+    }
+}
+
+void print_stream_statistics(SPMT *pmt) {
+    int max_value = 0;
+    uint64_t max_key = 0;
+    if (!pmt->global_start)
+        return;
+    uint64_t multiplier = (getTick() - pmt->start_time) / 10000;
+    for (const auto &[key, value] : *pmt->local_start) {
+        if (value > multiplier) {
+            (*pmt->global_start)[key] += value / multiplier;
+        }
+    }
+    for (const auto &[key, value] : *pmt->global_start) {
+        LOG("**** PMT %d, global key %" PRIx64 " packets per 10s interval %d",
+            pmt->id, key, value);
+    }
+    pmt->local_start->clear();
+}
+#else
+inline void stream_statistics(adapter *ad) {}
+inline void print_stream_statistics(SPMT *pmt) {}
+#endif
+
 int pmt_process_stream(adapter *ad) {
     SPid *p;
     int i, pid;
@@ -1238,6 +1294,8 @@ int pmt_process_stream(adapter *ad) {
     pmt_decrypt_stream(ad);
 
     mark_pids_null(ad);
+
+    stream_statistics(ad);
 
 #endif
     adapter_commit(ad);
@@ -2025,6 +2083,7 @@ void stop_pmt(SPMT *pmt, adapter *ad) {
     close_pmt_for_cas(ad, pmt);
 #endif
     pmt->state = PMT_STOPPED;
+    print_stream_statistics(pmt);
 }
 
 void pmt_pid_add(adapter *ad, int pid, int existing) {
