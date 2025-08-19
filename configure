@@ -2891,12 +2891,12 @@ then :
 printf "%s\n" "#define STDC_HEADERS 1" >>confdefs.h
 
 fi
-       for ac_header in dvbcsa/dvbcsa.h
+       for ac_header in stdio.h
 do :
-  ac_fn_cxx_check_header_compile "$LINENO" "dvbcsa/dvbcsa.h" "ac_cv_header_dvbcsa_dvbcsa_h" "$ac_includes_default"
-if test "x$ac_cv_header_dvbcsa_dvbcsa_h" = xyes
+  ac_fn_cxx_check_header_compile "$LINENO" "stdio.h" "ac_cv_header_stdio_h" "$ac_includes_default"
+if test "x$ac_cv_header_stdio_h" = xyes
 then :
-  printf "%s\n" "#define HAVE_DVBCSA_DVBCSA_H 1" >>confdefs.h
+  printf "%s\n" "#define HAVE_STDIO_H 1" >>confdefs.h
 
 else $as_nop
   NO_23=1
@@ -2908,12 +2908,12 @@ if test "$NO_23" = "1"; then
     { printf "%s\n" "$as_me:${as_lineno-$LINENO}:  == Checking C++ 20 == " >&5
 printf "%s\n" "$as_me:  == Checking C++ 20 == " >&6;}
     CXXFLAGS="-std=c++20"
-           for ac_header in dvbcsa/dvbcsa.h
+           for ac_header in stdio.h
 do :
-  ac_fn_cxx_check_header_compile "$LINENO" "dvbcsa/dvbcsa.h" "ac_cv_header_dvbcsa_dvbcsa_h" "$ac_includes_default"
-if test "x$ac_cv_header_dvbcsa_dvbcsa_h" = xyes
+  ac_fn_cxx_check_header_compile "$LINENO" "stdio.h" "ac_cv_header_stdio_h" "$ac_includes_default"
+if test "x$ac_cv_header_stdio_h" = xyes
 then :
-  printf "%s\n" "#define HAVE_DVBCSA_DVBCSA_H 1" >>confdefs.h
+  printf "%s\n" "#define HAVE_STDIO_H 1" >>confdefs.h
 
 else $as_nop
   CXXFLAGS="-std=c++17"

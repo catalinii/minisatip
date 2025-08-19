@@ -40,12 +40,12 @@ NO_23=0
 
 AC_MSG_NOTICE([ == Checking C++ 23 == ])
 CXXFLAGS="-std=c++23"
-AC_CHECK_HEADERS([dvbcsa/dvbcsa.h],[],[NO_23=1])
+AC_CHECK_HEADERS([stdio.h],[],[NO_23=1])
 
 if test "$NO_23" = "1"; then
     AC_MSG_NOTICE([ == Checking C++ 20 == ])
     CXXFLAGS="-std=c++20"
-    AC_CHECK_HEADERS([dvbcsa/dvbcsa.h],[],[CXXFLAGS="-std=c++17"])  # gcc 9
+    AC_CHECK_HEADERS([stdio.h],[],[CXXFLAGS="-std=c++17"])  # gcc 9
 fi
 
 AC_MSG_NOTICE([ == Using C++ standard $CXXFLAGS == ])
