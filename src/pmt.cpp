@@ -238,7 +238,7 @@ void dump_filters(int aid) {
 
 void reset_filter_data(SFilter *f) {
     f->len = 0;
-    // Position must be reset, otherwise residual data may be returned 
+    // Position must be reset, otherwise residual data may be returned
     // when the filter is re-assigned to another PMT
     f->pos = 0;
     memset(f->data, 0, FILTER_PACKET_SIZE);
@@ -380,8 +380,8 @@ int get_pid_filter(int aid, int pid) {
     for (i = 0; i < nfilters; i++)
         if (filters[i] && filters[i]->enabled && filters[i]->adapter == aid &&
             filters[i]->pid == pid) {
-            LOGM("found filter %d for pid %d, master %d (max filters %d)", i, pid,
-                 filters[i]->master_filter, nfilters);
+            LOGM("found filter %d for pid %d, master %d (max filters %d)", i,
+                 pid, filters[i]->master_filter, nfilters);
             return filters[i]->master_filter;
         }
     return -1;
@@ -1225,6 +1225,9 @@ void stream_statistics(adapter *ad) {
 
         if (!pmt)
             continue;
+        if (get_pmt(pmt->master_pmt))
+            pmt = get_pmt(pmt->master_pmt);
+
         if (!pmt->global_start) {
             pmt->global_start = new std::unordered_map<uint64_t, int>();
             pmt->local_start = new std::unordered_map<uint64_t, int>();
@@ -1235,11 +1238,9 @@ void stream_statistics(adapter *ad) {
 }
 
 void print_stream_statistics(SPMT *pmt) {
-    int max_value = 0;
-    uint64_t max_key = 0;
     if (!pmt->global_start)
         return;
-    uint64_t multiplier = (getTick() - pmt->start_time) / 10000;
+    int64_t multiplier = (getTick() - pmt->start_time) / 10000;
     for (const auto &[key, value] : *pmt->local_start) {
         if (value > multiplier) {
             (*pmt->global_start)[key] += value / multiplier;
@@ -1284,6 +1285,7 @@ int pmt_process_stream(adapter *ad) {
 #ifndef DISABLE_TABLES
     emulate_add_all_pids(ad);
     start_active_pmts(ad);
+    stream_statistics(ad);
 
     if (ad->ca_mask == 0) { // no CA enabled on this adapter
         adapter_commit(ad);
@@ -1294,8 +1296,6 @@ int pmt_process_stream(adapter *ad) {
     pmt_decrypt_stream(ad);
 
     mark_pids_null(ad);
-
-    stream_statistics(ad);
 
 #endif
     adapter_commit(ad);
@@ -1918,13 +1918,14 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     pmt->pcr_pid = pcr_pid;
 
     mutex_lock(&pmt->mutex);
-    LOG("new PMT %d AD %d, pid: %04X (%d), filter %d, len %d, pi_len %d, ver %d, pcr "
+    LOG("new PMT %d AD %d, pid: %04X (%d), filter %d, len %d, pi_len %d, ver "
+        "%d, pcr "
         "%d, "
         "sid "
         "%04X "
         "(%d) %s %s",
-        pmt->id, ad->id, pid, pid, filter, pmt_len, pi_len, ver, pcr_pid, pmt->sid,
-        pmt->sid, pmt->name[0] ? "channel:" : "", pmt->name);
+        pmt->id, ad->id, pid, pid, filter, pmt_len, pi_len, ver, pcr_pid,
+        pmt->sid, pmt->sid, pmt->name[0] ? "channel:" : "", pmt->name);
     pi = b + 12;
     pmt_b = b + 3;
 
@@ -2060,8 +2061,8 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque) {
 }
 
 void start_pmt(SPMT *pmt, adapter *ad) {
-    LOGM("starting PMT %d master %d, pid %d, sid %d, filter %d for channel: %s", pmt->id,
-         pmt->master_pmt, pmt->pid, pmt->sid, pmt->filter, pmt->name);
+    LOGM("starting PMT %d master %d, pid %d, sid %d, filter %d for channel: %s",
+         pmt->id, pmt->master_pmt, pmt->pid, pmt->sid, pmt->filter, pmt->name);
     pmt->state = PMT_STARTING;
     // give 2s to initialize decoding or override for each CA
     pmt->encrypted = 0;
@@ -2075,8 +2076,8 @@ void start_pmt(SPMT *pmt, adapter *ad) {
 void stop_pmt(SPMT *pmt, adapter *ad) {
     if (!pmt->state)
         return;
-    LOGM("stopping PMT %d pid %d sid %d master %d filter %d for channel %s", pmt->id,
-         pmt->pid, pmt->sid, pmt->master_pmt, pmt->filter, pmt->name);
+    LOGM("stopping PMT %d pid %d sid %d master %d filter %d for channel %s",
+         pmt->id, pmt->pid, pmt->sid, pmt->master_pmt, pmt->filter, pmt->name);
     pmt->state = PMT_STOPPING;
     set_filter_flags(pmt->filter, 0);
 #ifndef DISABLE_TABLES
