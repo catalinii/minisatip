@@ -1240,10 +1240,11 @@ void stream_statistics(adapter *ad) {
 void print_stream_statistics(SPMT *pmt) {
     if (!pmt->global_start)
         return;
-    int64_t multiplier = (getTick() - pmt->start_time) / 10000;
+    float multiplier = (getTick() - pmt->start_time) / 10000;
+
     for (const auto &[key, value] : *pmt->local_start) {
         if (value > multiplier) {
-            (*pmt->global_start)[key] += value / multiplier;
+            (*pmt->global_start)[key] += trunc(value / multiplier);
         }
     }
     for (const auto &[key, value] : *pmt->global_start) {
