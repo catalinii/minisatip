@@ -45,7 +45,7 @@
 #include "minisatip.h"
 #include "socketworks.h"
 #include "utils.h"
-#include "utils/alloc.h"
+
 #include "utils/ticks.h"
 
 #define DEFAULT_LOG LOG_SOCKETWORKS
@@ -474,55 +474,6 @@ int sockets_recv(int socket, void *buf, size_t len, sockets *ss, int *rv) {
     return (*rv >= 0);
 }
 
-int init_sock = 0;
-
-void sockets_lock(sockets *ss) {
-    int rv;
-    sockets *s = NULL;
-    mutex_lock(&ss->mutex);
-    if (ss->lock)
-        if ((rv = mutex_lock(ss->lock))) {
-            LOG("%s: Changing socket %d lock %p to NULL error %d %s",
-                __FUNCTION__, ss->id, ss->lock, rv,
-                strerror((rv > 0) ? rv : 0));
-            ss->lock = NULL;
-        }
-    if ((ss->master >= 0) && (s = get_sockets(ss->master))) {
-        if (ss->tid != s->tid) {
-            LOG("Master socket %d has different thread id than socket %d: %lx "
-                "!= "
-                "%lx, closing slave socket",
-                s->id, ss->id, s->tid, ss->tid);
-            ss->force_close = 1;
-        } else
-            sockets_lock(s);
-    }
-}
-
-void sockets_unlock(sockets *ss) {
-    int rv;
-    sockets *s;
-    if ((ss->master >= 0) && (s = get_sockets(ss->master))) {
-        sockets_unlock(s);
-    }
-    if (ss->lock)
-        if ((rv = mutex_unlock(ss->lock))) {
-            LOG("%s: Changing socket %d lock %p to NULL error %d %s",
-                __FUNCTION__, ss->id, ss->lock, rv,
-                strerror((rv > 0) ? rv : 0));
-            ss->lock = NULL;
-        }
-    mutex_unlock(&ss->mutex);
-}
-
-void set_sock_lock(int i, SMutex *m) {
-    sockets *ss = get_sockets(i);
-    if (ss) {
-        ss->lock = m;
-        LOG("%s: sock_id %d locks also mutex %p", __FUNCTION__, i, m);
-    }
-}
-
 int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
                 socket_action c, socket_action t) {
     int i;
@@ -536,12 +487,20 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
     if (sock == SOCK_TIMEOUT && t == NULL)
         LOG_AND_RETURN(-1, "sockets_add timeout without timeout function");
 
-    i = add_new_lock((void **)s, MAX_SOCKS, sizeof(sockets), &s_mutex);
+    std::lock_guard<SMutex> lock(s_mutex);
+
+    i = find_new_id((void **)s, MAX_SOCKS);
     if (i == -1)
         LOG_AND_RETURN(-1, "sockets_add failed for socks %d", sock);
+    if (!s[i]) {
+        s[i] = new sockets();
+    }
+    if (!s[i])
+        LOG_AND_RETURN(-1, "%s failed for id %d", __FUNCTION__, i);
 
     ss = s[i];
     ss->enabled = 1;
+    std::lock_guard<SMutex> lock2(ss->mutex);
     ss->is_enabled = 1;
     ss->force_close = 0;
     ss->sock = sock;
@@ -576,7 +535,6 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
     ss->prio_data_len = 0;
 
     ss->read = (read_action)sockets_read;
-    ss->lock = NULL;
     if (ss->type == TYPE_UDP || ss->type == TYPE_RTCP)
         ss->read = (read_action)sockets_recv;
     else if (ss->type == TYPE_SERVER)
@@ -590,7 +548,6 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
         "%p",
         ss->sock, ss->type, i, get_sockaddr_host(ss->sa, ra, sizeof(ra)),
         get_sockaddr_port(ss->sa), ss->read);
-    mutex_unlock(&ss->mutex);
     return i;
 }
 
@@ -631,14 +588,13 @@ int sockets_del(int sock) {
             break;
     max_sock = i + 1;
     ss->events = 0;
-    ss->lock = NULL;
     ss->master = -1;
     if ((ss->flags & 1) && ss->buf)
-        _free(ss->buf);
+        free(ss->buf);
     ss->flags = 0;
     ss->buf = NULL;
     if (ss->prio_data) {
-        _free(ss->prio_data);
+        free(ss->prio_data);
         ss->prio_data = NULL;
         ss->prio_data_len = 0;
     }
@@ -647,10 +603,11 @@ int sockets_del(int sock) {
     LOG("sockets_del: sock %d Last open socket is at index %d current_handle "
         "%d",
         sock, i, so);
-    mutex_destroy(&ss->mutex);
+
     mutex_lock(&s_mutex);
     ss->enabled = 0;
     mutex_unlock(&s_mutex);
+    mutex_unlock(&ss->mutex);
 
     for (i = 0; i < MAX_SOCKS; i++)
         if (s[i] && s[i]->enabled && s[i]->master == sock) {
@@ -677,14 +634,12 @@ SMutex thread_mutex;
 
 int get_thread_index() {
     int i;
-    mutex_init(&thread_mutex);
-    mutex_lock(&thread_mutex);
+    std::lock_guard<SMutex> lock(thread_mutex);
     for (i = 0; i < MAX_THREAD_INFO; i++)
         if (thread_info[i].enabled == 0) {
             thread_info[i].enabled = 1;
             break;
         }
-    mutex_unlock(&thread_mutex);
     if (i == MAX_THREAD_INFO)
         return -1;
     return i;
@@ -729,7 +684,6 @@ void *select_and_execute(void *arg) {
     while (run_loop) {
         c_time = getTick();
         es = 0;
-        clean_mutexes();
         for (i = 0; i < max_sock; i++)
             if (s[i] && s[i]->enabled && s[i]->tid == tid) {
                 pf[i].fd = s[i]->sock;
@@ -780,7 +734,6 @@ void *select_and_execute(void *arg) {
                            "buffered %d (poll fd: %d, events: %d, revents: %d)",
                            i, ss->sock, ss->type, buffered, pf[i].fd,
                            pf[i].events, pf[i].revents);
-                    sockets_lock(ss);
 
                     if ((pf[i].revents & POLLOUT) && buffered) {
                         LOGM("start flush sock id %d, buffered %d", ss->id,
@@ -790,7 +743,6 @@ void *select_and_execute(void *arg) {
                         if ((pf[i].revents & (~POLLOUT)) == 0) {
                             DEBUGM("Sock %d: No Read event, continuing",
                                    ss->id);
-                            sockets_unlock(ss);
                             continue;
                         }
 
@@ -807,6 +759,7 @@ void *select_and_execute(void *arg) {
                         master = get_sockets(ss->master);
                     if (!master)
                         master = ss;
+                    std::lock_guard<SMutex> lock(master->mutex);
 
                     if (!master->buf || master->buf == buf) {
                         master->buf = buf;
@@ -874,8 +827,6 @@ void *select_and_execute(void *arg) {
                         master->action && (master->type != TYPE_SERVER))
                         master->action(master);
 
-                    sockets_unlock(ss);
-
                     if (!read_ok && ss->type != TYPE_SERVER) {
                         const char *err_str;
                         const char *types[] = {"udp",  "tcp", "server", "http",
@@ -940,9 +891,8 @@ void *select_and_execute(void *arg) {
                         int rv;
                         if (ss->sock == SOCK_TIMEOUT)
                             ss->rtime = getTick();
-                        sockets_lock(ss);
+                        std::lock_guard<SMutex> lock(ss->mutex);
                         rv = ss->timeout(ss);
-                        sockets_unlock(ss);
                         if (rv)
                             sockets_del(i);
                     } else
@@ -951,8 +901,6 @@ void *select_and_execute(void *arg) {
             }
         }
     }
-
-    clean_mutexes();
 
     if (tid == main_tid)
         LOG("The main loop ended, run_loop = %d", run_loop)
@@ -1026,7 +974,7 @@ void set_socket_new_buffer(int sid, int len) {
 
     buf = ss->buf;
 
-    ss->buf = (uint8_t *)_malloc(len);
+    ss->buf = (uint8_t *)malloc(len);
     if (!ss->buf) {
         ss->buf = buf;
         return;
@@ -1045,6 +993,15 @@ void set_socket_buffer(int sid, uint8_t *buf, int len) {
     ss->lbuf = len;
 }
 
+uint64_t get_allocated_memory() {
+    uint64_t allocated_memory = 0;
+    for (int i = 0; i < MAX_SOCKS; i++)
+        if (s[i] && s[i]->fifo.size) {
+            allocated_memory += s[i]->fifo.size;
+        }
+    return allocated_memory;
+}
+
 void free_all_streams();
 void free_all_adapters();
 void free_all_keys();
@@ -1058,9 +1015,9 @@ void free_all() {
         if (s[i]->enabled)
             sockets_del(i);
         free_fifo(&s[i]->fifo);
-        _free(s[i]->prio_data);
+        free(s[i]->prio_data);
         if (s[i])
-            _free(s[i]);
+            delete s[i];
         s[i] = NULL;
     }
     free_all_streams();
@@ -1068,7 +1025,6 @@ void free_all() {
 #ifndef DISABLE_DVBAPI
     free_all_keys();
 #endif
-    free_alloc();
 }
 
 void set_socket_send_buffer(int sock, int len) {
@@ -1297,9 +1253,8 @@ int socket_enque_highprio(sockets *s, struct iovec *iov, int iovcnt) {
         len += iov[i].iov_len;
 
     pos = s->prio_data_len;
-
-    if (ensure_allocated((void **)&s->prio_data, 0, 1, pos + len, 1024))
-        return 0;
+    if (!s->prio_data)
+        s->prio_data = (uint8_t *)malloc(20480);
 
     for (i = 0; i < iovcnt; i++) {
         memcpy(s->prio_data + pos, iov[i].iov_base, iov[i].iov_len);
@@ -1509,6 +1464,7 @@ int flush_socket_prio(sockets *s) {
 }
 
 int flush_socket(sockets *s) {
+    std::lock_guard<SMutex> lock(s->mutex);
     flush_enqued_data_if_neededf_needed(s);
     if (s->force_close || s->prio_data_len) {
         return flush_socket_prio(s);

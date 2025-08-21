@@ -30,7 +30,7 @@
 #include "minisatip.h"
 #include "pmt.h"
 #include "utils.h"
-#include "utils/alloc.h"
+
 #include "utils/hash_table.h"
 #include "utils/ticks.h"
 
@@ -398,6 +398,7 @@ int satipc_timeout(sockets *s) {
     adapter *ad;
     satipc *sip;
     get_ad_and_sipr(s->sid, 1);
+    std::lock_guard<SMutex> lock(ad->mutex);
 
     if (sip->rtsp_socket_closed) {
         satipc_open_rtsp_socket(ad, sip);
@@ -590,7 +591,6 @@ int satipc_open_device(adapter *ad) {
         ad->fe_sock = sockets_add(SOCK_TIMEOUT, NULL, ad->id, TYPE_UDP, NULL,
                                   NULL, (socket_action)satipc_timeout);
         sockets_timeout(ad->fe_sock, 25000); // 25s
-        set_sock_lock(ad->fe_sock, &ad->mutex);
     }
     sip->session[0] = 0;
     sip->lap = 0;
@@ -812,7 +812,7 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
             if (i + 1 < rr) { // move data only if not in the last multibuffer
                               // slice (in this case only adjust the end)
                 // copy data until the end of the buffer over the empty
-                // space to _free the hole
+                // space to free the hole
                 uint8_t *eb = (uint8_t *)iovs[1].iov_base +
                               *rb; // current end of the read buffer
                 uint8_t *sb = (uint8_t *)holes[i]; // end of the valid read data
@@ -861,7 +861,6 @@ int process_rtsp_tcp(sockets *ss, unsigned char *rtsp, int rtsp_len, void *buf,
 int first;
 int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb) {
     unsigned char *rtsp;
-    sockets tmp_sock;
     int pos;
     int rtsp_len;
     int tmp_len = 0;
@@ -875,7 +874,7 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb) {
            sip->tcp_pos, sip->tcp_len, sip->tcp_size, len);
     if (!sip->tcp_data) {
         sip->tcp_size = TCP_DATA_SIZE;
-        sip->tcp_data = (uint8_t *)_malloc(sip->tcp_size + 3);
+        sip->tcp_data = (uint8_t *)malloc(sip->tcp_size + 3);
         if (!sip->tcp_data)
             LOG_AND_RETURN(-1, "Cannot alloc memory for tcp_data with size %d",
                            sip->tcp_size);
@@ -1013,7 +1012,7 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb) {
                      sip->tcp_pos);
                 break;
             }
-            memset(&tmp_sock, 0, sizeof(tmp_sock));
+            sockets tmp_sock;
             bytes = nlnl - rtsp;
             sip->tcp_pos += bytes + 4;
             tmp_sock.buf = rtsp;
@@ -1574,9 +1573,7 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
             if (!a[i])
                 a[i] = adapter_alloc();
             if (!satip[i]) {
-                satip[i] = (satipc *)_malloc(sizeof(satipc));
-                if (satip[i])
-                    memset(satip[i], 0, sizeof(satipc));
+                satip[i] = new satipc();
             }
             if (a[i] && satip[i])
                 break;
@@ -1586,7 +1583,6 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
 
     sip = satip[i];
     ad = a[i];
-    mutex_init(&sip->mutex);
     mutex_lock(&ad->mutex);
     ad->id = i;
     ad->open = satipc_open_device;
@@ -1843,7 +1839,7 @@ int satip_getxml(void *x) {
 }
 
 char *init_satip_pointer(int len) {
-    char *p = (char *)_malloc(len);
+    char *p = (char *)malloc(len);
     if (p)
         p[0] = 0;
     else
@@ -1853,6 +1849,6 @@ char *init_satip_pointer(int len) {
 
 _symbols satipc_sym[] = {{"ad_satip", VAR_AARRAY_STRING, satip, 1, MAX_ADAPTERS,
                           offsetof(satipc, sip)},
-                         {"ad_satip_use_tcp", VAR_AARRAY_UINT8, satip, 1, MAX_ADAPTERS,
-                          offsetof(satipc, use_tcp)},
+                         {"ad_satip_use_tcp", VAR_AARRAY_UINT8, satip, 1,
+                          MAX_ADAPTERS, offsetof(satipc, use_tcp)},
                          {NULL, 0, NULL, 0, 0, 0}};

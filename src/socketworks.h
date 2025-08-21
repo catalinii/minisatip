@@ -42,7 +42,6 @@ typedef struct struct_sockets {
     int events, revents;
     int64_t last_poll;
     pthread_t tid;
-    SMutex *lock;
     int sock_err;
     SFIFO fifo;
     int prio_data_len;
@@ -106,7 +105,6 @@ void sockets_setclose(int i, void *r);
 void set_socket_send_buffer(int sock, int len);
 void set_socket_receive_buffer(int sock, int len);
 void set_socket_pos(int sock, int pos);
-void set_sock_lock(int i, SMutex *m);
 void set_socket_thread(int s_id, pthread_t tid);
 pthread_t get_socket_thread(int s_id);
 int tcp_listen(char *addr, int port, int ipv4_only);
@@ -126,6 +124,7 @@ void sockets_force_close(int id);
 void sockets_set_master(int slave, int master);
 int copy_iovec_to_fifo(SFIFO *fifo, uint32_t offset, struct iovec *iov,
                        int iovcnt);
+uint64_t get_allocated_memory();
 void sockets_set_flush_enqued_data(int id);
 extern __thread char thread_name[];
 extern __thread pthread_t tid;

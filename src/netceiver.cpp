@@ -21,7 +21,7 @@
 #ifndef DISABLE_NETCVCLIENT
 
 #include "netceiver.h"
-#include "utils/alloc.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <ifaddrs.h>
@@ -127,10 +127,11 @@ int netcv_del_pid(adapter *ad, int fd, int pid) {
 
 int netcv_commit(adapter *ad) {
     int i;
-    LOG("netceiver: call netcv_commit for adapter %d want_tune=%d", ad->id, SN->want_tune);
+    LOG("netceiver: call netcv_commit for adapter %d want_tune=%d", ad->id,
+        SN->want_tune);
 
     int m_pos = 0;
-    fe_type_t type = (fe_type_t) 0;
+    fe_type_t type = (fe_type_t)0;
     recv_sec_t m_sec;
     struct dvb_frontend_parameters m_fep;
     dvb_pid_t m_pids[MAX_PIDS];
@@ -164,12 +165,12 @@ int netcv_commit(adapter *ad) {
 
         int map_pos[] = {0, 192, 130, 282,
                          -50}; // Default sat positions: 19.2E, 13E, 28.2E, 5W
-        fe_sec_voltage_t map_pol[] = {(fe_sec_voltage_t) 0, SEC_VOLTAGE_13, SEC_VOLTAGE_18, SEC_VOLTAGE_OFF};
+        fe_sec_voltage_t map_pol[] = {(fe_sec_voltage_t)0, SEC_VOLTAGE_13,
+                                      SEC_VOLTAGE_18, SEC_VOLTAGE_OFF};
 
         switch (tp->sys) {
         case SYS_DVBS:
-        case SYS_DVBS2:
-	    {
+        case SYS_DVBS2: {
             m_pos = 1800 + map_pos[tp->diseqc];
 
             memset(&m_sec, 0, sizeof(recv_sec_t));
@@ -187,11 +188,11 @@ int netcv_commit(adapter *ad) {
                 switch (tp->fec) // Handle FEC numbering exceptions
                 {
                 case FEC_3_5:
-                    m_fep.u.qpsk.fec_inner = (fe_code_rate_t) 13;
+                    m_fep.u.qpsk.fec_inner = (fe_code_rate_t)13;
                     break;
 
                 case FEC_9_10:
-                    m_fep.u.qpsk.fec_inner = (fe_code_rate_t) 14;
+                    m_fep.u.qpsk.fec_inner = (fe_code_rate_t)14;
                     break;
 
                 default:
@@ -200,13 +201,17 @@ int netcv_commit(adapter *ad) {
 
                 // Für DVB-S2 PSK8 oder QPSK, siehe vdr-mcli-plugin/device.c
                 if (tp->mtype)
-                    m_fep.u.qpsk.fec_inner = (fe_code_rate_t) (m_fep.u.qpsk.fec_inner | (PSK8 << 16));
+                    m_fep.u.qpsk.fec_inner =
+                        (fe_code_rate_t)(m_fep.u.qpsk.fec_inner | (PSK8 << 16));
                 else
-                    m_fep.u.qpsk.fec_inner = (fe_code_rate_t) (m_fep.u.qpsk.fec_inner | (QPSK_S2 << 16));
-                type = (fe_type_t) FE_DVBS2;
+                    m_fep.u.qpsk.fec_inner =
+                        (fe_code_rate_t)(m_fep.u.qpsk.fec_inner |
+                                         (QPSK_S2 << 16));
+                type = (fe_type_t)FE_DVBS2;
             }
 
-            const char *map_posc[] = {"", " @ 19.2E", " @ 13E", " @ 28.2E", " @ 5W"};
+            const char *map_posc[] = {"", " @ 19.2E", " @ 13E", " @ 28.2E",
+                                      " @ 5W"};
             LOG("netceiver: adapter %d tuning to %d%s pol:%s sr:%d fec:%s "
                 "delsys:%s "
                 "mod:%s",
@@ -221,7 +226,7 @@ int netcv_commit(adapter *ad) {
             // unreachable code
             //			m_fep.u.qpsk.fec_inner |= (tp->ro << 24);
             //			break;
-	    }
+        }
 
         case SYS_DVBC_ANNEX_A:
             m_pos = 0xfff; /* not sure, to be tested */
@@ -303,7 +308,8 @@ int netcv_commit(adapter *ad) {
             break;
 
         default:
-            LOG("netceiver: adapter %d tuning not supported for type %d", tp->sys)
+            LOG("netceiver: adapter %d tuning not supported for type %d",
+                tp->sys)
             break;
         }
 
@@ -446,7 +452,7 @@ void find_netcv_adapter(adapter **a) {
         if (!a[na])
             a[na] = adapter_alloc();
         if (!sn[na])
-            sn[na] = (SNetceiver*) _malloc(sizeof(SNetceiver));
+            sn[na] = (SNetceiver *)malloc(sizeof(SNetceiver));
 
         ad = a[na];
         ad->pa = 0;
@@ -518,7 +524,7 @@ void find_netcv_adapter(adapter **a) {
  */
 
 int handle_ts(unsigned char *buffer, size_t len, void *p) {
-    SNetceiver *nc = (SNetceiver *) p;
+    SNetceiver *nc = (SNetceiver *)p;
     size_t lw;
 
     if (nc->lp == 0)
@@ -541,7 +547,7 @@ int handle_ts(unsigned char *buffer, size_t len, void *p) {
 
 /* Handle signal status information */
 int handle_ten(tra_t *ten, void *p) {
-    adapter *ad = (adapter *) p;
+    adapter *ad = (adapter *)p;
     recv_festatus_t *festat;
 
     if (ten) {

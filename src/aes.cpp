@@ -26,7 +26,7 @@
 #include "socketworks.h"
 #include "tables.h"
 #include "utils.h"
-#include "utils/alloc.h"
+
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <errno.h>
@@ -52,10 +52,10 @@
 #define DEFAULT_LOG LOG_PMT
 
 void dvbaes_create_key(SCW *cw) {
-    cw->key = (uint8_t *)_malloc(sizeof(AES_KEY));
+    cw->key = (uint8_t *)malloc(sizeof(AES_KEY));
 }
 
-void dvbaes_delete_key(SCW *cw) { _free(cw->key); }
+void dvbaes_delete_key(SCW *cw) { free(cw->key); }
 
 void dvbaes_set_cw(SCW *cw, SPMT *pmt) {
     AES_set_decrypt_key(cw->cw, 128, (AES_KEY *)cw->key);
@@ -266,7 +266,7 @@ int pkcs_1_mgf1(const uint8_t *seed, unsigned long seedlen, uint8_t *mask,
     hLen = 20; /* SHA1 */
 
     /* allocate memory */
-    buf = (uint8_t *)_malloc(hLen);
+    buf = (uint8_t *)malloc(hLen);
     if (buf == NULL) {
         LOG("error mem");
         return -1;
@@ -291,7 +291,7 @@ int pkcs_1_mgf1(const uint8_t *seed, unsigned long seedlen, uint8_t *mask,
             *mask++ = buf[x];
     }
 
-    _free(buf);
+    free(buf);
     return 0;
 }
 
@@ -308,13 +308,13 @@ int pkcs_1_pss_encode(const uint8_t *msghash, unsigned int msghashlen,
     modulus_len = (modulus_bitlen >> 3) + (modulus_bitlen & 7 ? 1 : 0);
 
     /* allocate ram for DB/mask/salt/hash of size modulus_len */
-    DB = (uint8_t *)_malloc(modulus_len);
-    mask = (uint8_t *)_malloc(modulus_len);
-    salt = (uint8_t *)_malloc(modulus_len);
-    hash = (uint8_t *)_malloc(modulus_len);
+    DB = (uint8_t *)malloc(modulus_len);
+    mask = (uint8_t *)malloc(modulus_len);
+    salt = (uint8_t *)malloc(modulus_len);
+    hash = (uint8_t *)malloc(modulus_len);
 
     hashbuflen = 8 + msghashlen + saltlen;
-    hashbuf = (uint8_t *)_malloc(hashbuflen);
+    hashbuf = (uint8_t *)malloc(hashbuflen);
 
     if (!(DB && mask && salt && hash && hashbuf)) {
         LOG("out of memory");
@@ -376,11 +376,11 @@ int pkcs_1_pss_encode(const uint8_t *msghash, unsigned int msghashlen,
 
     err = 0;
 LBL_ERR:
-    _free(hashbuf);
-    _free(hash);
-    _free(salt);
-    _free(mask);
-    _free(DB);
+    free(hashbuf);
+    free(hash);
+    free(salt);
+    free(mask);
+    free(DB);
 
     return err;
 }

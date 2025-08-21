@@ -28,7 +28,7 @@
 #include "socketworks.h"
 #include "tables.h"
 #include "utils.h"
-#include "utils/alloc.h"
+
 #include "utils/dvb/dvb_support.h"
 #include "utils/ticks.h"
 
@@ -254,17 +254,21 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
                     uint8_t *filter, uint8_t *mask) {
     SFilter *f;
     int i, fid = 0;
+    std::lock_guard<SMutex> lock(filters_mutex);
 
     if (pid < 0 || pid > 8191)
         LOG_AND_RETURN(-1, "%s failed, pid %d", __FUNCTION__, pid);
 
-    fid = add_new_lock((void **)filters, MAX_FILTERS, sizeof(SFilter),
-                       &filters_mutex);
+    fid = find_new_id((void **)filters, MAX_FILTERS);
     if (fid == -1)
         LOG_AND_RETURN(-1, "%s failed", __FUNCTION__);
+    if (!filters[fid])
+        filters[fid] = new SFilter();
+    if (!filters[fid])
+        LOG_AND_RETURN(-1, "%s failed for id %d", __FUNCTION__, fid);
 
-    mutex_lock(&filters_mutex);
     f = filters[fid];
+    std::lock_guard<SMutex> lock2(f->mutex);
     f->id = fid;
     f->opaque = opaque;
     f->pid = pid;
@@ -290,8 +294,6 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
         }
     set_filter_flags(fid, flags);
     set_filter_mask(fid, filter, mask);
-    mutex_unlock(&filters_mutex);
-    mutex_unlock(&f->mutex);
 
     LOG("new filter %d added for adapter %d, pid %d, flags %d, mask_len %d, "
         "master_filter %d",
@@ -370,7 +372,7 @@ int del_filter(int id) {
     f->pid = -1;
     f->enabled = 0;
     mutex_unlock(&filters_mutex);
-    mutex_destroy(&f->mutex);
+    mutex_unlock(&f->mutex);
     LOG("deleted filter %d, ad %d, pid %d, max filters %d", id, adapter, pid,
         nfilters);
     return 0;
@@ -485,10 +487,11 @@ int match_filter(SFilter *f, unsigned char *b) {
 
 void process_filter(SFilter *f, unsigned char *b) {
     int match = 0;
-    if (!f || !f->enabled || mutex_lock(&f->mutex)) {
+    if (!f || !f->enabled) {
         LOGM("%s: filter %d not enabled", __FUNCTION__, f->id);
         return;
     }
+    std::lock_guard<SMutex> lock(f->mutex);
 
     if ((b[1] & 0x40)) {
         if (!(f->flags & FILTER_EMM))
@@ -525,8 +528,6 @@ void process_filter(SFilter *f, unsigned char *b) {
             }
         }
     }
-
-    mutex_unlock(&f->mutex);
 }
 void process_filters(adapter *ad, unsigned char *b, SPid *p) {
     int pid = PID_FROM_TS(b);
@@ -849,7 +850,7 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
     }
 
     if (!cws[i]) {
-        cws[i] = (SCW *)_malloc(sizeof(SCW));
+        cws[i] = new SCW();
         if (!cws[i]) {
             LOG("CWS: could not allocate memory");
             mutex_unlock(&cws_mutex);
@@ -1033,6 +1034,7 @@ int pmt_decrypt_stream(adapter *ad) {
         if (pmts[pmt_id[i]] && pmts[pmt_id[i]]->batch != NULL)
             pmts[pmt_id[i]]->batch = NULL;
     }
+    pmt->batch = NULL;
     return 0;
 }
 
@@ -1307,12 +1309,19 @@ int pmt_process_stream(adapter *ad) {
 int pmt_add(int adapter, int sid, int pmt_pid) {
 
     SPMT *pmt;
-    int i = add_new_lock((void **)pmts, MAX_PMT, sizeof(SPMT), &pmts_mutex);
-    if (i == -1 || !pmts[i]) {
+    std::lock_guard<SMutex> lock(pmts_mutex);
+    int i = find_new_id((void **)pmts, MAX_PMT);
+    if (i == -1) {
         LOG_AND_RETURN(-1, "PMT buffer is full, could not add new pmts");
     }
+    if (!pmts[i]) {
+        pmts[i] = new SPMT();
+    }
+    if (!pmts[i])
+        LOG_AND_RETURN(-1, "%s failed for id %d", __FUNCTION__, i);
 
     pmt = pmts[i];
+    std::lock_guard<SMutex> lock2(pmt->mutex);
 
     pmt->parity = -1;
     pmt->sid = sid;
@@ -1333,6 +1342,7 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
     pmt->opaque = NULL;
     pmt->first_active_pid = -1;
     pmt->ca_mask = pmt->disabled_ca_mask = 0;
+    pmt->batch = NULL;
     memset(pmt->name, 0, sizeof(pmt->name));
     memset(pmt->provider, 0, sizeof(pmt->provider));
     pmt->caids = 0;
@@ -1340,7 +1350,6 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
     if (i >= npmts)
         npmts = i + 1;
 
-    mutex_unlock(&pmt->mutex);
     LOG("returning new pmt %d for adapter %d, pmt pid %d, sid %d %04X", i,
         adapter, pmt_pid, sid, sid);
 
@@ -1358,12 +1367,11 @@ int pmt_del(int id) {
 #ifndef DISABLE_TABLES
     close_pmt_for_cas(get_adapter(pmt->adapter), pmt);
 #endif
-
-    mutex_lock(&pmt->mutex);
+    std::lock_guard<SMutex> lock(pmts_mutex);
     if (!pmt->enabled) {
-        mutex_unlock(&pmt->mutex);
         return 0;
     }
+    std::lock_guard<SMutex> lock2(pmt->mutex);
     LOG("deleting PMT %d, master PMT %d, name %s ", pmt->id, pmt->master_pmt,
         pmt->name);
     master_pmt = pmt->master_pmt;
@@ -1372,8 +1380,6 @@ int pmt_del(int id) {
         clear_cw_for_pmt(master_pmt, 0);
         clear_cw_for_pmt(master_pmt, 1);
     }
-
-    pmt->enabled = 0;
 
     pmt->sid = 0;
     pmt->pid = 0;
@@ -1384,14 +1390,14 @@ int pmt_del(int id) {
 
     for (i = 0; i < pmt->caids; i++)
         if (pmt->ca[i]) {
-            _free(pmt->ca[i]);
+            free(pmt->ca[i]);
             pmt->ca[i] = NULL;
         }
     pmt->caids = 0;
 
     for (i = 0; i < pmt->stream_pids; i++)
         if (pmt->stream_pid[i]) {
-            _free(pmt->stream_pid[i]);
+            free(pmt->stream_pid[i]);
             pmt->stream_pid[i] = NULL;
         }
 
@@ -1402,8 +1408,8 @@ int pmt_del(int id) {
         if (pmts[i] && pmts[i]->enabled)
             break;
     npmts = i + 1;
+    pmt->enabled = 0;
 
-    mutex_destroy(&pmt->mutex);
     return 0;
 }
 
@@ -1757,9 +1763,12 @@ void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid, uint8_t *data,
 
     LOG("PMT %d PI pos %d caid %04X => pid %04X (%d), index %d", pmt->id,
         pmt->caids + 1, caid, capid, capid, pmt->caids);
-    if (ensure_allocated((void **)pmt->ca + pmt->caids, sizeof(SPMTCA), 1, len,
-                         1))
+
+    pmt->ca[pmt->caids] = (SPMTCA *)malloc(sizeof(SPMTCA) + len);
+    if (!pmt->ca[pmt->caids]) {
+        LOG("Failed to allocate memory for CAID %04X", caid);
         return;
+    }
 
     pmt->ca[pmt->caids]->id = caid;
     pmt->ca[pmt->caids]->pid = capid;
@@ -1775,15 +1784,6 @@ void pmt_add_descriptor(SPMT *pmt, int stream_id, unsigned char *desc) {
     int i, es_len;
     int new_desc_id = desc[0];
     int new_desc_len = desc[1] + 2;
-
-    // allocate memory for the streampid and descriptor
-    if (ensure_allocated(
-            (void **)pmt->stream_pid + stream_id, sizeof(SStreamPid), 1,
-            pmt->stream_pid[stream_id]
-                ? new_desc_len + pmt->stream_pid[stream_id]->desc_len
-                : new_desc_len,
-            20))
-        return;
 
     SStreamPid *sp = pmt->stream_pid[stream_id];
     // do not add an already existing descriptor
@@ -1805,6 +1805,16 @@ void pmt_add_descriptors(SPMT *pmt, int stream_id, unsigned char *es, int len) {
 
     int es_len, caid, capid;
     int i;
+
+    if (!pmt->stream_pid[stream_id]) {
+        pmt->stream_pid[stream_id] = (SStreamPid *)malloc(1500);
+        memset(pmt->stream_pid[stream_id], 0, 1500);
+    }
+
+    if (!pmt->stream_pid[stream_id]) {
+        LOG("Failed to allocate memory for stream pid %d", stream_id);
+        return;
+    }
 
     for (i = 0; i < len; i += es_len + 2) // reading program info
     {
@@ -1851,11 +1861,11 @@ int pmt_add_stream_pid(SPMT *pmt, int pid, int type, int is_audio, int is_video,
         LOG_AND_RETURN(-1, "PMT %d, max number of stream pids reached (%d)",
                        pmt->id, pmt->stream_pids);
 
-    if (ensure_allocated((void **)pmt->stream_pid + pmt->stream_pids,
-                         sizeof(SStreamPid), 1, es_len, 8))
-        LOG_AND_RETURN(-1,
-                       "PMT %d: could not allocate memory for stream pid %d",
-                       pmt->id, pid);
+    if (!pmt->stream_pid[pmt->stream_pids]) {
+        pmt->stream_pid[pmt->stream_pids] = (SStreamPid *)malloc(1500);
+        memset(pmt->stream_pid[pmt->stream_pids], 0, 1500);
+    }
+
     pmt->stream_pid[pmt->stream_pids]->type = type;
     pmt->stream_pid[pmt->stream_pids]->pid = pid;
     pmt->stream_pid[pmt->stream_pids]->is_audio = is_audio;
@@ -2234,37 +2244,31 @@ void free_all_pmts() {
     int i, j;
     for (i = 0; i < MAX_PMT; i++) {
         if (pmts[i]) {
-            mutex_destroy(&pmts[i]->mutex);
             for (j = 0; j < pmts[i]->caids; j++)
                 if (pmts[i]->ca[j])
-                    _free(pmts[i]->ca[j]);
+                    free(pmts[i]->ca[j]);
             pmts[i]->caids = 0;
 
             for (j = 0; j < pmts[i]->stream_pids; j++)
                 if (pmts[i]->stream_pid[j])
-                    _free(pmts[i]->stream_pid[j]);
+                    free(pmts[i]->stream_pid[j]);
             pmts[i]->stream_pids = 0;
 
-            _free(pmts[i]->batch);
-            _free(pmts[i]);
+            delete pmts[i];
             pmts[i] = NULL;
         }
     }
-    mutex_destroy(&pmts_mutex);
 }
 
 void free_filters() {
     int i;
     for (i = 0; i < MAX_FILTERS; i++)
         if (filters[i]) {
-            mutex_destroy(&filters[i]->mutex);
-            _free(filters[i]);
+            delete filters[i];
         }
 }
 
 int pmt_init() {
-    mutex_init(&pmts_mutex);
-    mutex_init(&cws_mutex);
     init_algo();
 #ifndef DISABLE_TABLES
     tables_init();
@@ -2278,8 +2282,6 @@ int pmt_destroy() {
 #endif
     free_all_pmts();
     free_filters();
-    mutex_destroy(&cws_mutex);
-    mutex_destroy(&pmts_mutex);
     return 0;
 }
 

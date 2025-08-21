@@ -1,7 +1,6 @@
 #ifndef FIFO_H
 #define FIFO_H
 
-#include "utils/mutex.h"
 #include <stdint.h>
 
 // Circular Buffer/Ring Buffer implementation:

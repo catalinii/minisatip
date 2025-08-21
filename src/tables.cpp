@@ -67,7 +67,7 @@ int add_ca(SCA_op *op) {
             mutex_unlock(&ca_mutex);
         }
     if (i == MAX_CA)
-        LOG_AND_RETURN(0, "No _free CA slots for %p", ca);
+        LOG_AND_RETURN(0, "No free CA slots for %p", ca);
     new_ca = i;
 
     ca[new_ca].enabled = 1;
@@ -357,7 +357,6 @@ int tables_close_device(adapter *ad) {
 }
 
 int tables_init() {
-    mutex_init(&ca_mutex);
 #ifndef DISABLE_DVBCA
     dvbca_init();
 #endif

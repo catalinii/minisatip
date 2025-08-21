@@ -45,7 +45,7 @@
 #include "stream.h"
 #include "tables.h"
 #include "utils.h"
-#include "utils/alloc.h"
+
 #include "utils/fifo.h"
 #include "utils/ticks.h"
 #include <linux/dvb/ca.h>
@@ -426,7 +426,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     }
 
     if (pos == -1) {
-        LOG("No _free slot found for pmt %d on DDCI %d", pmt->id, d->id);
+        LOG("No free slot found for pmt %d on DDCI %d", pmt->id, d->id);
         mutex_unlock(&d->mutex);
         return TABLES_RESULT_ERROR_RETRY;
     }
@@ -901,15 +901,12 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
     unsigned char psi[MAX_CHANNELS_ON_CI * 1500];
     uint16_t ad_dd_pids[8192], dd_ad_pids[8192];
 
-    if (mutex_lock(&d->mutex))
-        return 0;
+    std::lock_guard<SMutex> lock(d->mutex);
     if (!d->enabled) {
-        mutex_unlock(&d->mutex);
         return 0;
     }
 
     if (!ad2) {
-        mutex_unlock(&d->mutex);
         return 0;
     }
     // step 0 - create ad_dd_pid and dd_ad_pid mapping
@@ -927,7 +924,6 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
 
     if (ec == 0) {
         d->read_index[ad->id] = 0;
-        mutex_unlock(&d->mutex);
         return 0;
     }
     // Reset to write index to prevent reading old data from the FIFO
@@ -991,8 +987,6 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
 
     // move back TS packets from the DDCI out buffer to the adapter buffer
     push_ts_to_adapter(d, ad, dd_ad_pids);
-
-    mutex_unlock(&d->mutex);
     return 0;
 }
 
@@ -1083,12 +1077,11 @@ int ddci_post_init(adapter *ad) {
 ddci_device_t *ddci_alloc(int id) {
     ddci_device_t *d;
 
-    d = ddci_devices[id] = (ddci_device_t *)_malloc(sizeof(ddci_device_t));
+    d = ddci_devices[id] = new ddci_device_t();
     if (!d) {
         return NULL;
     }
     create_fifo(&d->fifo, DDCI_BUFFER);
-    mutex_init(&d->mutex);
     d->id = id;
     create_hash_table(&d->mapping, 100);
     return d;

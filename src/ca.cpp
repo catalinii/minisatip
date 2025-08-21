@@ -33,7 +33,6 @@ alternative source
 #include "search.h"
 #include "socketworks.h"
 #include "tables.h"
-#include "utils/alloc.h"
 #include <linux/dvb/ca.h>
 
 #include "api/symbols.h"
@@ -677,7 +676,7 @@ static void element_invalidate(struct cc_ctrl_data *cc_data, unsigned int id) {
 
     e = element_get(cc_data, id);
     if (e) {
-        _free(e->data);
+        free(e->data);
         memset(e, 0, sizeof(struct element));
     }
 }
@@ -703,8 +702,8 @@ static int element_set(struct cc_ctrl_data *cc_data, unsigned int id,
         return 0;
     }
 
-    _free(e->data);
-    e->data = (uint8_t *)_malloc(size);
+    free(e->data);
+    e->data = (uint8_t *)malloc(size);
     memcpy(e->data, data, size);
     e->size = size;
     e->valid = 1;
@@ -1899,7 +1898,7 @@ static int CIPLUS_APP_OPRF_handler(ca_session_t *session, int tag,
         int cicam_original_network_id = (data[1] << 8) + data[2];
         char lang_code[4] = {0};
         strncpy(lang_code, (char *)data + 10, 3);
-        char *profile_name = (char *)_malloc(data[13]);
+        char *profile_name = (char *)malloc(data[13]);
         strncpy(profile_name, (char *)data + 14, data[13]);
 
         LOG("Received operator_info APDU: \n"
@@ -1914,7 +1913,7 @@ static int CIPLUS_APP_OPRF_handler(ca_session_t *session, int tag,
         // Initiate a profile search
         ca_write_apdu(session, CIPLUS_TAG_OPERATOR_SEARCH_START,
                       data_oprf_search, sizeof(data_oprf_search));
-        _free(profile_name);
+        free(profile_name);
         break;
     }
     case CIPLUS_TAG_OPERATOR_TUNE: {
@@ -2882,7 +2881,7 @@ int ca_init_en50221(ca_device_t *d) {
 }
 
 ca_device_t *alloc_ca_device() {
-    ca_device_t *d = (ca_device_t *)_malloc(sizeof(ca_device_t));
+    ca_device_t *d = (ca_device_t *)malloc(sizeof(ca_device_t));
     if (!d) {
         LOG_AND_RETURN(NULL, "Could not allocate memory for CA device");
     }

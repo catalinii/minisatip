@@ -28,7 +28,7 @@
 #include "socketworks.h"
 #include "tables.h"
 #include "utils.h"
-#include "utils/alloc.h"
+
 #include "utils/ticks.h"
 
 #include <arpa/inet.h>
@@ -593,7 +593,6 @@ void init_dvbapi() {
                               (socket_action)connect_dvbapi);
     sockets_timeout(poller_sock, sec * 1000); // try to connect every 1s
     set_sockets_rtime(poller_sock, -sec * 1000);
-    mutex_init(&keys_mutex);
 }
 
 void send_client_info(sockets *s) {
@@ -697,28 +696,22 @@ int keys_add(int i, int adapter, int pmt_id) {
 
     SKey *k;
     SPMT *pmt = get_pmt(pmt_id);
+    std::lock_guard<SMutex> lock(keys_mutex);
+
     if (!pmt)
         LOG_AND_RETURN(-1, "%s: PMT %d not found ", __FUNCTION__, pmt_id);
-    if (i == -1)
-        i = add_new_lock((void **)keys, MAX_KEYS, sizeof(SKey), &keys_mutex);
-    else {
-        if (keys[i])
-            mutex_lock(&keys[i]->mutex);
-        else {
-            keys[i] = (SKey *)_malloc(sizeof(SKey));
-            if (!keys[i])
-                LOG_AND_RETURN(-1, "Could not allocate memory for the key %d",
-                               i);
-            memset(keys[i], 0, sizeof(SKey));
-            mutex_init(&keys[i]->mutex);
-            mutex_lock(&keys[i]->mutex);
-        }
+    if (i == -1) {
+        i = find_new_id((void **)keys, MAX_KEYS);
+        if (i == -1)
+            LOG_AND_RETURN(-1, "%s: no free key id", __FUNCTION__);
     }
-    if (i == -1 || !keys[i]) {
+    if (!keys[i])
+        keys[i] = new SKey();
+    if (!keys[i])
         LOG_AND_RETURN(-1, "Key buffer is full, could not add new keys");
-    }
 
     k = keys[i];
+    mutex_lock(&k->mutex);
 
     k->parity = -1;
     k->sid = pmt->sid;
@@ -807,7 +800,7 @@ int keys_del(int i) {
     LOG("Stopped key %d, active keys %d, sock %d, pmt pid %d, sid %04X, op %s",
         i, ek, sock, pmt_pid, sid, msg);
 
-    mutex_destroy(&k->mutex);
+    mutex_unlock(&k->mutex);
 
     return 0;
 }
@@ -902,11 +895,9 @@ void free_all_keys(void) {
     int i;
     for (i = 0; i < MAX_KEYS; i++) {
         if (keys[i]) {
-            mutex_destroy(&keys[i]->mutex);
-            _free(keys[i]);
+            delete keys[i];
         }
     }
-    mutex_destroy(&keys_mutex);
 }
 
 _symbols dvbapi_sym[] = {

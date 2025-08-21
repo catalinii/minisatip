@@ -26,7 +26,7 @@
 #include "pmt.h"
 #include "socketworks.h"
 #include "stream.h"
-#include "utils/alloc.h"
+
 #include "utils/ticks.h"
 #include "utils/uuid.h"
 
@@ -565,7 +565,7 @@ char *get_command_line_string(int argc, char *argv[]) {
         len += strlen(argv[i]) + 1;
     }
 
-    char *dest = (char *)_malloc(len);
+    char *dest = (char *)malloc(len);
     memset(dest, 0, sizeof(len));
     for (i = 0; i < argc; i++) {
         strcat(dest, argv[i]);
@@ -843,7 +843,7 @@ void set_options(int argc, char *argv[]) {
 
         case PLAYLIST_OPT: {
             if (strlen(optarg) < 1000) {
-                opts.playlist = (char *)_malloc(strlen(optarg) + 200);
+                opts.playlist = (char *)malloc(strlen(optarg) + 200);
                 if (opts.playlist)
                     sprintf(opts.playlist,
                             "<satip:X_SATIPM3U "
@@ -1076,11 +1076,11 @@ void set_options(int argc, char *argv[]) {
         lip = opts.bind;
 
     if (!opts.http_host) {
-        opts.http_host = (char *)_malloc(MAX_HOST);
+        opts.http_host = (char *)malloc(MAX_HOST);
         sprintf(opts.http_host, "%s:%u", lip, opts.http_port);
     }
 
-    opts.rtsp_host = (char *)_malloc(MAX_HOST);
+    opts.rtsp_host = (char *)malloc(MAX_HOST);
     sprintf(opts.rtsp_host, "%s:%d", lip, opts.rtsp_port);
 
     LOG("Listening configuration RTSP:%s (bind address: %s), HTTP:%s (bind "
@@ -1092,20 +1092,20 @@ void set_options(int argc, char *argv[]) {
         : opts.bind    ? opts.bind
                        : "(null)");
 
-    opts.datetime_compile = (char *)_malloc(64);
+    opts.datetime_compile = (char *)malloc(64);
     sprintf(opts.datetime_compile, "%s | %s", __DATE__, __TIME__);
 
     time(&opts.start_time);
     struct tm *info;
     info = localtime(&opts.start_time);
-    opts.datetime_start = (char *)_malloc(32);
+    opts.datetime_start = (char *)malloc(32);
     sprintf(opts.datetime_start, "%s ", asctime(info));
     opts.datetime_start[24] = ' ';
     opts.datetime_start[25] = '\0';
 
-    opts.datetime_current = (char *)_malloc(32);
+    opts.datetime_current = (char *)malloc(32);
     sprintf(opts.datetime_current, "%s", " ");
-    opts.time_running = (char *)_malloc(32);
+    opts.time_running = (char *)malloc(32);
     sprintf(opts.time_running, "%s", "0");
 
     opts.run_user = (int)getuid();
@@ -1506,8 +1506,8 @@ int read_http(sockets *s) {
     }
 
     if (strcmp(arg[1], "/state.json") == 0) {
-        char *buf = (char *)_malloc(JSON_STATE_MAXLEN);
-        char *sbuf = (char *)_malloc(JSON_STRING_MAXLEN);
+        char *buf = (char *)malloc(JSON_STATE_MAXLEN);
+        char *sbuf = (char *)malloc(JSON_STRING_MAXLEN);
         memset(sbuf, 0, JSON_STRING_MAXLEN);
         int len =
             get_json_state(buf, JSON_STATE_MAXLEN, sbuf, JSON_STRING_MAXLEN);
@@ -1517,13 +1517,13 @@ int read_http(sockets *s) {
                      "Connection: close\r\n"
                      "Access-Control-Allow-Origin: *"),
             buf, 0, len);
-        _free(buf);
-        _free(sbuf);
+        free(buf);
+        free(sbuf);
         return 0;
     }
 
     if (strcmp(arg[1], "/bandwidth.json") == 0) {
-        char *buf = (char *)_malloc(JSON_BANDWIDTH_MAXLEN);
+        char *buf = (char *)malloc(JSON_BANDWIDTH_MAXLEN);
         int len = get_json_bandwidth(buf, JSON_BANDWIDTH_MAXLEN);
         http_response(
             s, 200,
@@ -1531,7 +1531,7 @@ int read_http(sockets *s) {
                      "Connection: close\r\n"
                      "Access-Control-Allow-Origin: *"),
             buf, 0, len);
-        _free(buf);
+        free(buf);
         return 0;
     }
 
@@ -1803,7 +1803,6 @@ int main(int argc, char *argv[]) {
     thread_index = 0;
     thread_info[thread_index].tid = main_tid;
     strcpy(thread_info[thread_index].thread_name, "main");
-    init_alloc();
     set_options(argc, argv);
     if ((rv = init_utils(argv[0]))) {
         LOG0("init_utils failed with %d", rv);
@@ -1919,7 +1918,7 @@ int main(int argc, char *argv[]) {
 #endif
     LOG0("Closing...");
     free_all();
-    _free(opts.command_line);
+    free(opts.command_line);
     LOG0("Exit OK.");
     if (opts.slog)
         closelog();

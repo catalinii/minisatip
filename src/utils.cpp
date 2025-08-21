@@ -26,7 +26,7 @@
 #include "minisatip.h"
 #include "pmt.h"
 #include "socketworks.h"
-#include "utils/alloc.h"
+
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <dirent.h>
@@ -510,34 +510,22 @@ void set_thread_prio(pthread_t tid, int prio) {
 
 struct struct_array {
     char enabled;
-    SMutex mutex;
 };
 
-// leaves sa[i]->mutex locked
-int add_new_lock(void **arr, int count, int size, SMutex *mutex) {
+// Find the first free slot in the array and return the index or -1 if no free
+// element found it requires first element to be "char enabled" to test if the
+// element is free does not handle the locking which should be handled by the
+// caller
+int find_new_id(void **arr, int count) {
     int i;
     struct struct_array **sa = (struct struct_array **)arr;
-    mutex_init(mutex);
-    mutex_lock(mutex);
     for (i = 0; i < count; i++)
         if (!sa[i] || !sa[i]->enabled) {
             if (!sa[i]) {
-                sa[i] = (struct struct_array *)_malloc(size);
-                if (!sa[i]) {
-                    mutex_unlock(mutex);
-                    LOG("Could not allocate memory for %p index %d", arr, i);
-                    return -1;
-                }
-                memset(sa[i], 0, size);
+                return i;
             }
-            mutex_init(&sa[i]->mutex);
-            // coverity[use : FALSE]
-            mutex_lock(&sa[i]->mutex);
-            sa[i]->enabled = 1;
-            mutex_unlock(mutex);
             return i;
         }
-    mutex_unlock(mutex);
     return -1;
 }
 
@@ -546,17 +534,13 @@ int join_pos = 0;
 SMutex join_lock;
 
 void add_join_thread(pthread_t t) {
-    mutex_init(&join_lock);
-    mutex_lock(&join_lock);
+    std::lock_guard<SMutex> lock(join_lock);
     join_th[join_pos++] = t;
     LOG("%s: pthread %lx", __FUNCTION__, t);
-    mutex_unlock(&join_lock);
 }
 
 void join_thread() {
     int i, rv;
-    if (!join_lock.enabled)
-        return;
     mutex_lock(&join_lock);
     //	LOG("starting %s", __FUNCTION__);
     for (i = 0; i < join_pos; i++) {
