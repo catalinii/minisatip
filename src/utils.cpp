@@ -62,8 +62,6 @@
 
 char pn[256];
 
-SMutex utils_mutex;
-
 int split(char **rv, char *s, int lrv, char sep) {
     int i = 0, j = 0;
 
@@ -541,7 +539,7 @@ void add_join_thread(pthread_t t) {
 
 void join_thread() {
     int i, rv;
-    mutex_lock(&join_lock);
+    std::lock_guard<SMutex> lock(join_lock);
     //	LOG("starting %s", __FUNCTION__);
     for (i = 0; i < join_pos; i++) {
         LOGM("Joining thread %lx", join_th[i]);
@@ -550,7 +548,6 @@ void join_thread() {
                 strerror(rv));
     }
     join_pos = 0;
-    mutex_unlock(&join_lock);
 }
 
 int init_utils(char *arg0) {

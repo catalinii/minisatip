@@ -90,10 +90,9 @@ int getItemLen(SHashTable *hash, uint64_t key) {
 int getItemSize(SHashTable *hash, uint64_t key) {
     int i;
     int result = 0;
-    mutex_lock(&hash->mutex);
+    std::lock_guard<SMutex> lock(hash->mutex);
     i = get_index_hash(hash, key);
     result = i >= 0 ? hash->items[i].max_size : 0;
-    mutex_unlock(&hash->mutex);
     return result;
 }
 
@@ -118,7 +117,7 @@ int setItemSize(SHashTable *hash, SHashItem *s, uint32_t max_size, int copy) {
 }
 
 int _setItem(SHashTable *hash, uint64_t key, void *data, int len, int copy) {
-    mutex_lock(&hash->mutex);
+    std::lock_guard<SMutex> lock(hash->mutex);
     SHashItem *s = NULL;
     int i = get_index_hash(hash, key);
     if (i >= 0)
@@ -139,12 +138,10 @@ int _setItem(SHashTable *hash, uint64_t key, void *data, int len, int copy) {
     }
 
     if (!s) {
-        mutex_unlock(&hash->mutex);
         LOG_AND_RETURN(-1, "%s failed for key %jx", __FUNCTION__, key);
     }
 
     if (setItemSize(hash, s, len, copy)) {
-        mutex_unlock(&hash->mutex);
         return 1;
     }
 
@@ -156,7 +153,6 @@ int _setItem(SHashTable *hash, uint64_t key, void *data, int len, int copy) {
         s->data = data;
 
     if (hash->resize) {
-        mutex_unlock(&hash->mutex);
         return 0;
     }
     if (++hash->len > hash->size / 2) {
@@ -166,7 +162,6 @@ int _setItem(SHashTable *hash, uint64_t key, void *data, int len, int copy) {
 
         // Do not fail, hash table full will fail before this code.
         if (_create_hash_table(&ht, new_size, hash->file, hash->line)) {
-            mutex_unlock(&hash->mutex);
             LOG_AND_RETURN(0, "Resizing hash_table at %p from %d to %d", hash,
                            hash->size, new_size);
         }
@@ -177,7 +172,6 @@ int _setItem(SHashTable *hash, uint64_t key, void *data, int len, int copy) {
         memcpy(hash, &ht, sizeof(SHashTable));
         hash->resize = 0;
     }
-    mutex_unlock(&hash->mutex);
     return 0;
 }
 
@@ -195,11 +189,10 @@ void copy_hash_table(SHashTable *s, SHashTable *d) {
 }
 
 int delItem(SHashTable *hash, uint64_t key) {
-    mutex_lock(&hash->mutex);
+    std::lock_guard<SMutex> lock(hash->mutex);
 
     int empty = get_index_hash(hash, key);
     if (empty == -1) {
-        mutex_unlock(&hash->mutex);
         return 0;
     }
     int pos;
@@ -220,7 +213,6 @@ int delItem(SHashTable *hash, uint64_t key) {
     hash->len--;
     s->len = 0;
     s->key = UNUSED_KEY;
-    mutex_unlock(&hash->mutex);
     return 0;
 }
 
@@ -237,7 +229,7 @@ void free_hash(SHashTable *hash) {
     if (hash->init != 1)
         return;
 
-    mutex_lock(&hash->mutex);
+    std::lock_guard<SMutex> lock(hash->mutex);
     for (i = 0; i < hash->size; i++)
         if (hash->items[i].is_alloc) {
             free(hash->items[i].data);
@@ -246,8 +238,5 @@ void free_hash(SHashTable *hash) {
     free(items);
     hash->items = NULL;
     hash->size = 0;
-
-    // mutex_unlock(&hash->mutex);
-    mutex_unlock(&hash->mutex); // unlock and destroy mutex
     return;
 }

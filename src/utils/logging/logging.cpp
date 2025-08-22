@@ -28,7 +28,7 @@
 #include <sys/time.h>
 #include <syslog.h>
 
-pthread_mutex_t log_mutex;
+SMutex log_mutex;
 SThreadInfo thread_info[135];
 __thread int thread_index;
 
@@ -42,14 +42,13 @@ void _log(const char *file, int line, const char *fmt, ...) {
 
     /* Check if the message should be logged */
     stid[0] = 0;
-    pthread_mutex_lock(&log_mutex);
+    std::lock_guard<SMutex> lock(log_mutex);
     snprintf(stid, sizeof(stid) - 1, " %s",
              thread_info[thread_index].thread_name);
     stid[sizeof(stid) - 1] = 0;
 
     if (!fmt) {
         printf("NULL format at %s:%d !!!!!", file, line);
-        pthread_mutex_unlock(&log_mutex);
         return;
     }
     idx = 1 - idx;
@@ -101,7 +100,6 @@ void _log(const char *file, int line, const char *fmt, ...) {
             puts(output[idx]);
     }
     fflush(stdout);
-    pthread_mutex_unlock(&log_mutex);
 }
 
 char *get_current_timestamp_log(void) {

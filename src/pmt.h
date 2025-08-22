@@ -115,7 +115,6 @@ typedef struct struct_pmt_ca {
 
 typedef struct struct_pmt {
     char enabled;
-    SMutex mutex;
     int sid;
     int pid;
     int pcr_pid;
@@ -157,7 +156,6 @@ typedef struct struct_pmt {
 
 typedef struct struct_filter {
     char enabled;
-    SMutex mutex;
     int id;
     int pid;
     int adapter;

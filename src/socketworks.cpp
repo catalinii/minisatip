@@ -495,8 +495,6 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
     if (!s[i]) {
         s[i] = new sockets();
     }
-    if (!s[i])
-        LOG_AND_RETURN(-1, "%s failed for id %d", __FUNCTION__, i);
 
     ss = s[i];
     ss->enabled = 1;

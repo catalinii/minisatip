@@ -44,10 +44,10 @@ int http_client_add() {
     h = httpc[i];
     h->id = i;
     h->opaque = NULL;
+    h->enabled = 1;
     memset(h->host, 0, sizeof(h->host));
     memset(h->req, 0, sizeof(h->req));
     h->port = 0;
-    mutex_unlock(&h->mutex);
     LOG("returning new http client %d", i);
 
     return i;

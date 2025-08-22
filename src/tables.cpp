@@ -58,13 +58,12 @@ SMutex ca_mutex;
 
 int add_ca(SCA_op *op) {
     int i, new_ca;
+    std::lock_guard<SMutex> lock(ca_mutex);
     del_ca(op);
     for (i = 0; i < MAX_CA; i++)
         if (!ca[i].enabled) {
-            mutex_lock(&ca_mutex);
             if (!ca[i].enabled)
                 break;
-            mutex_unlock(&ca_mutex);
         }
     if (i == MAX_CA)
         LOG_AND_RETURN(0, "No free CA slots for %p", ca);
@@ -79,14 +78,13 @@ int add_ca(SCA_op *op) {
         nca = new_ca + 1;
 
     init_ca_device(&ca[new_ca]);
-    mutex_unlock(&ca_mutex);
     return new_ca;
 }
 extern SPMT *pmts[];
 void del_ca(SCA_op *op) {
     int i, k, mask = 1;
     adapter *ad;
-    mutex_lock(&ca_mutex);
+    std::lock_guard<SMutex> lock(ca_mutex);
 
     for (i = 0; i < MAX_CA; i++) {
         if (ca[i].enabled) {
@@ -110,11 +108,6 @@ void del_ca(SCA_op *op) {
     while (--i >= 0 && !ca[i].enabled)
         ;
     nca = i + 1;
-
-    //	if (nca == 1)
-    //		nca = 0;
-
-    mutex_unlock(&ca_mutex);
 }
 
 void tables_ca_ts(adapter *ad) {

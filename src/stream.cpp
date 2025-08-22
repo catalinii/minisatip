@@ -343,9 +343,9 @@ int close_stream(int i) {
     if (i < 0 || i >= MAX_STREAMS || !st[i] || !st[i]->enabled) {
         return 0;
     }
-    mutex_lock(&sid->mutex);
 
     sid = st[i];
+    std::lock_guard<SMutex> lock2(st[i]->mutex);
     sockets_set_flush_enqued_data(sid->rsock_id);
     sid->enabled = 0;
     sid->start_streaming = 0;
@@ -354,21 +354,19 @@ int close_stream(int i) {
     sid->adapter = -1;
     if (sid->type == STREAM_RTSP_UDP && sid->rsock_id > 0) {
         LOG("Closing RTP sock %d handle %d", sid->rsock_id, sid->rsock);
-        sockets_del(sid->rsock_id);
+        sockets_force_close(sid->rsock_id);
     }
     sid->rsock = -1;
 
-    mutex_unlock(&sid->mutex);
-
     if (sid->rtcp_sock > 0 || sid->rtcp > 0) {
         LOG("Closing RTCP sock %d handle %d", sid->rtcp_sock, sid->rtcp);
-        sockets_del(sid->rtcp_sock);
+        sockets_force_close(sid->rtcp_sock);
         sid->rtcp_sock = -1;
         sid->rtcp = -1;
     }
 
     if (sid->st_sock > 0) {
-        sockets_del(sid->st_sock);
+        sockets_force_close(sid->st_sock);
         sid->st_sock = -1;
     }
 
@@ -535,8 +533,6 @@ int streams_add() {
         LOG_AND_RETURN(-1, "streams_add failed");
     if (!st[i])
         st[i] = new streams();
-    if (!st[i])
-        LOG_AND_RETURN(-1, "streams_add failed for %d", i);
 
     ss = st[i];
     std::lock_guard<SMutex> lock2(ss->mutex);
@@ -1117,9 +1113,9 @@ int read_dmx(sockets *s) {
 
     ad->flush = 0;
     ls = lock_streams_for_adapter(ad->id);
-    adapter_lock(ad->id);
+    mutex_lock(&ad->mutex);
     process_dmx(s);
-    adapter_unlock(ad->id);
+    mutex_unlock(&ad->mutex);
     lse = unlock_streams_for_adapter(ad->id);
     if (ls != lse)
         LOG("leak detected %d %d!!! ", ls, lse);
@@ -1182,7 +1178,7 @@ int stream_timeout(sockets *s) {
     s->rtime = ctime;
 
     if ((sid = get_sid(s->sid)) && sid->type != STREAM_HTTP) {
-        mutex_lock(&sid->mutex);
+        std::lock_guard<SMutex> lock(sid->mutex);
         rttime = sid->rtcp_wtime, rtime = sid->wtime;
 
         if (sid->do_play && ctime - rtime > 1000) {
@@ -1194,7 +1190,6 @@ int stream_timeout(sockets *s) {
         }
         if (sid->do_play && ctime - rttime >= 200)
             send_rtcp(sid->sid, ctime);
-        mutex_unlock(&sid->mutex);
         // check stream timeout, and allow 10s more to respond
         if ((sid->timeout > 0 && (ctime - sid->rtime > sid->timeout + 10000)) ||
             (sid->timeout == 1)) {

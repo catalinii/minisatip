@@ -264,11 +264,8 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
         LOG_AND_RETURN(-1, "%s failed", __FUNCTION__);
     if (!filters[fid])
         filters[fid] = new SFilter();
-    if (!filters[fid])
-        LOG_AND_RETURN(-1, "%s failed for id %d", __FUNCTION__, fid);
 
     f = filters[fid];
-    std::lock_guard<SMutex> lock2(f->mutex);
     f->id = fid;
     f->opaque = opaque;
     f->pid = pid;
@@ -277,6 +274,7 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
     reset_filter_data(f);
     f->next_filter = -1;
     f->adapter = aid;
+    f->enabled = 1;
 
     if (fid >= nfilters)
         nfilters = fid + 1;
@@ -326,12 +324,10 @@ int del_filter(int id) {
         return 0;
 
     f = filters[id];
-    mutex_lock(&f->mutex);
+    std::lock_guard<SMutex> lock(filters_mutex);
     if (!f->enabled) {
-        mutex_unlock(&f->mutex);
         return 0;
     }
-    mutex_lock(&filters_mutex);
     set_filter_flags(id, 0); // remote all pids if any
     pid = f->pid;
     adapter = f->adapter;
@@ -371,8 +367,6 @@ int del_filter(int id) {
     nfilters = i + 1;
     f->pid = -1;
     f->enabled = 0;
-    mutex_unlock(&filters_mutex);
-    mutex_unlock(&f->mutex);
     LOG("deleted filter %d, ad %d, pid %d, max filters %d", id, adapter, pid,
         nfilters);
     return 0;
@@ -491,7 +485,6 @@ void process_filter(SFilter *f, unsigned char *b) {
         LOGM("%s: filter %d not enabled", __FUNCTION__, f->id);
         return;
     }
-    std::lock_guard<SMutex> lock(f->mutex);
 
     if ((b[1] & 0x40)) {
         if (!(f->flags & FILTER_EMM))
@@ -504,7 +497,6 @@ void process_filter(SFilter *f, unsigned char *b) {
         int len = assemble_packet(f, b);
         DEBUGM("assemble_packet returned %d for pid %d", len, f->pid);
         if (!len) {
-            mutex_unlock(&f->mutex);
             return;
         }
         if (!(f->flags & FILTER_EMM))
@@ -534,8 +526,8 @@ void process_filters(adapter *ad, unsigned char *b, SPid *p) {
     SFilter *f;
     int filter = p->filter;
     f = get_filter(filter);
-    //	DEBUGM("got filter %d for pid (%d) %d master filter %d", filter, pid,
-    // p->pid, f ? f->master_filter : -1);
+    //    LOG("got filter %d for pid (%d) %d master filter %d", filter, pid,
+    //    p->pid, f ? f->master_filter : -1);
     if (!f || f->master_filter != filter || pid != f->pid) {
         p->filter = get_pid_filter(ad->id, pid);
         f = get_filter(p->filter);
@@ -780,9 +772,7 @@ void update_cw(SPMT *pmt) {
     pmt->cw = NULL;
     if (cw) {
         int64_t ctime = getTick();
-        mutex_lock(&pmt->mutex);
         pmt->cw = cw;
-        mutex_unlock(&pmt->mutex);
 
         if (!cw->set_time)
             cw->set_time = ctime;
@@ -836,7 +826,7 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
             LOG_AND_RETURN(1, "cw already exist at position %d: %s ", i,
                            cw_to_string(cws[i], buf));
 
-    mutex_lock(&cws_mutex);
+    std::lock_guard<SMutex> lock(cws_mutex);
     for (i = 0; i < MAX_CW; i++)
         if (!cws[i] || (!cws[i]->enabled && cws[i]->algo == algo) ||
             (cws[i]->enabled && cws[i]->algo == algo &&
@@ -845,18 +835,11 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
     if (i == MAX_CW) {
         LOG("CWS is full %d", i);
         dump_cws();
-        mutex_unlock(&cws_mutex);
         return 1;
     }
 
     if (!cws[i]) {
         cws[i] = new SCW();
-        if (!cws[i]) {
-            LOG("CWS: could not allocate memory");
-            mutex_unlock(&cws_mutex);
-            return 2;
-        }
-        memset(cws[i], 0, sizeof(SCW));
         op->create_cw(cws[i]);
     }
     SCW *c = cws[i];
@@ -899,7 +882,6 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
     if (i >= ncws)
         ncws = i + 1;
 
-    mutex_unlock(&cws_mutex);
     LOG("CW %d for PMT %d (%s), master %d, pid %d, for %s parity, %s", c->id,
         pmt_id, pmt->name, master_pmt, pmt->pid,
         c->parity != pmt->parity ? "next" : "current", cw_to_string(c, buf));
@@ -931,10 +913,7 @@ int decrypt_batch(SPMT *pmt) {
     int i;
     SCW *old_cw = pmt->cw;
 
-    mutex_lock(&pmt->mutex);
-
     if (pmt->blen <= 0) {
-        mutex_unlock(&pmt->mutex);
         return 0;
     }
 
@@ -944,7 +923,6 @@ int decrypt_batch(SPMT *pmt) {
                                    : TABLES_CHANNEL_ENCRYPTED);
     if (!pmt->cw) {
         pmt->blen = 0;
-        mutex_unlock(&pmt->mutex);
         return 1;
     }
 
@@ -958,8 +936,6 @@ int decrypt_batch(SPMT *pmt) {
         pmt->batch[i].data[3] &= 0x3F; // clear the encrypted flags
     pmt->blen = 0;
 
-    //	memset(pmt->batch, 0, sizeof(int *) * 128);
-    mutex_unlock(&pmt->mutex);
     return 0;
 }
 
@@ -1034,7 +1010,6 @@ int pmt_decrypt_stream(adapter *ad) {
         if (pmts[pmt_id[i]] && pmts[pmt_id[i]]->batch != NULL)
             pmts[pmt_id[i]]->batch = NULL;
     }
-    pmt->batch = NULL;
     return 0;
 }
 
@@ -1317,11 +1292,8 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
     if (!pmts[i]) {
         pmts[i] = new SPMT();
     }
-    if (!pmts[i])
-        LOG_AND_RETURN(-1, "%s failed for id %d", __FUNCTION__, i);
 
     pmt = pmts[i];
-    std::lock_guard<SMutex> lock2(pmt->mutex);
 
     pmt->parity = -1;
     pmt->sid = sid;
@@ -1371,7 +1343,6 @@ int pmt_del(int id) {
     if (!pmt->enabled) {
         return 0;
     }
-    std::lock_guard<SMutex> lock2(pmt->mutex);
     LOG("deleting PMT %d, master PMT %d, name %s ", pmt->id, pmt->master_pmt,
         pmt->name);
     master_pmt = pmt->master_pmt;
@@ -1381,6 +1352,7 @@ int pmt_del(int id) {
         clear_cw_for_pmt(master_pmt, 1);
     }
 
+    pmt->enabled = 0;
     pmt->sid = 0;
     pmt->pid = 0;
     pmt->adapter = -1;
@@ -1408,7 +1380,6 @@ int pmt_del(int id) {
         if (pmts[i] && pmts[i]->enabled)
             break;
     npmts = i + 1;
-    pmt->enabled = 0;
 
     return 0;
 }
@@ -1764,7 +1735,8 @@ void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid, uint8_t *data,
     LOG("PMT %d PI pos %d caid %04X => pid %04X (%d), index %d", pmt->id,
         pmt->caids + 1, caid, capid, capid, pmt->caids);
 
-    pmt->ca[pmt->caids] = (SPMTCA *)malloc(sizeof(SPMTCA) + len);
+    if (!pmt->ca[pmt->caids])
+        pmt->ca[pmt->caids] = (SPMTCA *)malloc(sizeof(SPMTCA) + len);
     if (!pmt->ca[pmt->caids]) {
         LOG("Failed to allocate memory for CAID %04X", caid);
         return;
@@ -1928,7 +1900,6 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     pmt->version = ver;
     pmt->pcr_pid = pcr_pid;
 
-    mutex_lock(&pmt->mutex);
     LOG("new PMT %d AD %d, pid: %04X (%d), filter %d, len %d, pi_len %d, ver "
         "%d, pcr "
         "%d, "
@@ -2017,8 +1988,6 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
 
     if (!pmt->state)
         set_filter_flags(filter, 0);
-
-    mutex_unlock(&pmt->mutex);
 
     return 0;
 }

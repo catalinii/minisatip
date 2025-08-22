@@ -1456,9 +1456,9 @@ int satipc_request(adapter *ad) {
         (sip->state == SATIP_STATE_SETUP || sip->state == SATIP_STATE_PLAY))
         return 0;
 
-    mutex_lock(&sip->mutex);
+    std::lock_guard<SMutex> lock(sip->mutex);
+
     if (sip->expect_reply) {
-        mutex_unlock(&sip->mutex);
         return 0;
     }
 
@@ -1496,13 +1496,10 @@ int satipc_request(adapter *ad) {
     }
 
     if (err) {
-        mutex_unlock(&sip->mutex);
         return 0;
     }
 
     satipc_send_describe(ad, sip);
-
-    mutex_unlock(&sip->mutex);
 
     return 0;
 }
@@ -1583,7 +1580,7 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
 
     sip = satip[i];
     ad = a[i];
-    mutex_lock(&ad->mutex);
+    std::lock_guard<SMutex> lock(ad->mutex);
     ad->id = i;
     ad->open = satipc_open_device;
     ad->set_pid = satipc_set_pid;
@@ -1633,7 +1630,6 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
         "devices %d",
         ad->id, sip->sip, sip->sport, ad->sys[0], get_delsys(ad->sys[0]),
         get_delsys(ad->sys[1]), sip->satip_fe, a_count);
-    mutex_unlock(&ad->mutex);
 
     return sip->id;
 }

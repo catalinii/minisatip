@@ -410,7 +410,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
         return TABLES_RESULT_ERROR_NORETRY;
     }
 
-    mutex_lock(&d->mutex);
+    std::lock_guard<SMutex> lock(d->mutex);
     int pos = -1;
 
     for (i = 0; i < d->max_channels; i++)
@@ -426,9 +426,9 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     }
 
     if (pos == -1) {
-        LOG("No free slot found for pmt %d on DDCI %d", pmt->id, d->id);
-        mutex_unlock(&d->mutex);
-        return TABLES_RESULT_ERROR_RETRY;
+        LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY,
+                       "No free slot found for pmt %d on DDCI %d", pmt->id,
+                       d->id);
     }
 
     d->pmt[pos].id = pmt->id;
@@ -476,7 +476,6 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     rv = TABLES_RESULT_OK;
     dump_mapping_table();
 
-    mutex_unlock(&d->mutex);
     return rv;
 }
 
@@ -1078,9 +1077,6 @@ ddci_device_t *ddci_alloc(int id) {
     ddci_device_t *d;
 
     d = ddci_devices[id] = new ddci_device_t();
-    if (!d) {
-        return NULL;
-    }
     create_fifo(&d->fifo, DDCI_BUFFER);
     d->id = id;
     create_hash_table(&d->mapping, 100);
@@ -1136,7 +1132,7 @@ int ddci_open_device(adapter *ad) {
     write_fd = fd[1];
 
 #endif
-    mutex_lock(&d->mutex);
+    std::lock_guard<SMutex> lock2(d->mutex);
     ad->fe = write_fd;
     // creating a non blocking socket for buffering -- not working
     ad->fe_sock = -1;
@@ -1157,7 +1153,6 @@ int ddci_open_device(adapter *ad) {
     d->tid = d->ver = 0;
     d->enabled = 1;
     ad->enabled = 1;
-    mutex_unlock(&d->mutex);
     LOG("opened DDCI adapter %d fe:%d dvr:%d", ad->id, ad->fe, ad->dvr);
 
     return 0;
@@ -1183,10 +1178,9 @@ int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque) {
         LOG_AND_RETURN(0, "DDCI %d no longer enabled, not processing PAT",
                        d->id);
 
-    mutex_lock(&d->mutex);
+    std::unique_lock<SMutex> lock(d->mutex);
 
     if (d->cat_processed || d->disable_cat) {
-        mutex_unlock(&d->mutex);
         return 0;
     }
 
@@ -1194,7 +1188,6 @@ int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque) {
     b += 8;
     LOG("CAT DDCI %d len %d", d->id, cat_len);
     if (cat_len > 1500) {
-        mutex_unlock(&d->mutex);
         return 0;
     }
 
@@ -1225,7 +1218,6 @@ int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque) {
             break;
         }
     if (!add_cat) {
-        mutex_unlock(&d->mutex);
         return 0;
     }
 
@@ -1234,7 +1226,7 @@ int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque) {
         add_pid_mapping_table(f->adapter, d->capid[i], d->pmt[0].id, d, 1);
     }
     d->cat_processed = 1;
-    mutex_unlock(&d->mutex);
+    lock.unlock();
     update_pids(f->adapter);
     update_pids(d->id);
     return 0;
