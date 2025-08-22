@@ -1788,25 +1788,6 @@ static int CIPLUS_APP_LANG_handler(ca_session_t *session, int tag,
     return 0;
 }
 
-static int CIPLUS_APP_SAS_handler(ca_session_t *session, int tag, uint8_t *data,
-                                  int data_length) {
-    hexdump("CIPLUS_APP_SAS_handler", data, data_length);
-
-    switch (tag) {
-    case CIPLUS_TAG_SAS_CONNECT_CNF: /* */
-    {
-        if (data[8] == 0) {
-            ca_write_apdu(session, 0x9f9a07, 0x00, 0);
-        }
-        break;
-    }
-    default:
-        LOG("unknown SAS apdu tag %03x", tag);
-    }
-
-    return 0;
-} /* not working, just for fun */
-
 static void parse_operator_tune_descriptor(const uint8_t *descr,
                                            opfr_operator_tune_descr_t *out) {
     // Frequency
@@ -2268,14 +2249,6 @@ int APP_MMI_handler(ca_session_t *session, int resource, uint8_t *buffer,
     return 0;
 }
 
-static int APP_SAS_create(ca_session_t *session, int resource_id) {
-    LOG("%s-------------------------", __FUNCTION__);
-    uint8_t data[] = {0x69, 0x74, 0x64, 0x74, 0x74, 0x63, 0x61, 0x00};
-    // private_Host_application_ID
-    ca_write_apdu(session, 0x9f9a00, data, sizeof(data));
-    return 0;
-}
-
 static int APP_LANG_create(ca_session_t *session, int resource_id) {
     uint8_t data_reply_lang[] = {0x65, 0x6e, 0x67};    // eng
     uint8_t data_reply_country[] = {0x55, 0x53, 0x41}; // USA
@@ -2339,8 +2312,6 @@ struct struct_application_handler application_handler[] = {
     DEFAPP(CIPLUS_APP_OPRF_RESOURCEID, CIPLUS_APP_OPRF_handler, NULL),
     DEFAPP(TS103205_APP_OPRF_TWO_RESOURCEID, CIPLUS_APP_OPRF_handler, NULL),
     DEFAPP(TS103205_APP_OPRF_THREE_RESOURCEID, CIPLUS_APP_OPRF_handler, NULL),
-    // SAS
-    DEFAPP(CIPLUS_APP_SAS_RESOURCEID, CIPLUS_APP_SAS_handler, APP_SAS_create),
     // Application MMI
     DEFAPP(TS101699_APP_AMMI_RESOURCEID, APP_empty, NULL),
     DEFAPP(CIPLUS_APP_AMMI_RESOURCEID, APP_empty, NULL),
