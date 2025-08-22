@@ -1841,21 +1841,19 @@ static int CIPLUS_APP_OPRF_handler(ca_session_t *session, int tag,
                                    uint8_t *data, int data_length) {
     hexdump("CIPLUS_APP_OPRF_handler", data, data_length);
 
-    uint8_t data_oprf_search[9];
-    data_oprf_search[0] = 0x03; /* unattended mode bit=0 + length in bytes
-                                   of the service types */
+    uint8_t data_oprf_search[8];
+    data_oprf_search[0] = (0 << 7) | 0x03; /* unattended mode bit=0 + length in
+                                              bytes of the service types */
     data_oprf_search[1] = 0x01; /* service MPEG-2 television (0x01) */
     data_oprf_search[2] = 0x16; /* service h264 SD (0x16) */
     data_oprf_search[3] = 0x19; /* service h264 HD (0x19) */
     data_oprf_search[4] = 0x02; /* length in bytes of the delivery_capability */
     data_oprf_search[5] = 0x43; /* DVB-S */
     data_oprf_search[6] = 0x79; /* DVB-S2 */
-    data_oprf_search[7] =
-        0x01; /* length in bytes of the application_capability */
-    data_oprf_search[8] = 0x00; /* System Software Update service */
+    data_oprf_search[7] = 0x00; /* application_capability_loop_length */
 
     uint8_t data_oprf_tune_status[] = {
-        0xFF, // descruptor number
+        0xFF, // descriptor number
         0x00, // signal strength and quality
         0x00,
         (0x03 << 4), // status + 4 bit length
