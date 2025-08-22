@@ -1,7 +1,7 @@
 #ifndef HASH_TABLE_H
 #define HASH_TABLE_H
 
-#include "utils/mutex.h"
+#include "utils.h"
 #include <stdint.h>
 
 // Hash Table implementation:

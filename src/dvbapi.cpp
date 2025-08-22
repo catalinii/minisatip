@@ -28,7 +28,7 @@
 #include "socketworks.h"
 #include "tables.h"
 #include "utils.h"
-#include "utils/alloc.h"
+
 #include "utils/ticks.h"
 
 #include <arpa/inet.h>
@@ -72,7 +72,7 @@ extern char *listmgmt_str[];
 #define TEST_WRITE(a, xlen)                                                    \
     {                                                                          \
         int x;                                                                 \
-        mutex_lock(&keys_mutex);                                               \
+        std::lock_guard<SMutex> lock(keys_mutex);                              \
         if ((x = (a)) != (xlen)) {                                             \
             LOG("write to dvbapi socket failed (%d out of %d), closing "       \
                 "socket %d, "                                                  \
@@ -80,7 +80,6 @@ extern char *listmgmt_str[];
                 x, (int)xlen, sock, errno, strerror(errno));                   \
             dvbapi_close_socket();                                             \
         }                                                                      \
-        mutex_unlock(&keys_mutex);                                             \
     }
 
 static inline SKey *get_key(int i) {
@@ -126,6 +125,8 @@ int dvbapi_reply(sockets *s) {
         send_client_info(s);
         return 0;
     }
+    std::lock_guard<SMutex> lock(keys_mutex);
+
     while (pos < s->rlen) {
         int op1;
         b = s->buf + pos;
@@ -310,7 +311,6 @@ int dvbapi_reply(sockets *s) {
             if (k && (parity < 2)) {
                 int correct = (((cw[0] + cw[1] + cw[2]) & 0xFF) == cw[3]) &&
                               (((cw[4] + cw[5] + cw[6]) & 0xFF) == cw[7]);
-                mutex_lock(&k->mutex);
 
                 k->key_len = 8;
                 memcpy(k->cw[parity], cw, k->key_len);
@@ -322,8 +322,6 @@ int dvbapi_reply(sockets *s) {
                     cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);
 
                 send_cw(k->pmt_id, k->algo, parity, cw, NULL, 0, &k->icam_ecm);
-
-                mutex_unlock(&k->mutex);
             } else
                 LOG("dvbapi: invalid DVBAPI_CA_SET_DESCR, key %d parity %d, k "
                     "%p, "
@@ -348,7 +346,6 @@ int dvbapi_reply(sockets *s) {
             copy16r(sid, b, i);
 
             if (k) {
-                mutex_lock(&k->mutex);
                 msg[0] = k->cardsystem;
                 msg[1] = k->reader;
                 msg[2] = k->from;
@@ -371,8 +368,6 @@ int dvbapi_reply(sockets *s) {
             }
             if (i < pos1 && k)
                 k->hops = b[i++];
-            if (k)
-                mutex_unlock(&k->mutex);
             pos += i;
             LOG("dvbapi: ECM_INFO: key %d, SID = %04X, CAID = %04X (%s), PID = "
                 "%d "
@@ -418,10 +413,11 @@ int dvbapi_send_pmt(SKey *k, int cmd_id) {
     unsigned char buf[2500];
     int len;
     int listmgmt = CLM_UPDATE;
+    std::lock_guard<SMutex> lock(keys_mutex);
     SPMT *pmt = get_pmt(k->pmt_id);
     if (!pmt)
         return 1;
-    mutex_lock(&keys_mutex);
+
     adapter *ad = get_adapter(k->adapter);
     int demux = 0;
     int adapter = 0;
@@ -481,7 +477,6 @@ int dvbapi_send_pmt(SKey *k, int cmd_id) {
     copy16(buf, 4, len - 6);
 
     buf[6] = listmgmt;
-    mutex_unlock(&keys_mutex);
     if (sock > 0) {
         LOG("Sending pmt %d to dvbapi server for pid %d, Channel ID %04X, key "
             "%d, "
@@ -593,7 +588,6 @@ void init_dvbapi() {
                               (socket_action)connect_dvbapi);
     sockets_timeout(poller_sock, sec * 1000); // try to connect every 1s
     set_sockets_rtime(poller_sock, -sec * 1000);
-    mutex_init(&keys_mutex);
 }
 
 void send_client_info(sockets *s) {
@@ -697,26 +691,17 @@ int keys_add(int i, int adapter, int pmt_id) {
 
     SKey *k;
     SPMT *pmt = get_pmt(pmt_id);
+    std::lock_guard<SMutex> lock(keys_mutex);
+
     if (!pmt)
         LOG_AND_RETURN(-1, "%s: PMT %d not found ", __FUNCTION__, pmt_id);
-    if (i == -1)
-        i = add_new_lock((void **)keys, MAX_KEYS, sizeof(SKey), &keys_mutex);
-    else {
-        if (keys[i])
-            mutex_lock(&keys[i]->mutex);
-        else {
-            keys[i] = (SKey *)_malloc(sizeof(SKey));
-            if (!keys[i])
-                LOG_AND_RETURN(-1, "Could not allocate memory for the key %d",
-                               i);
-            memset(keys[i], 0, sizeof(SKey));
-            mutex_init(&keys[i]->mutex);
-            mutex_lock(&keys[i]->mutex);
-        }
+    if (i == -1) {
+        i = find_new_id((void **)keys, MAX_KEYS);
+        if (i == -1)
+            LOG_AND_RETURN(-1, "%s: no free key id", __FUNCTION__);
     }
-    if (i == -1 || !keys[i]) {
-        LOG_AND_RETURN(-1, "Key buffer is full, could not add new keys");
-    }
+    if (!keys[i])
+        keys[i] = new SKey();
 
     k = keys[i];
 
@@ -740,7 +725,6 @@ int keys_add(int i, int adapter, int pmt_id) {
     memset(k->filter_id, -1, sizeof(k->filter_id));
     memset(k->filter, -1, sizeof(k->filter));
     memset(k->demux, -1, sizeof(k->demux));
-    mutex_unlock(&k->mutex);
     invalidate_adapter(adapter);
     __sync_add_and_fetch(&enabledKeys, 1);
     LOG("returning new key %d for adapter %d, pmt %d pid %d sid %04X", i,
@@ -754,13 +738,13 @@ int keys_del(int i) {
     unsigned char buf[8] = {0x9F, 0x80, 0x3f, 4, 0x83, 2, 0, 0};
     SKey *k;
     const char *msg = "";
+    std::lock_guard<SMutex> lock(keys_mutex);
+
     k = get_key(i);
     if (!k)
         return 0;
 
-    mutex_lock(&k->mutex);
     if (!k->enabled) {
-        mutex_unlock(&k->mutex);
         return 0;
     }
     // current key is not disabled
@@ -807,14 +791,13 @@ int keys_del(int i) {
     LOG("Stopped key %d, active keys %d, sock %d, pmt pid %d, sid %04X, op %s",
         i, ek, sock, pmt_pid, sid, msg);
 
-    mutex_destroy(&k->mutex);
-
     return 0;
 }
 
 int dvbapi_add_pmt(adapter *ad, SPMT *pmt) {
     SKey *k = NULL;
     int key, pid = pmt->pid;
+    std::lock_guard<SMutex> lock(keys_mutex);
 
     if (ad->type == ADAPTER_CI) {
         LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
@@ -832,7 +815,6 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt) {
     k = get_key(key);
     if (!k)
         LOG_AND_RETURN(1, "Could not add key for pmt %d", pmt->id);
-    mutex_lock(&k->mutex);
     pmt->opaque = k;
     k->sid = pmt->sid;
     k->adapter = ad->id;
@@ -842,7 +824,6 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt) {
     k->last_dmx_stop = getTick();
     dvbapi_send_pmt(k, CMD_ID_OK_DESCRAMBLING);
 
-    mutex_unlock(&k->mutex);
     return 0;
 }
 
@@ -902,11 +883,9 @@ void free_all_keys(void) {
     int i;
     for (i = 0; i < MAX_KEYS; i++) {
         if (keys[i]) {
-            mutex_destroy(&keys[i]->mutex);
-            _free(keys[i]);
+            delete keys[i];
         }
     }
-    mutex_destroy(&keys_mutex);
 }
 
 _symbols dvbapi_sym[] = {

@@ -23,7 +23,6 @@
 #include "api/symbols.h"
 #include "utils.h"
 #include "utils/logging/logging.h"
-#include "utils/mutex.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -299,8 +298,7 @@ extern int64_t c_ns_read, c_tt;
 
 int get_json_bandwidth(char *buf, int len) {
     int ptr = 0;
-    mutex_init(&bw_mutex);
-    mutex_lock(&bw_mutex);
+    std::lock_guard<SMutex> lock(bw_mutex);
     strlcatf(buf, len, ptr, "\
 {\n\
 \"bw\":%jd,\n\
@@ -316,6 +314,5 @@ int get_json_bandwidth(char *buf, int len) {
 }",
              c_bw, c_bw_dmx, c_tbw, c_reads, c_writes, c_failed_writes,
              c_ns_read, c_tt, c_buffered, c_dropped);
-    mutex_unlock(&bw_mutex);
     return ptr;
 }

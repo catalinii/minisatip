@@ -24,7 +24,7 @@
 #include "stdlib.h"
 
 // Define all symbols
-_symbols *sym[] = {adapters_sym, stream_sym, minisatip_sym, alloc_sym,
+_symbols *sym[] = {adapters_sym, stream_sym, minisatip_sym,
 #ifndef DISABLE_DVBCA
                    ca_sym,
 #endif

@@ -2,12 +2,16 @@
 #define UTILS_H
 
 #include "utils/logging/logging.h"
-#include "utils/mutex.h"
+#include <mutex>
 
 #include <pthread.h>
 #include <stdint.h>
 #include <sys/types.h>
 #include <sys/uio.h>
+
+typedef std::recursive_mutex SMutex;
+#define mutex_lock(x) (x)->lock()
+#define mutex_unlock(x) (x)->unlock()
 
 int split(char **rv, char *s, int lrv, char sep);
 int map_int(char *s, char **v);
@@ -28,7 +32,7 @@ pthread_t start_new_thread(char *name);
 pthread_t get_tid();
 void set_thread_prio(pthread_t tid, int prio);
 
-int add_new_lock(void **arr, int count, int size, SMutex *mutex);
+int find_new_id(void **arr, int count);
 void join_thread();
 void add_join_thread(pthread_t t);
 int init_utils(char *arg0);

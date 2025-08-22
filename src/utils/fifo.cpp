@@ -20,7 +20,6 @@
 #include "fifo.h"
 #include "opts.h"
 #include "utils.h"
-#include "utils/alloc.h"
 #include "utils/logging/logging.h"
 
 #include <stdlib.h>
@@ -35,7 +34,7 @@ int _create_fifo(SFIFO *f, int no, const char *file, int line) {
     memset(f, 0, sizeof(SFIFO));
     f->file = file;
     f->line = line;
-    f->data = malloc1(no, file, line, 1);
+    f->data = malloc(no);
     if (!f->data) {
         LOG_AND_RETURN(1, "Could not allocate FIFO %d", no);
     }
@@ -47,7 +46,7 @@ void free_fifo(SFIFO *f) {
     if (f->size <= 0)
         return;
 
-    _free(f->data);
+    free(f->data);
     memset(f, 0, sizeof(SFIFO));
     return;
 }

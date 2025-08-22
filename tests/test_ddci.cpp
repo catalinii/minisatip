@@ -26,7 +26,6 @@
 #include "minisatip.h"
 #include "socketworks.h"
 #include "utils.h"
-#include "utils/alloc.h"
 #include "utils/testing.h"
 #include "utils/ticks.h"
 #include <arpa/inet.h>
@@ -92,7 +91,6 @@ int test_channels() {
     SHashTable h;
     int i;
     Sddci_channel c1, c2, c3, *t;
-    memset(&h, 0, sizeof(h));
     create_hash_table(&h, 10);
 
     // Add one channel (SID 200) that can be decoded by DDCI 1
@@ -119,6 +117,7 @@ int test_channels() {
     // Save and reload the table
     save_channels(&h);
     free_hash(&h);
+    h.init = 0;
     create_hash_table(&h, 10);
     load_channels(&h);
 
@@ -337,7 +336,6 @@ int test_ddci_process_ts() {
     uint8_t fifo[188 * 3];
     int i;
     adapter ad, ad2, ad0;
-    memset(&d, 0, sizeof(d));
     memset(buf, 0, sizeof(buf));
     memset(fifo, 0, sizeof(fifo));
     d.id = 2;
@@ -346,7 +344,6 @@ int test_ddci_process_ts() {
     create_hash_table(&d.mapping, 30);
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[0] = &d;
-    mutex_init(&d.mutex);
     create_adapter(&ad0, 0);
     create_adapter(&ad, 1);
     create_adapter(&ad2, 2);
@@ -595,7 +592,6 @@ int main() {
     opts.debug = 0;
     opts.cache_dir = "/tmp";
     strcpy(thread_info[thread_index].thread_name, "test_ddci");
-    init_alloc();
     TEST_FUNC(test_channels(), "testing test_channels");
     TEST_FUNC(test_add_del_pmt(), "testing adding and removing pmts");
     TEST_FUNC(test_copy_ts_from_ddci(), "testing test_copy_ts_from_ddci");
@@ -604,7 +600,6 @@ int main() {
     TEST_FUNC(test_create_sdt(), "testing create_sdt");
     TEST_FUNC(test_create_pmt(), "testing create_pmt");
     free_all_pmts();
-    free_alloc();
     fflush(stdout);
     return 0;
 }

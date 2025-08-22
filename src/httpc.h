@@ -2,7 +2,7 @@
 #define HTTPC_H
 
 #include "socketworks.h"
-#include "utils/mutex.h"
+#include "utils.h"
 
 #define MAX_HTTPC 100
 

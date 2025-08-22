@@ -25,7 +25,6 @@
 #include "minisatip.h"
 #include "socketworks.h"
 #include "utils.h"
-#include "utils/alloc.h"
 #include "utils/testing.h"
 #include <arpa/inet.h>
 #include <ctype.h>
@@ -68,7 +67,7 @@ int test_socket_enque_highprio() {
     if (strncmp((char *)ss->prio_data, "test1test2test3", ss->prio_data_len))
         LOG_AND_RETURN(1, "expected != the actual result: %s len %d",
                        ss->prio_data, ss->prio_data_len);
-    _free(ss->prio_data);
+    free(ss->prio_data);
     ss->prio_data_len = 0;
     ss->prio_data = NULL;
     return 0;
@@ -201,7 +200,6 @@ int test_socket_buffering() {
 int main() {
     opts.log = 1; // LOG_UTILS | LOG_SOCKET;
     strcpy(thread_info[thread_index].thread_name, "test_socketworks");
-    init_alloc();
     _writev = writev;
     int fd[2];
     if (pipe(fd) == -1) {
