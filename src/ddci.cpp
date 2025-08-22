@@ -447,6 +447,14 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
         d->cat_processed = 0;
     }
 
+    // Some CAMs need access to the TDT in order to "wake up", so always map it
+    // just in case
+    if (!get_pid_mapping(d, pmt->adapter, 20)) {
+        LOG("Mapping TDT to PMT %d from transponder %d, DDCI transponder %d",
+            pmt->id, ad->transponder_id, d->tid);
+        add_pid_mapping_table(ad->id, 20, pmt->id, d, 1);
+    }
+
     LOG("found DDCI %d for pmt %d, running channels %d, max_channels %d", ddid,
         pmt->id, d->channels, d->max_channels);
 
