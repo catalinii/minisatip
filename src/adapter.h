@@ -175,8 +175,6 @@ int delsys_match(adapter *ad, int del_sys);
 int get_enabled_pids(adapter *ad, int *pids, int lpids);
 int get_all_pids(adapter *ad, int *pids, int lpids);
 char *get_adapter_pids(int aid, char *dest, int max_size);
-void adapter_lock1(const char *FILE, int line, int aid);
-void adapter_unlock1(const char *FILE, int line, int aid);
 int adapter_timeout(sockets *s);
 void adapter_set_dvr(adapter *ad);
 char is_adapter_disabled(int i);
@@ -197,6 +195,4 @@ void adapter_commit(adapter *ad);
     ((aid >= 0 && aid < MAX_ADAPTERS && a[aid] && a[aid]->enabled) ? a[aid]    \
                                                                    : NULL)
 
-#define adapter_lock(a) adapter_lock1(__FILE__, __LINE__, a)
-#define adapter_unlock(a) adapter_unlock1(__FILE__, __LINE__, a)
 #endif

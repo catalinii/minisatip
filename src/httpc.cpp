@@ -31,19 +31,23 @@ SMutex httpc_mutex;
 int http_client_add() {
 
     Shttp_client *h;
-    int i = add_new_lock((void **)httpc, MAX_HTTPC, sizeof(Shttp_client),
-                         &httpc_mutex);
+    std::lock_guard<SMutex> lock(httpc_mutex);
+    int i = find_new_id((void **)httpc, MAX_HTTPC);
     if (i == -1) {
         LOG_AND_RETURN(-1, "Could not add new http client");
     }
+    if (!httpc[i])
+        httpc[i] = new Shttp_client();
+    if (!httpc[i])
+        LOG_AND_RETURN(-1, "%s failed for id %d", __FUNCTION__, i);
 
     h = httpc[i];
     h->id = i;
     h->opaque = NULL;
+    h->enabled = 1;
     memset(h->host, 0, sizeof(h->host));
     memset(h->req, 0, sizeof(h->req));
     h->port = 0;
-    mutex_unlock(&h->mutex);
     LOG("returning new http client %d", i);
 
     return i;
@@ -51,14 +55,14 @@ int http_client_add() {
 
 int http_client_del(int i) {
     Shttp_client *h;
+    std::lock_guard<SMutex> lock(httpc_mutex);
     h = get_httpc(i);
     if (!h)
         return 0;
 
-    if (mutex_lock(&h->mutex))
-        return 0;
+    std::lock_guard<SMutex> lock2(h->mutex);
+
     h->enabled = 0;
-    mutex_destroy(&h->mutex);
     LOGM("Stopping http client %d", i);
     return 0;
 }

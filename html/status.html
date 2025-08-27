@@ -358,36 +358,6 @@
 			}
 		}
 
-		function getMemInfo(mem_info) {
-			var all_mem = 0
-			var line_mem = {}
-			var i = 0
-			while (i < mem_info.length) {
-				if (mem_info[i].length > 0) {
-					const myArray = mem_info[i].split(":")
-					var file = myArray[0]
-					var line = myArray[1]
-					var size = parseInt(myArray[2])
-					var count = parseInt(myArray[3])
-
-					var key = [file, line].join(':')
-					if (!(key in line_mem)) {
-						line_mem[key] = [size, count]
-					} else {
-						var s, n
-						[s, n] = line_mem[key]
-						line_mem[key] = [s + size, n + count]
-					}
-
-					all_mem += size
-				}
-				i++;
-			}
-			console.log(line_mem)
-			let all_mb = all_mem / 1048576
-			return `Using ${all_mb.toPrecision(4)} MB`
-
-		}
 
 		function formatCommaSeparated(str) {
 			return str.replaceAll(',', ', ');
@@ -540,7 +510,7 @@
 					if (state['ad_channel'][i]) {
 						myTable += "<b>" + formatCommaSeparated(state['ad_channel'][i]) + "</b><br>";
 					}
-					
+
 					var st_pmt = state['ad_pmt'][i];
 					if (st_pmt != "")
 						myTable += "<small>PMT: " + formatCommaSeparated(st_pmt) + "</small><br />";
@@ -656,7 +626,6 @@
 			myTable += "<li><B>RTSP address:</B> " + state['rtsp_host'] + " -- <B>UUID:</B> " + state['uuid'] + " -- <B>BOOTID:</B> " + state['bootid'] + " -- <B>DEVICE-ID:</B> " + state['deviceid'] + "</li>"
 			myTable += "<li><B>Service Name:</B> " + state['name_app'] + " -- <B>Process ID:</B> " + state['run_pid'] + " -- <B>Run as ID:</B> " + state['run_user'] + "</span></li>"
 			myTable += "<li><b>Command line:</b> " + state['command_line'] + "</li>"
-			myTable += "<li><b>Mem Info:</b> " + getMemInfo(state['alloc']) + "</li>"
 			myTable += "<p style='text-align:center'><a href='satfinder.html'>Show satfinder page</a></p>";
 			myTable += "</ul></div>"
 
