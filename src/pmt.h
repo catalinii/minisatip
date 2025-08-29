@@ -138,7 +138,6 @@ typedef struct struct_pmt {
     char state; // PMT state (PMT_STOPPED, PMT_STARTING, PMT_RUNNING,
                 // PMT_STOPPING)
     char encrypted;
-    int first_active_pid;
     int64_t grace_time, start_time;
     int filter;
     std::unordered_map<uint64_t, int> *global_start, *local_start;
