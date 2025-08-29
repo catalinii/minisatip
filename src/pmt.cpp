@@ -1312,7 +1312,6 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
     pmt->state = PMT_STOPPED;
     pmt->cw = NULL;
     pmt->opaque = NULL;
-    pmt->first_active_pid = -1;
     pmt->ca_mask = pmt->disabled_ca_mask = 0;
     pmt->batch = NULL;
     memset(pmt->name, 0, sizeof(pmt->name));
@@ -1959,9 +1958,6 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         if (!is_audio && !is_video)
             continue;
 
-        // is video stream
-        if (pmt->first_active_pid < 0 && is_video)
-            pmt->first_active_pid = spid;
         if (stream_pid_id >= 0)
             pmt_add_descriptors(pmt, stream_pid_id, pmt_b + i + 5, es_len);
 
@@ -1973,9 +1969,6 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     // Add the PCR pid if it's independent
     if (pcr_pid > 0 && pcr_pid < 8191)
         pmt_add_stream_pid(pmt, pcr_pid, 0, 0, 0, 0);
-
-    if ((pmt->first_active_pid < 0) && pmt->stream_pid[0])
-        pmt->first_active_pid = pmt->stream_pid[0]->pid;
 
     SPMT *master = get_pmt(pmt->master_pmt);
     if (pmt->caids && master && master != pmt) {
