@@ -1538,6 +1538,9 @@ int assemble_packet(SFilter *f, uint8_t *b) {
     uint32_t crc;
 
     pid = PID_FROM_TS(b);
+    // ignore null packets
+    if (pid == 0x1fff)
+        return len;
     if (f->flags & FILTER_EMM)
         len = assemble_emm(f, b);
     else
