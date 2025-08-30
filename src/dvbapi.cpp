@@ -95,8 +95,6 @@ void dvbapi_close_socket() {
     dvbapi_is_enabled = 0;
 }
 
-void invalidate_adapter(int aid) { return; }
-
 int get_index_for_filter(SKey *k, int filter) {
     int i;
     for (i = 0; i < MAX_KEY_FILTERS; i++)
@@ -725,7 +723,6 @@ int keys_add(int i, int adapter, int pmt_id) {
     memset(k->filter_id, -1, sizeof(k->filter_id));
     memset(k->filter, -1, sizeof(k->filter));
     memset(k->demux, -1, sizeof(k->demux));
-    invalidate_adapter(adapter);
     __sync_add_and_fetch(&enabledKeys, 1);
     LOG("returning new key %d for adapter %d, pmt %d pid %d sid %04X", i,
         adapter, pmt->id, pmt->pid, k->sid);
@@ -856,14 +853,6 @@ void unregister_dvbapi() {
     LOG("unregistering dvbapi as the socket is closed");
     del_ca(&dvbapi);
     dvbapi_ca = -1;
-}
-
-void dvbapi_delete_keys_for_adapter(int aid) {
-    int i;
-    SKey *k;
-    for (i = 0; i < MAX_KEYS; i++)
-        if ((k = get_key(i)) && k->adapter == aid)
-            keys_del(i);
 }
 
 char *get_channel_for_key(int key, char *dest, int max_size) {
