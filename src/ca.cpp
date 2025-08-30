@@ -312,8 +312,7 @@ int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
                  pmt->id, pmt->adapter, pmt->stream_pid[i]->pid);
             continue;
         }
-        if (!pmt->stream_pid[i]->is_audio && !pmt->stream_pid[i]->is_video)
-            continue;
+
         capmt[pos++] = pmt->stream_pid[i]->type;
         copy16(capmt, pos, pmt->stream_pid[i]->pid);
         pos += 2;

@@ -1029,11 +1029,9 @@ void start_active_pmts(adapter *ad) {
         int is_active = 0;
         int j, first = 0;
         int pmt_started = 0;
-        for (j = 0; j < pmt->stream_pids; j++)
-            // for all audio and video streams start the PMT containing them
-            if ((pmt->stream_pid[j]->is_audio ||
-                 pmt->stream_pid[j]->is_video) &&
-                pids[pmt->stream_pid[j]->pid] && pmt->id == pmt->master_pmt) {
+        for (j = 0; j < pmt->stream_pids; j++) {
+            // for all stream PIDs start the PMT containing them
+            if (pids[pmt->stream_pid[j]->pid] && pmt->id == pmt->master_pmt) {
                 is_active = 1;
 #ifndef DISABLE_TABLES
                 if (!first) {
@@ -1064,6 +1062,8 @@ void start_active_pmts(adapter *ad) {
 #endif
                 }
             }
+        }
+
         // non master PMTs should not be started
         if (pmt->state == PMT_RUNNING && !is_active) {
             LOG("Stopping started PMT %d: %s", pmt->id, pmt->name);
@@ -1312,7 +1312,6 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
     pmt->state = PMT_STOPPED;
     pmt->cw = NULL;
     pmt->opaque = NULL;
-    pmt->first_active_pid = -1;
     pmt->ca_mask = pmt->disabled_ca_mask = 0;
     pmt->batch = NULL;
     memset(pmt->name, 0, sizeof(pmt->name));
@@ -1539,6 +1538,9 @@ int assemble_packet(SFilter *f, uint8_t *b) {
     uint32_t crc;
 
     pid = PID_FROM_TS(b);
+    // ignore null packets
+    if (pid == 0x1fff)
+        return len;
     if (f->flags & FILTER_EMM)
         len = assemble_emm(f, b);
     else
@@ -1956,12 +1958,6 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
             break;
         }
 
-        if (!is_audio && !is_video)
-            continue;
-
-        // is video stream
-        if (pmt->first_active_pid < 0 && is_video)
-            pmt->first_active_pid = spid;
         if (stream_pid_id >= 0)
             pmt_add_descriptors(pmt, stream_pid_id, pmt_b + i + 5, es_len);
 
@@ -1973,9 +1969,6 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     // Add the PCR pid if it's independent
     if (pcr_pid > 0 && pcr_pid < 8191)
         pmt_add_stream_pid(pmt, pcr_pid, 0, 0, 0, 0);
-
-    if ((pmt->first_active_pid < 0) && pmt->stream_pid[0])
-        pmt->first_active_pid = pmt->stream_pid[0]->pid;
 
     SPMT *master = get_pmt(pmt->master_pmt);
     if (pmt->caids && master && master != pmt) {

@@ -316,10 +316,10 @@ int dvbapi_reply(sockets *s) {
                 memcpy(k->cw[parity], cw, k->key_len);
 
                 LOG("dvbapi: received DVBAPI_CA_SET_DESCR, key %d parity %d, "
-                    "index %d, "
+                    "index %d, algo %d, "
                     "CW %s: %02X %02X %02X %02X %02X %02X %02X %02X",
-                    k_id, parity, index, correct ? "OK" : "NOK", cw[0], cw[1],
-                    cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);
+                    k_id, parity, index, k->algo, correct ? "OK" : "NOK", cw[0],
+                    cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);
 
                 send_cw(k->pmt_id, k->algo, parity, cw, NULL, 0, &k->icam_ecm);
             } else
@@ -856,14 +856,6 @@ void unregister_dvbapi() {
     LOG("unregistering dvbapi as the socket is closed");
     del_ca(&dvbapi);
     dvbapi_ca = -1;
-}
-
-void dvbapi_delete_keys_for_adapter(int aid) {
-    int i;
-    SKey *k;
-    for (i = 0; i < MAX_KEYS; i++)
-        if ((k = get_key(i)) && k->adapter == aid)
-            keys_del(i);
 }
 
 char *get_channel_for_key(int key, char *dest, int max_size) {
