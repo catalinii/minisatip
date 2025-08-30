@@ -858,14 +858,6 @@ void unregister_dvbapi() {
     dvbapi_ca = -1;
 }
 
-void dvbapi_delete_keys_for_adapter(int aid) {
-    int i;
-    SKey *k;
-    for (i = 0; i < MAX_KEYS; i++)
-        if ((k = get_key(i)) && k->adapter == aid)
-            keys_del(i);
-}
-
 char *get_channel_for_key(int key, char *dest, int max_size) {
     SKey *k = get_key(key);
     SPMT *pmt = NULL;
