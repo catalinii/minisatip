@@ -855,10 +855,19 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
     c->time = getTick();
     c->set_time = 0;
     c->opaque = opaque;
-    if (expiry == 0)
-        c->expiry = c->time + MAX_CW_TIME;
-    else
+
+    if (expiry == 0) {
+        // If code word expiration isn't set we need to use a sane default
+        if (pmt_caid_is_const_cw(pmt)) {
+            LOG("CW %d for PMT %d is deemed constant and will not expire",
+                c->id, pmt->id);
+            c->expiry = c->time + CONST_CW_TIME;
+        } else {
+            c->expiry = c->time + DEFAULT_CW_TIME;
+        }
+    } else {
         c->expiry = c->time + expiry * 1000;
+    }
 
     if (parity == pmt->parity && pmt->cw && pmt->last_update_cw > 0) {
         LOG("CW %d for PMT %d (%s) Warning! New CW using the current parity",
@@ -1709,6 +1718,13 @@ int pmt_caid_exist(SPMT *pmt, uint16_t caid, uint16_t capid) {
             return 1;
     }
     return 0;
+}
+
+int pmt_caid_is_const_cw(SPMT *pmt) {
+    // Returns true if the PMT can be descrambled with a single CAID and that
+    // CAID is BISS. Other constant code word scrambling systems can be added
+    // as required.
+    return pmt->caids == 1 && pmt->ca[0]->id == 0x2600;
 }
 
 int is_ac3_es(unsigned char *es, int len) {
