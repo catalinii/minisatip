@@ -1799,6 +1799,9 @@ void pmt_add_descriptors(SPMT *pmt, int stream_id, unsigned char *es, int len) {
             caid = es[i + 2] * 256 + es[i + 3];
             capid = (es[i + 4] & 0x1F) * 256 + es[i + 5];
             pmt_add_caid(pmt, caid, capid, es + i + 6, es_len - 4);
+
+            // Mark the stream PID as scrambled
+            pmt->stream_pid[stream_id]->is_scrambled = true;
         }
     }
     return;

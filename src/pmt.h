@@ -102,6 +102,7 @@ typedef struct struct_stream_pid {
     int pid;
     char is_audio : 1;
     char is_video : 1;
+    bool is_scrambled;
     int desc_len;
     uint8_t desc[];
 } SStreamPid;

@@ -464,6 +464,12 @@ int dvbapi_send_pmt(SKey *k, int cmd_id) {
     copy16(buf, 10, len - 12);
     int i;
     for (i = 0; i < pmt->stream_pids; i++) {
+        if (!pmt->stream_pid[i]->is_scrambled) {
+            LOGM(
+                "%s: omitting PMT %d (ad %d) pid %d from CAPMT (not scrambled)",
+                __FUNCTION__, pmt->id, pmt->adapter, pmt->stream_pid[i]->pid);
+            continue;
+        }
         len += 5;
         int type = pmt->stream_pid[i]->type;
         int pid = pmt->stream_pid[i]->pid;
