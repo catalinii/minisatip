@@ -332,6 +332,9 @@ int dvbapi_reply(sockets *s) {
         case DVBAPI_ECM_INFO: {
             int pos1 = s->rlen - pos;
             SKey *k = get_key(b[4] - opts.dvbapi_offset);
+            if (!k) {
+                break;
+            }
             unsigned char cardsystem[255];
             unsigned char reader[255];
             unsigned char from[255];
@@ -343,16 +346,15 @@ int dvbapi_reply(sockets *s) {
 
             copy16r(sid, b, i);
 
-            if (k) {
-                msg[0] = k->cardsystem;
-                msg[1] = k->reader;
-                msg[2] = k->from;
-                msg[3] = k->protocol;
-                copy16r(k->caid, b, i + 2);
-                copy16r(k->info_pid, b, i + 4);
-                copy32r(k->prid, b, i + 6);
-                copy32r(k->ecmtime, b, i + 10);
-            }
+            msg[0] = k->cardsystem;
+            msg[1] = k->reader;
+            msg[2] = k->from;
+            msg[3] = k->protocol;
+            copy16r(k->caid, b, i + 2);
+            copy16r(k->info_pid, b, i + 4);
+            copy32r(k->prid, b, i + 6);
+            copy32r(k->ecmtime, b, i + 10);
+
             i += 14;
             while (msg[j] && i < pos1) {
                 len = b[i++];
@@ -364,7 +366,7 @@ int dvbapi_reply(sockets *s) {
                 i += len;
                 j++;
             }
-            if (i < pos1 && k)
+            if (i < pos1)
                 k->hops = b[i++];
             pos += i;
             LOG("dvbapi: ECM_INFO: key %d, SID = %04X, CAID = %04X (%s), PID = "
@@ -372,9 +374,8 @@ int dvbapi_reply(sockets *s) {
                 "(%04X), ProvID = %06X, ECM time = %d ms, reader = %s, from = "
                 "%s, "
                 "protocol = %s, hops = %d",
-                k ? k->id : -1, sid, k ? k->caid : 0, msg[0],
-                k ? k->info_pid : 0, k ? k->info_pid : 0, k ? k->prid : 0,
-                k ? k->ecmtime : -1, msg[1], msg[2], msg[3], k ? k->hops : 0);
+                k->id, sid, k->caid, msg[0], k->info_pid, k->info_pid, k->prid,
+                k->ecmtime, msg[1], msg[2], msg[3], k->hops);
             break;
         }
 
