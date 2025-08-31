@@ -1792,12 +1792,11 @@ void pmt_add_descriptors(SPMT *pmt, int stream_id, unsigned char *es, int len) {
         es_len = es[i + 1];
         if (es[i] != 9) {
             pmt_add_descriptor(pmt, stream_id, es + i);
-            continue;
+        } else {
+            caid = es[i + 2] * 256 + es[i + 3];
+            capid = (es[i + 4] & 0x1F) * 256 + es[i + 5];
+            pmt_add_caid(pmt, caid, capid, es + i + 6, es_len - 4);
         }
-
-        caid = es[i + 2] * 256 + es[i + 3];
-        capid = (es[i + 4] & 0x1F) * 256 + es[i + 5];
-        pmt_add_caid(pmt, caid, capid, es + i + 6, es_len - 4);
     }
     return;
 }
@@ -1915,15 +1914,17 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     if (pi_len > 0 && pi_len < pmt_len)
         pmt_add_descriptors(pmt, 0, pi, pi_len);
 
+    uint8_t *es;
     es_len = 0;
     for (i = 9 + pi_len; i < pmt_len - 4; i += (es_len) + 5) // reading streams
     {
+        es = pmt_b + i + 5;
         es_len = (pmt_b[i + 3] & 0xF) * 256 + pmt_b[i + 4];
         stype = pmt_b[i];
         spid = (pmt_b[i + 1] & 0x1F) * 256 + pmt_b[i + 2];
         isAC3 = 0;
         if (stype == 6)
-            isAC3 = is_ac3_es(pmt_b + i + 5, es_len);
+            isAC3 = is_ac3_es(es, es_len);
         else if (stype == 129)
             isAC3 = 1;
         if (pcr_pid == spid)
@@ -1956,7 +1957,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         }
 
         if (stream_pid_id >= 0)
-            pmt_add_descriptors(pmt, stream_pid_id, pmt_b + i + 5, es_len);
+            pmt_add_descriptors(pmt, stream_pid_id, es, es_len);
 
         if (opmt != -1 && opmt != pmt->master_pmt) {
             pmt->master_pmt = opmt;
