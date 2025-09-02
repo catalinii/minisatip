@@ -1787,12 +1787,15 @@ void pmt_add_descriptors(SPMT *pmt, int stream_id, unsigned char *es, int len) {
         return;
     }
 
-    for (i = 0; i < len; i += es_len + 2) // reading program info
-    {
+    // Add each elementary stream descriptor
+    for (i = 0; i < len; i += es_len + 2) {
         es_len = es[i + 1];
-        if (es[i] != 9) {
-            pmt_add_descriptor(pmt, stream_id, es + i);
-        } else {
+
+        // Store all descriptors, we need to be able to fully reconstruct the
+        // stream descriptors in some cases
+        pmt_add_descriptor(pmt, stream_id, es + i);
+
+        if (es[i] == 0x09) { // CA descriptor
             caid = es[i + 2] * 256 + es[i + 3];
             capid = (es[i + 4] & 0x1F) * 256 + es[i + 5];
             pmt_add_caid(pmt, caid, capid, es + i + 6, es_len - 4);
