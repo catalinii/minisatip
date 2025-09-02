@@ -1947,12 +1947,6 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         } else
             LOG("Too many pids for pmt %d, discarding pid %d", pmt->id, spid);
 
-        LOG("PMT pid %d - stream pid %04X (%d), type %d%s, es_len %d, pos "
-            "%d, "
-            "caids %d",
-            pid, spid, spid, stype, isAC3 ? " [AC3]" : "", es_len, i,
-            pmt->caids);
-
         if ((es_len + i + 5 > pmt_len) || (es_len < 0)) {
             LOGM("pmt processing complete, es_len + i %d, len %d, es_len %d",
                  es_len + i, pmt_len, es_len);
@@ -1961,6 +1955,12 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
 
         if (stream_pid_id >= 0)
             pmt_add_descriptors(pmt, stream_pid_id, es, es_len);
+
+        LOG("PMT pid %d - stream pid %04X (%d), type %d%s, es_len %d, pos "
+            "%d, "
+            "caids %d",
+            pid, spid, spid, stype, isAC3 ? " [AC3]" : "", es_len, i,
+            pmt->caids);
 
         if (opmt != -1 && opmt != pmt->master_pmt) {
             pmt->master_pmt = opmt;
