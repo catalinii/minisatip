@@ -24,7 +24,6 @@ SOURCES=\
 	test_minisatip.cpp \
 	test_utils.cpp \
 	test_socketworks.cpp \
-	utils/test_hash_table.cpp \
 	utils/test_utils.cpp
 
 MAIN_SOURCES=$(shell find ../src -type f -iname '*.cpp')

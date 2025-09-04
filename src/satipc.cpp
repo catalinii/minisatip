@@ -31,7 +31,6 @@
 #include "pmt.h"
 #include "utils.h"
 
-#include "utils/hash_table.h"
 #include "utils/ticks.h"
 
 #include <arpa/inet.h>
