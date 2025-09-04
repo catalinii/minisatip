@@ -46,7 +46,6 @@ SOURCES=\
 	utils/dvb/dvb_support.cpp \
 	utils/logging/logging.cpp \
 	utils/fifo.cpp \
-	utils/hash_table.cpp \
 	utils/ticks.cpp \
 	utils/uuid.cpp
 
