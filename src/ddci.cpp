@@ -717,8 +717,8 @@ int safe_get_pid_mapping(ddci_device_t *d, int aid, int pid) {
 
 int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
                     ddci_pmt_t *dp) {
-    int pid = pmt->pid, pi_len = 0, i;
-    uint8_t *b = new_pmt, *start_pmt, *start_pi_len;
+    int pid = pmt->pid, i;
+    uint8_t *b = new_pmt, *start_pmt;
     memset(new_pmt, 0, pmt_size);
 
     *b++ = 0;
@@ -734,29 +734,12 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
     *b++ = 0xE0 | ((dp->pcr_pid >> 8) & 0xFF); // PCR PID
     *b++ = dp->pcr_pid & 0xFF;                 // PCR PID
 
-    start_pi_len = b;
-
     *b++ = 0; // PI LEN
     *b++ = 0;
 
     LOGM("%s: PMT %d AD %d, pid: %04X (%d), ver %d, sid %04X (%d) %s %s",
          __FUNCTION__, pmt->id, pmt->adapter, pid, pid, dp->ver, pmt->sid,
          pmt->sid, pmt->name[0] ? "channel:" : "", pmt->name);
-
-    // Add CA IDs and CA Pids
-    for (i = 0; i < pmt->caids; i++) {
-        int private_data_len = pmt->ca[i]->private_data_len;
-        *b++ = 0x09;
-        *b++ = 0x04 + private_data_len;
-        copy16(b, 0, pmt->ca[i]->id);
-        copy16(b, 2, safe_get_pid_mapping(d, pmt->adapter, pmt->ca[i]->pid));
-        memcpy(b + 4, pmt->ca[i]->private_data, private_data_len);
-        pi_len += 6 + private_data_len;
-        b += 4 + private_data_len;
-        LOGM("%s: pmt %d added caid %04X, pid %04X", __FUNCTION__, pmt->id,
-             pmt->ca[i]->id, pmt->ca[i]->pid);
-    }
-    copy16(start_pi_len, 0, pi_len);
 
     // Add Stream pids
     // Add CA IDs and CA Pids
