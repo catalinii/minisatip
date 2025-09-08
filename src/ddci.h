@@ -4,7 +4,8 @@
 #include "pmt.h"
 #include "tables.h"
 #include "utils/fifo.h"
-#include "utils/hash_table.h"
+#include <unordered_map>
+#include <unordered_set>
 
 // Maximum number of PMTs (channels) supported per adapter
 #define MAX_CHANNELS_ON_CI 8
@@ -22,6 +23,21 @@ typedef struct ddci_pmt {
     uint32_t crc;
 } ddci_pmt_t;
 
+// Use a hash table to store mapping_table entries
+// the key is ad << 16 | pid to be able to search faster
+// based on this key. This key is needed mostly for processing CAT, PMT, PAT
+// to map from pids in original tables to destination ones.
+typedef struct ddci_mapping_table {
+    int ad;
+    int pid;
+    int ddci_pid;
+    int ddci;
+    char rewrite;
+    std::unordered_set<int> pmt;
+    int filter_id = -1;
+    int pid_added;
+} ddci_mapping_table_t;
+
 typedef struct ddci_device {
     SMutex mutex;
     int enabled;
@@ -37,25 +53,9 @@ typedef struct ddci_device {
     int tid, ver;
     int16_t pat_cc, sdt_cc, eit_cc;
     char disable_cat;
-    SHashTable mapping;
+    std::unordered_map<int, ddci_mapping_table_t> mapping;
     SFIFO fifo;
 } ddci_device_t;
-
-// Use a hash table to store mapping_table entries
-// the key is ad << 16 | pid to be able to search faster
-// based on this key. This key is needed mostly for processing CAT, PMT, PAT
-// to map from pids in original tables to destination ones.
-typedef struct ddci_mapping_table {
-    int ad;
-    int pid;
-    int ddci_pid;
-    int ddci;
-    char rewrite;
-    int pmt[MAX_CHANNELS_ON_CI + 1];
-    int npmt;
-    int filter_id;
-    int pid_added;
-} ddci_mapping_table_t;
 
 typedef struct ddci_channel {
     struct SDDCI {
@@ -79,10 +79,11 @@ int ddci_create_sdt(ddci_device_t *d, uint8_t *b);
 int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
                     ddci_pmt_t *dp);
 ddci_mapping_table_t *get_pid_mapping_allddci(int ad, int pid);
-void save_channels(SHashTable *ch);
-void load_channels(SHashTable *ch);
+void save_channels();
+void load_channels();
 int ddci_process_pmt(adapter *ad, SPMT *pmt);
 void blacklist_pmt_for_ddci(SPMT *pmt, int ddid);
 int ddci_del_pmt(adapter *ad, SPMT *spmt);
 void disable_cat_adapters(char *o);
+void dump_mapping_table();
 #endif

@@ -31,7 +31,6 @@
 #include "pmt.h"
 #include "utils.h"
 
-#include "utils/hash_table.h"
 #include "utils/ticks.h"
 
 #include <arpa/inet.h>
@@ -1327,9 +1326,9 @@ int satipc_send_setup(adapter *ad, satipc *sip) {
     return 0;
 }
 
-void satipc_get_pids(adapter *ad, satipc *sip, char *url, int size) {
+void satipc_get_pids(adapter *ad, satipc *sip, char *url, int size,
+                     int send_pids) {
     char tmp_url[1000];
-    int send_pids = 0;
     int len = 0;
 
     // Use pids= only when forced to use pids=
@@ -1387,6 +1386,7 @@ int satipc_send_play(adapter *ad) {
     url[0] = 0;
     if (sip->want_tune + sip->lap + sip->ldp + sip->force_pids == 0)
         LOG_AND_RETURN(0, "adapter %d: Nothing to commit", ad->id);
+    int use_pids = 0;
 
     if (sip->want_tune || !sip->sent_transport) {
         tune_url(ad, url, sizeof(url) - 1);
@@ -1394,9 +1394,10 @@ int satipc_send_play(adapter *ad) {
 
         len = strlen(url);
         strcatf(url, len, "&");
+        use_pids = 1;
     }
 
-    satipc_get_pids(ad, sip, url + len, sizeof(url) - len);
+    satipc_get_pids(ad, sip, url + len, sizeof(url) - len, use_pids);
     sip->want_tune = 0;
     http_request(ad, url, "PLAY", 0);
     return 0;
