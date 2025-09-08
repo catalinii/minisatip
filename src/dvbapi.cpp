@@ -52,7 +52,6 @@
 
 #define DEFAULT_LOG LOG_DVBAPI
 
-const int64_t DVBAPI_ITEM = 0x1000000000000;
 int dvbapi_sock = -1;
 int sock;
 int dvbapi_is_enabled = 0;
