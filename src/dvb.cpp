@@ -1443,7 +1443,7 @@ int dvb_demux_set_pid(adapter *a, int i_pid) {
         }
         LOG("AD %d [dvr %d %d], setting filter on PID %d for fd %d, active "
             "pids %d",
-            a->id, i_pid, fd, a->active_pids);
+            a->id, a->pa, a->fn, i_pid, fd, a->active_pids);
         return fd;
     }
 

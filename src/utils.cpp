@@ -519,9 +519,6 @@ int find_new_id(void **arr, int count) {
     struct struct_array **sa = (struct struct_array **)arr;
     for (i = 0; i < count; i++)
         if (!sa[i] || !sa[i]->enabled) {
-            if (!sa[i]) {
-                return i;
-            }
             return i;
         }
     return -1;

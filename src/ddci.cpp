@@ -164,7 +164,7 @@ void dump_mapping_table() {
                 for (const auto &elem : m.pmt)
                     out += std::to_string(elem) + " ";
 
-                LOGM("DD %d, ddpid %d, adapter %d pid %d, rewrite %d: %d PMTS "
+                LOGM("DD %d, ddpid %d, adapter %d pid %d, rewrite %d: %zu PMTS "
                      "%s",
                      m.ddci, m.ddci_pid, m.ad, m.pid, m.rewrite, m.pmt.size(),
                      out.c_str());
