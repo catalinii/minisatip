@@ -552,15 +552,16 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
 int sockets_del(int sock) {
     int i, so;
     sockets *ss;
+    std::unique_lock<SMutex> lock(s_mutex);
 
     if (sock < 0 || sock >= MAX_SOCKS || !s[sock] || !s[sock]->enabled ||
-        !s[sock]->is_enabled)
+        !s[sock]->is_enabled) {
         return 0;
+    }
 
     ss = s[sock];
-    mutex_lock(&ss->mutex);
+    std::unique_lock<SMutex> lock2(ss->mutex);
     if (!ss->enabled) {
-        mutex_unlock(&ss->mutex);
         return 0;
     }
     if (ss->close)
@@ -602,10 +603,9 @@ int sockets_del(int sock) {
         "%d",
         sock, i, so);
 
-    mutex_lock(&s_mutex);
     ss->enabled = 0;
-    mutex_unlock(&s_mutex);
-    mutex_unlock(&ss->mutex);
+    lock2.unlock();
+    lock.unlock();
 
     for (i = 0; i < MAX_SOCKS; i++)
         if (s[i] && s[i]->enabled && s[i]->master == sock) {

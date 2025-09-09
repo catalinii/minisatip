@@ -107,10 +107,8 @@ adapter *adapter_alloc() {
 
     ad->drop_encrypted = opts.drop_encrypted;
 
-    if (!ad->buf) {
-        ad->lbuf = opts.adapter_buffer;
-        ad->buf = (unsigned char *)malloc(ad->lbuf + 10);
-    }
+    ad->lbuf = opts.adapter_buffer;
+    ad->buf = (unsigned char *)malloc(ad->lbuf + 10);
 
 #ifndef DISABLE_PMT
     // filter for pid 0
@@ -338,11 +336,10 @@ int init_hw(int i) {
 
 int init_all_hw() {
     int i, rv;
-
+    std::lock_guard<SMutex> lock(a_mutex);
     LOG("starting init_all_hw %d", init_complete);
     if (init_complete)
         return num_adapters;
-    std::lock_guard<SMutex> lock(a_mutex);
     find_adapters();
     num_adapters = 0;
     init_complete = 1;
