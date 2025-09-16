@@ -1178,7 +1178,7 @@ int stream_timeout(sockets *s) {
     s->rtime = ctime;
 
     if ((sid = get_sid(s->sid)) && sid->type != STREAM_HTTP) {
-        std::lock_guard<SMutex> lock(sid->mutex);
+        std::unique_lock<SMutex> lock(sid->mutex);
         rttime = sid->rtcp_wtime, rtime = sid->wtime;
 
         if (sid->do_play && ctime - rtime > 1000) {
@@ -1196,6 +1196,8 @@ int stream_timeout(sockets *s) {
             LOG("Stream timeout sid %d, closing (ctime %jd , sid->rtime %jd, "
                 "sid->timeout %d)",
                 sid->sid, ctime, sid->rtime, sid->timeout);
+
+            lock.unlock();
             close_stream(sid->sid); // do not lock before this
         }
     }
