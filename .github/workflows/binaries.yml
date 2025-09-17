@@ -40,12 +40,6 @@ jobs:
         file minisatip
         zip -9 -r /minisatip_x64.zip minisatip html
 
-        make clean
-        ./configure --disable-netcv
-        make debug
-        file minisatip
-        zip -9 -r /minisatip_x64-debug.zip minisatip html
-
     - name: Build ARM
       run: |
         make clean
@@ -53,12 +47,6 @@ jobs:
         make
         file minisatip
         zip -9 -r /minisatip_arm.zip minisatip html
-        
-        make clean
-        ./configure --disable-netcv --host=arm-linux-gnueabihf
-        make debug
-        file minisatip
-        zip -9 -r /minisatip_arm-debug.zip minisatip html
 
     - name: Build MIPS
       run: |
@@ -82,9 +70,7 @@ jobs:
         name: minisatip
         path: |
           /minisatip_x64.zip
-          /minisatip_x64-debug.zip
           /minisatip_arm.zip
-          /minisatip_arm-debug.zip
           /minisatip_axe.zip
           /minisatip_mips.zip
           /minisatip_mips_musl.zip
