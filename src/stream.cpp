@@ -1245,7 +1245,7 @@ int unlock_streams_for_adapter(int aid) {
 
 void free_all_streams() {
     int i;
-
+    std::lock_guard<SMutex> lock(st_mutex);
     for (i = 0; i < MAX_STREAMS; i++) {
         if (st[i])
             delete st[i];

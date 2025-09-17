@@ -2211,6 +2211,7 @@ char *get_pmt_for_adapter(int aid, char *dest, int max_size) {
 
 void free_all_pmts() {
     int i, j;
+    std::lock_guard<SMutex> lock(pmts_mutex);
     for (i = 0; i < MAX_PMT; i++) {
         if (pmts[i]) {
             for (j = 0; j < pmts[i]->caids; j++)
