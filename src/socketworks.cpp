@@ -889,10 +889,12 @@ void *select_and_execute(void *arg) {
                         int rv;
                         if (ss->sock == SOCK_TIMEOUT)
                             ss->rtime = getTick();
-                        std::lock_guard<SMutex> lock(ss->mutex);
+                        std::unique_lock<SMutex> lock(ss->mutex);
                         rv = ss->timeout(ss);
-                        if (rv)
+                        if (rv) {
+                            lock.unlock();
                             sockets_del(i);
+                        }
                     } else
                         sockets_del(i);
                 }
