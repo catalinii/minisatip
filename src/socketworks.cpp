@@ -715,7 +715,7 @@ void *select_and_execute(void *arg) {
                 strerror(errno));
             continue;
         } else if (rv > 0) {
-            while (++i < max_sock)
+            while (++i < max_sock) {
                 if ((pf[i].fd >= 0) && pf[i].revents) {
                     sockets *ss = s[i];
                     if (!ss)
@@ -757,73 +757,83 @@ void *select_and_execute(void *arg) {
                         master = get_sockets(ss->master);
                     if (!master)
                         master = ss;
-                    std::lock_guard<SMutex> lock(master->mutex);
 
-                    if (!master->buf || master->buf == buf) {
-                        master->buf = buf;
-                        master->lbuf = sizeof(buf) - 1;
-                        master->rlen = 0;
-                    }
-                    if (master->rlen >= master->lbuf) {
-                        DEBUGM("Socket buffer full, handle %d, sock_id %d (m: "
-                               "%d), type "
-                               "%d, lbuf %d, rlen %d, ss->buf = %p, buf %p",
-                               master->sock, ss->id, master->id, master->type,
-                               master->lbuf, master->rlen, master->buf, buf);
-                        master->rlen = 0;
-                    }
-                    rlen = 0;
-                    read_ok = 0;
+                    // Hold lock while reading
+                    {
+                        std::lock_guard<SMutex> lock(master->mutex);
 
-                    pos = master->buf + master->rlen;
-                    pos_len = master->lbuf - master->rlen;
-                    old_rlen = master->rlen;
-
-                    if (ss->read)
-                        read_ok = ss->read(ss->sock, pos, pos_len, ss, &rlen);
-
-                    err = 0;
-                    if (!read_ok)
-                        err = errno;
-
-                    if (opts.log & LOG_SOCKET) {
-                        int64_t now = getTick();
-                        if (now - c_time > 100)
-                            LOGM("WARNING: read on socket id %d, handle %d, "
-                                 "took %jd ms",
-                                 ss->id, ss->sock, now - c_time);
-                    }
-
-                    if (rlen > 0)
-                        master->rtime = c_time;
-
-                    if (read_ok && rlen >= 0)
-                        master->rlen += rlen;
-                    else {
-                        if (master->rlen > 0) {
-                            LOG("socket %d, handle %d, master %d, errno %d, "
-                                "read_ok %d, "
-                                "clearing buffer with len %d",
-                                ss->id, ss->sock, master->id, err, read_ok,
-                                master->rlen)
+                        if (!master->buf || master->buf == buf) {
+                            master->buf = buf;
+                            master->lbuf = sizeof(buf) - 1;
+                            master->rlen = 0;
                         }
-                        master->rlen = 0;
+                        if (master->rlen >= master->lbuf) {
+                            DEBUGM(
+                                "Socket buffer full, handle %d, sock_id %d (m: "
+                                "%d), type "
+                                "%d, lbuf %d, rlen %d, ss->buf = %p, buf %p",
+                                master->sock, ss->id, master->id, master->type,
+                                master->lbuf, master->rlen, master->buf, buf);
+                            master->rlen = 0;
+                        }
+                        rlen = 0;
+                        read_ok = 0;
+
+                        pos = master->buf + master->rlen;
+                        pos_len = master->lbuf - master->rlen;
+                        old_rlen = master->rlen;
+
+                        if (ss->read)
+                            read_ok =
+                                ss->read(ss->sock, pos, pos_len, ss, &rlen);
+
+                        err = 0;
+                        if (!read_ok)
+                            err = errno;
+
+                        if (opts.log & LOG_SOCKET) {
+                            int64_t now = getTick();
+                            if (now - c_time > 100)
+                                LOGM(
+                                    "WARNING: read on socket id %d, handle %d, "
+                                    "took %jd ms",
+                                    ss->id, ss->sock, now - c_time);
+                        }
+
+                        if (rlen > 0)
+                            master->rtime = c_time;
+
+                        if (read_ok && rlen >= 0)
+                            master->rlen += rlen;
+                        else {
+                            if (master->rlen > 0) {
+                                LOG("socket %d, handle %d, master %d, errno "
+                                    "%d, "
+                                    "read_ok %d, "
+                                    "clearing buffer with len %d",
+                                    ss->id, ss->sock, master->id, err, read_ok,
+                                    master->rlen)
+                            }
+                            master->rlen = 0;
+                        }
+
+                        // force 0 at the end of the string
+                        if (master->lbuf >= master->rlen)
+                            master->buf[master->rlen] = 0;
+
+                        DEBUGM("Read %s %d (rlen:%d/total:%d) bytes from %d "
+                               "[s: %d "
+                               "m: %d] -> old pos %d (buf: %p) - iteration %jd "
+                               "action %p",
+                               read_ok ? "OK" : "NOK", rlen, master->rlen,
+                               master->lbuf, ss->sock, ss->id, master->id,
+                               old_rlen, master->buf, ss->iteration,
+                               master->action);
+
+                        if (((master->rlen > 0) || err == EWOULDBLOCK) &&
+                            master->action && (master->type != TYPE_SERVER))
+                            master->action(master);
                     }
-
-                    // force 0 at the end of the string
-                    if (master->lbuf >= master->rlen)
-                        master->buf[master->rlen] = 0;
-
-                    DEBUGM("Read %s %d (rlen:%d/total:%d) bytes from %d [s: %d "
-                           "m: %d] -> old pos %d (buf: %p) - iteration %jd "
-                           "action %p",
-                           read_ok ? "OK" : "NOK", rlen, master->rlen,
-                           master->lbuf, ss->sock, ss->id, master->id, old_rlen,
-                           master->buf, ss->iteration, master->action);
-
-                    if (((master->rlen > 0) || err == EWOULDBLOCK) &&
-                        master->action && (master->type != TYPE_SERVER))
-                        master->action(master);
 
                     if (!read_ok && ss->type != TYPE_SERVER) {
                         const char *err_str;
@@ -870,6 +880,7 @@ void *select_and_execute(void *arg) {
 
                     //					ss->err = 0;
                 }
+            }
         }
         // checking every 60seconds for idle connections - or if select times
         // out
