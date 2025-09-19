@@ -861,9 +861,13 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
         c->expiry = c->time + expiry * 1000;
 
     if (parity == pmt->parity && pmt->cw && pmt->last_update_cw > 0) {
-        LOG("CW %d for PMT %d (%s) Warning! New CW using the current parity",
-            c->id, pmt_id, pmt->name);
-        c->time = pmt->cw->time - 1000; // We set the time before the active CW
+        int res = 0;
+        if (!pmt->update_cw) {
+            c->time = pmt->cw->time - 1000; // We set the time before the active CW
+            res = 1;
+        }
+        LOG("CW %d for PMT %d (%s) Warning! New CW using the current parity%s",
+            c->id, pmt_id, pmt->name, res? " and perhaps a fake one!" : "");
     }
 
     if (algo < 2)
