@@ -1148,6 +1148,11 @@ void emulate_add_all_pids(adapter *ad) {
                 if (!pmt)
                     continue;
 
+                LOG("%s: adding PMT pid %d to emulate all pids",
+                    __FUNCTION__, pmt->pid);
+                mark_pid_add(p_all->sid[i], ad->id, pmt->pid);
+                updated = 1;
+
                 for (k = 0; k < pmt->stream_pids; k++)
                     if (!pids[pmt->stream_pid[k]->pid]) {
                         LOG("%s: adding pid %d to emulate all pids",
@@ -1155,7 +1160,6 @@ void emulate_add_all_pids(adapter *ad) {
                         mark_pid_add(p_all->sid[i], ad->id,
                                      pmt->stream_pid[k]->pid);
                         pids[pmt->stream_pid[k]->pid] = 1;
-                        updated = 1;
                     }
             }
 
