@@ -1226,10 +1226,7 @@ int lock_streams_for_adapter(int aid) {
     for (i = 0; i < MAX_STREAMS; i++)
         if ((sid = get_sid_nw(i)) && sid->adapter == aid) {
             mutex_lock(&sid->mutex);
-            if ((sid = get_sid_nw(i)) && (sid->adapter != aid))
-                mutex_unlock(&sid->mutex);
-            else
-                ls++;
+            ls++;
         }
     return ls;
 }
