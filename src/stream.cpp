@@ -1227,6 +1227,10 @@ int lock_streams_for_adapter(int aid) {
         if ((sid = get_sid_nw(i)) && sid->adapter == aid) {
             int64_t t = getTickUs();
             mutex_lock(&sid->mutex);
+            if (!sid->enabled) {
+                mutex_unlock(&sid->mutex);
+                continue;
+            }
             LOG("Locked stream %d after %jd for %d", i, t - getTickUs(), aid);
             ls++;
         }
