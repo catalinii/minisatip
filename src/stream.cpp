@@ -224,6 +224,7 @@ streams *setup_stream(char *str, sockets *s) {
         int ad = sid->adapter;
         if (!strstr(tmp_str, "addpids") && !strstr(tmp_str, "delpids")) {
             close_adapter_for_stream(sid->sid, ad, 0);
+            sid->adapter = -1;
         }
     }
 
