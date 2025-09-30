@@ -224,6 +224,7 @@ streams *setup_stream(char *str, sockets *s) {
         int ad = sid->adapter;
         if (!strstr(tmp_str, "addpids") && !strstr(tmp_str, "delpids")) {
             close_adapter_for_stream(sid->sid, ad, 0);
+            sid->adapter = -1;
         }
     }
 
@@ -1225,7 +1226,13 @@ int lock_streams_for_adapter(int aid) {
     int i = 0, ls = 0;
     for (i = 0; i < MAX_STREAMS; i++)
         if ((sid = get_sid_nw(i)) && sid->adapter == aid) {
+            int64_t t = getTickUs();
             mutex_lock(&sid->mutex);
+            if (!sid->enabled) {
+                mutex_unlock(&sid->mutex);
+                continue;
+            }
+            LOG("Locked stream %d after %jd for %d", i, t - getTickUs(), aid);
             ls++;
         }
     return ls;
@@ -1237,6 +1244,7 @@ int unlock_streams_for_adapter(int aid) {
     for (i = MAX_STREAMS - 1; i >= 0; i--)
         if ((sid = get_sid_nw(i)) && sid->adapter == aid) {
             mutex_unlock(&sid->mutex);
+            LOG("Unlocked stream %d for adapter %d", i, aid);
             ls++;
         }
     return ls;
