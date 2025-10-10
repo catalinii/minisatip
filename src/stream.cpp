@@ -17,6 +17,14 @@
  * USA
  *
  */
+#include "stream.h"
+#include "adapter.h"
+#include "api/symbols.h"
+#include "api/variables.h"
+#include "dvb.h"
+#include "minisatip.h"
+#include "pmt.h"
+#include "socketworks.h"
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -35,15 +43,7 @@
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
-
-#include "adapter.h"
-#include "api/symbols.h"
-#include "api/variables.h"
-#include "dvb.h"
-#include "minisatip.h"
-#include "pmt.h"
-#include "socketworks.h"
-#include "stream.h"
+#include <vector>
 
 #include "utils/ticks.h"
 
@@ -224,6 +224,7 @@ streams *setup_stream(char *str, sockets *s) {
         int ad = sid->adapter;
         if (!strstr(tmp_str, "addpids") && !strstr(tmp_str, "delpids")) {
             close_adapter_for_stream(sid->sid, ad, 0);
+            sid->adapter = -1;
         }
     }
 
@@ -991,7 +992,6 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
     flush_stream(sid, iov, iiov, rtime);
     return 0;
 }
-
 int process_dmx(sockets *s) {
     int i;
     adapter *ad;
@@ -1039,13 +1039,33 @@ int process_dmx(sockets *s) {
     return 0;
 }
 
+std::vector<SMutex *> lock_streams_for_adapter(int aid) {
+    streams *sid;
+    std::vector<SMutex *> locks;
+    for (int i = 0; i < MAX_STREAMS; i++)
+        if ((sid = get_sid_nw(i)) && sid->adapter == aid) {
+            mutex_lock(&sid->mutex);
+            if (!sid->enabled) {
+                mutex_unlock(&sid->mutex);
+                continue;
+            }
+            locks.push_back(&sid->mutex);
+        }
+    return locks;
+}
+void unlock_streams_for_adapter(std::vector<SMutex *> locks) {
+    int i = 0;
+    for (i = locks.size() - 1; i >= 0; i--)
+        mutex_unlock(locks[i]);
+}
+
 // lock order: socket -> stream -> adapter
 // after stream or adapter, avoid locking socket
 
 int read_dmx(sockets *s) {
     static int cnt;
     adapter *ad;
-    int send = 0, force_send = 0, ls, lse;
+    int send = 0, force_send = 0;
     int threshold = opts.udp_threshold;
     int64_t rtime = getTick();
 
@@ -1112,13 +1132,11 @@ int read_dmx(sockets *s) {
         return 0;
 
     ad->flush = 0;
-    ls = lock_streams_for_adapter(ad->id);
+    auto locks = lock_streams_for_adapter(ad->id);
     mutex_lock(&ad->mutex);
     process_dmx(s);
     mutex_unlock(&ad->mutex);
-    lse = unlock_streams_for_adapter(ad->id);
-    if (ls != lse)
-        LOG("leak detected %d %d!!! ", ls, lse);
+    unlock_streams_for_adapter(locks);
     return 0;
 }
 #undef DEFAULT_LOG
@@ -1218,28 +1236,6 @@ void dump_streams() {
                 sid->adapter, sid->rsock, sid->type, sid->do_play,
                 get_stream_rhost(sid->sid, ra, sizeof(ra)),
                 get_stream_rport(sid->sid));
-}
-
-int lock_streams_for_adapter(int aid) {
-    streams *sid;
-    int i = 0, ls = 0;
-    for (i = 0; i < MAX_STREAMS; i++)
-        if ((sid = get_sid_nw(i)) && sid->adapter == aid) {
-            mutex_lock(&sid->mutex);
-            ls++;
-        }
-    return ls;
-}
-
-int unlock_streams_for_adapter(int aid) {
-    streams *sid;
-    int i = 0, ls = 0;
-    for (i = MAX_STREAMS - 1; i >= 0; i--)
-        if ((sid = get_sid_nw(i)) && sid->adapter == aid) {
-            mutex_unlock(&sid->mutex);
-            ls++;
-        }
-    return ls;
 }
 
 void free_all_streams() {
