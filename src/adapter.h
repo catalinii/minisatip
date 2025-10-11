@@ -174,7 +174,7 @@ int get_lnb_int_freq(transponder *tp, diseqc *diseqc_param);
 int delsys_match(adapter *ad, int del_sys);
 int get_enabled_pids(adapter *ad, int *pids, int lpids);
 int get_all_pids(adapter *ad, int *pids, int lpids);
-char *get_adapter_pids(int aid, char *dest, int max_size);
+char *get_adapter_pids(int aid, char *dest, int max_size, int emu_all);
 int adapter_timeout(sockets *s);
 void adapter_set_dvr(adapter *ad);
 char is_adapter_disabled(int i);
