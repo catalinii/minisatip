@@ -868,6 +868,8 @@ char *get_channel_for_key(int key, char *dest, int max_size) {
 }
 
 void free_all_keys(void) {
+    std::lock_guard<SMutex> lock(keys_mutex);
+
     int i;
     for (i = 0; i < MAX_KEYS; i++) {
         if (keys[i]) {
