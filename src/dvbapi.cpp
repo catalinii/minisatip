@@ -132,8 +132,7 @@ int dvbapi_reply(sockets *s) {
         change_endianness = 0;
         if (op1 == CA_SET_DESCR_X || op1 == CA_SET_DESCR_AES_X ||
             op1 == CA_SET_PID_X || op1 == DMX_STOP_X ||
-            op1 == DMX_SET_FILTER_X ||
-            op1 == CA_SET_DESCR_AES_X) { // change endianness
+            op1 == DMX_SET_FILTER_X) { // change endianness
             op = 0x40000000 | ((op1 & 0xFF) << 16) | (op1 & 0xFF00) |
                  ((op1 & 0xFF0000) >> 16);
             if (!(op & 0xFF0000))
