@@ -55,6 +55,7 @@
 #define DEFAULT_LOG LOG_DVBAPI
 
 int dvbapi_sock = -1;
+int poller_sock;
 int sock;
 SMutex dvbapi_socket_mutex;
 int dvbapi_is_enabled = 0;
@@ -580,7 +581,6 @@ int connect_dvbapi(void *arg) {
     return 0;
 }
 
-int poller_sock;
 void init_dvbapi() {
     int sec = 1;
     poller_sock = sockets_add(SOCK_TIMEOUT, NULL, -1, TYPE_UDP, NULL, NULL,
