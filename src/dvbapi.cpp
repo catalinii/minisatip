@@ -413,7 +413,6 @@ int dvbapi_send_pmt(SKey *k, int cmd_id) {
     unsigned char buf[2500];
     int len;
     int listmgmt = CLM_UPDATE;
-    std::lock_guard<SMutex> lock(keys_mutex);
     SPMT *pmt = get_pmt(k->pmt_id);
     if (!pmt)
         return 1;
@@ -494,6 +493,8 @@ int dvbapi_close(sockets *s) {
     sock = -1;
     dvbapi_is_enabled = 0;
     SKey *k;
+    std::lock_guard<SMutex> lock(keys_mutex);
+
     for (i = 0; i < MAX_KEYS; i++)
         if (keys[i] && keys[i]->enabled) {
             k = get_key(i);
@@ -528,6 +529,7 @@ int connect_dvbapi(void *arg) {
     {
         int i;
         int64_t ctime = getTick();
+        std::lock_guard<SMutex> lock(keys_mutex);
 
         for (i = 0; i < MAX_KEYS; i++) {
             if (network_mode && keys[i] && keys[i]->enabled &&
@@ -690,7 +692,6 @@ int keys_add(int i, int adapter, int pmt_id) {
 
     SKey *k;
     SPMT *pmt = get_pmt(pmt_id);
-    std::lock_guard<SMutex> lock(keys_mutex);
 
     if (!pmt)
         LOG_AND_RETURN(-1, "%s: PMT %d not found ", __FUNCTION__, pmt_id);
@@ -735,7 +736,6 @@ int keys_del(int i) {
     unsigned char buf[8] = {0x9F, 0x80, 0x3f, 4, 0x83, 2, 0, 0};
     SKey *k;
     const char *msg = "";
-    std::lock_guard<SMutex> lock(keys_mutex);
 
     k = get_key(i);
     if (!k)
@@ -825,6 +825,7 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt) {
 
 int dvbapi_del_pmt(adapter *ad, SPMT *pmt) {
     SKey *k = (SKey *)pmt->opaque;
+    std::lock_guard<SMutex> lock(keys_mutex);
     keys_del(k->id);
     pmt->opaque = NULL;
     LOG("%s: deleted key %d, PMT pid %d, sid %d (%X), PMT %d", __FUNCTION__,
@@ -855,6 +856,8 @@ void unregister_dvbapi() {
 }
 
 char *get_channel_for_key(int key, char *dest, int max_size) {
+    std::lock_guard<SMutex> lock(keys_mutex);
+
     SKey *k = get_key(key);
     SPMT *pmt = NULL;
     dest[0] = 0;
