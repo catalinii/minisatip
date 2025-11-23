@@ -57,7 +57,6 @@
 int dvbapi_sock = -1;
 int sock;
 int dvbapi_is_enabled = 0;
-int enabledKeys = 0;
 int network_mode = 1;
 int dvbapi_protocol_version = DVBAPI_PROTOCOL_VERSION;
 int dvbapi_ca = -1;
@@ -726,7 +725,6 @@ int keys_add(int i, int adapter, int pmt_id) {
     memset(k->filter_id, -1, sizeof(k->filter_id));
     memset(k->filter, -1, sizeof(k->filter));
     memset(k->demux, -1, sizeof(k->demux));
-    __sync_add_and_fetch(&enabledKeys, 1);
     LOG("returning new key %d for adapter %d, pmt %d pid %d sid %04X", i,
         adapter, pmt->id, pmt->pid, k->sid);
 
