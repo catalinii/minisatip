@@ -613,6 +613,8 @@ int send_ecm(int filter_id, unsigned char *b, int len, void *opaque) {
     int old_parity;
     int valid_cw;
 
+    std::lock_guard<SMutex> lock(keys_mutex);
+
     if (!dvbapi_is_enabled)
         return 0;
     f = get_filter(filter_id);
