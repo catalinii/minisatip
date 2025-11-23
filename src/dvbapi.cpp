@@ -60,7 +60,6 @@ int dvbapi_is_enabled = 0;
 int network_mode = 1;
 int dvbapi_protocol_version = DVBAPI_PROTOCOL_VERSION;
 int dvbapi_ca = -1;
-int oscam_version;
 
 uint64_t dvbapi_last_close = 0;
 
@@ -162,6 +161,7 @@ int dvbapi_reply(sockets *s) {
             if (s->rlen < 6)
                 return 0;
             dvbapi_copy16r(dvbapi_protocol_version, b, 4);
+            int oscam_version = 0;
             char *oscam_version_str = strstr((char *)b + 7, "build r");
             if (oscam_version_str)
                 oscam_version = map_intd(oscam_version_str + 7, NULL, 0);
