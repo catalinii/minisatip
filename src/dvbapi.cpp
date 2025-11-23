@@ -38,6 +38,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <math.h>
+#include <mutex>
 #include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -57,14 +58,14 @@
 int dvbapi_sock = -1;
 int poller_sock;
 int sock;
-SMutex dvbapi_socket_mutex;
+std::mutex dvbapi_socket_mutex;
 int dvbapi_is_enabled = 0;
 int network_mode = 1;
 int dvbapi_protocol_version = DVBAPI_PROTOCOL_VERSION;
 int dvbapi_ca = -1;
 
 SKey *keys[MAX_KEYS];
-SMutex keys_mutex;
+std::mutex keys_mutex;
 unsigned char read_buffer[8192];
 extern char *listmgmt_str[];
 
@@ -82,7 +83,7 @@ void dvbapi_close_socket() {
 }
 
 void dvbapi_write(int sock, const void *buf, int len) {
-    std::lock_guard<SMutex> lock(dvbapi_socket_mutex);
+    std::lock_guard<std::mutex> lock(dvbapi_socket_mutex);
     int wrote;
 
     if ((wrote = write(sock, buf, len)) != len) {
@@ -122,7 +123,7 @@ int dvbapi_reply(sockets *s) {
         send_client_info(s);
         return 0;
     }
-    std::lock_guard<SMutex> lock(keys_mutex);
+    std::lock_guard<std::mutex> lock(keys_mutex);
 
     while (pos < s->rlen) {
         int op1;
@@ -492,7 +493,7 @@ int dvbapi_close(sockets *s) {
     sock = -1;
     dvbapi_is_enabled = 0;
     SKey *k;
-    std::lock_guard<SMutex> lock(keys_mutex);
+    std::lock_guard<std::mutex> lock(keys_mutex);
 
     for (i = 0; i < MAX_KEYS; i++)
         if (keys[i] && keys[i]->enabled) {
@@ -528,7 +529,7 @@ int connect_dvbapi(void *arg) {
     {
         int i;
         int64_t ctime = getTick();
-        std::lock_guard<SMutex> lock(keys_mutex);
+        std::lock_guard<std::mutex> lock(keys_mutex);
 
         for (i = 0; i < MAX_KEYS; i++) {
             if (network_mode && keys[i] && keys[i]->enabled &&
@@ -612,7 +613,7 @@ int send_ecm(int filter_id, unsigned char *b, int len, void *opaque) {
     int old_parity;
     int valid_cw;
 
-    std::lock_guard<SMutex> lock(keys_mutex);
+    std::lock_guard<std::mutex> lock(keys_mutex);
 
     if (!dvbapi_is_enabled)
         return 0;
@@ -794,7 +795,7 @@ int keys_del(int i) {
 int dvbapi_add_pmt(adapter *ad, SPMT *pmt) {
     SKey *k = NULL;
     int key, pid = pmt->pid;
-    std::lock_guard<SMutex> lock(keys_mutex);
+    std::lock_guard<std::mutex> lock(keys_mutex);
 
     if (ad->type == ADAPTER_CI) {
         LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
@@ -826,7 +827,7 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt) {
 
 int dvbapi_del_pmt(adapter *ad, SPMT *pmt) {
     SKey *k = (SKey *)pmt->opaque;
-    std::lock_guard<SMutex> lock(keys_mutex);
+    std::lock_guard<std::mutex> lock(keys_mutex);
     keys_del(k->id);
     pmt->opaque = NULL;
     LOG("%s: deleted key %d, PMT pid %d, sid %d (%X), PMT %d", __FUNCTION__,
@@ -857,7 +858,7 @@ void unregister_dvbapi() {
 }
 
 char *get_channel_for_key(int key, char *dest, int max_size) {
-    std::lock_guard<SMutex> lock(keys_mutex);
+    std::lock_guard<std::mutex> lock(keys_mutex);
 
     SKey *k = get_key(key);
     SPMT *pmt = NULL;
@@ -872,7 +873,7 @@ char *get_channel_for_key(int key, char *dest, int max_size) {
 }
 
 void free_all_keys(void) {
-    std::lock_guard<SMutex> lock(keys_mutex);
+    std::lock_guard<std::mutex> lock(keys_mutex);
 
     int i;
     for (i = 0; i < MAX_KEYS; i++) {
