@@ -56,6 +56,7 @@
 
 int dvbapi_sock = -1;
 int sock;
+SMutex dvbapi_socket_mutex;
 int dvbapi_is_enabled = 0;
 int network_mode = 1;
 int dvbapi_protocol_version = DVBAPI_PROTOCOL_VERSION;
@@ -65,19 +66,6 @@ SKey *keys[MAX_KEYS];
 SMutex keys_mutex;
 unsigned char read_buffer[8192];
 extern char *listmgmt_str[];
-
-#define TEST_WRITE(a, xlen)                                                    \
-    {                                                                          \
-        int x;                                                                 \
-        std::lock_guard<SMutex> lock(keys_mutex);                              \
-        if ((x = (a)) != (xlen)) {                                             \
-            LOG("write to dvbapi socket failed (%d out of %d), closing "       \
-                "socket %d, "                                                  \
-                "errno %d, error: %s",                                         \
-                x, (int)xlen, sock, errno, strerror(errno));                   \
-            dvbapi_close_socket();                                             \
-        }                                                                      \
-    }
 
 static inline SKey *get_key(int i) {
     if (i < 0 || i >= MAX_KEYS || !keys[i] || !keys[i]->enabled)
@@ -90,6 +78,19 @@ void dvbapi_close_socket() {
     sock = 0;
     dvbapi_sock = -1;
     dvbapi_is_enabled = 0;
+}
+
+void dvbapi_write(int sock, const void *buf, int len) {
+    std::lock_guard<SMutex> lock(dvbapi_socket_mutex);
+    int wrote;
+
+    if ((wrote = write(sock, buf, len)) != len) {
+        LOG("write to dvbapi socket failed (%d out of %d), closing "
+            "socket %d, "
+            "errno %d, error: %s",
+            wrote, (int)len, sock, errno, strerror(errno));
+        dvbapi_close_socket();
+    }
 }
 
 int get_index_for_filter(SKey *k, int filter) {
@@ -481,7 +482,7 @@ int dvbapi_send_pmt(SKey *k, int cmd_id) {
             "adapter %d, demux %d, using socket %d (%s)",
             k->pmt_id, k->pmt_pid, k->sid, k->id, adapter, demux, sock,
             listmgmt_str[listmgmt]);
-        TEST_WRITE(write(sock, buf, len), len);
+        dvbapi_write(sock, buf, len);
     }
     return 0;
 }
@@ -597,7 +598,7 @@ void send_client_info(sockets *s) {
         sprintf(buf + 7, "%s/%s", app_name, version);
     buf[6] = len;
     dvbapi_is_enabled = 1;
-    TEST_WRITE(write(s->sock, buf, len + 7), len + 7);
+    dvbapi_write(s->sock, buf, len + 7);
 }
 
 int send_ecm(int filter_id, unsigned char *b, int len, void *opaque) {
@@ -673,7 +674,7 @@ int send_ecm(int filter_id, unsigned char *b, int len, void *opaque) {
     memcpy(buf + 6, b, len);
     //	hexdump("ecm: ", buf, len + 6);
     if (sock > 0)
-        TEST_WRITE(write(sock, buf, len + 6), len + 6);
+        dvbapi_write(sock, buf, len + 6);
     return 0;
 }
 
@@ -755,12 +756,12 @@ int keys_del(int i) {
         buf[7] = 0xFF;
         msg = "ALL";
         if (sock > 0)
-            TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
+            dvbapi_write(sock, buf, sizeof(buf));
     } else if (!ed) {
         buf[7] = k->demux_index;
         msg = "DEMUX";
         if (sock > 0)
-            TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
+            dvbapi_write(sock, buf, sizeof(buf));
     } else { // only local socket mode where multiple channels are connected to
              // the same demux
         msg = "PMT";
