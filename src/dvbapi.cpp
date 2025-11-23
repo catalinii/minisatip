@@ -1,5 +1,7 @@
 /*
-   - * Copyright (C) 2014-2020 Catalin Toda <catalinii@yahoo.com>
+ * Copyright (C) 2014-2025 Catalin Toda <catalinii@yahoo.com>,
+                           Sam Stenvall <neggelandia@gmail.com>,
+                           et al.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
