@@ -61,8 +61,6 @@ int network_mode = 1;
 int dvbapi_protocol_version = DVBAPI_PROTOCOL_VERSION;
 int dvbapi_ca = -1;
 
-uint64_t dvbapi_last_close = 0;
-
 SKey *keys[MAX_KEYS];
 SMutex keys_mutex;
 unsigned char read_buffer[8192];
@@ -784,7 +782,6 @@ int keys_del(int i) {
             del_filter(k->filter_id[j]);
 
     k->hops = k->caid = k->info_pid = k->prid = k->ecmtime = 0;
-    dvbapi_last_close = getTick();
 
     LOG("Stopped key %d, active keys %d, sock %d, pmt pid %d, sid %04X, op %s",
         i, ek, sock, pmt_pid, sid, msg);
