@@ -103,13 +103,6 @@ int get_index_for_filter(SKey *k, int filter) {
     return -1;
 }
 
-#define dvbapi_copy32r(v, a, i)                                                \
-    if (change_endianness)                                                     \
-    copy32rr(v, a, i) else copy32r(v, a, i)
-#define dvbapi_copy16r(v, a, i)                                                \
-    if (change_endianness)                                                     \
-    copy16rr(v, a, i) else copy16r(v, a, i)
-
 int dvbapi_reply(sockets *s) {
     unsigned char *b = s->buf;
     SKey *k;
@@ -129,30 +122,11 @@ int dvbapi_reply(sockets *s) {
         int op1;
         b = s->buf + pos;
         copy32r(op, b, 0);
-        op1 = op & 0xFFFFFF;
-        change_endianness = 0;
-        if (op1 == CA_SET_DESCR_X || op1 == CA_SET_DESCR_AES_X ||
-            op1 == CA_SET_PID_X || op1 == DMX_STOP_X ||
-            op1 == DMX_SET_FILTER_X) { // change endianness
-            op = 0x40000000 | ((op1 & 0xFF) << 16) | (op1 & 0xFF00) |
-                 ((op1 & 0xFF0000) >> 16);
-            if (!(op & 0xFF0000))
-                op &= 0xFFFFFF;
-            LOG("dvbapi: changing endianness from %06X to %08X", op1, op);
-            // b ++;
-            // pos ++;
-            b[4] = b[0];
-            change_endianness = 1;
-        }
+
         LOG("dvbapi read from socket %d the following data (%d bytes), pos = "
             "%d, "
             "op %08X, key %d",
             s->sock, s->rlen, pos, op, b[4]);
-        //		LOGL(3, "dvbapi read from socket %d the following data
-        //(%d
-        // bytes), pos = %d, op %08X, key %d -> %02X %02X %02X %02X %02X %02X
-        // %02X %02X %02X %02X %02X", s->sock, s->rlen, pos, op, b[4], b[0],
-        // b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10]);
 
         switch (op) {
 
@@ -160,7 +134,7 @@ int dvbapi_reply(sockets *s) {
 
             if (s->rlen < 6)
                 return 0;
-            dvbapi_copy16r(dvbapi_protocol_version, b, 4);
+            copy16r(dvbapi_protocol_version, b, 4);
             int oscam_version = 0;
             char *oscam_version_str = strstr((char *)b + 7, "build r");
             if (oscam_version_str)
@@ -189,7 +163,7 @@ int dvbapi_reply(sockets *s) {
             if (change_endianness)
                 pos += 2; // for some reason the packet is longer with 2 bytes
             pos += 65;
-            dvbapi_copy16r(_pid, b, 7);
+            copy16r(_pid, b, 7);
             _pid &= 0x1FFF;
             k_id = b[4] - opts.dvbapi_offset;
             k = get_key(k_id);
@@ -267,7 +241,7 @@ int dvbapi_reply(sockets *s) {
             if (!k)
                 break;
             a_id = k->adapter;
-            dvbapi_copy16r(_pid, b, 7) _pid &= 0x1FFF;
+            copy16r(_pid, b, 7) _pid &= 0x1FFF;
             for (i = 0; i < MAX_KEY_FILTERS; i++)
                 if (k->filter[i] == filter && k->demux[i] == demux &&
                     k->pid[i] == _pid)
@@ -302,8 +276,8 @@ int dvbapi_reply(sockets *s) {
 
             pos += 21;
             k_id = b[4] - opts.dvbapi_offset;
-            dvbapi_copy32r(index, b, 5);
-            dvbapi_copy32r(parity, b, 9);
+            copy32r(index, b, 5);
+            copy32r(parity, b, 9);
             cw = b + 13;
             k = get_key(k_id);
             if (k && (parity < 2)) {
@@ -384,8 +358,8 @@ int dvbapi_reply(sockets *s) {
             SKey *k;
             pos += 17;
             k_id = b[4] - opts.dvbapi_offset;
-            dvbapi_copy32r(algo, b, 9);
-            dvbapi_copy32r(mode, b, 13);
+            copy32r(algo, b, 9);
+            copy32r(mode, b, 13);
             LOG("dvbapi: received DVBAPI_CA_SET_DESCR_MODE, key %d, algo %d, "
                 "mode %d",
                 k_id, algo, mode);
