@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        image: ['debian:11', 'debian:12', 'ubuntu:20.04', 'ubuntu:22.04', 'ubuntu:24.04']
+        image: ['debian:11', 'debian:12', 'debian:13', 'ubuntu:20.04', 'ubuntu:22.04', 'ubuntu:24.04']
     container: ${{ matrix.image }}
     steps:
     - uses: actions/checkout@v4
