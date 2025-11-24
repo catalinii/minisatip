@@ -18,7 +18,8 @@
 
 #define MAX_PMT 25600
 #define MAX_CW 200
-#define MAX_CW_TIME 45000 // 45s
+#define DEFAULT_CW_TIME 45000   // 45s
+#define CONST_CW_TIME 315360000 // 10 years
 #define MAX_BATCH_SIZE 128
 
 #define FILTER_SIZE 16 // based on DMX_FILTER_SIZE
@@ -138,7 +139,6 @@ typedef struct struct_pmt {
     char state; // PMT state (PMT_STOPPED, PMT_STARTING, PMT_RUNNING,
                 // PMT_STOPPING)
     char encrypted;
-    int first_active_pid;
     int64_t grace_time, start_time;
     int filter;
     std::unordered_map<uint64_t, int> *global_start, *local_start;
@@ -230,5 +230,6 @@ int pmt_add_stream_pid(SPMT *pmt, int pid, int type, int is_audio, int is_video,
                        int es_len);
 void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid, uint8_t *data,
                   int len);
+int pmt_caid_is_const_cw(SPMT *pmt);
 void free_all_pmts();
 #endif

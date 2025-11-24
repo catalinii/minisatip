@@ -855,10 +855,19 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
     c->time = getTick();
     c->set_time = 0;
     c->opaque = opaque;
-    if (expiry == 0)
-        c->expiry = c->time + MAX_CW_TIME;
-    else
+
+    if (expiry == 0) {
+        // If code word expiration isn't set we need to use a sane default
+        if (pmt_caid_is_const_cw(pmt)) {
+            LOG("CW %d for PMT %d is deemed constant and will not expire",
+                c->id, pmt->id);
+            c->expiry = c->time + CONST_CW_TIME;
+        } else {
+            c->expiry = c->time + DEFAULT_CW_TIME;
+        }
+    } else {
         c->expiry = c->time + expiry * 1000;
+    }
 
     if (parity == pmt->parity && pmt->cw && pmt->last_update_cw > 0) {
         int res = 0;
@@ -1033,11 +1042,9 @@ void start_active_pmts(adapter *ad) {
         int is_active = 0;
         int j, first = 0;
         int pmt_started = 0;
-        for (j = 0; j < pmt->stream_pids; j++)
-            // for all audio and video streams start the PMT containing them
-            if ((pmt->stream_pid[j]->is_audio ||
-                 pmt->stream_pid[j]->is_video) &&
-                pids[pmt->stream_pid[j]->pid] && pmt->id == pmt->master_pmt) {
+        for (j = 0; j < pmt->stream_pids; j++) {
+            // for all stream PIDs start the PMT containing them
+            if (pids[pmt->stream_pid[j]->pid] && pmt->id == pmt->master_pmt) {
                 is_active = 1;
 #ifndef DISABLE_TABLES
                 if (!first) {
@@ -1068,6 +1075,8 @@ void start_active_pmts(adapter *ad) {
 #endif
                 }
             }
+        }
+
         // non master PMTs should not be started
         if (pmt->state == PMT_RUNNING && !is_active) {
             LOG("Stopping started PMT %d: %s", pmt->id, pmt->name);
@@ -1320,7 +1329,6 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
     pmt->state = PMT_STOPPED;
     pmt->cw = NULL;
     pmt->opaque = NULL;
-    pmt->first_active_pid = -1;
     pmt->ca_mask = pmt->disabled_ca_mask = 0;
     pmt->batch = NULL;
     memset(pmt->name, 0, sizeof(pmt->name));
@@ -1547,6 +1555,9 @@ int assemble_packet(SFilter *f, uint8_t *b) {
     uint32_t crc;
 
     pid = PID_FROM_TS(b);
+    // ignore null packets
+    if (pid == 0x1fff)
+        return len;
     if (f->flags & FILTER_EMM)
         len = assemble_emm(f, b);
     else
@@ -1715,6 +1726,13 @@ int pmt_caid_exist(SPMT *pmt, uint16_t caid, uint16_t capid) {
             return 1;
     }
     return 0;
+}
+
+int pmt_caid_is_const_cw(SPMT *pmt) {
+    // Returns true if the PMT can be descrambled with a single CAID and that
+    // CAID is BISS. Other constant code word scrambling systems can be added
+    // as required.
+    return pmt->caids == 1 && pmt->ca[0]->id == 0x2600;
 }
 
 int is_ac3_es(unsigned char *es, int len) {
@@ -1964,12 +1982,6 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
             break;
         }
 
-        if (!is_audio && !is_video)
-            continue;
-
-        // is video stream
-        if (pmt->first_active_pid < 0 && is_video)
-            pmt->first_active_pid = spid;
         if (stream_pid_id >= 0)
             pmt_add_descriptors(pmt, stream_pid_id, pmt_b + i + 5, es_len);
 
@@ -1981,9 +1993,6 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     // Add the PCR pid if it's independent
     if (pcr_pid > 0 && pcr_pid < 8191)
         pmt_add_stream_pid(pmt, pcr_pid, 0, 0, 0, 0);
-
-    if ((pmt->first_active_pid < 0) && pmt->stream_pid[0])
-        pmt->first_active_pid = pmt->stream_pid[0]->pid;
 
     SPMT *master = get_pmt(pmt->master_pmt);
     if (pmt->caids && master && master != pmt) {
