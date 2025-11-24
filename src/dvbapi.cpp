@@ -525,27 +525,33 @@ int is_adapter_active() {
     return active_adapters;
 }
 
+void clear_inactive_keys() {
+    int i;
+    int64_t ctime = getTick();
+
+    std::lock_guard<std::mutex> lock(keys_mutex);
+
+    for (i = 0; i < MAX_KEYS; i++) {
+        if (keys[i] && keys[i]->enabled && (keys[i]->ecms == 0) &&
+            (keys[i]->last_dmx_stop > 0) &&
+            (ctime - keys[i]->last_dmx_stop > 3000)) {
+            int pmt_id = keys[i]->pmt_id, adapter_id = keys[i]->adapter;
+            LOG("Key %d active but no active filter, closing ", i);
+            keys_del(i);
+
+            // reset the PMT if the decrypting stops
+            SPMT *pmt = get_pmt(pmt_id);
+            if (pmt)
+                close_pmt_for_ca(dvbapi_ca, get_adapter(adapter_id), pmt);
+        }
+    }
+}
+
 int connect_dvbapi(void *arg) {
     if ((sock > 0) && dvbapi_is_enabled) // already connected
     {
-        int i;
-        int64_t ctime = getTick();
-        std::lock_guard<std::mutex> lock(keys_mutex);
-
-        for (i = 0; i < MAX_KEYS; i++) {
-            if (network_mode && keys[i] && keys[i]->enabled &&
-                (keys[i]->ecms == 0) && (keys[i]->last_dmx_stop > 0) &&
-                (ctime - keys[i]->last_dmx_stop > 3000)) {
-                int pmt_id = keys[i]->pmt_id, adapter_id = keys[i]->adapter;
-                LOG("Key %d active but no active filter, closing ", i);
-                keys_del(i);
-
-                // resent the PMT if the decrypting stops
-                SPMT *pmt = get_pmt(pmt_id);
-                if (pmt)
-                    close_pmt_for_ca(dvbapi_ca, get_adapter(adapter_id), pmt);
-            }
-        }
+        if (network_mode)
+            clear_inactive_keys();
 
         if (!is_adapter_active())
             dvbapi_close_socket();
