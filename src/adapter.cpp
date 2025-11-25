@@ -303,8 +303,8 @@ int init_hw(int i) {
     ad->pids_updates = 0;
     ad->rtime = getTick();
     adapter_set_dvr(ad);
-    snprintf(ad->name, sizeof(ad->name), "AD%d", i);
-    ad->thread = start_new_thread(ad->name);
+    snprintf(ad->thread_name, sizeof(ad->thread_name), "AD%d", i);
+    ad->thread = start_new_thread(ad->thread_name);
     set_socket_thread(ad->sock, ad->thread);
 #ifndef DISABLE_PMT
     pmt_init_device(ad);
