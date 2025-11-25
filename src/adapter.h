@@ -93,7 +93,7 @@ struct struct_adapter {
     int is_t2mi;
     uint64_t tune_time;
     pthread_t thread;
-    char name[5];
+    char thread_name[5];
     char null_packets;
     char drop_encrypted;
     char failed_adapter; // failed adapters will not be closed due to timeout
