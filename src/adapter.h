@@ -104,13 +104,6 @@ struct struct_adapter {
     int active_pmt[MAX_PMT_FOR_ADAPTER];
     int active_pmts;
 #endif
-#ifdef AXE
-    int fe2;
-    int64_t axe_vdevice_last_sync;
-    int64_t axe_pktc;
-    int64_t axe_ccerr;
-    int axe_used;
-#endif
 
     int (*set_pid)(adapter *ad, int i_pid);
     int (*del_filters)(adapter *ad, int fd, int pid);
