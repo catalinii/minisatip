@@ -9,13 +9,8 @@
 #define MAX_PMT_PIDS (2 * MAX_ACTIVE_PIDS)
 #define CA_ALGO_DVBCSA 0
 #define CA_ALGO_DES 1
-#define CA_ALGO_AES128 2
 #define CA_ALGO_AES128_ECB 2
 #define CA_ALGO_AES128_CBC 3
-#define CW_ALGO_CSA_ALT 3
-
-#define CA_MODE_ECB 0
-#define CA_MODE_CBC 1
 
 #define MAX_PMT 25600
 #define MAX_CW 200
