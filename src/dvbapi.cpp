@@ -384,7 +384,8 @@ int dvbapi_reply(sockets *s) {
             k_id = b[4] - opts.dvbapi_offset;
             dvbapi_copy32r(algo, b, 9);
             dvbapi_copy32r(mode, b, 13);
-            LOG("dvbapi: received DVBAPI_CA_SET_MODE, key %d, algo %d, mode %d",
+            LOG("dvbapi: received DVBAPI_CA_SET_DESCR_MODE, key %d, algo %d, "
+                "mode %d",
                 k_id, algo, mode);
             k = get_key(k_id);
             if (!k)
