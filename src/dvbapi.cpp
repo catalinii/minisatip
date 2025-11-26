@@ -681,6 +681,11 @@ int send_ecm(int filter_id, unsigned char *b, int len, void *opaque) {
 int set_algo(SKey *k, int algo, int mode) {
     if (algo == CA_ALGO_AES128 && mode == CA_MODE_CBC)
         algo = CA_ALGO_AES128_CBC;
+
+    // Treat ICAM ECM the same as normal ECM
+    if (algo == CW_ALGO_CSA_ALT)
+        algo = CA_ALGO_DVBCSA;
+
     k->algo = algo;
 
     return 0;

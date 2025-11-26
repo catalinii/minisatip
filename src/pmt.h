@@ -12,6 +12,7 @@
 #define CA_ALGO_AES128 2
 #define CA_ALGO_AES128_ECB 2
 #define CA_ALGO_AES128_CBC 3
+#define CW_ALGO_CSA_ALT 3
 
 #define CA_MODE_ECB 0
 #define CA_MODE_CBC 1
