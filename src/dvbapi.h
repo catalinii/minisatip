@@ -100,7 +100,7 @@ void dvbapi_pid_del(adapter *a, int pid, SPid *cp);
 void register_dvbapi();
 void unregister_dvbapi();
 void send_client_info(sockets *s);
-int set_algo(SKey *k, int algo, int mode);
+void set_algo(SKey *k, int algo, int mode);
 
 #endif
 #endif

@@ -678,18 +678,23 @@ int send_ecm(int filter_id, unsigned char *b, int len, void *opaque) {
     return 0;
 }
 
-int set_algo(SKey *k, int algo, int mode) {
-    // Use CBC when mode indicates it
-    if (algo == CW_ALGO_AES128 && mode == CW_ALGO_MODE_CBC)
-        algo = CA_ALGO_AES128_CBC;
-
-    // Treat ICAM ECM the same as normal ECM
-    if (algo == CW_ALGO_CSA_ALT)
-        algo = CA_ALGO_DVBCSA;
-
-    k->algo = algo;
-
-    return 0;
+void set_algo(SKey *k, int algo, int mode) {
+    switch (algo) {
+    case CW_ALGO_CSA:
+    case CW_ALGO_CSA_ALT: {
+        k->algo = CA_ALGO_DVBCSA;
+        break;
+    }
+    case CW_ALGO_DES: {
+        k->algo = CA_ALGO_DES;
+        break;
+    }
+    case CW_ALGO_AES128: {
+        k->algo =
+            mode == CW_ALGO_MODE_ECB ? CA_ALGO_AES128_ECB : CA_ALGO_AES128_CBC;
+        break;
+    }
+    }
 }
 
 int keys_add(int i, int adapter, int pmt_id) {
