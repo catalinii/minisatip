@@ -2124,7 +2124,8 @@ char *get_adapter_name(int aid, char *dest, int max_size) {
     if (!ad)
         return dest;
 
-    _strncpy(dest, ad->adapter_name.data(), ad->adapter_name.length() + 1);
+    _strncpy(dest, const_cast<char *>(ad->adapter_name.data()),
+             ad->adapter_name.length() + 1);
 
     return dest;
 }
