@@ -1710,6 +1710,19 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys) {
     return (fe_delivery_system_t)rv;
 }
 
+std::string dvb_name(int aid, int fd) {
+    // Query for frontend information so we can get the name
+    struct dvb_frontend_info fe_info;
+
+    if (ioctl(fd, FE_GET_INFO, &fe_info) < 0) {
+        LOG("FE_GET_INFO failed for adapter %d, fd %d: %s ", aid, fd,
+            strerror(errno));
+        return "";
+    }
+
+    return std::string(fe_info.name);
+}
+
 int64_t get_strength_decibels(int64_t init_strength) {
     int64_t strength_db;
 
@@ -2051,6 +2064,7 @@ void find_dvb_adapter(adapter **a) {
                 ad->commit = dvb_commit;
                 ad->tune = dvb_tune;
                 ad->delsys = dvb_delsys;
+                ad->name = dvb_name;
                 ad->post_init = NULL;
                 ad->close = dvb_close;
                 ad->get_signal = dvb_get_signal;

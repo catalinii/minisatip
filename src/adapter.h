@@ -3,6 +3,8 @@
 #include "dvb.h"
 #include "minisatip.h"
 
+#include <string>
+
 typedef struct ca_device ca_device_t;
 
 #define MAX_ADAPTERS 100
@@ -45,6 +47,7 @@ struct struct_adapter {
     char err; // adapter in an error state (initialized but not working
               // correctly)
     int adapter_timeout;
+    std::string adapter_name;
     char flush, updating_pids;
     int pids_updates;
     // physical adapter, physical frontend number
@@ -93,7 +96,7 @@ struct struct_adapter {
     int is_t2mi;
     uint64_t tune_time;
     pthread_t thread;
-    char name[5];
+    char thread_name[5];
     char null_packets;
     char drop_encrypted;
     char failed_adapter; // failed adapters will not be closed due to timeout
@@ -103,13 +106,6 @@ struct struct_adapter {
     // keeps the PMTs that are present in the PAT
     int active_pmt[MAX_PMT_FOR_ADAPTER];
     int active_pmts;
-#endif
-#ifdef AXE
-    int fe2;
-    int64_t axe_vdevice_last_sync;
-    int64_t axe_pktc;
-    int64_t axe_ccerr;
-    int axe_used;
 #endif
 
     int (*set_pid)(adapter *ad, int i_pid);
@@ -126,6 +122,7 @@ struct struct_adapter {
     // called when new tuning arguments are set
     int (*tune)(int aid, transponder *tp);
     fe_delivery_system_t (*delsys)(int aid, int fd, fe_delivery_system_t *sys);
+    std::string (*name)(int aid, int fd);
     // called when the adapter is closed
     int (*close)(adapter *ad);
     void (*free)(adapter *ad);

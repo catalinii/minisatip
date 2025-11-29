@@ -1145,6 +1145,8 @@ fe_delivery_system_t ddci_delsys(int aid, int fd, fe_delivery_system_t *sys) {
     return (fe_delivery_system_t)0;
 }
 
+std::string ddci_name(int aid, int fd) { return ""; }
+
 int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque) {
     int cat_len = 0, i, es_len = 0, caid, add_cat = 1;
     ddci_device_t *d = (ddci_device_t *)opaque;
@@ -1378,6 +1380,7 @@ void find_ddci_adapter(adapter **a) {
                 ad->commit = NULL;
                 ad->tune = NULL;
                 ad->delsys = ddci_delsys;
+                ad->name = ddci_name;
                 ad->post_init = ddci_post_init;
                 ad->close = ddci_close_adapter;
                 ad->get_signal = NULL;
