@@ -384,7 +384,8 @@ int dvbapi_reply(sockets *s) {
             k_id = b[4] - opts.dvbapi_offset;
             dvbapi_copy32r(algo, b, 9);
             dvbapi_copy32r(mode, b, 13);
-            LOG("dvbapi: received DVBAPI_CA_SET_MODE, key %d, algo %d, mode %d",
+            LOG("dvbapi: received DVBAPI_CA_SET_DESCR_MODE, key %d, algo %d, "
+                "mode %d",
                 k_id, algo, mode);
             k = get_key(k_id);
             if (!k)
@@ -677,12 +678,23 @@ int send_ecm(int filter_id, unsigned char *b, int len, void *opaque) {
     return 0;
 }
 
-int set_algo(SKey *k, int algo, int mode) {
-    if (algo == CA_ALGO_AES128 && mode == CA_MODE_CBC)
-        algo = CA_ALGO_AES128_CBC;
-    k->algo = algo;
-
-    return 0;
+void set_algo(SKey *k, int algo, int mode) {
+    switch (algo) {
+    case CW_ALGO_CSA:
+    case CW_ALGO_CSA_ALT: {
+        k->algo = CA_ALGO_DVBCSA;
+        break;
+    }
+    case CW_ALGO_DES: {
+        k->algo = CA_ALGO_DES;
+        break;
+    }
+    case CW_ALGO_AES128: {
+        k->algo =
+            mode == CW_ALGO_MODE_ECB ? CA_ALGO_AES128_ECB : CA_ALGO_AES128_CBC;
+        break;
+    }
+    }
 }
 
 int keys_add(int i, int adapter, int pmt_id) {

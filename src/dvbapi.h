@@ -24,6 +24,13 @@
 #define DVBAPI_ECM_INFO 0xFFFF0003
 #define CA_SET_DESCR_MODE 0x400c6f88
 
+#define CW_ALGO_CSA 0
+#define CW_ALGO_DES 1
+#define CW_ALGO_AES128 2
+#define CW_ALGO_CSA_ALT 3
+#define CW_ALGO_MODE_ECB 0
+#define CW_ALGO_MODE_CBC 1
+
 #define AOT_CA_PMT 0x9F803282
 
 #define CAPMT_LIST_MORE                                                        \
@@ -93,7 +100,7 @@ void dvbapi_pid_del(adapter *a, int pid, SPid *cp);
 void register_dvbapi();
 void unregister_dvbapi();
 void send_client_info(sockets *s);
-int set_algo(SKey *k, int algo, int mode);
+void set_algo(SKey *k, int algo, int mode);
 
 #endif
 #endif
