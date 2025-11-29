@@ -30,8 +30,10 @@
 #include "minisatip.h"
 #include "pmt.h"
 #include "utils.h"
-
 #include "utils/ticks.h"
+
+#include <sstream>
+#include <string>
 
 #include <arpa/inet.h>
 #include <ctype.h>
@@ -1564,6 +1566,18 @@ fe_delivery_system_t satipc_delsys(int aid, int fd, fe_delivery_system_t *sys) {
     return (fe_delivery_system_t)0;
 }
 
+std::string satipc_name(int aid, int fd) {
+    satipc *sip = get_configured_satip(aid);
+
+    if (!sip)
+        return "";
+
+    std::ostringstream ss;
+    ss << sip->sip << " @ " << (sip->use_tcp ? "RTP/TCP" : "RTP/UDP");
+
+    return ss.str();
+}
+
 void satipc_free(adapter *ad) {}
 
 int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
@@ -1596,6 +1610,7 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
     ad->commit = satipc_commit;
     ad->tune = satipc_tune;
     ad->delsys = satipc_delsys;
+    ad->name = satipc_name;
     ad->post_init = satip_post_init;
     ad->standby = satip_standby_device;
     ad->close = satip_close_device;
