@@ -2119,6 +2119,16 @@ char *get_all_delsys(int aid, char *dest, int max_size) {
     return dest;
 }
 
+char *get_adapter_name(int aid, char *dest, int max_size) {
+    adapter *ad = get_configured_adapter(aid);
+    if (!ad)
+        return dest;
+
+    _strncpy(dest, ad->adapter_name.data(), ad->adapter_name.length() + 1);
+
+    return dest;
+}
+
 int get_adapter_ccerrs(int aid) {
     int i, cc = 0;
     adapter *ad = get_adapter_nw(aid);
@@ -2215,4 +2225,6 @@ _symbols adapters_sym[] = {
     {"tuner_ac", VAR_INT, &tuner_ac, 1, 0, 0},
     {"tuner_at", VAR_INT, &tuner_at, 1, 0, 0},
     {"ad_disabled", VAR_ARRAY_INT8, disabled, 1, MAX_ADAPTERS, 0},
+    {"ad_adapter_names", VAR_FUNCTION_STRING, (void *)&get_adapter_name, 0,
+     MAX_ADAPTERS, 0},
     {NULL, 0, NULL, 0, 0, 0}};

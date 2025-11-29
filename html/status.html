@@ -417,12 +417,11 @@
 				else
 					myTable += "<td class='dt-right disabled'>" + state['ad_allsys'][i];
 
-
-				if (ad_type == 2) {
-					const satip_source_address = state['ad_satip'][i]
-					const satip_protocol_string = state['ad_satip_use_tcp'][i] === 1 ? 'RTP/TCP' : 'RTP/UDP'
-					myTable += "<br /><small>(" + satip_source_address + " @ " + satip_protocol_string + ")</small>";
+				// Adapter name
+				if (state['ad_adapter_names'][i] !== "") {
+					myTable += "<small>(" + state['ad_adapter_names'][i] + ")</small>";
 				}
+
 				myTable += "</td>";
 
 				// POSITION
