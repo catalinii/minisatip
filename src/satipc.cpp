@@ -130,6 +130,13 @@ typedef struct struct_satipc {
 
 satipc *satip[MAX_ADAPTERS];
 
+satipc *get_configured_satip(int aid) {
+    if (aid < 0 || aid >= MAX_ADAPTERS || !satip[aid]) {
+        return NULL;
+    }
+    return satip[aid];
+}
+
 satipc *get_satip1(int aid, const char *file, int line) {
     if (aid < 0 || aid >= MAX_ADAPTERS || !satip[aid] || !satip[aid]->enabled) {
         LOG("%s:%d: %s returns NULL for id %d", file, line, __FUNCTION__, aid);
