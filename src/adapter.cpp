@@ -290,6 +290,7 @@ int init_hw(int i) {
 
     if (!ad->sys[0])
         ad->delsys(i, ad->fe, ad->sys);
+    ad->adapter_name = ad->name(i, ad->fe);
     ad->master_sid = -1;
     ad->sid_cnt = 0;
     ad->pid_err = ad->dec_err = 0;

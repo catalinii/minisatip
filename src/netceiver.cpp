@@ -367,6 +367,8 @@ fe_delivery_system_t netcv_delsys(int aid, int fd, fe_delivery_system_t *sys) {
     return SYS_UNDEFINED;
 }
 
+std::string netcv_name(int aid, int fd) { return ""; }
+
 void find_netcv_adapter(adapter **a) {
     int i, k, n, na;
     netceiver_info_list_t *nc_list;
@@ -474,6 +476,7 @@ void find_netcv_adapter(adapter **a) {
         ad->commit = netcv_commit;
         ad->tune = netcv_tune;
         ad->delsys = netcv_delsys;
+        ad->name = netcv_name;
         ad->post_init = NULL;
         ad->close = netcv_close;
         ad->type = ADAPTER_NETCV;
