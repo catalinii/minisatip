@@ -506,8 +506,8 @@ int test_create_pmt() {
         LOG("Assemble packet failed");
         return 1;
     }
-    int new_pid = packet[30] * 256 + packet[31];
-    int new_capid = packet[21] * 256 + packet[22];
+    int new_pid = packet[18] * 256 + packet[19];
+    int new_capid = packet[9] * 256 + packet[10];
     new_pid &= 0x1FFF;
     new_capid &= 0x1FFF;
     if (new_pid != dpid)
