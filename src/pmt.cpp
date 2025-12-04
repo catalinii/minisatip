@@ -1033,11 +1033,9 @@ void start_active_pmts(adapter *ad) {
         int is_active = 0;
         int j, first = 0;
         int pmt_started = 0;
-        for (j = 0; j < pmt->stream_pids; j++)
-            // for all audio and video streams start the PMT containing them
-            if ((pmt->stream_pid[j]->is_audio ||
-                 pmt->stream_pid[j]->is_video) &&
-                pids[pmt->stream_pid[j]->pid] && pmt->id == pmt->master_pmt) {
+        for (j = 0; j < pmt->stream_pids; j++) {
+            // for all stream PIDs start the PMT containing them
+            if (pids[pmt->stream_pid[j]->pid] && pmt->id == pmt->master_pmt) {
                 is_active = 1;
 #ifndef DISABLE_TABLES
                 if (!first) {
@@ -1068,6 +1066,8 @@ void start_active_pmts(adapter *ad) {
 #endif
                 }
             }
+        }
+
         // non master PMTs should not be started
         if (pmt->state == PMT_RUNNING && !is_active) {
             LOG("Stopping started PMT %d: %s", pmt->id, pmt->name);
@@ -1320,7 +1320,6 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
     pmt->state = PMT_STOPPED;
     pmt->cw = NULL;
     pmt->opaque = NULL;
-    pmt->first_active_pid = -1;
     pmt->ca_mask = pmt->disabled_ca_mask = 0;
     pmt->batch = NULL;
     memset(pmt->name, 0, sizeof(pmt->name));
@@ -1760,12 +1759,11 @@ void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid, uint8_t *data,
     pmt->disabled_ca_mask = 0;
 }
 
-void pmt_add_descriptor(SPMT *pmt, int stream_id, unsigned char *desc) {
+void pmt_add_sp_descriptor(SPMT *pmt, SStreamPid *sp, unsigned char *desc) {
     int i, es_len;
     int new_desc_id = desc[0];
     int new_desc_len = desc[1] + 2;
 
-    SStreamPid *sp = pmt->stream_pid[stream_id];
     // do not add an already existing descriptor
     for (i = 0; i < sp->desc_len; i += es_len + 2) {
         es_len = sp->desc[i + 1];
@@ -1781,34 +1779,53 @@ void pmt_add_descriptor(SPMT *pmt, int stream_id, unsigned char *desc) {
     sp->desc_len += new_desc_len;
 }
 
-void pmt_add_descriptors(SPMT *pmt, int stream_id, unsigned char *es, int len) {
-
-    int es_len, caid, capid;
+void pmt_add_descriptors(SPMT *pmt, int stream_id, unsigned char *es, int len,
+                         unsigned char *pi, int pi_len) {
+    int descriptor_len, caid, capid;
     int i;
+    SStreamPid *sp = pmt->stream_pid[stream_id];
 
-    if (!pmt->stream_pid[stream_id]) {
-        pmt->stream_pid[stream_id] = (SStreamPid *)malloc(1500);
-        memset(pmt->stream_pid[stream_id], 0, 1500);
+    if (!sp) {
+        sp = (SStreamPid *)malloc(1500);
+        memset(sp, 0, 1500);
     }
 
-    if (!pmt->stream_pid[stream_id]) {
+    if (!sp) {
         LOG("Failed to allocate memory for stream pid %d", stream_id);
         return;
     }
 
-    for (i = 0; i < len; i += es_len + 2) // reading program info
-    {
-        es_len = es[i + 1];
-        if (es[i] != 9) {
-            pmt_add_descriptor(pmt, stream_id, es + i);
-            continue;
-        }
+    // Add each elementary stream descriptor
+    for (i = 0; i < len; i += descriptor_len + 2) {
+        descriptor_len = es[i + 1];
 
-        caid = es[i + 2] * 256 + es[i + 3];
-        capid = (es[i + 4] & 0x1F) * 256 + es[i + 5];
-        pmt_add_caid(pmt, caid, capid, es + i + 6, es_len - 4);
+        // Store all descriptors, we need to be able to fully reconstruct the
+        // stream descriptors in some cases
+        pmt_add_sp_descriptor(pmt, sp, es + i);
+
+        if (es[i] == 0x09) { // CA descriptor
+            caid = es[i + 2] * 256 + es[i + 3];
+            capid = (es[i + 4] & 0x1F) * 256 + es[i + 5];
+            pmt_add_caid(pmt, caid, capid, es + i + 6, descriptor_len - 4);
+
+            // Mark the stream PID as scrambled
+            pmt->stream_pid[stream_id]->is_scrambled = true;
+        }
     }
-    return;
+
+    // Add CA descriptors from PMT program information as elementary stream CA
+    // descriptors
+    for (i = 0; i < pi_len; i += descriptor_len + 2) {
+        descriptor_len = pi[i + 1];
+
+        if (pi[i] == 0x09) {
+            pmt_add_sp_descriptor(pmt, sp, pi + i);
+
+            caid = pi[i + 2] * 256 + pi[i + 3];
+            capid = (pi[i + 4] & 0x1F) * 256 + pi[i + 5];
+            pmt_add_caid(pmt, caid, capid, pi + i + 6, descriptor_len - 4);
+        }
+    }
 }
 
 int get_master_pmt_for_pid(adapter *ad, int pid) {
@@ -1921,18 +1938,17 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
 
     pmt->stream_pids = 0;
 
-    if (pi_len > 0 && pi_len < pmt_len)
-        pmt_add_descriptors(pmt, 0, pi, pi_len);
-
+    uint8_t *es;
     es_len = 0;
     for (i = 9 + pi_len; i < pmt_len - 4; i += (es_len) + 5) // reading streams
     {
+        es = pmt_b + i + 5;
         es_len = (pmt_b[i + 3] & 0xF) * 256 + pmt_b[i + 4];
         stype = pmt_b[i];
         spid = (pmt_b[i + 1] & 0x1F) * 256 + pmt_b[i + 2];
         isAC3 = 0;
         if (stype == 6)
-            isAC3 = is_ac3_es(pmt_b + i + 5, es_len);
+            isAC3 = is_ac3_es(es, es_len);
         else if (stype == 129)
             isAC3 = 1;
         if (pcr_pid == spid)
@@ -1952,26 +1968,21 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         } else
             LOG("Too many pids for pmt %d, discarding pid %d", pmt->id, spid);
 
-        LOG("PMT pid %d - stream pid %04X (%d), type %d%s, es_len %d, pos "
-            "%d, "
-            "caids %d",
-            pid, spid, spid, stype, isAC3 ? " [AC3]" : "", es_len, i,
-            pmt->caids);
-
         if ((es_len + i + 5 > pmt_len) || (es_len < 0)) {
             LOGM("pmt processing complete, es_len + i %d, len %d, es_len %d",
                  es_len + i, pmt_len, es_len);
             break;
         }
 
-        if (!is_audio && !is_video)
-            continue;
+        if (stream_pid_id >= 0) {
+            pmt_add_descriptors(pmt, stream_pid_id, es, es_len, pi, pi_len);
+        }
 
-        // is video stream
-        if (pmt->first_active_pid < 0 && is_video)
-            pmt->first_active_pid = spid;
-        if (stream_pid_id >= 0)
-            pmt_add_descriptors(pmt, stream_pid_id, pmt_b + i + 5, es_len);
+        LOG("PMT pid %d - stream pid %04X (%d), type %d%s, es_len %d, pos "
+            "%d, "
+            "caids %d",
+            pid, spid, spid, stype, isAC3 ? " [AC3]" : "", es_len, i,
+            pmt->caids);
 
         if (opmt != -1 && opmt != pmt->master_pmt) {
             pmt->master_pmt = opmt;
@@ -1981,9 +1992,6 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     // Add the PCR pid if it's independent
     if (pcr_pid > 0 && pcr_pid < 8191)
         pmt_add_stream_pid(pmt, pcr_pid, 0, 0, 0, 0);
-
-    if ((pmt->first_active_pid < 0) && pmt->stream_pid[0])
-        pmt->first_active_pid = pmt->stream_pid[0]->pid;
 
     SPMT *master = get_pmt(pmt->master_pmt);
     if (pmt->caids && master && master != pmt) {
