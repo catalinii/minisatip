@@ -17,10 +17,6 @@
  * USA
  *
  */
-#ifndef _GNU_SOURCE
-// zip c++ needs this
-#define _GNU_SOURCE
-#endif
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
