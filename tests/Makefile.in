@@ -31,7 +31,7 @@ MAIN_SOURCES=$(shell find ../src -type f -iname '*.cpp')
 TABLES=0
 PMT=0
 
-LIBS+=crypto dl pthread stdc++exp
+LIBS+=crypto dl pthread
 LIBS+=dvbcsa
 CXXFLAGS += -std=c++23 -fsanitize=address -fno-omit-frame-pointer -fsanitize=leak -fsanitize=null
 CXXFLAGS += -I../src
@@ -39,6 +39,7 @@ CXXFLAGS += -I../src
 CXXFLAGS += -DENIGMA
 CXXFLAGS += -DTESTING
 CXXFLAGS += -DDDCI_TEST
+CXXFLAGS += -DDISABLE_STACKTRACE
 CXXFLAGS += -DDISABLE_NETCVCLIENT
 CXXFLAGS += -DVERSION=\"test\"
 
