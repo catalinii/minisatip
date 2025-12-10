@@ -119,7 +119,7 @@ int test_add_del_pmt() {
     SPMT *pmt0, *pmt1, *pmt2, *pmt3, *pmt4;
     ddci_device_t d0, d1;
     ca_device_t ca0, ca1;
-    adapter ad, a0, a1;
+    adapter ad = {0}, a0 = {0}, a1 = {0};
 
     create_adapter(&ad, 8);
     create_adapter(&a0, 0);
@@ -467,7 +467,7 @@ int test_create_pmt() {
     ddci_device_t d;
     uint8_t psi[188];
     uint8_t packet[188];
-    adapter ad;
+    adapter ad = {0};
     int16_t cc;
     int psi_len;
     SFilter f;
