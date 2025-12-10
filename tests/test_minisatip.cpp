@@ -19,8 +19,6 @@
  * USA
  *
  */
-#define _GNU_SOURCE
-
 #include "minisatip.h"
 #include "utils/testing.h"
 #include <stdlib.h>
