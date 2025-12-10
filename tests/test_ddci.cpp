@@ -63,6 +63,9 @@ extern ca_device_t *ca_devices[MAX_ADAPTERS];
 extern std::unordered_map<int, Sddci_channel> channels;
 extern SFilter *filters[MAX_FILTERS];
 
+// Forward declarations
+descriptor_t create_descriptor(const uint8_t *data);
+
 SPMT *create_pmt(int ad, int sid, int pid1, int pid2, int caid1, int caid2) {
     int pmt_id = pmt_add(ad, sid, 1000);
     SPMT *pmt = get_pmt(pmt_id);
@@ -496,6 +499,12 @@ int test_create_pmt() {
     ca_devices[0] = NULL;
     ca_devices[1] = NULL;
 
+    // Add a CA descriptor to the second stream PID so we can test that it
+    // gets added to the PMT correctly
+    uint8_t descriptor_data[] = {0x09, 0x04, 0x0B, 0x00, 0x05, 0x73};
+    descriptor_t ca_descriptor = create_descriptor(descriptor_data);
+    pmt->stream_pid[1]->descriptors.push_back(ca_descriptor);
+
     psi_len = ddci_create_pmt(&d, pmt, psi, sizeof(psi), &dp);
     cc = 1;
     _hexdump("PACK: ", psi, psi_len);
@@ -516,6 +525,18 @@ int test_create_pmt() {
     if (new_capid != dcapid)
         LOG_AND_RETURN(1, "PMT PSI pid %04X != mapping table pid %04X",
                        new_capid, dcapid);
+
+    // Verify stream PID descriptors
+    int es_info_len = packet[38];
+    ASSERT_EQUAL(6, es_info_len, "es info length mismatch");
+    int ca_descriptor_type = packet[39];
+    ASSERT_EQUAL(0x09, ca_descriptor_type, "descriptor type mismatch");
+    int ca_descriptor_len = packet[40];
+    ASSERT_EQUAL(4, ca_descriptor_len, "descriptor length mismatch");
+    int ca_descriptor_caid = packet[41] * 256 + packet[42];
+    int ca_descriptor_capid = (packet[43] & 0x1F) * 256 + packet[44];
+    ASSERT_EQUAL(0x0B00, ca_descriptor_caid, "descriptor CA system mismatch");
+    ASSERT_EQUAL(0x0573, ca_descriptor_capid, "descriptor CA PID mismatch");
 
     SPMT *new_pmt = get_pmt(pmt_add(0, 200, 200));
     ad.id = 0;
