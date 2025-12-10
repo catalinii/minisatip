@@ -32,6 +32,8 @@
 #include "utils/dvb/dvb_support.h"
 #include "utils/ticks.h"
 
+#include <algorithm>
+
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <errno.h>
@@ -1356,7 +1358,7 @@ int pmt_del(int id) {
 
     for (i = 0; i < pmt->stream_pids; i++)
         if (pmt->stream_pid[i]) {
-            free(pmt->stream_pid[i]);
+            delete pmt->stream_pid[i];
             pmt->stream_pid[i] = NULL;
         }
 
@@ -1739,25 +1741,34 @@ void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid, uint8_t *data,
     pmt->disabled_ca_mask = 0;
 }
 
-void pmt_add_descriptor(SPMT *pmt, int stream_id, unsigned char *desc) {
-    int i, es_len;
-    int new_desc_id = desc[0];
-    int new_desc_len = desc[1] + 2;
+descriptor_t create_descriptor(const uint8_t *data) {
+    descriptor_t desc;
+    desc.type = data[0];
+    desc.len = data[1];
+    desc.data.reserve(desc.len);
 
-    SStreamPid *sp = pmt->stream_pid[stream_id];
-    // do not add an already existing descriptor
-    for (i = 0; i < sp->desc_len; i += es_len + 2) {
-        es_len = sp->desc[i + 1];
-        int desc_id = sp->desc[i];
-        if (desc_id == new_desc_id) {
-            LOGM("PMT %d pid %d descriptor already added %d", pmt->pid, sp->pid,
-                 desc_id);
-            return;
-        }
+    for (int i = 0; i < desc.len; i++) {
+        desc.data.push_back(data[i + 2]);
     }
 
-    memcpy(sp->desc + sp->desc_len, desc, new_desc_len);
-    sp->desc_len += new_desc_len;
+    return desc;
+}
+
+void pmt_add_descriptor(SPMT *pmt, int stream_id, unsigned char *desc) {
+    SStreamPid *sp = pmt->stream_pid[stream_id];
+    descriptor_t d = create_descriptor(desc);
+
+    // do not add an already existing descriptor
+    if (std::find_if(sp->descriptors.cbegin(), sp->descriptors.cend(),
+                     [&d](const descriptor_t &v) {
+                         return v.type == d.type;
+                     }) != sp->descriptors.cend()) {
+        LOGM("PMT %d pid %d descriptor already added %d", pmt->pid, sp->pid,
+             d.type);
+        return;
+    }
+
+    sp->descriptors.push_back(d);
 }
 
 void pmt_add_descriptors(SPMT *pmt, int stream_id, unsigned char *es, int len) {
@@ -1766,13 +1777,7 @@ void pmt_add_descriptors(SPMT *pmt, int stream_id, unsigned char *es, int len) {
     int i;
 
     if (!pmt->stream_pid[stream_id]) {
-        pmt->stream_pid[stream_id] = (SStreamPid *)malloc(1500);
-        memset(pmt->stream_pid[stream_id], 0, 1500);
-    }
-
-    if (!pmt->stream_pid[stream_id]) {
-        LOG("Failed to allocate memory for stream pid %d", stream_id);
-        return;
+        pmt->stream_pid[stream_id] = new SStreamPid;
     }
 
     for (i = 0; i < len; i += es_len + 2) // reading program info
@@ -1821,8 +1826,7 @@ int pmt_add_stream_pid(SPMT *pmt, int pid, int type, int is_audio, int is_video,
                        pmt->id, pmt->stream_pids);
 
     if (!pmt->stream_pid[pmt->stream_pids]) {
-        pmt->stream_pid[pmt->stream_pids] = (SStreamPid *)malloc(1500);
-        memset(pmt->stream_pid[pmt->stream_pids], 0, 1500);
+        pmt->stream_pid[pmt->stream_pids] = new SStreamPid;
     }
 
     pmt->stream_pid[pmt->stream_pids]->type = type;
@@ -2204,9 +2208,12 @@ void free_all_pmts() {
                     free(pmts[i]->ca[j]);
             pmts[i]->caids = 0;
 
-            for (j = 0; j < pmts[i]->stream_pids; j++)
-                if (pmts[i]->stream_pid[j])
-                    free(pmts[i]->stream_pid[j]);
+            for (j = 0; j < pmts[i]->stream_pids; j++) {
+                if (pmts[i]->stream_pid[j]) {
+                    delete pmts[i]->stream_pid[j];
+                    pmts[i]->stream_pid[j] = NULL;
+                }
+            }
             pmts[i]->stream_pids = 0;
 
             delete pmts[i];
