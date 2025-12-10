@@ -1286,10 +1286,8 @@ adapter *get_adapter1(int aid, const char *file, int line) {
     return a[aid];
 }
 
-adapter *get_configured_adapter1(int aid, char *file, int line) {
+inline adapter *get_configured_adapter_nw(int aid) {
     if (aid < 0 || aid >= MAX_ADAPTERS || !a[aid] || disabled[aid]) {
-        LOG("%s:%d: get_configured_adapter returns NULL for adapter_id %d",
-            file, line, aid);
         return NULL;
     }
     return a[aid];
@@ -2120,7 +2118,7 @@ char *get_all_delsys(int aid, char *dest, int max_size) {
 }
 
 char *get_adapter_name(int aid, char *dest, int max_size) {
-    adapter *ad = get_configured_adapter(aid);
+    adapter *ad = get_configured_adapter_nw(aid);
     if (!ad)
         return dest;
 
