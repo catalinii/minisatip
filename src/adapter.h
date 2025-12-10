@@ -151,7 +151,7 @@ int tune(int aid, int sid);
 void post_tune(adapter *ad);
 SPid *find_pid(int aid, int p);
 adapter *get_adapter1(int aid, const char *file, int line);
-adapter *get_configured_adapter1(int aid, char *file, int line);
+inline adapter *get_configured_adapter_nw(int aid);
 char *describe_adapter(int sid, int aid, char *dad, int ld);
 void dump_pids(int aid);
 void sort_pids(int aid);
@@ -187,7 +187,6 @@ int get_absolute_source_for_adapter(int aid, int src, int sys);
 void set_absolute_src(char *o);
 void adapter_commit(adapter *ad);
 #define get_adapter(a) get_adapter1(a, __FILE__, __LINE__)
-#define get_configured_adapter(a) get_configured_adapter1(a, __FILE__, __LINE__)
 #define get_adapter_nw(aid)                                                    \
     ((aid >= 0 && aid < MAX_ADAPTERS && a[aid] && a[aid]->enabled) ? a[aid]    \
                                                                    : NULL)
