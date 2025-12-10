@@ -760,7 +760,7 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
             }
         }
 
-        // Stream type + PID type + PID + es info length = 5 bytes
+        // Stream type + PID
         *b = pmt->stream_pid[i]->type;
         copy16(b, 1,
                safe_get_pid_mapping(d, pmt->adapter, pmt->stream_pid[i]->pid));
