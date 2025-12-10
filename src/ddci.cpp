@@ -760,16 +760,31 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
             }
         }
 
+        // Stream type + PID type + PID + es info length = 5 bytes
         *b = pmt->stream_pid[i]->type;
         copy16(b, 1,
                safe_get_pid_mapping(d, pmt->adapter, pmt->stream_pid[i]->pid));
-        int desc_len = pmt->stream_pid[i]->desc_len;
-        copy16(b, 3, desc_len);
-        memcpy(b + 5, pmt->stream_pid[i]->desc, desc_len);
-        b += desc_len + 5;
+        b += 3;
 
-        LOGM("%s: pmt %d added pid %04X, type %02X", __FUNCTION__, pmt->id,
-             pmt->stream_pid[i]->pid, pmt->stream_pid[i]->type);
+        // ES info length
+        int es_info_len = 0;
+        for (const auto &d : pmt->stream_pid[i]->descriptors) {
+            es_info_len += d.len + 2;
+        }
+        copy16(b, 0, es_info_len);
+        b += 2;
+
+        // Descriptors
+        for (const auto &d : pmt->stream_pid[i]->descriptors) {
+            *b++ = d.type;
+            *b++ = d.len;
+            memcpy(b, d.data.data(), d.len);
+            b += d.len;
+        }
+
+        LOGM("%s: pmt %d added pid %04X, type %02X, es_len %d", __FUNCTION__,
+             pmt->id, pmt->stream_pid[i]->pid, pmt->stream_pid[i]->type,
+             es_info_len);
     }
     // set the length (b + 4 bytes from crc)
     copy16(start_pmt, -2, 4 + b - start_pmt);

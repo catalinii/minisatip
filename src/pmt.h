@@ -3,6 +3,7 @@
 #include "adapter.h"
 #include "dvb.h"
 #include <unordered_map>
+#include <vector>
 
 #define MAX_CAID 20
 #define MAX_ACTIVE_PIDS 20
@@ -93,13 +94,18 @@ typedef struct struct_cw {
     void *opaque;
 } SCW;
 
+typedef struct descriptor {
+    uint8_t type;
+    uint8_t len;
+    std::vector<uint8_t> data;
+} descriptor_t;
+
 typedef struct struct_stream_pid {
     int type;
     int pid;
     char is_audio : 1;
     char is_video : 1;
-    int desc_len;
-    uint8_t desc[];
+    std::vector<descriptor_t> descriptors;
 } SStreamPid;
 
 typedef struct struct_pmt_ca {
