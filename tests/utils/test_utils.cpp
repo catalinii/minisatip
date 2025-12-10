@@ -17,8 +17,6 @@
  * USA
  *
  */
-#define _GNU_SOURCE
-
 #include "opts.h"
 #include "utils.h"
 #include "utils/testing.h"

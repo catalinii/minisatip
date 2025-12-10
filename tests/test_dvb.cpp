@@ -17,64 +17,65 @@
  * USA
  *
  */
-#define _GNU_SOURCE
-
 #include "dvb.h"
 #include "minisatip.h"
 #include "utils.h"
 #include "utils/testing.h"
 
-#include <string.h>
 #include <linux/dvb/frontend.h>
+#include <string.h>
 
 int test_detect_dvb_parameters_general() {
-  transponder tp;
-  char query[128] = "?fe=0&src=1&freq=11361.75&pol=h&ro=0.35&msys=dvbs2&mtype=qpsk&plts=off&sr=22000&fec=23&pids=0,16,201,302";
-  detect_dvb_parameters(query, &tp);
+    transponder tp;
+    char query[128] = "?fe=0&src=1&freq=11361.75&pol=h&ro=0.35&msys=dvbs2&"
+                      "mtype=qpsk&plts=off&sr=22000&fec=23&pids=0,16,201,302";
+    detect_dvb_parameters(query, &tp);
 
-  ASSERT(tp.fe == 0, "fe parsed incorrectly");
-  ASSERT(tp.diseqc == 1, "src parsed incorrectly");
-  ASSERT(tp.freq == 11361750, "freq parsed incorrectly");
-  ASSERT(tp.pol == 2, "pol parsed incorrectly");
-  ASSERT(tp.ro == ROLLOFF_35, "ro parsed incorrectly");
-  ASSERT(tp.sys == SYS_DVBS2, "msys parsed incorrectly");
-  ASSERT(tp.mtype == 0, "mtype parsed incorrectly");
-  ASSERT(tp.plts == 1, "plts parsed incorrectly");
-  ASSERT(tp.sr == 22000000, "sr parsed incorrectly");
-  ASSERT(tp.fec == 2, "fec parsed incorrectly");
-  ASSERT(strcmp(tp.pids, "0,16,201,302") == 0, "pids parsed incorrectly");
+    ASSERT(tp.fe == 0, "fe parsed incorrectly");
+    ASSERT(tp.diseqc == 1, "src parsed incorrectly");
+    ASSERT(tp.freq == 11361750, "freq parsed incorrectly");
+    ASSERT(tp.pol == 2, "pol parsed incorrectly");
+    ASSERT(tp.ro == ROLLOFF_35, "ro parsed incorrectly");
+    ASSERT(tp.sys == SYS_DVBS2, "msys parsed incorrectly");
+    ASSERT(tp.mtype == 0, "mtype parsed incorrectly");
+    ASSERT(tp.plts == 1, "plts parsed incorrectly");
+    ASSERT(tp.sr == 22000000, "sr parsed incorrectly");
+    ASSERT(tp.fec == 2, "fec parsed incorrectly");
+    ASSERT(strcmp(tp.pids, "0,16,201,302") == 0, "pids parsed incorrectly");
 
-  return 0;
+    return 0;
 }
 
 int test_detect_dvb_parameters_roll_off() {
-  transponder tp;
+    transponder tp;
 
-  // Undefined (should default to "auto")
-  char query[128] = "?freq=11734";
-  detect_dvb_parameters(query, &tp);
-  ASSERT(tp.ro == ROLLOFF_AUTO, "ro parsed incorrectly");
+    // Undefined (should default to "auto")
+    char query[128] = "?freq=11734";
+    detect_dvb_parameters(query, &tp);
+    ASSERT(tp.ro == ROLLOFF_AUTO, "ro parsed incorrectly");
 
-  // Various recognized values
-  strcpy(query, "?freq=11734&ro=0.35");
-  detect_dvb_parameters(query, &tp);
-  ASSERT(tp.ro == ROLLOFF_35, "ro parsed incorrectly");
-  strcpy(query, "?freq=11734&ro=0.25");
-  detect_dvb_parameters(query, &tp);
-  ASSERT(tp.ro == ROLLOFF_25, "ro parsed incorrectly");
-  strcpy(query, "?freq=11734&ro=0.20");
-  detect_dvb_parameters(query, &tp);
-  ASSERT(tp.ro == ROLLOFF_20, "ro parsed incorrectly");
+    // Various recognized values
+    strcpy(query, "?freq=11734&ro=0.35");
+    detect_dvb_parameters(query, &tp);
+    ASSERT(tp.ro == ROLLOFF_35, "ro parsed incorrectly");
+    strcpy(query, "?freq=11734&ro=0.25");
+    detect_dvb_parameters(query, &tp);
+    ASSERT(tp.ro == ROLLOFF_25, "ro parsed incorrectly");
+    strcpy(query, "?freq=11734&ro=0.20");
+    detect_dvb_parameters(query, &tp);
+    ASSERT(tp.ro == ROLLOFF_20, "ro parsed incorrectly");
 
-  return 0;
+    return 0;
 }
 
 int main() {
-  opts.log = 1;
-  opts.debug = 255;
-  strcpy(thread_info[thread_index].thread_name, "test_dvb");
+    opts.log = 1;
+    opts.debug = 255;
+    strcpy(thread_info[thread_index].thread_name, "test_dvb");
 
-  TEST_FUNC(test_detect_dvb_parameters_general(), "test detect_dvb_parameters with general parameters");
-  TEST_FUNC(test_detect_dvb_parameters_roll_off(), "test detect_dvb_parameters roll-off parsing");
-  return 0;
+    TEST_FUNC(test_detect_dvb_parameters_general(),
+              "test detect_dvb_parameters with general parameters");
+    TEST_FUNC(test_detect_dvb_parameters_roll_off(),
+              "test detect_dvb_parameters roll-off parsing");
+    return 0;
 }

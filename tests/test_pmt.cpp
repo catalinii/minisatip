@@ -17,9 +17,6 @@
  * USA
  *
  */
-#define _GNU_SOURCE
-#define _FILE_OFFSET_BITS 64
-
 #include "ca.h"
 #include "dvb.h"
 #include "minisatip.h"
