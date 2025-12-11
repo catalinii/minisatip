@@ -22,7 +22,7 @@ typedef int (*ca_close_action)();
 
 typedef struct struct_CA_op {
     ca_pid_action ca_add_pid, ca_del_pid;
-    ca_pmt_action ca_add_pmt, ca_del_pmt, ca_decrypted, ca_encrypted;
+    ca_pmt_action ca_add_pmt, ca_del_pmt;
     ca_device_action ca_init_dev, ca_close_dev, ca_ts;
     ca_close_action ca_close_ca;
 } SCA_op;
@@ -55,7 +55,6 @@ int close_pmt_for_cas(adapter *ad, SPMT *pmt);
 void tables_ca_ts(adapter *ad);
 int match_caid(SPMT *pmt, int caid, int mask);
 int match_ca_caid(int ica, int aid, int caid);
-void tables_update_encrypted_status(adapter *ad, SPMT *pmt);
 
 #endif
 

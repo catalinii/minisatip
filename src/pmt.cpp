@@ -863,11 +863,12 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
     if (parity == pmt->parity && pmt->cw && pmt->last_update_cw > 0) {
         int res = 0;
         if (!pmt->update_cw) {
-            c->time = pmt->cw->time - 1000; // We set the time before the active CW
+            c->time =
+                pmt->cw->time - 1000; // We set the time before the active CW
             res = 1;
         }
         LOG("CW %d for PMT %d (%s) Warning! New CW using the current parity%s",
-            c->id, pmt_id, pmt->name, res? " and perhaps a fake one!" : "");
+            c->id, pmt_id, pmt->name, res ? " and perhaps a fake one!" : "");
     }
 
     if (algo < 2)
@@ -892,24 +893,6 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
     return 0;
 }
 
-int set_pmt_encrypted(SPMT *pmt, int status) {
-    int64_t grace_time = pmt->start_time + pmt->grace_time - getTick();
-    if (!pmt->grace_time)
-        return 0;
-    if (status == TABLES_CHANNEL_ENCRYPTED && grace_time > 0)
-        return 0;
-    if (getTick() - pmt->start_time < 500)
-        return 0;
-
-    LOGM("updating status %d, time since start %jd grace_time %ld", status,
-         getTick() - pmt->start_time, pmt->grace_time);
-
-    pmt->grace_time = 0;
-    pmt->encrypted = status;
-    tables_update_encrypted_status(get_adapter(pmt->adapter), pmt);
-    return 0;
-}
-
 // Decrypts all the packets gathered for this PMT
 // If CW not found, tries to find one
 // pmt->blen needs to be 0 at the end of this
@@ -923,8 +906,6 @@ int decrypt_batch(SPMT *pmt) {
 
     update_cw(pmt);
 
-    set_pmt_encrypted(pmt, pmt->cw ? TABLES_CHANNEL_DECRYPTED
-                                   : TABLES_CHANNEL_ENCRYPTED);
     if (!pmt->cw) {
         pmt->blen = 0;
         return 1;
@@ -1152,8 +1133,8 @@ void emulate_add_all_pids(adapter *ad) {
                 if (!pmt)
                     continue;
 
-                LOG("%s: adding PMT pid %d to emulate all pids",
-                    __FUNCTION__, pmt->pid);
+                LOG("%s: adding PMT pid %d to emulate all pids", __FUNCTION__,
+                    pmt->pid);
                 mark_pid_add(p_all->sid[i], ad->id, pmt->pid);
                 updated = 1;
 
@@ -1310,8 +1291,6 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
     pmt->master_pmt = i;
     pmt->id = i;
     pmt->update_cw = 1;
-    pmt->grace_time = PMT_GRACE_TIME;
-    pmt->start_time = 0;
     pmt->blen = 0;
     pmt->last_update_cw = 0;
     pmt->filter = -1;
@@ -2052,9 +2031,7 @@ void start_pmt(SPMT *pmt, adapter *ad) {
     LOGM("starting PMT %d master %d, pid %d, sid %d, filter %d for channel: %s",
          pmt->id, pmt->master_pmt, pmt->pid, pmt->sid, pmt->filter, pmt->name);
     pmt->state = PMT_STARTING;
-    // give 2s to initialize decoding or override for each CA
-    pmt->encrypted = 0;
-    pmt->start_time = getTick();
+
     // do not call send_pmt_to_cas to allow all the slave PMTs to be read
     // when the master PMT is being sent next time, it will actually making
     // it to all CAs
