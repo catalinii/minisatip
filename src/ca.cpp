@@ -307,13 +307,21 @@ int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
                   int added_only, int ca_id) {
     int i = 0, pos = 0;
     for (i = 0; i < pmt->stream_pids; i++) {
+        // Skip PIDs not actually subscribed to
         if (added_only && !find_pid(pmt->adapter, pmt->stream_pid[i]->pid)) {
-            LOGM("%s: skipping pmt %d (ad %d) pid %d from CAPMT", __FUNCTION__,
-                 pmt->id, pmt->adapter, pmt->stream_pid[i]->pid);
+            LOG("%s: omitting PMT %d (ad %d) pid %d from CAPMT (not "
+                "subscribed to)",
+                __FUNCTION__, pmt->id, pmt->adapter, pmt->stream_pid[i]->pid);
             continue;
         }
-        if (!pmt->stream_pid[i]->is_audio && !pmt->stream_pid[i]->is_video)
+
+        // Omit unscrambled PIDs
+        if (!pmt->stream_pid[i]->is_scrambled) {
+            LOG("%s: omitting PMT %d (ad %d) pid %d from CAPMT (not scrambled)",
+                __FUNCTION__, pmt->id, pmt->adapter, pmt->stream_pid[i]->pid);
             continue;
+        }
+
         capmt[pos++] = pmt->stream_pid[i]->type;
         copy16(capmt, pos, pmt->stream_pid[i]->pid);
         pos += 2;
