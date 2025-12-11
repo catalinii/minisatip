@@ -36,8 +36,6 @@
 #define PMT_STOPPING 3
 #define PMT_CACHED 4
 
-#define PMT_GRACE_TIME 2000
-
 #define CLM_MORE 0x00
 #define CLM_FIRST 0x01
 #define CLM_LAST 0x02
@@ -133,9 +131,7 @@ typedef struct struct_pmt {
     void *opaque;
     char state; // PMT state (PMT_STOPPED, PMT_STARTING, PMT_RUNNING,
                 // PMT_STOPPING)
-    char encrypted;
     int first_active_pid;
-    int64_t grace_time, start_time;
     int filter;
     std::unordered_map<uint64_t, int> *global_start, *local_start;
 } SPMT;
