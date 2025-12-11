@@ -2203,9 +2203,12 @@ void free_all_pmts() {
     std::lock_guard<SMutex> lock(pmts_mutex);
     for (i = 0; i < MAX_PMT; i++) {
         if (pmts[i]) {
-            for (j = 0; j < pmts[i]->caids; j++)
-                if (pmts[i]->ca[j])
+            for (j = 0; j < pmts[i]->caids; j++) {
+                if (pmts[i]->ca[j]) {
                     free(pmts[i]->ca[j]);
+                    pmts[i]->ca[j] = NULL;
+                }
+            }
             pmts[i]->caids = 0;
 
             for (j = 0; j < pmts[i]->stream_pids; j++) {
