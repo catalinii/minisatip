@@ -17,10 +17,6 @@
  * USA
  *
  */
-#ifndef _GNU_SOURCE
-// zip c++ needs this
-#define _GNU_SOURCE
-#endif
 #include "satipc.h"
 #include "api/symbols.h"
 #include "api/variables.h"

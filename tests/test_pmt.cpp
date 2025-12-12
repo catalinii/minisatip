@@ -17,9 +17,6 @@
  * USA
  *
  */
-#define _GNU_SOURCE
-#define _FILE_OFFSET_BITS 64
-
 #include "ca.h"
 #include "dvb.h"
 #include "minisatip.h"
@@ -198,6 +195,7 @@ int test_assemble_packet() {
         0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
     SFilter f;
     f.id = 0;
+    f.flags = 0;
     int data = assemble_packet(&f, packet);
     ASSERT_EQUAL(123, data, "asemble_packet failed without adaptation")
     ASSERT_EQUAL(
