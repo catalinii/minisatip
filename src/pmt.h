@@ -96,6 +96,11 @@ typedef struct descriptor {
     uint8_t type;
     uint8_t len;
     std::vector<uint8_t> data;
+
+    bool operator==(const struct descriptor &other) const {
+        return this->type == other.type && this->len == other.len &&
+               this->data == other.data;
+    };
 } descriptor_t;
 
 typedef struct struct_stream_pid {

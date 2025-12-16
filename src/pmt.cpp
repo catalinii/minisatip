@@ -1759,10 +1759,8 @@ void pmt_add_descriptor(SPMT *pmt, int stream_id, unsigned char *desc) {
     descriptor_t d = create_descriptor(desc);
 
     // do not add an already existing descriptor
-    if (std::find_if(sp->descriptors.cbegin(), sp->descriptors.cend(),
-                     [&d](const descriptor_t &v) {
-                         return v.type == d.type;
-                     }) != sp->descriptors.cend()) {
+    if (std::find(sp->descriptors.cbegin(), sp->descriptors.cend(), d) !=
+        sp->descriptors.cend()) {
         LOGM("PMT %d pid %d descriptor already added %d", pmt->pid, sp->pid,
              d.type);
         return;

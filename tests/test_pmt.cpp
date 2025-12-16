@@ -53,6 +53,9 @@ extern adapter *a[MAX_ADAPTERS];
 extern SFilter *filters[MAX_FILTERS];
 extern SPMT *pmts[MAX_PMT];
 
+// Forward declarations
+descriptor_t create_descriptor(const uint8_t *data);
+
 uint8_t packet[188] = {
     0x47, 0x40, 0xff, 0x99, 0x14, 0x4c, 0x83, 0x7f, 0x46, 0xba, 0xb8, 0x12,
     0xfb, 0x83, 0xf7, 0x50, 0x9c, 0x73, 0x55, 0xe1, 0x8a, 0x1a, 0x54, 0x66,
@@ -76,6 +79,35 @@ uint8_t cw_invalid[] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77};
 
 extern adapter *a[MAX_ADAPTERS];
 extern SCW *cws[MAX_CW];
+
+int test_descriptor_equality() {
+    const uint8_t descr1_data[] = {0x09, 0x04, 0x0B, 0x00, 0x05, 0x73};
+    descriptor_t descr1 = create_descriptor(descr1_data);
+
+    // other type
+    const uint8_t descr2_data[] = {0x01, 0x04, 0x0B, 0x00, 0x05, 0x73};
+    descriptor_t descr2 = create_descriptor(descr2_data);
+
+    // other length
+    const uint8_t descr3_data[] = {0x09, 0x02, 0x0B, 0x00};
+    descriptor_t descr3 = create_descriptor(descr3_data);
+
+    // other data
+    const uint8_t descr4_data[] = {0x09, 0x04, 0x0B, 0x00, 0x05, 0xAB};
+    descriptor_t descr4 = create_descriptor(descr4_data);
+
+    // identical
+    const uint8_t descr5_data[] = {0x09, 0x04, 0x0B, 0x00, 0x05, 0x73};
+    descriptor_t descr5 = create_descriptor(descr5_data);
+
+    ASSERT(descr1 != descr2, "descr1 and descr2 should not match");
+    ASSERT(descr1 != descr3, "descr1 and descr3 should not match");
+    ASSERT(descr1 != descr4, "descr1 and descr4 should not match");
+    ASSERT(descr1 == descr1, "descr1 should match itself");
+    ASSERT(descr1 == descr5, "descr1 and descr5 should match");
+
+    return 0;
+}
 
 int test_decrypt() {
     int i, max_len = 1000;
@@ -259,6 +291,8 @@ int main() {
     opts.log = 255;
     opts.debug = 255;
     strcpy(thread_info[thread_index].thread_name, "test_pmt");
+    TEST_FUNC(test_descriptor_equality(),
+              "testing descriptor equality operator");
     TEST_FUNC(test_wait_pusi(), "testing decrypt");
     TEST_FUNC(test_decrypt(), "testing decrypt");
     TEST_FUNC(test_assemble_packet(),
