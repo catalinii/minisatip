@@ -142,7 +142,6 @@ typedef struct struct_pmt {
     void *opaque;
     char state; // PMT state (PMT_STOPPED, PMT_STARTING, PMT_RUNNING,
                 // PMT_STOPPING)
-    int first_active_pid;
     int filter;
     std::unordered_map<uint64_t, int> *global_start, *local_start;
 } SPMT;
