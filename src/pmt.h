@@ -101,6 +101,8 @@ typedef struct descriptor {
         return this->type == other.type && this->len == other.len &&
                this->data == other.data;
     };
+
+    bool is_ca_descriptor() { return this->type == 0x09; }
 } descriptor_t;
 
 typedef struct struct_stream_pid {
@@ -127,6 +129,7 @@ typedef struct struct_pmt {
     int version;
     uint16_t caids;
     SPMTCA *ca[MAX_CAID];
+    std::vector<descriptor_t> descriptors;
     int stream_pids;
     SStreamPid *stream_pid[MAX_PMT_PIDS];
     int id;
