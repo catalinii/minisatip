@@ -1306,6 +1306,7 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
     memset(pmt->name, 0, sizeof(pmt->name));
     memset(pmt->provider, 0, sizeof(pmt->provider));
     pmt->caids = 0;
+    pmt->descriptors.clear();
 
     if (i >= npmts)
         npmts = i + 1;
@@ -1354,6 +1355,7 @@ int pmt_del(int id) {
             pmt->ca[i] = NULL;
         }
     pmt->caids = 0;
+    pmt->descriptors.clear();
 
     for (i = 0; i < pmt->stream_pids; i++)
         if (pmt->stream_pid[i]) {
@@ -1753,43 +1755,58 @@ descriptor_t create_descriptor(const uint8_t *data) {
     return desc;
 }
 
-void pmt_add_descriptor(SPMT *pmt, int stream_id, unsigned char *desc) {
-    SStreamPid *sp = pmt->stream_pid[stream_id];
-    descriptor_t d = create_descriptor(desc);
+void pmt_add_descriptors(SPMT *pmt, unsigned char *pi, int len) {
+    int pi_len;
 
-    // do not add an already existing descriptor
-    if (std::find(sp->descriptors.cbegin(), sp->descriptors.cend(), d) !=
-        sp->descriptors.cend()) {
-        LOGM("PMT %d pid %d descriptor already added %d", pmt->pid, sp->pid,
-             d.type);
-        return;
-    }
+    for (int i = 0; i < len; i += pi_len + 2) {
+        pi_len = pi[i + 1];
 
-    sp->descriptors.push_back(d);
-}
+        // Store all descriptors (skipping already existing)
+        descriptor_t d = create_descriptor(pi + i);
 
-void pmt_add_descriptors(SPMT *pmt, int stream_id, unsigned char *es, int len) {
-
-    int es_len, caid, capid;
-    int i;
-
-    if (!pmt->stream_pid[stream_id]) {
-        pmt->stream_pid[stream_id] = new SStreamPid;
-    }
-
-    for (i = 0; i < len; i += es_len + 2) // reading program info
-    {
-        es_len = es[i + 1];
-        if (es[i] != 9) {
-            pmt_add_descriptor(pmt, stream_id, es + i);
+        if (std::find(pmt->descriptors.cbegin(), pmt->descriptors.cend(), d) !=
+            pmt->descriptors.cend()) {
+            LOGM("PMT %d already has descriptor with type %d, len %d", pmt->id,
+                 d.type, d.len);
             continue;
         }
 
-        caid = es[i + 2] * 256 + es[i + 3];
-        capid = (es[i + 4] & 0x1F) * 256 + es[i + 5];
-        pmt_add_caid(pmt, caid, capid, es + i + 6, es_len - 4);
+        pmt->descriptors.push_back(d);
+
+        // Handle CA descriptors separately
+        if (d.is_ca_descriptor()) {
+            int caid = pi[i + 2] * 256 + pi[i + 3];
+            int capid = (pi[i + 4] & 0x1F) * 256 + pi[i + 5];
+            pmt_add_caid(pmt, caid, capid, pi + i + 6, pi_len - 4);
+        }
     }
-    return;
+}
+
+void pmt_add_stream_pid_descriptors(SPMT *pmt, SStreamPid *sp,
+                                    unsigned char *es, int len) {
+    int es_len;
+
+    for (int i = 0; i < len; i += es_len + 2) {
+        es_len = es[i + 1];
+
+        descriptor_t d = create_descriptor(es + i);
+
+        if (std::find(sp->descriptors.cbegin(), sp->descriptors.cend(), d) !=
+            sp->descriptors.cend()) {
+            LOGM("PMT %d pid %d already has descriptor with type %d, len %d",
+                 pmt->id, sp->pid, d.type, d.len);
+            continue;
+        }
+
+        sp->descriptors.push_back(d);
+
+        // Handle CA descriptors separately
+        if (d.is_ca_descriptor()) {
+            int caid = es[i + 2] * 256 + es[i + 3];
+            int capid = (es[i + 4] & 0x1F) * 256 + es[i + 5];
+            pmt_add_caid(pmt, caid, capid, es + i + 6, es_len - 4);
+        }
+    }
 }
 
 int get_master_pmt_for_pid(adapter *ad, int pid) {
@@ -1901,8 +1918,9 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
 
     pmt->stream_pids = 0;
 
+    // Add PMT level desciptors from program info
     if (pi_len > 0 && pi_len < pmt_len)
-        pmt_add_descriptors(pmt, 0, pi, pi_len);
+        pmt_add_descriptors(pmt, pi, pi_len);
 
     es_len = 0;
     for (i = 9 + pi_len; i < pmt_len - 4; i += (es_len) + 5) // reading streams
@@ -1947,8 +1965,10 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         if (!is_audio && !is_video)
             continue;
 
+        // Add stream-level descriptors from elementary stream info
         if (stream_pid_id >= 0)
-            pmt_add_descriptors(pmt, stream_pid_id, pmt_b + i + 5, es_len);
+            pmt_add_stream_pid_descriptors(pmt, pmt->stream_pid[stream_pid_id],
+                                           pmt_b + i + 5, es_len);
 
         if (opmt != -1 && opmt != pmt->master_pmt) {
             pmt->master_pmt = opmt;
@@ -2201,6 +2221,7 @@ void free_all_pmts() {
                 }
             }
             pmts[i]->caids = 0;
+            pmts[i]->descriptors.clear();
 
             for (j = 0; j < pmts[i]->stream_pids; j++) {
                 if (pmts[i]->stream_pid[j]) {
