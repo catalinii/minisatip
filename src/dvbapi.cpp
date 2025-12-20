@@ -461,11 +461,11 @@ int dvbapi_send_pmt(SKey *k, int cmd_id) {
 
     // Pids associated with the PMT
     copy16(buf, 10, len - 12);
-    int i;
-    for (i = 0; i < pmt->stream_pids; i++) {
+
+    for (const auto &stream_pid : pmt->stream_pids) {
         len += 5;
-        int type = pmt->stream_pid[i]->type;
-        int pid = pmt->stream_pid[i]->pid;
+        int type = stream_pid.type;
+        int pid = stream_pid.pid;
         buf[len - 5] = type;
         copy16(buf, len - 4, pid);
         copy16(buf, len - 2, 0);

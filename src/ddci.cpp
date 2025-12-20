@@ -316,7 +316,7 @@ int find_ddci_for_pmt(Sddci_channel *c, SPMT *pmt) {
 
 int is_pmt_running(SPMT *pmt) {
     ddci_mapping_table_t *m =
-        get_pid_mapping_allddci(pmt->adapter, pmt->stream_pid[0]->pid);
+        get_pid_mapping_allddci(pmt->adapter, pmt->stream_pids[0].pid);
     if (!m)
         return -1;
     return m->ddci;
@@ -445,14 +445,14 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
         add_pid_mapping_table(ad->id, pmt->ca[i]->pid, pmt->id, d, 1);
     }
 
-    for (i = 0; i < pmt->stream_pids; i++) {
-        LOGM("DD %d adding stream pid %d %s", d->id, pmt->stream_pid[i]->pid,
-             pmt->stream_pid[i]->pid == pmt->pcr_pid ? "PCR" : "");
+    for (const auto &stream_pid : pmt->stream_pids) {
+        LOGM("DD %d adding stream pid %d %s", d->id, stream_pid.pid,
+             stream_pid.pid == pmt->pcr_pid ? "PCR" : "");
 
-        int ddci_pid = add_pid_mapping_table(ad->id, pmt->stream_pid[i]->pid,
-                                             pmt->id, d, 0);
+        int ddci_pid =
+            add_pid_mapping_table(ad->id, stream_pid.pid, pmt->id, d, 0);
         // map the PCR pid as well
-        if (pmt->stream_pid[i]->pid == pmt->pcr_pid) {
+        if (stream_pid.pid == pmt->pcr_pid) {
             d->pmt[pos].pcr_pid = ddci_pid;
         }
     }
@@ -736,10 +736,10 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
 
     // Add Stream pids
     // Add CA IDs and CA Pids
-    for (i = 0; i < pmt->stream_pids; i++) {
+    for (const auto &stream_pid : pmt->stream_pids) {
         if (get_ca_multiple_pmt(d->id)) {
             // Do not map any pids that are not requested by the client
-            SPid *p = find_pid(pmt->adapter, pmt->stream_pid[i]->pid);
+            SPid *p = find_pid(pmt->adapter, stream_pid.pid);
             if (!p) {
                 p = find_pid(pmt->adapter, 8192); // all pids are requested
             }
@@ -753,27 +753,26 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
             }
             if (is_added == 0) {
                 LOGM("%s: adapter %d pid %d not requested by the client",
-                     __FUNCTION__, pmt->adapter, pmt->stream_pid[i]->pid);
+                     __FUNCTION__, pmt->adapter, stream_pid.pid);
                 continue;
             }
         }
 
         // Stream type + PID
-        *b = pmt->stream_pid[i]->type;
-        copy16(b, 1,
-               safe_get_pid_mapping(d, pmt->adapter, pmt->stream_pid[i]->pid));
+        *b = stream_pid.type;
+        copy16(b, 1, safe_get_pid_mapping(d, pmt->adapter, stream_pid.pid));
         b += 3;
 
         // ES info length
         int es_info_len = 0;
-        for (const auto &d : pmt->stream_pid[i]->descriptors) {
+        for (const auto &d : stream_pid.descriptors) {
             es_info_len += d.len + 2;
         }
         copy16(b, 0, es_info_len);
         b += 2;
 
         // Descriptors
-        for (const auto &d : pmt->stream_pid[i]->descriptors) {
+        for (const auto &d : stream_pid.descriptors) {
             *b++ = d.type;
             *b++ = d.len;
             memcpy(b, d.data.data(), d.len);
@@ -781,8 +780,7 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
         }
 
         LOGM("%s: pmt %d added pid %04X, type %02X, es_len %d", __FUNCTION__,
-             pmt->id, pmt->stream_pid[i]->pid, pmt->stream_pid[i]->type,
-             es_info_len);
+             pmt->id, stream_pid.pid, stream_pid.type, es_info_len);
     }
     // set the length (b + 4 bytes from crc)
     copy16(start_pmt, -2, 4 + b - start_pmt);
