@@ -305,17 +305,17 @@ void disable_cws_for_all_pmts(ca_device_t *d) {
 
 int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
                   int added_only, int ca_id) {
-    int i = 0, pos = 0;
-    for (i = 0; i < pmt->stream_pids; i++) {
-        if (added_only && !find_pid(pmt->adapter, pmt->stream_pid[i]->pid)) {
+    int pos = 0;
+    for (const auto &stream_pid : pmt->stream_pids) {
+        if (added_only && !find_pid(pmt->adapter, stream_pid.pid)) {
             LOGM("%s: skipping pmt %d (ad %d) pid %d from CAPMT", __FUNCTION__,
-                 pmt->id, pmt->adapter, pmt->stream_pid[i]->pid);
+                 pmt->id, pmt->adapter, stream_pid.pid);
             continue;
         }
-        if (!pmt->stream_pid[i]->is_audio && !pmt->stream_pid[i]->is_video)
+        if (!stream_pid.is_audio && !stream_pid.is_video)
             continue;
-        capmt[pos++] = pmt->stream_pid[i]->type;
-        copy16(capmt, pos, pmt->stream_pid[i]->pid);
+        capmt[pos++] = stream_pid.type;
+        copy16(capmt, pos, stream_pid.pid);
         pos += 2;
         int pi_len_pos = pos, pi_len = 0;
         pos += 2;

@@ -7,7 +7,6 @@
 
 #define MAX_CAID 20
 #define MAX_ACTIVE_PIDS 20
-#define MAX_PMT_PIDS (2 * MAX_ACTIVE_PIDS)
 #define CA_ALGO_DVBCSA 0
 #define CA_ALGO_DES 1
 #define CA_ALGO_AES128_ECB 2
@@ -108,8 +107,8 @@ typedef struct descriptor {
 typedef struct struct_stream_pid {
     int type;
     int pid;
-    char is_audio : 1;
-    char is_video : 1;
+    bool is_audio;
+    bool is_video;
     std::vector<descriptor_t> descriptors;
 } SStreamPid;
 
@@ -130,8 +129,7 @@ typedef struct struct_pmt {
     uint16_t caids;
     SPMTCA *ca[MAX_CAID];
     std::vector<descriptor_t> descriptors;
-    int stream_pids;
-    SStreamPid *stream_pid[MAX_PMT_PIDS];
+    std::vector<SStreamPid> stream_pids;
     int id;
     int blen;
     int ca_mask, disabled_ca_mask;
@@ -231,8 +229,8 @@ int wait_pusi(adapter *ad, int len);
 int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf, int sca_id);
 void free_filters();
 void stop_pmt(SPMT *pmt, adapter *ad);
-int pmt_add_stream_pid(SPMT *pmt, int pid, int type, int is_audio, int is_video,
-                       int es_len);
+int pmt_add_stream_pid(SPMT *pmt, int pid, int type, bool is_audio,
+                       bool is_video);
 void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid, uint8_t *data,
                   int len);
 void free_all_pmts();

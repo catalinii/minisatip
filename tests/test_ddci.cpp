@@ -67,8 +67,8 @@ SPMT *create_pmt(int ad, int sid, int pid1, int pid2, int caid1, int caid2) {
     int pmt_id = pmt_add(ad, sid, 1000);
     SPMT *pmt = get_pmt(pmt_id);
     pmt->pid = pmt_id * 1000;
-    pmt_add_stream_pid(pmt, pid1, 2, 0, 1, 0);
-    pmt_add_stream_pid(pmt, pid2, 6, 1, 0, 0);
+    pmt_add_stream_pid(pmt, pid1, 2, false, true);
+    pmt_add_stream_pid(pmt, pid2, 6, true, false);
     pmt_add_caid(pmt, caid1, caid1, NULL, 0);
     pmt_add_caid(pmt, caid2, caid2, NULL, 0);
     return pmt;
@@ -183,7 +183,7 @@ int test_add_del_pmt() {
     c->locked = 1;
     c->ddci[c->ddcis++].ddci = 1;
 
-    pmt_add_stream_pid(pmt2, 0xFF, 2, 0, 1, 0);
+    pmt_add_stream_pid(pmt2, 0xFF, 2, false, true);
     pmt_add_caid(pmt2, 0x502, 0xFE, NULL, 0);
 
     ASSERT(ddci_process_pmt(&ad, pmt2) == TABLES_RESULT_OK,
@@ -500,7 +500,7 @@ int test_create_pmt() {
     // gets added to the PMT correctly
     uint8_t descriptor_data[] = {0x09, 0x04, 0x0B, 0x00, 0x05, 0x73};
     descriptor_t ca_descriptor = create_descriptor(descriptor_data);
-    pmt->stream_pid[1]->descriptors.push_back(ca_descriptor);
+    pmt->stream_pids[1].descriptors.push_back(ca_descriptor);
 
     psi_len = ddci_create_pmt(&d, pmt, psi, sizeof(psi), &dp);
     cc = 1;
@@ -548,7 +548,7 @@ int test_create_pmt() {
     process_pmt(0, psi + 1, psi_len, new_pmt);
     filters[0] = NULL;
     ASSERT_EQUAL(
-        pmt->stream_pids, new_pmt->stream_pids,
+        pmt->stream_pids.size(), new_pmt->stream_pids.size(),
         "Number of streampids does not matches between generated PMT and "
         "read PMT");
     ASSERT_EQUAL(pmt->caids, new_pmt->caids,

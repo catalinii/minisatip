@@ -740,7 +740,8 @@ void update_cw(SPMT *pmt) {
                 break;
             }
             // if we can verify if the CW is return the latest CW
-            if (len) // TEMP disabled: if (len && cw) // but don't reject failed decrypt checks
+            if (len) // TEMP disabled: if (len && cw) // but don't reject failed
+                     // decrypt checks
                 continue;
 
             int change = 0;
@@ -1014,13 +1015,12 @@ void start_active_pmts(adapter *ad) {
         if (!pmt)
             continue;
         int is_active = 0;
-        int j, first = 0;
+        int first = 0;
         int pmt_started = 0;
-        for (j = 0; j < pmt->stream_pids; j++)
+        for (const auto &stream_pid : pmt->stream_pids) {
             // for all audio and video streams start the PMT containing them
-            if ((pmt->stream_pid[j]->is_audio ||
-                 pmt->stream_pid[j]->is_video) &&
-                pids[pmt->stream_pid[j]->pid] && pmt->id == pmt->master_pmt) {
+            if ((stream_pid.is_audio || stream_pid.is_video) &&
+                pids[stream_pid.pid] && pmt->id == pmt->master_pmt) {
                 is_active = 1;
 #ifndef DISABLE_TABLES
                 if (!first) {
@@ -1038,19 +1038,21 @@ void start_active_pmts(adapter *ad) {
                         pmt->state = PMT_RUNNING;
                 }
 #endif
-                SPid *p = pids[pmt->stream_pid[j]->pid];
+                SPid *p = pids[stream_pid.pid];
                 if (p && p->pmt < 0) {
                     p->pmt = pmt->id;
                     p->is_decrypted = 0;
                     LOGM("Found PMT %d active with pid %d while processing the "
                          "PAT",
-                         pmt->id, pmt->stream_pid[j]->pid);
+                         pmt->id, stream_pid.pid);
 #ifndef DISABLE_TABLES
                     if (!pmt_started)
                         tables_add_pid(ad, pmt, p->pid);
 #endif
                 }
             }
+        }
+
         // non master PMTs should not be started
         if (pmt->state == PMT_RUNNING && !is_active) {
             LOG("Stopping started PMT %d: %s", pmt->id, pmt->name);
@@ -1115,7 +1117,7 @@ void mark_pids_null(adapter *ad) {
 void emulate_add_all_pids(adapter *ad) {
     char pids[8193];
     SPid *p_all = find_pid(ad->id, 8192);
-    int i, j, k;
+    int i, j;
     int updated = 0;
 
     if (!opts.emulate_pids_all)
@@ -1140,14 +1142,14 @@ void emulate_add_all_pids(adapter *ad) {
                 mark_pid_add(p_all->sid[i], ad->id, pmt->pid);
                 updated = 1;
 
-                for (k = 0; k < pmt->stream_pids; k++)
-                    if (!pids[pmt->stream_pid[k]->pid]) {
+                for (const auto &stream_pid : pmt->stream_pids) {
+                    if (!pids[stream_pid.pid]) {
                         LOG("%s: adding pid %d to emulate all pids",
-                            __FUNCTION__, pmt->stream_pid[k]->pid)
-                        mark_pid_add(p_all->sid[i], ad->id,
-                                     pmt->stream_pid[k]->pid);
-                        pids[pmt->stream_pid[k]->pid] = 1;
+                            __FUNCTION__, stream_pid.pid)
+                        mark_pid_add(p_all->sid[i], ad->id, stream_pid.pid);
+                        pids[stream_pid.pid] = 1;
                     }
+                }
             }
 
             int forced_pids[] = {EMU_PIDS_ALL_ENFORCED_PIDS_LIST};
@@ -1357,13 +1359,7 @@ int pmt_del(int id) {
     pmt->caids = 0;
     pmt->descriptors.clear();
 
-    for (i = 0; i < pmt->stream_pids; i++)
-        if (pmt->stream_pid[i]) {
-            delete pmt->stream_pid[i];
-            pmt->stream_pid[i] = NULL;
-        }
-
-    pmt->stream_pids = 0;
+    pmt->stream_pids.clear();
 
     i = MAX_PMT;
     while (--i >= 0)
@@ -1782,7 +1778,7 @@ void pmt_add_descriptors(SPMT *pmt, unsigned char *pi, int len) {
     }
 }
 
-void pmt_add_stream_pid_descriptors(SPMT *pmt, SStreamPid *sp,
+void pmt_add_stream_pid_descriptors(SPMT *pmt, SStreamPid &sp,
                                     unsigned char *es, int len) {
     int es_len;
 
@@ -1791,14 +1787,14 @@ void pmt_add_stream_pid_descriptors(SPMT *pmt, SStreamPid *sp,
 
         descriptor_t d = create_descriptor(es + i);
 
-        if (std::find(sp->descriptors.cbegin(), sp->descriptors.cend(), d) !=
-            sp->descriptors.cend()) {
+        if (std::find(sp.descriptors.cbegin(), sp.descriptors.cend(), d) !=
+            sp.descriptors.cend()) {
             LOGM("PMT %d pid %d already has descriptor with type %d, len %d",
-                 pmt->id, sp->pid, d.type, d.len);
+                 pmt->id, sp.pid, d.type, d.len);
             continue;
         }
 
-        sp->descriptors.push_back(d);
+        sp.descriptors.push_back(d);
 
         // Handle CA descriptors separately
         if (d.is_ca_descriptor()) {
@@ -1810,18 +1806,17 @@ void pmt_add_stream_pid_descriptors(SPMT *pmt, SStreamPid *sp,
 }
 
 int get_master_pmt_for_pid(adapter *ad, int pid) {
-    int i, j;
+    int i;
     SPMT *pmt;
     for (i = 0; i < ad->active_pmts; i++) {
         pmt = get_pmt(ad->active_pmt[i]);
         if (pmt && pmt->master_pmt == pmt->id) {
             DEBUGM("searching pid %d ad %d in pmt %d, active pids %d", pid,
-                   ad->id, pmt->id, pmt->stream_pids);
-            for (j = 0; j < pmt->stream_pids; j++) {
-                DEBUGM("comparing with pid %d", pmt->stream_pid[j]->pid);
-                if (pmt->stream_pid[j]->pid == pid &&
-                    (pmt->stream_pid[j]->is_video ||
-                     pmt->stream_pid[j]->is_audio)) {
+                   ad->id, pmt->id, pmt->stream_pids.size());
+            for (const auto &stream_pid : pmt->stream_pids) {
+                DEBUGM("comparing with pid %d", stream_pid.pid);
+                if (stream_pid.pid == pid &&
+                    (stream_pid.is_video || stream_pid.is_audio)) {
                     LOGM("%s: ad %d found pid %d in master pmt %d",
                          __FUNCTION__, ad->id, pid, pmt->master_pmt);
                     return pmt->master_pmt;
@@ -1833,21 +1828,12 @@ int get_master_pmt_for_pid(adapter *ad, int pid) {
     return -1;
 }
 
-int pmt_add_stream_pid(SPMT *pmt, int pid, int type, int is_audio, int is_video,
-                       int es_len) {
-    if (pmt->stream_pids >= MAX_PMT_PIDS)
-        LOG_AND_RETURN(-1, "PMT %d, max number of stream pids reached (%d)",
-                       pmt->id, pmt->stream_pids);
+int pmt_add_stream_pid(SPMT *pmt, int pid, int type, bool is_audio,
+                       bool is_video) {
+    pmt->stream_pids.push_back(
+        {.type = type, .pid = pid, .is_audio = is_audio, .is_video = is_video});
 
-    if (!pmt->stream_pid[pmt->stream_pids]) {
-        pmt->stream_pid[pmt->stream_pids] = new SStreamPid;
-    }
-
-    pmt->stream_pid[pmt->stream_pids]->type = type;
-    pmt->stream_pid[pmt->stream_pids]->pid = pid;
-    pmt->stream_pid[pmt->stream_pids]->is_audio = is_audio;
-    pmt->stream_pid[pmt->stream_pids]->is_video = is_video;
-    return pmt->stream_pids++;
+    return pmt->stream_pids.size() - 1;
 }
 
 int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
@@ -1916,7 +1902,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     pi = b + 12;
     pmt_b = b + 3;
 
-    pmt->stream_pids = 0;
+    pmt->stream_pids.clear();
 
     // Add PMT level desciptors from program info
     if (pi_len > 0 && pi_len < pmt_len)
@@ -1936,19 +1922,13 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         if (pcr_pid == spid)
             pcr_pid = 0;
 
-        int is_video =
+        bool is_video =
             (stype == 2) || (stype == 27) || (stype == 36) || (stype == 15);
-        int is_audio = isAC3 || (stype == 3) || (stype == 4) || (stype == 17);
+        bool is_audio = isAC3 || (stype == 3) || (stype == 4) || (stype == 17);
 
-        int stream_pid_id = -1;
+        int stream_pid_id =
+            pmt_add_stream_pid(pmt, spid, stype, is_audio, is_video);
         int opmt = get_master_pmt_for_pid(ad, spid);
-
-        if (pmt->stream_pids < MAX_PMT_PIDS - 1) {
-            stream_pid_id = pmt_add_stream_pid(pmt, spid, stype, is_audio,
-                                               is_video, es_len);
-
-        } else
-            LOG("Too many pids for pmt %d, discarding pid %d", pmt->id, spid);
 
         LOG("PMT pid %d - stream pid %04X (%d), type %d%s, es_len %d, pos "
             "%d, "
@@ -1967,7 +1947,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
 
         // Add stream-level descriptors from elementary stream info
         if (stream_pid_id >= 0)
-            pmt_add_stream_pid_descriptors(pmt, pmt->stream_pid[stream_pid_id],
+            pmt_add_stream_pid_descriptors(pmt, pmt->stream_pids[stream_pid_id],
                                            pmt_b + i + 5, es_len);
 
         if (opmt != -1 && opmt != pmt->master_pmt) {
@@ -1977,7 +1957,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     }
     // Add the PCR pid if it's independent
     if (pcr_pid > 0 && pcr_pid < 8191)
-        pmt_add_stream_pid(pmt, pcr_pid, 0, 0, 0, 0);
+        pmt_add_stream_pid(pmt, pcr_pid, 0, false, false);
 
     SPMT *master = get_pmt(pmt->master_pmt);
     if (pmt->caids && master && master != pmt) {
@@ -2106,14 +2086,14 @@ void pmt_pid_del(adapter *ad, int pid) {
 #endif
 
     ep = 0;
-    for (i = 0; i < pmt->stream_pids; i++)
-        if (pmt->stream_pid[i]->pid != pid &&
-            (p = find_pid(ad->id, pmt->stream_pid[i]->pid)) &&
+    for (const auto &stream_pid : pmt->stream_pids) {
+        if (stream_pid.pid != pid && (p = find_pid(ad->id, stream_pid.pid)) &&
             (p->flags == 1 || p->flags == 2)) {
-            LOGM("found active pid %d for pmt id %d, pid %d",
-                 pmt->stream_pid[i]->pid, pmt->id, pmt->pid);
+            LOGM("found active pid %d for pmt id %d, pid %d", stream_pid.pid,
+                 pmt->id, pmt->pid);
             ep++;
         }
+    }
 
     // stop only master PMT
     if (!ep)
@@ -2223,13 +2203,7 @@ void free_all_pmts() {
             pmts[i]->caids = 0;
             pmts[i]->descriptors.clear();
 
-            for (j = 0; j < pmts[i]->stream_pids; j++) {
-                if (pmts[i]->stream_pid[j]) {
-                    delete pmts[i]->stream_pid[j];
-                    pmts[i]->stream_pid[j] = NULL;
-                }
-            }
-            pmts[i]->stream_pids = 0;
+            pmts[i]->stream_pids.clear();
 
             delete pmts[i];
             pmts[i] = NULL;
