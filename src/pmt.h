@@ -101,7 +101,7 @@ typedef struct descriptor {
                this->data == other.data;
     };
 
-    bool is_ca_descriptor() { return this->type == 0x09; }
+    bool is_ca_descriptor() const { return this->type == 0x09; }
 } descriptor_t;
 
 typedef struct struct_stream_pid {
