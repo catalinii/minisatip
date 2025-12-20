@@ -740,7 +740,7 @@ void update_cw(SPMT *pmt) {
                 break;
             }
             // if we can verify if the CW is return the latest CW
-            if (len && cw) // but don't reject failed decrypt checks
+            if (len) // TEMP disabled: if (len && cw) // but don't reject failed decrypt checks
                 continue;
 
             int change = 0;
