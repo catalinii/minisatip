@@ -9,8 +9,6 @@
 
 // Maximum number of PMTs (channels) supported per adapter
 #define MAX_CHANNELS_ON_CI 8
-// Maximum number of CA PIDs supported per adapters
-#define MAX_CA_PIDS 64
 
 #define DDCI_BUFFER (20000 * 188)
 
@@ -47,7 +45,6 @@ typedef struct ddci_device {
     int max_channels;
     ddci_pmt_t pmt[MAX_CHANNELS_ON_CI + 1];
     int cat_processed;
-    int capid[MAX_CA_PIDS];
     uint64_t read_index[MAX_ADAPTERS]; // read index per adapter
     uint64_t last_pat, last_sdt, last_pmt;
     int tid, ver;
