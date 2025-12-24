@@ -558,11 +558,54 @@ int test_create_pmt() {
     return 0;
 }
 
+int test_process_cat() {
+    // Copied from Wireshark, PID 1 from 10934V @ 0.8W
+    uint8_t cat[] = {0x01, 0xb0, 0x21, 0xff, 0xff, 0xc5, 0x00, 0x00, 0x09,
+                     0x04, 0x0b, 0x00, 0xe0, 0x30, 0x09, 0x04, 0x09, 0x3e,
+                     0xe0, 0xc1, 0x09, 0x04, 0x09, 0x40, 0xe0, 0xc2, 0x09,
+                     0x04, 0x18, 0x8a, 0xe0, 0x31, 0xd9, 0x66, 0x34, 0x3b};
+
+    // Fixtures
+    ddci_device_t d;
+    d.id = 0;
+    d.enabled = 1;
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[0] = &d;
+    SFilter f;
+    f.flags = FILTER_CRC;
+    f.id = 0;
+    f.adapter = 0;
+    f.pid = 1234;
+    f.next_filter = -1;
+    f.enabled = 1;
+    filters[0] = &f;
+
+    // Process the CAT
+    ddci_process_cat(0, cat, sizeof(cat) / sizeof(uint8_t), &d);
+
+    // Check that each PID was mapped to the adapter
+    ddci_mapping_table_t *m;
+    m = get_pid_mapping_allddci(0, 48);
+    ASSERT(m != NULL, "EMM PID 48 not mapped");
+    m = get_pid_mapping_allddci(0, 193);
+    ASSERT(m != NULL, "EMM PID 48 not mapped");
+    m = get_pid_mapping_allddci(0, 194);
+    ASSERT(m != NULL, "EMM PID 48 not mapped");
+    m = get_pid_mapping_allddci(0, 49);
+    ASSERT(m != NULL, "EMM PID 48 not mapped");
+
+    // Reset fixtures
+    filters[0] = NULL;
+
+    return 0;
+}
+
 int main() {
     opts.log = 65535 ^ LOG_LOCK ^ LOG_UTILS;
     opts.debug = 0;
     opts.cache_dir = "/tmp";
     strcpy(thread_info[thread_index].thread_name, "test_ddci");
+    TEST_FUNC(test_process_cat(), "testing CAT processing");
     TEST_FUNC(test_channels(), "testing test_channels");
     TEST_FUNC(test_add_del_pmt(), "testing adding and removing pmts");
     TEST_FUNC(test_copy_ts_from_ddci(), "testing test_copy_ts_from_ddci");
