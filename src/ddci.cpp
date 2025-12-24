@@ -1161,10 +1161,11 @@ fe_delivery_system_t ddci_delsys(int aid, int fd, fe_delivery_system_t *sys) {
 std::string ddci_name(int aid, int fd) { return ""; }
 
 int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque) {
-    int cat_len = 0, cat_ver = 0, i, es_len = 0, caid, add_cat = 1;
+    int cat_len = 0, cat_ver = 0, i, k, es_len = 0, add_cat = 1;
+    uint16_t caid, capid;
+    std::vector<uint16_t> emm_pids;
     ddci_device_t *d = (ddci_device_t *)opaque;
     SFilter *f = get_filter(filter);
-    int id;
     if (!f)
         return 0;
 
@@ -1182,8 +1183,6 @@ int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque) {
     }
 
     cat_len = (b[1] & 0x0F) << 8 | b[2];
-    cat_len -= 4; // CRC
-
     cat_ver = (b[5] & 0x3E) >> 1;
 
     b += 8;
@@ -1192,40 +1191,39 @@ int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque) {
         return 0;
     }
 
-    id = 0;
-    for (i = 0; i < cat_len; i += es_len) // reading program info
-    {
+    // Parse all EMM PIDs from the table
+    for (i = 0, k = 0; i < cat_len - 4; i += es_len, k++) {
         es_len = b[i + 1] + 2;
         if (b[i] != 9)
             continue;
-        caid = b[i + 2] * 256 + b[i + 3];
-        if (id < MAX_CA_PIDS) {
-            d->capid[id] = (b[i + 4] & 0x1F) * 256 + b[i + 5];
-            LOG("CAT pos %d caid %04X, pid %d", id, caid, d->capid[id]);
-        } else {
-            LOG("MAX_CA_PIDS (%d) reached for adapter %d", MAX_CA_PIDS, d->id);
-        }
 
-        id++;
+        caid = b[i + 2] * 256 + b[i + 3];
+        capid = (b[i + 4] & 0x1F) * 256 + b[i + 5];
+        LOG("CAT pos %d caid %04X, pid %d", k, caid, capid);
+
+        emm_pids.push_back(capid);
     }
 
     add_cat = 1;
 
-    for (i = 0; i < id; i++)
-        if (get_ddci_pid(d, d->capid[i])) {
+    for (const auto &emm_pid : emm_pids) {
+        if (get_ddci_pid(d, emm_pid)) {
             add_cat = 0;
-            LOG("CAT pid %d already in use, skipping CAT", d->capid[i]);
+            LOG("CAT pid %d already in use, skipping CAT", emm_pid);
             d->cat_processed = 1;
             break;
         }
+    }
+
     if (!add_cat) {
         return 0;
     }
 
     // sending EMM pids to the CAM
-    for (i = 0; i < id; i++) {
-        add_pid_mapping_table(f->adapter, d->capid[i], d->pmt[0].id, d, 1);
+    for (const auto &emm_pid : emm_pids) {
+        add_pid_mapping_table(f->adapter, emm_pid, d->pmt[0].id, d, 1);
     }
+
     d->cat_processed = 1;
     lock.unlock();
     update_pids(f->adapter);
