@@ -1163,7 +1163,6 @@ std::string ddci_name(int aid, int fd) { return ""; }
 int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque) {
     int cat_len = 0, i, es_len = 0, caid, add_cat = 1;
     ddci_device_t *d = (ddci_device_t *)opaque;
-    cat_len = len - 4; // remove crc
     SFilter *f = get_filter(filter);
     int id;
     if (!f)
@@ -1182,7 +1181,9 @@ int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque) {
         return 0;
     }
 
-    cat_len -= 9;
+    cat_len = (b[1] & 0x0F) << 8 | b[2];
+    cat_len -= 4; // CRC
+
     b += 8;
     LOG("CAT DDCI %d len %d", d->id, cat_len);
     if (cat_len > 1500) {
