@@ -1161,7 +1161,7 @@ fe_delivery_system_t ddci_delsys(int aid, int fd, fe_delivery_system_t *sys) {
 std::string ddci_name(int aid, int fd) { return ""; }
 
 int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque) {
-    int cat_len = 0, i, es_len = 0, caid, add_cat = 1;
+    int cat_len = 0, cat_ver = 0, i, es_len = 0, caid, add_cat = 1;
     ddci_device_t *d = (ddci_device_t *)opaque;
     SFilter *f = get_filter(filter);
     int id;
@@ -1184,8 +1184,10 @@ int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque) {
     cat_len = (b[1] & 0x0F) << 8 | b[2];
     cat_len -= 4; // CRC
 
+    cat_ver = (b[5] & 0x3E) >> 1;
+
     b += 8;
-    LOG("CAT DDCI %d len %d", d->id, cat_len);
+    LOG("CAT DDCI %d ver %d, len %d", d->id, cat_ver, cat_len);
     if (cat_len > 1500) {
         return 0;
     }
