@@ -1172,11 +1172,11 @@ int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque) {
     if (b[0] != 1)
         return 0;
 
+    std::unique_lock<SMutex> lock(d->mutex);
+
     if (!d->enabled)
         LOG_AND_RETURN(0, "DDCI %d no longer enabled, not processing CAT",
                        d->id);
-
-    std::unique_lock<SMutex> lock(d->mutex);
 
     if (d->cat_processed || d->disable_cat) {
         return 0;
