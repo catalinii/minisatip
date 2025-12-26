@@ -102,6 +102,14 @@ typedef struct descriptor {
     };
 
     bool is_ca_descriptor() const { return this->type == 0x09; }
+
+    uint16_t get_ca_descriptor_caid() const {
+        return (data[0] * 256) + data[1];
+    }
+
+    uint16_t get_ca_descriptor_capid() const {
+        return (data[2] & 0x1F) * 256 + data[3];
+    }
 } descriptor_t;
 
 typedef struct struct_stream_pid {
