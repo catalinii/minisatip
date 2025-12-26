@@ -1343,7 +1343,7 @@ void satipc_get_pids(adapter *ad, satipc *sip, char *url, int size,
     if (!sip->lap && !sip->ldp)
         send_pids = 1;
 
-    get_adapter_pids(ad->id, tmp_url, sizeof(tmp_url));
+    get_adapter_pids(ad->id, tmp_url, sizeof(tmp_url), opts.emulate_pids_all);
     if ((!strcmp(tmp_url, "all") || !strcmp(tmp_url, "none"))) {
         send_pids = 1;
     }
