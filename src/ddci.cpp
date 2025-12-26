@@ -878,10 +878,11 @@ int push_ts_to_adapter(ddci_device_t *d, adapter *ad, uint16_t *mapping) {
             d->fifo.write_index - d->read_index[ad->id], d->read_index[ad->id]);
         dump_packets("DDCI -> AD", ad->buf + i, DVB_FRAME, i);
     }
-    LOGM("popped %d bytes from fifo up to index %d, rlen %d, lbuf %d, left in "
-         "fifo %jd",
-         popped, i, ad->rlen, ad->lbuf,
-         d->fifo.write_index - d->read_index[ad->id]);
+    DEBUGM(
+        "popped %d bytes from fifo up to index %d, rlen %d, lbuf %d, left in "
+        "fifo %jd",
+        popped, i, ad->rlen, ad->lbuf,
+        d->fifo.write_index - d->read_index[ad->id]);
     return 0;
 }
 
@@ -961,8 +962,8 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
             iop++;
         }
 
-        LOGM("writing %d bytes to DDCI device %d, fd %d, sock %d", bytes, d->id,
-             ad2->fe, ad2->fe_sock);
+        DEBUGM("writing %d bytes to DDCI device %d, fd %d, sock %d", bytes,
+               d->id, ad2->fe, ad2->fe_sock);
         int rb = writev(ad2->fe, io, iop);
         if (rb != bytes)
             LOG("%s: write incomplete to DDCI %d,fd %d, wrote %d out of %d "
@@ -1042,8 +1043,8 @@ int ddci_read_sec_data(sockets *s) {
 
     if ((left = fifo_push_force(&d->fifo, b, rlen, 1)) == 0)
         LOG("dropping %d bytes for ddci_adapter %d", left, d->id);
-    LOGM("pushed %d bytes to the adapter buffer from %d [write_index %jd]",
-         left, rlen, d->fifo.write_index);
+    DEBUGM("pushed %d bytes to the adapter buffer from %d [write_index %jd]",
+           left, rlen, d->fifo.write_index);
     dump_packets("DDCI ->FIFO ", (uint8_t *)d->fifo.data, 188, 0);
     dump_packets("SOURCE ", b, 188, 0);
     return 0;
