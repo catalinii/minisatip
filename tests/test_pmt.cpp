@@ -109,6 +109,16 @@ int test_descriptor_equality() {
     return 0;
 }
 
+int test_descriptor_caid_capid_getters() {
+    const uint8_t descr1_data[] = {0x09, 0x04, 0x0B, 0x00, 0x05, 0x73};
+    descriptor_t descr1 = create_descriptor(descr1_data);
+
+    ASSERT(descr1.get_ca_descriptor_caid() == 0x0B00, "CAID mismatch");
+    ASSERT(descr1.get_ca_descriptor_capid() == 0x0573, "CA PID mismatch");
+
+    return 0;
+}
+
 int test_decrypt() {
     int i, max_len = 1000;
     opts.adapter_buffer = 188 * 1000;
@@ -293,6 +303,8 @@ int main() {
     strcpy(thread_info[thread_index].thread_name, "test_pmt");
     TEST_FUNC(test_descriptor_equality(),
               "testing descriptor equality operator");
+    TEST_FUNC(test_descriptor_caid_capid_getters(),
+              "testing descriptor getters");
     TEST_FUNC(test_wait_pusi(), "testing decrypt");
     TEST_FUNC(test_decrypt(), "testing decrypt");
     TEST_FUNC(test_assemble_packet(),
