@@ -216,16 +216,6 @@ int close_pmt_for_cas(adapter *ad, SPMT *pmt) {
     return 0;
 }
 
-void disable_pmt_for_ca(int i, SPMT *pmt) {
-    uint64_t mask = 1ULL << i;
-    if (i >= MAX_CA || i < 0)
-        return;
-    if (ca[i].enabled) {
-        close_pmt_for_ca(i, NULL, pmt);
-        pmt->disabled_ca_mask |= mask;
-    }
-}
-
 int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt) {
     uint64_t mask;
     int rv = 0, result = 0;
