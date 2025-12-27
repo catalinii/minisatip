@@ -896,6 +896,8 @@ void check_cc2(adapter *ad) {
     }
 }
 
+// Locks the used structs in order to avoid race conditions (sockets -> stream
+// -> adapter) Requires the adapter lock to not be held before calling
 int process_packets_for_stream(streams *sid, adapter *ad) {
     int i, j, st_id = sid->sid;
     SPid *p;
@@ -910,6 +912,21 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
     int64_t rtime = ad->rtime;
     int total_len = 0;
     int max_pack = TCP_MAX_PACK;
+
+    sockets *s = get_sockets(sid->rsock_id);
+    if (!s)
+        LOG_AND_RETURN(0, "Stream %d rsock id not found %d", st_id,
+                       sid->rsock_id);
+    std::lock_guard<SMutex> lock(s->mutex);
+    if (!s->enabled)
+        LOG_AND_RETURN(0, "rsock %d disabled for stream %d", sid->rsock_id,
+                       st_id);
+    std::lock_guard<SMutex> lock2(sid->mutex);
+    if (!sid->enabled)
+        LOG_AND_RETURN(0, "stream disabled %d for addapter %d", st_id, ad->id);
+    std::lock_guard<SMutex> lock3(ad->mutex);
+    if (!ad->enabled)
+        return 0;
 
     memset(iov, 0, sizeof(iov));
     memset(pids, 0, sizeof(pids));
@@ -997,11 +1014,17 @@ int process_dmx(sockets *s) {
     adapter *ad;
     int64_t stime;
     int rlen = s->rlen;
-    s->rlen = 0;
 
     ad = get_adapter(s->sid);
-    if (!ad)
+    if (!ad) {
+        s->rlen = 0;
         return 0;
+    }
+    std::unique_lock<SMutex> lock(ad->mutex);
+    if (!ad->enabled) {
+        s->rlen = 0;
+        return 0;
+    }
 
     int64_t ms_ago = s->rtime - ad->rtime;
     ad->rtime = s->rtime;
@@ -1022,41 +1045,23 @@ int process_dmx(sockets *s) {
 
     check_cc2(ad);
 
-    for (i = 0; i < MAX_STREAMS; i++)
-        if (st[i] && st[i]->enabled && st[i]->adapter == ad->id)
-            process_packets_for_stream(st[i], ad);
-
     if (s->rtime - ad->last_sort > 2000) {
         ad->last_sort = s->rtime + 60000;
         sort_pids(s->sid);
     }
+    lock.unlock();
+
+    for (i = 0; i < MAX_STREAMS; i++)
+        if (st[i] && st[i]->enabled && st[i]->adapter == ad->id)
+            process_packets_for_stream(st[i], ad);
 
     nsecs += getTickUs() - stime;
     reads++;
+    s->rlen = 0;
     //      if(!found)LOG("pid not found = %d -> 1:%d 2:%d
     //      1&1f=%d",pid,s->buf[1],s->buf[2],s->buf[1]&0x1f); LOG("done send
     //      stream");
     return 0;
-}
-
-std::vector<SMutex *> lock_streams_for_adapter(int aid) {
-    streams *sid;
-    std::vector<SMutex *> locks;
-    for (int i = 0; i < MAX_STREAMS; i++)
-        if ((sid = get_sid_nw(i)) && sid->adapter == aid) {
-            mutex_lock(&sid->mutex);
-            if (!sid->enabled) {
-                mutex_unlock(&sid->mutex);
-                continue;
-            }
-            locks.push_back(&sid->mutex);
-        }
-    return locks;
-}
-void unlock_streams_for_adapter(std::vector<SMutex *> locks) {
-    int i = 0;
-    for (i = locks.size() - 1; i >= 0; i--)
-        mutex_unlock(locks[i]);
 }
 
 // lock order: socket -> stream -> adapter
@@ -1132,11 +1137,7 @@ int read_dmx(sockets *s) {
         return 0;
 
     ad->flush = 0;
-    auto locks = lock_streams_for_adapter(ad->id);
-    mutex_lock(&ad->mutex);
     process_dmx(s);
-    mutex_unlock(&ad->mutex);
-    unlock_streams_for_adapter(locks);
     return 0;
 }
 #undef DEFAULT_LOG
