@@ -2026,6 +2026,7 @@ void start_pmt(SPMT *pmt, adapter *ad) {
     LOGM("starting PMT %d master %d, pid %d, sid %d, filter %d for channel: %s",
          pmt->id, pmt->master_pmt, pmt->pid, pmt->sid, pmt->filter, pmt->name);
     pmt->state = PMT_STARTING;
+    pmt->start_time = getTick();
 
     // do not call send_pmt_to_cas to allow all the slave PMTs to be read
     // when the master PMT is being sent next time, it will actually making
