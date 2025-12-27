@@ -79,23 +79,111 @@ int test_multiple_pmt() {
     return 0;
 }
 
-int test_create_capmt() {
-    uint8_t clean[1500];
-    int p1 = pmt_add(0, 500, 500);
-    int p2 = pmt_add(0, 600, 600);
-    add_pmt_to_capmt(&d, get_pmt(p1), 1);
-    add_pmt_to_capmt(&d, get_pmt(p2), 1);
-    SPMT *pmt = get_pmt(p1);
-    pmt_add_stream_pid(pmt, 501, 2, false, true);
-    pmt_add_stream_pid(pmt, 502, 3, true, false);
-    pmt = get_pmt(p2);
-    pmt_add_stream_pid(pmt, 601, 2, false, true);
-    pmt_add_stream_pid(pmt, 602, 3, true, false);
+int test_create_capmt_single_clear() {
+    int pmt_id = pmt_add(0, 0x100, 0x101);
+    SPMT *pmt = get_pmt(pmt_id);
+    pmt_add_stream_pid(pmt, 0x501, 2, false, true);
+    pmt_add_stream_pid(pmt, 0x502, 3, true, false);
 
-    int len = create_capmt(d.capmt, 1, clean, sizeof(clean), 0, 0);
-    if (len <= 0)
-        LOG_AND_RETURN(1, "createCAPMT failed");
-    hexdump("CAPMT: ", clean, len);
+    SCAPMT scampt = {.pmt_id = pmt->id,
+                     .other_id = PMT_INVALID,
+                     .version = 1,
+                     .sid = 0x1234};
+
+    uint8_t capmt[1500];
+    int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
+                           CMD_ID_OK_DESCRAMBLING, 0);
+
+    ASSERT(len > 0, "create_capmt failed");
+    hexdump("CAPMT: ", capmt, len);
+
+    ASSERT(capmt[0] == CLM_ONLY, "ca_pmt_list_management incorrect");
+    uint16_t sid = (capmt[1] << 8) | capmt[2];
+    ASSERT(sid == 0x1234, "program_number incorrect");
+    uint8_t version = (capmt[3] & 0x3E) >> 1;
+    ASSERT(version == 1, "version incorrect");
+    bool current_next_indicator = (capmt[3] & 1) == 1;
+    ASSERT(current_next_indicator == true, "current next indicator wrong");
+    uint16_t pi_len = (capmt[4] << 8) | capmt[5];
+    ASSERT(pi_len == 0, "program info length incorrect");
+    ASSERT(capmt[6] == 2, "stream PID 1 service type incorrect");
+    ASSERT(capmt[11] == 3, "stream PID 2 service type incorrect");
+
+    return 0;
+}
+
+int test_create_capmt_single_pmt_scrambled() {
+    int pmt_id = pmt_add(0, 0x100, 0x101);
+    SPMT *pmt = get_pmt(pmt_id);
+    pmt_add_caid(pmt, 0x0B00, 0x573, nullptr, 0);
+    pmt_add_stream_pid(pmt, 0x501, 2, false, true);
+    pmt_add_stream_pid(pmt, 0x502, 3, true, false);
+
+    SCAPMT scampt = {.pmt_id = pmt->id,
+                     .other_id = PMT_INVALID,
+                     .version = 1,
+                     .sid = 0x1234};
+
+    uint8_t capmt[1500];
+    int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
+                           CMD_ID_OK_DESCRAMBLING, 0);
+
+    ASSERT(len > 0, "create_capmt failed");
+    hexdump("CAPMT: ", capmt, len);
+
+    // Descriptors should have been added on the stream-level, not program level
+    uint16_t pi_len = (capmt[4] << 8) | capmt[5];
+    ASSERT(pi_len == 0, "program info length incorrect");
+    ASSERT(capmt[6] == 2, "stream PID 1 service type incorrect");
+    uint16_t stream1_es_len = (capmt[9] << 8) | capmt[10];
+    ASSERT(stream1_es_len == 7, "stream PID 1 ES info length incorrect");
+    ASSERT(capmt[18] == 3, "stream PID 2 service type incorrect");
+    uint16_t stream2_es_len = (capmt[21] << 8) | capmt[22];
+    ASSERT(stream2_es_len == 7, "stream PID 1 ES info length incorrect");
+
+    return 0;
+}
+
+int test_create_capmt_multiple_pmt_scrambled() {
+    int pmt_id = pmt_add(0, 0x100, 0x101);
+    SPMT *pmt = get_pmt(pmt_id);
+    pmt_add_caid(pmt, 0x0B00, 0x573, nullptr, 0);
+    pmt_add_stream_pid(pmt, 0x501, 2, false, true);
+    pmt_add_stream_pid(pmt, 0x502, 3, true, false);
+
+    pmt_id = pmt_add(0, 0x200, 0x201);
+    SPMT *other = get_pmt(pmt_id);
+    pmt_add_caid(other, 0x0B01, 0xABC, nullptr, 0);
+    pmt_add_stream_pid(other, 0x601, 2, false, true);
+    pmt_add_stream_pid(other, 0x602, 3, true, false);
+
+    SCAPMT scampt = {
+        .pmt_id = pmt->id, .other_id = other->id, .version = 1, .sid = 0x1234};
+
+    uint8_t capmt[1500];
+    int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
+                           CMD_ID_OK_DESCRAMBLING, 0);
+
+    ASSERT(len > 0, "create_capmt failed");
+    hexdump("CAPMT: ", capmt, len);
+
+    // Descriptors should have been added on the stream-level, not program level
+    uint16_t pi_len = (capmt[4] << 8) | capmt[5];
+    ASSERT(pi_len == 0, "program info length incorrect");
+    ASSERT(capmt[6] == 2, "stream PID 1 service type incorrect");
+    uint16_t stream1_es_len = (capmt[9] << 8) | capmt[10];
+    ASSERT(stream1_es_len == 7, "stream PID 1 ES info length incorrect");
+    ASSERT(capmt[18] == 3, "stream PID 2 service type incorrect");
+    uint16_t stream2_es_len = (capmt[21] << 8) | capmt[22];
+    ASSERT(stream2_es_len == 7, "stream PID 1 ES info length incorrect");
+
+    // Stream PIDs from other PMT should be present too
+    ASSERT(capmt[30] == 2, "stream PID 3 service type incorrect");
+    uint16_t stream3_es_len = (capmt[33] << 8) | capmt[34];
+    ASSERT(stream3_es_len == 7, "stream PID 3 ES info length incorrect");
+    ASSERT(capmt[42] == 3, "stream PID 3 service type incorrect");
+    uint16_t stream4_es_len = (capmt[45] << 8) | capmt[46];
+    ASSERT(stream4_es_len == 7, "stream PID 4 ES info length incorrect");
     return 0;
 }
 
@@ -156,8 +244,15 @@ int main() {
     TEST_FUNC(test_get_ca_caids_string(), "testing CAID string generation");
     TEST_FUNC(test_multiple_pmt(), "testing CA multiple pmt");
     memset(d.capmt, -1, sizeof(d.capmt));
-    TEST_FUNC(test_create_capmt(), "testing CA creating multiple pmt");
     TEST_FUNC(test_get_authdata_filename(), "testing filename helper function");
+    TEST_FUNC(test_create_capmt_single_clear(),
+              "testing create_capmt with single PMT without CA descriptors");
+    TEST_FUNC(test_create_capmt_single_pmt_scrambled(),
+              "testing create_capmt with single PMT with program-level CA "
+              "descriptors");
+    TEST_FUNC(test_create_capmt_multiple_pmt_scrambled(),
+              "testing create_capmt with multiple PMTs with program-level CA "
+              "descriptors");
     fflush(stdout);
     return 0;
 }
