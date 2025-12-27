@@ -10,8 +10,6 @@
 #include <sys/uio.h>
 
 typedef std::recursive_mutex SMutex;
-#define mutex_lock(x) (x)->lock()
-#define mutex_unlock(x) (x)->unlock()
 
 int split(char **rv, char *s, int lrv, char sep);
 int map_int(char *s, char **v);
