@@ -325,8 +325,8 @@ int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
             capmt[pos++] = cmd_id;
             pi_len = pmt_add_ca_descriptor(pmt, capmt + pos, ca_id);
             pos += pi_len;
+            copy16(capmt, pi_len_pos, pi_len + 1);
         }
-        copy16(capmt, pi_len_pos, pi_len + 1);
     }
     return pos;
 }
@@ -336,7 +336,6 @@ int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
     int pos = 0;
     SPMT *pmt = get_pmt(ca->pmt_id);
     SPMT *other = get_pmt(ca->other_id);
-    int version = ca->version;
 
     if (!pmt)
         LOG_AND_RETURN(1, "%s: PMT %d not found", __FUNCTION__, ca->pmt_id);
@@ -344,7 +343,7 @@ int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
     capmt[pos++] = listmgmt;
     copy16(capmt, pos, ca->sid);
     pos += 2;
-    capmt[pos++] = ((version & 0xF) << 1) | 0x1;
+    capmt[pos++] = ca->version;
     capmt[pos++] = 0; // PI LEN 2 bytes, set 0
     capmt[pos++] = 0;
 
