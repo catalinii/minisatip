@@ -926,6 +926,7 @@ int update_pids(int aid) {
 
     ad->updating_pids = 0;
     ad->pids_updates++;
+    sort_pids(ad->id);
     return 0;
 }
 
@@ -967,7 +968,6 @@ int tune(int aid, int sid) {
 
     std::lock_guard<SMutex> lock(ad->mutex);
 
-    ad->last_sort = getTick();
     if (sid == ad->master_sid && ad->do_tune) {
         ad->tp.diseqc_param = ad->diseqc_param;
 

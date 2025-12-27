@@ -62,7 +62,6 @@ struct struct_adapter {
     int force_close;
     unsigned char *buf; // 7 rtp packets = MAX_PACK, 7 frames / packet
     int64_t rtime;
-    int64_t last_sort;
     int new_gs;
     int status, status_cnt, fast_status;
     int dmx_source;
