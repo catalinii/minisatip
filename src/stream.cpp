@@ -1045,10 +1045,6 @@ int process_dmx(sockets *s) {
 
     check_cc2(ad);
 
-    if (s->rtime - ad->last_sort > 2000) {
-        ad->last_sort = s->rtime + 60000;
-        sort_pids(s->sid);
-    }
     lock.unlock();
 
     for (i = 0; i < MAX_STREAMS; i++)
