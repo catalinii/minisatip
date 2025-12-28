@@ -318,7 +318,8 @@ int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
         copy16(capmt, pos, stream_pid.pid);
         pos += 2;
         int pi_len_pos = pos, pi_len = 0;
-        pos += 2;
+        capmt[pos++] = 0; // pi_len
+        capmt[pos++] = 0;
 
         // append the stream descriptors
         if (pmt->caids) {
