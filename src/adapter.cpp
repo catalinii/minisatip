@@ -541,7 +541,8 @@ void dump_adapters() {
 }
 
 void dump_pids(int aid) {
-    int i, dp = 1;
+    int i;
+    bool dh = true;
 
     if (!opts.log)
         return;
@@ -553,11 +554,11 @@ void dump_pids(int aid) {
         return;
     for (i = 0; i < MAX_PIDS; i++)
         if (p->pids[i].flags > 0) {
-            if (dp)
+            if (dh)
                 LOG("Dumping pids table for adapter %d, number of unknown "
                     "pids: %d",
                     aid, p->pid_err);
-            dp = 0;
+            dh = false;
             LOG("pid %d, fd %d, packets %d, d/c/c2 errs %d/%d/%d, flags %d, "
                 "pmt %d, "
                 "filter "
@@ -841,7 +842,8 @@ void close_adapter_for_stream(int sid, int aid, int close_stream) {
 }
 
 int update_pids(int aid) {
-    int i, dp = 1;
+    int i;
+    bool dp = false;
     adapter *ad;
     ad = get_adapter(aid);
     if (!ad || ad->updating_pids) {
@@ -868,9 +870,7 @@ int update_pids(int aid) {
 
     for (i = MAX_PIDS - 1; i >= 0; i--)
         if (ad->pids[i].flags == 3) {
-            if (dp)
-                dump_pids(aid);
-            dp = 0;
+            dp = true;
             if (ad->pids[i].fd > 0) {
                 if (ad->active_pids > 0)
                     ad->active_pids--;
@@ -891,9 +891,7 @@ int update_pids(int aid) {
                 break;
             }
 
-            if (dp)
-                dump_pids(aid);
-            dp = 0;
+            dp = true;
             if (ad->pids[i].fd <= 0) {
                 int pid = ad->pids[i].pid;
                 // For pids=all emulation add just the PAT pid. process_pmt will
@@ -926,6 +924,9 @@ int update_pids(int aid) {
 
     ad->updating_pids = 0;
     ad->pids_updates++;
+    sort_pids(ad->id);
+    if (dp)
+        dump_pids(ad->id);
     return 0;
 }
 
@@ -967,7 +968,6 @@ int tune(int aid, int sid) {
 
     std::lock_guard<SMutex> lock(ad->mutex);
 
-    ad->last_sort = getTick();
     if (sid == ad->master_sid && ad->do_tune) {
         ad->tp.diseqc_param = ad->diseqc_param;
 
