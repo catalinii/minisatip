@@ -413,7 +413,7 @@ int set_filter_flags(int id, int flags) {
                                        FILTER_ADD_REMOVE | FILTER_PERMANENT);
         if (!add_remove) {
             SPid *p = find_pid(f->adapter, f->pid);
-            if (p && p->flags != 3 && p->sid[0] == -1) {
+            if (p && p->flags != PID_STATE_DELETED && p->sid[0] == -1) {
                 mark_pid_deleted(f->adapter, -1, f->pid, p);
                 update_pids(f->adapter);
             } else
@@ -600,7 +600,7 @@ int wait_pusi(adapter *ad, int len) {
     memset(pids, 0, sizeof(pids));
     memset(parity, 0, sizeof(parity));
     for (i = 0; i < MAX_PIDS; i++)
-        if (ad->pids[i].flags == 1 && (ad->pids[i].pmt >= 0))
+        if (ad->pids[i].flags == PID_STATE_ACTIVE && (ad->pids[i].pmt >= 0))
             pids[ad->pids[i].pid] = PID_INIT;
     for (i = 0; i < len; i += DVB_FRAME) {
         uint8_t *b = ad->buf + i;
@@ -1007,7 +1007,7 @@ void start_active_pmts(adapter *ad) {
     memset(pids, 0, sizeof(pids));
 
     for (i = 0; i < MAX_PIDS; i++)
-        if (ad->pids[i].flags == 1) {
+        if (ad->pids[i].flags == PID_STATE_ACTIVE) {
             pids[ad->pids[i].pid] = ad->pids + i;
         }
     for (i = 0; i < ad->active_pmts; i++) {
@@ -1127,7 +1127,8 @@ void emulate_add_all_pids(adapter *ad) {
         return;
     memset(pids, 0, sizeof(pids));
     for (i = 0; i < MAX_PIDS; i++)
-        if (ad->pids[i].flags > 0 && ad->pids[i].flags < 3)
+        if (ad->pids[i].flags == PID_STATE_ACTIVE &&
+            ad->pids[i].flags == PID_STATE_NEW)
             pids[i] = 1;
 
     for (i = 0; i < MAX_STREAMS_PER_PID; i++)
@@ -2089,7 +2090,7 @@ void pmt_pid_del(adapter *ad, int pid) {
     ep = 0;
     for (const auto &stream_pid : pmt->stream_pids) {
         if (stream_pid.pid != pid && (p = find_pid(ad->id, stream_pid.pid)) &&
-            (p->flags == 1 || p->flags == 2)) {
+            (p->flags == PID_STATE_ACTIVE || p->flags == PID_STATE_NEW)) {
             LOGM("found active pid %d for pmt id %d, pid %d", stream_pid.pid,
                  pmt->id, pmt->pid);
             ep++;

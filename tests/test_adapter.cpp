@@ -119,6 +119,29 @@ int test_get_lnb_int_freq_cband() {
     return 0;
 }
 
+int test_update_pids() {
+    adapter ad;
+    a[0] = &ad;
+    ad.enabled = 1;
+    for (int i = 0; i < 8; i++) {
+        ad.pids[i].flags = i % 4;
+        ad.pids[i].pid = i;
+        ad.pids[i].packets = i;
+    }
+    update_pids(0);
+    ASSERT(ad.pids[0].pid == 5,
+           "Expected pid with flags = 1 and largest number of packets");
+    ASSERT(ad.pids[1].pid == 1,
+           "Expected pid with flags = 1 and second largest number of packets");
+    ASSERT(ad.pids[2].pid == 2 && ad.pids[2].packets == 0,
+           "Expected pid with flags = 1 and 0 packets");
+    ASSERT(ad.pids[3].pid == 6 && ad.pids[2].packets == 0,
+           "Expected pid with flags = 1 and 0 packets");
+    ASSERT(ad.pids[4].pid == 0 && ad.pids[4].flags == 0,
+           "Expected pid with flags = 0");
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -137,6 +160,7 @@ int main() {
               "test get_lnb_hiband with C-band linear LNB parameters");
     TEST_FUNC(test_get_lnb_int_freq_cband(),
               "test get_lnb_int_freq with C-band LNB parameters");
+    TEST_FUNC(test_update_pids(), "test update_pids and sort_pids");
 
     return 0;
 }

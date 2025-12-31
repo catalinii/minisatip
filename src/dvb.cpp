@@ -1512,7 +1512,8 @@ int dvb_psi_read(int socket, void *buf, int len, sockets *ss, int *rb) {
     int i, pid = -1;
     // obtain the pid
     for (i = 0; i < MAX_PIDS; i++)
-        if ((ad->pids[i].flags == 1) && (ad->pids[i].fd == socket)) {
+        if ((ad->pids[i].flags == PID_STATE_ACTIVE) &&
+            (ad->pids[i].fd == socket)) {
             pid = ad->pids[i].pid;
             break;
         }

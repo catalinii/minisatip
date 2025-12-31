@@ -553,7 +553,7 @@ void dump_pids(int aid) {
     if (!p)
         return;
     for (i = 0; i < MAX_PIDS; i++)
-        if (p->pids[i].flags > 0) {
+        if (p->pids[i].flags > PID_STATE_INACTIVE) {
             if (dh)
                 LOG("Dumping pids table for adapter %d, number of unknown "
                     "pids: %d",
@@ -860,16 +860,16 @@ int update_pids(int aid) {
     LOGM("Updating pids for adapter %d", ad->id);
 #ifndef DISABLE_PMT
     for (i = 0; i < MAX_PIDS; i++)
-        if (ad->pids[i].flags == 3)
+        if (ad->pids[i].flags == PID_STATE_DELETED)
             pmt_pid_del(ad, ad->pids[i].pid);
 
     for (i = 0; i < MAX_PIDS; i++)
-        if (ad->pids[i].flags == 2)
+        if (ad->pids[i].flags == PID_STATE_NEW)
             pmt_pid_add(ad, ad->pids[i].pid, 0);
 #endif
 
     for (i = MAX_PIDS - 1; i >= 0; i--)
-        if (ad->pids[i].flags == 3) {
+        if (ad->pids[i].flags == PID_STATE_DELETED) {
             dp = true;
             if (ad->pids[i].fd > 0) {
                 if (ad->active_pids > 0)
@@ -881,10 +881,12 @@ int update_pids(int aid) {
             ad->pids[i].filter = -1;
             ad->pids[i].pmt = -1;
             ad->pids[i].flags = 0;
+            ad->pids[i].packets2 = 0;
+            ad->pids[i].packets = 0;
         }
 
     for (i = 0; i < MAX_PIDS; i++)
-        if (ad->pids[i].flags == 2) {
+        if (ad->pids[i].flags == PID_STATE_NEW) {
             if (ad->max_pids && (ad->max_pids < ad->active_pids)) {
                 LOG("maximum number of pids %d out of %d reached",
                     ad->active_pids, ad->max_pids);
@@ -909,7 +911,7 @@ int update_pids(int aid) {
                 if (ad->max_active_pids < ad->active_pids)
                     ad->max_active_pids = ad->active_pids;
             }
-            ad->pids[i].flags = 1;
+            ad->pids[i].flags = PID_STATE_ACTIVE;
             if (ad->pids[i].pid == 0)
                 ad->pat_processed = 0;
             ad->pids[i].packets = 0;
@@ -937,14 +939,15 @@ void post_tune(adapter *ad) {
 #endif
 #ifndef DISABLE_PMT
     SPid *p_all = find_pid(aid, 8192);
-    if (!p_all || p_all->flags == 3) { // add pids if not explicitly added
+    if (!p_all ||
+        p_all->flags == PID_STATE_DELETED) { // add pids if not explicitly added
         int pid;
         uint32_t ppid = 0;
         int pids[] = {0, 1, 16, 18}; // pids not added by the PMT module
         for (ppid = 0; ppid < sizeof(pids) / sizeof(int); ppid++) {
             pid = pids[ppid];
             SPid *p = find_pid(aid, pid);
-            if (!p || p->flags == 3) {
+            if (!p || p->flags == PID_STATE_DELETED) {
                 LOG("Adding pid %d to the list of pids as not explicitly added "
                     "for adapter %d",
                     pid, aid);
@@ -1016,9 +1019,14 @@ SPid *find_pid(int aid, int p) {
     if (!ad)
         return NULL;
 
-    for (i = 0; i < MAX_PIDS; i++)
-        if ((ad->pids[i].flags > 0) && (ad->pids[i].pid == p))
+    for (i = 0; i < MAX_PIDS; i++) {
+        if ((ad->pids[i].flags > PID_STATE_INACTIVE) && (ad->pids[i].pid == p))
             return &ad->pids[i];
+        else if (ad->pids[i].flags ==
+                 PID_STATE_INACTIVE) // sort_pids ensures there is no active pid
+                                     // so we can exit early
+            break;
+    }
     return NULL;
 }
 
@@ -1032,8 +1040,8 @@ void mark_pid_deleted(int aid, int sid, int _pid, SPid *p) {
 
     if (sid == -1) // delete all sids and the pid
     {
-        if (p->flags != 0)
-            p->flags = 3;
+        if (p->flags != PID_STATE_INACTIVE)
+            p->flags = PID_STATE_DELETED;
         for (j = 0; j < MAX_STREAMS_PER_PID; j++)
             if (sid == -1) // delete all pids if sid = -1
                 p->sid[j] = -1;
@@ -1054,14 +1062,14 @@ void mark_pid_deleted(int aid, int sid, int _pid, SPid *p) {
     int keep = 0;
 
 #ifndef DISABLE_PMT
-    if (cnt == 0 && p->filter != -1 && p->flags > 0)
+    if (cnt == 0 && p->filter != -1 && p->flags > PID_STATE_INACTIVE)
         keep = get_active_filters_for_pid(
             p->filter, aid, _pid,
             FILTER_ADD_REMOVE); // 0 - no filter with type ADD_REMOVE
 #endif
 
-    if ((cnt == 0) && (p->flags != 0) && !keep)
-        p->flags = 3;
+    if ((cnt == 0) && (p->flags != PID_STATE_INACTIVE) && !keep)
+        p->flags = PID_STATE_DELETED;
 
     if (sort) {
         for (j = 0; j < MAX_STREAMS_PER_PID - 1; j++)
@@ -1120,8 +1128,8 @@ int mark_pid_add(int sid, int aid, int _pid) {
         LOG("found already existing pid %d flags %d", _pid, p->flags);
         for (k = 0; k < MAX_STREAMS_PER_PID; k++)
             if (p->sid[k] == -1 || p->sid[k] == sid) {
-                if (p->flags == 3)
-                    p->flags = 2;
+                if (p->flags == PID_STATE_DELETED)
+                    p->flags = PID_STATE_NEW;
                 p->sid[k] = sid;
                 found = 1;
                 break;
@@ -1134,8 +1142,8 @@ int mark_pid_add(int sid, int aid, int _pid) {
     }
     // add the new pid in a new position
     for (i = 0; i < MAX_PIDS; i++)
-        if (ad->pids[i].flags <= 0) {
-            ad->pids[i].flags = 2;
+        if (ad->pids[i].flags == PID_STATE_INACTIVE) {
+            ad->pids[i].flags = PID_STATE_NEW;
             ad->pids[i].pid = _pid;
             ad->pids[i].sid[0] = sid;
             ad->pids[i].pmt = -1;
@@ -1392,6 +1400,7 @@ char *describe_adapter(int sid, int aid, char *dad, int ld) {
 }
 
 // sorting the pid list in order to get faster the pids that are frequestly used
+// the enabled pids will always be in front of the array
 void sort_pids(int aid) {
     int b, i;
     SPid pp;
@@ -1404,13 +1413,18 @@ void sort_pids(int aid) {
     b = 1;
     while (b) {
         b = 0;
-        for (i = 0; i < MAX_PIDS - 1; i++)
-            if (p[i].packets < p[i + 1].packets) {
+        for (i = 0; i < MAX_PIDS - 1; i++) {
+            if (p[i + 1].flags ==
+                PID_STATE_INACTIVE) // do not exchange inactive pids
+                continue;
+            if (p[i].flags == PID_STATE_INACTIVE ||
+                p[i].packets < p[i + 1].packets) {
                 b = 1;
                 memcpy(&pp, &p[i], sizeof(pp));
                 memcpy(&p[i], &p[i + 1], sizeof(pp));
                 memcpy(&p[i + 1], &pp, sizeof(pp));
             }
+        }
     }
 }
 
@@ -2083,7 +2097,8 @@ char *get_adapter_pids(int aid, char *dest, int max_size) {
         return dest;
 
     for (i = 0; i < MAX_PIDS; i++)
-        if (ad->pids[i].flags == 1 || ad->pids[i].flags == 2) {
+        if (ad->pids[i].flags == PID_STATE_ACTIVE ||
+            ad->pids[i].flags == PID_STATE_NEW) {
             int pid = ad->pids[i].pid;
             if (pid == 8192) {
                 strlcatf(dest, max_size, len, "all,");
@@ -2135,7 +2150,7 @@ int get_adapter_ccerrs(int aid) {
         return 0;
 
     for (i = 0; i < 2; i++)
-        if (ad->pids[i].flags == 1)
+        if (ad->pids[i].flags == PID_STATE_ACTIVE)
             cc += ad->pids[i].cc_err;
     return cc;
 }
@@ -2147,7 +2162,7 @@ int get_adapter_decerrs(int aid) {
         return 0;
 
     for (i = 0; i < 2; i++)
-        if (ad->pids[i].flags == 1)
+        if (ad->pids[i].flags == PID_STATE_ACTIVE)
             dec += ad->pids[i].dec_err;
     return dec;
 }

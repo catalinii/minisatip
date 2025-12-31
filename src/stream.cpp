@@ -933,7 +933,7 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
 
     // cache the pids for this stream
     for (i = 0; i < MAX_PIDS; i++)
-        if (ad->pids[i].flags == 1) {
+        if (ad->pids[i].flags == PID_STATE_ACTIVE) {
             p = &ad->pids[i];
             for (j = 0; j < MAX_STREAMS_PER_PID && p->sid[j] > -1; j++)
                 if (p->sid[j] == st_id) {
@@ -1369,7 +1369,7 @@ char *get_stream_pids(int s_id, char *dest, int max_size) {
         return dest;
 
     for (i = 0; i < MAX_PIDS; i++)
-        if (ad->pids[i].flags == 1)
+        if (ad->pids[i].flags == PID_STATE_ACTIVE)
             for (j = 0; j < MAX_STREAMS_PER_PID; j++)
                 if (ad->pids[i].sid[j] == s_id) {
                     if (ad->pids[i].pid == 8192)
