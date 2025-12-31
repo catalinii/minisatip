@@ -240,6 +240,7 @@ void free_filters();
 void stop_pmt(SPMT *pmt, adapter *ad);
 int pmt_add_stream_pid(SPMT *pmt, int pid, int type, bool is_audio,
                        bool is_video);
+void emulate_add_all_pids(adapter *ad);
 void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid, uint8_t *data,
                   int len);
 void free_all_pmts();

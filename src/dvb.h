@@ -365,6 +365,10 @@ typedef struct struct_pid {
     uint32_t crc;
     int count;
 #endif
+    struct_pid() : flags(0) {
+        for (auto &x : sid)
+            x = -1;
+    }
 } SPid;
 
 #ifndef DISABLE_LINUXDVB
