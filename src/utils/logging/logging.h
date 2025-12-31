@@ -40,6 +40,7 @@ extern __thread int thread_index;
 #define LOG_DMX (1 << 15)
 #define LOG_SSDP (1 << 16)
 #define LOG_DVB (1 << 17)
+#define LOG_DDCI (1 << 18)
 
 #define LOGL(level, a, ...)                                                    \
     {                                                                          \
