@@ -3,7 +3,9 @@
 #include "adapter.h"
 #include "aes.h"
 #include "pmt.h"
-#define MAX_CA_PMT 4
+// Absolute maximum, used for array sizes. User sets the actual maximum value
+// using "-c"
+#define MAX_CA_PMT 8
 // Default number of CA PMTs to use
 #define DEFAULT_CA_PMT 1
 #define MAX_SESSIONS 64
