@@ -83,10 +83,11 @@ typedef ssize_t (*mywritev)(int fd, const struct iovec *io, int len);
 #endif
 
 #ifdef UTILS_C
-const char *loglevels[] = {
-    "general", "http",   "socketworks", "stream", "adapter",   "satipc",
-    "pmt",     "tables", "dvbapi",      "lock",   "netceiver", "ca",
-    "socket",  "utils",  "dmx",         "ssdp",   "dvb",       NULL};
+const char *loglevels[] = {"general", "http",   "socketworks", "stream",
+                           "adapter", "satipc", "pmt",         "tables",
+                           "dvbapi",  "lock",   "netceiver",   "ca",
+                           "socket",  "utils",  "dmx",         "ssdp",
+                           "dvb",     "ddci",   NULL};
 mywritev _writev = writev;
 #else
 extern char *loglevels[];

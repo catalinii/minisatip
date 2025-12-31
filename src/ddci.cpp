@@ -51,7 +51,7 @@
 #include "utils/ticks.h"
 #include <linux/dvb/ca.h>
 
-#define DEFAULT_LOG LOG_DVBCA
+#define DEFAULT_LOG LOG_DDCI
 #define CONFIG_FILE_NAME "ddci.conf"
 
 extern int dvbca_id;
