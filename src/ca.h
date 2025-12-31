@@ -4,7 +4,8 @@
 #include "aes.h"
 #include "pmt.h"
 #define MAX_CA_PMT 4
-#define DEFAULT_CA_PMT 4
+// Default number of CA PMTs to use
+#define DEFAULT_CA_PMT 1
 #define MAX_SESSIONS 64
 #define PMT_INVALID -1
 #define PMT_ID_IS_VALID(x) (x > PMT_INVALID)
