@@ -3106,7 +3106,11 @@ void set_ca_channels(char *o) {
             multiple_pmt = 1;
         }
 
+        // Can't go over MAX_CA_PMT
         int max_ca_pmt = atoi(sep + 1);
+        if (max_ca_pmt > MAX_CA_PMT) {
+            max_ca_pmt = MAX_CA_PMT;
+        }
 
         ddci = map_intd(arg[i], NULL, -1);
         if (!ca_devices[ddci])
