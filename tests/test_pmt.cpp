@@ -153,6 +153,8 @@ int test_decrypt() {
     free(a[0]->buf);
     delete a[0];
     a[0] = NULL;
+    delete pmts[0];
+    pmts[0] = NULL;
     return 0;
 }
 
@@ -297,6 +299,42 @@ int test_assemble_multi_packet() {
     return 0;
 }
 
+int test_emulate_add_all_pids() {
+    adapter ad;
+    a[0] = &ad;
+    ad.enabled = 1;
+    SPMT pmt;
+    pmts[0] = &pmt;
+    pmt.enabled = 1;
+    pmt.adapter = 0;
+    opts.emulate_pids_all = 1;
+    SStreamPid sp{.type = 1, .pid = 100};
+    pmt.stream_pids.push_back(sp);
+    SStreamPid sp1{.type = 1, .pid = 101};
+    pmt.stream_pids.push_back(sp1);
+    ad.active_pmts = 1;
+    ad.active_pmt[0] = 0;
+    mark_pid_add(0, ad.id, 8192);
+    mark_pid_add(1, ad.id, 8192);
+    mark_pid_add(2, ad.id, 101);
+    update_pids(ad.id);
+    int pids[] = {100, 0, 1, 16};
+    for (auto pid : pids) {
+        SPid *p = find_pid(ad.id, pid);
+        ASSERT_EQUAL(p->pid, pid, "emulate_add_all_pids failed");
+        ASSERT_EQUAL(p->sid[0], 0,
+                     "emulate_add_all_pids failed to set first stream");
+        ASSERT_EQUAL(p->sid[1], 1,
+                     "emulate_add_all_pids failed to set second stream");
+    }
+    SPid *p = find_pid(ad.id, 101); // pid 101 should have sid 0, 1. 2
+
+    ASSERT(p->sid[0] == 2 && p->sid[1] == 0 && p->sid[2] == 1,
+           "Expected 3 sids to be set fo pid 101");
+    opts.emulate_pids_all = 0;
+    return 0;
+}
+
 int main() {
     opts.log = 255;
     opts.debug = 255;
@@ -313,6 +351,8 @@ int main() {
               "testing assemble_packet with adaptation");
     TEST_FUNC(test_assemble_multi_packet(),
               "testing assemble_packet with multiple packets");
+    TEST_FUNC(test_emulate_add_all_pids(),
+              "testing test_emulate_add_all_pids failed")
     fflush(stdout);
     return 0;
 }

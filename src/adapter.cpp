@@ -55,6 +55,7 @@
 
 #define DEFAULT_LOG LOG_ADAPTER
 
+const int DEFAULT_PIDS[] = {0, 1, 16, 18};
 adapter *a[MAX_ADAPTERS];
 int a_count;
 char disabled[MAX_ADAPTERS]; // disabled adapters
@@ -843,7 +844,7 @@ void close_adapter_for_stream(int sid, int aid, int close_stream) {
 
 int update_pids(int aid) {
     int i;
-    bool dp = false;
+    bool dp = true;
     adapter *ad;
     ad = get_adapter(aid);
     if (!ad || ad->updating_pids) {
@@ -859,6 +860,7 @@ int update_pids(int aid) {
     ad->updating_pids = 1;
     LOGM("Updating pids for adapter %d", ad->id);
 #ifndef DISABLE_PMT
+    emulate_add_all_pids(ad);
     for (i = 0; i < MAX_PIDS; i++)
         if (ad->pids[i].flags == PID_STATE_DELETED)
             pmt_pid_del(ad, ad->pids[i].pid);
@@ -870,7 +872,10 @@ int update_pids(int aid) {
 
     for (i = MAX_PIDS - 1; i >= 0; i--)
         if (ad->pids[i].flags == PID_STATE_DELETED) {
-            dp = true;
+            if (dp)
+                dump_pids(ad->id);
+            dp = false;
+
             if (ad->pids[i].fd > 0) {
                 if (ad->active_pids > 0)
                     ad->active_pids--;
@@ -887,21 +892,23 @@ int update_pids(int aid) {
 
     for (i = 0; i < MAX_PIDS; i++)
         if (ad->pids[i].flags == PID_STATE_NEW) {
+            if (dp)
+                dump_pids(ad->id);
+            dp = false;
             if (ad->max_pids && (ad->max_pids < ad->active_pids)) {
                 LOG("maximum number of pids %d out of %d reached",
                     ad->active_pids, ad->max_pids);
                 break;
             }
 
-            dp = true;
             if (ad->pids[i].fd <= 0) {
                 int pid = ad->pids[i].pid;
                 // For pids=all emulation add just the PAT pid. process_pmt will
                 // add the other pids
                 if (opts.emulate_pids_all && pid == 8192)
-                    pid = 0;
-                if (ad->set_pid &&
-                    (ad->pids[i].fd = ad->set_pid(ad, pid)) < 0) {
+                    ad->pids[i].fd = -1;
+                else if (ad->set_pid &&
+                         (ad->pids[i].fd = ad->set_pid(ad, pid)) < 0) {
                     ad->max_pids = ad->max_active_pids - 1;
                     LOG0("Maximum pid filter reached, lowering the value to %d",
                          opts.max_pids);
@@ -927,8 +934,6 @@ int update_pids(int aid) {
     ad->updating_pids = 0;
     ad->pids_updates++;
     sort_pids(ad->id);
-    if (dp)
-        dump_pids(ad->id);
     return 0;
 }
 
@@ -941,11 +946,7 @@ void post_tune(adapter *ad) {
     SPid *p_all = find_pid(aid, 8192);
     if (!p_all ||
         p_all->flags == PID_STATE_DELETED) { // add pids if not explicitly added
-        int pid;
-        uint32_t ppid = 0;
-        int pids[] = {0, 1, 16, 18}; // pids not added by the PMT module
-        for (ppid = 0; ppid < sizeof(pids) / sizeof(int); ppid++) {
-            pid = pids[ppid];
+        for (auto &pid : DEFAULT_PIDS) {
             SPid *p = find_pid(aid, pid);
             if (!p || p->flags == PID_STATE_DELETED) {
                 LOG("Adding pid %d to the list of pids as not explicitly added "

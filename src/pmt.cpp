@@ -53,9 +53,11 @@
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
+#include <unordered_set>
 
 #define DEFAULT_LOG LOG_PMT
 
+uint16_t EMU_PIDS_ALL_ENFORCED_PIDS_LIST[] = {0, 1, 16, 17, 18, 20, 21};
 SPMT *pmts[MAX_PMT];
 SMutex pmts_mutex;
 int npmts;
@@ -1114,62 +1116,62 @@ void mark_pids_null(adapter *ad) {
     }
 }
 
+#define MAKE_KEY(pid, sid) (((pid) << 8) | (sid))
 void emulate_add_all_pids(adapter *ad) {
-    char pids[8193];
+    std::unordered_set<int> pids;
     SPid *p_all = find_pid(ad->id, 8192);
     int i, j;
-    int updated = 0;
 
     if (!opts.emulate_pids_all)
         return;
 
     if (!p_all)
         return;
-    memset(pids, 0, sizeof(pids));
-    for (i = 0; i < MAX_PIDS; i++)
-        if (ad->pids[i].flags == PID_STATE_ACTIVE &&
-            ad->pids[i].flags == PID_STATE_NEW)
-            pids[i] = 1;
 
+    // cache pids states to add all streams to each new pid
+    for (i = 0; i < MAX_PIDS; i++)
+        if (ad->pids[i].flags == PID_STATE_ACTIVE ||
+            ad->pids[i].flags == PID_STATE_NEW) {
+            for (j = 0; j < MAX_STREAMS_PER_PID; j++)
+                if (ad->pids[i].sid[j] >= 0) {
+                    pids.insert(MAKE_KEY(ad->pids[i].pid, ad->pids[i].sid[j]));
+                }
+        }
     for (i = 0; i < MAX_STREAMS_PER_PID; i++)
         if (p_all->sid[i] >= 0) {
+            int sid = p_all->sid[i];
             for (j = 0; j < ad->active_pmts; j++) {
                 SPMT *pmt = get_pmt(ad->active_pmt[j]);
                 if (!pmt)
                     continue;
-
-                LOG("%s: adding PMT pid %d to emulate all pids", __FUNCTION__,
-                    pmt->pid);
-                mark_pid_add(p_all->sid[i], ad->id, pmt->pid);
-                updated = 1;
+                if (!pids.count(MAKE_KEY(pmt->pid, sid)))
+                    mark_pid_add(sid, ad->id, pmt->pid);
 
                 for (const auto &stream_pid : pmt->stream_pids) {
-                    if (!pids[stream_pid.pid]) {
-                        LOG("%s: adding pid %d to emulate all pids",
-                            __FUNCTION__, stream_pid.pid)
-                        mark_pid_add(p_all->sid[i], ad->id, stream_pid.pid);
-                        pids[stream_pid.pid] = 1;
-                    }
+                    if (pids.count(MAKE_KEY(stream_pid.pid, sid)))
+                        continue;
+                    LOG("%s: adding pid %d sid %d to emulate all pids",
+                        __FUNCTION__, stream_pid.pid, sid);
+                    mark_pid_add(sid, ad->id, stream_pid.pid);
                 }
             }
 
-            int forced_pids[] = {EMU_PIDS_ALL_ENFORCED_PIDS_LIST};
-            int i_forced = sizeof(forced_pids) / sizeof(int);
-            for (j = 0; j < i_forced; j++) {
-                int fpid = forced_pids[j];
-                LOG("%s: adding (enforced) pid %d to emulate all pids",
-                    __FUNCTION__, fpid);
-                mark_pid_add(p_all->sid[i], ad->id, fpid);
-                updated = 1;
+            for (auto fpid : EMU_PIDS_ALL_ENFORCED_PIDS_LIST) {
+                if (pids.count(MAKE_KEY(fpid, sid)))
+                    continue;
+                LOG("%s: adding (enforced) pid %d sid %d to emulate all "
+                    "pids",
+                    __FUNCTION__, fpid, sid);
+                mark_pid_add(sid, ad->id, fpid);
             }
             if (!ad->drop_encrypted) {
                 LOG("%s: adding (enforced) pid 8191 (NULL) too", __FUNCTION__);
-                mark_pid_add(p_all->sid[i], ad->id, 8191);
+                if (!pids.count(MAKE_KEY(8191, sid)))
+                    mark_pid_add(sid, ad->id, 8191);
             }
         }
-    if (updated)
-        update_pids(ad->id);
 }
+#undef MAKE_KEY
 
 #ifdef DEBUG
 void stream_statistics(adapter *ad) {
@@ -1255,7 +1257,6 @@ int pmt_process_stream(adapter *ad) {
         }
     }
 #ifndef DISABLE_TABLES
-    emulate_add_all_pids(ad);
     start_active_pmts(ad);
     stream_statistics(ad);
 
