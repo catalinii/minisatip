@@ -145,21 +145,21 @@ void set_stream_parameters(int s_id, transponder *t) {
     if (!sid || !sid->enabled)
         return;
     if (t->apids && t->apids[0] >= '0' && t->apids[0] <= '9') {
-        _strncpy(sid->apids, t->apids, LEN_PIDS);
-        t->apids = sid->apids;
+        sid->apids = t->apids;
+        t->apids = (char *)sid->apids.c_str();
     }
     if (t->dpids && t->dpids[0] >= '0' && t->dpids[0] <= '9') {
-        _strncpy(sid->dpids, t->dpids, LEN_PIDS);
-        t->dpids = sid->dpids;
+        sid->dpids = t->dpids;
+        t->dpids = (char *)sid->dpids.c_str();
     }
     if (t->pids && t->pids[0] >= '0' && t->pids[0] <= '9') {
-        _strncpy(sid->pids, t->pids, LEN_PIDS);
-        t->pids = sid->pids;
+        sid->pids = t->pids;
+        t->pids = (char *)sid->pids.c_str();
     }
 
     if (t->x_pmt && t->x_pmt[0] >= '0' && t->x_pmt[0] <= '9') {
-        _strncpy(sid->x_pmt, t->x_pmt, LEN_PIDS);
-        t->x_pmt = sid->x_pmt;
+        sid->x_pmt = t->x_pmt;
+        t->x_pmt = (char *)sid->x_pmt.c_str();
     }
 
     if (!t->apids)

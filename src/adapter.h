@@ -34,6 +34,37 @@ typedef struct ca_device ca_device_t;
 #define MAX_DELSYS 10
 #define MAX_PMT_FOR_ADAPTER 255
 
+#define MAX_STREAMS_PER_PID 16
+#define MAX_PIDS 128
+#define PID_STATE_INACTIVE 0
+#define PID_STATE_ACTIVE 1
+#define PID_STATE_NEW 2
+#define PID_STATE_DELETED 3
+
+typedef struct struct_pid {
+    int16_t pid;         // pid for this demux - not used
+    int fd;              // fd for this demux
+    int cc_err, cc_err2; // counter errors
+    int16_t sid[MAX_STREAMS_PER_PID];
+    char flags; // 0 - disabled , 1 enabled, 2 - will be enabled next tune when
+                // tune is called, 3 disable when tune is called
+    uint32_t packets, packets2; // how many packets for this pid arrived, used
+                                // to sort the pids
+    int dec_err;                // decrypt errors, continuity counters
+    uint8_t is_decrypted;       // Set when first decrypted
+    int16_t pmt, filter;
+    int16_t cc, cc1, cc2;
+    int sock; // sock_id
+#ifdef CRC_TS
+    uint32_t crc;
+    int count;
+#endif
+    struct_pid() : flags(0) {
+        for (auto &x : sid)
+            x = -1;
+    }
+} SPid;
+
 typedef struct struct_adapter adapter;
 struct struct_adapter {
     char enabled;
