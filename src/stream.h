@@ -3,6 +3,7 @@
 
 #include "dvb.h"
 #include "socketworks.h"
+#include <string>
 #include <sys/socket.h>
 
 // MAX_STREAMS, DDCI_SID should fit in adapter->sid
@@ -21,8 +22,6 @@
 #define UDP_MAX_PACK 7   // maximum udp rtp packets to buffer
 #define TCP_MAX_PACK 42  // maximum tcp packets for a RTP header
 #define TCP_MAX_IOV 1008 // TCP_MAX_PACK * X < 1024
-
-#define LEN_PIDS (MAX_PIDS * 5 + 1)
 
 typedef struct struct_streams {
     char enabled;
@@ -45,8 +44,7 @@ typedef struct struct_streams {
     int do_play;
     int start_streaming;
     transponder tp;
-    char apids[LEN_PIDS + 1], dpids[LEN_PIDS + 1], pids[LEN_PIDS + 1],
-        x_pmt[LEN_PIDS + 1];
+    std::string apids, dpids, pids, x_pmt;
     uint32_t sp, sb;
     int timeout;
     char useragent[40];

@@ -1,6 +1,5 @@
 #ifndef DVB_H
 #define DVB_H
-
 #ifdef __APPLE__
 #include <sys/types.h>
 #else
@@ -9,7 +8,6 @@
 #endif
 
 #ifdef DISABLE_LINUXDVB
-// #include <linux/types.h>
 #include <stdint.h>
 #include <time.h>
 #define DVBAPIVERSION 0x0500
@@ -260,14 +258,7 @@ typedef enum dvb_snr_table {
 #define DTV_STREAM_ID 42
 #endif
 
-#define MAX_PIDS 128
-#define PID_STATE_INACTIVE 0
-#define PID_STATE_ACTIVE 1
-#define PID_STATE_NEW 2
-#define PID_STATE_DELETED 3
-
 #define MAX_DVBAPI_SYSTEMS 22
-#define MAX_STREAMS_PER_PID 16
 
 #define USE_DVR 0   // Always use DVR device for the stream
 #define USE_DEMUX 1 // Always use the DEMUX device for the stream
@@ -345,31 +336,6 @@ typedef struct struct_transponder {
 
     char *apids, *pids, *dpids, *x_pmt;
 } transponder;
-
-typedef struct struct_pid {
-    int16_t pid;         // pid for this demux - not used
-    int fd;              // fd for this demux
-    int cc_err, cc_err2; // counter errors
-    // stream id - one more to set it -1
-    int16_t sid[MAX_STREAMS_PER_PID];
-    char flags; // 0 - disabled , 1 enabled, 2 - will be enabled next tune when
-                // tune is called, 3 disable when tune is called
-    uint32_t packets, packets2; // how many packets for this pid arrived, used
-                                // to sort the pids
-    int dec_err;                // decrypt errors, continuity counters
-    uint8_t is_decrypted;       // Set when first decrypted
-    int16_t pmt, filter;
-    int16_t cc, cc1, cc2;
-    int sock; // sock_id
-#ifdef CRC_TS
-    uint32_t crc;
-    int count;
-#endif
-    struct_pid() : flags(0) {
-        for (auto &x : sid)
-            x = -1;
-    }
-} SPid;
 
 #ifndef DISABLE_LINUXDVB
 // int tune_it(int fd_frontend, unsigned int freq, unsigned int srate, char pol,
