@@ -556,22 +556,15 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
     ver = capmt->version;
     sid = spmt->sid;
 
-    listmgmt = get_active_capmts(d) == 1 ? CLM_ONLY : CLM_UPDATE;
-    if (listmgmt == CLM_ONLY) {
-        if (capmt->sid == first->sid)
-            listmgmt = CLM_UPDATE;
-        capmt->sid = first->sid;
-        int i;
-        for (i = 0; i < d->max_ca_pmt; i++) {
-            int sid = MAKE_SID_FOR_CA(d->id, i);
-            if (capmt != d->capmt + i) {
-                if (capmt->sid == sid)
-                    d->capmt[i].sid = MAKE_SID_FOR_CA(d->id, MAX_CA_PMT);
-                else
-                    d->capmt[i].sid = sid;
-            }
-        }
+    // Determine list management method to use
+    if (get_active_capmts(d) == 1 && capmt->sid == first->sid) {
+        listmgmt = CLM_ONLY;
+    } else {
+        listmgmt = CLM_UPDATE;
     }
+
+    // Use SID of first PMT in CA PMT
+    capmt->sid = first->sid;
 
     LOG("PMT CA %d pmt %d pid %u (%s) ver %u sid %u (%d), "
         "enabled_pmts %d, "

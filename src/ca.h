@@ -108,7 +108,6 @@
 #define CIPLUS_TAG_OPERATOR_TUNE 0x9f9c09
 #define CIPLUS_TAG_OPERATOR_TUNE_STATUS 0x9f9c0a
 
-#define MAKE_SID_FOR_CA(id, idx) (id * 100 + idx)
 #define MKRID(CLASS, TYPE, VERSION)                                            \
     ((((CLASS) & 0xffff) << 16) | (((TYPE) & 0x3ff) << 6) | ((VERSION) & 0x3f))
 
