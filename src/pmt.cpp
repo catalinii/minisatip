@@ -420,7 +420,7 @@ int set_filter_flags(int id, int flags) {
                                  p);
                 update_pids(f->adapter);
             } else
-                LOGM("pid not found or pid in use by %d streams",
+                LOGM("pid not found or pid in use by %lu streams",
                      p ? p->sid.size() : -1);
         }
     }
