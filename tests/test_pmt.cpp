@@ -322,14 +322,14 @@ int test_emulate_add_all_pids() {
     for (auto pid : pids) {
         SPid *p = find_pid(ad.id, pid);
         ASSERT_EQUAL(p->pid, pid, "emulate_add_all_pids failed");
-        ASSERT_EQUAL(p->sid[0], 0,
+        ASSERT_EQUAL(p->sid.count(0), 1,
                      "emulate_add_all_pids failed to set first stream");
-        ASSERT_EQUAL(p->sid[1], 1,
+        ASSERT_EQUAL(p->sid.count(1), 1,
                      "emulate_add_all_pids failed to set second stream");
     }
     SPid *p = find_pid(ad.id, 101); // pid 101 should have sid 0, 1. 2
 
-    ASSERT(p->sid[0] == 2 && p->sid[1] == 0 && p->sid[2] == 1,
+    ASSERT(p->has_stream(2) && p->has_stream(0) && p->has_stream(1),
            "Expected 3 sids to be set fo pid 101");
     opts.emulate_pids_all = 0;
     return 0;

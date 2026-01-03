@@ -408,19 +408,20 @@ int set_filter_flags(int id, int flags) {
     if (flags & FILTER_ADD_REMOVE) {
         SPid *p = find_pid(f->adapter, f->pid);
         if (!p)
-            mark_pid_add(-1, f->adapter, f->pid);
+            mark_pid_add(PID_STREAM_ID_UNDEFINED, f->adapter, f->pid);
     } else if (flags == 0) {
         int add_remove =
             get_active_filters_for_pid(f->master_filter, f->adapter, f->pid,
                                        FILTER_ADD_REMOVE | FILTER_PERMANENT);
         if (!add_remove) {
             SPid *p = find_pid(f->adapter, f->pid);
-            if (p && p->flags != PID_STATE_DELETED && p->sid[0] == -1) {
-                mark_pid_deleted(f->adapter, -1, f->pid, p);
+            if (p && p->flags != PID_STATE_DELETED && p->sid.size() == 0) {
+                mark_pid_deleted(f->adapter, PID_STREAM_ID_UNDEFINED, f->pid,
+                                 p);
                 update_pids(f->adapter);
             } else
-                LOGM("pid not found or pid in use by sid %d",
-                     p ? p->sid[0] : -1);
+                LOGM("pid not found or pid in use by %d streams",
+                     p ? p->sid.size() : -1);
         }
     }
     return 0;
@@ -1132,44 +1133,40 @@ void emulate_add_all_pids(adapter *ad) {
     for (i = 0; i < MAX_PIDS; i++)
         if (ad->pids[i].flags == PID_STATE_ACTIVE ||
             ad->pids[i].flags == PID_STATE_NEW) {
-            for (j = 0; j < MAX_STREAMS_PER_PID; j++)
-                if (ad->pids[i].sid[j] >= 0) {
-                    pids.insert(MAKE_KEY(ad->pids[i].pid, ad->pids[i].sid[j]));
-                }
+            for (auto &sid : ad->pids[i].sid)
+                pids.insert(MAKE_KEY(ad->pids[i].pid, sid));
         }
-    for (i = 0; i < MAX_STREAMS_PER_PID; i++)
-        if (p_all->sid[i] >= 0) {
-            int sid = p_all->sid[i];
-            for (j = 0; j < ad->active_pmts; j++) {
-                SPMT *pmt = get_pmt(ad->active_pmt[j]);
-                if (!pmt)
-                    continue;
-                if (!pids.count(MAKE_KEY(pmt->pid, sid)))
-                    mark_pid_add(sid, ad->id, pmt->pid);
+    for (auto &sid : p_all->sid) {
+        for (j = 0; j < ad->active_pmts; j++) {
+            SPMT *pmt = get_pmt(ad->active_pmt[j]);
+            if (!pmt)
+                continue;
+            if (!pids.count(MAKE_KEY(pmt->pid, sid)))
+                mark_pid_add(sid, ad->id, pmt->pid);
 
-                for (const auto &stream_pid : pmt->stream_pids) {
-                    if (pids.count(MAKE_KEY(stream_pid.pid, sid)))
-                        continue;
-                    LOG("%s: adding pid %d sid %d to emulate all pids",
-                        __FUNCTION__, stream_pid.pid, sid);
-                    mark_pid_add(sid, ad->id, stream_pid.pid);
-                }
-            }
-
-            for (auto fpid : EMU_PIDS_ALL_ENFORCED_PIDS_LIST) {
-                if (pids.count(MAKE_KEY(fpid, sid)))
+            for (const auto &stream_pid : pmt->stream_pids) {
+                if (pids.count(MAKE_KEY(stream_pid.pid, sid)))
                     continue;
-                LOG("%s: adding (enforced) pid %d sid %d to emulate all "
-                    "pids",
-                    __FUNCTION__, fpid, sid);
-                mark_pid_add(sid, ad->id, fpid);
-            }
-            if (!ad->drop_encrypted) {
-                LOG("%s: adding (enforced) pid 8191 (NULL) too", __FUNCTION__);
-                if (!pids.count(MAKE_KEY(8191, sid)))
-                    mark_pid_add(sid, ad->id, 8191);
+                LOG("%s: adding pid %d sid %d to emulate all pids",
+                    __FUNCTION__, stream_pid.pid, sid);
+                mark_pid_add(sid, ad->id, stream_pid.pid);
             }
         }
+
+        for (auto fpid : EMU_PIDS_ALL_ENFORCED_PIDS_LIST) {
+            if (pids.count(MAKE_KEY(fpid, sid)))
+                continue;
+            LOG("%s: adding (enforced) pid %d sid %d to emulate all "
+                "pids",
+                __FUNCTION__, fpid, sid);
+            mark_pid_add(sid, ad->id, fpid);
+        }
+        if (!ad->drop_encrypted) {
+            LOG("%s: adding (enforced) pid 8191 (NULL) too", __FUNCTION__);
+            if (!pids.count(MAKE_KEY(8191, sid)))
+                mark_pid_add(sid, ad->id, 8191);
+        }
+    }
 }
 #undef MAKE_KEY
 

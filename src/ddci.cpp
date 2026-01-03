@@ -743,15 +743,7 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
             if (!p) {
                 p = find_pid(pmt->adapter, 8192); // all pids are requested
             }
-            int is_added = 0, j;
-            if (p) {
-                for (j = 0; j < MAX_STREAMS_PER_PID; j++)
-                    if (p->sid[j] >= 0 && p->sid[j] < MAX_STREAMS) {
-                        is_added = 1;
-                        break;
-                    }
-            }
-            if (is_added == 0) {
+            if (p && !p->sid.empty()) {
                 LOGM("%s: adapter %d pid %d not requested by the client",
                      __FUNCTION__, pmt->adapter, stream_pid.pid);
                 continue;
