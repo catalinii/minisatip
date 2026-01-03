@@ -817,7 +817,7 @@ int check_cc(adapter *ad) {
             }
             p->cc = cc;
         }
-        if (!VALID_SID(p->sid[0]))
+        if (p->sid.size() == 0)
             packet_no_sid++;
 #ifdef CRC_TS
         if (p) {
@@ -899,7 +899,7 @@ void check_cc2(adapter *ad) {
 // Locks the used structs in order to avoid race conditions (sockets -> stream
 // -> adapter) Requires the adapter lock to not be held before calling
 int process_packets_for_stream(streams *sid, adapter *ad) {
-    int i, j, st_id = sid->sid;
+    int i, st_id = sid->sid;
     SPid *p;
     uint8_t *b;
     int max_iov = TCP_MAX_IOV;
@@ -935,10 +935,8 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
     for (i = 0; i < MAX_PIDS; i++)
         if (ad->pids[i].flags == PID_STATE_ACTIVE) {
             p = &ad->pids[i];
-            for (j = 0; j < MAX_STREAMS_PER_PID && p->sid[j] > -1; j++)
-                if (p->sid[j] == st_id) {
-                    pids[p->pid] = 1;
-                }
+            if (p->has_stream(st_id))
+                pids[p->pid] = 1;
         }
 
     if (sid->type == STREAM_RTSP_UDP) {
@@ -1355,7 +1353,7 @@ char *get_stream_protocol(int s_id, char *dest, int max_size) {
 
 char *get_stream_pids(int s_id, char *dest, int max_size) {
     int len = 0;
-    int i, j;
+    int i;
     streams *s = get_sid_nw(s_id);
     adapter *ad;
     dest[0] = 0;
@@ -1369,14 +1367,14 @@ char *get_stream_pids(int s_id, char *dest, int max_size) {
         return dest;
 
     for (i = 0; i < MAX_PIDS; i++)
-        if (ad->pids[i].flags == PID_STATE_ACTIVE)
-            for (j = 0; j < MAX_STREAMS_PER_PID; j++)
-                if (ad->pids[i].sid[j] == s_id) {
-                    if (ad->pids[i].pid == 8192)
-                        strlcatf(dest, max_size, len, "all,");
-                    else
-                        strlcatf(dest, max_size, len, "%d,", ad->pids[i].pid);
-                }
+        if (ad->pids[i].flags == PID_STATE_ACTIVE) {
+            if (ad->pids[i].has_stream(s_id)) {
+                if (ad->pids[i].pid == 8192)
+                    strlcatf(dest, max_size, len, "all,");
+                else
+                    strlcatf(dest, max_size, len, "%d,", ad->pids[i].pid);
+            }
+        }
     if (len > 0) {
         len--;
         dest[len] = 0;

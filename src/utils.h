@@ -2,7 +2,10 @@
 #define UTILS_H
 
 #include "utils/logging/logging.h"
+#include <iostream>
 #include <mutex>
+#include <sstream>
+#include <string>
 
 #include <pthread.h>
 #include <stdint.h>
@@ -49,6 +52,18 @@ int is_rtsp_response(char *buf, int len);
 int is_rtsp_request(char *buf, int len);
 int is_http_request(char *buf, int len);
 int is_byte_array_empty(uint8_t *b, int len);
+template <typename Container>
+std::string iterable_to_string(const Container &container,
+                               const std::string &delimiter = ", ") {
+    std::stringstream ss;
+    for (auto it = container.begin(); it != container.end(); ++it) {
+        ss << *it;
+        if (std::next(it) != container.end()) {
+            ss << delimiter;
+        }
+    }
+    return ss.str();
+}
 
 #define dump_packets(message, b, len, packet_offset)                           \
     if (DEFAULT_LOG & opts.debug)                                              \

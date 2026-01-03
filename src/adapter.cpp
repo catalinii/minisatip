@@ -286,7 +286,7 @@ int init_hw(int i) {
     }
     memset(ad->buf, 0, opts.adapter_buffer + 1);
     init_dvb_parameters(&ad->tp);
-    mark_pids_deleted(i, -1, NULL);
+    mark_pids_deleted(i, PID_STREAM_ID_UNDEFINED, NULL);
     update_pids(i);
 
     if (!ad->sys[0])
@@ -384,7 +384,7 @@ int close_adapter(int na) {
         ad->dvr, ad->sock, ad->fe_sock);
     // close all streams attached to this adapter
     //	close_streams_for_adapter (na, -1);
-    mark_pids_deleted(na, -1, NULL);
+    mark_pids_deleted(na, PID_STREAM_ID_UNDEFINED, NULL);
     update_pids(na);
     ad->enabled = 0;
     if (ad->close)
@@ -560,17 +560,14 @@ void dump_pids(int aid) {
                     "pids: %d",
                     aid, p->pid_err);
             dh = false;
+
             LOG("pid %d, fd %d, packets %d, d/c/c2 errs %d/%d/%d, flags %d, "
-                "pmt %d, "
-                "filter "
-                "%d, sock %d, p2 %d, sids: %d %d %d %d %d %d %d %d",
+                "pmt %d, filter %d, sock %d, p2 %d, sids: <%s>",
                 p->pids[i].pid, p->pids[i].fd, p->pids[i].packets,
                 p->pids[i].dec_err, p->pids[i].cc_err, p->pids[i].cc_err2,
                 p->pids[i].flags, p->pids[i].pmt, p->pids[i].filter,
-                p->pids[i].sock, p->pids[i].packets2, p->pids[i].sid[0],
-                p->pids[i].sid[1], p->pids[i].sid[2], p->pids[i].sid[3],
-                p->pids[i].sid[4], p->pids[i].sid[5], p->pids[i].sid[6],
-                p->pids[i].sid[7]);
+                p->pids[i].sock, p->pids[i].packets2,
+                iterable_to_string(p->pids[i].sid).c_str());
         }
 }
 
@@ -823,7 +820,7 @@ void close_adapter_for_stream(int sid, int aid, int close_stream) {
     // delete the attached PIDs as well
     if (ad->sid_cnt == 0) {
         ad->master_sid = -1;
-        mark_pids_deleted(aid, -1, NULL);
+        mark_pids_deleted(aid, PID_STREAM_ID_UNDEFINED, NULL);
         if (ad->standby && close_stream)
             ad->standby(ad);
         init_dvb_parameters(&ad->tp);
@@ -952,7 +949,7 @@ void post_tune(adapter *ad) {
                 LOG("Adding pid %d to the list of pids as not explicitly added "
                     "for adapter %d",
                     pid, aid);
-                mark_pid_add(-1, aid, pid);
+                mark_pid_add(PID_STREAM_ID_UNDEFINED, aid, pid);
             }
         }
     }
@@ -1032,54 +1029,32 @@ SPid *find_pid(int aid, int p) {
 }
 
 void mark_pid_deleted(int aid, int sid, int _pid, SPid *p) {
-    int j;
-    int cnt = 0, sort = 0;
     if (!p)
         p = find_pid(aid, _pid);
     if (!p)
         return;
 
-    if (sid == -1) // delete all sids and the pid
+    if (sid == PID_STREAM_ID_UNDEFINED) // delete all sids and the pid
     {
         if (p->flags != PID_STATE_INACTIVE)
             p->flags = PID_STATE_DELETED;
-        for (j = 0; j < MAX_STREAMS_PER_PID; j++)
-            if (sid == -1) // delete all pids if sid = -1
-                p->sid[j] = -1;
+        p->sid.clear();
         return;
     }
     // sid != -1
-    for (j = 0; j < MAX_STREAMS_PER_PID; j++)
-        if (p->sid[j] == sid) // delete all pids where .sid == sid
-        {
-            p->sid[j] = -1;
-            if ((j + 1 < MAX_STREAMS_PER_PID) && (p->sid[j + 1] >= 0))
-                sort = 1;
-        }
-
-    for (j = 0; j < MAX_STREAMS_PER_PID; j++)
-        if (p->sid[j] >= 0)
-            cnt++;
+    p->sid.erase(sid);
+    bool is_empty = p->sid.empty();
     int keep = 0;
 
 #ifndef DISABLE_PMT
-    if (cnt == 0 && p->filter != -1 && p->flags > PID_STATE_INACTIVE)
+    if (is_empty && p->filter != -1 && p->flags > PID_STATE_INACTIVE)
         keep = get_active_filters_for_pid(
             p->filter, aid, _pid,
             FILTER_ADD_REMOVE); // 0 - no filter with type ADD_REMOVE
 #endif
 
-    if ((cnt == 0) && (p->flags != PID_STATE_INACTIVE) && !keep)
+    if (is_empty && (p->flags != PID_STATE_INACTIVE) && !keep)
         p->flags = PID_STATE_DELETED;
-
-    if (sort) {
-        for (j = 0; j < MAX_STREAMS_PER_PID - 1; j++)
-            if (p->sid[j + 1] > p->sid[j]) {
-                int16_t t = p->sid[j];
-                p->sid[j] = p->sid[j + 1];
-                p->sid[j + 1] = t;
-            }
-    }
 }
 
 void mark_pids_deleted(int aid, int sid,
@@ -1118,27 +1093,18 @@ void mark_pids_deleted(int aid, int sid,
 
 int mark_pid_add(int sid, int aid, int _pid) {
     adapter *ad;
-    int k, i;
+    int i;
     ad = get_adapter(aid);
-    int found = 0;
     SPid *p;
     if (!ad)
         return -1;
     // check if the pid already exists, if yes add the sid
     if ((p = find_pid(aid, _pid))) {
         LOG("found already existing pid %d flags %d", _pid, p->flags);
-        for (k = 0; k < MAX_STREAMS_PER_PID; k++)
-            if (p->sid[k] == -1 || p->sid[k] == sid) {
-                if (p->flags == PID_STATE_DELETED)
-                    p->flags = PID_STATE_NEW;
-                p->sid[k] = sid;
-                found = 1;
-                break;
-            }
-        if (!found) {
-            LOG("too many streams for PID %d adapter %d", _pid, aid);
-            return -1;
-        }
+        if (sid != PID_STREAM_ID_UNDEFINED)
+            p->sid.insert(sid);
+        if (p->flags == PID_STATE_DELETED)
+            p->flags = PID_STATE_NEW;
         return 0;
     }
     // add the new pid in a new position
@@ -1146,7 +1112,9 @@ int mark_pid_add(int sid, int aid, int _pid) {
         if (ad->pids[i].flags == PID_STATE_INACTIVE) {
             ad->pids[i].flags = PID_STATE_NEW;
             ad->pids[i].pid = _pid;
-            ad->pids[i].sid[0] = sid;
+            ad->pids[i].sid.clear();
+            if (sid != PID_STREAM_ID_UNDEFINED)
+                ad->pids[i].sid.insert(sid);
             ad->pids[i].pmt = -1;
             ad->pids[i].filter = -1;
             ad->pids[i].sock = -1;
@@ -1250,7 +1218,7 @@ int set_adapter_parameters(int aid, int sid, transponder *tp) {
             return -1;
         }
         ad->do_tune = 1;
-        mark_pids_deleted(aid, -1, NULL);
+        mark_pids_deleted(aid, PID_STREAM_ID_UNDEFINED, NULL);
         if (update_pids(aid)) {
             ad->do_tune = 0;
             return -1;
@@ -1421,9 +1389,7 @@ void sort_pids(int aid) {
             if (p[i].flags == PID_STATE_INACTIVE ||
                 p[i].packets < p[i + 1].packets) {
                 b = 1;
-                memcpy(&pp, &p[i], sizeof(pp));
-                memcpy(&p[i], &p[i + 1], sizeof(pp));
-                memcpy(&p[i + 1], &pp, sizeof(pp));
+                std::swap(p[i], p[i + 1]);
             }
         }
     }
