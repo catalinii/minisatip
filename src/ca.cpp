@@ -597,12 +597,12 @@ void remove_pmt_from_device(ca_device_t *d, SPMT *pmt) {
             if (PMT_ID_IS_VALID(d->capmt[i].other_id)) {
                 d->capmt[i].pmt_id = d->capmt[i].other_id;
                 d->capmt[i].other_id = PMT_INVALID;
-                d->capmt[i].version++;
+                d->capmt[i].version = (d->capmt[i].version + 1) & 0xF;
             }
         }
         if (d->capmt[i].other_id == pmt->id) {
             d->capmt[i].other_id = PMT_INVALID;
-            d->capmt[i].version++;
+            d->capmt[i].version = (d->capmt[i].version + 1) & 0xF;
         }
     }
     return;
