@@ -735,21 +735,7 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
     copy16(start_pi_len, 0, pi_len);
 
     // Add Stream pids
-    // Add CA IDs and CA Pids
     for (const auto &stream_pid : pmt->stream_pids) {
-        if (get_ca_multiple_pmt(d->id)) {
-            // Do not map any pids that are not requested by the client
-            SPid *p = find_pid(pmt->adapter, stream_pid.pid);
-            if (!p) {
-                p = find_pid(pmt->adapter, 8192); // all pids are requested
-            }
-            if (p && p->sid.empty()) {
-                LOGM("%s: adapter %d pid %d not requested by the client",
-                     __FUNCTION__, pmt->adapter, stream_pid.pid);
-                continue;
-            }
-        }
-
         // Stream type + PID
         *b = stream_pid.type;
         copy16(b, 1, safe_get_pid_mapping(d, pmt->adapter, stream_pid.pid));

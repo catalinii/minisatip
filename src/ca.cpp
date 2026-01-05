@@ -271,12 +271,6 @@ int get_max_pmt_for_ca(int i) {
     return MAX_CA_PMT;
 }
 
-int get_ca_multiple_pmt(int i) {
-    if (i >= 0 && i < MAX_ADAPTERS && ca_devices[i] && ca_devices[i]->enabled)
-        return ca_devices[i]->multiple_pmt;
-    return 0;
-}
-
 void send_cw_to_all_pmts(ca_device_t *d, int parity) {
     int i;
     for (i = 0; i < d->max_ca_pmt; i++) {
