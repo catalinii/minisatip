@@ -391,7 +391,8 @@ int get_enabled_pmts_for_ca(ca_device_t *d) {
     return enabled_pmts;
 }
 
-SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple) {
+SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple,
+                         bool *out_update) {
     int ca_pos;
     SCAPMT *res = NULL;
 
@@ -400,6 +401,7 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple) {
         if (d->capmt[ca_pos].pmt_id == pmt->id ||
             d->capmt[ca_pos].other_id == pmt->id) {
             res = d->capmt + ca_pos;
+            *out_update = true;
             break;
         }
     }
@@ -414,6 +416,7 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple) {
             if (multiple && d->capmt[ca_pos].other_id == -1) {
                 d->capmt[ca_pos].other_id = pmt->id;
                 res = d->capmt + ca_pos;
+                *out_update = true;
                 break;
             }
         }
@@ -421,6 +424,11 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple) {
 
     if (res) {
         res->version = (res->version + 1) & 0xF;
+
+        // Use SID of first PMT in CA PMT
+        if (SPMT *first = get_pmt(res->pmt_id)) {
+            res->sid = first->sid;
+        }
     } else {
         LOG("CA %d all channels used %d, multiple allowed %d", d->id,
             d->max_ca_pmt, multiple);
@@ -543,7 +551,8 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
     if (d->state != CA_STATE_INITIALIZED)
         LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY, "CAM not yet initialized");
 
-    SCAPMT *capmt = add_pmt_to_capmt(d, spmt, d->multiple_pmt);
+    bool update = false;
+    SCAPMT *capmt = add_pmt_to_capmt(d, spmt, d->multiple_pmt, &update);
     if (!capmt)
         LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY,
                        "No free slots to add PMT %d to CA %d", spmt->id, d->id);
@@ -557,14 +566,11 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
     sid = spmt->sid;
 
     // Determine list management method to use
-    if (get_active_capmts(d) == 1 && capmt->sid == first->sid) {
+    if (get_active_capmts(d) == 1 && update) {
         listmgmt = CLM_ONLY;
     } else {
         listmgmt = CLM_UPDATE;
     }
-
-    // Use SID of first PMT in CA PMT
-    capmt->sid = first->sid;
 
     LOG("PMT CA %d pmt %d pid %u (%s) ver %u sid %u (%d), "
         "enabled_pmts %d, "
