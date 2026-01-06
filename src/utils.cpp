@@ -529,6 +529,11 @@ SMutex join_lock;
 
 void add_join_thread(pthread_t t) {
     std::lock_guard<SMutex> lock(join_lock);
+    if (join_pos >= 100) {
+        LOG("ERROR: Maximum thread limit (100) reached, cannot add thread %lx",
+            t);
+        return;
+    }
     join_th[join_pos++] = t;
     LOG("%s: pthread %lx", __FUNCTION__, t);
 }

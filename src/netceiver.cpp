@@ -25,6 +25,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <ifaddrs.h>
+#include <sstream>
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -373,7 +374,7 @@ void find_netcv_adapter(adapter **a) {
     int i, k, n, na;
     netceiver_info_list_t *nc_list;
     adapter *ad;
-    char dbuf[2048];
+    std::stringstream dbuf;
 
     /* check if network interface is available */
     struct ifaddrs *nif, *nif1;
@@ -408,16 +409,17 @@ void find_netcv_adapter(adapter **a) {
     if (api_sock_init(API_SOCK_NAMESPACE))
         LOG("Netceiver API socket init failed");
 
-    sprintf(dbuf, "REEL: Search for %d Netceiver%s on %s... ", opts.netcv_count,
-            opts.netcv_count == 1 ? "" : "s", opts.netcv_if);
+    dbuf << "REEL: Search for " << opts.netcv_count << " Netceiver"
+         << (opts.netcv_count == 1 ? "" : "s") << " on " << opts.netcv_if
+         << "... ";
     n = 0;
     do {
         sleep_msec(250);
-        sprintf(dbuf + strlen(dbuf), "##");
+        dbuf << "##";
         nc_list = nc_get_list();
     } while (nc_list->nci_num < opts.netcv_count && n++ < 19);
     nc_lock_list();
-    sprintf(dbuf + strlen(dbuf), "\n");
+    dbuf << "\n";
 
     /* count available tuner types */
     int nc_sys_c[] = {0, 0, 0, 0, 0};
@@ -425,20 +427,21 @@ void find_netcv_adapter(adapter **a) {
     int nc_sys_t = 0;
     for (n = 0; n < nc_list->nci_num; n++) {
         netceiver_info_t *nci = nc_list->nci + n;
-        sprintf(dbuf + strlen(dbuf), "Found NetCeiver: %s \n", nci->uuid);
+        dbuf << "Found NetCeiver: " << nci->uuid << " \n";
         for (i = 0; i < nci->tuner_num; i++) {
-            sprintf(dbuf + strlen(dbuf), "	Tuner: %s, Type %d\n",
-                    nci->tuner[i].fe_info.name, nci->tuner[i].fe_info.type);
+            dbuf << "\tTuner: " << nci->tuner[i].fe_info.name << ", Type "
+                 << nci->tuner[i].fe_info.type << "\n";
             nc_sys_c[nci->tuner[i].fe_info.type]++;
             nc_sys_t++;
         }
     }
-    LOG("%s", dbuf);
+    LOG("%s", dbuf.str().c_str());
 
     // add netceiver tuners to the list of adapters
     i = FE_QPSK;
     na = a_count;
-    sprintf(dbuf, "netceiver: adding ");
+    dbuf.str(""); // Clear the stringstream
+    dbuf << "netceiver: adding ";
     for (n = 0; n < nc_sys_t; n++) {
         while (i < FE_DVBS2 && nc_sys_c[map_type[i]] == 0)
             i++;
@@ -488,21 +491,21 @@ void find_netcv_adapter(adapter **a) {
         case FE_DVBS2:
             ad->sys[0] = SYS_DVBS2;
             ad->sys[1] = SYS_DVBS;
-            sprintf(dbuf + strlen(dbuf), "[AD%d DVB-S2] ", na);
+            dbuf << "[AD" << na << " DVB-S2] ";
             break;
 
         case FE_QPSK:
             ad->sys[0] = SYS_DVBS;
-            sprintf(dbuf + strlen(dbuf), "[AD%d DVB-S] ", na);
+            dbuf << "[AD" << na << " DVB-S] ";
             break;
 
         case FE_QAM:
             ad->sys[0] = SYS_DVBC_ANNEX_A;
-            sprintf(dbuf + strlen(dbuf), "[AD%d DVB-C] ", na);
+            dbuf << "[AD" << na << " DVB-C] ";
             break;
 
         case FE_OFDM:
-            sprintf(dbuf + strlen(dbuf), "[AD%d DVB-T] ", na);
+            dbuf << "[AD" << na << " DVB-T] ";
             ad->sys[0] = SYS_DVBT;
             break;
         }
@@ -510,7 +513,7 @@ void find_netcv_adapter(adapter **a) {
         na++; // increase number of tuner count
         a_count = na;
     }
-    LOG("%s", dbuf);
+    LOG("%s", dbuf.str().c_str());
     nc_unlock_list(); // netceivers appearing after this will be recognized by
                       // libmcli but will not made available to minisatip
 

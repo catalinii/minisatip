@@ -566,7 +566,7 @@ char *get_command_line_string(int argc, char *argv[]) {
     }
 
     char *dest = (char *)malloc(len);
-    memset(dest, 0, sizeof(len));
+    memset(dest, 0, len);
     for (i = 0; i < argc; i++) {
         strcat(dest, argv[i]);
         if (i != argc - 1) {
