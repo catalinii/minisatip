@@ -1,8 +1,8 @@
 #ifndef CA_H
 #define CA_H
 #include "adapter.h"
-#include "aes.h"
 #include "pmt.h"
+#include <openssl/rsa.h>
 // Absolute maximum, used for array sizes. User sets the actual maximum value
 // using "-c"
 #define MAX_CA_PMT 8
