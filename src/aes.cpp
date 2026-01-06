@@ -17,7 +17,6 @@
  * USA
  *
  */
-#include "openssl/aes.h"
 #include "adapter.h"
 #include "dvb.h"
 #include "minisatip.h"
@@ -51,22 +50,40 @@
 #define DEFAULT_LOG LOG_PMT
 
 void dvbaes_create_key(SCW *cw) {
-    cw->key = (uint8_t *)malloc(sizeof(AES_KEY));
+    if (!(cw->key = (void *)EVP_CIPHER_CTX_new()))
+        LOG("EVP_CIPHER_CTX_new failed");
 }
 
-void dvbaes_delete_key(SCW *cw) { free(cw->key); }
+void dvbaes_delete_key(SCW *cw) {
+    if (cw->key) {
+        EVP_CIPHER_CTX_free((EVP_CIPHER_CTX *)cw->key);
+        cw->key = NULL;
+    }
+}
 
 void dvbaes_set_cw(SCW *cw, SPMT *pmt) {
-    AES_set_decrypt_key(cw->cw, 128, (AES_KEY *)cw->key);
+    EVP_CIPHER_CTX *ctx = (EVP_CIPHER_CTX *)cw->key;
+    if (!ctx)
+        return;
+
+    if (1 != EVP_DecryptInit_ex(ctx, EVP_aes_128_ecb(), NULL, cw->cw, NULL))
+        LOG("EVP_DecryptInit_ex failed for ECB mode");
 }
 
 void dvbaes_decrypt_stream(SCW *cw, SPMT_batch *batch, int batch_len) {
-    int i, j, len;
+    EVP_CIPHER_CTX *ctx = (EVP_CIPHER_CTX *)cw->key;
+    int i, j, len, out_len;
+
+    if (!ctx)
+        return;
+
     for (i = 0; i < batch_len; i++) {
         len = (batch[i].len / 16) * 16;
-        for (j = 0; j < len; j++)
-            AES_ecb_encrypt(batch[i].data + j, batch[i].data + j,
-                            (AES_KEY *)cw->key, AES_DECRYPT);
+        for (j = 0; j < len; j += 16) {
+            if (1 != EVP_DecryptUpdate(ctx, batch[i].data + j, &out_len,
+                                       batch[i].data + j, 16))
+                LOG("EVP_DecryptUpdate failed");
+        }
     }
 }
 
@@ -144,12 +161,6 @@ SCW_op aes_cbc_op = {.algo = CA_ALGO_AES128_CBC,
                          (Decrypt_Stream)dvbaes_cbc_decrypt_stream};
 
 void init_algo_aes() {
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-    ERR_load_crypto_strings();
-    OpenSSL_add_all_algorithms();
-    OPENSSL_config(NULL);
-#endif
-
     register_algo(&aes_op);
     register_algo(&aes_cbc_op);
 }
