@@ -182,9 +182,68 @@ struct cert_ctx {
 struct aes_xcbc_mac_ctx {
     uint8_t K[3][16];
     uint8_t IV[16];
-    AES_KEY key;
+    uint8_t key[16]; // Store key data for one-shot EVP operations
     int buflen;
 };
+
+// One-shot AES-128-ECB encryption of a single 16-byte block
+static int aes_ecb_encrypt_block(const uint8_t *in, uint8_t *out,
+                                 const uint8_t *key) {
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    if (!ctx)
+        return -1;
+
+    int outlen = 0;
+    int ret = -1;
+
+    if (EVP_EncryptInit_ex(ctx, EVP_aes_128_ecb(), NULL, key, NULL) == 1 &&
+        EVP_CIPHER_CTX_set_padding(ctx, 0) == 1 &&
+        EVP_EncryptUpdate(ctx, out, &outlen, in, 16) == 1 &&
+        EVP_EncryptFinal_ex(ctx, out + outlen, &outlen) == 1) {
+        ret = 0;
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    return ret;
+}
+
+// One-shot AES-128-CBC encryption
+static int aes_cbc_encrypt(uint8_t *dst, const uint8_t *src, unsigned int len,
+                           const uint8_t *key, uint8_t *iv) {
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    if (!ctx)
+        return -1;
+
+    int ret = -1;
+
+    if (EVP_CipherInit_ex(ctx, EVP_aes_128_cbc(), NULL, key, iv, 1) == 1 &&
+        EVP_CIPHER_CTX_set_padding(ctx, 0) == 1 &&
+        EVP_Cipher(ctx, dst, src, len) >= 0) {
+        ret = 0;
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    return ret;
+}
+
+// One-shot AES-128-CBC decryption
+static int aes_cbc_decrypt(uint8_t *dst, const uint8_t *src, unsigned int len,
+                           const uint8_t *key, uint8_t *iv) {
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    if (!ctx)
+        return -1;
+
+    int ret = -1;
+
+    if (EVP_CipherInit_ex(ctx, EVP_aes_128_cbc(), NULL, key, iv, 0) == 1 &&
+        EVP_CIPHER_CTX_set_padding(ctx, 0) == 1 &&
+        EVP_Cipher(ctx, dst, src, len) >= 0) {
+        ret = 0;
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    return ret;
+}
 
 // EN 300 468, tables 36, 38, and 41
 const char en300468_fec_map[12][5] = {"",    "1/2", "2/3", "3/4",  "5/6", "7/8",
@@ -201,21 +260,16 @@ int asn_1_decode(int *length, unsigned char *asn_1_array);
 ///// AES_XCBC_MAC
 
 int aes_xcbc_mac_init(struct aes_xcbc_mac_ctx *ctx, const uint8_t *key) {
-    AES_KEY aes_key;
     int y, x;
-
-    memset(&aes_key, 0, sizeof(aes_key));
-
-    AES_set_encrypt_key(key, 128, &aes_key);
 
     for (y = 0; y < 3; y++) {
         for (x = 0; x < 16; x++)
             ctx->K[y][x] = y + 1;
-        AES_ecb_encrypt(ctx->K[y], ctx->K[y], &aes_key, 1);
+        aes_ecb_encrypt_block(ctx->K[y], ctx->K[y], key);
     }
 
-    /* setup K1 */
-    AES_set_encrypt_key(ctx->K[0], 128, &ctx->key);
+    /* setup K1 - store key for later use */
+    memcpy(ctx->key, ctx->K[0], 16);
 
     memset(ctx->IV, 0, 16);
     ctx->buflen = 0;
@@ -227,7 +281,7 @@ int aes_xcbc_mac_process(struct aes_xcbc_mac_ctx *ctx, const uint8_t *in,
                          unsigned int len) {
     while (len) {
         if (ctx->buflen == 16) {
-            AES_ecb_encrypt(ctx->IV, ctx->IV, &ctx->key, 1);
+            aes_ecb_encrypt_block(ctx->IV, ctx->IV, ctx->key);
             ctx->buflen = 0;
         }
         ctx->IV[ctx->buflen++] ^= *in++;
@@ -251,7 +305,7 @@ int aes_xcbc_mac_done(struct aes_xcbc_mac_ctx *ctx, uint8_t *out) {
             ctx->IV[i] ^= ctx->K[2][i];
     }
 
-    AES_ecb_encrypt(ctx->IV, ctx->IV, &ctx->key, 1);
+    aes_ecb_encrypt_block(ctx->IV, ctx->IV, ctx->key);
     memcpy(out, ctx->IV, 16);
 
     return 0;
@@ -1536,20 +1590,15 @@ static void generate_ns_host(struct cc_ctrl_data *cc_data)
 
 static int generate_SAK_SEK(uint8_t *sak, uint8_t *sek,
                             const uint8_t *ks_host) {
-    AES_KEY key;
     const uint8_t key_data[16] = {0xea, 0x74, 0xf4, 0x71, 0x99, 0xd7,
                                   0x6f, 0x35, 0x89, 0xf0, 0xd1, 0xdf,
                                   0x0f, 0xee, 0xe3, 0x00};
     uint8_t dec[32];
     int i;
 
-    /* key derivation of sak & sek */
-    memset(&key, 0, sizeof(key));
-
-    AES_set_encrypt_key(key_data, 128, &key);
-
+    /* key derivation of sak & sek using one-shot ECB */
     for (i = 0; i < 2; i++)
-        AES_ecb_encrypt(&ks_host[16 * i], &dec[16 * i], &key, 1);
+        aes_ecb_encrypt_block(&ks_host[16 * i], &dec[16 * i], key_data);
 
     for (i = 0; i < 16; i++)
         sek[i] = ks_host[i] ^ dec[i];
@@ -1564,19 +1613,11 @@ static int sac_crypt(uint8_t *dst, const uint8_t *src, unsigned int len,
                      const uint8_t *key_data, int encrypt) {
     uint8_t iv[16] = {0xf7, 0x70, 0xb0, 0x36, 0x03, 0x61, 0xf7, 0x96,
                       0x65, 0x74, 0x8a, 0x26, 0xea, 0x4e, 0x85, 0x41};
-    AES_KEY key;
-
-    /* AES_ENCRYPT is '1' */
-    memset(&key, 0, sizeof(key));
 
     if (encrypt)
-        AES_set_encrypt_key(key_data, 128, &key);
+        return aes_cbc_encrypt(dst, src, len, key_data, iv);
     else
-        AES_set_decrypt_key(key_data, 128, &key);
-
-    AES_cbc_encrypt(src, dst, len, &key, iv, encrypt);
-
-    return 0;
+        return aes_cbc_decrypt(dst, src, len, key_data, iv);
 }
 
 static X509 *import_ci_certificates(struct cc_ctrl_data *cc_data,
@@ -1812,12 +1853,10 @@ static int generate_uri_confirm(struct cc_ctrl_data *cc_data,
 static void check_new_key(ca_device_t *d, struct cc_ctrl_data *cc_data) {
     const uint8_t s_key[16] = {0x3e, 0x20, 0x15, 0x84, 0x2c, 0x37, 0xce, 0xe3,
                                0xd6, 0x14, 0x57, 0x3e, 0x3a, 0xab, 0x91, 0xb6};
-    AES_KEY aes_ctx;
     uint8_t dec[32];
     uint8_t *kp;
     uint8_t slot;
     unsigned int i;
-    memset(&aes_ctx, 0, sizeof(aes_ctx));
 
     /* check for keyprecursor */
     if (!element_valid(cc_data, 12)) {
@@ -1833,9 +1872,9 @@ static void check_new_key(ca_device_t *d, struct cc_ctrl_data *cc_data) {
     kp = element_get_ptr(cc_data, 12);
     element_get_buf(cc_data, &slot, 28);
 
-    AES_set_encrypt_key(s_key, 128, &aes_ctx);
+    /* Use one-shot ECB encryption */
     for (i = 0; i < 32; i += 16)
-        AES_ecb_encrypt(&kp[i], &dec[i], &aes_ctx, 1);
+        aes_ecb_encrypt_block(&kp[i], &dec[i], s_key);
 
     for (i = 0; i < 32; i++)
         dec[i] ^= kp[i];
