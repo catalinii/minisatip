@@ -41,13 +41,19 @@ alternative source
 #include "utils/ticks.h"
 #include <openssl/aes.h>
 #include <openssl/conf.h>
+#include <openssl/dh.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
+#include <openssl/opensslv.h>
 #include <openssl/pem.h>
 #include <openssl/rsa.h>
 #include <openssl/sha.h>
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+#include <openssl/core_names.h>
+#include <openssl/param_build.h>
+#endif
 
 #define DEFAULT_LOG LOG_DVBCA
 
@@ -242,6 +248,34 @@ static int aes_cbc_decrypt(uint8_t *dst, const uint8_t *src, unsigned int len,
     }
 
     EVP_CIPHER_CTX_free(ctx);
+    return ret;
+}
+
+static EVP_MD_CTX *sha256_init() {
+    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+    if (!ctx)
+        return NULL;
+
+    if (EVP_DigestInit_ex(ctx, EVP_sha256(), NULL) != 1) {
+        EVP_MD_CTX_free(ctx);
+        return NULL;
+    }
+    return ctx;
+}
+
+static int sha256_update(EVP_MD_CTX *ctx, const void *data, unsigned int len) {
+    if (!ctx)
+        return -1;
+    return EVP_DigestUpdate(ctx, data, len) == 1 ? 0 : -1;
+}
+
+static int sha256_final(EVP_MD_CTX *ctx, uint8_t *out) {
+    if (!ctx)
+        return -1;
+
+    unsigned int len = 0;
+    int ret = EVP_DigestFinal_ex(ctx, out, &len) == 1 ? 0 : -1;
+    EVP_MD_CTX_free(ctx);
     return ret;
 }
 
@@ -447,6 +481,108 @@ LBL_ERR:
 
 int dh_gen_exp(uint8_t *dest, int dest_len, uint8_t *dh_g, int dh_g_len,
                uint8_t *dh_p, int dh_p_len) {
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+    EVP_PKEY_CTX *pctx = NULL;
+    EVP_PKEY *params = NULL;
+    EVP_PKEY *pkey = NULL;
+    BIGNUM *p = NULL, *g = NULL;
+    BIGNUM *priv_key = NULL;
+    OSSL_PARAM_BLD *bld = NULL;
+    OSSL_PARAM *params_array = NULL;
+    int len;
+    unsigned int gap;
+    int ret = -1;
+
+    p = BN_bin2bn(dh_p, dh_p_len, NULL);
+    g = BN_bin2bn(dh_g, dh_g_len, NULL);
+    if (!p || !g) {
+        LOG("BN_bin2bn failed");
+        goto cleanup;
+    }
+
+    /* Create DH parameters using OSSL_PARAM_BLD */
+    bld = OSSL_PARAM_BLD_new();
+    if (!bld) {
+        LOG("OSSL_PARAM_BLD_new failed");
+        goto cleanup;
+    }
+
+    if (!OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_FFC_P, p) ||
+        !OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_FFC_G, g)) {
+        LOG("OSSL_PARAM_BLD_push_BN failed");
+        goto cleanup;
+    }
+
+    params_array = OSSL_PARAM_BLD_to_param(bld);
+    OSSL_PARAM_BLD_free(bld);
+    bld = NULL;
+    if (!params_array) {
+        LOG("OSSL_PARAM_BLD_to_param failed");
+        goto cleanup;
+    }
+
+    /* Create parameter EVP_PKEY */
+    pctx = EVP_PKEY_CTX_new_from_name(NULL, "DH", NULL);
+    if (!pctx) {
+        LOG("EVP_PKEY_CTX_new_from_name failed");
+        goto cleanup;
+    }
+
+    if (EVP_PKEY_fromdata_init(pctx) <= 0 ||
+        EVP_PKEY_fromdata(pctx, &params, EVP_PKEY_KEY_PARAMETERS,
+                          params_array) <= 0) {
+        LOG("EVP_PKEY_fromdata failed");
+        goto cleanup;
+    }
+    OSSL_PARAM_free(params_array);
+    params_array = NULL;
+    EVP_PKEY_CTX_free(pctx);
+    pctx = NULL;
+
+    /* Generate DH key pair */
+    pctx = EVP_PKEY_CTX_new_from_pkey(NULL, params, NULL);
+    if (!pctx) {
+        LOG("EVP_PKEY_CTX_new_from_pkey failed");
+        goto cleanup;
+    }
+
+    if (EVP_PKEY_keygen_init(pctx) <= 0 ||
+        EVP_PKEY_generate(pctx, &pkey) <= 0) {
+        LOG("EVP_PKEY_generate failed");
+        goto cleanup;
+    }
+
+    /* Extract private key */
+    if (!EVP_PKEY_get_bn_param(pkey, OSSL_PKEY_PARAM_PRIV_KEY, &priv_key)) {
+        LOG("EVP_PKEY_get_bn_param failed");
+        goto cleanup;
+    }
+
+    len = BN_num_bytes(priv_key);
+    if (len > dest_len) {
+        LOG("len > dest_len");
+        goto cleanup;
+    }
+
+    gap = dest_len - len;
+    memset(dest, 0, gap);
+    BN_bn2bin(priv_key, &dest[gap]);
+
+    ret = 0;
+
+cleanup:
+    OSSL_PARAM_free(params_array);
+    OSSL_PARAM_BLD_free(bld);
+    BN_free(priv_key);
+    EVP_PKEY_free(pkey);
+    EVP_PKEY_free(params);
+    EVP_PKEY_CTX_free(pctx);
+    BN_free(p);
+    BN_free(g);
+
+    return ret;
+#else
+    /* OpenSSL 1.x implementation */
     DH *dh;
     BIGNUM *p, *g;
     const BIGNUM *priv_key;
@@ -455,8 +591,8 @@ int dh_gen_exp(uint8_t *dest, int dest_len, uint8_t *dh_g, int dh_g_len,
 
     dh = DH_new();
 
-    p = BN_bin2bn(dh_p, dh_p_len, 0);
-    g = BN_bin2bn(dh_g, dh_g_len, 0);
+    p = BN_bin2bn(dh_p, dh_p_len, NULL);
+    g = BN_bin2bn(dh_g, dh_g_len, NULL);
     DH_set0_pqg(dh, p, NULL, g);
     DH_set_flags(dh, DH_FLAG_NO_EXP_CONSTTIME);
 
@@ -466,6 +602,7 @@ int dh_gen_exp(uint8_t *dest, int dest_len, uint8_t *dh_g, int dh_g_len,
     len = BN_num_bytes(priv_key);
     if (len > dest_len) {
         LOG("len > dest_len");
+        DH_free(dh);
         return -1;
     }
 
@@ -476,6 +613,7 @@ int dh_gen_exp(uint8_t *dest, int dest_len, uint8_t *dh_g, int dh_g_len,
     DH_free(dh);
 
     return 0;
+#endif
 }
 
 /* dest = base ^ exp % mod */
@@ -513,7 +651,8 @@ int dh_mod_exp(uint8_t *dest, int dest_len, uint8_t *base, int base_len,
     return 0;
 }
 
-int dh_dhph_signature(uint8_t *out, uint8_t *nonce, uint8_t *dhph, RSA *r) {
+int dh_dhph_signature(uint8_t *out, uint8_t *nonce, uint8_t *dhph,
+                      EVP_PKEY *pkey) {
     unsigned char dest[302];
     uint8_t hash[20];
     unsigned char dbuf[256];
@@ -545,8 +684,33 @@ int dh_dhph_signature(uint8_t *out, uint8_t *nonce, uint8_t *dhph, RSA *r) {
         return -1;
     }
 
-    RSA_private_encrypt(sizeof(dbuf), dbuf, out, r, RSA_NO_PADDING);
+    /* RSA private key operation (sign with no padding) */
+    EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(pkey, NULL);
+    if (!ctx) {
+        LOG("EVP_PKEY_CTX_new failed");
+        return -1;
+    }
 
+    if (EVP_PKEY_sign_init(ctx) <= 0) {
+        LOG("EVP_PKEY_sign_init failed");
+        EVP_PKEY_CTX_free(ctx);
+        return -1;
+    }
+
+    if (EVP_PKEY_CTX_set_rsa_padding(ctx, RSA_NO_PADDING) <= 0) {
+        LOG("EVP_PKEY_CTX_set_rsa_padding failed");
+        EVP_PKEY_CTX_free(ctx);
+        return -1;
+    }
+
+    size_t outlen = 256;
+    if (EVP_PKEY_sign(ctx, out, &outlen, dbuf, sizeof(dbuf)) <= 0) {
+        LOG("EVP_PKEY_sign failed");
+        EVP_PKEY_CTX_free(ctx);
+        return -1;
+    }
+
+    EVP_PKEY_CTX_free(ctx);
     return 0;
 }
 
@@ -565,9 +729,9 @@ int verify_cb(int ok, X509_STORE_CTX *ctx) {
     return 0;
 }
 
-RSA *rsa_privatekey_open(const char *filename) {
+EVP_PKEY *rsa_privatekey_open(const char *filename) {
     FILE *fp;
-    RSA *r = NULL;
+    EVP_PKEY *pkey = NULL;
 
     fp = fopen(filename, "r");
     if (!fp) {
@@ -575,14 +739,14 @@ RSA *rsa_privatekey_open(const char *filename) {
         return NULL;
     }
 
-    PEM_read_RSAPrivateKey(fp, &r, NULL, NULL);
-    if (!r) {
+    pkey = PEM_read_PrivateKey(fp, NULL, NULL, NULL);
+    if (!pkey) {
         LOG("read error");
     }
 
     fclose(fp);
 
-    return r;
+    return pkey;
 }
 
 X509 *certificate_open(const char *filename) {
@@ -1567,17 +1731,17 @@ static void generate_key_seed(struct cc_ctrl_data *cc_data) {
 
     /* generate new key_seed -> SEK/SAK key derivation */
 
-    SHA256_CTX sha;
+    EVP_MD_CTX *sha;
 
-    SHA256_Init(&sha);
-    SHA256_Update(&sha, &cc_data->dhsk[240], 16);
-    SHA256_Update(&sha, element_get_ptr(cc_data, 22),
+    sha = sha256_init();
+    sha256_update(sha, &cc_data->dhsk[240], 16);
+    sha256_update(sha, element_get_ptr(cc_data, 22),
                   element_get_buf(cc_data, NULL, 22));
-    SHA256_Update(&sha, element_get_ptr(cc_data, 20),
+    sha256_update(sha, element_get_ptr(cc_data, 20),
                   element_get_buf(cc_data, NULL, 20));
-    SHA256_Update(&sha, element_get_ptr(cc_data, 21),
+    sha256_update(sha, element_get_ptr(cc_data, 21),
                   element_get_buf(cc_data, NULL, 21));
-    SHA256_Final(cc_data->ks_host, &sha);
+    sha256_final(sha, cc_data->ks_host);
 }
 
 static void generate_ns_host(struct cc_ctrl_data *cc_data)
@@ -1699,15 +1863,15 @@ static int check_ci_certificates(struct cc_ctrl_data *cc_data) {
 
 static int generate_akh(struct cc_ctrl_data *cc_data) {
     uint8_t akh[32];
-    SHA256_CTX sha;
+    EVP_MD_CTX *sha;
 
-    SHA256_Init(&sha);
-    SHA256_Update(&sha, element_get_ptr(cc_data, 6),
+    sha = sha256_init();
+    sha256_update(sha, element_get_ptr(cc_data, 6),
                   element_get_buf(cc_data, NULL, 6));
-    SHA256_Update(&sha, element_get_ptr(cc_data, 5),
+    sha256_update(sha, element_get_ptr(cc_data, 5),
                   element_get_buf(cc_data, NULL, 5));
-    SHA256_Update(&sha, cc_data->dhsk, 256);
-    SHA256_Final(akh, &sha);
+    sha256_update(sha, cc_data->dhsk, 256);
+    sha256_final(sha, akh);
 
     element_set(cc_data, 22, akh, sizeof(akh));
 
@@ -1829,21 +1993,21 @@ static int restart_dh_challenge(struct cc_ctrl_data *cc_data) {
 
 static int generate_uri_confirm(struct cc_ctrl_data *cc_data,
                                 const uint8_t *sak) {
-    SHA256_CTX sha;
+    EVP_MD_CTX *sha;
     uint8_t uck[32];
     uint8_t uri_confirm[32];
 
     /* calculate UCK (uri confirmation key) */
-    SHA256_Init(&sha);
-    SHA256_Update(&sha, sak, 16);
-    SHA256_Final(uck, &sha);
+    sha = sha256_init();
+    sha256_update(sha, sak, 16);
+    sha256_final(sha, uck);
 
     /* calculate uri_confirm */
-    SHA256_Init(&sha);
-    SHA256_Update(&sha, element_get_ptr(cc_data, 25),
+    sha = sha256_init();
+    sha256_update(sha, element_get_ptr(cc_data, 25),
                   element_get_buf(cc_data, NULL, 25));
-    SHA256_Update(&sha, uck, 32);
-    SHA256_Final(uri_confirm, &sha);
+    sha256_update(sha, uck, 32);
+    sha256_final(sha, uri_confirm);
 
     element_set(cc_data, 27, uri_confirm, 32);
 
