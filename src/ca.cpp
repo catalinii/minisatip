@@ -5,20 +5,13 @@ alternative source
 
  */
 
-#include <arpa/inet.h>
 #include <ctype.h>
-#include <errno.h>
 #include <fcntl.h>
-#include <math.h>
-#include <net/if.h>
-#include <netdb.h>
-#include <netinet/in.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
-#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <time.h>
@@ -40,20 +33,13 @@ alternative source
 #include "utils.h"
 #include "utils/ticks.h"
 #include <openssl/aes.h>
-#include <openssl/conf.h>
-#include <openssl/dh.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
-#include <openssl/opensslv.h>
 #include <openssl/pem.h>
+#include <openssl/rand.h>
 #include <openssl/rsa.h>
 #include <openssl/sha.h>
 #include <openssl/x509.h>
-#include <openssl/x509v3.h>
-#if OPENSSL_VERSION_NUMBER >= 0x30000000L
-#include <openssl/core_names.h>
-#include <openssl/param_build.h>
-#endif
 
 #define DEFAULT_LOG LOG_DVBCA
 
@@ -511,141 +497,12 @@ LBL_ERR:
 
 /* DH */
 
-int dh_gen_exp(uint8_t *dest, int dest_len, uint8_t *dh_g, int dh_g_len,
-               uint8_t *dh_p, int dh_p_len) {
-#if OPENSSL_VERSION_NUMBER >= 0x30000000L
-    EVP_PKEY_CTX *pctx = NULL;
-    EVP_PKEY *params = NULL;
-    EVP_PKEY *pkey = NULL;
-    BIGNUM *p = NULL, *g = NULL;
-    BIGNUM *priv_key = NULL;
-    OSSL_PARAM_BLD *bld = NULL;
-    OSSL_PARAM *params_array = NULL;
-    int len;
-    unsigned int gap;
-    int ret = -1;
-
-    p = BN_bin2bn(dh_p, dh_p_len, NULL);
-    g = BN_bin2bn(dh_g, dh_g_len, NULL);
-    if (!p || !g) {
-        LOG("BN_bin2bn failed");
-        goto cleanup;
-    }
-
-    /* Create DH parameters using OSSL_PARAM_BLD */
-    bld = OSSL_PARAM_BLD_new();
-    if (!bld) {
-        LOG("OSSL_PARAM_BLD_new failed");
-        goto cleanup;
-    }
-
-    if (!OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_FFC_P, p) ||
-        !OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_FFC_G, g)) {
-        LOG("OSSL_PARAM_BLD_push_BN failed");
-        goto cleanup;
-    }
-
-    params_array = OSSL_PARAM_BLD_to_param(bld);
-    OSSL_PARAM_BLD_free(bld);
-    bld = NULL;
-    if (!params_array) {
-        LOG("OSSL_PARAM_BLD_to_param failed");
-        goto cleanup;
-    }
-
-    /* Create parameter EVP_PKEY */
-    pctx = EVP_PKEY_CTX_new_from_name(NULL, "DH", NULL);
-    if (!pctx) {
-        LOG("EVP_PKEY_CTX_new_from_name failed");
-        goto cleanup;
-    }
-
-    if (EVP_PKEY_fromdata_init(pctx) <= 0 ||
-        EVP_PKEY_fromdata(pctx, &params, EVP_PKEY_KEY_PARAMETERS,
-                          params_array) <= 0) {
-        LOG("EVP_PKEY_fromdata failed");
-        goto cleanup;
-    }
-    OSSL_PARAM_free(params_array);
-    params_array = NULL;
-    EVP_PKEY_CTX_free(pctx);
-    pctx = NULL;
-
-    /* Generate DH key pair */
-    pctx = EVP_PKEY_CTX_new_from_pkey(NULL, params, NULL);
-    if (!pctx) {
-        LOG("EVP_PKEY_CTX_new_from_pkey failed");
-        goto cleanup;
-    }
-
-    if (EVP_PKEY_keygen_init(pctx) <= 0 ||
-        EVP_PKEY_generate(pctx, &pkey) <= 0) {
-        LOG("EVP_PKEY_generate failed");
-        goto cleanup;
-    }
-
-    /* Extract private key */
-    if (!EVP_PKEY_get_bn_param(pkey, OSSL_PKEY_PARAM_PRIV_KEY, &priv_key)) {
-        LOG("EVP_PKEY_get_bn_param failed");
-        goto cleanup;
-    }
-
-    len = BN_num_bytes(priv_key);
-    if (len > dest_len) {
-        LOG("len > dest_len");
-        goto cleanup;
-    }
-
-    gap = dest_len - len;
-    memset(dest, 0, gap);
-    BN_bn2bin(priv_key, &dest[gap]);
-
-    ret = 0;
-
-cleanup:
-    OSSL_PARAM_free(params_array);
-    OSSL_PARAM_BLD_free(bld);
-    BN_free(priv_key);
-    EVP_PKEY_free(pkey);
-    EVP_PKEY_free(params);
-    EVP_PKEY_CTX_free(pctx);
-    BN_free(p);
-    BN_free(g);
-
-    return ret;
-#else
-    /* OpenSSL 1.x implementation */
-    DH *dh;
-    BIGNUM *p, *g;
-    const BIGNUM *priv_key;
-    int len;
-    unsigned int gap;
-
-    dh = DH_new();
-
-    p = BN_bin2bn(dh_p, dh_p_len, NULL);
-    g = BN_bin2bn(dh_g, dh_g_len, NULL);
-    DH_set0_pqg(dh, p, NULL, g);
-    DH_set_flags(dh, DH_FLAG_NO_EXP_CONSTTIME);
-
-    DH_generate_key(dh);
-
-    DH_get0_key(dh, NULL, &priv_key);
-    len = BN_num_bytes(priv_key);
-    if (len > dest_len) {
-        LOG("len > dest_len");
-        DH_free(dh);
+int dh_gen_exp(uint8_t *dest, int dest_len) {
+    if (RAND_bytes(dest, dest_len) != 1) {
+        LOG("RAND_bytes failed");
         return -1;
     }
-
-    gap = dest_len - len;
-    memset(dest, 0, gap);
-    BN_bn2bin(priv_key, &dest[gap]);
-
-    DH_free(dh);
-
     return 0;
-#endif
 }
 
 /* dest = base ^ exp % mod */
@@ -1977,7 +1834,7 @@ static int restart_dh_challenge(struct cc_ctrl_data *cc_data) {
     element_invalidate(cc_data, 22); /* this will refuse a unknown cam */
 
     /* new dh_exponent */
-    dh_gen_exp(cc_data->dh_exp, 256, dh_g, sizeof(dh_g), dh_p, sizeof(dh_p));
+    dh_gen_exp(cc_data->dh_exp, 256);
 
     /* new DHPH  - DHPH = dh_g ^ dh_exp % dh_p */
     dh_mod_exp(dhph, sizeof(dhph), dh_g, sizeof(dh_g), dh_p, sizeof(dh_p),
