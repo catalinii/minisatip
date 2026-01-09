@@ -279,6 +279,38 @@ static int sha256_final(EVP_MD_CTX *ctx, uint8_t *out) {
     return ret;
 }
 
+int RSA_private_encrypt_wrapper(EVP_PKEY *pkey, int dlen, uint8_t *dbuf,
+                                uint8_t *out) {
+    /* RSA private key operation (sign with no padding) */
+    EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(pkey, NULL);
+    if (!ctx) {
+        LOG("EVP_PKEY_CTX_new failed");
+        return -1;
+    }
+
+    if (EVP_PKEY_sign_init(ctx) <= 0) {
+        LOG("EVP_PKEY_sign_init failed");
+        EVP_PKEY_CTX_free(ctx);
+        return -1;
+    }
+
+    if (EVP_PKEY_CTX_set_rsa_padding(ctx, RSA_NO_PADDING) <= 0) {
+        LOG("EVP_PKEY_CTX_set_rsa_padding failed");
+        EVP_PKEY_CTX_free(ctx);
+        return -1;
+    }
+
+    size_t outlen = 256;
+    if (EVP_PKEY_sign(ctx, out, &outlen, dbuf, dlen) <= 0) {
+        LOG("EVP_PKEY_sign failed");
+        EVP_PKEY_CTX_free(ctx);
+        return -1;
+    }
+
+    EVP_PKEY_CTX_free(ctx);
+    return 0;
+}
+
 // EN 300 468, tables 36, 38, and 41
 const char en300468_fec_map[12][5] = {"",    "1/2", "2/3", "3/4",  "5/6", "7/8",
                                       "8/9", "3/5", "4/5", "9/10", "",    ""};
@@ -684,34 +716,7 @@ int dh_dhph_signature(uint8_t *out, uint8_t *nonce, uint8_t *dhph,
         return -1;
     }
 
-    /* RSA private key operation (sign with no padding) */
-    EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(pkey, NULL);
-    if (!ctx) {
-        LOG("EVP_PKEY_CTX_new failed");
-        return -1;
-    }
-
-    if (EVP_PKEY_sign_init(ctx) <= 0) {
-        LOG("EVP_PKEY_sign_init failed");
-        EVP_PKEY_CTX_free(ctx);
-        return -1;
-    }
-
-    if (EVP_PKEY_CTX_set_rsa_padding(ctx, RSA_NO_PADDING) <= 0) {
-        LOG("EVP_PKEY_CTX_set_rsa_padding failed");
-        EVP_PKEY_CTX_free(ctx);
-        return -1;
-    }
-
-    size_t outlen = 256;
-    if (EVP_PKEY_sign(ctx, out, &outlen, dbuf, sizeof(dbuf)) <= 0) {
-        LOG("EVP_PKEY_sign failed");
-        EVP_PKEY_CTX_free(ctx);
-        return -1;
-    }
-
-    EVP_PKEY_CTX_free(ctx);
-    return 0;
+    return RSA_private_encrypt_wrapper(pkey, sizeof(dbuf), dbuf, out);
 }
 
 int verify_cb(int ok, X509_STORE_CTX *ctx) {
