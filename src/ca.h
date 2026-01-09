@@ -2,6 +2,7 @@
 #define CA_H
 #include "adapter.h"
 #include "pmt.h"
+#include <openssl/evp.h>
 #include <openssl/rsa.h>
 // Absolute maximum, used for array sizes. User sets the actual maximum value
 // using "-c"
@@ -176,7 +177,7 @@ struct cc_ctrl_data {
     struct cert_ctx *cert_ctx;
 
     /* private key of device-cert */
-    RSA *rsa_device_key;
+    EVP_PKEY *rsa_device_key;
 };
 
 struct ca_device {

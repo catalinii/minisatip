@@ -41,13 +41,19 @@ alternative source
 #include "utils/ticks.h"
 #include <openssl/aes.h>
 #include <openssl/conf.h>
+#include <openssl/dh.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
+#include <openssl/opensslv.h>
 #include <openssl/pem.h>
 #include <openssl/rsa.h>
 #include <openssl/sha.h>
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+#include <openssl/core_names.h>
+#include <openssl/param_build.h>
+#endif
 
 #define DEFAULT_LOG LOG_DVBCA
 
@@ -182,9 +188,128 @@ struct cert_ctx {
 struct aes_xcbc_mac_ctx {
     uint8_t K[3][16];
     uint8_t IV[16];
-    AES_KEY key;
+    uint8_t key[16]; // Store key data for one-shot EVP operations
     int buflen;
 };
+
+// One-shot AES-128-ECB encryption of a single 16-byte block
+static int aes_ecb_encrypt_block(const uint8_t *in, uint8_t *out,
+                                 const uint8_t *key) {
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    if (!ctx)
+        return -1;
+
+    int outlen = 0;
+    int ret = -1;
+
+    if (EVP_EncryptInit_ex(ctx, EVP_aes_128_ecb(), NULL, key, NULL) == 1 &&
+        EVP_CIPHER_CTX_set_padding(ctx, 0) == 1 &&
+        EVP_EncryptUpdate(ctx, out, &outlen, in, 16) == 1 &&
+        EVP_EncryptFinal_ex(ctx, out + outlen, &outlen) == 1) {
+        ret = 0;
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    return ret;
+}
+
+// One-shot AES-128-CBC encryption
+static int aes_cbc_encrypt(uint8_t *dst, const uint8_t *src, unsigned int len,
+                           const uint8_t *key, uint8_t *iv) {
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    if (!ctx)
+        return -1;
+
+    int ret = -1;
+
+    if (EVP_CipherInit_ex(ctx, EVP_aes_128_cbc(), NULL, key, iv, 1) == 1 &&
+        EVP_CIPHER_CTX_set_padding(ctx, 0) == 1 &&
+        EVP_Cipher(ctx, dst, src, len) >= 0) {
+        ret = 0;
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    return ret;
+}
+
+// One-shot AES-128-CBC decryption
+static int aes_cbc_decrypt(uint8_t *dst, const uint8_t *src, unsigned int len,
+                           const uint8_t *key, uint8_t *iv) {
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    if (!ctx)
+        return -1;
+
+    int ret = -1;
+
+    if (EVP_CipherInit_ex(ctx, EVP_aes_128_cbc(), NULL, key, iv, 0) == 1 &&
+        EVP_CIPHER_CTX_set_padding(ctx, 0) == 1 &&
+        EVP_Cipher(ctx, dst, src, len) >= 0) {
+        ret = 0;
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    return ret;
+}
+
+static EVP_MD_CTX *sha256_init() {
+    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+    if (!ctx)
+        return NULL;
+
+    if (EVP_DigestInit_ex(ctx, EVP_sha256(), NULL) != 1) {
+        EVP_MD_CTX_free(ctx);
+        return NULL;
+    }
+    return ctx;
+}
+
+static int sha256_update(EVP_MD_CTX *ctx, const void *data, unsigned int len) {
+    if (!ctx)
+        return -1;
+    return EVP_DigestUpdate(ctx, data, len) == 1 ? 0 : -1;
+}
+
+static int sha256_final(EVP_MD_CTX *ctx, uint8_t *out) {
+    if (!ctx)
+        return -1;
+
+    unsigned int len = 0;
+    int ret = EVP_DigestFinal_ex(ctx, out, &len) == 1 ? 0 : -1;
+    EVP_MD_CTX_free(ctx);
+    return ret;
+}
+
+int RSA_private_encrypt_wrapper(EVP_PKEY *pkey, int dlen, uint8_t *dbuf,
+                                uint8_t *out) {
+    /* RSA private key operation (sign with no padding) */
+    EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(pkey, NULL);
+    if (!ctx) {
+        LOG("EVP_PKEY_CTX_new failed");
+        return -1;
+    }
+
+    if (EVP_PKEY_sign_init(ctx) <= 0) {
+        LOG("EVP_PKEY_sign_init failed");
+        EVP_PKEY_CTX_free(ctx);
+        return -1;
+    }
+
+    if (EVP_PKEY_CTX_set_rsa_padding(ctx, RSA_NO_PADDING) <= 0) {
+        LOG("EVP_PKEY_CTX_set_rsa_padding failed");
+        EVP_PKEY_CTX_free(ctx);
+        return -1;
+    }
+
+    size_t outlen = 256;
+    if (EVP_PKEY_sign(ctx, out, &outlen, dbuf, dlen) <= 0) {
+        LOG("EVP_PKEY_sign failed");
+        EVP_PKEY_CTX_free(ctx);
+        return -1;
+    }
+
+    EVP_PKEY_CTX_free(ctx);
+    return 0;
+}
 
 // EN 300 468, tables 36, 38, and 41
 const char en300468_fec_map[12][5] = {"",    "1/2", "2/3", "3/4",  "5/6", "7/8",
@@ -201,21 +326,16 @@ int asn_1_decode(int *length, unsigned char *asn_1_array);
 ///// AES_XCBC_MAC
 
 int aes_xcbc_mac_init(struct aes_xcbc_mac_ctx *ctx, const uint8_t *key) {
-    AES_KEY aes_key;
     int y, x;
-
-    memset(&aes_key, 0, sizeof(aes_key));
-
-    AES_set_encrypt_key(key, 128, &aes_key);
 
     for (y = 0; y < 3; y++) {
         for (x = 0; x < 16; x++)
             ctx->K[y][x] = y + 1;
-        AES_ecb_encrypt(ctx->K[y], ctx->K[y], &aes_key, 1);
+        aes_ecb_encrypt_block(ctx->K[y], ctx->K[y], key);
     }
 
-    /* setup K1 */
-    AES_set_encrypt_key(ctx->K[0], 128, &ctx->key);
+    /* setup K1 - store key for later use */
+    memcpy(ctx->key, ctx->K[0], 16);
 
     memset(ctx->IV, 0, 16);
     ctx->buflen = 0;
@@ -227,7 +347,7 @@ int aes_xcbc_mac_process(struct aes_xcbc_mac_ctx *ctx, const uint8_t *in,
                          unsigned int len) {
     while (len) {
         if (ctx->buflen == 16) {
-            AES_ecb_encrypt(ctx->IV, ctx->IV, &ctx->key, 1);
+            aes_ecb_encrypt_block(ctx->IV, ctx->IV, ctx->key);
             ctx->buflen = 0;
         }
         ctx->IV[ctx->buflen++] ^= *in++;
@@ -251,7 +371,7 @@ int aes_xcbc_mac_done(struct aes_xcbc_mac_ctx *ctx, uint8_t *out) {
             ctx->IV[i] ^= ctx->K[2][i];
     }
 
-    AES_ecb_encrypt(ctx->IV, ctx->IV, &ctx->key, 1);
+    aes_ecb_encrypt_block(ctx->IV, ctx->IV, ctx->key);
     memcpy(out, ctx->IV, 16);
 
     return 0;
@@ -393,6 +513,108 @@ LBL_ERR:
 
 int dh_gen_exp(uint8_t *dest, int dest_len, uint8_t *dh_g, int dh_g_len,
                uint8_t *dh_p, int dh_p_len) {
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+    EVP_PKEY_CTX *pctx = NULL;
+    EVP_PKEY *params = NULL;
+    EVP_PKEY *pkey = NULL;
+    BIGNUM *p = NULL, *g = NULL;
+    BIGNUM *priv_key = NULL;
+    OSSL_PARAM_BLD *bld = NULL;
+    OSSL_PARAM *params_array = NULL;
+    int len;
+    unsigned int gap;
+    int ret = -1;
+
+    p = BN_bin2bn(dh_p, dh_p_len, NULL);
+    g = BN_bin2bn(dh_g, dh_g_len, NULL);
+    if (!p || !g) {
+        LOG("BN_bin2bn failed");
+        goto cleanup;
+    }
+
+    /* Create DH parameters using OSSL_PARAM_BLD */
+    bld = OSSL_PARAM_BLD_new();
+    if (!bld) {
+        LOG("OSSL_PARAM_BLD_new failed");
+        goto cleanup;
+    }
+
+    if (!OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_FFC_P, p) ||
+        !OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_FFC_G, g)) {
+        LOG("OSSL_PARAM_BLD_push_BN failed");
+        goto cleanup;
+    }
+
+    params_array = OSSL_PARAM_BLD_to_param(bld);
+    OSSL_PARAM_BLD_free(bld);
+    bld = NULL;
+    if (!params_array) {
+        LOG("OSSL_PARAM_BLD_to_param failed");
+        goto cleanup;
+    }
+
+    /* Create parameter EVP_PKEY */
+    pctx = EVP_PKEY_CTX_new_from_name(NULL, "DH", NULL);
+    if (!pctx) {
+        LOG("EVP_PKEY_CTX_new_from_name failed");
+        goto cleanup;
+    }
+
+    if (EVP_PKEY_fromdata_init(pctx) <= 0 ||
+        EVP_PKEY_fromdata(pctx, &params, EVP_PKEY_KEY_PARAMETERS,
+                          params_array) <= 0) {
+        LOG("EVP_PKEY_fromdata failed");
+        goto cleanup;
+    }
+    OSSL_PARAM_free(params_array);
+    params_array = NULL;
+    EVP_PKEY_CTX_free(pctx);
+    pctx = NULL;
+
+    /* Generate DH key pair */
+    pctx = EVP_PKEY_CTX_new_from_pkey(NULL, params, NULL);
+    if (!pctx) {
+        LOG("EVP_PKEY_CTX_new_from_pkey failed");
+        goto cleanup;
+    }
+
+    if (EVP_PKEY_keygen_init(pctx) <= 0 ||
+        EVP_PKEY_generate(pctx, &pkey) <= 0) {
+        LOG("EVP_PKEY_generate failed");
+        goto cleanup;
+    }
+
+    /* Extract private key */
+    if (!EVP_PKEY_get_bn_param(pkey, OSSL_PKEY_PARAM_PRIV_KEY, &priv_key)) {
+        LOG("EVP_PKEY_get_bn_param failed");
+        goto cleanup;
+    }
+
+    len = BN_num_bytes(priv_key);
+    if (len > dest_len) {
+        LOG("len > dest_len");
+        goto cleanup;
+    }
+
+    gap = dest_len - len;
+    memset(dest, 0, gap);
+    BN_bn2bin(priv_key, &dest[gap]);
+
+    ret = 0;
+
+cleanup:
+    OSSL_PARAM_free(params_array);
+    OSSL_PARAM_BLD_free(bld);
+    BN_free(priv_key);
+    EVP_PKEY_free(pkey);
+    EVP_PKEY_free(params);
+    EVP_PKEY_CTX_free(pctx);
+    BN_free(p);
+    BN_free(g);
+
+    return ret;
+#else
+    /* OpenSSL 1.x implementation */
     DH *dh;
     BIGNUM *p, *g;
     const BIGNUM *priv_key;
@@ -401,8 +623,8 @@ int dh_gen_exp(uint8_t *dest, int dest_len, uint8_t *dh_g, int dh_g_len,
 
     dh = DH_new();
 
-    p = BN_bin2bn(dh_p, dh_p_len, 0);
-    g = BN_bin2bn(dh_g, dh_g_len, 0);
+    p = BN_bin2bn(dh_p, dh_p_len, NULL);
+    g = BN_bin2bn(dh_g, dh_g_len, NULL);
     DH_set0_pqg(dh, p, NULL, g);
     DH_set_flags(dh, DH_FLAG_NO_EXP_CONSTTIME);
 
@@ -412,6 +634,7 @@ int dh_gen_exp(uint8_t *dest, int dest_len, uint8_t *dh_g, int dh_g_len,
     len = BN_num_bytes(priv_key);
     if (len > dest_len) {
         LOG("len > dest_len");
+        DH_free(dh);
         return -1;
     }
 
@@ -422,6 +645,7 @@ int dh_gen_exp(uint8_t *dest, int dest_len, uint8_t *dh_g, int dh_g_len,
     DH_free(dh);
 
     return 0;
+#endif
 }
 
 /* dest = base ^ exp % mod */
@@ -459,7 +683,8 @@ int dh_mod_exp(uint8_t *dest, int dest_len, uint8_t *base, int base_len,
     return 0;
 }
 
-int dh_dhph_signature(uint8_t *out, uint8_t *nonce, uint8_t *dhph, RSA *r) {
+int dh_dhph_signature(uint8_t *out, uint8_t *nonce, uint8_t *dhph,
+                      EVP_PKEY *pkey) {
     unsigned char dest[302];
     uint8_t hash[20];
     unsigned char dbuf[256];
@@ -491,9 +716,7 @@ int dh_dhph_signature(uint8_t *out, uint8_t *nonce, uint8_t *dhph, RSA *r) {
         return -1;
     }
 
-    RSA_private_encrypt(sizeof(dbuf), dbuf, out, r, RSA_NO_PADDING);
-
-    return 0;
+    return RSA_private_encrypt_wrapper(pkey, sizeof(dbuf), dbuf, out);
 }
 
 int verify_cb(int ok, X509_STORE_CTX *ctx) {
@@ -511,9 +734,9 @@ int verify_cb(int ok, X509_STORE_CTX *ctx) {
     return 0;
 }
 
-RSA *rsa_privatekey_open(const char *filename) {
+EVP_PKEY *rsa_privatekey_open(const char *filename) {
     FILE *fp;
-    RSA *r = NULL;
+    EVP_PKEY *pkey = NULL;
 
     fp = fopen(filename, "r");
     if (!fp) {
@@ -521,14 +744,14 @@ RSA *rsa_privatekey_open(const char *filename) {
         return NULL;
     }
 
-    PEM_read_RSAPrivateKey(fp, &r, NULL, NULL);
-    if (!r) {
+    pkey = PEM_read_PrivateKey(fp, NULL, NULL, NULL);
+    if (!pkey) {
         LOG("read error");
     }
 
     fclose(fp);
 
-    return r;
+    return pkey;
 }
 
 X509 *certificate_open(const char *filename) {
@@ -1513,17 +1736,17 @@ static void generate_key_seed(struct cc_ctrl_data *cc_data) {
 
     /* generate new key_seed -> SEK/SAK key derivation */
 
-    SHA256_CTX sha;
+    EVP_MD_CTX *sha;
 
-    SHA256_Init(&sha);
-    SHA256_Update(&sha, &cc_data->dhsk[240], 16);
-    SHA256_Update(&sha, element_get_ptr(cc_data, 22),
+    sha = sha256_init();
+    sha256_update(sha, &cc_data->dhsk[240], 16);
+    sha256_update(sha, element_get_ptr(cc_data, 22),
                   element_get_buf(cc_data, NULL, 22));
-    SHA256_Update(&sha, element_get_ptr(cc_data, 20),
+    sha256_update(sha, element_get_ptr(cc_data, 20),
                   element_get_buf(cc_data, NULL, 20));
-    SHA256_Update(&sha, element_get_ptr(cc_data, 21),
+    sha256_update(sha, element_get_ptr(cc_data, 21),
                   element_get_buf(cc_data, NULL, 21));
-    SHA256_Final(cc_data->ks_host, &sha);
+    sha256_final(sha, cc_data->ks_host);
 }
 
 static void generate_ns_host(struct cc_ctrl_data *cc_data)
@@ -1536,20 +1759,15 @@ static void generate_ns_host(struct cc_ctrl_data *cc_data)
 
 static int generate_SAK_SEK(uint8_t *sak, uint8_t *sek,
                             const uint8_t *ks_host) {
-    AES_KEY key;
     const uint8_t key_data[16] = {0xea, 0x74, 0xf4, 0x71, 0x99, 0xd7,
                                   0x6f, 0x35, 0x89, 0xf0, 0xd1, 0xdf,
                                   0x0f, 0xee, 0xe3, 0x00};
     uint8_t dec[32];
     int i;
 
-    /* key derivation of sak & sek */
-    memset(&key, 0, sizeof(key));
-
-    AES_set_encrypt_key(key_data, 128, &key);
-
+    /* key derivation of sak & sek using one-shot ECB */
     for (i = 0; i < 2; i++)
-        AES_ecb_encrypt(&ks_host[16 * i], &dec[16 * i], &key, 1);
+        aes_ecb_encrypt_block(&ks_host[16 * i], &dec[16 * i], key_data);
 
     for (i = 0; i < 16; i++)
         sek[i] = ks_host[i] ^ dec[i];
@@ -1564,19 +1782,11 @@ static int sac_crypt(uint8_t *dst, const uint8_t *src, unsigned int len,
                      const uint8_t *key_data, int encrypt) {
     uint8_t iv[16] = {0xf7, 0x70, 0xb0, 0x36, 0x03, 0x61, 0xf7, 0x96,
                       0x65, 0x74, 0x8a, 0x26, 0xea, 0x4e, 0x85, 0x41};
-    AES_KEY key;
-
-    /* AES_ENCRYPT is '1' */
-    memset(&key, 0, sizeof(key));
 
     if (encrypt)
-        AES_set_encrypt_key(key_data, 128, &key);
+        return aes_cbc_encrypt(dst, src, len, key_data, iv);
     else
-        AES_set_decrypt_key(key_data, 128, &key);
-
-    AES_cbc_encrypt(src, dst, len, &key, iv, encrypt);
-
-    return 0;
+        return aes_cbc_decrypt(dst, src, len, key_data, iv);
 }
 
 static X509 *import_ci_certificates(struct cc_ctrl_data *cc_data,
@@ -1658,15 +1868,15 @@ static int check_ci_certificates(struct cc_ctrl_data *cc_data) {
 
 static int generate_akh(struct cc_ctrl_data *cc_data) {
     uint8_t akh[32];
-    SHA256_CTX sha;
+    EVP_MD_CTX *sha;
 
-    SHA256_Init(&sha);
-    SHA256_Update(&sha, element_get_ptr(cc_data, 6),
+    sha = sha256_init();
+    sha256_update(sha, element_get_ptr(cc_data, 6),
                   element_get_buf(cc_data, NULL, 6));
-    SHA256_Update(&sha, element_get_ptr(cc_data, 5),
+    sha256_update(sha, element_get_ptr(cc_data, 5),
                   element_get_buf(cc_data, NULL, 5));
-    SHA256_Update(&sha, cc_data->dhsk, 256);
-    SHA256_Final(akh, &sha);
+    sha256_update(sha, cc_data->dhsk, 256);
+    sha256_final(sha, akh);
 
     element_set(cc_data, 22, akh, sizeof(akh));
 
@@ -1788,21 +1998,21 @@ static int restart_dh_challenge(struct cc_ctrl_data *cc_data) {
 
 static int generate_uri_confirm(struct cc_ctrl_data *cc_data,
                                 const uint8_t *sak) {
-    SHA256_CTX sha;
+    EVP_MD_CTX *sha;
     uint8_t uck[32];
     uint8_t uri_confirm[32];
 
     /* calculate UCK (uri confirmation key) */
-    SHA256_Init(&sha);
-    SHA256_Update(&sha, sak, 16);
-    SHA256_Final(uck, &sha);
+    sha = sha256_init();
+    sha256_update(sha, sak, 16);
+    sha256_final(sha, uck);
 
     /* calculate uri_confirm */
-    SHA256_Init(&sha);
-    SHA256_Update(&sha, element_get_ptr(cc_data, 25),
+    sha = sha256_init();
+    sha256_update(sha, element_get_ptr(cc_data, 25),
                   element_get_buf(cc_data, NULL, 25));
-    SHA256_Update(&sha, uck, 32);
-    SHA256_Final(uri_confirm, &sha);
+    sha256_update(sha, uck, 32);
+    sha256_final(sha, uri_confirm);
 
     element_set(cc_data, 27, uri_confirm, 32);
 
@@ -1812,12 +2022,10 @@ static int generate_uri_confirm(struct cc_ctrl_data *cc_data,
 static void check_new_key(ca_device_t *d, struct cc_ctrl_data *cc_data) {
     const uint8_t s_key[16] = {0x3e, 0x20, 0x15, 0x84, 0x2c, 0x37, 0xce, 0xe3,
                                0xd6, 0x14, 0x57, 0x3e, 0x3a, 0xab, 0x91, 0xb6};
-    AES_KEY aes_ctx;
     uint8_t dec[32];
     uint8_t *kp;
     uint8_t slot;
     unsigned int i;
-    memset(&aes_ctx, 0, sizeof(aes_ctx));
 
     /* check for keyprecursor */
     if (!element_valid(cc_data, 12)) {
@@ -1833,9 +2041,9 @@ static void check_new_key(ca_device_t *d, struct cc_ctrl_data *cc_data) {
     kp = element_get_ptr(cc_data, 12);
     element_get_buf(cc_data, &slot, 28);
 
-    AES_set_encrypt_key(s_key, 128, &aes_ctx);
+    /* Use one-shot ECB encryption */
     for (i = 0; i < 32; i += 16)
-        AES_ecb_encrypt(&kp[i], &dec[i], &aes_ctx, 1);
+        aes_ecb_encrypt_block(&kp[i], &dec[i], s_key);
 
     for (i = 0; i < 32; i++)
         dec[i] ^= kp[i];
