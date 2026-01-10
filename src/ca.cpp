@@ -40,6 +40,10 @@ alternative source
 #include <openssl/rsa.h>
 #include <openssl/sha.h>
 #include <openssl/x509.h>
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+#include <openssl/core_names.h>
+#include <openssl/param_build.h>
+#endif
 
 #define DEFAULT_LOG LOG_DVBCA
 
@@ -265,36 +269,79 @@ static int sha256_final(EVP_MD_CTX *ctx, uint8_t *out) {
     return ret;
 }
 
-int RSA_private_encrypt_wrapper(EVP_PKEY *pkey, int dlen, uint8_t *dbuf,
+int RSA_private_encrypt_wrapper(EVP_PKEY *pkey, int dlen, uint8_t *data,
                                 uint8_t *out) {
-    /* RSA private key operation (sign with no padding) */
-    EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(pkey, NULL);
-    if (!ctx) {
-        LOG("EVP_PKEY_CTX_new failed");
+    /* RSA-PSS signature with SHA-1 hash and MGF1-SHA1 */
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+    size_t sig_len = 256;
+    EVP_PKEY_CTX *pkey_ctx = NULL;
+
+    EVP_MD_CTX *md_ctx = EVP_MD_CTX_new();
+    if (!md_ctx) {
+        LOG("EVP_MD_CTX_new failed");
         return -1;
     }
 
-    if (EVP_PKEY_sign_init(ctx) <= 0) {
-        LOG("EVP_PKEY_sign_init failed");
-        EVP_PKEY_CTX_free(ctx);
+    if (EVP_DigestSignInit(md_ctx, &pkey_ctx, EVP_sha1(), NULL, pkey) <= 0) {
+        LOG("EVP_DigestSignInit failed");
+        EVP_MD_CTX_free(md_ctx);
         return -1;
     }
 
-    if (EVP_PKEY_CTX_set_rsa_padding(ctx, RSA_NO_PADDING) <= 0) {
-        LOG("EVP_PKEY_CTX_set_rsa_padding failed");
-        EVP_PKEY_CTX_free(ctx);
+    if (EVP_PKEY_CTX_set_rsa_padding(pkey_ctx, RSA_PKCS1_PSS_PADDING) <= 0) {
+        LOG("set RSA_PKCS1_PSS_PADDING failed");
+        EVP_MD_CTX_free(md_ctx);
         return -1;
     }
 
-    size_t outlen = 256;
-    if (EVP_PKEY_sign(ctx, out, &outlen, dbuf, dlen) <= 0) {
-        LOG("EVP_PKEY_sign failed");
-        EVP_PKEY_CTX_free(ctx);
+    if (EVP_PKEY_CTX_set_rsa_pss_saltlen(pkey_ctx, 20) <= 0) {
+        LOG("set saltlen failed");
+        EVP_MD_CTX_free(md_ctx);
         return -1;
     }
 
-    EVP_PKEY_CTX_free(ctx);
+    if (EVP_PKEY_CTX_set_rsa_mgf1_md(pkey_ctx, EVP_sha1()) <= 0) {
+        LOG("set mgf1 md failed");
+        EVP_MD_CTX_free(md_ctx);
+        return -1;
+    }
+
+    if (EVP_DigestSign(md_ctx, out, &sig_len, data, dlen) <= 0) {
+        LOG("EVP_DigestSign failed");
+        EVP_MD_CTX_free(md_ctx);
+        return -1;
+    }
+
+    EVP_MD_CTX_free(md_ctx);
     return 0;
+#else
+    /* OpenSSL 1.x implementation, remove in August 2026 when Debian 11 build is removed */
+    uint8_t hash[SHA_DIGEST_LENGTH];
+    uint8_t padded[256];
+
+    RSA *rsa = EVP_PKEY_get1_RSA(pkey);
+    if (!rsa) {
+        LOG("EVP_PKEY_get1_RSA failed");
+        return -1;
+    }
+
+    SHA1(data, dlen, hash);
+
+    if (RSA_padding_add_PKCS1_PSS(rsa, padded, hash, EVP_sha1(), 20) != 1) {
+        LOG("RSA_padding_add_PKCS1_PSS failed");
+        RSA_free(rsa);
+        return -1;
+    }
+
+    if (RSA_private_encrypt(256, padded, out, rsa, RSA_NO_PADDING) != 256) {
+        LOG("RSA_private_encrypt failed");
+        RSA_free(rsa);
+        return -1;
+    }
+
+    RSA_free(rsa);
+    return 0;
+#endif
 }
 
 // EN 300 468, tables 36, 38, and 41
@@ -366,135 +413,6 @@ int aes_xcbc_mac_done(struct aes_xcbc_mac_ctx *ctx, uint8_t *out) {
 ////// END_AES_XCBC_MAC
 ////// DH_RSA_MISC
 
-int pkcs_1_mgf1(const uint8_t *seed, unsigned long seedlen, uint8_t *mask,
-                unsigned long masklen) {
-    unsigned long hLen, x;
-    uint32_t counter;
-    uint8_t *buf;
-
-    /* get hash output size */
-    hLen = 20; /* SHA1 */
-
-    /* allocate memory */
-    buf = (uint8_t *)malloc(hLen);
-    if (buf == NULL) {
-        LOG("error mem");
-        return -1;
-    }
-
-    /* start counter */
-    counter = 0;
-
-    while (masklen > 0) {
-        /* handle counter */
-        copy32(buf, 0, counter);
-        ++counter;
-
-        /* get hash of seed || counter */
-        unsigned char buffer[0x18];
-        memcpy(buffer, seed, seedlen);
-        memcpy(buffer + 0x14, buf, 4);
-        SHA1(buffer, 0x18, buf);
-
-        /* store it */
-        for (x = 0; x < hLen && masklen > 0; x++, masklen--)
-            *mask++ = buf[x];
-    }
-
-    free(buf);
-    return 0;
-}
-
-int pkcs_1_pss_encode(const uint8_t *msghash, unsigned int msghashlen,
-                      unsigned long saltlen, unsigned long modulus_bitlen,
-                      uint8_t *out, unsigned int outlen) {
-    unsigned char *DB, *mask, *salt, *hash;
-    unsigned long x, y, hLen, modulus_len;
-    int err = -1;
-    unsigned char *hashbuf;
-    unsigned int hashbuflen;
-
-    hLen = 20; /* SHA1 */
-    modulus_len = (modulus_bitlen >> 3) + (modulus_bitlen & 7 ? 1 : 0);
-
-    /* allocate ram for DB/mask/salt/hash of size modulus_len */
-    DB = (uint8_t *)malloc(modulus_len);
-    mask = (uint8_t *)malloc(modulus_len);
-    salt = (uint8_t *)malloc(modulus_len);
-    hash = (uint8_t *)malloc(modulus_len);
-
-    hashbuflen = 8 + msghashlen + saltlen;
-    hashbuf = (uint8_t *)malloc(hashbuflen);
-
-    if (!(DB && mask && salt && hash && hashbuf)) {
-        LOG("out of memory");
-        goto LBL_ERR;
-    }
-
-    /* generate random salt */
-    if (saltlen > 0) {
-        if (get_random(salt, saltlen) != (long)saltlen) {
-            LOG("rnd failed");
-            goto LBL_ERR;
-        }
-    }
-
-    /* M = (eight) 0x00 || msghash || salt, hash = H(M) */
-    memset(hashbuf, 0, 8);
-    memcpy(hashbuf + 8, msghash, msghashlen);
-    memcpy(hashbuf + 8 + msghashlen, salt, saltlen);
-    SHA1(hashbuf, hashbuflen, hash);
-
-    /* generate DB = PS || 0x01 || salt, PS == modulus_len - saltlen - hLen - 2
-     * zero bytes */
-    x = 0;
-    memset(DB + x, 0, modulus_len - saltlen - hLen - 2);
-    x += modulus_len - saltlen - hLen - 2;
-    DB[x++] = 0x01;
-    memcpy(DB + x, salt, saltlen);
-    x += saltlen;
-
-    err = pkcs_1_mgf1(hash, hLen, mask, modulus_len - hLen - 1);
-    if (err)
-        goto LBL_ERR;
-
-    /* xor against DB */
-    for (y = 0; y < (modulus_len - hLen - 1); y++)
-        DB[y] ^= mask[y];
-
-    /* output is DB || hash || 0xBC */
-    if (outlen < modulus_len) {
-        err = -1;
-        LOG("error overflow");
-        goto LBL_ERR;
-    }
-
-    /* DB len = modulus_len - hLen - 1 */
-    y = 0;
-    memcpy(out + y, DB, modulus_len - hLen - 1);
-    y += modulus_len - hLen - 1;
-
-    /* hash */
-    memcpy(out + y, hash, hLen);
-    y += hLen;
-
-    /* 0xBC */
-    out[y] = 0xBC;
-
-    /* now clear the 8*modulus_len - modulus_bitlen most significant bits */
-    out[0] &= 0xFF >> ((modulus_len << 3) - (modulus_bitlen - 1));
-
-    err = 0;
-LBL_ERR:
-    free(hashbuf);
-    free(hash);
-    free(salt);
-    free(mask);
-    free(DB);
-
-    return err;
-}
-
 /* DH */
 
 int dh_gen_exp(uint8_t *dest, int dest_len) {
@@ -543,8 +461,6 @@ int dh_mod_exp(uint8_t *dest, int dest_len, uint8_t *base, int base_len,
 int dh_dhph_signature(uint8_t *out, uint8_t *nonce, uint8_t *dhph,
                       EVP_PKEY *pkey) {
     unsigned char dest[302];
-    uint8_t hash[20];
-    unsigned char dbuf[256];
 
     dest[0x00] = 0x00; /* version */
     dest[0x01] = 0x00;
@@ -566,14 +482,7 @@ int dh_dhph_signature(uint8_t *out, uint8_t *nonce, uint8_t *dhph,
     dest[0x2d] = 0x00; /* len (bits) */
     memcpy(&dest[0x2e], dhph, 256);
 
-    SHA1(dest, 0x12e, hash);
-
-    if (pkcs_1_pss_encode(hash, 20, 20, 0x800, dbuf, sizeof(dbuf))) {
-        LOG("pss encode failed");
-        return -1;
-    }
-
-    return RSA_private_encrypt_wrapper(pkey, sizeof(dbuf), dbuf, out);
+    return RSA_private_encrypt_wrapper(pkey, 0x12e, dest, out);
 }
 
 int verify_cb(int ok, X509_STORE_CTX *ctx) {
