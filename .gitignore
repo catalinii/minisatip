@@ -12,3 +12,7 @@ src/confdefs.h
 .vscode
 autom4te.cache
 build/test
+
+# Bazel
+bazel-*
+MODULE.bazel.lock
