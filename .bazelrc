@@ -1,0 +1,33 @@
+# Minisatip Bazel Configuration
+
+# Build with C++20 by default
+build --cxxopt=-std=c++20
+build --host_cxxopt=-std=c++20
+
+# Default build configuration
+build --define dvbcsa=1
+build --define dvbca=1
+build --define satipclient=1
+build --define dvbapi=1
+build --define linuxdvb=1
+build --define ddci=1
+
+# Minimal build configuration
+build:minimal --define dvbcsa=0
+build:minimal --define dvbca=0
+build:minimal --define dvbapi=0
+build:minimal --define ddci=0
+
+# Debug build
+build:debug --compilation_mode=dbg
+build:debug --cxxopt=-fsanitize=address
+build:debug --cxxopt=-fsanitize=undefined
+build:debug --linkopt=-fsanitize=address
+build:debug --linkopt=-fsanitize=undefined
+
+# Release/optimized build
+build:release --compilation_mode=opt
+build:release --cxxopt=-O2
+
+# Static linking (note: requires static versions of system libraries)
+build:static --linkopt=-static

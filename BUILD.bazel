@@ -1,0 +1,213 @@
+# Minisatip Bazel Build File
+# Uses system-installed OpenSSL and builds libdvbcsa from source
+
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+
+# Configuration settings for feature flags
+config_setting(
+    name = "enable_dvbcsa",
+    values = {"define": "dvbcsa=1"},
+)
+
+config_setting(
+    name = "enable_dvbca",
+    values = {"define": "dvbca=1"},
+)
+
+config_setting(
+    name = "enable_satipclient",
+    values = {"define": "satipclient=1"},
+)
+
+config_setting(
+    name = "enable_dvbapi",
+    values = {"define": "dvbapi=1"},
+)
+
+config_setting(
+    name = "enable_linuxdvb",
+    values = {"define": "linuxdvb=1"},
+)
+
+config_setting(
+    name = "enable_ddci",
+    values = {"define": "ddci=1"},
+)
+
+config_setting(
+    name = "enable_netcvclient",
+    values = {"define": "netcvclient=1"},
+)
+
+# Version string - can be overridden via --define version=X.Y.Z
+VERSION = "1.0.0"
+
+# Common compiler flags
+COMMON_COPTS = [
+    "-Wall",
+    "-Wno-switch",
+    "-g",
+    "-fPIC",
+    "-fno-common",
+    "-fno-omit-frame-pointer",
+    "-Warray-bounds",
+    "-std=c++20",
+    "-O2",
+    "-DVERSION=\\\"" + VERSION + "\\\"",
+    "-DDISABLE_STACKTRACE",  # C++23 stacktrace not available
+]
+
+# All headers - used for include path
+ALL_HDRS = glob([
+    "src/*.h",
+    "src/**/*.h",
+])
+
+# Core sources (always compiled)
+CORE_SRCS = [
+    "src/adapter.cpp",
+    "src/dvb.cpp",
+    "src/httpc.cpp",
+    "src/minisatip.cpp",
+    "src/opts.cpp",
+    "src/socketworks.cpp",
+    "src/stream.cpp",
+    "src/utils.cpp",
+    "src/api/symbols.cpp",
+    "src/api/variables.cpp",
+    "src/utils/dvb/dvb_support.cpp",
+    "src/utils/fifo.cpp",
+    "src/utils/logging/logging.cpp",
+    "src/utils/ticks.cpp",
+    "src/utils/uuid.cpp",
+]
+
+# CSA sources (when dvbcsa is enabled)
+CSA_SRCS = ["src/csa.cpp"]
+
+# CA sources (when dvbca/openssl is enabled)
+CA_SRCS = [
+    "src/ca.cpp",
+    "src/aes.cpp",
+]
+
+# DVBAPI sources
+DVBAPI_SRCS = ["src/dvbapi.cpp"]
+
+# PMT sources (needed when dvbcsa, dvbapi, or dvbca is enabled)
+PMT_SRCS = ["src/pmt.cpp"]
+
+# Tables sources (needed when dvbapi or dvbca is enabled)
+TABLES_SRCS = ["src/tables.cpp"]
+
+# SatIP client sources
+SATIPC_SRCS = ["src/satipc.cpp"]
+
+# DDCI sources
+DDCI_SRCS = ["src/ddci.cpp"]
+
+# Netceiver sources
+NETCEIVER_SRCS = ["src/netceiver.cpp"]
+
+# Main minisatip binary with all features enabled
+# Uses system-installed openssl and builds dvbcsa from source
+cc_binary(
+    name = "minisatip",
+    srcs = CORE_SRCS +
+           CSA_SRCS +
+           CA_SRCS +
+           DVBAPI_SRCS +
+           PMT_SRCS +
+           TABLES_SRCS +
+           SATIPC_SRCS +
+           DDCI_SRCS +
+           ALL_HDRS,
+    copts = COMMON_COPTS + [
+        "-DDISABLE_NETCVCLIENT",  # netceiver library not available
+    ],
+    includes = ["src"],
+    linkopts = [
+        "-lpthread",
+        "-lrt",
+        "-ldl",
+        "-lcrypto",   # System OpenSSL crypto library
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@dvbcsa",    # Built from source
+    ],
+)
+
+# Minimal build without optional features
+cc_binary(
+    name = "minisatip_minimal",
+    srcs = CORE_SRCS +
+           SATIPC_SRCS +
+           ALL_HDRS,
+    copts = COMMON_COPTS + [
+        "-DDISABLE_DVBCSA",
+        "-DDISABLE_DVBCA",
+        "-DDISABLE_DVBAPI",
+        "-DDISABLE_PMT",
+        "-DDISABLE_TABLES",
+        "-DDISABLE_DDCI",
+        "-DDISABLE_NETCVCLIENT",
+    ],
+    includes = ["src"],
+    linkopts = [
+        "-lpthread",
+        "-lrt",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# Build with dvbcsa only (no CA/OpenSSL)
+cc_binary(
+    name = "minisatip_dvbcsa",
+    srcs = CORE_SRCS +
+           CSA_SRCS +
+           PMT_SRCS +
+           SATIPC_SRCS +
+           ALL_HDRS,
+    copts = COMMON_COPTS + [
+        "-DDISABLE_DVBCA",
+        "-DDISABLE_DVBAPI",
+        "-DDISABLE_TABLES",
+        "-DDISABLE_DDCI",
+        "-DDISABLE_NETCVCLIENT",
+    ],
+    includes = ["src"],
+    linkopts = [
+        "-lpthread",
+        "-lrt",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@dvbcsa",
+    ],
+)
+
+# Build with OpenSSL/CA only (no dvbcsa)
+cc_binary(
+    name = "minisatip_ca",
+    srcs = CORE_SRCS +
+           CA_SRCS +
+           PMT_SRCS +
+           TABLES_SRCS +
+           SATIPC_SRCS +
+           DDCI_SRCS +
+           ALL_HDRS,
+    copts = COMMON_COPTS + [
+        "-DDISABLE_DVBCSA",
+        "-DDISABLE_DVBAPI",
+        "-DDISABLE_NETCVCLIENT",
+    ],
+    includes = ["src"],
+    linkopts = [
+        "-lpthread",
+        "-lrt",
+        "-ldl",
+        "-lcrypto",
+    ],
+    visibility = ["//visibility:public"],
+)
