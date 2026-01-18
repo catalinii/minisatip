@@ -1,0 +1,143 @@
+# Minisatip Bazel Configuration
+#
+# Feature flags (mirror configure.ac options):
+#   --define dvbcsa=0/1      Enable/disable DVBCSA support (default: 1)
+#   --define dvbca=0/1       Enable/disable CA/OpenSSL support (default: 1)
+#   --define dvbapi=0/1      Enable/disable DVBAPI protocol (default: 1)
+#   --define satipclient=0/1 Enable/disable SatIP client (default: 1)
+#   --define linuxdvb=0/1    Enable/disable Linux DVB (default: 1)
+#   --define ddci=0/1        Enable/disable DDCI (default: 1, requires dvbca)
+#   --define netcvclient=0/1 Enable/disable Netceiver (default: 0, requires libs)
+#   --define pmt=0/1         Enable/disable PMT processing (default: 1)
+#   --define tables=0/1      Enable/disable TABLES processing (default: 1)
+#
+# Example usage:
+#   bazel build //:minisatip                      # Full build
+#   bazel build //:minisatip --define dvbcsa=0    # Without dvbcsa
+#   bazel build --config=minimal //:minisatip     # Minimal build
+
+# Build with C++20 by default
+build --cxxopt=-std=c++20
+build --host_cxxopt=-std=c++20
+
+# Default feature flags - all enabled except netcvclient (requires special libs)
+build --define dvbcsa=1
+build --define dvbca=1
+build --define dvbapi=1
+build --define satipclient=1
+build --define linuxdvb=1
+build --define ddci=1
+build --define netcvclient=0
+build --define pmt=1
+build --define tables=1
+
+# Minimal configuration - disable all optional features
+build:minimal --define dvbcsa=0
+build:minimal --define dvbca=0
+build:minimal --define dvbapi=0
+build:minimal --define ddci=0
+build:minimal --define netcvclient=0
+build:minimal --define pmt=0
+build:minimal --define tables=0
+
+# CA-only configuration - OpenSSL/CA without dvbcsa
+build:ca_only --define dvbcsa=0
+build:ca_only --define dvbca=1
+build:ca_only --define dvbapi=0
+build:ca_only --define ddci=1
+build:ca_only --define netcvclient=0
+build:ca_only --define pmt=1
+build:ca_only --define tables=1
+
+# DVBCSA-only configuration - dvbcsa without CA/OpenSSL
+build:dvbcsa_only --define dvbcsa=1
+build:dvbcsa_only --define dvbca=0
+build:dvbcsa_only --define dvbapi=0
+build:dvbcsa_only --define ddci=0
+build:dvbcsa_only --define netcvclient=0
+build:dvbcsa_only --define pmt=1
+build:dvbcsa_only --define tables=0
+
+# Debug build
+build:debug --compilation_mode=dbg
+build:debug --cxxopt=-fsanitize=address
+build:debug --cxxopt=-fsanitize=undefined
+build:debug --linkopt=-fsanitize=address
+build:debug --linkopt=-fsanitize=undefined
+
+# Release/optimized build
+build:release --compilation_mode=opt
+build:release --cxxopt=-O2
+
+# Static linking (note: requires static versions of system libraries)
+build:static --linkopt=-static
+
+#############################################################################
+# Cross-compilation configurations using Clang
+#############################################################################
+# Clang is a native cross-compiler - just specify the target platform.
+# For cross-compilation, you need target sysroot with headers and libraries.
+#
+# Install clang: sudo apt install clang lld llvm
+#
+# For ARM sysroot (Debian-based):
+#   sudo apt install gcc-arm-linux-gnueabihf libc6-dev-armhf-cross
+#
+# Usage:
+#   bazel build --config=clang //:minisatip           # Native build with clang (auto-detects host CPU)
+#   bazel build --config=clang-arm //:minisatip       # Cross-compile to ARM
+#   bazel build --config=clang-arm64 //:minisatip     # Cross-compile to ARM64
+
+# Use Clang for native builds (auto-detects host CPU)
+build:clang --crosstool_top=//toolchains:clang_suite
+build:clang --extra_toolchains=//toolchains:clang_x86_64,//toolchains:clang_arm64_aarch64_host
+
+# Use Clang for native x86_64 builds (explicit)
+build:clang-x86_64 --crosstool_top=//toolchains:clang_suite
+build:clang-x86_64 --cpu=x86_64
+build:clang-x86_64 --extra_toolchains=//toolchains:clang_x86_64
+
+# Use Clang for native aarch64 builds (explicit)
+build:clang-aarch64 --crosstool_top=//toolchains:clang_suite
+build:clang-aarch64 --cpu=aarch64
+build:clang-aarch64 --extra_toolchains=//toolchains:clang_arm64_aarch64_host
+
+# ARM 32-bit cross-compilation (Raspberry Pi, etc.)
+build:clang-arm --crosstool_top=//toolchains:clang_suite
+build:clang-arm --cpu=arm
+build:clang-arm --platforms=//platforms:linux_arm
+build:clang-arm --extra_toolchains=//toolchains:clang_arm,//toolchains:clang_arm_aarch64_host
+build:clang-arm --host_crosstool_top=@bazel_tools//tools/cpp:toolchain
+# Uncomment and set path to ARM sysroot:
+# build:clang-arm --action_env=SYSROOT=/usr/arm-linux-gnueabihf
+
+# ARM 64-bit cross-compilation (aarch64)
+build:clang-arm64 --crosstool_top=//toolchains:clang_suite
+build:clang-arm64 --cpu=aarch64
+build:clang-arm64 --platforms=//platforms:linux_arm64
+build:clang-arm64 --extra_toolchains=//toolchains:clang_arm64,//toolchains:clang_arm64_aarch64_host
+build:clang-arm64 --host_crosstool_top=@bazel_tools//tools/cpp:toolchain
+# Uncomment and set path to ARM64 sysroot:
+# build:clang-arm64 --action_env=SYSROOT=/usr/aarch64-linux-gnu
+
+# MIPSEL cross-compilation (little-endian MIPS32 R1, routers, set-top boxes)
+build:clang-mipsel --crosstool_top=//toolchains:clang_suite
+build:clang-mipsel --cpu=mipsel
+build:clang-mipsel --platforms=//platforms:linux_mipsel
+build:clang-mipsel --extra_toolchains=//toolchains:clang_mipsel,//toolchains:clang_mipsel_aarch64_host
+build:clang-mipsel --host_crosstool_top=@bazel_tools//tools/cpp:toolchain
+
+#############################################################################
+# Legacy GCC cross-compilation (alternative to Clang)
+#############################################################################
+# If you prefer GCC cross-compilers:
+
+# ARM 32-bit with GCC
+# Requires: sudo apt install gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+build:gcc-arm --platforms=//platforms:linux_arm
+build:gcc-arm --compiler=arm-linux-gnueabihf-gcc
+
+# ARM 64-bit with GCC
+# Requires: sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+build:gcc-arm64 --platforms=//platforms:linux_arm64
+build:gcc-arm64 --compiler=aarch64-linux-gnu-gcc

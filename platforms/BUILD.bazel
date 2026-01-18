@@ -1,0 +1,45 @@
+# Platform definitions for cross-compilation
+
+package(default_visibility = ["//visibility:public"])
+
+# Custom CPU constraint for MIPSEL (not in @platforms by default)
+constraint_value(
+    name = "mipsel",
+    constraint_setting = "@platforms//cpu:cpu",
+)
+
+# ARM 32-bit (e.g., Raspberry Pi)
+platform(
+    name = "linux_arm",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm",
+    ],
+)
+
+# ARM 64-bit (aarch64)
+platform(
+    name = "linux_arm64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:aarch64",
+    ],
+)
+
+# MIPSEL (little-endian MIPS32 R1, e.g., routers, set-top boxes)
+platform(
+    name = "linux_mipsel",
+    constraint_values = [
+        "@platforms//os:linux",
+        ":mipsel",
+    ],
+)
+
+# x86_64 (default)
+platform(
+    name = "linux_x86_64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+)

@@ -1,0 +1,5 @@
+# third_party directory marker
+exports_files([
+    "openssl.BUILD",
+    "dvbcsa.BUILD",
+])
