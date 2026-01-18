@@ -1,39 +1,183 @@
-# Cross-compilation toolchain definitions
+# Clang Cross-Compilation Toolchains
 #
-# To use cross-compilation, you need to:
-# 1. Install the cross-compiler (e.g., arm-linux-gnueabihf-gcc)
-# 2. Uncomment and configure the appropriate toolchain below
-# 3. Register it in WORKSPACE or MODULE.bazel
-# 4. Build with: bazel build --platforms=//platforms:linux_arm //:minisatip
+# Clang is a native cross-compiler - it can target any architecture
+# without needing separate toolchain installations.
+#
+# Requirements:
+#   - clang/clang++ installed
+#   - Target sysroot (for headers and libraries)
+#
+# Usage:
+#   bazel build --config=arm //:minisatip
+#   bazel build --config=arm64 //:minisatip
 
 load("@rules_cc//cc:defs.bzl", "cc_toolchain", "cc_toolchain_suite")
+load(":cc_toolchain_config.bzl", "cc_toolchain_config")
 
-# Example: ARM 32-bit cross-compiler toolchain
-# Requires: arm-linux-gnueabihf-gcc installed
-#
-# cc_toolchain_suite(
-#     name = "arm_suite",
-#     toolchains = {
-#         "arm": ":arm_toolchain",
-#     },
-# )
-#
-# filegroup(name = "empty")
-#
-# cc_toolchain(
-#     name = "arm_toolchain",
-#     all_files = ":empty",
-#     compiler_files = ":empty",
-#     dwp_files = ":empty",
-#     linker_files = ":empty",
-#     objcopy_files = ":empty",
-#     strip_files = ":empty",
-#     supports_param_files = 0,
-#     toolchain_config = ":arm_toolchain_config",
-#     toolchain_identifier = "arm-linux-gnueabihf",
-# )
+package(default_visibility = ["//visibility:public"])
 
-# For a complete cross-compilation setup, consider using:
-# - https://github.com/aspect-build/gcc-toolchain (pre-built toolchains)
-# - https://github.com/aspect-build/bazel-lib (toolchain helpers)
-# - https://github.com/aspect-build/rules_zig (Zig as cross-compiler)
+# Toolchain suite containing all cross-compilation toolchains
+cc_toolchain_suite(
+    name = "clang_suite",
+    toolchains = {
+        "k8": ":clang_x86_64_toolchain",
+        "x86_64": ":clang_x86_64_toolchain",
+        "arm": ":clang_arm_toolchain",
+        "aarch64": ":clang_arm64_toolchain",
+        "mips64": ":clang_mips64_toolchain",
+    },
+)
+
+filegroup(name = "empty")
+
+#############################################################################
+# x86_64 Toolchain (native)
+#############################################################################
+
+cc_toolchain(
+    name = "clang_x86_64_toolchain",
+    all_files = ":empty",
+    compiler_files = ":empty",
+    dwp_files = ":empty",
+    linker_files = ":empty",
+    objcopy_files = ":empty",
+    strip_files = ":empty",
+    supports_param_files = True,
+    toolchain_config = ":clang_x86_64_config",
+    toolchain_identifier = "clang-x86_64-linux",
+)
+
+cc_toolchain_config(
+    name = "clang_x86_64_config",
+    target_cpu = "x86_64",
+    target_triple = "x86_64-unknown-linux-gnu",
+    toolchain_identifier = "clang-x86_64-linux",
+)
+
+toolchain(
+    name = "clang_x86_64",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    toolchain = ":clang_x86_64_toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+#############################################################################
+# ARM 32-bit Toolchain (armv7, Raspberry Pi, etc.)
+#############################################################################
+
+cc_toolchain(
+    name = "clang_arm_toolchain",
+    all_files = ":empty",
+    compiler_files = ":empty",
+    dwp_files = ":empty",
+    linker_files = ":empty",
+    objcopy_files = ":empty",
+    strip_files = ":empty",
+    supports_param_files = True,
+    toolchain_config = ":clang_arm_config",
+    toolchain_identifier = "clang-arm-linux",
+)
+
+cc_toolchain_config(
+    name = "clang_arm_config",
+    target_cpu = "arm",
+    target_triple = "arm-unknown-linux-gnueabihf",
+    toolchain_identifier = "clang-arm-linux",
+)
+
+toolchain(
+    name = "clang_arm",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm",
+    ],
+    toolchain = ":clang_arm_toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+#############################################################################
+# ARM 64-bit Toolchain (aarch64)
+#############################################################################
+
+cc_toolchain(
+    name = "clang_arm64_toolchain",
+    all_files = ":empty",
+    compiler_files = ":empty",
+    dwp_files = ":empty",
+    linker_files = ":empty",
+    objcopy_files = ":empty",
+    strip_files = ":empty",
+    supports_param_files = True,
+    toolchain_config = ":clang_arm64_config",
+    toolchain_identifier = "clang-aarch64-linux",
+)
+
+cc_toolchain_config(
+    name = "clang_arm64_config",
+    target_cpu = "aarch64",
+    target_triple = "aarch64-unknown-linux-gnu",
+    toolchain_identifier = "clang-aarch64-linux",
+)
+
+toolchain(
+    name = "clang_arm64",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:aarch64",
+    ],
+    toolchain = ":clang_arm64_toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+#############################################################################
+# MIPS64 Toolchain
+#############################################################################
+
+cc_toolchain(
+    name = "clang_mips64_toolchain",
+    all_files = ":empty",
+    compiler_files = ":empty",
+    dwp_files = ":empty",
+    linker_files = ":empty",
+    objcopy_files = ":empty",
+    strip_files = ":empty",
+    supports_param_files = True,
+    toolchain_config = ":clang_mips64_config",
+    toolchain_identifier = "clang-mips64-linux",
+)
+
+cc_toolchain_config(
+    name = "clang_mips64_config",
+    target_cpu = "mips64",
+    target_triple = "mips64-unknown-linux-gnuabi64",
+    toolchain_identifier = "clang-mips64-linux",
+)
+
+toolchain(
+    name = "clang_mips64",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:mips64",
+    ],
+    toolchain = ":clang_mips64_toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)

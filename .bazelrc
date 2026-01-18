@@ -73,24 +73,55 @@ build:release --cxxopt=-O2
 build:static --linkopt=-static
 
 #############################################################################
-# Cross-compilation configurations
+# Cross-compilation configurations using Clang
 #############################################################################
-# To cross-compile, you need the appropriate cross-compiler installed.
-# Example: sudo apt install gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+# Clang is a native cross-compiler - just specify the target platform.
+# For cross-compilation, you need target sysroot with headers and libraries.
 #
-# Then build with: bazel build --config=arm //:minisatip
+# Install clang: sudo apt install clang lld llvm
+#
+# For ARM sysroot (Debian-based):
+#   sudo apt install gcc-arm-linux-gnueabihf libc6-dev-armhf-cross
+#
+# Usage:
+#   bazel build --config=clang //:minisatip           # Native x86_64 with clang
+#   bazel build --config=clang-arm //:minisatip       # Cross-compile to ARM
+#   bazel build --config=clang-arm64 //:minisatip     # Cross-compile to ARM64
 
-# ARM 32-bit (Raspberry Pi, etc.)
-# Requires: arm-linux-gnueabihf-gcc
-build:arm --platforms=//platforms:linux_arm
-build:arm --compiler=arm-linux-gnueabihf-gcc
-# build:arm --crosstool_top=//toolchains:arm_suite
+# Use Clang for native builds
+build:clang --crosstool_top=//toolchains:clang_suite
+build:clang --cpu=x86_64
 
-# ARM 64-bit (aarch64)
-# Requires: aarch64-linux-gnu-gcc
-build:arm64 --platforms=//platforms:linux_arm64
-build:arm64 --compiler=aarch64-linux-gnu-gcc
+# ARM 32-bit cross-compilation (Raspberry Pi, etc.)
+build:clang-arm --crosstool_top=//toolchains:clang_suite
+build:clang-arm --cpu=arm
+build:clang-arm --platforms=//platforms:linux_arm
+# Uncomment and set path to ARM sysroot:
+# build:clang-arm --action_env=SYSROOT=/usr/arm-linux-gnueabihf
 
-# MIPS (routers, set-top boxes)
-# Requires: mips-linux-gnu-gcc or similar
-build:mips --platforms=//platforms:linux_mips
+# ARM 64-bit cross-compilation (aarch64)
+build:clang-arm64 --crosstool_top=//toolchains:clang_suite
+build:clang-arm64 --cpu=aarch64
+build:clang-arm64 --platforms=//platforms:linux_arm64
+# Uncomment and set path to ARM64 sysroot:
+# build:clang-arm64 --action_env=SYSROOT=/usr/aarch64-linux-gnu
+
+# MIPS64 cross-compilation (routers, set-top boxes)
+build:clang-mips64 --crosstool_top=//toolchains:clang_suite
+build:clang-mips64 --cpu=mips64
+build:clang-mips64 --platforms=//platforms:linux_mips
+
+#############################################################################
+# Legacy GCC cross-compilation (alternative to Clang)
+#############################################################################
+# If you prefer GCC cross-compilers:
+
+# ARM 32-bit with GCC
+# Requires: sudo apt install gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+build:gcc-arm --platforms=//platforms:linux_arm
+build:gcc-arm --compiler=arm-linux-gnueabihf-gcc
+
+# ARM 64-bit with GCC
+# Requires: sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+build:gcc-arm64 --platforms=//platforms:linux_arm64
+build:gcc-arm64 --compiler=aarch64-linux-gnu-gcc

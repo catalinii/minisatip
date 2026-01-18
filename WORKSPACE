@@ -30,3 +30,11 @@ http_archive(
     strip_prefix = "libdvbcsa-1.1.0",
     urls = ["https://download.videolan.org/pub/videolan/libdvbcsa/1.1.0/libdvbcsa-1.1.0.tar.gz"],
 )
+
+# Register Clang cross-compilation toolchains
+register_toolchains(
+    "//toolchains:clang_x86_64",
+    "//toolchains:clang_arm",
+    "//toolchains:clang_arm64",
+    "//toolchains:clang_mips64",
+)
