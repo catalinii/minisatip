@@ -71,3 +71,26 @@ build:release --cxxopt=-O2
 
 # Static linking (note: requires static versions of system libraries)
 build:static --linkopt=-static
+
+#############################################################################
+# Cross-compilation configurations
+#############################################################################
+# To cross-compile, you need the appropriate cross-compiler installed.
+# Example: sudo apt install gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+#
+# Then build with: bazel build --config=arm //:minisatip
+
+# ARM 32-bit (Raspberry Pi, etc.)
+# Requires: arm-linux-gnueabihf-gcc
+build:arm --platforms=//platforms:linux_arm
+build:arm --compiler=arm-linux-gnueabihf-gcc
+# build:arm --crosstool_top=//toolchains:arm_suite
+
+# ARM 64-bit (aarch64)
+# Requires: aarch64-linux-gnu-gcc
+build:arm64 --platforms=//platforms:linux_arm64
+build:arm64 --compiler=aarch64-linux-gnu-gcc
+
+# MIPS (routers, set-top boxes)
+# Requires: mips-linux-gnu-gcc or similar
+build:mips --platforms=//platforms:linux_mips

@@ -1,0 +1,37 @@
+# Platform definitions for cross-compilation
+
+# ARM 32-bit (e.g., Raspberry Pi)
+platform(
+    name = "linux_arm",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm",
+    ],
+)
+
+# ARM 64-bit (aarch64)
+platform(
+    name = "linux_arm64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:aarch64",
+    ],
+)
+
+# MIPS (e.g., routers, set-top boxes)
+platform(
+    name = "linux_mips",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:mips64",
+    ],
+)
+
+# x86_64 (default)
+platform(
+    name = "linux_x86_64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+)

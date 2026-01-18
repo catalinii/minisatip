@@ -1,0 +1,39 @@
+# Cross-compilation toolchain definitions
+#
+# To use cross-compilation, you need to:
+# 1. Install the cross-compiler (e.g., arm-linux-gnueabihf-gcc)
+# 2. Uncomment and configure the appropriate toolchain below
+# 3. Register it in WORKSPACE or MODULE.bazel
+# 4. Build with: bazel build --platforms=//platforms:linux_arm //:minisatip
+
+load("@rules_cc//cc:defs.bzl", "cc_toolchain", "cc_toolchain_suite")
+
+# Example: ARM 32-bit cross-compiler toolchain
+# Requires: arm-linux-gnueabihf-gcc installed
+#
+# cc_toolchain_suite(
+#     name = "arm_suite",
+#     toolchains = {
+#         "arm": ":arm_toolchain",
+#     },
+# )
+#
+# filegroup(name = "empty")
+#
+# cc_toolchain(
+#     name = "arm_toolchain",
+#     all_files = ":empty",
+#     compiler_files = ":empty",
+#     dwp_files = ":empty",
+#     linker_files = ":empty",
+#     objcopy_files = ":empty",
+#     strip_files = ":empty",
+#     supports_param_files = 0,
+#     toolchain_config = ":arm_toolchain_config",
+#     toolchain_identifier = "arm-linux-gnueabihf",
+# )
+
+# For a complete cross-compilation setup, consider using:
+# - https://github.com/aspect-build/gcc-toolchain (pre-built toolchains)
+# - https://github.com/aspect-build/bazel-lib (toolchain helpers)
+# - https://github.com/aspect-build/rules_zig (Zig as cross-compiler)
