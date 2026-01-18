@@ -97,7 +97,7 @@ build:clang --extra_toolchains=//toolchains:clang_x86_64
 build:clang-arm --crosstool_top=//toolchains:clang_suite
 build:clang-arm --cpu=arm
 build:clang-arm --platforms=//platforms:linux_arm
-build:clang-arm --extra_toolchains=//toolchains:clang_arm
+build:clang-arm --extra_toolchains=//toolchains:clang_arm,//toolchains:clang_arm_aarch64_host
 build:clang-arm --host_crosstool_top=@bazel_tools//tools/cpp:toolchain
 # Uncomment and set path to ARM sysroot:
 # build:clang-arm --action_env=SYSROOT=/usr/arm-linux-gnueabihf
@@ -106,7 +106,7 @@ build:clang-arm --host_crosstool_top=@bazel_tools//tools/cpp:toolchain
 build:clang-arm64 --crosstool_top=//toolchains:clang_suite
 build:clang-arm64 --cpu=aarch64
 build:clang-arm64 --platforms=//platforms:linux_arm64
-build:clang-arm64 --extra_toolchains=//toolchains:clang_arm64
+build:clang-arm64 --extra_toolchains=//toolchains:clang_arm64,//toolchains:clang_arm64_aarch64_host
 build:clang-arm64 --host_crosstool_top=@bazel_tools//tools/cpp:toolchain
 # Uncomment and set path to ARM64 sysroot:
 # build:clang-arm64 --action_env=SYSROOT=/usr/aarch64-linux-gnu
@@ -115,7 +115,7 @@ build:clang-arm64 --host_crosstool_top=@bazel_tools//tools/cpp:toolchain
 build:clang-mipsel --crosstool_top=//toolchains:clang_suite
 build:clang-mipsel --cpu=mipsel
 build:clang-mipsel --platforms=//platforms:linux_mipsel
-build:clang-mipsel --extra_toolchains=//toolchains:clang_mipsel
+build:clang-mipsel --extra_toolchains=//toolchains:clang_mipsel,//toolchains:clang_mipsel_aarch64_host
 build:clang-mipsel --host_crosstool_top=@bazel_tools//tools/cpp:toolchain
 
 #############################################################################
