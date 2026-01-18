@@ -1,22 +1,62 @@
 # Minisatip Bazel Configuration
+#
+# Feature flags (mirror configure.ac options):
+#   --define dvbcsa=0/1      Enable/disable DVBCSA support (default: 1)
+#   --define dvbca=0/1       Enable/disable CA/OpenSSL support (default: 1)
+#   --define dvbapi=0/1      Enable/disable DVBAPI protocol (default: 1)
+#   --define satipclient=0/1 Enable/disable SatIP client (default: 1)
+#   --define linuxdvb=0/1    Enable/disable Linux DVB (default: 1)
+#   --define ddci=0/1        Enable/disable DDCI (default: 1, requires dvbca)
+#   --define netcvclient=0/1 Enable/disable Netceiver (default: 0, requires libs)
+#   --define pmt=0/1         Enable/disable PMT processing (default: 1)
+#   --define tables=0/1      Enable/disable TABLES processing (default: 1)
+#
+# Example usage:
+#   bazel build //:minisatip                      # Full build
+#   bazel build //:minisatip --define dvbcsa=0    # Without dvbcsa
+#   bazel build --config=minimal //:minisatip     # Minimal build
 
 # Build with C++20 by default
 build --cxxopt=-std=c++20
 build --host_cxxopt=-std=c++20
 
-# Default build configuration
+# Default feature flags - all enabled except netcvclient (requires special libs)
 build --define dvbcsa=1
 build --define dvbca=1
-build --define satipclient=1
 build --define dvbapi=1
+build --define satipclient=1
 build --define linuxdvb=1
 build --define ddci=1
+build --define netcvclient=0
+build --define pmt=1
+build --define tables=1
 
-# Minimal build configuration
+# Minimal configuration - disable all optional features
 build:minimal --define dvbcsa=0
 build:minimal --define dvbca=0
 build:minimal --define dvbapi=0
 build:minimal --define ddci=0
+build:minimal --define netcvclient=0
+build:minimal --define pmt=0
+build:minimal --define tables=0
+
+# CA-only configuration - OpenSSL/CA without dvbcsa
+build:ca_only --define dvbcsa=0
+build:ca_only --define dvbca=1
+build:ca_only --define dvbapi=0
+build:ca_only --define ddci=1
+build:ca_only --define netcvclient=0
+build:ca_only --define pmt=1
+build:ca_only --define tables=1
+
+# DVBCSA-only configuration - dvbcsa without CA/OpenSSL
+build:dvbcsa_only --define dvbcsa=1
+build:dvbcsa_only --define dvbca=0
+build:dvbcsa_only --define dvbapi=0
+build:dvbcsa_only --define ddci=0
+build:dvbcsa_only --define netcvclient=0
+build:dvbcsa_only --define pmt=1
+build:dvbcsa_only --define tables=0
 
 # Debug build
 build:debug --compilation_mode=dbg

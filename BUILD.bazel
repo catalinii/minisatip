@@ -1,48 +1,84 @@
 # Minisatip Bazel Build File
-# Uses system-installed OpenSSL and builds libdvbcsa from source
+# Feature flags mirror configure.ac and src/Makefile.in options
+#
+# Usage:
+#   bazel build //:minisatip                           # Default: all features enabled
+#   bazel build //:minisatip --define dvbcsa=0         # Disable dvbcsa
+#   bazel build //:minisatip --define dvbca=0          # Disable CA/OpenSSL
+#   bazel build //:minisatip --define dvbapi=0         # Disable dvbapi
+#   bazel build //:minisatip --define satipclient=0    # Disable satip client
+#   bazel build //:minisatip --define linuxdvb=0       # Disable linux dvb
+#   bazel build //:minisatip --config=minimal          # Minimal build (no optional features)
+#   bazel build //:minisatip --config=ca_only          # CA/OpenSSL only
+#   bazel build //:minisatip --config=dvbcsa_only      # DVBCSA only
 
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
 
-# Configuration settings for feature flags
-config_setting(
-    name = "enable_dvbcsa",
-    values = {"define": "dvbcsa=1"},
-)
-
-config_setting(
-    name = "enable_dvbca",
-    values = {"define": "dvbca=1"},
-)
-
-config_setting(
-    name = "enable_satipclient",
-    values = {"define": "satipclient=1"},
-)
-
-config_setting(
-    name = "enable_dvbapi",
-    values = {"define": "dvbapi=1"},
-)
-
-config_setting(
-    name = "enable_linuxdvb",
-    values = {"define": "linuxdvb=1"},
-)
-
-config_setting(
-    name = "enable_ddci",
-    values = {"define": "ddci=1"},
-)
-
-config_setting(
-    name = "enable_netcvclient",
-    values = {"define": "netcvclient=1"},
-)
-
-# Version string - can be overridden via --define version=X.Y.Z
+# Version string
 VERSION = "1.0.0"
 
+#############################################################################
+# Configuration settings for feature flags
+#############################################################################
+
+# DVBCSA - enables CSA decryption support
+config_setting(
+    name = "dvbcsa_disabled",
+    values = {"define": "dvbcsa=0"},
+)
+
+# DVBCA - enables Common Interface (CI) support via OpenSSL
+config_setting(
+    name = "dvbca_disabled",
+    values = {"define": "dvbca=0"},
+)
+
+# DVBAPI - enables dvbapi protocol support
+config_setting(
+    name = "dvbapi_disabled",
+    values = {"define": "dvbapi=0"},
+)
+
+# SATIPCLIENT - enables SatIP client support
+config_setting(
+    name = "satipclient_disabled",
+    values = {"define": "satipclient=0"},
+)
+
+# LINUXDVB - enables Linux DVB support
+config_setting(
+    name = "linuxdvb_disabled",
+    values = {"define": "linuxdvb=0"},
+)
+
+# DDCI - enables DDCI support (requires DVBCA on Linux)
+config_setting(
+    name = "ddci_disabled",
+    values = {"define": "ddci=0"},
+)
+
+# NETCVCLIENT - enables Netceiver support
+config_setting(
+    name = "netcvclient_disabled",
+    values = {"define": "netcvclient=0"},
+)
+
+# PMT - explicitly control PMT support
+config_setting(
+    name = "pmt_disabled",
+    values = {"define": "pmt=0"},
+)
+
+# TABLES - explicitly control TABLES support
+config_setting(
+    name = "tables_disabled",
+    values = {"define": "tables=0"},
+)
+
+#############################################################################
 # Common compiler flags
+#############################################################################
+
 COMMON_COPTS = [
     "-Wall",
     "-Wno-switch",
@@ -57,7 +93,11 @@ COMMON_COPTS = [
     "-DDISABLE_STACKTRACE",  # C++23 stacktrace not available
 ]
 
-# All headers - used for include path
+#############################################################################
+# Source file groups
+#############################################################################
+
+# All headers
 ALL_HDRS = glob([
     "src/*.h",
     "src/**/*.h",
@@ -66,7 +106,7 @@ ALL_HDRS = glob([
 # Core sources (always compiled)
 CORE_SRCS = [
     "src/adapter.cpp",
-    "src/dvb.cpp",
+    "src/dvb.cpp",  # Always included per Makefile.in
     "src/httpc.cpp",
     "src/minisatip.cpp",
     "src/opts.cpp",
@@ -82,68 +122,131 @@ CORE_SRCS = [
     "src/utils/uuid.cpp",
 ]
 
-# CSA sources (when dvbcsa is enabled)
-CSA_SRCS = ["src/csa.cpp"]
+#############################################################################
+# Main configurable binary
+#############################################################################
 
-# CA sources (when dvbca/openssl is enabled)
-CA_SRCS = [
-    "src/ca.cpp",
-    "src/aes.cpp",
-]
-
-# DVBAPI sources
-DVBAPI_SRCS = ["src/dvbapi.cpp"]
-
-# PMT sources (needed when dvbcsa, dvbapi, or dvbca is enabled)
-PMT_SRCS = ["src/pmt.cpp"]
-
-# Tables sources (needed when dvbapi or dvbca is enabled)
-TABLES_SRCS = ["src/tables.cpp"]
-
-# SatIP client sources
-SATIPC_SRCS = ["src/satipc.cpp"]
-
-# DDCI sources
-DDCI_SRCS = ["src/ddci.cpp"]
-
-# Netceiver sources
-NETCEIVER_SRCS = ["src/netceiver.cpp"]
-
-# Main minisatip binary with all features enabled
-# Uses system-installed openssl and builds dvbcsa from source
 cc_binary(
     name = "minisatip",
-    srcs = CORE_SRCS +
-           CSA_SRCS +
-           CA_SRCS +
-           DVBAPI_SRCS +
-           PMT_SRCS +
-           TABLES_SRCS +
-           SATIPC_SRCS +
-           DDCI_SRCS +
-           ALL_HDRS,
-    copts = COMMON_COPTS + [
-        "-DDISABLE_NETCVCLIENT",  # netceiver library not available
-    ],
+    srcs = CORE_SRCS + ALL_HDRS +
+           # DVBCSA sources
+           select({
+               ":dvbcsa_disabled": [],
+               "//conditions:default": ["src/csa.cpp"],
+           }) +
+           # DVBCA sources (ca.cpp, aes.cpp)
+           select({
+               ":dvbca_disabled": [],
+               "//conditions:default": ["src/ca.cpp", "src/aes.cpp"],
+           }) +
+           # DVBAPI sources
+           select({
+               ":dvbapi_disabled": [],
+               "//conditions:default": ["src/dvbapi.cpp"],
+           }) +
+           # PMT sources
+           select({
+               ":pmt_disabled": [],
+               "//conditions:default": ["src/pmt.cpp"],
+           }) +
+           # TABLES sources
+           select({
+               ":tables_disabled": [],
+               "//conditions:default": ["src/tables.cpp"],
+           }) +
+           # SATIPCLIENT sources
+           select({
+               ":satipclient_disabled": [],
+               "//conditions:default": ["src/satipc.cpp"],
+           }) +
+           # DDCI sources (enabled with DVBCA on Linux)
+           select({
+               ":ddci_disabled": [],
+               ":dvbca_disabled": [],
+               "//conditions:default": ["src/ddci.cpp"],
+           }) +
+           # NETCVCLIENT sources
+           select({
+               ":netcvclient_disabled": [],
+               "//conditions:default": ["src/netceiver.cpp"],
+           }),
+    copts = COMMON_COPTS +
+            # DVBCSA define
+            select({
+                ":dvbcsa_disabled": ["-DDISABLE_DVBCSA"],
+                "//conditions:default": [],
+            }) +
+            # DVBCA define
+            select({
+                ":dvbca_disabled": ["-DDISABLE_DVBCA"],
+                "//conditions:default": [],
+            }) +
+            # DVBAPI define
+            select({
+                ":dvbapi_disabled": ["-DDISABLE_DVBAPI"],
+                "//conditions:default": [],
+            }) +
+            # PMT define
+            select({
+                ":pmt_disabled": ["-DDISABLE_PMT"],
+                "//conditions:default": [],
+            }) +
+            # TABLES define
+            select({
+                ":tables_disabled": ["-DDISABLE_TABLES"],
+                "//conditions:default": [],
+            }) +
+            # SATIPCLIENT define
+            select({
+                ":satipclient_disabled": ["-DDISABLE_SATIPCLIENT"],
+                "//conditions:default": [],
+            }) +
+            # LINUXDVB define
+            select({
+                ":linuxdvb_disabled": ["-DDISABLE_LINUXDVB"],
+                "//conditions:default": [],
+            }) +
+            # DDCI define - disabled when ddci=0 OR dvbca=0
+            select({
+                ":ddci_disabled": ["-DDISABLE_DDCI"],
+                ":dvbca_disabled": ["-DDISABLE_DDCI"],
+                "//conditions:default": [],
+            }) +
+            # NETCVCLIENT define
+            select({
+                ":netcvclient_disabled": ["-DDISABLE_NETCVCLIENT"],
+                "//conditions:default": [],
+            }),
     includes = ["src"],
     linkopts = [
         "-lpthread",
         "-lrt",
-        "-ldl",
-        "-lcrypto",   # System OpenSSL crypto library
-    ],
+    ] +
+    # DVBCA link options (crypto, dl)
+    select({
+        ":dvbca_disabled": [],
+        "//conditions:default": ["-lcrypto", "-ldl"],
+    }) +
+    # NETCVCLIENT link options
+    select({
+        ":netcvclient_disabled": [],
+        "//conditions:default": ["-lnetceiver", "-lxml2", "-llzma", "-lz"],
+    }),
     visibility = ["//visibility:public"],
-    deps = [
-        "@dvbcsa",    # Built from source
-    ],
+    deps = select({
+        ":dvbcsa_disabled": [],
+        "//conditions:default": ["@dvbcsa"],
+    }),
 )
 
-# Minimal build without optional features
+#############################################################################
+# Convenience targets with specific configurations
+#############################################################################
+
+# Minimal build - no optional features
 cc_binary(
     name = "minisatip_minimal",
-    srcs = CORE_SRCS +
-           SATIPC_SRCS +
-           ALL_HDRS,
+    srcs = CORE_SRCS + ALL_HDRS + ["src/satipc.cpp"],
     copts = COMMON_COPTS + [
         "-DDISABLE_DVBCSA",
         "-DDISABLE_DVBCA",
@@ -161,42 +264,17 @@ cc_binary(
     visibility = ["//visibility:public"],
 )
 
-# Build with dvbcsa only (no CA/OpenSSL)
-cc_binary(
-    name = "minisatip_dvbcsa",
-    srcs = CORE_SRCS +
-           CSA_SRCS +
-           PMT_SRCS +
-           SATIPC_SRCS +
-           ALL_HDRS,
-    copts = COMMON_COPTS + [
-        "-DDISABLE_DVBCA",
-        "-DDISABLE_DVBAPI",
-        "-DDISABLE_TABLES",
-        "-DDISABLE_DDCI",
-        "-DDISABLE_NETCVCLIENT",
-    ],
-    includes = ["src"],
-    linkopts = [
-        "-lpthread",
-        "-lrt",
-    ],
-    visibility = ["//visibility:public"],
-    deps = [
-        "@dvbcsa",
-    ],
-)
-
-# Build with OpenSSL/CA only (no dvbcsa)
+# CA only build - OpenSSL/CA without dvbcsa
 cc_binary(
     name = "minisatip_ca",
-    srcs = CORE_SRCS +
-           CA_SRCS +
-           PMT_SRCS +
-           TABLES_SRCS +
-           SATIPC_SRCS +
-           DDCI_SRCS +
-           ALL_HDRS,
+    srcs = CORE_SRCS + ALL_HDRS + [
+        "src/ca.cpp",
+        "src/aes.cpp",
+        "src/pmt.cpp",
+        "src/tables.cpp",
+        "src/satipc.cpp",
+        "src/ddci.cpp",
+    ],
     copts = COMMON_COPTS + [
         "-DDISABLE_DVBCSA",
         "-DDISABLE_DVBAPI",
@@ -210,4 +288,28 @@ cc_binary(
         "-lcrypto",
     ],
     visibility = ["//visibility:public"],
+)
+
+# DVBCSA only build - dvbcsa without CA/OpenSSL
+cc_binary(
+    name = "minisatip_dvbcsa",
+    srcs = CORE_SRCS + ALL_HDRS + [
+        "src/csa.cpp",
+        "src/pmt.cpp",
+        "src/satipc.cpp",
+    ],
+    copts = COMMON_COPTS + [
+        "-DDISABLE_DVBCA",
+        "-DDISABLE_DVBAPI",
+        "-DDISABLE_TABLES",
+        "-DDISABLE_DDCI",
+        "-DDISABLE_NETCVCLIENT",
+    ],
+    includes = ["src"],
+    linkopts = [
+        "-lpthread",
+        "-lrt",
+    ],
+    visibility = ["//visibility:public"],
+    deps = ["@dvbcsa"],
 )
