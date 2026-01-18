@@ -2,6 +2,7 @@
 #
 # Uses prebuilt LLVM binaries from official releases - no system packages required.
 # Clang is a native cross-compiler - it can target any architecture.
+# Supports both x86_64 and aarch64 host machines.
 #
 # Requirements:
 #   - Target sysroot (for headers and libraries) when cross-compiling
@@ -28,20 +29,40 @@ cc_toolchain_suite(
     },
 )
 
-# LLVM toolchain file references
+# Host CPU detection for selecting the right LLVM toolchain
+config_setting(
+    name = "host_x86_64",
+    constraint_values = ["@platforms//cpu:x86_64"],
+)
+
+config_setting(
+    name = "host_aarch64",
+    constraint_values = ["@platforms//cpu:aarch64"],
+)
+
+# LLVM toolchain file references - select based on host CPU
 filegroup(
     name = "llvm_all_files",
-    srcs = ["@llvm_toolchain//:all_files"],
+    srcs = select({
+        ":host_aarch64": ["@llvm_toolchain_aarch64//:all_files"],
+        "//conditions:default": ["@llvm_toolchain_x86_64//:all_files"],
+    }),
 )
 
 filegroup(
     name = "llvm_compiler_files",
-    srcs = ["@llvm_toolchain//:compiler_files"],
+    srcs = select({
+        ":host_aarch64": ["@llvm_toolchain_aarch64//:compiler_files"],
+        "//conditions:default": ["@llvm_toolchain_x86_64//:compiler_files"],
+    }),
 )
 
 filegroup(
     name = "llvm_linker_files",
-    srcs = ["@llvm_toolchain//:linker_files"],
+    srcs = select({
+        ":host_aarch64": ["@llvm_toolchain_aarch64//:linker_files"],
+        "//conditions:default": ["@llvm_toolchain_x86_64//:linker_files"],
+    }),
 )
 
 filegroup(name = "empty")
@@ -59,12 +80,24 @@ cc_toolchain(
     objcopy_files = ":empty",
     strip_files = ":empty",
     supports_param_files = True,
-    toolchain_config = ":clang_x86_64_config",
+    toolchain_config = select({
+        ":host_aarch64": ":clang_x86_64_config_aarch64_host",
+        "//conditions:default": ":clang_x86_64_config_x86_64_host",
+    }),
     toolchain_identifier = "clang-x86_64-linux",
 )
 
 cc_toolchain_config(
-    name = "clang_x86_64_config",
+    name = "clang_x86_64_config_x86_64_host",
+    llvm_prefix = "external/llvm_toolchain_x86_64",
+    target_cpu = "x86_64",
+    target_triple = "x86_64-unknown-linux-gnu",
+    toolchain_identifier = "clang-x86_64-linux",
+)
+
+cc_toolchain_config(
+    name = "clang_x86_64_config_aarch64_host",
+    llvm_prefix = "external/llvm_toolchain_aarch64",
     target_cpu = "x86_64",
     target_triple = "x86_64-unknown-linux-gnu",
     toolchain_identifier = "clang-x86_64-linux",
@@ -97,12 +130,24 @@ cc_toolchain(
     objcopy_files = ":empty",
     strip_files = ":empty",
     supports_param_files = True,
-    toolchain_config = ":clang_arm_config",
+    toolchain_config = select({
+        ":host_aarch64": ":clang_arm_config_aarch64_host",
+        "//conditions:default": ":clang_arm_config_x86_64_host",
+    }),
     toolchain_identifier = "clang-arm-linux",
 )
 
 cc_toolchain_config(
-    name = "clang_arm_config",
+    name = "clang_arm_config_x86_64_host",
+    llvm_prefix = "external/llvm_toolchain_x86_64",
+    target_cpu = "arm",
+    target_triple = "arm-unknown-linux-gnueabihf",
+    toolchain_identifier = "clang-arm-linux",
+)
+
+cc_toolchain_config(
+    name = "clang_arm_config_aarch64_host",
+    llvm_prefix = "external/llvm_toolchain_aarch64",
     target_cpu = "arm",
     target_triple = "arm-unknown-linux-gnueabihf",
     toolchain_identifier = "clang-arm-linux",
@@ -113,6 +158,21 @@ toolchain(
     exec_compatible_with = [
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm",
+    ],
+    toolchain = ":clang_arm_toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+# Additional ARM toolchain for aarch64 hosts
+toolchain(
+    name = "clang_arm_aarch64_host",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:aarch64",
     ],
     target_compatible_with = [
         "@platforms//os:linux",
@@ -135,12 +195,24 @@ cc_toolchain(
     objcopy_files = ":empty",
     strip_files = ":empty",
     supports_param_files = True,
-    toolchain_config = ":clang_arm64_config",
+    toolchain_config = select({
+        ":host_aarch64": ":clang_arm64_config_aarch64_host",
+        "//conditions:default": ":clang_arm64_config_x86_64_host",
+    }),
     toolchain_identifier = "clang-aarch64-linux",
 )
 
 cc_toolchain_config(
-    name = "clang_arm64_config",
+    name = "clang_arm64_config_x86_64_host",
+    llvm_prefix = "external/llvm_toolchain_x86_64",
+    target_cpu = "aarch64",
+    target_triple = "aarch64-unknown-linux-gnu",
+    toolchain_identifier = "clang-aarch64-linux",
+)
+
+cc_toolchain_config(
+    name = "clang_arm64_config_aarch64_host",
+    llvm_prefix = "external/llvm_toolchain_aarch64",
     target_cpu = "aarch64",
     target_triple = "aarch64-unknown-linux-gnu",
     toolchain_identifier = "clang-aarch64-linux",
@@ -151,6 +223,21 @@ toolchain(
     exec_compatible_with = [
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:aarch64",
+    ],
+    toolchain = ":clang_arm64_toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+# Additional ARM64 toolchain for aarch64 hosts
+toolchain(
+    name = "clang_arm64_aarch64_host",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:aarch64",
     ],
     target_compatible_with = [
         "@platforms//os:linux",
@@ -173,14 +260,28 @@ cc_toolchain(
     objcopy_files = ":empty",
     strip_files = ":empty",
     supports_param_files = True,
-    toolchain_config = ":clang_mipsel_config",
+    toolchain_config = select({
+        ":host_aarch64": ":clang_mipsel_config_aarch64_host",
+        "//conditions:default": ":clang_mipsel_config_x86_64_host",
+    }),
     toolchain_identifier = "clang-mipsel-linux",
 )
 
 cc_toolchain_config(
-    name = "clang_mipsel_config",
+    name = "clang_mipsel_config_x86_64_host",
     extra_compile_flags = ["-march=mips32"],
     extra_link_flags = ["-march=mips32"],
+    llvm_prefix = "external/llvm_toolchain_x86_64",
+    target_cpu = "mipsel",
+    target_triple = "mipsel-unknown-linux-gnu",
+    toolchain_identifier = "clang-mipsel-linux",
+)
+
+cc_toolchain_config(
+    name = "clang_mipsel_config_aarch64_host",
+    extra_compile_flags = ["-march=mips32"],
+    extra_link_flags = ["-march=mips32"],
+    llvm_prefix = "external/llvm_toolchain_aarch64",
     target_cpu = "mipsel",
     target_triple = "mipsel-unknown-linux-gnu",
     toolchain_identifier = "clang-mipsel-linux",
@@ -191,6 +292,21 @@ toolchain(
     exec_compatible_with = [
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "//platforms:mipsel",
+    ],
+    toolchain = ":clang_mipsel_toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+# Additional MIPSEL toolchain for aarch64 hosts
+toolchain(
+    name = "clang_mipsel_aarch64_host",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:aarch64",
     ],
     target_compatible_with = [
         "@platforms//os:linux",

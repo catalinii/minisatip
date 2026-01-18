@@ -37,10 +37,22 @@ http_archive(
 
 # LLVM/Clang prebuilt binaries for cross-compilation
 # Downloaded from official LLVM releases - no system packages required
+# Separate archives for x86_64 and aarch64 hosts
+
+# LLVM for x86_64 hosts (Intel/AMD)
 http_archive(
-    name = "llvm_toolchain",
+    name = "llvm_toolchain_x86_64",
     build_file = "@//:third_party/llvm.BUILD",
     sha256 = "884ee67d647d77e58740c1e645649e29ae9e8a6f7571a8a5c9e9918b1c58a9fc",
     strip_prefix = "clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04",
     urls = ["https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz"],
+)
+
+# LLVM for aarch64 hosts (ARM64 servers, Apple Silicon via Rosetta, etc.)
+http_archive(
+    name = "llvm_toolchain_aarch64",
+    build_file = "@//:third_party/llvm.BUILD",
+    sha256 = "6dd62762285326f223f40b8e4f2864b5c372de3f7de0731cb7cd55ca5287b75a",
+    strip_prefix = "clang+llvm-17.0.6-aarch64-linux-gnu",
+    urls = ["https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/clang+llvm-17.0.6-aarch64-linux-gnu.tar.xz"],
 )
