@@ -1,15 +1,15 @@
 # Clang Cross-Compilation Toolchains
 #
-# Clang is a native cross-compiler - it can target any architecture
-# without needing separate toolchain installations.
+# Uses prebuilt LLVM binaries from official releases - no system packages required.
+# Clang is a native cross-compiler - it can target any architecture.
 #
 # Requirements:
-#   - clang/clang++ installed
-#   - Target sysroot (for headers and libraries)
+#   - Target sysroot (for headers and libraries) when cross-compiling
 #
 # Usage:
-#   bazel build --config=arm //:minisatip
-#   bazel build --config=arm64 //:minisatip
+#   bazel build --config=clang-arm //:minisatip
+#   bazel build --config=clang-arm64 //:minisatip
+#   bazel build --config=clang-mipsel //:minisatip
 
 load("@rules_cc//cc:defs.bzl", "cc_toolchain", "cc_toolchain_suite")
 load(":cc_toolchain_config.bzl", "cc_toolchain_config")
@@ -28,18 +28,34 @@ cc_toolchain_suite(
     },
 )
 
+# LLVM toolchain file references
+filegroup(
+    name = "llvm_all_files",
+    srcs = ["@llvm_toolchain//:all_files"],
+)
+
+filegroup(
+    name = "llvm_compiler_files",
+    srcs = ["@llvm_toolchain//:compiler_files"],
+)
+
+filegroup(
+    name = "llvm_linker_files",
+    srcs = ["@llvm_toolchain//:linker_files"],
+)
+
 filegroup(name = "empty")
 
 #############################################################################
-# x86_64 Toolchain (native)
+# x86_64 Toolchain (native with Clang)
 #############################################################################
 
 cc_toolchain(
     name = "clang_x86_64_toolchain",
-    all_files = ":empty",
-    compiler_files = ":empty",
+    all_files = ":llvm_all_files",
+    compiler_files = ":llvm_compiler_files",
     dwp_files = ":empty",
-    linker_files = ":empty",
+    linker_files = ":llvm_linker_files",
     objcopy_files = ":empty",
     strip_files = ":empty",
     supports_param_files = True,
@@ -74,10 +90,10 @@ toolchain(
 
 cc_toolchain(
     name = "clang_arm_toolchain",
-    all_files = ":empty",
-    compiler_files = ":empty",
+    all_files = ":llvm_all_files",
+    compiler_files = ":llvm_compiler_files",
     dwp_files = ":empty",
-    linker_files = ":empty",
+    linker_files = ":llvm_linker_files",
     objcopy_files = ":empty",
     strip_files = ":empty",
     supports_param_files = True,
@@ -112,10 +128,10 @@ toolchain(
 
 cc_toolchain(
     name = "clang_arm64_toolchain",
-    all_files = ":empty",
-    compiler_files = ":empty",
+    all_files = ":llvm_all_files",
+    compiler_files = ":llvm_compiler_files",
     dwp_files = ":empty",
-    linker_files = ":empty",
+    linker_files = ":llvm_linker_files",
     objcopy_files = ":empty",
     strip_files = ":empty",
     supports_param_files = True,
@@ -150,10 +166,10 @@ toolchain(
 
 cc_toolchain(
     name = "clang_mipsel_toolchain",
-    all_files = ":empty",
-    compiler_files = ":empty",
+    all_files = ":llvm_all_files",
+    compiler_files = ":llvm_compiler_files",
     dwp_files = ":empty",
-    linker_files = ":empty",
+    linker_files = ":llvm_linker_files",
     objcopy_files = ":empty",
     strip_files = ":empty",
     supports_param_files = True,

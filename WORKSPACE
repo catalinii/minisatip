@@ -34,3 +34,13 @@ http_archive(
 # Cross-compilation toolchains are defined in //toolchains
 # Use them with --config=clang-arm, --config=clang-arm64, etc.
 # See .bazelrc for configuration options.
+
+# LLVM/Clang prebuilt binaries for cross-compilation
+# Downloaded from official LLVM releases - no system packages required
+http_archive(
+    name = "llvm_toolchain",
+    build_file = "@//:third_party/llvm.BUILD",
+    sha256 = "884ee67d647d77e58740c1e645649e29ae9e8a6f7571a8a5c9e9918b1c58a9fc",
+    strip_prefix = "clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04",
+    urls = ["https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz"],
+)

@@ -3,14 +3,11 @@
 This toolchain uses Clang as a cross-compiler. Clang can target any
 architecture by specifying --target=<triple>.
 
-Requirements:
-  - clang/clang++ installed (apt install clang lld llvm)
-  - For cross-compilation: target sysroot with headers and libraries
+The toolchain uses prebuilt LLVM binaries downloaded from official releases,
+so no system packages are required.
 
-The toolchain will look for clang in these locations (in order):
-  1. /usr/bin/clang (system default)
-  2. /usr/bin/clang-18, clang-17, etc. (versioned)
-  3. clang in PATH
+Requirements:
+  - For cross-compilation: target sysroot with headers and libraries
 """
 
 load("@bazel_tools//tools/cpp:cc_toolchain_config_lib.bzl",
@@ -45,25 +42,26 @@ def _impl(ctx):
     target_triple = ctx.attr.target_triple
     target_cpu = ctx.attr.target_cpu
     toolchain_identifier = ctx.attr.toolchain_identifier
-    clang_path = ctx.attr.clang_path
+    llvm_prefix = ctx.attr.llvm_prefix
     sysroot = ctx.attr.sysroot
     extra_compile_flags = ctx.attr.extra_compile_flags
     extra_link_flags = ctx.attr.extra_link_flags
 
-    # Tool paths - using specified clang path or default
+    # Tool paths using the LLVM prefix
+    bin_prefix = llvm_prefix + "/bin/"
     tool_paths = [
-        tool_path(name = "gcc", path = clang_path),
-        tool_path(name = "g++", path = clang_path + "++"),
-        tool_path(name = "cpp", path = clang_path + "-cpp" if clang_path != "clang" else "/usr/bin/cpp"),
-        tool_path(name = "ar", path = "/usr/bin/llvm-ar"),
-        tool_path(name = "ld", path = "/usr/bin/ld.lld"),
-        tool_path(name = "nm", path = "/usr/bin/llvm-nm"),
-        tool_path(name = "objcopy", path = "/usr/bin/llvm-objcopy"),
-        tool_path(name = "objdump", path = "/usr/bin/llvm-objdump"),
-        tool_path(name = "strip", path = "/usr/bin/llvm-strip"),
-        tool_path(name = "dwp", path = "/usr/bin/llvm-dwp"),
-        tool_path(name = "llvm-cov", path = "/usr/bin/llvm-cov"),
-        tool_path(name = "gcov", path = "/usr/bin/llvm-cov"),
+        tool_path(name = "gcc", path = bin_prefix + "clang"),
+        tool_path(name = "g++", path = bin_prefix + "clang++"),
+        tool_path(name = "cpp", path = bin_prefix + "clang-cpp"),
+        tool_path(name = "ar", path = bin_prefix + "llvm-ar"),
+        tool_path(name = "ld", path = bin_prefix + "ld.lld"),
+        tool_path(name = "nm", path = bin_prefix + "llvm-nm"),
+        tool_path(name = "objcopy", path = bin_prefix + "llvm-objcopy"),
+        tool_path(name = "objdump", path = bin_prefix + "llvm-objdump"),
+        tool_path(name = "strip", path = bin_prefix + "llvm-strip"),
+        tool_path(name = "dwp", path = bin_prefix + "llvm-dwp"),
+        tool_path(name = "llvm-cov", path = bin_prefix + "llvm-cov"),
+        tool_path(name = "gcov", path = bin_prefix + "llvm-cov"),
     ]
 
     # Common compiler flags
@@ -212,9 +210,10 @@ def _impl(ctx):
         ),
     ]
 
-    # Builtin include directories
+    # Builtin include directories from the LLVM installation
     cxx_builtin_include_directories = [
-        "/usr/lib/clang",
+        llvm_prefix + "/lib/clang/17/include",
+        llvm_prefix + "/include/c++/v1",
         "/usr/include",
         "/usr/local/include",
     ]
@@ -247,19 +246,21 @@ cc_toolchain_config = rule(
         "target_cpu": attr.string(mandatory = True, doc = "Target CPU architecture"),
         "target_triple": attr.string(mandatory = True, doc = "Target triple (e.g., arm-unknown-linux-gnueabihf)"),
         "toolchain_identifier": attr.string(mandatory = True, doc = "Unique toolchain identifier"),
-        "clang_path": attr.string(default = "/usr/bin/clang", doc = "Path to clang binary"),
+        "llvm_prefix": attr.string(
+            default = "external/llvm_toolchain",
+            doc = "Path to LLVM installation (relative to execroot)",
+        ),
         "sysroot": attr.string(default = "", doc = "Path to target sysroot"),
         "extra_compile_flags": attr.string_list(default = [], doc = "Extra flags for compilation (e.g., -march=mips32)"),
         "extra_link_flags": attr.string_list(default = [], doc = "Extra flags for linking"),
     },
     provides = [CcToolchainConfigInfo],
     doc = """
-    Creates a Clang-based C++ toolchain configuration.
+    Creates a Clang-based C++ toolchain configuration using prebuilt LLVM binaries.
 
     This rule configures clang for cross-compilation by specifying the target
-    triple and optional sysroot. Clang is a native cross-compiler, so it can
-    target any supported architecture without needing separate toolchain
-    installations.
+    triple and optional sysroot. Uses prebuilt LLVM binaries from official
+    releases - no system packages required.
 
     Example:
         cc_toolchain_config(
