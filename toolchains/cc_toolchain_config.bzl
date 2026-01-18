@@ -212,7 +212,7 @@ def _impl(ctx):
 
     # Builtin include directories from the LLVM installation
     cxx_builtin_include_directories = [
-        llvm_prefix + "/lib/clang/17/include",
+        llvm_prefix + "/lib/clang/21/include",
         llvm_prefix + "/include/c++/v1",
         "/usr/include",
         "/usr/local/include",
