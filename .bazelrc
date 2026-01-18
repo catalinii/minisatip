@@ -84,14 +84,23 @@ build:static --linkopt=-static
 #   sudo apt install gcc-arm-linux-gnueabihf libc6-dev-armhf-cross
 #
 # Usage:
-#   bazel build --config=clang //:minisatip           # Native x86_64 with clang
+#   bazel build --config=clang //:minisatip           # Native build with clang (auto-detects host CPU)
 #   bazel build --config=clang-arm //:minisatip       # Cross-compile to ARM
 #   bazel build --config=clang-arm64 //:minisatip     # Cross-compile to ARM64
 
-# Use Clang for native builds
+# Use Clang for native builds (auto-detects host CPU)
 build:clang --crosstool_top=//toolchains:clang_suite
-build:clang --cpu=x86_64
-build:clang --extra_toolchains=//toolchains:clang_x86_64
+build:clang --extra_toolchains=//toolchains:clang_x86_64,//toolchains:clang_arm64_aarch64_host
+
+# Use Clang for native x86_64 builds (explicit)
+build:clang-x86_64 --crosstool_top=//toolchains:clang_suite
+build:clang-x86_64 --cpu=x86_64
+build:clang-x86_64 --extra_toolchains=//toolchains:clang_x86_64
+
+# Use Clang for native aarch64 builds (explicit)
+build:clang-aarch64 --crosstool_top=//toolchains:clang_suite
+build:clang-aarch64 --cpu=aarch64
+build:clang-aarch64 --extra_toolchains=//toolchains:clang_arm64_aarch64_host
 
 # ARM 32-bit cross-compilation (Raspberry Pi, etc.)
 build:clang-arm --crosstool_top=//toolchains:clang_suite
