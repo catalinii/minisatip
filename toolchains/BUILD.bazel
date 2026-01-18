@@ -24,7 +24,7 @@ cc_toolchain_suite(
         "x86_64": ":clang_x86_64_toolchain",
         "arm": ":clang_arm_toolchain",
         "aarch64": ":clang_arm64_toolchain",
-        "mips64": ":clang_mips64_toolchain",
+        "mipsel": ":clang_mipsel_toolchain",
     },
 )
 
@@ -145,11 +145,11 @@ toolchain(
 )
 
 #############################################################################
-# MIPS64 Toolchain
+# MIPSEL Toolchain (little-endian MIPS32 R1)
 #############################################################################
 
 cc_toolchain(
-    name = "clang_mips64_toolchain",
+    name = "clang_mipsel_toolchain",
     all_files = ":empty",
     compiler_files = ":empty",
     dwp_files = ":empty",
@@ -157,27 +157,29 @@ cc_toolchain(
     objcopy_files = ":empty",
     strip_files = ":empty",
     supports_param_files = True,
-    toolchain_config = ":clang_mips64_config",
-    toolchain_identifier = "clang-mips64-linux",
+    toolchain_config = ":clang_mipsel_config",
+    toolchain_identifier = "clang-mipsel-linux",
 )
 
 cc_toolchain_config(
-    name = "clang_mips64_config",
-    target_cpu = "mips64",
-    target_triple = "mips64-unknown-linux-gnuabi64",
-    toolchain_identifier = "clang-mips64-linux",
+    name = "clang_mipsel_config",
+    extra_compile_flags = ["-march=mips32"],
+    extra_link_flags = ["-march=mips32"],
+    target_cpu = "mipsel",
+    target_triple = "mipsel-unknown-linux-gnu",
+    toolchain_identifier = "clang-mipsel-linux",
 )
 
 toolchain(
-    name = "clang_mips64",
+    name = "clang_mipsel",
     exec_compatible_with = [
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
     ],
     target_compatible_with = [
         "@platforms//os:linux",
-        "@platforms//cpu:mips64",
+        "@platforms//cpu:mips32",
     ],
-    toolchain = ":clang_mips64_toolchain",
+    toolchain = ":clang_mipsel_toolchain",
     toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
 )

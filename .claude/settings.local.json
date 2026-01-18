@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pkg-config:*)",
+      "Bash(find:*)",
+      "Bash(g++:*)",
+      "Bash(../build/test_ca)",
+      "Bash(bazel-bin/minisatip:*)",
+      "Bash(bazel build:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -18,12 +18,12 @@ platform(
     ],
 )
 
-# MIPS (e.g., routers, set-top boxes)
+# MIPSEL (little-endian MIPS32 R1, e.g., routers, set-top boxes)
 platform(
-    name = "linux_mips",
+    name = "linux_mipsel",
     constraint_values = [
         "@platforms//os:linux",
-        "@platforms//cpu:mips64",
+        "@platforms//cpu:mips32",
     ],
 )
 

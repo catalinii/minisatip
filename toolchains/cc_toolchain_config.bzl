@@ -47,6 +47,8 @@ def _impl(ctx):
     toolchain_identifier = ctx.attr.toolchain_identifier
     clang_path = ctx.attr.clang_path
     sysroot = ctx.attr.sysroot
+    extra_compile_flags = ctx.attr.extra_compile_flags
+    extra_link_flags = ctx.attr.extra_link_flags
 
     # Tool paths - using specified clang path or default
     tool_paths = [
@@ -74,7 +76,7 @@ def _impl(ctx):
     ]
 
     # Target-specific flags
-    target_flags = ["--target=" + target_triple]
+    target_flags = ["--target=" + target_triple] + list(extra_compile_flags)
 
     # Sysroot flags (if specified)
     sysroot_flags = []
@@ -124,7 +126,7 @@ def _impl(ctx):
                             "-lpthread",
                             "-lrt",
                             "-lm",
-                        ] + sysroot_flags),
+                        ] + list(extra_link_flags) + sysroot_flags),
                     ],
                 ),
             ],
@@ -247,6 +249,8 @@ cc_toolchain_config = rule(
         "toolchain_identifier": attr.string(mandatory = True, doc = "Unique toolchain identifier"),
         "clang_path": attr.string(default = "/usr/bin/clang", doc = "Path to clang binary"),
         "sysroot": attr.string(default = "", doc = "Path to target sysroot"),
+        "extra_compile_flags": attr.string_list(default = [], doc = "Extra flags for compilation (e.g., -march=mips32)"),
+        "extra_link_flags": attr.string_list(default = [], doc = "Extra flags for linking"),
     },
     provides = [CcToolchainConfigInfo],
     doc = """

@@ -36,5 +36,5 @@ register_toolchains(
     "//toolchains:clang_x86_64",
     "//toolchains:clang_arm",
     "//toolchains:clang_arm64",
-    "//toolchains:clang_mips64",
+    "//toolchains:clang_mipsel",
 )

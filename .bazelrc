@@ -106,10 +106,10 @@ build:clang-arm64 --platforms=//platforms:linux_arm64
 # Uncomment and set path to ARM64 sysroot:
 # build:clang-arm64 --action_env=SYSROOT=/usr/aarch64-linux-gnu
 
-# MIPS64 cross-compilation (routers, set-top boxes)
-build:clang-mips64 --crosstool_top=//toolchains:clang_suite
-build:clang-mips64 --cpu=mips64
-build:clang-mips64 --platforms=//platforms:linux_mips
+# MIPSEL cross-compilation (little-endian MIPS32 R1, routers, set-top boxes)
+build:clang-mipsel --crosstool_top=//toolchains:clang_suite
+build:clang-mipsel --cpu=mipsel
+build:clang-mipsel --platforms=//platforms:linux_mipsel
 
 #############################################################################
 # Legacy GCC cross-compilation (alternative to Clang)
