@@ -31,10 +31,6 @@ http_archive(
     urls = ["https://download.videolan.org/pub/videolan/libdvbcsa/1.1.0/libdvbcsa-1.1.0.tar.gz"],
 )
 
-# Register Clang cross-compilation toolchains
-register_toolchains(
-    "//toolchains:clang_x86_64",
-    "//toolchains:clang_arm",
-    "//toolchains:clang_arm64",
-    "//toolchains:clang_mipsel",
-)
+# Cross-compilation toolchains are defined in //toolchains
+# Use them with --config=clang-arm, --config=clang-arm64, etc.
+# See .bazelrc for configuration options.

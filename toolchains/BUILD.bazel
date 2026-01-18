@@ -178,7 +178,7 @@ toolchain(
     ],
     target_compatible_with = [
         "@platforms//os:linux",
-        "@platforms//cpu:mips32",
+        "//platforms:mipsel",
     ],
     toolchain = ":clang_mipsel_toolchain",
     toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
