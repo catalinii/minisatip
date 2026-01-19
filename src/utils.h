@@ -1,6 +1,7 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+#include "config.h"
 #include "utils/logging/logging.h"
 #include <iostream>
 #include <mutex>
