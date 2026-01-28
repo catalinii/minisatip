@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        image: ['debian:11', 'debian:12', 'debian:13', 'ubuntu:20.04', 'ubuntu:22.04', 'ubuntu:24.04']
+        image: ['debian:12', 'debian:13', 'ubuntu:22.04', 'ubuntu:24.04']
     container: ${{ matrix.image }}
     steps:
     - uses: actions/checkout@v4
@@ -20,35 +20,28 @@ jobs:
     - name: Install build essentials
       run: |
         apt-get -y update
-        DEBIAN_FRONTEND=noninteractive apt-get -y install build-essential git clang
+        DEBIAN_FRONTEND=noninteractive apt-get -y install build-essential git clang cmake
 
     - name: Build all disabled
       run: |
-       ./configure --disable-linuxdvb --disable-dvbca --disable-dvbcsa --disable-netcv --disable-satipc --disable-dvbapi
-       make
+        rm -rf build;cmake -B build . -DLINUXDVB=OFF  && (cd build && make)
 
     - name: Install additional build dependencies
       run: |
-        DEBIAN_FRONTEND=noninteractive apt-get -y install libdvbcsa-dev libssl-dev zlib1g-dev libxml2-dev liblzma-dev
+        DEBIAN_FRONTEND=noninteractive apt-get -y install cmake libdvbcsa-dev libssl-dev zlib1g-dev libxml2-dev liblzma-dev
         git clone https://github.com/vdr-projects/libnetceiver/
         cd libnetceiver/ && make install
         cd ..
 
     - name: Build all enabled
       run: |
-       make clean
-       ./configure --enable-linuxdvb --enable-dvbca --enable-dvbcsa --enable-netcv --enable-dvbapi
-       make
+       rm -rf build;cmake -B build .  && (cd build && make)
 
     - name: Build clang
       run: |
-       make clean
-       ./configure --enable-linuxdvb --enable-dvbca --enable-dvbcsa --enable-netcv --enable-dvbapi CC=clang++
-       make
+       rm -rf build;CXX=/usr/bin/clang++ cmake -B build && (cd build && make)
 
     - name: Build without libssl-dev
       run: |
        apt-get -y remove --purge libssl-dev
-       make clean
-       ./configure --enable-dvbapi --enable-dvbcsa --disable-dvbca --disable-netcv
-       make
+       rm -rf build;cmake -B build .  && (cd build && make)

@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     
     steps:
     - uses: actions/checkout@v4
@@ -17,7 +17,7 @@ jobs:
 
     - name: Install build dependencies
       run: |
-        sudo DEBIAN_FRONTEND=noninteractive apt-get -y install build-essential dpkg-dev libdvbcsa-dev libssl-dev debhelper-compat vdr-dev
+        sudo DEBIAN_FRONTEND=noninteractive apt-get -y install build-essential dpkg-dev libdvbcsa-dev libssl-dev debhelper-compat vdr-dev cmake
 
     - name: Build Debian package
       run: |

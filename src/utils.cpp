@@ -52,7 +52,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#ifndef DISABLE_STACKTRACE
+#ifndef DISABLE_CXX23
 #include <iostream>
 #include <stacktrace>
 #endif
@@ -226,11 +226,12 @@ void set_signal_handler(char *argv0) {
 }
 
 void print_trace(void) {
-#ifndef DISABLE_STACKTRACE
+#ifndef DISABLE_CXX23
     const std::stacktrace trace = std::stacktrace::current();
     LOG0("Stack trace:\n%s", std::to_string(trace).c_str());
 #else
-    LOG("No stacktrace support compiled in");
+    LOG("C++ compiler does not support C++23 standard and stacktrace support "
+        "is missing");
 #endif
 }
 
