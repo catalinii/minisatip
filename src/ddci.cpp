@@ -417,20 +417,19 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
         d->tid = ad->transponder_id;
     }
 
-    // if the CAT is not mapped, add it
-    if (!has_pid_mapping(d, pmt->adapter, 1)) {
-        LOG("Mapping CAT to PMT %d from transponder %d, DDCI transponder %d",
-            pmt->id, ad->transponder_id, d->tid)
-        add_pid_mapping_table(ad->id, 1, pmt->id, d, 1);
-        d->cat_processed = 0;
-    }
+    // Map mandatory PIDs. Some CAMs need access to the TDT in order to "wake
+    // up", so always map it just in case.
+    for (const uint16_t pid : {0, 1, 20}) {
+        if (!has_pid_mapping(d, pmt->adapter, pid)) {
+            LOG("Mapping mandatory PID %d to PMT %d on DDCI %d", pid, pmt->id,
+                d->id);
+            add_pid_mapping_table(ad->id, pid, pmt->id, d, 1);
 
-    // Some CAMs need access to the TDT in order to "wake up", so always map it
-    // just in case
-    if (!has_pid_mapping(d, pmt->adapter, 20)) {
-        LOG("Mapping TDT to PMT %d from transponder %d, DDCI transponder %d",
-            pmt->id, ad->transponder_id, d->tid);
-        add_pid_mapping_table(ad->id, 20, pmt->id, d, 1);
+            // We need to process the CAT if this is the first time we see it
+            if (pid == 1) {
+                d->cat_processed = 0;
+            }
+        }
     }
 
     LOG("found DDCI %d for pmt %d, running channels %d, max_channels %d", ddid,
