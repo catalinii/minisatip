@@ -38,23 +38,23 @@ jobs:
         rm -rf build;
         cmake -B build . -DDDCI=ON
         (cd build && make)
-        file minisatip
+        cat build/minisatip > minisatip && file minisatip
         zip -9 -r /minisatip_x64.zip minisatip html
 
     - name: Build ARM
       run: |
         rm -rf build;
-        cmake -B build . -DCMAKE_CXX_COMPILER=arm-linux-gnueabihf-g++ -DNETCVCLIENT=0
+        CXXFLAGS=-L/usr/arm-linux-gnueabihf/lib/ cmake -B build . -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_CXX_COMPILER_TARGET=arm-linux-gnueabihf  -DNETCVCLIENT=0
         (cd build && make)
-        file minisatip
+        cat build/minisatip > minisatip && file minisatip
         zip -9 -r /minisatip_arm.zip minisatip html
 
     - name: Build MIPS
       run: |
         rm -rf build 
-        CXX="zig c++" cmake -B build . -DCMAKE_CXX_COMPILER_TARGET=mipsel-linux-gnueabihf -DNETCVCLIENT=0
+        CXXFLAGS=-L/usr/mipsel-linux-gnueabihf/lib/ cmake -B build . -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_CXX_COMPILER_TARGET=mipsel-linux-gnueabihf -DNETCVCLIENT=0
         (cd build && make)
-        file minisatip
+        cat build/minisatip > minisatip && file minisatip
         zip -9 -r /minisatip_mips.zip minisatip html
 
     - name: Archive built binaries
