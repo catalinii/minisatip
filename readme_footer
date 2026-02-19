@@ -11,7 +11,8 @@ Configures minisatip for the current system (use `./configure --help` for option
 To cross compile, use something like (static compilation), considering that `mips-openwrt-linux-musl-gcc` is the gcc executable for that platform:
 
 ```bash
-./configure --host=mips-openwrt-linux-musl --enable-static
+cmake -B build . -DCMAKE_CXX_COMPILER=arm-linux-gnueabihf-g++ -DNETCVCLIENT=0
+cd build
 ```
 
 To compile the application:
@@ -19,14 +20,6 @@ To compile the application:
 ```bash
 make
 ```
-
-To add custom compilation flags you can use for example:
-
-```bash
-make EXTRA_CFLAGS="-DNEEDS_SENDMMSG_SHIM"
-```
-
-The above command is useful if you're getting errors like `sendmmsg(): errno 38: Function not implemented` (usually only concerns really old systems).
 
 ## Contributing
 

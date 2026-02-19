@@ -30,7 +30,7 @@ https://paypal.me/minisatip
 
 (Message automatically generated from `minisatip --help`)
 ```
-minisatip version v2.0.19~7def250, compiled on Aug  9 2025 11:02:04, with s2api version: 050C
+minisatip version v2.0.71~6d5db68, compiled on Feb 18 2026 18:25:16, with s2api version: 050C
 
 	./minisatip [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 	[-[uj] A1:S1-F1[-PIN]] [-P port] [-l module1[,module2]] [-v module1[,module2]] 
@@ -113,7 +113,7 @@ Help
 
 * -l specifies the modules comma separated that will have increased verbosity, 
 	logging to stdout in foreground mode or in /tmp/minisatip.log when a daemon
-	Possible modules: general,http,socketworks,stream,adapter,satipc,pmt,tables,dvbapi,lock,netceiver,ca,axe,socket,utils,dmx,ssdp,dvb
+	Possible modules: general,http,socketworks,stream,adapter,satipc,pmt,tables,dvbapi,lock,netceiver,ca,socket,utils,dmx,ssdp,dvb,ddci
 	* eg: -l http,pmt
 
 * -v specifies the modules comma separated that will have increased debug level (more verbose than -l), 
@@ -148,6 +148,9 @@ Help
 * -5 --disable-cat ADAPTER1,ADAPTER2-ADAPTER4
 	* eg: -5 1-3,4 
 	- disable passing the CAT to the DDCI device 1,2,3 and 4 
+
+* -n --netceiver if:count: use network interface <if> (default vlan4) and look for <count> netceivers
+	* eg: -n vlan4:2 
 
 * -o --dvbapi [~]host:port,offset - specify the hostname and port for the dvbapi server (oscam). Port 9000 is set by default (if not specified) 
 	* [~] This symbol at the beginning indicates that in all `pids=all` requests the filtering of unencrypted packets must be disabled (useful when not using -E).
@@ -283,7 +286,8 @@ Configures minisatip for the current system (use `./configure --help` for option
 To cross compile, use something like (static compilation), considering that `mips-openwrt-linux-musl-gcc` is the gcc executable for that platform:
 
 ```bash
-./configure --host=mips-openwrt-linux-musl --enable-static
+cmake -B build . -DCMAKE_CXX_COMPILER=arm-linux-gnueabihf-g++ -DNETCVCLIENT=0
+cd build
 ```
 
 To compile the application:
@@ -291,14 +295,6 @@ To compile the application:
 ```bash
 make
 ```
-
-To add custom compilation flags you can use for example:
-
-```bash
-make EXTRA_CFLAGS="-DNEEDS_SENDMMSG_SHIM"
-```
-
-The above command is useful if you're getting errors like `sendmmsg(): errno 38: Function not implemented` (usually only concerns really old systems).
 
 ## Contributing
 
