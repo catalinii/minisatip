@@ -11,14 +11,13 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Install build tools and dependencies
-      run: DEBIAN_FRONTEND=noninteractive sudo apt-get -y install build-essential libdvbcsa-dev libssl-dev zlib1g-dev libxml2-dev
+      run: DEBIAN_FRONTEND=noninteractive sudo apt-get -y install build-essential libdvbcsa-dev libssl-dev zlib1g-dev libxml2-dev cmake
     - name: cmake
       run: |
         cmake -B build .
-        cd build
-        make
     - uses: vapier/coverity-scan-action@v1
       with:
         project: minisatip2
         token: ${{ secrets.COVERITY_SCAN_TOKEN }}
         email: reply+AB6SAEPNLEJSCE2WJ37GDNF6TC2NXEVBNHHDIEHQTY@reply.github.com
+        command: make -C build
