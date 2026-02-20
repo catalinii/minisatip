@@ -2054,7 +2054,7 @@ int signal_thread(sockets *s __attribute__((unused))) {
     return 0;
 }
 
-char *get_adapter_pids(int aid, char *dest, int max_size) {
+char *get_adapter_pids(int aid, char *dest, int max_size, int emu_all) {
     int len = 0;
     int i;
     adapter *ad = get_adapter_nw(aid);
@@ -2067,9 +2067,13 @@ char *get_adapter_pids(int aid, char *dest, int max_size) {
         if (ad->pids[i].flags == PID_STATE_ACTIVE ||
             ad->pids[i].flags == PID_STATE_NEW) {
             int pid = ad->pids[i].pid;
-            if (pid == 8192) {
-                strlcatf(dest, max_size, len, "all,");
-                break;
+			if (pid == 8192) {
+                if (!emu_all) {
+                    strlcatf(dest, max_size, len, "all,");
+                    break;
+                } else
+                    strlcatf(dest, max_size, len, "0,1,");
+                    continue;
             } else
                 strlcatf(dest, max_size, len, "%d,", pid);
         }
