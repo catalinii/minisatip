@@ -848,7 +848,8 @@ int get_enabled_pmts_for_ca(ca_device_t *d) {
     return enabled_pmts;
 }
 
-SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple) {
+SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple,
+                         bool *out_update) {
     int ca_pos;
     SCAPMT *res = NULL;
 
@@ -857,6 +858,7 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple) {
         if (d->capmt[ca_pos].pmt_id == pmt->id ||
             d->capmt[ca_pos].other_id == pmt->id) {
             res = d->capmt + ca_pos;
+            *out_update = true;
             break;
         }
     }
@@ -871,6 +873,7 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple) {
             if (multiple && d->capmt[ca_pos].other_id == -1) {
                 d->capmt[ca_pos].other_id = pmt->id;
                 res = d->capmt + ca_pos;
+                *out_update = true;
                 break;
             }
         }
@@ -878,6 +881,11 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple) {
 
     if (res) {
         res->version = (res->version + 1) & 0xF;
+
+        // Use SID of first PMT in CA PMT
+        if (SPMT *first = get_pmt(res->pmt_id)) {
+            res->sid = first->sid;
+        }
     } else {
         LOG("CA %d all channels used %d, multiple allowed %d", d->id,
             d->max_ca_pmt, multiple);
@@ -1000,7 +1008,8 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
     if (d->state != CA_STATE_INITIALIZED)
         LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY, "CAM not yet initialized");
 
-    SCAPMT *capmt = add_pmt_to_capmt(d, spmt, d->multiple_pmt);
+    bool update = false;
+    SCAPMT *capmt = add_pmt_to_capmt(d, spmt, d->multiple_pmt, &update);
     if (!capmt)
         LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY,
                        "No free slots to add PMT %d to CA %d", spmt->id, d->id);
@@ -1013,21 +1022,11 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
     ver = capmt->version;
     sid = spmt->sid;
 
-    listmgmt = get_active_capmts(d) == 1 ? CLM_ONLY : CLM_UPDATE;
-    if (listmgmt == CLM_ONLY) {
-        if (capmt->sid == first->sid)
-            listmgmt = CLM_UPDATE;
-        capmt->sid = first->sid;
-        int i;
-        for (i = 0; i < d->max_ca_pmt; i++) {
-            int sid = MAKE_SID_FOR_CA(d->id, i);
-            if (capmt != d->capmt + i) {
-                if (capmt->sid == sid)
-                    d->capmt[i].sid = MAKE_SID_FOR_CA(d->id, MAX_CA_PMT);
-                else
-                    d->capmt[i].sid = sid;
-            }
-        }
+    // Determine list management method to use
+    if (get_active_capmts(d) == 1 && update) {
+        listmgmt = CLM_ONLY;
+    } else {
+        listmgmt = CLM_UPDATE;
     }
 
     LOG("PMT CA %d pmt %d pid %u (%s) ver %u sid %u (%d), "
@@ -1061,12 +1060,12 @@ void remove_pmt_from_device(ca_device_t *d, SPMT *pmt) {
             if (PMT_ID_IS_VALID(d->capmt[i].other_id)) {
                 d->capmt[i].pmt_id = d->capmt[i].other_id;
                 d->capmt[i].other_id = PMT_INVALID;
-                d->capmt[i].version++;
+                d->capmt[i].version = (d->capmt[i].version + 1) & 0xF;
             }
         }
         if (d->capmt[i].other_id == pmt->id) {
             d->capmt[i].other_id = PMT_INVALID;
-            d->capmt[i].version++;
+            d->capmt[i].version = (d->capmt[i].version + 1) & 0xF;
         }
     }
     return;
