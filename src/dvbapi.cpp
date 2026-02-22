@@ -56,6 +56,8 @@ int dvbapi_sock = -1;
 int sock;
 int dvbapi_is_enabled = 0;
 int enabledKeys = 0;
+
+int dvbapi_enabled() { return dvbapi_is_enabled; }
 int network_mode = 1;
 int dvbapi_protocol_version = DVBAPI_PROTOCOL_VERSION;
 int dvbapi_ca = -1;
@@ -318,7 +320,10 @@ int dvbapi_reply(sockets *s) {
                     k_id, parity, index, k->algo, correct ? "OK" : "NOK", cw[0],
                     cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);
 
-                send_cw(k->pmt_id, k->algo, parity, cw, NULL, 0, &k->icam_ecm);
+                // Some systems may keep the same parity for >45s; keep CWs longer to
+                // avoid short freezes on parity switch when the "other" parity CW
+                // expired on our side.
+                send_cw(k->pmt_id, k->algo, parity, cw, NULL, 180, &k->icam_ecm);
             } else
                 LOG("dvbapi: invalid DVBAPI_CA_SET_DESCR, key %d parity %d, k "
                     "%p, "

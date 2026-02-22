@@ -95,6 +95,7 @@ int decrypt_stream(adapter *ad, void *arg);
 int keys_add(int i, int adapter, int pmt_id);
 int keys_del(int i);
 int dvbapi_process_pmt(unsigned char *b, adapter *ad);
+int dvbapi_send_pmt(SKey *k, int cmd_id);
 void dvbapi_pid_add(adapter *a, int pid, SPid *cp, int existing);
 void dvbapi_pid_del(adapter *a, int pid, SPid *cp);
 void register_dvbapi();
