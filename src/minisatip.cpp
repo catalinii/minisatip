@@ -255,6 +255,11 @@ const char *built_info[] = {
 #else
     "Built with ddci",
 #endif
+#ifdef DISABLE_SRT
+    "Built without srt",
+#else
+    "Built with srt",
+#endif
     NULL};
 
 void print_version(int use_log, int print_built_info) {

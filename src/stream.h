@@ -34,9 +34,7 @@ typedef struct struct_streams {
     int rsock; // return socket handle, for rtsp over tcp, rtsp over udp or http
     int rsock_id;
     int rtcp, rtcp_sock, st_sock;
-#ifndef DISABLE_SRT
     int srt_sock; // SRT socket for SRT transport
-#endif
     int type;
     int len;
     uint16_t seq; // rtp seq id
@@ -53,6 +51,10 @@ typedef struct struct_streams {
     int timeout;
     char useragent[40];
 } streams;
+
+#ifdef DISABLE_SRT
+#define SRT_INVALID_SOCK -1
+#endif
 
 #define TYPE_MCAST 1
 #define TYPE_UNICAST 2

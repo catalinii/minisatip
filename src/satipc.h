@@ -30,7 +30,7 @@ typedef struct struct_satipc {
     int sport;
     char session[18];
     int stream_id;
-    int listen_rtp;
+    int listen_udp;
     int rtcp, rtcp_sock, cseq;
     char ignore_packets; // ignore packets coming from satip server while tuning
     int satip_fe;
@@ -65,12 +65,12 @@ typedef struct struct_satipc {
     unsigned int want_tune : 1;
     unsigned int force_pids : 1;
     unsigned int sent_transport : 1;
+    bool use_srt; // use SRT transport instead of UDP/TCP
 #ifndef DISABLE_SRT
-    char use_srt;           // use SRT transport instead of UDP/TCP
-    SRTSOCKET srt_listener; // SRT listener socket (waiting for server connection)
-    SRTSOCKET srt_sock;     // accepted SRT connection (or SRT_INVALID_SOCK)
-    int srt_accepted;       // 1 when connection is accepted
-    int listen_srt;         // SRT listening port
+    SRTSOCKET
+    srt_listener;       // SRT listener socket (waiting for server connection)
+    SRTSOCKET srt_sock; // accepted SRT connection (or SRT_INVALID_SOCK)
+    bool srt_accepted;  // true when connection is accepted
 #endif
 } satipc;
 

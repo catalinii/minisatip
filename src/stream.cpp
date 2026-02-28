@@ -47,6 +47,7 @@
 
 #ifndef DISABLE_SRT
 #include <srt/srt.h>
+#define SRT_LATENCY_MS 120
 #endif
 
 #include "utils/ticks.h"
@@ -391,6 +392,71 @@ int close_stream(int i) {
     return 0;
 }
 
+static int decode_transport_srt(sockets *s, streams *sid, char *arg) {
+#ifndef DISABLE_SRT
+    char *arg2[10];
+    int l = split(arg2, arg, ARRAY_SIZE(arg2), ';');
+    int srt_port = 0;
+    while (l > 0) {
+        l--;
+        if (strncmp("port=", arg2[l], 5) == 0)
+            srt_port = atoi(arg2[l] + 5);
+    }
+    if (srt_port == 0)
+        LOG_AND_RETURN(-1, "SRT transport requires port= parameter");
+
+    char dest[64];
+    get_sockaddr_host(s->sa, dest, sizeof(dest) - 1);
+
+    if (sid->srt_sock != SRT_INVALID_SOCK) {
+        LOG("Closing already opened SRT socket and creating a new one")
+        srt_close(sid->srt_sock);
+    }
+
+    SRTSOCKET srt_s = srt_create_socket();
+    if (srt_s == SRT_INVALID_SOCK)
+        LOG_AND_RETURN(-1, "srt_create_socket failed: %s",
+                       srt_getlasterror_str());
+
+    int latency = SRT_LATENCY_MS;
+    srt_setsockflag(srt_s, SRTO_LATENCY, &latency, sizeof(latency));
+    int sender = 1;
+    srt_setsockflag(srt_s, SRTO_SENDER, &sender, sizeof(sender));
+
+    USockAddr sa;
+    memset(&sa, 0, sizeof(sa));
+    if (s->sa.sa.sa_family == AF_INET6) {
+        sa.sin6.sin6_family = AF_INET6;
+        sa.sin6.sin6_port = htons(srt_port);
+        inet_pton(AF_INET6, dest, &sa.sin6.sin6_addr);
+    } else {
+        sa.sin.sin_family = AF_INET;
+        sa.sin.sin_port = htons(srt_port);
+        inet_pton(AF_INET, dest, &sa.sin.sin_addr);
+    }
+
+    if (srt_connect(srt_s, &sa.sa, SOCKADDR_SIZE(sa)) == SRT_ERROR) {
+        LOG("SRT connect to %s:%d failed: %s", dest, srt_port,
+            srt_getlasterror_str());
+        srt_close(srt_s);
+        return -1;
+    }
+
+    sid->type = STREAM_RTSP_SRT;
+    sid->srt_sock = srt_s;
+    memcpy(&sid->sa, &sa, sizeof(sa));
+    sid->rsock = -1;
+    sid->rsock_id = -1;
+
+    LOG("SRT connected to %s:%d, srt_sock=%d for sid %d", dest, srt_port, srt_s,
+        sid->sid);
+    return 0;
+#else
+    LOG0("SRT streams are not supported, install libsrt-openssl-dev");
+    return -1;
+#endif
+}
+
 int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp) {
     char *arg2[10];
     int l;
@@ -406,72 +472,11 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp) {
     std::lock_guard<SMutex> lock(sid->mutex);
     l = 0;
     if (arg) {
-#ifndef DISABLE_SRT
         if (strstr(arg, "RTP/AVP/SRT")) {
             LOG("Assuming SRT transport for stream sid %d, arg %s", sid->sid,
                 arg);
-
-            // Parse port from the parameters
-            l = split(arg2, arg, ARRAY_SIZE(arg2), ';');
-            int srt_port = 0;
-            while (l > 0) {
-                l--;
-                if (strncmp("port=", arg2[l], 5) == 0)
-                    srt_port = atoi(arg2[l] + 5);
-            }
-            if (srt_port == 0)
-                LOG_AND_RETURN(-1,
-                               "SRT transport requires port= parameter");
-
-            // Get client IP
-            char dest[64];
-            get_sockaddr_host(s->sa, dest, sizeof(dest) - 1);
-
-            // Create SRT caller socket and connect to the client's SRT
-            // listener
-            SRTSOCKET srt_s = srt_create_socket();
-            if (srt_s == SRT_INVALID_SOCK)
-                LOG_AND_RETURN(-1, "srt_create_socket failed: %s",
-                               srt_getlasterror_str());
-
-            int latency = 120;
-            srt_setsockflag(srt_s, SRTO_LATENCY, &latency, sizeof(latency));
-            int sender = 1;
-            srt_setsockflag(srt_s, SRTO_SENDER, &sender, sizeof(sender));
-
-            USockAddr sa;
-            memset(&sa, 0, sizeof(sa));
-            if (s->sa.sa.sa_family == AF_INET6) {
-                sa.sin6.sin6_family = AF_INET6;
-                sa.sin6.sin6_port = htons(srt_port);
-                inet_pton(AF_INET6, dest, &sa.sin6.sin6_addr);
-            } else {
-                sa.sin.sin_family = AF_INET;
-                sa.sin.sin_port = htons(srt_port);
-                inet_pton(AF_INET, dest, &sa.sin.sin_addr);
-            }
-
-            if (srt_connect(srt_s, &sa.sa, SOCKADDR_SIZE(sa)) ==
-                SRT_ERROR) {
-                LOG("SRT connect to %s:%d failed: %s", dest, srt_port,
-                    srt_getlasterror_str());
-                srt_close(srt_s);
-                return -1;
-            }
-
-            sid->type = STREAM_RTSP_SRT;
-            sid->srt_sock = srt_s;
-            memcpy(&sid->sa, &s->sa, sizeof(s->sa));
-            // Set rsock/rsock_id to -1 since we don't use the regular socket
-            // path
-            sid->rsock = -1;
-            sid->rsock_id = -1;
-
-            LOG("SRT connected to %s:%d, srt_sock=%d for sid %d", dest,
-                srt_port, srt_s, sid->sid);
-            return 0;
+            return decode_transport_srt(s, sid, arg);
         }
-#endif
         if (strstr(arg, "RTP/AVP/TCP")) {
             LOG("Assuming RTSP over TCP for stream sid %d, arg %s", sid->sid,
                 arg);
@@ -521,12 +526,14 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp) {
             char *oldhost = get_stream_rhost(sid->sid, ra, sizeof(ra) - 1);
 
             if (p.port == oldport && !strcmp(p.dest, oldhost))
-                LOG("Transport for this connection is already setup to %s:%d, "
+                LOG("Transport for this connection is already setup to "
+                    "%s:%d, "
                     "leaving "
                     "as it is: sid = %d, handle %d",
                     p.dest, p.port, sid->sid, sid->rsock)
             else {
-                LOG("Stream has already a transport header associated with it "
+                LOG("Stream has already a transport header associated with "
+                    "it "
                     "to %s:%d "
                     "- sid = %d type = %d, closing %d",
                     oldhost, oldport, sid->sid, sid->type, sid->rsock);
@@ -590,7 +597,8 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp) {
                 get_sockaddr_host(sid->sa, h1, sizeof(h1));
                 get_sockaddr_host(sid2->sa, h2, sizeof(h2));
                 if (!strncmp(h1, h2, sizeof(h1))) {
-                    LOG("Detected stream with the same destination as sid %d: "
+                    LOG("Detected stream with the same destination as sid "
+                        "%d: "
                         "sid %d -> "
                         "%s:%d, aid: %d",
                         sid->sid, i, p.dest, p.port, sid2->adapter);
@@ -626,7 +634,9 @@ int streams_add() {
     ss->useragent[0] = 0;
     ss->len = 0;
     ss->st_sock = -1;
-    //	ss->seq = 0; // set the sequence to 0 for testing purposes - it should
+    ss->srt_sock = SRT_INVALID_SOCK;
+    //	ss->seq = 0; // set the sequence to 0 for testing purposes - it
+    // should
     // be random
     /* coverity[DC.WEAK_CRYPTO] */
     ss->ssrc = random();
@@ -817,16 +827,18 @@ int flush_stream(streams *sid, struct iovec *iov, int iiov, int64_t ctime) {
 
     if (rv > 0 && sid->start_streaming == 0) {
         sid->start_streaming = 1;
-        LOG("Start streaming for stream sid %d, len %d to handle %d => %s:%d",
+        LOG("Start streaming for stream sid %d, len %d to handle %d => "
+            "%s:%d",
             sid->sid, rv, sid->rsock,
             get_stream_rhost(sid->sid, ra, sizeof(ra)),
             get_stream_rport(sid->sid));
     }
 
-    DEBUGM(
-        "%s: sent %d bytes for sid %d, handle %d, sock_id %d, seq %d => %s:%d",
-        __FUNCTION__, rv, sid->sid, sid->rsock, sid->rsock_id, sid->seq,
-        get_stream_rhost(sid->sid, ra, sizeof(ra)), get_stream_rport(sid->sid));
+    DEBUGM("%s: sent %d bytes for sid %d, handle %d, sock_id %d, seq %d => "
+           "%s:%d",
+           __FUNCTION__, rv, sid->sid, sid->rsock, sid->rsock_id, sid->seq,
+           get_stream_rhost(sid->sid, ra, sizeof(ra)),
+           get_stream_rport(sid->sid));
 
     sid->wtime = ctime;
     sid->len = 0;
@@ -910,7 +922,8 @@ int check_cc(adapter *ad) {
             else
                 p->cc = (p->cc + 1) % 16;
 
-            //	if(b[1] ==0x40 && b[2]==0) LOG("PAT TID = %d", b[8] * 256 +
+            //	if(b[1] ==0x40 && b[2]==0) LOG("PAT TID = %d", b[8] *
+            // 256 +
             // b[9]);
             if (p->cc != cc) {
                 LOG("PID Continuity error (adapter %d, pos %d): pid: %03d, "
@@ -1001,7 +1014,8 @@ void check_cc2(adapter *ad) {
     }
 }
 
-// Locks the used structs in order to avoid race conditions (sockets -> stream
+// Locks the used structs in order to avoid race conditions (sockets ->
+// stream
 // -> adapter) Requires the adapter lock to not be held before calling
 int process_packets_for_stream(streams *sid, adapter *ad) {
     int i, st_id = sid->sid;
@@ -1036,7 +1050,8 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
                        st_id);
     // For SRT, sid->mutex is already locked as the first lock above
     std::unique_lock<SMutex> lock2(sid->mutex, std::defer_lock);
-    if (s) lock2.lock();
+    if (s)
+        lock2.lock();
     if (!sid->enabled)
         LOG_AND_RETURN(0, "stream disabled %d for addapter %d", st_id, ad->id);
     std::lock_guard<SMutex> lock3(ad->mutex);
@@ -1090,10 +1105,11 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
             rtp_added = 1;
         }
 
-        // unlikely: if the rtp header was just enqueued try to flush if there
-        // is not enough iiov left
+        // unlikely: if the rtp header was just enqueued try to flush if
+        // there is not enough iiov left
         if ((rtp_added || !max_pack) && (iiov >= max_iov)) {
-            LOG("stream sid %d, flushing intermediary stream iiov %d max_iiov "
+            LOG("stream sid %d, flushing intermediary stream iiov %d "
+                "max_iiov "
                 "%d, "
                 "total_len %d",
                 st_id, iiov - 1, max_iov, total_len);
@@ -1153,7 +1169,8 @@ int process_dmx(sockets *s) {
     if (ad->type != ADAPTER_CI)
         bw_dmx += rlen;
 
-    LOGM("process_dmx start called for adapter %d -> %d out of %d bytes read, "
+    LOGM("process_dmx start called for adapter %d -> %d out of %d bytes "
+         "read, "
          "%jd ms ago",
          ad->id, rlen, s->lbuf, ms_ago);
 
@@ -1224,7 +1241,8 @@ int read_dmx(sockets *s) {
     {
         int new_rlen = check_new_transponder(ad, s->rlen);
         if (!new_rlen) {
-            LOGM("Flushing adapter %d buffer of %d bytes after the tune %jd ms "
+            LOGM("Flushing adapter %d buffer of %d bytes after the tune "
+                 "%jd ms "
                  "ago",
                  ad->id, s->rlen, rtime - ad->tune_time);
             s->rlen = 0;
@@ -1243,7 +1261,8 @@ int read_dmx(sockets *s) {
         send = 0;
 #endif
 
-    LOGM("read_dmx send=%d, force_send=%d, cnt %d called for adapter %d -> %d "
+    LOGM("read_dmx send=%d, force_send=%d, cnt %d called for adapter %d -> "
+         "%d "
          "out "
          "of %d bytes read, %jd ms ago (%jd %jd)",
          send, force_send, cnt, ad->id, s->rlen, s->lbuf, rtime - ad->rtime,
@@ -1282,8 +1301,10 @@ int calculate_bw(sockets *s) {
             c_tt = nsecs / 1000;
             c_buffered = buffered_bytes;
             c_dropped = dropped_bytes;
-            LOG("BW %jd KB/s, DMX %jd KB/s, Buffered %.1f MB, Dropped: %.1f "
-                "MB, ns/read %jd, r: %d, w: %d fw: %d, tt: %jd ms, memory %jd "
+            LOG("BW %jd KB/s, DMX %jd KB/s, Buffered %.1f MB, Dropped: "
+                "%.1f "
+                "MB, ns/read %jd, r: %d, w: %d fw: %d, tt: %jd ms, memory "
+                "%jd "
                 "MB",
                 c_bw, c_bw_dmx, 1.0 * c_buffered / 1048576,
                 1.0 * c_dropped / 1048576, c_ns_read, c_reads, c_writes,
@@ -1332,7 +1353,8 @@ int stream_timeout(sockets *s) {
         // check stream timeout, and allow 10s more to respond
         if ((sid->timeout > 0 && (ctime - sid->rtime > sid->timeout + 10000)) ||
             (sid->timeout == 1)) {
-            LOG("Stream timeout sid %d, closing (ctime %jd , sid->rtime %jd, "
+            LOG("Stream timeout sid %d, closing (ctime %jd , sid->rtime "
+                "%jd, "
                 "sid->timeout %d)",
                 sid->sid, ctime, sid->rtime, sid->timeout);
 
@@ -1410,7 +1432,8 @@ int find_session_id(int id) {
     for (i = 0; i < MAX_STREAMS; i++)
         if ((sid = get_sid_nw(i)) && sid->ssrc == id) {
             sid->rtime = getTick();
-            LOG("recovered session id from a closed connection, sid %d , id: "
+            LOG("recovered session id from a closed connection, sid %d , "
+                "id: "
                 "%d",
                 i, id);
             return i;
@@ -1472,6 +1495,8 @@ char *get_stream_protocol(int s_id, char *dest, int max_size) {
         strlcatf(dest, max_size, len, "RTP/UDP");
     else if (s->type == STREAM_RTSP_TCP)
         strlcatf(dest, max_size, len, "RTP/TCP");
+    else if (s->type == STREAM_RTSP_SRT)
+        strlcatf(dest, max_size, len, "SRT");
     else
         strlcatf(dest, max_size, len, "unkown"); // RTP/MCAST ?
     return dest;
