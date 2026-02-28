@@ -482,60 +482,46 @@ int satipc_rtcp_reply(sockets *s) {
 }
 
 #ifndef DISABLE_SRT
-void *srt_receiver_thread(void *arg) {
-    int ad_id = (intptr_t)arg;
-    satipc *sip = get_satip(ad_id);
-    if (!sip)
-        return NULL;
+int satipc_srt_read(int socket, void *buf, int len, sockets *ss, int *rb) {
+    adapter *ad;
+    satipc *sip;
+    get_ad_and_sipr(ss->sid, 0);
 
-    LOG("SRT receiver thread started for adapter %d, listening on port %d",
-        ad_id, sip->listen_srt);
+    *rb = 0;
 
-    // Accept incoming SRT connection from the server
-    struct sockaddr_storage addr;
-    int addrlen = sizeof(addr);
-    SRTSOCKET accepted =
-        srt_accept(sip->srt_listener, (struct sockaddr *)&addr, &addrlen);
-    if (accepted == SRT_INVALID_SOCK) {
-        LOG("SRT accept failed for adapter %d: %s", ad_id,
-            srt_getlasterror_str());
-        sip->srt_running = 0;
-        return NULL;
+    // Try to accept if not yet connected
+    if (!sip->srt_accepted) {
+        struct sockaddr_storage addr;
+        int addrlen = sizeof(addr);
+        SRTSOCKET accepted = srt_accept(sip->srt_listener,
+                                        (struct sockaddr *)&addr, &addrlen);
+        if (accepted == SRT_INVALID_SOCK)
+            return 1; // no connection yet, keep socket alive
+        sip->srt_sock = accepted;
+        sip->srt_accepted = 1;
+        LOG("SRT connection accepted for adapter %d, srt_sock=%d", ad->id,
+            accepted);
     }
-    sip->srt_sock = accepted;
-    LOG("SRT connection accepted for adapter %d, srt_sock=%d", ad_id,
-        accepted);
 
-    char buf[1316]; // 7 * 188 = standard SRT/TS payload
-    while (sip->srt_running && sip->enabled) {
-        int ret = srt_recv(accepted, buf, sizeof(buf));
+    // Read available SRT data into the adapter buffer
+    int total = 0;
+    while (total + 1316 <= len) {
+        int ret = srt_recv(sip->srt_sock, (char *)buf + total, 1316);
         if (ret > 0) {
-            int written = 0;
-            while (written < ret) {
-                int w = write(sip->srt_pipe[1], buf + written, ret - written);
-                if (w <= 0) {
-                    if (errno == EINTR)
-                        continue;
-                    LOG("SRT pipe write failed for adapter %d: %s", ad_id,
-                        strerror(errno));
-                    goto done;
-                }
-                written += w;
-            }
+            total += ret;
         } else {
             if (srt_getlasterror(NULL) == SRT_EASYNCRCV)
-                continue;
-            LOG("SRT recv failed for adapter %d: %s", ad_id,
+                break; // no more data available
+            LOG("SRT recv failed for adapter %d: %s", ad->id,
                 srt_getlasterror_str());
             break;
         }
     }
-done:
-    LOG("SRT receiver thread ending for adapter %d", ad_id);
-    srt_close(accepted);
-    sip->srt_sock = SRT_INVALID_SOCK;
-    sip->srt_running = 0;
-    return NULL;
+
+    *rb = total;
+    if (total > 0)
+        ad->flush = (total + 1316 <= len) ? 0 : 1;
+    return 1;
 }
 #endif
 
@@ -563,21 +549,18 @@ int satipc_open_device(adapter *ad) {
     sip->init_use_tcp = sip->use_tcp;
 #ifndef DISABLE_SRT
     if (sip->use_srt) {
-        // SRT mode: create listener, use pipe for DVR
         sip->listen_srt = opts.start_rtp + 2000 + ad->id * 2;
 
-        // Create SRT listener (dual-stack for IPv4+IPv6)
-        sip->srt_listener = srt_create_socket();
-        if (sip->srt_listener == SRT_INVALID_SOCK)
-            LOG_AND_RETURN(2, "srt_create_socket failed: %s",
-                           srt_getlasterror_str());
+        // Create a UDP socket and bind it — this will be handed to SRT
+        int udp_sock = socket(AF_INET6, SOCK_DGRAM, 0);
+        if (udp_sock < 0)
+            LOG_AND_RETURN(2, "SRT UDP socket creation failed: %s",
+                           strerror(errno));
 
         int no = 0;
-        srt_setsockflag(sip->srt_listener, SRTO_IPV6ONLY, &no, sizeof(no));
-        int latency = 120;
-        srt_setsockflag(sip->srt_listener, SRTO_LATENCY, &latency,
-                        sizeof(latency));
-        srt_setsockflag(sip->srt_listener, SRTO_SENDER, &no, sizeof(no));
+        setsockopt(udp_sock, IPPROTO_IPV6, IPV6_V6ONLY, &no, sizeof(no));
+        int yes = 1;
+        setsockopt(udp_sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
 
         struct sockaddr_in6 sa;
         memset(&sa, 0, sizeof(sa));
@@ -585,40 +568,50 @@ int satipc_open_device(adapter *ad) {
         sa.sin6_port = htons(sip->listen_srt);
         sa.sin6_addr = in6addr_any;
 
-        if (srt_bind(sip->srt_listener, (struct sockaddr *)&sa, sizeof(sa)) ==
-            SRT_ERROR) {
-            LOG("SRT bind failed on port %d: %s", sip->listen_srt,
-                srt_getlasterror_str());
+        if (bind(udp_sock, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
+            LOG("SRT UDP bind failed on port %d: %s", sip->listen_srt,
+                strerror(errno));
+            close(udp_sock);
+            return 2;
+        }
+
+        // Create SRT socket and bind_acquire the UDP socket
+        sip->srt_listener = srt_create_socket();
+        if (sip->srt_listener == SRT_INVALID_SOCK) {
+            close(udp_sock);
+            LOG_AND_RETURN(2, "srt_create_socket failed: %s",
+                           srt_getlasterror_str());
+        }
+
+        int latency = 120;
+        srt_setsockflag(sip->srt_listener, SRTO_LATENCY, &latency,
+                        sizeof(latency));
+        int recv_no = 0;
+        srt_setsockflag(sip->srt_listener, SRTO_RCVSYN, &recv_no,
+                        sizeof(recv_no));
+
+        if (srt_bind_acquire(sip->srt_listener, udp_sock) == SRT_ERROR) {
+            LOG("srt_bind_acquire failed: %s", srt_getlasterror_str());
             srt_close(sip->srt_listener);
             return 2;
         }
+        // SRT now owns udp_sock — do not close it directly
+
         if (srt_listen(sip->srt_listener, 1) == SRT_ERROR) {
             LOG("SRT listen failed: %s", srt_getlasterror_str());
             srt_close(sip->srt_listener);
             return 2;
         }
 
-        // Create pipe for bridging SRT -> event loop
-        if (pipe(sip->srt_pipe) < 0) {
-            LOG("SRT pipe creation failed: %s", strerror(errno));
-            srt_close(sip->srt_listener);
-            return 2;
-        }
-        set_linux_socket_nonblock(sip->srt_pipe[0]); // read end non-blocking
-
-        ad->dvr = sip->srt_pipe[0]; // event loop reads from pipe
-        ad->fe_sock =
-            sockets_add(ad->fe, NULL, ad->id, TYPE_TCP,
-                        (socket_action)satipc_reply,
-                        (socket_action)satipc_close,
-                        (socket_action)satipc_timeout);
-        sockets_timeout(ad->fe_sock, 25000);
-
-        // Start SRT receiver thread
-        sip->srt_running = 1;
         sip->srt_sock = SRT_INVALID_SOCK;
-        pthread_create(&sip->srt_thread, NULL, srt_receiver_thread,
-                       (void *)(intptr_t)ad->id);
+        sip->srt_accepted = 0;
+
+        ad->dvr = udp_sock; // poll() monitors the UDP socket directly
+        ad->fe_sock = sockets_add(ad->fe, NULL, ad->id, TYPE_TCP,
+                                  (socket_action)satipc_reply,
+                                  (socket_action)satipc_close,
+                                  (socket_action)satipc_timeout);
+        sockets_timeout(ad->fe_sock, 25000);
     } else
 #endif
     if (!sip->init_use_tcp) {
@@ -714,19 +707,17 @@ int satip_close_device(adapter *ad) {
     sip->rtcp_sock = -1;
 #ifndef DISABLE_SRT
     if (sip->use_srt) {
-        sip->srt_running = 0;
+        // Prevent sockets_del from double-closing the UDP fd that SRT owns
+        sockets *ss = get_sockets(ad->sock);
+        if (ss)
+            ss->sock = -1;
         if (sip->srt_sock != SRT_INVALID_SOCK)
             srt_close(sip->srt_sock);
-        if (sip->srt_listener != SRT_INVALID_SOCK)
-            srt_close(sip->srt_listener);
         sip->srt_sock = SRT_INVALID_SOCK;
+        if (sip->srt_listener != SRT_INVALID_SOCK)
+            srt_close(sip->srt_listener); // closes underlying UDP socket
         sip->srt_listener = SRT_INVALID_SOCK;
-        if (sip->srt_pipe[0] > 0)
-            close(sip->srt_pipe[0]);
-        if (sip->srt_pipe[1] > 0)
-            close(sip->srt_pipe[1]);
-        sip->srt_pipe[0] = sip->srt_pipe[1] = -1;
-        pthread_join(sip->srt_thread, NULL);
+        sip->srt_accepted = 0;
     }
 #endif
     sip->enabled = 0;
@@ -1147,8 +1138,7 @@ int satip_post_init(adapter *ad) {
 
 #ifndef DISABLE_SRT
     if (sip->use_srt) {
-        // No custom read needed — pipe read end uses default sockets_read()
-        // Just move sockets to the adapter thread
+        sockets_setread(ad->sock, (void *)satipc_srt_read);
     } else
 #endif
     if (sip->init_use_tcp)

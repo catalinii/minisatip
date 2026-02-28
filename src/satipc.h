@@ -68,10 +68,8 @@ typedef struct struct_satipc {
 #ifndef DISABLE_SRT
     char use_srt;           // use SRT transport instead of UDP/TCP
     SRTSOCKET srt_listener; // SRT listener socket (waiting for server connection)
-    SRTSOCKET srt_sock;     // accepted SRT connection
-    int srt_pipe[2];        // pipe: [0]=read end (ad->dvr), [1]=write end (receiver thread)
-    pthread_t srt_thread;   // SRT receiver thread
-    int srt_running;        // flag to stop the receiver thread
+    SRTSOCKET srt_sock;     // accepted SRT connection (or SRT_INVALID_SOCK)
+    int srt_accepted;       // 1 when connection is accepted
     int listen_srt;         // SRT listening port
 #endif
 } satipc;
