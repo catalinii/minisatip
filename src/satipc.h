@@ -3,6 +3,10 @@
 
 #include "adapter.h"
 
+#ifndef DISABLE_SRT
+#include <srt/srt.h>
+#endif
+
 #define SATIP_STR_LEN 5000
 #define SATIP_MAX_STRENGTH 255
 #define SATIP_MAX_QUALITY 15
@@ -61,6 +65,15 @@ typedef struct struct_satipc {
     unsigned int want_tune : 1;
     unsigned int force_pids : 1;
     unsigned int sent_transport : 1;
+#ifndef DISABLE_SRT
+    char use_srt;           // use SRT transport instead of UDP/TCP
+    SRTSOCKET srt_listener; // SRT listener socket (waiting for server connection)
+    SRTSOCKET srt_sock;     // accepted SRT connection
+    int srt_pipe[2];        // pipe: [0]=read end (ad->dvr), [1]=write end (receiver thread)
+    pthread_t srt_thread;   // SRT receiver thread
+    int srt_running;        // flag to stop the receiver thread
+    int listen_srt;         // SRT listening port
+#endif
 } satipc;
 
 extern satipc *satip[];

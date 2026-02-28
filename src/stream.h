@@ -18,6 +18,7 @@
 #define STREAM_HTTP 1
 #define STREAM_RTSP_UDP 2
 #define STREAM_RTSP_TCP 3
+#define STREAM_RTSP_SRT 4
 
 #define UDP_MAX_PACK 7   // maximum udp rtp packets to buffer
 #define TCP_MAX_PACK 42  // maximum tcp packets for a RTP header
@@ -33,6 +34,9 @@ typedef struct struct_streams {
     int rsock; // return socket handle, for rtsp over tcp, rtsp over udp or http
     int rsock_id;
     int rtcp, rtcp_sock, st_sock;
+#ifndef DISABLE_SRT
+    int srt_sock; // SRT socket for SRT transport
+#endif
     int type;
     int len;
     uint16_t seq; // rtp seq id

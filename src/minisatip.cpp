@@ -50,6 +50,10 @@
 #include <time.h>
 #include <unistd.h>
 
+#ifndef DISABLE_SRT
+#include <srt/srt.h>
+#endif
+
 #ifndef DISABLE_SATIPCLIENT
 #include "satipc.h"
 #endif
@@ -1808,6 +1812,10 @@ int main(int argc, char *argv[]) {
         LOG0("init_utils failed with %d", rv);
         return rv;
     }
+#ifndef DISABLE_SRT
+    srt_startup();
+    LOG("SRT library initialized");
+#endif
     if (opts.daemon)
         becomeDaemon();
     LOG("Running mode: %s", opts.daemon ? "background" : "foreground");
@@ -1917,6 +1925,9 @@ int main(int argc, char *argv[]) {
     pmt_destroy();
 #endif
     LOG0("Closing...");
+#ifndef DISABLE_SRT
+    srt_cleanup();
+#endif
     free_all();
     free(opts.command_line);
     LOG0("Exit OK.");

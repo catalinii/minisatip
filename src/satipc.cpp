@@ -50,6 +50,10 @@
 #include <time.h>
 #include <unistd.h>
 
+#ifndef DISABLE_SRT
+#include <srt/srt.h>
+#endif
+
 #define TCP_DATA_SIZE ((ADAPTER_BUFFER / 1316) * (1316 + 16) * 3)
 #define TCP_DATA_MAX (TCP_DATA_SIZE * 8)
 #define MAKE_ITEM(a, b) ((a << 16) | (b))
@@ -477,6 +481,64 @@ int satipc_rtcp_reply(sockets *s) {
     return 0;
 }
 
+#ifndef DISABLE_SRT
+void *srt_receiver_thread(void *arg) {
+    int ad_id = (intptr_t)arg;
+    satipc *sip = get_satip(ad_id);
+    if (!sip)
+        return NULL;
+
+    LOG("SRT receiver thread started for adapter %d, listening on port %d",
+        ad_id, sip->listen_srt);
+
+    // Accept incoming SRT connection from the server
+    struct sockaddr_storage addr;
+    int addrlen = sizeof(addr);
+    SRTSOCKET accepted =
+        srt_accept(sip->srt_listener, (struct sockaddr *)&addr, &addrlen);
+    if (accepted == SRT_INVALID_SOCK) {
+        LOG("SRT accept failed for adapter %d: %s", ad_id,
+            srt_getlasterror_str());
+        sip->srt_running = 0;
+        return NULL;
+    }
+    sip->srt_sock = accepted;
+    LOG("SRT connection accepted for adapter %d, srt_sock=%d", ad_id,
+        accepted);
+
+    char buf[1316]; // 7 * 188 = standard SRT/TS payload
+    while (sip->srt_running && sip->enabled) {
+        int ret = srt_recv(accepted, buf, sizeof(buf));
+        if (ret > 0) {
+            int written = 0;
+            while (written < ret) {
+                int w = write(sip->srt_pipe[1], buf + written, ret - written);
+                if (w <= 0) {
+                    if (errno == EINTR)
+                        continue;
+                    LOG("SRT pipe write failed for adapter %d: %s", ad_id,
+                        strerror(errno));
+                    goto done;
+                }
+                written += w;
+            }
+        } else {
+            if (srt_getlasterror(NULL) == SRT_EASYNCRCV)
+                continue;
+            LOG("SRT recv failed for adapter %d: %s", ad_id,
+                srt_getlasterror_str());
+            break;
+        }
+    }
+done:
+    LOG("SRT receiver thread ending for adapter %d", ad_id);
+    srt_close(accepted);
+    sip->srt_sock = SRT_INVALID_SOCK;
+    sip->srt_running = 0;
+    return NULL;
+}
+#endif
+
 int satipc_open_device(adapter *ad) {
     satipc *sip = satip[ad->id];
     if (!sip)
@@ -499,6 +561,66 @@ int satipc_open_device(adapter *ad) {
         sip->source_ip[0] ? sip->source_ip : "");
 
     sip->init_use_tcp = sip->use_tcp;
+#ifndef DISABLE_SRT
+    if (sip->use_srt) {
+        // SRT mode: create listener, use pipe for DVR
+        sip->listen_srt = opts.start_rtp + 2000 + ad->id * 2;
+
+        // Create SRT listener (dual-stack for IPv4+IPv6)
+        sip->srt_listener = srt_create_socket();
+        if (sip->srt_listener == SRT_INVALID_SOCK)
+            LOG_AND_RETURN(2, "srt_create_socket failed: %s",
+                           srt_getlasterror_str());
+
+        int no = 0;
+        srt_setsockflag(sip->srt_listener, SRTO_IPV6ONLY, &no, sizeof(no));
+        int latency = 120;
+        srt_setsockflag(sip->srt_listener, SRTO_LATENCY, &latency,
+                        sizeof(latency));
+        srt_setsockflag(sip->srt_listener, SRTO_SENDER, &no, sizeof(no));
+
+        struct sockaddr_in6 sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sin6_family = AF_INET6;
+        sa.sin6_port = htons(sip->listen_srt);
+        sa.sin6_addr = in6addr_any;
+
+        if (srt_bind(sip->srt_listener, (struct sockaddr *)&sa, sizeof(sa)) ==
+            SRT_ERROR) {
+            LOG("SRT bind failed on port %d: %s", sip->listen_srt,
+                srt_getlasterror_str());
+            srt_close(sip->srt_listener);
+            return 2;
+        }
+        if (srt_listen(sip->srt_listener, 1) == SRT_ERROR) {
+            LOG("SRT listen failed: %s", srt_getlasterror_str());
+            srt_close(sip->srt_listener);
+            return 2;
+        }
+
+        // Create pipe for bridging SRT -> event loop
+        if (pipe(sip->srt_pipe) < 0) {
+            LOG("SRT pipe creation failed: %s", strerror(errno));
+            srt_close(sip->srt_listener);
+            return 2;
+        }
+        set_linux_socket_nonblock(sip->srt_pipe[0]); // read end non-blocking
+
+        ad->dvr = sip->srt_pipe[0]; // event loop reads from pipe
+        ad->fe_sock =
+            sockets_add(ad->fe, NULL, ad->id, TYPE_TCP,
+                        (socket_action)satipc_reply,
+                        (socket_action)satipc_close,
+                        (socket_action)satipc_timeout);
+        sockets_timeout(ad->fe_sock, 25000);
+
+        // Start SRT receiver thread
+        sip->srt_running = 1;
+        sip->srt_sock = SRT_INVALID_SOCK;
+        pthread_create(&sip->srt_thread, NULL, srt_receiver_thread,
+                       (void *)(intptr_t)ad->id);
+    } else
+#endif
     if (!sip->init_use_tcp) {
         sip->listen_rtp = opts.start_rtp + 1000 + ad->id * 2;
         ad->dvr = udp_bind(NULL, sip->listen_rtp, opts.use_ipv4_only);
@@ -590,6 +712,23 @@ int satip_close_device(adapter *ad) {
         sockets_del(sip->rtcp_sock);
     ad->fe_sock = -1;
     sip->rtcp_sock = -1;
+#ifndef DISABLE_SRT
+    if (sip->use_srt) {
+        sip->srt_running = 0;
+        if (sip->srt_sock != SRT_INVALID_SOCK)
+            srt_close(sip->srt_sock);
+        if (sip->srt_listener != SRT_INVALID_SOCK)
+            srt_close(sip->srt_listener);
+        sip->srt_sock = SRT_INVALID_SOCK;
+        sip->srt_listener = SRT_INVALID_SOCK;
+        if (sip->srt_pipe[0] > 0)
+            close(sip->srt_pipe[0]);
+        if (sip->srt_pipe[1] > 0)
+            close(sip->srt_pipe[1]);
+        sip->srt_pipe[0] = sip->srt_pipe[1] = -1;
+        pthread_join(sip->srt_thread, NULL);
+    }
+#endif
     sip->enabled = 0;
     sip->state = SATIP_STATE_DISCONNECTED;
     return 0;
@@ -1006,6 +1145,12 @@ int satip_post_init(adapter *ad) {
     if (!sip)
         return 0;
 
+#ifndef DISABLE_SRT
+    if (sip->use_srt) {
+        // No custom read needed — pipe read end uses default sockets_read()
+        // Just move sockets to the adapter thread
+    } else
+#endif
     if (sip->init_use_tcp)
         sockets_setread(ad->sock, (void *)satipc_tcp_read);
     else {
@@ -1185,6 +1330,12 @@ int http_request(adapter *ad, char *url, const char *method, int force) {
         sip->sent_transport = 1;
         sip->stream_id = -1;
         sip->session[0] = 0;
+#ifndef DISABLE_SRT
+        if (sip->use_srt)
+            strcatf(session, ptr, "\r\nTransport: RTP/AVP/SRT;port=%d",
+                    sip->listen_srt);
+        else
+#endif
         if (sip->init_use_tcp)
             strcatf(session, ptr, "\r\nTransport: RTP/AVP/TCP;interleaved=0-1");
         else
@@ -1527,7 +1678,11 @@ std::string satipc_name(int aid, int fd) {
 void satipc_free(adapter *ad) {}
 
 int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
-                     int use_tcp, int no_pids_all) {
+                     int use_tcp, int no_pids_all
+#ifndef DISABLE_SRT
+                     , int use_srt
+#endif
+) {
     int i, k;
     adapter *ad;
     satipc *sip;
@@ -1589,6 +1744,9 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
     sip->tcp_data = NULL;
     sip->use_tcp = use_tcp;
     sip->no_pids_all = no_pids_all;
+#ifndef DISABLE_SRT
+    sip->use_srt = use_srt;
+#endif
 
     if (i + 1 > a_count)
         a_count = i + 1; // update adapter counter
@@ -1625,6 +1783,13 @@ void find_satip_adapter(adapter **a) {
     for (i = 0; i < la; i++) {
         use_tcp = opts.satip_rtsp_over_tcp;
         no_pids_all = 0;
+#ifndef DISABLE_SRT
+        int use_srt = 0;
+        if (arg[i][0] == '^') {
+            use_srt = 1;
+            arg[i]++;
+        }
+#endif
 
         if (arg[i][0] == '*') {
             use_tcp = 1 - use_tcp;
@@ -1678,7 +1843,11 @@ void find_satip_adapter(adapter **a) {
         }
         port = map_int(sep2, NULL);
         add_satip_server(host, port, fe, delsys, source_ip, use_tcp,
-                         no_pids_all);
+                         no_pids_all
+#ifndef DISABLE_SRT
+                         , use_srt
+#endif
+        );
     }
 }
 
@@ -1772,7 +1941,11 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h) {
                 uint8_t ds = order[i];
                 for (j = 0; j < s->tuners[ds]; j++)
                     add_satip_server(s->host, s->port, fe++, ds, NULL,
-                                     opts.satip_rtsp_over_tcp, 0);
+                                     opts.satip_rtsp_over_tcp, 0
+#ifndef DISABLE_SRT
+                                     , 0
+#endif
+                    );
             }
             getAdaptersCount();
         } else
