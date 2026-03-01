@@ -52,7 +52,7 @@
 
 #ifndef DISABLE_SRT
 #include <srt/srt.h>
-#define SRT_LATENCY_MS 190
+#define SRT_LATENCY_MS 1000
 #endif
 
 #define TCP_DATA_SIZE ((ADAPTER_BUFFER / 1316) * (1316 + 16) * 3)
