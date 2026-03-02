@@ -25,6 +25,7 @@
 #include "httpc.h"
 #include "minisatip.h"
 #include "pmt.h"
+#include "socketworks.h"
 #include "utils.h"
 #include "utils/ticks.h"
 
@@ -75,6 +76,8 @@ int recvmmsg0(int sockfd, struct mmsghdr *msgvec, unsigned int vlen) {
     25 // max number of UDP datagrams (with 1316 bytes of payload) to be read at
        // one time
 #endif
+
+const char *str_transport_type[] = {"UDP", "TCP", "SRT"};
 
 extern const char *fe_delsys[];
 int satip_post_init(adapter *ad);
@@ -132,9 +135,8 @@ void handle_client_capabilities(satipc *sip, char *buf) {
             "changed",
             sip->id);
         sip->restart_when_tune = 1;
-        if (sip->use_tcp == 0) {
-            sip->use_tcp = 1;
-            sip->init_use_tcp = 1;
+        if (sip->transport_type == SIP_TRANSPORT_UDP) {
+            sip->transport_type = SIP_TRANSPORT_TCP;
             sip->restart_needed = 1;
             LOG("adapter %d is not RTSP over TCP, switching", sip->id);
         }
@@ -307,7 +309,7 @@ void satipc_close_rtsp_socket(adapter *ad, satipc *sip) {
     sip->stream_id = -1;
     sip->session[0] = 0;
     sip->tcp_len = sip->tcp_pos = 0;
-    if (sip->init_use_tcp)
+    if (sip->transport_type == SIP_TRANSPORT_TCP)
         ad->dvr = -1;
     else
         ad->fe = -1;
@@ -323,7 +325,7 @@ void satipc_open_rtsp_socket(adapter *ad, satipc *sip) {
                                                  : NULL); // blocking socket
     if (sock >= 0) {
         sip->rtsp_socket_closed = 0;
-        if (sip->init_use_tcp) {
+        if (sip->transport_type == SIP_TRANSPORT_TCP) {
             ad->dvr = sock;
             ad->fe = -1;
         } else
@@ -451,7 +453,8 @@ int satipc_rtcp_reply(sockets *s) {
     if (b[0] == 0x80 && b[1] == 0xC8) {
         copy32r(rp, b, 20);
 
-        if (!sip->init_use_tcp && ((++sip->repno % 100) == 0)) // every 20s
+        if (sip->transport_type == SIP_TRANSPORT_UDP &&
+            ((++sip->repno % 100) == 0)) // every 20s
             LOG("satipc: rtp report, adapter %d: rtcp missing packets %d, "
                 "rtp "
                 "missing %d, rtp ooo %d, pid unknown %d",
@@ -486,6 +489,7 @@ int satipc_rtcp_reply(sockets *s) {
 int satipc_srt_read(int socket, void *buf, int len, sockets *ss, int *rb) {
     adapter *ad;
     satipc *sip;
+    char dest[64];
     get_ad_and_sipr(ss->sid, 0);
 
     *rb = 0;
@@ -500,8 +504,9 @@ int satipc_srt_read(int socket, void *buf, int len, sockets *ss, int *rb) {
             return 1; // no connection yet, keep socket alive
         sip->srt_sock = accepted;
         sip->srt_accepted = true;
-        LOG("SRT connection accepted for adapter %d, srt_sock=%d", ad->id,
-            accepted);
+        get_sockaddr_host(*(USockAddr *)&addr, dest, sizeof(dest));
+        LOG("SRT connection accepted for adapter %d, srt_sock=%d, from %s:%d",
+            ad->id, accepted, dest, get_sockaddr_port(*(USockAddr *)&addr));
     }
 
     // Read available SRT data into the adapter buffer
@@ -513,8 +518,8 @@ int satipc_srt_read(int socket, void *buf, int len, sockets *ss, int *rb) {
         } else {
             if (srt_getlasterror(NULL) == SRT_EASYNCRCV)
                 break; // no more data available
-            LOG("SRT recv failed for adapter %d: %s", ad->id,
-                srt_getlasterror_str());
+            LOG("SRT recv failed for adapter %d, socket %d: %s", ad->id,
+                sip->srt_sock, srt_getlasterror_str());
             break;
         }
     }
@@ -547,6 +552,7 @@ static int satipc_open_srt(adapter *ad, satipc *sip) {
     if (srt_bind_acquire(sip->srt_listener, udp_sock) == SRT_ERROR) {
         LOG("srt_bind_acquire failed: %s", srt_getlasterror_str());
         srt_close(sip->srt_listener);
+        sip->srt_listener = SRT_INVALID_SOCK;
         return 2;
     }
     // SRT now owns udp_sock — do not close it directly
@@ -554,6 +560,7 @@ static int satipc_open_srt(adapter *ad, satipc *sip) {
     if (srt_listen(sip->srt_listener, 1) == SRT_ERROR) {
         LOG("SRT listen failed: %s", srt_getlasterror_str());
         srt_close(sip->srt_listener);
+        sip->srt_listener = SRT_INVALID_SOCK;
         return 2;
     }
 
@@ -586,19 +593,18 @@ int satipc_open_device(adapter *ad) {
         LOG_AND_RETURN(2, "could not connect to %s:%d", sip->sip, sip->sport);
 
     LOG("satipc: connected to SAT>IP server %s port %d %s handle %d %s %s",
-        sip->sip, sip->sport, sip->use_tcp ? "[RTSP OVER TCP]" : "", ad->fe,
+        sip->sip, sip->sport, str_transport_type[sip->transport_type], ad->fe,
         sip->source_ip[0] ? "from source" : "",
         sip->source_ip[0] ? sip->source_ip : "");
 
-    sip->init_use_tcp = sip->use_tcp;
 #ifndef DISABLE_SRT
-    if (sip->use_srt) {
+    if (sip->transport_type == SIP_TRANSPORT_SRT) {
         int rv = satipc_open_srt(ad, sip);
         if (rv)
             return rv;
     } else
 #endif
-        if (!sip->init_use_tcp) {
+        if (sip->transport_type == SIP_TRANSPORT_UDP) {
         sip->listen_udp = opts.start_rtp + 1000 + ad->id * 2;
         ad->dvr = udp_bind(NULL, sip->listen_udp, opts.use_ipv4_only);
         if (ad->dvr < 0)
@@ -690,7 +696,7 @@ int satip_close_device(adapter *ad) {
     ad->fe_sock = -1;
     sip->rtcp_sock = -1;
 #ifndef DISABLE_SRT
-    if (sip->use_srt) {
+    if (sip->transport_type == SIP_TRANSPORT_SRT) {
         // Prevent sockets_del from double-closing the UDP fd that SRT owns
         sockets *ss = get_sockets(ad->sock);
         if (ss)
@@ -1121,11 +1127,11 @@ int satip_post_init(adapter *ad) {
         return 0;
 
 #ifndef DISABLE_SRT
-    if (sip->use_srt) {
+    if (sip->transport_type == SIP_TRANSPORT_SRT) {
         sockets_setread(ad->sock, (void *)satipc_srt_read);
     } else
 #endif
-        if (sip->init_use_tcp)
+        if (sip->transport_type == SIP_TRANSPORT_TCP)
         sockets_setread(ad->sock, (void *)satipc_tcp_read);
     else {
         sockets_setread(ad->sock, (void *)satipc_read);
@@ -1297,17 +1303,18 @@ int http_request(adapter *ad, char *url, const char *method, int force) {
 
     session[0] = 0;
     sid[0] = 0;
-    remote_socket = sip->init_use_tcp ? ad->sock : ad->fe_sock;
+    remote_socket =
+        (sip->transport_type == SIP_TRANSPORT_TCP) ? ad->sock : ad->fe_sock;
 
     if (!sip->sent_transport && (method[0] == 'S' || method[0] == 'P')) {
         sip->last_setup = getTick();
         sip->sent_transport = 1;
         sip->stream_id = -1;
         sip->session[0] = 0;
-        if (sip->use_srt)
+        if (sip->transport_type == SIP_TRANSPORT_SRT)
             strcatf(session, ptr, "\r\nTransport: RTP/AVP/SRT;port=%d",
                     sip->listen_udp);
-        else if (sip->init_use_tcp)
+        else if (sip->transport_type == SIP_TRANSPORT_TCP)
             strcatf(session, ptr, "\r\nTransport: RTP/AVP/TCP;interleaved=0-1");
         else
             strcatf(session, ptr,
@@ -1641,16 +1648,14 @@ std::string satipc_name(int aid, int fd) {
         return "";
 
     std::ostringstream ss;
-    ss << sip->sip << " @ "
-       << (sip->use_srt ? "SRT" : (sip->use_tcp ? "RTP/TCP" : "RTP/UDP"));
-
+    ss << sip->sip << " @ " << str_transport_type[sip->transport_type];
     return ss.str();
 }
 
 void satipc_free(adapter *ad) {}
 
 int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
-                     int use_tcp, int no_pids_all, int use_srt) {
+                     char transport, int no_pids_all) {
     int i, k;
     adapter *ad;
     satipc *sip;
@@ -1710,9 +1715,8 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
     sip->setup_pids = 0;
     sip->tcp_size = 0;
     sip->tcp_data = NULL;
-    sip->use_tcp = use_tcp;
+    sip->transport_type = transport;
     sip->no_pids_all = no_pids_all;
-    sip->use_srt = use_srt;
 
     if (i + 1 > a_count)
         a_count = i + 1; // update adapter counter
@@ -1735,7 +1739,6 @@ void find_satip_adapter(adapter **a) {
     char host[100];
     char source_ip[100];
     int port;
-    int use_tcp;
     int no_pids_all;
     int fe;
     uint8_t delsys;
@@ -1747,11 +1750,11 @@ void find_satip_adapter(adapter **a) {
     la = split(arg, satip_servers, ARRAY_SIZE(arg), ',');
 
     for (i = 0; i < la; i++) {
-        use_tcp = opts.satip_rtsp_over_tcp;
+        char transport =
+            opts.satip_rtsp_over_tcp ? SIP_TRANSPORT_TCP : SIP_TRANSPORT_UDP;
         no_pids_all = 0;
-        int use_srt = 0;
         if (arg[i][0] == '^') {
-            use_srt = 1;
+            transport = SIP_TRANSPORT_SRT;
             arg[i]++;
 #ifdef DISABLE_SRT
             FAIL("SRT support is disabled, install libsrt-openssl-dev")
@@ -1759,7 +1762,10 @@ void find_satip_adapter(adapter **a) {
         }
 
         if (arg[i][0] == '*') {
-            use_tcp = 1 - use_tcp;
+            if (transport == SIP_TRANSPORT_TCP)
+                transport = SIP_TRANSPORT_UDP;
+            else if (transport == SIP_TRANSPORT_UDP)
+                transport = SIP_TRANSPORT_TCP;
             arg[i]++;
         }
         if (arg[i][0] == '~') {
@@ -1809,8 +1815,8 @@ void find_satip_adapter(adapter **a) {
             memmove(host, end + 1, sizeof(host) - 1);
         }
         port = map_int(sep2, NULL);
-        add_satip_server(host, port, fe, delsys, source_ip, use_tcp,
-                         no_pids_all, use_srt);
+        add_satip_server(host, port, fe, delsys, source_ip, transport,
+                         no_pids_all);
     }
 }
 
@@ -1904,7 +1910,10 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h) {
                 uint8_t ds = order[i];
                 for (j = 0; j < s->tuners[ds]; j++)
                     add_satip_server(s->host, s->port, fe++, ds, NULL,
-                                     opts.satip_rtsp_over_tcp, 0, 0);
+                                     opts.satip_rtsp_over_tcp
+                                         ? SIP_TRANSPORT_TCP
+                                         : SIP_TRANSPORT_UDP,
+                                     0);
             }
             getAdaptersCount();
         } else
@@ -1946,6 +1955,6 @@ char *init_satip_pointer(int len) {
 
 _symbols satipc_sym[] = {{"ad_satip", VAR_AARRAY_STRING, satip, 1, MAX_ADAPTERS,
                           offsetof(satipc, sip)},
-                         {"ad_satip_use_tcp", VAR_AARRAY_UINT8, satip, 1,
-                          MAX_ADAPTERS, offsetof(satipc, use_tcp)},
+                         {"ad_satip_transport_type", VAR_AARRAY_UINT8, satip, 1,
+                          MAX_ADAPTERS, offsetof(satipc, transport_type)},
                          {NULL, 0, NULL, 0, 0, 0}};

@@ -1316,6 +1316,11 @@ int read_rtsp(sockets *s) {
                          "%010d;timeout=%d\r\ncom.ses.streamID: %d",
                          get_session_id(s->sid), s_timeout, sid->sid + 1);
                 break;
+            case STREAM_RTSP_SRT:
+                snprintf(buf, sizeof(buf),
+                         "Transport: SRT/AVP;interleaved=0-1\r\nSession: "
+                         "%010d;timeout=%d\r\ncom.ses.streamID: %d",
+                         get_session_id(s->sid), s_timeout, sid->sid + 1);
             }
         }
 

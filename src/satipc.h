@@ -17,6 +17,10 @@
 #define SATIP_STATE_TEARDOWN 3
 #define SATIP_STATE_INACTIVE 0
 
+#define SIP_TRANSPORT_UDP 0
+#define SIP_TRANSPORT_TCP 1
+#define SIP_TRANSPORT_SRT 2
+
 typedef struct struct_satipc {
     char enabled;
     SMutex mutex;
@@ -35,7 +39,7 @@ typedef struct struct_satipc {
     char ignore_packets; // ignore packets coming from satip server while tuning
     int satip_fe;
     char last_cmd;
-    char use_tcp, init_use_tcp;
+    uint8_t transport_type;
     char no_pids_all;
     char state;
     int64_t last_setup, last_connect, last_close, last_response_sent;
@@ -65,7 +69,6 @@ typedef struct struct_satipc {
     unsigned int want_tune : 1;
     unsigned int force_pids : 1;
     unsigned int sent_transport : 1;
-    bool use_srt; // use SRT transport instead of UDP/TCP
 #ifndef DISABLE_SRT
     SRTSOCKET
     srt_listener;       // SRT listener socket (waiting for server connection)

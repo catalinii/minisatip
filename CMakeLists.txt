@@ -123,7 +123,7 @@ add_compile_options(
 
 if(DEBUG)
     add_compile_options(
-        -g
+        -ggdb
         -fsanitize=address
         -fsanitize=leak
         -fsanitize=undefined

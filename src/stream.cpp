@@ -405,10 +405,17 @@ static int decode_transport_srt(sockets *s, streams *sid, char *arg) {
     if (srt_port == 0)
         LOG_AND_RETURN(-1, "SRT transport requires port= parameter");
 
-    char dest[64];
+    char dest[64], current_dest[64];
     get_sockaddr_host(s->sa, dest, sizeof(dest) - 1);
-
+    get_sockaddr_host(sid->sa, current_dest, sizeof(dest) - 1);
     if (sid->srt_sock != SRT_INVALID_SOCK) {
+        if (strcmp(dest, current_dest) == 0 &&
+            srt_port == get_sockaddr_port(sid->sa)) {
+            sid->type = STREAM_RTSP_SRT;
+            LOG("SRT stream is already initialized to %s:%d", dest, srt_port);
+            return 0;
+        }
+
         LOG("Closing already opened SRT socket and creating a new one")
         srt_close(sid->srt_sock);
     }
@@ -425,15 +432,7 @@ static int decode_transport_srt(sockets *s, streams *sid, char *arg) {
 
     USockAddr sa;
     memset(&sa, 0, sizeof(sa));
-    if (s->sa.sa.sa_family == AF_INET6) {
-        sa.sin6.sin6_family = AF_INET6;
-        sa.sin6.sin6_port = htons(srt_port);
-        inet_pton(AF_INET6, dest, &sa.sin6.sin6_addr);
-    } else {
-        sa.sin.sin_family = AF_INET;
-        sa.sin.sin_port = htons(srt_port);
-        inet_pton(AF_INET, dest, &sa.sin.sin_addr);
-    }
+    fill_sockaddr(&sa, dest, srt_port, opts.use_ipv4_only);
 
     if (srt_connect(srt_s, &sa.sa, SOCKADDR_SIZE(sa)) == SRT_ERROR) {
         LOG("SRT connect to %s:%d failed: %s", dest, srt_port,
