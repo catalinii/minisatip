@@ -155,12 +155,42 @@ int test_get_s2_url_no_multistream() {
     char url[1000];
     get_s2_url(&ad, url, sizeof(url));
 
-    ASSERT(strstr(url, "isi") == NULL,
-           "ISI should not appear when unset");
+    ASSERT(strstr(url, "isi") == NULL, "ISI should not appear when unset");
     ASSERT(strstr(url, "plsm") == NULL,
            "PLS mode should not appear when unset");
     ASSERT(strstr(url, "plsc") == NULL,
            "PLS code should not appear when unset");
+
+    satip[0] = NULL;
+    return 0;
+}
+
+int test_no_duplicate_transport_header() {
+    adapter ad = {};
+    init_dvb_parameters(&ad.tp);
+
+    satipc sip = {};
+    sip.enabled = 1;
+    sip.satip_fe = 0;
+    ad.id = 0;
+    satip[0] = &sip;
+
+    // Simulate initial setup
+    ad.tp.freq = 11362000;
+    ad.tp.sys = SYS_DVBS2;
+    sip.state = SATIP_STATE_SETUP;
+    satipc_request(&ad);
+    ASSERT(sip.sent_transport == 1,
+           "sent_transport should be 1 after initial SETUP");
+
+    // Simulate a tuning change without a teardown, leading to another SETUP
+    // state
+    ad.tp.freq = 11400000;         // Change frequency to simulate a new tune
+    sip.state = SATIP_STATE_SETUP; // Transition back to SETUP state
+
+    satipc_request(&ad);
+    ASSERT(sip.sent_transport == 1,
+           "sent_transport should remain 1, no duplicate Transport header");
 
     satip[0] = NULL;
     return 0;
@@ -179,6 +209,8 @@ int main() {
               "test get_s2_url forwards PLS code with GOLD mode");
     TEST_FUNC(test_get_s2_url_no_multistream(),
               "test get_s2_url omits multistream params when unset");
+    TEST_FUNC(test_no_duplicate_transport_header(),
+              "test that Transport header is not sent duplicated");
 
     return 0;
 }

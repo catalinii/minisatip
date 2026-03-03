@@ -1424,7 +1424,11 @@ int satipc_request(adapter *ad) {
 
     // set the init parameters
     if (sip->state == SATIP_STATE_SETUP) {
-        sip->sent_transport = 0;
+        // Only reset sent_transport if it's a new session (stream_id == -1)
+        // or if a TEARDOWN has occurred previously.
+        if (sip->stream_id == -1 || sip->last_cmd == RTSP_TEARDOWN) {
+            sip->sent_transport = 0;
+        }
         sip->stream_id = -1;
         sip->session[0] = 0;
         sip->want_tune = 1;
