@@ -25,6 +25,7 @@
 #include "dvb.h"
 #include "pmt.h"
 #include "socketworks.h"
+#include "srt.h"
 #include "stream.h"
 
 #include "utils/ticks.h"
@@ -801,8 +802,8 @@ void set_options(int argc, char *argv[]) {
         case DVRBUFFER_OPT: {
             sscanf(optarg, "%d:%d", &opts.adapter_buffer, &opts.dvr_buffer);
             opts.adapter_buffer = (opts.adapter_buffer / 188) * 188;
-            if (opts.adapter_buffer < 1316)
-                opts.adapter_buffer = 1316; // 188 * 7 = 1316
+            if (opts.adapter_buffer < MAX_UDP_PACKET_SIZE)
+                opts.adapter_buffer = MAX_UDP_PACKET_SIZE;
             if (opts.dvr_buffer == 0)
                 opts.dvr_buffer = DVR_BUFFER;
 
@@ -1183,7 +1184,7 @@ int read_rtsp(sockets *s) {
     LOG("Read RTSP (sock %d, handle %d) [%s:%d] sid %d, len: %d", s->id,
         s->sock, get_sockaddr_host(s->sa, ra, sizeof(ra)),
         get_sockaddr_port(s->sa), s->sid, rlen);
-    LOGM("MSG client >> process :\n%s", s->buf); // LOGM->LOG
+    LOGM("%s", s->buf); // LOGM->LOG
 
     if ((s->type != TYPE_HTTP) &&
         (strncasecmp((const char *)s->buf, "GET", 3) == 0)) {
@@ -1318,9 +1319,10 @@ int read_rtsp(sockets *s) {
                 break;
             case STREAM_RTSP_SRT:
                 snprintf(buf, sizeof(buf),
-                         "Transport: SRT/AVP;interleaved=0-1\r\nSession: "
+                         "Transport: SRT/AVP;server_port=%d\r\nSession: "
                          "%010d;timeout=%d\r\ncom.ses.streamID: %d",
-                         get_session_id(s->sid), s_timeout, sid->sid + 1);
+                         opts.rtsp_port, get_session_id(s->sid), s_timeout,
+                         sid->sid + 1);
             }
         }
 
@@ -1472,7 +1474,7 @@ int read_http(sockets *s) {
     LOG("Read HTTP (handle %d) [%s:%d] sid %d, sock %d", s->sid,
         get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa),
         s->sid, s->sock);
-    LOGM("MSG client >> process :\n%s", s->buf);
+    LOGM("%s", s->buf);
 
     split(arg, (char *)s->buf, ARRAY_SIZE(arg), ' ');
     //      LOG("args: %s -> %s -> %s",arg[0],arg[1],arg[2]);
@@ -1825,6 +1827,9 @@ int main(int argc, char *argv[]) {
 #ifndef DISABLE_SRT
     srt_startup();
     LOG("SRT library initialized");
+    if (srt_listener_init() < 0)
+        LOG("Warning: SRT listener failed to start (SRT transport will not "
+            "work)");
 #endif
     if (opts.daemon)
         becomeDaemon();
@@ -1936,6 +1941,7 @@ int main(int argc, char *argv[]) {
 #endif
     LOG0("Closing...");
 #ifndef DISABLE_SRT
+    srt_listener_close();
     srt_cleanup();
 #endif
     free_all();

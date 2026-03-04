@@ -16,6 +16,11 @@ execute_process(
     ERROR_QUIET
 )
 
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    message(STATUS "Setting build type to 'DEBUG' as default.")
+    set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Choose the build type (Debug, Release, RelWithDebInfo, MinSizeRel)" FORCE)
+endif()
+
 if(DEFINED ENV{PR})
     set(VERSION_STRING "${GIT_TAG}+PR$ENV{PR}~${GIT_REVISION}")
 else()
@@ -199,6 +204,7 @@ if(DDCI)
     list(APPEND MINISATIP_SOURCES src/ddci.cpp)
 endif()
 if(SRT)
+    list(APPEND MINISATIP_SOURCES src/srt.cpp)
     list(APPEND MINISATIP_LIBS srt)
 endif()
 if(NOT APPLE)

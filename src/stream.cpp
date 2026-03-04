@@ -25,6 +25,7 @@
 #include "minisatip.h"
 #include "pmt.h"
 #include "socketworks.h"
+#include "srt.h"
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -364,8 +365,7 @@ int close_stream(int i) {
     }
 #ifndef DISABLE_SRT
     if (sid->type == STREAM_RTSP_SRT && sid->srt_sock > 0) {
-        LOG("Closing SRT sock %d for sid %d", sid->srt_sock, sid->sid);
-        srt_close(sid->srt_sock);
+        srt_pending_return(sid->srt_sock, sid->srt_streamid);
         sid->srt_sock = -1;
     }
 #endif
@@ -394,64 +394,38 @@ int close_stream(int i) {
 
 static int decode_transport_srt(sockets *s, streams *sid, char *arg) {
 #ifndef DISABLE_SRT
-    char *arg2[10];
-    int l = split(arg2, arg, ARRAY_SIZE(arg2), ';');
-    int srt_port = 0;
-    while (l > 0) {
-        l--;
-        if (strncmp("port=", arg2[l], 5) == 0)
-            srt_port = atoi(arg2[l] + 5);
+    if (!srt_listener_is_init())
+        LOG_AND_RETURN(-1, "SRT listener not initialized");
+    // Parse streamid from Transport header: RTP/AVP/SRT;srt_streamid=<id>
+    std::string transport_str(arg);
+    sid->srt_streamid.clear();
+    auto pos = transport_str.find("srt_streamid=");
+    if (pos != std::string::npos) {
+        auto val_start = pos + 13; // strlen("str_streamid=")
+        auto val_end = transport_str.find(';', val_start);
+        sid->srt_streamid = transport_str.substr(
+            val_start, val_end == std::string::npos ? std::string::npos
+                                                    : val_end - val_start);
     }
-    if (srt_port == 0)
-        LOG_AND_RETURN(-1, "SRT transport requires port= parameter");
-
-    char dest[64], current_dest[64];
-    get_sockaddr_host(s->sa, dest, sizeof(dest) - 1);
-    get_sockaddr_host(sid->sa, current_dest, sizeof(dest) - 1);
-    if (sid->srt_sock != SRT_INVALID_SOCK) {
-        if (strcmp(dest, current_dest) == 0 &&
-            srt_port == get_sockaddr_port(sid->sa)) {
-            sid->type = STREAM_RTSP_SRT;
-            LOG("SRT stream is already initialized to %s:%d", dest, srt_port);
-            return 0;
-        }
-
-        LOG("Closing already opened SRT socket and creating a new one")
-        srt_close(sid->srt_sock);
-    }
-
-    SRTSOCKET srt_s = srt_create_socket();
-    if (srt_s == SRT_INVALID_SOCK)
-        LOG_AND_RETURN(-1, "srt_create_socket failed: %s",
-                       srt_getlasterror_str());
-
-    int latency = SRT_LATENCY_MS;
-    srt_setsockflag(srt_s, SRTO_LATENCY, &latency, sizeof(latency));
-    int sender = 1;
-    srt_setsockflag(srt_s, SRTO_SENDER, &sender, sizeof(sender));
-
-    USockAddr sa;
-    memset(&sa, 0, sizeof(sa));
-    fill_sockaddr(&sa, dest, srt_port, opts.use_ipv4_only);
-
-    if (srt_connect(srt_s, &sa.sa, SOCKADDR_SIZE(sa)) == SRT_ERROR) {
-        LOG("SRT connect to %s:%d failed: %s", dest, srt_port,
-            srt_getlasterror_str());
-        srt_close(srt_s);
-        return -1;
-    }
+    if (sid->srt_streamid.empty())
+        LOG_AND_RETURN(-1, "SRT transport missing srt_streamid= parameter");
 
     sid->type = STREAM_RTSP_SRT;
-    sid->srt_sock = srt_s;
-    memcpy(&sid->sa, &sa, sizeof(sa));
-    sid->rsock = -1;
-    sid->rsock_id = -1;
 
-    LOG("SRT connected to %s:%d, srt_sock=%d for sid %d", dest, srt_port, srt_s,
-        sid->sid);
+    // Try to take SRT socket from pending map (may have been queued by accept)
+    SRTSOCKET srt_sock = srt_pending_take(sid->srt_streamid);
+    if (srt_sock == SRT_INVALID_SOCK)
+        LOG_AND_RETURN(
+            -1, "Failed finding pending SRT socket for sid %d, srt_streamid %s",
+            sid->sid, sid->srt_streamid.c_str());
+
+    sid->srt_sock = srt_sock;
+    LOG("SRT stream setup for sid %d, srt_streamid='%s', srt_sock=%d "
+        "(from pending)",
+        sid->sid, sid->srt_streamid.c_str(), sid->srt_sock);
     return 0;
 #else
-    LOG0("SRT streams are not supported, install libsrt-openssl-dev");
+    LOG0("SRT not supported, install libsrt-openssl-dev");
     return -1;
 #endif
 }
@@ -798,13 +772,15 @@ int flush_stream(streams *sid, struct iovec *iov, int iiov, int64_t ctime) {
 
 #ifndef DISABLE_SRT
     if (sid->type == STREAM_RTSP_SRT) {
-        // Send raw TS data over SRT, chunked to max 1316 bytes (7 * 188)
-        static const int SRT_TS_CHUNK = 1316;
+        // Send raw TS data over SRT, chunked to max MAX_UDP_PACKET_SIZE bytes
+        // (7 * 188)
         for (int i = 0; i < iiov; i++) {
             const char *data = (const char *)iov[i].iov_base;
             int remaining = iov[i].iov_len;
             while (remaining > 0) {
-                int chunk = remaining > SRT_TS_CHUNK ? SRT_TS_CHUNK : remaining;
+                int chunk = remaining > MAX_UDP_PACKET_SIZE
+                                ? MAX_UDP_PACKET_SIZE
+                                : remaining;
                 int sent = srt_send(sid->srt_sock, data, chunk);
                 if (sent > 0) {
                     rv += sent;
@@ -1032,10 +1008,7 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
     int max_pack = TCP_MAX_PACK;
 
     sockets *s = nullptr;
-#ifndef DISABLE_SRT
-    if (sid->type != STREAM_RTSP_SRT)
-#endif
-    {
+    if (sid->type != STREAM_RTSP_SRT) {
         s = get_sockets(sid->rsock_id);
         if (!s)
             LOG_AND_RETURN(0, "Stream %d rsock id not found %d", st_id,
@@ -1073,12 +1046,10 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
         //		max_iov = max_pack;
     }
 
-#ifndef DISABLE_SRT
     if (sid->type == STREAM_RTSP_SRT) {
         iiov = 0;     // no RTP header slot
         max_pack = 0; // no RTP batching
     }
-#endif
 
     if (sid->type == STREAM_HTTP) {
         iiov = 0;
@@ -1332,11 +1303,8 @@ int stream_timeout(sockets *s) {
     ctime = getTick();
     s->rtime = ctime;
 
-    if ((sid = get_sid(s->sid)) && sid->type != STREAM_HTTP
-#ifndef DISABLE_SRT
-        && sid->type != STREAM_RTSP_SRT
-#endif
-    ) {
+    if ((sid = get_sid(s->sid)) && sid->type != STREAM_HTTP &&
+        sid->type != STREAM_RTSP_SRT) {
         std::unique_lock<SMutex> lock(sid->mutex);
         rttime = sid->rtcp_wtime, rtime = sid->wtime;
 

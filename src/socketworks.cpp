@@ -527,6 +527,7 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
     ss->master = -1;
     ss->flush_enqued_data = 0;
     ss->prio_data_len = 0;
+    ss->close_unix_socket = true;
 
     ss->read = (read_action)sockets_read;
     if (ss->type == TYPE_UDP || ss->type == TYPE_RTCP)
@@ -570,7 +571,7 @@ int sockets_del(int sock) {
         "total buffered bytes %jd",
         sock, so, ss->sid, ss->overflow, ss->buffered_bytes);
 
-    if (so >= 0) {
+    if (so >= 0 && ss->close_unix_socket) {
         LOGM("sockets_del: closing socket handle %d", so);
         close(so);
     }
@@ -931,6 +932,12 @@ void sockets_setclose(int i, void *r) {
     sockets *ss = get_sockets(i);
     if (ss)
         ss->close = (socket_action)r;
+}
+
+void sockets_set_close_handle(int id, bool close_handle) {
+    sockets *ss = get_sockets(id);
+    if (ss)
+        ss->close_unix_socket = close_handle;
 }
 
 void sockets_setbuf(int i, char *buf, int len) {
@@ -1485,6 +1492,21 @@ void set_sockets_sid(int id, int sid) {
         s->sid = sid;
     else
         LOGM("sid for socket id %d could not be set", id);
+}
+
+int sockets_set_handle(int sock_id, int new_handle) {
+    sockets *s = get_sockets(sock_id);
+    if (!s) {
+        LOG("sockets_set_handle: socket id %d not found", sock_id);
+        return -1;
+    }
+
+    std::lock_guard<SMutex> lock(s->mutex);
+    int old_handle = s->sock;
+    s->sock = new_handle;
+    LOG("sockets_set_handle: socket id %d, old handle %d -> new handle %d",
+        sock_id, old_handle, new_handle);
+    return old_handle;
 }
 
 void set_socket_dscp(int id, int dscp, int prio) {

@@ -72,10 +72,10 @@ typedef struct struct_satipc {
     unsigned int force_pids : 1;
     unsigned int sent_transport : 1;
 #ifndef DISABLE_SRT
-    SRTSOCKET
-    srt_listener;       // SRT listener socket (waiting for server connection)
-    SRTSOCKET srt_sock; // accepted SRT connection (or SRT_INVALID_SOCK)
-    bool srt_accepted;  // true when connection is accepted
+    SRTSOCKET srt_sock = SRT_INVALID_SOCK;
+    int udp_sock = -1; // UDP socket for SRT
+    std::string
+        srt_streamid; // random SRT stream ID for caller/listener correlation
 #endif
 } satipc;
 
@@ -84,7 +84,5 @@ extern satipc *satip[];
 void find_satip_adapter(adapter **a);
 int satip_getxml(void *);
 char *init_satip_pointer(int len);
-void get_s2_url(adapter *ad, char *url, int url_len);
-void get_c2_url(adapter *ad, char *url, int url_len);
-void get_t2_url(adapter *ad, char *url, int url_len);
+int satipc_timeout(sockets *s);
 #endif

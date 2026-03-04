@@ -26,6 +26,7 @@
 #include "minisatip.h"
 #include "pmt.h"
 #include "socketworks.h"
+#include "srt.h"
 #include "utils.h"
 #include "utils/ticks.h"
 
@@ -56,7 +57,8 @@
 #define SRT_LATENCY_MS 1000
 #endif
 
-#define TCP_DATA_SIZE ((ADAPTER_BUFFER / 1316) * (1316 + 16) * 3)
+#define TCP_DATA_SIZE                                                          \
+    ((ADAPTER_BUFFER / MAX_UDP_PACKET_SIZE) * (MAX_UDP_PACKET_SIZE + 16) * 3)
 #define TCP_DATA_MAX (TCP_DATA_SIZE * 8)
 #define MAKE_ITEM(a, b) ((a << 16) | (b))
 
@@ -73,8 +75,8 @@ int recvmmsg0(int sockfd, struct mmsghdr *msgvec, unsigned int vlen) {
 #define recvmmsg(a, b, c, d, e) recvmmsg0(a, b, c)
 #else
 #define MAX_RTP_MSG                                                            \
-    25 // max number of UDP datagrams (with 1316 bytes of payload) to be read at
-       // one time
+    25 // max number of UDP datagrams (with MAX_UDP_PACKET_SIZE bytes of
+       // payload) to be read at one time
 #endif
 
 const char *str_transport_type[] = {"UDP", "TCP", "SRT"};
@@ -169,11 +171,12 @@ int satipc_handle_setup(adapter *ad, satipc *sip, char *buf) {
         if ((es = strchr(sess, ';')))
             *es = 0;
         safe_strncpy(sip->session, sess);
-        LOG("satipc: session set for adapter %d to %s", ad->id, sip->session);
-
         if (sid && sip->stream_id == -1)
             sip->stream_id = map_int(sid, NULL);
+        LOG("satipc: session set for adapter %d to %s with stream_id %d",
+            ad->id, sip->session, sip->stream_id);
     }
+
     return 0;
 }
 
@@ -203,7 +206,8 @@ int satipc_reply(sockets *s) {
 
     if (!is_rtsp_response((char *)s->buf, s->rlen)) {
         set_socket_new_buffer(s->id, 10240);
-        LOG("satipc: RTSP header not complete: %d\n%s", s->id, s->buf);
+        LOG("satipc: RTSP header not complete: %d len %d\n%s", s->id,
+            strlen((const char *)s->buf), s->buf);
         return 0;
     }
     s->rlen = 0;
@@ -214,11 +218,11 @@ int satipc_reply(sockets *s) {
     if (sep)
         rc = map_intd(sep + 9, NULL, 0);
 
-    LOGM("MSG process << server :\n%s", s->buf); // LOGM->LOG
     LOG("satipc_reply (adapter %d): sock %d (receiving from handle %d, state "
         "%d): "
         "[[ code %d ]]",
         s->sid, s->sock, s->id, sip->state, rc);
+    LOGM("%s", s->buf);
 
     is_transport = strstr((char *)s->buf, "Transport:") != NULL;
     handle_client_capabilities(sip, (char *)s->buf);
@@ -247,7 +251,7 @@ int satipc_reply(sockets *s) {
         if (ad->sys[0] == SYS_DVBC_ANNEX_A || ad->sys[0] == SYS_DVBC2)
             sip->satip_fe = 0;
 
-    if (rc == 454 || rc == 503 || rc == 405) {
+    if (rc == 454 || rc == 503 || rc == 405 || rc == 400) {
         sip->state = SATIP_STATE_SETUP;
         sip->last_setup = -10000;
     } else if (rc != 200) {
@@ -260,9 +264,10 @@ int satipc_reply(sockets *s) {
                 "rc = %d",
                 sip->id, rc);
     }
-    LOG("satipc %d, expect_reply %d, want_tune %d want commit %d, state %d",
+    LOG("satipc %d, expect_reply %d, want_tune %d want commit %d, state %d, "
+        "is_transport %d",
         sip->id, sip->expect_reply, sip->want_tune, sip->want_commit,
-        sip->state);
+        sip->state, is_transport);
 
     if (rc == 200) {
         if (is_transport)
@@ -295,7 +300,6 @@ int satipc_close(sockets *s) {
     close_adapter(s->sid);
     return 0;
 }
-
 void satipc_close_rtsp_socket(adapter *ad, satipc *sip) {
     sip->restart_needed = 0;
     sip->state = SATIP_STATE_DISCONNECTED;
@@ -311,29 +315,53 @@ void satipc_close_rtsp_socket(adapter *ad, satipc *sip) {
     sip->tcp_len = sip->tcp_pos = 0;
     if (sip->transport_type == SIP_TRANSPORT_TCP)
         ad->dvr = -1;
-    else
+    else {
         ad->fe = -1;
+#ifndef DISABLE_SRT
+        if (sip->transport_type == SIP_TRANSPORT_SRT)
+            ad->dvr = -1; // UDP socket was closed by srt_close
+#endif
+    }
     ad->sock = -1;
 }
 
-void satipc_open_rtsp_socket(adapter *ad, satipc *sip) {
-    if (!sip->rtsp_socket_closed)
-        return;
+int satipc_open_rtsp_socket(adapter *ad, satipc *sip, bool is_init) {
     sip->last_connect = getTick();
-    int sock = tcp_connect_src(sip->sip, sip->sport, NULL, 1,
-                               sip->source_ip[0] ? sip->source_ip
-                                                 : NULL); // blocking socket
-    if (sock >= 0) {
-        sip->rtsp_socket_closed = 0;
-        if (sip->transport_type == SIP_TRANSPORT_TCP) {
-            ad->dvr = sock;
-            ad->fe = -1;
-        } else
-            ad->fe = sock;
+    int s = tcp_connect_src(sip->sip, sip->sport, NULL, 1,
+                            sip->source_ip[0] ? sip->source_ip
+                                              : NULL); // blocking socket
+    if (s < 0)
+        LOG_AND_RETURN(s, "could not connect to %s:%d, error %s", sip->sip,
+                       sip->sport, strerror(errno));
+    ad->fe = s;
+    sip->rtsp_socket_closed = 0;
+
+    if (sip->transport_type == SIP_TRANSPORT_TCP) {
+        ad->dvr = ad->fe;
+        ad->fe = -1;
+        if (opts.satipc_buffer > 0)
+            set_socket_receive_buffer(ad->dvr, opts.satipc_buffer);
+        ad->fe_sock = sockets_add(SOCK_TIMEOUT, NULL, ad->id, TYPE_UDP, NULL,
+                                  NULL, (socket_action)satipc_timeout);
+    } else {
+        ad->fe_sock = sockets_add(
+            ad->fe, NULL, ad->id, TYPE_TCP, (socket_action)satipc_reply,
+            (socket_action)satipc_close, (socket_action)satipc_timeout);
+    }
+    sockets_timeout(ad->fe_sock,
+                    25000); // 25s
+    // just during the reopening of the RTSP socket
+    // Skip adapter_set_dvr during init_hw since it will be called by init_hw
+    // itself
+    if (ad->dvr >= 0 && !is_init) {
         adapter_set_dvr(ad);
         satip_post_init(ad);
-        LOG("satipc %d, reopened rtsp with handle %d", sip->id, sock);
     }
+    LOG("satipc: connected to SAT>IP server %s port %d %s handle %d %s %s",
+        sip->sip, sip->sport, str_transport_type[sip->transport_type], s,
+        sip->source_ip[0] ? "from source" : "",
+        sip->source_ip[0] ? sip->source_ip : "");
+    return s;
 }
 
 int satipc_close_rtsp(sockets *s) {
@@ -344,11 +372,21 @@ int satipc_close_rtsp(sockets *s) {
         "restart_needed %d",
         s->sid, s->id, s->sock, sip->keep_adapter_open, sip->restart_needed);
     if (sip->keep_adapter_open || sip->restart_needed) {
+#ifndef DISABLE_SRT
+        if (sip->transport_type == SIP_TRANSPORT_SRT) {
+            s->sock = -1; // prevent framework from closing UDP fd that SRT owns
+            // Don't close SRT socket, keep it for reuse
+        }
+#endif
         satipc_close_rtsp_socket(ad, sip);
     } else
         close_adapter_for_socket(s);
     return 0;
 }
+
+#ifndef DISABLE_SRT
+static int satipc_open_srt(adapter *ad, satipc *sip);
+#endif
 
 int satipc_send_options(adapter *ad) {
     http_request(ad, NULL, (char *)"OPTIONS", 0);
@@ -362,9 +400,23 @@ int satipc_timeout(sockets *s) {
     std::lock_guard<SMutex> lock(ad->mutex);
 
     if (sip->rtsp_socket_closed) {
-        satipc_open_rtsp_socket(ad, sip);
+        satipc_open_rtsp_socket(ad, sip,
+                                false); // is_init=false for reconnection
         return 0;
     }
+
+#ifndef DISABLE_SRT
+    // Check and restart SRT connection if it is broken
+    if (sip->transport_type == SIP_TRANSPORT_SRT) {
+        bool srt_connection_broken = (sip->srt_sock == SRT_INVALID_SOCK) ||
+                                     !srt_socket_is_connected(sip->srt_sock);
+
+        if (srt_connection_broken) {
+            LOG("SRT connection lost for adapter %d. Restarting SRT.", ad->id);
+            return satipc_open_srt(ad, sip);
+        }
+    }
+#endif // DISABLE_SRT
 
     // restart the connection we did not receive a response for more than 10
     // seconds from the server
@@ -489,35 +541,27 @@ int satipc_rtcp_reply(sockets *s) {
 int satipc_srt_read(int socket, void *buf, int len, sockets *ss, int *rb) {
     adapter *ad;
     satipc *sip;
-    char dest[64];
     get_ad_and_sipr(ss->sid, 0);
 
     *rb = 0;
 
-    // Try to accept if not yet connected
-    if (!sip->srt_accepted) {
-        struct sockaddr_storage addr;
-        int addrlen = sizeof(addr);
-        SRTSOCKET accepted =
-            srt_accept(sip->srt_listener, (struct sockaddr *)&addr, &addrlen);
-        if (accepted == SRT_INVALID_SOCK)
-            return 1; // no connection yet, keep socket alive
-        sip->srt_sock = accepted;
-        sip->srt_accepted = true;
-        get_sockaddr_host(*(USockAddr *)&addr, dest, sizeof(dest));
-        LOG("SRT connection accepted for adapter %d, srt_sock=%d, from %s:%d",
-            ad->id, accepted, dest, get_sockaddr_port(*(USockAddr *)&addr));
+    // Check if SRT socket is connected before attempting to read
+    if (!srt_socket_is_connected(sip->srt_sock)) {
+        return 1; // Not connected yet, no data available
     }
 
-    // Read available SRT data into the adapter buffer
+    // SRT_EASYNCRCV is returned while the rendezvous handshake is in progress
+    // and when the receive buffer is empty — both cases just keep polling.
     int total = 0;
-    while (total + 1316 <= len) {
-        int ret = srt_recv(sip->srt_sock, (char *)buf + total, 1316);
+    while (total + MAX_UDP_PACKET_SIZE <= len) {
+        int ret =
+            srt_recv(sip->srt_sock, (char *)buf + total, MAX_UDP_PACKET_SIZE);
         if (ret > 0) {
             total += ret;
         } else {
-            if (srt_getlasterror(NULL) == SRT_EASYNCRCV)
+            if (srt_getlasterror(NULL) == SRT_EASYNCRCV) {
                 break; // no more data available
+            }
             LOG("SRT recv failed for adapter %d, socket %d: %s", ad->id,
                 sip->srt_sock, srt_getlasterror_str());
             break;
@@ -526,55 +570,128 @@ int satipc_srt_read(int socket, void *buf, int len, sockets *ss, int *rb) {
 
     *rb = total;
     if (total > 0)
-        ad->flush = (total + 1316 <= len) ? 0 : 1;
+        ad->flush = (total + MAX_UDP_PACKET_SIZE <= len) ? 0 : 1;
     return 1;
 }
 
 static int satipc_open_srt(adapter *ad, satipc *sip) {
-    sip->listen_udp = opts.start_rtp + 1000 + ad->id * 2;
+    // Check if we have an existing socket and it\'s still connected
+    if (sip->srt_sock != SRT_INVALID_SOCK &&
+        srt_socket_is_connected(sip->srt_sock)) {
+        LOG("Reusing existing SRT socket %d for adapter %d", sip->srt_sock,
+            ad->id);
+        ad->dvr = sip->udp_sock;
+        return 0;
+    }
 
-    int udp_sock = udp_bind(NULL, sip->listen_udp, opts.use_ipv4_only);
+    // Close old socket if it exists but is not connected
+    if (sip->srt_sock != SRT_INVALID_SOCK) {
+        LOG("Closing old SRT socket %d (not connected)", sip->srt_sock);
+        srt_close(sip->srt_sock);
+        sip->srt_sock = SRT_INVALID_SOCK;
+    }
+
+    // Handle stale UDP socket: if ad->dvr points to an old UDP socket, close it
+    // and replace the socket tracking with SOCK_TIMEOUT
+    if (sip->udp_sock >= 0 && ad->dvr == sip->udp_sock) {
+        LOG("Closing stale UDP socket %d for adapter %d", sip->udp_sock,
+            ad->id);
+        // If there\'s a socket tracking this handle, replace it with
+        // SOCK_TIMEOUT
+        if (ad->fe_sock >= 0) {
+            sockets_set_handle(ad->sock, SOCK_TIMEOUT);
+        }
+        sip->udp_sock = -1;
+        ad->dvr = -1;
+    }
+
+    // Create UDP socket with ephemeral port (port 0 lets OS assign available
+    // port)
+    int udp_sock = udp_bind(NULL, 0, opts.use_ipv4_only);
     if (udp_sock < 0)
-        LOG_AND_RETURN(2, "SRT UDP bind failed on port %d", sip->listen_udp);
+        LOG_AND_RETURN(2, "SRT UDP bind failed on ephemeral port");
 
-    sip->srt_listener = srt_create_socket();
-    if (sip->srt_listener == SRT_INVALID_SOCK) {
+    sip->srt_sock = srt_create_socket();
+    if (sip->srt_sock == SRT_INVALID_SOCK) {
         close(udp_sock);
         LOG_AND_RETURN(2, "srt_create_socket failed: %s",
                        srt_getlasterror_str());
     }
 
     int latency = SRT_LATENCY_MS;
-    srt_setsockflag(sip->srt_listener, SRTO_LATENCY, &latency, sizeof(latency));
-    int recv_no = 0;
-    srt_setsockflag(sip->srt_listener, SRTO_RCVSYN, &recv_no, sizeof(recv_no));
+    srt_setsockflag(sip->srt_sock, SRTO_LATENCY, &latency, sizeof(latency));
+    // No SRTO_RENDEZVOUS — caller mode (default)
+    // Blocking mode for sync connect
+    sip->srt_streamid = std::to_string(get_random_uint32());
+    srt_setsockflag(sip->srt_sock, SRTO_STREAMID, sip->srt_streamid.c_str(),
+                    sip->srt_streamid.size());
 
-    if (srt_bind_acquire(sip->srt_listener, udp_sock) == SRT_ERROR) {
+    if (srt_bind_acquire(sip->srt_sock, udp_sock) == SRT_ERROR) {
         LOG("srt_bind_acquire failed: %s", srt_getlasterror_str());
-        srt_close(sip->srt_listener);
-        sip->srt_listener = SRT_INVALID_SOCK;
+        srt_close(sip->srt_sock);
+        sip->srt_sock = SRT_INVALID_SOCK;
+        close(udp_sock);
         return 2;
     }
-    // SRT now owns udp_sock — do not close it directly
+    // SRT now owns udp_sock
+    sip->udp_sock = udp_sock;
+    ad->dvr = udp_sock;
 
-    if (srt_listen(sip->srt_listener, 1) == SRT_ERROR) {
-        LOG("SRT listen failed: %s", srt_getlasterror_str());
-        srt_close(sip->srt_listener);
-        sip->srt_listener = SRT_INVALID_SOCK;
+    // If we had replaced the socket with SOCK_TIMEOUT, now swap it with the new
+    // handle
+    if (ad->sock >= 0) {
+        sockets_set_handle(ad->sock, udp_sock);
+    }
+
+    // Connect to server\'s SRT port (same as RTSP port) - synchronous, blocking
+    USockAddr sa;
+    memset(&sa, 0, sizeof(sa));
+    fill_sockaddr(&sa, sip->sip, sip->sport, opts.use_ipv4_only);
+    if (srt_connect(sip->srt_sock, &sa.sa, SOCKADDR_SIZE(sa)) == SRT_ERROR) {
+        LOG("SRT connect failed: %s", srt_getlasterror_str());
+        srt_close(sip->srt_sock);
+        sip->srt_sock = SRT_INVALID_SOCK;
         return 2;
     }
 
-    sip->srt_sock = SRT_INVALID_SOCK;
-    sip->srt_accepted = false;
+    // Make the socket non-blocking for read after connect
+    int recv_no = 0;
+    srt_setsockflag(sip->srt_sock, SRTO_RCVSYN, &recv_no, sizeof(recv_no));
 
-    ad->dvr = udp_sock; // poll() monitors the UDP socket directly
-    ad->fe_sock =
-        sockets_add(ad->fe, NULL, ad->id, TYPE_TCP, (socket_action)satipc_reply,
-                    (socket_action)satipc_close, (socket_action)satipc_timeout);
-    sockets_timeout(ad->fe_sock, 25000);
+    LOG("SRT connected for adapter %d to %s:%d, streamid=%s, srt_sock=%d",
+        ad->id, sip->sip, sip->sport, sip->srt_streamid.c_str(), sip->srt_sock);
+
     return 0;
 }
 #endif
+
+int satipc_setup_rtp_udp_sockets(adapter *ad, satipc *sip) {
+    sip->listen_udp = opts.start_rtp + 1000 + ad->id * 2;
+    ad->dvr = udp_bind(NULL, sip->listen_udp, opts.use_ipv4_only);
+    if (ad->dvr < 0)
+        LOG_AND_RETURN(-1, "Could not listen on port %d: err %d: %s",
+                       sip->listen_udp, errno, strerror(errno));
+
+    sip->rtcp = udp_bind(NULL, sip->listen_udp + 1, opts.use_ipv4_only);
+    if (sip->rtcp < 0) {
+        close(ad->dvr);
+        LOG_AND_RETURN(-1, "Could not listen on port %d: err %d: %s",
+                       sip->listen_udp + 1, errno, strerror(errno));
+    }
+
+    sip->rtcp_sock = -1;
+    sip->rtcp_sock = sockets_add(sip->rtcp, NULL, ad->id, TYPE_TCP,
+                                 (socket_action)satipc_rtcp_reply,
+                                 (socket_action)satipc_close, NULL);
+    if (sip->rtcp_sock < 0) {
+        close(ad->dvr);
+        close(sip->rtcp);
+        LOG_AND_RETURN(-1, "Could not add RTCP socket %d", sip->rtcp);
+    }
+    if (opts.satipc_buffer > 0)
+        set_socket_receive_buffer(ad->dvr, opts.satipc_buffer);
+    return 0;
+}
 
 int satipc_open_device(adapter *ad) {
     satipc *sip = satip[ad->id];
@@ -586,70 +703,28 @@ int satipc_open_device(adapter *ad) {
         return 3;
 
     sip->last_connect = ctime;
-    ad->fe = tcp_connect_src(sip->sip, sip->sport, NULL, 1,
-                             sip->source_ip[0] ? sip->source_ip
-                                               : NULL); // blocking socket
-    if (ad->fe < 0)
-        LOG_AND_RETURN(2, "could not connect to %s:%d", sip->sip, sip->sport);
 
-    LOG("satipc: connected to SAT>IP server %s port %d %s handle %d %s %s",
-        sip->sip, sip->sport, str_transport_type[sip->transport_type], ad->fe,
-        sip->source_ip[0] ? "from source" : "",
-        sip->source_ip[0] ? sip->source_ip : "");
+    // s is the RTSP socket handle
+    // is_init=true to skip adapter_set_dvr since it will be called by init_hw
+    int s = satipc_open_rtsp_socket(ad, sip, true);
+
+    if (s < 0)
+        return 2;
 
 #ifndef DISABLE_SRT
     if (sip->transport_type == SIP_TRANSPORT_SRT) {
         int rv = satipc_open_srt(ad, sip);
         if (rv)
             return rv;
-    } else
+    }
 #endif
-        if (sip->transport_type == SIP_TRANSPORT_UDP) {
-        sip->listen_udp = opts.start_rtp + 1000 + ad->id * 2;
-        ad->dvr = udp_bind(NULL, sip->listen_udp, opts.use_ipv4_only);
-        if (ad->dvr < 0)
-            LOG("Could not listen on port %d: err %d: %s", sip->listen_udp,
-                errno, strerror(errno));
-
-        sip->rtcp = udp_bind(NULL, sip->listen_udp + 1, opts.use_ipv4_only);
-        if (sip->rtcp < 0)
-            LOG("Could not listen on port %d: err %d: %s", sip->listen_udp + 1,
-                errno, strerror(errno));
-
-        ad->fe_sock = sockets_add(
-            ad->fe, NULL, ad->id, TYPE_TCP, (socket_action)satipc_reply,
-            (socket_action)satipc_close, (socket_action)satipc_timeout);
-        sip->rtcp_sock = -1;
-        if (sip->rtcp >= 0) {
-            sip->rtcp_sock = sockets_add(sip->rtcp, NULL, ad->id, TYPE_TCP,
-                                         (socket_action)satipc_rtcp_reply,
-                                         (socket_action)satipc_close, NULL);
+    if (sip->transport_type == SIP_TRANSPORT_UDP) {
+        int rv = satipc_setup_rtp_udp_sockets(ad, sip);
+        if (rv) {
+            satipc_open_rtsp_socket(ad, sip,
+                                    false); // is_init=false for error recovery
+            return rv;
         }
-        sockets_timeout(ad->fe_sock, 25000); // 25s
-        if (opts.satipc_buffer > 0)
-            set_socket_receive_buffer(ad->dvr, opts.satipc_buffer);
-        if (ad->fe_sock < 0 || sip->rtcp_sock < 0 || ad->dvr < 0 ||
-            sip->rtcp < 0) {
-            if (sip->rtcp_sock >= 0)
-                sockets_del(sip->rtcp_sock);
-            if (ad->fe_sock >= 0)
-                sockets_del(ad->fe_sock);
-            if (sip->rtcp > 0)
-                close(sip->rtcp);
-            if (ad->dvr > 0)
-                close(ad->dvr);
-            if (ad->fe > 0)
-                close(ad->fe);
-            ad->fe = ad->dvr = sip->rtcp = ad->fe_sock = sip->rtcp_sock = 0;
-        }
-    } else {
-        ad->dvr = ad->fe;
-        ad->fe = -1;
-        if (opts.satipc_buffer > 0)
-            set_socket_receive_buffer(ad->dvr, opts.satipc_buffer);
-        ad->fe_sock = sockets_add(SOCK_TIMEOUT, NULL, ad->id, TYPE_UDP, NULL,
-                                  NULL, (socket_action)satipc_timeout);
-        sockets_timeout(ad->fe_sock, 25000); // 25s
     }
     sip->session[0] = 0;
     sip->lap = 0;
@@ -695,21 +770,6 @@ int satip_close_device(adapter *ad) {
         sockets_del(sip->rtcp_sock);
     ad->fe_sock = -1;
     sip->rtcp_sock = -1;
-#ifndef DISABLE_SRT
-    if (sip->transport_type == SIP_TRANSPORT_SRT) {
-        // Prevent sockets_del from double-closing the UDP fd that SRT owns
-        sockets *ss = get_sockets(ad->sock);
-        if (ss)
-            ss->sock = -1;
-        if (sip->srt_sock != SRT_INVALID_SOCK)
-            srt_close(sip->srt_sock);
-        sip->srt_sock = SRT_INVALID_SOCK;
-        if (sip->srt_listener != SRT_INVALID_SOCK)
-            srt_close(sip->srt_listener); // closes underlying UDP socket
-        sip->srt_listener = SRT_INVALID_SOCK;
-        sip->srt_accepted = false;
-    }
-#endif
     sip->enabled = 0;
     sip->state = SATIP_STATE_DISCONNECTED;
     return 0;
@@ -753,7 +813,8 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
     void *holes[MAX_RTP_MSG];
     struct mmsghdr messages[MAX_RTP_MSG] = {0};
     struct iovec iovs[(MAX_RTP_MSG * 2) + 1] = {
-        0}; // RTP Header + Payload (up to 1316 bytes) for each UDP datagram
+        0}; // RTP Header + Payload (up to MAX_UDP_PACKET_SIZE bytes) for each
+            // UDP datagram
     uint16_t seq;
     adapter *ad;
     satipc *sip;
@@ -762,10 +823,10 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
     // Prepare receiving multibuffer
     for (i = 0; i < MAX_RTP_MSG && size_msg < len; i++) {
         num_msg++;
-        size_msg += 1316;
+        size_msg += MAX_UDP_PACKET_SIZE;
         if (size_msg >
             len) { // Insufficient space to receive a 7*188 Bytes TS packet
-            size_msg -= 1316;
+            size_msg -= MAX_UDP_PACKET_SIZE;
             num_msg--;
             break;
         }
@@ -776,8 +837,9 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
         iov[0].iov_base = buf1 + (i * 20); // RTP header slice
         iov[0].iov_len = 12;
         iov[1].iov_base =
-            (char *)buf + (i * 1316); // PAYLOAD slice in the READ BUFFER
-        iov[1].iov_len = 1316;
+            (char *)buf +
+            (i * MAX_UDP_PACKET_SIZE); // PAYLOAD slice in the READ BUFFER
+        iov[1].iov_len = MAX_UDP_PACKET_SIZE;
         iov[2].iov_base = NULL;
         iov[2].iov_len = 0;
 
@@ -801,8 +863,9 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
         return 0;
     }
 
-    size_msg -= (num_msg - rr) *
-                1316; // update the theoretical total size of the read buffer
+    size_msg -=
+        (num_msg - rr) * MAX_UDP_PACKET_SIZE; // update the theoretical total
+                                              // size of the read buffer
 
     // It checks if the read is full, because in that case there is a high
     // probability that there are still pending packets in the buffer, so
@@ -836,7 +899,7 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
             dlen = msg->msg_len - 12;
 
             // Free incomplete or erroneous reads
-            if (dlen < 0 || dlen > 1316)
+            if (dlen < 0 || dlen > MAX_UDP_PACKET_SIZE)
                 dlen = 0;
 
             // Workaround for some poor SAT>IP servers (ex. XORO).
@@ -1129,6 +1192,7 @@ int satip_post_init(adapter *ad) {
 #ifndef DISABLE_SRT
     if (sip->transport_type == SIP_TRANSPORT_SRT) {
         sockets_setread(ad->sock, (void *)satipc_srt_read);
+        sockets_set_close_handle(ad->sock, false);
     } else
 #endif
         if (sip->transport_type == SIP_TRANSPORT_TCP)
@@ -1310,10 +1374,11 @@ int http_request(adapter *ad, char *url, const char *method, int force) {
         sip->last_setup = getTick();
         sip->sent_transport = 1;
         sip->stream_id = -1;
+        ad->err = 0;
         sip->session[0] = 0;
         if (sip->transport_type == SIP_TRANSPORT_SRT)
-            strcatf(session, ptr, "\r\nTransport: RTP/AVP/SRT;port=%d",
-                    sip->listen_udp);
+            strcatf(session, ptr, "\r\nTransport: RTP/AVP/SRT;srt_streamid=%s",
+                    sip->srt_streamid.c_str());
         else if (sip->transport_type == SIP_TRANSPORT_TCP)
             strcatf(session, ptr, "\r\nTransport: RTP/AVP/TCP;interleaved=0-1");
         else
@@ -1358,7 +1423,7 @@ int http_request(adapter *ad, char *url, const char *method, int force) {
 
     LOG("satipc_http_request (adapter %d): sock %d: [[ %s %s ]]", ad->id,
         remote_socket, method, url);
-    LOGM("MSG process >> server :\n%s", buf); // LOGM->LOG
+    LOGM("%s", buf); // LOGM->LOG
 
     if (remote_socket >= 0) {
         sockets_write(remote_socket, buf, lb);
@@ -1404,7 +1469,6 @@ int satipc_send_setup(adapter *ad, satipc *sip) {
     sip->want_commit = 1;
 
     sip->sent_transport = 0;
-    ad->err = 0;
     strcatf(url, len, "&pids=none");
     http_request(ad, url, "SETUP", 0);
     return 0;
@@ -1627,7 +1691,8 @@ int satipc_tune(int aid, transponder *tp) {
             sip->state = SATIP_STATE_DISCONNECTED;
         }
         // Start a new rtsp socket
-        satipc_open_rtsp_socket(ad, sip);
+        satipc_open_rtsp_socket(ad, sip,
+                                false); // is_init=false for tune restart
     }
     // if TEARDOWN has been already sent and session was destroyed, re-start the
     // session

@@ -253,6 +253,8 @@ int init_hw(int i) {
     ad->sock = -1;
     ad->force_close = 0;
     ad->err = 0;
+    ad->dvr = -1;
+    ad->fe = -1;
 
     ad->db = MAX_DB;
 
@@ -398,7 +400,7 @@ int close_adapter(int na) {
 #endif
     ad->ca_mask = 0;
     ad->fe = -1;
-    ad->dvr = 0;
+    ad->dvr = -1;
     ad->strength = 0;
     ad->snr = 0;
     ad->db = MAX_DB;

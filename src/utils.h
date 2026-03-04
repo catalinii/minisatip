@@ -53,6 +53,7 @@ int is_rtsp_response(char *buf, int len);
 int is_rtsp_request(char *buf, int len);
 int is_http_request(char *buf, int len);
 int is_byte_array_empty(uint8_t *b, int len);
+uint32_t get_random_uint32();
 template <typename Container>
 std::string iterable_to_string(const Container &container,
                                const std::string &delimiter = ", ") {

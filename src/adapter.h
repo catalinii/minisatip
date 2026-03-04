@@ -66,7 +66,7 @@ struct struct_adapter {
     char enabled;
     SMutex mutex;
     char type; // available on the system
-    int fe, dmx, dvr;
+    int fe = -1, dmx, dvr = -1;
     int pa, fn;
     // flags
 

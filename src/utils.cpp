@@ -152,8 +152,9 @@ char *header_parameter(char **arg,
     int len = strlen(arg[i]);
     char *result;
 
-    if (arg[i][len - 1] == ':')
+    if (arg[i][len - 1] == ':') {
         return arg[i + 1];
+    }
 
     result = strchr(arg[i], ':');
     if (result)
@@ -793,6 +794,14 @@ int get_random(unsigned char *dest, int len) {
     close(fd);
 
     return len;
+}
+
+uint32_t get_random_uint32() {
+    uint8_t data[4];
+    uint32_t out;
+    get_random(data, sizeof(data));
+    copy32r(out, data, 0);
+    return out;
 }
 
 void _strncpy(char *a, char *b, int n) {
