@@ -17,9 +17,11 @@
 #define SATIP_STATE_TEARDOWN 3
 #define SATIP_STATE_INACTIVE 0
 
-#define SIP_TRANSPORT_UDP 0
-#define SIP_TRANSPORT_TCP 1
-#define SIP_TRANSPORT_SRT 2
+enum satipc_transport_type {
+    SIP_TRANSPORT_UDP = 0,
+    SIP_TRANSPORT_TCP = 1,
+    SIP_TRANSPORT_SRT = 2
+};
 
 typedef struct struct_satipc {
     char enabled;
@@ -39,7 +41,7 @@ typedef struct struct_satipc {
     char ignore_packets; // ignore packets coming from satip server while tuning
     int satip_fe;
     char last_cmd;
-    uint8_t transport_type;
+    satipc_transport_type transport_type;
     char no_pids_all;
     char state;
     int64_t last_setup, last_connect, last_close, last_response_sent;

@@ -247,6 +247,7 @@ if(BUILD_TESTING)
         crypto
         dl
         pthread
+	srt
     )
     if(NOT APPLE)
         list(APPEND TEST_LIBS rt)

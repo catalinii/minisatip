@@ -1655,7 +1655,7 @@ std::string satipc_name(int aid, int fd) {
 void satipc_free(adapter *ad) {}
 
 int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
-                     char transport, int no_pids_all) {
+                     satipc_transport_type transport, int no_pids_all) {
     int i, k;
     adapter *ad;
     satipc *sip;
@@ -1750,7 +1750,7 @@ void find_satip_adapter(adapter **a) {
     la = split(arg, satip_servers, ARRAY_SIZE(arg), ',');
 
     for (i = 0; i < la; i++) {
-        char transport =
+        satipc_transport_type transport =
             opts.satip_rtsp_over_tcp ? SIP_TRANSPORT_TCP : SIP_TRANSPORT_UDP;
         no_pids_all = 0;
         if (arg[i][0] == '^') {
@@ -1955,6 +1955,6 @@ char *init_satip_pointer(int len) {
 
 _symbols satipc_sym[] = {{"ad_satip", VAR_AARRAY_STRING, satip, 1, MAX_ADAPTERS,
                           offsetof(satipc, sip)},
-                         {"ad_satip_transport_type", VAR_AARRAY_UINT8, satip, 1,
+                         {"ad_satip_transport_type", VAR_AARRAY_INT, satip, 1,
                           MAX_ADAPTERS, offsetof(satipc, transport_type)},
                          {NULL, 0, NULL, 0, 0, 0}};
