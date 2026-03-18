@@ -38,7 +38,7 @@ typedef struct struct_satipc {
     int stream_id;
     int listen_udp;
     int rtcp, rtcp_sock, cseq;
-    char ignore_packets; // ignore packets coming from satip server while tuning
+    bool ignore_packets; // ignore packets coming from satip server while tuning
     int satip_fe;
     char last_cmd;
     satipc_transport_type transport_type;
@@ -48,29 +48,27 @@ typedef struct struct_satipc {
     uint8_t addpids, setup_pids;
     unsigned char *tcp_data;
     int tcp_size, tcp_pos, tcp_len;
-    char option_no_setup;
+    bool option_no_setup;
     uint32_t rcvp, repno, rtp_miss, rtp_ooo; // rtp statstics
     uint16_t rtp_seq;
     char static_config;
     int num_describe;
     int timeout_ms;
     // Bit Fields
-    unsigned int
-        rtsp_socket_closed : 1; // is set when the adapter was closed
+    bool rtsp_socket_closed;    // is set when the adapter was closed
                                 // unexpected and needs to be re-enabled
-    unsigned int
-        keep_adapter_open : 1; // if set, the adapter will not be closed
-                               // when the rtsp socket is being closed
-    unsigned int can_keep_adapter_open : 1; // if set, the adapter is valid and
-                                            // can be restarted
-    unsigned int restart_when_tune : 1;
-    unsigned int restart_needed : 1;
-    unsigned int expect_reply : 1;
+    bool keep_adapter_open;     // if set, the adapter will not be closed
+                                // when the rtsp socket is being closed
+    bool can_keep_adapter_open; // if set, the adapter is valid and
+                                // can be restarted
+    bool restart_when_tune;
+    bool restart_needed;
+    bool expect_reply;
 
-    unsigned int want_commit : 1;
-    unsigned int want_tune : 1;
-    unsigned int force_pids : 1;
-    unsigned int sent_transport : 1;
+    bool want_commit;
+    bool want_tune;
+    bool force_pids;
+    bool sent_transport;
 #ifndef DISABLE_SRT
     SRTSOCKET srt_sock = SRT_INVALID_SOCK;
     int udp_sock = -1; // UDP socket for SRT

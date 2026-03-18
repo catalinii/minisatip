@@ -128,7 +128,7 @@ void set_adapter_signal(adapter *ad, char *b, int rlen);
 void handle_client_capabilities(satipc *sip, char *buf) {
     char *sep = strstr(buf, "minisatip");
     if (sep) {
-        sip->option_no_setup = 1;
+        sip->option_no_setup = true;
         sip->addpids = 1;
     }
     sep = strstr(buf, "enigma");
@@ -136,13 +136,13 @@ void handle_client_capabilities(satipc *sip, char *buf) {
         LOG("Setting adapter %d to restart every time the transponder is "
             "changed",
             sip->id);
-        sip->restart_when_tune = 1;
+        sip->restart_when_tune = true;
         if (sip->transport_type == SIP_TRANSPORT_UDP) {
             sip->transport_type = SIP_TRANSPORT_TCP;
-            sip->restart_needed = 1;
+            sip->restart_needed = true;
             LOG("adapter %d is not RTSP over TCP, switching", sip->id);
         }
-        sip->option_no_setup = 1;
+        sip->option_no_setup = true;
     }
 }
 
@@ -184,12 +184,12 @@ int satipc_handle_setup(adapter *ad, satipc *sip, char *buf) {
 int satipc_handle_play(adapter *ad, satipc *sip) {
     if (sip->ignore_packets) {
         LOG("accepting packets from RTSP server");
-        sip->ignore_packets = 0;
+        sip->ignore_packets = false;
         ad->wait_new_stream = 1;
     }
 
     if (!sip->want_tune && sip->last_cmd == RTSP_PLAY) {
-        sip->can_keep_adapter_open = 1;
+        sip->can_keep_adapter_open = true;
     }
     return 0;
 }
@@ -211,7 +211,7 @@ int satipc_reply(sockets *s) {
         return 0;
     }
     s->rlen = 0;
-    sip->keep_adapter_open = 0;
+    sip->keep_adapter_open = false;
 
     // Parse RTSP return code
     sep = strstr((char *)s->buf, "RTSP/1.0");
@@ -231,7 +231,7 @@ int satipc_reply(sockets *s) {
         set_adapter_signal(ad, (char *)s->buf, rlen);
     }
 
-    sip->expect_reply = 0;
+    sip->expect_reply = false;
 
     // Fritzbox did reply 408 when mtype is missing
     if (rc == 408) {
@@ -301,14 +301,14 @@ int satipc_close(sockets *s) {
     return 0;
 }
 void satipc_close_rtsp_socket(adapter *ad, satipc *sip) {
-    sip->restart_needed = 0;
+    sip->restart_needed = false;
     sip->state = SATIP_STATE_DISCONNECTED;
-    sip->rtsp_socket_closed = 1;
-    sip->want_tune = 1;
-    sip->want_commit = 1;
+    sip->rtsp_socket_closed = true;
+    sip->want_tune = true;
+    sip->want_commit = true;
     sip->last_close = getTick();
-    sip->sent_transport = 0;
-    sip->expect_reply = 0;
+    sip->sent_transport = false;
+    sip->expect_reply = false;
     sip->last_response_sent = 0;
     sip->stream_id = -1;
     sip->session[0] = 0;
@@ -317,10 +317,6 @@ void satipc_close_rtsp_socket(adapter *ad, satipc *sip) {
         ad->dvr = -1;
     else {
         ad->fe = -1;
-#ifndef DISABLE_SRT
-        if (sip->transport_type == SIP_TRANSPORT_SRT)
-            ad->dvr = -1; // UDP socket was closed by srt_close
-#endif
     }
     ad->sock = -1;
 }
@@ -334,7 +330,7 @@ int satipc_open_rtsp_socket(adapter *ad, satipc *sip, bool is_init) {
         LOG_AND_RETURN(s, "could not connect to %s:%d, error %s", sip->sip,
                        sip->sport, strerror(errno));
     ad->fe = s;
-    sip->rtsp_socket_closed = 0;
+    sip->rtsp_socket_closed = false;
 
     if (sip->transport_type == SIP_TRANSPORT_TCP) {
         ad->dvr = ad->fe;
@@ -427,7 +423,7 @@ int satipc_timeout(sockets *s) {
             "%jd ms, "
             "closing connection",
             sip->id, getTick() - sip->last_response_sent);
-        sip->restart_needed = 1;
+        sip->restart_needed = true;
         sockets_del(ad->sock);
         sip->state = SATIP_STATE_DISCONNECTED;
     }
@@ -500,7 +496,7 @@ int satipc_rtcp_reply(sockets *s) {
     int sm;
 
     s->rlen = 0;
-    sip->rtsp_socket_closed = 0;
+    sip->rtsp_socket_closed = false;
     //	LOG("satip_rtcp_reply called");
     if (b[0] == 0x80 && b[1] == 0xC8) {
         copy32r(rp, b, 20);
@@ -732,22 +728,22 @@ int satipc_open_device(adapter *ad) {
     sip->cseq = 1;
     ad->err = 0;
     sip->tcp_pos = sip->tcp_len = 0;
-    sip->expect_reply = 0;
+    sip->expect_reply = false;
     sip->last_response_sent = 0;
     sip->last_connect = 0;
-    sip->sent_transport = 0;
+    sip->sent_transport = false;
     sip->stream_id = -1;
-    sip->want_commit = 0;
+    sip->want_commit = false;
     sip->rcvp = sip->repno = 0;
     sip->rtp_miss = sip->rtp_ooo = 0;
     sip->rtp_seq = 0xFFFF;
-    sip->ignore_packets = 1;
+    sip->ignore_packets = true;
     sip->num_describe = 0;
-    sip->force_pids = 0;
+    sip->force_pids = false;
     sip->last_setup = -10000;
     sip->last_cmd = 0;
     sip->enabled = 1;
-    sip->rtsp_socket_closed = 0;
+    sip->rtsp_socket_closed = false;
     sip->last_close = 0;
     sip->timeout_ms = 30000;
     sip->state = SATIP_STATE_SETUP;
@@ -791,12 +787,12 @@ int satip_standby_device(adapter *ad) {
         satipc_request(ad);
     }
     ad->err = 0;
-    sip->sent_transport = 0; // send Transport: at the next tune
+    sip->sent_transport = false; // send Transport: at the next tune
     sip->lap = sip->ldp = 0;
     if (sip->restart_when_tune) {
         LOG("All stream closed, restarting satip adapter %d", sip->id);
         // Force close the previous RTSP socket
-        sip->restart_needed = 1;
+        sip->restart_needed = true;
         sockets_del(ad->sock);
         sip->state = SATIP_STATE_DISCONNECTED;
     }
@@ -1047,7 +1043,7 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb) {
                 ss->id, socket, err, strerror(err));
             errno = err;
             if (sip->can_keep_adapter_open) {
-                sip->keep_adapter_open = 1;
+                sip->keep_adapter_open = true;
             }
             return 0;
         }
@@ -1372,7 +1368,7 @@ int http_request(adapter *ad, char *url, const char *method, int force) {
 
     if (!sip->sent_transport && (method[0] == 'S' || method[0] == 'P')) {
         sip->last_setup = getTick();
-        sip->sent_transport = 1;
+        sip->sent_transport = true;
         sip->stream_id = -1;
         ad->err = 0;
         sip->session[0] = 0;
@@ -1427,7 +1423,7 @@ int http_request(adapter *ad, char *url, const char *method, int force) {
 
     if (remote_socket >= 0) {
         sockets_write(remote_socket, buf, lb);
-        sip->expect_reply = 1;
+        sip->expect_reply = true;
         sip->last_response_sent = getTick();
     } else
         LOG("%s: remote socket is -1", __FUNCTION__);
@@ -1463,12 +1459,12 @@ int satipc_send_setup(adapter *ad, satipc *sip) {
     int len = strlen(url);
 
     // ignore all the packets until we handle 200 for the next PLAY
-    sip->ignore_packets = 1;
+    sip->ignore_packets = true;
     // ask the next PLAY command to send the pids
-    sip->want_tune = 0;
-    sip->want_commit = 1;
+    sip->want_tune = false;
+    sip->want_commit = true;
 
-    sip->sent_transport = 0;
+    sip->sent_transport = false;
     strcatf(url, len, "&pids=none");
     http_request(ad, url, "SETUP", 0);
     return 0;
@@ -1538,7 +1534,7 @@ int satipc_send_play(adapter *ad) {
 
     if (sip->want_tune || !sip->sent_transport) {
         tune_url(ad, url, sizeof(url) - 1);
-        sip->ignore_packets = 1;
+        sip->ignore_packets = true;
 
         len = strlen(url);
         strcatf(url, len, "&");
@@ -1546,7 +1542,7 @@ int satipc_send_play(adapter *ad) {
     }
 
     satipc_get_pids(ad, sip, url + len, sizeof(url) - len, use_pids);
-    sip->want_tune = 0;
+    sip->want_tune = false;
     http_request(ad, url, "PLAY", 0);
     return 0;
 }
@@ -1558,7 +1554,7 @@ int satipc_send_teardown(adapter *ad, satipc *sip) {
             sip->stream_id);
     sip->session[0] = 0;
     sip->stream_id = -1;
-    sip->sent_transport = 0;
+    sip->sent_transport = false;
     return 0;
 }
 
@@ -1617,16 +1613,22 @@ int satipc_request(adapter *ad) {
 
     // set the init parameters
     if (sip->state == SATIP_STATE_SETUP) {
-        sip->sent_transport = 0;
+        sip->sent_transport = false;
         sip->stream_id = -1;
         sip->session[0] = 0;
-        sip->want_tune = 1;
-        sip->want_commit = 1;
+        sip->want_tune = true;
+        sip->want_commit = true;
     }
 
     // PLAY contains the setup details as well
     if (sip->state == SATIP_STATE_SETUP && sip->option_no_setup) {
         sip->state = SATIP_STATE_PLAY;
+    }
+
+    if (sip->sent_transport == 0) {
+#ifndef DISABLE_SRT
+        satipc_open_srt(ad, sip);
+#endif
     }
 
     LOGM("satipc: for adapter %d, executing state %d", ad->id, sip->state);
@@ -1662,7 +1664,7 @@ int satipc_commit(adapter *ad) {
         "%d)",
         ad->tp.freq / 1000, ad->tp.sys, ad->id, sip->expect_reply);
 
-    sip->want_commit = 1;
+    sip->want_commit = true;
 
     return satipc_request(ad);
 }
@@ -1674,10 +1676,10 @@ int satipc_tune(int aid, transponder *tp) {
         "expect_reply %d)",
         ad->tp.freq / 1000, ad->tp.sys, aid, sip->state, sip->expect_reply);
     ad->err = 0;
-    sip->want_commit = 0;
-    sip->want_tune = 1;
+    sip->want_commit = false;
+    sip->want_tune = true;
     // ignore all the packets until we get 200 from the server
-    sip->ignore_packets = 1;
+    sip->ignore_packets = true;
     sip->lap = 0;
     sip->ldp = 0;
     if (sip->restart_when_tune) {
@@ -1686,7 +1688,7 @@ int satipc_tune(int aid, transponder *tp) {
             // Force close the previous RTSP socket
             sip->state = SATIP_STATE_TEARDOWN;
             satipc_request(ad);
-            sip->restart_needed = 1;
+            sip->restart_needed = true;
             sockets_del(ad->sock);
             sip->state = SATIP_STATE_DISCONNECTED;
         }
