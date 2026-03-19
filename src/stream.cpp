@@ -48,7 +48,6 @@
 
 #ifndef DISABLE_SRT
 #include <srt/srt.h>
-#define SRT_LATENCY_MS 120
 #endif
 
 #include "utils/ticks.h"

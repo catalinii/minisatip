@@ -83,4 +83,5 @@ void find_satip_adapter(adapter **a);
 int satip_getxml(void *);
 char *init_satip_pointer(int len);
 int satipc_timeout(sockets *s);
+void get_s2_url(adapter *ad, char *url, int url_len);
 #endif

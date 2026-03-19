@@ -253,8 +253,10 @@ if(BUILD_TESTING)
         crypto
         dl
         pthread
-	srt
     )
+    if(SRT)
+        list(APPEND TEST_LIBS srt)
+    endif()
     if(NOT APPLE)
         list(APPEND TEST_LIBS rt)
     endif()

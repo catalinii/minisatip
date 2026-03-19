@@ -1826,13 +1826,6 @@ int main(int argc, char *argv[]) {
         LOG0("init_utils failed with %d", rv);
         return rv;
     }
-#ifndef DISABLE_SRT
-    srt_startup();
-    LOG("SRT library initialized");
-    if (srt_listener_init() < 0)
-        LOG("Warning: SRT listener failed to start (SRT transport will not "
-            "work)");
-#endif
     if (opts.daemon)
         becomeDaemon();
     LOG("Running mode: %s", opts.daemon ? "background" : "foreground");
@@ -1891,6 +1884,14 @@ int main(int argc, char *argv[]) {
         if (si < 0 || si1 < 0)
             FAIL("sockets_add failed for ssdp");
     }
+
+#ifndef DISABLE_SRT
+    srt_startup();
+    LOG("SRT library initialized");
+    if (srt_listener_init() < 0)
+        LOG("Warning: SRT listener failed to start (SRT transport will not "
+            "work)");
+#endif
 
     sockets_timeout(si, 60 * 1000);
     set_sockets_rtime(si, -60 * 1000);
