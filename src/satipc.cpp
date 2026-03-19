@@ -1372,10 +1372,13 @@ int http_request(adapter *ad, char *url, const char *method, int force) {
         sip->stream_id = -1;
         ad->err = 0;
         sip->session[0] = 0;
+#ifndef DISABLE_SRT
         if (sip->transport_type == SIP_TRANSPORT_SRT)
             strcatf(session, ptr, "\r\nTransport: RTP/AVP/SRT;srt_streamid=%s",
                     sip->srt_streamid.c_str());
-        else if (sip->transport_type == SIP_TRANSPORT_TCP)
+        else
+#endif
+            if (sip->transport_type == SIP_TRANSPORT_TCP)
             strcatf(session, ptr, "\r\nTransport: RTP/AVP/TCP;interleaved=0-1");
         else
             strcatf(session, ptr,

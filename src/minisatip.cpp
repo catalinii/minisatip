@@ -1180,11 +1180,12 @@ int read_rtsp(sockets *s) {
 
     rlen = s->rlen;
     s->rlen = 0;
+    bool log_buf = opts.log & DEFAULT_LOG == DEFAULT_LOG;
 
-    LOG("Read RTSP (sock %d, handle %d) [%s:%d] sid %d, len: %d", s->id,
+    LOG("Read RTSP (sock %d, handle %d) [%s:%d] sid %d, len: %d %s%s", s->id,
         s->sock, get_sockaddr_host(s->sa, ra, sizeof(ra)),
-        get_sockaddr_port(s->sa), s->sid, rlen);
-    LOGM("%s", s->buf); // LOGM->LOG
+        get_sockaddr_port(s->sa), s->sid, rlen, log_buf ? "\n" : "",
+        log_buf ? (const char *)s->buf : "");
 
     if ((s->type != TYPE_HTTP) &&
         (strncasecmp((const char *)s->buf, "GET", 3) == 0)) {
@@ -1471,10 +1472,11 @@ int read_http(sockets *s) {
     sprintf(opts.time_running, "%.0d%s%02d:%02d:%02d", days,
             days > 0 ? "d " : "", hours, mins, secs);
 
-    LOG("Read HTTP (handle %d) [%s:%d] sid %d, sock %d", s->sid,
+    bool log_buf = opts.log & DEFAULT_LOG == DEFAULT_LOG;
+    LOG("Read HTTP (handle %d) [%s:%d] sid %d, sock %d %s%s", s->sid,
         get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa),
-        s->sid, s->sock);
-    LOGM("%s", s->buf);
+        s->sid, s->sock, log_buf ? "\n" : "",
+        log_buf ? (const char *)s->buf : "");
 
     split(arg, (char *)s->buf, ARRAY_SIZE(arg), ' ');
     //      LOG("args: %s -> %s -> %s",arg[0],arg[1],arg[2]);
@@ -1710,9 +1712,10 @@ int ssdp_reply(sockets *s) {
 
     // not my uuid
 
-    LOGM("Received SSDP packet (handle %d) from %s:%d", s->sock,
-         get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa));
-    LOGM("MSG querier >> process :\n%s", s->buf);
+    bool log_buf = opts.log & DEFAULT_LOG == DEFAULT_LOG;
+    LOGM("Received SSDP packet (handle %d) from %s:%d %s%s", s->sock,
+         get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa),
+         log_buf ? "\n" : "", log_buf ? (const char *)s->buf : "");
 
     if (strncasecmp((const char *)s->buf, "NOTIFY", 6) == 0) {
         rdid = strcasestr((char *)s->buf, "DEVICEID.SES.COM:");
@@ -1763,11 +1766,10 @@ int ssdp_reply(sockets *s) {
             opts.xml_path, opts.name_app, version, opts.uuid, opts.bootid, did);
 
     LOGM("Send Reply SSDP packet (fd: %d) %s:%d, bootid: %d deviceid: %d http: "
-         "%s",
+         "%s\n%s",
          ssdp, get_sockaddr_host(s->sa, ra, sizeof(ra)),
-         get_sockaddr_port(s->sa), opts.bootid, did, opts.http_host);
+         get_sockaddr_port(s->sa), opts.bootid, did, opts.http_host, buf);
     // use ssdp (unicast) even if received to multicast address
-    LOGM("MSG querier << process :\n%s", buf);
     int wb =
         sendto(ssdp, buf, ptr, MSG_NOSIGNAL, &s->sa.sa, SOCKADDR_SIZE(s->sa));
     if (wb != ptr)
@@ -2076,11 +2078,11 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr) {
     } else
         strlcatf(resp, sizeof(resp) - 1, lresp, "\r\n");
 
-    LOG("Reply %s(handle %d) [%s:%d] content_len:%d, sock %d",
+    bool log_buf = opts.log & DEFAULT_LOG == DEFAULT_LOG;
+    LOG("Reply %s(handle %d) [%s:%d] content_len:%d, sock %d %s%s",
         (lresp == sizeof(resp) - 1) ? "(message truncated) " : "", s->sock,
         get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa), lr,
-        s->id);
-    LOGM("MSG client << process :\n%s", resp);
+        s->id, log_buf ? "\n" : "", log_buf ? resp : "");
 
     struct iovec iov[2];
     iov[0].iov_base = resp;
