@@ -1192,7 +1192,7 @@ static int element_set_certificate(struct cc_ctrl_data *cc_data,
 
 static int element_set_hostid_from_certificate(struct cc_ctrl_data *cc_data,
                                                unsigned int id, X509 *cert) {
-    X509_NAME *subject;
+    const X509_NAME *subject;
     int nid_cn = OBJ_txt2nid("CN");
     char hostid[20];
     uint8_t bin_hostid[8];
