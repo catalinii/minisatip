@@ -214,16 +214,15 @@ target_include_directories(minisatip PRIVATE
 set_target_properties(minisatip PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 if(STATIC)
-    set(STATIC_LIBS "")
-    foreach(LIB ${MINISATIP_LIBS})
-        list(APPEND STATIC_LIBS "-l${LIB}.a")
-    endforeach()
-    target_link_libraries(minisatip PRIVATE ${STATIC_LIBS})
+    # Full static linking with -static flag
     target_link_options(minisatip PRIVATE -static)
-else()
-    target_link_libraries(minisatip PRIVATE ${MINISATIP_LIBS})
+    # Add atomic library for static MIPS builds
+    if(CMAKE_CXX_COMPILER_TARGET MATCHES "mipsel")
+        list(APPEND MINISATIP_LIBS atomic)
+    endif()
 endif()
 
+target_link_libraries(minisatip PRIVATE ${MINISATIP_LIBS})
 install(TARGETS minisatip RUNTIME DESTINATION bin)
 
 # Testing
