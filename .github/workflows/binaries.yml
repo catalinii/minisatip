@@ -44,7 +44,7 @@ jobs:
     - name: Build ARM
       run: |
         rm -rf build;
-        CXXFLAGS=-L/usr/arm-linux-gnueabihf/lib/ cmake -B build . -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_CXX_COMPILER_TARGET=arm-linux-gnueabihf  -DNETCVCLIENT=0
+        CXXFLAGS=-L/usr/arm-linux-gnueabihf/lib/ cmake -B build . -DCMAKE_CXX_COMPILER=arm-linux-gnueabihf-g++  -DNETCVCLIENT=0 -DSTATIC=ON
         (cd build && make)
         cat build/minisatip > minisatip && file minisatip
         zip -9 -r /minisatip_arm.zip minisatip html
@@ -52,7 +52,7 @@ jobs:
     - name: Build MIPS
       run: |
         rm -rf build 
-        CXXFLAGS=-L/usr/mipsel-linux-gnueabihf/lib/ cmake -B build . -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_CXX_COMPILER_TARGET=mipsel-linux-gnueabihf -DNETCVCLIENT=0
+        cmake -B build . -DCMAKE_CXX_COMPILER=mipsel-linux-gnu-g++ -DCMAKE_CXX_COMPILER_TARGET=mipsel-linux-gnu -DNETCVCLIENT=0 -DSTATIC=ON
         (cd build && make)
         cat build/minisatip > minisatip && file minisatip
         zip -9 -r /minisatip_mips.zip minisatip html
