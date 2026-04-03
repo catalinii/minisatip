@@ -278,7 +278,10 @@ By default every CAM supports 1 channels
 ## How to compile:
 
 ```bash
-./configure
+mkdir build
+cd build
+cmake ..
+make -j4
 ```
 
 Configures minisatip for the current system (use `./configure --help` for options)
