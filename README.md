@@ -284,8 +284,6 @@ cmake ..
 make -j4
 ```
 
-Configures minisatip for the current system (use `./configure --help` for options)
-
 To cross compile, use something like (static compilation), considering that `mips-openwrt-linux-musl-gcc` is the gcc executable for that platform:
 
 ```bash
