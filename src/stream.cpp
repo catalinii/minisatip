@@ -25,6 +25,7 @@
 #include "minisatip.h"
 #include "pmt.h"
 #include "socketworks.h"
+#include "srt.h"
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -44,6 +45,10 @@
 #include <time.h>
 #include <unistd.h>
 #include <vector>
+
+#ifndef DISABLE_SRT
+#include <srt/srt.h>
+#endif
 
 #include "utils/ticks.h"
 
@@ -357,6 +362,12 @@ int close_stream(int i) {
         LOG("Closing RTP sock %d handle %d", sid->rsock_id, sid->rsock);
         sockets_force_close(sid->rsock_id);
     }
+#ifndef DISABLE_SRT
+    if (sid->type == STREAM_RTSP_SRT && sid->srt_sock > 0) {
+        srt_pending_return(sid->srt_sock, sid->srt_streamid);
+        sid->srt_sock = -1;
+    }
+#endif
     sid->rsock = -1;
 
     if (sid->rtcp_sock > 0 || sid->rtcp > 0) {
@@ -380,6 +391,44 @@ int close_stream(int i) {
     return 0;
 }
 
+static int decode_transport_srt(sockets *s, streams *sid, char *arg) {
+#ifndef DISABLE_SRT
+    if (!srt_listener_is_init())
+        LOG_AND_RETURN(-1, "SRT listener not initialized");
+    // Parse streamid from Transport header: RTP/AVP/SRT;srt_streamid=<id>
+    std::string transport_str(arg);
+    sid->srt_streamid.clear();
+    auto pos = transport_str.find("srt_streamid=");
+    if (pos != std::string::npos) {
+        auto val_start = pos + 13; // strlen("str_streamid=")
+        auto val_end = transport_str.find(';', val_start);
+        sid->srt_streamid = transport_str.substr(
+            val_start, val_end == std::string::npos ? std::string::npos
+                                                    : val_end - val_start);
+    }
+    if (sid->srt_streamid.empty())
+        LOG_AND_RETURN(-1, "SRT transport missing srt_streamid= parameter");
+
+    sid->type = STREAM_RTSP_SRT;
+
+    // Try to take SRT socket from pending map (may have been queued by accept)
+    SRTSOCKET srt_sock = srt_pending_take(sid->srt_streamid);
+    if (srt_sock == SRT_INVALID_SOCK)
+        LOG_AND_RETURN(
+            -1, "Failed finding pending SRT socket for sid %d, srt_streamid %s",
+            sid->sid, sid->srt_streamid.c_str());
+
+    sid->srt_sock = srt_sock;
+    LOG("SRT stream setup for sid %d, srt_streamid='%s', srt_sock=%d "
+        "(from pending)",
+        sid->sid, sid->srt_streamid.c_str(), sid->srt_sock);
+    return 0;
+#else
+    LOG0("SRT not supported, install libsrt-openssl-dev");
+    return -1;
+#endif
+}
+
 int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp) {
     char *arg2[10];
     int l;
@@ -395,6 +444,11 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp) {
     std::lock_guard<SMutex> lock(sid->mutex);
     l = 0;
     if (arg) {
+        if (strstr(arg, "RTP/AVP/SRT")) {
+            LOG("Assuming SRT transport for stream sid %d, arg %s", sid->sid,
+                arg);
+            return decode_transport_srt(s, sid, arg);
+        }
         if (strstr(arg, "RTP/AVP/TCP")) {
             LOG("Assuming RTSP over TCP for stream sid %d, arg %s", sid->sid,
                 arg);
@@ -444,12 +498,14 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp) {
             char *oldhost = get_stream_rhost(sid->sid, ra, sizeof(ra) - 1);
 
             if (p.port == oldport && !strcmp(p.dest, oldhost))
-                LOG("Transport for this connection is already setup to %s:%d, "
+                LOG("Transport for this connection is already setup to "
+                    "%s:%d, "
                     "leaving "
                     "as it is: sid = %d, handle %d",
                     p.dest, p.port, sid->sid, sid->rsock)
             else {
-                LOG("Stream has already a transport header associated with it "
+                LOG("Stream has already a transport header associated with "
+                    "it "
                     "to %s:%d "
                     "- sid = %d type = %d, closing %d",
                     oldhost, oldport, sid->sid, sid->type, sid->rsock);
@@ -513,7 +569,8 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp) {
                 get_sockaddr_host(sid->sa, h1, sizeof(h1));
                 get_sockaddr_host(sid2->sa, h2, sizeof(h2));
                 if (!strncmp(h1, h2, sizeof(h1))) {
-                    LOG("Detected stream with the same destination as sid %d: "
+                    LOG("Detected stream with the same destination as sid "
+                        "%d: "
                         "sid %d -> "
                         "%s:%d, aid: %d",
                         sid->sid, i, p.dest, p.port, sid2->adapter);
@@ -549,7 +606,9 @@ int streams_add() {
     ss->useragent[0] = 0;
     ss->len = 0;
     ss->st_sock = -1;
-    //	ss->seq = 0; // set the sequence to 0 for testing purposes - it should
+    ss->srt_sock = SRT_INVALID_SOCK;
+    //	ss->seq = 0; // set the sequence to 0 for testing purposes - it
+    // should
     // be random
     /* coverity[DC.WEAK_CRYPTO] */
     ss->ssrc = random();
@@ -709,19 +768,51 @@ int send_rtcp(int s_id, int64_t ctime) {
 int flush_stream(streams *sid, struct iovec *iov, int iiov, int64_t ctime) {
     int rv = 0;
     char ra[50];
-    rv = sockets_writev(sid->rsock_id, iov, iiov);
+
+#ifndef DISABLE_SRT
+    if (sid->type == STREAM_RTSP_SRT) {
+        // Send raw TS data over SRT, chunked to max MAX_UDP_PACKET_SIZE bytes
+        // (7 * 188)
+        for (int i = 0; i < iiov; i++) {
+            const char *data = (const char *)iov[i].iov_base;
+            int remaining = iov[i].iov_len;
+            while (remaining > 0) {
+                int chunk = remaining > MAX_UDP_PACKET_SIZE
+                                ? MAX_UDP_PACKET_SIZE
+                                : remaining;
+                int sent = srt_send(sid->srt_sock, data, chunk);
+                if (sent > 0) {
+                    rv += sent;
+                    data += sent;
+                    remaining -= sent;
+                } else {
+                    LOG("SRT send failed for sid %d: %s", sid->sid,
+                        srt_getlasterror_str());
+                    goto srt_done;
+                }
+            }
+        }
+    srt_done:;
+    } else
+#endif
+    {
+        rv = sockets_writev(sid->rsock_id, iov, iiov);
+    }
+
     if (rv > 0 && sid->start_streaming == 0) {
         sid->start_streaming = 1;
-        LOG("Start streaming for stream sid %d, len %d to handle %d => %s:%d",
+        LOG("Start streaming for stream sid %d, len %d to handle %d => "
+            "%s:%d",
             sid->sid, rv, sid->rsock,
             get_stream_rhost(sid->sid, ra, sizeof(ra)),
             get_stream_rport(sid->sid));
     }
 
-    DEBUGM(
-        "%s: sent %d bytes for sid %d, handle %d, sock_id %d, seq %d => %s:%d",
-        __FUNCTION__, rv, sid->sid, sid->rsock, sid->rsock_id, sid->seq,
-        get_stream_rhost(sid->sid, ra, sizeof(ra)), get_stream_rport(sid->sid));
+    DEBUGM("%s: sent %d bytes for sid %d, handle %d, sock_id %d, seq %d => "
+           "%s:%d",
+           __FUNCTION__, rv, sid->sid, sid->rsock, sid->rsock_id, sid->seq,
+           get_stream_rhost(sid->sid, ra, sizeof(ra)),
+           get_stream_rport(sid->sid));
 
     sid->wtime = ctime;
     sid->len = 0;
@@ -805,7 +896,8 @@ int check_cc(adapter *ad) {
             else
                 p->cc = (p->cc + 1) % 16;
 
-            //	if(b[1] ==0x40 && b[2]==0) LOG("PAT TID = %d", b[8] * 256 +
+            //	if(b[1] ==0x40 && b[2]==0) LOG("PAT TID = %d", b[8] *
+            // 256 +
             // b[9]);
             if (p->cc != cc) {
                 LOG("PID Continuity error (adapter %d, pos %d): pid: %03d, "
@@ -896,7 +988,8 @@ void check_cc2(adapter *ad) {
     }
 }
 
-// Locks the used structs in order to avoid race conditions (sockets -> stream
+// Locks the used structs in order to avoid race conditions (sockets ->
+// stream
 // -> adapter) Requires the adapter lock to not be held before calling
 int process_packets_for_stream(streams *sid, adapter *ad) {
     int i, st_id = sid->sid;
@@ -913,15 +1006,23 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
     int total_len = 0;
     int max_pack = TCP_MAX_PACK;
 
-    sockets *s = get_sockets(sid->rsock_id);
-    if (!s)
-        LOG_AND_RETURN(0, "Stream %d rsock id not found %d", st_id,
-                       sid->rsock_id);
-    std::lock_guard<SMutex> lock(s->mutex);
-    if (!s->enabled)
+    sockets *s = nullptr;
+    if (sid->type != STREAM_RTSP_SRT) {
+        s = get_sockets(sid->rsock_id);
+        if (!s)
+            LOG_AND_RETURN(0, "Stream %d rsock id not found %d", st_id,
+                           sid->rsock_id);
+    }
+    // Lock ordering: socket -> stream -> adapter
+    std::unique_lock<SMutex> lock(s ? s->mutex : sid->mutex, std::defer_lock);
+    lock.lock();
+    if (s && !s->enabled)
         LOG_AND_RETURN(0, "rsock %d disabled for stream %d", sid->rsock_id,
                        st_id);
-    std::lock_guard<SMutex> lock2(sid->mutex);
+    // For SRT, sid->mutex is already locked as the first lock above
+    std::unique_lock<SMutex> lock2(sid->mutex, std::defer_lock);
+    if (s)
+        lock2.lock();
     if (!sid->enabled)
         LOG_AND_RETURN(0, "stream disabled %d for addapter %d", st_id, ad->id);
     std::lock_guard<SMutex> lock3(ad->mutex);
@@ -942,6 +1043,11 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
     if (sid->type == STREAM_RTSP_UDP) {
         max_pack = UDP_MAX_PACK;
         //		max_iov = max_pack;
+    }
+
+    if (sid->type == STREAM_RTSP_SRT) {
+        iiov = 0;     // no RTP header slot
+        max_pack = 0; // no RTP batching
     }
 
     if (sid->type == STREAM_HTTP) {
@@ -968,10 +1074,11 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
             rtp_added = 1;
         }
 
-        // unlikely: if the rtp header was just enqueued try to flush if there
-        // is not enough iiov left
+        // unlikely: if the rtp header was just enqueued try to flush if
+        // there is not enough iiov left
         if ((rtp_added || !max_pack) && (iiov >= max_iov)) {
-            LOG("stream sid %d, flushing intermediary stream iiov %d max_iiov "
+            LOG("stream sid %d, flushing intermediary stream iiov %d "
+                "max_iiov "
                 "%d, "
                 "total_len %d",
                 st_id, iiov - 1, max_iov, total_len);
@@ -1031,7 +1138,8 @@ int process_dmx(sockets *s) {
     if (ad->type != ADAPTER_CI)
         bw_dmx += rlen;
 
-    LOGM("process_dmx start called for adapter %d -> %d out of %d bytes read, "
+    LOGM("process_dmx start called for adapter %d -> %d out of %d bytes "
+         "read, "
          "%jd ms ago",
          ad->id, rlen, s->lbuf, ms_ago);
 
@@ -1102,7 +1210,8 @@ int read_dmx(sockets *s) {
     {
         int new_rlen = check_new_transponder(ad, s->rlen);
         if (!new_rlen) {
-            LOGM("Flushing adapter %d buffer of %d bytes after the tune %jd ms "
+            LOGM("Flushing adapter %d buffer of %d bytes after the tune "
+                 "%jd ms "
                  "ago",
                  ad->id, s->rlen, rtime - ad->tune_time);
             s->rlen = 0;
@@ -1121,7 +1230,8 @@ int read_dmx(sockets *s) {
         send = 0;
 #endif
 
-    LOGM("read_dmx send=%d, force_send=%d, cnt %d called for adapter %d -> %d "
+    LOGM("read_dmx send=%d, force_send=%d, cnt %d called for adapter %d -> "
+         "%d "
          "out "
          "of %d bytes read, %jd ms ago (%jd %jd)",
          send, force_send, cnt, ad->id, s->rlen, s->lbuf, rtime - ad->rtime,
@@ -1160,8 +1270,10 @@ int calculate_bw(sockets *s) {
             c_tt = nsecs / 1000;
             c_buffered = buffered_bytes;
             c_dropped = dropped_bytes;
-            LOG("BW %jd KB/s, DMX %jd KB/s, Buffered %.1f MB, Dropped: %.1f "
-                "MB, ns/read %jd, r: %d, w: %d fw: %d, tt: %jd ms, memory %jd "
+            LOG("BW %jd KB/s, DMX %jd KB/s, Buffered %.1f MB, Dropped: "
+                "%.1f "
+                "MB, ns/read %jd, r: %d, w: %d fw: %d, tt: %jd ms, memory "
+                "%jd "
                 "MB",
                 c_bw, c_bw_dmx, 1.0 * c_buffered / 1048576,
                 1.0 * c_dropped / 1048576, c_ns_read, c_reads, c_writes,
@@ -1190,7 +1302,8 @@ int stream_timeout(sockets *s) {
     ctime = getTick();
     s->rtime = ctime;
 
-    if ((sid = get_sid(s->sid)) && sid->type != STREAM_HTTP) {
+    if ((sid = get_sid(s->sid)) && sid->type != STREAM_HTTP &&
+        sid->type != STREAM_RTSP_SRT) {
         std::unique_lock<SMutex> lock(sid->mutex);
         rttime = sid->rtcp_wtime, rtime = sid->wtime;
 
@@ -1206,7 +1319,8 @@ int stream_timeout(sockets *s) {
         // check stream timeout, and allow 10s more to respond
         if ((sid->timeout > 0 && (ctime - sid->rtime > sid->timeout + 10000)) ||
             (sid->timeout == 1)) {
-            LOG("Stream timeout sid %d, closing (ctime %jd , sid->rtime %jd, "
+            LOG("Stream timeout sid %d, closing (ctime %jd , sid->rtime "
+                "%jd, "
                 "sid->timeout %d)",
                 sid->sid, ctime, sid->rtime, sid->timeout);
 
@@ -1284,7 +1398,8 @@ int find_session_id(int id) {
     for (i = 0; i < MAX_STREAMS; i++)
         if ((sid = get_sid_nw(i)) && sid->ssrc == id) {
             sid->rtime = getTick();
-            LOG("recovered session id from a closed connection, sid %d , id: "
+            LOG("recovered session id from a closed connection, sid %d , "
+                "id: "
                 "%d",
                 i, id);
             return i;
@@ -1346,6 +1461,8 @@ char *get_stream_protocol(int s_id, char *dest, int max_size) {
         strlcatf(dest, max_size, len, "RTP/UDP");
     else if (s->type == STREAM_RTSP_TCP)
         strlcatf(dest, max_size, len, "RTP/TCP");
+    else if (s->type == STREAM_RTSP_SRT)
+        strlcatf(dest, max_size, len, "SRT");
     else
         strlcatf(dest, max_size, len, "unkown"); // RTP/MCAST ?
     return dest;

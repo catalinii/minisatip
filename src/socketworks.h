@@ -53,6 +53,7 @@ typedef struct struct_sockets {
     // action function. Useful when the DVR buffer comes from different file
     // handles
     int master;
+    bool close_unix_socket; // flag to control if unix socket should be closed
 } sockets;
 
 #define IPTOS_DSCP_EF 0xb8
@@ -126,6 +127,8 @@ int copy_iovec_to_fifo(SFIFO *fifo, uint32_t offset, struct iovec *iov,
                        int iovcnt);
 uint64_t get_allocated_memory();
 void sockets_set_flush_enqued_data(int id);
+int sockets_set_handle(int sock_id, int new_handle);
+void sockets_set_close_handle(int id, bool close_handle);
 extern __thread char thread_name[];
 extern __thread pthread_t tid;
 extern __thread int select_timeout;

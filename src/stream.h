@@ -14,10 +14,12 @@
 #define VALID_SID(i) (i >= 0 && i < MAX_STREAMS)
 
 #define DVB_FRAME 188
+#define MAX_UDP_PACKET_SIZE 1316
 
 #define STREAM_HTTP 1
 #define STREAM_RTSP_UDP 2
 #define STREAM_RTSP_TCP 3
+#define STREAM_RTSP_SRT 4
 
 #define UDP_MAX_PACK 7   // maximum udp rtp packets to buffer
 #define TCP_MAX_PACK 42  // maximum tcp packets for a RTP header
@@ -33,6 +35,8 @@ typedef struct struct_streams {
     int rsock; // return socket handle, for rtsp over tcp, rtsp over udp or http
     int rsock_id;
     int rtcp, rtcp_sock, st_sock;
+    int srt_sock;             // SRT socket for SRT transport
+    std::string srt_streamid; // SRT stream ID for caller/listener correlation
     int type;
     int len;
     uint16_t seq; // rtp seq id
@@ -49,6 +53,10 @@ typedef struct struct_streams {
     int timeout;
     char useragent[40];
 } streams;
+
+#ifdef DISABLE_SRT
+#define SRT_INVALID_SOCK -1
+#endif
 
 #define TYPE_MCAST 1
 #define TYPE_UNICAST 2
@@ -83,9 +91,16 @@ int get_streams_for_adapter(int aid);
 int find_session_id(int id);
 int calculate_bw(sockets *s);
 
+#ifndef DISABLE_SRT
+#include "srt.h"
+#endif
+
 #define get_sid(a) get_sid1(a, __FILE__, __LINE__)
 #define get_sid_nw(i)                                                          \
     ((i >= 0 && i < MAX_STREAMS && st[i] && st[i]->enabled) ? st[i] : NULL)
+
+extern streams *st[MAX_STREAMS];
+extern SMutex st_mutex;
 
 extern int64_t c_tbw, c_bw, c_bw_dmx;
 extern uint32_t c_reads, c_writes, c_failed_writes;

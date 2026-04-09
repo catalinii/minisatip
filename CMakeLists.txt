@@ -16,6 +16,11 @@ execute_process(
     ERROR_QUIET
 )
 
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    message(STATUS "Setting build type to 'DEBUG' as default.")
+    set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Choose the build type (Debug, Release, RelWithDebInfo, MinSizeRel)" FORCE)
+endif()
+
 if(DEFINED ENV{PR})
     set(VERSION_STRING "${GIT_TAG}+PR$ENV{PR}~${GIT_REVISION}")
 else()
@@ -39,6 +44,13 @@ find_library(CRYPTO_LIBRARY crypto)
 find_library(NETCEIVER_LIBRARY netceiver)
 find_path(NETCEIVER_INCLUDE_DIR libnetceiver/netcv/defs.h)
 find_library(STDCPPEXP_LIBRARY NAMES stdc++exp)
+find_library(SRT_LIBRARY srt)
+find_path(SRT_INCLUDE_DIR srt/srt.h)
+if(SRT_LIBRARY AND SRT_INCLUDE_DIR)
+    set(SRT_DEFAULT ON)
+else()
+    set(SRT_DEFAULT OFF)
+endif()
 
 if(DVBCSA_LIBRARY)
     set(DVBCSA_DEFAULT ON)
@@ -66,6 +78,7 @@ option(LINUXDVB "Enable Linux DVB support" ON)
 option(CXX23 "Enable C++23 features (stacktrace)" ${CXX23_DEFAULT})
 option(STATIC "Build with static linking" OFF)
 option(DEBUG "Enable debug/sanitizer build" OFF)
+option(SRT "Enable SRT support" ${SRT_DEFAULT})
 option(BUILD_TESTING "Build tests" OFF)
 
 # Platform detection
@@ -88,7 +101,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Generate config.h
-set(OPTIONS DVBCSA DVBCA NETCVCLIENT LINUXDVB DDCI CXX23)
+set(OPTIONS DVBCSA DVBCA NETCVCLIENT LINUXDVB DDCI CXX23 SRT)
 set(CONFIG_CONTENT "// Auto-generated configuration header\n#ifndef CONFIG_H\n#define CONFIG_H\n\n")
 
 foreach(OPT ${OPTIONS})
@@ -115,7 +128,7 @@ add_compile_options(
 
 if(DEBUG)
     add_compile_options(
-        -g
+        -ggdb
         -fsanitize=address
         -fsanitize=leak
         -fsanitize=undefined
@@ -190,6 +203,10 @@ endif()
 if(DDCI)
     list(APPEND MINISATIP_SOURCES src/ddci.cpp)
 endif()
+if(SRT)
+    list(APPEND MINISATIP_SOURCES src/srt.cpp)
+    list(APPEND MINISATIP_LIBS srt)
+endif()
 if(NOT APPLE)
     list(APPEND MINISATIP_LIBS rt)
 endif()
@@ -201,6 +218,9 @@ target_include_directories(minisatip_lib PUBLIC
     ${CMAKE_BINARY_DIR}
 )
 target_compile_options(minisatip_lib PRIVATE -include ${CMAKE_BINARY_DIR}/config.h)
+if(SRT)
+    target_include_directories(minisatip_lib PUBLIC ${SRT_INCLUDE_DIR})
+endif()
 if(STDCPPEXP_LIBRARY)
     target_link_libraries(minisatip_lib PRIVATE ${STDCPPEXP_LIBRARY})
 endif()
@@ -234,6 +254,9 @@ if(BUILD_TESTING)
         dl
         pthread
     )
+    if(SRT)
+        list(APPEND TEST_LIBS srt)
+    endif()
     if(NOT APPLE)
         list(APPEND TEST_LIBS rt)
     endif()
