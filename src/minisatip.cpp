@@ -1180,7 +1180,7 @@ int read_rtsp(sockets *s) {
 
     rlen = s->rlen;
     s->rlen = 0;
-    bool log_buf = opts.log & DEFAULT_LOG == DEFAULT_LOG;
+    bool log_buf = (opts.log & DEFAULT_LOG) == DEFAULT_LOG;
 
     LOG("Read RTSP (sock %d, handle %d) [%s:%d] sid %d, len: %d %s%s", s->id,
         s->sock, get_sockaddr_host(s->sa, ra, sizeof(ra)),
@@ -1472,7 +1472,7 @@ int read_http(sockets *s) {
     sprintf(opts.time_running, "%.0d%s%02d:%02d:%02d", days,
             days > 0 ? "d " : "", hours, mins, secs);
 
-    bool log_buf = opts.log & DEFAULT_LOG == DEFAULT_LOG;
+    bool log_buf = (opts.log & DEFAULT_LOG) == DEFAULT_LOG;
     LOG("Read HTTP (handle %d) [%s:%d] sid %d, sock %d %s%s", s->sid,
         get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa),
         s->sid, s->sock, log_buf ? "\n" : "",
@@ -1712,7 +1712,7 @@ int ssdp_reply(sockets *s) {
 
     // not my uuid
 
-    bool log_buf = opts.log & DEFAULT_LOG == DEFAULT_LOG;
+    bool log_buf = (opts.log & DEFAULT_LOG) == DEFAULT_LOG;
     LOGM("Received SSDP packet (handle %d) from %s:%d %s%s", s->sock,
          get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa),
          log_buf ? "\n" : "", log_buf ? (const char *)s->buf : "");
@@ -2079,7 +2079,7 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr) {
     } else
         strlcatf(resp, sizeof(resp) - 1, lresp, "\r\n");
 
-    bool log_buf = opts.log & DEFAULT_LOG == DEFAULT_LOG;
+    bool log_buf = (opts.log & DEFAULT_LOG) == DEFAULT_LOG;
     LOG("Reply %s(handle %d) [%s:%d] content_len:%d, sock %d %s%s",
         (lresp == sizeof(resp) - 1) ? "(message truncated) " : "", s->sock,
         get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa), lr,
