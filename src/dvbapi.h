@@ -84,6 +84,10 @@ typedef struct struct_key {
         ecm_parity[MAX_KEY_FILTERS];
     int64_t last_parity_change;
     unsigned char icam_ecm;
+    // DVBAPI descramble watchdog state
+    int64_t descramble_fail_start;
+    int64_t last_descramble_restart;
+    uint8_t descramble_watchdog_resend_pmt;
 } SKey;
 
 void init_dvbapi();
@@ -95,6 +99,7 @@ int decrypt_stream(adapter *ad, void *arg);
 int keys_add(int i, int adapter, int pmt_id);
 int keys_del(int i);
 int dvbapi_process_pmt(unsigned char *b, adapter *ad);
+int dvbapi_send_pmt(SKey *k, int cmd_id);
 void dvbapi_pid_add(adapter *a, int pid, SPid *cp, int existing);
 void dvbapi_pid_del(adapter *a, int pid, SPid *cp);
 void register_dvbapi();

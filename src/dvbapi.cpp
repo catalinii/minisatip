@@ -52,9 +52,17 @@
 
 #define DEFAULT_LOG LOG_DVBAPI
 
+// DVBAPI descramble watchdog tuning constants (milliseconds)
+static const int64_t DVBAPI_STALL_MS = 3000; // scrambled TS, but no decrypt ok
+static const int64_t DVBAPI_GRACE_MS = 5000; // don't trigger right after start
+static const int64_t DVBAPI_COOLDOWN_MS = 5000; // rate-limit recovery actions
+static const int64_t DVBAPI_SCRAMBLED_RECENT_MS =
+    2000; // must be seeing scrambled TS
+
 int dvbapi_sock = -1;
 int sock;
 int dvbapi_is_enabled = 0;
+int dvbapi_enabled() { return dvbapi_is_enabled; }
 int enabledKeys = 0;
 int network_mode = 1;
 int dvbapi_protocol_version = DVBAPI_PROTOCOL_VERSION;
@@ -730,6 +738,9 @@ int keys_add(int i, int adapter, int pmt_id) {
     k->onid = 0;
     k->tsid = 0;
     k->icam_ecm = 0;
+    k->descramble_fail_start = 0;
+    k->last_descramble_restart = 0;
+    k->descramble_watchdog_resend_pmt = 0;
     memset(k->cw[0], 0, 16);
     memset(k->cw[1], 0, 16);
     memset(k->filter_id, -1, sizeof(k->filter_id));
@@ -852,11 +863,111 @@ int dvbapi_init_dev(adapter *ad) {
 
 SCA_op dvbapi;
 
+void dvbapi_descramble_watchdog(adapter *ad) {
+    if (!ad)
+        return;
+
+    if (!dvbapi_is_enabled)
+        return;
+
+    if (ad->active_pmts <= 0 || ad->ca_mask == 0)
+        return;
+
+    int64_t now = getTick();
+
+    for (int i = 0; i < ad->active_pmts; i++) {
+        SPMT *pmt = get_pmt(ad->active_pmt[i]);
+        if (!pmt)
+            continue;
+
+        // Watch only master PMTs
+        if (pmt->master_pmt != pmt->id)
+            continue;
+
+        if (pmt->state != PMT_RUNNING)
+            continue;
+
+        // Only for encrypted services (have CA descriptors / CAIDs)
+        if (pmt->caids <= 0)
+            continue;
+
+        // Get DVBAPI key (stored in pmt->opaque)
+        SKey *k = (SKey *)pmt->opaque;
+        if (!k || !k->enabled)
+            continue;
+
+        // Avoid interfering while the PMT is just starting
+        if (pmt->start_time > 0 && (now - pmt->start_time) < DVBAPI_GRACE_MS)
+            continue;
+
+        // If we are not currently seeing scrambled packets, reset fail state
+        if (pmt->last_scrambled_pkt == 0 ||
+            (now - pmt->last_scrambled_pkt) > DVBAPI_SCRAMBLED_RECENT_MS) {
+            k->descramble_fail_start = 0;
+            k->descramble_watchdog_resend_pmt = 0;
+            continue;
+        }
+
+        // If we decrypted after the last scrambled packet, everything is OK
+        if (pmt->last_decrypt_ok >= pmt->last_scrambled_pkt) {
+            k->descramble_fail_start = 0;
+            k->descramble_watchdog_resend_pmt = 0;
+            continue;
+        }
+
+        if (k->descramble_fail_start == 0)
+            k->descramble_fail_start = now;
+
+        if ((now - k->descramble_fail_start) < DVBAPI_STALL_MS)
+            continue;
+
+        if (k->last_descramble_restart > 0 &&
+            (now - k->last_descramble_restart) < DVBAPI_COOLDOWN_MS)
+            continue;
+
+        k->last_descramble_restart = now;
+        k->descramble_fail_start = now;
+
+        // Clear CWs (both parities) to force fresh decrypt state
+        clear_cw_for_pmt(pmt->id, 0);
+        clear_cw_for_pmt(pmt->id, 1);
+        pmt->update_cw = 1;
+
+        // Soft recovery: resend CAPMT once
+        if (!k->descramble_watchdog_resend_pmt) {
+            k->descramble_watchdog_resend_pmt = 1;
+            LOG("Descramble watchdog: resending CAPMT for PMT %d (%s)", pmt->id,
+                pmt->name);
+            dvbapi_send_pmt(k, CMD_ID_OK_DESCRAMBLING);
+            continue;
+        }
+
+        // Hard fallback: stop and let tables/CA logic re-add the PMT
+        k->descramble_watchdog_resend_pmt = 0;
+        LOG("Descramble watchdog: restarting PMT %d (%s)", pmt->id, pmt->name);
+        stop_pmt(pmt, ad);
+        pmt->update_cw = 1;
+    }
+}
+
+static int dvbapi_ts(adapter *ad) {
+    static int64_t last_watchdog_run = 0;
+    int64_t now = getTick();
+
+    // Run DVBAPI descramble watchdog every 100ms
+    if (now - last_watchdog_run >= 100) {
+        dvbapi_descramble_watchdog(ad);
+        last_watchdog_run = now;
+    }
+    return 0;
+}
+
 void register_dvbapi() {
     memset(&dvbapi, 0, sizeof(dvbapi));
     dvbapi.ca_init_dev = dvbapi_init_dev;
     dvbapi.ca_add_pmt = dvbapi_add_pmt;
     dvbapi.ca_del_pmt = dvbapi_del_pmt;
+    dvbapi.ca_ts = dvbapi_ts;
 
     dvbapi_ca = add_ca(&dvbapi);
 }

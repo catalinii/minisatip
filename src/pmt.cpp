@@ -910,6 +910,7 @@ int decrypt_batch(SPMT *pmt) {
         return 0;
     }
 
+    int64_t now = getTick();
     update_cw(pmt);
 
     if (!pmt->cw) {
@@ -925,6 +926,10 @@ int decrypt_batch(SPMT *pmt) {
          pmt->blen, pmt->sid, pid);
     for (i = 0; i < pmt->blen; i++)
         pmt->batch[i].data[3] &= 0x3F; // clear the encrypted flags
+
+    // Track successful decrypt for CA watchdog
+    pmt->last_decrypt_ok = now;
+
     pmt->blen = 0;
 
     return 0;
@@ -939,6 +944,7 @@ int pmt_decrypt_stream(adapter *ad) {
     int pid;
     int cp;
     int rlen = ad->rlen;
+    int64_t now = getTick();
     int pmt_id[rlen / DVB_FRAME + 10];
     int pmt_ids = 0;
 
@@ -961,6 +967,10 @@ int pmt_decrypt_stream(adapter *ad) {
             master = get_pmt(pmt->master_pmt);
             if (master)
                 pmt = master;
+
+            // Track scrambled packets for CA watchdog
+            pmt->last_scrambled_pkt = now;
+
             cp = ((b[3] & 0x40) > 0);
 
             if (pmt->parity == -1)
@@ -1296,6 +1306,8 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
     pmt->update_cw = 1;
     pmt->blen = 0;
     pmt->last_update_cw = 0;
+    pmt->last_decrypt_ok = 0;
+    pmt->last_scrambled_pkt = 0;
     pmt->filter = -1;
     pmt->enabled = 1;
     pmt->version = -1;
@@ -2026,6 +2038,10 @@ void start_pmt(SPMT *pmt, adapter *ad) {
          pmt->id, pmt->master_pmt, pmt->pid, pmt->sid, pmt->filter, pmt->name);
     pmt->state = PMT_STARTING;
     pmt->start_time = getTick();
+
+    // Reset descramble tracking on (re)start
+    pmt->last_decrypt_ok = 0;
+    pmt->last_scrambled_pkt = 0;
 
     // do not call send_pmt_to_cas to allow all the slave PMTs to be read
     // when the master PMT is being sent next time, it will actually making

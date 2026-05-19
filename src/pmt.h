@@ -144,6 +144,8 @@ typedef struct struct_pmt {
     SPMT_batch *batch;
     int8_t parity, update_cw;
     uint64_t last_update_cw;
+    int64_t last_decrypt_ok;    // Generic: last successful decrypt timestamp
+    int64_t last_scrambled_pkt; // Generic: last scrambled packet timestamp
     int16_t master_pmt; //  the pmt that contains the same pids as this PMT
     SCW *cw;
     SPid *p;
@@ -229,6 +231,7 @@ int get_pid_filter(int aid, int pid);
 int assemble_packet(SFilter *f, uint8_t *b);
 void disable_cw(int master_pmt);
 void expire_cw_for_pmt(int master_pmt, int parity, int64_t min_expiry);
+void clear_cw_for_pmt(int master_pmt, int parity);
 int pmt_add(int adapter, int sid, int pmt_pid);
 int test_decrypt_packet(SCW *cw, SPMT_batch *start, int len);
 void init_algo();
