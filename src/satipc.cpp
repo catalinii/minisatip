@@ -148,8 +148,8 @@ void handle_client_capabilities(satipc *sip, char *buf) {
 
 // This could be the response of a both SETUP or PLAY
 int satipc_handle_setup(adapter *ad, satipc *sip, char *buf) {
-    char *arg[100], *sess, *es, *sid, *timeout;
-    int la, i;
+    int i;
+    char *timeout;
 
     if ((timeout = strstr(buf, "timeout="))) {
         int tmout;
@@ -158,20 +158,34 @@ int satipc_handle_setup(adapter *ad, satipc *sip, char *buf) {
         sockets_timeout(ad->fe_sock, tmout * 500); // 2 times 30s
         sip->timeout_ms = tmout * 1000;
     }
-    la = split(arg, buf, ARRAY_SIZE(arg), ' ');
-    sess = NULL;
-    sid = NULL;
-    for (i = 0; i < la; i++)
-        if (strncasecmp("Session:", arg[i], 8) == 0)
+
+    size_t original_len = strlen(buf);
+    auto arg = split(std::string_view(buf, original_len), ' ');
+
+    // Mutate buf in-place to ensure all tokens are null-terminated (matching
+    // legacy behavior)
+    for (size_t k = 0; k < original_len; k++) {
+        if (buf[k] == ' ' || buf[k] < 33) {
+            buf[k] = '\0';
+        }
+    }
+
+    std::string_view sess;
+    std::string_view sid;
+    for (i = 0; i < (int)arg.size(); i++)
+        if (strncasecmp("Session:", arg[i].data(), 8) == 0)
             sess = header_parameter(arg, i);
-        else if (strncasecmp("com.ses.streamID:", arg[i], 17) == 0)
+        else if (strncasecmp("com.ses.streamID:", arg[i].data(), 17) == 0)
             sid = header_parameter(arg, i);
 
-    if (!ad->err && sid && sess) {
-        if ((es = strchr(sess, ';')))
-            *es = 0;
-        safe_strncpy(sip->session, sess);
-        if (sid && sip->stream_id == -1)
+    if (!ad->err && !sid.empty() && !sess.empty()) {
+        std::string sess_str(sess);
+        size_t semi = sess_str.find(';');
+        if (semi != std::string::npos) {
+            sess_str = sess_str.substr(0, semi);
+        }
+        safe_strncpy(sip->session, sess_str.c_str());
+        if (sip->stream_id == -1)
             sip->stream_id = map_int(sid, NULL);
         LOG("satipc: session set for adapter %d to %s with stream_id %d",
             ad->id, sip->session, sip->stream_id);
@@ -1809,9 +1823,7 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
 
 // [*][~][DELSYS:][FE_ID@][source_ip/]host[:port]
 void find_satip_adapter(adapter **a) {
-    int i, la;
-    char *sep1, *sep2, *sep;
-    char *arg[50];
+    int i;
     char host[100];
     char source_ip[100];
     int port;
@@ -1821,76 +1833,82 @@ void find_satip_adapter(adapter **a) {
 
     if (!opts.satip_servers || !opts.satip_servers[0])
         return;
-    char satip_servers[strlen(opts.satip_servers) + 10];
-    safe_strncpy(satip_servers, opts.satip_servers);
-    la = split(arg, satip_servers, ARRAY_SIZE(arg), ',');
 
-    for (i = 0; i < la; i++) {
+    auto arg = split(opts.satip_servers, ',');
+
+    for (const auto &token_val : arg) {
+        std::string_view token = token_val;
         satipc_transport_type transport =
             opts.satip_rtsp_over_tcp ? SIP_TRANSPORT_TCP : SIP_TRANSPORT_UDP;
         no_pids_all = 0;
-        if (arg[i][0] == '^') {
-            transport = SIP_TRANSPORT_SRT;
-            arg[i]++;
-#ifdef DISABLE_SRT
-            FAIL("SRT support is disabled, install libsrt-openssl-dev")
-#endif
-        }
 
-        if (arg[i][0] == '*') {
+        if (!token.empty() && token[0] == '^') {
+            transport = SIP_TRANSPORT_SRT;
+            token.remove_prefix(1);
+        }
+        if (!token.empty() && token[0] == '*') {
             if (transport == SIP_TRANSPORT_TCP)
                 transport = SIP_TRANSPORT_UDP;
             else if (transport == SIP_TRANSPORT_UDP)
                 transport = SIP_TRANSPORT_TCP;
-            arg[i]++;
+            token.remove_prefix(1);
         }
-        if (arg[i][0] == '~') {
+        if (!token.empty() && token[0] == '~') {
             no_pids_all = 1;
-            arg[i]++;
+            token.remove_prefix(1);
         }
-        sep = NULL;
-        sep2 = NULL;
-        sep1 = strchr(arg[i], ':');
-        if (sep1)
-            sep2 = strchr(sep1 + 1, ':');
-        if (map_intd(arg[i], (char **)fe_delsys, -1) != -1)
-            sep = arg[i];
 
-        if (sep1)
-            *sep1++ = 0;
-        if (sep2)
-            *sep2++ = 0;
+        auto parts = split(token, ':');
+        std::string_view system_part = "";
+        std::string_view host_part = "";
+        std::string_view port_part = "";
 
-        if (sep) {
-            if (!sep1) {
-                LOG("Found only the system for satip adapter %s", arg[i]);
+        if (parts.size() >= 1 && map_intd(parts[0], fe_delsys, -1) != -1) {
+            system_part = parts[0];
+            if (parts.size() >= 2)
+                host_part = parts[1];
+            if (parts.size() >= 3)
+                port_part = parts[2];
+            if (parts.size() < 2) {
+                LOG("Found only the system for satip adapter %.*s",
+                    (int)token.size(), token.data());
                 continue;
             }
         } else {
-            if (sep1)
-                sep2 = sep1;
-            sep1 = arg[i];
+            if (parts.size() >= 1)
+                host_part = parts[0];
+            if (parts.size() >= 2)
+                port_part = parts[1];
         }
 
-        if (!sep)
-            sep = (char *)"dvbs2";
-        if (!sep2)
-            sep2 = (char *)"554";
-        delsys = map_int(sep, (char **)fe_delsys);
-        safe_strncpy(host, sep1);
+        if (system_part.empty())
+            system_part = "dvbs2";
+        if (port_part.empty())
+            port_part = "554";
+
+        delsys = map_int(system_part, fe_delsys);
+        port = map_int(port_part, NULL);
+
         fe = -1;
         source_ip[0] = 0;
-        char *pos_at = strchr(host, '@');
-        if (pos_at) {
-            fe = map_int(sep1, NULL);
-            memmove(host, pos_at + 1, strlen(pos_at));
+
+        std::string_view actual_host = host_part;
+        size_t at_pos = actual_host.find('@');
+        if (at_pos != std::string_view::npos) {
+            fe = map_int(actual_host.substr(0, at_pos), NULL);
+            actual_host = actual_host.substr(at_pos + 1);
         }
-        if (strchr(host, '/')) {
-            char *end = strchr(host, '/');
-            _strncpy(source_ip, host, end - host + 1);
-            memmove(host, end + 1, sizeof(host) - 1);
+
+        size_t slash_pos = actual_host.find('/');
+        if (slash_pos != std::string_view::npos) {
+            std::string source_ip_str(actual_host.substr(0, slash_pos));
+            safe_strncpy(source_ip, source_ip_str.c_str());
+            actual_host = actual_host.substr(slash_pos + 1);
         }
-        port = map_int(sep2, NULL);
+
+        std::string host_str(actual_host);
+        safe_strncpy(host, host_str.c_str());
+
         add_satip_server(host, port, fe, delsys, source_ip, transport,
                          no_pids_all);
     }
@@ -1936,10 +1954,9 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h) {
     if (!data) // the socket will be closed, process the data;
     {
         char *sep, *eos;
-        char *arg[MAX_DVBAPI_SYSTEMS];
         char order[MAX_DVBAPI_SYSTEMS];
         int i_order = 0;
-        int i, j, la;
+        int i, j;
         safe_strncpy(s->host, h->host);
         s->port = 554;
         sep = strstr(s->xml, "X-SATIP-RTSP-Port:");
@@ -1957,17 +1974,21 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h) {
         eos = strchr(sep, '<');
         if (eos)
             *eos = 0;
-        la = split(arg, sep, ARRAY_SIZE(arg), ',');
-        for (i = 0; i < la; i++) {
-            int ds = map_intd(arg[i], (char **)satip_delsys, -1);
-            sep = strchr(arg[i], '-');
-            int t = map_intd(sep ? sep + 1 : NULL, NULL, -1);
+
+        auto arg = split(sep, ',');
+        for (const auto &arg_item : arg) {
+            int ds = map_intd(arg_item, satip_delsys, -1);
+            size_t dash = arg_item.find('-');
+            int t = map_intd((dash != std::string_view::npos)
+                                 ? arg_item.substr(dash + 1)
+                                 : "",
+                             NULL, -1);
             if (ds < 0 || ds >= MAX_DVBAPI_SYSTEMS || t < 0 ||
                 i_order >= (int)sizeof(order)) {
-                LOG("Could not determine the delivery system for %s (%d) "
+                LOG("Could not determine the delivery system for %.*s (%d) "
                     "tuners %d, "
                     "order %d",
-                    arg[i], ds, t, i_order);
+                    (int)arg_item.size(), arg_item.data(), ds, t, i_order);
                 continue;
             }
             s->tuners[ds] = t;
@@ -2005,16 +2026,14 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h) {
 }
 
 int satip_getxml(void *x) {
-    int i, la;
-    char *arg[MAX_SATIP_XML];
-    char satip_xml[1000];
+    int i;
     if (!opts.satip_xml)
         return 1;
     memset(sxd, 0, sizeof(sxd));
-    safe_strncpy(satip_xml, opts.satip_xml);
-    la = split(arg, satip_xml, ARRAY_SIZE(arg), ',');
-    for (i = 0; i < la; i++) {
-        safe_strncpy(sxd[i].url, arg[i]);
+    auto arg = split(opts.satip_xml, ',');
+    for (i = 0; i < (int)arg.size() && i < MAX_SATIP_XML; i++) {
+        std::string url_str(arg[i]);
+        safe_strncpy(sxd[i].url, url_str.c_str());
         http_client(sxd[i].url, (void *)satip_getxml_data, &sxd[i]);
     }
     return 0;

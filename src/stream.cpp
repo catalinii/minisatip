@@ -430,19 +430,17 @@ static int decode_transport_srt(sockets *s, streams *sid, char *arg) {
 }
 
 int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp) {
-    char *arg2[10];
-    int l;
     char ra[50];
     rtp_prop p;
     streams *sid = get_sid(s->sid);
     streams *sid2;
     if (!sid) {
         LOG("Error: No stream to set transport to, sock_id %d, arg %s ", s->id,
-            arg);
+            arg ? arg : "NULL");
         return -1;
     }
     std::lock_guard<SMutex> lock(sid->mutex);
-    l = 0;
+    memset(&p, 0, sizeof(p));
     if (arg) {
         if (strstr(arg, "RTP/AVP/SRT")) {
             LOG("Assuming SRT transport for stream sid %d, arg %s", sid->sid,
@@ -463,24 +461,23 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp) {
             return 0;
         }
 
-        l = split(arg2, arg, ARRAY_SIZE(arg2), ';');
-    }
-    //      LOG("arg2 %s %s %s",arg2[0],arg2[1],arg2[2]);
-    memset(&p, 0, sizeof(p));
-    while (l > 0) {
-        l--;
-        if (strcmp("multicast", arg2[l]) == 0)
-            p.type = TYPE_MCAST;
-        if (strcmp("unicast", arg2[l]) == 0)
-            p.type = TYPE_UNICAST;
-        if (strncmp("ttl=", arg2[l], 4) == 0)
-            p.ttl = atoi(arg2[l] + 4);
-        if (strncmp("client_port=", arg2[l], 12) == 0)
-            p.port = atoi(arg2[l] + 12);
-        if (strncmp("port=", arg2[l], 5) == 0)
-            p.port = atoi(arg2[l] + 5);
-        if (strncmp("destination=", arg2[l], 12) == 0)
-            safe_strncpy(p.dest, arg2[l] + 12);
+        auto arg2 = split(arg, ';');
+        for (const auto &token : arg2) {
+            if (token == "multicast")
+                p.type = TYPE_MCAST;
+            if (token == "unicast")
+                p.type = TYPE_UNICAST;
+            if (token.size() >= 4 && token.substr(0, 4) == "ttl=")
+                p.ttl = map_intd(token.substr(4), NULL, 0);
+            if (token.size() >= 12 && token.substr(0, 12) == "client_port=")
+                p.port = map_intd(token.substr(12), NULL, 0);
+            if (token.size() >= 5 && token.substr(0, 5) == "port=")
+                p.port = map_intd(token.substr(5), NULL, 0);
+            if (token.size() >= 12 && token.substr(0, 12) == "destination=") {
+                std::string dest_str(token.substr(12));
+                safe_strncpy(p.dest, (char *)dest_str.c_str());
+            }
+        }
     }
     if (default_rtp)
         safe_strncpy(p.dest, default_rtp);

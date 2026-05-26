@@ -1279,18 +1279,18 @@ void load_channels() {
         Sddci_channel *c = &channels[sid];
         c->sid = sid;
         c->locked = 1;
-        cc = strip(cc + 1);
+        std::string_view cc_sv = strip(cc + 1);
 
-        char *arg[MAX_ADAPTERS];
-        int la = split(arg, cc, ARRAY_SIZE(arg), ',');
+        auto arg = split(cc_sv, ',');
         int i = 0;
         nchannels++;
-        for (i = 0; i < la; i++) {
-            int v = map_intd(arg[i], NULL, -1);
+        for (const auto &arg_item : arg) {
+            int v = map_intd(arg_item, NULL, -1);
             if (v != -1) {
                 c->ddci[c->ddcis++].ddci = v;
                 strcatf(buf, pos, "%s%d", i ? "," : "", v);
             }
+            i++;
         }
         LOGM("Adding channel %d: DDCIs: %s", c->sid, buf);
     }
@@ -1299,23 +1299,21 @@ void load_channels() {
 }
 
 void disable_cat_adapters(char *o) {
-    int i, la, st, end, j;
-    char buf[strlen(o) + 1], *arg[40], *sep;
-    safe_strncpy(buf, o);
+    int st, end, j;
 
-    la = split(arg, buf, ARRAY_SIZE(arg), ',');
-    for (i = 0; i < la; i++) {
-        sep = strchr(arg[i], '-');
-        if (sep == NULL) {
-            st = map_int(arg[i], NULL);
+    auto arg = split(o, ',');
+    for (const auto &token : arg) {
+        size_t sep_pos = token.find('-');
+        if (sep_pos == std::string_view::npos) {
+            st = map_int(token, NULL);
             ddci_device_t *d = ddci_alloc(st);
             if (d) {
                 LOG("Disable passing the CAT to DDCI %d", d->id);
                 d->disable_cat = 1;
             }
         } else {
-            st = map_int(arg[i], NULL);
-            end = map_int(sep + 1, NULL);
+            st = map_int(token.substr(0, sep_pos), NULL);
+            end = map_int(token.substr(sep_pos + 1), NULL);
             for (j = st; j <= end; j++) {
                 ddci_device_t *d = ddci_alloc(j);
                 if (d) {

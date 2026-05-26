@@ -145,8 +145,6 @@ uint32_t pls_scrambling_index(transponder *tp) {
 }
 
 int detect_dvb_parameters(char *s, transponder *tp) {
-    char *arg[30];
-    int la, i;
 
     tp->sys = -1;
     tp->freq = -1;
@@ -184,65 +182,70 @@ int detect_dvb_parameters(char *s, transponder *tp) {
         init_dvb_parameters(tp);
 
     LOG("detect_dvb_parameters (S)-> %s", s);
-    la = split(arg, s, ARRAY_SIZE(arg), '&');
+    size_t original_len = strlen(s);
+    auto arg = split(std::string_view(s, original_len), '&');
 
-    for (i = 0; i < la; i++) {
-        if (strncmp("msys=", arg[i], 5) == 0)
-            tp->sys = map_int(arg[i] + 5, (char **)fe_delsys);
-        if (strncmp("freq=", arg[i], 5) == 0)
-            tp->freq = map_float(arg[i] + 5, 1000);
-        if (strncmp("pol=", arg[i], 4) == 0)
-            tp->pol = map_int(arg[i] + 4, (char **)fe_pol);
-        if (strncmp("sr=", arg[i], 3) == 0)
-            tp->sr = map_int(arg[i] + 3, NULL) * 1000;
-        if (strncmp("fe=", arg[i], 3) == 0)
-            tp->fe = map_int(arg[i] + 3, NULL);
-        if (strncmp("src=", arg[i], 4) == 0)
-            tp->diseqc = map_int(arg[i] + 4, NULL);
-        if (strncmp("ro=", arg[i], 3) == 0)
-            tp->ro = map_int(arg[i] + 3, (char **)fe_rolloff);
-        if (strncmp("mtype=", arg[i], 6) == 0)
-            tp->mtype =
-                (fe_modulation_t)map_int(arg[i] + 6, (char **)fe_modulation);
-        if (strncmp("fec=", arg[i], 4) == 0)
-            tp->fec = (fe_code_rate_t)map_int(arg[i] + 4, (char **)fe_fec);
-        if (strncmp("plts=", arg[i], 5) == 0)
-            tp->plts = map_int(arg[i] + 5, (char **)fe_pilot);
-        if (strncmp("gi=", arg[i], 3) == 0)
-            tp->gi = (fe_guard_interval_t)map_int(arg[i] + 3, (char **)fe_gi);
-        if (strncmp("tmode=", arg[i], 6) == 0)
-            tp->tmode =
-                (fe_transmit_mode_t)map_int(arg[i] + 6, (char **)fe_tmode);
-        if (strncmp("bw=", arg[i], 3) == 0) {
-            tp->bw = map_float(arg[i] + 3, 1000000);
-            if (tp->bw < 0 ||
-                tp->bw > 100000000) // Fix clients that send bw=8000 !
-                tp->bw = map_float(arg[i] + 3, 1000);
-            if (tp->bw < 0 ||
-                tp->bw > 100000000) // Fix clients that send bw=8000000 !
-                tp->bw = map_float(arg[i] + 3, 1);
+    // Mutate s in-place to preserve null-termination of substrings for
+    // transponder pointers
+    for (size_t k = 0; k < original_len; k++) {
+        if (s[k] == '&' || static_cast<unsigned char>(s[k]) < 33) {
+            s[k] = '\0';
         }
-        if (strncmp("specinv=", arg[i], 8) == 0)
-            tp->inversion = map_int(arg[i] + 8, NULL);
-        if (strncmp("c2tft=", arg[i], 6) == 0)
-            tp->c2tft = map_int(arg[i] + 6, NULL);
-        if (strncmp("ds=", arg[i], 3) == 0)
-            tp->ds = map_int(arg[i] + 3, NULL);
-        if (strncmp("plp=", arg[i], 4) == 0 || strncmp("isi=", arg[i], 4) == 0)
-            tp->plp_isi = map_int(arg[i] + 4, NULL);
-        if (strncmp("plsm=", arg[i], 5) == 0)
-            tp->pls_mode = map_int(arg[i] + 5, (char **)fe_pls_mode);
-        if (strncmp("plsc=", arg[i], 5) == 0)
-            tp->pls_code = map_int(arg[i] + 5, NULL);
+    }
 
-        if (strncmp("x_pmt=", arg[i], 6) == 0)
-            tp->x_pmt = arg[i] + 6;
-        if (strncmp("pids=", arg[i], 5) == 0)
-            tp->pids = arg[i] + 5;
-        if (strncmp("addpids=", arg[i], 8) == 0)
-            tp->apids = arg[i] + 8;
-        if (strncmp("delpids=", arg[i], 8) == 0)
-            tp->dpids = arg[i] + 8;
+    for (const auto &token : arg) {
+        if (token.size() >= 5 && token.substr(0, 5) == "msys=")
+            tp->sys = map_int(token.substr(5), fe_delsys);
+        else if (token.size() >= 5 && token.substr(0, 5) == "freq=")
+            tp->freq = map_float((char *)token.substr(5).data(), 1000);
+        else if (token.size() >= 4 && token.substr(0, 4) == "pol=")
+            tp->pol = map_int(token.substr(4), fe_pol);
+        else if (token.size() >= 3 && token.substr(0, 3) == "sr=")
+            tp->sr = map_int(token.substr(3), NULL) * 1000;
+        else if (token.size() >= 3 && token.substr(0, 3) == "fe=")
+            tp->fe = map_int(token.substr(3), NULL);
+        else if (token.size() >= 4 && token.substr(0, 4) == "src=")
+            tp->diseqc = map_int(token.substr(4), NULL);
+        else if (token.size() >= 3 && token.substr(0, 3) == "ro=")
+            tp->ro = map_int(token.substr(3), fe_rolloff);
+        else if (token.size() >= 6 && token.substr(0, 6) == "mtype=")
+            tp->mtype =
+                (fe_modulation_t)map_int(token.substr(6), fe_modulation);
+        else if (token.size() >= 4 && token.substr(0, 4) == "fec=")
+            tp->fec = (fe_code_rate_t)map_int(token.substr(4), fe_fec);
+        else if (token.size() >= 5 && token.substr(0, 5) == "plts=")
+            tp->plts = map_int(token.substr(5), fe_pilot);
+        else if (token.size() >= 3 && token.substr(0, 3) == "gi=")
+            tp->gi = (fe_guard_interval_t)map_int(token.substr(3), fe_gi);
+        else if (token.size() >= 6 && token.substr(0, 6) == "tmode=")
+            tp->tmode = (fe_transmit_mode_t)map_int(token.substr(6), fe_tmode);
+        else if (token.size() >= 3 && token.substr(0, 3) == "bw=") {
+            tp->bw = map_float((char *)token.substr(3).data(), 1000000);
+            if (tp->bw < 0 || tp->bw > 100000000)
+                tp->bw = map_float((char *)token.substr(3).data(), 1000);
+            if (tp->bw < 0 || tp->bw > 100000000)
+                tp->bw = map_float((char *)token.substr(3).data(), 1);
+        } else if (token.size() >= 8 && token.substr(0, 8) == "specinv=")
+            tp->inversion = map_int(token.substr(8), NULL);
+        else if (token.size() >= 6 && token.substr(0, 6) == "c2tft=")
+            tp->c2tft = map_int(token.substr(6), NULL);
+        else if (token.size() >= 3 && token.substr(0, 3) == "ds=")
+            tp->ds = map_int(token.substr(3), NULL);
+        else if ((token.size() >= 4 && token.substr(0, 4) == "plp=") ||
+                 (token.size() >= 4 && token.substr(0, 4) == "isi="))
+            tp->plp_isi = map_int(token.substr(4), NULL);
+        else if (token.size() >= 5 && token.substr(0, 5) == "plsm=")
+            tp->pls_mode = map_int(token.substr(5), fe_pls_mode);
+        else if (token.size() >= 5 && token.substr(0, 5) == "plsc=")
+            tp->pls_code = map_int(token.substr(5), NULL);
+        else if (token.size() >= 6 && token.substr(0, 6) == "x_pmt=")
+            tp->x_pmt = (char *)token.substr(6).data();
+        else if (token.size() >= 5 && token.substr(0, 5) == "pids=")
+            tp->pids = (char *)token.substr(5).data();
+        else if (token.size() >= 8 && token.substr(0, 8) == "addpids=")
+            tp->apids = (char *)token.substr(8).data();
+        else if (token.size() >= 8 && token.substr(0, 8) == "delpids=")
+            tp->dpids = (char *)token.substr(8).data();
     }
 
     if (tp->pids && strstr(tp->pids, "all")) {

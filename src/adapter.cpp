@@ -1064,9 +1064,8 @@ void mark_pid_deleted(int aid, int sid, int _pid, SPid *p) {
 void mark_pids_deleted(int aid, int sid,
                        char *pids) // pids==NULL -> delete all pids
 {
-    int i, la, pid;
+    int i, pid;
     adapter *ad;
-    char *arg[MAX_PIDS];
 
     ad = get_adapter(aid);
     if (!ad)
@@ -1083,9 +1082,9 @@ void mark_pids_deleted(int aid, int sid,
     }
 
     if (pids) {
-        la = split(arg, pids, ARRAY_SIZE(arg), ',');
-        for (i = 0; i < la; i++) {
-            pid = map_int(arg[i], NULL);
+        auto arg = split(pids, ',');
+        for (const auto &pid_sv : arg) {
+            pid = map_int(pid_sv, NULL);
             mark_pid_deleted(aid, sid, pid, NULL);
         }
         return;
@@ -1132,9 +1131,7 @@ int mark_pid_add(int sid, int aid, int _pid) {
 }
 
 int mark_pids_add(int sid, int aid, char *pids) {
-    int i, la;
     adapter *ad;
-    char *arg[MAX_PIDS + 2];
     int pid;
 
     ad = get_adapter(aid);
@@ -1146,9 +1143,9 @@ int mark_pids_add(int sid, int aid, char *pids) {
     LOG("adding pids to adapter %d, sid %d, pids=%s", aid, sid,
         pids ? pids : "NULL");
 
-    la = split(arg, pids, ARRAY_SIZE(arg), ',');
-    for (i = 0; i < la; i++) {
-        pid = map_intd(arg[i], NULL, -1);
+    auto arg = split(pids, ',');
+    for (const auto &pid_sv : arg) {
+        pid = map_intd(pid_sv, NULL, -1);
         if (pid < 0 || pid > 8192)
             continue;
         if (mark_pid_add(sid, aid, pid) < 0)
@@ -1436,21 +1433,19 @@ void set_disable(int i, int v) {
 }
 
 void enable_adapters(char *o) {
-    int i, la, st, end, j;
-    char buf[strlen(o) + 1], *arg[40], *sep;
+    int i, st, end, j;
     for (i = 0; i < MAX_ADAPTERS; i++)
         set_disable(i, 1);
-    safe_strncpy(buf, o);
 
-    la = split(arg, buf, ARRAY_SIZE(arg), ',');
-    for (i = 0; i < la; i++) {
-        sep = strchr(arg[i], '-');
-        if (sep == NULL) {
-            st = map_int(arg[i], NULL);
+    auto arg = split(o, ',');
+    for (const auto &arg_item : arg) {
+        size_t sep_pos = arg_item.find('-');
+        if (sep_pos == std::string_view::npos) {
+            st = map_int(arg_item, NULL);
             set_disable(st, 0);
         } else {
-            st = map_int(arg[i], NULL);
-            end = map_int(sep + 1, NULL);
+            st = map_int(arg_item.substr(0, sep_pos), NULL);
+            end = map_int(arg_item.substr(sep_pos + 1), NULL);
             for (j = st; j <= end; j++)
                 set_disable(j, 0);
         }
@@ -1458,13 +1453,11 @@ void enable_adapters(char *o) {
 }
 
 void set_unicable_adapters(char *o, int type) {
-    int i, la, a_id, slot, freq, pin, o13v;
-    char buf[strlen(o) + 1], *arg[40], *sep1, *sep2, *sep3;
+    int a_id, slot, freq, pin, o13v;
     adapter *ad;
-    safe_strncpy(buf, o);
-    la = split(arg, buf, ARRAY_SIZE(arg), ',');
-    for (i = 0; i < la; i++) {
-        a_id = map_intd(arg[i], NULL, -1);
+    auto arg = split(o, ',');
+    for (const auto &token : arg) {
+        a_id = map_intd(token, NULL, -1);
         if (a_id < 0 || a_id >= MAX_ADAPTERS)
             continue;
 
@@ -1472,21 +1465,32 @@ void set_unicable_adapters(char *o, int type) {
             a[a_id] = adapter_alloc();
         ad = a[a_id];
 
-        sep1 = strchr(arg[i], ':');
-        sep2 = strchr(arg[i], '-');
+        size_t colon_pos = token.find(':');
+        size_t dash_pos = token.find('-');
 
-        if (!sep1 || !sep2)
+        if (colon_pos == std::string_view::npos ||
+            dash_pos == std::string_view::npos)
             continue;
-        if ((o13v = (sep2[1] == '*')) != 0)
-            sep2++;
-        slot = map_intd(sep1 + 1, NULL, -1);
-        freq = map_intd(sep2 + 1, NULL, -1);
+
+        std::string_view sub_dash = token.substr(dash_pos);
+        if (sub_dash.size() > 1 && sub_dash[1] == '*') {
+            o13v = 1;
+            dash_pos++; // Skip the '*'
+        } else {
+            o13v = 0;
+        }
+
+        slot = map_intd(token.substr(colon_pos + 1), NULL, -1);
+        freq = map_intd(token.substr(dash_pos + 1), NULL, -1);
         if (slot < 0 || freq < 0)
             continue;
-        sep3 = strchr(sep2 + 1, '-');
+
+        size_t next_dash_pos = token.find('-', dash_pos + 1);
         pin = TP_VALUE_UNSET;
-        if (sep3)
-            pin = map_intd(sep3 + 1, NULL, TP_VALUE_UNSET);
+        if (next_dash_pos != std::string_view::npos) {
+            pin =
+                map_intd(token.substr(next_dash_pos + 1), NULL, TP_VALUE_UNSET);
+        }
 
         ad->diseqc_param.uslot = slot;
         ad->diseqc_param.ufreq = freq;
@@ -1500,17 +1504,15 @@ void set_unicable_adapters(char *o, int type) {
 }
 
 void set_diseqc_adapters(char *o) {
-    int i, la, a_id, fast, addr, committed_no, uncommitted_no;
-    char buf[strlen(o) + 1], *arg[40], *sep1, *sep2;
+    int a_id, fast, addr, committed_no, uncommitted_no;
     adapter *ad;
-    safe_strncpy(buf, o);
-    la = split(arg, buf, ARRAY_SIZE(arg), ',');
-    for (i = 0; i < la; i++) {
-        if (arg[i] && arg[i][0] == '*') {
+    auto arg = split(o, ',');
+    for (const auto &token : arg) {
+        if (!token.empty() && token[0] == '*') {
             ad = NULL;
             a_id = -1;
         } else {
-            a_id = map_intd(arg[i], NULL, -1);
+            a_id = map_intd(token, NULL, -1);
             if (a_id < 0 || a_id >= MAX_ADAPTERS)
                 continue;
 
@@ -1519,29 +1521,30 @@ void set_diseqc_adapters(char *o) {
             ad = a[a_id];
         }
 
-        sep1 = strchr(arg[i], ':');
-        sep2 = strchr(arg[i], '-');
-
-        if (!sep1 || !sep2)
+        size_t colon_pos = token.find(':');
+        size_t dash_pos = token.find('-');
+        if (colon_pos == std::string_view::npos ||
+            dash_pos == std::string_view::npos)
             continue;
 
+        size_t offset = colon_pos + 1;
         fast = 0;
         addr = 0x10;
-        while (sep1[1] == '*' || sep1[1] == '@' || sep1[1] == '.') {
-            if (sep1[1] == '*') {
+        while (offset < token.size() &&
+               (token[offset] == '*' || token[offset] == '@' ||
+                token[offset] == '.')) {
+            if (token[offset] == '*') {
                 fast = 1;
-                sep1++;
-            } else if (sep1[1] == '@') {
+            } else if (token[offset] == '@') {
                 addr = 0;
-                sep1++;
-            } else if (sep1[1] == '.') {
+            } else if (token[offset] == '.') {
                 addr = 0x11;
-                sep1++;
             }
+            offset++;
         }
 
-        committed_no = map_intd(sep1 + 1, NULL, -1);
-        uncommitted_no = map_intd(sep2 + 1, NULL, -1);
+        committed_no = map_intd(token.substr(offset), NULL, -1);
+        uncommitted_no = map_intd(token.substr(dash_pos + 1), NULL, -1);
         if (committed_no < 0 || uncommitted_no < 0)
             continue;
 
@@ -1571,31 +1574,27 @@ void set_diseqc_adapters(char *o) {
 }
 
 void set_absolute_src(char *o) {
-    int i, la, src, inp, pos, range;
-    char buf[strlen(o) + 1], *arg[40], *inps, *poss, *ranges;
+    int i, src, inp, pos, range;
     adapter *ad;
 
-    safe_strncpy(buf, o);
-    buf[sizeof(buf) - 1] = '\0';
-    la = split(arg, buf, ARRAY_SIZE(arg), ',');
-    for (i = 0; i < la; i++) {
-        inps = strchr(arg[i], ':');
-        if (!inps)
+    auto arg = split(o, ',');
+    for (i = 0; i < (int)arg.size(); i++) {
+        std::string_view token = arg[i];
+        size_t colon1 = token.find(':');
+        if (colon1 == std::string_view::npos)
             continue;
-        inps++;
-        poss = strchr(inps, ':');
-        if (!poss)
+        size_t colon2 = token.find(':', colon1 + 1);
+        if (colon2 == std::string_view::npos)
             continue;
-        poss++;
 
-        src = map_intd(arg[i], NULL, -1);
-        inp = map_intd(inps, NULL, -1);
-        pos = map_intd(poss, NULL, -1);
+        src = map_intd(token, NULL, -1);
+        inp = map_intd(token.substr(colon1 + 1), NULL, -1);
+        pos = map_intd(token.substr(colon2 + 1), NULL, -1);
 
         range = src;
-        ranges = strchr(arg[i], '-');
-        if (ranges && ranges < inps) {
-            range = map_intd(ranges + 1, NULL, -1);
+        size_t dash = token.find('-');
+        if (dash != std::string_view::npos && dash < colon1) {
+            range = map_intd(token.substr(dash + 1), NULL, -1);
         }
 
         if (src < 0 || src >= MAX_SOURCES)
@@ -1621,17 +1620,16 @@ void set_absolute_src(char *o) {
 }
 
 void set_diseqc_multi(char *o) {
-    int i, la, a_id, position;
-    char buf[strlen(o) + 1], *arg[40], *sep1;
+    int i, a_id, position;
     adapter *ad;
-    safe_strncpy(buf, o);
-    la = split(arg, buf, ARRAY_SIZE(arg), ',');
-    for (i = 0; i < la; i++) {
-        if (arg[i] && arg[i][0] == '*') {
+    auto arg = split(o, ',');
+    for (i = 0; i < (int)arg.size(); i++) {
+        std::string_view token = arg[i];
+        if (!token.empty() && token[0] == '*') {
             ad = NULL;
             a_id = -1;
         } else {
-            a_id = map_intd(arg[i], NULL, -1);
+            a_id = map_intd(token, NULL, -1);
             if (a_id < 0 || a_id >= MAX_ADAPTERS)
                 continue;
 
@@ -1640,11 +1638,10 @@ void set_diseqc_multi(char *o) {
             ad = a[a_id];
         }
 
-        sep1 = strchr(arg[i], ':');
-
-        if (!sep1)
+        size_t colon = token.find(':');
+        if (colon == std::string_view::npos)
             continue;
-        position = map_intd(sep1 + 1, NULL, -1);
+        position = map_intd(token.substr(colon + 1), NULL, -1);
         if (position < 0)
             continue;
         if (ad) {
@@ -1662,17 +1659,16 @@ void set_diseqc_multi(char *o) {
 }
 
 void set_lnb_adapters(char *o) {
-    int i, la, a_id, lnb_low, lnb_high, lnb_switch;
-    char buf[strlen(o) + 1], *arg[40], *sep1, *sep2, *sep3;
+    int i, a_id, lnb_low, lnb_high, lnb_switch;
     adapter *ad;
-    safe_strncpy(buf, o);
-    la = split(arg, buf, ARRAY_SIZE(arg), ',');
-    for (i = 0; i < la; i++) {
-        if (arg[i] && arg[i][0] == '*') {
+    auto arg = split(o, ',');
+    for (i = 0; i < (int)arg.size(); i++) {
+        std::string_view token = arg[i];
+        if (!token.empty() && token[0] == '*') {
             ad = NULL;
             a_id = -1;
         } else {
-            a_id = map_intd(arg[i], NULL, -1);
+            a_id = map_intd(token, NULL, -1);
             if (a_id < 0 || a_id >= MAX_ADAPTERS)
                 continue;
 
@@ -1680,20 +1676,23 @@ void set_lnb_adapters(char *o) {
                 a[a_id] = adapter_alloc();
             ad = a[a_id];
         }
-        sep3 = NULL;
-        sep1 = strchr(arg[i], ':');
-        sep2 = strchr(arg[i], '-');
-        if (sep2)
-            sep3 = strchr(sep2 + 1, '-');
+        size_t colon = token.find(':');
+        size_t dash1 = token.find('-');
+        size_t dash2 = std::string_view::npos;
+        if (dash1 != std::string_view::npos)
+            dash2 = token.find('-', dash1 + 1);
 
-        if (!sep1 || !sep2 || !sep3) {
-            LOG("LNB parameters not correctly specified: %s", arg[i]);
+        if (colon == std::string_view::npos ||
+            dash1 == std::string_view::npos ||
+            dash2 == std::string_view::npos) {
+            LOG("LNB parameters not correctly specified: %.*s",
+                (int)token.size(), token.data());
             continue;
         }
 
-        lnb_low = map_intd(sep1 + 1, NULL, -1) * 1000;
-        lnb_high = map_intd(sep2 + 1, NULL, -1) * 1000;
-        lnb_switch = map_intd(sep3 + 1, NULL, -1) * 1000;
+        lnb_low = map_intd(token.substr(colon + 1), NULL, -1) * 1000;
+        lnb_high = map_intd(token.substr(dash1 + 1), NULL, -1) * 1000;
+        lnb_switch = map_intd(token.substr(dash2 + 1), NULL, -1) * 1000;
         if (lnb_low < 0 || lnb_high < 0 || lnb_switch < 0)
             continue;
 
@@ -1722,20 +1721,18 @@ void set_lnb_adapters(char *o) {
 }
 
 void set_diseqc_timing(char *o) {
-    int i, la, a_id;
+    int i, a_id;
     int before_cmd, after_cmd, after_repeated_cmd;
     int after_switch, after_burst, after_tone;
-    char buf[strlen(o) + 1], *arg[40];
-    char *sep1, *sep2, *sep3, *sep4, *sep5, *sep6;
     adapter *ad;
-    safe_strncpy(buf, o);
-    la = split(arg, buf, ARRAY_SIZE(arg), ',');
-    for (i = 0; i < la; i++) {
-        if (arg[i] && arg[i][0] == '*') {
+    auto arg = split(o, ',');
+    for (i = 0; i < (int)arg.size(); i++) {
+        std::string_view token = arg[i];
+        if (!token.empty() && token[0] == '*') {
             ad = NULL;
             a_id = -1;
         } else {
-            a_id = map_intd(arg[i], NULL, -1);
+            a_id = map_intd(token, NULL, -1);
             if (a_id < 0 || a_id >= MAX_ADAPTERS)
                 continue;
 
@@ -1744,21 +1741,34 @@ void set_diseqc_timing(char *o) {
             ad = a[a_id];
         }
 
-        sep1 = strchr(arg[i], ':');
-        sep2 = strchr(arg[i], '-');
-        sep3 = sep2 ? strchr(sep2 + 1, '-') : NULL;
-        sep4 = sep3 ? strchr(sep3 + 1, '-') : NULL;
-        sep5 = sep4 ? strchr(sep4 + 1, '-') : NULL;
-        sep6 = sep5 ? strchr(sep5 + 1, '-') : NULL;
+        size_t colon = token.find(':');
+        size_t dash1 = token.find('-');
+        size_t dash2 = (dash1 != std::string_view::npos)
+                           ? token.find('-', dash1 + 1)
+                           : std::string_view::npos;
+        size_t dash3 = (dash2 != std::string_view::npos)
+                           ? token.find('-', dash2 + 1)
+                           : std::string_view::npos;
+        size_t dash4 = (dash3 != std::string_view::npos)
+                           ? token.find('-', dash3 + 1)
+                           : std::string_view::npos;
+        size_t dash5 = (dash4 != std::string_view::npos)
+                           ? token.find('-', dash4 + 1)
+                           : std::string_view::npos;
 
-        if (!sep1 || !sep2 || !sep3 || !sep4 || !sep5 || !sep6)
+        if (colon == std::string_view::npos ||
+            dash1 == std::string_view::npos ||
+            dash2 == std::string_view::npos ||
+            dash3 == std::string_view::npos ||
+            dash4 == std::string_view::npos || dash5 == std::string_view::npos)
             continue;
-        before_cmd = map_intd(sep1 + 1, NULL, -1);
-        after_cmd = map_intd(sep2 + 1, NULL, -1);
-        after_repeated_cmd = map_intd(sep3 + 1, NULL, -1);
-        after_switch = map_intd(sep4 + 1, NULL, -1);
-        after_burst = map_intd(sep5 + 1, NULL, -1);
-        after_tone = map_intd(sep6 + 1, NULL, -1);
+
+        before_cmd = map_intd(token.substr(colon + 1), NULL, -1);
+        after_cmd = map_intd(token.substr(dash1 + 1), NULL, -1);
+        after_repeated_cmd = map_intd(token.substr(dash2 + 1), NULL, -1);
+        after_switch = map_intd(token.substr(dash3 + 1), NULL, -1);
+        after_burst = map_intd(token.substr(dash4 + 1), NULL, -1);
+        after_tone = map_intd(token.substr(dash5 + 1), NULL, -1);
         if (before_cmd < 0 || after_cmd < 0 || after_repeated_cmd < 0 ||
             after_switch < 0 || after_burst < 0 || after_tone < 0)
             continue;
@@ -1797,27 +1807,26 @@ void set_diseqc_timing(char *o) {
 }
 
 void set_slave_adapters(char *o) {
-    int i, j, la, a_id, a_id2, master = 0;
-    char buf[strlen(o) + 1], *arg[40], *sep, *sep2;
+    int i, j, a_id, a_id2, master = 0;
     adapter *ad;
-    safe_strncpy(buf, o);
-    la = split(arg, buf, ARRAY_SIZE(arg), ',');
-    for (i = 0; i < la; i++) {
-        a_id = map_intd(arg[i], NULL, -1);
+    auto arg = split(o, ',');
+    for (i = 0; i < (int)arg.size(); i++) {
+        std::string_view token = arg[i];
+        a_id = map_intd(token, NULL, -1);
         if (a_id < 0 || a_id >= MAX_ADAPTERS)
             continue;
 
-        sep = strchr(arg[i], '-');
+        size_t dash = token.find('-');
         a_id2 = a_id;
-        if (sep)
-            a_id2 = map_intd(sep + 1, NULL, -1);
+        if (dash != std::string_view::npos)
+            a_id2 = map_intd(token.substr(dash + 1), NULL, -1);
 
         if (a_id2 < 0 || a_id2 >= MAX_ADAPTERS)
             continue;
 
-        sep2 = strchr(arg[i], ':');
-        if (sep2)
-            master = map_intd(sep2 + 1, NULL, 0);
+        size_t colon = token.find(':');
+        if (colon != std::string_view::npos)
+            master = map_intd(token.substr(colon + 1), NULL, 0);
 
         for (j = a_id; j <= a_id2; j++) {
             if (!a[j])
@@ -1846,16 +1855,15 @@ void set_slave_adapters(char *o) {
 }
 
 void set_timeout_adapters(char *o) {
-    int i, j, la, a_id, a_id2;
+    int i, j, a_id, a_id2;
     int timeout = opts.adapter_timeout / 1000;
-    char buf[strlen(o) + 1], *arg[40], *sep;
     adapter *ad;
-    safe_strncpy(buf, o);
-    sep = strchr(buf, ':');
-    if (sep)
-        timeout = map_intd(sep + 1, NULL, timeout);
-    la = split(arg, buf, ARRAY_SIZE(arg), ',');
-    if (arg[0] && (arg[0][0] == '*')) {
+    std::string_view sv = o;
+    size_t colon = sv.find(':');
+    if (colon != std::string_view::npos)
+        timeout = map_intd(sv.substr(colon + 1), NULL, timeout);
+    auto arg = split(sv, ',');
+    if (!arg.empty() && !arg[0].empty() && arg[0][0] == '*') {
         opts.adapter_timeout = timeout * 1000;
         int j;
         for (j = 0; j < MAX_ADAPTERS; j++)
@@ -1865,15 +1873,16 @@ void set_timeout_adapters(char *o) {
         LOG("Set default timeout to %d", opts.adapter_timeout);
         return;
     }
-    for (i = 0; i < la; i++) {
-        a_id = map_intd(arg[i], NULL, -1);
+    for (i = 0; i < (int)arg.size(); i++) {
+        std::string_view token = arg[i];
+        a_id = map_intd(token, NULL, -1);
         if (a_id < 0 || a_id >= MAX_ADAPTERS)
             continue;
 
-        sep = strchr(arg[i], '-');
+        size_t dash = token.find('-');
         a_id2 = a_id;
-        if (sep)
-            a_id2 = map_intd(sep + 1, NULL, -1);
+        if (dash != std::string_view::npos)
+            a_id2 = map_intd(token.substr(dash + 1), NULL, -1);
 
         if (a_id2 < 0 || a_id2 >= MAX_ADAPTERS)
             continue;
@@ -1892,23 +1901,22 @@ void set_timeout_adapters(char *o) {
 
 extern const char *fe_delsys[];
 void set_adapters_delsys(char *o) {
-    int i, la, a_id, ds;
-    char buf[strlen(o) + 1], *arg[40], *sep;
+    int i, a_id, ds;
     adapter *ad;
-    safe_strncpy(buf, o);
-    la = split(arg, buf, ARRAY_SIZE(arg), ',');
-    for (i = 0; i < la; i++) {
-        a_id = map_intd(arg[i], NULL, -1);
+    auto arg = split(o, ',');
+    for (i = 0; i < (int)arg.size(); i++) {
+        std::string_view token = arg[i];
+        a_id = map_intd(token, NULL, -1);
         if (a_id < 0 || a_id >= MAX_ADAPTERS)
             continue;
 
-        sep = strchr(arg[i], ':');
-        if (!sep) {
+        size_t colon = token.find(':');
+        if (colon == std::string_view::npos) {
             LOG("Delivery system is missing, the format is "
                 "adapter_number:delivery_system\n example: 2:dvbs2");
             return;
         }
-        ds = map_intd(sep + 1, (char **)fe_delsys, 0);
+        ds = map_intd(token.substr(colon + 1), fe_delsys, 0);
 
         if (!a[a_id])
             a[a_id] = adapter_alloc();
@@ -1929,20 +1937,19 @@ void set_adapters_delsys(char *o) {
 }
 
 void set_signal_multiplier(char *o) {
-    int i, la, a_id;
+    int i, a_id;
     float strength_multiplier, snr_multiplier;
     char force_tuner_signal = TUNER_FORCE_NO;
     char force_str[128];
-    char buf[strlen(o) + 1], *arg[40], *sep1, *sep2;
     adapter *ad;
-    safe_strncpy(buf, o);
-    la = split(arg, buf, ARRAY_SIZE(arg), ',');
-    for (i = 0; i < la; i++) {
-        if (arg[i] && arg[i][0] == '*') {
+    auto arg = split(o, ',');
+    for (i = 0; i < (int)arg.size(); i++) {
+        std::string_view token = arg[i];
+        if (!token.empty() && token[0] == '*') {
             ad = NULL;
             a_id = -1;
         } else {
-            a_id = map_intd(arg[i], NULL, -1);
+            a_id = map_intd(token, NULL, -1);
             if (a_id < 0 || a_id >= MAX_ADAPTERS)
                 continue;
 
@@ -1951,25 +1958,29 @@ void set_signal_multiplier(char *o) {
             ad = a[a_id];
         }
 
-        sep1 = strchr(arg[i], ':');
-        sep2 = strchr(arg[i], '-');
+        size_t colon = token.find(':');
+        size_t dash = token.find('-');
 
-        if (!sep1 || !sep2)
+        if (colon == std::string_view::npos || dash == std::string_view::npos)
             continue;
 
-        if (sep1[1] == '%' || sep1[1] == '#') {
-            force_tuner_signal |= sep1[1] == '%' ? TUNER_FORCE_STRENGTH_PERCENT
-                                                 : TUNER_FORCE_STRENGTH_DECIBEL;
-            strength_multiplier = strtod(sep1 + 2, NULL);
+        std::string_view s1 = token.substr(colon + 1);
+        std::string_view s2 = token.substr(dash + 1);
+
+        if (!s1.empty() && (s1[0] == '%' || s1[0] == '#')) {
+            force_tuner_signal |= s1[0] == '%' ? TUNER_FORCE_STRENGTH_PERCENT
+                                               : TUNER_FORCE_STRENGTH_DECIBEL;
+            strength_multiplier =
+                strtod(std::string(s1.substr(1)).c_str(), NULL);
         } else {
-            strength_multiplier = strtod(sep1 + 1, NULL);
+            strength_multiplier = strtod(std::string(s1).c_str(), NULL);
         }
-        if (sep2[1] == '%' || sep2[1] == '#') {
-            force_tuner_signal |= sep2[1] == '%' ? TUNER_FORCE_SNR_PERCENT
-                                                 : TUNER_FORCE_SNR_DECIBEL;
-            snr_multiplier = strtod(sep2 + 2, NULL);
+        if (!s2.empty() && (s2[0] == '%' || s2[0] == '#')) {
+            force_tuner_signal |= s2[0] == '%' ? TUNER_FORCE_SNR_PERCENT
+                                               : TUNER_FORCE_SNR_DECIBEL;
+            snr_multiplier = strtod(std::string(s2.substr(1)).c_str(), NULL);
         } else {
-            snr_multiplier = strtod(sep2 + 1, NULL);
+            snr_multiplier = strtod(std::string(s2).c_str(), NULL);
         }
         if (strength_multiplier < 0 || snr_multiplier < 0)
             continue;

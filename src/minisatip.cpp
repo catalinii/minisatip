@@ -736,21 +736,17 @@ void set_options(int argc, char *argv[]) {
                 opts.log = 0xFFFF;
                 break;
             }
-            char buf[200];
-            char *arg[50];
-            int i;
-            memset(buf, 0, sizeof(buf));
-            safe_strncpy(buf, optarg);
-            int la = split(arg, buf, ARRAY_SIZE(arg), ',');
-            for (i = 0; i < la; i++) {
-                int level = check_strs(arg[i], loglevels, -1);
+            auto arg = split(optarg, ',');
+            for (const auto &level_sv : arg) {
+                int level = check_strs(level_sv, loglevels, -1);
                 if (level == -1) {
-                    if (!strcmp(arg[i], "-l")) {
+                    if (level_sv == "-l") {
                         LOG("The LOG option has changed, please run "
                             "./minisatip -h");
                         level = 1;
                     } else {
-                        LOG("module %s not recognised", arg[i]);
+                        LOG("module %.*s not recognised", (int)level_sv.size(),
+                            level_sv.data());
                         continue;
                     }
                 }
@@ -1132,8 +1128,7 @@ void set_options(int argc, char *argv[]) {
 #define RBUF 32000
 
 int read_rtsp(sockets *s) {
-    char *arg[50];
-    int cseq, la, i, rlen;
+    int cseq, i, rlen;
     char *transport = NULL, *useragent = NULL;
     int sess_id = 0;
     char buf[2000];
@@ -1193,9 +1188,19 @@ int read_rtsp(sockets *s) {
         return 0;
     }
 
-    la = split(arg, (char *)s->buf, ARRAY_SIZE(arg), ' ');
+    size_t original_len = strlen((char *)s->buf);
+    auto arg = split(std::string_view((char *)s->buf, original_len), ' ');
+
+    // Mutate s->buf in-place to ensure all tokens are null-terminated (matching
+    // legacy behavior)
+    for (size_t k = 0; k < original_len; k++) {
+        if (s->buf[k] == ' ' || s->buf[k] < 33) {
+            s->buf[k] = '\0';
+        }
+    }
+
     cseq = 0;
-    if (la < 2)
+    if (arg.size() < 2)
         LOG_AND_RETURN(
             0,
             "Most likely not an RTSP packet sock_id: %d sid: %d rlen: "
@@ -1203,21 +1208,22 @@ int read_rtsp(sockets *s) {
             s->id, s->sid, rlen);
 
     if (s->sid < 0)
-        for (i = 0; i < la; i++)
-            if (strncasecmp("Session:", arg[i], 8) == 0) {
+        for (i = 0; i < (int)arg.size(); i++)
+            if (strncasecmp("Session:", arg[i].data(), 8) == 0) {
                 sess_id = map_int(header_parameter(arg, i), NULL);
                 s->sid = find_session_id(sess_id);
             }
 
-    if (strstr(arg[1], "freq") || strstr(arg[1], "pids")) {
-        sid = (streams *)setup_stream(arg[1], s);
+    if (arg[1].find("freq") != std::string_view::npos ||
+        arg[1].find("pids") != std::string_view::npos) {
+        sid = (streams *)setup_stream((char *)arg[1].data(), s);
     }
 
     // setup empty stream, removing this breaks satip tests
-    if (!get_sid(s->sid) && ((strncasecmp(arg[0], "PLAY", 4) == 0) ||
-                             (strncasecmp(arg[0], "GET", 3) == 0) ||
-                             (strncasecmp(arg[0], "SETUP", 5) == 0)))
-        sid = (streams *)setup_stream(arg[1], s);
+    if (!get_sid(s->sid) && ((strncasecmp(arg[0].data(), "PLAY", 4) == 0) ||
+                             (strncasecmp(arg[0].data(), "GET", 3) == 0) ||
+                             (strncasecmp(arg[0].data(), "SETUP", 5) == 0)))
+        sid = (streams *)setup_stream((char *)arg[1].data(), s);
 
     sid = get_sid(s->sid);
     if (sid) {
@@ -1229,31 +1235,36 @@ int read_rtsp(sockets *s) {
     if (sess_id)
         set_session_id(s->sid, sess_id);
 
-    for (i = 0; i < la; i++)
-        if (strncasecmp("CSeq:", arg[i], 5) == 0)
+    for (i = 0; i < (int)arg.size(); i++)
+        if (strncasecmp("CSeq:", arg[i].data(), 5) == 0)
             cseq = map_int(header_parameter(arg, i), NULL);
-        else if (strncasecmp("Transport:", arg[i], 10) == 0) {
-            transport = header_parameter(arg, i);
+        else if (strncasecmp("Transport:", arg[i].data(), 10) == 0) {
+            std::string_view transport_sv = header_parameter(arg, i);
+            transport = (char *)transport_sv.data();
 
             if (-1 ==
                 decode_transport(s, transport, opts.rrtp, opts.start_rtp)) {
                 http_response(s, 400, NULL, NULL, cseq, 0);
                 return 0;
             }
-        } else if (strstr(arg[i], "LIVE555")) {
+        } else if (arg[i].find("LIVE555") != std::string_view::npos) {
             if (sid)
                 sid->timeout = 0;
-        } else if (strstr(arg[i], "Lavf")) {
+        } else if (arg[i].find("Lavf") != std::string_view::npos) {
             if (sid)
                 sid->timeout = 0;
-        } else if (strncasecmp("User-Agent:", arg[i], 11) == 0)
-            useragent = header_parameter(arg, i);
-        else if (!useragent && strncasecmp("Server:", arg[i], 7) == 0)
-            useragent = header_parameter(arg, i);
+        } else if (strncasecmp("User-Agent:", arg[i].data(), 11) == 0) {
+            std::string_view ua_sv = header_parameter(arg, i);
+            useragent = (char *)ua_sv.data();
+        } else if (!useragent &&
+                   strncasecmp("Server:", arg[i].data(), 7) == 0) {
+            std::string_view ua_sv = header_parameter(arg, i);
+            useragent = (char *)ua_sv.data();
+        }
 
-    if ((strncasecmp(arg[0], "PLAY", 4) == 0) ||
-        (strncasecmp(arg[0], "GET", 3) == 0) ||
-        (strncasecmp(arg[0], "SETUP", 5) == 0)) {
+    if ((strncasecmp(arg[0].data(), "PLAY", 4) == 0) ||
+        (strncasecmp(arg[0].data(), "GET", 3) == 0) ||
+        (strncasecmp(arg[0].data(), "SETUP", 5) == 0)) {
         char ra[100];
         int rv;
 
@@ -1263,10 +1274,11 @@ int read_rtsp(sockets *s) {
         }
 
         if (useragent)
-            safe_strncpy(sid->useragent, useragent);
+            strncpy(sid->useragent, useragent,
+                    std::min(strlen(useragent), sizeof(sid->useragent) - 1));
 
-        if ((strncasecmp(arg[0], "PLAY", 4) == 0) ||
-            (strncasecmp(arg[0], "GET", 3) == 0))
+        if ((strncasecmp(arg[0].data(), "PLAY", 4) == 0) ||
+            (strncasecmp(arg[0].data(), "GET", 3) == 0))
             if ((rv = start_play(sid, s)) < 0) {
                 http_response(s, -rv, NULL, NULL, cseq, 0);
                 return 0;
@@ -1327,8 +1339,8 @@ int read_rtsp(sockets *s) {
             }
         }
 
-        if (strncasecmp(arg[0], "PLAY", 4) == 0) {
-            char *qm = strchr(arg[1], '?');
+        if (strncasecmp(arg[0].data(), "PLAY", 4) == 0) {
+            char *qm = strchr((char *)arg[1].data(), '?');
             if (qm)
                 *qm = 0;
             if (buf[0])
@@ -1336,13 +1348,13 @@ int read_rtsp(sockets *s) {
 
             snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf) - 1,
                      "RTP-Info: url=%s;seq=%d;rtptime=%jd\r\nRange: npt=0.000-",
-                     arg[1], sid->seq, (getTickUs() / 1000000));
+                     arg[1].data(), sid->seq, (getTickUs() / 1000000));
         }
         if (buf[0] == 0 && sid->type == STREAM_HTTP)
             snprintf(buf, sizeof(buf),
                      "Content-Type: video/mp2t\r\nConnection: close");
         http_response(s, 200, buf, NULL, cseq, 0);
-    } else if (strncmp(arg[0], "TEARDOWN", 8) == 0) {
+    } else if (strncmp(arg[0].data(), "TEARDOWN", 8) == 0) {
         if (get_sid(s->sid)) {
             buf[0] = 0;
             sprintf(buf, "Session: %010d", get_session_id(s->sid));
@@ -1350,11 +1362,11 @@ int read_rtsp(sockets *s) {
             http_response(s, 200, buf, NULL, cseq, 0);
         } else
             http_response(s, 454, NULL, NULL, cseq, 0);
-    } else if (strncmp(arg[0], "DESCRIBE", 8) == 0) {
+    } else if (strncmp(arg[0].data(), "DESCRIBE", 8) == 0) {
         char sbuf[1000];
         char localhost[100];
         char *rv;
-        rv = describe_streams(s, arg[1], sbuf, sizeof(sbuf));
+        rv = describe_streams(s, (char *)arg[1].data(), sbuf, sizeof(sbuf));
         if (!rv) {
             http_response(s, 404, NULL, NULL, cseq, 0);
             return 0;
@@ -1363,7 +1375,7 @@ int read_rtsp(sockets *s) {
                  "Content-type: application/sdp\r\nContent-Base: rtsp://%s/",
                  get_sock_shost(s->sock, localhost, sizeof(localhost)));
         http_response(s, 200, buf, sbuf, cseq, 0);
-    } else if (strncmp(arg[0], "OPTIONS", 7) == 0) {
+    } else if (strncmp(arg[0].data(), "OPTIONS", 7) == 0) {
         http_response(s, 200, public_str, NULL, cseq, 0);
     } else {
         http_response(s, 501, public_str, NULL, cseq, 0);
@@ -1378,7 +1390,6 @@ int read_rtsp(sockets *s) {
     }
 
 int read_http(sockets *s) {
-    char *arg[50];
     char buf[2000]; // the XML should not be larger than 1400 as it will create
                     // problems
     char url[300];
@@ -1472,21 +1483,31 @@ int read_http(sockets *s) {
     sprintf(opts.time_running, "%.0d%s%02d:%02d:%02d", days,
             days > 0 ? "d " : "", hours, mins, secs);
 
-    bool log_buf = (opts.log & DEFAULT_LOG) == DEFAULT_LOG;
-    LOG("Read HTTP (handle %d) [%s:%d] sid %d, sock %d %s%s", s->sid,
-        get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa),
-        s->sid, s->sock, log_buf ? "\n" : "",
-        log_buf ? (const char *)s->buf : "");
+    size_t original_len = strlen((char *)s->buf);
+    auto arg = split(std::string_view((char *)s->buf, original_len), ' ');
 
-    split(arg, (char *)s->buf, ARRAY_SIZE(arg), ' ');
+    // Mutate s->buf in-place to ensure all tokens are null-terminated (matching
+    // legacy behavior)
+    for (size_t k = 0; k < original_len; k++) {
+        if (s->buf[k] == ' ' || s->buf[k] < 33) {
+            s->buf[k] = '\0';
+        }
+    }
+
+    if (arg.size() < 2)
+        REPLY_AND_RETURN(503);
+
     //      LOG("args: %s -> %s -> %s",arg[0],arg[1],arg[2]);
-    if (strncmp(arg[0], "GET", 3) && strncmp(arg[0], "POST", 4) && !is_head)
+    if (strncmp(arg[0].data(), "GET", 3) && strncmp(arg[0].data(), "POST", 4) &&
+        !is_head)
         REPLY_AND_RETURN(503);
 
     if (!opts.disable_ssdp)
         ssdp_discovery(s);
 
-    if (strcmp(arg[1], "/" DESC_XML) == 0) {
+    std::string_view url_sv = arg[1];
+
+    if (url_sv == "/" DESC_XML) {
         extern int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2, tuner_at,
             tuner_ac;
         char adapters[400];
@@ -1523,7 +1544,7 @@ int read_http(sockets *s) {
         return 0;
     }
 
-    if (strcmp(arg[1], "/state.json") == 0) {
+    if (url_sv == "/state.json") {
         char *buf = (char *)malloc(JSON_STATE_MAXLEN);
         char *sbuf = (char *)malloc(JSON_STRING_MAXLEN);
         memset(sbuf, 0, JSON_STRING_MAXLEN);
@@ -1540,7 +1561,7 @@ int read_http(sockets *s) {
         return 0;
     }
 
-    if (strcmp(arg[1], "/bandwidth.json") == 0) {
+    if (url_sv == "/bandwidth.json") {
         char *buf = (char *)malloc(JSON_BANDWIDTH_MAXLEN);
         int len = get_json_bandwidth(buf, JSON_BANDWIDTH_MAXLEN);
         http_response(
@@ -1555,15 +1576,16 @@ int read_http(sockets *s) {
 
     // process file from html directory, the images are just sent back
 
-    if (!strcmp(arg[1], "/"))
-        arg[1] = (char *)"/status.html";
+    if (url_sv == "/")
+        url_sv = "/status.html";
 
-    if (!strchr(arg[1] + 1, '/') && !strstr(arg[1], "..")) {
+    if (url_sv.substr(1).find('/') == std::string_view::npos &&
+        url_sv.find("..") == std::string_view::npos) {
         char ctype[500];
         char *f;
         int nl;
 
-        f = readfile(arg[1], ctype, &nl);
+        f = readfile((char *)url_sv.data(), ctype, &nl);
         if (!f) {
             http_response(s, 404, NULL, NULL, 0, 0);
             return 0;
@@ -1703,7 +1725,7 @@ int ssdp_reply(sockets *s) {
     s->rtime = s->wtime; // consider the timeout of the discovery operation
 
     ruuid = strcasestr((char *)s->buf, "uuid:");
-    if (ruuid && strncmp(opts.uuid, strip(ruuid + 5), strlen(opts.uuid)) == 0) {
+    if (ruuid && strip(ruuid + 5).substr(0, strlen(opts.uuid)) == opts.uuid) {
         LOGM("Dropping packet from the same UUID as mine (from %s:%d)",
              get_sockaddr_host(s->sa, ra, sizeof(ra)),
              get_sockaddr_port(s->sa));

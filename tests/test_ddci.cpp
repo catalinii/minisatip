@@ -84,7 +84,8 @@ SPMT *create_pmt(int ad, int sid, int pid1, int pid2, int caid1, int caid2) {
     pmt_add_caid(pmt, caid2, caid2, NULL, 0);
     // Add a CA descriptor to the second stream PID so we can test that it
     // gets added to the PMT correctly
-    pmt->stream_pids[1].descriptors.push_back(create_ca_descriptor(0x0B00, 0x0573));
+    pmt->stream_pids[1].descriptors.push_back(
+        create_ca_descriptor(0x0B00, 0x0573));
 
     return pmt;
 }
@@ -132,8 +133,8 @@ int test_channels() {
 
 int test_add_del_pmt() {
     SPMT *pmt0, *pmt1, *pmt2, *pmt3, *pmt4;
-    ddci_device_t d0, d1;
-    ca_device_t ca0, ca1;
+    ddci_device_t d0 = {}, d1 = {};
+    ca_device_t ca0 = {}, ca1 = {};
     adapter ad = {0}, a0 = {0}, a1 = {0};
 
     create_adapter(&ad, 8);
@@ -242,9 +243,9 @@ int test_add_del_pmt() {
 }
 
 int test_copy_ts_from_ddci() {
-    ddci_device_t d;
+    ddci_device_t d = {};
     ddci_mapping_table_t *m;
-    adapter ad, ad0;
+    adapter ad = {}, ad0 = {};
     uint8_t buf[188 * 10], buf2[188 * 10];
     memset(buf, 0, sizeof(buf));
     memset(buf2, 0, sizeof(buf2));
@@ -310,11 +311,11 @@ int xwritev(int fd, const struct iovec *io, int len) {
 }
 
 int test_ddci_process_ts() {
-    ddci_device_t d;
+    ddci_device_t d = {};
     uint8_t buf[188 * 10];
     uint8_t fifo[188 * 3];
     int i;
-    adapter ad, ad2, ad0;
+    adapter ad = {}, ad2 = {}, ad0 = {};
     memset(buf, 0, sizeof(buf));
     memset(fifo, 0, sizeof(fifo));
     d.id = 2;
@@ -367,7 +368,7 @@ int test_ddci_process_ts() {
     return 0;
 }
 int test_create_pat() {
-    ddci_device_t d;
+    ddci_device_t d = {};
     uint8_t psi[188];
     uint8_t packet[188];
     int pid = 4096;
@@ -375,7 +376,7 @@ int test_create_pat() {
     int16_t cc;
     int psi_len;
     SFilter f;
-    adapter ad;
+    adapter ad = {};
     create_adapter(&ad, 0);
 
     d.id = 0;
@@ -409,11 +410,11 @@ int test_create_pat() {
 
 int test_create_sdt() {
     // Create an adapter
-    adapter ad;
+    adapter ad = {};
     create_adapter(&ad, 0);
 
     // Create a DDCI device
-    ddci_device_t d;
+    ddci_device_t d = {};
     d.id = 0;
     d.enabled = 1;
     d.max_channels = 2;
@@ -479,7 +480,7 @@ int test_create_sdt() {
 }
 
 int test_create_pmt() {
-    ddci_device_t d;
+    ddci_device_t d = {};
     uint8_t psi[188];
     uint8_t packet[188];
     adapter ad = {0};
@@ -575,7 +576,7 @@ int test_process_cat() {
                      0x04, 0x18, 0x8a, 0xe0, 0x31, 0xd9, 0x66, 0x34, 0x3b};
 
     // Fixtures
-    ddci_device_t d;
+    ddci_device_t d = {};
     d.id = 0;
     d.enabled = 1;
     memset(ddci_devices, 0, sizeof(ddci_devices));
