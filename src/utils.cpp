@@ -27,6 +27,7 @@
 #include "socketworks.h"
 
 #include <arpa/inet.h>
+#include <charconv>
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
@@ -61,108 +62,119 @@
 
 char pn[256];
 
-int split(char **rv, char *s, int lrv, char sep) {
-    int i = 0, j = 0;
-
-    if (!s)
-        return 0;
-    for (i = 0; s[i] && s[i] == sep && s[i] < 32; i++)
-        ;
-
-    rv[j++] = &s[i];
-    //      LOG("start %d %d\n",i,j);
-    while (j < lrv - 1) {
-        if (s[i] == 0 || s[i + 1] == 0)
+std::vector<std::string_view> split(std::string_view s, char sep) {
+    std::vector<std::string_view> result;
+    size_t start = 0;
+    while (start < s.size()) {
+        // Skip leading separators or control characters/spaces (matching legacy
+        // behavior)
+        while (start < s.size() &&
+               (s[start] == sep || static_cast<unsigned char>(s[start]) < 33)) {
+            start++;
+        }
+        if (start >= s.size())
             break;
-        if (s[i] == sep || s[i] < 33) {
-            s[i] = 0;
-            if (s[i + 1] != sep && s[i + 1] > 32)
-                rv[j++] = &s[i + 1];
-        } else if (s[i] < 14)
-            s[i] = 0;
-        //              LOG("i=%d j=%d %d %c \n",i,j,s[i],s[i]);
-        i++;
+
+        // Find end of token
+        size_t end = start;
+        while (end < s.size() && s[end] != sep &&
+               static_cast<unsigned char>(s[end]) >= 33) {
+            end++;
+        }
+
+        result.push_back(s.substr(start, end - start));
+        start = end;
     }
-    if (s[i] == sep)
-        s[i] = 0;
-    rv[j] = NULL;
-    return j;
+    return result;
 }
 
-char *strip(char *s) // strip spaces from the front of a string
+std::string_view
+strip(std::string_view s) // strip spaces from the front of a string
 {
-    if (s < (char *)1000)
-        return NULL;
-
-    while (*s && *s == ' ')
-        s++;
-    return s;
+    auto pos = s.find_first_not_of(' ');
+    if (pos == std::string_view::npos)
+        return "";
+    return s.substr(pos);
 }
 
-int map_intd(char *s, char **v, int dv) {
+int map_intd(std::string_view s, const char *const v[], int dv) {
     int i, n = dv;
-
-    if (s == NULL) {
-        LOG_AND_RETURN(dv, "map_intd: s=>NULL, v=%p, %s %s", v,
-                       v ? v[0] : "NULL", v ? v[1] : "NULL");
-    }
 
     s = strip(s);
 
-    if (!*s)
+    if (s.empty()) {
         LOG_AND_RETURN(dv, "map_intd: s is empty");
-
-    if (v == NULL) {
-        if (s[0] != '+' && s[0] != '-' && (s[0] < '0' || s[0] > '9'))
-            LOG_AND_RETURN(dv, "map_intd: s not a number: %s, v=%p, %s %s", s,
-                           v, v ? v[0] : "NULL", v ? v[1] : "NULL");
-        return atoi(s);
     }
-    for (i = 0; v[i]; i++)
-        if (!strncasecmp(s, v[i], strlen(v[i])))
+
+    if (v == nullptr) {
+        if (s[0] != '+' && s[0] != '-' && (s[0] < '0' || s[0] > '9')) {
+            LOG_AND_RETURN(dv, "map_intd: s not a number: %.*s, v=%p",
+                           (int)s.size(), s.data(), v);
+        }
+        if (s[0] == '+') {
+            s.remove_prefix(1);
+        }
+        int val = 0;
+        auto result = std::from_chars(s.data(), s.data() + s.size(), val);
+        if (result.ec == std::errc{}) {
+            return val;
+        }
+        return dv;
+    }
+    for (i = 0; v[i]; i++) {
+        size_t len = strlen(v[i]);
+        if (s.size() >= len && strncasecmp(s.data(), v[i], len) == 0)
             n = i;
+    }
     return n;
 }
 
-int check_strs(char *s, char **v, int dv) {
+int check_strs(std::string_view s, const char *const v[], int dv) {
     int i, n = dv;
 
-    if (s == NULL) {
-        LOG_AND_RETURN(dv, "check_strs: s=>NULL, v=%p, %s %s", v,
-                       v ? v[0] : "NULL", v ? v[1] : "NULL");
-    }
-    if (v == NULL) {
+    if (v == nullptr) {
         LOG_AND_RETURN(dv, "check_strs: v is empty");
     }
 
     s = strip(s);
 
-    if (!*s)
+    if (s.empty())
         LOG_AND_RETURN(dv, "check_strs: s is empty");
 
-    for (i = 0; v[i]; i++)
-        if (strncasecmp(s, v[i], strlen(s)) == 0)
+    for (i = 0; v[i]; i++) {
+        if (strncasecmp(s.data(), v[i], s.size()) == 0)
             n = i;
+    }
     return n;
 }
 
-char *header_parameter(char **arg,
-                       int i) // get the value of a header parameter
+std::string_view header_parameter(const std::vector<std::string_view> &arg,
+                                  int i) // get the value of a header parameter
 {
-    int len = strlen(arg[i]);
-    char *result;
+    if (i >= (int)arg.size())
+        return "";
 
-    if (arg[i][len - 1] == ':') {
-        return arg[i + 1];
+    std::string_view current = arg[i];
+    if (current.empty())
+        return "";
+
+    if (current.back() == ':') {
+        if (i + 1 < (int)arg.size())
+            return arg[i + 1];
+        return "";
     }
 
-    result = strchr(arg[i], ':');
-    if (result)
-        return result + 1;
+    size_t colon_pos = current.find(':');
+    if (colon_pos != std::string_view::npos) {
+        return current.substr(colon_pos + 1);
+    }
 
-    if (strcmp(arg[i + 1], ":") == 0)
-        return arg[i + 2];
-    return NULL;
+    if (i + 1 < (int)arg.size() && arg[i + 1] == ":") {
+        if (i + 2 < (int)arg.size())
+            return arg[i + 2];
+    }
+
+    return "";
 }
 
 int map_float(char *s, int mul) {
@@ -180,7 +192,9 @@ int map_float(char *s, int mul) {
     return r;
 }
 
-int map_int(char *s, char **v) { return map_intd(s, v, 0); }
+int map_int(std::string_view s, const char *const v[]) {
+    return map_intd(s, v, 0);
+}
 
 void posix_signal_handler(int sig, siginfo_t *siginfo, ucontext_t *ctx);
 void set_signal_handler(char *argv0) {
@@ -804,7 +818,7 @@ uint32_t get_random_uint32() {
     return out;
 }
 
-void _strncpy(char *a, char *b, int n) {
+void _strncpy(char *a, const char *b, int n) {
     strncpy(a, b, n);
     a[n - 1] = 0;
 }

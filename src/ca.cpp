@@ -315,7 +315,8 @@ int RSA_private_encrypt_wrapper(EVP_PKEY *pkey, int dlen, uint8_t *data,
     EVP_MD_CTX_free(md_ctx);
     return 0;
 #else
-    /* OpenSSL 1.x implementation, remove in August 2026 when Debian 11 build is removed */
+    /* OpenSSL 1.x implementation, remove in August 2026 when Debian 11 build is
+     * removed */
     uint8_t hash[SHA_DIGEST_LENGTH];
     uint8_t padded[256];
 
@@ -3468,13 +3469,14 @@ char *get_ca_pin(int i) {
     return NULL;
 }
 
-void set_ca_pin(int i, char *pin) {
+void set_ca_pin(int i, std::string_view pin) {
     if (!ca_devices[i])
         ca_devices[i] = alloc_ca_device();
     if (!ca_devices[i])
         return;
     memset(ca_devices[i]->pin_str, 0, sizeof(ca_devices[i]->pin_str));
-    safe_strncpy(ca_devices[i]->pin_str, pin);
+    strncpy(ca_devices[i]->pin_str, pin.data(),
+            std::min(pin.size(), sizeof(ca_devices[i]->pin_str) - 1));
 }
 
 void force_ci_adapter(int i) {
@@ -3486,21 +3488,18 @@ void force_ci_adapter(int i) {
 }
 
 void set_ca_adapter_force_ci(char *o) {
-    int i, j, la, st, end;
-    char buf[strlen(o) + 1], *arg[40], *sep;
-    safe_strncpy(buf, o);
-    la = split(arg, buf, ARRAY_SIZE(arg), ',');
-    for (i = 0; i < la; i++) {
-        sep = strchr(arg[i], '-');
+    int i, j, st, end;
+    auto arg = split(o, ',');
+    for (const auto &token : arg) {
+        size_t sep_pos = token.find('-');
 
-        if (sep == NULL) {
-            st = end = map_int(arg[i], NULL);
+        if (sep_pos == std::string_view::npos) {
+            st = end = map_int(token, NULL);
         } else {
-            st = map_int(arg[i], NULL);
-            end = map_int(sep + 1, NULL);
+            st = map_int(token.substr(0, sep_pos), NULL);
+            end = map_int(token.substr(sep_pos + 1), NULL);
         }
         for (j = st; j <= end; j++) {
-
             force_ci_adapter(j);
             LOG("Forcing CA %d to CI", j);
         }
@@ -3508,53 +3507,51 @@ void set_ca_adapter_force_ci(char *o) {
 }
 
 void set_ca_adapter_pin(char *o) {
-    int i, j, la, st, end;
-    char buf[strlen(o) + 1], *arg[40], *sep, *seps;
-    safe_strncpy(buf, o);
-    la = split(arg, buf, ARRAY_SIZE(arg), ',');
-    for (i = 0; i < la; i++) {
-        sep = strchr(arg[i], '-');
-        seps = strchr(arg[i], ':');
+    int i, j, st, end;
+    auto arg = split(o, ',');
+    for (const auto &token : arg) {
+        size_t sep_pos = token.find('-');
+        size_t colon_pos = token.find(':');
 
-        if (!seps)
+        if (colon_pos == std::string_view::npos)
             continue;
 
-        if (sep == NULL) {
-            st = end = map_int(arg[i], NULL);
+        if (sep_pos == std::string_view::npos) {
+            st = end = map_int(token, NULL);
         } else {
-            st = map_int(arg[i], NULL);
-            end = map_int(sep + 1, NULL);
+            st = map_int(token.substr(0, sep_pos), NULL);
+            end = map_int(token.substr(sep_pos + 1), NULL);
         }
+        std::string pin_str(token.substr(colon_pos + 1));
         for (j = st; j <= end; j++) {
-            set_ca_pin(j, seps + 1);
-            LOG("Setting CA %d pin to %s", j, seps + 1);
+            set_ca_pin(j, pin_str);
+            LOG("Setting CA %d pin to %s", j, pin_str.c_str());
         }
     }
 }
 
 void set_ca_channels(char *o) {
-    int i, la, ddci;
-    char buf[strlen(o) + 1], *arg[40], *sep, *seps;
-    safe_strncpy(buf, o);
-    la = split(arg, buf, ARRAY_SIZE(arg), ',');
-    for (i = 0; i < la; i++) {
-        sep = strchr(arg[i], ':');
+    int i, ddci;
+    auto arg = split(o, ',');
+    for (const auto &token : arg) {
+        size_t colon_pos = token.find(':');
 
-        if (!sep)
+        if (colon_pos == std::string_view::npos)
             continue;
         int multiple_pmt = 0;
-        if (sep[1] == '*') {
-            sep++;
+        std::string_view rem = token.substr(colon_pos + 1);
+        if (!rem.empty() && rem[0] == '*') {
+            rem = rem.substr(1);
             multiple_pmt = 1;
         }
 
         // Can't go over MAX_CA_PMT
-        int max_ca_pmt = atoi(sep + 1);
+        int max_ca_pmt = map_intd(rem, NULL, 0);
         if (max_ca_pmt > MAX_CA_PMT) {
             max_ca_pmt = MAX_CA_PMT;
         }
 
-        ddci = map_intd(arg[i], NULL, -1);
+        ddci = map_intd(token, NULL, -1);
         if (!ca_devices[ddci])
             ca_devices[ddci] = alloc_ca_device();
         if (!ca_devices[ddci])
@@ -3563,14 +3560,17 @@ void set_ca_channels(char *o) {
         ca_devices[ddci]->max_ca_pmt = max_ca_pmt;
         LOG("Forcing CA %d to use%s maximum channels %d", ddci,
             multiple_pmt ? "multiple PMTs with" : "", max_ca_pmt);
-        seps = sep;
-        while ((seps = strchr(seps + 1, '-'))) {
-            int caid = strtoul(seps + 1, NULL, 16);
+
+        size_t next_dash = rem.find('-');
+        while (next_dash != std::string_view::npos) {
+            std::string_view caid_sv = rem.substr(next_dash + 1);
+            int caid = strtoul(std::string(caid_sv).c_str(), NULL, 16);
             if (caid > 0) {
                 ca_devices[ddci]->caid[ca_devices[ddci]->caids++] = caid;
                 ca_devices[ddci]->has_forced_caids = 1;
             }
             LOG("Forcing CA %d to use CAID %04X", ddci, caid);
+            next_dash = rem.find('-', next_dash + 1);
         }
     }
 }

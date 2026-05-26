@@ -13,17 +13,20 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 
+#include <string_view>
+#include <vector>
+
 typedef std::recursive_mutex SMutex;
 
-int split(char **rv, char *s, int lrv, char sep);
-int map_int(char *s, char **v);
-int map_intd(char *s, char **v, int dv);
+std::vector<std::string_view> split(std::string_view s, char sep);
+int map_int(std::string_view s, const char *const v[] = nullptr);
+int map_intd(std::string_view s, const char *const v[], int dv);
 int map_float(char *s, int mul);
-int check_strs(char *s, char **v, int dv);
-char *header_parameter(char **arg, int i);
+int check_strs(std::string_view s, const char *const v[], int dv);
+std::string_view header_parameter(const std::vector<std::string_view> &arg,
+                                  int i);
 char *get_current_timestamp();
-char *strip(char *s);
-int split(char **rv, char *s, int lrv, char sep);
+std::string_view strip(std::string_view s);
 void set_signal_handler(char *argv0);
 int becomeDaemon();
 char *readfile(char *fn, char *ctype, int *len);
@@ -48,7 +51,7 @@ void write_buf_to_file(char *file, uint8_t *buf, int len);
 int mkdir_recursive(const char *path);
 void sleep_msec(uint32_t msec);
 int get_random(unsigned char *dest, int len);
-void _strncpy(char *a, char *b, int len);
+void _strncpy(char *a, const char *b, int len);
 int is_rtsp_response(char *buf, int len);
 int is_rtsp_request(char *buf, int len);
 int is_http_request(char *buf, int len);

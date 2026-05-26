@@ -120,7 +120,7 @@ int test_get_lnb_int_freq_cband() {
 }
 
 int test_update_pids() {
-    adapter ad;
+    adapter ad = {};
     a[0] = &ad;
     ad.enabled = 1;
     for (int i = 0; i < 8; i++) {
