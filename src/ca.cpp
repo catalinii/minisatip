@@ -3494,10 +3494,10 @@ void set_ca_adapter_force_ci(char *o) {
         size_t sep_pos = token.find('-');
 
         if (sep_pos == std::string_view::npos) {
-            st = end = map_int(token, NULL);
+            st = end = parse_int(token);
         } else {
-            st = map_int(token.substr(0, sep_pos), NULL);
-            end = map_int(token.substr(sep_pos + 1), NULL);
+            st = parse_int(token.substr(0, sep_pos));
+            end = parse_int(token.substr(sep_pos + 1));
         }
         for (j = st; j <= end; j++) {
             force_ci_adapter(j);
@@ -3517,10 +3517,10 @@ void set_ca_adapter_pin(char *o) {
             continue;
 
         if (sep_pos == std::string_view::npos) {
-            st = end = map_int(token, NULL);
+            st = end = parse_int(token);
         } else {
-            st = map_int(token.substr(0, sep_pos), NULL);
-            end = map_int(token.substr(sep_pos + 1), NULL);
+            st = parse_int(token.substr(0, sep_pos));
+            end = parse_int(token.substr(sep_pos + 1));
         }
         std::string pin_str(token.substr(colon_pos + 1));
         for (j = st; j <= end; j++) {
@@ -3546,12 +3546,12 @@ void set_ca_channels(char *o) {
         }
 
         // Can't go over MAX_CA_PMT
-        int max_ca_pmt = map_intd(rem, NULL, 0);
+        int max_ca_pmt = parse_int(rem);
         if (max_ca_pmt > MAX_CA_PMT) {
             max_ca_pmt = MAX_CA_PMT;
         }
 
-        ddci = map_intd(token, NULL, -1);
+        ddci = parse_int(token, -1);
         if (!ca_devices[ddci])
             ca_devices[ddci] = alloc_ca_device();
         if (!ca_devices[ddci])

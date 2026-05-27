@@ -18,9 +18,37 @@
 
 typedef std::recursive_mutex SMutex;
 
+#include <algorithm>
+#include <optional>
+#include <strings.h>
+
+template <typename EnumT> class EnumMap {
+  public:
+    struct Entry {
+        std::string_view key;
+        EnumT value;
+    };
+
+    EnumMap(std::initializer_list<Entry> entries) : entries_(entries) {}
+
+    std::optional<EnumT> lookup(std::string_view s) const {
+        auto it =
+            std::find_if(entries_.begin(), entries_.end(), [s](const Entry &e) {
+                return e.key.size() == s.size() &&
+                       strncasecmp(e.key.data(), s.data(), s.size()) == 0;
+            });
+        if (it != entries_.end()) {
+            return it->value;
+        }
+        return std::nullopt;
+    }
+
+  private:
+    std::vector<Entry> entries_;
+};
+
 std::vector<std::string_view> split(std::string_view s, char sep);
-int map_int(std::string_view s, const char *const v[] = nullptr);
-int map_intd(std::string_view s, const char *const v[], int dv);
+int parse_int(std::string_view s, int dv = 0);
 int map_float(char *s, int mul);
 int check_strs(std::string_view s, const char *const v[], int dv);
 std::string_view header_parameter(const std::vector<std::string_view> &arg,

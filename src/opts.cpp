@@ -36,7 +36,7 @@ void parse_dvbapi_opt(char *optarg, struct_opts_t *optz) {
     char *sep2 = strchr(buf, ',');
     if (sep2 != NULL) {
         *sep2 = 0;
-        optz->dvbapi_offset = map_int(sep2 + 1, NULL);
+        optz->dvbapi_offset = parse_int(sep2 + 1);
         memmove(buf, buf, strlen(buf) - 1 - strlen(sep2));
     }
     char *sep1 = strchr(buf, ':');
@@ -44,7 +44,7 @@ void parse_dvbapi_opt(char *optarg, struct_opts_t *optz) {
         // Hostname and port
         *sep1 = 0;
         safe_strncpy(optz->dvbapi_host, buf);
-        optz->dvbapi_port = map_int(sep1 + 1, NULL);
+        optz->dvbapi_port = parse_int(sep1 + 1);
     } else {
         // Socket file
         safe_strncpy(optz->dvbapi_host, buf);

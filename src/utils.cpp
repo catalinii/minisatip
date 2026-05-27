@@ -97,36 +97,25 @@ strip(std::string_view s) // strip spaces from the front of a string
     return s.substr(pos);
 }
 
-int map_intd(std::string_view s, const char *const v[], int dv) {
-    int i, n = dv;
-
+int parse_int(std::string_view s, int dv) {
     s = strip(s);
 
     if (s.empty()) {
-        LOG_AND_RETURN(dv, "map_intd: s is empty");
-    }
-
-    if (v == nullptr) {
-        if (s[0] != '+' && s[0] != '-' && (s[0] < '0' || s[0] > '9')) {
-            LOG_AND_RETURN(dv, "map_intd: s not a number: %.*s, v=%p",
-                           (int)s.size(), s.data(), v);
-        }
-        if (s[0] == '+') {
-            s.remove_prefix(1);
-        }
-        int val = 0;
-        auto result = std::from_chars(s.data(), s.data() + s.size(), val);
-        if (result.ec == std::errc{}) {
-            return val;
-        }
         return dv;
     }
-    for (i = 0; v[i]; i++) {
-        size_t len = strlen(v[i]);
-        if (s.size() >= len && strncasecmp(s.data(), v[i], len) == 0)
-            n = i;
+
+    if (s[0] != '+' && s[0] != '-' && (s[0] < '0' || s[0] > '9')) {
+        return dv;
     }
-    return n;
+    if (s[0] == '+') {
+        s.remove_prefix(1);
+    }
+    int val = 0;
+    auto result = std::from_chars(s.data(), s.data() + s.size(), val);
+    if (result.ec == std::errc{}) {
+        return val;
+    }
+    return dv;
 }
 
 int check_strs(std::string_view s, const char *const v[], int dv) {
@@ -190,10 +179,6 @@ int map_float(char *s, int mul) {
     r = (int)(f * mul);
     //      LOG("atof returned %.1f, mul = %d, result=%d",f,mul,r);
     return r;
-}
-
-int map_int(std::string_view s, const char *const v[]) {
-    return map_intd(s, v, 0);
 }
 
 void posix_signal_handler(int sig, siginfo_t *siginfo, ucontext_t *ctx);
@@ -852,7 +837,7 @@ int is_rtsp_http_header(char *buf, int len, const char *start[], int lstart) {
     // When RTP/TCP is used on SAT>IP adapters, responses are 4 bytes larger
     // than expected, so we just check that the specified content length fits
     // within the buffer, not that the length matches exactly.
-    int icl = map_intd(cl + 15, NULL, 0);
+    int icl = parse_int(cl + 15);
     if (nlnl + icl > buf + len)
         return 0;
 

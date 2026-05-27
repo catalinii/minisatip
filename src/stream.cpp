@@ -101,7 +101,7 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size) {
 
     if ((stream_id = strstr(req, "stream="))) {
         do_all = 0;
-        sid = get_sid(map_int(stream_id + 7, NULL) - 1);
+        sid = get_sid(parse_int(stream_id + 7) - 1);
         if (sid == NULL)
             return NULL;
     }
@@ -468,11 +468,11 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp) {
             if (token == "unicast")
                 p.type = TYPE_UNICAST;
             if (token.size() >= 4 && token.substr(0, 4) == "ttl=")
-                p.ttl = map_intd(token.substr(4), NULL, 0);
+                p.ttl = parse_int(token.substr(4));
             if (token.size() >= 12 && token.substr(0, 12) == "client_port=")
-                p.port = map_intd(token.substr(12), NULL, 0);
+                p.port = parse_int(token.substr(12));
             if (token.size() >= 5 && token.substr(0, 5) == "port=")
-                p.port = map_intd(token.substr(5), NULL, 0);
+                p.port = parse_int(token.substr(5));
             if (token.size() >= 12 && token.substr(0, 12) == "destination=") {
                 std::string dest_str(token.substr(12));
                 safe_strncpy(p.dest, (char *)dest_str.c_str());

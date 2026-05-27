@@ -125,6 +125,131 @@ make_func(inversion);
 make_func(pol);
 make_func(pls_mode);
 
+#ifndef ROLLOFF_15
+#define ROLLOFF_15 ((fe_rolloff_t)4)
+#endif
+#ifndef ROLLOFF_10
+#define ROLLOFF_10 ((fe_rolloff_t)5)
+#endif
+#ifndef ROLLOFF_5
+#define ROLLOFF_5 ((fe_rolloff_t)6)
+#endif
+
+#ifndef APSK_64
+#define APSK_64 ((fe_modulation_t)14)
+#endif
+#ifndef APSK_128
+#define APSK_128 ((fe_modulation_t)15)
+#endif
+#ifndef APSK_256
+#define APSK_256 ((fe_modulation_t)16)
+#endif
+
+#ifndef FEC_1_4
+#define FEC_1_4 ((fe_code_rate_t)13)
+#endif
+#ifndef FEC_1_3
+#define FEC_1_3 ((fe_code_rate_t)14)
+#endif
+
+const EnumMap<fe_delivery_system_t>
+    fe_delsys_map({{"undefined", SYS_UNDEFINED},
+                   {"dvbc", SYS_DVBC_ANNEX_A},
+                   {"dvbcb", SYS_DVBC_ANNEX_B},
+                   {"dvbt", SYS_DVBT},
+                   {"dss", SYS_DSS},
+                   {"dvbs", SYS_DVBS},
+                   {"dvbs2", SYS_DVBS2},
+                   {"dvbh", SYS_DVBH},
+                   {"isdbt", SYS_ISDBT},
+                   {"isdbs", SYS_ISDBS},
+                   {"isdbc", SYS_ISDBC},
+                   {"atsc", SYS_ATSC},
+                   {"atscmh", SYS_ATSCMH},
+                   {"dmbth", SYS_DMBTH},
+                   {"cmmb", SYS_CMMB},
+                   {"dab", SYS_DAB},
+                   {"dvbt2", (fe_delivery_system_t)SYS_DVBT2},
+                   {"turbo", SYS_TURBO},
+                   {"dvbcc", SYS_DVBC_ANNEX_C},
+                   {"dvbc2", (fe_delivery_system_t)SYS_DVBC2}});
+
+const EnumMap<int>
+    fe_pol_map({{"none", 0}, {"v", 1}, {"h", 2}, {"r", 3}, {"l", 4}});
+
+const EnumMap<fe_rolloff_t> fe_rolloff_map({{"0.35", ROLLOFF_35},
+                                            {"0.20", ROLLOFF_20},
+                                            {"0.25", ROLLOFF_25},
+                                            {" ", ROLLOFF_AUTO},
+                                            {"0.15", ROLLOFF_15},
+                                            {"0.10", ROLLOFF_10},
+                                            {"0.05", ROLLOFF_5}});
+
+const EnumMap<fe_modulation_t> fe_modulation_map({{"qpsk", QPSK},
+                                                  {"16qam", QAM_16},
+                                                  {"32qam", QAM_32},
+                                                  {"64qam", QAM_64},
+                                                  {"128qam", QAM_128},
+                                                  {"256qam", QAM_256},
+                                                  {" ", QAM_AUTO},
+                                                  {"8vsb", VSB_8},
+                                                  {"16vsb", VSB_16},
+                                                  {"8psk", PSK_8},
+                                                  {"16apsk", APSK_16},
+                                                  {"32apsk", APSK_32},
+                                                  {"dqpsk", DQPSK},
+                                                  {"qam_4_nr", QAM_4_NR},
+                                                  {"64apsk", APSK_64},
+                                                  {"128apsk", APSK_128},
+                                                  {"256apsk", APSK_256}});
+
+const EnumMap<fe_code_rate_t> fe_fec_map({{"none", FEC_NONE},
+                                          {"12", FEC_1_2},
+                                          {"23", FEC_2_3},
+                                          {"34", FEC_3_4},
+                                          {"45", FEC_4_5},
+                                          {"56", FEC_5_6},
+                                          {"67", FEC_6_7},
+                                          {"78", FEC_7_8},
+                                          {"89", FEC_8_9},
+                                          {" ", FEC_AUTO},
+                                          {"35", FEC_3_5},
+                                          {"910", FEC_9_10},
+                                          {"25", FEC_2_5},
+                                          {"14", FEC_1_4},
+                                          {"13", FEC_1_3}});
+
+const EnumMap<fe_pilot_t>
+    fe_pilot_map({{"on", PILOT_ON}, {"off", PILOT_OFF}, {" ", PILOT_AUTO}});
+
+const EnumMap<fe_guard_interval_t>
+    fe_gi_map({{"132", GUARD_INTERVAL_1_32},
+               {"116", GUARD_INTERVAL_1_16},
+               {"18", GUARD_INTERVAL_1_8},
+               {"14", GUARD_INTERVAL_1_4},
+               {" ", GUARD_INTERVAL_AUTO},
+               {"1128", GUARD_INTERVAL_1_128},
+               {"19128", GUARD_INTERVAL_19_128},
+               {"19256", GUARD_INTERVAL_19_256},
+               {"pn420", (fe_guard_interval_t)8},
+               {"pn595", (fe_guard_interval_t)9},
+               {"pn945", (fe_guard_interval_t)10}});
+
+const EnumMap<fe_transmit_mode_t>
+    fe_tmode_map({{"2k", TRANSMISSION_MODE_2K},
+                  {"8k", TRANSMISSION_MODE_8K},
+                  {" ", TRANSMISSION_MODE_AUTO},
+                  {"4k", TRANSMISSION_MODE_4K},
+                  {"1k", TRANSMISSION_MODE_1K},
+                  {"16k", TRANSMISSION_MODE_16K},
+                  {"32k", TRANSMISSION_MODE_32K},
+                  {"c1", TRANSMISSION_MODE_C1},
+                  {"c3780", TRANSMISSION_MODE_C3780}});
+
+const EnumMap<fe_pls_mode_t> fe_pls_mode_map({{"root", PLS_MODE_ROOT},
+                                              {"gold", PLS_MODE_GOLD},
+                                              {"combo", PLS_MODE_COMBO}});
+
 #define INVALID_URL(a)                                                         \
     {                                                                          \
         LOG(a);                                                                \
@@ -195,30 +320,35 @@ int detect_dvb_parameters(char *s, transponder *tp) {
 
     for (const auto &token : arg) {
         if (token.size() >= 5 && token.substr(0, 5) == "msys=")
-            tp->sys = map_int(token.substr(5), fe_delsys);
+            tp->sys =
+                fe_delsys_map.lookup(token.substr(5)).value_or(SYS_UNDEFINED);
         else if (token.size() >= 5 && token.substr(0, 5) == "freq=")
             tp->freq = map_float((char *)token.substr(5).data(), 1000);
         else if (token.size() >= 4 && token.substr(0, 4) == "pol=")
-            tp->pol = map_int(token.substr(4), fe_pol);
+            tp->pol = fe_pol_map.lookup(token.substr(4)).value_or(0);
         else if (token.size() >= 3 && token.substr(0, 3) == "sr=")
-            tp->sr = map_int(token.substr(3), NULL) * 1000;
+            tp->sr = parse_int(token.substr(3)) * 1000;
         else if (token.size() >= 3 && token.substr(0, 3) == "fe=")
-            tp->fe = map_int(token.substr(3), NULL);
+            tp->fe = parse_int(token.substr(3));
         else if (token.size() >= 4 && token.substr(0, 4) == "src=")
-            tp->diseqc = map_int(token.substr(4), NULL);
+            tp->diseqc = parse_int(token.substr(4));
         else if (token.size() >= 3 && token.substr(0, 3) == "ro=")
-            tp->ro = map_int(token.substr(3), fe_rolloff);
+            tp->ro =
+                fe_rolloff_map.lookup(token.substr(3)).value_or(ROLLOFF_AUTO);
         else if (token.size() >= 6 && token.substr(0, 6) == "mtype=")
             tp->mtype =
-                (fe_modulation_t)map_int(token.substr(6), fe_modulation);
+                fe_modulation_map.lookup(token.substr(6)).value_or(QPSK);
         else if (token.size() >= 4 && token.substr(0, 4) == "fec=")
-            tp->fec = (fe_code_rate_t)map_int(token.substr(4), fe_fec);
+            tp->fec = fe_fec_map.lookup(token.substr(4)).value_or(FEC_NONE);
         else if (token.size() >= 5 && token.substr(0, 5) == "plts=")
-            tp->plts = map_int(token.substr(5), fe_pilot);
+            tp->plts =
+                fe_pilot_map.lookup(token.substr(5)).value_or(PILOT_AUTO);
         else if (token.size() >= 3 && token.substr(0, 3) == "gi=")
-            tp->gi = (fe_guard_interval_t)map_int(token.substr(3), fe_gi);
+            tp->gi =
+                fe_gi_map.lookup(token.substr(3)).value_or(GUARD_INTERVAL_AUTO);
         else if (token.size() >= 6 && token.substr(0, 6) == "tmode=")
-            tp->tmode = (fe_transmit_mode_t)map_int(token.substr(6), fe_tmode);
+            tp->tmode = fe_tmode_map.lookup(token.substr(6))
+                            .value_or(TRANSMISSION_MODE_AUTO);
         else if (token.size() >= 3 && token.substr(0, 3) == "bw=") {
             tp->bw = map_float((char *)token.substr(3).data(), 1000000);
             if (tp->bw < 0 || tp->bw > 100000000)
@@ -226,18 +356,19 @@ int detect_dvb_parameters(char *s, transponder *tp) {
             if (tp->bw < 0 || tp->bw > 100000000)
                 tp->bw = map_float((char *)token.substr(3).data(), 1);
         } else if (token.size() >= 8 && token.substr(0, 8) == "specinv=")
-            tp->inversion = map_int(token.substr(8), NULL);
+            tp->inversion = parse_int(token.substr(8));
         else if (token.size() >= 6 && token.substr(0, 6) == "c2tft=")
-            tp->c2tft = map_int(token.substr(6), NULL);
+            tp->c2tft = parse_int(token.substr(6));
         else if (token.size() >= 3 && token.substr(0, 3) == "ds=")
-            tp->ds = map_int(token.substr(3), NULL);
+            tp->ds = parse_int(token.substr(3));
         else if ((token.size() >= 4 && token.substr(0, 4) == "plp=") ||
                  (token.size() >= 4 && token.substr(0, 4) == "isi="))
-            tp->plp_isi = map_int(token.substr(4), NULL);
+            tp->plp_isi = parse_int(token.substr(4));
         else if (token.size() >= 5 && token.substr(0, 5) == "plsm=")
-            tp->pls_mode = map_int(token.substr(5), fe_pls_mode);
+            tp->pls_mode =
+                fe_pls_mode_map.lookup(token.substr(5)).value_or(PLS_MODE_ROOT);
         else if (token.size() >= 5 && token.substr(0, 5) == "plsc=")
-            tp->pls_code = map_int(token.substr(5), NULL);
+            tp->pls_code = parse_int(token.substr(5));
         else if (token.size() >= 6 && token.substr(0, 6) == "x_pmt=")
             tp->x_pmt = (char *)token.substr(6).data();
         else if (token.size() >= 5 && token.substr(0, 5) == "pids=")
