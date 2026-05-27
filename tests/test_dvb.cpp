@@ -41,7 +41,7 @@ int test_detect_dvb_parameters_general() {
     ASSERT(tp.plts == 1, "plts parsed incorrectly");
     ASSERT(tp.sr == 22000000, "sr parsed incorrectly");
     ASSERT(tp.fec == 2, "fec parsed incorrectly");
-    ASSERT(strcmp(tp.pids, "0,16,201,302") == 0, "pids parsed incorrectly");
+    ASSERT(tp.pids == "0,16,201,302", "pids parsed incorrectly");
 
     return 0;
 }
@@ -68,6 +68,35 @@ int test_detect_dvb_parameters_roll_off() {
     return 0;
 }
 
+int test_detect_dvb_parameters_edge_cases() {
+    transponder tp;
+
+    // Test pids=all mapping to 8192
+    char query1[128] = "?freq=11362&pids=all";
+    detect_dvb_parameters(query1, &tp);
+    ASSERT(tp.pids == "8192", "pids=all parsed incorrectly");
+
+    // Test pids=none mapping to empty string
+    char query2[128] = "?freq=11362&pids=none";
+    detect_dvb_parameters(query2, &tp);
+    ASSERT(tp.pids == "", "pids=none parsed incorrectly");
+
+    // Test addpids, delpids, and x_pmt
+    char query3[128] = "?freq=11362&addpids=1,2,3&delpids=4,5&x_pmt=pmt_data";
+    detect_dvb_parameters(query3, &tp);
+    ASSERT(tp.apids == "1,2,3", "addpids parsed incorrectly");
+    ASSERT(tp.dpids == "4,5", "delpids parsed incorrectly");
+    ASSERT(tp.x_pmt == "pmt_data", "x_pmt parsed incorrectly");
+
+    // Test pls_mode and pls_code with PLS_MODE_ROOT
+    char query4[128] = "?freq=11362&plsm=root&plsc=42";
+    detect_dvb_parameters(query4, &tp);
+    ASSERT(tp.pls_mode == PLS_MODE_ROOT, "pls_mode parsed incorrectly");
+    ASSERT(tp.pls_code != -1, "pls_code not calculated for ROOT mode");
+
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -77,5 +106,7 @@ int main() {
               "test detect_dvb_parameters with general parameters");
     TEST_FUNC(test_detect_dvb_parameters_roll_off(),
               "test detect_dvb_parameters roll-off parsing");
+    TEST_FUNC(test_detect_dvb_parameters_edge_cases(),
+              "test detect_dvb_parameters edge cases");
     return 0;
 }

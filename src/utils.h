@@ -16,12 +16,44 @@
 #include <string_view>
 #include <vector>
 
+#include <cctype>
+
 typedef std::recursive_mutex SMutex;
+
+inline bool eq_case_insensitive(std::string_view a, std::string_view b) {
+    if (a.size() != b.size())
+        return false;
+    for (size_t i = 0; i < a.size(); ++i) {
+        if (std::tolower(static_cast<unsigned char>(a[i])) !=
+            std::tolower(static_cast<unsigned char>(b[i]))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+inline bool starts_with_case_insensitive(std::string_view str,
+                                         std::string_view prefix) {
+    if (str.size() < prefix.size())
+        return false;
+    for (size_t i = 0; i < prefix.size(); ++i) {
+        if (std::tolower(static_cast<unsigned char>(str[i])) !=
+            std::tolower(static_cast<unsigned char>(prefix[i]))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+inline bool starts_with(std::string_view str, std::string_view prefix) {
+    return str.size() >= prefix.size() &&
+           str.compare(0, prefix.size(), prefix) == 0;
+}
 
 std::vector<std::string_view> split(std::string_view s, char sep);
 int map_int(std::string_view s, const char *const v[] = nullptr);
 int map_intd(std::string_view s, const char *const v[], int dv);
-int map_float(char *s, int mul);
+int map_float(std::string_view s, int mul);
 int check_strs(std::string_view s, const char *const v[], int dv);
 std::string_view header_parameter(const std::vector<std::string_view> &arg,
                                   int i);
@@ -29,7 +61,7 @@ char *get_current_timestamp();
 std::string_view strip(std::string_view s);
 void set_signal_handler(char *argv0);
 int becomeDaemon();
-char *readfile(char *fn, char *ctype, int *len);
+char *readfile(const char *fn, char *ctype, int *len);
 void process_file(void *sock, char *s, int len, char *ctype);
 int closefile(char *mem, int len);
 

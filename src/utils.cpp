@@ -177,16 +177,19 @@ std::string_view header_parameter(const std::vector<std::string_view> &arg,
     return "";
 }
 
-int map_float(char *s, int mul) {
+int map_float(std::string_view s, int mul) {
     float f;
     int r;
 
-    if (s == NULL)
+    if (s.empty())
         LOG_AND_RETURN(0, "map_float: s=>NULL, mul=%d", mul);
-    if (s[0] != '+' && s[0] != '-' && (s[0] < '0' || s[0] > '9'))
-        LOG_AND_RETURN(0, "map_float: s not a number: %s, mul=%d", s, mul);
+    if (s[0] != '+' && s[0] != '-' && (s[0] < '0' || s[0] > '9')) {
+        std::string s_str(s);
+        LOG_AND_RETURN(0, "map_float: s not a number: %s, mul=%d",
+                       s_str.c_str(), mul);
+    }
 
-    f = atof(s);
+    f = atof(std::string(s).c_str());
     r = (int)(f * mul);
     //      LOG("atof returned %.1f, mul = %d, result=%d",f,mul,r);
     return r;
@@ -380,13 +383,6 @@ char *get_current_timestamp(void) {
     return date_str;
 }
 
-int endswith(char *src, char *with) {
-    uint32_t lw = strlen(with);
-    if (strlen(src) > lw && !strcmp(src + strlen(src) - lw, with))
-        return 1;
-    return 0;
-}
-
 // replace $VAR$ with it's value and write the output to the socket
 void process_file(void *sock, char *s, int len, char *ctype) {
     char outp[8300];
@@ -432,7 +428,7 @@ void process_file(void *sock, char *s, int len, char *ctype) {
     }
 }
 
-char *readfile(char *fn, char *ctype, int *len) {
+char *readfile(const char *fn, char *ctype, int *len) {
     char ffn[256];
     char *mem;
     struct stat sb;
@@ -467,27 +463,28 @@ char *readfile(char *fn, char *ctype, int *len) {
     *len = nl;
     if (ctype) {
         ctype[0] = 0;
-        if (endswith(fn, (char *)"png"))
+        std::string_view fn_sv(fn);
+        if (fn_sv.ends_with("png"))
             strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: "
                           "image/png\r\nConnection: close");
-        else if (endswith(fn, (char *)"jpg") || endswith(fn, (char *)"jpeg"))
+        else if (fn_sv.ends_with("jpg") || fn_sv.ends_with("jpeg"))
             strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: "
                           "image/jpeg\r\nConnection: close");
-        else if (endswith(fn, (char *)"css"))
+        else if (fn_sv.ends_with("css"))
             strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: "
                           "text/css\r\nConnection: close");
-        else if (endswith(fn, (char *)"js"))
+        else if (fn_sv.ends_with("js"))
             strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: "
                           "text/javascript\r\nConnection: close");
-        else if (endswith(fn, (char *)"htm") || endswith(fn, (char *)"html"))
+        else if (fn_sv.ends_with("htm") || fn_sv.ends_with("html"))
             strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: "
                           "text/html; charset=utf-8\r\nConnection: close");
-        else if (endswith(fn, (char *)"xml"))
+        else if (fn_sv.ends_with("xml"))
             strcpy(ctype, "Cache-Control: no-cache\r\nContent-type: text/xml");
-        else if (endswith(fn, (char *)"json"))
+        else if (fn_sv.ends_with("json"))
             strcpy(ctype, "Cache-Control: no-cache\r\nContent-type: "
                           "application/json; charset=utf-8");
-        else if (endswith(fn, (char *)"m3u"))
+        else if (fn_sv.ends_with("m3u"))
             strcpy(ctype,
                    "Cache-Control: no-cache\r\nContent-type: video/x-mpegurl");
         else
