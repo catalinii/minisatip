@@ -144,7 +144,7 @@ uint32_t pls_scrambling_index(transponder *tp) {
     return 0x3ffff;
 }
 
-int detect_dvb_parameters(char *s, transponder *tp) {
+int detect_dvb_parameters(std::string_view s, transponder *tp) {
 
     tp->sys = -1;
     tp->freq = -1;
@@ -169,35 +169,28 @@ int detect_dvb_parameters(char *s, transponder *tp) {
     tp->pls_mode = -1;
     tp->pls_code = -1;
 
-    tp->pids = tp->apids = tp->dpids = tp->x_pmt = NULL;
+    tp->pids.clear();
+    tp->apids.clear();
+    tp->dpids.clear();
+    tp->x_pmt.clear();
 
-    while (*s > 0 && *s != '?')
-        s++;
-
-    if (*s == 0)
+    auto qm_pos = s.find('?');
+    if (qm_pos == std::string_view::npos)
         LOG_AND_RETURN(0, "no ? found in URL");
 
-    s++;
-    if (strstr(s, "freq="))
+    std::string_view query = s.substr(qm_pos + 1);
+    if (query.find("freq=") != std::string_view::npos)
         init_dvb_parameters(tp);
 
-    LOG("detect_dvb_parameters (S)-> %s", s);
-    size_t original_len = strlen(s);
-    auto arg = split(std::string_view(s, original_len), '&');
-
-    // Mutate s in-place to preserve null-termination of substrings for
-    // transponder pointers
-    for (size_t k = 0; k < original_len; k++) {
-        if (s[k] == '&' || static_cast<unsigned char>(s[k]) < 33) {
-            s[k] = '\0';
-        }
-    }
+    std::string query_str(query);
+    LOG("detect_dvb_parameters (S)-> %s", query_str.c_str());
+    auto arg = split(query, '&');
 
     for (const auto &token : arg) {
         if (token.size() >= 5 && token.substr(0, 5) == "msys=")
             tp->sys = map_int(token.substr(5), fe_delsys);
         else if (token.size() >= 5 && token.substr(0, 5) == "freq=")
-            tp->freq = map_float((char *)token.substr(5).data(), 1000);
+            tp->freq = map_float(token.substr(5), 1000);
         else if (token.size() >= 4 && token.substr(0, 4) == "pol=")
             tp->pol = map_int(token.substr(4), fe_pol);
         else if (token.size() >= 3 && token.substr(0, 3) == "sr=")
@@ -220,11 +213,11 @@ int detect_dvb_parameters(char *s, transponder *tp) {
         else if (token.size() >= 6 && token.substr(0, 6) == "tmode=")
             tp->tmode = (fe_transmit_mode_t)map_int(token.substr(6), fe_tmode);
         else if (token.size() >= 3 && token.substr(0, 3) == "bw=") {
-            tp->bw = map_float((char *)token.substr(3).data(), 1000000);
+            tp->bw = map_float(token.substr(3), 1000000);
             if (tp->bw < 0 || tp->bw > 100000000)
-                tp->bw = map_float((char *)token.substr(3).data(), 1000);
+                tp->bw = map_float(token.substr(3), 1000);
             if (tp->bw < 0 || tp->bw > 100000000)
-                tp->bw = map_float((char *)token.substr(3).data(), 1);
+                tp->bw = map_float(token.substr(3), 1);
         } else if (token.size() >= 8 && token.substr(0, 8) == "specinv=")
             tp->inversion = map_int(token.substr(8), NULL);
         else if (token.size() >= 6 && token.substr(0, 6) == "c2tft=")
@@ -239,56 +232,66 @@ int detect_dvb_parameters(char *s, transponder *tp) {
         else if (token.size() >= 5 && token.substr(0, 5) == "plsc=")
             tp->pls_code = map_int(token.substr(5), NULL);
         else if (token.size() >= 6 && token.substr(0, 6) == "x_pmt=")
-            tp->x_pmt = (char *)token.substr(6).data();
+            tp->x_pmt = std::string(token.substr(6));
         else if (token.size() >= 5 && token.substr(0, 5) == "pids=")
-            tp->pids = (char *)token.substr(5).data();
+            tp->pids = std::string(token.substr(5));
         else if (token.size() >= 8 && token.substr(0, 8) == "addpids=")
-            tp->apids = (char *)token.substr(8).data();
+            tp->apids = std::string(token.substr(8));
         else if (token.size() >= 8 && token.substr(0, 8) == "delpids=")
-            tp->dpids = (char *)token.substr(8).data();
+            tp->dpids = std::string(token.substr(8));
     }
 
-    if (tp->pids && strstr(tp->pids, "all")) {
-        strcpy(def_pids, "8192");
-        // map pids=all to essential pids
-        tp->pids = (char *)def_pids;
+    if (!tp->pids.empty() && tp->pids.find("all") != std::string::npos) {
+        tp->pids = "8192";
     }
 
     if (tp->pls_mode == PLS_MODE_ROOT)
         tp->pls_code = pls_scrambling_index(tp);
 
-    if (tp->pids && strncmp(tp->pids, "none", 4) == 0)
-        tp->pids = (char *)"";
+    if (!tp->pids.empty() && tp->pids.compare(0, 4, "none") == 0)
+        tp->pids = "";
 
-    //      if(!msys)INVALID_URL("no msys= found in URL");
-    //      if(freq<10)INVALID_URL("no freq= found in URL or frequency
-    //      invalid"); if((msys==SYS_DVBS || msys==SYS_DVBS2) && (pol!='H' &&
-    //      pol!='V'))INVALID_URL("no pol= found in URL or pol is not H or V");
     LOG("detect_dvb_parameters (E) -> src=%d, fe=%d, freq=%d, fec=%d, sr=%d, "
         "pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s - "
         "apids=%s - dpids=%s x_pmt=%s",
         tp->diseqc, tp->fe, tp->freq, tp->fec, tp->sr, tp->pol, tp->ro, tp->sys,
         tp->mtype, tp->plts, tp->bw, tp->inversion,
-        tp->pids ? tp->pids : "NULL", tp->apids ? tp->apids : "NULL",
-        tp->dpids ? tp->dpids : "NULL", tp->x_pmt ? tp->x_pmt : "NULL");
+        !tp->pids.empty() ? tp->pids.c_str() : "NULL",
+        !tp->apids.empty() ? tp->apids.c_str() : "NULL",
+        !tp->dpids.empty() ? tp->dpids.c_str() : "NULL",
+        !tp->x_pmt.empty() ? tp->x_pmt.c_str() : "NULL");
     return 0;
 }
 
 void init_dvb_parameters(transponder *tp) {
-    memset(tp, 0, sizeof(transponder));
+    tp->sys = 0;
+    tp->freq = 0;
     tp->inversion = INVERSION_AUTO;
+    tp->mtype = QAM_AUTO;
+    tp->fe = 0;
     tp->hprate = FEC_AUTO;
     tp->tmode = TRANSMISSION_MODE_AUTO;
     tp->gi = GUARD_INTERVAL_AUTO;
     tp->bw = 8000000;
+    tp->sm = 0;
+    tp->t2id = 0;
     tp->ro = ROLLOFF_AUTO;
-    tp->mtype = QAM_AUTO;
     tp->plts = PILOT_AUTO;
     tp->fec = FEC_AUTO;
+    tp->sr = 0;
+    tp->pol = 0;
+    tp->diseqc = 0;
+    memset(&tp->diseqc_param, 0, sizeof(tp->diseqc_param));
+    tp->c2tft = 0;
     tp->ds = TP_VALUE_UNSET;
     tp->plp_isi = TP_VALUE_UNSET;
     tp->pls_mode = TP_VALUE_UNSET;
     tp->pls_code = TP_VALUE_UNSET;
+
+    tp->pids.clear();
+    tp->apids.clear();
+    tp->dpids.clear();
+    tp->x_pmt.clear();
 }
 
 void copy_dvb_parameters(transponder *s, transponder *d) {
@@ -297,9 +300,11 @@ void copy_dvb_parameters(transponder *s, transponder *d) {
         "ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s, apids=%s, "
         "dpids=%s x_pmt=%s",
         d->diseqc, d->fe, d->freq, d->fec, d->sr, d->pol, d->ro, d->sys,
-        d->mtype, d->plts, d->bw, d->inversion, d->pids ? d->pids : "NULL",
-        d->apids ? d->apids : "NULL", d->dpids ? d->dpids : "NULL",
-        d->x_pmt ? d->x_pmt : "NULL");
+        d->mtype, d->plts, d->bw, d->inversion,
+        !d->pids.empty() ? d->pids.c_str() : "NULL",
+        !d->apids.empty() ? d->apids.c_str() : "NULL",
+        !d->dpids.empty() ? d->dpids.c_str() : "NULL",
+        !d->x_pmt.empty() ? d->x_pmt.c_str() : "NULL");
     if (s->sys != -1)
         d->sys = s->sys;
     if (s->freq != -1)
@@ -363,9 +368,11 @@ void copy_dvb_parameters(transponder *s, transponder *d) {
         "ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s, apids=%s, "
         "dpids=%s x_pmt=%s",
         d->diseqc, d->fe, d->freq, d->fec, d->sr, d->pol, d->ro, d->sys,
-        d->mtype, d->plts, d->bw, d->inversion, d->pids ? d->pids : "NULL",
-        d->apids ? d->apids : "NULL", d->dpids ? d->dpids : "NULL",
-        d->x_pmt ? d->x_pmt : "NULL");
+        d->mtype, d->plts, d->bw, d->inversion,
+        !d->pids.empty() ? d->pids.c_str() : "NULL",
+        !d->apids.empty() ? d->apids.c_str() : "NULL",
+        !d->dpids.empty() ? d->dpids.c_str() : "NULL",
+        !d->x_pmt.empty() ? d->x_pmt.c_str() : "NULL");
 }
 
 // This function provides an scale factor for dB to percentage conversion,

@@ -1,5 +1,8 @@
 #ifndef DVB_H
 #define DVB_H
+
+#include <string>
+#include <string_view>
 #ifdef __APPLE__
 #include <sys/types.h>
 #else
@@ -334,7 +337,7 @@ typedef struct struct_transponder {
     int pls_mode; // DVB-S2
     int pls_code; // DVB-S2
 
-    char *apids, *pids, *dpids, *x_pmt;
+    std::string apids, pids, dpids, x_pmt;
 } transponder;
 
 #ifndef DISABLE_LINUXDVB
@@ -347,7 +350,7 @@ int tune_it_s2(int fd_frontend, transponder *tp);
 
 fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys);
 #endif
-int detect_dvb_parameters(char *s, transponder *tp);
+int detect_dvb_parameters(std::string_view s, transponder *tp);
 void init_dvb_parameters(transponder *tp);
 void copy_dvb_parameters(transponder *s, transponder *d);
 
