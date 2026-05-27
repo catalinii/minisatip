@@ -13,6 +13,7 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 
+#include <algorithm>
 #include <string_view>
 #include <vector>
 
@@ -21,28 +22,21 @@
 typedef std::recursive_mutex SMutex;
 
 inline bool eq_case_insensitive(std::string_view a, std::string_view b) {
-    if (a.size() != b.size())
-        return false;
-    for (size_t i = 0; i < a.size(); ++i) {
-        if (std::tolower(static_cast<unsigned char>(a[i])) !=
-            std::tolower(static_cast<unsigned char>(b[i]))) {
-            return false;
-        }
-    }
-    return true;
+    return std::ranges::equal(a, b, [](char c1, char c2) {
+        return std::tolower(static_cast<unsigned char>(c1)) ==
+               std::tolower(static_cast<unsigned char>(c2));
+    });
 }
 
 inline bool starts_with_case_insensitive(std::string_view str,
                                          std::string_view prefix) {
     if (str.size() < prefix.size())
         return false;
-    for (size_t i = 0; i < prefix.size(); ++i) {
-        if (std::tolower(static_cast<unsigned char>(str[i])) !=
-            std::tolower(static_cast<unsigned char>(prefix[i]))) {
-            return false;
-        }
-    }
-    return true;
+    return std::ranges::equal(
+        prefix, str.substr(0, prefix.size()), [](char c1, char c2) {
+            return std::tolower(static_cast<unsigned char>(c1)) ==
+                   std::tolower(static_cast<unsigned char>(c2));
+        });
 }
 
 inline bool starts_with(std::string_view str, std::string_view prefix) {
