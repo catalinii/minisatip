@@ -159,8 +159,7 @@ int satipc_handle_setup(adapter *ad, satipc *sip, char *buf) {
         sip->timeout_ms = tmout * 1000;
     }
 
-    size_t original_len = strlen(buf);
-    auto arg = split(std::string_view(buf, original_len), ' ');
+    auto arg = split(std::string_view(buf), ' ');
 
     std::string_view sess;
     std::string_view sid;
