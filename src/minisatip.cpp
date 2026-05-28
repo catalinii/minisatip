@@ -1187,8 +1187,7 @@ int read_rtsp(sockets *s) {
         return 0;
     }
 
-    size_t original_len = strlen((char *)s->buf);
-    auto arg = split(std::string_view((char *)s->buf, original_len), ' ');
+    auto arg = split(std::string_view((char *)s->buf), ' ');
 
     cseq = 0;
     if (arg.size() < 2)
@@ -1479,8 +1478,7 @@ int read_http(sockets *s) {
     sprintf(opts.time_running, "%.0d%s%02d:%02d:%02d", days,
             days > 0 ? "d " : "", hours, mins, secs);
 
-    size_t original_len = strlen((char *)s->buf);
-    auto arg = split(std::string_view((char *)s->buf, original_len), ' ');
+    auto arg = split(std::string_view((char *)s->buf), ' ');
 
     if (arg.size() < 2)
         REPLY_AND_RETURN(503);
