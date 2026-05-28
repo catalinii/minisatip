@@ -107,9 +107,8 @@ int parse_int(std::string_view s, int dv) {
     if (s[0] != '+' && s[0] != '-' && (s[0] < '0' || s[0] > '9')) {
         return dv;
     }
-    for (i = 0; v[i]; i++) {
-        if (starts_with_case_insensitive(s, v[i]))
-            n = i;
+    if (s[0] == '+') {
+        s.remove_prefix(1);
     }
     int val = 0;
     auto result = std::from_chars(s.data(), s.data() + s.size(), val);

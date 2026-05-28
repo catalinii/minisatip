@@ -52,7 +52,7 @@ template <typename EnumT> class EnumMap {
 
 std::vector<std::string_view> split(std::string_view s, char sep);
 int parse_int(std::string_view s, int dv = 0);
-int map_float(char *s, int mul);
+int map_float(std::string_view s, int mul);
 inline bool eq_case_insensitive(std::string_view a, std::string_view b) {
     return std::ranges::equal(a, b, [](char c1, char c2) {
         return std::tolower(static_cast<unsigned char>(c1)) ==
