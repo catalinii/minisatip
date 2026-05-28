@@ -299,8 +299,7 @@ int start_play(streams *sid, sockets *s) {
             set_socket_thread(sid->st_sock, get_socket_thread(ad->sock));
     }
     //  flush the sockets buffer if no pid was requested
-    if (sid->tp.apids.empty() && !sid->tp.pids.empty() &&
-        (sid->tp.pids[0] == '\0' || sid->tp.pids == "0"))
+    if (sid->tp.apids.empty() && sid->tp.pids == "0")
         s->flush_enqued_data = 1;
     sid->do_play = 1;
     if (s->type != TYPE_HTTP)

@@ -39,11 +39,6 @@ inline bool starts_with_case_insensitive(std::string_view str,
         });
 }
 
-inline bool starts_with(std::string_view str, std::string_view prefix) {
-    return str.size() >= prefix.size() &&
-           str.compare(0, prefix.size(), prefix) == 0;
-}
-
 std::vector<std::string_view> split(std::string_view s, char sep);
 int map_int(std::string_view s, const char *const v[] = nullptr);
 int map_intd(std::string_view s, const char *const v[], int dv);
