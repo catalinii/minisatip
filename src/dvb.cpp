@@ -183,8 +183,7 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
     if (query.find("freq=") != std::string_view::npos)
         init_dvb_parameters(tp);
 
-    std::string query_str(query);
-    LOG("detect_dvb_parameters (S)-> %s", query_str.c_str());
+    LOG("detect_dvb_parameters (S)-> %.*s", (int)query.size(), query.data());
     auto arg = split(query, '&');
 
     std::unordered_map<std::string_view, std::string_view> params;
