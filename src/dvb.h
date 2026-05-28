@@ -368,6 +368,9 @@ const char *get_pol(int i);
 const char *get_inversion(int i);
 const char *get_pls_mode(int i);
 
+#include "utils.h"
+extern const EnumMap<fe_delivery_system_t> fe_delsys_map;
+
 extern const char *fe_delsys[];
 extern const char *fe_fec[];
 extern const char *fe_tmode[];

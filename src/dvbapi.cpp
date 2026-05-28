@@ -163,7 +163,7 @@ int dvbapi_reply(sockets *s) {
             dvbapi_copy16r(dvbapi_protocol_version, b, 4);
             char *oscam_version_str = strstr((char *)b + 7, "build r");
             if (oscam_version_str)
-                oscam_version = map_intd(oscam_version_str + 7, NULL, 0);
+                oscam_version = parse_int(oscam_version_str + 7);
             LOG("dvbapi: server version %d, build %d, found, name = %s",
                 dvbapi_protocol_version, oscam_version, b + 7);
             if (dvbapi_protocol_version > DVBAPI_PROTOCOL_VERSION)

@@ -128,17 +128,23 @@ int test_strip() {
 }
 
 int test_map_int() {
-    ASSERT_EQUAL(map_int("123"), 123, "Expected 123");
-    ASSERT_EQUAL(map_int("  -456"), -456, "Expected -456");
-    ASSERT_EQUAL(map_int("+789"), 789, "Expected 789");
+    ASSERT_EQUAL(parse_int("123"), 123, "Expected 123");
+    ASSERT_EQUAL(parse_int("  -456"), -456, "Expected -456");
+    ASSERT_EQUAL(parse_int("+789"), 789, "Expected 789");
+    ASSERT_EQUAL(parse_int("invalid", 42), 42, "Expected 42 for invalid int");
 
-    const char *const map[] = {"zero", "one", "two", nullptr};
-    ASSERT_EQUAL(map_int("one", map), 1, "Expected index 1 for 'one'");
-    ASSERT_EQUAL(map_int("two", map), 2, "Expected index 2 for 'two'");
-    ASSERT_EQUAL(map_int("three", map), 0,
-                 "Expected default 0 for invalid value");
+    enum class TestEnum { ZERO, ONE, TWO };
 
-    ASSERT_EQUAL(map_intd("three", map, 42), 42, "Expected default 42");
+    EnumMap<TestEnum> my_map({{"zero", TestEnum::ZERO},
+                              {"one", TestEnum::ONE},
+                              {"two", TestEnum::TWO}});
+
+    ASSERT(my_map.lookup("one").value_or(TestEnum::ZERO) == TestEnum::ONE,
+           "Expected ONE");
+    ASSERT(my_map.lookup("TWO").value_or(TestEnum::ZERO) == TestEnum::TWO,
+           "Expected TWO");
+    ASSERT(!my_map.lookup("three").has_value(),
+           "Expected nullopt for invalid key");
 
     return 0;
 }

@@ -1006,19 +1006,19 @@ void set_options(int argc, char *argv[]) {
             if (sep1 != NULL) {
                 *sep1 = 0;
                 opts.netcv_if = optarg;
-                opts.netcv_count = map_int(sep1 + 1, NULL);
+                opts.netcv_count = parse_int(sep1 + 1);
                 break;
             }
 
             // default interface is vlan4 as it is used on the REEL
             opts.netcv_if = (char *)"vlan4";
-            opts.netcv_count = map_int(optarg, NULL);
+            opts.netcv_count = parse_int(optarg);
 #endif
             break;
         }
 
         case PRIORITY_OPT:
-            opts.th_priority = map_int(optarg, NULL);
+            opts.th_priority = parse_int(optarg);
             break;
 
         case DOCUMENTROOT_OPT:
@@ -1200,7 +1200,7 @@ int read_rtsp(sockets *s) {
     if (s->sid < 0)
         for (i = 0; i < (int)arg.size(); i++)
             if (starts_with_case_insensitive(arg[i], "Session:")) {
-                sess_id = map_int(header_parameter(arg, i), NULL);
+                sess_id = parse_int(header_parameter(arg, i));
                 s->sid = find_session_id(sess_id);
             }
 
@@ -1229,7 +1229,7 @@ int read_rtsp(sockets *s) {
 
     for (i = 0; i < (int)arg.size(); i++)
         if (starts_with_case_insensitive(arg[i], "CSeq:"))
-            cseq = map_int(header_parameter(arg, i), NULL);
+            cseq = parse_int(header_parameter(arg, i));
         else if (starts_with_case_insensitive(arg[i], "Transport:")) {
             transport_sv = header_parameter(arg, i);
 
@@ -1725,7 +1725,7 @@ int ssdp_reply(sockets *s) {
 
     if (strncasecmp((const char *)s->buf, "NOTIFY", 6) == 0) {
         rdid = strcasestr((char *)s->buf, "DEVICEID.SES.COM:");
-        if (rdid && opts.device_id == map_int(strip(rdid + 17), NULL)) {
+        if (rdid && opts.device_id == parse_int(strip(rdid + 17))) {
             ptr = 0;
             strcatf(buf, ptr, device_id_conflict,
                     opts.bind ? opts.bind : getlocalip(), opts.name_app,
@@ -1747,7 +1747,7 @@ int ssdp_reply(sockets *s) {
     man = strcasestr((char *)s->buf, "MAN");
     man_sd = strcasestr((char *)s->buf, "ssdp:discover");
     if ((didsescom = strcasestr((char *)s->buf, "DEVICEID.SES.COM:")))
-        did = map_int(didsescom + 17, NULL);
+        did = parse_int(didsescom + 17);
 
     if (man && man_sd && didsescom && (s->rtime < 15000) &&
         did == opts.device_id) // SSDP Device ID clash, only first 5 seconds

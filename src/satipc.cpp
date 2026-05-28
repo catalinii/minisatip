@@ -81,6 +81,8 @@ int recvmmsg0(int sockfd, struct mmsghdr *msgvec, unsigned int vlen) {
 
 const char *str_transport_type[] = {"UDP", "TCP", "SRT"};
 
+const EnumMap<fe_delivery_system_t> satip_delsys_map = fe_delsys_map;
+
 extern const char *fe_delsys[];
 int satip_post_init(adapter *ad);
 
@@ -154,7 +156,7 @@ int satipc_handle_setup(adapter *ad, satipc *sip, char *buf) {
     if ((timeout = strstr(buf, "timeout="))) {
         int tmout;
         timeout += strlen("timeout=");
-        tmout = map_intd(timeout, NULL, 30);
+        tmout = parse_int(timeout, 30);
         sockets_timeout(ad->fe_sock, tmout * 500); // 2 times 30s
         sip->timeout_ms = tmout * 1000;
     }
@@ -177,7 +179,7 @@ int satipc_handle_setup(adapter *ad, satipc *sip, char *buf) {
         }
         safe_strncpy(sip->session, sess_str.c_str());
         if (sip->stream_id == -1)
-            sip->stream_id = map_int(sid, NULL);
+            sip->stream_id = parse_int(sid);
         LOG("satipc: session set for adapter %d to %s with stream_id %d",
             ad->id, sip->session, sip->stream_id);
     }
@@ -221,7 +223,7 @@ int satipc_reply(sockets *s) {
     // Parse RTSP return code
     sep = strstr((char *)s->buf, "RTSP/1.0");
     if (sep)
-        rc = map_intd(sep + 9, NULL, 0);
+        rc = parse_int(sep + 9);
 
     LOG("satipc_reply (adapter %d): sock %d (receiving from handle %d, state "
         "%d): "
@@ -1142,7 +1144,7 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb) {
                 while (*cl == 0x20)
                     cl++;
 
-                icl = map_intd((char *)cl, NULL, 0);
+                icl = parse_int((char *)cl);
                 nlnl += icl;
             }
             if (!nlnl) {
@@ -1854,7 +1856,7 @@ void find_satip_adapter(adapter **a) {
         std::string_view host_part = "";
         std::string_view port_part = "";
 
-        if (parts.size() >= 1 && map_intd(parts[0], fe_delsys, -1) != -1) {
+        if (parts.size() >= 1 && fe_delsys_map.lookup(parts[0]).has_value()) {
             system_part = parts[0];
             if (parts.size() >= 2)
                 host_part = parts[1];
@@ -1877,8 +1879,8 @@ void find_satip_adapter(adapter **a) {
         if (port_part.empty())
             port_part = "554";
 
-        delsys = map_int(system_part, fe_delsys);
-        port = map_int(port_part, NULL);
+        delsys = fe_delsys_map.lookup(system_part).value_or(SYS_UNDEFINED);
+        port = parse_int(port_part);
 
         fe = -1;
         source_ip[0] = 0;
@@ -1886,7 +1888,7 @@ void find_satip_adapter(adapter **a) {
         std::string_view actual_host = host_part;
         size_t at_pos = actual_host.find('@');
         if (at_pos != std::string_view::npos) {
-            fe = map_int(actual_host.substr(0, at_pos), NULL);
+            fe = parse_int(actual_host.substr(0, at_pos));
             actual_host = actual_host.substr(at_pos + 1);
         }
 
@@ -1952,7 +1954,7 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h) {
         s->port = 554;
         sep = strstr(s->xml, "X-SATIP-RTSP-Port:");
         if (sep) {
-            s->port = map_intd(sep + 18, NULL, 554);
+            s->port = parse_int(sep + 18, 554);
         }
         sep = strstr(s->xml, "<satip:X_SATIPCAP");
         if (sep)
@@ -1968,12 +1970,18 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h) {
 
         auto arg = split(sep, ',');
         for (const auto &arg_item : arg) {
-            int ds = map_intd(arg_item, satip_delsys, -1);
+            auto ds_opt = satip_delsys_map.lookup(arg_item);
+            if (!ds_opt) {
+                LOG("Could not determine the delivery system for %.*s",
+                    (int)arg_item.size(), arg_item.data());
+                continue;
+            }
+            fe_delivery_system_t ds = ds_opt.value();
             size_t dash = arg_item.find('-');
-            int t = map_intd((dash != std::string_view::npos)
-                                 ? arg_item.substr(dash + 1)
-                                 : "",
-                             NULL, -1);
+            int t = parse_int((dash != std::string_view::npos)
+                                  ? arg_item.substr(dash + 1)
+                                  : "",
+                              -1);
             if (ds < 0 || ds >= MAX_DVBAPI_SYSTEMS || t < 0 ||
                 i_order >= (int)sizeof(order)) {
                 LOG("Could not determine the delivery system for %.*s (%d) "
