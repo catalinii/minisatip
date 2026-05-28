@@ -24,6 +24,7 @@
 #include "pmt.h"
 #include "utils.h"
 #include "utils/ticks.h"
+#include <unordered_map>
 
 #include <arpa/inet.h>
 #include <ctype.h>
@@ -186,59 +187,67 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
     LOG("detect_dvb_parameters (S)-> %s", query_str.c_str());
     auto arg = split(query, '&');
 
+    std::unordered_map<std::string_view, std::string_view> params;
     for (const auto &token : arg) {
-        if (token.size() >= 5 && token.substr(0, 5) == "msys=")
-            tp->sys = map_int(token.substr(5), fe_delsys);
-        else if (token.size() >= 5 && token.substr(0, 5) == "freq=")
-            tp->freq = map_float(token.substr(5), 1000);
-        else if (token.size() >= 4 && token.substr(0, 4) == "pol=")
-            tp->pol = map_int(token.substr(4), fe_pol);
-        else if (token.size() >= 3 && token.substr(0, 3) == "sr=")
-            tp->sr = map_int(token.substr(3), NULL) * 1000;
-        else if (token.size() >= 3 && token.substr(0, 3) == "fe=")
-            tp->fe = map_int(token.substr(3), NULL);
-        else if (token.size() >= 4 && token.substr(0, 4) == "src=")
-            tp->diseqc = map_int(token.substr(4), NULL);
-        else if (token.size() >= 3 && token.substr(0, 3) == "ro=")
-            tp->ro = map_int(token.substr(3), fe_rolloff);
-        else if (token.size() >= 6 && token.substr(0, 6) == "mtype=")
-            tp->mtype =
-                (fe_modulation_t)map_int(token.substr(6), fe_modulation);
-        else if (token.size() >= 4 && token.substr(0, 4) == "fec=")
-            tp->fec = (fe_code_rate_t)map_int(token.substr(4), fe_fec);
-        else if (token.size() >= 5 && token.substr(0, 5) == "plts=")
-            tp->plts = map_int(token.substr(5), fe_pilot);
-        else if (token.size() >= 3 && token.substr(0, 3) == "gi=")
-            tp->gi = (fe_guard_interval_t)map_int(token.substr(3), fe_gi);
-        else if (token.size() >= 6 && token.substr(0, 6) == "tmode=")
-            tp->tmode = (fe_transmit_mode_t)map_int(token.substr(6), fe_tmode);
-        else if (token.size() >= 3 && token.substr(0, 3) == "bw=") {
-            tp->bw = map_float(token.substr(3), 1000000);
+        auto eq_pos = token.find('=');
+        if (eq_pos != std::string_view::npos) {
+            params[token.substr(0, eq_pos)] = token.substr(eq_pos + 1);
+        } else {
+            params[token] = "";
+        }
+    }
+
+    for (const auto &[key, val] : params) {
+        if (key == "msys")
+            tp->sys = map_int(val, fe_delsys);
+        else if (key == "freq")
+            tp->freq = map_float(val, 1000);
+        else if (key == "pol")
+            tp->pol = map_int(val, fe_pol);
+        else if (key == "sr")
+            tp->sr = map_int(val, NULL) * 1000;
+        else if (key == "fe")
+            tp->fe = map_int(val, NULL);
+        else if (key == "src")
+            tp->diseqc = map_int(val, NULL);
+        else if (key == "ro")
+            tp->ro = map_int(val, fe_rolloff);
+        else if (key == "mtype")
+            tp->mtype = (fe_modulation_t)map_int(val, fe_modulation);
+        else if (key == "fec")
+            tp->fec = (fe_code_rate_t)map_int(val, fe_fec);
+        else if (key == "plts")
+            tp->plts = map_int(val, fe_pilot);
+        else if (key == "gi")
+            tp->gi = (fe_guard_interval_t)map_int(val, fe_gi);
+        else if (key == "tmode")
+            tp->tmode = (fe_transmit_mode_t)map_int(val, fe_tmode);
+        else if (key == "bw") {
+            tp->bw = map_float(val, 1000000);
             if (tp->bw < 0 || tp->bw > 100000000)
-                tp->bw = map_float(token.substr(3), 1000);
+                tp->bw = map_float(val, 1000);
             if (tp->bw < 0 || tp->bw > 100000000)
-                tp->bw = map_float(token.substr(3), 1);
-        } else if (token.size() >= 8 && token.substr(0, 8) == "specinv=")
-            tp->inversion = map_int(token.substr(8), NULL);
-        else if (token.size() >= 6 && token.substr(0, 6) == "c2tft=")
-            tp->c2tft = map_int(token.substr(6), NULL);
-        else if (token.size() >= 3 && token.substr(0, 3) == "ds=")
-            tp->ds = map_int(token.substr(3), NULL);
-        else if ((token.size() >= 4 && token.substr(0, 4) == "plp=") ||
-                 (token.size() >= 4 && token.substr(0, 4) == "isi="))
-            tp->plp_isi = map_int(token.substr(4), NULL);
-        else if (token.size() >= 5 && token.substr(0, 5) == "plsm=")
-            tp->pls_mode = map_int(token.substr(5), fe_pls_mode);
-        else if (token.size() >= 5 && token.substr(0, 5) == "plsc=")
-            tp->pls_code = map_int(token.substr(5), NULL);
-        else if (token.size() >= 6 && token.substr(0, 6) == "x_pmt=")
-            tp->x_pmt = std::string(token.substr(6));
-        else if (token.size() >= 5 && token.substr(0, 5) == "pids=")
-            tp->pids = std::string(token.substr(5));
-        else if (token.size() >= 8 && token.substr(0, 8) == "addpids=")
-            tp->apids = std::string(token.substr(8));
-        else if (token.size() >= 8 && token.substr(0, 8) == "delpids=")
-            tp->dpids = std::string(token.substr(8));
+                tp->bw = map_float(val, 1);
+        } else if (key == "specinv")
+            tp->inversion = map_int(val, NULL);
+        else if (key == "c2tft")
+            tp->c2tft = map_int(val, NULL);
+        else if (key == "ds")
+            tp->ds = map_int(val, NULL);
+        else if (key == "plp" || key == "isi")
+            tp->plp_isi = map_int(val, NULL);
+        else if (key == "plsm")
+            tp->pls_mode = map_int(val, fe_pls_mode);
+        else if (key == "plsc")
+            tp->pls_code = map_int(val, NULL);
+        else if (key == "x_pmt")
+            tp->x_pmt = std::string(val);
+        else if (key == "pids")
+            tp->pids = std::string(val);
+        else if (key == "addpids")
+            tp->apids = std::string(val);
+        else if (key == "delpids")
+            tp->dpids = std::string(val);
     }
 
     if (!tp->pids.empty() && tp->pids.find("all") != std::string::npos) {
