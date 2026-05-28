@@ -1357,7 +1357,7 @@ char *describe_adapter(int sid, int aid, char *dad, int ld) {
     }
 
     if (!use_ad && (!t->apids.empty() || !t->pids.empty())) {
-        if (!t->pids.empty() && t->pids.find("8192") != std::string::npos)
+        if (t->pids.contains("8192"))
             strlcatf(dad, ld, len, "%s", "all");
         else
             strlcatf(dad, ld, len, "%s",

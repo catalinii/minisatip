@@ -180,7 +180,7 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
         LOG_AND_RETURN(0, "no ? found in URL");
 
     std::string_view query = s.substr(qm_pos + 1);
-    if (query.find("freq=") != std::string_view::npos)
+    if (query.contains("freq="))
         init_dvb_parameters(tp);
 
     LOG("detect_dvb_parameters (S)-> %.*s", (int)query.size(), query.data());
@@ -249,7 +249,7 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
             tp->dpids = std::string(val);
     }
 
-    if (!tp->pids.empty() && tp->pids.find("all") != std::string::npos) {
+    if (tp->pids.contains("all")) {
         tp->pids = "8192";
     }
 

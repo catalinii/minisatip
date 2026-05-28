@@ -79,7 +79,7 @@ char *describe_streams(sockets *s, std::string_view req, char *sbuf, int size) {
     int do_all = 1;
     int is_ipv6 = 0;
 
-    if (s->sid == -1 && req.find('?') != std::string_view::npos)
+    if (s->sid == -1 && req.contains('?'))
         setup_stream(req, s);
 
     sidf = get_session_id(s->sid);
@@ -96,7 +96,7 @@ char *describe_streams(sockets *s, std::string_view req, char *sbuf, int size) {
         "0\r\n",
         sidf, sidf, is_ipv6 ? "IP6" : "IP4", localhost, tuner_s2,
         tuner_t + tuner_t2, tuner_c + tuner_c2);
-    if (req.find('?') != std::string_view::npos)
+    if (req.contains('?'))
         do_all = 0;
 
     auto stream_id_pos = req.find("stream=");
@@ -429,12 +429,12 @@ int decode_transport(sockets *s, std::string_view arg, char *default_rtp,
     std::lock_guard<SMutex> lock(sid->mutex);
     memset(&p, 0, sizeof(p));
     if (!arg.empty()) {
-        if (arg.find("RTP/AVP/SRT") != std::string_view::npos) {
+        if (arg.contains("RTP/AVP/SRT")) {
             LOG("Assuming SRT transport for stream sid %d, arg %.*s", sid->sid,
                 (int)arg.size(), arg.data());
             return decode_transport_srt(s, sid, arg);
         }
-        if (arg.find("RTP/AVP/TCP") != std::string_view::npos) {
+        if (arg.contains("RTP/AVP/TCP")) {
             LOG("Assuming RTSP over TCP for stream sid %d, arg %.*s", sid->sid,
                 (int)arg.size(), arg.data());
             sid->type = STREAM_RTSP_TCP;

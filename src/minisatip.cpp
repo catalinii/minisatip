@@ -1204,8 +1204,7 @@ int read_rtsp(sockets *s) {
                 s->sid = find_session_id(sess_id);
             }
 
-    if (arg[1].find("freq") != std::string_view::npos ||
-        arg[1].find("pids") != std::string_view::npos) {
+    if (arg[1].contains("freq") || arg[1].contains("pids")) {
         sid = (streams *)setup_stream(arg[1], s);
     }
 
@@ -1239,10 +1238,10 @@ int read_rtsp(sockets *s) {
                 http_response(s, 400, NULL, NULL, cseq, 0);
                 return 0;
             }
-        } else if (arg[i].find("LIVE555") != std::string_view::npos) {
+        } else if (arg[i].contains("LIVE555")) {
             if (sid)
                 sid->timeout = 0;
-        } else if (arg[i].find("Lavf") != std::string_view::npos) {
+        } else if (arg[i].contains("Lavf")) {
             if (sid)
                 sid->timeout = 0;
         } else if (starts_with_case_insensitive(arg[i], "User-Agent:")) {
