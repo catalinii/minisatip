@@ -109,6 +109,9 @@ int parse_int(std::string_view s, int dv) {
     }
     if (s[0] == '+') {
         s.remove_prefix(1);
+        if (s.empty()) {
+            return dv;
+        }
     }
     int val = 0;
     auto result = std::from_chars(s.data(), s.data() + s.size(), val);
