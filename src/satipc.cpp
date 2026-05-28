@@ -161,23 +161,14 @@ int satipc_handle_setup(adapter *ad, satipc *sip, char *buf) {
         sip->timeout_ms = tmout * 1000;
     }
 
-    size_t original_len = strlen(buf);
-    auto arg = split(std::string_view(buf, original_len), ' ');
-
-    // Mutate buf in-place to ensure all tokens are null-terminated (matching
-    // legacy behavior)
-    for (size_t k = 0; k < original_len; k++) {
-        if (buf[k] == ' ' || buf[k] < 33) {
-            buf[k] = '\0';
-        }
-    }
+    auto arg = split(std::string_view(buf), ' ');
 
     std::string_view sess;
     std::string_view sid;
     for (i = 0; i < (int)arg.size(); i++)
-        if (strncasecmp("Session:", arg[i].data(), 8) == 0)
+        if (starts_with_case_insensitive(arg[i], "Session:"))
             sess = header_parameter(arg, i);
-        else if (strncasecmp("com.ses.streamID:", arg[i].data(), 17) == 0)
+        else if (starts_with_case_insensitive(arg[i], "com.ses.streamID:"))
             sid = header_parameter(arg, i);
 
     if (!ad->err && !sid.empty() && !sess.empty()) {

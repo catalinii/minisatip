@@ -1129,7 +1129,6 @@ void set_options(int argc, char *argv[]) {
 
 int read_rtsp(sockets *s) {
     int cseq, i, rlen;
-    char *transport = NULL, *useragent = NULL;
     int sess_id = 0;
     char buf[2000];
     char ra[50];
@@ -1183,21 +1182,12 @@ int read_rtsp(sockets *s) {
         log_buf ? (const char *)s->buf : "");
 
     if ((s->type != TYPE_HTTP) &&
-        (strncasecmp((const char *)s->buf, "GET", 3) == 0)) {
+        starts_with_case_insensitive((const char *)s->buf, "GET")) {
         http_response(s, 404, NULL, NULL, 0, 0);
         return 0;
     }
 
-    size_t original_len = strlen((char *)s->buf);
-    auto arg = split(std::string_view((char *)s->buf, original_len), ' ');
-
-    // Mutate s->buf in-place to ensure all tokens are null-terminated (matching
-    // legacy behavior)
-    for (size_t k = 0; k < original_len; k++) {
-        if (s->buf[k] == ' ' || s->buf[k] < 33) {
-            s->buf[k] = '\0';
-        }
-    }
+    auto arg = split(std::string_view((char *)s->buf), ' ');
 
     cseq = 0;
     if (arg.size() < 2)
@@ -1209,21 +1199,21 @@ int read_rtsp(sockets *s) {
 
     if (s->sid < 0)
         for (i = 0; i < (int)arg.size(); i++)
-            if (strncasecmp("Session:", arg[i].data(), 8) == 0) {
+            if (starts_with_case_insensitive(arg[i], "Session:")) {
                 sess_id = parse_int(header_parameter(arg, i));
                 s->sid = find_session_id(sess_id);
             }
 
     if (arg[1].find("freq") != std::string_view::npos ||
         arg[1].find("pids") != std::string_view::npos) {
-        sid = (streams *)setup_stream((char *)arg[1].data(), s);
+        sid = (streams *)setup_stream(arg[1], s);
     }
 
     // setup empty stream, removing this breaks satip tests
-    if (!get_sid(s->sid) && ((strncasecmp(arg[0].data(), "PLAY", 4) == 0) ||
-                             (strncasecmp(arg[0].data(), "GET", 3) == 0) ||
-                             (strncasecmp(arg[0].data(), "SETUP", 5) == 0)))
-        sid = (streams *)setup_stream((char *)arg[1].data(), s);
+    if (!get_sid(s->sid) && (starts_with_case_insensitive(arg[0], "PLAY") ||
+                             starts_with_case_insensitive(arg[0], "GET") ||
+                             starts_with_case_insensitive(arg[0], "SETUP")))
+        sid = (streams *)setup_stream(arg[1], s);
 
     sid = get_sid(s->sid);
     if (sid) {
@@ -1235,15 +1225,17 @@ int read_rtsp(sockets *s) {
     if (sess_id)
         set_session_id(s->sid, sess_id);
 
+    std::string_view useragent_sv;
+    std::string_view transport_sv;
+
     for (i = 0; i < (int)arg.size(); i++)
-        if (strncasecmp("CSeq:", arg[i].data(), 5) == 0)
+        if (starts_with_case_insensitive(arg[i], "CSeq:"))
             cseq = parse_int(header_parameter(arg, i));
-        else if (strncasecmp("Transport:", arg[i].data(), 10) == 0) {
-            std::string_view transport_sv = header_parameter(arg, i);
-            transport = (char *)transport_sv.data();
+        else if (starts_with_case_insensitive(arg[i], "Transport:")) {
+            transport_sv = header_parameter(arg, i);
 
             if (-1 ==
-                decode_transport(s, transport, opts.rrtp, opts.start_rtp)) {
+                decode_transport(s, transport_sv, opts.rrtp, opts.start_rtp)) {
                 http_response(s, 400, NULL, NULL, cseq, 0);
                 return 0;
             }
@@ -1253,18 +1245,16 @@ int read_rtsp(sockets *s) {
         } else if (arg[i].find("Lavf") != std::string_view::npos) {
             if (sid)
                 sid->timeout = 0;
-        } else if (strncasecmp("User-Agent:", arg[i].data(), 11) == 0) {
-            std::string_view ua_sv = header_parameter(arg, i);
-            useragent = (char *)ua_sv.data();
-        } else if (!useragent &&
-                   strncasecmp("Server:", arg[i].data(), 7) == 0) {
-            std::string_view ua_sv = header_parameter(arg, i);
-            useragent = (char *)ua_sv.data();
+        } else if (starts_with_case_insensitive(arg[i], "User-Agent:")) {
+            useragent_sv = header_parameter(arg, i);
+        } else if (useragent_sv.empty() &&
+                   starts_with_case_insensitive(arg[i], "Server:")) {
+            useragent_sv = header_parameter(arg, i);
         }
 
-    if ((strncasecmp(arg[0].data(), "PLAY", 4) == 0) ||
-        (strncasecmp(arg[0].data(), "GET", 3) == 0) ||
-        (strncasecmp(arg[0].data(), "SETUP", 5) == 0)) {
+    if (starts_with_case_insensitive(arg[0], "PLAY") ||
+        starts_with_case_insensitive(arg[0], "GET") ||
+        starts_with_case_insensitive(arg[0], "SETUP")) {
         char ra[100];
         int rv;
 
@@ -1273,18 +1263,21 @@ int read_rtsp(sockets *s) {
             return 0;
         }
 
-        if (useragent)
-            strncpy(sid->useragent, useragent,
-                    std::min(strlen(useragent), sizeof(sid->useragent) - 1));
+        if (!useragent_sv.empty()) {
+            size_t copy_len =
+                std::min(useragent_sv.size(), sizeof(sid->useragent) - 1);
+            memcpy(sid->useragent, useragent_sv.data(), copy_len);
+            sid->useragent[copy_len] = '\0';
+        }
 
-        if ((strncasecmp(arg[0].data(), "PLAY", 4) == 0) ||
-            (strncasecmp(arg[0].data(), "GET", 3) == 0))
+        if (starts_with_case_insensitive(arg[0], "PLAY") ||
+            starts_with_case_insensitive(arg[0], "GET"))
             if ((rv = start_play(sid, s)) < 0) {
                 http_response(s, -rv, NULL, NULL, cseq, 0);
                 return 0;
             }
         buf[0] = 0;
-        if (transport) {
+        if (!transport_sv.empty()) {
             int s_timeout;
             char localhost[100];
 
@@ -1339,22 +1332,24 @@ int read_rtsp(sockets *s) {
             }
         }
 
-        if (strncasecmp(arg[0].data(), "PLAY", 4) == 0) {
-            char *qm = strchr((char *)arg[1].data(), '?');
-            if (qm)
-                *qm = 0;
+        if (starts_with_case_insensitive(arg[0], "PLAY")) {
+            std::string url_str(arg[1]);
+            auto qm_pos = url_str.find('?');
+            if (qm_pos != std::string::npos) {
+                url_str = url_str.substr(0, qm_pos);
+            }
             if (buf[0])
                 strcat(buf, "\r\n");
 
             snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf) - 1,
                      "RTP-Info: url=%s;seq=%d;rtptime=%jd\r\nRange: npt=0.000-",
-                     arg[1].data(), sid->seq, (getTickUs() / 1000000));
+                     url_str.c_str(), sid->seq, (getTickUs() / 1000000));
         }
         if (buf[0] == 0 && sid->type == STREAM_HTTP)
             snprintf(buf, sizeof(buf),
                      "Content-Type: video/mp2t\r\nConnection: close");
         http_response(s, 200, buf, NULL, cseq, 0);
-    } else if (strncmp(arg[0].data(), "TEARDOWN", 8) == 0) {
+    } else if (starts_with_case_insensitive(arg[0], "TEARDOWN")) {
         if (get_sid(s->sid)) {
             buf[0] = 0;
             sprintf(buf, "Session: %010d", get_session_id(s->sid));
@@ -1362,11 +1357,11 @@ int read_rtsp(sockets *s) {
             http_response(s, 200, buf, NULL, cseq, 0);
         } else
             http_response(s, 454, NULL, NULL, cseq, 0);
-    } else if (strncmp(arg[0].data(), "DESCRIBE", 8) == 0) {
+    } else if (starts_with_case_insensitive(arg[0], "DESCRIBE")) {
         char sbuf[1000];
         char localhost[100];
         char *rv;
-        rv = describe_streams(s, (char *)arg[1].data(), sbuf, sizeof(sbuf));
+        rv = describe_streams(s, arg[1], sbuf, sizeof(sbuf));
         if (!rv) {
             http_response(s, 404, NULL, NULL, cseq, 0);
             return 0;
@@ -1375,7 +1370,7 @@ int read_rtsp(sockets *s) {
                  "Content-type: application/sdp\r\nContent-Base: rtsp://%s/",
                  get_sock_shost(s->sock, localhost, sizeof(localhost)));
         http_response(s, 200, buf, sbuf, cseq, 0);
-    } else if (strncmp(arg[0].data(), "OPTIONS", 7) == 0) {
+    } else if (starts_with_case_insensitive(arg[0], "OPTIONS")) {
         http_response(s, 200, public_str, NULL, cseq, 0);
     } else {
         http_response(s, 501, public_str, NULL, cseq, 0);
@@ -1483,23 +1478,13 @@ int read_http(sockets *s) {
     sprintf(opts.time_running, "%.0d%s%02d:%02d:%02d", days,
             days > 0 ? "d " : "", hours, mins, secs);
 
-    size_t original_len = strlen((char *)s->buf);
-    auto arg = split(std::string_view((char *)s->buf, original_len), ' ');
-
-    // Mutate s->buf in-place to ensure all tokens are null-terminated (matching
-    // legacy behavior)
-    for (size_t k = 0; k < original_len; k++) {
-        if (s->buf[k] == ' ' || s->buf[k] < 33) {
-            s->buf[k] = '\0';
-        }
-    }
+    auto arg = split(std::string_view((char *)s->buf), ' ');
 
     if (arg.size() < 2)
         REPLY_AND_RETURN(503);
 
     //      LOG("args: %s -> %s -> %s",arg[0],arg[1],arg[2]);
-    if (strncmp(arg[0].data(), "GET", 3) && strncmp(arg[0].data(), "POST", 4) &&
-        !is_head)
+    if (arg[0] != "GET" && arg[0] != "POST" && !is_head)
         REPLY_AND_RETURN(503);
 
     if (!opts.disable_ssdp)
@@ -1585,7 +1570,7 @@ int read_http(sockets *s) {
         char *f;
         int nl;
 
-        f = readfile((char *)url_sv.data(), ctype, &nl);
+        f = readfile(std::string(url_sv).c_str(), ctype, &nl);
         if (!f) {
             http_response(s, 404, NULL, NULL, 0, 0);
             return 0;
@@ -1725,7 +1710,7 @@ int ssdp_reply(sockets *s) {
     s->rtime = s->wtime; // consider the timeout of the discovery operation
 
     ruuid = strcasestr((char *)s->buf, "uuid:");
-    if (ruuid && strip(ruuid + 5).substr(0, strlen(opts.uuid)) == opts.uuid) {
+    if (ruuid && strip(ruuid + 5).starts_with(opts.uuid)) {
         LOGM("Dropping packet from the same UUID as mine (from %s:%d)",
              get_sockaddr_host(s->sa, ra, sizeof(ra)),
              get_sockaddr_port(s->sa));

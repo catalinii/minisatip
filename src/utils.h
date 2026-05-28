@@ -13,8 +13,11 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 
+#include <algorithm>
 #include <string_view>
 #include <vector>
+
+#include <cctype>
 
 typedef std::recursive_mutex SMutex;
 
@@ -50,6 +53,24 @@ template <typename EnumT> class EnumMap {
 std::vector<std::string_view> split(std::string_view s, char sep);
 int parse_int(std::string_view s, int dv = 0);
 int map_float(char *s, int mul);
+inline bool eq_case_insensitive(std::string_view a, std::string_view b) {
+    return std::ranges::equal(a, b, [](char c1, char c2) {
+        return std::tolower(static_cast<unsigned char>(c1)) ==
+               std::tolower(static_cast<unsigned char>(c2));
+    });
+}
+
+inline bool starts_with_case_insensitive(std::string_view str,
+                                         std::string_view prefix) {
+    if (str.size() < prefix.size())
+        return false;
+    return std::ranges::equal(
+        prefix, str.substr(0, prefix.size()), [](char c1, char c2) {
+            return std::tolower(static_cast<unsigned char>(c1)) ==
+                   std::tolower(static_cast<unsigned char>(c2));
+        });
+}
+
 int check_strs(std::string_view s, const char *const v[], int dv);
 std::string_view header_parameter(const std::vector<std::string_view> &arg,
                                   int i);
@@ -57,7 +78,7 @@ char *get_current_timestamp();
 std::string_view strip(std::string_view s);
 void set_signal_handler(char *argv0);
 int becomeDaemon();
-char *readfile(char *fn, char *ctype, int *len);
+char *readfile(const char *fn, char *ctype, int *len);
 void process_file(void *sock, char *s, int len, char *ctype);
 int closefile(char *mem, int len);
 
