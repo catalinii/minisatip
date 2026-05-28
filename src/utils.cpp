@@ -174,9 +174,8 @@ int map_float(std::string_view s, int mul) {
     if (s.empty())
         LOG_AND_RETURN(0, "map_float: s=>NULL, mul=%d", mul);
     if (s[0] != '+' && s[0] != '-' && (s[0] < '0' || s[0] > '9')) {
-        std::string s_str(s);
-        LOG_AND_RETURN(0, "map_float: s not a number: %s, mul=%d",
-                       s_str.c_str(), mul);
+        LOG_AND_RETURN(0, "map_float: s not a number: %.*s, mul=%d",
+                       (int)s.size(), s.data(), mul);
     }
 
     f = atof(std::string(s).c_str());

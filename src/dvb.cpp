@@ -24,6 +24,7 @@
 #include "pmt.h"
 #include "utils.h"
 #include "utils/ticks.h"
+#include <unordered_map>
 
 #include <arpa/inet.h>
 #include <ctype.h>
@@ -307,69 +308,77 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
     if (query.find("freq=") != std::string_view::npos)
         init_dvb_parameters(tp);
 
-    std::string query_str(query);
-    LOG("detect_dvb_parameters (S)-> %s", query_str.c_str());
+    LOG("detect_dvb_parameters (S)-> %.*s", (int)query.size(), query.data());
     auto arg = split(query, '&');
 
+    std::unordered_map<std::string_view, std::string_view> params;
     for (const auto &token : arg) {
-        if (token.size() >= 5 && token.substr(0, 5) == "msys=")
+        auto eq_pos = token.find('=');
+        if (eq_pos != std::string_view::npos) {
+            params[token.substr(0, eq_pos)] = token.substr(eq_pos + 1);
+        } else {
+            params[token] = "";
+        }
+    }
+
+    for (const auto &[key, val] : params) {
+        if (key == "msys")
             tp->sys =
-                fe_delsys_map.lookup(token.substr(5)).value_or(SYS_UNDEFINED);
-        else if (token.size() >= 5 && token.substr(0, 5) == "freq=")
-            tp->freq = map_float(token.substr(5), 1000);
-        else if (token.size() >= 4 && token.substr(0, 4) == "pol=")
-            tp->pol = fe_pol_map.lookup(token.substr(4)).value_or(0);
-        else if (token.size() >= 3 && token.substr(0, 3) == "sr=")
-            tp->sr = parse_int(token.substr(3)) * 1000;
-        else if (token.size() >= 3 && token.substr(0, 3) == "fe=")
-            tp->fe = parse_int(token.substr(3));
-        else if (token.size() >= 4 && token.substr(0, 4) == "src=")
-            tp->diseqc = parse_int(token.substr(4));
-        else if (token.size() >= 3 && token.substr(0, 3) == "ro=")
+                fe_delsys_map.lookup(val).value_or(SYS_UNDEFINED);
+        else if (key == "freq")
+            tp->freq = map_float(val, 1000);
+        else if (key == "pol")
+            tp->pol = fe_pol_map.lookup(val).value_or(0);
+        else if (key == "sr")
+            tp->sr = parse_int(val) * 1000;
+        else if (key == "fe")
+            tp->fe = parse_int(val);
+        else if (key == "src")
+            tp->diseqc = parse_int(val);
+        else if (key == "ro")
             tp->ro =
-                fe_rolloff_map.lookup(token.substr(3)).value_or(ROLLOFF_AUTO);
-        else if (token.size() >= 6 && token.substr(0, 6) == "mtype=")
+                fe_rolloff_map.lookup(val).value_or(ROLLOFF_AUTO);
+        else if (key == "mtype")
             tp->mtype =
-                fe_modulation_map.lookup(token.substr(6)).value_or(QPSK);
-        else if (token.size() >= 4 && token.substr(0, 4) == "fec=")
-            tp->fec = fe_fec_map.lookup(token.substr(4)).value_or(FEC_NONE);
-        else if (token.size() >= 5 && token.substr(0, 5) == "plts=")
+                fe_modulation_map.lookup(val).value_or(QPSK);
+        else if (key == "fec")
+            tp->fec = fe_fec_map.lookup(val).value_or(FEC_NONE);
+        else if (key == "plts")
             tp->plts =
-                fe_pilot_map.lookup(token.substr(5)).value_or(PILOT_AUTO);
-        else if (token.size() >= 3 && token.substr(0, 3) == "gi=")
+                fe_pilot_map.lookup(val).value_or(PILOT_AUTO);
+        else if (key == "gi")
             tp->gi =
-                fe_gi_map.lookup(token.substr(3)).value_or(GUARD_INTERVAL_AUTO);
-        else if (token.size() >= 6 && token.substr(0, 6) == "tmode=")
-            tp->tmode = fe_tmode_map.lookup(token.substr(6))
+                fe_gi_map.lookup(val).value_or(GUARD_INTERVAL_AUTO);
+        else if (key == "tmode")
+            tp->tmode = fe_tmode_map.lookup(val)
                             .value_or(TRANSMISSION_MODE_AUTO);
-        else if (token.size() >= 3 && token.substr(0, 3) == "bw=") {
-            tp->bw = map_float(token.substr(3), 1000000);
+        else if (key == "bw") {
+            tp->bw = map_float(val, 1000000);
             if (tp->bw < 0 || tp->bw > 100000000)
-                tp->bw = map_float(token.substr(3), 1000);
+                tp->bw = map_float(val, 1000);
             if (tp->bw < 0 || tp->bw > 100000000)
-                tp->bw = map_float(token.substr(3), 1);
-        } else if (token.size() >= 8 && token.substr(0, 8) == "specinv=")
-            tp->inversion = parse_int(token.substr(8));
-        else if (token.size() >= 6 && token.substr(0, 6) == "c2tft=")
-            tp->c2tft = parse_int(token.substr(6));
-        else if (token.size() >= 3 && token.substr(0, 3) == "ds=")
-            tp->ds = parse_int(token.substr(3));
-        else if ((token.size() >= 4 && token.substr(0, 4) == "plp=") ||
-                 (token.size() >= 4 && token.substr(0, 4) == "isi="))
-            tp->plp_isi = parse_int(token.substr(4));
-        else if (token.size() >= 5 && token.substr(0, 5) == "plsm=")
+                tp->bw = map_float(val, 1);
+        } else if (key == "specinv")
+            tp->inversion = parse_int(val);
+        else if (key == "c2tft")
+            tp->c2tft = parse_int(val);
+        else if (key == "ds")
+            tp->ds = parse_int(val);
+        else if (key == "plp" || key == "isi")
+            tp->plp_isi = parse_int(val);
+        else if (key == "plsm")
             tp->pls_mode =
-                fe_pls_mode_map.lookup(token.substr(5)).value_or(PLS_MODE_ROOT);
-        else if (token.size() >= 5 && token.substr(0, 5) == "plsc=")
-            tp->pls_code = parse_int(token.substr(5));
-        else if (token.size() >= 6 && token.substr(0, 6) == "x_pmt=")
-            tp->x_pmt = std::string(token.substr(6));
-        else if (token.size() >= 5 && token.substr(0, 5) == "pids=")
-            tp->pids = std::string(token.substr(5));
-        else if (token.size() >= 8 && token.substr(0, 8) == "addpids=")
-            tp->apids = std::string(token.substr(8));
-        else if (token.size() >= 8 && token.substr(0, 8) == "delpids=")
-            tp->dpids = std::string(token.substr(8));
+                fe_pls_mode_map.lookup(val).value_or(PLS_MODE_ROOT);
+        else if (key == "plsc")
+            tp->pls_code = parse_int(val);
+        else if (key == "x_pmt")
+            tp->x_pmt = std::string(val);
+        else if (key == "pids")
+            tp->pids = std::string(val);
+        else if (key == "addpids")
+            tp->apids = std::string(val);
+        else if (key == "delpids")
+            tp->dpids = std::string(val);
     }
 
     if (!tp->pids.empty() && tp->pids.find("all") != std::string::npos) {

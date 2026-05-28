@@ -421,24 +421,22 @@ int decode_transport(sockets *s, std::string_view arg, char *default_rtp,
     streams *sid = get_sid(s->sid);
     streams *sid2;
     if (!sid) {
-        std::string arg_str(arg);
-        LOG("Error: No stream to set transport to, sock_id %d, arg %s ", s->id,
-            !arg.empty() ? arg_str.c_str() : "NULL");
+        LOG("Error: No stream to set transport to, sock_id %d, arg %.*s ",
+            s->id, !arg.empty() ? (int)arg.size() : 4,
+            !arg.empty() ? arg.data() : "NULL");
         return -1;
     }
     std::lock_guard<SMutex> lock(sid->mutex);
     memset(&p, 0, sizeof(p));
     if (!arg.empty()) {
         if (arg.find("RTP/AVP/SRT") != std::string_view::npos) {
-            std::string arg_str(arg);
-            LOG("Assuming SRT transport for stream sid %d, arg %s", sid->sid,
-                arg_str.c_str());
+            LOG("Assuming SRT transport for stream sid %d, arg %.*s", sid->sid,
+                (int)arg.size(), arg.data());
             return decode_transport_srt(s, sid, arg);
         }
         if (arg.find("RTP/AVP/TCP") != std::string_view::npos) {
-            std::string arg_str(arg);
-            LOG("Assuming RTSP over TCP for stream sid %d, arg %s", sid->sid,
-                arg_str.c_str());
+            LOG("Assuming RTSP over TCP for stream sid %d, arg %.*s", sid->sid,
+                (int)arg.size(), arg.data());
             sid->type = STREAM_RTSP_TCP;
             sid->rsock = s->sock;
             sid->rsock_id = s->id;
