@@ -1247,9 +1247,7 @@ int set_adapter_parameters(int aid, int sid, transponder *tp) {
         mark_pids_deleted(aid, sid, ad->tp.dpids.c_str());
     }
     if (!ad->tp.apids.empty()) {
-        if (mark_pids_add(sid, aid,
-                          !ad->tp.apids.empty() ? ad->tp.apids.c_str()
-                                                : ad->tp.pids.c_str()) < 0) {
+        if (mark_pids_add(sid, aid, ad->tp.apids.c_str()) < 0) {
             return -1;
         }
     }

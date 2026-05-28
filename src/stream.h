@@ -48,7 +48,6 @@ typedef struct struct_streams {
     int do_play;
     int start_streaming;
     transponder tp;
-    std::string apids, dpids, pids, x_pmt;
     uint32_t sp, sb;
     int timeout;
     char useragent[40];

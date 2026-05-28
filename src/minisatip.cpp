@@ -1712,7 +1712,7 @@ int ssdp_reply(sockets *s) {
     s->rtime = s->wtime; // consider the timeout of the discovery operation
 
     ruuid = strcasestr((char *)s->buf, "uuid:");
-    if (ruuid && strip(ruuid + 5).substr(0, strlen(opts.uuid)) == opts.uuid) {
+    if (ruuid && strip(ruuid + 5).starts_with(opts.uuid)) {
         LOGM("Dropping packet from the same UUID as mine (from %s:%d)",
              get_sockaddr_host(s->sa, ra, sizeof(ra)),
              get_sockaddr_port(s->sa));

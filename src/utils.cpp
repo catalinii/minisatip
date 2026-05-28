@@ -122,8 +122,7 @@ int map_intd(std::string_view s, const char *const v[], int dv) {
         return dv;
     }
     for (i = 0; v[i]; i++) {
-        size_t len = strlen(v[i]);
-        if (s.size() >= len && strncasecmp(s.data(), v[i], len) == 0)
+        if (starts_with_case_insensitive(s, v[i]))
             n = i;
     }
     return n;
@@ -142,7 +141,7 @@ int check_strs(std::string_view s, const char *const v[], int dv) {
         LOG_AND_RETURN(dv, "check_strs: s is empty");
 
     for (i = 0; v[i]; i++) {
-        if (strncasecmp(s.data(), v[i], s.size()) == 0)
+        if (starts_with_case_insensitive(v[i], s))
             n = i;
     }
     return n;
