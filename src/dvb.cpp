@@ -420,14 +420,12 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
         tp->pls_code = pls_scrambling_index(tp);
 
     std::string pids_str = iterable_to_string(tp->pids);
-    std::string x_pmt_str =
-        tp->x_pmt.has_value() ? std::to_string(*tp->x_pmt) : "NULL";
     LOG("detect_dvb_parameters (E) -> src=%d, fe=%d, freq=%d, fec=%d, sr=%d, "
         "pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s "
-        "x_pmt=%s",
+        "x_pmt=%d",
         tp->diseqc, tp->fe, tp->freq, tp->fec, tp->sr, tp->pol, tp->ro, tp->sys,
         tp->mtype, tp->plts, tp->bw, tp->inversion, pids_str.c_str(),
-        x_pmt_str.c_str());
+        tp->x_pmt.value_or(-1));
     return 0;
 }
 
@@ -462,14 +460,12 @@ void init_dvb_parameters(transponder *tp) {
 
 void copy_dvb_parameters(transponder *s, transponder *d) {
     std::string dpids_str = iterable_to_string(d->pids);
-    std::string dx_pmt_str =
-        d->x_pmt.has_value() ? std::to_string(*d->x_pmt) : "NULL";
     LOG("copy_dvb_param start -> src=%d, fe=%d, freq=%d, fec=%d, sr=%d, "
         "pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s "
-        "x_pmt=%s",
+        "x_pmt=%d",
         d->diseqc, d->fe, d->freq, d->fec, d->sr, d->pol, d->ro, d->sys,
         d->mtype, d->plts, d->bw, d->inversion, dpids_str.c_str(),
-        dx_pmt_str.c_str());
+        d->x_pmt.value_or(-1));
     if (s->sys != -1)
         d->sys = s->sys;
     if (s->freq != -1)
@@ -528,13 +524,11 @@ void copy_dvb_parameters(transponder *s, transponder *d) {
         d->mtype = QPSK;
 
     std::string d_pids_str = iterable_to_string(d->pids);
-    std::string d_x_pmt_str =
-        d->x_pmt.has_value() ? std::to_string(*d->x_pmt) : "NULL";
     LOG("copy_dvb_parameters -> src=%d, fe=%d, freq=%d, fec=%d sr=%d, pol=%d, "
-        "ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s x_pmt=%s",
+        "ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s x_pmt=%d",
         d->diseqc, d->fe, d->freq, d->fec, d->sr, d->pol, d->ro, d->sys,
         d->mtype, d->plts, d->bw, d->inversion, d_pids_str.c_str(),
-        d_x_pmt_str.c_str());
+        d->x_pmt.value_or(-1));
 }
 
 // This function provides an scale factor for dB to percentage conversion,
