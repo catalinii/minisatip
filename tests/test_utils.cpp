@@ -127,7 +127,7 @@ int test_strip() {
     return 0;
 }
 
-int test_map_int() {
+int test_parse_int_and_enum_map() {
     ASSERT_EQUAL(parse_int("123"), 123, "Expected 123");
     ASSERT_EQUAL(parse_int("  -456"), -456, "Expected -456");
     ASSERT_EQUAL(parse_int("+789"), 789, "Expected 789");
@@ -178,7 +178,7 @@ int main() {
     TEST_FUNC(test_is_rtsp_response(), "testing is_rtsp_response");
     TEST_FUNC(test_split(), "testing split");
     TEST_FUNC(test_strip(), "testing strip");
-    TEST_FUNC(test_map_int(), "testing map_int");
+    TEST_FUNC(test_parse_int_and_enum_map(), "testing parse_int and EnumMap");
     TEST_FUNC(test_check_strs(), "testing check_strs");
     TEST_FUNC(test_header_parameter(), "testing header_parameter");
     return 0;

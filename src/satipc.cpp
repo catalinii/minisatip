@@ -1833,8 +1833,12 @@ void find_satip_adapter(adapter **a) {
         no_pids_all = 0;
 
         if (!token.empty() && token[0] == '^') {
+#ifdef DISABLE_SRT
+            FAIL("SRT support is disabled, install libsrt-openssl-dev");
+#else
             transport = SIP_TRANSPORT_SRT;
             token.remove_prefix(1);
+#endif
         }
         if (!token.empty() && token[0] == '*') {
             if (transport == SIP_TRANSPORT_TCP)

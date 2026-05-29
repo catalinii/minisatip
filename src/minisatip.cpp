@@ -1477,6 +1477,12 @@ int read_http(sockets *s) {
     sprintf(opts.time_running, "%.0d%s%02d:%02d:%02d", days,
             days > 0 ? "d " : "", hours, mins, secs);
 
+    bool log_buf = (opts.log & DEFAULT_LOG) == DEFAULT_LOG;
+    LOG("Read HTTP (handle %d) [%s:%d] sid %d, sock %d %s%s", s->sid,
+        get_sockaddr_host(s->sa, ra, sizeof(ra)), get_sockaddr_port(s->sa),
+        s->sid, s->sock, log_buf ? "\n" : "",
+        log_buf ? (const char *)s->buf : "");
+
     auto arg = split(std::string_view((char *)s->buf), ' ');
 
     if (arg.size() < 2)

@@ -295,10 +295,10 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
     tp->pls_mode = -1;
     tp->pls_code = -1;
 
-    tp->pids = "__UNSPECIFIED__";
-    tp->apids = "__UNSPECIFIED__";
-    tp->dpids = "__UNSPECIFIED__";
-    tp->x_pmt = "__UNSPECIFIED__";
+    tp->pids = std::nullopt;
+    tp->apids = std::nullopt;
+    tp->dpids = std::nullopt;
+    tp->x_pmt = std::nullopt;
 
     auto qm_pos = s.find('?');
     if (qm_pos == std::string_view::npos)
@@ -375,15 +375,15 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
             tp->dpids = std::string(val);
     }
 
-    if (tp->pids != "__UNSPECIFIED__" && tp->pids.contains("all")) {
+    if (tp->pids.has_value() && tp->pids->contains("all")) {
         tp->pids = "8192";
     }
 
     if (tp->pls_mode == PLS_MODE_ROOT)
         tp->pls_code = pls_scrambling_index(tp);
 
-    if (tp->pids != "__UNSPECIFIED__" && !tp->pids.empty() &&
-        tp->pids.compare(0, 4, "none") == 0)
+    if (tp->pids.has_value() && !tp->pids->empty() &&
+        tp->pids->compare(0, 4, "none") == 0)
         tp->pids = "";
 
     LOG("detect_dvb_parameters (E) -> src=%d, fe=%d, freq=%d, fec=%d, sr=%d, "
@@ -391,17 +391,14 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
         "apids=%s - dpids=%s x_pmt=%s",
         tp->diseqc, tp->fe, tp->freq, tp->fec, tp->sr, tp->pol, tp->ro, tp->sys,
         tp->mtype, tp->plts, tp->bw, tp->inversion,
-        (tp->pids != "__UNSPECIFIED__" && !tp->pids.empty()) ? tp->pids.c_str()
-                                                             : "NULL",
-        (tp->apids != "__UNSPECIFIED__" && !tp->apids.empty())
-            ? tp->apids.c_str()
-            : "NULL",
-        (tp->dpids != "__UNSPECIFIED__" && !tp->dpids.empty())
-            ? tp->dpids.c_str()
-            : "NULL",
-        (tp->x_pmt != "__UNSPECIFIED__" && !tp->x_pmt.empty())
-            ? tp->x_pmt.c_str()
-            : "NULL");
+        (tp->pids.has_value() && !tp->pids->empty()) ? tp->pids->c_str()
+                                                     : "NULL",
+        (tp->apids.has_value() && !tp->apids->empty()) ? tp->apids->c_str()
+                                                       : "NULL",
+        (tp->dpids.has_value() && !tp->dpids->empty()) ? tp->dpids->c_str()
+                                                       : "NULL",
+        (tp->x_pmt.has_value() && !tp->x_pmt->empty()) ? tp->x_pmt->c_str()
+                                                       : "NULL");
     return 0;
 }
 
@@ -430,10 +427,10 @@ void init_dvb_parameters(transponder *tp) {
     tp->pls_mode = TP_VALUE_UNSET;
     tp->pls_code = TP_VALUE_UNSET;
 
-    tp->pids = "__UNSPECIFIED__";
-    tp->apids = "__UNSPECIFIED__";
-    tp->dpids = "__UNSPECIFIED__";
-    tp->x_pmt = "__UNSPECIFIED__";
+    tp->pids = std::nullopt;
+    tp->apids = std::nullopt;
+    tp->dpids = std::nullopt;
+    tp->x_pmt = std::nullopt;
 }
 
 void copy_dvb_parameters(transponder *s, transponder *d) {
@@ -443,10 +440,13 @@ void copy_dvb_parameters(transponder *s, transponder *d) {
         "dpids=%s x_pmt=%s",
         d->diseqc, d->fe, d->freq, d->fec, d->sr, d->pol, d->ro, d->sys,
         d->mtype, d->plts, d->bw, d->inversion,
-        !d->pids.empty() ? d->pids.c_str() : "NULL",
-        !d->apids.empty() ? d->apids.c_str() : "NULL",
-        !d->dpids.empty() ? d->dpids.c_str() : "NULL",
-        !d->x_pmt.empty() ? d->x_pmt.c_str() : "NULL");
+        (d->pids.has_value() && !d->pids->empty()) ? d->pids->c_str() : "NULL",
+        (d->apids.has_value() && !d->apids->empty()) ? d->apids->c_str()
+                                                     : "NULL",
+        (d->dpids.has_value() && !d->dpids->empty()) ? d->dpids->c_str()
+                                                     : "NULL",
+        (d->x_pmt.has_value() && !d->x_pmt->empty()) ? d->x_pmt->c_str()
+                                                     : "NULL");
     if (s->sys != -1)
         d->sys = s->sys;
     if (s->freq != -1)
@@ -492,10 +492,14 @@ void copy_dvb_parameters(transponder *s, transponder *d) {
     if (s->pls_code != -1)
         d->pls_code = s->pls_code;
 
-    d->x_pmt = s->x_pmt;
-    d->apids = s->apids;
-    d->pids = s->pids;
-    d->dpids = s->dpids;
+    if (s->x_pmt.has_value())
+        d->x_pmt = s->x_pmt;
+    if (s->apids.has_value())
+        d->apids = s->apids;
+    if (s->pids.has_value())
+        d->pids = s->pids;
+    if (s->dpids.has_value())
+        d->dpids = s->dpids;
 
     if (d->diseqc < 1) // force position 1 on the diseqc switch
         d->diseqc = 1;
@@ -511,10 +515,13 @@ void copy_dvb_parameters(transponder *s, transponder *d) {
         "dpids=%s x_pmt=%s",
         d->diseqc, d->fe, d->freq, d->fec, d->sr, d->pol, d->ro, d->sys,
         d->mtype, d->plts, d->bw, d->inversion,
-        !d->pids.empty() ? d->pids.c_str() : "NULL",
-        !d->apids.empty() ? d->apids.c_str() : "NULL",
-        !d->dpids.empty() ? d->dpids.c_str() : "NULL",
-        !d->x_pmt.empty() ? d->x_pmt.c_str() : "NULL");
+        (d->pids.has_value() && !d->pids->empty()) ? d->pids->c_str() : "NULL",
+        (d->apids.has_value() && !d->apids->empty()) ? d->apids->c_str()
+                                                     : "NULL",
+        (d->dpids.has_value() && !d->dpids->empty()) ? d->dpids->c_str()
+                                                     : "NULL",
+        (d->x_pmt.has_value() && !d->x_pmt->empty()) ? d->x_pmt->c_str()
+                                                     : "NULL");
 }
 
 // This function provides an scale factor for dB to percentage conversion,

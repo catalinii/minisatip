@@ -1233,21 +1233,22 @@ int set_adapter_parameters(int aid, int sid, transponder *tp) {
             get_absolute_source_for_adapter(ad->id, ad->tp.diseqc, ad->tp.sys);
     }
 
-    if (!ad->tp.pids
-             .empty()) // pids can be specified in SETUP and then followed by a
-                       // delpids in PLAY, make sure the behaviour is right
+    if (ad->tp.pids.has_value() &&
+        !ad->tp.pids
+             ->empty()) // pids can be specified in SETUP and then followed by a
+                        // delpids in PLAY, make sure the behaviour is right
     {
         mark_pids_deleted(aid, sid, NULL); // delete all the pids for this
-        if (mark_pids_add(sid, aid, ad->tp.pids.c_str()) < 0) {
+        if (mark_pids_add(sid, aid, ad->tp.pids->c_str()) < 0) {
             return -1;
         }
     }
 
-    if (!ad->tp.dpids.empty()) {
-        mark_pids_deleted(aid, sid, ad->tp.dpids.c_str());
+    if (ad->tp.dpids.has_value() && !ad->tp.dpids->empty()) {
+        mark_pids_deleted(aid, sid, ad->tp.dpids->c_str());
     }
-    if (!ad->tp.apids.empty()) {
-        if (mark_pids_add(sid, aid, ad->tp.apids.c_str()) < 0) {
+    if (ad->tp.apids.has_value() && !ad->tp.apids->empty()) {
+        if (mark_pids_add(sid, aid, ad->tp.apids->c_str()) < 0) {
             return -1;
         }
     }
@@ -1356,12 +1357,14 @@ char *describe_adapter(int sid, int aid, char *dad, int ld) {
             strlcatf(dad, ld, len, "%s", "none");
     }
 
-    if (!use_ad && (!t->apids.empty() || !t->pids.empty())) {
-        if (t->pids.contains("8192"))
+    bool has_apids = t->apids.has_value() && !t->apids->empty();
+    bool has_pids = t->pids.has_value() && !t->pids->empty();
+    if (!use_ad && (has_apids || has_pids)) {
+        if (has_pids && t->pids->contains("8192"))
             strlcatf(dad, ld, len, "%s", "all");
         else
             strlcatf(dad, ld, len, "%s",
-                     !t->pids.empty() ? t->pids.c_str() : t->apids.c_str());
+                     has_pids ? t->pids->c_str() : t->apids->c_str());
     } else if (!use_ad)
         strlcatf(dad, ld, len, "%s", "none");
 
