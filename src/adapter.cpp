@@ -287,7 +287,7 @@ int init_hw(int i) {
                        ad->id);
     }
     memset(ad->buf, 0, opts.adapter_buffer + 1);
-    init_dvb_parameters(&ad->tp);
+    ad->tp.clear();
     mark_pids_deleted(i, PID_STREAM_ID_UNDEFINED, NULL);
     update_pids(i);
 
@@ -826,7 +826,7 @@ void close_adapter_for_stream(int sid, int aid, int close_stream) {
         mark_pids_deleted(aid, PID_STREAM_ID_UNDEFINED, NULL);
         if (ad->standby && close_stream)
             ad->standby(ad);
-        init_dvb_parameters(&ad->tp);
+        ad->tp.clear();
 
         if ((ad->master_source >= 0) && (ad->master_source < MAX_ADAPTERS)) {
             adapter *ad2 = a[ad->master_source];

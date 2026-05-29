@@ -321,7 +321,7 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
     tp->pls_mode = std::nullopt;
     tp->pls_code = std::nullopt;
 
-    std::unordered_set<int> old_pids = tp->pids;
+    std::string old_pids = iterable_to_string(tp->pids);
     bool pids_specified = false;
 
     auto qm_pos = s.find('?');
@@ -330,7 +330,7 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
 
     std::string_view query = s.substr(qm_pos + 1);
     if (query.contains("freq=")) {
-        init_dvb_parameters(tp);
+        tp->clear();
     }
 
     LOG("detect_dvb_parameters (S)-> %.*s", (int)query.size(), query.data());
@@ -348,11 +348,11 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
         }
 
         if (key == "msys")
-            tp->sys = fe_delsys_map.lookup(val).value_or(SYS_UNDEFINED);
+            tp->sys = fe_delsys_map.lookup(val);
         else if (key == "freq")
             tp->freq = parse_float(val, 1000);
         else if (key == "pol")
-            tp->pol = fe_pol_map.lookup(val).value_or(0);
+            tp->pol = fe_pol_map.lookup(val);
         else if (key == "sr")
             tp->sr = parse_int(val) * 1000;
         else if (key == "fe")
@@ -360,18 +360,17 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
         else if (key == "src")
             tp->diseqc = parse_int(val);
         else if (key == "ro")
-            tp->ro = fe_rolloff_map.lookup(val).value_or(ROLLOFF_AUTO);
+            tp->ro = fe_rolloff_map.lookup(val);
         else if (key == "mtype")
-            tp->mtype = fe_modulation_map.lookup(val).value_or(QPSK);
+            tp->mtype = fe_modulation_map.lookup(val);
         else if (key == "fec")
-            tp->fec = fe_fec_map.lookup(val).value_or(FEC_NONE);
+            tp->fec = fe_fec_map.lookup(val);
         else if (key == "plts")
-            tp->plts = fe_pilot_map.lookup(val).value_or(PILOT_AUTO);
+            tp->plts = fe_pilot_map.lookup(val);
         else if (key == "gi")
-            tp->gi = fe_gi_map.lookup(val).value_or(GUARD_INTERVAL_AUTO);
+            tp->gi = fe_gi_map.lookup(val);
         else if (key == "tmode")
-            tp->tmode =
-                fe_tmode_map.lookup(val).value_or(TRANSMISSION_MODE_AUTO);
+            tp->tmode = fe_tmode_map.lookup(val);
         else if (key == "bw") {
             int bw_val = parse_float(val, 1000000);
             if (bw_val < 0 || bw_val > 100000000)
@@ -388,7 +387,7 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
         else if (key == "plp" || key == "isi")
             tp->plp_isi = parse_int(val);
         else if (key == "plsm")
-            tp->pls_mode = fe_pls_mode_map.lookup(val).value_or(PLS_MODE_ROOT);
+            tp->pls_mode = fe_pls_mode_map.lookup(val);
         else if (key == "plsc")
             tp->pls_code = parse_int(val);
         else if (key == "x_pmt")
@@ -413,8 +412,7 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
 
     if (pids_specified) {
         LOG("detect_dvb_parameters: PIDs changed: old = %s, new = %s",
-            iterable_to_string(old_pids).c_str(),
-            iterable_to_string(tp->pids).c_str());
+            old_pids.c_str(), iterable_to_string(tp->pids).c_str());
     }
 
     if (tp->pls_mode == PLS_MODE_ROOT)
@@ -431,35 +429,6 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
         tp->bw.value_or(8000000), tp->inversion.value_or(INVERSION_AUTO),
         pids_str.c_str(), tp->x_pmt.value_or(-1));
     return 0;
-}
-
-void init_dvb_parameters(transponder *tp) {
-    tp->sys = SYS_UNDEFINED;
-    tp->freq = 0;
-    tp->inversion = INVERSION_AUTO;
-    tp->mtype = QAM_AUTO;
-    tp->fe = 0;
-    tp->hprate = FEC_AUTO;
-    tp->tmode = TRANSMISSION_MODE_AUTO;
-    tp->gi = GUARD_INTERVAL_AUTO;
-    tp->bw = 8000000;
-    tp->sm = 0;
-    tp->t2id = 0;
-    tp->ro = ROLLOFF_AUTO;
-    tp->plts = PILOT_AUTO;
-    tp->fec = FEC_AUTO;
-    tp->sr = 0;
-    tp->pol = 0;
-    tp->diseqc = 0;
-    memset(&tp->diseqc_param, 0, sizeof(tp->diseqc_param));
-    tp->c2tft = 0;
-    tp->ds = std::nullopt;
-    tp->plp_isi = std::nullopt;
-    tp->pls_mode = std::nullopt;
-    tp->pls_code = std::nullopt;
-
-    tp->pids.clear();
-    tp->x_pmt = std::nullopt;
 }
 
 void copy_dvb_parameters(transponder *s, transponder *d) {
@@ -1303,9 +1272,17 @@ int setup_switch(adapter *ad) {
         if ((opt_val).has_value()) {                                           \
             p_cmd[iProp].cmd = (prop);                                         \
             p_cmd[iProp++].u.data = (opt_val).value();                         \
-        } else if ((def_val).bas_value()) {                                    \
+        } else {                                                               \
             p_cmd[iProp].cmd = (prop);                                         \
-            p_cmd[iProp++].u.data = (def_val).value();                         \
+            p_cmd[iProp++].u.data = (def_val);                                 \
+        }                                                                      \
+    }
+
+#define ADD_PROP2(prop, val)                                                   \
+    {                                                                          \
+        if ((val).has_value()) {                                               \
+            p_cmd[iProp].cmd = (prop);                                         \
+            p_cmd[iProp++].u.data = (val).value();                             \
         }                                                                      \
     }
 
@@ -1361,18 +1338,20 @@ int dvb_tune(int aid, transponder *tp) {
         ADD_PROP(DTV_ROLLOFF, tp->ro, ROLLOFF_AUTO)
 #if DVBAPIVERSION >= 0x0502
 #if DVBAPIVERSION >= 0x050b /* 5.11 */
-        ADD_PROP(DTV_STREAM_ID, tp->plp_isi, std::nullopt)
+        ADD_PROP2(DTV_STREAM_ID, tp->plp_isi)
 #else
         // In DVBAPI < 5.11 DTV_STREAM_ID takes also the PLS Code and Mode
-        if (tp->plp_isi.has_value()) {
-            ADD_PROP(DTV_STREAM_ID,
-                     tp->plp_isi.value_or(0) | (tp->pls_code.value_or(0) << 8) |
-                         (tp->pls_mode.value_or(PLS_MODE_ROOT) << 26))
-        }
+        ADD_PROP2(
+            DTV_STREAM_ID,
+            tp->plp_isi.has_value()
+                ? std::optional(tp->plp_isi.value() |
+                                (tp->pls_code.value_or(0) << 8) |
+                                (tp->pls_mode.value_or(PLS_MODE_ROOT) << 26))
+                : std::optional<int>())
 #endif
 #endif
 #if DVBAPIVERSION >= 0x050b /* 5.11 */
-        ADD_PROP(DTV_SCRAMBLING_SEQUENCE_INDEX, tp->pls_code, std::nullopt)
+        ADD_PROP2(DTV_SCRAMBLING_SEQUENCE_INDEX, tp->pls_code)
 #endif
 
 #ifdef USE_DVBAPI3
@@ -1407,10 +1386,11 @@ int dvb_tune(int aid, transponder *tp) {
         ADD_PROP(DTV_CODE_RATE_LP, tp->fec, FEC_AUTO)
         ADD_PROP(DTV_GUARD_INTERVAL, tp->gi, GUARD_INTERVAL_AUTO)
         ADD_PROP(DTV_TRANSMISSION_MODE, tp->tmode, TRANSMISSION_MODE_AUTO)
-        ADD_PROP(DTV_HIERARCHY, HIERARCHY_AUTO)
+        ADD_PROP2(DTV_HIERARCHY, std::make_optional(HIERARCHY_AUTO))
 #if DVBAPIVERSION >= 0x0502
-        if (tp->plp_isi.has_value())
-            ADD_PROP(DTV_STREAM_ID, tp->plp_isi.value_or(0) & 0xFF)
+        ADD_PROP2(DTV_STREAM_ID, tp->plp_isi.has_value()
+                                     ? std::optional(tp->plp_isi.value() & 0xFF)
+                                     : std::optional<int>())
 #endif
 
 // old DVBAPI version 3
@@ -1455,12 +1435,11 @@ int dvb_tune(int aid, transponder *tp) {
         freq = freq * 1000;
         ADD_PROP(DTV_SYMBOL_RATE, tp->sr, 0)
 #if DVBAPIVERSION >= 0x0502
-        if (tp->plp_isi.has_value()) {
-            int v = tp->plp_isi.value_or(0) & 0xFF;
-            if (tp->ds.has_value())
-                v |= (tp->ds.value_or(0) & 0xFF) << 8;
-            ADD_PROP(DTV_STREAM_ID, v);
-        }
+        ADD_PROP2(DTV_STREAM_ID,
+                  tp->plp_isi.has_value()
+                      ? std::optional((tp->plp_isi.value() & 0xFF) |
+                                      ((tp->ds.value_or(0) & 0xFF) << 8))
+                      : std::optional<int>())
 #endif
         // valid for DD DVB-C2 devices
 
@@ -1506,7 +1485,7 @@ int dvb_tune(int aid, transponder *tp) {
         freq = freq * 1000;
         ADD_PROP(DTV_BANDWIDTH_HZ, tp->bw, 8000000)
 #if DVBAPIVERSION >= 0x0501
-        ADD_PROP(DTV_ISDBT_PARTIAL_RECEPTION, 0)
+        ADD_PROP2(DTV_ISDBT_PARTIAL_RECEPTION, std::make_optional(0))
 //		ADD_PROP(DTV_ISDBT_LAYERA_SEGMENT_COUNT,   1);
 //		ADD_PROP(DTV_ISDBT_LAYER_ENABLED,   1);
 #endif
@@ -1523,11 +1502,11 @@ int dvb_tune(int aid, transponder *tp) {
         break;
     }
 
-    ADD_PROP(DTV_FREQUENCY, freq)
+    ADD_PROP2(DTV_FREQUENCY, std::make_optional(freq))
     ADD_PROP(DTV_INVERSION, tp->inversion, INVERSION_AUTO)
     ADD_PROP(DTV_MODULATION, tp->mtype, QAM_AUTO)
     ADD_PROP(DTV_DELIVERY_SYSTEM, tp->sys, SYS_UNDEFINED)
-    ADD_PROP(DTV_TUNE, 0)
+    ADD_PROP2(DTV_TUNE, std::make_optional(0))
 
     p.num = iProp;
     /* discard stale QPSK events */

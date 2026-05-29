@@ -579,7 +579,7 @@ int streams_add() {
     ss->type = 0;
     ss->do_play = 0;
     ss->sp = ss->sb = 0;
-    init_dvb_parameters(&ss->tp);
+    ss->tp.clear();
     ss->useragent[0] = 0;
     ss->len = 0;
     ss->st_sock = -1;

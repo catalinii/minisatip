@@ -33,7 +33,7 @@ extern void satip_getxml_data(char *data, int len, void *opaque,
 
 int test_get_s2_url_multistream_isi() {
     adapter ad = {};
-    init_dvb_parameters(&ad.tp);
+    ad.tp.clear();
 
     satipc sip = {};
     sip.enabled = 1;
@@ -64,7 +64,7 @@ int test_get_s2_url_multistream_isi() {
 
 int test_get_s2_url_pls_mode_root() {
     adapter ad = {};
-    init_dvb_parameters(&ad.tp);
+    ad.tp.clear();
 
     satipc sip = {};
     sip.enabled = 1;
@@ -99,7 +99,7 @@ int test_get_s2_url_pls_mode_root() {
 
 int test_get_s2_url_pls_mode_gold() {
     adapter ad = {};
-    init_dvb_parameters(&ad.tp);
+    ad.tp.clear();
 
     satipc sip = {};
     sip.enabled = 1;
@@ -136,7 +136,7 @@ int test_get_s2_url_pls_mode_gold() {
 
 int test_get_s2_url_no_multistream() {
     adapter ad = {};
-    init_dvb_parameters(&ad.tp);
+    ad.tp.clear();
 
     satipc sip = {};
     sip.enabled = 1;

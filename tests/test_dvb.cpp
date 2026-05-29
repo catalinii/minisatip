@@ -51,10 +51,10 @@ int test_detect_dvb_parameters_general() {
 int test_detect_dvb_parameters_roll_off() {
     transponder tp;
 
-    // Undefined (should default to "auto")
+    // Undefined (should remain nullopt)
     char query[128] = "?freq=11734";
     detect_dvb_parameters(query, &tp);
-    ASSERT(tp.ro == ROLLOFF_AUTO, "ro parsed incorrectly");
+    ASSERT(tp.ro == std::nullopt, "ro parsed incorrectly");
 
     // Various recognized values
     strcpy(query, "?freq=11734&ro=0.35");
