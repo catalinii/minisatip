@@ -1852,27 +1852,38 @@ void find_satip_adapter(adapter **a) {
             token.remove_prefix(1);
         }
 
-        auto parts = split(token, ':');
+        size_t sep1 = token.find(':');
+        size_t sep2 = std::string_view::npos;
+        if (sep1 != std::string_view::npos) {
+            sep2 = token.find(':', sep1 + 1);
+        }
+
         std::string_view system_part = "";
         std::string_view host_part = "";
         std::string_view port_part = "";
 
-        if (parts.size() >= 1 && fe_delsys_map.lookup(parts[0]).has_value()) {
-            system_part = parts[0];
-            if (parts.size() >= 2)
-                host_part = parts[1];
-            if (parts.size() >= 3)
-                port_part = parts[2];
-            if (parts.size() < 2) {
+        std::string_view first_segment =
+            (sep1 != std::string_view::npos) ? token.substr(0, sep1) : token;
+        if (fe_delsys_map.lookup(first_segment).has_value()) {
+            system_part = first_segment;
+            if (sep1 == std::string_view::npos) {
                 LOG("Found only the system for satip adapter %.*s",
                     (int)token.size(), token.data());
                 continue;
             }
+            if (sep2 != std::string_view::npos) {
+                host_part = token.substr(sep1 + 1, sep2 - sep1 - 1);
+                port_part = token.substr(sep2 + 1);
+            } else {
+                host_part = token.substr(sep1 + 1);
+            }
         } else {
-            if (parts.size() >= 1)
-                host_part = parts[0];
-            if (parts.size() >= 2)
-                port_part = parts[1];
+            if (sep1 != std::string_view::npos) {
+                host_part = token.substr(0, sep1);
+                port_part = token.substr(sep1 + 1);
+            } else {
+                host_part = token;
+            }
         }
 
         if (system_part.empty())

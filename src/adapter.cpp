@@ -1980,6 +1980,8 @@ void set_signal_multiplier(char *o) {
     auto arg = split(o, ',');
     for (i = 0; i < (int)arg.size(); i++) {
         std::string_view token = arg[i];
+        strength_multiplier = -1.0f;
+        snr_multiplier = -1.0f;
         if (!token.empty() && token[0] == '*') {
             ad = NULL;
             a_id = -1;

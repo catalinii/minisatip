@@ -3476,8 +3476,8 @@ void set_ca_pin(int i, std::string_view pin) {
     if (!ca_devices[i])
         return;
     memset(ca_devices[i]->pin_str, 0, sizeof(ca_devices[i]->pin_str));
-    strncpy(ca_devices[i]->pin_str, pin.data(),
-            std::min(pin.size(), sizeof(ca_devices[i]->pin_str) - 1));
+    memcpy(ca_devices[i]->pin_str, pin.data(),
+           std::min(pin.size(), sizeof(ca_devices[i]->pin_str) - 1));
 }
 
 void force_ci_adapter(int i) {

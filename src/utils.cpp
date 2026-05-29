@@ -91,7 +91,7 @@ std::vector<std::string_view> split(std::string_view s, char sep) {
 std::string_view
 strip(std::string_view s) // strip spaces from the front of a string
 {
-    auto pos = s.find_first_not_of(' ');
+    auto pos = s.find_first_not_of(" \t\r\n\v\f");
     if (pos == std::string_view::npos)
         return "";
     return s.substr(pos);
