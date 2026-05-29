@@ -1269,53 +1269,40 @@ int satipc_del_filters(adapter *ad, int fd, int pid) {
 }
 
 void get_s2_url(adapter *ad, char *url, int url_len) {
-#define FILL(req, val, def, met)                                               \
-    if (val.has_value() && val.value() != def && (int)val.value() != -1)       \
+#define FILL(req, val, met)                                                    \
+    if (val.has_value())                                                       \
         strlcatf(url, url_len, len, req, met);
     int len = 0;
-    fe_pilot_t plts;
-    fe_rolloff_t ro;
     transponder *tp = &ad->tp;
     satipc *sip = get_satip(ad->id);
     if (!sip)
         return;
     url[0] = 0;
-    plts = tp->plts.value_or(PILOT_AUTO);
-    ro = tp->ro.value_or(ROLLOFF_AUTO);
-    //	if (plts == PILOT_AUTO)
-    //		plts = PILOT_OFF;
-    //	if (ro == ROLLOFF_AUTO)
-    //		ro = ROLLOFF_35;
-    FILL("src=%d", tp->diseqc, 0, tp->diseqc.value_or(0));
-    if (sip->satip_fe > 0)
-        FILL("&fe=%d", std::optional<int>(sip->satip_fe), 0, sip->satip_fe);
-    FILL("&freq=%d", tp->freq, 0, tp->freq.value_or(0) / 1000);
-    FILL("&msys=%s", tp->sys, SYS_UNDEFINED,
-         get_delsys(tp->sys.value_or(SYS_UNDEFINED)));
-    FILL("&mtype=%s", tp->mtype, QAM_AUTO,
-         get_modulation(tp->mtype.value_or(QAM_AUTO)));
-    FILL("&pol=%s", tp->pol, -1, get_pol(tp->pol.value_or(0)));
-    FILL("&sr=%d", tp->sr, -1, tp->sr.value_or(0) / 1000);
-    FILL("&fec=%s", tp->fec, FEC_AUTO, get_fec(tp->fec.value_or(FEC_AUTO)));
-    FILL("&ro=%s", std::optional<fe_rolloff_t>(ro), ROLLOFF_AUTO,
-         get_rolloff(ro));
-    FILL("&plts=%s", std::optional<fe_pilot_t>(plts), PILOT_AUTO,
-         get_pilot(plts));
-    if (tp->plp_isi.value_or(-1) >= 0)
-        FILL("&isi=%d", tp->plp_isi, 0, tp->plp_isi.value_or(0));
-    if (tp->pls_mode.value_or((fe_pls_mode_t)-1) >= 0)
-        FILL("&plsm=%s", tp->pls_mode, (fe_pls_mode_t)-1,
-             get_pls_mode(tp->pls_mode.value_or((fe_pls_mode_t)0)));
-    if (tp->pls_code.value_or(-1) >= 0)
-        FILL("&plsc=%d", tp->pls_code, -1, tp->pls_code.value_or(0));
+    std::optional<int> satip_fe =
+        (sip->satip_fe > 0) ? std::optional<int>(sip->satip_fe) : std::nullopt;
+
+    FILL("src=%d", tp->diseqc, tp->diseqc.value_or(0));
+    FILL("&fe=%d", satip_fe, sip->satip_fe);
+    FILL("&freq=%d", tp->freq, tp->freq.value_or(0) / 1000);
+    FILL("&msys=%s", tp->sys, get_delsys(tp->sys.value_or(SYS_UNDEFINED)));
+    FILL("&mtype=%s", tp->mtype, get_modulation(tp->mtype.value_or(QAM_AUTO)));
+    FILL("&pol=%s", tp->pol, get_pol(tp->pol.value_or(0)));
+    FILL("&sr=%d", tp->sr, tp->sr.value_or(0) / 1000);
+    FILL("&fec=%s", tp->fec, get_fec(tp->fec.value_or(FEC_AUTO)));
+    FILL("&ro=%s", tp->ro, get_rolloff(tp->ro.value_or(ROLLOFF_AUTO)));
+    FILL("&plts=%s", tp->plts, get_pilot(tp->plts.value_or(PILOT_AUTO)));
+    FILL("&isi=%d", tp->plp_isi, tp->plp_isi.value_or(0));
+    FILL("&plsm=%s", tp->pls_mode,
+         get_pls_mode(tp->pls_mode.value_or((fe_pls_mode_t)0)));
+    FILL("&plsc=%d", tp->pls_code, tp->pls_code.value_or(0));
     url[len] = 0;
     return;
 #undef FILL
 }
 
 void get_c2_url(adapter *ad, char *url, int url_len) {
-#define FILL(req, val, def, met)                                               \
-    if (val.has_value() && val.value() != def && (int)val.value() != -1)       \
+#define FILL(req, val, met)                                                    \
+    if (val.has_value())                                                       \
         strlcatf(url, url_len, len, req, met);
     int len = 0;
     transponder *tp = &ad->tp;
@@ -1323,33 +1310,30 @@ void get_c2_url(adapter *ad, char *url, int url_len) {
     if (!sip)
         return;
     url[0] = 0;
-    FILL("freq=%.1f", tp->freq, 0, tp->freq.value_or(0) / 1000.0);
-    if (sip->satip_fe > 0)
-        FILL("&fe=%d", std::optional<int>(sip->satip_fe), 0, sip->satip_fe);
-    FILL("&sr=%d", tp->sr, -1, tp->sr.value_or(0) / 1000);
-    FILL("&msys=%s", tp->sys, SYS_UNDEFINED,
-         get_delsys(tp->sys.value_or(SYS_UNDEFINED)));
-    FILL("&mtype=%s", tp->mtype, QAM_AUTO,
-         get_modulation(tp->mtype.value_or(QAM_AUTO)));
-    FILL("&gi=%s", tp->gi, GUARD_INTERVAL_AUTO,
-         get_gi(tp->gi.value_or(GUARD_INTERVAL_AUTO)));
-    FILL("&fec=%s", tp->fec, FEC_AUTO, get_fec(tp->fec.value_or(FEC_AUTO)));
-    FILL("&tmode=%s", tp->tmode, TRANSMISSION_MODE_AUTO,
+    std::optional<int> satip_fe =
+        (sip->satip_fe > 0) ? std::optional<int>(sip->satip_fe) : std::nullopt;
+
+    FILL("freq=%.1f", tp->freq, tp->freq.value_or(0) / 1000.0);
+    FILL("&fe=%d", satip_fe, sip->satip_fe);
+    FILL("&sr=%d", tp->sr, tp->sr.value_or(0) / 1000);
+    FILL("&msys=%s", tp->sys, get_delsys(tp->sys.value_or(SYS_UNDEFINED)));
+    FILL("&mtype=%s", tp->mtype, get_modulation(tp->mtype.value_or(QAM_AUTO)));
+    FILL("&gi=%s", tp->gi, get_gi(tp->gi.value_or(GUARD_INTERVAL_AUTO)));
+    FILL("&fec=%s", tp->fec, get_fec(tp->fec.value_or(FEC_AUTO)));
+    FILL("&tmode=%s", tp->tmode,
          get_tmode(tp->tmode.value_or(TRANSMISSION_MODE_AUTO)));
-    FILL("&specinv=%d", tp->inversion, INVERSION_AUTO,
-         tp->inversion.value_or(INVERSION_AUTO));
-    FILL("&t2id=%d", tp->t2id, 0, tp->t2id.value_or(0));
-    FILL("&sm=%d", tp->sm, 0, tp->sm.value_or(0));
-    if (tp->plp_isi.value_or(-1) >= 0)
-        FILL("&plp=%d", tp->plp_isi, 0, tp->plp_isi.value_or(0));
+    FILL("&specinv=%d", tp->inversion, tp->inversion.value_or(INVERSION_AUTO));
+    FILL("&t2id=%d", tp->t2id, tp->t2id.value_or(0));
+    FILL("&sm=%d", tp->sm, tp->sm.value_or(0));
+    FILL("&plp=%d", tp->plp_isi, tp->plp_isi.value_or(0));
     url[len] = 0;
     return;
 #undef FILL
 }
 
 void get_t2_url(adapter *ad, char *url, int url_len) {
-#define FILL(req, val, def, met)                                               \
-    if (val.has_value() && val.value() != def && (int)val.value() != -1)       \
+#define FILL(req, val, met)                                                    \
+    if (val.has_value())                                                       \
         strlcatf(url, url_len, len, req, met);
     int len = 0;
     transponder *tp = &ad->tp;
@@ -1357,25 +1341,22 @@ void get_t2_url(adapter *ad, char *url, int url_len) {
     if (!sip)
         return;
     url[0] = 0;
-    FILL("freq=%.1f", tp->freq, 0, tp->freq.value_or(0) / 1000.0);
-    if (sip->satip_fe > 0)
-        FILL("&fe=%d", std::optional<int>(sip->satip_fe), 0, sip->satip_fe);
-    FILL("&bw=%d", tp->bw, BANDWIDTH_AUTO, tp->bw.value_or(0) / 1000000);
-    FILL("&msys=%s", tp->sys, SYS_UNDEFINED,
-         get_delsys(tp->sys.value_or(SYS_UNDEFINED)));
-    FILL("&mtype=%s", tp->mtype, (fe_modulation_t)-1,
+    std::optional<int> satip_fe =
+        (sip->satip_fe > 0) ? std::optional<int>(sip->satip_fe) : std::nullopt;
+
+    FILL("freq=%.1f", tp->freq, tp->freq.value_or(0) / 1000.0);
+    FILL("&fe=%d", satip_fe, sip->satip_fe);
+    FILL("&bw=%d", tp->bw, tp->bw.value_or(0) / 1000000);
+    FILL("&msys=%s", tp->sys, get_delsys(tp->sys.value_or(SYS_UNDEFINED)));
+    FILL("&mtype=%s", tp->mtype,
          get_modulation(tp->mtype.value_or((fe_modulation_t)0)));
-    FILL("&gi=%s", tp->gi, GUARD_INTERVAL_AUTO,
-         get_gi(tp->gi.value_or(GUARD_INTERVAL_AUTO)));
-    FILL("&tmode=%s", tp->tmode, TRANSMISSION_MODE_AUTO,
+    FILL("&gi=%s", tp->gi, get_gi(tp->gi.value_or(GUARD_INTERVAL_AUTO)));
+    FILL("&tmode=%s", tp->tmode,
          get_tmode(tp->tmode.value_or(TRANSMISSION_MODE_AUTO)));
-    FILL("&specinv=%d", tp->inversion, INVERSION_AUTO,
-         tp->inversion.value_or(INVERSION_AUTO));
-    FILL("&c2tft=%d", tp->c2tft, 0, tp->c2tft.value_or(0));
-    if (tp->ds.value_or(-1) >= 0)
-        FILL("&ds=%d", tp->ds, 0, tp->ds.value_or(0));
-    if (tp->plp_isi.value_or(-1) >= 0)
-        FILL("&plp=%d", tp->plp_isi, 0, tp->plp_isi.value_or(0));
+    FILL("&specinv=%d", tp->inversion, tp->inversion.value_or(INVERSION_AUTO));
+    FILL("&c2tft=%d", tp->c2tft, tp->c2tft.value_or(0));
+    FILL("&ds=%d", tp->ds, tp->ds.value_or(0));
+    FILL("&plp=%d", tp->plp_isi, tp->plp_isi.value_or(0));
     url[len] = 0;
     return;
 #undef FILL
