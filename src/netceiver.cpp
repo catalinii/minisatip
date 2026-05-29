@@ -232,8 +232,12 @@ int netcv_commit(adapter *ad) {
             LOG("netceiver: adapter %d tuning to %d%s pol:%s sr:%d fec:%s "
                 "delsys:%s "
                 "mod:%s",
-                ad->id, freq / 1000, map_posc[diseqc], get_pol(pol), sr / 1000,
-                fe_fec[fec], fe_delsys[sys], fe_modulation[mtype]);
+                ad->id, freq / 1000, map_posc[diseqc],
+                fe_pol_map.reverse_lookup(pol).data(), sr / 1000,
+                fe_fec_map.reverse_lookup((fe_code_rate_t)fec).data(),
+                fe_delsys_map.reverse_lookup((fe_delivery_system_t)sys).data(),
+                fe_modulation_map.reverse_lookup((fe_modulation_t)mtype)
+                    .data());
 
             break;
 
@@ -259,8 +263,10 @@ int netcv_commit(adapter *ad) {
             type = FE_QAM;
 
             LOG("netceiver: adapter %d tuning to %d sr:%d delsys:%s mod:%s",
-                ad->id, freq / 1000, sr / 1000, fe_delsys[sys],
-                fe_modulation[mtype]);
+                ad->id, freq / 1000, sr / 1000,
+                fe_delsys_map.reverse_lookup((fe_delivery_system_t)sys).data(),
+                fe_modulation_map.reverse_lookup((fe_modulation_t)mtype)
+                    .data());
 
             break;
 

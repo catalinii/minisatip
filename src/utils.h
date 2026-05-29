@@ -50,6 +50,17 @@ template <typename EnumT> class EnumMap {
             return it->value;
         }
         return std::nullopt;
+        ;
+    }
+
+    std::string_view reverse_lookup(EnumT val) const {
+        auto it =
+            std::find_if(entries_.begin(), entries_.end(),
+                         [val](const Entry &e) { return e.value == val; });
+        if (it != entries_.end() && it->key != " ")
+            return it->key;
+
+        return "NOT FOUND";
     }
 
   private:

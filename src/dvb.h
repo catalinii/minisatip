@@ -361,24 +361,16 @@ void copy_dvb_parameters(transponder *s, transponder *d);
 float get_db_snr_map(transponder *tp);
 uint32_t pls_scrambling_index(transponder *tp);
 
-const char *get_pilot(int i);
-const char *get_rolloff(int i);
-const char *get_delsys(int i);
-const char *get_fec(int i);
-const char *get_modulation(int i);
-const char *get_tmode(int i);
-const char *get_gi(int i);
-const char *get_pol(int i);
-const char *get_inversion(int i);
-const char *get_pls_mode(int i);
-
 #include "utils.h"
 extern const EnumMap<fe_delivery_system_t> fe_delsys_map;
-
-extern const char *fe_delsys[];
-extern const char *fe_fec[];
-extern const char *fe_tmode[];
-extern const char *fe_modulation[];
-extern const char *fe_gi[];
+extern const EnumMap<int> fe_pol_map;
+extern const EnumMap<fe_rolloff_t> fe_rolloff_map;
+extern const EnumMap<fe_modulation_t> fe_modulation_map;
+extern const EnumMap<fe_code_rate_t> fe_fec_map;
+extern const EnumMap<fe_pilot_t> fe_pilot_map;
+extern const EnumMap<fe_guard_interval_t> fe_gi_map;
+extern const EnumMap<fe_transmit_mode_t> fe_tmode_map;
+extern const EnumMap<fe_pls_mode_t> fe_pls_mode_map;
+extern const EnumMap<fe_spectral_inversion_t> fe_inversion_map;
 
 #endif /*  */

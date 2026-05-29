@@ -70,64 +70,6 @@ enum dmx_source {
 #define DMX_SET_SOURCE _IOW('o', 49, enum dmx_source)
 #endif
 
-const char *fe_pilot[] = {"on", "off", " ", // auto
-                          NULL};
-
-const char *fe_rolloff[] = {"0.35", "0.20", "0.25", " ", // auto
-                            "0.15", "0.10", "0.05", NULL};
-
-const char *fe_delsys[] = {
-    "undefined", "dvbc",  "dvbcb", "dvbt",  "dss",   "dvbs",   "dvbs2",
-    "dvbh",      "isdbt", "isdbs", "isdbc", "atsc",  "atscmh", "dmbth",
-    "cmmb",      "dab",   "dvbt2", "turbo", "dvbcc", "dvbc2",  NULL};
-
-const char *fe_fec[] = {"none", "12",  "23", "34", "45", "56",
-                        "67",   "78",  "89", " ", // auto
-                        "35",   "910", "25", "14", "13", NULL};
-
-const char *fe_modulation[] = {
-    "qpsk",   "16qam",   "32qam",   "64qam",  "128qam", "256qam", " ", // auto
-    "8vsb",   "16vsb",   "8psk",    "16apsk", "32apsk", "dqpsk",  "qam_4_nr",
-    "64apsk", "128apsk", "256apsk", NULL};
-
-const char *fe_tmode[] = {"2k", "8k", " ", // auto
-                          "4k", "1k", "16k", "32k", "c1", "c3780", NULL};
-
-const char *fe_gi[] = {"132",   "116",   "18",    "14",    " ", // auto
-                       "1128",  "19128", "19256", "pn420", "pn595",
-                       "pn945", NULL};
-
-const char *fe_hierarchy[] = {"HIERARCHY_NONE", "HIERARCHY_1",    "HIERARCHY_2",
-                              "HIERARCHY_4",    "HIERARCHY_AUTO", NULL};
-
-const char *fe_inversion[] = {"0", "1", " ", // auto
-                              NULL};
-
-const char *fe_pol[] = {"none", "v", "h", "r", "l", NULL};
-
-const char *fe_pls_mode[] = {"root", "gold", "combo", NULL};
-
-#define make_func(a)                                                           \
-    const char *get_##a(int i) {                                               \
-        if (i >= 0 && i < (int)(sizeof(fe_##a) / sizeof(fe_##a[0]))) {         \
-            if (fe_##a[i][0] == 32)                                            \
-                return "";                                                     \
-            else                                                               \
-                return fe_##a[i];                                              \
-        }                                                                      \
-        return "NONE";                                                         \
-    }
-make_func(pilot);
-make_func(rolloff);
-make_func(delsys);
-make_func(fec);
-make_func(modulation);
-make_func(tmode);
-make_func(gi);
-make_func(inversion);
-make_func(pol);
-make_func(pls_mode);
-
 #ifndef ROLLOFF_15
 #define ROLLOFF_15 ((fe_rolloff_t)4)
 #endif
@@ -252,6 +194,9 @@ const EnumMap<fe_transmit_mode_t>
 const EnumMap<fe_pls_mode_t> fe_pls_mode_map({{"root", PLS_MODE_ROOT},
                                               {"gold", PLS_MODE_GOLD},
                                               {"combo", PLS_MODE_COMBO}});
+
+const EnumMap<fe_spectral_inversion_t> fe_inversion_map(
+    {{"0", INVERSION_OFF}, {"1", INVERSION_ON}, {" ", INVERSION_AUTO}});
 
 #define INVALID_URL(a)                                                         \
     {                                                                          \
@@ -1363,13 +1308,17 @@ int dvb_tune(int aid, transponder *tp) {
 
         LOG("tuning to %d(%d) pol: %s (%d) sr:%d fec:%s delsys:%s mod:%s "
             "rolloff:%s pilot:%s, ts clear=%jd, ts pol=%jd",
-            tp->freq.value_or(0), freq, get_pol(tp->pol.value_or(0)),
+            tp->freq.value_or(0), freq,
+            fe_pol_map.reverse_lookup(tp->pol.value_or(0)).data(),
             tp->pol.value_or(0), tp->sr.value_or(0),
-            get_fec(tp->fec.value_or(FEC_AUTO)),
-            get_delsys(tp->sys.value_or(SYS_UNDEFINED)),
-            get_modulation(tp->mtype.value_or(QAM_AUTO)),
-            get_rolloff(tp->ro.value_or(ROLLOFF_AUTO)),
-            get_pilot(tp->plts.value_or(PILOT_AUTO)), bclear, bpol)
+            fe_fec_map.reverse_lookup(tp->fec.value_or(FEC_AUTO)).data(),
+            fe_delsys_map.reverse_lookup(tp->sys.value_or(SYS_UNDEFINED))
+                .data(),
+            fe_modulation_map.reverse_lookup(tp->mtype.value_or(QAM_AUTO))
+                .data(),
+            fe_rolloff_map.reverse_lookup(tp->ro.value_or(ROLLOFF_AUTO)).data(),
+            fe_pilot_map.reverse_lookup(tp->plts.value_or(PILOT_AUTO)).data(),
+            bclear, bpol)
         break;
 
     case SYS_DVBT:
@@ -1415,13 +1364,22 @@ int dvb_tune(int aid, transponder *tp) {
 
         LOG("tuning to %d delsys: %s bw:%d inversion:%s mod:%s fec:%s guard:%s "
             "transmission: %s, ts clear = %jd",
-            freq, get_delsys(tp->sys.value_or(SYS_UNDEFINED)),
+            freq,
+            fe_delsys_map.reverse_lookup(tp->sys.value_or(SYS_UNDEFINED))
+                .data(),
             tp->bw.value_or(8000000),
-            get_inversion(tp->inversion.value_or(INVERSION_AUTO)),
-            get_modulation(tp->mtype.value_or(QAM_AUTO)),
-            get_fec(tp->fec.value_or(FEC_AUTO)),
-            get_gi(tp->gi.value_or(GUARD_INTERVAL_AUTO)),
-            get_tmode(tp->tmode.value_or(TRANSMISSION_MODE_AUTO)), bclear)
+            fe_inversion_map
+                .reverse_lookup(tp->inversion.value_or(INVERSION_AUTO))
+                .data(),
+            fe_modulation_map.reverse_lookup(tp->mtype.value_or(QAM_AUTO))
+                .data(),
+            fe_fec_map.reverse_lookup(tp->fec.value_or(FEC_AUTO)).data(),
+            fe_gi_map.reverse_lookup(tp->gi.value_or(GUARD_INTERVAL_AUTO))
+                .data(),
+            fe_tmode_map
+                .reverse_lookup(tp->tmode.value_or(TRANSMISSION_MODE_AUTO))
+                .data(),
+            bclear)
         break;
 
     case SYS_DVBC2:
@@ -1453,9 +1411,14 @@ int dvb_tune(int aid, transponder *tp) {
 
         LOG("tuning to %d sr:%d specinv:%s delsys:%s mod:%s ts clear = %jd",
             freq, tp->sr.value_or(0),
-            get_inversion(tp->inversion.value_or(INVERSION_AUTO)),
-            get_delsys(tp->sys.value_or(SYS_UNDEFINED)),
-            get_modulation(tp->mtype.value_or(QAM_AUTO)), bclear)
+            fe_inversion_map
+                .reverse_lookup(tp->inversion.value_or(INVERSION_AUTO))
+                .data(),
+            fe_delsys_map.reverse_lookup(tp->sys.value_or(SYS_UNDEFINED))
+                .data(),
+            fe_modulation_map.reverse_lookup(tp->mtype.value_or(QAM_AUTO))
+                .data(),
+            bclear)
         break;
 
     case SYS_ATSC:
@@ -1469,9 +1432,14 @@ int dvb_tune(int aid, transponder *tp) {
         freq = freq * 1000;
 
         LOG("tuning to %d delsys:%s mod:%s specinv:%s ts clear = %jd", freq,
-            get_delsys(tp->sys.value_or(SYS_UNDEFINED)),
-            get_modulation(tp->mtype.value_or(QAM_AUTO)),
-            get_inversion(tp->inversion.value_or(INVERSION_AUTO)), bclear)
+            fe_delsys_map.reverse_lookup(tp->sys.value_or(SYS_UNDEFINED))
+                .data(),
+            fe_modulation_map.reverse_lookup(tp->mtype.value_or(QAM_AUTO))
+                .data(),
+            fe_inversion_map
+                .reverse_lookup(tp->inversion.value_or(INVERSION_AUTO))
+                .data(),
+            bclear)
 
         break;
 
@@ -1491,14 +1459,20 @@ int dvb_tune(int aid, transponder *tp) {
 #endif
 
         LOG("tuning to %d delsys: %s bw:%d inversion:%s , ts clear = %jd", freq,
-            get_delsys(tp->sys.value_or(SYS_UNDEFINED)),
+            fe_delsys_map.reverse_lookup(tp->sys.value_or(SYS_UNDEFINED))
+                .data(),
             tp->bw.value_or(8000000),
-            get_inversion(tp->inversion.value_or(INVERSION_AUTO)), bclear);
+            fe_inversion_map
+                .reverse_lookup(tp->inversion.value_or(INVERSION_AUTO))
+                .data(),
+            bclear);
 
         break;
     default:
         LOG("tuning to unknown delsys: %s freq %d ts clear = %jd",
-            get_delsys(tp->sys.value_or(SYS_UNDEFINED)), freq, bclear)
+            fe_delsys_map.reverse_lookup(tp->sys.value_or(SYS_UNDEFINED))
+                .data(),
+            freq, bclear)
         break;
     }
 
@@ -1896,7 +1870,7 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys) {
     }
     for (i = 0; i < nsys; i++)
         LOG("Detected delivery system for adapter %d: %s [%d]", aid,
-            get_delsys(sys[i]), sys[i]);
+            fe_delsys_map.reverse_lookup(sys[i]).data(), sys[i]);
 
     return (fe_delivery_system_t)rv;
 }

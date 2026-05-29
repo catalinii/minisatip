@@ -327,8 +327,10 @@ int init_hw(int i) {
     // on reading from the DVR
 
     LOG("done opening adapter %i delivery systems: %s %s %s %s", i,
-        get_delsys(ad->sys[0]), get_delsys(ad->sys[1]), get_delsys(ad->sys[2]),
-        get_delsys(ad->sys[3]));
+        fe_delsys_map.reverse_lookup(ad->sys[0]).data(),
+        fe_delsys_map.reverse_lookup(ad->sys[1]).data(),
+        fe_delsys_map.reverse_lookup(ad->sys[2]).data(),
+        fe_delsys_map.reverse_lookup(ad->sys[3]).data());
     getAdaptersCount();
 
     if ((ad->master_source >= 0) && (ad->master_source < MAX_ADAPTERS)) {
@@ -504,7 +506,8 @@ int getAdaptersCount() {
             for (j = 0; j < ifes[sys]; j++) {
                 fe_map[k++] = fes[sys][j];
                 LOG("FE %d mapped to Adapter %d, sys %s", k, fes[sys][j],
-                    get_delsys(sys));
+                    fe_delsys_map.reverse_lookup((fe_delivery_system_t)sys)
+                        .data());
             }
         }
     }
@@ -537,8 +540,9 @@ void dump_adapters() {
             LOG("%d|f: %d sid_cnt:%d master_sid:%d master_source:%d del_sys: "
                 "%s,%s,%s %s",
                 i, ad->tp.freq, ad->sid_cnt, ad->master_sid, ad->master_source,
-                get_delsys(ad->sys[0]), get_delsys(ad->sys[1]),
-                get_delsys(ad->sys[2]),
+                fe_delsys_map.reverse_lookup(ad->sys[0]).data(),
+                fe_delsys_map.reverse_lookup(ad->sys[1]).data(),
+                fe_delsys_map.reverse_lookup(ad->sys[2]).data(),
                 dump_absolute_table(ad, buf, sizeof(buf)));
     dump_streams();
 }
@@ -682,11 +686,13 @@ int get_free_adapter(transponder *tp) {
         LOG("get free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d src:%d f:%d "
             "pol=%d sys: %s %s",
             tp->fe, ad->id, ad->enabled, ad->master_sid, ad->sid_cnt,
-            ad->tp.diseqc, ad->tp.freq, ad->tp.pol, get_delsys(ad->sys[0]),
-            get_delsys(ad->sys[1]))
+            ad->tp.diseqc, ad->tp.freq, ad->tp.pol,
+            fe_delsys_map.reverse_lookup(ad->sys[0]).data(),
+            fe_delsys_map.reverse_lookup(ad->sys[1]).data())
     else
-        LOG("get free adapter %d msys %s requested %s", fe, get_delsys(fe),
-            get_delsys(msys));
+        LOG("get free adapter %d msys %s requested %s", fe,
+            fe_delsys_map.reverse_lookup((fe_delivery_system_t)fe).data(),
+            fe_delsys_map.reverse_lookup((fe_delivery_system_t)msys).data());
 
     dump_adapters();
 
@@ -1348,12 +1354,14 @@ char *describe_adapter(int sid, int aid, char *dad, int ld) {
             t->diseqc.value_or(0),
             (ad && ad->tp.fe.value_or(0) > 0) ? ad->tp.fe.value_or(0) : aid + 1,
             strength, status, snr, t->freq.value_or(0) / 1000,
-            get_pol(t->pol.value_or(0)),
-            get_delsys(t->sys.value_or(SYS_UNDEFINED)),
-            get_modulation(t->mtype.value_or(QAM_AUTO)),
-            get_pilot(t->plts.value_or(PILOT_AUTO)),
-            get_rolloff(t->ro.value_or(ROLLOFF_AUTO)), t->sr.value_or(0) / 1000,
-            get_fec(t->fec.value_or(FEC_AUTO)));
+            fe_pol_map.reverse_lookup(t->pol.value_or(0)).data(),
+            fe_delsys_map.reverse_lookup(t->sys.value_or(SYS_UNDEFINED)).data(),
+            fe_modulation_map.reverse_lookup(t->mtype.value_or(QAM_AUTO))
+                .data(),
+            fe_pilot_map.reverse_lookup(t->plts.value_or(PILOT_AUTO)).data(),
+            fe_rolloff_map.reverse_lookup(t->ro.value_or(ROLLOFF_AUTO)).data(),
+            t->sr.value_or(0) / 1000,
+            fe_fec_map.reverse_lookup(t->fec.value_or(FEC_AUTO)).data());
     else if (t->sys == SYS_DVBT || t->sys == SYS_DVBT2)
         len = snprintf(
             dad, ld,
@@ -1361,11 +1369,15 @@ char *describe_adapter(int sid, int aid, char *dad, int ld) {
             (ad && ad->tp.fe.value_or(0) > 0) ? ad->tp.fe.value_or(0) : aid + 1,
             strength, status, snr, (double)t->freq.value_or(0) / 1000.0,
             t->bw.value_or(8000000) / 1000000,
-            get_delsys(t->sys.value_or(SYS_UNDEFINED)),
-            get_tmode(t->tmode.value_or(TRANSMISSION_MODE_AUTO)),
-            get_modulation(t->mtype.value_or(QAM_AUTO)),
-            get_gi(t->gi.value_or(GUARD_INTERVAL_AUTO)),
-            get_fec(t->fec.value_or(FEC_AUTO)),
+            fe_delsys_map.reverse_lookup(t->sys.value_or(SYS_UNDEFINED)).data(),
+            fe_tmode_map
+                .reverse_lookup(t->tmode.value_or(TRANSMISSION_MODE_AUTO))
+                .data(),
+            fe_modulation_map.reverse_lookup(t->mtype.value_or(QAM_AUTO))
+                .data(),
+            fe_gi_map.reverse_lookup(t->gi.value_or(GUARD_INTERVAL_AUTO))
+                .data(),
+            fe_fec_map.reverse_lookup(t->fec.value_or(FEC_AUTO)).data(),
             itoa_positive(plp_isi, t->plp_isi.value_or(-1)),
             t->t2id.value_or(0), t->sm.value_or(0));
     else
@@ -1375,12 +1387,15 @@ char *describe_adapter(int sid, int aid, char *dad, int ld) {
             (ad && ad->tp.fe.value_or(0) > 0) ? ad->tp.fe.value_or(0) : aid + 1,
             strength, status, snr, (double)t->freq.value_or(0) / 1000.0,
             t->bw.value_or(8000000) / 1000000,
-            get_delsys(t->sys.value_or(SYS_UNDEFINED)),
-            get_modulation(t->mtype.value_or(QAM_AUTO)),
+            fe_delsys_map.reverse_lookup(t->sys.value_or(SYS_UNDEFINED)).data(),
+            fe_modulation_map.reverse_lookup(t->mtype.value_or(QAM_AUTO))
+                .data(),
             t->sr.value_or(0) / 1000, t->c2tft.value_or(0),
             itoa_positive(ds, t->ds.value_or(-1)),
             itoa_positive(plp_isi, t->plp_isi.value_or(-1)),
-            get_inversion(t->inversion.value_or(INVERSION_AUTO)));
+            fe_inversion_map
+                .reverse_lookup(t->inversion.value_or(INVERSION_AUTO))
+                .data());
 
     if (use_ad) {
         int len1 = len;
@@ -1988,7 +2003,8 @@ void set_adapters_delsys(char *o) {
             ad->sys[1] = SYS_DVBC_ANNEX_A;
 
         LOG("Setting delivery system for adapter %d to %s and %s", a_id,
-            get_delsys(ad->sys[0]), get_delsys(ad->sys[1]));
+            fe_delsys_map.reverse_lookup(ad->sys[0]).data(),
+            fe_delsys_map.reverse_lookup(ad->sys[1]).data());
     }
 }
 
@@ -2166,7 +2182,8 @@ char *get_all_delsys(int aid, char *dest, int max_size) {
 
     for (i = 0; i < MAX_DELSYS; i++)
         if (ad->sys[i] > 0)
-            strlcatf(dest, max_size, len, "%s,", get_delsys(ad->sys[i]));
+            strlcatf(dest, max_size, len, "%s,",
+                     fe_delsys_map.reverse_lookup(ad->sys[i]).data());
 
     if (len > 0)
         dest[len - 1] = 0;
