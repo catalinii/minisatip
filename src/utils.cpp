@@ -169,14 +169,14 @@ std::string_view header_parameter(const std::vector<std::string_view> &arg,
     return "";
 }
 
-int map_float(std::string_view s, int mul) {
+int parse_float(std::string_view s, int mul) {
     float f;
     int r;
 
     if (s.empty())
-        LOG_AND_RETURN(0, "map_float: s=>NULL, mul=%d", mul);
+        LOG_AND_RETURN(0, "parse_float: s=>NULL, mul=%d", mul);
     if (s[0] != '+' && s[0] != '-' && (s[0] < '0' || s[0] > '9')) {
-        LOG_AND_RETURN(0, "map_float: s not a number: %.*s, mul=%d",
+        LOG_AND_RETURN(0, "parse_float: s not a number: %.*s, mul=%d",
                        (int)s.size(), s.data(), mul);
     }
 
@@ -415,16 +415,17 @@ void process_file(void *sock, char *s, int len, char *ctype) {
     }
 }
 
-char *readfile(const char *fn, char *ctype, int *len) {
+char *readfile(std::string_view fn, char *ctype, int *len) {
     char ffn[256];
     char *mem;
     struct stat sb;
     int fd, nl = 0;
     *len = 0;
 
-    if (strstr(fn, ".."))
+    if (fn.contains(".."))
         return 0;
-    snprintf(ffn, sizeof(ffn), "%s/%s", opts.document_root, fn);
+    snprintf(ffn, sizeof(ffn), "%s/%.*s", opts.document_root, (int)fn.size(),
+             fn.data());
     ffn[sizeof(ffn) - 1] = 0;
 #ifdef O_LARGEFILE
     if ((fd = open(ffn, O_RDONLY | O_LARGEFILE)) < 0)

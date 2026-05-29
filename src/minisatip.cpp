@@ -1569,7 +1569,7 @@ int read_http(sockets *s) {
         char *f;
         int nl;
 
-        f = readfile(std::string(url_sv).c_str(), ctype, &nl);
+        f = readfile(url_sv, ctype, &nl);
         if (!f) {
             http_response(s, 404, NULL, NULL, 0, 0);
             return 0;

@@ -323,10 +323,9 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
 
     for (const auto &[key, val] : params) {
         if (key == "msys")
-            tp->sys =
-                fe_delsys_map.lookup(val).value_or(SYS_UNDEFINED);
+            tp->sys = fe_delsys_map.lookup(val).value_or(SYS_UNDEFINED);
         else if (key == "freq")
-            tp->freq = map_float(val, 1000);
+            tp->freq = parse_float(val, 1000);
         else if (key == "pol")
             tp->pol = fe_pol_map.lookup(val).value_or(0);
         else if (key == "sr")
@@ -336,28 +335,24 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
         else if (key == "src")
             tp->diseqc = parse_int(val);
         else if (key == "ro")
-            tp->ro =
-                fe_rolloff_map.lookup(val).value_or(ROLLOFF_AUTO);
+            tp->ro = fe_rolloff_map.lookup(val).value_or(ROLLOFF_AUTO);
         else if (key == "mtype")
-            tp->mtype =
-                fe_modulation_map.lookup(val).value_or(QPSK);
+            tp->mtype = fe_modulation_map.lookup(val).value_or(QPSK);
         else if (key == "fec")
             tp->fec = fe_fec_map.lookup(val).value_or(FEC_NONE);
         else if (key == "plts")
-            tp->plts =
-                fe_pilot_map.lookup(val).value_or(PILOT_AUTO);
+            tp->plts = fe_pilot_map.lookup(val).value_or(PILOT_AUTO);
         else if (key == "gi")
-            tp->gi =
-                fe_gi_map.lookup(val).value_or(GUARD_INTERVAL_AUTO);
+            tp->gi = fe_gi_map.lookup(val).value_or(GUARD_INTERVAL_AUTO);
         else if (key == "tmode")
-            tp->tmode = fe_tmode_map.lookup(val)
-                            .value_or(TRANSMISSION_MODE_AUTO);
+            tp->tmode =
+                fe_tmode_map.lookup(val).value_or(TRANSMISSION_MODE_AUTO);
         else if (key == "bw") {
-            tp->bw = map_float(val, 1000000);
+            tp->bw = parse_float(val, 1000000);
             if (tp->bw < 0 || tp->bw > 100000000)
-                tp->bw = map_float(val, 1000);
+                tp->bw = parse_float(val, 1000);
             if (tp->bw < 0 || tp->bw > 100000000)
-                tp->bw = map_float(val, 1);
+                tp->bw = parse_float(val, 1);
         } else if (key == "specinv")
             tp->inversion = parse_int(val);
         else if (key == "c2tft")
@@ -367,8 +362,7 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
         else if (key == "plp" || key == "isi")
             tp->plp_isi = parse_int(val);
         else if (key == "plsm")
-            tp->pls_mode =
-                fe_pls_mode_map.lookup(val).value_or(PLS_MODE_ROOT);
+            tp->pls_mode = fe_pls_mode_map.lookup(val).value_or(PLS_MODE_ROOT);
         else if (key == "plsc")
             tp->pls_code = parse_int(val);
         else if (key == "x_pmt")
