@@ -1305,6 +1305,26 @@ int setup_switch(adapter *ad) {
         iProp++;                                                               \
     }
 
+template <typename T, typename U>
+inline void add_prop_opt_inline(struct dtv_property *p_cmd, int &iProp,
+                                uint32_t cmd, const std::optional<T> &opt_val,
+                                U def_val) {
+    if (opt_val.has_value()) {
+        p_cmd[iProp].cmd = cmd;
+        p_cmd[iProp].u.data = opt_val.value();
+        iProp++;
+    } else {
+        if constexpr (!std::is_same_v<U, std::nullopt_t>) {
+            p_cmd[iProp].cmd = cmd;
+            p_cmd[iProp].u.data = def_val;
+            iProp++;
+        }
+    }
+}
+
+#define ADD_PROP_OPT(prop, opt_val, def_val)                                   \
+    add_prop_opt_inline(p_cmd, iProp, prop, opt_val, def_val);
+
 int dvb_tune(int aid, transponder *tp) {
     int64_t bclear, bpol;
     int iProp = 0;
@@ -1315,18 +1335,6 @@ int dvb_tune(int aid, transponder *tp) {
     struct dtv_property p_cmd[20];
     struct dtv_properties p = {.num = 0, .props = p_cmd};
     struct dvb_frontend_event ev;
-
-    auto add_prop_opt = [&](uint32_t cmd, auto opt_val, auto def_val) {
-        if (opt_val.has_value()) {
-            ADD_PROP(cmd, opt_val.value());
-        } else {
-            if constexpr (!std::is_same_v<decltype(def_val), std::nullopt_t>) {
-                ADD_PROP(cmd, def_val);
-            }
-        }
-    };
-#define ADD_PROP_OPT(prop, opt_val, def_val)                                   \
-    add_prop_opt(prop, opt_val, def_val);
 
     struct dtv_property p_clear[] = {
         {.cmd = DTV_CLEAR},
