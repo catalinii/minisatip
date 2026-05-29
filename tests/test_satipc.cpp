@@ -26,6 +26,7 @@
 #include "utils/testing.h"
 
 #include "httpc.h"
+#include <cstring>
 
 extern void satip_getxml_data(char *data, int len, void *opaque,
                               Shttp_client *h);
