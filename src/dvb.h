@@ -4,6 +4,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #ifdef __APPLE__
 #include <sys/types.h>
 #else
@@ -338,7 +339,8 @@ typedef struct struct_transponder {
     int pls_mode; // DVB-S2
     int pls_code; // DVB-S2
 
-    std::optional<std::string> apids, pids, dpids, x_pmt;
+    std::unordered_set<int> pids;
+    std::optional<int> x_pmt;
 } transponder;
 
 #ifndef DISABLE_LINUXDVB

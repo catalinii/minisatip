@@ -1194,6 +1194,32 @@ int compare_tunning_parameters(int aid, transponder *tp) {
     return 0;
 }
 
+int sync_pids(int sid, int aid, transponder *tp) {
+    adapter *ad = get_adapter(aid);
+    if (!ad)
+        return -1;
+
+    for (int i = 0; i < MAX_PIDS; i++) {
+        if (ad->pids[i].flags > PID_STATE_INACTIVE) {
+            if (ad->pids[i].has_stream(sid)) {
+                if (!tp->pids.contains(ad->pids[i].pid)) {
+                    mark_pid_deleted(aid, sid, ad->pids[i].pid, &ad->pids[i]);
+                }
+            }
+        }
+    }
+
+    for (int pid : tp->pids) {
+        SPid *p = find_pid(aid, pid);
+        if (!p || !p->has_stream(sid) || p->flags == PID_STATE_DELETED) {
+            if (mark_pid_add(sid, aid, pid) < 0) {
+                return -1;
+            }
+        }
+    }
+    return 0;
+}
+
 int set_adapter_parameters(int aid, int sid, transponder *tp) {
     adapter *ad = get_adapter(aid);
 
@@ -1233,25 +1259,8 @@ int set_adapter_parameters(int aid, int sid, transponder *tp) {
             get_absolute_source_for_adapter(ad->id, ad->tp.diseqc, ad->tp.sys);
     }
 
-    if (ad->tp.pids.has_value() &&
-        !ad->tp.pids
-             ->empty()) // pids can be specified in SETUP and then followed by a
-                        // delpids in PLAY, make sure the behaviour is right
-    {
-        mark_pids_deleted(aid, sid, NULL); // delete all the pids for this
-        if (mark_pids_add(sid, aid, ad->tp.pids->c_str()) < 0) {
-            return -1;
-        }
-    }
-
-    if (ad->tp.dpids.has_value() && !ad->tp.dpids->empty()) {
-        mark_pids_deleted(aid, sid, ad->tp.dpids->c_str());
-    }
-    if (ad->tp.apids.has_value() && !ad->tp.apids->empty()) {
-        if (mark_pids_add(sid, aid, ad->tp.apids->c_str()) < 0) {
-            return -1;
-        }
-    }
+    if (sync_pids(sid, aid, &ad->tp) < 0)
+        return -1;
 
     return 0;
 }
@@ -1357,16 +1366,15 @@ char *describe_adapter(int sid, int aid, char *dad, int ld) {
             strlcatf(dad, ld, len, "%s", "none");
     }
 
-    bool has_apids = t->apids.has_value() && !t->apids->empty();
-    bool has_pids = t->pids.has_value() && !t->pids->empty();
-    if (!use_ad && (has_apids || has_pids)) {
-        if (has_pids && t->pids->contains("8192"))
+    if (!use_ad) {
+        if (t->pids.contains(8192))
             strlcatf(dad, ld, len, "%s", "all");
-        else
-            strlcatf(dad, ld, len, "%s",
-                     has_pids ? t->pids->c_str() : t->apids->c_str());
-    } else if (!use_ad)
-        strlcatf(dad, ld, len, "%s", "none");
+        else if (!t->pids.empty()) {
+            std::string pids_str = iterable_to_string(t->pids);
+            strlcatf(dad, ld, len, "%s", pids_str.c_str());
+        } else
+            strlcatf(dad, ld, len, "%s", "none");
+    }
 
     LOGM("describe_adapter: sid %d, aid %d => %s", sid, aid, dad);
 

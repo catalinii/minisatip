@@ -151,15 +151,6 @@ void set_stream_parameters(int s_id, transponder *t) {
     if (!sid || !sid->enabled)
         return;
 
-    if (!t->apids.has_value())
-        t->apids = sid->tp.apids;
-    if (!t->dpids.has_value())
-        t->dpids = sid->tp.dpids;
-    if (!t->pids.has_value())
-        t->pids = sid->tp.pids;
-    if (!t->x_pmt.has_value())
-        t->x_pmt = sid->tp.x_pmt;
-
     copy_dvb_parameters(t, &sid->tp);
 }
 
@@ -167,6 +158,10 @@ streams *setup_stream(std::string_view str, sockets *s) {
     streams *sid;
 
     transponder t;
+    if (streams *exist_sid = get_sid(s->sid)) {
+        std::lock_guard<SMutex> lock(exist_sid->mutex);
+        t = exist_sid->tp;
+    }
     detect_dvb_parameters(str, &t);
     LOG("Setup stream sid %d parameters, sock_id %d, handle %d", s->sid, s->id,
         s->sock);
@@ -298,17 +293,15 @@ int start_play(streams *sid, sockets *s) {
         if (ad)
             set_socket_thread(sid->st_sock, get_socket_thread(ad->sock));
     }
-    bool apids_empty = !sid->tp.apids.has_value() || sid->tp.apids->empty();
-    bool pids_empty_or_zero = !sid->tp.pids.has_value() ||
-                              sid->tp.pids->empty() || *sid->tp.pids == "0";
-    if (apids_empty && pids_empty_or_zero)
+    bool pids_empty_or_zero =
+        sid->tp.pids.empty() ||
+        (sid->tp.pids.size() == 1 && sid->tp.pids.contains(0));
+    if (pids_empty_or_zero)
         s->flush_enqued_data = 1;
     sid->do_play = 1;
     if (s->type != TYPE_HTTP)
         sid->start_streaming = 0;
-    sid->tp.apids = std::nullopt;
-    sid->tp.dpids = std::nullopt;
-    sid->tp.pids = std::nullopt;
+    sid->tp.pids.clear();
     sid->tp.x_pmt = std::nullopt;
 
     ad = get_adapter(sid->adapter);

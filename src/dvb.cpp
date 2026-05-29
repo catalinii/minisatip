@@ -25,6 +25,7 @@
 #include "utils.h"
 #include "utils/ticks.h"
 #include <unordered_map>
+#include <vector>
 
 #include <arpa/inet.h>
 #include <ctype.h>
@@ -270,6 +271,31 @@ uint32_t pls_scrambling_index(transponder *tp) {
     return 0x3ffff;
 }
 
+static std::vector<int> parse_pids_list(std::string_view val) {
+    std::vector<int> res;
+    if (val.empty()) {
+        return res;
+    }
+    if (val == "none") {
+        return res;
+    }
+    if (val == "all") {
+        res.push_back(8192);
+        return res;
+    }
+    auto pids_split = split(val, ',');
+    for (const auto &pid_sv : pids_split) {
+        if (pid_sv == "all") {
+            res.push_back(8192);
+        } else if (pid_sv == "none") {
+            // ignore
+        } else if (!pid_sv.empty()) {
+            res.push_back(parse_int(pid_sv));
+        }
+    }
+    return res;
+}
+
 int detect_dvb_parameters(std::string_view s, transponder *tp) {
 
     tp->sys = -1;
@@ -295,18 +321,20 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
     tp->pls_mode = -1;
     tp->pls_code = -1;
 
-    tp->pids = std::nullopt;
-    tp->apids = std::nullopt;
-    tp->dpids = std::nullopt;
-    tp->x_pmt = std::nullopt;
+    std::unordered_set<int> old_pids = tp->pids;
+    std::optional<int> old_x_pmt = tp->x_pmt;
+    bool pids_specified = false;
 
     auto qm_pos = s.find('?');
     if (qm_pos == std::string_view::npos)
         LOG_AND_RETURN(0, "no ? found in URL");
 
     std::string_view query = s.substr(qm_pos + 1);
-    if (query.contains("freq="))
+    if (query.contains("freq=")) {
         init_dvb_parameters(tp);
+        tp->pids = old_pids;
+        tp->x_pmt = old_x_pmt;
+    }
 
     LOG("detect_dvb_parameters (S)-> %.*s", (int)query.size(), query.data());
     auto arg = split(query, '&');
@@ -366,39 +394,43 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
         else if (key == "plsc")
             tp->pls_code = parse_int(val);
         else if (key == "x_pmt")
-            tp->x_pmt = std::string(val);
-        else if (key == "pids")
-            tp->pids = std::string(val);
-        else if (key == "addpids")
-            tp->apids = std::string(val);
-        else if (key == "delpids")
-            tp->dpids = std::string(val);
+            tp->x_pmt = parse_int(val, -1);
+        else if (key == "pids") {
+            tp->pids.clear();
+            auto parsed = parse_pids_list(val);
+            tp->pids.insert(parsed.begin(), parsed.end());
+            pids_specified = true;
+        } else if (key == "addpids") {
+            auto parsed = parse_pids_list(val);
+            tp->pids.insert(parsed.begin(), parsed.end());
+            pids_specified = true;
+        } else if (key == "delpids") {
+            auto parsed = parse_pids_list(val);
+            for (int pid : parsed) {
+                tp->pids.erase(pid);
+            }
+            pids_specified = true;
+        }
     }
 
-    if (tp->pids.has_value() && tp->pids->contains("all")) {
-        tp->pids = "8192";
+    if (pids_specified) {
+        LOG("detect_dvb_parameters: PIDs changed: old = %s, new = %s",
+            iterable_to_string(old_pids).c_str(),
+            iterable_to_string(tp->pids).c_str());
     }
 
     if (tp->pls_mode == PLS_MODE_ROOT)
         tp->pls_code = pls_scrambling_index(tp);
 
-    if (tp->pids.has_value() && !tp->pids->empty() &&
-        tp->pids->compare(0, 4, "none") == 0)
-        tp->pids = "";
-
+    std::string pids_str = iterable_to_string(tp->pids);
+    std::string x_pmt_str =
+        tp->x_pmt.has_value() ? std::to_string(*tp->x_pmt) : "NULL";
     LOG("detect_dvb_parameters (E) -> src=%d, fe=%d, freq=%d, fec=%d, sr=%d, "
-        "pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s - "
-        "apids=%s - dpids=%s x_pmt=%s",
+        "pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s "
+        "x_pmt=%s",
         tp->diseqc, tp->fe, tp->freq, tp->fec, tp->sr, tp->pol, tp->ro, tp->sys,
-        tp->mtype, tp->plts, tp->bw, tp->inversion,
-        (tp->pids.has_value() && !tp->pids->empty()) ? tp->pids->c_str()
-                                                     : "NULL",
-        (tp->apids.has_value() && !tp->apids->empty()) ? tp->apids->c_str()
-                                                       : "NULL",
-        (tp->dpids.has_value() && !tp->dpids->empty()) ? tp->dpids->c_str()
-                                                       : "NULL",
-        (tp->x_pmt.has_value() && !tp->x_pmt->empty()) ? tp->x_pmt->c_str()
-                                                       : "NULL");
+        tp->mtype, tp->plts, tp->bw, tp->inversion, pids_str.c_str(),
+        x_pmt_str.c_str());
     return 0;
 }
 
@@ -427,26 +459,20 @@ void init_dvb_parameters(transponder *tp) {
     tp->pls_mode = TP_VALUE_UNSET;
     tp->pls_code = TP_VALUE_UNSET;
 
-    tp->pids = std::nullopt;
-    tp->apids = std::nullopt;
-    tp->dpids = std::nullopt;
+    tp->pids.clear();
     tp->x_pmt = std::nullopt;
 }
 
 void copy_dvb_parameters(transponder *s, transponder *d) {
+    std::string dpids_str = iterable_to_string(d->pids);
+    std::string dx_pmt_str =
+        d->x_pmt.has_value() ? std::to_string(*d->x_pmt) : "NULL";
     LOG("copy_dvb_param start -> src=%d, fe=%d, freq=%d, fec=%d, sr=%d, "
-        "pol=%d, "
-        "ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s, apids=%s, "
-        "dpids=%s x_pmt=%s",
+        "pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s "
+        "x_pmt=%s",
         d->diseqc, d->fe, d->freq, d->fec, d->sr, d->pol, d->ro, d->sys,
-        d->mtype, d->plts, d->bw, d->inversion,
-        (d->pids.has_value() && !d->pids->empty()) ? d->pids->c_str() : "NULL",
-        (d->apids.has_value() && !d->apids->empty()) ? d->apids->c_str()
-                                                     : "NULL",
-        (d->dpids.has_value() && !d->dpids->empty()) ? d->dpids->c_str()
-                                                     : "NULL",
-        (d->x_pmt.has_value() && !d->x_pmt->empty()) ? d->x_pmt->c_str()
-                                                     : "NULL");
+        d->mtype, d->plts, d->bw, d->inversion, dpids_str.c_str(),
+        dx_pmt_str.c_str());
     if (s->sys != -1)
         d->sys = s->sys;
     if (s->freq != -1)
@@ -492,14 +518,8 @@ void copy_dvb_parameters(transponder *s, transponder *d) {
     if (s->pls_code != -1)
         d->pls_code = s->pls_code;
 
-    if (s->x_pmt.has_value())
-        d->x_pmt = s->x_pmt;
-    if (s->apids.has_value())
-        d->apids = s->apids;
-    if (s->pids.has_value())
-        d->pids = s->pids;
-    if (s->dpids.has_value())
-        d->dpids = s->dpids;
+    d->pids = s->pids;
+    d->x_pmt = s->x_pmt;
 
     if (d->diseqc < 1) // force position 1 on the diseqc switch
         d->diseqc = 1;
@@ -510,18 +530,14 @@ void copy_dvb_parameters(transponder *s, transponder *d) {
     if ((d->sys == SYS_DVBS) && (d->mtype == -1))
         d->mtype = QPSK;
 
+    std::string d_pids_str = iterable_to_string(d->pids);
+    std::string d_x_pmt_str =
+        d->x_pmt.has_value() ? std::to_string(*d->x_pmt) : "NULL";
     LOG("copy_dvb_parameters -> src=%d, fe=%d, freq=%d, fec=%d sr=%d, pol=%d, "
-        "ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s, apids=%s, "
-        "dpids=%s x_pmt=%s",
+        "ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s x_pmt=%s",
         d->diseqc, d->fe, d->freq, d->fec, d->sr, d->pol, d->ro, d->sys,
-        d->mtype, d->plts, d->bw, d->inversion,
-        (d->pids.has_value() && !d->pids->empty()) ? d->pids->c_str() : "NULL",
-        (d->apids.has_value() && !d->apids->empty()) ? d->apids->c_str()
-                                                     : "NULL",
-        (d->dpids.has_value() && !d->dpids->empty()) ? d->dpids->c_str()
-                                                     : "NULL",
-        (d->x_pmt.has_value() && !d->x_pmt->empty()) ? d->x_pmt->c_str()
-                                                     : "NULL");
+        d->mtype, d->plts, d->bw, d->inversion, d_pids_str.c_str(),
+        d_x_pmt_str.c_str());
 }
 
 // This function provides an scale factor for dB to percentage conversion,

@@ -41,7 +41,9 @@ int test_detect_dvb_parameters_general() {
     ASSERT(tp.plts == 1, "plts parsed incorrectly");
     ASSERT(tp.sr == 22000000, "sr parsed incorrectly");
     ASSERT(tp.fec == 2, "fec parsed incorrectly");
-    ASSERT(tp.pids == "0,16,201,302", "pids parsed incorrectly");
+    ASSERT(tp.pids.size() == 4 && tp.pids.contains(0) && tp.pids.contains(16) &&
+               tp.pids.contains(201) && tp.pids.contains(302),
+           "pids parsed incorrectly");
 
     return 0;
 }
@@ -74,19 +76,24 @@ int test_detect_dvb_parameters_edge_cases() {
     // Test pids=all mapping to 8192
     char query1[128] = "?freq=11362&pids=all";
     detect_dvb_parameters(query1, &tp);
-    ASSERT(tp.pids == "8192", "pids=all parsed incorrectly");
+    ASSERT(tp.pids.size() == 1 && tp.pids.contains(8192),
+           "pids=all parsed incorrectly");
 
-    // Test pids=none mapping to empty string
+    // Test pids=none mapping to empty set
     char query2[128] = "?freq=11362&pids=none";
     detect_dvb_parameters(query2, &tp);
-    ASSERT(tp.pids == "", "pids=none parsed incorrectly");
+    ASSERT(tp.pids.empty(), "pids=none parsed incorrectly");
 
     // Test addpids, delpids, and x_pmt
-    char query3[128] = "?freq=11362&addpids=1,2,3&delpids=4,5&x_pmt=pmt_data";
+    tp.pids.clear();
+    tp.x_pmt = std::nullopt;
+    char query3[128] = "?pids=1,2,3&addpids=4,5&delpids=2&x_pmt=123";
     detect_dvb_parameters(query3, &tp);
-    ASSERT(tp.apids == "1,2,3", "addpids parsed incorrectly");
-    ASSERT(tp.dpids == "4,5", "delpids parsed incorrectly");
-    ASSERT(tp.x_pmt == "pmt_data", "x_pmt parsed incorrectly");
+    ASSERT(tp.pids.size() == 4 && tp.pids.contains(1) && !tp.pids.contains(2) &&
+               tp.pids.contains(3) && tp.pids.contains(4) &&
+               tp.pids.contains(5),
+           "pids/addpids/delpids parsed incorrectly");
+    ASSERT(tp.x_pmt == 123, "x_pmt parsed incorrectly");
 
     // Test pls_mode and pls_code with PLS_MODE_ROOT
     char query4[128] = "?freq=11362&plsm=root&plsc=42";

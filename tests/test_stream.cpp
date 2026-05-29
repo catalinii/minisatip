@@ -76,7 +76,8 @@ int test_setup_stream_new() {
     ASSERT(sid->tp.sys == SYS_DVBS2,
            "msys in stream transponder parsed incorrectly");
     ASSERT(sid->tp.pol == 2, "pol in stream transponder parsed incorrectly");
-    ASSERT(sid->tp.pids == "0,16",
+    ASSERT(sid->tp.pids.size() == 2 && sid->tp.pids.contains(0) &&
+               sid->tp.pids.contains(16),
            "pids in stream transponder parsed incorrectly");
 
     return 0;
@@ -109,8 +110,9 @@ int test_setup_stream_existing() {
     ASSERT(sid2->sid == allocated_sid, "did not reuse the same stream ID");
     ASSERT(sid2->tp.freq == 12543000, "frequency was not updated");
     ASSERT(sid2->tp.pol == 1, "polarity was not updated");
-    ASSERT(sid2->tp.pids == "0,17", "pids was not updated");
-    ASSERT(sid2->tp.apids == "100", "addpids was not updated");
+    ASSERT(sid2->tp.pids.size() == 3 && sid2->tp.pids.contains(0) &&
+               sid2->tp.pids.contains(17) && sid2->tp.pids.contains(100),
+           "pids were not updated correctly");
 
     return 0;
 }
@@ -186,26 +188,25 @@ int test_setup_stream_unspecified_vs_empty_pids() {
         "?src=1&freq=11362&pol=h&sr=22000&msys=dvbs2&pids=0,16&addpids=100";
     streams *sid = setup_stream(req1, &mock_sock);
     ASSERT(sid != NULL, "setup_stream failed");
-    ASSERT(sid->tp.pids == "0,16", "pids not set");
-    ASSERT(sid->tp.apids == "100", "apids not set");
+    ASSERT(sid->tp.pids.size() == 3 && sid->tp.pids.contains(0) &&
+               sid->tp.pids.contains(16) && sid->tp.pids.contains(100),
+           "pids not set correctly");
 
     // Call setup_stream again with UNSPECIFIED pids (pids/addpids absent from
     // request). They should inherit the previous values.
     std::string_view req2 = "?src=1&freq=11362&pol=h&sr=22000&msys=dvbs2";
     setup_stream(req2, &mock_sock);
-    ASSERT(sid->tp.pids == "0,16", "pids should be inherited when unspecified");
-    ASSERT(sid->tp.apids == "100",
-           "apids should be inherited when unspecified");
+    ASSERT(sid->tp.pids.size() == 3 && sid->tp.pids.contains(0) &&
+               sid->tp.pids.contains(16) && sid->tp.pids.contains(100),
+           "pids should be inherited when unspecified");
 
     // Call setup_stream again with EXPLICITLY empty pids (pids=none or empty)
     // They should NOT inherit previous values and should be cleared.
     std::string_view req3 =
         "?src=1&freq=11362&pol=h&sr=22000&msys=dvbs2&pids=none&addpids=";
     setup_stream(req3, &mock_sock);
-    ASSERT(sid->tp.pids == "",
+    ASSERT(sid->tp.pids.empty(),
            "pids should be cleared when explicitly none/empty");
-    ASSERT(sid->tp.apids == "",
-           "apids should be cleared when explicitly none/empty");
 
     return 0;
 }
