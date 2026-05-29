@@ -25,6 +25,13 @@ typedef std::recursive_mutex SMutex;
 #include <optional>
 #include <strings.h>
 
+inline bool eq_case_insensitive(std::string_view a, std::string_view b) {
+    return std::ranges::equal(a, b, [](char c1, char c2) {
+        return std::tolower(static_cast<unsigned char>(c1)) ==
+               std::tolower(static_cast<unsigned char>(c2));
+    });
+}
+
 template <typename EnumT> class EnumMap {
   public:
     struct Entry {
@@ -37,8 +44,7 @@ template <typename EnumT> class EnumMap {
     std::optional<EnumT> lookup(std::string_view s) const {
         auto it =
             std::find_if(entries_.begin(), entries_.end(), [s](const Entry &e) {
-                return e.key.size() == s.size() &&
-                       strncasecmp(e.key.data(), s.data(), s.size()) == 0;
+                return eq_case_insensitive(e.key, s);
             });
         if (it != entries_.end()) {
             return it->value;
@@ -53,12 +59,6 @@ template <typename EnumT> class EnumMap {
 std::vector<std::string_view> split(std::string_view s, char sep);
 int parse_int(std::string_view s, int dv = 0);
 int parse_float(std::string_view s, int mul);
-inline bool eq_case_insensitive(std::string_view a, std::string_view b) {
-    return std::ranges::equal(a, b, [](char c1, char c2) {
-        return std::tolower(static_cast<unsigned char>(c1)) ==
-               std::tolower(static_cast<unsigned char>(c2));
-    });
-}
 
 inline bool starts_with_case_insensitive(std::string_view str,
                                          std::string_view prefix) {
