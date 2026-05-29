@@ -301,8 +301,6 @@ int start_play(streams *sid, sockets *s) {
     sid->do_play = 1;
     if (s->type != TYPE_HTTP)
         sid->start_streaming = 0;
-    sid->tp.pids.clear();
-    sid->tp.x_pmt = std::nullopt;
 
     ad = get_adapter(sid->adapter);
     if (ad && ad->do_tune)

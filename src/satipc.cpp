@@ -1833,11 +1833,11 @@ void find_satip_adapter(adapter **a) {
         no_pids_all = 0;
 
         if (!token.empty() && token[0] == '^') {
+            token.remove_prefix(1);
 #ifdef DISABLE_SRT
             FAIL("SRT support is disabled, install libsrt-openssl-dev");
 #else
             transport = SIP_TRANSPORT_SRT;
-            token.remove_prefix(1);
 #endif
         }
         if (!token.empty() && token[0] == '*') {
@@ -1939,14 +1939,6 @@ void disable_satip_server(char *host, int port) {
             }
         }
 }
-#define MAX_SATIP_XML 20
-typedef struct satip_xml_data {
-    char url[100];
-    char host[64];
-    int port;
-    char xml[4000];
-    int tuners[MAX_DVBAPI_SYSTEMS];
-} Ssatip_xml_data;
 
 Ssatip_xml_data sxd[MAX_SATIP_XML];
 const char *satip_delsys[] = {

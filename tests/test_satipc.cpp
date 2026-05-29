@@ -27,14 +27,6 @@
 
 #include "httpc.h"
 
-typedef struct satip_xml_data {
-    char url[100];
-    char host[64];
-    int port;
-    char xml[4000];
-    int tuners[MAX_DVBAPI_SYSTEMS];
-} Ssatip_xml_data;
-
 extern void satip_getxml_data(char *data, int len, void *opaque,
                               Shttp_client *h);
 
