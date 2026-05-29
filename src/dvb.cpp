@@ -322,7 +322,6 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
     tp->pls_code = -1;
 
     std::unordered_set<int> old_pids = tp->pids;
-    std::optional<int> old_x_pmt = tp->x_pmt;
     bool pids_specified = false;
 
     auto qm_pos = s.find('?');
@@ -332,8 +331,6 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
     std::string_view query = s.substr(qm_pos + 1);
     if (query.contains("freq=")) {
         init_dvb_parameters(tp);
-        tp->pids = old_pids;
-        tp->x_pmt = old_x_pmt;
     }
 
     LOG("detect_dvb_parameters (S)-> %.*s", (int)query.size(), query.data());

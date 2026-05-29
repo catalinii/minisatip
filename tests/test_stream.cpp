@@ -192,21 +192,20 @@ int test_setup_stream_unspecified_vs_empty_pids() {
                sid->tp.pids.contains(16) && sid->tp.pids.contains(100),
            "pids not set correctly");
 
-    // Call setup_stream again with UNSPECIFIED pids (pids/addpids absent from
-    // request). They should inherit the previous values.
-    std::string_view req2 = "?src=1&freq=11362&pol=h&sr=22000&msys=dvbs2";
+    // Call setup_stream again with UNSPECIFIED pids and NO freq= in request.
+    // They should inherit the previous values.
+    std::string_view req2 = "?pol=v";
     setup_stream(req2, &mock_sock);
     ASSERT(sid->tp.pids.size() == 3 && sid->tp.pids.contains(0) &&
                sid->tp.pids.contains(16) && sid->tp.pids.contains(100),
            "pids should be inherited when unspecified");
 
-    // Call setup_stream again with EXPLICITLY empty pids (pids=none or empty)
-    // They should NOT inherit previous values and should be cleared.
-    std::string_view req3 =
-        "?src=1&freq=11362&pol=h&sr=22000&msys=dvbs2&pids=none&addpids=";
+    // Call setup_stream again with freq= in request.
+    // They should be cleared.
+    std::string_view req3 = "?freq=11362&pol=h&sr=22000&msys=dvbs2";
     setup_stream(req3, &mock_sock);
     ASSERT(sid->tp.pids.empty(),
-           "pids should be cleared when explicitly none/empty");
+           "pids should be cleared when freq= is specified");
 
     return 0;
 }
