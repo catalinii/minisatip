@@ -81,8 +81,6 @@ int recvmmsg0(int sockfd, struct mmsghdr *msgvec, unsigned int vlen) {
 
 const char *str_transport_type[] = {"UDP", "TCP", "SRT"};
 
-const EnumMap<fe_delivery_system_t> satip_delsys_map = fe_delsys_map;
-
 extern const char *fe_delsys[];
 int satip_post_init(adapter *ad);
 
@@ -1816,7 +1814,6 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
 
 // [*][~][DELSYS:][FE_ID@][source_ip/]host[:port]
 void find_satip_adapter(adapter **a) {
-    int i;
     char host[100];
     char source_ip[100];
     int port;
@@ -1970,7 +1967,7 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h) {
 
         auto arg = split(sep, ',');
         for (const auto &arg_item : arg) {
-            auto ds_opt = satip_delsys_map.lookup(arg_item);
+            auto ds_opt = fe_delsys_map.lookup(arg_item);
             if (!ds_opt) {
                 LOG("Could not determine the delivery system for %.*s",
                     (int)arg_item.size(), arg_item.data());

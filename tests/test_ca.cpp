@@ -248,15 +248,15 @@ int test_create_capmt_different_cmd_ids() {
     int len;
 
     // Test CMD_ID_OK_MMI
-    len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt), CMD_ID_OK_MMI,
-                       0);
+    len =
+        create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt), CMD_ID_OK_MMI, 0);
     ASSERT(len > 0, "create_capmt failed for CMD_ID_OK_MMI");
     // cmd_id is at position 11 (after stream type, pid, and es_info_length)
     ASSERT(capmt[11] == CMD_ID_OK_MMI, "cmd_id should be CMD_ID_OK_MMI");
 
     // Test CMD_ID_QUERY
-    len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt), CMD_ID_QUERY,
-                       0);
+    len =
+        create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt), CMD_ID_QUERY, 0);
     ASSERT(len > 0, "create_capmt failed for CMD_ID_QUERY");
     ASSERT(capmt[11] == CMD_ID_QUERY, "cmd_id should be CMD_ID_QUERY");
 
@@ -271,7 +271,7 @@ int test_create_capmt_different_cmd_ids() {
 }
 
 int test_create_capmt_invalid_pmt() {
-    SCAPMT scampt = {.pmt_id = 9999,  // invalid PMT ID
+    SCAPMT scampt = {.pmt_id = 9999, // invalid PMT ID
                      .other_id = PMT_INVALID,
                      .version = 1,
                      .sid = 0x1234};
@@ -292,7 +292,7 @@ int test_create_capmt_max_version() {
 
     SCAPMT scampt = {.pmt_id = pmt->id,
                      .other_id = PMT_INVALID,
-                     .version = 15,  // max 4-bit version
+                     .version = 15, // max 4-bit version
                      .sid = 0x1234};
 
     uint8_t capmt[1500];
@@ -314,7 +314,7 @@ int test_create_capmt_large_sid() {
     SCAPMT scampt = {.pmt_id = pmt->id,
                      .other_id = PMT_INVALID,
                      .version = 1,
-                     .sid = 0xFFFF};  // max 16-bit SID
+                     .sid = 0xFFFF}; // max 16-bit SID
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -374,8 +374,8 @@ int test_create_capmt_both_pmt_and_other_many_streams() {
         pmt_add_caid(pmt, 0x0B00 + i, 0x570 + i, nullptr, 0);
     }
     for (int i = 0; i < 8; i++) {
-        pmt_add_stream_pid(pmt, 0x500 + i, (i % 2 == 0) ? 2 : 3,
-                           (i % 2 == 1), (i % 2 == 0));
+        pmt_add_stream_pid(pmt, 0x500 + i, (i % 2 == 0) ? 2 : 3, (i % 2 == 1),
+                           (i % 2 == 0));
     }
 
     int other_pmt_id = pmt_add(0, 0x200, 0x201);
@@ -384,8 +384,8 @@ int test_create_capmt_both_pmt_and_other_many_streams() {
         pmt_add_caid(other, 0x0C00 + i, 0x670 + i, nullptr, 0);
     }
     for (int i = 0; i < 8; i++) {
-        pmt_add_stream_pid(other, 0x600 + i, (i % 2 == 0) ? 2 : 3,
-                           (i % 2 == 1), (i % 2 == 0));
+        pmt_add_stream_pid(other, 0x600 + i, (i % 2 == 0) ? 2 : 3, (i % 2 == 1),
+                           (i % 2 == 0));
     }
 
     SCAPMT scampt = {
@@ -415,8 +415,8 @@ int test_create_capmt_size_near_limit() {
     }
     // Add 11 streams to primary PMT
     for (int i = 0; i < 11; i++) {
-        pmt_add_stream_pid(pmt, 0x500 + i, (i % 2 == 0) ? 2 : 3,
-                           (i % 2 == 1), (i % 2 == 0));
+        pmt_add_stream_pid(pmt, 0x500 + i, (i % 2 == 0) ? 2 : 3, (i % 2 == 1),
+                           (i % 2 == 0));
     }
 
     int other_pmt_id = pmt_add(0, 0x200, 0x201);
@@ -427,8 +427,8 @@ int test_create_capmt_size_near_limit() {
     }
     // Add 11 streams to other PMT
     for (int i = 0; i < 11; i++) {
-        pmt_add_stream_pid(other, 0x600 + i, (i % 2 == 0) ? 2 : 3,
-                           (i % 2 == 1), (i % 2 == 0));
+        pmt_add_stream_pid(other, 0x600 + i, (i % 2 == 0) ? 2 : 3, (i % 2 == 1),
+                           (i % 2 == 0));
     }
 
     SCAPMT scampt = {
@@ -486,6 +486,32 @@ int test_get_ca_caids_string() {
     ASSERT(strcmp(caid_string, "0B00, 0B01, 0B02") == 0,
            "invalid single CAID string");
 
+    free(ca_devices[0]);
+    ca_devices[0] = nullptr;
+
+    return 0;
+}
+
+int test_set_ca_channels_parsing() {
+    for (int i = 0; i < MAX_ADAPTERS; ++i) {
+        ca_devices[i] = nullptr;
+    }
+
+    char config[] = "0:*2-0B00-0500";
+    set_ca_channels(config);
+
+    ASSERT(ca_devices[0] != nullptr, "Expected ca_devices[0] to be allocated");
+    ASSERT(ca_devices[0]->multiple_pmt == 1, "Expected multiple_pmt to be 1");
+    ASSERT(ca_devices[0]->max_ca_pmt == 2, "Expected max_ca_pmt to be 2");
+    ASSERT(ca_devices[0]->caids == 2, "Expected 2 CAIDs to be parsed");
+    ASSERT(ca_devices[0]->caid[0] == 0x0B00,
+           "Expected first CAID to be 0x0B00");
+    ASSERT(ca_devices[0]->has_forced_caids == 1,
+           "Expected has_forced_caids to be 1");
+
+    free(ca_devices[0]);
+    ca_devices[0] = nullptr;
+
     return 0;
 }
 
@@ -501,6 +527,8 @@ int main() {
     d.multiple_pmt = 1;
     d.max_ca_pmt = 1;
 
+    TEST_FUNC(test_set_ca_channels_parsing(),
+              "testing set_ca_channels parsing");
     TEST_FUNC(test_get_ca_caids_string(), "testing CAID string generation");
     TEST_FUNC(test_multiple_pmt(), "testing CA multiple pmt");
     memset(d.capmt, -1, sizeof(d.capmt));

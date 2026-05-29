@@ -169,6 +169,47 @@ int test_start_play_success() {
     return 0;
 }
 
+int test_setup_stream_unspecified_vs_empty_pids() {
+    setup_test_env();
+
+    sockets mock_sock = {};
+    mock_sock.enabled = 1;
+    mock_sock.is_enabled = 1;
+    mock_sock.sock = 1004;
+    mock_sock.id = 4;
+    mock_sock.sid = -1;
+    mock_sock.type = TYPE_HTTP;
+    mock_sock.buf = (unsigned char *)"SETUP";
+
+    // Setup initially with some pids
+    std::string_view req1 =
+        "?src=1&freq=11362&pol=h&sr=22000&msys=dvbs2&pids=0,16&addpids=100";
+    streams *sid = setup_stream(req1, &mock_sock);
+    ASSERT(sid != NULL, "setup_stream failed");
+    ASSERT(sid->tp.pids == "0,16", "pids not set");
+    ASSERT(sid->tp.apids == "100", "apids not set");
+
+    // Call setup_stream again with UNSPECIFIED pids (pids/addpids absent from
+    // request). They should inherit the previous values.
+    std::string_view req2 = "?src=1&freq=11362&pol=h&sr=22000&msys=dvbs2";
+    setup_stream(req2, &mock_sock);
+    ASSERT(sid->tp.pids == "0,16", "pids should be inherited when unspecified");
+    ASSERT(sid->tp.apids == "100",
+           "apids should be inherited when unspecified");
+
+    // Call setup_stream again with EXPLICITLY empty pids (pids=none or empty)
+    // They should NOT inherit previous values and should be cleared.
+    std::string_view req3 =
+        "?src=1&freq=11362&pol=h&sr=22000&msys=dvbs2&pids=none&addpids=";
+    setup_stream(req3, &mock_sock);
+    ASSERT(sid->tp.pids == "",
+           "pids should be cleared when explicitly none/empty");
+    ASSERT(sid->tp.apids == "",
+           "apids should be cleared when explicitly none/empty");
+
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -177,6 +218,8 @@ int main() {
     TEST_FUNC(test_setup_stream_new(), "test setup_stream for a new stream");
     TEST_FUNC(test_setup_stream_existing(),
               "test setup_stream with an existing stream");
+    TEST_FUNC(test_setup_stream_unspecified_vs_empty_pids(),
+              "test setup_stream unspecified vs empty pids inheritance");
     TEST_FUNC(test_start_play_no_transport(),
               "test start_play returns error when transport is missing");
     TEST_FUNC(test_start_play_success(), "test start_play success under HTTP");

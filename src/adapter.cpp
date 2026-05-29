@@ -1435,6 +1435,8 @@ void set_disable(int i, int v) {
 
 void enable_adapters(char *o) {
     int i, st, end, j;
+    if (!o)
+        return;
     for (i = 0; i < MAX_ADAPTERS; i++)
         set_disable(i, 1);
 
@@ -1456,6 +1458,8 @@ void enable_adapters(char *o) {
 void set_unicable_adapters(char *o, int type) {
     int a_id, slot, freq, pin, o13v;
     adapter *ad;
+    if (!o)
+        return;
     auto arg = split(o, ',');
     for (const auto &token : arg) {
         a_id = parse_int(token, -1);
@@ -1506,6 +1510,8 @@ void set_unicable_adapters(char *o, int type) {
 void set_diseqc_adapters(char *o) {
     int a_id, fast, addr, committed_no, uncommitted_no;
     adapter *ad;
+    if (!o)
+        return;
     auto arg = split(o, ',');
     for (const auto &token : arg) {
         if (!token.empty() && token[0] == '*') {
@@ -1576,6 +1582,8 @@ void set_diseqc_adapters(char *o) {
 void set_absolute_src(char *o) {
     int i, src, inp, pos, range;
     adapter *ad;
+    if (!o)
+        return;
 
     auto arg = split(o, ',');
     for (i = 0; i < (int)arg.size(); i++) {
@@ -1622,6 +1630,8 @@ void set_absolute_src(char *o) {
 void set_diseqc_multi(char *o) {
     int i, a_id, position;
     adapter *ad;
+    if (!o)
+        return;
     auto arg = split(o, ',');
     for (i = 0; i < (int)arg.size(); i++) {
         std::string_view token = arg[i];
@@ -1661,6 +1671,8 @@ void set_diseqc_multi(char *o) {
 void set_lnb_adapters(char *o) {
     int i, a_id, lnb_low, lnb_high, lnb_switch;
     adapter *ad;
+    if (!o)
+        return;
     auto arg = split(o, ',');
     for (i = 0; i < (int)arg.size(); i++) {
         std::string_view token = arg[i];
@@ -1725,6 +1737,8 @@ void set_diseqc_timing(char *o) {
     int before_cmd, after_cmd, after_repeated_cmd;
     int after_switch, after_burst, after_tone;
     adapter *ad;
+    if (!o)
+        return;
     auto arg = split(o, ',');
     for (i = 0; i < (int)arg.size(); i++) {
         std::string_view token = arg[i];
@@ -1809,6 +1823,8 @@ void set_diseqc_timing(char *o) {
 void set_slave_adapters(char *o) {
     int i, j, a_id, a_id2, master = 0;
     adapter *ad;
+    if (!o)
+        return;
     auto arg = split(o, ',');
     for (i = 0; i < (int)arg.size(); i++) {
         std::string_view token = arg[i];
@@ -1858,6 +1874,8 @@ void set_timeout_adapters(char *o) {
     int i, j, a_id, a_id2;
     int timeout = opts.adapter_timeout / 1000;
     adapter *ad;
+    if (!o)
+        return;
     std::string_view sv = o;
     size_t colon = sv.find(':');
     if (colon != std::string_view::npos)
@@ -1904,6 +1922,8 @@ void set_adapters_delsys(char *o) {
     int i, a_id;
     fe_delivery_system_t ds;
     adapter *ad;
+    if (!o)
+        return;
     auto arg = split(o, ',');
     for (i = 0; i < (int)arg.size(); i++) {
         std::string_view token = arg[i];
@@ -1944,6 +1964,8 @@ void set_signal_multiplier(char *o) {
     char force_tuner_signal = TUNER_FORCE_NO;
     char force_str[128];
     adapter *ad;
+    if (!o)
+        return;
     auto arg = split(o, ',');
     for (i = 0; i < (int)arg.size(); i++) {
         std::string_view token = arg[i];

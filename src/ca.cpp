@@ -32,6 +32,7 @@ alternative source
 #include "api/variables.h"
 #include "utils.h"
 #include "utils/ticks.h"
+#include <charconv>
 #include <openssl/aes.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
@@ -3488,7 +3489,9 @@ void force_ci_adapter(int i) {
 }
 
 void set_ca_adapter_force_ci(char *o) {
-    int i, j, st, end;
+    int j, st, end;
+    if (!o)
+        return;
     auto arg = split(o, ',');
     for (const auto &token : arg) {
         size_t sep_pos = token.find('-');
@@ -3507,7 +3510,9 @@ void set_ca_adapter_force_ci(char *o) {
 }
 
 void set_ca_adapter_pin(char *o) {
-    int i, j, st, end;
+    int j, st, end;
+    if (!o)
+        return;
     auto arg = split(o, ',');
     for (const auto &token : arg) {
         size_t sep_pos = token.find('-');
@@ -3531,7 +3536,9 @@ void set_ca_adapter_pin(char *o) {
 }
 
 void set_ca_channels(char *o) {
-    int i, ddci;
+    int ddci;
+    if (!o)
+        return;
     auto arg = split(o, ',');
     for (const auto &token : arg) {
         size_t colon_pos = token.find(':');
@@ -3564,12 +3571,14 @@ void set_ca_channels(char *o) {
         size_t next_dash = rem.find('-');
         while (next_dash != std::string_view::npos) {
             std::string_view caid_sv = rem.substr(next_dash + 1);
-            int caid = strtoul(std::string(caid_sv).c_str(), NULL, 16);
-            if (caid > 0) {
+            unsigned int caid = 0;
+            auto result = std::from_chars(
+                caid_sv.data(), caid_sv.data() + caid_sv.size(), caid, 16);
+            if (result.ec == std::errc{} && caid > 0) {
                 ca_devices[ddci]->caid[ca_devices[ddci]->caids++] = caid;
                 ca_devices[ddci]->has_forced_caids = 1;
+                LOG("Forcing CA %d to use CAID %04X", ddci, caid);
             }
-            LOG("Forcing CA %d to use CAID %04X", ddci, caid);
             next_dash = rem.find('-', next_dash + 1);
         }
     }

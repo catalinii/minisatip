@@ -151,13 +151,13 @@ void set_stream_parameters(int s_id, transponder *t) {
     if (!sid || !sid->enabled)
         return;
 
-    if (t->apids.empty() || t->apids[0] < '0' || t->apids[0] > '9')
+    if (t->apids == "__UNSPECIFIED__")
         t->apids = sid->tp.apids;
-    if (t->dpids.empty() || t->dpids[0] < '0' || t->dpids[0] > '9')
+    if (t->dpids == "__UNSPECIFIED__")
         t->dpids = sid->tp.dpids;
-    if (t->pids.empty() || t->pids[0] < '0' || t->pids[0] > '9')
+    if (t->pids == "__UNSPECIFIED__")
         t->pids = sid->tp.pids;
-    if (t->x_pmt.empty() || t->x_pmt[0] < '0' || t->x_pmt[0] > '9')
+    if (t->x_pmt == "__UNSPECIFIED__")
         t->x_pmt = sid->tp.x_pmt;
 
     copy_dvb_parameters(t, &sid->tp);
@@ -298,8 +298,7 @@ int start_play(streams *sid, sockets *s) {
         if (ad)
             set_socket_thread(sid->st_sock, get_socket_thread(ad->sock));
     }
-    //  flush the sockets buffer if no pid was requested
-    if (sid->tp.apids.empty() && sid->tp.pids == "0")
+    if (sid->tp.apids.empty() && (sid->tp.pids.empty() || sid->tp.pids == "0"))
         s->flush_enqued_data = 1;
     sid->do_play = 1;
     if (s->type != TYPE_HTTP)

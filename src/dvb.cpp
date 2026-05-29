@@ -295,10 +295,10 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
     tp->pls_mode = -1;
     tp->pls_code = -1;
 
-    tp->pids.clear();
-    tp->apids.clear();
-    tp->dpids.clear();
-    tp->x_pmt.clear();
+    tp->pids = "__UNSPECIFIED__";
+    tp->apids = "__UNSPECIFIED__";
+    tp->dpids = "__UNSPECIFIED__";
+    tp->x_pmt = "__UNSPECIFIED__";
 
     auto qm_pos = s.find('?');
     if (qm_pos == std::string_view::npos)
@@ -311,17 +311,17 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
     LOG("detect_dvb_parameters (S)-> %.*s", (int)query.size(), query.data());
     auto arg = split(query, '&');
 
-    std::unordered_map<std::string_view, std::string_view> params;
     for (const auto &token : arg) {
+        std::string_view key, val;
         auto eq_pos = token.find('=');
         if (eq_pos != std::string_view::npos) {
-            params[token.substr(0, eq_pos)] = token.substr(eq_pos + 1);
+            key = token.substr(0, eq_pos);
+            val = token.substr(eq_pos + 1);
         } else {
-            params[token] = "";
+            key = token;
+            val = "";
         }
-    }
 
-    for (const auto &[key, val] : params) {
         if (key == "msys")
             tp->sys = fe_delsys_map.lookup(val).value_or(SYS_UNDEFINED);
         else if (key == "freq")
@@ -375,14 +375,15 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
             tp->dpids = std::string(val);
     }
 
-    if (tp->pids.contains("all")) {
+    if (tp->pids != "__UNSPECIFIED__" && tp->pids.contains("all")) {
         tp->pids = "8192";
     }
 
     if (tp->pls_mode == PLS_MODE_ROOT)
         tp->pls_code = pls_scrambling_index(tp);
 
-    if (!tp->pids.empty() && tp->pids.compare(0, 4, "none") == 0)
+    if (tp->pids != "__UNSPECIFIED__" && !tp->pids.empty() &&
+        tp->pids.compare(0, 4, "none") == 0)
         tp->pids = "";
 
     LOG("detect_dvb_parameters (E) -> src=%d, fe=%d, freq=%d, fec=%d, sr=%d, "
@@ -390,10 +391,17 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
         "apids=%s - dpids=%s x_pmt=%s",
         tp->diseqc, tp->fe, tp->freq, tp->fec, tp->sr, tp->pol, tp->ro, tp->sys,
         tp->mtype, tp->plts, tp->bw, tp->inversion,
-        !tp->pids.empty() ? tp->pids.c_str() : "NULL",
-        !tp->apids.empty() ? tp->apids.c_str() : "NULL",
-        !tp->dpids.empty() ? tp->dpids.c_str() : "NULL",
-        !tp->x_pmt.empty() ? tp->x_pmt.c_str() : "NULL");
+        (tp->pids != "__UNSPECIFIED__" && !tp->pids.empty()) ? tp->pids.c_str()
+                                                             : "NULL",
+        (tp->apids != "__UNSPECIFIED__" && !tp->apids.empty())
+            ? tp->apids.c_str()
+            : "NULL",
+        (tp->dpids != "__UNSPECIFIED__" && !tp->dpids.empty())
+            ? tp->dpids.c_str()
+            : "NULL",
+        (tp->x_pmt != "__UNSPECIFIED__" && !tp->x_pmt.empty())
+            ? tp->x_pmt.c_str()
+            : "NULL");
     return 0;
 }
 
@@ -422,10 +430,10 @@ void init_dvb_parameters(transponder *tp) {
     tp->pls_mode = TP_VALUE_UNSET;
     tp->pls_code = TP_VALUE_UNSET;
 
-    tp->pids.clear();
-    tp->apids.clear();
-    tp->dpids.clear();
-    tp->x_pmt.clear();
+    tp->pids = "__UNSPECIFIED__";
+    tp->apids = "__UNSPECIFIED__";
+    tp->dpids = "__UNSPECIFIED__";
+    tp->x_pmt = "__UNSPECIFIED__";
 }
 
 void copy_dvb_parameters(transponder *s, transponder *d) {

@@ -1300,6 +1300,8 @@ void load_channels() {
 
 void disable_cat_adapters(char *o) {
     int st, end, j;
+    if (!o)
+        return;
 
     auto arg = split(o, ',');
     for (const auto &token : arg) {
