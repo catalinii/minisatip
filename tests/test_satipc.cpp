@@ -25,8 +25,18 @@
 #include "utils.h"
 #include "utils/testing.h"
 
-#include <linux/dvb/frontend.h>
-#include <string.h>
+#include "httpc.h"
+
+typedef struct satip_xml_data {
+    char url[100];
+    char host[64];
+    int port;
+    char xml[4000];
+    int tuners[MAX_DVBAPI_SYSTEMS];
+} Ssatip_xml_data;
+
+extern void satip_getxml_data(char *data, int len, void *opaque,
+                              Shttp_client *h);
 
 int test_get_s2_url_multistream_isi() {
     adapter ad = {};
@@ -155,14 +165,29 @@ int test_get_s2_url_no_multistream() {
     char url[1000];
     get_s2_url(&ad, url, sizeof(url));
 
-    ASSERT(strstr(url, "isi") == NULL,
-           "ISI should not appear when unset");
+    ASSERT(strstr(url, "isi") == NULL, "ISI should not appear when unset");
     ASSERT(strstr(url, "plsm") == NULL,
            "PLS mode should not appear when unset");
     ASSERT(strstr(url, "plsc") == NULL,
            "PLS code should not appear when unset");
 
     satip[0] = NULL;
+    return 0;
+}
+
+int test_satip_getxml_data_parsing() {
+    Ssatip_xml_data s = {};
+    strcpy(s.xml, "<satip:X_SATIPCAP>DVBS2-4,DVBT-2</satip:X_SATIPCAP>");
+    strcpy(s.url, "http://1.2.3.4/desc.xml");
+
+    Shttp_client h = {};
+    strcpy(h.host, "1.2.3.4");
+
+    satip_getxml_data(NULL, 0, &s, &h);
+
+    ASSERT(s.tuners[SYS_DVBS2] == 4, "Expected 4 tuners for DVBS2");
+    ASSERT(s.tuners[SYS_DVBT] == 2, "Expected 2 tuners for DVBT");
+
     return 0;
 }
 
@@ -179,6 +204,8 @@ int main() {
               "test get_s2_url forwards PLS code with GOLD mode");
     TEST_FUNC(test_get_s2_url_no_multistream(),
               "test get_s2_url omits multistream params when unset");
+    TEST_FUNC(test_satip_getxml_data_parsing(),
+              "test satip_getxml_data parses satipcap delivery systems");
 
     return 0;
 }

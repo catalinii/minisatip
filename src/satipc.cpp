@@ -1971,14 +1971,17 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h) {
 
         auto arg = split(sep, ',');
         for (const auto &arg_item : arg) {
-            auto ds_opt = fe_delsys_map.lookup(arg_item);
+            size_t dash = arg_item.find('-');
+            std::string_view system_name = (dash != std::string_view::npos)
+                                               ? arg_item.substr(0, dash)
+                                               : arg_item;
+            auto ds_opt = fe_delsys_map.lookup(system_name);
             if (!ds_opt) {
                 LOG("Could not determine the delivery system for %.*s",
                     (int)arg_item.size(), arg_item.data());
                 continue;
             }
             fe_delivery_system_t ds = ds_opt.value();
-            size_t dash = arg_item.find('-');
             int t = parse_int((dash != std::string_view::npos)
                                   ? arg_item.substr(dash + 1)
                                   : "",
