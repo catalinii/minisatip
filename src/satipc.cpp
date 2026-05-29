@@ -243,7 +243,7 @@ int satipc_reply(sockets *s) {
         sip->state = SATIP_STATE_SETUP;
         sip->last_setup = -10000;
         // quirk for Aurora client missing mtype
-        if (ad->tp.mtype == QAM_AUTO)
+        if (ad->tp.mtype.value_or(QAM_AUTO) == QAM_AUTO)
             ad->tp.mtype = QAM_256;
     }
 
@@ -1270,89 +1270,115 @@ int satipc_del_filters(adapter *ad, int fd, int pid) {
 
 void get_s2_url(adapter *ad, char *url, int url_len) {
 #define FILL(req, val, def, met)                                               \
-    if ((val != def) && (val != -1))                                           \
+    if (val.has_value() && val.value() != def && (int)val.value() != -1)       \
         strlcatf(url, url_len, len, req, met);
-    int len = 0, plts, ro;
+    int len = 0;
+    fe_pilot_t plts;
+    fe_rolloff_t ro;
     transponder *tp = &ad->tp;
     satipc *sip = get_satip(ad->id);
     if (!sip)
         return;
     url[0] = 0;
-    plts = tp->plts;
-    ro = tp->ro;
+    plts = tp->plts.value_or(PILOT_AUTO);
+    ro = tp->ro.value_or(ROLLOFF_AUTO);
     //	if (plts == PILOT_AUTO)
     //		plts = PILOT_OFF;
     //	if (ro == ROLLOFF_AUTO)
     //		ro = ROLLOFF_35;
-    FILL("src=%d", tp->diseqc, 0, tp->diseqc);
+    FILL("src=%d", tp->diseqc, 0, tp->diseqc.value_or(0));
     if (sip->satip_fe > 0)
-        FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
-    FILL("&freq=%d", tp->freq, 0, tp->freq / 1000);
-    FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
-    FILL("&mtype=%s", tp->mtype, QAM_AUTO, get_modulation(tp->mtype));
-    FILL("&pol=%s", tp->pol, -1, get_pol(tp->pol));
-    FILL("&sr=%d", tp->sr, -1, tp->sr / 1000);
-    FILL("&fec=%s", tp->fec, FEC_AUTO, get_fec(tp->fec));
-    FILL("&ro=%s", ro, ROLLOFF_AUTO, get_rolloff(ro));
-    FILL("&plts=%s", plts, PILOT_AUTO, get_pilot(plts));
-    if (tp->plp_isi >= 0)
-        FILL("&isi=%d", tp->plp_isi, 0, tp->plp_isi);
-    if (tp->pls_mode >= 0)
-        FILL("&plsm=%s", tp->pls_mode, -1, get_pls_mode(tp->pls_mode));
-    if (tp->pls_code >= 0)
-        FILL("&plsc=%d", tp->pls_code, -1, tp->pls_code);
+        FILL("&fe=%d", std::optional<int>(sip->satip_fe), 0, sip->satip_fe);
+    FILL("&freq=%d", tp->freq, 0, tp->freq.value_or(0) / 1000);
+    FILL("&msys=%s", tp->sys, SYS_UNDEFINED,
+         get_delsys(tp->sys.value_or(SYS_UNDEFINED)));
+    FILL("&mtype=%s", tp->mtype, QAM_AUTO,
+         get_modulation(tp->mtype.value_or(QAM_AUTO)));
+    FILL("&pol=%s", tp->pol, -1, get_pol(tp->pol.value_or(0)));
+    FILL("&sr=%d", tp->sr, -1, tp->sr.value_or(0) / 1000);
+    FILL("&fec=%s", tp->fec, FEC_AUTO, get_fec(tp->fec.value_or(FEC_AUTO)));
+    FILL("&ro=%s", std::optional<fe_rolloff_t>(ro), ROLLOFF_AUTO,
+         get_rolloff(ro));
+    FILL("&plts=%s", std::optional<fe_pilot_t>(plts), PILOT_AUTO,
+         get_pilot(plts));
+    if (tp->plp_isi.value_or(-1) >= 0)
+        FILL("&isi=%d", tp->plp_isi, 0, tp->plp_isi.value_or(0));
+    if (tp->pls_mode.value_or((fe_pls_mode_t)-1) >= 0)
+        FILL("&plsm=%s", tp->pls_mode, (fe_pls_mode_t)-1,
+             get_pls_mode(tp->pls_mode.value_or((fe_pls_mode_t)0)));
+    if (tp->pls_code.value_or(-1) >= 0)
+        FILL("&plsc=%d", tp->pls_code, -1, tp->pls_code.value_or(0));
     url[len] = 0;
     return;
+#undef FILL
 }
 
 void get_c2_url(adapter *ad, char *url, int url_len) {
+#define FILL(req, val, def, met)                                               \
+    if (val.has_value() && val.value() != def && (int)val.value() != -1)       \
+        strlcatf(url, url_len, len, req, met);
     int len = 0;
     transponder *tp = &ad->tp;
     satipc *sip = get_satip(ad->id);
     if (!sip)
         return;
     url[0] = 0;
-    FILL("freq=%.1f", tp->freq, 0, tp->freq / 1000.0);
+    FILL("freq=%.1f", tp->freq, 0, tp->freq.value_or(0) / 1000.0);
     if (sip->satip_fe > 0)
-        FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
-    FILL("&sr=%d", tp->sr, -1, tp->sr / 1000);
-    FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
-    FILL("&mtype=%s", tp->mtype, QAM_AUTO, get_modulation(tp->mtype));
-    FILL("&gi=%s", tp->gi, GUARD_INTERVAL_AUTO, get_gi(tp->gi));
-    FILL("&fec=%s", tp->fec, FEC_AUTO, get_fec(tp->fec));
-    FILL("&tmode=%s", tp->tmode, TRANSMISSION_MODE_AUTO, get_tmode(tp->tmode));
-    FILL("&specinv=%d", tp->inversion, INVERSION_AUTO, tp->inversion);
-    FILL("&t2id=%d", tp->t2id, 0, tp->t2id);
-    FILL("&sm=%d", tp->sm, 0, tp->sm);
-    if (tp->plp_isi >= 0)
-        FILL("&plp=%d", tp->plp_isi, 0, tp->plp_isi);
+        FILL("&fe=%d", std::optional<int>(sip->satip_fe), 0, sip->satip_fe);
+    FILL("&sr=%d", tp->sr, -1, tp->sr.value_or(0) / 1000);
+    FILL("&msys=%s", tp->sys, SYS_UNDEFINED,
+         get_delsys(tp->sys.value_or(SYS_UNDEFINED)));
+    FILL("&mtype=%s", tp->mtype, QAM_AUTO,
+         get_modulation(tp->mtype.value_or(QAM_AUTO)));
+    FILL("&gi=%s", tp->gi, GUARD_INTERVAL_AUTO,
+         get_gi(tp->gi.value_or(GUARD_INTERVAL_AUTO)));
+    FILL("&fec=%s", tp->fec, FEC_AUTO, get_fec(tp->fec.value_or(FEC_AUTO)));
+    FILL("&tmode=%s", tp->tmode, TRANSMISSION_MODE_AUTO,
+         get_tmode(tp->tmode.value_or(TRANSMISSION_MODE_AUTO)));
+    FILL("&specinv=%d", tp->inversion, INVERSION_AUTO,
+         tp->inversion.value_or(INVERSION_AUTO));
+    FILL("&t2id=%d", tp->t2id, 0, tp->t2id.value_or(0));
+    FILL("&sm=%d", tp->sm, 0, tp->sm.value_or(0));
+    if (tp->plp_isi.value_or(-1) >= 0)
+        FILL("&plp=%d", tp->plp_isi, 0, tp->plp_isi.value_or(0));
     url[len] = 0;
     return;
+#undef FILL
 }
 
 void get_t2_url(adapter *ad, char *url, int url_len) {
+#define FILL(req, val, def, met)                                               \
+    if (val.has_value() && val.value() != def && (int)val.value() != -1)       \
+        strlcatf(url, url_len, len, req, met);
     int len = 0;
     transponder *tp = &ad->tp;
     satipc *sip = get_satip(ad->id);
     if (!sip)
         return;
     url[0] = 0;
-    FILL("freq=%.1f", tp->freq, 0, tp->freq / 1000.0);
+    FILL("freq=%.1f", tp->freq, 0, tp->freq.value_or(0) / 1000.0);
     if (sip->satip_fe > 0)
-        FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
-    FILL("&bw=%d", tp->bw, BANDWIDTH_AUTO, tp->bw / 1000000);
-    FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
-    FILL("&mtype=%s", tp->mtype, -1, get_modulation(tp->mtype));
-    FILL("&gi=%s", tp->gi, GUARD_INTERVAL_AUTO, get_gi(tp->gi));
-    FILL("&tmode=%s", tp->tmode, TRANSMISSION_MODE_AUTO, get_tmode(tp->tmode));
-    FILL("&specinv=%d", tp->inversion, INVERSION_AUTO, tp->inversion);
-    FILL("&c2tft=%d", tp->c2tft, 0, tp->c2tft);
-    if (tp->ds >= 0)
-        FILL("&ds=%d", tp->ds, 0, tp->ds);
-    if (tp->plp_isi >= 0)
-        FILL("&plp=%d", tp->plp_isi, 0, tp->plp_isi);
+        FILL("&fe=%d", std::optional<int>(sip->satip_fe), 0, sip->satip_fe);
+    FILL("&bw=%d", tp->bw, BANDWIDTH_AUTO, tp->bw.value_or(0) / 1000000);
+    FILL("&msys=%s", tp->sys, SYS_UNDEFINED,
+         get_delsys(tp->sys.value_or(SYS_UNDEFINED)));
+    FILL("&mtype=%s", tp->mtype, (fe_modulation_t)-1,
+         get_modulation(tp->mtype.value_or((fe_modulation_t)0)));
+    FILL("&gi=%s", tp->gi, GUARD_INTERVAL_AUTO,
+         get_gi(tp->gi.value_or(GUARD_INTERVAL_AUTO)));
+    FILL("&tmode=%s", tp->tmode, TRANSMISSION_MODE_AUTO,
+         get_tmode(tp->tmode.value_or(TRANSMISSION_MODE_AUTO)));
+    FILL("&specinv=%d", tp->inversion, INVERSION_AUTO,
+         tp->inversion.value_or(INVERSION_AUTO));
+    FILL("&c2tft=%d", tp->c2tft, 0, tp->c2tft.value_or(0));
+    if (tp->ds.value_or(-1) >= 0)
+        FILL("&ds=%d", tp->ds, 0, tp->ds.value_or(0));
+    if (tp->plp_isi.value_or(-1) >= 0)
+        FILL("&plp=%d", tp->plp_isi, 0, tp->plp_isi.value_or(0));
     url[len] = 0;
     return;
+#undef FILL
 }
 
 int http_request(adapter *ad, char *url, const char *method, int force) {
@@ -1599,14 +1625,14 @@ int satipc_request(adapter *ad) {
         "pids to delete %d, expect_reply %d, want_tune %d, "
         "last_cmd %d, "
         "sent_transport %d, closed_rtsp %d",
-        ad->id, sip->state, ad->tp.freq, sip->lap, sip->ldp, sip->expect_reply,
-        sip->want_tune, sip->last_cmd, sip->sent_transport,
+        ad->id, sip->state, ad->tp.freq.value_or(0), sip->lap, sip->ldp,
+        sip->expect_reply, sip->want_tune, sip->last_cmd, sip->sent_transport,
         sip->rtsp_socket_closed);
 
     if (sip->rtsp_socket_closed)
         return 0;
 
-    if ((ad->tp.freq == 0) &&
+    if ((ad->tp.freq.value_or(0) == 0) &&
         ((sip->state == SATIP_STATE_INACTIVE) ||
          (sip->state == SATIP_STATE_SETUP) || (sip->state == SATIP_STATE_PLAY)))
         return 0;
@@ -1676,7 +1702,8 @@ int satipc_commit(adapter *ad) {
 
     LOG("satipc: commit on freq %d, sys %d for adapter %d (expect reply "
         "%d)",
-        ad->tp.freq / 1000, ad->tp.sys, ad->id, sip->expect_reply);
+        ad->tp.freq.value_or(0) / 1000, ad->tp.sys.value_or(SYS_UNDEFINED),
+        ad->id, sip->expect_reply);
 
     sip->want_commit = true;
 
@@ -1688,7 +1715,8 @@ int satipc_tune(int aid, transponder *tp) {
     get_ad_and_sipr(aid, 1);
     LOG("satipc: tuning to freq %d, sys %d for adapter %d (state %d, "
         "expect_reply %d)",
-        ad->tp.freq / 1000, ad->tp.sys, aid, sip->state, sip->expect_reply);
+        ad->tp.freq.value_or(0) / 1000, ad->tp.sys.value_or(SYS_UNDEFINED), aid,
+        sip->state, sip->expect_reply);
     ad->err = 0;
     sip->want_commit = false;
     sip->want_tune = true;

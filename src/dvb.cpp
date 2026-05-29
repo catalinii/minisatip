@@ -297,29 +297,28 @@ static std::vector<int> parse_pids_list(std::string_view val) {
 }
 
 int detect_dvb_parameters(std::string_view s, transponder *tp) {
-
-    tp->sys = -1;
-    tp->freq = -1;
-    tp->inversion = -1;
-    tp->hprate = -1;
-    tp->tmode = (fe_transmit_mode_t)-1;
-    tp->gi = (fe_guard_interval_t)-1;
-    tp->bw = -1;
-    tp->sm = -1;
-    tp->t2id = -1;
-    tp->fe = -1;
-    tp->ro = -1;
-    tp->mtype = (fe_modulation_t)-1;
-    tp->plts = -1;
-    tp->fec = (fe_code_rate_t)-1;
-    tp->sr = -1;
-    tp->pol = -1;
-    tp->diseqc = -1;
-    tp->c2tft = -1;
-    tp->ds = -1;
-    tp->plp_isi = TP_VALUE_UNSET;
-    tp->pls_mode = -1;
-    tp->pls_code = -1;
+    tp->sys = std::nullopt;
+    tp->freq = std::nullopt;
+    tp->inversion = std::nullopt;
+    tp->hprate = std::nullopt;
+    tp->tmode = std::nullopt;
+    tp->gi = std::nullopt;
+    tp->bw = std::nullopt;
+    tp->sm = std::nullopt;
+    tp->t2id = std::nullopt;
+    tp->fe = std::nullopt;
+    tp->ro = std::nullopt;
+    tp->mtype = std::nullopt;
+    tp->plts = std::nullopt;
+    tp->fec = std::nullopt;
+    tp->sr = std::nullopt;
+    tp->pol = std::nullopt;
+    tp->diseqc = std::nullopt;
+    tp->c2tft = std::nullopt;
+    tp->ds = std::nullopt;
+    tp->plp_isi = std::nullopt;
+    tp->pls_mode = std::nullopt;
+    tp->pls_code = std::nullopt;
 
     std::unordered_set<int> old_pids = tp->pids;
     bool pids_specified = false;
@@ -373,13 +372,14 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
             tp->tmode =
                 fe_tmode_map.lookup(val).value_or(TRANSMISSION_MODE_AUTO);
         else if (key == "bw") {
-            tp->bw = parse_float(val, 1000000);
-            if (tp->bw < 0 || tp->bw > 100000000)
-                tp->bw = parse_float(val, 1000);
-            if (tp->bw < 0 || tp->bw > 100000000)
-                tp->bw = parse_float(val, 1);
+            int bw_val = parse_float(val, 1000000);
+            if (bw_val < 0 || bw_val > 100000000)
+                bw_val = parse_float(val, 1000);
+            if (bw_val < 0 || bw_val > 100000000)
+                bw_val = parse_float(val, 1);
+            tp->bw = bw_val;
         } else if (key == "specinv")
-            tp->inversion = parse_int(val);
+            tp->inversion = (fe_spectral_inversion_t)parse_int(val);
         else if (key == "c2tft")
             tp->c2tft = parse_int(val);
         else if (key == "ds")
@@ -423,14 +423,17 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
     LOG("detect_dvb_parameters (E) -> src=%d, fe=%d, freq=%d, fec=%d, sr=%d, "
         "pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s "
         "x_pmt=%d",
-        tp->diseqc, tp->fe, tp->freq, tp->fec, tp->sr, tp->pol, tp->ro, tp->sys,
-        tp->mtype, tp->plts, tp->bw, tp->inversion, pids_str.c_str(),
-        tp->x_pmt.value_or(-1));
+        tp->diseqc.value_or(0), tp->fe.value_or(0), tp->freq.value_or(0),
+        tp->fec.value_or(FEC_AUTO), tp->sr.value_or(0), tp->pol.value_or(0),
+        tp->ro.value_or(ROLLOFF_AUTO), tp->sys.value_or(SYS_UNDEFINED),
+        tp->mtype.value_or(QAM_AUTO), tp->plts.value_or(PILOT_AUTO),
+        tp->bw.value_or(8000000), tp->inversion.value_or(INVERSION_AUTO),
+        pids_str.c_str(), tp->x_pmt.value_or(-1));
     return 0;
 }
 
 void init_dvb_parameters(transponder *tp) {
-    tp->sys = 0;
+    tp->sys = SYS_UNDEFINED;
     tp->freq = 0;
     tp->inversion = INVERSION_AUTO;
     tp->mtype = QAM_AUTO;
@@ -449,10 +452,10 @@ void init_dvb_parameters(transponder *tp) {
     tp->diseqc = 0;
     memset(&tp->diseqc_param, 0, sizeof(tp->diseqc_param));
     tp->c2tft = 0;
-    tp->ds = TP_VALUE_UNSET;
-    tp->plp_isi = TP_VALUE_UNSET;
-    tp->pls_mode = TP_VALUE_UNSET;
-    tp->pls_code = TP_VALUE_UNSET;
+    tp->ds = std::nullopt;
+    tp->plp_isi = std::nullopt;
+    tp->pls_mode = std::nullopt;
+    tp->pls_code = std::nullopt;
 
     tp->pids.clear();
     tp->x_pmt = std::nullopt;
@@ -463,72 +466,79 @@ void copy_dvb_parameters(transponder *s, transponder *d) {
     LOG("copy_dvb_param start -> src=%d, fe=%d, freq=%d, fec=%d, sr=%d, "
         "pol=%d, ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s "
         "x_pmt=%d",
-        d->diseqc, d->fe, d->freq, d->fec, d->sr, d->pol, d->ro, d->sys,
-        d->mtype, d->plts, d->bw, d->inversion, dpids_str.c_str(),
-        d->x_pmt.value_or(-1));
-    if (s->sys != -1)
+        d->diseqc.value_or(0), d->fe.value_or(0), d->freq.value_or(0),
+        d->fec.value_or(FEC_AUTO), d->sr.value_or(0), d->pol.value_or(0),
+        d->ro.value_or(ROLLOFF_AUTO), d->sys.value_or(SYS_UNDEFINED),
+        d->mtype.value_or(QAM_AUTO), d->plts.value_or(PILOT_AUTO),
+        d->bw.value_or(8000000), d->inversion.value_or(INVERSION_AUTO),
+        dpids_str.c_str(), d->x_pmt.value_or(-1));
+
+    if (s->sys)
         d->sys = s->sys;
-    if (s->freq != -1)
+    if (s->freq)
         d->freq = s->freq;
-    if (s->inversion != -1)
+    if (s->inversion)
         d->inversion = s->inversion;
-    if (s->hprate != -1)
+    if (s->hprate)
         d->hprate = s->hprate;
-    if (s->tmode != -1)
+    if (s->tmode)
         d->tmode = s->tmode;
-    if (s->gi != -1)
+    if (s->gi)
         d->gi = s->gi;
-    if (s->bw != -1)
+    if (s->bw)
         d->bw = s->bw;
-    if (s->sm != -1)
+    if (s->sm)
         d->sm = s->sm;
-    if (s->t2id != -1)
+    if (s->t2id)
         d->t2id = s->t2id;
-    if (s->fe != -1)
+    if (s->fe)
         d->fe = s->fe;
-    if (s->ro != -1)
+    if (s->ro)
         d->ro = s->ro;
-    if (s->mtype != -1)
+    if (s->mtype)
         d->mtype = s->mtype;
-    if (s->plts != -1)
+    if (s->plts)
         d->plts = s->plts;
-    if (s->fec != -1)
+    if (s->fec)
         d->fec = s->fec;
-    if (s->sr != -1)
+    if (s->sr)
         d->sr = s->sr;
-    if (s->pol != -1)
+    if (s->pol)
         d->pol = s->pol;
-    if (s->diseqc != -1)
+    if (s->diseqc)
         d->diseqc = s->diseqc;
-    if (s->c2tft != -1)
+    if (s->c2tft)
         d->c2tft = s->c2tft;
-    if (s->ds != TP_VALUE_UNSET)
+    if (s->ds)
         d->ds = s->ds;
-    if (s->plp_isi != TP_VALUE_UNSET)
+    if (s->plp_isi)
         d->plp_isi = s->plp_isi;
-    if (s->pls_mode != TP_VALUE_UNSET)
+    if (s->pls_mode)
         d->pls_mode = s->pls_mode;
-    if (s->pls_code != -1)
+    if (s->pls_code)
         d->pls_code = s->pls_code;
 
     d->pids = s->pids;
     d->x_pmt = s->x_pmt;
 
-    if (d->diseqc < 1) // force position 1 on the diseqc switch
+    if (d->diseqc.value_or(0) < 1) // force position 1 on the diseqc switch
         d->diseqc = 1;
 
-    if ((d->sys == SYS_DVBS2) && (d->mtype == -1))
+    if ((d->sys == SYS_DVBS2) && (!d->mtype))
         d->mtype = PSK_8;
 
-    if ((d->sys == SYS_DVBS) && (d->mtype == -1))
+    if ((d->sys == SYS_DVBS) && (!d->mtype))
         d->mtype = QPSK;
 
     std::string d_pids_str = iterable_to_string(d->pids);
     LOG("copy_dvb_parameters -> src=%d, fe=%d, freq=%d, fec=%d sr=%d, pol=%d, "
         "ro=%d, msys=%d, mtype=%d, plts=%d, bw=%d, inv=%d, pids=%s x_pmt=%d",
-        d->diseqc, d->fe, d->freq, d->fec, d->sr, d->pol, d->ro, d->sys,
-        d->mtype, d->plts, d->bw, d->inversion, d_pids_str.c_str(),
-        d->x_pmt.value_or(-1));
+        d->diseqc.value_or(0), d->fe.value_or(0), d->freq.value_or(0),
+        d->fec.value_or(FEC_AUTO), d->sr.value_or(0), d->pol.value_or(0),
+        d->ro.value_or(ROLLOFF_AUTO), d->sys.value_or(SYS_UNDEFINED),
+        d->mtype.value_or(QAM_AUTO), d->plts.value_or(PILOT_AUTO),
+        d->bw.value_or(8000000), d->inversion.value_or(INVERSION_AUTO),
+        d_pids_str.c_str(), d->x_pmt.value_or(-1));
 }
 
 // This function provides an scale factor for dB to percentage conversion,
@@ -537,11 +547,15 @@ float get_db_snr_map(transponder *tp) {
     float db_map;
     int top = 800; // Default factor: 80dB value ==> 100%
 
-    switch (tp->sys) {
+    fe_delivery_system_t sys = tp->sys.value_or(SYS_UNDEFINED);
+    fe_modulation_t mtype = tp->mtype.value_or(QAM_AUTO);
+    fe_code_rate_t fec = tp->fec.value_or(FEC_AUTO);
+
+    switch (sys) {
 
     case SYS_DVBC_ANNEX_AC:
     case SYS_DVBC_ANNEX_B:
-        switch (tp->mtype) {
+        switch (mtype) {
 
         case QAM_256:
             top = DVB_C__QAM_256__FEC_NONE;
@@ -557,10 +571,10 @@ float get_db_snr_map(transponder *tp) {
         break;
 
     case SYS_DVBS:
-        switch (tp->mtype) {
+        switch (mtype) {
 
         case QPSK:
-            switch (tp->fec) {
+            switch (fec) {
 
             case FEC_1_2:
                 top = DVB_S__QPSK__FEC_1_2;
@@ -595,10 +609,10 @@ float get_db_snr_map(transponder *tp) {
         break;
 
     case SYS_DVBS2:
-        switch (tp->mtype) {
+        switch (mtype) {
 
         case QPSK:
-            switch (tp->fec) {
+            switch (fec) {
 
             case FEC_1_2:
                 top = DVB_S2_QPSK__FEC_1_2;
@@ -634,7 +648,7 @@ float get_db_snr_map(transponder *tp) {
             break;
 
         case PSK_8:
-            switch (tp->fec) {
+            switch (fec) {
 
             case FEC_1_2:
                 top = DVB_S2_PSK_8_FEC_1_2;
@@ -675,10 +689,10 @@ float get_db_snr_map(transponder *tp) {
         break;
 
     case SYS_DVBT:
-        switch (tp->mtype) {
+        switch (mtype) {
 
         case QPSK:
-            switch (tp->fec) {
+            switch (fec) {
 
             case FEC_1_2:
                 top = DVB_T__QPSK__FEC_1_2;
@@ -704,7 +718,7 @@ float get_db_snr_map(transponder *tp) {
             break;
 
         case QAM_16:
-            switch (tp->fec) {
+            switch (fec) {
 
             case FEC_1_2:
                 top = DVB_T__QAM16_FEC_1_2;
@@ -730,7 +744,7 @@ float get_db_snr_map(transponder *tp) {
             break;
 
         case QAM_64:
-            switch (tp->fec) {
+            switch (fec) {
 
             case FEC_1_2:
                 top = DVB_T__QAM64_FEC_1_2;
@@ -761,10 +775,10 @@ float get_db_snr_map(transponder *tp) {
         break;
 
     case SYS_DVBT2:
-        switch (tp->mtype) {
+        switch (mtype) {
 
         case QPSK:
-            switch (tp->fec) {
+            switch (fec) {
 
             case FEC_1_2:
                 top = DVB_T2_QPSK__FEC_1_2;
@@ -793,7 +807,7 @@ float get_db_snr_map(transponder *tp) {
             break;
 
         case QAM_16:
-            switch (tp->fec) {
+            switch (fec) {
 
             case FEC_1_2:
                 top = DVB_T2_QAM16_FEC_1_2;
@@ -822,7 +836,7 @@ float get_db_snr_map(transponder *tp) {
             break;
 
         case QAM_64:
-            switch (tp->fec) {
+            switch (fec) {
 
             case FEC_1_2:
                 top = DVB_T2_QAM64_FEC_1_2;
@@ -851,7 +865,7 @@ float get_db_snr_map(transponder *tp) {
             break;
 
         case QAM_256:
-            switch (tp->fec) {
+            switch (fec) {
 
             case FEC_1_2:
                 top = DVB_T2_QAM256_FEC_1_2;
@@ -891,7 +905,8 @@ float get_db_snr_map(transponder *tp) {
     db_map = top / 10.0; // top is dB*10
     LOGM(
         "get_db_snr_map -> src=%d, fe=%d, msys=%d, mtype=%d, fec=%d, db_map=%f",
-        tp->diseqc, tp->fe, tp->sys, tp->mtype, tp->fec, db_map);
+        tp->diseqc.value_or(0), tp->fe.value_or(0), (int)sys, (int)mtype,
+        (int)fec, db_map);
 
     return db_map;
 }
@@ -1179,9 +1194,9 @@ int setup_switch(adapter *ad) {
     int frontend_fd = -1;
     transponder *tp = &ad->tp;
     int hiband = 0;
-    int diseqc = (tp->diseqc > 0) ? tp->diseqc - 1 : 0;
-    int freq = tp->freq;
-    int pol = (tp->pol - 1) & 1;
+    int diseqc = (tp->diseqc.value_or(0) > 0) ? tp->diseqc.value_or(0) - 1 : 0;
+    int freq = tp->freq.value_or(0);
+    int pol = (tp->pol.value_or(0) - 1) & 1;
     adapter *master = ad;
 
     if (ad->master_source >= 0) {
@@ -1295,7 +1310,7 @@ int dvb_tune(int aid, transponder *tp) {
     adapter *ad = get_adapter(aid);
     int fd_frontend;
 
-    int freq = tp->freq;
+    int freq = tp->freq.value_or(0);
     struct dtv_property p_cmd[20];
     struct dtv_properties p = {.num = 0, .props = p_cmd};
     struct dvb_frontend_event ev;
@@ -1308,23 +1323,25 @@ int dvb_tune(int aid, transponder *tp) {
 
 #ifdef USE_DVBAPI3
     struct dvb_frontend_parameters fep;
-    memset(&fep, 0, sizeof(fep));
 #endif
 
     if (!ad)
         return -404;
-
     fd_frontend = ad->fe;
-    memset(p_cmd, 0, sizeof(p_cmd));
     bclear = getTick();
+    if (fd_frontend < 0)
+        return -404;
 
-    if ((ioctl(fd_frontend, FE_SET_PROPERTY, &cmdseq_clear)) == -1) {
-        LOG("FE_SET_PROPERTY DTV_CLEAR failed for fd %d: %s", fd_frontend,
-            strerror(errno));
-        //        return -1;
+#ifndef USE_DVBAPI3
+    if (ioctl(fd_frontend, FE_SET_PROPERTY, &cmdseq_clear) == -1) {
+        LOG("dvb_tune: DTV_CLEAR failed %d %s", errno, strerror(errno));
+        return -404;
     }
+#endif
 
-    switch (tp->sys) {
+    bclear = getTick() - bclear;
+
+    switch (tp->sys.value_or(SYS_UNDEFINED)) {
     case SYS_DVBS:
     case SYS_DVBS2:
 
@@ -1333,135 +1350,158 @@ int dvb_tune(int aid, transponder *tp) {
         if (freq < MIN_FRQ_DVBS || freq > MAX_FRQ_DVBS)
             LOG_AND_RETURN(-404, "Frequency %d is not within range ", freq)
 
-        ADD_PROP(DTV_SYMBOL_RATE, tp->sr)
-        ADD_PROP(DTV_INNER_FEC, tp->fec)
-        ADD_PROP(DTV_PILOT, tp->plts)
-        ADD_PROP(DTV_ROLLOFF, tp->ro)
+        ADD_PROP(DTV_SYMBOL_RATE, tp->sr.value_or(0))
+        ADD_PROP(DTV_INNER_FEC, tp->fec.value_or(FEC_AUTO))
+        ADD_PROP(DTV_PILOT, tp->plts.value_or(PILOT_AUTO))
+        ADD_PROP(DTV_ROLLOFF, tp->ro.value_or(ROLLOFF_AUTO))
 #if DVBAPIVERSION >= 0x0502
-        if (tp->plp_isi >= 0)
+        if (tp->plp_isi.value_or(-1) >= 0)
 #if DVBAPIVERSION >= 0x050b /* 5.11 */
-            ADD_PROP(DTV_STREAM_ID, tp->plp_isi)
+            ADD_PROP(DTV_STREAM_ID, tp->plp_isi.value_or(0))
 #else
             // In DVBAPI < 5.11 DTV_STREAM_ID takes also the PLS Code and Mode
             ADD_PROP(DTV_STREAM_ID,
-                     tp->plp_isi | (tp->pls_code << 8) | (tp->pls_mode << 26))
+                     tp->plp_isi.value_or(0) | (tp->pls_code.value_or(0) << 8) |
+                         (tp->pls_mode.value_or(PLS_MODE_ROOT) << 26))
 #endif
 #endif
-#if DVBAPIVERSION >= 0x050b    /* 5.11 */
-        if (tp->pls_code >= 0) // Use Gold plp_mode by default if plsc specified
-            ADD_PROP(DTV_SCRAMBLING_SEQUENCE_INDEX, tp->pls_code)
+#if DVBAPIVERSION >= 0x050b /* 5.11 */
+        if (tp->pls_code.value_or(-1) >=
+            0) // Use Gold plp_mode by default if plsc specified
+            ADD_PROP(DTV_SCRAMBLING_SEQUENCE_INDEX, tp->pls_code.value_or(0))
 #endif
 
 #ifdef USE_DVBAPI3
-        fep.inversion = tp->inversion;
-        fep.u.qpsk.symbol_rate = tp->sr;
-        fep.u.qpsk.fec_inner = tp->fec;
+        fep.inversion = tp->inversion.value_or(INVERSION_AUTO);
+        fep.u.qpsk.symbol_rate = tp->sr.value_or(0);
+        fep.u.qpsk.fec_inner = tp->fec.value_or(FEC_AUTO);
         fep.frequency = freq;
 #endif
 
         LOG("tuning to %d(%d) pol: %s (%d) sr:%d fec:%s delsys:%s mod:%s "
             "rolloff:%s pilot:%s, ts clear=%jd, ts pol=%jd",
-            tp->freq, freq, get_pol(tp->pol), tp->pol, tp->sr, get_fec(tp->fec),
-            get_delsys(tp->sys), get_modulation(tp->mtype), get_rolloff(tp->ro),
-            get_pilot(tp->plts), bclear, bpol)
+            tp->freq.value_or(0), freq, get_pol(tp->pol.value_or(0)),
+            tp->pol.value_or(0), tp->sr.value_or(0),
+            get_fec(tp->fec.value_or(FEC_AUTO)),
+            get_delsys(tp->sys.value_or(SYS_UNDEFINED)),
+            get_modulation(tp->mtype.value_or(QAM_AUTO)),
+            get_rolloff(tp->ro.value_or(ROLLOFF_AUTO)),
+            get_pilot(tp->plts.value_or(PILOT_AUTO)), bclear, bpol)
         break;
 
     case SYS_DVBT:
     case SYS_DVBT2:
 
-        if (tp->freq < MIN_FRQ_DVBT || tp->freq > MAX_FRQ_DVBT)
-            LOG_AND_RETURN(-404, "Frequency %d is not within range ", tp->freq)
+        if (tp->freq.value_or(0) < MIN_FRQ_DVBT ||
+            tp->freq.value_or(0) > MAX_FRQ_DVBT)
+            LOG_AND_RETURN(-404, "Frequency %d is not within range ",
+                           tp->freq.value_or(0))
 
         freq = freq * 1000;
-        ADD_PROP(DTV_BANDWIDTH_HZ, tp->bw)
-        ADD_PROP(DTV_CODE_RATE_HP, tp->fec)
-        ADD_PROP(DTV_CODE_RATE_LP, tp->fec)
-        ADD_PROP(DTV_GUARD_INTERVAL, tp->gi)
-        ADD_PROP(DTV_TRANSMISSION_MODE, tp->tmode)
+        ADD_PROP(DTV_BANDWIDTH_HZ, tp->bw.value_or(8000000))
+        ADD_PROP(DTV_CODE_RATE_HP, tp->fec.value_or(FEC_AUTO))
+        ADD_PROP(DTV_CODE_RATE_LP, tp->fec.value_or(FEC_AUTO))
+        ADD_PROP(DTV_GUARD_INTERVAL, tp->gi.value_or(GUARD_INTERVAL_AUTO))
+        ADD_PROP(DTV_TRANSMISSION_MODE,
+                 tp->tmode.value_or(TRANSMISSION_MODE_AUTO))
         ADD_PROP(DTV_HIERARCHY, HIERARCHY_AUTO)
 #if DVBAPIVERSION >= 0x0502
-        if (tp->plp_isi >= 0)
-            ADD_PROP(DTV_STREAM_ID, tp->plp_isi & 0xFF)
+        if (tp->plp_isi.value_or(-1) >= 0)
+            ADD_PROP(DTV_STREAM_ID, tp->plp_isi.value_or(0) & 0xFF)
 #endif
 
 // old DVBAPI version 3
 #ifdef USE_DVBAPI3
         fep.frequency = freq;
         fep.u.ofdm.bandwidth = BANDWIDTH_8_MHZ;
-        if (tp->bw == 6000000)
+        if (tp->bw.value_or(8000000) == 6000000)
             fep.u.ofdm.bandwidth = BANDWIDTH_6_MHZ;
-        else if (tp->bw == 7000000)
+        else if (tp->bw.value_or(8000000) == 7000000)
             fep.u.ofdm.bandwidth = BANDWIDTH_7_MHZ;
 
-        fep.u.ofdm.code_rate_HP = tp->fec;
-        fep.u.ofdm.code_rate_LP = tp->fec;
-        fep.u.ofdm.constellation = tp->mtype;
-        fep.u.ofdm.transmission_mode = tp->tmode;
-        fep.u.ofdm.guard_interval = tp->gi;
+        fep.u.ofdm.code_rate_HP = tp->fec.value_or(FEC_AUTO);
+        fep.u.ofdm.code_rate_LP = tp->fec.value_or(FEC_AUTO);
+        fep.u.ofdm.constellation = tp->mtype.value_or(QAM_AUTO);
+        fep.u.ofdm.transmission_mode =
+            tp->tmode.value_or(TRANSMISSION_MODE_AUTO);
+        fep.u.ofdm.guard_interval = tp->gi.value_or(GUARD_INTERVAL_AUTO);
         fep.u.ofdm.hierarchy_information = HIERARCHY_AUTO;
-        fep.inversion = tp->inversion;
+        fep.inversion = tp->inversion.value_or(INVERSION_AUTO);
 
 #endif
 
         LOG("tuning to %d delsys: %s bw:%d inversion:%s mod:%s fec:%s guard:%s "
             "transmission: %s, ts clear = %jd",
-            freq, get_delsys(tp->sys), tp->bw, get_inversion(tp->inversion),
-            get_modulation(tp->mtype), get_fec(tp->fec), get_gi(tp->gi),
-            get_tmode(tp->tmode), bclear)
+            freq, get_delsys(tp->sys.value_or(SYS_UNDEFINED)),
+            tp->bw.value_or(8000000),
+            get_inversion(tp->inversion.value_or(INVERSION_AUTO)),
+            get_modulation(tp->mtype.value_or(QAM_AUTO)),
+            get_fec(tp->fec.value_or(FEC_AUTO)),
+            get_gi(tp->gi.value_or(GUARD_INTERVAL_AUTO)),
+            get_tmode(tp->tmode.value_or(TRANSMISSION_MODE_AUTO)), bclear)
         break;
 
     case SYS_DVBC2:
     case SYS_DVBC_ANNEX_A:
 
-        if (tp->freq < MIN_FRQ_DVBC || tp->freq > MAX_FRQ_DVBC)
-            LOG_AND_RETURN(-404, "Frequency %d is not within range ", tp->freq)
+        if (tp->freq.value_or(0) < MIN_FRQ_DVBC ||
+            tp->freq.value_or(0) > MAX_FRQ_DVBC)
+            LOG_AND_RETURN(-404, "Frequency %d is not within range ",
+                           tp->freq.value_or(0))
 
         freq = freq * 1000;
-        ADD_PROP(DTV_SYMBOL_RATE, tp->sr)
+        ADD_PROP(DTV_SYMBOL_RATE, tp->sr.value_or(0))
 #if DVBAPIVERSION >= 0x0502
-        if (tp->plp_isi >= 0) {
-            int v = tp->plp_isi & 0xFF;
-            if (tp->ds >= 0)
-                v |= (tp->ds & 0xFF) << 8;
+        if (tp->plp_isi.value_or(-1) >= 0) {
+            int v = tp->plp_isi.value_or(0) & 0xFF;
+            if (tp->ds.value_or(-1) >= 0)
+                v |= (tp->ds.value_or(0) & 0xFF) << 8;
             ADD_PROP(DTV_STREAM_ID, v);
         }
 #endif
         // valid for DD DVB-C2 devices
 
 #ifdef USE_DVBAPI3
-        fep.frequency = tp->freq;
-        fep.inversion = tp->inversion;
-        fep.u.qam.symbol_rate = tp->sr;
+        fep.frequency = tp->freq.value_or(0);
+        fep.inversion = tp->inversion.value_or(INVERSION_AUTO);
+        fep.u.qam.symbol_rate = tp->sr.value_or(0);
         fep.u.qam.fec_inner = FEC_AUTO;
-        fep.u.qam.modulation = tp->mtype;
+        fep.u.qam.modulation = tp->mtype.value_or(QAM_AUTO);
 #endif
 
         LOG("tuning to %d sr:%d specinv:%s delsys:%s mod:%s ts clear = %jd",
-            freq, tp->sr, get_inversion(tp->inversion), get_delsys(tp->sys),
-            get_modulation(tp->mtype), bclear)
+            freq, tp->sr.value_or(0),
+            get_inversion(tp->inversion.value_or(INVERSION_AUTO)),
+            get_delsys(tp->sys.value_or(SYS_UNDEFINED)),
+            get_modulation(tp->mtype.value_or(QAM_AUTO)), bclear)
         break;
 
     case SYS_ATSC:
     case SYS_DVBC_ANNEX_B:
 
-        if (tp->freq < MIN_FRQ_DVBC || tp->freq > MAX_FRQ_DVBC)
-            LOG_AND_RETURN(-404, "Frequency %d is not within range ", tp->freq)
+        if (tp->freq.value_or(0) < MIN_FRQ_DVBC ||
+            tp->freq.value_or(0) > MAX_FRQ_DVBC)
+            LOG_AND_RETURN(-404, "Frequency %d is not within range ",
+                           tp->freq.value_or(0))
 
         freq = freq * 1000;
 
         LOG("tuning to %d delsys:%s mod:%s specinv:%s ts clear = %jd", freq,
-            get_delsys(tp->sys), get_modulation(tp->mtype),
-            get_inversion(tp->inversion), bclear)
+            get_delsys(tp->sys.value_or(SYS_UNDEFINED)),
+            get_modulation(tp->mtype.value_or(QAM_AUTO)),
+            get_inversion(tp->inversion.value_or(INVERSION_AUTO)), bclear)
 
         break;
 
     case SYS_ISDBT:
 
-        if (tp->freq < MIN_FRQ_DVBT || tp->freq > MAX_FRQ_DVBT)
-            LOG_AND_RETURN(-404, "Frequency %d is not within range ", tp->freq)
+        if (tp->freq.value_or(0) < MIN_FRQ_DVBT ||
+            tp->freq.value_or(0) > MAX_FRQ_DVBT)
+            LOG_AND_RETURN(-404, "Frequency %d is not within range ",
+                           tp->freq.value_or(0))
 
         freq = freq * 1000;
-        ADD_PROP(DTV_BANDWIDTH_HZ, tp->bw)
+        ADD_PROP(DTV_BANDWIDTH_HZ, tp->bw.value_or(8000000))
 #if DVBAPIVERSION >= 0x0501
         ADD_PROP(DTV_ISDBT_PARTIAL_RECEPTION, 0)
 //		ADD_PROP(DTV_ISDBT_LAYERA_SEGMENT_COUNT,   1);
@@ -1469,19 +1509,21 @@ int dvb_tune(int aid, transponder *tp) {
 #endif
 
         LOG("tuning to %d delsys: %s bw:%d inversion:%s , ts clear = %jd", freq,
-            get_delsys(tp->sys), tp->bw, get_inversion(tp->inversion), bclear);
+            get_delsys(tp->sys.value_or(SYS_UNDEFINED)),
+            tp->bw.value_or(8000000),
+            get_inversion(tp->inversion.value_or(INVERSION_AUTO)), bclear);
 
         break;
     default:
         LOG("tuning to unknown delsys: %s freq %d ts clear = %jd",
-            get_delsys(tp->sys), freq, bclear)
+            get_delsys(tp->sys.value_or(SYS_UNDEFINED)), freq, bclear)
         break;
     }
 
     ADD_PROP(DTV_FREQUENCY, freq)
-    ADD_PROP(DTV_INVERSION, tp->inversion)
-    ADD_PROP(DTV_MODULATION, tp->mtype);
-    ADD_PROP(DTV_DELIVERY_SYSTEM, tp->sys);
+    ADD_PROP(DTV_INVERSION, tp->inversion.value_or(INVERSION_AUTO))
+    ADD_PROP(DTV_MODULATION, tp->mtype.value_or(QAM_AUTO));
+    ADD_PROP(DTV_DELIVERY_SYSTEM, tp->sys.value_or(SYS_UNDEFINED));
     ADD_PROP(DTV_TUNE, 0)
 
     p.num = iProp;

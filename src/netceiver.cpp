@@ -162,31 +162,47 @@ int netcv_commit(adapter *ad) {
     /* tune receiver to a new frequency / tranponder */
     if (SN->want_tune) {
         transponder *tp = &ad->tp;
-        LOG("netceiver: netcv_commit tune tp->sys=%d", tp->sys);
+        fe_delivery_system_t sys = tp->sys.value_or(SYS_UNDEFINED);
+        int freq = tp->freq.value_or(0);
+        int diseqc = tp->diseqc.value_or(0);
+        int pol = tp->pol.value_or(0);
+        int sr = tp->sr.value_or(0);
+        fe_code_rate_t fec = tp->fec.value_or(FEC_AUTO);
+        fe_modulation_t mtype = tp->mtype.value_or(QAM_AUTO);
+        int bw = tp->bw.value_or(0);
+        fe_transmit_mode_t tmode = tp->tmode.value_or(TRANSMISSION_MODE_AUTO);
+        fe_guard_interval_t gi = tp->gi.value_or(GUARD_INTERVAL_AUTO);
+        fe_spectral_inversion_t inversion =
+            tp->inversion.value_or(INVERSION_AUTO);
+        fe_code_rate_t hprate = tp->hprate.value_or(FEC_AUTO);
+        int sm = tp->sm.value_or(0);
+        int t2id = tp->t2id.value_or(0);
+
+        LOG("netceiver: netcv_commit tune tp->sys=%d", sys);
 
         int map_pos[] = {0, 192, 130, 282,
                          -50}; // Default sat positions: 19.2E, 13E, 28.2E, 5W
         fe_sec_voltage_t map_pol[] = {(fe_sec_voltage_t)0, SEC_VOLTAGE_13,
                                       SEC_VOLTAGE_18, SEC_VOLTAGE_OFF};
 
-        switch (tp->sys) {
+        switch (sys) {
         case SYS_DVBS:
         case SYS_DVBS2: {
-            m_pos = 1800 + map_pos[tp->diseqc];
+            m_pos = 1800 + map_pos[diseqc];
 
             memset(&m_sec, 0, sizeof(recv_sec_t));
-            m_sec.voltage = map_pol[tp->pol];
+            m_sec.voltage = map_pol[pol];
 
             memset(&m_fep, 0, sizeof(struct dvb_frontend_parameters));
-            m_fep.frequency = tp->freq;
+            m_fep.frequency = freq;
             m_fep.inversion = INVERSION_AUTO;
-            m_fep.u.qpsk.symbol_rate = tp->sr;
+            m_fep.u.qpsk.symbol_rate = sr;
 
-            if (tp->sys == SYS_DVBS) {
-                m_fep.u.qpsk.fec_inner = tp->fec;
+            if (sys == SYS_DVBS) {
+                m_fep.u.qpsk.fec_inner = fec;
                 type = FE_QPSK;
             } else {
-                switch (tp->fec) // Handle FEC numbering exceptions
+                switch (fec) // Handle FEC numbering exceptions
                 {
                 case FEC_3_5:
                     m_fep.u.qpsk.fec_inner = (fe_code_rate_t)13;
@@ -197,11 +213,11 @@ int netcv_commit(adapter *ad) {
                     break;
 
                 default:
-                    m_fep.u.qpsk.fec_inner = tp->fec;
+                    m_fep.u.qpsk.fec_inner = fec;
                 }
 
                 // Für DVB-S2 PSK8 oder QPSK, siehe vdr-mcli-plugin/device.c
-                if (tp->mtype)
+                if (mtype)
                     m_fep.u.qpsk.fec_inner =
                         (fe_code_rate_t)(m_fep.u.qpsk.fec_inner | (PSK8 << 16));
                 else
@@ -216,16 +232,15 @@ int netcv_commit(adapter *ad) {
             LOG("netceiver: adapter %d tuning to %d%s pol:%s sr:%d fec:%s "
                 "delsys:%s "
                 "mod:%s",
-                ad->id, tp->freq / 1000, map_posc[tp->diseqc], get_pol(tp->pol),
-                tp->sr / 1000, fe_fec[tp->fec], fe_delsys[tp->sys],
-                fe_modulation[tp->mtype]);
+                ad->id, freq / 1000, map_posc[diseqc], get_pol(pol), sr / 1000,
+                fe_fec[fec], fe_delsys[sys], fe_modulation[mtype]);
 
             break;
 
             /* set roll-off */
             // TODO: check if needed for DVB-S2 transponders
             // unreachable code
-            //			m_fep.u.qpsk.fec_inner |= (tp->ro << 24);
+            //			m_fep.u.qpsk.fec_inner |= (ro << 24);
             //			break;
         }
 
@@ -233,27 +248,27 @@ int netcv_commit(adapter *ad) {
             m_pos = 0xfff; /* not sure, to be tested */
             memset(&m_sec, 0, sizeof(recv_sec_t));
 
-            m_fep.frequency = tp->freq * 1000;
+            m_fep.frequency = freq * 1000;
             m_fep.inversion = INVERSION_AUTO;
             m_fep.u.qam.fec_inner = FEC_NONE;
             /* we enforce qam256 if qpsk is used falsely, e.g. by Elgato SAT>IP
              * app */
-            m_fep.u.qam.modulation = tp->mtype == QPSK ? QAM_256 : tp->mtype;
-            m_fep.u.qam.symbol_rate = tp->sr;
+            m_fep.u.qam.modulation = mtype == QPSK ? QAM_256 : mtype;
+            m_fep.u.qam.symbol_rate = sr;
 
             type = FE_QAM;
 
             LOG("netceiver: adapter %d tuning to %d sr:%d delsys:%s mod:%s",
-                ad->id, tp->freq / 1000, tp->sr / 1000, fe_delsys[tp->sys],
-                fe_modulation[tp->mtype]);
+                ad->id, freq / 1000, sr / 1000, fe_delsys[sys],
+                fe_modulation[mtype]);
 
             break;
 
         case SYS_DVBT:
-            m_fep.frequency = tp->freq * 1000;
+            m_fep.frequency = freq * 1000;
             m_fep.inversion = INVERSION_AUTO;
 
-            switch (tp->bw) {
+            switch (bw) {
             case 8000000:
                 m_fep.u.ofdm.bandwidth = BANDWIDTH_8_MHZ;
                 break;
@@ -277,13 +292,13 @@ int netcv_commit(adapter *ad) {
                 break;
             default:
                 m_fep.u.ofdm.bandwidth = BANDWIDTH_AUTO;
-                LOG("netceiver: DVB-T: unknown bandwith: %d", tp->bw);
+                LOG("netceiver: DVB-T: unknown bandwith: %d", bw);
             }
 
             m_fep.u.ofdm.code_rate_HP = FEC_AUTO; // TBC
             m_fep.u.ofdm.code_rate_LP = FEC_AUTO; // TBC
 
-            switch (tp->mtype) // not properly handled by vdr-satip-plugin ?
+            switch (mtype) // not properly handled by vdr-satip-plugin ?
             {
             case 0:
                 m_fep.u.ofdm.constellation = QAM_AUTO;
@@ -292,25 +307,24 @@ int netcv_commit(adapter *ad) {
                 m_fep.u.ofdm.constellation = QAM_32;
                 break;
             default:
-                m_fep.u.ofdm.constellation = tp->mtype;
+                m_fep.u.ofdm.constellation = mtype;
             }
 
-            m_fep.u.ofdm.transmission_mode = tp->tmode;
-            m_fep.u.ofdm.guard_interval = tp->gi;
+            m_fep.u.ofdm.transmission_mode = tmode;
+            m_fep.u.ofdm.guard_interval = gi;
             m_fep.u.ofdm.hierarchy_information = HIERARCHY_NONE;
 
             type = FE_OFDM;
 
             LOG("netceiver: adapter %d tuning to %d inv: %d mtype: %d "
                 "hprate: %d tmode: %d gi: %d bw:%d sm %d t2id %d",
-                ad->id, tp->freq / 1000, tp->inversion, tp->mtype, tp->hprate,
-                tp->tmode, tp->gi, tp->bw, tp->sm, tp->t2id);
+                ad->id, freq / 1000, inversion, mtype, hprate, tmode, gi, bw,
+                sm, t2id);
 
             break;
 
         default:
-            LOG("netceiver: adapter %d tuning not supported for type %d",
-                tp->sys)
+            LOG("netceiver: adapter %d tuning not supported for type %d", sys)
             break;
         }
 

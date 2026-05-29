@@ -309,38 +309,40 @@ typedef struct diseqc {
 } diseqc;
 
 typedef struct struct_transponder {
-    int sys;
-    int freq;
-    int inversion;
-    fe_modulation_t mtype;
-    int fe;
+    std::optional<fe_delivery_system_t> sys = std::nullopt;
+    std::optional<int> freq = std::nullopt;
+    std::optional<fe_spectral_inversion_t> inversion = std::nullopt;
+    std::optional<fe_modulation_t> mtype = std::nullopt;
+    std::optional<int> fe = std::nullopt;
 
     // DVB-T
-    int hprate;
-    fe_transmit_mode_t tmode;
-    fe_guard_interval_t gi;
-    int bw;
-    int sm;
-    int t2id;
+    std::optional<fe_code_rate_t> hprate = std::nullopt;
+    std::optional<fe_transmit_mode_t> tmode = std::nullopt;
+    std::optional<fe_guard_interval_t> gi = std::nullopt;
+    std::optional<int> bw = std::nullopt;
+    std::optional<int> sm = std::nullopt;
+    std::optional<int> t2id = std::nullopt;
 
     // DVB-S2
-    int ro;
-    int plts;
-    fe_code_rate_t fec;
-    int sr;
-    int pol;
-    int diseqc;
+    std::optional<fe_rolloff_t> ro = std::nullopt;
+    std::optional<fe_pilot_t> plts = std::nullopt;
+    std::optional<fe_code_rate_t> fec = std::nullopt;
+    std::optional<int> sr = std::nullopt;
+    std::optional<int> pol = std::nullopt;
+    std::optional<int> diseqc = std::nullopt;
 
-    struct diseqc diseqc_param;
+    struct diseqc diseqc_param = {};
 
-    int c2tft;    // DVB-C2
-    int ds;       // DVB-C2 (data slice)
-    int plp_isi;  // DVB-T2/DVB-S2
-    int pls_mode; // DVB-S2
-    int pls_code; // DVB-S2
+    std::optional<int> c2tft = std::nullopt;              // DVB-C2
+    std::optional<int> ds = std::nullopt;                 // DVB-C2 (data slice)
+    std::optional<int> plp_isi = std::nullopt;            // DVB-T2/DVB-S2
+    std::optional<fe_pls_mode_t> pls_mode = std::nullopt; // DVB-S2
+    std::optional<int> pls_code = std::nullopt;           // DVB-S2
 
-    std::unordered_set<int> pids;
-    std::optional<int> x_pmt;
+    std::unordered_set<int> pids = {};
+    std::optional<int> x_pmt = std::nullopt;
+
+    void clear() { *this = struct_transponder{}; }
 } transponder;
 
 #ifndef DISABLE_LINUXDVB

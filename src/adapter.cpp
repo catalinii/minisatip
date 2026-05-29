@@ -591,10 +591,10 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
         return 0;
 
     // master adapter is used by other
-    int diseqc = (tp->diseqc > 0) ? tp->diseqc - 1 : 0;
-    int pol = (tp->pol - 1) & 1;
+    int diseqc = (tp->diseqc.value_or(0) > 0) ? tp->diseqc.value_or(0) - 1 : 0;
+    int pol = (tp->pol.value_or(0) - 1) & 1;
     int hiband = get_lnb_hiband(tp, &tp->diseqc_param);
-    int freq = tp->freq;
+    int freq = tp->freq.value_or(0);
 
     if (ad->master_source >= 0 && ad->master_source < MAX_ADAPTERS)
         master = a[ad->master_source];
@@ -638,9 +638,10 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
 int source_enabled_for_adapter(adapter *ad, transponder *tp) {
     if (!absolute_switch)
         return 1;
-    if (tp->sys != SYS_DVBS && tp->sys != SYS_DVBS2)
+    if (tp->sys.value_or(SYS_UNDEFINED) != SYS_DVBS &&
+        tp->sys.value_or(SYS_UNDEFINED) != SYS_DVBS2)
         return 1;
-    return ad->absolute_table[tp->diseqc - 1];
+    return ad->absolute_table[tp->diseqc.value_or(0) - 1];
 }
 
 int get_absolute_source_for_adapter(int aid, int src, int sys) {
@@ -660,8 +661,8 @@ int get_absolute_source_for_adapter(int aid, int src, int sys) {
 int get_free_adapter(transponder *tp) {
     int i;
     int match = 0;
-    int msys = tp->sys;
-    int fe = tp->fe;
+    int msys = tp->sys.value_or(SYS_UNDEFINED);
+    int fe = tp->fe.value_or(0);
 
     adapter *ad = a[0]; // If none is found then the first is the default!
     for (i = 0; i < MAX_ADAPTERS; i++)
@@ -1155,17 +1156,18 @@ int mark_pids_add(int sid, int aid, const char *pids) {
 }
 
 int get_lnb_hiband(transponder *tp, diseqc *diseqc_param) {
-    if (tp->pol > 2 && diseqc_param->lnb_circular > 0)
+    if (tp->pol.value_or(0) > 2 && diseqc_param->lnb_circular > 0)
         return 0;
-    if (diseqc_param->lnb_switch > 0 && tp->freq > diseqc_param->lnb_switch)
+    if (diseqc_param->lnb_switch > 0 &&
+        tp->freq.value_or(0) > diseqc_param->lnb_switch)
         return 1;
     return 0;
 }
 
 int get_lnb_int_freq(transponder *tp, diseqc *diseqc_param) {
-    int freq = tp->freq;
+    int freq = tp->freq.value_or(0);
 
-    if (tp->pol > 2 && diseqc_param->lnb_circular > 0)
+    if (tp->pol.value_or(0) > 2 && diseqc_param->lnb_circular > 0)
         return (freq - diseqc_param->lnb_circular);
     if (diseqc_param->lnb_switch > 0 && freq > diseqc_param->lnb_switch)
         return (freq - diseqc_param->lnb_high);
@@ -1178,16 +1180,22 @@ int compare_tunning_parameters(int aid, transponder *tp) {
         return -1;
 
     LOGM("new parameters: f:%d, plp/isi:%d, diseqc:%d, pol:%d, sr:%d, mtype:%d",
-         tp->freq, tp->plp_isi, tp->diseqc, tp->pol, tp->sr, tp->mtype);
+         tp->freq.value_or(0), tp->plp_isi.value_or(-1), tp->diseqc.value_or(0),
+         tp->pol.value_or(0), tp->sr.value_or(0), tp->mtype.value_or(QAM_AUTO));
     LOGM("old parameters: f:%d, plp/isi:%d, diseqc:%d, pol:%d, sr:%d, mtype:%d",
-         ad->tp.freq, ad->tp.plp_isi, ad->tp.diseqc, ad->tp.pol, ad->tp.sr,
-         ad->tp.mtype);
-    if ((abs(tp->freq - ad->tp.freq) > 1000) || tp->plp_isi != ad->tp.plp_isi ||
-        get_absolute_source_for_adapter(aid, tp->diseqc, tp->sys) !=
+         ad->tp.freq.value_or(0), ad->tp.plp_isi.value_or(-1),
+         ad->tp.diseqc.value_or(0), ad->tp.pol.value_or(0),
+         ad->tp.sr.value_or(0), ad->tp.mtype.value_or(QAM_AUTO));
+    if ((abs(tp->freq.value_or(0) - ad->tp.freq.value_or(0)) > 1000) ||
+        tp->plp_isi != ad->tp.plp_isi ||
+        get_absolute_source_for_adapter(aid, tp->diseqc.value_or(0),
+                                        tp->sys.value_or(SYS_UNDEFINED)) !=
             ad->tp.diseqc ||
-        (tp->pol > 0 && tp->pol != ad->tp.pol) ||
-        (tp->sr > 1000 && ad->tp.sr > 1000 && tp->sr != ad->tp.sr) ||
-        (tp->mtype != 6 && ad->tp.mtype != 6 && tp->mtype != ad->tp.mtype))
+        (tp->pol.value_or(0) > 0 && tp->pol != ad->tp.pol) ||
+        (tp->sr.value_or(0) > 1000 && ad->tp.sr.value_or(0) > 1000 &&
+         tp->sr != ad->tp.sr) ||
+        (tp->mtype.value_or(QAM_AUTO) != 6 &&
+         ad->tp.mtype.value_or(QAM_AUTO) != 6 && tp->mtype != ad->tp.mtype))
 
         return 1;
 
@@ -1254,9 +1262,10 @@ int set_adapter_parameters(int aid, int sid, transponder *tp) {
 
     copy_dvb_parameters(tp, &ad->tp);
     // FE= is not specified by the client
-    if (ad->tp.fe < 1) {
+    if (ad->tp.fe.value_or(0) < 1) {
         ad->tp.diseqc =
-            get_absolute_source_for_adapter(ad->id, ad->tp.diseqc, ad->tp.sys);
+            get_absolute_source_for_adapter(ad->id, ad->tp.diseqc.value_or(0),
+                                            ad->tp.sys.value_or(SYS_UNDEFINED));
     }
 
     if (sync_pids(sid, aid, &ad->tp) < 0)
@@ -1336,28 +1345,42 @@ char *describe_adapter(int sid, int aid, char *dad, int ld) {
         len = snprintf(
             dad, ld,
             "ver=1.0;src=%d;tuner=%d,%d,%d,%d,%d,%s,%s,%s,%s,%s,%d,%s;pids=",
-            t->diseqc, (ad && ad->tp.fe > 0) ? ad->tp.fe : aid + 1, strength,
-            status, snr, t->freq / 1000, get_pol(t->pol), get_delsys(t->sys),
-            get_modulation(t->mtype), get_pilot(t->plts), get_rolloff(t->ro),
-            t->sr / 1000, get_fec(t->fec));
+            t->diseqc.value_or(0),
+            (ad && ad->tp.fe.value_or(0) > 0) ? ad->tp.fe.value_or(0) : aid + 1,
+            strength, status, snr, t->freq.value_or(0) / 1000,
+            get_pol(t->pol.value_or(0)),
+            get_delsys(t->sys.value_or(SYS_UNDEFINED)),
+            get_modulation(t->mtype.value_or(QAM_AUTO)),
+            get_pilot(t->plts.value_or(PILOT_AUTO)),
+            get_rolloff(t->ro.value_or(ROLLOFF_AUTO)), t->sr.value_or(0) / 1000,
+            get_fec(t->fec.value_or(FEC_AUTO)));
     else if (t->sys == SYS_DVBT || t->sys == SYS_DVBT2)
         len = snprintf(
             dad, ld,
             "ver=1.1;tuner=%d,%d,%d,%d,%.2f,%d,%s,%s,%s,%s,%s,%s,%d,%d;pids=",
-            (ad && ad->tp.fe > 0) ? ad->tp.fe : aid + 1, strength, status, snr,
-            (double)t->freq / 1000.0, t->bw / 1000000, get_delsys(t->sys),
-            get_tmode(t->tmode), get_modulation(t->mtype), get_gi(t->gi),
-            get_fec(t->fec), itoa_positive(plp_isi, t->plp_isi), t->t2id,
-            t->sm);
+            (ad && ad->tp.fe.value_or(0) > 0) ? ad->tp.fe.value_or(0) : aid + 1,
+            strength, status, snr, (double)t->freq.value_or(0) / 1000.0,
+            t->bw.value_or(8000000) / 1000000,
+            get_delsys(t->sys.value_or(SYS_UNDEFINED)),
+            get_tmode(t->tmode.value_or(TRANSMISSION_MODE_AUTO)),
+            get_modulation(t->mtype.value_or(QAM_AUTO)),
+            get_gi(t->gi.value_or(GUARD_INTERVAL_AUTO)),
+            get_fec(t->fec.value_or(FEC_AUTO)),
+            itoa_positive(plp_isi, t->plp_isi.value_or(-1)),
+            t->t2id.value_or(0), t->sm.value_or(0));
     else
         len = snprintf(
             dad, ld,
             "ver=1.2;tuner=%d,%d,%d,%d,%.2f,%d,%s,%s,%d,%d,%s,%s,%s;pids=",
-            (ad && ad->tp.fe > 0) ? ad->tp.fe : aid + 1, strength, status, snr,
-            (double)t->freq / 1000, t->bw / 1000000, get_delsys(t->sys),
-            get_modulation(t->mtype), t->sr / 1000, t->c2tft,
-            itoa_positive(ds, t->ds), itoa_positive(plp_isi, t->plp_isi),
-            get_inversion(t->inversion));
+            (ad && ad->tp.fe.value_or(0) > 0) ? ad->tp.fe.value_or(0) : aid + 1,
+            strength, status, snr, (double)t->freq.value_or(0) / 1000.0,
+            t->bw.value_or(8000000) / 1000000,
+            get_delsys(t->sys.value_or(SYS_UNDEFINED)),
+            get_modulation(t->mtype.value_or(QAM_AUTO)),
+            t->sr.value_or(0) / 1000, t->c2tft.value_or(0),
+            itoa_positive(ds, t->ds.value_or(-1)),
+            itoa_positive(plp_isi, t->plp_isi.value_or(-1)),
+            get_inversion(t->inversion.value_or(INVERSION_AUTO)));
 
     if (use_ad) {
         int len1 = len;
@@ -2192,7 +2215,7 @@ int get_adapter_fe(int aid) {
     adapter *ad = get_adapter_nw(aid);
     if (!ad)
         return 0;
-    fe = ad->tp.fe;
+    fe = ad->tp.fe.value_or(0);
     if (fe == 0)
         return 0;
 
