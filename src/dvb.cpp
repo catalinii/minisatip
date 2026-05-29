@@ -24,6 +24,7 @@
 #include "pmt.h"
 #include "utils.h"
 #include "utils/ticks.h"
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
 
@@ -1315,6 +1316,18 @@ int dvb_tune(int aid, transponder *tp) {
     struct dtv_properties p = {.num = 0, .props = p_cmd};
     struct dvb_frontend_event ev;
 
+    auto add_prop_opt = [&](uint32_t cmd, auto opt_val, auto def_val) {
+        if (opt_val.has_value()) {
+            ADD_PROP(cmd, opt_val.value());
+        } else {
+            if constexpr (!std::is_same_v<decltype(def_val), std::nullopt_t>) {
+                ADD_PROP(cmd, def_val);
+            }
+        }
+    };
+#define ADD_PROP_OPT(prop, opt_val, def_val)                                   \
+    add_prop_opt(prop, opt_val, def_val);
+
     struct dtv_property p_clear[] = {
         {.cmd = DTV_CLEAR},
     };
@@ -1350,25 +1363,24 @@ int dvb_tune(int aid, transponder *tp) {
         if (freq < MIN_FRQ_DVBS || freq > MAX_FRQ_DVBS)
             LOG_AND_RETURN(-404, "Frequency %d is not within range ", freq)
 
-        ADD_PROP(DTV_SYMBOL_RATE, tp->sr.value_or(0))
-        ADD_PROP(DTV_INNER_FEC, tp->fec.value_or(FEC_AUTO))
-        ADD_PROP(DTV_PILOT, tp->plts.value_or(PILOT_AUTO))
-        ADD_PROP(DTV_ROLLOFF, tp->ro.value_or(ROLLOFF_AUTO))
+        ADD_PROP_OPT(DTV_SYMBOL_RATE, tp->sr, 0)
+        ADD_PROP_OPT(DTV_INNER_FEC, tp->fec, FEC_AUTO)
+        ADD_PROP_OPT(DTV_PILOT, tp->plts, PILOT_AUTO)
+        ADD_PROP_OPT(DTV_ROLLOFF, tp->ro, ROLLOFF_AUTO)
 #if DVBAPIVERSION >= 0x0502
-        if (tp->plp_isi.value_or(-1) >= 0)
 #if DVBAPIVERSION >= 0x050b /* 5.11 */
-            ADD_PROP(DTV_STREAM_ID, tp->plp_isi.value_or(0))
+        ADD_PROP_OPT(DTV_STREAM_ID, tp->plp_isi, std::nullopt)
 #else
-            // In DVBAPI < 5.11 DTV_STREAM_ID takes also the PLS Code and Mode
+        // In DVBAPI < 5.11 DTV_STREAM_ID takes also the PLS Code and Mode
+        if (tp->plp_isi.has_value()) {
             ADD_PROP(DTV_STREAM_ID,
                      tp->plp_isi.value_or(0) | (tp->pls_code.value_or(0) << 8) |
                          (tp->pls_mode.value_or(PLS_MODE_ROOT) << 26))
+        }
 #endif
 #endif
 #if DVBAPIVERSION >= 0x050b /* 5.11 */
-        if (tp->pls_code.value_or(-1) >=
-            0) // Use Gold plp_mode by default if plsc specified
-            ADD_PROP(DTV_SCRAMBLING_SEQUENCE_INDEX, tp->pls_code.value_or(0))
+        ADD_PROP_OPT(DTV_SCRAMBLING_SEQUENCE_INDEX, tp->pls_code, std::nullopt)
 #endif
 
 #ifdef USE_DVBAPI3
@@ -1398,15 +1410,14 @@ int dvb_tune(int aid, transponder *tp) {
                            tp->freq.value_or(0))
 
         freq = freq * 1000;
-        ADD_PROP(DTV_BANDWIDTH_HZ, tp->bw.value_or(8000000))
-        ADD_PROP(DTV_CODE_RATE_HP, tp->fec.value_or(FEC_AUTO))
-        ADD_PROP(DTV_CODE_RATE_LP, tp->fec.value_or(FEC_AUTO))
-        ADD_PROP(DTV_GUARD_INTERVAL, tp->gi.value_or(GUARD_INTERVAL_AUTO))
-        ADD_PROP(DTV_TRANSMISSION_MODE,
-                 tp->tmode.value_or(TRANSMISSION_MODE_AUTO))
+        ADD_PROP_OPT(DTV_BANDWIDTH_HZ, tp->bw, 8000000)
+        ADD_PROP_OPT(DTV_CODE_RATE_HP, tp->fec, FEC_AUTO)
+        ADD_PROP_OPT(DTV_CODE_RATE_LP, tp->fec, FEC_AUTO)
+        ADD_PROP_OPT(DTV_GUARD_INTERVAL, tp->gi, GUARD_INTERVAL_AUTO)
+        ADD_PROP_OPT(DTV_TRANSMISSION_MODE, tp->tmode, TRANSMISSION_MODE_AUTO)
         ADD_PROP(DTV_HIERARCHY, HIERARCHY_AUTO)
 #if DVBAPIVERSION >= 0x0502
-        if (tp->plp_isi.value_or(-1) >= 0)
+        if (tp->plp_isi.has_value())
             ADD_PROP(DTV_STREAM_ID, tp->plp_isi.value_or(0) & 0xFF)
 #endif
 
@@ -1450,11 +1461,11 @@ int dvb_tune(int aid, transponder *tp) {
                            tp->freq.value_or(0))
 
         freq = freq * 1000;
-        ADD_PROP(DTV_SYMBOL_RATE, tp->sr.value_or(0))
+        ADD_PROP_OPT(DTV_SYMBOL_RATE, tp->sr, 0)
 #if DVBAPIVERSION >= 0x0502
-        if (tp->plp_isi.value_or(-1) >= 0) {
+        if (tp->plp_isi.has_value()) {
             int v = tp->plp_isi.value_or(0) & 0xFF;
-            if (tp->ds.value_or(-1) >= 0)
+            if (tp->ds.has_value())
                 v |= (tp->ds.value_or(0) & 0xFF) << 8;
             ADD_PROP(DTV_STREAM_ID, v);
         }
@@ -1501,7 +1512,7 @@ int dvb_tune(int aid, transponder *tp) {
                            tp->freq.value_or(0))
 
         freq = freq * 1000;
-        ADD_PROP(DTV_BANDWIDTH_HZ, tp->bw.value_or(8000000))
+        ADD_PROP_OPT(DTV_BANDWIDTH_HZ, tp->bw, 8000000)
 #if DVBAPIVERSION >= 0x0501
         ADD_PROP(DTV_ISDBT_PARTIAL_RECEPTION, 0)
 //		ADD_PROP(DTV_ISDBT_LAYERA_SEGMENT_COUNT,   1);
@@ -1521,12 +1532,13 @@ int dvb_tune(int aid, transponder *tp) {
     }
 
     ADD_PROP(DTV_FREQUENCY, freq)
-    ADD_PROP(DTV_INVERSION, tp->inversion.value_or(INVERSION_AUTO))
-    ADD_PROP(DTV_MODULATION, tp->mtype.value_or(QAM_AUTO));
-    ADD_PROP(DTV_DELIVERY_SYSTEM, tp->sys.value_or(SYS_UNDEFINED));
+    ADD_PROP_OPT(DTV_INVERSION, tp->inversion, INVERSION_AUTO)
+    ADD_PROP_OPT(DTV_MODULATION, tp->mtype, QAM_AUTO)
+    ADD_PROP_OPT(DTV_DELIVERY_SYSTEM, tp->sys, SYS_UNDEFINED)
     ADD_PROP(DTV_TUNE, 0)
 
     p.num = iProp;
+#undef ADD_PROP_OPT
     /* discard stale QPSK events */
     while (1) {
         if (ioctl(fd_frontend, FE_GET_EVENT, &ev) == -1)
