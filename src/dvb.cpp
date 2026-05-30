@@ -236,7 +236,10 @@ static std::vector<int> parse_pids_list(std::string_view val) {
         } else if (pid_sv == "none") {
             // ignore
         } else if (!pid_sv.empty()) {
-            res.push_back(parse_int(pid_sv));
+            int p = parse_int(pid_sv, -1);
+            if (p >= 0) {
+                res.push_back(p);
+            }
         }
     }
     return res;
@@ -335,9 +338,13 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
             tp->pls_mode = fe_pls_mode_map.lookup(val);
         else if (key == "plsc")
             tp->pls_code = parse_int(val);
-        else if (key == "x_pmt")
-            tp->x_pmt = parse_int(val, -1);
-        else if (key == "pids") {
+        else if (key == "x_pmt") {
+            int parsed = parse_int(val, -1);
+            if (parsed >= 0)
+                tp->x_pmt = parsed;
+            else
+                tp->x_pmt = std::nullopt;
+        } else if (key == "pids") {
             tp->pids.clear();
             auto parsed = parse_pids_list(val);
             tp->pids.insert(parsed.begin(), parsed.end());

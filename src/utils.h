@@ -14,16 +14,13 @@
 #include <sys/uio.h>
 
 #include <algorithm>
+#include <cctype>
+#include <optional>
 #include <string_view>
+#include <strings.h>
 #include <vector>
 
-#include <cctype>
-
 typedef std::recursive_mutex SMutex;
-
-#include <algorithm>
-#include <optional>
-#include <strings.h>
 
 inline bool eq_case_insensitive(std::string_view a, std::string_view b) {
     return std::ranges::equal(a, b, [](char c1, char c2) {
