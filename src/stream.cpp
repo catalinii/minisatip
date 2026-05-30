@@ -1303,37 +1303,38 @@ int stream_timeout(sockets *s) {
     ctime = getTick();
     s->rtime = ctime;
 
-    if ((sid = get_sid(s->sid))) {
-        std::unique_lock<SMutex> lock(sid->mutex);
-        if (sid->timeout == 1) {
-            LOG("Stream forced close requested for sid %d", sid->sid);
-            lock.unlock();
-            close_stream(sid->sid);
-            return 0;
+    if (!(sid = get_sid(s->sid)))
+        return 0;
+
+    std::unique_lock<SMutex> lock(sid->mutex);
+    if (sid->timeout == 1) {
+        LOG("Stream forced close requested for sid %d", sid->sid);
+        lock.unlock();
+        close_stream(sid->sid);
+        return 0;
+    }
+
+    if (sid->type != STREAM_HTTP && sid->type != STREAM_RTSP_SRT) {
+        rttime = sid->rtcp_wtime, rtime = sid->wtime;
+
+        if (sid->do_play && ctime - rtime > 1000) {
+            LOG("no data sent for more than 1s sid: %d for %s:%d", sid->sid,
+                get_stream_rhost(sid->sid, ra, sizeof(ra)),
+                get_stream_rport(sid->sid));
+            enqueue_rtp_header(sid, iov, 1, 0, rtp_buf);
+            flush_stream(sid, iov, 1, ctime);
         }
+        if (sid->do_play && ctime - rttime >= 200)
+            send_rtcp(sid->sid, ctime);
+        // check stream timeout, and allow 10s more to respond
+        if (sid->timeout > 0 && (ctime - sid->rtime > sid->timeout + 10000)) {
+            LOG("Stream timeout sid %d, closing (ctime %jd , sid->rtime "
+                "%jd, "
+                "sid->timeout %d)",
+                sid->sid, ctime, sid->rtime, sid->timeout);
 
-        if (sid->type != STREAM_HTTP && sid->type != STREAM_RTSP_SRT) {
-            rttime = sid->rtcp_wtime, rtime = sid->wtime;
-
-            if (sid->do_play && ctime - rtime > 1000) {
-                LOG("no data sent for more than 1s sid: %d for %s:%d", sid->sid,
-                    get_stream_rhost(sid->sid, ra, sizeof(ra)),
-                    get_stream_rport(sid->sid));
-                enqueue_rtp_header(sid, iov, 1, 0, rtp_buf);
-                flush_stream(sid, iov, 1, ctime);
-            }
-            if (sid->do_play && ctime - rttime >= 200)
-                send_rtcp(sid->sid, ctime);
-            // check stream timeout, and allow 10s more to respond
-            if (sid->timeout > 0 && (ctime - sid->rtime > sid->timeout + 10000)) {
-                LOG("Stream timeout sid %d, closing (ctime %jd , sid->rtime "
-                    "%jd, "
-                    "sid->timeout %d)",
-                    sid->sid, ctime, sid->rtime, sid->timeout);
-
-                lock.unlock();
-                close_stream(sid->sid); // do not lock before this
-            }
+            lock.unlock();
+            close_stream(sid->sid); // do not lock before this
         }
     }
 
