@@ -47,7 +47,6 @@ template <typename EnumT> class EnumMap {
             return it->value;
         }
         return std::nullopt;
-        ;
     }
 
     std::string_view reverse_lookup(EnumT val) const {

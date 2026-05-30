@@ -539,7 +539,8 @@ void dump_adapters() {
         if ((ad = get_adapter_nw(i)))
             LOG("%d|f: %d sid_cnt:%d master_sid:%d master_source:%d del_sys: "
                 "%s,%s,%s %s",
-                i, ad->tp.freq, ad->sid_cnt, ad->master_sid, ad->master_source,
+                i, ad->tp.freq.value_or(0), ad->sid_cnt, ad->master_sid,
+                ad->master_source,
                 fe_delsys_map.reverse_lookup(ad->sys[0]).data(),
                 fe_delsys_map.reverse_lookup(ad->sys[1]).data(),
                 fe_delsys_map.reverse_lookup(ad->sys[2]).data(),
@@ -685,8 +686,9 @@ int get_free_adapter(transponder *tp) {
     if (ad)
         LOG("get free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d src:%d f:%d "
             "pol=%d sys: %s %s",
-            tp->fe, ad->id, ad->enabled, ad->master_sid, ad->sid_cnt,
-            ad->tp.diseqc, ad->tp.freq, ad->tp.pol,
+            tp->fe.value_or(0), ad->id, ad->enabled, ad->master_sid,
+            ad->sid_cnt, ad->tp.diseqc.value_or(0), ad->tp.freq.value_or(0),
+            ad->tp.pol.value_or(0),
             fe_delsys_map.reverse_lookup(ad->sys[0]).data(),
             fe_delsys_map.reverse_lookup(ad->sys[1]).data())
     else
