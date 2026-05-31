@@ -788,6 +788,7 @@ int flush_stream(streams *sid, struct iovec *iov, int iiov, int64_t ctime) {
                 } else {
                     LOG("SRT send failed for sid %d: %s", sid->sid,
                         srt_getlasterror_str());
+                    sid->timeout = 1;
                     goto srt_done;
                 }
             }
@@ -1302,9 +1303,18 @@ int stream_timeout(sockets *s) {
     ctime = getTick();
     s->rtime = ctime;
 
-    if ((sid = get_sid(s->sid)) && sid->type != STREAM_HTTP &&
-        sid->type != STREAM_RTSP_SRT) {
-        std::unique_lock<SMutex> lock(sid->mutex);
+    if (!(sid = get_sid(s->sid)))
+        return 0;
+
+    std::unique_lock<SMutex> lock(sid->mutex);
+    if (sid->timeout == 1) {
+        LOG("Stream forced close requested for sid %d", sid->sid);
+        lock.unlock();
+        close_stream(sid->sid);
+        return 0;
+    }
+
+    if (sid->type != STREAM_HTTP && sid->type != STREAM_RTSP_SRT) {
         rttime = sid->rtcp_wtime, rtime = sid->wtime;
 
         if (sid->do_play && ctime - rtime > 1000) {
@@ -1317,8 +1327,7 @@ int stream_timeout(sockets *s) {
         if (sid->do_play && ctime - rttime >= 200)
             send_rtcp(sid->sid, ctime);
         // check stream timeout, and allow 10s more to respond
-        if ((sid->timeout > 0 && (ctime - sid->rtime > sid->timeout + 10000)) ||
-            (sid->timeout == 1)) {
+        if (sid->timeout > 0 && (ctime - sid->rtime > sid->timeout + 10000)) {
             LOG("Stream timeout sid %d, closing (ctime %jd , sid->rtime "
                 "%jd, "
                 "sid->timeout %d)",
