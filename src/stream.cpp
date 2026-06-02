@@ -262,9 +262,10 @@ int start_play(streams *sid, sockets *s) {
          ad->master_sid !=
              sid->sid)) // associate the adapter only at play (not at setup)
     {
-        if (sid->tp.sys == 0 &&
-            sid->tp.freq == 0) // play streams with no real parameters ==>
-                               // sending empty packets to the dest
+        if (sid->tp.sys.value_or(SYS_UNDEFINED) == SYS_UNDEFINED &&
+            sid->tp.freq.value_or(0) ==
+                0) // play streams with no real parameters ==>
+                   // sending empty packets to the dest
         {
             sid->do_play = 1;
             LOG_AND_RETURN(
@@ -455,7 +456,7 @@ int decode_transport(sockets *s, std::string_view arg, char *default_rtp,
                 p.port = parse_int(token.substr(5));
             if (token.size() >= 12 && token.substr(0, 12) == "destination=") {
                 std::string dest_str(token.substr(12));
-                safe_strncpy(p.dest, (char *)dest_str.c_str());
+                safe_strncpy(p.dest, dest_str.c_str());
             }
         }
     }

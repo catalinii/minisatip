@@ -56,7 +56,7 @@ template <typename EnumT> class EnumMap {
         if (it != entries_.end() && it->key != " ")
             return it->key;
 
-        return "NOT FOUND";
+        return "";
     }
 
   private:

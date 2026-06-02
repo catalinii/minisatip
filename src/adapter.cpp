@@ -646,7 +646,10 @@ int source_enabled_for_adapter(adapter *ad, transponder *tp) {
     if (tp->sys.value_or(SYS_UNDEFINED) != SYS_DVBS &&
         tp->sys.value_or(SYS_UNDEFINED) != SYS_DVBS2)
         return 1;
-    return ad->absolute_table[tp->diseqc.value_or(0) - 1];
+    int diseqc = tp->diseqc.value_or(0);
+    if (diseqc <= 0 || diseqc > MAX_SOURCES)
+        return 1;
+    return ad->absolute_table[diseqc - 1];
 }
 
 int get_absolute_source_for_adapter(int aid, int src, int sys) {
@@ -744,8 +747,9 @@ int get_free_adapter(transponder *tp) {
     }
 
 noadapter:
-    LOG("no adapter found for src:%d f:%d pol:%d msys:%d", tp->diseqc, tp->freq,
-        tp->pol, tp->sys);
+    LOG("no adapter found for src:%d f:%d pol:%d msys:%d",
+        tp->diseqc.value_or(0), tp->freq.value_or(0), tp->pol.value_or(0),
+        tp->sys.value_or(SYS_UNDEFINED));
     dump_adapters();
     return -1;
 }
@@ -1243,7 +1247,7 @@ int set_adapter_parameters(int aid, int sid, transponder *tp) {
         return -1;
 
     LOG("setting DVB parameters for adapter %d - master_sid %d sid %d old f:%d",
-        aid, ad->master_sid, sid, ad->tp.freq);
+        aid, ad->master_sid, sid, ad->tp.freq.value_or(0));
     std::lock_guard<SMutex> lock(ad->mutex);
     if (ad->master_sid == -1)
         ad->master_sid = sid; // master sid was closed
@@ -1255,9 +1259,12 @@ int set_adapter_parameters(int aid, int sid, transponder *tp) {
         {
             LOG("secondary stream requested tune, not gonna happen ad: f:%d sr:%d pol:%d plp/isi:%d src:%d mod %d -> \
 			new: f:%d sr:%d pol:%d plp/isi:%d src:%d mod %d",
-                ad->tp.freq, ad->tp.sr, ad->tp.pol, ad->tp.plp_isi,
-                ad->tp.diseqc, ad->tp.mtype, tp->freq, tp->sr, tp->pol,
-                tp->plp_isi, tp->diseqc, tp->mtype);
+                ad->tp.freq.value_or(0), ad->tp.sr.value_or(0),
+                ad->tp.pol.value_or(0), ad->tp.plp_isi.value_or(0),
+                ad->tp.diseqc.value_or(0), ad->tp.mtype.value_or(QAM_AUTO),
+                tp->freq.value_or(0), tp->sr.value_or(0), tp->pol.value_or(0),
+                tp->plp_isi.value_or(0), tp->diseqc.value_or(0),
+                tp->mtype.value_or(QAM_AUTO));
             return -1;
         }
         ad->do_tune = 1;

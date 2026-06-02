@@ -3559,6 +3559,8 @@ void set_ca_channels(char *o) {
         }
 
         ddci = parse_int(token, -1);
+        if (ddci < 0 || ddci >= MAX_ADAPTERS)
+            continue;
         if (!ca_devices[ddci])
             ca_devices[ddci] = alloc_ca_device();
         if (!ca_devices[ddci])

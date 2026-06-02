@@ -153,7 +153,7 @@ int test_get_s2_url_no_multistream() {
     ad.tp.fec = FEC_2_3;
     ad.tp.ro = ROLLOFF_35;
     ad.tp.plts = PILOT_OFF;
-    // plp_isi, pls_mode, pls_code left as TP_VALUE_UNSET from init
+    // plp_isi, pls_mode, pls_code left as std::nullopt
 
     char url[1000];
     get_s2_url(&ad, url, sizeof(url));
