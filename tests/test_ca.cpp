@@ -512,6 +512,21 @@ int test_set_ca_channels_parsing() {
     free(ca_devices[0]);
     ca_devices[0] = nullptr;
 
+    // Test MAX_CAID bounds protection
+    char config_overflow[] =
+        "0:*2-0100-0200-0300-0400-0500-0600-0700-0800-0900-0A00-0B00-0C00-0D00-"
+        "0E00-0F00-1000-1100-1200-1300-1400-1500-1600";
+    set_ca_channels(config_overflow);
+    ASSERT(ca_devices[0] != nullptr,
+           "Expected ca_devices[0] to be allocated on overflow test");
+    ASSERT(ca_devices[0]->caids == MAX_CAID,
+           "Expected caids to be clamped to MAX_CAID");
+    ASSERT(ca_devices[0]->caid[MAX_CAID - 1] == 0x1400,
+           "Expected 20th CAID to be 0x1400");
+
+    free(ca_devices[0]);
+    ca_devices[0] = nullptr;
+
     return 0;
 }
 

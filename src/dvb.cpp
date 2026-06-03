@@ -1256,7 +1256,7 @@ int dvb_tune(int aid, transponder *tp) {
     struct dtv_properties cmdseq_clear = {.num = 1, .props = p_clear};
 
 #ifdef USE_DVBAPI3
-    struct dvb_frontend_parameters fep;
+    struct dvb_frontend_parameters fep{};
 #endif
 
     if (!ad)

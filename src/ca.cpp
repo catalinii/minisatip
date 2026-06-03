@@ -2545,6 +2545,12 @@ int APP_CA_handler(ca_session_t *session, int resource, uint8_t *data,
         if (!d->has_forced_caids) {
             d->caids = 0;
             for (i = 0; i < caid_count; i++) {
+                if (d->caids >= MAX_CAID) {
+                    LOG("CA%d: CAM reported more CAIDs than MAX_CAID limit "
+                        "(%d), truncating",
+                        d->id, MAX_CAID);
+                    break;
+                }
                 int caid = (data[i * 2 + 0] << 8) | data[i * 2 + 1];
                 d->caid[d->caids++] = caid;
             }
@@ -3577,9 +3583,15 @@ void set_ca_channels(char *o) {
             auto result = std::from_chars(
                 caid_sv.data(), caid_sv.data() + caid_sv.size(), caid, 16);
             if (result.ec == std::errc{} && caid > 0) {
-                ca_devices[ddci]->caid[ca_devices[ddci]->caids++] = caid;
-                ca_devices[ddci]->has_forced_caids = 1;
-                LOG("Forcing CA %d to use CAID %04X", ddci, caid);
+                if (ca_devices[ddci]->caids < MAX_CAID) {
+                    ca_devices[ddci]->caid[ca_devices[ddci]->caids++] = caid;
+                    ca_devices[ddci]->has_forced_caids = 1;
+                    LOG("Forcing CA %d to use CAID %04X", ddci, caid);
+                } else {
+                    LOG("CA %d: reached maximum CAID limit (%d), ignoring CAID "
+                        "%04X",
+                        ddci, MAX_CAID, caid);
+                }
             }
             next_dash = rem.find('-', next_dash + 1);
         }
