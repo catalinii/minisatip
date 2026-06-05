@@ -97,7 +97,7 @@ enum dmx_source {
 #define FEC_1_3 ((fe_code_rate_t)14)
 #endif
 
-const EnumMap<fe_delivery_system_t>
+extern const EnumMap<fe_delivery_system_t>
     fe_delsys_map({{"undefined", SYS_UNDEFINED},
                    {"dvbc", SYS_DVBC_ANNEX_A},
                    {"dvbcb", SYS_DVBC_ANNEX_B},
@@ -119,55 +119,56 @@ const EnumMap<fe_delivery_system_t>
                    {"dvbcc", SYS_DVBC_ANNEX_C},
                    {"dvbc2", (fe_delivery_system_t)SYS_DVBC2}});
 
-const EnumMap<int>
+extern const EnumMap<int>
     fe_pol_map({{"none", 0}, {"v", 1}, {"h", 2}, {"r", 3}, {"l", 4}});
 
-const EnumMap<fe_rolloff_t> fe_rolloff_map({{"0.35", ROLLOFF_35},
-                                            {"0.20", ROLLOFF_20},
-                                            {"0.25", ROLLOFF_25},
-                                            {" ", ROLLOFF_AUTO},
-                                            {"0.15", ROLLOFF_15},
-                                            {"0.10", ROLLOFF_10},
-                                            {"0.05", ROLLOFF_5}});
+extern const EnumMap<fe_rolloff_t> fe_rolloff_map({{"0.35", ROLLOFF_35},
+                                                   {"0.20", ROLLOFF_20},
+                                                   {"0.25", ROLLOFF_25},
+                                                   {" ", ROLLOFF_AUTO},
+                                                   {"0.15", ROLLOFF_15},
+                                                   {"0.10", ROLLOFF_10},
+                                                   {"0.05", ROLLOFF_5}});
 
-const EnumMap<fe_modulation_t> fe_modulation_map({{"qpsk", QPSK},
-                                                  {"16qam", QAM_16},
-                                                  {"32qam", QAM_32},
-                                                  {"64qam", QAM_64},
-                                                  {"128qam", QAM_128},
-                                                  {"256qam", QAM_256},
-                                                  {" ", QAM_AUTO},
-                                                  {"8vsb", VSB_8},
-                                                  {"16vsb", VSB_16},
-                                                  {"8psk", PSK_8},
-                                                  {"16apsk", APSK_16},
-                                                  {"32apsk", APSK_32},
-                                                  {"dqpsk", DQPSK},
-                                                  {"qam_4_nr", QAM_4_NR},
-                                                  {"64apsk", APSK_64},
-                                                  {"128apsk", APSK_128},
-                                                  {"256apsk", APSK_256}});
+extern const EnumMap<fe_modulation_t>
+    fe_modulation_map({{"qpsk", QPSK},
+                       {"16qam", QAM_16},
+                       {"32qam", QAM_32},
+                       {"64qam", QAM_64},
+                       {"128qam", QAM_128},
+                       {"256qam", QAM_256},
+                       {" ", QAM_AUTO},
+                       {"8vsb", VSB_8},
+                       {"16vsb", VSB_16},
+                       {"8psk", PSK_8},
+                       {"16apsk", APSK_16},
+                       {"32apsk", APSK_32},
+                       {"dqpsk", DQPSK},
+                       {"qam_4_nr", QAM_4_NR},
+                       {"64apsk", APSK_64},
+                       {"128apsk", APSK_128},
+                       {"256apsk", APSK_256}});
 
-const EnumMap<fe_code_rate_t> fe_fec_map({{"none", FEC_NONE},
-                                          {"12", FEC_1_2},
-                                          {"23", FEC_2_3},
-                                          {"34", FEC_3_4},
-                                          {"45", FEC_4_5},
-                                          {"56", FEC_5_6},
-                                          {"67", FEC_6_7},
-                                          {"78", FEC_7_8},
-                                          {"89", FEC_8_9},
-                                          {" ", FEC_AUTO},
-                                          {"35", FEC_3_5},
-                                          {"910", FEC_9_10},
-                                          {"25", FEC_2_5},
-                                          {"14", FEC_1_4},
-                                          {"13", FEC_1_3}});
+extern const EnumMap<fe_code_rate_t> fe_fec_map({{"none", FEC_NONE},
+                                                 {"12", FEC_1_2},
+                                                 {"23", FEC_2_3},
+                                                 {"34", FEC_3_4},
+                                                 {"45", FEC_4_5},
+                                                 {"56", FEC_5_6},
+                                                 {"67", FEC_6_7},
+                                                 {"78", FEC_7_8},
+                                                 {"89", FEC_8_9},
+                                                 {" ", FEC_AUTO},
+                                                 {"35", FEC_3_5},
+                                                 {"910", FEC_9_10},
+                                                 {"25", FEC_2_5},
+                                                 {"14", FEC_1_4},
+                                                 {"13", FEC_1_3}});
 
-const EnumMap<fe_pilot_t>
+extern const EnumMap<fe_pilot_t>
     fe_pilot_map({{"on", PILOT_ON}, {"off", PILOT_OFF}, {" ", PILOT_AUTO}});
 
-const EnumMap<fe_guard_interval_t>
+extern const EnumMap<fe_guard_interval_t>
     fe_gi_map({{"132", GUARD_INTERVAL_1_32},
                {"116", GUARD_INTERVAL_1_16},
                {"18", GUARD_INTERVAL_1_8},
@@ -180,7 +181,7 @@ const EnumMap<fe_guard_interval_t>
                {"pn595", (fe_guard_interval_t)9},
                {"pn945", (fe_guard_interval_t)10}});
 
-const EnumMap<fe_transmit_mode_t>
+extern const EnumMap<fe_transmit_mode_t>
     fe_tmode_map({{"2k", TRANSMISSION_MODE_2K},
                   {"8k", TRANSMISSION_MODE_8K},
                   {" ", TRANSMISSION_MODE_AUTO},
@@ -191,11 +192,12 @@ const EnumMap<fe_transmit_mode_t>
                   {"c1", TRANSMISSION_MODE_C1},
                   {"c3780", TRANSMISSION_MODE_C3780}});
 
-const EnumMap<fe_pls_mode_t> fe_pls_mode_map({{"root", PLS_MODE_ROOT},
-                                              {"gold", PLS_MODE_GOLD},
-                                              {"combo", PLS_MODE_COMBO}});
+extern const EnumMap<fe_pls_mode_t>
+    fe_pls_mode_map({{"root", PLS_MODE_ROOT},
+                     {"gold", PLS_MODE_GOLD},
+                     {"combo", PLS_MODE_COMBO}});
 
-const EnumMap<fe_spectral_inversion_t> fe_inversion_map(
+extern const EnumMap<fe_spectral_inversion_t> fe_inversion_map(
     {{"0", INVERSION_OFF}, {"1", INVERSION_ON}, {" ", INVERSION_AUTO}});
 
 #define INVALID_URL(a)                                                         \

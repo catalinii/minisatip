@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <cctype>
 #include <optional>
+#include <ranges>
 #include <string_view>
 #include <strings.h>
 #include <vector>
