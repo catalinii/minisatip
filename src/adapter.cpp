@@ -1353,7 +1353,7 @@ char *describe_adapter(int sid, int aid, char *dad, int ld) {
                 snr = 1;
         }
     }
-    if (t->sys == 0)
+    if (!t->sys || t->sys == SYS_UNDEFINED)
         len = snprintf(dad, ld,
                        "ver=1.0;src=1;tuner=%d,0,0,0,0,,,,,,,;pids=", aid + 1);
     else if (t->sys == SYS_DVBS || t->sys == SYS_DVBS2)
@@ -2251,26 +2251,47 @@ int get_adapter_fe(int aid) {
     return -1;
 }
 
+#define ADAPTER_TP_GETTER(name, field, default_val)                            \
+    int get_adapter_##name(int aid) {                                          \
+        adapter *ad = get_adapter_nw(aid);                                     \
+        return ad ? ad->tp.field.value_or(default_val) : default_val;          \
+    }
+
+ADAPTER_TP_GETTER(diseqc, diseqc, 0)
+ADAPTER_TP_GETTER(freq, freq, 0)
+ADAPTER_TP_GETTER(pol, pol, 0)
+ADAPTER_TP_GETTER(sr, sr, 0)
+ADAPTER_TP_GETTER(bw, bw, 8000000)
+ADAPTER_TP_GETTER(plp_isi, plp_isi, -1)
+ADAPTER_TP_GETTER(sys, sys, SYS_UNDEFINED)
+ADAPTER_TP_GETTER(mtype, mtype, QAM_AUTO)
+ADAPTER_TP_GETTER(t2id, t2id, 0)
+ADAPTER_TP_GETTER(c2tft, c2tft, 0)
+ADAPTER_TP_GETTER(ds, ds, -1)
+ADAPTER_TP_GETTER(pls_code, pls_code, -1)
+ADAPTER_TP_GETTER(sm, sm, 0)
+ADAPTER_TP_GETTER(gi, gi, GUARD_INTERVAL_AUTO)
+
 _symbols adapters_sym[] = {
     {"ad_enabled", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS,
      offsetof(adapter, enabled)},
     {"ad_type", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS, offsetof(adapter, type)},
-    {"ad_pos", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS,
-     offsetof(adapter, tp.diseqc)},
-    {"ad_freq", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS,
-     offsetof(adapter, tp.freq)},
+    {"ad_pos", VAR_FUNCTION_INT, (void *)&get_adapter_diseqc, 0, MAX_ADAPTERS,
+     0},
+    {"ad_freq", VAR_FUNCTION_INT, (void *)&get_adapter_freq, 1. / 1000,
+     MAX_ADAPTERS, 0},
     {"ad_strength", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS,
      offsetof(adapter, strength)},
     {"ad_snr", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, offsetof(adapter, snr)},
     {"ad_db", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, offsetof(adapter, db)},
     {"ad_ber", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, ber)},
-    {"ad_pol", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.pol)},
-    {"ad_sr", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS,
-     offsetof(adapter, tp.sr)},
-    {"ad_bw", VAR_AARRAY_INT, a, 1. / 1000, MAX_ADAPTERS,
-     offsetof(adapter, tp.bw)},
-    {"ad_stream", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS,
-     offsetof(adapter, tp.plp_isi)},
+    {"ad_pol", VAR_FUNCTION_INT, (void *)&get_adapter_pol, 0, MAX_ADAPTERS, 0},
+    {"ad_sr", VAR_FUNCTION_INT, (void *)&get_adapter_sr, 1. / 1000,
+     MAX_ADAPTERS, 0},
+    {"ad_bw", VAR_FUNCTION_INT, (void *)&get_adapter_bw, 1. / 1000,
+     MAX_ADAPTERS, 0},
+    {"ad_stream", VAR_FUNCTION_INT, (void *)&get_adapter_plp_isi, 0,
+     MAX_ADAPTERS, 0},
     {"ad_fe", VAR_FUNCTION_INT, (void *)&get_adapter_fe, 0, MAX_ADAPTERS, 0},
     {"ad_master", VAR_AARRAY_UINT8, a, 1, MAX_ADAPTERS,
      offsetof(adapter, master_sid)},
@@ -2278,18 +2299,19 @@ _symbols adapters_sym[] = {
      offsetof(adapter, sid_cnt)},
     {"ad_phyad", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, pa)},
     {"ad_phyfd", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, fn)},
-    {"ad_sys", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.sys)},
-    {"ad_mtype", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS,
-     offsetof(adapter, tp.mtype)},
+    {"ad_sys", VAR_FUNCTION_INT, (void *)&get_adapter_sys, 0, MAX_ADAPTERS, 0},
+    {"ad_mtype", VAR_FUNCTION_INT, (void *)&get_adapter_mtype, 0, MAX_ADAPTERS,
+     0},
 
-    {"ad_t2id", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.t2id)},
-    {"ad_c2tft", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS,
-     offsetof(adapter, tp.c2tft)},
-    {"ad_plp", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.ds)},
-    {"ad_plsc", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS,
-     offsetof(adapter, tp.pls_code)},
-    {"ad_sm", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.sm)},
-    {"ad_gi", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, tp.gi)},
+    {"ad_t2id", VAR_FUNCTION_INT, (void *)&get_adapter_t2id, 0, MAX_ADAPTERS,
+     0},
+    {"ad_c2tft", VAR_FUNCTION_INT, (void *)&get_adapter_c2tft, 0, MAX_ADAPTERS,
+     0},
+    {"ad_plp", VAR_FUNCTION_INT, (void *)&get_adapter_ds, 0, MAX_ADAPTERS, 0},
+    {"ad_plsc", VAR_FUNCTION_INT, (void *)&get_adapter_pls_code, 0,
+     MAX_ADAPTERS, 0},
+    {"ad_sm", VAR_FUNCTION_INT, (void *)&get_adapter_sm, 0, MAX_ADAPTERS, 0},
+    {"ad_gi", VAR_FUNCTION_INT, (void *)&get_adapter_gi, 0, MAX_ADAPTERS, 0},
 
     {"ad_allsys", VAR_FUNCTION_STRING, (void *)&get_all_delsys, 0, MAX_ADAPTERS,
      0},

@@ -146,13 +146,17 @@ void *get_var_address(char *var, float *multiplier, int *type, void *storage,
                     off = parse_int(var + strlen(sym[i][j].name));
                     get_data_int funi = (get_data_int)sym[i][j].addr;
                     *(int *)storage = funi(off);
-                    *multiplier = 1;
+                    *multiplier = (sym[i][j].multiplier == 0)
+                                      ? 1.0f
+                                      : sym[i][j].multiplier;
                     return storage;
                 } else if (sym[i][j].type == VAR_FUNCTION_INT64) {
                     off = parse_int(var + strlen(sym[i][j].name));
                     get_data_int64 fun64 = (get_data_int64)sym[i][j].addr;
                     *(int64_t *)storage = fun64(off);
-                    *multiplier = 1;
+                    *multiplier = (sym[i][j].multiplier == 0)
+                                      ? 1.0f
+                                      : sym[i][j].multiplier;
                     return storage;
                 } else if (sym[i][j].type == VAR_FUNCTION_STRING) {
                     off = parse_int(var + strlen(sym[i][j].name));
@@ -251,8 +255,9 @@ int get_json_state(char *buf, int len, char *sbuf, int slen) {
                     int storage = funi(off);
                     if (off > 0)
                         strlcatf(buf, len, ptr, ",");
-                    ptr += snprintf_pointer(buf + ptr, len - ptr, p->type,
-                                            &storage, 1);
+                    ptr += snprintf_pointer(
+                        buf + ptr, len - ptr, p->type, &storage,
+                        (p->multiplier == 0) ? 1.0f : p->multiplier);
                 }
                 strlcatf(buf, len, ptr, "]");
             } else if (sym[i][j].type == VAR_FUNCTION_INT64) {
@@ -262,8 +267,9 @@ int get_json_state(char *buf, int len, char *sbuf, int slen) {
                     int64_t storage = fun64(off);
                     if (off > 0)
                         strlcatf(buf, len, ptr, ",");
-                    ptr += snprintf_pointer(buf + ptr, len - ptr, p->type,
-                                            &storage, 1);
+                    ptr += snprintf_pointer(
+                        buf + ptr, len - ptr, p->type, &storage,
+                        (p->multiplier == 0) ? 1.0f : p->multiplier);
                 }
                 strlcatf(buf, len, ptr, "]");
             } else if (sym[i][j].type == VAR_FUNCTION_STRING) {
