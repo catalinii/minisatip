@@ -444,7 +444,8 @@ int decode_transport(sockets *s, std::string_view arg, char *default_rtp,
         }
 
         auto arg2 = split(arg, ';');
-        for (const auto &token : arg2) {
+        for (auto it = arg2.rbegin(); it != arg2.rend(); ++it) {
+            const auto &token = *it;
             if (token == "multicast")
                 p.type = TYPE_MCAST;
             if (token == "unicast")
