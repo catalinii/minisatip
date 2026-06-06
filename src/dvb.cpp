@@ -1120,7 +1120,7 @@ int setup_switch(adapter *ad) {
     int hiband = 0;
     int diseqc = (tp->diseqc.value_or(0) > 0) ? tp->diseqc.value_or(0) - 1 : 0;
     int freq = tp->freq.value_or(0);
-    int pol = (tp->pol.value_or(0) - 1) & 1;
+    int pol = (tp->pol.value_or(-1) - 1) & 1;
     adapter *master = ad;
 
     if (ad->master_source >= 0) {

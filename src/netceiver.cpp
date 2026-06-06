@@ -169,7 +169,7 @@ int netcv_commit(adapter *ad) {
         int sr = tp->sr.value_or(0);
         fe_code_rate_t fec = tp->fec.value_or(FEC_AUTO);
         fe_modulation_t mtype = tp->mtype.value_or(QAM_AUTO);
-        int bw = tp->bw.value_or(0);
+        int bw = tp->bw.value_or(8000000);
         fe_transmit_mode_t tmode = tp->tmode.value_or(TRANSMISSION_MODE_AUTO);
         fe_guard_interval_t gi = tp->gi.value_or(GUARD_INTERVAL_AUTO);
         fe_spectral_inversion_t inversion =

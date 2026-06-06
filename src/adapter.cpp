@@ -597,7 +597,7 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
 
     // master adapter is used by other
     int diseqc = (tp->diseqc.value_or(0) > 0) ? tp->diseqc.value_or(0) - 1 : 0;
-    int pol = (tp->pol.value_or(0) - 1) & 1;
+    int pol = (tp->pol.value_or(-1) - 1) & 1;
     int hiband = get_lnb_hiband(tp, &tp->diseqc_param);
     int freq = tp->freq.value_or(0);
 
