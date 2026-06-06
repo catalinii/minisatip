@@ -158,14 +158,15 @@ streams *setup_stream(std::string_view str, sockets *s) {
     streams *sid;
 
     transponder t;
-    if (streams *exist_sid = get_sid(s->sid)) {
+    streams *exist_sid = (s->sid >= 0) ? get_sid(s->sid) : nullptr;
+    if (exist_sid) {
         std::lock_guard<SMutex> lock(exist_sid->mutex);
         t = exist_sid->tp;
     }
     detect_dvb_parameters(str, &t);
     LOG("Setup stream sid %d parameters, sock_id %d, handle %d", s->sid, s->id,
         s->sock);
-    if (!get_sid(s->sid)) // create the stream
+    if (!exist_sid) // create the stream
     {
         int s_id = streams_add();
         if (!(sid = get_sid(s_id)))
