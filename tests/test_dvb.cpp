@@ -99,7 +99,7 @@ int test_detect_dvb_parameters_edge_cases() {
     char query4[128] = "?freq=11362&plsm=root&plsc=42";
     detect_dvb_parameters(query4, &tp);
     ASSERT(tp.pls_mode == PLS_MODE_ROOT, "pls_mode parsed incorrectly");
-    ASSERT(tp.pls_code != -1, "pls_code not calculated for ROOT mode");
+    ASSERT(tp.pls_code == 114384, "pls_code not calculated for ROOT mode");
 
     return 0;
 }

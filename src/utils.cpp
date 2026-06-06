@@ -174,7 +174,7 @@ int parse_float(std::string_view s, int mul) {
     int r;
 
     if (s.empty())
-        LOG_AND_RETURN(0, "parse_float: s=>NULL, mul=%d", mul);
+        LOG_AND_RETURN(0, "parse_float: s is empty, mul=%d", mul);
     if (s[0] != '+' && s[0] != '-' && (s[0] < '0' || s[0] > '9')) {
         LOG_AND_RETURN(0, "parse_float: s not a number: %.*s, mul=%d",
                        (int)s.size(), s.data(), mul);
