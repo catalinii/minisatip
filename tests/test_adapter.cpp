@@ -253,6 +253,12 @@ int test_compare_slave_parameters() {
     ASSERT(compare_slave_parameters(&slave_ad, &tp) == 0,
            "Matching band (lowband) should return 0");
 
+    // tp.freq = 0 (unspecified) should not conflict
+    setup_tp(tp);
+    tp.freq = 0;
+    ASSERT(compare_slave_parameters(&slave_ad, &tp) == 0,
+           "Frequency=0 (unspecified) should return 0");
+
     // tp.freq conflicts with master's old_hiband (hiband)
     setup_tp(tp);
     tp.freq = 12322000; // hiband = 1
