@@ -49,5 +49,7 @@ Added a `bool is_init` parameter to `satipc_open_rtsp_socket()`:
 
 ## Git Workflow
 
-- **Never push directly to master**: Always create a feature branch, push to origin, request reviews on a Pull Request, and merge via PR.
+- **Never push directly to master**: Always create a feature branch, push to origin, and request reviews on a Pull Request.
+- **Human-Only Merges and Pushes**: Merges to `master` and direct master pushes can only be performed by humans. Agents are strictly limited to creating, pushing, and updating Pull Requests and are prohibited from merging them.
+
 
