@@ -595,15 +595,10 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
         (ad->diseqc_param.switch_type == SWITCH_UNICABLE))
         return 0;
 
-    std::optional<int> pol;
-    if (tp->pol && *tp->pol > 0) {
-        pol = (*tp->pol - 1) & 1;
-    }
-
-    std::optional<int> diseqc;
-    if (tp->diseqc && *tp->diseqc > 0) {
-        diseqc = *tp->diseqc - 1;
-    }
+    // Map parameters to concrete hardware values identically to setup_switch in
+    // dvb.cpp
+    int pol = (tp->pol.value_or(-1) - 1) & 1;
+    int diseqc = (tp->diseqc.value_or(0) > 0) ? tp->diseqc.value_or(0) - 1 : 0;
 
     std::optional<int> hiband;
     if (tp->freq && *tp->freq > 0) {
@@ -615,9 +610,8 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
     };
 
     auto is_incompatible = [&](adapter *other) {
-        return conflicts(pol, other->old_pol) ||
-               conflicts(hiband, other->old_hiband) ||
-               conflicts(diseqc, other->old_diseqc);
+        return pol != other->old_pol || conflicts(hiband, other->old_hiband) ||
+               diseqc != other->old_diseqc;
     };
 
     // master adapter used by slave adapters, check slave parameters if they
@@ -653,8 +647,8 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
     LOGM("%s: adapter %d master %d (pol %d, band %d, diseqc "
          "%d) compatible with freq %d, pol %d band %d diseqc %d",
          __FUNCTION__, ad->id, master ? master->id : ad->master_source,
-         ad->old_pol, ad->old_hiband, ad->old_diseqc, tp->freq.value_or(0),
-         pol.value_or(-1), hiband.value_or(-1), diseqc.value_or(-1));
+         ad->old_pol, ad->old_hiband, ad->old_diseqc, tp->freq.value_or(0), pol,
+         hiband.value_or(-1), diseqc);
     return 0;
 }
 

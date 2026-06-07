@@ -219,11 +219,20 @@ int test_compare_slave_parameters() {
     ASSERT(compare_slave_parameters(&slave_ad, &tp) == 0,
            "Matching polarization should return 0");
 
-    // tp.pol = 0 (none/unspecified) should not conflict
+    // tp.pol = 0 (none/unspecified) maps to pol=1, which conflicts with
+    // master's old_pol (0)
     setup_tp(tp);
     tp.pol = 0;
+    ASSERT(compare_slave_parameters(&slave_ad, &tp) == 1,
+           "Polarization=0 (unspecified) maps to pol=1 and should conflict "
+           "with old_pol=0");
+
+    // tp.pol = 0 maps to pol=1, which matches if master's old_pol is 1
+    master_ad.old_pol = 1;
     ASSERT(compare_slave_parameters(&slave_ad, &tp) == 0,
-           "Polarization=0 (unspecified) should return 0");
+           "Polarization=0 (unspecified) maps to pol=1 and should match "
+           "old_pol=1");
+    master_ad.old_pol = 0; // Restore old_pol to 0
 
     // tp.pol conflicts with master's old_pol
     setup_tp(tp);
@@ -237,11 +246,21 @@ int test_compare_slave_parameters() {
     ASSERT(compare_slave_parameters(&slave_ad, &tp) == 0,
            "Matching diseqc should return 0");
 
-    // tp.diseqc = 0 (none/unspecified) should not conflict
+    // tp.diseqc = 0 (none/unspecified) maps to diseqc=0, which matches master's
+    // old_diseqc (0)
     setup_tp(tp);
     tp.diseqc = 0;
     ASSERT(compare_slave_parameters(&slave_ad, &tp) == 0,
-           "Diseqc=0 (unspecified) should return 0");
+           "Diseqc=0 (unspecified) maps to diseqc=0 and should match "
+           "old_diseqc=0");
+
+    // tp.diseqc = 0 maps to diseqc=0, which conflicts if master's old_diseqc is
+    // 1
+    master_ad.old_diseqc = 1;
+    ASSERT(compare_slave_parameters(&slave_ad, &tp) == 1,
+           "Diseqc=0 (unspecified) maps to diseqc=0 and should conflict with "
+           "old_diseqc=1");
+    master_ad.old_diseqc = 0; // Restore old_diseqc to 0
 
     // tp.diseqc conflicts with master's old_diseqc
     setup_tp(tp);
