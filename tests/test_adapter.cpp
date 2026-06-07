@@ -217,6 +217,12 @@ int test_compare_slave_parameters() {
     ASSERT(compare_slave_parameters(&slave_ad, &tp) == 0,
            "Matching polarization should return 0");
 
+    // tp.pol = 0 (none/unspecified) should not conflict
+    setup_tp(tp);
+    tp.pol = 0;
+    ASSERT(compare_slave_parameters(&slave_ad, &tp) == 0,
+           "Polarization=0 (unspecified) should return 0");
+
     // tp.pol conflicts with master's old_pol
     setup_tp(tp);
     tp.pol = 2; // (*tp.pol - 1) & 1 = 1
@@ -228,6 +234,12 @@ int test_compare_slave_parameters() {
     tp.diseqc = 1; // (*tp.diseqc > 0) ? 1 - 1 : 0 = 0
     ASSERT(compare_slave_parameters(&slave_ad, &tp) == 0,
            "Matching diseqc should return 0");
+
+    // tp.diseqc = 0 (none/unspecified) should not conflict
+    setup_tp(tp);
+    tp.diseqc = 0;
+    ASSERT(compare_slave_parameters(&slave_ad, &tp) == 0,
+           "Diseqc=0 (unspecified) should return 0");
 
     // tp.diseqc conflicts with master's old_diseqc
     setup_tp(tp);

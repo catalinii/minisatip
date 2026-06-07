@@ -596,13 +596,13 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
         return 0;
 
     std::optional<int> pol;
-    if (tp->pol) {
+    if (tp->pol && *tp->pol > 0) {
         pol = (*tp->pol - 1) & 1;
     }
 
     std::optional<int> diseqc;
-    if (tp->diseqc) {
-        diseqc = (*tp->diseqc > 0) ? *tp->diseqc - 1 : 0;
+    if (tp->diseqc && *tp->diseqc > 0) {
+        diseqc = *tp->diseqc - 1;
     }
 
     std::optional<int> hiband;
