@@ -1194,9 +1194,12 @@ static int element_set_certificate(struct cc_ctrl_data *cc_data,
 
 static int element_set_hostid_from_certificate(struct cc_ctrl_data *cc_data,
                                                unsigned int id, X509 *cert) {
+    const ASN1_STRING *data;
     const X509_NAME *subject;
     int nid_cn = OBJ_txt2nid("CN");
-    char hostid[20];
+    int idx;
+    int len;
+    char hostid[20] = {};
     uint8_t bin_hostid[8];
 
     if ((id != 5) && (id != 6)) {
@@ -1205,7 +1208,18 @@ static int element_set_hostid_from_certificate(struct cc_ctrl_data *cc_data,
     }
 
     subject = X509_get_subject_name(cert);
-    X509_NAME_get_text_by_NID(subject, nid_cn, hostid, sizeof(hostid));
+    idx = X509_NAME_get_index_by_NID(subject, nid_cn, -1);
+    if (idx >= 0) {
+        data = X509_NAME_ENTRY_get_data(X509_NAME_get_entry(subject, idx));
+        len = ASN1_STRING_length(data);
+        if (len > (int)sizeof(hostid) - 1)
+            len = sizeof(hostid) - 1;
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+        memcpy(hostid, ASN1_STRING_data(data), len);
+#else
+        memcpy(hostid, ASN1_STRING_get0_data(data), len);
+#endif
+    }
 
     if (strlen(hostid) != 16) {
         LOG("malformed hostid");
