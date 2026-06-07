@@ -636,7 +636,7 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
                     continue;
                 }
                 if (is_incompatible(ad2))
-                    return 1; // slave parameters matches with the required
+                    return 1; // slave parameters conflict with the required
                               // parameters
             }
     }
@@ -648,10 +648,10 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
     // master adapter used by slave adapters
     if (master) {
         if (is_incompatible(master))
-            return 1; // master parameters matches with the required parameters
+            return 1; // master parameters conflict with the required parameters
     }
     LOGM("%s: adapter %d master %d (pol %d, band %d, diseqc "
-         "%d) not compatible with freq %d, pol %d band %d diseqc %d",
+         "%d) compatible with freq %d, pol %d band %d diseqc %d",
          __FUNCTION__, ad->id, master ? master->id : ad->master_source,
          ad->old_pol, ad->old_hiband, ad->old_diseqc, tp->freq.value_or(0),
          pol.value_or(-1), hiband.value_or(-1), diseqc.value_or(-1));

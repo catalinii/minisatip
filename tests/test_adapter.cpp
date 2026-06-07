@@ -178,9 +178,11 @@ int test_compare_slave_parameters() {
     };
     setup_tp(tp);
 
-    // 2. master_ad is not a slave and has no slave adapters using it
-    ASSERT(compare_slave_parameters(&master_ad, &tp) == 0,
-           "Master adapter with no slaves and no master should return 0");
+    // 2. master_ad is not a slave and is not marked as used by any slave
+    // adapters
+    ASSERT(
+        compare_slave_parameters(&master_ad, &tp) == 0,
+        "Adapter with empty used array and master_source < 0 should return 0");
 
     // 3. JESS/UNICABLE switch types should always return 0
     slave_ad.diseqc_param.switch_type = SWITCH_JESS;
