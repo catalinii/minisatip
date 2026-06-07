@@ -581,32 +581,48 @@ void dump_pids(int aid) {
 // makes sure the slave and the master adapter have the same polarity, band and
 // diseqc
 int compare_slave_parameters(adapter *ad, transponder *tp) {
-    adapter *master = NULL;
-
     if (!ad)
         return 0;
+
     // is not a slave and does not have a slave adapter
     if ((ad->master_source < 0) &&
         is_byte_array_empty(ad->used, sizeof(ad->used)))
         return 0;
+
     // is slave and the switch is UNICABLE/JESS - we do not care about pol and
     // band
     if ((ad->diseqc_param.switch_type == SWITCH_JESS) ||
         (ad->diseqc_param.switch_type == SWITCH_UNICABLE))
         return 0;
 
-    // master adapter is used by other
-    int diseqc = (tp->diseqc.value_or(0) > 0) ? tp->diseqc.value_or(0) - 1 : 0;
-    int pol = (tp->pol.value_or(-1) - 1) & 1;
-    int hiband = get_lnb_hiband(tp, &tp->diseqc_param);
-    int freq = tp->freq.value_or(0);
+    std::optional<int> pol;
+    if (tp->pol) {
+        pol = (*tp->pol - 1) & 1;
+    }
 
-    if (ad->master_source >= 0 && ad->master_source < MAX_ADAPTERS)
-        master = a[ad->master_source];
+    std::optional<int> diseqc;
+    if (tp->diseqc) {
+        diseqc = (*tp->diseqc > 0) ? *tp->diseqc - 1 : 0;
+    }
+
+    std::optional<int> hiband;
+    if (tp->freq) {
+        hiband = get_lnb_hiband(tp, &tp->diseqc_param);
+    }
+
+    auto conflicts = [](const std::optional<int> &req, int actual) {
+        return req.has_value() && *req != actual;
+    };
+
+    auto is_incompatible = [&](adapter *other) {
+        return conflicts(pol, other->old_pol) ||
+               conflicts(hiband, other->old_hiband) ||
+               conflicts(diseqc, other->old_diseqc);
+    };
 
     // master adapter used by slave adapters, check slave parameters if they
     // match
-    if (ad && !is_byte_array_empty(ad->used, sizeof(ad->used))) {
+    if (!is_byte_array_empty(ad->used, sizeof(ad->used))) {
         int i;
         for (i = 0; i < MAX_ADAPTERS; i++)
             if (ad->used[i]) {
@@ -619,24 +635,26 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
                     ad->used[i] = 0;
                     continue;
                 }
-                if (ad2->old_pol != pol || ad2->old_hiband != hiband ||
-                    ad2->old_diseqc != diseqc)
+                if (is_incompatible(ad2))
                     return 1; // slave parameters matches with the required
                               // parameters
             }
     }
 
+    adapter *master = NULL;
+    if (ad->master_source >= 0 && ad->master_source < MAX_ADAPTERS)
+        master = a[ad->master_source];
+
     // master adapter used by slave adapters
     if (master) {
-        if (master->old_pol != pol || master->old_hiband != hiband ||
-            master->old_diseqc != diseqc)
+        if (is_incompatible(master))
             return 1; // master parameters matches with the required parameters
     }
     LOGM("%s: adapter %d master %d (pol %d, band %d, diseqc "
          "%d) not compatible with freq %d, pol %d band %d diseqc %d",
          __FUNCTION__, ad->id, master ? master->id : ad->master_source,
-         ad->old_pol, ad->old_hiband, ad->old_diseqc, freq, pol, hiband,
-         diseqc);
+         ad->old_pol, ad->old_hiband, ad->old_diseqc, tp->freq.value_or(0),
+         pol.value_or(-1), hiband.value_or(-1), diseqc.value_or(-1));
     return 0;
 }
 
