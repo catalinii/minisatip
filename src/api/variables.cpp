@@ -123,14 +123,14 @@ void *get_var_address(char *var, float *multiplier, int *type, void *storage,
                     *multiplier = sym[i][j].multiplier;
                     return sym[i][j].addr;
                 } else if ((sym[i][j].type & 0xF0) == VAR_ARRAY) {
-                    off = map_intd(var + strlen(sym[i][j].name), NULL, 0);
+                    off = parse_int(var + strlen(sym[i][j].name));
                     if (off >= 0 && off < sym[i][j].len) {
                         *multiplier = sym[i][j].multiplier;
                         return (((char *)sym[i][j].addr) +
                                 off * sym[i][j].skip);
                     }
                 } else if ((sym[i][j].type & 0xF0) == VAR_AARRAY) {
-                    off = map_intd(var + strlen(sym[i][j].name), NULL, 0);
+                    off = parse_int(var + strlen(sym[i][j].name));
                     if (off >= 0 && off < sym[i][j].len) {
                         char **p1 = (char **)sym[i][j].addr;
                         char *p = p1[off];
@@ -143,19 +143,23 @@ void *get_var_address(char *var, float *multiplier, int *type, void *storage,
                         return p;
                     }
                 } else if (sym[i][j].type == VAR_FUNCTION_INT) {
-                    off = map_intd(var + strlen(sym[i][j].name), NULL, 0);
+                    off = parse_int(var + strlen(sym[i][j].name));
                     get_data_int funi = (get_data_int)sym[i][j].addr;
                     *(int *)storage = funi(off);
-                    *multiplier = 1;
+                    *multiplier = (sym[i][j].multiplier == 0)
+                                      ? 1.0f
+                                      : sym[i][j].multiplier;
                     return storage;
                 } else if (sym[i][j].type == VAR_FUNCTION_INT64) {
-                    off = map_intd(var + strlen(sym[i][j].name), NULL, 0);
+                    off = parse_int(var + strlen(sym[i][j].name));
                     get_data_int64 fun64 = (get_data_int64)sym[i][j].addr;
                     *(int64_t *)storage = fun64(off);
-                    *multiplier = 1;
+                    *multiplier = (sym[i][j].multiplier == 0)
+                                      ? 1.0f
+                                      : sym[i][j].multiplier;
                     return storage;
                 } else if (sym[i][j].type == VAR_FUNCTION_STRING) {
-                    off = map_intd(var + strlen(sym[i][j].name), NULL, 0);
+                    off = parse_int(var + strlen(sym[i][j].name));
                     get_data_string funs = (get_data_string)sym[i][j].addr;
                     funs(off, (char *)storage, ls);
                     return storage;
@@ -251,8 +255,9 @@ int get_json_state(char *buf, int len, char *sbuf, int slen) {
                     int storage = funi(off);
                     if (off > 0)
                         strlcatf(buf, len, ptr, ",");
-                    ptr += snprintf_pointer(buf + ptr, len - ptr, p->type,
-                                            &storage, 1);
+                    ptr += snprintf_pointer(
+                        buf + ptr, len - ptr, p->type, &storage,
+                        (p->multiplier == 0) ? 1.0f : p->multiplier);
                 }
                 strlcatf(buf, len, ptr, "]");
             } else if (sym[i][j].type == VAR_FUNCTION_INT64) {
@@ -262,8 +267,9 @@ int get_json_state(char *buf, int len, char *sbuf, int slen) {
                     int64_t storage = fun64(off);
                     if (off > 0)
                         strlcatf(buf, len, ptr, ",");
-                    ptr += snprintf_pointer(buf + ptr, len - ptr, p->type,
-                                            &storage, 1);
+                    ptr += snprintf_pointer(
+                        buf + ptr, len - ptr, p->type, &storage,
+                        (p->multiplier == 0) ? 1.0f : p->multiplier);
                 }
                 strlcatf(buf, len, ptr, "]");
             } else if (sym[i][j].type == VAR_FUNCTION_STRING) {

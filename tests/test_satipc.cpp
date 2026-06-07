@@ -25,12 +25,15 @@
 #include "utils.h"
 #include "utils/testing.h"
 
-#include <linux/dvb/frontend.h>
-#include <string.h>
+#include "httpc.h"
+#include <cstring>
+
+extern void satip_getxml_data(char *data, int len, void *opaque,
+                              Shttp_client *h);
 
 int test_get_s2_url_multistream_isi() {
     adapter ad = {};
-    init_dvb_parameters(&ad.tp);
+    ad.tp.clear();
 
     satipc sip = {};
     sip.enabled = 1;
@@ -61,7 +64,7 @@ int test_get_s2_url_multistream_isi() {
 
 int test_get_s2_url_pls_mode_root() {
     adapter ad = {};
-    init_dvb_parameters(&ad.tp);
+    ad.tp.clear();
 
     satipc sip = {};
     sip.enabled = 1;
@@ -96,7 +99,7 @@ int test_get_s2_url_pls_mode_root() {
 
 int test_get_s2_url_pls_mode_gold() {
     adapter ad = {};
-    init_dvb_parameters(&ad.tp);
+    ad.tp.clear();
 
     satipc sip = {};
     sip.enabled = 1;
@@ -133,7 +136,7 @@ int test_get_s2_url_pls_mode_gold() {
 
 int test_get_s2_url_no_multistream() {
     adapter ad = {};
-    init_dvb_parameters(&ad.tp);
+    ad.tp.clear();
 
     satipc sip = {};
     sip.enabled = 1;
@@ -150,19 +153,34 @@ int test_get_s2_url_no_multistream() {
     ad.tp.fec = FEC_2_3;
     ad.tp.ro = ROLLOFF_35;
     ad.tp.plts = PILOT_OFF;
-    // plp_isi, pls_mode, pls_code left as TP_VALUE_UNSET from init
+    // plp_isi, pls_mode, pls_code left as std::nullopt
 
     char url[1000];
     get_s2_url(&ad, url, sizeof(url));
 
-    ASSERT(strstr(url, "isi") == NULL,
-           "ISI should not appear when unset");
+    ASSERT(strstr(url, "isi") == NULL, "ISI should not appear when unset");
     ASSERT(strstr(url, "plsm") == NULL,
            "PLS mode should not appear when unset");
     ASSERT(strstr(url, "plsc") == NULL,
            "PLS code should not appear when unset");
 
     satip[0] = NULL;
+    return 0;
+}
+
+int test_satip_getxml_data_parsing() {
+    Ssatip_xml_data s = {};
+    strcpy(s.xml, "<satip:X_SATIPCAP>DVBS2-4,DVBT-2</satip:X_SATIPCAP>");
+    strcpy(s.url, "http://1.2.3.4/desc.xml");
+
+    Shttp_client h = {};
+    strcpy(h.host, "1.2.3.4");
+
+    satip_getxml_data(NULL, 0, &s, &h);
+
+    ASSERT(s.tuners[SYS_DVBS2] == 4, "Expected 4 tuners for DVBS2");
+    ASSERT(s.tuners[SYS_DVBT] == 2, "Expected 2 tuners for DVBT");
+
     return 0;
 }
 
@@ -179,6 +197,8 @@ int main() {
               "test get_s2_url forwards PLS code with GOLD mode");
     TEST_FUNC(test_get_s2_url_no_multistream(),
               "test get_s2_url omits multistream params when unset");
+    TEST_FUNC(test_satip_getxml_data_parsing(),
+              "test satip_getxml_data parses satipcap delivery systems");
 
     return 0;
 }

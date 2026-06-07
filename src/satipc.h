@@ -79,6 +79,15 @@ typedef struct struct_satipc {
 
 extern satipc *satip[];
 
+#define MAX_SATIP_XML 20
+typedef struct satip_xml_data {
+    char url[100];
+    char host[64];
+    int port;
+    char xml[4000];
+    int tuners[MAX_DVBAPI_SYSTEMS];
+} Ssatip_xml_data;
+
 void find_satip_adapter(adapter **a);
 int satip_getxml(void *);
 char *init_satip_pointer(int len);

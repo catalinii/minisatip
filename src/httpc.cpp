@@ -122,7 +122,7 @@ int http_client(char *url, void *callback, void *opaque) {
     h->port = 80;
     sep = strchr(h->host, ':');
     if (sep) {
-        h->port = map_intd(sep + 1, NULL, 80);
+        h->port = parse_int(sep + 1, 80);
     }
     if (!sep)
         sep = strchr(h->host, '/');

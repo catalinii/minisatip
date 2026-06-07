@@ -27,6 +27,7 @@
 #include "socketworks.h"
 
 #include <arpa/inet.h>
+#include <charconv>
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
@@ -61,126 +62,129 @@
 
 char pn[256];
 
-int split(char **rv, char *s, int lrv, char sep) {
-    int i = 0, j = 0;
-
-    if (!s)
-        return 0;
-    for (i = 0; s[i] && s[i] == sep && s[i] < 32; i++)
-        ;
-
-    rv[j++] = &s[i];
-    //      LOG("start %d %d\n",i,j);
-    while (j < lrv - 1) {
-        if (s[i] == 0 || s[i + 1] == 0)
+std::vector<std::string_view> split(std::string_view s, char sep) {
+    std::vector<std::string_view> result;
+    size_t start = 0;
+    while (start < s.size()) {
+        // Skip leading separators or control characters/spaces (matching legacy
+        // behavior)
+        while (start < s.size() &&
+               (s[start] == sep || static_cast<unsigned char>(s[start]) < 33)) {
+            start++;
+        }
+        if (start >= s.size())
             break;
-        if (s[i] == sep || s[i] < 33) {
-            s[i] = 0;
-            if (s[i + 1] != sep && s[i + 1] > 32)
-                rv[j++] = &s[i + 1];
-        } else if (s[i] < 14)
-            s[i] = 0;
-        //              LOG("i=%d j=%d %d %c \n",i,j,s[i],s[i]);
-        i++;
+
+        // Find end of token
+        size_t end = start;
+        while (end < s.size() && s[end] != sep &&
+               static_cast<unsigned char>(s[end]) >= 33) {
+            end++;
+        }
+
+        result.push_back(s.substr(start, end - start));
+        start = end;
     }
-    if (s[i] == sep)
-        s[i] = 0;
-    rv[j] = NULL;
-    return j;
+    return result;
 }
 
-char *strip(char *s) // strip spaces from the front of a string
+std::string_view
+strip(std::string_view s) // strip spaces from the front of a string
 {
-    if (s < (char *)1000)
-        return NULL;
-
-    while (*s && *s == ' ')
-        s++;
-    return s;
+    auto pos = s.find_first_not_of(" \t\r\n\v\f");
+    if (pos == std::string_view::npos)
+        return "";
+    return s.substr(pos);
 }
 
-int map_intd(char *s, char **v, int dv) {
-    int i, n = dv;
-
-    if (s == NULL) {
-        LOG_AND_RETURN(dv, "map_intd: s=>NULL, v=%p, %s %s", v,
-                       v ? v[0] : "NULL", v ? v[1] : "NULL");
-    }
-
+int parse_int(std::string_view s, int dv) {
     s = strip(s);
 
-    if (!*s)
-        LOG_AND_RETURN(dv, "map_intd: s is empty");
-
-    if (v == NULL) {
-        if (s[0] != '+' && s[0] != '-' && (s[0] < '0' || s[0] > '9'))
-            LOG_AND_RETURN(dv, "map_intd: s not a number: %s, v=%p, %s %s", s,
-                           v, v ? v[0] : "NULL", v ? v[1] : "NULL");
-        return atoi(s);
+    if (s.empty()) {
+        return dv;
     }
-    for (i = 0; v[i]; i++)
-        if (!strncasecmp(s, v[i], strlen(v[i])))
-            n = i;
-    return n;
+
+    if (s[0] != '+' && s[0] != '-' && (s[0] < '0' || s[0] > '9')) {
+        return dv;
+    }
+    if (s[0] == '+') {
+        s.remove_prefix(1);
+        if (s.empty()) {
+            return dv;
+        }
+    }
+    int val = 0;
+    auto result = std::from_chars(s.data(), s.data() + s.size(), val);
+    if (result.ec == std::errc{}) {
+        return val;
+    }
+    return dv;
 }
 
-int check_strs(char *s, char **v, int dv) {
+int check_strs(std::string_view s, const char *const v[], int dv) {
     int i, n = dv;
 
-    if (s == NULL) {
-        LOG_AND_RETURN(dv, "check_strs: s=>NULL, v=%p, %s %s", v,
-                       v ? v[0] : "NULL", v ? v[1] : "NULL");
-    }
-    if (v == NULL) {
+    if (v == nullptr) {
         LOG_AND_RETURN(dv, "check_strs: v is empty");
     }
 
     s = strip(s);
 
-    if (!*s)
+    if (s.empty())
         LOG_AND_RETURN(dv, "check_strs: s is empty");
 
-    for (i = 0; v[i]; i++)
-        if (strncasecmp(s, v[i], strlen(s)) == 0)
+    for (i = 0; v[i]; i++) {
+        if (starts_with_case_insensitive(v[i], s))
             n = i;
+    }
     return n;
 }
 
-char *header_parameter(char **arg,
-                       int i) // get the value of a header parameter
+std::string_view header_parameter(const std::vector<std::string_view> &arg,
+                                  int i) // get the value of a header parameter
 {
-    int len = strlen(arg[i]);
-    char *result;
+    if (i >= (int)arg.size())
+        return "";
 
-    if (arg[i][len - 1] == ':') {
-        return arg[i + 1];
+    std::string_view current = arg[i];
+    if (current.empty())
+        return "";
+
+    if (current.back() == ':') {
+        if (i + 1 < (int)arg.size())
+            return arg[i + 1];
+        return "";
     }
 
-    result = strchr(arg[i], ':');
-    if (result)
-        return result + 1;
+    size_t colon_pos = current.find(':');
+    if (colon_pos != std::string_view::npos) {
+        return current.substr(colon_pos + 1);
+    }
 
-    if (strcmp(arg[i + 1], ":") == 0)
-        return arg[i + 2];
-    return NULL;
+    if (i + 1 < (int)arg.size() && arg[i + 1] == ":") {
+        if (i + 2 < (int)arg.size())
+            return arg[i + 2];
+    }
+
+    return "";
 }
 
-int map_float(char *s, int mul) {
+int parse_float(std::string_view s, int mul) {
     float f;
     int r;
 
-    if (s == NULL)
-        LOG_AND_RETURN(0, "map_float: s=>NULL, mul=%d", mul);
-    if (s[0] != '+' && s[0] != '-' && (s[0] < '0' || s[0] > '9'))
-        LOG_AND_RETURN(0, "map_float: s not a number: %s, mul=%d", s, mul);
+    if (s.empty())
+        LOG_AND_RETURN(0, "parse_float: s is empty, mul=%d", mul);
+    if (s[0] != '+' && s[0] != '-' && (s[0] < '0' || s[0] > '9')) {
+        LOG_AND_RETURN(0, "parse_float: s not a number: %.*s, mul=%d",
+                       (int)s.size(), s.data(), mul);
+    }
 
-    f = atof(s);
+    f = atof(std::string(s).c_str());
     r = (int)(f * mul);
     //      LOG("atof returned %.1f, mul = %d, result=%d",f,mul,r);
     return r;
 }
-
-int map_int(char *s, char **v) { return map_intd(s, v, 0); }
 
 void posix_signal_handler(int sig, siginfo_t *siginfo, ucontext_t *ctx);
 void set_signal_handler(char *argv0) {
@@ -366,13 +370,6 @@ char *get_current_timestamp(void) {
     return date_str;
 }
 
-int endswith(char *src, char *with) {
-    uint32_t lw = strlen(with);
-    if (strlen(src) > lw && !strcmp(src + strlen(src) - lw, with))
-        return 1;
-    return 0;
-}
-
 // replace $VAR$ with it's value and write the output to the socket
 void process_file(void *sock, char *s, int len, char *ctype) {
     char outp[8300];
@@ -418,16 +415,17 @@ void process_file(void *sock, char *s, int len, char *ctype) {
     }
 }
 
-char *readfile(char *fn, char *ctype, int *len) {
+char *readfile(std::string_view fn, char *ctype, int *len) {
     char ffn[256];
     char *mem;
     struct stat sb;
     int fd, nl = 0;
     *len = 0;
 
-    if (strstr(fn, ".."))
+    if (fn.contains(".."))
         return 0;
-    snprintf(ffn, sizeof(ffn), "%s/%s", opts.document_root, fn);
+    snprintf(ffn, sizeof(ffn), "%s/%.*s", opts.document_root, (int)fn.size(),
+             fn.data());
     ffn[sizeof(ffn) - 1] = 0;
 #ifdef O_LARGEFILE
     if ((fd = open(ffn, O_RDONLY | O_LARGEFILE)) < 0)
@@ -453,27 +451,28 @@ char *readfile(char *fn, char *ctype, int *len) {
     *len = nl;
     if (ctype) {
         ctype[0] = 0;
-        if (endswith(fn, (char *)"png"))
+        std::string_view fn_sv(fn);
+        if (fn_sv.ends_with("png"))
             strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: "
                           "image/png\r\nConnection: close");
-        else if (endswith(fn, (char *)"jpg") || endswith(fn, (char *)"jpeg"))
+        else if (fn_sv.ends_with("jpg") || fn_sv.ends_with("jpeg"))
             strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: "
                           "image/jpeg\r\nConnection: close");
-        else if (endswith(fn, (char *)"css"))
+        else if (fn_sv.ends_with("css"))
             strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: "
                           "text/css\r\nConnection: close");
-        else if (endswith(fn, (char *)"js"))
+        else if (fn_sv.ends_with("js"))
             strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: "
                           "text/javascript\r\nConnection: close");
-        else if (endswith(fn, (char *)"htm") || endswith(fn, (char *)"html"))
+        else if (fn_sv.ends_with("htm") || fn_sv.ends_with("html"))
             strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: "
                           "text/html; charset=utf-8\r\nConnection: close");
-        else if (endswith(fn, (char *)"xml"))
+        else if (fn_sv.ends_with("xml"))
             strcpy(ctype, "Cache-Control: no-cache\r\nContent-type: text/xml");
-        else if (endswith(fn, (char *)"json"))
+        else if (fn_sv.ends_with("json"))
             strcpy(ctype, "Cache-Control: no-cache\r\nContent-type: "
                           "application/json; charset=utf-8");
-        else if (endswith(fn, (char *)"m3u"))
+        else if (fn_sv.ends_with("m3u"))
             strcpy(ctype,
                    "Cache-Control: no-cache\r\nContent-type: video/x-mpegurl");
         else
@@ -804,7 +803,7 @@ uint32_t get_random_uint32() {
     return out;
 }
 
-void _strncpy(char *a, char *b, int n) {
+void _strncpy(char *a, const char *b, int n) {
     strncpy(a, b, n);
     a[n - 1] = 0;
 }
@@ -838,7 +837,7 @@ int is_rtsp_http_header(char *buf, int len, const char *start[], int lstart) {
     // When RTP/TCP is used on SAT>IP adapters, responses are 4 bytes larger
     // than expected, so we just check that the specified content length fits
     // within the buffer, not that the length matches exactly.
-    int icl = map_intd(cl + 15, NULL, 0);
+    int icl = parse_int(cl + 15);
     if (nlnl + icl > buf + len)
         return 0;
 

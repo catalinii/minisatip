@@ -300,7 +300,7 @@ int test_assemble_multi_packet() {
 }
 
 int test_emulate_add_all_pids() {
-    adapter ad;
+    adapter ad = {};
     a[0] = &ad;
     ad.enabled = 1;
     SPMT pmt;

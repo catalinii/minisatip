@@ -72,14 +72,14 @@ streams *get_sid1(int sid, const char *file, int line) {
     return st[sid];
 }
 
-char *describe_streams(sockets *s, char *req, char *sbuf, int size) {
-    char *stream_id, dad[1000], localhost[100];
+char *describe_streams(sockets *s, std::string_view req, char *sbuf, int size) {
+    char dad[1000], localhost[100];
     int i, sidf, do_play = 0, streams_enabled = 0;
     streams *sid, *sid2;
     int do_all = 1;
     int is_ipv6 = 0;
 
-    if (s->sid == -1 && strchr(req, '?'))
+    if (s->sid == -1 && req.contains('?'))
         setup_stream(req, s);
 
     sidf = get_session_id(s->sid);
@@ -96,12 +96,13 @@ char *describe_streams(sockets *s, char *req, char *sbuf, int size) {
         "0\r\n",
         sidf, sidf, is_ipv6 ? "IP6" : "IP4", localhost, tuner_s2,
         tuner_t + tuner_t2, tuner_c + tuner_c2);
-    if (strchr(req, '?'))
+    if (req.contains('?'))
         do_all = 0;
 
-    if ((stream_id = strstr(req, "stream="))) {
+    auto stream_id_pos = req.find("stream=");
+    if (stream_id_pos != std::string_view::npos) {
         do_all = 0;
-        sid = get_sid(map_int(stream_id + 7, NULL) - 1);
+        sid = get_sid(parse_int(req.substr(stream_id_pos + 7)) - 1);
         if (sid == NULL)
             return NULL;
     }
@@ -149,47 +150,23 @@ void set_stream_parameters(int s_id, transponder *t) {
     sid = get_sid(s_id);
     if (!sid || !sid->enabled)
         return;
-    if (t->apids && t->apids[0] >= '0' && t->apids[0] <= '9') {
-        sid->apids = t->apids;
-        t->apids = (char *)sid->apids.c_str();
-    }
-    if (t->dpids && t->dpids[0] >= '0' && t->dpids[0] <= '9') {
-        sid->dpids = t->dpids;
-        t->dpids = (char *)sid->dpids.c_str();
-    }
-    if (t->pids && t->pids[0] >= '0' && t->pids[0] <= '9') {
-        sid->pids = t->pids;
-        t->pids = (char *)sid->pids.c_str();
-    }
-
-    if (t->x_pmt && t->x_pmt[0] >= '0' && t->x_pmt[0] <= '9') {
-        sid->x_pmt = t->x_pmt;
-        t->x_pmt = (char *)sid->x_pmt.c_str();
-    }
-
-    if (!t->apids)
-        t->apids = sid->tp.apids;
-    if (!t->dpids)
-        t->dpids = sid->tp.dpids;
-    if (!t->pids)
-        t->pids = sid->tp.pids;
-    if (!t->x_pmt)
-        t->x_pmt = sid->tp.x_pmt;
 
     copy_dvb_parameters(t, &sid->tp);
 }
 
-streams *setup_stream(char *str, sockets *s) {
+streams *setup_stream(std::string_view str, sockets *s) {
     streams *sid;
-    char tmp_str[2000];
 
     transponder t;
-    safe_strncpy(tmp_str, str);
-    tmp_str[sizeof(tmp_str) - 1] = 0;
+    streams *exist_sid = (s->sid >= 0) ? get_sid(s->sid) : nullptr;
+    if (exist_sid) {
+        std::lock_guard<SMutex> lock(exist_sid->mutex);
+        t = exist_sid->tp;
+    }
     detect_dvb_parameters(str, &t);
     LOG("Setup stream sid %d parameters, sock_id %d, handle %d", s->sid, s->id,
         s->sock);
-    if (!get_sid(s->sid)) // create the stream
+    if (!exist_sid) // create the stream
     {
         int s_id = streams_add();
         if (!(sid = get_sid(s_id)))
@@ -227,7 +204,8 @@ streams *setup_stream(char *str, sockets *s) {
         !strncasecmp((const char *)s->buf, "SETUP", 5)) // SETUP after PLAY
     {
         int ad = sid->adapter;
-        if (!strstr(tmp_str, "addpids") && !strstr(tmp_str, "delpids")) {
+        if (str.find("addpids") == std::string_view::npos &&
+            str.find("delpids") == std::string_view::npos) {
             close_adapter_for_stream(sid->sid, ad, 0);
             sid->adapter = -1;
         }
@@ -285,9 +263,10 @@ int start_play(streams *sid, sockets *s) {
          ad->master_sid !=
              sid->sid)) // associate the adapter only at play (not at setup)
     {
-        if (sid->tp.sys == 0 &&
-            sid->tp.freq == 0) // play streams with no real parameters ==>
-                               // sending empty packets to the dest
+        if (sid->tp.sys.value_or(SYS_UNDEFINED) == SYS_UNDEFINED &&
+            sid->tp.freq.value_or(0) ==
+                0) // play streams with no real parameters ==>
+                   // sending empty packets to the dest
         {
             sid->do_play = 1;
             LOG_AND_RETURN(
@@ -316,14 +295,14 @@ int start_play(streams *sid, sockets *s) {
         if (ad)
             set_socket_thread(sid->st_sock, get_socket_thread(ad->sock));
     }
-    //  flush the sockets buffer if no pid was requested
-    if (!sid->tp.apids && sid->tp.pids &&
-        (!sid->tp.pids[0] || !strcmp(sid->tp.pids, "0")))
+    bool pids_empty_or_zero =
+        sid->tp.pids.empty() ||
+        (sid->tp.pids.size() == 1 && sid->tp.pids.contains(0));
+    if (pids_empty_or_zero)
         s->flush_enqued_data = 1;
     sid->do_play = 1;
     if (s->type != TYPE_HTTP)
         sid->start_streaming = 0;
-    sid->tp.apids = sid->tp.dpids = sid->tp.pids = sid->tp.x_pmt = NULL;
 
     ad = get_adapter(sid->adapter);
     if (ad && ad->do_tune)
@@ -391,7 +370,8 @@ int close_stream(int i) {
     return 0;
 }
 
-static int decode_transport_srt(sockets *s, streams *sid, char *arg) {
+static int decode_transport_srt(sockets *s, streams *sid,
+                                std::string_view arg) {
 #ifndef DISABLE_SRT
     if (!srt_listener_is_init())
         LOG_AND_RETURN(-1, "SRT listener not initialized");
@@ -429,29 +409,29 @@ static int decode_transport_srt(sockets *s, streams *sid, char *arg) {
 #endif
 }
 
-int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp) {
-    char *arg2[10];
-    int l;
+int decode_transport(sockets *s, std::string_view arg, char *default_rtp,
+                     int start_rtp) {
     char ra[50];
     rtp_prop p;
     streams *sid = get_sid(s->sid);
     streams *sid2;
     if (!sid) {
-        LOG("Error: No stream to set transport to, sock_id %d, arg %s ", s->id,
-            arg);
+        LOG("Error: No stream to set transport to, sock_id %d, arg %.*s ",
+            s->id, !arg.empty() ? (int)arg.size() : 4,
+            !arg.empty() ? arg.data() : "NULL");
         return -1;
     }
     std::lock_guard<SMutex> lock(sid->mutex);
-    l = 0;
-    if (arg) {
-        if (strstr(arg, "RTP/AVP/SRT")) {
-            LOG("Assuming SRT transport for stream sid %d, arg %s", sid->sid,
-                arg);
+    memset(&p, 0, sizeof(p));
+    if (!arg.empty()) {
+        if (arg.contains("RTP/AVP/SRT")) {
+            LOG("Assuming SRT transport for stream sid %d, arg %.*s", sid->sid,
+                (int)arg.size(), arg.data());
             return decode_transport_srt(s, sid, arg);
         }
-        if (strstr(arg, "RTP/AVP/TCP")) {
-            LOG("Assuming RTSP over TCP for stream sid %d, arg %s", sid->sid,
-                arg);
+        if (arg.contains("RTP/AVP/TCP")) {
+            LOG("Assuming RTSP over TCP for stream sid %d, arg %.*s", sid->sid,
+                (int)arg.size(), arg.data());
             sid->type = STREAM_RTSP_TCP;
             sid->rsock = s->sock;
             sid->rsock_id = s->id;
@@ -463,24 +443,24 @@ int decode_transport(sockets *s, char *arg, char *default_rtp, int start_rtp) {
             return 0;
         }
 
-        l = split(arg2, arg, ARRAY_SIZE(arg2), ';');
-    }
-    //      LOG("arg2 %s %s %s",arg2[0],arg2[1],arg2[2]);
-    memset(&p, 0, sizeof(p));
-    while (l > 0) {
-        l--;
-        if (strcmp("multicast", arg2[l]) == 0)
-            p.type = TYPE_MCAST;
-        if (strcmp("unicast", arg2[l]) == 0)
-            p.type = TYPE_UNICAST;
-        if (strncmp("ttl=", arg2[l], 4) == 0)
-            p.ttl = atoi(arg2[l] + 4);
-        if (strncmp("client_port=", arg2[l], 12) == 0)
-            p.port = atoi(arg2[l] + 12);
-        if (strncmp("port=", arg2[l], 5) == 0)
-            p.port = atoi(arg2[l] + 5);
-        if (strncmp("destination=", arg2[l], 12) == 0)
-            safe_strncpy(p.dest, arg2[l] + 12);
+        auto arg2 = split(arg, ';');
+        for (auto it = arg2.rbegin(); it != arg2.rend(); ++it) {
+            const auto &token = *it;
+            if (token == "multicast")
+                p.type = TYPE_MCAST;
+            if (token == "unicast")
+                p.type = TYPE_UNICAST;
+            if (token.size() >= 4 && token.substr(0, 4) == "ttl=")
+                p.ttl = parse_int(token.substr(4));
+            if (token.size() >= 12 && token.substr(0, 12) == "client_port=")
+                p.port = parse_int(token.substr(12));
+            if (token.size() >= 5 && token.substr(0, 5) == "port=")
+                p.port = parse_int(token.substr(5));
+            if (token.size() >= 12 && token.substr(0, 12) == "destination=") {
+                std::string dest_str(token.substr(12));
+                safe_strncpy(p.dest, dest_str.c_str());
+            }
+        }
     }
     if (default_rtp)
         safe_strncpy(p.dest, default_rtp);
@@ -602,7 +582,7 @@ int streams_add() {
     ss->type = 0;
     ss->do_play = 0;
     ss->sp = ss->sb = 0;
-    init_dvb_parameters(&ss->tp);
+    ss->tp.clear();
     ss->useragent[0] = 0;
     ss->len = 0;
     ss->st_sock = -1;

@@ -148,31 +148,36 @@ void handle_client_capabilities(satipc *sip, char *buf) {
 
 // This could be the response of a both SETUP or PLAY
 int satipc_handle_setup(adapter *ad, satipc *sip, char *buf) {
-    char *arg[100], *sess, *es, *sid, *timeout;
-    int la, i;
+    int i;
+    char *timeout;
 
     if ((timeout = strstr(buf, "timeout="))) {
         int tmout;
         timeout += strlen("timeout=");
-        tmout = map_intd(timeout, NULL, 30);
+        tmout = parse_int(timeout, 30);
         sockets_timeout(ad->fe_sock, tmout * 500); // 2 times 30s
         sip->timeout_ms = tmout * 1000;
     }
-    la = split(arg, buf, ARRAY_SIZE(arg), ' ');
-    sess = NULL;
-    sid = NULL;
-    for (i = 0; i < la; i++)
-        if (strncasecmp("Session:", arg[i], 8) == 0)
+
+    auto arg = split(std::string_view(buf), ' ');
+
+    std::string_view sess;
+    std::string_view sid;
+    for (i = 0; i < (int)arg.size(); i++)
+        if (starts_with_case_insensitive(arg[i], "Session:"))
             sess = header_parameter(arg, i);
-        else if (strncasecmp("com.ses.streamID:", arg[i], 17) == 0)
+        else if (starts_with_case_insensitive(arg[i], "com.ses.streamID:"))
             sid = header_parameter(arg, i);
 
-    if (!ad->err && sid && sess) {
-        if ((es = strchr(sess, ';')))
-            *es = 0;
-        safe_strncpy(sip->session, sess);
-        if (sid && sip->stream_id == -1)
-            sip->stream_id = map_int(sid, NULL);
+    if (!ad->err && !sid.empty() && !sess.empty()) {
+        std::string sess_str(sess);
+        size_t semi = sess_str.find(';');
+        if (semi != std::string::npos) {
+            sess_str = sess_str.substr(0, semi);
+        }
+        safe_strncpy(sip->session, sess_str.c_str());
+        if (sip->stream_id == -1)
+            sip->stream_id = parse_int(sid);
         LOG("satipc: session set for adapter %d to %s with stream_id %d",
             ad->id, sip->session, sip->stream_id);
     }
@@ -216,7 +221,7 @@ int satipc_reply(sockets *s) {
     // Parse RTSP return code
     sep = strstr((char *)s->buf, "RTSP/1.0");
     if (sep)
-        rc = map_intd(sep + 9, NULL, 0);
+        rc = parse_int(sep + 9);
 
     LOG("satipc_reply (adapter %d): sock %d (receiving from handle %d, state "
         "%d): "
@@ -238,7 +243,7 @@ int satipc_reply(sockets *s) {
         sip->state = SATIP_STATE_SETUP;
         sip->last_setup = -10000;
         // quirk for Aurora client missing mtype
-        if (ad->tp.mtype == QAM_AUTO)
+        if (ad->tp.mtype.value_or(QAM_AUTO) == QAM_AUTO)
             ad->tp.mtype = QAM_256;
     }
 
@@ -1137,7 +1142,7 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb) {
                 while (*cl == 0x20)
                     cl++;
 
-                icl = map_intd((char *)cl, NULL, 0);
+                icl = parse_int((char *)cl);
                 nlnl += icl;
             }
             if (!nlnl) {
@@ -1263,41 +1268,54 @@ int satipc_del_filters(adapter *ad, int fd, int pid) {
     return 0;
 }
 
+#define FILL(req, val)                                                         \
+    if ((val).has_value())                                                     \
+        strlcatf(url, url_len, len, req, *(val));
+
 void get_s2_url(adapter *ad, char *url, int url_len) {
-#define FILL(req, val, def, met)                                               \
-    if ((val != def) && (val != -1))                                           \
-        strlcatf(url, url_len, len, req, met);
-    int len = 0, plts, ro;
+    int len = 0;
     transponder *tp = &ad->tp;
     satipc *sip = get_satip(ad->id);
     if (!sip)
         return;
     url[0] = 0;
-    plts = tp->plts;
-    ro = tp->ro;
-    //	if (plts == PILOT_AUTO)
-    //		plts = PILOT_OFF;
-    //	if (ro == ROLLOFF_AUTO)
-    //		ro = ROLLOFF_35;
-    FILL("src=%d", tp->diseqc, 0, tp->diseqc);
-    if (sip->satip_fe > 0)
-        FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
-    FILL("&freq=%d", tp->freq, 0, tp->freq / 1000);
-    FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
-    FILL("&mtype=%s", tp->mtype, QAM_AUTO, get_modulation(tp->mtype));
-    FILL("&pol=%s", tp->pol, -1, get_pol(tp->pol));
-    FILL("&sr=%d", tp->sr, -1, tp->sr / 1000);
-    FILL("&fec=%s", tp->fec, FEC_AUTO, get_fec(tp->fec));
-    FILL("&ro=%s", ro, ROLLOFF_AUTO, get_rolloff(ro));
-    FILL("&plts=%s", plts, PILOT_AUTO, get_pilot(plts));
-    if (tp->plp_isi >= 0)
-        FILL("&isi=%d", tp->plp_isi, 0, tp->plp_isi);
-    if (tp->pls_mode >= 0)
-        FILL("&plsm=%s", tp->pls_mode, -1, get_pls_mode(tp->pls_mode));
-    if (tp->pls_code >= 0)
-        FILL("&plsc=%d", tp->pls_code, -1, tp->pls_code);
+    std::optional<int> satip_fe =
+        (sip->satip_fe > 0) ? std::make_optional(sip->satip_fe) : std::nullopt;
+
+    FILL("src=%d", tp->diseqc);
+    FILL("&fe=%d", satip_fe);
+    FILL("&freq=%d",
+         tp->freq ? std::make_optional(*tp->freq / 1000) : std::nullopt);
+    FILL("&msys=%s",
+         tp->sys
+             ? std::make_optional(fe_delsys_map.reverse_lookup(*tp->sys).data())
+             : std::nullopt);
+    FILL("&mtype=%s",
+         tp->mtype ? std::make_optional(
+                         fe_modulation_map.reverse_lookup(*tp->mtype).data())
+                   : std::nullopt);
+    FILL("&pol=%s", tp->pol ? std::make_optional(
+                                  fe_pol_map.reverse_lookup(*tp->pol).data())
+                            : std::nullopt);
+    FILL("&sr=%d", tp->sr ? std::make_optional(*tp->sr / 1000) : std::nullopt);
+    FILL("&fec=%s", tp->fec ? std::make_optional(
+                                  fe_fec_map.reverse_lookup(*tp->fec).data())
+                            : std::nullopt);
+    FILL("&ro=%s", tp->ro ? std::make_optional(
+                                fe_rolloff_map.reverse_lookup(*tp->ro).data())
+                          : std::nullopt);
+    FILL("&plts=%s",
+         tp->plts
+             ? std::make_optional(fe_pilot_map.reverse_lookup(*tp->plts).data())
+             : std::nullopt);
+    FILL("&isi=%d", tp->plp_isi);
+    FILL("&plsm=%s",
+         tp->pls_mode
+             ? std::make_optional(
+                   fe_pls_mode_map.reverse_lookup(*tp->pls_mode).data())
+             : std::nullopt);
+    FILL("&plsc=%d", tp->pls_code);
     url[len] = 0;
-    return;
 }
 
 void get_c2_url(adapter *ad, char *url, int url_len) {
@@ -1307,22 +1325,36 @@ void get_c2_url(adapter *ad, char *url, int url_len) {
     if (!sip)
         return;
     url[0] = 0;
-    FILL("freq=%.1f", tp->freq, 0, tp->freq / 1000.0);
-    if (sip->satip_fe > 0)
-        FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
-    FILL("&sr=%d", tp->sr, -1, tp->sr / 1000);
-    FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
-    FILL("&mtype=%s", tp->mtype, QAM_AUTO, get_modulation(tp->mtype));
-    FILL("&gi=%s", tp->gi, GUARD_INTERVAL_AUTO, get_gi(tp->gi));
-    FILL("&fec=%s", tp->fec, FEC_AUTO, get_fec(tp->fec));
-    FILL("&tmode=%s", tp->tmode, TRANSMISSION_MODE_AUTO, get_tmode(tp->tmode));
-    FILL("&specinv=%d", tp->inversion, INVERSION_AUTO, tp->inversion);
-    FILL("&t2id=%d", tp->t2id, 0, tp->t2id);
-    FILL("&sm=%d", tp->sm, 0, tp->sm);
-    if (tp->plp_isi >= 0)
-        FILL("&plp=%d", tp->plp_isi, 0, tp->plp_isi);
+    std::optional<int> satip_fe =
+        (sip->satip_fe > 0) ? std::make_optional(sip->satip_fe) : std::nullopt;
+
+    FILL("freq=%.1f",
+         tp->freq ? std::make_optional(*tp->freq / 1000.0) : std::nullopt);
+    FILL("&fe=%d", satip_fe);
+    FILL("&sr=%d", tp->sr ? std::make_optional(*tp->sr / 1000) : std::nullopt);
+    FILL("&msys=%s",
+         tp->sys
+             ? std::make_optional(fe_delsys_map.reverse_lookup(*tp->sys).data())
+             : std::nullopt);
+    FILL("&mtype=%s",
+         tp->mtype ? std::make_optional(
+                         fe_modulation_map.reverse_lookup(*tp->mtype).data())
+                   : std::nullopt);
+    FILL("&gi=%s",
+         tp->gi ? std::make_optional(fe_gi_map.reverse_lookup(*tp->gi).data())
+                : std::nullopt);
+    FILL("&fec=%s", tp->fec ? std::make_optional(
+                                  fe_fec_map.reverse_lookup(*tp->fec).data())
+                            : std::nullopt);
+    FILL("&tmode=%s", tp->tmode
+                          ? std::make_optional(
+                                fe_tmode_map.reverse_lookup(*tp->tmode).data())
+                          : std::nullopt);
+    FILL("&specinv=%d", tp->inversion);
+    FILL("&t2id=%d", tp->t2id);
+    FILL("&sm=%d", tp->sm);
+    FILL("&plp=%d", tp->plp_isi);
     url[len] = 0;
-    return;
 }
 
 void get_t2_url(adapter *ad, char *url, int url_len) {
@@ -1332,23 +1364,37 @@ void get_t2_url(adapter *ad, char *url, int url_len) {
     if (!sip)
         return;
     url[0] = 0;
-    FILL("freq=%.1f", tp->freq, 0, tp->freq / 1000.0);
-    if (sip->satip_fe > 0)
-        FILL("&fe=%d", sip->satip_fe, 0, sip->satip_fe);
-    FILL("&bw=%d", tp->bw, BANDWIDTH_AUTO, tp->bw / 1000000);
-    FILL("&msys=%s", tp->sys, 0, get_delsys(tp->sys));
-    FILL("&mtype=%s", tp->mtype, -1, get_modulation(tp->mtype));
-    FILL("&gi=%s", tp->gi, GUARD_INTERVAL_AUTO, get_gi(tp->gi));
-    FILL("&tmode=%s", tp->tmode, TRANSMISSION_MODE_AUTO, get_tmode(tp->tmode));
-    FILL("&specinv=%d", tp->inversion, INVERSION_AUTO, tp->inversion);
-    FILL("&c2tft=%d", tp->c2tft, 0, tp->c2tft);
-    if (tp->ds >= 0)
-        FILL("&ds=%d", tp->ds, 0, tp->ds);
-    if (tp->plp_isi >= 0)
-        FILL("&plp=%d", tp->plp_isi, 0, tp->plp_isi);
+    std::optional<int> satip_fe =
+        (sip->satip_fe > 0) ? std::make_optional(sip->satip_fe) : std::nullopt;
+
+    FILL("freq=%.1f",
+         tp->freq ? std::make_optional(*tp->freq / 1000.0) : std::nullopt);
+    FILL("&fe=%d", satip_fe);
+    FILL("&bw=%d",
+         tp->bw ? std::make_optional(*tp->bw / 1000000) : std::nullopt);
+    FILL("&msys=%s",
+         tp->sys
+             ? std::make_optional(fe_delsys_map.reverse_lookup(*tp->sys).data())
+             : std::nullopt);
+    FILL("&mtype=%s",
+         tp->mtype ? std::make_optional(
+                         fe_modulation_map.reverse_lookup(*tp->mtype).data())
+                   : std::nullopt);
+    FILL("&gi=%s",
+         tp->gi ? std::make_optional(fe_gi_map.reverse_lookup(*tp->gi).data())
+                : std::nullopt);
+    FILL("&tmode=%s", tp->tmode
+                          ? std::make_optional(
+                                fe_tmode_map.reverse_lookup(*tp->tmode).data())
+                          : std::nullopt);
+    FILL("&specinv=%d", tp->inversion);
+    FILL("&c2tft=%d", tp->c2tft);
+    FILL("&ds=%d", tp->ds);
+    FILL("&plp=%d", tp->plp_isi);
     url[len] = 0;
-    return;
 }
+
+#undef FILL
 
 int http_request(adapter *ad, char *url, const char *method, int force) {
     char session[200];
@@ -1594,14 +1640,14 @@ int satipc_request(adapter *ad) {
         "pids to delete %d, expect_reply %d, want_tune %d, "
         "last_cmd %d, "
         "sent_transport %d, closed_rtsp %d",
-        ad->id, sip->state, ad->tp.freq, sip->lap, sip->ldp, sip->expect_reply,
-        sip->want_tune, sip->last_cmd, sip->sent_transport,
+        ad->id, sip->state, ad->tp.freq.value_or(0), sip->lap, sip->ldp,
+        sip->expect_reply, sip->want_tune, sip->last_cmd, sip->sent_transport,
         sip->rtsp_socket_closed);
 
     if (sip->rtsp_socket_closed)
         return 0;
 
-    if ((ad->tp.freq == 0) &&
+    if ((ad->tp.freq.value_or(0) == 0) &&
         ((sip->state == SATIP_STATE_INACTIVE) ||
          (sip->state == SATIP_STATE_SETUP) || (sip->state == SATIP_STATE_PLAY)))
         return 0;
@@ -1671,7 +1717,8 @@ int satipc_commit(adapter *ad) {
 
     LOG("satipc: commit on freq %d, sys %d for adapter %d (expect reply "
         "%d)",
-        ad->tp.freq / 1000, ad->tp.sys, ad->id, sip->expect_reply);
+        ad->tp.freq.value_or(0) / 1000, ad->tp.sys.value_or(SYS_UNDEFINED),
+        ad->id, sip->expect_reply);
 
     sip->want_commit = true;
 
@@ -1683,7 +1730,8 @@ int satipc_tune(int aid, transponder *tp) {
     get_ad_and_sipr(aid, 1);
     LOG("satipc: tuning to freq %d, sys %d for adapter %d (state %d, "
         "expect_reply %d)",
-        ad->tp.freq / 1000, ad->tp.sys, aid, sip->state, sip->expect_reply);
+        ad->tp.freq.value_or(0) / 1000, ad->tp.sys.value_or(SYS_UNDEFINED), aid,
+        sip->state, sip->expect_reply);
     ad->err = 0;
     sip->want_commit = false;
     sip->want_tune = true;
@@ -1801,17 +1849,16 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
         "number "
         "of "
         "devices %d",
-        ad->id, sip->sip, sip->sport, ad->sys[0], get_delsys(ad->sys[0]),
-        get_delsys(ad->sys[1]), sip->satip_fe, a_count);
+        ad->id, sip->sip, sip->sport, ad->sys[0],
+        fe_delsys_map.reverse_lookup(ad->sys[0]).data(),
+        fe_delsys_map.reverse_lookup(ad->sys[1]).data(), sip->satip_fe,
+        a_count);
 
     return sip->id;
 }
 
 // [*][~][DELSYS:][FE_ID@][source_ip/]host[:port]
 void find_satip_adapter(adapter **a) {
-    int i, la;
-    char *sep1, *sep2, *sep;
-    char *arg[50];
     char host[100];
     char source_ip[100];
     int port;
@@ -1821,76 +1868,97 @@ void find_satip_adapter(adapter **a) {
 
     if (!opts.satip_servers || !opts.satip_servers[0])
         return;
-    char satip_servers[strlen(opts.satip_servers) + 10];
-    safe_strncpy(satip_servers, opts.satip_servers);
-    la = split(arg, satip_servers, ARRAY_SIZE(arg), ',');
 
-    for (i = 0; i < la; i++) {
+    auto arg = split(opts.satip_servers, ',');
+
+    for (const auto &token_val : arg) {
+        std::string_view token = token_val;
         satipc_transport_type transport =
             opts.satip_rtsp_over_tcp ? SIP_TRANSPORT_TCP : SIP_TRANSPORT_UDP;
         no_pids_all = 0;
-        if (arg[i][0] == '^') {
-            transport = SIP_TRANSPORT_SRT;
-            arg[i]++;
+
+        if (!token.empty() && token[0] == '^') {
+            token.remove_prefix(1);
 #ifdef DISABLE_SRT
-            FAIL("SRT support is disabled, install libsrt-openssl-dev")
+            FAIL("SRT support is disabled, install libsrt-openssl-dev");
+#else
+            transport = SIP_TRANSPORT_SRT;
 #endif
         }
-
-        if (arg[i][0] == '*') {
+        if (!token.empty() && token[0] == '*') {
             if (transport == SIP_TRANSPORT_TCP)
                 transport = SIP_TRANSPORT_UDP;
             else if (transport == SIP_TRANSPORT_UDP)
                 transport = SIP_TRANSPORT_TCP;
-            arg[i]++;
+            token.remove_prefix(1);
         }
-        if (arg[i][0] == '~') {
+        if (!token.empty() && token[0] == '~') {
             no_pids_all = 1;
-            arg[i]++;
+            token.remove_prefix(1);
         }
-        sep = NULL;
-        sep2 = NULL;
-        sep1 = strchr(arg[i], ':');
-        if (sep1)
-            sep2 = strchr(sep1 + 1, ':');
-        if (map_intd(arg[i], (char **)fe_delsys, -1) != -1)
-            sep = arg[i];
 
-        if (sep1)
-            *sep1++ = 0;
-        if (sep2)
-            *sep2++ = 0;
+        size_t sep1 = token.find(':');
+        size_t sep2 = std::string_view::npos;
+        if (sep1 != std::string_view::npos) {
+            sep2 = token.find(':', sep1 + 1);
+        }
 
-        if (sep) {
-            if (!sep1) {
-                LOG("Found only the system for satip adapter %s", arg[i]);
+        std::string_view system_part = "";
+        std::string_view host_part = "";
+        std::string_view port_part = "";
+
+        std::string_view first_segment =
+            (sep1 != std::string_view::npos) ? token.substr(0, sep1) : token;
+        if (fe_delsys_map.lookup(first_segment).has_value()) {
+            system_part = first_segment;
+            if (sep1 == std::string_view::npos) {
+                LOG("Found only the system for satip adapter %.*s",
+                    (int)token.size(), token.data());
                 continue;
             }
+            if (sep2 != std::string_view::npos) {
+                host_part = token.substr(sep1 + 1, sep2 - sep1 - 1);
+                port_part = token.substr(sep2 + 1);
+            } else {
+                host_part = token.substr(sep1 + 1);
+            }
         } else {
-            if (sep1)
-                sep2 = sep1;
-            sep1 = arg[i];
+            if (sep1 != std::string_view::npos) {
+                host_part = token.substr(0, sep1);
+                port_part = token.substr(sep1 + 1);
+            } else {
+                host_part = token;
+            }
         }
 
-        if (!sep)
-            sep = (char *)"dvbs2";
-        if (!sep2)
-            sep2 = (char *)"554";
-        delsys = map_int(sep, (char **)fe_delsys);
-        safe_strncpy(host, sep1);
+        if (system_part.empty())
+            system_part = "dvbs2";
+        if (port_part.empty())
+            port_part = "554";
+
+        delsys = fe_delsys_map.lookup(system_part).value_or(SYS_UNDEFINED);
+        port = parse_int(port_part);
+
         fe = -1;
         source_ip[0] = 0;
-        char *pos_at = strchr(host, '@');
-        if (pos_at) {
-            fe = map_int(sep1, NULL);
-            memmove(host, pos_at + 1, strlen(pos_at));
+
+        std::string_view actual_host = host_part;
+        size_t at_pos = actual_host.find('@');
+        if (at_pos != std::string_view::npos) {
+            fe = parse_int(actual_host.substr(0, at_pos));
+            actual_host = actual_host.substr(at_pos + 1);
         }
-        if (strchr(host, '/')) {
-            char *end = strchr(host, '/');
-            _strncpy(source_ip, host, end - host + 1);
-            memmove(host, end + 1, sizeof(host) - 1);
+
+        size_t slash_pos = actual_host.find('/');
+        if (slash_pos != std::string_view::npos) {
+            std::string source_ip_str(actual_host.substr(0, slash_pos));
+            safe_strncpy(source_ip, source_ip_str.c_str());
+            actual_host = actual_host.substr(slash_pos + 1);
         }
-        port = map_int(sep2, NULL);
+
+        std::string host_str(actual_host);
+        safe_strncpy(host, host_str.c_str());
+
         add_satip_server(host, port, fe, delsys, source_ip, transport,
                          no_pids_all);
     }
@@ -1916,14 +1984,6 @@ void disable_satip_server(char *host, int port) {
             }
         }
 }
-#define MAX_SATIP_XML 20
-typedef struct satip_xml_data {
-    char url[100];
-    char host[64];
-    int port;
-    char xml[4000];
-    int tuners[MAX_DVBAPI_SYSTEMS];
-} Ssatip_xml_data;
 
 Ssatip_xml_data sxd[MAX_SATIP_XML];
 const char *satip_delsys[] = {
@@ -1936,15 +1996,14 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h) {
     if (!data) // the socket will be closed, process the data;
     {
         char *sep, *eos;
-        char *arg[MAX_DVBAPI_SYSTEMS];
         char order[MAX_DVBAPI_SYSTEMS];
         int i_order = 0;
-        int i, j, la;
+        int i, j;
         safe_strncpy(s->host, h->host);
         s->port = 554;
         sep = strstr(s->xml, "X-SATIP-RTSP-Port:");
         if (sep) {
-            s->port = map_intd(sep + 18, NULL, 554);
+            s->port = parse_int(sep + 18, 554);
         }
         sep = strstr(s->xml, "<satip:X_SATIPCAP");
         if (sep)
@@ -1957,17 +2016,30 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h) {
         eos = strchr(sep, '<');
         if (eos)
             *eos = 0;
-        la = split(arg, sep, ARRAY_SIZE(arg), ',');
-        for (i = 0; i < la; i++) {
-            int ds = map_intd(arg[i], (char **)satip_delsys, -1);
-            sep = strchr(arg[i], '-');
-            int t = map_intd(sep ? sep + 1 : NULL, NULL, -1);
+
+        auto arg = split(sep, ',');
+        for (const auto &arg_item : arg) {
+            size_t dash = arg_item.find('-');
+            std::string_view system_name = (dash != std::string_view::npos)
+                                               ? arg_item.substr(0, dash)
+                                               : arg_item;
+            auto ds_opt = fe_delsys_map.lookup(system_name);
+            if (!ds_opt) {
+                LOG("Could not determine the delivery system for %.*s",
+                    (int)arg_item.size(), arg_item.data());
+                continue;
+            }
+            fe_delivery_system_t ds = ds_opt.value();
+            int t = parse_int((dash != std::string_view::npos)
+                                  ? arg_item.substr(dash + 1)
+                                  : "",
+                              -1);
             if (ds < 0 || ds >= MAX_DVBAPI_SYSTEMS || t < 0 ||
                 i_order >= (int)sizeof(order)) {
-                LOG("Could not determine the delivery system for %s (%d) "
+                LOG("Could not determine the delivery system for %.*s (%d) "
                     "tuners %d, "
                     "order %d",
-                    arg[i], ds, t, i_order);
+                    (int)arg_item.size(), arg_item.data(), ds, t, i_order);
                 continue;
             }
             s->tuners[ds] = t;
@@ -2005,16 +2077,14 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h) {
 }
 
 int satip_getxml(void *x) {
-    int i, la;
-    char *arg[MAX_SATIP_XML];
-    char satip_xml[1000];
+    int i;
     if (!opts.satip_xml)
         return 1;
     memset(sxd, 0, sizeof(sxd));
-    safe_strncpy(satip_xml, opts.satip_xml);
-    la = split(arg, satip_xml, ARRAY_SIZE(arg), ',');
-    for (i = 0; i < la; i++) {
-        safe_strncpy(sxd[i].url, arg[i]);
+    auto arg = split(opts.satip_xml, ',');
+    for (i = 0; i < (int)arg.size() && i < MAX_SATIP_XML; i++) {
+        std::string url_str(arg[i]);
+        safe_strncpy(sxd[i].url, url_str.c_str());
         http_client(sxd[i].url, (void *)satip_getxml_data, &sxd[i]);
     }
     return 0;

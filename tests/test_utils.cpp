@@ -96,11 +96,90 @@ int test_is_rtsp_response() {
     return 0;
 }
 
+int test_split() {
+    auto res1 = split("a,b,c", ',');
+    ASSERT_EQUAL(res1.size(), 3, "Expected 3 elements");
+    ASSERT(res1[0] == "a", "Expected 'a'");
+    ASSERT(res1[1] == "b", "Expected 'b'");
+    ASSERT(res1[2] == "c", "Expected 'c'");
+
+    auto res2 = split("  a , b \n, c\r", ',');
+    ASSERT_EQUAL(res2.size(), 3,
+                 "Expected 3 elements after filtering control characters");
+    ASSERT(res2[0] == "a", "Expected 'a'");
+    ASSERT(res2[1] == "b", "Expected 'b'");
+    ASSERT(res2[2] == "c", "Expected 'c'");
+
+    auto res3 = split("a,,b", ',');
+    ASSERT_EQUAL(res3.size(), 2, "Expected 2 elements, empty elements ignored");
+    ASSERT(res3[0] == "a", "Expected 'a'");
+    ASSERT(res3[1] == "b", "Expected 'b'");
+
+    return 0;
+}
+
+int test_strip() {
+    ASSERT(strip("  hello") == "hello", "Expected leading spaces stripped");
+    ASSERT(strip("world  ") == "world  ",
+           "Expected trailing spaces not stripped");
+    ASSERT(strip("   ") == "", "Expected empty string view for all spaces");
+    ASSERT(strip("") == "", "Expected empty string view for empty input");
+    return 0;
+}
+
+int test_parse_int_and_enum_map() {
+    ASSERT_EQUAL(parse_int("123"), 123, "Expected 123");
+    ASSERT_EQUAL(parse_int("  -456"), -456, "Expected -456");
+    ASSERT_EQUAL(parse_int("+789"), 789, "Expected 789");
+    ASSERT_EQUAL(parse_int("invalid", 42), 42, "Expected 42 for invalid int");
+
+    enum class TestEnum { ZERO, ONE, TWO };
+
+    EnumMap<TestEnum> my_map({{"zero", TestEnum::ZERO},
+                              {"one", TestEnum::ONE},
+                              {"two", TestEnum::TWO}});
+
+    ASSERT(my_map.lookup("one").value_or(TestEnum::ZERO) == TestEnum::ONE,
+           "Expected ONE");
+    ASSERT(my_map.lookup("TWO").value_or(TestEnum::ZERO) == TestEnum::TWO,
+           "Expected TWO");
+    ASSERT(!my_map.lookup("three").has_value(),
+           "Expected nullopt for invalid key");
+
+    return 0;
+}
+
+int test_check_strs() {
+    const char *const map[] = {"zero", "one", "two", nullptr};
+    ASSERT_EQUAL(check_strs("one", map, -1), 1, "Expected index 1");
+    ASSERT_EQUAL(check_strs("two", map, -1), 2, "Expected index 2");
+    ASSERT_EQUAL(check_strs("invalid", map, -1), -1, "Expected default -1");
+    return 0;
+}
+
+int test_header_parameter() {
+    std::vector<std::string_view> args1 = {"Session:", "12345"};
+    ASSERT(header_parameter(args1, 0) == "12345", "Expected '12345'");
+
+    std::vector<std::string_view> args2 = {"Session:54321"};
+    ASSERT(header_parameter(args2, 0) == "54321", "Expected '54321'");
+
+    std::vector<std::string_view> args3 = {"Session", ":", "abcde"};
+    ASSERT(header_parameter(args3, 0) == "abcde", "Expected 'abcde'");
+
+    return 0;
+}
+
 int main() {
     opts.log = 255;
     strcpy(thread_info[thread_index].thread_name, "test_utils");
     TEST_FUNC(test_mkdir_recursive(), "testing directory creation");
     TEST_FUNC(test_fifo(), "testing fifo");
     TEST_FUNC(test_is_rtsp_response(), "testing is_rtsp_response");
+    TEST_FUNC(test_split(), "testing split");
+    TEST_FUNC(test_strip(), "testing strip");
+    TEST_FUNC(test_parse_int_and_enum_map(), "testing parse_int and EnumMap");
+    TEST_FUNC(test_check_strs(), "testing check_strs");
+    TEST_FUNC(test_header_parameter(), "testing header_parameter");
     return 0;
 }

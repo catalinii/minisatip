@@ -276,6 +276,7 @@ if(BUILD_TESTING)
 	tests/test_satipc.cpp
         tests/test_socketworks.cpp
         tests/utils/test_utils_dir.cpp
+        tests/test_stream.cpp
     )
 
     # Re-use MINISATIP_SOURCES and adjust for tests
