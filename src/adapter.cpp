@@ -605,13 +605,9 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
         hiband = get_lnb_hiband(tp, &tp->diseqc_param);
     }
 
-    auto conflicts = [](const std::optional<int> &req, int actual) {
-        return req.has_value() && *req != actual;
-    };
-
     auto is_incompatible = [&](adapter *other) {
-        return pol != other->old_pol || conflicts(hiband, other->old_hiband) ||
-               diseqc != other->old_diseqc;
+        return pol != other->old_pol || diseqc != other->old_diseqc ||
+               (hiband.has_value() && *hiband != other->old_hiband);
     };
 
     // master adapter used by slave adapters, check slave parameters if they
