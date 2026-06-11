@@ -605,15 +605,6 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
         hiband = get_lnb_hiband(tp, &tp->diseqc_param);
     }
 
-    auto conflicts = [](const std::optional<int> &req, int actual) {
-        return req.has_value() && *req != actual;
-    };
-
-    auto is_incompatible = [&](adapter *other) {
-        return pol != other->old_pol || conflicts(hiband, other->old_hiband) ||
-               diseqc != other->old_diseqc;
-    };
-
     // master adapter used by slave adapters, check slave parameters if they
     // match
     if (!is_byte_array_empty(ad->used, sizeof(ad->used))) {
@@ -629,7 +620,7 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
                     ad->used[i] = 0;
                     continue;
                 }
-                if (is_incompatible(ad2))
+                if (ad2->is_incompatible(pol, hiband, diseqc))
                     return 1; // slave parameters conflict with the required
                               // parameters
             }
@@ -641,7 +632,7 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
 
     // master adapter used by slave adapters
     if (master) {
-        if (is_incompatible(master))
+        if (master->is_incompatible(pol, hiband, diseqc))
             return 1; // master parameters conflict with the required parameters
     }
     LOGM("%s: adapter %d master %d (pol %d, band %d, diseqc "
