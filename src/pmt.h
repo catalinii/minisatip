@@ -144,6 +144,11 @@ typedef struct struct_pmt {
     SPMT_batch *batch;
     int8_t parity, update_cw;
     uint64_t last_update_cw;
+    int64_t last_descramble_ok;
+    int64_t last_scrambled;
+    int64_t descramble_fail_start;
+    int64_t last_descramble_restart;
+    uint8_t descramble_watchdog_resend_pmt;
     int16_t master_pmt; //  the pmt that contains the same pids as this PMT
     SCW *cw;
     SPid *p;
