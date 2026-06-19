@@ -286,6 +286,20 @@ int test_compare_slave_parameters() {
     ASSERT(compare_slave_parameters(&slave_ad, &tp) == 1,
            "Conflicting band (hiband) should return 1");
 
+    // 4b. Test band check when tp.diseqc_param is uninitialized (empty/zeroed),
+    // which simulates the real application request. The check should use the
+    // adapter's diseqc_param settings.
+    tp.clear();
+    tp.freq = 12322000;
+    master_ad.old_hiband = 1;
+    ASSERT(
+        compare_slave_parameters(&slave_ad, &tp) == 0,
+        "Highband tp with empty diseqc_param should match master old_hiband=1");
+    master_ad.old_hiband = 0;
+    ASSERT(compare_slave_parameters(&slave_ad, &tp) == 1,
+           "Highband tp with empty diseqc_param should conflict with master "
+           "old_hiband=0");
+
     // 5. Test slave check (when master_ad is used by slave_ad)
     master_ad.used[1] = 1; // master_ad is used by slave_ad (id 1)
 

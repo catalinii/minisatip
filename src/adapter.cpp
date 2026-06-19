@@ -602,7 +602,7 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
 
     std::optional<int> hiband;
     if (tp->freq && *tp->freq > 0) {
-        hiband = get_lnb_hiband(tp, &tp->diseqc_param);
+        hiband = get_lnb_hiband(tp, &ad->diseqc_param);
     }
 
     // master adapter used by slave adapters, check slave parameters if they
