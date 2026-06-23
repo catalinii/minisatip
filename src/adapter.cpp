@@ -595,8 +595,8 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
         (ad->diseqc_param.switch_type == SWITCH_UNICABLE))
         return 0;
 
-    // Map parameters to concrete hardware values identically to setup_switch in
-    // dvb.cpp
+    // Map parameters to concrete hardware values. The LNB switch threshold
+    // (hiband) is computed using the master/adapter configuration.
     int pol = (tp->pol.value_or(-1) - 1) & 1;
     int diseqc = (tp->diseqc.value_or(0) > 0) ? tp->diseqc.value_or(0) - 1 : 0;
 
