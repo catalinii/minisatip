@@ -600,9 +600,14 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
     int pol = (tp->pol.value_or(-1) - 1) & 1;
     int diseqc = (tp->diseqc.value_or(0) > 0) ? tp->diseqc.value_or(0) - 1 : 0;
 
+    adapter *master = NULL;
+    if (ad->master_source >= 0 && ad->master_source < MAX_ADAPTERS)
+        master = a[ad->master_source];
+
     std::optional<int> hiband;
     if (tp->freq && *tp->freq > 0) {
-        hiband = get_lnb_hiband(tp, &ad->diseqc_param);
+        hiband = get_lnb_hiband(tp, master ? &master->diseqc_param
+                                           : &ad->diseqc_param);
     }
 
     // master adapter used by slave adapters, check slave parameters if they
@@ -625,10 +630,6 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
                               // parameters
             }
     }
-
-    adapter *master = NULL;
-    if (ad->master_source >= 0 && ad->master_source < MAX_ADAPTERS)
-        master = a[ad->master_source];
 
     // master adapter used by slave adapters
     if (master) {

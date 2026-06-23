@@ -146,6 +146,21 @@ int test_compare_slave_parameters() {
     adapter master_ad = {};
     adapter slave_ad = {};
 
+    // Save current global adapter state and restore it on scope exit
+    struct AdapterRestore {
+        adapter *saved[MAX_ADAPTERS];
+        AdapterRestore() {
+            for (int i = 0; i < MAX_ADAPTERS; i++) {
+                saved[i] = a[i];
+            }
+        }
+        ~AdapterRestore() {
+            for (int i = 0; i < MAX_ADAPTERS; i++) {
+                a[i] = saved[i];
+            }
+        }
+    } restore;
+
     // Clear global adapter array to ensure clean state
     for (int i = 0; i < MAX_ADAPTERS; i++) {
         a[i] = nullptr;
@@ -200,6 +215,7 @@ int test_compare_slave_parameters() {
     slave_ad.diseqc_param.lnb_low = 9750000;
     slave_ad.diseqc_param.lnb_high = 10600000;
     slave_ad.diseqc_param.lnb_switch = 11700000;
+    master_ad.diseqc_param = slave_ad.diseqc_param;
 
     // Configure master adapter parameters
     master_ad.old_pol = 0;    // horizontal/vertical (0)
