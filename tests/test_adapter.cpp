@@ -146,21 +146,6 @@ int test_compare_slave_parameters() {
     adapter master_ad = {};
     adapter slave_ad = {};
 
-    // Save current global adapter state and restore it on scope exit
-    struct AdapterRestore {
-        adapter *saved[MAX_ADAPTERS];
-        AdapterRestore() {
-            for (int i = 0; i < MAX_ADAPTERS; i++) {
-                saved[i] = a[i];
-            }
-        }
-        ~AdapterRestore() {
-            for (int i = 0; i < MAX_ADAPTERS; i++) {
-                a[i] = saved[i];
-            }
-        }
-    } restore;
-
     // Clear global adapter array to ensure clean state
     for (int i = 0; i < MAX_ADAPTERS; i++) {
         a[i] = nullptr;
@@ -335,8 +320,9 @@ int test_compare_slave_parameters() {
            "Matching polarization on slave adapter should return 0");
 
     // Reset global array
-    a[0] = nullptr;
-    a[1] = nullptr;
+    for (int i = 0; i < MAX_ADAPTERS; i++) {
+        a[i] = nullptr;
+    }
 
     return 0;
 }
