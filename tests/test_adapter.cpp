@@ -142,6 +142,191 @@ int test_update_pids() {
     return 0;
 }
 
+int test_compare_slave_parameters() {
+    adapter master_ad = {};
+    adapter slave_ad = {};
+
+    // Clear global adapter array to ensure clean state
+    for (int i = 0; i < MAX_ADAPTERS; i++) {
+        a[i] = nullptr;
+    }
+
+    // 1. ad is NULL
+    ASSERT(compare_slave_parameters(nullptr, nullptr) == 0,
+           "compare_slave_parameters with NULL adapter should return 0");
+
+    // Initialize master_ad
+    master_ad.id = 0;
+    master_ad.enabled = 1;
+    master_ad.master_source = -1;
+    memset(master_ad.used, 0, sizeof(master_ad.used));
+    a[0] = &master_ad;
+
+    // Initialize slave_ad
+    slave_ad.id = 1;
+    slave_ad.enabled = 1;
+    slave_ad.master_source = 0; // slave of master_ad
+    memset(slave_ad.used, 0, sizeof(slave_ad.used));
+    a[1] = &slave_ad;
+
+    transponder tp;
+    auto setup_tp = [](transponder &t) {
+        t.clear();
+        t.diseqc_param.lnb_low = 9750000;
+        t.diseqc_param.lnb_high = 10600000;
+        t.diseqc_param.lnb_switch = 11700000;
+    };
+    setup_tp(tp);
+
+    // 2. master_ad is not a slave and is not marked as used by any slave
+    // adapters
+    ASSERT(
+        compare_slave_parameters(&master_ad, &tp) == 0,
+        "Adapter with empty used array and master_source < 0 should return 0");
+
+    // 3. JESS/UNICABLE switch types should always return 0
+    slave_ad.diseqc_param.switch_type = SWITCH_JESS;
+    tp.pol = 2; // would mismatch but ignored due to JESS
+    ASSERT(compare_slave_parameters(&slave_ad, &tp) == 0,
+           "UNICABLE/JESS adapter should return 0");
+    slave_ad.diseqc_param.switch_type = SWITCH_UNICABLE;
+    ASSERT(compare_slave_parameters(&slave_ad, &tp) == 0,
+           "UNICABLE/JESS adapter should return 0");
+
+    // Reset switch type
+    slave_ad.diseqc_param.switch_type = SWITCH_SLAVE;
+
+    // Configure LNB parameters (Universal LNB)
+    slave_ad.diseqc_param.lnb_low = 9750000;
+    slave_ad.diseqc_param.lnb_high = 10600000;
+    slave_ad.diseqc_param.lnb_switch = 11700000;
+    master_ad.diseqc_param = slave_ad.diseqc_param;
+
+    // Configure master adapter parameters
+    master_ad.old_pol = 0;    // horizontal/vertical (0)
+    master_ad.old_hiband = 0; // lowband (0)
+    master_ad.old_diseqc = 0; // diseqc port (0)
+
+    // 4. Test master check with optional parameters
+
+    // No optional parameters set in transponder -> should match
+    setup_tp(tp);
+    ASSERT(compare_slave_parameters(&slave_ad, &tp) == 0,
+           "No parameters set in transponder should not conflict");
+
+    // tp.pol matches master's old_pol
+    setup_tp(tp);
+    tp.pol = 1; // (*tp.pol - 1) & 1 = 0
+    ASSERT(compare_slave_parameters(&slave_ad, &tp) == 0,
+           "Matching polarization should return 0");
+
+    // tp.pol = 0 (none/unspecified) maps to pol=1, which conflicts with
+    // master's old_pol (0)
+    setup_tp(tp);
+    tp.pol = 0;
+    ASSERT(compare_slave_parameters(&slave_ad, &tp) == 1,
+           "Polarization=0 (unspecified) maps to pol=1 and should conflict "
+           "with old_pol=0");
+
+    // tp.pol = 0 maps to pol=1, which matches if master's old_pol is 1
+    master_ad.old_pol = 1;
+    ASSERT(compare_slave_parameters(&slave_ad, &tp) == 0,
+           "Polarization=0 (unspecified) maps to pol=1 and should match "
+           "old_pol=1");
+    master_ad.old_pol = 0; // Restore old_pol to 0
+
+    // tp.pol conflicts with master's old_pol
+    setup_tp(tp);
+    tp.pol = 2; // (*tp.pol - 1) & 1 = 1
+    ASSERT(compare_slave_parameters(&slave_ad, &tp) == 1,
+           "Conflicting polarization should return 1");
+
+    // tp.diseqc matches master's old_diseqc
+    setup_tp(tp);
+    tp.diseqc = 1; // (*tp.diseqc > 0) ? 1 - 1 : 0 = 0
+    ASSERT(compare_slave_parameters(&slave_ad, &tp) == 0,
+           "Matching diseqc should return 0");
+
+    // tp.diseqc = 0 (none/unspecified) maps to diseqc=0, which matches master's
+    // old_diseqc (0)
+    setup_tp(tp);
+    tp.diseqc = 0;
+    ASSERT(compare_slave_parameters(&slave_ad, &tp) == 0,
+           "Diseqc=0 (unspecified) maps to diseqc=0 and should match "
+           "old_diseqc=0");
+
+    // tp.diseqc = 0 maps to diseqc=0, which conflicts if master's old_diseqc is
+    // 1
+    master_ad.old_diseqc = 1;
+    ASSERT(compare_slave_parameters(&slave_ad, &tp) == 1,
+           "Diseqc=0 (unspecified) maps to diseqc=0 and should conflict with "
+           "old_diseqc=1");
+    master_ad.old_diseqc = 0; // Restore old_diseqc to 0
+
+    // tp.diseqc conflicts with master's old_diseqc
+    setup_tp(tp);
+    tp.diseqc = 2; // 1
+    ASSERT(compare_slave_parameters(&slave_ad, &tp) == 1,
+           "Conflicting diseqc should return 1");
+
+    // tp.freq matches master's old_hiband (lowband)
+    setup_tp(tp);
+    tp.freq = 10778000; // hiband = 0
+    ASSERT(compare_slave_parameters(&slave_ad, &tp) == 0,
+           "Matching band (lowband) should return 0");
+
+    // tp.freq = 0 (unspecified) should not conflict
+    setup_tp(tp);
+    tp.freq = 0;
+    ASSERT(compare_slave_parameters(&slave_ad, &tp) == 0,
+           "Frequency=0 (unspecified) should return 0");
+
+    // tp.freq conflicts with master's old_hiband (hiband)
+    setup_tp(tp);
+    tp.freq = 12322000; // hiband = 1
+    ASSERT(compare_slave_parameters(&slave_ad, &tp) == 1,
+           "Conflicting band (hiband) should return 1");
+
+    // 4b. Test band check when tp.diseqc_param is uninitialized (empty/zeroed),
+    // which simulates the real application request. The check should use the
+    // adapter's diseqc_param settings.
+    tp.clear();
+    tp.freq = 12322000;
+    master_ad.old_hiband = 1;
+    ASSERT(
+        compare_slave_parameters(&slave_ad, &tp) == 0,
+        "Highband tp with empty diseqc_param should match master old_hiband=1");
+    master_ad.old_hiband = 0;
+    ASSERT(compare_slave_parameters(&slave_ad, &tp) == 1,
+           "Highband tp with empty diseqc_param should conflict with master "
+           "old_hiband=0");
+
+    // 5. Test slave check (when master_ad is used by slave_ad)
+    master_ad.used[1] = 1; // master_ad is used by slave_ad (id 1)
+
+    // Set slave adapter parameters
+    slave_ad.old_pol = 0;
+    slave_ad.old_hiband = 0;
+    slave_ad.old_diseqc = 0;
+
+    setup_tp(tp);
+    tp.pol = 2; // conflicts with slave_ad (old_pol = 0)
+    ASSERT(compare_slave_parameters(&master_ad, &tp) == 1,
+           "Conflicting polarization on slave adapter should return 1");
+
+    setup_tp(tp);
+    tp.pol = 1; // matches
+    ASSERT(compare_slave_parameters(&master_ad, &tp) == 0,
+           "Matching polarization on slave adapter should return 0");
+
+    // Reset global array
+    for (int i = 0; i < MAX_ADAPTERS; i++) {
+        a[i] = nullptr;
+    }
+
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -161,6 +346,8 @@ int main() {
     TEST_FUNC(test_get_lnb_int_freq_cband(),
               "test get_lnb_int_freq with C-band LNB parameters");
     TEST_FUNC(test_update_pids(), "test update_pids and sort_pids");
+    TEST_FUNC(test_compare_slave_parameters(),
+              "test compare_slave_parameters with std::optional");
 
     return 0;
 }

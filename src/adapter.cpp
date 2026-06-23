@@ -581,32 +581,38 @@ void dump_pids(int aid) {
 // makes sure the slave and the master adapter have the same polarity, band and
 // diseqc
 int compare_slave_parameters(adapter *ad, transponder *tp) {
-    adapter *master = NULL;
-
     if (!ad)
         return 0;
+
     // is not a slave and does not have a slave adapter
     if ((ad->master_source < 0) &&
         is_byte_array_empty(ad->used, sizeof(ad->used)))
         return 0;
+
     // is slave and the switch is UNICABLE/JESS - we do not care about pol and
     // band
     if ((ad->diseqc_param.switch_type == SWITCH_JESS) ||
         (ad->diseqc_param.switch_type == SWITCH_UNICABLE))
         return 0;
 
-    // master adapter is used by other
-    int diseqc = (tp->diseqc.value_or(0) > 0) ? tp->diseqc.value_or(0) - 1 : 0;
+    // Map parameters to concrete hardware values. The LNB switch threshold
+    // (hiband) is computed using the master/adapter configuration.
     int pol = (tp->pol.value_or(-1) - 1) & 1;
-    int hiband = get_lnb_hiband(tp, &tp->diseqc_param);
-    int freq = tp->freq.value_or(0);
+    int diseqc = (tp->diseqc.value_or(0) > 0) ? tp->diseqc.value_or(0) - 1 : 0;
 
+    adapter *master = NULL;
     if (ad->master_source >= 0 && ad->master_source < MAX_ADAPTERS)
         master = a[ad->master_source];
 
+    std::optional<int> hiband;
+    if (tp->freq && *tp->freq > 0) {
+        hiband = get_lnb_hiband(tp, master ? &master->diseqc_param
+                                           : &ad->diseqc_param);
+    }
+
     // master adapter used by slave adapters, check slave parameters if they
     // match
-    if (ad && !is_byte_array_empty(ad->used, sizeof(ad->used))) {
+    if (!is_byte_array_empty(ad->used, sizeof(ad->used))) {
         int i;
         for (i = 0; i < MAX_ADAPTERS; i++)
             if (ad->used[i]) {
@@ -619,24 +625,22 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
                     ad->used[i] = 0;
                     continue;
                 }
-                if (ad2->old_pol != pol || ad2->old_hiband != hiband ||
-                    ad2->old_diseqc != diseqc)
-                    return 1; // slave parameters matches with the required
+                if (ad2->is_incompatible(pol, hiband, diseqc))
+                    return 1; // slave parameters conflict with the required
                               // parameters
             }
     }
 
     // master adapter used by slave adapters
     if (master) {
-        if (master->old_pol != pol || master->old_hiband != hiband ||
-            master->old_diseqc != diseqc)
-            return 1; // master parameters matches with the required parameters
+        if (master->is_incompatible(pol, hiband, diseqc))
+            return 1; // master parameters conflict with the required parameters
     }
     LOGM("%s: adapter %d master %d (pol %d, band %d, diseqc "
-         "%d) not compatible with freq %d, pol %d band %d diseqc %d",
+         "%d) compatible with freq %d, pol %d band %d diseqc %d",
          __FUNCTION__, ad->id, master ? master->id : ad->master_source,
-         ad->old_pol, ad->old_hiband, ad->old_diseqc, freq, pol, hiband,
-         diseqc);
+         ad->old_pol, ad->old_hiband, ad->old_diseqc, tp->freq.value_or(0), pol,
+         hiband.value_or(-1), diseqc);
     return 0;
 }
 
