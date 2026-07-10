@@ -38,6 +38,14 @@ set(DVBCA_DEFAULT OFF)
 set(NETCVCLIENT_DEFAULT OFF)
 set(CXX23_DEFAULT OFF)
 
+option(STATIC "Build with static linking" OFF)
+
+if(STATIC)
+    set(CMAKE_FIND_LIBRARY_SUFFIXES .a)
+else()
+    set(CMAKE_FIND_LIBRARY_SUFFIXES .so .a)
+endif()
+
 # Detect available libraries for setting defaults
 find_library(DVBCSA_LIBRARY dvbcsa)
 find_library(CRYPTO_LIBRARY crypto)
@@ -76,7 +84,6 @@ option(DVBCA "Enable DVB-CA support" ${DVBCA_DEFAULT})
 option(NETCVCLIENT "Enable NetCeiver client support" ${NETCVCLIENT_DEFAULT})
 option(LINUXDVB "Enable Linux DVB support" ON)
 option(CXX23 "Enable C++23 features (stacktrace)" ${CXX23_DEFAULT})
-option(STATIC "Build with static linking" OFF)
 option(DEBUG "Enable debug/sanitizer build" OFF)
 option(SRT "Enable SRT support" ${SRT_DEFAULT})
 option(BUILD_TESTING "Build tests" OFF)
