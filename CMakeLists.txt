@@ -88,20 +88,6 @@ option(DEBUG "Enable debug/sanitizer build" OFF)
 option(SRT "Enable SRT support" ${SRT_DEFAULT})
 option(BUILD_TESTING "Build tests" OFF)
 
-# Fall back to plain library names if find_library didn't find them
-if(NOT DVBCSA_LIBRARY)
-    set(DVBCSA_LIBRARY dvbcsa)
-endif()
-if(NOT CRYPTO_LIBRARY)
-    set(CRYPTO_LIBRARY crypto)
-endif()
-if(NOT NETCEIVER_LIBRARY)
-    set(NETCEIVER_LIBRARY netceiver)
-endif()
-if(NOT SRT_LIBRARY)
-    set(SRT_LIBRARY srt)
-endif()
-
 # Platform detection
 if(APPLE)
     set(LINUXDVB OFF)
