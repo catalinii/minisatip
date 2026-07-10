@@ -44,7 +44,7 @@ jobs:
     - name: Build ARM
       run: |
         rm -rf build;
-        CXXFLAGS=-L/usr/arm-linux-gnueabihf/lib/ cmake -B build . -DCMAKE_CXX_COMPILER=arm-linux-gnueabihf-g++  -DNETCVCLIENT=0 -DSTATIC=ON
+        cmake -B build . -DCMAKE_CXX_COMPILER=arm-linux-gnueabihf-g++ -DCMAKE_FIND_ROOT_PATH=/usr/arm-linux-gnueabihf -DNETCVCLIENT=0 -DSTATIC=ON
         (cd build && make)
         cat build/minisatip > minisatip && file minisatip
         zip -9 -r /minisatip_arm.zip minisatip html
