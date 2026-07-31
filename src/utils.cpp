@@ -552,6 +552,23 @@ void join_thread() {
     join_pos = 0;
 }
 
+void join_all_threads() {
+    int i, running = 0;
+
+    do {
+        running = 0;
+        for (i = 0; i < MAX_THREAD_INFO; i++)
+            if (thread_info[i].enabled) {
+                running = 1;
+                break;
+            }
+        if (running)
+            sleep_msec(10);
+    } while (running);
+
+    join_thread();
+}
+
 int init_utils(char *arg0) {
     set_signal_handler(arg0);
     return 0;

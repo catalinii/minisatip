@@ -97,6 +97,7 @@ void set_thread_prio(pthread_t tid, int prio);
 int find_new_id(void **arr, int count);
 void join_thread();
 void add_join_thread(pthread_t t);
+void join_all_threads();
 int init_utils(char *arg0);
 void _hexdump(const char *desc, void *addr, int len);
 uint32_t crc_32(const uint8_t *data, int datalen);
