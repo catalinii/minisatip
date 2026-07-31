@@ -555,6 +555,14 @@ void join_exited_threads() {
 void join_thread() {
     int i, running = 0;
 
+    // A worker thread only registers itself via add_join_thread() at the very
+    // end of its select_and_execute() loop, right before it clears
+    // thread_info[].enabled. join_exited_threads() below can only join threads
+    // that are already in join_th[], so wait until every worker has cleared its
+    // enabled flag (guaranteeing it has already registered) before joining.
+    // Without this wait, main() would return while worker threads are still
+    // running and using global statics (e.g. the EnumMap tables in dvb.cpp),
+    // which are destroyed when main() returns - causing a heap-use-after-free.
     do {
         running = 0;
         for (i = 0; i < MAX_THREAD_INFO; i++)
