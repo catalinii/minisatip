@@ -1269,7 +1269,7 @@ int calculate_bw(sockets *s) {
         buffered_bytes = 0;
         dropped_bytes = 0;
     }
-    join_thread();
+    join_exited_threads();
     return 0;
 }
 

@@ -539,7 +539,7 @@ void add_join_thread(pthread_t t) {
     LOG("%s: pthread %lx", __FUNCTION__, t);
 }
 
-void join_thread() {
+void join_exited_threads() {
     int i, rv;
     std::lock_guard<SMutex> lock(join_lock);
     //	LOG("starting %s", __FUNCTION__);
@@ -552,7 +552,7 @@ void join_thread() {
     join_pos = 0;
 }
 
-void join_all_threads() {
+void join_thread() {
     int i, running = 0;
 
     do {
@@ -566,7 +566,7 @@ void join_all_threads() {
             sleep_msec(10);
     } while (running);
 
-    join_thread();
+    join_exited_threads();
 }
 
 int init_utils(char *arg0) {

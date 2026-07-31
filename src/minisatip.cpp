@@ -1950,7 +1950,7 @@ int main(int argc, char *argv[]) {
 
     write_pid_file();
     select_and_execute(NULL);
-    join_all_threads();
+    join_thread();
     unlink(pid_file);
 #ifndef DISABLE_PMT
     pmt_destroy();
