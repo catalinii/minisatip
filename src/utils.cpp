@@ -539,7 +539,7 @@ void add_join_thread(pthread_t t) {
     LOG("%s: pthread %lx", __FUNCTION__, t);
 }
 
-void join_thread() {
+void join_exited_threads() {
     int i, rv;
     std::lock_guard<SMutex> lock(join_lock);
     //	LOG("starting %s", __FUNCTION__);
@@ -550,6 +550,31 @@ void join_thread() {
                 strerror(rv));
     }
     join_pos = 0;
+}
+
+void join_thread() {
+    int i, running = 0;
+
+    // A worker thread only registers itself via add_join_thread() at the very
+    // end of its select_and_execute() loop, right before it clears
+    // thread_info[].enabled. join_exited_threads() below can only join threads
+    // that are already in join_th[], so wait until every worker has cleared its
+    // enabled flag (guaranteeing it has already registered) before joining.
+    // Without this wait, main() would return while worker threads are still
+    // running and using global statics (e.g. the EnumMap tables in dvb.cpp),
+    // which are destroyed when main() returns - causing a heap-use-after-free.
+    do {
+        running = 0;
+        for (i = 0; i < MAX_THREAD_INFO; i++)
+            if (thread_info[i].enabled) {
+                running = 1;
+                break;
+            }
+        if (running)
+            sleep_msec(10);
+    } while (running);
+
+    join_exited_threads();
 }
 
 int init_utils(char *arg0) {
