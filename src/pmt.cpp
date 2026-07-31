@@ -655,7 +655,7 @@ void cw_decrypt_stream(SCW *cw, SPMT_batch *batch, int len) {
 
 // Return 0 if the packet was decrypted successfully, 1 otherwise
 int test_decrypt_packet(SCW *cw, SPMT_batch *start, int len) {
-    uint8_t data[len * 188 + 10];
+    uint8_t data[len * 188 + 256];
     int i = 0;
     uint32_t pos = 0;
     LOGM("Testing len %d, CW: %s", len, cw_to_string(cw, (char *)data));
