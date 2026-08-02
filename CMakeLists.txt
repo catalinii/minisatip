@@ -193,6 +193,7 @@ set(MINISATIP_SOURCES
     src/tables.cpp
     src/dvbapi.cpp
     src/satipc.cpp
+    src/hw_descrambler.cpp
 )
 
 if(DVBCSA)

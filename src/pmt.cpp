@@ -189,18 +189,19 @@ void init_algo_csa();
 #ifndef DISABLE_DVBCA
 void init_algo_aes();
 #endif
+void init_hw_descrambler();
 
 typedef void (*type_algo_init_func)();
 
 // software decryption should be last, use first hardware
-type_algo_init_func algo_init_func[] = {
+type_algo_init_func algo_init_func[] = {&init_hw_descrambler,
 #ifndef DISABLE_DVBCSA
-    &init_algo_csa,
+                                        &init_algo_csa,
 #endif
 #ifndef DISABLE_DVBCA
-    &init_algo_aes,
+                                        &init_algo_aes,
 #endif
-    NULL};
+                                        NULL};
 
 void init_algo() {
     int i;
