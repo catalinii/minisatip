@@ -193,6 +193,7 @@ set(MINISATIP_SOURCES
     src/tables.cpp
     src/dvbapi.cpp
     src/satipc.cpp
+    src/hw_descrambler.cpp
 )
 
 if(DVBCSA)
@@ -200,7 +201,7 @@ if(DVBCSA)
     list(APPEND MINISATIP_LIBS ${DVBCSA_LIBRARY})
 endif()
 if(DVBCA)
-    list(APPEND MINISATIP_SOURCES src/ca.cpp src/aes.cpp src/hw_descrambler.cpp)
+    list(APPEND MINISATIP_SOURCES src/ca.cpp src/aes.cpp)
     list(APPEND MINISATIP_LIBS ${CRYPTO_LIBRARY} dl)
 endif()
 if(NETCVCLIENT)
@@ -290,13 +291,9 @@ if(BUILD_TESTING)
     # Re-use MINISATIP_SOURCES and adjust for tests
     set(TEST_MAIN_SOURCES ${MINISATIP_SOURCES})
     list(REMOVE_ITEM TEST_MAIN_SOURCES src/netceiver.cpp)
-    list(APPEND TEST_MAIN_SOURCES src/ca.cpp src/aes.cpp src/ddci.cpp src/hw_descrambler.cpp)
+    list(APPEND TEST_MAIN_SOURCES src/ca.cpp src/aes.cpp src/ddci.cpp)
     if(DVBCSA_LIBRARY)
         list(APPEND TEST_MAIN_SOURCES src/csa.cpp)
-    endif()
-    if(DISABLE_DVBCA)
-        list(REMOVE_ITEM TEST_MAIN_SOURCES src/hw_descrambler.cpp)
-        list(REMOVE_ITEM TEST_SOURCES tests/test_hw_descrambler.cpp)
     endif()
     list(REMOVE_DUPLICATES TEST_MAIN_SOURCES)
 
