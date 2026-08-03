@@ -48,5 +48,11 @@ struct ca_descr_data {
 #endif
 
 void init_hw_descrambler();
+void hw_create_key(SCW *cw);
+void hw_delete_key(SCW *cw);
+void hw_set_cw(SCW *cw, SPMT *pmt);
+void hw_decrypt_stream(SCW *cw, SPMT_batch *batch, int batch_len);
+int hw_ca_del_pmt(adapter *ad, SPMT *pmt);
+int hw_ca_close_dev(adapter *ad);
 
 #endif // HW_DESCRAMBLER_H
