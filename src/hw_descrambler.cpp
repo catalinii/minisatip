@@ -81,19 +81,22 @@ class HwSlotManager {
         return mgr;
     }
 
-    int get_or_open_ca_fd(int adapter_id, const char *device_path) {
+    int get_or_open_ca_fd(int physical_adapter_id, const char *device_path) {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (adapter_id < 0 || adapter_id >= MAX_ADAPTERS)
+        if (physical_adapter_id < 0 || physical_adapter_id >= MAX_ADAPTERS)
             return -1;
 
-        auto &ca = adapters_[static_cast<std::size_t>(adapter_id)];
+        auto &ca = adapters_[static_cast<std::size_t>(physical_adapter_id)];
         if (ca.ca_fd < 0) {
-            ca.ca_fd = open(device_path, O_RDWR);
+            ca.ca_fd = open(device_path, O_RDWR | O_CLOEXEC);
             if (ca.ca_fd >= 0) {
                 ca.num_descramblers = get_max_descramblers(ca.ca_fd);
+                if (ca.num_descramblers <= 0)
+                    ca.num_descramblers = kDefaultMaxDescramblers;
                 LOG("hw_descrambler: successfully opened shared %s (ca_fd = "
-                    "%d, max slots = %d) for adapter %d",
-                    device_path, ca.ca_fd, ca.num_descramblers, adapter_id);
+                    "%d, max slots = %d) for physical adapter %d",
+                    device_path, ca.ca_fd, ca.num_descramblers,
+                    physical_adapter_id);
             } else {
                 LOG("hw_descrambler: failed to open %s: %s (errno %d)",
                     device_path, std::strerror(errno), errno);
@@ -102,19 +105,24 @@ class HwSlotManager {
         return ca.ca_fd;
     }
 
-    int get_max_slots(int adapter_id) {
+    int get_max_slots(int physical_adapter_id) {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (adapter_id < 0 || adapter_id >= MAX_ADAPTERS)
+        if (physical_adapter_id < 0 || physical_adapter_id >= MAX_ADAPTERS)
             return kDefaultMaxDescramblers;
-        return adapters_[static_cast<std::size_t>(adapter_id)].num_descramblers;
+        int slots = adapters_[static_cast<std::size_t>(physical_adapter_id)]
+                        .num_descramblers;
+        return slots > 0 ? slots : kDefaultMaxDescramblers;
     }
 
-    int allocate_slot(int adapter_id, int pmt_id) {
+    int allocate_slot(int physical_adapter_id, int pmt_id) {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (adapter_id < 0 || adapter_id >= MAX_ADAPTERS)
+        if (physical_adapter_id < 0 || physical_adapter_id >= MAX_ADAPTERS)
             return 0;
 
-        auto &ca = adapters_[static_cast<std::size_t>(adapter_id)];
+        auto &ca = adapters_[static_cast<std::size_t>(physical_adapter_id)];
+        if (ca.num_descramblers <= 0)
+            ca.num_descramblers = kDefaultMaxDescramblers;
+
         for (int i = 0;
              i < ca.num_descramblers && i < static_cast<int>(kMaxSlots); ++i) {
             if (ca.pmt_slots[static_cast<std::size_t>(i)] == pmt_id) {
@@ -127,46 +135,48 @@ class HwSlotManager {
             if (ca.pmt_slots[static_cast<std::size_t>(i)] == -1) {
                 ca.pmt_slots[static_cast<std::size_t>(i)] = pmt_id;
                 LOG("hw_descrambler: Allocated hardware descrambler slot index "
-                    "%d for PMT %d on adapter %d",
-                    i, pmt_id, adapter_id);
+                    "%d for PMT %d on physical adapter %d",
+                    i, pmt_id, physical_adapter_id);
                 return i;
             }
         }
 
         int fallback_slot = pmt_id % ca.num_descramblers;
-        LOG("hw_descrambler: Warning: all slots full on adapter %d, using "
+        LOG("hw_descrambler: Warning: all slots full on physical adapter %d, "
+            "using "
             "fallback slot %d for PMT %d",
-            adapter_id, fallback_slot, pmt_id);
+            physical_adapter_id, fallback_slot, pmt_id);
         return fallback_slot;
     }
 
-    void release_slot(int adapter_id, int pmt_id) {
+    void release_slot(int physical_adapter_id, int pmt_id) {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (adapter_id < 0 || adapter_id >= MAX_ADAPTERS)
+        if (physical_adapter_id < 0 || physical_adapter_id >= MAX_ADAPTERS)
             return;
 
-        auto &ca = adapters_[static_cast<std::size_t>(adapter_id)];
+        auto &ca = adapters_[static_cast<std::size_t>(physical_adapter_id)];
         for (int i = 0;
              i < ca.num_descramblers && i < static_cast<int>(kMaxSlots); ++i) {
             if (ca.pmt_slots[static_cast<std::size_t>(i)] == pmt_id) {
                 LOG("hw_descrambler: Released hardware descrambler slot index "
-                    "%d for PMT %d on adapter %d",
-                    i, pmt_id, adapter_id);
+                    "%d for PMT %d on physical adapter %d",
+                    i, pmt_id, physical_adapter_id);
                 ca.pmt_slots[static_cast<std::size_t>(i)] = -1;
                 break;
             }
         }
     }
 
-    void close_adapter_ca(int adapter_id) {
+    void close_adapter_ca(int physical_adapter_id) {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (adapter_id < 0 || adapter_id >= MAX_ADAPTERS)
+        if (physical_adapter_id < 0 || physical_adapter_id >= MAX_ADAPTERS)
             return;
 
-        auto &ca = adapters_[static_cast<std::size_t>(adapter_id)];
+        auto &ca = adapters_[static_cast<std::size_t>(physical_adapter_id)];
         if (ca.ca_fd >= 0) {
-            LOG("hw_descrambler: closing shared ca_fd %d for adapter %d",
-                ca.ca_fd, adapter_id);
+            LOG("hw_descrambler: closing shared ca_fd %d for physical adapter "
+                "%d",
+                ca.ca_fd, physical_adapter_id);
             close(ca.ca_fd);
             ca.ca_fd = -1;
         }
@@ -176,6 +186,8 @@ class HwSlotManager {
 } // namespace
 
 void hw_create_key(SCW *cw) {
+    if (!cw)
+        return;
     auto k = std::make_unique<HwKey>(cw->algo);
     LOG("hw_descrambler: hw_create_key cw_id = %d, algo = %d", cw->id,
         cw->algo);
@@ -183,7 +195,7 @@ void hw_create_key(SCW *cw) {
 }
 
 void hw_delete_key(SCW *cw) {
-    if (!cw->key)
+    if (!cw || !cw->key)
         return;
     auto *k = static_cast<HwKey *>(cw->key);
     delete k;
@@ -196,12 +208,12 @@ void hw_set_cw(SCW *cw, SPMT *pmt) {
         return;
     }
 
-    auto *k = static_cast<HwKey *>(cw->key);
-    if (!k || !pmt) {
+    if (!cw || !cw->key || !pmt) {
         LOG("hw_descrambler: hw_set_cw key or pmt is nullptr");
         return;
     }
 
+    auto *k = static_cast<HwKey *>(cw->key);
     adapter *ad = get_adapter(pmt->adapter);
     if (!ad) {
         LOG("hw_descrambler: adapter for PMT %d not found", pmt->adapter);
@@ -212,8 +224,8 @@ void hw_set_cw(SCW *cw, SPMT *pmt) {
     std::snprintf(device_path.data(), device_path.size(),
                   "/dev/dvb/adapter%d/ca%d", ad->pa, ad->fn);
 
-    int ca_fd = HwSlotManager::instance().get_or_open_ca_fd(pmt->adapter,
-                                                            device_path.data());
+    int ca_fd =
+        HwSlotManager::instance().get_or_open_ca_fd(ad->pa, device_path.data());
     if (ca_fd < 0) {
         LOG("hw_descrambler: unable to obtain ca_fd for %s",
             device_path.data());
@@ -221,14 +233,13 @@ void hw_set_cw(SCW *cw, SPMT *pmt) {
     }
 
     k->ca_fd = ca_fd;
-    k->adapter_id = pmt->adapter;
+    k->adapter_id = ad->pa;
     const int pmt_id = (pmt->master_pmt >= 0) ? pmt->master_pmt : pmt->id;
     k->pmt_id = pmt_id;
-    k->num_descramblers = HwSlotManager::instance().get_max_slots(pmt->adapter);
+    k->num_descramblers = HwSlotManager::instance().get_max_slots(ad->pa);
 
     // Dynamically allocate or retrieve hardware slot index for this PMT
-    k->slot_index =
-        HwSlotManager::instance().allocate_slot(pmt->adapter, pmt_id);
+    k->slot_index = HwSlotManager::instance().allocate_slot(ad->pa, pmt_id);
 
     LOG("hw_descrambler: hw_set_cw called for PMT %d (master %d), adapter %d "
         "(pa %d, ca %d), slot %d/%d, algo %d, parity %d",
@@ -311,6 +322,9 @@ void hw_set_cw(SCW *cw, SPMT *pmt) {
 }
 
 void hw_decrypt_stream(SCW *cw, SPMT_batch *batch, int batch_len) {
+    (void)cw;
+    (void)batch;
+    (void)batch_len;
     // Hardware descrambler decrypts TS stream directly in STB demux/CA
     // hardware. Software decryption loop is bypassed (pass-through).
 }
@@ -321,14 +335,14 @@ int hw_ca_del_pmt(adapter *ad, SPMT *pmt) {
 
     const int pmt_id = (pmt->master_pmt >= 0) ? pmt->master_pmt : pmt->id;
     LOG("hw_descrambler: hw_ca_del_pmt called for PMT %d (master %d) on "
-        "adapter %d",
-        pmt->id, pmt_id, ad->id);
+        "physical adapter %d (logical %d)",
+        pmt->id, pmt_id, ad->pa, ad->id);
 
     std::array<char, 64> device_path{};
     std::snprintf(device_path.data(), device_path.size(),
                   "/dev/dvb/adapter%d/ca%d", ad->pa, ad->fn);
     int ca_fd =
-        HwSlotManager::instance().get_or_open_ca_fd(ad->id, device_path.data());
+        HwSlotManager::instance().get_or_open_ca_fd(ad->pa, device_path.data());
     if (ca_fd >= 0) {
         // 1. Unbind stream PIDs from hardware descrambler slot
         for (std::size_t i = 0; i < pmt->stream_pids.size(); ++i) {
@@ -340,13 +354,13 @@ int hw_ca_del_pmt(adapter *ad, SPMT *pmt) {
     }
 
     // 2. Release hardware descrambler slot index
-    HwSlotManager::instance().release_slot(ad->id, pmt_id);
+    HwSlotManager::instance().release_slot(ad->pa, pmt_id);
     return 0;
 }
 
 int hw_ca_close_dev(adapter *ad) {
     if (ad) {
-        HwSlotManager::instance().close_adapter_ca(ad->id);
+        HwSlotManager::instance().close_adapter_ca(ad->pa);
     }
     return 0;
 }

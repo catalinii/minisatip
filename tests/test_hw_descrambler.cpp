@@ -250,6 +250,23 @@ static int test_aes128_key_programming() {
     return 0;
 }
 
+// Test 5: Adapter Teardown and Null Safety Guards
+static int test_hw_ca_close_dev_and_null_guards() {
+    // Null pointer guards
+    hw_create_key(nullptr);
+    hw_delete_key(nullptr);
+    hw_set_cw(nullptr, nullptr);
+
+    adapter *ad = setup_mock_adapter(0, 0, 0);
+    ASSERT(ad != nullptr, "setup_mock_adapter failed");
+
+    int res = hw_ca_close_dev(ad);
+    ASSERT(res == 0, "hw_ca_close_dev failed");
+
+    cleanup_mock_adapter(0);
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -266,6 +283,8 @@ int main() {
               "testing multi-channel parallel slot allocation and unbinding");
     TEST_FUNC(test_aes128_key_programming(),
               "testing AES-128 ECB and CBC key programming simulation");
+    TEST_FUNC(test_hw_ca_close_dev_and_null_guards(),
+              "testing adapter teardown and null pointer safety guards");
 
     return 0;
 }
