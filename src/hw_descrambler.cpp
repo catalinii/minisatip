@@ -16,9 +16,9 @@
 #include <cstdio>
 #include <cstring>
 #include <fcntl.h>
-#include <format>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <string_view>
 #include <sys/ioctl.h>
 #include <unistd.h>
@@ -92,7 +92,7 @@ class HwSlotManager {
             ca.ca_fd = open(device_path, O_RDWR | O_CLOEXEC);
             if (ca.ca_fd < 0 && errno == ENOENT) {
                 const std::string alt_path =
-                    std::format("/dev/ci{}", physical_adapter_id);
+                    "/dev/ci" + std::to_string(physical_adapter_id);
                 ca.ca_fd = open(alt_path.c_str(), O_RDWR | O_CLOEXEC);
                 if (ca.ca_fd >= 0) {
                     LOG("hw_descrambler: opened fallback %s (ca_fd = %d) for "
@@ -229,8 +229,9 @@ void hw_set_cw(SCW *cw, SPMT *pmt) {
         return;
     }
 
-    const std::string device_path =
-        std::format("/dev/dvb/adapter{}/ca{}", ad->pa, ad->fn);
+    const std::string device_path = "/dev/dvb/adapter" +
+                                    std::to_string(ad->pa) + "/ca" +
+                                    std::to_string(ad->fn);
 
     int ca_fd = HwSlotManager::instance().get_or_open_ca_fd(
         ad->pa, device_path.c_str());
@@ -350,8 +351,9 @@ int hw_ca_del_pmt(adapter *ad, SPMT *pmt) {
         "physical adapter %d (logical %d)",
         pmt->id, pmt_id, ad->pa, ad->id);
 
-    const std::string device_path =
-        std::format("/dev/dvb/adapter{}/ca{}", ad->pa, ad->fn);
+    const std::string device_path = "/dev/dvb/adapter" +
+                                    std::to_string(ad->pa) + "/ca" +
+                                    std::to_string(ad->fn);
     int ca_fd = HwSlotManager::instance().get_or_open_ca_fd(
         ad->pa, device_path.c_str());
     if (ca_fd >= 0) {
