@@ -78,7 +78,8 @@ class HwSlotManager {
         if (physical_adapter_id < 0 || physical_adapter_id >= MAX_ADAPTERS)
             return -1;
 
-        auto &ca = adapters_[static_cast<std::size_t>(physical_adapter_id)];
+        const auto idx = static_cast<std::size_t>(physical_adapter_id);
+        auto &ca = adapters_[idx];
         if (ca.ca_fd < 0) {
             ca.ca_fd = open(device_path, O_RDWR | O_CLOEXEC);
             if (ca.ca_fd < 0 && errno == ENOENT) {
@@ -111,8 +112,8 @@ class HwSlotManager {
         std::lock_guard<std::mutex> lock(mutex_);
         if (physical_adapter_id < 0 || physical_adapter_id >= MAX_ADAPTERS)
             return kDefaultMaxDescramblers;
-        int slots = adapters_[static_cast<std::size_t>(physical_adapter_id)]
-                        .num_descramblers;
+        const auto idx = static_cast<std::size_t>(physical_adapter_id);
+        int slots = adapters_[idx].num_descramblers;
         return slots > 0 ? slots : kDefaultMaxDescramblers;
     }
 
@@ -121,25 +122,27 @@ class HwSlotManager {
         if (physical_adapter_id < 0 || physical_adapter_id >= MAX_ADAPTERS)
             return -1;
 
-        auto &ca = adapters_[static_cast<std::size_t>(physical_adapter_id)];
+        const auto idx = static_cast<std::size_t>(physical_adapter_id);
+        auto &ca = adapters_[idx];
         if (ca.num_descramblers <= 0)
             ca.num_descramblers = kDefaultMaxDescramblers;
 
-        for (int i = 0;
-             i < ca.num_descramblers && i < static_cast<int>(kMaxSlots); ++i) {
-            if (ca.pmt_slots[static_cast<std::size_t>(i)] == pmt_id) {
-                return i;
+        const std::size_t max_desc =
+            std::min(static_cast<std::size_t>(ca.num_descramblers), kMaxSlots);
+
+        for (std::size_t i = 0; i < max_desc; ++i) {
+            if (ca.pmt_slots[i] == pmt_id) {
+                return static_cast<int>(i);
             }
         }
 
-        for (int i = 0;
-             i < ca.num_descramblers && i < static_cast<int>(kMaxSlots); ++i) {
-            if (ca.pmt_slots[static_cast<std::size_t>(i)] == -1) {
-                ca.pmt_slots[static_cast<std::size_t>(i)] = pmt_id;
+        for (std::size_t i = 0; i < max_desc; ++i) {
+            if (ca.pmt_slots[i] == -1) {
+                ca.pmt_slots[i] = pmt_id;
                 LOG("hw_descrambler: Allocated hardware descrambler slot index "
-                    "%d for PMT %d on physical adapter %d",
+                    "%zu for PMT %d on physical adapter %d",
                     i, pmt_id, physical_adapter_id);
-                return i;
+                return static_cast<int>(i);
             }
         }
 
@@ -154,14 +157,17 @@ class HwSlotManager {
         if (physical_adapter_id < 0 || physical_adapter_id >= MAX_ADAPTERS)
             return;
 
-        auto &ca = adapters_[static_cast<std::size_t>(physical_adapter_id)];
-        for (int i = 0;
-             i < ca.num_descramblers && i < static_cast<int>(kMaxSlots); ++i) {
-            if (ca.pmt_slots[static_cast<std::size_t>(i)] == pmt_id) {
+        const auto idx = static_cast<std::size_t>(physical_adapter_id);
+        auto &ca = adapters_[idx];
+        const std::size_t max_desc =
+            std::min(static_cast<std::size_t>(ca.num_descramblers), kMaxSlots);
+
+        for (std::size_t i = 0; i < max_desc; ++i) {
+            if (ca.pmt_slots[i] == pmt_id) {
                 LOG("hw_descrambler: Released hardware descrambler slot index "
-                    "%d for PMT %d on physical adapter %d",
+                    "%zu for PMT %d on physical adapter %d",
                     i, pmt_id, physical_adapter_id);
-                ca.pmt_slots[static_cast<std::size_t>(i)] = -1;
+                ca.pmt_slots[i] = -1;
                 break;
             }
         }
@@ -172,7 +178,8 @@ class HwSlotManager {
         if (physical_adapter_id < 0 || physical_adapter_id >= MAX_ADAPTERS)
             return;
 
-        auto &ca = adapters_[static_cast<std::size_t>(physical_adapter_id)];
+        const auto idx = static_cast<std::size_t>(physical_adapter_id);
+        auto &ca = adapters_[idx];
         if (ca.ca_fd >= 0) {
             LOG("hw_descrambler: closing shared ca_fd %d for physical adapter "
                 "%d",
@@ -191,7 +198,7 @@ void hw_create_key(SCW *cw) {
     auto k = std::make_unique<HwKey>(cw->algo);
     LOG("hw_descrambler: hw_create_key cw_id = %d, algo = %d", cw->id,
         cw->algo);
-    cw->key = static_cast<void *>(k.release());
+    cw->key = k.release(); // Implicit conversion from HwKey* to void*
 }
 
 void hw_delete_key(SCW *cw) {
