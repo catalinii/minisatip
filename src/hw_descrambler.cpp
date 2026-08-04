@@ -30,15 +30,6 @@ constexpr std::size_t kMaxSlots = 64;
 
 #define DEFAULT_LOG kDefaultLog
 
-enum class CaAlgo : std::uint32_t {
-    DvbCsa = 0,
-    Des = 1,
-    Aes128Ecb = 2,
-    Aes128Cbc = 3
-};
-
-enum class CipherMode : std::uint32_t { Ecb = 0, Cbc = 1 };
-
 struct HwKey {
     int ca_fd{-1};
     int adapter_id{-1};
@@ -260,20 +251,12 @@ void hw_set_cw(SCW *cw, SPMT *pmt) {
         pmt->id, pmt_id, pmt->adapter, ad->pa, ad->fn, k->slot_index,
         k->num_descramblers, cw->algo, cw->parity);
 
-    // 1. Configure Hardware Descrambler Algorithm Mode
+    // 1. Configure Hardware Descrambler Algorithm Mode using pmt.h CA_ALGO_*
+    // values
     struct ca_descr_mode mode_cmd{};
     mode_cmd.index = static_cast<unsigned int>(k->slot_index);
-
-    if (cw->algo == CA_ALGO_DVBCSA) {
-        mode_cmd.algo = static_cast<unsigned int>(CaAlgo::DvbCsa);
-        mode_cmd.cipher_mode = static_cast<unsigned int>(CipherMode::Ecb);
-    } else if (cw->algo == CA_ALGO_AES128_ECB) {
-        mode_cmd.algo = static_cast<unsigned int>(CaAlgo::Aes128Ecb);
-        mode_cmd.cipher_mode = static_cast<unsigned int>(CipherMode::Ecb);
-    } else if (cw->algo == CA_ALGO_AES128_CBC) {
-        mode_cmd.algo = static_cast<unsigned int>(CaAlgo::Aes128Cbc);
-        mode_cmd.cipher_mode = static_cast<unsigned int>(CipherMode::Cbc);
-    }
+    mode_cmd.algo = static_cast<unsigned int>(cw->algo);
+    mode_cmd.cipher_mode = (cw->algo == CA_ALGO_AES128_CBC) ? 1 : 0;
 
     const int res_mode = ioctl(k->ca_fd, CA_SET_DESCR_MODE, &mode_cmd);
     LOG("hw_descrambler: CA_SET_DESCR_MODE ioctl (slot=%d, algo=%d, mode=%d) "
