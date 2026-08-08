@@ -10,6 +10,11 @@
 #include <linux/dvb/ca.h>
 #include <sys/ioctl.h>
 
+/**
+ * Enigma2 DVB CA hardware descrambler extended ioctls and API structures.
+ * Supports DVB-CSA, AES-128 ECB, and AES-128 CBC hardware registers.
+ */
+
 #ifndef CA_SET_PID
 #define CA_SET_PID _IOW('o', 135, struct ca_pid)
 struct ca_pid {
