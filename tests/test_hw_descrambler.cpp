@@ -93,7 +93,7 @@ static int test_hw_descrambler_disabled_when_opts_enigma_zero() {
     cw.id = 10;
     cw.algo = CA_ALGO_DVBCSA;
     cw.parity = 0;
-    std::memset(cw.cw, 0xAA, 8);
+    std::fill_n(cw.cw, 8, 0xAA);
     hw_create_key(&cw);
 
     // Call hw_set_cw when opts.enigma == 0

@@ -302,7 +302,7 @@ void hw_set_cw(SCW *cw, SPMT *pmt) {
 
         // AES-128 16-byte IV (for CBC mode)
         if (cw->algo == CA_ALGO_AES128_CBC) {
-            std::memset(&data_cmd, 0, sizeof(data_cmd));
+            data_cmd = {};
             data_cmd.index = k->slot_index;
             data_cmd.parity = cw->parity;
             data_cmd.data_type = 1; // 1 = IV
@@ -396,7 +396,7 @@ void init_hw_descrambler() {
         register_algo(&hw_aes_ecb_op);
         register_algo(&hw_aes_cbc_op);
 
-        std::memset(&hw_ca_op, 0, sizeof(hw_ca_op));
+        hw_ca_op = {};
         hw_ca_op.ca_del_pmt = reinterpret_cast<ca_pmt_action>(hw_ca_del_pmt);
         hw_ca_op.ca_close_dev =
             reinterpret_cast<ca_device_action>(hw_ca_close_dev);
