@@ -271,9 +271,9 @@ int main() {
     opts.log = 1;
     opts.debug = 255;
     opts.cache_dir = "/tmp";
-    std::memset(a, 0, sizeof(a));
-    std::memset(pmts, 0, sizeof(pmts));
-    std::memset(cws, 0, sizeof(cws));
+    std::fill(std::begin(a), std::end(a), nullptr);
+    std::fill(std::begin(pmts), std::end(pmts), nullptr);
+    std::fill(std::begin(cws), std::end(cws), nullptr);
 
     init_hw_descrambler();
 
