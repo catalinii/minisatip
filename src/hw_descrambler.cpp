@@ -24,11 +24,10 @@
 #include <unistd.h>
 
 namespace {
-constexpr int kDefaultLog = LOG_DVBCA;
-constexpr int kDefaultMaxDescramblers = 16;
-constexpr int kMaxSlots = 64;
+constexpr int DEFAULT_MAX_DESCRAMBLERS = 16;
+constexpr int MAX_SLOTS = 64;
 
-#define DEFAULT_LOG kDefaultLog
+#define DEFAULT_LOG LOG_DVBCA
 
 struct HwKey {
     int ca_fd{-1};
@@ -36,10 +35,17 @@ struct HwKey {
     int pmt_id{-1};
     int slot_index{-1};
     int algo{-1};
-    int num_descramblers{kDefaultMaxDescramblers};
+    int num_descramblers{DEFAULT_MAX_DESCRAMBLERS};
 
     explicit HwKey(int algorithm) : algo(algorithm) {}
 };
+
+std::string get_ca_device_path(const adapter *ad) {
+    if (!ad)
+        return "";
+    return "/dev/dvb/adapter" + std::to_string(ad->pa) + "/ca" +
+           std::to_string(ad->fn);
+}
 
 int get_max_descramblers(int ca_fd) {
     struct ca_descr_info info{};
@@ -50,22 +56,28 @@ int get_max_descramblers(int ca_fd) {
         return info.num;
     }
     LOG("hw_descrambler: CA_GET_DESCR_INFO unavailable, defaulting to %d slots",
-        kDefaultMaxDescramblers);
-    return kDefaultMaxDescramblers;
+        DEFAULT_MAX_DESCRAMBLERS);
+    return DEFAULT_MAX_DESCRAMBLERS;
 }
 
 class HwSlotManager {
   private:
     struct AdapterCaState {
         int ca_fd{-1};
-        int num_descramblers{kDefaultMaxDescramblers};
-        std::array<int, kMaxSlots> pmt_slots{};
+        int num_descramblers{DEFAULT_MAX_DESCRAMBLERS};
+        std::array<int, MAX_SLOTS> pmt_slots{};
 
         AdapterCaState() { pmt_slots.fill(-1); }
     };
 
     std::array<AdapterCaState, MAX_ADAPTERS> adapters_{};
     std::mutex mutex_{};
+
+    AdapterCaState *get_state(int physical_adapter_id) {
+        if (physical_adapter_id < 0 || physical_adapter_id >= MAX_ADAPTERS)
+            return nullptr;
+        return &adapters_[physical_adapter_id];
+    }
 
   public:
     static HwSlotManager &instance() noexcept {
@@ -75,66 +87,67 @@ class HwSlotManager {
 
     int get_or_open_ca_fd(int physical_adapter_id, const char *device_path) {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (physical_adapter_id < 0 || physical_adapter_id >= MAX_ADAPTERS)
+        auto *ca = get_state(physical_adapter_id);
+        if (!ca)
             return -1;
 
-        auto &ca = adapters_[physical_adapter_id];
-        if (ca.ca_fd < 0) {
-            ca.ca_fd = open(device_path, O_RDWR | O_CLOEXEC);
-            if (ca.ca_fd < 0 && errno == ENOENT) {
+        if (ca->ca_fd < 0) {
+            ca->ca_fd = open(device_path, O_RDWR | O_CLOEXEC);
+            if (ca->ca_fd < 0 && errno == ENOENT) {
                 const std::string alt_path =
                     "/dev/ci" + std::to_string(physical_adapter_id);
-                ca.ca_fd = open(alt_path.c_str(), O_RDWR | O_CLOEXEC);
-                if (ca.ca_fd >= 0) {
+                ca->ca_fd = open(alt_path.c_str(), O_RDWR | O_CLOEXEC);
+                if (ca->ca_fd >= 0) {
                     LOG("hw_descrambler: opened fallback %s (ca_fd = %d) for "
                         "adapter %d",
-                        alt_path.c_str(), ca.ca_fd, physical_adapter_id);
+                        alt_path.c_str(), ca->ca_fd, physical_adapter_id);
                 }
             }
-            if (ca.ca_fd >= 0) {
-                ca.num_descramblers = get_max_descramblers(ca.ca_fd);
-                if (ca.num_descramblers <= 0)
-                    ca.num_descramblers = kDefaultMaxDescramblers;
+            if (ca->ca_fd >= 0) {
+                ca->num_descramblers = get_max_descramblers(ca->ca_fd);
+                if (ca->num_descramblers <= 0)
+                    ca->num_descramblers = DEFAULT_MAX_DESCRAMBLERS;
                 LOG("hw_descrambler: successfully opened shared %s (ca_fd = "
                     "%d, max slots = %d) for physical adapter %d",
-                    device_path, ca.ca_fd, ca.num_descramblers,
+                    device_path, ca->ca_fd, ca->num_descramblers,
                     physical_adapter_id);
             } else {
                 LOG("hw_descrambler: failed to open %s: %s (errno %d)",
                     device_path, std::strerror(errno), errno);
             }
         }
-        return ca.ca_fd;
+        return ca->ca_fd;
     }
 
     int get_max_slots(int physical_adapter_id) {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (physical_adapter_id < 0 || physical_adapter_id >= MAX_ADAPTERS)
-            return kDefaultMaxDescramblers;
-        int slots = adapters_[physical_adapter_id].num_descramblers;
-        return slots > 0 ? slots : kDefaultMaxDescramblers;
+        auto *ca = get_state(physical_adapter_id);
+        if (!ca)
+            return DEFAULT_MAX_DESCRAMBLERS;
+        return ca->num_descramblers > 0 ? ca->num_descramblers
+                                        : DEFAULT_MAX_DESCRAMBLERS;
     }
 
     int allocate_slot(int physical_adapter_id, int pmt_id) {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (physical_adapter_id < 0 || physical_adapter_id >= MAX_ADAPTERS)
+        auto *ca = get_state(physical_adapter_id);
+        if (!ca)
             return -1;
 
-        auto &ca = adapters_[physical_adapter_id];
-        if (ca.num_descramblers <= 0)
-            ca.num_descramblers = kDefaultMaxDescramblers;
+        if (ca->num_descramblers <= 0)
+            ca->num_descramblers = DEFAULT_MAX_DESCRAMBLERS;
 
-        const int max_desc = std::min(ca.num_descramblers, kMaxSlots);
+        const int max_desc = std::min(ca->num_descramblers, MAX_SLOTS);
 
         for (int i = 0; i < max_desc; ++i) {
-            if (ca.pmt_slots[i] == pmt_id) {
+            if (ca->pmt_slots[i] == pmt_id) {
                 return i;
             }
         }
 
         for (int i = 0; i < max_desc; ++i) {
-            if (ca.pmt_slots[i] == -1) {
-                ca.pmt_slots[i] = pmt_id;
+            if (ca->pmt_slots[i] == -1) {
+                ca->pmt_slots[i] = pmt_id;
                 LOG("hw_descrambler: Allocated hardware descrambler slot index "
                     "%d for PMT %d on physical adapter %d",
                     i, pmt_id, physical_adapter_id);
@@ -150,18 +163,18 @@ class HwSlotManager {
 
     void release_slot(int physical_adapter_id, int pmt_id) {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (physical_adapter_id < 0 || physical_adapter_id >= MAX_ADAPTERS)
+        auto *ca = get_state(physical_adapter_id);
+        if (!ca)
             return;
 
-        auto &ca = adapters_[physical_adapter_id];
-        const int max_desc = std::min(ca.num_descramblers, kMaxSlots);
+        const int max_desc = std::min(ca->num_descramblers, MAX_SLOTS);
 
         for (int i = 0; i < max_desc; ++i) {
-            if (ca.pmt_slots[i] == pmt_id) {
+            if (ca->pmt_slots[i] == pmt_id) {
                 LOG("hw_descrambler: Released hardware descrambler slot index "
                     "%d for PMT %d on physical adapter %d",
                     i, pmt_id, physical_adapter_id);
-                ca.pmt_slots[i] = -1;
+                ca->pmt_slots[i] = -1;
                 break;
             }
         }
@@ -169,18 +182,18 @@ class HwSlotManager {
 
     void close_adapter_ca(int physical_adapter_id) {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (physical_adapter_id < 0 || physical_adapter_id >= MAX_ADAPTERS)
+        auto *ca = get_state(physical_adapter_id);
+        if (!ca)
             return;
 
-        auto &ca = adapters_[physical_adapter_id];
-        if (ca.ca_fd >= 0) {
+        if (ca->ca_fd >= 0) {
             LOG("hw_descrambler: closing shared ca_fd %d for physical adapter "
                 "%d",
-                ca.ca_fd, physical_adapter_id);
-            close(ca.ca_fd);
-            ca.ca_fd = -1;
+                ca->ca_fd, physical_adapter_id);
+            close(ca->ca_fd);
+            ca->ca_fd = -1;
         }
-        ca.pmt_slots.fill(-1);
+        ca->pmt_slots.fill(-1);
     }
 };
 } // namespace
@@ -220,9 +233,7 @@ void hw_set_cw(SCW *cw, SPMT *pmt) {
         return;
     }
 
-    const std::string device_path = "/dev/dvb/adapter" +
-                                    std::to_string(ad->pa) + "/ca" +
-                                    std::to_string(ad->fn);
+    const std::string device_path = get_ca_device_path(ad);
 
     int ca_fd = HwSlotManager::instance().get_or_open_ca_fd(
         ad->pa, device_path.c_str());
@@ -334,9 +345,7 @@ int hw_ca_del_pmt(adapter *ad, SPMT *pmt) {
         "physical adapter %d (logical %d)",
         pmt->id, pmt_id, ad->pa, ad->id);
 
-    const std::string device_path = "/dev/dvb/adapter" +
-                                    std::to_string(ad->pa) + "/ca" +
-                                    std::to_string(ad->fn);
+    const std::string device_path = get_ca_device_path(ad);
     int ca_fd = HwSlotManager::instance().get_or_open_ca_fd(
         ad->pa, device_path.c_str());
     if (ca_fd >= 0) {
