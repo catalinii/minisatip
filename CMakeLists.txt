@@ -193,6 +193,7 @@ set(MINISATIP_SOURCES
     src/tables.cpp
     src/dvbapi.cpp
     src/satipc.cpp
+    src/hw_descrambler.cpp
 )
 
 if(DVBCSA)
@@ -284,6 +285,7 @@ if(BUILD_TESTING)
         tests/test_socketworks.cpp
         tests/utils/test_utils_dir.cpp
         tests/test_stream.cpp
+        tests/test_hw_descrambler.cpp
     )
 
     # Re-use MINISATIP_SOURCES and adjust for tests
