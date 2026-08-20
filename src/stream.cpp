@@ -312,6 +312,8 @@ int start_play(streams *sid, sockets *s) {
 }
 
 int close_stream_for_socket(sockets *s) {
+    if (!s || s->sid < 0)
+        return 0;
     streams *sid = get_sid(s->sid);
     LOG("%s: start close_stream_for_socket for id %d %p", __FUNCTION__, s->sid,
         sid);

@@ -967,11 +967,13 @@ int sockets_del_for_sid(int sid) {
     if (sid < 0)
         return 0;
     for (i = 0; i < MAX_SOCKS; i++)
-        if ((ss = get_sockets(i)) && ss->sid >= 0 && ss->type == TYPE_RTSP &&
-            ss->sid == sid) {
+        if ((ss = get_sockets(i)) && ss->sid >= 0 && ss->sid == sid &&
+            (ss->type == TYPE_RTSP || ss->type == TYPE_HTTP ||
+             ss->type == TYPE_UDP || ss->type == TYPE_RTCP)) {
             ss->sid =
                 -1; // make sure the stream is not closed in the future to
                     // prevent closing the stream created by another socket
+            ss->close = NULL;
         }
     return 0;
 }
