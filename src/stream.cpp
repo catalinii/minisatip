@@ -312,8 +312,6 @@ int start_play(streams *sid, sockets *s) {
 }
 
 int close_stream_for_socket(sockets *s) {
-    if (!s || s->sid < 0)
-        return 0;
     streams *sid = get_sid(s->sid);
     LOG("%s: start close_stream_for_socket for id %d %p", __FUNCTION__, s->sid,
         sid);
@@ -519,7 +517,7 @@ int decode_transport(sockets *s, std::string_view arg, char *default_rtp,
                            p.dest, p.port);
 
         if ((sid->rsock_id =
-                 sockets_add(sid->rsock, &sid->sa, sid->sid, TYPE_UDP, NULL,
+                 sockets_add(sid->rsock, &sid->sa, sid->sid, TYPE_RTP, NULL,
                              (socket_action)close_stream_for_socket, NULL)) < 0)
             LOG_AND_RETURN(-1, "RTP sockets_add failed");
 
