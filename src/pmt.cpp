@@ -562,9 +562,9 @@ char *cw_to_string(SCW *cw, char *buf) {
             "%jd ms, "
             "CW: %02X %02X %02X %02X %02X %02X %02X %02X",
             cw->id, cw->parity, cw->pmt,
-            cw->opaque && *(uint8_t *)cw->opaque ? " ICAM," : "",
-            ctime - cw->time, cw->expiry - ctime, cw->cw[0], cw->cw[1],
-            cw->cw[2], cw->cw[3], cw->cw[4], cw->cw[5], cw->cw[6], cw->cw[7]);
+            cw->algo == CA_ALGO_DVBCSA_ICAM ? " ICAM," : "", ctime - cw->time,
+            cw->expiry - ctime, cw->cw[0], cw->cw[1], cw->cw[2], cw->cw[3],
+            cw->cw[4], cw->cw[5], cw->cw[6], cw->cw[7]);
     if (cw->iv[0])
         sprintf(buf + strlen(buf),
                 ", IV: %02X %02X %02X %02X %02X %02X %02X %02X", cw->iv[0],
@@ -878,7 +878,8 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
             c->id, pmt_id, pmt->name, res ? " and perhaps a fake one!" : "");
     }
 
-    if (algo < 2)
+    if (algo == CA_ALGO_DVBCSA || algo == CA_ALGO_DES ||
+        algo == CA_ALGO_DVBCSA_ICAM)
         c->cw_len = 8;
     c->algo = algo;
     memcpy(c->cw, cw, c->cw_len);

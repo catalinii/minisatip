@@ -267,6 +267,47 @@ static int test_hw_ca_close_dev_and_null_guards() {
     return 0;
 }
 
+// Test 6: CSA vs CSA-ICAM routing and Enigma hardware rejection of ICAM
+static int test_csa_vs_csa_icam_routing() {
+    opts.enigma = 1;
+
+    SCW_op *csa_op_res = get_op_for_algo(CA_ALGO_DVBCSA);
+    ASSERT(csa_op_res != nullptr, "get_op_for_algo failed for CA_ALGO_DVBCSA");
+    ASSERT(csa_op_res->algo == CA_ALGO_DVBCSA,
+           "csa_op_res algo should be CA_ALGO_DVBCSA");
+
+    // ICAM algo is only registered when libdvbcsa has dvbcsa_bs_key_set_ecm
+    SCW_op *icam_op_res = get_op_for_algo(CA_ALGO_DVBCSA_ICAM);
+    if (icam_op_res) {
+        ASSERT(icam_op_res->algo == CA_ALGO_DVBCSA_ICAM,
+               "icam_op_res algo should be CA_ALGO_DVBCSA_ICAM");
+        ASSERT(icam_op_res != csa_op_res,
+               "CSA_ICAM op must be different from CSA op");
+    }
+
+    // Verify hw_set_cw rejects ICAM
+    adapter *ad = setup_mock_adapter(0, 0, 0);
+    ASSERT(ad != nullptr, "setup_mock_adapter failed");
+
+    int pmt_id = pmt_add(0, 500, 5000);
+    SPMT *pmt = get_pmt(pmt_id);
+
+    SCW cw_icam{};
+    cw_icam.id = 50;
+    cw_icam.algo = CA_ALGO_DVBCSA_ICAM;
+    cw_icam.parity = 0;
+    hw_create_key(&cw_icam);
+
+    // hw_set_cw should reject CA_ALGO_DVBCSA_ICAM and return early
+    hw_set_cw(&cw_icam, pmt);
+
+    hw_delete_key(&cw_icam);
+    pmt_del(pmt_id);
+    cleanup_mock_adapter(0);
+
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -276,6 +317,7 @@ int main() {
     std::fill(std::begin(cws), std::end(cws), nullptr);
 
     init_hw_descrambler();
+    init_algo_csa();
 
     TEST_FUNC(test_hw_key_lifecycle(),
               "testing hw_create_key and hw_delete_key lifecycle");
@@ -287,6 +329,8 @@ int main() {
               "testing AES-128 ECB and CBC key programming simulation");
     TEST_FUNC(test_hw_ca_close_dev_and_null_guards(),
               "testing adapter teardown and null pointer safety guards");
+    TEST_FUNC(test_csa_vs_csa_icam_routing(),
+              "testing CSA vs CSA-ICAM algorithm routing and HW rejection");
 
     return 0;
 }

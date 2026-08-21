@@ -60,13 +60,16 @@ void dvbcsa_create_key(SCW *cw) { cw->key = dvbcsa_bs_key_alloc(); }
 void dvbcsa_delete_key(SCW *cw) { dvbcsa_key_free((dvbcsa_key_s *)cw->key); }
 
 void dvbcsa_set_cw(SCW *cw, SPMT *pmt) {
-    unsigned char ecm = *(unsigned char *)cw->opaque;
+    dvbcsa_bs_key_set((unsigned char *)cw->cw, (dvbcsa_bs_key_s *)cw->key);
+}
+
+void dvbcsa_set_cw_icam(SCW *cw, SPMT *pmt) {
+    unsigned char ecm = cw->opaque ? *(unsigned char *)cw->opaque : 0;
     if (!dvbcsa_bs_key_set_ecm) {
         dvbcsa_bs_key_set((unsigned char *)cw->cw, (dvbcsa_bs_key_s *)cw->key);
-        if (ecm)
-            LOGL(1, "minisatip required libdvbcsa with ICAM support. Please "
-                    "see https://github.com/catalinii/minisatip/issues/1003 "
-                    "for more details");
+        LOGL(1, "minisatip required libdvbcsa with ICAM support. Please "
+                "see https://github.com/catalinii/minisatip/issues/1003 "
+                "for more details");
     } else {
         dvbcsa_bs_key_set_ecm(ecm, (unsigned char *)cw->cw,
                               (struct dvbcsa_bs_key_s *)cw->key);
@@ -104,4 +107,18 @@ SCW_op csa_op = {.algo = CA_ALGO_DVBCSA,
                  .stop_cw = NULL,
                  .decrypt_stream = (Decrypt_Stream)dvbcsa_decrypt_stream};
 
-void init_algo_csa() { register_algo(&csa_op); }
+SCW_op csa_icam_op = {.algo = CA_ALGO_DVBCSA_ICAM,
+                      .create_cw = (Create_CW)dvbcsa_create_key,
+                      .delete_cw = (Delete_CW)dvbcsa_delete_key,
+                      .set_cw = (Set_CW)dvbcsa_set_cw_icam,
+                      .stop_cw = NULL,
+                      .decrypt_stream = (Decrypt_Stream)dvbcsa_decrypt_stream};
+
+void init_algo_csa() {
+    register_algo(&csa_op);
+    if (dvbcsa_bs_key_set_ecm) {
+        register_algo(&csa_icam_op);
+    } else {
+        LOG("libdvbcsa does not support ICAM (dvbcsa_bs_key_set_ecm missing)");
+    }
+}
