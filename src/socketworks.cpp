@@ -530,7 +530,7 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
     ss->close_unix_socket = true;
 
     ss->read = (read_action)sockets_read;
-    if (ss->type == TYPE_UDP || ss->type == TYPE_RTCP)
+    if (ss->type == TYPE_UDP || ss->type == TYPE_RTCP || ss->type == TYPE_RTP)
         ss->read = (read_action)sockets_recv;
     else if (ss->type == TYPE_SERVER)
         ss->read = (read_action)(void *)sockets_accept;
@@ -967,11 +967,13 @@ int sockets_del_for_sid(int sid) {
     if (sid < 0)
         return 0;
     for (i = 0; i < MAX_SOCKS; i++)
-        if ((ss = get_sockets(i)) && ss->sid >= 0 && ss->type == TYPE_RTSP &&
-            ss->sid == sid) {
+        if ((ss = get_sockets(i)) && ss->sid >= 0 && ss->sid == sid &&
+            (ss->type == TYPE_RTSP || ss->type == TYPE_RTP ||
+             ss->type == TYPE_RTCP)) {
             ss->sid =
                 -1; // make sure the stream is not closed in the future to
                     // prevent closing the stream created by another socket
+            ss->close = NULL;
         }
     return 0;
 }
@@ -1212,7 +1214,7 @@ int my_writev(sockets *s, struct iovec *iov, int iiov) {
         stime = getTick();
 
     if (s->sock > 0) {
-        if (s->type == TYPE_UDP && len > 1450)
+        if ((s->type == TYPE_UDP || s->type == TYPE_RTP) && len > 1450)
             rv = writev_udp(s->sock, iov, iiov);
         else
             rv = writev(s->sock, iov, iiov);
