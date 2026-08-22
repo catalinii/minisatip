@@ -226,6 +226,12 @@ void hw_set_cw(SCW *cw, SPMT *pmt) {
         return;
     }
 
+    if (cw->algo == CA_ALGO_DVBCSA_ICAM) {
+        LOG("hw_descrambler: ICAM mode (CA_ALGO_DVBCSA_ICAM) not supported by "
+            "hardware descrambler");
+        return;
+    }
+
     auto *k = static_cast<HwKey *>(cw->key);
     adapter *ad = get_adapter(pmt->adapter);
     if (!ad) {

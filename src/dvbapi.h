@@ -84,6 +84,7 @@ typedef struct struct_key {
         ecm_parity[MAX_KEY_FILTERS];
     int64_t last_parity_change;
     unsigned char icam_ecm;
+    unsigned char is_icam;
 } SKey;
 
 void init_dvbapi();

@@ -318,7 +318,8 @@ int dvbapi_reply(sockets *s) {
                     k_id, parity, index, k->algo, correct ? "OK" : "NOK", cw[0],
                     cw[1], cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);
 
-                send_cw(k->pmt_id, k->algo, parity, cw, NULL, 0, &k->icam_ecm);
+                send_cw(k->pmt_id, k->is_icam ? CA_ALGO_DVBCSA_ICAM : k->algo,
+                        parity, cw, NULL, 0, &k->icam_ecm);
             } else
                 LOG("dvbapi: invalid DVBAPI_CA_SET_DESCR, key %d parity %d, k "
                     "%p, "
@@ -653,8 +654,13 @@ int send_ecm(int filter_id, unsigned char *b, int len, void *opaque) {
     len = ((b[1] & 0xF) << 8) + b[2];
     len += 3;
     k->last_ecm = getTick();
-    if (b[2] - b[4] == 4)
+    if (b[2] - b[4] == 4) {
         k->icam_ecm = b[0x15];
+        k->is_icam = k->icam_ecm ? 1 : 0;
+    } else {
+        k->icam_ecm = 0;
+        k->is_icam = 0;
+    }
     LOG("dvbapi: sending ECM key %d for pid %04X (%d), ecm_parity = %d, "
         "previous parity %d, demux = %d, filter = %d, icam_ecm %d, len = %d "
         "[%02X %02X %02X "
@@ -730,6 +736,7 @@ int keys_add(int i, int adapter, int pmt_id) {
     k->onid = 0;
     k->tsid = 0;
     k->icam_ecm = 0;
+    k->is_icam = 0;
     memset(k->cw[0], 0, 16);
     memset(k->cw[1], 0, 16);
     memset(k->filter_id, -1, sizeof(k->filter_id));

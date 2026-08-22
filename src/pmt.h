@@ -11,6 +11,7 @@
 #define CA_ALGO_DES 1
 #define CA_ALGO_AES128_ECB 2
 #define CA_ALGO_AES128_CBC 3
+#define CA_ALGO_DVBCSA_ICAM 4
 
 #define MAX_PMT 25600
 #define MAX_CW 200
@@ -184,6 +185,8 @@ typedef struct struct_filter {
 } SFilter;
 
 int register_algo(SCW_op *o);
+SCW_op *get_op_for_algo(int algo);
+void init_algo_csa();
 int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
             int64_t expiry, void *opaque);
 
