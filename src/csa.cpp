@@ -53,8 +53,14 @@ extern "C" {
 
 #define DEFAULT_LOG LOG_DVBCA
 
-void dvbcsa_bs_key_set_ecm(unsigned char ecm, const dvbcsa_cw_t cw,
-                           struct dvbcsa_bs_key_s *key) __attribute__((weak));
+// libdvbcsa is a C library, so this has to be declared with C linkage. An
+// ICAM patched libdvbcsa declares it in dvbcsa.h and the extern "C" there
+// applies, but building against a stock libdvbcsa leaves this declaration
+// on its own, and a C++ mangled weak reference never binds to the C symbol
+// even when an ICAM capable libdvbcsa.so is loaded at run time.
+extern "C" void dvbcsa_bs_key_set_ecm(unsigned char ecm, const dvbcsa_cw_t cw,
+                                      struct dvbcsa_bs_key_s *key)
+    __attribute__((weak));
 void dvbcsa_create_key(SCW *cw) { cw->key = dvbcsa_bs_key_alloc(); }
 
 void dvbcsa_delete_key(SCW *cw) { dvbcsa_key_free((dvbcsa_key_s *)cw->key); }
