@@ -87,6 +87,7 @@ option(CXX23 "Enable C++23 features (stacktrace)" ${CXX23_DEFAULT})
 option(DEBUG "Enable debug/sanitizer build" OFF)
 option(SRT "Enable SRT support" ${SRT_DEFAULT})
 option(BUILD_TESTING "Build tests" OFF)
+option(TEST_SANITIZERS "Build tests with AddressSanitizer/LeakSanitizer" ON)
 
 # Platform detection
 if(APPLE)
@@ -314,11 +315,13 @@ if(BUILD_TESTING)
     if(NOT DVBCSA_LIBRARY)
         target_compile_definitions(test_main_lib PRIVATE DISABLE_DVBCSA)
     endif()
-    target_compile_options(test_main_lib PRIVATE
-        -fsanitize=address
-        -fno-omit-frame-pointer
-        -fsanitize=leak
-    )
+    target_compile_options(test_main_lib PRIVATE -fno-omit-frame-pointer)
+    if(TEST_SANITIZERS)
+        target_compile_options(test_main_lib PRIVATE
+            -fsanitize=address
+            -fsanitize=leak
+        )
+    endif()
 
     foreach(TEST_SOURCE ${TEST_SOURCES})
         get_filename_component(TEST_NAME ${TEST_SOURCE} NAME_WE)
@@ -338,15 +341,17 @@ if(BUILD_TESTING)
         if(NOT DVBCSA_LIBRARY)
             target_compile_definitions(${TEST_NAME} PRIVATE DISABLE_DVBCSA)
         endif()
-        target_compile_options(${TEST_NAME} PRIVATE
-            -fsanitize=address
-            -fno-omit-frame-pointer
-            -fsanitize=leak
-        )
-        target_link_options(${TEST_NAME} PRIVATE
-            -fsanitize=address
-            -fsanitize=leak
-        )
+        target_compile_options(${TEST_NAME} PRIVATE -fno-omit-frame-pointer)
+        if(TEST_SANITIZERS)
+            target_compile_options(${TEST_NAME} PRIVATE
+                -fsanitize=address
+                -fsanitize=leak
+            )
+            target_link_options(${TEST_NAME} PRIVATE
+                -fsanitize=address
+                -fsanitize=leak
+            )
+        endif()
         target_link_libraries(${TEST_NAME} PRIVATE ${TEST_LIBS})
         add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
     endforeach()
