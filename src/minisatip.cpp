@@ -802,6 +802,7 @@ void set_options(int argc, char *argv[]) {
                 opts.adapter_buffer = MAX_UDP_PACKET_SIZE;
             if (opts.dvr_buffer == 0)
                 opts.dvr_buffer = DVR_BUFFER;
+            adapter_resize_buffers();
 
             break;
         }

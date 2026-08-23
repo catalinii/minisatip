@@ -119,6 +119,29 @@ adapter *adapter_alloc() {
     return ad;
 }
 
+// Adapters allocated by an option that came before -b still carry the
+// previous buffer size.
+void adapter_resize_buffers() {
+    int i;
+    for (i = 0; i < MAX_ADAPTERS; i++) {
+        adapter *ad = a[i];
+        unsigned char *nb;
+        if (!ad || !ad->buf || ad->lbuf == opts.adapter_buffer)
+            continue;
+        nb = (unsigned char *)realloc(ad->buf, opts.adapter_buffer + 10);
+        if (!nb) {
+            LOG("could not resize the buffer of adapter %d from %d to %d "
+                "bytes",
+                i, ad->lbuf, opts.adapter_buffer);
+            continue;
+        }
+        LOG("adapter %d: buffer resized from %d to %d bytes", i, ad->lbuf,
+            opts.adapter_buffer);
+        ad->buf = nb;
+        ad->lbuf = opts.adapter_buffer;
+    }
+}
+
 void find_adapters() {
     static int init_find_adapter;
     if (init_find_adapter == 1)
@@ -212,8 +235,8 @@ void adapter_set_dvr(adapter *ad) {
         sockets_add(ad->dvr, NULL, ad->id, TYPE_DVR, (socket_action)read_dmx,
                     (socket_action)close_adapter_for_socket,
                     (socket_action)adapter_timeout);
-    memset(ad->buf, 0, opts.adapter_buffer + 1);
-    set_socket_buffer(ad->sock, (unsigned char *)ad->buf, opts.adapter_buffer);
+    memset(ad->buf, 0, ad->lbuf + 1);
+    set_socket_buffer(ad->sock, (unsigned char *)ad->buf, ad->lbuf);
     if (ad->adapter_timeout > 0)
         sockets_timeout(ad->sock, ad->adapter_timeout);
     if (opts.th_priority > 0)
@@ -286,7 +309,7 @@ int init_hw(int i) {
                        "buffer was not initialized",
                        ad->id);
     }
-    memset(ad->buf, 0, opts.adapter_buffer + 1);
+    memset(ad->buf, 0, ad->lbuf + 1);
     ad->tp.clear();
     mark_pids_deleted(i, PID_STREAM_ID_UNDEFINED, NULL);
     update_pids(i);
