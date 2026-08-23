@@ -169,6 +169,7 @@ int init_hw(int i);
 int init_all_hw();
 int getAdaptersCount();
 adapter *adapter_alloc();
+void adapter_resize_buffers();
 int close_adapter(int na);
 int get_free_adapter(transponder *tp);
 int set_adapter_for_stream(int sid, int aid);
