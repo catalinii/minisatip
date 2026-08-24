@@ -654,7 +654,7 @@ int send_ecm(int filter_id, unsigned char *b, int len, void *opaque) {
     len = ((b[1] & 0xF) << 8) + b[2];
     len += 3;
     k->last_ecm = getTick();
-    if (b[2] - b[4] == 4) {
+    if (len > 0x15 && b[2] - b[4] == 4) {
         k->icam_ecm = b[0x15];
         k->is_icam = k->icam_ecm ? 1 : 0;
     } else {
