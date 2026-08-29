@@ -55,6 +55,9 @@ extern SPMT *pmts[MAX_PMT];
 
 // Forward declarations
 descriptor_t create_descriptor(const uint8_t *data);
+void pmt_add_descriptors(SPMT *pmt, unsigned char *pi, int len);
+void pmt_add_stream_pid_descriptors(SPMT *pmt, SStreamPid &sp,
+                                    unsigned char *es, int len);
 
 uint8_t packet[188] = {
     0x47, 0x40, 0xff, 0x99, 0x14, 0x4c, 0x83, 0x7f, 0x46, 0xba, 0xb8, 0x12,
@@ -335,10 +338,29 @@ int test_emulate_add_all_pids() {
     return 0;
 }
 
+// A CA descriptor with no room for a CAID must not be registered as one.
+int test_short_ca_descriptor() {
+    SPMT pmt = {};
+    SStreamPid sp;
+    uint8_t src[] = {0x09, 0x02, 0x09, 0x8D};
+    uint8_t *desc = (uint8_t *)malloc(sizeof(src));
+
+    memcpy(desc, src, sizeof(src));
+    sp.pid = 34;
+    pmt_add_stream_pid_descriptors(&pmt, sp, desc, sizeof(src));
+    pmt_add_descriptors(&pmt, desc, sizeof(src));
+    ASSERT(pmt.caids == 0, "a CA descriptor shorter than 4 bytes made a CAID");
+
+    free(desc);
+    return 0;
+}
+
 int main() {
     opts.log = 255;
     opts.debug = 255;
     strcpy(thread_info[thread_index].thread_name, "test_pmt");
+    TEST_FUNC(test_short_ca_descriptor(),
+              "testing a CA descriptor without a CAID is not registered");
     TEST_FUNC(test_descriptor_equality(),
               "testing descriptor equality operator");
     TEST_FUNC(test_descriptor_caid_capid_getters(),

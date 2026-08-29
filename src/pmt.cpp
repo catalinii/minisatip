@@ -1770,8 +1770,10 @@ void pmt_add_descriptors(SPMT *pmt, unsigned char *pi, int len) {
 
         pmt->descriptors.push_back(d);
 
-        // Handle CA descriptors separately
-        if (d.is_ca_descriptor()) {
+        // Handle CA descriptors separately. Below four bytes there is no
+        // CAID and no CA pid to read, and the private data length would be
+        // negative.
+        if (d.is_ca_descriptor() && pi_len >= 4) {
             int caid = pi[i + 2] * 256 + pi[i + 3];
             int capid = (pi[i + 4] & 0x1F) * 256 + pi[i + 5];
             pmt_add_caid(pmt, caid, capid, pi + i + 6, pi_len - 4);
@@ -1797,8 +1799,10 @@ void pmt_add_stream_pid_descriptors(SPMT *pmt, SStreamPid &sp,
 
         sp.descriptors.push_back(d);
 
-        // Handle CA descriptors separately
-        if (d.is_ca_descriptor()) {
+        // Handle CA descriptors separately. Below four bytes there is no
+        // CAID and no CA pid to read, and the private data length would be
+        // negative.
+        if (d.is_ca_descriptor() && es_len >= 4) {
             int caid = es[i + 2] * 256 + es[i + 3];
             int capid = (es[i + 4] & 0x1F) * 256 + es[i + 5];
             pmt_add_caid(pmt, caid, capid, es + i + 6, es_len - 4);
