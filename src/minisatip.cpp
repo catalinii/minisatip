@@ -139,6 +139,7 @@ int rtsp, http, si, si1, ssdp1;
 #define SATIPC_RECV_BUFFER_OPT (LONG_OPT_ONLY_START + 3)
 #define CLIENT_SEND_BUFFER_OPT (LONG_OPT_ONLY_START + 4)
 #define HW_DESCRAMBLER_OPT (LONG_OPT_ONLY_START + 5)
+#define CLEAN_PSI_OPT (LONG_OPT_ONLY_START + 6)
 
 static const struct option long_options[] = {
     {"adapters", required_argument, NULL, ADAPTERS_OPT},
@@ -149,6 +150,7 @@ static const struct option long_options[] = {
     {"bind-http", required_argument, NULL, BIND_HTTP_OPT},
     {"bind-dev", required_argument, NULL, BIND_DEV_OPT},
     {"cache-dir", required_argument, NULL, CACHE_DIR_OPT},
+    {"clean-psi", optional_argument, NULL, CLEAN_PSI_OPT},
     {"send-all-ecm", no_argument, NULL, SENDALLECM_OPT},
     {"client-send-buffer", required_argument, NULL, CLIENT_SEND_BUFFER_OPT},
     {"delsys", required_argument, NULL, DELSYS_OPT},
@@ -545,6 +547,12 @@ Help\n\
 \t* Provides more reliable decrypting for channels included in multiple providers\n\
 \n\
 * --hw-descrambler: Enable hardware descrambler (Enigma2 CA ioctl). Disabled by default\n\
+\n\
+* --clean-psi[=seconds|=all]: Rebuild the PMT of descrambled services without their CA descriptors\n\
+\t* Clients then see a free to air service, once a control word has really decrypted it\n\
+\t* Software descrambling only: a CAM or a hardware descrambler is not detected\n\
+\t* The pid is withheld up to [seconds] (default 3) while that is undecided, 0 never withholds it\n\
+\t* =all rebuilds every encrypted PMT, so one that cannot be descrambled arrives announced free to air\n\
 \n"
 #ifndef DISABLE_DVBCA
         "\
@@ -635,6 +643,8 @@ void set_options(int argc, char *argv[]) {
     memset(opts.dvbapi_host, 0, sizeof(opts.dvbapi_host));
     opts.drop_encrypted = 1;
     opts.pids_all_no_dec = 0;
+    opts.clean_psi = CLEAN_PSI_OFF;
+    opts.clean_psi_grace = CLEAN_PSI_GRACE;
     opts.rtsp_port = 554;
     opts.use_ipv4_only = 1;
     opts.document_root = "html";
@@ -1063,6 +1073,30 @@ void set_options(int argc, char *argv[]) {
         case DISABLE_PMT_SCAN:
             opts.pmt_scan = 1 - opts.pmt_scan;
             break;
+
+        case CLEAN_PSI_OPT: {
+            char *e;
+            long v;
+            opts.clean_psi = CLEAN_PSI_DECRYPTED;
+            if (!optarg)
+                break;
+            if (!strcmp(optarg, "all")) {
+                opts.clean_psi = CLEAN_PSI_ALL;
+                break;
+            }
+            v = strtol(optarg, &e, 10);
+            if (e == optarg || *e || v < 0 || v > 3600) {
+                // Do not guess: =0 is a mode of its own, and enabling with a
+                // grace time nobody asked for is worse than not enabling
+                opts.clean_psi = CLEAN_PSI_OFF;
+                LOG0("--clean-psi: '%s' is not 'all' or 0..3600 seconds, "
+                     "option disabled",
+                     optarg);
+                break;
+            }
+            opts.clean_psi_grace = (int)v * 1000;
+            break;
+        }
 
 #ifndef DISABLE_DVBCA
         case CA_PIN_OPT:

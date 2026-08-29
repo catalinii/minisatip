@@ -155,6 +155,11 @@ typedef struct struct_pmt {
     int filter;
     int64_t start_time;
     std::unordered_map<uint64_t, int> *global_start, *local_start;
+    // --clean-psi
+    uint8_t ever_decrypted; // a validated CW decrypted this service (master)
+    uint8_t clean_warned;   // an uncovered section was already reported
+    int16_t clean_off;      // bytes of the rewrite emitted, -1 = not writing
+    int16_t clean_olen;     // length of the section being replaced
 } SPMT;
 
 // filters can be setup for specific pids and masks
@@ -237,6 +242,16 @@ int test_decrypt_packet(SCW *cw, SPMT_batch *start, int len);
 void init_algo();
 void update_cw(SPMT *pmt);
 int pmt_decrypt_stream(adapter *ad);
+#define CLEAN_PSI_GRACE 3000 // ms the PMT pid may be withheld
+#define CLEAN_PSI_OFF 0
+#define CLEAN_PSI_DECRYPTED 1 // only what a control word really decrypted
+#define CLEAN_PSI_ALL 2       // every encrypted service, decrypted or not
+
+int pmt_create_clean_pmt(SPMT *pmt, uint8_t *dst, int dstsize);
+void pmt_clean_prepare(adapter *ad, int probe);
+uint8_t *pmt_clean_packet(adapter *ad, int idx, uint8_t *b, int in_grace,
+                          int *pos);
+void pmt_clean_reset(SPMT *pmt);
 int wait_pusi(adapter *ad, int len);
 int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf, int sca_id);
 void free_filters();

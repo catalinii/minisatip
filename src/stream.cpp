@@ -301,6 +301,11 @@ int start_play(streams *sid, sockets *s) {
     if (pids_empty_or_zero)
         s->flush_enqued_data = 1;
     sid->do_play = 1;
+    // --clean-psi: this client asked for a different set of pids, so a PMT it
+    // has not been given a verdict on yet must be held back again. Zero arms
+    // the window at the first buffer the client is served: it has to cover the
+    // ECM round trip, and a cold tune alone would outlast it.
+    sid->clean_since = 0;
     if (s->type != TYPE_HTTP)
         sid->start_streaming = 0;
 
@@ -593,6 +598,7 @@ int streams_add() {
     /* coverity[DC.WEAK_CRYPTO] */
     ss->ssrc = random();
     ss->timeout = opts.timeout_sec;
+    ss->clean_since = 0;
     ss->wtime = ss->rtcp_wtime = getTick();
 
     return i;
@@ -969,6 +975,23 @@ void check_cc2(adapter *ad) {
     }
 }
 
+// --clean-psi: is any client of this adapter still waiting for a verdict on
+// the service it asked for? Only then is it worth looking for PMT pids that no
+// SPMT covers yet. A stream that has not been served a buffer counts, its
+// window is armed by the first one. Read without the stream locks, which would
+// invert the socket -> stream -> adapter order: the answer only decides how
+// hard this one buffer is looked at.
+static int clean_grace_open(adapter *ad) {
+    if (!opts.clean_psi)
+        return 0;
+    for (int i = 0; i < MAX_STREAMS; i++)
+        if (st[i] && st[i]->enabled && st[i]->adapter == ad->id &&
+            (!st[i]->clean_since ||
+             ad->rtime - st[i]->clean_since < opts.clean_psi_grace))
+            return 1;
+    return 0;
+}
+
 // Locks the used structs in order to avoid race conditions (sockets ->
 // stream
 // -> adapter) Requires the adapter lock to not be held before calling
@@ -1036,6 +1059,15 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
         max_pack = 0;
     }
 
+    // --clean-psi: pmt_clean_prepare() decided what the PMT pids carry, this
+    // client decides whether it is still willing to wait for one.
+    int clean_n = ad->clean_psi_packets, clean_pos = 0, in_grace = 0;
+    if (opts.clean_psi) {
+        if (!sid->clean_since)
+            sid->clean_since = rtime;
+        in_grace = rtime - sid->clean_since < opts.clean_psi_grace;
+    }
+
     for (i = 0; i < ad->rlen; i += DVB_FRAME) {
         int rtp_added = 0;
         b = ad->buf + i;
@@ -1045,6 +1077,9 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
         }
         int _pid = PID_FROM_TS(b);
         if (!pids[_pid] && !pids[8192])
+            continue;
+        if (clean_n &&
+            !(b = pmt_clean_packet(ad, i / DVB_FRAME, b, in_grace, &clean_pos)))
             continue;
 
         if (total_len && max_pack && (total_len / DVB_FRAME % max_pack == 0)) {
@@ -1128,6 +1163,8 @@ int process_dmx(sockets *s) {
 
 #ifndef DISABLE_TABLES
     pmt_process_stream(ad);
+    // After the descramblers, so this buffer already counts as decrypted
+    pmt_clean_prepare(ad, clean_grace_open(ad));
 #endif
 
     check_cc2(ad);
