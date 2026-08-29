@@ -1903,6 +1903,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     pi = b + 12;
     pmt_b = b + 3;
 
+    pmt->descriptors.clear();
     pmt->stream_pids.clear();
 
     // Add PMT level desciptors from program info
