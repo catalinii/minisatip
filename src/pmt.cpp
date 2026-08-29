@@ -1781,8 +1781,12 @@ void pmt_add_descriptors(SPMT *pmt, unsigned char *pi, int len) {
     }
 }
 
+// add_caids stays false for streams that are neither audio nor video: their
+// descriptors are recorded, but which CAIDs the PMT is considered to carry does
+// not change.
 void pmt_add_stream_pid_descriptors(SPMT *pmt, SStreamPid &sp,
-                                    unsigned char *es, int len) {
+                                    unsigned char *es, int len,
+                                    bool add_caids) {
     int es_len;
 
     for (int i = 0; i < len; i += es_len + 2) {
@@ -1802,7 +1806,7 @@ void pmt_add_stream_pid_descriptors(SPMT *pmt, SStreamPid &sp,
         // Handle CA descriptors separately. Below four bytes there is no
         // CAID and no CA pid to read, and the private data length would be
         // negative.
-        if (d.is_ca_descriptor() && es_len >= 4) {
+        if (add_caids && d.is_ca_descriptor() && es_len >= 4) {
             int caid = es[i + 2] * 256 + es[i + 3];
             int capid = (es[i + 4] & 0x1F) * 256 + es[i + 5];
             pmt_add_caid(pmt, caid, capid, es + i + 6, es_len - 4);
@@ -1950,13 +1954,15 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
             break;
         }
 
-        if (!is_audio && !is_video)
-            continue;
-
-        // Add stream-level descriptors from elementary stream info
+        // Done for every stream, including teletext and subtitles, so that
+        // the parsed PMT still describes what was broadcast
         if (stream_pid_id >= 0)
             pmt_add_stream_pid_descriptors(pmt, pmt->stream_pids[stream_pid_id],
-                                           pmt_b + i + 5, es_len);
+                                           pmt_b + i + 5, es_len,
+                                           is_audio || is_video);
+
+        if (!is_audio && !is_video)
+            continue;
 
         if (opmt != -1 && opmt != pmt->master_pmt) {
             pmt->master_pmt = opmt;
