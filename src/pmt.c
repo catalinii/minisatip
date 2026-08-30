@@ -1110,9 +1110,11 @@ void start_active_pmts(adapter *ad) {
         int pmt_started = 0;
         for (j = 0; j < pmt->stream_pids; j++)
             // for all audio and video streams start the PMT containing them
+            // Hypothesis: force PMT/ECM if PMT pid itself in pids and linger if ES still derived (keep 225/2250 on 10.0.0.5)
             if ((pmt->stream_pid[j]->is_audio ||
                  pmt->stream_pid[j]->is_video) &&
                 pids[pmt->stream_pid[j]->pid] && pmt->id == pmt->master_pmt) {
+                // Mirrors satip-client psi.cpp fix for PMT 225/ECM 2250 missing
                 is_active = 1;
 #ifndef DISABLE_TABLES
                 if (!first) {
