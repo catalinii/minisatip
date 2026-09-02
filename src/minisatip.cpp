@@ -138,6 +138,7 @@ int rtsp, http, si, si1, ssdp1;
 #define SENDALLECM_OPT (LONG_OPT_ONLY_START + 2)
 #define SATIPC_RECV_BUFFER_OPT (LONG_OPT_ONLY_START + 3)
 #define CLIENT_SEND_BUFFER_OPT (LONG_OPT_ONLY_START + 4)
+#define HW_DESCRAMBLER_OPT (LONG_OPT_ONLY_START + 5)
 
 static const struct option long_options[] = {
     {"adapters", required_argument, NULL, ADAPTERS_OPT},
@@ -207,6 +208,7 @@ static const struct option long_options[] = {
     {"ci", required_argument, NULL, FORCE_CI_OPT},
     {"ca-channels", required_argument, NULL, CA_CHANNELS_OPT},
 #endif
+    {"hw-descrambler", no_argument, NULL, HW_DESCRAMBLER_OPT},
 
     {0, 0, 0, 0}};
 
@@ -541,6 +543,8 @@ Help\n\
 \n\
 * -9 --disable-pmt-scan: Disables scanning PMTs and only reads the PMTs that are requested by the client\n\
 \t* Provides more reliable decrypting for channels included in multiple providers\n\
+\n\
+* --hw-descrambler: Enable hardware descrambler (Enigma2 CA ioctl). Disabled by default\n\
 \n"
 #ifndef DISABLE_DVBCA
         "\
@@ -1074,6 +1078,9 @@ void set_options(int argc, char *argv[]) {
             break;
 
 #endif
+        case HW_DESCRAMBLER_OPT:
+            opts.hw_descrambler = 1;
+            break;
         }
     }
 
