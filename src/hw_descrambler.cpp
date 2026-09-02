@@ -216,8 +216,8 @@ void hw_delete_key(SCW *cw) {
 }
 
 void hw_set_cw(SCW *cw, SPMT *pmt) {
-    if (!opts.enigma) {
-        LOG("hw_descrambler: opts.enigma is 0, skipping hw_set_cw");
+    if (!opts.hw_descrambler) {
+        LOG("hw_descrambler: --hw-descrambler not enabled, skipping hw_set_cw");
         return;
     }
 
@@ -343,7 +343,7 @@ void hw_decrypt_stream(SCW *cw, SPMT_batch *batch, int batch_len) {
 }
 
 int hw_ca_del_pmt(adapter *ad, SPMT *pmt) {
-    if (!opts.enigma || !ad || !pmt)
+    if (!opts.hw_descrambler || !ad || !pmt)
         return 0;
 
     const int pmt_id = (pmt->master_pmt >= 0) ? pmt->master_pmt : pmt->id;
@@ -403,10 +403,9 @@ SCW_op hw_aes_cbc_op = {
 static SCA_op hw_ca_op{};
 
 void init_hw_descrambler() {
-    if (opts.enigma) {
-        LOG("hw_descrambler: Initializing Hardware Descrambler for Enigma2 "
-            "(opts.enigma = %d)",
-            opts.enigma);
+    if (opts.hw_descrambler) {
+        LOG("hw_descrambler: Initializing Hardware Descrambler "
+            "(--hw-descrambler enabled)");
         register_algo(&hw_csa_op);
         register_algo(&hw_aes_ecb_op);
         register_algo(&hw_aes_cbc_op);
@@ -417,6 +416,7 @@ void init_hw_descrambler() {
             reinterpret_cast<ca_device_action>(hw_ca_close_dev);
         add_ca(&hw_ca_op);
     } else {
-        LOG("hw_descrambler: opts.enigma is 0, hardware descrambler disabled");
+        LOG("hw_descrambler: --hw-descrambler not enabled, hardware "
+            "descrambler disabled");
     }
 }

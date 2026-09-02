@@ -77,9 +77,10 @@ static int test_hw_key_lifecycle() {
     return 0;
 }
 
-// Test 2: PMT Creation and Hardware Descrambler Binding (opts.enigma checks)
+// Test 2: PMT Creation and Hardware Descrambler Binding (opts.hw_descrambler
+// checks)
 static int test_hw_descrambler_disabled_when_opts_enigma_zero() {
-    opts.enigma = 0;
+    opts.hw_descrambler = 0;
 
     adapter *ad = setup_mock_adapter(0, 0, 0);
     ASSERT(ad != nullptr, "setup_mock_adapter failed");
@@ -96,10 +97,10 @@ static int test_hw_descrambler_disabled_when_opts_enigma_zero() {
     std::fill_n(cw.cw, 8, 0xAA);
     hw_create_key(&cw);
 
-    // Call hw_set_cw when opts.enigma == 0
+    // Call hw_set_cw when opts.hw_descrambler == 0
     hw_set_cw(&cw, pmt);
 
-    // Verify hw_ca_del_pmt when opts.enigma == 0 returns safely
+    // Verify hw_ca_del_pmt when opts.hw_descrambler == 0 returns safely
     int res = hw_ca_del_pmt(ad, pmt);
     ASSERT(res == 0, "hw_ca_del_pmt should return 0");
 
@@ -111,7 +112,7 @@ static int test_hw_descrambler_disabled_when_opts_enigma_zero() {
 
 // Test 3: Multi-Channel Parallel Slot Allocation and Parity Sharing
 static int test_multi_channel_slot_allocation() {
-    opts.enigma = 1;
+    opts.hw_descrambler = 1;
 
     adapter *ad = setup_mock_adapter(0, 0, 0);
     ASSERT(ad != nullptr, "setup_mock_adapter failed");
@@ -205,7 +206,7 @@ static int test_multi_channel_slot_allocation() {
 
 // Test 4: AES-128 ECB & CBC Mode Key Programming Simulation
 static int test_aes128_key_programming() {
-    opts.enigma = 1;
+    opts.hw_descrambler = 1;
 
     adapter *ad = setup_mock_adapter(0, 0, 0);
     ASSERT(ad != nullptr, "setup_mock_adapter failed");
@@ -269,7 +270,7 @@ static int test_hw_ca_close_dev_and_null_guards() {
 
 // Test 6: CSA vs CSA-ICAM routing and Enigma hardware rejection of ICAM
 static int test_csa_vs_csa_icam_routing() {
-    opts.enigma = 1;
+    opts.hw_descrambler = 1;
 
     SCW_op *csa_op_res = get_op_for_algo(CA_ALGO_DVBCSA);
     ASSERT(csa_op_res != nullptr, "get_op_for_algo failed for CA_ALGO_DVBCSA");
@@ -322,7 +323,7 @@ int main() {
     TEST_FUNC(test_hw_key_lifecycle(),
               "testing hw_create_key and hw_delete_key lifecycle");
     TEST_FUNC(test_hw_descrambler_disabled_when_opts_enigma_zero(),
-              "testing hw_descrambler disabled when opts.enigma == 0");
+              "testing hw_descrambler disabled when opts.hw_descrambler == 0");
     TEST_FUNC(test_multi_channel_slot_allocation(),
               "testing multi-channel parallel slot allocation and unbinding");
     TEST_FUNC(test_aes128_key_programming(),
