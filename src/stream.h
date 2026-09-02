@@ -42,7 +42,8 @@ typedef struct struct_streams {
     uint16_t seq; // rtp seq id
     int ssrc;     // rtp seq id
     int64_t wtime;
-    int64_t rtime; // stream timeout
+    int64_t rtime;       // stream timeout
+    int64_t clean_since; // --clean-psi window start, 0 = arm at the next buffer
     int64_t rtcp_wtime;
     int64_t last_init_hw;
     int do_play;

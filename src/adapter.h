@@ -121,6 +121,8 @@ struct struct_adapter {
     int active_demux_pids;
     int is_t2mi;
     uint64_t tune_time;
+    // --clean-psi packets to substitute in this buffer
+    int clean_psi_packets = 0;
     pthread_t thread;
     char thread_name[5];
     char null_packets;

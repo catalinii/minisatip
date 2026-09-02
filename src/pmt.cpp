@@ -740,6 +740,9 @@ void update_cw(SPMT *pmt) {
             if (len && !test_decrypt_packet(cws[i], start, len)) {
                 LOGM("correct CW found (len %d): %s", len,
                      cw_to_string(cws[i], buf));
+                // The only proof that this service really is descrambled, and
+                // what --clean-psi waits for.
+                pmt->ever_decrypted = 1;
                 cw = cws[i];
                 break;
             }
@@ -1275,6 +1278,379 @@ int pmt_process_stream(adapter *ad) {
     return 0;
 }
 
+// --clean-psi. What a client is given is decided in two steps: once per buffer
+// for the adapter, in pmt_clean_prepare(), and once per client in
+// process_packets_for_stream(). The adapter buffer is shared, so a rewrite in
+// place would force the same PMT on every client of the transponder, the CAM
+// behind DDCI included.
+
+// Nothing is known about this PMT yet, so the rewrite starts at the next
+// section start rather than in the middle of one.
+void pmt_clean_reset(SPMT *pmt) {
+    pmt->ever_decrypted = 0;
+    pmt->clean_warned = 0;
+    pmt->clean_off = -1;
+    pmt->clean_olen = 0;
+}
+
+// What a client gets on a PMT pid: the section as broadcast, nothing while the
+// service is still undecided, or the section rebuilt without CA descriptors.
+enum clean_action { CLEAN_PASS = 0, CLEAN_HOLD, CLEAN_WRITE };
+
+typedef struct clean_pmt {
+    SPMT *pmt;
+    int pid;
+    enum clean_action action;
+} SCleanPMT;
+
+// A packet of the adapter buffer that is not handed on as it is. Built in
+// buffer order, so a client walks it with its own cursor instead of searching.
+typedef struct clean_packet {
+    int idx;      // packet number in ad->buf
+    uint8_t hold; // withhold it, rather than send pkt in its place
+    uint8_t pkt[DVB_FRAME];
+} SCleanPacket;
+
+static std::vector<SCleanPacket> clean_list[MAX_ADAPTERS];
+
+static SCleanPMT *clean_find(SCleanPMT *cp, int n, int pid) {
+    for (int i = 0; i < n; i++)
+        if (cp[i].pid == pid)
+            return cp + i;
+    return NULL;
+}
+
+// Offset of the payload, DVB_FRAME if the packet has none.
+static int ts_payload(uint8_t *b) {
+    int p = 4;
+    if (!(b[3] & 0x10))
+        return DVB_FRAME;
+    if (b[3] & 0x20)
+        p += 1 + b[4];
+    return p < DVB_FRAME ? p : DVB_FRAME;
+}
+
+// Does this packet begin a PMT section?
+static int starts_pmt(uint8_t *b) {
+    int p = ts_payload(b);
+    if (!(b[1] & 0x40) || p >= DVB_FRAME - 1)
+        return 0;
+    p += b[p] + 1; // pointer field
+    return p < DVB_FRAME && b[p] == 0x02;
+}
+
+static bool has_ca_descriptor(const std::vector<descriptor_t> &desc) {
+    for (const auto &d : desc)
+        if (d.is_ca_descriptor())
+            return true;
+    return false;
+}
+
+// pmt->caids cannot answer this: it holds no CAID of a stream that is neither
+// audio nor video, and it keeps the ones of the previous PMT version.
+static bool pmt_has_ca_descriptor(SPMT *pmt) {
+    if (has_ca_descriptor(pmt->descriptors))
+        return true;
+    for (const auto &sp : pmt->stream_pids)
+        if (has_ca_descriptor(sp.descriptors))
+            return true;
+    return false;
+}
+
+// Copy the descriptors that are not CA descriptors, -1 if they do not fit.
+static int copy_no_ca(uint8_t *b, uint8_t *end,
+                      const std::vector<descriptor_t> &desc) {
+    uint8_t *s = b;
+    for (const auto &d : desc) {
+        if (d.is_ca_descriptor())
+            continue;
+        if (b + d.len + 2 > end)
+            return -1;
+        *b++ = d.type;
+        *b++ = d.len;
+        memcpy(b, d.data.data(), d.len);
+        b += d.len;
+    }
+    return b - s;
+}
+
+// Rebuild the PMT without its CA descriptors, returns the length including the
+// pointer field, or 0. The descriptors differ from the broadcast, so the
+// version has to as well.
+int pmt_create_clean_pmt(SPMT *pmt, uint8_t *dst, int dstsize) {
+    uint8_t *b = dst, *end = dst + dstsize - 4, *start, *pi_len;
+    int len;
+
+    if (dstsize < 21)
+        return 0;
+    *b++ = 0; // pointer field
+    *b++ = 0x02;
+    b += 2; // section_length, filled in below
+    start = b;
+    copy16(b, 0, pmt->sid);
+    b += 2;
+    *b++ = 0xC1 | (((pmt->version + 1) & 0x1F) << 1);
+    *b++ = 0; // section number
+    *b++ = 0; // last section number
+    *b++ = 0xE0 | ((pmt->pcr_pid >> 8) & 0x1F);
+    *b++ = pmt->pcr_pid & 0xFF;
+
+    pi_len = b;
+    b += 2;
+    if ((len = copy_no_ca(b, end, pmt->descriptors)) < 0)
+        return 0;
+    copy16(pi_len, 0, 0xF000 | len);
+    b += len;
+
+    for (const auto &sp : pmt->stream_pids) {
+        uint8_t *es_len;
+        if (sp.type == 0)
+            continue; // an independent PCR pid, not a stream of the broadcast
+        if (b + 5 > end)
+            return 0;
+        *b = sp.type;
+        copy16(b, 1, 0xE000 | sp.pid);
+        b += 3;
+        es_len = b;
+        b += 2;
+        if ((len = copy_no_ca(b, end, sp.descriptors)) < 0)
+            return 0;
+        copy16(es_len, 0, 0xF000 | len);
+        b += len;
+    }
+
+    copy16(start, -2, (b - start) + 4); // section_length counts the CRC too
+    dst[2] |= 0xB0;                     // section_syntax_indicator, reserved
+    copy32(b, 0, crc_32(dst + 1, b - dst - 1));
+    return b + 4 - dst;
+}
+
+// Gated on a control word that really decrypted, or an unreachable card server
+// would announce an encrypted service as free to air. CLEAN_PSI_ALL asks for
+// exactly that, scrambled stream and all. This sees software descrambling
+// only; a CAM behind DDCI returns clear packets without a control word being
+// validated here.
+static enum clean_action pmt_clean_action(SPMT *pmt) {
+    SPMT *master = get_pmt(pmt->master_pmt);
+    bool encrypted = pmt_has_ca_descriptor(pmt);
+    if (!master)
+        master = pmt;
+    if (pmt->state != PMT_CACHED && encrypted &&
+        (opts.clean_psi == CLEAN_PSI_ALL || master->ever_decrypted))
+        return CLEAN_WRITE;
+    if (pmt->version >= 0 && !encrypted)
+        return CLEAN_PASS; // parsed and free to air
+    return CLEAN_HOLD;
+}
+
+// Report what the rewrite cannot do once per PMT, not once per packet.
+#define CLEAN_WARN(pmt, ...)                                                   \
+    do {                                                                       \
+        if (!(pmt)->clean_warned) {                                            \
+            (pmt)->clean_warned = 1;                                           \
+            LOG(__VA_ARGS__);                                                  \
+        }                                                                      \
+    } while (0)
+
+// Reserve the entry for packet idx: a copy of b to patch, or a hold if b is
+// NULL. The caller fills it before the next call, so the vector cannot move.
+static uint8_t *clean_add(std::vector<SCleanPacket> &out, int idx, uint8_t *b) {
+    out.emplace_back();
+    SCleanPacket &s = out.back();
+    s.idx = idx;
+    s.hold = b ? 0 : 1;
+    if (b)
+        memcpy(s.pkt, b, DVB_FRAME);
+    return s.pkt;
+}
+
+// Decide what happens to the PMT pids in this buffer. Runs after the
+// descramblers and after process_filters(), so our own parser always sees the
+// original packets. probe asks to look for PMT pids of services that have not
+// been classified yet, which only a client still inside its window can use.
+void pmt_clean_prepare(adapter *ad, int probe) {
+    std::vector<SCleanPacket> &out = clean_list[ad->id];
+    SCleanPMT cp[MAX_PMT_FOR_ADAPTER];
+    uint8_t section[DVB_FRAME * 8];
+    SPMT *built = NULL; // whose section is in section[]
+    int i, n = 0, slen = 0;
+
+    out.clear();
+    ad->clean_psi_packets = 0;
+    if (!opts.clean_psi)
+        return;
+
+    for (i = 0; i < ad->active_pmts && n < MAX_PMT_FOR_ADAPTER; i++) {
+        SPMT *pmt = get_pmt(ad->active_pmt[i]);
+        SCleanPMT *dup;
+        if (!pmt || !pmt->enabled || pmt->pid < 0 || pmt->pid >= 8192)
+            continue;
+        if ((dup = clean_find(cp, n, pmt->pid))) {
+            dup->action = CLEAN_PASS; // two services on one pid: leave it
+            continue;
+        }
+        cp[n].pmt = pmt;
+        cp[n].pid = pmt->pid;
+        cp[n].action = pmt_clean_action(pmt);
+        n++;
+    }
+    if (!n && !probe)
+        return;
+
+    for (i = 0; i < ad->rlen; i += DVB_FRAME) {
+        uint8_t *b = ad->buf + i, *sec, *dst;
+        enum clean_action action = CLEAN_PASS;
+        int pid, pay, room, left, olen, last = 0;
+        SCleanPMT *c;
+        SPMT *pmt;
+
+        if (b[0] != 0x47)
+            continue;
+        pid = PID_FROM_TS(b);
+        if ((c = clean_find(cp, n, pid)))
+            action = c->action;
+        else if (probe && pid && starts_pmt(b))
+            action = CLEAN_HOLD; // a PMT of a service not classified yet
+
+        if (action == CLEAN_HOLD) {
+            clean_add(out, i / DVB_FRAME, NULL);
+            continue;
+        }
+        if (action != CLEAN_WRITE) {
+            // The section went out as broadcast, so the rewrite starts again
+            // at the next section start rather than in the middle of this one.
+            if (c && (b[1] & 0x40))
+                c->pmt->clean_off = -1;
+            continue;
+        }
+
+        pay = ts_payload(b);
+        if (pay >= DVB_FRAME)
+            continue;
+        room = DVB_FRAME - pay;
+        pmt = c->pmt;
+
+        // Only a single PMT section of this service is rewritten. Anything
+        // else - another table, another service, a section of a version that
+        // has not been parsed, one that is not yet current, or a second
+        // section packed behind this one - is passed on untouched, and
+        // clean_off stays -1 until the next section start.
+        if ((b[1] & 0x40) && b[pay] != 0) {
+            // A pointer field ends the section being written in the bytes
+            // before it and starts the next one behind them, which is not
+            // ours: finish here, and only inside those bytes. A section that
+            // was never begun is left to the clean_off check below.
+            if (b[pay] >= room) {
+                pmt->clean_off = -1;
+                continue;
+            }
+            room = b[pay];
+            pay++;
+            last = 1;
+        } else if (b[1] & 0x40) {
+            // Nine bytes are what the checks below read; a payload shorter
+            // than that cannot hold a PMT header anyway.
+            if (room < 9) {
+                CLEAN_WARN(pmt,
+                           "%s: pid %d carries a PSI header of %d bytes, "
+                           "passing it on",
+                           __FUNCTION__, pid, room);
+                pmt->clean_off = -1;
+                continue;
+            }
+            // b[pay] is the pointer field, the section starts behind it
+            sec = b + pay + 1;
+            olen = 3 + (((sec[1] & 0x0F) << 8) | sec[2]);
+            if (sec[0] != 0x02 || sec[6] != 0 || sec[7] != 0 ||
+                ((sec[3] << 8) | sec[4]) != pmt->sid || !(sec[5] & 0x01) ||
+                ((sec[5] & 0x3E) >> 1) != pmt->version) {
+                CLEAN_WARN(pmt,
+                           "%s: pid %d has a section this does not cover "
+                           "(table %02X sid %04X version %d current %d "
+                           "section %d/%d), passing it on",
+                           __FUNCTION__, pid, sec[0], (sec[3] << 8) | sec[4],
+                           (sec[5] & 0x3E) >> 1, sec[5] & 0x01, sec[6], sec[7]);
+                pmt->clean_off = -1;
+                continue;
+            }
+            // A shorter rewrite would free bytes that already hold the start
+            // of the next section, and stuffing over it would lose it.
+            if (sec + olen < b + DVB_FRAME && sec[olen] != 0xFF) {
+                CLEAN_WARN(pmt,
+                           "%s: pid %d packs table %02X behind the PMT, "
+                           "passing it on",
+                           __FUNCTION__, pid, sec[olen]);
+                pmt->clean_off = -1;
+                continue;
+            }
+            pmt->clean_off = 0;
+            pmt->clean_olen = (int16_t)olen;
+        }
+        if (pmt->clean_off < 0)
+            continue; // a continuation of a section that was passed on
+        if (built != pmt) {
+            slen = pmt_create_clean_pmt(pmt, section, sizeof(section));
+            if (slen <= 0) {
+                CLEAN_WARN(pmt, "%s: no clean PMT for pmt %d pid %d",
+                           __FUNCTION__, pmt->id, pmt->pid);
+                c->action = CLEAN_PASS;
+                pmt->clean_off = -1;
+                continue;
+            }
+            built = pmt;
+        }
+        // Dropping descriptors can only shorten the section. If it did not,
+        // the parsed PMT is not the one on the wire - do not touch it.
+        if (slen > 1 + pmt->clean_olen) {
+            CLEAN_WARN(pmt,
+                       "%s: pmt %d pid %d rebuilds to %d over %d bytes, "
+                       "passing it on",
+                       __FUNCTION__, pmt->id, pmt->pid, slen,
+                       1 + pmt->clean_olen);
+            c->action = CLEAN_PASS;
+            pmt->clean_off = -1;
+            continue;
+        }
+
+        // The rewrite is never longer than the original, so it fits into the
+        // packets the original occupied and every TS header, the continuity
+        // counter included, reaches the client as broadcast.
+        dst = clean_add(out, i / DVB_FRAME, b);
+        if (pmt->clean_off > slen)
+            pmt->clean_off = slen;
+        left = slen - pmt->clean_off;
+        if (left > room)
+            left = room;
+        if (left > 0) {
+            memcpy(dst + pay, section + pmt->clean_off, left);
+            pmt->clean_off = (int16_t)(pmt->clean_off + left);
+        }
+        if (left < room) // stuffing, as the original carried past its section
+            memset(dst + pay + left, 0xFF, room - left);
+        if (last)
+            pmt->clean_off = -1;
+    }
+    ad->clean_psi_packets = out.size();
+}
+
+// What this client gets for the packet at idx: the rebuilt section, the
+// original, or NULL to withhold it while the service is undecided and the
+// client is still inside its window. idx grows with the caller's loop, so pos
+// walks the list instead of searching it.
+uint8_t *pmt_clean_packet(adapter *ad, int idx, uint8_t *b, int in_grace,
+                          int *pos) {
+    std::vector<SCleanPacket> &l = clean_list[ad->id];
+    int n = l.size();
+
+    while (*pos < n && l[*pos].idx < idx)
+        (*pos)++;
+    if (*pos >= n || l[*pos].idx != idx)
+        return b;
+    if (!l[*pos].hold)
+        return l[*pos].pkt;
+    return in_grace ? NULL : b;
+}
+
 int pmt_add(int adapter, int sid, int pmt_pid) {
 
     SPMT *pmt;
@@ -1302,6 +1678,7 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
     pmt->enabled = 1;
     pmt->version = -1;
     pmt->state = PMT_STOPPED;
+    pmt_clean_reset(pmt);
     pmt->cw = NULL;
     pmt->opaque = NULL;
     pmt->ca_mask = pmt->disabled_ca_mask = 0;
@@ -2028,6 +2405,7 @@ void start_pmt(SPMT *pmt, adapter *ad) {
          pmt->id, pmt->master_pmt, pmt->pid, pmt->sid, pmt->filter, pmt->name);
     pmt->state = PMT_STARTING;
     pmt->start_time = getTick();
+    pmt_clean_reset(pmt);
 
     // do not call send_pmt_to_cas to allow all the slave PMTs to be read
     // when the master PMT is being sent next time, it will actually making
