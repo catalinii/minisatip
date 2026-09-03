@@ -1995,6 +1995,22 @@ void adapt_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
 
 #define E2_SAT_MAX 1600 // eDVBFrontend::calculateSignalQuality default
 
+// Some front-ends report no signal strength at all: the BCM45208/BCM45308 FBC
+// modules return 0 from FE_READ_SIGNAL_STRENGTH even on a locked transponder,
+// and expose no DVBv5 statistics (FE_GET_PROPERTY succeeds but returns zero
+// stat layers). Enigma2 has no calibration entry for these front-ends either,
+// so the value is simply not available from the hardware.
+//
+// SAT>IP defines level 0 as "no signal", so reporting 0 for a tuner that is
+// locked and receiving makes clients believe the tuner is dead. When enabled
+// below, the level reported for such a front-end mirrors the (calibrated) SNR
+// instead, so that clients get an indication that follows reception rather
+// than a flat zero.
+//
+// This is a display fallback, NOT a measurement: the hardware provides no AGC
+// reading. Set to 0 to report the raw 0 instead.
+#define DERIVE_STRENGTH_FROM_SNR 1
+
 #define SNR_CALIB_UNKNOWN 0 // not probed yet (static zero initialization)
 #define SNR_CALIB_NONE 1    // no table entry, use the raw value
 #define SNR_CALIB_BCM3158_VU 2
@@ -2002,6 +2018,7 @@ void adapt_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
 #define SNR_CALIB_NIM_FBC 4
 
 static int8_t snr_calib[MAX_ADAPTERS];
+static int8_t strength_warned[MAX_ADAPTERS];
 
 // Matched in the same order as eDVBFrontend::calculateSignalQuality, as some
 // of these names are substrings of the others.
@@ -2101,6 +2118,20 @@ void get_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
             if (*snr != raw_snr)
                 LOGM("get_signal adapter %d: SNR calibrated %d -> %d", ad->id,
                      raw_snr, *snr);
+
+#if DERIVE_STRENGTH_FROM_SNR
+            // the driver reports no AGC for this front-end, see above
+            if (*strength == 0 && *snr > 0 && (*status & FE_HAS_LOCK)) {
+                if (!strength_warned[ad->id]) {
+                    strength_warned[ad->id] = 1;
+                    LOG("ad %d reports no signal strength while locked, "
+                        "deriving the reported level from the SNR "
+                        "(display fallback, the hardware provides no AGC)",
+                        ad->id);
+                }
+                *strength = *snr;
+            }
+#endif
         }
     }
 
