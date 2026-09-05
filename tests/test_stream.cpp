@@ -18,7 +18,24 @@
 
 #include <linux/dvb/frontend.h>
 #include <string.h>
+#include <sys/uio.h>
 #include <unistd.h>
+
+#ifndef DISABLE_SRT
+#include "srt.h"
+// Mock srt_send: interposes the libsrt symbol in this test binary so
+// flush_stream() can be exercised without a real SRT connection.
+static int mock_srt_fail = 0;
+static int mock_srt_calls = 0;
+extern "C" int srt_send(SRTSOCKET u, const char *buf, int len) {
+    (void)u;
+    (void)buf;
+    mock_srt_calls++;
+    if (mock_srt_fail)
+        return SRT_ERROR;
+    return len;
+}
+#endif
 
 int mock_adapter_tune(int aid, transponder *tp) { return 0; }
 
@@ -210,6 +227,58 @@ int test_setup_stream_unspecified_vs_empty_pids() {
     return 0;
 }
 
+#ifndef DISABLE_SRT
+extern int64_t bw;
+extern uint32_t writes, failed_writes;
+int flush_stream(streams *sid, struct iovec *iov, int iiov, int64_t ctime);
+
+int test_flush_stream_srt_accounts_bw() {
+    setup_test_env();
+
+    int s_id = streams_add();
+    ASSERT(s_id >= 0, "streams_add failed");
+    streams *sid = get_sid(s_id);
+    ASSERT(sid != NULL, "get_sid returned NULL");
+    sid->type = STREAM_RTSP_SRT;
+    sid->srt_sock = 12345;
+    sid->rsock = -1;
+    sid->rsock_id = -1;
+
+    // Larger than MAX_UDP_PACKET_SIZE to exercise multi-chunk accounting
+    char buf[10 * DVB_FRAME];
+    memset(buf, 0, sizeof(buf));
+    struct iovec iov[1];
+    iov[0].iov_base = buf;
+    iov[0].iov_len = sizeof(buf);
+
+    mock_srt_fail = 0;
+    mock_srt_calls = 0;
+    int64_t bw0 = bw;
+    uint32_t w0 = writes;
+    uint32_t sb0 = sid->sb, sp0 = sid->sp;
+
+    int rv = flush_stream(sid, iov, 1, 0);
+    ASSERT(rv == (int)sizeof(buf), "SRT flush_stream should return sent bytes");
+    ASSERT(mock_srt_calls > 1, "expected chunked srt_send calls");
+    ASSERT(bw == bw0 + (int64_t)sizeof(buf), "bw not updated for SRT send");
+    ASSERT(writes == w0 + 1, "writes not updated for SRT send");
+    ASSERT(sid->sb == sb0 + sizeof(buf), "stream sb not updated");
+    ASSERT(sid->sp == sp0 + 1, "stream sp not updated");
+
+    mock_srt_fail = 1;
+    int64_t bw1 = bw;
+    uint32_t fw1 = failed_writes;
+    sid->timeout = 0;
+    rv = flush_stream(sid, iov, 1, 0);
+    ASSERT(sid->timeout == 1, "timeout not set on SRT send failure");
+    ASSERT(failed_writes == fw1 + 1,
+           "failed_writes not updated on SRT failure");
+    ASSERT(bw == bw1, "bw should not change on failed SRT send");
+    mock_srt_fail = 0;
+    return 0;
+}
+#endif
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -223,6 +292,10 @@ int main() {
     TEST_FUNC(test_start_play_no_transport(),
               "test start_play returns error when transport is missing");
     TEST_FUNC(test_start_play_success(), "test start_play success under HTTP");
+#ifndef DISABLE_SRT
+    TEST_FUNC(test_flush_stream_srt_accounts_bw(),
+              "test SRT flush_stream updates bw counters");
+#endif
 
     fflush(stdout);
     free_all();
