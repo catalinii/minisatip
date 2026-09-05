@@ -753,10 +753,11 @@ int flush_stream(streams *sid, struct iovec *iov, int iiov, int64_t ctime) {
     if (sid->type == STREAM_RTSP_SRT) {
         // Send raw TS data over SRT, chunked to max MAX_UDP_PACKET_SIZE bytes
         // (7 * 188)
-        for (int i = 0; i < iiov; i++) {
+        int srt_failed = 0;
+        for (int i = 0; i < iiov && !srt_failed; i++) {
             const char *data = (const char *)iov[i].iov_base;
             int remaining = iov[i].iov_len;
-            while (remaining > 0) {
+            while (remaining > 0 && !srt_failed) {
                 int chunk = remaining > MAX_UDP_PACKET_SIZE
                                 ? MAX_UDP_PACKET_SIZE
                                 : remaining;
@@ -769,11 +770,16 @@ int flush_stream(streams *sid, struct iovec *iov, int iiov, int64_t ctime) {
                     LOG("SRT send failed for sid %d: %s", sid->sid,
                         srt_getlasterror_str());
                     sid->timeout = 1;
-                    goto srt_done;
+                    srt_failed = 1;
                 }
             }
         }
-    srt_done:;
+        if (rv > 0) {
+            bw += rv;
+            writes++;
+        } else if (srt_failed) {
+            failed_writes++;
+        }
     } else
 #endif
     {
