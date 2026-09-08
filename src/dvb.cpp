@@ -1979,6 +1979,98 @@ void adapt_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
          ad->id, *strength, strength_init, *snr, snr_init, *db, db_init);
 }
 
+// Tuner specific calibration of the raw legacy FE_READ_SNR value.
+//
+// The legacy DVB API does not define the scale nor the measurement point of
+// the value returned by FE_READ_SNR: every demod reports it in its own units,
+// so the raw reading cannot be turned into a percentage without knowing which
+// tuner produced it. Enigma2 keeps a per tuner table for exactly this purpose
+// in lib/dvb/frontend.cpp (eDVBFrontend::calculateSignalQuality); the entries
+// below mirror that table for the Broadcom FBC front ends so that minisatip
+// reports the same quality Enigma2 reports on the same hardware.
+//
+// Without this, a BCM45208/BCM45308 FBC tuner (Dreambox DM900/DM920) reports a
+// raw SNR that saturates around 4096 instead of 65535, which the generic
+// scaling below turns into a permanent ~6% reading.
+
+#define E2_SAT_MAX 1600 // eDVBFrontend::calculateSignalQuality default
+
+// Some front-ends report no signal strength at all: the BCM45208/BCM45308 FBC
+// modules return 0 from FE_READ_SIGNAL_STRENGTH even on a locked transponder,
+// and expose no DVBv5 statistics (FE_GET_PROPERTY succeeds but returns zero
+// stat layers). Enigma2 has no calibration entry for these front-ends either,
+// so the value is simply not available from the hardware.
+//
+// SAT>IP defines level 0 as "no signal", so reporting 0 for a tuner that is
+// locked and receiving makes clients believe the tuner is dead. When enabled
+// below, the level reported for such a front-end mirrors the (calibrated) SNR
+// instead, so that clients get an indication that follows reception rather
+// than a flat zero.
+//
+// This is a display fallback, NOT a measurement: the hardware provides no AGC
+// reading. Set to 0 to report the raw 0 instead.
+#define DERIVE_STRENGTH_FROM_SNR 1
+
+#define SNR_CALIB_UNKNOWN 0 // not probed yet (static zero initialization)
+#define SNR_CALIB_NONE 1    // no table entry, use the raw value
+#define SNR_CALIB_BCM3158_VU 2
+#define SNR_CALIB_BCM_FBC 3
+#define SNR_CALIB_NIM_FBC 4
+
+static int8_t snr_calib[MAX_ADAPTERS];
+static int8_t strength_warned[MAX_ADAPTERS];
+
+// Matched in the same order as eDVBFrontend::calculateSignalQuality, as some
+// of these names are substrings of the others.
+static int dvb_snr_calibration(const char *name) {
+    if (strstr(name, "Vuplus DVB-C NIM(BCM3158)"))
+        return SNR_CALIB_BCM3158_VU;
+    if (strstr(name, "BCM4506") || strstr(name, "BCM4505") ||
+        strstr(name, "BCM45208") || strstr(name, "BCM45308") ||
+        strstr(name, "BCM73625 (G3)") || strstr(name, "BCM3158"))
+        return SNR_CALIB_BCM_FBC;
+    if (strstr(name, "NIM(45208 FBC)") || strstr(name, "NIM(45308 FBC)") ||
+        strstr(name, "NIM(45308X FBC)"))
+        return SNR_CALIB_NIM_FBC;
+    return SNR_CALIB_NONE;
+}
+
+// converts a raw FE_READ_SNR reading into the 0 .. 65535 range get_signal()
+// is expected to return
+static uint16_t dvb_calibrate_snr(int calib, uint16_t raw) {
+    double snr = raw;
+    int64_t ret;
+
+    switch (calib) {
+    case SNR_CALIB_BCM3158_VU:
+        ret = (int64_t)(snr / 15.61);
+        break;
+
+    case SNR_CALIB_BCM_FBC:
+        ret = ((int64_t)raw * 100) >> 8;
+        break;
+
+    case SNR_CALIB_NIM_FBC:
+        ret = (int64_t)(snr < 57500
+                            ? (snr < 52500
+                                   ? (snr < 32200 ? 0.02640 * snr + 0.0
+                                                  : 0.02604 * snr + 11.55125)
+                                   : 0.01310 * snr + 661.55172)
+                            : 0.02826 * snr - 210.);
+        break;
+
+    default:
+        return raw;
+    }
+
+    if (ret < 0)
+        ret = 0;
+    if (ret >= E2_SAT_MAX)
+        return 65535;
+
+    return (uint16_t)(ret * 65535 / E2_SAT_MAX);
+}
+
 // returns the strength and SNR between 0 .. 65535
 
 void get_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
@@ -2009,6 +2101,37 @@ void get_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
         if (ad->fe > 0 && ioctl(ad->fe, FE_READ_SNR, snr) < 0) {
             LOG("ad %d ioctl fd %d FE_READ_SNR failed, error %d (%s)", ad->id,
                 ad->fe, errno, strerror(errno));
+        } else if (ad->force_tuner_signal == TUNER_FORCE_NO && ad->id >= 0 &&
+                   ad->id < MAX_ADAPTERS) {
+            // -M with % or # means the user calibrates manually, do not
+            // interfere in that case
+            uint16_t raw_snr = *snr;
+
+            if (snr_calib[ad->id] == SNR_CALIB_UNKNOWN) {
+                std::string name = dvb_name(ad->pa, ad->fe);
+                snr_calib[ad->id] = dvb_snr_calibration(name.c_str());
+                LOG("ad %d tuner '%s' uses SNR calibration %d", ad->id,
+                    name.c_str(), snr_calib[ad->id]);
+            }
+
+            *snr = dvb_calibrate_snr(snr_calib[ad->id], raw_snr);
+            if (*snr != raw_snr)
+                LOGM("get_signal adapter %d: SNR calibrated %d -> %d", ad->id,
+                     raw_snr, *snr);
+
+#if DERIVE_STRENGTH_FROM_SNR
+            // the driver reports no AGC for this front-end, see above
+            if (*strength == 0 && *snr > 0 && (*status & FE_HAS_LOCK)) {
+                if (!strength_warned[ad->id]) {
+                    strength_warned[ad->id] = 1;
+                    LOG("ad %d reports no signal strength while locked, "
+                        "deriving the reported level from the SNR "
+                        "(display fallback, the hardware provides no AGC)",
+                        ad->id);
+                }
+                *strength = *snr;
+            }
+#endif
         }
     }
 
