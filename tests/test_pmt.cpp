@@ -80,6 +80,11 @@ uint8_t cw_invalid[] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77};
 extern adapter *a[MAX_ADAPTERS];
 extern SCW *cws[MAX_CW];
 
+int is_ac3_es(unsigned char *es, int len);
+void pmt_add_descriptors(SPMT *pmt, unsigned char *pi, int len);
+void pmt_add_stream_pid_descriptors(SPMT *pmt, SStreamPid &sp,
+                                    unsigned char *es, int len);
+
 int test_descriptor_equality() {
     const uint8_t descr1_data[] = {0x09, 0x04, 0x0B, 0x00, 0x05, 0x73};
     descriptor_t descr1 = create_descriptor(descr1_data);
@@ -335,10 +340,152 @@ int test_emulate_add_all_pids() {
     return 0;
 }
 
+int test_truncated_descriptors() {
+    SPMT pmt = {};
+    SStreamPid sp;
+    // ISO_639_language, then one that claims 20 bytes with none left
+    uint8_t src[] = {0x0A, 0x04, 'd', 'e', 'u', 0x00, 0x52, 0x14};
+    uint8_t *desc = (uint8_t *)malloc(sizeof(src));
+
+    memcpy(desc, src, sizeof(src));
+    sp.pid = 34;
+    pmt_add_stream_pid_descriptors(&pmt, sp, desc, sizeof(src));
+    ASSERT(sp.descriptors.size() == 1,
+           "a truncated ES descriptor was accepted");
+
+    pmt_add_descriptors(&pmt, desc, sizeof(src));
+    ASSERT(pmt.descriptors.size() == 1,
+           "a truncated program descriptor was accepted");
+
+    // The same length, used to classify a stream rather than to walk a loop
+    uint8_t ac3[] = {0x6A, 0x14};
+    ASSERT(!is_ac3_es(ac3, sizeof(ac3)),
+           "a truncated AC-3 descriptor was accepted");
+
+    free(desc);
+    return 0;
+}
+
+// A CA descriptor with no room for a CAID must not be registered as one.
+int test_short_ca_descriptor() {
+    SPMT pmt = {};
+    SStreamPid sp;
+    uint8_t src[] = {0x09, 0x02, 0x09, 0x8D};
+    uint8_t *desc = (uint8_t *)malloc(sizeof(src));
+
+    memcpy(desc, src, sizeof(src));
+    sp.pid = 34;
+    pmt_add_stream_pid_descriptors(&pmt, sp, desc, sizeof(src));
+    pmt_add_descriptors(&pmt, desc, sizeof(src));
+    ASSERT(pmt.caids == 0, "a CA descriptor shorter than 4 bytes made a CAID");
+
+    free(desc);
+    return 0;
+}
+
+// A PMT of one stream, with program_info_length and ES_info_length as given
+// rather than as they should be.
+static int build_pmt_section(uint8_t *s, int pi_len, int es_len) {
+    uint8_t *b = s;
+    *b++ = 0x02;
+    b += 2; // section_length, filled in below
+    copy16(b, 0, 0x0083);
+    b += 2;
+    *b++ = 0xC1; // version 0, current
+    *b++ = 0;    // section number
+    *b++ = 0;    // last section number
+    copy16(b, 0, 0xE000 | 1279);
+    b += 2;
+    copy16(b, 0, 0xF000 | pi_len);
+    b += 2;
+    *b++ = 6; // an AC-3 candidate, so es_len is followed into is_ac3_es()
+    copy16(b, 0, 0xE000 | 1283);
+    b += 2;
+    copy16(b, 0, 0xF000 | es_len);
+    b += 2;
+    copy16(s, 1, 0xB000 | ((b - s) - 3 + 4));
+    copy32(b, 0, crc_32(s, b - s));
+    return (b - s) + 4;
+}
+
+// process_pmt() may read and record only what the section really contains.
+int test_pmt_section_bounds() {
+    adapter *ad = adapter_alloc();
+    SPMT pmt = {};
+    SFilter f = {};
+    uint8_t s[64], *sec;
+    int len;
+
+    a[0] = ad;
+    ad->id = 0;
+    ad->enabled = 1;
+    filters[0] = &f;
+    f.id = 0;
+    f.enabled = 1;
+    f.adapter = 0;
+    f.pid = 100;
+    f.master_filter = 0;
+    f.next_filter = -1; // or the filter list walks onto itself
+    pmts[0] = &pmt;
+    npmts = 1;
+    pmt.id = 0;
+    pmt.enabled = 1;
+    pmt.adapter = 0;
+    pmt.master_pmt = 0;
+    pmt.pid = 100;
+    pmt.version = -1;
+    pmt.state = PMT_STOPPED;
+    mark_pid_add(0, ad->id, 100);
+    update_pids(ad->id);
+
+    // A section too short to hold the header fields that are read from it
+    sec = (uint8_t *)malloc(6);
+    memset(sec, 0, 6);
+    sec[0] = 0x02;
+    sec[2] = 3;
+    ASSERT(process_pmt(0, sec, 6, &pmt) == 0 && pmt.version == -1,
+           "a section shorter than a PMT header was parsed");
+    free(sec);
+
+    // Sized exactly, so that a read past the section is caught as well
+    len = build_pmt_section(s, 10, 0);
+    sec = (uint8_t *)malloc(len);
+    memcpy(sec, s, len);
+    ASSERT(process_pmt(0, sec, len, &pmt) == 0 && pmt.version == -1,
+           "a program info length past the end of the section was parsed");
+    free(sec);
+
+    len = build_pmt_section(s, 0, 40);
+    sec = (uint8_t *)malloc(len);
+    memcpy(sec, s, len);
+    process_pmt(0, sec, len, &pmt);
+    // Only the entry the independent PCR pid adds after the loop
+    ASSERT(pmt.stream_pids.size() == 1 && pmt.stream_pids[0].type == 0,
+           "a stream whose descriptors are not in the section was recorded");
+    free(sec);
+
+    ad->active_pmts = 0;
+    filters[0] = NULL;
+    pmts[0] = NULL;
+    npmts = 0;
+    free(ad->buf);
+    delete ad;
+    a[0] = NULL;
+    return 0;
+}
+
+// Every stream keeps its descriptors, but only audio and video register their
+
 int main() {
     opts.log = 255;
     opts.debug = 255;
     strcpy(thread_info[thread_index].thread_name, "test_pmt");
+    TEST_FUNC(test_pmt_section_bounds(),
+              "testing the PMT section lengths are validated");
+    TEST_FUNC(test_truncated_descriptors(),
+              "testing truncated descriptor loops are not followed");
+    TEST_FUNC(test_short_ca_descriptor(),
+              "testing a CA descriptor without a CAID is not registered");
     TEST_FUNC(test_descriptor_equality(),
               "testing descriptor equality operator");
     TEST_FUNC(test_descriptor_caid_capid_getters(),

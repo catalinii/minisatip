@@ -1698,8 +1698,11 @@ int pmt_caid_exist(SPMT *pmt, uint16_t caid, uint16_t capid) {
 
 int is_ac3_es(unsigned char *es, int len) {
     int i, es_len, isAC3 = 0;
-    for (i = 0; i < len; i += es_len) {
+    for (i = 0; i + 1 < len; i += es_len) {
         es_len = es[i + 1] + 2;
+        // A descriptor whose body is not there is not one to classify from
+        if (es_len > len - i)
+            break;
         if (es[i] == 0x6A || es[i] == 0x7A)
             isAC3 = 1;
     }
@@ -1756,6 +1759,11 @@ void pmt_add_descriptors(SPMT *pmt, unsigned char *pi, int len) {
     int pi_len;
 
     for (int i = 0; i < len; i += pi_len + 2) {
+        // A length that runs past the section would read foreign memory
+        if (len - i < 2 || pi[i + 1] > len - i - 2) {
+            LOG("PMT %d has a truncated program descriptor at %d", pmt->id, i);
+            return;
+        }
         pi_len = pi[i + 1];
 
         // Store all descriptors (skipping already existing)
@@ -1770,8 +1778,10 @@ void pmt_add_descriptors(SPMT *pmt, unsigned char *pi, int len) {
 
         pmt->descriptors.push_back(d);
 
-        // Handle CA descriptors separately
-        if (d.is_ca_descriptor()) {
+        // Handle CA descriptors separately. Below four bytes there is no
+        // CAID and no CA pid to read, and the private data length would be
+        // negative.
+        if (d.is_ca_descriptor() && pi_len >= 4) {
             int caid = pi[i + 2] * 256 + pi[i + 3];
             int capid = (pi[i + 4] & 0x1F) * 256 + pi[i + 5];
             pmt_add_caid(pmt, caid, capid, pi + i + 6, pi_len - 4);
@@ -1784,6 +1794,12 @@ void pmt_add_stream_pid_descriptors(SPMT *pmt, SStreamPid &sp,
     int es_len;
 
     for (int i = 0; i < len; i += es_len + 2) {
+        // A length that runs past the section would read foreign memory
+        if (len - i < 2 || es[i + 1] > len - i - 2) {
+            LOG("PMT %d pid %d has a truncated ES descriptor at %d", pmt->id,
+                sp.pid, i);
+            return;
+        }
         es_len = es[i + 1];
 
         descriptor_t d = create_descriptor(es + i);
@@ -1797,8 +1813,10 @@ void pmt_add_stream_pid_descriptors(SPMT *pmt, SStreamPid &sp,
 
         sp.descriptors.push_back(d);
 
-        // Handle CA descriptors separately
-        if (d.is_ca_descriptor()) {
+        // Handle CA descriptors separately. Below four bytes there is no
+        // CAID and no CA pid to read, and the private data length would be
+        // negative.
+        if (d.is_ca_descriptor() && es_len >= 4) {
             int caid = es[i + 2] * 256 + es[i + 3];
             int capid = (es[i + 4] & 0x1F) * 256 + es[i + 5];
             pmt_add_caid(pmt, caid, capid, es + i + 6, es_len - 4);
@@ -1846,7 +1864,9 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     adapter *ad = NULL;
     SPMT *pmt = (SPMT *)opaque;
 
-    if (b[0] != 2)
+    // Twelve bytes of header and four of CRC: below that the fields read here
+    // are not in the section at all
+    if (b[0] != 2 || len < 16)
         return 0;
 
     f = get_filter(filter);
@@ -1854,6 +1874,16 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         LOG_AND_RETURN(0, "%s: filter %d not found", __FUNCTION__, filter);
 
     pid = f->pid;
+    pmt_len = ((b[1] & 0xF) << 8) + b[2];
+    pi_len = ((b[10] & 0xF) << 8) + b[11];
+    // Before anything is changed, because stop_pmt() below cannot be undone.
+    // The program info ends where the first stream begins, and the streams end
+    // before the CRC.
+    if (pi_len > pmt_len - 13)
+        LOG_AND_RETURN(0,
+                       "PMT pid %d: a program info length of %d does not fit "
+                       "a section of %d",
+                       pid, pi_len, pmt_len);
     ver = (b[5] & 0x3e) >> 1;
     sid = b[3] * 256 + b[4];
 
@@ -1884,8 +1914,6 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     if (!(p = find_pid(ad->id, pid)))
         return -1;
 
-    pmt_len = ((b[1] & 0xF) << 8) + b[2];
-    pi_len = ((b[10] & 0xF) << 8) + b[11];
     pcr_pid = ((b[8] & 0x1F) << 8) + b[9];
 
     pmt->sid = sid;
@@ -1907,13 +1935,20 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     pmt->stream_pids.clear();
 
     // Add PMT level desciptors from program info
-    if (pi_len > 0 && pi_len < pmt_len)
+    if (pi_len > 0)
         pmt_add_descriptors(pmt, pi, pi_len);
 
     es_len = 0;
-    for (i = 9 + pi_len; i < pmt_len - 4; i += (es_len) + 5) // reading streams
+    for (i = 9 + pi_len; i + 5 <= pmt_len - 4;
+         i += (es_len) + 5) // reading streams
     {
         es_len = (pmt_b[i + 3] & 0xF) * 256 + pmt_b[i + 4];
+        // Before es_len is used to read the descriptors or to record a stream
+        if (es_len > pmt_len - 4 - i - 5) {
+            LOGM("pmt processing complete, es_len + i %d, len %d, es_len %d",
+                 es_len + i, pmt_len, es_len);
+            break;
+        }
         stype = pmt_b[i];
         spid = (pmt_b[i + 1] & 0x1F) * 256 + pmt_b[i + 2];
         isAC3 = 0;
@@ -1937,12 +1972,6 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
             "caids %d",
             pid, spid, spid, stype, isAC3 ? " [AC3]" : "", es_len, i,
             pmt->caids);
-
-        if ((es_len + i + 5 > pmt_len) || (es_len < 0)) {
-            LOGM("pmt processing complete, es_len + i %d, len %d, es_len %d",
-                 es_len + i, pmt_len, es_len);
-            break;
-        }
 
         if (!is_audio && !is_video)
             continue;
