@@ -114,10 +114,10 @@ typedef struct descriptor {
 } descriptor_t;
 
 typedef struct struct_stream_pid {
+    // The stream_type as broadcast. Zero is not one: it marks the entry that
+    // carries a PCR pid of its own, which is not an elementary stream.
     int type;
     int pid;
-    bool is_audio;
-    bool is_video;
     std::vector<descriptor_t> descriptors;
 } SStreamPid;
 
@@ -241,8 +241,7 @@ int wait_pusi(adapter *ad, int len);
 int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf, int sca_id);
 void free_filters();
 void stop_pmt(SPMT *pmt, adapter *ad);
-int pmt_add_stream_pid(SPMT *pmt, int pid, int type, bool is_audio,
-                       bool is_video);
+int pmt_add_stream_pid(SPMT *pmt, int pid, int type);
 void emulate_add_all_pids(adapter *ad);
 void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid, uint8_t *data,
                   int len);

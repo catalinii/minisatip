@@ -764,15 +764,32 @@ void disable_cws_for_all_pmts(ca_device_t *d) {
 
 int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
                   int added_only, int ca_id) {
-    int pos = 0;
+    // Every stream is given the same CA descriptors, so they are built once
+    uint8_t ca_desc[MAX_CAID * (6 + 256)];
+    int pos = 0, ca_len = 0;
+
+    if (pmt->caids)
+        ca_len = pmt_add_ca_descriptor(pmt, ca_desc, ca_id);
+
     for (const auto &stream_pid : pmt->stream_pids) {
         if (added_only && !find_pid(pmt->adapter, stream_pid.pid)) {
             LOGM("%s: skipping pmt %d (ad %d) pid %d from CAPMT", __FUNCTION__,
                  pmt->id, pmt->adapter, stream_pid.pid);
             continue;
         }
-        if (!stream_pid.is_audio && !stream_pid.is_video)
-            continue;
+        if (!stream_pid.type)
+            continue; // a PCR pid of its own, not an elementary stream
+
+        // stream_type, pid and ES_info_length, then the cmd_id and the
+        // descriptors. A CAPMT that does not fit is truncated here rather
+        // than written past the buffer it was given.
+        int need = 5 + (pmt->caids ? 1 + ca_len : 0);
+        if (pos + need > len)
+            LOG_AND_RETURN(pos,
+                           "%s: pmt %d (ad %d) does not fit the CAPMT, %d "
+                           "bytes left of %d",
+                           __FUNCTION__, pmt->id, pmt->adapter, len - pos, len);
+
         capmt[pos++] = stream_pid.type;
         copy16(capmt, pos, stream_pid.pid);
         pos += 2;
@@ -783,7 +800,8 @@ int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
         // append the stream descriptors
         if (pmt->caids) {
             capmt[pos++] = cmd_id;
-            pi_len = pmt_add_ca_descriptor(pmt, capmt + pos, ca_id);
+            memcpy(capmt + pos, ca_desc, ca_len);
+            pi_len = ca_len;
             pos += pi_len;
             copy16(capmt, pi_len_pos, pi_len + 1);
         }

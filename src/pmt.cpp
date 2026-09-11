@@ -1023,9 +1023,10 @@ void start_active_pmts(adapter *ad) {
         int first = 0;
         int pmt_started = 0;
         for (const auto &stream_pid : pmt->stream_pids) {
-            // for all audio and video streams start the PMT containing them
-            if ((stream_pid.is_audio || stream_pid.is_video) &&
-                pids[stream_pid.pid] && pmt->id == pmt->master_pmt) {
+            // a requested stream of this service starts the PMT that carries
+            // it; the entry of a PCR pid of its own is not one
+            if (stream_pid.type && pids[stream_pid.pid] &&
+                pmt->id == pmt->master_pmt) {
                 is_active = 1;
 #ifndef DISABLE_TABLES
                 if (!first) {
@@ -1834,8 +1835,7 @@ int get_master_pmt_for_pid(adapter *ad, int pid) {
                    ad->id, pmt->id, pmt->stream_pids.size());
             for (const auto &stream_pid : pmt->stream_pids) {
                 DEBUGM("comparing with pid %d", stream_pid.pid);
-                if (stream_pid.pid == pid &&
-                    (stream_pid.is_video || stream_pid.is_audio)) {
+                if (stream_pid.pid == pid && stream_pid.type) {
                     LOGM("%s: ad %d found pid %d in master pmt %d",
                          __FUNCTION__, ad->id, pid, pmt->master_pmt);
                     return pmt->master_pmt;
@@ -1847,10 +1847,8 @@ int get_master_pmt_for_pid(adapter *ad, int pid) {
     return -1;
 }
 
-int pmt_add_stream_pid(SPMT *pmt, int pid, int type, bool is_audio,
-                       bool is_video) {
-    pmt->stream_pids.push_back(
-        {.type = type, .pid = pid, .is_audio = is_audio, .is_video = is_video});
+int pmt_add_stream_pid(SPMT *pmt, int pid, int type) {
+    pmt->stream_pids.push_back({.type = type, .pid = pid});
 
     return pmt->stream_pids.size() - 1;
 }
@@ -1959,12 +1957,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         if (pcr_pid == spid)
             pcr_pid = 0;
 
-        bool is_video =
-            (stype == 2) || (stype == 27) || (stype == 36) || (stype == 15);
-        bool is_audio = isAC3 || (stype == 3) || (stype == 4) || (stype == 17);
-
-        int stream_pid_id =
-            pmt_add_stream_pid(pmt, spid, stype, is_audio, is_video);
+        int stream_pid_id = pmt_add_stream_pid(pmt, spid, stype);
         int opmt = get_master_pmt_for_pid(ad, spid);
 
         LOG("PMT pid %d - stream pid %04X (%d), type %d%s, es_len %d, pos "
@@ -1973,10 +1966,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
             pid, spid, spid, stype, isAC3 ? " [AC3]" : "", es_len, i,
             pmt->caids);
 
-        if (!is_audio && !is_video)
-            continue;
-
-        // Add stream-level descriptors from elementary stream info
+        // Every stream, so that the parsed PMT describes what was broadcast
         if (stream_pid_id >= 0)
             pmt_add_stream_pid_descriptors(pmt, pmt->stream_pids[stream_pid_id],
                                            pmt_b + i + 5, es_len);
@@ -1988,7 +1978,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     }
     // Add the PCR pid if it's independent
     if (pcr_pid > 0 && pcr_pid < 8191)
-        pmt_add_stream_pid(pmt, pcr_pid, 0, false, false);
+        pmt_add_stream_pid(pmt, pcr_pid, 0);
 
     SPMT *master = get_pmt(pmt->master_pmt);
     if (pmt->caids && master && master != pmt) {

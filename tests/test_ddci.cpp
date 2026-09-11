@@ -78,8 +78,8 @@ SPMT *create_pmt(int ad, int sid, int pid1, int pid2, int caid1, int caid2) {
     int pmt_id = pmt_add(ad, sid, 1000);
     SPMT *pmt = get_pmt(pmt_id);
     pmt->pid = pmt_id * 1000;
-    pmt_add_stream_pid(pmt, pid1, 2, false, true);
-    pmt_add_stream_pid(pmt, pid2, 6, true, false);
+    pmt_add_stream_pid(pmt, pid1, 2);
+    pmt_add_stream_pid(pmt, pid2, 6);
     pmt_add_caid(pmt, caid1, caid1, NULL, 0);
     pmt_add_caid(pmt, caid2, caid2, NULL, 0);
     // Add a CA descriptor to the second stream PID so we can test that it
@@ -199,7 +199,7 @@ int test_add_del_pmt() {
     c->locked = 1;
     c->ddci[c->ddcis++].ddci = 1;
 
-    pmt_add_stream_pid(pmt2, 0xFF, 2, false, true);
+    pmt_add_stream_pid(pmt2, 0xFF, 2);
     pmt_add_caid(pmt2, 0x502, 0xFE, NULL, 0);
 
     ASSERT(ddci_process_pmt(&ad, pmt2) == TABLES_RESULT_OK,

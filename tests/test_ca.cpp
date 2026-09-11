@@ -82,8 +82,8 @@ int test_multiple_pmt() {
 int test_create_capmt_single_clear() {
     int pmt_id = pmt_add(0, 0x100, 0x101);
     SPMT *pmt = get_pmt(pmt_id);
-    pmt_add_stream_pid(pmt, 0x501, 2, false, true);
-    pmt_add_stream_pid(pmt, 0x502, 3, true, false);
+    pmt_add_stream_pid(pmt, 0x501, 2);
+    pmt_add_stream_pid(pmt, 0x502, 3);
 
     SCAPMT scampt = {.pmt_id = pmt->id,
                      .other_id = PMT_INVALID,
@@ -116,8 +116,8 @@ int test_create_capmt_single_pmt_scrambled() {
     int pmt_id = pmt_add(0, 0x100, 0x101);
     SPMT *pmt = get_pmt(pmt_id);
     pmt_add_caid(pmt, 0x0B00, 0x573, nullptr, 0);
-    pmt_add_stream_pid(pmt, 0x501, 2, false, true);
-    pmt_add_stream_pid(pmt, 0x502, 3, true, false);
+    pmt_add_stream_pid(pmt, 0x501, 2);
+    pmt_add_stream_pid(pmt, 0x502, 3);
 
     SCAPMT scampt = {.pmt_id = pmt->id,
                      .other_id = PMT_INVALID,
@@ -148,14 +148,14 @@ int test_create_capmt_multiple_pmt_scrambled() {
     int pmt_id = pmt_add(0, 0x100, 0x101);
     SPMT *pmt = get_pmt(pmt_id);
     pmt_add_caid(pmt, 0x0B00, 0x573, nullptr, 0);
-    pmt_add_stream_pid(pmt, 0x501, 2, false, true);
-    pmt_add_stream_pid(pmt, 0x502, 3, true, false);
+    pmt_add_stream_pid(pmt, 0x501, 2);
+    pmt_add_stream_pid(pmt, 0x502, 3);
 
     pmt_id = pmt_add(0, 0x200, 0x201);
     SPMT *other = get_pmt(pmt_id);
     pmt_add_caid(other, 0x0B01, 0xABC, nullptr, 0);
-    pmt_add_stream_pid(other, 0x601, 2, false, true);
-    pmt_add_stream_pid(other, 0x602, 3, true, false);
+    pmt_add_stream_pid(other, 0x601, 2);
+    pmt_add_stream_pid(other, 0x602, 3);
 
     SCAPMT scampt = {
         .pmt_id = pmt->id, .other_id = other->id, .version = 1, .sid = 0x1234};
@@ -190,7 +190,7 @@ int test_create_capmt_multiple_pmt_scrambled() {
 int test_create_capmt_different_listmgmt() {
     int pmt_id = pmt_add(0, 0x100, 0x101);
     SPMT *pmt = get_pmt(pmt_id);
-    pmt_add_stream_pid(pmt, 0x501, 2, false, true);
+    pmt_add_stream_pid(pmt, 0x501, 2);
 
     SCAPMT scampt = {.pmt_id = pmt->id,
                      .other_id = PMT_INVALID,
@@ -237,7 +237,7 @@ int test_create_capmt_different_cmd_ids() {
     int pmt_id = pmt_add(0, 0x100, 0x101);
     SPMT *pmt = get_pmt(pmt_id);
     pmt_add_caid(pmt, 0x0B00, 0x573, nullptr, 0);
-    pmt_add_stream_pid(pmt, 0x501, 2, false, true);
+    pmt_add_stream_pid(pmt, 0x501, 2);
 
     SCAPMT scampt = {.pmt_id = pmt->id,
                      .other_id = PMT_INVALID,
@@ -288,7 +288,7 @@ int test_create_capmt_invalid_pmt() {
 int test_create_capmt_max_version() {
     int pmt_id = pmt_add(0, 0x100, 0x101);
     SPMT *pmt = get_pmt(pmt_id);
-    pmt_add_stream_pid(pmt, 0x501, 2, false, true);
+    pmt_add_stream_pid(pmt, 0x501, 2);
 
     SCAPMT scampt = {.pmt_id = pmt->id,
                      .other_id = PMT_INVALID,
@@ -309,7 +309,7 @@ int test_create_capmt_max_version() {
 int test_create_capmt_large_sid() {
     int pmt_id = pmt_add(0, 0x100, 0x101);
     SPMT *pmt = get_pmt(pmt_id);
-    pmt_add_stream_pid(pmt, 0x501, 2, false, true);
+    pmt_add_stream_pid(pmt, 0x501, 2);
 
     SCAPMT scampt = {.pmt_id = pmt->id,
                      .other_id = PMT_INVALID,
@@ -334,16 +334,16 @@ int test_create_capmt_both_pmt_and_other_with_caids() {
     for (int i = 0; i < 8; i++) {
         pmt_add_caid(pmt, 0x0B00 + i, 0x570 + i, nullptr, 0);
     }
-    pmt_add_stream_pid(pmt, 0x501, 2, false, true);
-    pmt_add_stream_pid(pmt, 0x502, 3, true, false);
+    pmt_add_stream_pid(pmt, 0x501, 2);
+    pmt_add_stream_pid(pmt, 0x502, 3);
 
     int other_pmt_id = pmt_add(0, 0x200, 0x201);
     SPMT *other = get_pmt(other_pmt_id);
     for (int i = 0; i < 8; i++) {
         pmt_add_caid(other, 0x0C00 + i, 0x670 + i, nullptr, 0);
     }
-    pmt_add_stream_pid(other, 0x601, 2, false, true);
-    pmt_add_stream_pid(other, 0x602, 3, true, false);
+    pmt_add_stream_pid(other, 0x601, 2);
+    pmt_add_stream_pid(other, 0x602, 3);
 
     SCAPMT scampt = {
         .pmt_id = pmt->id, .other_id = other->id, .version = 1, .sid = 0x1234};
@@ -374,8 +374,7 @@ int test_create_capmt_both_pmt_and_other_many_streams() {
         pmt_add_caid(pmt, 0x0B00 + i, 0x570 + i, nullptr, 0);
     }
     for (int i = 0; i < 8; i++) {
-        pmt_add_stream_pid(pmt, 0x500 + i, (i % 2 == 0) ? 2 : 3, (i % 2 == 1),
-                           (i % 2 == 0));
+        pmt_add_stream_pid(pmt, 0x500 + i, (i % 2 == 0) ? 2 : 3);
     }
 
     int other_pmt_id = pmt_add(0, 0x200, 0x201);
@@ -384,8 +383,7 @@ int test_create_capmt_both_pmt_and_other_many_streams() {
         pmt_add_caid(other, 0x0C00 + i, 0x670 + i, nullptr, 0);
     }
     for (int i = 0; i < 8; i++) {
-        pmt_add_stream_pid(other, 0x600 + i, (i % 2 == 0) ? 2 : 3, (i % 2 == 1),
-                           (i % 2 == 0));
+        pmt_add_stream_pid(other, 0x600 + i, (i % 2 == 0) ? 2 : 3);
     }
 
     SCAPMT scampt = {
@@ -415,8 +413,7 @@ int test_create_capmt_size_near_limit() {
     }
     // Add 11 streams to primary PMT
     for (int i = 0; i < 11; i++) {
-        pmt_add_stream_pid(pmt, 0x500 + i, (i % 2 == 0) ? 2 : 3, (i % 2 == 1),
-                           (i % 2 == 0));
+        pmt_add_stream_pid(pmt, 0x500 + i, (i % 2 == 0) ? 2 : 3);
     }
 
     int other_pmt_id = pmt_add(0, 0x200, 0x201);
@@ -427,8 +424,7 @@ int test_create_capmt_size_near_limit() {
     }
     // Add 11 streams to other PMT
     for (int i = 0; i < 11; i++) {
-        pmt_add_stream_pid(other, 0x600 + i, (i % 2 == 0) ? 2 : 3, (i % 2 == 1),
-                           (i % 2 == 0));
+        pmt_add_stream_pid(other, 0x600 + i, (i % 2 == 0) ? 2 : 3);
     }
 
     SCAPMT scampt = {
@@ -530,6 +526,34 @@ int test_set_ca_channels_parsing() {
     return 0;
 }
 
+// A CAPMT describes the service, not just its audio and video: a subtitle
+// stream belongs in it, the entry that only carries a PCR pid does not.
+int test_create_capmt_all_stream_types() {
+    int pmt_id = pmt_add(0, 0x100, 0x101);
+    SPMT *pmt = get_pmt(pmt_id);
+    pmt_add_stream_pid(pmt, 0x501, 2);  // video
+    pmt_add_stream_pid(pmt, 0x503, 6);  // subtitles
+    pmt_add_stream_pid(pmt, 0x504, 0);  // a PCR pid of its own
+
+    SCAPMT scampt = {.pmt_id = pmt->id,
+                     .other_id = PMT_INVALID,
+                     .version = 1,
+                     .sid = 0x1234};
+
+    uint8_t capmt[1500];
+    int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
+                           CMD_ID_OK_DESCRAMBLING, 0);
+
+    ASSERT(len > 0, "create_capmt failed");
+    hexdump("CAPMT: ", capmt, len);
+    // 6 bytes of header, then 5 per stream with no CAIDs to add
+    ASSERT(len == 6 + 2 * 5, "the CAPMT does not hold exactly two streams");
+    ASSERT(capmt[6] == 2, "the video stream is missing from the CAPMT");
+    ASSERT(capmt[11] == 6, "the subtitle stream is missing from the CAPMT");
+
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -548,6 +572,8 @@ int main() {
     TEST_FUNC(test_multiple_pmt(), "testing CA multiple pmt");
     memset(d.capmt, -1, sizeof(d.capmt));
     TEST_FUNC(test_get_authdata_filename(), "testing filename helper function");
+    TEST_FUNC(test_create_capmt_all_stream_types(),
+              "testing the CAPMT carries every elementary stream");
     TEST_FUNC(test_create_capmt_single_clear(),
               "testing create_capmt with single PMT without CA descriptors");
     TEST_FUNC(test_create_capmt_single_pmt_scrambled(),

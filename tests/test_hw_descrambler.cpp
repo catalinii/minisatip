@@ -88,7 +88,7 @@ static int test_hw_descrambler_disabled_when_opts_enigma_zero() {
     int pmt_id = pmt_add(0, 100, 1000);
     SPMT *pmt = get_pmt(pmt_id);
     ASSERT(pmt != nullptr, "pmt_add failed");
-    pmt_add_stream_pid(pmt, 1001, 2, false, true);
+    pmt_add_stream_pid(pmt, 1001, 2);
 
     SCW cw{};
     cw.id = 10;
@@ -120,19 +120,19 @@ static int test_multi_channel_slot_allocation() {
     // Add PMT 100 (HBO HD)
     int pmt_id1 = pmt_add(0, 100, 1000);
     SPMT *pmt1 = get_pmt(pmt_id1);
-    pmt_add_stream_pid(pmt1, 1001, 27, false, true); // Video PID
-    pmt_add_stream_pid(pmt1, 1002, 3, false, true);  // Audio PID
+    pmt_add_stream_pid(pmt1, 1001, 27); // Video PID
+    pmt_add_stream_pid(pmt1, 1002, 3);  // Audio PID
 
     // Add PMT 200 (FILM NOW HD)
     int pmt_id2 = pmt_add(0, 200, 2000);
     SPMT *pmt2 = get_pmt(pmt_id2);
-    pmt_add_stream_pid(pmt2, 2001, 27, false, true); // Video PID
-    pmt_add_stream_pid(pmt2, 2002, 4, false, true);  // Audio PID
+    pmt_add_stream_pid(pmt2, 2001, 27); // Video PID
+    pmt_add_stream_pid(pmt2, 2002, 4);  // Audio PID
 
     // Add PMT 300 (AXN White)
     int pmt_id3 = pmt_add(0, 300, 3000);
     SPMT *pmt3 = get_pmt(pmt_id3);
-    pmt_add_stream_pid(pmt3, 3001, 2, false, true);
+    pmt_add_stream_pid(pmt3, 3001, 2);
 
     // Create EVEN and ODD CWs for PMT 1
     SCW cw1_even{}, cw1_odd{};
@@ -174,7 +174,7 @@ static int test_multi_channel_slot_allocation() {
     // Re-allocate PMT 4 (Nickelodeon starts)
     int pmt_id4 = pmt_add(0, 400, 4000);
     SPMT *pmt4 = get_pmt(pmt_id4);
-    pmt_add_stream_pid(pmt4, 4001, 2, false, true);
+    pmt_add_stream_pid(pmt4, 4001, 2);
 
     SCW cw4{};
     cw4.id = 5;
@@ -213,8 +213,8 @@ static int test_aes128_key_programming() {
 
     int pmt_id = pmt_add(0, 680, 6800);
     SPMT *pmt = get_pmt(pmt_id);
-    pmt_add_stream_pid(pmt, 6801, 36, false, true); // 4K HEVC Video PID
-    pmt_add_stream_pid(pmt, 6802, 15, false, true); // AAC Audio PID
+    pmt_add_stream_pid(pmt, 6801, 36); // 4K HEVC Video PID
+    pmt_add_stream_pid(pmt, 6802, 15); // AAC Audio PID
 
     // 16-byte AES Key and IV
     uint8_t aes_key[16] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
