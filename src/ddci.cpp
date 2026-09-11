@@ -756,18 +756,30 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
 
         // ES info length
         int es_info_len = 0;
-        for (const auto &d : stream_pid.descriptors) {
-            es_info_len += d.len + 2;
+        for (const auto &desc : stream_pid.descriptors) {
+            es_info_len += desc.len + 2;
         }
         copy16(b, 0, es_info_len);
         b += 2;
 
         // Descriptors
-        for (const auto &d : stream_pid.descriptors) {
-            *b++ = d.type;
-            *b++ = d.len;
-            memcpy(b, d.data.data(), d.len);
-            b += d.len;
+        for (const auto &desc : stream_pid.descriptors) {
+            *b++ = desc.type;
+            *b++ = desc.len;
+            memcpy(b, desc.data.data(), desc.len);
+            // The ECM pid of a CA descriptor on a stream is a pid of this
+            // adapter like the program level ones and is mapped the same way,
+            // or the CAM is pointed at a pid that does not reach it
+            if (desc.is_ca_descriptor() && desc.len >= 4) {
+                int capid = safe_get_pid_mapping(
+                    d, pmt->adapter, desc.get_ca_descriptor_capid());
+                b[2] = (b[2] & 0xE0) | ((capid >> 8) & 0x1F);
+                b[3] = capid & 0xFF;
+                LOGM("%s: pmt %d stream %d caid %04X mapped ECM pid %04X",
+                     __FUNCTION__, pmt->id, stream_pid.pid,
+                     desc.get_ca_descriptor_caid(), capid);
+            }
+            b += desc.len;
         }
 
         LOGM("%s: pmt %d added pid %04X, type %02X, es_len %d", __FUNCTION__,

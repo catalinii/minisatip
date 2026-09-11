@@ -496,6 +496,11 @@ int test_create_pmt() {
     int capid = 0x100;
     int dpid = add_pid_mapping_table(0, pid, 0, &d, 0);
     int dcapid = add_pid_mapping_table(0, capid, 0, &d, 0);
+    // The ECM pid of the CA descriptor that sits on the second stream. Another
+    // adapter holds 0x0573 on this DDCI already, so the mapping has to move it
+    // and a pid that was not mapped is visible as such.
+    add_pid_mapping_table(1, 0x0573, 0, &d, 0);
+    int descapid = add_pid_mapping_table(0, 0x0573, 0, &d, 0);
     f.flags = FILTER_CRC;
     f.id = 0;
     f.adapter = 0;
@@ -543,7 +548,10 @@ int test_create_pmt() {
     int ca_descriptor_caid = packet[41] * 256 + packet[42];
     int ca_descriptor_capid = (packet[43] & 0x1F) * 256 + packet[44];
     ASSERT_EQUAL(0x0B00, ca_descriptor_caid, "descriptor CA system mismatch");
-    ASSERT_EQUAL(0x0573, ca_descriptor_capid, "descriptor CA PID mismatch");
+    // A stream level ECM pid is mapped like a program level one, or it names
+    // a pid of the source adapter that the CAM never sees
+    ASSERT_EQUAL(descapid, ca_descriptor_capid,
+                 "descriptor CA PID was not mapped");
 
     SPMT *new_pmt = get_pmt(pmt_add(0, 200, 200));
     ad.id = 0;
