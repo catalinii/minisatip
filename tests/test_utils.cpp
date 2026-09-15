@@ -75,6 +75,21 @@ int test_fifo() {
 
     free_fifo(&f);
 
+    // pushing more bytes than available fails without force
+    SFIFO f2;
+    char buf2[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+    char buf3[4] = {8, 9, 10, 11};
+    memset(&f2, 0, sizeof(f2));
+    create_fifo(&f2, 10);
+    ASSERT(sizeof(buf2) == fifo_push(&f2, buf2, sizeof(buf2)),
+           "Failed to fill fifo");
+    ASSERT(0 == fifo_push(&f2, buf3, sizeof(buf3)),
+           "Expected push beyond available space to fail");
+    ASSERT(sizeof(buf3) == fifo_push_force(&f2, buf3, sizeof(buf3), 1),
+           "Failed to force write beyond available space");
+
+    free_fifo(&f2);
+
     return 0;
 }
 

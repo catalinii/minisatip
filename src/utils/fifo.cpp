@@ -60,8 +60,12 @@ int fifo_push_force(SFIFO *fifo, void *src, unsigned int len, int force) {
 
     if (len > size)
         return 0;
-    if (!force && (len > available))
+    if (!force && (len > available)) {
+        LOG("Not enough space in FIFO created at %s:%d: need %u, "
+            "available %u",
+            fifo->file, fifo->line, len, available);
         return 0;
+    }
     if ((fifo->read_index > 0) && (len > available))
         LOG("Overwriting %d bytes in the FIFO created at %s:%d",
             len - available, fifo->file, fifo->line);
