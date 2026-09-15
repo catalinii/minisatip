@@ -155,6 +155,13 @@ typedef struct struct_pmt {
     int filter;
     int64_t start_time;
     std::unordered_map<uint64_t, int> *global_start, *local_start;
+    // --clean-psi
+    uint8_t ever_decrypted;     // a validated CW decrypted this service (master)
+    uint8_t arrives_clear;      // the source hands it over descrambled (master)
+    uint16_t clear_run;         // unscrambled PCR stream packets in a row
+    int16_t clean_off;          // bytes of the rewrite emitted, -1 = not writing
+    uint8_t clean_hdr[8];       // header of the section that clean replaces
+    std::vector<uint8_t> clean; // that section without its CA descriptors
 } SPMT;
 
 // filters can be setup for specific pids and masks
@@ -237,6 +244,18 @@ int test_decrypt_packet(SCW *cw, SPMT_batch *start, int len);
 void init_algo();
 void update_cw(SPMT *pmt);
 int pmt_decrypt_stream(adapter *ad);
+#define CLEAN_PSI_GRACE 3000 // ms a client may wait for the PMT
+// Unscrambled payload packets of the PCR stream in a row that make a service
+// count as one the source descrambles. A scrambled service sends that stream
+// scrambled, so a run this long is only reached once it arrives in the clear.
+#define CLEAN_PSI_CLEAR_PACKETS 100
+
+void pmt_clean_build(SPMT *pmt, uint8_t *b, int len);
+void pmt_clean_prepare(adapter *ad, int probe);
+uint8_t *pmt_clean_packet(adapter *ad, int idx, uint8_t *b, int in_grace,
+                          int *pos);
+void pmt_clean_reset(SPMT *pmt);
+void pmt_clean_count_clear(adapter *ad, uint8_t *b, SPid *p);
 int wait_pusi(adapter *ad, int len);
 int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf, int sca_id);
 void free_filters();
