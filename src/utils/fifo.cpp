@@ -74,7 +74,8 @@ int fifo_push_force(SFIFO *fifo, void *src, unsigned int len, int force) {
     uint32_t l = min(len, size - off);
 
     memcpy((char *)fifo->data + off, src, l);
-    memcpy(fifo->data, (char *)src + l, len - l);
+    if (len > l)
+        memcpy(fifo->data, (char *)src + l, len - l);
     fifo->write_index += len;
     return len;
 }
@@ -95,7 +96,7 @@ uint32_t fifo_pop_offset(SFIFO *fifo, void *dst, unsigned int len,
 
         *offset = fifo->write_index - size;
     }
-    uint32_t available = fifo->write_index - fifo->read_index;
+    uint32_t available = fifo->write_index - *offset;
 
     if (len > available)
         len = available;
@@ -104,7 +105,8 @@ uint32_t fifo_pop_offset(SFIFO *fifo, void *dst, unsigned int len,
     l = min(len, size - off);
 
     memcpy(dst, (char *)fifo->data + off, l);
-    memcpy((char *)dst + l, fifo->data, len - l);
+    if (len > l)
+        memcpy((char *)dst + l, fifo->data, len - l);
     *offset += len;
     return len;
 }
