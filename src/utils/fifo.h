@@ -37,11 +37,7 @@ uint32_t fifo_pop_offset(SFIFO *fifo, void *dst, unsigned int len,
 uint32_t fifo_peek(SFIFO *fifo, void **dst, unsigned int len,
                    unsigned int relative_offset);
 
-int fifo_push_record(SFIFO *fifo, void *src, uint32_t len);
-
-uint32_t fifo_pop_record(SFIFO *fifo, void *dst, uint32_t len);
 uint32_t fifo_peek_32(SFIFO *fifo, uint64_t offset);
-uint32_t fifo_peek_record_size(SFIFO *fifo);
 
 #define create_fifo(f, x) _create_fifo(f, x, __FILE__, __LINE__)
 #define fifo_push(a, b, c) fifo_push_force(a, b, c, 0)
