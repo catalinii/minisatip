@@ -90,6 +90,22 @@ int test_fifo() {
 
     free_fifo(&f2);
 
+    // Test fifo_pop_offset available calculation when read_index is 0 but
+    // offset is non-zero
+    SFIFO f3;
+    memset(&f3, 0, sizeof(f3));
+    create_fifo(&f3, 100);
+    char in_buf[50] = {0};
+    fifo_push_force(&f3, in_buf, 50, 1); // write_index = 50, read_index = 0
+    uint64_t offset = 30;                // 20 bytes available at offset 30
+    char out_buf[50] = {0};
+    uint32_t popped = fifo_pop_offset(&f3, out_buf, 50, &offset);
+    ASSERT_EQUAL(
+        popped, 20,
+        "Expected fifo_pop_offset to cap to write_index - offset (20 bytes)");
+    ASSERT_EQUAL(offset, 50, "Expected offset to advance to write_index (50)");
+    free_fifo(&f3);
+
     return 0;
 }
 
