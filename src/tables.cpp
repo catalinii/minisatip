@@ -193,17 +193,27 @@ void close_pmt_for_ca(int i, adapter *ad, SPMT *pmt) {
         ad = get_adapter(pmt->adapter);
     if (!ad)
         return;
-    if (ca[i].enabled && (ad->ca_mask & mask) && (pmt->ca_mask & mask)) {
+    // Guard on ca_registered_mask, not ca_mask. ca_mask is cleared by
+    // pmt_add_caid() whenever a new CA descriptor turns up, purely to force a
+    // re-send; if a PMT is stopped in the same processing burst as such an
+    // update, the old ca_mask-based guard silently skipped ca_del_pmt and the
+    // CA (e.g. DDCI) kept the PMT registered forever, leaking a channel slot.
+    if (ca[i].enabled && (ad->ca_mask & mask) &&
+        (pmt->ca_registered_mask & mask)) {
         LOGM("Closing pmt %d for ca %d and adapter %d", pmt->id, i, ad->id);
         if (ad && ca[i].op->ca_del_pmt)
             ca[i].op->ca_del_pmt(ad, pmt);
         pmt->ca_mask &= ~mask;
+        pmt->ca_registered_mask &= ~mask;
     }
 }
 
 int close_pmt_for_cas(adapter *ad, SPMT *pmt) {
     int i;
-    if (!pmt || !pmt->ca_mask)
+    // Use ca_registered_mask (see close_pmt_for_ca): ca_mask may legitimately
+    // be 0 here while CAs still hold this PMT, if a CA-descriptor update
+    // cleared it just before the PMT was stopped.
+    if (!pmt || !pmt->ca_registered_mask)
         return 0;
 
     if (!ad)
@@ -240,6 +250,11 @@ int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt) {
 
         if (result == TABLES_RESULT_OK) {
             pmt->ca_mask |= mask;
+            // Track actual registration separately from the "needs sending"
+            // flag above, so a later CA-descriptor update (which clears
+            // ca_mask to force a re-send) cannot make us forget that this CA
+            // still holds resources for this PMT.
+            pmt->ca_registered_mask |= mask;
         } else if (result == TABLES_RESULT_ERROR_NORETRY)
             pmt->disabled_ca_mask |= mask;
         disable_cw(pmt->id);

@@ -141,7 +141,14 @@ typedef struct struct_pmt {
     std::vector<SStreamPid> stream_pids;
     int id;
     int blen;
-    int ca_mask, disabled_ca_mask;
+    // ca_mask         - "already sent to this CA"; cleared by pmt_add_caid()
+    //                   to force a re-send when the CA descriptor list grows.
+    // ca_registered_mask - "currently registered with this CA, so cleanup is
+    //                   required on stop". Deliberately NOT cleared by
+    //                   pmt_add_caid(): a CA-info update is a reason to
+    //                   re-send, not evidence that the CA forgot about us.
+    //                   Only close_pmt_for_ca() clears it.
+    int ca_mask, disabled_ca_mask, ca_registered_mask;
     SPMT_batch *batch;
     int8_t parity, update_cw;
     uint64_t last_update_cw;

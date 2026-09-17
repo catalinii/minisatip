@@ -45,6 +45,7 @@
 #include "stream.h"
 #include "tables.h"
 #include "utils.h"
+#include <map>
 #include <string>
 
 #include "utils/fifo.h"
@@ -390,10 +391,13 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
 
     std::lock_guard<SMutex> lock(d->mutex);
     int pos = -1;
+    int already_registered = 0;
 
     for (i = 0; i < d->max_channels; i++)
-        if (d->pmt[i].id == pmt->id)
+        if (d->pmt[i].id == pmt->id) {
             pos = i;
+            already_registered = 1;
+        }
 
     if (pos == -1) {
         for (i = 0; i < d->max_channels; i++)
@@ -413,8 +417,17 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     d->pmt[pos].ver = (d->pmt[pos].ver + 1) & 0xF;
 
     d->ver = (d->ver + 1) & 0xF;
-    if (!d->channels++) { // for first PMT set transponder ID
-        d->tid = ad->transponder_id;
+    // Only count a genuinely new registration. send_pmt_to_cas() is called
+    // again for an already-registered PMT whenever a new CA descriptor is
+    // discovered for it (pmt_add_caid() clears pmt->ca_mask to force a
+    // re-send). Counting those re-sends leaked one channel slot each time
+    // and could exhaust max_channels: with PMT scanning enabled a single
+    // channel consumed 3+ slots, and later channels were then refused a
+    // DDCI entirely ("cannot be used ... used channels 6 max 6").
+    if (!already_registered) {
+        if (!d->channels++) { // for first PMT set transponder ID
+            d->tid = ad->transponder_id;
+        }
     }
 
     // Map mandatory PIDs. Some CAMs need access to the TDT in order to "wake
@@ -486,16 +499,23 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
         LOG_AND_RETURN(0, "%s: ddci %d already disabled", __FUNCTION__,
                        m->ddci);
     d->ver = (d->ver + 1) & 0xF;
-    if (d->channels > 0)
-        d->channels--;
-    LOG("%s: deleting pmt id %d, sid %d (%X), pid %d, ddci %d, name %s",
-        __FUNCTION__, spmt->id, spmt->sid, spmt->sid, m->ddci_pid, m->ddci,
-        spmt->name);
 
+    // Release the slot and decrement only if this PMT actually held one, to
+    // stay symmetric with the registration side above.
+    int was_registered = 0;
     for (i = 0; i < d->max_channels; i++)
         if (d->pmt[i].id == pmt) {
             d->pmt[i].id = -1;
+            was_registered = 1;
         }
+
+    if (was_registered && d->channels > 0)
+        d->channels--;
+
+    LOG("%s: deleting pmt id %d, sid %d (%X), pid %d, ddci %d, name %s "
+        "(registered %d, running channels now %d)",
+        __FUNCTION__, spmt->id, spmt->sid, spmt->sid, m->ddci_pid, m->ddci,
+        spmt->name, was_registered, d->channels);
 
     del_pmt_mapping_table(d, ad->id, pmt);
     update_pids(d->id);
@@ -888,6 +908,30 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
     unsigned char psi[MAX_CHANNELS_ON_CI * 1500];
     uint16_t ad_dd_pids[8192], dd_ad_pids[8192];
 
+    // --- BEGIN call-frequency instrumentation ---
+    {
+        static std::map<int, uint64_t> calls_total, calls_productive, last_gap_max_ms;
+        static std::map<int, int64_t> last_call_ms, last_log_ms;
+        int64_t now = getTick();
+        int64_t gap = last_call_ms.count(d->id) ? (now - last_call_ms[d->id]) : 0;
+        last_call_ms[d->id] = now;
+        calls_total[d->id]++;
+        if (gap > (int64_t)last_gap_max_ms[d->id])
+            last_gap_max_ms[d->id] = gap;
+        if (!last_log_ms.count(d->id))
+            last_log_ms[d->id] = now;
+        if (now - last_log_ms[d->id] >= 1000) {
+            LOG("DDCI_FREQ device %d: %llu calls/s (max gap %llu ms) in last "
+                "interval",
+                d->id, (unsigned long long)calls_total[d->id],
+                (unsigned long long)last_gap_max_ms[d->id]);
+            calls_total[d->id] = 0;
+            last_gap_max_ms[d->id] = 0;
+            last_log_ms[d->id] = now;
+        }
+    }
+    // --- END call-frequency instrumentation ---
+
     std::lock_guard<SMutex> lock(d->mutex);
     if (!d->enabled) {
         return 0;
@@ -973,6 +1017,24 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
 
     // move back TS packets from the DDCI out buffer to the adapter buffer
     push_ts_to_adapter(d, ad, dd_ad_pids);
+
+    // --- BEGIN drain-frequency instrumentation ---
+    {
+        static std::map<int, uint64_t> drains;
+        static std::map<int, int64_t> last_log_ms2;
+        int64_t now = getTick();
+        drains[d->id]++;
+        if (!last_log_ms2.count(d->id))
+            last_log_ms2[d->id] = now;
+        if (now - last_log_ms2[d->id] >= 1000) {
+            LOG("DDCI_DRAIN device %d: %llu drains/s", d->id,
+                (unsigned long long)drains[d->id]);
+            drains[d->id] = 0;
+            last_log_ms2[d->id] = now;
+        }
+    }
+    // --- END drain-frequency instrumentation ---
+
     return 0;
 }
 
