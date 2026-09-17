@@ -129,26 +129,6 @@ uint32_t fifo_peek(SFIFO *fifo, void **dst, unsigned int len,
     return l;
 }
 
-// pushes a record of len bytes. this will add the length as 4 bytes into the
-// fifo then the entire packet if there is space availble. If no space is
-// available returns 0
-int fifo_push_record(SFIFO *fifo, void *src, uint32_t len) {
-    if (fifo_available(fifo) < (int)(len + LEN_SIZE))
-        return 0;
-    int r = 0;
-    uint8_t *data = (uint8_t *)fifo->data;
-    uint32_t off = fifo->read_index;
-    uint32_t size = fifo->size;
-    data[(off + 0) % size] = (len >> 24) & 0xFF;
-    data[(off + 1) % size] = (len >> 16) & 0xFF;
-    data[(off + 2) % size] = (len >> 8) & 0xFF;
-    data[(off + 3) % size] = len & 0xFF;
-    fifo->write_index += 4;
-
-    r += fifo_push_force(fifo, src, len, 0);
-    return r;
-}
-
 uint32_t fifo_peek_32(SFIFO *fifo, uint64_t offset) {
     uint8_t *data = (uint8_t *)fifo->data;
     if (fifo->write_index - offset < LEN_SIZE)
@@ -158,20 +138,4 @@ uint32_t fifo_peek_32(SFIFO *fifo, uint64_t offset) {
            ((unsigned int)data[(offset + 1) % size] << 16) |
            ((unsigned int)data[(offset + 2) % size] << 8) |
            (unsigned int)data[(offset + 3) % size];
-}
-
-// pops a record only if len >= record size. pops 4 bytes which stores the
-// record length then pops the record itself.
-uint32_t fifo_peek_record_size(SFIFO *fifo) {
-    return fifo_peek_32(fifo, fifo->read_index);
-}
-
-// returns 0 if not enough
-uint32_t fifo_pop_record(SFIFO *fifo, void *dst, uint32_t len) {
-    uint32_t record_size = fifo_peek_record_size(fifo);
-    if (len < record_size || record_size == 0)
-        return 0;
-    fifo->read_index += LEN_SIZE;
-
-    return fifo_pop_offset(fifo, dst, len, &fifo->read_index);
 }
