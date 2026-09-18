@@ -139,6 +139,7 @@ int rtsp, http, si, si1, ssdp1;
 #define SATIPC_RECV_BUFFER_OPT (LONG_OPT_ONLY_START + 3)
 #define CLIENT_SEND_BUFFER_OPT (LONG_OPT_ONLY_START + 4)
 #define HW_DESCRAMBLER_OPT (LONG_OPT_ONLY_START + 5)
+#define DDCI_INSTRUMENT_OPT (LONG_OPT_ONLY_START + 6)
 
 static const struct option long_options[] = {
     {"adapters", required_argument, NULL, ADAPTERS_OPT},
@@ -209,6 +210,7 @@ static const struct option long_options[] = {
     {"ca-channels", required_argument, NULL, CA_CHANNELS_OPT},
 #endif
     {"hw-descrambler", no_argument, NULL, HW_DESCRAMBLER_OPT},
+    {"ddci-instrument", no_argument, NULL, DDCI_INSTRUMENT_OPT},
 
     {0, 0, 0, 0}};
 
@@ -545,6 +547,8 @@ Help\n\
 \t* Provides more reliable decrypting for channels included in multiple providers\n\
 \n\
 * --hw-descrambler: Enable hardware descrambler (Enigma2 CA ioctl). Disabled by default\n\
+\n\
+* --ddci-instrument: Track TS continuity per CI-link pid on both sides of the DDCI bridge (packets written to the CAM vs packets read back from it) and log cadence statistics every 10s, to localize packet loss between minisatip, the kernel driver and the CAM. Use together with -l ddci\n\
 \n"
 #ifndef DISABLE_DVBCA
         "\
@@ -1080,6 +1084,10 @@ void set_options(int argc, char *argv[]) {
 #endif
         case HW_DESCRAMBLER_OPT:
             opts.hw_descrambler = 1;
+            break;
+
+        case DDCI_INSTRUMENT_OPT:
+            opts.ddci_instrument = 1;
             break;
         }
     }

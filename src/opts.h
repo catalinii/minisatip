@@ -53,6 +53,7 @@ typedef struct struct_opts {
     float strength_multiplier, snr_multiplier;
     char enigma;
     char hw_descrambler;
+    char ddci_instrument;
 #ifndef DISABLE_SATIPCLIENT
     char *satip_servers;
     char *satip_xml;

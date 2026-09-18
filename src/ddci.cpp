@@ -85,6 +85,215 @@ ddci_mapping_table_t *get_ddci_pid(ddci_device_t *d, int dpid) {
 #define get_pid_mapping(d, ad, pid) d->mapping.find(MAKE_KEY(ad, pid))
 #define has_pid_mapping(d, ad, pid) (d->mapping.count(MAKE_KEY(ad, pid)) > 0)
 
+#define DDCI_INSTR_DUMP_MS 10000
+
+ddci_instr_t *ddci_instr_alloc() {
+    ddci_instr_t *in = new ddci_instr_t();
+    memset(in->wcc, -1, sizeof(in->wcc));
+    memset(in->rcc, -1, sizeof(in->rcc));
+    // -1 = "never happened"; 0 is a valid tick (getTick() starts at 0)
+    in->last_read_tick = in->last_write_tick = in->dump_start = -1;
+    return in;
+}
+
+void ddci_instr_free(ddci_instr_t *in) { delete in; }
+
+// bucket for the read-phase histogram: ms between this read and the previous
+// writev into the CI
+static int ddci_instr_hist_bucket(int64_t ms) {
+    if (ms <= 4)
+        return 0;
+    if (ms <= 16)
+        return 1;
+    if (ms <= 33)
+        return 2;
+    if (ms <= 66)
+        return 3;
+    if (ms <= 132)
+        return 4;
+    return 5;
+}
+
+// scan full TS packets and update the per-pid continuity state for the
+// specified direction (0 = written to the CI, 1 = read back from the CI).
+// Returns the number of continuity errors detected.
+static int ddci_instr_scan(ddci_device_t *d, int dir, uint8_t *buf, int len,
+                           int64_t read_gap_ms, int last_read_len,
+                           int64_t since_prev_writev, int hist_bucket) {
+    ddci_instr_t *in = d->instr;
+    int8_t *cc = dir ? in->rcc : in->wcc;
+    uint32_t *cnt = dir ? in->rcnt : in->wcnt;
+    uint32_t *err = dir ? in->rerr : in->werr;
+    int errs = 0, i;
+    for (i = 0; i + DVB_FRAME <= len; i += DVB_FRAME) {
+        uint8_t *b = buf + i;
+        int pid, gap;
+        if (b[0] != 0x47)
+            continue;
+        pid = PID_FROM_TS(b);
+        if (pid == 8191 || !(b[3] & 0x10)) // null pid or packet without payload
+            continue;
+        cnt[pid]++;
+        int8_t cur = b[3] & 0xF;
+        int8_t exp = (cc[pid] + 1) & 0xF;
+        if (cc[pid] >= 0 && cur != exp) {
+            gap = (cur - exp + 16) & 0xF;
+            err[pid]++;
+            errs++;
+            if (dir) {
+                if (hist_bucket >= 0)
+                    in->read_err_hist[hist_bucket]++;
+                LOG("DDCI-INSTR [R] CC error on CI-link pid %d: expected %X, "
+                    "got %X (gap %d), %jd ms since previous read (%d bytes), "
+                    "%jd ms since previous writev",
+                    pid, exp, cur, gap, read_gap_ms, last_read_len,
+                    since_prev_writev);
+            } else {
+                LOG("DDCI-INSTR [W] CC error on CI-link pid %d: expected %X, "
+                    "got %X (gap %d)",
+                    pid, exp, cur, gap);
+            }
+        }
+        cc[pid] = cur;
+    }
+    return errs;
+}
+
+// called with the raw bytes read back from the CI device, before any
+// minisatip buffering (FIFO). CC errors logged here are already present in
+// the data returned by the kernel
+void ddci_instrument_read(ddci_device_t *d, uint8_t *b, int len) {
+    ddci_instr_t *in = d->instr;
+    int64_t now, gap;
+    int bucket = 0;
+    if (!in)
+        return;
+    std::lock_guard<SMutex> lock(in->mutex);
+    now = getTick();
+    gap = in->last_read_tick >= 0 ? now - in->last_read_tick : 0;
+    if (gap > in->max_read_gap)
+        in->max_read_gap = gap;
+    in->since_prev_writev =
+        in->last_write_tick >= 0 ? now - in->last_write_tick : -1;
+    in->reads++;
+    in->read_bytes += len;
+    in->last_read_len = len;
+    // sample the read phase for all reads, not only the failing ones, so the
+    // error lines can be compared against the good-read distribution
+    if (in->since_prev_writev >= 0) {
+        bucket = ddci_instr_hist_bucket(in->since_prev_writev);
+        in->read_hist[bucket]++;
+        if (!in->wpkts_reads || in->wpkts_since_read < in->wpkts_min)
+            in->wpkts_min = in->wpkts_since_read;
+        if (in->wpkts_since_read > in->wpkts_max)
+            in->wpkts_max = in->wpkts_since_read;
+        in->wpkts_sum += in->wpkts_since_read;
+        in->wpkts_reads++;
+    } else {
+        bucket = -1; // no writev seen yet: not attributable to a phase
+    }
+    in->wpkts_since_read = 0;
+    ddci_instr_scan(d, 1, b, len, gap, len, in->since_prev_writev, bucket);
+    in->last_read_tick = now;
+}
+
+// called with the iovec written to the CI device. The packets already carry
+// the remapped (CI-link) pids, same key space as ddci_instrument_read
+void ddci_instrument_write(ddci_device_t *d, struct iovec *io, int iop) {
+    ddci_instr_t *in = d->instr;
+    int64_t now, gap, elapsed, wbits, rbits, bytes = 0;
+    uint64_t werr_sum = 0, rerr_sum = 0;
+    int i, pid, pos;
+    char pids[1024];
+    if (!in)
+        return;
+    std::lock_guard<SMutex> lock(in->mutex);
+    now = getTick();
+    gap = in->last_write_tick >= 0 ? now - in->last_write_tick : 0;
+    if (gap > in->max_write_gap)
+        in->max_write_gap = gap;
+    in->writevs++;
+    for (i = 0; i < iop; i++) {
+        bytes += io[i].iov_len;
+        ddci_instr_scan(d, 0, (uint8_t *)io[i].iov_base, io[i].iov_len, 0, 0, 0,
+                        0);
+    }
+    in->write_bytes += bytes;
+    in->wpkts_since_read += bytes / DVB_FRAME;
+    in->last_write_tick = now;
+
+    if (in->dump_start < 0)
+        in->dump_start = now;
+    elapsed = now - in->dump_start;
+    if (elapsed < DDCI_INSTR_DUMP_MS)
+        return;
+    for (pid = 0; pid < 8192; pid++) {
+        werr_sum += in->werr[pid];
+        rerr_sum += in->rerr[pid];
+    }
+    wbits = (in->write_bytes - in->prev_write_bytes) * 8;
+    rbits = (in->read_bytes - in->prev_read_bytes) * 8;
+    LOG("DDCI-INSTATS ddci %d [%jd ms]: writev %u (%.2f Mbit/s, max gap %jd "
+        "ms), reads %u (%.2f Mbit/s, max gap %jd ms), pushed %ju KB, drained "
+        "%ju KB, fifo push-fails %ju, fifo max-level %ju KB, [W] CC errs %ju, "
+        "[R] CC errs %ju",
+        d->id, elapsed, in->writevs, wbits / 1000.0 / elapsed,
+        in->max_write_gap, in->reads, rbits / 1000.0 / elapsed,
+        in->max_read_gap, (in->pushed_bytes - in->prev_pushed) / 1024,
+        (in->drained_bytes - in->prev_drained) / 1024, in->fifo_push_fail,
+        in->fifo_max_level / 1024, werr_sum, rerr_sum);
+    in->prev_write_bytes = in->write_bytes;
+    in->prev_read_bytes = in->read_bytes;
+    in->prev_pushed = in->pushed_bytes;
+    in->prev_drained = in->drained_bytes;
+    in->writevs = in->reads = 0;
+    in->max_write_gap = in->max_read_gap = 0;
+    in->dump_start = now;
+
+    // distribution of the read phase (ms since the previous writev) over all
+    // reads in this interval, with the [R] CC errors attributed per bucket.
+    // If the good reads share the phase of the failing ones, the proximity to
+    // a writev is not the trigger of the loss
+    LOG("DDCI-INSTATS ddci %d read-phase histogram (ms after writev): "
+        "0-4:%u (errs %u), 5-16:%u (errs %u), 17-33:%u (errs %u), 34-66:%u "
+        "(errs %u), 67-132:%u (errs %u), >132:%u (errs %u) | "
+        "pkts-since-prev-read min/avg/max: %u/%u/%u",
+        d->id, in->read_hist[0], in->read_err_hist[0], in->read_hist[1],
+        in->read_err_hist[1], in->read_hist[2], in->read_err_hist[2],
+        in->read_hist[3], in->read_err_hist[3], in->read_hist[4],
+        in->read_err_hist[4], in->read_hist[5], in->read_err_hist[5],
+        in->wpkts_min,
+        in->wpkts_reads ? (uint32_t)(in->wpkts_sum / in->wpkts_reads) : 0,
+        in->wpkts_max);
+    memset(in->read_hist, 0, sizeof(in->read_hist));
+    memset(in->read_err_hist, 0, sizeof(in->read_err_hist));
+    in->wpkts_min = in->wpkts_max = in->wpkts_sum = in->wpkts_reads = 0;
+
+    pos = 0;
+    pids[0] = 0;
+    for (pid = 0; pid < 8192; pid++) {
+        int n;
+        if (!in->wcnt[pid] && !in->rcnt[pid])
+            continue;
+        n = snprintf(pids + pos, sizeof(pids) - pos, "%d:w%u/r%u/e%u+%u ", pid,
+                     in->wcnt[pid], in->rcnt[pid], in->werr[pid],
+                     in->rerr[pid]);
+        if (n < 0)
+            break;
+        if (pos + n >= (int)sizeof(pids) - 1) {
+            LOG("DDCI-INSTATS ddci %d pids (wcnt/rcnt/werr+rerr): %s", d->id,
+                pids);
+            pos = 0;
+            n = snprintf(pids, sizeof(pids) - pos, "%d:w%u/r%u/e%u+%u ", pid,
+                         in->wcnt[pid], in->rcnt[pid], in->werr[pid],
+                         in->rerr[pid]);
+        }
+        pos += n;
+    }
+    if (pos > 0)
+        LOG("DDCI-INSTATS ddci %d pids (wcnt/rcnt/werr+rerr): %s", d->id, pids);
+}
+
 int find_ddci_pid(ddci_device_t *d, int pid) {
     int ddci_pid;
     if (pid < 0 || pid > 8191)
@@ -869,6 +1078,13 @@ int push_ts_to_adapter(ddci_device_t *d, adapter *ad, uint16_t *mapping) {
             d->fifo.write_index - d->read_index[ad->id], d->read_index[ad->id]);
         dump_packets("DDCI -> AD", ad->buf + i, DVB_FRAME, i);
     }
+    if (d->instr) {
+        std::lock_guard<SMutex> lock(d->instr->mutex);
+        d->instr->drained_bytes += popped;
+        uint64_t level = d->fifo.write_index - d->read_index[ad->id];
+        if (level > d->instr->fifo_max_level)
+            d->instr->fifo_max_level = level;
+    }
     DEBUGM(
         "popped %d bytes from fifo up to index %d, rlen %d, lbuf %d, left in "
         "fifo %jd",
@@ -955,6 +1171,8 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
 
         DEBUGM("writing %d bytes to DDCI device %d, fd %d, sock %d", bytes,
                d->id, ad2->fe, ad2->fe_sock);
+        if (d->instr)
+            ddci_instrument_write(d, io, iop);
         int rb = writev(ad2->fe, io, iop);
         if (rb != bytes)
             LOG("%s: write incomplete to DDCI %d,fd %d, wrote %d out of %d "
@@ -1032,8 +1250,21 @@ int ddci_read_sec_data(sockets *s) {
     b = ad->buf;
     int left = 0, rlen = ad->rlen;
 
-    if ((left = fifo_push_force(&d->fifo, b, rlen, 1)) == 0)
-        LOG("dropping %d bytes for ddci_adapter %d", left, d->id);
+    // instrument the raw bytes read back from the CI device before they are
+    // buffered in minisatip
+    if (d->instr && rlen > 0)
+        ddci_instrument_read(d, b, rlen);
+
+    if ((left = fifo_push_force(&d->fifo, b, rlen, 1)) == 0) {
+        if (d->instr) {
+            std::lock_guard<SMutex> lock(d->instr->mutex);
+            d->instr->fifo_push_fail++;
+        }
+        LOG("dropping %d bytes for ddci_adapter %d", rlen, d->id);
+    } else if (d->instr) {
+        std::lock_guard<SMutex> lock(d->instr->mutex);
+        d->instr->pushed_bytes += left;
+    }
     DEBUGM("pushed %d bytes to the adapter buffer from %d [write_index %jd]",
            left, rlen, d->fifo.write_index);
     dump_packets("DDCI ->FIFO ", (uint8_t *)d->fifo.data, 188, 0);
@@ -1066,6 +1297,8 @@ ddci_device_t *ddci_alloc(int id) {
     d = ddci_devices[id] = new ddci_device_t();
     create_fifo(&d->fifo, DDCI_BUFFER);
     d->id = id;
+    if (opts.ddci_instrument)
+        d->instr = ddci_instr_alloc();
     return d;
 }
 
