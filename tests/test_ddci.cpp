@@ -610,6 +610,67 @@ int test_process_cat() {
     return 0;
 }
 
+static void make_ts_packet(uint8_t *b, int pid, int cc, int payload) {
+    b[0] = 0x47;
+    b[1] = (pid >> 8) & 0x1F;
+    b[2] = pid & 0xFF;
+    b[3] = (payload ? 0x10 : 0x00) | (cc & 0xF);
+    memset(b + 4, 0, 184);
+}
+
+int test_ddci_instrument() {
+    ddci_device_t d = {};
+    uint8_t buf[188 * 3];
+    struct iovec io[1];
+    int i;
+
+    d.id = 0;
+    d.instr = ddci_instr_alloc();
+
+    // clean stream on pid 100 with CC 0,1,2 on the read side
+    for (i = 0; i < 3; i++)
+        make_ts_packet(buf + i * 188, 100, i, 1);
+    ddci_instrument_read(&d, buf, sizeof(buf));
+    ASSERT(d.instr->rerr[100] == 0, "no read CC errors expected");
+    ASSERT(d.instr->rcnt[100] == 3, "expected 3 packets counted on read");
+
+    // missing packet: CC jumps from 2 to 4
+    make_ts_packet(buf, 100, 4, 1);
+    ddci_instrument_read(&d, buf, 188);
+    ASSERT(d.instr->rerr[100] == 1, "expected 1 read CC error");
+    ASSERT(d.instr->rcnt[100] == 4, "expected 4 packets counted on read");
+
+    // write side has its own state, same stream is clean there
+    for (i = 0; i < 3; i++)
+        make_ts_packet(buf + i * 188, 100, i, 1);
+    io[0].iov_base = buf;
+    io[0].iov_len = 188 * 3;
+    ddci_instrument_write(&d, io, 1);
+    ASSERT(d.instr->werr[100] == 0, "no write CC errors expected");
+    ASSERT(d.instr->wcnt[100] == 3, "expected 3 packets counted on write");
+
+    // write side gap: CC jumps from 2 to 6
+    uint8_t gapbuf[188];
+    make_ts_packet(gapbuf, 100, 6, 1);
+    io[0].iov_base = gapbuf;
+    io[0].iov_len = 188;
+    ddci_instrument_write(&d, io, 1);
+    ASSERT(d.instr->werr[100] == 1, "expected 1 write CC error");
+    ASSERT(d.instr->wcnt[100] == 4, "expected 4 packets counted on write");
+
+    // null pid and packets without payload are not counted
+    int rcnt0 = d.instr->rcnt[8191];
+    make_ts_packet(buf, 8191, 0, 1);
+    ddci_instrument_read(&d, buf, 188);
+    make_ts_packet(buf, 100, 5, 0);
+    ddci_instrument_read(&d, buf, 188);
+    ASSERT(d.instr->rcnt[8191] == rcnt0, "null pid packets are not counted");
+    ASSERT(d.instr->rcnt[100] == 4, "packets without payload are not counted");
+
+    ddci_instr_free(d.instr);
+    return 0;
+}
+
 int main() {
     opts.log = 65535 ^ LOG_LOCK ^ LOG_UTILS;
     opts.debug = 0;
@@ -623,6 +684,7 @@ int main() {
     TEST_FUNC(test_create_pat(), "testing create_pat");
     TEST_FUNC(test_create_sdt(), "testing create_sdt");
     TEST_FUNC(test_create_pmt(), "testing create_pmt");
+    TEST_FUNC(test_ddci_instrument(), "testing ddci instrument");
     free_all_pmts();
     fflush(stdout);
     return 0;
