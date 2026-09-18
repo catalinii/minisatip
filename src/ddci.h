@@ -13,6 +13,11 @@
 
 #define DDCI_BUFFER (20000 * 188)
 
+// buckets for the read-phase histogram: ms between a read from the CI device
+// and the previous writev into it. The first bucket covers the smallest
+// read-after-write turnaround the driver can produce
+#define DDCI_INSTR_HIST_BUCKETS 6
+
 // per CI-link pid continuity tracking used by --ddci-instrument.
 // The same pid space (the remapped pids on the CI link) is tracked
 // independently for the packets written to the CAM ([W]) and for the packets
@@ -33,6 +38,14 @@ typedef struct ddci_instr {
     uint64_t pushed_bytes, drained_bytes; // cumulative fifo in/out
     uint64_t fifo_push_fail, fifo_max_level;
     uint64_t prev_read_bytes, prev_write_bytes, prev_pushed, prev_drained;
+    // read-phase histogram (ms since previous writev), windowed; errors are
+    // attributed to the bucket of the read batch they were detected in
+    uint32_t read_hist[DDCI_INSTR_HIST_BUCKETS];
+    uint32_t read_err_hist[DDCI_INSTR_HIST_BUCKETS];
+    // TS packets written to the CI since the previous read, windowed
+    // min/avg/max, to detect reads driven by accumulated output
+    uint32_t wpkts_since_read, wpkts_min, wpkts_max;
+    uint64_t wpkts_sum, wpkts_reads;
 } ddci_instr_t;
 
 // keeps PMT informations for the channels that are enabled on this ddci_device

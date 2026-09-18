@@ -667,6 +667,38 @@ int test_ddci_instrument() {
     ASSERT(d.instr->rcnt[8191] == rcnt0, "null pid packets are not counted");
     ASSERT(d.instr->rcnt[100] == 4, "packets without payload are not counted");
 
+    // read-phase histogram: the 2 startup reads ran before any writev and
+    // are not counted, nor is their CC error attributed; the 2 reads above
+    // ran right after a writev and land in the first bucket
+    int hist_total = 0, err_hist_total = 0, b;
+    for (b = 0; b < DDCI_INSTR_HIST_BUCKETS; b++) {
+        hist_total += d.instr->read_hist[b];
+        err_hist_total += d.instr->read_err_hist[b];
+    }
+    ASSERT(hist_total == 2, "expected only the 2 post-write reads counted");
+    ASSERT(err_hist_total == 0, "startup read error must not be attributed");
+
+    // a read error after a writev is attributed to the read-phase histogram
+    make_ts_packet(gapbuf, 100, 7, 1); // write side: CC 6 -> 7, clean
+    io[0].iov_base = gapbuf;
+    io[0].iov_len = 188;
+    ddci_instrument_write(&d, io, 1);
+    make_ts_packet(buf, 100, 8, 1); // read side: CC 4, expected 5, got 8
+    ddci_instrument_read(&d, buf, 188);
+    ASSERT(d.instr->rerr[100] == 2, "expected a second read CC error");
+    hist_total = err_hist_total = 0;
+    for (b = 0; b < DDCI_INSTR_HIST_BUCKETS; b++) {
+        hist_total += d.instr->read_hist[b];
+        err_hist_total += d.instr->read_err_hist[b];
+    }
+    ASSERT(hist_total == 3, "expected 3 sampled reads in total");
+    ASSERT(err_hist_total == 1, "expected 1 attributed read error");
+    ASSERT(d.instr->wpkts_min == 0 && d.instr->wpkts_max == 4,
+           "packets-since-read min/max mismatch");
+    ASSERT(d.instr->wpkts_reads == 3, "expected 3 reads sampled");
+    ASSERT(d.instr->wpkts_since_read == 0,
+           "packets-since-read must reset on read");
+
     ddci_instr_free(d.instr);
     return 0;
 }
