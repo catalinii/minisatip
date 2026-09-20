@@ -1566,6 +1566,8 @@ void satipc_get_pids(adapter *ad, satipc *sip, char *url, int size,
 
     if (sip->ldp) {
         int i;
+        if (len > 0) // an addpids= parameter was already written above
+            strlcatf(url, size, len, "&");
         strlcatf(url, size, len, "delpids=");
         for (i = 0; i < sip->ldp; i++)
             strlcatf(url, size, len, "%d,", sip->dpid[i]);

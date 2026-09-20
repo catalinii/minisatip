@@ -30,6 +30,8 @@
 
 extern void satip_getxml_data(char *data, int len, void *opaque,
                               Shttp_client *h);
+extern void satipc_get_pids(adapter *ad, satipc *sip, char *url, int size,
+                            int send_pids);
 
 int test_get_s2_url_multistream_isi() {
     adapter ad = {};
@@ -184,6 +186,47 @@ int test_satip_getxml_data_parsing() {
     return 0;
 }
 
+int test_satipc_get_pids_add_and_del() {
+    adapter ad = {};
+    ad.id = 0; // no adapter registered, get_adapter_pids returns ""
+    char url[1000];
+
+    // combined add + delete must separate the parameters with '&'
+    satipc sip_add_del = {};
+    sip_add_del.lap = 1;
+    sip_add_del.apid[0] = 202;
+    sip_add_del.ldp = 2;
+    sip_add_del.dpid[0] = 201;
+    sip_add_del.dpid[1] = 213;
+    url[0] = 0;
+    satipc_get_pids(&ad, &sip_add_del, url, sizeof(url), 0);
+    ASSERT(strcmp(url, "addpids=202&delpids=201,213") == 0,
+           "addpids and delpids parameters must be separated by '&'");
+    ASSERT(sip_add_del.lap == 0 && sip_add_del.ldp == 0,
+           "pending add/del pids must be cleared after building the URL");
+
+    // add-only must not gain a separator
+    satipc sip_add = {};
+    sip_add.lap = 2;
+    sip_add.apid[0] = 2211;
+    sip_add.apid[1] = 2212;
+    url[0] = 0;
+    satipc_get_pids(&ad, &sip_add, url, sizeof(url), 0);
+    ASSERT(strcmp(url, "addpids=2211,2212") == 0,
+           "add-only URL must be plain addpids=");
+
+    // del-only must not gain a leading separator
+    satipc sip_del = {};
+    sip_del.ldp = 1;
+    sip_del.dpid[0] = 18;
+    url[0] = 0;
+    satipc_get_pids(&ad, &sip_del, url, sizeof(url), 0);
+    ASSERT(strcmp(url, "delpids=18") == 0,
+           "del-only URL must be plain delpids=");
+
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -199,6 +242,8 @@ int main() {
               "test get_s2_url omits multistream params when unset");
     TEST_FUNC(test_satip_getxml_data_parsing(),
               "test satip_getxml_data parses satipcap delivery systems");
+    TEST_FUNC(test_satipc_get_pids_add_and_del(),
+              "test satipc_get_pids separates addpids/delpids with '&'");
 
     return 0;
 }
