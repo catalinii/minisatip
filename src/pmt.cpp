@@ -2219,7 +2219,9 @@ void free_filters() {
     for (i = 0; i < MAX_FILTERS; i++)
         if (filters[i]) {
             delete filters[i];
+            filters[i] = NULL;
         }
+    nfilters = 0;
 }
 
 int pmt_init() {
