@@ -310,6 +310,70 @@ int xwritev(int fd, const struct iovec *io, int len) {
     return len * 188;
 }
 
+// the last iovec passed to writev(), captured by xwritev_last
+static int last_iov_len = -1;
+static uint8_t last_iov[188];
+int xwritev_last(int fd, const struct iovec *io, int len) {
+    int i, total = 0;
+    did_write = 1;
+    for (i = 0; i < len; i++)
+        total += io[i].iov_len;
+    last_iov_len = io[len - 1].iov_len;
+    if (last_iov_len == 188)
+        memcpy(last_iov, io[len - 1].iov_base, 188);
+    return total;
+}
+
+// every write to the CI must end with exactly one null packet, so the
+// 128 byte DMA granularity of the driver never cuts a real packet (#1437)
+int test_ddci_process_ts_null_tail() {
+    ddci_device_t d = {};
+    uint8_t buf[188 * 10];
+    adapter ad = {}, ad2 = {}, ad0 = {};
+    int i;
+    memset(buf, 0, sizeof(buf));
+    d.id = 2;
+    d.enabled = 1;
+    create_fifo(&d.fifo, DDCI_BUFFER);
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[0] = &d;
+    create_adapter(&ad0, 0);
+    create_adapter(&ad, 1);
+    create_adapter(&ad2, 2);
+    ad.buf = buf;
+    ad.lbuf = sizeof(buf);
+    for (i = 0; i < ad.lbuf; i += 188) {
+        buf[i] = 0x47;
+        set_pid_ts(buf + i, 2121); // unmapped pid
+    }
+
+    SPMT *save = pmts[0];
+    pmts[0] = NULL;
+    add_pid_mapping_table(1, 1000, 0, &d, 0);
+    ad.rlen = ad.lbuf - 188;
+    set_pid_ts(buf, 1000);
+    d.read_index[1] = d.read_index[2] = d.fifo.write_index = 188;
+    _writev = (mywritev)&xwritev_last;
+    d.last_pmt = getTick(); // prevent adding PMT/EPG
+    did_write = 0;
+    last_iov_len = -1;
+    ddci_process_ts(&ad, &d);
+    if (!did_write)
+        LOG_AND_RETURN(1, "no writev called");
+    if (last_iov_len != 188)
+        LOG_AND_RETURN(1, "expected a single 188 byte packet last, got %d",
+                       last_iov_len);
+    if (last_iov[0] != 0x47 || PID_FROM_TS(last_iov) != 8191)
+        LOG_AND_RETURN(1, "last packet is not a null packet (pid %d)",
+                       PID_FROM_TS(last_iov));
+    if ((last_iov[3] & 0x30) != 0x10)
+        LOG_AND_RETURN(1, "null packet must carry payload only, got %02X",
+                       last_iov[3]);
+    free_fifo(&d.fifo);
+    pmts[0] = save;
+    return 0;
+}
+
 int test_ddci_process_ts() {
     ddci_device_t d = {};
     uint8_t buf[188 * 10];
@@ -620,6 +684,8 @@ int main() {
     TEST_FUNC(test_add_del_pmt(), "testing adding and removing pmts");
     TEST_FUNC(test_copy_ts_from_ddci(), "testing test_copy_ts_from_ddci");
     TEST_FUNC(test_ddci_process_ts(), "testing ddci_process_ts");
+    TEST_FUNC(test_ddci_process_ts_null_tail(),
+              "testing ddci_process_ts ends every write with a null packet");
     TEST_FUNC(test_create_pat(), "testing create_pat");
     TEST_FUNC(test_create_sdt(), "testing create_sdt");
     TEST_FUNC(test_create_pmt(), "testing create_pmt");
