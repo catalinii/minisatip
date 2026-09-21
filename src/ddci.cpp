@@ -389,11 +389,13 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     }
 
     std::lock_guard<SMutex> lock(d->mutex);
-    int pos = -1;
+    int pos = -1, already_registered = 0;
 
     for (i = 0; i < d->max_channels; i++)
-        if (d->pmt[i].id == pmt->id)
+        if (d->pmt[i].id == pmt->id) {
             pos = i;
+            already_registered = 1;
+        }
 
     if (pos == -1) {
         for (i = 0; i < d->max_channels; i++)
@@ -413,7 +415,12 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     d->pmt[pos].ver = (d->pmt[pos].ver + 1) & 0xF;
 
     d->ver = (d->ver + 1) & 0xF;
-    if (!d->channels++) { // for first PMT set transponder ID
+    // Count only a new registration. send_pmt_to_cas() calls us again for a
+    // PMT that already holds a slot whenever pmt_add_caid() finds a new CA
+    // descriptor (it clears pmt->ca_mask to force a re-send); counting those
+    // re-sends used up max_channels with a single real channel.
+    if (!already_registered && !d->channels++) {
+        // for first PMT set transponder ID
         d->tid = ad->transponder_id;
     }
 
@@ -486,16 +493,21 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
         LOG_AND_RETURN(0, "%s: ddci %d already disabled", __FUNCTION__,
                        m->ddci);
     d->ver = (d->ver + 1) & 0xF;
-    if (d->channels > 0)
-        d->channels--;
-    LOG("%s: deleting pmt id %d, sid %d (%X), pid %d, ddci %d, name %s",
-        __FUNCTION__, spmt->id, spmt->sid, spmt->sid, m->ddci_pid, m->ddci,
-        spmt->name);
 
+    // Decrement only if this PMT actually held a slot, symmetric with
+    // ddci_process_pmt()
+    int was_registered = 0;
     for (i = 0; i < d->max_channels; i++)
         if (d->pmt[i].id == pmt) {
             d->pmt[i].id = -1;
+            was_registered = 1;
         }
+    if (was_registered && d->channels > 0)
+        d->channels--;
+    LOG("%s: deleting pmt id %d, sid %d (%X), pid %d, ddci %d, name %s, "
+        "held a slot %d, running channels %d",
+        __FUNCTION__, spmt->id, spmt->sid, spmt->sid, m->ddci_pid, m->ddci,
+        spmt->name, was_registered, d->channels);
 
     del_pmt_mapping_table(d, ad->id, pmt);
     update_pids(d->id);

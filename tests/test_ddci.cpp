@@ -131,6 +131,66 @@ int test_channels() {
     return 0;
 }
 
+// A PMT re-sent to the DDCI (pmt_add_caid() clears ca_mask to force it) must
+// not take another channel, and deleting a PMT that holds no slot must not
+// free one (#1442)
+int test_ddci_channel_count() {
+    SPMT *pmt0, *pmt_noslot;
+    ddci_device_t d0 = {};
+    ca_device_t ca0 = {};
+    adapter ad = {0}, a0 = {0};
+    int i;
+
+    // adapters of previous tests lived on their stacks
+    for (i = 0; i < MAX_ADAPTERS; i++)
+        a[i] = NULL;
+    create_adapter(&ad, 8);
+    create_adapter(&a0, 0);
+    pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
+    pmt_noslot = create_pmt(8, 700, 701, 702, 0x100, 0x100);
+    memset(&d0.pmt, -1, sizeof(d0.pmt));
+    d0.id = 0;
+    d0.enabled = 1;
+    d0.max_channels = 2;
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[0] = &d0;
+
+    ca0.id = 0;
+    ca0.enabled = 1;
+    ca0.state = CA_STATE_INITIALIZED;
+    memset(ca_devices, 0, sizeof(ca_devices));
+    ca_devices[0] = &ca0;
+    int dvbca_id = add_ca(&dvbca);
+    add_caid_mask(dvbca_id, 0, 0x100, 0xFFFF);
+
+    ASSERT(ddci_process_pmt(&ad, pmt0) == TABLES_RESULT_OK,
+           "PMT 0 expected to get a DDCI slot");
+    ASSERT(d0.channels == 1, "expected 1 running channel");
+
+    // re-send of the same PMT, as after pmt_add_caid()
+    ASSERT(ddci_process_pmt(&ad, pmt0) == TABLES_RESULT_OK,
+           "re-send of PMT 0 expected to succeed");
+    ASSERT(ddci_process_pmt(&ad, pmt0) == TABLES_RESULT_OK,
+           "re-send of PMT 0 expected to succeed");
+    ASSERT(d0.channels == 1, "re-sends must not count as new channels");
+
+    // a PMT that never held a slot, found through the same PMT pid mapping
+    pmt_noslot->pid = pmt0->pid;
+    ddci_del_pmt(&ad, pmt_noslot);
+    ASSERT(d0.channels == 1,
+           "deleting a PMT without a slot must not free a channel");
+
+    ddci_del_pmt(&ad, pmt0);
+    ASSERT(d0.channels == 0, "expected 0 running channels after delete");
+
+    channels.clear();
+    free_filters();
+    ddci_devices[0] = NULL;
+    ca_devices[0] = NULL;
+    a[0] = a[8] = NULL;
+    return 0;
+}
+
 int test_add_del_pmt() {
     SPMT *pmt0, *pmt1, *pmt2, *pmt3, *pmt4;
     ddci_device_t d0 = {}, d1 = {};
@@ -618,6 +678,8 @@ int main() {
     TEST_FUNC(test_process_cat(), "testing CAT processing");
     TEST_FUNC(test_channels(), "testing test_channels");
     TEST_FUNC(test_add_del_pmt(), "testing adding and removing pmts");
+    TEST_FUNC(test_ddci_channel_count(),
+              "testing DDCI channel accounting on re-send and delete");
     TEST_FUNC(test_copy_ts_from_ddci(), "testing test_copy_ts_from_ddci");
     TEST_FUNC(test_ddci_process_ts(), "testing ddci_process_ts");
     TEST_FUNC(test_create_pat(), "testing create_pat");
