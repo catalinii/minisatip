@@ -1304,7 +1304,7 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
     pmt->state = PMT_STOPPED;
     pmt->cw = NULL;
     pmt->opaque = NULL;
-    pmt->ca_mask = pmt->disabled_ca_mask = 0;
+    pmt->ca_mask = pmt->disabled_ca_mask = pmt->ca_registered_mask = 0;
     pmt->batch = NULL;
     memset(pmt->name, 0, sizeof(pmt->name));
     memset(pmt->provider, 0, sizeof(pmt->provider));
@@ -1381,6 +1381,7 @@ void cache_pmt_for_adapter(adapter *ad, SPMT *pmt) {
     pmt->state = PMT_CACHED;
     pmt->disabled_ca_mask = 0;
     pmt->ca_mask = 0;
+    pmt->ca_registered_mask = 0;
     for (i = 0; i < ad->active_pmts; i++)
         if (ad->active_pmt[i] == pmt->id)
             ad->active_pmt[i] = -1;
