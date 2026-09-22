@@ -976,6 +976,11 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
         // gaps on the readback, #1437). The trailing null packet takes that
         // position instead, so every real packet is sent out complete. It
         // costs one packet per write (~0.05 Mbit/s per source adapter).
+        // This also holds across DMA buffer wraps: the driver sizes its output
+        // buffers as dma_buf_size * 128 * 47 bytes, a multiple of both 128 and
+        // 188 (6016 = 128 * 47 = 188 * 32) for any dma_buf_size, so a packet
+        // never straddles two buffers. Keep that in mind if the buffer sizing
+        // ever changes.
         memset(null_tail, 0xFF, sizeof(null_tail));
         null_tail[0] = 0x47;
         null_tail[1] = 0x1F;
