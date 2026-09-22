@@ -142,6 +142,40 @@ int test_update_pids() {
     return 0;
 }
 
+int test_find_pid_unsorted() {
+    for (int i = 0; i < MAX_ADAPTERS; i++) {
+        a[i] = nullptr;
+    }
+
+    // Simulate the mid-update_pids state: the delete loop compacted a low
+    // slot to INACTIVE while a NEW entry sits behind it. find_pid must still
+    // find the entry (previously it stopped at the first INACTIVE slot, so
+    // dvb_set_psi_filter never attached the socket and the pid was later
+    // deleted through the wrong demux path).
+    adapter ad = {};
+    a[0] = &ad;
+    ad.id = 0;
+    ad.enabled = 1;
+    ad.pids[0].flags = PID_STATE_INACTIVE;
+    ad.pids[1].flags = PID_STATE_NEW;
+    ad.pids[1].pid = 18;
+    ad.pids[2].flags = PID_STATE_ACTIVE;
+    ad.pids[2].pid = 1151;
+    SPid *p = find_pid(0, 18);
+    ASSERT(p != nullptr && p->pid == 18,
+           "find_pid must find a NEW entry behind an INACTIVE slot");
+    p = find_pid(0, 1151);
+    ASSERT(p != nullptr && p->pid == 1151,
+           "find_pid must find an ACTIVE entry behind an INACTIVE slot");
+    ASSERT(find_pid(0, 9999) == nullptr,
+           "find_pid must return NULL for a missing pid");
+
+    for (int i = 0; i < MAX_ADAPTERS; i++) {
+        a[i] = nullptr;
+    }
+    return 0;
+}
+
 int test_compare_slave_parameters() {
     adapter master_ad = {};
     adapter slave_ad = {};
@@ -346,6 +380,8 @@ int main() {
     TEST_FUNC(test_get_lnb_int_freq_cband(),
               "test get_lnb_int_freq with C-band LNB parameters");
     TEST_FUNC(test_update_pids(), "test update_pids and sort_pids");
+    TEST_FUNC(test_find_pid_unsorted(),
+              "test find_pid with entries behind INACTIVE slots");
     TEST_FUNC(test_compare_slave_parameters(),
               "test compare_slave_parameters with std::optional");
 

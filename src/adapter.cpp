@@ -1061,13 +1061,13 @@ SPid *find_pid(int aid, int p) {
     if (!ad)
         return NULL;
 
+    // Scan the whole table: update_pids mutates flags mid-pass (the delete
+    // loop compacts entries to INACTIVE ahead of not-yet-processed NEW ones)
+    // and only re-sorts at the end, so stopping at the first INACTIVE slot
+    // can miss entries that are present.
     for (i = 0; i < MAX_PIDS; i++) {
         if ((ad->pids[i].flags > PID_STATE_INACTIVE) && (ad->pids[i].pid == p))
             return &ad->pids[i];
-        else if (ad->pids[i].flags ==
-                 PID_STATE_INACTIVE) // sort_pids ensures there is no active pid
-                                     // so we can exit early
-            break;
     }
     return NULL;
 }
