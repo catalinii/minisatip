@@ -1028,7 +1028,11 @@ void start_active_pmts(adapter *ad) {
                 pids[stream_pid.pid] && pmt->id == pmt->master_pmt) {
                 is_active = 1;
 #ifndef DISABLE_TABLES
-                if (!first) {
+                // A PMT revived from the cache has no filter until
+                // process_pmt() sees the next section. Starting it here would
+                // send the CAs a CA_PMT built from the cached descriptors,
+                // before the service is known to be unchanged.
+                if (!first && pmt->filter >= 0) {
                     first = 1;
                     if (pmt->state == PMT_STOPPED) {
                         start_pmt(pmt, ad);
@@ -1382,6 +1386,12 @@ void cache_pmt_for_adapter(adapter *ad, SPMT *pmt) {
     pmt->disabled_ca_mask = 0;
     pmt->ca_mask = 0;
     pmt->ca_registered_mask = 0;
+    // The filter is dropped below, so the cached stream pids and CA
+    // descriptors are only as good as the next PMT section. Forget the
+    // version as well, otherwise process_pmt() takes the "already processed"
+    // early return when the service comes back unchanged and the PMT is
+    // restarted from stale data.
+    pmt->version = -1;
     for (i = 0; i < ad->active_pmts; i++)
         if (ad->active_pmt[i] == pmt->id)
             ad->active_pmt[i] = -1;

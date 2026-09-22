@@ -55,6 +55,9 @@ extern SPMT *pmts[MAX_PMT];
 
 // Forward declarations
 descriptor_t create_descriptor(const uint8_t *data);
+void cache_pmt_for_adapter(adapter *ad, SPMT *pmt);
+void pmt_add_active_pmt(adapter *ad, int pmt_id);
+void start_active_pmts(adapter *ad);
 
 uint8_t packet[188] = {
     0x47, 0x40, 0xff, 0x99, 0x14, 0x4c, 0x83, 0x7f, 0x46, 0xba, 0xb8, 0x12,
@@ -335,6 +338,73 @@ int test_emulate_add_all_pids() {
     return 0;
 }
 
+// A PMT that disappeared from the PAT keeps its stream pids and CA
+// descriptors but loses its filter. When the service comes back,
+// pmt_add_active_pmt() marks it PMT_STOPPED again and start_active_pmts()
+// used to start it right away, with filter -1 and the cached descriptors,
+// before process_pmt() had a chance to look at the new section.
+int test_cached_pmt_is_not_started_without_a_filter() {
+    int i;
+    for (i = 0; i < MAX_ADAPTERS; i++)
+        a[i] = NULL;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+
+    SPMT pmt = {};
+    pmts[0] = &pmt;
+    pmt.enabled = 1;
+    pmt.id = 0;
+    pmt.master_pmt = 0;
+    pmt.adapter = 0;
+    pmt.sid = 17030;
+    pmt.pid = 256;
+    pmt.filter = -1;
+    pmt.version = 7;
+    pmt.state = PMT_RUNNING;
+    SStreamPid sp{.type = 2, .pid = 300, .is_audio = false, .is_video = true};
+    pmt.stream_pids.push_back(sp);
+
+    // the client keeps streaming the video pid while the PMT is gone
+    ad.pids[0].pid = 300;
+    ad.pids[0].flags = PID_STATE_ACTIVE;
+    ad.pids[0].pmt = -1;
+
+    ad.active_pmts = 1;
+    ad.active_pmt[0] = 0;
+
+    cache_pmt_for_adapter(&ad, &pmt);
+    ASSERT_EQUAL(pmt.state, PMT_CACHED, "PMT should be cached");
+    ASSERT_EQUAL(pmt.version, -1,
+                 "the cached PMT should forget its version, otherwise "
+                 "process_pmt() skips the reparse when it comes back");
+
+    // the sid shows up again in the PAT
+    ad.active_pmts = 0;
+    pmt_add_active_pmt(&ad, 0);
+    ASSERT_EQUAL(pmt.state, PMT_STOPPED, "the revived PMT should be stopped");
+
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmt.state, PMT_STOPPED,
+                 "the revived PMT should stay stopped until process_pmt() "
+                 "gives it a filter");
+    ASSERT_EQUAL(pmt.ca_mask, 0,
+                 "no CA_PMT should be sent before the PMT is reparsed");
+
+    // process_pmt() sets the filter, the next pass starts the PMT
+    pmt.filter = 0;
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmt.state, PMT_RUNNING,
+                 "the PMT should start once it has a filter");
+
+    pmts[0] = NULL;
+    a[0] = NULL;
+    return 0;
+}
+
 int main() {
     opts.log = 255;
     opts.debug = 255;
@@ -353,6 +423,8 @@ int main() {
               "testing assemble_packet with multiple packets");
     TEST_FUNC(test_emulate_add_all_pids(),
               "testing test_emulate_add_all_pids failed")
+    TEST_FUNC(test_cached_pmt_is_not_started_without_a_filter(),
+              "testing that a revived cached PMT waits for its filter")
     fflush(stdout);
     return 0;
 }
