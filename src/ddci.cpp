@@ -886,6 +886,7 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
     int pid, dpid, i;
     struct iovec io[iomax];
     unsigned char psi[MAX_CHANNELS_ON_CI * 1500];
+    unsigned char null_tail[DVB_FRAME];
     uint16_t ad_dd_pids[8192], dd_ad_pids[8192];
 
     std::lock_guard<SMutex> lock(d->mutex);
@@ -952,6 +953,26 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
             bytes += io[iop].iov_len;
             iop++;
         }
+
+        // End every write with one null packet (pid 8191). The ddbridge
+        // driver hands the written data to the FPGA with a 128 byte
+        // granularity (DMA_BUFFER_ACK takes coff >> 7), so unless a write
+        // ends on a multiple of 6016 bytes (32 TS packets), up to 127 bytes
+        // of its last packet stay invisible to the FPGA and the output to the
+        // CI stops in the middle of that packet until the next write. Some
+        // CAMs drop the torn packet while descrambling (seen as 1-3 packet CC
+        // gaps on the readback, #1437). The trailing null packet takes that
+        // position instead, so every real packet is sent out complete. It
+        // costs one packet per write (~0.05 Mbit/s per source adapter).
+        memset(null_tail, 0xFF, sizeof(null_tail));
+        null_tail[0] = 0x47;
+        null_tail[1] = 0x1F;
+        null_tail[2] = 0xFF;
+        null_tail[3] = 0x10;
+        io[iop].iov_base = null_tail;
+        io[iop].iov_len = DVB_FRAME;
+        bytes += DVB_FRAME;
+        iop++;
 
         DEBUGM("writing %d bytes to DDCI device %d, fd %d, sock %d", bytes,
                d->id, ad2->fe, ad2->fe_sock);
