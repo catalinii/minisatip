@@ -141,7 +141,11 @@ typedef struct struct_pmt {
     std::vector<SStreamPid> stream_pids;
     int id;
     int blen;
-    int ca_mask, disabled_ca_mask;
+    // ca_mask: the PMT was sent to that CA. pmt_add_caid() clears it to force
+    // a re-send when a new CA descriptor shows up.
+    // ca_registered_mask: that CA holds the PMT and must be told when it
+    // stops. Cleared when the registration, CA, or cached PMT is removed.
+    int ca_mask, disabled_ca_mask, ca_registered_mask;
     SPMT_batch *batch;
     int8_t parity, update_cw;
     uint64_t last_update_cw;

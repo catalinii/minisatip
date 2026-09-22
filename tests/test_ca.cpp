@@ -21,6 +21,7 @@
 #include "dvb.h"
 #include "minisatip.h"
 #include "socketworks.h"
+#include "tables.h"
 #include "utils.h"
 #include "utils/testing.h"
 #include <arpa/inet.h>
@@ -530,6 +531,67 @@ int test_set_ca_channels_parsing() {
     return 0;
 }
 
+// A CA that only counts how often a PMT is released on it
+static int fake_ca_del_calls;
+static int fake_ca_add_pmt(adapter *ad, SPMT *pmt) { return TABLES_RESULT_OK; }
+static int fake_ca_del_pmt(adapter *ad, SPMT *pmt) {
+    fake_ca_del_calls++;
+    return TABLES_RESULT_OK;
+}
+static SCA_op fake_ca_op = {.ca_add_pid = NULL,
+                            .ca_del_pid = NULL,
+                            .ca_add_pmt = fake_ca_add_pmt,
+                            .ca_del_pmt = fake_ca_del_pmt,
+                            .ca_init_dev = NULL,
+                            .ca_close_dev = NULL,
+                            .ca_ts = NULL,
+                            .ca_close_ca = NULL};
+
+// pmt_add_caid() clears ca_mask to force a re-send. A PMT stopped before that
+// re-send happens must still be released on the CA that holds it (#1442)
+extern int pmt_del(int id);
+
+int test_close_pmt_after_caid_update() {
+    uint8_t priv[1] = {0};
+    adapter ad = {};
+    ad.enabled = 1;
+    ad.id = 5;
+    ad.type = ADAPTER_DVB;
+    a[5] = &ad;
+
+    int ica = add_ca(&fake_ca_op);
+    ASSERT(ica >= 0, "could not register the fake CA");
+    ad.ca_mask = 1 << ica;
+
+    int id = pmt_add(ad.id, 0x2000, 0x2001);
+    ASSERT(id >= 0, "could not create the PMT");
+    SPMT *pmt = get_pmt(id);
+    pmt_add_caid(pmt, 0x0664, 0x1F06, priv, 0);
+    send_pmt_to_cas(&ad, pmt);
+    ASSERT(pmt->ca_mask & (1 << ica), "PMT was not sent to the CA");
+
+    // a new CA descriptor turns up, the PMT is due for a re-send ...
+    pmt_add_caid(pmt, 0x06EE, 0x1F07, priv, 0);
+    ASSERT_EQUAL(pmt->ca_mask, 0, "pmt_add_caid() expected to clear ca_mask");
+
+    // ... but it is stopped before the re-send
+    fake_ca_del_calls = 0;
+    close_pmt_for_cas(&ad, pmt);
+    ASSERT_EQUAL(fake_ca_del_calls, 1,
+                 "the CA holding the PMT was not told that it stopped");
+    ASSERT_EQUAL(pmt->ca_registered_mask, 0,
+                 "the CA registration was not cleared");
+
+    // nothing left to release
+    close_pmt_for_cas(&ad, pmt);
+    ASSERT_EQUAL(fake_ca_del_calls, 1, "the PMT was released twice");
+
+    pmt_del(id);
+    del_ca(&fake_ca_op);
+    a[5] = NULL;
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -562,6 +624,9 @@ int main() {
               "testing create_capmt with both PMT and other with many streams");
     TEST_FUNC(test_create_capmt_size_near_limit(),
               "testing create_capmt size near 1500 byte limit");
+    TEST_FUNC(
+        test_close_pmt_after_caid_update(),
+        "testing CA release of a PMT stopped after a CA descriptor update");
     fflush(stdout);
     return 0;
 }

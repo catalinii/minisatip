@@ -97,9 +97,10 @@ void del_ca(SCA_op *op) {
                         ad->ca_mask &= ~mask;
                 }
                 for (k = 0; k < MAX_PMT; k++) // delete ca_mask for all the PMTs
-                    if (pmts[k] && pmts[k]->enabled &&
-                        (pmts[k]->ca_mask & mask))
+                    if (pmts[k] && pmts[k]->enabled) {
                         pmts[k]->ca_mask &= ~mask;
+                        pmts[k]->ca_registered_mask &= ~mask;
+                    }
             }
         }
         mask = mask << 1;
@@ -193,17 +194,22 @@ void close_pmt_for_ca(int i, adapter *ad, SPMT *pmt) {
         ad = get_adapter(pmt->adapter);
     if (!ad)
         return;
-    if (ca[i].enabled && (ad->ca_mask & mask) && (pmt->ca_mask & mask)) {
+    // Check ca_registered_mask, not ca_mask: pmt_add_caid() clears ca_mask to
+    // force a re-send, and a PMT stopped right after that was never released
+    // on the CA, which kept it registered for ever (a leaked CAM slot).
+    if (ca[i].enabled && (ad->ca_mask & mask) &&
+        (pmt->ca_registered_mask & mask)) {
         LOGM("Closing pmt %d for ca %d and adapter %d", pmt->id, i, ad->id);
         if (ad && ca[i].op->ca_del_pmt)
             ca[i].op->ca_del_pmt(ad, pmt);
         pmt->ca_mask &= ~mask;
+        pmt->ca_registered_mask &= ~mask;
     }
 }
 
 int close_pmt_for_cas(adapter *ad, SPMT *pmt) {
     int i;
-    if (!pmt || !pmt->ca_mask)
+    if (!pmt || !pmt->ca_registered_mask)
         return 0;
 
     if (!ad)
@@ -240,6 +246,7 @@ int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt) {
 
         if (result == TABLES_RESULT_OK) {
             pmt->ca_mask |= mask;
+            pmt->ca_registered_mask |= mask;
         } else if (result == TABLES_RESULT_ERROR_NORETRY)
             pmt->disabled_ca_mask |= mask;
         disable_cw(pmt->id);
