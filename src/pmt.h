@@ -144,7 +144,7 @@ typedef struct struct_pmt {
     // ca_mask: the PMT was sent to that CA. pmt_add_caid() clears it to force
     // a re-send when a new CA descriptor shows up.
     // ca_registered_mask: that CA holds the PMT and must be told when it
-    // stops. Not cleared by pmt_add_caid(), only by close_pmt_for_ca().
+    // stops. Cleared when the registration, CA, or cached PMT is removed.
     int ca_mask, disabled_ca_mask, ca_registered_mask;
     SPMT_batch *batch;
     int8_t parity, update_cw;
