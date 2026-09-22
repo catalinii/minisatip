@@ -282,6 +282,40 @@ int test_update_pids_max_pids_floor() {
     return 0;
 }
 
+int dvb_demux_shared_pid_count(adapter *a);
+void dvb_reset_demux_state(adapter *a);
+
+int test_dvb_demux_state() {
+    adapter ad = {};
+    ad.dvr = 12;
+    ad.pids[0].flags = PID_STATE_ACTIVE;
+    ad.pids[0].pid = 0;
+    ad.pids[0].fd = 18; // PSI pid on its own fd
+    ad.pids[1].flags = PID_STATE_ACTIVE;
+    ad.pids[1].pid = 1151;
+    ad.pids[1].fd = 12; // media pid on the shared demux fd
+    ad.pids[2].flags = PID_STATE_NEW;
+    ad.pids[2].pid = 2221;
+    ad.pids[2].fd = 0; // not active yet: must not be counted
+    ad.pids[3].flags = PID_STATE_DELETED;
+    ad.pids[3].pid = 20;
+    ad.pids[3].fd = 12; // deleted: must not be counted
+    ASSERT(dvb_demux_shared_pid_count(&ad) == 1,
+           "only active pids on the shared demux fd must be counted");
+
+    int saved_max_pids = opts.max_pids;
+    opts.max_pids = 32;
+    ad.active_demux_pids = 7;
+    ad.max_pids = 4;
+    dvb_reset_demux_state(&ad);
+    ASSERT(ad.active_demux_pids == 0,
+           "open must reset a stale demux pid counter");
+    ASSERT(ad.max_pids == 32,
+           "open must restore the pid cap instead of keeping a stale one");
+    opts.max_pids = saved_max_pids;
+    return 0;
+}
+
 int test_compare_slave_parameters() {
     adapter master_ad = {};
     adapter slave_ad = {};
@@ -492,6 +526,8 @@ int main() {
               "test max_pids floor and error below the minimum pid count");
     TEST_FUNC(test_update_pids_del_filters_error(),
               "test removal error below the minimum pid count");
+    TEST_FUNC(test_dvb_demux_state(),
+              "test demux state reset and shared fd pid count");
     TEST_FUNC(test_compare_slave_parameters(),
               "test compare_slave_parameters with std::optional");
 

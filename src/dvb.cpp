@@ -876,6 +876,24 @@ void dvb_set_demux_source(adapter *ad) {
 #endif
 }
 
+void dvb_reset_demux_state(adapter *ad) {
+    // Fresh demux fds carry no PES filter and no learned pid cap: drop any
+    // counter/cap left over from a previous session on this adapter, so the
+    // first demux pid uses DMX_SET_PES_FILTER instead of DMX_ADD_PID.
+    ad->active_demux_pids = 0;
+    ad->max_pids = opts.max_pids;
+}
+
+// Number of active pids currently using the shared demux fd. Used to decide
+// whether DMX_SET_PES_FILTER recovery is safe (no live pids to disrupt).
+int dvb_demux_shared_pid_count(adapter *a) {
+    int n = 0;
+    for (int i = 0; i < MAX_PIDS; i++)
+        if (a->pids[i].flags == PID_STATE_ACTIVE && a->pids[i].fd == a->dvr)
+            n++;
+    return n;
+}
+
 int dvb_open_device(adapter *ad) {
     char buf[100];
     int use_demux = opts.use_demux_device == USE_DEMUX ||
@@ -904,6 +922,7 @@ int dvb_open_device(adapter *ad) {
     }
     ad->type = ADAPTER_DVB;
     ad->dmx = -1;
+    dvb_reset_demux_state(ad);
     LOG("opened DVB adapter %d fe:%d dvr:%d", ad->id, ad->fe, ad->dvr);
     if (ioctl(ad->dvr, DMX_SET_BUFFER_SIZE, opts.dvr_buffer) < 0)
         LOG("couldn't set DVR buffer size error %d: %s", errno, strerror(errno))
@@ -1566,14 +1585,14 @@ int dvb_set_pid(adapter *a, int i_pid) {
 
 int dvb_del_filters(adapter *ad, int fd, int pid) {
     uint64_t ctime = getTick();
-    int rv = 0;
     if (fd < 0)
         LOG_AND_RETURN(0, "DMX_STOP on an invalid handle %d, pid %d", fd, pid);
-    if (ioctl(fd, DMX_STOP, NULL) < 0) {
+    // Best effort: the fd is unconditionally closed below, which releases the
+    // filter even if DMX_STOP fails, so a stop error is not a removal error.
+    if (ioctl(fd, DMX_STOP, NULL) < 0)
         LOG0("DMX_STOP failed on PID %d FD %d: error %d %s", pid, fd, errno,
-             strerror(errno));
-        rv = -1;
-    } else
+             strerror(errno))
+    else
         LOG("clearing filter on PID %d FD %d [%jd ms]", pid, fd,
             getTick() - ctime);
 
@@ -1586,10 +1605,30 @@ int dvb_del_filters(adapter *ad, int fd, int pid) {
         p->sock = -1;
     } else
         close(fd);
-    return rv;
+    return 0;
 }
 
 // useful on devices where DVR is not used
+
+static int dvb_demux_set_pes_filter(adapter *a, int fd, int i_pid) {
+    struct dmx_pes_filter_params s_filter_params;
+
+    memset(&s_filter_params, 0, sizeof(s_filter_params));
+    s_filter_params.pid = i_pid;
+    s_filter_params.input = DMX_IN_FRONTEND;
+    s_filter_params.output = DMX_OUT_TSDEMUX_TAP;
+    s_filter_params.flags = DMX_IMMEDIATE_START;
+    s_filter_params.pes_type = DMX_PES_OTHER;
+
+    if (ioctl(fd, DMX_SET_PES_FILTER, &s_filter_params) < 0) {
+        LOG0("failed setting filter on fd %d, adapter %d, pid %d, errno %d "
+             "(%s), "
+             "enabled pids %d",
+             fd, a->id, i_pid, errno, strerror(errno), a->active_pids);
+        return -1;
+    }
+    return 0;
+}
 
 int dvb_demux_set_pid(adapter *a, int i_pid) {
     int fd = a->dvr;
@@ -1599,21 +1638,7 @@ int dvb_demux_set_pid(adapter *a, int i_pid) {
         LOG_AND_RETURN(-1, "pid %d > 8192 for adapter %d", i_pid, a->id);
 
     if (a->active_demux_pids++ == 0) {
-        struct dmx_pes_filter_params s_filter_params;
-
-        memset(&s_filter_params, 0, sizeof(s_filter_params));
-        s_filter_params.pid = i_pid;
-        s_filter_params.input = DMX_IN_FRONTEND;
-        s_filter_params.output = DMX_OUT_TSDEMUX_TAP;
-        s_filter_params.flags = DMX_IMMEDIATE_START;
-        s_filter_params.pes_type = DMX_PES_OTHER;
-
-        if (ioctl(fd, DMX_SET_PES_FILTER, &s_filter_params) < 0) {
-            int ep = a->active_pids;
-            LOG0("failed setting filter on fd %d, adapter %d, pid %d, errno %d "
-                 "(%s), "
-                 "enabled pids %d",
-                 fd, a->id, i_pid, errno, strerror(errno), ep);
+        if (dvb_demux_set_pes_filter(a, fd, i_pid)) {
             a->active_demux_pids--;
             return -1;
         }
@@ -1625,8 +1650,21 @@ int dvb_demux_set_pid(adapter *a, int i_pid) {
 
     uint16_t p = i_pid;
     if (ioctl(fd, DMX_ADD_PID, &p) < 0) {
+        int err = errno;
         LOG0("failed to add pid %d to fd %d maximum pids %d: errno %d, %s", p,
-             fd, a->active_pids, errno, strerror(errno));
+             fd, a->active_pids, err, strerror(err));
+        if (err == EINVAL && !dvb_demux_shared_pid_count(a) &&
+            !dvb_demux_set_pes_filter(a, fd, i_pid)) {
+            // No other pid is using the shared demux fd, so it cannot have a
+            // PES filter: the demux counter disagrees with the driver (e.g.
+            // stale count after adapter reopen). Recover by setting the
+            // filter instead of adding to it.
+            LOG("AD %d [demux %d %d], recovered stale demux counter, setting "
+                "filter on PID %d for fd %d",
+                a->id, a->pa, a->fn, i_pid, fd);
+            a->active_demux_pids = 1;
+            return fd;
+        }
         a->active_demux_pids--;
         return -1;
     }
@@ -1653,11 +1691,12 @@ int dvb_demux_del_filters(adapter *ad, int fd, int pid) {
     }
 
     if (!--ad->active_demux_pids) {
-        if (ioctl(fd, DMX_STOP, NULL) < 0) {
+        // Best effort: the pid was already removed above and the shared fd
+        // stays open, so a stop error must not fail the removal. The next
+        // first pid re-arms the demux with DMX_SET_PES_FILTER.
+        if (ioctl(fd, DMX_STOP, NULL) < 0)
             LOG("DMX_STOP failed on PID %d FD %d: error %d %s", pid, fd, errno,
                 strerror(errno));
-            rv = -1;
-        }
         LOG("stopped filters on fd %d", fd);
     }
 
