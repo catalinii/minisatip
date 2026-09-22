@@ -876,14 +876,6 @@ void dvb_set_demux_source(adapter *ad) {
 #endif
 }
 
-void dvb_reset_demux_state(adapter *ad) {
-    // Fresh demux fds carry no PES filter and no learned pid cap: drop any
-    // counter/cap left over from a previous session on this adapter, so the
-    // first demux pid uses DMX_SET_PES_FILTER instead of DMX_ADD_PID.
-    ad->active_demux_pids = 0;
-    ad->max_pids = opts.max_pids;
-}
-
 // Number of active pids currently using the shared demux fd. Used to decide
 // whether DMX_SET_PES_FILTER recovery is safe (no live pids to disrupt).
 int dvb_demux_shared_pid_count(adapter *a) {
@@ -922,7 +914,9 @@ int dvb_open_device(adapter *ad) {
     }
     ad->type = ADAPTER_DVB;
     ad->dmx = -1;
-    dvb_reset_demux_state(ad);
+    // Fresh demux fd carries no PES filter: drop any counter left over from
+    // a previous session, so the first demux pid uses DMX_SET_PES_FILTER.
+    ad->active_demux_pids = 0;
     LOG("opened DVB adapter %d fe:%d dvr:%d", ad->id, ad->fe, ad->dvr);
     if (ioctl(ad->dvr, DMX_SET_BUFFER_SIZE, opts.dvr_buffer) < 0)
         LOG("couldn't set DVR buffer size error %d: %s", errno, strerror(errno))

@@ -920,11 +920,9 @@ int update_pids(int aid) {
                 if (ad->active_pids > 0)
                     ad->active_pids--;
                 if (ad->del_filters &&
-                    ad->del_filters(ad, ad->pids[i].fd, ad->pids[i].pid) &&
-                    ad->active_pids < MIN_ADAPTER_PIDS) {
-                    LOG0("failed to remove pid %d with only %d active pids, "
-                         "reporting error",
-                         ad->pids[i].pid, ad->active_pids);
+                    ad->del_filters(ad, ad->pids[i].fd, ad->pids[i].pid)) {
+                    LOG0("failed to remove pid %d, reporting error",
+                         ad->pids[i].pid);
                     rv = 1;
                 }
             }
