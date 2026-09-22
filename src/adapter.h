@@ -35,6 +35,11 @@ typedef struct ca_device ca_device_t;
 #define MAX_PMT_FOR_ADAPTER 255
 
 #define MAX_PIDS 128
+// Minimum usable pid count per adapter. A demux failure (e.g. DMX_ADD_PID
+// errno 22) must never permanently cap an adapter below this, and a pid that
+// fails to be added while below this count is reported as an error so the
+// RTSP reply reflects it instead of 200 OK.
+#define MIN_ADAPTER_PIDS 16
 #define PID_STREAM_ID_UNDEFINED -1
 #define PID_STATE_INACTIVE 0
 #define PID_STATE_ACTIVE 1

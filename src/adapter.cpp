@@ -883,6 +883,7 @@ void close_adapter_for_stream(int sid, int aid, int close_stream) {
 
 int update_pids(int aid) {
     int i;
+    int rv = 0;
     bool dp = true;
     adapter *ad;
     ad = get_adapter(aid);
@@ -949,8 +950,16 @@ int update_pids(int aid) {
                 else if (ad->set_pid &&
                          (ad->pids[i].fd = ad->set_pid(ad, pid)) < 0) {
                     ad->max_pids = ad->max_active_pids - 1;
+                    if (ad->max_pids < MIN_ADAPTER_PIDS)
+                        ad->max_pids = MIN_ADAPTER_PIDS;
                     LOG0("Maximum pid filter reached, lowering the value to %d",
-                         opts.max_pids);
+                         ad->max_pids);
+                    if (ad->active_pids < MIN_ADAPTER_PIDS) {
+                        LOG0("failed to add pid %d with only %d active pids, "
+                             "reporting error",
+                             pid, ad->active_pids);
+                        rv = 1;
+                    }
                     break;
                 }
                 ad->active_pids++;
@@ -973,7 +982,7 @@ int update_pids(int aid) {
     ad->updating_pids = 0;
     ad->pids_updates++;
     sort_pids(ad->id);
-    return 0;
+    return rv;
 }
 
 void post_tune(adapter *ad) {

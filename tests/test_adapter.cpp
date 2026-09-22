@@ -176,6 +176,64 @@ int test_find_pid_unsorted() {
     return 0;
 }
 
+static int test_set_pid_fail(adapter *ad, int pid) {
+    (void)ad;
+    (void)pid;
+    return -1;
+}
+
+int test_update_pids_max_pids_floor() {
+    for (int i = 0; i < MAX_ADAPTERS; i++) {
+        a[i] = nullptr;
+    }
+
+    // Demux failure while below the minimum: max_pids must not drop below
+    // MIN_ADAPTER_PIDS and update_pids must report an error so the RTSP
+    // reply reflects it.
+    adapter ad = {};
+    a[0] = &ad;
+    ad.id = 0;
+    ad.enabled = 1;
+    ad.active_pids = 5;
+    ad.max_active_pids = 5;
+    ad.set_pid = test_set_pid_fail;
+    ad.pids[0].flags = PID_STATE_NEW;
+    ad.pids[0].pid = 1151;
+    ASSERT(update_pids(0) != 0,
+           "update_pids should fail when a pid cannot be added below the "
+           "minimum pid count");
+    ASSERT(ad.max_pids == MIN_ADAPTER_PIDS,
+           "max_pids must not go below MIN_ADAPTER_PIDS");
+    ASSERT(ad.pids[0].flags == PID_STATE_NEW,
+           "failing pid must stay NEW so a later update retries it");
+
+    // Repeated failures must not lower the floor further.
+    ASSERT(update_pids(0) != 0, "repeated failure should still report error");
+    ASSERT(ad.max_pids == MIN_ADAPTER_PIDS,
+           "max_pids must stay at MIN_ADAPTER_PIDS on repeated failures");
+
+    // Demux failure at/above the minimum keeps the old behavior: lower the
+    // cap (but not below the floor) and succeed so existing streams continue.
+    adapter ad2 = {};
+    a[0] = &ad2;
+    ad2.id = 0;
+    ad2.enabled = 1;
+    ad2.active_pids = 20;
+    ad2.max_active_pids = 20;
+    ad2.set_pid = test_set_pid_fail;
+    ad2.pids[0].flags = PID_STATE_NEW;
+    ad2.pids[0].pid = 1151;
+    ASSERT(update_pids(0) == 0,
+           "update_pids should succeed when the cap is reached at/above the "
+           "minimum pid count");
+    ASSERT(ad2.max_pids == 19, "max_pids should lower to max_active_pids - 1");
+
+    for (int i = 0; i < MAX_ADAPTERS; i++) {
+        a[i] = nullptr;
+    }
+    return 0;
+}
+
 int test_compare_slave_parameters() {
     adapter master_ad = {};
     adapter slave_ad = {};
@@ -382,6 +440,8 @@ int main() {
     TEST_FUNC(test_update_pids(), "test update_pids and sort_pids");
     TEST_FUNC(test_find_pid_unsorted(),
               "test find_pid with entries behind INACTIVE slots");
+    TEST_FUNC(test_update_pids_max_pids_floor(),
+              "test max_pids floor and error below the minimum pid count");
     TEST_FUNC(test_compare_slave_parameters(),
               "test compare_slave_parameters with std::optional");
 
