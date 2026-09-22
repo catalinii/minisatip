@@ -1566,12 +1566,14 @@ int dvb_set_pid(adapter *a, int i_pid) {
 
 int dvb_del_filters(adapter *ad, int fd, int pid) {
     uint64_t ctime = getTick();
+    int rv = 0;
     if (fd < 0)
         LOG_AND_RETURN(0, "DMX_STOP on an invalid handle %d, pid %d", fd, pid);
-    if (ioctl(fd, DMX_STOP, NULL) < 0)
+    if (ioctl(fd, DMX_STOP, NULL) < 0) {
         LOG0("DMX_STOP failed on PID %d FD %d: error %d %s", pid, fd, errno,
-             strerror(errno))
-    else
+             strerror(errno));
+        rv = -1;
+    } else
         LOG("clearing filter on PID %d FD %d [%jd ms]", pid, fd,
             getTick() - ctime);
 
@@ -1584,7 +1586,7 @@ int dvb_del_filters(adapter *ad, int fd, int pid) {
         p->sock = -1;
     } else
         close(fd);
-    return 0;
+    return rv;
 }
 
 // useful on devices where DVR is not used
@@ -1612,6 +1614,7 @@ int dvb_demux_set_pid(adapter *a, int i_pid) {
                  "(%s), "
                  "enabled pids %d",
                  fd, a->id, i_pid, errno, strerror(errno), ep);
+            a->active_demux_pids--;
             return -1;
         }
         LOG("AD %d [dvr %d %d], setting filter on PID %d for fd %d, active "
@@ -1624,6 +1627,7 @@ int dvb_demux_set_pid(adapter *a, int i_pid) {
     if (ioctl(fd, DMX_ADD_PID, &p) < 0) {
         LOG0("failed to add pid %d to fd %d maximum pids %d: errno %d, %s", p,
              fd, a->active_pids, errno, strerror(errno));
+        a->active_demux_pids--;
         return -1;
     }
     LOG("AD %d [demux %d %d], setting filter on PID %d for fd %d [%jd ms]",
@@ -1641,21 +1645,25 @@ int dvb_demux_del_filters(adapter *ad, int fd, int pid) {
         LOG_AND_RETURN(-1, "pid %d > 8192 for adapter %d", pid, ad->id);
 
     uint16_t p = pid;
+    int rv = 0;
     if (ioctl(fd, DMX_REMOVE_PID, &p) < 0) {
         LOG0("failed to remove pid %d to fd %d: errno %d, %s", p, fd, errno,
              strerror(errno));
+        rv = -1;
     }
 
     if (!--ad->active_demux_pids) {
-        if (ioctl(fd, DMX_STOP, NULL) < 0)
+        if (ioctl(fd, DMX_STOP, NULL) < 0) {
             LOG("DMX_STOP failed on PID %d FD %d: error %d %s", pid, fd, errno,
                 strerror(errno));
+            rv = -1;
+        }
         LOG("stopped filters on fd %d", fd);
     }
 
     LOG("clearing demux filter on PID %d FD %d, active_pids %d [%jd ms]", pid,
         fd, ad->active_demux_pids, getTick() - ctime);
-    return 0;
+    return rv;
 }
 
 // construct TS header from PSI data
