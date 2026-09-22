@@ -80,6 +80,50 @@ int test_multiple_pmt() {
     return 0;
 }
 
+// A new PMT should go into a CAPMT of its own while there is a free one.
+// Packing it next to a PMT that is already running rewrites that CAPMT with
+// a new version and the CAM restarts the channel it carries.
+int test_capmt_uses_empty_slots_first() {
+    ca_device_t dev;
+    memset(&dev, 0, sizeof(dev));
+    memset(dev.capmt, -1, sizeof(dev.capmt));
+    dev.enabled = 1;
+    dev.multiple_pmt = 1;
+    dev.max_ca_pmt = 4;
+
+    int first = pmt_add(0, 500, 500);
+    int second = pmt_add(0, 600, 600);
+
+    SCAPMT *c1 = add_pmt_to_capmt(&dev, get_pmt(first), dev.multiple_pmt);
+    ASSERT(c1 == dev.capmt, "the first PMT should use the first CAPMT");
+
+    SCAPMT *c2 = add_pmt_to_capmt(&dev, get_pmt(second), dev.multiple_pmt);
+    ASSERT(c2 == dev.capmt + 1,
+           "the second PMT should use an empty CAPMT, not the one in use");
+    ASSERT(dev.capmt[0].pmt_id == first &&
+               !PMT_ID_IS_VALID(dev.capmt[0].other_id),
+           "the first CAPMT should be left alone");
+    ASSERT(dev.capmt[1].pmt_id == second, "the second CAPMT should be used");
+
+    // with every CAPMT taken, packing two PMTs together is the only option
+    int third = pmt_add(0, 700, 700);
+    int fourth = pmt_add(0, 800, 800);
+    int fifth = pmt_add(0, 900, 900);
+    add_pmt_to_capmt(&dev, get_pmt(third), dev.multiple_pmt);
+    add_pmt_to_capmt(&dev, get_pmt(fourth), dev.multiple_pmt);
+    SCAPMT *c5 = add_pmt_to_capmt(&dev, get_pmt(fifth), dev.multiple_pmt);
+    ASSERT(c5 == dev.capmt, "the fifth PMT should be packed in the first "
+                            "CAPMT once all of them are used");
+    ASSERT(dev.capmt[0].other_id == fifth, "expected the fifth PMT packed");
+
+    // an update of a PMT keeps using the CAPMT it is already in
+    ASSERT(add_pmt_to_capmt(&dev, get_pmt(second), dev.multiple_pmt) ==
+               dev.capmt + 1,
+           "an update should reuse the same CAPMT");
+
+    return 0;
+}
+
 int test_create_capmt_single_clear() {
     int pmt_id = pmt_add(0, 0x100, 0x101);
     SPMT *pmt = get_pmt(pmt_id);
@@ -609,6 +653,8 @@ int main() {
     TEST_FUNC(test_get_ca_caids_string(), "testing CAID string generation");
     TEST_FUNC(test_multiple_pmt(), "testing CA multiple pmt");
     memset(d.capmt, -1, sizeof(d.capmt));
+    TEST_FUNC(test_capmt_uses_empty_slots_first(),
+              "testing that a new PMT uses an empty CAPMT when there is one");
     TEST_FUNC(test_get_authdata_filename(), "testing filename helper function");
     TEST_FUNC(test_create_capmt_single_clear(),
               "testing create_capmt with single PMT without CA descriptors");

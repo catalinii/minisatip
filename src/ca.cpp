@@ -862,15 +862,28 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple) {
             break;
         }
     }
-    // add the pmt to the CI
+    // add the pmt to the CI, in an empty CAPMT if there is one.
+    // Packing it next to another PMT rewrites the CAPMT that carries that
+    // PMT with a new version, and the CAM restarts the descrambling of the
+    // channel that is already running. Only pack when there is no room left.
     if (!res) {
         for (ca_pos = 0; ca_pos < d->max_ca_pmt; ca_pos++) {
-            if (d->capmt[ca_pos].pmt_id == -1) {
+            if (!PMT_ID_IS_VALID(d->capmt[ca_pos].pmt_id) &&
+                !PMT_ID_IS_VALID(d->capmt[ca_pos].other_id)) {
                 d->capmt[ca_pos].pmt_id = pmt->id;
                 res = d->capmt + ca_pos;
                 break;
             }
-            if (multiple && d->capmt[ca_pos].other_id == -1) {
+        }
+    }
+    if (!res && multiple) {
+        for (ca_pos = 0; ca_pos < d->max_ca_pmt; ca_pos++) {
+            if (!PMT_ID_IS_VALID(d->capmt[ca_pos].pmt_id)) {
+                d->capmt[ca_pos].pmt_id = pmt->id;
+                res = d->capmt + ca_pos;
+                break;
+            }
+            if (!PMT_ID_IS_VALID(d->capmt[ca_pos].other_id)) {
                 d->capmt[ca_pos].other_id = pmt->id;
                 res = d->capmt + ca_pos;
                 break;
