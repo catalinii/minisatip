@@ -1111,6 +1111,21 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt) {
     if (!capmt)
         LOG_AND_RETURN(0, "CAPMT not found for pmt %d", spmt->id);
 
+    // This PMT is the last one in the CAPMT: nothing will be sent for this
+    // program number again, so tell the CAM to stop descrambling it before
+    // the slot is released. Without it the program stays selected in the CAM
+    // and the next channel that reuses the slot is descrambled next to a
+    // service the CAM still believes is running.
+    int last_in_capmt =
+        capmt->pmt_id == spmt->id && !PMT_ID_IS_VALID(capmt->other_id);
+    if (last_in_capmt) {
+        capmt->version = (capmt->version + 1) & 0xF;
+        listmgmt = CLM_UPDATE;
+        if (send_capmt(d, capmt, listmgmt, CA_PMT_CMD_ID_NOT_SELECTED))
+            LOG("%s: send_capmt failed releasing pmt %d", __FUNCTION__,
+                spmt->id);
+    }
+
     remove_pmt_from_device(d, spmt);
     if (PMT_ID_IS_VALID(capmt->pmt_id)) {
         listmgmt = CLM_UPDATE;
