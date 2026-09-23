@@ -250,8 +250,11 @@ int test_add_del_pmt() {
     ASSERT(ddci_process_pmt(&ad, pmt0) == TABLES_RESULT_OK,
            "DDCI matching DD 0");
     ASSERT(d0.pmt[0].id == 0, "PMT 0 using DDCI 0");
-    // the SDT written on pid 17 of the CI has to be read back, otherwise
+    // the PAT and the SDT written on pids 0 and 17 of the CI have to be read
+    // back, otherwise process_pat() never sees a new service and
     // process_sdt() never names the PMTs on the DDCI adapter
+    ASSERT(find_pid(d0.id, 0) != NULL,
+           "pid 0 was not requested on the DDCI adapter");
     ASSERT(find_pid(d0.id, 17) != NULL,
            "pid 17 was not requested on the DDCI adapter");
 
@@ -498,6 +501,75 @@ int test_ddci_process_ts() {
     pmts[0] = save;
     return 0;
 }
+// Two services from two different tuners on one CI. When the first one is
+// stopped, its mapping is what held pid 0 of the CI adapter, and losing it
+// leaves process_pat() blind: the next service never gets a PMT on the CI
+// side, so it is never sent to the CAM and never descrambles. (#1217)
+int test_psi_pids_survive_a_channel_change() {
+    SPMT *pmt_a, *pmt_b;
+    ddci_device_t d = {};
+    ca_device_t ca0 = {};
+    adapter ci = {0}, ad_a = {0}, ad_b = {0};
+    int i;
+
+    // earlier tests leave stack adapters and CA devices in the global arrays
+    for (i = 0; i < MAX_ADAPTERS; i++)
+        a[i] = NULL;
+    memset(ca_devices, 0, sizeof(ca_devices));
+    channels.clear();
+
+    create_adapter(&ci, 8);
+    create_adapter(&ad_a, 2);
+    create_adapter(&ad_b, 4);
+
+    pmt_a = create_pmt(2, 600, 601, 602, 0x100, 0x100);
+    pmt_b = create_pmt(4, 700, 701, 702, 0x100, 0x100);
+    // create_pmt() derives the PMT pid from the PMT id, which is 0 here
+    pmt_a->pid = 600;
+    pmt_b->pid = 700;
+
+    memset(&d.pmt, -1, sizeof(d.pmt));
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    d.id = ci.id;
+    d.enabled = 1;
+    d.max_channels = 2;
+    ddci_devices[ci.id] = &d;
+
+    int ca_id = add_ca(&dvbca);
+    add_caid_mask(ca_id, ci.id, 0x100, 0xFFFF);
+    ca0.id = 0;
+    ca0.enabled = 1;
+    ca0.state = CA_STATE_INITIALIZED;
+    ca_devices[0] = &ca0;
+
+    ASSERT(ddci_process_pmt(&ad_a, pmt_a) == TABLES_RESULT_OK,
+           "the first PMT should be registered");
+    ASSERT(ddci_process_pmt(&ad_b, pmt_b) == TABLES_RESULT_OK,
+           "the second PMT should be registered");
+    ASSERT(find_pid(d.id, 0) != NULL, "pid 0 should be on the CI adapter");
+
+    // the first tuner goes away, the second keeps streaming
+    ddci_del_pmt(&ad_a, pmt_a);
+
+    SPid *p = find_pid(d.id, 0);
+    ASSERT(p && p->flags != PID_STATE_DELETED,
+           "pid 0 was lost with the first PMT, the CI adapter can no longer "
+           "read the PAT it generates");
+    p = find_pid(d.id, 17);
+    ASSERT(p && p->flags != PID_STATE_DELETED, "pid 17 was lost as well");
+
+    ddci_del_pmt(&ad_b, pmt_b);
+    del_ca(&dvbca);
+    pmt_del(pmt_a->id);
+    pmt_del(pmt_b->id);
+    free_filters();
+    channels.clear();
+    a[2] = NULL;
+    a[4] = NULL;
+    a[8] = NULL;
+    return 0;
+}
+
 int test_create_pat() {
     ddci_device_t d = {};
     uint8_t psi[188];
@@ -833,6 +905,8 @@ int main() {
     TEST_FUNC(test_ddci_process_ts(), "testing ddci_process_ts");
     TEST_FUNC(test_ddci_process_ts_null_tail(),
               "testing ddci_process_ts ends every write with a null packet");
+    TEST_FUNC(test_psi_pids_survive_a_channel_change(),
+              "testing that the CI keeps the pids of its generated PSI");
     TEST_FUNC(test_create_pat(), "testing create_pat");
     TEST_FUNC(test_create_sdt(), "testing create_sdt");
     TEST_FUNC(test_create_sdt_service_name(),
