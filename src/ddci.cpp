@@ -324,6 +324,25 @@ int is_pmt_running(SPMT *pmt) {
 
 // determine if the pids from this PMT needs to be added to the virtual adapter,
 // also adds the PIDs to the translation table
+// ddci_add_psi() generates a PAT and an SDT for the CI and writes them on pids
+// 0 and 17 of its input. They come back with everything else, but the sections
+// are only parsed if the pid is in the adapter's pid list, and nothing puts
+// them there: pmt_tune() adds the filters with FILTER_PERMANENT, which by
+// design does not add the pid, and post_tune() skips DEFAULT_PIDS for CI
+// adapters. Pid 0 happened to be there as a side effect of the first source
+// adapter mapping its own PAT onto it, and disappeared again with that
+// adapter, leaving the CI adapter unable to see a new service.
+static void ddci_add_psi_pids(ddci_device_t *d) {
+    for (const uint16_t pid : {0, 17}) {
+        SPid *p = find_pid(d->id, pid);
+        if (!p || p->flags == PID_STATE_DELETED) {
+            LOG("Adding pid %d to DDCI %d to read back the generated PSI", pid,
+                d->id);
+            mark_pid_add(DDCI_SID, d->id, pid);
+        }
+    }
+}
+
 int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     int i, ddid = -1;
     int rv = TABLES_RESULT_ERROR_NORETRY;
@@ -439,16 +458,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
         }
     }
 
-    // The SDT is not mapped from the source adapter, ddci_add_psi() generates
-    // one and writes it on pid 17 of the CI input. Ask for that pid on the way
-    // back, otherwise the section is counted as an unknown pid and
-    // process_sdt() never runs on this adapter. pmt_tune() has already added
-    // the filter, but it is FILTER_PERMANENT, which does not add the pid.
-    SPid *sdt_pid = find_pid(d->id, 17);
-    if (!sdt_pid || sdt_pid->flags == PID_STATE_DELETED) {
-        LOG("Adding pid 17 to DDCI %d to read back the SDT", d->id);
-        mark_pid_add(DDCI_SID, d->id, 17);
-    }
+    ddci_add_psi_pids(d);
 
     LOG("found DDCI %d for pmt %d, running channels %d, max_channels %d", ddid,
         pmt->id, d->channels, d->max_channels);
@@ -521,6 +531,10 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
         spmt->name, was_registered, d->channels);
 
     del_pmt_mapping_table(d, ad->id, pmt);
+    // the mapping that was just dropped may have been the one holding pid 0
+    // or 17 on this adapter
+    if (d->channels > 0)
+        ddci_add_psi_pids(d);
     update_pids(d->id);
     dump_mapping_table();
     return 0;
