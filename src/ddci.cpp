@@ -439,6 +439,17 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
         }
     }
 
+    // The SDT is not mapped from the source adapter, ddci_add_psi() generates
+    // one and writes it on pid 17 of the CI input. Ask for that pid on the way
+    // back, otherwise the section is counted as an unknown pid and
+    // process_sdt() never runs on this adapter. pmt_tune() has already added
+    // the filter, but it is FILTER_PERMANENT, which does not add the pid.
+    SPid *sdt_pid = find_pid(d->id, 17);
+    if (!sdt_pid || sdt_pid->flags == PID_STATE_DELETED) {
+        LOG("Adding pid 17 to DDCI %d to read back the SDT", d->id);
+        mark_pid_add(DDCI_SID, d->id, 17);
+    }
+
     LOG("found DDCI %d for pmt %d, running channels %d, max_channels %d", ddid,
         pmt->id, d->channels, d->max_channels);
 
