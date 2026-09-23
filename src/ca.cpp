@@ -862,15 +862,28 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple) {
             break;
         }
     }
-    // add the pmt to the CI
+    // add the pmt to the CI, in an empty CAPMT if there is one.
+    // Packing it next to another PMT rewrites the CAPMT that carries that
+    // PMT with a new version, and the CAM restarts the descrambling of the
+    // channel that is already running. Only pack when there is no room left.
     if (!res) {
         for (ca_pos = 0; ca_pos < d->max_ca_pmt; ca_pos++) {
-            if (d->capmt[ca_pos].pmt_id == -1) {
+            if (!PMT_ID_IS_VALID(d->capmt[ca_pos].pmt_id) &&
+                !PMT_ID_IS_VALID(d->capmt[ca_pos].other_id)) {
                 d->capmt[ca_pos].pmt_id = pmt->id;
                 res = d->capmt + ca_pos;
                 break;
             }
-            if (multiple && d->capmt[ca_pos].other_id == -1) {
+        }
+    }
+    if (!res && multiple) {
+        for (ca_pos = 0; ca_pos < d->max_ca_pmt; ca_pos++) {
+            if (!PMT_ID_IS_VALID(d->capmt[ca_pos].pmt_id)) {
+                d->capmt[ca_pos].pmt_id = pmt->id;
+                res = d->capmt + ca_pos;
+                break;
+            }
+            if (!PMT_ID_IS_VALID(d->capmt[ca_pos].other_id)) {
                 d->capmt[ca_pos].other_id = pmt->id;
                 res = d->capmt + ca_pos;
                 break;
@@ -1097,6 +1110,21 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt) {
     SCAPMT *capmt = get_capmt_for_pmt(spmt, &d);
     if (!capmt)
         LOG_AND_RETURN(0, "CAPMT not found for pmt %d", spmt->id);
+
+    // This PMT is the last one in the CAPMT: nothing will be sent for this
+    // program number again, so tell the CAM to stop descrambling it before
+    // the slot is released. Without it the program stays selected in the CAM
+    // and the next channel that reuses the slot is descrambled next to a
+    // service the CAM still believes is running.
+    int last_in_capmt =
+        capmt->pmt_id == spmt->id && !PMT_ID_IS_VALID(capmt->other_id);
+    if (last_in_capmt) {
+        capmt->version = (capmt->version + 1) & 0xF;
+        listmgmt = CLM_UPDATE;
+        if (send_capmt(d, capmt, listmgmt, CA_PMT_CMD_ID_NOT_SELECTED))
+            LOG("%s: send_capmt failed releasing pmt %d", __FUNCTION__,
+                spmt->id);
+    }
 
     remove_pmt_from_device(d, spmt);
     if (PMT_ID_IS_VALID(capmt->pmt_id)) {
