@@ -1580,7 +1580,6 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque) {
     adapter *ad = (adapter *)opaque;
     uint8_t new_filter[FILTER_SIZE], new_mask[FILTER_SIZE];
     uint8_t seen_pmts[MAX_PMT];
-    int new_version = 0;
     pat_len = len - 4; // remove crc
     tid = b[3] * 256 + b[4];
     ver = (b[5] & 0x3e) >> 1;
@@ -1604,7 +1603,6 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque) {
     if (ad->pat_processed && ad->transponder_id == tid && ad->pat_ver != ver) {
         LOG("PAT AD %d new version for transponder %d, version %d", ad->id,
             ad->transponder_id, ver);
-        new_version = 1;
     }
 
     if (ad->pat_processed && ad->transponder_id != tid) {
@@ -1643,7 +1641,7 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque) {
         LOG("Adapter %d, PMT %d sid %d (%04X), pid %d", ad->id,
             existing_pmt ? existing_pmt->id : -1, sid, sid, pid);
 
-        if (new_version && existing_pmt)
+        if (existing_pmt)
             seen_pmts[existing_pmt->id] = 1;
 
         if (sid > 0) {
@@ -1671,21 +1669,22 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque) {
         }
     }
 
-    if (new_version) {
-        for (i = 0; i < npmts; i++)
-            if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == ad->id &&
-                seen_pmts[i] == 0) {
-                LOG("Caching PMT %d (%s) and filter %d as it is not "
-                    "present in the new PAT",
-                    i, pmts[i]->name, pmts[i]->filter);
-                if (ad->type == ADAPTER_CI) {
-                    // Do not cache PMTs for CI adapters as they are being
-                    // re-generated very often (on channel change)
-                    pmt_del(i);
-                } else
-                    cache_pmt_for_adapter(ad, pmts[i]);
-            }
-    }
+    // A PMT missing from the PAT we just parsed is already out of
+    // ad->active_pmt[], so start_active_pmts() will never stop it and its CA
+    // registration would be kept for ever. Cached PMTs hold none, skip those.
+    for (i = 0; i < npmts; i++)
+        if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == ad->id &&
+            pmts[i]->state != PMT_CACHED && seen_pmts[i] == 0) {
+            LOG("Caching PMT %d (%s) and filter %d as it is not "
+                "present in the new PAT",
+                i, pmts[i]->name, pmts[i]->filter);
+            if (ad->type == ADAPTER_CI) {
+                // Do not cache PMTs for CI adapters as they are being
+                // re-generated very often (on channel change)
+                pmt_del(i);
+            } else
+                cache_pmt_for_adapter(ad, pmts[i]);
+        }
 
     update_pids(ad->id);
     ad->pat_processed = 1;

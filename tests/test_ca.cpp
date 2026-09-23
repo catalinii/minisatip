@@ -54,6 +54,8 @@ extern adapter *a[MAX_ADAPTERS];
 extern SPMT *pmts[MAX_PMT];
 void remove_pmt_from_device(ca_device_t *d, SPMT *pmt);
 SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple);
+int dvbca_del_pmt(adapter *ad, SPMT *spmt);
+extern ca_device_t *ca_devices[MAX_ADAPTERS];
 int get_active_capmts(ca_device_t *d);
 int get_enabled_pmts_for_ca(ca_device_t *d);
 
@@ -76,6 +78,113 @@ int test_multiple_pmt() {
            "only first PMT should be active");
 
     ASSERT(add_pmt_to_capmt(&d, get_pmt(2), 0) == NULL, "failed adding PMT");
+
+    return 0;
+}
+
+// Releasing a service is a CA_PMT for the same program with the command id
+// set to not_selected, not a missing message.
+int test_create_capmt_not_selected() {
+    int pmt_id = pmt_add(0, 0x100, 0x101);
+    SPMT *pmt = get_pmt(pmt_id);
+    pmt_add_caid(pmt, 0x0B00, 0x573, nullptr, 0);
+    pmt_add_stream_pid(pmt, 0x501, 2, false, true);
+    pmt_add_stream_pid(pmt, 0x502, 3, true, false);
+
+    SCAPMT scapmt = {.pmt_id = pmt->id,
+                     .other_id = PMT_INVALID,
+                     .version = 2,
+                     .sid = 0x1234};
+
+    uint8_t capmt[1500];
+    int len = create_capmt(&scapmt, CLM_UPDATE, capmt, sizeof(capmt),
+                           CA_PMT_CMD_ID_NOT_SELECTED, 0);
+
+    ASSERT(len > 0, "create_capmt failed");
+    hexdump("CAPMT: ", capmt, len);
+
+    ASSERT(capmt[0] == CLM_UPDATE, "ca_pmt_list_management incorrect");
+    uint16_t sid = (capmt[1] << 8) | capmt[2];
+    ASSERT(sid == 0x1234, "program_number incorrect");
+    ASSERT(capmt[11] == CA_PMT_CMD_ID_NOT_SELECTED,
+           "stream PID 1 should be released");
+    ASSERT(capmt[23] == CA_PMT_CMD_ID_NOT_SELECTED,
+           "stream PID 2 should be released");
+
+    return 0;
+}
+
+// The CAM is told about the release before the CAPMT is handed back.
+int test_capmt_release_on_last_pmt() {
+    ca_device_t dev;
+    memset(&dev, 0, sizeof(dev));
+    memset(dev.capmt, -1, sizeof(dev.capmt));
+    dev.enabled = 1;
+    dev.state = CA_STATE_INITIALIZED;
+    dev.id = 0;
+    dev.max_ca_pmt = 4;
+
+    adapter ad = {};
+    ad.id = 0;
+    ca_devices[0] = &dev;
+
+    int first = pmt_add(0, 0x300, 0x301);
+    int second = pmt_add(0, 0x400, 0x401);
+    SCAPMT *c1 = add_pmt_to_capmt(&dev, get_pmt(first), 1);
+    SCAPMT *c2 = add_pmt_to_capmt(&dev, get_pmt(second), 1);
+    ASSERT(c1 != c2, "the two PMTs should be in different CAPMTs");
+
+    int version = c2->version;
+    dvbca_del_pmt(&ad, get_pmt(second));
+    ASSERT(!PMT_ID_IS_VALID(c2->pmt_id), "the CAPMT should have been released");
+    ASSERT(c2->version == ((version + 1) & 0xF),
+           "the release should be sent as a new version of the program");
+    ASSERT(c1->pmt_id == first, "the other CAPMT should be left alone");
+
+    ca_devices[0] = NULL;
+    return 0;
+}
+
+// A new PMT should go into a CAPMT of its own while there is a free one.
+// Packing it next to a PMT that is already running rewrites that CAPMT with
+// a new version and the CAM restarts the channel it carries.
+int test_capmt_uses_empty_slots_first() {
+    ca_device_t dev;
+    memset(&dev, 0, sizeof(dev));
+    memset(dev.capmt, -1, sizeof(dev.capmt));
+    dev.enabled = 1;
+    dev.multiple_pmt = 1;
+    dev.max_ca_pmt = 4;
+
+    int first = pmt_add(0, 500, 500);
+    int second = pmt_add(0, 600, 600);
+
+    SCAPMT *c1 = add_pmt_to_capmt(&dev, get_pmt(first), dev.multiple_pmt);
+    ASSERT(c1 == dev.capmt, "the first PMT should use the first CAPMT");
+
+    SCAPMT *c2 = add_pmt_to_capmt(&dev, get_pmt(second), dev.multiple_pmt);
+    ASSERT(c2 == dev.capmt + 1,
+           "the second PMT should use an empty CAPMT, not the one in use");
+    ASSERT(dev.capmt[0].pmt_id == first &&
+               !PMT_ID_IS_VALID(dev.capmt[0].other_id),
+           "the first CAPMT should be left alone");
+    ASSERT(dev.capmt[1].pmt_id == second, "the second CAPMT should be used");
+
+    // with every CAPMT taken, packing two PMTs together is the only option
+    int third = pmt_add(0, 700, 700);
+    int fourth = pmt_add(0, 800, 800);
+    int fifth = pmt_add(0, 900, 900);
+    add_pmt_to_capmt(&dev, get_pmt(third), dev.multiple_pmt);
+    add_pmt_to_capmt(&dev, get_pmt(fourth), dev.multiple_pmt);
+    SCAPMT *c5 = add_pmt_to_capmt(&dev, get_pmt(fifth), dev.multiple_pmt);
+    ASSERT(c5 == dev.capmt, "the fifth PMT should be packed in the first "
+                            "CAPMT once all of them are used");
+    ASSERT(dev.capmt[0].other_id == fifth, "expected the fifth PMT packed");
+
+    // an update of a PMT keeps using the CAPMT it is already in
+    ASSERT(add_pmt_to_capmt(&dev, get_pmt(second), dev.multiple_pmt) ==
+               dev.capmt + 1,
+           "an update should reuse the same CAPMT");
 
     return 0;
 }
@@ -609,6 +718,10 @@ int main() {
     TEST_FUNC(test_get_ca_caids_string(), "testing CAID string generation");
     TEST_FUNC(test_multiple_pmt(), "testing CA multiple pmt");
     memset(d.capmt, -1, sizeof(d.capmt));
+    TEST_FUNC(test_capmt_uses_empty_slots_first(),
+              "testing that a new PMT uses an empty CAPMT when there is one");
+    TEST_FUNC(test_capmt_release_on_last_pmt(),
+              "testing that the last PMT of a CAPMT is released on the CAM");
     TEST_FUNC(test_get_authdata_filename(), "testing filename helper function");
     TEST_FUNC(test_create_capmt_single_clear(),
               "testing create_capmt with single PMT without CA descriptors");
@@ -622,6 +735,8 @@ int main() {
               "testing create_capmt with both PMT and other with CAIDs");
     TEST_FUNC(test_create_capmt_both_pmt_and_other_many_streams(),
               "testing create_capmt with both PMT and other with many streams");
+    TEST_FUNC(test_create_capmt_not_selected(),
+              "testing create_capmt with the not_selected command id");
     TEST_FUNC(test_create_capmt_size_near_limit(),
               "testing create_capmt size near 1500 byte limit");
     TEST_FUNC(
