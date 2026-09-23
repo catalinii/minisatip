@@ -565,7 +565,49 @@ int ddci_create_pat(ddci_device_t *d, uint8_t *b) {
     return len;
 }
 
-int ddci_create_sdt(ddci_device_t *d, uint8_t *sdt) {
+// Describes the service in a service_descriptor, so that process_sdt() on the
+// CI adapter can name the PMTs it parses back from the CI. The name of a
+// service is only known once the SDT of the transponder has been parsed, which
+// usually happens after ddci_process_pmt() has already copied it, and that
+// copy is the only one: a PMT registered before its name was known stays
+// unnamed until the channel is opened again.
+// Returns the number of bytes written, 0 when there is no name yet or the
+// descriptor does not fit.
+static int ddci_service_descriptor(SPMT *pmt, uint8_t *b, int len) {
+    int plen = strlen(pmt->provider);
+    int nlen = strlen(pmt->name);
+    // the 0x15 in front of each string marks it as UTF-8, which is what
+    // dvb_get_string() produced when the name was parsed
+    int dlen = 2 + 1 + 1 + (plen ? plen + 1 : 0) + 1 + nlen + 1;
+    int service_type = 0x02; // digital radio sound service
+
+    if (!nlen || dlen > len || dlen - 2 > 255)
+        return 0;
+
+    for (const auto &stream_pid : pmt->stream_pids)
+        if (stream_pid.is_video) {
+            service_type = 0x01; // digital television service
+            break;
+        }
+
+    *b++ = 0x48; // service_descriptor
+    *b++ = dlen - 2;
+    *b++ = service_type;
+    if (plen) {
+        *b++ = plen + 1;
+        *b++ = 0x15;
+        memcpy(b, pmt->provider, plen);
+        b += plen;
+    } else
+        *b++ = 0;
+    *b++ = nlen + 1;
+    *b++ = 0x15;
+    memcpy(b, pmt->name, nlen);
+
+    return dlen;
+}
+
+int ddci_create_sdt(ddci_device_t *d, uint8_t *sdt, int len) {
     uint8_t *b = sdt;
 
     *b++ = 0x00;
@@ -610,8 +652,12 @@ int ddci_create_sdt(ddci_device_t *d, uint8_t *sdt) {
             // running_status, free_CA_mode, descriptors_length
             uint8_t r = 4 << 5; // running_status = 4
             r ^= 1 << 4;        // free_CA_mode = 1
-            *b++ = r;
-            *b++ = 0x00;
+            // leave room for the 2 bytes below and for the CRC
+            int dlen = ddci_service_descriptor(pmt, b + 2,
+                                               len - (int)(b - sdt) - 2 - 4);
+            *b++ = r | ((dlen >> 8) & 0x0F);
+            *b++ = dlen & 0xFF;
+            b += dlen;
         }
     }
     // calculate section_length
@@ -817,7 +863,7 @@ int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len) {
 
     // Add SDT
     if (ctime - d->last_sdt > 500) {
-        psi_len = ddci_create_sdt(d, psi);
+        psi_len = ddci_create_sdt(d, psi, sizeof(psi));
         pos += buffer_to_ts(dst + pos, len - pos, psi, psi_len, &d->sdt_cc, 17);
         d->last_sdt = ctime;
     }
