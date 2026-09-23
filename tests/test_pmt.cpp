@@ -56,6 +56,9 @@ extern SPMT *pmts[MAX_PMT];
 
 // Forward declarations
 descriptor_t create_descriptor(const uint8_t *data);
+void cache_pmt_for_adapter(adapter *ad, SPMT *pmt);
+void pmt_add_active_pmt(adapter *ad, int pmt_id);
+void start_active_pmts(adapter *ad);
 
 uint8_t packet[188] = {
     0x47, 0x40, 0xff, 0x99, 0x14, 0x4c, 0x83, 0x7f, 0x46, 0xba, 0xb8, 0x12,
@@ -496,6 +499,85 @@ int test_pat_drop_releases_ca() {
     return check_pat_drop_releases_ca(ADAPTER_CI);
 }
 
+// A PMT that disappeared from the PAT is cached: it keeps its stream pids,
+// its CA descriptors and its version, but its filter is deleted. When the sid
+// shows up in the PAT again, process_pat() creates a fresh filter for the PMT
+// pid and used to throw the id away, so the PMT stayed on filter -1 until a
+// section happened to arrive. start_active_pmts() started it anyway, and
+// start_pmt() then called set_filter_flags(-1), which fails before it adds the
+// pid: the PMT was RUNNING, the CAs had a CA_PMT, and the PMT pid was not in
+// the demux. A second PAT would also add a second filter for the same PMT.
+int test_revived_cached_pmt_gets_its_filter() {
+    int i;
+    uint8_t pat[64];
+    int sids[] = {SID_KEPT};
+    int pids[] = {PID_KEPT};
+
+    for (i = 0; i < MAX_ADAPTERS; i++)
+        a[i] = NULL;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    ad.type = ADAPTER_DVB;
+    ad.pat_filter = add_filter(ad.id, 0, (void *)process_pat, &ad,
+                               FILTER_PERMANENT | FILTER_CRC);
+
+    int id = pmt_add(ad.id, SID_KEPT, PID_KEPT);
+    ASSERT(id >= 0, "could not create the PMT");
+    SPMT *pmt = pmts[id];
+    pmt->version = 7;
+    pmt->state = PMT_RUNNING;
+    SStreamPid sp{.type = 2, .pid = 300, .is_audio = false, .is_video = true};
+    pmt->stream_pids.push_back(sp);
+
+    // the client keeps streaming the video pid while the PMT is gone
+    ad.pids[0].pid = 300;
+    ad.pids[0].flags = PID_STATE_ACTIVE;
+    ad.pids[0].pmt = -1;
+
+    ad.active_pmts = 1;
+    ad.active_pmt[0] = id;
+
+    cache_pmt_for_adapter(&ad, pmt);
+    ASSERT_EQUAL(pmt->state, PMT_CACHED, "PMT should be cached");
+    ASSERT_EQUAL(pmt->filter, -1, "the cached PMT should have no filter");
+
+    // the sid is back in the PAT
+    int len = build_pat(pat, PAT_TSID, 1, sids, pids, 1);
+    process_pat(ad.pat_filter, pat, len, &ad);
+
+    ASSERT_EQUAL(pmt->state, PMT_STOPPED, "the revived PMT should be stopped");
+    ASSERT(pmt->filter >= 0,
+           "process_pat() should hand the new filter to the revived PMT");
+    ASSERT_EQUAL(filters[pmt->filter]->pid, PID_KEPT,
+                 "the filter should be the one for the PMT pid");
+    ASSERT(filters[pmt->filter]->opaque == pmt,
+           "the filter should belong to this PMT");
+
+    // a second PAT must not add another filter for the same PMT
+    int before = pmt->filter;
+    len = build_pat(pat, PAT_TSID, 2, sids, pids, 1);
+    process_pat(ad.pat_filter, pat, len, &ad);
+    ASSERT_EQUAL(pmt->filter, before,
+                 "a second PAT should reuse the filter of the revived PMT");
+
+    // with a real filter the PMT starts from cache on this pass, and
+    // set_filter_flags() can put the PMT pid back in the demux
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmt->state, PMT_RUNNING,
+                 "the revived PMT should start straight from the cache");
+    ASSERT(filters[pmt->filter]->flags != 0,
+           "starting the PMT should have enabled its filter");
+
+    del_filter(ad.pat_filter);
+    free_all_pmts();
+    free_filters();
+    a[0] = NULL;
+    return 0;
+}
+
 int main() {
     opts.log = 255;
     opts.debug = 255;
@@ -516,6 +598,8 @@ int main() {
               "testing test_emulate_add_all_pids failed")
     TEST_FUNC(test_pat_drop_releases_ca(),
               "testing that PMTs missing from the PAT release their CA slot")
+    TEST_FUNC(test_revived_cached_pmt_gets_its_filter(),
+              "testing that a revived cached PMT is given its new filter")
     fflush(stdout);
     return 0;
 }
