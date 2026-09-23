@@ -341,8 +341,9 @@ int test_emulate_add_all_pids() {
 // A PMT that disappeared from the PAT keeps its stream pids and CA
 // descriptors but loses its filter. When the service comes back,
 // pmt_add_active_pmt() marks it PMT_STOPPED again and start_active_pmts()
-// used to start it right away, with filter -1 and the cached descriptors,
-// before process_pmt() had a chance to look at the new section.
+// used to start it right away, with filter -1, so set_filter_flags() could
+// not enable the filter process_pat() had just created and the CAs were sent
+// a CA_PMT before the PMT pid was even in the demux.
 int test_cached_pmt_is_not_started_without_a_filter() {
     int i;
     for (i = 0; i < MAX_ADAPTERS; i++)
@@ -378,9 +379,7 @@ int test_cached_pmt_is_not_started_without_a_filter() {
 
     cache_pmt_for_adapter(&ad, &pmt);
     ASSERT_EQUAL(pmt.state, PMT_CACHED, "PMT should be cached");
-    ASSERT_EQUAL(pmt.version, -1,
-                 "the cached PMT should forget its version, otherwise "
-                 "process_pmt() skips the reparse when it comes back");
+    ASSERT_EQUAL(pmt.filter, -1, "the cached PMT should have no filter");
 
     // the sid shows up again in the PAT
     ad.active_pmts = 0;
@@ -392,7 +391,7 @@ int test_cached_pmt_is_not_started_without_a_filter() {
                  "the revived PMT should stay stopped until process_pmt() "
                  "gives it a filter");
     ASSERT_EQUAL(pmt.ca_mask, 0,
-                 "no CA_PMT should be sent before the PMT is reparsed");
+                 "no CA_PMT should be sent while the PMT has no filter");
 
     // process_pmt() sets the filter, the next pass starts the PMT
     pmt.filter = 0;
