@@ -90,6 +90,9 @@ SPMT *create_pmt(int ad, int sid, int pid1, int pid2, int caid1, int caid2) {
     return pmt;
 }
 
+int process_sdt(int filter, unsigned char *sdt, int len, void *opaque);
+int pmt_del(int id);
+
 void create_adapter(adapter *ad, int id) {
     ad->enabled = 1;
     ad->id = id;
@@ -566,7 +569,7 @@ int test_create_sdt() {
     // Create the SDT
     uint8_t sdt[188];
     memset(&sdt, 0, sizeof(sdt));
-    int sdt_len = ddci_create_sdt(&d, sdt);
+    int sdt_len = ddci_create_sdt(&d, sdt, sizeof(sdt));
     LOG("SDT length: %d", sdt_len);
     _hexdump("SDT", sdt, sdt_len);
 
@@ -600,6 +603,84 @@ int test_create_sdt() {
     ASSERT(sdt_running_status2 == 4, "SDT SID 1 running_status != 4");
     ASSERT(sdt_free_CA_mode2 != 0, "SDT SID 1 free_CA_mode != 1");
 
+    return 0;
+}
+
+// The name of a service reaches the CI adapter through the SDT that
+// ddci_add_psi() injects on pid 17. Build one for two named services and push
+// it back through process_sdt(), the way the CI adapter sees it. (#1217)
+int test_create_sdt_service_name() {
+    int i;
+    adapter ad = {};
+    adapter ci = {};
+    create_adapter(&ad, 0);
+    create_adapter(&ci, 1);
+
+    ddci_device_t d = {};
+    d.id = 0;
+    d.enabled = 1;
+    d.max_channels = 2;
+    memset(&d.pmt, -1, sizeof(d.pmt));
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[0] = &d;
+
+    int pid1 = 4200, pid2 = 4201;
+    int sid1 = 0x200, sid2 = 0x201;
+
+    // the services as the tuner adapter knows them, with their names
+    int src1 = pmt_add(ad.id, sid1, pid1);
+    int src2 = pmt_add(ad.id, sid2, pid2);
+    add_pid_mapping_table(ad.id, pid1, src1, &d, 0);
+    add_pid_mapping_table(ad.id, pid2, src2, &d, 0);
+    d.pmt[0].id = src1;
+    d.pmt[1].id = src2;
+    safe_strncpy(get_pmt(src1)->name, "beIN SPORTS 1");
+    safe_strncpy(get_pmt(src1)->provider, "Digiturk");
+    pmt_add_stream_pid(get_pmt(src1), 4942, 27, false, true);
+    safe_strncpy(get_pmt(src2)->name, "Radyo D");
+    safe_strncpy(get_pmt(src2)->provider, "Digiturk");
+
+    // the same services as the CI adapter parses them back, still unnamed
+    int ci1 = pmt_add(ci.id, sid1, pid1);
+    int ci2 = pmt_add(ci.id, sid2, pid2);
+    ASSERT(get_pmt(ci1)->name[0] == 0 && get_pmt(ci2)->name[0] == 0,
+           "the CI PMTs should start without a name");
+
+    uint8_t sdt[1500];
+    memset(sdt, 0, sizeof(sdt));
+    int sdt_len = ddci_create_sdt(&d, sdt, sizeof(sdt));
+    ASSERT(sdt_len > 0, "ddci_create_sdt failed");
+    _hexdump("SDT", sdt, sdt_len);
+
+    SFilter f;
+    f.flags = FILTER_CRC;
+    f.id = 0;
+    f.adapter = ci.id;
+    uint8_t packet[188];
+    int16_t cc = 1;
+    buffer_to_ts(packet, sizeof(packet), sdt, sdt_len, &cc, 17);
+    int len = assemble_packet(&f, packet);
+    ASSERT(len > 0, "the SDT did not reassemble");
+
+    process_sdt(f.id, packet + 5, len, &ci);
+
+    ASSERT(!strcmp(get_pmt(ci1)->name, "beIN SPORTS 1"),
+           "the television service was not named on the CI adapter");
+    ASSERT(!strcmp(get_pmt(ci1)->provider, "Digiturk"),
+           "the provider was not copied");
+    ASSERT(!strcmp(get_pmt(ci2)->name, "Radyo D"),
+           "the radio service was not named on the CI adapter");
+
+    // first service: descriptor right after the 5 byte service header, and
+    // service_type follows the streams, television for the one with video
+    ASSERT(sdt[17] == 0x48, "expected a service_descriptor");
+    ASSERT(sdt[19] == 0x01, "expected a television service_type");
+
+    for (i = 0; i < MAX_PMT; i++)
+        if (pmts[i] && pmts[i]->enabled)
+            pmt_del(i);
+    a[0] = NULL;
+    a[1] = NULL;
     return 0;
 }
 
@@ -750,6 +831,8 @@ int main() {
               "testing ddci_process_ts ends every write with a null packet");
     TEST_FUNC(test_create_pat(), "testing create_pat");
     TEST_FUNC(test_create_sdt(), "testing create_sdt");
+    TEST_FUNC(test_create_sdt_service_name(),
+              "testing that the SDT carries the service name");
     TEST_FUNC(test_create_pmt(), "testing create_pmt");
     free_all_pmts();
     fflush(stdout);
