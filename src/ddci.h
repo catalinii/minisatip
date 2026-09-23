@@ -73,7 +73,7 @@ void set_pid_ts(unsigned char *b, int pid);
 int ddci_process_ts(adapter *ad, ddci_device_t *d);
 int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque);
 int ddci_create_pat(ddci_device_t *d, uint8_t *b);
-int ddci_create_sdt(ddci_device_t *d, uint8_t *b);
+int ddci_create_sdt(ddci_device_t *d, uint8_t *b, int len);
 int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
                     ddci_pmt_t *dp);
 ddci_mapping_table_t *get_pid_mapping_allddci(int ad, int pid);
