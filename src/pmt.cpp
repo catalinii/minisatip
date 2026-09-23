@@ -1028,12 +1028,7 @@ void start_active_pmts(adapter *ad) {
                 pids[stream_pid.pid] && pmt->id == pmt->master_pmt) {
                 is_active = 1;
 #ifndef DISABLE_TABLES
-                // A PMT revived from the cache has no filter until
-                // process_pmt() sees the next section on the PMT pid.
-                // start_pmt() cannot enable a filter it does not have, so
-                // starting here would leave the pid out of the demux and
-                // still send the CAs a CA_PMT.
-                if (!first && pmt->filter >= 0) {
+                if (!first) {
                     first = 1;
                     if (pmt->state == PMT_STOPPED) {
                         start_pmt(pmt, ad);
@@ -1658,11 +1653,21 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque) {
                 new_mask[1] = 0xFF;
                 new_filter[2] = b[i + 1];
                 new_mask[2] = 0xFF;
-                add_filter_mask(ad->id, pid, (void *)process_pmt, pmt,
-                                opts.pmt_scan && (existing_pmt == NULL)
-                                    ? FILTER_ADD_REMOVE | FILTER_CRC
-                                    : 0,
-                                new_filter, new_mask);
+                int fid =
+                    add_filter_mask(ad->id, pid, (void *)process_pmt, pmt,
+                                    opts.pmt_scan && (existing_pmt == NULL)
+                                        ? FILTER_ADD_REMOVE | FILTER_CRC
+                                        : 0,
+                                    new_filter, new_mask);
+                // A PMT revived from the cache keeps everything but its
+                // filter, and until process_pmt() sees a section nothing
+                // claims the one created here: start_pmt() would call
+                // set_filter_flags(-1), leaving the PMT pid out of the demux,
+                // and a second PAT would add yet another filter for the same
+                // PMT. Hand it over now so the cached PMT can be started
+                // straight away.
+                if (pmt && fid >= 0)
+                    pmt->filter = fid;
             }
             if (pmt_id >= 0)
                 seen_pmts[pmt_id] = 1;
