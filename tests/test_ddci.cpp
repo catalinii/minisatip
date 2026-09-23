@@ -250,6 +250,10 @@ int test_add_del_pmt() {
     ASSERT(ddci_process_pmt(&ad, pmt0) == TABLES_RESULT_OK,
            "DDCI matching DD 0");
     ASSERT(d0.pmt[0].id == 0, "PMT 0 using DDCI 0");
+    // the SDT written on pid 17 of the CI has to be read back, otherwise
+    // process_sdt() never names the PMTs on the DDCI adapter
+    ASSERT(find_pid(d0.id, 17) != NULL,
+           "pid 17 was not requested on the DDCI adapter");
 
     ASSERT(ddci_process_pmt(&ad, pmt1) == TABLES_RESULT_OK,
            "DDCI matching DD 1");
