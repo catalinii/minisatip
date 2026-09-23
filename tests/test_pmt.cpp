@@ -21,6 +21,7 @@
 #include "dvb.h"
 #include "minisatip.h"
 #include "socketworks.h"
+#include "tables.h"
 #include "utils.h"
 #include "utils/testing.h"
 #include <arpa/inet.h>
@@ -335,6 +336,166 @@ int test_emulate_add_all_pids() {
     return 0;
 }
 
+// ---------------------------------------------------------------------------
+// Regression test for the CA channel-slot leak fixed in this commit.
+//
+// process_pat() resets ad->active_pmts and rebuilds it from the PAT it has
+// just parsed, so a PMT that was active before and is absent from the new PAT
+// is already out of ad->active_pmt[] when the function returns.
+// start_active_pmts() only walks that array, so it never stops such a PMT and
+// close_pmt_for_cas() is never reached: the PMT keeps its CA registration for
+// ever. As a CAM supports one channel by default, one leaked registration is
+// enough to stop the next service from being descrambled.
+//
+// The retirement used to run only when the PAT version changed on an already
+// processed PAT. This test covers the other case: the first PAT after the
+// adapter was (re)initialised, when ad->pat_processed is still 0, which is
+// what a CI adapter does on every channel change.
+// ---------------------------------------------------------------------------
+
+extern int npmts;
+extern int process_pat(int filter, unsigned char *b, int len, void *opaque);
+
+static int fake_ca_del_calls;
+static int fake_ca_last_del_pmt;
+
+static int fake_ca_add_pmt(adapter *ad, SPMT *pmt) { return TABLES_RESULT_OK; }
+
+static int fake_ca_del_pmt(adapter *ad, SPMT *pmt) {
+    fake_ca_del_calls++;
+    fake_ca_last_del_pmt = pmt->id;
+    return TABLES_RESULT_OK;
+}
+
+static int fake_ca_init_dev(adapter *ad) { return TABLES_RESULT_OK; }
+static int fake_ca_close_dev(adapter *ad) { return TABLES_RESULT_OK; }
+static int fake_ca_close_ca() { return 0; }
+
+static SCA_op fake_ca_op = {.ca_add_pid = NULL,
+                            .ca_del_pid = NULL,
+                            .ca_add_pmt = fake_ca_add_pmt,
+                            .ca_del_pmt = fake_ca_del_pmt,
+                            .ca_init_dev = fake_ca_init_dev,
+                            .ca_close_dev = fake_ca_close_dev,
+                            .ca_ts = NULL,
+                            .ca_close_ca = fake_ca_close_ca};
+
+// Builds a minimal PAT section as process_pat() expects to receive it.
+static int build_pat(uint8_t *b, int tsid, int version, const int *sids,
+                     const int *pids, int n) {
+    int i, len = 8 + 4 * n + 4;
+    b[0] = 0x00; // table_id
+    b[1] = 0xb0 | (((len - 3) >> 8) & 0x0f);
+    b[2] = (len - 3) & 0xff;
+    b[3] = (tsid >> 8) & 0xff;
+    b[4] = tsid & 0xff;
+    b[5] = 0xc1 | ((version & 0x1f) << 1);
+    b[6] = 0; // section_number
+    b[7] = 0; // last_section_number
+    for (i = 0; i < n; i++) {
+        b[8 + i * 4] = (sids[i] >> 8) & 0xff;
+        b[9 + i * 4] = sids[i] & 0xff;
+        b[10 + i * 4] = 0xe0 | ((pids[i] >> 8) & 0x1f);
+        b[11 + i * 4] = pids[i] & 0xff;
+    }
+    memset(b + 8 + 4 * n, 0, 4); // CRC, not verified on this path
+    return len;
+}
+
+#define PAT_TSID 40901
+#define SID_KEPT 100
+#define PID_KEPT 1000
+#define SID_GONE 200
+#define PID_GONE 2000
+
+static int check_pat_drop_releases_ca(int adapter_type) {
+    int i;
+    uint8_t priv[1] = {0};
+    uint8_t pat[64];
+    int sids[] = {SID_KEPT};
+    int pids[] = {PID_KEPT};
+
+    // Earlier tests in this binary leave SPMT objects with automatic storage
+    // duration in the global pmts[] array, so start from a known state. The
+    // entries are only detached, never freed, as some of them are not ours.
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    ad.type = adapter_type;
+    // ad.pat_processed stays 0: this is the first PAT after the adapter was
+    // initialised, which is the case the old code did not clean up.
+
+    int ica = add_ca(&fake_ca_op);
+    ASSERT(ica >= 0, "could not register the fake CA");
+    ad.ca_mask = 1 << ica;
+
+    ad.pat_filter = add_filter(ad.id, 0, (void *)process_pat, &ad,
+                               FILTER_PERMANENT | FILTER_CRC);
+    ASSERT(ad.pat_filter >= 0, "could not add the PAT filter");
+
+    // Both services are known and registered with the CA.
+    int kept = pmt_add(ad.id, SID_KEPT, PID_KEPT);
+    int gone = pmt_add(ad.id, SID_GONE, PID_GONE);
+    ASSERT(kept >= 0 && gone >= 0, "could not create the PMTs");
+
+    pmt_add_caid(pmts[kept], 0x0664, 0x1F06, priv, 0);
+    pmt_add_caid(pmts[gone], 0x0664, 0x1F08, priv, 0);
+    send_pmt_to_cas(&ad, pmts[kept]);
+    send_pmt_to_cas(&ad, pmts[gone]);
+    ASSERT(pmts[kept]->ca_mask != 0, "kept PMT was not registered with the CA");
+    ASSERT(pmts[gone]->ca_mask != 0, "gone PMT was not registered with the CA");
+
+    pmts[kept]->state = PMT_RUNNING;
+    pmts[gone]->state = PMT_RUNNING;
+    ad.active_pmts = 2;
+    ad.active_pmt[0] = kept;
+    ad.active_pmt[1] = gone;
+
+    // A PAT that no longer carries SID_GONE.
+    fake_ca_del_calls = 0;
+    fake_ca_last_del_pmt = -1;
+    int len = build_pat(pat, PAT_TSID, 1, sids, pids, 1);
+    process_pat(ad.pat_filter, pat, len, &ad);
+
+    ASSERT_EQUAL(fake_ca_del_calls, 1,
+                 "the PMT missing from the PAT was not closed on the CA");
+    ASSERT_EQUAL(fake_ca_last_del_pmt, gone,
+                 "the wrong PMT was closed on the CA");
+    ASSERT_EQUAL(pmts[gone]->ca_mask, 0,
+                 "the CA registration of the dropped PMT was not released");
+
+    // The service still present in the PAT must be left alone.
+    ASSERT(pmts[kept] != NULL && pmts[kept]->enabled,
+           "the PMT still present in the PAT was retired");
+    ASSERT(pmts[kept]->ca_mask != 0,
+           "the PMT still present in the PAT lost its CA registration");
+
+    // A CI adapter deletes the PMT outright, any other adapter caches it.
+    if (adapter_type == ADAPTER_CI) {
+        ASSERT_EQUAL(pmts[gone]->enabled, 0,
+                     "the dropped PMT was not deleted on a CI adapter");
+    } else {
+        ASSERT_EQUAL(pmts[gone]->state, PMT_CACHED,
+                     "the dropped PMT was not cached");
+    }
+
+    del_ca(&fake_ca_op);
+    // Only the PMTs created above are left in pmts[] at this point.
+    free_all_pmts();
+    return 0;
+}
+
+int test_pat_drop_releases_ca() {
+    if (check_pat_drop_releases_ca(ADAPTER_DVB))
+        return 1;
+    return check_pat_drop_releases_ca(ADAPTER_CI);
+}
+
 int main() {
     opts.log = 255;
     opts.debug = 255;
@@ -353,6 +514,8 @@ int main() {
               "testing assemble_packet with multiple packets");
     TEST_FUNC(test_emulate_add_all_pids(),
               "testing test_emulate_add_all_pids failed")
+    TEST_FUNC(test_pat_drop_releases_ca(),
+              "testing that PMTs missing from the PAT release their CA slot")
     fflush(stdout);
     return 0;
 }
