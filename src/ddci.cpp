@@ -324,22 +324,21 @@ int is_pmt_running(SPMT *pmt) {
 
 // determine if the pids from this PMT needs to be added to the virtual adapter,
 // also adds the PIDs to the translation table
-// ddci_add_psi() generates a PAT and an SDT for the CI and writes them on pids
-// 0 and 17 of its input. They come back with everything else, but the sections
-// are only parsed if the pid is in the adapter's pid list, and nothing puts
-// them there: pmt_tune() adds the filters with FILTER_PERMANENT, which by
-// design does not add the pid, and post_tune() skips DEFAULT_PIDS for CI
-// adapters. Pid 0 happened to be there as a side effect of the first source
-// adapter mapping its own PAT onto it, and disappeared again with that
-// adapter, leaving the CI adapter unable to see a new service.
+// ddci_add_psi() generates a PAT for the CI and writes it on pid 0 of its
+// input. It comes back with everything else, but a section is only parsed if
+// the pid is in the adapter's pid list, and nothing puts it there: pmt_tune()
+// adds the filter with FILTER_PERMANENT, which by design does not add the pid,
+// and post_tune() skips DEFAULT_PIDS for CI adapters. Pid 0 was there only as
+// a side effect of the first source adapter mapping its own PAT onto this
+// device - a mapping whose data ddci_process_ts() discards - and it left again
+// with that adapter, after which the CI adapter could no longer see the PAT,
+// so no filter was created for the generated PMT pid, no PMT was parsed and
+// the next service never reached the CAM.
 static void ddci_add_psi_pids(ddci_device_t *d) {
-    for (const uint16_t pid : {0, 17}) {
-        SPid *p = find_pid(d->id, pid);
-        if (!p || p->flags == PID_STATE_DELETED) {
-            LOG("Adding pid %d to DDCI %d to read back the generated PSI", pid,
-                d->id);
-            mark_pid_add(DDCI_SID, d->id, pid);
-        }
+    SPid *p = find_pid(d->id, 0);
+    if (!p || p->flags == PID_STATE_DELETED) {
+        LOG("Adding pid 0 to DDCI %d to read back the generated PAT", d->id);
+        mark_pid_add(DDCI_SID, d->id, 0);
     }
 }
 
@@ -532,7 +531,7 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
 
     del_pmt_mapping_table(d, ad->id, pmt);
     // the mapping that was just dropped may have been the one holding pid 0
-    // or 17 on this adapter
+    // on this adapter
     if (d->channels > 0)
         ddci_add_psi_pids(d);
     update_pids(d->id);
@@ -590,49 +589,7 @@ int ddci_create_pat(ddci_device_t *d, uint8_t *b) {
     return len;
 }
 
-// Describes the service in a service_descriptor, so that process_sdt() on the
-// CI adapter can name the PMTs it parses back from the CI. The name of a
-// service is only known once the SDT of the transponder has been parsed, which
-// usually happens after ddci_process_pmt() has already copied it, and that
-// copy is the only one: a PMT registered before its name was known stays
-// unnamed until the channel is opened again.
-// Returns the number of bytes written, 0 when there is no name yet or the
-// descriptor does not fit.
-static int ddci_service_descriptor(SPMT *pmt, uint8_t *b, int len) {
-    int plen = strlen(pmt->provider);
-    int nlen = strlen(pmt->name);
-    // the 0x15 in front of each string marks it as UTF-8, which is what
-    // dvb_get_string() produced when the name was parsed
-    int dlen = 2 + 1 + 1 + (plen ? plen + 1 : 0) + 1 + nlen + 1;
-    int service_type = 0x02; // digital radio sound service
-
-    if (!nlen || dlen > len || dlen - 2 > 255)
-        return 0;
-
-    for (const auto &stream_pid : pmt->stream_pids)
-        if (stream_pid.is_video) {
-            service_type = 0x01; // digital television service
-            break;
-        }
-
-    *b++ = 0x48; // service_descriptor
-    *b++ = dlen - 2;
-    *b++ = service_type;
-    if (plen) {
-        *b++ = plen + 1;
-        *b++ = 0x15;
-        memcpy(b, pmt->provider, plen);
-        b += plen;
-    } else
-        *b++ = 0;
-    *b++ = nlen + 1;
-    *b++ = 0x15;
-    memcpy(b, pmt->name, nlen);
-
-    return dlen;
-}
-
-int ddci_create_sdt(ddci_device_t *d, uint8_t *sdt, int len) {
+int ddci_create_sdt(ddci_device_t *d, uint8_t *sdt) {
     uint8_t *b = sdt;
 
     *b++ = 0x00;
@@ -677,12 +634,8 @@ int ddci_create_sdt(ddci_device_t *d, uint8_t *sdt, int len) {
             // running_status, free_CA_mode, descriptors_length
             uint8_t r = 4 << 5; // running_status = 4
             r ^= 1 << 4;        // free_CA_mode = 1
-            // leave room for the 2 bytes below and for the CRC
-            int dlen = ddci_service_descriptor(pmt, b + 2,
-                                               len - (int)(b - sdt) - 2 - 4);
-            *b++ = r | ((dlen >> 8) & 0x0F);
-            *b++ = dlen & 0xFF;
-            b += dlen;
+            *b++ = r;
+            *b++ = 0x00;
         }
     }
     // calculate section_length
@@ -873,6 +826,28 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
     return b - new_pmt;
 }
 
+// ddci_process_pmt() copies the service name to the PMT the CI adapter parsed
+// back from the generated stream, but it only runs when that PMT is parsed,
+// and the name of a service is not known until the SDT of its transponder has
+// been read - usually later. process_pmt() then takes the "already processed"
+// early return for every repeat of the generated section, so the copy never
+// happens again and the CI side keeps the empty name it was registered with
+// until the channel is opened once more. Refresh it here instead: the
+// generated PAT carries the real sid, so the two PMTs are found by it.
+static void ddci_update_pmt_name(ddci_device_t *d, SPMT *pmt) {
+    if (!pmt->name[0])
+        return;
+
+    SPMT *dpmt = get_all_pmt_for_sid(d->id, pmt->sid);
+    if (!dpmt || dpmt == pmt || !strcmp(dpmt->name, pmt->name))
+        return;
+
+    LOG("DD %d: naming PMT %d (sid %d) %s", d->id, dpmt->id, dpmt->sid,
+        pmt->name);
+    safe_strncpy(dpmt->name, pmt->name);
+    safe_strncpy(dpmt->provider, pmt->provider);
+}
+
 int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len) {
     unsigned char psi[1500];
     int64_t ctime = getTick();
@@ -888,7 +863,7 @@ int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len) {
 
     // Add SDT
     if (ctime - d->last_sdt > 500) {
-        psi_len = ddci_create_sdt(d, psi, sizeof(psi));
+        psi_len = ddci_create_sdt(d, psi);
         pos += buffer_to_ts(dst + pos, len - pos, psi, psi_len, &d->sdt_cc, 17);
         d->last_sdt = ctime;
     }
@@ -898,6 +873,7 @@ int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len) {
         SPMT *pmt;
         for (i = 0; i < d->max_channels; i++) {
             if ((pmt = get_pmt(d->pmt[i].id))) {
+                ddci_update_pmt_name(d, pmt);
                 psi_len = ddci_create_pmt(d, pmt, psi, sizeof(psi), d->pmt + i);
                 auto it = get_pid_mapping(d, pmt->adapter, pmt->pid);
                 if (it != d->mapping.end())
