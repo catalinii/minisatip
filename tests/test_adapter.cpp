@@ -176,6 +176,136 @@ int test_find_pid_unsorted() {
     return 0;
 }
 
+static int test_set_pid_fail(adapter *ad, int pid) {
+    (void)ad;
+    (void)pid;
+    return -1;
+}
+
+static int test_del_filters_fail(adapter *ad, int fd, int pid) {
+    (void)ad;
+    (void)fd;
+    (void)pid;
+    return -1;
+}
+
+int test_update_pids_del_filters_error() {
+    for (int i = 0; i < MAX_ADAPTERS; i++) {
+        a[i] = nullptr;
+    }
+
+    // Removal failure must always be reported, after cleanup, with no
+    // minimum-pid-count gate.
+    adapter ad = {};
+    a[0] = &ad;
+    ad.id = 0;
+    ad.enabled = 1;
+    ad.active_pids = 5;
+    ad.del_filters = test_del_filters_fail;
+    ad.pids[0].flags = PID_STATE_DELETED;
+    ad.pids[0].pid = 0;
+    ad.pids[0].fd = 42;
+    ASSERT(update_pids(0) != 0,
+           "update_pids should fail when a pid cannot be removed");
+    ASSERT(ad.pids[0].flags == PID_STATE_INACTIVE && ad.pids[0].fd == 0,
+           "removed pid entry must be cleaned up even on failure");
+
+    // Same above the minimum pid count: still an error.
+    adapter ad2 = {};
+    a[0] = &ad2;
+    ad2.id = 0;
+    ad2.enabled = 1;
+    ad2.active_pids = 20;
+    ad2.del_filters = test_del_filters_fail;
+    ad2.pids[0].flags = PID_STATE_DELETED;
+    ad2.pids[0].pid = 0;
+    ad2.pids[0].fd = 42;
+    ASSERT(update_pids(0) != 0,
+           "update_pids should fail on removal failure regardless of pid "
+           "count");
+
+    for (int i = 0; i < MAX_ADAPTERS; i++) {
+        a[i] = nullptr;
+    }
+    return 0;
+}
+
+int test_update_pids_max_pids_floor() {
+    for (int i = 0; i < MAX_ADAPTERS; i++) {
+        a[i] = nullptr;
+    }
+
+    // Demux failure while below the minimum: max_pids must not drop below
+    // MIN_ADAPTER_PIDS and update_pids must report an error so the RTSP
+    // reply reflects it.
+    adapter ad = {};
+    a[0] = &ad;
+    ad.id = 0;
+    ad.enabled = 1;
+    ad.active_pids = 5;
+    ad.max_active_pids = 5;
+    ad.set_pid = test_set_pid_fail;
+    ad.pids[0].flags = PID_STATE_NEW;
+    ad.pids[0].pid = 1151;
+    ASSERT(update_pids(0) != 0,
+           "update_pids should fail when a pid cannot be added below the "
+           "minimum pid count");
+    ASSERT(ad.max_pids == MIN_ADAPTER_PIDS,
+           "max_pids must not go below MIN_ADAPTER_PIDS");
+    ASSERT(ad.pids[0].flags == PID_STATE_NEW,
+           "failing pid must stay NEW so a later update retries it");
+
+    // Repeated failures must not lower the floor further.
+    ASSERT(update_pids(0) != 0, "repeated failure should still report error");
+    ASSERT(ad.max_pids == MIN_ADAPTER_PIDS,
+           "max_pids must stay at MIN_ADAPTER_PIDS on repeated failures");
+
+    // Demux failure at/above the minimum keeps the old behavior: lower the
+    // cap (but not below the floor) and succeed so existing streams continue.
+    adapter ad2 = {};
+    a[0] = &ad2;
+    ad2.id = 0;
+    ad2.enabled = 1;
+    ad2.active_pids = 20;
+    ad2.max_active_pids = 20;
+    ad2.set_pid = test_set_pid_fail;
+    ad2.pids[0].flags = PID_STATE_NEW;
+    ad2.pids[0].pid = 1151;
+    ASSERT(update_pids(0) == 0,
+           "update_pids should succeed when the cap is reached at/above the "
+           "minimum pid count");
+    ASSERT(ad2.max_pids == 19, "max_pids should lower to max_active_pids - 1");
+
+    for (int i = 0; i < MAX_ADAPTERS; i++) {
+        a[i] = nullptr;
+    }
+    return 0;
+}
+
+#ifndef DISABLE_LINUXDVB
+int dvb_demux_shared_pid_count(adapter *a);
+
+int test_dvb_demux_shared_pid_count() {
+    adapter ad = {};
+    ad.dvr = 12;
+    ad.pids[0].flags = PID_STATE_ACTIVE;
+    ad.pids[0].pid = 0;
+    ad.pids[0].fd = 18; // PSI pid on its own fd
+    ad.pids[1].flags = PID_STATE_ACTIVE;
+    ad.pids[1].pid = 1151;
+    ad.pids[1].fd = 12; // media pid on the shared demux fd
+    ad.pids[2].flags = PID_STATE_NEW;
+    ad.pids[2].pid = 2221;
+    ad.pids[2].fd = 0; // not active yet: must not be counted
+    ad.pids[3].flags = PID_STATE_DELETED;
+    ad.pids[3].pid = 20;
+    ad.pids[3].fd = 12; // deleted: must not be counted
+    ASSERT(dvb_demux_shared_pid_count(&ad) == 1,
+           "only active pids on the shared demux fd must be counted");
+    return 0;
+}
+#endif
+
 int test_compare_slave_parameters() {
     adapter master_ad = {};
     adapter slave_ad = {};
@@ -382,6 +512,14 @@ int main() {
     TEST_FUNC(test_update_pids(), "test update_pids and sort_pids");
     TEST_FUNC(test_find_pid_unsorted(),
               "test find_pid with entries behind INACTIVE slots");
+    TEST_FUNC(test_update_pids_max_pids_floor(),
+              "test max_pids floor and error below the minimum pid count");
+    TEST_FUNC(test_update_pids_del_filters_error(),
+              "test removal error is always reported");
+#ifndef DISABLE_LINUXDVB
+    TEST_FUNC(test_dvb_demux_shared_pid_count(),
+              "test shared demux fd pid count");
+#endif
     TEST_FUNC(test_compare_slave_parameters(),
               "test compare_slave_parameters with std::optional");
 
