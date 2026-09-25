@@ -282,6 +282,7 @@ int test_update_pids_max_pids_floor() {
     return 0;
 }
 
+#ifndef DISABLE_LINUXDVB
 int dvb_demux_shared_pid_count(adapter *a);
 
 int test_dvb_demux_shared_pid_count() {
@@ -303,6 +304,7 @@ int test_dvb_demux_shared_pid_count() {
            "only active pids on the shared demux fd must be counted");
     return 0;
 }
+#endif
 
 int test_compare_slave_parameters() {
     adapter master_ad = {};
@@ -514,8 +516,10 @@ int main() {
               "test max_pids floor and error below the minimum pid count");
     TEST_FUNC(test_update_pids_del_filters_error(),
               "test removal error is always reported");
+#ifndef DISABLE_LINUXDVB
     TEST_FUNC(test_dvb_demux_shared_pid_count(),
               "test shared demux fd pid count");
+#endif
     TEST_FUNC(test_compare_slave_parameters(),
               "test compare_slave_parameters with std::optional");
 
