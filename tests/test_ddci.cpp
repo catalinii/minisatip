@@ -249,12 +249,6 @@ int test_add_del_pmt() {
     ASSERT(ddci_process_pmt(&ad, pmt0) == TABLES_RESULT_OK,
            "DDCI matching DD 0");
     ASSERT(d0.pmt[0].id == 0, "PMT 0 using DDCI 0");
-    // the PAT written on pid 0 of the CI has to be read back, otherwise
-    // process_pat() never creates a filter for the generated PMT pid and no
-    // PMT is ever parsed on the DDCI adapter
-    ASSERT(find_pid(d0.id, 0) != NULL,
-           "pid 0 was not requested on the DDCI adapter");
-
     ASSERT(ddci_process_pmt(&ad, pmt1) == TABLES_RESULT_OK,
            "DDCI matching DD 1");
     ASSERT(d1.pmt[0].id == 1, "PMT 1 using DDCI 1");
@@ -518,6 +512,12 @@ int test_psi_pids_survive_a_channel_change() {
     create_adapter(&ci, 8);
     create_adapter(&ad_a, 2);
     create_adapter(&ad_b, 4);
+
+    // pid 0 reaches the CI adapter the same way it does at runtime: post_tune()
+    // adds it as a default pid, under PID_STREAM_ID_UNDEFINED rather than the
+    // DDCI_SID the mappings use, which is what makes it outlive them
+    ci.type = ADAPTER_CI;
+    post_tune(&ci);
 
     pmt_a = create_pmt(2, 600, 601, 602, 0x100, 0x100);
     pmt_b = create_pmt(4, 700, 701, 702, 0x100, 0x100);

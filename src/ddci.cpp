@@ -324,24 +324,6 @@ int is_pmt_running(SPMT *pmt) {
 
 // determine if the pids from this PMT needs to be added to the virtual adapter,
 // also adds the PIDs to the translation table
-// ddci_add_psi() generates a PAT for the CI and writes it on pid 0 of its
-// input. It comes back with everything else, but a section is only parsed if
-// the pid is in the adapter's pid list, and nothing puts it there: pmt_tune()
-// adds the filter with FILTER_PERMANENT, which by design does not add the pid,
-// and post_tune() skips DEFAULT_PIDS for CI adapters. Pid 0 was there only as
-// a side effect of the first source adapter mapping its own PAT onto this
-// device - a mapping whose data ddci_process_ts() discards - and it left again
-// with that adapter, after which the CI adapter could no longer see the PAT,
-// so no filter was created for the generated PMT pid, no PMT was parsed and
-// the next service never reached the CAM.
-static void ddci_add_psi_pids(ddci_device_t *d) {
-    SPid *p = find_pid(d->id, 0);
-    if (!p || p->flags == PID_STATE_DELETED) {
-        LOG("Adding pid 0 to DDCI %d to read back the generated PAT", d->id);
-        mark_pid_add(DDCI_SID, d->id, 0);
-    }
-}
-
 int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     int i, ddid = -1;
     int rv = TABLES_RESULT_ERROR_NORETRY;
@@ -351,19 +333,9 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     if ((d = get_ddci(ad->id))) {
         LOG("Skip processing pmt for ddci adapter %d", ad->id);
 
-        SPMT *dpmt;
-
-        // set the name of the PMT from the DDCI to the original pmt
-        for (i = 0; i < d->max_channels; i++)
-            if ((dpmt = get_pmt(d->pmt[i].id))) {
-                if (dpmt->sid == pmt->sid) {
-                    ddci_mapping_table_t *m = get_ddci_pid(d, pmt->pid);
-                    if (m && m->pid == dpmt->pid) {
-                        safe_strncpy(pmt->name, dpmt->name);
-                    }
-                }
-            }
-
+        // The name is kept up to date by ddci_update_pmt_name() from the PMT
+        // generation tick; the one-shot copy that used to be here could only
+        // ever run before the transponder SDT had been parsed.
         return TABLES_RESULT_OK;
     }
 
@@ -443,8 +415,13 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     }
 
     // Map mandatory PIDs. Some CAMs need access to the TDT in order to "wake
-    // up", so always map it just in case.
-    for (const uint16_t pid : {0, 1, 20}) {
+    // up", so always map it just in case. Pid 0 is not among them: the CI gets
+    // the PAT that ddci_add_psi() generates, and the transponder's own PAT is
+    // dropped by ddci_process_ts() anyway (dpid == 0 means "no mapping"), so
+    // mapping it only served to put pid 0 in the CI adapter's pid list as a
+    // side effect - and to take it away again with the first source adapter.
+    // post_tune() adds pid 0 to a CI adapter as a default pid instead.
+    for (const uint16_t pid : {1, 20}) {
         if (!has_pid_mapping(d, pmt->adapter, pid)) {
             LOG("Mapping mandatory PID %d to PMT %d on DDCI %d", pid, pmt->id,
                 d->id);
@@ -456,8 +433,6 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
             }
         }
     }
-
-    ddci_add_psi_pids(d);
 
     LOG("found DDCI %d for pmt %d, running channels %d, max_channels %d", ddid,
         pmt->id, d->channels, d->max_channels);
@@ -530,10 +505,6 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
         spmt->name, was_registered, d->channels);
 
     del_pmt_mapping_table(d, ad->id, pmt);
-    // the mapping that was just dropped may have been the one holding pid 0
-    // on this adapter
-    if (d->channels > 0)
-        ddci_add_psi_pids(d);
     update_pids(d->id);
     dump_mapping_table();
     return 0;
