@@ -333,9 +333,6 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     if ((d = get_ddci(ad->id))) {
         LOG("Skip processing pmt for ddci adapter %d", ad->id);
 
-        // The name is kept up to date by ddci_update_pmt_name() from the PMT
-        // generation tick; the one-shot copy that used to be here could only
-        // ever run before the transponder SDT had been parsed.
         return TABLES_RESULT_OK;
     }
 
