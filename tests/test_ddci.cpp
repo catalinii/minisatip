@@ -60,6 +60,8 @@ extern ca_device_t *ca_devices[MAX_ADAPTERS];
 extern std::unordered_map<int, Sddci_channel> channels;
 extern SFilter *filters[MAX_FILTERS];
 
+int pmt_del(int id);
+
 // Forward declarations
 descriptor_t create_descriptor(const uint8_t *data);
 
@@ -247,7 +249,6 @@ int test_add_del_pmt() {
     ASSERT(ddci_process_pmt(&ad, pmt0) == TABLES_RESULT_OK,
            "DDCI matching DD 0");
     ASSERT(d0.pmt[0].id == 0, "PMT 0 using DDCI 0");
-
     ASSERT(ddci_process_pmt(&ad, pmt1) == TABLES_RESULT_OK,
            "DDCI matching DD 1");
     ASSERT(d1.pmt[0].id == 1, "PMT 1 using DDCI 1");
@@ -491,6 +492,78 @@ int test_ddci_process_ts() {
     pmts[0] = save;
     return 0;
 }
+// Two services from two different tuners on one CI. When the first one is
+// stopped, its mapping is what held pid 0 of the CI adapter, and losing it
+// leaves process_pat() blind: the next service never gets a PMT on the CI
+// side, so it is never sent to the CAM and never descrambles. (#1217)
+int test_psi_pids_survive_a_channel_change() {
+    SPMT *pmt_a, *pmt_b;
+    ddci_device_t d = {};
+    ca_device_t ca0 = {};
+    adapter ci = {0}, ad_a = {0}, ad_b = {0};
+    int i;
+
+    // earlier tests leave stack adapters and CA devices in the global arrays
+    for (i = 0; i < MAX_ADAPTERS; i++)
+        a[i] = NULL;
+    memset(ca_devices, 0, sizeof(ca_devices));
+    channels.clear();
+
+    create_adapter(&ci, 8);
+    create_adapter(&ad_a, 2);
+    create_adapter(&ad_b, 4);
+
+    // pid 0 reaches the CI adapter the same way it does at runtime: post_tune()
+    // adds it as a default pid, under PID_STREAM_ID_UNDEFINED rather than the
+    // DDCI_SID the mappings use, which is what makes it outlive them
+    ci.type = ADAPTER_CI;
+    post_tune(&ci);
+
+    pmt_a = create_pmt(2, 600, 601, 602, 0x100, 0x100);
+    pmt_b = create_pmt(4, 700, 701, 702, 0x100, 0x100);
+    // create_pmt() derives the PMT pid from the PMT id, which is 0 here
+    pmt_a->pid = 600;
+    pmt_b->pid = 700;
+
+    memset(&d.pmt, -1, sizeof(d.pmt));
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    d.id = ci.id;
+    d.enabled = 1;
+    d.max_channels = 2;
+    ddci_devices[ci.id] = &d;
+
+    int ca_id = add_ca(&dvbca);
+    add_caid_mask(ca_id, ci.id, 0x100, 0xFFFF);
+    ca0.id = 0;
+    ca0.enabled = 1;
+    ca0.state = CA_STATE_INITIALIZED;
+    ca_devices[0] = &ca0;
+
+    ASSERT(ddci_process_pmt(&ad_a, pmt_a) == TABLES_RESULT_OK,
+           "the first PMT should be registered");
+    ASSERT(ddci_process_pmt(&ad_b, pmt_b) == TABLES_RESULT_OK,
+           "the second PMT should be registered");
+    ASSERT(find_pid(d.id, 0) != NULL, "pid 0 should be on the CI adapter");
+
+    // the first tuner goes away, the second keeps streaming
+    ddci_del_pmt(&ad_a, pmt_a);
+
+    SPid *p = find_pid(d.id, 0);
+    ASSERT(p && p->flags != PID_STATE_DELETED,
+           "pid 0 was lost with the first PMT, the CI adapter can no longer "
+           "read the PAT it generates");
+    ddci_del_pmt(&ad_b, pmt_b);
+    del_ca(&dvbca);
+    pmt_del(pmt_a->id);
+    pmt_del(pmt_b->id);
+    free_filters();
+    channels.clear();
+    a[2] = NULL;
+    a[4] = NULL;
+    a[8] = NULL;
+    return 0;
+}
+
 int test_create_pat() {
     ddci_device_t d = {};
     uint8_t psi[188];
@@ -734,6 +807,87 @@ int test_process_cat() {
     return 0;
 }
 
+// The name of a service is only known once the SDT of its transponder has
+// been parsed, which is normally well after the PMT was registered on the CI.
+// ddci_process_pmt() copies the name when the CI adapter parses the generated
+// PMT, but process_pmt() takes the "already processed" early return for every
+// repeat of an unchanged section, so without a refresh the CI-side PMT keeps
+// the blank name it was created with until the channel is opened again.
+// (#1217)
+int test_ci_pmt_name_is_refreshed() {
+    SPMT *src, *ci_pmt;
+    ddci_device_t d = {};
+    ca_device_t ca0 = {};
+    adapter ci = {0}, ad = {0};
+    uint8_t buf[4096];
+    int i;
+
+    // earlier tests leave stack adapters and CA devices in the global arrays
+    for (i = 0; i < MAX_ADAPTERS; i++)
+        a[i] = NULL;
+    memset(ca_devices, 0, sizeof(ca_devices));
+    channels.clear();
+
+    create_adapter(&ci, 8);
+    create_adapter(&ad, 2);
+
+    // a sid no other test in this binary uses: they leave their PMTs in
+    // pmts[] and get_all_pmt_for_sid() returns the first match
+    src = create_pmt(2, 1601, 601, 602, 0x100, 0x100);
+    src->pid = 600;
+
+    memset(&d.pmt, -1, sizeof(d.pmt));
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    d.id = ci.id;
+    d.enabled = 1;
+    d.max_channels = 2;
+    ddci_devices[ci.id] = &d;
+
+    int ca_id = add_ca(&dvbca);
+    add_caid_mask(ca_id, ci.id, 0x100, 0xFFFF);
+    ca0.id = 0;
+    ca0.enabled = 1;
+    ca0.state = CA_STATE_INITIALIZED;
+    ca_devices[0] = &ca0;
+
+    ASSERT(ddci_process_pmt(&ad, src) == TABLES_RESULT_OK,
+           "the PMT should be registered");
+
+    // this is the PMT the CI adapter parses back out of the generated PAT:
+    // same sid, its own pid, and no name, because the source had none when
+    // ddci_process_pmt() copied it
+    ci_pmt = create_pmt(ci.id, 1601, 611, 612, 0x100, 0x100);
+    ci_pmt->pid = 800;
+    ci_pmt->name[0] = 0;
+    ASSERT(get_all_pmt_for_sid(ci.id, 1601) == ci_pmt,
+           "the CI-side PMT should be found by its sid");
+
+    // the PMT block of ddci_add_psi() is gated on ctime - last_pmt > 100 and
+    // getTick() is only a few ms into a test run, so age it by hand
+    d.last_pmt = getTick() - 1000;
+    ddci_add_psi(&d, buf, sizeof(buf));
+    ASSERT(ci_pmt->name[0] == 0,
+           "the CI-side PMT should stay unnamed while the source is unnamed");
+
+    // the transponder SDT arrives and names the source service
+    safe_strncpy(src->name, "beIN SPORTS 1");
+    safe_strncpy(src->provider, "Digital Platform");
+
+    d.last_pmt = getTick() - 1000;
+    ddci_add_psi(&d, buf, sizeof(buf));
+    ASSERT(!strcmp(ci_pmt->name, "beIN SPORTS 1"),
+           "the CI-side PMT should take the name of the source service");
+    ASSERT(!strcmp(ci_pmt->provider, "Digital Platform"),
+           "the CI-side PMT should take the provider as well");
+
+    ddci_del_pmt(&ad, src);
+    del_ca(&dvbca);
+    pmt_del(src->id);
+    pmt_del(ci_pmt->id);
+    free_filters();
+    return 0;
+}
+
 int main() {
     opts.log = 65535 ^ LOG_LOCK ^ LOG_UTILS;
     opts.debug = 0;
@@ -748,6 +902,10 @@ int main() {
     TEST_FUNC(test_ddci_process_ts(), "testing ddci_process_ts");
     TEST_FUNC(test_ddci_process_ts_null_tail(),
               "testing ddci_process_ts ends every write with a null packet");
+    TEST_FUNC(test_psi_pids_survive_a_channel_change(),
+              "testing that the CI keeps the pids of its generated PSI");
+    TEST_FUNC(test_ci_pmt_name_is_refreshed(),
+              "testing that the CI-side PMT is named once the source is");
     TEST_FUNC(test_create_pat(), "testing create_pat");
     TEST_FUNC(test_create_sdt(), "testing create_sdt");
     TEST_FUNC(test_create_pmt(), "testing create_pmt");
