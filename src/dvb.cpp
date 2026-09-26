@@ -2121,7 +2121,7 @@ void get_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
 
 #if DERIVE_STRENGTH_FROM_SNR
             // the driver reports no AGC for this front-end, see above
-            if (*strength == 0 && *snr > 0 && (*status & FE_HAS_LOCK)) {
+            if ((snr_calib[ad->id] == SNR_CALIB_BCM_FBC || snr_calib[ad->id] == SNR_CALIB_NIM_FBC) && *strength == 0 && *snr > 0 && (*status & FE_HAS_LOCK)) {
                 if (!strength_warned[ad->id]) {
                     strength_warned[ad->id] = 1;
                     LOG("ad %d reports no signal strength while locked, "
