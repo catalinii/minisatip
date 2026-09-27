@@ -654,12 +654,16 @@ int send_ecm(int filter_id, unsigned char *b, int len, void *opaque) {
     len = ((b[1] & 0xF) << 8) + b[2];
     len += 3;
     k->last_ecm = getTick();
-    if (len > 0x15 && b[2] - b[4] == 4) {
-        k->icam_ecm = b[0x15];
-        k->is_icam = k->icam_ecm ? 1 : 0;
-    } else {
-        k->icam_ecm = 0;
-        k->is_icam = 0;
+    // Only ECMs set the iCAM mode: OSCam also filters CAT and SDT on this key,
+    // and a reset between an ECM and its CW would key the CW in the wrong mode.
+    if (b[0] == 0x80 || b[0] == 0x81) {
+        if (len > 0x15 && b[2] - b[4] == 4) {
+            k->icam_ecm = b[0x15];
+            k->is_icam = k->icam_ecm ? 1 : 0;
+        } else {
+            k->icam_ecm = 0;
+            k->is_icam = 0;
+        }
     }
     LOG("dvbapi: sending ECM key %d for pid %04X (%d), ecm_parity = %d, "
         "previous parity %d, demux = %d, filter = %d, icam_ecm %d, len = %d "

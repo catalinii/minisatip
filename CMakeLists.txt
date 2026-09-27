@@ -277,6 +277,7 @@ if(BUILD_TESTING)
         tests/test_adapter.cpp
         tests/test_opts.cpp
         tests/test_ca.cpp
+        tests/test_dvbapi.cpp
         tests/test_pmt.cpp
         tests/test_ddci.cpp
         tests/test_dvb.cpp
