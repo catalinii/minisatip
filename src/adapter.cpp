@@ -983,11 +983,7 @@ void post_tune(adapter *ad) {
 #endif
 #ifndef DISABLE_PMT
     // If we're not requesting all PIDs, add default PIDs unless they've been
-    // explicitly added. A CI adapter carries the PSI that the DDCI module
-    // generates for it rather than the transponder's, so it only needs pid 0:
-    // process_pat() on that PAT is what creates the filters for the generated
-    // PMTs, and without it a service registered on the DDCI is never parsed
-    // back and never reaches the CAM.
+    // explicitly added. CI adapters only need pid 0, for the generated PAT.
     SPid *p_all = find_pid(aid, 8192);
     if (!p_all || p_all->flags == PID_STATE_DELETED) {
         for (auto &pid : DEFAULT_PIDS) {

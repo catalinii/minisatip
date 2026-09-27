@@ -412,12 +412,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     }
 
     // Map mandatory PIDs. Some CAMs need access to the TDT in order to "wake
-    // up", so always map it just in case. Pid 0 is not among them: the CI gets
-    // the PAT that ddci_add_psi() generates, and the transponder's own PAT is
-    // dropped by ddci_process_ts() anyway (dpid == 0 means "no mapping"), so
-    // mapping it only served to put pid 0 in the CI adapter's pid list as a
-    // side effect - and to take it away again with the first source adapter.
-    // post_tune() adds pid 0 to a CI adapter as a default pid instead.
+    // up", so always map it just in case. Pid 0 comes from post_tune().
     for (const uint16_t pid : {1, 20}) {
         if (!has_pid_mapping(d, pmt->adapter, pid)) {
             LOG("Mapping mandatory PID %d to PMT %d on DDCI %d", pid, pmt->id,
@@ -794,14 +789,8 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
     return b - new_pmt;
 }
 
-// ddci_process_pmt() copies the service name to the PMT the CI adapter parsed
-// back from the generated stream, but it only runs when that PMT is parsed,
-// and the name of a service is not known until the SDT of its transponder has
-// been read - usually later. process_pmt() then takes the "already processed"
-// early return for every repeat of the generated section, so the copy never
-// happens again and the CI side keeps the empty name it was registered with
-// until the channel is opened once more. Refresh it here instead: the
-// generated PAT carries the real sid, so the two PMTs are found by it.
+// Copy the service name to the CI-side PMT, found by sid. The name is only
+// known once the transponder SDT is parsed, so it is refreshed on every tick.
 static void ddci_update_pmt_name(ddci_device_t *d, SPMT *pmt) {
     if (!pmt->name[0])
         return;

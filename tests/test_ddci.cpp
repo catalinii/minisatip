@@ -492,10 +492,8 @@ int test_ddci_process_ts() {
     pmts[0] = save;
     return 0;
 }
-// Two services from two different tuners on one CI. When the first one is
-// stopped, its mapping is what held pid 0 of the CI adapter, and losing it
-// leaves process_pat() blind: the next service never gets a PMT on the CI
-// side, so it is never sent to the CAM and never descrambles. (#1217)
+// Two tuners on one CI: stopping the first must not remove pid 0 from the CI
+// adapter, or the next service never reaches the CAM. (#1217)
 int test_psi_pids_survive_a_channel_change() {
     SPMT *pmt_a, *pmt_b;
     ddci_device_t d = {};
@@ -513,9 +511,8 @@ int test_psi_pids_survive_a_channel_change() {
     create_adapter(&ad_a, 2);
     create_adapter(&ad_b, 4);
 
-    // pid 0 reaches the CI adapter the same way it does at runtime: post_tune()
-    // adds it as a default pid, under PID_STREAM_ID_UNDEFINED rather than the
-    // DDCI_SID the mappings use, which is what makes it outlive them
+    // as at runtime, post_tune() adds pid 0 as a default pid, so it outlives
+    // the DDCI mappings
     ci.type = ADAPTER_CI;
     post_tune(&ci);
 
@@ -807,13 +804,8 @@ int test_process_cat() {
     return 0;
 }
 
-// The name of a service is only known once the SDT of its transponder has
-// been parsed, which is normally well after the PMT was registered on the CI.
-// ddci_process_pmt() copies the name when the CI adapter parses the generated
-// PMT, but process_pmt() takes the "already processed" early return for every
-// repeat of an unchanged section, so without a refresh the CI-side PMT keeps
-// the blank name it was created with until the channel is opened again.
-// (#1217)
+// A PMT registered on the CI before its transponder SDT was parsed must pick
+// up the service name once it is known. (#1217)
 int test_ci_pmt_name_is_refreshed() {
     SPMT *src, *ci_pmt;
     ddci_device_t d = {};
@@ -853,9 +845,8 @@ int test_ci_pmt_name_is_refreshed() {
     ASSERT(ddci_process_pmt(&ad, src) == TABLES_RESULT_OK,
            "the PMT should be registered");
 
-    // this is the PMT the CI adapter parses back out of the generated PAT:
-    // same sid, its own pid, and no name, because the source had none when
-    // ddci_process_pmt() copied it
+    // the PMT the CI adapter parses back from the generated PAT: same sid,
+    // its own pid, and no name yet
     ci_pmt = create_pmt(ci.id, 1601, 611, 612, 0x100, 0x100);
     ci_pmt->pid = 800;
     ci_pmt->name[0] = 0;
