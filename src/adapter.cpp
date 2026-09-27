@@ -996,11 +996,12 @@ void post_tune(adapter *ad) {
 #endif
 #ifndef DISABLE_PMT
     // If we're not requesting all PIDs, add default PIDs unless they've been
-    // explicitly added. Doesn't apply to CI adapters.
+    // explicitly added. CI adapters only need pid 0, for the generated PAT.
     SPid *p_all = find_pid(aid, 8192);
-    if (ad->type != ADAPTER_CI &&
-        (!p_all || p_all->flags == PID_STATE_DELETED)) {
+    if (!p_all || p_all->flags == PID_STATE_DELETED) {
         for (auto &pid : DEFAULT_PIDS) {
+            if (ad->type == ADAPTER_CI && pid != 0)
+                continue;
             SPid *p = find_pid(aid, pid);
             if (!p || p->flags == PID_STATE_DELETED) {
                 LOG("Adding pid %d to the list of pids as not explicitly added "

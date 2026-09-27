@@ -333,19 +333,6 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     if ((d = get_ddci(ad->id))) {
         LOG("Skip processing pmt for ddci adapter %d", ad->id);
 
-        SPMT *dpmt;
-
-        // set the name of the PMT from the DDCI to the original pmt
-        for (i = 0; i < d->max_channels; i++)
-            if ((dpmt = get_pmt(d->pmt[i].id))) {
-                if (dpmt->sid == pmt->sid) {
-                    ddci_mapping_table_t *m = get_ddci_pid(d, pmt->pid);
-                    if (m && m->pid == dpmt->pid) {
-                        safe_strncpy(pmt->name, dpmt->name);
-                    }
-                }
-            }
-
         return TABLES_RESULT_OK;
     }
 
@@ -425,8 +412,8 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     }
 
     // Map mandatory PIDs. Some CAMs need access to the TDT in order to "wake
-    // up", so always map it just in case.
-    for (const uint16_t pid : {0, 1, 20}) {
+    // up", so always map it just in case. Pid 0 comes from post_tune().
+    for (const uint16_t pid : {1, 20}) {
         if (!has_pid_mapping(d, pmt->adapter, pid)) {
             LOG("Mapping mandatory PID %d to PMT %d on DDCI %d", pid, pmt->id,
                 d->id);
@@ -802,6 +789,22 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
     return b - new_pmt;
 }
 
+// Copy the service name to the CI-side PMT, found by sid. The name is only
+// known once the transponder SDT is parsed, so it is refreshed on every tick.
+static void ddci_update_pmt_name(ddci_device_t *d, SPMT *pmt) {
+    if (!pmt->name[0])
+        return;
+
+    SPMT *dpmt = get_all_pmt_for_sid(d->id, pmt->sid);
+    if (!dpmt || dpmt == pmt || !strcmp(dpmt->name, pmt->name))
+        return;
+
+    LOG("DD %d: naming PMT %d (sid %d) %s", d->id, dpmt->id, dpmt->sid,
+        pmt->name);
+    safe_strncpy(dpmt->name, pmt->name);
+    safe_strncpy(dpmt->provider, pmt->provider);
+}
+
 int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len) {
     unsigned char psi[1500];
     int64_t ctime = getTick();
@@ -827,6 +830,7 @@ int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len) {
         SPMT *pmt;
         for (i = 0; i < d->max_channels; i++) {
             if ((pmt = get_pmt(d->pmt[i].id))) {
+                ddci_update_pmt_name(d, pmt);
                 psi_len = ddci_create_pmt(d, pmt, psi, sizeof(psi), d->pmt + i);
                 auto it = get_pid_mapping(d, pmt->adapter, pmt->pid);
                 if (it != d->mapping.end())
