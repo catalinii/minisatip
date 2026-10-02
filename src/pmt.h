@@ -149,7 +149,6 @@ typedef struct struct_pmt {
     SPMT_batch *batch;
     int8_t parity, update_cw;
     uint64_t last_update_cw;
-    int16_t master_pmt; //  the pmt that contains the same pids as this PMT
     SCW *cw;
     SPid *p;
     char provider[50], name[50];
@@ -234,8 +233,8 @@ int set_filter_flags(int id, int flags);
 int set_filter_opaque(int id, void *opaque);
 int get_pid_filter(int aid, int pid);
 int assemble_packet(SFilter *f, uint8_t *b);
-void disable_cw(int master_pmt);
-void expire_cw_for_pmt(int master_pmt, int parity, int64_t min_expiry);
+void disable_cw(int pmt_id);
+void expire_cw_for_pmt(int pmt_id, int parity, int64_t min_expiry);
 int pmt_add(int adapter, int sid, int pmt_pid);
 SPMT *get_all_pmt_for_sid(int aid, int sid);
 int test_decrypt_packet(SCW *cw, SPMT_batch *start, int len);
@@ -243,7 +242,7 @@ void init_algo();
 void update_cw(SPMT *pmt);
 int pmt_decrypt_stream(adapter *ad);
 int wait_pusi(adapter *ad, int len);
-int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf, int sca_id);
+int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf, int buf_len, int sca_id);
 void free_filters();
 void stop_pmt(SPMT *pmt, adapter *ad);
 int pmt_add_stream_pid(SPMT *pmt, int pid, int type, bool is_audio,

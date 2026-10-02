@@ -720,6 +720,11 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
     // Add CA IDs and CA Pids
     for (i = 0; i < pmt->caids; i++) {
         int private_data_len = pmt->ca[i]->private_data_len;
+        if (b - new_pmt + 10 + private_data_len > pmt_size) {
+            LOG("%s: truncating PMT %d program CA list, buffer full",
+                __FUNCTION__, pmt->id);
+            break;
+        }
         *b++ = 0x09;
         *b++ = 0x04 + private_data_len;
         copy16(b, 0, pmt->ca[i]->id);
@@ -748,25 +753,42 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
             }
         }
 
+        // ES info length
+        int es_info_len = 0;
+        for (const auto &desc : stream_pid.descriptors) {
+            es_info_len += desc.len + 2;
+        }
+        if (b - new_pmt + 9 + es_info_len > pmt_size) {
+            LOG("%s: truncating PMT %d stream list, buffer full", __FUNCTION__,
+                pmt->id);
+            break;
+        }
+
         // Stream type + PID
         *b = stream_pid.type;
         copy16(b, 1, safe_get_pid_mapping(d, pmt->adapter, stream_pid.pid));
         b += 3;
 
-        // ES info length
-        int es_info_len = 0;
-        for (const auto &d : stream_pid.descriptors) {
-            es_info_len += d.len + 2;
-        }
         copy16(b, 0, es_info_len);
         b += 2;
 
-        // Descriptors
-        for (const auto &d : stream_pid.descriptors) {
-            *b++ = d.type;
-            *b++ = d.len;
-            memcpy(b, d.data.data(), d.len);
-            b += d.len;
+        // Descriptors, remapping the ECM pid of CA descriptors
+        for (const auto &desc : stream_pid.descriptors) {
+            *b++ = desc.type;
+            *b++ = desc.len;
+            if (desc.is_ca_descriptor() && desc.len >= 4 &&
+                desc.data.size() >= 4) {
+                int raw = ((desc.data[2] & 0x1F) << 8) | desc.data[3];
+                int mapped = safe_get_pid_mapping(d, pmt->adapter, raw);
+                b[0] = desc.data[0];
+                b[1] = desc.data[1];
+                b[2] = (desc.data[2] & 0xE0) | ((mapped >> 8) & 0x1F);
+                b[3] = mapped & 0xFF;
+                memcpy(b + 4, desc.data.data() + 4, desc.len - 4);
+            } else {
+                memcpy(b, desc.data.data(), desc.len);
+            }
+            b += desc.len;
         }
 
         LOGM("%s: pmt %d added pid %04X, type %02X, es_len %d", __FUNCTION__,

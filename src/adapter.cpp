@@ -929,6 +929,7 @@ int update_pids(int aid) {
             ad->pids[i].fd = 0;
             ad->pids[i].filter = -1;
             ad->pids[i].pmt = -1;
+            ad->pids[i].order = 0;
             ad->pids[i].flags = 0;
             ad->pids[i].packets2 = 0;
             ad->pids[i].packets = 0;
@@ -1086,6 +1087,15 @@ SPid *find_pid(int aid, int p) {
     return NULL;
 }
 
+int spid_has_client_sid(SPid *p) {
+    if (!p)
+        return 0;
+    for (int16_t sid : p->sid)
+        if (sid >= 0 && sid < MAX_STREAMS)
+            return 1;
+    return 0;
+}
+
 void mark_pid_deleted(int aid, int sid, int _pid, SPid *p) {
     if (!p)
         p = find_pid(aid, _pid);
@@ -1097,10 +1107,13 @@ void mark_pid_deleted(int aid, int sid, int _pid, SPid *p) {
         if (p->flags != PID_STATE_INACTIVE)
             p->flags = PID_STATE_DELETED;
         p->sid.clear();
+        p->order = 0;
         return;
     }
     // sid != -1
     p->sid.erase(sid);
+    if (!spid_has_client_sid(p))
+        p->order = 0;
     bool is_empty = p->sid.empty();
     int keep = 0;
 
@@ -1158,8 +1171,12 @@ int mark_pid_add(int sid, int aid, int _pid) {
     // check if the pid already exists, if yes add the sid
     if ((p = find_pid(aid, _pid))) {
         LOG("found already existing pid %d flags %d", _pid, p->flags);
-        if (sid != PID_STREAM_ID_UNDEFINED)
+        if (sid != PID_STREAM_ID_UNDEFINED) {
+            int had_client = spid_has_client_sid(p);
             p->sid.insert(sid);
+            if (!had_client && spid_has_client_sid(p))
+                p->order = ++ad->pid_order_seq;
+        }
         if (p->flags == PID_STATE_DELETED)
             p->flags = PID_STATE_NEW;
         return 0;
@@ -1170,8 +1187,11 @@ int mark_pid_add(int sid, int aid, int _pid) {
             ad->pids[i].flags = PID_STATE_NEW;
             ad->pids[i].pid = _pid;
             ad->pids[i].sid.clear();
+            ad->pids[i].order = 0;
             if (sid != PID_STREAM_ID_UNDEFINED)
                 ad->pids[i].sid.insert(sid);
+            if (spid_has_client_sid(&ad->pids[i]))
+                ad->pids[i].order = ++ad->pid_order_seq;
             ad->pids[i].pmt = -1;
             ad->pids[i].filter = -1;
             ad->pids[i].sock = -1;

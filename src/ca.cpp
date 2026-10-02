@@ -773,6 +773,11 @@ int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
         }
         if (!stream_pid.is_audio && !stream_pid.is_video)
             continue;
+        if (pos + 6 > len) {
+            LOG("%s: truncating PMT %d stream list at %d bytes", __FUNCTION__,
+                pmt->id, pos);
+            break;
+        }
         capmt[pos++] = stream_pid.type;
         copy16(capmt, pos, stream_pid.pid);
         pos += 2;
@@ -783,7 +788,7 @@ int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
         // append the stream descriptors
         if (pmt->caids) {
             capmt[pos++] = cmd_id;
-            pi_len = pmt_add_ca_descriptor(pmt, capmt + pos, ca_id);
+            pi_len = pmt_add_ca_descriptor(pmt, capmt + pos, len - pos, ca_id);
             pos += pi_len;
             copy16(capmt, pi_len_pos, pi_len + 1);
         }

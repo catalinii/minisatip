@@ -573,16 +573,16 @@ char *cw_to_string(SCW *cw, char *buf) {
     return buf;
 }
 
-void clear_cw_for_pmt(int master_pmt, int parity) {
+void clear_cw_for_pmt(int pmt_id, int parity) {
     int i;
     int64_t ctime = getTick();
     for (i = 0; i < ncws; i++)
-        if (cws[i] && cws[i]->enabled && cws[i]->pmt == master_pmt &&
+        if (cws[i] && cws[i]->enabled && cws[i]->pmt == pmt_id &&
             cws[i]->parity == parity) {
             LOG("disabling CW %d, parity %d created %jd ms ago", i,
                 cws[i]->parity, ctime - cws[i]->time);
             if (cws[i]->op->stop_cw)
-                cws[i]->op->stop_cw(cws[i], get_pmt(master_pmt));
+                cws[i]->op->stop_cw(cws[i], get_pmt(pmt_id));
             cws[i]->enabled = 0;
         }
     i = MAX_CW;
@@ -636,8 +636,8 @@ int wait_pusi(adapter *ad, int len) {
     return 0;
 }
 
-void disable_cw(int master_pmt) {
-    SPMT *pmt = get_pmt(master_pmt);
+void disable_cw(int pmt_id) {
+    SPMT *pmt = get_pmt(pmt_id);
     if (pmt) {
         pmt->update_cw = 1;
     }
@@ -807,27 +807,17 @@ void update_cw(SPMT *pmt) {
 int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
             int64_t expiry, void *opaque) {
     char buf[300];
-    int i, master_pmt;
+    int i;
     int64_t ctime = getTick();
     SCW_op *op = get_op_for_algo(algo);
     SPMT *pmt = get_pmt(pmt_id);
     if (!pmt)
         LOG_AND_RETURN(1, "%s: pmt not found %d", __FUNCTION__, pmt_id);
-    master_pmt = pmt->master_pmt;
-    pmt = get_pmt(master_pmt);
-    if (!pmt) {
-        LOG("%s: master pmt not found %d for pmt %d", __FUNCTION__, master_pmt,
-            pmt_id);
-        pmt = get_pmt(pmt_id);
-        if (!pmt)
-            LOG_AND_RETURN(2, "%s: pmt %d and master pmt not found %d ",
-                           __FUNCTION__, pmt_id, master_pmt);
-    }
     if (!op)
         LOG_AND_RETURN(3, "op not found for algo %d", algo);
 
     for (i = 0; i < MAX_CW; i++)
-        if (cws[i] && cws[i]->enabled && cws[i]->pmt == master_pmt &&
+        if (cws[i] && cws[i]->enabled && cws[i]->pmt == pmt_id &&
             cws[i]->parity == parity && ctime < cws[i]->expiry &&
             !memcmp(cw, cws[i]->cw, cws[i]->cw_len))
             LOG_AND_RETURN(1, "cw already exist at position %d: %s ", i,
@@ -857,7 +847,7 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
     c->id = i;
     c->adapter = pmt->adapter;
     c->parity = parity;
-    c->pmt = master_pmt;
+    c->pmt = pmt_id;
     c->cw_len = 16;
     c->time = getTick();
     c->set_time = 0;
@@ -895,9 +885,9 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
     if (i >= ncws)
         ncws = i + 1;
 
-    LOG("CW %d for PMT %d (%s), master %d, pid %d, for %s parity, %s", c->id,
-        pmt_id, pmt->name, master_pmt, pmt->pid,
-        c->parity != pmt->parity ? "next" : "current", cw_to_string(c, buf));
+    LOG("CW %d for PMT %d (%s), pid %d, for %s parity, %s", c->id, pmt_id,
+        pmt->name, pmt->pid, c->parity != pmt->parity ? "next" : "current",
+        cw_to_string(c, buf));
     return 0;
 }
 
@@ -933,7 +923,7 @@ int decrypt_batch(SPMT *pmt) {
 }
 
 int pmt_decrypt_stream(adapter *ad) {
-    SPMT *pmt = NULL, *master = NULL;
+    SPMT *pmt = NULL;
     // max batch
     int i = 0;
     unsigned char *b;
@@ -960,9 +950,6 @@ int pmt_decrypt_stream(adapter *ad) {
                 continue; // cannot decrypt
             }
 
-            master = get_pmt(pmt->master_pmt);
-            if (master)
-                pmt = master;
             cp = ((b[3] & 0x40) > 0);
 
             if (pmt->parity == -1)
@@ -1006,63 +993,230 @@ int pmt_decrypt_stream(adapter *ad) {
     return 0;
 }
 
+// Release exactly this PMT's pid claims, never another PMT's.
+static void release_pmt_claims(adapter *ad, SPMT *pmt) {
+    for (int i = 0; i < MAX_PIDS; i++)
+        if (ad->pids[i].pmt == pmt->id)
+            ad->pids[i].pmt = -1;
+}
+
+// A PMT may start while its own PMT pid is subscribed by a real client
+// and at least one of its audio/video pids is subscribed by one.
+static int is_start_candidate(SPid **subs, SPMT *pmt) {
+    SPid *pp = subs[pmt->pid];
+    if (!pp || !spid_has_client_sid(pp))
+        return 0;
+    for (const auto &sp : pmt->stream_pids)
+        if ((sp.is_audio || sp.is_video) && subs[sp.pid] &&
+            spid_has_client_sid(subs[sp.pid]))
+            return 1;
+    return 0;
+}
+
+// True when the PMT owns at least one subscribed audio/video pid.
+static int holds_av_claim(SPid **subs, SPMT *pmt) {
+    for (const auto &sp : pmt->stream_pids) {
+        if (!sp.is_audio && !sp.is_video)
+            continue;
+        SPid *s = subs[sp.pid];
+        if (s && s->pmt == pmt->id)
+            return 1;
+    }
+    return 0;
+}
+
+static int pmt_carries_pid(SPMT *pmt, int pid) {
+    for (const auto &sp : pmt->stream_pids)
+        if (sp.pid == pid)
+            return 1;
+    return 0;
+}
+
+// Subscription order of the owner's PMT pid; unknown sorts last.
+static uint32_t claim_owner_order(SPid **subs, int owner_id) {
+    SPMT *o = get_pmt(owner_id);
+    SPid *op = o ? subs[o->pid] : NULL;
+    if (!op || !op->order)
+        return UINT32_MAX;
+    return op->order;
+}
+
+typedef struct {
+    SPMT *pmt;
+    char candidate, chosen, resolved;
+    uint32_t order;
+} SPmtChoice;
+
+// The chosen sibling can run when every subscribed AV pid is free, its
+// own, held by the same pid group, or stealable from a later subscriber.
+static int chosen_activatable(SPid **subs, SPMT *chosen, uint32_t order) {
+    for (const auto &sp : chosen->stream_pids) {
+        SPid *s;
+        SPMT *o;
+        if (!sp.is_audio && !sp.is_video)
+            continue;
+        s = subs[sp.pid];
+        if (!s || s->pmt < 0 || s->pmt == chosen->id)
+            continue;
+        o = get_pmt(s->pmt);
+        if (!o || o->pid == chosen->pid)
+            continue;
+        if (order >= claim_owner_order(subs, o->id))
+            return 0;
+    }
+    return 1;
+}
+
+// A running group sibling is demoted when another member is chosen (D8)
+// and that member can actually take over its audio/video pids.
+static int d8_demotable(SPmtChoice *ch, int nch, SPid **subs, int i) {
+    int j, chosen = -1, contested = 0;
+    for (j = 0; j < nch; j++) {
+        if (j == i || !ch[j].candidate || ch[j].pmt->pid != ch[i].pmt->pid)
+            continue;
+        contested = 1;
+        if (ch[j].chosen)
+            chosen = j;
+    }
+    if (!contested || ch[i].chosen || chosen < 0)
+        return 0;
+    return chosen_activatable(subs, ch[chosen].pmt, ch[chosen].order);
+}
+
+// The active PMT is the one in the pid list: a PMT runs while its own
+// PMT pid is client-subscribed and it owns a subscribed AV pid. Shared
+// pids go to the earliest-subscribed PMT pid (smaller SPid.order), which
+// preempts larger-order holders; newcomers otherwise never steal.
 void start_active_pmts(adapter *ad) {
     int i;
-    SPid *pids[8193];
-    memset(pids, 0, sizeof(pids));
+    SPid *subs[8193];
+    SPmtChoice ch[MAX_PMT_FOR_ADAPTER];
+    int nch = 0;
+    memset(subs, 0, sizeof(subs));
 
     for (i = 0; i < MAX_PIDS; i++)
         if (ad->pids[i].flags == PID_STATE_ACTIVE) {
-            pids[ad->pids[i].pid] = ad->pids + i;
+            subs[ad->pids[i].pid] = ad->pids + i;
         }
-    for (i = 0; i < ad->active_pmts; i++) {
+    for (i = 0; i < ad->active_pmts && nch < MAX_PMT_FOR_ADAPTER; i++) {
         SPMT *pmt = get_pmt(ad->active_pmt[i]);
+        SPid *pp;
         if (!pmt)
             continue;
-        int is_active = 0;
-        int first = 0;
-        int pmt_started = 0;
-        for (const auto &stream_pid : pmt->stream_pids) {
-            // for all audio and video streams start the PMT containing them
-            if ((stream_pid.is_audio || stream_pid.is_video) &&
-                pids[stream_pid.pid] && pmt->id == pmt->master_pmt) {
-                is_active = 1;
-#ifndef DISABLE_TABLES
-                if (!first) {
-                    first = 1;
-                    if (pmt->state == PMT_STOPPED) {
-                        start_pmt(pmt, ad);
-                        pmt_started = 1;
-                    }
+        pp = subs[pmt->pid];
+        ch[nch].pmt = pmt;
+        ch[nch].candidate = is_start_candidate(subs, pmt);
+        ch[nch].chosen = 0;
+        ch[nch].resolved = 0;
+        ch[nch].order = (pp && pp->order) ? pp->order : UINT32_MAX;
+        nch++;
+    }
 
-                    if (ad->ca_mask != (pmt->disabled_ca_mask | pmt->ca_mask)) {
-                        send_pmt_to_cas(ad, pmt);
-                    }
-
-                    if (pmt->state == PMT_STARTING)
-                        pmt->state = PMT_RUNNING;
-                }
-#endif
-                SPid *p = pids[stream_pid.pid];
-                if (p && p->pmt < 0) {
-                    p->pmt = pmt->id;
-                    p->is_decrypted = 0;
-                    LOGM("Found PMT %d active with pid %d while processing the "
-                         "PAT",
-                         pmt->id, stream_pid.pid);
-#ifndef DISABLE_TABLES
-                    if (!pmt_started)
-                        tables_add_pid(ad, pmt, p->pid);
-#endif
-                }
-            }
+    // D8: one PMT pid shared by several PMTs yields a single choice, the
+    // candidate whose ES set covers the requested pids, lowest sid on ties.
+    for (i = 0; i < nch; i++) {
+        int group[MAX_PMT_FOR_ADAPTER], ngroup = 0, j, best = -1;
+        if (!ch[i].candidate || ch[i].resolved)
+            continue;
+        for (j = 0; j < nch; j++)
+            if (ch[j].candidate && !ch[j].resolved &&
+                ch[j].pmt->pid == ch[i].pmt->pid)
+                group[ngroup++] = j;
+        if (ngroup == 1) {
+            ch[group[0]].chosen = 1;
+            ch[group[0]].resolved = 1;
+            continue;
         }
+        for (j = 0; j < ngroup; j++) {
+            SPMT *m = ch[group[j]].pmt;
+            int covers = 1, g;
+            for (g = 0; covers && g < ngroup; g++)
+                for (const auto &sp : ch[group[g]].pmt->stream_pids) {
+                    SPid *rs = subs[sp.pid];
+                    if (!rs || !spid_has_client_sid(rs))
+                        continue;
+                    if (!pmt_carries_pid(m, sp.pid)) {
+                        covers = 0;
+                        break;
+                    }
+                }
+            if (covers && (best < 0 || m->sid < ch[best].pmt->sid))
+                best = group[j];
+            ch[group[j]].resolved = 1;
+        }
+        if (best >= 0)
+            ch[best].chosen = 1;
+    }
 
-        // non master PMTs should not be started
-        if (pmt->state == PMT_RUNNING && !is_active) {
+    // Phase 1: stops. A PMT that lost its subscription, its D8
+    // choice, or all its AV claims stops and releases its claims.
+    for (i = 0; i < nch; i++) {
+        SPMT *pmt = ch[i].pmt;
+        if (pmt->state != PMT_RUNNING && pmt->state != PMT_STARTING)
+            continue;
+        if (!ch[i].candidate || d8_demotable(ch, nch, subs, i) ||
+            !holds_av_claim(subs, pmt)) {
             LOG("Stopping started PMT %d: %s", pmt->id, pmt->name);
             stop_pmt(pmt, ad);
+            release_pmt_claims(ad, pmt);
         }
+    }
+
+    // Phase 2: claims and starts in PMT pid subscription order, so the
+    // earliest subscriber wins shared pids deterministically in one pass.
+    std::sort(ch, ch + nch, [](const SPmtChoice &a, const SPmtChoice &b) {
+        return a.order != b.order ? a.order < b.order : a.pmt->id < b.pmt->id;
+    });
+    for (i = 0; i < nch; i++) {
+        SPMT *pmt = ch[i].pmt;
+        if (!ch[i].candidate || !ch[i].chosen)
+            continue;
+        for (const auto &sp : pmt->stream_pids) {
+            SPid *s = subs[sp.pid];
+            SPMT *old;
+            if (!sp.is_audio && !sp.is_video)
+                continue;
+            if (!s || !spid_has_client_sid(s) || s->pmt == pmt->id)
+                continue;
+            old = s->pmt >= 0 ? get_pmt(s->pmt) : NULL;
+            if (old && ch[i].order >= claim_owner_order(subs, old->id))
+                continue; // held by an earlier subscriber, wait
+            if (old)
+                LOGM("PMT %d takes pid %d from PMT %d", pmt->id, sp.pid,
+                     old->id);
+#ifndef DISABLE_TABLES
+            if (old)
+                tables_del_pid(ad, old, sp.pid);
+#endif
+            s->pmt = pmt->id;
+            s->is_decrypted = 0;
+            LOGM("PMT %d claimed pid %d", pmt->id, sp.pid);
+#ifndef DISABLE_TABLES
+            if (pmt->state != PMT_STOPPED)
+                tables_add_pid(ad, pmt, sp.pid);
+#endif
+            if (old && old != pmt &&
+                (old->state == PMT_RUNNING || old->state == PMT_STARTING) &&
+                !holds_av_claim(subs, old)) {
+                stop_pmt(old, ad);
+                release_pmt_claims(ad, old);
+            }
+        }
+        if (!holds_av_claim(subs, pmt)) {
+            if (pmt->state == PMT_RUNNING || pmt->state == PMT_STARTING) {
+                stop_pmt(pmt, ad);
+                release_pmt_claims(ad, pmt);
+            }
+            continue;
+        }
+#ifndef DISABLE_TABLES
+        if (pmt->state == PMT_STOPPED)
+            start_pmt(pmt, ad);
+        if (ad->ca_mask != (pmt->disabled_ca_mask | pmt->ca_mask))
+            send_pmt_to_cas(ad, pmt);
+        if (pmt->state == PMT_STARTING)
+            pmt->state = PMT_RUNNING;
+#endif
     }
 }
 
@@ -1197,8 +1351,6 @@ void stream_statistics(adapter *ad) {
 
         if (!pmt)
             continue;
-        if (get_pmt(pmt->master_pmt))
-            pmt = get_pmt(pmt->master_pmt);
 
         if (!pmt->global_start) {
             pmt->global_start = new std::unordered_map<uint64_t, int>();
@@ -1293,7 +1445,6 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
     pmt->sid = sid;
     pmt->pid = pmt_pid;
     pmt->adapter = adapter;
-    pmt->master_pmt = i;
     pmt->id = i;
     pmt->update_cw = 1;
     pmt->blen = 0;
@@ -1323,7 +1474,6 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
 int pmt_del(int id) {
     int i;
     SPMT *pmt;
-    int master_pmt;
     pmt = get_pmt(id);
     if (!pmt)
         return 0;
@@ -1335,14 +1485,13 @@ int pmt_del(int id) {
     if (!pmt->enabled) {
         return 0;
     }
-    LOG("deleting PMT %d, master PMT %d, name %s ", pmt->id, pmt->master_pmt,
-        pmt->name);
-    master_pmt = pmt->master_pmt;
+    LOG("deleting PMT %d, name %s ", pmt->id, pmt->name);
+    adapter *ad = get_adapter_nw(pmt->adapter);
+    if (ad)
+        release_pmt_claims(ad, pmt);
 
-    if (master_pmt == id) {
-        clear_cw_for_pmt(master_pmt, 0);
-        clear_cw_for_pmt(master_pmt, 1);
-    }
+    clear_cw_for_pmt(id, 0);
+    clear_cw_for_pmt(id, 1);
 
     pmt->enabled = 0;
     pmt->sid = 0;
@@ -1378,6 +1527,7 @@ void cache_pmt_for_adapter(adapter *ad, SPMT *pmt) {
 #ifndef DISABLE_TABLES
     close_pmt_for_cas(ad, pmt);
 #endif
+    release_pmt_claims(ad, pmt);
     pmt->state = PMT_CACHED;
     pmt->disabled_ca_mask = 0;
     pmt->ca_mask = 0;
@@ -1816,29 +1966,6 @@ void pmt_add_stream_pid_descriptors(SPMT *pmt, SStreamPid &sp,
     }
 }
 
-int get_master_pmt_for_pid(adapter *ad, int pid) {
-    int i;
-    SPMT *pmt;
-    for (i = 0; i < ad->active_pmts; i++) {
-        pmt = get_pmt(ad->active_pmt[i]);
-        if (pmt && pmt->master_pmt == pmt->id) {
-            DEBUGM("searching pid %d ad %d in pmt %d, active pids %d", pid,
-                   ad->id, pmt->id, pmt->stream_pids.size());
-            for (const auto &stream_pid : pmt->stream_pids) {
-                DEBUGM("comparing with pid %d", stream_pid.pid);
-                if (stream_pid.pid == pid &&
-                    (stream_pid.is_video || stream_pid.is_audio)) {
-                    LOGM("%s: ad %d found pid %d in master pmt %d",
-                         __FUNCTION__, ad->id, pid, pmt->master_pmt);
-                    return pmt->master_pmt;
-                }
-            }
-        }
-    }
-    LOGM("%s: no pmt found for pid %d adapter %d", __FUNCTION__, pid, ad->id);
-    return -1;
-}
-
 int pmt_add_stream_pid(SPMT *pmt, int pid, int type, bool is_audio,
                        bool is_video) {
     pmt->stream_pids.push_back(
@@ -1940,7 +2067,6 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
 
         int stream_pid_id =
             pmt_add_stream_pid(pmt, spid, stype, is_audio, is_video);
-        int opmt = get_master_pmt_for_pid(ad, spid);
 
         LOG("PMT pid %d - stream pid %04X (%d), type %d%s, es_len %d, pos "
             "%d, "
@@ -1961,24 +2087,10 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         if (stream_pid_id >= 0)
             pmt_add_stream_pid_descriptors(pmt, pmt->stream_pids[stream_pid_id],
                                            pmt_b + i + 5, es_len);
-
-        if (opmt != -1 && opmt != pmt->master_pmt) {
-            pmt->master_pmt = opmt;
-            LOG("PMT %d, master pmt set to %d", pmt->id, opmt);
-        }
     }
     // Add the PCR pid if it's independent
     if (pcr_pid > 0 && pcr_pid < 8191)
         pmt_add_stream_pid(pmt, pcr_pid, 0, false, false);
-
-    SPMT *master = get_pmt(pmt->master_pmt);
-    if (pmt->caids && master && master != pmt) {
-        int i;
-        for (i = 0; i < pmt->caids; i++)
-            pmt_add_caid(master, pmt->ca[i]->id, pmt->ca[i]->pid,
-                         pmt->ca[i]->private_data,
-                         pmt->ca[i]->private_data_len);
-    }
 
     if (!pmt->state)
         set_filter_flags(filter, 0);
@@ -2035,22 +2147,20 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque) {
 }
 
 void start_pmt(SPMT *pmt, adapter *ad) {
-    LOGM("starting PMT %d master %d, pid %d, sid %d, filter %d for channel: %s",
-         pmt->id, pmt->master_pmt, pmt->pid, pmt->sid, pmt->filter, pmt->name);
+    LOGM("starting PMT %d, pid %d, sid %d, filter %d for channel: %s", pmt->id,
+         pmt->pid, pmt->sid, pmt->filter, pmt->name);
     pmt->state = PMT_STARTING;
     pmt->start_time = getTick();
 
-    // do not call send_pmt_to_cas to allow all the slave PMTs to be read
-    // when the master PMT is being sent next time, it will actually making
-    // it to all CAs
+    // The CA send happens in start_active_pmts right after the start.
     set_filter_flags(pmt->filter, FILTER_ADD_REMOVE | FILTER_CRC);
 }
 
 void stop_pmt(SPMT *pmt, adapter *ad) {
     if (!pmt->state)
         return;
-    LOGM("stopping PMT %d pid %d sid %d master %d filter %d for channel %s",
-         pmt->id, pmt->pid, pmt->sid, pmt->master_pmt, pmt->filter, pmt->name);
+    LOGM("stopping PMT %d pid %d sid %d filter %d for channel %s", pmt->id,
+         pmt->pid, pmt->sid, pmt->filter, pmt->name);
     pmt->state = PMT_STOPPING;
     set_filter_flags(pmt->filter, 0);
 #ifndef DISABLE_TABLES
@@ -2079,23 +2189,18 @@ void pmt_pid_del(adapter *ad, int pid) {
 
     // filter code
 
-    int i;
     p = find_pid(ad->id, pid);
     if (!p)
         return;
     SPMT *pmt = get_pmt(p->pmt);
     if (pmt)
-        LOGM("%s: pid %d adapter %d pmt %d, master %d, channel %s",
-             __FUNCTION__, pid, ad->id, p->pmt, pmt->master_pmt, pmt->name)
+        LOGM("%s: pid %d adapter %d pmt %d, channel %s", __FUNCTION__, pid,
+             ad->id, p->pmt, pmt->name)
     else
         return;
 
 #ifndef DISABLE_TABLES
-    for (i = 0; i < ad->active_pmts; i++) {
-        SPMT *pmt2 = get_pmt(ad->active_pmt[i]);
-        if (pmt2 && pmt2->master_pmt == pmt->master_pmt && pmt2->state)
-            tables_del_pid(ad, pmt2, pid);
-    }
+    tables_del_pid(ad, pmt, pid);
 #endif
 
     ep = 0;
@@ -2108,9 +2213,10 @@ void pmt_pid_del(adapter *ad, int pid) {
         }
     }
 
-    // stop only master PMT
-    if (!ep)
+    if (!ep) {
         stop_pmt(pmt, ad);
+        release_pmt_claims(ad, pmt);
+    }
 }
 
 int pmt_init_device(adapter *ad) {
@@ -2139,7 +2245,7 @@ int pmt_tune(adapter *ad) {
     return 0;
 }
 
-int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf, int ca_id) {
+int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf, int buf_len, int ca_id) {
     int i, len = 0;
     for (i = 0; i < pmt->caids; i++) {
 #ifndef DISABLE_TABLES
@@ -2150,6 +2256,11 @@ int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf, int ca_id) {
         }
 #endif
         int private_data_len = pmt->ca[i]->private_data_len;
+        if (len + 6 + private_data_len > buf_len) {
+            LOG("PMT %d CA descriptor %d does not fit, truncating at %d",
+                pmt->id, i, len);
+            break;
+        }
         buf[len] = 0x09;
         buf[len + 1] = 0x04 + private_data_len;
         copy16(buf, len + 2, pmt->ca[i]->id);

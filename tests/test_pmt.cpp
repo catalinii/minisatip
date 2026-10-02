@@ -59,6 +59,7 @@ descriptor_t create_descriptor(const uint8_t *data);
 void cache_pmt_for_adapter(adapter *ad, SPMT *pmt);
 void pmt_add_active_pmt(adapter *ad, int pmt_id);
 void start_active_pmts(adapter *ad);
+SPMT *get_pmt_for_sid_pid(int aid, int sid, int pid);
 
 uint8_t packet[188] = {
     0x47, 0x40, 0xff, 0x99, 0x14, 0x4c, 0x83, 0x7f, 0x46, 0xba, 0xb8, 0x12,
@@ -532,10 +533,18 @@ int test_revived_cached_pmt_gets_its_filter() {
     SStreamPid sp{.type = 2, .pid = 300, .is_audio = false, .is_video = true};
     pmt->stream_pids.push_back(sp);
 
-    // the client keeps streaming the video pid while the PMT is gone
+    // the client keeps streaming while the PMT is gone: the PMT pid
+    // and the video pid stay subscribed (a PMT only starts with both)
     ad.pids[0].pid = 300;
     ad.pids[0].flags = PID_STATE_ACTIVE;
     ad.pids[0].pmt = -1;
+    ad.pids[0].sid.insert(0);
+    ad.pids[0].order = 2;
+    ad.pids[1].pid = PID_KEPT;
+    ad.pids[1].flags = PID_STATE_ACTIVE;
+    ad.pids[1].pmt = -1;
+    ad.pids[1].sid.insert(0);
+    ad.pids[1].order = 1;
 
     ad.active_pmts = 1;
     ad.active_pmt[0] = id;
@@ -578,6 +587,426 @@ int test_revived_cached_pmt_gets_its_filter() {
     return 0;
 }
 
+// The active PMT is the one in the pid list (#1445): with two services
+// sharing every elementary pid, only the sibling whose PMT pid is
+// subscribed starts; with no PMT pid subscribed nothing starts (FTA).
+int test_pmt_starts_only_with_pmt_pid() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+
+    int aid = pmt_add(0, 14101, 48);
+    int bid = pmt_add(0, 14104, 52);
+    ASSERT(aid >= 0 && bid >= 0, "could not create the PMTs");
+    for (int id : {aid, bid}) {
+        pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
+        pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
+    }
+    ad.active_pmts = 2;
+    ad.active_pmt[0] = aid;
+    ad.active_pmt[1] = bid;
+
+    // subscribe the wanted PMT pid plus the shared elementary pids
+    int pids[] = {52, 3301, 3401};
+    for (i = 0; i < 3; i++) {
+        ad.pids[i].pid = pids[i];
+        ad.pids[i].flags = PID_STATE_ACTIVE;
+        ad.pids[i].pmt = -1;
+        ad.pids[i].filter = -1;
+        ad.pids[i].sid.insert(0);
+        ad.pids[i].order = i + 1;
+    }
+
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "wanted PMT should run");
+    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "sibling PMT should wait");
+    ASSERT(find_pid(0, 3301)->pmt == bid, "video pid should be claimed by B");
+    ASSERT(find_pid(0, 3401)->pmt == bid, "audio pid should be claimed by B");
+
+    // drop the PMT pid: ES-only playlist must not decrypt anything
+    find_pid(0, 52)->sid.clear();
+    find_pid(0, 52)->order = 0;
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[bid]->state, PMT_STOPPED, "PMT should stop");
+    ASSERT(find_pid(0, 3301)->pmt == -1, "video claim should be released");
+    ASSERT(find_pid(0, 3401)->pmt == -1, "audio claim should be released");
+
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
+// Retune A->B completes in one pass with no sections: A stops and
+// releases, B claims and starts, and the CA handover is ordered.
+static int fake_ca_add_calls;
+static int fake_ca_last_add_pmt;
+
+static int counting_ca_add_pmt(adapter *ad, SPMT *pmt) {
+    fake_ca_add_calls++;
+    fake_ca_last_add_pmt = pmt->id;
+    return fake_ca_add_pmt(ad, pmt);
+}
+
+int test_retune_handover_same_loop() {
+    int i;
+    uint8_t priv[1] = {0};
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+
+    SCA_op counting_op = fake_ca_op;
+    counting_op.ca_add_pmt = counting_ca_add_pmt;
+    int ica = add_ca(&counting_op);
+    ASSERT(ica >= 0, "could not register the fake CA");
+    ad.ca_mask = 1 << ica;
+
+    int aid = pmt_add(0, 14101, 48);
+    int bid = pmt_add(0, 14104, 52);
+    for (int id : {aid, bid}) {
+        pmt_add_caid(pmts[id], 0x0664, 0x1F06, priv, 0);
+        pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
+        pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
+    }
+    ad.active_pmts = 2;
+    ad.active_pmt[0] = aid;
+    ad.active_pmt[1] = bid;
+
+    int pids[] = {48, 3301, 3401};
+    for (i = 0; i < 3; i++) {
+        ad.pids[i].pid = pids[i];
+        ad.pids[i].flags = PID_STATE_ACTIVE;
+        ad.pids[i].pmt = -1;
+        ad.pids[i].filter = -1;
+        ad.pids[i].sid.insert(0);
+        ad.pids[i].order = i + 1;
+    }
+    fake_ca_add_calls = fake_ca_del_calls = 0;
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "A should run first");
+    ASSERT(fake_ca_add_calls == 1 && fake_ca_last_add_pmt == aid,
+           "A should be sent to the CA");
+
+    // retune: A leaves the subscription list, B joins it
+    find_pid(0, 48)->sid.clear();
+    find_pid(0, 48)->order = 0;
+    ad.pids[3].pid = 52;
+    ad.pids[3].flags = PID_STATE_ACTIVE;
+    ad.pids[3].pmt = -1;
+    ad.pids[3].filter = -1;
+    ad.pids[3].sid.insert(0);
+    ad.pids[3].order = 4;
+    fake_ca_add_calls = fake_ca_del_calls = 0;
+    fake_ca_last_add_pmt = fake_ca_last_del_pmt = -1;
+    start_active_pmts(&ad);
+
+    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "A should stop");
+    ASSERT_EQUAL(pmts[aid]->ca_mask, 0, "A should release its CA slot");
+    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "B should run");
+    ASSERT(pmts[bid]->ca_mask != 0, "B should hold a CA slot");
+    ASSERT(fake_ca_del_calls == 1 && fake_ca_last_del_pmt == aid,
+           "A should be closed on the CA");
+    ASSERT(fake_ca_add_calls == 1 && fake_ca_last_add_pmt == bid,
+           "B should be sent to the CA");
+    ASSERT(find_pid(0, 3301)->pmt == bid, "video pid should move to B");
+
+    del_ca(&counting_op);
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
+// Contention follows subscription order, not parse order: a PMT whose
+// PMT pid was subscribed earlier preempts a running larger-order holder,
+// while a later-subscribed newcomer waits without flapping.
+int test_smaller_order_preempts() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+
+    int aid = pmt_add(0, 14101, 48);
+    int bid = pmt_add(0, 14104, 52);
+    for (int id : {aid, bid}) {
+        pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
+        pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
+    }
+    // both PMT pids subscribed, A earlier; B parsed (and started) first
+    int pids[] = {48, 52, 3301, 3401};
+    int orders[] = {3, 5, 6, 7};
+    for (i = 0; i < 4; i++) {
+        ad.pids[i].pid = pids[i];
+        ad.pids[i].flags = PID_STATE_ACTIVE;
+        ad.pids[i].pmt = -1;
+        ad.pids[i].filter = -1;
+        ad.pids[i].sid.insert(i < 2 ? i : 0);
+        if (i >= 2)
+            ad.pids[i].sid.insert(1);
+        ad.pids[i].order = orders[i];
+    }
+    ad.active_pmts = 1;
+    ad.active_pmt[0] = bid;
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "B should run alone");
+
+    // A parses late but was subscribed first: it takes over in one pass
+    ad.active_pmts = 2;
+    ad.active_pmt[1] = aid;
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "A should preempt");
+    ASSERT_EQUAL(pmts[bid]->state, PMT_STOPPED, "B should be demoted");
+    ASSERT(find_pid(0, 3301)->pmt == aid, "video pid should move to A");
+
+    // steady state: no flapping between the two passes
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "A should keep running");
+    ASSERT_EQUAL(pmts[bid]->state, PMT_STOPPED, "B should keep waiting");
+
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
+// SPid.order is assigned on subscription and reset on removal.
+int test_pid_order_reset_on_remove() {
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    ASSERT(mark_pid_add(0, 0, 100) == 0, "pid 100 should be added");
+    ASSERT(mark_pid_add(0, 0, 101) == 0, "pid 101 should be added");
+    update_pids(0);
+    SPid *p100 = find_pid(0, 100);
+    SPid *p101 = find_pid(0, 101);
+    ASSERT(p100 && p101, "both pids should be present");
+    ASSERT(p100->order > 0 && p101->order > p100->order,
+           "later add should have larger order");
+    uint32_t first_order = p100->order;
+
+    mark_pid_deleted(0, 0, 100, NULL);
+    update_pids(0);
+    ASSERT(find_pid(0, 100) == NULL, "pid 100 should be gone");
+    ASSERT(mark_pid_add(0, 0, 100) == 0, "pid 100 should be re-added");
+    update_pids(0);
+    p100 = find_pid(0, 100);
+    ASSERT(p100 && p100->order > 0 && p100->order != first_order,
+           "re-added pid should get a fresh order");
+
+    // scanner marks carry no client sid and no order until subscribed
+    ASSERT(mark_pid_add(PID_STREAM_ID_UNDEFINED, 0, 200) == 0,
+           "scanner pid should be added");
+    SPid *p200 = find_pid(0, 200);
+    ASSERT(p200 && p200->order == 0, "scanner pid should have no order");
+    ASSERT(mark_pid_add(0, 0, 200) == 0, "pid 200 should be subscribed");
+    ASSERT(p200->order > 0, "subscribed pid should gain an order");
+
+    mark_pids_deleted(0, PID_STREAM_ID_UNDEFINED, NULL);
+    update_pids(0);
+    a[0] = NULL;
+    return 0;
+}
+
+// D8: several SIDs on one PMT pid. The candidate whose ES set covers
+// the requested pids runs; identical ES sets run the lowest sid.
+int test_d8_subset_match() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+
+    int m1 = pmt_add(0, 100, 60);
+    int m2 = pmt_add(0, 200, 60);
+    pmt_add_stream_pid(pmts[m1], 701, 2, false, true);
+    pmt_add_stream_pid(pmts[m1], 711, 3, true, false);
+    pmt_add_stream_pid(pmts[m2], 701, 2, false, true);
+    pmt_add_stream_pid(pmts[m2], 712, 3, true, false);
+    int m3 = pmt_add(0, 300, 61);
+    int m4 = pmt_add(0, 400, 61);
+    for (int id : {m3, m4}) {
+        pmt_add_stream_pid(pmts[id], 801, 2, false, true);
+        pmt_add_stream_pid(pmts[id], 811, 3, true, false);
+    }
+    ad.active_pmts = 4;
+    ad.active_pmt[0] = m1;
+    ad.active_pmt[1] = m2;
+    ad.active_pmt[2] = m3;
+    ad.active_pmt[3] = m4;
+
+    int pids[] = {60, 701, 712, 61, 801, 811};
+    for (i = 0; i < 6; i++) {
+        ad.pids[i].pid = pids[i];
+        ad.pids[i].flags = PID_STATE_ACTIVE;
+        ad.pids[i].pmt = -1;
+        ad.pids[i].filter = -1;
+        ad.pids[i].sid.insert(0);
+        ad.pids[i].order = i + 1;
+    }
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[m2]->state, PMT_RUNNING, "covering PMT should run");
+    ASSERT_EQUAL(pmts[m1]->state, PMT_STOPPED, "subset PMT should wait");
+    ASSERT_EQUAL(pmts[m3]->state, PMT_RUNNING, "lowest sid should run");
+    ASSERT_EQUAL(pmts[m4]->state, PMT_STOPPED, "higher sid should wait");
+
+    // request the other audio: the choice hands over to the sibling
+    find_pid(0, 712)->sid.clear();
+    find_pid(0, 712)->order = 0;
+    ad.pids[6].pid = 711;
+    ad.pids[6].flags = PID_STATE_ACTIVE;
+    ad.pids[6].pmt = -1;
+    ad.pids[6].filter = -1;
+    ad.pids[6].sid.insert(0);
+    ad.pids[6].order = 7;
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[m1]->state, PMT_RUNNING, "new choice should run");
+    ASSERT_EQUAL(pmts[m2]->state, PMT_STOPPED, "old choice should stop");
+
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
+// CWs are stored under the PMT they arrived for, with no master hop.
+int test_cw_keyed_by_pmt() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+    for (i = 0; i < MAX_CW; i++)
+        if (cws[i])
+            cws[i]->enabled = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    init_algo();
+
+    int id = pmt_add(0, 100, 48);
+    ASSERT(id >= 0, "could not create the PMT");
+    uint8_t cw[8] = {0x10, 0x22, 0x34, 0x66, 0x88, 0x9A, 0xAC, 0xC6};
+    ASSERT(send_cw(id, CA_ALGO_DVBCSA, 0, cw, NULL, 25, NULL) == 0,
+           "send_cw should store the CW");
+    int found = -1;
+    for (i = 0; i < MAX_CW; i++)
+        if (cws[i] && cws[i]->enabled && cws[i]->pmt == id)
+            found = i;
+    ASSERT(found >= 0, "CW should be keyed by the PMT id");
+    ASSERT(send_cw(id, CA_ALGO_DVBCSA, 0, cw, NULL, 25, NULL) != 0,
+           "duplicate CW should be rejected");
+
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
+// pids=all expands every known PMT pid with the requestor sid, so the
+// subscribed-PMT rule still decrypts as before under claims arbitration.
+int test_pids_all_expands_pmt_pids() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 1;
+
+    int id = pmt_add(0, 100, 1000);
+    ASSERT(id >= 0, "could not create the PMT");
+    pmt_add_stream_pid(pmts[id], 100, 2, false, true);
+    ad.active_pmts = 1;
+    ad.active_pmt[0] = id;
+
+    ASSERT(mark_pid_add(0, 0, 8192) == 0, "pids=all should be added");
+    update_pids(0);
+    SPid *pp = find_pid(0, 1000);
+    ASSERT(pp && pp->has_stream(0), "PMT pid should carry the client sid");
+    SPid *ps = find_pid(0, 100);
+    ASSERT(ps && ps->has_stream(0), "stream pid should carry the client sid");
+
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should run for pids=all");
+
+    opts.emulate_pids_all = 0;
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
+// Multi-service PMT pid: two SIDs on pid 60 parse into two PMT objects
+// with their own ES lists, which is what D8 selection arbitrates.
+int test_multi_service_pid_parses_per_sid() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+    for (i = 0; i < MAX_FILTERS; i++)
+        filters[i] = NULL;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    ad.pids[0].pid = 60;
+    ad.pids[0].flags = PID_STATE_ACTIVE;
+    ad.pids[0].pmt = -1;
+    ad.pids[0].filter = -1;
+    ad.pids[0].sid.insert(0);
+    ad.pids[0].order = 1;
+
+    int f1 = add_filter(0, 60, (void *)process_pmt, NULL, 0);
+    int f2 = add_filter(0, 60, (void *)process_pmt, NULL, 0);
+    ASSERT(f1 >= 0 && f2 >= 0 && f1 != f2, "need two filters on pid 60");
+
+    uint8_t sec[21] = {0x02, 0xB0, 0x12, 0x00, 0x64, 0xC1, 0x00,
+                       0x00, 0xE2, 0xBD, 0xF0, 0x00, 0x02, 0xE2,
+                       0xBD, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00};
+    ASSERT(process_pmt(f1, sec, sizeof(sec), NULL) == 0, "sid 100 to parse");
+    sec[4] = 0xC8; // sid 200, video pid 702
+    sec[8] = 0xE2;
+    sec[9] = 0xBE;
+    sec[13] = 0xE2;
+    sec[14] = 0xBE;
+    ASSERT(process_pmt(f2, sec, sizeof(sec), NULL) == 0, "sid 200 to parse");
+
+    SPMT *p1 = get_pmt_for_sid_pid(0, 100, 60);
+    SPMT *p2 = get_pmt_for_sid_pid(0, 200, 60);
+    ASSERT(p1 && p2 && p1 != p2, "each sid should own a PMT object");
+    ASSERT(p1->stream_pids.size() == 1 && p1->stream_pids[0].pid == 701,
+           "sid 100 should carry pid 701");
+    ASSERT(p2->stream_pids.size() == 1 && p2->stream_pids[0].pid == 702,
+           "sid 200 should carry pid 702");
+
+    free_all_pmts();
+    free_filters();
+    a[0] = NULL;
+    return 0;
+}
+
 int main() {
     opts.log = 255;
     opts.debug = 255;
@@ -600,6 +1029,21 @@ int main() {
               "testing that PMTs missing from the PAT release their CA slot")
     TEST_FUNC(test_revived_cached_pmt_gets_its_filter(),
               "testing that a revived cached PMT is given its new filter")
+    TEST_FUNC(test_pmt_starts_only_with_pmt_pid(),
+              "testing that the subscribed PMT pid selects the PMT")
+    TEST_FUNC(test_retune_handover_same_loop(),
+              "testing the single-pass retune handover with CA ordering")
+    TEST_FUNC(test_smaller_order_preempts(),
+              "testing subscription-order preemption without flapping")
+    TEST_FUNC(test_pid_order_reset_on_remove(),
+              "testing SPid order assignment and reset")
+    TEST_FUNC(test_d8_subset_match(),
+              "testing multi-service PMT pid subset selection")
+    TEST_FUNC(test_cw_keyed_by_pmt(), "testing direct CW to PMT mapping")
+    TEST_FUNC(test_pids_all_expands_pmt_pids(),
+              "testing pids=all PMT pid expansion")
+    TEST_FUNC(test_multi_service_pid_parses_per_sid(),
+              "testing per-sid PMT objects on a shared PMT pid")
     fflush(stdout);
     return 0;
 }
