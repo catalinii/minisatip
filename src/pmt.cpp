@@ -2234,7 +2234,7 @@ void pmt_pid_add(adapter *ad, int pid, int existing) {
 }
 
 void pmt_pid_del(adapter *ad, int pid) {
-    int ep;
+    int ep, i;
     SPid *p;
     if (!ad) // || ad->do_tune)
         return;
@@ -2244,6 +2244,16 @@ void pmt_pid_del(adapter *ad, int pid) {
     p = find_pid(ad->id, pid);
     if (!p)
         return;
+    // Own pid deleted: stop the PMT and free its claims even though its
+    // streams stay subscribed; a successor starts on the next pass.
+    for (i = 0; i < ad->active_pmts; i++) {
+        SPMT *own = get_pmt(ad->active_pmt[i]);
+        if (own && own->pid == pid &&
+            (own->state == PMT_RUNNING || own->state == PMT_STARTING)) {
+            stop_pmt(own, ad);
+            release_pmt_claims(ad, own);
+        }
+    }
     SPMT *pmt = get_pmt(p->pmt);
     if (pmt)
         LOGM("%s: pid %d adapter %d pmt %d, channel %s", __FUNCTION__, pid,

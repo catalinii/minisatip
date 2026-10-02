@@ -1112,10 +1112,112 @@ int test_running_pmt_pid_deleted_on_unsubscribe() {
     mark_pid_deleted(0, 0, 48, NULL);
     update_pids(0);
     ASSERT(find_pid(0, 48) == NULL, "PMT pid should leave the demux");
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "stop comes from the loop");
+    ASSERT_EQUAL(pmts[id]->state, PMT_STOPPED, "PMT should stop on pid delete");
 
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[id]->state, PMT_STOPPED, "PMT should stop unsubscribed");
+    ASSERT_EQUAL(pmts[id]->state, PMT_STOPPED, "PMT should stay stopped");
+
+    del_filter(fid);
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
+// Scenario 1: deleting the PMT pid stops its PMT while the streams stay
+// subscribed; the sibling takes over once its own pid is subscribed.
+int test_pmt_pid_delete_hands_over() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    int aid = pmt_add(0, 14101, 48);
+    int bid = pmt_add(0, 14104, 52);
+    ASSERT(aid >= 0 && bid >= 0, "could not create the PMTs");
+    for (int id : {aid, bid}) {
+        pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
+        pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
+    }
+    int fa = add_filter(0, 48, (void *)process_pmt, pmts[aid], 0);
+    int fb = add_filter(0, 52, (void *)process_pmt, pmts[bid], 0);
+    ASSERT(fa >= 0 && fb >= 0, "could not add the PMT filters");
+    pmts[aid]->filter = fa;
+    pmts[bid]->filter = fb;
+    ad.active_pmts = 2;
+    ad.active_pmt[0] = aid;
+    ad.active_pmt[1] = bid;
+
+    ASSERT(mark_pid_add(0, 0, 48) == 0, "pid 48 should be added");
+    ASSERT(mark_pid_add(0, 0, 3301) == 0, "pid 3301 should be added");
+    ASSERT(mark_pid_add(0, 0, 3401) == 0, "pid 3401 should be added");
+    update_pids(0);
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "A should run");
+    ASSERT(find_pid(0, 3301)->pmt == aid, "A should own the video pid");
+
+    // zap: the PMT pid leaves while the streams stay subscribed
+    mark_pid_deleted(0, 0, 48, NULL);
+    ASSERT(mark_pid_add(0, 0, 52) == 0, "pid 52 should be added");
+    update_pids(0);
+    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "A should stop on pid delete");
+    ASSERT(find_pid(0, 3301)->pmt == -1, "video claim should be released");
+    ASSERT(find_pid(0, 48) == NULL, "pid 48 should leave the demux");
+
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "B should take over");
+    ASSERT(find_pid(0, 3301)->pmt == bid, "B should own the video pid");
+
+    del_filter(fa);
+    del_filter(fb);
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
+// Scenario 2: deleting the streams stops the PMT even though its own pid
+// stays subscribed.
+int test_stream_pid_delete_stops_pmt() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    int id = pmt_add(0, 100, 48);
+    ASSERT(id >= 0, "could not create the PMT");
+    pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
+    pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
+    int fid = add_filter(0, 48, (void *)process_pmt, pmts[id], 0);
+    ASSERT(fid >= 0, "could not add the PMT filter");
+    pmts[id]->filter = fid;
+    ad.active_pmts = 1;
+    ad.active_pmt[0] = id;
+
+    ASSERT(mark_pid_add(0, 0, 48) == 0, "pid 48 should be added");
+    ASSERT(mark_pid_add(0, 0, 3301) == 0, "pid 3301 should be added");
+    ASSERT(mark_pid_add(0, 0, 3401) == 0, "pid 3401 should be added");
+    update_pids(0);
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should run");
+
+    mark_pid_deleted(0, 0, 3301, NULL);
+    mark_pid_deleted(0, 0, 3401, NULL);
+    update_pids(0);
+    ASSERT_EQUAL(pmts[id]->state, PMT_STOPPED, "PMT should stop");
+    ASSERT(find_pid(0, 3301) == NULL, "video pid should be gone");
+    SPid *pp = find_pid(0, 48);
+    ASSERT(pp && pp->flags == PID_STATE_ACTIVE, "PMT pid should remain");
 
     del_filter(fid);
     free_all_pmts();
@@ -1164,6 +1266,10 @@ int main() {
               "testing handover when the earlier PMT parses late")
     TEST_FUNC(test_running_pmt_pid_deleted_on_unsubscribe(),
               "testing demux release on last PMT pid unsubscribe")
+    TEST_FUNC(test_pmt_pid_delete_hands_over(),
+              "testing handover when the PMT pid is deleted")
+    TEST_FUNC(test_stream_pid_delete_stops_pmt(),
+              "testing stop when the streams are deleted")
     fflush(stdout);
     return 0;
 }
