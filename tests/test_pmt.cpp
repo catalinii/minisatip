@@ -726,10 +726,9 @@ int test_retune_handover_same_loop() {
     return 0;
 }
 
-// Contention follows subscription order, not parse order: a PMT whose
-// PMT pid was subscribed earlier preempts a running larger-order holder,
-// while a later-subscribed newcomer waits without flapping.
-int test_smaller_order_preempts() {
+// Claims are sticky in the loop: a later-subscribed newcomer waits on
+// pids held by the earlier holder. Preemption happens at parse instead.
+int test_sticky_claims_without_parse() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
@@ -746,15 +745,15 @@ int test_smaller_order_preempts() {
         pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
         pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
     }
-    // both PMT pids subscribed, A earlier; B parsed (and started) first
+    // B subscribed earlier and runs; A is the later newcomer
     int pids[] = {48, 52, 3301, 3401};
-    int orders[] = {3, 5, 6, 7};
+    int orders[] = {5, 3, 6, 7};
     for (i = 0; i < 4; i++) {
         ad.pids[i].pid = pids[i];
         ad.pids[i].flags = PID_STATE_ACTIVE;
         ad.pids[i].pmt = -1;
         ad.pids[i].filter = -1;
-        ad.pids[i].sid.insert(i < 2 ? i : 0);
+        ad.pids[i].sid.insert(i < 2 ? 1 - i : 0);
         if (i >= 2)
             ad.pids[i].sid.insert(1);
         ad.pids[i].order = orders[i];
@@ -764,18 +763,18 @@ int test_smaller_order_preempts() {
     start_active_pmts(&ad);
     ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "B should run alone");
 
-    // A parses late but was subscribed first: it takes over in one pass
+    // A arrives parsed and subscribed, but the loop must not steal for it
     ad.active_pmts = 2;
     ad.active_pmt[1] = aid;
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "A should preempt");
-    ASSERT_EQUAL(pmts[bid]->state, PMT_STOPPED, "B should be demoted");
-    ASSERT(find_pid(0, 3301)->pmt == aid, "video pid should move to A");
+    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "newcomer should wait");
+    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "holder should keep running");
+    ASSERT(find_pid(0, 3301)->pmt == bid, "video pid should stay with B");
 
     // steady state: no flapping between the two passes
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "A should keep running");
-    ASSERT_EQUAL(pmts[bid]->state, PMT_STOPPED, "B should keep waiting");
+    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "newcomer should keep waiting");
+    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "holder should keep running");
 
     free_all_pmts();
     a[0] = NULL;
@@ -1225,6 +1224,57 @@ int test_stream_pid_delete_stops_pmt() {
     return 0;
 }
 
+// A PMT version update stops and releases at parse, so the restarted PMT
+// or a waiter claims the pids free on the next pass.
+int test_version_update_releases_claims() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    int id = pmt_add(0, 100, 48);
+    ASSERT(id >= 0, "could not create the PMT");
+    pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
+    pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
+    int fid = add_filter(0, 48, (void *)process_pmt, pmts[id], 0);
+    ASSERT(fid >= 0, "could not add the PMT filter");
+    pmts[id]->filter = fid;
+    ad.active_pmts = 1;
+    ad.active_pmt[0] = id;
+
+    ASSERT(mark_pid_add(0, 0, 48) == 0, "pid 48 should be added");
+    ASSERT(mark_pid_add(0, 0, 3301) == 0, "pid 3301 should be added");
+    ASSERT(mark_pid_add(0, 0, 3401) == 0, "pid 3401 should be added");
+    update_pids(0);
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should run");
+    ASSERT(find_pid(0, 3301)->pmt == id, "PMT should own the video pid");
+
+    uint8_t sec[26] = {0x02, 0xB0, 0x17, 0x00, 0x64, 0xC3, 0x00, 0x00, 0xEC,
+                       0xE5, 0xF0, 0x00, 0x02, 0xEC, 0xE5, 0xF0, 0x00, 0x03,
+                       0xED, 0x49, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00};
+    ASSERT(process_pmt(fid, sec, sizeof(sec), pmts[id]) == 0,
+           "update to parse");
+    ASSERT_EQUAL(pmts[id]->state, PMT_STOPPED, "PMT should stop on update");
+    ASSERT_EQUAL(pmts[id]->version, 1, "version should advance");
+    ASSERT(find_pid(0, 3301)->pmt == -1, "video claim should be released");
+
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should restart");
+    ASSERT(find_pid(0, 3301)->pmt == id, "PMT should reclaim the video pid");
+
+    del_filter(fid);
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
 int main() {
     opts.log = 255;
     opts.debug = 255;
@@ -1251,8 +1301,8 @@ int main() {
               "testing that the subscribed PMT pid selects the PMT")
     TEST_FUNC(test_retune_handover_same_loop(),
               "testing the single-pass retune handover with CA ordering")
-    TEST_FUNC(test_smaller_order_preempts(),
-              "testing subscription-order preemption without flapping")
+    TEST_FUNC(test_sticky_claims_without_parse(),
+              "testing the loop never steals without a parse")
     TEST_FUNC(test_pid_order_reset_on_remove(),
               "testing SPid order assignment and reset")
     TEST_FUNC(test_d8_subset_match(),
@@ -1270,6 +1320,8 @@ int main() {
               "testing handover when the PMT pid is deleted")
     TEST_FUNC(test_stream_pid_delete_stops_pmt(),
               "testing stop when the streams are deleted")
+    TEST_FUNC(test_version_update_releases_claims(),
+              "testing release on PMT version update")
     fflush(stdout);
     return 0;
 }

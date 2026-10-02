@@ -1032,24 +1032,15 @@ static int pmt_carries_pid(SPMT *pmt, int pid) {
     return 0;
 }
 
-// Subscription order of the owner's PMT pid; unknown sorts last.
-static uint32_t claim_owner_order(SPid **subs, int owner_id) {
-    SPMT *o = get_pmt(owner_id);
-    SPid *op = o ? subs[o->pid] : NULL;
-    if (!op || !op->order)
-        return UINT32_MAX;
-    return op->order;
-}
-
 typedef struct {
     SPMT *pmt;
     char candidate, chosen, resolved;
     uint32_t order;
 } SPmtChoice;
 
-// The chosen sibling can run when every subscribed AV pid is free, its
-// own, held by the same pid group, or stealable from a later subscriber.
-static int chosen_activatable(SPid **subs, SPMT *chosen, uint32_t order) {
+// The chosen sibling takes over when every subscribed AV pid is free,
+// its own, or held by the same pid group (freed by the demotion).
+static int chosen_activatable(SPid **subs, SPMT *chosen) {
     for (const auto &sp : chosen->stream_pids) {
         SPid *s;
         SPMT *o;
@@ -1061,8 +1052,7 @@ static int chosen_activatable(SPid **subs, SPMT *chosen, uint32_t order) {
         o = get_pmt(s->pmt);
         if (!o || o->pid == chosen->pid)
             continue;
-        if (order >= claim_owner_order(subs, o->id))
-            return 0;
+        return 0;
     }
     return 1;
 }
@@ -1126,13 +1116,11 @@ static int d8_demotable(SPmtChoice *ch, int nch, SPid **subs, int i) {
     }
     if (!contested || ch[i].chosen || chosen < 0)
         return 0;
-    return chosen_activatable(subs, ch[chosen].pmt, ch[chosen].order);
+    return chosen_activatable(subs, ch[chosen].pmt);
 }
 
-// The active PMT is the one in the pid list: a PMT runs while its own
-// PMT pid is client-subscribed and it owns a subscribed AV pid. Shared
-// pids go to the earliest-subscribed PMT pid (smaller SPid.order), which
-// preempts larger-order holders; newcomers otherwise never steal.
+// A PMT runs while its PMT pid is client-subscribed and it owns a
+// subscribed AV pid. Claims are sticky; preemption happens at parse.
 void start_active_pmts(adapter *ad) {
     int i;
     SPid *subs[8193];
@@ -1209,7 +1197,7 @@ void start_active_pmts(adapter *ad) {
     }
 
     // Phase 2: claims and starts in PMT pid subscription order, so the
-    // earliest subscriber wins shared pids deterministically in one pass.
+    // earliest subscriber wins free pids deterministically in one pass.
     std::sort(ch, ch + nch, [](const SPmtChoice &a, const SPmtChoice &b) {
         return a.order != b.order ? a.order < b.order : a.pmt->id < b.pmt->id;
     });
@@ -1219,21 +1207,13 @@ void start_active_pmts(adapter *ad) {
             continue;
         for (const auto &sp : pmt->stream_pids) {
             SPid *s = subs[sp.pid];
-            SPMT *old;
             if (!sp.is_audio && !sp.is_video)
                 continue;
             if (!s || !spid_has_client_sid(s) || s->pmt == pmt->id)
                 continue;
-            old = s->pmt >= 0 ? get_pmt(s->pmt) : NULL;
-            if (old && ch[i].order >= claim_owner_order(subs, old->id))
-                continue; // held by an earlier subscriber, wait
-            if (old)
-                LOGM("PMT %d takes pid %d from PMT %d", pmt->id, sp.pid,
-                     old->id);
-#ifndef DISABLE_TABLES
-            if (old)
-                tables_del_pid(ad, old, sp.pid);
-#endif
+            // Sticky claims: take free or stale pids only, never steal.
+            if (s->pmt >= 0 && get_pmt(s->pmt))
+                continue;
             s->pmt = pmt->id;
             s->is_decrypted = 0;
             LOGM("PMT %d claimed pid %d", pmt->id, sp.pid);
@@ -1241,12 +1221,6 @@ void start_active_pmts(adapter *ad) {
             if (pmt->state != PMT_STOPPED)
                 tables_add_pid(ad, pmt, sp.pid);
 #endif
-            if (old && old != pmt &&
-                (old->state == PMT_RUNNING || old->state == PMT_STARTING) &&
-                !holds_av_claim(subs, old)) {
-                stop_pmt(old, ad);
-                release_pmt_claims(ad, old);
-            }
         }
         if (!holds_av_claim(subs, pmt)) {
             if (pmt->state == PMT_RUNNING || pmt->state == PMT_STARTING) {
@@ -2059,10 +2033,12 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     if (pmt->version == ver) {
         // Already processed
         return 0;
-    } else
-        // In case of PMT update, just stop the PMT before processing the
-        // update
+    } else {
+        // In case of PMT update, stop and release before processing it, so
+        // the restarted PMT or a waiter claims the pids free on next pass.
         stop_pmt(pmt, ad);
+        release_pmt_claims(ad, pmt);
+    }
 
     if (!(p = find_pid(ad->id, pid)))
         return -1;
