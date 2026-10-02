@@ -460,6 +460,14 @@ static int check_pat_drop_releases_ca(int adapter_type) {
     ad.active_pmt[0] = kept;
     ad.active_pmt[1] = gone;
 
+    // The kept service is watched: subscribe its pids so the update_pids
+    // tail election leaves it running with its CA registration intact.
+    pmt_add_stream_pid(pmts[kept], 1101, 2, false, true);
+    pmt_add_stream_pid(pmts[kept], 1201, 3, true, false);
+    ASSERT(mark_pid_add(0, 0, PID_KEPT) == 0, "kept PMT pid should be added");
+    ASSERT(mark_pid_add(0, 0, 1101) == 0, "kept video pid should be added");
+    ASSERT(mark_pid_add(0, 0, 1201) == 0, "kept audio pid should be added");
+
     // A PAT that no longer carries SID_GONE.
     fake_ca_del_calls = 0;
     fake_ca_last_del_pmt = -1;
@@ -557,7 +565,8 @@ int test_revived_cached_pmt_gets_its_filter() {
     int len = build_pat(pat, PAT_TSID, 1, sids, pids, 1);
     process_pat(ad.pat_filter, pat, len, &ad);
 
-    ASSERT_EQUAL(pmt->state, PMT_STOPPED, "the revived PMT should be stopped");
+    ASSERT_EQUAL(pmt->state, PMT_RUNNING,
+                 "the revived PMT should start straight from the cache");
     ASSERT(pmt->filter >= 0,
            "process_pat() should hand the new filter to the revived PMT");
     ASSERT_EQUAL(filters[pmt->filter]->pid, PID_KEPT,
@@ -572,11 +581,9 @@ int test_revived_cached_pmt_gets_its_filter() {
     ASSERT_EQUAL(pmt->filter, before,
                  "a second PAT should reuse the filter of the revived PMT");
 
-    // with a real filter the PMT starts from cache on this pass, and
-    // set_filter_flags() can put the PMT pid back in the demux
+    // the loop pass that used to start it is now a no-op backstop
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmt->state, PMT_RUNNING,
-                 "the revived PMT should start straight from the cache");
+    ASSERT_EQUAL(pmt->state, PMT_RUNNING, "the revived PMT should stay up");
     ASSERT(filters[pmt->filter]->flags != 0,
            "starting the PMT should have enabled its filter");
 
@@ -1165,11 +1172,65 @@ int test_pmt_pid_delete_hands_over() {
     ASSERT(mark_pid_add(0, 0, 52) == 0, "pid 52 should be added");
     update_pids(0);
     ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "A should stop on pid delete");
-    ASSERT(find_pid(0, 3301)->pmt == -1, "video claim should be released");
+    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "B should take over at once");
+    ASSERT(find_pid(0, 3301)->pmt == bid, "B should own the video pid");
     ASSERT(find_pid(0, 48) == NULL, "pid 48 should leave the demux");
 
+    // the loop pass that used to elect B is now a no-op backstop
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "B should take over");
+    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "B should stay up");
+
+    del_filter(fa);
+    del_filter(fb);
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
+// The update_pids tail elects synchronously: the zap handover below
+// completes with no demux pass pumping start_active_pmts in between.
+int test_update_pids_tail_elects() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    int aid = pmt_add(0, 14101, 48);
+    int bid = pmt_add(0, 14104, 52);
+    ASSERT(aid >= 0 && bid >= 0, "could not create the PMTs");
+    for (int id : {aid, bid}) {
+        pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
+        pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
+    }
+    int fa = add_filter(0, 48, (void *)process_pmt, pmts[aid], 0);
+    int fb = add_filter(0, 52, (void *)process_pmt, pmts[bid], 0);
+    ASSERT(fa >= 0 && fb >= 0, "could not add the PMT filters");
+    pmts[aid]->filter = fa;
+    pmts[bid]->filter = fb;
+    ad.active_pmts = 2;
+    ad.active_pmt[0] = aid;
+    ad.active_pmt[1] = bid;
+
+    ASSERT(mark_pid_add(0, 0, 48) == 0, "pid 48 should be added");
+    ASSERT(mark_pid_add(0, 0, 3301) == 0, "pid 3301 should be added");
+    ASSERT(mark_pid_add(0, 0, 3401) == 0, "pid 3401 should be added");
+    update_pids(0);
+    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "A should run with no pump");
+    ASSERT(find_pid(0, 3301)->pmt == aid, "A should own the video pid");
+
+    // zap: the PMT pid leaves while the streams stay subscribed
+    mark_pid_deleted(0, 0, 48, NULL);
+    ASSERT(mark_pid_add(0, 0, 52) == 0, "pid 52 should be added");
+    update_pids(0);
+    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "A should stop on pid delete");
+    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING,
+                 "B should take over with no pump");
     ASSERT(find_pid(0, 3301)->pmt == bid, "B should own the video pid");
 
     del_filter(fa);
@@ -1318,6 +1379,8 @@ int main() {
               "testing demux release on last PMT pid unsubscribe")
     TEST_FUNC(test_pmt_pid_delete_hands_over(),
               "testing handover when the PMT pid is deleted")
+    TEST_FUNC(test_update_pids_tail_elects(),
+              "testing synchronous election at the end of update_pids")
     TEST_FUNC(test_stream_pid_delete_stops_pmt(),
               "testing stop when the streams are deleted")
     TEST_FUNC(test_version_update_releases_claims(),

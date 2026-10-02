@@ -987,6 +987,10 @@ int update_pids(int aid) {
     ad->updating_pids = 0;
     ad->pids_updates++;
     sort_pids(ad->id);
+#ifndef DISABLE_PMT
+    // Elect after the guard clears so nested pid updates run fully.
+    pmt_pid_updated_pids(ad);
+#endif
     return rv;
 }
 

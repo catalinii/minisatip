@@ -1121,7 +1121,7 @@ static int d8_demotable(SPmtChoice *ch, int nch, SPid **subs, int i) {
 
 // A PMT runs while its PMT pid is client-subscribed and it owns a
 // subscribed AV pid. Claims are sticky; preemption happens at parse.
-void start_active_pmts(adapter *ad) {
+void pmt_pid_updated_pids(adapter *ad) {
     int i;
     SPid *subs[8193];
     SPmtChoice ch[MAX_PMT_FOR_ADAPTER];
@@ -1182,14 +1182,13 @@ void start_active_pmts(adapter *ad) {
             ch[best].chosen = 1;
     }
 
-    // Phase 1: stops. A PMT that lost its subscription, its D8
-    // choice, or all its AV claims stops and releases its claims.
+    // Phase 1: stops. Unsubscribed or D8-demoted PMTs stop here;
+    // claim failure is rechecked after Phase 2 claims instead.
     for (i = 0; i < nch; i++) {
         SPMT *pmt = ch[i].pmt;
         if (pmt->state != PMT_RUNNING && pmt->state != PMT_STARTING)
             continue;
-        if (!ch[i].candidate || d8_demotable(ch, nch, subs, i) ||
-            !holds_av_claim(subs, pmt)) {
+        if (!ch[i].candidate || d8_demotable(ch, nch, subs, i)) {
             LOG("Stopping started PMT %d: %s", pmt->id, pmt->name);
             stop_pmt(pmt, ad);
             release_pmt_claims(ad, pmt);
@@ -1239,6 +1238,10 @@ void start_active_pmts(adapter *ad) {
 #endif
     }
 }
+
+// Demux-pass backstop: parses never call update_pids, so the loop
+// re-runs the election to start what a parse freed or handed over.
+void start_active_pmts(adapter *ad) { pmt_pid_updated_pids(ad); }
 
 void mark_pids_null(adapter *ad) {
     int i;
