@@ -1002,23 +1002,23 @@ static void release_pmt_claims(adapter *ad, SPMT *pmt) {
 
 // A PMT may start while its own PMT pid is subscribed by a real client
 // and at least one of its audio/video pids is subscribed by one.
-static int is_start_candidate(SPid **subs, SPMT *pmt) {
-    SPid *pp = subs[pmt->pid];
+static int is_start_candidate(SPid **pids, SPMT *pmt) {
+    SPid *pp = pids[pmt->pid];
     if (!pp || !spid_has_client_sid(pp))
         return 0;
     for (const auto &sp : pmt->stream_pids)
-        if ((sp.is_audio || sp.is_video) && subs[sp.pid] &&
-            spid_has_client_sid(subs[sp.pid]))
+        if ((sp.is_audio || sp.is_video) && pids[sp.pid] &&
+            spid_has_client_sid(pids[sp.pid]))
             return 1;
     return 0;
 }
 
 // True when the PMT owns at least one subscribed audio/video pid.
-static int holds_av_claim(SPid **subs, SPMT *pmt) {
+static int holds_av_claim(SPid **pids, SPMT *pmt) {
     for (const auto &sp : pmt->stream_pids) {
         if (!sp.is_audio && !sp.is_video)
             continue;
-        SPid *s = subs[sp.pid];
+        SPid *s = pids[sp.pid];
         if (s && s->pmt == pmt->id)
             return 1;
     }
@@ -1040,13 +1040,13 @@ typedef struct {
 
 // The chosen sibling takes over when every subscribed AV pid is free,
 // its own, or held by the same pid group (freed by the demotion).
-static int chosen_activatable(SPid **subs, SPMT *chosen) {
+static int chosen_activatable(SPid **pids, SPMT *chosen) {
     for (const auto &sp : chosen->stream_pids) {
         SPid *s;
         SPMT *o;
         if (!sp.is_audio && !sp.is_video)
             continue;
-        s = subs[sp.pid];
+        s = pids[sp.pid];
         if (!s || s->pmt < 0 || s->pmt == chosen->id)
             continue;
         o = get_pmt(s->pmt);
@@ -1103,9 +1103,10 @@ static void handover_claims_from_lower_priority(adapter *ad, SPMT *pmt) {
     }
 }
 
-// A running group sibling is demoted when another member is chosen (D8)
-// and that member can actually take over its audio/video pids.
-static int d8_demotable(SPmtChoice *ch, int nch, SPid **subs, int i) {
+// A running PMT yields when a sibling on its PMT pid is chosen and
+// the sibling can actually take over its audio/video pids.
+static int yields_to_chosen_sibling(SPmtChoice *ch, int nch, SPid **pids,
+                                    int i) {
     int j, chosen = -1, contested = 0;
     for (j = 0; j < nch; j++) {
         if (j == i || !ch[j].candidate || ch[j].pmt->pid != ch[i].pmt->pid)
@@ -1116,30 +1117,30 @@ static int d8_demotable(SPmtChoice *ch, int nch, SPid **subs, int i) {
     }
     if (!contested || ch[i].chosen || chosen < 0)
         return 0;
-    return chosen_activatable(subs, ch[chosen].pmt);
+    return chosen_activatable(pids, ch[chosen].pmt);
 }
 
 // A PMT runs while its PMT pid is client-subscribed and it owns a
 // subscribed AV pid. Claims are sticky; preemption happens at parse.
 void pmt_pid_updated_pids(adapter *ad) {
     int i;
-    SPid *subs[8193];
+    SPid *pids[8193];
     SPmtChoice ch[MAX_PMT_FOR_ADAPTER];
     int nch = 0;
-    memset(subs, 0, sizeof(subs));
+    memset(pids, 0, sizeof(pids));
 
     for (i = 0; i < MAX_PIDS; i++)
         if (ad->pids[i].flags == PID_STATE_ACTIVE) {
-            subs[ad->pids[i].pid] = ad->pids + i;
+            pids[ad->pids[i].pid] = ad->pids + i;
         }
     for (i = 0; i < ad->active_pmts && nch < MAX_PMT_FOR_ADAPTER; i++) {
         SPMT *pmt = get_pmt(ad->active_pmt[i]);
         SPid *pp;
         if (!pmt)
             continue;
-        pp = subs[pmt->pid];
+        pp = pids[pmt->pid];
         ch[nch].pmt = pmt;
-        ch[nch].candidate = is_start_candidate(subs, pmt);
+        ch[nch].candidate = is_start_candidate(pids, pmt);
         ch[nch].chosen = 0;
         ch[nch].resolved = 0;
         ch[nch].order = (pp && pp->order) ? pp->order : UINT32_MAX;
@@ -1166,7 +1167,7 @@ void pmt_pid_updated_pids(adapter *ad) {
             int covers = 1, g;
             for (g = 0; covers && g < ngroup; g++)
                 for (const auto &sp : ch[group[g]].pmt->stream_pids) {
-                    SPid *rs = subs[sp.pid];
+                    SPid *rs = pids[sp.pid];
                     if (!rs || !spid_has_client_sid(rs))
                         continue;
                     if (!pmt_carries_pid(m, sp.pid)) {
@@ -1182,13 +1183,13 @@ void pmt_pid_updated_pids(adapter *ad) {
             ch[best].chosen = 1;
     }
 
-    // Phase 1: stops. Unsubscribed or D8-demoted PMTs stop here;
-    // claim failure is rechecked after Phase 2 claims instead.
+    // Phase 1: stops. A PMT that lost its subscription or yields to a
+    // chosen sibling stops here; claim failure is rechecked after Phase 2.
     for (i = 0; i < nch; i++) {
         SPMT *pmt = ch[i].pmt;
         if (pmt->state != PMT_RUNNING && pmt->state != PMT_STARTING)
             continue;
-        if (!ch[i].candidate || d8_demotable(ch, nch, subs, i)) {
+        if (!ch[i].candidate || yields_to_chosen_sibling(ch, nch, pids, i)) {
             LOG("Stopping started PMT %d: %s", pmt->id, pmt->name);
             stop_pmt(pmt, ad);
             release_pmt_claims(ad, pmt);
@@ -1205,7 +1206,7 @@ void pmt_pid_updated_pids(adapter *ad) {
         if (!ch[i].candidate || !ch[i].chosen)
             continue;
         for (const auto &sp : pmt->stream_pids) {
-            SPid *s = subs[sp.pid];
+            SPid *s = pids[sp.pid];
             if (!sp.is_audio && !sp.is_video)
                 continue;
             if (!s || !spid_has_client_sid(s) || s->pmt == pmt->id)
@@ -1221,7 +1222,7 @@ void pmt_pid_updated_pids(adapter *ad) {
                 tables_add_pid(ad, pmt, sp.pid);
 #endif
         }
-        if (!holds_av_claim(subs, pmt)) {
+        if (!holds_av_claim(pids, pmt)) {
             if (pmt->state == PMT_RUNNING || pmt->state == PMT_STARTING) {
                 stop_pmt(pmt, ad);
                 release_pmt_claims(ad, pmt);
