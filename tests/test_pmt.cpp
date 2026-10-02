@@ -1187,10 +1187,11 @@ int test_pmt_pid_delete_hands_over() {
     return 0;
 }
 
-// The update_pids tail elects synchronously: the zap handover below
-// completes with no demux pass pumping start_active_pmts in between.
+// The update_pids tail elects synchronously but never sends: states and
+// claims settle with no demux pass, CAPMTs go out on the loop instead.
 int test_update_pids_tail_elects() {
     int i;
+    uint8_t priv[1] = {0};
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
     npmts = 0;
@@ -1201,12 +1202,17 @@ int test_update_pids_tail_elects() {
     ad.id = 0;
     opts.emulate_pids_all = 0;
 
+    int ica = add_ca(&fake_ca_op);
+    ASSERT(ica >= 0, "could not register the fake CA");
+    ad.ca_mask = 1 << ica;
+
     int aid = pmt_add(0, 14101, 48);
     int bid = pmt_add(0, 14104, 52);
     ASSERT(aid >= 0 && bid >= 0, "could not create the PMTs");
     for (int id : {aid, bid}) {
         pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
         pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
+        pmt_add_caid(pmts[id], 0x0664, 0x1F00 + id, priv, 0);
     }
     int fa = add_filter(0, 48, (void *)process_pmt, pmts[aid], 0);
     int fb = add_filter(0, 52, (void *)process_pmt, pmts[bid], 0);
@@ -1223,16 +1229,27 @@ int test_update_pids_tail_elects() {
     update_pids(0);
     ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "A should run with no pump");
     ASSERT(find_pid(0, 3301)->pmt == aid, "A should own the video pid");
+    ASSERT_EQUAL(pmts[aid]->ca_mask, 0, "A should be elected but unsent");
+    start_active_pmts(&ad);
+    ASSERT(pmts[aid]->ca_mask != 0, "the loop should send A to the CA");
 
     // zap: the PMT pid leaves while the streams stay subscribed
     mark_pid_deleted(0, 0, 48, NULL);
     ASSERT(mark_pid_add(0, 0, 52) == 0, "pid 52 should be added");
+    fake_ca_del_calls = 0;
+    fake_ca_last_del_pmt = -1;
     update_pids(0);
     ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "A should stop on pid delete");
+    ASSERT_EQUAL(fake_ca_del_calls, 1, "A should release the CA at the tail");
+    ASSERT_EQUAL(fake_ca_last_del_pmt, aid, "the wrong PMT left the CA");
     ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING,
                  "B should take over with no pump");
     ASSERT(find_pid(0, 3301)->pmt == bid, "B should own the video pid");
+    ASSERT_EQUAL(pmts[bid]->ca_mask, 0, "B should be elected but unsent");
+    start_active_pmts(&ad);
+    ASSERT(pmts[bid]->ca_mask != 0, "the loop should send B to the CA");
 
+    del_ca(&fake_ca_op);
     del_filter(fa);
     del_filter(fb);
     free_all_pmts();
@@ -1380,7 +1397,7 @@ int main() {
     TEST_FUNC(test_pmt_pid_delete_hands_over(),
               "testing handover when the PMT pid is deleted")
     TEST_FUNC(test_update_pids_tail_elects(),
-              "testing synchronous election at the end of update_pids")
+              "testing tail election with the CA send on the loop")
     TEST_FUNC(test_stream_pid_delete_stops_pmt(),
               "testing stop when the streams are deleted")
     TEST_FUNC(test_version_update_releases_claims(),

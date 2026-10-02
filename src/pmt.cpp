@@ -1231,17 +1231,30 @@ void pmt_pid_updated_pids(adapter *ad) {
 #ifndef DISABLE_TABLES
         if (pmt->state == PMT_STOPPED)
             start_pmt(pmt, ad);
-        if (ad->ca_mask != (pmt->disabled_ca_mask | pmt->ca_mask))
-            send_pmt_to_cas(ad, pmt);
+        // No CA send here: start_active_pmts sends on the demux pass.
         if (pmt->state == PMT_STARTING)
             pmt->state = PMT_RUNNING;
 #endif
     }
 }
 
-// Demux-pass backstop: parses never call update_pids, so the loop
-// re-runs the election to start what a parse freed or handed over.
-void start_active_pmts(adapter *ad) { pmt_pid_updated_pids(ad); }
+// Demux-pass driver: re-run the election (parses never call update_pids)
+// then emit CAPMTs; pid batches elect but never send on their own.
+void start_active_pmts(adapter *ad) {
+    int i;
+    pmt_pid_updated_pids(ad);
+#ifndef DISABLE_TABLES
+    for (i = 0; i < ad->active_pmts; i++) {
+        SPMT *pmt = get_pmt(ad->active_pmt[i]);
+        if (!pmt)
+            continue;
+        if (pmt->state != PMT_RUNNING && pmt->state != PMT_STARTING)
+            continue;
+        if (ad->ca_mask != (pmt->disabled_ca_mask | pmt->ca_mask))
+            send_pmt_to_cas(ad, pmt);
+    }
+#endif
+}
 
 void mark_pids_null(adapter *ad) {
     int i;
@@ -2183,7 +2196,7 @@ void start_pmt(SPMT *pmt, adapter *ad) {
     pmt->start_time = getTick();
 
     // No ADD_REMOVE: the client subscription holds the pid in the demux,
-    // so the last unsubscribe deletes it; the CA send follows in the caller.
+    // so the last unsubscribe deletes it; the CA send follows on the pass.
     set_filter_flags(pmt->filter, FILTER_CRC);
 }
 
