@@ -1007,6 +1007,71 @@ int test_multi_service_pid_parses_per_sid() {
     return 0;
 }
 
+// Late parse handover: Q runs holding pids subscribed after P, then P
+// parses. process_pmt stops Q at once; P starts on the next pass.
+int test_late_parse_handover() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+
+    int qid = pmt_add(0, 14104, 52);
+    ASSERT(qid >= 0, "could not create Q");
+    pmt_add_stream_pid(pmts[qid], 3301, 2, false, true);
+    pmt_add_stream_pid(pmts[qid], 3401, 3, true, false);
+    ad.active_pmts = 1;
+    ad.active_pmt[0] = qid;
+
+    int pids[] = {52, 3301, 3401};
+    int orders[] = {5, 6, 7};
+    for (i = 0; i < 3; i++) {
+        ad.pids[i].pid = pids[i];
+        ad.pids[i].flags = PID_STATE_ACTIVE;
+        ad.pids[i].pmt = -1;
+        ad.pids[i].filter = -1;
+        ad.pids[i].sid.insert(1);
+        if (i > 0)
+            ad.pids[i].sid.insert(0);
+        ad.pids[i].order = orders[i];
+    }
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[qid]->state, PMT_RUNNING, "Q should run alone");
+    ASSERT(find_pid(0, 3301)->pmt == qid, "Q should own the video pid");
+
+    // P subscribed earlier but parses only now
+    ad.pids[3].pid = 48;
+    ad.pids[3].flags = PID_STATE_ACTIVE;
+    ad.pids[3].pmt = -1;
+    ad.pids[3].filter = -1;
+    ad.pids[3].sid.insert(0);
+    ad.pids[3].order = 3;
+    int fid = add_filter(0, 48, (void *)process_pmt, NULL, 0);
+    ASSERT(fid >= 0, "could not add the PMT filter");
+
+    uint8_t sec[26] = {0x02, 0xB0, 0x17, 0x37, 0x15, 0xC1, 0x00, 0x00, 0xEC,
+                       0xE5, 0xF0, 0x00, 0x02, 0xEC, 0xE5, 0xF0, 0x00, 0x03,
+                       0xED, 0x49, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00};
+    ASSERT(process_pmt(fid, sec, sizeof(sec), NULL) == 0, "P to parse");
+    SPMT *p = get_pmt_for_sid_pid(0, 14101, 48);
+    ASSERT(p && p->stream_pids.size() == 2, "P should hold both streams");
+    ASSERT_EQUAL(pmts[qid]->state, PMT_STOPPED, "Q should stop at parse");
+    ASSERT(find_pid(0, 3301)->pmt == -1, "video claim should be released");
+
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(p->state, PMT_RUNNING, "P should start on next pass");
+    ASSERT(find_pid(0, 3301)->pmt == p->id, "P should own the video pid");
+
+    del_filter(fid);
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
 int main() {
     opts.log = 255;
     opts.debug = 255;
@@ -1044,6 +1109,8 @@ int main() {
               "testing pids=all PMT pid expansion")
     TEST_FUNC(test_multi_service_pid_parses_per_sid(),
               "testing per-sid PMT objects on a shared PMT pid")
+    TEST_FUNC(test_late_parse_handover(),
+              "testing handover when the earlier PMT parses late")
     fflush(stdout);
     return 0;
 }

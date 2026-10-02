@@ -1067,6 +1067,52 @@ static int chosen_activatable(SPid **subs, SPMT *chosen, uint32_t order) {
     return 1;
 }
 
+// Subscription gate for the late-parse handover: own PMT pid plus one
+// audio/video pid subscribed by a real client.
+static int is_pmt_subscribed(adapter *ad, SPMT *pmt) {
+    SPid *pp = find_pid(ad->id, pmt->pid);
+    if (!pp || pp->flags != PID_STATE_ACTIVE || !spid_has_client_sid(pp))
+        return 0;
+    for (const auto &sp : pmt->stream_pids) {
+        SPid *s;
+        if (!sp.is_audio && !sp.is_video)
+            continue;
+        s = find_pid(ad->id, sp.pid);
+        if (s && s->flags == PID_STATE_ACTIVE && spid_has_client_sid(s))
+            return 1;
+    }
+    return 0;
+}
+
+// A newly parsed PMT outranks running owners subscribed after it: stop
+// every lower-priority owner of its audio/video pids and release theirs.
+static void handover_claims_from_lower_priority(adapter *ad, SPMT *pmt) {
+    SPid *pp = find_pid(ad->id, pmt->pid);
+    uint32_t order = (pp && pp->order) ? pp->order : UINT32_MAX;
+    for (const auto &sp : pmt->stream_pids) {
+        SPid *s = find_pid(ad->id, sp.pid);
+        SPMT *old;
+        SPid *op;
+        uint32_t old_order;
+        if (!sp.is_audio && !sp.is_video)
+            continue;
+        if (!s || s->flags != PID_STATE_ACTIVE || s->pmt < 0)
+            continue;
+        old = get_pmt(s->pmt);
+        if (!old || old == pmt)
+            continue;
+        op = find_pid(ad->id, old->pid);
+        old_order = (op && op->order) ? op->order : UINT32_MAX;
+        if (order >= old_order)
+            continue; // equal or earlier subscriber keeps its claims
+        if (old->state != PMT_RUNNING && old->state != PMT_STARTING)
+            continue;
+        LOG("PMT %d takes over from lower-priority PMT %d", pmt->id, old->id);
+        stop_pmt(old, ad);
+        release_pmt_claims(ad, old);
+    }
+}
+
 // A running group sibling is demoted when another member is chosen (D8)
 // and that member can actually take over its audio/video pids.
 static int d8_demotable(SPmtChoice *ch, int nch, SPid **subs, int i) {
@@ -2091,6 +2137,11 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     // Add the PCR pid if it's independent
     if (pcr_pid > 0 && pcr_pid < 8191)
         pmt_add_stream_pid(pmt, pcr_pid, 0, false, false);
+
+    // Late parse handover: a pid below may be owned by a running PMT
+    // subscribed after this one. Stop it; this PMT starts same loop.
+    if (is_pmt_subscribed(ad, pmt))
+        handover_claims_from_lower_priority(ad, pmt);
 
     if (!pmt->state)
         set_filter_flags(filter, 0);
