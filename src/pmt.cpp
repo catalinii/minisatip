@@ -2203,8 +2203,9 @@ void start_pmt(SPMT *pmt, adapter *ad) {
     pmt->state = PMT_STARTING;
     pmt->start_time = getTick();
 
-    // The CA send happens in start_active_pmts right after the start.
-    set_filter_flags(pmt->filter, FILTER_ADD_REMOVE | FILTER_CRC);
+    // No ADD_REMOVE: the client subscription holds the pid in the demux,
+    // so the last unsubscribe deletes it; the CA send follows in the caller.
+    set_filter_flags(pmt->filter, FILTER_CRC);
 }
 
 void stop_pmt(SPMT *pmt, adapter *ad) {

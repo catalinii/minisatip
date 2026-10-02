@@ -1072,6 +1072,57 @@ int test_late_parse_handover() {
     return 0;
 }
 
+// Without ADD_REMOVE on the running filter, the last unsubscribe deletes
+// the PMT pid from the demux at once; the PMT stops on the next pass.
+int test_running_pmt_pid_deleted_on_unsubscribe() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    int id = pmt_add(0, 100, 48);
+    ASSERT(id >= 0, "could not create the PMT");
+    pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
+    pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
+    int fid = add_filter(0, 48, (void *)process_pmt, pmts[id], 0);
+    ASSERT(fid >= 0, "could not add the PMT filter");
+    pmts[id]->filter = fid;
+    ad.active_pmts = 1;
+    ad.active_pmt[0] = id;
+
+    int pids[] = {48, 3301, 3401};
+    for (i = 0; i < 3; i++) {
+        ad.pids[i].pid = pids[i];
+        ad.pids[i].flags = PID_STATE_ACTIVE;
+        ad.pids[i].pmt = -1;
+        ad.pids[i].filter = i == 0 ? fid : -1;
+        ad.pids[i].sid.insert(0);
+        ad.pids[i].order = i + 1;
+    }
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should run");
+    ASSERT(filters[fid]->flags == FILTER_CRC, "running filter keeps CRC only");
+
+    mark_pid_deleted(0, 0, 48, NULL);
+    update_pids(0);
+    ASSERT(find_pid(0, 48) == NULL, "PMT pid should leave the demux");
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "stop comes from the loop");
+
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[id]->state, PMT_STOPPED, "PMT should stop unsubscribed");
+
+    del_filter(fid);
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
 int main() {
     opts.log = 255;
     opts.debug = 255;
@@ -1111,6 +1162,8 @@ int main() {
               "testing per-sid PMT objects on a shared PMT pid")
     TEST_FUNC(test_late_parse_handover(),
               "testing handover when the earlier PMT parses late")
+    TEST_FUNC(test_running_pmt_pid_deleted_on_unsubscribe(),
+              "testing demux release on last PMT pid unsubscribe")
     fflush(stdout);
     return 0;
 }
