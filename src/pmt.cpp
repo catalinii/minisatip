@@ -1019,17 +1019,25 @@ static int holds_av_claim(SPid **pids, SPMT *pmt) {
         if (!sp.is_audio && !sp.is_video)
             continue;
         SPid *s = pids[sp.pid];
-        if (s && s->pmt == pmt->id)
+        if (s && s->pmt == pmt->id && spid_has_client_sid(s))
             return 1;
     }
     return 0;
 }
 
-static int pmt_carries_pid(SPMT *pmt, int pid) {
-    for (const auto &sp : pmt->stream_pids)
-        if (sp.pid == pid)
-            return 1;
-    return 0;
+// Two PMTs duplicate each other when their stream sets match element
+// for element; CA descriptors are state, not identity.
+static int same_stream_pids(SPMT *a, SPMT *b) {
+    size_t i;
+    if (a->stream_pids.size() != b->stream_pids.size())
+        return 0;
+    for (i = 0; i < a->stream_pids.size(); i++) {
+        const SStreamPid &sa = a->stream_pids[i], &sb = b->stream_pids[i];
+        if (sa.pid != sb.pid || sa.type != sb.type ||
+            sa.is_audio != sb.is_audio || sa.is_video != sb.is_video)
+            return 0;
+    }
+    return 1;
 }
 
 typedef struct {
@@ -1114,36 +1122,24 @@ void pmt_pid_updated_pids(adapter *ad) {
         nch++;
     }
 
-    // Decide the new active set: each PMT-pid group elects its covering
-    // member, lowest sid on ties; uncovered groups keep all contending.
+    // Sort by subscription order, lowest sid on ties, then drop later
+    // members duplicating an earlier member's stream set.
+    std::sort(ch, ch + nch, [](const SPmtChoice &a, const SPmtChoice &b) {
+        return a.order != b.order ? a.order < b.order : a.pmt->sid < b.pmt->sid;
+    });
     for (i = 0; i < nch; i++) {
-        int group[MAX_PMT_FOR_ADAPTER], ngroup = 0, j, best = -1;
-        // all same-pid members, decided or not, so the group is stable
-        for (j = 0; j < nch; j++)
-            if (ch[j].pmt->pid == ch[i].pmt->pid)
-                group[ngroup++] = j;
-        for (j = 0; j < ngroup; j++) {
-            SPMT *m = ch[group[j]].pmt;
-            int covers = 1, g;
-            for (g = 0; covers && g < ngroup; g++)
-                for (const auto &sp : ch[group[g]].pmt->stream_pids) {
-                    SPid *rs = pids[sp.pid];
-                    if (!rs || !spid_has_client_sid(rs))
-                        continue;
-                    if (!pmt_carries_pid(m, sp.pid)) {
-                        covers = 0;
-                        break;
-                    }
-                }
-            if (covers && (best < 0 || m->sid < ch[best].pmt->sid))
-                best = group[j];
-        }
-        if (best < 0) {
-            ch[i].pmt->best = 1;
+        int j;
+        if (!ch[i].candidate)
             continue;
+        ch[i].pmt->best = 1;
+        for (j = i + 1; j < nch; j++) {
+            if (!ch[j].candidate)
+                continue;
+            if (!same_stream_pids(ch[i].pmt, ch[j].pmt))
+                continue;
+            ch[j].candidate = 0;
+            ch[j].pmt->best = 0;
         }
-        ch[i].candidate = (best == i);
-        ch[i].pmt->best = (best == i);
     }
 
     // Stop old PMTs that are not in the new active set anymore.
@@ -1160,11 +1156,8 @@ void pmt_pid_updated_pids(adapter *ad) {
         }
     }
 
-    // Claim and start the set in PMT pid subscription order, so the
+    // Claim and start the set in the order decided above, so the
     // earliest subscriber wins free pids deterministically in one pass.
-    std::sort(ch, ch + nch, [](const SPmtChoice &a, const SPmtChoice &b) {
-        return a.order != b.order ? a.order < b.order : a.pmt->id < b.pmt->id;
-    });
     for (i = 0; i < nch; i++) {
         SPMT *pmt = ch[i].pmt;
         if (!ch[i].candidate)

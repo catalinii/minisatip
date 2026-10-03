@@ -829,9 +829,9 @@ int test_pid_order_reset_on_remove() {
     return 0;
 }
 
-// D8: several SIDs on one PMT pid. The candidate whose ES set covers
-// the requested pids runs; identical ES sets run the lowest sid.
-int test_d8_subset_match() {
+// D8: several SIDs on one PMT pid. Identical stream sets run the lowest
+// sid; different sets coexist and split the streams by subscription order.
+int test_d8_shared_pid() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
@@ -870,14 +870,16 @@ int test_d8_subset_match() {
         ad.pids[i].order = i + 1;
     }
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[m2]->state, PMT_RUNNING, "covering PMT should run");
-    ASSERT_EQUAL(pmts[m1]->state, PMT_STOPPED, "subset PMT should wait");
+    ASSERT_EQUAL(pmts[m1]->state, PMT_RUNNING, "first set should run");
+    ASSERT_EQUAL(pmts[m2]->state, PMT_RUNNING, "second set should run");
     ASSERT_EQUAL(pmts[m3]->state, PMT_RUNNING, "lowest sid should run");
-    ASSERT_EQUAL(pmts[m4]->state, PMT_STOPPED, "higher sid should wait");
-    ASSERT(pmts[m2]->best && !pmts[m1]->best, "only the cover is best");
+    ASSERT_EQUAL(pmts[m4]->state, PMT_STOPPED, "duplicate should wait");
+    ASSERT(find_pid(0, 701)->pmt == m1, "shared video goes to the first");
+    ASSERT(find_pid(0, 712)->pmt == m2, "own audio goes to the second");
+    ASSERT(pmts[m1]->best && pmts[m2]->best, "different sets stay in");
     ASSERT(pmts[m3]->best && !pmts[m4]->best, "only the lowest sid is best");
 
-    // request the other audio: the choice hands over to the sibling
+    // drop 712: m2 has nothing left to serve and waits, m1 keeps all
     find_pid(0, 712)->sid.clear();
     find_pid(0, 712)->order = 0;
     ad.pids[6].pid = 711;
@@ -887,18 +889,19 @@ int test_d8_subset_match() {
     ad.pids[6].sid.insert(0);
     ad.pids[6].order = 7;
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[m1]->state, PMT_RUNNING, "new choice should run");
-    ASSERT_EQUAL(pmts[m2]->state, PMT_STOPPED, "old choice should stop");
-    ASSERT(pmts[m1]->best && !pmts[m2]->best, "best should follow the cover");
+    ASSERT_EQUAL(pmts[m1]->state, PMT_RUNNING, "m1 should keep running");
+    ASSERT_EQUAL(pmts[m2]->state, PMT_STOPPED, "m2 should wait claimless");
+    ASSERT(pmts[m1]->best && pmts[m2]->best, "waiter stays in the set");
+    ASSERT(find_pid(0, 701)->pmt == m1, "shared video should not move");
 
     free_all_pmts();
     a[0] = NULL;
     return 0;
 }
 
-// No group member covers the request: all stay in the set and sticky
-// claims arbitrate, so each serves its part instead of going dark.
-int test_group_without_cover_all_contend() {
+// Same PMT pid, different stream sets: both stay in the set and sticky
+// claims split the streams, each serving the pids it carries.
+int test_shared_pid_split() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
@@ -1486,10 +1489,9 @@ int main() {
               "testing the loop never steals without a parse")
     TEST_FUNC(test_pid_order_reset_on_remove(),
               "testing SPid order assignment and reset")
-    TEST_FUNC(test_d8_subset_match(),
-              "testing multi-service PMT pid subset selection")
-    TEST_FUNC(test_group_without_cover_all_contend(),
-              "testing uncovered groups keep all contending")
+    TEST_FUNC(test_d8_shared_pid(), "testing D8 shared pid dedupe and split")
+    TEST_FUNC(test_shared_pid_split(),
+              "testing same-pid different sets split streams")
     TEST_FUNC(test_held_pids_without_client_stop_pmt(),
               "testing stop when pids are held without a client")
     TEST_FUNC(test_cw_keyed_by_pmt(), "testing direct CW to PMT mapping")
