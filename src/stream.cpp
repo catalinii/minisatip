@@ -421,7 +421,7 @@ int decode_transport(sockets *s, std::string_view arg, char *default_rtp,
             !arg.empty() ? arg.data() : "NULL");
         return -1;
     }
-    std::lock_guard<SMutex> lock(sid->mutex);
+    std::unique_lock<SMutex> lock(sid->mutex);
     memset(&p, 0, sizeof(p));
     if (!arg.empty()) {
         if (arg.contains("RTP/AVP/SRT")) {
@@ -489,10 +489,19 @@ int decode_transport(sockets *s, std::string_view arg, char *default_rtp,
                     "to %s:%d "
                     "- sid = %d type = %d, closing %d",
                     oldhost, oldport, sid->sid, sid->type, sid->rsock);
-                sockets_del(sid->rsock_id);
+                int old_rsock_id = sid->rsock_id;
                 sid->rsock = -1;
                 sid->rsock_id = -1;
                 sid->type = 0;
+                // The demux thread locks the RTP socket before the stream, so
+                // delete the old socket with the stream unlocked.
+                lock.unlock();
+                sockets_del(old_rsock_id);
+                lock.lock();
+                if (!sid->enabled)
+                    LOG_AND_RETURN(-1,
+                                   "stream %d closed while changing transport",
+                                   sid->sid);
             }
         }
     }
