@@ -1064,6 +1064,114 @@ int test_30w_shared_pmt_pid() {
     return 0;
 }
 
+// #1129 beIN: PMT 48 (sid 14101) and PMT 52 (sid 14104) share vpid and
+// apid. The subscribed PMT pid decides, never the parsed-first sibling.
+int test_1129_bein_shared_es() {
+    int i;
+    uint8_t priv[1] = {0};
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    int ica = add_ca(&fake_ca_op);
+    ASSERT(ica >= 0, "could not register the fake CA");
+    ad.ca_mask = 1 << ica;
+
+    // wrong sibling parsed first: the old master linkage latched onto it
+    int ticari = pmt_add(0, 14104, 52);
+    int bein = pmt_add(0, 14101, 48);
+    ASSERT(ticari >= 0 && bein >= 0, "could not create the PMTs");
+    for (int id : {ticari, bein}) {
+        pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
+        pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
+        pmt_add_caid(pmts[id], 0x0664, 0x1F00 + id, priv, 0);
+    }
+    ad.active_pmts = 2;
+    ad.active_pmt[0] = ticari;
+    ad.active_pmt[1] = bein;
+
+    ASSERT(mark_pid_add(0, 0, 48) == 0, "pid 48 should be added");
+    ASSERT(mark_pid_add(0, 0, 3301) == 0, "pid 3301 should be added");
+    ASSERT(mark_pid_add(0, 0, 3401) == 0, "pid 3401 should be added");
+    update_pids(0);
+    ASSERT_EQUAL(pmts[bein]->state, PMT_RUNNING, "subscribed PMT should run");
+    ASSERT_EQUAL(pmts[ticari]->state, PMT_STOPPED, "parsed-first should wait");
+    ASSERT(find_pid(0, 3301)->pmt == bein, "subscribed PMT should own video");
+    start_active_pmts(&ad);
+    ASSERT(pmts[bein]->ca_mask != 0, "loop should send the winner");
+    ASSERT_EQUAL(pmts[ticari]->ca_mask, 0, "loser should never be sent");
+
+    // zap to the other sibling on the same shared streams
+    mark_pid_deleted(0, 0, 48, NULL);
+    ASSERT(mark_pid_add(0, 0, 52) == 0, "pid 52 should be added");
+    update_pids(0);
+    ASSERT_EQUAL(pmts[ticari]->state, PMT_RUNNING, "new zap should run");
+    ASSERT_EQUAL(pmts[bein]->state, PMT_STOPPED, "old zap should stop");
+    ASSERT(find_pid(0, 3301)->pmt == ticari, "video should move with the zap");
+
+    del_ca(&fake_ca_op);
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
+// #1129 Stingray: music channels share VPID 108 with different APIDs.
+// NATURE ESCAPE (PMT 1908, APID 208) vs '80'ler (PMT 1922, APID 222).
+int test_1129_stingray_shared_vpid() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    int eighties = pmt_add(0, 200, 1922);
+    int nature = pmt_add(0, 100, 1908);
+    ASSERT(eighties >= 0 && nature >= 0, "could not create the PMTs");
+    pmt_add_stream_pid(pmts[nature], 108, 2, false, true);
+    pmt_add_stream_pid(pmts[nature], 208, 3, true, false);
+    pmt_add_stream_pid(pmts[eighties], 108, 2, false, true);
+    pmt_add_stream_pid(pmts[eighties], 222, 3, true, false);
+    ad.active_pmts = 2;
+    ad.active_pmt[0] = eighties;
+    ad.active_pmt[1] = nature;
+
+    ASSERT(mark_pid_add(0, 0, 1908) == 0, "pid 1908 should be added");
+    ASSERT(mark_pid_add(0, 0, 108) == 0, "pid 108 should be added");
+    ASSERT(mark_pid_add(0, 0, 208) == 0, "pid 208 should be added");
+    update_pids(0);
+    ASSERT_EQUAL(pmts[nature]->state, PMT_RUNNING, "subscribed PMT should run");
+    ASSERT_EQUAL(pmts[eighties]->state, PMT_STOPPED, "sibling should wait");
+    ASSERT(find_pid(0, 108)->pmt == nature, "shared VPID follows the sub");
+    ASSERT(find_pid(0, 208)->pmt == nature, "own APID follows the sub");
+    ASSERT(find_pid(0, 222) == NULL, "other APID stays out of the demux");
+
+    // zap to '80'ler: the shared VPID moves with the subscription
+    mark_pid_deleted(0, 0, 1908, NULL);
+    mark_pid_deleted(0, 0, 208, NULL);
+    ASSERT(mark_pid_add(0, 0, 1922) == 0, "pid 1922 should be added");
+    ASSERT(mark_pid_add(0, 0, 222) == 0, "pid 222 should be added");
+    update_pids(0);
+    ASSERT_EQUAL(pmts[eighties]->state, PMT_RUNNING, "new zap should run");
+    ASSERT_EQUAL(pmts[nature]->state, PMT_STOPPED, "old zap should stop");
+    ASSERT(find_pid(0, 108)->pmt == eighties, "VPID should move with zap");
+    ASSERT(find_pid(0, 222)->pmt == eighties, "new APID should be owned");
+
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
 // A RUNNING PMT whose pids are held without any client sid (DDCI marks)
 // is out of the set and must stop, releasing its CA registration.
 int test_held_pids_without_client_stop_pmt() {
@@ -1609,6 +1717,10 @@ int main() {
               "testing same-pid different sets split streams")
     TEST_FUNC(test_30w_shared_pmt_pid(),
               "testing 30W pid 817 multi-service election")
+    TEST_FUNC(test_1129_bein_shared_es(),
+              "testing #1129 beIN shared streams elect subscribed pid")
+    TEST_FUNC(test_1129_stingray_shared_vpid(),
+              "testing #1129 Stingray shared VPID follows subscription")
     TEST_FUNC(test_held_pids_without_client_stop_pmt(),
               "testing stop when pids are held without a client")
     TEST_FUNC(test_cw_keyed_by_pmt(), "testing direct CW to PMT mapping")
