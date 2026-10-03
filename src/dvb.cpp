@@ -1132,7 +1132,7 @@ int send_jess(adapter *ad, int fd, int freq, int pos, int pol, int hiband,
     return d->ufreq * 1000;
 }
 
-int setup_switch(adapter *ad) {
+int setup_switch(adapter *ad, bool force) {
     int frontend_fd = -1;
     transponder *tp = &ad->tp;
     int hiband = 0;
@@ -1178,7 +1178,7 @@ int setup_switch(adapter *ad) {
             ad->old_diseqc != diseqc)
             change_par = 1;
 
-        if (ad == master && change_par)
+        if (ad == master && (change_par || force))
             do_setup_switch = 1;
 
         if (ad != master) // slave adapter
@@ -1209,8 +1209,9 @@ int setup_switch(adapter *ad) {
             }
         }
         if (do_setup_switch)
-            send_diseqc(ad, frontend_fd, diseqc, ad->old_diseqc != diseqc, pol,
-                        hiband, &tp->diseqc_param);
+            send_diseqc(ad, frontend_fd, diseqc,
+                        force || ad->old_diseqc != diseqc, pol, hiband,
+                        &tp->diseqc_param);
         else if (ad == master)
             LOGM("Skip sending diseqc commands since the switch position "
                  "doesn't "
@@ -1281,6 +1282,8 @@ int dvb_tune(int aid, transponder *tp) {
 
     if (!ad)
         return -500;
+    ad->lock_retry_armed = false;
+    ad->lock_retries = 0;
     fd_frontend = ad->fe;
     bclear = getTick();
     if (fd_frontend < 0)
@@ -1300,7 +1303,7 @@ int dvb_tune(int aid, transponder *tp) {
     case SYS_DVBS2:
 
         bpol = getTick();
-        freq = setup_switch(ad);
+        freq = setup_switch(ad, false);
         if (freq < MIN_FRQ_DVBS || freq > MAX_FRQ_DVBS)
             LOG_AND_RETURN(-403, "Frequency %d is not within range ", freq)
 
@@ -1531,6 +1534,11 @@ int dvb_tune(int aid, transponder *tp) {
     }
 #endif
 
+    const int sys = tp->sys.value_or(SYS_UNDEFINED);
+    if (sys == SYS_DVBS || sys == SYS_DVBS2) {
+        ad->lock_retry_time = getTick();
+        ad->lock_retry_armed = true;
+    }
     ad->db_snr_map = get_db_snr_map(&ad->tp);
 
     return 0;
@@ -2093,18 +2101,28 @@ static uint16_t dvb_calibrate_snr(int calib, uint16_t raw) {
 
 // returns the strength and SNR between 0 .. 65535
 
+static bool dvb_read_status(adapter *ad, int *status) {
+    *status = 0;
+    if (ad->fe <= 0)
+        return false;
+    if (ioctl(ad->fe, FE_READ_STATUS, status) < 0) {
+        LOG("ad %d ioctl fd %d FE_READ_STATUS failed, error %d (%s)", ad->id,
+            ad->fe, errno, strerror(errno));
+        *status = 0;
+        return false;
+    }
+    return true;
+}
+
 void get_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
-                uint16_t *snr, uint16_t *db) {
+                uint16_t *snr, uint16_t *db, bool *status_valid) {
     *status = 0;
     *ber = *snr = *strength = 0;
     *db = 65535;
 
-    if (ad->fe > 0 && ioctl(ad->fe, FE_READ_STATUS, status) < 0) {
-        LOG("ad %d ioctl fd %d FE_READ_STATUS failed, error %d (%s)", ad->id,
-            ad->fe, errno, strerror(errno));
-        *status = 0;
+    *status_valid = dvb_read_status(ad, status);
+    if (!*status_valid)
         return;
-    }
     //	*status = (*status & FE_HAS_LOCK) ? 1 : 0;
     if (*status) {
         if (ad->fe > 0 && ioctl(ad->fe, FE_READ_BER, ber) < 0)
@@ -2164,7 +2182,8 @@ void get_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
 // returns the strength and SNR between 0 .. 65535
 
 int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
-                   uint16_t *snr, uint16_t *db) {
+                   uint16_t *snr, uint16_t *db, bool *status_valid) {
+    *status_valid = false;
 #if DVBAPIVERSION >= 0x050A
     *status = *snr = *ber = *strength = 0;
     *db = 65535;
@@ -2215,11 +2234,7 @@ int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
     //		err |= 2;
 
     *ber = enum_cmdargs[2].u.st.stat[0].uvalue & 0x7FFF;
-    if (ad->fe > 0 && ioctl(ad->fe, FE_READ_STATUS, status) < 0) {
-        LOG("ioctl fd %d FE_READ_STATUS failed, error %d (%s)", ad->fe, errno,
-            strerror(errno));
-        *status = 0;
-    }
+    *status_valid = dvb_read_status(ad, status);
 
     LOGM(
         "get_signal_new adapter %d: status %d, strength %jd %s -> %jd, snr %jd "
@@ -2246,16 +2261,65 @@ int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
 // converts the strength and SNR between 0 .. 255 after multiplying with
 // *_multiplier
 
+constexpr int LOCK_RETRY_INITIAL_MS = 6000;
+constexpr int LOCK_RETRY_INTERVAL_MS = 2000;
+constexpr int LOCK_RETRY_MAX = 5;
+
+// Retry only an active, independent SAT adapter that has remained unlocked.
+bool dvb_lock_retry_due(adapter *ad, int64_t now) {
+    int sys = ad->tp.sys.value_or(SYS_UNDEFINED);
+    if (!ad->lock_retry_armed || ad->fe <= 0 || ad->sid_cnt <= 0 ||
+        (ad->status & FE_HAS_LOCK))
+        return false;
+    if (sys != SYS_DVBS && sys != SYS_DVBS2)
+        return false;
+    const int switch_type = ad->tp.diseqc_param.switch_type;
+    const bool single_cable =
+        switch_type == SWITCH_JESS || switch_type == SWITCH_UNICABLE;
+    if ((!single_cable && ad->master_source >= 0) ||
+        switch_type == SWITCH_SLAVE)
+        return false;
+    if (ad->lock_retries >= LOCK_RETRY_MAX)
+        return false;
+    const int delay =
+        ad->lock_retries == 0 ? LOCK_RETRY_INITIAL_MS : LOCK_RETRY_INTERVAL_MS;
+    return now - ad->lock_retry_time >= delay;
+}
+
+bool dvb_lock_retry_update(adapter *ad, int64_t now, bool status_valid) {
+    if (!status_valid)
+        return false;
+    if (ad->status & FE_HAS_LOCK) {
+        ad->lock_retries = 0;
+        ad->lock_retry_time = now;
+        return false;
+    }
+    if (!dvb_lock_retry_due(ad, now))
+        return false;
+    ad->lock_retries++;
+    ad->lock_retry_time = now;
+    return true;
+}
+
+void dvb_retry_lock(adapter *ad, bool status_valid) {
+    if (!dvb_lock_retry_update(ad, getTick(), status_valid))
+        return;
+    LOG("ad %d has no lock, resending the switch commands (retry %d)", ad->id,
+        ad->lock_retries);
+    setup_switch(ad, true);
+}
+
 int dvb_get_signal(adapter *ad) {
     int start = 0;
     uint16_t strength = 0, snr = 0, dbvalue = 65535;
     int status = 0;
     uint32_t ber = 0;
+    bool status_valid = false;
 
     if (ad->strength_multiplier || ad->snr_multiplier) {
         if (ad->new_gs == 0) {
-            int new_gs =
-                get_signal_new(ad, &status, &ber, &strength, &snr, &dbvalue);
+            int new_gs = get_signal_new(ad, &status, &ber, &strength, &snr,
+                                        &dbvalue, &status_valid);
             if (!new_gs)
                 ad->new_gs = NEW_SIGNAL;
             else
@@ -2264,18 +2328,21 @@ int dvb_get_signal(adapter *ad) {
         }
 
         if (!start && ad->new_gs == NEW_SIGNAL)
-            get_signal_new(ad, &status, &ber, &strength, &snr, &dbvalue);
+            get_signal_new(ad, &status, &ber, &strength, &snr, &dbvalue,
+                           &status_valid);
 
         if (ad->new_gs == OLD_SIGNAL) {
-            get_signal(ad, &status, &ber, &strength, &snr, &dbvalue);
+            get_signal(ad, &status, &ber, &strength, &snr, &dbvalue,
+                       &status_valid);
             if (ad->force_tuner_signal != TUNER_FORCE_NO)
                 adapt_signal(ad, &status, &ber, &strength, &snr, &dbvalue);
         }
     } else {
-        status = 1;
-        LOGM("Signal is not retrieved from the adapter as both signal "
-             "multipliers "
-             "are 0");
+        if (ad->lock_retry_armed)
+            status_valid = dvb_read_status(ad, &status);
+        if (!status_valid)
+            status = 1;
+        LOGM("Signal metrics are not retrieved as both multipliers are 0");
     }
     if (ad->strength_multiplier)
         strength = strength * ad->strength_multiplier;
@@ -2300,14 +2367,11 @@ int dvb_get_signal(adapter *ad) {
     ad->snr = snr;
     ad->db = dbvalue;
     ad->strength = strength;
-    ad->status = status;
+    if (status_valid)
+        ad->status = status;
     ad->ber = ber;
 
-    if (ad->status == 0 &&
-        ((ad->tp.diseqc_param.switch_type == SWITCH_JESS) ||
-         (ad->tp.diseqc_param.switch_type == SWITCH_UNICABLE))) {
-        setup_switch(ad);
-    }
+    dvb_retry_lock(ad, status_valid);
     return 0;
 }
 

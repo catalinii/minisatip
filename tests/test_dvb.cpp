@@ -17,13 +17,29 @@
  * USA
  *
  */
+#include "adapter.h"
 #include "dvb.h"
 #include "minisatip.h"
 #include "utils.h"
 #include "utils/testing.h"
 
+#include <fcntl.h>
 #include <linux/dvb/frontend.h>
 #include <string.h>
+#include <unistd.h>
+
+extern bool dvb_lock_retry_due(adapter *ad, int64_t now);
+extern bool dvb_lock_retry_update(adapter *ad, int64_t now, bool status_valid);
+extern int dvb_get_signal(adapter *ad);
+extern int dvb_tune(int aid, transponder *tp);
+extern int setup_switch(adapter *ad, bool force);
+
+static int lock_recovery_wakeup_calls;
+
+int count_lock_recovery_wakeup(adapter *, int, int) {
+    ++lock_recovery_wakeup_calls;
+    return 0;
+}
 
 int test_detect_dvb_parameters_general() {
     transponder tp;
@@ -130,6 +146,230 @@ int test_detect_dvb_parameters_numeric_bounds() {
     return 0;
 }
 
+int test_dvb_lock_recovery_eligibility() {
+    adapter ad = {};
+    ad.fe = 5;
+    ad.sid_cnt = 1;
+    ad.status = 0;
+    ad.master_source = -1;
+    ad.tp.sys = SYS_DVBS2;
+
+    ASSERT(!dvb_lock_retry_due(&ad, 6000),
+           "an unsuccessful tune never arms retries");
+    ad.lock_retry_armed = true;
+    ASSERT(!dvb_lock_retry_due(&ad, 5999),
+           "first retry waits through normal cold acquisition");
+    ASSERT(dvb_lock_retry_due(&ad, 6000),
+           "first retry is due at the exact 6s boundary");
+
+    ad.status = FE_HAS_LOCK;
+    ASSERT(!dvb_lock_retry_due(&ad, 6000), "no retry once locked");
+    ad.status = FE_HAS_SIGNAL | FE_HAS_CARRIER;
+    ASSERT(dvb_lock_retry_due(&ad, 6000),
+           "a carrier without lock still retries");
+    ad.status = FE_TIMEDOUT;
+    ASSERT(dvb_lock_retry_due(&ad, 6000),
+           "a frontend timeout without lock still retries");
+    ad.status = 0;
+
+    ad.sid_cnt = 0;
+    ASSERT(!dvb_lock_retry_due(&ad, 6000), "no retry with no viewers");
+    ad.sid_cnt = 1;
+
+    ad.lock_retries = 5;
+    ASSERT(!dvb_lock_retry_due(&ad, 6000), "retries give up after the cap");
+    ad.lock_retries = 0;
+
+    ad.master_source = 0;
+    ASSERT(!dvb_lock_retry_due(&ad, 6000),
+           "conventional slaves never resend the switch");
+    ad.tp.diseqc_param.switch_type = SWITCH_JESS;
+    ASSERT(dvb_lock_retry_due(&ad, 6000),
+           "JESS slaves retry their slot-specific command");
+    ad.tp.diseqc_param.switch_type = SWITCH_UNICABLE;
+    ASSERT(dvb_lock_retry_due(&ad, 6000),
+           "Unicable slaves retry their slot-specific command");
+    ad.tp.diseqc_param.switch_type = 0;
+    ad.master_source = -1;
+
+    ad.tp.diseqc_param.switch_type = SWITCH_SLAVE;
+    ASSERT(!dvb_lock_retry_due(&ad, 6000), "slave switch type never resends");
+    ad.tp.diseqc_param.switch_type = 0;
+
+    ad.tp.diseqc_param.fast = 1;
+    ASSERT(dvb_lock_retry_due(&ad, 6000),
+           "fast diseqc mode still permits forced recovery");
+    ad.tp.diseqc_param.fast = 0;
+
+    ad.tp.sys = SYS_DVBT;
+    ASSERT(!dvb_lock_retry_due(&ad, 6000), "no resend for non-SAT systems");
+    ad.tp.sys.reset();
+    ASSERT(!dvb_lock_retry_due(&ad, 6000),
+           "no resend when the delivery system is omitted");
+    ad.tp.sys = SYS_DVBS;
+    ASSERT(dvb_lock_retry_due(&ad, 6000), "DVB-S retries like DVB-S2");
+
+    ad.fe = 0;
+    ASSERT(!dvb_lock_retry_due(&ad, 6000), "frontend zero cannot retry");
+    ad.fe = -1;
+    ASSERT(!dvb_lock_retry_due(&ad, 6000), "negative frontend cannot retry");
+    return 0;
+}
+
+int test_dvb_lock_recovery_state_transitions() {
+    adapter ad = {};
+    ad.fe = 5;
+    ad.sid_cnt = 1;
+    ad.master_source = -1;
+    ad.tp.sys = SYS_DVBS2;
+    ad.lock_retry_armed = true;
+    ad.lock_retries = 3;
+    ad.lock_retry_time = 1000;
+    ad.status = FE_HAS_LOCK;
+
+    ASSERT(!dvb_lock_retry_update(&ad, 10000, true),
+           "a lock never requests a resend");
+    ASSERT(ad.lock_retries == 0 && ad.lock_retry_time == 10000,
+           "a lock resets retries and starts a new loss window");
+
+    ad.status = FE_HAS_SIGNAL | FE_HAS_CARRIER;
+    ASSERT(!dvb_lock_retry_update(&ad, 15999, true),
+           "a lock loss gets the full initial delay");
+    ASSERT(dvb_lock_retry_update(&ad, 16000, true),
+           "a continuous 6s lock loss requests a resend");
+    ASSERT(ad.lock_retries == 1 && ad.lock_retry_time == 16000,
+           "a resend advances the retry state");
+    ASSERT(!dvb_lock_retry_update(&ad, 17999, true),
+           "subsequent retries remain spaced by 2s");
+    ASSERT(dvb_lock_retry_update(&ad, 18000, true),
+           "the next retry is due at the 2s boundary");
+
+    ad.lock_retries = 4;
+    ASSERT(!dvb_lock_retry_update(&ad, 19999, true),
+           "the fifth retry waits for the full interval");
+    ASSERT(dvb_lock_retry_update(&ad, 20000, true),
+           "the fifth retry is permitted at the boundary");
+    ASSERT(ad.lock_retries == 5 && ad.lock_retry_time == 20000,
+           "the fifth retry reaches the cap");
+    ASSERT(!dvb_lock_retry_update(&ad, 22000, true),
+           "a sixth retry is rejected and the cap persists");
+
+    ASSERT(!dvb_lock_retry_update(&ad, 23000, false),
+           "an unknown status never requests a resend");
+    ASSERT(ad.lock_retries == 5 && ad.lock_retry_time == 20000,
+           "an unknown status preserves the retry cap and timing");
+    return 0;
+}
+
+int test_dvb_lock_recovery_rejects_failed_tunes() {
+    int fd = open("/dev/null", O_RDWR);
+    ASSERT(fd > 0, "open /dev/null for failed tune test");
+
+    adapter ad = {};
+    ad.enabled = 1;
+    ad.id = 0;
+    ad.fe = fd;
+    ad.master_source = -1;
+    ad.old_pol = 1;
+    ad.old_hiband = 1;
+    ad.old_diseqc = 0;
+
+    transponder tp = {};
+    tp.sys = SYS_DVBS2;
+    tp.freq = 15000000;
+    tp.pol = 2;
+    tp.diseqc = 1;
+    tp.diseqc_param.lnb_low = 9750000;
+    tp.diseqc_param.lnb_high = 10600000;
+    tp.diseqc_param.lnb_switch = 11700000;
+    ad.tp = tp;
+
+    adapter *saved_adapter = a[0];
+    int saved_log = opts.log;
+    a[0] = &ad;
+    opts.log = 0;
+
+    ad.lock_retry_armed = true;
+    int invalid_frequency_result = dvb_tune(0, &ad.tp);
+    bool armed_after_invalid_frequency = ad.lock_retry_armed;
+
+    ad.tp.freq = 11000000;
+    ad.old_hiband = 0;
+    ad.lock_retry_armed = true;
+    int failed_ioctl_result = dvb_tune(0, &ad.tp);
+    bool armed_after_failed_ioctl = ad.lock_retry_armed;
+
+    ad.fe = -1;
+    ad.lock_retry_armed = true;
+    int missing_frontend_result = dvb_tune(0, &ad.tp);
+    bool armed_without_frontend = ad.lock_retry_armed;
+
+    opts.log = saved_log;
+    a[0] = saved_adapter;
+    close(fd);
+
+    ASSERT(invalid_frequency_result == -403,
+           "out-of-range SAT frequency must fail tuning");
+    ASSERT(!armed_after_invalid_frequency,
+           "out-of-range SAT frequency must not arm retries");
+    ASSERT(failed_ioctl_result == -500,
+           "failed frontend ioctl must fail tuning");
+    ASSERT(!armed_after_failed_ioctl,
+           "failed frontend ioctl must not arm retries");
+    ASSERT(missing_frontend_result == -500,
+           "missing frontend must fail tuning");
+    ASSERT(!armed_without_frontend,
+           "missing frontend must clear stale retry state");
+    return 0;
+}
+
+int test_dvb_lock_recovery_without_signal_metrics() {
+    adapter ad = {};
+    ad.lock_retry_armed = true;
+    ad.lock_retries = 5;
+    ad.lock_retry_time = 1;
+    ad.status = FE_HAS_LOCK;
+
+    dvb_get_signal(&ad);
+
+    ASSERT(ad.status == FE_HAS_LOCK,
+           "an invalid status read preserves the last frontend status");
+    ASSERT(ad.lock_retries == 5 && ad.lock_retry_time == 1,
+           "disabled metrics preserve exhausted retry state");
+    return 0;
+}
+
+int test_dvb_lock_recovery_forced_switch_resend() {
+    adapter ad = {};
+    ad.fe = -1;
+    ad.master_source = -1;
+    ad.old_pol = 1;
+    ad.old_hiband = 0;
+    ad.old_diseqc = 0;
+    ad.tp.freq = 11000000;
+    ad.tp.pol = 2;
+    ad.tp.diseqc = 1;
+    ad.tp.diseqc_param.lnb_low = 9750000;
+    ad.tp.diseqc_param.lnb_high = 10600000;
+    ad.tp.diseqc_param.lnb_switch = 11700000;
+    ad.wakeup = count_lock_recovery_wakeup;
+    lock_recovery_wakeup_calls = 0;
+    int old_log = opts.log;
+    opts.log = 0;
+
+    setup_switch(&ad, false);
+    int no_op_calls = lock_recovery_wakeup_calls;
+    setup_switch(&ad, true);
+    opts.log = old_log;
+
+    ASSERT(no_op_calls == 0, "an exact switch-state match remains a no-op");
+    ASSERT(lock_recovery_wakeup_calls == 1,
+           "lock recovery forces one switch resend");
+    ASSERT(ad.old_pol == 1 && ad.old_hiband == 0 && ad.old_diseqc == 0,
+           "forcing a resend keeps the cached switch state valid");
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -145,5 +385,15 @@ int main() {
               "test detect_dvb_parameters roll-off parsing");
     TEST_FUNC(test_detect_dvb_parameters_edge_cases(),
               "test detect_dvb_parameters edge cases");
+    TEST_FUNC(test_dvb_lock_recovery_eligibility(),
+              "test DVB lock recovery eligibility");
+    TEST_FUNC(test_dvb_lock_recovery_state_transitions(),
+              "test DVB lock recovery state transitions");
+    TEST_FUNC(test_dvb_lock_recovery_rejects_failed_tunes(),
+              "test DVB lock recovery rejects failed tunes");
+    TEST_FUNC(test_dvb_lock_recovery_without_signal_metrics(),
+              "test DVB lock recovery without signal metrics");
+    TEST_FUNC(test_dvb_lock_recovery_forced_switch_resend(),
+              "test DVB lock recovery forced switch resend");
     return 0;
 }

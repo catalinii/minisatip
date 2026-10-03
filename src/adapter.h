@@ -141,6 +141,9 @@ struct struct_adapter {
     int active_demux_pids;
     int is_t2mi;
     uint64_t tune_time;
+    int lock_retries;        // switch resends in the current no-lock period
+    int64_t lock_retry_time; // start of the current retry delay
+    bool lock_retry_armed;
     pthread_t thread;
     char thread_name[5];
     char null_packets;
