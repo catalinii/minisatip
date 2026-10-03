@@ -907,6 +907,247 @@ int test_active_pmt_list_capped_at_max() {
     return 0;
 }
 
+// 19.2E 11493H (live S1+S2): A/B share AV 5121/5122 and differ only in a
+// data pid. Replace-zaps follow the PMT pid; add/del hands claims over.
+int test_19e_11493h_zap_flows() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    int aid = pmt_add(0, 10303, 5120);
+    int bid = pmt_add(0, 10304, 5130);
+    ASSERT(aid >= 0 && bid >= 0, "could not create the PMTs");
+    for (int id : {aid, bid}) {
+        pmt_add_stream_pid(pmts[id], 5121, 27, false, true);
+        pmt_add_stream_pid(pmts[id], 5122, 3, true, false);
+    }
+    pmt_add_stream_pid(pmts[aid], 5124, 6, false, false);
+    pmt_add_stream_pid(pmts[bid], 5134, 6, false, false);
+    ad.active_pmts = 2;
+    ad.active_pmt[0] = aid;
+    ad.active_pmt[1] = bid;
+
+    // S1: replace-zap follows the PMT pid both ways
+    ASSERT(mark_pid_add(0, 0, 5120) == 0, "pid 5120 should be added");
+    ASSERT(mark_pid_add(0, 0, 5121) == 0, "pid 5121 should be added");
+    ASSERT(mark_pid_add(0, 0, 5122) == 0, "pid 5122 should be added");
+    update_pids(0);
+    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "A should run first");
+    ASSERT(find_pid(0, 5121)->pmt == aid, "A should own video");
+    mark_pid_deleted(0, 0, 5120, NULL);
+    ASSERT(mark_pid_add(0, 0, 5130) == 0, "pid 5130 should be added");
+    update_pids(0);
+    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "zap should run B");
+    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "zap should stop A");
+    ASSERT(find_pid(0, 5121)->pmt == bid, "video should move to B");
+    mark_pid_deleted(0, 0, 5130, NULL);
+    ASSERT(mark_pid_add(0, 0, 5120) == 0, "pid 5120 should be re-added");
+    update_pids(0);
+    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "zap back should run A");
+    ASSERT(find_pid(0, 5121)->pmt == aid, "video should move back to A");
+
+    // S2: AV-only runs nothing, PMT-after-AV elects, del hands over
+    mark_pid_deleted(0, 0, 5120, NULL);
+    mark_pid_deleted(0, 0, 5121, NULL);
+    mark_pid_deleted(0, 0, 5122, NULL);
+    ASSERT(mark_pid_add(0, 0, 5121) == 0, "pid 5121 should be added");
+    ASSERT(mark_pid_add(0, 0, 5122) == 0, "pid 5122 should be added");
+    update_pids(0);
+    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "AV-only runs nothing");
+    ASSERT_EQUAL(pmts[bid]->state, PMT_STOPPED, "AV-only runs nothing");
+    ASSERT(mark_pid_add(0, 0, 5120) == 0, "pid 5120 should be added");
+    update_pids(0);
+    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "PMT-after-AV runs A");
+    ASSERT(mark_pid_add(0, 0, 5130) == 0, "pid 5130 should be added");
+    update_pids(0);
+    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "first keeps running");
+    ASSERT_EQUAL(pmts[bid]->state, PMT_STOPPED, "second waits");
+    ASSERT(pmts[bid]->best, "waiter stays in the set");
+    ASSERT(find_pid(0, 5121)->pmt == aid, "video stays with A");
+    mark_pid_deleted(0, 0, 5120, NULL);
+    update_pids(0);
+    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "del hands over to B");
+    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "deleted PMT stops");
+    ASSERT(find_pid(0, 5121)->pmt == bid, "video moves to B");
+
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
+// 19.2E 11582H (live S4+S5): C/D are byte-identical on distinct PMT pids,
+// E/F/G/H share AV and differ in one data pid each, I is disjoint.
+int test_19e_11582h_group_and_disjoint() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    int cid = pmt_add(0, 10325, 5200);
+    int did = pmt_add(0, 10326, 5210);
+    ASSERT(cid >= 0 && did >= 0, "could not create the PMTs");
+    for (int id : {cid, did}) {
+        pmt_add_stream_pid(pmts[id], 5201, 27, false, true);
+        pmt_add_stream_pid(pmts[id], 5202, 3, true, false);
+        pmt_add_stream_pid(pmts[id], 5204, 6, false, false);
+    }
+    int efgh[4];
+    int sids[4] = {10327, 10328, 10329, 10330};
+    int ppids[4] = {5220, 5230, 5240, 5250};
+    int dpids[4] = {5225, 5235, 5245, 5255};
+    for (i = 0; i < 4; i++) {
+        efgh[i] = pmt_add(0, sids[i], ppids[i]);
+        ASSERT(efgh[i] >= 0, "could not create the group PMT");
+        pmt_add_stream_pid(pmts[efgh[i]], 5221, 27, false, true);
+        pmt_add_stream_pid(pmts[efgh[i]], 5222, 3, true, false);
+        pmt_add_stream_pid(pmts[efgh[i]], dpids[i], 6, false, false);
+    }
+    int iid = pmt_add(0, 10331, 5260);
+    ASSERT(iid >= 0, "could not create the disjoint PMT");
+    pmt_add_stream_pid(pmts[iid], 5261, 27, false, true);
+    pmt_add_stream_pid(pmts[iid], 5262, 3, true, false);
+    ad.active_pmts = 7;
+    ad.active_pmt[0] = cid;
+    ad.active_pmt[1] = did;
+    for (i = 0; i < 4; i++)
+        ad.active_pmt[2 + i] = efgh[i];
+    ad.active_pmt[6] = iid;
+
+    // S4: identical pair dedupes on distinct PMT pids, del hands over
+    ASSERT(mark_pid_add(0, 0, 5201) == 0, "pid 5201 should be added");
+    ASSERT(mark_pid_add(0, 0, 5202) == 0, "pid 5202 should be added");
+    ASSERT(mark_pid_add(0, 0, 5200) == 0, "pid 5200 should be added");
+    update_pids(0);
+    ASSERT_EQUAL(pmts[cid]->state, PMT_RUNNING, "C should run first");
+    ASSERT(mark_pid_add(0, 0, 5210) == 0, "pid 5210 should be added");
+    update_pids(0);
+    ASSERT_EQUAL(pmts[cid]->state, PMT_RUNNING, "C keeps running");
+    ASSERT_EQUAL(pmts[did]->state, PMT_STOPPED, "dup never starts");
+    ASSERT(!pmts[did]->best, "dup drops out of the set");
+    mark_pid_deleted(0, 0, 5200, NULL);
+    update_pids(0);
+    ASSERT_EQUAL(pmts[did]->state, PMT_RUNNING, "del hands over to D");
+    ASSERT(find_pid(0, 5201)->pmt == did, "video moves to D");
+    mark_pid_deleted(0, 0, 5201, NULL);
+    mark_pid_deleted(0, 0, 5202, NULL);
+    mark_pid_deleted(0, 0, 5210, NULL);
+
+    // S5: group winner and disjoint coexist, AV-drop stops only the group
+    ASSERT(mark_pid_add(0, 0, 5221) == 0, "pid 5221 should be added");
+    ASSERT(mark_pid_add(0, 0, 5222) == 0, "pid 5222 should be added");
+    for (i = 0; i < 4; i++) {
+        ASSERT(mark_pid_add(0, 0, ppids[i]) == 0, "group pid added");
+        update_pids(0);
+    }
+    ASSERT_EQUAL(pmts[efgh[0]]->state, PMT_RUNNING, "E should run");
+    for (i = 1; i < 4; i++) {
+        ASSERT_EQUAL(pmts[efgh[i]]->state, PMT_STOPPED, "group waits");
+        ASSERT(pmts[efgh[i]]->best, "waiter stays in the set");
+    }
+    ASSERT(mark_pid_add(0, 0, 5260) == 0, "pid 5260 should be added");
+    ASSERT(mark_pid_add(0, 0, 5261) == 0, "pid 5261 should be added");
+    ASSERT(mark_pid_add(0, 0, 5262) == 0, "pid 5262 should be added");
+    update_pids(0);
+    ASSERT_EQUAL(pmts[iid]->state, PMT_RUNNING, "disjoint runs too");
+    ASSERT_EQUAL(pmts[efgh[0]]->state, PMT_RUNNING, "E keeps running");
+    ASSERT(find_pid(0, 5261)->pmt == iid, "I owns its video");
+    mark_pid_deleted(0, 0, 5221, NULL);
+    mark_pid_deleted(0, 0, 5222, NULL);
+    update_pids(0);
+    ASSERT_EQUAL(pmts[efgh[0]]->state, PMT_STOPPED, "AV-drop stops E");
+    ASSERT_EQUAL(pmts[iid]->state, PMT_RUNNING, "disjoint survives");
+    ASSERT(find_pid(0, 5261)->pmt == iid, "I keeps its video");
+
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
+// 19.2E 11914H Sky DE (live S7): an encrypted zap sends the new PMT to the
+// CA, closes the old one, and teardown closes the last one.
+int test_19e_11914h_ca_send_close() {
+    int i;
+    uint8_t priv[1] = {0};
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    SCA_op counting_op = fake_ca_op;
+    counting_op.ca_add_pmt = counting_ca_add_pmt;
+    int ica = add_ca(&counting_op);
+    ASSERT(ica >= 0, "could not register the fake CA");
+    ad.ca_mask = 1 << ica;
+    fake_ca_add_calls = 0;
+    fake_ca_last_add_pmt = -1;
+    fake_ca_del_calls = 0;
+    fake_ca_last_del_pmt = -1;
+
+    int jid = pmt_add(0, 13, 101);
+    int kid = pmt_add(0, 17, 102);
+    ASSERT(jid >= 0 && kid >= 0, "could not create the PMTs");
+    pmt_add_caid(pmts[jid], 0x098C, 6786, priv, 0);
+    pmt_add_caid(pmts[jid], 0x09F0, 8066, priv, 0);
+    pmt_add_stream_pid(pmts[jid], 1535, 27, false, true);
+    pmt_add_caid(pmts[kid], 0x098C, 6843, priv, 0);
+    pmt_add_caid(pmts[kid], 0x09F0, 8123, priv, 0);
+    pmt_add_stream_pid(pmts[kid], 1791, 27, false, true);
+    ad.active_pmts = 2;
+    ad.active_pmt[0] = jid;
+    ad.active_pmt[1] = kid;
+
+    ASSERT(mark_pid_add(0, 0, 101) == 0, "pid 101 should be added");
+    ASSERT(mark_pid_add(0, 0, 1535) == 0, "pid 1535 should be added");
+    update_pids(0);
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[jid]->state, PMT_RUNNING, "J should run");
+    ASSERT_EQUAL(fake_ca_add_calls, 1, "J should be sent once");
+    ASSERT_EQUAL(fake_ca_last_add_pmt, jid, "J should be the sent PMT");
+
+    mark_pid_deleted(0, 0, 101, NULL);
+    mark_pid_deleted(0, 0, 1535, NULL);
+    ASSERT(mark_pid_add(0, 0, 102) == 0, "pid 102 should be added");
+    ASSERT(mark_pid_add(0, 0, 1791) == 0, "pid 1791 should be added");
+    update_pids(0);
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[kid]->state, PMT_RUNNING, "zap should run K");
+    ASSERT_EQUAL(pmts[jid]->state, PMT_STOPPED, "zap should stop J");
+    ASSERT_EQUAL(fake_ca_last_add_pmt, kid, "K should be sent on zap");
+    ASSERT_EQUAL(fake_ca_del_calls, 1, "J should be closed on zap");
+    ASSERT_EQUAL(fake_ca_last_del_pmt, jid, "closed PMT should be J");
+
+    mark_pid_deleted(0, 0, 102, NULL);
+    mark_pid_deleted(0, 0, 1791, NULL);
+    update_pids(0);
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[kid]->state, PMT_STOPPED, "teardown stops K");
+    ASSERT_EQUAL(fake_ca_del_calls, 2, "teardown closes K");
+    ASSERT_EQUAL(fake_ca_last_del_pmt, kid, "closed PMT should be K");
+
+    del_ca(&counting_op);
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
 int test_sticky_claims_without_parse() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
@@ -1901,6 +2142,12 @@ int main() {
               "testing 30W pid 817 multi-service election")
     TEST_FUNC(test_1129_bein_shared_es(),
               "testing #1129 beIN shared streams elect subscribed pid")
+    TEST_FUNC(test_19e_11493h_zap_flows(),
+              "testing 19E 11493H replace-zap and add/del flows")
+    TEST_FUNC(test_19e_11582h_group_and_disjoint(),
+              "testing 19E 11582H identical pair, group and disjoint")
+    TEST_FUNC(test_19e_11914h_ca_send_close(),
+              "testing 19E 11914H CA send on zap and close on teardown")
     TEST_FUNC(test_1129_stingray_shared_vpid(),
               "testing #1129 Stingray shared VPID follows subscription")
     TEST_FUNC(test_held_pids_without_client_stop_pmt(),
