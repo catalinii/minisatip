@@ -28,6 +28,7 @@
 extern SPMT *pmts[MAX_PMT];
 extern SKey *keys[MAX_KEYS];
 extern int dvbapi_is_enabled;
+extern char *get_channel_for_key(int key, char *dest, int max_size);
 
 // A VideoGuard ECM in iCAM mode `mode`, which both the fixed offset 0x15 and
 // the low nibble of the last byte carry; mode 0 is a plain CSA ECM.
@@ -92,12 +93,47 @@ int test_icam_mode_only_from_ecms() {
     return 0;
 }
 
+int test_channel_falls_back_to_sid() {
+    SPMT pmt = {};
+    char dest[64];
+    int id;
+    SKey *k;
+
+    pmt.enabled = 1;
+    pmt.master_pmt = -1;
+    pmt.sid = 1234;
+    pmts[0] = &pmt;
+    npmts = 1;
+    id = keys_add(-1, 0, 0);
+    ASSERT(id >= 0, "no key for the PMT");
+    k = keys[id];
+    k->pmt_id = 0;
+
+    // No SDT seen: the name is empty so the channel shows the SID
+    get_channel_for_key(id, dest, sizeof(dest));
+    ASSERT(strcmp(dest, "SID 1234") == 0,
+           "channel must fall back to the SID without SDT");
+
+    // SDT seen: the real name wins over the fallback
+    strcpy(pmt.name, "Test Channel");
+    get_channel_for_key(id, dest, sizeof(dest));
+    ASSERT(strcmp(dest, "Test Channel") == 0,
+           "channel must show the SDT name when present");
+
+    keys_del(id);
+    pmts[0] = NULL;
+    npmts = 0;
+    return 0;
+}
+
 int main() {
     opts.log = 255;
     opts.debug = 255;
     strcpy(thread_info[thread_index].thread_name, "test_dvbapi");
     TEST_FUNC(test_icam_mode_only_from_ecms(),
               "testing that only ECMs set the iCAM mode");
+    TEST_FUNC(test_channel_falls_back_to_sid(),
+              "testing the channel falls back to the SID without SDT");
     fflush(stdout);
     return 0;
 }
