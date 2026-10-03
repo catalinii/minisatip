@@ -234,7 +234,7 @@ static void send_rtsp_reply(sockets *s, char *buf, const char *reply) {
     satipc_reply(s);
 }
 
-int test_satipc_reject_teardown_no_retry() {
+int test_satipc_reject_teardown_then_retry() {
     adapter ad = {};
     satipc sip = {};
     sockets s = {};
@@ -261,27 +261,61 @@ int test_satipc_reject_teardown_no_retry() {
     s.sock = -1;
     s.buf = (unsigned char *)buf;
 
-    // 503 to PLAY tears the session down and fails the adapter
+    // 503 to PLAY releases the session, then retries like 454
     send_rtsp_reply(
         &s, buf, "RTSP/1.0 503 Service Unavailable\r\nCSeq: 110\r\n\r\n");
-    ASSERT(ad.err == 1, "503 must mark the adapter in error");
+    ASSERT(ad.err == 0, "503 must not flag the adapter in error");
     ASSERT(sip.state == SATIP_STATE_TEARDOWN, "503 must move to TEARDOWN");
     ASSERT(sip.stream_id == -1, "TEARDOWN must drop the stream");
 
-    // The TEARDOWN reply parks the adapter instead of re-setting up
+    // The TEARDOWN reply restarts the session with a fresh SETUP
     sip.ignore_packets = false;
     send_rtsp_reply(&s, buf, "RTSP/1.0 200 OK\r\nCSeq: 111\r\n\r\n");
+    ASSERT(sip.state == SATIP_STATE_SETUP,
+           "TEARDOWN reply must restart the session");
+    ASSERT(sip.ignore_packets, "a fresh SETUP must follow the teardown");
+
+    // 503 with no session retries the SETUP at once
+    sip.stream_id = -1;
+    sip.state = SATIP_STATE_SETUP;
+    sip.ignore_packets = false;
+    send_rtsp_reply(
+        &s, buf, "RTSP/1.0 503 Service Unavailable\r\nCSeq: 112\r\n\r\n");
+    ASSERT(sip.state == SATIP_STATE_SETUP,
+           "503 without session must retry SETUP");
+    ASSERT(sip.ignore_packets, "SETUP must go out right after the 503");
+
+    // 503 while in error stays parked
+    ad.err = 1;
+    sip.state = SATIP_STATE_SETUP;
+    sip.ignore_packets = false;
+    send_rtsp_reply(
+        &s, buf, "RTSP/1.0 503 Service Unavailable\r\nCSeq: 113\r\n\r\n");
     ASSERT(sip.state == SATIP_STATE_INACTIVE,
-           "TEARDOWN reply must park the adapter");
-    ASSERT(!sip.ignore_packets, "no SETUP may follow the teardown in error");
-    ASSERT(ad.err == 1, "adapter stays in error until the next tune");
+           "503 must not retry while in error");
+    ASSERT(!sip.ignore_packets, "no SETUP may follow while in error");
+
+    // TEARDOWN completing while in error must not restart the session
+    ad.err = 0;
+    sip.state = SATIP_STATE_PLAY;
+    sip.stream_id = 310;
+    strcpy(sip.session, "AA112233");
+    send_rtsp_reply(
+        &s, buf, "RTSP/1.0 503 Service Unavailable\r\nCSeq: 114\r\n\r\n");
+    ASSERT(sip.state == SATIP_STATE_TEARDOWN, "503 must move to TEARDOWN");
+    ad.err = 1; // error raised while the TEARDOWN was in flight
+    sip.ignore_packets = false;
+    send_rtsp_reply(&s, buf, "RTSP/1.0 200 OK\r\nCSeq: 115\r\n\r\n");
+    ASSERT(sip.state == SATIP_STATE_INACTIVE,
+           "TEARDOWN reply must park the adapter while in error");
+    ASSERT(!sip.ignore_packets, "no SETUP may restart while in error");
 
     // 454 without error still restarts the session (expiry recovery)
     ad.err = 0;
     sip.state = SATIP_STATE_PLAY;
     sip.stream_id = 309;
     send_rtsp_reply(&s, buf,
-                    "RTSP/1.0 454 Session Not Found\r\nCSeq: 112\r\n\r\n");
+                    "RTSP/1.0 454 Session Not Found\r\nCSeq: 116\r\n\r\n");
     ASSERT(sip.state == SATIP_STATE_SETUP,
            "454 must restart the session when healthy");
 
@@ -290,7 +324,7 @@ int test_satipc_reject_teardown_no_retry() {
     sip.state = SATIP_STATE_INACTIVE;
     sip.ignore_packets = false;
     send_rtsp_reply(&s, buf,
-                    "RTSP/1.0 454 Session Not Found\r\nCSeq: 113\r\n\r\n");
+                    "RTSP/1.0 454 Session Not Found\r\nCSeq: 117\r\n\r\n");
     ASSERT(sip.state == SATIP_STATE_INACTIVE,
            "454 must not restart while in error");
     ASSERT(!sip.ignore_packets, "no SETUP may follow while in error");
@@ -317,8 +351,8 @@ int main() {
               "test satip_getxml_data parses satipcap delivery systems");
     TEST_FUNC(test_satipc_get_pids_add_and_del(),
               "test satipc_get_pids separates addpids/delpids with '&'");
-    TEST_FUNC(test_satipc_reject_teardown_no_retry(),
-              "test rejected SETUP tears down instead of retrying");
+    TEST_FUNC(test_satipc_reject_teardown_then_retry(),
+              "test rejected SETUP tears down and retries");
 
     return 0;
 }

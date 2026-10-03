@@ -262,15 +262,17 @@ int satipc_reply(sockets *s) {
         // Session expired server-side: start over, unless we gave up
         sip->state = ad->err ? SATIP_STATE_INACTIVE : SATIP_STATE_SETUP;
     } else if (rc == 503 || rc == 405 || rc == 400) {
-        // Server refuses the request: tear down and fail, no retry (#904)
-        if (sip->stream_id != -1) {
+        // Server refuses the request: release the session if any, then
+        // retry like a session loss, unless we gave up (#904)
+        if (ad->err) {
+            sip->state = SATIP_STATE_INACTIVE;
+        } else if (sip->stream_id != -1) {
             sip->state = SATIP_STATE_TEARDOWN;
             satipc_send_teardown(ad, sip);
         } else {
-            sip->state = SATIP_STATE_INACTIVE;
+            sip->state = SATIP_STATE_SETUP;
         }
-        ad->err = 1;
-        LOG("satipc %d: request rejected (rc %d), tearing down", sip->id, rc);
+        LOG("satipc %d: request rejected (rc %d), retrying", sip->id, rc);
     } else if (rc != 200) {
         if (rc != 0) // AVM Fritz!Box workaround sdp reply without header
         {
