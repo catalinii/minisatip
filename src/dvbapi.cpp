@@ -885,8 +885,14 @@ char *get_channel_for_key(int key, char *dest, int max_size) {
     dest[max_size - 1] = 0;
     if (k)
         pmt = get_pmt(k->pmt_id);
-    if (pmt)
+    if (!pmt)
+        return dest;
+    // Without SDT (pid 17 not requested) the name stays empty, so
+    // fall back to the SID instead of showing a blank channel (#643)
+    if (pmt->name[0])
         _strncpy(dest, pmt->name, max_size - 1);
+    else
+        snprintf(dest, max_size, "SID %d", pmt->sid);
 
     return dest;
 }
