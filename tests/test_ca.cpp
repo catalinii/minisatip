@@ -145,9 +145,8 @@ int test_capmt_release_on_last_pmt() {
     return 0;
 }
 
-// A new PMT should go into a CAPMT of its own while there is a free one.
-// Packing it next to a PMT that is already running rewrites that CAPMT with
-// a new version and the CAM restarts the channel it carries.
+// A new PMT takes an empty CAPMT first: packing restarts the running
+// channel carried by the rewritten CAPMT.
 int test_capmt_uses_empty_slots_first() {
     ca_device_t dev;
     memset(&dev, 0, sizeof(dev));
@@ -767,6 +766,7 @@ int main() {
     TEST_FUNC(
         test_close_pmt_after_caid_update(),
         "testing CA release of a PMT stopped after a CA descriptor update");
+    free_all_pmts();
     fflush(stdout);
     return 0;
 }

@@ -1080,10 +1080,8 @@ SPid *find_pid(int aid, int p) {
     if (!ad)
         return NULL;
 
-    // Scan the whole table: update_pids mutates flags mid-pass (the delete
-    // loop compacts entries to INACTIVE ahead of not-yet-processed NEW ones)
-    // and only re-sorts at the end, so stopping at the first INACTIVE slot
-    // can miss entries that are present.
+    // Scan the whole table: update_pids mutates flags mid-pass and only
+    // re-sorts at the end, so stopping at the first INACTIVE slot can miss.
     for (i = 0; i < MAX_PIDS; i++) {
         if ((ad->pids[i].flags > PID_STATE_INACTIVE) && (ad->pids[i].pid == p))
             return &ad->pids[i];
@@ -1165,12 +1163,19 @@ void mark_pids_deleted(int aid, int sid,
         mark_pid_deleted(aid, sid, ad->pids[i].pid, &ad->pids[i]);
 }
 
+// 0 means unordered: skip it even when the sequence wraps.
+static uint32_t next_pid_order(adapter *ad) {
+    if (++ad->pid_order_seq == 0)
+        ++ad->pid_order_seq;
+    return ad->pid_order_seq;
+}
+
 int mark_pid_add(int sid, int aid, int _pid) {
     adapter *ad;
     int i;
     ad = get_adapter(aid);
     SPid *p;
-    if (!ad)
+    if (!ad || _pid < 0 || _pid > 8192)
         return -1;
     // check if the pid already exists, if yes add the sid
     if ((p = find_pid(aid, _pid))) {
@@ -1179,7 +1184,7 @@ int mark_pid_add(int sid, int aid, int _pid) {
             int had_client = spid_has_client_sid(p);
             p->sid.insert(sid);
             if (!had_client && spid_has_client_sid(p))
-                p->order = ++ad->pid_order_seq;
+                p->order = next_pid_order(ad);
         }
         if (p->flags == PID_STATE_DELETED)
             p->flags = PID_STATE_NEW;
@@ -1195,7 +1200,7 @@ int mark_pid_add(int sid, int aid, int _pid) {
             if (sid != PID_STREAM_ID_UNDEFINED)
                 ad->pids[i].sid.insert(sid);
             if (spid_has_client_sid(&ad->pids[i]))
-                ad->pids[i].order = ++ad->pid_order_seq;
+                ad->pids[i].order = next_pid_order(ad);
             ad->pids[i].pmt = -1;
             ad->pids[i].filter = -1;
             ad->pids[i].sock = -1;

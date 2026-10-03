@@ -1,6 +1,4 @@
-/*
- * Unit tests for Enigma2 Hardware Descrambler (hw_descrambler.cpp)
- */
+// Unit tests for Enigma2 Hardware Descrambler (hw_descrambler.cpp)
 
 #include "adapter.h"
 #include "ca.h"
@@ -309,6 +307,26 @@ static int test_csa_vs_csa_icam_routing() {
     return 0;
 }
 
+// The add/init hooks must succeed so the del/close hooks stay armed and
+// stop_pmt releases the hw slot instead of leaking it.
+static int test_hw_ca_hooks_succeed() {
+    adapter *ad = setup_mock_adapter(0, 0, 0);
+    ASSERT(ad != nullptr, "setup_mock_adapter failed");
+
+    int pmt_id = pmt_add(0, 500, 5000);
+    SPMT *pmt = get_pmt(pmt_id);
+    ASSERT(pmt != nullptr, "pmt_add failed");
+    ASSERT_EQUAL(hw_ca_add_pmt(ad, pmt), TABLES_RESULT_OK,
+                 "hw_ca_add_pmt must succeed");
+    ASSERT_EQUAL(hw_ca_init_dev(ad), TABLES_RESULT_OK,
+                 "hw_ca_init_dev must succeed");
+
+    pmt_del(pmt_id);
+    cleanup_mock_adapter(0);
+
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -332,6 +350,8 @@ int main() {
               "testing adapter teardown and null pointer safety guards");
     TEST_FUNC(test_csa_vs_csa_icam_routing(),
               "testing CSA vs CSA-ICAM algorithm routing and HW rejection");
+    TEST_FUNC(test_hw_ca_hooks_succeed(),
+              "testing hw CA add/init hooks succeed");
 
     return 0;
 }

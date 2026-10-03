@@ -88,6 +88,7 @@ int test_icam_mode_only_from_ecms() {
     keys_del(id);
     pmts[0] = NULL;
     npmts = 0;
+    free_filters();
     return 0;
 }
 

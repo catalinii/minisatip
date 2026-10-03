@@ -835,7 +835,8 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt) {
     key = keys_add(-1, ad->id, pmt->id);
     k = get_key(key);
     if (!k)
-        LOG_AND_RETURN(1, "Could not add key for pmt %d", pmt->id);
+        LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY,
+                       "Could not add key for pmt %d", pmt->id);
     pmt->opaque = k;
     k->sid = pmt->sid;
     k->adapter = ad->id;
@@ -850,6 +851,8 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt) {
 
 int dvbapi_del_pmt(adapter *ad, SPMT *pmt) {
     SKey *k = (SKey *)pmt->opaque;
+    if (!k)
+        return 0;
     keys_del(k->id);
     pmt->opaque = NULL;
     LOG("%s: deleted key %d, PMT pid %d, sid %d (%X), PMT %d", __FUNCTION__,

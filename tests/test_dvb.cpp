@@ -104,11 +104,41 @@ int test_detect_dvb_parameters_edge_cases() {
     return 0;
 }
 
+// Client pids are capped at 8192 (the pids=all marker): larger values are
+// dropped at parse so they never reach the fixed-size pid tables.
+int test_detect_dvb_parameters_pids_bounds() {
+    transponder tp;
+    char query[128] = "?pids=0,100,8191,8192,8193,99999";
+    detect_dvb_parameters(query, &tp);
+
+    ASSERT(tp.pids.size() == 4, "out-of-range pids must be dropped");
+    ASSERT(tp.pids.contains(8192), "the pids=all marker must survive");
+    ASSERT(!tp.pids.contains(8193) && !tp.pids.contains(99999),
+           "pids above 8192 must be dropped");
+    return 0;
+}
+
+// Meaningless numeric values stay unset (or clamped) instead of overflowing.
+int test_detect_dvb_parameters_numeric_bounds() {
+    transponder tp;
+    char query[128] = "?freq=&src=&sr=3000000";
+    detect_dvb_parameters(query, &tp);
+
+    ASSERT(!tp.freq.has_value(), "empty freq must stay unset");
+    ASSERT(!tp.diseqc.has_value(), "empty src must stay unset");
+    ASSERT(tp.sr.has_value() && *tp.sr == 0, "huge sr must clamp to 0");
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
     strcpy(thread_info[thread_index].thread_name, "test_dvb");
 
+    TEST_FUNC(test_detect_dvb_parameters_pids_bounds(),
+              "test detect_dvb_parameters drops out-of-range pids");
+    TEST_FUNC(test_detect_dvb_parameters_numeric_bounds(),
+              "test detect_dvb_parameters clamps numeric values");
     TEST_FUNC(test_detect_dvb_parameters_general(),
               "test detect_dvb_parameters with general parameters");
     TEST_FUNC(test_detect_dvb_parameters_roll_off(),

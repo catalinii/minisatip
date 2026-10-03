@@ -239,7 +239,7 @@ static std::vector<int> parse_pids_list(std::string_view val) {
             // ignore
         } else if (!pid_sv.empty()) {
             int p = parse_int(pid_sv, -1);
-            if (p >= 0) {
+            if (p >= 0 && p <= 8192) {
                 res.push_back(p);
             }
         }
@@ -299,17 +299,22 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
 
         if (key == "msys")
             tp->sys = fe_delsys_map.lookup(val);
-        else if (key == "freq")
-            tp->freq = parse_float(val, 1000);
-        else if (key == "pol")
+        else if (key == "freq") {
+            int f = parse_float(val, 1000);
+            tp->freq = f ? std::optional<int>(f) : std::nullopt;
+        } else if (key == "pol")
             tp->pol = fe_pol_map.lookup(val);
-        else if (key == "sr")
-            tp->sr = parse_int(val) * 1000;
-        else if (key == "fe")
+        else if (key == "sr") {
+            int sr = parse_int(val);
+            if (sr < 0 || sr > 1000000)
+                sr = 0;
+            tp->sr = sr * 1000;
+        } else if (key == "fe")
             tp->fe = parse_int(val);
-        else if (key == "src")
-            tp->diseqc = parse_int(val);
-        else if (key == "ro")
+        else if (key == "src") {
+            int d = parse_int(val);
+            tp->diseqc = d ? std::optional<int>(d) : std::nullopt;
+        } else if (key == "ro")
             tp->ro = fe_rolloff_map.lookup(val);
         else if (key == "mtype")
             tp->mtype = fe_modulation_map.lookup(val);
@@ -1283,8 +1288,8 @@ int dvb_tune(int aid, transponder *tp) {
 
 #ifndef USE_DVBAPI3
     if (ioctl(fd_frontend, FE_SET_PROPERTY, &cmdseq_clear) == -1) {
-        LOG("dvb_tune: DTV_CLEAR failed %d %s", errno, strerror(errno));
-        return -404;
+        LOG("dvb_tune: DTV_CLEAR failed %d %s, continuing", errno,
+            strerror(errno));
     }
 #endif
 
@@ -1649,10 +1654,8 @@ int dvb_demux_set_pid(adapter *a, int i_pid) {
              fd, a->active_pids, err, strerror(err));
         if (err == EINVAL && !dvb_demux_shared_pid_count(a) &&
             !dvb_demux_set_pes_filter(a, fd, i_pid)) {
-            // No other pid is using the shared demux fd, so it cannot have a
-            // PES filter: the demux counter disagrees with the driver (e.g.
-            // stale count after adapter reopen). Recover by setting the
-            // filter instead of adding to it.
+            // Shared demux fd unused by others, so no PES filter exists: the
+            // counter disagrees with the driver (stale after reopen); set it.
             LOG("AD %d [demux %d %d], recovered stale demux counter, setting "
                 "filter on PID %d for fd %d",
                 a->id, a->pa, a->fn, i_pid, fd);
@@ -1685,9 +1688,8 @@ int dvb_demux_del_filters(adapter *ad, int fd, int pid) {
     }
 
     if (!--ad->active_demux_pids) {
-        // Best effort: the pid was already removed above and the shared fd
-        // stays open, so a stop error must not fail the removal. The next
-        // first pid re-arms the demux with DMX_SET_PES_FILTER.
+        // Best effort: the pid is already removed, so a stop error must not
+        // fail the removal; the next pid re-arms the demux.
         if (ioctl(fd, DMX_STOP, NULL) < 0)
             LOG("DMX_STOP failed on PID %d FD %d: error %d %s", pid, fd, errno,
                 strerror(errno));
@@ -2020,36 +2022,13 @@ void adapt_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
          ad->id, *strength, strength_init, *snr, snr_init, *db, db_init);
 }
 
-// Tuner specific calibration of the raw legacy FE_READ_SNR value.
-//
-// The legacy DVB API does not define the scale nor the measurement point of
-// the value returned by FE_READ_SNR: every demod reports it in its own units,
-// so the raw reading cannot be turned into a percentage without knowing which
-// tuner produced it. Enigma2 keeps a per tuner table for exactly this purpose
-// in lib/dvb/frontend.cpp (eDVBFrontend::calculateSignalQuality); the entries
-// below mirror that table for the Broadcom FBC front ends so that minisatip
-// reports the same quality Enigma2 reports on the same hardware.
-//
-// Without this, a BCM45208/BCM45308 FBC tuner (Dreambox DM900/DM920) reports a
-// raw SNR that saturates around 4096 instead of 65535, which the generic
-// scaling below turns into a permanent ~6% reading.
+// FE_READ_SNR units are tuner-specific: calibrate per Enigma2's table so
+// Broadcom FBC reports quality, not a permanent ~6% (raw saturates ~4k).
 
 #define E2_SAT_MAX 1600 // eDVBFrontend::calculateSignalQuality default
 
-// Some front-ends report no signal strength at all: the BCM45208/BCM45308 FBC
-// modules return 0 from FE_READ_SIGNAL_STRENGTH even on a locked transponder,
-// and expose no DVBv5 statistics (FE_GET_PROPERTY succeeds but returns zero
-// stat layers). Enigma2 has no calibration entry for these front-ends either,
-// so the value is simply not available from the hardware.
-//
-// SAT>IP defines level 0 as "no signal", so reporting 0 for a tuner that is
-// locked and receiving makes clients believe the tuner is dead. When enabled
-// below, the level reported for such a front-end mirrors the (calibrated) SNR
-// instead, so that clients get an indication that follows reception rather
-// than a flat zero.
-//
-// This is a display fallback, NOT a measurement: the hardware provides no AGC
-// reading. Set to 0 to report the raw 0 instead.
+// Some FBC front-ends report no strength at all; SAT>IP 0 means dead, so
+// mirror calibrated SNR instead (display fallback, not a measurement).
 #define DERIVE_STRENGTH_FROM_SNR 1
 
 #define SNR_CALIB_UNKNOWN 0 // not probed yet (static zero initialization)
@@ -2162,7 +2141,9 @@ void get_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
 
 #if DERIVE_STRENGTH_FROM_SNR
             // the driver reports no AGC for this front-end, see above
-            if ((snr_calib[ad->id] == SNR_CALIB_BCM_FBC || snr_calib[ad->id] == SNR_CALIB_NIM_FBC) && *strength == 0 && *snr > 0 && (*status & FE_HAS_LOCK)) {
+            if ((snr_calib[ad->id] == SNR_CALIB_BCM_FBC ||
+                 snr_calib[ad->id] == SNR_CALIB_NIM_FBC) &&
+                *strength == 0 && *snr > 0 && (*status & FE_HAS_LOCK)) {
                 if (!strength_warned[ad->id]) {
                     strength_warned[ad->id] = 1;
                     LOG("ad %d reports no signal strength while locked, "

@@ -340,22 +340,8 @@ int test_emulate_add_all_pids() {
     return 0;
 }
 
-// ---------------------------------------------------------------------------
-// Regression test for the CA channel-slot leak fixed in this commit.
-//
-// process_pat() resets ad->active_pmts and rebuilds it from the PAT it has
-// just parsed, so a PMT that was active before and is absent from the new PAT
-// is already out of ad->active_pmt[] when the function returns.
-// start_active_pmts() only walks that array, so it never stops such a PMT and
-// close_pmt_for_cas() is never reached: the PMT keeps its CA registration for
-// ever. As a CAM supports one channel by default, one leaked registration is
-// enough to stop the next service from being descrambled.
-//
-// The retirement used to run only when the PAT version changed on an already
-// processed PAT. This test covers the other case: the first PAT after the
-// adapter was (re)initialised, when ad->pat_processed is still 0, which is
-// what a CI adapter does on every channel change.
-// ---------------------------------------------------------------------------
+// First PAT after (re)init (pat_processed == 0, every CI channel change):
+// a PMT missing from it must still retire its CA registration.
 
 extern int npmts;
 extern int process_pat(int filter, unsigned char *b, int len, void *opaque);
@@ -419,9 +405,8 @@ static int check_pat_drop_releases_ca(int adapter_type) {
     int sids[] = {SID_KEPT};
     int pids[] = {PID_KEPT};
 
-    // Earlier tests in this binary leave SPMT objects with automatic storage
-    // duration in the global pmts[] array, so start from a known state. The
-    // entries are only detached, never freed, as some of them are not ours.
+    // Earlier tests leave stack SPMTs in pmts[]: detach all, never free,
+    // as some entries are not ours.
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
     npmts = 0;
@@ -508,14 +493,8 @@ int test_pat_drop_releases_ca() {
     return check_pat_drop_releases_ca(ADAPTER_CI);
 }
 
-// A PMT that disappeared from the PAT is cached: it keeps its stream pids,
-// its CA descriptors and its version, but its filter is deleted. When the sid
-// shows up in the PAT again, process_pat() creates a fresh filter for the PMT
-// pid and used to throw the id away, so the PMT stayed on filter -1 until a
-// section happened to arrive. start_active_pmts() started it anyway, and
-// start_pmt() then called set_filter_flags(-1), which fails before it adds the
-// pid: the PMT was RUNNING, the CAs had a CA_PMT, and the PMT pid was not in
-// the demux. A second PAT would also add a second filter for the same PMT.
+// A revived PMT must get its fresh filter handed over, or start_pmt fails
+// before adding the pid and the PMT pid stays out of the demux.
 int test_revived_cached_pmt_gets_its_filter() {
     int i;
     uint8_t pat[64];
@@ -903,6 +882,31 @@ int test_scan_pmt_only_starts_nothing() {
 
 // Claims are sticky in the loop: a later-subscribed newcomer waits on
 // pids held by the earlier holder. Preemption happens at parse instead.
+// The active list is capped: a full active_pmts must not overflow when a new
+// PMT starts.
+int test_active_pmt_list_capped_at_max() {
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.log = 1;
+
+    int ids[MAX_PMT_FOR_ADAPTER + 1];
+    for (int i = 0; i <= MAX_PMT_FOR_ADAPTER; i++)
+        ids[i] = pmt_add(0, 1000 + i, 4000 + i);
+    for (int i = 0; i < MAX_PMT_FOR_ADAPTER; i++)
+        pmt_add_active_pmt(&ad, ids[i]);
+    ASSERT(ad.active_pmts == MAX_PMT_FOR_ADAPTER, "active list must fill up");
+
+    pmt_add_active_pmt(&ad, ids[MAX_PMT_FOR_ADAPTER]);
+    ASSERT(ad.active_pmts == MAX_PMT_FOR_ADAPTER,
+           "full active list must refuse");
+
+    a[0] = NULL;
+    free_all_pmts();
+    return 0;
+}
+
 int test_sticky_claims_without_parse() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
@@ -1420,6 +1424,9 @@ int test_cw_keyed_by_pmt() {
     ASSERT(send_cw(id, CA_ALGO_DVBCSA, 0, cw, NULL, 25, NULL) != 0,
            "duplicate CW should be rejected");
 
+    for (i = 0; i < MAX_CW; i++)
+        if (cws[i])
+            cws[i]->enabled = 0;
     free_all_pmts();
     a[0] = NULL;
     return 0;
@@ -1881,6 +1888,8 @@ int main() {
               "testing single-slot release before acquire on retune")
     TEST_FUNC(test_scan_pmt_only_starts_nothing(),
               "testing PMT-only scan subscriptions start nothing")
+    TEST_FUNC(test_active_pmt_list_capped_at_max(),
+              "testing the active PMT list refuses to overflow")
     TEST_FUNC(test_sticky_claims_without_parse(),
               "testing the loop never steals without a parse")
     TEST_FUNC(test_pid_order_reset_on_remove(),

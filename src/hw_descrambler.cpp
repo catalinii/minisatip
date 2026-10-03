@@ -1,6 +1,4 @@
-/*
- * Hardware Descrambler implementation for Enigma2 DVB CA ioctls (C++23)
- */
+// Hardware Descrambler implementation for Enigma2 DVB CA ioctls (C++23)
 
 #include "hw_descrambler.h"
 #include "adapter.h"
@@ -400,6 +398,19 @@ SCW_op hw_aes_cbc_op = {
     .stop_cw = nullptr,
     .decrypt_stream = reinterpret_cast<Decrypt_Stream>(hw_decrypt_stream)};
 
+// Keys arrive via the CW ops; registering here only arms del/close so
+// stop_pmt releases the hw slot instead of leaking it.
+int hw_ca_add_pmt(adapter *ad, SPMT *pmt) {
+    (void)ad;
+    (void)pmt;
+    return TABLES_RESULT_OK;
+}
+
+int hw_ca_init_dev(adapter *ad) {
+    (void)ad;
+    return TABLES_RESULT_OK;
+}
+
 static SCA_op hw_ca_op{};
 
 void init_hw_descrambler() {
@@ -411,6 +422,9 @@ void init_hw_descrambler() {
         register_algo(&hw_aes_cbc_op);
 
         hw_ca_op = {};
+        hw_ca_op.ca_add_pmt = reinterpret_cast<ca_pmt_action>(hw_ca_add_pmt);
+        hw_ca_op.ca_init_dev =
+            reinterpret_cast<ca_device_action>(hw_ca_init_dev);
         hw_ca_op.ca_del_pmt = reinterpret_cast<ca_pmt_action>(hw_ca_del_pmt);
         hw_ca_op.ca_close_dev =
             reinterpret_cast<ca_device_action>(hw_ca_close_dev);

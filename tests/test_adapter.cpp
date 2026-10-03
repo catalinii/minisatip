@@ -147,11 +147,8 @@ int test_find_pid_unsorted() {
         a[i] = nullptr;
     }
 
-    // Simulate the mid-update_pids state: the delete loop compacted a low
-    // slot to INACTIVE while a NEW entry sits behind it. find_pid must still
-    // find the entry (previously it stopped at the first INACTIVE slot, so
-    // dvb_set_psi_filter never attached the socket and the pid was later
-    // deleted through the wrong demux path).
+    // Mid-update_pids state: an INACTIVE slot ahead of a NEW entry. find_pid
+    // must still find the entry behind it.
     adapter ad = {};
     a[0] = &ad;
     ad.id = 0;
@@ -235,9 +232,8 @@ int test_update_pids_max_pids_floor() {
         a[i] = nullptr;
     }
 
-    // Demux failure while below the minimum: max_pids must not drop below
-    // MIN_ADAPTER_PIDS and update_pids must report an error so the RTSP
-    // reply reflects it.
+    // Demux failure below the minimum: max_pids keeps MIN_ADAPTER_PIDS and
+    // update_pids errors so the RTSP reply reflects it.
     adapter ad = {};
     a[0] = &ad;
     ad.id = 0;
@@ -451,9 +447,8 @@ int test_compare_slave_parameters() {
     ASSERT(compare_slave_parameters(&slave_ad, &tp) == 1,
            "Conflicting band (hiband) should return 1");
 
-    // 4b. Test band check when tp.diseqc_param is uninitialized (empty/zeroed),
-    // which simulates the real application request. The check should use the
-    // adapter's diseqc_param settings.
+    // 4b. Band check with uninitialized tp.diseqc_param (zeroed, as in real
+    // requests): the adapter's diseqc_param settings apply.
     tp.clear();
     tp.freq = 12322000;
     master_ad.old_hiband = 1;
@@ -491,6 +486,25 @@ int test_compare_slave_parameters() {
     return 0;
 }
 
+// mark_pid_add is the only writer of adapter pids: reject anything outside
+// 0..8192 so client values never index the fixed-size pid tables.
+int test_mark_pid_add_bounds() {
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+
+    ASSERT(mark_pid_add(0, 0, 8193) == -1, "pid 8193 must be rejected");
+    ASSERT(mark_pid_add(0, 0, 99999) == -1, "pid 99999 must be rejected");
+    ASSERT(mark_pid_add(0, 0, -5) == -1, "negative pid must be rejected");
+    ASSERT(find_pid(0, 8193) == NULL, "rejected pid must leave no entry");
+    ASSERT(mark_pid_add(0, 0, 8192) == 0, "pids=all marker must be added");
+    ASSERT(find_pid(0, 8192) != NULL, "pids=all marker must be found");
+
+    a[0] = NULL;
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -522,6 +536,7 @@ int main() {
 #endif
     TEST_FUNC(test_compare_slave_parameters(),
               "test compare_slave_parameters with std::optional");
+    TEST_FUNC(test_mark_pid_add_bounds(), "test mark_pid_add pid bounds");
 
     return 0;
 }

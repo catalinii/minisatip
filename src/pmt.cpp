@@ -604,7 +604,8 @@ int wait_pusi(adapter *ad, int len) {
     memset(pids, 0, sizeof(pids));
     memset(parity, 0, sizeof(parity));
     for (i = 0; i < MAX_PIDS; i++)
-        if (ad->pids[i].flags == PID_STATE_ACTIVE && (ad->pids[i].pmt >= 0))
+        if (ad->pids[i].flags == PID_STATE_ACTIVE && (ad->pids[i].pmt >= 0) &&
+            ad->pids[i].pid < 8192)
             pids[ad->pids[i].pid] = PID_INIT;
     for (i = 0; i < len; i += DVB_FRAME) {
         uint8_t *b = ad->buf + i;
@@ -1025,16 +1026,46 @@ static int holds_av_claim(SPid **pids, SPMT *pmt) {
     return 0;
 }
 
-// Two PMTs duplicate each other when their stream sets match element
-// for element; CA descriptors are state, not identity.
+// Duplicates match as multisets on streams and CA descriptors (parse order
+// is unstable); shared AV with different ECMs (30W pid 817) stays distinct.
+static int same_descriptors(const std::vector<descriptor_t> &a,
+                            const std::vector<descriptor_t> &b) {
+    if (a.size() != b.size())
+        return 0;
+    std::vector<char> used(b.size(), 0);
+    for (const auto &da : a) {
+        size_t j;
+        for (j = 0; j < b.size(); j++)
+            if (!used[j] && da == b[j]) {
+                used[j] = 1;
+                break;
+            }
+        if (j == b.size())
+            return 0;
+    }
+    return 1;
+}
+
+static int same_stream_pid(const SStreamPid &sa, const SStreamPid &sb) {
+    return sa.pid == sb.pid && sa.type == sb.type &&
+           sa.is_audio == sb.is_audio && sa.is_video == sb.is_video &&
+           same_descriptors(sa.descriptors, sb.descriptors);
+}
+
 static int same_stream_pids(SPMT *a, SPMT *b) {
-    size_t i;
     if (a->stream_pids.size() != b->stream_pids.size())
         return 0;
-    for (i = 0; i < a->stream_pids.size(); i++) {
-        const SStreamPid &sa = a->stream_pids[i], &sb = b->stream_pids[i];
-        if (sa.pid != sb.pid || sa.type != sb.type ||
-            sa.is_audio != sb.is_audio || sa.is_video != sb.is_video)
+    if (!same_descriptors(a->descriptors, b->descriptors))
+        return 0;
+    std::vector<char> used(b->stream_pids.size(), 0);
+    for (const auto &sa : a->stream_pids) {
+        size_t j;
+        for (j = 0; j < b->stream_pids.size(); j++)
+            if (!used[j] && same_stream_pid(sa, b->stream_pids[j])) {
+                used[j] = 1;
+                break;
+            }
+        if (j == b->stream_pids.size())
             return 0;
     }
     return 1;
@@ -1179,6 +1210,8 @@ void pmt_pid_updated_pids(adapter *ad) {
                 tables_add_pid(ad, pmt, sp.pid);
 #endif
         }
+        // A claimless member waits stopped but stays in the set: it is
+        // still the elected owner if its streams get subscribed later.
         if (!holds_av_claim(pids, pmt)) {
             if (pmt->state == PMT_RUNNING || pmt->state == PMT_STARTING) {
                 stop_pmt(pmt, ad);
@@ -1189,7 +1222,8 @@ void pmt_pid_updated_pids(adapter *ad) {
 #ifndef DISABLE_TABLES
         if (pmt->state == PMT_STOPPED)
             start_pmt(pmt, ad);
-        // No CA send here: start_active_pmts sends on the demux pass.
+        // No CA send here: start_active_pmts sends on the demux pass, so
+        // non-demux drivers must call it after electing.
         if (pmt->state == PMT_STARTING)
             pmt->state = PMT_RUNNING;
 #endif
@@ -1450,6 +1484,7 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
     pmt->cw = NULL;
     pmt->opaque = NULL;
     pmt->ca_mask = pmt->disabled_ca_mask = pmt->ca_registered_mask = 0;
+    pmt->best = 0;
     pmt->batch = NULL;
     memset(pmt->name, 0, sizeof(pmt->name));
     memset(pmt->provider, 0, sizeof(pmt->provider));
@@ -1708,6 +1743,11 @@ void pmt_add_active_pmt(adapter *ad, int pmt_id) {
         if (ad->active_pmt[i] == pmt_id)
             is_added = 1;
     if (!is_added) {
+        if (ad->active_pmts >= MAX_PMT_FOR_ADAPTER) {
+            LOG("adapter %d active PMT list full, dropping PMT %d", ad->id,
+                pmt_id);
+            return;
+        }
         ad->active_pmt[ad->active_pmts++] = pmt_id;
         if (pmt->state == PMT_CACHED)
             pmt->state = PMT_STOPPED;
@@ -1803,13 +1843,8 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque) {
                                         ? FILTER_ADD_REMOVE | FILTER_CRC
                                         : 0,
                                     new_filter, new_mask);
-                // A PMT revived from the cache keeps everything but its
-                // filter, and until process_pmt() sees a section nothing
-                // claims the one created here: start_pmt() would call
-                // set_filter_flags(-1), leaving the PMT pid out of the demux,
-                // and a second PAT would add yet another filter for the same
-                // PMT. Hand it over now so the cached PMT can be started
-                // straight away.
+                // A revived PMT keeps everything but its filter: hand the new
+                // one over now so it can start straight away.
                 if (pmt && fid >= 0)
                     pmt->filter = fid;
             }
@@ -1818,9 +1853,8 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque) {
         }
     }
 
-    // A PMT missing from the PAT we just parsed is already out of
-    // ad->active_pmt[], so start_active_pmts() will never stop it and its CA
-    // registration would be kept for ever. Cached PMTs hold none, skip those.
+    // A PMT missing from the PAT is never stopped by the election, so
+    // retire its CA registration here (cached PMTs hold none).
     for (i = 0; i < npmts; i++)
         if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == ad->id &&
             pmts[i]->state != PMT_CACHED && seen_pmts[i] == 0) {
@@ -2089,7 +2123,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         pmt_add_stream_pid(pmt, pcr_pid, 0, false, false);
 
     // Late parse handover: a pid below may be owned by a running PMT
-    // subscribed after this one. Stop it; this PMT starts same loop.
+    // subscribed after this one. Stop it; this PMT starts next pass.
     if (is_pmt_subscribed(ad, pmt))
         handover_claims_from_lower_priority(ad, pmt);
 
