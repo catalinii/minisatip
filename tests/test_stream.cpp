@@ -21,6 +21,11 @@
 #include <sys/uio.h>
 #include <unistd.h>
 
+#include <atomic>
+#include <chrono>
+#include <future>
+#include <thread>
+
 #ifndef DISABLE_SRT
 #include "srt.h"
 // Mock srt_send: interposes the libsrt symbol in this test binary so
@@ -279,6 +284,60 @@ int test_flush_stream_srt_accounts_bw() {
 }
 #endif
 
+// A demux thread holds the RTP socket and waits for the stream while the
+// client moves its RTP port: decode_transport must not deadlock with it.
+int test_decode_transport_port_change_no_deadlock() {
+    setup_test_env();
+
+    sockets rtsp = {};
+    rtsp.enabled = 1;
+    rtsp.is_enabled = 1;
+    rtsp.sock = 1000;
+    rtsp.id = 0;
+    rtsp.sid = -1;
+    rtsp.type = TYPE_RTSP;
+    rtsp.buf = (unsigned char *)"SETUP";
+
+    streams *sid =
+        setup_stream("?src=1&freq=11362&pol=h&sr=22000&pids=0", &rtsp);
+    ASSERT(sid != NULL, "setup_stream returned NULL");
+    opts.start_rtp = 45500;
+    char host[] = "127.0.0.1";
+    ASSERT(decode_transport(&rtsp, "RTP/AVP;unicast;client_port=46000-46001",
+                            host, opts.start_rtp) == 0,
+           "first transport failed");
+    sockets *rs = get_sockets(sid->rsock_id);
+    ASSERT(rs != NULL, "RTP socket not created");
+
+    std::atomic<int> held{0};
+    std::thread demux([&] {
+        std::lock_guard<SMutex> l1(rs->mutex);
+        held = 1;
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        std::lock_guard<SMutex> l2(sid->mutex);
+    });
+    while (!held)
+        usleep(1000);
+
+    auto f = std::async(std::launch::async, [&] {
+        return decode_transport(&rtsp,
+                                "RTP/AVP;unicast;client_port=46002-46003", host,
+                                opts.start_rtp);
+    });
+    if (f.wait_for(std::chrono::seconds(3)) != std::future_status::ready) {
+        LOG("decode_transport deadlocked with the demux thread");
+        fflush(stdout);
+        _exit(1);
+    }
+    demux.join();
+    ASSERT(f.get() == 0, "second transport failed");
+    ASSERT(get_sockets(sid->rsock_id) != NULL, "new RTP socket not created");
+    ASSERT(get_stream_rport(sid->sid) == 46002, "client port not updated");
+
+    close_stream(sid->sid);
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -292,6 +351,8 @@ int main() {
     TEST_FUNC(test_start_play_no_transport(),
               "test start_play returns error when transport is missing");
     TEST_FUNC(test_start_play_success(), "test start_play success under HTTP");
+    TEST_FUNC(test_decode_transport_port_change_no_deadlock(),
+              "test decode_transport does not deadlock on a port change");
 #ifndef DISABLE_SRT
     TEST_FUNC(test_flush_stream_srt_accounts_bw(),
               "test SRT flush_stream updates bw counters");
