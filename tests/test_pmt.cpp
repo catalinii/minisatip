@@ -732,6 +732,175 @@ int test_retune_handover_same_loop() {
     return 0;
 }
 
+// Single-slot CAM (D6/surfcu): one slot shared by two siblings, the add
+// fails while the slot is held, so the retune must release A before B.
+static int single_slot_holder = -1;
+static int single_slot_seq;
+static int single_slot_add_seq;
+static int single_slot_del_seq;
+static int single_slot_failed_adds;
+
+static int single_slot_ca_add_pmt(adapter *ad, SPMT *pmt) {
+    (void)ad;
+    if (single_slot_holder != -1 && single_slot_holder != pmt->id) {
+        single_slot_failed_adds++;
+        return TABLES_RESULT_ERROR_RETRY;
+    }
+    single_slot_holder = pmt->id;
+    single_slot_add_seq = ++single_slot_seq;
+    return TABLES_RESULT_OK;
+}
+
+static int single_slot_ca_del_pmt(adapter *ad, SPMT *pmt) {
+    (void)ad;
+    if (single_slot_holder == pmt->id) {
+        single_slot_holder = -1;
+        single_slot_del_seq = ++single_slot_seq;
+    }
+    return TABLES_RESULT_OK;
+}
+
+int test_single_slot_retune_releases_first() {
+    int i;
+    uint8_t priv[1] = {0};
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+
+    SCA_op single_slot_op = fake_ca_op;
+    single_slot_op.ca_add_pmt = single_slot_ca_add_pmt;
+    single_slot_op.ca_del_pmt = single_slot_ca_del_pmt;
+    int ica = add_ca(&single_slot_op);
+    ASSERT(ica >= 0, "could not register the fake CA");
+    ad.ca_mask = 1 << ica;
+
+    int aid = pmt_add(0, 14101, 48);
+    int bid = pmt_add(0, 14104, 52);
+    for (int id : {aid, bid}) {
+        pmt_add_caid(pmts[id], 0x0664, 0x1F06, priv, 0);
+        pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
+        pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
+    }
+    ad.active_pmts = 2;
+    ad.active_pmt[0] = aid;
+    ad.active_pmt[1] = bid;
+
+    int pids[] = {48, 3301, 3401};
+    for (i = 0; i < 3; i++) {
+        ad.pids[i].pid = pids[i];
+        ad.pids[i].flags = PID_STATE_ACTIVE;
+        ad.pids[i].pmt = -1;
+        ad.pids[i].filter = -1;
+        ad.pids[i].sid.insert(0);
+        ad.pids[i].order = i + 1;
+    }
+    single_slot_holder = -1;
+    single_slot_seq = 0;
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "A should run first");
+    ASSERT_EQUAL(single_slot_holder, aid, "A should hold the slot");
+
+    // retune: A leaves, B joins, the shared streams stay subscribed
+    find_pid(0, 48)->sid.clear();
+    find_pid(0, 48)->order = 0;
+    ad.pids[3].pid = 52;
+    ad.pids[3].flags = PID_STATE_ACTIVE;
+    ad.pids[3].pmt = -1;
+    ad.pids[3].filter = -1;
+    ad.pids[3].sid.insert(0);
+    ad.pids[3].order = 4;
+    single_slot_seq = 0;
+    single_slot_add_seq = single_slot_del_seq = 0;
+    single_slot_failed_adds = 0;
+    start_active_pmts(&ad);
+
+    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "A should stop");
+    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "B should run");
+    ASSERT(pmts[bid]->ca_mask != 0, "B should hold a CA slot");
+    ASSERT_EQUAL(single_slot_holder, bid, "B should hold the slot");
+    ASSERT_EQUAL(single_slot_failed_adds, 0, "B must not see a full slot");
+    ASSERT(single_slot_del_seq > 0 && single_slot_add_seq > 0 &&
+               single_slot_del_seq < single_slot_add_seq,
+           "the release must come before the acquire");
+
+    del_ca(&single_slot_op);
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
+// Tvheadend mux scan (surfcu): PMT pids subscribed without any ES pid
+// must not start anything; adding the streams elects the earlier one.
+int test_scan_pmt_only_starts_nothing() {
+    int i;
+    uint8_t priv[1] = {0};
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+
+    SCA_op counting_op = fake_ca_op;
+    counting_op.ca_add_pmt = counting_ca_add_pmt;
+    int ica = add_ca(&counting_op);
+    ASSERT(ica >= 0, "could not register the fake CA");
+    ad.ca_mask = 1 << ica;
+
+    int aid = pmt_add(0, 14101, 48);
+    int bid = pmt_add(0, 14104, 52);
+    ASSERT(aid >= 0 && bid >= 0, "could not create the PMTs");
+    for (int id : {aid, bid}) {
+        pmt_add_caid(pmts[id], 0x0664, 0x1F06, priv, 0);
+        pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
+        pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
+    }
+    ad.active_pmts = 2;
+    ad.active_pmt[0] = aid;
+    ad.active_pmt[1] = bid;
+
+    int pids[] = {48, 52};
+    for (i = 0; i < 2; i++) {
+        ad.pids[i].pid = pids[i];
+        ad.pids[i].flags = PID_STATE_ACTIVE;
+        ad.pids[i].pmt = -1;
+        ad.pids[i].filter = -1;
+        ad.pids[i].sid.insert(0);
+        ad.pids[i].order = i + 1;
+    }
+    fake_ca_add_calls = 0;
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "A must not run on scan");
+    ASSERT_EQUAL(pmts[bid]->state, PMT_STOPPED, "B must not run on scan");
+    ASSERT_EQUAL(fake_ca_add_calls, 0, "nothing must be sent to the CA");
+
+    // the client tunes for real: both PMT pids plus the shared streams
+    int es[] = {3301, 3401};
+    for (i = 0; i < 2; i++) {
+        ad.pids[2 + i].pid = es[i];
+        ad.pids[2 + i].flags = PID_STATE_ACTIVE;
+        ad.pids[2 + i].pmt = -1;
+        ad.pids[2 + i].filter = -1;
+        ad.pids[2 + i].sid.insert(0);
+        ad.pids[2 + i].order = 3 + i;
+    }
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "earlier PMT should run");
+    ASSERT_EQUAL(pmts[bid]->state, PMT_STOPPED, "later PMT should wait");
+
+    del_ca(&counting_op);
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
 // Claims are sticky in the loop: a later-subscribed newcomer waits on
 // pids held by the earlier holder. Preemption happens at parse instead.
 int test_sticky_claims_without_parse() {
@@ -1708,6 +1877,10 @@ int main() {
               "testing that the subscribed PMT pid selects the PMT")
     TEST_FUNC(test_retune_handover_same_loop(),
               "testing the single-pass retune handover with CA ordering")
+    TEST_FUNC(test_single_slot_retune_releases_first(),
+              "testing single-slot release before acquire on retune")
+    TEST_FUNC(test_scan_pmt_only_starts_nothing(),
+              "testing PMT-only scan subscriptions start nothing")
     TEST_FUNC(test_sticky_claims_without_parse(),
               "testing the loop never steals without a parse")
     TEST_FUNC(test_pid_order_reset_on_remove(),
