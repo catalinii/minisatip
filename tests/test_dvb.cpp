@@ -17,6 +17,7 @@
  * USA
  *
  */
+#include "adapter.h"
 #include "dvb.h"
 #include "minisatip.h"
 #include "utils.h"
@@ -24,6 +25,8 @@
 
 #include <linux/dvb/frontend.h>
 #include <string.h>
+
+extern int dvb_lock_retry_due(adapter *ad, int64_t now);
 
 int test_detect_dvb_parameters_general() {
     transponder tp;
@@ -104,6 +107,53 @@ int test_detect_dvb_parameters_edge_cases() {
     return 0;
 }
 
+int test_lock_retry_due() {
+    adapter ad = {};
+    ad.fe = 5;
+    ad.sid_cnt = 1;
+    ad.status = 0;
+    ad.master_source = -1;
+    ad.tp.sys = SYS_DVBS2;
+
+    ASSERT(dvb_lock_retry_due(&ad, 5000),
+           "retry is due when unlocked 5s after the tune");
+    ASSERT(!dvb_lock_retry_due(&ad, 1500),
+           "retry waits 2s after the tune before the first resend");
+
+    ad.status = FE_HAS_LOCK;
+    ASSERT(!dvb_lock_retry_due(&ad, 5000), "no retry once locked");
+    ad.status = 0;
+
+    ad.sid_cnt = 0;
+    ASSERT(!dvb_lock_retry_due(&ad, 5000), "no retry with no viewers");
+    ad.sid_cnt = 1;
+
+    ad.lock_retries = 5;
+    ASSERT(!dvb_lock_retry_due(&ad, 5000), "retries give up after the cap");
+    ad.lock_retries = 0;
+
+    ad.master_source = 0;
+    ASSERT(!dvb_lock_retry_due(&ad, 5000), "slaves never resend the switch");
+    ad.master_source = -1;
+
+    ad.tp.diseqc_param.switch_type = SWITCH_SLAVE;
+    ASSERT(!dvb_lock_retry_due(&ad, 5000), "slave switch type never resends");
+    ad.tp.diseqc_param.switch_type = 0;
+
+    ad.tp.diseqc_param.fast = 1;
+    ASSERT(!dvb_lock_retry_due(&ad, 5000), "fast diseqc mode opts out");
+    ad.tp.diseqc_param.fast = 0;
+
+    ad.tp.sys = SYS_DVBT;
+    ASSERT(!dvb_lock_retry_due(&ad, 5000), "no resend for non-SAT systems");
+    ad.tp.sys = SYS_DVBS;
+    ASSERT(dvb_lock_retry_due(&ad, 5000), "DVB-S retries like DVB-S2");
+
+    ad.fe = -1;
+    ASSERT(!dvb_lock_retry_due(&ad, 5000), "no retry without frontend");
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -115,5 +165,6 @@ int main() {
               "test detect_dvb_parameters roll-off parsing");
     TEST_FUNC(test_detect_dvb_parameters_edge_cases(),
               "test detect_dvb_parameters edge cases");
+    TEST_FUNC(test_lock_retry_due(), "test lock retry decision matrix");
     return 0;
 }

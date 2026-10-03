@@ -126,6 +126,8 @@ struct struct_adapter {
     int active_demux_pids;
     int is_t2mi;
     uint64_t tune_time;
+    int lock_retries;        // switch resends since the last tune with no lock
+    int64_t last_lock_retry; // tick of the last resend (lock recovery)
     pthread_t thread;
     char thread_name[5];
     char null_packets;

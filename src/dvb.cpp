@@ -1280,6 +1280,9 @@ int dvb_tune(int aid, transponder *tp) {
     bclear = getTick();
     if (fd_frontend < 0)
         return -404;
+    // Fresh tune, fresh lock-recovery window (#919)
+    ad->lock_retries = 0;
+    ad->last_lock_retry = bclear;
 
 #ifndef USE_DVBAPI3
     if (ioctl(fd_frontend, FE_SET_PROPERTY, &cmdseq_clear) == -1) {
@@ -2265,6 +2268,45 @@ int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
 // converts the strength and SNR between 0 .. 255 after multiplying with
 // *_multiplier
 
+#define LOCK_RETRY_AFTER_MS 2000
+#define LOCK_RETRY_MAX 5
+
+// True when the switch commands should be resent: tuned SAT adapter with
+// viewers, no signal at all, and the last resend long enough ago (#919)
+int dvb_lock_retry_due(adapter *ad, int64_t now) {
+    int sys = ad->tp.sys.value_or(SYS_UNDEFINED);
+    if (ad->fe <= 0 || ad->sid_cnt <= 0 || ad->status != 0)
+        return 0;
+    if (sys != SYS_DVBS && sys != SYS_DVBS2)
+        return 0;
+    if (ad->master_source >= 0 ||
+        ad->tp.diseqc_param.switch_type == SWITCH_SLAVE)
+        return 0;
+    if (ad->tp.diseqc_param.fast)
+        return 0;
+    if (ad->lock_retries >= LOCK_RETRY_MAX)
+        return 0;
+    return now - ad->last_lock_retry >= LOCK_RETRY_AFTER_MS;
+}
+
+void dvb_retry_lock(adapter *ad) {
+    int64_t now;
+    if (ad->status != 0) {
+        ad->lock_retries = 0;
+        return;
+    }
+    now = getTick();
+    if (!dvb_lock_retry_due(ad, now))
+        return;
+    LOG("ad %d has no lock, resending the switch commands (retry %d)", ad->id,
+        ad->lock_retries + 1);
+    ad->lock_retries++;
+    ad->last_lock_retry = now;
+    // Force resending even though the switch position did not change
+    ad->old_pol = ad->old_hiband = ad->old_diseqc = -1;
+    setup_switch(ad);
+}
+
 int dvb_get_signal(adapter *ad) {
     int start = 0;
     uint16_t strength = 0, snr = 0, dbvalue = 65535;
@@ -2322,11 +2364,7 @@ int dvb_get_signal(adapter *ad) {
     ad->status = status;
     ad->ber = ber;
 
-    if (ad->status == 0 &&
-        ((ad->tp.diseqc_param.switch_type == SWITCH_JESS) ||
-         (ad->tp.diseqc_param.switch_type == SWITCH_UNICABLE))) {
-        setup_switch(ad);
-    }
+    dvb_retry_lock(ad);
     return 0;
 }
 
