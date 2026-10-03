@@ -594,9 +594,8 @@ int test_revived_cached_pmt_gets_its_filter() {
     return 0;
 }
 
-// The active PMT is the one in the pid list (#1445): with two services
-// sharing every elementary pid, only the sibling whose PMT pid is
-// subscribed starts; with no PMT pid subscribed nothing starts (FTA).
+// Two services sharing every ES pid (#1445): only the sibling whose
+// PMT pid is subscribed starts, else nothing decrypts (FTA).
 int test_pmt_starts_only_with_pmt_pid() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
@@ -945,6 +944,122 @@ int test_shared_pid_split() {
     ASSERT(find_pid(0, 701)->pmt == m1, "shared video should not move");
 
     free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
+// 30W 12437H: pid 817 carries dozens of PMTs (Meo/Nos). SIDs 1338/6043
+// share all A/V pids with different ECMs; 807 is disjoint. Lowest sid serves.
+int test_30w_shared_pmt_pid() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+    for (i = 0; i < MAX_FILTERS; i++)
+        filters[i] = NULL;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+    ad.pids[0].pid = 817;
+    ad.pids[0].flags = PID_STATE_ACTIVE;
+    ad.pids[0].pmt = -1;
+    ad.pids[0].filter = -1;
+    ad.pids[0].sid.insert(0);
+    ad.pids[0].order = 1;
+
+    int ica = add_ca(&fake_ca_op);
+    ASSERT(ica >= 0, "could not register the fake CA");
+    ad.ca_mask = 1 << ica;
+
+    // verbatim sections from the pmt817.ts sample
+    uint8_t sec6043[] = {0x02, 0xB0, 0x2A, 0x17, 0x9B, 0xE9, 0x00, 0x00, 0xFD,
+                         0x30, 0xF0, 0x09, 0x09, 0x07, 0x18, 0x14, 0xE6, 0x43,
+                         0x02, 0x52, 0x11, 0x1B, 0xFD, 0x30, 0xF0, 0x00, 0x0F,
+                         0xFD, 0x31, 0xF0, 0x0A, 0x0A, 0x04, 0x70, 0x6F, 0x72,
+                         0x00, 0x7C, 0x02, 0x00, 0x00, 0x43, 0x9A, 0x7E, 0xD6};
+    uint8_t sec807[] = {
+        0x02, 0xB0, 0x2D, 0x03, 0x27, 0xE9, 0x00, 0x00, 0xFF, 0x70, 0xF0, 0x00,
+        0x0F, 0xFF, 0x71, 0xF0, 0x10, 0x09, 0x04, 0x18, 0x02, 0xE4, 0x06, 0x0A,
+        0x04, 0x70, 0x6F, 0x72, 0x00, 0x7C, 0x02, 0x00, 0x00, 0x1B, 0xFF, 0x70,
+        0xF0, 0x06, 0x09, 0x04, 0x18, 0x02, 0xE4, 0x06, 0xA0, 0x11, 0x76, 0x82};
+    uint8_t sec1338[] = {
+        0x02, 0xB0, 0x2D, 0x05, 0x3A, 0xE9, 0x00, 0x00, 0xFD, 0x30, 0xF0, 0x00,
+        0x0F, 0xFD, 0x31, 0xF0, 0x10, 0x09, 0x04, 0x18, 0x02, 0xE4, 0xCF, 0x0A,
+        0x04, 0x70, 0x6F, 0x72, 0x00, 0x7C, 0x02, 0x00, 0x00, 0x1B, 0xFD, 0x30,
+        0xF0, 0x06, 0x09, 0x04, 0x18, 0x02, 0xE4, 0xCF, 0xDD, 0x41, 0xAD, 0x2C};
+
+    int f1 = add_filter(0, 817, (void *)process_pmt, NULL, 0);
+    int f2 = add_filter(0, 817, (void *)process_pmt, NULL, 0);
+    int f3 = add_filter(0, 817, (void *)process_pmt, NULL, 0);
+    ASSERT(f1 >= 0 && f2 >= 0 && f3 >= 0, "need three filters on pid 817");
+
+    // higher sid parses first: the winner must not depend on arrival
+    ASSERT(process_pmt(f1, sec6043, sizeof(sec6043), NULL) == 0,
+           "6043 to parse");
+    ASSERT(process_pmt(f2, sec1338, sizeof(sec1338), NULL) == 0,
+           "1338 to parse");
+    ASSERT(process_pmt(f3, sec807, sizeof(sec807), NULL) == 0, "807 to parse");
+
+    SPMT *p1338 = get_pmt_for_sid_pid(0, 1338, 817);
+    SPMT *p6043 = get_pmt_for_sid_pid(0, 6043, 817);
+    SPMT *p807 = get_pmt_for_sid_pid(0, 807, 817);
+    ASSERT(p1338 && p6043 && p807, "each sid should own a PMT object");
+    ASSERT(p1338->stream_pids.size() == 2, "1338 should hold two streams");
+    ASSERT(p6043->stream_pids.size() == 2, "6043 should hold two streams");
+    ASSERT(p807->stream_pids.size() == 2, "807 should hold two streams");
+    ad.active_pmts = 3;
+    ad.active_pmt[0] = p1338->id;
+    ad.active_pmt[1] = p6043->id;
+    ad.active_pmt[2] = p807->id;
+
+    auto carries_ecm = [](SPMT *p, int ecm) {
+        for (auto &d : p->descriptors)
+            if (d.type == 0x09 && d.get_ca_descriptor_capid() == ecm)
+                return true;
+        for (auto &sp : p->stream_pids)
+            for (auto &d : sp.descriptors)
+                if (d.type == 0x09 && d.get_ca_descriptor_capid() == ecm)
+                    return true;
+        return false;
+    };
+    ASSERT(carries_ecm(p1338, 1231), "1338 should carry ECM 1231");
+    ASSERT(carries_ecm(p6043, 1603), "6043 should carry ECM 1603");
+    ASSERT(carries_ecm(p807, 1030), "807 should carry ECM 1030");
+
+    ASSERT(mark_pid_add(0, 0, 7472) == 0, "pid 7472 should be added");
+    ASSERT(mark_pid_add(0, 0, 7473) == 0, "pid 7473 should be added");
+    ASSERT(mark_pid_add(0, 0, 8048) == 0, "pid 8048 should be added");
+    ASSERT(mark_pid_add(0, 0, 8049) == 0, "pid 8049 should be added");
+    update_pids(0);
+    ASSERT_EQUAL(p1338->state, PMT_RUNNING, "lowest sid should run");
+    ASSERT_EQUAL(p6043->state, PMT_STOPPED, "higher sid should wait");
+    ASSERT_EQUAL(p807->state, PMT_RUNNING, "disjoint service should run");
+    ASSERT(p6043->best, "waiter stays in the set");
+    ASSERT(find_pid(0, 7472)->pmt == p1338->id, "1338 should own video");
+    ASSERT(find_pid(0, 7473)->pmt == p1338->id, "1338 should own audio");
+    ASSERT(find_pid(0, 8048)->pmt == p807->id, "807 should own video");
+    start_active_pmts(&ad);
+    ASSERT(p1338->ca_mask != 0, "loop should send the winner");
+    ASSERT(p807->ca_mask != 0, "loop should send 807");
+    ASSERT_EQUAL(p6043->ca_mask, 0, "waiter should never be sent");
+
+    // zap away from the pair: only 807 keeps running
+    mark_pid_deleted(0, 0, 7472, NULL);
+    mark_pid_deleted(0, 0, 7473, NULL);
+    update_pids(0);
+    ASSERT_EQUAL(p1338->state, PMT_STOPPED, "1338 should stop");
+    ASSERT_EQUAL(p807->state, PMT_RUNNING, "807 should keep running");
+    ASSERT(find_pid(0, 7472) == NULL, "video pid should leave the demux");
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(p807->state, PMT_RUNNING, "807 should stay up");
+    ASSERT_EQUAL(p1338->state, PMT_STOPPED, "1338 should stay down");
+
+    del_ca(&fake_ca_op);
+    free_all_pmts();
+    free_filters();
     a[0] = NULL;
     return 0;
 }
@@ -1492,6 +1607,8 @@ int main() {
     TEST_FUNC(test_d8_shared_pid(), "testing D8 shared pid dedupe and split")
     TEST_FUNC(test_shared_pid_split(),
               "testing same-pid different sets split streams")
+    TEST_FUNC(test_30w_shared_pmt_pid(),
+              "testing 30W pid 817 multi-service election")
     TEST_FUNC(test_held_pids_without_client_stop_pmt(),
               "testing stop when pids are held without a client")
     TEST_FUNC(test_cw_keyed_by_pmt(), "testing direct CW to PMT mapping")
