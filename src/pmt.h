@@ -155,6 +155,7 @@ typedef struct struct_pmt {
     void *opaque;
     char state; // PMT state (PMT_STOPPED, PMT_STARTING, PMT_RUNNING,
                 // PMT_STOPPING)
+    char best;  // elected into the active set this election
     int filter;
     int64_t start_time;
     std::unordered_map<uint64_t, int> *global_start, *local_start;

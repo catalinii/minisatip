@@ -874,6 +874,8 @@ int test_d8_subset_match() {
     ASSERT_EQUAL(pmts[m1]->state, PMT_STOPPED, "subset PMT should wait");
     ASSERT_EQUAL(pmts[m3]->state, PMT_RUNNING, "lowest sid should run");
     ASSERT_EQUAL(pmts[m4]->state, PMT_STOPPED, "higher sid should wait");
+    ASSERT(pmts[m2]->best && !pmts[m1]->best, "only the cover is best");
+    ASSERT(pmts[m3]->best && !pmts[m4]->best, "only the lowest sid is best");
 
     // request the other audio: the choice hands over to the sibling
     find_pid(0, 712)->sid.clear();
@@ -887,7 +889,108 @@ int test_d8_subset_match() {
     start_active_pmts(&ad);
     ASSERT_EQUAL(pmts[m1]->state, PMT_RUNNING, "new choice should run");
     ASSERT_EQUAL(pmts[m2]->state, PMT_STOPPED, "old choice should stop");
+    ASSERT(pmts[m1]->best && !pmts[m2]->best, "best should follow the cover");
 
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
+// No group member covers the request: all stay in the set and sticky
+// claims arbitrate, so each serves its part instead of going dark.
+int test_group_without_cover_all_contend() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+
+    int m1 = pmt_add(0, 100, 60);
+    int m2 = pmt_add(0, 200, 60);
+    pmt_add_stream_pid(pmts[m1], 701, 2, false, true);
+    pmt_add_stream_pid(pmts[m1], 711, 3, true, false);
+    pmt_add_stream_pid(pmts[m2], 701, 2, false, true);
+    pmt_add_stream_pid(pmts[m2], 712, 3, true, false);
+    ad.active_pmts = 2;
+    ad.active_pmt[0] = m1;
+    ad.active_pmt[1] = m2;
+
+    int pids[] = {60, 701, 711, 712};
+    for (i = 0; i < 4; i++) {
+        ad.pids[i].pid = pids[i];
+        ad.pids[i].flags = PID_STATE_ACTIVE;
+        ad.pids[i].pmt = -1;
+        ad.pids[i].filter = -1;
+        ad.pids[i].sid.insert(0);
+        ad.pids[i].order = i + 1;
+    }
+    start_active_pmts(&ad);
+    ASSERT(pmts[m1]->best && pmts[m2]->best, "both should stay in the set");
+    ASSERT_EQUAL(pmts[m1]->state, PMT_RUNNING, "first contender should run");
+    ASSERT_EQUAL(pmts[m2]->state, PMT_RUNNING, "second contender should run");
+    ASSERT(find_pid(0, 701)->pmt == m1, "shared video goes to the first");
+    ASSERT(find_pid(0, 712)->pmt == m2, "own audio goes to the second");
+
+    // sticky claims: a second pass changes nothing
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[m1]->state, PMT_RUNNING, "first should stay up");
+    ASSERT_EQUAL(pmts[m2]->state, PMT_RUNNING, "second should stay up");
+    ASSERT(find_pid(0, 701)->pmt == m1, "shared video should not move");
+
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
+// A RUNNING PMT whose pids are held without any client sid (DDCI marks)
+// is out of the set and must stop, releasing its CA registration.
+int test_held_pids_without_client_stop_pmt() {
+    int i;
+    uint8_t priv[1] = {0};
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    int ica = add_ca(&fake_ca_op);
+    ASSERT(ica >= 0, "could not register the fake CA");
+    ad.ca_mask = 1 << ica;
+
+    int id = pmt_add(0, 100, 48);
+    ASSERT(id >= 0, "could not create the PMT");
+    pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
+    pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
+    pmt_add_caid(pmts[id], 0x0664, 0x1F06, priv, 0);
+    send_pmt_to_cas(&ad, pmts[id]);
+    ASSERT(pmts[id]->ca_mask != 0, "PMT was not registered with the CA");
+    pmts[id]->state = PMT_RUNNING;
+    ad.active_pmts = 1;
+    ad.active_pmt[0] = id;
+
+    int pids[] = {48, 3301, 3401};
+    for (i = 0; i < 3; i++) {
+        ad.pids[i].pid = pids[i];
+        ad.pids[i].flags = PID_STATE_ACTIVE;
+        ad.pids[i].pmt = id;
+        ad.pids[i].filter = -1;
+        ad.pids[i].sid.insert(DDCI_SID);
+    }
+    fake_ca_del_calls = 0;
+    update_pids(0);
+    ASSERT_EQUAL(pmts[id]->state, PMT_STOPPED, "held PMT should stop");
+    ASSERT_EQUAL(fake_ca_del_calls, 1, "held PMT should release the CA");
+    ASSERT_EQUAL(pmts[id]->ca_mask, 0, "CA registration should be gone");
+
+    del_ca(&fake_ca_op);
     free_all_pmts();
     a[0] = NULL;
     return 0;
@@ -1385,6 +1488,10 @@ int main() {
               "testing SPid order assignment and reset")
     TEST_FUNC(test_d8_subset_match(),
               "testing multi-service PMT pid subset selection")
+    TEST_FUNC(test_group_without_cover_all_contend(),
+              "testing uncovered groups keep all contending")
+    TEST_FUNC(test_held_pids_without_client_stop_pmt(),
+              "testing stop when pids are held without a client")
     TEST_FUNC(test_cw_keyed_by_pmt(), "testing direct CW to PMT mapping")
     TEST_FUNC(test_pids_all_expands_pmt_pids(),
               "testing pids=all PMT pid expansion")

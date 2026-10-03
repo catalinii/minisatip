@@ -1034,28 +1034,9 @@ static int pmt_carries_pid(SPMT *pmt, int pid) {
 
 typedef struct {
     SPMT *pmt;
-    char candidate, chosen, resolved;
+    char candidate;
     uint32_t order;
 } SPmtChoice;
-
-// The chosen sibling takes over when every subscribed AV pid is free,
-// its own, or held by the same pid group (freed by the demotion).
-static int chosen_activatable(SPid **pids, SPMT *chosen) {
-    for (const auto &sp : chosen->stream_pids) {
-        SPid *s;
-        SPMT *o;
-        if (!sp.is_audio && !sp.is_video)
-            continue;
-        s = pids[sp.pid];
-        if (!s || s->pmt < 0 || s->pmt == chosen->id)
-            continue;
-        o = get_pmt(s->pmt);
-        if (!o || o->pid == chosen->pid)
-            continue;
-        return 0;
-    }
-    return 1;
-}
 
 // Subscription gate for the late-parse handover: own PMT pid plus one
 // audio/video pid subscribed by a real client.
@@ -1103,23 +1084,6 @@ static void handover_claims_from_lower_priority(adapter *ad, SPMT *pmt) {
     }
 }
 
-// A running PMT yields when a sibling on its PMT pid is chosen and
-// the sibling can actually take over its audio/video pids.
-static int yields_to_chosen_sibling(SPmtChoice *ch, int nch, SPid **pids,
-                                    int i) {
-    int j, chosen = -1, contested = 0;
-    for (j = 0; j < nch; j++) {
-        if (j == i || !ch[j].candidate || ch[j].pmt->pid != ch[i].pmt->pid)
-            continue;
-        contested = 1;
-        if (ch[j].chosen)
-            chosen = j;
-    }
-    if (!contested || ch[i].chosen || chosen < 0)
-        return 0;
-    return chosen_activatable(pids, ch[chosen].pmt);
-}
-
 // A PMT runs while its PMT pid is client-subscribed and it owns a
 // subscribed AV pid. Claims are sticky; preemption happens at parse.
 void pmt_pid_updated_pids(adapter *ad) {
@@ -1133,35 +1097,31 @@ void pmt_pid_updated_pids(adapter *ad) {
         if (ad->pids[i].flags == PID_STATE_ACTIVE) {
             pids[ad->pids[i].pid] = ad->pids + i;
         }
+    for (i = 0; i < ad->active_pmts; i++) {
+        SPMT *pmt = get_pmt(ad->active_pmt[i]);
+        if (pmt)
+            pmt->best = 0;
+    }
     for (i = 0; i < ad->active_pmts && nch < MAX_PMT_FOR_ADAPTER; i++) {
         SPMT *pmt = get_pmt(ad->active_pmt[i]);
         SPid *pp;
-        if (!pmt)
+        if (!pmt || !is_start_candidate(pids, pmt))
             continue;
         pp = pids[pmt->pid];
         ch[nch].pmt = pmt;
-        ch[nch].candidate = is_start_candidate(pids, pmt);
-        ch[nch].chosen = 0;
-        ch[nch].resolved = 0;
+        ch[nch].candidate = 1;
         ch[nch].order = (pp && pp->order) ? pp->order : UINT32_MAX;
         nch++;
     }
 
-    // D8: one PMT pid shared by several PMTs yields a single choice, the
-    // candidate whose ES set covers the requested pids, lowest sid on ties.
+    // Decide the new active set: each PMT-pid group elects its covering
+    // member, lowest sid on ties; uncovered groups keep all contending.
     for (i = 0; i < nch; i++) {
         int group[MAX_PMT_FOR_ADAPTER], ngroup = 0, j, best = -1;
-        if (!ch[i].candidate || ch[i].resolved)
-            continue;
+        // all same-pid members, decided or not, so the group is stable
         for (j = 0; j < nch; j++)
-            if (ch[j].candidate && !ch[j].resolved &&
-                ch[j].pmt->pid == ch[i].pmt->pid)
+            if (ch[j].pmt->pid == ch[i].pmt->pid)
                 group[ngroup++] = j;
-        if (ngroup == 1) {
-            ch[group[0]].chosen = 1;
-            ch[group[0]].resolved = 1;
-            continue;
-        }
         for (j = 0; j < ngroup; j++) {
             SPMT *m = ch[group[j]].pmt;
             int covers = 1, g;
@@ -1177,33 +1137,37 @@ void pmt_pid_updated_pids(adapter *ad) {
                 }
             if (covers && (best < 0 || m->sid < ch[best].pmt->sid))
                 best = group[j];
-            ch[group[j]].resolved = 1;
         }
-        if (best >= 0)
-            ch[best].chosen = 1;
+        if (best < 0) {
+            ch[i].pmt->best = 1;
+            continue;
+        }
+        ch[i].candidate = (best == i);
+        ch[i].pmt->best = (best == i);
     }
 
-    // Phase 1: stops. A PMT that lost its subscription or yields to a
-    // chosen sibling stops here; claim failure is rechecked after Phase 2.
-    for (i = 0; i < nch; i++) {
-        SPMT *pmt = ch[i].pmt;
+    // Stop old PMTs that are not in the new active set anymore.
+    for (i = 0; i < ad->active_pmts; i++) {
+        SPMT *pmt = get_pmt(ad->active_pmt[i]);
+        if (!pmt)
+            continue;
         if (pmt->state != PMT_RUNNING && pmt->state != PMT_STARTING)
             continue;
-        if (!ch[i].candidate || yields_to_chosen_sibling(ch, nch, pids, i)) {
+        if (!pmt->best) {
             LOG("Stopping started PMT %d: %s", pmt->id, pmt->name);
             stop_pmt(pmt, ad);
             release_pmt_claims(ad, pmt);
         }
     }
 
-    // Phase 2: claims and starts in PMT pid subscription order, so the
+    // Claim and start the set in PMT pid subscription order, so the
     // earliest subscriber wins free pids deterministically in one pass.
     std::sort(ch, ch + nch, [](const SPmtChoice &a, const SPmtChoice &b) {
         return a.order != b.order ? a.order < b.order : a.pmt->id < b.pmt->id;
     });
     for (i = 0; i < nch; i++) {
         SPMT *pmt = ch[i].pmt;
-        if (!ch[i].candidate || !ch[i].chosen)
+        if (!ch[i].candidate)
             continue;
         for (const auto &sp : pmt->stream_pids) {
             SPid *s = pids[sp.pid];
