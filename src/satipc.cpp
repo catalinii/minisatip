@@ -242,6 +242,7 @@ int satipc_reply(sockets *s) {
     // Fritzbox did reply 408 when mtype is missing
     if (rc == 408) {
         sip->state = SATIP_STATE_SETUP;
+        sip->force_pids = true; // resend full pids, deltas are lost
         sip->last_setup = -10000;
         // quirk for Aurora client missing mtype
         if (ad->tp.mtype.value_or(QAM_AUTO) == QAM_AUTO)
@@ -251,6 +252,8 @@ int satipc_reply(sockets *s) {
     if (rc == 404) {
         // Session is gone server-side: start over, unless we gave up
         sip->state = ad->err ? SATIP_STATE_INACTIVE : SATIP_STATE_SETUP;
+        if (!ad->err)
+            sip->force_pids = true; // resend full pids, deltas are lost
     }
 
     // quirk for Geniatech EyeTV Netstream 4C when fe=x is in the URL
@@ -261,6 +264,8 @@ int satipc_reply(sockets *s) {
     if (rc == 454) {
         // Session expired server-side: start over, unless we gave up
         sip->state = ad->err ? SATIP_STATE_INACTIVE : SATIP_STATE_SETUP;
+        if (!ad->err)
+            sip->force_pids = true; // resend full pids, deltas are lost
     } else if (rc == 503 || rc == 405 || rc == 400) {
         // Server refuses the request: release the session if any, then
         // retry like a session loss, unless we gave up (#904)
@@ -272,6 +277,8 @@ int satipc_reply(sockets *s) {
         } else {
             sip->state = SATIP_STATE_SETUP;
         }
+        if (!ad->err)
+            sip->force_pids = true; // resend full pids, deltas are lost
         LOG("satipc %d: request rejected (rc %d), retrying", sip->id, rc);
     } else if (rc != 200) {
         if (rc != 0) // AVM Fritz!Box workaround sdp reply without header
@@ -1545,8 +1552,10 @@ void satipc_get_pids(adapter *ad, satipc *sip, char *url, int size,
     int len = 0;
 
     // Use pids= only when forced to use pids=
-    if (sip->force_pids)
+    if (sip->force_pids) {
         send_pids = 1;
+        sip->force_pids = false; // one shot: full list goes out once
+    }
 
     if (!sip->lap && !sip->ldp)
         send_pids = 1;
