@@ -249,7 +249,8 @@ int satipc_reply(sockets *s) {
     }
 
     if (rc == 404) {
-        sip->state = SATIP_STATE_SETUP;
+        // Session is gone server-side: start over, unless we gave up
+        sip->state = ad->err ? SATIP_STATE_INACTIVE : SATIP_STATE_SETUP;
     }
 
     // quirk for Geniatech EyeTV Netstream 4C when fe=x is in the URL
@@ -257,19 +258,19 @@ int satipc_reply(sockets *s) {
         if (ad->sys[0] == SYS_DVBC_ANNEX_A || ad->sys[0] == SYS_DVBC2)
             sip->satip_fe = 0;
 
-    if (rc == 454 || rc == 503 || rc == 405 || rc == 400) {
-        int delay_ms = 2000 << sip->setup_rejects;
-        sip->state = SATIP_STATE_SETUP;
-        // Release the server session, then back off before the next SETUP
-        if (sip->stream_id != -1)
+    if (rc == 454) {
+        // Session expired server-side: start over, unless we gave up
+        sip->state = ad->err ? SATIP_STATE_INACTIVE : SATIP_STATE_SETUP;
+    } else if (rc == 503 || rc == 405 || rc == 400) {
+        // Server refuses the request: tear down and fail, no retry (#904)
+        if (sip->stream_id != -1) {
+            sip->state = SATIP_STATE_TEARDOWN;
             satipc_send_teardown(ad, sip);
-        if (sip->setup_rejects < 4)
-            sip->setup_rejects++;
-        if (delay_ms > 30000)
-            delay_ms = 30000;
-        sip->retry_setup_after = getTick() + delay_ms;
-        LOG("satipc %d: request rejected (rc %d), retrying SETUP in %d ms",
-            sip->id, rc, delay_ms);
+        } else {
+            sip->state = SATIP_STATE_INACTIVE;
+        }
+        ad->err = 1;
+        LOG("satipc %d: request rejected (rc %d), tearing down", sip->id, rc);
     } else if (rc != 200) {
         if (rc != 0) // AVM Fritz!Box workaround sdp reply without header
         {
@@ -291,16 +292,11 @@ int satipc_reply(sockets *s) {
 
         switch (sip->state) {
         case SATIP_STATE_SETUP:
-            if (sip->last_cmd == RTSP_SETUP) {
+            if (sip->last_cmd == RTSP_SETUP)
                 sip->state = SATIP_STATE_PLAY;
-                sip->setup_rejects = 0;
-                sip->retry_setup_after = 0;
-            }
             break;
         case SATIP_STATE_PLAY:
             satipc_handle_play(ad, sip);
-            sip->setup_rejects = 0;
-            sip->retry_setup_after = 0;
             break;
         case SATIP_STATE_TEARDOWN:
             if (sip->last_cmd == RTSP_TEARDOWN)
@@ -450,14 +446,6 @@ int satipc_timeout(sockets *s) {
     }
 
     if (sip->want_tune || sip->lap || sip->ldp) {
-        // This fires about every 200 ms while ops are queued, which
-        // drives the SETUP retry once its backoff has elapsed (#904)
-        if (sip->state == SATIP_STATE_SETUP && sip->retry_setup_after > 0) {
-            if (getTick() < sip->retry_setup_after)
-                return 0;
-            sip->retry_setup_after = 0;
-            return satipc_request(ad);
-        }
         LOG("satipc %d no timeout will be performed as we have operations "
             "in queue tune %d lap %d ldp %d",
             sip->id, sip->want_tune, sip->lap, sip->ldp);
@@ -776,8 +764,6 @@ int satipc_open_device(adapter *ad) {
     sip->num_describe = 0;
     sip->force_pids = false;
     sip->last_setup = -10000;
-    sip->retry_setup_after = 0;
-    sip->setup_rejects = 0;
     sip->last_cmd = 0;
     sip->enabled = 1;
     sip->rtsp_socket_closed = false;
@@ -1690,8 +1676,10 @@ int satipc_request(adapter *ad) {
         return 0;
     }
 
-    // if TEARDOWN has been recently received then re-start the session
-    if (sip->state == SATIP_STATE_INACTIVE && sip->last_cmd == RTSP_TEARDOWN)
+    // if TEARDOWN has been recently received then re-start the session,
+    // unless the adapter is in error state after giving up (#904)
+    if (sip->state == SATIP_STATE_INACTIVE && !ad->err &&
+        sip->last_cmd == RTSP_TEARDOWN)
         sip->state = SATIP_STATE_SETUP;
 
     // set the init parameters
@@ -1701,13 +1689,6 @@ int satipc_request(adapter *ad) {
         sip->session[0] = 0;
         sip->want_tune = true;
         sip->want_commit = true;
-    }
-
-    // Hold off SETUP while backing off from a rejected request (#904)
-    if (sip->state == SATIP_STATE_SETUP && sip->retry_setup_after > 0) {
-        if (getTick() < sip->retry_setup_after)
-            return 0;
-        sip->retry_setup_after = 0;
     }
 
     // PLAY contains the setup details as well

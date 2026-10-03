@@ -24,7 +24,6 @@
 #include "satipc.h"
 #include "utils.h"
 #include "utils/testing.h"
-#include "utils/ticks.h"
 
 #include "httpc.h"
 #include <cstring>
@@ -33,7 +32,7 @@ extern void satip_getxml_data(char *data, int len, void *opaque,
                               Shttp_client *h);
 extern void satipc_get_pids(adapter *ad, satipc *sip, char *url, int size,
                             int send_pids);
-extern int satipc_request(adapter *ad);
+extern int satipc_reply(sockets *s);
 
 int test_get_s2_url_multistream_isi() {
     adapter ad = {};
@@ -229,38 +228,74 @@ int test_satipc_get_pids_add_and_del() {
     return 0;
 }
 
-int test_satipc_setup_retry_backoff() {
+static void send_rtsp_reply(sockets *s, char *buf, const char *reply) {
+    strcpy(buf, reply);
+    s->rlen = strlen(buf);
+    satipc_reply(s);
+}
+
+int test_satipc_reject_teardown_no_retry() {
     adapter ad = {};
-    ad.tp.clear();
+    satipc sip = {};
+    sockets s = {};
+    char buf[512];
+    adapter *saved_a = a[0];
+    satipc *saved_sip = satip[0];
+
     ad.id = 0;
+    ad.enabled = 1;
+    ad.tp.clear();
     ad.tp.freq = 11362000;
     ad.sid_cnt = 1;
-
-    satipc sip = {};
+    ad.sock = -1;
+    ad.fe_sock = -1;
     sip.enabled = 1;
-    sip.state = SATIP_STATE_SETUP;
-    satipc *saved_sip = satip[0];
+    sip.state = SATIP_STATE_PLAY;
+    sip.stream_id = 308;
+    strcpy(sip.session, "EDCD7C81");
+    a[0] = &ad;
     satip[0] = &sip;
 
-    // Backoff pending: SETUP must not go out but the tune stays queued
-    sip.retry_setup_after = getTick() + 60000;
-    sip.want_tune = false;
+    s.sid = 0;
+    s.id = 1;
+    s.sock = -1;
+    s.buf = (unsigned char *)buf;
+
+    // 503 to PLAY tears the session down and fails the adapter
+    send_rtsp_reply(
+        &s, buf, "RTSP/1.0 503 Service Unavailable\r\nCSeq: 110\r\n\r\n");
+    ASSERT(ad.err == 1, "503 must mark the adapter in error");
+    ASSERT(sip.state == SATIP_STATE_TEARDOWN, "503 must move to TEARDOWN");
+    ASSERT(sip.stream_id == -1, "TEARDOWN must drop the stream");
+
+    // The TEARDOWN reply parks the adapter instead of re-setting up
     sip.ignore_packets = false;
-    satipc_request(&ad);
-    ASSERT(sip.want_tune,
-           "tune must stay queued while SETUP backs off after rejection");
-    ASSERT(!sip.ignore_packets,
-           "SETUP must not be sent while the rejection backoff is pending");
+    send_rtsp_reply(&s, buf, "RTSP/1.0 200 OK\r\nCSeq: 111\r\n\r\n");
+    ASSERT(sip.state == SATIP_STATE_INACTIVE,
+           "TEARDOWN reply must park the adapter");
+    ASSERT(!sip.ignore_packets, "no SETUP may follow the teardown in error");
+    ASSERT(ad.err == 1, "adapter stays in error until the next tune");
 
-    // Backoff elapsed: SETUP goes out and the timer is cleared
-    sip.retry_setup_after = 5;
-    while (getTick() <= 5)
-        ;
-    satipc_request(&ad);
-    ASSERT(sip.ignore_packets, "SETUP must be sent after backoff elapses");
-    ASSERT(sip.retry_setup_after == 0,
-           "backoff timer must be cleared once SETUP is sent");
+    // 454 without error still restarts the session (expiry recovery)
+    ad.err = 0;
+    sip.state = SATIP_STATE_PLAY;
+    sip.stream_id = 309;
+    send_rtsp_reply(&s, buf,
+                    "RTSP/1.0 454 Session Not Found\r\nCSeq: 112\r\n\r\n");
+    ASSERT(sip.state == SATIP_STATE_SETUP,
+           "454 must restart the session when healthy");
 
+    // 454 while in error stays parked
+    ad.err = 1;
+    sip.state = SATIP_STATE_INACTIVE;
+    sip.ignore_packets = false;
+    send_rtsp_reply(&s, buf,
+                    "RTSP/1.0 454 Session Not Found\r\nCSeq: 113\r\n\r\n");
+    ASSERT(sip.state == SATIP_STATE_INACTIVE,
+           "454 must not restart while in error");
+    ASSERT(!sip.ignore_packets, "no SETUP may follow while in error");
+
+    a[0] = saved_a;
     satip[0] = saved_sip;
     return 0;
 }
@@ -282,8 +317,8 @@ int main() {
               "test satip_getxml_data parses satipcap delivery systems");
     TEST_FUNC(test_satipc_get_pids_add_and_del(),
               "test satipc_get_pids separates addpids/delpids with '&'");
-    TEST_FUNC(test_satipc_setup_retry_backoff(),
-              "test rejected SETUP backs off instead of retrying at once");
+    TEST_FUNC(test_satipc_reject_teardown_no_retry(),
+              "test rejected SETUP tears down instead of retrying");
 
     return 0;
 }

@@ -45,8 +45,6 @@ typedef struct struct_satipc {
     char no_pids_all;
     char state;
     int64_t last_setup, last_connect, last_close, last_response_sent;
-    int64_t retry_setup_after; // no SETUP before this tick (rejection backoff)
-    int setup_rejects;         // consecutive SETUP/PLAY rejections
     uint8_t addpids, setup_pids;
     unsigned char *tcp_data;
     int tcp_size, tcp_pos, tcp_len;
