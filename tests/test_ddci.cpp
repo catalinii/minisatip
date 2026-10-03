@@ -759,6 +759,7 @@ int test_create_pmt() {
                  "Number of caids does not matches "
                  "between generated PMT and read PMT");
 
+    a[0] = NULL;
     return 0;
 }
 
@@ -771,8 +772,9 @@ int test_create_pmt_maps_es_ecm_pids() {
     d.enabled = 1;
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[0] = &d;
-    for (int i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    a[0] = NULL;
+    // free, not just NULL: earlier tests never released their PMTs
+    free_all_pmts();
     npmts = 0;
     ca_devices[0] = NULL;
     ca_devices[1] = NULL;
