@@ -23,17 +23,22 @@
 #include "minisatip.h"
 #include "socketworks.h"
 #include "stream.h"
+#include <atomic>
+#include <mutex>
 #include <srt/srt.h>
 #include <stdio.h>
 #include <string>
+#include <thread>
 #include <unistd.h>
 #include <unordered_map>
 
 #define DEFAULT_LOG LOG_STREAM
+#define SRT_PENDING_MAX 64
 
-static SRTSOCKET srt_listener_sock = SRT_INVALID_SOCK;
+// Mutex guards map access only, never srt_* calls (SRT lock-order safety).
+static std::atomic<SRTSOCKET> srt_listener_sock{SRT_INVALID_SOCK};
 static int srt_listener_udp_fd = -1;
-// Pending map for accepted SRT sockets not yet matched to a stream
+static std::mutex srt_pending_mutex;
 static std::unordered_map<std::string, SRTSOCKET> srt_pending;
 
 // Check if SRT listener is initialized
@@ -51,6 +56,7 @@ int srt_socket_is_connected(SRTSOCKET sock) {
 // Called from decode_transport_srt when a stream is ready.
 // Returns the accepted SRTSOCKET or SRT_INVALID_SOCK if not found.
 SRTSOCKET srt_pending_take(const std::string &streamid) {
+    std::lock_guard<std::mutex> lock(srt_pending_mutex);
     auto it = srt_pending.find(streamid);
     if (it == srt_pending.end())
         return SRT_INVALID_SOCK;
@@ -65,15 +71,26 @@ void srt_pending_return(SRTSOCKET sock, const std::string &streamid) {
     if (sock == SRT_INVALID_SOCK)
         return;
     // Only reuse connected sockets
-    if (srt_socket_is_connected(sock)) {
-        srt_pending[streamid] = sock;
-        LOG("SRT socket %d returned to pending pool for reuse, streamid='%s'",
-            sock, streamid.c_str());
-    } else {
+    if (!srt_socket_is_connected(sock)) {
         srt_close(sock);
         LOG("SRT socket %d closed (not connected), streamid='%s'", sock,
             streamid.c_str());
+        return;
     }
+    SRTSOCKET old = SRT_INVALID_SOCK;
+    {
+        std::lock_guard<std::mutex> lock(srt_pending_mutex);
+        auto it = srt_pending.find(streamid);
+        if (it != srt_pending.end() && it->second != sock) {
+            old = it->second;
+            srt_pending.erase(it);
+        }
+        srt_pending[streamid] = sock;
+    }
+    if (old != SRT_INVALID_SOCK)
+        srt_close(old);
+    LOG("SRT socket %d returned to pending pool for reuse, streamid='%s'", sock,
+        streamid.c_str());
 }
 
 // Pre-accept callback function - called by SRT during handshake for each
@@ -85,13 +102,39 @@ static int srt_accept_poll(void *opaq, SRTSOCKET ns, int hsversion,
         LOG("SRT accept: empty streamid, rejecting connection");
         return -1; // reject
     }
-    // No waiting stream found, queue in pending
-    srt_pending[streamid] = ns;
-    LOG("SRT accepted connection srt_sock=%d, streamid='%s' "
-        "(%zu "
-        "pending)",
-        ns, streamid, srt_pending.size());
+    SRTSOCKET old = SRT_INVALID_SOCK;
+    size_t pending = 0;
+    {
+        std::lock_guard<std::mutex> lock(srt_pending_mutex);
+        if (srt_pending.size() >= SRT_PENDING_MAX) {
+            LOG("SRT accept: pending pool full (%d), rejecting connection",
+                SRT_PENDING_MAX);
+            return -1; // reject
+        }
+        auto it = srt_pending.find(streamid);
+        if (it != srt_pending.end() && it->second != ns) {
+            old = it->second;
+            srt_pending.erase(it);
+        }
+        // No waiting stream found, queue in pending
+        srt_pending[streamid] = ns;
+        pending = srt_pending.size();
+    }
+    if (old != SRT_INVALID_SOCK)
+        srt_close(old);
+    LOG("SRT accepted connection srt_sock=%d, streamid='%s' (%zu pending)", ns,
+        streamid, pending);
     return 0; // accept
+}
+
+// The callback uses accepted sockets directly, but each still occupies an
+// accept-queue slot until srt_accept pops it: drain the queue so the
+// backlog never fills. srt_close wakes the blocked accept on shutdown.
+static void srt_accept_drain() {
+    while (srt_listener_sock != SRT_INVALID_SOCK) {
+        if (srt_accept(srt_listener_sock, NULL, NULL) == SRT_INVALID_SOCK)
+            break;
+    }
 }
 
 int srt_listener_init() {
@@ -142,9 +185,13 @@ int srt_listener_init() {
                        srt_getlasterror_str());
     }
 
-    srt_pending.clear();
+    {
+        std::lock_guard<std::mutex> lock(srt_pending_mutex);
+        srt_pending.clear();
+    }
+    std::thread(srt_accept_drain).detach();
     LOG("SRT listener started on port %d, srt_sock=%d, udp_fd=%d",
-        opts.rtsp_port, srt_listener_sock, srt_listener_udp_fd);
+        opts.rtsp_port, srt_listener_sock.load(), srt_listener_udp_fd);
     return 0;
 }
 
@@ -155,9 +202,13 @@ void srt_listener_close() {
         srt_listener_udp_fd = -1;
     }
     // Close any pending accepted sockets
-    for (auto &p : srt_pending)
+    std::unordered_map<std::string, SRTSOCKET> dropped;
+    {
+        std::lock_guard<std::mutex> lock(srt_pending_mutex);
+        dropped.swap(srt_pending);
+    }
+    for (auto &p : dropped)
         srt_close(p.second);
-    srt_pending.clear();
 }
 
 #endif // DISABLE_SRT

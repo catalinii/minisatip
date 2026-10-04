@@ -58,7 +58,6 @@ int test_icam_mode_only_from_ecms() {
     SKey *k;
 
     pmt.enabled = 1;
-    pmt.master_pmt = -1;
     pmts[0] = &pmt;
     npmts = 1;
     id = keys_add(-1, 0, 0);
@@ -90,6 +89,7 @@ int test_icam_mode_only_from_ecms() {
     keys_del(id);
     pmts[0] = NULL;
     npmts = 0;
+    free_filters();
     return 0;
 }
 
@@ -100,7 +100,6 @@ int test_channel_falls_back_to_sid() {
     SKey *k;
 
     pmt.enabled = 1;
-    pmt.master_pmt = -1;
     pmt.sid = 1234;
     pmts[0] = &pmt;
     npmts = 1;

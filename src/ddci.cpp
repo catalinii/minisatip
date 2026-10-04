@@ -269,6 +269,7 @@ int create_channel_for_pmt(Sddci_channel *c, SPMT *pmt) {
  */
 int find_ddci_for_pmt(Sddci_channel *c, SPMT *pmt) {
     int ddid = -100; // -100 means we didn't find a suitable device
+    int saw_full = 0;
 
     int i = 0;
     for (i = 0; i < c->ddcis; i++) {
@@ -285,6 +286,7 @@ int find_ddci_for_pmt(Sddci_channel *c, SPMT *pmt) {
                 "%d max %d), skipping",
                 __FUNCTION__, candidate, pmt->id, pmt->pid, pmt->sid,
                 d ? d->channels : -1, d ? d->max_channels : -1);
+            saw_full = 1;
             continue;
         }
 
@@ -293,6 +295,12 @@ int find_ddci_for_pmt(Sddci_channel *c, SPMT *pmt) {
     }
 
     if (ddid == -100) {
+        // Full candidates free up later: retry instead of disabling the PMT.
+        if (saw_full) {
+            LOG("%s: all DDCIs full for PMT %d (sid %d), retrying",
+                __FUNCTION__, pmt->id, pmt->sid);
+            return -TABLES_RESULT_ERROR_RETRY;
+        }
         // Distinguish between otherwise not found and deliberately not assigned
         if (c->ddcis == 0) {
             LOG("%s: no suitable DDCI found for PMT %d (sid %d): not mapped to "
@@ -402,10 +410,8 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     d->pmt[pos].ver = (d->pmt[pos].ver + 1) & 0xF;
 
     d->ver = (d->ver + 1) & 0xF;
-    // Count only a new registration. send_pmt_to_cas() calls us again for a
-    // PMT that already holds a slot whenever pmt_add_caid() finds a new CA
-    // descriptor (it clears pmt->ca_mask to force a re-send); counting those
-    // re-sends used up max_channels with a single real channel.
+    // Count only new registrations: pmt_add_caid() re-sends clear ca_mask,
+    // and counting re-sends used up max_channels with one real channel.
     if (!already_registered && !d->channels++) {
         // for first PMT set transponder ID
         d->tid = ad->transponder_id;
@@ -471,14 +477,29 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
     ddci_mapping_table_t *m = get_pid_mapping_allddci(ad->id, spmt->pid);
     if (!m) {
         dump_mapping_table();
-        LOG_AND_RETURN(
-            0, "%s: pid mapping for adapter %d, pmt %d and pid %d not found",
+        LOG("%s: pid mapping for adapter %d, pmt %d and pid %d not found",
             __FUNCTION__, ad->id, spmt->id, spmt->pid);
+        // No mapping: still sweep every device for a slot this PMT holds,
+        // otherwise the slot and channel count leak.
+        for (i = 0; i < MAX_ADAPTERS; i++) {
+            ddci_device_t *d = get_ddci(i);
+            if (!d)
+                continue;
+            std::lock_guard<SMutex> lock(d->mutex);
+            for (int j = 0; j < d->max_channels; j++)
+                if (d->pmt[j].id == pmt) {
+                    d->pmt[j].id = -1;
+                    if (d->channels > 0)
+                        d->channels--;
+                }
+        }
+        return 0;
     }
     ddci_device_t *d = get_ddci(m->ddci);
     if (!d)
         LOG_AND_RETURN(0, "%s: ddci %d already disabled", __FUNCTION__,
                        m->ddci);
+    std::lock_guard<SMutex> lock(d->mutex);
     d->ver = (d->ver + 1) & 0xF;
 
     // Decrement only if this PMT actually held a slot, symmetric with
@@ -720,6 +741,11 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
     // Add CA IDs and CA Pids
     for (i = 0; i < pmt->caids; i++) {
         int private_data_len = pmt->ca[i]->private_data_len;
+        if (b - new_pmt + 10 + private_data_len > pmt_size) {
+            LOG("%s: truncating PMT %d program CA list, buffer full",
+                __FUNCTION__, pmt->id);
+            break;
+        }
         *b++ = 0x09;
         *b++ = 0x04 + private_data_len;
         copy16(b, 0, pmt->ca[i]->id);
@@ -748,25 +774,42 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
             }
         }
 
+        // ES info length
+        int es_info_len = 0;
+        for (const auto &desc : stream_pid.descriptors) {
+            es_info_len += desc.len + 2;
+        }
+        if (b - new_pmt + 9 + es_info_len > pmt_size) {
+            LOG("%s: truncating PMT %d stream list, buffer full", __FUNCTION__,
+                pmt->id);
+            break;
+        }
+
         // Stream type + PID
         *b = stream_pid.type;
         copy16(b, 1, safe_get_pid_mapping(d, pmt->adapter, stream_pid.pid));
         b += 3;
 
-        // ES info length
-        int es_info_len = 0;
-        for (const auto &d : stream_pid.descriptors) {
-            es_info_len += d.len + 2;
-        }
         copy16(b, 0, es_info_len);
         b += 2;
 
-        // Descriptors
-        for (const auto &d : stream_pid.descriptors) {
-            *b++ = d.type;
-            *b++ = d.len;
-            memcpy(b, d.data.data(), d.len);
-            b += d.len;
+        // Descriptors, remapping the ECM pid of CA descriptors
+        for (const auto &desc : stream_pid.descriptors) {
+            *b++ = desc.type;
+            *b++ = desc.len;
+            if (desc.is_ca_descriptor() && desc.len >= 4 &&
+                desc.data.size() >= 4) {
+                int raw = ((desc.data[2] & 0x1F) << 8) | desc.data[3];
+                int mapped = safe_get_pid_mapping(d, pmt->adapter, raw);
+                b[0] = desc.data[0];
+                b[1] = desc.data[1];
+                b[2] = (desc.data[2] & 0xE0) | ((mapped >> 8) & 0x1F);
+                b[3] = mapped & 0xFF;
+                memcpy(b + 4, desc.data.data() + 4, desc.len - 4);
+            } else {
+                memcpy(b, desc.data.data(), desc.len);
+            }
+            b += desc.len;
         }
 
         LOGM("%s: pmt %d added pid %04X, type %02X, es_len %d", __FUNCTION__,
@@ -970,21 +1013,8 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
             iop++;
         }
 
-        // End every write with one null packet (pid 8191). The ddbridge
-        // driver hands the written data to the FPGA with a 128 byte
-        // granularity (DMA_BUFFER_ACK takes coff >> 7), so unless a write
-        // ends on a multiple of 6016 bytes (32 TS packets), up to 127 bytes
-        // of its last packet stay invisible to the FPGA and the output to the
-        // CI stops in the middle of that packet until the next write. Some
-        // CAMs drop the torn packet while descrambling (seen as 1-3 packet CC
-        // gaps on the readback, #1437). The trailing null packet takes that
-        // position instead, so every real packet is sent out complete. It
-        // costs one packet per write (~0.05 Mbit/s per source adapter).
-        // This also holds across DMA buffer wraps: the driver sizes its output
-        // buffers as dma_buf_size * 128 * 47 bytes, a multiple of both 128 and
-        // 188 (6016 = 128 * 47 = 188 * 32) for any dma_buf_size, so a packet
-        // never straddles two buffers. Keep that in mind if the buffer sizing
-        // ever changes.
+        // End every write with a null packet: the FPGA reads with 128 byte
+        // granularity, so it takes the torn tail instead of a real one (#1437).
         memset(null_tail, 0xFF, sizeof(null_tail));
         null_tail[0] = 0x47;
         null_tail[1] = 0x1F;

@@ -1,6 +1,4 @@
-/*
- * Hardware Descrambler implementation for Enigma2 DVB CA ioctls (C++23)
- */
+// Hardware Descrambler implementation for Enigma2 DVB CA ioctls (C++23)
 
 #include "hw_descrambler.h"
 #include "adapter.h"
@@ -251,7 +249,7 @@ void hw_set_cw(SCW *cw, SPMT *pmt) {
 
     k->ca_fd = ca_fd;
     k->adapter_id = ad->pa;
-    const int pmt_id = (pmt->master_pmt >= 0) ? pmt->master_pmt : pmt->id;
+    const int pmt_id = pmt->id;
     k->pmt_id = pmt_id;
     k->num_descramblers = HwSlotManager::instance().get_max_slots(ad->pa);
 
@@ -263,9 +261,9 @@ void hw_set_cw(SCW *cw, SPMT *pmt) {
         return;
     }
 
-    LOG("hw_descrambler: hw_set_cw called for PMT %d (master %d), adapter %d "
+    LOG("hw_descrambler: hw_set_cw called for PMT %d, adapter %d "
         "(pa %d, ca %d), slot %d/%d, algo %d, parity %d",
-        pmt->id, pmt_id, pmt->adapter, ad->pa, ad->fn, k->slot_index,
+        pmt->id, pmt->adapter, ad->pa, ad->fn, k->slot_index,
         k->num_descramblers, cw->algo, cw->parity);
 
     // 1. Configure Hardware Descrambler Algorithm Mode using pmt.h CA_ALGO_*
@@ -346,10 +344,10 @@ int hw_ca_del_pmt(adapter *ad, SPMT *pmt) {
     if (!opts.hw_descrambler || !ad || !pmt)
         return 0;
 
-    const int pmt_id = (pmt->master_pmt >= 0) ? pmt->master_pmt : pmt->id;
-    LOG("hw_descrambler: hw_ca_del_pmt called for PMT %d (master %d) on "
+    const int pmt_id = pmt->id;
+    LOG("hw_descrambler: hw_ca_del_pmt called for PMT %d on "
         "physical adapter %d (logical %d)",
-        pmt->id, pmt_id, ad->pa, ad->id);
+        pmt->id, ad->pa, ad->id);
 
     const std::string device_path = get_ca_device_path(ad);
     int ca_fd = HwSlotManager::instance().get_or_open_ca_fd(
@@ -400,6 +398,19 @@ SCW_op hw_aes_cbc_op = {
     .stop_cw = nullptr,
     .decrypt_stream = reinterpret_cast<Decrypt_Stream>(hw_decrypt_stream)};
 
+// Keys arrive via the CW ops; registering here only arms del/close so
+// stop_pmt releases the hw slot instead of leaking it.
+int hw_ca_add_pmt(adapter *ad, SPMT *pmt) {
+    (void)ad;
+    (void)pmt;
+    return TABLES_RESULT_OK;
+}
+
+int hw_ca_init_dev(adapter *ad) {
+    (void)ad;
+    return TABLES_RESULT_OK;
+}
+
 static SCA_op hw_ca_op{};
 
 void init_hw_descrambler() {
@@ -411,6 +422,9 @@ void init_hw_descrambler() {
         register_algo(&hw_aes_cbc_op);
 
         hw_ca_op = {};
+        hw_ca_op.ca_add_pmt = reinterpret_cast<ca_pmt_action>(hw_ca_add_pmt);
+        hw_ca_op.ca_init_dev =
+            reinterpret_cast<ca_device_action>(hw_ca_init_dev);
         hw_ca_op.ca_del_pmt = reinterpret_cast<ca_pmt_action>(hw_ca_del_pmt);
         hw_ca_op.ca_close_dev =
             reinterpret_cast<ca_device_action>(hw_ca_close_dev);

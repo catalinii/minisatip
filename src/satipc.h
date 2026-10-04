@@ -74,6 +74,7 @@ typedef struct struct_satipc {
     int udp_sock = -1; // UDP socket for SRT
     std::string
         srt_streamid; // random SRT stream ID for caller/listener correlation
+    int64_t last_srt_fail = 0; // backoff for failed SRT connects
 #endif
 } satipc;
 

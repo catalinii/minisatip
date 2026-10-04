@@ -145,9 +145,8 @@ int test_capmt_release_on_last_pmt() {
     return 0;
 }
 
-// A new PMT should go into a CAPMT of its own while there is a free one.
-// Packing it next to a PMT that is already running rewrites that CAPMT with
-// a new version and the CAM restarts the channel it carries.
+// A new PMT takes an empty CAPMT first: packing restarts the running
+// channel carried by the rewritten CAPMT.
 int test_capmt_uses_empty_slots_first() {
     ca_device_t dev;
     memset(&dev, 0, sizeof(dev));
@@ -557,6 +556,29 @@ int test_create_capmt_size_near_limit() {
     return 0;
 }
 
+// A CAPMT that does not fit must truncate, never overrun its buffer.
+int test_create_capmt_respects_length() {
+    int pmt_id = pmt_add(0, 0x100, 0x101);
+    SPMT *pmt = get_pmt(pmt_id);
+    uint8_t priv[64];
+    memset(priv, 0xAB, sizeof(priv));
+    for (int i = 0; i < MAX_CAID; i++)
+        pmt_add_caid(pmt, 0x0B00 + i, 0x570 + i, priv, sizeof(priv));
+    for (int i = 0; i < 20; i++)
+        pmt_add_stream_pid(pmt, 0x500 + i, 2, false, true);
+
+    SCAPMT scampt = {.pmt_id = pmt->id,
+                     .other_id = PMT_INVALID,
+                     .version = 1,
+                     .sid = 0x9999};
+    uint8_t capmt[128];
+    memset(capmt, 0xAA, sizeof(capmt));
+    int len =
+        create_capmt(&scampt, CLM_ONLY, capmt, 40, CMD_ID_OK_DESCRAMBLING, 0);
+    ASSERT(len > 0 && len <= 40, "CAPMT must respect its length");
+    return 0;
+}
+
 int test_get_authdata_filename() {
     const char *expected_file_name = "/tmp/ci_auth_Conax_CSP_CIPLUS_CAM_4.bin";
     char actual_filename[FILENAME_MAX];
@@ -739,9 +761,12 @@ int main() {
               "testing create_capmt with the not_selected command id");
     TEST_FUNC(test_create_capmt_size_near_limit(),
               "testing create_capmt size near 1500 byte limit");
+    TEST_FUNC(test_create_capmt_respects_length(),
+              "testing create_capmt truncates to its length");
     TEST_FUNC(
         test_close_pmt_after_caid_update(),
         "testing CA release of a PMT stopped after a CA descriptor update");
+    free_all_pmts();
     fflush(stdout);
     return 0;
 }
