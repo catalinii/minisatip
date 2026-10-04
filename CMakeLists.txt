@@ -284,6 +284,7 @@ if(BUILD_TESTING)
         tests/test_minisatip.cpp
         tests/test_utils.cpp
 	tests/test_satipc.cpp
+        tests/test_satipc_rtsp.cpp
         tests/test_socketworks.cpp
         tests/utils/test_utils_dir.cpp
         tests/test_stream.cpp

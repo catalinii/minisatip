@@ -123,6 +123,7 @@ satipc *get_satip1(int aid, const char *file, int line) {
 int http_request(adapter *ad, char *url, const char *method, int force);
 
 int satipc_request(adapter *ad);
+int satipc_send_teardown(adapter *ad, satipc *sip);
 void set_adapter_signal(adapter *ad, char *b, int rlen);
 
 void handle_client_capabilities(satipc *sip, char *buf) {
@@ -241,6 +242,7 @@ int satipc_reply(sockets *s) {
     // Fritzbox did reply 408 when mtype is missing
     if (rc == 408) {
         sip->state = SATIP_STATE_SETUP;
+        sip->force_pids = true; // resend full pids, deltas are lost
         sip->last_setup = -10000;
         // quirk for Aurora client missing mtype
         if (ad->tp.mtype.value_or(QAM_AUTO) == QAM_AUTO)
@@ -248,7 +250,10 @@ int satipc_reply(sockets *s) {
     }
 
     if (rc == 404) {
-        sip->state = SATIP_STATE_SETUP;
+        // Session is gone server-side: start over, unless we gave up
+        sip->state = ad->err ? SATIP_STATE_INACTIVE : SATIP_STATE_SETUP;
+        if (!ad->err)
+            sip->force_pids = true; // resend full pids, deltas are lost
     }
 
     // quirk for Geniatech EyeTV Netstream 4C when fe=x is in the URL
@@ -256,9 +261,25 @@ int satipc_reply(sockets *s) {
         if (ad->sys[0] == SYS_DVBC_ANNEX_A || ad->sys[0] == SYS_DVBC2)
             sip->satip_fe = 0;
 
-    if (rc == 454 || rc == 503 || rc == 405 || rc == 400) {
-        sip->state = SATIP_STATE_SETUP;
-        sip->last_setup = -10000;
+    if (rc == 454) {
+        // Session expired server-side: start over, unless we gave up
+        sip->state = ad->err ? SATIP_STATE_INACTIVE : SATIP_STATE_SETUP;
+        if (!ad->err)
+            sip->force_pids = true; // resend full pids, deltas are lost
+    } else if (rc == 503 || rc == 405 || rc == 400) {
+        // Server refuses the request: release the session if any, then
+        // retry like a session loss, unless we gave up (#904)
+        if (ad->err) {
+            sip->state = SATIP_STATE_INACTIVE;
+        } else if (sip->stream_id != -1) {
+            sip->state = SATIP_STATE_TEARDOWN;
+            satipc_send_teardown(ad, sip);
+        } else {
+            sip->state = SATIP_STATE_SETUP;
+        }
+        if (!ad->err)
+            sip->force_pids = true; // resend full pids, deltas are lost
+        LOG("satipc %d: request rejected (rc %d), retrying", sip->id, rc);
     } else if (rc != 200) {
         if (rc != 0) // AVM Fritz!Box workaround sdp reply without header
         {
@@ -1566,8 +1587,10 @@ void satipc_get_pids(adapter *ad, satipc *sip, char *url, int size,
     int len = 0;
 
     // Use pids= only when forced to use pids=
-    if (sip->force_pids)
+    if (sip->force_pids) {
         send_pids = 1;
+        sip->force_pids = false; // one shot: full list goes out once
+    }
 
     if (!sip->lap && !sip->ldp)
         send_pids = 1;
@@ -1699,8 +1722,10 @@ int satipc_request(adapter *ad) {
         return 0;
     }
 
-    // if TEARDOWN has been recently received then re-start the session
-    if (sip->state == SATIP_STATE_INACTIVE && sip->last_cmd == RTSP_TEARDOWN)
+    // if TEARDOWN has been recently received then re-start the session,
+    // unless the adapter is in error state after giving up (#904)
+    if (sip->state == SATIP_STATE_INACTIVE && !ad->err &&
+        sip->last_cmd == RTSP_TEARDOWN)
         sip->state = SATIP_STATE_SETUP;
 
     // set the init parameters
