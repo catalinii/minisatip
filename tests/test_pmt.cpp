@@ -957,6 +957,9 @@ int test_19e_11493h_zap_flows() {
     mark_pid_deleted(0, 0, 5120, NULL);
     mark_pid_deleted(0, 0, 5121, NULL);
     mark_pid_deleted(0, 0, 5122, NULL);
+    ASSERT(mark_pid_add(0, 0, 5124) == 0, "pid 5124 should be added");
+    update_pids(0);
+    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "data-only runs nothing");
     ASSERT(mark_pid_add(0, 0, 5121) == 0, "pid 5121 should be added");
     ASSERT(mark_pid_add(0, 0, 5122) == 0, "pid 5122 should be added");
     update_pids(0);
@@ -965,6 +968,7 @@ int test_19e_11493h_zap_flows() {
     ASSERT(mark_pid_add(0, 0, 5120) == 0, "pid 5120 should be added");
     update_pids(0);
     ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "PMT-after-AV runs A");
+    ASSERT(find_pid(0, 5124)->pmt == aid, "data is marked with its owner");
     ASSERT(mark_pid_add(0, 0, 5130) == 0, "pid 5130 should be added");
     update_pids(0);
     ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "first keeps running");
@@ -976,6 +980,7 @@ int test_19e_11493h_zap_flows() {
     ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "del hands over to B");
     ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "deleted PMT stops");
     ASSERT(find_pid(0, 5121)->pmt == bid, "video moves to B");
+    ASSERT(find_pid(0, 5124)->pmt == -1, "released data has no owner");
 
     free_all_pmts();
     a[0] = NULL;

@@ -1195,8 +1195,8 @@ void pmt_pid_updated_pids(adapter *ad) {
             continue;
         for (const auto &sp : pmt->stream_pids) {
             SPid *s = pids[sp.pid];
-            if (!sp.is_audio && !sp.is_video)
-                continue;
+            // Every stream (data included) is marked so the decrypt
+            // path finds an owner; only AV pid claims start the PMT.
             if (!s || !spid_has_client_sid(s) || s->pmt == pmt->id)
                 continue;
             // Sticky claims: take free or stale pids only, never steal.
