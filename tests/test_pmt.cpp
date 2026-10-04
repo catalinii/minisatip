@@ -1153,6 +1153,43 @@ int test_19e_11914h_ca_send_close() {
     return 0;
 }
 
+// DDCI marks the CI adapter's pids with DDCI_SID and no client stream exists
+// there, yet its PMT must start so the CA_PMT reaches the CAM.
+int test_ci_adapter_pmt_starts() {
+    int i;
+    free_all_pmts();
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    ad.type = ADAPTER_CI;
+
+    int id = pmt_add(0, 16542, 67);
+    ASSERT(id >= 0, "could not create the PMT");
+    pmt_add_stream_pid(pmts[id], 4942, 2, false, true);
+    pmt_add_stream_pid(pmts[id], 5042, 3, true, false);
+    ad.active_pmts = 1;
+    ad.active_pmt[0] = id;
+
+    int pids[] = {67, 4942, 5042};
+    for (i = 0; i < 3; i++) {
+        ad.pids[i].pid = pids[i];
+        ad.pids[i].flags = PID_STATE_ACTIVE;
+        ad.pids[i].pmt = -1;
+        ad.pids[i].filter = -1;
+        ad.pids[i].sid.insert(DDCI_SID);
+    }
+
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING,
+                 "the CI adapter's PMT should start");
+
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
 int test_sticky_claims_without_parse() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
@@ -2153,6 +2190,8 @@ int main() {
               "testing 19E 11582H identical pair, group and disjoint")
     TEST_FUNC(test_19e_11914h_ca_send_close(),
               "testing 19E 11914H CA send on zap and close on teardown")
+    TEST_FUNC(test_ci_adapter_pmt_starts(),
+              "testing that the CI adapter PMT starts")
     TEST_FUNC(test_1129_stingray_shared_vpid(),
               "testing #1129 Stingray shared VPID follows subscription")
     TEST_FUNC(test_held_pids_without_client_stop_pmt(),

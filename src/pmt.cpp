@@ -1001,26 +1001,35 @@ static void release_pmt_claims(adapter *ad, SPMT *pmt) {
             ad->pids[i].pmt = -1;
 }
 
+// A client subscribes the pid; on a CI adapter DDCI subscribes it for the
+// service it registered, so its regenerated PMT can reach the CAM.
+static int pid_subscribed(adapter *ad, SPid *p) {
+    if (!p)
+        return 0;
+    if (ad->type == ADAPTER_CI && p->sid.count(DDCI_SID))
+        return 1;
+    return spid_has_client_sid(p);
+}
+
 // A PMT may start while its own PMT pid is subscribed by a real client
 // and at least one of its audio/video pids is subscribed by one.
-static int is_start_candidate(SPid **pids, SPMT *pmt) {
+static int is_start_candidate(adapter *ad, SPid **pids, SPMT *pmt) {
     SPid *pp = pids[pmt->pid];
-    if (!pp || !spid_has_client_sid(pp))
+    if (!pid_subscribed(ad, pp))
         return 0;
     for (const auto &sp : pmt->stream_pids)
-        if ((sp.is_audio || sp.is_video) && pids[sp.pid] &&
-            spid_has_client_sid(pids[sp.pid]))
+        if ((sp.is_audio || sp.is_video) && pid_subscribed(ad, pids[sp.pid]))
             return 1;
     return 0;
 }
 
 // True when the PMT owns at least one subscribed audio/video pid.
-static int holds_av_claim(SPid **pids, SPMT *pmt) {
+static int holds_av_claim(adapter *ad, SPid **pids, SPMT *pmt) {
     for (const auto &sp : pmt->stream_pids) {
         if (!sp.is_audio && !sp.is_video)
             continue;
         SPid *s = pids[sp.pid];
-        if (s && s->pmt == pmt->id && spid_has_client_sid(s))
+        if (s && s->pmt == pmt->id && pid_subscribed(ad, s))
             return 1;
     }
     return 0;
@@ -1081,14 +1090,14 @@ typedef struct {
 // audio/video pid subscribed by a real client.
 static int is_pmt_subscribed(adapter *ad, SPMT *pmt) {
     SPid *pp = find_pid(ad->id, pmt->pid);
-    if (!pp || pp->flags != PID_STATE_ACTIVE || !spid_has_client_sid(pp))
+    if (!pp || pp->flags != PID_STATE_ACTIVE || !pid_subscribed(ad, pp))
         return 0;
     for (const auto &sp : pmt->stream_pids) {
         SPid *s;
         if (!sp.is_audio && !sp.is_video)
             continue;
         s = find_pid(ad->id, sp.pid);
-        if (s && s->flags == PID_STATE_ACTIVE && spid_has_client_sid(s))
+        if (s && s->flags == PID_STATE_ACTIVE && pid_subscribed(ad, s))
             return 1;
     }
     return 0;
@@ -1144,7 +1153,7 @@ void pmt_pid_updated_pids(adapter *ad) {
     for (i = 0; i < ad->active_pmts && nch < MAX_PMT_FOR_ADAPTER; i++) {
         SPMT *pmt = get_pmt(ad->active_pmt[i]);
         SPid *pp;
-        if (!pmt || !is_start_candidate(pids, pmt))
+        if (!pmt || !is_start_candidate(ad, pids, pmt))
             continue;
         pp = pids[pmt->pid];
         ch[nch].pmt = pmt;
@@ -1197,7 +1206,7 @@ void pmt_pid_updated_pids(adapter *ad) {
             SPid *s = pids[sp.pid];
             // Every stream (data included) is marked so the decrypt
             // path finds an owner; only AV pid claims start the PMT.
-            if (!s || !spid_has_client_sid(s) || s->pmt == pmt->id)
+            if (!s || !pid_subscribed(ad, s) || s->pmt == pmt->id)
                 continue;
             // Sticky claims: take free or stale pids only, never steal.
             if (s->pmt >= 0 && get_pmt(s->pmt))
@@ -1212,7 +1221,7 @@ void pmt_pid_updated_pids(adapter *ad) {
         }
         // A claimless member waits stopped but stays in the set: it is
         // still the elected owner if its streams get subscribed later.
-        if (!holds_av_claim(pids, pmt)) {
+        if (!holds_av_claim(ad, pids, pmt)) {
             if (pmt->state == PMT_RUNNING || pmt->state == PMT_STARTING) {
                 stop_pmt(pmt, ad);
                 release_pmt_claims(ad, pmt);
