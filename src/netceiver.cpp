@@ -164,8 +164,13 @@ int netcv_commit(adapter *ad) {
         transponder *tp = &ad->tp;
         fe_delivery_system_t sys = tp->sys.value_or(SYS_UNDEFINED);
         int freq = tp->freq.value_or(0);
+        // Client-controlled: clamp to the map sizes used below.
         int diseqc = tp->diseqc.value_or(0);
+        if (diseqc < 0 || diseqc > 3)
+            diseqc = 0;
         int pol = tp->pol.value_or(0);
+        if (pol < 0 || pol > 3)
+            pol = 0;
         int sr = tp->sr.value_or(0);
         fe_code_rate_t fec = tp->fec.value_or(FEC_AUTO);
         fe_modulation_t mtype = tp->mtype.value_or(QAM_AUTO);

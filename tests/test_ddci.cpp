@@ -133,9 +133,8 @@ int test_channels() {
     return 0;
 }
 
-// A PMT re-sent to the DDCI (pmt_add_caid() clears ca_mask to force it) must
-// not take another channel, and deleting a PMT that holds no slot must not
-// free one (#1442)
+// A re-sent PMT must not take another channel; deleting a slotless PMT
+// must not free one (#1442).
 int test_ddci_channel_count() {
     SPMT *pmt0, *pmt_noslot;
     ddci_device_t d0 = {};
@@ -187,6 +186,7 @@ int test_ddci_channel_count() {
 
     channels.clear();
     free_filters();
+    del_ca(&dvbca);
     ddci_devices[0] = NULL;
     ca_devices[0] = NULL;
     a[0] = a[8] = NULL;
@@ -432,6 +432,10 @@ int test_ddci_process_ts_null_tail() {
                        last_iov[3]);
     free_fifo(&d.fifo);
     pmts[0] = save;
+    _writev = writev;
+    channels.clear();
+    ddci_devices[0] = NULL;
+    a[0] = a[1] = a[2] = NULL;
     return 0;
 }
 
@@ -759,6 +763,57 @@ int test_create_pmt() {
                  "Number of caids does not matches "
                  "between generated PMT and read PMT");
 
+    a[0] = NULL;
+    return 0;
+}
+
+// The rebuilt PMT must emit mapped DDCI pids in the stream-level CA
+// descriptors too, never the raw source ECM pids.
+int test_create_pmt_maps_es_ecm_pids() {
+    ddci_device_t d = {};
+    uint8_t psi[512];
+    d.id = 0;
+    d.enabled = 1;
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[0] = &d;
+    a[0] = NULL;
+    // free, not just NULL: earlier tests never released their PMTs
+    free_all_pmts();
+    npmts = 0;
+    ca_devices[0] = NULL;
+    ca_devices[1] = NULL;
+
+    SPMT *pmt = create_pmt(0, 0x66, 1023, 0x55, 0x100, 0x500);
+    // occupy ddci pid 0x0573 from another adapter so the ECM pid remaps
+    add_pid_mapping_table(1, 0x0573, 99, &d, 0);
+    int mapped = add_pid_mapping_table(0, 0x0573, pmt->id, &d, 0);
+    ASSERT(mapped >= 0 && mapped != 0x0573, "ECM pid should be remapped");
+
+    ddci_pmt_t dp = {.ver = 0, .pcr_pid = 8191};
+    int psi_len = ddci_create_pmt(&d, pmt, psi, sizeof(psi), &dp);
+    ASSERT(psi_len > 0, "ddci_create_pmt failed");
+
+    uint8_t *b = psi + 1; // section start
+    int pi_len = ((b[10] & 0xF) << 8) | b[11];
+    uint8_t *es = b + 12 + pi_len;
+    uint8_t *end = psi + psi_len - 4; // before the CRC
+    int found = 0;
+    while (es + 5 <= end) {
+        int es_len = ((es[3] & 0xF) << 8) | es[4];
+        uint8_t *dd = es + 5;
+        uint8_t *dd_end = dd + es_len;
+        while (dd + 2 <= dd_end && dd + 2 + dd[1] <= dd_end) {
+            if (dd[0] == 0x09 && dd[1] >= 4) {
+                int capid = ((dd[4] & 0x1F) << 8) | dd[5];
+                ASSERT(capid == mapped, "ES ECM pid should be mapped");
+                found++;
+            }
+            dd += 2 + dd[1];
+        }
+        es = dd_end;
+    }
+    ASSERT(found == 1, "expected one ES CA descriptor");
+    free_all_pmts();
     return 0;
 }
 
@@ -879,6 +934,53 @@ int test_ci_pmt_name_is_refreshed() {
     return 0;
 }
 
+// A candidate DDCI that is already full must retry later, not burn the SID:
+// filling dd0 then adding another PMT for it returns RETRY.
+int test_ddci_full_device_retries() {
+    SPMT *pmt0, *pmt1;
+    ddci_device_t d0 = {};
+    ca_device_t ca0 = {};
+    adapter ad = {0};
+    int i;
+
+    // Adapters of previous tests lived on their stacks
+    for (i = 0; i < MAX_ADAPTERS; i++)
+        a[i] = NULL;
+    create_adapter(&ad, 8);
+    pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
+    pmt1 = create_pmt(8, 700, 701, 702, 0x100, 0x100);
+    memset(&d0.pmt, -1, sizeof(d0.pmt));
+    d0.id = 0;
+    d0.enabled = 1;
+    d0.max_channels = 1;
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    memset(ca_devices, 0, sizeof(ca_devices));
+    ddci_devices[0] = &d0;
+    Sddci_channel *c0 = &channels[pmt0->sid];
+    c0->sid = pmt0->sid;
+    c0->locked = 1;
+    c0->ddci[c0->ddcis++].ddci = 0;
+    Sddci_channel *c1 = &channels[pmt1->sid];
+    c1->sid = pmt1->sid;
+    c1->locked = 1;
+    c1->ddci[c1->ddcis++].ddci = 0;
+
+    int dvbca_id = add_ca(&dvbca);
+    add_caid_mask(dvbca_id, 0, 0x100, 0xFFFF);
+    ca0.id = 0;
+    ca0.enabled = 1;
+    ca0.state = CA_STATE_INITIALIZED;
+    ca_devices[0] = &ca0;
+
+    ASSERT(ddci_process_pmt(&ad, pmt0) == TABLES_RESULT_OK,
+           "first PMT must take the only slot");
+    ASSERT(ddci_process_pmt(&ad, pmt1) == TABLES_RESULT_ERROR_RETRY,
+           "second PMT for a full device must retry, not burn the SID");
+
+    del_ca(&dvbca);
+    return 0;
+}
+
 int main() {
     opts.log = 65535 ^ LOG_LOCK ^ LOG_UTILS;
     opts.debug = 0;
@@ -900,6 +1002,10 @@ int main() {
     TEST_FUNC(test_create_pat(), "testing create_pat");
     TEST_FUNC(test_create_sdt(), "testing create_sdt");
     TEST_FUNC(test_create_pmt(), "testing create_pmt");
+    TEST_FUNC(test_create_pmt_maps_es_ecm_pids(),
+              "testing that rebuilt PMTs carry mapped ES ECM pids");
+    TEST_FUNC(test_ddci_full_device_retries(),
+              "testing that a full DDCI device retries instead of burning");
     free_all_pmts();
     fflush(stdout);
     return 0;

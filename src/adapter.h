@@ -35,10 +35,8 @@ typedef struct ca_device ca_device_t;
 #define MAX_PMT_FOR_ADAPTER 255
 
 #define MAX_PIDS 128
-// Minimum usable pid count per adapter. A demux failure (e.g. DMX_ADD_PID
-// errno 22) must never permanently cap an adapter below this, and a pid that
-// fails to be added while below this count is reported as an error so the
-// RTSP reply reflects it instead of 200 OK.
+// Minimum usable pid count per adapter. A demux failure must never cap an
+// adapter below this; failures below it are reported, not 200 OK.
 #define MIN_ADAPTER_PIDS 16
 #define PID_STREAM_ID_UNDEFINED -1
 #define PID_STATE_INACTIVE 0
@@ -64,6 +62,9 @@ typedef struct struct_pid {
 #endif
     std::unordered_set<int16_t> sid;
     bool has_stream(int id) { return sid.count(id) > 0; }
+    // Subscription order: ++pid_order_seq when the first client sid is
+    // added, 0 when no client sid is left. Smaller wins PMT contention.
+    uint32_t order = 0;
 } SPid;
 
 typedef struct struct_adapter adapter;
@@ -82,6 +83,8 @@ struct struct_adapter {
     std::string adapter_name;
     char flush, updating_pids;
     int pids_updates;
+    // Monotonic source for SPid.order on this adapter.
+    uint32_t pid_order_seq = 0;
     // physical adapter, physical frontend number
     fe_delivery_system_t sys[MAX_DELSYS];
     transponder tp;
@@ -184,6 +187,8 @@ void mark_pids_deleted(int aid, int sid, const char *pids);
 int mark_pids_add(int sid, int aid, const char *pids);
 int mark_pid_add(int sid, int aid, int _pid);
 void mark_pid_deleted(int aid, int sid, int _pid, SPid *p);
+// True when a real client stream (not scanner/filter/DDCI marks) owns the pid.
+int spid_has_client_sid(SPid *p);
 int update_pids(int aid);
 int tune(int aid, int sid);
 void post_tune(adapter *ad);

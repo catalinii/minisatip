@@ -372,7 +372,6 @@ int satipc_open_rtsp_socket(adapter *ad, satipc *sip, bool is_init) {
     }
     sockets_timeout(ad->fe_sock,
                     25000); // 25s
-    // just during the reopening of the RTSP socket
     // Skip adapter_set_dvr during init_hw since it will be called by init_hw
     // itself
     if (ad->dvr >= 0 && !is_init) {
@@ -419,6 +418,8 @@ int satipc_timeout(sockets *s) {
     adapter *ad;
     satipc *sip;
     get_ad_and_sipr(s->sid, 1);
+    // Adapter -> socket order below, inverse of the stream path; safe: the
+    // tracked socket differs from stream sockets and SMutex is recursive.
     std::lock_guard<SMutex> lock(ad->mutex);
 
     if (sip->rtsp_socket_closed) {
@@ -608,6 +609,10 @@ static int satipc_open_srt(adapter *ad, satipc *sip) {
         return 0;
     }
 
+    // Back off: srt_connect blocks, so don't stall the worker every round.
+    if (getTick() - sip->last_srt_fail < 30000)
+        return 2;
+
     // Close old socket if it exists but is not connected
     if (sip->srt_sock != SRT_INVALID_SOCK) {
         LOG("Closing old SRT socket %d (not connected)", sip->srt_sock);
@@ -622,7 +627,7 @@ static int satipc_open_srt(adapter *ad, satipc *sip) {
             ad->id);
         // If there\'s a socket tracking this handle, replace it with
         // SOCK_TIMEOUT
-        if (ad->fe_sock >= 0) {
+        if (ad->sock >= 0) {
             sockets_set_handle(ad->sock, SOCK_TIMEOUT);
         }
         sip->udp_sock = -1;
@@ -654,6 +659,8 @@ static int satipc_open_srt(adapter *ad, satipc *sip) {
         LOG("srt_bind_acquire failed: %s", srt_getlasterror_str());
         srt_close(sip->srt_sock);
         sip->srt_sock = SRT_INVALID_SOCK;
+        sip->srt_streamid.clear();
+        sip->last_srt_fail = getTick();
         close(udp_sock);
         return 2;
     }
@@ -676,6 +683,14 @@ static int satipc_open_srt(adapter *ad, satipc *sip) {
             srt_getlasterror_str());
         srt_close(sip->srt_sock);
         sip->srt_sock = SRT_INVALID_SOCK;
+        sip->srt_streamid.clear();
+        sip->last_srt_fail = getTick();
+        // srt_close also closes the acquired UDP socket: drop tracking.
+        if (ad->sock >= 0) {
+            sockets_set_handle(ad->sock, SOCK_TIMEOUT);
+        }
+        sip->udp_sock = -1;
+        ad->dvr = -1;
         return 2;
     }
 
@@ -703,6 +718,7 @@ int satipc_setup_rtp_udp_sockets(adapter *ad, satipc *sip) {
     sip->rtcp = udp_bind(NULL, sip->listen_udp + 1, opts.use_ipv4_only);
     if (sip->rtcp < 0) {
         close(ad->dvr);
+        ad->dvr = -1;
         LOG_AND_RETURN(-1, "Could not listen on port %d: err %d: %s",
                        sip->listen_udp + 1, errno, strerror(errno));
     }
@@ -712,9 +728,12 @@ int satipc_setup_rtp_udp_sockets(adapter *ad, satipc *sip) {
                                  (socket_action)satipc_rtcp_reply,
                                  (socket_action)satipc_close, NULL);
     if (sip->rtcp_sock < 0) {
+        LOG("Could not add RTCP socket %d", sip->rtcp);
         close(ad->dvr);
+        ad->dvr = -1;
         close(sip->rtcp);
-        LOG_AND_RETURN(-1, "Could not add RTCP socket %d", sip->rtcp);
+        sip->rtcp = -1;
+        return -1;
     }
     if (opts.satipc_buffer > 0)
         set_socket_receive_buffer(ad->dvr, opts.satipc_buffer);
@@ -748,11 +767,10 @@ int satipc_open_device(adapter *ad) {
 #endif
     if (sip->transport_type == SIP_TRANSPORT_UDP) {
         int rv = satipc_setup_rtp_udp_sockets(ad, sip);
-        if (rv) {
-            satipc_open_rtsp_socket(ad, sip,
-                                    false); // is_init=false for error recovery
+        // No recovery reopen here: a second RTSP socket would orphan the
+        // first fd and its tracking; the lifecycle retries and closes.
+        if (rv)
             return rv;
-        }
     }
     sip->session[0] = 0;
     sip->lap = 0;
@@ -1293,6 +1311,12 @@ int satipc_del_filters(adapter *ad, int fd, int pid) {
     if ((val).has_value())                                                     \
         strlcatf(url, url_len, len, req, *(val));
 
+// String sibling: reverse_lookup yields "" for AUTO/missing entries, and an
+// empty value must be omitted like the old default checks did.
+#define FILL_STR(req, val)                                                     \
+    if ((val).has_value() && (val).value()[0])                                 \
+        strlcatf(url, url_len, len, req, *(val));
+
 void get_s2_url(adapter *ad, char *url, int url_len) {
     int len = 0;
     transponder *tp = &ad->tp;
@@ -1307,34 +1331,38 @@ void get_s2_url(adapter *ad, char *url, int url_len) {
     FILL("&fe=%d", satip_fe);
     FILL("&freq=%d",
          tp->freq ? std::make_optional(*tp->freq / 1000) : std::nullopt);
-    FILL("&msys=%s",
-         tp->sys
-             ? std::make_optional(fe_delsys_map.reverse_lookup(*tp->sys).data())
-             : std::nullopt);
-    FILL("&mtype=%s",
-         tp->mtype ? std::make_optional(
-                         fe_modulation_map.reverse_lookup(*tp->mtype).data())
-                   : std::nullopt);
-    FILL("&pol=%s", tp->pol ? std::make_optional(
-                                  fe_pol_map.reverse_lookup(*tp->pol).data())
-                            : std::nullopt);
+    FILL_STR("&msys=%s",
+             tp->sys ? std::make_optional(
+                           fe_delsys_map.reverse_lookup(*tp->sys).data())
+                     : std::nullopt);
+    FILL_STR("&mtype=%s",
+             tp->mtype
+                 ? std::make_optional(
+                       fe_modulation_map.reverse_lookup(*tp->mtype).data())
+                 : std::nullopt);
+    FILL_STR(
+        "&pol=%s",
+        tp->pol ? std::make_optional(fe_pol_map.reverse_lookup(*tp->pol).data())
+                : std::nullopt);
     FILL("&sr=%d", tp->sr ? std::make_optional(*tp->sr / 1000) : std::nullopt);
-    FILL("&fec=%s", tp->fec ? std::make_optional(
-                                  fe_fec_map.reverse_lookup(*tp->fec).data())
-                            : std::nullopt);
-    FILL("&ro=%s", tp->ro ? std::make_optional(
-                                fe_rolloff_map.reverse_lookup(*tp->ro).data())
-                          : std::nullopt);
-    FILL("&plts=%s",
-         tp->plts
-             ? std::make_optional(fe_pilot_map.reverse_lookup(*tp->plts).data())
-             : std::nullopt);
+    FILL_STR(
+        "&fec=%s",
+        tp->fec ? std::make_optional(fe_fec_map.reverse_lookup(*tp->fec).data())
+                : std::nullopt);
+    FILL_STR("&ro=%s", tp->ro
+                           ? std::make_optional(
+                                 fe_rolloff_map.reverse_lookup(*tp->ro).data())
+                           : std::nullopt);
+    FILL_STR("&plts=%s",
+             tp->plts ? std::make_optional(
+                            fe_pilot_map.reverse_lookup(*tp->plts).data())
+                      : std::nullopt);
     FILL("&isi=%d", tp->plp_isi);
-    FILL("&plsm=%s",
-         tp->pls_mode
-             ? std::make_optional(
-                   fe_pls_mode_map.reverse_lookup(*tp->pls_mode).data())
-             : std::nullopt);
+    FILL_STR("&plsm=%s",
+             tp->pls_mode
+                 ? std::make_optional(
+                       fe_pls_mode_map.reverse_lookup(*tp->pls_mode).data())
+                 : std::nullopt);
     FILL("&plsc=%d", tp->pls_code);
     url[len] = 0;
 }
@@ -1353,25 +1381,29 @@ void get_c2_url(adapter *ad, char *url, int url_len) {
          tp->freq ? std::make_optional(*tp->freq / 1000.0) : std::nullopt);
     FILL("&fe=%d", satip_fe);
     FILL("&sr=%d", tp->sr ? std::make_optional(*tp->sr / 1000) : std::nullopt);
-    FILL("&msys=%s",
-         tp->sys
-             ? std::make_optional(fe_delsys_map.reverse_lookup(*tp->sys).data())
-             : std::nullopt);
-    FILL("&mtype=%s",
-         tp->mtype ? std::make_optional(
-                         fe_modulation_map.reverse_lookup(*tp->mtype).data())
-                   : std::nullopt);
-    FILL("&gi=%s",
-         tp->gi ? std::make_optional(fe_gi_map.reverse_lookup(*tp->gi).data())
+    FILL_STR("&msys=%s",
+             tp->sys ? std::make_optional(
+                           fe_delsys_map.reverse_lookup(*tp->sys).data())
+                     : std::nullopt);
+    FILL_STR("&mtype=%s",
+             tp->mtype
+                 ? std::make_optional(
+                       fe_modulation_map.reverse_lookup(*tp->mtype).data())
+                 : std::nullopt);
+    FILL_STR("&gi=%s", tp->gi ? std::make_optional(
+                                    fe_gi_map.reverse_lookup(*tp->gi).data())
+                              : std::nullopt);
+    FILL_STR(
+        "&fec=%s",
+        tp->fec ? std::make_optional(fe_fec_map.reverse_lookup(*tp->fec).data())
                 : std::nullopt);
-    FILL("&fec=%s", tp->fec ? std::make_optional(
-                                  fe_fec_map.reverse_lookup(*tp->fec).data())
+    FILL_STR("&tmode=%s",
+             tp->tmode ? std::make_optional(
+                             fe_tmode_map.reverse_lookup(*tp->tmode).data())
+                       : std::nullopt);
+    FILL("&specinv=%d", tp->inversion && *tp->inversion != INVERSION_AUTO
+                            ? tp->inversion
                             : std::nullopt);
-    FILL("&tmode=%s", tp->tmode
-                          ? std::make_optional(
-                                fe_tmode_map.reverse_lookup(*tp->tmode).data())
-                          : std::nullopt);
-    FILL("&specinv=%d", tp->inversion);
     FILL("&t2id=%d", tp->t2id);
     FILL("&sm=%d", tp->sm);
     FILL("&plp=%d", tp->plp_isi);
@@ -1393,22 +1425,25 @@ void get_t2_url(adapter *ad, char *url, int url_len) {
     FILL("&fe=%d", satip_fe);
     FILL("&bw=%d",
          tp->bw ? std::make_optional(*tp->bw / 1000000) : std::nullopt);
-    FILL("&msys=%s",
-         tp->sys
-             ? std::make_optional(fe_delsys_map.reverse_lookup(*tp->sys).data())
-             : std::nullopt);
-    FILL("&mtype=%s",
-         tp->mtype ? std::make_optional(
-                         fe_modulation_map.reverse_lookup(*tp->mtype).data())
-                   : std::nullopt);
-    FILL("&gi=%s",
-         tp->gi ? std::make_optional(fe_gi_map.reverse_lookup(*tp->gi).data())
-                : std::nullopt);
-    FILL("&tmode=%s", tp->tmode
-                          ? std::make_optional(
-                                fe_tmode_map.reverse_lookup(*tp->tmode).data())
-                          : std::nullopt);
-    FILL("&specinv=%d", tp->inversion);
+    FILL_STR("&msys=%s",
+             tp->sys ? std::make_optional(
+                           fe_delsys_map.reverse_lookup(*tp->sys).data())
+                     : std::nullopt);
+    FILL_STR("&mtype=%s",
+             tp->mtype
+                 ? std::make_optional(
+                       fe_modulation_map.reverse_lookup(*tp->mtype).data())
+                 : std::nullopt);
+    FILL_STR("&gi=%s", tp->gi ? std::make_optional(
+                                    fe_gi_map.reverse_lookup(*tp->gi).data())
+                              : std::nullopt);
+    FILL_STR("&tmode=%s",
+             tp->tmode ? std::make_optional(
+                             fe_tmode_map.reverse_lookup(*tp->tmode).data())
+                       : std::nullopt);
+    FILL("&specinv=%d", tp->inversion && *tp->inversion != INVERSION_AUTO
+                            ? tp->inversion
+                            : std::nullopt);
     FILL("&c2tft=%d", tp->c2tft);
     FILL("&ds=%d", tp->ds);
     FILL("&plp=%d", tp->plp_isi);
@@ -1709,7 +1744,10 @@ int satipc_request(adapter *ad) {
 
     if (sip->sent_transport == 0) {
 #ifndef DISABLE_SRT
-        satipc_open_srt(ad, sip);
+        // No SRT socket, no SETUP: never advertise a dead streamid, the
+        // timeout path retries after the backoff.
+        if (satipc_open_srt(ad, sip))
+            return 0;
 #endif
     }
 

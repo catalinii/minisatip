@@ -457,13 +457,17 @@ int dvbapi_send_pmt(SKey *k, int cmd_id) {
     copy16(buf, 23, 0x8701); // ca_device_descriptor (caX)
     buf[25] = demux;
 
-    len =
-        26 + pmt_add_ca_descriptor(pmt, buf + 26, dvbapi_ca); // CA description
+    len = 26 + pmt_add_ca_descriptor(pmt, buf + 26, sizeof(buf) - 26,
+                                     dvbapi_ca); // CA description
 
     // Pids associated with the PMT
     copy16(buf, 10, len - 12);
 
     for (const auto &stream_pid : pmt->stream_pids) {
+        if (len + 5 > (int)sizeof(buf)) {
+            LOG("Key %d truncating stream list, dvbapi buffer full", k->id);
+            break;
+        }
         len += 5;
         int type = stream_pid.type;
         int pid = stream_pid.pid;
@@ -605,7 +609,7 @@ void send_client_info(sockets *s) {
 int send_ecm(int filter_id, unsigned char *b, int len, void *opaque) {
     SKey *k = NULL;
     SFilter *f;
-    SPMT *pmt, *master;
+    SPMT *pmt;
     uint8_t buf[1600];
     int i, pid;
     int filter, demux;
@@ -637,9 +641,6 @@ int send_ecm(int filter_id, unsigned char *b, int len, void *opaque) {
     filter = k->filter[i];
 
     valid_cw = pmt->cw != NULL;
-    master = get_pmt(pmt->master_pmt);
-    if (master)
-        valid_cw = master->cw != NULL;
 
     if ((getTick() - k->last_ecm > 1000) && !valid_cw)
         k->ecm_parity[i] = -1;
@@ -834,7 +835,8 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt) {
     key = keys_add(-1, ad->id, pmt->id);
     k = get_key(key);
     if (!k)
-        LOG_AND_RETURN(1, "Could not add key for pmt %d", pmt->id);
+        LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY,
+                       "Could not add key for pmt %d", pmt->id);
     pmt->opaque = k;
     k->sid = pmt->sid;
     k->adapter = ad->id;
@@ -849,6 +851,8 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt) {
 
 int dvbapi_del_pmt(adapter *ad, SPMT *pmt) {
     SKey *k = (SKey *)pmt->opaque;
+    if (!k)
+        return 0;
     keys_del(k->id);
     pmt->opaque = NULL;
     LOG("%s: deleted key %d, PMT pid %d, sid %d (%X), PMT %d", __FUNCTION__,

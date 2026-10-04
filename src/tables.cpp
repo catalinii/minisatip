@@ -194,9 +194,8 @@ void close_pmt_for_ca(int i, adapter *ad, SPMT *pmt) {
         ad = get_adapter(pmt->adapter);
     if (!ad)
         return;
-    // Check ca_registered_mask, not ca_mask: pmt_add_caid() clears ca_mask to
-    // force a re-send, and a PMT stopped right after that was never released
-    // on the CA, which kept it registered for ever (a leaked CAM slot).
+    // Check ca_registered_mask, not ca_mask: pmt_add_caid() clears ca_mask
+    // to force a re-send, and a PMT stopped right after was never released.
     if (ca[i].enabled && (ad->ca_mask & mask) &&
         (pmt->ca_registered_mask & mask)) {
         LOGM("Closing pmt %d for ca %d and adapter %d", pmt->id, i, ad->id);

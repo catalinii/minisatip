@@ -929,6 +929,7 @@ int update_pids(int aid) {
             ad->pids[i].fd = 0;
             ad->pids[i].filter = -1;
             ad->pids[i].pmt = -1;
+            ad->pids[i].order = 0;
             ad->pids[i].flags = 0;
             ad->pids[i].packets2 = 0;
             ad->pids[i].packets = 0;
@@ -986,6 +987,10 @@ int update_pids(int aid) {
     ad->updating_pids = 0;
     ad->pids_updates++;
     sort_pids(ad->id);
+#ifndef DISABLE_PMT
+    // Elect after the guard clears so nested pid updates run fully.
+    pmt_pid_updated_pids(ad);
+#endif
     return rv;
 }
 
@@ -1075,15 +1080,22 @@ SPid *find_pid(int aid, int p) {
     if (!ad)
         return NULL;
 
-    // Scan the whole table: update_pids mutates flags mid-pass (the delete
-    // loop compacts entries to INACTIVE ahead of not-yet-processed NEW ones)
-    // and only re-sorts at the end, so stopping at the first INACTIVE slot
-    // can miss entries that are present.
+    // Scan the whole table: update_pids mutates flags mid-pass and only
+    // re-sorts at the end, so stopping at the first INACTIVE slot can miss.
     for (i = 0; i < MAX_PIDS; i++) {
         if ((ad->pids[i].flags > PID_STATE_INACTIVE) && (ad->pids[i].pid == p))
             return &ad->pids[i];
     }
     return NULL;
+}
+
+int spid_has_client_sid(SPid *p) {
+    if (!p)
+        return 0;
+    for (int16_t sid : p->sid)
+        if (sid >= 0 && sid < MAX_STREAMS)
+            return 1;
+    return 0;
 }
 
 void mark_pid_deleted(int aid, int sid, int _pid, SPid *p) {
@@ -1097,10 +1109,13 @@ void mark_pid_deleted(int aid, int sid, int _pid, SPid *p) {
         if (p->flags != PID_STATE_INACTIVE)
             p->flags = PID_STATE_DELETED;
         p->sid.clear();
+        p->order = 0;
         return;
     }
     // sid != -1
     p->sid.erase(sid);
+    if (!spid_has_client_sid(p))
+        p->order = 0;
     bool is_empty = p->sid.empty();
     int keep = 0;
 
@@ -1148,18 +1163,29 @@ void mark_pids_deleted(int aid, int sid,
         mark_pid_deleted(aid, sid, ad->pids[i].pid, &ad->pids[i]);
 }
 
+// 0 means unordered: skip it even when the sequence wraps.
+static uint32_t next_pid_order(adapter *ad) {
+    if (++ad->pid_order_seq == 0)
+        ++ad->pid_order_seq;
+    return ad->pid_order_seq;
+}
+
 int mark_pid_add(int sid, int aid, int _pid) {
     adapter *ad;
     int i;
     ad = get_adapter(aid);
     SPid *p;
-    if (!ad)
+    if (!ad || _pid < 0 || _pid > 8192)
         return -1;
     // check if the pid already exists, if yes add the sid
     if ((p = find_pid(aid, _pid))) {
         LOG("found already existing pid %d flags %d", _pid, p->flags);
-        if (sid != PID_STREAM_ID_UNDEFINED)
+        if (sid != PID_STREAM_ID_UNDEFINED) {
+            int had_client = spid_has_client_sid(p);
             p->sid.insert(sid);
+            if (!had_client && spid_has_client_sid(p))
+                p->order = next_pid_order(ad);
+        }
         if (p->flags == PID_STATE_DELETED)
             p->flags = PID_STATE_NEW;
         return 0;
@@ -1170,8 +1196,11 @@ int mark_pid_add(int sid, int aid, int _pid) {
             ad->pids[i].flags = PID_STATE_NEW;
             ad->pids[i].pid = _pid;
             ad->pids[i].sid.clear();
+            ad->pids[i].order = 0;
             if (sid != PID_STREAM_ID_UNDEFINED)
                 ad->pids[i].sid.insert(sid);
+            if (spid_has_client_sid(&ad->pids[i]))
+                ad->pids[i].order = next_pid_order(ad);
             ad->pids[i].pmt = -1;
             ad->pids[i].filter = -1;
             ad->pids[i].sock = -1;

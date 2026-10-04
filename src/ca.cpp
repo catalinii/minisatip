@@ -773,6 +773,11 @@ int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
         }
         if (!stream_pid.is_audio && !stream_pid.is_video)
             continue;
+        if (pos + 6 > len) {
+            LOG("%s: truncating PMT %d stream list at %d bytes", __FUNCTION__,
+                pmt->id, pos);
+            break;
+        }
         capmt[pos++] = stream_pid.type;
         copy16(capmt, pos, stream_pid.pid);
         pos += 2;
@@ -783,7 +788,7 @@ int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
         // append the stream descriptors
         if (pmt->caids) {
             capmt[pos++] = cmd_id;
-            pi_len = pmt_add_ca_descriptor(pmt, capmt + pos, ca_id);
+            pi_len = pmt_add_ca_descriptor(pmt, capmt + pos, len - pos, ca_id);
             pos += pi_len;
             copy16(capmt, pi_len_pos, pi_len + 1);
         }
@@ -862,10 +867,8 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple) {
             break;
         }
     }
-    // add the pmt to the CI, in an empty CAPMT if there is one.
-    // Packing it next to another PMT rewrites the CAPMT that carries that
-    // PMT with a new version, and the CAM restarts the descrambling of the
-    // channel that is already running. Only pack when there is no room left.
+    // Prefer an empty CAPMT: packing next to a running PMT rewrites its
+    // CAPMT with a new version and the CAM restarts that channel.
     if (!res) {
         for (ca_pos = 0; ca_pos < d->max_ca_pmt; ca_pos++) {
             if (!PMT_ID_IS_VALID(d->capmt[ca_pos].pmt_id) &&
@@ -984,10 +987,26 @@ ca_device_t *find_dvbca_for_pmt(SPMT *pmt) {
 // a new sid works To not leak sids, the first channel will have the
 // original SID (some CAMs do not like this), the other ones a fixed SID
 
+// A failed acquire must not strand the previously running channel on a
+// moved-away CI: route everything back to the adapter linked before.
+static void restore_ci_link(ca_device_t *d, adapter *ad, int prev_linked) {
+    if (!d || prev_linked < -1 || prev_linked == ad->id)
+        return; // nothing moved
+    set_tuner_input(-1, ad->id);
+    if (prev_linked < 0) {
+        d->linked_adapter = -1;
+        return;
+    }
+    set_tuner_input(d->id, prev_linked);
+    set_input_ci(d->id, prev_linked);
+    d->linked_adapter = prev_linked;
+}
+
 int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
     ca_device_t *d = ca_devices[ad->id];
     uint16_t pid, sid, ver;
     int listmgmt;
+    int prev_linked = -2; // -2: CI was not moved for this call
     SPMT *first = NULL;
 
     if (opts.enigma) {
@@ -1000,6 +1019,7 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
                 return TABLES_RESULT_ERROR_NORETRY;
         }
 
+        prev_linked = d->linked_adapter;
         // detach the CI from the previous adapter
         if (d->linked_adapter != ad->id) {
             set_tuner_input(-1, d->linked_adapter);
@@ -1012,13 +1032,17 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
     if (!d)
         return TABLES_RESULT_ERROR_NORETRY;
 
-    if (d->state != CA_STATE_INITIALIZED)
+    if (d->state != CA_STATE_INITIALIZED) {
+        restore_ci_link(d, ad, prev_linked);
         LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY, "CAM not yet initialized");
+    }
 
     SCAPMT *capmt = add_pmt_to_capmt(d, spmt, d->multiple_pmt);
-    if (!capmt)
+    if (!capmt) {
+        restore_ci_link(d, ad, prev_linked);
         LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY,
                        "No free slots to add PMT %d to CA %d", spmt->id, d->id);
+    }
 
     first = get_pmt(capmt->pmt_id);
     if (!first)
@@ -1111,11 +1135,8 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt) {
     if (!capmt)
         LOG_AND_RETURN(0, "CAPMT not found for pmt %d", spmt->id);
 
-    // This PMT is the last one in the CAPMT: nothing will be sent for this
-    // program number again, so tell the CAM to stop descrambling it before
-    // the slot is released. Without it the program stays selected in the CAM
-    // and the next channel that reuses the slot is descrambled next to a
-    // service the CAM still believes is running.
+    // Last PMT in the CAPMT: tell the CAM to stop it before releasing the
+    // slot, or it stays selected next to the next channel on that slot.
     int last_in_capmt =
         capmt->pmt_id == spmt->id && !PMT_ID_IS_VALID(capmt->other_id);
     if (last_in_capmt) {

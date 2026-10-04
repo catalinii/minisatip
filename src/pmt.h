@@ -143,19 +143,20 @@ typedef struct struct_pmt {
     int blen;
     // ca_mask: the PMT was sent to that CA. pmt_add_caid() clears it to force
     // a re-send when a new CA descriptor shows up.
+    //
     // ca_registered_mask: that CA holds the PMT and must be told when it
     // stops. Cleared when the registration, CA, or cached PMT is removed.
     int ca_mask, disabled_ca_mask, ca_registered_mask;
     SPMT_batch *batch;
     int8_t parity, update_cw;
     uint64_t last_update_cw;
-    int16_t master_pmt; //  the pmt that contains the same pids as this PMT
     SCW *cw;
     SPid *p;
     char provider[50], name[50];
     void *opaque;
     char state; // PMT state (PMT_STOPPED, PMT_STARTING, PMT_RUNNING,
                 // PMT_STOPPING)
+    char best;  // elected into the active set this election
     int filter;
     int64_t start_time;
     std::unordered_map<uint64_t, int> *global_start, *local_start;
@@ -213,6 +214,7 @@ static inline SFilter *get_filter(int id) {
 int process_pmt(int filter, unsigned char *b, int len, void *opaque);
 void pmt_pid_del(adapter *ad, int pid);
 void pmt_pid_add(adapter *ad, int pid, int existing);
+void pmt_pid_updated_pids(adapter *ad);
 int pmt_init_device(
     adapter *ad); // will call action[CA_INIT_DEVICE] for the adapter if CA is
                   // registered for it in adapter_mask,
@@ -234,8 +236,8 @@ int set_filter_flags(int id, int flags);
 int set_filter_opaque(int id, void *opaque);
 int get_pid_filter(int aid, int pid);
 int assemble_packet(SFilter *f, uint8_t *b);
-void disable_cw(int master_pmt);
-void expire_cw_for_pmt(int master_pmt, int parity, int64_t min_expiry);
+void disable_cw(int pmt_id);
+void expire_cw_for_pmt(int pmt_id, int parity, int64_t min_expiry);
 int pmt_add(int adapter, int sid, int pmt_pid);
 SPMT *get_all_pmt_for_sid(int aid, int sid);
 int test_decrypt_packet(SCW *cw, SPMT_batch *start, int len);
@@ -243,7 +245,7 @@ void init_algo();
 void update_cw(SPMT *pmt);
 int pmt_decrypt_stream(adapter *ad);
 int wait_pusi(adapter *ad, int len);
-int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf, int sca_id);
+int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf, int buf_len, int sca_id);
 void free_filters();
 void stop_pmt(SPMT *pmt, adapter *ad);
 int pmt_add_stream_pid(SPMT *pmt, int pid, int type, bool is_audio,
