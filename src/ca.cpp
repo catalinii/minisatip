@@ -3312,28 +3312,60 @@ int ca_init_enigma(ca_device_t *d) {
     return 0;
 }
 
+static int ca_slot_reset(int fd) {
+    ca_slot_info_t info;
+    memset(&info, 0, sizeof(info));
+    return ioctl(fd, CA_RESET, &info);
+}
+
+static int ca_slot_get_info(int fd, struct ca_slot_info *info) {
+    return ioctl(fd, CA_GET_SLOT_INFO, info);
+}
+
+static void ca_sleep_ms(int ms) { sleep_msec((uint32_t)ms); }
+
+// Returns 0 when ready, 1 on timeout, -1 on io error.
+int ca_reset_and_wait_ready(int fd, struct ca_slot_info *info, int id,
+                            int attempts, int polls, ca_reset_fn do_reset,
+                            ca_slot_info_fn get_info, ca_sleep_fn sleep_fn) {
+    for (int attempt = 0; attempt < attempts; attempt++) {
+        if (do_reset(fd))
+            return -1;
+        int seen_present = 0;
+        for (int i = 0; i < polls; i++) {
+            if (get_info(fd, info))
+                return -1;
+            if (info->flags & CA_CI_MODULE_READY)
+                return 0;
+            if (info->flags & CA_CI_MODULE_PRESENT)
+                seen_present = 1;
+            sleep_fn(10);
+        }
+        if (get_info(fd, info))
+            return -1;
+        if (info->flags & CA_CI_MODULE_READY)
+            return 0;
+        if (!(info->flags & CA_CI_MODULE_PRESENT) && !seen_present) {
+            LOG("CA %d: no module present, not retrying reset", id);
+            return 1;
+        }
+        if (attempt + 1 < attempts)
+            LOG("CA %d: module not ready after reset %d/%d, retrying", id,
+                attempt + 1, attempts);
+    }
+    return 1;
+}
+
 // initializes the dvbca devices
 int ca_init_en50221(ca_device_t *d) {
     ca_slot_info_t info;
     int64_t st = getTick();
-    __attribute__((unused)) int tries = 800; // wait up to 8s for the CAM
     int fd = d->fd;
     memset(&info, 0, sizeof(info));
-    if (ioctl(fd, CA_RESET, &info))
-        LOG_AND_RETURN(0, "%s: Could not reset ca %d", __FUNCTION__, d->id);
-
-    do {
-        if (ioctl(fd, CA_GET_SLOT_INFO, &info))
-            LOG_AND_RETURN(0, "%s: Could not get info1 for ca %d", __FUNCTION__,
-                           d->id);
-        if (info.flags & CA_CI_MODULE_READY)
-            break;
-        sleep_msec(10);
-    } while (tries-- > 0);
-
-    if (ioctl(fd, CA_GET_SLOT_INFO, &info))
-        LOG_AND_RETURN(0, "%s: Could not get info2 for ca %d, tries %d",
-                       __FUNCTION__, d->id, tries);
+    if (ca_reset_and_wait_ready(fd, &info, d->id, CA_RESET_ATTEMPTS,
+                                CA_READY_POLLS, ca_slot_reset, ca_slot_get_info,
+                                ca_sleep_ms) < 0)
+        LOG_AND_RETURN(1, "%s: io error on ca %d", __FUNCTION__, d->id);
 
     LOG("initializing CA %d, fd %d type %d flags 0x%x, after %jd ms", d->id, fd,
         info.type, info.flags, (getTick() - st));

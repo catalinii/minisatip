@@ -723,6 +723,102 @@ int test_close_pmt_after_caid_update() {
     return 0;
 }
 
+// Fake CAM slot for testing the reset-and-wait policy.
+static int fake_resets;
+static int fake_queries_until_ready;
+static int fake_present;
+static int fake_fail_reset;
+static int fake_fail_info;
+
+static int fake_ca_reset(int fd) {
+    (void)fd;
+    fake_resets++;
+    return fake_fail_reset ? -1 : 0;
+}
+
+static int fake_ca_slot_info(int fd, struct ca_slot_info *info) {
+    (void)fd;
+    if (fake_fail_info)
+        return -1;
+    info->type = CA_CI_LINK;
+    info->flags = 0;
+    if (fake_present)
+        info->flags |= CA_CI_MODULE_PRESENT;
+    if (fake_queries_until_ready <= 0)
+        info->flags |= CA_CI_MODULE_READY;
+    else
+        fake_queries_until_ready--;
+    return 0;
+}
+
+static void fake_ca_sleep(int ms) { (void)ms; }
+
+static void reset_fake_cam(int present, int queries_until_ready) {
+    fake_resets = 0;
+    fake_present = present;
+    fake_queries_until_ready = queries_until_ready;
+    fake_fail_reset = 0;
+    fake_fail_info = 0;
+}
+
+int test_ca_reset_ready_immediately() {
+    struct ca_slot_info info;
+    reset_fake_cam(1, 0);
+    int rv = ca_reset_and_wait_ready(-1, &info, 4, 3, 10, fake_ca_reset,
+                                     fake_ca_slot_info, fake_ca_sleep);
+    ASSERT_EQUAL(rv, 0, "expected ready");
+    ASSERT_EQUAL(fake_resets, 1, "expected a single reset");
+    return 0;
+}
+
+// A CAM that misses the first reset becomes ready after a retry.
+int test_ca_reset_retries_present_module() {
+    struct ca_slot_info info;
+    reset_fake_cam(1, 25);
+    int rv = ca_reset_and_wait_ready(-1, &info, 4, 3, 10, fake_ca_reset,
+                                     fake_ca_slot_info, fake_ca_sleep);
+    ASSERT_EQUAL(rv, 0, "expected ready after retry");
+    ASSERT_EQUAL(fake_resets, 3, "expected resets until ready");
+    return 0;
+}
+
+// No module in the slot: fail fast without further resets.
+int test_ca_reset_no_module_no_retry() {
+    struct ca_slot_info info;
+    reset_fake_cam(0, 1000000);
+    int rv = ca_reset_and_wait_ready(-1, &info, 4, 3, 10, fake_ca_reset,
+                                     fake_ca_slot_info, fake_ca_sleep);
+    ASSERT_EQUAL(rv, 1, "expected timeout");
+    ASSERT_EQUAL(fake_resets, 1, "expected no retry without a module");
+    return 0;
+}
+
+// A stuck module exhausts all attempts and then gives up.
+int test_ca_reset_gives_up_after_attempts() {
+    struct ca_slot_info info;
+    reset_fake_cam(1, 1000000);
+    int rv = ca_reset_and_wait_ready(-1, &info, 4, 3, 10, fake_ca_reset,
+                                     fake_ca_slot_info, fake_ca_sleep);
+    ASSERT_EQUAL(rv, 1, "expected timeout");
+    ASSERT_EQUAL(fake_resets, 3, "expected all attempts used");
+    return 0;
+}
+
+int test_ca_reset_io_error() {
+    struct ca_slot_info info;
+    reset_fake_cam(1, 0);
+    fake_fail_info = 1;
+    ASSERT_EQUAL(ca_reset_and_wait_ready(-1, &info, 4, 3, 10, fake_ca_reset,
+                                         fake_ca_slot_info, fake_ca_sleep),
+                 -1, "expected io error from slot info");
+    reset_fake_cam(1, 0);
+    fake_fail_reset = 1;
+    ASSERT_EQUAL(ca_reset_and_wait_ready(-1, &info, 4, 3, 10, fake_ca_reset,
+                                         fake_ca_slot_info, fake_ca_sleep),
+                 -1, "expected io error from reset");
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -766,6 +862,16 @@ int main() {
     TEST_FUNC(
         test_close_pmt_after_caid_update(),
         "testing CA release of a PMT stopped after a CA descriptor update");
+    TEST_FUNC(test_ca_reset_ready_immediately(),
+              "testing CAM ready after a single reset");
+    TEST_FUNC(test_ca_reset_retries_present_module(),
+              "testing CAM reset retry when the module misses a reset");
+    TEST_FUNC(test_ca_reset_no_module_no_retry(),
+              "testing no CAM reset retry without a module");
+    TEST_FUNC(test_ca_reset_gives_up_after_attempts(),
+              "testing CAM reset gives up after all attempts");
+    TEST_FUNC(test_ca_reset_io_error(),
+              "testing CAM reset io errors");
     free_all_pmts();
     fflush(stdout);
     return 0;

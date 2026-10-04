@@ -234,4 +234,18 @@ void get_authdata_filename(char *dest, size_t len, unsigned int slot,
                            char *ci_name);
 char *get_ca_caids_string(int i, char *dest, int max_len);
 
+// CAM reset policy: reset attempts and ready polls per attempt.
+#define CA_RESET_ATTEMPTS 3
+#define CA_READY_POLLS 800
+
+typedef int (*ca_reset_fn)(int fd);
+typedef int (*ca_slot_info_fn)(int fd, struct ca_slot_info *info);
+typedef void (*ca_sleep_fn)(int ms);
+
+// Reset the CAM and wait until it reports ready, retrying the
+// reset when a module is present but not ready yet.
+int ca_reset_and_wait_ready(int fd, struct ca_slot_info *info, int id,
+                            int attempts, int polls, ca_reset_fn do_reset,
+                            ca_slot_info_fn get_info, ca_sleep_fn sleep_fn);
+
 #endif
