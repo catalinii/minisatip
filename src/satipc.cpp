@@ -436,7 +436,9 @@ int satipc_timeout(sockets *s) {
 
         if (srt_connection_broken) {
             LOG("SRT connection lost for adapter %d. Restarting SRT.", ad->id);
-            return satipc_open_srt(ad, sip);
+            // Return 0: a nonzero timeout return deletes the RTSP socket.
+            satipc_open_srt(ad, sip);
+            return 0;
         }
     }
 #endif // DISABLE_SRT
@@ -609,10 +611,6 @@ static int satipc_open_srt(adapter *ad, satipc *sip) {
         return 0;
     }
 
-    // Back off: srt_connect blocks, so don't stall the worker every round.
-    if (getTick() - sip->last_srt_fail < 30000)
-        return 2;
-
     // Close old socket if it exists but is not connected
     if (sip->srt_sock != SRT_INVALID_SOCK) {
         LOG("Closing old SRT socket %d (not connected)", sip->srt_sock);
@@ -660,7 +658,6 @@ static int satipc_open_srt(adapter *ad, satipc *sip) {
         srt_close(sip->srt_sock);
         sip->srt_sock = SRT_INVALID_SOCK;
         sip->srt_streamid.clear();
-        sip->last_srt_fail = getTick();
         close(udp_sock);
         return 2;
     }
@@ -684,7 +681,6 @@ static int satipc_open_srt(adapter *ad, satipc *sip) {
         srt_close(sip->srt_sock);
         sip->srt_sock = SRT_INVALID_SOCK;
         sip->srt_streamid.clear();
-        sip->last_srt_fail = getTick();
         // srt_close also closes the acquired UDP socket: drop tracking.
         if (ad->sock >= 0) {
             sockets_set_handle(ad->sock, SOCK_TIMEOUT);
@@ -1745,7 +1741,7 @@ int satipc_request(adapter *ad) {
     if (sip->sent_transport == 0) {
 #ifndef DISABLE_SRT
         // No SRT socket, no SETUP: never advertise a dead streamid, the
-        // timeout path retries after the backoff.
+        // timeout path retries.
         if (satipc_open_srt(ad, sip))
             return 0;
 #endif
