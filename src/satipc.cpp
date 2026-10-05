@@ -328,9 +328,9 @@ void satipc_close_rtsp_socket(adapter *ad, satipc *sip) {
 
 int satipc_open_rtsp_socket(adapter *ad, satipc *sip, bool is_init) {
     sip->last_connect = getTick();
-    int s = tcp_connect_src(sip->sip, sip->sport, NULL, 1,
-                            sip->source_ip[0] ? sip->source_ip
-                                              : NULL); // blocking socket
+    int s = tcp_connect_src(
+        sip->sip, sip->sport, NULL, 1,
+        sip->source_ip[0] ? sip->source_ip : bind_dev_ip()); // blocking socket
     if (s < 0)
         LOG_AND_RETURN(s, "could not connect to %s:%d, error %s", sip->sip,
                        sip->sport, strerror(errno));
@@ -610,7 +610,7 @@ static int satipc_open_srt(adapter *ad, satipc *sip) {
 
     // Create UDP socket with ephemeral port (port 0 lets OS assign available
     // port)
-    int udp_sock = udp_bind(NULL, 0, opts.use_ipv4_only);
+    int udp_sock = udp_bind(bind_dev_ip(), 0, opts.use_ipv4_only);
     if (udp_sock < 0)
         LOG_AND_RETURN(2, "SRT UDP bind failed on ephemeral port");
 
@@ -674,12 +674,13 @@ int satipc_setup_rtp_udp_sockets(adapter *ad, satipc *sip) {
         return 0;
 
     sip->listen_udp = opts.start_rtp + 1000 + ad->id * 2;
-    ad->dvr = udp_bind(NULL, sip->listen_udp, opts.use_ipv4_only);
+    ad->dvr = udp_bind(bind_dev_ip(), sip->listen_udp, opts.use_ipv4_only);
     if (ad->dvr < 0)
         LOG_AND_RETURN(-1, "Could not listen on port %d: err %d: %s",
                        sip->listen_udp, errno, strerror(errno));
 
-    sip->rtcp = udp_bind(NULL, sip->listen_udp + 1, opts.use_ipv4_only);
+    sip->rtcp =
+        udp_bind(bind_dev_ip(), sip->listen_udp + 1, opts.use_ipv4_only);
     if (sip->rtcp < 0) {
         close(ad->dvr);
         LOG_AND_RETURN(-1, "Could not listen on port %d: err %d: %s",

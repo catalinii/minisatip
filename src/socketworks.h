@@ -77,10 +77,11 @@ typedef struct struct_sockets {
 #define SOCK_TIMEOUT -2
 #define SELECT_TIMEOUT 100
 
-char *setlocalip();
 char *getlocalip();
 int get_dev_ip(char *dev, char *buf, int len);
 int validate_bind_dev(char *dev);
+int resolve_bind_opts();
+char *bind_dev_ip();
 int set_socket_bind_dev(int sock);
 int socket_bind_dev_ok(int sock);
 int udp_connect(char *addr, int port, USockAddr *serv);

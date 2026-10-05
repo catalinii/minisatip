@@ -525,9 +525,9 @@ Help\n\
 	* 2 - use dvrX device and additionally capture PSI data from demuxX device \n\
 	* 3 - use demuxX device and additionally capture PSI data from demuxX device \n\
 * -V --bind address: address for listening (RTSP + SSDP) \n\
-* -U --bind-http address: address for listening (HTTP)\n\
+* -U --bind-http address: address for listening (HTTP, defaults to --bind)\n\
 * -J --bind-dev device: device name for binding (all services)\n\
-        * one device only (IPv4); explicit --bind keeps its address\n\
+        * one device only (IPv4); not with --bind/--bind-http\n\
 \n\
 * -A --virtual-diseqc mapping_string: absolute source mapping for virtual diseqc mode\n\
 \t* The format is: SRC1[-END1]:AD1:DISEQC1[,SRC2:INP2:DISEQC2]\n\
@@ -1086,11 +1086,8 @@ void set_options(int argc, char *argv[]) {
         }
     }
 
-    if (opts.bind_dev) {
-        char dev_ip[MAX_HOST];
-        if (get_dev_ip(opts.bind_dev, dev_ip, sizeof(dev_ip)))
-            FAIL("Cannot resolve --bind-dev %s", opts.bind_dev);
-    }
+    if (resolve_bind_opts())
+        FAIL("Invalid bind configuration");
 
     if (!opts.bind)
         lip = getlocalip();

@@ -238,9 +238,9 @@ Help
 	* 2 - use dvrX device and additionally capture PSI data from demuxX device 
 	* 3 - use demuxX device and additionally capture PSI data from demuxX device 
 * -V --bind address: address for listening (RTSP + SSDP) 
-* -U --bind-http address: address for listening (HTTP)
+* -U --bind-http address: address for listening (HTTP, defaults to --bind)
 * -J --bind-dev device: device name for binding (all services)
-        * beware that only works with 1 device. loopback may not work!
+        * one device only (IPv4); cannot be combined with --bind/--bind-http
 
 * -A --virtual-diseqc mapping_string: absolute source mapping for virtual diseqc mode
 	* The format is: SRC1[-END1]:AD1:DISEQC1[,SRC2:INP2:DISEQC2]

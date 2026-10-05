@@ -196,8 +196,12 @@ int test_socket_buffering() {
 
 int test_bind_dev() {
     char ip[MAX_HOST], baseline[MAX_HOST];
+    char *saved_bind = opts.bind;
+    char *saved_http = opts.bind_http;
+    char *saved_dev = opts.bind_dev;
     char *saved_disc = opts.disc_host;
     int saved_ipv4 = opts.use_ipv4_only;
+    opts.bind = opts.bind_http = opts.bind_dev = NULL;
     opts.disc_host = (char *)"239.255.255.250";
     opts.use_ipv4_only = 1;
 
@@ -226,10 +230,28 @@ int test_bind_dev() {
     }
 
     safe_strncpy(baseline, getlocalip());
+
+    opts.bind = (char *)"127.0.0.2";
     opts.bind_dev = dev;
-    char good_lip[MAX_HOST];
-    safe_strncpy(good_lip, getlocalip());
-    int fd = tcp_listen(NULL, 0, 1);
+    ASSERT(resolve_bind_opts(), "bind + bind-dev must conflict");
+    opts.bind = NULL;
+    opts.bind_http = (char *)"127.0.0.2";
+    ASSERT(resolve_bind_opts(), "bind-http + bind-dev must conflict");
+    opts.bind_http = NULL;
+    opts.bind_dev = (char *)"no-such-dev-xyz";
+    ASSERT(resolve_bind_opts(), "unknown dev must fail");
+
+    opts.bind_dev = dev;
+    ASSERT(!resolve_bind_opts(), "loopback dev must resolve");
+    ASSERT(opts.bind && !strcmp(opts.bind, ip), "bind must hold dev IP");
+    ASSERT(opts.bind_http && !strcmp(opts.bind_http, ip),
+           "bind-http must hold dev IP");
+    ASSERT(bind_dev_ip() && !strcmp(bind_dev_ip(), ip),
+           "source IP must be dev IP");
+    ASSERT(!strcmp(getlocalip(), baseline),
+           "bind-dev must not affect getlocalip");
+
+    int fd = tcp_listen(opts.bind, 0, 1);
     char tcp_host[100] = {0};
     const char *tcp_got =
         fd >= 0 ? get_sock_shost(fd, tcp_host, sizeof(tcp_host)) : NULL;
@@ -246,54 +268,68 @@ int test_bind_dev() {
             dev_ok = socket_bind_dev_ok(fd) ? 1 : 0;
     }
 #endif
-    int ufd = udp_bind(NULL, 0, 1);
+    int afd = tcp_listen(NULL, 0, 1);
+    char any_host[100] = {0};
+    const char *any_got =
+        afd >= 0 ? get_sock_shost(afd, any_host, sizeof(any_host)) : NULL;
+    int ufd = udp_bind(opts.bind, 0, 1);
     char udp_host[100] = {0};
     const char *udp_got =
         ufd >= 0 ? get_sock_shost(ufd, udp_host, sizeof(udp_host)) : NULL;
-    int efd = tcp_listen((char *)"127.0.0.2", 0, 1);
-    char exp_host[100] = {0};
-    const char *exp_got =
-        efd >= 0 ? get_sock_shost(efd, exp_host, sizeof(exp_host)) : NULL;
     int cfd = -1;
     char conn_host[100] = {0};
     if (fd >= 0) {
         int port = get_sock_sport(fd);
         if (port > 0)
-            cfd = tcp_connect_src(ip, port, NULL, 1, NULL);
+            cfd = tcp_connect_src(ip, port, NULL, 1, bind_dev_ip());
         if (cfd >= 0)
             get_sock_shost(cfd, conn_host, sizeof(conn_host));
     }
-    opts.bind_dev = (char *)"no-such-dev-xyz";
-    char invalid_lip[MAX_HOST];
-    safe_strncpy(invalid_lip, getlocalip());
-    int bad_tcp = tcp_listen(NULL, 0, 1);
-    int bad_udp = udp_bind(NULL, 0, 1);
-    int bad_exp = tcp_listen(ip, 0, 1);
-    int bad_conn = tcp_connect_src(ip, get_sock_sport(fd), NULL, 1, NULL);
-    opts.bind_dev = NULL;
     if (fd >= 0)
         close(fd);
+    if (afd >= 0)
+        close(afd);
     if (ufd >= 0)
         close(ufd);
-    if (efd >= 0)
-        close(efd);
     if (cfd >= 0)
         close(cfd);
-    opts.disc_host = saved_disc;
-    opts.use_ipv4_only = saved_ipv4;
-    ASSERT(!strcmp(good_lip, ip), "getlocalip must return dev IP");
     ASSERT(tcp_got && !strcmp(tcp_host, ip), "tcp_listen must bind dev IP");
+    ASSERT(any_got && !strcmp(any_host, "0.0.0.0"),
+           "NULL must bind ANY without substitution");
     ASSERT(udp_got && !strcmp(udp_host, ip), "udp_bind must bind dev IP");
-    ASSERT(exp_got && !strcmp(exp_host, "127.0.0.2"), "explicit must win");
-    ASSERT(cfd >= 0, "connect with bind_dev must succeed");
+    ASSERT(cfd >= 0, "connect with explicit source must succeed");
     ASSERT(!strcmp(conn_host, ip), "connect must source dev IP");
-    ASSERT(!strcmp(invalid_lip, baseline), "invalid dev must fall back");
-    ASSERT(bad_tcp < 0 && bad_udp < 0 && bad_exp < 0 && bad_conn < 0,
-           "invalid dev must fail closed");
 #ifdef SO_BINDTODEVICE
     ASSERT(soft == 0 || soft == 1, "valid dev must apply or degrade");
 #endif
     ASSERT(dev_ok != 0, "device restriction not applied");
+
+    opts.bind = (char *)"127.0.0.2";
+    opts.bind_http = NULL;
+    opts.bind_dev = NULL;
+    ASSERT(!resolve_bind_opts(), "bind alone must resolve");
+    ASSERT(opts.bind_http && !strcmp(opts.bind_http, "127.0.0.2"),
+           "bind-http must default to bind");
+    ASSERT(!bind_dev_ip(), "no source IP without bind-dev");
+    int efd = tcp_listen(opts.bind, 0, 1);
+    char exp_host[100] = {0};
+    const char *exp_got =
+        efd >= 0 ? get_sock_shost(efd, exp_host, sizeof(exp_host)) : NULL;
+    if (efd >= 0)
+        close(efd);
+    ASSERT(exp_got && !strcmp(exp_host, "127.0.0.2"),
+           "bind must be used as-is");
+
+    opts.bind = opts.bind_http = opts.bind_dev = NULL;
+    ASSERT(!resolve_bind_opts(), "empty opts must resolve");
+    ASSERT(!opts.bind && !opts.bind_http && !bind_dev_ip(),
+           "empty opts must stay NULL");
+
+    opts.bind = saved_bind;
+    opts.bind_http = saved_http;
+    opts.bind_dev = saved_dev;
+    opts.disc_host = saved_disc;
+    opts.use_ipv4_only = saved_ipv4;
     return 0;
 }
 
