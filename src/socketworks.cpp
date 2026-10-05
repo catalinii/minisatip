@@ -133,14 +133,20 @@ int get_dev_ip(char *dev, char *buf, int len) {
     return rv;
 }
 
-// Resolves bind opts once at startup: rejects --bind-dev with --bind,
-// stores the device IP in opts.bind/opts.bind_http, defaults http to bind.
+// Resolve bind opts: reject dev+addr mix, store device IP, default http.
 int resolve_bind_opts() {
     static char bind_ip[MAX_HOST], bind_http_ip[MAX_HOST];
     char dev_ip[MAX_HOST];
-    int has_bind = opts.bind && opts.bind[0];
-    int has_http = opts.bind_http && opts.bind_http[0];
-    int has_dev = opts.bind_dev && opts.bind_dev[0];
+    if (opts.bind && !opts.bind[0])
+        opts.bind = NULL;
+    if (opts.bind_http && !opts.bind_http[0])
+        opts.bind_http = NULL;
+    if (opts.bind_dev && !opts.bind_dev[0])
+        opts.bind_dev = NULL;
+    // Pointers to our own statics mean a previous resolve, not a conflict.
+    int has_bind = opts.bind && opts.bind != bind_ip;
+    int has_http = opts.bind_http && opts.bind_http != bind_http_ip;
+    int has_dev = opts.bind_dev != NULL;
 
     if (has_dev && (has_bind || has_http)) {
         LOG("--bind-dev cannot be combined with --bind or --bind-http");
@@ -161,8 +167,7 @@ int resolve_bind_opts() {
     return 0;
 }
 
-// Source/join IP derived from --bind-dev, NULL otherwise.
-// Valid after resolve_bind_opts().
+// --bind-dev IP for sources/joins, if set; call resolve_bind_opts first.
 char *bind_dev_ip() {
     if (opts.bind_dev && opts.bind_dev[0])
         return opts.bind;
@@ -181,7 +186,7 @@ int set_socket_bind_dev(int sock) {
     }
     if (setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, opts.bind_dev,
                    strlen(opts.bind_dev) + 1) < 0) {
-        if (errno == EPERM) {
+        if (errno == EPERM || errno == EACCES) {
             LOG("No permission to bind socket %d to %s, using IP binding", sock,
                 opts.bind_dev);
             return 1;
@@ -199,11 +204,11 @@ int set_socket_bind_dev(int sock) {
 
 // Checks whether a socket is restricted to opts.bind_dev.
 int socket_bind_dev_ok(int sock) {
+    if (!opts.bind_dev || !opts.bind_dev[0])
+        return 1;
 #if defined(SO_BINDTODEVICE)
     char dev[IFNAMSIZ];
     socklen_t len = sizeof(dev);
-    if (!opts.bind_dev || !opts.bind_dev[0])
-        return 1;
     memset(dev, 0, sizeof(dev));
     if (getsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, dev, &len) < 0)
         return 0;
@@ -264,6 +269,7 @@ int udp_bind(char *addr, int port, int ipv4_only) {
 
     if (family == AF_INET && addr && atoi(addr) >= 239) {
         struct ip_mreq mreq;
+        // Join-interface only; cached at startup, never resolved here.
         char *mcast_if = bind_dev_ip();
 
         mreq.imr_multiaddr.s_addr = inet_addr(addr);
@@ -344,44 +350,6 @@ int udp_bind_connect(char *src, int sport, char *dest, int dport,
     return sock;
 }
 
-int udp_connect(char *addr, int port, USockAddr *serv) {
-    USockAddr sv;
-    int sock, optval = 1;
-    int family;
-    char localhost[100];
-
-    if (serv == NULL)
-        serv = &sv;
-    if (!(family = fill_sockaddr(serv, addr, port, opts.use_ipv4_only)))
-        return -1;
-    sock = socket(family, SOCK_DGRAM, IPPROTO_IP);
-    if (sock < 0) {
-        LOG("udp_connect failed: socket() %s", strerror(errno));
-        return -1;
-    }
-    if (set_socket_bind_dev(sock) < 0) {
-        close(sock);
-        return -1;
-    }
-
-    if (family == AF_INET && setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval,
-                                        sizeof(optval)) < 0) {
-        LOG("udp_bind: setsockopt(SO_REUSEADDR): %s", strerror(errno));
-        close(sock);
-        return -1;
-    }
-
-    if (connect(sock, &serv->sa, SOCKADDR_SIZE(*serv)) < 0) {
-        LOG("udp_connect: failed: bind(): %s", strerror(errno));
-        close(sock);
-        return -1;
-    }
-    LOG("New UDP socket %d connected to %s:%d", sock,
-        get_sockaddr_host(*serv, localhost, sizeof(localhost)),
-        get_sockaddr_port(*serv));
-    return sock;
-}
-
 int set_linux_socket_nonblock(int sockfd) {
     int flags = fcntl(sockfd, F_GETFL, 0);
     return fcntl(sockfd, F_SETFL, flags | O_NONBLOCK);
@@ -457,15 +425,16 @@ int tcp_connect_src(char *addr, int port, USockAddr *serv, int blocking,
 
     if (src && src[0]) {
         USockAddr src_add;
-        if (!fill_sockaddr(&src_add, src, 0, family == AF_INET)) {
+        // Retry without family restriction: a valid wrong-family source is
+        // skipped below, while a garbage source still fails the connection.
+        if (!fill_sockaddr(&src_add, src, 0, family == AF_INET) &&
+            !fill_sockaddr(&src_add, src, 0, 0)) {
             close(sock);
             return -1;
         }
-        // Skip a source address of the wrong family (e.g. IPv4
-        // --bind-dev with an IPv6 destination) instead of failing.
         if (src_add.sa.sa_family != family) {
-            LOG("%s: ignoring source %s for IPv6 connection", __FUNCTION__,
-                src);
+            LOG("%s: ignoring source %s (family %d) for family %d socket",
+                __FUNCTION__, src, src_add.sa.sa_family, family);
         } else if (bind(sock, &src_add.sa, SOCKADDR_SIZE(src_add)) < 0) {
             LOG("%s: failed: bind() on address: %s: error %s", __FUNCTION__,
                 src, strerror(errno));

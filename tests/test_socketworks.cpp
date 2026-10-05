@@ -223,6 +223,9 @@ int test_bind_dev() {
     else if (!get_dev_ip((char *)"lo0", ip, sizeof(ip)))
         dev = (char *)"lo0";
     if (!dev) {
+        opts.bind = saved_bind;
+        opts.bind_http = saved_http;
+        opts.bind_dev = saved_dev;
         opts.disc_host = saved_disc;
         opts.use_ipv4_only = saved_ipv4;
         LOG("no loopback device, skipping bind-dev test");
@@ -250,14 +253,24 @@ int test_bind_dev() {
            "source IP must be dev IP");
     ASSERT(!strcmp(getlocalip(), baseline),
            "bind-dev must not affect getlocalip");
+    ASSERT(!resolve_bind_opts(), "second resolve must be idempotent");
+    ASSERT(opts.bind && !strcmp(opts.bind, ip), "bind must keep dev IP");
+
+    opts.bind = (char *)"";
+    opts.bind_http = (char *)"";
+    opts.bind_dev = (char *)"";
+    ASSERT(!resolve_bind_opts(), "empty strings must resolve");
+    ASSERT(!opts.bind && !opts.bind_http && !opts.bind_dev && !bind_dev_ip(),
+           "empty strings must normalize to NULL");
+    opts.bind_dev = dev;
+    ASSERT(!resolve_bind_opts(), "loopback dev must resolve again");
 
     int fd = tcp_listen(opts.bind, 0, 1);
     char tcp_host[100] = {0};
     const char *tcp_got =
         fd >= 0 ? get_sock_shost(fd, tcp_host, sizeof(tcp_host)) : NULL;
-    int dev_ok = -1;
 #ifdef SO_BINDTODEVICE
-    int soft = -2;
+    int soft = -2, dev_ok = -1;
     if (fd >= 0) {
         int t = socket(AF_INET, SOCK_STREAM, 0);
         if (t >= 0) {
@@ -301,8 +314,60 @@ int test_bind_dev() {
     ASSERT(!strcmp(conn_host, ip), "connect must source dev IP");
 #ifdef SO_BINDTODEVICE
     ASSERT(soft == 0 || soft == 1, "valid dev must apply or degrade");
+    if (soft == 0)
+        ASSERT(dev_ok == 1, "device restriction not applied");
 #endif
-    ASSERT(dev_ok != 0, "device restriction not applied");
+
+    int mfd = udp_bind(opts.disc_host, 0, 1);
+    if (mfd >= 0)
+        close(mfd);
+    ASSERT(mfd >= 0, "multicast bind with dev IP must succeed");
+
+    USockAddr usa;
+    int usock = udp_bind_connect(ip, 0, (char *)"127.0.0.1", 9, &usa);
+    char usrc[100] = {0};
+    const char *usrc_got =
+        usock >= 0 ? get_sock_shost(usock, usrc, sizeof(usrc)) : NULL;
+    if (usock >= 0)
+        close(usock);
+    ASSERT(usrc_got && !strcmp(usrc, ip), "udp_bind_connect must bind src IP");
+
+    opts.use_ipv4_only = 0;
+    int v6fd = tcp_listen(NULL, 0, 0);
+    int v6skip = -1;
+    if (v6fd >= 0) {
+        int v6port = get_sock_sport(v6fd);
+        if (v6port > 0)
+            v6skip = tcp_connect_src((char *)"::1", v6port, NULL, 1,
+                                     (char *)"127.0.0.1");
+    }
+    opts.use_ipv4_only = 1;
+    int v4fd = tcp_listen((char *)"127.0.0.1", 0, 1);
+    int v4skip = -1, badsrc = -1;
+    if (v4fd >= 0) {
+        int v4port = get_sock_sport(v4fd);
+        if (v4port > 0) {
+            v4skip = tcp_connect_src((char *)"127.0.0.1", v4port, NULL, 1,
+                                     (char *)"::1");
+            badsrc = tcp_connect_src((char *)"127.0.0.1", v4port, NULL, 1,
+                                     (char *)"no-such-src-xyz.invalid");
+        }
+    }
+    if (v6fd >= 0)
+        close(v6fd);
+    if (v4fd >= 0)
+        close(v4fd);
+    if (v6skip >= 0)
+        close(v6skip);
+    if (v4skip >= 0)
+        close(v4skip);
+    if (v6fd >= 0) {
+        ASSERT(v6skip >= 0, "IPv4 source on IPv6 dest must be skipped");
+    } else {
+        LOG("no IPv6 listener, skipping v6 family test");
+    }
+    ASSERT(v4skip >= 0, "IPv6 source on IPv4 dest must be skipped");
+    ASSERT(badsrc < 0, "garbage source must fail");
 
     opts.bind = (char *)"127.0.0.2";
     opts.bind_http = NULL;

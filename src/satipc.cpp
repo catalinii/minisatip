@@ -349,6 +349,9 @@ void satipc_close_rtsp_socket(adapter *ad, satipc *sip) {
 
 int satipc_open_rtsp_socket(adapter *ad, satipc *sip, bool is_init) {
     sip->last_connect = getTick();
+    if (sip->source_ip[0] && bind_dev_ip())
+        LOG("per-server source %s overrides --bind-dev source %s",
+            sip->source_ip, bind_dev_ip());
     int s = tcp_connect_src(
         sip->sip, sip->sport, NULL, 1,
         sip->source_ip[0] ? sip->source_ip : bind_dev_ip()); // blocking socket
