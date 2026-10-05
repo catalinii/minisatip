@@ -134,7 +134,7 @@ int http_client(char *url, void *callback, void *opaque) {
     if (!req)
         req = (char *)"/";
 
-    sock = tcp_connect(h->host, h->port, NULL, 0);
+    sock = tcp_connect_src(h->host, h->port, NULL, 0, bind_dev_ip());
     if (sock < 0)
         LOG_AND_RETURN(1, "%s: connect to %s:%d failed", __FUNCTION__, h->host,
                        h->port);

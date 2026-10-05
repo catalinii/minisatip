@@ -508,9 +508,9 @@ int decode_transport(sockets *s, std::string_view arg, char *default_rtp,
             sid->rtcp = -1;
         }
 
-        if ((sid->rsock =
-                 udp_bind_connect(NULL, opts.start_rtp + (sid->sid * 2), p.dest,
-                                  p.port, &sid->sa)) < 0)
+        if ((sid->rsock = udp_bind_connect(bind_dev_ip(),
+                                           opts.start_rtp + (sid->sid * 2),
+                                           p.dest, p.port, &sid->sa)) < 0)
             LOG_AND_RETURN(-1,
                            "decode_transport failed: UDP connection on rtp "
                            "port to %s:%d failed",
@@ -525,9 +525,9 @@ int decode_transport(sockets *s, std::string_view arg, char *default_rtp,
             set_socket_send_buffer(sid->rsock, opts.output_buffer);
         set_socket_dscp(sid->rsock, IPTOS_DSCP_EF, 7);
 
-        if ((sid->rtcp =
-                 udp_bind_connect(NULL, opts.start_rtp + (sid->sid * 2) + 1,
-                                  p.dest, p.port + 1, &sa)) < 1)
+        if ((sid->rtcp = udp_bind_connect(bind_dev_ip(),
+                                          opts.start_rtp + (sid->sid * 2) + 1,
+                                          p.dest, p.port + 1, &sa)) < 1)
             LOG_AND_RETURN(
                 -1,
                 "decode_transport failed: UDP connection on rtcp port to "

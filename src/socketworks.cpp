@@ -103,10 +103,120 @@ int fill_sockaddr(USockAddr *serv, char *host, int port, int ipv4_only) {
 }
 
 char localip[MAX_HOST];
+
+// Checks --bind-dev format: non-empty, fits ifname, no separators.
+int validate_bind_dev(char *dev) {
+    if (!dev || !dev[0] || strlen(dev) >= IFNAMSIZ ||
+        strcspn(dev, "/ \t\r\n") != strlen(dev))
+        return -1;
+    return 0;
+}
+
+// Resolves the IPv4 address of a local device via ioctl.
+int get_dev_ip(char *dev, char *buf, int len) {
+    struct ifreq ifr;
+    int sock, rv = -1;
+    if (!dev || !dev[0] || !buf || len < (int)INET_ADDRSTRLEN ||
+        strlen(dev) >= sizeof(ifr.ifr_name))
+        return -1;
+    sock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sock < 0)
+        return -1;
+    memset(&ifr, 0, sizeof(ifr));
+    snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "%s", dev);
+    if (!ioctl(sock, SIOCGIFADDR, &ifr)) {
+        struct sockaddr_in *sin = (struct sockaddr_in *)&ifr.ifr_addr;
+        if (inet_ntop(AF_INET, &sin->sin_addr, buf, len))
+            rv = 0;
+    }
+    close(sock);
+    return rv;
+}
+
+// Resolves bind opts once at startup: rejects --bind-dev with --bind,
+// stores the device IP in opts.bind/opts.bind_http, defaults http to bind.
+int resolve_bind_opts() {
+    static char bind_ip[MAX_HOST], bind_http_ip[MAX_HOST];
+    char dev_ip[MAX_HOST];
+    int has_bind = opts.bind && opts.bind[0];
+    int has_http = opts.bind_http && opts.bind_http[0];
+    int has_dev = opts.bind_dev && opts.bind_dev[0];
+
+    if (has_dev && (has_bind || has_http)) {
+        LOG("--bind-dev cannot be combined with --bind or --bind-http");
+        return -1;
+    }
+    if (has_dev) {
+        if (get_dev_ip(opts.bind_dev, dev_ip, sizeof(dev_ip))) {
+            LOG("Cannot resolve --bind-dev %s", opts.bind_dev);
+            return -1;
+        }
+        safe_strncpy(bind_ip, dev_ip);
+        safe_strncpy(bind_http_ip, dev_ip);
+        opts.bind = bind_ip;
+        opts.bind_http = bind_http_ip;
+    } else if (has_bind && !has_http) {
+        opts.bind_http = opts.bind;
+    }
+    return 0;
+}
+
+// Source/join IP derived from --bind-dev, NULL otherwise.
+// Valid after resolve_bind_opts().
+char *bind_dev_ip() {
+    if (opts.bind_dev && opts.bind_dev[0])
+        return opts.bind;
+    return NULL;
+}
+
+// Restricts a socket to opts.bind_dev. Returns 0 when applied
+// or unset, 1 when unavailable (non-root/unsupported), -1 on error.
+int set_socket_bind_dev(int sock) {
+    if (!opts.bind_dev || !opts.bind_dev[0])
+        return 0;
+#if defined(SO_BINDTODEVICE)
+    if (strlen(opts.bind_dev) >= IFNAMSIZ) {
+        LOG("Device name %s too long", opts.bind_dev);
+        return -1;
+    }
+    if (setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, opts.bind_dev,
+                   strlen(opts.bind_dev) + 1) < 0) {
+        if (errno == EPERM) {
+            LOG("No permission to bind socket %d to %s, using IP binding", sock,
+                opts.bind_dev);
+            return 1;
+        }
+        LOG("Failed to bind socket %d to device %s: %s", sock, opts.bind_dev,
+            strerror(errno));
+        return -1;
+    }
+    return 0;
+#else
+    LOG("SO_BINDTODEVICE unsupported, using IP binding for %s", opts.bind_dev);
+    return 1;
+#endif
+}
+
+// Checks whether a socket is restricted to opts.bind_dev.
+int socket_bind_dev_ok(int sock) {
+#if defined(SO_BINDTODEVICE)
+    char dev[IFNAMSIZ];
+    socklen_t len = sizeof(dev);
+    if (!opts.bind_dev || !opts.bind_dev[0])
+        return 1;
+    memset(dev, 0, sizeof(dev));
+    if (getsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, dev, &len) < 0)
+        return 0;
+    return !strncmp(dev, opts.bind_dev, sizeof(dev));
+#else
+    (void)sock;
+    return 0;
+#endif
+}
+
 char *getlocalip() {
     const char *dest = opts.disc_host;
     int port = 1900;
-
     USockAddr serv;
 
     int family = fill_sockaddr(&serv, (char *)dest, port, opts.use_ipv4_only);
@@ -116,6 +226,7 @@ char *getlocalip() {
     // Socket could not be created
     if (sock < 0) {
         LOG("getlocalip: Cannot create socket: %s", strerror(errno));
+        memset(localip, 0, sizeof(localip));
         return localip;
     }
 
@@ -146,17 +257,30 @@ int udp_bind(char *addr, int port, int ipv4_only) {
         LOG("udp_bind failed: socket(): %s", strerror(errno));
         return -1;
     }
+    if (set_socket_bind_dev(sock) < 0) {
+        close(sock);
+        return -1;
+    }
 
     if (family == AF_INET && addr && atoi(addr) >= 239) {
         struct ip_mreq mreq;
+        char *mcast_if = bind_dev_ip();
 
         mreq.imr_multiaddr.s_addr = inet_addr(addr);
-        mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+        mreq.imr_interface.s_addr =
+            mcast_if ? inet_addr(mcast_if) : htonl(INADDR_ANY);
         is_multicast = 1;
         LOG("setting multicast for %s", addr);
         if (setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq,
                        sizeof(mreq)) == -1) {
             LOG("membership error: %s", strerror(errno));
+        }
+        if (mcast_if) {
+            struct in_addr ifaddr;
+            ifaddr.s_addr = inet_addr(mcast_if);
+            if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_IF, &ifaddr,
+                           sizeof(ifaddr)) < 0)
+                LOG("multicast if error: %s", strerror(errno));
         }
     }
     if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) <
@@ -181,6 +305,7 @@ int udp_bind(char *addr, int port, int ipv4_only) {
                 close(sock);
                 return -1;
             }
+            LOG("udp_bind: bound %s to ANY (multicast fallback)", addr);
         } else {
             LOG("udp_bind: failed: bind() on host %s port %d: error %s", addr,
                 port, strerror(errno));
@@ -232,6 +357,10 @@ int udp_connect(char *addr, int port, USockAddr *serv) {
     sock = socket(family, SOCK_DGRAM, IPPROTO_IP);
     if (sock < 0) {
         LOG("udp_connect failed: socket() %s", strerror(errno));
+        return -1;
+    }
+    if (set_socket_bind_dev(sock) < 0) {
+        close(sock);
         return -1;
     }
 
@@ -305,6 +434,10 @@ int tcp_connect_src(char *addr, int port, USockAddr *serv, int blocking,
         LOG("tcp_connect failed: socket() %s", strerror(errno));
         return -1;
     }
+    if (set_socket_bind_dev(sock) < 0) {
+        close(sock);
+        return -1;
+    }
 
     if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) <
         0) {
@@ -328,7 +461,12 @@ int tcp_connect_src(char *addr, int port, USockAddr *serv, int blocking,
             close(sock);
             return -1;
         }
-        if (bind(sock, &src_add.sa, SOCKADDR_SIZE(src_add)) < 0) {
+        // Skip a source address of the wrong family (e.g. IPv4
+        // --bind-dev with an IPv6 destination) instead of failing.
+        if (src_add.sa.sa_family != family) {
+            LOG("%s: ignoring source %s for IPv6 connection", __FUNCTION__,
+                src);
+        } else if (bind(sock, &src_add.sa, SOCKADDR_SIZE(src_add)) < 0) {
             LOG("%s: failed: bind() on address: %s: error %s", __FUNCTION__,
                 src, strerror(errno));
             close(sock);
@@ -366,6 +504,10 @@ int tcp_listen(char *addr, int port, int ipv4_only) {
     sock = socket(family, SOCK_STREAM, IPPROTO_IP);
     if (sock < 0) {
         LOG("tcp_listen failed: socket(): %s", strerror(errno));
+        return -1;
+    }
+    if (set_socket_bind_dev(sock) < 0) {
+        close(sock);
         return -1;
     }
     if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) <

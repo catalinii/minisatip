@@ -567,7 +567,8 @@ int connect_dvbapi(void *arg) {
             network_mode = 0;
             sock = connect_local_socket(opts.dvbapi_host, 1);
         } else
-            sock = tcp_connect(opts.dvbapi_host, opts.dvbapi_port, NULL, 0);
+            sock = tcp_connect_src(opts.dvbapi_host, opts.dvbapi_port, NULL, 0,
+                                   bind_dev_ip());
         if (sock < 0) {
             LOG_AND_RETURN(0, "%s: connect to %s failed", __FUNCTION__,
                            opts.dvbapi_host);

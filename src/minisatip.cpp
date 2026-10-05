@@ -525,9 +525,9 @@ Help\n\
 	* 2 - use dvrX device and additionally capture PSI data from demuxX device \n\
 	* 3 - use demuxX device and additionally capture PSI data from demuxX device \n\
 * -V --bind address: address for listening (RTSP + SSDP) \n\
-* -U --bind-http address: address for listening (HTTP)\n\
+* -U --bind-http address: address for listening (HTTP, defaults to --bind)\n\
 * -J --bind-dev device: device name for binding (all services)\n\
-        * beware that only works with 1 device. loopback may not work!\n\
+        * one device only (IPv4); not with --bind/--bind-http\n\
 \n\
 * -A --virtual-diseqc mapping_string: absolute source mapping for virtual diseqc mode\n\
 \t* The format is: SRC1[-END1]:AD1:DISEQC1[,SRC2:INP2:DISEQC2]\n\
@@ -729,6 +729,8 @@ void set_options(int argc, char *argv[]) {
         }
 
         case BIND_DEV_OPT: {
+            if (validate_bind_dev(optarg))
+                FAIL("Invalid --bind-dev value");
             opts.bind_dev = optarg;
             break;
         }
@@ -1084,6 +1086,9 @@ void set_options(int argc, char *argv[]) {
         }
     }
 
+    if (resolve_bind_opts())
+        FAIL("Invalid bind configuration");
+
     if (!opts.bind)
         lip = getlocalip();
     else
@@ -1091,20 +1096,22 @@ void set_options(int argc, char *argv[]) {
 
     if (!opts.http_host) {
         opts.http_host = (char *)malloc(MAX_HOST);
-        sprintf(opts.http_host, "%s:%u", lip, opts.http_port);
+        snprintf(opts.http_host, MAX_HOST, "%s:%u", lip, opts.http_port);
     }
 
     opts.rtsp_host = (char *)malloc(MAX_HOST);
-    sprintf(opts.rtsp_host, "%s:%d", lip, opts.rtsp_port);
+    snprintf(opts.rtsp_host, MAX_HOST, "%s:%d", lip, opts.rtsp_port);
 
-    LOG("Listening configuration RTSP:%s (bind address: %s), HTTP:%s (bind "
-        "address: %s)",
+    LOG("Listening configuration RTSP:%s (bind address: %s, bind device: "
+        "%s), HTTP:%s (bind address: %s, bind device: %s)",
         opts.rtsp_host ? opts.rtsp_host : "(null)",
         opts.bind ? opts.bind : "(null)",
+        opts.bind_dev ? opts.bind_dev : "(null)",
         opts.http_host ? opts.http_host : "(null)",
         opts.bind_http ? opts.bind_http
         : opts.bind    ? opts.bind
-                       : "(null)");
+                       : "(null)",
+        opts.bind_dev ? opts.bind_dev : "(null)");
 
     opts.datetime_compile = (char *)malloc(64);
     sprintf(opts.datetime_compile, "%s | %s", __DATE__, __TIME__);
@@ -1879,20 +1886,12 @@ int main(int argc, char *argv[]) {
         if ((ssdp1 = udp_bind(opts.disc_host, 1900, 1)) < 1)
             FAIL("SSDP: Could not bind on %s udp port 1900", opts.disc_host);
         if (opts.bind_dev) {
-#if defined(SO_BINDTODEVICE)
-            struct ifreq ifr;
-            memset(&ifr, 0, sizeof(ifr));
-            snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "%s", opts.bind_dev);
-            if (setsockopt(ssdp, SOL_SOCKET, SO_BINDTODEVICE, (void *)&ifr,
-                           sizeof(ifr)) < 0)
-                LOG("SSDP: Failed to set SO_BINDTODEVICE to %s", opts.bind_dev);
-            if (setsockopt(ssdp1, SOL_SOCKET, SO_BINDTODEVICE, (void *)&ifr,
-                           sizeof(ifr)) < 0)
-                LOG("SSDP: Failed to set SO_BINDTODEVICE to %s", opts.bind_dev);
-            LOG("SSDP: Bound to device %s", opts.bind_dev);
-#else
-            LOG("SSDP: Binding to device with SO_BINDTODEVICE not supported!");
-#endif
+            if (socket_bind_dev_ok(ssdp) && socket_bind_dev_ok(ssdp1)) {
+                LOG("SSDP: Bound to device %s", opts.bind_dev);
+            } else {
+                LOG("SSDP: Device %s unavailable, using IP binding",
+                    opts.bind_dev);
+            }
         }
 
         si = sockets_add(ssdp, NULL, -1, TYPE_UDP, (socket_action)ssdp_reply,
