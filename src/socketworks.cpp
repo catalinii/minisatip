@@ -103,9 +103,90 @@ int fill_sockaddr(USockAddr *serv, char *host, int port, int ipv4_only) {
 }
 
 char localip[MAX_HOST];
+
+// Checks --bind-dev format: non-empty, fits ifname, no separators.
+int validate_bind_dev(char *dev) {
+    if (!dev || !dev[0] || strlen(dev) >= IFNAMSIZ ||
+        strcspn(dev, "/ \t\r\n") != strlen(dev))
+        return -1;
+    return 0;
+}
+
+// Resolves the IPv4 address of a local device via ioctl.
+int get_dev_ip(char *dev, char *buf, int len) {
+    struct ifreq ifr;
+    int sock, rv = -1;
+    if (!dev || !dev[0] || !buf || len < (int)INET_ADDRSTRLEN ||
+        strlen(dev) >= sizeof(ifr.ifr_name))
+        return -1;
+    sock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sock < 0)
+        return -1;
+    memset(&ifr, 0, sizeof(ifr));
+    snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "%s", dev);
+    if (!ioctl(sock, SIOCGIFADDR, &ifr)) {
+        struct sockaddr_in *sin = (struct sockaddr_in *)&ifr.ifr_addr;
+        if (inet_ntop(AF_INET, &sin->sin_addr, buf, len))
+            rv = 0;
+    }
+    close(sock);
+    return rv;
+}
+
+// Restricts a socket to opts.bind_dev. Returns 0 when applied
+// or unset, 1 when unavailable (non-root/unsupported), -1 on error.
+int set_socket_bind_dev(int sock) {
+    if (!opts.bind_dev || !opts.bind_dev[0])
+        return 0;
+#if defined(SO_BINDTODEVICE)
+    if (strlen(opts.bind_dev) >= IFNAMSIZ) {
+        LOG("Device name %s too long", opts.bind_dev);
+        return -1;
+    }
+    if (setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, opts.bind_dev,
+                   strlen(opts.bind_dev) + 1) < 0) {
+        if (errno == EPERM) {
+            LOG("No permission to bind socket %d to %s, using IP binding", sock,
+                opts.bind_dev);
+            return 1;
+        }
+        LOG("Failed to bind socket %d to device %s: %s", sock, opts.bind_dev,
+            strerror(errno));
+        return -1;
+    }
+    return 0;
+#else
+    LOG("SO_BINDTODEVICE unsupported, using IP binding for %s", opts.bind_dev);
+    return 1;
+#endif
+}
+
+// Checks whether a socket is restricted to opts.bind_dev.
+int socket_bind_dev_ok(int sock) {
+#if defined(SO_BINDTODEVICE)
+    char dev[IFNAMSIZ];
+    socklen_t len = sizeof(dev);
+    if (!opts.bind_dev || !opts.bind_dev[0])
+        return 1;
+    memset(dev, 0, sizeof(dev));
+    if (getsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, dev, &len) < 0)
+        return 0;
+    return !strncmp(dev, opts.bind_dev, sizeof(dev));
+#else
+    (void)sock;
+    return 0;
+#endif
+}
+
 char *getlocalip() {
     const char *dest = opts.disc_host;
     int port = 1900;
+    if (opts.bind_dev && opts.bind_dev[0]) {
+        if (!get_dev_ip(opts.bind_dev, localip, sizeof(localip)))
+            return localip;
+        LOG("getlocalip: cannot resolve %s, using default route",
+            opts.bind_dev);
+    }
 
     USockAddr serv;
 
@@ -116,6 +197,7 @@ char *getlocalip() {
     // Socket could not be created
     if (sock < 0) {
         LOG("getlocalip: Cannot create socket: %s", strerror(errno));
+        memset(localip, 0, sizeof(localip));
         return localip;
     }
 
@@ -133,9 +215,21 @@ char *getlocalip() {
 int udp_bind(char *addr, int port, int ipv4_only) {
     USockAddr serv;
     char localhost[100];
+    char dev_ip[MAX_HOST];
     int sock, optval = 1;
     int is_multicast = 0;
-    int family = fill_sockaddr(&serv, addr, port, ipv4_only);
+    char *bind_addr = addr;
+    int have_dev_ip = 0;
+    if (opts.bind_dev && opts.bind_dev[0]) {
+        if (get_dev_ip(opts.bind_dev, dev_ip, sizeof(dev_ip))) {
+            LOG("udp_bind: cannot resolve device %s", opts.bind_dev);
+            return -1;
+        }
+        have_dev_ip = 1;
+        if (!bind_addr || !bind_addr[0])
+            bind_addr = dev_ip;
+    }
+    int family = fill_sockaddr(&serv, bind_addr, port, ipv4_only);
 
     if (!family)
         return -1;
@@ -146,17 +240,29 @@ int udp_bind(char *addr, int port, int ipv4_only) {
         LOG("udp_bind failed: socket(): %s", strerror(errno));
         return -1;
     }
+    if (set_socket_bind_dev(sock) < 0) {
+        close(sock);
+        return -1;
+    }
 
-    if (family == AF_INET && addr && atoi(addr) >= 239) {
+    if (family == AF_INET && bind_addr && atoi(bind_addr) >= 239) {
         struct ip_mreq mreq;
 
-        mreq.imr_multiaddr.s_addr = inet_addr(addr);
-        mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+        mreq.imr_multiaddr.s_addr = inet_addr(bind_addr);
+        mreq.imr_interface.s_addr =
+            have_dev_ip ? inet_addr(dev_ip) : htonl(INADDR_ANY);
         is_multicast = 1;
-        LOG("setting multicast for %s", addr);
+        LOG("setting multicast for %s", bind_addr);
         if (setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq,
                        sizeof(mreq)) == -1) {
             LOG("membership error: %s", strerror(errno));
+        }
+        if (have_dev_ip) {
+            struct in_addr ifaddr;
+            ifaddr.s_addr = inet_addr(dev_ip);
+            if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_IF, &ifaddr,
+                           sizeof(ifaddr)) < 0)
+                LOG("multicast if error: %s", strerror(errno));
         }
     }
     if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) <
@@ -181,9 +287,10 @@ int udp_bind(char *addr, int port, int ipv4_only) {
                 close(sock);
                 return -1;
             }
+            LOG("udp_bind: bound %s to ANY (multicast fallback)", bind_addr);
         } else {
-            LOG("udp_bind: failed: bind() on host %s port %d: error %s", addr,
-                port, strerror(errno));
+            LOG("udp_bind: failed: bind() on host %s port %d: error %s",
+                bind_addr, port, strerror(errno));
             close(sock);
             return -1;
         }
@@ -194,7 +301,7 @@ int udp_bind(char *addr, int port, int ipv4_only) {
     LOG("New UDP socket %d bound to %s:%d %s%s%s", sock,
         get_sockaddr_host(serv, localhost, sizeof(localhost)),
         get_sockaddr_port(serv), is_multicast ? "(mcast:" : "",
-        is_multicast ? addr : "", is_multicast ? ")" : "");
+        is_multicast ? bind_addr : "", is_multicast ? ")" : "");
     return sock;
 }
 
@@ -234,12 +341,34 @@ int udp_connect(char *addr, int port, USockAddr *serv) {
         LOG("udp_connect failed: socket() %s", strerror(errno));
         return -1;
     }
+    if (set_socket_bind_dev(sock) < 0) {
+        close(sock);
+        return -1;
+    }
 
     if (family == AF_INET && setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval,
                                         sizeof(optval)) < 0) {
         LOG("udp_bind: setsockopt(SO_REUSEADDR): %s", strerror(errno));
         close(sock);
         return -1;
+    }
+
+    if (opts.bind_dev && opts.bind_dev[0]) {
+        char dev_ip[MAX_HOST];
+        if (get_dev_ip(opts.bind_dev, dev_ip, sizeof(dev_ip))) {
+            LOG("udp_connect: cannot resolve device %s", opts.bind_dev);
+            close(sock);
+            return -1;
+        }
+        if (family == AF_INET) {
+            USockAddr src_add;
+            if (!fill_sockaddr(&src_add, dev_ip, 0, 1) ||
+                bind(sock, &src_add.sa, SOCKADDR_SIZE(src_add)) < 0) {
+                LOG("udp_connect: cannot bind %s: %s", dev_ip, strerror(errno));
+                close(sock);
+                return -1;
+            }
+        }
     }
 
     if (connect(sock, &serv->sa, SOCKADDR_SIZE(*serv)) < 0) {
@@ -293,6 +422,7 @@ int tcp_connect_src(char *addr, int port, USockAddr *serv, int blocking,
     USockAddr sv;
     int sock, optval = 1;
     int family;
+    char dev_ip[MAX_HOST];
 
     if (serv == NULL)
         serv = &sv;
@@ -303,6 +433,10 @@ int tcp_connect_src(char *addr, int port, USockAddr *serv, int blocking,
     sock = socket(family, SOCK_STREAM, IPPROTO_IP);
     if (sock < 0) {
         LOG("tcp_connect failed: socket() %s", strerror(errno));
+        return -1;
+    }
+    if (set_socket_bind_dev(sock) < 0) {
+        close(sock);
         return -1;
     }
 
@@ -320,6 +454,16 @@ int tcp_connect_src(char *addr, int port, USockAddr *serv, int blocking,
             LOG("%s: could not set the socket %d in nonblocking mode %d err: "
                 "%s",
                 __FUNCTION__, sock, errno, strerror(errno));
+    }
+
+    if (opts.bind_dev && opts.bind_dev[0]) {
+        if (get_dev_ip(opts.bind_dev, dev_ip, sizeof(dev_ip))) {
+            LOG("tcp_connect: cannot resolve device %s", opts.bind_dev);
+            close(sock);
+            return -1;
+        }
+        if ((!src || !src[0]) && family == AF_INET)
+            src = dev_ip;
     }
 
     if (src && src[0]) {
@@ -359,13 +503,27 @@ int tcp_listen(char *addr, int port, int ipv4_only) {
     int sock, optval = 1;
     int family;
     char sa[50];
+    char dev_ip[MAX_HOST];
+    char *bind_addr = addr;
+    if (opts.bind_dev && opts.bind_dev[0]) {
+        if (get_dev_ip(opts.bind_dev, dev_ip, sizeof(dev_ip))) {
+            LOG("tcp_listen: cannot resolve device %s", opts.bind_dev);
+            return -1;
+        }
+        if (!bind_addr || !bind_addr[0])
+            bind_addr = dev_ip;
+    }
 
-    if (!(family = fill_sockaddr(&serv, addr, port, ipv4_only)))
+    if (!(family = fill_sockaddr(&serv, bind_addr, port, ipv4_only)))
         return -1;
 
     sock = socket(family, SOCK_STREAM, IPPROTO_IP);
     if (sock < 0) {
         LOG("tcp_listen failed: socket(): %s", strerror(errno));
+        return -1;
+    }
+    if (set_socket_bind_dev(sock) < 0) {
+        close(sock);
         return -1;
     }
     if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) <
@@ -378,8 +536,8 @@ int tcp_listen(char *addr, int port, int ipv4_only) {
     if (bind(sock, &serv.sa, SOCKADDR_SIZE(serv)) < 0) {
         LOG("tcp_listen: failed: bind() on address: %s [%s], port %d : error "
             "%s",
-            addr ? addr : "ANY", get_sockaddr_host(serv, sa, sizeof(sa)), port,
-            strerror(errno));
+            bind_addr ? bind_addr : "ANY",
+            get_sockaddr_host(serv, sa, sizeof(sa)), port, strerror(errno));
         close(sock);
         return -1;
     }
@@ -389,7 +547,7 @@ int tcp_listen(char *addr, int port, int ipv4_only) {
         return -1;
     }
     LOG("New TCP listening socket %d at %s:%d, family %d", sock,
-        addr ? addr : "0:0:0:0", port, family);
+        bind_addr ? bind_addr : "0:0:0:0", port, family);
     return sock;
 }
 

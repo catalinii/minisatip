@@ -79,6 +79,10 @@ typedef struct struct_sockets {
 
 char *setlocalip();
 char *getlocalip();
+int get_dev_ip(char *dev, char *buf, int len);
+int validate_bind_dev(char *dev);
+int set_socket_bind_dev(int sock);
+int socket_bind_dev_ok(int sock);
 int udp_connect(char *addr, int port, USockAddr *serv);
 int udp_bind_connect(char *src, int sport, char *dest, int dport,
                      USockAddr *serv);

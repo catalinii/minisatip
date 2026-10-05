@@ -194,6 +194,109 @@ int test_socket_buffering() {
     return 0;
 }
 
+int test_bind_dev() {
+    char ip[MAX_HOST], baseline[MAX_HOST];
+    char *saved_disc = opts.disc_host;
+    int saved_ipv4 = opts.use_ipv4_only;
+    opts.disc_host = (char *)"239.255.255.250";
+    opts.use_ipv4_only = 1;
+
+    ASSERT(get_dev_ip(NULL, ip, sizeof(ip)), "NULL dev must fail");
+    ASSERT(get_dev_ip((char *)"", ip, sizeof(ip)), "empty dev must fail");
+    ASSERT(get_dev_ip((char *)"lo", NULL, 10), "NULL buf must fail");
+    ASSERT(get_dev_ip((char *)"lo", ip, 4), "short buf must fail");
+    ASSERT(!validate_bind_dev((char *)"eth0"), "eth0 must validate");
+    ASSERT(validate_bind_dev(NULL), "NULL must not validate");
+    ASSERT(validate_bind_dev((char *)""), "empty must not validate");
+    ASSERT(!validate_bind_dev((char *)"123456789012345"), "15 chars must pass");
+    ASSERT(validate_bind_dev((char *)"1234567890123456"), "16 chars must fail");
+    ASSERT(validate_bind_dev((char *)"a/b"), "slash must not validate");
+    ASSERT(validate_bind_dev((char *)"a\nb"), "newline must not validate");
+
+    char *dev = NULL;
+    if (!get_dev_ip((char *)"lo", ip, sizeof(ip)))
+        dev = (char *)"lo";
+    else if (!get_dev_ip((char *)"lo0", ip, sizeof(ip)))
+        dev = (char *)"lo0";
+    if (!dev) {
+        opts.disc_host = saved_disc;
+        opts.use_ipv4_only = saved_ipv4;
+        LOG("no loopback device, skipping bind-dev test");
+        return 0;
+    }
+
+    safe_strncpy(baseline, getlocalip());
+    opts.bind_dev = dev;
+    char good_lip[MAX_HOST];
+    safe_strncpy(good_lip, getlocalip());
+    int fd = tcp_listen(NULL, 0, 1);
+    char tcp_host[100] = {0};
+    const char *tcp_got =
+        fd >= 0 ? get_sock_shost(fd, tcp_host, sizeof(tcp_host)) : NULL;
+    int dev_ok = -1;
+#ifdef SO_BINDTODEVICE
+    int soft = -2;
+    if (fd >= 0) {
+        int t = socket(AF_INET, SOCK_STREAM, 0);
+        if (t >= 0) {
+            soft = set_socket_bind_dev(t);
+            close(t);
+        }
+        if (soft == 0)
+            dev_ok = socket_bind_dev_ok(fd) ? 1 : 0;
+    }
+#endif
+    int ufd = udp_bind(NULL, 0, 1);
+    char udp_host[100] = {0};
+    const char *udp_got =
+        ufd >= 0 ? get_sock_shost(ufd, udp_host, sizeof(udp_host)) : NULL;
+    int efd = tcp_listen((char *)"127.0.0.2", 0, 1);
+    char exp_host[100] = {0};
+    const char *exp_got =
+        efd >= 0 ? get_sock_shost(efd, exp_host, sizeof(exp_host)) : NULL;
+    int cfd = -1;
+    char conn_host[100] = {0};
+    if (fd >= 0) {
+        int port = get_sock_sport(fd);
+        if (port > 0)
+            cfd = tcp_connect_src(ip, port, NULL, 1, NULL);
+        if (cfd >= 0)
+            get_sock_shost(cfd, conn_host, sizeof(conn_host));
+    }
+    opts.bind_dev = (char *)"no-such-dev-xyz";
+    char invalid_lip[MAX_HOST];
+    safe_strncpy(invalid_lip, getlocalip());
+    int bad_tcp = tcp_listen(NULL, 0, 1);
+    int bad_udp = udp_bind(NULL, 0, 1);
+    int bad_exp = tcp_listen(ip, 0, 1);
+    int bad_conn = tcp_connect_src(ip, get_sock_sport(fd), NULL, 1, NULL);
+    opts.bind_dev = NULL;
+    if (fd >= 0)
+        close(fd);
+    if (ufd >= 0)
+        close(ufd);
+    if (efd >= 0)
+        close(efd);
+    if (cfd >= 0)
+        close(cfd);
+    opts.disc_host = saved_disc;
+    opts.use_ipv4_only = saved_ipv4;
+    ASSERT(!strcmp(good_lip, ip), "getlocalip must return dev IP");
+    ASSERT(tcp_got && !strcmp(tcp_host, ip), "tcp_listen must bind dev IP");
+    ASSERT(udp_got && !strcmp(udp_host, ip), "udp_bind must bind dev IP");
+    ASSERT(exp_got && !strcmp(exp_host, "127.0.0.2"), "explicit must win");
+    ASSERT(cfd >= 0, "connect with bind_dev must succeed");
+    ASSERT(!strcmp(conn_host, ip), "connect must source dev IP");
+    ASSERT(!strcmp(invalid_lip, baseline), "invalid dev must fall back");
+    ASSERT(bad_tcp < 0 && bad_udp < 0 && bad_exp < 0 && bad_conn < 0,
+           "invalid dev must fail closed");
+#ifdef SO_BINDTODEVICE
+    ASSERT(soft == 0 || soft == 1, "valid dev must apply or degrade");
+#endif
+    ASSERT(dev_ok != 0, "device restriction not applied");
+    return 0;
+}
+
 int main() {
     opts.log = 1; // LOG_UTILS | LOG_SOCKET;
     strcpy(thread_info[thread_index].thread_name, "test_socketworks");
@@ -210,6 +313,7 @@ int main() {
     TEST_FUNC(test_socket_writev_flush_enqued(),
               "testing socket_writev with flushing the queue");
     TEST_FUNC(test_socket_buffering(), "testing socket buffering and flushing");
+    TEST_FUNC(test_bind_dev(), "testing bind-dev handling");
     fflush(stdout);
     free_all();
     return 0;
