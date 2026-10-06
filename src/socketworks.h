@@ -84,7 +84,6 @@ int resolve_bind_opts();
 char *bind_dev_ip();
 int set_socket_bind_dev(int sock);
 int socket_bind_dev_ok(int sock);
-int udp_connect(char *addr, int port, USockAddr *serv);
 int udp_bind_connect(char *src, int sport, char *dest, int dport,
                      USockAddr *serv);
 int udp_bind(char *addr, int port, int ipv4_only);

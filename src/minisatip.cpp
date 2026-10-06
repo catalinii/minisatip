@@ -527,7 +527,7 @@ Help\n\
 * -V --bind address: address for listening (RTSP + SSDP) \n\
 * -U --bind-http address: address for listening (HTTP, defaults to --bind)\n\
 * -J --bind-dev device: device name for binding (all services)\n\
-        * one device only (IPv4); not with --bind/--bind-http\n\
+        * one device only (IPv4); cannot be combined with --bind/--bind-http\n\
 \n\
 * -A --virtual-diseqc mapping_string: absolute source mapping for virtual diseqc mode\n\
 \t* The format is: SRC1[-END1]:AD1:DISEQC1[,SRC2:INP2:DISEQC2]\n\
