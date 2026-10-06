@@ -13,7 +13,9 @@
 
 #include <fcntl.h>
 #include <linux/dvb/frontend.h>
+#include <netinet/in.h>
 #include <string.h>
+#include <sys/socket.h>
 
 extern int satipc_tune(int aid, transponder *tp);
 extern int satipc_commit(adapter *ad);
@@ -300,6 +302,45 @@ int test_rtsp_keepalive() {
     return 0;
 }
 
+#ifndef DISABLE_SRT
+// Binds an ephemeral localhost UDP port and releases it, so the SRT
+// connect below fails fast against a closed port.
+static int closed_udp_port() {
+    int s = socket(AF_INET, SOCK_DGRAM, 0);
+    if (s < 0)
+        return 9;
+    struct sockaddr_in sa = {};
+    sa.sin_family = AF_INET;
+    sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (bind(s, (struct sockaddr *)&sa, sizeof(sa))) {
+        close(s);
+        return 9;
+    }
+    socklen_t len = sizeof(sa);
+    getsockname(s, (struct sockaddr *)&sa, &len);
+    close(s);
+    return ntohs(sa.sin_port);
+}
+
+int test_rtsp_srt_failure_keeps_socket() {
+    RtspFixture fx;
+    if (fx.setup())
+        return 1;
+
+    fx.sip.transport_type = SIP_TRANSPORT_SRT;
+    fx.sip.srt_sock = SRT_INVALID_SOCK;
+    strcpy(fx.sip.sip, "127.0.0.1");
+    fx.sip.sport = closed_udp_port();
+
+    // The dispatch deletes the socket on nonzero timeout returns.
+    ASSERT(satipc_timeout(&fx.rsock) == 0,
+           "SRT failure must not delete the RTSP socket");
+
+    fx.teardown();
+    return 0;
+}
+#endif
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -310,6 +351,10 @@ int main() {
     TEST_FUNC(test_rtsp_503_recovery(), "test 503 tears down and recovers");
     TEST_FUNC(test_rtsp_454_recovery(), "test 454 restarts the session");
     TEST_FUNC(test_rtsp_keepalive(), "test OPTIONS keep-alive rules");
+#ifndef DISABLE_SRT
+    TEST_FUNC(test_rtsp_srt_failure_keeps_socket(),
+              "test SRT failure keeps the RTSP socket");
+#endif
 
     fflush(stdout);
     free_all();
