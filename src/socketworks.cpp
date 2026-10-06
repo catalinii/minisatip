@@ -169,7 +169,7 @@ int resolve_bind_opts() {
 
 // --bind-dev IP for sources/joins, if set; call resolve_bind_opts first.
 char *bind_dev_ip() {
-    if (opts.bind_dev && opts.bind_dev[0])
+    if (opts.bind_dev)
         return opts.bind;
     return NULL;
 }
@@ -177,7 +177,7 @@ char *bind_dev_ip() {
 // Restricts a socket to opts.bind_dev. Returns 0 when applied
 // or unset, 1 when unavailable (non-root/unsupported), -1 on error.
 int set_socket_bind_dev(int sock) {
-    if (!opts.bind_dev || !opts.bind_dev[0])
+    if (!opts.bind_dev)
         return 0;
 #if defined(SO_BINDTODEVICE)
     if (strlen(opts.bind_dev) >= IFNAMSIZ) {
@@ -204,7 +204,7 @@ int set_socket_bind_dev(int sock) {
 
 // Checks whether a socket is restricted to opts.bind_dev.
 int socket_bind_dev_ok(int sock) {
-    if (!opts.bind_dev || !opts.bind_dev[0])
+    if (!opts.bind_dev)
         return 1;
 #if defined(SO_BINDTODEVICE)
     char dev[IFNAMSIZ];
