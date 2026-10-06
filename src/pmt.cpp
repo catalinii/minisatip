@@ -1011,11 +1011,24 @@ static int pid_subscribed(adapter *ad, SPid *p) {
     return spid_has_client_sid(p);
 }
 
-// A PMT may start while its own PMT pid is subscribed by a real client
-// and at least one of its audio/video pids is subscribed by one.
+// Live AV check for the update path: NEW counts, DELETED does not.
+static int has_live_av(adapter *ad, SPMT *pmt) {
+    for (const auto &sp : pmt->stream_pids) {
+        SPid *s;
+        if (!sp.is_audio && !sp.is_video)
+            continue;
+        s = find_pid(ad->id, sp.pid);
+        if (s && (s->flags == PID_STATE_ACTIVE || s->flags == PID_STATE_NEW) &&
+            pid_subscribed(ad, s))
+            return 1;
+    }
+    return 0;
+}
+
+// Start needs own pid + AV; a running PMT stays candidate on AV alone.
 static int is_start_candidate(adapter *ad, SPid **pids, SPMT *pmt) {
     SPid *pp = pids[pmt->pid];
-    if (!pid_subscribed(ad, pp))
+    if (pmt->state != PMT_RUNNING && !pid_subscribed(ad, pp))
         return 0;
     for (const auto &sp : pmt->stream_pids)
         if ((sp.is_audio || sp.is_video) && pid_subscribed(ad, pids[sp.pid]))
@@ -1132,8 +1145,7 @@ static void handover_claims_from_lower_priority(adapter *ad, SPMT *pmt) {
     }
 }
 
-// A PMT runs while its PMT pid is client-subscribed and it owns a
-// subscribed AV pid. Claims are sticky; preemption happens at parse.
+// Earliest subscriber wins each pid; a running PMT without its pid sorts last.
 void pmt_pid_updated_pids(adapter *ad) {
     int i;
     SPid *pids[8193];
@@ -1161,7 +1173,6 @@ void pmt_pid_updated_pids(adapter *ad) {
         ch[nch].order = (pp && pp->order) ? pp->order : UINT32_MAX;
         nch++;
     }
-
     // Sort by subscription order, lowest sid on ties, then drop later
     // members duplicating an earlier member's stream set.
     std::sort(ch, ch + nch, [](const SPmtChoice &a, const SPmtChoice &b) {
@@ -1208,9 +1219,17 @@ void pmt_pid_updated_pids(adapter *ad) {
             // path finds an owner; only AV pid claims start the PMT.
             if (!s || !pid_subscribed(ad, s) || s->pmt == pmt->id)
                 continue;
-            // Sticky claims: take free or stale pids only, never steal.
-            if (s->pmt >= 0 && get_pmt(s->pmt))
-                continue;
+            // Order steals: take over from later-sorted holders only.
+            SPMT *holder = s->pmt >= 0 ? get_pmt(s->pmt) : NULL;
+            if (holder) {
+                SPid *hp = pids[holder->pid];
+                uint32_t holder_order =
+                    (hp && hp->order) ? hp->order : UINT32_MAX;
+                if (ch[i].order >= holder_order)
+                    continue;
+                LOGM("PMT %d steals pid %d from PMT %d", pmt->id, sp.pid,
+                     s->pmt);
+            }
             s->pmt = pmt->id;
             s->is_decrypted = 0;
             LOGM("PMT %d claimed pid %d", pmt->id, sp.pid);
@@ -2237,12 +2256,15 @@ void pmt_pid_del(adapter *ad, int pid) {
     p = find_pid(ad->id, pid);
     if (!p)
         return;
-    // Own pid deleted: stop the PMT and free its claims even though its
-    // streams stay subscribed; a successor starts on the next pass.
+    // Own pid deleted: keep while AV stays, the election steals for rivals.
     for (i = 0; i < ad->active_pmts; i++) {
         SPMT *own = get_pmt(ad->active_pmt[i]);
         if (own && own->pid == pid &&
             (own->state == PMT_RUNNING || own->state == PMT_STARTING)) {
+            if (has_live_av(ad, own)) {
+                LOG("PMT %d keeps running without pid %d", own->id, pid);
+                continue;
+            }
             stop_pmt(own, ad);
             release_pmt_claims(ad, own);
         }

@@ -614,13 +614,13 @@ int test_pmt_starts_only_with_pmt_pid() {
     ASSERT(find_pid(0, 3301)->pmt == bid, "video pid should be claimed by B");
     ASSERT(find_pid(0, 3401)->pmt == bid, "audio pid should be claimed by B");
 
-    // drop the PMT pid: ES-only playlist must not decrypt anything
+    // drop the PMT pid: AV stays with no rival, so the PMT stays
     find_pid(0, 52)->sid.clear();
     find_pid(0, 52)->order = 0;
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[bid]->state, PMT_STOPPED, "PMT should stop");
-    ASSERT(find_pid(0, 3301)->pmt == -1, "video claim should be released");
-    ASSERT(find_pid(0, 3401)->pmt == -1, "audio claim should be released");
+    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "PMT should stay");
+    ASSERT(find_pid(0, 3301)->pmt == bid, "video claim should be kept");
+    ASSERT(find_pid(0, 3401)->pmt == bid, "audio claim should be kept");
 
     free_all_pmts();
     a[0] = NULL;
@@ -1237,6 +1237,107 @@ int test_sticky_claims_without_parse() {
     start_active_pmts(&ad);
     ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "newcomer should keep waiting");
     ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "holder should keep running");
+
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
+// Mirror image: an earlier-subscribed newcomer steals by order.
+int test_earlier_newcomer_steals_by_order() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+
+    int aid = pmt_add(0, 14101, 48);
+    int bid = pmt_add(0, 14104, 52);
+    pmt_add_stream_pid(pmts[aid], 3301, 2, false, true);
+    pmt_add_stream_pid(pmts[bid], 3301, 2, false, true);
+    pmt_add_stream_pid(pmts[bid], 3401, 3, true, false);
+    // B subscribed earlier but joins late; A runs holding video only.
+    // Sets differ so no dedupe: the takeover must steal mid-loop.
+    int pids[] = {48, 52, 3301, 3401};
+    int orders[] = {5, 3, 6, 7};
+    for (i = 0; i < 4; i++) {
+        ad.pids[i].pid = pids[i];
+        ad.pids[i].flags = PID_STATE_ACTIVE;
+        ad.pids[i].pmt = -1;
+        ad.pids[i].filter = -1;
+        ad.pids[i].sid.insert(i < 2 ? 1 - i : 0);
+        if (i >= 2)
+            ad.pids[i].sid.insert(1);
+        ad.pids[i].order = orders[i];
+    }
+    ad.active_pmts = 1;
+    ad.active_pmt[0] = aid;
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "A should run alone");
+    ASSERT(find_pid(0, 3301)->pmt == aid, "A should own the video pid");
+
+    // B arrives fully subscribed with the earlier order and takes over
+    ad.active_pmts = 2;
+    ad.active_pmt[1] = bid;
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "earlier should take over");
+    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "holder should step aside");
+    ASSERT(find_pid(0, 3301)->pmt == bid, "video pid should move to B");
+
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
+// Partial overlap: the thief takes the shared pid, the holder keeps its
+// own audio and both stay running.
+int test_steal_splits_partial_overlap() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+
+    int aid = pmt_add(0, 14101, 48);
+    int bid = pmt_add(0, 14104, 52);
+    pmt_add_stream_pid(pmts[aid], 3301, 2, false, true);
+    pmt_add_stream_pid(pmts[aid], 3401, 3, true, false);
+    pmt_add_stream_pid(pmts[bid], 3301, 2, false, true);
+    pmt_add_stream_pid(pmts[bid], 3402, 3, true, false);
+    int pids[] = {48, 52, 3301, 3401, 3402};
+    int orders[] = {5, 3, 6, 7, 8};
+    int sids[] = {1, 0, 0, 1, 0};
+    for (i = 0; i < 5; i++) {
+        ad.pids[i].pid = pids[i];
+        ad.pids[i].flags = PID_STATE_ACTIVE;
+        ad.pids[i].pmt = -1;
+        ad.pids[i].filter = -1;
+        ad.pids[i].sid.insert(sids[i]);
+        if (pids[i] == 3301)
+            ad.pids[i].sid.insert(1);
+        ad.pids[i].order = orders[i];
+    }
+    ad.active_pmts = 1;
+    ad.active_pmt[0] = aid;
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "A should run alone");
+
+    ad.active_pmts = 2;
+    ad.active_pmt[1] = bid;
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "earlier should run");
+    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "holder keeps own audio");
+    ASSERT(find_pid(0, 3301)->pmt == bid, "shared video moves to B");
+    ASSERT(find_pid(0, 3401)->pmt == aid, "own audio stays with A");
+    ASSERT(find_pid(0, 3402)->pmt == bid, "own audio goes to B");
 
     free_all_pmts();
     a[0] = NULL;
@@ -1866,8 +1967,7 @@ int test_late_parse_handover() {
     return 0;
 }
 
-// Without ADD_REMOVE on the running filter, the last unsubscribe deletes
-// the PMT pid from the demux at once; the PMT stops on the next pass.
+// Last unsubscribe deletes the pid, but the PMT stays on AV with no rival.
 int test_running_pmt_pid_deleted_on_unsubscribe() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
@@ -1906,11 +2006,79 @@ int test_running_pmt_pid_deleted_on_unsubscribe() {
     mark_pid_deleted(0, 0, 48, NULL);
     update_pids(0);
     ASSERT(find_pid(0, 48) == NULL, "PMT pid should leave the demux");
-    ASSERT_EQUAL(pmts[id]->state, PMT_STOPPED, "PMT should stop on pid delete");
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should stay on pid delete");
+    ASSERT(find_pid(0, 3301)->pmt == id, "video claim should be kept");
 
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[id]->state, PMT_STOPPED, "PMT should stay stopped");
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should stay running");
 
+    del_filter(fid);
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
+// Pid leaves and returns, AV stays with no rival: PMT runs, CA sees no churn.
+int test_pmt_pid_remove_readd_no_churn() {
+    int i;
+    uint8_t priv[1] = {0};
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    SCA_op counting_op = fake_ca_op;
+    counting_op.ca_add_pmt = counting_ca_add_pmt;
+    int ica = add_ca(&counting_op);
+    ASSERT(ica >= 0, "could not register the fake CA");
+    ad.ca_mask = 1 << ica;
+
+    int id = pmt_add(0, 222, 222);
+    ASSERT(id >= 0, "could not create the PMT");
+    pmt_add_stream_pid(pmts[id], 2221, 27, false, true);
+    pmt_add_stream_pid(pmts[id], 2222, 6, true, false);
+    pmt_add_caid(pmts[id], 0x4AFC, 2220, priv, 0);
+    int fid = add_filter(0, 222, (void *)process_pmt, pmts[id], 0);
+    ASSERT(fid >= 0, "could not add the PMT filter");
+    pmts[id]->filter = fid;
+    ad.active_pmts = 1;
+    ad.active_pmt[0] = id;
+
+    ASSERT(mark_pid_add(0, 0, 222) == 0, "pid 222 should be added");
+    ASSERT(mark_pid_add(0, 0, 2221) == 0, "pid 2221 should be added");
+    ASSERT(mark_pid_add(0, 0, 2222) == 0, "pid 2222 should be added");
+    update_pids(0);
+    fake_ca_add_calls = fake_ca_del_calls = 0;
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should run");
+    ASSERT_EQUAL(fake_ca_add_calls, 1, "PMT should reach the CA once");
+
+    // delpids=222 while the streams stay subscribed
+    fake_ca_add_calls = fake_ca_del_calls = 0;
+    mark_pid_deleted(0, 0, 222, NULL);
+    update_pids(0);
+    ASSERT(find_pid(0, 222) == NULL, "pid 222 should leave the demux");
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should stay");
+    ASSERT_EQUAL(fake_ca_del_calls, 0, "PMT should not leave the CA");
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should stay on pass");
+    ASSERT_EQUAL(fake_ca_add_calls, 0, "PMT should not be re-sent");
+
+    // addpids=222 back: still no churn
+    ASSERT(mark_pid_add(0, 0, 222) == 0, "pid 222 should be added back");
+    update_pids(0);
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should stay");
+    ASSERT_EQUAL(fake_ca_del_calls, 0, "PMT should not leave the CA");
+    ASSERT_EQUAL(fake_ca_add_calls, 0, "PMT should not be re-sent");
+    ASSERT(find_pid(0, 2221)->pmt == id, "video claim should be kept");
+
+    del_ca(&counting_op);
     del_filter(fid);
     free_all_pmts();
     a[0] = NULL;
@@ -2174,7 +2342,11 @@ int main() {
     TEST_FUNC(test_active_pmt_list_capped_at_max(),
               "testing the active PMT list refuses to overflow")
     TEST_FUNC(test_sticky_claims_without_parse(),
-              "testing the loop never steals without a parse")
+              "testing later order never steals from earlier holder")
+    TEST_FUNC(test_earlier_newcomer_steals_by_order(),
+              "testing earlier order steals from later holder")
+    TEST_FUNC(test_steal_splits_partial_overlap(),
+              "testing steal splits partial overlap, both run")
     TEST_FUNC(test_pid_order_reset_on_remove(),
               "testing SPid order assignment and reset")
     TEST_FUNC(test_d8_shared_pid(), "testing D8 shared pid dedupe and split")
@@ -2205,6 +2377,8 @@ int main() {
               "testing handover when the earlier PMT parses late")
     TEST_FUNC(test_running_pmt_pid_deleted_on_unsubscribe(),
               "testing demux release on last PMT pid unsubscribe")
+    TEST_FUNC(test_pmt_pid_remove_readd_no_churn(),
+              "testing no churn on PMT pid remove and re-add")
     TEST_FUNC(test_pmt_pid_delete_hands_over(),
               "testing handover when the PMT pid is deleted")
     TEST_FUNC(test_update_pids_tail_elects(),
