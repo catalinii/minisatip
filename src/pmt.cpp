@@ -1220,9 +1220,9 @@ void pmt_pid_updated_pids(adapter *ad) {
             if (!s || !pid_subscribed(ad, s) || s->pmt == pmt->id)
                 continue;
             // Order steals: take over from later-sorted holders only.
-            if (s->pmt >= 0 && get_pmt(s->pmt)) {
-                SPMT *holder = get_pmt(s->pmt);
-                SPid *hp = holder ? pids[holder->pid] : NULL;
+            SPMT *holder = s->pmt >= 0 ? get_pmt(s->pmt) : NULL;
+            if (holder) {
+                SPid *hp = pids[holder->pid];
                 uint32_t holder_order =
                     (hp && hp->order) ? hp->order : UINT32_MAX;
                 if (ch[i].order >= holder_order)

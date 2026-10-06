@@ -1293,6 +1293,57 @@ int test_earlier_newcomer_steals_by_order() {
     return 0;
 }
 
+// Partial overlap: the thief takes the shared pid, the holder keeps its
+// own audio and both stay running.
+int test_steal_splits_partial_overlap() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+
+    int aid = pmt_add(0, 14101, 48);
+    int bid = pmt_add(0, 14104, 52);
+    pmt_add_stream_pid(pmts[aid], 3301, 2, false, true);
+    pmt_add_stream_pid(pmts[aid], 3401, 3, true, false);
+    pmt_add_stream_pid(pmts[bid], 3301, 2, false, true);
+    pmt_add_stream_pid(pmts[bid], 3402, 3, true, false);
+    int pids[] = {48, 52, 3301, 3401, 3402};
+    int orders[] = {5, 3, 6, 7, 8};
+    int sids[] = {1, 0, 0, 1, 0};
+    for (i = 0; i < 5; i++) {
+        ad.pids[i].pid = pids[i];
+        ad.pids[i].flags = PID_STATE_ACTIVE;
+        ad.pids[i].pmt = -1;
+        ad.pids[i].filter = -1;
+        ad.pids[i].sid.insert(sids[i]);
+        if (pids[i] == 3301)
+            ad.pids[i].sid.insert(1);
+        ad.pids[i].order = orders[i];
+    }
+    ad.active_pmts = 1;
+    ad.active_pmt[0] = aid;
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "A should run alone");
+
+    ad.active_pmts = 2;
+    ad.active_pmt[1] = bid;
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "earlier should run");
+    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "holder keeps own audio");
+    ASSERT(find_pid(0, 3301)->pmt == bid, "shared video moves to B");
+    ASSERT(find_pid(0, 3401)->pmt == aid, "own audio stays with A");
+    ASSERT(find_pid(0, 3402)->pmt == bid, "own audio goes to B");
+
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
 // SPid.order is assigned on subscription and reset on removal.
 int test_pid_order_reset_on_remove() {
     adapter ad = {};
@@ -2294,6 +2345,8 @@ int main() {
               "testing later order never steals from earlier holder")
     TEST_FUNC(test_earlier_newcomer_steals_by_order(),
               "testing earlier order steals from later holder")
+    TEST_FUNC(test_steal_splits_partial_overlap(),
+              "testing steal splits partial overlap, both run")
     TEST_FUNC(test_pid_order_reset_on_remove(),
               "testing SPid order assignment and reset")
     TEST_FUNC(test_d8_shared_pid(), "testing D8 shared pid dedupe and split")
