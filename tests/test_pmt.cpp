@@ -1243,6 +1243,56 @@ int test_sticky_claims_without_parse() {
     return 0;
 }
 
+// Mirror image: an earlier-subscribed newcomer steals by order.
+int test_earlier_newcomer_steals_by_order() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+
+    int aid = pmt_add(0, 14101, 48);
+    int bid = pmt_add(0, 14104, 52);
+    pmt_add_stream_pid(pmts[aid], 3301, 2, false, true);
+    pmt_add_stream_pid(pmts[bid], 3301, 2, false, true);
+    pmt_add_stream_pid(pmts[bid], 3401, 3, true, false);
+    // B subscribed earlier but joins late; A runs holding video only.
+    // Sets differ so no dedupe: the takeover must steal mid-loop.
+    int pids[] = {48, 52, 3301, 3401};
+    int orders[] = {5, 3, 6, 7};
+    for (i = 0; i < 4; i++) {
+        ad.pids[i].pid = pids[i];
+        ad.pids[i].flags = PID_STATE_ACTIVE;
+        ad.pids[i].pmt = -1;
+        ad.pids[i].filter = -1;
+        ad.pids[i].sid.insert(i < 2 ? 1 - i : 0);
+        if (i >= 2)
+            ad.pids[i].sid.insert(1);
+        ad.pids[i].order = orders[i];
+    }
+    ad.active_pmts = 1;
+    ad.active_pmt[0] = aid;
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "A should run alone");
+    ASSERT(find_pid(0, 3301)->pmt == aid, "A should own the video pid");
+
+    // B arrives fully subscribed with the earlier order and takes over
+    ad.active_pmts = 2;
+    ad.active_pmt[1] = bid;
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "earlier should take over");
+    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "holder should step aside");
+    ASSERT(find_pid(0, 3301)->pmt == bid, "video pid should move to B");
+
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
 // SPid.order is assigned on subscription and reset on removal.
 int test_pid_order_reset_on_remove() {
     adapter ad = {};
@@ -2241,7 +2291,9 @@ int main() {
     TEST_FUNC(test_active_pmt_list_capped_at_max(),
               "testing the active PMT list refuses to overflow")
     TEST_FUNC(test_sticky_claims_without_parse(),
-              "testing the loop never steals without a parse")
+              "testing later order never steals from earlier holder")
+    TEST_FUNC(test_earlier_newcomer_steals_by_order(),
+              "testing earlier order steals from later holder")
     TEST_FUNC(test_pid_order_reset_on_remove(),
               "testing SPid order assignment and reset")
     TEST_FUNC(test_d8_shared_pid(), "testing D8 shared pid dedupe and split")
