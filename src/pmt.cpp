@@ -1011,17 +1011,6 @@ static int pid_subscribed(adapter *ad, SPid *p) {
     return spid_has_client_sid(p);
 }
 
-// True when any audio/video pid of the PMT stays subscribed.
-static int has_subscribed_av(adapter *ad, SPid **pids, SPMT *pmt) {
-    for (const auto &sp : pmt->stream_pids) {
-        if (!sp.is_audio && !sp.is_video)
-            continue;
-        if (pid_subscribed(ad, pids[sp.pid]))
-            return 1;
-    }
-    return 0;
-}
-
 // Live AV check for the update path: NEW counts, DELETED does not.
 static int has_live_av(adapter *ad, SPMT *pmt) {
     for (const auto &sp : pmt->stream_pids) {
@@ -1039,11 +1028,8 @@ static int has_live_av(adapter *ad, SPMT *pmt) {
 // Start needs own pid + AV; a running PMT stays candidate on AV alone.
 static int is_start_candidate(adapter *ad, SPid **pids, SPMT *pmt) {
     SPid *pp = pids[pmt->pid];
-    if (!pid_subscribed(ad, pp)) {
-        if (pmt->state != PMT_RUNNING && pmt->state != PMT_STARTING)
-            return 0;
-        return has_subscribed_av(ad, pids, pmt);
-    }
+    if (pmt->state != PMT_RUNNING && !pid_subscribed(ad, pp))
+        return 0;
     for (const auto &sp : pmt->stream_pids)
         if ((sp.is_audio || sp.is_video) && pid_subscribed(ad, pids[sp.pid]))
             return 1;
