@@ -1866,8 +1866,7 @@ int test_late_parse_handover() {
     return 0;
 }
 
-// Without ADD_REMOVE the last unsubscribe deletes the PMT pid at once;
-// with AV staying and no rival the PMT keeps running.
+// Last unsubscribe deletes the pid, but the PMT stays on AV with no rival.
 int test_running_pmt_pid_deleted_on_unsubscribe() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
@@ -1918,8 +1917,7 @@ int test_running_pmt_pid_deleted_on_unsubscribe() {
     return 0;
 }
 
-// BBC Two: the PMT pid leaves and returns while AV stays with no
-// rival; the PMT keeps running and the CA sees no churn.
+// Pid leaves and returns, AV stays with no rival: PMT runs, CA sees no churn.
 int test_pmt_pid_remove_readd_no_churn() {
     int i;
     uint8_t priv[1] = {0};

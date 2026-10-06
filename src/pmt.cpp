@@ -1093,8 +1093,7 @@ static int is_live_candidate(adapter *ad, SPMT *pmt) {
     return 0;
 }
 
-// Keep a running PMT without its own pid while AV stays and no
-// other live candidate shares those pids.
+// Keep a running PMT without its pid while AV stays and no rival shares it.
 static int should_keep_without_own_pid(adapter *ad, SPMT *old) {
     int i, has_av = 0;
     for (const auto &sp : old->stream_pids)
@@ -1215,8 +1214,7 @@ static void handover_claims_from_lower_priority(adapter *ad, SPMT *pmt) {
     }
 }
 
-// A PMT starts with its PMT pid subscribed and stays while it owns
-// a subscribed AV pid; only a rival candidate stops it without one.
+// Start needs the PMT pid; a PMT stays on AV unless a rival shares it.
 void pmt_pid_updated_pids(adapter *ad) {
     int i;
     SPid *pids[8193];
@@ -1244,8 +1242,7 @@ void pmt_pid_updated_pids(adapter *ad) {
         ch[nch].order = (pp && pp->order) ? pp->order : UINT32_MAX;
         nch++;
     }
-    // Stay-alive: a running PMT without its own pid keeps its AV
-    // while no other candidate shares them.
+    // Stay-alive: a running PMT without its pid keeps AV if no rival shares it.
     for (i = 0; i < ad->active_pmts && nch < MAX_PMT_FOR_ADAPTER; i++) {
         SPMT *pmt = get_pmt(ad->active_pmt[i]);
         int j, listed = 0;
@@ -2341,8 +2338,7 @@ void pmt_pid_del(adapter *ad, int pid) {
     p = find_pid(ad->id, pid);
     if (!p)
         return;
-    // Own pid deleted: keep the PMT while AV stays and no rival
-    // shares them; otherwise stop so a successor starts next pass.
+    // Own pid deleted: stay on AV unless a rival shares it, else stop for handover.
     for (i = 0; i < ad->active_pmts; i++) {
         SPMT *own = get_pmt(ad->active_pmt[i]);
         if (own && own->pid == pid &&
