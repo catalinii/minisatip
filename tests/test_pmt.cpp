@@ -18,6 +18,7 @@
  *
  */
 #include "ca.h"
+#include "ddci.h"
 #include "dvb.h"
 #include "minisatip.h"
 #include "socketworks.h"
@@ -32,6 +33,7 @@
 #include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -2669,6 +2671,260 @@ int test_handover_ignores_stale_holder() {
     return 0;
 }
 
+extern ddci_device_t *ddci_devices[MAX_ADAPTERS];
+extern ca_device_t *ca_devices[MAX_ADAPTERS];
+extern std::unordered_map<int, Sddci_channel> channels;
+extern int dvbca_id;
+int dvbca_process_pmt(adapter *ad, SPMT *pmt, int update);
+int dvbca_del_pmt(adapter *ad, SPMT *spmt);
+int dvbca_add_pid(adapter *ad, SPMT *pmt, int pid);
+
+static int e2e_del_calls;
+static int e2e_dvbca_del_pmt(adapter *ad, SPMT *pmt) {
+    e2e_del_calls++;
+    return dvbca_del_pmt(ad, pmt);
+}
+static int e2e_ddci_del_pmt(adapter *ad, SPMT *pmt) {
+    e2e_del_calls++;
+    return ddci_del_pmt(ad, pmt);
+}
+
+struct e2e_apdu {
+    uint8_t listmgmt;
+    uint8_t cmd;
+    int pids[16];
+    int npids;
+};
+
+// Scan captured CA-fd bytes for ca_pmt APDUs (tag 9F8032) and parse the
+// list management, command and ES pid set out of each. Our sections
+// carry no private data, so the tag cannot occur spuriously inside.
+static int e2e_parse_apdus(uint8_t *b, int len, struct e2e_apdu *out, int max) {
+    int found = 0;
+    for (int i = 0; i + 4 < len && found < max; i++) {
+        if (b[i] != 0x9F || b[i + 1] != 0x80 || b[i + 2] != 0x32)
+            continue;
+        int p = i + 3; // ASN.1 length
+        int obj_len = b[p++];
+        if (obj_len & 0x80) {
+            int n = obj_len & 0x7F, v = 0;
+            for (int k = 0; k < n && p < len; k++)
+                v = (v << 8) | b[p++];
+            obj_len = v;
+        }
+        if (p + 6 > len)
+            break;
+        struct e2e_apdu *a = &out[found++];
+        a->listmgmt = b[p];
+        a->cmd = 0;
+        a->npids = 0;
+        int end = p + obj_len, q = p + 6; // skip listmgmt/sid/ver/pilen
+        while (q + 5 <= end && q + 5 <= len && a->npids < 16) {
+            a->pids[a->npids++] = (b[q + 1] << 8) | b[q + 2];
+            int eslen = (b[q + 3] << 8) | b[q + 4];
+            if (!a->cmd && eslen > 0 && q + 5 < len)
+                a->cmd = b[q + 5];
+            q += 5 + eslen;
+        }
+        i = q - 1;
+    }
+    return found;
+}
+
+static int e2e_apdu_has_pid(struct e2e_apdu *a, int pid) {
+    for (int i = 0; i < a->npids; i++)
+        if (a->pids[i] == pid)
+            return 1;
+    return 0;
+}
+
+static int e2e_drain(int fd, uint8_t *buf, int cap) {
+    int total = 0, n;
+    struct pollfd pfd = {fd, POLLIN, 0};
+    while (total < cap && poll(&pfd, 1, 0) > 0) {
+        n = read(fd, buf + total, cap - total);
+        if (n <= 0)
+            break;
+        total += n;
+    }
+    return total;
+}
+
+// End-to-end PMT version update across the real DDCI + DVBCA CAs, modeled
+// on the #1346 capture: sid 7100 drops pid 3127 and adds 3151 (as type 4
+// here, not the log's type 6, so the swap lands in the CAPMT ES loop).
+// Asserts no stop/start anywhere: the PMT stays RUNNING with zero CA
+// deletes, DDCI only swaps the mapping on the same slot, and the CAM
+// sees exactly one UPDATE CAPMT — no NOT_SELECTED + re-ADD.
+int test_pmt_update_e2e_single_capmt_update() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+    for (i = 0; i < MAX_ADAPTERS; i++)
+        a[i] = NULL;
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    memset(ca_devices, 0, sizeof(ca_devices));
+    channels.clear();
+
+    adapter ad = {}, a0 = {};
+    a[8] = &ad;
+    a[0] = &a0;
+    ad.enabled = 1;
+    ad.id = 8;
+    a0.enabled = 1;
+    a0.id = 0;
+    opts.emulate_pids_all = 0;
+    char saved_enigma = opts.enigma;
+    opts.enigma = 0;
+
+    ddci_device_t d0 = {};
+    memset(&d0.pmt, -1, sizeof(d0.pmt));
+    d0.id = 0;
+    d0.enabled = 1;
+    d0.max_channels = 1;
+    ddci_devices[0] = &d0;
+
+    ca_device_t ca8 = {};
+    ca8.id = 8;
+    ca8.enabled = 1;
+    ca8.state = CA_STATE_INITIALIZED;
+    ca8.max_ca_pmt = 4;
+    memset(ca8.capmt, -1, sizeof(ca8.capmt));
+    for (i = 0; i < MAX_CA_PMT; i++) {
+        ca8.capmt[i].capmt_hash = 0;
+        ca8.capmt[i].capmt_hash_valid = 0;
+    }
+    int sv[2];
+    ASSERT(socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == 0, "no socketpair");
+    ca8.fd = sv[0];
+    ca8.sessions[0].handler.name = "test";
+    ca8.sessions[1].handler.resource = MKRID(3, 1, 1);
+    ca8.sessions[1].handler.name = "test";
+    ca8.sessions[1].ca = &ca8;
+    ca8.sessions[1].session_number = 1;
+    ca_devices[8] = &ca8;
+
+    SCA_op e2e_dvbca = {}, e2e_ddci = {};
+    e2e_dvbca.ca_add_pid = dvbca_add_pid;
+    e2e_dvbca.ca_add_pmt = dvbca_process_pmt;
+    e2e_dvbca.ca_del_pmt = e2e_dvbca_del_pmt;
+    e2e_ddci.ca_add_pmt = ddci_process_pmt;
+    e2e_ddci.ca_del_pmt = e2e_ddci_del_pmt;
+    int vidx = add_ca(&e2e_dvbca);
+    int didx = add_ca(&e2e_ddci);
+    ASSERT(vidx >= 0 && didx >= 0, "could not register the CAs");
+    ad.ca_mask = (1 << vidx) | (1 << didx);
+    int saved_dvbca_id = dvbca_id;
+    dvbca_id = vidx;
+    add_caid_mask(vidx, 8, 0x0B00, 0xFFFF);
+    add_caid_mask(vidx, 0, 0x0B00, 0xFFFF);
+
+    int id = pmt_add(8, 7100, 1025);
+    ASSERT(id >= 0, "could not create the PMT");
+    int fid = add_filter(8, 1025, (void *)process_pmt, pmts[id], 0);
+    ASSERT(fid >= 0, "could not add the PMT filter");
+    pmts[id]->filter = fid;
+
+    // 3151 stays unsubscribed: the client adds it after the update.
+    int sub1[] = {1025, 314, 870, 873, 3127, 3128, 5100, 6403};
+    for (i = 0; i < 8; i++)
+        ASSERT(mark_pid_add(0, 8, sub1[i]) == 0, "pid should be added");
+    update_pids(8);
+
+    int types1[] = {27, 4, 4, 4, 6, 6, 5};
+    int spids1[] = {314, 870, 873, 3127, 3128, 5100, 6403};
+    uint8_t sec[256], cap[8192], psi[1500];
+    struct e2e_apdu apdus[4];
+    int len = build_pmt(sec, 7100, 2, 314, 0x0B00, 0x0C00, types1, spids1, 7);
+    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v2 to parse");
+    e2e_del_calls = 0;
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should run");
+    ASSERT_EQUAL(e2e_del_calls, 0, "no stop on first add");
+
+    int n = e2e_drain(sv[1], cap, sizeof(cap));
+    ASSERT(n > 0, "CAM should get the first CAPMT");
+    ASSERT_EQUAL(e2e_parse_apdus(cap, n, apdus, 4), 1, "one CAPMT expected");
+    ASSERT_EQUAL((int)apdus[0].listmgmt, CLM_ONLY, "first send is ONLY");
+    ASSERT_EQUAL((int)apdus[0].cmd, CA_PMT_CMD_ID_OK_DESCRAMBLING,
+                 "first send is OK");
+    ASSERT_EQUAL(apdus[0].npids, 4, "only AV streams go in the CAPMT");
+    ASSERT(e2e_apdu_has_pid(&apdus[0], 3127), "3127 in first CAPMT");
+
+    ASSERT(d0.pmt[0].id == id, "DDCI should hold the PMT on slot 0");
+    ASSERT(get_pid_mapping_allddci(8, 3127) != NULL, "3127 should map");
+    int ddci_314 = get_pid_mapping_allddci(8, 314)->ddci_pid;
+    int ddci_870 = get_pid_mapping_allddci(8, 870)->ddci_pid;
+    int ddci_873 = get_pid_mapping_allddci(8, 873)->ddci_pid;
+    int ddci_3128 = get_pid_mapping_allddci(8, 3128)->ddci_pid;
+    ASSERT(ddci_create_pmt(&d0, pmts[id], psi, sizeof(psi), &d0.pmt[0]) > 0,
+           "DDCI PMT expected");
+    int ver1 = d0.pmt[0].ver;
+
+    // Version bump: 3127 disappears, 3151 appears.
+    int types2[] = {27, 4, 4, 4, 6, 6, 5};
+    int spids2[] = {314, 870, 873, 3151, 3128, 5100, 6403};
+    len = build_pmt(sec, 7100, 3, 314, 0x0B00, 0x0C00, types2, spids2, 7);
+    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v3 to parse");
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "update must not stop it");
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should still run");
+    ASSERT_EQUAL(e2e_del_calls, 0, "no stop/start on update");
+
+    n = e2e_drain(sv[1], cap, sizeof(cap));
+    ASSERT(n > 0, "CAM should get the update");
+    ASSERT_EQUAL(e2e_parse_apdus(cap, n, apdus, 4), 1, "single UPDATE");
+    ASSERT_EQUAL((int)apdus[0].listmgmt, CLM_UPDATE, "re-send is UPDATE");
+    ASSERT_EQUAL((int)apdus[0].cmd, CA_PMT_CMD_ID_OK_DESCRAMBLING,
+                 "update is OK");
+    ASSERT(!e2e_apdu_has_pid(&apdus[0], 3127), "3127 must be gone");
+    ASSERT(e2e_apdu_has_pid(&apdus[0], 3151), "3151 must be present");
+
+    ASSERT(d0.pmt[0].id == id, "DDCI should keep the slot");
+    ASSERT(get_pid_mapping_allddci(8, 3127) == NULL, "3127 must unmap");
+    ASSERT(get_pid_mapping_allddci(8, 3151) != NULL, "3151 must map");
+    ASSERT_EQUAL(get_pid_mapping_allddci(8, 314)->ddci_pid, ddci_314,
+                 "kept pids keep ddci pids");
+    ASSERT_EQUAL(get_pid_mapping_allddci(8, 870)->ddci_pid, ddci_870,
+                 "kept pids keep ddci pids");
+    ASSERT_EQUAL(get_pid_mapping_allddci(8, 873)->ddci_pid, ddci_873,
+                 "kept pids keep ddci pids");
+    ASSERT_EQUAL(get_pid_mapping_allddci(8, 3128)->ddci_pid, ddci_3128,
+                 "kept pids keep ddci pids");
+    ASSERT(ddci_create_pmt(&d0, pmts[id], psi, sizeof(psi), &d0.pmt[0]) > 0,
+           "DDCI PMT expected");
+    ASSERT_EQUAL(d0.pmt[0].ver, (ver1 + 1) & 0xF, "DDCI PMT bumps once");
+
+    // The client subscribes 3151 late, as in the capture: re-parse and
+    // re-send, but the identical CAPMT is skipped and nothing stops.
+    ASSERT(mark_pid_add(0, 8, 3151) == 0, "client adds 3151");
+    update_pids(8);
+    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v3 repeat to parse");
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should still run");
+    ASSERT_EQUAL(e2e_del_calls, 0, "no stop/start on pid add");
+    n = e2e_drain(sv[1], cap, sizeof(cap));
+    ASSERT_EQUAL(n, 0, "identical re-send writes no CAPMT");
+    ASSERT(ddci_create_pmt(&d0, pmts[id], psi, sizeof(psi), &d0.pmt[0]) > 0,
+           "DDCI PMT expected");
+    ASSERT_EQUAL(d0.pmt[0].ver, (ver1 + 1) & 0xF, "DDCI version stable");
+
+    del_ca(&e2e_dvbca);
+    del_ca(&e2e_ddci);
+    dvbca_id = saved_dvbca_id;
+    free_filters();
+    free_all_pmts();
+    channels.clear();
+    ddci_devices[0] = NULL;
+    ca_devices[8] = NULL;
+    a[8] = a[0] = NULL;
+    close(sv[0]);
+    close(sv[1]);
+    opts.enigma = saved_enigma;
+    return 0;
+}
+
 // A re-send the CA rejects with NORETRY (match lost on update)
 // releases the stale registration instead of leaking it.
 int test_resend_rejected_releases_ca() {
@@ -2896,6 +3152,8 @@ int main() {
               "testing the CA add call flags updates vs first adds")
     TEST_FUNC(test_handover_ignores_stale_holder(),
               "testing handover skips holders that dropped the pid")
+    TEST_FUNC(test_pmt_update_e2e_single_capmt_update(),
+              "testing a version update sends one CAPMT UPDATE end to end")
     TEST_FUNC(test_resend_rejected_releases_ca(),
               "testing a rejected re-send releases the CA slot")
     TEST_FUNC(test_add_caid_rejects_negative_len(),
