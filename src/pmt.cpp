@@ -1589,7 +1589,7 @@ void cache_pmt_for_adapter(adapter *ad, SPMT *pmt) {
     // Same lock as the send path: removal tears these masks down,
     // so it bumps the epoch to invalidate in-flight sets.
     std::lock_guard<SMutex> lock(pmts_mutex);
-    tables_bump_teardown_epoch();
+    ca_teardown_epoch++;
     pmt->disabled_ca_mask = 0;
     pmt->ca_mask = 0;
     pmt->ca_registered_mask = 0;
