@@ -981,6 +981,83 @@ int test_ddci_full_device_retries() {
     return 0;
 }
 
+// A PMT matching a ready DDCI must proceed while another DDCI is still
+// initializing; only PMTs with no ready match wait for it.
+int test_initializing_ddci_does_not_block_others() {
+    SPMT *pmt_dd0, *pmt_dd1, *pmt_nomatch;
+    ddci_device_t d0 = {}, d1 = {};
+    ca_device_t ca0 = {}, ca1 = {};
+    adapter ad = {0}, a0 = {0}, a1 = {0};
+    int i;
+
+    for (i = 0; i < MAX_ADAPTERS; i++)
+        a[i] = NULL;
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    memset(ca_devices, 0, sizeof(ca_devices));
+    channels.clear();
+
+    create_adapter(&ad, 8);
+    create_adapter(&a0, 0);
+    create_adapter(&a1, 1);
+
+    pmt_dd0 = create_pmt(8, 810, 811, 812, 0x100, 0x100);
+    pmt_dd1 = create_pmt(8, 820, 821, 822, 0x500, 0x500);
+    pmt_nomatch = create_pmt(8, 830, 831, 832, 0x600, 0x600);
+    memset(&d0.pmt, -1, sizeof(d0.pmt));
+    memset(&d1.pmt, -1, sizeof(d1.pmt));
+    d0.id = 0;
+    d1.id = 1;
+    d0.enabled = d1.enabled = 1;
+    d0.max_channels = d1.max_channels = 2;
+    ddci_devices[0] = &d0;
+    ddci_devices[1] = &d1;
+
+    int dvbca_id = add_ca(&dvbca);
+    add_caid_mask(dvbca_id, 0, 0x100, 0xFFFF);
+    add_caid_mask(dvbca_id, 1, 0x500, 0xFFFF);
+    ca0.id = 0;
+    ca1.id = 1;
+    ca0.enabled = ca1.enabled = 1;
+    ca_devices[0] = &ca0;
+    ca_devices[1] = &ca1;
+
+    // initializing DDCI first, ready match second
+    ca0.state = CA_STATE_ACTIVE;
+    ca1.state = CA_STATE_INITIALIZED;
+    ASSERT(ddci_process_pmt(&ad, pmt_dd1) == TABLES_RESULT_OK,
+           "PMT matching the ready DDCI must not wait for DDCI 0");
+    ASSERT(d1.channels == 1 && d0.channels == 0,
+           "PMT must run on the ready DDCI 1");
+    ASSERT(ddci_process_pmt(&ad, pmt_dd0) == TABLES_RESULT_ERROR_RETRY,
+           "PMT matching only the initializing DDCI must retry");
+    ddci_del_pmt(&ad, pmt_dd1);
+    channels.clear();
+
+    // ready match first, initializing DDCI second
+    ca0.state = CA_STATE_INITIALIZED;
+    ca1.state = CA_STATE_ACTIVE;
+    ASSERT(ddci_process_pmt(&ad, pmt_dd0) == TABLES_RESULT_OK,
+           "PMT matching the ready DDCI must not wait for DDCI 1");
+    ASSERT(d0.channels == 1 && d1.channels == 0,
+           "PMT must run on the ready DDCI 0");
+    ASSERT(ddci_process_pmt(&ad, pmt_nomatch) == TABLES_RESULT_ERROR_RETRY,
+           "PMT with no ready match must retry while a DDCI initializes");
+    ddci_del_pmt(&ad, pmt_dd0);
+    channels.clear();
+
+    ca1.state = CA_STATE_INITIALIZED;
+    ASSERT(ddci_process_pmt(&ad, pmt_nomatch) == TABLES_RESULT_ERROR_NORETRY,
+           "PMT with no match must not retry once all DDCIs are ready");
+
+    del_ca(&dvbca);
+    channels.clear();
+    free_filters();
+    ddci_devices[0] = ddci_devices[1] = NULL;
+    ca_devices[0] = ca_devices[1] = NULL;
+    a[0] = a[1] = a[8] = NULL;
+    return 0;
+}
+
 int main() {
     opts.log = 65535 ^ LOG_LOCK ^ LOG_UTILS;
     opts.debug = 0;
@@ -1006,6 +1083,8 @@ int main() {
               "testing that rebuilt PMTs carry mapped ES ECM pids");
     TEST_FUNC(test_ddci_full_device_retries(),
               "testing that a full DDCI device retries instead of burning");
+    TEST_FUNC(test_initializing_ddci_does_not_block_others(),
+              "testing that an initializing DDCI does not block the others");
     free_all_pmts();
     fflush(stdout);
     return 0;
