@@ -265,6 +265,11 @@ int test_capmt_content_hash_masks_version() {
     ASSERT(other[3] == (capmt[3] ^ 0x3E), "test setup broken");
 
     memcpy(other, capmt, len);
+    other[3] ^= 0x01; // current/next bit is content, not version
+    ASSERT(capmt_content_hash(other, len) != hash,
+           "non-version bit change must flip the hash");
+
+    memcpy(other, capmt, len);
     other[0] ^= 0xFF; // list management
     ASSERT(capmt_content_hash(other, len) != hash,
            "list management change must flip the hash");

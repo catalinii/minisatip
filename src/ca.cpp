@@ -915,7 +915,7 @@ int send_capmt(ca_device_t *d, SCAPMT *ca, int listmgmt, int reason,
         LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "create_capmt failed");
 
     uint32_t hash = capmt_content_hash(capmt, size);
-    if (!force && hash == ca->capmt_hash) {
+    if (!force && ca->capmt_hash_valid && hash == ca->capmt_hash) {
         LOG("CA %d: CAPMT for PMTs %d %d unchanged (%08X), not re-sending",
             d->id, ca->pmt_id, ca->other_id, hash);
         return 0;
@@ -935,8 +935,12 @@ int send_capmt(ca_device_t *d, SCAPMT *ca, int listmgmt, int reason,
         LOG_AND_RETURN(1, "Unable to find CA session for device %d", d->id);
     hexdump("CAPMT: ", capmt, size);
 
-    ca->capmt_hash = hash;
-    ca_write_apdu(session, TAG_CA_PMT, capmt, size);
+    // Baseline the hash only when the write succeeded, so a failed
+    // send never suppresses the retry.
+    if (!ca_write_apdu(session, TAG_CA_PMT, capmt, size)) {
+        ca->capmt_hash = hash;
+        ca->capmt_hash_valid = 1;
+    }
     return 0;
 }
 
@@ -1200,22 +1204,24 @@ void remove_pmt_from_device(ca_device_t *d, SPMT *pmt) {
     int i;
     std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
     for (i = 0; i < d->max_ca_pmt; i++) {
+        // No version bump here: the forced send_capmt after the removal
+        // bumps exactly once per attempted send.
         if (d->capmt[i].pmt_id == pmt->id) {
             d->capmt[i].pmt_id = PMT_INVALID;
             if (PMT_ID_IS_VALID(d->capmt[i].other_id)) {
                 d->capmt[i].pmt_id = d->capmt[i].other_id;
                 d->capmt[i].other_id = PMT_INVALID;
-                d->capmt[i].version++;
             }
         }
         if (d->capmt[i].other_id == pmt->id) {
             d->capmt[i].other_id = PMT_INVALID;
-            d->capmt[i].version++;
         }
         // A freed slot must not suppress the next PMT's first send.
         if (!PMT_ID_IS_VALID(d->capmt[i].pmt_id) &&
-            !PMT_ID_IS_VALID(d->capmt[i].other_id))
+            !PMT_ID_IS_VALID(d->capmt[i].other_id)) {
             d->capmt[i].capmt_hash = 0;
+            d->capmt[i].capmt_hash_valid = 0;
+        }
     }
     return;
 }
@@ -2722,8 +2728,10 @@ int APP_CA_handler(ca_session_t *session, int resource, uint8_t *data,
     case TAG_CA_INFO:
         d->state = CA_STATE_INITIALIZED;
         // The CAM lost its state: force pending updates to re-send.
-        for (int j = 0; j < d->max_ca_pmt; j++)
+        for (int j = 0; j < d->max_ca_pmt; j++) {
             d->capmt[j].capmt_hash = 0;
+            d->capmt[j].capmt_hash_valid = 0;
+        }
 
         // Ignore CAM reported values if user has forced specific CAIDs
         if (!d->has_forced_caids) {
@@ -3832,6 +3840,11 @@ int dvbca_init_dev(adapter *ad) {
         c->pending_since = -1;
 
         memset(c->capmt, -1, sizeof(c->capmt));
+        // The memset above also covers the new fields: nothing sent yet.
+        for (int i = 0; i < MAX_CA_PMT; i++) {
+            c->capmt[i].capmt_hash = 0;
+            c->capmt[i].capmt_hash_valid = 0;
+        }
         memset(c->key[0], 0, sizeof(c->key[0]));
         memset(c->key[1], 0, sizeof(c->key[1]));
         memset(c->iv[0], 0, sizeof(c->iv[0]));

@@ -482,7 +482,7 @@ int dvbapi_send_pmt(SKey *k, int cmd_id, int force) {
 
     buf[6] = listmgmt;
     uint32_t hash = crc_32(buf, len);
-    if (!force && hash == k->capmt_hash) {
+    if (!force && k->capmt_hash_valid && hash == k->capmt_hash) {
         LOG("dvbapi key %d: PMT %d update, CAPMT unchanged (%08X), not "
             "re-sending",
             k->id, k->pmt_id, hash);
@@ -495,7 +495,12 @@ int dvbapi_send_pmt(SKey *k, int cmd_id, int force) {
             k->pmt_id, k->pmt_pid, k->sid, k->id, adapter, demux, sock,
             listmgmt_str[listmgmt]);
         TEST_WRITE(write(sock, buf, len), len);
-        k->capmt_hash = hash;
+        // TEST_WRITE closes the socket on short write: baseline the
+        // hash only when the bytes went out.
+        if (sock > 0) {
+            k->capmt_hash = hash;
+            k->capmt_hash_valid = 1;
+        }
     }
     return 0;
 }
@@ -752,6 +757,7 @@ int keys_add(int i, int adapter, int pmt_id) {
     k->icam_ecm = 0;
     k->is_icam = 0;
     k->capmt_hash = 0;
+    k->capmt_hash_valid = 0;
     memset(k->cw[0], 0, 16);
     memset(k->cw[1], 0, 16);
     memset(k->filter_id, -1, sizeof(k->filter_id));

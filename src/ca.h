@@ -125,7 +125,8 @@ typedef struct ca_pmt {
     int other_id;
     int version;
     int sid;
-    uint32_t capmt_hash; // content hash of the last CAPMT sent, minus version
+    uint32_t capmt_hash;  // content hash of the last CAPMT sent, minus version
+    int capmt_hash_valid; // set once a send is known delivered
 } SCAPMT;
 
 extern char *listmgmt_str[];
