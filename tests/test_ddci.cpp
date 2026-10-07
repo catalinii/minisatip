@@ -61,6 +61,7 @@ extern std::unordered_map<int, Sddci_channel> channels;
 extern SFilter *filters[MAX_FILTERS];
 
 int pmt_del(int id);
+int del_pmt_mapping_table(ddci_device_t *d, int ad, int pmt);
 
 // Forward declarations
 descriptor_t create_descriptor(const uint8_t *data);
@@ -238,20 +239,20 @@ int test_update_resend_keeps_slot() {
     ASSERT(section_pcr_pid(&d0, pmt0) == d0.pmt[0].pcr_pid,
            "section PCR should match the slot");
 
-    // the update drops 602: unmap just it, then re-send on the full device
+    // the update drops 602: the re-send on the full device unmaps
+    // just it while keeping the slot, the count, and the other pids
     for (auto it = pmt0->stream_pids.begin(); it != pmt0->stream_pids.end();
          ++it)
         if (it->pid == 602) {
             pmt0->stream_pids.erase(it);
             break;
         }
-    ddci_del_pid(&ad, pmt0, 602);
-    ASSERT(get_pid_mapping_allddci(8, 602) == NULL, "602 should be unmapped");
-    ASSERT(get_pid_mapping_allddci(8, 601) != NULL, "601 should stay mapped");
-    ASSERT(d0.pmt[0].id == pmt0->id, "slot should be kept");
-    ASSERT(d0.channels == 1, "channel count should be kept");
     ASSERT(ddci_process_pmt(&ad, pmt0) == TABLES_RESULT_OK,
            "re-send on the full device expected to succeed");
+    ASSERT(get_pid_mapping_allddci(8, 602) == NULL, "602 should be unmapped");
+    ASSERT(get_pid_mapping_allddci(8, 601) != NULL, "601 should stay mapped");
+    ASSERT(get_pid_mapping_allddci(8, 1) != NULL, "CAT should stay mapped");
+    ASSERT(d0.pmt[0].id == pmt0->id, "slot should be kept");
     ASSERT(d0.channels == 1, "re-send must not count as new channel");
     ASSERT(d0.pmt[0].pcr_pid == get_pid_mapping_allddci(8, 601)->ddci_pid,
            "re-send must keep the slot PCR pid");
@@ -268,7 +269,6 @@ int test_update_resend_keeps_slot() {
         }
     pmt_add_stream_pid(pmt0, 603, 2, false, true);
     pmt0->pcr_pid = 603;
-    ddci_del_pid(&ad, pmt0, 601);
     ASSERT(ddci_process_pmt(&ad, pmt0) == TABLES_RESULT_OK,
            "re-send after replacing the first pid expected to succeed");
     ASSERT(get_pid_mapping_allddci(8, 603) != NULL, "603 should be mapped");
@@ -279,20 +279,29 @@ int test_update_resend_keeps_slot() {
     ASSERT(section_pcr_pid(&d0, pmt0) == d0.pmt[0].pcr_pid,
            "section PCR should match the slot");
 
-    // unknown pids are a harmless no-op
-    ASSERT(ddci_del_pid(&ad, pmt0, 604) == 0, "unknown pid should be a no-op");
-    ASSERT(get_pid_mapping_allddci(8, 603) != NULL,
-           "603 should survive the no-op");
-
     // a pid shared by two PMTs stays mapped until its last user is gone
-    SPMT *pmt1 = create_pmt(8, 700, 701, 702, 0x100, 0x100);
-    add_pid_mapping_table(8, 603, pmt1->id, &d0, 0);
-    ddci_del_pid(&ad, pmt0, 603);
+    add_pid_mapping_table(8, 603, 999, &d0, 0);
+    for (auto it = pmt0->stream_pids.begin(); it != pmt0->stream_pids.end();
+         ++it)
+        if (it->pid == 603) {
+            pmt0->stream_pids.erase(it);
+            break;
+        }
+    ASSERT(ddci_process_pmt(&ad, pmt0) == TABLES_RESULT_OK,
+           "re-send dropping the shared pid expected to succeed");
     ASSERT(get_pid_mapping_allddci(8, 603) != NULL,
            "shared 603 should stay mapped");
-    ddci_del_pid(&ad, pmt1, 603);
+    del_pmt_mapping_table(&d0, 8, 999);
     ASSERT(get_pid_mapping_allddci(8, 603) == NULL,
            "603 should be unmapped after its last user");
+
+    // CAT-listed EMM pids are never swept, even though no PMT lists them
+    add_pid_mapping_table(8, 700, pmt0->id, &d0, 1);
+    d0.emm_pids.insert(700);
+    ASSERT(ddci_process_pmt(&ad, pmt0) == TABLES_RESULT_OK,
+           "re-send with EMM expected to succeed");
+    ASSERT(get_pid_mapping_allddci(8, 700) != NULL,
+           "EMM pid should stay mapped");
 
     ddci_del_pmt(&ad, pmt0);
     ASSERT(d0.channels == 0, "expected 0 running channels after delete");

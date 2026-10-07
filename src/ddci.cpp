@@ -198,20 +198,6 @@ static int find_registered_ddci(int pmt_id) {
     return -1;
 }
 
-// Find the device mapping this pid for this PMT, locking one at a time.
-static int find_mapping_ddci(int ad, int pid, int pmt_id) {
-    for (int i = 0; i < MAX_ADAPTERS; i++) {
-        ddci_device_t *d = get_ddci(i);
-        if (!d)
-            continue;
-        std::lock_guard<SMutex> lock(d->mutex);
-        auto it = get_pid_mapping(d, ad, pid);
-        if (it != d->mapping.end() && it->second.pmt.count(pmt_id) > 0)
-            return i;
-    }
-    return -1;
-}
-
 // Drop one last-user mapping entry: the DDCI-side pid, its filter,
 // and the source-side pid when DDCI added it.
 static void release_mapping_entry(ddci_device_t *d, int ad, int pmt,
@@ -252,31 +238,37 @@ int del_pmt_mapping_table(ddci_device_t *d, int ad, int pmt) {
     return 0;
 }
 
-// Unmap a single pid of a PMT update; shared entries stay until
-// their last user is gone. Teardown runs unlocked: the entry is
-// already erased, so no lock inversion with filters can occur.
-int ddci_del_pid(adapter *ad, SPMT *pmt, int pid) {
-    int ddci = find_mapping_ddci(ad->id, pid, pmt->id);
-    if (ddci < 0)
-        return 0;
-    ddci_device_t *d = get_ddci(ddci);
-    if (!d)
-        return 0;
-    ddci_mapping_table_t gone;
-    {
-        std::lock_guard<SMutex> lock(d->mutex);
-        auto it = get_pid_mapping(d, ad->id, pid);
-        if (it == d->mapping.end() || it->second.pmt.count(pmt->id) == 0)
-            return 0;
-        it->second.pmt.erase(pmt->id);
-        if (!it->second.pmt.empty())
-            return 0;
-        gone = it->second;
-        d->mapping.erase(it);
+// Unmap this PMT's pids that the update dropped; shared entries stay
+// until their last user is gone. Call with d->mutex held.
+static void unmap_removed_pids(ddci_device_t *d, int ad, SPMT *pmt) {
+    auto still_needed = [d, pmt](int pid) {
+        if (pid == pmt->pid || pid == 1 || pid == 20)
+            return true;
+        if (d->emm_pids.count(pid) > 0)
+            return true;
+        for (const auto &sp : pmt->stream_pids)
+            if (sp.pid == pid)
+                return true;
+        for (int i = 0; i < pmt->caids; i++)
+            if (pmt->ca[i]->pid == pid)
+                return true;
+        return false;
+    };
+    int to_del[MAX_PIDS], n = 0;
+    for (const auto &u : d->mapping) {
+        ddci_mapping_table_t *m = (ddci_mapping_table_t *)&u.second;
+        if (m->ad != ad || m->pmt.count(pmt->id) == 0)
+            continue;
+        if (still_needed(m->pid))
+            continue;
+        m->pmt.erase(pmt->id);
+        if (!m->pmt.empty())
+            continue;
+        to_del[n++] = m->pid;
+        release_mapping_entry(d, ad, pmt->id, m);
     }
-    release_mapping_entry(d, ad->id, pmt->id, &gone);
-    update_pids(d->id);
-    return 0;
+    for (int i = 0; i < n; i++)
+        d->mapping.erase(MAKE_KEY(ad, to_del[i]));
 }
 
 int ddci_init_dev(adapter *ad) { return TABLES_RESULT_OK; }
@@ -541,6 +533,10 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
             d->pmt[pos].pcr_pid = ddci_pid;
         }
     }
+
+    // A re-send doubles as the update path: unmap pids the new PMT
+    // dropped, so removed streams and ECMs stop flowing to the CAM.
+    unmap_removed_pids(d, ad->id, pmt);
 
     update_pids(ad->id);
     update_pids(d->id);
@@ -1157,7 +1153,6 @@ void ddci_init() // you can search the devices here and fill the ddci_devices,
     ddci.ca_close_dev = ddci_close_dev;
     ddci.ca_add_pmt = ddci_process_pmt;
     ddci.ca_del_pmt = ddci_del_pmt;
-    ddci.ca_del_pid = ddci_del_pid;
     ddci.ca_close_ca = ddci_close;
     ddci.ca_ts = ddci_ts;
 
@@ -1371,6 +1366,7 @@ int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque) {
     // sending EMM pids to the CAM
     for (const auto &emm_pid : emm_pids) {
         add_pid_mapping_table(f->adapter, emm_pid, d->pmt[0].id, d, 1);
+        d->emm_pids.insert(emm_pid);
     }
 
     d->cat_processed = 1;

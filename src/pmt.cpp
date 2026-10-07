@@ -1093,13 +1093,14 @@ static int same_stream_pids(SPMT *a, SPMT *b) {
     return 1;
 }
 
-// Pids and masks a running PMT held before an update parse, so the
-// diff can drop removed pids and restore a cosmetic update silently.
-typedef struct {
-    std::vector<int> streams;
-    std::vector<int> ecm;
-    int ca_mask, disabled_ca_mask, ca_registered_mask;
-} SPmtPrev;
+// True when the pid is still one of the PMT's streams. Updates drop
+// pids without unclaiming, so holders are validated lazily instead.
+static int pmt_lists_pid(SPMT *pmt, int pid) {
+    for (const auto &sp : pmt->stream_pids)
+        if (sp.pid == pid)
+            return 1;
+    return 0;
+}
 
 // Drop the CA list so the update parse rebuilds it; entries are kept
 // for reuse and never freed here (cross-thread readers hold them).
@@ -1123,47 +1124,6 @@ static uint32_t pmt_content_hash(unsigned char *b, int len) {
     if (tmp.size() > 5)
         tmp[5] &= ~0x3E;
     return crc_32(tmp.data(), (int)tmp.size());
-}
-
-static void snapshot_pmt_pids(SPMT *pmt, SPmtPrev &prev) {
-    prev.streams.clear();
-    for (const auto &sp : pmt->stream_pids)
-        prev.streams.push_back(sp.pid);
-    prev.ecm.clear();
-    for (int i = 0; i < pmt->caids; i++)
-        prev.ecm.push_back(pmt->ca[i]->pid);
-    prev.ca_mask = pmt->ca_mask;
-    prev.disabled_ca_mask = pmt->disabled_ca_mask;
-    prev.ca_registered_mask = pmt->ca_registered_mask;
-}
-
-// Unclaim pids the new PMT dropped and tell the CAs, so DDCI unmaps
-// and hw unbinds them without stopping the PMT.
-static void drop_removed_pids(adapter *ad, SPMT *pmt, const SPmtPrev &prev) {
-    auto still_present = [pmt](int pid) {
-        for (const auto &sp : pmt->stream_pids)
-            if (sp.pid == pid)
-                return true;
-        for (int i = 0; i < pmt->caids; i++)
-            if (pmt->ca[i]->pid == pid)
-                return true;
-        return false;
-    };
-    std::unordered_set<int> gone;
-    for (int pid : prev.streams)
-        if (!still_present(pid))
-            gone.insert(pid);
-    for (int pid : prev.ecm)
-        if (!still_present(pid))
-            gone.insert(pid);
-    for (int pid : gone) {
-        SPid *s = find_pid(ad->id, pid);
-        if (s && s->pmt == pmt->id)
-            s->pmt = -1;
-#ifndef DISABLE_TABLES
-        tables_del_pid(ad, pmt, pid);
-#endif
-    }
 }
 
 typedef struct {
@@ -1204,7 +1164,7 @@ static void handover_claims_from_lower_priority(adapter *ad, SPMT *pmt) {
         if (!s || s->flags != PID_STATE_ACTIVE || s->pmt < 0)
             continue;
         old = get_pmt(s->pmt);
-        if (!old || old == pmt)
+        if (!old || old == pmt || !pmt_lists_pid(old, sp.pid))
             continue;
         op = find_pid(ad->id, old->pid);
         old_order = (op && op->order) ? op->order : UINT32_MAX;
@@ -1293,7 +1253,10 @@ void pmt_pid_updated_pids(adapter *ad) {
             if (!s || !pid_subscribed(ad, s) || s->pmt == pmt->id)
                 continue;
             // Order steals: take over from later-sorted holders only.
+            // Holders that dropped the pid in an update count as gone.
             SPMT *holder = s->pmt >= 0 ? get_pmt(s->pmt) : NULL;
+            if (holder && !pmt_lists_pid(holder, sp.pid))
+                holder = NULL;
             if (holder) {
                 SPid *hp = pids[holder->pid];
                 uint32_t holder_order =
@@ -2166,13 +2129,16 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         return -1;
 
     // A running PMT keeps its state and claims across the update; the
-    // content hash after the parse decides silent keep vs delta send.
-    SPmtPrev prev;
+    // content hash after the parse decides silent keep vs CA re-send.
+    // Removed pids keep stale claims, which the election ignores.
     uint32_t hash = pmt_content_hash(b, len);
     int was_running = pmt->state == PMT_RUNNING || pmt->state == PMT_STARTING;
-    if (was_running)
-        snapshot_pmt_pids(pmt, prev);
-    else
+    int old_ca_mask = 0, old_disabled = 0, old_registered = 0;
+    if (was_running) {
+        old_ca_mask = pmt->ca_mask;
+        old_disabled = pmt->disabled_ca_mask;
+        old_registered = pmt->ca_registered_mask;
+    } else
         release_pmt_claims(ad, pmt);
     reset_pmt_ca(pmt);
 
@@ -2249,14 +2215,13 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
 
     if (was_running) {
         // The parse cleared the CA masks; restore them first so a
-        // cosmetic update is silent and removals still notify.
-        pmt->ca_mask = prev.ca_mask;
-        pmt->disabled_ca_mask = prev.disabled_ca_mask;
-        pmt->ca_registered_mask = prev.ca_registered_mask;
+        // cosmetic update stays silent.
+        pmt->ca_mask = old_ca_mask;
+        pmt->disabled_ca_mask = old_disabled;
+        pmt->ca_registered_mask = old_registered;
         if (hash != pmt->content_hash) {
-            // Content changed: drop removed pids, then force the
-            // CAs to re-send on the next pass.
-            drop_removed_pids(ad, pmt, prev);
+            // Content changed: force the CAs to re-send on the next
+            // pass; each CA drops removed pids itself on re-send.
             if (pmt->caids == 0) {
                 // Newly FTA: nothing to re-send, so release the
                 // stale CA registrations instead of leaking them.

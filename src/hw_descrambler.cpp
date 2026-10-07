@@ -20,6 +20,8 @@
 #include <string>
 #include <sys/ioctl.h>
 #include <unistd.h>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace {
 constexpr int DEFAULT_MAX_DESCRAMBLERS = 16;
@@ -64,6 +66,7 @@ class HwSlotManager {
         int ca_fd{-1};
         int num_descramblers{DEFAULT_MAX_DESCRAMBLERS};
         std::array<int, MAX_SLOTS> pmt_slots{};
+        std::unordered_map<int, std::unordered_set<int>> bound_pids;
 
         AdapterCaState() { pmt_slots.fill(-1); }
     };
@@ -178,6 +181,37 @@ class HwSlotManager {
         }
     }
 
+    // Swap in the new bound set, returning pids to unbind.
+    std::unordered_set<int>
+    retarget_pids(int physical_adapter_id, int pmt_id,
+                  const std::unordered_set<int> &current) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto *ca = get_state(physical_adapter_id);
+        if (!ca)
+            return {};
+        std::unordered_set<int> removed;
+        for (int pid : ca->bound_pids[pmt_id])
+            if (!current.count(pid))
+                removed.insert(pid);
+        ca->bound_pids[pmt_id] = current;
+        return removed;
+    }
+
+    // Take and forget the bound set for teardown.
+    std::unordered_set<int> take_bound_pids(int physical_adapter_id,
+                                            int pmt_id) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto *ca = get_state(physical_adapter_id);
+        if (!ca)
+            return {};
+        auto it = ca->bound_pids.find(pmt_id);
+        if (it == ca->bound_pids.end())
+            return {};
+        std::unordered_set<int> bound = it->second;
+        ca->bound_pids.erase(it);
+        return bound;
+    }
+
     void close_adapter_ca(int physical_adapter_id) {
         std::lock_guard<std::mutex> lock(mutex_);
         auto *ca = get_state(physical_adapter_id);
@@ -192,6 +226,7 @@ class HwSlotManager {
             ca->ca_fd = -1;
         }
         ca->pmt_slots.fill(-1);
+        ca->bound_pids.clear();
     }
 };
 } // namespace
@@ -340,6 +375,21 @@ void hw_decrypt_stream(SCW *cw, SPMT_batch *batch, int batch_len) {
     // hardware. Software decryption loop is bypassed (pass-through).
 }
 
+static void hw_unbind_pids(int pa, const char *device_path,
+                           const std::unordered_set<int> &pids) {
+    if (pids.empty())
+        return;
+    int ca_fd = HwSlotManager::instance().get_or_open_ca_fd(pa, device_path);
+    if (ca_fd < 0)
+        return;
+    for (int pid : pids) {
+        struct ca_pid pid_cmd{};
+        pid_cmd.pid = pid;
+        pid_cmd.index = -1; // -1 unbinds PID
+        ioctl(ca_fd, CA_SET_PID, &pid_cmd);
+    }
+}
+
 int hw_ca_del_pmt(adapter *ad, SPMT *pmt) {
     if (!opts.hw_descrambler || !ad || !pmt)
         return 0;
@@ -349,52 +399,33 @@ int hw_ca_del_pmt(adapter *ad, SPMT *pmt) {
         "physical adapter %d (logical %d)",
         pmt->id, ad->pa, ad->id);
 
+    // Unbind everything ever bound: updates shrink the live list, so
+    // unbinding just it would leak removed pids.
+    std::unordered_set<int> bound =
+        HwSlotManager::instance().take_bound_pids(ad->pa, pmt_id);
+    for (const auto &sp : pmt->stream_pids)
+        bound.insert(sp.pid);
     const std::string device_path = get_ca_device_path(ad);
-    int ca_fd = HwSlotManager::instance().get_or_open_ca_fd(
-        ad->pa, device_path.c_str());
-    if (ca_fd >= 0) {
-        // 1. Unbind stream PIDs from hardware descrambler slot
-        for (std::size_t i = 0; i < pmt->stream_pids.size(); ++i) {
-            struct ca_pid pid_cmd{};
-            pid_cmd.pid = pmt->stream_pids[i].pid;
-            pid_cmd.index = -1; // -1 unbinds PID
-            ioctl(ca_fd, CA_SET_PID, &pid_cmd);
-        }
-    }
+    hw_unbind_pids(ad->pa, device_path.c_str(), bound);
 
     // 2. Release hardware descrambler slot index
     HwSlotManager::instance().release_slot(ad->pa, pmt_id);
     return 0;
 }
 
-// Unbind one pid dropped by a PMT update; the slot stays allocated.
-int hw_ca_del_pid(adapter *ad, SPMT *pmt, int pid) {
+// On re-send, unbind pids the update dropped; added pids bind on
+// the next CW via hw_set_cw, which binds the whole live list.
+int hw_ca_add_pmt(adapter *ad, SPMT *pmt) {
     if (!opts.hw_descrambler || !ad || !pmt)
-        return 0;
-    // The unbind is device-wide: keep the pid while another PMT on
-    // the same hardware still lists it.
-    for (int i = 0; i < MAX_PMT; i++) {
-        SPMT *o = get_pmt(i);
-        adapter *oa;
-        if (!o || o == pmt || o->adapter < 0)
-            continue;
-        oa = get_adapter_nw(o->adapter);
-        if (!oa || oa->pa != ad->pa)
-            continue;
-        for (const auto &sp : o->stream_pids)
-            if (sp.pid == pid)
-                return 0;
-    }
+        return TABLES_RESULT_OK;
+    std::unordered_set<int> current;
+    for (const auto &sp : pmt->stream_pids)
+        current.insert(sp.pid);
+    std::unordered_set<int> removed =
+        HwSlotManager::instance().retarget_pids(ad->pa, pmt->id, current);
     const std::string device_path = get_ca_device_path(ad);
-    int ca_fd = HwSlotManager::instance().get_or_open_ca_fd(
-        ad->pa, device_path.c_str());
-    if (ca_fd < 0)
-        return 0;
-    struct ca_pid pid_cmd{};
-    pid_cmd.pid = pid;
-    pid_cmd.index = -1; // -1 unbinds PID
-    ioctl(ca_fd, CA_SET_PID, &pid_cmd);
-    return 0;
+    hw_unbind_pids(ad->pa, device_path.c_str(), removed);
+    return TABLES_RESULT_OK;
 }
 
 int hw_ca_close_dev(adapter *ad) {
@@ -428,14 +459,6 @@ SCW_op hw_aes_cbc_op = {
     .stop_cw = nullptr,
     .decrypt_stream = reinterpret_cast<Decrypt_Stream>(hw_decrypt_stream)};
 
-// Keys arrive via the CW ops; registering here only arms del/close so
-// stop_pmt releases the hw slot instead of leaking it.
-int hw_ca_add_pmt(adapter *ad, SPMT *pmt) {
-    (void)ad;
-    (void)pmt;
-    return TABLES_RESULT_OK;
-}
-
 int hw_ca_init_dev(adapter *ad) {
     (void)ad;
     return TABLES_RESULT_OK;
@@ -456,7 +479,6 @@ void init_hw_descrambler() {
         hw_ca_op.ca_init_dev =
             reinterpret_cast<ca_device_action>(hw_ca_init_dev);
         hw_ca_op.ca_del_pmt = reinterpret_cast<ca_pmt_action>(hw_ca_del_pmt);
-        hw_ca_op.ca_del_pid = reinterpret_cast<ca_pid_action>(hw_ca_del_pid);
         hw_ca_op.ca_close_dev =
             reinterpret_cast<ca_device_action>(hw_ca_close_dev);
         add_ca(&hw_ca_op);

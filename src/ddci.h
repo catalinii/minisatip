@@ -51,6 +51,7 @@ typedef struct ddci_device {
     int16_t pat_cc, sdt_cc, eit_cc;
     char disable_cat;
     std::unordered_map<int, ddci_mapping_table_t> mapping;
+    std::unordered_set<int> emm_pids; // CAT-listed, never swept on update
     SFIFO fifo;
 } ddci_device_t;
 
@@ -83,7 +84,6 @@ void load_channels();
 int ddci_process_pmt(adapter *ad, SPMT *pmt);
 void blacklist_pmt_for_ddci(SPMT *pmt, int ddid);
 int ddci_del_pmt(adapter *ad, SPMT *spmt);
-int ddci_del_pid(adapter *ad, SPMT *pmt, int pid);
 void disable_cat_adapters(char *o);
 void dump_mapping_table();
 #endif

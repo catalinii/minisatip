@@ -309,6 +309,36 @@ static int test_csa_vs_csa_icam_routing() {
 
 // The add/init hooks must succeed so the del/close hooks stay armed and
 // stop_pmt releases the hw slot instead of leaking it.
+// A PMT update re-send retargets the bound set and teardown releases
+// it; without hardware the ioctls skip, but the sequence must hold.
+static int test_hw_ca_update_retarget() {
+    adapter *ad = setup_mock_adapter(0, 0, 0);
+    ASSERT(ad != nullptr, "setup_mock_adapter failed");
+    int saved = opts.hw_descrambler;
+    opts.hw_descrambler = 1;
+
+    int pmt_id = pmt_add(0, 500, 5000);
+    SPMT *pmt = get_pmt(pmt_id);
+    ASSERT(pmt != nullptr, "pmt_add failed");
+    pmt_add_stream_pid(pmt, 1001, 2, false, true);
+    pmt_add_stream_pid(pmt, 1002, 3, true, false);
+    ASSERT_EQUAL(hw_ca_add_pmt(ad, pmt), TABLES_RESULT_OK, "add must succeed");
+
+    for (auto it = pmt->stream_pids.begin(); it != pmt->stream_pids.end(); ++it)
+        if (it->pid == 1002) {
+            pmt->stream_pids.erase(it);
+            break;
+        }
+    ASSERT_EQUAL(hw_ca_add_pmt(ad, pmt), TABLES_RESULT_OK,
+                 "re-send must succeed");
+    ASSERT_EQUAL(hw_ca_del_pmt(ad, pmt), 0, "del must succeed");
+
+    opts.hw_descrambler = saved;
+    pmt_del(pmt_id);
+    cleanup_mock_adapter(0);
+    return 0;
+}
+
 static int test_hw_ca_hooks_succeed() {
     adapter *ad = setup_mock_adapter(0, 0, 0);
     ASSERT(ad != nullptr, "setup_mock_adapter failed");
@@ -352,6 +382,8 @@ int main() {
               "testing CSA vs CSA-ICAM algorithm routing and HW rejection");
     TEST_FUNC(test_hw_ca_hooks_succeed(),
               "testing hw CA add/init hooks succeed");
+    TEST_FUNC(test_hw_ca_update_retarget(),
+              "testing hw CA re-send retargets bound pids");
 
     return 0;
 }
