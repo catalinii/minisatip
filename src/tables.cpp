@@ -85,6 +85,8 @@ int add_ca(SCA_op *op) {
 extern SPMT *pmts[];
 // Clear one PMT's tables masks for a CA bit. Takes pmts_mutex;
 // nest-safe (recursive) for callers already holding it.
+// Always bump, even when the cleared bits were already zero: the
+// table entry was still torn down, so in-flight sets must skip.
 void tables_bump_teardown_epoch(void) { ca_teardown_epoch++; }
 
 void tables_clear_pmt_ca_masks(SPMT *pmt, uint64_t mask, int clear_disabled) {

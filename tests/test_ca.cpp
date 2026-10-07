@@ -1383,6 +1383,7 @@ int test_send_skips_stale_set() {
     ca[1].enabled = 1;
     ca[1].id = 1;
     ca[1].op = &fake_op;
+    // ca[0] stays disabled (globals start zeroed), so only slot 1 sends.
     nca = 2;
     adapter ad = {};
     ad.id = 0;
@@ -1412,8 +1413,8 @@ int test_send_skips_stale_set() {
 int test_ca_read_bad_session() {
     ca_device_t dev;
     memset(&dev, 0, sizeof(dev));
-    // Sentinels beside the session table: sessions+-1 would call
-    // through or clobber them, so they prove the drop is real.
+    // Sentinels around the session table: a private_data fill below
+    // and uri_mask above catch a sessions+-1 call-through or clobber.
     ASSERT(offsetof(ca_device_t, sessions) ==
                offsetof(ca_device_t, private_data) + sizeof(dev.private_data),
            "sessions follow private_data");
@@ -1421,7 +1422,8 @@ int test_ca_read_bad_session() {
                offsetof(ca_device_t, sessions) + sizeof(dev.sessions),
            "uri_mask follows sessions");
     memset(&dev.private_data, 0xAB, sizeof(dev.private_data));
-    memset(dev.ci_name, 0xAB, sizeof(dev.ci_name));
+    dev.uri_mask = 0x5A5A5A5A;
+    dev.fd = -1;
     dev.state = CA_STATE_ACTIVE;
     unsigned char close65[4] = {ST_CLOSE_SESSION_REQUEST, 0x02, 0x00, 65};
     unsigned char close0[4] = {ST_CLOSE_SESSION_REQUEST, 0x02, 0x00, 0x00};
@@ -1434,7 +1436,7 @@ int test_ca_read_bad_session() {
     ca_devices[70] = &dev;
     ss.buf = close65;
     ASSERT_EQUAL(ca_read(&ss), 0, "close session 65 dropped");
-    ASSERT((unsigned char)dev.ci_name[0] == 0xAB, "tail sentinel intact");
+    ASSERT_EQUAL(dev.uri_mask, 0x5A5A5A5A, "uri_mask sentinel intact");
     ss.buf = close0;
     ss.rlen = 4;
     ASSERT_EQUAL(ca_read(&ss), 0, "close session 0 dropped");

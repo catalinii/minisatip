@@ -1958,7 +1958,8 @@ void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid, uint8_t *data,
     memcpy(pmt->ca[pmt->caids]->private_data, data,
            pmt->ca[pmt->caids]->private_data_len);
     pmt->caids++;
-    // force sending the PMT to all CAs
+    // Force a re-send; same demux thread as the send path, so no
+    // epoch bump is needed (unlike cross-thread clearers).
     pmt->ca_mask = 0;
     pmt->disabled_ca_mask = 0;
 }
