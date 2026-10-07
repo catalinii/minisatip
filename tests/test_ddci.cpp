@@ -193,6 +193,65 @@ int test_ddci_channel_count() {
     return 0;
 }
 
+// Two DDCIs, the second with an empty slot (enabled, never initialized):
+// PMTs for the CAM in the first one must still be decrypted.
+int test_empty_ddci_slot_does_not_block_others() {
+    SPMT *pmt0, *pmt_other;
+    ddci_device_t d0 = {}, d1 = {};
+    ca_device_t ca0 = {}, ca1 = {};
+    adapter ad = {0}, a0 = {0}, a1 = {0};
+    int i;
+
+    for (i = 0; i < MAX_ADAPTERS; i++)
+        a[i] = NULL;
+    create_adapter(&ad, 2);
+    create_adapter(&a0, 8);
+    create_adapter(&a1, 9);
+    pmt0 = create_pmt(2, 800, 801, 802, 0x100, 0x100);
+    pmt_other = create_pmt(2, 900, 901, 902, 0x600, 0x600);
+    memset(&d0.pmt, -1, sizeof(d0.pmt));
+    memset(&d1.pmt, -1, sizeof(d1.pmt));
+    d0.id = 8;
+    d1.id = 9;
+    d0.enabled = d1.enabled = 1;
+    d0.max_channels = d1.max_channels = 2;
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[8] = &d0;
+    ddci_devices[9] = &d1;
+
+    ca0.id = 8;
+    ca1.id = 9;
+    ca0.enabled = ca1.enabled = 1;
+    ca0.state = CA_STATE_INITIALIZED;
+    ca1.state = CA_STATE_INACTIVE; // no module in slot, reconnect pending
+    ca1.fd = -1;
+    memset(ca_devices, 0, sizeof(ca_devices));
+    ca_devices[8] = &ca0;
+    ca_devices[9] = &ca1;
+    int dvbca_id = add_ca(&dvbca);
+    add_caid_mask(dvbca_id, 8, 0x100, 0xFFFF);
+    ASSERT(is_ca_initializing(9), "empty slot counts as initializing");
+
+    ASSERT(ddci_process_pmt(&ad, pmt0) == TABLES_RESULT_OK,
+           "PMT for the ready DDCI must start despite the empty slot");
+    ASSERT(d0.channels == 1, "PMT 0 expected on DDCI 8");
+
+    // Nothing ready matches: the slot may still come up, so retry
+    ASSERT(ddci_process_pmt(&ad, pmt_other) == TABLES_RESULT_ERROR_RETRY,
+           "unmatched PMT retries while a DDCI is initializing");
+
+    ddci_del_pmt(&ad, pmt0);
+    ASSERT(d0.channels == 0, "expected 0 running channels after delete");
+
+    channels.clear();
+    free_filters();
+    del_ca(&dvbca);
+    ddci_devices[8] = ddci_devices[9] = NULL;
+    ca_devices[8] = ca_devices[9] = NULL;
+    a[2] = a[8] = a[9] = NULL;
+    return 0;
+}
+
 int test_add_del_pmt() {
     SPMT *pmt0, *pmt1, *pmt2, *pmt3, *pmt4;
     ddci_device_t d0 = {}, d1 = {};
@@ -1006,6 +1065,8 @@ int main() {
               "testing that rebuilt PMTs carry mapped ES ECM pids");
     TEST_FUNC(test_ddci_full_device_retries(),
               "testing that a full DDCI device retries instead of burning");
+    TEST_FUNC(test_empty_ddci_slot_does_not_block_others(),
+              "testing that an empty DDCI slot does not block the others");
     free_all_pmts();
     fflush(stdout);
     return 0;
