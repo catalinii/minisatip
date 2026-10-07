@@ -1093,78 +1093,49 @@ static int same_stream_pids(SPMT *a, SPMT *b) {
     return 1;
 }
 
+// Pids and masks a running PMT held before an update parse, so the
+// diff can drop removed pids and restore a cosmetic update silently.
 typedef struct {
-    int id, pid;
-    std::vector<uint8_t> data;
-} SCaEntry;
-
-// Snapshot of a PMT's parsed content to tell cosmetic version bumps
-// from real changes; cosmetic updates keep the PMT running as-is.
-typedef struct {
-    std::vector<SStreamPid> streams;
-    std::vector<descriptor_t> descriptors;
-    std::vector<SCaEntry> ca;
-    int sid, pcr_pid;
+    std::vector<int> streams;
+    std::vector<int> ecm;
     int ca_mask, disabled_ca_mask, ca_registered_mask;
-} SPmtContent;
+} SPmtPrev;
 
 // Drop the CA list so the update parse rebuilds it; entries are kept
 // for reuse and never freed here (cross-thread readers hold them).
 static void reset_pmt_ca(SPMT *pmt) { pmt->caids = 0; }
 
-static void snapshot_pmt_content(SPMT *pmt, SPmtContent &prev) {
-    prev.streams = pmt->stream_pids;
-    prev.descriptors = pmt->descriptors;
-    prev.ca.clear();
-    for (int i = 0; i < pmt->caids; i++) {
-        SCaEntry e;
-        e.id = pmt->ca[i]->id;
-        e.pid = pmt->ca[i]->pid;
-        e.data.assign(pmt->ca[i]->private_data,
-                      pmt->ca[i]->private_data + pmt->ca[i]->private_data_len);
-        prev.ca.push_back(e);
-    }
-    prev.sid = pmt->sid;
-    prev.pcr_pid = pmt->pcr_pid;
+// CRC over the section minus version bits and trailing CRC: any
+// content change flips it, while a pure version bump does not.
+static uint32_t pmt_content_hash(unsigned char *b, int len) {
+    if (len < 6)
+        return crc_32(b, len);
+    int section_len = ((b[1] & 0xF) << 8) + b[2];
+    int hash_len = 3 + section_len - 4;
+    if (hash_len > len)
+        hash_len = len;
+    if (hash_len < 6)
+        hash_len = 6;
+    std::vector<uint8_t> tmp(b, b + hash_len);
+    tmp[5] &= ~0x3E;
+    return crc_32(tmp.data(), hash_len);
+}
+
+static void snapshot_pmt_pids(SPMT *pmt, SPmtPrev &prev) {
+    prev.streams.clear();
+    for (const auto &sp : pmt->stream_pids)
+        prev.streams.push_back(sp.pid);
+    prev.ecm.clear();
+    for (int i = 0; i < pmt->caids; i++)
+        prev.ecm.push_back(pmt->ca[i]->pid);
     prev.ca_mask = pmt->ca_mask;
     prev.disabled_ca_mask = pmt->disabled_ca_mask;
     prev.ca_registered_mask = pmt->ca_registered_mask;
 }
 
-static int same_ca_entries(SPMT *pmt, const std::vector<SCaEntry> &old) {
-    if ((int)old.size() != pmt->caids)
-        return 0;
-    std::vector<char> used(pmt->caids, 0);
-    for (int i = 0; i < pmt->caids; i++) {
-        int j;
-        for (j = 0; j < pmt->caids; j++) {
-            if (used[j] || old[j].id != pmt->ca[i]->id ||
-                old[j].pid != pmt->ca[i]->pid ||
-                (int)old[j].data.size() != pmt->ca[i]->private_data_len ||
-                memcmp(old[j].data.data(), pmt->ca[i]->private_data,
-                       pmt->ca[i]->private_data_len))
-                continue;
-            used[j] = 1;
-            break;
-        }
-        if (j == pmt->caids)
-            return 0;
-    }
-    return 1;
-}
-
-static int same_pmt_content(SPMT *pmt, const SPmtContent &prev) {
-    SPMT old{};
-    if (pmt->sid != prev.sid || pmt->pcr_pid != prev.pcr_pid)
-        return 0;
-    old.stream_pids = prev.streams;
-    old.descriptors = prev.descriptors;
-    return same_stream_pids(&old, pmt) && same_ca_entries(pmt, prev.ca);
-}
-
 // Unclaim pids the new PMT dropped and tell the CAs, so DDCI unmaps
 // and hw unbinds them without stopping the PMT.
-static void drop_removed_pids(adapter *ad, SPMT *pmt, const SPmtContent &prev) {
+static void drop_removed_pids(adapter *ad, SPMT *pmt, const SPmtPrev &prev) {
     auto still_present = [pmt](int pid) {
         for (const auto &sp : pmt->stream_pids)
             if (sp.pid == pid)
@@ -1175,12 +1146,12 @@ static void drop_removed_pids(adapter *ad, SPMT *pmt, const SPmtContent &prev) {
         return false;
     };
     std::unordered_set<int> gone;
-    for (const auto &sp : prev.streams)
-        if (!still_present(sp.pid))
-            gone.insert(sp.pid);
-    for (const auto &e : prev.ca)
-        if (!still_present(e.pid))
-            gone.insert(e.pid);
+    for (int pid : prev.streams)
+        if (!still_present(pid))
+            gone.insert(pid);
+    for (int pid : prev.ecm)
+        if (!still_present(pid))
+            gone.insert(pid);
     for (int pid : gone) {
         SPid *s = find_pid(ad->id, pid);
         if (s && s->pmt == pmt->id)
@@ -1606,6 +1577,7 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
     pmt->filter = -1;
     pmt->enabled = 1;
     pmt->version = -1;
+    pmt->content_hash = 0;
     pmt->state = PMT_STOPPED;
     pmt->cw = NULL;
     pmt->opaque = NULL;
@@ -2190,11 +2162,12 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         return -1;
 
     // A running PMT keeps its state and claims across the update; the
-    // diff after the parse decides between silent keep and delta send.
-    SPmtContent prev;
+    // content hash after the parse decides silent keep vs delta send.
+    SPmtPrev prev;
+    uint32_t hash = pmt_content_hash(b, len);
     int was_running = pmt->state == PMT_RUNNING || pmt->state == PMT_STARTING;
     if (was_running)
-        snapshot_pmt_content(pmt, prev);
+        snapshot_pmt_pids(pmt, prev);
     else
         release_pmt_claims(ad, pmt);
     reset_pmt_ca(pmt);
@@ -2276,7 +2249,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         pmt->ca_mask = prev.ca_mask;
         pmt->disabled_ca_mask = prev.disabled_ca_mask;
         pmt->ca_registered_mask = prev.ca_registered_mask;
-        if (!same_pmt_content(pmt, prev)) {
+        if (hash != pmt->content_hash) {
             // Content changed: drop removed pids, then force the
             // CAs to re-send on the next pass.
             drop_removed_pids(ad, pmt, prev);
@@ -2292,6 +2265,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
             }
         }
     }
+    pmt->content_hash = hash;
 
     // Late parse handover: a pid below may be owned by a running PMT
     // subscribed after this one. Stop it; this PMT starts next pass.

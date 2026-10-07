@@ -137,6 +137,7 @@ typedef struct struct_pmt {
     int pcr_pid;
     int adapter;
     int version;
+    uint32_t content_hash; // CRC of the last section, minus version and CRC
     uint16_t caids;
     SPMTCA *ca[MAX_CAID];
     std::vector<descriptor_t> descriptors;

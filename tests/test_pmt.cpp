@@ -2372,6 +2372,23 @@ int test_pmt_cosmetic_update_keeps_running() {
     ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should still run");
     ASSERT_EQUAL(fake_ca_add_calls, 0, "CA should see no re-send");
 
+    // v3 reorders the same streams: the hash flips, so the CA gets a
+    // benign re-send, but nothing is dropped or deleted.
+    int types3[] = {3, 2};
+    int spids3[] = {3401, 3301};
+    len = build_pmt(sec, 100, 3, 3301, 0x0B00, 0x0C00, types3, spids3, 2);
+    fake_ca_add_calls = fake_ca_del_calls = fake_ca_del_pid_calls = 0;
+    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v3 to parse");
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should keep running");
+    ASSERT(find_pid(0, 3301)->pmt == id, "video claim should be kept");
+    ASSERT(find_pid(0, 3401)->pmt == id, "audio claim should be kept");
+    ASSERT_EQUAL(fake_ca_del_calls, 0, "CA should see no delete");
+    ASSERT_EQUAL(fake_ca_del_pid_calls, 0, "CA should see no pid drop");
+
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should still run");
+    ASSERT(fake_ca_add_calls == 1, "CA should see one benign re-send");
+
     del_ca(&counting_op);
     del_filter(fid);
     free_all_pmts();
