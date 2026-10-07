@@ -535,9 +535,9 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
 
     // A re-send doubles as the update path: unmap pids the new PMT
     // dropped, so removed streams and ECMs stop flowing to the CAM.
-    // First adds map exactly the live sets, so there is nothing to sweep.
-    if (already_registered)
-        unmap_removed_pids(d, ad->id, pmt);
+    // Runs on first adds too: a no-op then, but it self-heals stale
+    // entries a reused PMT id could otherwise inherit.
+    unmap_removed_pids(d, ad->id, pmt);
 
     update_pids(ad->id);
     update_pids(d->id);

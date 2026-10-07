@@ -63,6 +63,9 @@ extern SFilter *filters[MAX_FILTERS];
 int pmt_del(int id);
 int del_pmt_mapping_table(ddci_device_t *d, int ad, int pmt);
 
+// Mirrors MAKE_KEY in src/ddci.cpp (not exported to headers).
+#define DDCI_KEY(ad, pid) (((ad) << 16) | (pid))
+
 // Forward declarations
 descriptor_t create_descriptor(const uint8_t *data);
 
@@ -304,7 +307,7 @@ int test_update_resend_keeps_slot() {
     // CAT-listed EMM pids are never swept, even though no PMT lists them;
     // an untracked pid mapped the same way is swept on the same pass
     add_pid_mapping_table(8, 700, pmt0->id, &d0, 1);
-    d0.emm_pids.insert((8 << 16) | 700); // MAKE_KEY lives in ddci.cpp
+    d0.emm_pids.insert(DDCI_KEY(8, 700));
     add_pid_mapping_table(8, 701, pmt0->id, &d0, 1);
     ASSERT(ddci_process_pmt(&ad, pmt0) == TABLES_RESULT_OK,
            "re-send with EMM expected to succeed");
@@ -986,10 +989,10 @@ int test_process_cat() {
     ASSERT(m != NULL, "EMM PID 48 not mapped");
 
     // The CAT-listed EMMs are also tracked for the update sweep.
-    ASSERT(d.emm_pids.count(48) > 0, "EMM PID 48 not tracked");
-    ASSERT(d.emm_pids.count(193) > 0, "EMM PID 193 not tracked");
-    ASSERT(d.emm_pids.count(194) > 0, "EMM PID 194 not tracked");
-    ASSERT(d.emm_pids.count(49) > 0, "EMM PID 49 not tracked");
+    ASSERT(d.emm_pids.count(DDCI_KEY(0, 48)) > 0, "EMM PID 48 not tracked");
+    ASSERT(d.emm_pids.count(DDCI_KEY(0, 193)) > 0, "EMM PID 193 not tracked");
+    ASSERT(d.emm_pids.count(DDCI_KEY(0, 194)) > 0, "EMM PID 194 not tracked");
+    ASSERT(d.emm_pids.count(DDCI_KEY(0, 49)) > 0, "EMM PID 49 not tracked");
 
     // Reset fixtures
     filters[0] = NULL;
