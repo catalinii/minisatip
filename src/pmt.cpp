@@ -1108,17 +1108,21 @@ static void reset_pmt_ca(SPMT *pmt) { pmt->caids = 0; }
 // CRC over the section minus version bits and trailing CRC: any
 // content change flips it, while a pure version bump does not.
 static uint32_t pmt_content_hash(unsigned char *b, int len) {
-    if (len < 6)
-        return crc_32(b, len);
-    int section_len = ((b[1] & 0xF) << 8) + b[2];
-    int hash_len = 3 + section_len - 4;
-    if (hash_len > len)
-        hash_len = len;
-    if (hash_len < 6)
-        hash_len = 6;
+    if (len <= 0)
+        return crc_32(b, 0);
+    int hash_len = len;
+    if (len >= 6) {
+        int section_len = ((b[1] & 0xF) << 8) + b[2];
+        hash_len = 3 + section_len - 4;
+        if (hash_len > len)
+            hash_len = len;
+        if (hash_len < 6)
+            hash_len = 6;
+    }
     std::vector<uint8_t> tmp(b, b + hash_len);
-    tmp[5] &= ~0x3E;
-    return crc_32(tmp.data(), hash_len);
+    if (tmp.size() > 5)
+        tmp[5] &= ~0x3E;
+    return crc_32(tmp.data(), (int)tmp.size());
 }
 
 static void snapshot_pmt_pids(SPMT *pmt, SPmtPrev &prev) {
