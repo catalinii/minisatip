@@ -392,6 +392,31 @@ int is_pmt_running(SPMT *pmt) {
     return m->ddci;
 }
 
+// Find the DDCI channel for this sid, creating it on first use.
+// Returns 0 with *channel set, or a TABLES_RESULT_ERROR_* code.
+static int get_ddci_channel_for_pmt(SPMT *pmt, Sddci_channel **channel) {
+    auto it = channels.find(pmt->sid);
+    if (it == channels.end()) {
+        Sddci_channel *c = &channels[pmt->sid];
+        int result = create_channel_for_pmt(c, pmt);
+        if (result) {
+            channels.erase(pmt->sid);
+            LOG_AND_RETURN(result, "DDCI not ready or busy at the moment: %s",
+                           result == TABLES_RESULT_ERROR_NORETRY ? "no retry"
+                                                                 : "retry");
+        }
+        if (c->ddcis == 0) {
+            channels.erase(pmt->sid);
+            LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
+                           "no suitable DDCI found");
+        }
+        *channel = c;
+    } else {
+        *channel = &it->second;
+    }
+    return TABLES_RESULT_OK;
+}
+
 // determine if the pids from this PMT needs to be added to the virtual adapter,
 // also adds the PIDs to the translation table
 int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
@@ -417,24 +442,9 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
         __FUNCTION__, ad->id, pmt->id, pmt->pid, pmt->sid, ddid, pmt->name);
 
     if (registered == -1) {
-        auto it = channels.find(pmt->sid);
-        if (it == channels.end()) {
-            Sddci_channel *c = &channels[pmt->sid];
-            int result = create_channel_for_pmt(c, pmt);
-            if (result) {
-                channels.erase(pmt->sid);
-                LOG_AND_RETURN(
-                    result, "DDCI not ready or busy at the moment: %s",
-                    result == TABLES_RESULT_ERROR_NORETRY ? "no retry"
-                                                          : "retry");
-            }
-            if (c->ddcis == 0) {
-                channels.erase(pmt->sid);
-                LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
-                               "no suitable DDCI found");
-            }
-        }
-        channel = &channels[pmt->sid];
+        int result = get_ddci_channel_for_pmt(pmt, &channel);
+        if (result)
+            return result;
 
         // Determine which DDCI should handle this PMT
         if (ddid == -1)
