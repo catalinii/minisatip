@@ -2721,6 +2721,28 @@ int test_resend_rejected_releases_ca() {
     return 0;
 }
 
+// A CA descriptor shorter than its CAID+PID header is malformed: it
+// must be skipped, not crash the malloc/memcpy below it.
+int test_add_caid_rejects_negative_len() {
+    int i;
+    uint8_t priv[1] = {0};
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    int id = pmt_add(0, 100, 48);
+    ASSERT(id >= 0, "could not create the PMT");
+
+    pmt_add_caid(pmts[id], 0x0B00, 0x0C00, priv, -1);
+    ASSERT_EQUAL(pmts[id]->caids, 0, "malformed descriptor must be skipped");
+
+    pmt_add_caid(pmts[id], 0x0B00, 0x0C00, priv, 0);
+    ASSERT_EQUAL(pmts[id]->caids, 1, "empty private data still registers");
+
+    free_all_pmts();
+    return 0;
+}
+
 // A PMT version update with identical content keeps the PMT running
 // with its claims (#1346); stopping here was the glitch.
 int test_version_update_keeps_claims() {
@@ -2876,6 +2898,8 @@ int main() {
               "testing handover skips holders that dropped the pid")
     TEST_FUNC(test_resend_rejected_releases_ca(),
               "testing a rejected re-send releases the CA slot")
+    TEST_FUNC(test_add_caid_rejects_negative_len(),
+              "testing a short CA descriptor is skipped")
     fflush(stdout);
     return 0;
 }

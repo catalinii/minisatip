@@ -1964,6 +1964,12 @@ void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid, uint8_t *data,
         LOG("Too many CAIDs for pmt %d, discarding %04X", pmt->id, caid);
         return;
     }
+    // A short descriptor has no valid CAID/PID either: skip it instead
+    // of overflowing the malloc and memcpy below.
+    if (len < 0) {
+        LOG("PMT %d discarding CA descriptor with length %d", pmt->id, len);
+        return;
+    }
 
     LOG("PMT %d PI pos %d caid %04X => pid %04X (%d), index %d", pmt->id,
         pmt->caids + 1, caid, capid, capid, pmt->caids);
