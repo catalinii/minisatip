@@ -55,6 +55,8 @@
 SCA ca[MAX_CA];
 int nca;
 SMutex ca_mutex;
+extern SMutex ca_mask_mutex;
+uint32_t ca_teardown_epoch;
 
 int add_ca(SCA_op *op) {
     int i, new_ca;
@@ -81,34 +83,53 @@ int add_ca(SCA_op *op) {
     return new_ca;
 }
 extern SPMT *pmts[];
-void del_ca(SCA_op *op) {
-    int i, k, mask = 1;
-    adapter *ad;
-    std::lock_guard<SMutex> lock(ca_mutex);
+// Clear one PMT's tables masks for a CA bit. Takes pmts_mutex;
+// nest-safe (recursive) for callers already holding it.
+void tables_clear_pmt_ca_masks(SPMT *pmt, uint64_t mask, int clear_disabled) {
+    extern SMutex pmts_mutex;
+    std::lock_guard<SMutex> lock(pmts_mutex);
+    if (!pmt)
+        return;
+    pmt->ca_mask &= ~mask;
+    pmt->ca_registered_mask &= ~mask;
+    if (clear_disabled)
+        pmt->disabled_ca_mask &= ~mask;
+    // Always bump, even when the cleared bits were already zero: the
+    // table entry was still torn down, so in-flight sets must skip.
+    ca_teardown_epoch++;
+}
 
-    for (i = 0; i < MAX_CA; i++) {
-        if (ca[i].enabled) {
-            if (ca[i].op == op) {
+void del_ca(SCA_op *op) {
+    int i, k;
+    int found[MAX_CA], nfound = 0;
+    adapter *ad;
+    {
+        std::lock_guard<SMutex> lock(ca_mutex);
+        for (i = 0; i < MAX_CA; i++)
+            if (ca[i].enabled && ca[i].op == op) {
                 ca[i].enabled = 0;
-                for (k = 0; k < MAX_ADAPTERS;
-                     k++) // delete ca_mask for all adapters
-                {
-                    if ((ad = get_adapter_nw(k)))
-                        ad->ca_mask &= ~mask;
-                }
-                for (k = 0; k < MAX_PMT; k++) // delete ca_mask for all the PMTs
-                    if (pmts[k] && pmts[k]->enabled) {
-                        pmts[k]->ca_mask &= ~mask;
-                        pmts[k]->ca_registered_mask &= ~mask;
-                    }
+                found[nfound++] = i;
             }
-        }
-        mask = mask << 1;
+        i = MAX_CA;
+        while (--i >= 0 && !ca[i].enabled)
+            ;
+        nca = i + 1;
     }
-    i = MAX_CA;
-    while (--i >= 0 && !ca[i].enabled)
-        ;
-    nca = i + 1;
+    // Mask teardown runs outside ca_mutex: shorter hold, and no
+    // nesting order to audit against the socket-thread teardown.
+    for (int f = 0; f < nfound; f++) {
+        int mask = 1 << found[f];
+        for (k = 0; k < MAX_ADAPTERS; k++) // delete ca_mask for all adapters
+            if ((ad = get_adapter_nw(k))) {
+                std::lock_guard<SMutex> lock(ca_mask_mutex);
+                ad->ca_mask &= ~mask;
+            }
+        extern SMutex pmts_mutex;
+        std::lock_guard<SMutex> lock(pmts_mutex);
+        for (k = 0; k < MAX_PMT; k++) // delete ca_mask for all the PMTs
+            if (pmts[k] && pmts[k]->enabled)
+                tables_clear_pmt_ca_masks(pmts[k], mask, 0);
+    }
 }
 
 void tables_ca_ts(adapter *ad) {
@@ -129,6 +150,9 @@ void add_caid_mask(int ica, int aid, int caid, int mask) {
         LOG("%s: No adapter %d found ", __FUNCTION__, aid);
         return;
     }
+    // Written here on the socket thread, read by the send path:
+    // serialize both sides (leaf sections, no lock order risk).
+    std::lock_guard<SMutex> lock(ca_mask_mutex);
     if (ca[ica].enabled && ca[ica].ad_info[aid].caids < MAX_CAID) {
         for (i = 0; i < ca[ica].ad_info[aid].caids; i++)
             if (ca[ica].ad_info[aid].caid[i] == caid &&
@@ -154,6 +178,7 @@ int tables_init_ca_for_device(int i, adapter *ad) {
         if (ca[i].enabled && ca[i].op->ca_init_dev) {
             if (ca[i].op->ca_init_dev(ad) == TABLES_RESULT_OK) {
                 LOGM("CA %d will handle adapter %d", i, ad->id);
+                std::lock_guard<SMutex> lock(ca_mask_mutex);
                 ad->ca_mask = ad->ca_mask | mask;
                 rv = 1;
             } else
@@ -177,6 +202,7 @@ int match_caid(SPMT *pmt, int caid, int mask) {
 // return 1 if CA can handle this specific CAID on the specified adapter
 int match_ca_caid(int ica, int aid, int caid) {
     int i;
+    std::lock_guard<SMutex> lock(ca_mask_mutex);
     // no CAID added - it means it can handle all CAIDs
     if (ca[ica].ad_info[aid].caids == 0)
         return 1;
@@ -199,10 +225,14 @@ void close_pmt_for_ca(int i, adapter *ad, SPMT *pmt) {
     if (ca[i].enabled && (ad->ca_mask & mask) &&
         (pmt->ca_registered_mask & mask)) {
         LOGM("Closing pmt %d for ca %d and adapter %d", pmt->id, i, ad->id);
+        // Same split as the send path: op outside, mask RMW locked.
         if (ad && ca[i].op->ca_del_pmt)
             ca[i].op->ca_del_pmt(ad, pmt);
-        pmt->ca_mask &= ~mask;
-        pmt->ca_registered_mask &= ~mask;
+        extern SMutex pmts_mutex;
+        std::lock_guard<SMutex> lock(pmts_mutex);
+        if (!(pmt->ca_registered_mask & mask))
+            return;
+        tables_clear_pmt_ca_masks(pmt, mask, 0);
     }
 }
 
@@ -228,21 +258,41 @@ int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt) {
 
     if (ca[i].enabled && (ad->ca_mask & mask) && ca[i].op->ca_add_pmt &&
         !(pmt->disabled_ca_mask & mask) && !(pmt->ca_mask & mask)) {
-        int j, send = 0;
-        for (j = 0; j < ca[i].ad_info[ad->id].caids; j++)
-            if (match_caid(pmt, ca[i].ad_info[ad->id].caid[j],
-                           ca[i].ad_info[ad->id].mask[j])) {
-                LOG("CAID %04X and mask %04X matched PMT %d",
-                    ca[i].ad_info[ad->id].caid[j],
-                    ca[i].ad_info[ad->id].mask[j], pmt->id);
-                send = 1;
-                break;
-            }
+        int j, send = 0, no_caids;
+        {
+            std::lock_guard<SMutex> lock(ca_mask_mutex);
+            for (j = 0; j < ca[i].ad_info[ad->id].caids; j++)
+                if (match_caid(pmt, ca[i].ad_info[ad->id].caid[j],
+                               ca[i].ad_info[ad->id].mask[j])) {
+                    LOG("CAID %04X and mask %04X matched PMT %d",
+                        ca[i].ad_info[ad->id].caid[j],
+                        ca[i].ad_info[ad->id].mask[j], pmt->id);
+                    send = 1;
+                    break;
+                }
+            no_caids = (ca[i].ad_info[ad->id].caids == 0);
+        }
         result = TABLES_RESULT_ERROR_NORETRY;
-        if (send || ca[i].ad_info[ad->id].caids == 0) {
+        // Send outside pmts_mutex: CA ops take socket locks, which
+        // would deadlock against teardown's s_mutex -> pmts order.
+        uint32_t epoch;
+        {
+            extern SMutex pmts_mutex;
+            std::lock_guard<SMutex> lock(pmts_mutex);
+            epoch = ca_teardown_epoch;
+        }
+        if (send || no_caids) {
             result = ca[i].op->ca_add_pmt(ad, pmt);
         }
 
+        extern SMutex pmts_mutex;
+        std::lock_guard<SMutex> lock(pmts_mutex);
+        if ((pmt->disabled_ca_mask & mask) || (pmt->ca_mask & mask))
+            return rv;
+        // Skip a set made stale by a teardown that cleared masks
+        // mid-send; the PMT is simply re-sent on the next pass.
+        if (epoch != ca_teardown_epoch)
+            return rv;
         if (result == TABLES_RESULT_OK) {
             pmt->ca_mask |= mask;
             pmt->ca_registered_mask |= mask;
@@ -321,7 +371,10 @@ int tables_close_device(adapter *ad) {
         }
     }
 
-    ad->ca_mask = 0;
+    {
+        std::lock_guard<SMutex> lock(ca_mask_mutex);
+        ad->ca_mask = 0;
+    }
     return rv;
 }
 

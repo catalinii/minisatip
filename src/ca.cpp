@@ -34,6 +34,7 @@ alternative source
 #include "utils/ticks.h"
 #include <charconv>
 #include <openssl/aes.h>
+#include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
@@ -353,6 +354,8 @@ const char en300468_pol_map[] = {'H', 'V', 'L', 'R'};
 const char en300468_mod_map[4][8] = {"auto", "QPSK", "8PSK", "16QAM"};
 
 static int ca_send_datetime(ca_device_t *d);
+static SMutex &ca_dev_lock(int id);
+void disable_cws_for_all_pmts(ca_device_t *d);
 int populate_resources(ca_device_t *d, int *resource_ids);
 int ca_write_apdu(ca_session_t *s, int resource, const void *data, int len);
 ca_session_t *find_session_for_resource(ca_device_t *d, int resource);
@@ -712,13 +715,68 @@ void cert_strings(char *certfile) {
 /// END MISC
 
 void ca_request_close(ca_device_t *d) {
+    if (!d)
+        return;
     LOG("Requesting CA %d close", d->id);
     sockets_force_close(d->sock);
 }
 
+// Eligible for a reconnect attempt: enabled, down,
+// and the fixed retry interval has elapsed.
+int ca_reconnect_due(ca_device_t *d, int64_t now) {
+    return d && d->enabled && d->fd == -1 && now >= d->reconnect_next_try;
+}
+
+// Forget every PMT held on a dead CAM, clearing its tables masks
+// so the retry loop resends them once the CAM is initialized again.
+void ca_release_pmts(ca_device_t *d) {
+    uint64_t mask;
+    if (!d)
+        return;
+    mask = 1ULL << dvbca_id;
+    // Same lock as the send path: mask updates must not interleave.
+    // get_pmt stays valid under it; the helper nests (recursive).
+    extern SMutex pmts_mutex;
+    std::lock_guard<SMutex> lock(pmts_mutex);
+    // Same bound as the producers: slots beyond max_ca_pmt are
+    // always -1, as max_ca_pmt is fixed at startup (see opts).
+    int n = d->max_ca_pmt;
+    if (n < 0)
+        n = 0;
+    if (n > MAX_CA_PMT)
+        n = MAX_CA_PMT;
+    for (int i = 0; i < n; i++) {
+        tables_clear_pmt_ca_masks(get_pmt(d->capmt[i].pmt_id), mask, 1);
+        tables_clear_pmt_ca_masks(get_pmt(d->capmt[i].other_id), mask, 1);
+    }
+    disable_cws_for_all_pmts(d);
+    memset(d->capmt, -1, sizeof(d->capmt));
+}
+
+// Drop volatile CAM state after a disconnect: sessions, keys,
+// PMT mappings and the dead handle. Keeps enabled sticky.
+void ca_teardown(ca_device_t *d) {
+    if (!d)
+        return;
+    // private_data (CI+ creds) is deliberately kept: the next
+    // handshake wipes it in data_initialize before reuse.
+    std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
+    ca_release_pmts(d);
+    OPENSSL_cleanse(d->sessions, sizeof(d->sessions));
+    OPENSSL_cleanse(d->key, sizeof(d->key));
+    OPENSSL_cleanse(d->iv, sizeof(d->iv));
+    d->caids = 0;
+    d->poll_fails = 0;
+    d->datetime_next_send = 0;
+    d->fd = -1;
+    d->sock = -1;
+    d->state = CA_STATE_INACTIVE;
+}
+
+// Enabled but not initialized covers both initial activation and
+// reconnect-pending: callers must RETRY, never NORETRY-disable PMTs.
 int is_ca_initializing(int i) {
     if (i >= 0 && i < MAX_ADAPTERS && ca_devices[i] && ca_devices[i]->enabled &&
-        ca_devices[i]->state != CA_STATE_INACTIVE &&
         ca_devices[i]->state != CA_STATE_INITIALIZED)
         return 1;
     return 0;
@@ -738,6 +796,8 @@ int get_ca_multiple_pmt(int i) {
 
 void send_cw_to_all_pmts(ca_device_t *d, int parity) {
     int i;
+    // Same producer bound as everywhere else: slots past
+    // max_ca_pmt are always -1 and skipped by the checks below.
     for (i = 0; i < d->max_ca_pmt; i++) {
         if (PMT_ID_IS_VALID(d->capmt[i].pmt_id)) {
             send_cw(d->capmt[i].pmt_id, CA_ALGO_AES128_CBC, parity,
@@ -827,6 +887,7 @@ int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
 // Second PMT can be NULL
 int send_capmt(ca_device_t *d, SCAPMT *ca, int listmgmt, int reason) {
     uint8_t capmt[8192];
+    std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
     memset(capmt, 0, sizeof(capmt));
 
     int size = create_capmt(ca, listmgmt, capmt, sizeof(capmt), reason,
@@ -846,6 +907,7 @@ int send_capmt(ca_device_t *d, SCAPMT *ca, int listmgmt, int reason) {
 
 int get_enabled_pmts_for_ca(ca_device_t *d) {
     int i, enabled_pmts = 0;
+    std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
     for (i = 0; i < d->max_ca_pmt; i++) {
         if (PMT_ID_IS_VALID(d->capmt[i].pmt_id))
             enabled_pmts++;
@@ -858,6 +920,7 @@ int get_enabled_pmts_for_ca(ca_device_t *d) {
 SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple) {
     int ca_pos;
     SCAPMT *res = NULL;
+    std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
 
     // check if the PMT is already added (happening on PMT update)
     for (ca_pos = 0; ca_pos < d->max_ca_pmt; ca_pos++) {
@@ -1032,6 +1095,9 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
     if (!d)
         return TABLES_RESULT_ERROR_NORETRY;
 
+    // Hold the device from the state check through the send, so
+    // teardown cannot wipe sessions/keys/capmt mid-registration.
+    std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
     if (d->state != CA_STATE_INITIALIZED) {
         restore_ci_link(d, ad, prev_linked);
         LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY, "CAM not yet initialized");
@@ -1094,6 +1160,7 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
 // exchange the IDs
 void remove_pmt_from_device(ca_device_t *d, SPMT *pmt) {
     int i;
+    std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
     for (i = 0; i < d->max_ca_pmt; i++) {
         if (d->capmt[i].pmt_id == pmt->id) {
             d->capmt[i].pmt_id = PMT_INVALID;
@@ -1114,7 +1181,10 @@ void remove_pmt_from_device(ca_device_t *d, SPMT *pmt) {
 SCAPMT *get_capmt_for_pmt(SPMT *pmt, ca_device_t **output) {
     ca_device_t *d;
     int i, j;
-    for (i = 0; i < MAX_ADAPTERS; i++)
+    for (i = 0; i < MAX_ADAPTERS; i++) {
+        // One device at a time, ascending: never holds two device
+        // locks, so no lock order to audit against teardown.
+        std::lock_guard<SMutex> lock(ca_dev_lock(i));
         if ((d = ca_devices[i]) &&
             (d->enabled && d->state == CA_STATE_INITIALIZED)) {
             for (j = 0; j < d->max_ca_pmt; j++)
@@ -1124,6 +1194,7 @@ SCAPMT *get_capmt_for_pmt(SPMT *pmt, ca_device_t **output) {
                     return d->capmt + j;
                 }
         }
+    }
     return NULL;
 }
 
@@ -1134,6 +1205,12 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt) {
     SCAPMT *capmt = get_capmt_for_pmt(spmt, &d);
     if (!capmt)
         LOG_AND_RETURN(0, "CAPMT not found for pmt %d", spmt->id);
+
+    // Hold the device across use; re-check the entry in case
+    // teardown wiped the table between the lookup and now.
+    std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
+    if (capmt->pmt_id != spmt->id && capmt->other_id != spmt->id)
+        return 0;
 
     // Last PMT in the CAPMT: tell the CAM to stop it before releasing the
     // slot, or it stays selected next to the next channel on that slot.
@@ -2927,7 +3004,10 @@ int asn_1_encode(int length, uint8_t *asn_1_array) {
 int ca_write_tpdu(ca_device_t *d, int tag, uint8_t *buf, int len) {
     if (opts.enigma) {
 
-        int written = write(d->fd, buf, len);
+        int written;
+        do {
+            written = write(d->fd, buf, len);
+        } while (written == -1 && errno == EINTR);
         if (written != len) {
             LOG("incomplete write to CA %d fd %d, expected %d got %d, errno %d "
                 "%s",
@@ -2989,7 +3069,10 @@ int ca_write_tpdu(ca_device_t *d, int tag, uint8_t *buf, int len) {
         hexdump("WRITE TPDU: ", p_data, i_size);
     }
 
-    int written = write(d->fd, p_data, i_size);
+    int written;
+    do {
+        written = write(d->fd, p_data, i_size);
+    } while (written == -1 && errno == EINTR);
     if (written != i_size) {
         int err = errno;
         LOG("incomplete write to CA %d fd %d, expected %d got %d, errno %d %s",
@@ -3050,13 +3133,27 @@ int ca_write_apdu(ca_session_t *s, int tag, const void *data, int len) {
 
 // reads a TPDU from the CAM. This is called only on DVBCA path
 int ca_read_tpdu(int socket, void *buf, int buf_len, sockets *ss, int *rb) {
-    ca_device_t *c = ca_devices[ss->sid];
+    if (!rb)
+        return 0;
     *rb = 0;
+    if (!ss || ss->sid < 0 || ss->sid >= MAX_ADAPTERS || !ca_devices[ss->sid] ||
+        ca_devices[ss->sid]->fd < 0)
+        return 0;
+    ca_device_t *c = ca_devices[ss->sid];
     uint8_t data[4096];
     int len;
     unsigned char *d;
     len = read(c->fd, data, sizeof(data));
-    if (len > 0 && !((len == 6) && data[5] == 0)) {
+    if (len <= 0) {
+        // Spurious wakeup on a live link, otherwise the CAM is gone.
+        if (len < 0 &&
+            (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR))
+            return 1;
+        errno = EIO; // do not let a stale errno keep a dead socket open
+        return 0;
+    }
+    c->poll_fails = 0;
+    if (!((len == 6) && data[5] == 0)) {
         hexdump("READ TPDU: ", data, len);
     }
     d = data;
@@ -3104,7 +3201,8 @@ int ca_read_tpdu(int socket, void *buf, int buf_len, sockets *ss, int *rb) {
             break;
         case T_DELETE_TC:
             LOG("Got \"Delete Transport Connection\" from module ");
-            return 0; // this will reset the module
+            errno = EIO; // force the socket layer to drop the link
+            return 0;    // this will reset the module
             break;
         case T_DTC_REPLY:
             LOG("Got \"Delete Transport Connection Replay\" from "
@@ -3175,11 +3273,15 @@ int ca_read_apdu(ca_session_t *session, uint8_t *buf, int buf_len) {
 // Reads session data. Session data is provided by both enigma and DVBCA
 // code path
 int ca_read(sockets *s) {
-    unsigned char *data = s->buf;
+    unsigned char *data;
     uint32_t resource_identifier;
     int session_number = -1;
-    ca_device_t *d = ca_devices[s->sid];
+    ca_device_t *d;
     char pkt[6];
+    if (!s || s->sid < 0 || s->sid >= MAX_ADAPTERS || !ca_devices[s->sid])
+        return 0;
+    data = s->buf;
+    d = ca_devices[s->sid];
     int len, status = 0;
     hexdump("CAREAD", data, s->rlen);
     int tag = data[0];
@@ -3189,6 +3291,7 @@ int ca_read(sockets *s) {
     // prevent device close
     if (d->state == CA_STATE_INACTIVE)
         d->state = CA_STATE_ACTIVE;
+    d->poll_fails = 0;
 
     if (llen < 0) {
         s->rlen = 0;
@@ -3219,6 +3322,10 @@ int ca_read(sockets *s) {
     case ST_CLOSE_SESSION_REQUEST: {
         // closing the CI session
         copy16r(session_number, data, 2);
+        if (session_number < 1 || session_number > MAX_SESSIONS) {
+            LOG("CA %d: bad session %d, dropping", d->id, session_number);
+            break;
+        }
         session = d->sessions + session_number - 1;
         LOG("Received close session %s", session->handler.name);
         if (session->handler.close)
@@ -3234,6 +3341,10 @@ int ca_read(sockets *s) {
     case ST_SESSION_NUMBER: {
         copy16r(session_number, data, 1 + llen);
         DEBUGM("got ST_SESSION_NUMBER for session_number %d", session_number);
+        if (session_number < 1 || session_number > MAX_SESSIONS) {
+            LOG("CA %d: bad session %d, dropping", d->id, session_number);
+            break;
+        }
         session = d->sessions + session_number - 1;
         if (session->handler.resource == 0) {
             LOG("CA %d: session %d is not registered", d->id, session_number)
@@ -3250,10 +3361,18 @@ int ca_read(sockets *s) {
 }
 
 int ca_close(sockets *s) {
-    ca_device_t *c = ca_devices[s->sid];
+    ca_device_t *c = NULL;
+    if (s && s->sid >= 0 && s->sid < MAX_ADAPTERS)
+        c = ca_devices[s->sid];
+    if (!c)
+        return 0;
+    // Only the current socket may tear down; a stale close
+    // from a previous generation must not wipe the new one.
+    std::lock_guard<SMutex> lock(ca_dev_lock(c->id));
+    if (c->sock != s->id)
+        return 0;
     LOG("closing CA device %d, fd %d", c->id, c->fd);
-    c->fd = -1;
-    c->state = CA_STATE_INACTIVE;
+    ca_teardown(c);
     // cleanup
     EVP_cleanup();
     ERR_free_strings();
@@ -3261,21 +3380,44 @@ int ca_close(sockets *s) {
 }
 
 int ca_timeout(sockets *s) {
+    ca_device_t *d;
+    if (!s)
+        return 0;
     s->rtime = getTick();
+    if (s->sid < 0 || s->sid >= MAX_ADAPTERS || !ca_devices[s->sid])
+        return 0;
+    d = ca_devices[s->sid];
     if (!opts.enigma) {
-        ca_device_t *d = ca_devices[s->sid];
+        int rc;
         if (d->state == CA_STATE_INACTIVE) {
-            ca_write_tpdu(d, T_CREATE_TC, NULL, 0);
+            rc = ca_write_tpdu(d, T_CREATE_TC, NULL, 0);
         } else {
-            ca_write_tpdu(d, T_DATA_LAST, NULL, 0);
+            rc = ca_write_tpdu(d, T_DATA_LAST, NULL, 0);
+        }
+        // Consecutive keepalive failures mean a dead link
+        // even when the driver reports no explicit error.
+        if (rc) {
+            if (++d->poll_fails >= CA_MAX_POLL_FAILS) {
+                d->poll_fails = 0;
+                ca_request_close(d);
+            }
+        } else {
+            d->poll_fails = 0;
         }
     }
+    // Date/time updates run on the socket thread so they
+    // cannot race session teardown in ca_close.
+    if (d->state == CA_STATE_INITIALIZED && d->datetime_response_interval &&
+        getTick() > d->datetime_next_send)
+        ca_send_datetime(d);
     return 0;
 }
 
 // reads session data on enigma devices. Handles specific issues (such as
 // reading 0 bytes) and adds only the session data to sockets buffer
 int ca_read_enigma(int socket, void *buf, int len, sockets *ss, int *rb) {
+    if (!ss || !rb || !buf)
+        return 0;
     int rl = read(socket, buf, len);
     *rb = 0;
     if (rl > 0) {
@@ -3285,10 +3427,13 @@ int ca_read_enigma(int socket, void *buf, int len, sockets *ss, int *rb) {
         }
         return 1;
     }
-    if (ss->revents == POLLPRI) {
-        ca_device_t *d = ca_devices[ss->sid];
-        if (d->state != CA_STATE_INACTIVE) {
-            d->state = CA_STATE_INACTIVE;
+    if (ss->revents & POLLPRI) {
+        if (ss->sid >= 0 && ss->sid < MAX_ADAPTERS) {
+            ca_device_t *d = ca_devices[ss->sid];
+            // Module removal: tear everything down and let
+            // the reconnect poller reopen the device.
+            if (d && d->state != CA_STATE_INACTIVE)
+                ca_request_close(d);
         }
         ss->events = POLLIN;
     }
@@ -3301,10 +3446,16 @@ int ca_init_enigma(ca_device_t *d) {
 
     ioctl(fd, 0);
 
-    d->sock = sockets_add(fd, NULL, d->id, TYPE_TCP, (socket_action)ca_read,
-                          (socket_action)ca_close, (socket_action)ca_timeout);
-    if (d->sock < 0)
-        LOG_AND_RETURN(0, "%s: sockets_add failed", __FUNCTION__);
+    int sk = sockets_add(fd, NULL, d->id, TYPE_TCP, (socket_action)ca_read,
+                         (socket_action)ca_close, (socket_action)ca_timeout);
+    if (sk < 0)
+        LOG_AND_RETURN(1, "%s: sockets_add failed", __FUNCTION__);
+    // Publish under the device lock; socket setup stays outside
+    // it so this never nests socket locks under the device lock.
+    {
+        std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
+        d->sock = sk;
+    }
     sockets_timeout(d->sock, 1000);
     sockets_setread(d->sock, (void *)ca_read_enigma);
     LOG("initializing CA %d, fd %d sock %d", d->id, fd, d->sock);
@@ -3381,11 +3532,17 @@ int ca_init_en50221(ca_device_t *d) {
     }
     ca_write_tpdu(d, T_CREATE_TC, NULL, 0);
 
-    d->sock = sockets_add(fd, NULL, d->id, TYPE_TCP, (socket_action)ca_read,
-                          (socket_action)ca_close, (socket_action)ca_timeout);
-    if (d->sock < 0) {
+    int sk = sockets_add(fd, NULL, d->id, TYPE_TCP, (socket_action)ca_read,
+                         (socket_action)ca_close, (socket_action)ca_timeout);
+    if (sk < 0) {
         LOG("%s:8 sockets_add failed", __FUNCTION__);
         return 1;
+    }
+    // Publish under the device lock; socket setup stays outside
+    // it so this never nests socket locks under the device lock.
+    {
+        std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
+        d->sock = sk;
     }
     sockets_timeout(d->sock, 1000);
     sockets_setread(d->sock, (void *)ca_read_tpdu);
@@ -3420,13 +3577,73 @@ void flush_handle(int fd) {
     if (!(flags & O_NONBLOCK) && (fcntl(fd, F_SETFL, flags) == -1))
         LOG("Failed to set the handle %d as blocking", fd);
 }
+
+// True when slot info reports a module present or ready.
+int ca_slot_has_module(const struct ca_slot_info *info) {
+    return info &&
+           (info->flags & (CA_CI_MODULE_PRESENT | CA_CI_MODULE_READY)) != 0;
+}
+
+// Cheap presence probe: a single slot query, no reset.
+// Unknown errors proceed to the full init so it can decide.
+static int ca_slot_present(int fd) {
+    ca_slot_info_t info;
+    memset(&info, 0, sizeof(info));
+    if (ioctl(fd, CA_GET_SLOT_INFO, &info))
+        return 1;
+    return ca_slot_has_module(&info);
+}
+
+// Record a failed init: drop the handle, stay enabled for the
+// reconnect poller. Always returns RETRY; NULL-safe for tests.
+int ca_init_failed(ca_device_t *d) {
+    if (!d)
+        return TABLES_RESULT_ERROR_RETRY;
+    if (d->fd >= 0)
+        close(d->fd);
+    std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
+    d->fd = -1;
+    d->sock = -1;
+    d->state = CA_STATE_INACTIVE;
+    d->enabled = 1;
+    return TABLES_RESULT_ERROR_RETRY;
+}
+
+// Serializes concurrent inits of the same adapter (CA poller
+// vs tables thread); different adapters init in parallel.
+static SMutex ca_init_mutex[MAX_ADAPTERS];
+
+// Guards one device's sessions/keys/capmt/state. Sections must
+// stay socket-free: teardown nests this under s_mutex.
+static SMutex ca_dev_mutex[MAX_ADAPTERS];
+
+static SMutex &ca_dev_lock(int id) {
+    static SMutex fallback;
+    if (id < 0 || id >= MAX_ADAPTERS)
+        return fallback;
+    return ca_dev_mutex[id];
+}
+
 int dvbca_init_dev(adapter *ad) {
-    ca_device_t *c = ca_devices[ad->id];
+    ca_device_t *c;
     int fd, result = 0;
     char ca_dev_path[100];
 
-    if (c && c->state == CA_STATE_INITIALIZED)
+    if (!ad || ad->id < 0 || ad->id >= MAX_ADAPTERS)
+        return TABLES_RESULT_ERROR_NORETRY;
+    std::lock_guard<SMutex> init_lock(ca_init_mutex[ad->id]);
+    c = ca_devices[ad->id];
+    int initialized = 0;
+    if (c) {
+        std::lock_guard<SMutex> dev_lock(ca_dev_lock(ad->id));
+        initialized = (c->state == CA_STATE_INITIALIZED);
+    }
+    if (initialized) {
+        extern SMutex ca_mask_mutex;
+        std::lock_guard<SMutex> mask_lock(ca_mask_mutex);
+        ad->ca_mask |= (1ULL << dvbca_id);
         return TABLES_RESULT_OK;
+    }
 
     if (ad->type != ADAPTER_DVB && ad->type != ADAPTER_CI)
         return TABLES_RESULT_ERROR_NORETRY;
@@ -3451,20 +3668,26 @@ int dvbca_init_dev(adapter *ad) {
         c = ca_devices[ad->id] = alloc_ca_device();
         if (!c) {
             close(fd);
-            LOG_AND_RETURN(0, "Could not allocate memory for CA device %d",
+            LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
+                           "Could not allocate memory for CA device %d",
                            ad->id);
         }
     }
-    c->fd = fd;
-    c->id = ad->id;
-    c->state = CA_STATE_INACTIVE;
-    c->sock = -1;
+    // Publish under the device lock: readers on other threads
+    // (close guard, send paths) must see a consistent device.
+    {
+        std::lock_guard<SMutex> lock(ca_dev_lock(ad->id));
+        c->fd = fd;
+        c->id = ad->id;
+        c->state = CA_STATE_INACTIVE;
+        c->sock = -1;
 
-    memset(c->capmt, -1, sizeof(c->capmt));
-    memset(c->key[0], 0, sizeof(c->key[0]));
-    memset(c->key[1], 0, sizeof(c->key[1]));
-    memset(c->iv[0], 0, sizeof(c->iv[0]));
-    memset(c->iv[1], 0, sizeof(c->iv[1]));
+        memset(c->capmt, -1, sizeof(c->capmt));
+        memset(c->key[0], 0, sizeof(c->key[0]));
+        memset(c->key[1], 0, sizeof(c->key[1]));
+        memset(c->iv[0], 0, sizeof(c->iv[0]));
+        memset(c->iv[1], 0, sizeof(c->iv[1]));
+    }
 
     if (!c->force_ci) {
         if (access("/etc/ssl/certs/root.pem", F_OK) != 0) {
@@ -3472,27 +3695,40 @@ int dvbca_init_dev(adapter *ad) {
         }
     }
 
+    // Empty slot: skip the reset storm, the poller retries later.
+    if (!opts.enigma && !ca_slot_present(fd)) {
+        LOG("CA %d: no module in slot, deferring init", c->id);
+        return ca_init_failed(c);
+    }
+
     if (opts.enigma)
         result = ca_init_enigma(c);
     else
         result = ca_init_en50221(c);
     if (result) {
-        ca_request_close(c);
-        close(c->fd);
-        c->fd = -1;
-        c->enabled = 0;
-        return TABLES_RESULT_ERROR_NORETRY;
+        return ca_init_failed(c);
     }
 
     has_ci = 1;
-    c->enabled = 1;
+    {
+        std::lock_guard<SMutex> lock(ca_dev_lock(ad->id));
+        c->enabled = 1;
+    }
+    {
+        extern SMutex ca_mask_mutex;
+        std::lock_guard<SMutex> lock(ca_mask_mutex);
+        ad->ca_mask |= (1ULL << dvbca_id);
+    }
 
     set_socket_thread(c->sock, ad->thread);
     return TABLES_RESULT_OK;
 }
 
 int dvbca_close_dev(adapter *ad) {
-    ca_device_t *c = ca_devices[ad->id];
+    ca_device_t *c;
+    if (!ad || ad->id < 0 || ad->id >= MAX_ADAPTERS)
+        return 1;
+    c = ca_devices[ad->id];
     if (c && c->enabled &&
         c->state ==
             CA_STATE_INACTIVE) // do not close the CA unless in a bad state
@@ -3529,25 +3765,29 @@ SCA_op dvbca = {
 
 int ca_reconnect(void *arg) {
     int i;
+    int64_t now = getTick();
     extern adapter *a[];
-    for (i = 0; i < MAX_ADAPTERS; i++)
-        if (ca_devices[i] && ca_devices[i]->enabled &&
-            ca_devices[i]->fd == -1) {
-            LOG("Trying to reconnect to CA %d", i);
-            dvbca_init_dev(a[i]);
+    for (i = 0; i < MAX_ADAPTERS; i++) {
+        ca_device_t *c = ca_devices[i];
+        adapter *ad;
+        if (!ca_reconnect_due(c, now))
+            continue;
+        ad = a[i];
+        if (!ad || !ad->enabled)
+            continue;
+        LOG("Trying to reconnect to CA %d", i);
+        if (dvbca_init_dev(ad) == TABLES_RESULT_OK) {
+            c = ca_devices[i];
+            if (c)
+                c->reconnect_next_try = 0;
+        } else {
+            c = ca_devices[i];
+            if (c) // fresh tick: a slow init may outlast the interval
+                c->reconnect_next_try = getTick() + CA_RECONNECT_INTERVAL_MS;
         }
-
-    for (i = 0; i < MAX_ADAPTERS; i++)
-        if (ca_devices[i] && ca_devices[i]->enabled &&
-            ca_devices[i]->state == CA_STATE_INITIALIZED) {
-            {
-                // Send regular date/time updates to the CAM
-                if (ca_devices[i]->datetime_response_interval &&
-                    (getTick() > ca_devices[i]->datetime_next_send)) {
-                    ca_send_datetime(ca_devices[i]);
-                }
-            }
-        }
+    }
+    // Date/time updates are sent from ca_timeout on the socket
+    // thread, never from this poller (see the race note there).
     return 0;
 }
 

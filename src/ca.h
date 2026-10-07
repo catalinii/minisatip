@@ -182,6 +182,8 @@ struct cc_ctrl_data {
 };
 
 struct ca_device {
+    // enabled/fd/sock/state are plain cross-thread ints: writers
+    // take the per-device lock, readers tolerate one stale pass.
     int enabled;
     SCAPMT capmt[MAX_CA_PMT];
     int max_ca_pmt, multiple_pmt;
@@ -214,6 +216,11 @@ struct ca_device {
      */
     uint64_t datetime_response_interval;
     int64_t datetime_next_send;
+
+    // Reconnect pacing, written only by the CA poller thread.
+    // poll_fails is socket-thread state, reset on any inbound traffic.
+    int64_t reconnect_next_try;
+    int poll_fails;
 };
 
 extern ca_device_t *ca_devices[];
@@ -238,6 +245,11 @@ char *get_ca_caids_string(int i, char *dest, int max_len);
 #define CA_RESET_ATTEMPTS 3
 #define CA_READY_POLLS 800
 
+// Reconnect policy: retry a dead CAM at most every 5 seconds.
+#define CA_RECONNECT_INTERVAL_MS 5000
+// Failed keepalive polls in a row before the link is declared dead.
+#define CA_MAX_POLL_FAILS 3
+
 typedef int (*ca_reset_fn)(int fd);
 typedef int (*ca_slot_info_fn)(int fd, struct ca_slot_info *info);
 typedef void (*ca_sleep_fn)(int ms);
@@ -247,5 +259,21 @@ typedef void (*ca_sleep_fn)(int ms);
 int ca_reset_and_wait_ready(int fd, struct ca_slot_info *info, int id,
                             int attempts, int polls, ca_reset_fn do_reset,
                             ca_slot_info_fn get_info, ca_sleep_fn sleep_fn);
+
+// True when the device is down and its retry interval has elapsed.
+int ca_reconnect_due(ca_device_t *d, int64_t now);
+// True when slot info reports a module present or ready.
+int ca_slot_has_module(const struct ca_slot_info *info);
+// Record a failed init: drop the handle, stay enabled, return RETRY.
+int ca_init_failed(ca_device_t *d);
+// Release PMT registrations held on a dead CAM for re-send after reconnect.
+void ca_release_pmts(ca_device_t *d);
+// Drop all volatile CAM state after a disconnect. Idempotent.
+void ca_teardown(ca_device_t *d);
+// Reconnect poller, runs every second on the CA poller thread.
+int ca_reconnect(void *arg);
+
+struct struct_sockets;
+int ca_close(struct struct_sockets *s);
 
 #endif

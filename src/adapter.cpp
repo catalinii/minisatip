@@ -63,6 +63,9 @@ int sock_signal;
 char do_dump_pids = 1;
 char absolute_switch;
 SMutex a_mutex;
+// Serializes ad->ca_mask writers (init, close, reconnect); readers
+// re-read every pass, so a stale read only delays one cycle.
+SMutex ca_mask_mutex;
 
 int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2, tuner_at, tuner_ac;
 int16_t fe_map[2 * MAX_ADAPTERS];
@@ -423,7 +426,10 @@ int close_adapter(int na) {
     if (ad->ca_mask > 0)
         pmt_close_device(ad);
 #endif
-    ad->ca_mask = 0;
+    {
+        std::lock_guard<SMutex> lock(ca_mask_mutex);
+        ad->ca_mask = 0;
+    }
     ad->fe = -1;
     ad->dvr = -1;
     ad->strength = 0;
