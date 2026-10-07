@@ -76,6 +76,15 @@ int nfilters;
 const char *listmgmt_str[] = {"CLM_MORE", "CLM_FIRST", "CLM_LAST",
                               "CLM_ONLY", "CLM_ADD",   "CLM_UPDATE"};
 
+// True when the pid is still one of the PMT's streams. Updates drop
+// pids without unclaiming, so holders are validated lazily instead.
+static int pmt_lists_pid(SPMT *pmt, int pid) {
+    for (const auto &sp : pmt->stream_pids)
+        if (sp.pid == pid)
+            return 1;
+    return 0;
+}
+
 static inline SPMT *get_pmt_for_existing_pid(SPid *p) {
     SPMT *pmt = NULL;
     if (p && p->pmt >= 0 && p->pmt < npmts && pmts[p->pmt] &&
@@ -605,8 +614,12 @@ int wait_pusi(adapter *ad, int len) {
     memset(parity, 0, sizeof(parity));
     for (i = 0; i < MAX_PIDS; i++)
         if (ad->pids[i].flags == PID_STATE_ACTIVE && (ad->pids[i].pmt >= 0) &&
-            ad->pids[i].pid < 8192)
+            ad->pids[i].pid < 8192) {
+            SPMT *holder = get_pmt(ad->pids[i].pmt);
+            if (holder && !pmt_lists_pid(holder, ad->pids[i].pid))
+                continue; // stale claim: update dropped it
             pids[ad->pids[i].pid] = PID_INIT;
+        }
     for (i = 0; i < len; i += DVB_FRAME) {
         uint8_t *b = ad->buf + i;
         int pid = PID_FROM_TS(b);
@@ -945,6 +958,8 @@ int pmt_decrypt_stream(adapter *ad) {
         if (b[3] & 0x80) {
             p = find_pid(ad->id, pid);
             pmt = get_pmt_for_existing_pid(p);
+            if (pmt && !pmt_lists_pid(pmt, pid))
+                pmt = NULL; // stale claim: update dropped it, skip decrypt
             if (!pmt) {
                 DEBUGM("PMT not found for pid %d, id %d, packet %d, pos %d",
                        pid, p ? p->pmt : -3, i / 188, i);
@@ -1091,15 +1106,6 @@ static int same_stream_pids(SPMT *a, SPMT *b) {
             return 0;
     }
     return 1;
-}
-
-// True when the pid is still one of the PMT's streams. Updates drop
-// pids without unclaiming, so holders are validated lazily instead.
-static int pmt_lists_pid(SPMT *pmt, int pid) {
-    for (const auto &sp : pmt->stream_pids)
-        if (sp.pid == pid)
-            return 1;
-    return 0;
 }
 
 // Drop the CA list so the update parse rebuilds it; entries are kept
@@ -2363,6 +2369,8 @@ void pmt_pid_del(adapter *ad, int pid) {
         return;
 
 #ifndef DISABLE_TABLES
+    // Tolerates stale claims (update dropped the pid): the stop check
+    // below runs over current streams either way.
     tables_del_pid(ad, pmt, pid);
 #endif
 

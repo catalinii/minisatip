@@ -51,7 +51,7 @@ typedef struct ddci_device {
     int16_t pat_cc, sdt_cc, eit_cc;
     char disable_cat;
     std::unordered_map<int, ddci_mapping_table_t> mapping;
-    std::unordered_set<int> emm_pids; // CAT-listed, never swept on update
+    std::unordered_set<int> emm_pids; // MAKE_KEY(ad,pid), never swept
     SFIFO fifo;
 } ddci_device_t;
 

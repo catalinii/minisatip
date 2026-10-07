@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <linux/dvb/ca.h>
 #include <sys/ioctl.h>
+#include <unordered_set>
 
 // Enigma2 DVB CA hardware descrambler ioctls and API structures (CSA,
 // AES-128 ECB and AES-128 CBC registers).
@@ -59,5 +60,8 @@ int hw_ca_add_pmt(adapter *ad, SPMT *pmt);
 int hw_ca_init_dev(adapter *ad);
 int hw_ca_del_pmt(adapter *ad, SPMT *pmt);
 int hw_ca_close_dev(adapter *ad);
+
+// Test hook: pids currently tracked as bound for a PMT.
+std::unordered_set<int> hw_bound_pids_for_test(int pa, int pmt_id);
 
 #endif // HW_DESCRAMBLER_H

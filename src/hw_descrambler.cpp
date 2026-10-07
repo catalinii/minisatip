@@ -212,6 +212,17 @@ class HwSlotManager {
         return bound;
     }
 
+    std::unordered_set<int> bound_pids(int physical_adapter_id, int pmt_id) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto *ca = get_state(physical_adapter_id);
+        if (!ca)
+            return {};
+        auto it = ca->bound_pids.find(pmt_id);
+        if (it == ca->bound_pids.end())
+            return {};
+        return it->second;
+    }
+
     void close_adapter_ca(int physical_adapter_id) {
         std::lock_guard<std::mutex> lock(mutex_);
         auto *ca = get_state(physical_adapter_id);
@@ -375,6 +386,31 @@ void hw_decrypt_stream(SCW *cw, SPMT_batch *batch, int batch_len) {
     // hardware. Software decryption loop is bypassed (pass-through).
 }
 
+// Drop pids another PMT on the same hardware still lists: the
+// unbind is device-wide and must not break other services.
+static void hw_drop_held_pids(adapter *ad, SPMT *pmt,
+                              std::unordered_set<int> &pids) {
+    for (auto it = pids.begin(); it != pids.end();) {
+        int held = 0;
+        for (int i = 0; i < MAX_PMT && !held; i++) {
+            SPMT *o = get_pmt(i);
+            adapter *oa;
+            if (!o || o == pmt || o->adapter < 0)
+                continue;
+            oa = get_adapter_nw(o->adapter);
+            if (!oa || oa->pa != ad->pa)
+                continue;
+            for (const auto &sp : o->stream_pids)
+                if (sp.pid == *it)
+                    held = 1;
+        }
+        if (held)
+            it = pids.erase(it);
+        else
+            ++it;
+    }
+}
+
 static void hw_unbind_pids(int pa, const char *device_path,
                            const std::unordered_set<int> &pids) {
     if (pids.empty())
@@ -405,12 +441,17 @@ int hw_ca_del_pmt(adapter *ad, SPMT *pmt) {
         HwSlotManager::instance().take_bound_pids(ad->pa, pmt_id);
     for (const auto &sp : pmt->stream_pids)
         bound.insert(sp.pid);
+    hw_drop_held_pids(ad, pmt, bound);
     const std::string device_path = get_ca_device_path(ad);
     hw_unbind_pids(ad->pa, device_path.c_str(), bound);
 
     // 2. Release hardware descrambler slot index
     HwSlotManager::instance().release_slot(ad->pa, pmt_id);
     return 0;
+}
+
+std::unordered_set<int> hw_bound_pids_for_test(int pa, int pmt_id) {
+    return HwSlotManager::instance().bound_pids(pa, pmt_id);
 }
 
 // On re-send, unbind pids the update dropped; added pids bind on
@@ -423,6 +464,7 @@ int hw_ca_add_pmt(adapter *ad, SPMT *pmt) {
         current.insert(sp.pid);
     std::unordered_set<int> removed =
         HwSlotManager::instance().retarget_pids(ad->pa, pmt->id, current);
+    hw_drop_held_pids(ad, pmt, removed);
     const std::string device_path = get_ca_device_path(ad);
     hw_unbind_pids(ad->pa, device_path.c_str(), removed);
     return TABLES_RESULT_OK;

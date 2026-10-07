@@ -217,8 +217,7 @@ static void release_mapping_entry(ddci_device_t *d, int ad, int pmt,
 }
 
 int del_pmt_mapping_table(ddci_device_t *d, int ad, int pmt) {
-    int i;
-    int to_del[MAX_PIDS], n = 0;
+    std::vector<int> to_del;
     for (const auto &u : d->mapping) {
         ddci_mapping_table_t *m = (ddci_mapping_table_t *)&u.second;
         if (m->ad == ad) {
@@ -227,13 +226,13 @@ int del_pmt_mapping_table(ddci_device_t *d, int ad, int pmt) {
             if (m->pmt.size() > 0)
                 continue;
 
-            to_del[n++] = m->pid;
+            to_del.push_back(m->pid);
             release_mapping_entry(d, ad, pmt, m);
         }
     }
 
-    for (i = 0; i < n; i++)
-        d->mapping.erase(MAKE_KEY(ad, to_del[i]));
+    for (int pid : to_del)
+        d->mapping.erase(MAKE_KEY(ad, pid));
 
     return 0;
 }
@@ -241,10 +240,10 @@ int del_pmt_mapping_table(ddci_device_t *d, int ad, int pmt) {
 // Unmap this PMT's pids that the update dropped; shared entries stay
 // until their last user is gone. Call with d->mutex held.
 static void unmap_removed_pids(ddci_device_t *d, int ad, SPMT *pmt) {
-    auto still_needed = [d, pmt](int pid) {
+    auto still_needed = [d, pmt, ad](int pid) {
         if (pid == pmt->pid || pid == 1 || pid == 20)
             return true;
-        if (d->emm_pids.count(pid) > 0)
+        if (d->emm_pids.count(MAKE_KEY(ad, pid)) > 0)
             return true;
         for (const auto &sp : pmt->stream_pids)
             if (sp.pid == pid)
@@ -254,7 +253,7 @@ static void unmap_removed_pids(ddci_device_t *d, int ad, SPMT *pmt) {
                 return true;
         return false;
     };
-    int to_del[MAX_PIDS], n = 0;
+    std::vector<int> to_del;
     for (const auto &u : d->mapping) {
         ddci_mapping_table_t *m = (ddci_mapping_table_t *)&u.second;
         if (m->ad != ad || m->pmt.count(pmt->id) == 0)
@@ -264,11 +263,11 @@ static void unmap_removed_pids(ddci_device_t *d, int ad, SPMT *pmt) {
         m->pmt.erase(pmt->id);
         if (!m->pmt.empty())
             continue;
-        to_del[n++] = m->pid;
+        to_del.push_back(m->pid);
         release_mapping_entry(d, ad, pmt->id, m);
     }
-    for (int i = 0; i < n; i++)
-        d->mapping.erase(MAKE_KEY(ad, to_del[i]));
+    for (int pid : to_del)
+        d->mapping.erase(MAKE_KEY(ad, pid));
 }
 
 int ddci_init_dev(adapter *ad) { return TABLES_RESULT_OK; }
@@ -536,7 +535,9 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
 
     // A re-send doubles as the update path: unmap pids the new PMT
     // dropped, so removed streams and ECMs stop flowing to the CAM.
-    unmap_removed_pids(d, ad->id, pmt);
+    // First adds map exactly the live sets, so there is nothing to sweep.
+    if (already_registered)
+        unmap_removed_pids(d, ad->id, pmt);
 
     update_pids(ad->id);
     update_pids(d->id);
@@ -1363,10 +1364,17 @@ int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque) {
         return 0;
     }
 
-    // sending EMM pids to the CAM
+    // sending EMM pids to the CAM; rebuild this adapter's set so
+    // dropped EMMs stop being sweep-protected
+    for (auto it = d->emm_pids.begin(); it != d->emm_pids.end();) {
+        if ((*it >> 16) == f->adapter)
+            it = d->emm_pids.erase(it);
+        else
+            ++it;
+    }
     for (const auto &emm_pid : emm_pids) {
         add_pid_mapping_table(f->adapter, emm_pid, d->pmt[0].id, d, 1);
-        d->emm_pids.insert(emm_pid);
+        d->emm_pids.insert(MAKE_KEY(f->adapter, emm_pid));
     }
 
     d->cat_processed = 1;

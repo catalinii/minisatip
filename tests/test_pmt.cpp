@@ -134,6 +134,8 @@ int test_decrypt() {
     a[0]->pids[0].pmt = 0;
     a[0]->enabled = 1;
     pmt_add(0, 0, 100);
+    // Claims reference listed streams; the decrypt path skips stale ones.
+    pmt_add_stream_pid(pmts[0], 0xff, 2, false, true);
     for (i = 0; i < max_len; i++) {
         memcpy(a[0]->buf + i * sizeof(packet), packet, sizeof(packet));
     }
@@ -2450,6 +2452,7 @@ int test_pmt_content_update_delta() {
     ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should still run");
     ASSERT(fake_ca_add_calls == 1, "CA should see one re-send");
     ASSERT(pmts[id]->ca_mask != 0, "PMT should hold a CA slot again");
+    ASSERT(find_pid(0, 3401)->pmt == id, "stale claim should survive pass");
 
     // v3 changes only the ECM pid: still a delta re-send, no delete.
     len = build_pmt(sec, 100, 3, 3301, 0x0B00, 0x0C01, types2, spids2, 1);
@@ -2509,15 +2512,84 @@ int test_pmt_content_update_delta() {
     update_pids(0);
     pmt_add_active_pmt(&ad, bid);
 
+    // Preconditions for a stale steal: 3401 still held by A, and B
+    // subscribed strictly later so order alone would block the steal.
+    ASSERT(find_pid(0, 3401)->pmt == id, "3401 should still be stale-held");
+    ASSERT(find_pid(0, 48)->order < find_pid(0, 52)->order,
+           "B should subscribe later than A");
     fake_ca_add_calls = fake_ca_del_calls = 0;
     start_active_pmts(&ad);
     ASSERT(find_pid(0, 3401)->pmt == bid, "stale claim should be stolen");
     ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "second PMT should run");
     ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "first PMT should still run");
     ASSERT(fake_ca_add_calls == 1, "second PMT should be sent to the CA");
+    ASSERT_EQUAL(fake_ca_last_add_pmt, bid, "B should be the one sent");
 
     del_ca(&counting_op);
     del_filter(fid);
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
+// A late parse whose streams are stale-held by a later PMT must not
+// stop it: the holder dropped the pid, so handover skips it.
+int test_handover_ignores_stale_holder() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    // B's PMT pid first: B subscribes strictly earlier than A.
+    ASSERT(mark_pid_add(0, 0, 60) == 0, "pid 60 should be added");
+    ASSERT(mark_pid_add(0, 0, 48) == 0, "pid 48 should be added");
+    ASSERT(mark_pid_add(0, 0, 3301) == 0, "pid 3301 should be added");
+    ASSERT(mark_pid_add(0, 0, 3302) == 0, "pid 3302 should be added");
+    update_pids(0);
+    ASSERT(find_pid(0, 60)->order < find_pid(0, 48)->order,
+           "B should subscribe earlier than A");
+
+    int aid = pmt_add(0, 100, 48);
+    ASSERT(aid >= 0, "could not create PMT A");
+    pmt_add_stream_pid(pmts[aid], 3301, 2, false, true);
+    pmt_add_stream_pid(pmts[aid], 3302, 2, false, true);
+    pmt_add_active_pmt(&ad, aid);
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "A should run");
+    ASSERT(find_pid(0, 3301)->pmt == aid, "A should claim 3301");
+
+    // A drops 3301 without unclaiming (post-update state).
+    for (auto it = pmts[aid]->stream_pids.begin();
+         it != pmts[aid]->stream_pids.end(); ++it)
+        if (it->pid == 3301) {
+            pmts[aid]->stream_pids.erase(it);
+            break;
+        }
+
+    int bid = pmt_add(0, 200, 60);
+    ASSERT(bid >= 0, "could not create PMT B");
+    int bfid = add_filter(0, 60, (void *)process_pmt, pmts[bid], 0);
+    ASSERT(bfid >= 0, "could not add the PMT filter");
+    pmts[bid]->filter = bfid;
+    int types[] = {2};
+    int spids[] = {3301};
+    uint8_t sec[64];
+    int len = build_pmt(sec, 200, 1, 3301, 0, 0, types, spids, 1);
+    ASSERT(process_pmt(bfid, sec, len, pmts[bid]) == 0, "B to parse");
+    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "A must survive handover");
+
+    start_active_pmts(&ad);
+    ASSERT(find_pid(0, 3301)->pmt == bid, "B should take 3301");
+    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "B should run");
+    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "A should run on 3302");
+
+    del_filter(bfid);
     free_all_pmts();
     a[0] = NULL;
     return 0;
@@ -2724,6 +2796,8 @@ int main() {
               "testing cosmetic PMT update keeps running without CA churn")
     TEST_FUNC(test_pmt_content_update_delta(),
               "testing PMT content update keeps running with a re-send")
+    TEST_FUNC(test_handover_ignores_stale_holder(),
+              "testing handover skips holders that dropped the pid")
     TEST_FUNC(test_resend_rejected_releases_ca(),
               "testing a rejected re-send releases the CA slot")
     fflush(stdout);

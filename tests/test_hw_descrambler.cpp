@@ -323,6 +323,9 @@ static int test_hw_ca_update_retarget() {
     pmt_add_stream_pid(pmt, 1001, 2, false, true);
     pmt_add_stream_pid(pmt, 1002, 3, true, false);
     ASSERT_EQUAL(hw_ca_add_pmt(ad, pmt), TABLES_RESULT_OK, "add must succeed");
+    ASSERT(hw_bound_pids_for_test(0, pmt_id) ==
+               std::unordered_set<int>({1001, 1002}),
+           "add must track both pids");
 
     for (auto it = pmt->stream_pids.begin(); it != pmt->stream_pids.end(); ++it)
         if (it->pid == 1002) {
@@ -331,7 +334,11 @@ static int test_hw_ca_update_retarget() {
         }
     ASSERT_EQUAL(hw_ca_add_pmt(ad, pmt), TABLES_RESULT_OK,
                  "re-send must succeed");
+    ASSERT(hw_bound_pids_for_test(0, pmt_id) == std::unordered_set<int>({1001}),
+           "re-send must drop 1002 from tracking");
     ASSERT_EQUAL(hw_ca_del_pmt(ad, pmt), 0, "del must succeed");
+    ASSERT(hw_bound_pids_for_test(0, pmt_id).empty(),
+           "del must forget tracking");
 
     opts.hw_descrambler = saved;
     pmt_del(pmt_id);

@@ -252,6 +252,11 @@ int test_update_resend_keeps_slot() {
     ASSERT(get_pid_mapping_allddci(8, 602) == NULL, "602 should be unmapped");
     ASSERT(get_pid_mapping_allddci(8, 601) != NULL, "601 should stay mapped");
     ASSERT(get_pid_mapping_allddci(8, 1) != NULL, "CAT should stay mapped");
+    ASSERT(get_pid_mapping_allddci(8, 20) != NULL, "TDT should stay mapped");
+    ASSERT(get_pid_mapping_allddci(8, 256) != NULL, "ECM should stay mapped");
+    if (pmt0->pid >= 0 && pmt0->pid < 8192)
+        ASSERT(get_pid_mapping_allddci(8, pmt0->pid) != NULL,
+               "PMT pid should stay mapped");
     ASSERT(d0.pmt[0].id == pmt0->id, "slot should be kept");
     ASSERT(d0.channels == 1, "re-send must not count as new channel");
     ASSERT(d0.pmt[0].pcr_pid == get_pid_mapping_allddci(8, 601)->ddci_pid,
@@ -280,7 +285,8 @@ int test_update_resend_keeps_slot() {
            "section PCR should match the slot");
 
     // a pid shared by two PMTs stays mapped until its last user is gone
-    add_pid_mapping_table(8, 603, 999, &d0, 0);
+    SPMT *pmt1 = create_pmt(8, 701, 702, 703, 0x100, 0x100);
+    add_pid_mapping_table(8, 603, pmt1->id, &d0, 0);
     for (auto it = pmt0->stream_pids.begin(); it != pmt0->stream_pids.end();
          ++it)
         if (it->pid == 603) {
@@ -291,17 +297,21 @@ int test_update_resend_keeps_slot() {
            "re-send dropping the shared pid expected to succeed");
     ASSERT(get_pid_mapping_allddci(8, 603) != NULL,
            "shared 603 should stay mapped");
-    del_pmt_mapping_table(&d0, 8, 999);
+    del_pmt_mapping_table(&d0, 8, pmt1->id);
     ASSERT(get_pid_mapping_allddci(8, 603) == NULL,
            "603 should be unmapped after its last user");
 
-    // CAT-listed EMM pids are never swept, even though no PMT lists them
+    // CAT-listed EMM pids are never swept, even though no PMT lists them;
+    // an untracked pid mapped the same way is swept on the same pass
     add_pid_mapping_table(8, 700, pmt0->id, &d0, 1);
-    d0.emm_pids.insert(700);
+    d0.emm_pids.insert((8 << 16) | 700); // MAKE_KEY lives in ddci.cpp
+    add_pid_mapping_table(8, 701, pmt0->id, &d0, 1);
     ASSERT(ddci_process_pmt(&ad, pmt0) == TABLES_RESULT_OK,
            "re-send with EMM expected to succeed");
     ASSERT(get_pid_mapping_allddci(8, 700) != NULL,
            "EMM pid should stay mapped");
+    ASSERT(get_pid_mapping_allddci(8, 701) == NULL,
+           "untracked pid should be swept");
 
     ddci_del_pmt(&ad, pmt0);
     ASSERT(d0.channels == 0, "expected 0 running channels after delete");
@@ -974,6 +984,12 @@ int test_process_cat() {
     ASSERT(m != NULL, "EMM PID 48 not mapped");
     m = get_pid_mapping_allddci(0, 49);
     ASSERT(m != NULL, "EMM PID 48 not mapped");
+
+    // The CAT-listed EMMs are also tracked for the update sweep.
+    ASSERT(d.emm_pids.count(48) > 0, "EMM PID 48 not tracked");
+    ASSERT(d.emm_pids.count(193) > 0, "EMM PID 193 not tracked");
+    ASSERT(d.emm_pids.count(194) > 0, "EMM PID 194 not tracked");
+    ASSERT(d.emm_pids.count(49) > 0, "EMM PID 49 not tracked");
 
     // Reset fixtures
     filters[0] = NULL;
