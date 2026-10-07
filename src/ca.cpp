@@ -3323,6 +3323,10 @@ int ca_read(sockets *s) {
     case ST_CLOSE_SESSION_REQUEST: {
         // closing the CI session
         copy16r(session_number, data, 2);
+        if (session_number < 1 || session_number > MAX_SESSIONS) {
+            LOG("CA %d: bad session %d, dropping", d->id, session_number);
+            break;
+        }
         session = d->sessions + session_number - 1;
         LOG("Received close session %s", session->handler.name);
         if (session->handler.close)
@@ -3338,6 +3342,10 @@ int ca_read(sockets *s) {
     case ST_SESSION_NUMBER: {
         copy16r(session_number, data, 1 + llen);
         DEBUGM("got ST_SESSION_NUMBER for session_number %d", session_number);
+        if (session_number < 1 || session_number > MAX_SESSIONS) {
+            LOG("CA %d: bad session %d, dropping", d->id, session_number);
+            break;
+        }
         session = d->sessions + session_number - 1;
         if (session->handler.resource == 0) {
             LOG("CA %d: session %d is not registered", d->id, session_number)

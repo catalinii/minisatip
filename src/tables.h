@@ -42,6 +42,9 @@ typedef struct struct_CA {
 int add_ca(SCA_op *op);
 void del_ca(SCA_op *op);
 void tables_clear_pmt_ca_masks(SPMT *pmt, uint64_t mask, int clear_disabled);
+// Counts mask teardowns; call with pmts_mutex held. Sends capture
+// it to skip a mask-set made stale by a racing teardown.
+void tables_bump_teardown_epoch(void);
 void add_caid_mask(int ica, int aid, int caid, int mask);
 void init_ca_device(SCA *c); //  calls table_init_device for all the devices
 int tables_init_device(adapter *ad);

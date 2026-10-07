@@ -56,6 +56,7 @@ SCA ca[MAX_CA];
 int nca;
 SMutex ca_mutex;
 extern SMutex ca_mask_mutex;
+static uint32_t ca_teardown_epoch;
 
 int add_ca(SCA_op *op) {
     int i, new_ca;
@@ -84,6 +85,8 @@ int add_ca(SCA_op *op) {
 extern SPMT *pmts[];
 // Clear one PMT's tables masks for a CA bit. Takes pmts_mutex;
 // nest-safe (recursive) for callers already holding it.
+void tables_bump_teardown_epoch(void) { ca_teardown_epoch++; }
+
 void tables_clear_pmt_ca_masks(SPMT *pmt, uint64_t mask, int clear_disabled) {
     extern SMutex pmts_mutex;
     std::lock_guard<SMutex> lock(pmts_mutex);
@@ -93,6 +96,7 @@ void tables_clear_pmt_ca_masks(SPMT *pmt, uint64_t mask, int clear_disabled) {
     pmt->ca_registered_mask &= ~mask;
     if (clear_disabled)
         pmt->disabled_ca_mask &= ~mask;
+    tables_bump_teardown_epoch();
 }
 
 void del_ca(SCA_op *op) {
@@ -228,8 +232,7 @@ void close_pmt_for_ca(int i, adapter *ad, SPMT *pmt) {
         std::lock_guard<SMutex> lock(pmts_mutex);
         if (!(pmt->ca_registered_mask & mask))
             return;
-        pmt->ca_mask &= ~mask;
-        pmt->ca_registered_mask &= ~mask;
+        tables_clear_pmt_ca_masks(pmt, mask, 0);
     }
 }
 
@@ -272,6 +275,12 @@ int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt) {
         result = TABLES_RESULT_ERROR_NORETRY;
         // Send outside pmts_mutex: CA ops take socket locks, which
         // would deadlock against teardown's s_mutex -> pmts order.
+        uint32_t epoch;
+        {
+            extern SMutex pmts_mutex;
+            std::lock_guard<SMutex> lock(pmts_mutex);
+            epoch = ca_teardown_epoch;
+        }
         if (send || no_caids) {
             result = ca[i].op->ca_add_pmt(ad, pmt);
         }
@@ -279,6 +288,10 @@ int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt) {
         extern SMutex pmts_mutex;
         std::lock_guard<SMutex> lock(pmts_mutex);
         if ((pmt->disabled_ca_mask & mask) || (pmt->ca_mask & mask))
+            return rv;
+        // Skip a set made stale by a teardown that cleared masks
+        // mid-send; the PMT is simply re-sent on the next pass.
+        if (epoch != ca_teardown_epoch)
             return rv;
         if (result == TABLES_RESULT_OK) {
             pmt->ca_mask |= mask;

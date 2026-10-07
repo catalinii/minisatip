@@ -36,6 +36,7 @@
 #include <poll.h>
 #include <signal.h>
 #include <stdarg.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -59,6 +60,8 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple);
 int dvbca_del_pmt(adapter *ad, SPMT *spmt);
 extern ca_device_t *ca_devices[MAX_ADAPTERS];
 extern int dvbca_id;
+extern SCA ca[];
+extern int nca;
 int get_active_capmts(ca_device_t *d);
 int dvbca_init_dev(adapter *ad);
 int dvbca_close_dev(adapter *ad);
@@ -1324,7 +1327,9 @@ int test_ca_reconnect_success() {
     dev.enabled = 1;
     dev.state = CA_STATE_INITIALIZED;
     dev.fd = -1;
-    dev.reconnect_next_try = 0;
+    // -1, not 0 or 1: 0 would pass without a clear, and 1 may
+    // not be due yet since getTick() starts at 0 (see timeout test).
+    dev.reconnect_next_try = -1;
     adapter *saved_a = a[68];
     ca_device_t *saved_c = ca_devices[68];
     a[68] = &ad;
@@ -1334,6 +1339,115 @@ int test_ca_reconnect_success() {
     ASSERT_EQUAL(ad.ca_mask, (int)(1ULL << dvbca_id), "tables bit set");
     a[68] = saved_a;
     ca_devices[68] = saved_c;
+    return 0;
+}
+
+// Any traffic is a sign of life: failures reset and an idle
+// device goes active again, even for an unknown tag.
+int test_ca_read_resets_fails() {
+    ca_device_t dev;
+    memset(&dev, 0, sizeof(dev));
+    dev.state = CA_STATE_INACTIVE;
+    dev.poll_fails = 5;
+    unsigned char buf[4] = {0x00, 0x00, 0x00, 0x00};
+    sockets ss{};
+    ss.sid = 69;
+    ss.buf = buf;
+    ss.rlen = sizeof(buf);
+    ca_device_t *saved = ca_devices[69];
+    ca_devices[69] = &dev;
+    int rv = ca_read(&ss);
+    ca_devices[69] = saved;
+    ASSERT_EQUAL(rv, 0, "unknown tag dropped");
+    ASSERT_EQUAL(dev.state, CA_STATE_ACTIVE, "inactive->active");
+    ASSERT_EQUAL(dev.poll_fails, 0, "fails reset");
+    return 0;
+}
+
+static int epoch_fake_teardown;
+static int epoch_fake_add_pmt(adapter *ad, SPMT *pmt) {
+    (void)ad;
+    if (epoch_fake_teardown) // teardown landing mid-send clears now
+        tables_clear_pmt_ca_masks(pmt, 1ULL << 1, 1);
+    return TABLES_RESULT_OK;
+}
+
+// A teardown clearing masks between send and mask-set must not
+// leave the PMT marked as sent on the dead CAM.
+int test_send_skips_stale_set() {
+    SCA saved_ca = ca[1];
+    int saved_nca = nca;
+    SCA_op fake_op{};
+    fake_op.ca_add_pmt = epoch_fake_add_pmt;
+    memset(&ca[1], 0, sizeof(ca[1]));
+    ca[1].enabled = 1;
+    ca[1].id = 1;
+    ca[1].op = &fake_op;
+    nca = 2;
+    adapter ad = {};
+    ad.id = 0;
+    ad.ca_mask = 1 << 1;
+
+    epoch_fake_teardown = 1;
+    SPMT *pmt = get_pmt(pmt_add(0, 0x600, 0x601));
+    pmt_add_caid(pmt, 0x0B00, 0x573, nullptr, 0);
+    send_pmt_to_cas(&ad, pmt);
+    ASSERT(!(pmt->ca_mask & (1 << 1)), "stale ca_mask skipped");
+    ASSERT(!(pmt->ca_registered_mask & (1 << 1)), "stale register skipped");
+
+    epoch_fake_teardown = 0; // control: a quiet send still sets
+    SPMT *pmt2 = get_pmt(pmt_add(0, 0x610, 0x611));
+    pmt_add_caid(pmt2, 0x0B00, 0x573, nullptr, 0);
+    send_pmt_to_cas(&ad, pmt2);
+    ASSERT(pmt2->ca_mask & (1 << 1), "quiet send sets ca_mask");
+    ASSERT(pmt2->ca_registered_mask & (1 << 1), "quiet send registers");
+
+    ca[1] = saved_ca;
+    nca = saved_nca;
+    return 0;
+}
+
+// A CAM-controlled session number outside 1..MAX_SESSIONS is
+// dropped instead of indexing the session table out of bounds.
+int test_ca_read_bad_session() {
+    ca_device_t dev;
+    memset(&dev, 0, sizeof(dev));
+    // Sentinels beside the session table: sessions+-1 would call
+    // through or clobber them, so they prove the drop is real.
+    ASSERT(offsetof(ca_device_t, sessions) ==
+               offsetof(ca_device_t, private_data) + sizeof(dev.private_data),
+           "sessions follow private_data");
+    ASSERT(offsetof(ca_device_t, uri_mask) ==
+               offsetof(ca_device_t, sessions) + sizeof(dev.sessions),
+           "uri_mask follows sessions");
+    memset(&dev.private_data, 0xAB, sizeof(dev.private_data));
+    memset(dev.ci_name, 0xAB, sizeof(dev.ci_name));
+    dev.state = CA_STATE_ACTIVE;
+    unsigned char close65[4] = {ST_CLOSE_SESSION_REQUEST, 0x02, 0x00, 65};
+    unsigned char close0[4] = {ST_CLOSE_SESSION_REQUEST, 0x02, 0x00, 0x00};
+    unsigned char num99[4] = {ST_SESSION_NUMBER, 0x02, 0x00, 99};
+    unsigned char num1[4] = {ST_SESSION_NUMBER, 0x02, 0x00, 0x01};
+    sockets ss{};
+    ss.sid = 70;
+    ss.rlen = 4;
+    ca_device_t *saved = ca_devices[70];
+    ca_devices[70] = &dev;
+    ss.buf = close65;
+    ASSERT_EQUAL(ca_read(&ss), 0, "close session 65 dropped");
+    ASSERT((unsigned char)dev.ci_name[0] == 0xAB, "tail sentinel intact");
+    ss.buf = close0;
+    ss.rlen = 4;
+    ASSERT_EQUAL(ca_read(&ss), 0, "close session 0 dropped");
+    ASSERT((uintptr_t)dev.private_data.rsa_device_key == 0xABABABABABABABABULL,
+           "head sentinel intact");
+    ss.buf = num99;
+    ss.rlen = 4;
+    ASSERT_EQUAL(ca_read(&ss), 0, "apdu session 99 dropped");
+    ss.buf = num1;
+    ss.rlen = 4;
+    ASSERT_EQUAL(ca_read(&ss), 0, "valid session still dispatched");
+    ASSERT_EQUAL(dev.sessions[0].handler.resource, 0, "table untouched");
+    ca_devices[70] = saved;
     return 0;
 }
 
@@ -1407,6 +1521,9 @@ int main() {
     TEST_FUNC(test_ca_timeout_branches(), "testing timeout branches");
     TEST_FUNC(test_ca_read_guards(), "testing ca_read guards");
     TEST_FUNC(test_ca_reconnect_success(), "testing reconnect success path");
+    TEST_FUNC(test_ca_read_resets_fails(), "testing ca_read sign of life");
+    TEST_FUNC(test_send_skips_stale_set(), "testing stale mask-set skip");
+    TEST_FUNC(test_ca_read_bad_session(), "testing bad session drop");
     free_all(); // releases sockets opened by the enigma test
     free_all_pmts();
     fflush(stdout);
