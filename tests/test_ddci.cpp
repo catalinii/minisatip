@@ -1233,15 +1233,15 @@ int test_initializing_ddci_does_not_block_others() {
     // initializing DDCI first, ready match second
     ca0.state = CA_STATE_ACTIVE;
     ca1.state = CA_STATE_INITIALIZED;
-    ASSERT(ddci_process_pmt(&ad, pmt_dd1) == TABLES_RESULT_OK,
+    ASSERT(ddci_process_pmt(&ad, pmt_dd1, 0) == TABLES_RESULT_OK,
            "PMT matching the ready DDCI must not wait for DDCI 0");
     ASSERT(channels[pmt_dd1->sid].ddcis == 1,
            "initializing DDCI must be excluded from candidates");
     ASSERT(d1.channels == 1 && d0.channels == 0,
            "PMT must run on the ready DDCI 1");
-    ASSERT(ddci_process_pmt(&ad, pmt_both) == TABLES_RESULT_OK,
+    ASSERT(ddci_process_pmt(&ad, pmt_both, 0) == TABLES_RESULT_OK,
            "dual-CAID PMT must proceed on the ready DDCI");
-    ASSERT(ddci_process_pmt(&ad, pmt_dd0) == TABLES_RESULT_ERROR_RETRY,
+    ASSERT(ddci_process_pmt(&ad, pmt_dd0, 0) == TABLES_RESULT_ERROR_RETRY,
            "PMT matching only the initializing DDCI must retry");
     ddci_del_pmt(&ad, pmt_dd1);
     ddci_del_pmt(&ad, pmt_both);
@@ -1252,13 +1252,13 @@ int test_initializing_ddci_does_not_block_others() {
     // ready match first, initializing DDCI second
     ca0.state = CA_STATE_INITIALIZED;
     ca1.state = CA_STATE_ACTIVE;
-    ASSERT(ddci_process_pmt(&ad, pmt_dd0) == TABLES_RESULT_OK,
+    ASSERT(ddci_process_pmt(&ad, pmt_dd0, 0) == TABLES_RESULT_OK,
            "PMT matching the ready DDCI must not wait for DDCI 1");
     ASSERT(channels[pmt_dd0->sid].ddcis == 1,
            "initializing DDCI must be excluded from candidates");
     ASSERT(d0.channels == 1 && d1.channels == 0,
            "PMT must run on the ready DDCI 0");
-    ASSERT(ddci_process_pmt(&ad, pmt_nomatch) == TABLES_RESULT_ERROR_RETRY,
+    ASSERT(ddci_process_pmt(&ad, pmt_nomatch, 0) == TABLES_RESULT_ERROR_RETRY,
            "PMT with no ready match must retry while a DDCI initializes");
     ddci_del_pmt(&ad, pmt_dd0);
     ASSERT(d0.channels == 0 && d1.channels == 0,
@@ -1266,7 +1266,7 @@ int test_initializing_ddci_does_not_block_others() {
     channels.clear();
 
     ca1.state = CA_STATE_INITIALIZED;
-    ASSERT(ddci_process_pmt(&ad, pmt_nomatch) == TABLES_RESULT_ERROR_NORETRY,
+    ASSERT(ddci_process_pmt(&ad, pmt_nomatch, 0) == TABLES_RESULT_ERROR_NORETRY,
            "PMT with no match must not retry once all DDCIs are ready");
     channels.clear();
 
@@ -1275,12 +1275,12 @@ int test_initializing_ddci_does_not_block_others() {
     d0.max_channels = d1.max_channels = 1;
     ca0.state = CA_STATE_INITIALIZED;
     ca1.state = CA_STATE_ACTIVE;
-    ASSERT(ddci_process_pmt(&ad, pmt_dd0) == TABLES_RESULT_OK,
+    ASSERT(ddci_process_pmt(&ad, pmt_dd0, 0) == TABLES_RESULT_OK,
            "setup: fill the only slot of DDCI 0");
-    ASSERT(ddci_process_pmt(&ad, pmt_both) == TABLES_RESULT_ERROR_RETRY,
+    ASSERT(ddci_process_pmt(&ad, pmt_both, 0) == TABLES_RESULT_ERROR_RETRY,
            "dual PMT must retry while its only ready match is full");
     ca1.state = CA_STATE_INITIALIZED;
-    ASSERT(ddci_process_pmt(&ad, pmt_both) == TABLES_RESULT_OK,
+    ASSERT(ddci_process_pmt(&ad, pmt_both, 0) == TABLES_RESULT_OK,
            "dual PMT must move to the late-ready DDCI");
     ASSERT(channels[pmt_both->sid].ddcis == 2,
            "rebuilt candidates must include the late-ready DDCI");

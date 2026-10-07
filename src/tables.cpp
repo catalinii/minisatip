@@ -288,7 +288,6 @@ int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt) {
             LOG("PMT %d -> CA %d: %s", pmt->id, i, update ? "update" : "add");
             result = ca[i].op->ca_add_pmt(ad, pmt, update);
         }
-        }
 
         extern SMutex pmts_mutex;
         std::lock_guard<SMutex> lock(pmts_mutex);

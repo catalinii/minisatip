@@ -1658,8 +1658,9 @@ int test_ca_read_resets_fails() {
 }
 
 static int epoch_fake_teardown;
-static int epoch_fake_add_pmt(adapter *ad, SPMT *pmt) {
+static int epoch_fake_add_pmt(adapter *ad, SPMT *pmt, int update) {
     (void)ad;
+    (void)update;
     if (epoch_fake_teardown) // teardown landing mid-send clears now
         tables_clear_pmt_ca_masks(pmt, 1ULL << 1, 1);
     return TABLES_RESULT_OK;
