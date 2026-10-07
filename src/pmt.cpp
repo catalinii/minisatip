@@ -1112,26 +1112,6 @@ static int same_stream_pids(SPMT *a, SPMT *b) {
 // for reuse and never freed here (cross-thread readers hold them).
 static void reset_pmt_ca(SPMT *pmt) { pmt->caids = 0; }
 
-// CRC over the section minus version bits and trailing CRC: any
-// content change flips it, while a pure version bump does not.
-static uint32_t pmt_content_hash(unsigned char *b, int len) {
-    if (len <= 0)
-        return crc_32(b, 0);
-    int hash_len = len;
-    if (len >= 6) {
-        int section_len = ((b[1] & 0xF) << 8) + b[2];
-        hash_len = 3 + section_len - 4;
-        if (hash_len > len)
-            hash_len = len;
-        if (hash_len < 6)
-            hash_len = 6;
-    }
-    std::vector<uint8_t> tmp(b, b + hash_len);
-    if (tmp.size() > 5)
-        tmp[5] &= ~0x3E;
-    return crc_32(tmp.data(), (int)tmp.size());
-}
-
 typedef struct {
     SPMT *pmt;
     char candidate;
@@ -1550,7 +1530,6 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
     pmt->filter = -1;
     pmt->enabled = 1;
     pmt->version = -1;
-    pmt->content_hash = 0;
     pmt->state = PMT_STOPPED;
     pmt->cw = NULL;
     pmt->opaque = NULL;
@@ -2134,17 +2113,13 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     if (!(p = find_pid(ad->id, pid)))
         return -1;
 
-    // A running PMT keeps its state and claims across the update; the
-    // content hash after the parse decides silent keep vs CA re-send.
-    // Removed pids keep stale claims, which the election ignores.
-    uint32_t hash = pmt_content_hash(b, len);
+    // A running PMT keeps its state and claims; the parse clears the
+    // send masks so the CAs get an update=1 re-send on the next pass.
     int was_running = pmt->state == PMT_RUNNING || pmt->state == PMT_STARTING;
-    int old_ca_mask = 0, old_disabled = 0, old_registered = 0;
-    if (was_running) {
-        old_ca_mask = pmt->ca_mask;
-        old_disabled = pmt->disabled_ca_mask;
+    int old_registered = 0;
+    if (was_running)
         old_registered = pmt->ca_registered_mask;
-    } else
+    else
         release_pmt_claims(ad, pmt);
     reset_pmt_ca(pmt);
 
@@ -2220,31 +2195,20 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         pmt_add_stream_pid(pmt, pcr_pid, 0, false, false);
 
     if (was_running) {
-        // The parse cleared the CA masks; restore them first so a
-        // cosmetic update stays silent.
-        pmt->ca_mask = old_ca_mask;
-        pmt->disabled_ca_mask = old_disabled;
+        // Every new version re-sends with update=1; each CA skips
+        // identical work itself.
         pmt->ca_registered_mask = old_registered;
-        LOG("PMT %d ver %d AD %d: content hash %08X -> %08X (%s)", pmt->id, ver,
-            ad->id, pmt->content_hash, hash,
-            hash != pmt->content_hash ? "changed, re-sending to CAs"
-                                      : "unchanged, keeping CA state");
-        if (hash != pmt->content_hash) {
-            // Content changed: force the CAs to re-send on the next
-            // pass; each CA drops removed pids itself on re-send.
-            if (pmt->caids == 0) {
-                // Newly FTA: nothing to re-send, so release the
-                // stale CA registrations instead of leaking them.
+        if (pmt->caids == 0) {
+            // Newly FTA: nothing to re-send, so release the
+            // stale CA registrations instead of leaking them.
 #ifndef DISABLE_TABLES
-                close_pmt_for_cas(ad, pmt);
+            close_pmt_for_cas(ad, pmt);
 #endif
-            } else {
-                pmt->ca_mask = 0;
-                pmt->disabled_ca_mask = 0;
-            }
+        } else {
+            pmt->ca_mask = 0;
+            pmt->disabled_ca_mask = 0;
         }
     }
-    pmt->content_hash = hash;
 
     // Late parse handover: a pid below may be owned by a running PMT
     // subscribed after this one. Stop it; this PMT starts next pass.

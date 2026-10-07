@@ -434,7 +434,7 @@ static int build_pmt(uint8_t *b, int sid, int version, int pcr, uint16_t caid,
         b[o + 4] = 0x00; // es_len
     }
     // Real trailing CRC: it covers the version byte, so it differs per
-    // version exactly as on the wire (the hash must exclude it).
+    // version exactly as on the wire.
     copy32(b, 12 + pi_len + 5 * n, crc_32(b, 12 + pi_len + 5 * n));
     return len;
 }
@@ -2319,7 +2319,7 @@ int test_stream_pid_delete_stops_pmt() {
 }
 
 // A PMT version bump with identical content (#1346) keeps the PMT
-// running: no CA delete, claims kept, and no re-send on the pass.
+// running: no CA delete, claims kept, the CA gets an update re-send.
 int test_pmt_cosmetic_update_keeps_running() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
@@ -2370,10 +2370,11 @@ int test_pmt_cosmetic_update_keeps_running() {
 
     start_active_pmts(&ad);
     ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should still run");
-    ASSERT_EQUAL(fake_ca_add_calls, 0, "CA should see no re-send");
+    ASSERT_EQUAL(fake_ca_add_calls, 1, "CA should see the update");
+    ASSERT_EQUAL(fake_ca_last_add_update, 1, "re-send is an update");
 
-    // v3 reorders the same streams: the hash flips, so the CA gets a
-    // benign re-send, but nothing is dropped or deleted.
+    // v3 reorders the same streams: the CA gets a re-send, but
+    // nothing is dropped or deleted.
     int types3[] = {3, 2};
     int spids3[] = {3401, 3301};
     len = build_pmt(sec, 100, 3, 3301, 0x0B00, 0x0C00, types3, spids3, 2);
@@ -2541,7 +2542,7 @@ int test_pmt_content_update_delta() {
 }
 
 // The CA add call carries update=0 on first registration and update=1
-// on a PMT-update re-send; a cosmetic bump sends nothing at all.
+// on a PMT-update re-send; every version bump re-sends.
 int test_ca_update_flag_distinguishes_resend() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
@@ -2584,7 +2585,8 @@ int test_ca_update_flag_distinguishes_resend() {
     fake_ca_add_calls = 0;
     ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v2 to parse");
     start_active_pmts(&ad);
-    ASSERT_EQUAL(fake_ca_add_calls, 0, "cosmetic bump sends nothing");
+    ASSERT_EQUAL(fake_ca_add_calls, 1, "cosmetic bump still informs the CA");
+    ASSERT_EQUAL(fake_ca_last_add_update, 1, "re-send is an update");
 
     ASSERT(mark_pid_add(0, 0, 3401) == 0, "pid 3401 should be added");
     update_pids(0);
@@ -2756,8 +2758,8 @@ int test_version_update_keeps_claims() {
                        0xE5, 0xF0, 0x00, 0x02, 0xEC, 0xE5, 0xF0, 0x00, 0x03,
                        0xED, 0x49, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00};
     copy32(sec, 22, crc_32(sec, 22));
-    // First parse on a running PMT takes the hash-changed path (no
-    // stored hash yet) with an empty delta, so nothing is released.
+    // First parse on a running PMT re-sends with update=1;
+    // nothing is released.
     ASSERT(process_pmt(fid, sec, sizeof(sec), pmts[id]) == 0,
            "update to parse");
     ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should keep running");
@@ -2765,7 +2767,7 @@ int test_version_update_keeps_claims() {
     ASSERT(find_pid(0, 3301)->pmt == id, "video claim should be kept");
     ASSERT(find_pid(0, 3401)->pmt == id, "audio claim should be kept");
 
-    // Same content, next version: the true silent path, still running.
+    // Same content, next version: still running after the re-send.
     uint8_t sec2[sizeof(sec)];
     memcpy(sec2, sec, sizeof(sec));
     sec2[5] = 0xC1 | (2 << 1);
@@ -2865,7 +2867,7 @@ int main() {
     TEST_FUNC(test_version_update_keeps_claims(),
               "testing claims survive a PMT version update")
     TEST_FUNC(test_pmt_cosmetic_update_keeps_running(),
-              "testing cosmetic PMT update keeps running without CA churn")
+              "testing cosmetic PMT update keeps running with a re-send")
     TEST_FUNC(test_pmt_content_update_delta(),
               "testing PMT content update keeps running with a re-send")
     TEST_FUNC(test_ca_update_flag_distinguishes_resend(),
