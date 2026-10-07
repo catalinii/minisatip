@@ -1951,7 +1951,9 @@ void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid, uint8_t *data,
     memcpy(pmt->ca[pmt->caids]->private_data, data,
            pmt->ca[pmt->caids]->private_data_len);
     pmt->caids++;
-    pmt->ca_mask = 0; // force sending the PMT to all CAs
+    // force sending the PMT to all CAs
+    std::lock_guard<SMutex> lock(pmts_mutex);
+    pmt->ca_mask = 0;
     pmt->disabled_ca_mask = 0;
 }
 

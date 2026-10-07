@@ -55,6 +55,9 @@
 SCA ca[MAX_CA];
 int nca;
 SMutex ca_mutex;
+// Serializes ad->ca_mask writers (init, close, reconnect); readers
+// re-read every pass, so a stale read only delays one cycle.
+SMutex ca_mask_mutex;
 
 int add_ca(SCA_op *op) {
     int i, new_ca;
@@ -154,6 +157,7 @@ int tables_init_ca_for_device(int i, adapter *ad) {
         if (ca[i].enabled && ca[i].op->ca_init_dev) {
             if (ca[i].op->ca_init_dev(ad) == TABLES_RESULT_OK) {
                 LOGM("CA %d will handle adapter %d", i, ad->id);
+                std::lock_guard<SMutex> lock(ca_mask_mutex);
                 ad->ca_mask = ad->ca_mask | mask;
                 rv = 1;
             } else
@@ -199,6 +203,11 @@ void close_pmt_for_ca(int i, adapter *ad, SPMT *pmt) {
     if (ca[i].enabled && (ad->ca_mask & mask) &&
         (pmt->ca_registered_mask & mask)) {
         LOGM("Closing pmt %d for ca %d and adapter %d", pmt->id, i, ad->id);
+        // Same serialization as the send path (see send_pmt_to_ca).
+        extern SMutex pmts_mutex;
+        std::lock_guard<SMutex> lock(pmts_mutex);
+        if (!(pmt->ca_registered_mask & mask))
+            return;
         if (ad && ca[i].op->ca_del_pmt)
             ca[i].op->ca_del_pmt(ad, pmt);
         pmt->ca_mask &= ~mask;
@@ -239,6 +248,12 @@ int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt) {
                 break;
             }
         result = TABLES_RESULT_ERROR_NORETRY;
+        // Mask updates race disconnect teardown; hold pmts_mutex across
+        // the send and its result so teardown cannot interleave between.
+        extern SMutex pmts_mutex;
+        std::lock_guard<SMutex> lock(pmts_mutex);
+        if ((pmt->disabled_ca_mask & mask) || (pmt->ca_mask & mask))
+            return rv;
         if (send || ca[i].ad_info[ad->id].caids == 0) {
             result = ca[i].op->ca_add_pmt(ad, pmt);
         }
@@ -321,7 +336,10 @@ int tables_close_device(adapter *ad) {
         }
     }
 
-    ad->ca_mask = 0;
+    {
+        std::lock_guard<SMutex> lock(ca_mask_mutex);
+        ad->ca_mask = 0;
+    }
     return rv;
 }
 

@@ -215,7 +215,8 @@ struct ca_device {
     uint64_t datetime_response_interval;
     int64_t datetime_next_send;
 
-    // Reconnect state, owned by the CA poller thread
+    // Reconnect pacing, written only by the CA poller thread.
+    // poll_fails is socket-thread state, reset on any inbound traffic.
     int64_t reconnect_next_try;
     int poll_fails;
 };
@@ -259,6 +260,10 @@ int ca_reset_and_wait_ready(int fd, struct ca_slot_info *info, int id,
 
 // True when the device is down and its retry interval has elapsed.
 int ca_reconnect_due(ca_device_t *d, int64_t now);
+// True when slot info reports a module present or ready.
+int ca_slot_has_module(const struct ca_slot_info *info);
+// Record a failed init: drop the handle, stay enabled, return RETRY.
+int ca_init_failed(ca_device_t *d);
 // Release PMT registrations held on a dead CAM for re-send after reconnect.
 void ca_release_pmts(ca_device_t *d);
 // Drop all volatile CAM state after a disconnect. Idempotent.
