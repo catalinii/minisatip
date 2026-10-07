@@ -236,16 +236,18 @@ int ddci_close_adapter(adapter *a) { return 0; }
 
 // return 0 if
 int create_channel_for_pmt(Sddci_channel *c, SPMT *pmt) {
-    int i;
+    int i, initializing = 0;
     ddci_device_t *d;
     memset(c, 0, sizeof(*c));
     for (i = 0; i < MAX_ADAPTERS; i++)
         if ((d = get_ddci(i))) {
             int j;
 
-            // DDCI exists but not yet initialized
-            if (is_ca_initializing(i))
-                return TABLES_RESULT_ERROR_RETRY;
+            // A DDCI that is down (e.g. empty slot) must not block the others
+            if (is_ca_initializing(i)) {
+                initializing = 1;
+                continue;
+            }
 
             for (j = 0; j < ca[dvbca_id].ad_info[i].caids; j++)
                 if (match_caid(pmt, ca[dvbca_id].ad_info[i].caid[j],
@@ -258,6 +260,9 @@ int create_channel_for_pmt(Sddci_channel *c, SPMT *pmt) {
                     safe_strncpy(c->name, pmt->name);
                 }
         }
+    // No ready DDCI matched: one still coming up may handle it later
+    if (c->ddcis == 0 && initializing)
+        return TABLES_RESULT_ERROR_RETRY;
     return 0;
 }
 
