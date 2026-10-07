@@ -2481,30 +2481,34 @@ int test_pmt_content_update_delta() {
     ASSERT(fake_ca_add_calls == 1, "CA should see one re-send");
     ASSERT(pmts[id]->ca_mask != 0, "PMT should hold a CA slot again");
 
-    // v4 turns the service FTA: the CA registration is released, and
-    // nothing is re-sent afterwards.
-    len = build_pmt(sec, 100, 4, 3301, 0, 0, types2, spids2, 1);
+    // v4 changes only the stream type: same pids, so the delta path
+    // drops nothing but still re-sends while encrypted.
+    int types4[] = {27};
+    len = build_pmt(sec, 100, 4, 3301, 0x0B00, 0x0C01, types4, spids2, 1);
     fake_ca_add_calls = fake_ca_del_calls = fake_ca_del_pid_calls = 0;
     ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v4 to parse");
     ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should keep running");
-    ASSERT_EQUAL(fake_ca_del_calls, 1, "CA registration should be released");
-    ASSERT_EQUAL(pmts[id]->ca_registered_mask, 0, "registration is gone");
+    ASSERT_EQUAL(pmts[id]->version, 4, "version should advance");
+    ASSERT(find_pid(0, 3301)->pmt == id, "video claim should be kept");
+    ASSERT_EQUAL(fake_ca_del_calls, 0, "CA should see no delete");
+    ASSERT_EQUAL(fake_ca_del_pid_calls, 0, "CA should see no pid drop");
+    ASSERT_EQUAL(pmts[id]->ca_mask, 0, "CA re-send should be pending");
 
     start_active_pmts(&ad);
     ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should still run");
-    ASSERT_EQUAL(fake_ca_add_calls, 0, "FTA PMT should see no re-send");
+    ASSERT(fake_ca_add_calls == 1, "CA should see one re-send");
+    ASSERT(pmts[id]->ca_mask != 0, "PMT should hold a CA slot again");
 
-    // v5 changes only the stream type: same pids, so the delta path
-    // drops nothing and the PMT keeps running.
-    int types5[] = {27};
-    len = build_pmt(sec, 100, 5, 3301, 0, 0, types5, spids2, 1);
+    // v5 turns the service FTA: the CA registration is released, and
+    // nothing is re-sent afterwards.
+    len = build_pmt(sec, 100, 5, 3301, 0, 0, types4, spids2, 1);
     fake_ca_add_calls = fake_ca_del_calls = fake_ca_del_pid_calls = 0;
     ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v5 to parse");
     ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should keep running");
     ASSERT_EQUAL(pmts[id]->version, 5, "version should advance");
     ASSERT(find_pid(0, 3301)->pmt == id, "video claim should be kept");
-    ASSERT_EQUAL(fake_ca_del_calls, 0, "CA should see no delete");
-    ASSERT_EQUAL(fake_ca_del_pid_calls, 0, "CA should see no pid drop");
+    ASSERT_EQUAL(fake_ca_del_calls, 1, "CA registration should be released");
+    ASSERT_EQUAL(pmts[id]->ca_registered_mask, 0, "registration is gone");
 
     start_active_pmts(&ad);
     ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should still run");
@@ -2605,6 +2609,7 @@ int test_version_update_keeps_claims() {
     uint8_t sec[26] = {0x02, 0xB0, 0x17, 0x00, 0x64, 0xC3, 0x00, 0x00, 0xEC,
                        0xE5, 0xF0, 0x00, 0x02, 0xEC, 0xE5, 0xF0, 0x00, 0x03,
                        0xED, 0x49, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00};
+    copy32(sec, 22, crc_32(sec, 22));
     // First parse on a running PMT takes the hash-changed path (no
     // stored hash yet) with an empty delta, so nothing is released.
     ASSERT(process_pmt(fid, sec, sizeof(sec), pmts[id]) == 0,
@@ -2612,11 +2617,13 @@ int test_version_update_keeps_claims() {
     ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should keep running");
     ASSERT_EQUAL(pmts[id]->version, 1, "version should advance");
     ASSERT(find_pid(0, 3301)->pmt == id, "video claim should be kept");
+    ASSERT(find_pid(0, 3401)->pmt == id, "audio claim should be kept");
 
     // Same content, next version: the true silent path, still running.
     uint8_t sec2[sizeof(sec)];
     memcpy(sec2, sec, sizeof(sec));
     sec2[5] = 0xC1 | (2 << 1);
+    copy32(sec2, 22, crc_32(sec2, 22));
     ASSERT(process_pmt(fid, sec2, sizeof(sec2), pmts[id]) == 0,
            "same content to parse");
     ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should keep running");
