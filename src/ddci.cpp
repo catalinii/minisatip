@@ -234,9 +234,10 @@ SCA_op ddci;
 int ddci_close() { return 0; }
 int ddci_close_adapter(adapter *a) { return 0; }
 
-// return 0 if
+// Skip initializing DDCIs: their CAM has not confirmed its CA list yet,
+// so they only force a retry when no ready DDCI matched.
 int create_channel_for_pmt(Sddci_channel *c, SPMT *pmt) {
-    int i;
+    int i, saw_initializing = 0;
     ddci_device_t *d;
     memset(c, 0, sizeof(*c));
     for (i = 0; i < MAX_ADAPTERS; i++)
@@ -244,8 +245,10 @@ int create_channel_for_pmt(Sddci_channel *c, SPMT *pmt) {
             int j;
 
             // DDCI exists but not yet initialized
-            if (is_ca_initializing(i))
-                return TABLES_RESULT_ERROR_RETRY;
+            if (is_ca_initializing(i)) {
+                saw_initializing = 1;
+                continue;
+            }
 
             for (j = 0; j < ca[dvbca_id].ad_info[i].caids; j++)
                 if (match_caid(pmt, ca[dvbca_id].ad_info[i].caid[j],
@@ -258,6 +261,8 @@ int create_channel_for_pmt(Sddci_channel *c, SPMT *pmt) {
                     safe_strncpy(c->name, pmt->name);
                 }
         }
+    if (c->ddcis == 0 && saw_initializing)
+        return TABLES_RESULT_ERROR_RETRY;
     return 0;
 }
 
@@ -372,9 +377,13 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
         ddid = find_ddci_for_pmt(channel, pmt);
     // Negative return values are used to distinguish from valid return values
     // (>= 0)
-    if (ddid == -TABLES_RESULT_ERROR_RETRY)
+    if (ddid == -TABLES_RESULT_ERROR_RETRY) {
+        // Unlocked candidates may predate a DDCI that became ready since,
+        // so drop them and rebuild on the next attempt.
+        if (!channel->locked)
+            channels.erase(pmt->sid);
         return TABLES_RESULT_ERROR_RETRY;
-    else if (ddid == -TABLES_RESULT_ERROR_NORETRY)
+    } else if (ddid == -TABLES_RESULT_ERROR_NORETRY)
         return TABLES_RESULT_ERROR_NORETRY;
 
     d = get_ddci(ddid);
