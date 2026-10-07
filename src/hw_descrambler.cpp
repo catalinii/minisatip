@@ -456,7 +456,7 @@ std::unordered_set<int> hw_bound_pids_for_test(int pa, int pmt_id) {
 
 // On re-send, unbind pids the update dropped; added pids bind on
 // the next CW via hw_set_cw, which binds the whole live list.
-int hw_ca_add_pmt(adapter *ad, SPMT *pmt) {
+int hw_ca_add_pmt(adapter *ad, SPMT *pmt, int update) {
     if (!opts.hw_descrambler || !ad || !pmt)
         return TABLES_RESULT_OK;
     std::unordered_set<int> current;
@@ -464,6 +464,8 @@ int hw_ca_add_pmt(adapter *ad, SPMT *pmt) {
         current.insert(sp.pid);
     std::unordered_set<int> removed =
         HwSlotManager::instance().retarget_pids(ad->pa, pmt->id, current);
+    LOG("hw_descrambler: PMT %d %s: %zu pids bound, %zu removed", pmt->id,
+        update ? "update" : "add", current.size(), removed.size());
     hw_drop_held_pids(ad, pmt, removed);
     const std::string device_path = get_ca_device_path(ad);
     hw_unbind_pids(ad->pa, device_path.c_str(), removed);
@@ -517,7 +519,7 @@ void init_hw_descrambler() {
         register_algo(&hw_aes_cbc_op);
 
         hw_ca_op = {};
-        hw_ca_op.ca_add_pmt = reinterpret_cast<ca_pmt_action>(hw_ca_add_pmt);
+        hw_ca_op.ca_add_pmt = hw_ca_add_pmt;
         hw_ca_op.ca_init_dev =
             reinterpret_cast<ca_device_action>(hw_ca_init_dev);
         hw_ca_op.ca_del_pmt = reinterpret_cast<ca_pmt_action>(hw_ca_del_pmt);

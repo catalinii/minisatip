@@ -85,6 +85,7 @@ typedef struct struct_key {
     int64_t last_parity_change;
     unsigned char icam_ecm;
     unsigned char is_icam;
+    uint32_t capmt_hash; // content hash of the last CAPMT sent
 } SKey;
 
 void init_dvbapi();

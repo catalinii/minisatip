@@ -81,7 +81,7 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
 ddci_mapping_table_t *get_pid_mapping_allddci(int ad, int pid);
 void save_channels();
 void load_channels();
-int ddci_process_pmt(adapter *ad, SPMT *pmt);
+int ddci_process_pmt(adapter *ad, SPMT *pmt, int update);
 void blacklist_pmt_for_ddci(SPMT *pmt, int ddid);
 int ddci_del_pmt(adapter *ad, SPMT *spmt);
 void disable_cat_adapters(char *o);

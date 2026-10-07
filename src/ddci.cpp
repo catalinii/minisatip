@@ -239,7 +239,7 @@ int del_pmt_mapping_table(ddci_device_t *d, int ad, int pmt) {
 
 // Unmap this PMT's pids that the update dropped; shared entries stay
 // until their last user is gone. Call with d->mutex held.
-static void unmap_removed_pids(ddci_device_t *d, int ad, SPMT *pmt) {
+static int unmap_removed_pids(ddci_device_t *d, int ad, SPMT *pmt) {
     auto still_needed = [d, pmt, ad](int pid) {
         if (pid == pmt->pid || pid == 1 || pid == 20)
             return true;
@@ -268,6 +268,7 @@ static void unmap_removed_pids(ddci_device_t *d, int ad, SPMT *pmt) {
     }
     for (int pid : to_del)
         d->mapping.erase(MAKE_KEY(ad, pid));
+    return to_del.size();
 }
 
 int ddci_init_dev(adapter *ad) { return TABLES_RESULT_OK; }
@@ -393,7 +394,7 @@ int is_pmt_running(SPMT *pmt) {
 
 // determine if the pids from this PMT needs to be added to the virtual adapter,
 // also adds the PIDs to the translation table
-int ddci_process_pmt(adapter *ad, SPMT *pmt) {
+int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
     int i, ddid = -1;
     int rv = TABLES_RESULT_ERROR_NORETRY;
     Sddci_channel *channel;
@@ -484,8 +485,9 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     }
 
     d->pmt[pos].id = pmt->id;
-    d->pmt[pos].ver = (d->pmt[pos].ver + 1) & 0xF;
-
+    // No PMT version bump here: ddci_create_pmt compares the content CRC
+    // at emit time and bumps only when the bytes changed, so a
+    // content-identical update is a no-op for the CAM.
     d->ver = (d->ver + 1) & 0xF;
     // Count only new registrations: pmt_add_caid() re-sends clear ca_mask,
     // and counting re-sends used up max_channels with one real channel.
@@ -494,12 +496,21 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
         d->tid = ad->transponder_id;
     }
 
+    // Count mappings this call creates, for the summary log below.
+    int mapped = 0;
+    auto count_new = [&](int pid) {
+        auto it = get_pid_mapping(d, ad->id, pid);
+        if (it == d->mapping.end() || it->second.pmt.count(pmt->id) == 0)
+            mapped++;
+    };
+
     // Map mandatory PIDs. Some CAMs need access to the TDT in order to "wake
     // up", so always map it just in case. Pid 0 comes from post_tune().
     for (const uint16_t pid : {1, 20}) {
         if (!has_pid_mapping(d, pmt->adapter, pid)) {
             LOG("Mapping mandatory PID %d to PMT %d on DDCI %d", pid, pmt->id,
                 d->id);
+            count_new(pid);
             add_pid_mapping_table(ad->id, pid, pmt->id, d, 1);
 
             // We need to process the CAT if this is the first time we see it
@@ -512,12 +523,14 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     LOG("found DDCI %d for pmt %d, running channels %d, max_channels %d", ddid,
         pmt->id, d->channels, d->max_channels);
 
+    count_new(pmt->pid);
     add_pid_mapping_table(ad->id, pmt->pid, pmt->id, d, 0);
     set_pid_rewrite(d, ad->id, pmt->pid,
                     0); // do not send the PMT pid to the DDCI device
 
     for (i = 0; i < pmt->caids; i++) {
         LOGM("DD %d adding ECM pid %d", d->id, pmt->ca[i]->pid);
+        count_new(pmt->ca[i]->pid);
         add_pid_mapping_table(ad->id, pmt->ca[i]->pid, pmt->id, d, 1);
     }
 
@@ -525,6 +538,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
         LOGM("DD %d adding stream pid %d %s", d->id, stream_pid.pid,
              stream_pid.pid == pmt->pcr_pid ? "PCR" : "");
 
+        count_new(stream_pid.pid);
         int ddci_pid =
             add_pid_mapping_table(ad->id, stream_pid.pid, pmt->id, d, 0);
         // map the PCR pid as well
@@ -537,7 +551,10 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
     // dropped, so removed streams and ECMs stop flowing to the CAM.
     // Runs on first adds too: a no-op then, but it self-heals stale
     // entries a reused PMT id could otherwise inherit.
-    unmap_removed_pids(d, ad->id, pmt);
+    int unmapped = unmap_removed_pids(d, ad->id, pmt);
+
+    LOG("DDCI %d: PMT %d %s on slot %d (+%d -%d pids), keeping ddci pids",
+        d->id, pmt->id, update ? "update" : "add", pos, mapped, unmapped);
 
     update_pids(ad->id);
     update_pids(d->id);
@@ -905,6 +922,8 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
 
     // Check if PMT has changed because the user may have added or removed pids
     if (dp->crc != crc) {
+        LOGM("%s: PMT %d content changed, bumping ver %d -> %d", __FUNCTION__,
+             pmt->id, dp->ver, (dp->ver + 1) & 0xF);
         dp->ver = (dp->ver + 1) & 0xF;
         start_pmt[2] = (dp->ver << 1) | 0x01;
         crc = crc_32(new_pmt + 1, b - new_pmt - 1);

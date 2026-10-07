@@ -351,7 +351,12 @@ extern int process_pat(int filter, unsigned char *b, int len, void *opaque);
 static int fake_ca_del_calls;
 static int fake_ca_last_del_pmt;
 
-static int fake_ca_add_pmt(adapter *ad, SPMT *pmt) { return TABLES_RESULT_OK; }
+static int fake_ca_add_pmt(adapter *ad, SPMT *pmt, int update) {
+    (void)ad;
+    (void)pmt;
+    (void)update;
+    return TABLES_RESULT_OK;
+}
 
 static int fake_ca_del_pmt(adapter *ad, SPMT *pmt) {
     fake_ca_del_calls++;
@@ -673,21 +678,23 @@ int test_pmt_starts_only_with_pmt_pid() {
 // releases, B claims and starts, and the CA handover is ordered.
 static int fake_ca_add_calls;
 static int fake_ca_last_add_pmt;
+static int fake_ca_last_add_update;
 
-static int counting_ca_add_pmt(adapter *ad, SPMT *pmt) {
+static int counting_ca_add_pmt(adapter *ad, SPMT *pmt, int update) {
     fake_ca_add_calls++;
     fake_ca_last_add_pmt = pmt->id;
-    return fake_ca_add_pmt(ad, pmt);
+    fake_ca_last_add_update = update;
+    return fake_ca_add_pmt(ad, pmt, update);
 }
 
 static int fail_next_ca_add;
 
-static int failing_ca_add_pmt(adapter *ad, SPMT *pmt) {
+static int failing_ca_add_pmt(adapter *ad, SPMT *pmt, int update) {
     if (fail_next_ca_add) {
         fail_next_ca_add = 0;
         return TABLES_RESULT_ERROR_NORETRY;
     }
-    return counting_ca_add_pmt(ad, pmt);
+    return counting_ca_add_pmt(ad, pmt, update);
 }
 
 int test_retune_handover_same_loop() {
@@ -771,8 +778,9 @@ static int single_slot_add_seq;
 static int single_slot_del_seq;
 static int single_slot_failed_adds;
 
-static int single_slot_ca_add_pmt(adapter *ad, SPMT *pmt) {
+static int single_slot_ca_add_pmt(adapter *ad, SPMT *pmt, int update) {
     (void)ad;
+    (void)update;
     if (single_slot_holder != -1 && single_slot_holder != pmt->id) {
         single_slot_failed_adds++;
         return TABLES_RESULT_ERROR_RETRY;
@@ -2532,6 +2540,70 @@ int test_pmt_content_update_delta() {
     return 0;
 }
 
+// The CA add call carries update=0 on first registration and update=1
+// on a PMT-update re-send; a cosmetic bump sends nothing at all.
+int test_ca_update_flag_distinguishes_resend() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    SCA_op counting_op = fake_ca_op;
+    counting_op.ca_add_pmt = counting_ca_add_pmt;
+    int ica = add_ca(&counting_op);
+    ASSERT(ica >= 0, "could not register the fake CA");
+    ad.ca_mask = 1 << ica;
+
+    int id = pmt_add(0, 100, 48);
+    ASSERT(id >= 0, "could not create the PMT");
+    int fid = add_filter(0, 48, (void *)process_pmt, pmts[id], 0);
+    ASSERT(fid >= 0, "could not add the PMT filter");
+    pmts[id]->filter = fid;
+
+    ASSERT(mark_pid_add(0, 0, 48) == 0, "pid 48 should be added");
+    ASSERT(mark_pid_add(0, 0, 3301) == 0, "pid 3301 should be added");
+    update_pids(0);
+
+    int types[] = {2};
+    int spids[] = {3301};
+    uint8_t sec[64];
+    int len = build_pmt(sec, 100, 1, 3301, 0x0B00, 0x0C00, types, spids, 1);
+    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v1 to parse");
+    fake_ca_add_calls = 0;
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(fake_ca_add_calls, 1, "PMT should be sent to the CA");
+    ASSERT_EQUAL(fake_ca_last_add_update, 0, "first send is an add");
+
+    len = build_pmt(sec, 100, 2, 3301, 0x0B00, 0x0C00, types, spids, 1);
+    fake_ca_add_calls = 0;
+    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v2 to parse");
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(fake_ca_add_calls, 0, "cosmetic bump sends nothing");
+
+    ASSERT(mark_pid_add(0, 0, 3401) == 0, "pid 3401 should be added");
+    update_pids(0);
+    int types3[] = {2, 3};
+    int spids3[] = {3301, 3401};
+    len = build_pmt(sec, 100, 3, 3301, 0x0B00, 0x0C00, types3, spids3, 2);
+    fake_ca_add_calls = 0;
+    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v3 to parse");
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(fake_ca_add_calls, 1, "content change re-sends");
+    ASSERT_EQUAL(fake_ca_last_add_update, 1, "re-send is an update");
+
+    del_ca(&counting_op);
+    del_filter(fid);
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
 // A late parse whose streams are stale-held by a later PMT must not
 // stop it: the holder dropped the pid, so handover skips it.
 int test_handover_ignores_stale_holder() {
@@ -2796,6 +2868,8 @@ int main() {
               "testing cosmetic PMT update keeps running without CA churn")
     TEST_FUNC(test_pmt_content_update_delta(),
               "testing PMT content update keeps running with a re-send")
+    TEST_FUNC(test_ca_update_flag_distinguishes_resend(),
+              "testing the CA add call flags updates vs first adds")
     TEST_FUNC(test_handover_ignores_stale_holder(),
               "testing handover skips holders that dropped the pid")
     TEST_FUNC(test_resend_rejected_releases_ca(),

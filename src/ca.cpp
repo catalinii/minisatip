@@ -888,17 +888,44 @@ int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
     return pos;
 }
 
+// Hash the built CAPMT minus its version byte, so an update that
+// leaves the content identical is detected and not re-sent.
+uint32_t capmt_content_hash(uint8_t *capmt, int len) {
+    if (len <= 4)
+        return crc_32(capmt, len);
+    uint8_t ver = capmt[3];
+    capmt[3] &= ~0x3E;
+    uint32_t hash = crc_32(capmt, len);
+    capmt[3] = ver;
+    return hash;
+}
+
 // Creates and Sends 2 PMTs to bundle them into the same CAPMT
 // Second PMT can be NULL
-int send_capmt(ca_device_t *d, SCAPMT *ca, int listmgmt, int reason) {
+int send_capmt(ca_device_t *d, SCAPMT *ca, int listmgmt, int reason,
+               int force) {
     uint8_t capmt[8192];
     std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
     memset(capmt, 0, sizeof(capmt));
 
     int size = create_capmt(ca, listmgmt, capmt, sizeof(capmt), reason,
                             d->multiple_pmt);
-    hexdump("CAPMT: ", capmt, size);
 
+    if (size <= 0)
+        LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "create_capmt failed");
+
+    uint32_t hash = capmt_content_hash(capmt, size);
+    if (!force && hash == ca->capmt_hash) {
+        LOG("CA %d: CAPMT for PMTs %d %d unchanged (%08X), not re-sending",
+            d->id, ca->pmt_id, ca->other_id, hash);
+        return 0;
+    }
+
+    // Bump when a send is attempted; the hash is stored only below,
+    // once the bytes really go out.
+    ca->version = (ca->version + 1) & 0xF;
+    size = create_capmt(ca, listmgmt, capmt, sizeof(capmt), reason,
+                        d->multiple_pmt);
     if (size <= 0)
         LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "create_capmt failed");
 
@@ -906,6 +933,9 @@ int send_capmt(ca_device_t *d, SCAPMT *ca, int listmgmt, int reason) {
         find_session_for_resource(d, EN50221_APP_CA_RESOURCEID);
     if (!session)
         LOG_AND_RETURN(1, "Unable to find CA session for device %d", d->id);
+    hexdump("CAPMT: ", capmt, size);
+
+    ca->capmt_hash = hash;
     ca_write_apdu(session, TAG_CA_PMT, capmt, size);
     return 0;
 }
@@ -962,9 +992,8 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple) {
         }
     }
 
-    if (res) {
-        res->version = (res->version + 1) & 0xF;
-    } else {
+    // No version bump here: send_capmt bumps only when bytes go out.
+    if (!res) {
         LOG("CA %d all channels used %d, multiple allowed %d", d->id,
             d->max_ca_pmt, multiple);
         for (ca_pos = 0; ca_pos < d->max_ca_pmt; ca_pos++) {
@@ -1073,9 +1102,9 @@ static void restore_ci_link(ca_device_t *d, adapter *ad, int prev_linked) {
     d->linked_adapter = prev_linked;
 }
 
-int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
+int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
     ca_device_t *d = ca_devices[ad->id];
-    uint16_t pid, sid, ver;
+    uint16_t pid, sid;
     int listmgmt;
     int prev_linked = -2; // -2: CI was not moved for this call
     SPMT *first = NULL;
@@ -1123,7 +1152,6 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
         LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
                        "First PMT not found from capmt %d", capmt->pmt_id);
     pid = spmt->pid;
-    ver = capmt->version;
     sid = spmt->sid;
 
     listmgmt = get_active_capmts(d) == 1 ? CLM_ONLY : CLM_UPDATE;
@@ -1143,15 +1171,17 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt) {
         }
     }
 
-    LOG("PMT CA %d pmt %d pid %u (%s) ver %u sid %u (%d), "
-        "enabled_pmts %d, "
-        "%s, PMTS to be send %d %d, pos %ld",
-        spmt->adapter, spmt->id, pid, spmt->name, ver, sid, capmt->sid,
-        get_enabled_pmts_for_ca(d), listmgmt_str[listmgmt], capmt->pmt_id,
-        capmt->other_id, capmt - d->capmt);
-
-    if (send_capmt(d, capmt, listmgmt, CA_PMT_CMD_ID_OK_DESCRAMBLING))
+    // First registration always sends; an update sends only when the
+    // built CAPMT changed, decided inside send_capmt.
+    if (send_capmt(d, capmt, listmgmt, CA_PMT_CMD_ID_OK_DESCRAMBLING, !update))
         LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "send_capmt failed");
+
+    LOG("PMT CA %d pmt %d pid %u (%s) ver %u sid %u (%d), enabled_pmts %d, "
+        "%s, PMTS to be send %d %d, pos %ld%s",
+        spmt->adapter, spmt->id, pid, spmt->name, capmt->version, sid,
+        capmt->sid, get_enabled_pmts_for_ca(d), listmgmt_str[listmgmt],
+        capmt->pmt_id, capmt->other_id, capmt - d->capmt,
+        update ? ", update" : "");
 
     if (d->key[0][0])
         send_cw(spmt->id, CA_ALGO_AES128_CBC, 0, d->key[0], d->iv[0], 3600,
@@ -1182,6 +1212,10 @@ void remove_pmt_from_device(ca_device_t *d, SPMT *pmt) {
             d->capmt[i].other_id = PMT_INVALID;
             d->capmt[i].version++;
         }
+        // A freed slot must not suppress the next PMT's first send.
+        if (!PMT_ID_IS_VALID(d->capmt[i].pmt_id) &&
+            !PMT_ID_IS_VALID(d->capmt[i].other_id))
+            d->capmt[i].capmt_hash = 0;
     }
     return;
 }
@@ -1225,9 +1259,8 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt) {
     int last_in_capmt =
         capmt->pmt_id == spmt->id && !PMT_ID_IS_VALID(capmt->other_id);
     if (last_in_capmt) {
-        capmt->version = (capmt->version + 1) & 0xF;
         listmgmt = CLM_UPDATE;
-        if (send_capmt(d, capmt, listmgmt, CA_PMT_CMD_ID_NOT_SELECTED))
+        if (send_capmt(d, capmt, listmgmt, CA_PMT_CMD_ID_NOT_SELECTED, 1))
             LOG("%s: send_capmt failed releasing pmt %d", __FUNCTION__,
                 spmt->id);
     }
@@ -1235,7 +1268,7 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt) {
     remove_pmt_from_device(d, spmt);
     if (PMT_ID_IS_VALID(capmt->pmt_id)) {
         listmgmt = CLM_UPDATE;
-        if (send_capmt(d, capmt, listmgmt, CA_PMT_CMD_ID_OK_DESCRAMBLING))
+        if (send_capmt(d, capmt, listmgmt, CA_PMT_CMD_ID_OK_DESCRAMBLING, 1))
             LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
                            "%s: send_capmt failed for pmt ids %d", __FUNCTION__,
                            capmt->pmt_id)
@@ -2688,6 +2721,9 @@ int APP_CA_handler(ca_session_t *session, int resource, uint8_t *data,
     switch (resource) {
     case TAG_CA_INFO:
         d->state = CA_STATE_INITIALIZED;
+        // The CAM lost its state: force pending updates to re-send.
+        for (int j = 0; j < d->max_ca_pmt; j++)
+            d->capmt[j].capmt_hash = 0;
 
         // Ignore CAM reported values if user has forced specific CAIDs
         if (!d->has_forced_caids) {

@@ -409,7 +409,7 @@ int dvbapi_reply(sockets *s) {
     return 0;
 }
 
-int dvbapi_send_pmt(SKey *k, int cmd_id) {
+int dvbapi_send_pmt(SKey *k, int cmd_id, int force) {
     unsigned char buf[2500];
     int len;
     int listmgmt = CLM_UPDATE;
@@ -481,6 +481,13 @@ int dvbapi_send_pmt(SKey *k, int cmd_id) {
     copy16(buf, 4, len - 6);
 
     buf[6] = listmgmt;
+    uint32_t hash = crc_32(buf, len);
+    if (!force && hash == k->capmt_hash) {
+        LOG("dvbapi key %d: PMT %d update, CAPMT unchanged (%08X), not "
+            "re-sending",
+            k->id, k->pmt_id, hash);
+        return 0;
+    }
     if (sock > 0) {
         LOG("Sending pmt %d to dvbapi server for pid %d, Channel ID %04X, key "
             "%d, "
@@ -488,6 +495,7 @@ int dvbapi_send_pmt(SKey *k, int cmd_id) {
             k->pmt_id, k->pmt_pid, k->sid, k->id, adapter, demux, sock,
             listmgmt_str[listmgmt]);
         TEST_WRITE(write(sock, buf, len), len);
+        k->capmt_hash = hash;
     }
     return 0;
 }
@@ -743,6 +751,7 @@ int keys_add(int i, int adapter, int pmt_id) {
     k->tsid = 0;
     k->icam_ecm = 0;
     k->is_icam = 0;
+    k->capmt_hash = 0;
     memset(k->cw[0], 0, 16);
     memset(k->cw[1], 0, 16);
     memset(k->filter_id, -1, sizeof(k->filter_id));
@@ -790,7 +799,7 @@ int keys_del(int i) {
     } else { // only local socket mode where multiple channels are connected to
              // the same demux
         msg = "PMT";
-        dvbapi_send_pmt(k, CMD_ID_NOT_SELECTED);
+        dvbapi_send_pmt(k, CMD_ID_NOT_SELECTED, 1);
     }
 
     pmt_pid = k->pmt_pid;
@@ -816,7 +825,7 @@ int keys_del(int i) {
     return 0;
 }
 
-int dvbapi_add_pmt(adapter *ad, SPMT *pmt) {
+int dvbapi_add_pmt(adapter *ad, SPMT *pmt, int update) {
     SKey *k = NULL;
     int key, pid = pmt->pid;
     std::lock_guard<SMutex> lock(keys_mutex);
@@ -842,7 +851,7 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt) {
         old->pmt_pid = pid;
         old->tsid = ad->transponder_id;
         old->last_dmx_stop = getTick();
-        dvbapi_send_pmt(old, CMD_ID_OK_DESCRAMBLING);
+        dvbapi_send_pmt(old, CMD_ID_OK_DESCRAMBLING, !update);
         return 0;
     }
 
@@ -858,7 +867,7 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt) {
     k->tsid = ad->transponder_id;
     k->onid = 0;
     k->last_dmx_stop = getTick();
-    dvbapi_send_pmt(k, CMD_ID_OK_DESCRAMBLING);
+    dvbapi_send_pmt(k, CMD_ID_OK_DESCRAMBLING, 1);
 
     return 0;
 }

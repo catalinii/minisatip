@@ -322,7 +322,8 @@ static int test_hw_ca_update_retarget() {
     ASSERT(pmt != nullptr, "pmt_add failed");
     pmt_add_stream_pid(pmt, 1001, 2, false, true);
     pmt_add_stream_pid(pmt, 1002, 3, true, false);
-    ASSERT_EQUAL(hw_ca_add_pmt(ad, pmt), TABLES_RESULT_OK, "add must succeed");
+    ASSERT_EQUAL(hw_ca_add_pmt(ad, pmt, 0), TABLES_RESULT_OK,
+                 "add must succeed");
     ASSERT(hw_bound_pids_for_test(0, pmt_id) ==
                std::unordered_set<int>({1001, 1002}),
            "add must track both pids");
@@ -332,7 +333,7 @@ static int test_hw_ca_update_retarget() {
             pmt->stream_pids.erase(it);
             break;
         }
-    ASSERT_EQUAL(hw_ca_add_pmt(ad, pmt), TABLES_RESULT_OK,
+    ASSERT_EQUAL(hw_ca_add_pmt(ad, pmt, 1), TABLES_RESULT_OK,
                  "re-send must succeed");
     ASSERT(hw_bound_pids_for_test(0, pmt_id) == std::unordered_set<int>({1001}),
            "re-send must drop 1002 from tracking");
@@ -353,7 +354,7 @@ static int test_hw_ca_hooks_succeed() {
     int pmt_id = pmt_add(0, 500, 5000);
     SPMT *pmt = get_pmt(pmt_id);
     ASSERT(pmt != nullptr, "pmt_add failed");
-    ASSERT_EQUAL(hw_ca_add_pmt(ad, pmt), TABLES_RESULT_OK,
+    ASSERT_EQUAL(hw_ca_add_pmt(ad, pmt, 0), TABLES_RESULT_OK,
                  "hw_ca_add_pmt must succeed");
     ASSERT_EQUAL(hw_ca_init_dev(ad), TABLES_RESULT_OK,
                  "hw_ca_init_dev must succeed");

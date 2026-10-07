@@ -2225,6 +2225,10 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
         pmt->ca_mask = old_ca_mask;
         pmt->disabled_ca_mask = old_disabled;
         pmt->ca_registered_mask = old_registered;
+        LOG("PMT %d ver %d AD %d: content hash %08X -> %08X (%s)", pmt->id, ver,
+            ad->id, pmt->content_hash, hash,
+            hash != pmt->content_hash ? "changed, re-sending to CAs"
+                                      : "unchanged, keeping CA state");
         if (hash != pmt->content_hash) {
             // Content changed: force the CAs to re-send on the next
             // pass; each CA drops removed pids itself on re-send.
