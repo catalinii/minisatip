@@ -984,7 +984,7 @@ int test_ddci_full_device_retries() {
 // A PMT matching a ready DDCI must proceed while another DDCI is still
 // initializing; only PMTs with no ready match wait for it.
 int test_initializing_ddci_does_not_block_others() {
-    SPMT *pmt_dd0, *pmt_dd1, *pmt_nomatch;
+    SPMT *pmt_dd0, *pmt_dd1, *pmt_both, *pmt_nomatch;
     ddci_device_t d0 = {}, d1 = {};
     ca_device_t ca0 = {}, ca1 = {};
     adapter ad = {0}, a0 = {0}, a1 = {0};
@@ -1002,6 +1002,7 @@ int test_initializing_ddci_does_not_block_others() {
 
     pmt_dd0 = create_pmt(8, 810, 811, 812, 0x100, 0x100);
     pmt_dd1 = create_pmt(8, 820, 821, 822, 0x500, 0x500);
+    pmt_both = create_pmt(8, 840, 841, 842, 0x100, 0x500);
     pmt_nomatch = create_pmt(8, 830, 831, 832, 0x600, 0x600);
     memset(&d0.pmt, -1, sizeof(d0.pmt));
     memset(&d1.pmt, -1, sizeof(d1.pmt));
@@ -1026,11 +1027,18 @@ int test_initializing_ddci_does_not_block_others() {
     ca1.state = CA_STATE_INITIALIZED;
     ASSERT(ddci_process_pmt(&ad, pmt_dd1) == TABLES_RESULT_OK,
            "PMT matching the ready DDCI must not wait for DDCI 0");
+    ASSERT(channels[pmt_dd1->sid].ddcis == 1,
+           "initializing DDCI must be excluded from candidates");
     ASSERT(d1.channels == 1 && d0.channels == 0,
            "PMT must run on the ready DDCI 1");
+    ASSERT(ddci_process_pmt(&ad, pmt_both) == TABLES_RESULT_OK,
+           "dual-CAID PMT must proceed on the ready DDCI");
     ASSERT(ddci_process_pmt(&ad, pmt_dd0) == TABLES_RESULT_ERROR_RETRY,
            "PMT matching only the initializing DDCI must retry");
     ddci_del_pmt(&ad, pmt_dd1);
+    ddci_del_pmt(&ad, pmt_both);
+    ASSERT(d0.channels == 0 && d1.channels == 0,
+           "expected 0 running channels after delete");
     channels.clear();
 
     // ready match first, initializing DDCI second
@@ -1038,18 +1046,47 @@ int test_initializing_ddci_does_not_block_others() {
     ca1.state = CA_STATE_ACTIVE;
     ASSERT(ddci_process_pmt(&ad, pmt_dd0) == TABLES_RESULT_OK,
            "PMT matching the ready DDCI must not wait for DDCI 1");
+    ASSERT(channels[pmt_dd0->sid].ddcis == 1,
+           "initializing DDCI must be excluded from candidates");
     ASSERT(d0.channels == 1 && d1.channels == 0,
            "PMT must run on the ready DDCI 0");
     ASSERT(ddci_process_pmt(&ad, pmt_nomatch) == TABLES_RESULT_ERROR_RETRY,
            "PMT with no ready match must retry while a DDCI initializes");
     ddci_del_pmt(&ad, pmt_dd0);
+    ASSERT(d0.channels == 0 && d1.channels == 0,
+           "expected 0 running channels after delete");
     channels.clear();
 
     ca1.state = CA_STATE_INITIALIZED;
     ASSERT(ddci_process_pmt(&ad, pmt_nomatch) == TABLES_RESULT_ERROR_NORETRY,
            "PMT with no match must not retry once all DDCIs are ready");
+    channels.clear();
+
+    // full ready DDCI + initializing DDCI: the dual PMT retries, then uses
+    // the late DDCI once ready instead of starving on stale candidates.
+    d0.max_channels = d1.max_channels = 1;
+    ca0.state = CA_STATE_INITIALIZED;
+    ca1.state = CA_STATE_ACTIVE;
+    ASSERT(ddci_process_pmt(&ad, pmt_dd0) == TABLES_RESULT_OK,
+           "setup: fill the only slot of DDCI 0");
+    ASSERT(ddci_process_pmt(&ad, pmt_both) == TABLES_RESULT_ERROR_RETRY,
+           "dual PMT must retry while its only ready match is full");
+    ca1.state = CA_STATE_INITIALIZED;
+    ASSERT(ddci_process_pmt(&ad, pmt_both) == TABLES_RESULT_OK,
+           "dual PMT must move to the late-ready DDCI");
+    ASSERT(channels[pmt_both->sid].ddcis == 2,
+           "rebuilt candidates must include the late-ready DDCI");
+    ASSERT(d1.channels == 1, "dual PMT must run on DDCI 1");
+    ddci_del_pmt(&ad, pmt_both);
+    ddci_del_pmt(&ad, pmt_dd0);
+    ASSERT(d0.channels == 0 && d1.channels == 0,
+           "expected 0 running channels after delete");
 
     del_ca(&dvbca);
+    pmt_del(pmt_dd0->id);
+    pmt_del(pmt_dd1->id);
+    pmt_del(pmt_both->id);
+    pmt_del(pmt_nomatch->id);
     channels.clear();
     free_filters();
     ddci_devices[0] = ddci_devices[1] = NULL;
