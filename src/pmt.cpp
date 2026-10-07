@@ -1968,15 +1968,8 @@ void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid, uint8_t *data,
     LOG("PMT %d PI pos %d caid %04X => pid %04X (%d), index %d", pmt->id,
         pmt->caids + 1, caid, capid, capid, pmt->caids);
 
-    // Fixed-size entries: updates reuse them without freeing, so other
-    // threads never dereference a freed entry.
-    if (len < 0 || len > MAX_CA_PRIVATE) {
-        LOG("PMT %d CAID %04X private data length %d out of range, clamping",
-            pmt->id, caid, len);
-        len = len < 0 ? 0 : MAX_CA_PRIVATE;
-    }
     if (!pmt->ca[pmt->caids])
-        pmt->ca[pmt->caids] = (SPMTCA *)malloc(sizeof(SPMTCA) + MAX_CA_PRIVATE);
+        pmt->ca[pmt->caids] = (SPMTCA *)malloc(sizeof(SPMTCA) + len);
     if (!pmt->ca[pmt->caids]) {
         LOG("Failed to allocate memory for CAID %04X", caid);
         return;

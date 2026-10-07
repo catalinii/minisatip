@@ -6,8 +6,6 @@
 #include <vector>
 
 #define MAX_CAID 20
-// CA descriptor length is one byte, so private data never exceeds it.
-#define MAX_CA_PRIVATE 251
 #define MAX_ACTIVE_PIDS 20
 #define CA_ALGO_DVBCSA 0
 #define CA_ALGO_DES 1
