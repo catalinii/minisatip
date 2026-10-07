@@ -746,9 +746,8 @@ void ca_release_pmts(ca_device_t *d) {
     if (n > MAX_CA_PMT)
         n = MAX_CA_PMT;
     for (int i = 0; i < n; i++) {
-        int ids[2] = {d->capmt[i].pmt_id, d->capmt[i].other_id};
-        for (int k = 0; k < 2; k++)
-            tables_clear_pmt_ca_masks(get_pmt(ids[k]), mask, 1);
+        tables_clear_pmt_ca_masks(get_pmt(d->capmt[i].pmt_id), mask, 1);
+        tables_clear_pmt_ca_masks(get_pmt(d->capmt[i].other_id), mask, 1);
     }
     disable_cws_for_all_pmts(d);
     memset(d->capmt, -1, sizeof(d->capmt));
