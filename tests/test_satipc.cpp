@@ -33,6 +33,8 @@ extern void satip_getxml_data(char *data, int len, void *opaque,
 extern void satipc_get_pids(adapter *ad, satipc *sip, char *url, int size,
                             int send_pids);
 extern int satipc_reply(sockets *s);
+extern int satipc_set_pid(adapter *ad, int pid);
+extern int satipc_del_filters(adapter *ad, int fd, int pid);
 
 int test_get_s2_url_multistream_isi() {
     adapter ad = {};
@@ -234,6 +236,47 @@ static void send_rtsp_reply(sockets *s, char *buf, const char *reply) {
     satipc_reply(s);
 }
 
+static int queue_has(uint16_t *q, int n, int pid) {
+    for (int i = 0; i < n; i++)
+        if (q[i] == pid)
+            return 1;
+    return 0;
+}
+
+// Cancelling a queued pid must drop only that pid; the swap
+// must move the last valid entry, not read past it.
+int test_satipc_cancel_keeps_queued_pids() {
+    adapter ad = {};
+    ad.id = 0;
+    ad.err = 0;
+    satipc *saved_sip = satip[0];
+
+    satipc sip_add = {};
+    sip_add.enabled = 1;
+    satip[0] = &sip_add;
+    satipc_set_pid(&ad, 100);
+    satipc_set_pid(&ad, 200);
+    satipc_set_pid(&ad, 300);
+    satipc_del_filters(&ad, 100, 100);
+    ASSERT(sip_add.lap == 2, "cancel shrinks the add queue by one");
+    ASSERT(queue_has(sip_add.apid, sip_add.lap, 200), "keeps pid 200");
+    ASSERT(queue_has(sip_add.apid, sip_add.lap, 300), "keeps pid 300");
+
+    satipc sip_del = {};
+    sip_del.enabled = 1;
+    satip[0] = &sip_del;
+    satipc_del_filters(&ad, 100, 400);
+    satipc_del_filters(&ad, 100, 500);
+    satipc_del_filters(&ad, 100, 600);
+    satipc_set_pid(&ad, 400);
+    ASSERT(sip_del.ldp == 2, "cancel shrinks the del queue by one");
+    ASSERT(queue_has(sip_del.dpid, sip_del.ldp, 500), "keeps pid 500");
+    ASSERT(queue_has(sip_del.dpid, sip_del.ldp, 600), "keeps pid 600");
+
+    satip[0] = saved_sip;
+    return 0;
+}
+
 int test_satipc_reject_teardown_then_retry() {
     adapter ad = {};
     satipc sip = {};
@@ -262,8 +305,8 @@ int test_satipc_reject_teardown_then_retry() {
     s.buf = (unsigned char *)buf;
 
     // 503 to PLAY releases the session, then retries like 454
-    send_rtsp_reply(
-        &s, buf, "RTSP/1.0 503 Service Unavailable\r\nCSeq: 110\r\n\r\n");
+    send_rtsp_reply(&s, buf,
+                    "RTSP/1.0 503 Service Unavailable\r\nCSeq: 110\r\n\r\n");
     ASSERT(ad.err == 0, "503 must not flag the adapter in error");
     ASSERT(sip.state == SATIP_STATE_TEARDOWN, "503 must move to TEARDOWN");
     ASSERT(sip.stream_id == -1, "TEARDOWN must drop the stream");
@@ -279,8 +322,8 @@ int test_satipc_reject_teardown_then_retry() {
     sip.stream_id = -1;
     sip.state = SATIP_STATE_SETUP;
     sip.ignore_packets = false;
-    send_rtsp_reply(
-        &s, buf, "RTSP/1.0 503 Service Unavailable\r\nCSeq: 112\r\n\r\n");
+    send_rtsp_reply(&s, buf,
+                    "RTSP/1.0 503 Service Unavailable\r\nCSeq: 112\r\n\r\n");
     ASSERT(sip.state == SATIP_STATE_SETUP,
            "503 without session must retry SETUP");
     ASSERT(sip.ignore_packets, "SETUP must go out right after the 503");
@@ -289,8 +332,8 @@ int test_satipc_reject_teardown_then_retry() {
     ad.err = 1;
     sip.state = SATIP_STATE_SETUP;
     sip.ignore_packets = false;
-    send_rtsp_reply(
-        &s, buf, "RTSP/1.0 503 Service Unavailable\r\nCSeq: 113\r\n\r\n");
+    send_rtsp_reply(&s, buf,
+                    "RTSP/1.0 503 Service Unavailable\r\nCSeq: 113\r\n\r\n");
     ASSERT(sip.state == SATIP_STATE_INACTIVE,
            "503 must not retry while in error");
     ASSERT(!sip.ignore_packets, "no SETUP may follow while in error");
@@ -300,8 +343,8 @@ int test_satipc_reject_teardown_then_retry() {
     sip.state = SATIP_STATE_PLAY;
     sip.stream_id = 310;
     strcpy(sip.session, "AA112233");
-    send_rtsp_reply(
-        &s, buf, "RTSP/1.0 503 Service Unavailable\r\nCSeq: 114\r\n\r\n");
+    send_rtsp_reply(&s, buf,
+                    "RTSP/1.0 503 Service Unavailable\r\nCSeq: 114\r\n\r\n");
     ASSERT(sip.state == SATIP_STATE_TEARDOWN, "503 must move to TEARDOWN");
     ad.err = 1; // error raised while the TEARDOWN was in flight
     sip.ignore_packets = false;
@@ -353,6 +396,8 @@ int main() {
               "test satipc_get_pids separates addpids/delpids with '&'");
     TEST_FUNC(test_satipc_reject_teardown_then_retry(),
               "test rejected SETUP tears down and retries");
+    TEST_FUNC(test_satipc_cancel_keeps_queued_pids(),
+              "test cancelling a queued pid keeps the rest");
 
     return 0;
 }
