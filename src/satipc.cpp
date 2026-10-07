@@ -1270,7 +1270,7 @@ int satipc_set_pid(adapter *ad, int pid) {
             if (i + 1 == sip->ldp)
                 sip->ldp--;
             else
-                sip->dpid[i] = sip->dpid[sip->ldp--];
+                sip->dpid[i] = sip->dpid[--sip->ldp];
             LOGM("satipc: set_pid for pid %d already in the delete list! "
                  "(ldp=%d)",
                  pid, sip->ldp);
@@ -1295,7 +1295,7 @@ int satipc_del_filters(adapter *ad, int fd, int pid) {
             if (i + 1 == sip->lap)
                 sip->lap--;
             else
-                sip->apid[i] = sip->apid[sip->lap--];
+                sip->apid[i] = sip->apid[--sip->lap];
             LOGM("satipc: del_pid for pid %d already in the add list! "
                  "(lap=%d)",
                  pid, sip->lap);
