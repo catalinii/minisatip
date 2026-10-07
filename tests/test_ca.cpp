@@ -61,7 +61,9 @@ extern ca_device_t *ca_devices[MAX_ADAPTERS];
 extern int dvbca_id;
 int get_active_capmts(ca_device_t *d);
 int dvbca_init_dev(adapter *ad);
+int dvbca_close_dev(adapter *ad);
 int ca_timeout(sockets *s);
+int ca_read(sockets *s);
 int ca_read_tpdu(int socket, void *buf, int buf_len, sockets *ss, int *rb);
 int ca_read_enigma(int socket, void *buf, int len, sockets *ss, int *rb);
 int get_enabled_pmts_for_ca(ca_device_t *d);
@@ -852,8 +854,7 @@ int test_ca_teardown_releases_pmts() {
     memset(&dev, 0, sizeof(dev));
     memset(dev.capmt, -1, sizeof(dev.capmt));
     dev.enabled = 1;
-    // Shrunken table: a stale entry past max_ca_pmt must still release.
-    dev.max_ca_pmt = 1;
+    dev.max_ca_pmt = MAX_CA_PMT;
     dev.state = CA_STATE_INITIALIZED;
     dev.fd = 42;
     dev.sock = 43;
@@ -868,12 +869,10 @@ int test_ca_teardown_releases_pmts() {
 
     int first = pmt_add(0, 0x500, 0x501);
     int second = pmt_add(0, 0x600, 0x601);
-    int third = pmt_add(0, 0x700, 0x701);
     dev.capmt[0].pmt_id = first;
     dev.capmt[0].other_id = second;
-    dev.capmt[3].pmt_id = third;
     uint64_t mask = 1ULL << dvbca_id;
-    for (int id : {first, second, third}) {
+    for (int id : {first, second}) {
         SPMT *pmt = get_pmt(id);
         pmt->ca_mask = mask | 0x40;
         pmt->ca_registered_mask = mask | 0x40;
@@ -902,7 +901,7 @@ int test_ca_teardown_releases_pmts() {
         ASSERT(!PMT_ID_IS_VALID(dev.capmt[i].pmt_id) &&
                    !PMT_ID_IS_VALID(dev.capmt[i].other_id),
                "capmt table wiped");
-    for (int id : {first, second, third}) {
+    for (int id : {first, second}) {
         SPMT *pmt = get_pmt(id);
         ASSERT_EQUAL(pmt->ca_mask, 0x40, "pmt released for resend");
         ASSERT_EQUAL(pmt->ca_registered_mask, 0x40, "registration cleared");
@@ -944,8 +943,11 @@ int test_ca_close_null_safe() {
     ASSERT_EQUAL(ca_close(&s), 0, "close runs teardown");
     ASSERT_EQUAL(dev.state, CA_STATE_INACTIVE, "state reset");
     ASSERT_EQUAL(dev.fd, -1, "fd reset");
+    ASSERT_EQUAL(dev.sock, -1, "sock reset");
     ASSERT_EQUAL(dev.enabled, 1, "enabled stays sticky");
     ASSERT_EQUAL(dev.sessions[0].handler.resource, 0, "sessions cleared");
+    static const uint8_t zero_key[2][16] = {};
+    ASSERT(memcmp(dev.key, zero_key, sizeof(dev.key)) == 0, "keys cleared");
 
     // Stale generation: an old socket must not wipe the new state.
     dev.state = CA_STATE_INITIALIZED;
@@ -975,6 +977,8 @@ int test_is_ca_initializing_reconnect_pending() {
     ASSERT_EQUAL(is_ca_initializing(7), 0, "disabled skips");
     ca_devices[7] = NULL;
     ASSERT_EQUAL(is_ca_initializing(7), 0, "missing device skips");
+    ASSERT_EQUAL(is_ca_initializing(-1), 0, "negative index skips");
+    ASSERT_EQUAL(is_ca_initializing(MAX_ADAPTERS), 0, "index over range skips");
     ca_devices[7] = saved;
     return 0;
 }
@@ -1006,6 +1010,15 @@ int test_ca_init_failed() {
     ASSERT_EQUAL(dev.fd, -1, "fd dropped");
     ASSERT_EQUAL(dev.sock, -1, "sock dropped");
     ASSERT_EQUAL(dev.state, CA_STATE_INACTIVE, "state reset");
+
+    int fds[2];
+    ASSERT(pipe(fds) == 0, "pipe for fd cleanup");
+    dev.fd = fds[1];
+    ASSERT_EQUAL(ca_init_failed(&dev), TABLES_RESULT_ERROR_RETRY,
+                 "open fd retries");
+    ASSERT_EQUAL(dev.fd, -1, "open fd dropped");
+    ASSERT(fcntl(fds[1], F_GETFL) == -1 && errno == EBADF, "fd really closed");
+    close(fds[0]);
     return 0;
 }
 
@@ -1057,7 +1070,11 @@ int test_ca_keepalive_counts_failures() {
     dev.enabled = 1;
     dev.state = CA_STATE_ACTIVE;
     dev.fd = -1; // every write fails without an EIO close (EBADF)
-    dev.sock = -1;
+    int sp[2];
+    ASSERT(pipe(sp) == 0, "pipe for close observation");
+    int id = sockets_add(sp[0], NULL, 61, TYPE_TCP, NULL, NULL, NULL);
+    ASSERT(id >= 0, "socket added");
+    dev.sock = id;
     sockets ss{};
     ss.sid = 61;
     ca_timeout(&ss);
@@ -1066,6 +1083,10 @@ int test_ca_keepalive_counts_failures() {
     ASSERT_EQUAL(dev.poll_fails, 2, "second failure counts");
     ca_timeout(&ss);
     ASSERT_EQUAL(dev.poll_fails, 0, "third failure closes and resets");
+    ASSERT_EQUAL(get_sockets(id)->force_close, 1, "close was requested");
+    sockets_del(id); // closes sp[0]
+    close(sp[1]);
+    dev.sock = -1;
 
     int fds[2];
     ASSERT(pipe(fds) == 0, "pipe for successful write");
@@ -1086,6 +1107,8 @@ int test_ca_read_tpdu_outcomes() {
     ASSERT_EQUAL(ca_read_tpdu(0, buf, sizeof(buf), NULL, &rb), 0,
                  "null sockets");
     ASSERT_EQUAL(rb, 0, "nothing read");
+    ASSERT_EQUAL(ca_read_tpdu(0, buf, sizeof(buf), NULL, NULL), 0,
+                 "null length");
     sockets ss{};
     ss.sid = -1;
     ASSERT_EQUAL(ca_read_tpdu(0, buf, sizeof(buf), &ss, &rb), 0, "bad sid");
@@ -1110,8 +1133,10 @@ int test_ca_read_tpdu_outcomes() {
     ASSERT_EQUAL(rb, 0, "nothing buffered");
     uint8_t one = 0x00;
     ASSERT(write(fds[1], &one, 1) == 1, "one byte queued");
+    dev.poll_fails = 5;
     ASSERT_EQUAL(ca_read_tpdu(0, buf, sizeof(buf), &ss, &rb), 1,
                  "short read parses");
+    ASSERT_EQUAL(dev.poll_fails, 0, "traffic resets the counter");
     close(fds[1]); // read end now hits EOF
     ASSERT_EQUAL(ca_read_tpdu(0, buf, sizeof(buf), &ss, &rb), 0,
                  "EOF tears down");
@@ -1151,10 +1176,26 @@ int test_ca_read_enigma_removal() {
                  "plain poll quiet");
     ASSERT_EQUAL(ss->force_close, 0, "no close without PRI");
 
+    ss->revents = POLLPRI;
+    ASSERT_EQUAL(ca_read_enigma(fds[0], buf, sizeof(buf), ss, &rb), 1,
+                 "pure PRI requests close");
+    ASSERT_EQUAL(ss->force_close, 1, "close on pure PRI");
+
+    ss->force_close = 0;
+    dev.state = CA_STATE_INACTIVE;
+    ASSERT_EQUAL(ca_read_enigma(fds[0], buf, sizeof(buf), ss, &rb), 1,
+                 "inactive stays quiet");
+    ASSERT_EQUAL(ss->force_close, 0, "no close when inactive");
+    dev.state = CA_STATE_ACTIVE;
+
     ss->sid = -1;
     ss->revents = POLLPRI;
     ASSERT_EQUAL(ca_read_enigma(fds[0], buf, sizeof(buf), ss, &rb), 1,
                  "bad sid guarded");
+    ASSERT_EQUAL(ca_read_enigma(fds[0], buf, sizeof(buf), NULL, &rb), 0,
+                 "null sockets guarded");
+    ASSERT_EQUAL(ca_read_enigma(fds[0], buf, sizeof(buf), ss, NULL), 0,
+                 "null length guarded");
 
     ca_devices[63] = saved;
     sockets_del(id); // closes fds[0]
@@ -1173,14 +1214,126 @@ int test_dvbca_init_dev_guards() {
     ca_device_t *saved = ca_devices[64];
     ca_devices[64] = &dev;
     ASSERT_EQUAL(dvbca_init_dev(&ad), TABLES_RESULT_OK, "live device ok");
-    ASSERT_EQUAL(ad.ca_mask, 1 << dvbca_id, "tables bit kept");
+    ASSERT_EQUAL(ad.ca_mask, (int)(1ULL << dvbca_id), "tables bit kept");
     ASSERT_EQUAL(dvbca_init_dev(NULL), TABLES_RESULT_ERROR_NORETRY,
                  "null adapter");
     ad.type = ADAPTER_SATIP;
     ad.id = 65;
     ASSERT_EQUAL(dvbca_init_dev(&ad), TABLES_RESULT_ERROR_NORETRY,
                  "wrong adapter type");
+    ad.id = -1;
+    ASSERT_EQUAL(dvbca_init_dev(&ad), TABLES_RESULT_ERROR_NORETRY,
+                 "negative adapter id");
+    ad.id = MAX_ADAPTERS;
+    ASSERT_EQUAL(dvbca_init_dev(&ad), TABLES_RESULT_ERROR_NORETRY,
+                 "adapter id out of range");
+    ASSERT_EQUAL(dvbca_close_dev(NULL), 1, "close null adapter");
+    ASSERT_EQUAL(dvbca_close_dev(&ad), 1, "close adapter id out of range");
     ca_devices[64] = saved;
+    return 0;
+}
+
+// Shared mask clearer: drops the CA bit, disabled bit only on request.
+int test_tables_clear_pmt_ca_masks() {
+    int id = pmt_add(0, 0x800, 0x801);
+    SPMT *pmt = get_pmt(id);
+    tables_clear_pmt_ca_masks(NULL, 0x1, 1);
+    pmt->ca_mask = 0x41;
+    pmt->ca_registered_mask = 0x41;
+    pmt->disabled_ca_mask = 0x41;
+    tables_clear_pmt_ca_masks(pmt, 0x1, 0);
+    ASSERT_EQUAL(pmt->ca_mask, 0x40, "ca bit cleared");
+    ASSERT_EQUAL(pmt->ca_registered_mask, 0x40, "registered bit cleared");
+    ASSERT_EQUAL(pmt->disabled_ca_mask, 0x41, "disabled bit kept");
+    tables_clear_pmt_ca_masks(pmt, 0x1, 1);
+    ASSERT_EQUAL(pmt->disabled_ca_mask, 0x40, "disabled bit cleared");
+    return 0;
+}
+
+// Timeout guards and branches: INACTIVE polls, enigma skips,
+// datetime re-arms even with no session to send on.
+int test_ca_timeout_branches() {
+    ASSERT_EQUAL(ca_timeout(NULL), 0, "null sockets");
+    sockets ss{};
+    ss.sid = -1;
+    ASSERT_EQUAL(ca_timeout(&ss), 0, "negative sid");
+    ss.sid = MAX_ADAPTERS;
+    ASSERT_EQUAL(ca_timeout(&ss), 0, "sid out of range");
+    ca_device_t *saved = ca_devices[66];
+    ca_devices[66] = NULL;
+    ss.sid = 66;
+    ASSERT_EQUAL(ca_timeout(&ss), 0, "no device");
+
+    ca_device_t dev;
+    memset(&dev, 0, sizeof(dev));
+    dev.enabled = 1;
+    ca_devices[66] = &dev;
+    int fds[2];
+    ASSERT(pipe(fds) == 0, "pipe for INACTIVE poll");
+    dev.fd = fds[1];
+    dev.state = CA_STATE_INACTIVE;
+    ASSERT_EQUAL(ca_timeout(&ss), 0, "INACTIVE polls cleanly");
+    ASSERT_EQUAL(dev.poll_fails, 0, "INACTIVE poll succeeds");
+    close(fds[0]);
+    close(fds[1]);
+
+    int saved_enigma = opts.enigma;
+    opts.enigma = 1;
+    dev.fd = -1;
+    dev.state = CA_STATE_ACTIVE;
+    dev.poll_fails = 0;
+    ASSERT_EQUAL(ca_timeout(&ss), 0, "enigma skips keepalive");
+    ASSERT_EQUAL(dev.poll_fails, 0, "enigma counts nothing");
+    opts.enigma = saved_enigma;
+
+    dev.state = CA_STATE_INITIALIZED;
+    dev.datetime_response_interval = 30000;
+    // -1, not 0: getTick() starts at 0, so 0 would not be past due.
+    dev.datetime_next_send = -1;
+    int64_t before = getTick();
+    ASSERT_EQUAL(ca_timeout(&ss), 0, "datetime branch runs");
+    ASSERT(dev.datetime_next_send >= before + 30000, "datetime re-armed");
+    ca_devices[66] = saved;
+    return 0;
+}
+
+// ca_read guards: bad sockets never reach the parser.
+int test_ca_read_guards() {
+    ASSERT_EQUAL(ca_read(NULL), 0, "null sockets");
+    sockets ss{};
+    ss.sid = -1;
+    ASSERT_EQUAL(ca_read(&ss), 0, "negative sid");
+    ss.sid = MAX_ADAPTERS;
+    ASSERT_EQUAL(ca_read(&ss), 0, "sid out of range");
+    ca_device_t *saved = ca_devices[67];
+    ca_devices[67] = NULL;
+    ss.sid = 67;
+    ASSERT_EQUAL(ca_read(&ss), 0, "no device");
+    ca_devices[67] = saved;
+    return 0;
+}
+
+// A recovered device clears its retry timer on the success path.
+int test_ca_reconnect_success() {
+    adapter ad = {};
+    ad.id = 68;
+    ad.type = ADAPTER_DVB;
+    ad.enabled = 1;
+    ca_device_t dev;
+    memset(&dev, 0, sizeof(dev));
+    dev.enabled = 1;
+    dev.state = CA_STATE_INITIALIZED;
+    dev.fd = -1;
+    dev.reconnect_next_try = 0;
+    adapter *saved_a = a[68];
+    ca_device_t *saved_c = ca_devices[68];
+    a[68] = &ad;
+    ca_devices[68] = &dev;
+    ca_reconnect(NULL);
+    ASSERT_EQUAL(dev.reconnect_next_try, 0, "timer cleared on success");
+    ASSERT_EQUAL(ad.ca_mask, (int)(1ULL << dvbca_id), "tables bit set");
+    a[68] = saved_a;
+    ca_devices[68] = saved_c;
     return 0;
 }
 
@@ -1250,6 +1403,10 @@ int main() {
     TEST_FUNC(test_ca_read_tpdu_outcomes(), "testing TPDU read outcomes");
     TEST_FUNC(test_ca_read_enigma_removal(), "testing enigma removal close");
     TEST_FUNC(test_dvbca_init_dev_guards(), "testing init device guards");
+    TEST_FUNC(test_tables_clear_pmt_ca_masks(), "testing shared mask clearer");
+    TEST_FUNC(test_ca_timeout_branches(), "testing timeout branches");
+    TEST_FUNC(test_ca_read_guards(), "testing ca_read guards");
+    TEST_FUNC(test_ca_reconnect_success(), "testing reconnect success path");
     free_all(); // releases sockets opened by the enigma test
     free_all_pmts();
     fflush(stdout);

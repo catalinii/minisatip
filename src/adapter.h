@@ -38,6 +38,7 @@ typedef struct ca_device ca_device_t;
 // Minimum usable pid count per adapter. A demux failure must never cap an
 // adapter below this; failures below it are reported, not 200 OK.
 #define MIN_ADAPTER_PIDS 16
+extern SMutex ca_mask_mutex;
 #define PID_STREAM_ID_UNDEFINED -1
 #define PID_STATE_INACTIVE 0
 #define PID_STATE_ACTIVE 1
@@ -89,6 +90,7 @@ struct struct_adapter {
     fe_delivery_system_t sys[MAX_DELSYS];
     transponder tp;
     SPid pids[MAX_PIDS];
+    // Writers take ca_mask_mutex; readers re-read every pass.
     int ca_mask;
     int master_sid; // first SID, the one that controls the tuning
     int sid_cnt;    // number of streams

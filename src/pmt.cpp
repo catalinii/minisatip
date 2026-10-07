@@ -1586,6 +1586,8 @@ void cache_pmt_for_adapter(adapter *ad, SPMT *pmt) {
 #endif
     release_pmt_claims(ad, pmt);
     pmt->state = PMT_CACHED;
+    // Same lock as the send path: teardown clears these masks too.
+    std::lock_guard<SMutex> lock(pmts_mutex);
     pmt->disabled_ca_mask = 0;
     pmt->ca_mask = 0;
     pmt->ca_registered_mask = 0;
@@ -1925,6 +1927,9 @@ int is_ac3_es(unsigned char *es, int len) {
 
 void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid, uint8_t *data,
                   int len) {
+    // Whole function: teardown races both the descriptor append
+    // below and the mask reset, so cover both with one guard.
+    std::lock_guard<SMutex> lock(pmts_mutex);
     if (pmt_caid_exist(pmt, caid, capid)) {
         LOGM("%s: CAID %04X CAPID %d already exists in PMT %d", __FUNCTION__,
              caid, capid, pmt->id);
@@ -1952,7 +1957,6 @@ void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid, uint8_t *data,
            pmt->ca[pmt->caids]->private_data_len);
     pmt->caids++;
     // force sending the PMT to all CAs
-    std::lock_guard<SMutex> lock(pmts_mutex);
     pmt->ca_mask = 0;
     pmt->disabled_ca_mask = 0;
 }

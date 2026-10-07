@@ -182,6 +182,8 @@ struct cc_ctrl_data {
 };
 
 struct ca_device {
+    // enabled/fd/sock/state are plain cross-thread ints: writers
+    // take the per-device lock, readers tolerate one stale pass.
     int enabled;
     SCAPMT capmt[MAX_CA_PMT];
     int max_ca_pmt, multiple_pmt;
