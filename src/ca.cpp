@@ -353,6 +353,7 @@ const char en300468_pol_map[] = {'H', 'V', 'L', 'R'};
 const char en300468_mod_map[4][8] = {"auto", "QPSK", "8PSK", "16QAM"};
 
 static int ca_send_datetime(ca_device_t *d);
+void disable_cws_for_all_pmts(ca_device_t *d);
 int populate_resources(ca_device_t *d, int *resource_ids);
 int ca_write_apdu(ca_session_t *s, int resource, const void *data, int len);
 ca_session_t *find_session_for_resource(ca_device_t *d, int resource);
@@ -712,13 +713,56 @@ void cert_strings(char *certfile) {
 /// END MISC
 
 void ca_request_close(ca_device_t *d) {
+    if (!d)
+        return;
     LOG("Requesting CA %d close", d->id);
     sockets_force_close(d->sock);
 }
 
+// Eligible for a reconnect attempt: enabled, down,
+// and the fixed retry interval has elapsed.
+int ca_reconnect_due(ca_device_t *d, int64_t now) {
+    return d && d->enabled && d->fd == -1 && now >= d->reconnect_next_try;
+}
+
+// Forget every PMT held on a dead CAM, clearing its tables masks
+// so the retry loop resends them once the CAM is initialized again.
+void ca_release_pmts(ca_device_t *d) {
+    uint64_t mask = 1ULL << dvbca_id;
+    for (int i = 0; i < MAX_CA_PMT; i++) {
+        int ids[2] = {d->capmt[i].pmt_id, d->capmt[i].other_id};
+        for (int k = 0; k < 2; k++) {
+            SPMT *pmt = get_pmt(ids[k]);
+            if (!pmt)
+                continue;
+            pmt->ca_mask &= ~mask;
+            pmt->ca_registered_mask &= ~mask;
+            pmt->disabled_ca_mask &= ~mask;
+        }
+    }
+    disable_cws_for_all_pmts(d);
+    memset(d->capmt, -1, sizeof(d->capmt));
+}
+
+// Drop volatile CAM state after a disconnect: sessions, keys,
+// PMT mappings and the dead handle. Keeps enabled sticky.
+void ca_teardown(ca_device_t *d) {
+    if (!d)
+        return;
+    ca_release_pmts(d);
+    memset(d->sessions, 0, sizeof(d->sessions));
+    memset(d->key, 0, sizeof(d->key));
+    memset(d->iv, 0, sizeof(d->iv));
+    d->caids = 0;
+    d->poll_fails = 0;
+    d->datetime_next_send = 0;
+    d->fd = -1;
+    d->sock = -1;
+    d->state = CA_STATE_INACTIVE;
+}
+
 int is_ca_initializing(int i) {
     if (i >= 0 && i < MAX_ADAPTERS && ca_devices[i] && ca_devices[i]->enabled &&
-        ca_devices[i]->state != CA_STATE_INACTIVE &&
         ca_devices[i]->state != CA_STATE_INITIALIZED)
         return 1;
     return 0;
@@ -3050,13 +3094,23 @@ int ca_write_apdu(ca_session_t *s, int tag, const void *data, int len) {
 
 // reads a TPDU from the CAM. This is called only on DVBCA path
 int ca_read_tpdu(int socket, void *buf, int buf_len, sockets *ss, int *rb) {
-    ca_device_t *c = ca_devices[ss->sid];
     *rb = 0;
+    if (!ss || ss->sid < 0 || ss->sid >= MAX_ADAPTERS || !ca_devices[ss->sid] ||
+        ca_devices[ss->sid]->fd < 0)
+        return 0;
+    ca_device_t *c = ca_devices[ss->sid];
     uint8_t data[4096];
     int len;
     unsigned char *d;
     len = read(c->fd, data, sizeof(data));
-    if (len > 0 && !((len == 6) && data[5] == 0)) {
+    if (len <= 0) {
+        // Spurious wakeup on a live link, otherwise the CAM is gone.
+        if (len < 0 &&
+            (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR))
+            return 1;
+        return 0;
+    }
+    if (!((len == 6) && data[5] == 0)) {
         hexdump("READ TPDU: ", data, len);
     }
     d = data;
@@ -3189,6 +3243,7 @@ int ca_read(sockets *s) {
     // prevent device close
     if (d->state == CA_STATE_INACTIVE)
         d->state = CA_STATE_ACTIVE;
+    d->poll_fails = 0;
 
     if (llen < 0) {
         s->rlen = 0;
@@ -3250,10 +3305,13 @@ int ca_read(sockets *s) {
 }
 
 int ca_close(sockets *s) {
-    ca_device_t *c = ca_devices[s->sid];
+    ca_device_t *c = NULL;
+    if (s && s->sid >= 0 && s->sid < MAX_ADAPTERS)
+        c = ca_devices[s->sid];
+    if (!c)
+        return 0;
     LOG("closing CA device %d, fd %d", c->id, c->fd);
-    c->fd = -1;
-    c->state = CA_STATE_INACTIVE;
+    ca_teardown(c);
     // cleanup
     EVP_cleanup();
     ERR_free_strings();
@@ -3262,12 +3320,25 @@ int ca_close(sockets *s) {
 
 int ca_timeout(sockets *s) {
     s->rtime = getTick();
-    if (!opts.enigma) {
+    if (!opts.enigma && s->sid >= 0 && s->sid < MAX_ADAPTERS) {
         ca_device_t *d = ca_devices[s->sid];
+        if (!d)
+            return 0;
+        int rc;
         if (d->state == CA_STATE_INACTIVE) {
-            ca_write_tpdu(d, T_CREATE_TC, NULL, 0);
+            rc = ca_write_tpdu(d, T_CREATE_TC, NULL, 0);
         } else {
-            ca_write_tpdu(d, T_DATA_LAST, NULL, 0);
+            rc = ca_write_tpdu(d, T_DATA_LAST, NULL, 0);
+        }
+        // Consecutive keepalive failures mean a dead link
+        // even when the driver reports no explicit error.
+        if (rc) {
+            if (++d->poll_fails >= CA_MAX_POLL_FAILS) {
+                d->poll_fails = 0;
+                ca_request_close(d);
+            }
+        } else {
+            d->poll_fails = 0;
         }
     }
     return 0;
@@ -3285,10 +3356,13 @@ int ca_read_enigma(int socket, void *buf, int len, sockets *ss, int *rb) {
         }
         return 1;
     }
-    if (ss->revents == POLLPRI) {
-        ca_device_t *d = ca_devices[ss->sid];
-        if (d->state != CA_STATE_INACTIVE) {
-            d->state = CA_STATE_INACTIVE;
+    if (ss->revents & POLLPRI) {
+        if (ss->sid >= 0 && ss->sid < MAX_ADAPTERS) {
+            ca_device_t *d = ca_devices[ss->sid];
+            // Module removal: tear everything down and let
+            // the reconnect poller reopen the device.
+            if (d && d->state != CA_STATE_INACTIVE)
+                ca_request_close(d);
         }
         ss->events = POLLIN;
     }
@@ -3420,13 +3494,29 @@ void flush_handle(int fd) {
     if (!(flags & O_NONBLOCK) && (fcntl(fd, F_SETFL, flags) == -1))
         LOG("Failed to set the handle %d as blocking", fd);
 }
+
+// Cheap presence probe: a single slot query, no reset.
+// Unknown errors proceed to the full init so it can decide.
+static int ca_slot_present(int fd) {
+    ca_slot_info_t info;
+    memset(&info, 0, sizeof(info));
+    if (ioctl(fd, CA_GET_SLOT_INFO, &info))
+        return 1;
+    return (info.flags & (CA_CI_MODULE_PRESENT | CA_CI_MODULE_READY)) != 0;
+}
+
 int dvbca_init_dev(adapter *ad) {
-    ca_device_t *c = ca_devices[ad->id];
+    ca_device_t *c;
     int fd, result = 0;
     char ca_dev_path[100];
 
-    if (c && c->state == CA_STATE_INITIALIZED)
+    if (!ad || ad->id < 0 || ad->id >= MAX_ADAPTERS)
+        return TABLES_RESULT_ERROR_NORETRY;
+    c = ca_devices[ad->id];
+    if (c && c->state == CA_STATE_INITIALIZED) {
+        ad->ca_mask |= (1ULL << dvbca_id);
         return TABLES_RESULT_OK;
+    }
 
     if (ad->type != ADAPTER_DVB && ad->type != ADAPTER_CI)
         return TABLES_RESULT_ERROR_NORETRY;
@@ -3472,27 +3562,43 @@ int dvbca_init_dev(adapter *ad) {
         }
     }
 
+    // Empty slot: skip the reset storm, the poller retries later.
+    if (!opts.enigma && !ca_slot_present(fd)) {
+        LOG("CA %d: no module in slot, deferring init", c->id);
+        close(fd);
+        c->fd = -1;
+        c->enabled = 1;
+        return TABLES_RESULT_ERROR_RETRY;
+    }
+
     if (opts.enigma)
         result = ca_init_enigma(c);
     else
         result = ca_init_en50221(c);
     if (result) {
-        ca_request_close(c);
+        // Keep enabled sticky so the reconnect poller retries.
         close(c->fd);
         c->fd = -1;
-        c->enabled = 0;
-        return TABLES_RESULT_ERROR_NORETRY;
+        c->sock = -1;
+        c->state = CA_STATE_INACTIVE;
+        c->enabled = 1;
+        return TABLES_RESULT_ERROR_RETRY;
     }
 
     has_ci = 1;
     c->enabled = 1;
+    c->reconnect_next_try = 0;
+    ad->ca_mask |= (1ULL << dvbca_id);
 
     set_socket_thread(c->sock, ad->thread);
     return TABLES_RESULT_OK;
 }
 
 int dvbca_close_dev(adapter *ad) {
-    ca_device_t *c = ca_devices[ad->id];
+    ca_device_t *c;
+    if (!ad || ad->id < 0 || ad->id >= MAX_ADAPTERS)
+        return 1;
+    c = ca_devices[ad->id];
     if (c && c->enabled &&
         c->state ==
             CA_STATE_INACTIVE) // do not close the CA unless in a bad state
@@ -3529,23 +3635,35 @@ SCA_op dvbca = {
 
 int ca_reconnect(void *arg) {
     int i;
+    int64_t now = getTick();
     extern adapter *a[];
-    for (i = 0; i < MAX_ADAPTERS; i++)
-        if (ca_devices[i] && ca_devices[i]->enabled &&
-            ca_devices[i]->fd == -1) {
-            LOG("Trying to reconnect to CA %d", i);
-            dvbca_init_dev(a[i]);
+    for (i = 0; i < MAX_ADAPTERS; i++) {
+        ca_device_t *c = ca_devices[i];
+        adapter *ad;
+        if (!ca_reconnect_due(c, now))
+            continue;
+        ad = a[i];
+        if (!ad || !ad->enabled)
+            continue;
+        LOG("Trying to reconnect to CA %d", i);
+        if (dvbca_init_dev(ad) == TABLES_RESULT_OK) {
+            c = ca_devices[i];
+            if (c)
+                c->reconnect_next_try = 0;
+        } else {
+            c = ca_devices[i];
+            if (c)
+                c->reconnect_next_try = now + CA_RECONNECT_INTERVAL_MS;
         }
+    }
 
     for (i = 0; i < MAX_ADAPTERS; i++)
         if (ca_devices[i] && ca_devices[i]->enabled &&
             ca_devices[i]->state == CA_STATE_INITIALIZED) {
-            {
-                // Send regular date/time updates to the CAM
-                if (ca_devices[i]->datetime_response_interval &&
-                    (getTick() > ca_devices[i]->datetime_next_send)) {
-                    ca_send_datetime(ca_devices[i]);
-                }
+            // Send regular date/time updates to the CAM
+            if (ca_devices[i]->datetime_response_interval &&
+                (getTick() > ca_devices[i]->datetime_next_send)) {
+                ca_send_datetime(ca_devices[i]);
             }
         }
     return 0;

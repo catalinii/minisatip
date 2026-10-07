@@ -56,6 +56,7 @@ void remove_pmt_from_device(ca_device_t *d, SPMT *pmt);
 SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple);
 int dvbca_del_pmt(adapter *ad, SPMT *spmt);
 extern ca_device_t *ca_devices[MAX_ADAPTERS];
+extern int dvbca_id;
 int get_active_capmts(ca_device_t *d);
 int get_enabled_pmts_for_ca(ca_device_t *d);
 
@@ -819,6 +820,117 @@ int test_ca_reset_io_error() {
     return 0;
 }
 
+// A reconnect is due only for an enabled, down device
+// whose fixed retry interval has elapsed.
+int test_ca_reconnect_due() {
+    ca_device_t dev;
+    memset(&dev, 0, sizeof(dev));
+    ASSERT(!ca_reconnect_due(NULL, 1000), "null device not due");
+    ASSERT(!ca_reconnect_due(&dev, 1000), "disabled device not due");
+    dev.enabled = 1;
+    dev.fd = 5;
+    ASSERT(!ca_reconnect_due(&dev, 1000), "live device not due");
+    dev.fd = -1;
+    dev.reconnect_next_try = 2000;
+    ASSERT(!ca_reconnect_due(&dev, 1000), "interval not elapsed");
+    ASSERT(ca_reconnect_due(&dev, 2000), "due at the deadline");
+    ASSERT(ca_reconnect_due(&dev, 9000), "due after the deadline");
+    return 0;
+}
+
+// Teardown drops volatile CAM state but keeps the device enabled
+// so the reconnect poller picks it up again.
+int test_ca_teardown_releases_pmts() {
+    ca_device_t dev;
+    memset(&dev, 0, sizeof(dev));
+    memset(dev.capmt, -1, sizeof(dev.capmt));
+    dev.enabled = 1;
+    dev.max_ca_pmt = MAX_CA_PMT;
+    dev.state = CA_STATE_INITIALIZED;
+    dev.fd = 42;
+    dev.sock = 43;
+    dev.id = 2;
+    dev.caids = 3;
+    dev.poll_fails = 2;
+    dev.datetime_next_send = 1234;
+    dev.sessions[0].handler.resource = 0x1234;
+    dev.sessions[0].session_number = 7;
+    memset(dev.key, 0xAB, sizeof(dev.key));
+    memset(dev.iv, 0xCD, sizeof(dev.iv));
+
+    int first = pmt_add(0, 0x500, 0x501);
+    int second = pmt_add(0, 0x600, 0x601);
+    dev.capmt[0].pmt_id = first;
+    dev.capmt[0].other_id = second;
+    uint64_t mask = 1ULL << dvbca_id;
+    for (int id : {first, second}) {
+        SPMT *pmt = get_pmt(id);
+        pmt->ca_mask = mask | 0x40;
+        pmt->ca_registered_mask = mask | 0x40;
+        pmt->disabled_ca_mask = mask | 0x40;
+    }
+
+    ca_teardown(&dev);
+
+    ASSERT_EQUAL(dev.enabled, 1, "enabled stays sticky");
+    ASSERT_EQUAL(dev.state, CA_STATE_INACTIVE, "state reset");
+    ASSERT_EQUAL(dev.fd, -1, "fd reset");
+    ASSERT_EQUAL(dev.sock, -1, "sock reset");
+    ASSERT_EQUAL(dev.caids, 0u, "caids cleared");
+    ASSERT_EQUAL(dev.poll_fails, 0, "poll fails cleared");
+    ASSERT_EQUAL(dev.datetime_next_send, 0, "datetime resend due");
+    ASSERT_EQUAL(dev.sessions[0].handler.resource, 0, "sessions cleared");
+    ASSERT(dev.key[0][0] == 0 && dev.iv[1][0] == 0, "keys cleared");
+    for (int i = 0; i < MAX_CA_PMT; i++)
+        ASSERT(!PMT_ID_IS_VALID(dev.capmt[i].pmt_id) &&
+                   !PMT_ID_IS_VALID(dev.capmt[i].other_id),
+               "capmt table wiped");
+    for (int id : {first, second}) {
+        SPMT *pmt = get_pmt(id);
+        ASSERT_EQUAL(pmt->ca_mask, 0x40, "pmt released for resend");
+        ASSERT_EQUAL(pmt->ca_registered_mask, 0x40, "registration cleared");
+        ASSERT_EQUAL(pmt->disabled_ca_mask, 0x40, "disabled bit cleared");
+        ASSERT_EQUAL(pmt->update_cw, 1, "stale cw disabled");
+    }
+    return 0;
+}
+
+int test_ca_close_null_safe() {
+    ASSERT_EQUAL(ca_close(NULL), 0, "null socket");
+    sockets s{};
+    s.sid = -1;
+    ASSERT_EQUAL(ca_close(&s), 0, "negative sid");
+    s.sid = MAX_ADAPTERS;
+    ASSERT_EQUAL(ca_close(&s), 0, "sid out of range");
+    s.sid = 9;
+    ca_devices[9] = NULL;
+    ASSERT_EQUAL(ca_close(&s), 0, "no device");
+    return 0;
+}
+
+// A disconnected but enabled CA counts as initializing so PMTs
+// keep retrying instead of being disabled while it reconnects.
+int test_is_ca_initializing_reconnect_pending() {
+    ca_device_t dev;
+    memset(&dev, 0, sizeof(dev));
+    ca_devices[7] = &dev;
+    dev.enabled = 1;
+    dev.state = CA_STATE_INACTIVE;
+    dev.fd = -1;
+    ASSERT_EQUAL(is_ca_initializing(7), 1, "reconnect pending retries");
+    dev.fd = 5;
+    dev.state = CA_STATE_ACTIVE;
+    ASSERT_EQUAL(is_ca_initializing(7), 1, "activating retries");
+    dev.state = CA_STATE_INITIALIZED;
+    ASSERT_EQUAL(is_ca_initializing(7), 0, "initialized runs");
+    dev.enabled = 0;
+    dev.state = CA_STATE_INACTIVE;
+    ASSERT_EQUAL(is_ca_initializing(7), 0, "disabled skips");
+    ca_devices[7] = NULL;
+    ASSERT_EQUAL(is_ca_initializing(7), 0, "missing device skips");
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -870,8 +982,13 @@ int main() {
               "testing no CAM reset retry without a module");
     TEST_FUNC(test_ca_reset_gives_up_after_attempts(),
               "testing CAM reset gives up after all attempts");
-    TEST_FUNC(test_ca_reset_io_error(),
-              "testing CAM reset io errors");
+    TEST_FUNC(test_ca_reset_io_error(), "testing CAM reset io errors");
+    TEST_FUNC(test_ca_reconnect_due(), "testing reconnect due gating");
+    TEST_FUNC(test_ca_teardown_releases_pmts(),
+              "testing teardown releases PMTs for resend");
+    TEST_FUNC(test_ca_close_null_safe(), "testing ca_close guards");
+    TEST_FUNC(test_is_ca_initializing_reconnect_pending(),
+              "testing reconnect pending counts as initializing");
     free_all_pmts();
     fflush(stdout);
     return 0;
