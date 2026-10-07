@@ -1094,6 +1094,104 @@ static int same_stream_pids(SPMT *a, SPMT *b) {
 }
 
 typedef struct {
+    int id, pid;
+    std::vector<uint8_t> data;
+} SCaEntry;
+
+// Snapshot of a PMT's parsed content to tell cosmetic version bumps
+// from real changes; cosmetic updates keep the PMT running as-is.
+typedef struct {
+    std::vector<SStreamPid> streams;
+    std::vector<descriptor_t> descriptors;
+    std::vector<SCaEntry> ca;
+    int sid, pcr_pid;
+    int ca_mask, disabled_ca_mask, ca_registered_mask;
+} SPmtContent;
+
+// Drop the CA list so the update parse rebuilds it; entries are kept
+// for reuse and never freed here (cross-thread readers hold them).
+static void reset_pmt_ca(SPMT *pmt) { pmt->caids = 0; }
+
+static void snapshot_pmt_content(SPMT *pmt, SPmtContent &prev) {
+    prev.streams = pmt->stream_pids;
+    prev.descriptors = pmt->descriptors;
+    prev.ca.clear();
+    for (int i = 0; i < pmt->caids; i++) {
+        SCaEntry e;
+        e.id = pmt->ca[i]->id;
+        e.pid = pmt->ca[i]->pid;
+        e.data.assign(pmt->ca[i]->private_data,
+                      pmt->ca[i]->private_data + pmt->ca[i]->private_data_len);
+        prev.ca.push_back(e);
+    }
+    prev.sid = pmt->sid;
+    prev.pcr_pid = pmt->pcr_pid;
+    prev.ca_mask = pmt->ca_mask;
+    prev.disabled_ca_mask = pmt->disabled_ca_mask;
+    prev.ca_registered_mask = pmt->ca_registered_mask;
+}
+
+static int same_ca_entries(SPMT *pmt, const std::vector<SCaEntry> &old) {
+    if ((int)old.size() != pmt->caids)
+        return 0;
+    std::vector<char> used(pmt->caids, 0);
+    for (int i = 0; i < pmt->caids; i++) {
+        int j;
+        for (j = 0; j < pmt->caids; j++) {
+            if (used[j] || old[j].id != pmt->ca[i]->id ||
+                old[j].pid != pmt->ca[i]->pid ||
+                (int)old[j].data.size() != pmt->ca[i]->private_data_len ||
+                memcmp(old[j].data.data(), pmt->ca[i]->private_data,
+                       pmt->ca[i]->private_data_len))
+                continue;
+            used[j] = 1;
+            break;
+        }
+        if (j == pmt->caids)
+            return 0;
+    }
+    return 1;
+}
+
+static int same_pmt_content(SPMT *pmt, const SPmtContent &prev) {
+    SPMT old{};
+    if (pmt->sid != prev.sid || pmt->pcr_pid != prev.pcr_pid)
+        return 0;
+    old.stream_pids = prev.streams;
+    old.descriptors = prev.descriptors;
+    return same_stream_pids(&old, pmt) && same_ca_entries(pmt, prev.ca);
+}
+
+// Unclaim pids the new PMT dropped and tell the CAs, so DDCI unmaps
+// and hw unbinds them without stopping the PMT.
+static void drop_removed_pids(adapter *ad, SPMT *pmt, const SPmtContent &prev) {
+    auto still_present = [pmt](int pid) {
+        for (const auto &sp : pmt->stream_pids)
+            if (sp.pid == pid)
+                return true;
+        for (int i = 0; i < pmt->caids; i++)
+            if (pmt->ca[i]->pid == pid)
+                return true;
+        return false;
+    };
+    std::unordered_set<int> gone;
+    for (const auto &sp : prev.streams)
+        if (!still_present(sp.pid))
+            gone.insert(sp.pid);
+    for (const auto &e : prev.ca)
+        if (!still_present(e.pid))
+            gone.insert(e.pid);
+    for (int pid : gone) {
+        SPid *s = find_pid(ad->id, pid);
+        if (s && s->pmt == pmt->id)
+            s->pmt = -1;
+#ifndef DISABLE_TABLES
+        tables_del_pid(ad, pmt, pid);
+#endif
+    }
+}
+
+typedef struct {
     SPMT *pmt;
     char candidate;
     uint32_t order;
@@ -1558,7 +1656,8 @@ int pmt_del(int id) {
         del_filter(pmt->filter);
     pmt->filter = -1;
 
-    for (i = 0; i < pmt->caids; i++)
+    // Updates shrink caids while keeping entries for reuse: free all slots.
+    for (i = 0; i < MAX_CAID; i++)
         if (pmt->ca[i]) {
             free(pmt->ca[i]);
             pmt->ca[i] = NULL;
@@ -1945,8 +2044,15 @@ void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid, uint8_t *data,
     LOG("PMT %d PI pos %d caid %04X => pid %04X (%d), index %d", pmt->id,
         pmt->caids + 1, caid, capid, capid, pmt->caids);
 
+    // Fixed-size entries: updates reuse them without freeing, so other
+    // threads never dereference a freed entry.
+    if (len < 0 || len > MAX_CA_PRIVATE) {
+        LOG("PMT %d CAID %04X private data length %d out of range, clamping",
+            pmt->id, caid, len);
+        len = len < 0 ? 0 : MAX_CA_PRIVATE;
+    }
     if (!pmt->ca[pmt->caids])
-        pmt->ca[pmt->caids] = (SPMTCA *)malloc(sizeof(SPMTCA) + len);
+        pmt->ca[pmt->caids] = (SPMTCA *)malloc(sizeof(SPMTCA) + MAX_CA_PRIVATE);
     if (!pmt->ca[pmt->caids]) {
         LOG("Failed to allocate memory for CAID %04X", caid);
         return;
@@ -2078,15 +2184,20 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     if (pmt->version == ver) {
         // Already processed
         return 0;
-    } else {
-        // In case of PMT update, stop and release before processing it, so
-        // the restarted PMT or a waiter claims the pids free on next pass.
-        stop_pmt(pmt, ad);
-        release_pmt_claims(ad, pmt);
     }
 
     if (!(p = find_pid(ad->id, pid)))
         return -1;
+
+    // A running PMT keeps its state and claims across the update; the
+    // diff after the parse decides between silent keep and delta send.
+    SPmtContent prev;
+    int was_running = pmt->state == PMT_RUNNING || pmt->state == PMT_STARTING;
+    if (was_running)
+        snapshot_pmt_content(pmt, prev);
+    else
+        release_pmt_claims(ad, pmt);
+    reset_pmt_ca(pmt);
 
     pmt_len = ((b[1] & 0xF) << 8) + b[2];
     pi_len = ((b[10] & 0xF) << 8) + b[11];
@@ -2158,6 +2269,29 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     // Add the PCR pid if it's independent
     if (pcr_pid > 0 && pcr_pid < 8191)
         pmt_add_stream_pid(pmt, pcr_pid, 0, false, false);
+
+    if (was_running) {
+        // The parse cleared the CA masks; restore them first so a
+        // cosmetic update is silent and removals still notify.
+        pmt->ca_mask = prev.ca_mask;
+        pmt->disabled_ca_mask = prev.disabled_ca_mask;
+        pmt->ca_registered_mask = prev.ca_registered_mask;
+        if (!same_pmt_content(pmt, prev)) {
+            // Content changed: drop removed pids, then force the
+            // CAs to re-send on the next pass.
+            drop_removed_pids(ad, pmt, prev);
+            if (pmt->caids == 0) {
+                // Newly FTA: nothing to re-send, so release the
+                // stale CA registrations instead of leaking them.
+#ifndef DISABLE_TABLES
+                close_pmt_for_cas(ad, pmt);
+#endif
+            } else {
+                pmt->ca_mask = 0;
+                pmt->disabled_ca_mask = 0;
+            }
+        }
+    }
 
     // Late parse handover: a pid below may be owned by a running PMT
     // subscribed after this one. Stop it; this PMT starts next pass.
@@ -2404,7 +2538,8 @@ void free_all_pmts() {
     std::lock_guard<SMutex> lock(pmts_mutex);
     for (i = 0; i < MAX_PMT; i++) {
         if (pmts[i]) {
-            for (j = 0; j < pmts[i]->caids; j++) {
+            // Updates shrink caids while keeping entries: free all slots.
+            for (j = 0; j < MAX_CAID; j++) {
                 if (pmts[i]->ca[j]) {
                     free(pmts[i]->ca[j]);
                     pmts[i]->ca[j] = NULL;

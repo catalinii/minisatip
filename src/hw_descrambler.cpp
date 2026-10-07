@@ -367,6 +367,36 @@ int hw_ca_del_pmt(adapter *ad, SPMT *pmt) {
     return 0;
 }
 
+// Unbind one pid dropped by a PMT update; the slot stays allocated.
+int hw_ca_del_pid(adapter *ad, SPMT *pmt, int pid) {
+    if (!opts.hw_descrambler || !ad || !pmt)
+        return 0;
+    // The unbind is device-wide: keep the pid while another PMT on
+    // the same hardware still lists it.
+    for (int i = 0; i < MAX_PMT; i++) {
+        SPMT *o = get_pmt(i);
+        adapter *oa;
+        if (!o || o == pmt || o->adapter < 0)
+            continue;
+        oa = get_adapter_nw(o->adapter);
+        if (!oa || oa->pa != ad->pa)
+            continue;
+        for (const auto &sp : o->stream_pids)
+            if (sp.pid == pid)
+                return 0;
+    }
+    const std::string device_path = get_ca_device_path(ad);
+    int ca_fd = HwSlotManager::instance().get_or_open_ca_fd(
+        ad->pa, device_path.c_str());
+    if (ca_fd < 0)
+        return 0;
+    struct ca_pid pid_cmd{};
+    pid_cmd.pid = pid;
+    pid_cmd.index = -1; // -1 unbinds PID
+    ioctl(ca_fd, CA_SET_PID, &pid_cmd);
+    return 0;
+}
+
 int hw_ca_close_dev(adapter *ad) {
     if (ad) {
         HwSlotManager::instance().close_adapter_ca(ad->pa);
@@ -426,6 +456,7 @@ void init_hw_descrambler() {
         hw_ca_op.ca_init_dev =
             reinterpret_cast<ca_device_action>(hw_ca_init_dev);
         hw_ca_op.ca_del_pmt = reinterpret_cast<ca_pmt_action>(hw_ca_del_pmt);
+        hw_ca_op.ca_del_pid = reinterpret_cast<ca_pid_action>(hw_ca_del_pid);
         hw_ca_op.ca_close_dev =
             reinterpret_cast<ca_device_action>(hw_ca_close_dev);
         add_ca(&hw_ca_op);

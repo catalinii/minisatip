@@ -58,6 +58,7 @@ void hw_decrypt_stream(SCW *cw, SPMT_batch *batch, int batch_len);
 int hw_ca_add_pmt(adapter *ad, SPMT *pmt);
 int hw_ca_init_dev(adapter *ad);
 int hw_ca_del_pmt(adapter *ad, SPMT *pmt);
+int hw_ca_del_pid(adapter *ad, SPMT *pmt, int pid);
 int hw_ca_close_dev(adapter *ad);
 
 #endif // HW_DESCRAMBLER_H

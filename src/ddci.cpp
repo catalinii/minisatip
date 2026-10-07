@@ -117,10 +117,13 @@ int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
             -1, "could not add pid %d and ad %d to the mapping table", pid, ad);
 
     int add_pid = 1;
-    if (m->pmt.count(pmt) > 0)
-        LOG_AND_RETURN(
-            0, "Adapter %d pid %d already mapped to pmt %d, already added %d",
-            ad, pid, pmt, m->pid_added);
+    if (m->pmt.count(pmt) > 0) {
+        // Already mapped: hand back the mapping, so re-sends keep the
+        // stored PCR pid instead of zeroing it.
+        LOGM("Adapter %d pid %d already mapped to pmt %d, already added %d", ad,
+             pid, pmt, m->pid_added);
+        return m->ddci_pid;
+    }
 
     add_pid = m->pmt.size() == 0;
     m->pmt.insert(pmt);
@@ -181,9 +184,54 @@ int set_pid_rewrite(ddci_device_t *d, int ad, int pid, int rewrite) {
     return 0;
 }
 
+// Find the device holding this PMT id, locking one device at a time.
+static int find_registered_ddci(int pmt_id) {
+    for (int i = 0; i < MAX_ADAPTERS; i++) {
+        ddci_device_t *rd = get_ddci(i);
+        if (!rd)
+            continue;
+        std::lock_guard<SMutex> lock(rd->mutex);
+        for (int j = 0; j < rd->max_channels; j++)
+            if (rd->pmt[j].id == pmt_id)
+                return i;
+    }
+    return -1;
+}
+
+// Find the device mapping this pid for this PMT, locking one at a time.
+static int find_mapping_ddci(int ad, int pid, int pmt_id) {
+    for (int i = 0; i < MAX_ADAPTERS; i++) {
+        ddci_device_t *d = get_ddci(i);
+        if (!d)
+            continue;
+        std::lock_guard<SMutex> lock(d->mutex);
+        auto it = get_pid_mapping(d, ad, pid);
+        if (it != d->mapping.end() && it->second.pmt.count(pmt_id) > 0)
+            return i;
+    }
+    return -1;
+}
+
+// Drop one last-user mapping entry: the DDCI-side pid, its filter,
+// and the source-side pid when DDCI added it.
+static void release_mapping_entry(ddci_device_t *d, int ad, int pmt,
+                                  ddci_mapping_table_t *m) {
+    int pid = m->pid, ddci_pid = m->ddci_pid;
+    SPid *p = find_pid(d->id, ddci_pid);
+    LOG("Deleting ad %d pmt %d pid %d ddci_pid %d", ad, pmt, pid, ddci_pid);
+    if (p)
+        mark_pid_deleted(d->id, DDCI_SID, ddci_pid, NULL);
+    if (m->filter_id >= 0)
+        del_filter(m->filter_id);
+    if (m->pid_added >= 0) {
+        LOGM("Marking pid %d deleted on adapter %d (initial ad %d pid %d)",
+             ddci_pid, d->id, ad, pid);
+        mark_pid_deleted(ad, DDCI_SID, pid, NULL);
+    }
+}
+
 int del_pmt_mapping_table(ddci_device_t *d, int ad, int pmt) {
-    int ddci_pid = -1, i;
-    int filter_id, pid_added;
+    int i;
     int to_del[MAX_PIDS], n = 0;
     for (const auto &u : d->mapping) {
         ddci_mapping_table_t *m = (ddci_mapping_table_t *)&u.second;
@@ -193,31 +241,41 @@ int del_pmt_mapping_table(ddci_device_t *d, int ad, int pmt) {
             if (m->pmt.size() > 0)
                 continue;
 
-            ddci_pid = m->ddci_pid;
-            filter_id = m->filter_id;
-            pid_added = m->pid_added;
-            int pid = m->pid;
-            to_del[n++] = pid;
-
-            SPid *p = find_pid(d->id, ddci_pid);
-            LOG("Deleting ad %d pmt %d pid %d ddci_pid %d", ad, pmt, pid,
-                ddci_pid);
-            if (p)
-                mark_pid_deleted(d->id, DDCI_SID, ddci_pid, NULL);
-            if (filter_id >= 0)
-                del_filter(filter_id);
-            if (pid_added >= 0) {
-                LOGM("Marking pid %d deleted on adapter %d (initial ad %d pid "
-                     "%d)",
-                     ddci_pid, d->id, ad, pid);
-                mark_pid_deleted(ad, DDCI_SID, pid, NULL);
-            }
+            to_del[n++] = m->pid;
+            release_mapping_entry(d, ad, pmt, m);
         }
     }
 
     for (i = 0; i < n; i++)
         d->mapping.erase(MAKE_KEY(ad, to_del[i]));
 
+    return 0;
+}
+
+// Unmap a single pid of a PMT update; shared entries stay until
+// their last user is gone. Teardown runs unlocked: the entry is
+// already erased, so no lock inversion with filters can occur.
+int ddci_del_pid(adapter *ad, SPMT *pmt, int pid) {
+    int ddci = find_mapping_ddci(ad->id, pid, pmt->id);
+    if (ddci < 0)
+        return 0;
+    ddci_device_t *d = get_ddci(ddci);
+    if (!d)
+        return 0;
+    ddci_mapping_table_t gone;
+    {
+        std::lock_guard<SMutex> lock(d->mutex);
+        auto it = get_pid_mapping(d, ad->id, pid);
+        if (it == d->mapping.end() || it->second.pmt.count(pmt->id) == 0)
+            return 0;
+        it->second.pmt.erase(pmt->id);
+        if (!it->second.pmt.empty())
+            return 0;
+        gone = it->second;
+        d->mapping.erase(it);
+    }
+    release_mapping_entry(d, ad->id, pmt->id, &gone);
+    update_pids(d->id);
     return 0;
 }
 
@@ -333,6 +391,8 @@ int find_ddci_for_pmt(Sddci_channel *c, SPMT *pmt) {
 }
 
 int is_pmt_running(SPMT *pmt) {
+    if (pmt->stream_pids.empty())
+        return -1;
     ddci_mapping_table_t *m =
         get_pid_mapping_allddci(pmt->adapter, pmt->stream_pids[0].pid);
     if (!m)
@@ -354,42 +414,54 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt) {
         return TABLES_RESULT_OK;
     }
 
-    ddid = is_pmt_running(pmt);
+    // A PMT update re-sends while registered: reuse its slot even if
+    // the first stream pid changed, instead of failing on a full device.
+    int registered = find_registered_ddci(pmt->id);
+    ddid = registered;
+    if (ddid == -1)
+        ddid = is_pmt_running(pmt);
 
     LOG("%s: adapter %d, pmt %d, pid %d, sid %d, ddid %d, name: %s",
         __FUNCTION__, ad->id, pmt->id, pmt->pid, pmt->sid, ddid, pmt->name);
 
-    auto it = channels.find(pmt->sid);
-    if (it == channels.end()) {
-        Sddci_channel *c = &channels[pmt->sid];
-        int result = create_channel_for_pmt(c, pmt);
-        if (result) {
-            channels.erase(pmt->sid);
-            LOG_AND_RETURN(result, "DDCI not ready or busy at the moment: %s",
-                           result == TABLES_RESULT_ERROR_NORETRY ? "no retry"
-                                                                 : "retry");
+    if (registered == -1) {
+        auto it = channels.find(pmt->sid);
+        if (it == channels.end()) {
+            Sddci_channel *c = &channels[pmt->sid];
+            int result = create_channel_for_pmt(c, pmt);
+            if (result) {
+                channels.erase(pmt->sid);
+                LOG_AND_RETURN(
+                    result, "DDCI not ready or busy at the moment: %s",
+                    result == TABLES_RESULT_ERROR_NORETRY ? "no retry"
+                                                          : "retry");
+            }
+            if (c->ddcis == 0) {
+                channels.erase(pmt->sid);
+                LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
+                               "no suitable DDCI found");
+            }
         }
-        if (c->ddcis == 0) {
-            channels.erase(pmt->sid);
-            LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
-                           "no suitable DDCI found");
-        }
-    }
-    channel = &channels[pmt->sid];
+        channel = &channels[pmt->sid];
 
-    // Determine which DDCI should handle this PMT
-    if (ddid == -1)
-        ddid = find_ddci_for_pmt(channel, pmt);
-    // Negative return values are used to distinguish from valid return values
-    // (>= 0)
-    if (ddid == -TABLES_RESULT_ERROR_RETRY) {
-        // Unlocked candidates may predate a DDCI that became ready since,
-        // so drop them and rebuild on the next attempt.
-        if (!channel->locked)
-            channels.erase(pmt->sid);
+        // Determine which DDCI should handle this PMT
+        if (ddid == -1)
+            ddid = find_ddci_for_pmt(channel, pmt);
+        // Negative return values are used to distinguish from valid return
+        // values (>= 0)
+        if (ddid == -TABLES_RESULT_ERROR_RETRY) {
+            // Unlocked candidates may predate a DDCI that became ready
+            // since, so drop them and rebuild on the next attempt.
+            if (!channel->locked)
+                channels.erase(pmt->sid);
+            return TABLES_RESULT_ERROR_RETRY;
+        } else if (ddid == -TABLES_RESULT_ERROR_NORETRY)
+            return TABLES_RESULT_ERROR_NORETRY;
+    } else if (is_ca_initializing(ddid)) {
+        // Registered re-send during CAM init: retry instead of
+        // marking a stale PMT as sent.
         return TABLES_RESULT_ERROR_RETRY;
-    } else if (ddid == -TABLES_RESULT_ERROR_NORETRY)
-        return TABLES_RESULT_ERROR_NORETRY;
+    }
 
     d = get_ddci(ddid);
     if (!d) {
@@ -1085,6 +1157,7 @@ void ddci_init() // you can search the devices here and fill the ddci_devices,
     ddci.ca_close_dev = ddci_close_dev;
     ddci.ca_add_pmt = ddci_process_pmt;
     ddci.ca_del_pmt = ddci_del_pmt;
+    ddci.ca_del_pid = ddci_del_pid;
     ddci.ca_close_ca = ddci_close;
     ddci.ca_ts = ddci_ts;
 

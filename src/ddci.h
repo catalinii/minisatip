@@ -33,7 +33,7 @@ typedef struct ddci_mapping_table {
     char rewrite;
     std::unordered_set<int> pmt;
     int filter_id = -1;
-    int pid_added;
+    int pid_added = -1;
 } ddci_mapping_table_t;
 
 typedef struct ddci_device {
@@ -83,6 +83,7 @@ void load_channels();
 int ddci_process_pmt(adapter *ad, SPMT *pmt);
 void blacklist_pmt_for_ddci(SPMT *pmt, int ddid);
 int ddci_del_pmt(adapter *ad, SPMT *spmt);
+int ddci_del_pid(adapter *ad, SPMT *pmt, int pid);
 void disable_cat_adapters(char *o);
 void dump_mapping_table();
 #endif

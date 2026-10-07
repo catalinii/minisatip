@@ -193,6 +193,119 @@ int test_ddci_channel_count() {
     return 0;
 }
 
+// PCR pid carried by the regenerated PMT section for a DDCI slot.
+static int section_pcr_pid(ddci_device_t *d, SPMT *pmt) {
+    uint8_t psi[512];
+    ddci_create_pmt(d, pmt, psi, sizeof(psi), &d->pmt[0]);
+    return ((psi[9] & 0x1F) << 8) | psi[10];
+}
+
+// A PMT update re-send keeps its DDCI slot on a full device, and a
+// removed pid is unmapped without touching the kept ones (#1346).
+int test_update_resend_keeps_slot() {
+    ddci_device_t d0 = {};
+    ca_device_t ca0 = {};
+    adapter ad = {0}, a0 = {0};
+    int i;
+
+    for (i = 0; i < MAX_ADAPTERS; i++)
+        a[i] = NULL;
+    create_adapter(&ad, 8);
+    create_adapter(&a0, 0);
+    SPMT *pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
+    pmt0->pcr_pid = 601;
+    memset(&d0.pmt, -1, sizeof(d0.pmt));
+    d0.id = 0;
+    d0.enabled = 1;
+    d0.max_channels = 1;
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[0] = &d0;
+
+    ca0.id = 0;
+    ca0.enabled = 1;
+    ca0.state = CA_STATE_INITIALIZED;
+    memset(ca_devices, 0, sizeof(ca_devices));
+    ca_devices[0] = &ca0;
+    int dvbca_id = add_ca(&dvbca);
+    add_caid_mask(dvbca_id, 0, 0x100, 0xFFFF);
+
+    ASSERT(ddci_process_pmt(&ad, pmt0) == TABLES_RESULT_OK, "slot expected");
+    ASSERT(d0.channels == 1, "expected 1 running channel");
+    ASSERT(get_pid_mapping_allddci(8, 601) != NULL, "601 should be mapped");
+    ASSERT(get_pid_mapping_allddci(8, 602) != NULL, "602 should be mapped");
+    ASSERT(d0.pmt[0].pcr_pid == get_pid_mapping_allddci(8, 601)->ddci_pid,
+           "slot PCR should be the 601 mapping");
+    ASSERT(section_pcr_pid(&d0, pmt0) == d0.pmt[0].pcr_pid,
+           "section PCR should match the slot");
+
+    // the update drops 602: unmap just it, then re-send on the full device
+    for (auto it = pmt0->stream_pids.begin(); it != pmt0->stream_pids.end();
+         ++it)
+        if (it->pid == 602) {
+            pmt0->stream_pids.erase(it);
+            break;
+        }
+    ddci_del_pid(&ad, pmt0, 602);
+    ASSERT(get_pid_mapping_allddci(8, 602) == NULL, "602 should be unmapped");
+    ASSERT(get_pid_mapping_allddci(8, 601) != NULL, "601 should stay mapped");
+    ASSERT(d0.pmt[0].id == pmt0->id, "slot should be kept");
+    ASSERT(d0.channels == 1, "channel count should be kept");
+    ASSERT(ddci_process_pmt(&ad, pmt0) == TABLES_RESULT_OK,
+           "re-send on the full device expected to succeed");
+    ASSERT(d0.channels == 1, "re-send must not count as new channel");
+    ASSERT(d0.pmt[0].pcr_pid == get_pid_mapping_allddci(8, 601)->ddci_pid,
+           "re-send must keep the slot PCR pid");
+    ASSERT(section_pcr_pid(&d0, pmt0) == d0.pmt[0].pcr_pid,
+           "section PCR should match the slot");
+
+    // replace the first stream pid: the stream lookup misses, but the
+    // slot scan must still find the registration
+    for (auto it = pmt0->stream_pids.begin(); it != pmt0->stream_pids.end();
+         ++it)
+        if (it->pid == 601) {
+            pmt0->stream_pids.erase(it);
+            break;
+        }
+    pmt_add_stream_pid(pmt0, 603, 2, false, true);
+    pmt0->pcr_pid = 603;
+    ddci_del_pid(&ad, pmt0, 601);
+    ASSERT(ddci_process_pmt(&ad, pmt0) == TABLES_RESULT_OK,
+           "re-send after replacing the first pid expected to succeed");
+    ASSERT(get_pid_mapping_allddci(8, 603) != NULL, "603 should be mapped");
+    ASSERT(get_pid_mapping_allddci(8, 601) == NULL, "601 should be unmapped");
+    ASSERT(d0.pmt[0].id == pmt0->id, "slot should still be kept");
+    ASSERT(d0.pmt[0].pcr_pid == get_pid_mapping_allddci(8, 603)->ddci_pid,
+           "slot PCR should follow the new PCR pid");
+    ASSERT(section_pcr_pid(&d0, pmt0) == d0.pmt[0].pcr_pid,
+           "section PCR should match the slot");
+
+    // unknown pids are a harmless no-op
+    ASSERT(ddci_del_pid(&ad, pmt0, 604) == 0, "unknown pid should be a no-op");
+    ASSERT(get_pid_mapping_allddci(8, 603) != NULL,
+           "603 should survive the no-op");
+
+    // a pid shared by two PMTs stays mapped until its last user is gone
+    SPMT *pmt1 = create_pmt(8, 700, 701, 702, 0x100, 0x100);
+    add_pid_mapping_table(8, 603, pmt1->id, &d0, 0);
+    ddci_del_pid(&ad, pmt0, 603);
+    ASSERT(get_pid_mapping_allddci(8, 603) != NULL,
+           "shared 603 should stay mapped");
+    ddci_del_pid(&ad, pmt1, 603);
+    ASSERT(get_pid_mapping_allddci(8, 603) == NULL,
+           "603 should be unmapped after its last user");
+
+    ddci_del_pmt(&ad, pmt0);
+    ASSERT(d0.channels == 0, "expected 0 running channels after delete");
+
+    channels.clear();
+    free_filters();
+    del_ca(&dvbca);
+    ddci_devices[0] = NULL;
+    ca_devices[0] = NULL;
+    a[0] = a[8] = NULL;
+    return 0;
+}
+
 int test_add_del_pmt() {
     SPMT *pmt0, *pmt1, *pmt2, *pmt3, *pmt4;
     ddci_device_t d0 = {}, d1 = {};
@@ -1105,6 +1218,8 @@ int main() {
     TEST_FUNC(test_add_del_pmt(), "testing adding and removing pmts");
     TEST_FUNC(test_ddci_channel_count(),
               "testing DDCI channel accounting on re-send and delete");
+    TEST_FUNC(test_update_resend_keeps_slot(),
+              "testing update re-send keeps the slot and drops one pid");
     TEST_FUNC(test_copy_ts_from_ddci(), "testing test_copy_ts_from_ddci");
     TEST_FUNC(test_ddci_process_ts(), "testing ddci_process_ts");
     TEST_FUNC(test_ddci_process_ts_null_tail(),

@@ -833,6 +833,19 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt) {
                        __FUNCTION__, ad->id, pmt->id);
     }
 
+    // A PMT update re-sends on the live key, keeping the demux index
+    // stable instead of leaking a key per version bump.
+    SKey *old = (SKey *)pmt->opaque;
+    if (old && old->id >= 0 && old->id < MAX_KEYS && keys[old->id] == old &&
+        old->enabled && old->pmt_id == pmt->id && old->adapter == ad->id) {
+        old->sid = pmt->sid;
+        old->pmt_pid = pid;
+        old->tsid = ad->transponder_id;
+        old->last_dmx_stop = getTick();
+        dvbapi_send_pmt(old, CMD_ID_OK_DESCRAMBLING);
+        return 0;
+    }
+
     key = keys_add(-1, ad->id, pmt->id);
     k = get_key(key);
     if (!k)
@@ -851,6 +864,7 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt) {
 }
 
 int dvbapi_del_pmt(adapter *ad, SPMT *pmt) {
+    std::lock_guard<SMutex> lock(keys_mutex);
     SKey *k = (SKey *)pmt->opaque;
     if (!k)
         return 0;

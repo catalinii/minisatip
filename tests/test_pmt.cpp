@@ -392,6 +392,44 @@ static int build_pat(uint8_t *b, int tsid, int version, const int *sids,
     return len;
 }
 
+// Builds a minimal PMT section: one program CA descriptor plus
+// audio/video streams without ES descriptors.
+static int build_pmt(uint8_t *b, int sid, int version, int pcr, uint16_t caid,
+                     uint16_t ecm, const int *types, const int *pids, int n) {
+    int pi_len = caid ? 6 : 0;
+    int len = 12 + pi_len + 5 * n + 4;
+    b[0] = 0x02; // table_id
+    b[1] = 0xb0 | (((len - 3) >> 8) & 0x0f);
+    b[2] = (len - 3) & 0xff;
+    b[3] = (sid >> 8) & 0xff;
+    b[4] = sid & 0xff;
+    b[5] = 0xc1 | ((version & 0x1f) << 1);
+    b[6] = 0; // section_number
+    b[7] = 0; // last_section_number
+    b[8] = 0xe0 | ((pcr >> 8) & 0x1f);
+    b[9] = pcr & 0xff;
+    b[10] = 0xf0 | ((pi_len >> 8) & 0x0f);
+    b[11] = pi_len & 0xff;
+    if (caid) {
+        b[12] = 0x09;
+        b[13] = 0x04;
+        b[14] = (caid >> 8) & 0xff;
+        b[15] = caid & 0xff;
+        b[16] = 0xe0 | ((ecm >> 8) & 0x1f);
+        b[17] = ecm & 0xff;
+    }
+    for (int i = 0; i < n; i++) {
+        int o = 12 + pi_len + 5 * i;
+        b[o] = types[i];
+        b[o + 1] = 0xe0 | ((pids[i] >> 8) & 0x1f);
+        b[o + 2] = pids[i] & 0xff;
+        b[o + 3] = 0xf0;
+        b[o + 4] = 0x00; // es_len
+    }
+    memset(b + 12 + pi_len + 5 * n, 0, 4); // CRC, not verified here
+    return len;
+}
+
 #define PAT_TSID 40901
 #define SID_KEPT 100
 #define PID_KEPT 1000
@@ -631,11 +669,31 @@ int test_pmt_starts_only_with_pmt_pid() {
 // releases, B claims and starts, and the CA handover is ordered.
 static int fake_ca_add_calls;
 static int fake_ca_last_add_pmt;
+static int fake_ca_del_pid_calls;
+static int fake_ca_last_del_pid;
 
 static int counting_ca_add_pmt(adapter *ad, SPMT *pmt) {
     fake_ca_add_calls++;
     fake_ca_last_add_pmt = pmt->id;
     return fake_ca_add_pmt(ad, pmt);
+}
+
+static int counting_ca_del_pid(adapter *ad, SPMT *pmt, int pid) {
+    (void)ad;
+    (void)pmt;
+    fake_ca_del_pid_calls++;
+    fake_ca_last_del_pid = pid;
+    return TABLES_RESULT_OK;
+}
+
+static int fail_next_ca_add;
+
+static int failing_ca_add_pmt(adapter *ad, SPMT *pmt) {
+    if (fail_next_ca_add) {
+        fail_next_ca_add = 0;
+        return TABLES_RESULT_ERROR_NORETRY;
+    }
+    return counting_ca_add_pmt(ad, pmt);
 }
 
 int test_retune_handover_same_loop() {
@@ -2258,9 +2316,222 @@ int test_stream_pid_delete_stops_pmt() {
     return 0;
 }
 
-// A PMT version update stops and releases at parse, so the restarted PMT
-// or a waiter claims the pids free on the next pass.
-int test_version_update_releases_claims() {
+// A PMT version bump with identical content (#1346) keeps the PMT
+// running: no CA delete, claims kept, and no re-send on the pass.
+int test_pmt_cosmetic_update_keeps_running() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    SCA_op counting_op = fake_ca_op;
+    counting_op.ca_add_pmt = counting_ca_add_pmt;
+    counting_op.ca_del_pid = counting_ca_del_pid;
+    int ica = add_ca(&counting_op);
+    ASSERT(ica >= 0, "could not register the fake CA");
+    ad.ca_mask = 1 << ica;
+
+    int id = pmt_add(0, 100, 48);
+    ASSERT(id >= 0, "could not create the PMT");
+    int fid = add_filter(0, 48, (void *)process_pmt, pmts[id], 0);
+    ASSERT(fid >= 0, "could not add the PMT filter");
+    pmts[id]->filter = fid;
+
+    ASSERT(mark_pid_add(0, 0, 48) == 0, "pid 48 should be added");
+    ASSERT(mark_pid_add(0, 0, 3301) == 0, "pid 3301 should be added");
+    ASSERT(mark_pid_add(0, 0, 3401) == 0, "pid 3401 should be added");
+    update_pids(0);
+
+    int types[] = {2, 3};
+    int spids[] = {3301, 3401};
+    uint8_t sec[64];
+    int len = build_pmt(sec, 100, 1, 3301, 0x0B00, 0x0C00, types, spids, 2);
+    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v1 to parse");
+    fake_ca_add_calls = fake_ca_del_calls = fake_ca_del_pid_calls = 0;
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should run");
+    ASSERT(fake_ca_add_calls == 1, "PMT should be sent to the CA");
+
+    len = build_pmt(sec, 100, 2, 3301, 0x0B00, 0x0C00, types, spids, 2);
+    fake_ca_add_calls = fake_ca_del_calls = fake_ca_del_pid_calls = 0;
+    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v2 to parse");
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should keep running");
+    ASSERT_EQUAL(pmts[id]->version, 2, "version should advance");
+    ASSERT(find_pid(0, 3301)->pmt == id, "video claim should be kept");
+    ASSERT(find_pid(0, 3401)->pmt == id, "audio claim should be kept");
+    ASSERT_EQUAL(fake_ca_del_calls, 0, "CA should see no delete");
+    ASSERT_EQUAL(fake_ca_del_pid_calls, 0, "CA should see no pid drop");
+
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should still run");
+    ASSERT_EQUAL(fake_ca_add_calls, 0, "CA should see no re-send");
+
+    del_ca(&counting_op);
+    del_filter(fid);
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
+// A PMT version update with changed streams keeps the PMT running
+// and only releases the removed pids; the CA gets a re-send, no delete.
+int test_pmt_content_update_delta() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    SCA_op counting_op = fake_ca_op;
+    counting_op.ca_add_pmt = counting_ca_add_pmt;
+    counting_op.ca_del_pid = counting_ca_del_pid;
+    int ica = add_ca(&counting_op);
+    ASSERT(ica >= 0, "could not register the fake CA");
+    ad.ca_mask = 1 << ica;
+
+    int id = pmt_add(0, 100, 48);
+    ASSERT(id >= 0, "could not create the PMT");
+    int fid = add_filter(0, 48, (void *)process_pmt, pmts[id], 0);
+    ASSERT(fid >= 0, "could not add the PMT filter");
+    pmts[id]->filter = fid;
+
+    ASSERT(mark_pid_add(0, 0, 48) == 0, "pid 48 should be added");
+    ASSERT(mark_pid_add(0, 0, 3301) == 0, "pid 3301 should be added");
+    ASSERT(mark_pid_add(0, 0, 3401) == 0, "pid 3401 should be added");
+    update_pids(0);
+
+    int types[] = {2, 3};
+    int spids[] = {3301, 3401};
+    uint8_t sec[64];
+    int len = build_pmt(sec, 100, 1, 3301, 0x0B00, 0x0C00, types, spids, 2);
+    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v1 to parse");
+    fake_ca_add_calls = fake_ca_del_calls = fake_ca_del_pid_calls = 0;
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should run");
+    ASSERT(fake_ca_add_calls == 1, "PMT should be sent to the CA");
+
+    int types2[] = {2};
+    int spids2[] = {3301};
+    len = build_pmt(sec, 100, 2, 3301, 0x0B00, 0x0C00, types2, spids2, 1);
+    fake_ca_add_calls = fake_ca_del_calls = fake_ca_del_pid_calls = 0;
+    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v2 to parse");
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should keep running");
+    ASSERT_EQUAL(pmts[id]->version, 2, "version should advance");
+    ASSERT(find_pid(0, 3301)->pmt == id, "video claim should be kept");
+    ASSERT(find_pid(0, 3401)->pmt == -1, "audio claim should be released");
+    ASSERT_EQUAL(fake_ca_del_calls, 0, "CA should see no delete");
+    ASSERT_EQUAL(fake_ca_del_pid_calls, 1, "CA should see one pid drop");
+    ASSERT_EQUAL(fake_ca_last_del_pid, 3401, "dropped pid should be 3401");
+    ASSERT_EQUAL(pmts[id]->ca_mask, 0, "CA re-send should be pending");
+
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should still run");
+    ASSERT(fake_ca_add_calls == 1, "CA should see one re-send");
+    ASSERT(pmts[id]->ca_mask != 0, "PMT should hold a CA slot again");
+
+    // v3 changes only the ECM pid: still a delta re-send, no delete.
+    len = build_pmt(sec, 100, 3, 3301, 0x0B00, 0x0C01, types2, spids2, 1);
+    fake_ca_add_calls = fake_ca_del_calls = fake_ca_del_pid_calls = 0;
+    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v3 to parse");
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should keep running");
+    ASSERT_EQUAL(pmts[id]->version, 3, "version should advance");
+    ASSERT(find_pid(0, 3301)->pmt == id, "video claim should be kept");
+    ASSERT_EQUAL(fake_ca_del_calls, 0, "CA should see no delete");
+    ASSERT_EQUAL(fake_ca_del_pid_calls, 1, "CA should see one pid drop");
+    ASSERT_EQUAL(fake_ca_last_del_pid, 0x0C00, "dropped pid should be old ECM");
+    ASSERT_EQUAL(pmts[id]->ca_mask, 0, "CA re-send should be pending");
+
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should still run");
+    ASSERT(fake_ca_add_calls == 1, "CA should see one re-send");
+    ASSERT(pmts[id]->ca_mask != 0, "PMT should hold a CA slot again");
+
+    // v4 turns the service FTA: the CA registration is released, and
+    // nothing is re-sent afterwards.
+    len = build_pmt(sec, 100, 4, 3301, 0, 0, types2, spids2, 1);
+    fake_ca_add_calls = fake_ca_del_calls = fake_ca_del_pid_calls = 0;
+    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v4 to parse");
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should keep running");
+    ASSERT_EQUAL(fake_ca_del_calls, 1, "CA registration should be released");
+    ASSERT_EQUAL(pmts[id]->ca_registered_mask, 0, "registration is gone");
+
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should still run");
+    ASSERT_EQUAL(fake_ca_add_calls, 0, "FTA PMT should see no re-send");
+
+    del_ca(&counting_op);
+    del_filter(fid);
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
+// A re-send the CA rejects with NORETRY (match lost on update)
+// releases the stale registration instead of leaking it.
+int test_resend_rejected_releases_ca() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    SCA_op failing_op = fake_ca_op;
+    failing_op.ca_add_pmt = failing_ca_add_pmt;
+    int ica = add_ca(&failing_op);
+    ASSERT(ica >= 0, "could not register the fake CA");
+    ad.ca_mask = 1 << ica;
+
+    int id = pmt_add(0, 100, 48);
+    ASSERT(id >= 0, "could not create the PMT");
+    uint8_t priv[1] = {0};
+    pmt_add_caid(pmts[id], 0x0B00, 0x0C00, priv, 0);
+    pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
+    ASSERT(mark_pid_add(0, 0, 48) == 0, "pid 48 should be added");
+    ASSERT(mark_pid_add(0, 0, 3301) == 0, "pid 3301 should be added");
+    update_pids(0);
+    pmt_add_active_pmt(&ad, id);
+
+    fail_next_ca_add = 0;
+    fake_ca_add_calls = fake_ca_del_calls = 0;
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should run");
+    ASSERT(pmts[id]->ca_registered_mask != 0, "PMT should be registered");
+
+    // update clears the send mask; the re-send is rejected this time
+    pmts[id]->ca_mask = 0;
+    fail_next_ca_add = 1;
+    fake_ca_add_calls = fake_ca_del_calls = 0;
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should keep running");
+    ASSERT_EQUAL(fake_ca_del_calls, 1, "stale registration should close");
+    ASSERT_EQUAL(pmts[id]->ca_registered_mask, 0, "registration is gone");
+    ASSERT(pmts[id]->disabled_ca_mask != 0, "CA should be disabled");
+
+    del_ca(&failing_op);
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
+// A PMT version update with identical content keeps the PMT running
+// with its claims (#1346); stopping here was the glitch.
+int test_version_update_keeps_claims() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
@@ -2276,6 +2547,7 @@ int test_version_update_releases_claims() {
     ASSERT(id >= 0, "could not create the PMT");
     pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
     pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
+    pmts[id]->pcr_pid = 3301;
     int fid = add_filter(0, 48, (void *)process_pmt, pmts[id], 0);
     ASSERT(fid >= 0, "could not add the PMT filter");
     pmts[id]->filter = fid;
@@ -2295,13 +2567,13 @@ int test_version_update_releases_claims() {
                        0xED, 0x49, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00};
     ASSERT(process_pmt(fid, sec, sizeof(sec), pmts[id]) == 0,
            "update to parse");
-    ASSERT_EQUAL(pmts[id]->state, PMT_STOPPED, "PMT should stop on update");
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should keep running");
     ASSERT_EQUAL(pmts[id]->version, 1, "version should advance");
-    ASSERT(find_pid(0, 3301)->pmt == -1, "video claim should be released");
+    ASSERT(find_pid(0, 3301)->pmt == id, "video claim should be kept");
 
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should restart");
-    ASSERT(find_pid(0, 3301)->pmt == id, "PMT should reclaim the video pid");
+    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should still run");
+    ASSERT(find_pid(0, 3301)->pmt == id, "video claim should stay kept");
 
     del_filter(fid);
     free_all_pmts();
@@ -2385,8 +2657,14 @@ int main() {
               "testing tail election with the CA send on the loop")
     TEST_FUNC(test_stream_pid_delete_stops_pmt(),
               "testing stop when the streams are deleted")
-    TEST_FUNC(test_version_update_releases_claims(),
-              "testing release on PMT version update")
+    TEST_FUNC(test_version_update_keeps_claims(),
+              "testing claims survive a PMT version update")
+    TEST_FUNC(test_pmt_cosmetic_update_keeps_running(),
+              "testing cosmetic PMT update keeps running without CA churn")
+    TEST_FUNC(test_pmt_content_update_delta(),
+              "testing PMT content update releases only removed pids")
+    TEST_FUNC(test_resend_rejected_releases_ca(),
+              "testing a rejected re-send releases the CA slot")
     fflush(stdout);
     return 0;
 }

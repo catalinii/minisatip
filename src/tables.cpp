@@ -296,8 +296,13 @@ int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt) {
         if (result == TABLES_RESULT_OK) {
             pmt->ca_mask |= mask;
             pmt->ca_registered_mask |= mask;
-        } else if (result == TABLES_RESULT_ERROR_NORETRY)
+        } else if (result == TABLES_RESULT_ERROR_NORETRY) {
             pmt->disabled_ca_mask |= mask;
+            // Re-send rejected after an update (CA no longer matches):
+            // release the stale registration instead of leaking it.
+            if (pmt->ca_registered_mask & mask)
+                close_pmt_for_ca(i, ad, pmt);
+        }
         disable_cw(pmt->id);
         rv += (1 - result);
         LOGM("In processing PMT %d, ca %d, CA matched %d, ca_pmt_add "
