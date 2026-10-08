@@ -2130,14 +2130,15 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     pmt->version = ver;
     pmt->pcr_pid = pcr_pid;
 
-    LOG("new PMT %d AD %d, pid: %04X (%d), filter %d, len %d, pi_len %d, ver "
+    LOG("%s PMT %d AD %d, pid: %04X (%d), filter %d, len %d, pi_len %d, ver "
         "%d, pcr "
         "%d, "
         "sid "
         "%04X "
         "(%d) %s %s",
-        pmt->id, ad->id, pid, pid, filter, pmt_len, pi_len, ver, pcr_pid,
-        pmt->sid, pmt->sid, pmt->name[0] ? "channel:" : "", pmt->name);
+        was_running ? "update" : "new", pmt->id, ad->id, pid, pid, filter,
+        pmt_len, pi_len, ver, pcr_pid, pmt->sid, pmt->sid,
+        pmt->name[0] ? "channel:" : "", pmt->name);
     pi = b + 12;
     pmt_b = b + 3;
 
