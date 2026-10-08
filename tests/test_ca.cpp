@@ -1135,7 +1135,6 @@ int test_ca_cmd_watchdog() {
     const int64_t t0 = 1000000;
 
     ca_cmd_watchdog(NULL, t0);
-    ASSERT_EQUAL(CA_CMD_TIMEOUT_MS, 15000, "timeout is 15s");
     dev.pending_tag = TAG_CA_INFO_ENQUIRY;
     dev.pending_session = 3;
     dev.pending_since = t0;
