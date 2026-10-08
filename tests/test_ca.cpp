@@ -1135,7 +1135,6 @@ int test_ca_cmd_watchdog() {
     const int64_t t0 = 1000000;
 
     ca_cmd_watchdog(NULL, t0);
-    dev.init_start = t0;
     dev.pending_tag = TAG_CA_INFO_ENQUIRY;
     dev.pending_session = 3;
     dev.pending_since = t0;
@@ -1149,19 +1148,19 @@ int test_ca_cmd_watchdog() {
     ca_cmd_watchdog(&dev, t0 + CA_CMD_TIMEOUT_MS);
     ASSERT_EQUAL(get_sockets(id)->force_close, 1, "stale command resets");
     ASSERT_EQUAL(dev.pending_tag, 0, "reset clears pending");
-    ASSERT_EQUAL(dev.init_start, 0, "reset clears init");
+    ASSERT_EQUAL(dev.pending_since, 0, "reset disarms");
     get_sockets(id)->force_close = 0;
 
-    dev.init_start = t0; // mute CAM: nothing pending, nothing answered
+    dev.pending_since = t0; // stalled init: nothing pending, quiet since t0
     ca_cmd_watchdog(&dev, t0 + CA_CMD_TIMEOUT_MS);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 1, "mute CAM resets");
-    ASSERT_EQUAL(dev.init_start, 0, "mute reset disarms");
+    ASSERT_EQUAL(get_sockets(id)->force_close, 1, "stalled init resets");
+    ASSERT_EQUAL(dev.pending_since, 0, "init reset disarms");
     get_sockets(id)->force_close = 0;
 
     dev.state = CA_STATE_INITIALIZED;
-    dev.init_start = t0;
+    dev.pending_since = t0;
     ca_cmd_watchdog(&dev, t0 + 10 * CA_CMD_TIMEOUT_MS);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 0, "initialized skips backstop");
+    ASSERT_EQUAL(get_sockets(id)->force_close, 0, "initialized idles quietly");
 
     dev.pending_tag = TAG_CA_INFO_ENQUIRY; // post-init commands still guarded
     dev.pending_session = 3;
@@ -1171,7 +1170,7 @@ int test_ca_cmd_watchdog() {
     get_sockets(id)->force_close = 0;
 
     dev.state = CA_STATE_ACTIVE;
-    dev.init_start = 0; // fully unarmed: late ticks stay quiet
+    dev.pending_since = 0; // fully unarmed: late ticks stay quiet
     ca_cmd_watchdog(&dev, t0 + 10 * CA_CMD_TIMEOUT_MS);
     ASSERT_EQUAL(get_sockets(id)->force_close, 0, "unarmed never resets");
 
@@ -1184,6 +1183,9 @@ int test_ca_cmd_watchdog() {
     ASSERT_EQUAL(dev.pending_tag, TAG_CA_INFO_ENQUIRY, "tracked send arms");
     ASSERT_EQUAL(dev.pending_session, 3, "armed on its session");
     int64_t since = dev.pending_since;
+    ASSERT_EQUAL(ca_write_apdu(&dev.sessions[2], TAG_CA_INFO_ENQUIRY, NULL, 0),
+                 0, "repeat succeeds");
+    ASSERT_EQUAL(dev.pending_since, since, "repeat keeps deadline");
     ASSERT_EQUAL(ca_write_apdu(&dev.sessions[2], TAG_CA_PMT, NULL, 0), 0,
                  "one-way send succeeds");
     ASSERT_EQUAL(dev.pending_tag, TAG_CA_INFO_ENQUIRY, "one-way keeps tag");
@@ -1199,6 +1201,19 @@ int test_ca_cmd_watchdog() {
     uint8_t right[] = {0x9F, 0x80, 0x31, 0x00}; // CA_INFO, our reply
     ASSERT_EQUAL(ca_read_apdu(&rs, right, sizeof(right)), 0, "reply parsed");
     ASSERT_EQUAL(dev.pending_tag, 0, "reply disarms");
+    ASSERT_EQUAL(dev.pending_since, since, "reply keeps anchor");
+
+    dev.pending_tag = CIPLUS_TAG_OPERATOR_INFO_REQ;
+    dev.pending_session = 6;
+    uint8_t info[] = {0x9F, 0x9C, 0x05, 0x00}; // OPERATOR_INFO, our reply
+    ASSERT_EQUAL(ca_read_apdu(&rs, info, sizeof(info)), 0, "oprf parsed");
+    ASSERT_EQUAL(dev.pending_tag, 0, "oprf reply disarms");
+
+    dev.pending_tag = CIPLUS_TAG_OPERATOR_SEARCH_START;
+    dev.pending_session = 6;
+    uint8_t tune[] = {0x9F, 0x9C, 0x09, 0x00}; // TUNE ends the search ladder
+    ASSERT_EQUAL(ca_read_apdu(&rs, tune, sizeof(tune)), 0, "ladder parsed");
+    ASSERT_EQUAL(dev.pending_tag, 0, "ladder reply disarms");
 
     dev.pending_tag = TAG_CA_INFO_ENQUIRY;
     dev.pending_session = 3;
@@ -1209,6 +1224,7 @@ int test_ca_cmd_watchdog() {
     cs.buf = close3;
     ASSERT_EQUAL(ca_read(&cs), 0, "close parsed");
     ASSERT_EQUAL(dev.pending_tag, 0, "close clears pending");
+    ASSERT_EQUAL(dev.pending_since, since, "close keeps anchor");
 
     opts.enigma = saved_enigma;
     sockets_del(id); // closes sp[0]

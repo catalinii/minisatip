@@ -768,7 +768,6 @@ void ca_teardown(ca_device_t *d) {
     d->caids = 0;
     d->poll_fails = 0;
     d->datetime_next_send = 0;
-    d->init_start = 0;
     d->pending_tag = 0;
     d->pending_session = 0;
     d->pending_since = 0;
@@ -2684,7 +2683,6 @@ int APP_CA_handler(ca_session_t *session, int resource, uint8_t *data,
     switch (resource) {
     case TAG_CA_INFO:
         d->state = CA_STATE_INITIALIZED;
-        d->init_start = 0;
 
         // Ignore CAM reported values if user has forced specific CAIDs
         if (!d->has_forced_caids) {
@@ -3090,46 +3088,62 @@ int ca_write_tpdu(ca_device_t *d, int tag, uint8_t *buf, int len) {
     return 0;
 }
 
-// Commands the CAM must answer: the watchdog resets
-// the module when the reply never arrives.
+// Commands the CAM must answer, or the watchdog resets it.
+// One-way sends (CA_PMT, replies, CC confirmations) stay untracked.
 static const struct {
     int cmd, reply;
 } ca_tracked_cmds[] = {
     {TAG_PROFILE_ENQUIRY, TAG_PROFILE},
     {TAG_APP_INFO_ENQUIRY, CIPLUS_TAG_APP_INFO},
     {TAG_CA_INFO_ENQUIRY, TAG_CA_INFO},
+    {CIPLUS_TAG_OPERATOR_INFO_REQ, CIPLUS_TAG_OPERATOR_INFO},
+    {CIPLUS_TAG_OPERATOR_SEARCH_START, CIPLUS_TAG_OPERATOR_SEARCH_STATUS},
+    {CIPLUS_TAG_OPERATOR_SEARCH_START, CIPLUS_TAG_OPERATOR_STATUS},
+    {CIPLUS_TAG_OPERATOR_SEARCH_START, CIPLUS_TAG_OPERATOR_INFO},
+    {CIPLUS_TAG_OPERATOR_SEARCH_START, CIPLUS_TAG_OPERATOR_TUNE},
 };
 
-// Expected reply for a tracked command, 0 when untracked.
-static int ca_expected_reply(int cmd) {
-    for (uint32_t i = 0;
-         i < sizeof(ca_tracked_cmds) / sizeof(ca_tracked_cmds[0]); i++)
+#define CA_TRACKED_ROWS (sizeof(ca_tracked_cmds) / sizeof(ca_tracked_cmds[0]))
+
+// Tracked when some row names it as a command.
+static int ca_cmd_tracked(int cmd) {
+    for (uint32_t i = 0; i < CA_TRACKED_ROWS; i++)
         if (ca_tracked_cmds[i].cmd == cmd)
-            return ca_tracked_cmds[i].reply;
+            return 1;
     return 0;
 }
 
+// Expected when some row pairs the pending command with it.
+static int ca_cmd_reply(int cmd, int reply) {
+    for (uint32_t i = 0; i < CA_TRACKED_ROWS; i++)
+        if (ca_tracked_cmds[i].cmd == cmd && ca_tracked_cmds[i].reply == reply)
+            return 1;
+    return 0;
+}
+
+// Drop the tracked command; since stays as the deadline anchor.
 static void ca_clear_pending(ca_device_t *d) {
     d->pending_tag = 0;
     d->pending_session = 0;
-    d->pending_since = 0;
 }
 
 // Arm the watchdog when a tracked command goes out.
 static void ca_track_command(ca_session_t *s, int tag) {
-    if (!s || !s->ca || !ca_expected_reply(tag))
+    if (!s || !s->ca || !ca_cmd_tracked(tag))
         return;
-    ca_device_t *d = s->ca;
-    d->pending_tag = tag;
-    d->pending_session = s->session_number;
-    d->pending_since = getTick();
+    // Repeating an unanswered command must not push its deadline.
+    if (s->ca->pending_tag == tag)
+        return;
+    s->ca->pending_tag = tag;
+    s->ca->pending_session = s->session_number;
+    s->ca->pending_since = getTick();
 }
 
 // Disarm when the tracked reply arrives.
 static void ca_match_reply(ca_session_t *s, int tag) {
     if (!s || !s->ca || !s->ca->pending_tag)
         return;
-    if (tag == ca_expected_reply(s->ca->pending_tag))
+    if (ca_cmd_reply(s->ca->pending_tag, tag))
         ca_clear_pending(s->ca);
 }
 
@@ -3471,28 +3485,24 @@ int ca_timeout(sockets *s) {
     return 0;
 }
 
-// Reset the CAM when a command goes unanswered past the deadline.
+// Reset the CAM when a command goes unanswered, or when
+// initialization stalls between commands.
 void ca_cmd_watchdog(ca_device_t *d, int64_t now) {
-    if (!d)
+    if (!d || d->pending_since <= 0 ||
+        now - d->pending_since < CA_CMD_TIMEOUT_MS)
         return;
-    if (d->pending_tag &&
-        now - d->pending_since >= CA_CMD_TIMEOUT_MS) {
-        LOG("CA %d: command %06X unanswered after %jd ms, resetting",
-            d->id, d->pending_tag, now - d->pending_since);
-        ca_clear_pending(d);
-        d->init_start = 0;
-        ca_request_close(d);
+    if (d->pending_tag) {
+        LOG("CA %d: command %06X unanswered after %jd ms, resetting", d->id,
+            d->pending_tag, now - d->pending_since);
+    } else if (d->state != CA_STATE_INITIALIZED) {
+        LOG("CA %d: initialization stalled after %jd ms, resetting", d->id,
+            now - d->pending_since);
+    } else {
         return;
     }
-    // No tracked command outstanding: a mute CAM still
-    // resets once it misses the init deadline.
-    if (!d->pending_tag && d->state != CA_STATE_INITIALIZED &&
-        d->init_start > 0 && now - d->init_start >= CA_CMD_TIMEOUT_MS) {
-        LOG("CA %d: no CA_INFO after %jd ms, resetting the module", d->id,
-            now - d->init_start);
-        d->init_start = 0;
-        ca_request_close(d);
-    }
+    ca_clear_pending(d);
+    d->pending_since = 0;
+    ca_request_close(d);
 }
 
 // reads session data on enigma devices. Handles specific issues (such as
@@ -3537,7 +3547,7 @@ int ca_init_enigma(ca_device_t *d) {
     {
         std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
         d->sock = sk;
-        d->init_start = getTick();
+        d->pending_since = getTick();
     }
     sockets_timeout(d->sock, 1000);
     sockets_setread(d->sock, (void *)ca_read_enigma);
@@ -3626,7 +3636,7 @@ int ca_init_en50221(ca_device_t *d) {
     {
         std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
         d->sock = sk;
-        d->init_start = getTick();
+        d->pending_since = getTick();
     }
     sockets_timeout(d->sock, 1000);
     sockets_setread(d->sock, (void *)ca_read_tpdu);
@@ -3765,7 +3775,6 @@ int dvbca_init_dev(adapter *ad) {
         c->id = ad->id;
         c->state = CA_STATE_INACTIVE;
         c->sock = -1;
-        c->init_start = 0;
         c->pending_tag = 0;
         c->pending_session = 0;
         c->pending_since = 0;

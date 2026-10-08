@@ -223,10 +223,9 @@ struct ca_device {
     int poll_fails;
 
     // Command watchdog, socket-thread state like poll_fails.
-    int64_t init_start;
     int pending_tag;
     int pending_session;
-    int64_t pending_since;
+    int64_t pending_since; // last tracked send, or socket open
 };
 
 extern ca_device_t *ca_devices[];
