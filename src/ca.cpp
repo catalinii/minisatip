@@ -32,6 +32,8 @@ alternative source
 #include "api/variables.h"
 #include "utils.h"
 #include "utils/ticks.h"
+#include <algorithm>
+#include <array>
 #include <charconv>
 #include <openssl/aes.h>
 #include <openssl/crypto.h>
@@ -3088,11 +3090,16 @@ int ca_write_tpdu(ca_device_t *d, int tag, uint8_t *buf, int len) {
     return 0;
 }
 
+namespace {
+
 // Commands the CAM must answer, or the watchdog resets it.
 // One-way sends (CA_PMT, replies, CC confirmations) stay untracked.
-static const struct {
-    int cmd, reply;
-} ca_tracked_cmds[] = {
+struct ca_cmd_pair {
+    int cmd;
+    int reply;
+};
+
+constexpr auto ca_tracked_cmds = std::to_array<ca_cmd_pair>({
     {TAG_PROFILE_ENQUIRY, TAG_PROFILE},
     {TAG_APP_INFO_ENQUIRY, CIPLUS_TAG_APP_INFO},
     {TAG_CA_INFO_ENQUIRY, TAG_CA_INFO},
@@ -3101,34 +3108,31 @@ static const struct {
     {CIPLUS_TAG_OPERATOR_SEARCH_START, CIPLUS_TAG_OPERATOR_STATUS},
     {CIPLUS_TAG_OPERATOR_SEARCH_START, CIPLUS_TAG_OPERATOR_INFO},
     {CIPLUS_TAG_OPERATOR_SEARCH_START, CIPLUS_TAG_OPERATOR_TUNE},
-};
-
-#define CA_TRACKED_ROWS (sizeof(ca_tracked_cmds) / sizeof(ca_tracked_cmds[0]))
+});
 
 // Tracked when some row names it as a command.
-static int ca_cmd_tracked(int cmd) {
-    for (uint32_t i = 0; i < CA_TRACKED_ROWS; i++)
-        if (ca_tracked_cmds[i].cmd == cmd)
-            return 1;
-    return 0;
+[[nodiscard]] constexpr bool ca_cmd_tracked(int cmd) {
+    return std::ranges::any_of(ca_tracked_cmds, [cmd](const ca_cmd_pair &row) {
+        return row.cmd == cmd;
+    });
 }
 
 // Expected when some row pairs the pending command with it.
-static int ca_cmd_reply(int cmd, int reply) {
-    for (uint32_t i = 0; i < CA_TRACKED_ROWS; i++)
-        if (ca_tracked_cmds[i].cmd == cmd && ca_tracked_cmds[i].reply == reply)
-            return 1;
-    return 0;
+[[nodiscard]] constexpr bool ca_cmd_reply(int cmd, int reply) {
+    return std::ranges::any_of(ca_tracked_cmds,
+                               [cmd, reply](const ca_cmd_pair &row) {
+                                   return row.cmd == cmd && row.reply == reply;
+                               });
 }
 
 // Drop the tracked command; since stays as the deadline anchor.
-static void ca_clear_pending(ca_device_t *d) {
+void ca_clear_pending(ca_device_t *d) {
     d->pending_tag = 0;
     d->pending_session = 0;
 }
 
 // Arm the watchdog when a tracked command goes out.
-static void ca_track_command(ca_session_t *s, int tag) {
+void ca_track_command(ca_session_t *s, int tag) {
     if (!s || !s->ca || !ca_cmd_tracked(tag))
         return;
     // Repeating an unanswered command must not push its deadline.
@@ -3140,13 +3144,15 @@ static void ca_track_command(ca_session_t *s, int tag) {
 }
 
 // Disarm when the tracked reply arrives on its session.
-static void ca_match_reply(ca_session_t *s, int tag) {
+void ca_match_reply(ca_session_t *s, int tag) {
     if (!s || !s->ca || !s->ca->pending_tag)
         return;
     if (s->session_number == s->ca->pending_session &&
         ca_cmd_reply(s->ca->pending_tag, tag))
         ca_clear_pending(s->ca);
 }
+
+} // namespace
 
 // writes session data to the CAM.
 int ca_write_spdu(ca_device_t *d, int session_number, unsigned char tag,
