@@ -480,8 +480,11 @@ int dvbapi_send_pmt(SKey *k, int cmd_id, int force) {
 
     copy16(buf, 4, len - 6);
 
-    buf[6] = listmgmt;
+    // List-management is framing, not content: hash with it zeroed
+    // so ONLY->ADD flips alone do not force a re-send.
+    buf[6] = 0;
     uint32_t hash = crc_32(buf, len);
+    buf[6] = listmgmt;
     if (!force && k->capmt_hash_valid && hash == k->capmt_hash) {
         LOG("dvbapi key %d: PMT %d update, CAPMT unchanged (%08X), not "
             "re-sending",

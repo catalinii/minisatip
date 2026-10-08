@@ -888,14 +888,16 @@ int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
     return pos;
 }
 
-// Hash the built CAPMT minus its version byte, so an update that
-// leaves the content identical is detected and not re-sent.
+// Hash the built CAPMT minus version and list-management, so an
+// update that leaves the content identical is not re-sent.
 uint32_t capmt_content_hash(uint8_t *capmt, int len) {
     if (len <= 4)
         return crc_32(capmt, len);
-    uint8_t ver = capmt[3];
+    uint8_t lm = capmt[0], ver = capmt[3];
+    capmt[0] = 0;
     capmt[3] &= ~0x3E;
     uint32_t hash = crc_32(capmt, len);
+    capmt[0] = lm;
     capmt[3] = ver;
     return hash;
 }

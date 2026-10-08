@@ -238,6 +238,16 @@ int test_update_resend_skips_identical_capmt() {
            "identical re-send failed");
     ASSERT(drain(sv[1]) == 0, "identical re-send must write nothing");
 
+    // A second live key flips this key's list-management ONLY->ADD;
+    // framing alone must not force a re-send either.
+    int other = keys_add(-1, 0, 0);
+    ASSERT(other >= 0 && keys[other]->enabled, "no second live key");
+    ASSERT(dvbapi_add_pmt(&ad, &pmt, 1) == TABLES_RESULT_OK,
+           "listmgmt-flip re-send failed");
+    ASSERT(drain(sv[1]) == 0, "listmgmt flip must write nothing");
+    keys_del(other);
+    drain(sv[1]); // discard teardown bytes before the changed re-send
+
     pmt.sid = 200;
     ASSERT(dvbapi_add_pmt(&ad, &pmt, 1) == TABLES_RESULT_OK,
            "changed re-send failed");

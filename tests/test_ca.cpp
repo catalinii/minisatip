@@ -235,9 +235,9 @@ int test_create_capmt_single_clear() {
     return 0;
 }
 
-// The CAPMT content hash ignores the version byte but flips on any
-// other byte, so identical updates are skipped and real ones send.
-int test_capmt_content_hash_masks_version() {
+// The CAPMT content hash ignores version and list-management but
+// flips on any other byte, so identical updates are skipped.
+int test_capmt_content_hash_masks_version_and_listmgmt() {
     int pmt_id = pmt_add(0, 0x100, 0x101);
     SPMT *pmt = get_pmt(pmt_id);
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
@@ -271,8 +271,15 @@ int test_capmt_content_hash_masks_version() {
 
     memcpy(other, capmt, len);
     other[0] ^= 0xFF; // list management
-    ASSERT(capmt_content_hash(other, len) != hash,
-           "list management change must flip the hash");
+    ASSERT(capmt_content_hash(other, len) == hash,
+           "list management change must not flip the hash");
+    ASSERT(other[0] == (capmt[0] ^ 0xFF), "test setup broken");
+
+    int ulen = create_capmt(&scampt, CLM_UPDATE, other, sizeof(other),
+                            CMD_ID_OK_DESCRAMBLING, 0);
+    ASSERT(ulen == len, "ONLY and UPDATE builds must match in length");
+    ASSERT(capmt_content_hash(other, ulen) == hash,
+           "ONLY->UPDATE flip alone must not flip the hash");
 
     memcpy(other, capmt, len);
     other[len - 1] ^= 0xFF; // stream tail
@@ -1769,8 +1776,8 @@ int main() {
     TEST_FUNC(test_capmt_release_on_last_pmt(),
               "testing that the last PMT of a CAPMT is released on the CAM");
     TEST_FUNC(test_get_authdata_filename(), "testing filename helper function");
-    TEST_FUNC(test_capmt_content_hash_masks_version(),
-              "testing the CAPMT hash masks the version byte");
+    TEST_FUNC(test_capmt_content_hash_masks_version_and_listmgmt(),
+              "testing the CAPMT hash masks version and listmgmt");
     TEST_FUNC(test_create_capmt_single_clear(),
               "testing create_capmt with single PMT without CA descriptors");
     TEST_FUNC(test_create_capmt_single_pmt_scrambled(),
