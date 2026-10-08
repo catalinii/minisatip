@@ -2108,19 +2108,16 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     pi_len = ((b[10] & 0xF) << 8) + b[11];
     pcr_pid = ((b[8] & 0x1F) << 8) + b[9];
 
+    int old_ver = pmt->version;
     pmt->sid = sid;
     pmt->version = ver;
     pmt->pcr_pid = pcr_pid;
 
-    LOG("%s PMT %d AD %d, pid: %04X (%d), filter %d, len %d, pi_len %d, ver "
-        "%d, pcr "
-        "%d, "
-        "sid "
-        "%04X "
-        "(%d) %s %s",
-        was_running ? "update" : "new", pmt->id, ad->id, pid, pid, filter,
-        pmt_len, pi_len, ver, pcr_pid, pmt->sid, pmt->sid,
-        pmt->name[0] ? "channel:" : "", pmt->name);
+    LOG("new PMT %d AD %d, pid: %04X (%d), filter %d, len %d, pi_len %d, "
+        "ver %d, pcr %d, sid %04X (%d)%s%s%s",
+        pmt->id, ad->id, pid, pid, filter, pmt_len, pi_len, ver, pcr_pid,
+        pmt->sid, pmt->sid, pmt->name[0] ? " channel: " : "", pmt->name,
+        old_ver != -1 && old_ver != ver ? " UPDATE" : "");
     pi = b + 12;
     pmt_b = b + 3;
 
