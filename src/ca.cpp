@@ -768,6 +768,8 @@ void ca_teardown(ca_device_t *d) {
     d->caids = 0;
     d->poll_fails = 0;
     d->datetime_next_send = 0;
+    d->init_start = 0;
+    d->enquiry_next = 0;
     d->fd = -1;
     d->sock = -1;
     d->state = CA_STATE_INACTIVE;
@@ -2680,6 +2682,8 @@ int APP_CA_handler(ca_session_t *session, int resource, uint8_t *data,
     switch (resource) {
     case TAG_CA_INFO:
         d->state = CA_STATE_INITIALIZED;
+        d->init_start = 0;
+        d->enquiry_next = 0;
 
         // Ignore CAM reported values if user has forced specific CAIDs
         if (!d->has_forced_caids) {
@@ -3410,7 +3414,29 @@ int ca_timeout(sockets *s) {
     if (d->state == CA_STATE_INITIALIZED && d->datetime_response_interval &&
         getTick() > d->datetime_next_send)
         ca_send_datetime(d);
+    ca_init_watchdog(d, getTick());
     return 0;
+}
+
+// Nudge a silent CAM with another enquiry, reset it past the deadline.
+void ca_init_watchdog(ca_device_t *d, int64_t now) {
+    if (!d || d->state == CA_STATE_INITIALIZED || d->init_start <= 0)
+        return;
+    if (now - d->init_start >= CA_INIT_TIMEOUT_MS) {
+        LOG("CA %d: no CA_INFO after %jd ms, resetting the module", d->id,
+            now - d->init_start);
+        d->init_start = 0;
+        d->enquiry_next = 0;
+        ca_request_close(d);
+    } else if (now >= d->enquiry_next) {
+        ca_session_t *s =
+            find_session_for_resource(d, EN50221_APP_CA_RESOURCEID);
+        if (s) {
+            LOG("CA %d: no CA_INFO yet, re-sending enquiry", d->id);
+            ca_write_apdu(s, TAG_CA_INFO_ENQUIRY, NULL, 0);
+        }
+        d->enquiry_next = now + CA_INFO_RETRY_MS;
+    }
 }
 
 // reads session data on enigma devices. Handles specific issues (such as
@@ -3455,6 +3481,8 @@ int ca_init_enigma(ca_device_t *d) {
     {
         std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
         d->sock = sk;
+        d->init_start = getTick();
+        d->enquiry_next = d->init_start + CA_INFO_RETRY_MS;
     }
     sockets_timeout(d->sock, 1000);
     sockets_setread(d->sock, (void *)ca_read_enigma);
@@ -3543,6 +3571,8 @@ int ca_init_en50221(ca_device_t *d) {
     {
         std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
         d->sock = sk;
+        d->init_start = getTick();
+        d->enquiry_next = d->init_start + CA_INFO_RETRY_MS;
     }
     sockets_timeout(d->sock, 1000);
     sockets_setread(d->sock, (void *)ca_read_tpdu);
@@ -3681,6 +3711,8 @@ int dvbca_init_dev(adapter *ad) {
         c->id = ad->id;
         c->state = CA_STATE_INACTIVE;
         c->sock = -1;
+        c->init_start = 0;
+        c->enquiry_next = 0;
 
         memset(c->capmt, -1, sizeof(c->capmt));
         memset(c->key[0], 0, sizeof(c->key[0]));

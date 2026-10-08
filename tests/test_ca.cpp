@@ -1103,6 +1103,78 @@ int test_ca_keepalive_counts_failures() {
     return 0;
 }
 
+// Init watchdog: silent CAMs get re-enquired, stale ones get reset.
+int test_ca_init_watchdog() {
+    ca_device_t dev;
+    memset(&dev, 0, sizeof(dev));
+    ca_device_t *saved = ca_devices[65];
+    ca_devices[65] = &dev;
+    int saved_enigma = opts.enigma;
+    opts.enigma = 0;
+    dev.enabled = 1;
+    dev.id = 65;
+    dev.state = CA_STATE_ACTIVE;
+    int sp[2];
+    ASSERT(pipe(sp) == 0, "pipe for close observation");
+    int id = sockets_add(sp[0], NULL, 65, TYPE_TCP, NULL, NULL, NULL);
+    ASSERT(id >= 0, "socket added");
+    dev.sock = id;
+    int fds[2];
+    ASSERT(pipe(fds) == 0, "pipe for TPDU writes");
+    dev.fd = fds[1];
+    int flags = fcntl(fds[0], F_GETFL);
+    ASSERT(fcntl(fds[0], F_SETFL, flags | O_NONBLOCK) == 0, "nonblock read");
+    uint8_t buf[4096];
+    const int64_t t0 = 1000000;
+
+    ca_init_watchdog(NULL, t0);
+    dev.init_start = t0;
+    dev.enquiry_next = t0 + CA_INFO_RETRY_MS;
+    ca_init_watchdog(&dev, t0 + 1000);
+    ASSERT_EQUAL(get_sockets(id)->force_close, 0, "fresh init not closed");
+    ASSERT_EQUAL(dev.enquiry_next, t0 + CA_INFO_RETRY_MS, "fresh not nudged");
+    ASSERT(read(fds[0], buf, sizeof(buf)) < 0, "fresh writes nothing");
+
+    // MKRID(3, 1, 1) is EN50221_APP_CA_RESOURCEID (ca.cpp-local).
+    dev.sessions[2].handler.resource = MKRID(3, 1, 1);
+    dev.sessions[2].ca = &dev;
+    dev.sessions[2].session_number = 3;
+    ca_init_watchdog(&dev, t0 + CA_INFO_RETRY_MS);
+    ASSERT(read(fds[0], buf, sizeof(buf)) > 0, "retry writes the enquiry");
+    ASSERT_EQUAL(dev.enquiry_next, t0 + 2 * CA_INFO_RETRY_MS, "retry re-armed");
+    ASSERT_EQUAL(get_sockets(id)->force_close, 0, "retry does not close");
+    ca_init_watchdog(&dev, t0 + CA_INFO_RETRY_MS + 1000);
+    ASSERT(read(fds[0], buf, sizeof(buf)) < 0, "re-armed sends nothing");
+
+    memset(dev.sessions, 0, sizeof(dev.sessions)); // CAM silent, no session
+    ca_init_watchdog(&dev, t0 + 2 * CA_INFO_RETRY_MS);
+    ASSERT(read(fds[0], buf, sizeof(buf)) < 0, "no session writes nothing");
+    ASSERT_EQUAL(dev.enquiry_next, t0 + 3 * CA_INFO_RETRY_MS, "still re-armed");
+
+    dev.state = CA_STATE_INITIALIZED;
+    ca_init_watchdog(&dev, t0 + CA_INIT_TIMEOUT_MS + 1000);
+    ASSERT_EQUAL(get_sockets(id)->force_close, 0, "initialized not closed");
+
+    dev.state = CA_STATE_ACTIVE;
+    ca_init_watchdog(&dev, t0 + CA_INIT_TIMEOUT_MS);
+    ASSERT_EQUAL(get_sockets(id)->force_close, 1, "stale init resets");
+    ASSERT_EQUAL(dev.init_start, 0, "reset disarms the watchdog");
+    ASSERT_EQUAL(dev.enquiry_next, 0, "reset clears the retry");
+    get_sockets(id)->force_close = 0;
+
+    dev.init_start = 0; // never armed: late ticks stay quiet
+    ca_init_watchdog(&dev, t0 + 10 * CA_INIT_TIMEOUT_MS);
+    ASSERT_EQUAL(get_sockets(id)->force_close, 0, "unarmed never resets");
+
+    opts.enigma = saved_enigma;
+    sockets_del(id); // closes sp[0]
+    close(sp[1]);
+    close(fds[0]);
+    close(fds[1]);
+    ca_devices[65] = saved;
+    return 0;
+}
+
 // TPDU reads: guards drop, EAGAIN stays up, EOF tears down.
 int test_ca_read_tpdu_outcomes() {
     int rb = -1;
@@ -1516,6 +1588,7 @@ int main() {
     TEST_FUNC(test_ca_reconnect_poller(), "testing reconnect poller gating");
     TEST_FUNC(test_ca_keepalive_counts_failures(),
               "testing keepalive failure counting");
+    TEST_FUNC(test_ca_init_watchdog(), "testing init watchdog");
     TEST_FUNC(test_ca_read_tpdu_outcomes(), "testing TPDU read outcomes");
     TEST_FUNC(test_ca_read_enigma_removal(), "testing enigma removal close");
     TEST_FUNC(test_dvbca_init_dev_guards(), "testing init device guards");
