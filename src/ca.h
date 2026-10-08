@@ -254,8 +254,8 @@ char *get_ca_caids_string(int i, char *dest, int max_len);
 #define CA_RECONNECT_INTERVAL_MS 5000
 // Failed keepalive polls in a row before the link is declared dead.
 #define CA_MAX_POLL_FAILS 3
-// Command watchdog: reset the CAM when a command is unanswered for 60s.
-#define CA_CMD_TIMEOUT_MS 60000
+// Command watchdog: reset the CAM when a command is unanswered for 15s.
+#define CA_CMD_TIMEOUT_MS 15000
 
 typedef int (*ca_reset_fn)(int fd);
 typedef int (*ca_slot_info_fn)(int fd, struct ca_slot_info *info);
