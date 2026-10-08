@@ -3139,11 +3139,12 @@ static void ca_track_command(ca_session_t *s, int tag) {
     s->ca->pending_since = getTick();
 }
 
-// Disarm when the tracked reply arrives.
+// Disarm when the tracked reply arrives on its session.
 static void ca_match_reply(ca_session_t *s, int tag) {
     if (!s || !s->ca || !s->ca->pending_tag)
         return;
-    if (ca_cmd_reply(s->ca->pending_tag, tag))
+    if (s->session_number == s->ca->pending_session &&
+        ca_cmd_reply(s->ca->pending_tag, tag))
         ca_clear_pending(s->ca);
 }
 
@@ -3402,6 +3403,10 @@ int ca_read(sockets *s) {
         // Its exchange is dead: drop any command it awaited.
         if (d->pending_session == session_number)
             ca_clear_pending(d);
+        // A close is peer activity: idle devices get a fresh grace
+        // period, but an outstanding command keeps its deadline.
+        if (!d->pending_tag)
+            d->pending_since = getTick();
         memset(&session->handler, 0, sizeof(session->handler));
         pkt[0] = 0; // status
         copy16(pkt, 1, session_number);

@@ -223,6 +223,7 @@ struct ca_device {
     int poll_fails;
 
     // Command watchdog, socket-thread state like poll_fails.
+    // One slot: a newer tracked send supersedes the older one.
     int pending_tag;
     int pending_session;
     int64_t pending_since; // last tracked send, or socket open
