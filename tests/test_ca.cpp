@@ -899,7 +899,7 @@ int test_ca_teardown_releases_pmts() {
     ASSERT_EQUAL(dev.datetime_next_send, 0, "datetime resend due");
     ASSERT_EQUAL(dev.pending_tag, 0, "pending tag cleared");
     ASSERT_EQUAL(dev.pending_session, 0, "pending session cleared");
-    ASSERT_EQUAL(dev.pending_since, 0, "pending anchor cleared");
+    ASSERT_EQUAL(dev.pending_since, -1, "pending anchor cleared");
     for (int i = 0; i < MAX_SESSIONS; i++)
         ASSERT(dev.sessions[i].handler.resource == 0 &&
                    dev.sessions[i].session_number == 0,
@@ -1154,13 +1154,13 @@ int test_ca_cmd_watchdog() {
     ca_cmd_watchdog(&dev, t0 + CA_CMD_TIMEOUT_MS);
     ASSERT_EQUAL(get_sockets(id)->force_close, 1, "stale command resets");
     ASSERT_EQUAL(dev.pending_tag, 0, "reset clears pending");
-    ASSERT_EQUAL(dev.pending_since, 0, "reset disarms");
+    ASSERT_EQUAL(dev.pending_since, -1, "reset disarms");
     get_sockets(id)->force_close = 0;
 
     dev.pending_since = t0; // stalled init: nothing pending, quiet since t0
     ca_cmd_watchdog(&dev, t0 + CA_CMD_TIMEOUT_MS);
     ASSERT_EQUAL(get_sockets(id)->force_close, 1, "stalled init resets");
-    ASSERT_EQUAL(dev.pending_since, 0, "init reset disarms");
+    ASSERT_EQUAL(dev.pending_since, -1, "init reset disarms");
     get_sockets(id)->force_close = 0;
 
     dev.state = CA_STATE_INITIALIZED;
@@ -1177,9 +1177,16 @@ int test_ca_cmd_watchdog() {
     get_sockets(id)->force_close = 0;
 
     dev.state = CA_STATE_ACTIVE;
-    dev.pending_since = 0; // fully unarmed: late ticks stay quiet
+    dev.pending_since = -1; // fully unarmed: late ticks stay quiet
     ca_cmd_watchdog(&dev, t0 + 10 * CA_CMD_TIMEOUT_MS);
     ASSERT_EQUAL(get_sockets(id)->force_close, 0, "unarmed never resets");
+
+    dev.pending_tag = TAG_CA_INFO_ENQUIRY; // tick-zero anchor still arms
+    dev.pending_session = 3;
+    dev.pending_since = 0;
+    ca_cmd_watchdog(&dev, CA_CMD_TIMEOUT_MS);
+    ASSERT_EQUAL(get_sockets(id)->force_close, 1, "zero anchor fires");
+    get_sockets(id)->force_close = 0;
 
     ca_session_t rs{};
     rs.ca = &dev;
@@ -1213,6 +1220,37 @@ int test_ca_cmd_watchdog() {
     ASSERT_EQUAL(ca_read_apdu(&rs, right, sizeof(right)), 0, "reply parsed");
     ASSERT_EQUAL(dev.pending_tag, 0, "reply disarms");
     ASSERT_EQUAL(dev.pending_since, since, "reply keeps anchor");
+
+    dev.sessions[4].handler.resource = MKRID(3, 1, 1);
+    dev.sessions[4].ca = &dev;
+    dev.sessions[4].session_number = 5;
+    ASSERT_EQUAL(ca_write_apdu(&dev.sessions[2], TAG_CA_INFO_ENQUIRY, NULL, 0),
+                 0, "rearm succeeds");
+    int64_t aged = dev.pending_since - 5000;
+    dev.pending_since = aged;
+    ASSERT_EQUAL(ca_write_apdu(&dev.sessions[4], TAG_CA_INFO_ENQUIRY, NULL, 0),
+                 0, "second send succeeds");
+    ASSERT_EQUAL(dev.pending_session, 5, "newer session supersedes");
+    ASSERT(dev.pending_since > aged, "supersede refreshes deadline");
+    rs.session_number = 3;
+    ASSERT_EQUAL(ca_read_apdu(&rs, right, sizeof(right)), 0, "old parsed");
+    ASSERT(dev.pending_tag != 0, "old session cannot disarm");
+    rs.session_number = 5;
+    ASSERT_EQUAL(ca_read_apdu(&rs, right, sizeof(right)), 0, "new parsed");
+    ASSERT_EQUAL(dev.pending_tag, 0, "newer session disarms");
+    rs.session_number = 3;
+
+    ASSERT_EQUAL(ca_write_apdu(&dev.sessions[2], TAG_CA_INFO_ENQUIRY, NULL, 0),
+                 0, "rearm2 succeeds");
+    int64_t aged2 = dev.pending_since - 5000;
+    dev.pending_since = aged2;
+    ASSERT_EQUAL(ca_write_apdu(&dev.sessions[2], TAG_PROFILE_ENQUIRY, NULL, 0),
+                 0, "other tag succeeds");
+    ASSERT_EQUAL(dev.pending_tag, TAG_PROFILE_ENQUIRY, "other tag supersedes");
+    ASSERT(dev.pending_since > aged2, "overwrite refreshes deadline");
+    uint8_t prof2[] = {0x9F, 0x80, 0x11, 0x00}; // PROFILE, our reply
+    ASSERT_EQUAL(ca_read_apdu(&rs, prof2, sizeof(prof2)), 0, "other parsed");
+    ASSERT_EQUAL(dev.pending_tag, 0, "other reply disarms");
 
     ASSERT_EQUAL(ca_write_apdu(&dev.sessions[2], TAG_PROFILE_ENQUIRY, NULL, 0),
                  0, "profile send succeeds");

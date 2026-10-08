@@ -772,7 +772,7 @@ void ca_teardown(ca_device_t *d) {
     d->datetime_next_send = 0;
     d->pending_tag = 0;
     d->pending_session = 0;
-    d->pending_since = 0;
+    d->pending_since = -1;
     d->fd = -1;
     d->sock = -1;
     d->state = CA_STATE_INACTIVE;
@@ -3135,8 +3135,10 @@ void ca_clear_pending(ca_device_t *d) {
 void ca_track_command(ca_session_t *s, int tag) {
     if (!s || !s->ca || !ca_cmd_tracked(tag))
         return;
-    // Repeating an unanswered command must not push its deadline.
-    if (s->ca->pending_tag == tag)
+    // Repeating an unanswered command on the same session must not
+    // push its deadline; on another session it is a new exchange.
+    if (s->ca->pending_tag == tag &&
+        s->ca->pending_session == s->session_number)
         return;
     s->ca->pending_tag = tag;
     s->ca->pending_session = s->session_number;
@@ -3499,7 +3501,7 @@ int ca_timeout(sockets *s) {
 // Reset the CAM when a command goes unanswered, or when
 // initialization stalls between commands.
 void ca_cmd_watchdog(ca_device_t *d, int64_t now) {
-    if (!d || d->pending_since <= 0 ||
+    if (!d || d->pending_since < 0 ||
         now - d->pending_since < CA_CMD_TIMEOUT_MS)
         return;
     if (d->pending_tag) {
@@ -3512,7 +3514,7 @@ void ca_cmd_watchdog(ca_device_t *d, int64_t now) {
         return;
     }
     ca_clear_pending(d);
-    d->pending_since = 0;
+    d->pending_since = -1;
     ca_request_close(d);
 }
 
@@ -3788,7 +3790,7 @@ int dvbca_init_dev(adapter *ad) {
         c->sock = -1;
         c->pending_tag = 0;
         c->pending_session = 0;
-        c->pending_since = 0;
+        c->pending_since = -1;
 
         memset(c->capmt, -1, sizeof(c->capmt));
         memset(c->key[0], 0, sizeof(c->key[0]));
