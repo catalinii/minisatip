@@ -76,15 +76,6 @@ int nfilters;
 const char *listmgmt_str[] = {"CLM_MORE", "CLM_FIRST", "CLM_LAST",
                               "CLM_ONLY", "CLM_ADD",   "CLM_UPDATE"};
 
-// True when the pid is still one of the PMT's streams. Updates drop
-// pids without unclaiming, so holders are validated lazily instead.
-static int pmt_lists_pid(SPMT *pmt, int pid) {
-    for (const auto &sp : pmt->stream_pids)
-        if (sp.pid == pid)
-            return 1;
-    return 0;
-}
-
 static inline SPMT *get_pmt_for_existing_pid(SPid *p) {
     SPMT *pmt = NULL;
     if (p && p->pmt >= 0 && p->pmt < npmts && pmts[p->pmt] &&
@@ -614,12 +605,8 @@ int wait_pusi(adapter *ad, int len) {
     memset(parity, 0, sizeof(parity));
     for (i = 0; i < MAX_PIDS; i++)
         if (ad->pids[i].flags == PID_STATE_ACTIVE && (ad->pids[i].pmt >= 0) &&
-            ad->pids[i].pid < 8192) {
-            SPMT *holder = get_pmt(ad->pids[i].pmt);
-            if (holder && !pmt_lists_pid(holder, ad->pids[i].pid))
-                continue; // stale claim: update dropped it
+            ad->pids[i].pid < 8192)
             pids[ad->pids[i].pid] = PID_INIT;
-        }
     for (i = 0; i < len; i += DVB_FRAME) {
         uint8_t *b = ad->buf + i;
         int pid = PID_FROM_TS(b);
@@ -958,8 +945,6 @@ int pmt_decrypt_stream(adapter *ad) {
         if (b[3] & 0x80) {
             p = find_pid(ad->id, pid);
             pmt = get_pmt_for_existing_pid(p);
-            if (pmt && !pmt_lists_pid(pmt, pid))
-                pmt = NULL; // stale claim: update dropped it, skip decrypt
             if (!pmt) {
                 DEBUGM("PMT not found for pid %d, id %d, packet %d, pos %d",
                        pid, p ? p->pmt : -3, i / 188, i);
@@ -1150,7 +1135,7 @@ static void handover_claims_from_lower_priority(adapter *ad, SPMT *pmt) {
         if (!s || s->flags != PID_STATE_ACTIVE || s->pmt < 0)
             continue;
         old = get_pmt(s->pmt);
-        if (!old || old == pmt || !pmt_lists_pid(old, sp.pid))
+        if (!old || old == pmt)
             continue;
         op = find_pid(ad->id, old->pid);
         old_order = (op && op->order) ? op->order : UINT32_MAX;
@@ -1239,10 +1224,7 @@ void pmt_pid_updated_pids(adapter *ad) {
             if (!s || !pid_subscribed(ad, s) || s->pmt == pmt->id)
                 continue;
             // Order steals: take over from later-sorted holders only.
-            // Holders that dropped the pid in an update count as gone.
             SPMT *holder = s->pmt >= 0 ? get_pmt(s->pmt) : NULL;
-            if (holder && !pmt_lists_pid(holder, sp.pid))
-                holder = NULL;
             if (holder) {
                 SPid *hp = pids[holder->pid];
                 uint32_t holder_order =

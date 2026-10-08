@@ -2453,8 +2453,8 @@ int test_pmt_content_update_delta() {
     ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should keep running");
     ASSERT_EQUAL(pmts[id]->version, 2, "version should advance");
     ASSERT(find_pid(0, 3301)->pmt == id, "video claim should be kept");
-    // Removed pids keep a stale claim; the election ignores holders
-    // that no longer list the pid.
+    // Removed pids keep a stale claim that still counts as live:
+    // the election does not look inside the holder's stream list.
     ASSERT(find_pid(0, 3401)->pmt == id, "stale audio claim should linger");
     ASSERT_EQUAL(fake_ca_del_calls, 0, "CA should see no delete");
     ASSERT_EQUAL(pmts[id]->ca_mask, 0, "CA re-send should be pending");
@@ -2512,8 +2512,8 @@ int test_pmt_content_update_delta() {
     ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should still run");
     ASSERT_EQUAL(fake_ca_add_calls, 0, "FTA PMT should see no re-send");
 
-    // A later PMT listing the dropped pid steals it: the stale holder
-    // no longer lists 3401, so its earlier order does not block.
+    // A later PMT listing the dropped pid cannot steal it: the stale
+    // holder still claims 3401, and its earlier order blocks the rival.
     int bid = pmt_add(0, 200, 52);
     ASSERT(bid >= 0, "could not create the second PMT");
     uint8_t priv[1] = {0};
@@ -2523,18 +2523,18 @@ int test_pmt_content_update_delta() {
     update_pids(0);
     pmt_add_active_pmt(&ad, bid);
 
-    // Preconditions for a stale steal: 3401 still held by A, and B
-    // subscribed strictly later so order alone would block the steal.
+    // Preconditions for a blocked steal: 3401 still held by A, and B
+    // subscribed strictly later so order keeps the holder in place.
     ASSERT(find_pid(0, 3401)->pmt == id, "3401 should still be stale-held");
     ASSERT(find_pid(0, 48)->order < find_pid(0, 52)->order,
            "B should subscribe later than A");
     fake_ca_add_calls = fake_ca_del_calls = 0;
     start_active_pmts(&ad);
-    ASSERT(find_pid(0, 3401)->pmt == bid, "stale claim should be stolen");
-    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "second PMT should run");
+    ASSERT(find_pid(0, 3401)->pmt == id, "stale holder should keep 3401");
+    ASSERT_EQUAL(pmts[bid]->state, PMT_STOPPED,
+                 "claimless rival waits stopped");
     ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "first PMT should still run");
-    ASSERT(fake_ca_add_calls == 1, "second PMT should be sent to the CA");
-    ASSERT_EQUAL(fake_ca_last_add_pmt, bid, "B should be the one sent");
+    ASSERT_EQUAL(fake_ca_add_calls, 0, "stopped rival should see no CA send");
 
     del_ca(&counting_op);
     del_filter(fid);
@@ -2608,9 +2608,9 @@ int test_ca_update_flag_distinguishes_resend() {
     return 0;
 }
 
-// A late parse whose streams are stale-held by a later PMT must not
-// stop it: the holder dropped the pid, so handover skips it.
-int test_handover_ignores_stale_holder() {
+// A late parse whose streams are stale-held by a later PMT stops
+// it: the holder counts as live, so handover applies as usual.
+int test_handover_stops_stale_holder() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
@@ -2658,7 +2658,7 @@ int test_handover_ignores_stale_holder() {
     uint8_t sec[64];
     int len = build_pmt(sec, 200, 1, 3301, 0, 0, types, spids, 1);
     ASSERT(process_pmt(bfid, sec, len, pmts[bid]) == 0, "B to parse");
-    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "A must survive handover");
+    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "A must yield to handover");
 
     start_active_pmts(&ad);
     ASSERT(find_pid(0, 3301)->pmt == bid, "B should take 3301");
@@ -3150,8 +3150,8 @@ int main() {
               "testing PMT content update keeps running with a re-send")
     TEST_FUNC(test_ca_update_flag_distinguishes_resend(),
               "testing the CA add call flags updates vs first adds")
-    TEST_FUNC(test_handover_ignores_stale_holder(),
-              "testing handover skips holders that dropped the pid")
+    TEST_FUNC(test_handover_stops_stale_holder(),
+              "testing handover stops holders that dropped the pid")
     TEST_FUNC(test_pmt_update_e2e_single_capmt_update(),
               "testing a version update sends one CAPMT UPDATE end to end")
     TEST_FUNC(test_resend_rejected_releases_ca(),
