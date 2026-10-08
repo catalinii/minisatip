@@ -769,7 +769,9 @@ void ca_teardown(ca_device_t *d) {
     d->poll_fails = 0;
     d->datetime_next_send = 0;
     d->init_start = 0;
-    d->enquiry_next = 0;
+    d->pending_tag = 0;
+    d->pending_session = 0;
+    d->pending_since = 0;
     d->fd = -1;
     d->sock = -1;
     d->state = CA_STATE_INACTIVE;
@@ -2683,7 +2685,6 @@ int APP_CA_handler(ca_session_t *session, int resource, uint8_t *data,
     case TAG_CA_INFO:
         d->state = CA_STATE_INITIALIZED;
         d->init_start = 0;
-        d->enquiry_next = 0;
 
         // Ignore CAM reported values if user has forced specific CAIDs
         if (!d->has_forced_caids) {
@@ -3089,6 +3090,49 @@ int ca_write_tpdu(ca_device_t *d, int tag, uint8_t *buf, int len) {
     return 0;
 }
 
+// Commands the CAM must answer: the watchdog resets
+// the module when the reply never arrives.
+static const struct {
+    int cmd, reply;
+} ca_tracked_cmds[] = {
+    {TAG_PROFILE_ENQUIRY, TAG_PROFILE},
+    {TAG_APP_INFO_ENQUIRY, CIPLUS_TAG_APP_INFO},
+    {TAG_CA_INFO_ENQUIRY, TAG_CA_INFO},
+};
+
+// Expected reply for a tracked command, 0 when untracked.
+static int ca_expected_reply(int cmd) {
+    for (uint32_t i = 0;
+         i < sizeof(ca_tracked_cmds) / sizeof(ca_tracked_cmds[0]); i++)
+        if (ca_tracked_cmds[i].cmd == cmd)
+            return ca_tracked_cmds[i].reply;
+    return 0;
+}
+
+static void ca_clear_pending(ca_device_t *d) {
+    d->pending_tag = 0;
+    d->pending_session = 0;
+    d->pending_since = 0;
+}
+
+// Arm the watchdog when a tracked command goes out.
+static void ca_track_command(ca_session_t *s, int tag) {
+    if (!s || !s->ca || !ca_expected_reply(tag))
+        return;
+    ca_device_t *d = s->ca;
+    d->pending_tag = tag;
+    d->pending_session = s->session_number;
+    d->pending_since = getTick();
+}
+
+// Disarm when the tracked reply arrives.
+static void ca_match_reply(ca_session_t *s, int tag) {
+    if (!s || !s->ca || !s->ca->pending_tag)
+        return;
+    if (tag == ca_expected_reply(s->ca->pending_tag))
+        ca_clear_pending(s->ca);
+}
+
 // writes session data to the CAM.
 int ca_write_spdu(ca_device_t *d, int session_number, unsigned char tag,
                   const void *data, int len, const void *apdu, int alen) {
@@ -3131,8 +3175,12 @@ int ca_write_apdu(ca_session_t *s, int tag, const void *data, int len) {
     LOG("ca_write_apdu: CA %d, session %d, name %s, write tag %06X, data "
         "length %d",
         s->ca->id, s->session_number, s->handler.name, tag, len);
-    return ca_write_spdu(s->ca, s->session_number, ST_SESSION_NUMBER, 0, 0, pkt,
-                         len + 3 + l);
+    int rc = ca_write_spdu(s->ca, s->session_number, ST_SESSION_NUMBER, 0, 0,
+                           pkt, len + 3 + l);
+    // Failed writes never went out, so only successes arm it.
+    if (!rc)
+        ca_track_command(s, tag);
+    return rc;
 }
 
 // reads a TPDU from the CAM. This is called only on DVBCA path
@@ -3267,6 +3315,8 @@ int ca_read_apdu(ca_session_t *session, uint8_t *buf, int buf_len) {
         if (len > 0)
             hexdump("data: ", data, len);
 
+        // The CAM answered: drop the matching tracked command.
+        ca_match_reply(session, tag);
         session->handler.callback(session, tag, data, len);
 
         i += 3 + llen + len;
@@ -3335,6 +3385,9 @@ int ca_read(sockets *s) {
         if (session->handler.close)
             session->handler.close(session);
 
+        // Its exchange is dead: drop any command it awaited.
+        if (d->pending_session == session_number)
+            ca_clear_pending(d);
         memset(&session->handler, 0, sizeof(session->handler));
         pkt[0] = 0; // status
         copy16(pkt, 1, session_number);
@@ -3414,28 +3467,31 @@ int ca_timeout(sockets *s) {
     if (d->state == CA_STATE_INITIALIZED && d->datetime_response_interval &&
         getTick() > d->datetime_next_send)
         ca_send_datetime(d);
-    ca_init_watchdog(d, getTick());
+    ca_cmd_watchdog(d, getTick());
     return 0;
 }
 
-// Nudge a silent CAM with another enquiry, reset it past the deadline.
-void ca_init_watchdog(ca_device_t *d, int64_t now) {
-    if (!d || d->state == CA_STATE_INITIALIZED || d->init_start <= 0)
+// Reset the CAM when a command goes unanswered past the deadline.
+void ca_cmd_watchdog(ca_device_t *d, int64_t now) {
+    if (!d)
         return;
-    if (now - d->init_start >= CA_INIT_TIMEOUT_MS) {
+    if (d->pending_tag &&
+        now - d->pending_since >= CA_CMD_TIMEOUT_MS) {
+        LOG("CA %d: command %06X unanswered after %jd ms, resetting",
+            d->id, d->pending_tag, now - d->pending_since);
+        ca_clear_pending(d);
+        d->init_start = 0;
+        ca_request_close(d);
+        return;
+    }
+    // No tracked command outstanding: a mute CAM still
+    // resets once it misses the init deadline.
+    if (!d->pending_tag && d->state != CA_STATE_INITIALIZED &&
+        d->init_start > 0 && now - d->init_start >= CA_CMD_TIMEOUT_MS) {
         LOG("CA %d: no CA_INFO after %jd ms, resetting the module", d->id,
             now - d->init_start);
         d->init_start = 0;
-        d->enquiry_next = 0;
         ca_request_close(d);
-    } else if (now >= d->enquiry_next) {
-        ca_session_t *s =
-            find_session_for_resource(d, EN50221_APP_CA_RESOURCEID);
-        if (s) {
-            LOG("CA %d: no CA_INFO yet, re-sending enquiry", d->id);
-            ca_write_apdu(s, TAG_CA_INFO_ENQUIRY, NULL, 0);
-        }
-        d->enquiry_next = now + CA_INFO_RETRY_MS;
     }
 }
 
@@ -3482,7 +3538,6 @@ int ca_init_enigma(ca_device_t *d) {
         std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
         d->sock = sk;
         d->init_start = getTick();
-        d->enquiry_next = d->init_start + CA_INFO_RETRY_MS;
     }
     sockets_timeout(d->sock, 1000);
     sockets_setread(d->sock, (void *)ca_read_enigma);
@@ -3572,7 +3627,6 @@ int ca_init_en50221(ca_device_t *d) {
         std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
         d->sock = sk;
         d->init_start = getTick();
-        d->enquiry_next = d->init_start + CA_INFO_RETRY_MS;
     }
     sockets_timeout(d->sock, 1000);
     sockets_setread(d->sock, (void *)ca_read_tpdu);
@@ -3712,7 +3766,9 @@ int dvbca_init_dev(adapter *ad) {
         c->state = CA_STATE_INACTIVE;
         c->sock = -1;
         c->init_start = 0;
-        c->enquiry_next = 0;
+        c->pending_tag = 0;
+        c->pending_session = 0;
+        c->pending_since = 0;
 
         memset(c->capmt, -1, sizeof(c->capmt));
         memset(c->key[0], 0, sizeof(c->key[0]));

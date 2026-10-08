@@ -67,6 +67,8 @@ int dvbca_init_dev(adapter *ad);
 int dvbca_close_dev(adapter *ad);
 int ca_timeout(sockets *s);
 int ca_read(sockets *s);
+int ca_write_apdu(ca_session_t *s, int tag, const void *data, int len);
+int ca_read_apdu(ca_session_t *session, uint8_t *buf, int buf_len);
 int ca_read_tpdu(int socket, void *buf, int buf_len, sockets *ss, int *rb);
 int ca_read_enigma(int socket, void *buf, int len, sockets *ss, int *rb);
 int get_enabled_pmts_for_ca(ca_device_t *d);
@@ -1103,8 +1105,16 @@ int test_ca_keepalive_counts_failures() {
     return 0;
 }
 
-// Init watchdog: silent CAMs get re-enquired, stale ones get reset.
-int test_ca_init_watchdog() {
+static int track_stub_cb(ca_session_t *s, int r, uint8_t *b, int l) {
+    (void)s;
+    (void)r;
+    (void)b;
+    (void)l;
+    return 0;
+}
+
+// Command watchdog: an unanswered command resets the CAM.
+int test_ca_cmd_watchdog() {
     ca_device_t dev;
     memset(&dev, 0, sizeof(dev));
     ca_device_t *saved = ca_devices[65];
@@ -1122,49 +1132,83 @@ int test_ca_init_watchdog() {
     int fds[2];
     ASSERT(pipe(fds) == 0, "pipe for TPDU writes");
     dev.fd = fds[1];
-    int flags = fcntl(fds[0], F_GETFL);
-    ASSERT(fcntl(fds[0], F_SETFL, flags | O_NONBLOCK) == 0, "nonblock read");
-    uint8_t buf[4096];
     const int64_t t0 = 1000000;
 
-    ca_init_watchdog(NULL, t0);
+    ca_cmd_watchdog(NULL, t0);
     dev.init_start = t0;
-    dev.enquiry_next = t0 + CA_INFO_RETRY_MS;
-    ca_init_watchdog(&dev, t0 + 1000);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 0, "fresh init not closed");
-    ASSERT_EQUAL(dev.enquiry_next, t0 + CA_INFO_RETRY_MS, "fresh not nudged");
-    ASSERT(read(fds[0], buf, sizeof(buf)) < 0, "fresh writes nothing");
+    dev.pending_tag = TAG_CA_INFO_ENQUIRY;
+    dev.pending_session = 3;
+    dev.pending_since = t0;
+    ca_cmd_watchdog(&dev, t0 + 1000);
+    ASSERT_EQUAL(get_sockets(id)->force_close, 0, "fresh command not closed");
+    ASSERT(dev.pending_tag != 0, "fresh command stays tracked");
+
+    dev.pending_tag = TAG_PROFILE_ENQUIRY;
+    dev.pending_session = 1;
+    dev.pending_since = t0;
+    ca_cmd_watchdog(&dev, t0 + CA_CMD_TIMEOUT_MS);
+    ASSERT_EQUAL(get_sockets(id)->force_close, 1, "stale command resets");
+    ASSERT_EQUAL(dev.pending_tag, 0, "reset clears pending");
+    ASSERT_EQUAL(dev.init_start, 0, "reset clears init");
+    get_sockets(id)->force_close = 0;
+
+    dev.init_start = t0; // mute CAM: nothing pending, nothing answered
+    ca_cmd_watchdog(&dev, t0 + CA_CMD_TIMEOUT_MS);
+    ASSERT_EQUAL(get_sockets(id)->force_close, 1, "mute CAM resets");
+    ASSERT_EQUAL(dev.init_start, 0, "mute reset disarms");
+    get_sockets(id)->force_close = 0;
+
+    dev.state = CA_STATE_INITIALIZED;
+    dev.init_start = t0;
+    ca_cmd_watchdog(&dev, t0 + 10 * CA_CMD_TIMEOUT_MS);
+    ASSERT_EQUAL(get_sockets(id)->force_close, 0, "initialized skips backstop");
+
+    dev.pending_tag = TAG_CA_INFO_ENQUIRY; // post-init commands still guarded
+    dev.pending_session = 3;
+    dev.pending_since = t0;
+    ca_cmd_watchdog(&dev, t0 + CA_CMD_TIMEOUT_MS);
+    ASSERT_EQUAL(get_sockets(id)->force_close, 1, "post-init stale resets");
+    get_sockets(id)->force_close = 0;
+
+    dev.state = CA_STATE_ACTIVE;
+    dev.init_start = 0; // fully unarmed: late ticks stay quiet
+    ca_cmd_watchdog(&dev, t0 + 10 * CA_CMD_TIMEOUT_MS);
+    ASSERT_EQUAL(get_sockets(id)->force_close, 0, "unarmed never resets");
 
     // MKRID(3, 1, 1) is EN50221_APP_CA_RESOURCEID (ca.cpp-local).
     dev.sessions[2].handler.resource = MKRID(3, 1, 1);
     dev.sessions[2].ca = &dev;
     dev.sessions[2].session_number = 3;
-    ca_init_watchdog(&dev, t0 + CA_INFO_RETRY_MS);
-    ASSERT(read(fds[0], buf, sizeof(buf)) > 0, "retry writes the enquiry");
-    ASSERT_EQUAL(dev.enquiry_next, t0 + 2 * CA_INFO_RETRY_MS, "retry re-armed");
-    ASSERT_EQUAL(get_sockets(id)->force_close, 0, "retry does not close");
-    ca_init_watchdog(&dev, t0 + CA_INFO_RETRY_MS + 1000);
-    ASSERT(read(fds[0], buf, sizeof(buf)) < 0, "re-armed sends nothing");
+    ASSERT_EQUAL(ca_write_apdu(&dev.sessions[2], TAG_CA_INFO_ENQUIRY, NULL, 0),
+                 0, "tracked send succeeds");
+    ASSERT_EQUAL(dev.pending_tag, TAG_CA_INFO_ENQUIRY, "tracked send arms");
+    ASSERT_EQUAL(dev.pending_session, 3, "armed on its session");
+    int64_t since = dev.pending_since;
+    ASSERT_EQUAL(ca_write_apdu(&dev.sessions[2], TAG_CA_PMT, NULL, 0), 0,
+                 "one-way send succeeds");
+    ASSERT_EQUAL(dev.pending_tag, TAG_CA_INFO_ENQUIRY, "one-way keeps tag");
+    ASSERT_EQUAL(dev.pending_since, since, "one-way keeps deadline");
 
-    memset(dev.sessions, 0, sizeof(dev.sessions)); // CAM silent, no session
-    ca_init_watchdog(&dev, t0 + 2 * CA_INFO_RETRY_MS);
-    ASSERT(read(fds[0], buf, sizeof(buf)) < 0, "no session writes nothing");
-    ASSERT_EQUAL(dev.enquiry_next, t0 + 3 * CA_INFO_RETRY_MS, "still re-armed");
+    ca_session_t rs{};
+    rs.ca = &dev;
+    rs.session_number = 3;
+    rs.handler.callback = track_stub_cb;
+    uint8_t wrong[] = {0x9F, 0x80, 0x21, 0x00}; // APP_INFO, not our reply
+    ASSERT_EQUAL(ca_read_apdu(&rs, wrong, sizeof(wrong)), 0, "wrong parsed");
+    ASSERT(dev.pending_tag != 0, "wrong reply keeps pending");
+    uint8_t right[] = {0x9F, 0x80, 0x31, 0x00}; // CA_INFO, our reply
+    ASSERT_EQUAL(ca_read_apdu(&rs, right, sizeof(right)), 0, "reply parsed");
+    ASSERT_EQUAL(dev.pending_tag, 0, "reply disarms");
 
-    dev.state = CA_STATE_INITIALIZED;
-    ca_init_watchdog(&dev, t0 + CA_INIT_TIMEOUT_MS + 1000);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 0, "initialized not closed");
-
-    dev.state = CA_STATE_ACTIVE;
-    ca_init_watchdog(&dev, t0 + CA_INIT_TIMEOUT_MS);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 1, "stale init resets");
-    ASSERT_EQUAL(dev.init_start, 0, "reset disarms the watchdog");
-    ASSERT_EQUAL(dev.enquiry_next, 0, "reset clears the retry");
-    get_sockets(id)->force_close = 0;
-
-    dev.init_start = 0; // never armed: late ticks stay quiet
-    ca_init_watchdog(&dev, t0 + 10 * CA_INIT_TIMEOUT_MS);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 0, "unarmed never resets");
+    dev.pending_tag = TAG_CA_INFO_ENQUIRY;
+    dev.pending_session = 3;
+    unsigned char close3[4] = {ST_CLOSE_SESSION_REQUEST, 0x02, 0x00, 0x03};
+    sockets cs{};
+    cs.sid = 65;
+    cs.rlen = 4;
+    cs.buf = close3;
+    ASSERT_EQUAL(ca_read(&cs), 0, "close parsed");
+    ASSERT_EQUAL(dev.pending_tag, 0, "close clears pending");
 
     opts.enigma = saved_enigma;
     sockets_del(id); // closes sp[0]
@@ -1588,7 +1632,7 @@ int main() {
     TEST_FUNC(test_ca_reconnect_poller(), "testing reconnect poller gating");
     TEST_FUNC(test_ca_keepalive_counts_failures(),
               "testing keepalive failure counting");
-    TEST_FUNC(test_ca_init_watchdog(), "testing init watchdog");
+    TEST_FUNC(test_ca_cmd_watchdog(), "testing command watchdog");
     TEST_FUNC(test_ca_read_tpdu_outcomes(), "testing TPDU read outcomes");
     TEST_FUNC(test_ca_read_enigma_removal(), "testing enigma removal close");
     TEST_FUNC(test_dvbca_init_dev_guards(), "testing init device guards");
