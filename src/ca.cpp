@@ -1180,7 +1180,7 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
     if (send_capmt(d, capmt, listmgmt, CA_PMT_CMD_ID_OK_DESCRAMBLING, !update))
         LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "send_capmt failed");
 
-    LOG("PMT CA %d pmt %d pid %u (%s) ver %u sid %u (%d), enabled_pmts %d, "
+    LOG("PMT CA %d pmt %d pid %u (%s) ver %u sid %X (%u), enabled_pmts %d, "
         "%s, PMTS to be send %d %d, pos %ld%s",
         spmt->adapter, spmt->id, pid, spmt->name, capmt->version, sid,
         capmt->sid, get_enabled_pmts_for_ca(d), listmgmt_str[listmgmt],
