@@ -285,7 +285,7 @@ int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt) {
         // never closed: this send is a PMT update, not a new add.
         int update = (pmt->ca_registered_mask & mask) != 0;
         if (send || no_caids) {
-            LOG("PMT %d -> CA %d: %s", pmt->id, i, update ? "update" : "add");
+            LOGM("PMT %d -> CA %d: %s", pmt->id, i, update ? "update" : "add");
             result = ca[i].op->ca_add_pmt(ad, pmt, update);
         }
 
