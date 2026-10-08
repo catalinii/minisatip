@@ -1177,17 +1177,17 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
         }
     }
 
-    // First registration always sends; an update sends only when the
-    // built CAPMT changed, decided inside send_capmt.
-    if (send_capmt(d, capmt, listmgmt, CA_PMT_CMD_ID_OK_DESCRAMBLING, !update))
-        LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "send_capmt failed");
-
     LOG("PMT CA %d pmt %d pid %u (%s) ver %u sid %X (%u), enabled_pmts %d, "
         "%s, PMTS to be send %d %d, pos %ld%s",
         spmt->adapter, spmt->id, pid, spmt->name, capmt->version, sid,
         capmt->sid, get_enabled_pmts_for_ca(d), listmgmt_str[listmgmt],
         capmt->pmt_id, capmt->other_id, capmt - d->capmt,
         update ? ", update" : "");
+
+    // First registration always sends; an update sends only when the
+    // built CAPMT changed, decided inside send_capmt.
+    if (send_capmt(d, capmt, listmgmt, CA_PMT_CMD_ID_OK_DESCRAMBLING, !update))
+        LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "send_capmt failed");
 
     if (d->key[0][0])
         send_cw(spmt->id, CA_ALGO_AES128_CBC, 0, d->key[0], d->iv[0], 3600,
