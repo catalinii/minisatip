@@ -836,6 +836,9 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt, int update) {
     int key, pid = pmt->pid;
     std::lock_guard<SMutex> lock(keys_mutex);
 
+    LOG("%s: adapter %d, pmt %d, pid %d, update %d", __FUNCTION__, ad->id,
+        pmt->id, pid, update);
+
     if (ad->type == ADAPTER_CI) {
         LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
                        "%s: Disabling dvbapi on DDCI adapter %d", __FUNCTION__,

@@ -438,8 +438,10 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
     if (ddid == -1)
         ddid = is_pmt_running(pmt);
 
-    LOG("%s: adapter %d, pmt %d, pid %d, sid %d, ddid %d, name: %s",
-        __FUNCTION__, ad->id, pmt->id, pmt->pid, pmt->sid, ddid, pmt->name);
+    LOG("%s: adapter %d, pmt %d, pid %d, sid %d, ddid %d, update %d, "
+        "name: %s",
+        __FUNCTION__, ad->id, pmt->id, pmt->pid, pmt->sid, ddid, update,
+        pmt->name);
 
     if (registered == -1) {
         int result = get_ddci_channel_for_pmt(pmt, &channel);
