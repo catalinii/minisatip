@@ -21,14 +21,16 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Choose the build type (Debug, Release, RelWithDebInfo, MinSizeRel)" FORCE)
 endif()
 
-if(DEFINED ENV{PR})
-    set(VERSION_STRING "${GIT_TAG}+PR$ENV{PR}~${GIT_REVISION}")
-else()
-    set(VERSION_STRING "${GIT_TAG}~${GIT_REVISION}")
-endif()
-
+# A release tarball has no git metadata and would get the version "~", so a
+# packager passes it with -DVERSION_STRING instead.
 if(NOT VERSION_STRING)
-    set(VERSION_STRING "unknown")
+    if(DEFINED ENV{PR})
+        set(VERSION_STRING "${GIT_TAG}+PR$ENV{PR}~${GIT_REVISION}")
+    elseif(GIT_TAG OR GIT_REVISION)
+        set(VERSION_STRING "${GIT_TAG}~${GIT_REVISION}")
+    else()
+        set(VERSION_STRING "unknown")
+    endif()
 endif()
 
 project(minisatip VERSION 2.0 LANGUAGES CXX)
