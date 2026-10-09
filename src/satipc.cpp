@@ -481,8 +481,15 @@ int satipc_timeout(sockets *s) {
         return 0;
     }
 #endif // DISABLE_SRT
-    if (restart_conn)
-        sockets_del(sock_to_del);
+    if (restart_conn) {
+        // Re-check under the lock: a reopen may have replaced ad->sock
+        // after the snapshot, and the old id may since be reused.
+        std::unique_lock<SMutex> lock(ad->mutex);
+        bool same = (ad->sock == sock_to_del);
+        lock.unlock();
+        if (same)
+            sockets_del(sock_to_del);
+    }
     if (busy)
         return 0;
     LOG("satipc: Sent keep-alive to the satip server %s:%d, adapter %d, "
@@ -764,6 +771,9 @@ int satipc_setup_rtp_udp_sockets(adapter *ad, satipc *sip) {
 static void satipc_drop_rtsp_socket(adapter *ad) {
     if (ad->fe_sock < 0)
         return;
+    // No teardown: the adapter never got enabled, so drop the close
+    // callback and just untrack/close instead of re-entering close.
+    sockets_setclose(ad->fe_sock, NULL);
     sockets_del(ad->fe_sock); // also closes ad->fe (close_unix_socket)
     ad->fe_sock = -1;
     ad->fe = -1;
