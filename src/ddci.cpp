@@ -234,6 +234,8 @@ SCA_op ddci;
 int ddci_close() { return 0; }
 int ddci_close_adapter(adapter *a) { return 0; }
 
+extern SMutex ca_mask_mutex;
+
 // Skip initializing DDCIs: their CAM has not confirmed its CA list yet,
 // so they only force a retry when no ready DDCI matched.
 int create_channel_for_pmt(Sddci_channel *c, SPMT *pmt) {
@@ -250,6 +252,9 @@ int create_channel_for_pmt(Sddci_channel *c, SPMT *pmt) {
                 continue;
             }
 
+            // add_caid_mask writes ad_info under ca_mask_mutex: read
+            // it under the same lock so count/caid/mask stay together.
+            std::lock_guard<SMutex> lock(ca_mask_mutex);
             for (j = 0; j < ca[dvbca_id].ad_info[i].caids; j++)
                 if (match_caid(pmt, ca[dvbca_id].ad_info[i].caid[j],
                                ca[dvbca_id].ad_info[i].mask[j])) {

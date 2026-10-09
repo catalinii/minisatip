@@ -25,6 +25,9 @@
 
 #include <linux/dvb/frontend.h>
 #include <string.h>
+#include <thread>
+#include <unordered_set>
+#include <vector>
 
 int test_get_lnb_hiband_universal() {
     transponder tp;
@@ -505,6 +508,35 @@ int test_mark_pid_add_bounds() {
     return 0;
 }
 
+// Concurrent mark_pid_add lost sequence updates (duplicate SPid.order):
+// next_pid_order must hand out unique nonzero values across threads.
+int test_next_pid_order_concurrent() {
+    adapter ad = {};
+    ad.enabled = 1;
+    ad.id = 0;
+    const int nthreads = 8, per = 2000;
+    std::vector<std::vector<uint32_t>> got(nthreads);
+    std::vector<std::thread> th;
+    for (int t = 0; t < nthreads; t++) {
+        got[t].resize(per);
+        th.emplace_back([&ad, &got, t, per] {
+            for (int i = 0; i < per; i++)
+                got[t][i] = ad.next_pid_order();
+        });
+    }
+    for (auto &t : th)
+        t.join();
+    std::unordered_set<uint32_t> seen;
+    for (auto &v : got)
+        for (uint32_t o : v) {
+            ASSERT(o != 0, "order must never be 0");
+            ASSERT(!seen.count(o), "duplicate pid order across threads");
+            seen.insert(o);
+        }
+    ASSERT(seen.size() == (size_t)nthreads * per, "lost sequence updates");
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -537,6 +569,8 @@ int main() {
     TEST_FUNC(test_compare_slave_parameters(),
               "test compare_slave_parameters with std::optional");
     TEST_FUNC(test_mark_pid_add_bounds(), "test mark_pid_add pid bounds");
+    TEST_FUNC(test_next_pid_order_concurrent(),
+              "test concurrent next_pid_order hands out unique orders");
 
     return 0;
 }

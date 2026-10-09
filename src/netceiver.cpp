@@ -166,7 +166,7 @@ int netcv_commit(adapter *ad) {
         int freq = tp->freq.value_or(0);
         // Client-controlled: clamp to the map sizes used below.
         int diseqc = tp->diseqc.value_or(0);
-        if (diseqc < 0 || diseqc > 3)
+        if (diseqc < 0 || diseqc > 4)
             diseqc = 0;
         int pol = tp->pol.value_or(0);
         if (pol < 0 || pol > 3)

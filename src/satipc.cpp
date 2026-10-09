@@ -421,51 +421,112 @@ int satipc_timeout(sockets *s) {
     adapter *ad;
     satipc *sip;
     get_ad_and_sipr(s->sid, 1);
-    // Adapter -> socket order below, inverse of the stream path; safe: the
-    // tracked socket differs from stream sockets and SMutex is recursive.
-    std::lock_guard<SMutex> lock(ad->mutex);
-
-    if (sip->rtsp_socket_closed) {
-        satipc_open_rtsp_socket(ad, sip,
-                                false); // is_init=false for reconnection
-        return 0;
-    }
-
+    // Decide under ad->mutex, act below without it: holding adapter
+    // across socket calls ABBA-deadlocks vs sockets_del->close_adapter.
+    bool reopen_rtsp = false;
+    bool restart_srt = false;
+    bool restart_conn = false;
+    bool busy = false;
+    int sock_to_del = -1;
+    {
+        std::lock_guard<SMutex> lock(ad->mutex);
+        if (sip->rtsp_socket_closed) {
+            // Claim the reopen so a concurrent timeout opens only once.
+            sip->rtsp_socket_closed = false;
+            reopen_rtsp = true;
+        }
 #ifndef DISABLE_SRT
-    // Check and restart SRT connection if it is broken
-    if (sip->transport_type == SIP_TRANSPORT_SRT) {
-        bool srt_connection_broken = (sip->srt_sock == SRT_INVALID_SOCK) ||
-                                     !srt_socket_is_connected(sip->srt_sock);
-
-        if (srt_connection_broken) {
-            LOG("SRT connection lost for adapter %d. Restarting SRT.", ad->id);
-            // Return 0: a nonzero timeout return deletes the RTSP socket.
-            satipc_open_srt(ad, sip);
-            return 0;
+        // srt_socket_is_connected is a lock-free SRT state query. The
+        // claim serializes restarts across concurrent timeouts.
+        else if (sip->transport_type == SIP_TRANSPORT_SRT &&
+                 !sip->srt_restart_claimed &&
+                 (sip->srt_sock == SRT_INVALID_SOCK ||
+                  !srt_socket_is_connected(sip->srt_sock))) {
+            sip->srt_restart_claimed = true;
+            restart_srt = true;
+        }
+#endif
+        if (!reopen_rtsp && !restart_srt) {
+            // restart the connection we did not receive a response for
+            // more than 10 seconds from the server
+            if (sip->expect_reply && (getTick() - sip->last_response_sent >
+                                      sip->timeout_ms)) {
+                LOG("satipc %d: no response was received from the server "
+                    "for more than %jd ms, closing connection",
+                    sip->id, getTick() - sip->last_response_sent);
+                sip->restart_needed = true;
+                sock_to_del = ad->sock;
+                sip->state = SATIP_STATE_DISCONNECTED;
+                restart_conn = true;
+            }
+            if (sip->want_tune || sip->lap || sip->ldp) {
+                LOG("satipc %d no timeout will be performed as we have "
+                    "operations in queue tune %d lap %d ldp %d",
+                    sip->id, sip->want_tune, sip->lap, sip->ldp);
+                busy = true;
+            }
         }
     }
-#endif // DISABLE_SRT
 
-    // restart the connection we did not receive a response for more than 10
-    // seconds from the server
-    if (sip->expect_reply &&
-        (getTick() - sip->last_response_sent > sip->timeout_ms)) {
-        LOG("satipc %d: no response was received from the server for more "
-            "than "
-            "%jd ms, "
-            "closing connection",
-            sip->id, getTick() - sip->last_response_sent);
-        sip->restart_needed = true;
-        sockets_del(ad->sock);
-        sip->state = SATIP_STATE_DISCONNECTED;
-    }
-
-    if (sip->want_tune || sip->lap || sip->ldp) {
-        LOG("satipc %d no timeout will be performed as we have operations "
-            "in queue tune %d lap %d ldp %d",
-            sip->id, sip->want_tune, sip->lap, sip->ldp);
+    if (reopen_rtsp) {
+        // is_init=false for reconnection
+        if (satipc_open_rtsp_socket(ad, sip, false) < 0) {
+            std::lock_guard<SMutex> lock(ad->mutex);
+            sip->rtsp_socket_closed = true; // retry on the next timeout
+            return 0;
+        }
+        // The adapter may have closed while unlocked: drop what was
+        // just installed instead of resurrecting it outside close.
+        bool closed;
+        int installed, fe, dvr;
+        {
+            std::lock_guard<SMutex> lock(ad->mutex);
+            closed = !ad->enabled;
+            installed = ad->fe_sock;
+            fe = ad->fe;
+            dvr = ad->dvr;
+        }
+        if (closed)
+            satipc_drop_rtsp_socket(ad, sip, installed, fe, dvr);
         return 0;
     }
+#ifndef DISABLE_SRT
+    // Check and restart SRT connection if it is broken
+    if (restart_srt) {
+        LOG("SRT connection lost for adapter %d. Restarting SRT.", ad->id);
+        // Return 0: a nonzero timeout return deletes the RTSP socket.
+        int srv = satipc_open_srt(ad, sip);
+        // The adapter may have closed while unlocked: release what the
+        // open published instead of stranding it on a dead adapter.
+        bool closed = false;
+        SRTSOCKET fresh = SRT_INVALID_SOCK;
+        {
+            std::lock_guard<SMutex> lock(ad->mutex);
+            if (srv == 0) {
+                closed = !ad->enabled;
+                fresh = sip->srt_sock;
+            }
+        }
+        if (closed)
+            satipc_abort_srt(ad, sip, fresh);
+        {
+            std::lock_guard<SMutex> lock(ad->mutex);
+            sip->srt_restart_claimed = false;
+        }
+        return 0;
+    }
+#endif // DISABLE_SRT
+    if (restart_conn) {
+        // Re-check under the lock: a reopen may have replaced ad->sock
+        // after the snapshot, and the old id may since be reused.
+        std::unique_lock<SMutex> lock(ad->mutex);
+        bool same = (ad->sock == sock_to_del);
+        lock.unlock();
+        if (same)
+            sockets_del(sock_to_del);
+    }
+    if (busy)
+        return 0;
     LOG("satipc: Sent keep-alive to the satip server %s:%d, adapter %d, "
         "socket_id %d, handle %d, timeout %d",
         ad ? sip->sip : NULL, ad ? sip->sport : 0, s->sid, s->id, s->sock,
@@ -740,6 +801,45 @@ int satipc_setup_rtp_udp_sockets(adapter *ad, satipc *sip) {
     return 0;
 }
 
+// Drop an RTSP socket installed by a failed or raced open: only the
+// expected entry and fds are released, then the closed flag returns.
+void satipc_drop_rtsp_socket(adapter *ad, satipc *sip, int id, int fe, int dvr) {
+    if (id >= 0) {
+        // No teardown: drop the close callback and just untrack/close
+        // instead of re-entering close_adapter while opening.
+        sockets_setclose(id, NULL);
+        sockets_del(id); // also closes ad->fe (close_unix_socket)
+    }
+    std::lock_guard<SMutex> lock(ad->mutex);
+    if (ad->fe_sock != id || ad->fe != fe)
+        return; // replaced meanwhile, the new owner handles it
+    if (id < 0 && fe >= 0)
+        close(fe); // untracked: sockets_add failed, raw fd remains
+    if (sip->transport_type == SIP_TRANSPORT_TCP && ad->dvr == dvr && dvr >= 0)
+        close(dvr); // TCP dvr was never tracked, close released it nowhere
+    ad->fe_sock = -1;
+    ad->fe = -1;
+    if (sip->transport_type == SIP_TRANSPORT_TCP)
+        ad->dvr = -1;
+    sip->rtsp_socket_closed = true;
+}
+
+#ifndef DISABLE_SRT
+// Release SRT state published while its adapter was closing; only the
+// expected socket is touched, so a concurrent reopen is never harmed.
+void satipc_abort_srt(adapter *ad, satipc *sip, SRTSOCKET fresh) {
+    if (sip->srt_sock != fresh || fresh == SRT_INVALID_SOCK)
+        return;
+    srt_close(sip->srt_sock);
+    sip->srt_sock = SRT_INVALID_SOCK;
+    sip->srt_streamid.clear();
+    if (ad->sock >= 0)
+        sockets_set_handle(ad->sock, SOCK_TIMEOUT);
+    sip->udp_sock = -1;
+    ad->dvr = -1;
+}
+#endif
+
 int satipc_open_device(adapter *ad) {
     satipc *sip = satip[ad->id];
     if (!sip)
@@ -761,16 +861,18 @@ int satipc_open_device(adapter *ad) {
 #ifndef DISABLE_SRT
     if (sip->transport_type == SIP_TRANSPORT_SRT) {
         int rv = satipc_open_srt(ad, sip);
-        if (rv)
+        if (rv) {
+            satipc_drop_rtsp_socket(ad, sip, ad->fe_sock, ad->fe, ad->dvr);
             return rv;
+        }
     }
 #endif
     if (sip->transport_type == SIP_TRANSPORT_UDP) {
         int rv = satipc_setup_rtp_udp_sockets(ad, sip);
-        // No recovery reopen here: a second RTSP socket would orphan the
-        // first fd and its tracking; the lifecycle retries and closes.
-        if (rv)
+        if (rv) {
+            satipc_drop_rtsp_socket(ad, sip, ad->fe_sock, ad->fe, ad->dvr);
             return rv;
+        }
     }
     sip->session[0] = 0;
     sip->lap = 0;

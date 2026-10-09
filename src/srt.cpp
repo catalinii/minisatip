@@ -40,6 +40,8 @@ static std::atomic<SRTSOCKET> srt_listener_sock{SRT_INVALID_SOCK};
 static int srt_listener_udp_fd = -1;
 static std::mutex srt_pending_mutex;
 static std::unordered_map<std::string, SRTSOCKET> srt_pending;
+// Drain thread handle: close joins it so srt_cleanup never runs beneath.
+static std::thread srt_drain_thread;
 
 // Check if SRT listener is initialized
 int srt_listener_is_init() { return srt_listener_sock != SRT_INVALID_SOCK; }
@@ -127,9 +129,8 @@ static int srt_accept_poll(void *opaq, SRTSOCKET ns, int hsversion,
     return 0; // accept
 }
 
-// The callback uses accepted sockets directly, but each still occupies an
-// accept-queue slot until srt_accept pops it: drain the queue so the
-// backlog never fills. srt_close wakes the blocked accept on shutdown.
+// Callback-held sockets still occupy accept-queue slots until popped:
+// drain them so the backlog never fills; close wakes the accept.
 static void srt_accept_drain() {
     while (srt_listener_sock != SRT_INVALID_SOCK) {
         if (srt_accept(srt_listener_sock, NULL, NULL) == SRT_INVALID_SOCK)
@@ -154,9 +155,8 @@ int srt_listener_init() {
                        srt_getlasterror_str());
     }
 
-    // Step 3: Configure non-blocking, acquire UDP fd, listen
-    int recv_no = 0;
-    srt_setsockflag(srt_listener_sock, SRTO_RCVSYN, &recv_no, sizeof(recv_no));
+    // Blocking accept (SRT default): the drain sleeps in srt_accept
+    // until a handshake completes or srt_close wakes it on shutdown.
 
     if (srt_bind_acquire(srt_listener_sock, srt_listener_udp_fd) == SRT_ERROR) {
         close(srt_listener_udp_fd);
@@ -189,7 +189,9 @@ int srt_listener_init() {
         std::lock_guard<std::mutex> lock(srt_pending_mutex);
         srt_pending.clear();
     }
-    std::thread(srt_accept_drain).detach();
+    if (srt_drain_thread.joinable())
+        srt_drain_thread.detach(); // superseded init; exits on next close
+    srt_drain_thread = std::thread(srt_accept_drain);
     LOG("SRT listener started on port %d, srt_sock=%d, udp_fd=%d",
         opts.rtsp_port, srt_listener_sock.load(), srt_listener_udp_fd);
     return 0;
@@ -201,6 +203,9 @@ void srt_listener_close() {
         srt_listener_sock = SRT_INVALID_SOCK;
         srt_listener_udp_fd = -1;
     }
+    // Wait for the drain: srt_cleanup must not run beneath it.
+    if (srt_drain_thread.joinable())
+        srt_drain_thread.join();
     // Close any pending accepted sockets
     std::unordered_map<std::string, SRTSOCKET> dropped;
     {

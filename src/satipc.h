@@ -74,6 +74,8 @@ typedef struct struct_satipc {
     int udp_sock = -1; // UDP socket for SRT
     std::string
         srt_streamid; // random SRT stream ID for caller/listener correlation
+    // Set while a timeout owns the SRT restart; serializes restarts.
+    bool srt_restart_claimed;
 #endif
 } satipc;
 
@@ -93,4 +95,9 @@ int satip_getxml(void *);
 char *init_satip_pointer(int len);
 int satipc_timeout(sockets *s);
 void get_s2_url(adapter *ad, char *url, int url_len);
+// Timeout-race helpers (defined in satipc.cpp, unit-tested).
+void satipc_drop_rtsp_socket(adapter *ad, satipc *sip, int id, int fe, int dvr);
+#ifndef DISABLE_SRT
+void satipc_abort_srt(adapter *ad, satipc *sip, SRTSOCKET fresh);
+#endif
 #endif

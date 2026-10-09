@@ -8,9 +8,12 @@
 #include "minisatip.h"
 #include "satipc.h"
 #include "socketworks.h"
+#include "srt.h"
 #include "utils.h"
 #include "utils/testing.h"
+#include "utils/ticks.h"
 
+#include <dirent.h>
 #include <fcntl.h>
 #include <linux/dvb/frontend.h>
 #include <netinet/in.h>
@@ -21,6 +24,7 @@ extern int satipc_tune(int aid, transponder *tp);
 extern int satipc_commit(adapter *ad);
 extern int satipc_set_pid(adapter *ad, int pid);
 extern int satip_standby_device(adapter *ad);
+extern int satipc_open_device(adapter *ad);
 
 static const char *SETUP_OK =
     "RTSP/1.0 200 OK\r\nCSeq: 1\r\n"
@@ -341,6 +345,387 @@ int test_rtsp_srt_failure_keeps_socket() {
 }
 #endif
 
+// Binds an ephemeral localhost TCP port and releases it, so a connect
+// below fails fast with ECONNREFUSED.
+static int closed_tcp_port() {
+    int s = socket(AF_INET, SOCK_STREAM, 0);
+    if (s < 0)
+        return 9;
+    struct sockaddr_in sa = {};
+    sa.sin_family = AF_INET;
+    sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (bind(s, (struct sockaddr *)&sa, sizeof(sa))) {
+        close(s);
+        return 9;
+    }
+    socklen_t len = sizeof(sa);
+    getsockname(s, (struct sockaddr *)&sa, &len);
+    close(s);
+    return ntohs(sa.sin_port);
+}
+
+// A failed RTSP reopen must stay flagged so the next timeout retries
+// instead of wedging the adapter with a dead claimed reopen.
+int test_rtsp_timeout_reopen_retries() {
+    RtspFixture fx;
+    if (fx.setup())
+        return 1;
+
+    strcpy(fx.sip.sip, "127.0.0.1");
+    fx.sip.sport = closed_tcp_port();
+    fx.sip.rtsp_socket_closed = true;
+
+    ASSERT(satipc_timeout(&fx.rsock) == 0, "failed reopen must return 0");
+    ASSERT(fx.sip.rtsp_socket_closed, "failed reopen must stay flagged");
+    ASSERT(satipc_timeout(&fx.rsock) == 0, "retry must return 0");
+
+    fx.teardown();
+    return 0;
+}
+
+// A server silent past timeout_ms must flag a restart and drop the
+// session without taking the adapter lock across socket calls.
+int test_rtsp_timeout_restart_on_silent_server() {
+    RtspFixture fx;
+    if (fx.setup())
+        return 1;
+
+    fx.sip.expect_reply = true;
+    fx.sip.last_response_sent = getTick() - 60000;
+    fx.sip.timeout_ms = 30000;
+
+    ASSERT(satipc_timeout(&fx.rsock) == 0, "restart timeout must return 0");
+    ASSERT(fx.sip.restart_needed, "silent server must flag restart");
+    ASSERT(fx.sip.state == SATIP_STATE_DISCONNECTED,
+           "silent server must disconnect");
+
+    fx.teardown();
+    return 0;
+}
+
+// A failed RTP setup must release the RTSP socket opened just before:
+// otherwise the fd and its tracking are orphaned on the next retry.
+int test_satipc_open_device_cleans_rtsp_on_rtp_failure() {
+    const int aid = 3;
+    adapter ad = {};
+    satipc sip = {};
+    ad.id = aid;
+    sip.transport_type = SIP_TRANSPORT_UDP;
+    strcpy(sip.sip, "127.0.0.1");
+
+    int srv = socket(AF_INET, SOCK_STREAM, 0);
+    if (srv < 0)
+        return 1;
+    struct sockaddr_in sa = {};
+    sa.sin_family = AF_INET;
+    sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (bind(srv, (struct sockaddr *)&sa, sizeof(sa)) ||
+        listen(srv, 1)) {
+        close(srv);
+        return 1;
+    }
+    socklen_t len = sizeof(sa);
+    getsockname(srv, (struct sockaddr *)&sa, &len);
+    sip.sport = ntohs(sa.sin_port);
+
+    int saved_rtp = opts.start_rtp;
+    opts.start_rtp = 5500;
+    int listen_udp = opts.start_rtp + 1000 + aid * 2;
+    // Occupy the RTP port without reuse so the setup bind fails.
+    int block4 = socket(AF_INET, SOCK_DGRAM, 0);
+    struct sockaddr_in ba = {};
+    ba.sin_family = AF_INET;
+    ba.sin_addr.s_addr = htonl(INADDR_ANY);
+    ba.sin_port = htons(listen_udp);
+    int block_ok =
+        block4 >= 0 && !bind(block4, (struct sockaddr *)&ba, sizeof(ba));
+    int block6 = socket(AF_INET6, SOCK_DGRAM, 0);
+    if (block6 >= 0) {
+        struct sockaddr_in6 b6 = {};
+        b6.sin6_family = AF_INET6;
+        b6.sin6_port = htons(listen_udp);
+        if (bind(block6, (struct sockaddr *)&b6, sizeof(b6)))
+            { close(block6); block6 = -1; }
+    }
+    if (!block_ok) {
+        LOG("cannot occupy UDP port %d, failing", listen_udp);
+        close(srv);
+        if (block4 >= 0)
+            close(block4);
+        if (block6 >= 0)
+            close(block6);
+        opts.start_rtp = saved_rtp;
+        return 1;
+    }
+
+    adapter *saved_a = a[aid];
+    satipc *saved_sip = satip[aid];
+    a[aid] = &ad;
+    satip[aid] = &sip;
+    int rv = satipc_open_device(&ad);
+    a[aid] = saved_a;
+    satip[aid] = saved_sip;
+
+    ASSERT(rv != 0, "RTP setup must fail on the occupied port");
+    ASSERT(ad.fe_sock == -1 && ad.fe == -1,
+           "failed open must drop the RTSP socket");
+    for (int i = 0; i < MAX_SOCKS; i++) {
+        sockets *ss = get_sockets(i);
+        ASSERT(!(ss && ss->sid == aid), "failed open must not leak tracking");
+    }
+
+    close(srv);
+    close(block4);
+    if (block6 >= 0)
+        close(block6);
+    opts.start_rtp = saved_rtp;
+    return 0;
+}
+
+// Listens on an ephemeral localhost TCP port for open/reopen tests.
+static int listen_on_loopback(int *port) {
+    int srv = socket(AF_INET, SOCK_STREAM, 0);
+    if (srv < 0)
+        return -1;
+    struct sockaddr_in sa = {};
+    sa.sin_family = AF_INET;
+    sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (bind(srv, (struct sockaddr *)&sa, sizeof(sa)) ||
+        listen(srv, 1)) {
+        close(srv);
+        return -1;
+    }
+    socklen_t len = sizeof(sa);
+    getsockname(srv, (struct sockaddr *)&sa, &len);
+    *port = ntohs(sa.sin_port);
+    return srv;
+}
+
+static int count_open_fds() {
+    DIR *d = opendir("/proc/self/fd");
+    if (!d)
+        return -1;
+    int n = 0;
+    while (readdir(d))
+        n++;
+    closedir(d);
+    return n - 2;
+}
+
+static int dummy_timeout_action(sockets *s) {
+    (void)s;
+    return 0;
+}
+
+// Only the expected entry is dropped: matches reset and reflag,
+// mismatches are left for whoever installed them.
+int test_satipc_drop_raced_socket() {
+    adapter ad = {};
+    satipc sip = {};
+    ad.id = 8;
+    sip.transport_type = SIP_TRANSPORT_UDP;
+
+    int pipefd[2];
+    ASSERT(pipe(pipefd) == 0, "pipe failed");
+    int id = sockets_add(pipefd[1], NULL, 8, TYPE_TCP, NULL, NULL, NULL);
+    ASSERT(id >= 0, "sockets_add failed");
+    ad.fe_sock = id;
+    ad.fe = pipefd[1];
+    ad.dvr = -1;
+    sip.rtsp_socket_closed = false;
+    satipc_drop_rtsp_socket(&ad, &sip, id, pipefd[1], -1);
+    ASSERT(ad.fe_sock == -1 && ad.fe == -1, "fields must reset");
+    ASSERT(sip.rtsp_socket_closed, "flag must return");
+    ASSERT(get_sockets(id) == NULL, "entry must be gone");
+    ASSERT(fcntl(pipefd[1], F_GETFD) < 0, "fd must be closed");
+    close(pipefd[0]);
+
+    ASSERT(pipe(pipefd) == 0, "pipe failed");
+    int id2 = sockets_add(pipefd[1], NULL, 8, TYPE_TCP, NULL, NULL, NULL);
+    ad.fe_sock = id2;
+    ad.fe = pipefd[1];
+    sip.rtsp_socket_closed = false;
+    satipc_drop_rtsp_socket(&ad, &sip, -1, 9999, -1);
+    ASSERT(ad.fe_sock == id2 && ad.fe == pipefd[1], "mismatch must keep");
+    ASSERT(!sip.rtsp_socket_closed, "mismatch must not reflag");
+    ASSERT(get_sockets(id2) != NULL, "entry must survive");
+    sockets_setclose(id2, NULL);
+    sockets_del(id2);
+    close(pipefd[0]);
+    close(pipefd[1]);
+
+    // Untracked fd (sockets_add failed): the raw fd is still released.
+    ASSERT(pipe(pipefd) == 0, "pipe failed");
+    ad.fe_sock = -1;
+    ad.fe = pipefd[1];
+    sip.rtsp_socket_closed = false;
+    satipc_drop_rtsp_socket(&ad, &sip, -1, pipefd[1], -1);
+    ASSERT(ad.fe == -1 && sip.rtsp_socket_closed, "untracked must reset");
+    ASSERT(fcntl(pipefd[1], F_GETFD) < 0, "untracked fd must close");
+    close(pipefd[0]);
+
+    // TCP: the never-tracked dvr fd is released as well.
+    sip.transport_type = SIP_TRANSPORT_TCP;
+    int dvrpipe[2];
+    ASSERT(pipe(pipefd) == 0 && pipe(dvrpipe) == 0, "pipe failed");
+    int tid = sockets_add(pipefd[1], NULL, 8, TYPE_TCP, NULL, NULL, NULL);
+    ad.fe_sock = tid;
+    ad.fe = pipefd[1];
+    ad.dvr = dvrpipe[1];
+    sip.rtsp_socket_closed = false;
+    satipc_drop_rtsp_socket(&ad, &sip, tid, pipefd[1], dvrpipe[1]);
+    ASSERT(ad.dvr == -1, "TCP dvr must reset");
+    ASSERT(fcntl(dvrpipe[1], F_GETFD) < 0, "TCP dvr fd must close");
+    close(pipefd[0]);
+    close(dvrpipe[0]);
+    return 0;
+}
+
+#ifndef DISABLE_SRT
+// Abort releases exactly the raced publish: matching state is torn
+// down, anything else (or nobody) is left untouched.
+int test_satipc_abort_srt() {
+    adapter ad = {};
+    satipc sip = {};
+    ad.id = 9;
+    ad.sock = -1;
+    srt_startup();
+    SRTSOCKET s = srt_create_socket();
+    ASSERT(s != SRT_INVALID_SOCK, "srt_create_socket");
+    int pipefd[2];
+    ASSERT(pipe(pipefd) == 0, "pipe failed");
+    int id = sockets_add(pipefd[1], NULL, 9, TYPE_DVR, NULL, NULL, NULL);
+    ad.sock = id;
+    sip.srt_sock = s;
+    sip.srt_streamid = "abort-me";
+    sip.udp_sock = 4001;
+    ad.dvr = 4002;
+    satipc_abort_srt(&ad, &sip, s);
+    ASSERT(sip.srt_sock == SRT_INVALID_SOCK, "srt must invalidate");
+    ASSERT(sip.srt_streamid.empty(), "streamid must clear");
+    ASSERT(sip.udp_sock == -1 && ad.dvr == -1, "udp/dvr must reset");
+    ASSERT(get_sockets(id) && get_sockets(id)->sock == SOCK_TIMEOUT,
+           "handle must swap");
+    ASSERT(!srt_socket_is_connected(s), "closed srt must read down");
+    SRTSOCKET s2 = srt_create_socket();
+    sip.srt_sock = s2;
+    sip.srt_streamid = "keep-me";
+    satipc_abort_srt(&ad, &sip, SRT_INVALID_SOCK);
+    ASSERT(sip.srt_sock == s2 && sip.srt_streamid == "keep-me",
+           "invalid fresh must noop");
+    satipc_abort_srt(&ad, &sip, s);
+    ASSERT(sip.srt_sock == s2, "stale fresh must noop");
+    srt_close(s2);
+    sockets_setclose(id, NULL);
+    sockets_del(id);
+    close(pipefd[0]);
+    close(pipefd[1]);
+    srt_cleanup();
+    return 0;
+}
+#endif
+
+// A reopen on a live adapter stays published: the reconcile only
+// drops sockets installed while the adapter was closing.
+int test_rtsp_timeout_reopen_keeps_live_adapter() {
+    RtspFixture fx;
+    if (fx.setup())
+        return 1;
+    int port = 0;
+    int srv = listen_on_loopback(&port);
+    if (srv < 0) {
+        fx.teardown();
+        return 1;
+    }
+    strcpy(fx.sip.sip, "127.0.0.1");
+    fx.sip.sport = port;
+    fx.sip.rtsp_socket_closed = true;
+    ASSERT(satipc_timeout(&fx.rsock) == 0, "reopen must return 0");
+    ASSERT(!fx.sip.rtsp_socket_closed, "live reopen must stay open");
+    ASSERT(fx.ad.fe_sock >= 0, "live reopen must track the socket");
+    sockets *ss = get_sockets(fx.ad.fe_sock);
+    ASSERT(ss && ss->sid == 0, "reopened socket must be tracked");
+    sockets_setclose(fx.ad.fe_sock, NULL);
+    sockets_del(fx.ad.fe_sock);
+    fx.ad.fe_sock = -1;
+    fx.ad.fe = -1;
+    close(srv);
+    fx.teardown();
+    return 0;
+}
+
+// A full socket table makes the RTSP sockets_add fail while the TCP
+// connect succeeds: the failed open must still release the raw fd.
+int test_satipc_open_device_full_table_closes_untracked() {
+    const int aid = 4;
+    int ids[MAX_SOCKS];
+    int n = 0;
+    for (int i = 0; i < MAX_SOCKS; i++) {
+        int id = sockets_add(SOCK_TIMEOUT, NULL, 60, TYPE_UDP, NULL, NULL,
+                             (socket_action)dummy_timeout_action);
+        if (id < 0)
+            break;
+        ids[n++] = id;
+    }
+    int extra = sockets_add(SOCK_TIMEOUT, NULL, 60, TYPE_UDP, NULL, NULL,
+                            (socket_action)dummy_timeout_action);
+    ASSERT(extra < 0, "table must be full");
+
+    adapter ad = {};
+    satipc sip = {};
+    ad.id = aid;
+    sip.transport_type = SIP_TRANSPORT_UDP;
+    strcpy(sip.sip, "127.0.0.1");
+    int port = 0;
+    int srv = listen_on_loopback(&port);
+    if (srv < 0)
+        return 1;
+    sip.sport = port;
+
+    int saved_rtp = opts.start_rtp;
+    opts.start_rtp = 5500;
+    int listen_udp = opts.start_rtp + 1000 + aid * 2;
+    int block4 = socket(AF_INET, SOCK_DGRAM, 0);
+    struct sockaddr_in ba = {};
+    ba.sin_family = AF_INET;
+    ba.sin_addr.s_addr = htonl(INADDR_ANY);
+    ba.sin_port = htons(listen_udp);
+    int block_ok =
+        block4 >= 0 && !bind(block4, (struct sockaddr *)&ba, sizeof(ba));
+    if (!block_ok) {
+        LOG("cannot occupy UDP port %d, failing", listen_udp);
+        close(srv);
+        close(block4);
+        opts.start_rtp = saved_rtp;
+        return 1;
+    }
+
+    adapter *saved_a = a[aid];
+    satipc *saved_sip = satip[aid];
+    a[aid] = &ad;
+    satip[aid] = &sip;
+    int before = count_open_fds();
+    int rv = satipc_open_device(&ad);
+    int after = count_open_fds();
+    a[aid] = saved_a;
+    satip[aid] = saved_sip;
+
+    ASSERT(rv != 0, "RTP setup must fail on the occupied port");
+    ASSERT(ad.fe == -1, "untracked fd must be released");
+    ASSERT(before >= 0 && after == before, "no fd may leak");
+    for (int i = 0; i < MAX_SOCKS; i++) {
+        sockets *ss = get_sockets(i);
+        ASSERT(!(ss && ss->sid == aid), "failed open must not track");
+    }
+
+    for (int i = 0; i < n; i++)
+        sockets_del(ids[i]);
+    close(srv);
+    close(block4);
+    opts.start_rtp = saved_rtp;
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -351,10 +736,24 @@ int main() {
     TEST_FUNC(test_rtsp_503_recovery(), "test 503 tears down and recovers");
     TEST_FUNC(test_rtsp_454_recovery(), "test 454 restarts the session");
     TEST_FUNC(test_rtsp_keepalive(), "test OPTIONS keep-alive rules");
+    TEST_FUNC(test_rtsp_timeout_reopen_retries(),
+              "test failed RTSP reopen stays flagged for retry");
+    TEST_FUNC(test_rtsp_timeout_restart_on_silent_server(),
+              "test silent server flags restart and disconnects");
+    TEST_FUNC(test_satipc_open_device_cleans_rtsp_on_rtp_failure(),
+              "test failed open drops the RTSP socket and tracking");
 #ifndef DISABLE_SRT
     TEST_FUNC(test_rtsp_srt_failure_keeps_socket(),
               "test SRT failure keeps the RTSP socket");
+    TEST_FUNC(test_satipc_abort_srt(), "test SRT abort releases the publish");
 #endif
+    TEST_FUNC(test_satipc_drop_raced_socket(),
+              "test raced drop only releases its own socket");
+    TEST_FUNC(test_rtsp_timeout_reopen_keeps_live_adapter(),
+              "test live reopen stays published");
+    // Last: fills the whole socket table (restores it afterwards).
+    TEST_FUNC(test_satipc_open_device_full_table_closes_untracked(),
+              "test full table still releases the untracked fd");
 
     fflush(stdout);
     free_all();

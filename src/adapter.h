@@ -3,6 +3,7 @@
 #include "dvb.h"
 #include "minisatip.h"
 
+#include <atomic>
 #include <string>
 #include <unordered_set>
 typedef struct ca_device ca_device_t;
@@ -84,8 +85,17 @@ struct struct_adapter {
     std::string adapter_name;
     char flush, updating_pids;
     int pids_updates;
-    // Monotonic source for SPid.order on this adapter.
-    uint32_t pid_order_seq = 0;
+    // Monotonic source for SPid.order on this adapter, atomic so
+    // concurrent mark_pid_add calls never share or lose a value.
+    std::atomic<uint32_t> pid_order_seq = 0;
+    // 0 means unordered: skip it even when the sequence wraps.
+    uint32_t next_pid_order() {
+        uint32_t seq =
+            pid_order_seq.fetch_add(1, std::memory_order_relaxed) + 1;
+        if (seq == 0)
+            seq = pid_order_seq.fetch_add(1, std::memory_order_relaxed) + 1;
+        return seq;
+    }
     // physical adapter, physical frontend number
     fe_delivery_system_t sys[MAX_DELSYS];
     transponder tp;
