@@ -1169,13 +1169,6 @@ void mark_pids_deleted(int aid, int sid,
         mark_pid_deleted(aid, sid, ad->pids[i].pid, &ad->pids[i]);
 }
 
-// 0 means unordered: skip it even when the sequence wraps.
-static uint32_t next_pid_order(adapter *ad) {
-    if (++ad->pid_order_seq == 0)
-        ++ad->pid_order_seq;
-    return ad->pid_order_seq;
-}
-
 int mark_pid_add(int sid, int aid, int _pid) {
     adapter *ad;
     int i;
@@ -1190,7 +1183,7 @@ int mark_pid_add(int sid, int aid, int _pid) {
             int had_client = spid_has_client_sid(p);
             p->sid.insert(sid);
             if (!had_client && spid_has_client_sid(p))
-                p->order = next_pid_order(ad);
+                p->order = ad->next_pid_order();
         }
         if (p->flags == PID_STATE_DELETED)
             p->flags = PID_STATE_NEW;
@@ -1206,7 +1199,7 @@ int mark_pid_add(int sid, int aid, int _pid) {
             if (sid != PID_STREAM_ID_UNDEFINED)
                 ad->pids[i].sid.insert(sid);
             if (spid_has_client_sid(&ad->pids[i]))
-                ad->pids[i].order = next_pid_order(ad);
+                ad->pids[i].order = ad->next_pid_order();
             ad->pids[i].pmt = -1;
             ad->pids[i].filter = -1;
             ad->pids[i].sock = -1;

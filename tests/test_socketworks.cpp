@@ -25,6 +25,9 @@
 #include "utils/testing.h"
 #include <arpa/inet.h>
 #include <ctype.h>
+#ifdef SO_BINDTODEVICE
+#include <dlfcn.h>
+#endif
 #include <errno.h>
 #include <fcntl.h>
 #include <math.h>
@@ -398,6 +401,55 @@ int test_bind_dev() {
     return 0;
 }
 
+#ifdef SO_BINDTODEVICE
+// Interposes libc getsockopt so socket_bind_dev_ok is testable without
+// root: only SO_BINDTODEVICE queries are faked, the rest are forwarded.
+static char mock_bind_dev[IFNAMSIZ];
+static int mock_bind_dev_set = 0;
+extern "C" int getsockopt(int sockfd, int level, int optname, void *optval,
+                          socklen_t *optlen) {
+    static int (*real_getsockopt)(int, int, int, void *, socklen_t *) = NULL;
+    if (!real_getsockopt)
+        real_getsockopt =
+            (int (*)(int, int, int, void *,
+                     socklen_t *))dlsym(RTLD_NEXT, "getsockopt");
+    if (level == SOL_SOCKET && optname == SO_BINDTODEVICE &&
+        mock_bind_dev_set) {
+        size_t n = strlen(mock_bind_dev) + 1;
+        if (n > *optlen)
+            n = *optlen;
+        memcpy(optval, mock_bind_dev, n);
+        return 0;
+    }
+    return real_getsockopt(sockfd, level, optname, optval, optlen);
+}
+
+// Locks in exact-match semantics: a bound device matches even with
+// unrelated bytes past the NUL in the option buffer, others do not.
+int test_socket_bind_dev_ok_compare() {
+    char *saved = opts.bind_dev;
+    int fd = socket(AF_INET, SOCK_DGRAM, 0);
+    ASSERT(fd >= 0, "socket failed");
+    static char devbuf[24];
+    memset(devbuf, 0, sizeof(devbuf));
+    strcpy(devbuf, "eth0");
+    devbuf[5] = 'X';
+    devbuf[6] = 'Y';
+    snprintf(mock_bind_dev, sizeof(mock_bind_dev), "eth0");
+    mock_bind_dev_set = 1;
+    opts.bind_dev = devbuf;
+    ASSERT(socket_bind_dev_ok(fd) == 1, "bound device must match exactly");
+    snprintf(mock_bind_dev, sizeof(mock_bind_dev), "wlan9");
+    ASSERT(socket_bind_dev_ok(fd) == 0, "other device must not match");
+    mock_bind_dev_set = 0;
+    opts.bind_dev = NULL;
+    ASSERT(socket_bind_dev_ok(fd) == 1, "unset bind-dev must pass");
+    opts.bind_dev = saved;
+    close(fd);
+    return 0;
+}
+#endif
+
 int main() {
     opts.log = 1; // LOG_UTILS | LOG_SOCKET;
     strcpy(thread_info[thread_index].thread_name, "test_socketworks");
@@ -415,6 +467,10 @@ int main() {
               "testing socket_writev with flushing the queue");
     TEST_FUNC(test_socket_buffering(), "testing socket buffering and flushing");
     TEST_FUNC(test_bind_dev(), "testing bind-dev handling");
+#ifdef SO_BINDTODEVICE
+    TEST_FUNC(test_socket_bind_dev_ok_compare(),
+              "testing bind-dev compare stops at NUL");
+#endif
     fflush(stdout);
     free_all();
     return 0;

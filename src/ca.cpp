@@ -1038,6 +1038,9 @@ ca_device_t *find_dvbca_for_pmt(SPMT *pmt) {
     for (i = 0; i < MAX_ADAPTERS; i++)
         if (ca_devices[i] && ca_devices[i]->state == CA_STATE_INITIALIZED) {
             d = ca_devices[i];
+            // add_caid_mask writes ad_info under ca_mask_mutex: read
+            // it under the same lock so count/caid/mask stay together.
+            std::lock_guard<SMutex> lock(ca_mask_mutex);
             for (j = 0; j < ca[dvbca_id].ad_info[i].caids; j++)
                 if (match_caid(pmt, ca[dvbca_id].ad_info[i].caid[j],
                                ca[dvbca_id].ad_info[i].mask[j])) {
