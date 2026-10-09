@@ -40,6 +40,8 @@ static std::atomic<SRTSOCKET> srt_listener_sock{SRT_INVALID_SOCK};
 static int srt_listener_udp_fd = -1;
 static std::mutex srt_pending_mutex;
 static std::unordered_map<std::string, SRTSOCKET> srt_pending;
+// Drain thread handle: close joins it so srt_cleanup never runs beneath.
+static std::thread srt_drain_thread;
 
 // Check if SRT listener is initialized
 int srt_listener_is_init() { return srt_listener_sock != SRT_INVALID_SOCK; }
@@ -187,7 +189,9 @@ int srt_listener_init() {
         std::lock_guard<std::mutex> lock(srt_pending_mutex);
         srt_pending.clear();
     }
-    std::thread(srt_accept_drain).detach();
+    if (srt_drain_thread.joinable())
+        srt_drain_thread.detach(); // superseded init; exits on next close
+    srt_drain_thread = std::thread(srt_accept_drain);
     LOG("SRT listener started on port %d, srt_sock=%d, udp_fd=%d",
         opts.rtsp_port, srt_listener_sock.load(), srt_listener_udp_fd);
     return 0;
@@ -199,6 +203,9 @@ void srt_listener_close() {
         srt_listener_sock = SRT_INVALID_SOCK;
         srt_listener_udp_fd = -1;
     }
+    // Wait for the drain: srt_cleanup must not run beneath it.
+    if (srt_drain_thread.joinable())
+        srt_drain_thread.join();
     // Close any pending accepted sockets
     std::unordered_map<std::string, SRTSOCKET> dropped;
     {
