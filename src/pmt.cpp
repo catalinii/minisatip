@@ -576,6 +576,7 @@ char *cw_to_string(SCW *cw, char *buf) {
 void clear_cw_for_pmt(int pmt_id, int parity) {
     int i;
     int64_t ctime = getTick();
+    std::lock_guard<SMutex> lock(cws_mutex);
     for (i = 0; i < ncws; i++)
         if (cws[i] && cws[i]->enabled && cws[i]->pmt == pmt_id &&
             cws[i]->parity == parity) {
@@ -726,6 +727,8 @@ void update_cw(SPMT *pmt) {
     if (!pmt->update_cw)
         return;
 
+    // send_cw() fills cws[] from the dvbapi socket thread
+    std::lock_guard<SMutex> lock(cws_mutex);
     pmt->last_update_cw = ctime;
 
     // Find a CW that matches the stream that has start indicator (which
@@ -805,6 +808,13 @@ void update_cw(SPMT *pmt) {
     }
 }
 
+// An expired CW stays in pmt->cw until update_cw() picks another one and the
+// adapter thread may still decrypt with it, so its slot must not be reused
+static int cw_in_use(SCW *c) {
+    SPMT *p = get_pmt(c->pmt);
+    return p && p->cw == c;
+}
+
 int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
             int64_t expiry, void *opaque) {
     char buf[300];
@@ -817,6 +827,7 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
     if (!op)
         LOG_AND_RETURN(3, "op not found for algo %d", algo);
 
+    std::lock_guard<SMutex> lock(cws_mutex);
     for (i = 0; i < MAX_CW; i++)
         if (cws[i] && cws[i]->enabled && cws[i]->pmt == pmt_id &&
             cws[i]->parity == parity && ctime < cws[i]->expiry &&
@@ -824,11 +835,9 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
             LOG_AND_RETURN(1, "cw already exist at position %d: %s ", i,
                            cw_to_string(cws[i], buf));
 
-    std::lock_guard<SMutex> lock(cws_mutex);
     for (i = 0; i < MAX_CW; i++)
-        if (!cws[i] || (!cws[i]->enabled && cws[i]->algo == algo) ||
-            (cws[i]->enabled && cws[i]->algo == algo &&
-             (ctime > cws[i]->expiry)))
+        if (!cws[i] || (cws[i]->algo == algo && !cw_in_use(cws[i]) &&
+                        (!cws[i]->enabled || ctime > cws[i]->expiry)))
             break;
     if (i == MAX_CW) {
         LOG("CWS is full %d", i);
@@ -1514,7 +1523,10 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
     pmt->enabled = 1;
     pmt->version = -1;
     pmt->state = PMT_STOPPED;
-    pmt->cw = NULL;
+    { // send_cw() reads pmt->cw under cws_mutex
+        std::lock_guard<SMutex> lock(cws_mutex);
+        pmt->cw = NULL;
+    }
     pmt->opaque = NULL;
     pmt->ca_mask = pmt->disabled_ca_mask = pmt->ca_registered_mask = 0;
     pmt->best = 0;
