@@ -998,7 +998,6 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple) {
         }
     }
 
-    // No version bump here: send_capmt bumps only when bytes go out.
     if (!res) {
         LOG("CA %d all channels used %d, multiple allowed %d", d->id,
             d->max_ca_pmt, multiple);
@@ -1206,8 +1205,6 @@ void remove_pmt_from_device(ca_device_t *d, SPMT *pmt) {
     int i;
     std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
     for (i = 0; i < d->max_ca_pmt; i++) {
-        // No version bump here: the forced send_capmt after the removal
-        // bumps exactly once per attempted send.
         if (d->capmt[i].pmt_id == pmt->id) {
             d->capmt[i].pmt_id = PMT_INVALID;
             if (PMT_ID_IS_VALID(d->capmt[i].other_id)) {

@@ -12,6 +12,9 @@
 
 #define DDCI_BUFFER (20000 * 188)
 
+// Mapping-table key: adapter in the high 16 bits, pid below.
+#define MAKE_KEY(ad, pid) (((ad) << 16) | (pid))
+
 // keeps PMT informations for the channels that are enabled on this ddci_device
 typedef struct ddci_pmt {
     int id;

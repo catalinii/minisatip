@@ -65,8 +65,6 @@ std::unordered_map<int, Sddci_channel> channels;
          ? ddci_devices[i]                                                     \
          : NULL)
 
-#define MAKE_KEY(ad, pid) (((ad) << 16) | (pid))
-
 int ddci_id = -1;
 ddci_device_t *ddci_devices[MAX_ADAPTERS];
 
@@ -497,9 +495,6 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
     }
 
     d->pmt[pos].id = pmt->id;
-    // No PMT version bump here: ddci_create_pmt compares the content CRC
-    // at emit time and bumps only when the bytes changed, so a
-    // content-identical update is a no-op for the CAM.
     d->ver = (d->ver + 1) & 0xF;
     // Count only new registrations: pmt_add_caid() re-sends clear ca_mask,
     // and counting re-sends used up max_channels with one real channel.
