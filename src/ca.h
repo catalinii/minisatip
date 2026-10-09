@@ -221,6 +221,12 @@ struct ca_device {
     // poll_fails is socket-thread state, reset on any inbound traffic.
     int64_t reconnect_next_try;
     int poll_fails;
+
+    // Command watchdog, socket-thread state like poll_fails.
+    // One slot: a newer tracked send supersedes the older one.
+    int pending_tag;
+    int pending_session;
+    int64_t pending_since; // -1 disarms; else last send, or open
 };
 
 extern ca_device_t *ca_devices[];
@@ -249,6 +255,8 @@ char *get_ca_caids_string(int i, char *dest, int max_len);
 #define CA_RECONNECT_INTERVAL_MS 5000
 // Failed keepalive polls in a row before the link is declared dead.
 #define CA_MAX_POLL_FAILS 3
+// Command watchdog: reset the CAM when a command is unanswered for 15s.
+#define CA_CMD_TIMEOUT_MS 15000
 
 typedef int (*ca_reset_fn)(int fd);
 typedef int (*ca_slot_info_fn)(int fd, struct ca_slot_info *info);
@@ -272,6 +280,8 @@ void ca_release_pmts(ca_device_t *d);
 void ca_teardown(ca_device_t *d);
 // Reconnect poller, runs every second on the CA poller thread.
 int ca_reconnect(void *arg);
+// Command watchdog: reset the CAM when a command goes unanswered.
+void ca_cmd_watchdog(ca_device_t *d, int64_t now);
 
 struct struct_sockets;
 int ca_close(struct struct_sockets *s);
