@@ -289,6 +289,7 @@ if(BUILD_TESTING)
         tests/utils/test_utils_dir.cpp
         tests/test_stream.cpp
         tests/test_hw_descrambler.cpp
+        tests/test_srt.cpp
     )
 
     # Re-use MINISATIP_SOURCES and adjust for tests
