@@ -18,6 +18,7 @@
  *
  */
 #include <arpa/inet.h>
+#include <atomic>
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
@@ -725,11 +726,11 @@ int sockets_del(int sock) {
 #undef DEFAULT_LOG
 #define DEFAULT_LOG LOG_SOCKET
 
-int run_loop = 1;
+std::atomic<int> run_loop{1}; // cleared by the signal handler
 extern pthread_t main_tid;
 extern int bwnotify;
-extern int64_t bwtt, bw, buffered_bytes, dropped_bytes;
-extern uint32_t writes, failed_writes;
+extern std::atomic<int64_t> bw, buffered_bytes, dropped_bytes;
+extern std::atomic<uint32_t> writes, failed_writes;
 
 // remove __thread if your platform does not support threads.
 // also make sure to run with option -t (no threads)
@@ -741,7 +742,8 @@ SMutex thread_mutex;
 int get_thread_index() {
     int i;
     std::lock_guard<SMutex> lock(thread_mutex);
-    for (i = 0; i < MAX_THREAD_INFO; i++)
+    // slot 0 is the main thread's, which does not come here
+    for (i = 1; i < MAX_THREAD_INFO; i++)
         if (thread_info[i].enabled == 0) {
             thread_info[i].enabled = 1;
             break;
@@ -1022,7 +1024,7 @@ void *select_and_execute(void *arg) {
     }
 
     if (tid == main_tid)
-        LOG("The main loop ended, run_loop = %d", run_loop)
+        LOG("The main loop ended, run_loop = %d", run_loop.load())
     else
         add_join_thread(tid);
     thread_info[thread_index].enabled = 0;
