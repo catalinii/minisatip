@@ -27,6 +27,7 @@
 #include "socketworks.h"
 #include "srt.h"
 #include <arpa/inet.h>
+#include <atomic>
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
@@ -621,9 +622,10 @@ close_streams_for_adapter(int ad, int except) {
     return 0;
 }
 
-int64_t tbw, bw, bwtt, bw_dmx, buffered_bytes, dropped_bytes;
-uint32_t reads, writes, failed_writes;
-int64_t nsecs;
+// Counted by the stream and adapter threads, read by calculate_bw()
+std::atomic<int64_t> bw, bw_dmx, buffered_bytes, dropped_bytes, nsecs;
+std::atomic<uint32_t> reads, writes, failed_writes;
+int64_t tbw, bwtt;
 
 int64_t c_tbw, c_bw, c_bw_dmx, c_buffered, c_tt, c_dropped, c_ns_read;
 uint32_t c_reads, c_writes, c_failed_writes;

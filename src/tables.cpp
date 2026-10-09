@@ -53,7 +53,7 @@
 #define DEFAULT_LOG LOG_TABLES
 
 SCA ca[MAX_CA];
-int nca;
+std::atomic<int> nca;
 SMutex ca_mutex;
 extern SMutex ca_mask_mutex;
 uint32_t ca_teardown_epoch;
@@ -71,10 +71,15 @@ int add_ca(SCA_op *op) {
         LOG_AND_RETURN(0, "No free CA slots for %p", ca);
     new_ca = i;
 
-    ca[new_ca].enabled = 1;
+    // A disconnect leaves op in place, and a reconnect keeps the same op
+    if (ca[new_ca].op != op)
+        ca[new_ca].op = op;
     ca[new_ca].id = new_ca;
-    ca[new_ca].op = op;
-    memset(ca[new_ca].ad_info, 0, sizeof(ca[new_ca].ad_info));
+    {
+        std::lock_guard<SMutex> lock(ca_mask_mutex);
+        memset(ca[new_ca].ad_info, 0, sizeof(ca[new_ca].ad_info));
+    }
+    ca[new_ca].enabled = 1;
 
     if (new_ca >= nca)
         nca = new_ca + 1;
@@ -312,7 +317,7 @@ int send_pmt_to_cas(adapter *ad, SPMT *pmt) {
     if (pmt->caids > 0) {
         LOG("Sending PMT %d to all CAs: ad_ca_mask %X, "
             "pmt_ca_mask %X, disabled_ca_mask %X",
-            pmt->id, ad ? ad->ca_mask : -2, pmt->ca_mask,
+            pmt->id, ad ? ad->ca_mask.load() : -2, pmt->ca_mask,
             pmt->disabled_ca_mask);
         for (i = 0; i < nca; i++)
             if (ca[i].enabled)

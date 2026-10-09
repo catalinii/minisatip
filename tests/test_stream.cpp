@@ -233,8 +233,8 @@ int test_setup_stream_unspecified_vs_empty_pids() {
 }
 
 #ifndef DISABLE_SRT
-extern int64_t bw;
-extern uint32_t writes, failed_writes;
+extern std::atomic<int64_t> bw;
+extern std::atomic<uint32_t> writes, failed_writes;
 int flush_stream(streams *sid, struct iovec *iov, int iiov, int64_t ctime);
 
 int test_flush_stream_srt_accounts_bw() {

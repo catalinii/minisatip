@@ -3,6 +3,7 @@
 
 #include "opts.h"
 
+#include <atomic>
 #include <stdint.h>
 #include <sys/types.h>
 
@@ -15,7 +16,7 @@ uint32_t crc_32(const uint8_t *data, int datalen);
 
 #define MAX_THREAD_INFO 135 // 128 + 7
 typedef struct {
-    char enabled;
+    std::atomic<char> enabled; // join_thread() waits for all to clear it
     pthread_t tid;
     char thread_name[100];
     const char *last_log;

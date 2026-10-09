@@ -6,6 +6,8 @@
 #include "adapter.h"
 #include "pmt.h"
 
+#include <atomic>
+
 #define MAX_CA 8
 
 #define TABLES_RESULT_OK 0
@@ -34,7 +36,7 @@ typedef struct struct_CA_AD {
 } SCA_AD;
 
 typedef struct struct_CA {
-    uint8_t enabled;
+    std::atomic<uint8_t> enabled; // set last, the adapter threads read ca[]
     SCA_op *op;
     int id;
     SCA_AD ad_info[MAX_ADAPTERS];

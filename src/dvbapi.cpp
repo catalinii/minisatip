@@ -866,16 +866,12 @@ int dvbapi_init_dev(adapter *ad) {
     return TABLES_RESULT_OK;
 }
 
-SCA_op dvbapi;
+// Set up once: the adapter threads call through it while OSCam reconnects
+SCA_op dvbapi = {.ca_add_pmt = dvbapi_add_pmt,
+                 .ca_del_pmt = dvbapi_del_pmt,
+                 .ca_init_dev = dvbapi_init_dev};
 
-void register_dvbapi() {
-    memset(&dvbapi, 0, sizeof(dvbapi));
-    dvbapi.ca_init_dev = dvbapi_init_dev;
-    dvbapi.ca_add_pmt = dvbapi_add_pmt;
-    dvbapi.ca_del_pmt = dvbapi_del_pmt;
-
-    dvbapi_ca = add_ca(&dvbapi);
-}
+void register_dvbapi() { dvbapi_ca = add_ca(&dvbapi); }
 
 void unregister_dvbapi() {
     LOG("unregistering dvbapi as the socket is closed");

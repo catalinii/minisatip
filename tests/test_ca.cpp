@@ -26,6 +26,7 @@
 #include "utils/testing.h"
 #include "utils/ticks.h"
 #include <arpa/inet.h>
+#include <atomic>
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -61,7 +62,7 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt);
 extern ca_device_t *ca_devices[MAX_ADAPTERS];
 extern int dvbca_id;
 extern SCA ca[];
-extern int nca;
+extern std::atomic<int> nca;
 int get_active_capmts(ca_device_t *d);
 int dvbca_init_dev(adapter *ad);
 int dvbca_close_dev(adapter *ad);
@@ -1616,11 +1617,16 @@ static int epoch_fake_add_pmt(adapter *ad, SPMT *pmt) {
 // A teardown clearing masks between send and mask-set must not
 // leave the PMT marked as sent on the dead CAM.
 int test_send_skips_stale_set() {
-    SCA saved_ca = ca[1];
+    // SCA cannot be copied (atomic enabled): save the fields used here
+    SCA_AD saved_info[MAX_ADAPTERS];
+    memcpy(saved_info, ca[1].ad_info, sizeof(saved_info));
+    SCA_op *saved_op = ca[1].op;
+    int saved_id = ca[1].id;
+    uint8_t saved_enabled = ca[1].enabled;
     int saved_nca = nca;
     SCA_op fake_op{};
     fake_op.ca_add_pmt = epoch_fake_add_pmt;
-    memset(&ca[1], 0, sizeof(ca[1]));
+    memset(ca[1].ad_info, 0, sizeof(ca[1].ad_info));
     ca[1].enabled = 1;
     ca[1].id = 1;
     ca[1].op = &fake_op;
@@ -1644,7 +1650,10 @@ int test_send_skips_stale_set() {
     ASSERT(pmt2->ca_mask & (1 << 1), "quiet send sets ca_mask");
     ASSERT(pmt2->ca_registered_mask & (1 << 1), "quiet send registers");
 
-    ca[1] = saved_ca;
+    memcpy(ca[1].ad_info, saved_info, sizeof(saved_info));
+    ca[1].op = saved_op;
+    ca[1].id = saved_id;
+    ca[1].enabled = saved_enabled;
     nca = saved_nca;
     return 0;
 }

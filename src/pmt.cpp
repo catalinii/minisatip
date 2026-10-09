@@ -1270,7 +1270,12 @@ void start_active_pmts(adapter *ad) {
             continue;
         if (pmt->state != PMT_RUNNING && pmt->state != PMT_STARTING)
             continue;
-        if (ad->ca_mask != (pmt->disabled_ca_mask | pmt->ca_mask))
+        int resend;
+        { // del_ca() clears the PMT masks from the socket thread
+            std::lock_guard<SMutex> lock(pmts_mutex);
+            resend = ad->ca_mask != (pmt->disabled_ca_mask | pmt->ca_mask);
+        }
+        if (resend)
             send_pmt_to_cas(ad, pmt);
     }
 #endif

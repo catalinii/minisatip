@@ -27,6 +27,7 @@
 #include "socketworks.h"
 
 #include <arpa/inet.h>
+#include <atomic>
 #include <charconv>
 #include <climits>
 #include <ctype.h>
@@ -244,7 +245,7 @@ void print_trace(void) {
 #endif
 }
 
-extern int run_loop;
+extern std::atomic<int> run_loop;
 
 void posix_signal_handler(int sig, siginfo_t *siginfo, ucontext_t *ctx) {
     uint64_t sp = 0, ip = 0;
