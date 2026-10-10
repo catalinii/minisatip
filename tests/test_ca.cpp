@@ -235,6 +235,60 @@ int test_create_capmt_single_clear() {
     return 0;
 }
 
+// The CAPMT content hash ignores version and list-management but
+// flips on any other byte, so identical updates are skipped.
+int test_capmt_content_hash_masks_version_and_listmgmt() {
+    int pmt_id = pmt_add(0, 0x100, 0x101);
+    SPMT *pmt = get_pmt(pmt_id);
+    pmt_add_stream_pid(pmt, 0x501, 2, false, true);
+    pmt_add_stream_pid(pmt, 0x502, 3, true, false);
+
+    SCAPMT scampt = {.pmt_id = pmt->id,
+                     .other_id = PMT_INVALID,
+                     .version = 1,
+                     .sid = 0x1234};
+
+    uint8_t capmt[1500], other[1500];
+    int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
+                           CMD_ID_OK_DESCRAMBLING, 0);
+    ASSERT(len > 0, "create_capmt failed");
+    uint8_t ver_byte = capmt[3];
+    uint32_t hash = capmt_content_hash(capmt, len);
+    ASSERT(hash != 0, "hash should be non-trivial");
+    ASSERT(capmt_content_hash(capmt, len) == hash, "hash should be stable");
+    ASSERT(capmt[3] == ver_byte, "hash must restore the version byte");
+
+    memcpy(other, capmt, len);
+    other[3] ^= 0x3E; // version bits only
+    ASSERT(capmt_content_hash(other, len) == hash,
+           "version-only change must not flip the hash");
+    ASSERT(other[3] == (capmt[3] ^ 0x3E), "test setup broken");
+
+    memcpy(other, capmt, len);
+    other[3] ^= 0x01; // current/next bit is content, not version
+    ASSERT(capmt_content_hash(other, len) != hash,
+           "non-version bit change must flip the hash");
+
+    memcpy(other, capmt, len);
+    other[0] ^= 0xFF; // list management
+    ASSERT(capmt_content_hash(other, len) == hash,
+           "list management change must not flip the hash");
+    ASSERT(other[0] == (capmt[0] ^ 0xFF), "test setup broken");
+
+    int ulen = create_capmt(&scampt, CLM_UPDATE, other, sizeof(other),
+                            CMD_ID_OK_DESCRAMBLING, 0);
+    ASSERT(ulen == len, "ONLY and UPDATE builds must match in length");
+    ASSERT(capmt_content_hash(other, ulen) == hash,
+           "ONLY->UPDATE flip alone must not flip the hash");
+
+    memcpy(other, capmt, len);
+    other[len - 1] ^= 0xFF; // stream tail
+    ASSERT(capmt_content_hash(other, len) != hash,
+           "content change must flip the hash");
+
+    return 0;
+}
+
 int test_create_capmt_single_pmt_scrambled() {
     int pmt_id = pmt_add(0, 0x100, 0x101);
     SPMT *pmt = get_pmt(pmt_id);
@@ -678,7 +732,12 @@ int test_set_ca_channels_parsing() {
 
 // A CA that only counts how often a PMT is released on it
 static int fake_ca_del_calls;
-static int fake_ca_add_pmt(adapter *ad, SPMT *pmt) { return TABLES_RESULT_OK; }
+static int fake_ca_add_pmt(adapter *ad, SPMT *pmt, int update) {
+    (void)ad;
+    (void)pmt;
+    (void)update;
+    return TABLES_RESULT_OK;
+}
 static int fake_ca_del_pmt(adapter *ad, SPMT *pmt) {
     fake_ca_del_calls++;
     return TABLES_RESULT_OK;
@@ -1606,8 +1665,9 @@ int test_ca_read_resets_fails() {
 }
 
 static int epoch_fake_teardown;
-static int epoch_fake_add_pmt(adapter *ad, SPMT *pmt) {
+static int epoch_fake_add_pmt(adapter *ad, SPMT *pmt, int update) {
     (void)ad;
+    (void)update;
     if (epoch_fake_teardown) // teardown landing mid-send clears now
         tables_clear_pmt_ca_masks(pmt, 1ULL << 1, 1);
     return TABLES_RESULT_OK;
@@ -1716,6 +1776,8 @@ int main() {
     TEST_FUNC(test_capmt_release_on_last_pmt(),
               "testing that the last PMT of a CAPMT is released on the CAM");
     TEST_FUNC(test_get_authdata_filename(), "testing filename helper function");
+    TEST_FUNC(test_capmt_content_hash_masks_version_and_listmgmt(),
+              "testing the CAPMT hash masks version and listmgmt");
     TEST_FUNC(test_create_capmt_single_clear(),
               "testing create_capmt with single PMT without CA descriptors");
     TEST_FUNC(test_create_capmt_single_pmt_scrambled(),

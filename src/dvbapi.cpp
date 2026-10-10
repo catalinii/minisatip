@@ -409,7 +409,7 @@ int dvbapi_reply(sockets *s) {
     return 0;
 }
 
-int dvbapi_send_pmt(SKey *k, int cmd_id) {
+int dvbapi_send_pmt(SKey *k, int cmd_id, int force) {
     unsigned char buf[2500];
     int len;
     int listmgmt = CLM_UPDATE;
@@ -480,7 +480,17 @@ int dvbapi_send_pmt(SKey *k, int cmd_id) {
 
     copy16(buf, 4, len - 6);
 
+    // List-management is framing, not content: hash with it zeroed
+    // so ONLY->ADD flips alone do not force a re-send.
+    buf[6] = 0;
+    uint32_t hash = crc_32(buf, len);
     buf[6] = listmgmt;
+    if (!force && k->capmt_hash_valid && hash == k->capmt_hash) {
+        LOG("dvbapi key %d: PMT %d update, CAPMT unchanged (%08X), not "
+            "re-sending",
+            k->id, k->pmt_id, hash);
+        return 0;
+    }
     if (sock > 0) {
         LOG("Sending pmt %d to dvbapi server for pid %d, Channel ID %04X, key "
             "%d, "
@@ -488,6 +498,12 @@ int dvbapi_send_pmt(SKey *k, int cmd_id) {
             k->pmt_id, k->pmt_pid, k->sid, k->id, adapter, demux, sock,
             listmgmt_str[listmgmt]);
         TEST_WRITE(write(sock, buf, len), len);
+        // TEST_WRITE closes the socket on short write: baseline the
+        // hash only when the bytes went out.
+        if (sock > 0) {
+            k->capmt_hash = hash;
+            k->capmt_hash_valid = 1;
+        }
     }
     return 0;
 }
@@ -743,6 +759,8 @@ int keys_add(int i, int adapter, int pmt_id) {
     k->tsid = 0;
     k->icam_ecm = 0;
     k->is_icam = 0;
+    k->capmt_hash = 0;
+    k->capmt_hash_valid = 0;
     memset(k->cw[0], 0, 16);
     memset(k->cw[1], 0, 16);
     memset(k->filter_id, -1, sizeof(k->filter_id));
@@ -790,7 +808,7 @@ int keys_del(int i) {
     } else { // only local socket mode where multiple channels are connected to
              // the same demux
         msg = "PMT";
-        dvbapi_send_pmt(k, CMD_ID_NOT_SELECTED);
+        dvbapi_send_pmt(k, CMD_ID_NOT_SELECTED, 1);
     }
 
     pmt_pid = k->pmt_pid;
@@ -816,10 +834,13 @@ int keys_del(int i) {
     return 0;
 }
 
-int dvbapi_add_pmt(adapter *ad, SPMT *pmt) {
+int dvbapi_add_pmt(adapter *ad, SPMT *pmt, int update) {
     SKey *k = NULL;
     int key, pid = pmt->pid;
     std::lock_guard<SMutex> lock(keys_mutex);
+
+    LOG("%s: adapter %d, pmt %d, pid %d, update %d", __FUNCTION__, ad->id,
+        pmt->id, pid, update);
 
     if (ad->type == ADAPTER_CI) {
         LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
@@ -831,6 +852,19 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt) {
         LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY,
                        "%s: dvbapi socket is not open, adapter %d, pmt %d",
                        __FUNCTION__, ad->id, pmt->id);
+    }
+
+    // A PMT update re-sends on the live key, keeping the demux index
+    // stable instead of leaking a key per version bump.
+    SKey *old = (SKey *)pmt->opaque;
+    if (old && old->id >= 0 && old->id < MAX_KEYS && keys[old->id] == old &&
+        old->enabled && old->pmt_id == pmt->id && old->adapter == ad->id) {
+        old->sid = pmt->sid;
+        old->pmt_pid = pid;
+        old->tsid = ad->transponder_id;
+        old->last_dmx_stop = getTick();
+        dvbapi_send_pmt(old, CMD_ID_OK_DESCRAMBLING, !update);
+        return 0;
     }
 
     key = keys_add(-1, ad->id, pmt->id);
@@ -845,12 +879,13 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt) {
     k->tsid = ad->transponder_id;
     k->onid = 0;
     k->last_dmx_stop = getTick();
-    dvbapi_send_pmt(k, CMD_ID_OK_DESCRAMBLING);
+    dvbapi_send_pmt(k, CMD_ID_OK_DESCRAMBLING, 1);
 
     return 0;
 }
 
 int dvbapi_del_pmt(adapter *ad, SPMT *pmt) {
+    std::lock_guard<SMutex> lock(keys_mutex);
     SKey *k = (SKey *)pmt->opaque;
     if (!k)
         return 0;

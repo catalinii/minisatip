@@ -12,6 +12,9 @@
 
 #define DDCI_BUFFER (20000 * 188)
 
+// Mapping-table key: adapter in the high 16 bits, pid below.
+#define MAKE_KEY(ad, pid) (((ad) << 16) | (pid))
+
 // keeps PMT informations for the channels that are enabled on this ddci_device
 typedef struct ddci_pmt {
     int id;
@@ -33,7 +36,7 @@ typedef struct ddci_mapping_table {
     char rewrite;
     std::unordered_set<int> pmt;
     int filter_id = -1;
-    int pid_added;
+    int pid_added = -1;
 } ddci_mapping_table_t;
 
 typedef struct ddci_device {
@@ -51,6 +54,7 @@ typedef struct ddci_device {
     int16_t pat_cc, sdt_cc, eit_cc;
     char disable_cat;
     std::unordered_map<int, ddci_mapping_table_t> mapping;
+    std::unordered_set<int> emm_pids; // MAKE_KEY(ad,pid), never swept
     SFIFO fifo;
 } ddci_device_t;
 
@@ -80,7 +84,7 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
 ddci_mapping_table_t *get_pid_mapping_allddci(int ad, int pid);
 void save_channels();
 void load_channels();
-int ddci_process_pmt(adapter *ad, SPMT *pmt);
+int ddci_process_pmt(adapter *ad, SPMT *pmt, int update);
 void blacklist_pmt_for_ddci(SPMT *pmt, int ddid);
 int ddci_del_pmt(adapter *ad, SPMT *spmt);
 void disable_cat_adapters(char *o);
