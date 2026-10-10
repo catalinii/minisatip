@@ -338,6 +338,156 @@ int test_decode_transport_port_change_no_deadlock() {
     return 0;
 }
 
+int test_start_play_all_tuners_busy_returns_503() {
+    setup_test_env();
+
+    sockets http1 = {};
+    http1.enabled = 1;
+    http1.is_enabled = 1;
+    http1.sock = 1005;
+    http1.id = 5;
+    http1.sid = -1;
+    http1.type = TYPE_HTTP;
+    http1.buf = (unsigned char *)"PLAY";
+
+    streams *sid1 = setup_stream(
+        "?src=1&freq=11362&pol=h&sr=22000&msys=dvbs2&pids=0,16", &http1);
+    ASSERT(sid1 != NULL, "first setup_stream returned NULL");
+    ASSERT(start_play(sid1, &http1) == 0, "first start_play failed");
+
+    sockets http2 = {};
+    http2.enabled = 1;
+    http2.is_enabled = 1;
+    http2.sock = 1006;
+    http2.id = 6;
+    http2.sid = -1;
+    http2.type = TYPE_HTTP;
+    http2.buf = (unsigned char *)"PLAY";
+
+    streams *sid2 = setup_stream(
+        "?src=1&freq=12543&pol=v&sr=27500&msys=dvbs2&pids=0,17", &http2);
+    ASSERT(sid2 != NULL, "second setup_stream returned NULL");
+    int res = start_play(sid2, &http2);
+    ASSERT(res == -503, "start_play should return -503 when busy");
+    ASSERT(sid2->rtsp_error == "No-More: frontends",
+           "missing No-More: frontends body");
+
+    return 0;
+}
+
+int test_start_play_unmapped_src_returns_403() {
+    setup_test_env();
+    memset(a[0]->absolute_table, 0, sizeof(a[0]->absolute_table));
+    char saved_switch = absolute_switch;
+    absolute_switch = 1;
+
+    sockets http = {};
+    http.enabled = 1;
+    http.is_enabled = 1;
+    http.sock = 1007;
+    http.id = 7;
+    http.sid = -1;
+    http.type = TYPE_HTTP;
+    http.buf = (unsigned char *)"PLAY";
+
+    streams *sid = setup_stream(
+        "?src=3&freq=11362&pol=h&sr=22000&msys=dvbs2&pids=0", &http);
+    ASSERT(sid != NULL, "setup_stream returned NULL");
+    int res = start_play(sid, &http);
+    absolute_switch = saved_switch;
+    ASSERT(res == -403, "start_play should return -403 for unmapped src");
+    ASSERT(sid->rtsp_error == "Out-of-Range: src",
+           "missing Out-of-Range: src body");
+
+    return 0;
+}
+
+int test_start_play_unsupported_msys_returns_403() {
+    setup_test_env();
+    for (int i = 0; i < MAX_DELSYS; i++)
+        a[0]->sys[i] = SYS_UNDEFINED;
+    a[0]->sys[0] = SYS_DVBS2;
+
+    sockets http = {};
+    http.enabled = 1;
+    http.is_enabled = 1;
+    http.sock = 1008;
+    http.id = 8;
+    http.sid = -1;
+    http.type = TYPE_HTTP;
+    http.buf = (unsigned char *)"PLAY";
+
+    streams *sid = setup_stream("?freq=538&bw=8&msys=dvbt2&pids=0", &http);
+    ASSERT(sid != NULL, "setup_stream returned NULL");
+    int res = start_play(sid, &http);
+    ASSERT(res == -403, "start_play should return -403 for bad msys");
+    ASSERT(sid->rtsp_error == "Out-of-Range: msys",
+           "missing Out-of-Range: msys body");
+
+    return 0;
+}
+
+int test_start_play_pid_exhaustion_returns_503() {
+    setup_test_env();
+
+    sockets http1 = {};
+    http1.enabled = 1;
+    http1.is_enabled = 1;
+    http1.sock = 1009;
+    http1.id = 9;
+    http1.sid = -1;
+    http1.type = TYPE_HTTP;
+    http1.buf = (unsigned char *)"PLAY";
+
+    streams *sid1 = setup_stream(
+        "?src=1&freq=11362&pol=h&sr=22000&msys=dvbs2&pids=0", &http1);
+    ASSERT(sid1 != NULL, "first setup_stream returned NULL");
+    ASSERT(start_play(sid1, &http1) == 0, "first start_play failed");
+
+    int pid = 100;
+    while (pid < 8000 && mark_pid_add(PID_STREAM_ID_UNDEFINED, 0, pid) == 0)
+        pid++;
+    ASSERT(pid < 8000, "could not fill the pid table");
+
+    sockets http2 = {};
+    http2.enabled = 1;
+    http2.is_enabled = 1;
+    http2.sock = 1010;
+    http2.id = 10;
+    http2.sid = -1;
+    http2.type = TYPE_HTTP;
+    http2.buf = (unsigned char *)"PLAY";
+
+    // Same transponder as sid1, so no retune clears the pid table.
+    streams *sid2 = setup_stream(
+        "?src=1&freq=11362&pol=h&sr=22000&msys=dvbs2&pids=5000", &http2);
+    ASSERT(sid2 != NULL, "second setup_stream returned NULL");
+    int res = start_play(sid2, &http2);
+    ASSERT(res == -503, "start_play should return -503 when pids run out");
+    ASSERT(sid2->rtsp_error == "No-More: pids", "missing No-More: pids body");
+
+    return 0;
+}
+
+int test_streams_full() {
+    setup_test_env();
+    ASSERT(!streams_full(), "streams should not be full initially");
+    int ids[MAX_STREAMS];
+    for (int i = 0; i < MAX_STREAMS; i++) {
+        ids[i] = streams_add();
+        ASSERT(ids[i] >= 0, "streams_add failed before MAX_STREAMS");
+        streams *s = get_sid(ids[i]);
+        s->rtcp = s->rtcp_sock = s->sock = -1;
+        s->seq = 0;
+    }
+    ASSERT(streams_full(), "streams should be full");
+    ASSERT(streams_add() == -1, "streams_add should fail when full");
+    close_stream(ids[0]);
+    ASSERT(!streams_full(), "streams should not be full after close");
+
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -351,6 +501,15 @@ int main() {
     TEST_FUNC(test_start_play_no_transport(),
               "test start_play returns error when transport is missing");
     TEST_FUNC(test_start_play_success(), "test start_play success under HTTP");
+    TEST_FUNC(test_start_play_all_tuners_busy_returns_503(),
+              "test start_play returns 503 when all tuners are busy");
+    TEST_FUNC(test_start_play_unmapped_src_returns_403(),
+              "test start_play returns 403 for unmapped src");
+    TEST_FUNC(test_start_play_unsupported_msys_returns_403(),
+              "test start_play returns 403 for unsupported msys");
+    TEST_FUNC(test_start_play_pid_exhaustion_returns_503(),
+              "test start_play returns 503 when pids run out");
+    TEST_FUNC(test_streams_full(), "test streams_full tracks exhaustion");
     TEST_FUNC(test_decode_transport_port_change_no_deadlock(),
               "test decode_transport does not deadlock on a port change");
 #ifndef DISABLE_SRT

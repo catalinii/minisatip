@@ -50,6 +50,7 @@ extern char app_name[], version[];
     }
 int ssdp_discovery(sockets *s);
 int readBootID();
-void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr);
+void http_response(sockets *s, int rc, const char *ah, const char *desc,
+                   int cseq, int lr);
 
 #endif

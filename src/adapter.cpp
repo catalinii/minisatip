@@ -787,6 +787,37 @@ noadapter:
     return -1;
 }
 
+std::string out_of_range_attrs(transponder *tp) {
+    int msys = tp->sys.value_or(SYS_UNDEFINED);
+    int req_fe = tp->fe.value_or(0);
+
+    if (req_fe > 0) {
+        int mapped =
+            (req_fe <= (int)ARRAY_SIZE(fe_map)) ? fe_map[req_fe - 1] : -1;
+        adapter *fad =
+            (mapped >= 0 && mapped < MAX_ADAPTERS) ? a[mapped] : NULL;
+        if (!fad || is_adapter_disabled(mapped) || !delsys_match(fad, msys))
+            return "fe";
+        if (!source_enabled_for_adapter(fad, tp))
+            return "src";
+        return "";
+    }
+    int delsys_ok = 0, src_ok = 0;
+    for (int i = 0; i < MAX_ADAPTERS; i++) {
+        adapter *ad = a[i];
+        if (!ad || is_adapter_disabled(i) || !delsys_match(ad, msys))
+            continue;
+        delsys_ok = 1;
+        if (source_enabled_for_adapter(ad, tp))
+            src_ok = 1;
+    }
+    if (!delsys_ok)
+        return "msys";
+    if (!src_ok)
+        return "src";
+    return "";
+}
+
 void adapter_update_threshold(adapter *ad) {
     streams *sid = NULL;
     int i, threshold = opts.udp_threshold;
@@ -1026,6 +1057,13 @@ void post_tune(adapter *ad) {
 #endif
 }
 
+// Stores the RTSP error body on the stream; caller holds sid->mutex.
+static void set_play_error(int sid, const char *body) {
+    streams *ss = get_sid_nw(sid);
+    if (ss)
+        ss->rtsp_error = body;
+}
+
 int tune(int aid, int sid) {
     adapter *ad = get_adapter(aid);
     int rv = 0, flush_data = 0;
@@ -1034,7 +1072,7 @@ int tune(int aid, int sid) {
          ad ? ad->sock : -1);
 
     if (!ad)
-        return -400;
+        return -500;
 
     std::lock_guard<SMutex> lock(ad->mutex);
 
@@ -1042,6 +1080,8 @@ int tune(int aid, int sid) {
         ad->tp.diseqc_param = ad->diseqc_param;
 
         rv = ad->tune(ad->id, &ad->tp);
+        if (rv == -403)
+            set_play_error(sid, "Out-of-Range: freq");
         ad->status = -1;
         ad->status_cnt = 0;
         ad->wait_new_stream = 1;
@@ -1057,6 +1097,7 @@ int tune(int aid, int sid) {
             close_streams_for_adapter(aid, sid);
             if (update_pids(aid)) {
                 ad->do_tune = 0;
+                set_play_error(sid, "No-More: pids");
                 return -503;
             }
         }
@@ -1068,7 +1109,11 @@ int tune(int aid, int sid) {
         mark_pids_deleted(aid, sid, NULL);
     if (update_pids(aid)) {
         ad->do_tune = 0;
-        return -503;
+        // Keep the hardware error: pid cleanup after a failed tune is noise.
+        if (rv >= 0) {
+            set_play_error(sid, "No-More: pids");
+            return -503;
+        }
     }
     if (flush_data) {
         ad->tune_time = getTick();
@@ -1323,9 +1368,8 @@ int set_adapter_parameters(int aid, int sid, transponder *tp) {
 
     ad->do_tune = 0;
     if (compare_tunning_parameters(aid, tp)) {
-        if (sid != ad->master_sid) // slave sid requesting to tune to a
-                                   // different frequency
-        {
+        // Slave sid retuning a busy adapter: -2 (busy) vs -1 (pids).
+        if (sid != ad->master_sid) {
             LOG("secondary stream requested tune, not gonna happen ad: f:%d sr:%d pol:%d plp/isi:%d src:%d mod %d -> \
 			new: f:%d sr:%d pol:%d plp/isi:%d src:%d mod %d",
                 ad->tp.freq.value_or(0), ad->tp.sr.value_or(0),
@@ -1334,7 +1378,7 @@ int set_adapter_parameters(int aid, int sid, transponder *tp) {
                 tp->freq.value_or(0), tp->sr.value_or(0), tp->pol.value_or(0),
                 tp->plp_isi.value_or(0), tp->diseqc.value_or(0),
                 tp->mtype.value_or(QAM_AUTO));
-            return -1;
+            return -2;
         }
         ad->do_tune = 1;
         mark_pids_deleted(aid, PID_STREAM_ID_UNDEFINED, NULL);
