@@ -1050,7 +1050,7 @@ int tune(int aid, int sid) {
         ad->db = MAX_DB;
         flush_data = 1;
         ad->is_t2mi = 0;
-        set_socket_pos(ad->sock, 0); // flush the existing buffer
+        sockets_reset_buffer(ad->sock); // flush the existing buffer
         ad->rlen = 0;
         if (ad->sid_cnt > 1) // the master changed the frequency
         {
@@ -1070,10 +1070,8 @@ int tune(int aid, int sid) {
         ad->do_tune = 0;
         return -503;
     }
-    if (flush_data) {
+    if (flush_data)
         ad->tune_time = getTick();
-        set_socket_iteration(ad->sock, 0);
-    }
     adapter_commit(ad);
     ad->do_tune = 0;
     return rv;

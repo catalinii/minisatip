@@ -48,7 +48,8 @@
 #define DEFAULT_LOG LOG_SOCKETWORKS
 
 sockets *s[MAX_SOCKS];
-int max_sock;
+std::atomic<int> max_sock;
+// Guards the slot list only: no other lock is taken while holding it
 SMutex s_mutex;
 
 // returns the protocol (AF_INET, AF_INET6) or 0 in case of failure
@@ -595,20 +596,21 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
     if (sock == SOCK_TIMEOUT && t == NULL)
         LOG_AND_RETURN(-1, "sockets_add timeout without timeout function");
 
-    std::lock_guard<SMutex> lock(s_mutex);
-
-    i = find_new_id((void **)s, MAX_SOCKS);
-    if (i == -1)
-        LOG_AND_RETURN(-1, "sockets_add failed for socks %d", sock);
-    if (!s[i]) {
-        s[i] = new sockets();
+    {
+        std::lock_guard<SMutex> lock(s_mutex);
+        i = find_new_id((void **)s, MAX_SOCKS);
+        if (i == -1)
+            LOG_AND_RETURN(-1, "sockets_add failed for socks %d", sock);
+        if (!s[i])
+            __atomic_store_n(&s[i], new sockets(), __ATOMIC_RELEASE);
+        ss = s[i];
+        ss->enabled = 1; // reserved: nobody else uses it until is_enabled
+        if (max_sock <= i)
+            max_sock = i + 1;
     }
 
-    ss = s[i];
-    ss->enabled = 1;
-    std::lock_guard<SMutex> lock2(ss->mutex);
-    ss->is_enabled = 1;
     ss->force_close = 0;
+    ss->reset_buffer = 0;
     ss->sock = sock;
     ss->nonblock = !!(type & TYPE_NONBLOCK);
     ss->tid = get_tid();
@@ -626,8 +628,6 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
     ss->type = type & ~(TYPE_NONBLOCK | TYPE_CONNECT);
     ss->rtime = getTick();
     ss->wtime = 0;
-    if (max_sock <= i)
-        max_sock = i + 1;
     ss->opaque = ss->opaque2 = ss->opaque3 = NULL;
     ss->buf = NULL;
     ss->lbuf = 0;
@@ -649,6 +649,7 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
     ss->events = POLLIN | POLLPRI;
     if (type & TYPE_CONNECT)
         ss->events |= POLLOUT;
+    ss->is_enabled = 1;
 
     LOG("sockets_add: handle %d (type %d) returning socket sock %d [%s:%d] "
         "read: "
@@ -660,17 +661,14 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
 
 int sockets_del(int sock) {
     int i, so;
-    sockets *ss;
-    std::unique_lock<SMutex> lock(s_mutex);
+    sockets *ss = get_sockets(sock);
 
-    if (sock < 0 || sock >= MAX_SOCKS || !s[sock] || !s[sock]->enabled ||
-        !s[sock]->is_enabled) {
+    if (!ss)
         return 0;
-    }
 
-    ss = s[sock];
+    // The close callbacks lock streams and adapters: not under s_mutex
     std::unique_lock<SMutex> lock2(ss->mutex);
-    if (!ss->enabled) {
+    if (!ss->enabled || !ss->is_enabled) {
         return 0;
     }
     if (ss->close)
@@ -688,13 +686,6 @@ int sockets_del(int sock) {
         close(so);
     }
     ss->sid = -1;
-    i = MAX_SOCKS;
-    while (--i >= 0)
-        if (s[i] && !s[i]->enabled)
-            s[i]->sock = -1;
-        else if (s[i] && s[i]->enabled)
-            break;
-    max_sock = i + 1;
     ss->events = 0;
     ss->master = -1;
     if ((ss->flags & 1) && ss->buf)
@@ -708,16 +699,22 @@ int sockets_del(int sock) {
     }
     free_fifo(&ss->fifo);
 
+    {
+        std::lock_guard<SMutex> lock(s_mutex);
+        ss->enabled = 0;
+        i = MAX_SOCKS;
+        while (--i >= 0)
+            if (s[i] && s[i]->enabled)
+                break;
+        max_sock = i + 1;
+    }
     LOG("sockets_del: sock %d Last open socket is at index %d current_handle "
         "%d",
         sock, i, so);
-
-    ss->enabled = 0;
     lock2.unlock();
-    lock.unlock();
 
     for (i = 0; i < MAX_SOCKS; i++)
-        if (s[i] && s[i]->enabled && s[i]->master == sock) {
+        if ((ss = get_sockets(i)) && ss->master == sock) {
             LOG("Closing slave socket index %d (master sock %d)", i, sock);
             sockets_del(i);
         }
@@ -754,7 +751,7 @@ int get_thread_index() {
 }
 
 void *select_and_execute(void *arg) {
-    int i, rv, rlen, les, es, pos_len, old_rlen;
+    int i, rv, rlen, les, es, pos_len, old_rlen, nsock;
     unsigned char buf[10240], *pos;
     int err;
     struct pollfd pf[MAX_SOCKS];
@@ -792,21 +789,24 @@ void *select_and_execute(void *arg) {
     while (run_loop) {
         c_time = getTick();
         es = 0;
-        for (i = 0; i < max_sock; i++)
-            if (s[i] && s[i]->enabled && s[i]->tid == tid) {
-                pf[i].fd = s[i]->sock;
-                pf[i].events = s[i]->events;
+        nsock = max_sock; // the same range for pf[] and poll()
+        for (i = 0; i < nsock; i++) {
+            sockets *ss = get_sockets(i);
+            if (ss && ss->tid == tid) {
+                pf[i].fd = ss->sock;
+                pf[i].events = ss->events;
 
-                if (fifo_used(&s[i]->fifo))
+                if (fifo_used(&ss->fifo))
                     pf[i].events |= POLLOUT;
 
                 pf[i].revents = 0;
-                s[i]->last_poll = c_time;
+                ss->last_poll = c_time;
                 es++;
             } else {
                 pf[i].fd = -1;
                 pf[i].events = pf[i].revents = 0;
             }
+        }
         i = -1;
         if (les == 0 && es == 0 && tid != main_tid) {
             LOG("No enabled sockets for Thread ID %lx name %s ... exiting ",
@@ -817,7 +817,7 @@ void *select_and_execute(void *arg) {
 
         // Poll, retrying if we get interrupted with EINTR
         do {
-            rv = poll(pf, max_sock, select_timeout);
+            rv = poll(pf, nsock, select_timeout);
         } while (rv < 0 && errno == EINTR);
 
         if (rv < 0) {
@@ -825,12 +825,10 @@ void *select_and_execute(void *arg) {
                 strerror(errno));
             continue;
         } else if (rv > 0) {
-            while (++i < max_sock) {
+            while (++i < nsock) {
                 if ((pf[i].fd >= 0) && pf[i].revents) {
-                    sockets *ss = s[i];
+                    sockets *ss = get_sockets(i);
                     if (!ss)
-                        continue;
-                    if (!ss->enabled)
                         continue;
 
                     c_time = getTick();
@@ -871,6 +869,13 @@ void *select_and_execute(void *arg) {
                     // Hold lock while reading
                     {
                         std::lock_guard<SMutex> lock(master->mutex);
+                        // deleted or reused by another thread meanwhile
+                        if (!ss->is_enabled || !master->is_enabled)
+                            continue;
+                        if (master->reset_buffer.exchange(0)) {
+                            master->rlen = 0;
+                            master->iteration = 0;
+                        }
 
                         if (!master->buf || master->buf == buf) {
                             master->buf = buf;
@@ -1124,10 +1129,11 @@ void set_socket_buffer(int sid, uint8_t *buf, int len) {
 
 uint64_t get_allocated_memory() {
     uint64_t allocated_memory = 0;
-    for (int i = 0; i < MAX_SOCKS; i++)
-        if (s[i] && s[i]->fifo.size) {
-            allocated_memory += s[i]->fifo.size;
-        }
+    for (int i = 0; i < MAX_SOCKS; i++) {
+        sockets *ss = get_sockets(i);
+        if (ss && ss->fifo.size)
+            allocated_memory += ss->fifo.size;
+    }
     return allocated_memory;
 }
 
@@ -1189,11 +1195,12 @@ void set_socket_receive_buffer(int sock, int len) {
         LOG("receive socket buffer size is %d bytes", len);
 }
 
-void set_socket_pos(int sock, int pos) {
+// The thread reading the socket owns its buffer: it drops the data before
+// its next read
+void sockets_reset_buffer(int sock) {
     sockets *ss = get_sockets(sock);
-    if (!ss)
-        return;
-    ss->rlen = pos;
+    if (ss)
+        ss->reset_buffer = 1;
 }
 
 char *get_sock_shost(int fd, char *dest, int ld) {
@@ -1236,13 +1243,6 @@ char *get_sockaddr_host(USockAddr s, char *dest, int ld) {
         }
     }
     return dest;
-}
-
-void set_socket_iteration(int s_id, uint64_t it) {
-    sockets *ss = get_sockets(s_id);
-    if (!ss)
-        return;
-    ss->iteration = it;
 }
 
 void set_socket_thread(int s_id, pthread_t tid) {
@@ -1668,7 +1668,7 @@ void sockets_set_master(int slave, int master) {
             slave, master);
         return;
     }
-    s->tid = m->tid;
+    s->tid = m->tid.load();
     s->master = master;
     LOG("sock %d is master for sock %d", s->master, s->id);
 }

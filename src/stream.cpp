@@ -579,8 +579,8 @@ int streams_add() {
     i = find_new_id((void **)st, MAX_STREAMS);
     if (i == -1)
         LOG_AND_RETURN(-1, "streams_add failed");
-    if (!st[i])
-        st[i] = new streams();
+    if (!st[i]) // the adapter threads scan st[] without st_mutex
+        __atomic_store_n(&st[i], new streams(), __ATOMIC_RELEASE);
 
     ss = st[i];
     std::lock_guard<SMutex> lock2(ss->mutex);
@@ -1004,12 +1004,19 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
     int total_len = 0;
     int max_pack = TCP_MAX_PACK;
 
+    int type, rsock_id;
+    { // start_play() sets them under the stream lock, which comes after the
+      // socket lock: read them first, check them again below
+        std::lock_guard<SMutex> lock(sid->mutex);
+        type = sid->type;
+        rsock_id = sid->rsock_id;
+    }
     sockets *s = nullptr;
-    if (sid->type != STREAM_RTSP_SRT) {
-        s = get_sockets(sid->rsock_id);
+    if (type != STREAM_RTSP_SRT) {
+        s = get_sockets(rsock_id);
         if (!s)
             LOG_AND_RETURN(0, "Stream %d rsock id not found %d", st_id,
-                           sid->rsock_id);
+                           rsock_id);
     }
     // Lock ordering: socket -> stream -> adapter
     std::unique_lock<SMutex> lock(s ? s->mutex : sid->mutex, std::defer_lock);
@@ -1023,6 +1030,8 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
         lock2.lock();
     if (!sid->enabled)
         LOG_AND_RETURN(0, "stream disabled %d for addapter %d", st_id, ad->id);
+    if (sid->type != type || sid->rsock_id != rsock_id)
+        return 0;
     std::lock_guard<SMutex> lock3(ad->mutex);
     if (!ad->enabled)
         return 0;
@@ -1151,9 +1160,16 @@ int process_dmx(sockets *s) {
 
     lock.unlock();
 
-    for (i = 0; i < MAX_STREAMS; i++)
-        if (st[i] && st[i]->enabled && st[i]->adapter == ad->id)
-            process_packets_for_stream(st[i], ad);
+    for (i = 0; i < MAX_STREAMS; i++) {
+        streams *sid = __atomic_load_n(&st[i], __ATOMIC_ACQUIRE);
+        int mine = 0;
+        if (sid) { // start_play() and close_stream() change them under the lock
+            std::lock_guard<SMutex> lock(sid->mutex);
+            mine = sid->enabled && sid->adapter == ad->id;
+        }
+        if (mine)
+            process_packets_for_stream(sid, ad);
+    }
 
     nsecs += getTickUs() - stime;
     reads++;
