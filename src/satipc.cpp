@@ -147,6 +147,27 @@ void handle_client_capabilities(satipc *sip, char *buf) {
     }
 }
 
+// Finds a text/parameters body line (spec 3.5.14: Out-of-Range, No-More).
+static const char *rtsp_body_param(const char *buf, const char *name) {
+    const char *body = strstr(buf, "\r\n\r\n");
+    if (!body)
+        return nullptr;
+    return strstr(body + 4, name);
+}
+
+// Fatal rejection: release the server session and park the adapter.
+// A later tune() clears ad->err and starts over.
+static void satipc_give_up(adapter *ad, satipc *sip, int rc) {
+    if (sip->stream_id != -1) {
+        sip->state = SATIP_STATE_TEARDOWN;
+        satipc_send_teardown(ad, sip);
+    } else {
+        sip->state = SATIP_STATE_INACTIVE;
+    }
+    ad->err = 1;
+    LOG("satipc %d: request failed fatally (rc %d)", sip->id, rc);
+}
+
 // This could be the response of a both SETUP or PLAY
 int satipc_handle_setup(adapter *ad, satipc *sip, char *buf) {
     int i;
@@ -266,20 +287,40 @@ int satipc_reply(sockets *s) {
         sip->state = ad->err ? SATIP_STATE_INACTIVE : SATIP_STATE_SETUP;
         if (!ad->err)
             sip->force_pids = true; // resend full pids, deltas are lost
-    } else if (rc == 503 || rc == 405 || rc == 400) {
-        // Server refuses the request: release the session if any, then
-        // retry like a session loss, unless we gave up (#904)
-        if (ad->err) {
-            sip->state = SATIP_STATE_INACTIVE;
-        } else if (sip->stream_id != -1) {
-            sip->state = SATIP_STATE_TEARDOWN;
-            satipc_send_teardown(ad, sip);
-        } else {
-            sip->state = SATIP_STATE_SETUP;
+    } else if (rc == 403 || rc == 500) {
+        // Permanent refusal (bad params / broken server): identical
+        // retries are futile, so release the session and give up.
+        if (rc == 403) {
+            if (const char *oor =
+                    rtsp_body_param((char *)s->buf, "Out-of-Range:")) {
+                char attrs[96];
+                snprintf(attrs, sizeof(attrs), "%.*s",
+                         (int)strcspn(oor, "\r\n"), oor);
+                LOG("satipc %d: server reports %s", sip->id, attrs);
+            }
         }
-        if (!ad->err)
-            sip->force_pids = true; // resend full pids, deltas are lost
-        LOG("satipc %d: request rejected (rc %d), retrying", sip->id, rc);
+        satipc_give_up(ad, sip, rc);
+    } else if (rc == 503 || rc == 405 || rc == 400) {
+        const char *nomore =
+            rc == 503 ? rtsp_body_param((char *)s->buf, "No-More:") : nullptr;
+        if (nomore && strstr(nomore, "pids")) {
+            // Server cannot take our pid list: retrying it is futile.
+            satipc_give_up(ad, sip, rc);
+        } else {
+            // Server refuses the request: release the session if any, then
+            // retry like a session loss, unless we gave up (#904)
+            if (ad->err) {
+                sip->state = SATIP_STATE_INACTIVE;
+            } else if (sip->stream_id != -1) {
+                sip->state = SATIP_STATE_TEARDOWN;
+                satipc_send_teardown(ad, sip);
+            } else {
+                sip->state = SATIP_STATE_SETUP;
+            }
+            if (!ad->err)
+                sip->force_pids = true; // resend full pids, deltas are lost
+            LOG("satipc %d: request rejected (rc %d), retrying", sip->id, rc);
+        }
     } else if (rc != 200) {
         if (rc != 0) // AVM Fritz!Box workaround sdp reply without header
         {
@@ -449,8 +490,8 @@ int satipc_timeout(sockets *s) {
         if (!reopen_rtsp && !restart_srt) {
             // restart the connection we did not receive a response for
             // more than 10 seconds from the server
-            if (sip->expect_reply && (getTick() - sip->last_response_sent >
-                                      sip->timeout_ms)) {
+            if (sip->expect_reply &&
+                (getTick() - sip->last_response_sent > sip->timeout_ms)) {
                 LOG("satipc %d: no response was received from the server "
                     "for more than %jd ms, closing connection",
                     sip->id, getTick() - sip->last_response_sent);
@@ -803,7 +844,8 @@ int satipc_setup_rtp_udp_sockets(adapter *ad, satipc *sip) {
 
 // Drop an RTSP socket installed by a failed or raced open: only the
 // expected entry and fds are released, then the closed flag returns.
-void satipc_drop_rtsp_socket(adapter *ad, satipc *sip, int id, int fe, int dvr) {
+void satipc_drop_rtsp_socket(adapter *ad, satipc *sip, int id, int fe,
+                             int dvr) {
     if (id >= 0) {
         // No teardown: drop the close callback and just untrack/close
         // instead of re-entering close_adapter while opening.
