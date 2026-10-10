@@ -54,7 +54,6 @@
 extern ddci_device_t *ddci_devices[MAX_ADAPTERS];
 extern adapter *a[MAX_ADAPTERS];
 extern std::vector<SPMT *> pmts;
-extern int npmts;
 extern SCA_op dvbca;
 extern ca_device_t *ca_devices[MAX_ADAPTERS];
 extern std::unordered_map<int, Sddci_channel> channels;
@@ -779,7 +778,6 @@ int test_create_pmt_maps_es_ecm_pids() {
     a[0] = NULL;
     // free, not just NULL: earlier tests never released their PMTs
     free_all_pmts();
-    npmts = 0;
     ca_devices[0] = NULL;
     ca_devices[1] = NULL;
 

@@ -130,9 +130,12 @@ void del_ca(SCA_op *op) {
             }
         extern SMutex pmts_mutex;
         std::lock_guard<SMutex> lock(pmts_mutex);
-        for (k = 0; k < MAX_PMT; k++) // delete ca_mask for all the PMTs
-            if (pmts[k] && pmts[k]->enabled)
-                tables_clear_pmt_ca_masks(pmts[k], mask, 0);
+        int n = static_cast<int>(pmts.size());
+        for (k = 0; k < n; k++) { // delete ca_mask for all the PMTs
+            SPMT *pmt = __atomic_load_n(&pmts[k], __ATOMIC_ACQUIRE);
+            if (pmt && pmt->enabled)
+                tables_clear_pmt_ca_masks(pmt, mask, 0);
+        }
     }
 }
 

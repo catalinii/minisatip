@@ -200,14 +200,15 @@ void init_algo_csa();
 int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
             int64_t expiry, void *opaque);
 
-extern int npmts;
 static inline SPMT *get_pmt(int id) {
     extern std::vector<SPMT *> pmts;
 
-    if (id < 0 || id >= npmts || !pmts[id] || !pmts[id]->enabled)
-        //		LOG_AND_RETURN(NULL, "PMT not found for id %d", id);
+    if (id < 0 || id >= static_cast<int>(pmts.size()))
         return NULL;
-    return pmts[id];
+    SPMT *pmt = __atomic_load_n(&pmts[id], __ATOMIC_ACQUIRE);
+    if (!pmt || !pmt->enabled)
+        return NULL;
+    return pmt;
 }
 
 static inline SFilter *get_filter(int id) {

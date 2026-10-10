@@ -343,7 +343,6 @@ int test_emulate_add_all_pids() {
 // First PAT after (re)init (pat_processed == 0, every CI channel change):
 // a PMT missing from it must still retire its CA registration.
 
-extern int npmts;
 extern int process_pat(int filter, unsigned char *b, int len, void *opaque);
 
 static int fake_ca_del_calls;
@@ -457,7 +456,6 @@ static int check_pat_drop_releases_ca(int adapter_type) {
     // as some entries are not ours.
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
 
     adapter ad = {};
     a[0] = &ad;
@@ -627,7 +625,6 @@ int test_pmt_starts_only_with_pmt_pid() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
 
     adapter ad = {};
     a[0] = &ad;
@@ -691,7 +688,6 @@ int test_retune_handover_same_loop() {
     uint8_t priv[1] = {0};
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
 
     adapter ad = {};
     a[0] = &ad;
@@ -792,7 +788,6 @@ int test_single_slot_retune_releases_first() {
     uint8_t priv[1] = {0};
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
 
     adapter ad = {};
     a[0] = &ad;
@@ -868,7 +863,6 @@ int test_scan_pmt_only_starts_nothing() {
     uint8_t priv[1] = {0};
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
 
     adapter ad = {};
     a[0] = &ad;
@@ -961,7 +955,6 @@ int test_19e_11493h_zap_flows() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
 
     adapter ad = {};
     a[0] = &ad;
@@ -1041,7 +1034,6 @@ int test_19e_11582h_group_and_disjoint() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
 
     adapter ad = {};
     a[0] = &ad;
@@ -1136,7 +1128,6 @@ int test_19e_11914h_ca_send_close() {
     uint8_t priv[1] = {0};
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
 
     adapter ad = {};
     a[0] = &ad;
@@ -1242,7 +1233,6 @@ int test_sticky_claims_without_parse() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
 
     adapter ad = {};
     a[0] = &ad;
@@ -1296,7 +1286,6 @@ int test_earlier_newcomer_steals_by_order() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
 
     adapter ad = {};
     a[0] = &ad;
@@ -1347,7 +1336,6 @@ int test_steal_splits_partial_overlap() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
 
     adapter ad = {};
     a[0] = &ad;
@@ -1439,7 +1427,6 @@ int test_d8_shared_pid() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
 
     adapter ad = {};
     a[0] = &ad;
@@ -1509,7 +1496,6 @@ int test_shared_pid_split() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
 
     adapter ad = {};
     a[0] = &ad;
@@ -1559,7 +1545,6 @@ int test_30w_shared_pmt_pid() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
     for (i = 0; i < MAX_FILTERS; i++)
         filters[i] = NULL;
 
@@ -1676,7 +1661,6 @@ int test_1129_bein_shared_es() {
     uint8_t priv[1] = {0};
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
 
     adapter ad = {};
     a[0] = &ad;
@@ -1732,7 +1716,6 @@ int test_1129_stingray_shared_vpid() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
 
     adapter ad = {};
     a[0] = &ad;
@@ -1784,7 +1767,6 @@ int test_held_pids_without_client_stop_pmt() {
     uint8_t priv[1] = {0};
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
 
     adapter ad = {};
     a[0] = &ad;
@@ -1832,7 +1814,6 @@ int test_cw_keyed_by_pmt() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
     for (i = 0; i < MAX_CW; i++)
         if (cws[i])
             cws[i]->enabled = 0;
@@ -1870,7 +1851,6 @@ int test_send_cw_skips_in_use_slot() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
     for (i = 0; i < MAX_CW; i++)
         if (cws[i])
             cws[i]->enabled = 0;
@@ -1915,7 +1895,6 @@ int test_pids_all_expands_pmt_pids() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
 
     adapter ad = {};
     a[0] = &ad;
@@ -1951,7 +1930,6 @@ int test_multi_service_pid_parses_per_sid() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
     for (i = 0; i < MAX_FILTERS; i++)
         filters[i] = NULL;
 
@@ -2001,7 +1979,6 @@ int test_late_parse_handover() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
 
     adapter ad = {};
     a[0] = &ad;
@@ -2065,7 +2042,6 @@ int test_running_pmt_pid_deleted_on_unsubscribe() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
 
     adapter ad = {};
     a[0] = &ad;
@@ -2117,7 +2093,6 @@ int test_pmt_pid_remove_readd_no_churn() {
     uint8_t priv[1] = {0};
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
 
     adapter ad = {};
     a[0] = &ad;
@@ -2184,7 +2159,6 @@ int test_pmt_pid_delete_hands_over() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
 
     adapter ad = {};
     a[0] = &ad;
@@ -2243,7 +2217,6 @@ int test_update_pids_tail_elects() {
     uint8_t priv[1] = {0};
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
 
     adapter ad = {};
     a[0] = &ad;
@@ -2312,7 +2285,6 @@ int test_stream_pid_delete_stops_pmt() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
 
     adapter ad = {};
     a[0] = &ad;
@@ -2357,7 +2329,6 @@ int test_version_update_releases_claims() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
         pmts[i] = NULL;
-    npmts = 0;
 
     adapter ad = {};
     a[0] = &ad;
