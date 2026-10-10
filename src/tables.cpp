@@ -281,8 +281,12 @@ int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt) {
             std::lock_guard<SMutex> lock(pmts_mutex);
             epoch = ca_teardown_epoch;
         }
+        // A set registered bit means a previous add succeeded and was
+        // never closed: this send is a PMT update, not a new add.
+        int update = (pmt->ca_registered_mask & mask) != 0;
         if (send || no_caids) {
-            result = ca[i].op->ca_add_pmt(ad, pmt);
+            LOGM("PMT %d -> CA %d: %s", pmt->id, i, update ? "update" : "add");
+            result = ca[i].op->ca_add_pmt(ad, pmt, update);
         }
 
         extern SMutex pmts_mutex;
@@ -296,13 +300,19 @@ int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt) {
         if (result == TABLES_RESULT_OK) {
             pmt->ca_mask |= mask;
             pmt->ca_registered_mask |= mask;
-        } else if (result == TABLES_RESULT_ERROR_NORETRY)
+        } else if (result == TABLES_RESULT_ERROR_NORETRY) {
             pmt->disabled_ca_mask |= mask;
+            // Re-send rejected after an update (CA no longer matches):
+            // release the stale registration instead of leaking it.
+            if (pmt->ca_registered_mask & mask)
+                close_pmt_for_ca(i, ad, pmt);
+        }
         disable_cw(pmt->id);
         rv += (1 - result);
-        LOGM("In processing PMT %d, ca %d, CA matched %d, ca_pmt_add "
-             "returned %d, new ca_mask %d new disabled_ca_mask %d",
-             pmt->id, i, send, result, pmt->ca_mask, pmt->disabled_ca_mask);
+        LOGM("In processing PMT %d, ca %d, CA matched %d, update %d, "
+             "ca_pmt_add returned %d, new ca_mask %d new disabled_ca_mask %d",
+             pmt->id, i, send, update, result, pmt->ca_mask,
+             pmt->disabled_ca_mask);
     }
     return rv;
 }

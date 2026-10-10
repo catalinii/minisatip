@@ -1093,6 +1093,10 @@ static int same_stream_pids(SPMT *a, SPMT *b) {
     return 1;
 }
 
+// Drop the CA list so the update parse rebuilds it; entries are kept
+// for reuse and never freed here (cross-thread readers hold them).
+static void reset_pmt_ca(SPMT *pmt) { pmt->caids = 0; }
+
 typedef struct {
     SPMT *pmt;
     char candidate;
@@ -1558,7 +1562,8 @@ int pmt_del(int id) {
         del_filter(pmt->filter);
     pmt->filter = -1;
 
-    for (i = 0; i < pmt->caids; i++)
+    // Updates shrink caids while keeping entries for reuse: free all slots.
+    for (i = 0; i < MAX_CAID; i++)
         if (pmt->ca[i]) {
             free(pmt->ca[i]);
             pmt->ca[i] = NULL;
@@ -1941,6 +1946,12 @@ void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid, uint8_t *data,
         LOG("Too many CAIDs for pmt %d, discarding %04X", pmt->id, caid);
         return;
     }
+    // A short descriptor has no valid CAID/PID either: skip it instead
+    // of overflowing the malloc and memcpy below.
+    if (len < 0) {
+        LOG("PMT %d discarding CA descriptor with length %d", pmt->id, len);
+        return;
+    }
 
     LOG("PMT %d PI pos %d caid %04X => pid %04X (%d), index %d", pmt->id,
         pmt->caids + 1, caid, capid, capid, pmt->caids);
@@ -2078,32 +2089,35 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     if (pmt->version == ver) {
         // Already processed
         return 0;
-    } else {
-        // In case of PMT update, stop and release before processing it, so
-        // the restarted PMT or a waiter claims the pids free on next pass.
-        stop_pmt(pmt, ad);
-        release_pmt_claims(ad, pmt);
     }
 
     if (!(p = find_pid(ad->id, pid)))
         return -1;
 
+    // A running PMT keeps its state and claims; the parse clears the
+    // send masks so the CAs get an update=1 re-send on the next pass.
+    int was_running = pmt->state == PMT_RUNNING || pmt->state == PMT_STARTING;
+    int old_registered = 0;
+    if (was_running)
+        old_registered = pmt->ca_registered_mask;
+    else
+        release_pmt_claims(ad, pmt);
+    reset_pmt_ca(pmt);
+
     pmt_len = ((b[1] & 0xF) << 8) + b[2];
     pi_len = ((b[10] & 0xF) << 8) + b[11];
     pcr_pid = ((b[8] & 0x1F) << 8) + b[9];
 
+    int old_ver = pmt->version;
     pmt->sid = sid;
     pmt->version = ver;
     pmt->pcr_pid = pcr_pid;
 
-    LOG("new PMT %d AD %d, pid: %04X (%d), filter %d, len %d, pi_len %d, ver "
-        "%d, pcr "
-        "%d, "
-        "sid "
-        "%04X "
-        "(%d) %s %s",
+    LOG("new PMT %d AD %d, pid: %04X (%d), filter %d, len %d, pi_len %d, "
+        "ver %d, pcr %d, sid %04X (%d)%s%s%s",
         pmt->id, ad->id, pid, pid, filter, pmt_len, pi_len, ver, pcr_pid,
-        pmt->sid, pmt->sid, pmt->name[0] ? "channel:" : "", pmt->name);
+        pmt->sid, pmt->sid, pmt->name[0] ? " channel: " : "", pmt->name,
+        old_ver != -1 && old_ver != ver ? " UPDATE" : "");
     pi = b + 12;
     pmt_b = b + 3;
 
@@ -2158,6 +2172,22 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     // Add the PCR pid if it's independent
     if (pcr_pid > 0 && pcr_pid < 8191)
         pmt_add_stream_pid(pmt, pcr_pid, 0, false, false);
+
+    if (was_running) {
+        // Every new version re-sends with update=1; each CA skips
+        // identical work itself.
+        pmt->ca_registered_mask = old_registered;
+        if (pmt->caids == 0) {
+            // Newly FTA: nothing to re-send, so release the
+            // stale CA registrations instead of leaking them.
+#ifndef DISABLE_TABLES
+            close_pmt_for_cas(ad, pmt);
+#endif
+        } else {
+            pmt->ca_mask = 0;
+            pmt->disabled_ca_mask = 0;
+        }
+    }
 
     // Late parse handover: a pid below may be owned by a running PMT
     // subscribed after this one. Stop it; this PMT starts next pass.
@@ -2286,6 +2316,8 @@ void pmt_pid_del(adapter *ad, int pid) {
         return;
 
 #ifndef DISABLE_TABLES
+    // Tolerates stale claims (update dropped the pid): the stop check
+    // below runs over current streams either way.
     tables_del_pid(ad, pmt, pid);
 #endif
 
@@ -2404,7 +2436,8 @@ void free_all_pmts() {
     std::lock_guard<SMutex> lock(pmts_mutex);
     for (i = 0; i < MAX_PMT; i++) {
         if (pmts[i]) {
-            for (j = 0; j < pmts[i]->caids; j++) {
+            // Updates shrink caids while keeping entries: free all slots.
+            for (j = 0; j < MAX_CAID; j++) {
                 if (pmts[i]->ca[j]) {
                     free(pmts[i]->ca[j]);
                     pmts[i]->ca[j] = NULL;

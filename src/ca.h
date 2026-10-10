@@ -125,6 +125,8 @@ typedef struct ca_pmt {
     int other_id;
     int version;
     int sid;
+    uint32_t capmt_hash;  // content hash of the last CAPMT sent, minus version
+    int capmt_hash_valid; // set once a send is known delivered
 } SCAPMT;
 
 extern char *listmgmt_str[];
@@ -236,6 +238,7 @@ int ca_init(ca_device_t *d);
 void dvbca_init();
 int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
                  int cmd_id, int added_only);
+uint32_t capmt_content_hash(uint8_t *capmt, int len);
 int is_ca_initializing(int i);
 void set_ca_adapter_pin(char *o);
 void set_ca_adapter_force_ci(char *o);

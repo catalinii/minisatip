@@ -16,13 +16,15 @@
 #define TABLES_CHANNEL_DECRYPTED 2
 
 typedef int (*ca_pmt_action)(adapter *ad, SPMT *pmt);
+typedef int (*ca_pmt_add_action)(adapter *ad, SPMT *pmt, int update);
 typedef int (*ca_pid_action)(adapter *ad, SPMT *pmt, int pid);
 typedef int (*ca_device_action)(adapter *ad);
 typedef int (*ca_close_action)();
 
 typedef struct struct_CA_op {
     ca_pid_action ca_add_pid, ca_del_pid;
-    ca_pmt_action ca_add_pmt, ca_del_pmt;
+    ca_pmt_add_action ca_add_pmt;
+    ca_pmt_action ca_del_pmt;
     ca_device_action ca_init_dev, ca_close_dev, ca_ts;
     ca_close_action ca_close_ca;
 } SCA_op;
