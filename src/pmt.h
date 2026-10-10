@@ -2,6 +2,7 @@
 #define PMT_H
 #include "adapter.h"
 #include "dvb.h"
+#include <atomic>
 #include <unordered_map>
 #include <vector>
 
@@ -129,7 +130,9 @@ typedef struct struct_pmt_ca {
 } SPMTCA;
 
 typedef struct struct_pmt {
-    char enabled;
+    std::atomic<char> enabled = 0;
+    std::atomic<char> allocated = 0; // CAS-claimed by find_new_ids
+    SMutex mutex;                    // serializes writers of this PMT
     int sid;
     int pid;
     int pcr_pid;
@@ -146,9 +149,9 @@ typedef struct struct_pmt {
     //
     // ca_registered_mask: that CA holds the PMT and must be told when it
     // stops. Cleared when the registration, CA, or cached PMT is removed.
-    // Writers take pmts_mutex; readers re-read every pass, so a stale
+    // Writers take pmt->mutex; readers re-read every pass, so a stale
     // read only delays one cycle (see ca_mask_mutex for the same rule).
-    int ca_mask, disabled_ca_mask, ca_registered_mask;
+    std::atomic<int> ca_mask = 0, disabled_ca_mask = 0, ca_registered_mask = 0;
     SPMT_batch *batch;
     int8_t parity, update_cw;
     uint64_t last_update_cw;
@@ -156,9 +159,9 @@ typedef struct struct_pmt {
     SPid *p;
     char provider[50], name[50];
     void *opaque;
-    char state; // PMT state (PMT_STOPPED, PMT_STARTING, PMT_RUNNING,
-                // PMT_STOPPING)
-    char best;  // elected into the active set this election
+    std::atomic<char> state = 0; // PMT state (PMT_STOPPED, PMT_STARTING,
+                                 // PMT_RUNNING, PMT_STOPPING)
+    char best;                   // elected into the active set this election
     int filter;
     int64_t start_time;
     std::unordered_map<uint64_t, int> *global_start, *local_start;

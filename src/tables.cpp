@@ -308,7 +308,8 @@ int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt) {
         rv += (1 - result);
         LOGM("In processing PMT %d, ca %d, CA matched %d, ca_pmt_add "
              "returned %d, new ca_mask %d new disabled_ca_mask %d",
-             pmt->id, i, send, result, pmt->ca_mask, pmt->disabled_ca_mask);
+             pmt->id, i, send, result, pmt->ca_mask.load(),
+             pmt->disabled_ca_mask.load());
     }
     return rv;
 }
@@ -318,8 +319,8 @@ int send_pmt_to_cas(adapter *ad, SPMT *pmt) {
     if (pmt->caids > 0) {
         LOG("Sending PMT %d to all CAs: ad_ca_mask %X, "
             "pmt_ca_mask %X, disabled_ca_mask %X",
-            pmt->id, ad ? ad->ca_mask.load() : -2, pmt->ca_mask,
-            pmt->disabled_ca_mask);
+            pmt->id, ad ? ad->ca_mask.load() : -2, pmt->ca_mask.load(),
+            pmt->disabled_ca_mask.load());
         size_t i = 0;
         for (auto &c : ca) {
             if (c.enabled)
