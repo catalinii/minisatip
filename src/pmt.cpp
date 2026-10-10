@@ -1516,6 +1516,10 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
     pmt->batch = NULL;
     memset(pmt->name, 0, sizeof(pmt->name));
     memset(pmt->provider, 0, sizeof(pmt->provider));
+    pmt->has_sdt = 0;
+    pmt->sdt_service_type = pmt->sdt_running_status = pmt->sdt_ca_mode = 0;
+    pmt->sdt_eit_schedule = pmt->sdt_eit_pf = 0;
+    pmt->sdt_tsid = pmt->sdt_onid = 0;
     pmt->caids = 0;
     pmt->descriptors.clear();
 
@@ -2200,18 +2204,28 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque) {
             DEBUGM("%s: no PMT found for sid %d (%X)", __FUNCTION__, sid, sid);
             continue;
         }
+        pmt->sdt_running_status = (b[3] >> 5) & 0x7;
+        pmt->sdt_ca_mode = (b[3] >> 4) & 0x1;
+        pmt->sdt_eit_schedule = (b[2] >> 1) & 0x1;
+        pmt->sdt_eit_pf = b[2] & 0x1;
+        pmt->sdt_tsid = tsid;
+        pmt->sdt_onid = sdt[8] * 256 + sdt[9];
+        pmt->has_sdt = 1;
         for (j = 5; j < desc_loop_len; j += desc_len) {
             unsigned char *c = b + j;
             desc_len = c[1];
             desc_len += 2;
-            if (c[0] == 0x48 && !pmt->name[0]) {
-                int name_size = sizeof(pmt->name) - 1;
-                c += 3;
-                dvb_get_string(pmt->provider, name_size, c + 1, c[0]);
-                c += c[0] + 1;
-                dvb_get_string(pmt->name, name_size, c + 1, c[0]);
-                LOG("SDT PMT %d: name %s provider %s, sid: %d (%X)", pmt->id,
-                    pmt->name, pmt->provider, sid, sid);
+            if (c[0] == 0x48) {
+                pmt->sdt_service_type = c[2];
+                if (!pmt->name[0]) {
+                    int name_size = sizeof(pmt->name) - 1;
+                    c += 3;
+                    dvb_get_string(pmt->provider, name_size, c + 1, c[0]);
+                    c += c[0] + 1;
+                    dvb_get_string(pmt->name, name_size, c + 1, c[0]);
+                    LOG("SDT PMT %d: name %s provider %s, sid: %d (%X)",
+                        pmt->id, pmt->name, pmt->provider, sid, sid);
+                }
             }
         }
     }

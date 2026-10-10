@@ -48,6 +48,7 @@ typedef struct ddci_device {
     uint64_t read_index[MAX_ADAPTERS]; // read index per adapter
     uint64_t last_pat, last_sdt, last_pmt;
     int tid, ver;
+    int sdt_data_mask; // channels with real SDT data at last SDT generation
     int16_t pat_cc, sdt_cc, eit_cc;
     char disable_cat;
     std::unordered_map<int, ddci_mapping_table_t> mapping;

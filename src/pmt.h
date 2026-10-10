@@ -155,6 +155,13 @@ typedef struct struct_pmt {
     SCW *cw;
     SPid *p;
     char provider[50], name[50];
+    // Real SDT data for this service, stored by process_sdt() and emitted
+    // into the generated DDCI SDT (some CAMs need more than the minimal SDT)
+    char has_sdt;
+    int sdt_service_type;
+    int sdt_running_status, sdt_ca_mode;
+    int sdt_eit_schedule, sdt_eit_pf;
+    int sdt_tsid, sdt_onid;
     void *opaque;
     char state; // PMT state (PMT_STOPPED, PMT_STARTING, PMT_RUNNING,
                 // PMT_STOPPING)
@@ -214,6 +221,7 @@ static inline SFilter *get_filter(int id) {
                : NULL;
 }
 int process_pmt(int filter, unsigned char *b, int len, void *opaque);
+int process_sdt(int filter, unsigned char *sdt, int len, void *opaque);
 void pmt_pid_del(adapter *ad, int pid);
 void pmt_pid_add(adapter *ad, int pid, int existing);
 void pmt_pid_updated_pids(adapter *ad);

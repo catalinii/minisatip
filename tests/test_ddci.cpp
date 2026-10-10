@@ -674,6 +674,156 @@ int test_create_sdt() {
     ASSERT(sdt_running_status2 == 4, "SDT SID 1 running_status != 4");
     ASSERT(sdt_free_CA_mode2 != 0, "SDT SID 1 free_CA_mode != 1");
 
+    // do not leave the stack adapter behind for later tests
+    a[0] = NULL;
+    return 0;
+}
+
+int test_create_sdt_with_real_data() {
+    // PMTs with real SDT data (parsed from the transponder) must produce an
+    // SDT carrying the real tsid/onid, per-service flags and a
+    // service_descriptor (#1377: Conax CAM needs more than the minimal SDT)
+    // Other tests also use adapter 2, but with different sids, and lookup
+    // is by (adapter, sid), so process_sdt() matches the PMTs created here.
+    adapter ad = {};
+    create_adapter(&ad, 2);
+
+    ddci_device_t d = {};
+    d.id = 0;
+    d.enabled = 1;
+    d.max_channels = 2;
+    memset(&d.pmt, -1, sizeof(d.pmt));
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[0] = &d;
+
+    int pid1 = 4096, pid2 = 4097, sid1 = 0x100, sid2 = 0x101;
+    int pmt_id1 = pmt_add(ad.id, sid1, pid1);
+    int pmt_id2 = pmt_add(ad.id, sid2, pid2);
+    add_pid_mapping_table(ad.id, pid1, pmt_id1, &d, 0);
+    add_pid_mapping_table(ad.id, pid2, pmt_id2, &d, 0);
+    d.pmt[0].id = pmt_id1;
+    d.pmt[1].id = pmt_id2;
+
+    // Real SDT section as seen on the transponder: tsid 7900, onid 156
+    uint8_t section[256];
+    uint8_t *b = section;
+    *b++ = 0x42;
+    *b++ = 0xF0;
+    *b++ = 0x00;
+    uint8_t *section_start = b;
+    copy16(b, 0, 7900);
+    b += 2;
+    *b++ = 0xC1;
+    *b++ = 0x00;
+    *b++ = 0x00;
+    copy16(b, 0, 156);
+    b += 2;
+    *b++ = 0xFF;
+    // service 1: EIT schedule+pf, running 4, CA 1
+    const char *prov = "Pyur", *name1 = "RTL HD", *name2 = "Test SD";
+    copy16(b, 0, sid1);
+    b += 2;
+    *b++ = 0x03;
+    *b++ = (4 << 5) | (1 << 4);
+    uint8_t *dlen = b++;
+    *b++ = 0x48;
+    uint8_t *sdlen = b++;
+    *b++ = 0x19;
+    *b++ = strlen(prov);
+    memcpy(b, prov, strlen(prov));
+    b += strlen(prov);
+    *b++ = strlen(name1);
+    memcpy(b, name1, strlen(name1));
+    b += strlen(name1);
+    *sdlen = b - sdlen - 1;
+    *dlen = b - dlen - 1;
+    // service 2: no EIT, running 4, CA 0
+    copy16(b, 0, sid2);
+    b += 2;
+    *b++ = 0x00;
+    *b++ = (4 << 5) | (0 << 4);
+    dlen = b++;
+    *b++ = 0x48;
+    sdlen = b++;
+    *b++ = 0x01;
+    *b++ = strlen(prov);
+    memcpy(b, prov, strlen(prov));
+    b += strlen(prov);
+    *b++ = strlen(name2);
+    memcpy(b, name2, strlen(name2));
+    b += strlen(name2);
+    *sdlen = b - sdlen - 1;
+    *dlen = b - dlen - 1;
+    int section_length = b - section_start + 4;
+    *(section_start - 2) |= (section_length >> 8) & 0x0F;
+    *(section_start - 1) = section_length & 0xFF;
+    copy32(b, 0, crc_32(section, b - section));
+    b += 4;
+
+    ASSERT(process_sdt(0, section, b - section, &ad) == 0,
+           "process_sdt failed");
+
+    SPMT *pmt1 = get_pmt(pmt_id1);
+    ASSERT(pmt1->has_sdt, "PMT1 has no SDT data");
+    ASSERT(pmt1->sdt_service_type == 0x19, "PMT1 service_type != 0x19");
+    ASSERT(pmt1->sdt_running_status == 4, "PMT1 running_status != 4");
+    ASSERT(pmt1->sdt_ca_mode == 1, "PMT1 ca_mode != 1");
+    ASSERT(pmt1->sdt_eit_schedule == 1 && pmt1->sdt_eit_pf == 1,
+           "PMT1 EIT flags != 1");
+    ASSERT(pmt1->sdt_tsid == 7900 && pmt1->sdt_onid == 156,
+           "PMT1 tsid/onid != 7900/156");
+    ASSERT(!strcmp(pmt1->name, "RTL HD"), "PMT1 name != RTL HD");
+
+    // Generate the DDCI SDT
+    uint8_t sdt[512];
+    memset(sdt, 0, sizeof(sdt));
+    int sdt_len = ddci_create_sdt(&d, sdt);
+    // version bumped: SDT data arrived after registration
+    ASSERT(d.ver == 1, "SDT version not bumped on new data");
+
+    // tsid/onid
+    ASSERT(((sdt[4] << 8) | sdt[5]) == 7900, "generated tsid != 7900");
+    ASSERT(((sdt[9] << 8) | sdt[10]) == 156, "generated onid != 156");
+    // service 1 at offset 12
+    uint8_t *s = sdt + 12;
+    ASSERT(((s[0] << 8) | s[1]) == sid1, "generated SID 1");
+    ASSERT(s[2] == 0x03, "generated EIT flags 1 != 0x03");
+    ASSERT((s[3] >> 5) == 4 && ((s[3] >> 4) & 1) == 1,
+           "generated running/CA 1 != 4/1");
+    int dl1 = ((s[3] & 0xF) << 8) | s[4];
+    ASSERT(dl1 > 0 && s[5] == 0x48, "generated service_descriptor 1 missing");
+    ASSERT(s[7] == 0x19, "generated service_type 1 != 0x19");
+    // service 2
+    s += 5 + dl1;
+    ASSERT(((s[0] << 8) | s[1]) == sid2, "generated SID 2");
+    ASSERT(s[2] == 0x00, "generated EIT flags 2 != 0x00");
+    ASSERT((s[3] >> 5) == 4 && ((s[3] >> 4) & 1) == 0,
+           "generated running/CA 2 != 4/0");
+    int dl2 = ((s[3] & 0xF) << 8) | s[4];
+    ASSERT(dl2 > 0 && s[5] == 0x48, "generated service_descriptor 2 missing");
+
+    // section length and CRC must be valid
+    int gen_len = ((sdt[2] & 0xF) << 8) | sdt[3];
+    ASSERT(gen_len + 3 == sdt_len - 1, "generated section_length mismatch");
+    uint8_t packet[188 * 4];
+    int16_t cc = 1;
+    int ts_len = buffer_to_ts(packet, sizeof(packet), sdt, sdt_len, &cc, 17);
+    SFilter f;
+    memset(&f, 0, sizeof(f));
+    f.flags = FILTER_CRC;
+    int off = 0, asm_len = 0;
+    while (off < ts_len) {
+        asm_len = assemble_packet(&f, packet + off);
+        off += 188;
+    }
+    ASSERT(asm_len > 0, "generated SDT CRC check failed");
+
+    // second generation without changes keeps the version
+    ddci_create_sdt(&d, sdt);
+    ASSERT(d.ver == 1, "SDT version bumped without changes");
+
+    // do not leave the stack adapter behind for later tests
+    a[2] = NULL;
     return 0;
 }
 
@@ -1115,6 +1265,8 @@ int main() {
               "testing that the CI-side PMT is named once the source is");
     TEST_FUNC(test_create_pat(), "testing create_pat");
     TEST_FUNC(test_create_sdt(), "testing create_sdt");
+    TEST_FUNC(test_create_sdt_with_real_data(),
+              "testing create_sdt with real data");
     TEST_FUNC(test_create_pmt(), "testing create_pmt");
     TEST_FUNC(test_create_pmt_maps_es_ecm_pids(),
               "testing that rebuilt PMTs carry mapped ES ECM pids");
