@@ -108,17 +108,21 @@ struct struct_adapter {
     int do_tune;
     int force_close;
     unsigned char *buf; // 7 rtp packets = MAX_PACK, 7 frames / packet
-    int64_t rtime;
+    std::atomic<int64_t> rtime = 0; // read/written by stream threads
     int new_gs;
-    int status, status_cnt, fast_status;
+    std::atomic<int> status = 0; // set by dvb/satipc/netceiver signal paths
+    int status_cnt, fast_status;
     int dmx_source;
     int master_source;
     int is_fbc;
     uint8_t used[MAX_ADAPTERS];
-    uint16_t strength; // strength have values between 0 and 255
-    uint32_t ber;
-    uint16_t snr; // strength have values between 0 and 255
-    uint16_t db;  // if MAX_DB then no value, else value is dB*10 of the adapter
+    // Written without ad->mutex; each read is atomic but fields
+    // may come from different updates.
+    std::atomic<uint16_t> strength =
+        0; // strength have values between 0 and 255
+    std::atomic<uint32_t> ber = 0;
+    std::atomic<uint16_t> snr = 0; // strength have values between 0 and 255
+    std::atomic<uint16_t> db = 0;  // if MAX_DB then no value, else dB*10
     float strength_multiplier, // final value: strength * strength_multipler,
         snr_multiplier;        // same for snr
     char force_tuner_signal;   // Values: TUNER_FORCE_*

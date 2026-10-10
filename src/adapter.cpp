@@ -2220,7 +2220,8 @@ int signal_thread(sockets *s __attribute__((unused))) {
                 "%d, ber: "
                 "%d, strength:%d, snr: %d, force scan %d)",
                 (ad->new_gs == 1) ? "_new" : "", ctime - ts, ad->id, ad->fe,
-                ad->status, ad->ber, ad->strength, ad->snr, opts.force_scan);
+                ad->status.load(), ad->ber.load(), ad->strength.load(),
+                ad->snr.load(), opts.force_scan);
         ad->mutex.unlock();
     }
     return 0;

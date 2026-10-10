@@ -1252,7 +1252,7 @@ int read_dmx(sockets *s) {
          "out "
          "of %d bytes read, %jd ms ago (%jd %jd)",
          send, force_send, cnt, ad->id, s->rlen, s->lbuf, rtime - ad->rtime,
-         rtime, ad->rtime);
+         rtime, ad->rtime.load());
 
     if (!send && !force_send)
         return 0;
