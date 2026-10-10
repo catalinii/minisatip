@@ -21,7 +21,9 @@
 #include "utils.h"
 #include "utils/fifo.h"
 #include "utils/testing.h"
+#include <fstream>
 #include <string.h>
+#include <string>
 #include <sys/stat.h>
 
 int test_mkdir_recursive() {
@@ -178,10 +180,48 @@ int test_header_parameter() {
     return 0;
 }
 
+int test_readfile_content_type() {
+    // readfile must report image/x-icon for .ico (favicon) and keep
+    // the existing mappings for the other extensions
+    const char *dir = "/tmp/minisatip/test-ctype";
+    mkdir_recursive(dir);
+    const char *names[] = {"a.ico", "b.png", "c.jpg", "d.html", "e.bin"};
+    for (const char *n : names) {
+        std::ofstream f(std::string(dir) + "/" + n);
+        ASSERT(f.is_open(), "could not create fixture file");
+        f << 'x';
+    }
+    const char *saved = opts.document_root;
+    opts.document_root = dir;
+    struct Case {
+        const char *fn;
+        const char *mime;
+    };
+    const Case cases[] = {
+        {"/a.ico", "image/x-icon"},
+        {"/b.png", "image/png"},
+        {"/c.jpg", "image/jpeg"},
+        {"/d.html", "text/html"},
+        {"/e.bin", "application/octet-stream"},
+    };
+    for (const auto &c : cases) {
+        char ctype[500];
+        int len = 0;
+        char *mem = readfile(c.fn, ctype, &len);
+        ASSERT(mem != nullptr, "readfile should open fixture file");
+        ASSERT(strstr(ctype, c.mime) != nullptr,
+               "readfile reported wrong Content-Type");
+        closefile(mem, len);
+    }
+    opts.document_root = saved;
+    return 0;
+}
+
 int main() {
     opts.log = 255;
     strcpy(thread_info[thread_index].thread_name, "test_utils");
     TEST_FUNC(test_mkdir_recursive(), "testing directory creation");
+    TEST_FUNC(test_readfile_content_type(), "testing readfile content types");
     TEST_FUNC(test_fifo(), "testing fifo");
     TEST_FUNC(test_is_rtsp_response(), "testing is_rtsp_response");
     TEST_FUNC(test_split(), "testing split");
