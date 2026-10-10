@@ -236,6 +236,50 @@ progress::-webkit-progress-bar {
 	.nod{
 		display:none !important;
 	}
+/* Dark mode */
+#darkModeBtn {
+	float: right;
+	margin-bottom: 2px;
+}
+.dark-mode {
+	background: #000;
+	color: #fff;
+	color-scheme: dark;
+}
+.dark-mode a {
+	color: #8ab4f8;
+}
+.dark-mode .cnt {
+	border-color: #444;
+}
+.dark-mode .left {
+	border-right-color: #444;
+}
+.dark-mode .tuner_button {
+	border-color: #888;
+}
+.dark-mode .active {
+	background-color: #444;
+}
+.dark-mode .inactive {
+	background-color: #222;
+}
+.dark-mode .mute_button {
+	filter: invert(1);
+}
+.dark-mode progress {
+	background-color: #333;
+	border-color: #888;
+}
+.dark-mode progress::-webkit-progress-bar {
+	background-color: #333;
+}
+.dark-mode progress::-webkit-progress-value {
+	border-right-color: #888;
+}
+.dark-mode progress::-moz-progress-bar {
+	border-right-color: #888;
+}
 </style>
 </head>
 <body>
@@ -244,6 +288,7 @@ progress::-webkit-progress-bar {
 		<div id="contentContainer">
 			<div id="mainContent" class="ui-corner-all">
 			<div class="mute_button" ></div>
+			<button id="darkModeBtn">Dark Mode</button>
 			<div class="tuner_list">
 			
 			</div>
@@ -274,6 +319,25 @@ progress::-webkit-progress-bar {
 			<p style="text-align:center"><a onclick="document.location.href='/" href="/">Show status page</a></p>
 		</div>
 
+    <script>
+var darkModeBody = document.querySelector("body");
+var darkModeButton = document.getElementById("darkModeBtn");
+if (localStorage.getItem("darkMode") == "enabled") {
+	darkModeBody.classList.add("dark-mode");
+	darkModeButton.innerText = "Light Mode";
+}
+darkModeButton.addEventListener("click", function () {
+	if (darkModeBody.classList.contains("dark-mode")) {
+		darkModeBody.classList.remove("dark-mode");
+		darkModeButton.innerText = "Dark Mode";
+		localStorage.setItem("darkMode", "disabled");
+	} else {
+		darkModeBody.classList.add("dark-mode");
+		darkModeButton.innerText = "Light Mode";
+		localStorage.setItem("darkMode", "enabled");
+	}
+});
+    </script>
     <script>
 var sys = ["", "dvbc", "dvbcb", "dvbt", "dss", "dvbs", "dvbs2", "dvbh", "isdbt", "isdbs", "isdbc", "atsc", "atscmh", "dmbth", "cmmb", "dab", "dvbt2", "turbo", "dvbcc", "dvbc2"];
 var mtype = ["&mtype=qpsk", "&mtype=16qam", "&mtype=32qam", "&mtype=64qam", "&mtype=128qam", "&mtype=256qam", "", // auto
