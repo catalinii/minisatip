@@ -122,7 +122,7 @@ void del_ca(SCA_op *op) {
     // Mask teardown runs outside ca_mutex: shorter hold, and no
     // nesting order to audit against the socket-thread teardown.
     for (int idx : found) {
-        int mask = 1 << idx;
+        uint64_t mask = 1ULL << idx;
         for (k = 0; k < MAX_ADAPTERS; k++) // delete ca_mask for all adapters
             if ((ad = get_adapter_nw(k))) {
                 std::lock_guard<SMutex> lock(ca_mask_mutex);
@@ -137,7 +137,7 @@ void del_ca(SCA_op *op) {
 }
 
 void tables_ca_ts(adapter *ad) {
-    int mask = 1;
+    uint64_t mask = 1;
 
     for (auto &c : ca) {
         if (c.enabled && (ad->ca_mask & mask) && c.op->ca_ts) {
@@ -384,6 +384,7 @@ int tables_close_device(adapter *ad) {
         if (c.enabled && (ad->ca_mask & mask) && c.op->ca_close_dev) {
             c.op->ca_close_dev(ad);
         }
+        mask = mask << 1;
     }
 
     {

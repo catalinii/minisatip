@@ -370,6 +370,54 @@ static SCA_op fake_ca_op = {.ca_add_pid = NULL,
                             .ca_ts = NULL,
                             .ca_close_ca = fake_ca_close_ca};
 
+static int close_dev_calls_a, close_dev_calls_b;
+
+static int counting_close_dev_a(adapter *ad) {
+    (void)ad;
+    close_dev_calls_a++;
+    return TABLES_RESULT_OK;
+}
+
+static int counting_close_dev_b(adapter *ad) {
+    (void)ad;
+    close_dev_calls_b++;
+    return TABLES_RESULT_OK;
+}
+
+// tables_close_device must call ca_close_dev only for the slots whose
+// bit is set in the adapter mask, so the mask has to advance per slot.
+int test_tables_close_device_masks_cas() {
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+
+    SCA_op op_a = fake_ca_op;
+    op_a.ca_close_dev = counting_close_dev_a;
+    SCA_op op_b = fake_ca_op;
+    op_b.ca_close_dev = counting_close_dev_b;
+    int ica_a = add_ca(&op_a);
+    int ica_b = add_ca(&op_b);
+    ASSERT(ica_a >= 0 && ica_b >= 0 && ica_a != ica_b,
+           "could not register two CAs");
+
+    close_dev_calls_a = close_dev_calls_b = 0;
+    ad.ca_mask = 1 << ica_b;
+    tables_close_device(&ad);
+    ASSERT_EQUAL(close_dev_calls_a, 0, "close ran for a CA outside the mask");
+    ASSERT_EQUAL(close_dev_calls_b, 1, "close did not run for the masked CA");
+
+    close_dev_calls_a = close_dev_calls_b = 0;
+    ad.ca_mask = 1 << ica_a;
+    tables_close_device(&ad);
+    ASSERT_EQUAL(close_dev_calls_a, 1, "close did not run for the masked CA");
+    ASSERT_EQUAL(close_dev_calls_b, 0, "close ran for a CA outside the mask");
+
+    del_ca(&op_a);
+    del_ca(&op_b);
+    return 0;
+}
+
 // Builds a minimal PAT section as process_pat() expects to receive it.
 static int build_pat(uint8_t *b, int tsid, int version, const int *sids,
                      const int *pids, int n) {
@@ -2434,6 +2482,8 @@ int main() {
               "testing stop when the streams are deleted")
     TEST_FUNC(test_version_update_releases_claims(),
               "testing release on PMT version update")
+    TEST_FUNC(test_tables_close_device_masks_cas(),
+              "testing close_device only closes masked CAs")
     fflush(stdout);
     return 0;
 }
