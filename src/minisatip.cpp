@@ -1292,7 +1292,8 @@ int read_rtsp(sockets *s) {
         int rv;
 
         if (!(sid = get_sid(s->sid))) {
-            if (s->sid < 0 && streams_full())
+            // A Session header that matched nothing is 454 even when full.
+            if (s->sid < 0 && !sess_id && streams_full())
                 http_response(s, 503, "Content-Type: text/parameters",
                               "No-More: sessions", cseq, 0);
             else
@@ -1311,11 +1312,19 @@ int read_rtsp(sockets *s) {
             starts_with_case_insensitive(arg[0], "GET"))
             if ((rv = start_play(sid, s)) < 0) {
                 int code = -rv;
-                const char *body =
-                    sid->rtsp_error.empty() ? nullptr : sid->rtsp_error.c_str();
+                // Writers hold sid->mutex; copy under it (data race otherwise).
+                std::string err;
+                {
+                    std::lock_guard<SMutex> lock(sid->mutex);
+                    err = sid->rtsp_error;
+                }
+                // Bodies are defined only for 403/503 error responses.
+                const char *body = nullptr;
                 const char *hdrs = nullptr;
-                if (body && (code == 400 || code == 403 || code == 503))
+                if (!err.empty() && (code == 403 || code == 503)) {
+                    body = err.c_str();
                     hdrs = "Content-Type: text/parameters";
+                }
                 http_response(s, code, hdrs, body, cseq, 0);
                 return 0;
             }
@@ -1381,6 +1390,10 @@ int read_rtsp(sockets *s) {
             if (qm_pos != std::string::npos) {
                 url_str = url_str.substr(0, qm_pos);
             }
+            // Target is client-controlled: cut response-splitting bytes.
+            auto crlf = url_str.find_first_of("\r\n");
+            if (crlf != std::string::npos)
+                url_str.erase(crlf);
             if (buf[0])
                 strcat(buf, "\r\n");
 

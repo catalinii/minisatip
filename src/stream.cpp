@@ -219,6 +219,8 @@ int start_play(streams *sid, sockets *s) {
     int a_id;
     adapter *ad;
     std::lock_guard<SMutex> lock(sid->mutex);
+    // Drop any previous failure body so errors never echo stale text.
+    sid->rtsp_error.clear();
 
     if (sid->type == 0 && s->type == TYPE_HTTP) {
         sid->type = STREAM_HTTP;

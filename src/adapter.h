@@ -181,6 +181,7 @@ struct struct_adapter {
 };
 
 extern adapter *a[MAX_ADAPTERS];
+extern int16_t fe_map[2 * MAX_ADAPTERS];
 extern int a_count;
 extern char absolute_switch;
 extern char do_dump_pids;

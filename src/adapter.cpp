@@ -692,7 +692,7 @@ int get_absolute_source_for_adapter(int aid, int src, int sys) {
         return src;
     if (sys != SYS_DVBS && sys != SYS_DVBS2)
         return src;
-    if (src <= 0)
+    if (src <= 0 || src > MAX_SOURCES)
         return src;
     LOG("Mapping adapter %d src %d to src %d", aid, src,
         a[aid]->absolute_table[src - 1]);
@@ -791,11 +791,13 @@ std::string out_of_range_attrs(transponder *tp) {
     int msys = tp->sys.value_or(SYS_UNDEFINED);
     int req_fe = tp->fe.value_or(0);
 
-    if (req_fe > 0) {
-        int mapped =
-            (req_fe <= (int)ARRAY_SIZE(fe_map)) ? fe_map[req_fe - 1] : -1;
-        adapter *fad =
-            (mapped >= 0 && mapped < MAX_ADAPTERS) ? a[mapped] : NULL;
+    // Invalid/unmapped fe pins are ignored by get_free_adapter too, so
+    // only a mapped pin can blame fe; otherwise run the global checks.
+    int mapped = -1;
+    if (req_fe > 0 && req_fe <= (int)ARRAY_SIZE(fe_map))
+        mapped = fe_map[req_fe - 1];
+    if (mapped >= 0 && mapped < MAX_ADAPTERS) {
+        adapter *fad = a[mapped];
         if (!fad || is_adapter_disabled(mapped) || !delsys_match(fad, msys))
             return "fe";
         if (!source_enabled_for_adapter(fad, tp))
@@ -1097,8 +1099,11 @@ int tune(int aid, int sid) {
             close_streams_for_adapter(aid, sid);
             if (update_pids(aid)) {
                 ad->do_tune = 0;
-                set_play_error(sid, "No-More: pids");
-                return -503;
+                // Keep the hardware error like the path below does.
+                if (rv >= 0) {
+                    set_play_error(sid, "No-More: pids");
+                    return -503;
+                }
             }
         }
         post_tune(ad);
