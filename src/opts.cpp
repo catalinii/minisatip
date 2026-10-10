@@ -22,6 +22,7 @@
 #include "socketworks.h"
 #include "utils.h"
 #include "utils/logging/logging.h"
+#include "utils/dvb/dvb_support.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -61,4 +62,14 @@ void parse_dvbapi_opt(char *optarg, struct_opts_t *optz) {
     if (optz->pids_all_no_dec) {
         LOG("Not filtering out encrypted packets from pids=all streams");
     }
+}
+
+/* Parses --sdt-charset, returns DVB_CHARSET_AUTO/LATIN1, or -1. */
+int parse_sdt_charset_opt(const char *optarg) {
+    if (!strcmp(optarg, "auto"))
+        return DVB_CHARSET_AUTO;
+    if (!strcmp(optarg, "latin1") || !strcmp(optarg, "iso-8859-1") ||
+        !strcmp(optarg, "iso8859-1"))
+        return DVB_CHARSET_LATIN1;
+    return -1;
 }

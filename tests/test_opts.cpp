@@ -19,6 +19,7 @@
  */
 
 #include "opts.h"
+#include "utils/dvb/dvb_support.h"
 #include "utils/testing.h"
 #include <stdio.h>
 #include <string.h>
@@ -90,9 +91,24 @@ int test_parse_dvbapi_opt() {
     return 0;
 }
 
+int test_parse_sdt_charset_opt() {
+    ASSERT(parse_sdt_charset_opt("auto") == DVB_CHARSET_AUTO,
+           "auto should select AUTO");
+    ASSERT(parse_sdt_charset_opt("latin1") == DVB_CHARSET_LATIN1,
+           "latin1 should select LATIN1");
+    ASSERT(parse_sdt_charset_opt("iso-8859-1") == DVB_CHARSET_LATIN1,
+           "iso-8859-1 should select LATIN1");
+    ASSERT(parse_sdt_charset_opt("iso8859-1") == DVB_CHARSET_LATIN1,
+           "iso8859-1 should select LATIN1");
+    ASSERT(parse_sdt_charset_opt("utf8") == -1, "utf8 should be invalid");
+    ASSERT(parse_sdt_charset_opt("") == -1, "empty should be invalid");
+    return 0;
+}
+
 int main() {
     opts.log = 255;
     strcpy(thread_info[thread_index].thread_name, "test_opts");
     TEST_FUNC(test_parse_dvbapi_opt(), "parse_dvbapi_offset() failed");
+    TEST_FUNC(test_parse_sdt_charset_opt(), "parse_sdt_charset_opt() failed");
     return 0;
 }

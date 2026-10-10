@@ -30,6 +30,7 @@
 
 #include "utils/ticks.h"
 #include "utils/uuid.h"
+#include "utils/dvb/dvb_support.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -139,6 +140,7 @@ int rtsp, http, si, si1, ssdp1;
 #define SATIPC_RECV_BUFFER_OPT (LONG_OPT_ONLY_START + 3)
 #define CLIENT_SEND_BUFFER_OPT (LONG_OPT_ONLY_START + 4)
 #define HW_DESCRAMBLER_OPT (LONG_OPT_ONLY_START + 5)
+#define SDT_CHARSET_OPT (LONG_OPT_ONLY_START + 6)
 
 static const struct option long_options[] = {
     {"adapters", required_argument, NULL, ADAPTERS_OPT},
@@ -178,6 +180,7 @@ static const struct option long_options[] = {
     {"playlist", required_argument, NULL, PLAYLIST_OPT},
     {"remote-rtp", required_argument, NULL, RRTP_OPT},
     {"rtsp-port", required_argument, NULL, RTSPPORT_OPT},
+    {"sdt-charset", required_argument, NULL, SDT_CHARSET_OPT},
     {"syslog", no_argument, NULL, SYSLOG_OPT},
     {"slave", required_argument, NULL, SLAVE_OPT},
     {"threshold", required_argument, NULL, THRESHOLD_OPT},
@@ -325,6 +328,9 @@ Help\n\
 	- The default value is 0, corresponding to use the kernel default value\n\
 	* eg: --satip-receive-buffer  100 - to set the socket buffer to 100KB\n\
 	* eg: --satip-receive-buffer 1024 - to set the socket buffer to 1MB\n\
+\n\
+* --sdt-charset auto|latin1 : decode SDT channel names as ISO-8859-1 (latin1) instead of auto-detecting the DVB charset \n\
+	- use latin1 when the provider sends raw Latin-1 bytes without a charset prefix (mangled names, see #1477). Default: auto \n\
 \n\
 * -z --cache-dir dir : set the app cache directory to dir. The directory will be created if it doesn't exist. \n\
 	* defaults to /var/cache/minisatip (/var/lib/minisatip on Enigma) \n\
@@ -1083,8 +1089,21 @@ void set_options(int argc, char *argv[]) {
         case HW_DESCRAMBLER_OPT:
             opts.hw_descrambler = 1;
             break;
+
+        case SDT_CHARSET_OPT: {
+            int cs = parse_sdt_charset_opt(optarg);
+            if (cs < 0) {
+                LOG("Invalid --sdt-charset value, expected auto or latin1");
+                usage();
+                exit(1);
+            }
+            opts.sdt_charset = cs;
+            break;
+        }
         }
     }
+
+    dvb_set_charset_override(opts.sdt_charset);
 
     if (resolve_bind_opts())
         FAIL("Invalid bind configuration");
