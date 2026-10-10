@@ -20,6 +20,7 @@
 #include "utils.h"
 #include "utils/testing.h"
 
+#include <atomic>
 #include <stdint.h>
 #include <string.h>
 
@@ -27,7 +28,7 @@
 
 extern SPMT *pmts[MAX_PMT];
 extern SKey *keys[MAX_KEYS];
-extern int dvbapi_is_enabled;
+extern std::atomic<int> dvbapi_is_enabled;
 extern char *get_channel_for_key(int key, char *dest, int max_size);
 
 // A VideoGuard ECM in iCAM mode `mode`, which both the fixed offset 0x15 and

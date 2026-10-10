@@ -2196,17 +2196,22 @@ int signal_thread(sockets *s __attribute__((unused))) {
     int64_t ts, ctime;
     adapter *ad;
     for (i = 0; i < MAX_ADAPTERS; i++) {
-        if ((ad = get_adapter_nw(i)) == NULL || ad->get_signal == NULL)
+        if ((ad = get_adapter_nw(i)) == NULL)
             continue;
-        if (ad->fe <= 0 || ad->tp.freq <= 0)
-            continue;
-        status = ad->status;
-        if (ad->status_cnt++ <=
-            0) // make sure the kernel has updated the status
-            continue;
-        // do not get the signal when the adapter is being changed
+        // do not get the signal when the adapter is being changed; tune()
+        // writes fe, tp and status under the lock
         if (!ad->mutex.try_lock())
             continue;
+        if (ad->get_signal == NULL || ad->fe <= 0 || ad->tp.freq <= 0) {
+            ad->mutex.unlock();
+            continue;
+        }
+        status = ad->status;
+        if (ad->status_cnt++ <=
+            0) { // make sure the kernel has updated the status
+            ad->mutex.unlock();
+            continue;
+        }
         ts = getTick();
         ad->get_signal(ad);
         ctime = getTick();

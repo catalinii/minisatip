@@ -1204,6 +1204,9 @@ int read_dmx(sockets *s) {
         return 0;
     }
 
+    // tune() and other threads change these fields under the adapter lock;
+    // process_dmx() takes it again
+    std::unique_lock<SMutex> lock(ad->mutex);
     threshold = ad->threshold;
 
     if (rtime - ad->rtime > threshold)
@@ -1255,6 +1258,7 @@ int read_dmx(sockets *s) {
         return 0;
 
     ad->flush = 0;
+    lock.unlock();
     process_dmx(s);
     return 0;
 }
