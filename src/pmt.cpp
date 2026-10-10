@@ -264,7 +264,7 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
     if (pid < 0 || pid > 8191)
         LOG_AND_RETURN(-1, "%s failed, pid %d", __FUNCTION__, pid);
 
-    fid = find_new_id((void **)filters, MAX_FILTERS);
+    fid = find_new_id(filters, MAX_FILTERS);
     if (fid == -1)
         LOG_AND_RETURN(-1, "%s failed", __FUNCTION__);
     if (!filters[fid])
@@ -1501,7 +1501,7 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
 
     SPMT *pmt;
     std::lock_guard<SMutex> lock(pmts_mutex);
-    int i = find_new_id((void **)pmts, MAX_PMT);
+    int i = find_new_id(pmts, MAX_PMT);
     if (i == -1) {
         LOG_AND_RETURN(-1, "PMT buffer is full, could not add new pmts");
     }

@@ -750,7 +750,7 @@ int keys_add(int i, int adapter, int pmt_id) {
     if (!pmt)
         LOG_AND_RETURN(-1, "%s: PMT %d not found ", __FUNCTION__, pmt_id);
     if (i == -1) {
-        i = find_new_id((void **)keys, MAX_KEYS);
+        i = find_new_id(keys, MAX_KEYS);
         if (i == -1)
             LOG_AND_RETURN(-1, "%s: no free key id", __FUNCTION__);
     }

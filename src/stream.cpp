@@ -576,7 +576,7 @@ int streams_add() {
     int i;
     streams *ss;
     std::lock_guard<SMutex> lock(st_mutex);
-    i = find_new_id((void **)st, MAX_STREAMS);
+    i = find_new_id(st, MAX_STREAMS);
     if (i == -1)
         LOG_AND_RETURN(-1, "streams_add failed");
     if (!st[i]) // the adapter threads scan st[] without st_mutex

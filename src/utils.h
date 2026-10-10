@@ -94,7 +94,14 @@ pthread_t start_new_thread(char *name);
 pthread_t get_tid();
 void set_thread_prio(pthread_t tid, int prio);
 
-int find_new_id(void **arr, int count);
+// First free slot (null or !enabled), or -1. Typed so atomic
+// enabled members load atomically; locking stays with the caller.
+template <typename T> int find_new_id(T **arr, int count) {
+    for (int i = 0; i < count; i++)
+        if (!arr[i] || !arr[i]->enabled)
+            return i;
+    return -1;
+}
 void join_thread();
 void add_join_thread(pthread_t t);
 void join_exited_threads();

@@ -598,7 +598,7 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
 
     {
         std::lock_guard<SMutex> lock(s_mutex);
-        i = find_new_id((void **)s, MAX_SOCKS);
+        i = find_new_id(s, MAX_SOCKS);
         if (i == -1)
             LOG_AND_RETURN(-1, "sockets_add failed for socks %d", sock);
         if (!s[i])

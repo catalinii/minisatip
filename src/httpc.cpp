@@ -32,7 +32,7 @@ int http_client_add() {
 
     Shttp_client *h;
     std::lock_guard<SMutex> lock(httpc_mutex);
-    int i = find_new_id((void **)httpc, MAX_HTTPC);
+    int i = find_new_id(httpc, MAX_HTTPC);
     if (i == -1) {
         LOG_AND_RETURN(-1, "Could not add new http client");
     }

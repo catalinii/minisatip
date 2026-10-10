@@ -511,24 +511,6 @@ void set_thread_prio(pthread_t tid, int prio) {
     return;
 }
 
-struct struct_array {
-    char enabled;
-};
-
-// Find the first free slot in the array and return the index or -1 if no free
-// element found it requires first element to be "char enabled" to test if the
-// element is free does not handle the locking which should be handled by the
-// caller
-int find_new_id(void **arr, int count) {
-    int i;
-    struct struct_array **sa = (struct struct_array **)arr;
-    for (i = 0; i < count; i++)
-        if (!sa[i] || !sa[i]->enabled) {
-            return i;
-        }
-    return -1;
-}
-
 pthread_t join_th[100];
 int join_pos = 0;
 SMutex join_lock;
