@@ -459,6 +459,9 @@ char *readfile(std::string_view fn, char *ctype, int *len) {
         if (fn_sv.ends_with("png"))
             strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: "
                           "image/png\r\nConnection: close");
+        else if (fn_sv.ends_with("ico"))
+            strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: "
+                          "image/x-icon\r\nConnection: close");
         else if (fn_sv.ends_with("jpg") || fn_sv.ends_with("jpeg"))
             strcpy(ctype, "Cache-Control: max-age=3600\r\nContent-type: "
                           "image/jpeg\r\nConnection: close");
