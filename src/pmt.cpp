@@ -1550,7 +1550,7 @@ int pmt_del(int id) {
 #ifndef DISABLE_TABLES
     close_pmt_for_cas(get_adapter(pmt->adapter), pmt);
 #endif
-    std::lock_guard<SMutex> lock(pmts_mutex);
+    std::lock_guard<SMutex> lock(pmt->mutex);
     if (!pmt->enabled) {
         return 0;
     }
@@ -1562,10 +1562,9 @@ int pmt_del(int id) {
     clear_cw_for_pmt(id, 0);
     clear_cw_for_pmt(id, 1);
 
+    // Identity (sid/pid/adapter) stays: all readers gate on enabled,
+    // so a disabled slot's stale identity is never acted on.
     pmt->enabled = 0;
-    pmt->sid = 0;
-    pmt->pid = 0;
-    pmt->adapter = -1;
     if (pmt->filter >= 0)
         del_filter(pmt->filter);
     pmt->filter = -1;
@@ -1579,6 +1578,7 @@ int pmt_del(int id) {
     pmt->descriptors.clear();
 
     pmt->stream_pids.clear();
+    pmt->allocated = 0;
 
     return 0;
 }
