@@ -587,6 +587,21 @@ int ddci_create_pat(ddci_device_t *d, uint8_t *b) {
     return len;
 }
 
+// Write a DVB string: UTF-8 bytes with the 0x15 code-table prefix (names
+// are stored UTF-8, see dvb_get_string), or an empty string. Returns the
+// bytes written.
+static int dvb_put_string(uint8_t *b, const char *s) {
+    size_t len = strlen(s);
+    if (!len) {
+        *b = 0;
+        return 1;
+    }
+    *b++ = len + 1;
+    *b++ = 0x15;
+    memcpy(b, s, len);
+    return len + 2;
+}
+
 int ddci_create_sdt(ddci_device_t *d, uint8_t *sdt) {
     uint8_t *b = sdt;
 
@@ -598,8 +613,29 @@ int ddci_create_sdt(ddci_device_t *d, uint8_t *sdt) {
     *b++ = 0xF0; // 11110000
     *b++ = 0x00; // 00000000
     uint8_t *section_start = b;
-    // transport_stream_id
-    copy16(b, 0, 1);
+    // transport_stream_id, original_network_id from the first service with
+    // real SDT data. A section carries a single tsid/onid, so on a
+    // multi-transponder DDCI the other services keep their own entry data
+    // but share these ids.
+    int i, tsid = 1, onid = 0, data_mask = 0, have_ids = 0;
+    SPMT *pmt;
+    for (i = 0; i < d->max_channels; i++)
+        if ((pmt = get_pmt(d->pmt[i].id)) && pmt->has_sdt) {
+            data_mask |= 1 << i;
+            if (!have_ids) {
+                tsid = pmt->sdt_tsid;
+                onid = pmt->sdt_onid;
+                have_ids = 1;
+            }
+        }
+    // SDT data normally arrives after the PMT is registered, so bump the
+    // version when new services gain data, otherwise the CAM keeps the
+    // minimal section it cached at tune time.
+    if (data_mask != d->sdt_data_mask) {
+        d->sdt_data_mask = data_mask;
+        d->ver = (d->ver + 1) & 0xF;
+    }
+    copy16(b, 0, tsid);
     b += 2;
     // reserved, version_number, current_next_indicator
     *b++ = 0xC1 | (d->ver << 1);
@@ -607,13 +643,11 @@ int ddci_create_sdt(ddci_device_t *d, uint8_t *sdt) {
     copy16(b, 0, 0);
     b += 2;
     // original_network_id, reserved_future_use
-    copy16(b, 0, 0);
+    copy16(b, 0, onid);
     b += 2;
     // reserved_future_use
     *b++ = 0x00;
     // describe each service
-    int i;
-    SPMT *pmt;
     for (i = 0; i < d->max_channels; i++) {
         if ((pmt = get_pmt(d->pmt[i].id))) {
             LOGM("Adding PMT %d to SDT, sid %d", d->pmt[i].id, pmt->sid);
@@ -628,16 +662,30 @@ int ddci_create_sdt(ddci_device_t *d, uint8_t *sdt) {
             b += 2;
             // reserved_future_use, EIT_schedule_flag,
             // EIT_present_following_flag
-            *b++ = 0x00;
+            *b++ = pmt->has_sdt
+                       ? ((pmt->sdt_eit_schedule << 1) | pmt->sdt_eit_pf)
+                       : 0x00;
             // running_status, free_CA_mode, descriptors_length
-            uint8_t r = 4 << 5; // running_status = 4
-            r ^= 1 << 4;        // free_CA_mode = 1
+            uint8_t r = (pmt->has_sdt ? pmt->sdt_running_status : 4) << 5;
+            r |= (pmt->has_sdt ? pmt->sdt_ca_mode : 1) << 4;
             *b++ = r;
-            *b++ = 0x00;
+            uint8_t *dlen = b++;
+            if (pmt->has_sdt) {
+                // service_descriptor
+                *b++ = 0x48;
+                uint8_t *sdlen = b++;
+                *b++ = pmt->sdt_service_type;
+                b += dvb_put_string(b, pmt->provider);
+                b += dvb_put_string(b, pmt->name);
+                *sdlen = b - sdlen - 1;
+            }
+            *dlen = b - dlen - 1;
         }
     }
-    // calculate section_length
-    *(section_start - 1) = b - section_start + 4;
+    // calculate section_length (12 bits, descriptors can push it past 255)
+    int section_length = b - section_start + 4;
+    *(section_start - 2) |= (section_length >> 8) & 0x0F;
+    *(section_start - 1) = section_length & 0xFF;
     // checksum
     int crc = crc_32(payload_start, b - payload_start);
     copy32(b, 0, crc);
@@ -1222,7 +1270,7 @@ int ddci_open_device(adapter *ad) {
     d->channels = 0;
     memset(d->read_index, 0, sizeof(d->read_index));
     d->last_pmt = d->last_pat = 0;
-    d->tid = d->ver = 0;
+    d->tid = d->ver = d->sdt_data_mask = 0;
     d->enabled = 1;
     ad->enabled = 1;
     LOG("opened DDCI adapter %d fe:%d dvr:%d", ad->id, ad->fe, ad->dvr);
