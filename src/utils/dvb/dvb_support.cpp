@@ -230,6 +230,13 @@ static inline int64_t dvb_convert(int conv, const uint8_t *src, size_t srclen,
     }
 }
 
+/* Forced charset, DVB_CHARSET_AUTO by default. Set once at startup. */
+static int dvb_charset_override = DVB_CHARSET_AUTO;
+
+void dvb_set_charset_override(int charset) {
+    dvb_charset_override = charset;
+}
+
 int dvb_get_string(char *dst, size_t dstlen, const uint8_t *src,
                    size_t srclen) {
     int ic = -1;
@@ -237,6 +244,18 @@ int dvb_get_string(char *dst, size_t dstlen, const uint8_t *src,
 
     if (srclen < 1) {
         *dst = 0;
+        return 0;
+    }
+
+    if (dvb_charset_override == DVB_CHARSET_LATIN1) {
+        /* forced Latin-1: decode every byte as ISO-8859-1, ignoring any
+         * DVB charset prefix (conv 0 is the 8859-1 table, same as the
+         * Table A.4 path with table byte 1). */
+        outlen = dstlen - 1;
+        if (dvb_convert(0, src, srclen, dst, &outlen) == -1)
+            return -1;
+        len = dstlen - outlen - 1;
+        dst[len] = 0;
         return 0;
     }
 

@@ -290,6 +290,7 @@ if(BUILD_TESTING)
         tests/test_stream.cpp
         tests/test_hw_descrambler.cpp
         tests/test_srt.cpp
+        tests/test_dvb_charset.cpp
     )
 
     # Re-use MINISATIP_SOURCES and adjust for tests

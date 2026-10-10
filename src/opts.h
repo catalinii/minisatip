@@ -43,6 +43,7 @@ typedef struct struct_opts {
     int dvbapi_offset;
     int drop_encrypted;
     int pids_all_no_dec;
+    int sdt_charset; // DVB_CHARSET_*, --sdt-charset
     int rtsp_port;
     uint8_t netcv_count;
     char *netcv_if;
@@ -84,6 +85,7 @@ typedef struct struct_opts {
 } struct_opts_t;
 
 void parse_dvbapi_opt(char *optarg, struct_opts_t *optz);
+int parse_sdt_charset_opt(const char *optarg);
 
 extern struct_opts_t opts;
 
