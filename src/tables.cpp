@@ -52,30 +52,32 @@
 
 #define DEFAULT_LOG LOG_TABLES
 
-// Sized once before threads start and never resized, so readers can use
-// ca[i] without holding ca_mutex.
-std::vector<SCA> ca(MAX_CA);
+// Eight fixed slots, sized before threads start and never resized,
+// so readers scan ca[] without holding ca_mutex.
+std::vector<SCA> ca(8);
 SMutex ca_mutex;
 extern SMutex ca_mask_mutex;
 uint32_t ca_teardown_epoch;
 
 int add_ca(SCA_op *op) {
-    int i, new_ca;
+    size_t i = 0;
     std::lock_guard<SMutex> lock(ca_mutex);
     del_ca(op);
-    for (i = 0; i < MAX_CA; i++)
-        if (!ca[i].enabled) {
-            if (!ca[i].enabled)
+    for (auto &c : ca) {
+        if (!c.enabled) {
+            if (!c.enabled)
                 break;
         }
-    if (i == MAX_CA)
+        i++;
+    }
+    if (i == ca.size())
         LOG_AND_RETURN(0, "No free CA slots for %p", (void *)ca.data());
-    new_ca = i;
+    size_t new_ca = i;
 
     // A disconnect leaves op in place, and a reconnect keeps the same op
     if (ca[new_ca].op != op)
         ca[new_ca].op = op;
-    ca[new_ca].id = new_ca;
+    ca[new_ca].id = static_cast<int>(new_ca);
     {
         std::lock_guard<SMutex> lock(ca_mask_mutex);
         memset(ca[new_ca].ad_info, 0, sizeof(ca[new_ca].ad_info));
@@ -83,7 +85,7 @@ int add_ca(SCA_op *op) {
     ca[new_ca].enabled = 1;
 
     init_ca_device(&ca[new_ca]);
-    return new_ca;
+    return static_cast<int>(new_ca);
 }
 extern SPMT *pmts[];
 // Clear one PMT's tables masks for a CA bit. Takes pmts_mutex;
@@ -103,21 +105,24 @@ void tables_clear_pmt_ca_masks(SPMT *pmt, uint64_t mask, int clear_disabled) {
 }
 
 void del_ca(SCA_op *op) {
-    int i, k;
-    int found[MAX_CA], nfound = 0;
+    int k;
+    std::vector<int> found;
     adapter *ad;
     {
         std::lock_guard<SMutex> lock(ca_mutex);
-        for (i = 0; i < MAX_CA; i++)
-            if (ca[i].enabled && ca[i].op == op) {
-                ca[i].enabled = 0;
-                found[nfound++] = i;
+        size_t i = 0;
+        for (auto &c : ca) {
+            if (c.enabled && c.op == op) {
+                c.enabled = 0;
+                found.push_back(static_cast<int>(i));
             }
+            i++;
+        }
     }
     // Mask teardown runs outside ca_mutex: shorter hold, and no
     // nesting order to audit against the socket-thread teardown.
-    for (int f = 0; f < nfound; f++) {
-        int mask = 1 << found[f];
+    for (int idx : found) {
+        int mask = 1 << idx;
         for (k = 0; k < MAX_ADAPTERS; k++) // delete ca_mask for all adapters
             if ((ad = get_adapter_nw(k))) {
                 std::lock_guard<SMutex> lock(ca_mask_mutex);
@@ -132,11 +137,11 @@ void del_ca(SCA_op *op) {
 }
 
 void tables_ca_ts(adapter *ad) {
-    int i, mask = 1;
+    int mask = 1;
 
-    for (i = 0; i < MAX_CA; i++) {
-        if (ca[i].enabled && (ad->ca_mask & mask) && ca[i].op->ca_ts) {
-            ca[i].op->ca_ts(ad);
+    for (auto &c : ca) {
+        if (c.enabled && (ad->ca_mask & mask) && c.op->ca_ts) {
+            c.op->ca_ts(ad);
         }
         mask = mask << 1;
     }
@@ -170,7 +175,7 @@ void add_caid_mask(int ica, int aid, int caid, int mask) {
 int tables_init_ca_for_device(int i, adapter *ad) {
     uint64_t mask = (1ULL << i);
     int rv = 0;
-    if (i < 0 || i >= MAX_CA)
+    if (i < 0 || static_cast<size_t>(i) >= ca.size())
         return 0;
 
     if (!(ad->ca_mask & mask)) {
@@ -236,7 +241,6 @@ void close_pmt_for_ca(int i, adapter *ad, SPMT *pmt) {
 }
 
 int close_pmt_for_cas(adapter *ad, SPMT *pmt) {
-    int i;
     if (!pmt || !pmt->ca_registered_mask)
         return 0;
 
@@ -244,9 +248,12 @@ int close_pmt_for_cas(adapter *ad, SPMT *pmt) {
         return 0;
 
     LOGM("Closing pmt %d for adapter %d", pmt->id, ad->id);
-    for (i = 0; i < MAX_CA; i++)
-        if (ca[i].enabled)
-            close_pmt_for_ca(i, ad, pmt);
+    size_t i = 0;
+    for (auto &c : ca) {
+        if (c.enabled)
+            close_pmt_for_ca(static_cast<int>(i), ad, pmt);
+        i++;
+    }
     return 0;
 }
 
@@ -307,15 +314,18 @@ int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt) {
 }
 
 int send_pmt_to_cas(adapter *ad, SPMT *pmt) {
-    int i, rv = 1;
+    int rv = 1;
     if (pmt->caids > 0) {
         LOG("Sending PMT %d to all CAs: ad_ca_mask %X, "
             "pmt_ca_mask %X, disabled_ca_mask %X",
             pmt->id, ad ? ad->ca_mask.load() : -2, pmt->ca_mask,
             pmt->disabled_ca_mask);
-        for (i = 0; i < MAX_CA; i++)
-            if (ca[i].enabled)
-                rv += send_pmt_to_ca(i, ad, pmt);
+        size_t i = 0;
+        for (auto &c : ca) {
+            if (c.enabled)
+                rv += send_pmt_to_ca(static_cast<int>(i), ad, pmt);
+            i++;
+        }
     }
 
     return rv;
@@ -323,28 +333,34 @@ int send_pmt_to_cas(adapter *ad, SPMT *pmt) {
 
 void tables_add_pid(adapter *ad, SPMT *pmt, int pid) {
     uint64_t mask;
-    for (int i = 0; i < MAX_CA; i++) {
+    size_t i = 0;
+    for (auto &c : ca) {
         mask = 1ULL << i;
-        if (ca[i].enabled && (pmt->ca_mask & mask) && ca[i].op->ca_add_pid)
-            ca[i].op->ca_add_pid(ad, pmt, pid);
+        if (c.enabled && (pmt->ca_mask & mask) && c.op->ca_add_pid)
+            c.op->ca_add_pid(ad, pmt, pid);
+        i++;
     }
 }
 
 void tables_del_pid(adapter *ad, SPMT *pmt, int pid) {
     uint64_t mask;
-    for (int i = 0; i < MAX_CA; i++) {
+    size_t i = 0;
+    for (auto &c : ca) {
         mask = 1ULL << i;
-        if (ca[i].enabled && (pmt->ca_mask & mask) && ca[i].op->ca_del_pid)
-            ca[i].op->ca_del_pid(ad, pmt, pid);
+        if (c.enabled && (pmt->ca_mask & mask) && c.op->ca_del_pid)
+            c.op->ca_del_pid(ad, pmt, pid);
+        i++;
     }
 }
 
 int tables_init_device(adapter *ad) {
-    int i;
     int rv = 0;
-    for (i = 0; i < MAX_CA; i++)
-        if (ca[i].enabled)
-            rv += tables_init_ca_for_device(i, ad);
+    size_t i = 0;
+    for (auto &c : ca) {
+        if (c.enabled)
+            rv += tables_init_ca_for_device(static_cast<int>(i), ad);
+        i++;
+    }
     return rv;
 }
 
@@ -364,9 +380,9 @@ int tables_close_device(adapter *ad) {
     uint64_t mask = 1;
     int rv = 0;
 
-    for (int i = 0; i < MAX_CA; i++) {
-        if (ca[i].enabled && (ad->ca_mask & mask) && ca[i].op->ca_close_dev) {
-            ca[i].op->ca_close_dev(ad);
+    for (auto &c : ca) {
+        if (c.enabled && (ad->ca_mask & mask) && c.op->ca_close_dev) {
+            c.op->ca_close_dev(ad);
         }
     }
 
@@ -388,10 +404,9 @@ int tables_init() {
 }
 
 int tables_destroy() {
-    int i;
-    for (i = 0; i < MAX_CA; i++) {
-        if (ca[i].enabled && ca[i].op->ca_close_ca)
-            ca[i].op->ca_close_ca();
+    for (auto &c : ca) {
+        if (c.enabled && c.op->ca_close_ca)
+            c.op->ca_close_ca();
     }
     return 0;
 }

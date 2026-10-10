@@ -9,8 +9,6 @@
 #include <atomic>
 #include <vector>
 
-#define MAX_CA 8
-
 #define TABLES_RESULT_OK 0
 #define TABLES_RESULT_ERROR_RETRY 1
 #define TABLES_RESULT_ERROR_NORETRY 2
