@@ -38,6 +38,24 @@ static const char *PLAY_503 =
     "RTSP/1.0 503 Service Unavailable\r\nCSeq: 2\r\n\r\n";
 static const char *PLAY_454 =
     "RTSP/1.0 454 Session Not Found\r\nCSeq: 2\r\n\r\n";
+static const char *SETUP_403 =
+    "RTSP/1.0 403 Forbidden\r\nCSeq: 1\r\n"
+    "Content-Type: text/parameters\r\nContent-Length: 17\r\n\r\n"
+    "Out-of-Range: src\r\n";
+static const char *PLAY_403 =
+    "RTSP/1.0 403 Forbidden\r\nCSeq: 2\r\n"
+    "Content-Type: text/parameters\r\nContent-Length: 17\r\n\r\n"
+    "Out-of-Range: src\r\n";
+static const char *SETUP_500 =
+    "RTSP/1.0 500 Internal Server Error\r\nCSeq: 1\r\n\r\n";
+static const char *PLAY_503_PIDS =
+    "RTSP/1.0 503 Service Unavailable\r\nCSeq: 2\r\n"
+    "Content-Type: text/parameters\r\nContent-Length: 14\r\n\r\n"
+    "No-More: pids\r\n";
+static const char *PLAY_503_FRONTENDS =
+    "RTSP/1.0 503 Service Unavailable\r\nCSeq: 2\r\n"
+    "Content-Type: text/parameters\r\nContent-Length: 18\r\n\r\n"
+    "No-More: frontends\r\n";
 static const char *TEARDOWN_OK =
     "RTSP/1.0 200 OK\r\nCSeq: 3\r\nSession: EDCD7C81\r\n\r\n";
 static const char *DESCRIBE_OK =
@@ -196,12 +214,12 @@ int test_rtsp_happy_loop() {
 int test_rtsp_503_recovery() {
     RtspFixture fx;
     FakeSatipServer srv;
-    srv.script = {{"SETUP ", SETUP_OK},
-                  {"PLAY rtsp://192.168.1.43:554/stream=308?addpids=5167",
-                   PLAY_503},
-                  {"PLAY ", PLAY_OK},
-                  {"TEARDOWN ", TEARDOWN_OK},
-                  {"DESCRIBE ", DESCRIBE_OK}};
+    srv.script = {
+        {"SETUP ", SETUP_OK},
+        {"PLAY rtsp://192.168.1.43:554/stream=308?addpids=5167", PLAY_503},
+        {"PLAY ", PLAY_OK},
+        {"TEARDOWN ", TEARDOWN_OK},
+        {"DESCRIBE ", DESCRIBE_OK}};
     if (fx.setup())
         return 1;
 
@@ -235,15 +253,167 @@ int test_rtsp_503_recovery() {
     return 0;
 }
 
-int test_rtsp_454_recovery() {
+int test_rtsp_403_setup_gives_up() {
+    RtspFixture fx;
+    FakeSatipServer srv;
+    srv.script = {{"SETUP ", SETUP_403}};
+    if (fx.setup())
+        return 1;
+
+    satipc_tune(0, &fx.ad.tp);
+    add_pid(fx, 0);
+    satipc_commit(&fx.ad);
+    ASSERT(srv.run(&fx.rsock, fx.pipefd[0], fx.reply_buf,
+                   sizeof(fx.reply_buf)) == 1,
+           "403 on SETUP must not retry");
+    ASSERT(srv.requests.size() == 1 && has_prefix(srv.requests[0], "SETUP "),
+           "only the failed SETUP must go out");
+    ASSERT(fx.sip.state == SATIP_STATE_INACTIVE, "client must park");
+    ASSERT(fx.ad.err == 1, "403 must flag the adapter");
+
+    fx.teardown();
+    return 0;
+}
+
+int test_rtsp_500_setup_gives_up() {
+    RtspFixture fx;
+    FakeSatipServer srv;
+    srv.script = {{"SETUP ", SETUP_500}};
+    if (fx.setup())
+        return 1;
+
+    satipc_tune(0, &fx.ad.tp);
+    add_pid(fx, 0);
+    satipc_commit(&fx.ad);
+    ASSERT(srv.run(&fx.rsock, fx.pipefd[0], fx.reply_buf,
+                   sizeof(fx.reply_buf)) == 1,
+           "500 on SETUP must not retry");
+    ASSERT(fx.sip.state == SATIP_STATE_INACTIVE, "client must park");
+    ASSERT(fx.ad.err == 1, "500 must flag the adapter");
+
+    fx.teardown();
+    return 0;
+}
+
+int test_rtsp_403_play_tears_down() {
+    RtspFixture fx;
+    FakeSatipServer srv;
+    srv.script = {
+        {"SETUP ", SETUP_OK},
+        {"PLAY rtsp://192.168.1.43:554/stream=308?addpids=5167", PLAY_403},
+        {"PLAY ", PLAY_OK},
+        {"TEARDOWN ", TEARDOWN_OK},
+        {"DESCRIBE ", DESCRIBE_OK}};
+    if (fx.setup())
+        return 1;
+
+    satipc_tune(0, &fx.ad.tp);
+    add_pid(fx, 0);
+    satipc_commit(&fx.ad);
+    ASSERT(srv.run(&fx.rsock, fx.pipefd[0], fx.reply_buf,
+                   sizeof(fx.reply_buf)) > 0,
+           "initial tune must complete");
+
+    size_t base = srv.requests.size();
+    add_pid(fx, 5167);
+    add_pid(fx, 5171);
+    satipc_commit(&fx.ad);
+    ASSERT(srv.run(&fx.rsock, fx.pipefd[0], fx.reply_buf,
+                   sizeof(fx.reply_buf)) == 2,
+           "403 must tear down once and stop");
+    ASSERT(has_prefix(srv.requests[base], "PLAY ") &&
+               has_prefix(srv.requests[base + 1], "TEARDOWN "),
+           "403 must end the session without re-setup");
+    ASSERT(fx.sip.state == SATIP_STATE_INACTIVE, "client must park");
+    ASSERT(fx.ad.err == 1, "403 must flag the adapter");
+
+    fx.teardown();
+    return 0;
+}
+
+int test_rtsp_503_no_more_pids_gives_up() {
+    RtspFixture fx;
+    FakeSatipServer srv;
+    srv.script = {
+        {"SETUP ", SETUP_OK},
+        {"PLAY rtsp://192.168.1.43:554/stream=308?addpids=5167", PLAY_503_PIDS},
+        {"PLAY ", PLAY_OK},
+        {"TEARDOWN ", TEARDOWN_OK},
+        {"DESCRIBE ", DESCRIBE_OK}};
+    if (fx.setup())
+        return 1;
+
+    satipc_tune(0, &fx.ad.tp);
+    add_pid(fx, 0);
+    satipc_commit(&fx.ad);
+    ASSERT(srv.run(&fx.rsock, fx.pipefd[0], fx.reply_buf,
+                   sizeof(fx.reply_buf)) > 0,
+           "initial tune must complete");
+
+    size_t base = srv.requests.size();
+    add_pid(fx, 5167);
+    add_pid(fx, 5171);
+    satipc_commit(&fx.ad);
+    ASSERT(srv.run(&fx.rsock, fx.pipefd[0], fx.reply_buf,
+                   sizeof(fx.reply_buf)) == 2,
+           "No-More: pids must tear down once and stop");
+    ASSERT(has_prefix(srv.requests[base], "PLAY ") &&
+               has_prefix(srv.requests[base + 1], "TEARDOWN "),
+           "exhausted pids must end the session without re-setup");
+    ASSERT(fx.sip.state == SATIP_STATE_INACTIVE, "client must park");
+    ASSERT(fx.ad.err == 1, "exhausted pids must flag the adapter");
+
+    fx.teardown();
+    return 0;
+}
+
+int test_rtsp_503_no_more_frontends_recovers() {
     RtspFixture fx;
     FakeSatipServer srv;
     srv.script = {{"SETUP ", SETUP_OK},
-                  {"PLAY rtsp://192.168.1.43:554/stream=308?addpids=18",
-                   PLAY_454},
+                  {"PLAY rtsp://192.168.1.43:554/stream=308?addpids=5167",
+                   PLAY_503_FRONTENDS},
                   {"PLAY ", PLAY_OK},
                   {"TEARDOWN ", TEARDOWN_OK},
                   {"DESCRIBE ", DESCRIBE_OK}};
+    if (fx.setup())
+        return 1;
+
+    satipc_tune(0, &fx.ad.tp);
+    add_pid(fx, 0);
+    satipc_commit(&fx.ad);
+    ASSERT(srv.run(&fx.rsock, fx.pipefd[0], fx.reply_buf,
+                   sizeof(fx.reply_buf)) > 0,
+           "initial tune must complete");
+
+    size_t base = srv.requests.size();
+    add_pid(fx, 5167);
+    add_pid(fx, 5171);
+    satipc_commit(&fx.ad);
+    ASSERT(srv.run(&fx.rsock, fx.pipefd[0], fx.reply_buf,
+                   sizeof(fx.reply_buf)) == 4,
+           "busy frontends must cycle PLAY, TEARDOWN, SETUP, PLAY");
+    ASSERT(has_prefix(srv.requests[base], "PLAY ") &&
+               has_prefix(srv.requests[base + 1], "TEARDOWN ") &&
+               has_prefix(srv.requests[base + 2], "SETUP ") &&
+               has_prefix(srv.requests[base + 3], "PLAY "),
+           "busy frontends must tear down and re-establish the session");
+    ASSERT(fx.sip.state == SATIP_STATE_PLAY, "client must end up playing");
+    ASSERT(!fx.ad.err, "recovery must not flag the adapter");
+
+    fx.teardown();
+    return 0;
+}
+
+int test_rtsp_454_recovery() {
+    RtspFixture fx;
+    FakeSatipServer srv;
+    srv.script = {
+        {"SETUP ", SETUP_OK},
+        {"PLAY rtsp://192.168.1.43:554/stream=308?addpids=18", PLAY_454},
+        {"PLAY ", PLAY_OK},
+        {"TEARDOWN ", TEARDOWN_OK},
+        {"DESCRIBE ", DESCRIBE_OK}};
     if (fx.setup())
         return 1;
 
@@ -419,8 +589,7 @@ int test_satipc_open_device_cleans_rtsp_on_rtp_failure() {
     struct sockaddr_in sa = {};
     sa.sin_family = AF_INET;
     sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    if (bind(srv, (struct sockaddr *)&sa, sizeof(sa)) ||
-        listen(srv, 1)) {
+    if (bind(srv, (struct sockaddr *)&sa, sizeof(sa)) || listen(srv, 1)) {
         close(srv);
         return 1;
     }
@@ -444,8 +613,10 @@ int test_satipc_open_device_cleans_rtsp_on_rtp_failure() {
         struct sockaddr_in6 b6 = {};
         b6.sin6_family = AF_INET6;
         b6.sin6_port = htons(listen_udp);
-        if (bind(block6, (struct sockaddr *)&b6, sizeof(b6)))
-            { close(block6); block6 = -1; }
+        if (bind(block6, (struct sockaddr *)&b6, sizeof(b6))) {
+            close(block6);
+            block6 = -1;
+        }
     }
     if (!block_ok) {
         LOG("cannot occupy UDP port %d, failing", listen_udp);
@@ -490,8 +661,7 @@ static int listen_on_loopback(int *port) {
     struct sockaddr_in sa = {};
     sa.sin_family = AF_INET;
     sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    if (bind(srv, (struct sockaddr *)&sa, sizeof(sa)) ||
-        listen(srv, 1)) {
+    if (bind(srv, (struct sockaddr *)&sa, sizeof(sa)) || listen(srv, 1)) {
         close(srv);
         return -1;
     }
@@ -734,6 +904,14 @@ int main() {
 
     TEST_FUNC(test_rtsp_happy_loop(), "test full SETUP to TEARDOWN loop");
     TEST_FUNC(test_rtsp_503_recovery(), "test 503 tears down and recovers");
+    TEST_FUNC(test_rtsp_403_setup_gives_up(), "test 403 on SETUP gives up");
+    TEST_FUNC(test_rtsp_500_setup_gives_up(), "test 500 on SETUP gives up");
+    TEST_FUNC(test_rtsp_403_play_tears_down(),
+              "test 403 on PLAY tears down and parks");
+    TEST_FUNC(test_rtsp_503_no_more_pids_gives_up(),
+              "test No-More pids tears down and parks");
+    TEST_FUNC(test_rtsp_503_no_more_frontends_recovers(),
+              "test No-More frontends recovers");
     TEST_FUNC(test_rtsp_454_recovery(), "test 454 restarts the session");
     TEST_FUNC(test_rtsp_keepalive(), "test OPTIONS keep-alive rules");
     TEST_FUNC(test_rtsp_timeout_reopen_retries(),

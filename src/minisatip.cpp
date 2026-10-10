@@ -28,9 +28,9 @@
 #include "srt.h"
 #include "stream.h"
 
+#include "utils/dvb/dvb_support.h"
 #include "utils/ticks.h"
 #include "utils/uuid.h"
-#include "utils/dvb/dvb_support.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -1292,7 +1292,12 @@ int read_rtsp(sockets *s) {
         int rv;
 
         if (!(sid = get_sid(s->sid))) {
-            http_response(s, 454, NULL, NULL, cseq, 0);
+            // A Session header that matched nothing is 454 even when full.
+            if (s->sid < 0 && !sess_id && streams_full())
+                http_response(s, 503, "Content-Type: text/parameters",
+                              "No-More: sessions", cseq, 0);
+            else
+                http_response(s, 454, NULL, NULL, cseq, 0);
             return 0;
         }
 
@@ -1306,7 +1311,21 @@ int read_rtsp(sockets *s) {
         if (starts_with_case_insensitive(arg[0], "PLAY") ||
             starts_with_case_insensitive(arg[0], "GET"))
             if ((rv = start_play(sid, s)) < 0) {
-                http_response(s, -rv, NULL, NULL, cseq, 0);
+                int code = -rv;
+                // Writers hold sid->mutex; copy under it (data race otherwise).
+                std::string err;
+                {
+                    std::lock_guard<SMutex> lock(sid->mutex);
+                    err = sid->rtsp_error;
+                }
+                // Bodies are defined only for 403/503 error responses.
+                const char *body = nullptr;
+                const char *hdrs = nullptr;
+                if (!err.empty() && (code == 403 || code == 503)) {
+                    body = err.c_str();
+                    hdrs = "Content-Type: text/parameters";
+                }
+                http_response(s, code, hdrs, body, cseq, 0);
                 return 0;
             }
         buf[0] = 0;
@@ -1371,6 +1390,10 @@ int read_rtsp(sockets *s) {
             if (qm_pos != std::string::npos) {
                 url_str = url_str.substr(0, qm_pos);
             }
+            // Target is client-controlled: cut response-splitting bytes.
+            auto crlf = url_str.find_first_of("\r\n");
+            if (crlf != std::string::npos)
+                url_str.erase(crlf);
             if (buf[0])
                 strcat(buf, "\r\n");
 
@@ -2036,9 +2059,10 @@ int readBootID() {
     return opts.bootid;
 }
 
-void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr) {
+void http_response(sockets *s, int rc, const char *ah, const char *desc,
+                   int cseq, int lr) {
     int binary = 0;
-    char *desc1;
+    const char *desc1;
     char ra[50];
     const char *d;
     const char *proto;
@@ -2059,10 +2083,11 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr) {
         return;
     }
 
-    if (!ah || !ah[0])
+    // Public is only valid on OPTIONS 200 and 501 responses.
+    if ((!ah || !ah[0]) && rc == 501)
         ah = public_str;
     if (!desc)
-        desc = (char *)"";
+        desc = "";
     if (rc == 200)
         d = "OK";
     else if (rc == 400)
@@ -2108,7 +2133,7 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr) {
         strlcatf(resp, sizeof(resp) - 1, lresp, "Server: %s/%s\r\n", app_name,
                  version);
 
-    if (rc != 454 && rc != 404)
+    if (ah && ah[0] && rc != 454 && rc != 404)
         strlcatf(resp, sizeof(resp) - 1, lresp, "%s\r\n", ah);
 
     if (lr > 0) {
@@ -2128,7 +2153,7 @@ void http_response(sockets *s, int rc, char *ah, char *desc, int cseq, int lr) {
     iov[0].iov_base = resp;
     iov[0].iov_len = strlen(resp);
     if (binary) {
-        iov[1].iov_base = desc;
+        iov[1].iov_base = const_cast<char *>(desc);
         iov[1].iov_len = lr;
     }
     sockets_writev_prio(s->id, iov, binary ? 2 : 1, 1);

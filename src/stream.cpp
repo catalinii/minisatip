@@ -199,6 +199,7 @@ streams *setup_stream(std::string_view str, sockets *s) {
     std::lock_guard<SMutex> lock(sid->mutex);
     set_stream_parameters(s->sid, &t);
     sid->do_play = 0;
+    sid->rtsp_error.clear();
 
     if (sid->adapter >= 0 &&
         !strncasecmp((const char *)s->buf, "SETUP", 5)) // SETUP after PLAY
@@ -218,6 +219,8 @@ int start_play(streams *sid, sockets *s) {
     int a_id;
     adapter *ad;
     std::lock_guard<SMutex> lock(sid->mutex);
+    // Drop any previous failure body so errors never echo stale text.
+    sid->rtsp_error.clear();
 
     if (sid->type == 0 && s->type == TYPE_HTTP) {
         sid->type = STREAM_HTTP;
@@ -279,13 +282,27 @@ int start_play(streams *sid, sockets *s) {
         }
         a_id = get_free_adapter(&sid->tp);
         LOG("Got adapter %d on sid %d socket %d", a_id, sid->sid, s->id);
-        if (a_id < 0)
-            return -404;
+        if (a_id < 0) {
+            std::string oor = out_of_range_attrs(&sid->tp);
+            if (!oor.empty()) {
+                sid->rtsp_error = "Out-of-Range: " + oor;
+                return -403;
+            }
+            sid->rtsp_error = "No-More: frontends";
+            return -503;
+        }
         sid->adapter = a_id;
         set_adapter_for_stream(sid->sid, a_id);
     }
-    if (set_adapter_parameters(sid->adapter, s->sid, &sid->tp) < 0)
-        return -404;
+    int par = set_adapter_parameters(sid->adapter, s->sid, &sid->tp);
+    if (par == -2) {
+        sid->rtsp_error = "No-More: frontends";
+        return -503;
+    }
+    if (par < 0) {
+        sid->rtsp_error = "No-More: pids";
+        return -503;
+    }
 
     if (get_socket_thread(sid->st_sock) == get_tid()) {
         ad = get_adapter(sid->adapter);
@@ -586,6 +603,7 @@ int streams_add() {
     ss->enabled = 1;
     ss->adapter = -1;
     ss->sid = i;
+    ss->rtsp_error.clear();
     ss->rsock = -1;
     ss->rsock_id = -1;
     ss->type = 0;
@@ -605,6 +623,14 @@ int streams_add() {
     ss->wtime = ss->rtcp_wtime = getTick();
 
     return i;
+}
+
+int streams_full() {
+    std::lock_guard<SMutex> lock(st_mutex);
+    for (int i = 0; i < MAX_STREAMS; i++)
+        if (!st[i] || !st[i]->enabled)
+            return 0;
+    return 1;
 }
 
 int

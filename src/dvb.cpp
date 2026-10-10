@@ -1280,11 +1280,11 @@ int dvb_tune(int aid, transponder *tp) {
 #endif
 
     if (!ad)
-        return -404;
+        return -500;
     fd_frontend = ad->fe;
     bclear = getTick();
     if (fd_frontend < 0)
-        return -404;
+        return -500;
 
 #ifndef USE_DVBAPI3
     if (ioctl(fd_frontend, FE_SET_PROPERTY, &cmdseq_clear) == -1) {
@@ -1302,7 +1302,7 @@ int dvb_tune(int aid, transponder *tp) {
         bpol = getTick();
         freq = setup_switch(ad);
         if (freq < MIN_FRQ_DVBS || freq > MAX_FRQ_DVBS)
-            LOG_AND_RETURN(-404, "Frequency %d is not within range ", freq)
+            LOG_AND_RETURN(-403, "Frequency %d is not within range ", freq)
 
         ADD_PROP(DTV_SYMBOL_RATE, tp->sr, 0)
         ADD_PROP(DTV_INNER_FEC, tp->fec, FEC_AUTO)
@@ -1353,7 +1353,7 @@ int dvb_tune(int aid, transponder *tp) {
 
         if (tp->freq.value_or(0) < MIN_FRQ_DVBT ||
             tp->freq.value_or(0) > MAX_FRQ_DVBT)
-            LOG_AND_RETURN(-404, "Frequency %d is not within range ",
+            LOG_AND_RETURN(-403, "Frequency %d is not within range ",
                            tp->freq.value_or(0))
 
         freq = freq * 1000;
@@ -1414,7 +1414,7 @@ int dvb_tune(int aid, transponder *tp) {
 
         if (tp->freq.value_or(0) < MIN_FRQ_DVBC ||
             tp->freq.value_or(0) > MAX_FRQ_DVBC)
-            LOG_AND_RETURN(-404, "Frequency %d is not within range ",
+            LOG_AND_RETURN(-403, "Frequency %d is not within range ",
                            tp->freq.value_or(0))
 
         freq = freq * 1000;
@@ -1453,7 +1453,7 @@ int dvb_tune(int aid, transponder *tp) {
 
         if (tp->freq.value_or(0) < MIN_FRQ_DVBC ||
             tp->freq.value_or(0) > MAX_FRQ_DVBC)
-            LOG_AND_RETURN(-404, "Frequency %d is not within range ",
+            LOG_AND_RETURN(-403, "Frequency %d is not within range ",
                            tp->freq.value_or(0))
 
         freq = freq * 1000;
@@ -1474,7 +1474,7 @@ int dvb_tune(int aid, transponder *tp) {
 
         if (tp->freq.value_or(0) < MIN_FRQ_DVBT ||
             tp->freq.value_or(0) > MAX_FRQ_DVBT)
-            LOG_AND_RETURN(-404, "Frequency %d is not within range ",
+            LOG_AND_RETURN(-403, "Frequency %d is not within range ",
                            tp->freq.value_or(0))
 
         freq = freq * 1000;
@@ -1520,14 +1520,14 @@ int dvb_tune(int aid, transponder *tp) {
     if ((ioctl(fd_frontend, FE_SET_PROPERTY, &p)) == -1)
         if (ioctl(fd_frontend, FE_SET_PROPERTY, &p) == -1) {
             LOG("dvb_tune: set property failed %d %s", errno, strerror(errno));
-            return -404;
+            return -500;
         }
 #else
     LOG("dvb_tune: trying dvbapi version 3");
     if (ioctl(fd_frontend, FE_SET_FRONTEND, &fep) == -1) {
         LOG("dvbapi v3 ioctl failed, fd %d, errno %d (%s)", fd_frontend, errno,
             strerror(errno));
-        return -404;
+        return -500;
     }
 #endif
 

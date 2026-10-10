@@ -181,6 +181,7 @@ struct struct_adapter {
 };
 
 extern adapter *a[MAX_ADAPTERS];
+extern int16_t fe_map[2 * MAX_ADAPTERS];
 extern int a_count;
 extern char absolute_switch;
 extern char do_dump_pids;
@@ -192,8 +193,11 @@ adapter *adapter_alloc();
 void adapter_resize_buffers();
 int close_adapter(int na);
 int get_free_adapter(transponder *tp);
+// Out-of-range attrs when no usable adapter can serve tp, else "" (busy).
+std::string out_of_range_attrs(transponder *tp);
 int set_adapter_for_stream(int sid, int aid);
 void close_adapter_for_stream(int sid, int aid, int close_stream);
+// 0 ok, -2 slave conflict on busy adapter, -1 pid/resource failure.
 int set_adapter_parameters(int aid, int sid, transponder *tp);
 void mark_pids_deleted(int aid, int sid, const char *pids);
 int mark_pids_add(int sid, int aid, const char *pids);

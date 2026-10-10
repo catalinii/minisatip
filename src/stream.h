@@ -51,6 +51,8 @@ typedef struct struct_streams {
     uint32_t sp, sb;
     int timeout;
     char useragent[40];
+    // Pending RTSP error body ("Out-of-Range: ..."/"No-More: ...").
+    std::string rtsp_error;
 } streams;
 
 #ifdef DISABLE_SRT
@@ -75,6 +77,7 @@ int start_play(streams *sid, sockets *s);
 int decode_transport(sockets *s, std::string_view arg, char *default_rtp,
                      int start_rtp);
 int streams_add();
+int streams_full();
 int read_dmx(sockets *s);
 int stream_timeout(sockets *s);
 int close_streams_for_adapter(int ad, int except);
