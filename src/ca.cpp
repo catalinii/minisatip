@@ -736,10 +736,8 @@ void ca_release_pmts(ca_device_t *d) {
     if (!d)
         return;
     mask = 1ULL << dvbca_id;
-    // Same lock as the send path: mask updates must not interleave.
-    // get_pmt stays valid under it; the helper nests (recursive).
-    extern SMutex pmts_mutex;
-    std::lock_guard<SMutex> lock(pmts_mutex);
+    // Mask updates serialize per PMT inside the helper; get_pmt stays
+    // valid without locking (slots are never freed mid-run).
     // Same bound as the producers: slots beyond max_ca_pmt are
     // always -1, as max_ca_pmt is fixed at startup (see opts).
     int n = d->max_ca_pmt;

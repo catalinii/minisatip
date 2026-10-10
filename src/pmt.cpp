@@ -1282,10 +1282,9 @@ void start_active_pmts(adapter *ad) {
         if (pmt->state != PMT_RUNNING && pmt->state != PMT_STARTING)
             continue;
         int resend;
-        { // del_ca() clears the PMT masks from the socket thread
-            std::lock_guard<SMutex> lock(pmts_mutex);
-            resend = ad->ca_mask != (pmt->disabled_ca_mask | pmt->ca_mask);
-        }
+        // Masks are atomic; del_ca() clearing them mid-read only
+        // mistriggers one re-send, fixed on the next pass.
+        resend = ad->ca_mask != (pmt->disabled_ca_mask | pmt->ca_mask);
         if (resend)
             send_pmt_to_cas(ad, pmt);
     }
@@ -1594,8 +1593,8 @@ void cache_pmt_for_adapter(adapter *ad, SPMT *pmt) {
     pmt->state = PMT_CACHED;
     // Same lock as the send path: removal tears these masks down,
     // so it bumps the epoch to invalidate in-flight sets.
-    std::lock_guard<SMutex> lock(pmts_mutex);
-    ca_teardown_epoch++;
+    std::lock_guard<SMutex> lock(pmt->mutex);
+    ca_teardown_epoch.fetch_add(1);
     pmt->disabled_ca_mask = 0;
     pmt->ca_mask = 0;
     pmt->ca_registered_mask = 0;

@@ -57,7 +57,7 @@
 std::vector<SCA> ca(8);
 SMutex ca_mutex;
 extern SMutex ca_mask_mutex;
-uint32_t ca_teardown_epoch;
+std::atomic<uint32_t> ca_teardown_epoch{0};
 
 int add_ca(SCA_op *op) {
     size_t i = 0;
@@ -88,20 +88,19 @@ int add_ca(SCA_op *op) {
     return static_cast<int>(new_ca);
 }
 extern std::vector<SPMT *> pmts;
-// Clear one PMT's tables masks for a CA bit. Takes pmts_mutex;
-// nest-safe (recursive) for callers already holding it.
+// Clear one PMT's tables masks for a CA bit. Takes pmt->mutex;
+// same-PMT nesting is safe (recursive).
 void tables_clear_pmt_ca_masks(SPMT *pmt, uint64_t mask, int clear_disabled) {
-    extern SMutex pmts_mutex;
-    std::lock_guard<SMutex> lock(pmts_mutex);
     if (!pmt)
         return;
+    std::lock_guard<SMutex> lock(pmt->mutex);
     pmt->ca_mask &= ~mask;
     pmt->ca_registered_mask &= ~mask;
     if (clear_disabled)
         pmt->disabled_ca_mask &= ~mask;
     // Always bump, even when the cleared bits were already zero: the
     // table entry was still torn down, so in-flight sets must skip.
-    ca_teardown_epoch++;
+    ca_teardown_epoch.fetch_add(1);
 }
 
 void del_ca(SCA_op *op) {
@@ -128,8 +127,6 @@ void del_ca(SCA_op *op) {
                 std::lock_guard<SMutex> lock(ca_mask_mutex);
                 ad->ca_mask &= ~mask;
             }
-        extern SMutex pmts_mutex;
-        std::lock_guard<SMutex> lock(pmts_mutex);
         int n = static_cast<int>(pmts.size());
         for (k = 0; k < n; k++) { // delete ca_mask for all the PMTs
             SPMT *pmt = __atomic_load_n(&pmts[k], __ATOMIC_ACQUIRE);
@@ -235,8 +232,7 @@ void close_pmt_for_ca(int i, adapter *ad, SPMT *pmt) {
         // Same split as the send path: op outside, mask RMW locked.
         if (ad && ca[i].op->ca_del_pmt)
             ca[i].op->ca_del_pmt(ad, pmt);
-        extern SMutex pmts_mutex;
-        std::lock_guard<SMutex> lock(pmts_mutex);
+        std::lock_guard<SMutex> lock(pmt->mutex);
         if (!(pmt->ca_registered_mask & mask))
             return;
         tables_clear_pmt_ca_masks(pmt, mask, 0);
@@ -282,25 +278,23 @@ int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt) {
             no_caids = (ca[i].ad_info[ad->id].caids == 0);
         }
         result = TABLES_RESULT_ERROR_NORETRY;
-        // Send outside pmts_mutex: CA ops take socket locks, which
-        // would deadlock against teardown's s_mutex -> pmts order.
+        // Send outside pmt->mutex: CA ops take socket locks, which
+        // would deadlock against teardown's s_mutex -> pmt order.
         uint32_t epoch;
         {
-            extern SMutex pmts_mutex;
-            std::lock_guard<SMutex> lock(pmts_mutex);
-            epoch = ca_teardown_epoch;
+            std::lock_guard<SMutex> lock(pmt->mutex);
+            epoch = ca_teardown_epoch.load();
         }
         if (send || no_caids) {
             result = ca[i].op->ca_add_pmt(ad, pmt);
         }
 
-        extern SMutex pmts_mutex;
-        std::lock_guard<SMutex> lock(pmts_mutex);
+        std::lock_guard<SMutex> lock(pmt->mutex);
         if ((pmt->disabled_ca_mask & mask) || (pmt->ca_mask & mask))
             return rv;
         // Skip a set made stale by a teardown that cleared masks
         // mid-send; the PMT is simply re-sent on the next pass.
-        if (epoch != ca_teardown_epoch)
+        if (epoch != ca_teardown_epoch.load())
             return rv;
         if (result == TABLES_RESULT_OK) {
             pmt->ca_mask |= mask;
