@@ -1032,7 +1032,6 @@ int any_ca_initializing() {
 
 ca_device_t *find_dvbca_for_pmt(SPMT *pmt) {
     ca_device_t *d;
-    extern SCA ca[MAX_CA];
     int i, j;
 
     for (i = 0; i < MAX_ADAPTERS; i++)

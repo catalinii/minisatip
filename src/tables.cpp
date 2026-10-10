@@ -52,8 +52,9 @@
 
 #define DEFAULT_LOG LOG_TABLES
 
-SCA ca[MAX_CA];
-std::atomic<int> nca;
+// Sized once before threads start and never resized, so readers can use
+// ca.size() and ca[i] without holding ca_mutex.
+std::vector<SCA> ca(MAX_CA);
 SMutex ca_mutex;
 extern SMutex ca_mask_mutex;
 uint32_t ca_teardown_epoch;
@@ -68,7 +69,7 @@ int add_ca(SCA_op *op) {
                 break;
         }
     if (i == MAX_CA)
-        LOG_AND_RETURN(0, "No free CA slots for %p", ca);
+        LOG_AND_RETURN(0, "No free CA slots for %p", (void *)ca.data());
     new_ca = i;
 
     // A disconnect leaves op in place, and a reconnect keeps the same op
@@ -80,9 +81,6 @@ int add_ca(SCA_op *op) {
         memset(ca[new_ca].ad_info, 0, sizeof(ca[new_ca].ad_info));
     }
     ca[new_ca].enabled = 1;
-
-    if (new_ca >= nca)
-        nca = new_ca + 1;
 
     init_ca_device(&ca[new_ca]);
     return new_ca;
@@ -115,10 +113,6 @@ void del_ca(SCA_op *op) {
                 ca[i].enabled = 0;
                 found[nfound++] = i;
             }
-        i = MAX_CA;
-        while (--i >= 0 && !ca[i].enabled)
-            ;
-        nca = i + 1;
     }
     // Mask teardown runs outside ca_mutex: shorter hold, and no
     // nesting order to audit against the socket-thread teardown.
@@ -140,7 +134,7 @@ void del_ca(SCA_op *op) {
 void tables_ca_ts(adapter *ad) {
     int i, mask = 1;
 
-    for (i = 0; i < nca; i++) {
+    for (i = 0; i < ca.size(); i++) {
         if (ca[i].enabled && (ad->ca_mask & mask) && ca[i].op->ca_ts) {
             ca[i].op->ca_ts(ad);
         }
@@ -176,7 +170,7 @@ void add_caid_mask(int ica, int aid, int caid, int mask) {
 int tables_init_ca_for_device(int i, adapter *ad) {
     uint64_t mask = (1ULL << i);
     int rv = 0;
-    if (i < 0 || i >= nca)
+    if (i < 0 || i >= ca.size())
         return 0;
 
     if (!(ad->ca_mask & mask)) {
@@ -250,7 +244,7 @@ int close_pmt_for_cas(adapter *ad, SPMT *pmt) {
         return 0;
 
     LOGM("Closing pmt %d for adapter %d", pmt->id, ad->id);
-    for (i = 0; i < nca; i++)
+    for (i = 0; i < ca.size(); i++)
         if (ca[i].enabled)
             close_pmt_for_ca(i, ad, pmt);
     return 0;
@@ -319,7 +313,7 @@ int send_pmt_to_cas(adapter *ad, SPMT *pmt) {
             "pmt_ca_mask %X, disabled_ca_mask %X",
             pmt->id, ad ? ad->ca_mask.load() : -2, pmt->ca_mask,
             pmt->disabled_ca_mask);
-        for (i = 0; i < nca; i++)
+        for (i = 0; i < ca.size(); i++)
             if (ca[i].enabled)
                 rv += send_pmt_to_ca(i, ad, pmt);
     }
@@ -329,7 +323,7 @@ int send_pmt_to_cas(adapter *ad, SPMT *pmt) {
 
 void tables_add_pid(adapter *ad, SPMT *pmt, int pid) {
     uint64_t mask;
-    for (int i = 0; i < nca; i++) {
+    for (int i = 0; i < ca.size(); i++) {
         mask = 1ULL << i;
         if (ca[i].enabled && (pmt->ca_mask & mask) && ca[i].op->ca_add_pid)
             ca[i].op->ca_add_pid(ad, pmt, pid);
@@ -338,7 +332,7 @@ void tables_add_pid(adapter *ad, SPMT *pmt, int pid) {
 
 void tables_del_pid(adapter *ad, SPMT *pmt, int pid) {
     uint64_t mask;
-    for (int i = 0; i < nca; i++) {
+    for (int i = 0; i < ca.size(); i++) {
         mask = 1ULL << i;
         if (ca[i].enabled && (pmt->ca_mask & mask) && ca[i].op->ca_del_pid)
             ca[i].op->ca_del_pid(ad, pmt, pid);
@@ -348,7 +342,7 @@ void tables_del_pid(adapter *ad, SPMT *pmt, int pid) {
 int tables_init_device(adapter *ad) {
     int i;
     int rv = 0;
-    for (i = 0; i < nca; i++)
+    for (i = 0; i < ca.size(); i++)
         if (ca[i].enabled)
             rv += tables_init_ca_for_device(i, ad);
     return rv;
@@ -370,7 +364,7 @@ int tables_close_device(adapter *ad) {
     uint64_t mask = 1;
     int rv = 0;
 
-    for (int i = 0; i < nca; i++) {
+    for (int i = 0; i < ca.size(); i++) {
         if (ca[i].enabled && (ad->ca_mask & mask) && ca[i].op->ca_close_dev) {
             ca[i].op->ca_close_dev(ad);
         }
@@ -395,7 +389,7 @@ int tables_init() {
 
 int tables_destroy() {
     int i;
-    for (i = 0; i < nca; i++) {
+    for (i = 0; i < ca.size(); i++) {
         if (ca[i].enabled && ca[i].op->ca_close_ca)
             ca[i].op->ca_close_ca();
     }

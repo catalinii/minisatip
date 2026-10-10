@@ -26,7 +26,6 @@
 #include "utils/testing.h"
 #include "utils/ticks.h"
 #include <arpa/inet.h>
-#include <atomic>
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -61,8 +60,6 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple);
 int dvbca_del_pmt(adapter *ad, SPMT *spmt);
 extern ca_device_t *ca_devices[MAX_ADAPTERS];
 extern int dvbca_id;
-extern SCA ca[];
-extern std::atomic<int> nca;
 int get_active_capmts(ca_device_t *d);
 int dvbca_init_dev(adapter *ad);
 int dvbca_close_dev(adapter *ad);
@@ -1623,15 +1620,13 @@ int test_send_skips_stale_set() {
     SCA_op *saved_op = ca[1].op;
     int saved_id = ca[1].id;
     uint8_t saved_enabled = ca[1].enabled;
-    int saved_nca = nca;
     SCA_op fake_op{};
     fake_op.ca_add_pmt = epoch_fake_add_pmt;
     memset(ca[1].ad_info, 0, sizeof(ca[1].ad_info));
     ca[1].enabled = 1;
     ca[1].id = 1;
     ca[1].op = &fake_op;
-    // ca[0] stays disabled (globals start zeroed), so only slot 1 sends.
-    nca = 2;
+    // ca[0] stays disabled, so only slot 1 sends.
     adapter ad = {};
     ad.id = 0;
     ad.ca_mask = 1 << 1;
@@ -1654,7 +1649,6 @@ int test_send_skips_stale_set() {
     ca[1].op = saved_op;
     ca[1].id = saved_id;
     ca[1].enabled = saved_enabled;
-    nca = saved_nca;
     return 0;
 }
 

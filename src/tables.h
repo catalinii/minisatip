@@ -7,6 +7,7 @@
 #include "pmt.h"
 
 #include <atomic>
+#include <vector>
 
 #define MAX_CA 8
 
@@ -36,11 +37,14 @@ typedef struct struct_CA_AD {
 } SCA_AD;
 
 typedef struct struct_CA {
-    std::atomic<uint8_t> enabled; // set last, the adapter threads read ca[]
-    SCA_op *op;
-    int id;
-    SCA_AD ad_info[MAX_ADAPTERS];
+    // Defaults replace the zeroed static array now that slots live in a vector.
+    std::atomic<uint8_t> enabled{0}; // set last, the adapter threads read ca[]
+    SCA_op *op{nullptr};
+    int id{0};
+    SCA_AD ad_info[MAX_ADAPTERS]{};
 } SCA;
+// Fixed-size table, see tables.cpp; readers use it without ca_mutex.
+extern std::vector<SCA> ca;
 int add_ca(SCA_op *op);
 void del_ca(SCA_op *op);
 void tables_clear_pmt_ca_masks(SPMT *pmt, uint64_t mask, int clear_disabled);

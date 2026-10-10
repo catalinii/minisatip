@@ -55,7 +55,6 @@
 #define CONFIG_FILE_NAME "ddci.conf"
 
 extern int dvbca_id;
-extern SCA ca[MAX_CA];
 extern SPMT *pmts[];
 std::unordered_map<int, Sddci_channel> channels;
 
