@@ -1816,6 +1816,51 @@ int test_cw_keyed_by_pmt() {
     return 0;
 }
 
+// An expired CW stays in pmt->cw until the adapter thread picks another
+// one, so send_cw() must not reuse its slot for the replacement (#1481).
+int test_send_cw_skips_in_use_slot() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+    for (i = 0; i < MAX_CW; i++)
+        if (cws[i])
+            cws[i]->enabled = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    init_algo();
+
+    int id = pmt_add(0, 100, 48);
+    ASSERT(id >= 0, "could not create the PMT");
+    SPMT *pmt = get_pmt(id);
+    uint8_t cw0[8] = {0x10, 0x22, 0x34, 0x66, 0x88, 0x9A, 0xAC, 0xC6};
+    ASSERT(send_cw(id, CA_ALGO_DVBCSA, 0, cw0, NULL, 25, NULL) == 0,
+           "send_cw should store the CW");
+    SCW *old = NULL;
+    for (i = 0; i < MAX_CW; i++)
+        if (cws[i] && cws[i]->enabled && cws[i]->pmt == id)
+            old = cws[i];
+    ASSERT(old != NULL, "CW should be stored");
+    old->expiry = 0; // expired, but the PMT still decrypts with it
+    pmt->cw = old;
+    uint8_t cw1[8] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF};
+    ASSERT(send_cw(id, CA_ALGO_DVBCSA, 0, cw1, NULL, 25, NULL) == 0,
+           "replacement CW should be stored");
+    ASSERT(memcmp(old->cw, cw0, sizeof(cw0)) == 0,
+           "in-use CW slot must not be reused");
+    ASSERT(pmt->cw == old, "PMT should keep decrypting with the old CW");
+
+    for (i = 0; i < MAX_CW; i++)
+        if (cws[i])
+            cws[i]->enabled = 0;
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
 // pids=all expands every known PMT pid with the requestor sid, so the
 // subscribed-PMT rule still decrypts as before under claims arbitration.
 int test_pids_all_expands_pmt_pids() {
@@ -2369,6 +2414,8 @@ int main() {
     TEST_FUNC(test_held_pids_without_client_stop_pmt(),
               "testing stop when pids are held without a client")
     TEST_FUNC(test_cw_keyed_by_pmt(), "testing direct CW to PMT mapping")
+    TEST_FUNC(test_send_cw_skips_in_use_slot(),
+              "testing send_cw skips the in-use CW slot")
     TEST_FUNC(test_pids_all_expands_pmt_pids(),
               "testing pids=all PMT pid expansion")
     TEST_FUNC(test_multi_service_pid_parses_per_sid(),
