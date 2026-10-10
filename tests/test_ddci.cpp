@@ -674,6 +674,8 @@ int test_create_sdt() {
     ASSERT(sdt_running_status2 == 4, "SDT SID 1 running_status != 4");
     ASSERT(sdt_free_CA_mode2 != 0, "SDT SID 1 free_CA_mode != 1");
 
+    // do not leave the stack adapter behind for later tests
+    a[0] = NULL;
     return 0;
 }
 
@@ -681,8 +683,8 @@ int test_create_sdt_with_real_data() {
     // PMTs with real SDT data (parsed from the transponder) must produce an
     // SDT carrying the real tsid/onid, per-service flags and a
     // service_descriptor (#1377: Conax CAM needs more than the minimal SDT)
-    // Adapter 2 is unused by the other tests, so process_sdt() matches the
-    // PMTs created here.
+    // Other tests also use adapter 2, but with different sids, and lookup
+    // is by (adapter, sid), so process_sdt() matches the PMTs created here.
     adapter ad = {};
     create_adapter(&ad, 2);
 
@@ -819,6 +821,9 @@ int test_create_sdt_with_real_data() {
     // second generation without changes keeps the version
     ddci_create_sdt(&d, sdt);
     ASSERT(d.ver == 1, "SDT version bumped without changes");
+
+    // do not leave the stack adapter behind for later tests
+    a[2] = NULL;
     return 0;
 }
 
