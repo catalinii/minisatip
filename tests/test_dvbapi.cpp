@@ -21,6 +21,7 @@
 #include "utils.h"
 #include "utils/testing.h"
 
+#include <atomic>
 #include <poll.h>
 #include <stdint.h>
 #include <string.h>
@@ -32,7 +33,7 @@
 extern SPMT *pmts[MAX_PMT];
 extern SKey *keys[MAX_KEYS];
 extern adapter *a[MAX_ADAPTERS];
-extern int dvbapi_is_enabled;
+extern std::atomic<int> dvbapi_is_enabled;
 extern int sock;
 extern char *get_channel_for_key(int key, char *dest, int max_size);
 int dvbapi_add_pmt(adapter *ad, SPMT *pmt, int update);
