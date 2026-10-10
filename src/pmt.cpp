@@ -58,7 +58,9 @@
 #define DEFAULT_LOG LOG_PMT
 
 uint16_t EMU_PIDS_ALL_ENFORCED_PIDS_LIST[] = {0, 1, 16, 17, 18, 20, 21};
-SPMT *pmts[MAX_PMT];
+// Sized once before threads start and never resized: lock-free
+// readers index pmts[] while adds publish slots.
+std::vector<SPMT *> pmts(MAX_PMT);
 SMutex pmts_mutex;
 int npmts;
 
@@ -1501,7 +1503,7 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
 
     SPMT *pmt;
     std::lock_guard<SMutex> lock(pmts_mutex);
-    int i = find_new_id(pmts, MAX_PMT);
+    int i = find_new_id(pmts.data(), MAX_PMT);
     if (i == -1) {
         LOG_AND_RETURN(-1, "PMT buffer is full, could not add new pmts");
     }

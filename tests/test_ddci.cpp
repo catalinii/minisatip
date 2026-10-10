@@ -53,7 +53,7 @@
 
 extern ddci_device_t *ddci_devices[MAX_ADAPTERS];
 extern adapter *a[MAX_ADAPTERS];
-extern SPMT *pmts[MAX_PMT];
+extern std::vector<SPMT *> pmts;
 extern int npmts;
 extern SCA_op dvbca;
 extern ca_device_t *ca_devices[MAX_ADAPTERS];

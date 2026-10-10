@@ -54,7 +54,7 @@
 #define DEFAULT_LOG LOG_PMT
 
 extern adapter *a[MAX_ADAPTERS];
-extern SPMT *pmts[MAX_PMT];
+extern std::vector<SPMT *> pmts;
 void remove_pmt_from_device(ca_device_t *d, SPMT *pmt);
 SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple);
 int dvbca_del_pmt(adapter *ad, SPMT *spmt);

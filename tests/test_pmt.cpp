@@ -52,7 +52,7 @@
 
 extern adapter *a[MAX_ADAPTERS];
 extern SFilter *filters[MAX_FILTERS];
-extern SPMT *pmts[MAX_PMT];
+extern std::vector<SPMT *> pmts;
 
 // Forward declarations
 descriptor_t create_descriptor(const uint8_t *data);

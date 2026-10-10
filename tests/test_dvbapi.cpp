@@ -26,7 +26,7 @@
 
 #define DEFAULT_LOG LOG_DVBAPI
 
-extern SPMT *pmts[MAX_PMT];
+extern std::vector<SPMT *> pmts;
 extern SKey *keys[MAX_KEYS];
 extern std::atomic<int> dvbapi_is_enabled;
 extern char *get_channel_for_key(int key, char *dest, int max_size);

@@ -202,7 +202,7 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
 
 extern int npmts;
 static inline SPMT *get_pmt(int id) {
-    extern SPMT *pmts[];
+    extern std::vector<SPMT *> pmts;
 
     if (id < 0 || id >= npmts || !pmts[id] || !pmts[id]->enabled)
         //		LOG_AND_RETURN(NULL, "PMT not found for id %d", id);

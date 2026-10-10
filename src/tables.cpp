@@ -87,7 +87,7 @@ int add_ca(SCA_op *op) {
     init_ca_device(&ca[new_ca]);
     return static_cast<int>(new_ca);
 }
-extern SPMT *pmts[];
+extern std::vector<SPMT *> pmts;
 // Clear one PMT's tables masks for a CA bit. Takes pmts_mutex;
 // nest-safe (recursive) for callers already holding it.
 void tables_clear_pmt_ca_masks(SPMT *pmt, uint64_t mask, int clear_disabled) {
