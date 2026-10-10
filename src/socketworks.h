@@ -3,6 +3,7 @@
 #define MAX_SOCKS 1024
 #include "utils.h"
 #include "utils/fifo.h"
+#include <atomic>
 #include <netinet/in.h>
 #include <sys/socket.h>
 
@@ -16,9 +17,11 @@ typedef union union_sockaddr {
 } USockAddr;
 
 typedef struct struct_sockets {
-    char enabled;
+    // enabled reserves the slot, is_enabled publishes it to other threads
+    std::atomic<char> enabled;
     SMutex mutex;
-    char is_enabled, force_close;
+    std::atomic<char> is_enabled, force_close;
+    std::atomic<char> reset_buffer; // see sockets_reset_buffer()
     int sock;     // socket - <0 for invalid/not used, 0 for end of the list
     int nonblock; // non-blocking i/o mode
     USockAddr sa; // remote address - set on accept or recvfrom on udp sockets
@@ -41,7 +44,7 @@ typedef struct struct_sockets {
     int flags; // 1 - buf is allocated dynamically
     int events, revents;
     int64_t last_poll;
-    pthread_t tid;
+    std::atomic<pthread_t> tid; // thread that polls the socket
     int sock_err;
     SFIFO fifo;
     int prio_data_len;
@@ -110,7 +113,7 @@ void sockets_setread(int i, void *r);
 void sockets_setclose(int i, void *r);
 void set_socket_send_buffer(int sock, int len);
 void set_socket_receive_buffer(int sock, int len);
-void set_socket_pos(int sock, int pos);
+void sockets_reset_buffer(int sock);
 void set_socket_thread(int s_id, pthread_t tid);
 pthread_t get_socket_thread(int s_id);
 int tcp_listen(char *addr, int port, int ipv4_only);
@@ -122,7 +125,6 @@ int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt,
                         int high_prio);
 int sockets_write(int sock_id, void *buf, int len);
 int flush_socket(sockets *s);
-void set_socket_iteration(int s_id, uint64_t it);
 void set_sockets_sid(int id, int sid);
 void set_socket_dscp(int id, int dscp, int prio);
 void sockets_set_opaque(int id, void *opaque, void *opaque2, void *opaque3);
@@ -140,9 +142,14 @@ extern __thread int select_timeout;
 
 static inline sockets *get_sockets(int i) {
     extern sockets *s[];
-    if (i < 0 || i >= MAX_SOCKS || !s[i] || !s[i]->enabled || !s[i]->is_enabled)
+    sockets *ss;
+    if (i < 0 || i >= MAX_SOCKS)
         return NULL;
-    return s[i];
+    // sockets_add() publishes new slots with a release store
+    ss = __atomic_load_n(&s[i], __ATOMIC_ACQUIRE);
+    if (!ss || !ss->enabled || !ss->is_enabled)
+        return NULL;
+    return ss;
 }
 #define sockets_writev(sock_id, iov, iovcnt)                                   \
     sockets_writev_prio(sock_id, iov, iovcnt, 0)

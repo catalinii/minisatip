@@ -27,6 +27,7 @@
 #include "socketworks.h"
 
 #include <arpa/inet.h>
+#include <atomic>
 #include <charconv>
 #include <climits>
 #include <ctype.h>
@@ -244,7 +245,7 @@ void print_trace(void) {
 #endif
 }
 
-extern int run_loop;
+extern std::atomic<int> run_loop;
 
 void posix_signal_handler(int sig, siginfo_t *siginfo, ucontext_t *ctx) {
     uint64_t sp = 0, ip = 0;
@@ -511,24 +512,6 @@ void set_thread_prio(pthread_t tid, int prio) {
     if ((rv = pthread_setschedparam(pthread_self(), SCHED_RR, &param)))
         LOG("pthread_setschedparam failed with error %d", rv);
     return;
-}
-
-struct struct_array {
-    char enabled;
-};
-
-// Find the first free slot in the array and return the index or -1 if no free
-// element found it requires first element to be "char enabled" to test if the
-// element is free does not handle the locking which should be handled by the
-// caller
-int find_new_id(void **arr, int count) {
-    int i;
-    struct struct_array **sa = (struct struct_array **)arr;
-    for (i = 0; i < count; i++)
-        if (!sa[i] || !sa[i]->enabled) {
-            return i;
-        }
-    return -1;
 }
 
 pthread_t join_th[100];

@@ -32,6 +32,7 @@
 #include "utils/ticks.h"
 
 #include <arpa/inet.h>
+#include <atomic>
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -52,9 +53,10 @@
 
 #define DEFAULT_LOG LOG_DVBAPI
 
-int dvbapi_sock = -1;
-int sock;
-int dvbapi_is_enabled = 0;
+// Read by the adapter threads, written by the socket thread
+std::atomic<int> dvbapi_sock{-1};
+std::atomic<int> sock{0};
+std::atomic<int> dvbapi_is_enabled{0};
 int enabledKeys = 0;
 int network_mode = 1;
 int dvbapi_protocol_version = DVBAPI_PROTOCOL_VERSION;
@@ -76,7 +78,7 @@ extern char *listmgmt_str[];
             LOG("write to dvbapi socket failed (%d out of %d), closing "       \
                 "socket %d, "                                                  \
                 "errno %d, error: %s",                                         \
-                x, (int)xlen, sock, errno, strerror(errno));                   \
+                x, (int)xlen, sock.load(), errno, strerror(errno));            \
             dvbapi_close_socket();                                             \
         }                                                                      \
     }
@@ -87,11 +89,33 @@ static inline SKey *get_key(int i) {
     return keys[i];
 }
 
+// Callers may hold an adapter lock: let the socket's own thread close it,
+// dvbapi_close() resets the state
 void dvbapi_close_socket() {
-    sockets_del(dvbapi_sock);
-    sock = 0;
-    dvbapi_sock = -1;
     dvbapi_is_enabled = 0;
+    sockets_force_close(dvbapi_sock);
+}
+
+// The adapter threads take ad->mutex before keys_mutex. Lock the adapter of
+// key k_id the same way; returns with keys_mutex held in any case.
+static void lock_key_adapter(int k_id, std::unique_lock<SMutex> &ad_lock,
+                             std::unique_lock<SMutex> &keys_lock) {
+    for (;;) {
+        keys_lock = std::unique_lock<SMutex>(keys_mutex);
+        SKey *k = get_key(k_id);
+        adapter *ad = k ? get_adapter_nw(k->adapter) : NULL;
+        if (!ad)
+            return;
+        int aid = ad->id;
+        keys_lock.unlock();
+        ad_lock = std::unique_lock<SMutex>(ad->mutex);
+        keys_lock.lock();
+        k = get_key(k_id);
+        if (!k || k->adapter == aid)
+            return;
+        keys_lock.unlock();
+        ad_lock.unlock();
+    }
 }
 
 int get_index_for_filter(SKey *k, int filter) {
@@ -122,7 +146,6 @@ int dvbapi_reply(sockets *s) {
         send_client_info(s);
         return 0;
     }
-    std::lock_guard<SMutex> lock(keys_mutex);
 
     while (pos < s->rlen) {
         int op1;
@@ -153,6 +176,13 @@ int dvbapi_reply(sockets *s) {
         // bytes), pos = %d, op %08X, key %d -> %02X %02X %02X %02X %02X %02X
         // %02X %02X %02X %02X %02X", s->sock, s->rlen, pos, op, b[4], b[0],
         // b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10]);
+
+        // Key messages change the key's adapter, the adapter thread reads it
+        std::unique_lock<SMutex> ad_lock, keys_lock;
+        if (op == DVBAPI_SERVER_INFO)
+            keys_lock = std::unique_lock<SMutex>(keys_mutex);
+        else
+            lock_key_adapter(b[4] - opts.dvbapi_offset, ad_lock, keys_lock);
 
         switch (op) {
 
@@ -485,7 +515,7 @@ int dvbapi_send_pmt(SKey *k, int cmd_id) {
         LOG("Sending pmt %d to dvbapi server for pid %d, Channel ID %04X, key "
             "%d, "
             "adapter %d, demux %d, using socket %d (%s)",
-            k->pmt_id, k->pmt_pid, k->sid, k->id, adapter, demux, sock,
+            k->pmt_id, k->pmt_pid, k->sid, k->id, adapter, demux, sock.load(),
             listmgmt_str[listmgmt]);
         TEST_WRITE(write(sock, buf, len), len);
     }
@@ -496,15 +526,14 @@ int dvbapi_close(sockets *s) {
     int i;
     LOG("requested dvbapi close for sock %d, sock_id %d", s->id, s->sock);
     sock = -1;
+    dvbapi_sock = -1;
     dvbapi_is_enabled = 0;
-    SKey *k;
-    for (i = 0; i < MAX_KEYS; i++)
-        if (keys[i] && keys[i]->enabled) {
-            k = get_key(i);
-            if (!k)
-                continue;
+    for (i = 0; i < MAX_KEYS; i++) {
+        std::unique_lock<SMutex> ad_lock, keys_lock;
+        lock_key_adapter(i, ad_lock, keys_lock);
+        if (get_key(i))
             keys_del(i);
-        }
+    }
 
     unregister_dvbapi();
     return 0;
@@ -534,12 +563,15 @@ int connect_dvbapi(void *arg) {
         int64_t ctime = getTick();
 
         for (i = 0; i < MAX_KEYS; i++) {
-            if (network_mode && keys[i] && keys[i]->enabled &&
-                (keys[i]->ecms == 0) && (keys[i]->last_dmx_stop > 0) &&
-                (ctime - keys[i]->last_dmx_stop > 3000)) {
-                int pmt_id = keys[i]->pmt_id, adapter_id = keys[i]->adapter;
+            std::unique_lock<SMutex> ad_lock, keys_lock;
+            lock_key_adapter(i, ad_lock, keys_lock);
+            SKey *k = get_key(i);
+            if (network_mode && k && (k->ecms == 0) && (k->last_dmx_stop > 0) &&
+                (ctime - k->last_dmx_stop > 3000)) {
+                int pmt_id = k->pmt_id, adapter_id = k->adapter;
                 LOG("Key %d active but no active filter, closing ", i);
                 keys_del(i);
+                keys_lock.unlock();
 
                 // resent the PMT if the decrypting stops
                 SPMT *pmt = get_pmt(pmt_id);
@@ -718,7 +750,7 @@ int keys_add(int i, int adapter, int pmt_id) {
     if (!pmt)
         LOG_AND_RETURN(-1, "%s: PMT %d not found ", __FUNCTION__, pmt_id);
     if (i == -1) {
-        i = find_new_id((void **)keys, MAX_KEYS);
+        i = find_new_id(keys, MAX_KEYS);
         if (i == -1)
             LOG_AND_RETURN(-1, "%s: no free key id", __FUNCTION__);
     }
@@ -811,7 +843,7 @@ int keys_del(int i) {
     dvbapi_last_close = getTick();
 
     LOG("Stopped key %d, active keys %d, sock %d, pmt pid %d, sid %04X, op %s",
-        i, ek, sock, pmt_pid, sid, msg);
+        i, ek, sock.load(), pmt_pid, sid, msg);
 
     return 0;
 }
@@ -866,16 +898,12 @@ int dvbapi_init_dev(adapter *ad) {
     return TABLES_RESULT_OK;
 }
 
-SCA_op dvbapi;
+// Set up once: the adapter threads call through it while OSCam reconnects
+SCA_op dvbapi = {.ca_add_pmt = dvbapi_add_pmt,
+                 .ca_del_pmt = dvbapi_del_pmt,
+                 .ca_init_dev = dvbapi_init_dev};
 
-void register_dvbapi() {
-    memset(&dvbapi, 0, sizeof(dvbapi));
-    dvbapi.ca_init_dev = dvbapi_init_dev;
-    dvbapi.ca_add_pmt = dvbapi_add_pmt;
-    dvbapi.ca_del_pmt = dvbapi_del_pmt;
-
-    dvbapi_ca = add_ca(&dvbapi);
-}
+void register_dvbapi() { dvbapi_ca = add_ca(&dvbapi); }
 
 void unregister_dvbapi() {
     LOG("unregistering dvbapi as the socket is closed");

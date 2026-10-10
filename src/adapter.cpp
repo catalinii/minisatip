@@ -1092,7 +1092,7 @@ int tune(int aid, int sid) {
         ad->db = MAX_DB;
         flush_data = 1;
         ad->is_t2mi = 0;
-        set_socket_pos(ad->sock, 0); // flush the existing buffer
+        sockets_reset_buffer(ad->sock); // flush the existing buffer
         ad->rlen = 0;
         if (ad->sid_cnt > 1) // the master changed the frequency
         {
@@ -1120,10 +1120,8 @@ int tune(int aid, int sid) {
             return -503;
         }
     }
-    if (flush_data) {
+    if (flush_data)
         ad->tune_time = getTick();
-        set_socket_iteration(ad->sock, 0);
-    }
     adapter_commit(ad);
     ad->do_tune = 0;
     return rv;
@@ -2247,17 +2245,22 @@ int signal_thread(sockets *s __attribute__((unused))) {
     int64_t ts, ctime;
     adapter *ad;
     for (i = 0; i < MAX_ADAPTERS; i++) {
-        if ((ad = get_adapter_nw(i)) == NULL || ad->get_signal == NULL)
+        if ((ad = get_adapter_nw(i)) == NULL)
             continue;
-        if (ad->fe <= 0 || ad->tp.freq <= 0)
-            continue;
-        status = ad->status;
-        if (ad->status_cnt++ <=
-            0) // make sure the kernel has updated the status
-            continue;
-        // do not get the signal when the adapter is being changed
+        // do not get the signal when the adapter is being changed; tune()
+        // writes fe, tp and status under the lock
         if (!ad->mutex.try_lock())
             continue;
+        if (ad->get_signal == NULL || ad->fe <= 0 || ad->tp.freq <= 0) {
+            ad->mutex.unlock();
+            continue;
+        }
+        status = ad->status;
+        if (ad->status_cnt++ <=
+            0) { // make sure the kernel has updated the status
+            ad->mutex.unlock();
+            continue;
+        }
         ts = getTick();
         ad->get_signal(ad);
         ctime = getTick();
@@ -2266,7 +2269,8 @@ int signal_thread(sockets *s __attribute__((unused))) {
                 "%d, ber: "
                 "%d, strength:%d, snr: %d, force scan %d)",
                 (ad->new_gs == 1) ? "_new" : "", ctime - ts, ad->id, ad->fe,
-                ad->status, ad->ber, ad->strength, ad->snr, opts.force_scan);
+                ad->status.load(), ad->ber.load(), ad->strength.load(),
+                ad->snr.load(), opts.force_scan);
         ad->mutex.unlock();
     }
     return 0;

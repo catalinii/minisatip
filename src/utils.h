@@ -3,8 +3,10 @@
 
 #include "config.h"
 #include "utils/logging/logging.h"
+#include <atomic>
 #include <iostream>
 #include <mutex>
+#include <span>
 #include <sstream>
 #include <string>
 
@@ -94,7 +96,36 @@ pthread_t start_new_thread(char *name);
 pthread_t get_tid();
 void set_thread_prio(pthread_t tid, int prio);
 
-int find_new_id(void **arr, int count);
+// First free slot (null or !enabled), or -1. Typed so atomic
+// enabled members load atomically; locking stays with the caller.
+template <typename T> int find_new_id(T **arr, int count) {
+    for (int i = 0; i < count; i++)
+        if (!arr[i] || !arr[i]->enabled)
+            return i;
+    return -1;
+}
+
+// Claim a free slot: allocate-on-first-use via pointer CAS, then CAS
+// the allocated flag. Returns index or -1; caller inits, then publishes.
+template <typename T> int find_new_ids(std::span<T *> table) {
+    for (size_t i = 0; i < table.size(); i++) {
+        T *p = __atomic_load_n(&table[i], __ATOMIC_ACQUIRE);
+        if (!p) {
+            T *fresh = new T();
+            if (!__atomic_compare_exchange_n(&table[i], &p, fresh, false,
+                                             __ATOMIC_RELEASE,
+                                             __ATOMIC_ACQUIRE))
+                delete fresh;
+            else
+                p = fresh;
+        }
+        char e = 0;
+        if (p->allocated.compare_exchange_strong(e, 1,
+                                                 std::memory_order_acquire))
+            return static_cast<int>(i);
+    }
+    return -1;
+}
 void join_thread();
 void add_join_thread(pthread_t t);
 void join_exited_threads();

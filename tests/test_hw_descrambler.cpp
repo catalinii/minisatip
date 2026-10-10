@@ -19,7 +19,7 @@
 
 extern adapter *a[MAX_ADAPTERS];
 extern SCW *cws[MAX_CW];
-extern SPMT *pmts[MAX_PMT];
+extern std::vector<SPMT *> pmts;
 extern int pmt_del(int id);
 
 // Test Helper: setup mock adapter

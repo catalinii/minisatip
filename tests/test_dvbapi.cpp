@@ -20,14 +20,15 @@
 #include "utils.h"
 #include "utils/testing.h"
 
+#include <atomic>
 #include <stdint.h>
 #include <string.h>
 
 #define DEFAULT_LOG LOG_DVBAPI
 
-extern SPMT *pmts[MAX_PMT];
+extern std::vector<SPMT *> pmts;
 extern SKey *keys[MAX_KEYS];
-extern int dvbapi_is_enabled;
+extern std::atomic<int> dvbapi_is_enabled;
 extern char *get_channel_for_key(int key, char *dest, int max_size);
 
 // A VideoGuard ECM in iCAM mode `mode`, which both the fixed offset 0x15 and
@@ -59,7 +60,6 @@ int test_icam_mode_only_from_ecms() {
 
     pmt.enabled = 1;
     pmts[0] = &pmt;
-    npmts = 1;
     id = keys_add(-1, 0, 0);
     ASSERT(id >= 0, "no key for the PMT");
     k = keys[id];
@@ -88,7 +88,6 @@ int test_icam_mode_only_from_ecms() {
     dvbapi_is_enabled = 0;
     keys_del(id);
     pmts[0] = NULL;
-    npmts = 0;
     free_filters();
     return 0;
 }
@@ -102,7 +101,6 @@ int test_channel_falls_back_to_sid() {
     pmt.enabled = 1;
     pmt.sid = 1234;
     pmts[0] = &pmt;
-    npmts = 1;
     id = keys_add(-1, 0, 0);
     ASSERT(id >= 0, "no key for the PMT");
     k = keys[id];
@@ -121,7 +119,6 @@ int test_channel_falls_back_to_sid() {
 
     keys_del(id);
     pmts[0] = NULL;
-    npmts = 0;
     return 0;
 }
 

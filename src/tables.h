@@ -6,7 +6,8 @@
 #include "adapter.h"
 #include "pmt.h"
 
-#define MAX_CA 8
+#include <atomic>
+#include <vector>
 
 #define TABLES_RESULT_OK 0
 #define TABLES_RESULT_ERROR_RETRY 1
@@ -34,17 +35,20 @@ typedef struct struct_CA_AD {
 } SCA_AD;
 
 typedef struct struct_CA {
-    uint8_t enabled;
-    SCA_op *op;
-    int id;
-    SCA_AD ad_info[MAX_ADAPTERS];
+    // Defaults replace the zeroed static array now that slots live in a vector.
+    std::atomic<uint8_t> enabled{0}; // set last, the adapter threads read ca[]
+    SCA_op *op{nullptr};
+    int id{0};
+    SCA_AD ad_info[MAX_ADAPTERS]{};
 } SCA;
+// Fixed-size table, see tables.cpp; readers use it without ca_mutex.
+extern std::vector<SCA> ca;
 int add_ca(SCA_op *op);
 void del_ca(SCA_op *op);
 void tables_clear_pmt_ca_masks(SPMT *pmt, uint64_t mask, int clear_disabled);
-// Counts mask teardowns; only touch with pmts_mutex held.
+// Counts mask teardowns; atomic, bumped under pmt->mutex.
 // Sends capture it to skip a set made stale by a teardown.
-extern uint32_t ca_teardown_epoch;
+extern std::atomic<uint32_t> ca_teardown_epoch;
 void add_caid_mask(int ica, int aid, int caid, int mask);
 void init_ca_device(SCA *c); //  calls table_init_device for all the devices
 int tables_init_device(adapter *ad);
