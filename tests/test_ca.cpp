@@ -1083,6 +1083,8 @@ int test_ca_keepalive_counts_failures() {
     ASSERT(pipe(sp) == 0, "pipe for close observation");
     int id = sockets_add(sp[0], NULL, 61, TYPE_TCP, NULL, NULL, NULL);
     ASSERT(id >= 0, "socket added");
+    sockets *slot = get_sockets(id);
+    ASSERT(slot != NULL, "socket slot");
     dev.sock = id;
     sockets ss{};
     ss.sid = 61;
@@ -1092,7 +1094,7 @@ int test_ca_keepalive_counts_failures() {
     ASSERT_EQUAL(dev.poll_fails, 2, "second failure counts");
     ca_timeout(&ss);
     ASSERT_EQUAL(dev.poll_fails, 0, "third failure closes and resets");
-    ASSERT_EQUAL(get_sockets(id)->force_close, 1, "close was requested");
+    ASSERT_EQUAL(slot->force_close, 1, "close was requested");
     sockets_del(id); // closes sp[0]
     close(sp[1]);
     dev.sock = -1;
@@ -1132,6 +1134,8 @@ int test_ca_cmd_watchdog() {
     ASSERT(pipe(sp) == 0, "pipe for close observation");
     int id = sockets_add(sp[0], NULL, 65, TYPE_TCP, NULL, NULL, NULL);
     ASSERT(id >= 0, "socket added");
+    sockets *ss = get_sockets(id);
+    ASSERT(ss != NULL, "socket slot");
     dev.sock = id;
     int fds[2];
     ASSERT(pipe(fds) == 0, "pipe for TPDU writes");
@@ -1143,48 +1147,48 @@ int test_ca_cmd_watchdog() {
     dev.pending_session = 3;
     dev.pending_since = t0;
     ca_cmd_watchdog(&dev, t0 + 1000);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 0, "fresh command not closed");
+    ASSERT_EQUAL(ss->force_close, 0, "fresh command not closed");
     ASSERT(dev.pending_tag != 0, "fresh command stays tracked");
 
     dev.pending_tag = TAG_PROFILE_ENQUIRY;
     dev.pending_session = 1;
     dev.pending_since = t0;
     ca_cmd_watchdog(&dev, t0 + CA_CMD_TIMEOUT_MS);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 1, "stale command resets");
+    ASSERT_EQUAL(ss->force_close, 1, "stale command resets");
     ASSERT_EQUAL(dev.pending_tag, 0, "reset clears pending");
     ASSERT_EQUAL(dev.pending_since, -1, "reset disarms");
-    get_sockets(id)->force_close = 0;
+    ss->force_close = 0;
 
     dev.pending_since = t0; // stalled init: nothing pending, quiet since t0
     ca_cmd_watchdog(&dev, t0 + CA_CMD_TIMEOUT_MS);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 1, "stalled init resets");
+    ASSERT_EQUAL(ss->force_close, 1, "stalled init resets");
     ASSERT_EQUAL(dev.pending_since, -1, "init reset disarms");
-    get_sockets(id)->force_close = 0;
+    ss->force_close = 0;
 
     dev.state = CA_STATE_INITIALIZED;
     dev.pending_since = t0;
     ca_cmd_watchdog(&dev, t0 + 10 * CA_CMD_TIMEOUT_MS);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 0, "initialized idles quietly");
+    ASSERT_EQUAL(ss->force_close, 0, "initialized idles quietly");
     ASSERT_EQUAL(dev.pending_since, t0, "quiet keeps anchor");
 
     dev.pending_tag = TAG_CA_INFO_ENQUIRY; // post-init commands still guarded
     dev.pending_session = 3;
     dev.pending_since = t0;
     ca_cmd_watchdog(&dev, t0 + CA_CMD_TIMEOUT_MS);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 1, "post-init stale resets");
-    get_sockets(id)->force_close = 0;
+    ASSERT_EQUAL(ss->force_close, 1, "post-init stale resets");
+    ss->force_close = 0;
 
     dev.state = CA_STATE_ACTIVE;
     dev.pending_since = -1; // fully unarmed: late ticks stay quiet
     ca_cmd_watchdog(&dev, t0 + 10 * CA_CMD_TIMEOUT_MS);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 0, "unarmed never resets");
+    ASSERT_EQUAL(ss->force_close, 0, "unarmed never resets");
 
     dev.pending_tag = TAG_CA_INFO_ENQUIRY; // tick-zero anchor still arms
     dev.pending_session = 3;
     dev.pending_since = 0;
     ca_cmd_watchdog(&dev, CA_CMD_TIMEOUT_MS);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 1, "zero anchor fires");
-    get_sockets(id)->force_close = 0;
+    ASSERT_EQUAL(ss->force_close, 1, "zero anchor fires");
+    ss->force_close = 0;
 
     ca_session_t rs{};
     rs.ca = &dev;
@@ -1329,9 +1333,9 @@ int test_ca_cmd_watchdog() {
     ASSERT_EQUAL(ca_read(&cs), 0, "second close parsed");
     hi = getTick();
     ca_cmd_watchdog(&dev, hi + 1000);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 0, "no instant reset");
+    ASSERT_EQUAL(ss->force_close, 0, "no instant reset");
     ca_cmd_watchdog(&dev, hi + CA_CMD_TIMEOUT_MS);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 1, "quiet after close resets");
+    ASSERT_EQUAL(ss->force_close, 1, "quiet after close resets");
 
     opts.enigma = saved_enigma;
     sockets_del(id); // closes sp[0]
@@ -1397,6 +1401,7 @@ int test_ca_read_enigma_removal() {
     int id = sockets_add(fds[0], NULL, 63, TYPE_TCP, NULL, NULL, NULL);
     ASSERT(id >= 0, "socket added");
     sockets *ss = get_sockets(id);
+    ASSERT(ss != NULL, "socket slot");
     ca_device_t dev;
     memset(&dev, 0, sizeof(dev));
     dev.enabled = 1;
