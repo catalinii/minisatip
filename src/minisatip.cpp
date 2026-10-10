@@ -1434,7 +1434,7 @@ int read_http(sockets *s) {
         "manufacturerURL>"
         "<modelDescription>%s for "
         "Linux</modelDescription><modelName>%s</modelName>"
-        "<modelNumber>1.1</modelNumber><modelURL></modelURL><serialNumber>1</"
+        "<modelNumber>%s</modelNumber><modelURL></modelURL><serialNumber>1</"
         "serialNumber><UDN>uuid:%s</UDN>"
         "<iconList>"
         "<icon><mimetype>image/png</mimetype><width>48</width><height>48</"
@@ -1558,7 +1558,7 @@ int read_http(sockets *s) {
             strcpy(adapters, "DVBS2-0,");
         adapters[strlen(adapters) - 1] = 0;
         snprintf(buf, sizeof(buf), xml, opts.name_app, app_name, opts.name_app,
-                 opts.uuid, opts.http_host, adapters,
+                 version, opts.uuid, opts.http_host, adapters,
                  opts.playlist ? opts.playlist : "");
         sprintf(headers,
                 "Cache-Control: no-cache\r\nContent-type: "

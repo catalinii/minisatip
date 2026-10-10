@@ -19,6 +19,7 @@
  * USA
  *
  */
+#include "api/variables.h"
 #include "minisatip.h"
 #include "utils/testing.h"
 #include <stdlib.h>
@@ -38,8 +39,26 @@ int test_get_command_line_string() {
     return 0;
 }
 
+int test_version_var_eval() {
+    ASSERT(version[0] != '\0', "version should not be empty");
+
+    char var[] = "$version$";
+    int len = is_var(var);
+    ASSERT(len > 0, "$version$ should be recognized as a variable");
+
+    char dest[256];
+    memset(dest, 0, sizeof(dest));
+    int nb = var_eval(var, len, dest, sizeof(dest) - 1);
+    ASSERT(nb > 0, "var_eval should produce output for $version$");
+    ASSERT(strcmp(dest, version) == 0,
+           "$version$ should expand to the version string");
+
+    return 0;
+}
+
 int main() {
     TEST_FUNC(test_get_command_line_string(), "test get_command_line_string()");
+    TEST_FUNC(test_version_var_eval(), "test $version$ expansion");
 
     return 0;
 }
