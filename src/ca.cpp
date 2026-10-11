@@ -736,7 +736,6 @@ void ca_release_pmts(ca_device_t *d) {
     if (!d)
         return;
     mask = 1ULL << dvbca_id;
-    // Per-PMT lock inside the helper; slots stay valid (never freed).
     // Same bound as the producers: slots beyond max_ca_pmt are
     // always -1, as max_ca_pmt is fixed at startup (see opts).
     int n = d->max_ca_pmt;
@@ -744,6 +743,7 @@ void ca_release_pmts(ca_device_t *d) {
         n = 0;
     if (n > MAX_CA_PMT)
         n = MAX_CA_PMT;
+    // Per-PMT lock inside the helper; slots stay valid (never freed).
     for (int i = 0; i < n; i++) {
         tables_clear_pmt_ca_masks(get_pmt(d->capmt[i].pmt_id), mask, 1);
         tables_clear_pmt_ca_masks(get_pmt(d->capmt[i].other_id), mask, 1);
