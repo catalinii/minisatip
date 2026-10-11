@@ -564,7 +564,7 @@ Help\n\
 \n\
 * -c --ca-channels adapter_list:maximum_number_of_channels_supported: Specify the number of channels supported by the CAM and override the CAIDs\n\
 \t* The format is: ADAPTER1:[*]MAX_CHANNELS[-CAID1[-CAID2]...,ADAPTER2:MAX_CHANNELS[-CAID3[-CAID4]...] \n\
-\t\t * before the MAX_CHANNELS enable 2 PMTs inside of the same CAPMT to double the number of decrypted channels\n\
+\t\t * before the MAX_CHANNELS enable 2 PMTs inside of the same CAPMT to double the number of decrypted channels, ** packs 3 PMTs\n\
 			* eg : 0:*1-100\n\
 The DDCI adapters 0 will support maximum of 1 CAPMT (2 channels because of *) and will use CAID1. If CAID is not specified it will use CAMs CAIDs\n\
 Official CAMs support 1 or 2 channels, with this option this is extended to 2 or 4\n\
