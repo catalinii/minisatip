@@ -56,7 +56,8 @@
 #define MAX_PMT_DATA 1880
 #define MAX_KEY_FILTERS 20
 typedef struct struct_key {
-    char enabled;
+    std::atomic<bool> enabled{false};
+    std::atomic<bool> allocated{false};
     int pmt_id;
     int algo;
     unsigned char cw[2][16];

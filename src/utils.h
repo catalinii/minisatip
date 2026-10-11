@@ -3,6 +3,7 @@
 
 #include "config.h"
 #include "utils/logging/logging.h"
+#include <atomic>
 #include <iostream>
 #include <mutex>
 #include <sstream>
@@ -94,7 +95,35 @@ pthread_t start_new_thread(char *name);
 pthread_t get_tid();
 void set_thread_prio(pthread_t tid, int prio);
 
-int find_new_id(void **arr, int count);
+// Claim a free slot atomically, allocating the object if needed.
+template <typename T> T *find_new_id(T **arr, int count) {
+    static_assert(requires(T *t) { t->id; } || requires(T *t) { t->sid; });
+    for (int i = 0; i < count; ++i) {
+        T *cur = arr[i];
+        if (!cur) {
+            cur = new T();
+            cur->allocated = true;
+            cur->enabled = false;
+            if constexpr (requires(T *t) { t->id; })
+                cur->id = i;
+            else
+                cur->sid = i;
+            arr[i] = cur;
+            return cur;
+        }
+        bool expected = false;
+        if (!cur->enabled.load() &&
+            cur->allocated.compare_exchange_strong(expected, true)) {
+            cur->enabled = false;
+            if constexpr (requires(T *t) { t->id; })
+                cur->id = i;
+            else
+                cur->sid = i;
+            return cur;
+        }
+    }
+    return nullptr;
+}
 void join_thread();
 void add_join_thread(pthread_t t);
 void join_exited_threads();

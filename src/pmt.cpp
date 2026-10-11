@@ -258,20 +258,16 @@ int add_filter(int aid, int pid, void *callback, void *opaque, int flags) {
 int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
                     uint8_t *filter, uint8_t *mask) {
     SFilter *f;
-    int i, fid = 0;
+    int i;
     std::lock_guard<SMutex> lock(filters_mutex);
 
     if (pid < 0 || pid > 8191)
         LOG_AND_RETURN(-1, "%s failed, pid %d", __FUNCTION__, pid);
 
-    fid = find_new_id((void **)filters, MAX_FILTERS);
-    if (fid == -1)
+    f = find_new_id(filters, MAX_FILTERS);
+    if (!f)
         LOG_AND_RETURN(-1, "%s failed", __FUNCTION__);
-    if (!filters[fid])
-        filters[fid] = new SFilter();
-
-    f = filters[fid];
-    f->id = fid;
+    int fid = f->id;
     f->opaque = opaque;
     f->pid = pid;
     f->callback = (filter_function)callback;
@@ -372,6 +368,7 @@ int del_filter(int id) {
     nfilters = i + 1;
     f->pid = -1;
     f->enabled = 0;
+    f->allocated = false;
     LOG("deleted filter %d, ad %d, pid %d, max filters %d", id, adapter, pid,
         nfilters);
     return 0;
@@ -1512,21 +1509,16 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
 
     SPMT *pmt;
     std::lock_guard<SMutex> lock(pmts_mutex);
-    int i = find_new_id((void **)pmts, MAX_PMT);
-    if (i == -1) {
+    pmt = find_new_id(pmts, MAX_PMT);
+    if (!pmt) {
         LOG_AND_RETURN(-1, "PMT buffer is full, could not add new pmts");
     }
-    if (!pmts[i]) {
-        pmts[i] = new SPMT();
-    }
-
-    pmt = pmts[i];
+    int i = pmt->id;
 
     pmt->parity = -1;
     pmt->sid = sid;
     pmt->pid = pmt_pid;
     pmt->adapter = adapter;
-    pmt->id = i;
     pmt->update_cw = 1;
     pmt->blen = 0;
     pmt->last_update_cw = 0;
@@ -1580,6 +1572,7 @@ int pmt_del(int id) {
     pmt->cw.store(nullptr);
 
     pmt->enabled = 0;
+    pmt->allocated = false;
     pmt->sid = 0;
     pmt->pid = 0;
     pmt->adapter = -1;

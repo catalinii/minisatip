@@ -21,6 +21,7 @@
 #include "utils.h"
 #include "utils/fifo.h"
 #include "utils/testing.h"
+#include <atomic>
 #include <fstream>
 #include <string.h>
 #include <string>
@@ -217,9 +218,55 @@ int test_readfile_content_type() {
     return 0;
 }
 
+struct TestSlot {
+    std::atomic<bool> enabled{false};
+    std::atomic<bool> allocated{false};
+    int id{-1};
+};
+
+struct TestSidSlot {
+    std::atomic<bool> enabled{false};
+    std::atomic<bool> allocated{false};
+    int sid{-1};
+};
+
+int test_find_new_id() {
+    TestSlot *arr[4] = {nullptr, nullptr, nullptr, nullptr};
+    TestSlot *s0 = find_new_id(arr, 4);
+    ASSERT(s0 && s0->id == 0, "first slot gets id 0");
+    ASSERT(s0->allocated.load() && !s0->enabled.load(),
+           "claimed slot is allocated but not enabled");
+    s0->enabled = true;
+    TestSlot *s1 = find_new_id(arr, 4);
+    ASSERT(s1 && s1->id == 1, "second slot gets id 1");
+    s1->enabled = true;
+    ASSERT(find_new_id(arr, 4)->id == 2, "third slot gets id 2");
+    arr[2]->enabled = true;
+    ASSERT(find_new_id(arr, 4)->id == 3, "fourth slot gets id 3");
+    arr[3]->enabled = true;
+    ASSERT(find_new_id(arr, 4) == nullptr, "full array returns nullptr");
+    arr[1]->enabled = false;
+    arr[1]->allocated = false;
+    TestSlot *reuse = find_new_id(arr, 4);
+    ASSERT(reuse && reuse->id == 1, "freed slot is reused");
+    ASSERT(reuse == arr[1], "reuse returns the same object");
+    for (auto *p : arr)
+        delete p;
+
+    TestSidSlot *sarr[2] = {nullptr, nullptr};
+    TestSidSlot *ss0 = find_new_id(sarr, 2);
+    ASSERT(ss0 && ss0->sid == 0, "sid slot gets sid 0");
+    ss0->enabled = true;
+    ASSERT(find_new_id(sarr, 2)->sid == 1, "second sid slot gets sid 1");
+    for (auto *p : sarr)
+        delete p;
+    return 0;
+}
+
 int main() {
     opts.log = 255;
     strcpy(thread_info[thread_index].thread_name, "test_utils");
+    TEST_FUNC(test_find_new_id(), "testing find_new_id");
     TEST_FUNC(test_mkdir_recursive(), "testing directory creation");
     TEST_FUNC(test_readfile_content_type(), "testing readfile content types");
     TEST_FUNC(test_fifo(), "testing fifo");

@@ -16,7 +16,8 @@ typedef union union_sockaddr {
 } USockAddr;
 
 typedef struct struct_sockets {
-    char enabled;
+    std::atomic<bool> enabled{false};
+    std::atomic<bool> allocated{false};
     SMutex mutex;
     char is_enabled, force_close;
     int sock;     // socket - <0 for invalid/not used, 0 for end of the list
