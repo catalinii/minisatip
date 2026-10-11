@@ -339,51 +339,60 @@ int close_stream_for_socket(sockets *s) {
 }
 
 int close_stream(int i) {
-    int ad;
-    streams *sid;
-    std::lock_guard<SMutex> lock(id_mutex);
     LOG("closing stream %d", i);
-    if (i < 0 || i >= MAX_STREAMS || !st[i] || !st[i]->enabled) {
+    if (i < 0 || i >= MAX_STREAMS || !st[i])
         return 0;
+
+    streams *sid = st[i];
+    int ad, rsock_id, type, srt_sock, rtcp_sock, rtcp, st_sock, rsock;
+    { // Disable under own lock; never hold it across adapter calls.
+        std::lock_guard<SMutex> lock(sid->mutex);
+        if (!sid->enabled)
+            return 0;
+        sid->enabled = 0;
+        ad = sid->adapter;
+        rsock_id = sid->rsock_id;
+        type = sid->type;
+        srt_sock = sid->srt_sock;
+        rtcp_sock = sid->rtcp_sock;
+        rtcp = sid->rtcp;
+        st_sock = sid->st_sock;
+        rsock = sid->rsock;
     }
 
-    sid = st[i];
-    std::lock_guard<SMutex> lock2(st[i]->mutex);
-    sockets_set_flush_enqued_data(sid->rsock_id);
-    sid->enabled = 0;
-    sid->allocated = false;
-    sid->start_streaming = 0;
-    sid->timeout = 0;
-    ad = sid->adapter;
-    sid->adapter = -1;
-    if (sid->type == STREAM_RTSP_UDP && sid->rsock_id > 0) {
-        LOG("Closing RTP sock %d handle %d", sid->rsock_id, sid->rsock);
-        sockets_force_close(sid->rsock_id);
+    sockets_set_flush_enqued_data(rsock_id);
+    if (type == STREAM_RTSP_UDP && rsock_id > 0) {
+        LOG("Closing RTP sock %d handle %d", rsock_id, rsock);
+        sockets_force_close(rsock_id);
     }
 #ifndef DISABLE_SRT
-    if (sid->type == STREAM_RTSP_SRT && sid->srt_sock > 0) {
-        srt_pending_return(sid->srt_sock, sid->srt_streamid);
-        sid->srt_sock = -1;
-    }
+    if (type == STREAM_RTSP_SRT && srt_sock > 0)
+        srt_pending_return(srt_sock, sid->srt_streamid);
 #endif
-    sid->rsock = -1;
 
-    if (sid->rtcp_sock > 0 || sid->rtcp > 0) {
-        LOG("Closing RTCP sock %d handle %d", sid->rtcp_sock, sid->rtcp);
-        sockets_force_close(sid->rtcp_sock);
-        sid->rtcp_sock = -1;
-        sid->rtcp = -1;
+    if (rtcp_sock > 0 || rtcp > 0) {
+        LOG("Closing RTCP sock %d handle %d", rtcp_sock, rtcp);
+        sockets_force_close(rtcp_sock);
     }
 
-    if (sid->st_sock > 0) {
-        sockets_force_close(sid->st_sock);
-        sid->st_sock = -1;
-    }
+    if (st_sock > 0)
+        sockets_force_close(st_sock);
 
     if (ad >= 0)
         close_adapter_for_stream(i, ad, 1);
 
     sockets_del_for_sid(i);
+
+    // Exclusive now (disabled, unclaimable): cleanup needs no lock.
+    sid->adapter = -1;
+    sid->start_streaming = 0;
+    sid->timeout = 0;
+    sid->rsock = -1;
+    sid->srt_sock = -1;
+    sid->rtcp_sock = -1;
+    sid->rtcp = -1;
+    sid->st_sock = -1;
+    sid->allocated = false;
 
     LOG("closed stream %d", i);
     return 0;
@@ -591,14 +600,11 @@ int decode_transport(sockets *s, std::string_view arg, char *default_rtp,
 }
 
 int streams_add() {
-    streams *ss;
-    std::lock_guard<SMutex> lock(id_mutex);
-    ss = find_new_id(st, MAX_STREAMS);
+    streams *ss = find_new_id(st, MAX_STREAMS);
     if (!ss)
         LOG_AND_RETURN(-1, "streams_add failed");
     int i = ss->sid;
-    std::lock_guard<SMutex> lock2(ss->mutex);
-    ss->enabled = 1;
+    std::lock_guard<SMutex> lock(ss->mutex);
     ss->adapter = -1;
     ss->rtsp_error.clear();
     ss->rsock = -1;
@@ -618,12 +624,12 @@ int streams_add() {
     ss->ssrc = random();
     ss->timeout = opts.timeout_sec;
     ss->wtime = ss->rtcp_wtime = getTick();
+    ss->enabled = 1;
 
     return i;
 }
 
 int streams_full() {
-    std::lock_guard<SMutex> lock(id_mutex);
     for (int i = 0; i < MAX_STREAMS; i++)
         if (!st[i] || !st[i]->enabled)
             return 0;
@@ -1377,7 +1383,6 @@ void dump_streams() {
 
 void free_all_streams() {
     int i;
-    std::lock_guard<SMutex> lock(id_mutex);
     for (i = 0; i < MAX_STREAMS; i++) {
         if (st[i])
             delete st[i];

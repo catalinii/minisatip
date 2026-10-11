@@ -19,7 +19,7 @@ typedef struct struct_sockets {
     std::atomic<bool> enabled{false};
     std::atomic<bool> allocated{false};
     SMutex mutex;
-    char is_enabled, force_close;
+    std::atomic<bool> is_enabled{false}, force_close{false};
     int sock;     // socket - <0 for invalid/not used, 0 for end of the list
     int nonblock; // non-blocking i/o mode
     USockAddr sa; // remote address - set on accept or recvfrom on udp sockets

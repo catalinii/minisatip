@@ -27,6 +27,7 @@
 #include "utils/testing.h"
 #include "utils/ticks.h"
 #include <arpa/inet.h>
+#include <atomic>
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -48,8 +49,10 @@
 #include <sys/types.h>
 #include <sys/ucontext.h>
 #include <syslog.h>
+#include <thread>
 #include <time.h>
 #include <unistd.h>
+#include <vector>
 
 #define DEFAULT_LOG LOG_PMT
 
@@ -348,7 +351,7 @@ int test_emulate_add_all_pids() {
 // First PAT after (re)init (pat_processed == 0, every CI channel change):
 // a PMT missing from it must still retire its CA registration.
 
-extern int npmts;
+extern std::atomic<int> npmts;
 extern int process_pat(int filter, unsigned char *b, int len, void *opaque);
 
 static int fake_ca_del_calls;
@@ -3118,6 +3121,40 @@ int test_version_update_keeps_claims() {
     return 0;
 }
 
+int test_filter_add_del_mt() {
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    constexpr int T = 4, K = 8;
+    int fids[T][K];
+    std::atomic<int> added{0};
+    auto worker = [&](int t) {
+        for (int k = 0; k < K; k++) {
+            fids[t][k] =
+                add_filter(0, 100 + t * K + k, (void *)process_pmt, NULL, 0);
+            if (fids[t][k] >= 0)
+                added++;
+        }
+        for (int k = 0; k < K; k++)
+            if (fids[t][k] >= 0)
+                del_filter(fids[t][k]);
+    };
+    std::vector<std::thread> th;
+    for (int t = 0; t < T; t++)
+        th.emplace_back(worker, t);
+    for (auto &t : th)
+        t.join();
+    ASSERT(added == T * K, "all filters added");
+    for (int t = 0; t < T; t++)
+        for (int k = 0; k < K; k++) {
+            SFilter *f = filters[fids[t][k]];
+            ASSERT(f && !f->enabled && !f->allocated,
+                   "filter reclaimed after del");
+        }
+    a[0] = NULL;
+    return 0;
+}
+
 int main() {
     opts.log = 255;
     opts.debug = 255;
@@ -3212,6 +3249,8 @@ int main() {
               "testing a rejected re-send releases the CA slot")
     TEST_FUNC(test_add_caid_rejects_negative_len(),
               "testing a short CA descriptor is skipped")
+    TEST_FUNC(test_filter_add_del_mt(),
+              "testing concurrent filter add and delete")
     fflush(stdout);
     return 0;
 }

@@ -56,7 +56,7 @@ SCA ca[MAX_CA];
 std::atomic<int> nca;
 SMutex ca_mutex;
 extern SMutex ca_mask_mutex;
-uint32_t ca_teardown_epoch;
+std::atomic<uint32_t> ca_teardown_epoch{0};
 
 int add_ca(SCA_op *op) {
     int i, new_ca;
@@ -88,12 +88,12 @@ int add_ca(SCA_op *op) {
     return new_ca;
 }
 extern SPMT *pmts[];
-// Clear one PMT's tables masks for a CA bit. Takes id_mutex;
+// Clear one PMT's tables masks for a CA bit. Takes the PMT lock;
 // nest-safe (recursive) for callers already holding it.
 void tables_clear_pmt_ca_masks(SPMT *pmt, uint64_t mask, int clear_disabled) {
-    std::lock_guard<SMutex> lock(id_mutex);
     if (!pmt)
         return;
+    std::lock_guard<SMutex> lock(pmt->mutex);
     pmt->ca_mask &= ~mask;
     pmt->ca_registered_mask &= ~mask;
     if (clear_disabled)
@@ -128,7 +128,7 @@ void del_ca(SCA_op *op) {
                 std::lock_guard<SMutex> lock(ca_mask_mutex);
                 ad->ca_mask &= ~mask;
             }
-        std::lock_guard<SMutex> lock(id_mutex);
+        // Per-PMT lock inside tables_clear; no outer lock needed.
         for (k = 0; k < MAX_PMT; k++) // delete ca_mask for all the PMTs
             if (pmts[k] && pmts[k]->enabled)
                 tables_clear_pmt_ca_masks(pmts[k], mask, 0);
@@ -229,7 +229,7 @@ void close_pmt_for_ca(int i, adapter *ad, SPMT *pmt) {
     // snapshot, the locked re-check below stays authoritative.
     uint64_t registered;
     {
-        std::lock_guard<SMutex> lock(id_mutex);
+        std::lock_guard<SMutex> lock(pmt->mutex);
         registered = pmt->ca_registered_mask;
     }
     SCA_op *op = ca[i].op.load();
@@ -240,7 +240,7 @@ void close_pmt_for_ca(int i, adapter *ad, SPMT *pmt) {
         // Same split as the send path: op outside, mask RMW locked.
         if (ad && op->ca_del_pmt)
             op->ca_del_pmt(ad, pmt);
-        std::lock_guard<SMutex> lock(id_mutex);
+        std::lock_guard<SMutex> lock(pmt->mutex);
         if (!(pmt->ca_registered_mask & mask))
             return;
         tables_clear_pmt_ca_masks(pmt, mask, 0);
@@ -271,7 +271,7 @@ int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt) {
     // snapshot, the locked re-check below stays authoritative.
     uint64_t disabled, sent, registered;
     {
-        std::lock_guard<SMutex> lock(id_mutex);
+        std::lock_guard<SMutex> lock(pmt->mutex);
         disabled = pmt->disabled_ca_mask;
         sent = pmt->ca_mask;
         registered = pmt->ca_registered_mask;
@@ -294,11 +294,11 @@ int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt) {
             no_caids = (ca[i].ad_info[ad->id].caids == 0);
         }
         result = TABLES_RESULT_ERROR_NORETRY;
-        // Send outside id_mutex: CA ops do socket I/O, so never
-        // hold the global lock across them.
+        // Send outside the PMT lock: CA ops do socket I/O, so never
+        // hold it across them.
         uint32_t epoch;
         {
-            std::lock_guard<SMutex> lock(id_mutex);
+            std::lock_guard<SMutex> lock(pmt->mutex);
             epoch = ca_teardown_epoch;
         }
         // A set registered bit means a previous add succeeded and was
@@ -309,7 +309,7 @@ int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt) {
             result = op->ca_add_pmt(ad, pmt, update);
         }
 
-        std::lock_guard<SMutex> lock(id_mutex);
+        std::lock_guard<SMutex> lock(pmt->mutex);
         if ((pmt->disabled_ca_mask & mask) || (pmt->ca_mask & mask))
             return rv;
         // Skip a set made stale by a teardown that cleared masks
@@ -341,7 +341,7 @@ int send_pmt_to_cas(adapter *ad, SPMT *pmt) {
     if (pmt->caids > 0) {
         uint64_t sent, disabled;
         {
-            std::lock_guard<SMutex> lock(id_mutex);
+            std::lock_guard<SMutex> lock(pmt->mutex);
             sent = pmt->ca_mask;
             disabled = pmt->disabled_ca_mask;
         }
