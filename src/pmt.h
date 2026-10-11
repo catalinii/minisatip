@@ -182,7 +182,6 @@ typedef struct struct_pmt {
 typedef struct struct_filter {
     std::atomic<bool> enabled{false};
     std::atomic<bool> allocated{false};
-    SMutex mutex;
     int id;
     int pid;
     int adapter;
