@@ -154,7 +154,8 @@ typedef struct struct_pmt {
     // Set on the adapter thread, read from send_cw() on dvbapi/ca threads.
     std::atomic<int8_t> parity, update_cw;
     uint64_t last_update_cw;
-    SCW *cw;
+    // Active key: stored on the adapter thread, loaded from dvbapi/ca threads.
+    std::atomic<SCW *> cw{nullptr};
     SPid *p;
     char provider[50], name[50];
     void *opaque;

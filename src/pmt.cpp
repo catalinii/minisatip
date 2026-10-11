@@ -711,7 +711,7 @@ void dump_cws() {
 }
 
 void update_cw(SPMT *pmt) {
-    SCW *cw = NULL, *old_cw = pmt->cw;
+    SCW *cw = NULL, *old_cw = pmt->cw.load();
     char buf[300];
     int64_t ctime = getTick();
     int i = 0;
@@ -721,7 +721,7 @@ void update_cw(SPMT *pmt) {
 
     // If no CW exists and we can validate the CW, try to find one again
     // Helps for CI+ case
-    if (!pmt->cw && !pmt->update_cw && validated)
+    if (!pmt->cw.load() && !pmt->update_cw && validated)
         pmt->update_cw = 1;
 
     if (!pmt->update_cw)
@@ -735,7 +735,7 @@ void update_cw(SPMT *pmt) {
     // starts with 0 0 1) if no packet with start indicator found (len ==
     // 0), choose the latest CW this generally happens on parity change
     // where there are no more packets in the buffer
-    pmt->cw = NULL;
+    pmt->cw.store(nullptr);
     for (i = 0; i < ncws; i++)
         if (cws[i] && cws[i]->enabled && pmt->parity == cws[i]->parity &&
             cws[i]->pmt == pmt->id) {
@@ -780,10 +780,10 @@ void update_cw(SPMT *pmt) {
     pmt->update_cw = 0;
     if (!validated)
         pmt->update_cw = 1;
-    pmt->cw = NULL;
+    pmt->cw.store(nullptr);
     if (cw) {
         int64_t ctime = getTick();
-        pmt->cw = cw;
+        pmt->cw.store(cw);
 
         if (!cw->set_time)
             cw->set_time = ctime;
@@ -812,7 +812,7 @@ void update_cw(SPMT *pmt) {
 // adapter thread may still decrypt with it, so its slot must not be reused
 static int cw_in_use(SCW *c) {
     SPMT *p = get_pmt(c->pmt);
-    return p && p->cw == c;
+    return p && p->cw.load() == c;
 }
 
 int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
@@ -872,11 +872,12 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
     else
         c->expiry = c->time + expiry * 1000;
 
-    if (parity == pmt->parity && pmt->cw && pmt->last_update_cw > 0) {
+    SCW *cur = pmt->cw.load();
+    if (parity == pmt->parity && cur && pmt->last_update_cw > 0) {
         int res = 0;
         if (!pmt->update_cw) {
-            c->time =
-                pmt->cw->time - 1000; // We set the time before the active CW
+            // We set the time before the active CW
+            c->time = cur->time - 1000;
             res = 1;
         }
         LOG("CW %d for PMT %d (%s) Warning! New CW using the current parity%s",
@@ -894,7 +895,7 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
         memset(c->iv, 0, sizeof(c->iv));
     c->op = op;
     c->op->set_cw(c, pmt);
-    if (!pmt->cw)
+    if (!pmt->cw.load())
         pmt->update_cw = 1;
     c->enabled = 1;
     if (i >= ncws)
@@ -911,11 +912,7 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
 // pmt->blen needs to be 0 at the end of this
 int decrypt_batch(SPMT *pmt) {
     int i;
-    SCW *old_cw;
-    {
-        std::lock_guard<SMutex> lock(cws_mutex);
-        old_cw = pmt->cw;
-    }
+    SCW *old_cw = pmt->cw.load();
 
     if (pmt->blen <= 0) {
         return 0;
@@ -923,11 +920,7 @@ int decrypt_batch(SPMT *pmt) {
 
     update_cw(pmt);
 
-    SCW *cw;
-    {
-        std::lock_guard<SMutex> lock(cws_mutex);
-        cw = pmt->cw;
-    }
+    SCW *cw = pmt->cw.load();
     if (!cw) {
         pmt->blen = 0;
         return 1;
@@ -1541,10 +1534,8 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
     pmt->enabled = 1;
     pmt->version = -1;
     pmt->state = PMT_STOPPED;
-    { // send_cw() reads pmt->cw under cws_mutex
-        std::lock_guard<SMutex> lock(cws_mutex);
-        pmt->cw = NULL;
-    }
+    // PMT slots are reused: drop the previous key.
+    pmt->cw.store(nullptr);
     pmt->opaque = NULL;
     pmt->ca_mask = pmt->disabled_ca_mask = pmt->ca_registered_mask = 0;
     pmt->best = 0;
@@ -1585,11 +1576,8 @@ int pmt_del(int id) {
     clear_cw_for_pmt(id, 0);
     clear_cw_for_pmt(id, 1);
 
-    { // drop the decrypt pointer with the table, so cw_in_use()
-        // stops pinning the expired slot after the PMT is gone.
-        std::lock_guard<SMutex> lock(cws_mutex);
-        pmt->cw = NULL;
-    }
+    // Drop the decrypt pointer so cw_in_use() stops pinning the slot.
+    pmt->cw.store(nullptr);
 
     pmt->enabled = 0;
     pmt->sid = 0;

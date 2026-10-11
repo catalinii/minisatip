@@ -1909,7 +1909,7 @@ int test_send_cw_skips_in_use_slot() {
             slot = i;
     ASSERT(slot >= 0, "first CW should be stored");
 
-    pmt->cw = cws[slot]; // adapter thread picked it up (update_cw)
+    pmt->cw.store(cws[slot]); // adapter thread picked it up (update_cw)
     cws[slot]->expiry = getTick() - 1; // ... then it expired
     ASSERT(send_cw(id, CA_ALGO_DVBCSA, 0, cwB, NULL, 25, NULL) == 0,
            "send_cw should store the second CW");

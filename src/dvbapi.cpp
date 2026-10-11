@@ -657,7 +657,7 @@ int send_ecm(int filter_id, unsigned char *b, int len, void *opaque) {
     demux = k->demux[i];
     filter = k->filter[i];
 
-    valid_cw = pmt->cw != NULL;
+    valid_cw = pmt->cw.load() != nullptr;
 
     if ((getTick() - k->last_ecm > 1000) && !valid_cw)
         k->ecm_parity[i] = -1;
