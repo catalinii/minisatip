@@ -95,9 +95,15 @@ pthread_t start_new_thread(char *name);
 pthread_t get_tid();
 void set_thread_prio(pthread_t tid, int prio);
 
+// Global lock for object arrays: held while claiming an id,
+// freeing a slot, or iterating the arrays.
+extern SMutex id_mutex;
+
 // Claim a free slot atomically, allocating the object if needed.
+// Sets id (preferred) or sid to the index; nullptr when full.
 template <typename T> T *find_new_id(T **arr, int count) {
     static_assert(requires(T *t) { t->id; } || requires(T *t) { t->sid; });
+    std::lock_guard<SMutex> lock(id_mutex);
     for (int i = 0; i < count; ++i) {
         T *cur = arr[i];
         if (!cur) {

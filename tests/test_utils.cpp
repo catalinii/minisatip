@@ -230,6 +230,13 @@ struct TestSidSlot {
     int sid{-1};
 };
 
+struct TestBothSlot {
+    std::atomic<bool> enabled{false};
+    std::atomic<bool> allocated{false};
+    int id{-1};
+    int sid{-1};
+};
+
 int test_find_new_id() {
     TestSlot *arr[4] = {nullptr, nullptr, nullptr, nullptr};
     TestSlot *s0 = find_new_id(arr, 4);
@@ -260,6 +267,12 @@ int test_find_new_id() {
     ASSERT(find_new_id(sarr, 2)->sid == 1, "second sid slot gets sid 1");
     for (auto *p : sarr)
         delete p;
+
+    TestBothSlot *barr[1] = {nullptr};
+    TestBothSlot *bs0 = find_new_id(barr, 1);
+    ASSERT(bs0 && bs0->id == 0 && bs0->sid == -1,
+           "type with both fields gets id, sid untouched");
+    delete bs0;
     return 0;
 }
 

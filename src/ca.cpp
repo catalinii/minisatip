@@ -738,8 +738,7 @@ void ca_release_pmts(ca_device_t *d) {
     mask = 1ULL << dvbca_id;
     // Same lock as the send path: mask updates must not interleave.
     // get_pmt stays valid under it; the helper nests (recursive).
-    extern SMutex pmts_mutex;
-    std::lock_guard<SMutex> lock(pmts_mutex);
+    std::lock_guard<SMutex> lock(id_mutex);
     // Same bound as the producers: slots beyond max_ca_pmt are
     // always -1, as max_ca_pmt is fixed at startup (see opts).
     int n = d->max_ca_pmt;
@@ -3767,7 +3766,7 @@ int ca_init_failed(ca_device_t *d) {
 static SMutex ca_init_mutex[MAX_ADAPTERS];
 
 // Guards one device's sessions/keys/capmt/state. Sections must
-// stay socket-free: teardown nests this under s_mutex.
+// stay socket-free: teardown nests this under id_mutex.
 static SMutex ca_dev_mutex[MAX_ADAPTERS];
 
 static SMutex &ca_dev_lock(int id) {

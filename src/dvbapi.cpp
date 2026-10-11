@@ -64,14 +64,13 @@ int oscam_version;
 uint64_t dvbapi_last_close = 0;
 
 SKey *keys[MAX_KEYS];
-SMutex keys_mutex;
 unsigned char read_buffer[8192];
 extern char *listmgmt_str[];
 
 #define TEST_WRITE(a, xlen)                                                    \
     {                                                                          \
         int x;                                                                 \
-        std::lock_guard<SMutex> lock(keys_mutex);                              \
+        std::lock_guard<SMutex> lock(id_mutex);                                \
         if ((x = (a)) != (xlen)) {                                             \
             LOG("write to dvbapi socket failed (%d out of %d), closing "       \
                 "socket %d, "                                                  \
@@ -122,7 +121,7 @@ int dvbapi_reply(sockets *s) {
         send_client_info(s);
         return 0;
     }
-    std::lock_guard<SMutex> lock(keys_mutex);
+    std::lock_guard<SMutex> lock(id_mutex);
 
     while (pos < s->rlen) {
         int op1;
@@ -413,7 +412,7 @@ int dvbapi_send_pmt(SKey *k, int cmd_id, int force) {
     unsigned char buf[2500];
     int len;
     int listmgmt = CLM_UPDATE;
-    std::lock_guard<SMutex> lock(keys_mutex);
+    std::lock_guard<SMutex> lock(id_mutex);
     SPMT *pmt = get_pmt(k->pmt_id);
     if (!pmt)
         return 1;
@@ -729,7 +728,7 @@ int keys_add(int i, int adapter, int pmt_id) {
 
     SKey *k;
     SPMT *pmt = get_pmt(pmt_id);
-    std::lock_guard<SMutex> lock(keys_mutex);
+    std::lock_guard<SMutex> lock(id_mutex);
 
     if (!pmt)
         LOG_AND_RETURN(-1, "%s: PMT %d not found ", __FUNCTION__, pmt_id);
@@ -787,7 +786,7 @@ int keys_del(int i) {
     unsigned char buf[8] = {0x9F, 0x80, 0x3f, 4, 0x83, 2, 0, 0};
     SKey *k;
     const char *msg = "";
-    std::lock_guard<SMutex> lock(keys_mutex);
+    std::lock_guard<SMutex> lock(id_mutex);
 
     k = get_key(i);
     if (!k)
@@ -847,7 +846,7 @@ int keys_del(int i) {
 int dvbapi_add_pmt(adapter *ad, SPMT *pmt, int update) {
     SKey *k = NULL;
     int key, pid = pmt->pid;
-    std::lock_guard<SMutex> lock(keys_mutex);
+    std::lock_guard<SMutex> lock(id_mutex);
 
     LOG("%s: adapter %d, pmt %d, pid %d, update %d", __FUNCTION__, ad->id,
         pmt->id, pid, update);
@@ -895,7 +894,7 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt, int update) {
 }
 
 int dvbapi_del_pmt(adapter *ad, SPMT *pmt) {
-    std::lock_guard<SMutex> lock(keys_mutex);
+    std::lock_guard<SMutex> lock(id_mutex);
     SKey *k = (SKey *)pmt->opaque;
     if (!k)
         return 0;

@@ -26,12 +26,11 @@
 #define DEFAULT_LOG LOG_HTTP
 
 Shttp_client *httpc[MAX_HTTPC];
-SMutex httpc_mutex;
 
 int http_client_add() {
 
     Shttp_client *h;
-    std::lock_guard<SMutex> lock(httpc_mutex);
+    std::lock_guard<SMutex> lock(id_mutex);
     h = find_new_id(httpc, MAX_HTTPC);
     if (!h) {
         LOG_AND_RETURN(-1, "Could not add new http client");
@@ -49,7 +48,7 @@ int http_client_add() {
 
 int http_client_del(int i) {
     Shttp_client *h;
-    std::lock_guard<SMutex> lock(httpc_mutex);
+    std::lock_guard<SMutex> lock(id_mutex);
     h = get_httpc(i);
     if (!h)
         return 0;
