@@ -79,7 +79,6 @@ int test_setup_stream_new() {
 
     sockets mock_sock = {};
     mock_sock.enabled = 1;
-    mock_sock.is_enabled = 1;
     mock_sock.sock = 1000;
     mock_sock.id = 0;
     mock_sock.sid = -1; // Request new stream allocation
@@ -112,7 +111,6 @@ int test_setup_stream_existing() {
 
     sockets mock_sock = {};
     mock_sock.enabled = 1;
-    mock_sock.is_enabled = 1;
     mock_sock.sock = 1001;
     mock_sock.id = 1;
     mock_sock.sid = -1; // Request new stream allocation
@@ -146,7 +144,6 @@ int test_start_play_no_transport() {
 
     sockets mock_sock = {};
     mock_sock.enabled = 1;
-    mock_sock.is_enabled = 1;
     mock_sock.sock = 1002;
     mock_sock.id = 2;
     mock_sock.sid = -1;
@@ -172,7 +169,6 @@ int test_start_play_success() {
 
     sockets mock_sock = {};
     mock_sock.enabled = 1;
-    mock_sock.is_enabled = 1;
     mock_sock.sock = 1003;
     mock_sock.id = 3;
     mock_sock.sid = -1;
@@ -200,7 +196,6 @@ int test_setup_stream_unspecified_vs_empty_pids() {
 
     sockets mock_sock = {};
     mock_sock.enabled = 1;
-    mock_sock.is_enabled = 1;
     mock_sock.sock = 1004;
     mock_sock.id = 4;
     mock_sock.sid = -1;
@@ -293,7 +288,6 @@ int test_decode_transport_port_change_no_deadlock() {
 
     sockets rtsp = {};
     rtsp.enabled = 1;
-    rtsp.is_enabled = 1;
     rtsp.sock = 1000;
     rtsp.id = 0;
     rtsp.sid = -1;
@@ -345,7 +339,6 @@ int test_start_play_all_tuners_busy_returns_503() {
 
     sockets http1 = {};
     http1.enabled = 1;
-    http1.is_enabled = 1;
     http1.sock = 1005;
     http1.id = 5;
     http1.sid = -1;
@@ -359,7 +352,6 @@ int test_start_play_all_tuners_busy_returns_503() {
 
     sockets http2 = {};
     http2.enabled = 1;
-    http2.is_enabled = 1;
     http2.sock = 1006;
     http2.id = 6;
     http2.sid = -1;
@@ -393,7 +385,6 @@ int test_start_play_unmapped_src_returns_403() {
 
     sockets http = {};
     http.enabled = 1;
-    http.is_enabled = 1;
     http.sock = 1007;
     http.id = 7;
     http.sid = -1;
@@ -417,7 +408,6 @@ int test_start_play_unsupported_msys_returns_403() {
 
     sockets http = {};
     http.enabled = 1;
-    http.is_enabled = 1;
     http.sock = 1008;
     http.id = 8;
     http.sid = -1;
@@ -439,7 +429,6 @@ int test_start_play_pid_exhaustion_returns_503() {
 
     sockets http1 = {};
     http1.enabled = 1;
-    http1.is_enabled = 1;
     http1.sock = 1009;
     http1.id = 9;
     http1.sid = -1;
@@ -458,7 +447,6 @@ int test_start_play_pid_exhaustion_returns_503() {
 
     sockets http2 = {};
     http2.enabled = 1;
-    http2.is_enabled = 1;
     http2.sock = 1010;
     http2.id = 10;
     http2.sid = -1;
@@ -486,7 +474,6 @@ int test_start_play_pinned_fe_mismatch_returns_403() {
 
     sockets http = {};
     http.enabled = 1;
-    http.is_enabled = 1;
     http.sock = 1011;
     http.id = 11;
     http.sid = -1;
@@ -510,7 +497,6 @@ int test_start_play_unmapped_fe_ignored_when_busy() {
 
     sockets http1 = {};
     http1.enabled = 1;
-    http1.is_enabled = 1;
     http1.sock = 1016;
     http1.id = 16;
     http1.sid = -1;
@@ -528,7 +514,6 @@ int test_start_play_unmapped_fe_ignored_when_busy() {
 
     sockets http2 = {};
     http2.enabled = 1;
-    http2.is_enabled = 1;
     http2.sock = 1017;
     http2.id = 17;
     http2.sid = -1;
@@ -559,7 +544,6 @@ int test_start_play_tune_freq_error_returns_403() {
 
     sockets http = {};
     http.enabled = 1;
-    http.is_enabled = 1;
     http.sock = 1012;
     http.id = 12;
     http.sid = -1;
@@ -596,7 +580,6 @@ int test_start_play_tune_error_returns_500() {
 
     sockets http = {};
     http.enabled = 1;
-    http.is_enabled = 1;
     http.sock = 1013;
     http.id = 13;
     http.sid = -1;
@@ -618,7 +601,6 @@ int test_set_adapter_parameters_slave_conflict() {
 
     sockets http1 = {};
     http1.enabled = 1;
-    http1.is_enabled = 1;
     http1.sock = 1014;
     http1.id = 14;
     http1.sid = -1;
@@ -632,7 +614,6 @@ int test_set_adapter_parameters_slave_conflict() {
 
     sockets http2 = {};
     http2.enabled = 1;
-    http2.is_enabled = 1;
     http2.sock = 1015;
     http2.id = 15;
     http2.sid = -1;
@@ -787,7 +768,6 @@ int test_read_rtsp_play_while_busy_returns_503() {
 
     sockets http1 = {};
     http1.enabled = 1;
-    http1.is_enabled = 1;
     http1.sock = 1018;
     http1.id = 18;
     http1.sid = -1;

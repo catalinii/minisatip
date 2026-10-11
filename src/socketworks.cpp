@@ -638,7 +638,6 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
     if (type & TYPE_CONNECT)
         ss->events |= POLLOUT;
 
-    ss->is_enabled = 1;
     ss->enabled = 1;
     LOG("sockets_add: handle %d (type %d) returning socket sock %d [%s:%d] "
         "read: "
@@ -656,10 +655,9 @@ int sockets_del(int sock) {
 
     ss = s[sock];
     std::unique_lock<SMutex> lock(ss->mutex);
-    if (!ss->enabled || !ss->is_enabled)
+    if (!ss->enabled)
         return 0;
     ss->enabled = 0;
-    ss->is_enabled = 0;
     if (ss->close)
         ss->close(ss);
 
