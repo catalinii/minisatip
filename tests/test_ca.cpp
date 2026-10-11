@@ -89,7 +89,7 @@ int test_multiple_pmt() {
     remove_pmt_from_device(&d, get_pmt(0));
     ASSERT(get_enabled_pmts_for_ca(&d) == 1, "expected capmt should be 1");
     ASSERT(PMT_ID_IS_VALID(d.capmt[0].pmt_id) &&
-               !PMT_ID_IS_VALID(d.capmt[0].other_id),
+               !PMT_ID_IS_VALID(d.capmt[0].other_id[0]),
            "only first PMT should be active");
 
     ASSERT(add_pmt_to_capmt(&d, get_pmt(2), 0) == NULL, "failed adding PMT");
@@ -107,7 +107,7 @@ int test_create_capmt_not_selected() {
     pmt_add_stream_pid(pmt, 0x502, 3, true, false);
 
     SCAPMT scapmt = {.pmt_id = pmt->id,
-                     .other_id = PMT_INVALID,
+                     .other_id = {PMT_INVALID, PMT_INVALID},
                      .version = 2,
                      .sid = 0x1234};
 
@@ -180,7 +180,7 @@ int test_capmt_uses_empty_slots_first() {
     ASSERT(c2 == dev.capmt + 1,
            "the second PMT should use an empty CAPMT, not the one in use");
     ASSERT(dev.capmt[0].pmt_id == first &&
-               !PMT_ID_IS_VALID(dev.capmt[0].other_id),
+               !PMT_ID_IS_VALID(dev.capmt[0].other_id[0]),
            "the first CAPMT should be left alone");
     ASSERT(dev.capmt[1].pmt_id == second, "the second CAPMT should be used");
 
@@ -193,7 +193,7 @@ int test_capmt_uses_empty_slots_first() {
     SCAPMT *c5 = add_pmt_to_capmt(&dev, get_pmt(fifth), dev.multiple_pmt);
     ASSERT(c5 == dev.capmt, "the fifth PMT should be packed in the first "
                             "CAPMT once all of them are used");
-    ASSERT(dev.capmt[0].other_id == fifth, "expected the fifth PMT packed");
+    ASSERT(dev.capmt[0].other_id[0] == fifth, "expected the fifth PMT packed");
 
     // an update of a PMT keeps using the CAPMT it is already in
     ASSERT(add_pmt_to_capmt(&dev, get_pmt(second), dev.multiple_pmt) ==
@@ -210,7 +210,7 @@ int test_create_capmt_single_clear() {
     pmt_add_stream_pid(pmt, 0x502, 3, true, false);
 
     SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = PMT_INVALID,
+                     .other_id = {PMT_INVALID, PMT_INVALID},
                      .version = 1,
                      .sid = 0x1234};
 
@@ -245,7 +245,7 @@ int test_capmt_content_hash_masks_version_and_listmgmt() {
     pmt_add_stream_pid(pmt, 0x502, 3, true, false);
 
     SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = PMT_INVALID,
+                     .other_id = {PMT_INVALID, PMT_INVALID},
                      .version = 1,
                      .sid = 0x1234};
 
@@ -298,7 +298,7 @@ int test_create_capmt_single_pmt_scrambled() {
     pmt_add_stream_pid(pmt, 0x502, 3, true, false);
 
     SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = PMT_INVALID,
+                     .other_id = {PMT_INVALID, PMT_INVALID},
                      .version = 1,
                      .sid = 0x1234};
 
@@ -322,6 +322,103 @@ int test_create_capmt_single_pmt_scrambled() {
     return 0;
 }
 
+// With ** every CAPMT carries up to 3 programs, packed evenly
+int test_capmt_packs_three_pmts() {
+    ca_device_t dev;
+    memset(&dev, 0, sizeof(dev));
+    memset(dev.capmt, -1, sizeof(dev.capmt));
+    dev.enabled = 1;
+    dev.multiple_pmt = 2;
+    dev.max_ca_pmt = 2;
+
+    int ids[7];
+    for (int i = 0; i < 7; i++)
+        ids[i] = pmt_add(0, 1000 + i, 1000 + i);
+
+    for (int i = 0; i < 6; i++)
+        ASSERT(add_pmt_to_capmt(&dev, get_pmt(ids[i]), dev.multiple_pmt) ==
+                   dev.capmt + i % 2,
+               "PMTs should alternate between the two CAPMTs");
+    ASSERT(dev.capmt[0].pmt_id == ids[0] &&
+               dev.capmt[0].other_id[0] == ids[2] &&
+               dev.capmt[0].other_id[1] == ids[4],
+           "first CAPMT should carry PMTs 0, 2 and 4");
+    ASSERT(capmt_pmt_count(dev.capmt + 1) == 3, "second CAPMT should be full");
+    ASSERT(get_enabled_pmts_for_ca(&dev) == 6, "expected 6 enabled PMTs");
+    ASSERT(add_pmt_to_capmt(&dev, get_pmt(ids[6]), dev.multiple_pmt) == NULL,
+           "a seventh PMT should not fit");
+
+    // Removing the first program shifts the partners up
+    remove_pmt_from_device(&dev, get_pmt(ids[0]));
+    ASSERT(dev.capmt[0].pmt_id == ids[2] &&
+               dev.capmt[0].other_id[0] == ids[4] &&
+               !PMT_ID_IS_VALID(dev.capmt[0].other_id[1]),
+           "partners should shift up");
+
+    // Removing a middle partner keeps the order of the rest
+    remove_pmt_from_device(&dev, get_pmt(ids[3]));
+    ASSERT(dev.capmt[1].pmt_id == ids[1] &&
+               dev.capmt[1].other_id[0] == ids[5] &&
+               !PMT_ID_IS_VALID(dev.capmt[1].other_id[1]),
+           "middle partner should be removed");
+
+    // The freed place is reused
+    ASSERT(add_pmt_to_capmt(&dev, get_pmt(ids[6]), dev.multiple_pmt) ==
+               dev.capmt,
+           "a freed place should be reused");
+    ASSERT(capmt_has_pmt(dev.capmt, ids[6]), "PMT 6 should be packed");
+    return 0;
+}
+
+// One '*' still packs at most 2 programs per CAPMT
+int test_capmt_single_star_packs_two() {
+    ca_device_t dev;
+    memset(&dev, 0, sizeof(dev));
+    memset(dev.capmt, -1, sizeof(dev.capmt));
+    dev.enabled = 1;
+    dev.multiple_pmt = 1;
+    dev.max_ca_pmt = 1;
+
+    int a = pmt_add(0, 1100, 1100), b = pmt_add(0, 1101, 1101),
+        c = pmt_add(0, 1102, 1102);
+    ASSERT(add_pmt_to_capmt(&dev, get_pmt(a), 1) == dev.capmt, "first PMT");
+    ASSERT(add_pmt_to_capmt(&dev, get_pmt(b), 1) == dev.capmt, "packed PMT");
+    ASSERT(add_pmt_to_capmt(&dev, get_pmt(c), 1) == NULL,
+           "a third PMT should not fit with a single '*'");
+    return 0;
+}
+
+// A CAPMT with 3 programs lists the streams of all of them
+int test_create_capmt_three_pmts() {
+    int p[3];
+    for (int i = 0; i < 3; i++) {
+        p[i] = pmt_add(0, 0x300 + i, 0x310 + i);
+        SPMT *pmt = get_pmt(p[i]);
+        pmt_add_caid(pmt, 0x0664, 0x700 + i, nullptr, 0);
+        pmt_add_stream_pid(pmt, 0x800 + i * 0x10, 2, false, true);
+        pmt_add_stream_pid(pmt, 0x801 + i * 0x10, 3, true, false);
+    }
+    SCAPMT scapmt = {
+        .pmt_id = p[0], .other_id = {p[1], p[2]}, .version = 1, .sid = 0x1234};
+
+    uint8_t capmt[1500];
+    int len = create_capmt(&scapmt, CLM_ONLY, capmt, sizeof(capmt),
+                           CMD_ID_OK_DESCRAMBLING, 0);
+    ASSERT(len > 0, "create_capmt failed");
+    hexdump("CAPMT: ", capmt, len);
+
+    // 6 bytes header, then 12 bytes per stream (5 + 7 ES info)
+    ASSERT_EQUAL(len, 6 + 6 * 12, "expected 6 streams in the CAPMT");
+    for (int i = 0; i < 6; i++) {
+        int pid = ((capmt[6 + i * 12 + 1] & 0x1F) << 8) | capmt[6 + i * 12 + 2];
+        int ecm =
+            ((capmt[6 + i * 12 + 10] & 0x1F) << 8) | capmt[6 + i * 12 + 11];
+        ASSERT_EQUAL(pid, 0x800 + (i / 2) * 0x10 + i % 2, "stream pid order");
+        ASSERT_EQUAL(ecm, 0x700 + i / 2, "each stream keeps its own ECM pid");
+    }
+    return 0;
+}
+
 int test_create_capmt_multiple_pmt_scrambled() {
     int pmt_id = pmt_add(0, 0x100, 0x101);
     SPMT *pmt = get_pmt(pmt_id);
@@ -335,8 +432,10 @@ int test_create_capmt_multiple_pmt_scrambled() {
     pmt_add_stream_pid(other, 0x601, 2, false, true);
     pmt_add_stream_pid(other, 0x602, 3, true, false);
 
-    SCAPMT scampt = {
-        .pmt_id = pmt->id, .other_id = other->id, .version = 1, .sid = 0x1234};
+    SCAPMT scampt = {.pmt_id = pmt->id,
+                     .other_id = {other->id, PMT_INVALID},
+                     .version = 1,
+                     .sid = 0x1234};
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -371,7 +470,7 @@ int test_create_capmt_different_listmgmt() {
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
 
     SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = PMT_INVALID,
+                     .other_id = {PMT_INVALID, PMT_INVALID},
                      .version = 1,
                      .sid = 0x1234};
 
@@ -418,7 +517,7 @@ int test_create_capmt_different_cmd_ids() {
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
 
     SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = PMT_INVALID,
+                     .other_id = {PMT_INVALID, PMT_INVALID},
                      .version = 1,
                      .sid = 0x1234};
 
@@ -450,7 +549,7 @@ int test_create_capmt_different_cmd_ids() {
 
 int test_create_capmt_invalid_pmt() {
     SCAPMT scampt = {.pmt_id = 9999, // invalid PMT ID
-                     .other_id = PMT_INVALID,
+                     .other_id = {PMT_INVALID, PMT_INVALID},
                      .version = 1,
                      .sid = 0x1234};
 
@@ -469,7 +568,7 @@ int test_create_capmt_max_version() {
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
 
     SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = PMT_INVALID,
+                     .other_id = {PMT_INVALID, PMT_INVALID},
                      .version = 15, // max 4-bit version
                      .sid = 0x1234};
 
@@ -490,7 +589,7 @@ int test_create_capmt_large_sid() {
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
 
     SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = PMT_INVALID,
+                     .other_id = {PMT_INVALID, PMT_INVALID},
                      .version = 1,
                      .sid = 0xFFFF}; // max 16-bit SID
 
@@ -523,8 +622,10 @@ int test_create_capmt_both_pmt_and_other_with_caids() {
     pmt_add_stream_pid(other, 0x601, 2, false, true);
     pmt_add_stream_pid(other, 0x602, 3, true, false);
 
-    SCAPMT scampt = {
-        .pmt_id = pmt->id, .other_id = other->id, .version = 1, .sid = 0x1234};
+    SCAPMT scampt = {.pmt_id = pmt->id,
+                     .other_id = {other->id, PMT_INVALID},
+                     .version = 1,
+                     .sid = 0x1234};
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -566,8 +667,10 @@ int test_create_capmt_both_pmt_and_other_many_streams() {
                            (i % 2 == 0));
     }
 
-    SCAPMT scampt = {
-        .pmt_id = pmt->id, .other_id = other->id, .version = 5, .sid = 0xABCD};
+    SCAPMT scampt = {.pmt_id = pmt->id,
+                     .other_id = {other->id, PMT_INVALID},
+                     .version = 5,
+                     .sid = 0xABCD};
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -609,8 +712,10 @@ int test_create_capmt_size_near_limit() {
                            (i % 2 == 0));
     }
 
-    SCAPMT scampt = {
-        .pmt_id = pmt->id, .other_id = other->id, .version = 1, .sid = 0x9999};
+    SCAPMT scampt = {.pmt_id = pmt->id,
+                     .other_id = {other->id, PMT_INVALID},
+                     .version = 1,
+                     .sid = 0x9999};
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -637,7 +742,7 @@ int test_create_capmt_respects_length() {
         pmt_add_stream_pid(pmt, 0x500 + i, 2, false, true);
 
     SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = PMT_INVALID,
+                     .other_id = {PMT_INVALID, PMT_INVALID},
                      .version = 1,
                      .sid = 0x9999};
     uint8_t capmt[128];
@@ -712,6 +817,25 @@ int test_set_ca_channels_parsing() {
 
     free(ca_devices[0]);
     ca_devices[0] = nullptr;
+
+    // ** packs 3 programs per CAPMT; more stars are capped
+    char config3[] = "8:**2";
+    set_ca_channels(config3);
+    ASSERT(ca_devices[8] && ca_devices[8]->multiple_pmt == 2 &&
+               ca_devices[8]->max_ca_pmt == 2,
+           "Expected 2 CAPMTs with 3 PMTs each");
+    ca_devices[8]->enabled = 1;
+    ASSERT_EQUAL(get_max_pmt_for_ca(8), 6, "Expected 6 channels on CA 8");
+    free(ca_devices[8]);
+    ca_devices[8] = nullptr;
+
+    char config4[] = "8:****1";
+    set_ca_channels(config4);
+    ASSERT(ca_devices[8] &&
+               ca_devices[8]->multiple_pmt == MAX_PMT_PER_CAPMT - 1,
+           "Expected the number of stars to be capped");
+    free(ca_devices[8]);
+    ca_devices[8] = nullptr;
 
     // Test MAX_CAID bounds protection
     char config_overflow[] =
@@ -939,7 +1063,7 @@ int test_ca_teardown_releases_pmts() {
     int first = pmt_add(0, 0x500, 0x501);
     int second = pmt_add(0, 0x600, 0x601);
     dev.capmt[0].pmt_id = first;
-    dev.capmt[0].other_id = second;
+    dev.capmt[0].other_id[0] = second;
     uint64_t mask = 1ULL << dvbca_id;
     for (int id : {first, second}) {
         SPMT *pmt = get_pmt(id);
@@ -971,7 +1095,7 @@ int test_ca_teardown_releases_pmts() {
            "keys cleared");
     for (int i = 0; i < MAX_CA_PMT; i++)
         ASSERT(!PMT_ID_IS_VALID(dev.capmt[i].pmt_id) &&
-                   !PMT_ID_IS_VALID(dev.capmt[i].other_id),
+                   !PMT_ID_IS_VALID(dev.capmt[i].other_id[0]),
                "capmt table wiped");
     for (int id : {first, second}) {
         SPMT *pmt = get_pmt(id);
@@ -1783,6 +1907,12 @@ int main() {
     memset(d.capmt, -1, sizeof(d.capmt));
     TEST_FUNC(test_capmt_uses_empty_slots_first(),
               "testing that a new PMT uses an empty CAPMT when there is one");
+    TEST_FUNC(test_capmt_packs_three_pmts(),
+              "testing that ** packs 3 PMTs in every CAPMT");
+    TEST_FUNC(test_capmt_single_star_packs_two(),
+              "testing that a single * packs at most 2 PMTs");
+    TEST_FUNC(test_create_capmt_three_pmts(),
+              "testing create_capmt with 3 PMTs");
     TEST_FUNC(test_capmt_release_on_last_pmt(),
               "testing that the last PMT of a CAPMT is released on the CAM");
     TEST_FUNC(test_get_authdata_filename(), "testing filename helper function");
