@@ -132,6 +132,7 @@ typedef struct struct_pmt_ca {
 typedef struct struct_pmt {
     std::atomic<bool> enabled{false};
     std::atomic<bool> allocated{false};
+    SMutex mutex;
     int sid;
     int pid;
     int pcr_pid;
@@ -148,7 +149,7 @@ typedef struct struct_pmt {
     //
     // ca_registered_mask: that CA holds the PMT and must be told when it
     // stops. Cleared when the registration, CA, or cached PMT is removed.
-    // Writers take id_mutex; readers re-read every pass, so a stale
+    // Writers take the PMT lock; readers re-read every pass, so a stale
     // read only delays one cycle (see ca_mask_mutex for the same rule).
     int ca_mask, disabled_ca_mask, ca_registered_mask;
     SPMT_batch *batch;
@@ -181,19 +182,21 @@ typedef struct struct_pmt {
 typedef struct struct_filter {
     std::atomic<bool> enabled{false};
     std::atomic<bool> allocated{false};
+    SMutex mutex;
     int id;
     int pid;
     int adapter;
     void *opaque;
-    int len, mask_len;
+    int len;
+    std::atomic<int> mask_len{0};
     int pos;
     char match;
     filter_function callback;
     unsigned char filter[FILTER_SIZE];
     unsigned char mask[FILTER_SIZE];
     unsigned char data[FILTER_PACKET_SIZE + 2];
-    int flags;
-    int next_filter, master_filter;
+    std::atomic<int> flags{0};
+    std::atomic<int> next_filter{-1}, master_filter{-1};
 } SFilter;
 
 int register_algo(SCW_op *o);
@@ -202,7 +205,7 @@ void init_algo_csa();
 int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
             int64_t expiry, void *opaque);
 
-extern int npmts;
+extern std::atomic<int> npmts;
 static inline SPMT *get_pmt(int id) {
     extern SPMT *pmts[];
 

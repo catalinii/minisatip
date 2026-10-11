@@ -95,9 +95,15 @@ pthread_t start_new_thread(char *name);
 pthread_t get_tid();
 void set_thread_prio(pthread_t tid, int prio);
 
-// Global lock for object arrays: held while claiming an id,
-// freeing a slot, or iterating the arrays.
+// Global lock for object arrays: held only inside find_new_id.
 extern SMutex id_mutex;
+
+// Raise an atomic high-water mark; lock-free max update.
+inline void atomic_max(std::atomic<int> &mark, int v) {
+    int cur = mark.load();
+    while (cur < v && !mark.compare_exchange_weak(cur, v)) {
+    }
+}
 
 // Claim a free slot atomically, allocating the object if needed.
 // Sets id (preferred) or sid to the index; nullptr when full.

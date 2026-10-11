@@ -48,7 +48,7 @@
 #define DEFAULT_LOG LOG_SOCKETWORKS
 
 sockets *s[MAX_SOCKS];
-int max_sock;
+std::atomic<int> max_sock{0};
 
 // returns the protocol (AF_INET, AF_INET6) or 0 in case of failure
 int fill_sockaddr(USockAddr *serv, char *host, int port, int ipv4_only) {
@@ -593,15 +593,11 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
     if (sock == SOCK_TIMEOUT && t == NULL)
         LOG_AND_RETURN(-1, "sockets_add timeout without timeout function");
 
-    std::lock_guard<SMutex> lock(id_mutex);
-
     ss = find_new_id(s, MAX_SOCKS);
     if (!ss)
         LOG_AND_RETURN(-1, "sockets_add failed for socks %d", sock);
     int i = ss->id;
-    ss->enabled = 1;
-    std::lock_guard<SMutex> lock2(ss->mutex);
-    ss->is_enabled = 1;
+    std::lock_guard<SMutex> lock(ss->mutex);
     ss->force_close = 0;
     ss->sock = sock;
     ss->nonblock = !!(type & TYPE_NONBLOCK);
@@ -620,8 +616,7 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
     ss->type = type & ~(TYPE_NONBLOCK | TYPE_CONNECT);
     ss->rtime = getTick();
     ss->wtime = 0;
-    if (max_sock <= i)
-        max_sock = i + 1;
+    atomic_max(max_sock, i + 1);
     ss->opaque = ss->opaque2 = ss->opaque3 = NULL;
     ss->buf = NULL;
     ss->lbuf = 0;
@@ -643,6 +638,8 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
     if (type & TYPE_CONNECT)
         ss->events |= POLLOUT;
 
+    ss->is_enabled = 1;
+    ss->enabled = 1;
     LOG("sockets_add: handle %d (type %d) returning socket sock %d [%s:%d] "
         "read: "
         "%p",
@@ -654,22 +651,18 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
 int sockets_del(int sock) {
     int i, so;
     sockets *ss;
-    std::unique_lock<SMutex> lock(id_mutex);
-
-    if (sock < 0 || sock >= MAX_SOCKS || !s[sock] || !s[sock]->enabled ||
-        !s[sock]->is_enabled) {
+    if (sock < 0 || sock >= MAX_SOCKS || !s[sock])
         return 0;
-    }
 
     ss = s[sock];
-    std::unique_lock<SMutex> lock2(ss->mutex);
-    if (!ss->enabled) {
+    std::unique_lock<SMutex> lock(ss->mutex);
+    if (!ss->enabled || !ss->is_enabled)
         return 0;
-    }
+    ss->enabled = 0;
+    ss->is_enabled = 0;
     if (ss->close)
         ss->close(ss);
 
-    ss->is_enabled = 0;
     so = ss->sock;
     ss->sock = -1; // avoid infinite loop
     LOG("sockets_del: sock %d -> handle %d, sid %d, overflow bytes %d, "
@@ -681,13 +674,6 @@ int sockets_del(int sock) {
         close(so);
     }
     ss->sid = -1;
-    i = MAX_SOCKS;
-    while (--i >= 0)
-        if (s[i] && !s[i]->enabled)
-            s[i]->sock = -1;
-        else if (s[i] && s[i]->enabled)
-            break;
-    max_sock = i + 1;
     ss->events = 0;
     ss->master = -1;
     if ((ss->flags & 1) && ss->buf)
@@ -703,11 +689,10 @@ int sockets_del(int sock) {
 
     LOG("sockets_del: sock %d Last open socket is at index %d current_handle "
         "%d",
-        sock, i, so);
+        sock, max_sock.load(), so);
 
-    ss->enabled = 0;
+    // Free last: teardown above must not overlap a reuse.
     ss->allocated = false;
-    lock2.unlock();
     lock.unlock();
 
     for (i = 0; i < MAX_SOCKS; i++)

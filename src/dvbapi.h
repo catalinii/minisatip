@@ -58,6 +58,7 @@
 typedef struct struct_key {
     std::atomic<bool> enabled{false};
     std::atomic<bool> allocated{false};
+    SMutex mutex;
     int pmt_id;
     int algo;
     unsigned char cw[2][16];

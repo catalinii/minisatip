@@ -67,10 +67,10 @@ SKey *keys[MAX_KEYS];
 unsigned char read_buffer[8192];
 extern char *listmgmt_str[];
 
+// Single write() is kernel-atomic; the failure close is idempotent.
 #define TEST_WRITE(a, xlen)                                                    \
     {                                                                          \
         int x;                                                                 \
-        std::lock_guard<SMutex> lock(id_mutex);                                \
         if ((x = (a)) != (xlen)) {                                             \
             LOG("write to dvbapi socket failed (%d out of %d), closing "       \
                 "socket %d, "                                                  \
@@ -121,7 +121,6 @@ int dvbapi_reply(sockets *s) {
         send_client_info(s);
         return 0;
     }
-    std::lock_guard<SMutex> lock(id_mutex);
 
     while (pos < s->rlen) {
         int op1;
@@ -192,8 +191,6 @@ int dvbapi_reply(sockets *s) {
             k_id = b[4] - opts.dvbapi_offset;
             k = get_key(k_id);
             a_id = -1;
-            if (k)
-                a_id = k->adapter;
             demux = b[5];
             filter = b[6];
             i = -1;
@@ -214,6 +211,10 @@ int dvbapi_reply(sockets *s) {
                  b[29]);
 
             if (k) {
+                std::lock_guard<SMutex> klock(k->mutex);
+                if (!k->enabled)
+                    break;
+                a_id = k->adapter;
                 int new_filter_id = -1, fpos = -1;
 
                 for (i = 0; i < MAX_KEY_FILTERS; i++)
@@ -230,6 +231,17 @@ int dvbapi_reply(sockets *s) {
                                           (void *)k, FILTER_ADD_REMOVE | isEMM,
                                           b + 9, b + 25);
                     i = get_index_for_filter(k, -1);
+                    if (i >= 0 && fid >= 0) {
+                        k->filter_id[i] = fid;
+                        k->filter[i] = filter;
+                        k->demux[i] = demux;
+                        k->pid[i] = _pid;
+                        k->ecm_parity[i] = -1;
+                        k->ecms++;
+                        update_pids(a_id);
+                    } else
+                        LOG("dvbapi: DMX_SET_FILTER failed, fid %d, index %d",
+                            fid, i);
                 } else {
                     LOG("dvbapi: filter for pid %d and key %d already exists, "
                         "fid %d",
@@ -243,16 +255,6 @@ int dvbapi_reply(sockets *s) {
                     break;
                 }
             }
-            if (i >= 0 && fid >= 0 && k) {
-                k->filter_id[i] = fid;
-                k->filter[i] = filter;
-                k->demux[i] = demux;
-                k->pid[i] = _pid;
-                k->ecm_parity[i] = -1;
-                k->ecms++;
-                update_pids(a_id);
-            } else if (not_found)
-                LOG("dvbapi: DMX_SET_FILTER failed, fid %d, index %d", fid, i);
             break;
         }
         case DVBAPI_DMX_STOP: {
@@ -263,6 +265,9 @@ int dvbapi_reply(sockets *s) {
             pos += 9;
             k = get_key(k_id);
             if (!k)
+                break;
+            std::lock_guard<SMutex> klock(k->mutex);
+            if (!k->enabled)
                 break;
             a_id = k->adapter;
             dvbapi_copy16r(_pid, b, 7) _pid &= 0x1FFF;
@@ -305,6 +310,9 @@ int dvbapi_reply(sockets *s) {
             cw = b + 13;
             k = get_key(k_id);
             if (k && (parity < 2)) {
+                std::lock_guard<SMutex> klock(k->mutex);
+                if (!k->enabled)
+                    break;
                 int correct = (((cw[0] + cw[1] + cw[2]) & 0xFF) == cw[3]) &&
                               (((cw[4] + cw[5] + cw[6]) & 0xFF) == cw[7]);
 
@@ -331,6 +339,14 @@ int dvbapi_reply(sockets *s) {
         case DVBAPI_ECM_INFO: {
             int pos1 = s->rlen - pos;
             SKey *k = get_key(b[4] - opts.dvbapi_offset);
+            std::unique_lock<SMutex> klock;
+            if (k) {
+                klock = std::unique_lock<SMutex>(k->mutex);
+                if (!k->enabled) {
+                    klock.unlock();
+                    k = nullptr;
+                }
+            }
             unsigned char cardsystem[255];
             unsigned char reader[255];
             unsigned char from[255];
@@ -390,6 +406,9 @@ int dvbapi_reply(sockets *s) {
             k = get_key(k_id);
             if (!k)
                 break;
+            std::lock_guard<SMutex> klock(k->mutex);
+            if (!k->enabled)
+                break;
             set_algo(k, algo, mode);
             break;
         }
@@ -412,7 +431,7 @@ int dvbapi_send_pmt(SKey *k, int cmd_id, int force) {
     unsigned char buf[2500];
     int len;
     int listmgmt = CLM_UPDATE;
-    std::lock_guard<SMutex> lock(id_mutex);
+    std::lock_guard<SMutex> lock(k->mutex);
     SPMT *pmt = get_pmt(k->pmt_id);
     if (!pmt)
         return 1;
@@ -644,6 +663,10 @@ int send_ecm(int filter_id, unsigned char *b, int len, void *opaque) {
     if (!k || !k->enabled)
         LOG_AND_RETURN(0, "%s: key is null pid %d and filter %d", __FUNCTION__,
                        pid, filter_id);
+    std::lock_guard<SMutex> klock(k->mutex);
+    if (!k->enabled)
+        LOG_AND_RETURN(0, "%s: key is null pid %d and filter %d", __FUNCTION__,
+                       pid, filter_id);
     pmt = get_pmt(k->pmt_id);
     if (!pmt)
         LOG_AND_RETURN(0, "%s: PMT not found for pid %d and filter %d",
@@ -726,12 +749,10 @@ void set_algo(SKey *k, int algo, int mode) {
 
 int keys_add(int i, int adapter, int pmt_id) {
 
-    SKey *k;
     SPMT *pmt = get_pmt(pmt_id);
-    std::lock_guard<SMutex> lock(id_mutex);
-
     if (!pmt)
         LOG_AND_RETURN(-1, "%s: PMT %d not found ", __FUNCTION__, pmt_id);
+    SKey *k;
     if (i == -1) {
         k = find_new_id(keys, MAX_KEYS);
         if (!k)
@@ -746,11 +767,14 @@ int keys_add(int i, int adapter, int pmt_id) {
             keys[i]->enabled = false;
             keys[i]->id = i;
         } else {
-            keys[i]->allocated = true;
+            bool expected = false;
+            if (!keys[i]->allocated.compare_exchange_strong(expected, true))
+                LOG_AND_RETURN(-1, "%s: key id %d in use", __FUNCTION__, i);
             keys[i]->enabled = false;
         }
         k = keys[i];
     }
+    std::lock_guard<SMutex> lock(k->mutex);
 
     k->parity = -1;
     k->sid = pmt->sid;
@@ -759,7 +783,6 @@ int keys_add(int i, int adapter, int pmt_id) {
     k->adapter_index = -1;
     k->demux_index = -1;
     k->blen = 0;
-    k->enabled = 1;
     k->ver = -1;
     k->ecms = 0;
     k->last_dmx_stop = 0;
@@ -774,6 +797,7 @@ int keys_add(int i, int adapter, int pmt_id) {
     memset(k->filter_id, -1, sizeof(k->filter_id));
     memset(k->filter, -1, sizeof(k->filter));
     memset(k->demux, -1, sizeof(k->demux));
+    k->enabled = 1;
     __sync_add_and_fetch(&enabledKeys, 1);
     LOG("returning new key %d for adapter %d, pmt %d pid %d sid %04X", i,
         adapter, pmt->id, pmt->pid, k->sid);
@@ -786,15 +810,16 @@ int keys_del(int i) {
     unsigned char buf[8] = {0x9F, 0x80, 0x3f, 4, 0x83, 2, 0, 0};
     SKey *k;
     const char *msg = "";
-    std::lock_guard<SMutex> lock(id_mutex);
 
     k = get_key(i);
     if (!k)
         return 0;
+    std::lock_guard<SMutex> lock(k->mutex);
 
     if (!k->enabled) {
         return 0;
     }
+    k->enabled = 0;
     // current key is not disabled
     int j, ek = 0, ed = 0;
     for (j = 0; j < MAX_KEYS; j++)
@@ -828,14 +853,14 @@ int keys_del(int i) {
     k->last_dmx_stop = 0;
     k->demux_index = -1;
     k->adapter_index = -1;
-    k->enabled = 0;
-    k->allocated = false;
     for (j = 0; j < MAX_KEY_FILTERS; j++)
         if (k->filter_id[j] >= 0)
             del_filter(k->filter_id[j]);
 
     k->hops = k->caid = k->info_pid = k->prid = k->ecmtime = 0;
     dvbapi_last_close = getTick();
+    // Free last: teardown above must not overlap a reuse.
+    k->allocated = false;
 
     LOG("Stopped key %d, active keys %d, sock %d, pmt pid %d, sid %04X, op %s",
         i, ek, sock, pmt_pid, sid, msg);
@@ -846,10 +871,15 @@ int keys_del(int i) {
 int dvbapi_add_pmt(adapter *ad, SPMT *pmt, int update) {
     SKey *k = NULL;
     int key, pid = pmt->pid;
-    std::lock_guard<SMutex> lock(id_mutex);
+    std::lock_guard<SMutex> lock(pmt->mutex);
 
     LOG("%s: adapter %d, pmt %d, pid %d, update %d", __FUNCTION__, ad->id,
         pmt->id, pid, update);
+
+    if (!pmt->enabled)
+        LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
+                       "%s: PMT %d is gone, not adding a key", __FUNCTION__,
+                       pmt->id);
 
     if (ad->type == ADAPTER_CI) {
         LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
@@ -866,14 +896,17 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt, int update) {
     // A PMT update re-sends on the live key, keeping the demux index
     // stable instead of leaking a key per version bump.
     SKey *old = (SKey *)pmt->opaque;
-    if (old && old->id >= 0 && old->id < MAX_KEYS && keys[old->id] == old &&
-        old->enabled && old->pmt_id == pmt->id && old->adapter == ad->id) {
-        old->sid = pmt->sid;
-        old->pmt_pid = pid;
-        old->tsid = ad->transponder_id;
-        old->last_dmx_stop = getTick();
-        dvbapi_send_pmt(old, CMD_ID_OK_DESCRAMBLING, !update);
-        return 0;
+    if (old && old->id >= 0 && old->id < MAX_KEYS) {
+        std::lock_guard<SMutex> oldlock(old->mutex);
+        if (old->enabled && keys[old->id] == old && old->pmt_id == pmt->id &&
+            old->adapter == ad->id) {
+            old->sid = pmt->sid;
+            old->pmt_pid = pid;
+            old->tsid = ad->transponder_id;
+            old->last_dmx_stop = getTick();
+            dvbapi_send_pmt(old, CMD_ID_OK_DESCRAMBLING, !update);
+            return 0;
+        }
     }
 
     key = keys_add(-1, ad->id, pmt->id);
@@ -894,7 +927,7 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt, int update) {
 }
 
 int dvbapi_del_pmt(adapter *ad, SPMT *pmt) {
-    std::lock_guard<SMutex> lock(id_mutex);
+    std::lock_guard<SMutex> lock(pmt->mutex);
     SKey *k = (SKey *)pmt->opaque;
     if (!k)
         return 0;

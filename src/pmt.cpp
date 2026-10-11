@@ -59,7 +59,7 @@
 
 uint16_t EMU_PIDS_ALL_ENFORCED_PIDS_LIST[] = {0, 1, 16, 17, 18, 20, 21};
 SPMT *pmts[MAX_PMT];
-int npmts;
+std::atomic<int> npmts{0};
 
 #define MAX_OPS 10
 _SCW_op ops[MAX_OPS];
@@ -69,7 +69,7 @@ SMutex cws_mutex;
 int ncws;
 
 SFilter *filters[MAX_FILTERS];
-int nfilters;
+std::atomic<int> nfilters{0};
 
 const char *listmgmt_str[] = {"CLM_MORE", "CLM_FIRST", "CLM_LAST",
                               "CLM_ONLY", "CLM_ADD",   "CLM_UPDATE"};
@@ -232,8 +232,9 @@ void dump_filters(int aid) {
                 "mask_len %d, "
                 "filter -> %02X %02X %02X %02X, mask ->%02X %02X %02X %02x",
                 filters[i]->id, filters[i]->adapter, filters[i]->pid,
-                filters[i]->master_filter, filters[i]->next_filter,
-                filters[i]->flags, filters[i]->mask_len, filters[i]->filter[0],
+                filters[i]->master_filter.load(),
+                filters[i]->next_filter.load(), filters[i]->flags.load(),
+                filters[i]->mask_len.load(), filters[i]->filter[0],
                 filters[i]->filter[1], filters[i]->filter[2],
                 filters[i]->filter[3], filters[i]->mask[0], filters[i]->mask[1],
                 filters[i]->mask[2], filters[i]->mask[3]);
@@ -247,6 +248,9 @@ void reset_filter_data(SFilter *f) {
     memset(f->data, 0, FILTER_PACKET_SIZE);
 }
 
+// Flag logic without get/locks: caller holds f->mutex.
+static int set_filter_flags_locked(SFilter *f, int flags);
+
 int add_filter(int aid, int pid, void *callback, void *opaque, int flags) {
     uint8_t filter[FILTER_SIZE], mask[FILTER_SIZE];
     memset(filter, 0, sizeof(filter));
@@ -255,17 +259,14 @@ int add_filter(int aid, int pid, void *callback, void *opaque, int flags) {
 }
 int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
                     uint8_t *filter, uint8_t *mask) {
-    SFilter *f;
-    int i;
-    std::lock_guard<SMutex> lock(id_mutex);
-
     if (pid < 0 || pid > 8191)
         LOG_AND_RETURN(-1, "%s failed, pid %d", __FUNCTION__, pid);
 
-    f = find_new_id(filters, MAX_FILTERS);
+    SFilter *f = find_new_id(filters, MAX_FILTERS);
     if (!f)
         LOG_AND_RETURN(-1, "%s failed", __FUNCTION__);
     int fid = f->id;
+    // Claimed slot is disabled and unclaimable: init needs no lock.
     f->opaque = opaque;
     f->pid = pid;
     f->callback = (filter_function)callback;
@@ -273,102 +274,130 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
     reset_filter_data(f);
     f->next_filter = -1;
     f->adapter = aid;
+    f->master_filter = fid;
+
+    // Own lock across the whole add excludes del(fid); the pred lock
+    // below serializes concurrent appends to the same tail.
+    std::lock_guard<SMutex> lock(f->mutex);
+    for (int i = 0; i < nfilters; i++) {
+        SFilter *pred = filters[i];
+        if (i == fid || !pred || !pred->enabled || pred->adapter != aid ||
+            pred->pid != pid || pred->next_filter != -1)
+            continue;
+        std::lock_guard<SMutex> predlock(pred->mutex);
+        if (!pred->enabled || pred->adapter != aid || pred->pid != pid ||
+            pred->next_filter != -1)
+            continue;
+        pred->next_filter = fid;
+        f->master_filter = pred->master_filter.load();
+        break;
+    }
+    // Concurrent first-adds for one pid may both miss and form two
+    // chains; first filter creation per pid is thread-affine in practice.
+    set_filter_flags_locked(f, flags);
+    memcpy(f->filter, filter, sizeof(f->filter));
+    memcpy(f->mask, mask, sizeof(f->mask));
+    f->mask_len = get_mask_len(f->mask, sizeof(f->mask));
+    atomic_max(nfilters, fid + 1);
+
+    SPid *p = find_pid(aid, pid);
+    if (p)
+        p->filter = fid;
     f->enabled = 1;
-
-    if (fid >= nfilters)
-        nfilters = fid + 1;
-
-    f->master_filter = f->id;
-
-    // this should be syncronized using id_mutex
-
-    for (i = 0; i < nfilters; i++)
-        if (i != fid && filters[i] && filters[i]->enabled &&
-            filters[i]->adapter == aid && filters[i]->pid == pid &&
-            filters[i]->next_filter == -1) {
-            filters[i]->next_filter = fid;
-            f->master_filter = filters[i]->master_filter;
-        }
-    set_filter_flags(fid, flags);
-    set_filter_mask(fid, filter, mask);
 
     LOG("new filter %d added for adapter %d, pid %d, flags %d, mask_len %d, "
         "master_filter %d",
-        fid, f->adapter, pid, f->flags, f->mask_len, f->master_filter);
-
-    SPid *p = find_pid(f->adapter, pid);
-    if (p)
-        p->filter = fid;
+        fid, f->adapter, pid, f->flags.load(), f->mask_len.load(),
+        f->master_filter.load());
 
     return fid;
 }
 
+// Sequential per-record update; a filter enabling mid-reset keeps the
+// old master until the next tune (adds are quiescent then in practice).
 int reset_master_filter(int adapter, int pid, int id) {
-    int i, nf = 0;
-    for (i = 0; i < nfilters; i++)
-        if ((filters[i] && filters[i]->enabled &&
-             filters[i]->adapter == adapter && filters[i]->pid == pid)) {
-            filters[i]->master_filter = id;
-            nf++;
-        }
+    int nf = 0;
+    for (int i = 0; i < nfilters; i++) {
+        SFilter *r = filters[i];
+        if (!r || !r->enabled || r->adapter != adapter || r->pid != pid)
+            continue;
+        std::lock_guard<SMutex> rlock(r->mutex);
+        if (!r->enabled || r->adapter != adapter || r->pid != pid)
+            continue;
+        r->master_filter = id;
+        nf++;
+    }
     return nf;
 }
 
+// Dead slots' next links are immutable (adds/dels never touch them),
+// so this lock-free walk always sees consistent values.
+static int skip_dead_filters(int id) {
+    for (int n = 0; n < MAX_FILTERS && id >= 0 && id < MAX_FILTERS; n++) {
+        SFilter *f = filters[id];
+        if (!f || f->enabled)
+            return f ? id : -1;
+        id = f->next_filter.load();
+    }
+    return -1;
+}
+
 int del_filter(int id) {
-    SFilter *f;
-    int i, pid;
-    int adapter = -1;
+    int pid, adapter = -1, master, next;
     LOG("deleting filter %d", id);
     if (id < 0 || id >= MAX_FILTERS || !filters[id])
         return 0;
 
-    f = filters[id];
-    std::lock_guard<SMutex> lock(id_mutex);
-    if (!f->enabled) {
-        return 0;
+    SFilter *f = filters[id];
+    { // Gate + disable under own lock; teardown below is exclusive.
+        std::lock_guard<SMutex> lock(f->mutex);
+        if (!f->enabled)
+            return 0;
+        pid = f->pid;
+        adapter = f->adapter;
+        master = f->master_filter;
+        next = f->next_filter;
+        f->enabled = false;
     }
-    set_filter_flags(id, 0); // remote all pids if any
-    pid = f->pid;
-    adapter = f->adapter;
-    if (id == f->master_filter) {
-        int master_filter = f->next_filter;
-        SFilter *m = get_filter(master_filter);
-        if (!m) // double check there is no other filter
+
+    set_filter_flags_locked(f, 0); // remote all pids if any
+    if (id == master) {
+        SFilter *m = get_filter(next); // enabled-gated, NULL if dead
+        if (!m)                        // double check there is no other filter
         {
-            for (i = 0; i < nfilters; i++)
+            for (int i = 0; i < nfilters; i++)
                 if (i != id && (filters[i] && filters[i]->enabled &&
-                                filters[i]->adapter == f->adapter &&
+                                filters[i]->adapter == adapter &&
                                 filters[i]->pid == pid)) {
                     m = filters[i];
                     LOGM("warning: filter %d was also found for pid %d", m->id,
                          pid);
                     break;
                 }
-            SPid *p = find_pid(f->adapter, pid);
+            SPid *p = find_pid(adapter, pid);
             if (p)
                 p->filter = -1;
         }
         if (m) // reset master_filter for all filters
-            reset_master_filter(f->adapter, pid, m->id);
+            reset_master_filter(adapter, pid, m->id);
     } else {
-        for (i = 0; i < nfilters; i++)
-            if (filters[i] && filters[i]->enabled &&
-                filters[i]->adapter == f->adapter && filters[i]->pid == pid &&
-                filters[i]->next_filter == f->id) {
-                filters[i]->next_filter = f->next_filter;
-                break;
-            }
-    }
-    i = MAX_FILTERS;
-    while (--i >= 0)
-        if (filters[i] && filters[i]->enabled)
+        for (int i = 0; i < nfilters; i++) {
+            SFilter *pred = filters[i];
+            if (!pred || !pred->enabled || pred->adapter != adapter ||
+                pred->pid != pid || pred->next_filter != id)
+                continue;
+            std::lock_guard<SMutex> predlock(pred->mutex);
+            if (!pred->enabled || pred->adapter != adapter ||
+                pred->pid != pid || pred->next_filter != id)
+                continue;
+            pred->next_filter = skip_dead_filters(next);
             break;
-    nfilters = i + 1;
+        }
+    }
     f->pid = -1;
-    f->enabled = 0;
     f->allocated = false;
     LOG("deleted filter %d, ad %d, pid %d, max filters %d", id, adapter, pid,
-        nfilters);
+        nfilters.load());
     return 0;
 }
 int get_pid_filter(int aid, int pid) {
@@ -377,7 +406,7 @@ int get_pid_filter(int aid, int pid) {
         if (filters[i] && filters[i]->enabled && filters[i]->adapter == aid &&
             filters[i]->pid == pid) {
             LOGM("found filter %d for pid %d, master %d (max filters %d)", i,
-                 pid, filters[i]->master_filter, nfilters);
+                 pid, filters[i]->master_filter.load(), nfilters.load());
             return filters[i]->master_filter;
         }
     return -1;
@@ -396,10 +425,9 @@ int get_active_filters_for_pid(int master_filter, int aid, int pid, int flags) {
     return add_remove;
 }
 
-int set_filter_flags(int id, int flags) {
-    SFilter *f = get_filter(id);
-    if (!f)
-        LOG_AND_RETURN(1, "%s: filter %d not found", __FUNCTION__, id)
+// Same-pid add/del marks are unordered across records now; same class
+// as the pid layer's existing cross-subsystem races (affinity-held).
+static int set_filter_flags_locked(SFilter *f, int flags) {
     f->flags = flags;
     if (flags & FILTER_ADD_REMOVE) {
         SPid *p = find_pid(f->adapter, f->pid);
@@ -423,9 +451,22 @@ int set_filter_flags(int id, int flags) {
     return 0;
 }
 
+int set_filter_flags(int id, int flags) {
+    SFilter *f = get_filter(id);
+    if (!f)
+        LOG_AND_RETURN(1, "%s: filter %d not found", __FUNCTION__, id)
+    std::lock_guard<SMutex> ownlock(f->mutex);
+    if (!f->enabled)
+        LOG_AND_RETURN(1, "%s: filter %d not found", __FUNCTION__, id)
+    return set_filter_flags_locked(f, flags);
+}
+
 int set_filter_opaque(int id, void *opaque) {
     SFilter *f = get_filter(id);
     if (!f)
+        LOG_AND_RETURN(1, "%s: filter %d not found", __FUNCTION__, id)
+    std::lock_guard<SMutex> lock(f->mutex);
+    if (!f->enabled)
         LOG_AND_RETURN(1, "%s: filter %d not found", __FUNCTION__, id)
     f->opaque = opaque;
     return 0;
@@ -433,13 +474,17 @@ int set_filter_opaque(int id, void *opaque) {
 
 int set_filter_mask(int id, uint8_t *filter, uint8_t *mask) {
     SFilter *f = get_filter(id);
-    if (f) {
-        memcpy(f->filter, filter, sizeof(f->filter));
-        memcpy(f->mask, mask, sizeof(f->mask));
-        f->mask_len = get_mask_len(f->mask, sizeof(f->mask));
-    } else
+    if (!f)
+        LOG_AND_RETURN(1, "%s: filter %d not found", __FUNCTION__, id);
+    std::lock_guard<SMutex> lock(f->mutex);
+    if (!f->enabled) {
         LOGM("%s: filter %d not found", __FUNCTION__, id);
-    return f ? 0 : 1;
+        return 1;
+    }
+    memcpy(f->filter, filter, sizeof(f->filter));
+    memcpy(f->mask, mask, sizeof(f->mask));
+    f->mask_len = get_mask_len(f->mask, sizeof(f->mask));
+    return 0;
 }
 
 void delete_filter_for_adapter(int aid) {
@@ -473,10 +518,10 @@ int match_filter(SFilter *f, unsigned char *b) {
         "filter %smatch: id %d: pid %d, flags %d, mask_len %d, filter -> %02X "
         "%02X %02X %02X %02X, mask ->%02X %02X %02X %02X %02X -> data %02X "
         "[%02x %02x] %02X %02X %02X %02X",
-        match ? "" : "not ", f->id, f->pid, f->flags, f->mask_len, f->filter[0],
-        f->filter[1], f->filter[2], f->filter[3], f->filter[4], f->mask[0],
-        f->mask[1], f->mask[2], f->mask[3], f->mask[4], b[0], b[1], b[2], b[3],
-        b[4], b[5], b[6]);
+        match ? "" : "not ", f->id, f->pid, f->flags.load(), f->mask_len.load(),
+        f->filter[0], f->filter[1], f->filter[2], f->filter[3], f->filter[4],
+        f->mask[0], f->mask[1], f->mask[2], f->mask[3], f->mask[4], b[0], b[1],
+        b[2], b[3], b[4], b[5], b[6]);
     return match;
 }
 
@@ -491,7 +536,8 @@ void process_filter(SFilter *f, unsigned char *b) {
         if (!(f->flags & FILTER_EMM))
             match = match_filter(f, b + 5);
         DEBUGM("matching pid %d, filter %d, match %d, flags %d, isEMM %d",
-               f->pid, f->id, match, f->flags, (f->flags & FILTER_EMM) > 0);
+               f->pid, f->id, match, f->flags.load(),
+               (f->flags & FILTER_EMM) > 0);
         f->match = match;
     }
     if (f->match || (f->flags & FILTER_EMM)) {
@@ -1279,15 +1325,25 @@ void start_active_pmts(adapter *ad) {
     int i;
     pmt_pid_updated_pids(ad);
 #ifndef DISABLE_TABLES
-    for (i = 0; i < ad->active_pmts; i++) {
-        SPMT *pmt = get_pmt(ad->active_pmt[i]);
+    int n;
+    { // active_pmts is adapter state, written with ad->mutex held.
+        std::lock_guard<SMutex> adlock(ad->mutex);
+        n = ad->active_pmts;
+    }
+    for (i = 0; i < n; i++) {
+        int pmt_id;
+        { // Never hold ad->mutex across the PMT lock below.
+            std::lock_guard<SMutex> adlock(ad->mutex);
+            pmt_id = ad->active_pmt[i];
+        }
+        SPMT *pmt = get_pmt(pmt_id);
         if (!pmt)
             continue;
         if (pmt->state != PMT_RUNNING && pmt->state != PMT_STARTING)
             continue;
         int resend;
         { // del_ca() clears the PMT masks from the socket thread
-            std::lock_guard<SMutex> lock(id_mutex);
+            std::lock_guard<SMutex> lock(pmt->mutex);
             resend = ad->ca_mask != (pmt->disabled_ca_mask | pmt->ca_mask);
         }
         if (resend)
@@ -1505,13 +1561,12 @@ int pmt_process_stream(adapter *ad) {
 
 int pmt_add(int adapter, int sid, int pmt_pid) {
 
-    SPMT *pmt;
-    std::lock_guard<SMutex> lock(id_mutex);
-    pmt = find_new_id(pmts, MAX_PMT);
+    SPMT *pmt = find_new_id(pmts, MAX_PMT);
     if (!pmt) {
         LOG_AND_RETURN(-1, "PMT buffer is full, could not add new pmts");
     }
     int i = pmt->id;
+    std::lock_guard<SMutex> lock(pmt->mutex);
 
     pmt->parity = -1;
     pmt->sid = sid;
@@ -1521,7 +1576,6 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
     pmt->blen = 0;
     pmt->last_update_cw = 0;
     pmt->filter = -1;
-    pmt->enabled = 1;
     pmt->version = -1;
     pmt->state = PMT_STOPPED;
     // PMT slots are reused: drop the previous key.
@@ -1535,8 +1589,8 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
     pmt->caids = 0;
     pmt->descriptors.clear();
 
-    if (i >= npmts)
-        npmts = i + 1;
+    atomic_max(npmts, i + 1);
+    pmt->enabled = 1;
 
     LOG("returning new pmt %d for adapter %d, pmt pid %d, sid %d %04X", i,
         adapter, pmt_pid, sid, sid);
@@ -1554,11 +1608,12 @@ int pmt_del(int id) {
 #ifndef DISABLE_TABLES
     close_pmt_for_cas(get_adapter(pmt->adapter), pmt);
 #endif
-    std::lock_guard<SMutex> lock(id_mutex);
+    std::lock_guard<SMutex> lock(pmt->mutex);
     if (!pmt->enabled) {
         return 0;
     }
     LOG("deleting PMT %d, name %s ", pmt->id, pmt->name);
+    pmt->enabled = 0;
     adapter *ad = get_adapter_nw(pmt->adapter);
     if (ad)
         release_pmt_claims(ad, pmt);
@@ -1569,8 +1624,6 @@ int pmt_del(int id) {
     // Drop the decrypt pointer so cw_in_use() stops pinning the slot.
     pmt->cw.store(nullptr);
 
-    pmt->enabled = 0;
-    pmt->allocated = false;
     pmt->sid = 0;
     pmt->pid = 0;
     pmt->adapter = -1;
@@ -1588,12 +1641,8 @@ int pmt_del(int id) {
     pmt->descriptors.clear();
 
     pmt->stream_pids.clear();
-
-    i = MAX_PMT;
-    while (--i >= 0)
-        if (pmts[i] && pmts[i]->enabled)
-            break;
-    npmts = i + 1;
+    // Free last: teardown above must not overlap a reuse.
+    pmt->allocated = false;
 
     return 0;
 }
@@ -1601,26 +1650,32 @@ int pmt_del(int id) {
 void cache_pmt_for_adapter(adapter *ad, SPMT *pmt) {
     if (!pmt)
         return;
-    int i;
 #ifndef DISABLE_TABLES
     close_pmt_for_cas(ad, pmt);
 #endif
     release_pmt_claims(ad, pmt);
-    pmt->state = PMT_CACHED;
     // Same lock as the send path: removal tears these masks down,
     // so it bumps the epoch to invalidate in-flight sets.
-    std::lock_guard<SMutex> lock(id_mutex);
-    ca_teardown_epoch++;
-    pmt->disabled_ca_mask = 0;
-    pmt->ca_mask = 0;
-    pmt->ca_registered_mask = 0;
-    for (i = 0; i < ad->active_pmts; i++)
-        if (ad->active_pmt[i] == pmt->id)
-            ad->active_pmt[i] = -1;
-
-    if (pmt->filter >= 0)
-        del_filter(pmt->filter);
-    pmt->filter = -1;
+    {
+        std::lock_guard<SMutex> lock(pmt->mutex);
+        ca_teardown_epoch++;
+        pmt->disabled_ca_mask = 0;
+        pmt->ca_mask = 0;
+        pmt->ca_registered_mask = 0;
+        pmt->state = PMT_CACHED;
+    }
+    { // Never hold the PMT lock across the adapter lock.
+        std::lock_guard<SMutex> adlock(ad->mutex);
+        for (int j = 0; j < ad->active_pmts; j++)
+            if (ad->active_pmt[j] == pmt->id)
+                ad->active_pmt[j] = -1;
+    }
+    { // del_filter nests filter locks under the PMT lock.
+        std::lock_guard<SMutex> lock(pmt->mutex);
+        if (pmt->filter >= 0)
+            del_filter(pmt->filter);
+        pmt->filter = -1;
+    }
 }
 
 int cache_pmts_for_adapter(int aid) {
@@ -1773,7 +1828,7 @@ int assemble_packet(SFilter *f, uint8_t *b) {
                 0,
                 "assemble_packet: CRC check: flags %d len %d not valid "
                 "for pid %d [%02X %02X %02X %02X %02X %02X]",
-                f->flags, len, pid, b[0], b[1], b[2], b[3], b[4], b[5]);
+                f->flags.load(), len, pid, b[0], b[1], b[2], b[3], b[4], b[5]);
         crc = crc_32(b, len - 4);
         copy32r(current_crc, b, len - 4);
         if (crc != current_crc) {
@@ -1952,7 +2007,7 @@ void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid, uint8_t *data,
                   int len) {
     // Whole function: teardown races both the descriptor append
     // below and the mask reset, so cover both with one guard.
-    std::lock_guard<SMutex> lock(id_mutex);
+    std::lock_guard<SMutex> lock(pmt->mutex);
     if (pmt_caid_exist(pmt, caid, capid)) {
         LOGM("%s: CAID %04X CAPID %d already exists in PMT %d", __FUNCTION__,
              caid, capid, pmt->id);
@@ -2449,7 +2504,6 @@ char *get_pmt_for_adapter(int aid, char *dest, int max_size) {
 
 void free_all_pmts() {
     int i, j;
-    std::lock_guard<SMutex> lock(id_mutex);
     for (i = 0; i < MAX_PMT; i++) {
         if (pmts[i]) {
             // Updates shrink caids while keeping entries: free all slots.

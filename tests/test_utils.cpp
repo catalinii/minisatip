@@ -26,6 +26,8 @@
 #include <string.h>
 #include <string>
 #include <sys/stat.h>
+#include <thread>
+#include <vector>
 
 int test_mkdir_recursive() {
     const char *dir = "/tmp/minisatip/test";
@@ -276,10 +278,37 @@ int test_find_new_id() {
     return 0;
 }
 
+int test_find_new_id_mt() {
+    constexpr int N = 64, T = 8;
+    TestSlot *arr[N] = {};
+    std::atomic<int> total{0};
+    auto worker = [&]() {
+        int n = 0;
+        while (TestSlot *s = find_new_id(arr, N)) {
+            s->enabled = true;
+            n++;
+        }
+        total += n;
+    };
+    std::vector<std::thread> th;
+    for (int t = 0; t < T; t++)
+        th.emplace_back(worker);
+    for (auto &t : th)
+        t.join();
+    ASSERT(total == N, "all slots claimed exactly once");
+    for (int i = 0; i < N; i++)
+        ASSERT(arr[i] && arr[i]->id == i, "slot id matches index");
+    ASSERT(find_new_id(arr, N) == nullptr, "full stays full");
+    for (auto *p : arr)
+        delete p;
+    return 0;
+}
+
 int main() {
     opts.log = 255;
     strcpy(thread_info[thread_index].thread_name, "test_utils");
     TEST_FUNC(test_find_new_id(), "testing find_new_id");
+    TEST_FUNC(test_find_new_id_mt(), "testing find_new_id mt");
     TEST_FUNC(test_mkdir_recursive(), "testing directory creation");
     TEST_FUNC(test_readfile_content_type(), "testing readfile content types");
     TEST_FUNC(test_fifo(), "testing fifo");
