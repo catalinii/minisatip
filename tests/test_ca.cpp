@@ -51,6 +51,7 @@
 #include <syslog.h>
 #include <time.h>
 #include <unistd.h>
+#include <vector>
 
 #define DEFAULT_LOG LOG_PMT
 
@@ -88,9 +89,9 @@ int test_multiple_pmt() {
     ASSERT(get_active_capmts(&d) == 1, "expected number of capmt ahould be 1");
     remove_pmt_from_device(&d, get_pmt(0));
     ASSERT(get_enabled_pmts_for_ca(&d) == 1, "expected capmt should be 1");
-    ASSERT(PMT_ID_IS_VALID(d.capmt[0].pmt_id) &&
-               !PMT_ID_IS_VALID(d.capmt[0].other_id[0]),
-           "only first PMT should be active");
+    // The partner keeps its place until a send compacts the CAPMT
+    ASSERT(!PMT_ID_IS_VALID(d.capmt[0].pmt_id) && d.capmt[0].other_id[0] == 1,
+           "only the partner should be active, in its place");
 
     ASSERT(add_pmt_to_capmt(&d, get_pmt(2), 0) == NULL, "failed adding PMT");
 
@@ -348,25 +349,25 @@ int test_capmt_packs_three_pmts() {
     ASSERT(add_pmt_to_capmt(&dev, get_pmt(ids[6]), dev.multiple_pmt) == NULL,
            "a seventh PMT should not fit");
 
-    // Removing the first program shifts the partners up
+    // Removing the first program leaves its place empty
     remove_pmt_from_device(&dev, get_pmt(ids[0]));
-    ASSERT(dev.capmt[0].pmt_id == ids[2] &&
-               dev.capmt[0].other_id[0] == ids[4] &&
-               !PMT_ID_IS_VALID(dev.capmt[0].other_id[1]),
-           "partners should shift up");
+    ASSERT(!PMT_ID_IS_VALID(dev.capmt[0].pmt_id) &&
+               dev.capmt[0].other_id[0] == ids[2] &&
+               dev.capmt[0].other_id[1] == ids[4],
+           "partners should keep their places");
 
     // Removing a middle partner keeps the order of the rest
     remove_pmt_from_device(&dev, get_pmt(ids[3]));
     ASSERT(dev.capmt[1].pmt_id == ids[1] &&
-               dev.capmt[1].other_id[0] == ids[5] &&
-               !PMT_ID_IS_VALID(dev.capmt[1].other_id[1]),
-           "middle partner should be removed");
+               !PMT_ID_IS_VALID(dev.capmt[1].other_id[0]) &&
+               dev.capmt[1].other_id[1] == ids[5],
+           "middle partner should be removed in place");
 
-    // The freed place is reused
+    // The freed place is reused in place
     ASSERT(add_pmt_to_capmt(&dev, get_pmt(ids[6]), dev.multiple_pmt) ==
                dev.capmt,
            "a freed place should be reused");
-    ASSERT(capmt_has_pmt(dev.capmt, ids[6]), "PMT 6 should be packed");
+    ASSERT(dev.capmt[0].pmt_id == ids[6], "PMT 6 should fill the first place");
     return 0;
 }
 
@@ -1888,6 +1889,280 @@ int test_ca_read_bad_session() {
     return 0;
 }
 
+int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update);
+
+// A CAM on a pipe that packs 3 programs in one CAPMT; every CAPMT
+// written to it can be read back and counted.
+struct packing_cam {
+    ca_device_t dev;
+    adapter ad;
+    int fds[2];
+    int sock;
+    int next_pid;
+};
+static packing_cam *pcam;
+
+static int packing_cam_open() {
+    pcam = new packing_cam();
+    memset(&pcam->dev, 0, sizeof(pcam->dev));
+    memset(pcam->dev.capmt, -1, sizeof(pcam->dev.capmt));
+    ca_device_t &dev = pcam->dev;
+    dev.enabled = 1;
+    dev.id = 3;
+    dev.state = CA_STATE_INITIALIZED;
+    dev.multiple_pmt = 2;
+    dev.max_ca_pmt = 1;
+    dev.sessions[1].handler.resource = MKRID(3, 1, 1); // CA support
+    dev.sessions[1].session_number = 2;
+    dev.sessions[1].ca = &dev;
+    ASSERT(pipe(pcam->fds) == 0, "pipe for the fake CAM");
+    fcntl(pcam->fds[0], F_SETFL, O_NONBLOCK);
+    dev.fd = pcam->fds[1];
+    int sp[2];
+    ASSERT(pipe(sp) == 0, "pipe for the CA socket");
+    pcam->sock = sockets_add(sp[0], NULL, 3, TYPE_TCP, NULL, NULL, NULL);
+    close(sp[1]);
+    ASSERT(pcam->sock >= 0, "CA socket added");
+    sockets_timeout(pcam->sock, 1000);
+    dev.sock = pcam->sock;
+    pcam->ad.id = 3;
+    pcam->ad.enabled = 1;
+    pcam->next_pid = 0x1000;
+    a[3] = &pcam->ad;
+    ca_devices[3] = &dev;
+    opts.enigma = 0;
+    return 0;
+}
+
+static void packing_cam_close() {
+    a[3] = NULL;
+    ca_devices[3] = NULL;
+    sockets_del(pcam->sock);
+    close(pcam->fds[0]);
+    close(pcam->fds[1]);
+    delete pcam;
+    pcam = NULL;
+}
+
+// A scrambled program with video and audio, both streaming
+static SPMT *packing_program(int sid) {
+    SPMT *pmt = get_pmt(pmt_add(3, sid, sid));
+    pmt_add_caid(pmt, 0x0B00, 0x573, nullptr, 0);
+    for (int video = 1; video >= 0; video--) {
+        int pid = pcam->next_pid++;
+        pmt_add_stream_pid(pmt, pid, video ? 2 : 3, !video, video);
+        for (auto &p : pcam->ad.pids)
+            if (p.flags <= PID_STATE_INACTIVE) {
+                p.pid = pid;
+                p.flags = 1;
+                break;
+            }
+    }
+    return pmt;
+}
+
+// Drains the fake CAM: returns the CAPMTs written, keeps the last one
+static int read_capmts(std::vector<uint8_t> *last = nullptr) {
+    std::vector<uint8_t> all;
+    uint8_t buf[4096];
+    int n;
+    while ((n = read(pcam->fds[0], buf, sizeof(buf))) > 0)
+        all.insert(all.end(), buf, buf + n);
+    int count = 0;
+    for (size_t i = 0; i + 4 < all.size(); i++) {
+        if (all[i] != 0x9F || all[i + 1] != 0x80 || all[i + 2] != 0x32)
+            continue;
+        size_t p = i + 3, len = all[p++];
+        if (len & 0x80) {
+            int bytes = len & 0x7F;
+            for (len = 0; bytes-- > 0;)
+                len = (len << 8) | all[p++];
+        }
+        if (last && p + len <= all.size())
+            last->assign(all.begin() + p, all.begin() + p + len);
+        count++;
+        i = p + len - 1;
+    }
+    return count;
+}
+
+// True when the CAPMT lists this elementary stream
+static int capmt_lists_pid(const std::vector<uint8_t> &c, int pid) {
+    for (size_t i = 6; i + 4 < c.size();) {
+        if (((c[i + 1] & 0x1F) << 8 | c[i + 2]) == pid)
+            return 1;
+        i += 5 + ((c[i + 3] & 0x0F) << 8 | c[i + 4]);
+    }
+    return 0;
+}
+
+static int flush_window() {
+    return ca_flush_capmts(&pcam->dev, getTick() + CAPMT_COALESCE_MS);
+}
+
+// Joins after the first are merged into one send once the window ends
+int test_capmt_joins_coalesce() {
+    packing_cam_open();
+    SCAPMT *c = pcam->dev.capmt;
+    SPMT *p1 = packing_program(0x2001), *p2 = packing_program(0x2002),
+         *p3 = packing_program(0x2003);
+
+    ASSERT_EQUAL(dvbca_process_pmt(&pcam->ad, p1, 0), 0, "first join");
+    ASSERT_EQUAL(read_capmts(), 1, "a fresh CAPMT is sent at once");
+    ASSERT_EQUAL(c->sid, 0x2001, "a fresh CAPMT takes the real sid");
+
+    ASSERT_EQUAL(dvbca_process_pmt(&pcam->ad, p2, 0), 0, "second join");
+    ASSERT_EQUAL(dvbca_process_pmt(&pcam->ad, p3, 0), 0, "third join");
+    ASSERT_EQUAL(read_capmts(), 0, "partner joins wait for the window");
+    ASSERT(get_sockets(pcam->sock)->timeout_ms < 1000,
+           "the CA socket ticks faster while a send waits");
+    ASSERT_EQUAL(ca_flush_capmts(&pcam->dev, getTick()), 1,
+                 "nothing is sent before the window ends");
+
+    std::vector<uint8_t> last;
+    ASSERT_EQUAL(flush_window(), 0, "the window ends");
+    ASSERT_EQUAL(read_capmts(&last), 1, "both joins go out as one CAPMT");
+    ASSERT(capmt_lists_pid(last, p2->stream_pids[0].pid) &&
+               capmt_lists_pid(last, p3->stream_pids[0].pid),
+           "the CAPMT carries both new programs");
+    ASSERT_EQUAL(c->sid, 0x2001, "partners keep the running program number");
+
+    sockets *ss = get_sockets(pcam->sock);
+    ca_timeout(ss);
+    ASSERT_EQUAL(ss->timeout_ms, 1000, "the tick is restored once all sent");
+    packing_cam_close();
+    return 0;
+}
+
+// A partner leaving sends nothing and its streams stay listed, so a
+// later no-op update of a partner is still suppressed.
+int test_capmt_partner_leave_is_lazy() {
+    packing_cam_open();
+    SPMT *p1 = packing_program(0x2101), *p2 = packing_program(0x2102),
+         *p3 = packing_program(0x2103);
+    dvbca_process_pmt(&pcam->ad, p1, 0);
+    dvbca_process_pmt(&pcam->ad, p2, 0);
+    dvbca_process_pmt(&pcam->ad, p3, 0);
+    flush_window();
+    std::vector<uint8_t> before;
+    ASSERT_EQUAL(read_capmts(&before), 2, "setup sends two CAPMTs");
+    int version = pcam->dev.capmt[0].version;
+
+    ASSERT_EQUAL(dvbca_del_pmt(&pcam->ad, p2), 0, "partner leaves");
+    ASSERT_EQUAL(read_capmts(), 0, "a partner leave sends nothing");
+    ASSERT_EQUAL(pcam->dev.capmt[0].version, version, "version untouched");
+
+    ASSERT_EQUAL(dvbca_process_pmt(&pcam->ad, p1, 1), 0, "no-op update");
+    flush_window();
+    ASSERT_EQUAL(read_capmts(), 0,
+                 "the left streams still count, so nothing changed");
+    ASSERT(capmt_lists_pid(before, p2->stream_pids[0].pid),
+           "the CAM still runs the left program");
+    packing_cam_close();
+    return 0;
+}
+
+// A zap inside a packed CAPMT is one send: the new program takes the
+// left one's place and the others keep their order.
+int test_capmt_zap_is_one_send() {
+    packing_cam_open();
+    SPMT *p1 = packing_program(0x2201), *p2 = packing_program(0x2202),
+         *p3 = packing_program(0x2203), *p4 = packing_program(0x2204);
+    dvbca_process_pmt(&pcam->ad, p1, 0);
+    dvbca_process_pmt(&pcam->ad, p2, 0);
+    dvbca_process_pmt(&pcam->ad, p3, 0);
+    flush_window();
+    read_capmts();
+
+    dvbca_del_pmt(&pcam->ad, p2);
+    dvbca_process_pmt(&pcam->ad, p4, 0);
+    ASSERT_EQUAL(pcam->dev.capmt[0].other_id[0], p4->id,
+                 "the new program takes the left one's place");
+    std::vector<uint8_t> last;
+    flush_window();
+    ASSERT_EQUAL(read_capmts(&last), 1, "the zap is a single CAPMT");
+    ASSERT(!capmt_lists_pid(last, p2->stream_pids[0].pid),
+           "the left program is dropped by that send");
+    ASSERT(capmt_lists_pid(last, p1->stream_pids[0].pid) &&
+               capmt_lists_pid(last, p3->stream_pids[0].pid) &&
+               capmt_lists_pid(last, p4->stream_pids[0].pid),
+           "the running programs and the new one are listed");
+    ASSERT_EQUAL(pcam->dev.capmt[0].sid, 0x2201, "program number kept");
+    packing_cam_close();
+    return 0;
+}
+
+// The first program leaving keeps the CAPMT running under the same
+// program number; the next send compacts the places.
+int test_capmt_first_leave_keeps_program() {
+    packing_cam_open();
+    SCAPMT *c = pcam->dev.capmt;
+    SPMT *p1 = packing_program(0x2301), *p2 = packing_program(0x2302),
+         *p3 = packing_program(0x2303);
+    dvbca_process_pmt(&pcam->ad, p1, 0);
+    dvbca_process_pmt(&pcam->ad, p2, 0);
+    flush_window();
+    read_capmts();
+
+    dvbca_del_pmt(&pcam->ad, p1);
+    ASSERT_EQUAL(read_capmts(), 0, "the first program leaves lazily");
+    ASSERT(!PMT_ID_IS_VALID(c->pmt_id) && c->other_id[0] == p2->id,
+           "the partner keeps its place");
+    ASSERT_EQUAL(dvbca_process_pmt(&pcam->ad, p2, 1), 0,
+                 "an update without the first program in place");
+    flush_window();
+    ASSERT_EQUAL(read_capmts(), 0, "and it changes nothing");
+
+    dvbca_process_pmt(&pcam->ad, p3, 0);
+    flush_window();
+    ASSERT_EQUAL(read_capmts(), 1, "a join rewrites once");
+    ASSERT_EQUAL(c->pmt_id, p3->id, "the join fills the first place");
+    ASSERT_EQUAL(c->sid, 0x2301, "the program number is kept");
+    packing_cam_close();
+    return 0;
+}
+
+// Joining and leaving within the window never reaches the CAM
+int test_capmt_join_leave_in_window() {
+    packing_cam_open();
+    SPMT *p1 = packing_program(0x2401), *p2 = packing_program(0x2402);
+    dvbca_process_pmt(&pcam->ad, p1, 0);
+    read_capmts();
+    dvbca_process_pmt(&pcam->ad, p2, 0);
+    dvbca_del_pmt(&pcam->ad, p2);
+    flush_window();
+    ASSERT_EQUAL(read_capmts(), 0, "a join undone in the window sends nothing");
+    packing_cam_close();
+    return 0;
+}
+
+// The last program leaving releases the CAPMT without the streams kept
+// for left partners, and forgets them.
+int test_capmt_last_leave_drops_kept() {
+    packing_cam_open();
+    SCAPMT *c = pcam->dev.capmt;
+    SPMT *p1 = packing_program(0x2501), *p2 = packing_program(0x2502);
+    dvbca_process_pmt(&pcam->ad, p1, 0);
+    dvbca_process_pmt(&pcam->ad, p2, 0);
+    flush_window();
+    read_capmts();
+    dvbca_del_pmt(&pcam->ad, p2);
+
+    std::vector<uint8_t> last;
+    dvbca_del_pmt(&pcam->ad, p1);
+    ASSERT_EQUAL(read_capmts(&last), 1, "the release is sent at once");
+    ASSERT(capmt_lists_pid(last, p1->stream_pids[0].pid) &&
+               !capmt_lists_pid(last, p2->stream_pids[0].pid),
+           "only the last program is released");
+    ASSERT_EQUAL(last[11], CA_PMT_CMD_ID_NOT_SELECTED, "as not selected");
+    ASSERT_EQUAL(capmt_pmt_count(c), 0, "the CAPMT is free");
+    for (int len : c->sent_es_len)
+        ASSERT(len <= 0, "nothing is kept for the next channel");
+    ASSERT(c->send_due <= 0, "no send is left waiting");
+    packing_cam_close();
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -1915,6 +2190,18 @@ int main() {
               "testing create_capmt with 3 PMTs");
     TEST_FUNC(test_capmt_release_on_last_pmt(),
               "testing that the last PMT of a CAPMT is released on the CAM");
+    TEST_FUNC(test_capmt_joins_coalesce(),
+              "testing that partner joins are coalesced into one CAPMT");
+    TEST_FUNC(test_capmt_partner_leave_is_lazy(),
+              "testing that a partner leave does not rewrite the CAPMT");
+    TEST_FUNC(test_capmt_zap_is_one_send(),
+              "testing that a zap in a packed CAPMT is one send");
+    TEST_FUNC(test_capmt_first_leave_keeps_program(),
+              "testing that the first program leaving keeps the CAPMT");
+    TEST_FUNC(test_capmt_join_leave_in_window(),
+              "testing that a join undone in the window sends nothing");
+    TEST_FUNC(test_capmt_last_leave_drops_kept(),
+              "testing that the release drops the left partners");
     TEST_FUNC(test_get_authdata_filename(), "testing filename helper function");
     TEST_FUNC(test_capmt_content_hash_masks_version_and_listmgmt(),
               "testing the CAPMT hash masks version and listmgmt");

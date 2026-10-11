@@ -120,9 +120,13 @@
 
 // Programs one CAPMT can carry: the first one plus packed partners
 #define MAX_PMT_PER_CAPMT 3
+// Largest stream loop of one program kept for a lazy leave
+#define CAPMT_KEPT_ES_MAX 1024
+// Window that merges joins and updates of a shared CAPMT into one send
+#define CAPMT_COALESCE_MS 300
 
 // Contains informations needed to send a CAPMT
-// Packed partners fill other_id in order; unused entries are PMT_INVALID
+// Place 0 is pmt_id, places 1.. are other_id; unused ones are PMT_INVALID
 typedef struct ca_pmt {
     int pmt_id;
     int other_id[MAX_PMT_PER_CAPMT - 1];
@@ -130,6 +134,12 @@ typedef struct ca_pmt {
     int sid;
     uint32_t capmt_hash;  // content hash of the last CAPMT sent, minus version
     int capmt_hash_valid; // set once a send is known delivered
+    // Stream loop last sent per place; resent for a left program
+    // so its leave does not change what the CAM sees.
+    uint8_t sent_es[MAX_PMT_PER_CAPMT][CAPMT_KEPT_ES_MAX];
+    int sent_es_len[MAX_PMT_PER_CAPMT]; // <= 0: nothing kept
+    int64_t send_due;  // > 0: a coalesced send waits until this tick
+    int send_listmgmt; // list management of that send
 } SCAPMT;
 
 extern char *listmgmt_str[];
@@ -232,6 +242,10 @@ struct ca_device {
     int pending_tag;
     int pending_session;
     int64_t pending_since; // -1 disarms; else last send, or open
+
+    // Socket-thread state: keepalive stays at 1s while the socket
+    // timeout is shortened for a coalesced CAPMT send.
+    int64_t keepalive_next;
 };
 
 extern ca_device_t *ca_devices[];
@@ -240,7 +254,12 @@ ca_device_t *alloc_ca_device();
 int ca_init(ca_device_t *d);
 void dvbca_init();
 int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
-                 int cmd_id, int added_only);
+                 int cmd_id, int added_only, int kept = 1,
+                 int (*spans)[2] = nullptr);
+struct struct_sockets;
+int ca_flush_capmts(ca_device_t *d, int64_t now,
+                    struct struct_sockets *s = nullptr);
+void capmt_forget_sent(SCAPMT *c);
 uint32_t capmt_content_hash(uint8_t *capmt, int len);
 int is_ca_initializing(int i);
 void set_ca_adapter_pin(char *o);

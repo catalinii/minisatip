@@ -754,6 +754,35 @@ int capmt_pmt_count(const SCAPMT *c) {
     return n;
 }
 
+// PMT id at a place of the CAPMT: 0 is pmt_id, the rest other_id
+static int &capmt_place(SCAPMT *c, int place) {
+    return place ? c->other_id[place - 1] : c->pmt_id;
+}
+
+// First program still carried; place 0 is empty after its lazy leave
+static int capmt_first_pmt_id(SCAPMT *c) {
+    for (int place = 0; place < MAX_PMT_PER_CAPMT; place++)
+        if (PMT_ID_IS_VALID(capmt_place(c, place)))
+            return capmt_place(c, place);
+    return PMT_INVALID;
+}
+
+// Drop the stream loops kept from earlier sends
+void capmt_forget_sent(SCAPMT *c) {
+    for (int &len : c->sent_es_len)
+        len = 0;
+}
+
+// Move the programs to the front; only done when a send happens anyway
+static void capmt_compact(SCAPMT *c) {
+    int ids[MAX_PMT_PER_CAPMT], n = 0;
+    for (int place = 0; place < MAX_PMT_PER_CAPMT; place++)
+        if (PMT_ID_IS_VALID(capmt_place(c, place)))
+            ids[n++] = capmt_place(c, place);
+    for (int place = 0; place < MAX_PMT_PER_CAPMT; place++)
+        capmt_place(c, place) = place < n ? ids[place] : PMT_INVALID;
+}
+
 // Forget every PMT held on a dead CAM, clearing its tables masks
 // so the retry loop resends them once the CAM is initialized again.
 void ca_release_pmts(ca_device_t *d) {
@@ -884,14 +913,16 @@ int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
     return pos;
 }
 
+// Builds the CAPMT place by place; with kept, an empty place repeats the
+// streams last sent there. spans gets each place's offset and length.
 int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
-                 int cmd_id, int added_only) {
+                 int cmd_id, int added_only, int kept, int (*spans)[2]) {
     int pos = 0;
-    SPMT *pmt = get_pmt(ca->pmt_id);
+    int first = capmt_first_pmt_id(ca);
     int version = ca->version;
 
-    if (!pmt)
-        LOG_AND_RETURN(1, "%s: PMT %d not found", __FUNCTION__, ca->pmt_id);
+    if (!get_pmt(first))
+        LOG_AND_RETURN(1, "%s: PMT %d not found", __FUNCTION__, first);
 
     capmt[pos++] = listmgmt;
     copy16(capmt, pos, ca->sid);
@@ -900,13 +931,21 @@ int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
     capmt[pos++] = 0; // PI LEN 2 bytes, set 0
     capmt[pos++] = 0;
 
-    pos += CAPMT_add_PMT(capmt + pos, capmt_len - pos, pmt, cmd_id, added_only,
-                         dvbca_id);
-    for (int id : ca->other_id) {
-        SPMT *other = get_pmt(id);
-        if (other)
-            pos += CAPMT_add_PMT(capmt + pos, capmt_len - pos, other, cmd_id,
+    for (int place = 0; place < MAX_PMT_PER_CAPMT; place++) {
+        int start = pos, id = capmt_place(ca, place);
+        int kept_len = ca->sent_es_len[place];
+        if (SPMT *pmt = get_pmt(id))
+            pos += CAPMT_add_PMT(capmt + pos, capmt_len - pos, pmt, cmd_id,
                                  added_only, dvbca_id);
+        else if (kept && !PMT_ID_IS_VALID(id) && kept_len > 0 &&
+                 kept_len <= CAPMT_KEPT_ES_MAX && pos + kept_len <= capmt_len) {
+            memcpy(capmt + pos, ca->sent_es[place], kept_len);
+            pos += kept_len;
+        }
+        if (spans) {
+            spans[place][0] = start;
+            spans[place][1] = pos - start;
+        }
     }
 
     return pos;
@@ -930,9 +969,11 @@ uint32_t capmt_content_hash(uint8_t *capmt, int len) {
 int send_capmt(ca_device_t *d, SCAPMT *ca, int listmgmt, int reason,
                int force) {
     uint8_t capmt[8192];
+    int spans[MAX_PMT_PER_CAPMT][2];
     std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
     memset(capmt, 0, sizeof(capmt));
 
+    // Left programs count as still there: the CAM was never told
     int size = create_capmt(ca, listmgmt, capmt, sizeof(capmt), reason,
                             d->multiple_pmt);
 
@@ -946,27 +987,70 @@ int send_capmt(ca_device_t *d, SCAPMT *ca, int listmgmt, int reason,
         return 0;
     }
 
+    // This send rewrites the program anyway: drop the left programs,
+    // close the gaps, and cover any coalesced send still waiting.
+    capmt_compact(ca);
+    ca->send_due = 0;
+
     // Bump when a send is attempted; the hash is stored only below,
     // once the bytes really go out.
     ca->version = (ca->version + 1) & 0xF;
     size = create_capmt(ca, listmgmt, capmt, sizeof(capmt), reason,
-                        d->multiple_pmt);
+                        d->multiple_pmt, 0, spans);
     if (size <= 0)
         LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "create_capmt failed");
 
     ca_session_t *session =
         find_session_for_resource(d, EN50221_APP_CA_RESOURCEID);
-    if (!session)
+    if (!session) {
+        capmt_forget_sent(ca);
         LOG_AND_RETURN(1, "Unable to find CA session for device %d", d->id);
+    }
     hexdump("CAPMT: ", capmt, size);
 
     // Baseline the hash only when the write succeeded, so a failed
     // send never suppresses the retry.
-    if (!ca_write_apdu(session, TAG_CA_PMT, capmt, size)) {
-        ca->capmt_hash = hash;
-        ca->capmt_hash_valid = 1;
+    if (ca_write_apdu(session, TAG_CA_PMT, capmt, size)) {
+        capmt_forget_sent(ca);
+        return 0;
+    }
+    ca->capmt_hash = capmt_content_hash(capmt, size);
+    ca->capmt_hash_valid = 1;
+    for (int place = 0; place < MAX_PMT_PER_CAPMT; place++) {
+        auto [start, len] = spans[place];
+        int fits = len > 0 && len <= CAPMT_KEPT_ES_MAX;
+        if (fits)
+            memcpy(ca->sent_es[place], capmt + start, len);
+        ca->sent_es_len[place] = fits ? len : 0;
     }
     return 0;
+}
+
+// Sends the coalesced CAPMTs whose window has passed and returns how
+// many still wait; with none left, s gets its 1s tick back.
+int ca_flush_capmts(ca_device_t *d, int64_t now, sockets *s) {
+    if (!d)
+        return 0;
+    // Device lock only, as on the tables send path: PMT slots stay valid
+    std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
+    int waiting = 0, n = std::min(d->max_ca_pmt, MAX_CA_PMT);
+    for (int i = 0; i < n; i++) {
+        SCAPMT *c = d->capmt + i;
+        if (c->send_due <= 0)
+            continue;
+        if (d->state != CA_STATE_INITIALIZED || now < c->send_due) {
+            waiting++;
+            continue;
+        }
+        c->send_due = 0;
+        if (capmt_pmt_count(c))
+            send_capmt(d, c, c->send_listmgmt, CA_PMT_CMD_ID_OK_DESCRAMBLING,
+                       0);
+    }
+    // Under the device lock, so a join cannot shorten it in between
+    if (!waiting && s && s->timeout_ms > 0 && s->timeout_ms < 1000)
+        s->timeout_ms = 1000;
+    return waiting;
 }
 
 int get_enabled_pmts_for_ca(ca_device_t *d) {
@@ -1167,6 +1251,10 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
         LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY, "CAM not yet initialized");
     }
 
+    int was_member = 0;
+    for (int i = 0; i < d->max_ca_pmt; i++)
+        was_member |= capmt_has_pmt(d->capmt + i, spmt->id);
+
     SCAPMT *capmt = add_pmt_to_capmt(d, spmt, d->multiple_pmt);
     if (!capmt) {
         restore_ci_link(d, ad, prev_linked);
@@ -1174,18 +1262,23 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
                        "No free slots to add PMT %d to CA %d", spmt->id, d->id);
     }
 
-    first = get_pmt(capmt->pmt_id);
+    first = get_pmt(capmt_first_pmt_id(capmt));
     if (!first)
         LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
                        "First PMT not found from capmt %d", capmt->pmt_id);
     pid = spmt->pid;
     sid = spmt->sid;
 
+    // Only a CAPMT starting fresh takes the real sid: a shared one keeps
+    // the program number the CAM runs, so its partners are not restarted.
+    int fresh = !was_member && capmt_pmt_count(capmt) == 1;
+    int shared = capmt_pmt_count(capmt) > 1 || capmt->send_due > 0;
     listmgmt = get_active_capmts(d) == 1 ? CLM_ONLY : CLM_UPDATE;
     if (listmgmt == CLM_ONLY) {
-        if (capmt->sid == first->sid)
+        if (!fresh || capmt->sid == first->sid)
             listmgmt = CLM_UPDATE;
-        capmt->sid = first->sid;
+        if (fresh)
+            capmt->sid = first->sid;
         int i;
         for (i = 0; i < d->max_ca_pmt; i++) {
             int sid = MAKE_SID_FOR_CA(d->id, i);
@@ -1205,9 +1298,20 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
         capmt_pmts_str(capmt).c_str(), capmt - d->capmt,
         update ? ", update" : "");
 
+    // A shared CAPMT waits so close joins and updates restart its
+    // partners once; ca_timeout sends it when the window ends.
+    if (shared) {
+        if (capmt->send_due <= 0)
+            capmt->send_due = getTick() + CAPMT_COALESCE_MS;
+        capmt->send_listmgmt = listmgmt;
+        sockets_timeout(d->sock, CAPMT_COALESCE_MS / 3);
+        LOG("CA %d: CAPMT %ld send coalesced for pmt %d", d->id,
+            capmt - d->capmt, spmt->id);
+    }
     // First registration always sends; an update sends only when the
     // built CAPMT changed, decided inside send_capmt.
-    if (send_capmt(d, capmt, listmgmt, CA_PMT_CMD_ID_OK_DESCRAMBLING, !update))
+    else if (send_capmt(d, capmt, listmgmt, CA_PMT_CMD_ID_OK_DESCRAMBLING,
+                        !update))
         LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "send_capmt failed");
 
     if (d->key[0][0])
@@ -1220,27 +1324,23 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
     return 0;
 }
 
-// Remove the PMT from the CAPMTs of this device; the remaining programs
-// shift up so the first valid one is always pmt_id
+// Remove the PMT from the CAPMTs of this device. Its place stays empty,
+// so the others keep their order until the next send compacts them.
 void remove_pmt_from_device(ca_device_t *d, SPMT *pmt) {
     std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
     for (int i = 0; i < d->max_ca_pmt; i++) {
         SCAPMT *c = d->capmt + i;
         if (!capmt_has_pmt(c, pmt->id))
             continue;
-        int ids[MAX_PMT_PER_CAPMT], n = 0;
-        if (PMT_ID_IS_VALID(c->pmt_id) && c->pmt_id != pmt->id)
-            ids[n++] = c->pmt_id;
-        for (int id : c->other_id)
-            if (PMT_ID_IS_VALID(id) && id != pmt->id)
-                ids[n++] = id;
-        c->pmt_id = n > 0 ? ids[0] : PMT_INVALID;
-        for (int k = 0; k < MAX_PMT_PER_CAPMT - 1; k++)
-            c->other_id[k] = k + 1 < n ? ids[k + 1] : PMT_INVALID;
+        for (int place = 0; place < MAX_PMT_PER_CAPMT; place++)
+            if (capmt_place(c, place) == pmt->id)
+                capmt_place(c, place) = PMT_INVALID;
         // A freed slot must not suppress the next PMT's first send.
-        if (n == 0) {
+        if (capmt_pmt_count(c) == 0) {
             c->capmt_hash = 0;
             c->capmt_hash_valid = 0;
+            c->send_due = 0;
+            capmt_forget_sent(c);
         }
     }
 }
@@ -1280,8 +1380,7 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt) {
 
     // Last PMT in the CAPMT: tell the CAM to stop it before releasing the
     // slot, or it stays selected next to the next channel on that slot.
-    int last_in_capmt =
-        capmt->pmt_id == spmt->id && capmt_pmt_count(capmt) == 1;
+    int last_in_capmt = capmt_pmt_count(capmt) == 1;
     if (last_in_capmt) {
         listmgmt = CLM_UPDATE;
         if (send_capmt(d, capmt, listmgmt, CA_PMT_CMD_ID_NOT_SELECTED, 1))
@@ -1289,14 +1388,9 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt) {
                 spmt->id);
     }
 
+    // A partner leaves without a send: its streams stay in the CAPMT
+    // until the next real send, so the other programs are not restarted.
     remove_pmt_from_device(d, spmt);
-    if (PMT_ID_IS_VALID(capmt->pmt_id)) {
-        listmgmt = CLM_UPDATE;
-        if (send_capmt(d, capmt, listmgmt, CA_PMT_CMD_ID_OK_DESCRAMBLING, 1))
-            LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
-                           "%s: send_capmt failed for pmt ids %d", __FUNCTION__,
-                           capmt->pmt_id)
-    }
     LOG("PMT CA %d DEL pmt %d pid %u, sid %u (%u), ver %d, %s name: %s",
         spmt->adapter, spmt->id, spmt->pid, spmt->sid, capmt->sid,
         capmt->version, listmgmt >= 0 ? listmgmt_str[listmgmt] : "NO UPDATE",
@@ -2749,6 +2843,7 @@ int APP_CA_handler(ca_session_t *session, int resource, uint8_t *data,
         for (int j = 0; j < d->max_ca_pmt; j++) {
             d->capmt[j].capmt_hash = 0;
             d->capmt[j].capmt_hash_valid = 0;
+            capmt_forget_sent(d->capmt + j);
         }
 
         // Ignore CAM reported values if user has forced specific CAIDs
@@ -3536,8 +3631,12 @@ int ca_timeout(sockets *s) {
     if (s->sid < 0 || s->sid >= MAX_ADAPTERS || !ca_devices[s->sid])
         return 0;
     d = ca_devices[s->sid];
-    if (!opts.enigma) {
+    int64_t now = getTick();
+    ca_flush_capmts(d, now, s);
+    int short_tick = s->timeout_ms > 0 && s->timeout_ms < 1000;
+    if (!opts.enigma && (!short_tick || now >= d->keepalive_next)) {
         int rc;
+        d->keepalive_next = now + 900;
         if (d->state == CA_STATE_INACTIVE) {
             rc = ca_write_tpdu(d, T_CREATE_TC, NULL, 0);
         } else {
