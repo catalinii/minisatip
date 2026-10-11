@@ -5,6 +5,7 @@
 #include "adapter.h"
 #include "pmt.h"
 #include "stream.h"
+#include <atomic>
 
 #define DVBAPI_PROTOCOL_VERSION 2
 
@@ -71,7 +72,9 @@ typedef struct struct_key {
     uint16_t caid, info_pid;
     uint32_t prid;
     int ecmtime;
-    int demux_index, adapter_index;
+    // Compared across keys in keys_del without their locks.
+    std::atomic<int> demux_index{-1};
+    int adapter_index;
     int id;
     int adapter;
     int ver;

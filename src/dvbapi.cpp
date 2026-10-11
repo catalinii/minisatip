@@ -96,7 +96,7 @@ void dvbapi_close_socket() {
 }
 
 // The adapter threads take ad->mutex before k->mutex. Lock the adapter of
-// key k_id the same way; returns with k->mutex held in any case.
+// key k_id the same way; both locks stay free when the key is gone.
 static void lock_key_adapter(int k_id, std::unique_lock<SMutex> &ad_lock,
                              std::unique_lock<SMutex> &klock) {
     for (;;) {
@@ -183,9 +183,10 @@ int dvbapi_reply(sockets *s) {
         // %02X %02X %02X %02X %02X", s->sock, s->rlen, pos, op, b[4], b[0],
         // b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10]);
 
-        // Key messages change the key's adapter, the adapter thread reads it
+        // Only SET_FILTER touches adapter state (update_pids); the other
+        // cases take just their key lock below, SERVER_INFO needs none.
         std::unique_lock<SMutex> ad_lock, klock;
-        if (op != DVBAPI_SERVER_INFO)
+        if (op == DVBAPI_DMX_SET_FILTER)
             lock_key_adapter(b[4] - opts.dvbapi_offset, ad_lock, klock);
 
         switch (op) {
@@ -463,6 +464,7 @@ int dvbapi_reply(sockets *s) {
     return 0;
 }
 
+// Caller holds pmt->mutex of k's PMT: it walks stream_pids/CA tables.
 int dvbapi_send_pmt(SKey *k, int cmd_id, int force) {
     unsigned char buf[2500];
     int len;
@@ -568,12 +570,9 @@ int dvbapi_close(sockets *s) {
     sock = -1;
     dvbapi_sock = -1;
     dvbapi_is_enabled = 0;
-    for (i = 0; i < MAX_KEYS; i++) {
-        std::unique_lock<SMutex> ad_lock, klock;
-        lock_key_adapter(i, ad_lock, klock);
-        if (get_key(i))
-            keys_del(i);
-    }
+    // keys_del takes the key lock itself; nothing here touches adapters.
+    for (i = 0; i < MAX_KEYS; i++)
+        keys_del(i);
 
     unregister_dvbapi();
     return 0;
@@ -603,10 +602,12 @@ int connect_dvbapi(void *arg) {
         int64_t ctime = getTick();
 
         for (i = 0; i < MAX_KEYS; i++) {
-            std::unique_lock<SMutex> ad_lock, klock;
-            lock_key_adapter(i, ad_lock, klock);
             SKey *k = get_key(i);
-            if (network_mode && k && (k->ecms == 0) && (k->last_dmx_stop > 0) &&
+            if (!k)
+                continue;
+            std::unique_lock<SMutex> klock(k->mutex);
+            if (network_mode && k->enabled && (k->ecms == 0) &&
+                (k->last_dmx_stop > 0) &&
                 (ctime - k->last_dmx_stop > 3000)) {
                 int pmt_id = k->pmt_id, adapter_id = k->adapter;
                 LOG("Key %d active but no active filter, closing ", i);
@@ -785,6 +786,7 @@ void set_algo(SKey *k, int algo, int mode) {
     }
 }
 
+// Caller holds pmt->mutex of pmt_id (dvbapi_add_pmt does) for sid/pid.
 int keys_add(int i, int adapter, int pmt_id) {
 
     SPMT *pmt = get_pmt(pmt_id);
@@ -852,7 +854,7 @@ int keys_del(int i) {
     k = get_key(i);
     if (!k)
         return 0;
-    std::lock_guard<SMutex> lock(k->mutex);
+    std::unique_lock<SMutex> lock(k->mutex);
 
     if (!k->enabled) {
         return 0;
@@ -879,7 +881,15 @@ int keys_del(int i) {
     } else { // only local socket mode where multiple channels are connected to
              // the same demux
         msg = "PMT";
-        dvbapi_send_pmt(k, CMD_ID_NOT_SELECTED, 1);
+        // send_pmt walks PMT tables: switch to pmt->k order, which del_pmt
+        // nests the same way; the slot cannot be reused mid-teardown.
+        SPMT *pmt = get_pmt(k->pmt_id);
+        if (pmt) {
+            lock.unlock();
+            std::lock_guard<SMutex> plock(pmt->mutex);
+            lock.lock();
+            dvbapi_send_pmt(k, CMD_ID_NOT_SELECTED, 1);
+        }
     }
 
     pmt_pid = k->pmt_pid;
@@ -952,6 +962,7 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt, int update) {
     if (!k)
         LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY,
                        "Could not add key for pmt %d", pmt->id);
+    std::lock_guard<SMutex> klock(k->mutex);
     pmt->opaque = k;
     k->sid = pmt->sid;
     k->adapter = ad->id;
@@ -995,20 +1006,35 @@ void unregister_dvbapi() {
 }
 
 char *get_channel_for_key(int key, char *dest, int max_size) {
-    SKey *k = get_key(key);
-    SPMT *pmt = NULL;
+    int pmt_id = -1;
+    char name[50];
+    int sid = 0;
     dest[0] = 0;
     dest[max_size - 1] = 0;
-    if (k)
-        pmt = get_pmt(k->pmt_id);
+    SKey *k = get_key(key);
+    // Snapshot under each lock in turn, never nested: the http thread
+    // owns no lock order here.
+    if (k) {
+        std::lock_guard<SMutex> klock(k->mutex);
+        if (k->enabled)
+            pmt_id = k->pmt_id;
+    }
+    SPMT *pmt = pmt_id >= 0 ? get_pmt(pmt_id) : NULL;
     if (!pmt)
         return dest;
+    {
+        std::lock_guard<SMutex> plock(pmt->mutex);
+        if (!pmt->enabled)
+            return dest;
+        memcpy(name, pmt->name, sizeof(name));
+        sid = pmt->sid;
+    }
     // Without SDT (pid 17 not requested) the name stays empty, so
     // fall back to the SID instead of showing a blank channel (#643)
-    if (pmt->name[0])
-        _strncpy(dest, pmt->name, max_size - 1);
+    if (name[0])
+        _strncpy(dest, name, max_size - 1);
     else
-        snprintf(dest, max_size, "SID %d", pmt->sid);
+        snprintf(dest, max_size, "SID %d", sid);
 
     return dest;
 }
