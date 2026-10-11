@@ -2163,6 +2163,47 @@ int test_capmt_last_leave_drops_kept() {
     return 0;
 }
 
+// With 2 CAPMTs, a program back before the next send returns to its
+// kept place instead of the least loaded CAPMT: nothing is sent.
+int test_capmt_rejoin_takes_kept_place() {
+    packing_cam_open();
+    pcam->dev.max_ca_pmt = 2;
+    SCAPMT *c0 = pcam->dev.capmt, *c1 = pcam->dev.capmt + 1;
+    SPMT *p[6];
+    for (int i = 0; i < 6; i++)
+        p[i] = packing_program(0x2801 + i);
+    for (int i = 0; i < 5; i++)
+        ASSERT_EQUAL(dvbca_process_pmt(&pcam->ad, p[i], 0), 0, "join");
+    flush_window();
+    ASSERT(capmt_has_pmt(c0, p[2]->id) && capmt_pmt_count(c0) == 3 &&
+               capmt_has_pmt(c1, p[3]->id) && capmt_pmt_count(c1) == 2,
+           "PMTs 0, 2, 4 in the first CAPMT, 1 and 3 in the second");
+    read_capmts();
+
+    dvbca_del_pmt(&pcam->ad, p[3]);
+    dvbca_del_pmt(&pcam->ad, p[2]);
+    ASSERT_EQUAL(read_capmts(), 0, "both leave lazily");
+    ASSERT(capmt_pmt_count(c1) < capmt_pmt_count(c0),
+           "the second CAPMT is now the least loaded");
+
+    ASSERT_EQUAL(dvbca_process_pmt(&pcam->ad, p[2], 0), 0, "rejoin");
+    ASSERT(capmt_has_pmt(c0, p[2]->id), "back in its own CAPMT");
+    ASSERT(!capmt_has_pmt(c1, p[2]->id), "not in the least loaded one");
+    flush_window();
+    ASSERT_EQUAL(read_capmts(), 0, "the CAPMT is unchanged, nothing sent");
+
+    // A different program does not take a kept place it does not match
+    ASSERT_EQUAL(dvbca_process_pmt(&pcam->ad, p[5], 0), 0, "new program");
+    ASSERT(capmt_has_pmt(c1, p[5]->id), "it goes to the least loaded");
+    flush_window();
+    std::vector<uint8_t> last;
+    ASSERT_EQUAL(read_capmts(&last), 1, "and rewrites that CAPMT once");
+    ASSERT(!capmt_lists_pid(last, p[3]->stream_pids[0].pid),
+           "dropping the left program it replaced");
+    packing_cam_close();
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -2202,6 +2243,8 @@ int main() {
               "testing that a join undone in the window sends nothing");
     TEST_FUNC(test_capmt_last_leave_drops_kept(),
               "testing that the release drops the left partners");
+    TEST_FUNC(test_capmt_rejoin_takes_kept_place(),
+              "testing that a rejoin returns to its kept place");
     TEST_FUNC(test_get_authdata_filename(), "testing filename helper function");
     TEST_FUNC(test_capmt_content_hash_masks_version_and_listmgmt(),
               "testing the CAPMT hash masks version and listmgmt");

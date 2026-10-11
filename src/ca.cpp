@@ -1073,6 +1073,27 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple) {
             break;
         }
     }
+    // A program back before the next send takes its kept place, matched by
+    // streams as PMT ids get reused: the CAPMT is then unchanged.
+    if (!res) {
+        uint8_t es[8192];
+        int len =
+            CAPMT_add_PMT(es, sizeof(es), pmt, CA_PMT_CMD_ID_OK_DESCRAMBLING,
+                          d->multiple_pmt, dvbca_id);
+        if (len > CAPMT_KEPT_ES_MAX)
+            len = 0; // never kept, so it cannot match
+        for (ca_pos = 0; !res && len > 0 && ca_pos < d->max_ca_pmt; ca_pos++) {
+            SCAPMT *c = d->capmt + ca_pos;
+            for (int place = 0; place < MAX_PMT_PER_CAPMT; place++)
+                if (!PMT_ID_IS_VALID(capmt_place(c, place)) &&
+                    c->sent_es_len[place] == len &&
+                    !memcmp(c->sent_es[place], es, len)) {
+                    capmt_place(c, place) = pmt->id;
+                    res = c;
+                    break;
+                }
+        }
+    }
     // Prefer an empty CAPMT: packing next to a running PMT rewrites its
     // CAPMT with a new version and the CAM restarts that channel.
     if (!res) {
