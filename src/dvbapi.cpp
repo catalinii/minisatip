@@ -57,10 +57,10 @@
 std::atomic<int> dvbapi_sock{-1};
 std::atomic<int> sock{0};
 std::atomic<int> dvbapi_is_enabled{0};
+std::atomic<int> network_mode{1};
+std::atomic<int> dvbapi_ca{-1};
 int enabledKeys = 0;
-int network_mode = 1;
 int dvbapi_protocol_version = DVBAPI_PROTOCOL_VERSION;
-int dvbapi_ca = -1;
 int oscam_version;
 
 uint64_t dvbapi_last_close = 0;
@@ -95,24 +95,31 @@ void dvbapi_close_socket() {
     sockets_force_close(dvbapi_sock);
 }
 
-// The adapter threads take ad->mutex before keys_mutex. Lock the adapter of
-// key k_id the same way; returns with keys_mutex held in any case.
+// The adapter threads take ad->mutex before k->mutex. Lock the adapter of
+// key k_id the same way; returns with k->mutex held in any case.
 static void lock_key_adapter(int k_id, std::unique_lock<SMutex> &ad_lock,
-                             std::unique_lock<SMutex> &keys_lock) {
+                             std::unique_lock<SMutex> &klock) {
     for (;;) {
-        keys_lock = std::unique_lock<SMutex>(keys_mutex);
         SKey *k = get_key(k_id);
-        adapter *ad = k ? get_adapter_nw(k->adapter) : NULL;
+        if (!k)
+            return;
+        klock = std::unique_lock<SMutex>(k->mutex);
+        if (!k->enabled) {
+            klock.unlock();
+            return;
+        }
+        int aid = k->adapter;
+        adapter *ad = get_adapter_nw(aid);
         if (!ad)
             return;
-        int aid = ad->id;
-        keys_lock.unlock();
+        klock.unlock();
         ad_lock = std::unique_lock<SMutex>(ad->mutex);
-        keys_lock.lock();
+        klock.lock();
         k = get_key(k_id);
-        if (!k || k->adapter == aid)
+        if (k && k->enabled && k->adapter == aid)
             return;
-        keys_lock.unlock();
+        // key vanished or moved adapters: drop both and retry
+        klock.unlock();
         ad_lock.unlock();
     }
 }
@@ -177,11 +184,9 @@ int dvbapi_reply(sockets *s) {
         // b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10]);
 
         // Key messages change the key's adapter, the adapter thread reads it
-        std::unique_lock<SMutex> ad_lock, keys_lock;
-        if (op == DVBAPI_SERVER_INFO)
-            keys_lock = std::unique_lock<SMutex>(keys_mutex);
-        else
-            lock_key_adapter(b[4] - opts.dvbapi_offset, ad_lock, keys_lock);
+        std::unique_lock<SMutex> ad_lock, klock;
+        if (op != DVBAPI_SERVER_INFO)
+            lock_key_adapter(b[4] - opts.dvbapi_offset, ad_lock, klock);
 
         switch (op) {
 
@@ -564,8 +569,8 @@ int dvbapi_close(sockets *s) {
     dvbapi_sock = -1;
     dvbapi_is_enabled = 0;
     for (i = 0; i < MAX_KEYS; i++) {
-        std::unique_lock<SMutex> ad_lock, keys_lock;
-        lock_key_adapter(i, ad_lock, keys_lock);
+        std::unique_lock<SMutex> ad_lock, klock;
+        lock_key_adapter(i, ad_lock, klock);
         if (get_key(i))
             keys_del(i);
     }
@@ -598,15 +603,15 @@ int connect_dvbapi(void *arg) {
         int64_t ctime = getTick();
 
         for (i = 0; i < MAX_KEYS; i++) {
-            std::unique_lock<SMutex> ad_lock, keys_lock;
-            lock_key_adapter(i, ad_lock, keys_lock);
+            std::unique_lock<SMutex> ad_lock, klock;
+            lock_key_adapter(i, ad_lock, klock);
             SKey *k = get_key(i);
             if (network_mode && k && (k->ecms == 0) && (k->last_dmx_stop > 0) &&
                 (ctime - k->last_dmx_stop > 3000)) {
                 int pmt_id = k->pmt_id, adapter_id = k->adapter;
                 LOG("Key %d active but no active filter, closing ", i);
                 keys_del(i);
-                keys_lock.unlock();
+                klock.unlock();
 
                 // resent the PMT if the decrypting stops
                 SPMT *pmt = get_pmt(pmt_id);

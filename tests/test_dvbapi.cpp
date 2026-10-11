@@ -17,6 +17,7 @@
 #include "dvbapi.h"
 #include "minisatip.h"
 #include "pmt.h"
+#include "socketworks.h"
 #include "tables.h"
 #include "utils.h"
 #include "utils/testing.h"
@@ -34,9 +35,11 @@ extern SPMT *pmts[MAX_PMT];
 extern SKey *keys[MAX_KEYS];
 extern adapter *a[MAX_ADAPTERS];
 extern std::atomic<int> dvbapi_is_enabled;
-extern int sock;
+extern std::atomic<int> sock;
+extern std::atomic<int> dvbapi_sock;
 extern char *get_channel_for_key(int key, char *dest, int max_size);
 int dvbapi_add_pmt(adapter *ad, SPMT *pmt, int update);
+void dvbapi_close_socket();
 
 static int count_enabled_keys() {
     int n = 0;
@@ -264,6 +267,31 @@ int test_update_resend_skips_identical_capmt() {
     return 0;
 }
 
+// A failed OSCam write happens under the adapter lock, so closing only
+// marks the socket; the delete runs later, outside that lock.
+int test_close_socket_marks_without_deleting() {
+    int sv[2];
+    ASSERT(socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == 0, "no socketpair");
+    int id = sockets_add(sv[0], NULL, -1, TYPE_TCP, NULL, NULL, NULL);
+    ASSERT(id >= 0, "could not add socket");
+    int saved_dvbapi_sock = dvbapi_sock;
+    int saved_enabled = dvbapi_is_enabled;
+    dvbapi_sock = id;
+    dvbapi_is_enabled = 1;
+
+    dvbapi_close_socket();
+
+    sockets *ss = get_sockets(id);
+    ASSERT(ss && ss->force_close, "socket must be marked, not deleted");
+    ASSERT(dvbapi_is_enabled == 0, "dvbapi must be disabled");
+
+    sockets_del(id);
+    close(sv[1]);
+    dvbapi_sock = saved_dvbapi_sock;
+    dvbapi_is_enabled = saved_enabled;
+    return 0;
+}
+
 int main() {
     opts.log = 255;
     opts.debug = 255;
@@ -276,6 +304,8 @@ int main() {
               "testing a PMT re-send reuses the live key");
     TEST_FUNC(test_update_resend_skips_identical_capmt(),
               "testing an identical re-send writes no CAPMT");
+    TEST_FUNC(test_close_socket_marks_without_deleting(),
+              "testing close marks the socket without deleting it");
     fflush(stdout);
     return 0;
 }
