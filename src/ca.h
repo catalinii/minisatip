@@ -118,11 +118,14 @@
 #define CA_STATE_ACTIVE 1
 #define CA_STATE_INITIALIZED 2
 
+// Programs one CAPMT can carry: the first one plus packed partners
+#define MAX_PMT_PER_CAPMT 3
+
 // Contains informations needed to send a CAPMT
-// If multiple_pmt is 0, other_id will be PMT_INVALID
+// Packed partners fill other_id in order; unused entries are PMT_INVALID
 typedef struct ca_pmt {
     int pmt_id;
-    int other_id;
+    int other_id[MAX_PMT_PER_CAPMT - 1];
     int version;
     int sid;
     uint32_t capmt_hash;  // content hash of the last CAPMT sent, minus version
@@ -245,6 +248,8 @@ void set_ca_adapter_force_ci(char *o);
 char *get_ca_pin(int i);
 void set_ca_channels(char *o);
 int get_ca_multiple_pmt(int i);
+int capmt_has_pmt(const SCAPMT *c, int pmt_id);
+int capmt_pmt_count(const SCAPMT *c);
 int get_max_pmt_for_ca(int i);
 void get_authdata_filename(char *dest, size_t len, unsigned int slot,
                            char *ci_name);
