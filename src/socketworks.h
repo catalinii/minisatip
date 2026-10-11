@@ -19,7 +19,7 @@ typedef struct struct_sockets {
     std::atomic<bool> enabled{false};
     std::atomic<bool> allocated{false};
     SMutex mutex;
-    std::atomic<bool> is_enabled{false}, force_close{false};
+    std::atomic<bool> force_close{false};
     int sock;     // socket - <0 for invalid/not used, 0 for end of the list
     int nonblock; // non-blocking i/o mode
     USockAddr sa; // remote address - set on accept or recvfrom on udp sockets
@@ -141,7 +141,7 @@ extern __thread int select_timeout;
 
 static inline sockets *get_sockets(int i) {
     extern sockets *s[];
-    if (i < 0 || i >= MAX_SOCKS || !s[i] || !s[i]->enabled || !s[i]->is_enabled)
+    if (i < 0 || i >= MAX_SOCKS || !s[i] || !s[i]->enabled)
         return NULL;
     return s[i];
 }
