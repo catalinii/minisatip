@@ -603,8 +603,9 @@ int streams_add() {
     streams *ss = find_new_id(st, MAX_STREAMS);
     if (!ss)
         LOG_AND_RETURN(-1, "streams_add failed");
-    int i = ss->sid;
+    int i = ss->id;
     std::lock_guard<SMutex> lock(ss->mutex);
+    ss->sid = i;
     ss->adapter = -1;
     ss->rtsp_error.clear();
     ss->rsock = -1;

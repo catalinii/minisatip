@@ -106,9 +106,9 @@ inline void atomic_max(std::atomic<int> &mark, int v) {
 }
 
 // Claim a free slot atomically, allocating the object if needed.
-// Sets id (preferred) or sid to the index; nullptr when full.
+// Sets id to the index; nullptr when full.
 template <typename T> T *find_new_id(T **arr, int count) {
-    static_assert(requires(T *t) { t->id; } || requires(T *t) { t->sid; });
+    static_assert(requires(T *t) { t->id; });
     std::lock_guard<SMutex> lock(id_mutex);
     for (int i = 0; i < count; ++i) {
         T *cur = arr[i];
@@ -116,10 +116,7 @@ template <typename T> T *find_new_id(T **arr, int count) {
             cur = new T();
             cur->allocated = true;
             cur->enabled = false;
-            if constexpr (requires(T *t) { t->id; })
-                cur->id = i;
-            else
-                cur->sid = i;
+            cur->id = i;
             arr[i] = cur;
             return cur;
         }
@@ -127,10 +124,7 @@ template <typename T> T *find_new_id(T **arr, int count) {
         if (!cur->enabled.load() &&
             cur->allocated.compare_exchange_strong(expected, true)) {
             cur->enabled = false;
-            if constexpr (requires(T *t) { t->id; })
-                cur->id = i;
-            else
-                cur->sid = i;
+            cur->id = i;
             return cur;
         }
     }

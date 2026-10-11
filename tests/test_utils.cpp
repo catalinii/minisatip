@@ -226,12 +226,6 @@ struct TestSlot {
     int id{-1};
 };
 
-struct TestSidSlot {
-    std::atomic<bool> enabled{false};
-    std::atomic<bool> allocated{false};
-    int sid{-1};
-};
-
 struct TestBothSlot {
     std::atomic<bool> enabled{false};
     std::atomic<bool> allocated{false};
@@ -260,14 +254,6 @@ int test_find_new_id() {
     ASSERT(reuse && reuse->id == 1, "freed slot is reused");
     ASSERT(reuse == arr[1], "reuse returns the same object");
     for (auto *p : arr)
-        delete p;
-
-    TestSidSlot *sarr[2] = {nullptr, nullptr};
-    TestSidSlot *ss0 = find_new_id(sarr, 2);
-    ASSERT(ss0 && ss0->sid == 0, "sid slot gets sid 0");
-    ss0->enabled = true;
-    ASSERT(find_new_id(sarr, 2)->sid == 1, "second sid slot gets sid 1");
-    for (auto *p : sarr)
         delete p;
 
     TestBothSlot *barr[1] = {nullptr};
