@@ -56,7 +56,7 @@
 #define DEFAULT_LOG LOG_STREAM
 
 streams *st[MAX_STREAMS];
-SMutex st_mutex, bw_mutex;
+SMutex bw_mutex;
 extern int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
 int pmt_process_stream(adapter *ad);
 
@@ -341,7 +341,7 @@ int close_stream_for_socket(sockets *s) {
 int close_stream(int i) {
     int ad;
     streams *sid;
-    std::lock_guard<SMutex> lock(st_mutex);
+    std::lock_guard<SMutex> lock(id_mutex);
     LOG("closing stream %d", i);
     if (i < 0 || i >= MAX_STREAMS || !st[i] || !st[i]->enabled) {
         return 0;
@@ -592,7 +592,7 @@ int decode_transport(sockets *s, std::string_view arg, char *default_rtp,
 
 int streams_add() {
     streams *ss;
-    std::lock_guard<SMutex> lock(st_mutex);
+    std::lock_guard<SMutex> lock(id_mutex);
     ss = find_new_id(st, MAX_STREAMS);
     if (!ss)
         LOG_AND_RETURN(-1, "streams_add failed");
@@ -623,7 +623,7 @@ int streams_add() {
 }
 
 int streams_full() {
-    std::lock_guard<SMutex> lock(st_mutex);
+    std::lock_guard<SMutex> lock(id_mutex);
     for (int i = 0; i < MAX_STREAMS; i++)
         if (!st[i] || !st[i]->enabled)
             return 0;
@@ -1377,7 +1377,7 @@ void dump_streams() {
 
 void free_all_streams() {
     int i;
-    std::lock_guard<SMutex> lock(st_mutex);
+    std::lock_guard<SMutex> lock(id_mutex);
     for (i = 0; i < MAX_STREAMS; i++) {
         if (st[i])
             delete st[i];

@@ -59,7 +59,6 @@
 
 uint16_t EMU_PIDS_ALL_ENFORCED_PIDS_LIST[] = {0, 1, 16, 17, 18, 20, 21};
 SPMT *pmts[MAX_PMT];
-SMutex pmts_mutex;
 int npmts;
 
 #define MAX_OPS 10
@@ -70,7 +69,6 @@ SMutex cws_mutex;
 int ncws;
 
 SFilter *filters[MAX_FILTERS];
-SMutex filters_mutex;
 int nfilters;
 
 const char *listmgmt_str[] = {"CLM_MORE", "CLM_FIRST", "CLM_LAST",
@@ -259,7 +257,7 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
                     uint8_t *filter, uint8_t *mask) {
     SFilter *f;
     int i;
-    std::lock_guard<SMutex> lock(filters_mutex);
+    std::lock_guard<SMutex> lock(id_mutex);
 
     if (pid < 0 || pid > 8191)
         LOG_AND_RETURN(-1, "%s failed, pid %d", __FUNCTION__, pid);
@@ -282,7 +280,7 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
 
     f->master_filter = f->id;
 
-    // this should be syncronized using filters_mutex
+    // this should be syncronized using id_mutex
 
     for (i = 0; i < nfilters; i++)
         if (i != fid && filters[i] && filters[i]->enabled &&
@@ -325,7 +323,7 @@ int del_filter(int id) {
         return 0;
 
     f = filters[id];
-    std::lock_guard<SMutex> lock(filters_mutex);
+    std::lock_guard<SMutex> lock(id_mutex);
     if (!f->enabled) {
         return 0;
     }
@@ -1289,7 +1287,7 @@ void start_active_pmts(adapter *ad) {
             continue;
         int resend;
         { // del_ca() clears the PMT masks from the socket thread
-            std::lock_guard<SMutex> lock(pmts_mutex);
+            std::lock_guard<SMutex> lock(id_mutex);
             resend = ad->ca_mask != (pmt->disabled_ca_mask | pmt->ca_mask);
         }
         if (resend)
@@ -1508,7 +1506,7 @@ int pmt_process_stream(adapter *ad) {
 int pmt_add(int adapter, int sid, int pmt_pid) {
 
     SPMT *pmt;
-    std::lock_guard<SMutex> lock(pmts_mutex);
+    std::lock_guard<SMutex> lock(id_mutex);
     pmt = find_new_id(pmts, MAX_PMT);
     if (!pmt) {
         LOG_AND_RETURN(-1, "PMT buffer is full, could not add new pmts");
@@ -1556,7 +1554,7 @@ int pmt_del(int id) {
 #ifndef DISABLE_TABLES
     close_pmt_for_cas(get_adapter(pmt->adapter), pmt);
 #endif
-    std::lock_guard<SMutex> lock(pmts_mutex);
+    std::lock_guard<SMutex> lock(id_mutex);
     if (!pmt->enabled) {
         return 0;
     }
@@ -1611,7 +1609,7 @@ void cache_pmt_for_adapter(adapter *ad, SPMT *pmt) {
     pmt->state = PMT_CACHED;
     // Same lock as the send path: removal tears these masks down,
     // so it bumps the epoch to invalidate in-flight sets.
-    std::lock_guard<SMutex> lock(pmts_mutex);
+    std::lock_guard<SMutex> lock(id_mutex);
     ca_teardown_epoch++;
     pmt->disabled_ca_mask = 0;
     pmt->ca_mask = 0;
@@ -1954,7 +1952,7 @@ void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid, uint8_t *data,
                   int len) {
     // Whole function: teardown races both the descriptor append
     // below and the mask reset, so cover both with one guard.
-    std::lock_guard<SMutex> lock(pmts_mutex);
+    std::lock_guard<SMutex> lock(id_mutex);
     if (pmt_caid_exist(pmt, caid, capid)) {
         LOGM("%s: CAID %04X CAPID %d already exists in PMT %d", __FUNCTION__,
              caid, capid, pmt->id);
@@ -2451,7 +2449,7 @@ char *get_pmt_for_adapter(int aid, char *dest, int max_size) {
 
 void free_all_pmts() {
     int i, j;
-    std::lock_guard<SMutex> lock(pmts_mutex);
+    std::lock_guard<SMutex> lock(id_mutex);
     for (i = 0; i < MAX_PMT; i++) {
         if (pmts[i]) {
             // Updates shrink caids while keeping entries: free all slots.

@@ -105,7 +105,6 @@ int calculate_bw(sockets *s);
     ((i >= 0 && i < MAX_STREAMS && st[i] && st[i]->enabled) ? st[i] : NULL)
 
 extern streams *st[MAX_STREAMS];
-extern SMutex st_mutex;
 
 extern int64_t c_tbw, c_bw, c_bw_dmx;
 extern uint32_t c_reads, c_writes, c_failed_writes;

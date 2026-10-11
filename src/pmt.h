@@ -148,7 +148,7 @@ typedef struct struct_pmt {
     //
     // ca_registered_mask: that CA holds the PMT and must be told when it
     // stops. Cleared when the registration, CA, or cached PMT is removed.
-    // Writers take pmts_mutex; readers re-read every pass, so a stale
+    // Writers take id_mutex; readers re-read every pass, so a stale
     // read only delays one cycle (see ca_mask_mutex for the same rule).
     int ca_mask, disabled_ca_mask, ca_registered_mask;
     SPMT_batch *batch;

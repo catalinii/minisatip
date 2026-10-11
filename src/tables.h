@@ -47,7 +47,7 @@ typedef struct struct_CA {
 int add_ca(SCA_op *op);
 void del_ca(SCA_op *op);
 void tables_clear_pmt_ca_masks(SPMT *pmt, uint64_t mask, int clear_disabled);
-// Counts mask teardowns; only touch with pmts_mutex held.
+// Counts mask teardowns; only touch with id_mutex held.
 // Sends capture it to skip a set made stale by a teardown.
 extern uint32_t ca_teardown_epoch;
 void add_caid_mask(int ica, int aid, int caid, int mask);

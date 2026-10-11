@@ -49,7 +49,6 @@
 
 sockets *s[MAX_SOCKS];
 int max_sock;
-SMutex s_mutex;
 
 // returns the protocol (AF_INET, AF_INET6) or 0 in case of failure
 int fill_sockaddr(USockAddr *serv, char *host, int port, int ipv4_only) {
@@ -594,7 +593,7 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
     if (sock == SOCK_TIMEOUT && t == NULL)
         LOG_AND_RETURN(-1, "sockets_add timeout without timeout function");
 
-    std::lock_guard<SMutex> lock(s_mutex);
+    std::lock_guard<SMutex> lock(id_mutex);
 
     ss = find_new_id(s, MAX_SOCKS);
     if (!ss)
@@ -655,7 +654,7 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
 int sockets_del(int sock) {
     int i, so;
     sockets *ss;
-    std::unique_lock<SMutex> lock(s_mutex);
+    std::unique_lock<SMutex> lock(id_mutex);
 
     if (sock < 0 || sock >= MAX_SOCKS || !s[sock] || !s[sock]->enabled ||
         !s[sock]->is_enabled) {

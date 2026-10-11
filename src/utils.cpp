@@ -517,6 +517,7 @@ void set_thread_prio(pthread_t tid, int prio) {
 pthread_t join_th[100];
 int join_pos = 0;
 SMutex join_lock;
+SMutex id_mutex;
 
 void add_join_thread(pthread_t t) {
     std::lock_guard<SMutex> lock(join_lock);
