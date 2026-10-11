@@ -69,6 +69,7 @@ SMutex cws_mutex;
 int ncws;
 
 SFilter *filters[MAX_FILTERS];
+SMutex filters_mutex;
 std::atomic<int> nfilters{0};
 
 const char *listmgmt_str[] = {"CLM_MORE", "CLM_FIRST", "CLM_LAST",
@@ -248,7 +249,7 @@ void reset_filter_data(SFilter *f) {
     memset(f->data, 0, FILTER_PACKET_SIZE);
 }
 
-// Flag logic without get/locks: caller holds f->mutex.
+// Flag logic without get/locks: caller holds filters_mutex.
 static int set_filter_flags_locked(SFilter *f, int flags);
 
 int add_filter(int aid, int pid, void *callback, void *opaque, int flags) {
@@ -262,11 +263,11 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
     if (pid < 0 || pid > 8191)
         LOG_AND_RETURN(-1, "%s failed, pid %d", __FUNCTION__, pid);
 
+    std::lock_guard<SMutex> lock(filters_mutex);
     SFilter *f = find_new_id(filters, MAX_FILTERS);
     if (!f)
         LOG_AND_RETURN(-1, "%s failed", __FUNCTION__);
     int fid = f->id;
-    // Claimed slot is disabled and unclaimable: init needs no lock.
     f->opaque = opaque;
     f->pid = pid;
     f->callback = (filter_function)callback;
@@ -276,24 +277,13 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
     f->adapter = aid;
     f->master_filter = fid;
 
-    // Own lock across the whole add excludes del(fid); the pred lock
-    // below serializes concurrent appends to the same tail.
-    std::lock_guard<SMutex> lock(f->mutex);
-    for (int i = 0; i < nfilters; i++) {
-        SFilter *pred = filters[i];
-        if (i == fid || !pred || !pred->enabled || pred->adapter != aid ||
-            pred->pid != pid || pred->next_filter != -1)
-            continue;
-        std::lock_guard<SMutex> predlock(pred->mutex);
-        if (!pred->enabled || pred->adapter != aid || pred->pid != pid ||
-            pred->next_filter != -1)
-            continue;
-        pred->next_filter = fid;
-        f->master_filter = pred->master_filter.load();
-        break;
-    }
-    // Concurrent first-adds for one pid may both miss and form two
-    // chains; first filter creation per pid is thread-affine in practice.
+    for (int i = 0; i < nfilters; i++)
+        if (i != fid && filters[i] && filters[i]->enabled &&
+            filters[i]->adapter == aid && filters[i]->pid == pid &&
+            filters[i]->next_filter == -1) {
+            filters[i]->next_filter = fid;
+            f->master_filter = filters[i]->master_filter.load();
+        }
     set_filter_flags_locked(f, flags);
     memcpy(f->filter, filter, sizeof(f->filter));
     memcpy(f->mask, mask, sizeof(f->mask));
@@ -313,87 +303,69 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
     return fid;
 }
 
-// Sequential per-record update; a filter enabling mid-reset keeps the
-// old master until the next tune (adds are quiescent then in practice).
+// Caller holds filters_mutex.
 int reset_master_filter(int adapter, int pid, int id) {
-    int nf = 0;
-    for (int i = 0; i < nfilters; i++) {
-        SFilter *r = filters[i];
-        if (!r || !r->enabled || r->adapter != adapter || r->pid != pid)
-            continue;
-        std::lock_guard<SMutex> rlock(r->mutex);
-        if (!r->enabled || r->adapter != adapter || r->pid != pid)
-            continue;
-        r->master_filter = id;
-        nf++;
-    }
+    int i, nf = 0;
+    for (i = 0; i < nfilters; i++)
+        if ((filters[i] && filters[i]->enabled &&
+             filters[i]->adapter == adapter && filters[i]->pid == pid)) {
+            filters[i]->master_filter = id;
+            nf++;
+        }
     return nf;
 }
 
-// Dead slots' next links are immutable (adds/dels never touch them),
-// so this lock-free walk always sees consistent values.
-static int skip_dead_filters(int id) {
-    for (int n = 0; n < MAX_FILTERS && id >= 0 && id < MAX_FILTERS; n++) {
-        SFilter *f = filters[id];
-        if (!f || f->enabled)
-            return f ? id : -1;
-        id = f->next_filter.load();
-    }
-    return -1;
-}
-
 int del_filter(int id) {
-    int pid, adapter = -1, master, next;
+    SFilter *f;
+    int i, pid;
+    int adapter = -1;
     LOG("deleting filter %d", id);
     if (id < 0 || id >= MAX_FILTERS || !filters[id])
         return 0;
 
-    SFilter *f = filters[id];
-    { // Gate + disable under own lock; teardown below is exclusive.
-        std::lock_guard<SMutex> lock(f->mutex);
-        if (!f->enabled)
-            return 0;
-        pid = f->pid;
-        adapter = f->adapter;
-        master = f->master_filter;
-        next = f->next_filter;
-        f->enabled = false;
+    f = filters[id];
+    std::lock_guard<SMutex> lock(filters_mutex);
+    if (!f->enabled) {
+        return 0;
     }
-
+    f->enabled = false;
     set_filter_flags_locked(f, 0); // remote all pids if any
-    if (id == master) {
-        SFilter *m = get_filter(next); // enabled-gated, NULL if dead
-        if (!m)                        // double check there is no other filter
+    pid = f->pid;
+    adapter = f->adapter;
+    if (id == f->master_filter) {
+        int master_filter = f->next_filter;
+        SFilter *m = get_filter(master_filter);
+        if (!m) // double check there is no other filter
         {
-            for (int i = 0; i < nfilters; i++)
+            for (i = 0; i < nfilters; i++)
                 if (i != id && (filters[i] && filters[i]->enabled &&
-                                filters[i]->adapter == adapter &&
+                                filters[i]->adapter == f->adapter &&
                                 filters[i]->pid == pid)) {
                     m = filters[i];
                     LOGM("warning: filter %d was also found for pid %d", m->id,
                          pid);
                     break;
                 }
-            SPid *p = find_pid(adapter, pid);
+            SPid *p = find_pid(f->adapter, pid);
             if (p)
                 p->filter = -1;
         }
         if (m) // reset master_filter for all filters
-            reset_master_filter(adapter, pid, m->id);
+            reset_master_filter(f->adapter, pid, m->id);
     } else {
-        for (int i = 0; i < nfilters; i++) {
-            SFilter *pred = filters[i];
-            if (!pred || !pred->enabled || pred->adapter != adapter ||
-                pred->pid != pid || pred->next_filter != id)
-                continue;
-            std::lock_guard<SMutex> predlock(pred->mutex);
-            if (!pred->enabled || pred->adapter != adapter ||
-                pred->pid != pid || pred->next_filter != id)
-                continue;
-            pred->next_filter = skip_dead_filters(next);
-            break;
-        }
+        for (i = 0; i < nfilters; i++)
+            if (filters[i] && filters[i]->enabled &&
+                filters[i]->adapter == f->adapter && filters[i]->pid == pid &&
+                filters[i]->next_filter == f->id) {
+                filters[i]->next_filter = f->next_filter.load();
+                break;
+            }
     }
+    i = MAX_FILTERS;
+    while (--i >= 0)
+        if (filters[i] && filters[i]->enabled)
+            break;
+    nfilters = i + 1;
     f->pid = -1;
     f->allocated = false;
     LOG("deleted filter %d, ad %d, pid %d, max filters %d", id, adapter, pid,
@@ -425,8 +397,6 @@ int get_active_filters_for_pid(int master_filter, int aid, int pid, int flags) {
     return add_remove;
 }
 
-// Same-pid add/del marks are unordered across records now; same class
-// as the pid layer's existing cross-subsystem races (affinity-held).
 static int set_filter_flags_locked(SFilter *f, int flags) {
     f->flags = flags;
     if (flags & FILTER_ADD_REMOVE) {
@@ -455,7 +425,7 @@ int set_filter_flags(int id, int flags) {
     SFilter *f = get_filter(id);
     if (!f)
         LOG_AND_RETURN(1, "%s: filter %d not found", __FUNCTION__, id)
-    std::lock_guard<SMutex> ownlock(f->mutex);
+    std::lock_guard<SMutex> lock(filters_mutex);
     if (!f->enabled)
         LOG_AND_RETURN(1, "%s: filter %d not found", __FUNCTION__, id)
     return set_filter_flags_locked(f, flags);
@@ -465,7 +435,7 @@ int set_filter_opaque(int id, void *opaque) {
     SFilter *f = get_filter(id);
     if (!f)
         LOG_AND_RETURN(1, "%s: filter %d not found", __FUNCTION__, id)
-    std::lock_guard<SMutex> lock(f->mutex);
+    std::lock_guard<SMutex> lock(filters_mutex);
     if (!f->enabled)
         LOG_AND_RETURN(1, "%s: filter %d not found", __FUNCTION__, id)
     f->opaque = opaque;
@@ -476,7 +446,7 @@ int set_filter_mask(int id, uint8_t *filter, uint8_t *mask) {
     SFilter *f = get_filter(id);
     if (!f)
         LOG_AND_RETURN(1, "%s: filter %d not found", __FUNCTION__, id);
-    std::lock_guard<SMutex> lock(f->mutex);
+    std::lock_guard<SMutex> lock(filters_mutex);
     if (!f->enabled) {
         LOGM("%s: filter %d not found", __FUNCTION__, id);
         return 1;
