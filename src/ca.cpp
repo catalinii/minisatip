@@ -729,6 +729,31 @@ int ca_reconnect_due(ca_device_t *d, int64_t now) {
     return d && d->enabled && d->fd == -1 && now >= d->reconnect_next_try;
 }
 
+// True when the PMT is the first program or a packed partner of the CAPMT
+int capmt_has_pmt(const SCAPMT *c, int pmt_id) {
+    if (!PMT_ID_IS_VALID(pmt_id))
+        return 0;
+    if (c->pmt_id == pmt_id)
+        return 1;
+    return std::ranges::find(c->other_id, pmt_id) != std::end(c->other_id);
+}
+
+// PMT ids of the CAPMT for logs, e.g. "3 7 -1"
+static std::string capmt_pmts_str(const SCAPMT *c) {
+    std::string s = std::to_string(c->pmt_id);
+    for (int id : c->other_id)
+        s += " " + std::to_string(id);
+    return s;
+}
+
+// Number of programs carried by the CAPMT
+int capmt_pmt_count(const SCAPMT *c) {
+    int n = PMT_ID_IS_VALID(c->pmt_id);
+    for (int id : c->other_id)
+        n += PMT_ID_IS_VALID(id);
+    return n;
+}
+
 // Forget every PMT held on a dead CAM, clearing its tables masks
 // so the retry loop resends them once the CAM is initialized again.
 void ca_release_pmts(ca_device_t *d) {
@@ -749,7 +774,8 @@ void ca_release_pmts(ca_device_t *d) {
         n = MAX_CA_PMT;
     for (int i = 0; i < n; i++) {
         tables_clear_pmt_ca_masks(get_pmt(d->capmt[i].pmt_id), mask, 1);
-        tables_clear_pmt_ca_masks(get_pmt(d->capmt[i].other_id), mask, 1);
+        for (int id : d->capmt[i].other_id)
+            tables_clear_pmt_ca_masks(get_pmt(id), mask, 1);
     }
     disable_cws_for_all_pmts(d);
     memset(d->capmt, -1, sizeof(d->capmt));
@@ -808,10 +834,10 @@ void send_cw_to_all_pmts(ca_device_t *d, int parity) {
             send_cw(d->capmt[i].pmt_id, CA_ALGO_AES128_CBC, parity,
                     d->key[parity], d->iv[parity], 3720, NULL);
         }
-        if (PMT_ID_IS_VALID(d->capmt[i].other_id)) {
-            send_cw(d->capmt[i].other_id, CA_ALGO_AES128_CBC, parity,
-                    d->key[parity], d->iv[parity], 3720, NULL);
-        }
+        for (int id : d->capmt[i].other_id)
+            if (PMT_ID_IS_VALID(id))
+                send_cw(id, CA_ALGO_AES128_CBC, parity, d->key[parity],
+                        d->iv[parity], 3720, NULL);
     }
 }
 
@@ -821,9 +847,9 @@ void disable_cws_for_all_pmts(ca_device_t *d) {
         if (PMT_ID_IS_VALID(d->capmt[i].pmt_id)) {
             disable_cw(d->capmt[i].pmt_id);
         }
-        if (PMT_ID_IS_VALID(d->capmt[i].other_id)) {
-            disable_cw(d->capmt[i].other_id);
-        }
+        for (int id : d->capmt[i].other_id)
+            if (PMT_ID_IS_VALID(id))
+                disable_cw(id);
     }
 }
 
@@ -865,7 +891,6 @@ int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
                  int cmd_id, int added_only) {
     int pos = 0;
     SPMT *pmt = get_pmt(ca->pmt_id);
-    SPMT *other = get_pmt(ca->other_id);
     int version = ca->version;
 
     if (!pmt)
@@ -880,9 +905,11 @@ int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
 
     pos += CAPMT_add_PMT(capmt + pos, capmt_len - pos, pmt, cmd_id, added_only,
                          dvbca_id);
-    if (other) {
-        pos += CAPMT_add_PMT(capmt + pos, capmt_len - pos, other, cmd_id,
-                             added_only, dvbca_id);
+    for (int id : ca->other_id) {
+        SPMT *other = get_pmt(id);
+        if (other)
+            pos += CAPMT_add_PMT(capmt + pos, capmt_len - pos, other, cmd_id,
+                                 added_only, dvbca_id);
     }
 
     return pos;
@@ -902,8 +929,7 @@ uint32_t capmt_content_hash(uint8_t *capmt, int len) {
     return hash;
 }
 
-// Creates and Sends 2 PMTs to bundle them into the same CAPMT
-// Second PMT can be NULL
+// Creates and sends the CAPMT with its first PMT and any packed partners
 int send_capmt(ca_device_t *d, SCAPMT *ca, int listmgmt, int reason,
                int force) {
     uint8_t capmt[8192];
@@ -918,8 +944,8 @@ int send_capmt(ca_device_t *d, SCAPMT *ca, int listmgmt, int reason,
 
     uint32_t hash = capmt_content_hash(capmt, size);
     if (!force && ca->capmt_hash_valid && hash == ca->capmt_hash) {
-        LOG("CA %d: CAPMT for PMTs %d %d unchanged (%08X), not re-sending",
-            d->id, ca->pmt_id, ca->other_id, hash);
+        LOG("CA %d: CAPMT for PMTs %s unchanged (%08X), not re-sending", d->id,
+            capmt_pmts_str(ca).c_str(), hash);
         return 0;
     }
 
@@ -949,12 +975,8 @@ int send_capmt(ca_device_t *d, SCAPMT *ca, int listmgmt, int reason,
 int get_enabled_pmts_for_ca(ca_device_t *d) {
     int i, enabled_pmts = 0;
     std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
-    for (i = 0; i < d->max_ca_pmt; i++) {
-        if (PMT_ID_IS_VALID(d->capmt[i].pmt_id))
-            enabled_pmts++;
-        if (PMT_ID_IS_VALID(d->capmt[i].other_id))
-            enabled_pmts++;
-    }
+    for (i = 0; i < d->max_ca_pmt; i++)
+        enabled_pmts += capmt_pmt_count(d->capmt + i);
     return enabled_pmts;
 }
 
@@ -965,8 +987,7 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple) {
 
     // check if the PMT is already added (happening on PMT update)
     for (ca_pos = 0; ca_pos < d->max_ca_pmt; ca_pos++) {
-        if (d->capmt[ca_pos].pmt_id == pmt->id ||
-            d->capmt[ca_pos].other_id == pmt->id) {
+        if (capmt_has_pmt(d->capmt + ca_pos, pmt->id)) {
             res = d->capmt + ca_pos;
             break;
         }
@@ -975,26 +996,31 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple) {
     // CAPMT with a new version and the CAM restarts that channel.
     if (!res) {
         for (ca_pos = 0; ca_pos < d->max_ca_pmt; ca_pos++) {
-            if (!PMT_ID_IS_VALID(d->capmt[ca_pos].pmt_id) &&
-                !PMT_ID_IS_VALID(d->capmt[ca_pos].other_id)) {
+            if (capmt_pmt_count(d->capmt + ca_pos) == 0) {
                 d->capmt[ca_pos].pmt_id = pmt->id;
                 res = d->capmt + ca_pos;
                 break;
             }
         }
     }
-    if (!res && multiple) {
+    // Pack into the least loaded CAPMT, up to multiple + 1 programs each
+    if (!res && multiple > 0) {
+        int limit = std::min(multiple + 1, MAX_PMT_PER_CAPMT), best = -1;
         for (ca_pos = 0; ca_pos < d->max_ca_pmt; ca_pos++) {
-            if (!PMT_ID_IS_VALID(d->capmt[ca_pos].pmt_id)) {
-                d->capmt[ca_pos].pmt_id = pmt->id;
-                res = d->capmt + ca_pos;
-                break;
-            }
-            if (!PMT_ID_IS_VALID(d->capmt[ca_pos].other_id)) {
-                d->capmt[ca_pos].other_id = pmt->id;
-                res = d->capmt + ca_pos;
-                break;
-            }
+            int n = capmt_pmt_count(d->capmt + ca_pos);
+            if (n < limit && (best < 0 || n < capmt_pmt_count(d->capmt + best)))
+                best = ca_pos;
+        }
+        if (best >= 0) {
+            res = d->capmt + best;
+            if (!PMT_ID_IS_VALID(res->pmt_id))
+                res->pmt_id = pmt->id;
+            else
+                for (int &id : res->other_id)
+                    if (!PMT_ID_IS_VALID(id)) {
+                        id = pmt->id;
+                        break;
+                    }
         }
     }
 
@@ -1002,8 +1028,8 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple) {
         LOG("CA %d all channels used %d, multiple allowed %d", d->id,
             d->max_ca_pmt, multiple);
         for (ca_pos = 0; ca_pos < d->max_ca_pmt; ca_pos++) {
-            LOG("CAPMT %d pmts %d %d", ca_pos, d->capmt[ca_pos].pmt_id,
-                d->capmt[ca_pos].other_id);
+            LOG("CAPMT %d pmts %s", ca_pos,
+                capmt_pmts_str(d->capmt + ca_pos).c_str());
         }
     }
 
@@ -1013,8 +1039,7 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple) {
 int get_active_capmts(ca_device_t *d) {
     int i, active = 0;
     for (i = 0; i < d->max_ca_pmt; i++)
-        if (PMT_ID_IS_VALID(d->capmt[i].pmt_id) ||
-            PMT_ID_IS_VALID(d->capmt[i].other_id))
+        if (capmt_pmt_count(d->capmt + i))
             active++;
     return active;
 }
@@ -1177,10 +1202,10 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
     }
 
     LOG("PMT CA %d pmt %d pid %u (%s) ver %u sid %X (%u), enabled_pmts %d, "
-        "%s, PMTS to be send %d %d, pos %ld%s",
+        "%s, PMTS to be send %s, pos %ld%s",
         spmt->adapter, spmt->id, pid, spmt->name, capmt->version, sid,
         capmt->sid, get_enabled_pmts_for_ca(d), listmgmt_str[listmgmt],
-        capmt->pmt_id, capmt->other_id, capmt - d->capmt,
+        capmt_pmts_str(capmt).c_str(), capmt - d->capmt,
         update ? ", update" : "");
 
     // First registration always sends; an update sends only when the
@@ -1198,31 +1223,29 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
     return 0;
 }
 
-// Remove the PMT from the CAPMT associated with this device
-// if the pmt_id is not valid and other_id is valid,
-// exchange the IDs
+// Remove the PMT from the CAPMTs of this device; the remaining programs
+// shift up so the first valid one is always pmt_id
 void remove_pmt_from_device(ca_device_t *d, SPMT *pmt) {
-    int i;
     std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
-    for (i = 0; i < d->max_ca_pmt; i++) {
-        if (d->capmt[i].pmt_id == pmt->id) {
-            d->capmt[i].pmt_id = PMT_INVALID;
-            if (PMT_ID_IS_VALID(d->capmt[i].other_id)) {
-                d->capmt[i].pmt_id = d->capmt[i].other_id;
-                d->capmt[i].other_id = PMT_INVALID;
-            }
-        }
-        if (d->capmt[i].other_id == pmt->id) {
-            d->capmt[i].other_id = PMT_INVALID;
-        }
+    for (int i = 0; i < d->max_ca_pmt; i++) {
+        SCAPMT *c = d->capmt + i;
+        if (!capmt_has_pmt(c, pmt->id))
+            continue;
+        int ids[MAX_PMT_PER_CAPMT], n = 0;
+        if (PMT_ID_IS_VALID(c->pmt_id) && c->pmt_id != pmt->id)
+            ids[n++] = c->pmt_id;
+        for (int id : c->other_id)
+            if (PMT_ID_IS_VALID(id) && id != pmt->id)
+                ids[n++] = id;
+        c->pmt_id = n > 0 ? ids[0] : PMT_INVALID;
+        for (int k = 0; k < MAX_PMT_PER_CAPMT - 1; k++)
+            c->other_id[k] = k + 1 < n ? ids[k + 1] : PMT_INVALID;
         // A freed slot must not suppress the next PMT's first send.
-        if (!PMT_ID_IS_VALID(d->capmt[i].pmt_id) &&
-            !PMT_ID_IS_VALID(d->capmt[i].other_id)) {
-            d->capmt[i].capmt_hash = 0;
-            d->capmt[i].capmt_hash_valid = 0;
+        if (n == 0) {
+            c->capmt_hash = 0;
+            c->capmt_hash_valid = 0;
         }
     }
-    return;
 }
 
 SCAPMT *get_capmt_for_pmt(SPMT *pmt, ca_device_t **output) {
@@ -1235,8 +1258,7 @@ SCAPMT *get_capmt_for_pmt(SPMT *pmt, ca_device_t **output) {
         if ((d = ca_devices[i]) &&
             (d->enabled && d->state == CA_STATE_INITIALIZED)) {
             for (j = 0; j < d->max_ca_pmt; j++)
-                if (d->capmt[j].pmt_id == pmt->id ||
-                    d->capmt[j].other_id == pmt->id) {
+                if (capmt_has_pmt(d->capmt + j, pmt->id)) {
                     *output = d;
                     return d->capmt + j;
                 }
@@ -1256,13 +1278,13 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt) {
     // Hold the device across use; re-check the entry in case
     // teardown wiped the table between the lookup and now.
     std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
-    if (capmt->pmt_id != spmt->id && capmt->other_id != spmt->id)
+    if (!capmt_has_pmt(capmt, spmt->id))
         return 0;
 
     // Last PMT in the CAPMT: tell the CAM to stop it before releasing the
     // slot, or it stays selected next to the next channel on that slot.
     int last_in_capmt =
-        capmt->pmt_id == spmt->id && !PMT_ID_IS_VALID(capmt->other_id);
+        capmt->pmt_id == spmt->id && capmt_pmt_count(capmt) == 1;
     if (last_in_capmt) {
         listmgmt = CLM_UPDATE;
         if (send_capmt(d, capmt, listmgmt, CA_PMT_CMD_ID_NOT_SELECTED, 1))
@@ -4047,12 +4069,14 @@ void set_ca_channels(char *o) {
 
         if (colon_pos == std::string_view::npos)
             continue;
+        // Each '*' packs one more program into every CAPMT
         int multiple_pmt = 0;
         std::string_view rem = token.substr(colon_pos + 1);
-        if (!rem.empty() && rem[0] == '*') {
+        while (!rem.empty() && rem[0] == '*') {
             rem = rem.substr(1);
-            multiple_pmt = 1;
+            multiple_pmt++;
         }
+        multiple_pmt = std::min(multiple_pmt, MAX_PMT_PER_CAPMT - 1);
 
         // Can't go over MAX_CA_PMT
         int max_ca_pmt = parse_int(rem);
@@ -4069,8 +4093,8 @@ void set_ca_channels(char *o) {
             return;
         ca_devices[ddci]->multiple_pmt = multiple_pmt;
         ca_devices[ddci]->max_ca_pmt = max_ca_pmt;
-        LOG("Forcing CA %d to use%s maximum channels %d", ddci,
-            multiple_pmt ? "multiple PMTs with" : "", max_ca_pmt);
+        LOG("Forcing CA %d to use maximum %d CAPMTs with %d PMTs each", ddci,
+            max_ca_pmt, multiple_pmt + 1);
 
         size_t next_dash = rem.find('-');
         while (next_dash != std::string_view::npos) {
