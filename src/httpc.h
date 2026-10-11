@@ -11,7 +11,8 @@ typedef int (*http_client_action)(void *s, int len, void *opaque,
                                   struct struct_http_client *h);
 
 typedef struct struct_http_client {
-    char enabled;
+    std::atomic<bool> enabled{false};
+    std::atomic<bool> allocated{false};
     SMutex mutex;
     int state;
     http_client_action action;

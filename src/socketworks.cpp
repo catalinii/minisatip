@@ -584,7 +584,6 @@ int sockets_recv(int socket, void *buf, size_t len, sockets *ss, int *rv) {
 
 int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
                 socket_action c, socket_action t) {
-    int i;
     char ra[50];
     sockets *ss;
 
@@ -597,14 +596,10 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
 
     std::lock_guard<SMutex> lock(s_mutex);
 
-    i = find_new_id((void **)s, MAX_SOCKS);
-    if (i == -1)
+    ss = find_new_id(s, MAX_SOCKS);
+    if (!ss)
         LOG_AND_RETURN(-1, "sockets_add failed for socks %d", sock);
-    if (!s[i]) {
-        s[i] = new sockets();
-    }
-
-    ss = s[i];
+    int i = ss->id;
     ss->enabled = 1;
     std::lock_guard<SMutex> lock2(ss->mutex);
     ss->is_enabled = 1;
@@ -632,7 +627,6 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
     ss->buf = NULL;
     ss->lbuf = 0;
     ss->timeout_ms = 0;
-    ss->id = i;
     ss->sock_err = 0;
     ss->overflow = 0;
     ss->iteration = 0;
@@ -713,6 +707,7 @@ int sockets_del(int sock) {
         sock, i, so);
 
     ss->enabled = 0;
+    ss->allocated = false;
     lock2.unlock();
     lock.unlock();
 

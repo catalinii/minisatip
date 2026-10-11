@@ -130,7 +130,8 @@ typedef struct struct_pmt_ca {
 } SPMTCA;
 
 typedef struct struct_pmt {
-    char enabled;
+    std::atomic<bool> enabled{false};
+    std::atomic<bool> allocated{false};
     int sid;
     int pid;
     int pcr_pid;
@@ -178,7 +179,8 @@ typedef struct struct_pmt {
 // later time with timeout or close callbacks
 
 typedef struct struct_filter {
-    char enabled;
+    std::atomic<bool> enabled{false};
+    std::atomic<bool> allocated{false};
     int id;
     int pid;
     int adapter;

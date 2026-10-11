@@ -3,6 +3,7 @@
 
 #include "dvb.h"
 #include "socketworks.h"
+#include <atomic>
 #include <string>
 #include <sys/socket.h>
 
@@ -26,7 +27,8 @@
 #define TCP_MAX_IOV 1008 // TCP_MAX_PACK * X < 1024
 
 typedef struct struct_streams {
-    char enabled;
+    std::atomic<bool> enabled{false};
+    std::atomic<bool> allocated{false};
     SMutex mutex;
     int sid; // socket - <0 for invalid/not used, 0 for end of the list
     int adapter;

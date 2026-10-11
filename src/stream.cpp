@@ -351,6 +351,7 @@ int close_stream(int i) {
     std::lock_guard<SMutex> lock2(st[i]->mutex);
     sockets_set_flush_enqued_data(sid->rsock_id);
     sid->enabled = 0;
+    sid->allocated = false;
     sid->start_streaming = 0;
     sid->timeout = 0;
     ad = sid->adapter;
@@ -590,20 +591,15 @@ int decode_transport(sockets *s, std::string_view arg, char *default_rtp,
 }
 
 int streams_add() {
-    int i;
     streams *ss;
     std::lock_guard<SMutex> lock(st_mutex);
-    i = find_new_id((void **)st, MAX_STREAMS);
-    if (i == -1)
+    ss = find_new_id(st, MAX_STREAMS);
+    if (!ss)
         LOG_AND_RETURN(-1, "streams_add failed");
-    if (!st[i])
-        st[i] = new streams();
-
-    ss = st[i];
+    int i = ss->sid;
     std::lock_guard<SMutex> lock2(ss->mutex);
     ss->enabled = 1;
     ss->adapter = -1;
-    ss->sid = i;
     ss->rtsp_error.clear();
     ss->rsock = -1;
     ss->rsock_id = -1;

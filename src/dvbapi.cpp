@@ -734,14 +734,24 @@ int keys_add(int i, int adapter, int pmt_id) {
     if (!pmt)
         LOG_AND_RETURN(-1, "%s: PMT %d not found ", __FUNCTION__, pmt_id);
     if (i == -1) {
-        i = find_new_id((void **)keys, MAX_KEYS);
-        if (i == -1)
+        k = find_new_id(keys, MAX_KEYS);
+        if (!k)
             LOG_AND_RETURN(-1, "%s: no free key id", __FUNCTION__);
+        i = k->id;
+    } else {
+        if (i < 0 || i >= MAX_KEYS)
+            LOG_AND_RETURN(-1, "%s: invalid key id %d", __FUNCTION__, i);
+        if (!keys[i]) {
+            keys[i] = new SKey();
+            keys[i]->allocated = true;
+            keys[i]->enabled = false;
+            keys[i]->id = i;
+        } else {
+            keys[i]->allocated = true;
+            keys[i]->enabled = false;
+        }
+        k = keys[i];
     }
-    if (!keys[i])
-        keys[i] = new SKey();
-
-    k = keys[i];
 
     k->parity = -1;
     k->sid = pmt->sid;
@@ -749,7 +759,6 @@ int keys_add(int i, int adapter, int pmt_id) {
     k->adapter = adapter;
     k->adapter_index = -1;
     k->demux_index = -1;
-    k->id = i;
     k->blen = 0;
     k->enabled = 1;
     k->ver = -1;
@@ -821,6 +830,7 @@ int keys_del(int i) {
     k->demux_index = -1;
     k->adapter_index = -1;
     k->enabled = 0;
+    k->allocated = false;
     for (j = 0; j < MAX_KEY_FILTERS; j++)
         if (k->filter_id[j] >= 0)
             del_filter(k->filter_id[j]);
