@@ -766,6 +766,7 @@ int test_close_pmt_after_caid_update() {
 
     int ica = add_ca(&fake_ca_op);
     ASSERT(ica >= 0, "could not register the fake CA");
+    ASSERT(ca[ica].op.load() == &fake_ca_op, "add_ca did not publish the op");
     ad.ca_mask = 1 << ica;
 
     int id = pmt_add(ad.id, 0x2000, 0x2001);
@@ -1677,10 +1678,10 @@ static int epoch_fake_add_pmt(adapter *ad, SPMT *pmt, int update) {
 // A teardown clearing masks between send and mask-set must not
 // leave the PMT marked as sent on the dead CAM.
 int test_send_skips_stale_set() {
-    // SCA cannot be copied (atomic enabled): save the fields used here
+    // SCA cannot be copied (atomic members): save the fields used here
     SCA_AD saved_info[MAX_ADAPTERS];
     memcpy(saved_info, ca[1].ad_info, sizeof(saved_info));
-    SCA_op *saved_op = ca[1].op;
+    SCA_op *saved_op = ca[1].op.load();
     int saved_id = ca[1].id;
     uint8_t saved_enabled = ca[1].enabled;
     int saved_nca = nca;
@@ -1689,7 +1690,7 @@ int test_send_skips_stale_set() {
     memset(ca[1].ad_info, 0, sizeof(ca[1].ad_info));
     ca[1].enabled = 1;
     ca[1].id = 1;
-    ca[1].op = &fake_op;
+    ca[1].op.store(&fake_op);
     // ca[0] stays disabled (globals start zeroed), so only slot 1 sends.
     nca = 2;
     adapter ad = {};
@@ -1711,7 +1712,7 @@ int test_send_skips_stale_set() {
     ASSERT(pmt2->ca_registered_mask & (1 << 1), "quiet send registers");
 
     memcpy(ca[1].ad_info, saved_info, sizeof(saved_info));
-    ca[1].op = saved_op;
+    ca[1].op.store(saved_op);
     ca[1].id = saved_id;
     ca[1].enabled = saved_enabled;
     nca = saved_nca;

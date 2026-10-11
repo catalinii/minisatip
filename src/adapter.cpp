@@ -325,7 +325,10 @@ int init_hw(int i) {
     ad->pid_err = ad->dec_err = 0;
     ad->new_gs = 0;
     ad->force_close = 0;
-    ad->ca_mask = 0;
+    { // keep the writer protocol: ca_mask stores take ca_mask_mutex
+        std::lock_guard<SMutex> lock(ca_mask_mutex);
+        ad->ca_mask = 0;
+    }
     ad->tune_time = 0;
     ad->threshold = opts.udp_threshold;
     ad->updating_pids = 0;

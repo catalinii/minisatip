@@ -39,7 +39,8 @@ typedef struct struct_CA_AD {
 
 typedef struct struct_CA {
     std::atomic<uint8_t> enabled; // set last, the adapter threads read ca[]
-    SCA_op *op;
+    // Written once per generation in add_ca(), read lock-free by send/close.
+    std::atomic<SCA_op *> op;
     int id;
     SCA_AD ad_info[MAX_ADAPTERS];
 } SCA;
