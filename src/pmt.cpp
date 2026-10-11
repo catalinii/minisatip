@@ -727,7 +727,7 @@ void update_cw(SPMT *pmt) {
     if (!pmt->update_cw)
         return;
 
-    // send_cw() fills cws[] from the dvbapi socket thread
+    // send_cw() fills cws[] from other threads (dvbapi/ca)
     std::lock_guard<SMutex> lock(cws_mutex);
     pmt->last_update_cw = ctime;
 
@@ -773,8 +773,8 @@ void update_cw(SPMT *pmt) {
          "found CW: %d %s for %s PMT %d, old cw %d, packets %d, parity %d, pid "
          "%d: %s",
          cw ? cw->id : -1, validated ? "[validated]" : "[not validated]",
-         pmt->name, pmt->id, old_cw ? old_cw->id : -1, pmt->blen, pmt->parity,
-         pmt->pid, cw_to_string(cw, buf));
+         pmt->name, pmt->id, old_cw ? old_cw->id : -1, pmt->blen,
+         pmt->parity.load(), pmt->pid, cw_to_string(cw, buf));
 
     // don't search again for a CW
     pmt->update_cw = 0;
@@ -828,6 +828,11 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
         LOG_AND_RETURN(3, "op not found for algo %d", algo);
 
     std::lock_guard<SMutex> lock(cws_mutex);
+    // Re-fetch under the lock: the PMT may have been deleted and
+    // re-added between the lookup above and the lock.
+    pmt = get_pmt(pmt_id);
+    if (!pmt)
+        LOG_AND_RETURN(1, "%s: pmt %d gone", __FUNCTION__, pmt_id);
     for (i = 0; i < MAX_CW; i++)
         if (cws[i] && cws[i]->enabled && cws[i]->pmt == pmt_id &&
             cws[i]->parity == parity && ctime < cws[i]->expiry &&
@@ -852,7 +857,7 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
     SCW *c = cws[i];
 
     if (c->enabled && c->op->stop_cw)
-        c->op->stop_cw(cw, pmt);
+        c->op->stop_cw(c, pmt);
 
     c->id = i;
     c->adapter = pmt->adapter;
@@ -906,7 +911,11 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
 // pmt->blen needs to be 0 at the end of this
 int decrypt_batch(SPMT *pmt) {
     int i;
-    SCW *old_cw = pmt->cw;
+    SCW *old_cw;
+    {
+        std::lock_guard<SMutex> lock(cws_mutex);
+        old_cw = pmt->cw;
+    }
 
     if (pmt->blen <= 0) {
         return 0;
@@ -914,17 +923,22 @@ int decrypt_batch(SPMT *pmt) {
 
     update_cw(pmt);
 
-    if (!pmt->cw) {
+    SCW *cw;
+    {
+        std::lock_guard<SMutex> lock(cws_mutex);
+        cw = pmt->cw;
+    }
+    if (!cw) {
         pmt->blen = 0;
         return 1;
     }
 
     int pid = PID_FROM_TS(pmt->batch[0].data);
-    cw_decrypt_stream(pmt->cw, pmt->batch, pmt->blen);
+    cw_decrypt_stream(cw, pmt->batch, pmt->blen);
     LOGM("pmt: decrypted pmt %d, packets %d, CW %d, old CW %d, parity %d at "
          "len %d, channel_id %d (pid %d)",
-         pmt->id, pmt->blen, pmt->cw->id, old_cw ? old_cw->id : -1, pmt->parity,
-         pmt->blen, pmt->sid, pid);
+         pmt->id, pmt->blen, cw->id, old_cw ? old_cw->id : -1,
+         pmt->parity.load(), pmt->blen, pmt->sid, pid);
     for (i = 0; i < pmt->blen; i++)
         pmt->batch[i].data[3] &= 0x3F; // clear the encrypted flags
     pmt->blen = 0;
@@ -1570,6 +1584,12 @@ int pmt_del(int id) {
 
     clear_cw_for_pmt(id, 0);
     clear_cw_for_pmt(id, 1);
+
+    { // drop the decrypt pointer with the table, so cw_in_use()
+        // stops pinning the expired slot after the PMT is gone.
+        std::lock_guard<SMutex> lock(cws_mutex);
+        pmt->cw = NULL;
+    }
 
     pmt->enabled = 0;
     pmt->sid = 0;

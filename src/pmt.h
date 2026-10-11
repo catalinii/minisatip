@@ -2,6 +2,7 @@
 #define PMT_H
 #include "adapter.h"
 #include "dvb.h"
+#include <atomic>
 #include <unordered_map>
 #include <vector>
 
@@ -150,7 +151,8 @@ typedef struct struct_pmt {
     // read only delays one cycle (see ca_mask_mutex for the same rule).
     int ca_mask, disabled_ca_mask, ca_registered_mask;
     SPMT_batch *batch;
-    int8_t parity, update_cw;
+    // Set on the adapter thread, read from send_cw() on dvbapi/ca threads.
+    std::atomic<int8_t> parity, update_cw;
     uint64_t last_update_cw;
     SCW *cw;
     SPid *p;

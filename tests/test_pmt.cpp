@@ -25,6 +25,7 @@
 #include "tables.h"
 #include "utils.h"
 #include "utils/testing.h"
+#include "utils/ticks.h"
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <errno.h>
@@ -1878,6 +1879,57 @@ int test_cw_keyed_by_pmt() {
     return 0;
 }
 
+// An expired slot the PMT still decrypts with must not be reused for
+// the next CW: the adapter thread may still read it (cw_in_use).
+int test_send_cw_skips_in_use_slot() {
+    int i;
+    for (i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+    for (i = 0; i < MAX_CW; i++)
+        if (cws[i])
+            cws[i]->enabled = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    init_algo();
+
+    int id = pmt_add(0, 100, 48);
+    ASSERT(id >= 0, "could not create the PMT");
+    SPMT *pmt = get_pmt(id);
+    uint8_t cwA[8] = {0x10, 0x22, 0x34, 0x66, 0x88, 0x9A, 0xAC, 0xC6};
+    uint8_t cwB[8] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
+    ASSERT(send_cw(id, CA_ALGO_DVBCSA, 0, cwA, NULL, 25, NULL) == 0,
+           "send_cw should store the first CW");
+    int slot = -1;
+    for (i = 0; i < MAX_CW; i++)
+        if (cws[i] && cws[i]->enabled && cws[i]->pmt == id)
+            slot = i;
+    ASSERT(slot >= 0, "first CW should be stored");
+
+    pmt->cw = cws[slot]; // adapter thread picked it up (update_cw)
+    cws[slot]->expiry = getTick() - 1; // ... then it expired
+    ASSERT(send_cw(id, CA_ALGO_DVBCSA, 0, cwB, NULL, 25, NULL) == 0,
+           "send_cw should store the second CW");
+    ASSERT(!memcmp(cws[slot]->cw, cwA, 8),
+           "in-use expired slot must not be reused");
+    int other = -1;
+    for (i = 0; i < MAX_CW; i++)
+        if (i != slot && cws[i] && cws[i]->enabled && cws[i]->pmt == id &&
+            !memcmp(cws[i]->cw, cwB, 8))
+            other = i;
+    ASSERT(other >= 0, "second CW should land in another slot");
+
+    for (i = 0; i < MAX_CW; i++)
+        if (cws[i])
+            cws[i]->enabled = 0;
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
 // pids=all expands every known PMT pid with the requestor sid, so the
 // subscribed-PMT rule still decrypts as before under claims arbitration.
 int test_pids_all_expands_pmt_pids() {
@@ -3126,6 +3178,8 @@ int main() {
     TEST_FUNC(test_held_pids_without_client_stop_pmt(),
               "testing stop when pids are held without a client")
     TEST_FUNC(test_cw_keyed_by_pmt(), "testing direct CW to PMT mapping")
+    TEST_FUNC(test_send_cw_skips_in_use_slot(),
+              "testing send_cw skips the in-use CW slot")
     TEST_FUNC(test_pids_all_expands_pmt_pids(),
               "testing pids=all PMT pid expansion")
     TEST_FUNC(test_multi_service_pid_parses_per_sid(),
