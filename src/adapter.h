@@ -101,7 +101,7 @@ struct struct_adapter {
     transponder tp;
     SPid pids[MAX_PIDS];
     // Writers take ca_mask_mutex; readers re-read every pass.
-    std::atomic<int> ca_mask;
+    std::atomic<int> ca_mask = 0;
     int master_sid; // first SID, the one that controls the tuning
     int sid_cnt;    // number of streams
     int sock, fe_sock;
