@@ -294,8 +294,7 @@ int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt) {
             no_caids = (ca[i].ad_info[ad->id].caids == 0);
         }
         result = TABLES_RESULT_ERROR_NORETRY;
-        // Send outside the PMT lock: CA ops do socket I/O, so never
-        // hold it across them.
+        // Send outside the PMT lock: CA ops do socket I/O.
         uint32_t epoch;
         {
             std::lock_guard<SMutex> lock(pmt->mutex);

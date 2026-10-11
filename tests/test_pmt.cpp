@@ -3131,7 +3131,8 @@ int test_filter_add_del_mt() {
     auto worker = [&](int t) {
         for (int k = 0; k < K; k++) {
             fids[t][k] =
-                add_filter(0, 100 + t * K + k, (void *)process_pmt, NULL, 0);
+                add_filter(0, 100 + t * K + k,
+                           reinterpret_cast<void *>(process_pmt), nullptr, 0);
             if (fids[t][k] >= 0)
                 added++;
         }
@@ -3151,7 +3152,7 @@ int test_filter_add_del_mt() {
             ASSERT(f && !f->enabled && !f->allocated,
                    "filter reclaimed after del");
         }
-    a[0] = NULL;
+    a[0] = nullptr;
     return 0;
 }
 
