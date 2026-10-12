@@ -1300,6 +1300,84 @@ int test_initializing_ddci_does_not_block_others() {
     return 0;
 }
 
+// New channels go to the least used DDCI (#1216), the first on a tie;
+// a configured but initializing DDCI no longer holds them back.
+int test_ddci_least_used_device() {
+    SPMT *pmt[5];
+    ddci_device_t d0 = {}, d1 = {};
+    ca_device_t ca0 = {}, ca1 = {};
+    adapter ad = {0}, a0 = {0}, a1 = {0};
+
+    for (int i = 0; i < MAX_ADAPTERS; i++)
+        a[i] = NULL;
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    memset(ca_devices, 0, sizeof(ca_devices));
+    channels.clear();
+    create_adapter(&ad, 8);
+    create_adapter(&a0, 0);
+    create_adapter(&a1, 1);
+    for (int i = 0; i < 5; i++)
+        pmt[i] = create_pmt(8, 900 + 10 * i, 901 + 10 * i, 902 + 10 * i, 0x100,
+                            0x100);
+    memset(&d0.pmt, -1, sizeof(d0.pmt));
+    memset(&d1.pmt, -1, sizeof(d1.pmt));
+    d0.id = 0;
+    d1.id = 1;
+    d0.enabled = d1.enabled = 1;
+    d0.max_channels = d1.max_channels = 3;
+    ddci_devices[0] = &d0;
+    ddci_devices[1] = &d1;
+
+    int dvbca_id = add_ca(&dvbca);
+    add_caid_mask(dvbca_id, 0, 0x100, 0xFFFF);
+    add_caid_mask(dvbca_id, 1, 0x100, 0xFFFF);
+    ca0.id = 0;
+    ca1.id = 1;
+    ca0.enabled = ca1.enabled = 1;
+    ca0.state = ca1.state = CA_STATE_INITIALIZED;
+    ca_devices[0] = &ca0;
+    ca_devices[1] = &ca1;
+
+    ASSERT(ddci_process_pmt(&ad, pmt[0], 0) == TABLES_RESULT_OK, "first");
+    ASSERT(d0.channels == 1 && d1.channels == 0, "first goes to DDCI 0");
+    ASSERT(ddci_process_pmt(&ad, pmt[1], 0) == TABLES_RESULT_OK, "second");
+    ASSERT(d0.channels == 1 && d1.channels == 1,
+           "second goes to the idle DDCI 1, not the first fit");
+    ASSERT(ddci_process_pmt(&ad, pmt[2], 0) == TABLES_RESULT_OK, "third");
+    ASSERT(d0.channels == 2 && d1.channels == 1,
+           "a tie keeps the configured order");
+    ddci_del_pmt(&ad, pmt[0]);
+    ddci_del_pmt(&ad, pmt[2]);
+    ASSERT(ddci_process_pmt(&ad, pmt[3], 0) == TABLES_RESULT_OK, "fourth");
+    ASSERT(d0.channels == 1 && d1.channels == 1,
+           "after leaves the emptier DDCI 0 is used again");
+
+    // A channel listed for both DDCIs while DDCI 0 initializes runs on
+    // DDCI 1 instead of waiting, even though DDCI 0 is emptier.
+    ddci_del_pmt(&ad, pmt[3]);
+    Sddci_channel *c = &channels[pmt[4]->sid];
+    c->sid = pmt[4]->sid;
+    c->locked = 1;
+    c->ddci[c->ddcis++].ddci = 0;
+    c->ddci[c->ddcis++].ddci = 1;
+    ca0.state = CA_STATE_ACTIVE;
+    ASSERT(ddci_process_pmt(&ad, pmt[4], 0) == TABLES_RESULT_OK,
+           "the ready DDCI takes it");
+    ASSERT(d0.channels == 0 && d1.channels == 2, "it runs on DDCI 1");
+    ddci_del_pmt(&ad, pmt[4]);
+    ddci_del_pmt(&ad, pmt[1]);
+
+    del_ca(&dvbca);
+    for (auto *p : pmt)
+        pmt_del(p->id);
+    channels.clear();
+    free_filters();
+    ddci_devices[0] = ddci_devices[1] = NULL;
+    ca_devices[0] = ca_devices[1] = NULL;
+    a[0] = a[1] = a[8] = NULL;
+    return 0;
+}
+
 int main() {
     opts.log = 65535 ^ LOG_LOCK ^ LOG_UTILS;
     opts.debug = 0;
@@ -1331,6 +1409,8 @@ int main() {
               "testing that a full DDCI device retries instead of burning");
     TEST_FUNC(test_initializing_ddci_does_not_block_others(),
               "testing that an initializing DDCI does not block the others");
+    TEST_FUNC(test_ddci_least_used_device(),
+              "testing that new channels go to the least used DDCI");
     free_all_pmts();
     fflush(stdout);
     return 0;

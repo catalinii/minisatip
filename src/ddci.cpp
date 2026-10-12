@@ -319,15 +319,11 @@ int create_channel_for_pmt(Sddci_channel *c, SPMT *pmt) {
     return 0;
 }
 
-/**
- * Find the DDCI device that should be used to handle the specified PMT. The
- * first suitable device is returned. If a suitable device is found but the
- * device is still initializing, -1 is returned. If no suitable device is found,
- * -2 is returned.
- */
+// Picks the ready DDCI running the fewest channels, the first on a tie.
+// Retries while candidates are full or initializing; NORETRY if none usable.
 int find_ddci_for_pmt(Sddci_channel *c, SPMT *pmt) {
     int ddid = -100; // -100 means we didn't find a suitable device
-    int saw_full = 0;
+    int saw_full = 0, saw_initializing = 0, best_channels = 0;
 
     int i = 0;
     for (i = 0; i < c->ddcis; i++) {
@@ -348,11 +344,27 @@ int find_ddci_for_pmt(Sddci_channel *c, SPMT *pmt) {
             continue;
         }
 
-        ddid = candidate;
-        break;
+        // An initializing CAM runs no channels: it would always win
+        if (is_ca_initializing(candidate)) {
+            LOG("%s: DDCI %d is initializing, skipping", __FUNCTION__,
+                candidate);
+            saw_initializing = 1;
+            continue;
+        }
+
+        // Least used CAM first (#1216); ties keep the configured order
+        if (ddid == -100 || d->channels < best_channels) {
+            ddid = candidate;
+            best_channels = d->channels;
+        }
     }
 
     if (ddid == -100) {
+        if (saw_initializing) {
+            LOG("%s: DDCI for PMT %d (sid %d) is initializing, retrying",
+                __FUNCTION__, pmt->id, pmt->sid);
+            return -TABLES_RESULT_ERROR_RETRY;
+        }
         // Full candidates free up later: retry instead of disabling the PMT.
         if (saw_full) {
             LOG("%s: all DDCIs full for PMT %d (sid %d), retrying",
@@ -371,13 +383,10 @@ int find_ddci_for_pmt(Sddci_channel *c, SPMT *pmt) {
         }
 
         return -TABLES_RESULT_ERROR_NORETRY;
-    } else if (is_ca_initializing(ddid)) {
-        LOG("%s: DDCI %d is initializing, retrying", __FUNCTION__, ddid);
-        return -TABLES_RESULT_ERROR_RETRY;
-    } else {
-        LOG("%s: Using DDCI %d", __FUNCTION__, ddid);
-        return ddid;
     }
+    LOG("%s: Using DDCI %d, running %d channels", __FUNCTION__, ddid,
+        best_channels);
+    return ddid;
 }
 
 int is_pmt_running(SPMT *pmt) {
