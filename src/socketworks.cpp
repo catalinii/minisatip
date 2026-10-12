@@ -917,7 +917,10 @@ void *select_and_execute(void *arg) {
                                old_rlen, master->buf, ss->iteration,
                                master->action);
 
-                        if (((master->rlen > 0) || err == EWOULDBLOCK) &&
+                        // EOF (rlen == 0) leaves errno stale, so only a real
+                        // read error (rlen < 0) may dispatch on EWOULDBLOCK.
+                        if (((master->rlen > 0) ||
+                             (rlen < 0 && err == EWOULDBLOCK)) &&
                             master->action && (master->type != TYPE_SERVER))
                             master->action(master);
                     }

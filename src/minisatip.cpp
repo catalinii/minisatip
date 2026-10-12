@@ -1162,6 +1162,8 @@ void set_options(int argc, char *argv[]) {
 #define RBUF 32000
 
 int read_rtsp(sockets *s) {
+    if (!s->rlen) // nothing buffered (EOF), nothing to parse
+        return 0;
     int cseq, i, rlen;
     int sess_id = 0;
     char buf[2000];
@@ -1441,6 +1443,8 @@ int read_rtsp(sockets *s) {
     }
 
 int read_http(sockets *s) {
+    if (!s->rlen) // nothing buffered (EOF), nothing to parse
+        return 0;
     char buf[2000]; // the XML should not be larger than 1400 as it will create
                     // problems
     char url[300];

@@ -27,6 +27,8 @@
 
 #include "httpc.h"
 #include <cstring>
+#include <sys/socket.h>
+#include <unistd.h>
 
 extern void satip_getxml_data(char *data, int len, void *opaque,
                               Shttp_client *h);
@@ -230,6 +232,37 @@ int test_satipc_get_pids_add_and_del() {
     return 0;
 }
 
+int test_satipc_reply_empty_buffer_ignored() {
+    adapter ad = {};
+    satipc sip = {};
+    adapter *saved_a = a[0];
+    satipc *saved_sip = satip[0];
+    int sp[2];
+    ASSERT(socketpair(AF_UNIX, SOCK_STREAM, 0, sp) == 0, "socketpair failed");
+
+    ad.id = 0;
+    ad.enabled = 1;
+    sip.enabled = 1;
+    a[0] = &ad;
+    satip[0] = &sip;
+    int id = sockets_add(sp[0], NULL, 0, TYPE_TCP, NULL, NULL, NULL);
+    ASSERT(id >= 0, "sockets_add failed");
+    sockets *s = get_sockets(id);
+    static unsigned char empty[1] = {0};
+    s->buf = empty;
+    s->lbuf = sizeof(empty);
+    s->rlen = 0;
+    s->flags = 0;
+    satipc_reply(s);
+    ASSERT_EQUAL(0, s->flags, "empty buffer must not grow the socket buffer");
+    ASSERT(s->buf == empty, "empty buffer must leave the socket buffer alone");
+    sockets_del(id);
+    close(sp[1]);
+    a[0] = saved_a;
+    satip[0] = saved_sip;
+    return 0;
+}
+
 static void send_rtsp_reply(sockets *s, char *buf, const char *reply) {
     strcpy(buf, reply);
     s->rlen = strlen(buf);
@@ -398,6 +431,8 @@ int main() {
               "test rejected SETUP tears down and retries");
     TEST_FUNC(test_satipc_cancel_keeps_queued_pids(),
               "test cancelling a queued pid keeps the rest");
+    TEST_FUNC(test_satipc_reply_empty_buffer_ignored(),
+              "test satipc_reply ignores an empty buffer");
 
     return 0;
 }

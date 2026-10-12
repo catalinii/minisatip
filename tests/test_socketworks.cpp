@@ -50,6 +50,9 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <chrono>
+#include <thread>
+
 #define DEFAULT_LOG LOG_DVBCA
 
 extern sockets *s[MAX_SOCKS];
@@ -450,6 +453,56 @@ int test_socket_bind_dev_ok_compare() {
 }
 #endif
 
+extern int run_loop;
+
+static int eof_action_calls = 0;
+static int eof_count_action(void *p) {
+    (void)p;
+    eof_action_calls++;
+    return 0;
+}
+
+// EOF with production-like stale errno: read() returning 0 never
+// touches errno, which often still holds EWOULDBLOCK at that point.
+static int eof_stale_errno_read(int sock, void *buf, size_t len, void *ss,
+                                int *rv) {
+    (void)sock;
+    (void)buf;
+    (void)len;
+    (void)ss;
+    errno = EWOULDBLOCK;
+    *rv = 0;
+    return 0;
+}
+
+static void stop_loop_after(int ms) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+    run_loop = 0;
+}
+
+// EOF on an HTTP socket must close it without dispatching the action.
+int test_eof_does_not_dispatch_action() {
+    // Last test: dismantles the shared pipe fixture from main().
+    sockets_del(id);
+    close(read_fd);
+    eof_action_calls = 0;
+    int sp[2];
+    ASSERT(socketpair(AF_UNIX, SOCK_STREAM, 0, sp) == 0, "socketpair failed");
+    int eof_id =
+        sockets_add(sp[0], NULL, -1, TYPE_HTTP, eof_count_action, NULL, NULL);
+    ASSERT(eof_id >= 0, "sockets_add failed");
+    get_sockets(eof_id)->read = eof_stale_errno_read;
+    close(sp[1]); // peer gone, our end stays poll-readable
+    run_loop = 1;
+    std::thread stopper(stop_loop_after, 300);
+    select_and_execute(NULL);
+    stopper.join();
+    run_loop = 1;
+    ASSERT(eof_action_calls == 0, "action must not run on EOF");
+    ASSERT(get_sockets(eof_id) == NULL, "EOF socket must be closed");
+    return 0;
+}
+
 int main() {
     opts.log = 1; // LOG_UTILS | LOG_SOCKET;
     strcpy(thread_info[thread_index].thread_name, "test_socketworks");
@@ -471,6 +524,8 @@ int main() {
     TEST_FUNC(test_socket_bind_dev_ok_compare(),
               "testing bind-dev compare stops at NUL");
 #endif
+    TEST_FUNC(test_eof_does_not_dispatch_action(),
+              "testing EOF closes the socket without dispatching action");
     fflush(stdout);
     free_all();
     return 0;
