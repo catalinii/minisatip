@@ -686,6 +686,54 @@ static int run_rtsp_request(const char *req, std::string &out) {
     return 0;
 }
 
+// Runs fn with an empty socket buffer; reports if it left the buffer alone.
+static int run_empty_request(int type, int (*fn)(sockets *), int *flags_after,
+                             bool *buf_kept) {
+    int sp[2];
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, sp) != 0)
+        return -1;
+    int id = sockets_add(sp[0], NULL, -1, type, NULL, NULL, NULL);
+    if (id < 0) {
+        close(sp[0]);
+        close(sp[1]);
+        return -1;
+    }
+    sockets *s = get_sockets(id);
+    static unsigned char empty[1] = {0};
+    s->buf = empty;
+    s->lbuf = sizeof(empty);
+    s->rlen = 0;
+    s->flags = 0;
+    fn(s);
+    *flags_after = s->flags;
+    *buf_kept = (s->buf == empty);
+    sockets_del(id);
+    close(sp[1]);
+    return 0;
+}
+
+int test_read_rtsp_empty_buffer_ignored() {
+    setup_test_env();
+    int flags = -1;
+    bool kept = false;
+    ASSERT(run_empty_request(TYPE_RTSP, read_rtsp, &flags, &kept) == 0,
+           "request helper failed");
+    ASSERT_EQUAL(0, flags, "empty buffer must not grow the socket buffer");
+    ASSERT(kept, "empty buffer must leave the socket buffer alone");
+    return 0;
+}
+
+int test_read_http_empty_buffer_ignored() {
+    setup_test_env();
+    int flags = -1;
+    bool kept = false;
+    ASSERT(run_empty_request(TYPE_HTTP, read_http, &flags, &kept) == 0,
+           "request helper failed");
+    ASSERT_EQUAL(0, flags, "empty buffer must not grow the socket buffer");
+    ASSERT(kept, "empty buffer must leave the socket buffer alone");
+    return 0;
+}
+
 int test_read_rtsp_sessions_exhausted_returns_503() {
     setup_test_env();
     for (int i = 0; i < MAX_STREAMS; i++)
@@ -847,6 +895,10 @@ int main() {
               "test bogus session stays 454 when full");
     TEST_FUNC(test_read_rtsp_play_while_busy_returns_503(),
               "test read_rtsp emits 503 while busy");
+    TEST_FUNC(test_read_rtsp_empty_buffer_ignored(),
+              "test read_rtsp ignores an empty buffer");
+    TEST_FUNC(test_read_http_empty_buffer_ignored(),
+              "test read_http ignores an empty buffer");
     TEST_FUNC(test_decode_transport_port_change_no_deadlock(),
               "test decode_transport does not deadlock on a port change");
 #ifndef DISABLE_SRT

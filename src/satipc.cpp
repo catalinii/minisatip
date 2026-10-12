@@ -222,6 +222,8 @@ int satipc_handle_play(adapter *ad, satipc *sip) {
 }
 
 int satipc_reply(sockets *s) {
+    if (!s->rlen) // nothing buffered (EOF), nothing to parse
+        return 0;
     int rlen = s->rlen;
     adapter *ad;
     satipc *sip;
