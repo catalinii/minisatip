@@ -773,6 +773,15 @@ void capmt_forget_sent(SCAPMT *c) {
         len = 0;
 }
 
+// Places of left programs whose streams are still kept for a rejoin
+static int capmt_kept_count(SCAPMT *c) {
+    int n = 0;
+    for (int place = 0; place < MAX_PMT_PER_CAPMT; place++)
+        n += !PMT_ID_IS_VALID(capmt_place(c, place)) &&
+             c->sent_es_len[place] > 0;
+    return n;
+}
+
 // Move the programs to the front; only done when a send happens anyway
 static void capmt_compact(SCAPMT *c) {
     int ids[MAX_PMT_PER_CAPMT], n = 0;
@@ -1105,12 +1114,17 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple) {
             }
         }
     }
-    // Pack into the least loaded CAPMT, up to multiple + 1 programs each
+    // Pack into the least loaded CAPMT, up to multiple + 1 programs each.
+    // On a tie prefer one without kept places, so a zap back stays free.
     if (!res && multiple > 0) {
         int limit = std::min(multiple + 1, MAX_PMT_PER_CAPMT), best = -1;
+        auto load = [](SCAPMT *c) {
+            return std::pair{capmt_pmt_count(c), capmt_kept_count(c)};
+        };
         for (ca_pos = 0; ca_pos < d->max_ca_pmt; ca_pos++) {
-            int n = capmt_pmt_count(d->capmt + ca_pos);
-            if (n < limit && (best < 0 || n < capmt_pmt_count(d->capmt + best)))
+            SCAPMT *c = d->capmt + ca_pos;
+            if (capmt_pmt_count(c) < limit &&
+                (best < 0 || load(c) < load(d->capmt + best)))
                 best = ca_pos;
         }
         if (best >= 0) {
