@@ -50,6 +50,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <atomic>
 #include <chrono>
 #include <thread>
 
@@ -453,7 +454,7 @@ int test_socket_bind_dev_ok_compare() {
 }
 #endif
 
-extern int run_loop;
+extern std::atomic<int> run_loop;
 
 static int eof_action_calls = 0;
 static int eof_count_action(void *p) {
