@@ -2204,6 +2204,48 @@ int test_capmt_rejoin_takes_kept_place() {
     return 0;
 }
 
+// CAPMT 0 = {1, 3}, CAPMT 1 = {2}: zapping 3 -> 4 -> 3 -> 4 restarts
+// a resident once; the zaps back return to kept places and send nothing.
+int test_capmt_zap_back_keeps_places() {
+    packing_cam_open();
+    pcam->dev.max_ca_pmt = 2;
+    SCAPMT *c0 = pcam->dev.capmt, *c1 = pcam->dev.capmt + 1;
+    SPMT *ch1 = packing_program(0x2901), *ch2 = packing_program(0x2902),
+         *ch3 = packing_program(0x2903), *ch4 = packing_program(0x2904);
+    dvbca_process_pmt(&pcam->ad, ch1, 0);
+    dvbca_process_pmt(&pcam->ad, ch2, 0);
+    dvbca_process_pmt(&pcam->ad, ch3, 0);
+    flush_window();
+    ASSERT(capmt_has_pmt(c0, ch1->id) && capmt_has_pmt(c0, ch3->id) &&
+               capmt_has_pmt(c1, ch2->id) && capmt_pmt_count(c1) == 1,
+           "CAPMT 0 carries channels 1 and 3, CAPMT 1 channel 2");
+    read_capmts();
+
+    dvbca_del_pmt(&pcam->ad, ch3);
+    dvbca_process_pmt(&pcam->ad, ch4, 0);
+    ASSERT(capmt_has_pmt(c1, ch4->id),
+           "on a tie the CAPMT without kept places takes channel 4");
+    flush_window();
+    std::vector<uint8_t> last;
+    ASSERT_EQUAL(read_capmts(&last), 1, "the first zap is one send");
+    ASSERT(capmt_lists_pid(last, ch2->stream_pids[0].pid) &&
+               capmt_lists_pid(last, ch4->stream_pids[0].pid),
+           "on CAPMT 1, next to channel 2");
+
+    for (int i = 0; i < 2; i++) {
+        dvbca_del_pmt(&pcam->ad, ch4);
+        dvbca_process_pmt(&pcam->ad, ch3, 0);
+        ASSERT(capmt_has_pmt(c0, ch3->id), "channel 3 back in CAPMT 0");
+        dvbca_del_pmt(&pcam->ad, ch3);
+        dvbca_process_pmt(&pcam->ad, ch4, 0);
+        ASSERT(capmt_has_pmt(c1, ch4->id), "channel 4 back in CAPMT 1");
+        flush_window();
+        ASSERT_EQUAL(read_capmts(), 0, "zapping back and forth sends nothing");
+    }
+    packing_cam_close();
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -2245,6 +2287,8 @@ int main() {
               "testing that the release drops the left partners");
     TEST_FUNC(test_capmt_rejoin_takes_kept_place(),
               "testing that a rejoin returns to its kept place");
+    TEST_FUNC(test_capmt_zap_back_keeps_places(),
+              "testing that zapping back and forth keeps kept places");
     TEST_FUNC(test_get_authdata_filename(), "testing filename helper function");
     TEST_FUNC(test_capmt_content_hash_masks_version_and_listmgmt(),
               "testing the CAPMT hash masks version and listmgmt");
