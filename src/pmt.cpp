@@ -945,6 +945,8 @@ int decrypt_batch(SPMT *pmt) {
          pmt->parity.load(), pmt->blen, pmt->sid, pid);
     for (i = 0; i < pmt->blen; i++)
         pmt->batch[i].data[3] &= 0x3F; // clear the encrypted flags
+    if (!pmt->update_cw) // the CW was verified, not just the newest one
+        pmt->last_decrypt_ok = getTick();
     pmt->blen = 0;
 
     return 0;
@@ -959,6 +961,7 @@ int pmt_decrypt_stream(adapter *ad) {
     int pid;
     int cp;
     int rlen = ad->rlen;
+    int64_t now = getTick();
     int pmt_id[rlen / DVB_FRAME + 10];
     int pmt_ids = 0;
 
@@ -977,6 +980,7 @@ int pmt_decrypt_stream(adapter *ad) {
                        pid, p ? p->pmt : -3, i / 188, i);
                 continue; // cannot decrypt
             }
+            pmt->last_scrambled_pkt = now;
 
             cp = ((b[3] & 0x40) > 0);
 
@@ -1545,6 +1549,7 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
     pmt->update_cw = 1;
     pmt->blen = 0;
     pmt->last_update_cw = 0;
+    pmt->last_decrypt_ok = pmt->last_scrambled_pkt = 0;
     pmt->filter = -1;
     pmt->version = -1;
     pmt->state = PMT_STOPPED;
@@ -2309,6 +2314,7 @@ void start_pmt(SPMT *pmt, adapter *ad) {
          pmt->pid, pmt->sid, pmt->filter, pmt->name);
     pmt->state = PMT_STARTING;
     pmt->start_time = getTick();
+    pmt->last_decrypt_ok = pmt->last_scrambled_pkt = 0;
 
     // No ADD_REMOVE: the client subscription holds the pid in the demux,
     // so the last unsubscribe deletes it; the CA send follows on the pass.

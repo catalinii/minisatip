@@ -92,6 +92,8 @@ typedef struct struct_key {
     unsigned char is_icam;
     uint32_t capmt_hash;  // content hash of the last CAPMT sent
     int capmt_hash_valid; // set once a send is known delivered
+    // Descramble watchdog: key creation, first pass with no decrypt
+    int64_t created, stall_start;
 } SKey;
 
 void init_dvbapi();
@@ -107,6 +109,7 @@ void dvbapi_pid_add(adapter *a, int pid, SPid *cp, int existing);
 void dvbapi_pid_del(adapter *a, int pid, SPid *cp);
 void register_dvbapi();
 void unregister_dvbapi();
+void dvbapi_descramble_watchdog(adapter *ad);
 void send_client_info(sockets *s);
 void set_algo(SKey *k, int algo, int mode);
 

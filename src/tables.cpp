@@ -220,6 +220,8 @@ int match_ca_caid(int ica, int aid, int caid) {
 }
 
 void close_pmt_for_ca(int i, adapter *ad, SPMT *pmt) {
+    if (i < 0 || i >= nca)
+        return;
     uint64_t mask = 1ULL << i;
     if (!ad)
         ad = get_adapter(pmt->adapter);

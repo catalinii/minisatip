@@ -21,6 +21,7 @@
 #include "tables.h"
 #include "utils.h"
 #include "utils/testing.h"
+#include "utils/ticks.h"
 
 #include <atomic>
 #include <poll.h>
@@ -37,9 +38,11 @@ extern adapter *a[MAX_ADAPTERS];
 extern std::atomic<int> dvbapi_is_enabled;
 extern std::atomic<int> sock;
 extern std::atomic<int> dvbapi_sock;
+extern std::atomic<int> dvbapi_ca;
 extern char *get_channel_for_key(int key, char *dest, int max_size);
 int dvbapi_add_pmt(adapter *ad, SPMT *pmt, int update);
 void dvbapi_close_socket();
+int pmt_del(int id);
 
 static int count_enabled_keys() {
     int n = 0;
@@ -267,6 +270,139 @@ int test_update_resend_skips_identical_capmt() {
     return 0;
 }
 
+// A PMT that decrypted and then gets no CWs is restarted for OSCam: CA_STOP,
+// a new key and CAPMT on the next pass, while the PMT itself keeps running.
+int test_descramble_watchdog() {
+    adapter ad = {};
+    int sv[2];
+    ASSERT(socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == 0, "no socketpair");
+    int saved_sock = sock;
+    int saved_enabled = dvbapi_is_enabled;
+    sock = sv[0];
+    dvbapi_is_enabled = 1;
+    ad.enabled = 1;
+    ad.id = 0;
+    a[0] = &ad;
+    register_dvbapi();
+    int ca_idx = dvbapi_ca;
+    uint64_t dvbapi_mask = 1ULL << ca_idx;
+    ASSERT(ad.ca_mask & dvbapi_mask, "dvbapi not on the adapter");
+
+    int id = pmt_add(0, 100, 48);
+    SPMT *pmt = get_pmt(id);
+    ASSERT(pmt, "no PMT");
+    pmt_add_caid(pmt, 0x0100, 0x1000, NULL, 0);
+    pmt->state = PMT_RUNNING;
+    ad.active_pmt[0] = id;
+    ad.active_pmts = 1;
+    send_pmt_to_cas(&ad, pmt);
+    SKey *k = static_cast<SKey *>(pmt->opaque);
+    ASSERT(k && k->enabled, "no live key after the CAPMT");
+    drain(sv[1]);
+
+    // getTick() starts at 0 on its first call, and a 0 stamp means never
+    while (getTick() < 1)
+        usleep(1000);
+    int64_t now = getTick();
+    k->created = now - 10000; // past the grace of a new key
+    pmt->last_scrambled_pkt = now;
+    dvbapi_descramble_watchdog(&ad);
+    ASSERT_EQUAL(k->stall_start, 0, "a PMT that never decrypted is left alone");
+
+    pmt->last_decrypt_ok = now - 5000;
+    dvbapi_descramble_watchdog(&ad);
+    ASSERT(k->stall_start > 0, "a stall starts the clock");
+    ASSERT(k->enabled, "no restart before the stall time");
+
+    pmt->last_decrypt_ok = now;
+    dvbapi_descramble_watchdog(&ad);
+    ASSERT_EQUAL(k->stall_start, 0, "a decrypt ends the stall");
+    pmt->last_decrypt_ok = now - 5000;
+
+    pmt->last_scrambled_pkt = now - 3000;
+    dvbapi_descramble_watchdog(&ad);
+    ASSERT_EQUAL(k->stall_start, 0, "no recent scrambled packet, no stall");
+
+    pmt->last_scrambled_pkt = now;
+    k->stall_start = now - 4000;
+    k->created = now;
+    dvbapi_descramble_watchdog(&ad);
+    ASSERT(k->enabled, "a new key gets its grace");
+
+    k->created = now - 10000;
+    k->pmt_id = id + 1;
+    dvbapi_descramble_watchdog(&ad);
+    ASSERT(k->enabled, "a key of another PMT is left alone");
+    k->pmt_id = id;
+    pmt->state = PMT_STARTING;
+    dvbapi_descramble_watchdog(&ad);
+    ASSERT(k->enabled, "only a running PMT is restarted");
+    pmt->state = PMT_RUNNING;
+    dvbapi_is_enabled = 0;
+    dvbapi_descramble_watchdog(&ad);
+    ASSERT(k->enabled, "nothing to restart without OSCam");
+    dvbapi_is_enabled = 1;
+    dvbapi_ca = -1;
+    dvbapi_descramble_watchdog(&ad);
+    ASSERT(k->enabled, "nothing to restart once dvbapi is unregistered");
+    dvbapi_ca = ca_idx;
+    pmt->adapter = 1;
+    dvbapi_descramble_watchdog(&ad);
+    ASSERT(k->enabled, "a PMT of another adapter is left alone");
+    pmt->adapter = 0;
+    k->enabled = false;
+    dvbapi_descramble_watchdog(&ad);
+    ASSERT(pmt->opaque == k, "a key dvbapi deleted is left alone");
+    k->enabled = true;
+
+    ASSERT_EQUAL(drain(sv[1]), 0, "nothing sent to OSCam so far");
+    dvbapi_descramble_watchdog(&ad);
+    ASSERT(!k->enabled && !pmt->opaque, "a stall deletes the dvbapi key");
+    ASSERT_EQUAL(pmt->state, PMT_RUNNING, "the PMT keeps running");
+    ASSERT(drain(sv[1]) > 0, "OSCam gets a CA_STOP");
+    ASSERT(!(pmt->ca_mask & dvbapi_mask), "the next pass resends");
+
+    send_pmt_to_cas(&ad, pmt);
+    SKey *k2 = static_cast<SKey *>(pmt->opaque);
+    ASSERT(k2 && k2->enabled, "a new key after the restart");
+    ASSERT(drain(sv[1]) > 0, "a fresh CAPMT after the restart");
+
+    k2->stall_start = now - 4000;
+    k2->created = now - 6000;
+    dvbapi_descramble_watchdog(&ad);
+    ASSERT(k2->enabled, "a second restart waits twice the grace");
+    k2->created = now - 11000;
+    dvbapi_descramble_watchdog(&ad);
+    ASSERT(!k2->enabled, "the second restart after the doubled grace");
+
+    send_pmt_to_cas(&ad, pmt);
+    SKey *k3 = static_cast<SKey *>(pmt->opaque);
+    ASSERT(k3 && k3->enabled, "a new key after the second restart");
+    pmt->last_decrypt_ok = now - 4500;
+    k3->stall_start = now - 4000;
+    k3->created = now - 6000;
+    dvbapi_descramble_watchdog(&ad);
+    ASSERT(!k3->enabled, "a decrypt in between resets the back-off");
+    drain(sv[1]);
+
+    start_pmt(pmt, &ad);
+    ASSERT(!pmt->last_decrypt_ok && !pmt->last_scrambled_pkt,
+           "a started PMT has no stamps");
+    pmt->last_decrypt_ok = pmt->last_scrambled_pkt = now;
+    unregister_dvbapi();
+    pmt_del(id);
+    ASSERT_EQUAL(pmt_add(0, 100, 48), id, "the PMT slot is reused");
+    ASSERT(!pmt->last_decrypt_ok && !pmt->last_scrambled_pkt,
+           "a reused PMT has no stamps");
+    pmt_del(id);
+    dvbapi_is_enabled = saved_enabled;
+    sock = saved_sock;
+    close(sv[0]);
+    close(sv[1]);
+    a[0] = NULL;
+    return 0;
+}
+
 // A failed OSCam write happens under the adapter lock, so closing only
 // marks the socket; the delete runs later, outside that lock.
 int test_close_socket_marks_without_deleting() {
@@ -306,6 +442,8 @@ int main() {
               "testing an identical re-send writes no CAPMT");
     TEST_FUNC(test_close_socket_marks_without_deleting(),
               "testing close marks the socket without deleting it");
+    TEST_FUNC(test_descramble_watchdog(),
+              "testing the watchdog restarts a stalled PMT for OSCam");
     fflush(stdout);
     return 0;
 }
