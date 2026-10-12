@@ -155,6 +155,9 @@ typedef struct struct_pmt {
     // Set on the adapter thread, read from send_cw() on dvbapi/ca threads.
     std::atomic<int8_t> parity, update_cw;
     uint64_t last_update_cw;
+    // For CA watchdogs: last batch decrypted with a verified CW and last
+    // scrambled packet. Owned by the adapter thread.
+    int64_t last_decrypt_ok, last_scrambled_pkt;
     // Active key: stored on the adapter thread, loaded from dvbapi/ca threads.
     std::atomic<SCW *> cw{nullptr};
     SPid *p;

@@ -32,6 +32,7 @@
 #include "utils/ticks.h"
 
 #include <arpa/inet.h>
+#include <array>
 #include <atomic>
 #include <ctype.h>
 #include <errno.h>
@@ -52,6 +53,18 @@
 #include <unistd.h>
 
 #define DEFAULT_LOG LOG_DVBAPI
+
+// Descramble watchdog timings (ms)
+constexpr int64_t DVBAPI_STALL_MS = 3000;     // scrambled packets, no decrypt
+constexpr int64_t DVBAPI_KEY_GRACE_MS = 5000; // a new key waits for its CWs
+constexpr int64_t DVBAPI_SCRAMBLED_RECENT_MS = 2000; // still scrambled
+// Per PMT id, under its PMT lock: each restart without a decrypt since
+// doubles the grace of the next key, up to 320 s
+struct DvbapiWatchdog {
+    int64_t decrypt_ok;
+    int restarts;
+};
+static std::array<DvbapiWatchdog, MAX_PMT> watchdog;
 
 // Read by the adapter threads, written by the socket thread
 std::atomic<int> dvbapi_sock{-1};
@@ -839,6 +852,8 @@ int keys_add(int i, int adapter, int pmt_id) {
     k->is_icam = 0;
     k->capmt_hash = 0;
     k->capmt_hash_valid = 0;
+    k->created = getTick();
+    k->stall_start = 0;
     memset(k->cw[0], 0, 16);
     memset(k->cw[1], 0, 16);
     memset(k->filter_id, -1, sizeof(k->filter_id));
@@ -999,10 +1014,74 @@ int dvbapi_init_dev(adapter *ad) {
     return TABLES_RESULT_OK;
 }
 
+// A PMT that decrypted gets scrambled packets only: restart its dvbapi side,
+// as a zap would. Adapter thread with ad->mutex, order ad -> pmt -> key.
+void dvbapi_descramble_watchdog(adapter *ad) {
+    // unregister_dvbapi() on the socket thread can reset it to -1
+    int ca_idx = dvbapi_ca;
+    if (!dvbapi_is_enabled || ca_idx < 0)
+        return;
+
+    int64_t now = getTick();
+    for (int i = 0; i < ad->active_pmts; i++) {
+        SPMT *pmt = get_pmt(ad->active_pmt[i]);
+        // Its stamps are only safe to read under its own adapter's mutex
+        if (!pmt || pmt->adapter != ad->id)
+            continue;
+        int restarts = 0;
+        {
+            std::lock_guard<SMutex> plock(pmt->mutex);
+            // Never decrypted since its start: nothing to recover
+            if (!pmt->enabled || pmt->state != PMT_RUNNING ||
+                !pmt->last_decrypt_ok)
+                continue;
+            SKey *k = static_cast<SKey *>(pmt->opaque);
+            if (!k)
+                continue;
+            std::lock_guard<SMutex> klock(k->mutex);
+            if (!k->enabled || k->pmt_id != pmt->id)
+                continue;
+            // Decrypted since the last scrambled packet, or none lately
+            if (now - pmt->last_scrambled_pkt > DVBAPI_SCRAMBLED_RECENT_MS ||
+                pmt->last_decrypt_ok >= pmt->last_scrambled_pkt) {
+                k->stall_start = 0;
+                continue;
+            }
+            if (!k->stall_start)
+                k->stall_start = now;
+            auto &w = watchdog[pmt->id];
+            if (w.decrypt_ok != pmt->last_decrypt_ok)
+                w = {pmt->last_decrypt_ok, 0};
+            int64_t grace = DVBAPI_KEY_GRACE_MS << std::min(w.restarts, 6);
+            if (now - k->stall_start < DVBAPI_STALL_MS ||
+                now - k->created < grace)
+                continue;
+            restarts = ++w.restarts;
+        }
+        // CA_STOP and a new key; the next pass sends a fresh CAPMT
+        LOG("Descramble watchdog: no CW for PMT %d, restarting it for OSCam, "
+            "restart %d",
+            pmt->id, restarts);
+        close_pmt_for_ca(ca_idx, ad, pmt);
+    }
+}
+
+static int dvbapi_ts(adapter *ad) {
+    // Per adapter: each adapter thread only touches its own entry
+    static std::array<int64_t, MAX_ADAPTERS> last_run{};
+    int64_t now = getTick();
+    if (ad->id < 0 || ad->id >= MAX_ADAPTERS || now - last_run[ad->id] < 100)
+        return 0;
+    last_run[ad->id] = now;
+    dvbapi_descramble_watchdog(ad);
+    return 0;
+}
+
 // Set up once: the adapter threads call through it while OSCam reconnects
 SCA_op dvbapi = {.ca_add_pmt = dvbapi_add_pmt,
                  .ca_del_pmt = dvbapi_del_pmt,
-                 .ca_init_dev = dvbapi_init_dev};
+                 .ca_init_dev = dvbapi_init_dev,
+                 .ca_ts = dvbapi_ts};
 
 void register_dvbapi() { dvbapi_ca = add_ca(&dvbapi); }
 

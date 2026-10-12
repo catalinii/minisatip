@@ -159,9 +159,21 @@ int test_decrypt() {
     ASSERT(0 == test_decrypt_packet(cws[1], batch, 1),
            "test_decrypt_packet expected to work");
 
+    // Without a packet start the CW cannot be verified: no decrypt stamp
+    for (i = 0; i < max_len; i++)
+        a[0]->buf[i * sizeof(packet) + 1] &= ~0x40;
+    pmts[0]->last_scrambled_pkt = pmts[0]->last_decrypt_ok = -1;
+    pmt_decrypt_stream(a[0]);
+    ASSERT(pmts[0]->last_scrambled_pkt >= 0, "scrambled packets stamped");
+    ASSERT_EQUAL(pmts[0]->last_decrypt_ok, -1, "unverified CW not stamped");
+    for (i = 0; i < max_len; i++)
+        memcpy(a[0]->buf + i * sizeof(packet), packet, sizeof(packet));
+
     pmt_decrypt_stream(a[0]);
     uint8_t *b = a[0]->buf + (max_len - 1) * sizeof(packet);
     ASSERT(b[4] + b[5] + b[6] == 1, "MPEG header expected");
+    ASSERT(pmts[0]->last_decrypt_ok >= pmts[0]->last_scrambled_pkt,
+           "a verified decrypt is stamped");
     hexdump("adapter buffer ", a[0]->buf, 188);
     free(a[0]->buf);
     delete a[0];
