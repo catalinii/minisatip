@@ -104,6 +104,13 @@ option(DEBUG "Enable debug/sanitizer build" OFF)
 option(SRT "Enable SRT support" ${SRT_DEFAULT})
 option(BUILD_TESTING "Build tests" OFF)
 option(TEST_SANITIZERS "Build tests with AddressSanitizer/LeakSanitizer" ON)
+option(DEV_WARNINGS "More compiler warnings, all of them errors" OFF)
+option(LINT "Check the minisatip sources with clang-tidy while building" OFF)
+
+# The development build that CI uses: what passes here passes there
+if(DEV_WARNINGS)
+    add_compile_options(-Wextra -Wno-unused-parameter -Wformat=2 -Werror)
+endif()
 
 # Platform detection
 if(APPLE)
@@ -247,6 +254,15 @@ target_include_directories(minisatip PRIVATE
     ${CMAKE_BINARY_DIR}
 )
 target_compile_options(minisatip PRIVATE -include ${CMAKE_BINARY_DIR}/config.h)
+# The checks are in .clang-tidy; clang-tidy reads the compiler's flags, so
+# this works best with CXX=clang++
+if(LINT)
+    find_program(CLANG_TIDY_EXE NAMES clang-tidy)
+    if(NOT CLANG_TIDY_EXE)
+        message(FATAL_ERROR "LINT=ON needs clang-tidy")
+    endif()
+    set_target_properties(minisatip PROPERTIES CXX_CLANG_TIDY ${CLANG_TIDY_EXE})
+endif()
 if(SRT)
     target_include_directories(minisatip SYSTEM PRIVATE ${SRT_INCLUDE_DIR})
 endif()

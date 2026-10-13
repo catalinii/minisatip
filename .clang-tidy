@@ -1,0 +1,22 @@
+# Used by cmake -DLINT=ON. Bug-finding checks only; the ones left out are
+# style or flag almost every file of this code base.
+Checks: >
+  -*,
+  clang-analyzer-*,
+  -clang-analyzer-optin.performance.Padding,
+  -clang-analyzer-security.insecureAPI.*,
+  bugprone-*,
+  -bugprone-assignment-in-if-condition,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-implicit-widening-of-multiplication-result,
+  -bugprone-macro-parentheses,
+  -bugprone-multi-level-implicit-pointer-conversion,
+  -bugprone-narrowing-conversions,
+  -bugprone-reserved-identifier,
+  -bugprone-suspicious-stringview-data-usage,
+  -bugprone-switch-missing-default-case,
+  -bugprone-throwing-static-initialization,
+  -bugprone-unchecked-string-to-number-conversion,
+  performance-*,
+  -performance-enum-size
+HeaderFilterRegex: 'src/.*'

@@ -307,6 +307,13 @@ pre-commit install
 apt-get install clang-format
 ```
 
+CI builds with `-DDEV_WARNINGS=ON`, which adds warnings and makes all of them
+errors, so check a change with it, and optionally with clang-tidy:
+```bash
+cmake -B build . -DDEV_WARNINGS=ON -DBUILD_TESTING=ON && make -C build && make -C build test
+CXX=clang++ cmake -B build-lint . -DLINT=ON && make -C build-lint
+```
+
 
 ## Building a Debian package:
 
