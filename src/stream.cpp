@@ -344,7 +344,8 @@ int close_stream(int i) {
         return 0;
 
     streams *sid = st[i];
-    int ad, rsock_id, type, srt_sock, rtcp_sock, rtcp, st_sock, rsock;
+    int ad, rsock_id, type, rtcp_sock, rtcp, st_sock, rsock;
+    [[maybe_unused]] int srt_sock; // only read when SRT is enabled
     { // Disable under own lock; never hold it across adapter calls.
         std::lock_guard<SMutex> lock(sid->mutex);
         if (!sid->enabled)
