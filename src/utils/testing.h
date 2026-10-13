@@ -17,8 +17,9 @@
     LOG_AND_RETURN(1, "%s:%d %s: %s", __FILE__, __LINE__, __FUNCTION__, msg)
 
 #define ASSERT_EQUAL(v1, v2, msg)                                              \
-    if (v1 != v2)                                                              \
+    if ((v1) != (v2))                                                          \
     LOG_AND_RETURN(1, "%s:%d %s: Expected '%jd', got '%jd': %s", __FILE__,     \
-                   __LINE__, __FUNCTION__, (intmax_t)(v1), (intmax_t)(v2), msg)
+                   __LINE__, __FUNCTION__, (intmax_t)(v1), (intmax_t)(v2),     \
+                   msg)
 
 #define writev(a, b, c) _writev(a, b, c)

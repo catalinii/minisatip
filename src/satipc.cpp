@@ -1003,10 +1003,9 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
     int force_ok = 0;
     int check_holes = 0;
     void *holes[MAX_RTP_MSG];
-    struct mmsghdr messages[MAX_RTP_MSG] = {0};
-    struct iovec iovs[(MAX_RTP_MSG * 2) + 1] = {
-        0}; // RTP Header + Payload (up to MAX_UDP_PACKET_SIZE bytes) for each
-            // UDP datagram
+    struct mmsghdr messages[MAX_RTP_MSG] = {};
+    // RTP Header + Payload (up to MAX_UDP_PACKET_SIZE bytes) for each datagram
+    struct iovec iovs[(MAX_RTP_MSG * 2) + 1] = {};
     uint16_t seq;
     adapter *ad;
     satipc *sip;
@@ -1454,14 +1453,20 @@ int satipc_del_filters(adapter *ad, int fd, int pid) {
 }
 
 #define FILL(req, val)                                                         \
-    if ((val).has_value())                                                     \
-        strlcatf(url, url_len, len, req, *(val));
+    do {                                                                       \
+        auto fill_ = (val);                                                    \
+        if (fill_.has_value())                                                 \
+            strlcatf(url, url_len, len, req, *fill_);                          \
+    } while (0)
 
 // String sibling: reverse_lookup yields "" for AUTO/missing entries, and an
 // empty value must be omitted like the old default checks did.
 #define FILL_STR(req, val)                                                     \
-    if ((val).has_value() && (val).value()[0])                                 \
-        strlcatf(url, url_len, len, req, *(val));
+    do {                                                                       \
+        auto fill_ = (val);                                                    \
+        if (fill_.has_value() && *fill_ && (*fill_)[0])                        \
+            strlcatf(url, url_len, len, req, *fill_);                          \
+    } while (0)
 
 void get_s2_url(adapter *ad, char *url, int url_len) {
     int len = 0;

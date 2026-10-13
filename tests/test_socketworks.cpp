@@ -118,7 +118,7 @@ ssize_t writev_test(int rsock, const struct iovec *iov, int iiov) {
     int left = to_write;
     int old_pos = buf_pos;
     for (i = 0; i < iiov; i++) {
-        int w = (left < iov[i].iov_len) ? left : iov[i].iov_len;
+        int w = std::min(left, static_cast<int>(iov[i].iov_len));
         memcpy(test_buf + buf_pos, iov[i].iov_base, w);
         left -= w;
         buf_pos += w;
@@ -132,7 +132,7 @@ int test_socket_buffering() {
     uint8_t start_rtsp_frame[] = {0x24, 0x0, 1, 2, 0x80, 0x21};
     int i;
     // account for 9 missing bytes at offset 50 (prio data + start_rtsp_frame)
-    for (i = 0; i < sizeof(buf); i++)
+    for (i = 0; i < static_cast<int>(sizeof(buf)); i++)
         if (i < 50)
             buf[i] = i;
         else

@@ -26,7 +26,7 @@
 #include <stdio.h>
 #include <string.h>
 
-void parse_dvbapi_opt(char *optarg, struct_opts_t *optz) {
+void parse_dvbapi_opt(const char *optarg, struct_opts_t *optz) {
     char buf[100];
     memset(buf, 0, sizeof(buf));
     safe_strncpy(buf, optarg);

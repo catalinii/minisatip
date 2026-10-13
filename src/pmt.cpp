@@ -657,7 +657,8 @@ void disable_cw(int pmt_id) {
 }
 
 void cw_decrypt_stream(SCW *cw, SPMT_batch *batch, int len) {
-    SPMT_batch out[len + 1];
+    std::vector<SPMT_batch> outv(len + 1);
+    SPMT_batch *out = outv.data();
     int i;
     for (i = 0; i < len; i++) {
         int adapt_len = get_adaptation_len(batch[i].data);
@@ -669,18 +670,20 @@ void cw_decrypt_stream(SCW *cw, SPMT_batch *batch, int len) {
 
 // Return 0 if the packet was decrypted successfully, 1 otherwise
 int test_decrypt_packet(SCW *cw, SPMT_batch *start, int len) {
-    uint8_t data[len * 188 + 256];
+    std::vector<uint8_t> datav(len * 188 + 256);
+    uint8_t *data = datav.data();
     int i = 0;
     uint32_t pos = 0;
     LOGM("Testing len %d, CW: %s", len, cw_to_string(cw, (char *)data));
-    SPMT_batch batch[len + 1];
+    std::vector<SPMT_batch> batchv(len + 1);
+    SPMT_batch *batch = batchv.data();
     for (i = 0; i < len; i++) {
         hexdump("test_decrypt_packet before: ", start[i].data, start[i].len);
         memcpy(data + pos, start[i].data, start[i].len);
         batch[i].data = data + pos;
         batch[i].len = start[i].len;
         pos += start[i].len;
-        if (pos > sizeof(data))
+        if (pos > datav.size())
             break;
     }
 
@@ -959,10 +962,8 @@ int pmt_decrypt_stream(adapter *ad) {
     int pid;
     int cp;
     int rlen = ad->rlen;
-    int pmt_id[rlen / DVB_FRAME + 10];
+    std::vector<int> pmt_id(rlen / DVB_FRAME + 10, -1);
     int pmt_ids = 0;
-
-    memset(pmt_id, -1, sizeof(pmt_id));
 
     for (i = 0; i < rlen; i += DVB_FRAME) {
         b = ad->buf + i;

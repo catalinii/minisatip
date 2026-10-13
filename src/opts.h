@@ -84,7 +84,7 @@ typedef struct struct_opts {
     const char *cache_dir;
 } struct_opts_t;
 
-void parse_dvbapi_opt(char *optarg, struct_opts_t *optz);
+void parse_dvbapi_opt(const char *optarg, struct_opts_t *optz);
 int parse_sdt_charset_opt(const char *optarg);
 
 extern struct_opts_t opts;

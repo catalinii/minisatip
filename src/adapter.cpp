@@ -1439,7 +1439,7 @@ char *describe_adapter(int sid, int aid, char *dad, int ld) {
     transponder *t;
     adapter *ad;
     streams *ss;
-    char plp_isi[10], ds[10];
+    char plp_isi[12], ds[12];
     int status = 1, strength = 255, snr = 15;
 
     ss = get_sid(sid);
@@ -2398,6 +2398,9 @@ ADAPTER_TP_GETTER(pls_code, pls_code, -1)
 ADAPTER_TP_GETTER(sm, sm, 0)
 ADAPTER_TP_GETTER(gi, gi, GUARD_INTERVAL_AUTO)
 
+// GCC and clang support offsetof() on these non-standard-layout structs
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winvalid-offsetof"
 _symbols adapters_sym[] = {
     {"ad_enabled", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS,
      offsetof(adapter, enabled)},
@@ -2458,3 +2461,4 @@ _symbols adapters_sym[] = {
     {"ad_adapter_names", VAR_FUNCTION_STRING, (void *)&get_adapter_name, 0,
      MAX_ADAPTERS, 0},
     {NULL, 0, NULL, 0, 0, 0}};
+#pragma GCC diagnostic pop

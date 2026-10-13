@@ -1061,7 +1061,8 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
     int bytes = 0, ec = 0;
     int iop = 0, iomax = ad->rlen / 188 + 100;
     int pid, dpid, i;
-    struct iovec io[iomax];
+    std::vector<struct iovec> iov(iomax);
+    struct iovec *io = iov.data();
     unsigned char psi[MAX_CHANNELS_ON_CI * 1500];
     unsigned char null_tail[DVB_FRAME];
     uint16_t ad_dd_pids[8192], dd_ad_pids[8192];

@@ -7,7 +7,7 @@
 #include "utils.h"
 
 void set_options(int argc, char *argv[]);
-char *get_command_line_string(int argc, char *argv[]);
+char *get_command_line_string(int argc, const char *const argv[]);
 
 extern char pid_file[];
 extern char app_name[], version[];

@@ -1357,7 +1357,7 @@ int my_writev(sockets *s, struct iovec *iov, int iiov) {
 }
 
 int socket_enque_highprio(sockets *s, struct iovec *iov, int iovcnt) {
-    int len = 0, i, pos = 0;
+    int len [[maybe_unused]] = 0, i, pos = 0;
     for (i = 0; i < iovcnt; i++)
         len += iov[i].iov_len;
 

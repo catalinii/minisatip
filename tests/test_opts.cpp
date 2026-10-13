@@ -31,7 +31,7 @@ void _reset_dvbapi_opts() {
     memset(opts.dvbapi_host, 0, sizeof(opts.dvbapi_host));
 }
 
-void _parse_dvbapi_opt(char *optarg) {
+void _parse_dvbapi_opt(const char *optarg) {
     LOG("Parsing \"%s\"", optarg);
     _reset_dvbapi_opts();
     parse_dvbapi_opt(optarg, &opts);

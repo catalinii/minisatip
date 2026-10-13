@@ -519,7 +519,7 @@ int test_next_pid_order_concurrent() {
     std::vector<std::thread> th;
     for (int t = 0; t < nthreads; t++) {
         got[t].resize(per);
-        th.emplace_back([&ad, &got, t, per] {
+        th.emplace_back([&ad, &got, t] {
             for (int i = 0; i < per; i++)
                 got[t][i] = ad.next_pid_order();
         });

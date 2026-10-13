@@ -271,7 +271,7 @@ int capmt_has_pmt(const SCAPMT *c, int pmt_id);
 int capmt_pmt_count(const SCAPMT *c);
 int get_max_pmt_for_ca(int i);
 void get_authdata_filename(char *dest, size_t len, unsigned int slot,
-                           char *ci_name);
+                           const char *ci_name);
 char *get_ca_caids_string(int i, char *dest, int max_len);
 
 // CAM reset policy: reset attempts and ready polls per attempt.

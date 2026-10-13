@@ -577,7 +577,7 @@ By default every CAM supports 1 channels\n\
     exit(1);
 }
 
-char *get_command_line_string(int argc, char *argv[]) {
+char *get_command_line_string(int argc, const char *const argv[]) {
     int i;
     size_t len = argc;
 

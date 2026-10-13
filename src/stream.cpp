@@ -344,7 +344,8 @@ int close_stream(int i) {
         return 0;
 
     streams *sid = st[i];
-    int ad, rsock_id, type, srt_sock, rtcp_sock, rtcp, st_sock, rsock;
+    int ad, rsock_id, type, rtcp_sock, rtcp, st_sock, rsock;
+    [[maybe_unused]] int srt_sock; // used with SRT only
     { // Disable under own lock; never hold it across adapter calls.
         std::lock_guard<SMutex> lock(sid->mutex);
         if (!sid->enabled)
@@ -1022,7 +1023,7 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
     int i, st_id = sid->sid;
     SPid *p;
     uint8_t *b;
-    int max_iov = TCP_MAX_IOV;
+    constexpr int max_iov = TCP_MAX_IOV;
     char pids[8193];
     struct iovec iov[max_iov + 1];
     char rtp_buf[16 * (max_iov + 1)];
@@ -1554,6 +1555,9 @@ int get_stream_buffered_size(int s_id) {
         return 0;
     return fifo_used(&s->fifo);
 }
+// GCC and clang support offsetof() on these non-standard-layout structs
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winvalid-offsetof"
 _symbols stream_sym[] = {
     {"st_enabled", VAR_AARRAY_INT8, st, 1, MAX_STREAMS,
      offsetof(streams, enabled)},
@@ -1575,3 +1579,4 @@ _symbols stream_sym[] = {
     {"st_buffered", VAR_FUNCTION_INT, (void *)&get_stream_buffered_size, 0,
      MAX_STREAMS, 0},
     {NULL, 0, NULL, 0, 0, 0}};
+#pragma GCC diagnostic pop

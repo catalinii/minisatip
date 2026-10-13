@@ -1627,7 +1627,7 @@ static uint8_t *element_get_ptr(struct cc_ctrl_data *cc_data, unsigned int id) {
 }
 
 void get_authdata_filename(char *dest, size_t len, unsigned int slot,
-                           char *ci_name) {
+                           const char *ci_name) {
     char cin[128];
     /* add module name to slot authorization bin file */
     memset(cin, 0, sizeof(cin));
@@ -2348,7 +2348,6 @@ static int ci_ccmgr_cc_sac_data_req(ca_session_t *session, const uint8_t *data,
     struct cc_ctrl_data *cc_data = &d->private_data;
     uint32_t data_cnf_tag = CIPLUS_TAG_CC_SAC_DATA_CNF;
     uint8_t dest[2048];
-    uint8_t tmp[len];
     uint8_t id_bitmask, dt_nr;
     unsigned int serial;
     int answ_len;
@@ -2359,9 +2358,10 @@ static int ci_ccmgr_cc_sac_data_req(ca_session_t *session, const uint8_t *data,
         return 0;
     //_hexdump("ci_ccmgr_cc_sac_data_req:", data, len);
 
-    memcpy(tmp, data, 8);
+    std::vector<uint8_t> tmp(len);
+    memcpy(tmp.data(), data, 8);
     sac_crypt(&tmp[8], &data[8], len - 8, cc_data->sek, AES_DECRYPT);
-    data = tmp;
+    data = tmp.data();
 
     if (!sac_check_auth(data, len, cc_data->sak)) {
         LOG("check_auth of message failed");
@@ -2926,7 +2926,8 @@ int APP_DateTime_handler(ca_session_t *session, int resource, uint8_t *buffer,
 
 int ca_app_mmi_answ(ca_session_t *session, uint8_t answ_id, uint8_t *text,
                     uint32_t text_count) {
-    uint8_t buf[10 + text_count];
+    std::vector<uint8_t> answ(static_cast<size_t>(text_count) + 10);
+    uint8_t *buf = answ.data();
     int len = 1 + text_count;
 
     buf[0] = answ_id;
@@ -3016,12 +3017,10 @@ int APP_MMI_handler(ca_session_t *session, int resource, uint8_t *buffer,
             }
             data += llen;
             DEBUGM("[%d] %d bytes text", i, textlen);
-            if ((data + textlen) > max)
+            if (textlen < 0 || (data + textlen) > max)
                 break;
-            char str[textlen + 1];
-            memcpy(str, data, textlen);
-            str[textlen] = '\0';
-            LOG("[UI %d] %s", i, str);
+            std::string str(reinterpret_cast<char *>(data), textlen);
+            LOG("[UI %d] %s", i, str.c_str());
             data += textlen;
         }
         LOG("======================")
@@ -3216,7 +3215,8 @@ int ca_write_tpdu(ca_device_t *d, int tag, uint8_t *buf, int len) {
         }
         return 0;
     }
-    uint8_t p_data[10 + len];
+    std::vector<uint8_t> tpdu(10 + len);
+    uint8_t *p_data = tpdu.data();
     int i_size;
     int slot_id = 0;
     int connection_id = slot_id + 1;
@@ -3380,7 +3380,8 @@ int ca_write_spdu(ca_device_t *d, int session_number, unsigned char tag,
 
 // write an APDU using the current session
 int ca_write_apdu(ca_session_t *s, int tag, const void *data, int len) {
-    unsigned char pkt[len + 3 + 4];
+    std::vector<unsigned char> apdu(len + 3 + 4);
+    unsigned char *pkt = apdu.data();
     int l;
 
     pkt[0] = (tag >> 16) & 0xFF;

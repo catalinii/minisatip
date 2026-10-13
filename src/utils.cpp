@@ -572,7 +572,6 @@ void _hexdump(const char *desc, void *addr, int len) {
     // that one character ends up on a new line, requiring 74 bytes to print.
     int i, pos = 0, bl = (len * 5) + 74;
     char buff[17];
-    char buf[bl];
     unsigned char *pc = (unsigned char *)addr;
 
     if (len == 0) {
@@ -583,7 +582,8 @@ void _hexdump(const char *desc, void *addr, int len) {
         LOG("%s: NEGATIVE LENGTH: %i\n", desc, len);
         return;
     }
-    memset(buf, 0, bl - 1);
+    std::vector<char> out(bl);
+    char *buf = out.data();
     // Process every byte in the data.
     for (i = 0; i < len; i++) {
         // Multiple of 16 means new line (with line offset).
@@ -813,9 +813,11 @@ uint32_t get_random_uint32() {
     return out;
 }
 
+// Copies at most n - 1 bytes of the string b and always terminates a
 void _strncpy(char *a, const char *b, int n) {
-    strncpy(a, b, n);
-    a[n - 1] = 0;
+    size_t len = std::min(strlen(b), static_cast<size_t>(n - 1));
+    memcpy(a, b, len);
+    a[len] = 0;
 }
 
 /**
