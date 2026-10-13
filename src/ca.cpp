@@ -2821,14 +2821,17 @@ static int CIPLUS_APP_AI_handler(ca_session_t *session, int resource_id,
     case CIPLUS_TAG_APP_INFO: {
 
         hexdump("CIPLUS_TAG_APP_INFO", data, data_length);
+        if (data_length < 6) {
+            LOG("CA %d: application info too short (%d)", d->id, data_length);
+            break;
+        }
         LOG("  Application type: %02x", data[0]);
         LOG("  Application manufacturer: %04X", (data[2] << 8) | data[1]);
         LOG("  Manufacturer code: %04X", (data[4] << 8) | data[3]);
 
-        uint8_t dl = data[5];
-        if ((dl + 6) > data_length) {
-            dl = data_length - 6;
-        }
+        // The name length comes from the CAM: bound it by the data and ci_name
+        int dl = std::min({static_cast<int>(data[5]), data_length - 6,
+                           static_cast<int>(sizeof(d->ci_name)) - 1});
         memcpy(d->ci_name, data + 6, dl);
         if (dl > 0)
             d->ci_name[dl] = '\0'; // NOSONAR
@@ -2971,11 +2974,11 @@ int APP_MMI_handler(ca_session_t *session, int resource, uint8_t *buffer,
         uint8_t answer_length = buffer[1];
         uint8_t *text = buffer + 2;
 
-        char buffer[256];
+        char text_buf[256];
 
-        snprintf(buffer, sizeof(buffer), "%.*s", len - 2, text);
+        snprintf(text_buf, sizeof(text_buf), "%.*s", len - 2, text);
 
-        LOG("MMI enquiry from CAM in CA %u:  %s (%s%u digits)", d->id, text,
+        LOG("MMI enquiry from CAM in CA %u:  %s (%s%u digits)", d->id, text_buf,
             blind_answer ? "blind " : "", answer_length);
 
         if (strlen((char *)d->pin_str) == answer_length) {
@@ -3372,7 +3375,9 @@ int ca_write_spdu(ca_device_t *d, int session_number, unsigned char tag,
 
     DEBUGM("%s: CA %d, session %d, name %s, write tag %02X, data length %ld",
            __FUNCTION__, d->id, session_number,
-           d->sessions[session_number - 1].handler.name, tag, ptr - pkt);
+           session_number > 0 ? d->sessions[session_number - 1].handler.name
+                              : "none",
+           tag, ptr - pkt);
     if (ptr > pkt)
         hexdump("WRITE SPDU: ", pkt, ptr - pkt);
     return ca_write_tpdu(d, T_DATA_LAST, pkt, ptr - pkt);
@@ -3580,7 +3585,7 @@ int ca_read(sockets *s) {
             status = 0xF0;
         LOG("Found session_number %d for resource %06X, name %s, status %02X",
             session ? session->session_number : -1, resource_identifier,
-            session->handler.name, status);
+            session ? session->handler.name : "none", status);
         pkt[0] = status;
         copy32(pkt, 1, resource_identifier);
         ca_write_spdu(d, session ? session->session_number : -1,

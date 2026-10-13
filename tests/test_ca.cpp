@@ -1743,6 +1743,89 @@ int test_ca_read_guards() {
     return 0;
 }
 
+// The CAM name stays inside ci_name, however long the CAM says it is.
+int test_ca_app_info_name_bounds() {
+    ca_device_t dev;
+    memset(&dev, 0, sizeof(dev));
+    dev.id = 71;
+    dev.fd = -1;
+    ca_device_t *saved = ca_devices[71];
+    ca_devices[71] = &dev;
+    sockets cs{};
+    cs.sid = 71;
+
+    // ST_OPEN_SESSION_REQUEST for the Application Information resource
+    unsigned char open_ai[6] = {0x91, 0x04, 0x00, 0x02, 0x00, 0x41};
+    cs.buf = open_ai;
+    cs.rlen = sizeof(open_ai);
+    ASSERT_EQUAL(ca_read(&cs), 0, "open AI session parsed");
+    ASSERT_EQUAL(dev.sessions[0].handler.resource, 0x20041, "AI session");
+
+    // ST_SESSION_NUMBER 1, APP_INFO tag, length 206, name length 200
+    unsigned char info[4 + 5 + 206];
+    memset(info, 'A', sizeof(info));
+    unsigned char head[] = {0x90, 0x02, 0x00, 0x01, 0x9F, 0x80, 0x21, 0x81,
+                            0xCE, 0x01, 0x00, 0x00, 0x00, 0x00, 0xC8};
+    memcpy(info, head, sizeof(head));
+    strcpy(dev.cam_menu_string, "menu");
+    cs.buf = info;
+    cs.rlen = sizeof(info);
+    ASSERT_EQUAL(ca_read(&cs), 0, "long app info parsed");
+    ASSERT_EQUAL(strlen(dev.ci_name), sizeof(dev.ci_name) - 1, "name cut");
+    ASSERT(!strcmp(dev.cam_menu_string, "menu"), "field after ci_name kept");
+
+    // APP_INFO of 3 bytes: too short for the name length byte
+    unsigned char short_info[] = {0x90, 0x02, 0x00, 0x01, 0x9F, 0x80,
+                                  0x21, 0x03, 0x01, 0x00, 0x00};
+    strcpy(dev.ci_name, "keep");
+    cs.buf = short_info;
+    cs.rlen = sizeof(short_info);
+    ASSERT_EQUAL(ca_read(&cs), 0, "short app info parsed");
+    ASSERT(!strcmp(dev.ci_name, "keep"), "short app info ignored");
+    ASSERT(!strcmp(dev.cam_menu_string, "menu"), "short info stays inside");
+
+    ca_devices[71] = saved;
+    return 0;
+}
+
+// With every session in use an open request is refused, and neither log
+// line looks up the missing session.
+int test_ca_open_session_table_full() {
+    ca_device_t dev;
+    memset(&dev, 0, sizeof(dev));
+    // garbage where sessions[-2] would be read from
+    memset(&dev.private_data, 0xAB, sizeof(dev.private_data));
+    for (int i = 0; i < MAX_SESSIONS; i++)
+        dev.sessions[i].handler.resource = 0x20041;
+    int fds[2];
+    ASSERT(pipe(fds) == 0, "pipe for the response");
+    dev.id = 72;
+    dev.fd = fds[1];
+    ca_device_t *saved = ca_devices[72];
+    ca_devices[72] = &dev;
+    int saved_enigma = opts.enigma, saved_debug = opts.debug;
+    opts.enigma = 1; // SPDUs go to the fd unwrapped
+    opts.debug |= LOG_DVBCA;
+
+    unsigned char open_ai[6] = {0x91, 0x04, 0x00, 0x02, 0x00, 0x41};
+    sockets cs{};
+    cs.sid = 72;
+    cs.buf = open_ai;
+    cs.rlen = sizeof(open_ai);
+    ca_read(&cs);
+    unsigned char rsp[16] = {};
+    ASSERT_EQUAL(read(fds[0], rsp, sizeof(rsp)), 9, "response written");
+    ASSERT_EQUAL(rsp[0], ST_OPEN_SESSION_RESPONSE, "open session response");
+    ASSERT_EQUAL(rsp[2], 0xF0, "refused");
+
+    opts.enigma = saved_enigma;
+    opts.debug = saved_debug;
+    close(fds[0]);
+    close(fds[1]);
+    ca_devices[72] = saved;
+    return 0;
+}
+
 // A recovered device clears its retry timer on the success path.
 int test_ca_reconnect_success() {
     adapter ad = {};
@@ -2340,6 +2423,9 @@ int main() {
     TEST_FUNC(test_tables_clear_pmt_ca_masks(), "testing shared mask clearer");
     TEST_FUNC(test_ca_timeout_branches(), "testing timeout branches");
     TEST_FUNC(test_ca_read_guards(), "testing ca_read guards");
+    TEST_FUNC(test_ca_app_info_name_bounds(), "testing CAM name bounds");
+    TEST_FUNC(test_ca_open_session_table_full(),
+              "testing an open session request with no free session");
     TEST_FUNC(test_ca_reconnect_success(), "testing reconnect success path");
     TEST_FUNC(test_ca_read_resets_fails(), "testing ca_read sign of life");
     TEST_FUNC(test_send_skips_stale_set(), "testing stale mask-set skip");
