@@ -170,14 +170,15 @@ std::string iterable_to_string(const Container &container,
     if (DEFAULT_LOG & opts.debug)                                              \
     _hexdump(message, b, len)
 
-#define strlcatf(buf, size, ptr, fmt...)                                       \
+#define strlcatf(buf, size, ptr, ...)                                          \
     do {                                                                       \
-        int __r = snprintf((buf) + ptr, (size) - ptr, fmt);                    \
+        const int strlcatf_size = static_cast<int>(size);                      \
+        int __r = snprintf((buf) + ptr, strlcatf_size - ptr, __VA_ARGS__);     \
         ptr += __r;                                                            \
-        if (ptr >= (int)(size)) {                                              \
+        if (ptr >= strlcatf_size) {                                            \
             LOG("%s:%d buffer size too small (%d)", __FUNCTION__, __LINE__,    \
-                size);                                                         \
-            ptr = (size) - 1;                                                  \
+                strlcatf_size);                                                \
+            ptr = strlcatf_size - 1;                                           \
         }                                                                      \
     } while (0)
 

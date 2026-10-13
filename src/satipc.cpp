@@ -235,7 +235,7 @@ int satipc_reply(sockets *s) {
 
     if (!is_rtsp_response((char *)s->buf, s->rlen)) {
         set_socket_new_buffer(s->id, 10240);
-        LOG("satipc: RTSP header not complete: %d len %d\n%s", s->id,
+        LOG("satipc: RTSP header not complete: %d len %zu\n%s", s->id,
             strlen((const char *)s->buf), s->buf);
         return 0;
     }
@@ -1610,7 +1610,8 @@ int http_request(adapter *ad, char *url, const char *method, int force) {
     const char *qm;
     int ptr = 0;
     int lb, remote_socket;
-    char format[] = "%s rtsp://%s:%d/%s%s%s RTSP/1.0\r\nCSeq: %d%s\r\n\r\n";
+    static constexpr char format[] =
+        "%s rtsp://%s:%d/%s%s%s RTSP/1.0\r\nCSeq: %d%s\r\n\r\n";
     satipc *sip = get_satip(ad->id);
     if (!sip)
         return 0;

@@ -345,8 +345,9 @@ int send_pmt_to_cas(adapter *ad, SPMT *pmt) {
             disabled = pmt->disabled_ca_mask;
         }
         LOG("Sending PMT %d to all CAs: ad_ca_mask %X, "
-            "pmt_ca_mask %X, disabled_ca_mask %X",
-            pmt->id, ad ? ad->ca_mask.load() : -2, sent, disabled);
+            "pmt_ca_mask %jX, disabled_ca_mask %jX",
+            pmt->id, ad ? ad->ca_mask.load() : -2, static_cast<uintmax_t>(sent),
+            static_cast<uintmax_t>(disabled));
         for (i = 0; i < nca; i++)
             if (ca[i].enabled)
                 rv += send_pmt_to_ca(i, ad, pmt);

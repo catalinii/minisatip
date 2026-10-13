@@ -277,7 +277,7 @@ void print_version(int use_log, int print_built_info) {
     if (!use_log)
         puts(buf);
     else
-        LOG0(buf);
+        LOG0("%s", buf);
 
     if (print_built_info) {
         for (i = 0; built_info[i]; i++)
@@ -1451,7 +1451,7 @@ int read_http(sockets *s) {
     char ra[50];
     char *space;
     int is_head = 0;
-    static const char *xml =
+    static constexpr char xml[] =
         "<?xml version=\"1.0\"?>"
         "<root xmlns=\"urn:schemas-upnp-org:device-1-0\" configId=\"1\">"
         "<specVersion><major>1</major><minor>1</minor></specVersion>"
@@ -1747,23 +1747,25 @@ int ssdp_byebye(sockets *s) { return ssdp_notify(s, 0); }
 
 int ssdp;
 int ssdp_reply(sockets *s) {
-    const char *reply = "HTTP/1.1 200 OK\r\n"
-                        "CACHE-CONTROL: max-age=1800\r\n"
-                        "DATE: %s\r\n"
-                        "EXT:\r\n"
-                        "LOCATION: http://%s/%s\r\n"
-                        "SERVER: Linux/1.0 UPnP/1.1 %s/%s\r\n"
-                        "ST: urn:ses-com:device:SatIPServer:1\r\n"
-                        "USN: uuid:%s::urn:ses-com:device:SatIPServer:1\r\n"
-                        "BOOTID.UPNP.ORG: %d\r\n"
-                        "CONFIGID.UPNP.ORG: 0\r\n"
-                        "DEVICEID.SES.COM: %d\r\n\r\n\0";
-    const char *device_id_conflict = "M-SEARCH * HTTP/1.1\r\n"
-                                     "HOST: %s:1900\r\n"
-                                     "MAN: \"ssdp:discover\"\r\n"
-                                     "ST: urn:ses-com:device:SatIPServer:1\r\n"
-                                     "USER-AGENT: Linux/1.0 UPnP/1.1 %s/%s\r\n"
-                                     "DEVICEID.SES.COM: %d\r\n\r\n\0";
+    static constexpr char reply[] =
+        "HTTP/1.1 200 OK\r\n"
+        "CACHE-CONTROL: max-age=1800\r\n"
+        "DATE: %s\r\n"
+        "EXT:\r\n"
+        "LOCATION: http://%s/%s\r\n"
+        "SERVER: Linux/1.0 UPnP/1.1 %s/%s\r\n"
+        "ST: urn:ses-com:device:SatIPServer:1\r\n"
+        "USN: uuid:%s::urn:ses-com:device:SatIPServer:1\r\n"
+        "BOOTID.UPNP.ORG: %d\r\n"
+        "CONFIGID.UPNP.ORG: 0\r\n"
+        "DEVICEID.SES.COM: %d\r\n\r\n";
+    static constexpr char device_id_conflict[] =
+        "M-SEARCH * HTTP/1.1\r\n"
+        "HOST: %s:1900\r\n"
+        "MAN: \"ssdp:discover\"\r\n"
+        "ST: urn:ses-com:device:SatIPServer:1\r\n"
+        "USER-AGENT: Linux/1.0 UPnP/1.1 %s/%s\r\n"
+        "DEVICEID.SES.COM: %d\r\n\r\n";
     char *man, *man_sd, *didsescom, *ruuid, *rdid;
     char buf[500];
     char ra[50];
