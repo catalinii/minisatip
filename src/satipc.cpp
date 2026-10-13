@@ -2279,11 +2279,13 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h) {
             LOG("No change for satip xml: %s", s->url);
         return;
     }
-    if (len + strlen(s->xml) > sizeof(s->xml)) {
+    size_t xml_len = strlen(s->xml);
+    if (len + xml_len >= sizeof(s->xml)) {
         LOG("too much data from the satip server for URL %s", s->url);
         return;
     }
-    _strncpy(s->xml + strlen(s->xml), data, len);
+    memcpy(s->xml + xml_len, data, len);
+    s->xml[xml_len + len] = 0;
     DEBUGM("%s: %s", __FUNCTION__, s->xml);
 }
 
