@@ -643,7 +643,7 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
         "read: "
         "%p",
         ss->sock, ss->type, i, get_sockaddr_host(ss->sa, ra, sizeof(ra)),
-        get_sockaddr_port(ss->sa), ss->read);
+        get_sockaddr_port(ss->sa), reinterpret_cast<void *>(ss->read));
     return i;
 }
 
@@ -880,7 +880,9 @@ void *select_and_execute(void *arg) {
                                 "%d), type "
                                 "%d, lbuf %d, rlen %d, ss->buf = %p, buf %p",
                                 master->sock, ss->id, master->id, master->type,
-                                master->lbuf, master->rlen, master->buf, buf);
+                                master->lbuf, master->rlen,
+                                static_cast<void *>(master->buf),
+                                static_cast<void *>(buf));
                             master->rlen = 0;
                         }
                         rlen = 0;
@@ -934,8 +936,9 @@ void *select_and_execute(void *arg) {
                                "action %p",
                                read_ok ? "OK" : "NOK", rlen, master->rlen,
                                master->lbuf, ss->sock, ss->id, master->id,
-                               old_rlen, master->buf, ss->iteration,
-                               master->action);
+                               old_rlen, static_cast<void *>(master->buf),
+                               ss->iteration,
+                               reinterpret_cast<void *>(master->action));
 
                         // EOF (rlen == 0) leaves errno stale, so only a real
                         // read error (rlen < 0) may dispatch on EWOULDBLOCK.

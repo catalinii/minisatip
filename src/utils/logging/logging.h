@@ -7,7 +7,8 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-void _log(const char *file, int line, const char *fmt, ...);
+void _log(const char *file, int line, const char *fmt, ...)
+    __attribute__((format(printf, 3, 4)));
 void _dump_packets(const char *message, unsigned char *b, int len,
                    int packet_offset);
 void _hexdump(const char *desc, void *addr, int len);

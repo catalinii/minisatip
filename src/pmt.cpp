@@ -406,8 +406,8 @@ static int set_filter_flags_locked(SFilter *f, int flags) {
                                  p);
                 update_pids(f->adapter);
             } else
-                LOGM("pid not found or pid in use by %lu streams",
-                     p ? p->sid.size() : -1);
+                LOGM("pid not found or pid in use by %d streams",
+                     p ? static_cast<int>(p->sid.size()) : -1);
         }
     }
     return 0;

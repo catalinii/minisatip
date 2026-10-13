@@ -1307,7 +1307,7 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
     }
 
     LOG("PMT CA %d pmt %d pid %u (%s) ver %u sid %X (%u), enabled_pmts %d, "
-        "%s, PMTS to be send %s, pos %ld%s",
+        "%s, PMTS to be send %s, pos %td%s",
         spmt->adapter, spmt->id, pid, spmt->name, capmt->version, sid,
         capmt->sid, get_enabled_pmts_for_ca(d), listmgmt_str[listmgmt],
         capmt_pmts_str(capmt).c_str(), capmt - d->capmt,
@@ -3348,7 +3348,7 @@ int ca_write_spdu(ca_device_t *d, int session_number, unsigned char tag,
 
     ptr += alen;
 
-    DEBUGM("%s: CA %d, session %d, name %s, write tag %02X, data length %ld",
+    DEBUGM("%s: CA %d, session %d, name %s, write tag %02X, data length %td",
            __FUNCTION__, d->id, session_number,
            session_number > 0 ? d->sessions[session_number - 1].handler.name
                               : "none",
