@@ -145,6 +145,27 @@ int test_update_pids() {
     return 0;
 }
 
+// plp/isi and ds come from the client's URL: ten digits must fit.
+int test_describe_adapter_large_plp_ds() {
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    char buf[500];
+
+    ad.tp.sys = static_cast<fe_delivery_system>(SYS_DVBT2);
+    ad.tp.plp_isi = 2147483647;
+    describe_adapter(-1, 0, buf, sizeof(buf));
+    ASSERT(strstr(buf, ",2147483647,"), "DVB-T2 plp printed");
+
+    ad.tp.sys = static_cast<fe_delivery_system>(SYS_DVBC2);
+    ad.tp.ds = 2147483646;
+    describe_adapter(-1, 0, buf, sizeof(buf));
+    ASSERT(strstr(buf, ",2147483646,2147483647,"), "DVB-C2 ds and plp printed");
+
+    a[0] = NULL;
+    return 0;
+}
+
 int test_find_pid_unsorted() {
     for (int i = 0; i < MAX_ADAPTERS; i++) {
         a[i] = nullptr;
@@ -556,6 +577,8 @@ int main() {
     TEST_FUNC(test_get_lnb_int_freq_cband(),
               "test get_lnb_int_freq with C-band LNB parameters");
     TEST_FUNC(test_update_pids(), "test update_pids and sort_pids");
+    TEST_FUNC(test_describe_adapter_large_plp_ds(),
+              "test describe_adapter with ten-digit plp and ds");
     TEST_FUNC(test_find_pid_unsorted(),
               "test find_pid with entries behind INACTIVE slots");
     TEST_FUNC(test_update_pids_max_pids_floor(),
