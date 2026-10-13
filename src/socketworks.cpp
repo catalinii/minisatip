@@ -1356,14 +1356,26 @@ int my_writev(sockets *s, struct iovec *iov, int iiov) {
     return rv;
 }
 
+// Replies queued behind stream data; a client that never reads stops here
+#define MAX_PRIO_DATA (1024 * 1024)
+
 int socket_enque_highprio(sockets *s, struct iovec *iov, int iovcnt) {
     int len = 0, i, pos = 0;
     for (i = 0; i < iovcnt; i++)
         len += iov[i].iov_len;
 
     pos = s->prio_data_len;
-    if (!s->prio_data)
-        s->prio_data = (uint8_t *)malloc(20480);
+    if (len > MAX_PRIO_DATA - pos) {
+        LOG("sock %d: dropping %d bytes of high priority data, %d queued",
+            s->id, len, pos);
+        return -1;
+    }
+    uint8_t *data = (uint8_t *)realloc(s->prio_data, pos + len);
+    if (!data) {
+        LOG("sock %d: no memory to queue %d bytes", s->id, len);
+        return -1;
+    }
+    s->prio_data = data;
 
     for (i = 0; i < iovcnt; i++) {
         memcpy(s->prio_data + pos, iov[i].iov_base, iov[i].iov_len);
