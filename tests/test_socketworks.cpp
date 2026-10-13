@@ -77,6 +77,30 @@ int test_socket_enque_highprio() {
     return 0;
 }
 
+// A reply with a file body exceeds any small fixed queue
+int test_socket_enque_highprio_large() {
+    sockets *ss = s[id];
+    std::vector<char> body(30000, 'x');
+    struct iovec iov[2];
+    iov[0].iov_base = (void *)"head";
+    iov[0].iov_len = 4;
+    iov[1].iov_base = body.data();
+    iov[1].iov_len = body.size();
+    ASSERT_EQUAL(socket_enque_highprio(ss, iov, 2), 0, "large reply queued");
+    ASSERT_EQUAL(ss->prio_data_len, 30004, "whole reply queued");
+    ASSERT(ss->prio_data[29999] == 'x' && ss->prio_data[30003] == 'x',
+           "reply copied completely");
+    std::vector<char> huge(1024 * 1024, 'y');
+    iov[0].iov_base = huge.data();
+    iov[0].iov_len = huge.size();
+    ASSERT_EQUAL(socket_enque_highprio(ss, iov, 1), -1, "queue is capped");
+    ASSERT_EQUAL(ss->prio_data_len, 30004, "capped reply is dropped");
+    free(ss->prio_data);
+    ss->prio_data_len = 0;
+    ss->prio_data = NULL;
+    return 0;
+}
+
 int test_socket_writev_flush_enqued() {
     struct iovec iov[2];
     char buf[100];
@@ -517,6 +541,8 @@ int main() {
     id = sockets_add(fd[1], NULL, -1, TYPE_UDP, NULL, NULL, NULL);
     TEST_FUNC(test_socket_enque_highprio(),
               "testing test_socket_enque_highprio");
+    TEST_FUNC(test_socket_enque_highprio_large(),
+              "testing a large high priority reply");
     TEST_FUNC(test_socket_writev_flush_enqued(),
               "testing socket_writev with flushing the queue");
     TEST_FUNC(test_socket_buffering(), "testing socket buffering and flushing");
