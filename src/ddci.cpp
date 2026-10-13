@@ -504,7 +504,10 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
     }
 
     d->pmt[pos].id = pmt->id;
+
+    // A new service changes both PAT and SDT content, so both bump.
     d->ver = (d->ver + 1) & 0xF;
+    d->sdt_ver = (d->sdt_ver + 1) & 0xF;
     // Count only new registrations: pmt_add_caid() re-sends clear ca_mask,
     // and counting re-sends used up max_channels with one real channel.
     if (!already_registered && !d->channels++) {
@@ -616,7 +619,9 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
         LOG_AND_RETURN(0, "%s: ddci %d already disabled", __FUNCTION__,
                        m->ddci);
     std::lock_guard<SMutex> lock(d->mutex);
+    // A removed service changes both PAT and SDT content, so both bump.
     d->ver = (d->ver + 1) & 0xF;
+    d->sdt_ver = (d->sdt_ver + 1) & 0xF;
 
     // Decrement only if this PMT actually held a slot, symmetric with
     // ddci_process_pmt()
@@ -735,12 +740,12 @@ int ddci_create_sdt(ddci_device_t *d, uint8_t *sdt) {
     // minimal section it cached at tune time.
     if (data_mask != d->sdt_data_mask) {
         d->sdt_data_mask = data_mask;
-        d->ver = (d->ver + 1) & 0xF;
+        d->sdt_ver = (d->sdt_ver + 1) & 0xF;
     }
     copy16(b, 0, tsid);
     b += 2;
     // reserved, version_number, current_next_indicator
-    *b++ = 0xC1 | (d->ver << 1);
+    *b++ = 0xC1 | (d->sdt_ver << 1);
     // section_number, last_section_number
     copy16(b, 0, 0);
     b += 2;
@@ -764,12 +769,13 @@ int ddci_create_sdt(ddci_device_t *d, uint8_t *sdt) {
             b += 2;
             // reserved_future_use, EIT_schedule_flag,
             // EIT_present_following_flag
-            *b++ = pmt->has_sdt
-                       ? ((pmt->sdt_eit_schedule << 1) | pmt->sdt_eit_pf)
-                       : 0x00;
+            *b++ = pmt->has_sdt ? ((pmt->sdt_eit_schedule.load() << 1) |
+                                   pmt->sdt_eit_pf.load())
+                                : 0x00;
             // running_status, free_CA_mode, descriptors_length
-            uint8_t r = (pmt->has_sdt ? pmt->sdt_running_status : 4) << 5;
-            r |= (pmt->has_sdt ? pmt->sdt_ca_mode : 1) << 4;
+            uint8_t r = (pmt->has_sdt ? pmt->sdt_running_status.load() : 4)
+                        << 5;
+            r |= (pmt->has_sdt ? pmt->sdt_ca_mode.load() : 1) << 4;
             *b++ = r;
             uint8_t *dlen = b++;
             if (pmt->has_sdt) {
@@ -1374,7 +1380,7 @@ int ddci_open_device(adapter *ad) {
     d->channels = 0;
     memset(d->read_index, 0, sizeof(d->read_index));
     d->last_pmt = d->last_pat = 0;
-    d->tid = d->ver = d->sdt_data_mask = 0;
+    d->tid = d->ver = d->sdt_ver = d->sdt_data_mask = 0;
     d->enabled = 1;
     ad->enabled = 1;
     LOG("opened DDCI adapter %d fe:%d dvr:%d", ad->id, ad->fe, ad->dvr);

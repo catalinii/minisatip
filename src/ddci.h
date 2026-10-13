@@ -51,6 +51,9 @@ typedef struct ddci_device {
     uint64_t read_index[MAX_ADAPTERS]; // read index per adapter
     uint64_t last_pat, last_sdt, last_pmt;
     int tid, ver;
+    // SDT section version, split from the PAT ver so SDT-only changes
+    // (transponder data arriving late) do not re-version the PAT.
+    int sdt_ver;
     int sdt_data_mask; // channels with real SDT data at last SDT generation
     int16_t pat_cc, sdt_cc, eit_cc;
     char disable_cat;

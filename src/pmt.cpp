@@ -1556,7 +1556,8 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
     pmt->batch = NULL;
     memset(pmt->name, 0, sizeof(pmt->name));
     memset(pmt->provider, 0, sizeof(pmt->provider));
-    pmt->has_sdt = 0;
+    // Slots are reused: drop the previous SDT state.
+    pmt->has_sdt = false;
     pmt->sdt_service_type = pmt->sdt_running_status = pmt->sdt_ca_mode = 0;
     pmt->sdt_eit_schedule = pmt->sdt_eit_pf = 0;
     pmt->sdt_tsid = pmt->sdt_onid = 0;
@@ -2281,7 +2282,7 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque) {
         pmt->sdt_eit_pf = b[2] & 0x1;
         pmt->sdt_tsid = tsid;
         pmt->sdt_onid = sdt[8] * 256 + sdt[9];
-        pmt->has_sdt = 1;
+        pmt->has_sdt = true;
         for (j = 5; j < desc_loop_len; j += desc_len) {
             unsigned char *c = b + j;
             desc_len = c[1];
