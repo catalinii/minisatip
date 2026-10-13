@@ -1609,7 +1609,7 @@ int pmt_del(int id) {
     // Updates shrink caids while keeping entries for reuse: free all slots.
     for (i = 0; i < MAX_CAID; i++)
         if (pmt->ca[i]) {
-            free(pmt->ca[i]);
+            delete pmt->ca[i];
             pmt->ca[i] = NULL;
         }
     pmt->caids = 0;
@@ -1993,7 +1993,7 @@ void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid, uint8_t *data,
         return;
     }
     // A short descriptor has no valid CAID/PID either: skip it instead
-    // of overflowing the malloc and memcpy below.
+    // of copying a negative length below.
     if (len < 0) {
         LOG("PMT %d discarding CA descriptor with length %d", pmt->id, len);
         return;
@@ -2002,18 +2002,13 @@ void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid, uint8_t *data,
     LOG("PMT %d PI pos %d caid %04X => pid %04X (%d), index %d", pmt->id,
         pmt->caids + 1, caid, capid, capid, pmt->caids);
 
+    // Updates reuse the entry, so its private data is sized on every copy
     if (!pmt->ca[pmt->caids])
-        pmt->ca[pmt->caids] = (SPMTCA *)malloc(sizeof(SPMTCA) + len);
-    if (!pmt->ca[pmt->caids]) {
-        LOG("Failed to allocate memory for CAID %04X", caid);
-        return;
-    }
+        pmt->ca[pmt->caids] = new SPMTCA();
 
     pmt->ca[pmt->caids]->id = caid;
     pmt->ca[pmt->caids]->pid = capid;
-    pmt->ca[pmt->caids]->private_data_len = len;
-    memcpy(pmt->ca[pmt->caids]->private_data, data,
-           pmt->ca[pmt->caids]->private_data_len);
+    pmt->ca[pmt->caids]->private_data.assign(data, data + len);
     pmt->caids++;
     // Force a re-send; same demux thread as the send path, so no
     // epoch bump is needed (unlike cross-thread clearers).
@@ -2429,7 +2424,7 @@ int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf, int buf_len, int ca_id) {
             continue;
         }
 #endif
-        int private_data_len = pmt->ca[i]->private_data_len;
+        int private_data_len = pmt->ca[i]->private_data.size();
         if (len + 6 + private_data_len > buf_len) {
             LOG("PMT %d CA descriptor %d does not fit, truncating at %d",
                 pmt->id, i, len);
@@ -2439,7 +2434,8 @@ int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf, int buf_len, int ca_id) {
         buf[len + 1] = 0x04 + private_data_len;
         copy16(buf, len + 2, pmt->ca[i]->id);
         copy16(buf, len + 4, pmt->ca[i]->pid);
-        memcpy(buf + len + 6, pmt->ca[i]->private_data, private_data_len);
+        std::copy_n(pmt->ca[i]->private_data.data(), private_data_len,
+                    buf + len + 6);
         len += 6 + private_data_len;
         LOGM("PMT %d added caid %04X, pid %04X, pos %d", pmt->id,
              pmt->ca[i]->id, pmt->ca[i]->pid, len);
@@ -2494,7 +2490,7 @@ void free_all_pmts() {
             // Updates shrink caids while keeping entries: free all slots.
             for (j = 0; j < MAX_CAID; j++) {
                 if (pmts[i]->ca[j]) {
-                    free(pmts[i]->ca[j]);
+                    delete pmts[i]->ca[j];
                     pmts[i]->ca[j] = NULL;
                 }
             }

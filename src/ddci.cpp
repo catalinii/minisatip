@@ -910,7 +910,7 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
 
     // Add CA IDs and CA Pids
     for (i = 0; i < pmt->caids; i++) {
-        int private_data_len = pmt->ca[i]->private_data_len;
+        int private_data_len = pmt->ca[i]->private_data.size();
         if (b - new_pmt + 10 + private_data_len > pmt_size) {
             LOG("%s: truncating PMT %d program CA list, buffer full",
                 __FUNCTION__, pmt->id);
@@ -920,7 +920,7 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
         *b++ = 0x04 + private_data_len;
         copy16(b, 0, pmt->ca[i]->id);
         copy16(b, 2, safe_get_pid_mapping(d, pmt->adapter, pmt->ca[i]->pid));
-        memcpy(b + 4, pmt->ca[i]->private_data, private_data_len);
+        std::copy_n(pmt->ca[i]->private_data.data(), private_data_len, b + 4);
         pi_len += 6 + private_data_len;
         b += 4 + private_data_len;
         LOGM("%s: pmt %d added caid %04X, pid %04X", __FUNCTION__, pmt->id,
