@@ -125,8 +125,7 @@ typedef struct struct_stream_pid {
 typedef struct struct_pmt_ca {
     int id;
     int pid;
-    int private_data_len;
-    uint8_t private_data[];
+    std::vector<uint8_t> private_data;
 } SPMTCA;
 
 typedef struct struct_pmt {

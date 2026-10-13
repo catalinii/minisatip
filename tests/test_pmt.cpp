@@ -2458,6 +2458,70 @@ int test_pmt_cosmetic_update_keeps_running() {
     return 0;
 }
 
+// One program CA descriptor with priv_len bytes of private data and
+// one video stream.
+static int build_pmt_ca_private(uint8_t *b, int version, int priv_len) {
+    int pi_len = 6 + priv_len;
+    int len = 12 + pi_len + 5 + 4;
+    memset(b, 0, len);
+    b[0] = 0x02;
+    copy16(b, 1, 0xb000 | (len - 3));
+    b[4] = 100; // sid
+    b[5] = 0xc1 | ((version & 0x1f) << 1);
+    copy16(b, 8, 0xe000 | 3301);
+    copy16(b, 10, 0xf000 | pi_len);
+    b[12] = 0x09;
+    b[13] = 4 + priv_len;
+    copy16(b, 14, 0x0B00);
+    copy16(b, 16, 0xe000 | 0x0C00);
+    for (int i = 0; i < priv_len; i++)
+        b[18 + i] = i + 1;
+    b[12 + pi_len] = 2;
+    copy16(b, 12 + pi_len + 1, 0xe000 | 3301);
+    copy16(b, 12 + pi_len + 3, 0xf000);
+    copy32(b, len - 4, crc_32(b, len - 4));
+    return len;
+}
+
+// An update reuses the CA entries: longer private data must still fit.
+int test_pmt_update_longer_ca_private_data() {
+    for (int i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    int id = pmt_add(0, 100, 48);
+    ASSERT(id >= 0, "could not create the PMT");
+    int fid = add_filter(0, 48, (void *)process_pmt, pmts[id], 0);
+    ASSERT(fid >= 0, "could not add the PMT filter");
+    pmts[id]->filter = fid;
+    ASSERT(mark_pid_add(0, 0, 48) == 0, "pid 48 should be added");
+    ASSERT(mark_pid_add(0, 0, 3301) == 0, "pid 3301 should be added");
+    update_pids(0);
+
+    uint8_t sec[1024];
+    int len = build_pmt_ca_private(sec, 1, 0);
+    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v1 to parse");
+    ASSERT_EQUAL(pmts[id]->ca[0]->private_data.size(), 0, "v1 private data");
+
+    len = build_pmt_ca_private(sec, 2, 200);
+    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v2 to parse");
+    ASSERT_EQUAL(pmts[id]->caids, 1, "v2 CAIDs");
+    ASSERT_EQUAL(pmts[id]->ca[0]->private_data.size(), 200, "v2 private data");
+    auto &priv = pmts[id]->ca[0]->private_data;
+    ASSERT(std::equal(priv.begin(), priv.end(), sec + 18), "v2 private data");
+
+    del_filter(fid);
+    free_all_pmts();
+    a[0] = NULL;
+    return 0;
+}
+
 // A PMT version update with changed streams keeps the PMT running;
 // removed pids keep stale claims the election ignores, and the CA
 // gets a re-send, no delete.
@@ -3238,6 +3302,8 @@ int main() {
               "testing claims survive a PMT version update")
     TEST_FUNC(test_pmt_cosmetic_update_keeps_running(),
               "testing cosmetic PMT update keeps running with a re-send")
+    TEST_FUNC(test_pmt_update_longer_ca_private_data(),
+              "testing a PMT update with longer CA private data");
     TEST_FUNC(test_pmt_content_update_delta(),
               "testing PMT content update keeps running with a re-send")
     TEST_FUNC(test_ca_update_flag_distinguishes_resend(),
