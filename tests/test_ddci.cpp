@@ -977,8 +977,9 @@ int test_create_sdt_with_real_data() {
     uint8_t sdt[512];
     memset(sdt, 0, sizeof(sdt));
     int sdt_len = ddci_create_sdt(&d, sdt);
-    // version bumped: SDT data arrived after registration
-    ASSERT(d.ver == 1, "SDT version not bumped on new data");
+    // SDT version bumped, PAT version untouched: only SDT content changed
+    ASSERT(d.sdt_ver == 1, "SDT version not bumped on new data");
+    ASSERT(d.ver == 0, "PAT version bumped by SDT-only change");
 
     // tsid/onid
     ASSERT(((sdt[4] << 8) | sdt[5]) == 7900, "generated tsid != 7900");
@@ -1019,7 +1020,7 @@ int test_create_sdt_with_real_data() {
 
     // second generation without changes keeps the version
     ddci_create_sdt(&d, sdt);
-    ASSERT(d.ver == 1, "SDT version bumped without changes");
+    ASSERT(d.sdt_ver == 1, "SDT version bumped without changes");
 
     // do not leave the stack adapter behind for later tests
     a[2] = NULL;

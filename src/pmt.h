@@ -160,13 +160,13 @@ typedef struct struct_pmt {
     std::atomic<SCW *> cw{nullptr};
     SPid *p;
     char provider[50], name[50];
-    // Real SDT data for this service, stored by process_sdt() and emitted
-    // into the generated DDCI SDT (some CAMs need more than the minimal SDT)
-    char has_sdt;
-    int sdt_service_type;
-    int sdt_running_status, sdt_ca_mode;
-    int sdt_eit_schedule, sdt_eit_pf;
-    int sdt_tsid, sdt_onid;
+    // Real SDT data for this service, emitted into the generated DDCI SDT.
+    // Atomics: written on the owning thread, read holding d->mutex.
+    std::atomic<bool> has_sdt{false};
+    std::atomic<int> sdt_service_type{0};
+    std::atomic<int> sdt_running_status{0}, sdt_ca_mode{0};
+    std::atomic<int> sdt_eit_schedule{0}, sdt_eit_pf{0};
+    std::atomic<int> sdt_tsid{0}, sdt_onid{0};
     void *opaque;
     char state; // PMT state (PMT_STOPPED, PMT_STARTING, PMT_RUNNING,
                 // PMT_STOPPING)
