@@ -183,10 +183,10 @@ int dvbapi_reply(sockets *s) {
         // %02X %02X %02X %02X %02X", s->sock, s->rlen, pos, op, b[4], b[0],
         // b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10]);
 
-        // Only SET_FILTER touches adapter state (update_pids); the other
-        // cases take just their key lock below, SERVER_INFO needs none.
+        // SET_FILTER and DMX_STOP change the adapter's pids (update_pids(),
+        // del_filter()); the others take just their key lock below.
         std::unique_lock<SMutex> ad_lock, klock;
-        if (op == DVBAPI_DMX_SET_FILTER)
+        if (op == DVBAPI_DMX_SET_FILTER || op == DVBAPI_DMX_STOP)
             lock_key_adapter(b[4] - opts.dvbapi_offset, ad_lock, klock);
 
         switch (op) {
@@ -570,9 +570,15 @@ int dvbapi_close(sockets *s) {
     sock = -1;
     dvbapi_sock = -1;
     dvbapi_is_enabled = 0;
-    // keys_del takes the key lock itself; nothing here touches adapters.
-    for (i = 0; i < MAX_KEYS; i++)
+    // keys_del() reaches update_pids() via del_filter(): hold the adapter.
+    // Not the key: keys_del() takes it, and may need pmt->mutex first.
+    for (i = 0; i < MAX_KEYS; i++) {
+        std::unique_lock<SMutex> ad_lock, klock;
+        lock_key_adapter(i, ad_lock, klock);
+        if (klock.owns_lock())
+            klock.unlock();
         keys_del(i);
+    }
 
     unregister_dvbapi();
     return 0;
@@ -602,13 +608,14 @@ int connect_dvbapi(void *arg) {
         int64_t ctime = getTick();
 
         for (i = 0; i < MAX_KEYS; i++) {
+            // keys_del() and close_pmt_for_ca() change the key's adapter
+            std::unique_lock<SMutex> ad_lock, klock;
+            lock_key_adapter(i, ad_lock, klock);
             SKey *k = get_key(i);
-            if (!k)
+            if (!k || !klock.owns_lock())
                 continue;
-            std::unique_lock<SMutex> klock(k->mutex);
             if (network_mode && k->enabled && (k->ecms == 0) &&
-                (k->last_dmx_stop > 0) &&
-                (ctime - k->last_dmx_stop > 3000)) {
+                (k->last_dmx_stop > 0) && (ctime - k->last_dmx_stop > 3000)) {
                 int pmt_id = k->pmt_id, adapter_id = k->adapter;
                 LOG("Key %d active but no active filter, closing ", i);
                 keys_del(i);
