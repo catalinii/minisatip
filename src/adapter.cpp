@@ -1439,7 +1439,7 @@ char *describe_adapter(int sid, int aid, char *dad, int ld) {
     transponder *t;
     adapter *ad;
     streams *ss;
-    char plp_isi[10], ds[10];
+    char plp_isi[11], ds[11]; // a positive int: 10 digits and the NUL
     int status = 1, strength = 255, snr = 15;
 
     ss = get_sid(sid);
