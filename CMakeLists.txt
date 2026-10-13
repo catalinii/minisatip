@@ -1,24 +1,22 @@
 cmake_minimum_required(VERSION 3.16)
 
-# Determine version from git
-execute_process(
-    COMMAND git describe --abbrev=0 --tags
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    OUTPUT_VARIABLE GIT_TAG
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    ERROR_QUIET
-)
-execute_process(
-    COMMAND git rev-parse --short HEAD
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    OUTPUT_VARIABLE GIT_REVISION
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    ERROR_QUIET
-)
-
-if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
-    message(STATUS "Setting build type to 'DEBUG' as default.")
-    set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Choose the build type (Debug, Release, RelWithDebInfo, MinSizeRel)" FORCE)
+# Determine version from git. Only minisatip's own checkout: a tarball
+# unpacked inside another repository would get that repository's tag.
+if(EXISTS ${CMAKE_SOURCE_DIR}/.git)
+    execute_process(
+        COMMAND git describe --abbrev=0 --tags
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_TAG
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    execute_process(
+        COMMAND git rev-parse --short HEAD
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_REVISION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
 endif()
 
 # A release tarball has no git metadata and would get the version "~", so a
@@ -34,6 +32,22 @@ if(NOT VERSION_STRING)
 endif()
 
 project(minisatip VERSION 2.0 LANGUAGES CXX)
+
+include(GNUInstallDirs)
+include(CheckPIESupported)
+
+# The build type decides the optimization (it was a forced -O2, even for
+# Debug). The default stays -O2 -g, and unoptimized for the sanitizer build.
+get_property(MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(NOT CMAKE_BUILD_TYPE AND NOT MULTI_CONFIG)
+    if(DEBUG)
+        set(DEFAULT_BUILD_TYPE "Debug")
+    else()
+        set(DEFAULT_BUILD_TYPE "RelWithDebInfo")
+    endif()
+    message(STATUS "Setting build type to '${DEFAULT_BUILD_TYPE}' as default.")
+    set(CMAKE_BUILD_TYPE "${DEFAULT_BUILD_TYPE}" CACHE STRING "Choose the build type (Debug, Release, RelWithDebInfo, MinSizeRel)" FORCE)
+endif()
 
 set(DVBCSA_DEFAULT OFF)
 set(DVBCA_DEFAULT OFF)
@@ -74,10 +88,10 @@ if(NETCEIVER_LIBRARY AND NETCEIVER_INCLUDE_DIR)
     set(NETCVCLIENT_DEFAULT ON)
 endif()
 
-set(MINISATIP_LIBS pthread)
+find_package(Threads REQUIRED)
+set(MINISATIP_LIBS Threads::Threads)
 if(STDCPPEXP_LIBRARY)
     set(CXX23_DEFAULT ON)
-    list(APPEND MINISATIP_LIBS ${STDCPPEXP_LIBRARY})
 endif()
 
 # Build options
@@ -98,6 +112,10 @@ if(APPLE)
     set(NETCVCLIENT OFF)
 endif()
 
+if(CXX23 AND STDCPPEXP_LIBRARY)
+    list(APPEND MINISATIP_LIBS ${STDCPPEXP_LIBRARY})
+endif()
+
 # Compute derived feature flags
 set(DDCI OFF)
 if(DVBCA AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -116,21 +134,23 @@ set(CONFIG_CONTENT "// Auto-generated configuration header\n#ifndef CONFIG_H\n#d
 
 foreach(OPT ${OPTIONS})
     if(NOT ${OPT})
-        string(APPEND CONFIG_CONTENT "#define DISABLE_${OPT}\n")
+        string(APPEND CONFIG_CONTENT "#ifndef DISABLE_${OPT}\n#define DISABLE_${OPT}\n#endif\n")
         message(STATUS "Option ${OPT} disabled")
     endif()
 endforeach()
 
 string(APPEND CONFIG_CONTENT "#ifndef VERSION\n#define VERSION \"${VERSION_STRING}\"\n#endif\n")
 string(APPEND CONFIG_CONTENT "\n#endif // CONFIG_H\n")
-file(WRITE ${CMAKE_BINARY_DIR}/config.h "${CONFIG_CONTENT}")
+# configure_file() only touches config.h when its content changes, so a
+# reconfigure does not rebuild everything
+file(WRITE ${CMAKE_BINARY_DIR}/config.h.tmp "${CONFIG_CONTENT}")
+configure_file(${CMAKE_BINARY_DIR}/config.h.tmp ${CMAKE_BINARY_DIR}/config.h COPYONLY)
 
 # Common compile flags
 add_compile_options(
     -Wall
     -Wno-date-time
     -Wno-switch
-    -fPIC
     -fno-common
     -fno-omit-frame-pointer
     -Warray-bounds
@@ -156,8 +176,13 @@ if(DEBUG)
             -static-liblsan
         )
     endif()
-else()
-    add_compile_options(-O2)
+endif()
+
+# A position independent executable, not -fPIC code: PIC makes every global
+# call interposable. Static builds stay non-PIE.
+if(NOT STATIC)
+    check_pie_supported()
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
 
 # NetCeiver XML2 flags
@@ -222,26 +247,16 @@ if(NOT APPLE)
     list(APPEND MINISATIP_LIBS rt)
 endif()
 
-# Main library
-add_library(minisatip_lib OBJECT ${MINISATIP_SOURCES})
-target_include_directories(minisatip_lib PUBLIC
-    ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_BINARY_DIR}
-)
-target_compile_options(minisatip_lib PRIVATE -include ${CMAKE_BINARY_DIR}/config.h)
-if(SRT)
-    target_include_directories(minisatip_lib PUBLIC ${SRT_INCLUDE_DIR})
-endif()
-if(STDCPPEXP_LIBRARY)
-    target_link_libraries(minisatip_lib PRIVATE ${STDCPPEXP_LIBRARY})
-endif()
-
 # Main executable
-add_executable(minisatip $<TARGET_OBJECTS:minisatip_lib>)
+add_executable(minisatip ${MINISATIP_SOURCES})
 target_include_directories(minisatip PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_BINARY_DIR}
 )
+target_compile_options(minisatip PRIVATE -include ${CMAKE_BINARY_DIR}/config.h)
+if(SRT)
+    target_include_directories(minisatip PRIVATE ${SRT_INCLUDE_DIR})
+endif()
 set_target_properties(minisatip PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 if(STATIC)
@@ -254,7 +269,11 @@ if(STATIC)
 endif()
 
 target_link_libraries(minisatip PRIVATE ${MINISATIP_LIBS})
-install(TARGETS minisatip RUNTIME DESTINATION bin)
+install(TARGETS minisatip RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+# The web interface, where -R / the working directory expects it; status.html
+# is executable in git
+install(DIRECTORY html/ DESTINATION ${CMAKE_INSTALL_DATADIR}/minisatip/html
+    FILE_PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
 
 # Testing
 if(BUILD_TESTING)
@@ -263,7 +282,7 @@ if(BUILD_TESTING)
     set(TEST_LIBS
         crypto
         dl
-        pthread
+        Threads::Threads
     )
     if(SRT)
         list(APPEND TEST_LIBS srt)
@@ -285,7 +304,7 @@ if(BUILD_TESTING)
         tests/test_dvb.cpp
         tests/test_minisatip.cpp
         tests/test_utils.cpp
-	tests/test_satipc.cpp
+        tests/test_satipc.cpp
         tests/test_satipc_rtsp.cpp
         tests/test_socketworks.cpp
         tests/utils/test_utils_dir.cpp
