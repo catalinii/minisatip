@@ -316,7 +316,7 @@ int test_emulate_add_all_pids() {
     adapter ad = {};
     a[0] = &ad;
     ad.enabled = 1;
-    SPMT pmt;
+    SPMT pmt{};
     pmts[0] = &pmt;
     pmt.enabled = 1;
     pmt.adapter = 0;
