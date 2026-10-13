@@ -346,7 +346,7 @@ int dvbapi_reply(sockets *s) {
             dvbapi_copy32r(parity, b, 9);
             cw = b + 13;
             k = get_key(k_id);
-            if (k && (parity < 2)) {
+            if (k && parity >= 0 && parity < 2) {
                 std::lock_guard<SMutex> klock(k->mutex);
                 if (!k->enabled)
                     break;
