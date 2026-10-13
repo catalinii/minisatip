@@ -1000,9 +1000,14 @@ int dvbapi_init_dev(adapter *ad) {
 }
 
 // Set up once: the adapter threads call through it while OSCam reconnects
-SCA_op dvbapi = {.ca_add_pmt = dvbapi_add_pmt,
+SCA_op dvbapi = {.ca_add_pid = NULL,
+                 .ca_del_pid = NULL,
+                 .ca_add_pmt = dvbapi_add_pmt,
                  .ca_del_pmt = dvbapi_del_pmt,
-                 .ca_init_dev = dvbapi_init_dev};
+                 .ca_init_dev = dvbapi_init_dev,
+                 .ca_close_dev = NULL,
+                 .ca_ts = NULL,
+                 .ca_close_ca = NULL};
 
 void register_dvbapi() { dvbapi_ca = add_ca(&dvbapi); }
 

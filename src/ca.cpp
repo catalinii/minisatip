@@ -4070,6 +4070,7 @@ int dvbca_add_pid(adapter *ad, SPMT *pmt, int pid) {
 
 SCA_op dvbca = {
     .ca_add_pid = dvbca_add_pid,
+    .ca_del_pid = NULL,
     .ca_add_pmt = dvbca_process_pmt,
     .ca_del_pmt = dvbca_del_pmt,
     .ca_init_dev = dvbca_init_dev,

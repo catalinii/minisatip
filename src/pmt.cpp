@@ -2086,8 +2086,11 @@ void pmt_add_stream_pid_descriptors(SPMT *pmt, SStreamPid &sp,
 
 int pmt_add_stream_pid(SPMT *pmt, int pid, int type, bool is_audio,
                        bool is_video) {
-    pmt->stream_pids.push_back(
-        {.type = type, .pid = pid, .is_audio = is_audio, .is_video = is_video});
+    pmt->stream_pids.push_back({.type = type,
+                                .pid = pid,
+                                .is_audio = is_audio,
+                                .is_video = is_video,
+                                .descriptors = {}});
 
     return pmt->stream_pids.size() - 1;
 }

@@ -140,7 +140,7 @@ int test_ddci_channel_count() {
     SPMT *pmt0, *pmt_noslot;
     ddci_device_t d0 = {};
     ca_device_t ca0 = {};
-    adapter ad = {0}, a0 = {0};
+    adapter ad = {}, a0 = {};
     int i;
 
     // adapters of previous tests lived on their stacks
@@ -206,7 +206,7 @@ static int section_pcr_pid(ddci_device_t *d, SPMT *pmt) {
 int test_update_resend_keeps_slot() {
     ddci_device_t d0 = {};
     ca_device_t ca0 = {};
-    adapter ad = {0}, a0 = {0};
+    adapter ad = {}, a0 = {};
     int i;
 
     for (i = 0; i < MAX_ADAPTERS; i++)
@@ -330,7 +330,7 @@ int test_update_resend_keeps_slot() {
 int test_ddci_update_version_follows_content() {
     ddci_device_t d0 = {};
     ca_device_t ca0 = {};
-    adapter ad = {0}, a0 = {0};
+    adapter ad = {}, a0 = {};
     int i;
 
     for (i = 0; i < MAX_ADAPTERS; i++)
@@ -396,7 +396,7 @@ int test_add_del_pmt() {
     SPMT *pmt0, *pmt1, *pmt2, *pmt3, *pmt4;
     ddci_device_t d0 = {}, d1 = {};
     ca_device_t ca0 = {}, ca1 = {};
-    adapter ad = {0}, a0 = {0}, a1 = {0};
+    adapter ad = {}, a0 = {}, a1 = {};
 
     create_adapter(&ad, 8);
     create_adapter(&a0, 0);
@@ -550,7 +550,7 @@ int test_copy_ts_from_ddci() {
 int is_err = 0;
 int expected_pid = 0;
 int did_write = 0;
-int xwritev(int fd, const struct iovec *io, int len) {
+ssize_t xwritev(int fd, const struct iovec *io, int len) {
     unsigned char *b = (unsigned char *)io[0].iov_base;
     LOGM("called writev with len %d, first pid %d", len, PID_FROM_TS(b));
     did_write = 1;
@@ -573,7 +573,7 @@ int xwritev(int fd, const struct iovec *io, int len) {
 // the last iovec passed to writev(), captured by xwritev_last
 static int last_iov_len = -1;
 static uint8_t last_iov[188];
-int xwritev_last(int fd, const struct iovec *io, int len) {
+ssize_t xwritev_last(int fd, const struct iovec *io, int len) {
     int i, total = 0;
     did_write = 1;
     for (i = 0; i < len; i++)
@@ -701,7 +701,7 @@ int test_psi_pids_survive_a_channel_change() {
     SPMT *pmt_a, *pmt_b;
     ddci_device_t d = {};
     ca_device_t ca0 = {};
-    adapter ci = {0}, ad_a = {0}, ad_b = {0};
+    adapter ci = {}, ad_a = {}, ad_b = {};
     int i;
 
     // earlier tests leave stack adapters and CA devices in the global arrays
@@ -880,7 +880,7 @@ int test_create_pmt() {
     ddci_device_t d = {};
     uint8_t psi[188];
     uint8_t packet[188];
-    adapter ad = {0};
+    adapter ad = {};
     int16_t cc;
     int psi_len;
     SFilter f;
@@ -905,7 +905,9 @@ int test_create_pmt() {
     pmt->pid = pid - 1;
     pmt->version = 0;
     strcpy((char *)pmt->name, "TEST CHANNEL HD");
-    ddci_pmt_t dp = {.ver = 0, .pcr_pid = 8191};
+    ddci_pmt_t dp{};
+    dp.ver = 0;
+    dp.pcr_pid = 8191;
     ca_devices[0] = NULL;
     ca_devices[1] = NULL;
 
@@ -988,7 +990,9 @@ int test_create_pmt_maps_es_ecm_pids() {
     int mapped = add_pid_mapping_table(0, 0x0573, pmt->id, &d, 0);
     ASSERT(mapped >= 0 && mapped != 0x0573, "ECM pid should be remapped");
 
-    ddci_pmt_t dp = {.ver = 0, .pcr_pid = 8191};
+    ddci_pmt_t dp{};
+    dp.ver = 0;
+    dp.pcr_pid = 8191;
     int psi_len = ddci_create_pmt(&d, pmt, psi, sizeof(psi), &dp);
     ASSERT(psi_len > 0, "ddci_create_pmt failed");
 
@@ -1070,7 +1074,7 @@ int test_ci_pmt_name_is_refreshed() {
     SPMT *src, *ci_pmt;
     ddci_device_t d = {};
     ca_device_t ca0 = {};
-    adapter ci = {0}, ad = {0};
+    adapter ci = {}, ad = {};
     uint8_t buf[4096];
     int i;
 
@@ -1145,7 +1149,7 @@ int test_ddci_full_device_retries() {
     SPMT *pmt0, *pmt1;
     ddci_device_t d0 = {};
     ca_device_t ca0 = {};
-    adapter ad = {0};
+    adapter ad = {};
     int i;
 
     // Adapters of previous tests lived on their stacks
@@ -1192,7 +1196,7 @@ int test_initializing_ddci_does_not_block_others() {
     SPMT *pmt_dd0, *pmt_dd1, *pmt_both, *pmt_nomatch;
     ddci_device_t d0 = {}, d1 = {};
     ca_device_t ca0 = {}, ca1 = {};
-    adapter ad = {0}, a0 = {0}, a1 = {0};
+    adapter ad = {}, a0 = {}, a1 = {};
     int i;
 
     for (i = 0; i < MAX_ADAPTERS; i++)
@@ -1306,7 +1310,7 @@ int test_ddci_least_used_device() {
     SPMT *pmt[5];
     ddci_device_t d0 = {}, d1 = {};
     ca_device_t ca0 = {}, ca1 = {};
-    adapter ad = {0}, a0 = {0}, a1 = {0};
+    adapter ad = {}, a0 = {}, a1 = {};
 
     for (int i = 0; i < MAX_ADAPTERS; i++)
         a[i] = NULL;

@@ -1270,7 +1270,7 @@ int dvb_tune(int aid, transponder *tp) {
     struct dvb_frontend_event ev;
 
     struct dtv_property p_clear[] = {
-        {.cmd = DTV_CLEAR},
+        {.cmd = DTV_CLEAR, .reserved = {}, .u = {}, .result = 0},
     };
 
     struct dtv_properties cmdseq_clear = {.num = 1, .props = p_clear};
@@ -1848,7 +1848,7 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys) {
     struct dvb_frontend_info fe_info;
 
     static struct dtv_property enum_cmdargs[] = {
-        {.cmd = DTV_ENUM_DELSYS},
+        {.cmd = DTV_ENUM_DELSYS, .reserved = {}, .u = {}, .result = 0},
     };
     enum_cmdargs[0].u.data = 0;
     static struct dtv_properties enum_cmdseq = {
@@ -2172,9 +2172,12 @@ int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
     const char *strength_s = "(none)", *snr_s = "(none)";
     int err = 0;
     static struct dtv_property enum_cmdargs[] = {
-        {.cmd = DTV_STAT_SIGNAL_STRENGTH},
-        {.cmd = DTV_STAT_CNR},
-        {.cmd = DTV_STAT_ERROR_BLOCK_COUNT},
+        {.cmd = DTV_STAT_SIGNAL_STRENGTH, .reserved = {}, .u = {}, .result = 0},
+        {.cmd = DTV_STAT_CNR, .reserved = {}, .u = {}, .result = 0},
+        {.cmd = DTV_STAT_ERROR_BLOCK_COUNT,
+         .reserved = {},
+         .u = {},
+         .result = 0},
     };
     enum_cmdargs[0].u.data = 0;
     enum_cmdargs[1].u.data = 0;

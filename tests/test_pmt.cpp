@@ -321,9 +321,17 @@ int test_emulate_add_all_pids() {
     pmt.enabled = 1;
     pmt.adapter = 0;
     opts.emulate_pids_all = 1;
-    SStreamPid sp{.type = 1, .pid = 100};
+    SStreamPid sp{.type = 1,
+                  .pid = 100,
+                  .is_audio = false,
+                  .is_video = false,
+                  .descriptors = {}};
     pmt.stream_pids.push_back(sp);
-    SStreamPid sp1{.type = 1, .pid = 101};
+    SStreamPid sp1{.type = 1,
+                   .pid = 101,
+                   .is_audio = false,
+                   .is_video = false,
+                   .descriptors = {}};
     pmt.stream_pids.push_back(sp1);
     ad.active_pmts = 1;
     ad.active_pmt[0] = 0;
@@ -570,7 +578,11 @@ int test_revived_cached_pmt_gets_its_filter() {
     SPMT *pmt = pmts[id];
     pmt->version = 7;
     pmt->state = PMT_RUNNING;
-    SStreamPid sp{.type = 2, .pid = 300, .is_audio = false, .is_video = true};
+    SStreamPid sp{.type = 2,
+                  .pid = 300,
+                  .is_audio = false,
+                  .is_video = true,
+                  .descriptors = {}};
     pmt->stream_pids.push_back(sp);
 
     // the client keeps streaming while the PMT is gone: the PMT pid

@@ -100,6 +100,17 @@ int test_multiple_pmt() {
 
 // Releasing a service is a CA_PMT for the same program with the command id
 // set to not_selected, not a missing message.
+// A CAPMT for these programs, everything else zero
+static SCAPMT make_capmt(int pmt_id, int other0, int other1, int ver, int sid) {
+    SCAPMT c{};
+    c.pmt_id = pmt_id;
+    c.other_id[0] = other0;
+    c.other_id[1] = other1;
+    c.version = ver;
+    c.sid = sid;
+    return c;
+}
+
 int test_create_capmt_not_selected() {
     int pmt_id = pmt_add(0, 0x100, 0x101);
     SPMT *pmt = get_pmt(pmt_id);
@@ -107,10 +118,7 @@ int test_create_capmt_not_selected() {
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
     pmt_add_stream_pid(pmt, 0x502, 3, true, false);
 
-    SCAPMT scapmt = {.pmt_id = pmt->id,
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 2,
-                     .sid = 0x1234};
+    SCAPMT scapmt = make_capmt(pmt->id, PMT_INVALID, PMT_INVALID, 2, 0x1234);
 
     uint8_t capmt[1500];
     int len = create_capmt(&scapmt, CLM_UPDATE, capmt, sizeof(capmt),
@@ -210,10 +218,7 @@ int test_create_capmt_single_clear() {
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
     pmt_add_stream_pid(pmt, 0x502, 3, true, false);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x1234};
+    SCAPMT scampt = make_capmt(pmt->id, PMT_INVALID, PMT_INVALID, 1, 0x1234);
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -245,10 +250,7 @@ int test_capmt_content_hash_masks_version_and_listmgmt() {
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
     pmt_add_stream_pid(pmt, 0x502, 3, true, false);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x1234};
+    SCAPMT scampt = make_capmt(pmt->id, PMT_INVALID, PMT_INVALID, 1, 0x1234);
 
     uint8_t capmt[1500], other[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -298,10 +300,7 @@ int test_create_capmt_single_pmt_scrambled() {
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
     pmt_add_stream_pid(pmt, 0x502, 3, true, false);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x1234};
+    SCAPMT scampt = make_capmt(pmt->id, PMT_INVALID, PMT_INVALID, 1, 0x1234);
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -399,8 +398,7 @@ int test_create_capmt_three_pmts() {
         pmt_add_stream_pid(pmt, 0x800 + i * 0x10, 2, false, true);
         pmt_add_stream_pid(pmt, 0x801 + i * 0x10, 3, true, false);
     }
-    SCAPMT scapmt = {
-        .pmt_id = p[0], .other_id = {p[1], p[2]}, .version = 1, .sid = 0x1234};
+    SCAPMT scapmt = make_capmt(p[0], p[1], p[2], 1, 0x1234);
 
     uint8_t capmt[1500];
     int len = create_capmt(&scapmt, CLM_ONLY, capmt, sizeof(capmt),
@@ -433,10 +431,7 @@ int test_create_capmt_multiple_pmt_scrambled() {
     pmt_add_stream_pid(other, 0x601, 2, false, true);
     pmt_add_stream_pid(other, 0x602, 3, true, false);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {other->id, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x1234};
+    SCAPMT scampt = make_capmt(pmt->id, other->id, PMT_INVALID, 1, 0x1234);
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -470,10 +465,7 @@ int test_create_capmt_different_listmgmt() {
     SPMT *pmt = get_pmt(pmt_id);
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x1234};
+    SCAPMT scampt = make_capmt(pmt->id, PMT_INVALID, PMT_INVALID, 1, 0x1234);
 
     uint8_t capmt[1500];
     int len;
@@ -517,10 +509,7 @@ int test_create_capmt_different_cmd_ids() {
     pmt_add_caid(pmt, 0x0B00, 0x573, nullptr, 0);
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x1234};
+    SCAPMT scampt = make_capmt(pmt->id, PMT_INVALID, PMT_INVALID, 1, 0x1234);
 
     uint8_t capmt[1500];
     int len;
@@ -549,10 +538,8 @@ int test_create_capmt_different_cmd_ids() {
 }
 
 int test_create_capmt_invalid_pmt() {
-    SCAPMT scampt = {.pmt_id = 9999, // invalid PMT ID
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x1234};
+    // Invalid PMT ID
+    SCAPMT scampt = make_capmt(9999, PMT_INVALID, PMT_INVALID, 1, 0x1234);
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -568,10 +555,8 @@ int test_create_capmt_max_version() {
     SPMT *pmt = get_pmt(pmt_id);
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 15, // max 4-bit version
-                     .sid = 0x1234};
+    // Max 4-bit version
+    SCAPMT scampt = make_capmt(pmt->id, PMT_INVALID, PMT_INVALID, 15, 0x1234);
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -589,10 +574,8 @@ int test_create_capmt_large_sid() {
     SPMT *pmt = get_pmt(pmt_id);
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0xFFFF}; // max 16-bit SID
+    // Max 16-bit SID
+    SCAPMT scampt = make_capmt(pmt->id, PMT_INVALID, PMT_INVALID, 1, 0xFFFF);
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -623,10 +606,7 @@ int test_create_capmt_both_pmt_and_other_with_caids() {
     pmt_add_stream_pid(other, 0x601, 2, false, true);
     pmt_add_stream_pid(other, 0x602, 3, true, false);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {other->id, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x1234};
+    SCAPMT scampt = make_capmt(pmt->id, other->id, PMT_INVALID, 1, 0x1234);
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -668,10 +648,7 @@ int test_create_capmt_both_pmt_and_other_many_streams() {
                            (i % 2 == 0));
     }
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {other->id, PMT_INVALID},
-                     .version = 5,
-                     .sid = 0xABCD};
+    SCAPMT scampt = make_capmt(pmt->id, other->id, PMT_INVALID, 5, 0xABCD);
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -713,10 +690,7 @@ int test_create_capmt_size_near_limit() {
                            (i % 2 == 0));
     }
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {other->id, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x9999};
+    SCAPMT scampt = make_capmt(pmt->id, other->id, PMT_INVALID, 1, 0x9999);
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -742,10 +716,7 @@ int test_create_capmt_respects_length() {
     for (int i = 0; i < 20; i++)
         pmt_add_stream_pid(pmt, 0x500 + i, 2, false, true);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x9999};
+    SCAPMT scampt = make_capmt(pmt->id, PMT_INVALID, PMT_INVALID, 1, 0x9999);
     uint8_t capmt[128];
     memset(capmt, 0xAA, sizeof(capmt));
     int len =

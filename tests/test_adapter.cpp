@@ -29,10 +29,18 @@
 #include <unordered_set>
 #include <vector>
 
+// An LNB with these frequencies, everything else zero
+static diseqc make_lnb(int low, int high, int lnb_switch) {
+    diseqc d{};
+    d.lnb_low = low;
+    d.lnb_high = high;
+    d.lnb_switch = lnb_switch;
+    return d;
+}
+
 int test_get_lnb_hiband_universal() {
     transponder tp;
-    diseqc diseqc_param = {
-        .lnb_low = 9750000, .lnb_high = 10600000, .lnb_switch = 11700000};
+    diseqc diseqc_param = make_lnb(9750000, 10600000, 11700000);
 
     tp.freq = 10778000;
     int hiband = get_lnb_hiband(&tp, &diseqc_param);
@@ -47,8 +55,7 @@ int test_get_lnb_hiband_universal() {
 
 int test_get_lnb_int_freq_universal() {
     transponder tp;
-    diseqc diseqc_param = {
-        .lnb_low = 9750000, .lnb_high = 10600000, .lnb_switch = 11700000};
+    diseqc diseqc_param = make_lnb(9750000, 10600000, 11700000);
 
     tp.freq = 10778000;
     int freq = get_lnb_int_freq(&tp, &diseqc_param);
@@ -63,11 +70,7 @@ int test_get_lnb_int_freq_universal() {
 
 int test_get_lnb_hiband_kuband() {
     transponder tp;
-    diseqc diseqc_param = {
-        .lnb_low = 10750000,
-        .lnb_high = 0,
-        .lnb_switch = 0,
-    };
+    diseqc diseqc_param = make_lnb(10750000, 0, 0);
 
     tp.freq = 12267000;
     int hiband = get_lnb_hiband(&tp, &diseqc_param);
@@ -78,11 +81,7 @@ int test_get_lnb_hiband_kuband() {
 
 int test_get_lnb_int_freq_kuband() {
     transponder tp;
-    diseqc diseqc_param = {
-        .lnb_low = 10750000,
-        .lnb_high = 0,
-        .lnb_switch = 0,
-    };
+    diseqc diseqc_param = make_lnb(10750000, 0, 0);
 
     tp.freq = 12267000;
     int freq = get_lnb_int_freq(&tp, &diseqc_param);
@@ -93,11 +92,7 @@ int test_get_lnb_int_freq_kuband() {
 
 int test_get_lnb_hiband_cband() {
     transponder tp;
-    diseqc diseqc_param = {
-        .lnb_low = 5150000,
-        .lnb_high = 0,
-        .lnb_switch = 0,
-    };
+    diseqc diseqc_param = make_lnb(5150000, 0, 0);
 
     tp.freq = 3773000;
     int hiband = get_lnb_hiband(&tp, &diseqc_param);
@@ -108,7 +103,7 @@ int test_get_lnb_hiband_cband() {
 
 int test_get_lnb_int_freq_cband() {
     transponder tp;
-    diseqc diseqc_param = {.lnb_low = 5150000, .lnb_high = 0, .lnb_switch = 0};
+    diseqc diseqc_param = make_lnb(5150000, 0, 0);
 
     tp.freq = 3773000;
     int freq = get_lnb_int_freq(&tp, &diseqc_param);
