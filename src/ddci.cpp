@@ -1323,7 +1323,8 @@ int ddci_post_init(adapter *ad) {
     }
 
     sockets *s = get_sockets(ad->sock);
-    s->action = (socket_action)ddci_read_sec_data;
+    if (s)
+        s->action = (socket_action)ddci_read_sec_data;
     if (ad->fe_sock >= 0)
         set_socket_thread(ad->fe_sock, get_socket_thread(ad->sock));
     post_tune(ad);
