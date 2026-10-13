@@ -8,6 +8,7 @@
 #include "utils/testing.h"
 #include <stdio.h>
 #include <string.h>
+#include <vector>
 
 int test_charset_latin1_override() {
     char out[64];
@@ -80,6 +81,17 @@ int test_charset_override_ignores_prefix() {
     return 0;
 }
 
+// UCS-2 text with an odd length: the dangling byte must not be read past
+int test_charset_ucs2_odd_length() {
+    char out[64];
+    dvb_set_charset_override(DVB_CHARSET_AUTO);
+    std::vector<uint8_t> ucs2 = {0x11, 0x00, 0x41, 0x00};
+    ASSERT(dvb_get_string(out, sizeof(out), ucs2.data(), ucs2.size()) == 0,
+           "odd UCS-2 name should decode");
+    ASSERT(strcmp(out, "A") == 0, "odd UCS-2 name should keep its pairs");
+    return 0;
+}
+
 int main() {
     opts.log = 255;
     strcpy(thread_info[thread_index].thread_name, "test_dvb_charset");
@@ -88,5 +100,6 @@ int main() {
               "auto detection failed");
     TEST_FUNC(test_charset_override_ignores_prefix(),
               "prefix ignore failed");
+    TEST_FUNC(test_charset_ucs2_odd_length(), "odd UCS-2 length failed");
     return 0;
 }
