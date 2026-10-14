@@ -996,10 +996,9 @@ int send_capmt(ca_device_t *d, SCAPMT *ca, int listmgmt, int reason,
         return 0;
     }
 
-    // This send rewrites the program anyway: drop the left programs,
-    // close the gaps, and cover any coalesced send still waiting.
+    // This send rewrites the program anyway: drop the left
+    // programs and close the gaps.
     capmt_compact(ca);
-    ca->send_due = 0;
 
     // Bump when a send is attempted; the hash is stored only below,
     // once the bytes really go out.
@@ -1033,33 +1032,6 @@ int send_capmt(ca_device_t *d, SCAPMT *ca, int listmgmt, int reason,
         ca->sent_es_len[place] = fits ? len : 0;
     }
     return 0;
-}
-
-// Sends the coalesced CAPMTs whose window has passed and returns how
-// many still wait; with none left, s gets its 1s tick back.
-int ca_flush_capmts(ca_device_t *d, int64_t now, sockets *s) {
-    if (!d)
-        return 0;
-    // Device lock only, as on the tables send path: PMT slots stay valid
-    std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
-    int waiting = 0, n = std::min(d->max_ca_pmt, MAX_CA_PMT);
-    for (int i = 0; i < n; i++) {
-        SCAPMT *c = d->capmt + i;
-        if (c->send_due <= 0)
-            continue;
-        if (d->state != CA_STATE_INITIALIZED || now < c->send_due) {
-            waiting++;
-            continue;
-        }
-        c->send_due = 0;
-        if (capmt_pmt_count(c))
-            send_capmt(d, c, c->send_listmgmt, CA_PMT_CMD_ID_OK_DESCRAMBLING,
-                       0);
-    }
-    // Under the device lock, so a join cannot shorten it in between
-    if (!waiting && s && s->timeout_ms > 0 && s->timeout_ms < 1000)
-        s->timeout_ms = 1000;
-    return waiting;
 }
 
 int get_enabled_pmts_for_ca(ca_device_t *d) {
@@ -1307,7 +1279,6 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
     // Only a CAPMT starting fresh takes the real sid: a shared one keeps
     // the program number the CAM runs, so its partners are not restarted.
     int fresh = !was_member && capmt_pmt_count(capmt) == 1;
-    int shared = capmt_pmt_count(capmt) > 1 || capmt->send_due > 0;
     listmgmt = get_active_capmts(d) == 1 ? CLM_ONLY : CLM_UPDATE;
     if (listmgmt == CLM_ONLY) {
         if (!fresh || capmt->sid == first->sid)
@@ -1333,20 +1304,9 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
         capmt_pmts_str(capmt).c_str(), capmt - d->capmt,
         update ? ", update" : "");
 
-    // A shared CAPMT waits so close joins and updates restart its
-    // partners once; ca_timeout sends it when the window ends.
-    if (shared) {
-        if (capmt->send_due <= 0)
-            capmt->send_due = getTick() + CAPMT_COALESCE_MS;
-        capmt->send_listmgmt = listmgmt;
-        sockets_timeout(d->sock, CAPMT_COALESCE_MS / 3);
-        LOG("CA %d: CAPMT %ld send coalesced for pmt %d", d->id,
-            capmt - d->capmt, spmt->id);
-    }
     // First registration always sends; an update sends only when the
     // built CAPMT changed, decided inside send_capmt.
-    else if (send_capmt(d, capmt, listmgmt, CA_PMT_CMD_ID_OK_DESCRAMBLING,
-                        !update))
+    if (send_capmt(d, capmt, listmgmt, CA_PMT_CMD_ID_OK_DESCRAMBLING, !update))
         LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "send_capmt failed");
 
     if (d->key[0][0])
@@ -1374,7 +1334,6 @@ void remove_pmt_from_device(ca_device_t *d, SPMT *pmt) {
         if (capmt_pmt_count(c) == 0) {
             c->capmt_hash = 0;
             c->capmt_hash_valid = 0;
-            c->send_due = 0;
             capmt_forget_sent(c);
         }
     }
@@ -3671,12 +3630,8 @@ int ca_timeout(sockets *s) {
     if (s->sid < 0 || s->sid >= MAX_ADAPTERS || !ca_devices[s->sid])
         return 0;
     d = ca_devices[s->sid];
-    int64_t now = getTick();
-    ca_flush_capmts(d, now, s);
-    int short_tick = s->timeout_ms > 0 && s->timeout_ms < 1000;
-    if (!opts.enigma && (!short_tick || now >= d->keepalive_next)) {
+    if (!opts.enigma) {
         int rc;
-        d->keepalive_next = now + 900;
         if (d->state == CA_STATE_INACTIVE) {
             rc = ca_write_tpdu(d, T_CREATE_TC, NULL, 0);
         } else {
