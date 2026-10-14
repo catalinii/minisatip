@@ -250,10 +250,14 @@ set_target_properties(minisatip PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINA
 if(STATIC)
     # Full static linking with -static flag
     target_link_options(minisatip PRIVATE -static)
-    # Add atomic library for static MIPS builds
-    if(CMAKE_CXX_COMPILER_TARGET MATCHES "mipsel")
-        list(APPEND MINISATIP_LIBS atomic)
-    endif()
+endif()
+
+# 64-bit atomics need libatomic on 32-bit MIPS, static or not (#1498).
+# Toolchain builds report it via CMAKE_SYSTEM_PROCESSOR; plain
+# -DCMAKE_CXX_COMPILER_TARGET=... builds (CI) only via that variable.
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "mips" OR
+        CMAKE_CXX_COMPILER_TARGET MATCHES "mips")
+    list(APPEND MINISATIP_LIBS atomic)
 endif()
 
 target_link_libraries(minisatip PRIVATE ${MINISATIP_LIBS})
@@ -276,6 +280,11 @@ if(BUILD_TESTING)
     endif()
     if(DVBCSA_LIBRARY)
         list(APPEND TEST_LIBS dvbcsa)
+    endif()
+    # Same libatomic need as the main binary on 32-bit MIPS (#1498)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "mips" OR
+            CMAKE_CXX_COMPILER_TARGET MATCHES "mips")
+        list(APPEND TEST_LIBS atomic)
     endif()
 
     set(TEST_SOURCES
