@@ -22,6 +22,8 @@ typedef struct ddci_pmt {
     int pcr_pid;
     int16_t cc;
     uint32_t crc;
+    // Per-channel PMT emission clock (ms); 0 emits on the next tick.
+    uint64_t last_pmt;
 } ddci_pmt_t;
 
 // Use a hash table to store mapping_table entries
@@ -49,7 +51,7 @@ typedef struct ddci_device {
     ddci_pmt_t pmt[MAX_CHANNELS_ON_CI + 1];
     int cat_processed;
     uint64_t read_index[MAX_ADAPTERS]; // read index per adapter
-    uint64_t last_pat, last_sdt, last_pmt;
+    uint64_t last_pat, last_sdt;
     int tid, ver;
     // SDT section version, split from the PAT ver so SDT-only changes
     // (transponder data arriving late) do not re-version the PAT.
@@ -81,7 +83,7 @@ void set_pid_ts(unsigned char *b, int pid);
 int ddci_process_ts(adapter *ad, ddci_device_t *d);
 int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque);
 int ddci_create_pat(ddci_device_t *d, uint8_t *b);
-int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len);
+int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len, adapter *ad);
 int ddci_create_sdt(ddci_device_t *d, uint8_t *b);
 int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
                     ddci_pmt_t *dp);

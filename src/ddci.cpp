@@ -504,6 +504,8 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
     }
 
     d->pmt[pos].id = pmt->id;
+    // A (re-)registered channel emits on the next tick.
+    d->pmt[pos].last_pmt = 0;
 
     // A new service changes both PAT and SDT content, so both bump.
     d->ver = (d->ver + 1) & 0xF;
@@ -1020,7 +1022,9 @@ static void ddci_update_pmt_name(ddci_device_t *d, SPMT *pmt) {
     safe_strncpy(dpmt->provider, pmt->provider);
 }
 
-int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len) {
+// PMT create/update/del all run on the owner adapter's thread,
+// so this tick emits only the processed adapter's channels.
+int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len, adapter *ad) {
     unsigned char psi[1500];
     int64_t ctime = getTick();
     int i, pos = 0;
@@ -1040,29 +1044,31 @@ int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len) {
         d->last_sdt = ctime;
     }
 
-    // Add PMTs
-    if (ctime - d->last_pmt > 100) {
-        SPMT *pmt;
-        for (i = 0; i < d->max_channels; i++) {
-            if ((pmt = get_pmt(d->pmt[i].id))) {
-                ddci_update_pmt_name(d, pmt);
-                psi_len = ddci_create_pmt(d, pmt, psi, sizeof(psi), d->pmt + i);
-                auto it = get_pid_mapping(d, pmt->adapter, pmt->pid);
-                if (it != d->mapping.end())
-                    pos += buffer_to_ts(dst + pos, len - pos, psi, psi_len,
-                                        &d->pmt[i].cc, it->second.ddci_pid);
-                else
-                    LOG("%s: could not find PMT %d adapter %d and pid %d to "
-                        "mapping table",
-                        __FUNCTION__, d->pmt[i].id, pmt->adapter, pmt->pid);
-
-                // Add an EIT table for each channel
-                psi_len = ddci_create_eit(d, pmt->sid, psi, d->pmt[i].ver);
+    // Add PMTs, each channel on its own 100 ms clock and only on
+    // its owner adapter's tick (same-thread read, needs no lock).
+    SPMT *pmt;
+    for (i = 0; i < d->max_channels; i++) {
+        if (ctime - d->pmt[i].last_pmt <= 100)
+            continue;
+        // Foreign channels wait for their own adapter's tick.
+        if ((pmt = get_pmt(d->pmt[i].id)) && pmt->adapter == ad->id) {
+            ddci_update_pmt_name(d, pmt);
+            psi_len = ddci_create_pmt(d, pmt, psi, sizeof(psi), d->pmt + i);
+            auto it = get_pid_mapping(d, pmt->adapter, pmt->pid);
+            if (it != d->mapping.end())
                 pos += buffer_to_ts(dst + pos, len - pos, psi, psi_len,
-                                    &d->eit_cc, 18);
-            }
+                                    &d->pmt[i].cc, it->second.ddci_pid);
+            else
+                LOG("%s: could not find PMT %d adapter %d and pid %d to "
+                    "mapping table",
+                    __FUNCTION__, d->pmt[i].id, pmt->adapter, pmt->pid);
+
+            // Add an EIT table for each channel
+            psi_len = ddci_create_eit(d, pmt->sid, psi, d->pmt[i].ver);
+            pos += buffer_to_ts(dst + pos, len - pos, psi, psi_len, &d->eit_cc,
+                                18);
+            d->pmt[i].last_pmt = ctime;
         }
-        d->last_pmt = ctime;
     }
     return pos;
 }
@@ -1176,7 +1182,7 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
     }
     // write the TS to the DDCI handle
     if (iop > 0) {
-        int psi_len = ddci_add_psi(d, psi, sizeof(psi) - 1);
+        int psi_len = ddci_add_psi(d, psi, sizeof(psi) - 1, ad);
         hexdump("PSI -> ", psi, psi_len);
         if (psi_len > 0) {
             io[iop].iov_base = psi;
@@ -1379,7 +1385,7 @@ int ddci_open_device(adapter *ad) {
     d->max_channels = MAX_CHANNELS_ON_CI;
     d->channels = 0;
     memset(d->read_index, 0, sizeof(d->read_index));
-    d->last_pmt = d->last_pat = 0;
+    d->last_pat = 0;
     d->tid = d->ver = d->sdt_ver = d->sdt_data_mask = 0;
     d->enabled = 1;
     ad->enabled = 1;
