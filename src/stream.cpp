@@ -206,8 +206,11 @@ streams *setup_stream(std::string_view str, sockets *s) {
         !strncasecmp((const char *)s->buf, "SETUP", 5)) // SETUP after PLAY
     {
         int ad = sid->adapter;
+        // Keep the adapter when only the PIDs change on the same mux
+        bool same_mux = !compare_tunning_parameters(ad, &sid->tp) &&
+                        fe_pin_matches_adapter(ad, &sid->tp);
         if (str.find("addpids") == std::string_view::npos &&
-            str.find("delpids") == std::string_view::npos) {
+            str.find("delpids") == std::string_view::npos && !same_mux) {
             close_adapter_for_stream(sid->sid, ad, 0);
             sid->adapter = -1;
         }

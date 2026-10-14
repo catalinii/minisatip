@@ -1308,6 +1308,15 @@ int get_lnb_int_freq(transponder *tp, diseqc *diseqc_param) {
     return abs(freq - diseqc_param->lnb_low);
 }
 
+// True unless tp pins a mapped fe= that belongs to a different adapter
+bool fe_pin_matches_adapter(int aid, const transponder *tp) {
+    int fe = tp->fe.value_or(0);
+    if (fe <= 0 || fe > static_cast<int>(std::size(fe_map)))
+        return true;
+    int mapped = fe_map[fe - 1];
+    return mapped < 0 || mapped >= MAX_ADAPTERS || mapped == aid;
+}
+
 int compare_tunning_parameters(int aid, transponder *tp) {
     adapter *ad = get_adapter(aid);
     if (!ad)
