@@ -1826,6 +1826,47 @@ int test_ca_open_session_table_full() {
     return 0;
 }
 
+// A resource without a handler is refused, so no APDU can reach a session
+// whose callback is NULL.
+int test_ca_open_session_unknown_resource() {
+    ca_device_t dev;
+    memset(&dev, 0, sizeof(dev));
+    int fds[2];
+    ASSERT(pipe(fds) == 0, "pipe for the response");
+    dev.id = 73;
+    dev.fd = fds[1];
+    ca_device_t *saved = ca_devices[73];
+    ca_devices[73] = &dev;
+    int saved_enigma = opts.enigma;
+    opts.enigma = 1; // SPDUs go to the fd unwrapped
+
+    // ST_OPEN_SESSION_REQUEST for TS 103 205 MMI, which has no handler
+    unsigned char open_mmi[6] = {0x91, 0x04, 0x00, 0x40, 0x00, 0x81};
+    sockets cs{};
+    cs.sid = 73;
+    cs.buf = open_mmi;
+    cs.rlen = sizeof(open_mmi);
+    ca_read(&cs);
+    unsigned char rsp[16] = {};
+    ASSERT_EQUAL(read(fds[0], rsp, sizeof(rsp)), 9, "response written");
+    ASSERT_EQUAL(rsp[0], ST_OPEN_SESSION_RESPONSE, "open session response");
+    ASSERT_EQUAL(rsp[2], 0xF0, "unknown resource refused");
+    ASSERT_EQUAL(dev.sessions[0].handler.resource, 0, "no session opened");
+
+    // An APDU for that session number must not reach a NULL callback:
+    // before the fix this crashed in ca_read()
+    unsigned char apdu[] = {0x90, 0x02, 0x00, 0x01, 0x9F, 0x88, 0x01, 0x00};
+    cs.buf = apdu;
+    cs.rlen = sizeof(apdu);
+    ca_read(&cs);
+
+    opts.enigma = saved_enigma;
+    close(fds[0]);
+    close(fds[1]);
+    ca_devices[73] = saved;
+    return 0;
+}
+
 // A recovered device clears its retry timer on the success path.
 int test_ca_reconnect_success() {
     adapter ad = {};
@@ -2380,6 +2421,8 @@ int main() {
     TEST_FUNC(test_ca_app_info_name_bounds(), "testing CAM name bounds");
     TEST_FUNC(test_ca_open_session_table_full(),
               "testing an open session request with no free session");
+    TEST_FUNC(test_ca_open_session_unknown_resource(),
+              "testing an open session request for an unknown resource");
     TEST_FUNC(test_ca_reconnect_success(), "testing reconnect success path");
     TEST_FUNC(test_ca_read_resets_fails(), "testing ca_read sign of life");
     TEST_FUNC(test_send_skips_stale_set(), "testing stale mask-set skip");

@@ -3073,9 +3073,15 @@ struct struct_application_handler application_handler[] = {
 };
 
 ca_session_t *new_session(ca_device_t *d, int resource) {
-    uint32_t i;
     int session_number;
     ca_session_t *s;
+    // Without a handler the first APDU would call a NULL callback: refuse
+    // the resource, ca_read() answers 0xF0 (resource non-existent)
+    auto h = std::ranges::find(application_handler, resource,
+                               &struct_application_handler::resource);
+    if (h == std::end(application_handler))
+        LOG_AND_RETURN(NULL, "CA %d: resource %06X is not supported", d->id,
+                       resource);
     for (session_number = 0; session_number < MAX_SESSIONS; session_number++)
         if (!d->sessions[session_number].handler.resource)
             break;
@@ -3083,17 +3089,9 @@ ca_session_t *new_session(ca_device_t *d, int resource) {
         LOG_AND_RETURN(NULL, "Could not allocate a new session id for CA %d",
                        d->id);
     s = d->sessions + session_number;
-    memset(&s->handler, 0, sizeof(s->handler));
-    s->handler.resource = resource;
+    s->handler = *h;
     s->ca = d;
     s->session_number = session_number + 1;
-
-    for (i = 0;
-         i < sizeof(application_handler) / sizeof(application_handler[0]); i++)
-        if (application_handler[i].resource == resource) {
-            memcpy(&s->handler, application_handler + i, sizeof(s->handler));
-            break;
-        }
 
     return d->sessions + session_number;
 }
