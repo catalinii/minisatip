@@ -614,7 +614,6 @@ int test_ddci_process_ts_null_tail() {
     set_pid_ts(buf, 1000);
     d.read_index[1] = d.read_index[2] = d.fifo.write_index = 188;
     _writev = (mywritev)&xwritev_last;
-    d.last_pmt = getTick(); // prevent adding PMT/EPG
     did_write = 0;
     last_iov_len = -1;
     ddci_process_ts(&ad, &d);
@@ -679,7 +678,6 @@ int test_ddci_process_ts() {
     fifo_push(&d.fifo, fifo, sizeof(fifo));
     expected_pid = new_pid;
     _writev = (mywritev)&xwritev;
-    d.last_pmt = getTick(); // prevent adding PMT/EPG
     ddci_process_ts(&ad, &d);
     if (is_err)
         LOG_AND_RETURN(1, "is_err is set");
@@ -1264,10 +1262,11 @@ int test_ci_pmt_name_is_refreshed() {
     ASSERT(get_all_pmt_for_sid(ci.id, 1601) == ci_pmt,
            "the CI-side PMT should be found by its sid");
 
-    // the PMT block of ddci_add_psi() is gated on ctime - last_pmt > 100 and
-    // getTick() is only a few ms into a test run, so age it by hand
-    d.last_pmt = getTick() - 1000;
-    ddci_add_psi(&d, buf, sizeof(buf));
+    // each channel has its own 100 ms clock and getTick() is only a
+    // few ms into a test run, so age them by hand
+    for (i = 0; i < d.max_channels; i++)
+        d.pmt[i].last_pmt = getTick() - 1000;
+    ddci_add_psi(&d, buf, sizeof(buf), &ad);
     ASSERT(ci_pmt->name[0] == 0,
            "the CI-side PMT should stay unnamed while the source is unnamed");
 
@@ -1275,8 +1274,9 @@ int test_ci_pmt_name_is_refreshed() {
     safe_strncpy(src->name, "beIN SPORTS 1");
     safe_strncpy(src->provider, "Digital Platform");
 
-    d.last_pmt = getTick() - 1000;
-    ddci_add_psi(&d, buf, sizeof(buf));
+    for (i = 0; i < d.max_channels; i++)
+        d.pmt[i].last_pmt = getTick() - 1000;
+    ddci_add_psi(&d, buf, sizeof(buf), &ad);
     ASSERT(!strcmp(ci_pmt->name, "beIN SPORTS 1"),
            "the CI-side PMT should take the name of the source service");
     ASSERT(!strcmp(ci_pmt->provider, "Digital Platform"),
@@ -1286,6 +1286,79 @@ int test_ci_pmt_name_is_refreshed() {
     del_ca(&dvbca);
     pmt_del(src->id);
     pmt_del(ci_pmt->id);
+    free_filters();
+    return 0;
+}
+
+// A tick emits only the processed adapter's channels, each on its own
+// 100 ms clock: the PMT tables stay same-thread reads, needing no lock.
+int test_ddci_add_psi_per_channel_pmt() {
+    ddci_device_t d = {};
+    ca_device_t ca0 = {};
+    adapter adA = {0}, adB = {0}, ci = {0};
+    uint8_t buf[4096];
+    int i, ia = -1, ib = -1;
+
+    for (i = 0; i < MAX_ADAPTERS; i++)
+        a[i] = NULL;
+    memset(ca_devices, 0, sizeof(ca_devices));
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    channels.clear();
+
+    create_adapter(&adA, 2);
+    create_adapter(&adB, 3);
+    create_adapter(&ci, 8);
+
+    SPMT *pmtA = create_pmt(2, 1701, 701, 702, 0x100, 0x100);
+    SPMT *pmtB = create_pmt(3, 1702, 711, 712, 0x100, 0x100);
+
+    memset(&d.pmt, -1, sizeof(d.pmt));
+    d.id = ci.id;
+    d.enabled = 1;
+    d.max_channels = 2;
+    ddci_devices[ci.id] = &d;
+
+    int ca_id = add_ca(&dvbca);
+    add_caid_mask(ca_id, ci.id, 0x100, 0xFFFF);
+    ca0.id = 0;
+    ca0.enabled = 1;
+    ca0.state = CA_STATE_INITIALIZED;
+    ca_devices[0] = &ca0;
+
+    ASSERT(ddci_process_pmt(&adA, pmtA, 0) == TABLES_RESULT_OK,
+           "adapter A program should register");
+    ASSERT(ddci_process_pmt(&adB, pmtB, 0) == TABLES_RESULT_OK,
+           "adapter B program should register");
+    for (i = 0; i < d.max_channels; i++) {
+        if (d.pmt[i].id == pmtA->id)
+            ia = i;
+        if (d.pmt[i].id == pmtB->id)
+            ib = i;
+    }
+    ASSERT(ia >= 0 && ib >= 0 && ia != ib, "both programs should slot");
+
+    // The per-channel continuity counter only advances when its PMT
+    // section is actually emitted.
+    d.pmt[ia].cc = 5;
+    d.pmt[ib].cc = 7;
+    d.pmt[ia].last_pmt = d.pmt[ib].last_pmt = getTick() - 1000;
+    ddci_add_psi(&d, buf, sizeof(buf), &adA);
+    ASSERT(d.pmt[ia].cc == 6 && d.pmt[ib].cc == 7,
+           "A tick emits only the processed adapter's PMT");
+
+    ddci_add_psi(&d, buf, sizeof(buf), &adA);
+    ASSERT(d.pmt[ia].cc == 6,
+           "an immediate re-tick is held back by the channel's own clock");
+
+    ddci_add_psi(&d, buf, sizeof(buf), &adB);
+    ASSERT(d.pmt[ia].cc == 6 && d.pmt[ib].cc == 8,
+           "A's emission does not delay B's own clock");
+
+    ddci_del_pmt(&adA, pmtA);
+    ddci_del_pmt(&adB, pmtB);
+    del_ca(&dvbca);
+    pmt_del(pmtA->id);
+    pmt_del(pmtB->id);
     free_filters();
     return 0;
 }
@@ -1551,6 +1624,8 @@ int main() {
               "testing that the CI keeps the pids of its generated PSI");
     TEST_FUNC(test_ci_pmt_name_is_refreshed(),
               "testing that the CI-side PMT is named once the source is");
+    TEST_FUNC(test_ddci_add_psi_per_channel_pmt(),
+              "testing per-channel per-adapter PMT emission");
     TEST_FUNC(test_create_pat(), "testing create_pat");
     TEST_FUNC(test_create_sdt(), "testing create_sdt");
     TEST_FUNC(test_create_sdt_with_real_data(),
