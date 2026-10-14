@@ -148,7 +148,7 @@ static inline int64_t conv_6937(const uint8_t *src, size_t srclen, char *dst,
 static inline int64_t conv_UCS2(const uint8_t *src, size_t srclen, char *dst,
                                 size_t *dstlen) {
     // A dangling byte of an odd length is no character: drop it
-    srclen &= ~static_cast<size_t>(1);
+    srclen &= ~1;
     while (srclen > 0 && (*dstlen) > 0) {
         uint16_t uc = *src << 8 | *(src + 1);
         if (uc >= 0xe080 && uc <= 0xe09f) {
