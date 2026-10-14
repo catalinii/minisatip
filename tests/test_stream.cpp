@@ -191,6 +191,68 @@ int test_start_play_success() {
     return 0;
 }
 
+// PLAY on a mux, then SETUP the same session with `next`
+static streams *play_then_setup(sockets *s, const char *first,
+                                const char *next) {
+    s->enabled = 1;
+    s->sid = -1;
+    s->type = TYPE_HTTP;
+    s->buf = (unsigned char *)"PLAY";
+    streams *sid = setup_stream(first, s);
+    if (!sid || start_play(sid, s) != 0)
+        return nullptr;
+    s->buf = (unsigned char *)"SETUP";
+    return setup_stream(next, s);
+}
+
+int test_setup_after_play_same_mux_keeps_adapter() {
+    setup_test_env();
+    sockets s = {};
+    s.sock = 1030;
+    s.id = 30;
+    streams *sid = play_then_setup(
+        &s, "?src=1&freq=12073&pol=v&sr=27500&msys=dvbs2&pids=0,67",
+        "?src=1&freq=12073&pol=v&sr=27500&msys=dvbs2&pids=0");
+    ASSERT(sid != NULL, "play_then_setup failed");
+    ASSERT(sid->adapter == 0, "same-mux SETUP released the adapter");
+    ASSERT(a[0]->sid_cnt == 1, "same-mux SETUP dropped the stream count");
+    ASSERT(a[0]->tp.freq == 12073000, "same-mux SETUP cleared the tuning");
+    return 0;
+}
+
+int test_setup_after_play_new_mux_releases_adapter() {
+    setup_test_env();
+    sockets s = {};
+    s.sock = 1031;
+    s.id = 31;
+    streams *sid = play_then_setup(
+        &s, "?src=1&freq=12073&pol=v&sr=27500&msys=dvbs2&pids=0",
+        "?src=1&freq=11362&pol=h&sr=22000&msys=dvbs2&pids=0");
+    ASSERT(sid != NULL, "play_then_setup failed");
+    ASSERT(sid->adapter == -1, "new-mux SETUP kept the adapter");
+    ASSERT(a[0]->sid_cnt == 0, "new-mux SETUP kept the stream count");
+    return 0;
+}
+
+int test_setup_after_play_other_fe_releases_adapter() {
+    setup_test_env();
+    int16_t saved_fe[2 * MAX_ADAPTERS];
+    memcpy(saved_fe, fe_map, sizeof(fe_map));
+    memset(fe_map, -1, sizeof(fe_map));
+    fe_map[0] = 0;
+    fe_map[1] = 1; // fe=2 maps to an adapter other than 0
+    sockets s = {};
+    s.sock = 1032;
+    s.id = 32;
+    streams *sid = play_then_setup(
+        &s, "?fe=1&src=1&freq=12073&pol=v&sr=27500&msys=dvbs2&pids=0",
+        "?fe=2&src=1&freq=12073&pol=v&sr=27500&msys=dvbs2&pids=0");
+    memcpy(fe_map, saved_fe, sizeof(fe_map));
+    ASSERT(sid != NULL, "play_then_setup failed");
+    ASSERT(sid->adapter == -1, "SETUP pinned to another fe kept the adapter");
+    return 0;
+}
+
 int test_setup_stream_unspecified_vs_empty_pids() {
     setup_test_env();
 
@@ -864,6 +926,12 @@ int main() {
     TEST_FUNC(test_start_play_no_transport(),
               "test start_play returns error when transport is missing");
     TEST_FUNC(test_start_play_success(), "test start_play success under HTTP");
+    TEST_FUNC(test_setup_after_play_same_mux_keeps_adapter(),
+              "test same-mux SETUP after PLAY keeps the adapter");
+    TEST_FUNC(test_setup_after_play_new_mux_releases_adapter(),
+              "test new-mux SETUP after PLAY releases the adapter");
+    TEST_FUNC(test_setup_after_play_other_fe_releases_adapter(),
+              "test SETUP pinned to another fe releases the adapter");
     TEST_FUNC(test_start_play_all_tuners_busy_returns_503(),
               "test start_play returns 503 when all tuners are busy");
     TEST_FUNC(test_start_play_unmapped_src_returns_403(),
