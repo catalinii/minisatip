@@ -2008,7 +2008,12 @@ void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid, uint8_t *data,
 
     pmt->ca[pmt->caids]->id = caid;
     pmt->ca[pmt->caids]->pid = capid;
-    pmt->ca[pmt->caids]->private_data.assign(data, data + len);
+    // Null/empty input is valid: clear instead of forming a null
+    // range, and drop stale bytes on the entry-reuse path.
+    if (len > 0 && data)
+        pmt->ca[pmt->caids]->private_data.assign(data, data + len);
+    else
+        pmt->ca[pmt->caids]->private_data.clear();
     pmt->caids++;
     // Force a re-send; same demux thread as the send path, so no
     // epoch bump is needed (unlike cross-thread clearers).
