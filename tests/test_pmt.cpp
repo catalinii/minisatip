@@ -2522,6 +2522,30 @@ int test_pmt_update_longer_ca_private_data() {
     return 0;
 }
 
+// A null/empty CA update on a reused entry is valid input and must
+// not leave stale private data behind.
+int test_pmt_add_caid_null_clears_reused_entry() {
+    for (int i = 0; i < MAX_PMT; i++)
+        pmts[i] = NULL;
+    npmts = 0;
+
+    int id = pmt_add(0, 100, 48);
+    ASSERT(id >= 0, "could not create the PMT");
+    SPMT *pmt = get_pmt(id);
+
+    uint8_t priv[20];
+    memset(priv, 0xA5, sizeof(priv));
+    pmt_add_caid(pmt, 0x0B00, 0x573, priv, sizeof(priv));
+    ASSERT_EQUAL(pmt->ca[0]->private_data.size(), 20, "filled private data");
+
+    pmt->caids = 0; // reset_pmt_ca(): keep the entry for reuse
+    pmt_add_caid(pmt, 0x0B00, 0x573, nullptr, 0);
+    ASSERT_EQUAL(pmt->ca[0]->private_data.size(), 0, "cleared private data");
+
+    free_all_pmts();
+    return 0;
+}
+
 // A PMT version update with changed streams keeps the PMT running;
 // removed pids keep stale claims the election ignores, and the CA
 // gets a re-send, no delete.
@@ -3304,6 +3328,8 @@ int main() {
               "testing cosmetic PMT update keeps running with a re-send")
     TEST_FUNC(test_pmt_update_longer_ca_private_data(),
               "testing a PMT update with longer CA private data");
+    TEST_FUNC(test_pmt_add_caid_null_clears_reused_entry(),
+              "testing a null CA update clears the reused entry");
     TEST_FUNC(test_pmt_content_update_delta(),
               "testing PMT content update keeps running with a re-send")
     TEST_FUNC(test_ca_update_flag_distinguishes_resend(),
