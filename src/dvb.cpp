@@ -1282,6 +1282,8 @@ int dvb_tune(int aid, transponder *tp) {
 
     if (!ad)
         return -500;
+    // A retune may fix v5 stats: re-probe the signal path (TVH).
+    ad->new_gs = 0;
     ad->lock_retry_armed = false;
     ad->lock_retries = 0;
     fd_frontend = ad->fe;
@@ -2126,19 +2128,19 @@ void get_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
     //	*status = (*status & FE_HAS_LOCK) ? 1 : 0;
     if (*status) {
         if (ad->fe > 0 && ioctl(ad->fe, FE_READ_BER, ber) < 0)
-            LOG("ad %d ioctl fd %d, FE_READ_BER failed, error %d (%s)", ad->id,
-                ad->fe, errno, strerror(errno));
+            LOGM("ad %d ioctl fd %d, FE_READ_BER failed, error %d (%s)", ad->id,
+                 ad->fe, errno, strerror(errno));
 
         if (ad->fe > 0 &&
             ioctl(ad->fe, FE_READ_SIGNAL_STRENGTH, strength) < 0) {
-            LOG("ad %d ioctl fd %d FE_READ_SIGNAL_STRENGTH failed, error %d "
-                "(%s)",
-                ad->id, ad->fe, errno, strerror(errno));
+            LOGM("ad %d ioctl fd %d FE_READ_SIGNAL_STRENGTH failed, error %d "
+                 "(%s)",
+                 ad->id, ad->fe, errno, strerror(errno));
         }
 
         if (ad->fe > 0 && ioctl(ad->fe, FE_READ_SNR, snr) < 0) {
-            LOG("ad %d ioctl fd %d FE_READ_SNR failed, error %d (%s)", ad->id,
-                ad->fe, errno, strerror(errno));
+            LOGM("ad %d ioctl fd %d FE_READ_SNR failed, error %d (%s)", ad->id,
+                 ad->fe, errno, strerror(errno));
         } else if (ad->force_tuner_signal == TUNER_FORCE_NO && ad->id >= 0 &&
                    ad->id < MAX_ADAPTERS) {
             // -M with % or # means the user calibrates manually, do not
@@ -2189,7 +2191,6 @@ int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
     *db = 65535;
     int64_t strengthd = 0, snrd = 0, init_strength = 0, init_snr = 0;
     const char *strength_s = "(none)", *snr_s = "(none)";
-    int err = 0;
     static struct dtv_property enum_cmdargs[] = {
         {.cmd = DTV_STAT_SIGNAL_STRENGTH},
         {.cmd = DTV_STAT_CNR},
@@ -2203,24 +2204,25 @@ int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
         .props = enum_cmdargs};
 
     if (ad->fe > 0 && ioctl(ad->fe, FE_GET_PROPERTY, &enum_cmdseq) < 0) {
-        LOG("get_signal_new: unable to query frontend %d: %s", ad->fe,
-            strerror(errno));
-        err = 100;
+        // v3 covers a hard v5 failure; debug keeps it quiet.
+        LOGM("get_signal_new: unable to query frontend %d: %s", ad->fe,
+             strerror(errno));
+        return 1;
     }
+    // Like TVH: v5 serves when the driver returns any entries; each stat
+    // is then read by its own scale, unavailable reads as zero.
+    if (!enum_cmdargs[0].u.st.len && !enum_cmdargs[1].u.st.len &&
+        !enum_cmdargs[2].u.st.len)
+        return 1;
 
     if (enum_cmdargs[0].u.st.stat[0].scale == FE_SCALE_RELATIVE) {
         strength_s = "%";
-        strengthd =
-            enum_cmdargs[0]
-                .u.st.stat[0]
-                .uvalue; // The frontend provides a 0% to 100% measurement
-                         // for Signal/Noise (actually, 0 to 65535)
+        strengthd = enum_cmdargs[0].u.st.stat[0].uvalue;
     } else if (enum_cmdargs[0].u.st.stat[0].scale == FE_SCALE_DECIBEL) {
         strength_s = "dBm";
         init_strength = enum_cmdargs[0].u.st.stat[0].svalue; // dBm / 1000
         strengthd = get_strength_decibels(init_strength);
-    } else if (enum_cmdargs[0].u.st.stat[0].scale == 0)
-        err |= 1;
+    }
 
     if (enum_cmdargs[1].u.st.stat[0].scale == FE_SCALE_RELATIVE) {
         snr_s = "%";
@@ -2230,24 +2232,16 @@ int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
         init_snr = enum_cmdargs[1].u.st.stat[0].svalue; // dB * 1000
         *db = (int)get_snr_decibels(init_snr, &snrd, ad->db_snr_map);
     }
-    //	else if (enum_cmdargs[1].u.st.stat[0].scale == 0)
-    //		err |= 2;
-
     *ber = enum_cmdargs[2].u.st.stat[0].uvalue & 0x7FFF;
     *status_valid = dvb_read_status(ad, status);
 
-    LOGM(
-        "get_signal_new adapter %d: status %d, strength %jd %s -> %jd, snr %jd "
-        "%s -> %jd, BER: %d, dB: %hu, err %d",
-        ad->id, *status, init_strength, strength_s, strengthd, init_snr, snr_s,
-        snrd, *ber, *db, err);
-
-    if (err)
-        return err;
+    LOGM("get_signal_new adapter %d: status %d, strength %jd %s -> %jd, snr "
+         "%jd %s -> %jd, BER: %d, dB: %hu",
+         ad->id, *status, init_strength, strength_s, strengthd, init_snr, snr_s,
+         snrd, *ber, *db);
 
     *strength = (int)strengthd;
     *snr = (int)snrd;
-
     return 0;
 
 #else
@@ -2310,28 +2304,20 @@ void dvb_retry_lock(adapter *ad, bool status_valid) {
 }
 
 int dvb_get_signal(adapter *ad) {
-    int start = 0;
     uint16_t strength = 0, snr = 0, dbvalue = 65535;
     int status = 0;
     uint32_t ber = 0;
     bool status_valid = false;
 
     if (ad->strength_multiplier || ad->snr_multiplier) {
-        if (ad->new_gs == 0) {
-            int new_gs = get_signal_new(ad, &status, &ber, &strength, &snr,
-                                        &dbvalue, &status_valid);
-            if (!new_gs)
-                ad->new_gs = NEW_SIGNAL;
-            else
-                ad->new_gs = OLD_SIGNAL;
-            start = 1;
-        }
-
-        if (!start && ad->new_gs == NEW_SIGNAL)
-            get_signal_new(ad, &status, &ber, &strength, &snr, &dbvalue,
-                           &status_valid);
-
-        if (ad->new_gs == OLD_SIGNAL) {
+        // DVBv5 stats are the default; on genuine failure use v3 and skip
+        // v5 until the next tune (like TVH).
+        if (ad->new_gs != OLD_SIGNAL &&
+            !get_signal_new(ad, &status, &ber, &strength, &snr, &dbvalue,
+                            &status_valid))
+            ad->new_gs = NEW_SIGNAL;
+        else {
+            ad->new_gs = OLD_SIGNAL;
             get_signal(ad, &status, &ber, &strength, &snr, &dbvalue,
                        &status_valid);
             if (ad->force_tuner_signal != TUNER_FORCE_NO)

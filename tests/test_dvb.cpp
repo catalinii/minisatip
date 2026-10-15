@@ -23,6 +23,8 @@
 #include "utils.h"
 #include "utils/testing.h"
 
+#include <cerrno>
+#include <cstdarg>
 #include <fcntl.h>
 #include <linux/dvb/frontend.h>
 #include <string.h>
@@ -370,6 +372,197 @@ int test_dvb_lock_recovery_forced_switch_resend() {
     return 0;
 }
 
+// Mock frontend state for the signal relatch test: v5 stats appear only
+// after lock, and the v3 reads fail like the mn88472 in #1494.
+static struct {
+    int status;
+    bool prop_fail;
+    int str_len;
+    int str_scale;
+    int cnr_len;
+    int cnr_scale;
+    int blk_len;
+    uint32_t str_value;
+    uint32_t snr_value;
+    bool v3_fail;
+    uint16_t v3_strength;
+    uint16_t v3_snr;
+    uint32_t v3_ber;
+} mock_fe;
+
+static int mock_ioctl(int fd, unsigned long req, ...) {
+    va_list ap;
+    va_start(ap, req);
+    void *arg = va_arg(ap, void *);
+    va_end(ap);
+    (void)fd;
+    switch (req) {
+    case FE_GET_PROPERTY: {
+        if (mock_fe.prop_fail) {
+            errno = EINVAL;
+            return -1;
+        }
+        auto *props = static_cast<struct dtv_properties *>(arg);
+        for (uint32_t i = 0; i < props->num; i++) {
+            auto &st = props->props[i].u.st;
+            if (props->props[i].cmd == DTV_STAT_SIGNAL_STRENGTH) {
+                st.len = static_cast<uint8_t>(mock_fe.str_len);
+                st.stat[0].scale = static_cast<uint8_t>(mock_fe.str_scale);
+                st.stat[0].uvalue = mock_fe.str_value;
+            } else if (props->props[i].cmd == DTV_STAT_CNR) {
+                st.len = static_cast<uint8_t>(mock_fe.cnr_len);
+                st.stat[0].scale = static_cast<uint8_t>(mock_fe.cnr_scale);
+                st.stat[0].uvalue = mock_fe.snr_value;
+            } else {
+                st.len = static_cast<uint8_t>(mock_fe.blk_len);
+                st.stat[0].scale = FE_SCALE_COUNTER;
+                st.stat[0].uvalue = 0;
+            }
+        }
+        return 0;
+    }
+    case FE_READ_STATUS:
+        *static_cast<int *>(arg) = mock_fe.status;
+        return 0;
+    case FE_READ_BER:
+        if (mock_fe.v3_fail) {
+            errno = EOPNOTSUPP;
+            return -1;
+        }
+        *static_cast<uint32_t *>(arg) = mock_fe.v3_ber;
+        return 0;
+    case FE_READ_SIGNAL_STRENGTH:
+        if (mock_fe.v3_fail) {
+            errno = EOPNOTSUPP;
+            return -1;
+        }
+        *static_cast<uint16_t *>(arg) = mock_fe.v3_strength;
+        return 0;
+    case FE_READ_SNR:
+        if (mock_fe.v3_fail) {
+            errno = EOPNOTSUPP;
+            return -1;
+        }
+        *static_cast<uint16_t *>(arg) = mock_fe.v3_snr;
+        return 0;
+    case FE_GET_INFO: {
+        auto *info = static_cast<struct dvb_frontend_info *>(arg);
+        memset(info, 0, sizeof(*info));
+        strcpy(info->name, "Mock FE");
+        return 0;
+    }
+    }
+    errno = EINVAL;
+    return -1;
+}
+
+int test_dvb_signal_v5_fallback() {
+    adapter ad = {};
+    ad.fe = 42;
+    ad.enabled = 1;
+    ad.strength_multiplier = 1;
+    ad.snr_multiplier = 1;
+    // Leave logging on so failures stay visible.
+    _ioctl = mock_ioctl;
+
+    // entries without usable scales still count as v5 (TVH): no v3 attempt
+    mock_fe = {.status = 0,
+               .str_len = 1,
+               .str_scale = 0,
+               .cnr_len = 1,
+               .cnr_scale = 0,
+               .blk_len = 1,
+               .v3_fail = true};
+    dvb_get_signal(&ad);
+    ASSERT(ad.new_gs == 1, "entries with N/A scales must use the v5 path");
+    ASSERT(ad.strength == 0 && ad.snr == 0, "N/A scales read as zero");
+
+    // stats appear after lock: v5 reports them (#1494)
+    mock_fe.status = FE_HAS_LOCK;
+    mock_fe.str_scale = FE_SCALE_RELATIVE;
+    mock_fe.cnr_scale = FE_SCALE_RELATIVE;
+    mock_fe.str_value = 0x8000;
+    mock_fe.snr_value = 0x4000;
+    dvb_get_signal(&ad);
+    ASSERT(ad.new_gs == 1, "v5 must serve as soon as stats are usable");
+    ASSERT(ad.strength == 0x80 && ad.snr == 0x40,
+           "v5 stats must reach the adapter");
+
+    // mixed scales stay per-stat: good CNR is kept, N/A strength reads zero
+    mock_fe.str_scale = 0;
+    dvb_get_signal(&ad);
+    ASSERT(ad.new_gs == 1, "one good stat keeps the v5 path");
+    ASSERT(ad.strength == 0 && ad.snr == 0x40,
+           "per-stat scales must not fall back to v3");
+
+    // no entries at all: v3 rescues the poll and sticks until retune
+    mock_fe.str_len = 0;
+    mock_fe.cnr_len = 0;
+    mock_fe.blk_len = 0;
+    mock_fe.v3_fail = false;
+    mock_fe.v3_strength = 0x4000;
+    mock_fe.v3_snr = 0x2000;
+    dvb_get_signal(&ad);
+    ASSERT(ad.new_gs == 2, "missing entries must fall back to v3");
+    ASSERT(ad.strength == 0x40 && ad.snr == 0x20,
+           "v3 values must reach the adapter");
+    mock_fe.str_len = 1;
+    mock_fe.cnr_len = 1;
+    mock_fe.blk_len = 1;
+    mock_fe.str_scale = FE_SCALE_RELATIVE;
+    mock_fe.cnr_scale = FE_SCALE_RELATIVE;
+    dvb_get_signal(&ad);
+    ASSERT(ad.new_gs == 2, "v3 must stick until the next tune");
+    ASSERT(ad.strength == 0x40 && ad.snr == 0x20,
+           "stuck v3 must not see the healed v5 stats");
+
+    // a retune re-probes v5
+    adapter *saved = a[0];
+    a[0] = &ad;
+    dvb_tune(0, &ad.tp);
+    a[0] = saved;
+    ASSERT(ad.new_gs == 0, "a retune must re-probe the signal path");
+    dvb_get_signal(&ad);
+    ASSERT(ad.new_gs == 1, "v5 must serve again after the retune");
+    ASSERT(ad.strength == 0x80 && ad.snr == 0x40,
+           "v5 stats must reach the adapter");
+
+    // a hard v5 failure latches v3 the same way
+    adapter ad2 = {};
+    ad2.fe = 42;
+    ad2.strength_multiplier = 1;
+    ad2.snr_multiplier = 1;
+    mock_fe.prop_fail = true;
+    dvb_get_signal(&ad2);
+    ASSERT(ad2.new_gs == 2, "a failed properties query must fall back to v3");
+    ASSERT(ad2.strength == 0x40 && ad2.snr == 0x20,
+           "v3 values must flow despite failing v5");
+    mock_fe.prop_fail = false;
+
+    // a forced (-M) display reshapes v3 values but leaves v5 raw
+    adapter ad3 = {};
+    ad3.fe = 42;
+    ad3.strength_multiplier = 1;
+    ad3.snr_multiplier = 1;
+    ad3.force_tuner_signal = TUNER_FORCE_STRENGTH_PERCENT;
+    mock_fe.str_len = 0;
+    mock_fe.cnr_len = 0;
+    mock_fe.blk_len = 0;
+    dvb_get_signal(&ad3);
+    ASSERT(ad3.new_gs == 2, "forced display must use v3 while v5 idles");
+    ad.force_tuner_signal = TUNER_FORCE_STRENGTH_PERCENT;
+    mock_fe.str_len = 1;
+    mock_fe.cnr_len = 1;
+    mock_fe.blk_len = 1;
+    dvb_get_signal(&ad);
+    ASSERT(ad.new_gs == 1, "forced display must use v5 when usable");
+    ASSERT(ad.strength == 0x80 && ad.snr == 0x40,
+           "forcing must not reshape v5 values");
+
+    _ioctl = ioctl;
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -395,5 +588,7 @@ int main() {
               "test DVB lock recovery without signal metrics");
     TEST_FUNC(test_dvb_lock_recovery_forced_switch_resend(),
               "test DVB lock recovery forced switch resend");
+    TEST_FUNC(test_dvb_signal_v5_fallback(),
+              "test DVB signal v5 preference with v3 fallback");
     return 0;
 }
