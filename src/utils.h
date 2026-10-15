@@ -187,12 +187,17 @@ std::string iterable_to_string(const Container &container,
 #define safe_strncpy(a, b) _strncpy(a, b, sizeof(a))
 
 typedef ssize_t (*mywritev)(int fd, const struct iovec *io, int len);
+typedef int (*myioctl)(int fd, unsigned long req, ...);
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
 #define PID_FROM_TS(b) (((b)[1] & 0x1F) * 256 + (b)[2])
 
+// Declared before the TESTING redirect below so the _ioctl
+// initializer always sees the real ioctl.
+#include <sys/ioctl.h>
 #ifdef TESTING
 #define writev(a, b, c) _writev(a, b, c)
+#define ioctl(fd, ...) _ioctl(fd __VA_OPT__(, ) __VA_ARGS__)
 #endif
 
 #ifdef UTILS_C
@@ -202,9 +207,11 @@ const char *loglevels[] = {"general", "http",   "socketworks", "stream",
                            "socket",  "utils",  "dmx",         "ssdp",
                            "dvb",     "ddci",   NULL};
 mywritev _writev = writev;
+myioctl _ioctl = ioctl;
 #else
 extern char *loglevels[];
 extern mywritev _writev;
+extern myioctl _ioctl;
 #endif
 
 #endif
