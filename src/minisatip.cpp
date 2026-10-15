@@ -285,6 +285,17 @@ void print_version(int use_log, int print_built_info) {
     }
 }
 
+// Bit mask for a -l/-v module name ("all" = every module), 0 if unknown
+unsigned int log_module_mask(std::string_view name) {
+    unsigned int all = 0;
+    for (int i = 0; loglevels[i]; i++) {
+        if (name == loglevels[i])
+            return 1u << i;
+        all |= 1u << i;
+    }
+    return name == "all" ? all : 0;
+}
+
 void usage() {
     char modules[1000];
     int len = 0, i;
@@ -745,7 +756,10 @@ void set_options(int argc, char *argv[]) {
         case LOG_OPT: {
             is_log = 1;
             if (strstr(optarg, "all")) {
-                opts.log = 0xFFFF;
+                unsigned int all = log_module_mask("all");
+                if (opt == DEBUG_OPT)
+                    opts.debug |= all;
+                opts.log |= all;
                 break;
             }
             auto arg = split(optarg, ',');
@@ -763,7 +777,7 @@ void set_options(int argc, char *argv[]) {
                     }
                 }
 
-                int log = (1 << level);
+                unsigned int log = 1u << level;
                 if (opt == DEBUG_OPT)
                     opts.debug |= log;
                 opts.log |= log;

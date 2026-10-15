@@ -8,6 +8,7 @@
 
 void set_options(int argc, char *argv[]);
 char *get_command_line_string(int argc, char *argv[]);
+unsigned int log_module_mask(std::string_view name);
 
 extern char pid_file[];
 extern char app_name[], version[];

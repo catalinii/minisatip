@@ -56,8 +56,46 @@ int test_version_var_eval() {
     return 0;
 }
 
+int test_log_module_mask() {
+    struct {
+        const char *name;
+        unsigned int bit;
+    } modules[] = {
+        {"general", LOG_GENERAL},
+        {"http", LOG_HTTP},
+        {"socketworks", LOG_SOCKETWORKS},
+        {"stream", LOG_STREAM},
+        {"adapter", LOG_ADAPTER},
+        {"satipc", LOG_SATIPC},
+        {"pmt", LOG_PMT},
+        {"tables", LOG_TABLES},
+        {"dvbapi", LOG_DVBAPI},
+        {"lock", LOG_LOCK},
+        {"netceiver", LOG_NETCEIVER},
+        {"ca", LOG_DVBCA},
+        {"socket", LOG_SOCKET},
+        {"utils", LOG_UTILS},
+        {"dmx", LOG_DMX},
+        {"ssdp", LOG_SSDP},
+        {"dvb", LOG_DVB},
+        {"ddci", LOG_DDCI},
+    };
+    unsigned int all = log_module_mask("all");
+
+    for (const auto &m : modules) {
+        ASSERT(log_module_mask(m.name) == m.bit,
+               "module name enables the wrong log bit");
+        ASSERT(all & m.bit, "\"all\" misses a module");
+    }
+    ASSERT(loglevels[std::size(modules)] == NULL,
+           "loglevels has a module this test does not cover");
+    ASSERT(log_module_mask("nope") == 0, "unknown module should be 0");
+    return 0;
+}
+
 int main() {
     TEST_FUNC(test_get_command_line_string(), "test get_command_line_string()");
+    TEST_FUNC(test_log_module_mask(), "test -l/-v module name to log bit");
     TEST_FUNC(test_version_var_eval(), "test $version$ expansion");
 
     return 0;
