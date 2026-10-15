@@ -1363,6 +1363,85 @@ int test_ddci_add_psi_per_channel_pmt() {
     return 0;
 }
 
+// True when a TS buffer carries a packet on pid
+static bool has_pid(const uint8_t *buf, int len, int pid) {
+    for (int i = 0; i + DVB_FRAME <= len; i += DVB_FRAME)
+        if (buf[i] == 0x47 && PID_FROM_TS(buf + i) == pid)
+            return true;
+    return false;
+}
+
+// A channel joining or leaving sends the PAT on the next write instead of
+// waiting for the 500 ms PAT timer, so the CAM sees the change at once.
+int test_channel_change_sends_pat_immediately() {
+    SPMT *pmt0, *pmt1;
+    ddci_device_t d = {};
+    ca_device_t ca0 = {};
+    adapter ci = {0}, ad = {0};
+    uint8_t buf[8192];
+    int i;
+
+    for (i = 0; i < MAX_ADAPTERS; i++)
+        a[i] = NULL;
+    memset(ca_devices, 0, sizeof(ca_devices));
+    channels.clear();
+    create_adapter(&ci, 8);
+    create_adapter(&ad, 2);
+    pmt0 = create_pmt(2, 1801, 801, 802, 0x100, 0x100);
+    pmt1 = create_pmt(2, 1802, 803, 804, 0x100, 0x100);
+
+    memset(&d.pmt, -1, sizeof(d.pmt));
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    d.id = ci.id;
+    d.enabled = 1;
+    d.max_channels = 2;
+    ddci_devices[ci.id] = &d;
+    int ca_id = add_ca(&dvbca);
+    add_caid_mask(ca_id, ci.id, 0x100, 0xFFFF);
+    ca0.id = 0;
+    ca0.enabled = 1;
+    ca0.state = CA_STATE_INITIALIZED;
+    ca_devices[0] = &ca0;
+
+    ASSERT(ddci_process_pmt(&ad, pmt0, 0) == TABLES_RESULT_OK,
+           "PMT 0 should be registered");
+    ddci_add_psi(&d, buf, sizeof(buf), &ad);
+
+    // all timers are fresh: a plain write carries no PAT
+    int len = ddci_add_psi(&d, buf, sizeof(buf), &ad);
+    ASSERT(!has_pid(buf, len, 0), "no PAT expected while the timer runs");
+
+    // a joining channel sends the PAT at once
+    ASSERT(ddci_process_pmt(&ad, pmt1, 0) == TABLES_RESULT_OK,
+           "PMT 1 should be registered");
+    len = ddci_add_psi(&d, buf, sizeof(buf), &ad);
+    ASSERT(has_pid(buf, len, 0), "PAT expected right after a join");
+    len = ddci_add_psi(&d, buf, sizeof(buf), &ad);
+    ASSERT(!has_pid(buf, len, 0), "the immediate PAT is sent only once");
+
+    // a re-send of a registered PMT is not a channel change
+    ASSERT(ddci_process_pmt(&ad, pmt1, 1) == TABLES_RESULT_OK,
+           "re-send of PMT 1 should succeed");
+    len = ddci_add_psi(&d, buf, sizeof(buf), &ad);
+    ASSERT(!has_pid(buf, len, 0), "a re-send must not force a PAT");
+
+    // a leaving channel sends the PAT at once
+    ddci_del_pmt(&ad, pmt0);
+    len = ddci_add_psi(&d, buf, sizeof(buf), &ad);
+    ASSERT(has_pid(buf, len, 0), "PAT expected right after a leave");
+
+    ddci_del_pmt(&ad, pmt1);
+    del_ca(&dvbca);
+    pmt_del(pmt0->id);
+    pmt_del(pmt1->id);
+    free_filters();
+    channels.clear();
+    ddci_devices[ci.id] = NULL;
+    ca_devices[0] = NULL;
+    a[2] = a[8] = NULL;
+    return 0;
+}
+
 // A candidate DDCI that is already full must retry later, not burn the SID:
 // filling dd0 then adding another PMT for it returns RETRY.
 int test_ddci_full_device_retries() {
@@ -1626,6 +1705,8 @@ int main() {
               "testing that the CI-side PMT is named once the source is");
     TEST_FUNC(test_ddci_add_psi_per_channel_pmt(),
               "testing per-channel per-adapter PMT emission");
+    TEST_FUNC(test_channel_change_sends_pat_immediately(),
+              "testing that a channel change sends the PAT immediately");
     TEST_FUNC(test_create_pat(), "testing create_pat");
     TEST_FUNC(test_create_sdt(), "testing create_sdt");
     TEST_FUNC(test_create_sdt_with_real_data(),

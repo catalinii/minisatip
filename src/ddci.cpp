@@ -46,6 +46,7 @@
 #include "tables.h"
 #include "utils.h"
 #include <string>
+#include <utility>
 
 #include "utils/fifo.h"
 #include "utils/ticks.h"
@@ -516,6 +517,8 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
         // for first PMT set transponder ID
         d->tid = ad->transponder_id;
     }
+    if (!already_registered)
+        d->psi_changed = true;
 
     // Count mappings this call creates, for the summary log below.
     int mapped = 0;
@@ -635,6 +638,8 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
         }
     if (was_registered && d->channels > 0)
         d->channels--;
+    if (was_registered)
+        d->psi_changed = true;
     LOG("%s: deleting pmt id %d, sid %d (%X), pid %d, ddci %d, name %s, "
         "held a slot %d, running channels %d",
         __FUNCTION__, spmt->id, spmt->sid, spmt->sid, m->ddci_pid, m->ddci,
@@ -1030,15 +1035,18 @@ int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len, adapter *ad) {
     int i, pos = 0;
     int psi_len;
 
+    // A channel change sends PAT/SDT now; a new channel's PMT is due already
+    bool now = std::exchange(d->psi_changed, false);
+
     // Add PAT
-    if (ctime - d->last_pat > 500) {
+    if (now || ctime - d->last_pat > 500) {
         psi_len = ddci_create_pat(d, psi);
         pos += buffer_to_ts(dst + pos, len - pos, psi, psi_len, &d->pat_cc, 0);
         d->last_pat = ctime;
     }
 
     // Add SDT
-    if (ctime - d->last_sdt > 500) {
+    if (now || ctime - d->last_sdt > 500) {
         psi_len = ddci_create_sdt(d, psi);
         pos += buffer_to_ts(dst + pos, len - pos, psi, psi_len, &d->sdt_cc, 17);
         d->last_sdt = ctime;
@@ -1386,6 +1394,7 @@ int ddci_open_device(adapter *ad) {
     d->channels = 0;
     memset(d->read_index, 0, sizeof(d->read_index));
     d->last_pat = 0;
+    d->psi_changed = false;
     d->tid = d->ver = d->sdt_ver = d->sdt_data_mask = 0;
     d->enabled = 1;
     ad->enabled = 1;
