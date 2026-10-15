@@ -36,12 +36,13 @@ extern __thread int thread_index;
 #define LOG_LOCK (1 << 9)
 #define LOG_NETCEIVER (1 << 10)
 #define LOG_DVBCA (1 << 11)
-#define LOG_SOCKET (1 << 13)
-#define LOG_UTILS (1 << 14)
-#define LOG_DMX (1 << 15)
-#define LOG_SSDP (1 << 16)
-#define LOG_DVB (1 << 17)
-#define LOG_DDCI (1 << 18)
+// Bit N must match loglevels[N] in utils.h (the -l/-v module names)
+#define LOG_SOCKET (1 << 12)
+#define LOG_UTILS (1 << 13)
+#define LOG_DMX (1 << 14)
+#define LOG_SSDP (1 << 15)
+#define LOG_DVB (1 << 16)
+#define LOG_DDCI (1 << 17)
 
 #define LOGL(level, a, ...)                                                    \
     {                                                                          \
