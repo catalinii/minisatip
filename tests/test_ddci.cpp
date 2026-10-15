@@ -1403,19 +1403,23 @@ int test_channel_change_sends_pat_immediately() {
     ca0.state = CA_STATE_INITIALIZED;
     ca_devices[0] = &ca0;
 
+    // Regression proof: the has_pid() == true asserts (PAT 0, SDT 17) fail
+    // without the change; the negative ones guard against over-sending.
     ASSERT(ddci_process_pmt(&ad, pmt0, 0) == TABLES_RESULT_OK,
            "PMT 0 should be registered");
     ddci_add_psi(&d, buf, sizeof(buf), &ad);
 
-    // all timers are fresh: a plain write carries no PAT
+    // all timers are fresh: a plain write carries no PAT/SDT
     int len = ddci_add_psi(&d, buf, sizeof(buf), &ad);
     ASSERT(!has_pid(buf, len, 0), "no PAT expected while the timer runs");
+    ASSERT(!has_pid(buf, len, 17), "no SDT expected while the timer runs");
 
-    // a joining channel sends the PAT at once
+    // a joining channel sends PAT and SDT at once
     ASSERT(ddci_process_pmt(&ad, pmt1, 0) == TABLES_RESULT_OK,
            "PMT 1 should be registered");
     len = ddci_add_psi(&d, buf, sizeof(buf), &ad);
     ASSERT(has_pid(buf, len, 0), "PAT expected right after a join");
+    ASSERT(has_pid(buf, len, 17), "SDT expected right after a join");
     len = ddci_add_psi(&d, buf, sizeof(buf), &ad);
     ASSERT(!has_pid(buf, len, 0), "the immediate PAT is sent only once");
 
@@ -1425,10 +1429,28 @@ int test_channel_change_sends_pat_immediately() {
     len = ddci_add_psi(&d, buf, sizeof(buf), &ad);
     ASSERT(!has_pid(buf, len, 0), "a re-send must not force a PAT");
 
-    // a leaving channel sends the PAT at once
+    // a leaving channel sends PAT and SDT at once
     ddci_del_pmt(&ad, pmt0);
     len = ddci_add_psi(&d, buf, sizeof(buf), &ad);
     ASSERT(has_pid(buf, len, 0), "PAT expected right after a leave");
+    ASSERT(has_pid(buf, len, 17), "SDT expected right after a leave");
+
+    // a write too short for the PAT keeps the pending change for the next
+    ASSERT(ddci_process_pmt(&ad, pmt0, 0) == TABLES_RESULT_OK,
+           "PMT 0 should register again");
+    len = ddci_add_psi(&d, buf, DVB_FRAME - 1, &ad);
+    ASSERT(len <= 0, "nothing fits in a short buffer");
+    len = ddci_add_psi(&d, buf, sizeof(buf), &ad);
+    ASSERT(has_pid(buf, len, 0), "PAT expected after a short write");
+
+    // a leave through the no-mapping sweep also sends PAT at once
+    int pid0 = pmt0->pid;
+    pmt0->pid = 7777; // no mapping for this pid
+    ddci_del_pmt(&ad, pmt0);
+    pmt0->pid = pid0;
+    del_pmt_mapping_table(&d, ad.id, pmt0->id);
+    len = ddci_add_psi(&d, buf, sizeof(buf), &ad);
+    ASSERT(has_pid(buf, len, 0), "PAT expected after a no-mapping leave");
 
     ddci_del_pmt(&ad, pmt1);
     del_ca(&dvbca);

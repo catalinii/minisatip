@@ -46,7 +46,6 @@
 #include "tables.h"
 #include "utils.h"
 #include <string>
-#include <utility>
 
 #include "utils/fifo.h"
 #include "utils/ticks.h"
@@ -517,6 +516,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
         // for first PMT set transponder ID
         d->tid = ad->transponder_id;
     }
+    // Only a new slot forces PSI; a re-send just bumps the versions above
     if (!already_registered)
         d->psi_changed = true;
 
@@ -615,6 +615,10 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
                     d->pmt[j].id = -1;
                     if (d->channels > 0)
                         d->channels--;
+                    // Same as the mapped path: new PAT/SDT, sent at once
+                    d->ver = (d->ver + 1) & 0xF;
+                    d->sdt_ver = (d->sdt_ver + 1) & 0xF;
+                    d->psi_changed = true;
                 }
         }
         return 0;
@@ -1035,22 +1039,35 @@ int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len, adapter *ad) {
     int i, pos = 0;
     int psi_len;
 
-    // A channel change sends PAT/SDT now; a new channel's PMT is due already
-    bool now = std::exchange(d->psi_changed, false);
+    // A channel change sends PAT/SDT now; a new channel's PMT is due already.
+    // Flag and timers only clear once the table was actually written.
+    bool now = d->psi_changed;
+    bool pat_sent = false, sdt_sent = false;
+    int n;
 
     // Add PAT
     if (now || ctime - d->last_pat > 500) {
         psi_len = ddci_create_pat(d, psi);
-        pos += buffer_to_ts(dst + pos, len - pos, psi, psi_len, &d->pat_cc, 0);
-        d->last_pat = ctime;
+        n = buffer_to_ts(dst + pos, len - pos, psi, psi_len, &d->pat_cc, 0);
+        if (n > 0) {
+            pos += n;
+            d->last_pat = ctime;
+            pat_sent = true;
+        }
     }
 
     // Add SDT
     if (now || ctime - d->last_sdt > 500) {
         psi_len = ddci_create_sdt(d, psi);
-        pos += buffer_to_ts(dst + pos, len - pos, psi, psi_len, &d->sdt_cc, 17);
-        d->last_sdt = ctime;
+        n = buffer_to_ts(dst + pos, len - pos, psi, psi_len, &d->sdt_cc, 17);
+        if (n > 0) {
+            pos += n;
+            d->last_sdt = ctime;
+            sdt_sent = true;
+        }
     }
+    if (now && pat_sent && sdt_sent)
+        d->psi_changed = false;
 
     // Add PMTs, each channel on its own 100 ms clock and only on
     // its owner adapter's tick (same-thread read, needs no lock).
