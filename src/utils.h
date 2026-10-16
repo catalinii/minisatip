@@ -207,11 +207,16 @@ const char *loglevels[] = {"general", "http",   "socketworks", "stream",
                            "socket",  "utils",  "dmx",         "ssdp",
                            "dvb",     "ddci",   NULL};
 mywritev _writev = writev;
+#ifdef TESTING
+// Test-only hook: musl declares ioctl(int, int, ...), not unsigned long
 myioctl _ioctl = ioctl;
+#endif
 #else
 extern char *loglevels[];
 extern mywritev _writev;
+#ifdef TESTING
 extern myioctl _ioctl;
+#endif
 #endif
 
 #endif
