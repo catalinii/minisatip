@@ -807,33 +807,15 @@ void set_algo(SKey *k, int algo, int mode) {
 }
 
 // Caller holds pmt->mutex of pmt_id (dvbapi_add_pmt does) for sid/pid.
-int keys_add(int i, int adapter, int pmt_id) {
+int keys_add(int adapter, int pmt_id) {
 
     SPMT *pmt = get_pmt(pmt_id);
     if (!pmt)
         LOG_AND_RETURN(-1, "%s: PMT %d not found ", __FUNCTION__, pmt_id);
-    SKey *k;
-    if (i == -1) {
-        k = find_new_id(keys, MAX_KEYS);
-        if (!k)
-            LOG_AND_RETURN(-1, "%s: no free key id", __FUNCTION__);
-        i = k->id;
-    } else {
-        if (i < 0 || i >= MAX_KEYS)
-            LOG_AND_RETURN(-1, "%s: invalid key id %d", __FUNCTION__, i);
-        if (!keys[i]) {
-            keys[i] = new SKey();
-            keys[i]->allocated = true;
-            keys[i]->enabled = false;
-            keys[i]->id = i;
-        } else {
-            bool expected = false;
-            if (!keys[i]->allocated.compare_exchange_strong(expected, true))
-                LOG_AND_RETURN(-1, "%s: key id %d in use", __FUNCTION__, i);
-            keys[i]->enabled = false;
-        }
-        k = keys[i];
-    }
+    SKey *k = find_new_id(keys, MAX_KEYS);
+    if (!k)
+        LOG_AND_RETURN(-1, "%s: no free key id", __FUNCTION__);
+    int i = k->id;
     std::lock_guard<SMutex> lock(k->mutex);
 
     k->parity = -1;
@@ -979,7 +961,7 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt, int update) {
         }
     }
 
-    key = keys_add(-1, ad->id, pmt->id);
+    key = keys_add(ad->id, pmt->id);
     k = get_key(key);
     if (!k)
         LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY,

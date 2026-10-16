@@ -137,7 +137,7 @@ int test_icam_mode_only_from_ecms() {
     pmt.enabled = 1;
     pmts[0] = &pmt;
     npmts = 1;
-    id = keys_add(-1, 0, 0);
+    id = keys_add(0, 0);
     ASSERT(id >= 0, "no key for the PMT");
     k = keys[id];
     fid_ecm = add_filter(0, 0x1CB6, (void *)send_ecm, k, 0);
@@ -180,7 +180,7 @@ int test_channel_falls_back_to_sid() {
     pmt.sid = 1234;
     pmts[0] = &pmt;
     npmts = 1;
-    id = keys_add(-1, 0, 0);
+    id = keys_add(0, 0);
     ASSERT(id >= 0, "no key for the PMT");
     k = keys[id];
     k->pmt_id = 0;
@@ -247,7 +247,7 @@ int test_update_resend_skips_identical_capmt() {
 
     // A second live key flips this key's list-management ONLY->ADD;
     // framing alone must not force a re-send either.
-    int other = keys_add(-1, 0, 0);
+    int other = keys_add(0, 0);
     ASSERT(other >= 0 && keys[other]->enabled, "no second live key");
     ASSERT(dvbapi_add_pmt(&ad, &pmt, 1) == TABLES_RESULT_OK,
            "listmgmt-flip re-send failed");
