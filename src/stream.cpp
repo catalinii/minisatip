@@ -60,17 +60,13 @@ SMutex bw_mutex;
 extern int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
 int pmt_process_stream(adapter *ad);
 
-streams *get_stream(int i) {
-    return (i >= 0 && i < MAX_STREAMS && st[i] && st[i]->enabled) ? st[i]
-                                                                  : NULL;
-}
+streams *get_stream(int i) { return get_sid_nw(i); }
 
 streams *get_sid1(int sid, const char *file, int line) {
-    if (sid < 0 || sid >= MAX_STREAMS || !st[sid] || st[sid]->enabled == 0) {
+    streams *sid_ptr = get_sid_nw(sid);
+    if (!sid_ptr)
         LOG("%s:%d get_sid returns NULL for s_id = %d", file, line, sid);
-        return NULL;
-    }
-    return st[sid];
+    return sid_ptr;
 }
 
 char *describe_streams(sockets *s, std::string_view req, char *sbuf, int size) {

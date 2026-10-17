@@ -117,7 +117,8 @@ template <typename T> T *find_new_id(T **arr, int count) {
             cur->allocated = true;
             cur->enabled = false;
             cur->id = i;
-            arr[i] = cur;
+            // Readers skip id_mutex: publish the pointer after the object
+            std::atomic_ref<T *>(arr[i]).store(cur, std::memory_order_release);
             return cur;
         }
         bool expected = false;
@@ -129,6 +130,11 @@ template <typename T> T *find_new_id(T **arr, int count) {
         }
     }
     return nullptr;
+}
+
+// Reads a slot of a find_new_id() array; pairs with its release store
+template <typename T> T *load_slot(T *&slot) {
+    return std::atomic_ref<T *>(slot).load(std::memory_order_acquire);
 }
 void join_thread();
 void add_join_thread(pthread_t t);

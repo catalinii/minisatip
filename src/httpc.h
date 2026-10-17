@@ -23,11 +23,14 @@ typedef struct struct_http_client {
     int id;
 } Shttp_client;
 
-#define get_httpc(i)                                                           \
-    ((i >= 0 && i < MAX_HTTPC && httpc[i] && httpc[i]->enabled) ? httpc[i]     \
-                                                                : NULL)
-
 extern Shttp_client *httpc[MAX_HTTPC];
+
+static inline Shttp_client *get_httpc(int i) {
+    if (i < 0 || i >= MAX_HTTPC)
+        return nullptr;
+    Shttp_client *h = load_slot(httpc[i]);
+    return h && h->enabled ? h : nullptr;
+}
 
 int http_client(char *url, void *callback, void *opaque);
 int http_client_add();

@@ -96,9 +96,10 @@ extern char *listmgmt_str[];
     }
 
 static inline SKey *get_key(int i) {
-    if (i < 0 || i >= MAX_KEYS || !keys[i] || !keys[i]->enabled)
-        return NULL;
-    return keys[i];
+    if (i < 0 || i >= MAX_KEYS)
+        return nullptr;
+    SKey *k = load_slot(keys[i]);
+    return k && k->enabled ? k : nullptr;
 }
 
 // Callers may hold an adapter lock: let the socket's own thread close it,
