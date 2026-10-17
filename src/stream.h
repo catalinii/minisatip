@@ -102,10 +102,14 @@ int calculate_bw(sockets *s);
 #endif
 
 #define get_sid(a) get_sid1(a, __FILE__, __LINE__)
-#define get_sid_nw(i)                                                          \
-    ((i >= 0 && i < MAX_STREAMS && st[i] && st[i]->enabled) ? st[i] : NULL)
-
 extern streams *st[MAX_STREAMS];
+
+static inline streams *get_sid_nw(int i) {
+    if (i < 0 || i >= MAX_STREAMS)
+        return nullptr;
+    streams *sid = load_slot(st[i]);
+    return sid && sid->enabled ? sid : nullptr;
+}
 
 extern int64_t c_tbw, c_bw, c_bw_dmx;
 extern uint32_t c_reads, c_writes, c_failed_writes;

@@ -141,9 +141,10 @@ extern __thread int select_timeout;
 
 static inline sockets *get_sockets(int i) {
     extern sockets *s[];
-    if (i < 0 || i >= MAX_SOCKS || !s[i] || !s[i]->enabled)
-        return NULL;
-    return s[i];
+    if (i < 0 || i >= MAX_SOCKS)
+        return nullptr;
+    sockets *ss = load_slot(s[i]);
+    return ss && ss->enabled ? ss : nullptr;
 }
 #define sockets_writev(sock_id, iov, iovcnt)                                   \
     sockets_writev_prio(sock_id, iov, iovcnt, 0)
