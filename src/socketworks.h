@@ -139,11 +139,15 @@ extern __thread char thread_name[];
 extern __thread pthread_t tid;
 extern __thread int select_timeout;
 
+extern std::array<std::atomic<sockets *>, MAX_SOCKS> s;
+
 static inline sockets *get_sockets(int i) {
-    extern sockets *s[];
-    if (i < 0 || i >= MAX_SOCKS || !s[i] || !s[i]->enabled)
+    if (i < 0 || i >= MAX_SOCKS)
         return NULL;
-    return s[i];
+    sockets *ss = s[i].load();
+    if (!ss || !ss->enabled)
+        return NULL;
+    return ss;
 }
 #define sockets_writev(sock_id, iov, iovcnt)                                   \
     sockets_writev_prio(sock_id, iov, iovcnt, 0)

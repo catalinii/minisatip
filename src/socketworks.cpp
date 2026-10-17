@@ -47,7 +47,7 @@
 
 #define DEFAULT_LOG LOG_SOCKETWORKS
 
-sockets *s[MAX_SOCKS];
+std::array<std::atomic<sockets *>, MAX_SOCKS> s;
 std::atomic<int> max_sock{0};
 
 // returns the protocol (AF_INET, AF_INET6) or 0 in case of failure
@@ -559,7 +559,7 @@ int sockets_accept(int socket __attribute__((unused)),
         return 1;
     }
     if (ss->action != NULL) {
-        ss->action(s[ni]);
+        ss->action(s[ni].load());
     }
     set_linux_socket_timeout(new_sock);
 
@@ -593,7 +593,7 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
     if (sock == SOCK_TIMEOUT && t == NULL)
         LOG_AND_RETURN(-1, "sockets_add timeout without timeout function");
 
-    ss = find_new_id(s, MAX_SOCKS);
+    ss = find_new_id(s);
     if (!ss)
         LOG_AND_RETURN(-1, "sockets_add failed for socks %d", sock);
     int i = ss->id;
@@ -650,10 +650,10 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
 int sockets_del(int sock) {
     int i, so;
     sockets *ss;
-    if (sock < 0 || sock >= MAX_SOCKS || !s[sock])
+    if (sock < 0 || sock >= MAX_SOCKS || !s[sock].load())
         return 0;
 
-    ss = s[sock];
+    ss = s[sock].load();
     std::unique_lock<SMutex> lock(ss->mutex);
     if (!ss->enabled)
         return 0;
@@ -693,11 +693,13 @@ int sockets_del(int sock) {
     ss->allocated = false;
     lock.unlock();
 
-    for (i = 0; i < MAX_SOCKS; i++)
-        if (s[i] && s[i]->enabled && s[i]->master == sock) {
+    for (i = 0; i < MAX_SOCKS; i++) {
+        sockets *slave = s[i].load();
+        if (slave && slave->enabled && slave->master == sock) {
             LOG("Closing slave socket index %d (master sock %d)", i, sock);
             sockets_del(i);
         }
+    }
     return 0;
 }
 #undef DEFAULT_LOG
@@ -769,21 +771,23 @@ void *select_and_execute(void *arg) {
     while (run_loop) {
         c_time = getTick();
         es = 0;
-        for (i = 0; i < max_sock; i++)
-            if (s[i] && s[i]->enabled && s[i]->tid == tid) {
-                pf[i].fd = s[i]->sock;
-                pf[i].events = s[i]->events;
+        for (i = 0; i < max_sock; i++) {
+            sockets *ps = s[i].load();
+            if (ps && ps->enabled && ps->tid == tid) {
+                pf[i].fd = ps->sock;
+                pf[i].events = ps->events;
 
-                if (fifo_used(&s[i]->fifo))
+                if (fifo_used(&ps->fifo))
                     pf[i].events |= POLLOUT;
 
                 pf[i].revents = 0;
-                s[i]->last_poll = c_time;
+                ps->last_poll = c_time;
                 es++;
             } else {
                 pf[i].fd = -1;
                 pf[i].events = pf[i].revents = 0;
             }
+        }
         i = -1;
         if (les == 0 && es == 0 && tid != main_tid) {
             LOG("No enabled sockets for Thread ID %lx name %s ... exiting ",
@@ -804,7 +808,7 @@ void *select_and_execute(void *arg) {
         } else if (rv > 0) {
             while (++i < max_sock) {
                 if ((pf[i].fd >= 0) && pf[i].revents) {
-                    sockets *ss = s[i];
+                    sockets *ss = s[i].load();
                     if (!ss)
                         continue;
                     if (!ss->enabled)
@@ -1104,10 +1108,11 @@ void set_socket_buffer(int sid, uint8_t *buf, int len) {
 
 uint64_t get_allocated_memory() {
     uint64_t allocated_memory = 0;
-    for (int i = 0; i < MAX_SOCKS; i++)
-        if (s[i] && s[i]->fifo.size) {
-            allocated_memory += s[i]->fifo.size;
-        }
+    for (int i = 0; i < MAX_SOCKS; i++) {
+        sockets *ss = s[i].load();
+        if (ss && ss->fifo.size)
+            allocated_memory += ss->fifo.size;
+    }
     return allocated_memory;
 }
 
@@ -1119,15 +1124,15 @@ void free_all() {
     int i = 0;
 
     for (i = MAX_SOCKS - 1; i > 0; i--) {
-        if (!s[i])
+        sockets *ss = s[i].load();
+        if (!ss)
             continue;
-        if (s[i]->enabled)
+        if (ss->enabled)
             sockets_del(i);
-        free_fifo(&s[i]->fifo);
-        free(s[i]->prio_data);
-        if (s[i])
-            delete s[i];
-        s[i] = NULL;
+        free_fifo(&ss->fifo);
+        free(ss->prio_data);
+        delete ss;
+        s[i].store(nullptr);
     }
     free_all_streams();
     free_all_adapters();

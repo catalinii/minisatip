@@ -55,22 +55,25 @@
 
 #define DEFAULT_LOG LOG_STREAM
 
-streams *st[MAX_STREAMS];
+std::array<std::atomic<streams *>, MAX_STREAMS> st;
 SMutex bw_mutex;
 extern int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
 int pmt_process_stream(adapter *ad);
 
 streams *get_stream(int i) {
-    return (i >= 0 && i < MAX_STREAMS && st[i] && st[i]->enabled) ? st[i]
-                                                                  : NULL;
+    if (i < 0 || i >= MAX_STREAMS)
+        return NULL;
+    streams *sid = st[i].load();
+    return (sid && sid->enabled) ? sid : NULL;
 }
 
 streams *get_sid1(int sid, const char *file, int line) {
-    if (sid < 0 || sid >= MAX_STREAMS || !st[sid] || st[sid]->enabled == 0) {
+    streams *s = (sid >= 0 && sid < MAX_STREAMS) ? st[sid].load() : NULL;
+    if (!s || s->enabled == 0) {
         LOG("%s:%d get_sid returns NULL for s_id = %d", file, line, sid);
         return NULL;
     }
-    return st[sid];
+    return s;
 }
 
 char *describe_streams(sockets *s, std::string_view req, char *sbuf, int size) {
@@ -343,10 +346,10 @@ int close_stream_for_socket(sockets *s) {
 
 int close_stream(int i) {
     LOG("closing stream %d", i);
-    if (i < 0 || i >= MAX_STREAMS || !st[i])
+    if (i < 0 || i >= MAX_STREAMS || !st[i].load())
         return 0;
 
-    streams *sid = st[i];
+    streams *sid = st[i].load();
     int ad, rsock_id, type, rtcp_sock, rtcp, st_sock, rsock;
     [[maybe_unused]] int srt_sock; // only read when SRT is enabled
     { // Disable under own lock; never hold it across adapter calls.
@@ -604,7 +607,7 @@ int decode_transport(sockets *s, std::string_view arg, char *default_rtp,
 }
 
 int streams_add() {
-    streams *ss = find_new_id(st, MAX_STREAMS);
+    streams *ss = find_new_id(st);
     if (!ss)
         LOG_AND_RETURN(-1, "streams_add failed");
     int i = ss->id;
@@ -635,9 +638,11 @@ int streams_add() {
 }
 
 int streams_full() {
-    for (int i = 0; i < MAX_STREAMS; i++)
-        if (!st[i] || !st[i]->enabled)
+    for (int i = 0; i < MAX_STREAMS; i++) {
+        streams *sid = st[i].load();
+        if (!sid || !sid->enabled)
             return 0;
+    }
     return 1;
 }
 
@@ -1184,9 +1189,11 @@ int process_dmx(sockets *s) {
 
     lock.unlock();
 
-    for (i = 0; i < MAX_STREAMS; i++)
-        if (st[i] && st[i]->enabled && st[i]->adapter == ad->id)
-            process_packets_for_stream(st[i], ad);
+    for (i = 0; i < MAX_STREAMS; i++) {
+        streams *sid = st[i].load();
+        if (sid && sid->enabled && sid->adapter == ad->id)
+            process_packets_for_stream(sid, ad);
+    }
 
     nsecs += getTickUs() - stime;
     reads++;
@@ -1393,9 +1400,8 @@ void dump_streams() {
 void free_all_streams() {
     int i;
     for (i = 0; i < MAX_STREAMS; i++) {
-        if (st[i])
-            delete st[i];
-        st[i] = NULL;
+        delete st[i].load();
+        st[i].store(nullptr);
     }
 }
 
@@ -1558,14 +1564,46 @@ int get_stream_buffered_size(int s_id) {
         return 0;
     return fifo_used(&s->fifo);
 }
+// Slot readers for the status API; a null slot reads as zero/empty.
+static int get_st_enabled(int i) {
+    if (i < 0 || i >= MAX_STREAMS)
+        return 0;
+    streams *sid = st[i].load();
+    return sid ? sid->enabled.load() : 0;
+}
+
+static int get_st_play(int i) {
+    if (i < 0 || i >= MAX_STREAMS)
+        return 0;
+    streams *sid = st[i].load();
+    return sid ? sid->do_play : 0;
+}
+
+static int get_st_adapter(int i) {
+    if (i < 0 || i >= MAX_STREAMS)
+        return 0;
+    streams *sid = st[i].load();
+    return sid ? sid->adapter : 0;
+}
+
+static char *get_st_useragent(int i, char *dest, int max_size) {
+    dest[0] = 0;
+    if (i < 0 || i >= MAX_STREAMS)
+        return dest;
+    streams *sid = st[i].load();
+    if (sid)
+        _strncpy(dest, sid->useragent, max_size - 1);
+    return dest;
+}
+
 _symbols stream_sym[] = {
-    {"st_enabled", VAR_AARRAY_INT8, st, 1, MAX_STREAMS,
-     offsetof(streams, enabled)},
-    {"st_play", VAR_AARRAY_INT, st, 1, MAX_STREAMS, offsetof(streams, do_play)},
-    {"st_adapter", VAR_AARRAY_INT, st, 1, MAX_STREAMS,
-     offsetof(streams, adapter)},
-    {"st_useragent", VAR_AARRAY_STRING, st, 1, MAX_STREAMS,
-     offsetof(streams, useragent)},
+    {"st_enabled", VAR_FUNCTION_INT, (void *)&get_st_enabled, 0, MAX_STREAMS,
+     0},
+    {"st_play", VAR_FUNCTION_INT, (void *)&get_st_play, 0, MAX_STREAMS, 0},
+    {"st_adapter", VAR_FUNCTION_INT, (void *)&get_st_adapter, 0, MAX_STREAMS,
+     0},
+    {"st_useragent", VAR_FUNCTION_STRING, (void *)&get_st_useragent, 0,
+     MAX_STREAMS, 0},
     {"st_rhost", VAR_FUNCTION_STRING, (void *)&get_stream_rhost, 0, MAX_STREAMS,
      0},
     {"st_rport", VAR_FUNCTION_INT, (void *)&get_stream_rport, 0, MAX_STREAMS,

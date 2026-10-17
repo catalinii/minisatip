@@ -58,7 +58,7 @@
 #define DEFAULT_LOG LOG_PMT
 
 uint16_t EMU_PIDS_ALL_ENFORCED_PIDS_LIST[] = {0, 1, 16, 17, 18, 20, 21};
-SPMT *pmts[MAX_PMT];
+std::array<std::atomic<SPMT *>, MAX_PMT> pmts;
 std::atomic<int> npmts{0};
 
 #define MAX_OPS 10
@@ -68,7 +68,7 @@ SCW *cws[MAX_CW];
 SMutex cws_mutex;
 int ncws;
 
-SFilter *filters[MAX_FILTERS];
+std::array<std::atomic<SFilter *>, MAX_FILTERS> filters;
 SMutex filters_mutex;
 std::atomic<int> nfilters{0};
 
@@ -77,9 +77,10 @@ const char *listmgmt_str[] = {"CLM_MORE", "CLM_FIRST", "CLM_LAST",
 
 static inline SPMT *get_pmt_for_existing_pid(SPid *p) {
     SPMT *pmt = NULL;
-    if (p && p->pmt >= 0 && p->pmt < npmts && pmts[p->pmt] &&
-        pmts[p->pmt]->enabled) {
-        pmt = pmts[p->pmt];
+    if (p && p->pmt >= 0 && p->pmt < npmts) {
+        SPMT *cand = pmts[p->pmt].load();
+        if (cand && cand->enabled)
+            pmt = cand;
     }
     return pmt;
 }
@@ -227,18 +228,17 @@ int get_mask_len(uint8_t *filter, int l) {
 
 void dump_filters(int aid) {
     int i;
-    for (i = 0; i < nfilters; i++)
-        if (filters[i] && filters[i]->enabled)
+    for (i = 0; i < nfilters; i++) {
+        SFilter *f = filters[i].load();
+        if (f && f->enabled)
             LOG("filter %d A: %d: pid %d, master %d, next %d, flags %d, "
                 "mask_len %d, "
                 "filter -> %02X %02X %02X %02X, mask ->%02X %02X %02X %02x",
-                filters[i]->id, filters[i]->adapter, filters[i]->pid,
-                filters[i]->master_filter.load(),
-                filters[i]->next_filter.load(), filters[i]->flags.load(),
-                filters[i]->mask_len.load(), filters[i]->filter[0],
-                filters[i]->filter[1], filters[i]->filter[2],
-                filters[i]->filter[3], filters[i]->mask[0], filters[i]->mask[1],
-                filters[i]->mask[2], filters[i]->mask[3]);
+                f->id, f->adapter, f->pid, f->master_filter.load(),
+                f->next_filter.load(), f->flags.load(), f->mask_len.load(),
+                f->filter[0], f->filter[1], f->filter[2], f->filter[3],
+                f->mask[0], f->mask[1], f->mask[2], f->mask[3]);
+    }
 }
 
 void reset_filter_data(SFilter *f) {
@@ -264,7 +264,7 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
         LOG_AND_RETURN(-1, "%s failed, pid %d", __FUNCTION__, pid);
 
     std::lock_guard<SMutex> lock(filters_mutex);
-    SFilter *f = find_new_id(filters, MAX_FILTERS);
+    SFilter *f = find_new_id(filters);
     if (!f)
         LOG_AND_RETURN(-1, "%s failed", __FUNCTION__);
     int fid = f->id;
@@ -277,13 +277,14 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
     f->adapter = aid;
     f->master_filter = fid;
 
-    for (int i = 0; i < nfilters; i++)
-        if (i != fid && filters[i] && filters[i]->enabled &&
-            filters[i]->adapter == aid && filters[i]->pid == pid &&
-            filters[i]->next_filter == -1) {
-            filters[i]->next_filter = fid;
-            f->master_filter = filters[i]->master_filter.load();
+    for (int i = 0; i < nfilters; i++) {
+        SFilter *o = filters[i].load();
+        if (i != fid && o && o->enabled && o->adapter == aid && o->pid == pid &&
+            o->next_filter == -1) {
+            o->next_filter = fid;
+            f->master_filter = o->master_filter.load();
         }
+    }
     set_filter_flags_locked(f, flags);
     memcpy(f->filter, filter, sizeof(f->filter));
     memcpy(f->mask, mask, sizeof(f->mask));
@@ -306,12 +307,13 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
 // Caller holds filters_mutex.
 int reset_master_filter(int adapter, int pid, int id) {
     int i, nf = 0;
-    for (i = 0; i < nfilters; i++)
-        if ((filters[i] && filters[i]->enabled &&
-             filters[i]->adapter == adapter && filters[i]->pid == pid)) {
-            filters[i]->master_filter = id;
+    for (i = 0; i < nfilters; i++) {
+        SFilter *f = filters[i].load();
+        if (f && f->enabled && f->adapter == adapter && f->pid == pid) {
+            f->master_filter = id;
             nf++;
         }
+    }
     return nf;
 }
 
@@ -320,10 +322,10 @@ int del_filter(int id) {
     int i, pid;
     int adapter = -1;
     LOG("deleting filter %d", id);
-    if (id < 0 || id >= MAX_FILTERS || !filters[id])
+    if (id < 0 || id >= MAX_FILTERS || !filters[id].load())
         return 0;
 
-    f = filters[id];
+    f = filters[id].load();
     std::lock_guard<SMutex> lock(filters_mutex);
     if (!f->enabled) {
         return 0;
@@ -337,15 +339,16 @@ int del_filter(int id) {
         SFilter *m = get_filter(master_filter);
         if (!m) // double check there is no other filter
         {
-            for (i = 0; i < nfilters; i++)
-                if (i != id && (filters[i] && filters[i]->enabled &&
-                                filters[i]->adapter == f->adapter &&
-                                filters[i]->pid == pid)) {
-                    m = filters[i];
+            for (i = 0; i < nfilters; i++) {
+                SFilter *o = filters[i].load();
+                if (i != id && o && o->enabled && o->adapter == f->adapter &&
+                    o->pid == pid) {
+                    m = o;
                     LOGM("warning: filter %d was also found for pid %d", m->id,
                          pid);
                     break;
                 }
+            }
             SPid *p = find_pid(f->adapter, pid);
             if (p)
                 p->filter = -1;
@@ -353,18 +356,21 @@ int del_filter(int id) {
         if (m) // reset master_filter for all filters
             reset_master_filter(f->adapter, pid, m->id);
     } else {
-        for (i = 0; i < nfilters; i++)
-            if (filters[i] && filters[i]->enabled &&
-                filters[i]->adapter == f->adapter && filters[i]->pid == pid &&
-                filters[i]->next_filter == f->id) {
-                filters[i]->next_filter = f->next_filter.load();
+        for (i = 0; i < nfilters; i++) {
+            SFilter *o = filters[i].load();
+            if (o && o->enabled && o->adapter == f->adapter && o->pid == pid &&
+                o->next_filter == f->id) {
+                o->next_filter = f->next_filter.load();
                 break;
             }
+        }
     }
     i = MAX_FILTERS;
-    while (--i >= 0)
-        if (filters[i] && filters[i]->enabled)
+    while (--i >= 0) {
+        SFilter *o = filters[i].load();
+        if (o && o->enabled)
             break;
+    }
     nfilters = i + 1;
     f->pid = -1;
     f->allocated = false;
@@ -374,13 +380,14 @@ int del_filter(int id) {
 }
 int get_pid_filter(int aid, int pid) {
     int i;
-    for (i = 0; i < nfilters; i++)
-        if (filters[i] && filters[i]->enabled && filters[i]->adapter == aid &&
-            filters[i]->pid == pid) {
+    for (i = 0; i < nfilters; i++) {
+        SFilter *f = filters[i].load();
+        if (f && f->enabled && f->adapter == aid && f->pid == pid) {
             LOGM("found filter %d for pid %d, master %d (max filters %d)", i,
-                 pid, filters[i]->master_filter.load(), nfilters.load());
-            return filters[i]->master_filter;
+                 pid, f->master_filter.load(), nfilters.load());
+            return f->master_filter;
         }
+    }
     return -1;
 }
 
@@ -459,10 +466,12 @@ int set_filter_mask(int id, uint8_t *filter, uint8_t *mask) {
 
 void delete_filter_for_adapter(int aid) {
     int i;
-    for (i = 0; i < nfilters; i++)
-        if (filters[i] && filters[i]->enabled && (filters[i]->adapter == aid) &&
-            !(filters[i]->flags & FILTER_PERMANENT))
+    for (i = 0; i < nfilters; i++) {
+        SFilter *f = filters[i].load();
+        if (f && f->enabled && f->adapter == aid &&
+            !(f->flags & FILTER_PERMANENT))
             del_filter(i);
+    }
     return;
 }
 int match_filter(SFilter *f, unsigned char *b) {
@@ -1017,10 +1026,11 @@ int pmt_decrypt_stream(adapter *ad) {
 
     // decrypt everything that's left
     for (i = 0; i < pmt_ids; i++) {
-        if (pmts[pmt_id[i]] && pmts[pmt_id[i]]->blen > 0)
-            decrypt_batch(pmts[pmt_id[i]]);
-        if (pmts[pmt_id[i]] && pmts[pmt_id[i]]->batch != NULL)
-            pmts[pmt_id[i]]->batch = NULL;
+        SPMT *pmt = pmts[pmt_id[i]].load();
+        if (pmt && pmt->blen > 0)
+            decrypt_batch(pmt);
+        if (pmt && pmt->batch != NULL)
+            pmt->batch = NULL;
     }
     return 0;
 }
@@ -1535,7 +1545,7 @@ int pmt_process_stream(adapter *ad) {
 
 int pmt_add(int adapter, int sid, int pmt_pid) {
 
-    SPMT *pmt = find_new_id(pmts, MAX_PMT);
+    SPMT *pmt = find_new_id(pmts);
     if (!pmt) {
         LOG_AND_RETURN(-1, "PMT buffer is full, could not add new pmts");
     }
@@ -1710,19 +1720,22 @@ SPMT *get_all_pmt_for_sid(int aid, int sid) {
     adapter *ad = get_adapter(aid);
     if (!ad)
         return NULL;
-    for (i = 0; i < npmts; i++)
-        if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == aid &&
-            pmts[i]->sid == sid)
-            return pmts[i];
+    for (i = 0; i < npmts; i++) {
+        SPMT *pmt = pmts[i].load();
+        if (pmt && pmt->enabled && pmt->adapter == aid && pmt->sid == sid)
+            return pmt;
+    }
     return NULL;
 }
 
 SPMT *get_pmt_for_sid_pid(int aid, int sid, int pid) {
     int i;
-    for (i = 0; i < npmts; i++)
-        if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == aid &&
-            pmts[i]->sid == sid && pmts[i]->pid == pid)
-            return pmts[i];
+    for (i = 0; i < npmts; i++) {
+        SPMT *pmt = pmts[i].load();
+        if (pmt && pmt->enabled && pmt->adapter == aid && pmt->sid == sid &&
+            pmt->pid == pid)
+            return pmt;
+    }
     return NULL;
 }
 
@@ -1943,19 +1956,21 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque) {
 
     // A PMT missing from the PAT is never stopped by the election, so
     // retire its CA registration here (cached PMTs hold none).
-    for (i = 0; i < npmts; i++)
-        if (pmts[i] && pmts[i]->enabled && pmts[i]->adapter == ad->id &&
-            pmts[i]->state != PMT_CACHED && seen_pmts[i] == 0) {
+    for (i = 0; i < npmts; i++) {
+        SPMT *pmt = pmts[i].load();
+        if (pmt && pmt->enabled && pmt->adapter == ad->id &&
+            pmt->state != PMT_CACHED && seen_pmts[i] == 0) {
             LOG("Caching PMT %d (%s) and filter %d as it is not "
                 "present in the new PAT",
-                i, pmts[i]->name, pmts[i]->filter);
+                i, pmt->name, pmt->filter);
             if (ad->type == ADAPTER_CI) {
                 // Do not cache PMTs for CI adapters as they are being
                 // re-generated very often (on channel change)
                 pmt_del(i);
             } else
-                cache_pmt_for_adapter(ad, pmts[i]);
+                cache_pmt_for_adapter(ad, pmt);
         }
+    }
 
     update_pids(ad->id);
     ad->pat_processed = 1;
@@ -2497,32 +2512,32 @@ char *get_pmt_for_adapter(int aid, char *dest, int max_size) {
 void free_all_pmts() {
     int i, j;
     for (i = 0; i < MAX_PMT; i++) {
-        if (pmts[i]) {
+        SPMT *pmt = pmts[i].load();
+        if (pmt) {
             // Updates shrink caids while keeping entries: free all slots.
             for (j = 0; j < MAX_CAID; j++) {
-                if (pmts[i]->ca[j]) {
-                    delete pmts[i]->ca[j];
-                    pmts[i]->ca[j] = NULL;
+                if (pmt->ca[j]) {
+                    delete pmt->ca[j];
+                    pmt->ca[j] = NULL;
                 }
             }
-            pmts[i]->caids = 0;
-            pmts[i]->descriptors.clear();
+            pmt->caids = 0;
+            pmt->descriptors.clear();
 
-            pmts[i]->stream_pids.clear();
+            pmt->stream_pids.clear();
 
-            delete pmts[i];
-            pmts[i] = NULL;
+            delete pmt;
+            pmts[i].store(nullptr);
         }
     }
 }
 
 void free_filters() {
     int i;
-    for (i = 0; i < MAX_FILTERS; i++)
-        if (filters[i]) {
-            delete filters[i];
-            filters[i] = NULL;
-        }
+    for (i = 0; i < MAX_FILTERS; i++) {
+        delete filters[i].load();
+        filters[i].store(nullptr);
+    }
     nfilters = 0;
 }
 

@@ -57,8 +57,8 @@
 #define DEFAULT_LOG LOG_PMT
 
 extern adapter *a[MAX_ADAPTERS];
-extern SFilter *filters[MAX_FILTERS];
-extern SPMT *pmts[MAX_PMT];
+extern std::array<std::atomic<SFilter *>, MAX_FILTERS> filters;
+extern std::array<std::atomic<SPMT *>, MAX_PMT> pmts;
 
 // Forward declarations
 descriptor_t create_descriptor(const uint8_t *data);
@@ -141,7 +141,7 @@ int test_decrypt() {
     a[0]->enabled = 1;
     pmt_add(0, 0, 100);
     // Claims reference listed streams; the decrypt path skips stale ones.
-    pmt_add_stream_pid(pmts[0], 0xff, 2, false, true);
+    pmt_add_stream_pid(pmts[0].load(), 0xff, 2, false, true);
     for (i = 0; i < max_len; i++) {
         memcpy(a[0]->buf + i * sizeof(packet), packet, sizeof(packet));
     }
@@ -162,24 +162,27 @@ int test_decrypt() {
     // Without a packet start the CW cannot be verified: no decrypt stamp
     for (i = 0; i < max_len; i++)
         a[0]->buf[i * sizeof(packet) + 1] &= ~0x40;
-    pmts[0]->last_scrambled_pkt = pmts[0]->last_decrypt_ok = -1;
+    pmts[0].load()->last_scrambled_pkt = pmts[0].load()->last_decrypt_ok = -1;
     pmt_decrypt_stream(a[0]);
-    ASSERT(pmts[0]->last_scrambled_pkt >= 0, "scrambled packets stamped");
-    ASSERT_EQUAL(pmts[0]->last_decrypt_ok, -1, "unverified CW not stamped");
+    ASSERT(pmts[0].load()->last_scrambled_pkt >= 0,
+           "scrambled packets stamped");
+    ASSERT_EQUAL(pmts[0].load()->last_decrypt_ok, -1,
+                 "unverified CW not stamped");
     for (i = 0; i < max_len; i++)
         memcpy(a[0]->buf + i * sizeof(packet), packet, sizeof(packet));
 
     pmt_decrypt_stream(a[0]);
     uint8_t *b = a[0]->buf + (max_len - 1) * sizeof(packet);
     ASSERT(b[4] + b[5] + b[6] == 1, "MPEG header expected");
-    ASSERT(pmts[0]->last_decrypt_ok >= pmts[0]->last_scrambled_pkt,
+    ASSERT(pmts[0].load()->last_decrypt_ok >=
+               pmts[0].load()->last_scrambled_pkt,
            "a verified decrypt is stamped");
     hexdump("adapter buffer ", a[0]->buf, 188);
     free(a[0]->buf);
     delete a[0];
     a[0] = NULL;
-    delete pmts[0];
-    pmts[0] = NULL;
+    delete pmts[0].load();
+    pmts[0].store(nullptr);
     return 0;
 }
 
@@ -329,7 +332,7 @@ int test_emulate_add_all_pids() {
     a[0] = &ad;
     ad.enabled = 1;
     SPMT pmt{};
-    pmts[0] = &pmt;
+    pmts[0].store(&pmt);
     pmt.enabled = 1;
     pmt.adapter = 0;
     opts.emulate_pids_all = 1;
@@ -473,7 +476,7 @@ static int check_pat_drop_releases_ca(int adapter_type) {
     // Earlier tests leave stack SPMTs in pmts[]: detach all, never free,
     // as some entries are not ours.
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -497,23 +500,25 @@ static int check_pat_drop_releases_ca(int adapter_type) {
     int gone = pmt_add(ad.id, SID_GONE, PID_GONE);
     ASSERT(kept >= 0 && gone >= 0, "could not create the PMTs");
 
-    pmt_add_caid(pmts[kept], 0x0664, 0x1F06, priv, 0);
-    pmt_add_caid(pmts[gone], 0x0664, 0x1F08, priv, 0);
-    send_pmt_to_cas(&ad, pmts[kept]);
-    send_pmt_to_cas(&ad, pmts[gone]);
-    ASSERT(pmts[kept]->ca_mask != 0, "kept PMT was not registered with the CA");
-    ASSERT(pmts[gone]->ca_mask != 0, "gone PMT was not registered with the CA");
+    pmt_add_caid(pmts[kept].load(), 0x0664, 0x1F06, priv, 0);
+    pmt_add_caid(pmts[gone].load(), 0x0664, 0x1F08, priv, 0);
+    send_pmt_to_cas(&ad, pmts[kept].load());
+    send_pmt_to_cas(&ad, pmts[gone].load());
+    ASSERT(pmts[kept].load()->ca_mask != 0,
+           "kept PMT was not registered with the CA");
+    ASSERT(pmts[gone].load()->ca_mask != 0,
+           "gone PMT was not registered with the CA");
 
-    pmts[kept]->state = PMT_RUNNING;
-    pmts[gone]->state = PMT_RUNNING;
+    pmts[kept].load()->state = PMT_RUNNING;
+    pmts[gone].load()->state = PMT_RUNNING;
     ad.active_pmts = 2;
     ad.active_pmt[0] = kept;
     ad.active_pmt[1] = gone;
 
     // The kept service is watched: subscribe its pids so the update_pids
     // tail election leaves it running with its CA registration intact.
-    pmt_add_stream_pid(pmts[kept], 1101, 2, false, true);
-    pmt_add_stream_pid(pmts[kept], 1201, 3, true, false);
+    pmt_add_stream_pid(pmts[kept].load(), 1101, 2, false, true);
+    pmt_add_stream_pid(pmts[kept].load(), 1201, 3, true, false);
     ASSERT(mark_pid_add(0, 0, PID_KEPT) == 0, "kept PMT pid should be added");
     ASSERT(mark_pid_add(0, 0, 1101) == 0, "kept video pid should be added");
     ASSERT(mark_pid_add(0, 0, 1201) == 0, "kept audio pid should be added");
@@ -528,21 +533,21 @@ static int check_pat_drop_releases_ca(int adapter_type) {
                  "the PMT missing from the PAT was not closed on the CA");
     ASSERT_EQUAL(fake_ca_last_del_pmt, gone,
                  "the wrong PMT was closed on the CA");
-    ASSERT_EQUAL(pmts[gone]->ca_mask, 0,
+    ASSERT_EQUAL(pmts[gone].load()->ca_mask, 0,
                  "the CA registration of the dropped PMT was not released");
 
     // The service still present in the PAT must be left alone.
-    ASSERT(pmts[kept] != NULL && pmts[kept]->enabled,
+    ASSERT(pmts[kept].load() != NULL && pmts[kept].load()->enabled,
            "the PMT still present in the PAT was retired");
-    ASSERT(pmts[kept]->ca_mask != 0,
+    ASSERT(pmts[kept].load()->ca_mask != 0,
            "the PMT still present in the PAT lost its CA registration");
 
     // A CI adapter deletes the PMT outright, any other adapter caches it.
     if (adapter_type == ADAPTER_CI) {
-        ASSERT_EQUAL(pmts[gone]->enabled, 0,
+        ASSERT_EQUAL(pmts[gone].load()->enabled, 0,
                      "the dropped PMT was not deleted on a CI adapter");
     } else {
-        ASSERT_EQUAL(pmts[gone]->state, PMT_CACHED,
+        ASSERT_EQUAL(pmts[gone].load()->state, PMT_CACHED,
                      "the dropped PMT was not cached");
     }
 
@@ -579,7 +584,7 @@ int test_revived_cached_pmt_gets_its_filter() {
 
     int id = pmt_add(ad.id, SID_KEPT, PID_KEPT);
     ASSERT(id >= 0, "could not create the PMT");
-    SPMT *pmt = pmts[id];
+    SPMT *pmt = pmts[id].load();
     pmt->version = 7;
     pmt->state = PMT_RUNNING;
     SStreamPid sp{.type = 2, .pid = 300, .is_audio = false, .is_video = true};
@@ -613,9 +618,9 @@ int test_revived_cached_pmt_gets_its_filter() {
                  "the revived PMT should start straight from the cache");
     ASSERT(pmt->filter >= 0,
            "process_pat() should hand the new filter to the revived PMT");
-    ASSERT_EQUAL(filters[pmt->filter]->pid, PID_KEPT,
+    ASSERT_EQUAL(filters[pmt->filter].load()->pid, PID_KEPT,
                  "the filter should be the one for the PMT pid");
-    ASSERT(filters[pmt->filter]->opaque == pmt,
+    ASSERT(filters[pmt->filter].load()->opaque == pmt,
            "the filter should belong to this PMT");
 
     // a second PAT must not add another filter for the same PMT
@@ -628,7 +633,7 @@ int test_revived_cached_pmt_gets_its_filter() {
     // the loop pass that used to start it is now a no-op backstop
     start_active_pmts(&ad);
     ASSERT_EQUAL(pmt->state, PMT_RUNNING, "the revived PMT should stay up");
-    ASSERT(filters[pmt->filter]->flags != 0,
+    ASSERT(filters[pmt->filter].load()->flags != 0,
            "starting the PMT should have enabled its filter");
 
     del_filter(ad.pat_filter);
@@ -643,7 +648,7 @@ int test_revived_cached_pmt_gets_its_filter() {
 int test_pmt_starts_only_with_pmt_pid() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -655,8 +660,8 @@ int test_pmt_starts_only_with_pmt_pid() {
     int bid = pmt_add(0, 14104, 52);
     ASSERT(aid >= 0 && bid >= 0, "could not create the PMTs");
     for (int id : {aid, bid}) {
-        pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
-        pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
+        pmt_add_stream_pid(pmts[id].load(), 3301, 2, false, true);
+        pmt_add_stream_pid(pmts[id].load(), 3401, 3, true, false);
     }
     ad.active_pmts = 2;
     ad.active_pmt[0] = aid;
@@ -674,8 +679,9 @@ int test_pmt_starts_only_with_pmt_pid() {
     }
 
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "wanted PMT should run");
-    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "sibling PMT should wait");
+    ASSERT_EQUAL(pmts[bid].load()->state, PMT_RUNNING, "wanted PMT should run");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_STOPPED,
+                 "sibling PMT should wait");
     ASSERT(find_pid(0, 3301)->pmt == bid, "video pid should be claimed by B");
     ASSERT(find_pid(0, 3401)->pmt == bid, "audio pid should be claimed by B");
 
@@ -683,7 +689,7 @@ int test_pmt_starts_only_with_pmt_pid() {
     find_pid(0, 52)->sid.clear();
     find_pid(0, 52)->order = 0;
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "PMT should stay");
+    ASSERT_EQUAL(pmts[bid].load()->state, PMT_RUNNING, "PMT should stay");
     ASSERT(find_pid(0, 3301)->pmt == bid, "video claim should be kept");
     ASSERT(find_pid(0, 3401)->pmt == bid, "audio claim should be kept");
 
@@ -719,7 +725,7 @@ int test_retune_handover_same_loop() {
     int i;
     uint8_t priv[1] = {0};
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -736,9 +742,9 @@ int test_retune_handover_same_loop() {
     int aid = pmt_add(0, 14101, 48);
     int bid = pmt_add(0, 14104, 52);
     for (int id : {aid, bid}) {
-        pmt_add_caid(pmts[id], 0x0664, 0x1F06, priv, 0);
-        pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
-        pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
+        pmt_add_caid(pmts[id].load(), 0x0664, 0x1F06, priv, 0);
+        pmt_add_stream_pid(pmts[id].load(), 3301, 2, false, true);
+        pmt_add_stream_pid(pmts[id].load(), 3401, 3, true, false);
     }
     ad.active_pmts = 2;
     ad.active_pmt[0] = aid;
@@ -755,7 +761,7 @@ int test_retune_handover_same_loop() {
     }
     fake_ca_add_calls = fake_ca_del_calls = 0;
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "A should run first");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_RUNNING, "A should run first");
     ASSERT(fake_ca_add_calls == 1 && fake_ca_last_add_pmt == aid,
            "A should be sent to the CA");
 
@@ -772,10 +778,10 @@ int test_retune_handover_same_loop() {
     fake_ca_last_add_pmt = fake_ca_last_del_pmt = -1;
     start_active_pmts(&ad);
 
-    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "A should stop");
-    ASSERT_EQUAL(pmts[aid]->ca_mask, 0, "A should release its CA slot");
-    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "B should run");
-    ASSERT(pmts[bid]->ca_mask != 0, "B should hold a CA slot");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_STOPPED, "A should stop");
+    ASSERT_EQUAL(pmts[aid].load()->ca_mask, 0, "A should release its CA slot");
+    ASSERT_EQUAL(pmts[bid].load()->state, PMT_RUNNING, "B should run");
+    ASSERT(pmts[bid].load()->ca_mask != 0, "B should hold a CA slot");
     ASSERT(fake_ca_del_calls == 1 && fake_ca_last_del_pmt == aid,
            "A should be closed on the CA");
     ASSERT(fake_ca_add_calls == 1 && fake_ca_last_add_pmt == bid,
@@ -821,7 +827,7 @@ int test_single_slot_retune_releases_first() {
     int i;
     uint8_t priv[1] = {0};
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -839,9 +845,9 @@ int test_single_slot_retune_releases_first() {
     int aid = pmt_add(0, 14101, 48);
     int bid = pmt_add(0, 14104, 52);
     for (int id : {aid, bid}) {
-        pmt_add_caid(pmts[id], 0x0664, 0x1F06, priv, 0);
-        pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
-        pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
+        pmt_add_caid(pmts[id].load(), 0x0664, 0x1F06, priv, 0);
+        pmt_add_stream_pid(pmts[id].load(), 3301, 2, false, true);
+        pmt_add_stream_pid(pmts[id].load(), 3401, 3, true, false);
     }
     ad.active_pmts = 2;
     ad.active_pmt[0] = aid;
@@ -859,7 +865,7 @@ int test_single_slot_retune_releases_first() {
     single_slot_holder = -1;
     single_slot_seq = 0;
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "A should run first");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_RUNNING, "A should run first");
     ASSERT_EQUAL(single_slot_holder, aid, "A should hold the slot");
 
     // retune: A leaves, B joins, the shared streams stay subscribed
@@ -876,9 +882,9 @@ int test_single_slot_retune_releases_first() {
     single_slot_failed_adds = 0;
     start_active_pmts(&ad);
 
-    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "A should stop");
-    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "B should run");
-    ASSERT(pmts[bid]->ca_mask != 0, "B should hold a CA slot");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_STOPPED, "A should stop");
+    ASSERT_EQUAL(pmts[bid].load()->state, PMT_RUNNING, "B should run");
+    ASSERT(pmts[bid].load()->ca_mask != 0, "B should hold a CA slot");
     ASSERT_EQUAL(single_slot_holder, bid, "B should hold the slot");
     ASSERT_EQUAL(single_slot_failed_adds, 0, "B must not see a full slot");
     ASSERT(single_slot_del_seq > 0 && single_slot_add_seq > 0 &&
@@ -897,7 +903,7 @@ int test_scan_pmt_only_starts_nothing() {
     int i;
     uint8_t priv[1] = {0};
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -915,9 +921,9 @@ int test_scan_pmt_only_starts_nothing() {
     int bid = pmt_add(0, 14104, 52);
     ASSERT(aid >= 0 && bid >= 0, "could not create the PMTs");
     for (int id : {aid, bid}) {
-        pmt_add_caid(pmts[id], 0x0664, 0x1F06, priv, 0);
-        pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
-        pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
+        pmt_add_caid(pmts[id].load(), 0x0664, 0x1F06, priv, 0);
+        pmt_add_stream_pid(pmts[id].load(), 3301, 2, false, true);
+        pmt_add_stream_pid(pmts[id].load(), 3401, 3, true, false);
     }
     ad.active_pmts = 2;
     ad.active_pmt[0] = aid;
@@ -934,8 +940,10 @@ int test_scan_pmt_only_starts_nothing() {
     }
     fake_ca_add_calls = 0;
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "A must not run on scan");
-    ASSERT_EQUAL(pmts[bid]->state, PMT_STOPPED, "B must not run on scan");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_STOPPED,
+                 "A must not run on scan");
+    ASSERT_EQUAL(pmts[bid].load()->state, PMT_STOPPED,
+                 "B must not run on scan");
     ASSERT_EQUAL(fake_ca_add_calls, 0, "nothing must be sent to the CA");
 
     // the client tunes for real: both PMT pids plus the shared streams
@@ -949,8 +957,9 @@ int test_scan_pmt_only_starts_nothing() {
         ad.pids[2 + i].order = 3 + i;
     }
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "earlier PMT should run");
-    ASSERT_EQUAL(pmts[bid]->state, PMT_STOPPED, "later PMT should wait");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_RUNNING,
+                 "earlier PMT should run");
+    ASSERT_EQUAL(pmts[bid].load()->state, PMT_STOPPED, "later PMT should wait");
 
     del_ca(&counting_op);
     free_all_pmts();
@@ -990,7 +999,7 @@ int test_active_pmt_list_capped_at_max() {
 int test_19e_11493h_zap_flows() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -1003,11 +1012,11 @@ int test_19e_11493h_zap_flows() {
     int bid = pmt_add(0, 10304, 5130);
     ASSERT(aid >= 0 && bid >= 0, "could not create the PMTs");
     for (int id : {aid, bid}) {
-        pmt_add_stream_pid(pmts[id], 5121, 27, false, true);
-        pmt_add_stream_pid(pmts[id], 5122, 3, true, false);
+        pmt_add_stream_pid(pmts[id].load(), 5121, 27, false, true);
+        pmt_add_stream_pid(pmts[id].load(), 5122, 3, true, false);
     }
-    pmt_add_stream_pid(pmts[aid], 5124, 6, false, false);
-    pmt_add_stream_pid(pmts[bid], 5134, 6, false, false);
+    pmt_add_stream_pid(pmts[aid].load(), 5124, 6, false, false);
+    pmt_add_stream_pid(pmts[bid].load(), 5134, 6, false, false);
     ad.active_pmts = 2;
     ad.active_pmt[0] = aid;
     ad.active_pmt[1] = bid;
@@ -1017,18 +1026,18 @@ int test_19e_11493h_zap_flows() {
     ASSERT(mark_pid_add(0, 0, 5121) == 0, "pid 5121 should be added");
     ASSERT(mark_pid_add(0, 0, 5122) == 0, "pid 5122 should be added");
     update_pids(0);
-    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "A should run first");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_RUNNING, "A should run first");
     ASSERT(find_pid(0, 5121)->pmt == aid, "A should own video");
     mark_pid_deleted(0, 0, 5120, NULL);
     ASSERT(mark_pid_add(0, 0, 5130) == 0, "pid 5130 should be added");
     update_pids(0);
-    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "zap should run B");
-    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "zap should stop A");
+    ASSERT_EQUAL(pmts[bid].load()->state, PMT_RUNNING, "zap should run B");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_STOPPED, "zap should stop A");
     ASSERT(find_pid(0, 5121)->pmt == bid, "video should move to B");
     mark_pid_deleted(0, 0, 5130, NULL);
     ASSERT(mark_pid_add(0, 0, 5120) == 0, "pid 5120 should be re-added");
     update_pids(0);
-    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "zap back should run A");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_RUNNING, "zap back should run A");
     ASSERT(find_pid(0, 5121)->pmt == aid, "video should move back to A");
 
     // S2: AV-only runs nothing, PMT-after-AV elects, del hands over
@@ -1037,26 +1046,27 @@ int test_19e_11493h_zap_flows() {
     mark_pid_deleted(0, 0, 5122, NULL);
     ASSERT(mark_pid_add(0, 0, 5124) == 0, "pid 5124 should be added");
     update_pids(0);
-    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "data-only runs nothing");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_STOPPED,
+                 "data-only runs nothing");
     ASSERT(mark_pid_add(0, 0, 5121) == 0, "pid 5121 should be added");
     ASSERT(mark_pid_add(0, 0, 5122) == 0, "pid 5122 should be added");
     update_pids(0);
-    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "AV-only runs nothing");
-    ASSERT_EQUAL(pmts[bid]->state, PMT_STOPPED, "AV-only runs nothing");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_STOPPED, "AV-only runs nothing");
+    ASSERT_EQUAL(pmts[bid].load()->state, PMT_STOPPED, "AV-only runs nothing");
     ASSERT(mark_pid_add(0, 0, 5120) == 0, "pid 5120 should be added");
     update_pids(0);
-    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "PMT-after-AV runs A");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_RUNNING, "PMT-after-AV runs A");
     ASSERT(find_pid(0, 5124)->pmt == aid, "data is marked with its owner");
     ASSERT(mark_pid_add(0, 0, 5130) == 0, "pid 5130 should be added");
     update_pids(0);
-    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "first keeps running");
-    ASSERT_EQUAL(pmts[bid]->state, PMT_STOPPED, "second waits");
-    ASSERT(pmts[bid]->best, "waiter stays in the set");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_RUNNING, "first keeps running");
+    ASSERT_EQUAL(pmts[bid].load()->state, PMT_STOPPED, "second waits");
+    ASSERT(pmts[bid].load()->best, "waiter stays in the set");
     ASSERT(find_pid(0, 5121)->pmt == aid, "video stays with A");
     mark_pid_deleted(0, 0, 5120, NULL);
     update_pids(0);
-    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "del hands over to B");
-    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "deleted PMT stops");
+    ASSERT_EQUAL(pmts[bid].load()->state, PMT_RUNNING, "del hands over to B");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_STOPPED, "deleted PMT stops");
     ASSERT(find_pid(0, 5121)->pmt == bid, "video moves to B");
     ASSERT(find_pid(0, 5124)->pmt == -1, "released data has no owner");
 
@@ -1070,7 +1080,7 @@ int test_19e_11493h_zap_flows() {
 int test_19e_11582h_group_and_disjoint() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -1083,9 +1093,9 @@ int test_19e_11582h_group_and_disjoint() {
     int did = pmt_add(0, 10326, 5210);
     ASSERT(cid >= 0 && did >= 0, "could not create the PMTs");
     for (int id : {cid, did}) {
-        pmt_add_stream_pid(pmts[id], 5201, 27, false, true);
-        pmt_add_stream_pid(pmts[id], 5202, 3, true, false);
-        pmt_add_stream_pid(pmts[id], 5204, 6, false, false);
+        pmt_add_stream_pid(pmts[id].load(), 5201, 27, false, true);
+        pmt_add_stream_pid(pmts[id].load(), 5202, 3, true, false);
+        pmt_add_stream_pid(pmts[id].load(), 5204, 6, false, false);
     }
     int efgh[4];
     int sids[4] = {10327, 10328, 10329, 10330};
@@ -1094,14 +1104,14 @@ int test_19e_11582h_group_and_disjoint() {
     for (i = 0; i < 4; i++) {
         efgh[i] = pmt_add(0, sids[i], ppids[i]);
         ASSERT(efgh[i] >= 0, "could not create the group PMT");
-        pmt_add_stream_pid(pmts[efgh[i]], 5221, 27, false, true);
-        pmt_add_stream_pid(pmts[efgh[i]], 5222, 3, true, false);
-        pmt_add_stream_pid(pmts[efgh[i]], dpids[i], 6, false, false);
+        pmt_add_stream_pid(pmts[efgh[i]].load(), 5221, 27, false, true);
+        pmt_add_stream_pid(pmts[efgh[i]].load(), 5222, 3, true, false);
+        pmt_add_stream_pid(pmts[efgh[i]].load(), dpids[i], 6, false, false);
     }
     int iid = pmt_add(0, 10331, 5260);
     ASSERT(iid >= 0, "could not create the disjoint PMT");
-    pmt_add_stream_pid(pmts[iid], 5261, 27, false, true);
-    pmt_add_stream_pid(pmts[iid], 5262, 3, true, false);
+    pmt_add_stream_pid(pmts[iid].load(), 5261, 27, false, true);
+    pmt_add_stream_pid(pmts[iid].load(), 5262, 3, true, false);
     ad.active_pmts = 7;
     ad.active_pmt[0] = cid;
     ad.active_pmt[1] = did;
@@ -1114,15 +1124,15 @@ int test_19e_11582h_group_and_disjoint() {
     ASSERT(mark_pid_add(0, 0, 5202) == 0, "pid 5202 should be added");
     ASSERT(mark_pid_add(0, 0, 5200) == 0, "pid 5200 should be added");
     update_pids(0);
-    ASSERT_EQUAL(pmts[cid]->state, PMT_RUNNING, "C should run first");
+    ASSERT_EQUAL(pmts[cid].load()->state, PMT_RUNNING, "C should run first");
     ASSERT(mark_pid_add(0, 0, 5210) == 0, "pid 5210 should be added");
     update_pids(0);
-    ASSERT_EQUAL(pmts[cid]->state, PMT_RUNNING, "C keeps running");
-    ASSERT_EQUAL(pmts[did]->state, PMT_STOPPED, "dup never starts");
-    ASSERT(!pmts[did]->best, "dup drops out of the set");
+    ASSERT_EQUAL(pmts[cid].load()->state, PMT_RUNNING, "C keeps running");
+    ASSERT_EQUAL(pmts[did].load()->state, PMT_STOPPED, "dup never starts");
+    ASSERT(!pmts[did].load()->best, "dup drops out of the set");
     mark_pid_deleted(0, 0, 5200, NULL);
     update_pids(0);
-    ASSERT_EQUAL(pmts[did]->state, PMT_RUNNING, "del hands over to D");
+    ASSERT_EQUAL(pmts[did].load()->state, PMT_RUNNING, "del hands over to D");
     ASSERT(find_pid(0, 5201)->pmt == did, "video moves to D");
     mark_pid_deleted(0, 0, 5201, NULL);
     mark_pid_deleted(0, 0, 5202, NULL);
@@ -1135,23 +1145,23 @@ int test_19e_11582h_group_and_disjoint() {
         ASSERT(mark_pid_add(0, 0, ppids[i]) == 0, "group pid added");
         update_pids(0);
     }
-    ASSERT_EQUAL(pmts[efgh[0]]->state, PMT_RUNNING, "E should run");
+    ASSERT_EQUAL(pmts[efgh[0]].load()->state, PMT_RUNNING, "E should run");
     for (i = 1; i < 4; i++) {
-        ASSERT_EQUAL(pmts[efgh[i]]->state, PMT_STOPPED, "group waits");
-        ASSERT(pmts[efgh[i]]->best, "waiter stays in the set");
+        ASSERT_EQUAL(pmts[efgh[i]].load()->state, PMT_STOPPED, "group waits");
+        ASSERT(pmts[efgh[i]].load()->best, "waiter stays in the set");
     }
     ASSERT(mark_pid_add(0, 0, 5260) == 0, "pid 5260 should be added");
     ASSERT(mark_pid_add(0, 0, 5261) == 0, "pid 5261 should be added");
     ASSERT(mark_pid_add(0, 0, 5262) == 0, "pid 5262 should be added");
     update_pids(0);
-    ASSERT_EQUAL(pmts[iid]->state, PMT_RUNNING, "disjoint runs too");
-    ASSERT_EQUAL(pmts[efgh[0]]->state, PMT_RUNNING, "E keeps running");
+    ASSERT_EQUAL(pmts[iid].load()->state, PMT_RUNNING, "disjoint runs too");
+    ASSERT_EQUAL(pmts[efgh[0]].load()->state, PMT_RUNNING, "E keeps running");
     ASSERT(find_pid(0, 5261)->pmt == iid, "I owns its video");
     mark_pid_deleted(0, 0, 5221, NULL);
     mark_pid_deleted(0, 0, 5222, NULL);
     update_pids(0);
-    ASSERT_EQUAL(pmts[efgh[0]]->state, PMT_STOPPED, "AV-drop stops E");
-    ASSERT_EQUAL(pmts[iid]->state, PMT_RUNNING, "disjoint survives");
+    ASSERT_EQUAL(pmts[efgh[0]].load()->state, PMT_STOPPED, "AV-drop stops E");
+    ASSERT_EQUAL(pmts[iid].load()->state, PMT_RUNNING, "disjoint survives");
     ASSERT(find_pid(0, 5261)->pmt == iid, "I keeps its video");
 
     free_all_pmts();
@@ -1165,7 +1175,7 @@ int test_19e_11914h_ca_send_close() {
     int i;
     uint8_t priv[1] = {0};
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -1187,12 +1197,12 @@ int test_19e_11914h_ca_send_close() {
     int jid = pmt_add(0, 13, 101);
     int kid = pmt_add(0, 17, 102);
     ASSERT(jid >= 0 && kid >= 0, "could not create the PMTs");
-    pmt_add_caid(pmts[jid], 0x098C, 6786, priv, 0);
-    pmt_add_caid(pmts[jid], 0x09F0, 8066, priv, 0);
-    pmt_add_stream_pid(pmts[jid], 1535, 27, false, true);
-    pmt_add_caid(pmts[kid], 0x098C, 6843, priv, 0);
-    pmt_add_caid(pmts[kid], 0x09F0, 8123, priv, 0);
-    pmt_add_stream_pid(pmts[kid], 1791, 27, false, true);
+    pmt_add_caid(pmts[jid].load(), 0x098C, 6786, priv, 0);
+    pmt_add_caid(pmts[jid].load(), 0x09F0, 8066, priv, 0);
+    pmt_add_stream_pid(pmts[jid].load(), 1535, 27, false, true);
+    pmt_add_caid(pmts[kid].load(), 0x098C, 6843, priv, 0);
+    pmt_add_caid(pmts[kid].load(), 0x09F0, 8123, priv, 0);
+    pmt_add_stream_pid(pmts[kid].load(), 1791, 27, false, true);
     ad.active_pmts = 2;
     ad.active_pmt[0] = jid;
     ad.active_pmt[1] = kid;
@@ -1201,7 +1211,7 @@ int test_19e_11914h_ca_send_close() {
     ASSERT(mark_pid_add(0, 0, 1535) == 0, "pid 1535 should be added");
     update_pids(0);
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[jid]->state, PMT_RUNNING, "J should run");
+    ASSERT_EQUAL(pmts[jid].load()->state, PMT_RUNNING, "J should run");
     ASSERT_EQUAL(fake_ca_add_calls, 1, "J should be sent once");
     ASSERT_EQUAL(fake_ca_last_add_pmt, jid, "J should be the sent PMT");
 
@@ -1211,8 +1221,8 @@ int test_19e_11914h_ca_send_close() {
     ASSERT(mark_pid_add(0, 0, 1791) == 0, "pid 1791 should be added");
     update_pids(0);
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[kid]->state, PMT_RUNNING, "zap should run K");
-    ASSERT_EQUAL(pmts[jid]->state, PMT_STOPPED, "zap should stop J");
+    ASSERT_EQUAL(pmts[kid].load()->state, PMT_RUNNING, "zap should run K");
+    ASSERT_EQUAL(pmts[jid].load()->state, PMT_STOPPED, "zap should stop J");
     ASSERT_EQUAL(fake_ca_last_add_pmt, kid, "K should be sent on zap");
     ASSERT_EQUAL(fake_ca_del_calls, 1, "J should be closed on zap");
     ASSERT_EQUAL(fake_ca_last_del_pmt, jid, "closed PMT should be J");
@@ -1221,7 +1231,7 @@ int test_19e_11914h_ca_send_close() {
     mark_pid_deleted(0, 0, 1791, NULL);
     update_pids(0);
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[kid]->state, PMT_STOPPED, "teardown stops K");
+    ASSERT_EQUAL(pmts[kid].load()->state, PMT_STOPPED, "teardown stops K");
     ASSERT_EQUAL(fake_ca_del_calls, 2, "teardown closes K");
     ASSERT_EQUAL(fake_ca_last_del_pmt, kid, "closed PMT should be K");
 
@@ -1245,8 +1255,8 @@ int test_ci_adapter_pmt_starts() {
 
     int id = pmt_add(0, 16542, 67);
     ASSERT(id >= 0, "could not create the PMT");
-    pmt_add_stream_pid(pmts[id], 4942, 2, false, true);
-    pmt_add_stream_pid(pmts[id], 5042, 3, true, false);
+    pmt_add_stream_pid(pmts[id].load(), 4942, 2, false, true);
+    pmt_add_stream_pid(pmts[id].load(), 5042, 3, true, false);
     ad.active_pmts = 1;
     ad.active_pmt[0] = id;
 
@@ -1260,7 +1270,7 @@ int test_ci_adapter_pmt_starts() {
     }
 
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING,
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING,
                  "the CI adapter's PMT should start");
 
     free_all_pmts();
@@ -1271,7 +1281,7 @@ int test_ci_adapter_pmt_starts() {
 int test_sticky_claims_without_parse() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -1282,8 +1292,8 @@ int test_sticky_claims_without_parse() {
     int aid = pmt_add(0, 14101, 48);
     int bid = pmt_add(0, 14104, 52);
     for (int id : {aid, bid}) {
-        pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
-        pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
+        pmt_add_stream_pid(pmts[id].load(), 3301, 2, false, true);
+        pmt_add_stream_pid(pmts[id].load(), 3401, 3, true, false);
     }
     // B subscribed earlier and runs; A is the later newcomer
     int pids[] = {48, 52, 3301, 3401};
@@ -1301,20 +1311,23 @@ int test_sticky_claims_without_parse() {
     ad.active_pmts = 1;
     ad.active_pmt[0] = bid;
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "B should run alone");
+    ASSERT_EQUAL(pmts[bid].load()->state, PMT_RUNNING, "B should run alone");
 
     // A arrives parsed and subscribed, but the loop must not steal for it
     ad.active_pmts = 2;
     ad.active_pmt[1] = aid;
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "newcomer should wait");
-    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "holder should keep running");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_STOPPED, "newcomer should wait");
+    ASSERT_EQUAL(pmts[bid].load()->state, PMT_RUNNING,
+                 "holder should keep running");
     ASSERT(find_pid(0, 3301)->pmt == bid, "video pid should stay with B");
 
     // steady state: no flapping between the two passes
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "newcomer should keep waiting");
-    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "holder should keep running");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_STOPPED,
+                 "newcomer should keep waiting");
+    ASSERT_EQUAL(pmts[bid].load()->state, PMT_RUNNING,
+                 "holder should keep running");
 
     free_all_pmts();
     a[0] = NULL;
@@ -1325,7 +1338,7 @@ int test_sticky_claims_without_parse() {
 int test_earlier_newcomer_steals_by_order() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -1335,9 +1348,9 @@ int test_earlier_newcomer_steals_by_order() {
 
     int aid = pmt_add(0, 14101, 48);
     int bid = pmt_add(0, 14104, 52);
-    pmt_add_stream_pid(pmts[aid], 3301, 2, false, true);
-    pmt_add_stream_pid(pmts[bid], 3301, 2, false, true);
-    pmt_add_stream_pid(pmts[bid], 3401, 3, true, false);
+    pmt_add_stream_pid(pmts[aid].load(), 3301, 2, false, true);
+    pmt_add_stream_pid(pmts[bid].load(), 3301, 2, false, true);
+    pmt_add_stream_pid(pmts[bid].load(), 3401, 3, true, false);
     // B subscribed earlier but joins late; A runs holding video only.
     // Sets differ so no dedupe: the takeover must steal mid-loop.
     int pids[] = {48, 52, 3301, 3401};
@@ -1355,15 +1368,17 @@ int test_earlier_newcomer_steals_by_order() {
     ad.active_pmts = 1;
     ad.active_pmt[0] = aid;
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "A should run alone");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_RUNNING, "A should run alone");
     ASSERT(find_pid(0, 3301)->pmt == aid, "A should own the video pid");
 
     // B arrives fully subscribed with the earlier order and takes over
     ad.active_pmts = 2;
     ad.active_pmt[1] = bid;
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "earlier should take over");
-    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "holder should step aside");
+    ASSERT_EQUAL(pmts[bid].load()->state, PMT_RUNNING,
+                 "earlier should take over");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_STOPPED,
+                 "holder should step aside");
     ASSERT(find_pid(0, 3301)->pmt == bid, "video pid should move to B");
 
     free_all_pmts();
@@ -1376,7 +1391,7 @@ int test_earlier_newcomer_steals_by_order() {
 int test_steal_splits_partial_overlap() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -1386,10 +1401,10 @@ int test_steal_splits_partial_overlap() {
 
     int aid = pmt_add(0, 14101, 48);
     int bid = pmt_add(0, 14104, 52);
-    pmt_add_stream_pid(pmts[aid], 3301, 2, false, true);
-    pmt_add_stream_pid(pmts[aid], 3401, 3, true, false);
-    pmt_add_stream_pid(pmts[bid], 3301, 2, false, true);
-    pmt_add_stream_pid(pmts[bid], 3402, 3, true, false);
+    pmt_add_stream_pid(pmts[aid].load(), 3301, 2, false, true);
+    pmt_add_stream_pid(pmts[aid].load(), 3401, 3, true, false);
+    pmt_add_stream_pid(pmts[bid].load(), 3301, 2, false, true);
+    pmt_add_stream_pid(pmts[bid].load(), 3402, 3, true, false);
     int pids[] = {48, 52, 3301, 3401, 3402};
     int orders[] = {5, 3, 6, 7, 8};
     int sids[] = {1, 0, 0, 1, 0};
@@ -1406,13 +1421,14 @@ int test_steal_splits_partial_overlap() {
     ad.active_pmts = 1;
     ad.active_pmt[0] = aid;
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "A should run alone");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_RUNNING, "A should run alone");
 
     ad.active_pmts = 2;
     ad.active_pmt[1] = bid;
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "earlier should run");
-    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "holder keeps own audio");
+    ASSERT_EQUAL(pmts[bid].load()->state, PMT_RUNNING, "earlier should run");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_RUNNING,
+                 "holder keeps own audio");
     ASSERT(find_pid(0, 3301)->pmt == bid, "shared video moves to B");
     ASSERT(find_pid(0, 3401)->pmt == aid, "own audio stays with A");
     ASSERT(find_pid(0, 3402)->pmt == bid, "own audio goes to B");
@@ -1468,7 +1484,7 @@ int test_pid_order_reset_on_remove() {
 int test_d8_shared_pid() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -1478,15 +1494,15 @@ int test_d8_shared_pid() {
 
     int m1 = pmt_add(0, 100, 60);
     int m2 = pmt_add(0, 200, 60);
-    pmt_add_stream_pid(pmts[m1], 701, 2, false, true);
-    pmt_add_stream_pid(pmts[m1], 711, 3, true, false);
-    pmt_add_stream_pid(pmts[m2], 701, 2, false, true);
-    pmt_add_stream_pid(pmts[m2], 712, 3, true, false);
+    pmt_add_stream_pid(pmts[m1].load(), 701, 2, false, true);
+    pmt_add_stream_pid(pmts[m1].load(), 711, 3, true, false);
+    pmt_add_stream_pid(pmts[m2].load(), 701, 2, false, true);
+    pmt_add_stream_pid(pmts[m2].load(), 712, 3, true, false);
     int m3 = pmt_add(0, 300, 61);
     int m4 = pmt_add(0, 400, 61);
     for (int id : {m3, m4}) {
-        pmt_add_stream_pid(pmts[id], 801, 2, false, true);
-        pmt_add_stream_pid(pmts[id], 811, 3, true, false);
+        pmt_add_stream_pid(pmts[id].load(), 801, 2, false, true);
+        pmt_add_stream_pid(pmts[id].load(), 811, 3, true, false);
     }
     ad.active_pmts = 4;
     ad.active_pmt[0] = m1;
@@ -1504,14 +1520,16 @@ int test_d8_shared_pid() {
         ad.pids[i].order = i + 1;
     }
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[m1]->state, PMT_RUNNING, "first set should run");
-    ASSERT_EQUAL(pmts[m2]->state, PMT_RUNNING, "second set should run");
-    ASSERT_EQUAL(pmts[m3]->state, PMT_RUNNING, "lowest sid should run");
-    ASSERT_EQUAL(pmts[m4]->state, PMT_STOPPED, "duplicate should wait");
+    ASSERT_EQUAL(pmts[m1].load()->state, PMT_RUNNING, "first set should run");
+    ASSERT_EQUAL(pmts[m2].load()->state, PMT_RUNNING, "second set should run");
+    ASSERT_EQUAL(pmts[m3].load()->state, PMT_RUNNING, "lowest sid should run");
+    ASSERT_EQUAL(pmts[m4].load()->state, PMT_STOPPED, "duplicate should wait");
     ASSERT(find_pid(0, 701)->pmt == m1, "shared video goes to the first");
     ASSERT(find_pid(0, 712)->pmt == m2, "own audio goes to the second");
-    ASSERT(pmts[m1]->best && pmts[m2]->best, "different sets stay in");
-    ASSERT(pmts[m3]->best && !pmts[m4]->best, "only the lowest sid is best");
+    ASSERT(pmts[m1].load()->best && pmts[m2].load()->best,
+           "different sets stay in");
+    ASSERT(pmts[m3].load()->best && !pmts[m4].load()->best,
+           "only the lowest sid is best");
 
     // drop 712: m2 has nothing left to serve and waits, m1 keeps all
     find_pid(0, 712)->sid.clear();
@@ -1523,9 +1541,11 @@ int test_d8_shared_pid() {
     ad.pids[6].sid.insert(0);
     ad.pids[6].order = 7;
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[m1]->state, PMT_RUNNING, "m1 should keep running");
-    ASSERT_EQUAL(pmts[m2]->state, PMT_STOPPED, "m2 should wait claimless");
-    ASSERT(pmts[m1]->best && pmts[m2]->best, "waiter stays in the set");
+    ASSERT_EQUAL(pmts[m1].load()->state, PMT_RUNNING, "m1 should keep running");
+    ASSERT_EQUAL(pmts[m2].load()->state, PMT_STOPPED,
+                 "m2 should wait claimless");
+    ASSERT(pmts[m1].load()->best && pmts[m2].load()->best,
+           "waiter stays in the set");
     ASSERT(find_pid(0, 701)->pmt == m1, "shared video should not move");
 
     free_all_pmts();
@@ -1538,7 +1558,7 @@ int test_d8_shared_pid() {
 int test_shared_pid_split() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -1548,10 +1568,10 @@ int test_shared_pid_split() {
 
     int m1 = pmt_add(0, 100, 60);
     int m2 = pmt_add(0, 200, 60);
-    pmt_add_stream_pid(pmts[m1], 701, 2, false, true);
-    pmt_add_stream_pid(pmts[m1], 711, 3, true, false);
-    pmt_add_stream_pid(pmts[m2], 701, 2, false, true);
-    pmt_add_stream_pid(pmts[m2], 712, 3, true, false);
+    pmt_add_stream_pid(pmts[m1].load(), 701, 2, false, true);
+    pmt_add_stream_pid(pmts[m1].load(), 711, 3, true, false);
+    pmt_add_stream_pid(pmts[m2].load(), 701, 2, false, true);
+    pmt_add_stream_pid(pmts[m2].load(), 712, 3, true, false);
     ad.active_pmts = 2;
     ad.active_pmt[0] = m1;
     ad.active_pmt[1] = m2;
@@ -1566,16 +1586,19 @@ int test_shared_pid_split() {
         ad.pids[i].order = i + 1;
     }
     start_active_pmts(&ad);
-    ASSERT(pmts[m1]->best && pmts[m2]->best, "both should stay in the set");
-    ASSERT_EQUAL(pmts[m1]->state, PMT_RUNNING, "first contender should run");
-    ASSERT_EQUAL(pmts[m2]->state, PMT_RUNNING, "second contender should run");
+    ASSERT(pmts[m1].load()->best && pmts[m2].load()->best,
+           "both should stay in the set");
+    ASSERT_EQUAL(pmts[m1].load()->state, PMT_RUNNING,
+                 "first contender should run");
+    ASSERT_EQUAL(pmts[m2].load()->state, PMT_RUNNING,
+                 "second contender should run");
     ASSERT(find_pid(0, 701)->pmt == m1, "shared video goes to the first");
     ASSERT(find_pid(0, 712)->pmt == m2, "own audio goes to the second");
 
     // sticky claims: a second pass changes nothing
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[m1]->state, PMT_RUNNING, "first should stay up");
-    ASSERT_EQUAL(pmts[m2]->state, PMT_RUNNING, "second should stay up");
+    ASSERT_EQUAL(pmts[m1].load()->state, PMT_RUNNING, "first should stay up");
+    ASSERT_EQUAL(pmts[m2].load()->state, PMT_RUNNING, "second should stay up");
     ASSERT(find_pid(0, 701)->pmt == m1, "shared video should not move");
 
     free_all_pmts();
@@ -1588,10 +1611,10 @@ int test_shared_pid_split() {
 int test_30w_shared_pmt_pid() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
     for (i = 0; i < MAX_FILTERS; i++)
-        filters[i] = NULL;
+        filters[i].store(nullptr);
 
     adapter ad = {};
     a[0] = &ad;
@@ -1705,7 +1728,7 @@ int test_1129_bein_shared_es() {
     int i;
     uint8_t priv[1] = {0};
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -1723,9 +1746,9 @@ int test_1129_bein_shared_es() {
     int bein = pmt_add(0, 14101, 48);
     ASSERT(ticari >= 0 && bein >= 0, "could not create the PMTs");
     for (int id : {ticari, bein}) {
-        pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
-        pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
-        pmt_add_caid(pmts[id], 0x0664, 0x1F00 + id, priv, 0);
+        pmt_add_stream_pid(pmts[id].load(), 3301, 2, false, true);
+        pmt_add_stream_pid(pmts[id].load(), 3401, 3, true, false);
+        pmt_add_caid(pmts[id].load(), 0x0664, 0x1F00 + id, priv, 0);
     }
     ad.active_pmts = 2;
     ad.active_pmt[0] = ticari;
@@ -1735,19 +1758,21 @@ int test_1129_bein_shared_es() {
     ASSERT(mark_pid_add(0, 0, 3301) == 0, "pid 3301 should be added");
     ASSERT(mark_pid_add(0, 0, 3401) == 0, "pid 3401 should be added");
     update_pids(0);
-    ASSERT_EQUAL(pmts[bein]->state, PMT_RUNNING, "subscribed PMT should run");
-    ASSERT_EQUAL(pmts[ticari]->state, PMT_STOPPED, "parsed-first should wait");
+    ASSERT_EQUAL(pmts[bein].load()->state, PMT_RUNNING,
+                 "subscribed PMT should run");
+    ASSERT_EQUAL(pmts[ticari].load()->state, PMT_STOPPED,
+                 "parsed-first should wait");
     ASSERT(find_pid(0, 3301)->pmt == bein, "subscribed PMT should own video");
     start_active_pmts(&ad);
-    ASSERT(pmts[bein]->ca_mask != 0, "loop should send the winner");
-    ASSERT_EQUAL(pmts[ticari]->ca_mask, 0, "loser should never be sent");
+    ASSERT(pmts[bein].load()->ca_mask != 0, "loop should send the winner");
+    ASSERT_EQUAL(pmts[ticari].load()->ca_mask, 0, "loser should never be sent");
 
     // zap to the other sibling on the same shared streams
     mark_pid_deleted(0, 0, 48, NULL);
     ASSERT(mark_pid_add(0, 0, 52) == 0, "pid 52 should be added");
     update_pids(0);
-    ASSERT_EQUAL(pmts[ticari]->state, PMT_RUNNING, "new zap should run");
-    ASSERT_EQUAL(pmts[bein]->state, PMT_STOPPED, "old zap should stop");
+    ASSERT_EQUAL(pmts[ticari].load()->state, PMT_RUNNING, "new zap should run");
+    ASSERT_EQUAL(pmts[bein].load()->state, PMT_STOPPED, "old zap should stop");
     ASSERT(find_pid(0, 3301)->pmt == ticari, "video should move with the zap");
 
     del_ca(&fake_ca_op);
@@ -1761,7 +1786,7 @@ int test_1129_bein_shared_es() {
 int test_1129_stingray_shared_vpid() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -1773,10 +1798,10 @@ int test_1129_stingray_shared_vpid() {
     int eighties = pmt_add(0, 200, 1922);
     int nature = pmt_add(0, 100, 1908);
     ASSERT(eighties >= 0 && nature >= 0, "could not create the PMTs");
-    pmt_add_stream_pid(pmts[nature], 108, 2, false, true);
-    pmt_add_stream_pid(pmts[nature], 208, 3, true, false);
-    pmt_add_stream_pid(pmts[eighties], 108, 2, false, true);
-    pmt_add_stream_pid(pmts[eighties], 222, 3, true, false);
+    pmt_add_stream_pid(pmts[nature].load(), 108, 2, false, true);
+    pmt_add_stream_pid(pmts[nature].load(), 208, 3, true, false);
+    pmt_add_stream_pid(pmts[eighties].load(), 108, 2, false, true);
+    pmt_add_stream_pid(pmts[eighties].load(), 222, 3, true, false);
     ad.active_pmts = 2;
     ad.active_pmt[0] = eighties;
     ad.active_pmt[1] = nature;
@@ -1785,8 +1810,10 @@ int test_1129_stingray_shared_vpid() {
     ASSERT(mark_pid_add(0, 0, 108) == 0, "pid 108 should be added");
     ASSERT(mark_pid_add(0, 0, 208) == 0, "pid 208 should be added");
     update_pids(0);
-    ASSERT_EQUAL(pmts[nature]->state, PMT_RUNNING, "subscribed PMT should run");
-    ASSERT_EQUAL(pmts[eighties]->state, PMT_STOPPED, "sibling should wait");
+    ASSERT_EQUAL(pmts[nature].load()->state, PMT_RUNNING,
+                 "subscribed PMT should run");
+    ASSERT_EQUAL(pmts[eighties].load()->state, PMT_STOPPED,
+                 "sibling should wait");
     ASSERT(find_pid(0, 108)->pmt == nature, "shared VPID follows the sub");
     ASSERT(find_pid(0, 208)->pmt == nature, "own APID follows the sub");
     ASSERT(find_pid(0, 222) == NULL, "other APID stays out of the demux");
@@ -1797,8 +1824,10 @@ int test_1129_stingray_shared_vpid() {
     ASSERT(mark_pid_add(0, 0, 1922) == 0, "pid 1922 should be added");
     ASSERT(mark_pid_add(0, 0, 222) == 0, "pid 222 should be added");
     update_pids(0);
-    ASSERT_EQUAL(pmts[eighties]->state, PMT_RUNNING, "new zap should run");
-    ASSERT_EQUAL(pmts[nature]->state, PMT_STOPPED, "old zap should stop");
+    ASSERT_EQUAL(pmts[eighties].load()->state, PMT_RUNNING,
+                 "new zap should run");
+    ASSERT_EQUAL(pmts[nature].load()->state, PMT_STOPPED,
+                 "old zap should stop");
     ASSERT(find_pid(0, 108)->pmt == eighties, "VPID should move with zap");
     ASSERT(find_pid(0, 222)->pmt == eighties, "new APID should be owned");
 
@@ -1813,7 +1842,7 @@ int test_held_pids_without_client_stop_pmt() {
     int i;
     uint8_t priv[1] = {0};
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -1828,12 +1857,12 @@ int test_held_pids_without_client_stop_pmt() {
 
     int id = pmt_add(0, 100, 48);
     ASSERT(id >= 0, "could not create the PMT");
-    pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
-    pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
-    pmt_add_caid(pmts[id], 0x0664, 0x1F06, priv, 0);
-    send_pmt_to_cas(&ad, pmts[id]);
-    ASSERT(pmts[id]->ca_mask != 0, "PMT was not registered with the CA");
-    pmts[id]->state = PMT_RUNNING;
+    pmt_add_stream_pid(pmts[id].load(), 3301, 2, false, true);
+    pmt_add_stream_pid(pmts[id].load(), 3401, 3, true, false);
+    pmt_add_caid(pmts[id].load(), 0x0664, 0x1F06, priv, 0);
+    send_pmt_to_cas(&ad, pmts[id].load());
+    ASSERT(pmts[id].load()->ca_mask != 0, "PMT was not registered with the CA");
+    pmts[id].load()->state = PMT_RUNNING;
     ad.active_pmts = 1;
     ad.active_pmt[0] = id;
 
@@ -1847,9 +1876,9 @@ int test_held_pids_without_client_stop_pmt() {
     }
     fake_ca_del_calls = 0;
     update_pids(0);
-    ASSERT_EQUAL(pmts[id]->state, PMT_STOPPED, "held PMT should stop");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_STOPPED, "held PMT should stop");
     ASSERT_EQUAL(fake_ca_del_calls, 1, "held PMT should release the CA");
-    ASSERT_EQUAL(pmts[id]->ca_mask, 0, "CA registration should be gone");
+    ASSERT_EQUAL(pmts[id].load()->ca_mask, 0, "CA registration should be gone");
 
     del_ca(&fake_ca_op);
     free_all_pmts();
@@ -1861,7 +1890,7 @@ int test_held_pids_without_client_stop_pmt() {
 int test_cw_keyed_by_pmt() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
     for (i = 0; i < MAX_CW; i++)
         if (cws[i])
@@ -1899,7 +1928,7 @@ int test_cw_keyed_by_pmt() {
 int test_send_cw_skips_in_use_slot() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
     for (i = 0; i < MAX_CW; i++)
         if (cws[i])
@@ -1950,7 +1979,7 @@ int test_send_cw_skips_in_use_slot() {
 int test_pids_all_expands_pmt_pids() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -1961,7 +1990,7 @@ int test_pids_all_expands_pmt_pids() {
 
     int id = pmt_add(0, 100, 1000);
     ASSERT(id >= 0, "could not create the PMT");
-    pmt_add_stream_pid(pmts[id], 100, 2, false, true);
+    pmt_add_stream_pid(pmts[id].load(), 100, 2, false, true);
     ad.active_pmts = 1;
     ad.active_pmt[0] = id;
 
@@ -1973,7 +2002,8 @@ int test_pids_all_expands_pmt_pids() {
     ASSERT(ps && ps->has_stream(0), "stream pid should carry the client sid");
 
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should run for pids=all");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING,
+                 "PMT should run for pids=all");
 
     opts.emulate_pids_all = 0;
     free_all_pmts();
@@ -1986,10 +2016,10 @@ int test_pids_all_expands_pmt_pids() {
 int test_multi_service_pid_parses_per_sid() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
     for (i = 0; i < MAX_FILTERS; i++)
-        filters[i] = NULL;
+        filters[i].store(nullptr);
 
     adapter ad = {};
     a[0] = &ad;
@@ -2036,7 +2066,7 @@ int test_multi_service_pid_parses_per_sid() {
 int test_late_parse_handover() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -2046,8 +2076,8 @@ int test_late_parse_handover() {
 
     int qid = pmt_add(0, 14104, 52);
     ASSERT(qid >= 0, "could not create Q");
-    pmt_add_stream_pid(pmts[qid], 3301, 2, false, true);
-    pmt_add_stream_pid(pmts[qid], 3401, 3, true, false);
+    pmt_add_stream_pid(pmts[qid].load(), 3301, 2, false, true);
+    pmt_add_stream_pid(pmts[qid].load(), 3401, 3, true, false);
     ad.active_pmts = 1;
     ad.active_pmt[0] = qid;
 
@@ -2064,7 +2094,7 @@ int test_late_parse_handover() {
         ad.pids[i].order = orders[i];
     }
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[qid]->state, PMT_RUNNING, "Q should run alone");
+    ASSERT_EQUAL(pmts[qid].load()->state, PMT_RUNNING, "Q should run alone");
     ASSERT(find_pid(0, 3301)->pmt == qid, "Q should own the video pid");
 
     // P subscribed earlier but parses only now
@@ -2083,7 +2113,8 @@ int test_late_parse_handover() {
     ASSERT(process_pmt(fid, sec, sizeof(sec), NULL) == 0, "P to parse");
     SPMT *p = get_pmt_for_sid_pid(0, 14101, 48);
     ASSERT(p && p->stream_pids.size() == 2, "P should hold both streams");
-    ASSERT_EQUAL(pmts[qid]->state, PMT_STOPPED, "Q should stop at parse");
+    ASSERT_EQUAL(pmts[qid].load()->state, PMT_STOPPED,
+                 "Q should stop at parse");
     ASSERT(find_pid(0, 3301)->pmt == -1, "video claim should be released");
 
     start_active_pmts(&ad);
@@ -2100,7 +2131,7 @@ int test_late_parse_handover() {
 int test_running_pmt_pid_deleted_on_unsubscribe() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -2111,11 +2142,11 @@ int test_running_pmt_pid_deleted_on_unsubscribe() {
 
     int id = pmt_add(0, 100, 48);
     ASSERT(id >= 0, "could not create the PMT");
-    pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
-    pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
-    int fid = add_filter(0, 48, (void *)process_pmt, pmts[id], 0);
+    pmt_add_stream_pid(pmts[id].load(), 3301, 2, false, true);
+    pmt_add_stream_pid(pmts[id].load(), 3401, 3, true, false);
+    int fid = add_filter(0, 48, (void *)process_pmt, pmts[id].load(), 0);
     ASSERT(fid >= 0, "could not add the PMT filter");
-    pmts[id]->filter = fid;
+    pmts[id].load()->filter = fid;
     ad.active_pmts = 1;
     ad.active_pmt[0] = id;
 
@@ -2129,17 +2160,20 @@ int test_running_pmt_pid_deleted_on_unsubscribe() {
         ad.pids[i].order = i + 1;
     }
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should run");
-    ASSERT(filters[fid]->flags == FILTER_CRC, "running filter keeps CRC only");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING, "PMT should run");
+    ASSERT(filters[fid].load()->flags == FILTER_CRC,
+           "running filter keeps CRC only");
 
     mark_pid_deleted(0, 0, 48, NULL);
     update_pids(0);
     ASSERT(find_pid(0, 48) == NULL, "PMT pid should leave the demux");
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should stay on pid delete");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING,
+                 "PMT should stay on pid delete");
     ASSERT(find_pid(0, 3301)->pmt == id, "video claim should be kept");
 
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should stay running");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING,
+                 "PMT should stay running");
 
     del_filter(fid);
     free_all_pmts();
@@ -2152,7 +2186,7 @@ int test_pmt_pid_remove_readd_no_churn() {
     int i;
     uint8_t priv[1] = {0};
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -2169,12 +2203,12 @@ int test_pmt_pid_remove_readd_no_churn() {
 
     int id = pmt_add(0, 222, 222);
     ASSERT(id >= 0, "could not create the PMT");
-    pmt_add_stream_pid(pmts[id], 2221, 27, false, true);
-    pmt_add_stream_pid(pmts[id], 2222, 6, true, false);
-    pmt_add_caid(pmts[id], 0x4AFC, 2220, priv, 0);
-    int fid = add_filter(0, 222, (void *)process_pmt, pmts[id], 0);
+    pmt_add_stream_pid(pmts[id].load(), 2221, 27, false, true);
+    pmt_add_stream_pid(pmts[id].load(), 2222, 6, true, false);
+    pmt_add_caid(pmts[id].load(), 0x4AFC, 2220, priv, 0);
+    int fid = add_filter(0, 222, (void *)process_pmt, pmts[id].load(), 0);
     ASSERT(fid >= 0, "could not add the PMT filter");
-    pmts[id]->filter = fid;
+    pmts[id].load()->filter = fid;
     ad.active_pmts = 1;
     ad.active_pmt[0] = id;
 
@@ -2184,7 +2218,7 @@ int test_pmt_pid_remove_readd_no_churn() {
     update_pids(0);
     fake_ca_add_calls = fake_ca_del_calls = 0;
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should run");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING, "PMT should run");
     ASSERT_EQUAL(fake_ca_add_calls, 1, "PMT should reach the CA once");
 
     // delpids=222 while the streams stay subscribed
@@ -2192,17 +2226,18 @@ int test_pmt_pid_remove_readd_no_churn() {
     mark_pid_deleted(0, 0, 222, NULL);
     update_pids(0);
     ASSERT(find_pid(0, 222) == NULL, "pid 222 should leave the demux");
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should stay");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING, "PMT should stay");
     ASSERT_EQUAL(fake_ca_del_calls, 0, "PMT should not leave the CA");
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should stay on pass");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING,
+                 "PMT should stay on pass");
     ASSERT_EQUAL(fake_ca_add_calls, 0, "PMT should not be re-sent");
 
     // addpids=222 back: still no churn
     ASSERT(mark_pid_add(0, 0, 222) == 0, "pid 222 should be added back");
     update_pids(0);
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should stay");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING, "PMT should stay");
     ASSERT_EQUAL(fake_ca_del_calls, 0, "PMT should not leave the CA");
     ASSERT_EQUAL(fake_ca_add_calls, 0, "PMT should not be re-sent");
     ASSERT(find_pid(0, 2221)->pmt == id, "video claim should be kept");
@@ -2219,7 +2254,7 @@ int test_pmt_pid_remove_readd_no_churn() {
 int test_pmt_pid_delete_hands_over() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -2232,14 +2267,14 @@ int test_pmt_pid_delete_hands_over() {
     int bid = pmt_add(0, 14104, 52);
     ASSERT(aid >= 0 && bid >= 0, "could not create the PMTs");
     for (int id : {aid, bid}) {
-        pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
-        pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
+        pmt_add_stream_pid(pmts[id].load(), 3301, 2, false, true);
+        pmt_add_stream_pid(pmts[id].load(), 3401, 3, true, false);
     }
-    int fa = add_filter(0, 48, (void *)process_pmt, pmts[aid], 0);
-    int fb = add_filter(0, 52, (void *)process_pmt, pmts[bid], 0);
+    int fa = add_filter(0, 48, (void *)process_pmt, pmts[aid].load(), 0);
+    int fb = add_filter(0, 52, (void *)process_pmt, pmts[bid].load(), 0);
     ASSERT(fa >= 0 && fb >= 0, "could not add the PMT filters");
-    pmts[aid]->filter = fa;
-    pmts[bid]->filter = fb;
+    pmts[aid].load()->filter = fa;
+    pmts[bid].load()->filter = fb;
     ad.active_pmts = 2;
     ad.active_pmt[0] = aid;
     ad.active_pmt[1] = bid;
@@ -2249,21 +2284,23 @@ int test_pmt_pid_delete_hands_over() {
     ASSERT(mark_pid_add(0, 0, 3401) == 0, "pid 3401 should be added");
     update_pids(0);
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "A should run");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_RUNNING, "A should run");
     ASSERT(find_pid(0, 3301)->pmt == aid, "A should own the video pid");
 
     // zap: the PMT pid leaves while the streams stay subscribed
     mark_pid_deleted(0, 0, 48, NULL);
     ASSERT(mark_pid_add(0, 0, 52) == 0, "pid 52 should be added");
     update_pids(0);
-    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "A should stop on pid delete");
-    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "B should take over at once");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_STOPPED,
+                 "A should stop on pid delete");
+    ASSERT_EQUAL(pmts[bid].load()->state, PMT_RUNNING,
+                 "B should take over at once");
     ASSERT(find_pid(0, 3301)->pmt == bid, "B should own the video pid");
     ASSERT(find_pid(0, 48) == NULL, "pid 48 should leave the demux");
 
     // the loop pass that used to elect B is now a no-op backstop
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "B should stay up");
+    ASSERT_EQUAL(pmts[bid].load()->state, PMT_RUNNING, "B should stay up");
 
     del_filter(fa);
     del_filter(fb);
@@ -2278,7 +2315,7 @@ int test_update_pids_tail_elects() {
     int i;
     uint8_t priv[1] = {0};
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -2295,15 +2332,15 @@ int test_update_pids_tail_elects() {
     int bid = pmt_add(0, 14104, 52);
     ASSERT(aid >= 0 && bid >= 0, "could not create the PMTs");
     for (int id : {aid, bid}) {
-        pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
-        pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
-        pmt_add_caid(pmts[id], 0x0664, 0x1F00 + id, priv, 0);
+        pmt_add_stream_pid(pmts[id].load(), 3301, 2, false, true);
+        pmt_add_stream_pid(pmts[id].load(), 3401, 3, true, false);
+        pmt_add_caid(pmts[id].load(), 0x0664, 0x1F00 + id, priv, 0);
     }
-    int fa = add_filter(0, 48, (void *)process_pmt, pmts[aid], 0);
-    int fb = add_filter(0, 52, (void *)process_pmt, pmts[bid], 0);
+    int fa = add_filter(0, 48, (void *)process_pmt, pmts[aid].load(), 0);
+    int fb = add_filter(0, 52, (void *)process_pmt, pmts[bid].load(), 0);
     ASSERT(fa >= 0 && fb >= 0, "could not add the PMT filters");
-    pmts[aid]->filter = fa;
-    pmts[bid]->filter = fb;
+    pmts[aid].load()->filter = fa;
+    pmts[bid].load()->filter = fb;
     ad.active_pmts = 2;
     ad.active_pmt[0] = aid;
     ad.active_pmt[1] = bid;
@@ -2312,11 +2349,13 @@ int test_update_pids_tail_elects() {
     ASSERT(mark_pid_add(0, 0, 3301) == 0, "pid 3301 should be added");
     ASSERT(mark_pid_add(0, 0, 3401) == 0, "pid 3401 should be added");
     update_pids(0);
-    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "A should run with no pump");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_RUNNING,
+                 "A should run with no pump");
     ASSERT(find_pid(0, 3301)->pmt == aid, "A should own the video pid");
-    ASSERT_EQUAL(pmts[aid]->ca_mask, 0, "A should be elected but unsent");
+    ASSERT_EQUAL(pmts[aid].load()->ca_mask, 0,
+                 "A should be elected but unsent");
     start_active_pmts(&ad);
-    ASSERT(pmts[aid]->ca_mask != 0, "the loop should send A to the CA");
+    ASSERT(pmts[aid].load()->ca_mask != 0, "the loop should send A to the CA");
 
     // zap: the PMT pid leaves while the streams stay subscribed
     mark_pid_deleted(0, 0, 48, NULL);
@@ -2324,15 +2363,17 @@ int test_update_pids_tail_elects() {
     fake_ca_del_calls = 0;
     fake_ca_last_del_pmt = -1;
     update_pids(0);
-    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "A should stop on pid delete");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_STOPPED,
+                 "A should stop on pid delete");
     ASSERT_EQUAL(fake_ca_del_calls, 1, "A should release the CA at the tail");
     ASSERT_EQUAL(fake_ca_last_del_pmt, aid, "the wrong PMT left the CA");
-    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING,
+    ASSERT_EQUAL(pmts[bid].load()->state, PMT_RUNNING,
                  "B should take over with no pump");
     ASSERT(find_pid(0, 3301)->pmt == bid, "B should own the video pid");
-    ASSERT_EQUAL(pmts[bid]->ca_mask, 0, "B should be elected but unsent");
+    ASSERT_EQUAL(pmts[bid].load()->ca_mask, 0,
+                 "B should be elected but unsent");
     start_active_pmts(&ad);
-    ASSERT(pmts[bid]->ca_mask != 0, "the loop should send B to the CA");
+    ASSERT(pmts[bid].load()->ca_mask != 0, "the loop should send B to the CA");
 
     del_ca(&fake_ca_op);
     del_filter(fa);
@@ -2347,7 +2388,7 @@ int test_update_pids_tail_elects() {
 int test_stream_pid_delete_stops_pmt() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -2358,11 +2399,11 @@ int test_stream_pid_delete_stops_pmt() {
 
     int id = pmt_add(0, 100, 48);
     ASSERT(id >= 0, "could not create the PMT");
-    pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
-    pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
-    int fid = add_filter(0, 48, (void *)process_pmt, pmts[id], 0);
+    pmt_add_stream_pid(pmts[id].load(), 3301, 2, false, true);
+    pmt_add_stream_pid(pmts[id].load(), 3401, 3, true, false);
+    int fid = add_filter(0, 48, (void *)process_pmt, pmts[id].load(), 0);
     ASSERT(fid >= 0, "could not add the PMT filter");
-    pmts[id]->filter = fid;
+    pmts[id].load()->filter = fid;
     ad.active_pmts = 1;
     ad.active_pmt[0] = id;
 
@@ -2371,12 +2412,12 @@ int test_stream_pid_delete_stops_pmt() {
     ASSERT(mark_pid_add(0, 0, 3401) == 0, "pid 3401 should be added");
     update_pids(0);
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should run");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING, "PMT should run");
 
     mark_pid_deleted(0, 0, 3301, NULL);
     mark_pid_deleted(0, 0, 3401, NULL);
     update_pids(0);
-    ASSERT_EQUAL(pmts[id]->state, PMT_STOPPED, "PMT should stop");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_STOPPED, "PMT should stop");
     ASSERT(find_pid(0, 3301) == NULL, "video pid should be gone");
     SPid *pp = find_pid(0, 48);
     ASSERT(pp && pp->flags == PID_STATE_ACTIVE, "PMT pid should remain");
@@ -2392,7 +2433,7 @@ int test_stream_pid_delete_stops_pmt() {
 int test_pmt_cosmetic_update_keeps_running() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -2409,9 +2450,9 @@ int test_pmt_cosmetic_update_keeps_running() {
 
     int id = pmt_add(0, 100, 48);
     ASSERT(id >= 0, "could not create the PMT");
-    int fid = add_filter(0, 48, (void *)process_pmt, pmts[id], 0);
+    int fid = add_filter(0, 48, (void *)process_pmt, pmts[id].load(), 0);
     ASSERT(fid >= 0, "could not add the PMT filter");
-    pmts[id]->filter = fid;
+    pmts[id].load()->filter = fid;
 
     ASSERT(mark_pid_add(0, 0, 48) == 0, "pid 48 should be added");
     ASSERT(mark_pid_add(0, 0, 3301) == 0, "pid 3301 should be added");
@@ -2422,23 +2463,24 @@ int test_pmt_cosmetic_update_keeps_running() {
     int spids[] = {3301, 3401};
     uint8_t sec[64];
     int len = build_pmt(sec, 100, 1, 3301, 0x0B00, 0x0C00, types, spids, 2);
-    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v1 to parse");
+    ASSERT(process_pmt(fid, sec, len, pmts[id].load()) == 0, "v1 to parse");
     fake_ca_add_calls = fake_ca_del_calls = 0;
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should run");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING, "PMT should run");
     ASSERT(fake_ca_add_calls == 1, "PMT should be sent to the CA");
 
     len = build_pmt(sec, 100, 2, 3301, 0x0B00, 0x0C00, types, spids, 2);
     fake_ca_add_calls = fake_ca_del_calls = 0;
-    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v2 to parse");
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should keep running");
-    ASSERT_EQUAL(pmts[id]->version, 2, "version should advance");
+    ASSERT(process_pmt(fid, sec, len, pmts[id].load()) == 0, "v2 to parse");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING,
+                 "PMT should keep running");
+    ASSERT_EQUAL(pmts[id].load()->version, 2, "version should advance");
     ASSERT(find_pid(0, 3301)->pmt == id, "video claim should be kept");
     ASSERT(find_pid(0, 3401)->pmt == id, "audio claim should be kept");
     ASSERT_EQUAL(fake_ca_del_calls, 0, "CA should see no delete");
 
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should still run");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING, "PMT should still run");
     ASSERT_EQUAL(fake_ca_add_calls, 1, "CA should see the update");
     ASSERT_EQUAL(fake_ca_last_add_update, 1, "re-send is an update");
 
@@ -2448,19 +2490,20 @@ int test_pmt_cosmetic_update_keeps_running() {
     int spids3[] = {3401, 3301};
     len = build_pmt(sec, 100, 3, 3301, 0x0B00, 0x0C00, types3, spids3, 2);
     fake_ca_add_calls = fake_ca_del_calls = 0;
-    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v3 to parse");
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should keep running");
-    ASSERT_EQUAL(pmts[id]->version, 3, "version should advance");
-    ASSERT_EQUAL((int)pmts[id]->stream_pids.size(), 2,
+    ASSERT(process_pmt(fid, sec, len, pmts[id].load()) == 0, "v3 to parse");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING,
+                 "PMT should keep running");
+    ASSERT_EQUAL(pmts[id].load()->version, 3, "version should advance");
+    ASSERT_EQUAL((int)pmts[id].load()->stream_pids.size(), 2,
                  "streams should be intact");
-    ASSERT_EQUAL(pmts[id]->pcr_pid, 3301, "PCR should be intact");
+    ASSERT_EQUAL(pmts[id].load()->pcr_pid, 3301, "PCR should be intact");
     ASSERT(find_pid(0, 3301)->pmt == id, "video claim should be kept");
     ASSERT(find_pid(0, 3401)->pmt == id, "audio claim should be kept");
     ASSERT_EQUAL(fake_ca_del_calls, 0, "CA should see no delete");
-    ASSERT_EQUAL(pmts[id]->ca_mask, 0, "CA re-send should be pending");
+    ASSERT_EQUAL(pmts[id].load()->ca_mask, 0, "CA re-send should be pending");
 
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should still run");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING, "PMT should still run");
     ASSERT(fake_ca_add_calls == 1, "CA should see one benign re-send");
 
     del_ca(&counting_op);
@@ -2498,7 +2541,7 @@ static int build_pmt_ca_private(uint8_t *b, int version, int priv_len) {
 // An update reuses the CA entries: longer private data must still fit.
 int test_pmt_update_longer_ca_private_data() {
     for (int i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -2509,23 +2552,25 @@ int test_pmt_update_longer_ca_private_data() {
 
     int id = pmt_add(0, 100, 48);
     ASSERT(id >= 0, "could not create the PMT");
-    int fid = add_filter(0, 48, (void *)process_pmt, pmts[id], 0);
+    int fid = add_filter(0, 48, (void *)process_pmt, pmts[id].load(), 0);
     ASSERT(fid >= 0, "could not add the PMT filter");
-    pmts[id]->filter = fid;
+    pmts[id].load()->filter = fid;
     ASSERT(mark_pid_add(0, 0, 48) == 0, "pid 48 should be added");
     ASSERT(mark_pid_add(0, 0, 3301) == 0, "pid 3301 should be added");
     update_pids(0);
 
     uint8_t sec[1024];
     int len = build_pmt_ca_private(sec, 1, 0);
-    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v1 to parse");
-    ASSERT_EQUAL(pmts[id]->ca[0]->private_data.size(), 0, "v1 private data");
+    ASSERT(process_pmt(fid, sec, len, pmts[id].load()) == 0, "v1 to parse");
+    ASSERT_EQUAL(pmts[id].load()->ca[0]->private_data.size(), 0,
+                 "v1 private data");
 
     len = build_pmt_ca_private(sec, 2, 200);
-    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v2 to parse");
-    ASSERT_EQUAL(pmts[id]->caids, 1, "v2 CAIDs");
-    ASSERT_EQUAL(pmts[id]->ca[0]->private_data.size(), 200, "v2 private data");
-    auto &priv = pmts[id]->ca[0]->private_data;
+    ASSERT(process_pmt(fid, sec, len, pmts[id].load()) == 0, "v2 to parse");
+    ASSERT_EQUAL(pmts[id].load()->caids, 1, "v2 CAIDs");
+    ASSERT_EQUAL(pmts[id].load()->ca[0]->private_data.size(), 200,
+                 "v2 private data");
+    auto &priv = pmts[id].load()->ca[0]->private_data;
     ASSERT(std::equal(priv.begin(), priv.end(), sec + 18), "v2 private data");
 
     del_filter(fid);
@@ -2538,7 +2583,7 @@ int test_pmt_update_longer_ca_private_data() {
 // not leave stale private data behind.
 int test_pmt_add_caid_null_clears_reused_entry() {
     for (int i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     int id = pmt_add(0, 100, 48);
@@ -2564,7 +2609,7 @@ int test_pmt_add_caid_null_clears_reused_entry() {
 int test_pmt_content_update_delta() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -2581,9 +2626,9 @@ int test_pmt_content_update_delta() {
 
     int id = pmt_add(0, 100, 48);
     ASSERT(id >= 0, "could not create the PMT");
-    int fid = add_filter(0, 48, (void *)process_pmt, pmts[id], 0);
+    int fid = add_filter(0, 48, (void *)process_pmt, pmts[id].load(), 0);
     ASSERT(fid >= 0, "could not add the PMT filter");
-    pmts[id]->filter = fid;
+    pmts[id].load()->filter = fid;
 
     ASSERT(mark_pid_add(0, 0, 48) == 0, "pid 48 should be added");
     ASSERT(mark_pid_add(0, 0, 3301) == 0, "pid 3301 should be added");
@@ -2594,77 +2639,82 @@ int test_pmt_content_update_delta() {
     int spids[] = {3301, 3401};
     uint8_t sec[64];
     int len = build_pmt(sec, 100, 1, 3301, 0x0B00, 0x0C00, types, spids, 2);
-    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v1 to parse");
+    ASSERT(process_pmt(fid, sec, len, pmts[id].load()) == 0, "v1 to parse");
     fake_ca_add_calls = fake_ca_del_calls = 0;
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should run");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING, "PMT should run");
     ASSERT(fake_ca_add_calls == 1, "PMT should be sent to the CA");
 
     int types2[] = {2};
     int spids2[] = {3301};
     len = build_pmt(sec, 100, 2, 3301, 0x0B00, 0x0C00, types2, spids2, 1);
     fake_ca_add_calls = fake_ca_del_calls = 0;
-    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v2 to parse");
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should keep running");
-    ASSERT_EQUAL(pmts[id]->version, 2, "version should advance");
+    ASSERT(process_pmt(fid, sec, len, pmts[id].load()) == 0, "v2 to parse");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING,
+                 "PMT should keep running");
+    ASSERT_EQUAL(pmts[id].load()->version, 2, "version should advance");
     ASSERT(find_pid(0, 3301)->pmt == id, "video claim should be kept");
     // Removed pids keep a stale claim that still counts as live:
     // the election does not look inside the holder's stream list.
     ASSERT(find_pid(0, 3401)->pmt == id, "stale audio claim should linger");
     ASSERT_EQUAL(fake_ca_del_calls, 0, "CA should see no delete");
-    ASSERT_EQUAL(pmts[id]->ca_mask, 0, "CA re-send should be pending");
+    ASSERT_EQUAL(pmts[id].load()->ca_mask, 0, "CA re-send should be pending");
 
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should still run");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING, "PMT should still run");
     ASSERT(fake_ca_add_calls == 1, "CA should see one re-send");
-    ASSERT(pmts[id]->ca_mask != 0, "PMT should hold a CA slot again");
+    ASSERT(pmts[id].load()->ca_mask != 0, "PMT should hold a CA slot again");
     ASSERT(find_pid(0, 3401)->pmt == id, "stale claim should survive pass");
 
     // v3 changes only the ECM pid: still a delta re-send, no delete.
     len = build_pmt(sec, 100, 3, 3301, 0x0B00, 0x0C01, types2, spids2, 1);
     fake_ca_add_calls = fake_ca_del_calls = 0;
-    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v3 to parse");
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should keep running");
-    ASSERT_EQUAL(pmts[id]->version, 3, "version should advance");
+    ASSERT(process_pmt(fid, sec, len, pmts[id].load()) == 0, "v3 to parse");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING,
+                 "PMT should keep running");
+    ASSERT_EQUAL(pmts[id].load()->version, 3, "version should advance");
     ASSERT(find_pid(0, 3301)->pmt == id, "video claim should be kept");
     ASSERT_EQUAL(fake_ca_del_calls, 0, "CA should see no delete");
-    ASSERT_EQUAL(pmts[id]->ca_mask, 0, "CA re-send should be pending");
+    ASSERT_EQUAL(pmts[id].load()->ca_mask, 0, "CA re-send should be pending");
 
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should still run");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING, "PMT should still run");
     ASSERT(fake_ca_add_calls == 1, "CA should see one re-send");
-    ASSERT(pmts[id]->ca_mask != 0, "PMT should hold a CA slot again");
+    ASSERT(pmts[id].load()->ca_mask != 0, "PMT should hold a CA slot again");
 
     // v4 changes only the stream type: same pids, so the delta path
     // drops nothing but still re-sends while encrypted.
     int types4[] = {27};
     len = build_pmt(sec, 100, 4, 3301, 0x0B00, 0x0C01, types4, spids2, 1);
     fake_ca_add_calls = fake_ca_del_calls = 0;
-    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v4 to parse");
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should keep running");
-    ASSERT_EQUAL(pmts[id]->version, 4, "version should advance");
+    ASSERT(process_pmt(fid, sec, len, pmts[id].load()) == 0, "v4 to parse");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING,
+                 "PMT should keep running");
+    ASSERT_EQUAL(pmts[id].load()->version, 4, "version should advance");
     ASSERT(find_pid(0, 3301)->pmt == id, "video claim should be kept");
     ASSERT_EQUAL(fake_ca_del_calls, 0, "CA should see no delete");
-    ASSERT_EQUAL(pmts[id]->ca_mask, 0, "CA re-send should be pending");
+    ASSERT_EQUAL(pmts[id].load()->ca_mask, 0, "CA re-send should be pending");
 
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should still run");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING, "PMT should still run");
     ASSERT(fake_ca_add_calls == 1, "CA should see one re-send");
-    ASSERT(pmts[id]->ca_mask != 0, "PMT should hold a CA slot again");
+    ASSERT(pmts[id].load()->ca_mask != 0, "PMT should hold a CA slot again");
 
     // v5 turns the service FTA: the CA registration is released, and
     // nothing is re-sent afterwards.
     len = build_pmt(sec, 100, 5, 3301, 0, 0, types4, spids2, 1);
     fake_ca_add_calls = fake_ca_del_calls = 0;
-    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v5 to parse");
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should keep running");
-    ASSERT_EQUAL(pmts[id]->version, 5, "version should advance");
+    ASSERT(process_pmt(fid, sec, len, pmts[id].load()) == 0, "v5 to parse");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING,
+                 "PMT should keep running");
+    ASSERT_EQUAL(pmts[id].load()->version, 5, "version should advance");
     ASSERT(find_pid(0, 3301)->pmt == id, "video claim should be kept");
     ASSERT_EQUAL(fake_ca_del_calls, 1, "CA registration should be released");
-    ASSERT_EQUAL(pmts[id]->ca_registered_mask, 0, "registration is gone");
+    ASSERT_EQUAL(pmts[id].load()->ca_registered_mask, 0,
+                 "registration is gone");
 
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should still run");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING, "PMT should still run");
     ASSERT_EQUAL(fake_ca_add_calls, 0, "FTA PMT should see no re-send");
 
     // A later PMT listing the dropped pid cannot steal it: the stale
@@ -2672,8 +2722,8 @@ int test_pmt_content_update_delta() {
     int bid = pmt_add(0, 200, 52);
     ASSERT(bid >= 0, "could not create the second PMT");
     uint8_t priv[1] = {0};
-    pmt_add_caid(pmts[bid], 0x0B00, 0x0C00, priv, 0);
-    pmt_add_stream_pid(pmts[bid], 3401, 3, true, false);
+    pmt_add_caid(pmts[bid].load(), 0x0B00, 0x0C00, priv, 0);
+    pmt_add_stream_pid(pmts[bid].load(), 3401, 3, true, false);
     ASSERT(mark_pid_add(0, 0, 52) == 0, "pid 52 should be added");
     update_pids(0);
     pmt_add_active_pmt(&ad, bid);
@@ -2686,9 +2736,10 @@ int test_pmt_content_update_delta() {
     fake_ca_add_calls = fake_ca_del_calls = 0;
     start_active_pmts(&ad);
     ASSERT(find_pid(0, 3401)->pmt == id, "stale holder should keep 3401");
-    ASSERT_EQUAL(pmts[bid]->state, PMT_STOPPED,
+    ASSERT_EQUAL(pmts[bid].load()->state, PMT_STOPPED,
                  "claimless rival waits stopped");
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "first PMT should still run");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING,
+                 "first PMT should still run");
     ASSERT_EQUAL(fake_ca_add_calls, 0, "stopped rival should see no CA send");
 
     del_ca(&counting_op);
@@ -2703,7 +2754,7 @@ int test_pmt_content_update_delta() {
 int test_ca_update_flag_distinguishes_resend() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -2720,9 +2771,9 @@ int test_ca_update_flag_distinguishes_resend() {
 
     int id = pmt_add(0, 100, 48);
     ASSERT(id >= 0, "could not create the PMT");
-    int fid = add_filter(0, 48, (void *)process_pmt, pmts[id], 0);
+    int fid = add_filter(0, 48, (void *)process_pmt, pmts[id].load(), 0);
     ASSERT(fid >= 0, "could not add the PMT filter");
-    pmts[id]->filter = fid;
+    pmts[id].load()->filter = fid;
 
     ASSERT(mark_pid_add(0, 0, 48) == 0, "pid 48 should be added");
     ASSERT(mark_pid_add(0, 0, 3301) == 0, "pid 3301 should be added");
@@ -2732,7 +2783,7 @@ int test_ca_update_flag_distinguishes_resend() {
     int spids[] = {3301};
     uint8_t sec[64];
     int len = build_pmt(sec, 100, 1, 3301, 0x0B00, 0x0C00, types, spids, 1);
-    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v1 to parse");
+    ASSERT(process_pmt(fid, sec, len, pmts[id].load()) == 0, "v1 to parse");
     fake_ca_add_calls = 0;
     start_active_pmts(&ad);
     ASSERT_EQUAL(fake_ca_add_calls, 1, "PMT should be sent to the CA");
@@ -2740,7 +2791,7 @@ int test_ca_update_flag_distinguishes_resend() {
 
     len = build_pmt(sec, 100, 2, 3301, 0x0B00, 0x0C00, types, spids, 1);
     fake_ca_add_calls = 0;
-    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v2 to parse");
+    ASSERT(process_pmt(fid, sec, len, pmts[id].load()) == 0, "v2 to parse");
     start_active_pmts(&ad);
     ASSERT_EQUAL(fake_ca_add_calls, 1, "cosmetic bump still informs the CA");
     ASSERT_EQUAL(fake_ca_last_add_update, 1, "re-send is an update");
@@ -2751,7 +2802,7 @@ int test_ca_update_flag_distinguishes_resend() {
     int spids3[] = {3301, 3401};
     len = build_pmt(sec, 100, 3, 3301, 0x0B00, 0x0C00, types3, spids3, 2);
     fake_ca_add_calls = 0;
-    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v3 to parse");
+    ASSERT(process_pmt(fid, sec, len, pmts[id].load()) == 0, "v3 to parse");
     start_active_pmts(&ad);
     ASSERT_EQUAL(fake_ca_add_calls, 1, "content change re-sends");
     ASSERT_EQUAL(fake_ca_last_add_update, 1, "re-send is an update");
@@ -2768,7 +2819,7 @@ int test_ca_update_flag_distinguishes_resend() {
 int test_handover_stops_stale_holder() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -2788,37 +2839,38 @@ int test_handover_stops_stale_holder() {
 
     int aid = pmt_add(0, 100, 48);
     ASSERT(aid >= 0, "could not create PMT A");
-    pmt_add_stream_pid(pmts[aid], 3301, 2, false, true);
-    pmt_add_stream_pid(pmts[aid], 3302, 2, false, true);
+    pmt_add_stream_pid(pmts[aid].load(), 3301, 2, false, true);
+    pmt_add_stream_pid(pmts[aid].load(), 3302, 2, false, true);
     pmt_add_active_pmt(&ad, aid);
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "A should run");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_RUNNING, "A should run");
     ASSERT(find_pid(0, 3301)->pmt == aid, "A should claim 3301");
 
     // A drops 3301 without unclaiming (post-update state).
-    for (auto it = pmts[aid]->stream_pids.begin();
-         it != pmts[aid]->stream_pids.end(); ++it)
+    for (auto it = pmts[aid].load()->stream_pids.begin();
+         it != pmts[aid].load()->stream_pids.end(); ++it)
         if (it->pid == 3301) {
-            pmts[aid]->stream_pids.erase(it);
+            pmts[aid].load()->stream_pids.erase(it);
             break;
         }
 
     int bid = pmt_add(0, 200, 60);
     ASSERT(bid >= 0, "could not create PMT B");
-    int bfid = add_filter(0, 60, (void *)process_pmt, pmts[bid], 0);
+    int bfid = add_filter(0, 60, (void *)process_pmt, pmts[bid].load(), 0);
     ASSERT(bfid >= 0, "could not add the PMT filter");
-    pmts[bid]->filter = bfid;
+    pmts[bid].load()->filter = bfid;
     int types[] = {2};
     int spids[] = {3301};
     uint8_t sec[64];
     int len = build_pmt(sec, 200, 1, 3301, 0, 0, types, spids, 1);
-    ASSERT(process_pmt(bfid, sec, len, pmts[bid]) == 0, "B to parse");
-    ASSERT_EQUAL(pmts[aid]->state, PMT_STOPPED, "A must yield to handover");
+    ASSERT(process_pmt(bfid, sec, len, pmts[bid].load()) == 0, "B to parse");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_STOPPED,
+                 "A must yield to handover");
 
     start_active_pmts(&ad);
     ASSERT(find_pid(0, 3301)->pmt == bid, "B should take 3301");
-    ASSERT_EQUAL(pmts[bid]->state, PMT_RUNNING, "B should run");
-    ASSERT_EQUAL(pmts[aid]->state, PMT_RUNNING, "A should run on 3302");
+    ASSERT_EQUAL(pmts[bid].load()->state, PMT_RUNNING, "B should run");
+    ASSERT_EQUAL(pmts[aid].load()->state, PMT_RUNNING, "A should run on 3302");
 
     del_filter(bfid);
     free_all_pmts();
@@ -2914,7 +2966,7 @@ static int e2e_drain(int fd, uint8_t *buf, int cap) {
 int test_pmt_update_e2e_single_capmt_update() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
     for (i = 0; i < MAX_ADAPTERS; i++)
         a[i] = NULL;
@@ -2977,9 +3029,9 @@ int test_pmt_update_e2e_single_capmt_update() {
 
     int id = pmt_add(8, 7100, 1025);
     ASSERT(id >= 0, "could not create the PMT");
-    int fid = add_filter(8, 1025, (void *)process_pmt, pmts[id], 0);
+    int fid = add_filter(8, 1025, (void *)process_pmt, pmts[id].load(), 0);
     ASSERT(fid >= 0, "could not add the PMT filter");
-    pmts[id]->filter = fid;
+    pmts[id].load()->filter = fid;
 
     // 3151 stays unsubscribed: the client adds it after the update.
     int sub1[] = {1025, 314, 870, 873, 3127, 3128, 5100, 6403};
@@ -2992,10 +3044,10 @@ int test_pmt_update_e2e_single_capmt_update() {
     uint8_t sec[256], cap[8192], psi[1500];
     struct e2e_apdu apdus[4];
     int len = build_pmt(sec, 7100, 2, 314, 0x0B00, 0x0C00, types1, spids1, 7);
-    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v2 to parse");
+    ASSERT(process_pmt(fid, sec, len, pmts[id].load()) == 0, "v2 to parse");
     e2e_del_calls = 0;
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should run");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING, "PMT should run");
     ASSERT_EQUAL(e2e_del_calls, 0, "no stop on first add");
 
     int n = e2e_drain(sv[1], cap, sizeof(cap));
@@ -3013,7 +3065,8 @@ int test_pmt_update_e2e_single_capmt_update() {
     int ddci_870 = get_pid_mapping_allddci(8, 870)->ddci_pid;
     int ddci_873 = get_pid_mapping_allddci(8, 873)->ddci_pid;
     int ddci_3128 = get_pid_mapping_allddci(8, 3128)->ddci_pid;
-    ASSERT(ddci_create_pmt(&d0, pmts[id], psi, sizeof(psi), &d0.pmt[0]) > 0,
+    ASSERT(ddci_create_pmt(&d0, pmts[id].load(), psi, sizeof(psi), &d0.pmt[0]) >
+               0,
            "DDCI PMT expected");
     int ver1 = d0.pmt[0].ver;
 
@@ -3021,10 +3074,11 @@ int test_pmt_update_e2e_single_capmt_update() {
     int types2[] = {27, 4, 4, 4, 6, 6, 5};
     int spids2[] = {314, 870, 873, 3151, 3128, 5100, 6403};
     len = build_pmt(sec, 7100, 3, 314, 0x0B00, 0x0C00, types2, spids2, 7);
-    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v3 to parse");
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "update must not stop it");
+    ASSERT(process_pmt(fid, sec, len, pmts[id].load()) == 0, "v3 to parse");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING,
+                 "update must not stop it");
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should still run");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING, "PMT should still run");
     ASSERT_EQUAL(e2e_del_calls, 0, "no stop/start on update");
 
     n = e2e_drain(sv[1], cap, sizeof(cap));
@@ -3047,7 +3101,8 @@ int test_pmt_update_e2e_single_capmt_update() {
                  "kept pids keep ddci pids");
     ASSERT_EQUAL(get_pid_mapping_allddci(8, 3128)->ddci_pid, ddci_3128,
                  "kept pids keep ddci pids");
-    ASSERT(ddci_create_pmt(&d0, pmts[id], psi, sizeof(psi), &d0.pmt[0]) > 0,
+    ASSERT(ddci_create_pmt(&d0, pmts[id].load(), psi, sizeof(psi), &d0.pmt[0]) >
+               0,
            "DDCI PMT expected");
     ASSERT_EQUAL(d0.pmt[0].ver, (ver1 + 1) & 0xF, "DDCI PMT bumps once");
 
@@ -3055,13 +3110,15 @@ int test_pmt_update_e2e_single_capmt_update() {
     // re-send, but the identical CAPMT is skipped and nothing stops.
     ASSERT(mark_pid_add(0, 8, 3151) == 0, "client adds 3151");
     update_pids(8);
-    ASSERT(process_pmt(fid, sec, len, pmts[id]) == 0, "v3 repeat to parse");
+    ASSERT(process_pmt(fid, sec, len, pmts[id].load()) == 0,
+           "v3 repeat to parse");
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should still run");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING, "PMT should still run");
     ASSERT_EQUAL(e2e_del_calls, 0, "no stop/start on pid add");
     n = e2e_drain(sv[1], cap, sizeof(cap));
     ASSERT_EQUAL(n, 0, "identical re-send writes no CAPMT");
-    ASSERT(ddci_create_pmt(&d0, pmts[id], psi, sizeof(psi), &d0.pmt[0]) > 0,
+    ASSERT(ddci_create_pmt(&d0, pmts[id].load(), psi, sizeof(psi), &d0.pmt[0]) >
+               0,
            "DDCI PMT expected");
     ASSERT_EQUAL(d0.pmt[0].ver, (ver1 + 1) & 0xF, "DDCI version stable");
 
@@ -3085,7 +3142,7 @@ int test_pmt_update_e2e_single_capmt_update() {
 int test_resend_rejected_releases_ca() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -3103,8 +3160,8 @@ int test_resend_rejected_releases_ca() {
     int id = pmt_add(0, 100, 48);
     ASSERT(id >= 0, "could not create the PMT");
     uint8_t priv[1] = {0};
-    pmt_add_caid(pmts[id], 0x0B00, 0x0C00, priv, 0);
-    pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
+    pmt_add_caid(pmts[id].load(), 0x0B00, 0x0C00, priv, 0);
+    pmt_add_stream_pid(pmts[id].load(), 3301, 2, false, true);
     ASSERT(mark_pid_add(0, 0, 48) == 0, "pid 48 should be added");
     ASSERT(mark_pid_add(0, 0, 3301) == 0, "pid 3301 should be added");
     update_pids(0);
@@ -3113,18 +3170,21 @@ int test_resend_rejected_releases_ca() {
     fail_next_ca_add = 0;
     fake_ca_add_calls = fake_ca_del_calls = 0;
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should run");
-    ASSERT(pmts[id]->ca_registered_mask != 0, "PMT should be registered");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING, "PMT should run");
+    ASSERT(pmts[id].load()->ca_registered_mask != 0,
+           "PMT should be registered");
 
     // update clears the send mask; the re-send is rejected this time
-    pmts[id]->ca_mask = 0;
+    pmts[id].load()->ca_mask = 0;
     fail_next_ca_add = 1;
     fake_ca_add_calls = fake_ca_del_calls = 0;
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should keep running");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING,
+                 "PMT should keep running");
     ASSERT_EQUAL(fake_ca_del_calls, 1, "stale registration should close");
-    ASSERT_EQUAL(pmts[id]->ca_registered_mask, 0, "registration is gone");
-    ASSERT(pmts[id]->disabled_ca_mask != 0, "CA should be disabled");
+    ASSERT_EQUAL(pmts[id].load()->ca_registered_mask, 0,
+                 "registration is gone");
+    ASSERT(pmts[id].load()->disabled_ca_mask != 0, "CA should be disabled");
 
     del_ca(&failing_op);
     free_all_pmts();
@@ -3138,17 +3198,19 @@ int test_add_caid_rejects_negative_len() {
     int i;
     uint8_t priv[1] = {0};
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     int id = pmt_add(0, 100, 48);
     ASSERT(id >= 0, "could not create the PMT");
 
-    pmt_add_caid(pmts[id], 0x0B00, 0x0C00, priv, -1);
-    ASSERT_EQUAL(pmts[id]->caids, 0, "malformed descriptor must be skipped");
+    pmt_add_caid(pmts[id].load(), 0x0B00, 0x0C00, priv, -1);
+    ASSERT_EQUAL(pmts[id].load()->caids, 0,
+                 "malformed descriptor must be skipped");
 
-    pmt_add_caid(pmts[id], 0x0B00, 0x0C00, priv, 0);
-    ASSERT_EQUAL(pmts[id]->caids, 1, "empty private data still registers");
+    pmt_add_caid(pmts[id].load(), 0x0B00, 0x0C00, priv, 0);
+    ASSERT_EQUAL(pmts[id].load()->caids, 1,
+                 "empty private data still registers");
 
     free_all_pmts();
     return 0;
@@ -3159,7 +3221,7 @@ int test_add_caid_rejects_negative_len() {
 int test_version_update_keeps_claims() {
     int i;
     for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+        pmts[i].store(nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -3170,12 +3232,12 @@ int test_version_update_keeps_claims() {
 
     int id = pmt_add(0, 100, 48);
     ASSERT(id >= 0, "could not create the PMT");
-    pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
-    pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
-    pmts[id]->pcr_pid = 3301;
-    int fid = add_filter(0, 48, (void *)process_pmt, pmts[id], 0);
+    pmt_add_stream_pid(pmts[id].load(), 3301, 2, false, true);
+    pmt_add_stream_pid(pmts[id].load(), 3401, 3, true, false);
+    pmts[id].load()->pcr_pid = 3301;
+    int fid = add_filter(0, 48, (void *)process_pmt, pmts[id].load(), 0);
     ASSERT(fid >= 0, "could not add the PMT filter");
-    pmts[id]->filter = fid;
+    pmts[id].load()->filter = fid;
     ad.active_pmts = 1;
     ad.active_pmt[0] = id;
 
@@ -3184,7 +3246,7 @@ int test_version_update_keeps_claims() {
     ASSERT(mark_pid_add(0, 0, 3401) == 0, "pid 3401 should be added");
     update_pids(0);
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should run");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING, "PMT should run");
     ASSERT(find_pid(0, 3301)->pmt == id, "PMT should own the video pid");
 
     uint8_t sec[26] = {0x02, 0xB0, 0x17, 0x00, 0x64, 0xC3, 0x00, 0x00, 0xEC,
@@ -3193,10 +3255,11 @@ int test_version_update_keeps_claims() {
     copy32(sec, 22, crc_32(sec, 22));
     // First parse on a running PMT re-sends with update=1;
     // nothing is released.
-    ASSERT(process_pmt(fid, sec, sizeof(sec), pmts[id]) == 0,
+    ASSERT(process_pmt(fid, sec, sizeof(sec), pmts[id].load()) == 0,
            "update to parse");
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should keep running");
-    ASSERT_EQUAL(pmts[id]->version, 1, "version should advance");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING,
+                 "PMT should keep running");
+    ASSERT_EQUAL(pmts[id].load()->version, 1, "version should advance");
     ASSERT(find_pid(0, 3301)->pmt == id, "video claim should be kept");
     ASSERT(find_pid(0, 3401)->pmt == id, "audio claim should be kept");
 
@@ -3205,14 +3268,15 @@ int test_version_update_keeps_claims() {
     memcpy(sec2, sec, sizeof(sec));
     sec2[5] = 0xC1 | (2 << 1);
     copy32(sec2, 22, crc_32(sec2, 22));
-    ASSERT(process_pmt(fid, sec2, sizeof(sec2), pmts[id]) == 0,
+    ASSERT(process_pmt(fid, sec2, sizeof(sec2), pmts[id].load()) == 0,
            "same content to parse");
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should keep running");
-    ASSERT_EQUAL(pmts[id]->version, 2, "version should advance");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING,
+                 "PMT should keep running");
+    ASSERT_EQUAL(pmts[id].load()->version, 2, "version should advance");
     ASSERT(find_pid(0, 3301)->pmt == id, "video claim should be kept");
 
     start_active_pmts(&ad);
-    ASSERT_EQUAL(pmts[id]->state, PMT_RUNNING, "PMT should still run");
+    ASSERT_EQUAL(pmts[id].load()->state, PMT_RUNNING, "PMT should still run");
     ASSERT(find_pid(0, 3301)->pmt == id, "video claim should stay kept");
 
     del_filter(fid);
@@ -3248,7 +3312,7 @@ int test_filter_add_del_mt() {
     ASSERT(added == T * K, "all filters added");
     for (int t = 0; t < T; t++)
         for (int k = 0; k < K; k++) {
-            SFilter *f = filters[fids[t][k]];
+            SFilter *f = filters[fids[t][k]].load();
             ASSERT(f && !f->enabled && !f->allocated,
                    "filter reclaimed after del");
         }

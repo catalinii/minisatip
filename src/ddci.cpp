@@ -56,7 +56,7 @@
 
 extern int dvbca_id;
 extern SCA ca[MAX_CA];
-extern SPMT *pmts[];
+extern std::array<std::atomic<SPMT *>, MAX_PMT> pmts;
 std::unordered_map<int, Sddci_channel> channels;
 
 #define get_ddci(i)                                                            \
