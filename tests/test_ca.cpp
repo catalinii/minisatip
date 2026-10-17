@@ -58,7 +58,8 @@
 extern adapter *a[MAX_ADAPTERS];
 extern SPMT *pmts[MAX_PMT];
 void remove_pmt_from_device(ca_device_t *d, SPMT *pmt);
-SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple);
+SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple,
+                         int *rejoined = NULL);
 int dvbca_del_pmt(adapter *ad, SPMT *spmt);
 extern ca_device_t *ca_devices[MAX_ADAPTERS];
 extern int dvbca_id;
@@ -2274,7 +2275,7 @@ int test_capmt_rejoin_takes_kept_place() {
     ASSERT_EQUAL(dvbca_process_pmt(&pcam->ad, p[2], 0), 0, "rejoin");
     ASSERT(capmt_has_pmt(c0, p[2]->id), "back in its own CAPMT");
     ASSERT(!capmt_has_pmt(c1, p[2]->id), "not in the least loaded one");
-    ASSERT_EQUAL(read_capmts(), 1, "the rejoin is sent at once");
+    ASSERT_EQUAL(read_capmts(), 0, "the CAPMT is unchanged, nothing sent");
 
     // A different program does not take a kept place it does not match
     ASSERT_EQUAL(dvbca_process_pmt(&pcam->ad, p[5], 0), 0, "new program");
@@ -2320,7 +2321,7 @@ int test_capmt_zap_back_keeps_places() {
         dvbca_del_pmt(&pcam->ad, ch3);
         dvbca_process_pmt(&pcam->ad, ch4, 0);
         ASSERT(capmt_has_pmt(c1, ch4->id), "channel 4 back in CAPMT 1");
-        ASSERT_EQUAL(read_capmts(), 2, "each rejoin sends at once");
+        ASSERT_EQUAL(read_capmts(), 0, "zapping back sends nothing");
     }
     packing_cam_close();
     return 0;
