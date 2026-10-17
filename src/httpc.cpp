@@ -25,11 +25,11 @@
 
 #define DEFAULT_LOG LOG_HTTP
 
-Shttp_client *httpc[MAX_HTTPC];
+std::array<std::atomic<Shttp_client *>, MAX_HTTPC> httpc;
 
 int http_client_add() {
 
-    Shttp_client *h = find_new_id(httpc, MAX_HTTPC);
+    Shttp_client *h = find_new_id(httpc);
     if (!h) {
         LOG_AND_RETURN(-1, "Could not add new http client");
     }

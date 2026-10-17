@@ -3,6 +3,7 @@
 
 #include "config.h"
 #include "utils/logging/logging.h"
+#include <array>
 #include <atomic>
 #include <iostream>
 #include <mutex>
@@ -95,9 +96,6 @@ pthread_t start_new_thread(char *name);
 pthread_t get_tid();
 void set_thread_prio(pthread_t tid, int prio);
 
-// Global lock for object arrays: held only inside find_new_id.
-extern SMutex id_mutex;
-
 // Raise an atomic high-water mark; lock-free max update.
 inline void atomic_max(std::atomic<int> &mark, int v) {
     int cur = mark.load();
@@ -105,26 +103,30 @@ inline void atomic_max(std::atomic<int> &mark, int v) {
     }
 }
 
-// Claim a free slot atomically, allocating the object if needed.
+// Claim a free slot lock-free, allocating the object if needed.
 // Sets id to the index; nullptr when full.
-template <typename T> T *find_new_id(T **arr, int count) {
+template <typename T, size_t N>
+T *find_new_id(std::array<std::atomic<T *>, N> &arr) {
     static_assert(requires(T *t) { t->id; });
-    std::lock_guard<SMutex> lock(id_mutex);
-    for (int i = 0; i < count; ++i) {
-        T *cur = arr[i];
+    for (size_t i = 0; i < N; ++i) {
+        T *cur = arr[i].load();
         if (!cur) {
-            cur = new T();
-            cur->allocated = true;
-            cur->enabled = false;
-            cur->id = i;
-            arr[i] = cur;
-            return cur;
+            T *fresh = new T();
+            fresh->allocated = true;
+            fresh->enabled = false;
+            fresh->id = (int)i;
+            if (arr[i].compare_exchange_strong(cur, fresh))
+                return fresh;
+            delete fresh;
+            cur = arr[i].load();
+            if (!cur)
+                continue;
         }
         bool expected = false;
         if (!cur->enabled.load() &&
             cur->allocated.compare_exchange_strong(expected, true)) {
             cur->enabled = false;
-            cur->id = i;
+            cur->id = (int)i;
             return cur;
         }
     }

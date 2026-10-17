@@ -2,6 +2,7 @@
 #define PMT_H
 #include "adapter.h"
 #include "dvb.h"
+#include <array>
 #include <atomic>
 #include <unordered_map>
 #include <vector>
@@ -214,20 +215,24 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
             int64_t expiry, void *opaque);
 
 extern std::atomic<int> npmts;
-static inline SPMT *get_pmt(int id) {
-    extern SPMT *pmts[];
+extern std::array<std::atomic<SPMT *>, MAX_PMT> pmts;
+extern std::array<std::atomic<SFilter *>, MAX_FILTERS> filters;
 
-    if (id < 0 || id >= npmts || !pmts[id] || !pmts[id]->enabled)
+static inline SPMT *get_pmt(int id) {
+    if (id < 0 || id >= npmts)
         //		LOG_AND_RETURN(NULL, "PMT not found for id %d", id);
         return NULL;
-    return pmts[id];
+    SPMT *pmt = pmts[id].load();
+    if (!pmt || !pmt->enabled)
+        return NULL;
+    return pmt;
 }
 
 static inline SFilter *get_filter(int id) {
-    extern SFilter *filters[];
-    return (id >= 0 && id < MAX_FILTERS && filters[id] && filters[id]->enabled)
-               ? filters[id]
-               : NULL;
+    if (id < 0 || id >= MAX_FILTERS)
+        return NULL;
+    SFilter *f = filters[id].load();
+    return (f && f->enabled) ? f : NULL;
 }
 int process_pmt(int filter, unsigned char *b, int len, void *opaque);
 int process_sdt(int filter, unsigned char *sdt, int len, void *opaque);

@@ -56,10 +56,10 @@
 
 #define DEFAULT_LOG LOG_DVBCA
 
-extern sockets *s[MAX_SOCKS];
+extern std::array<std::atomic<sockets *>, MAX_SOCKS> s;
 int read_fd, id;
 int test_socket_enque_highprio() {
-    sockets *ss = s[id];
+    sockets *ss = s[id].load();
     struct iovec iov[2];
     iov[0].iov_base = (void *)"test1";
     iov[0].iov_len = 5;
@@ -79,7 +79,7 @@ int test_socket_enque_highprio() {
 
 // A reply with a file body exceeds any small fixed queue
 int test_socket_enque_highprio_large() {
-    sockets *ss = s[id];
+    sockets *ss = s[id].load();
     std::vector<char> body(30000, 'x');
     struct iovec iov[2];
     iov[0].iov_base = (void *)"head";
@@ -108,7 +108,7 @@ int test_socket_writev_flush_enqued() {
     int rv;
     memset(buf, 0, sizeof(buf));
     memset(&iov, 0, sizeof(iov));
-    sockets *ss = s[id];
+    sockets *ss = s[id].load();
     create_fifo(&ss->fifo, 100);
 
     // flush enqued data (everything after 0x24 is not written)
@@ -163,7 +163,7 @@ int test_socket_buffering() {
             buf[i] = i + 9;
 
     memset(&iov, 0, sizeof(iov));
-    sockets *ss = s[id];
+    sockets *ss = s[id].load();
     create_fifo(&ss->fifo, 100);
     ss->fifo.write_index = 50;
     ss->fifo.read_index = 50;
@@ -438,9 +438,8 @@ extern "C" int getsockopt(int sockfd, int level, int optname, void *optval,
                           socklen_t *optlen) {
     static int (*real_getsockopt)(int, int, int, void *, socklen_t *) = NULL;
     if (!real_getsockopt)
-        real_getsockopt =
-            (int (*)(int, int, int, void *,
-                     socklen_t *))dlsym(RTLD_NEXT, "getsockopt");
+        real_getsockopt = (int (*)(int, int, int, void *, socklen_t *))dlsym(
+            RTLD_NEXT, "getsockopt");
     if (level == SOL_SOCKET && optname == SO_BINDTODEVICE &&
         mock_bind_dev_set) {
         size_t n = strlen(mock_bind_dev) + 1;

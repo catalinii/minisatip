@@ -78,7 +78,7 @@ int oscam_version;
 
 uint64_t dvbapi_last_close = 0;
 
-SKey *keys[MAX_KEYS];
+std::array<std::atomic<SKey *>, MAX_KEYS> keys;
 unsigned char read_buffer[8192];
 extern char *listmgmt_str[];
 
@@ -96,9 +96,12 @@ extern char *listmgmt_str[];
     }
 
 static inline SKey *get_key(int i) {
-    if (i < 0 || i >= MAX_KEYS || !keys[i] || !keys[i]->enabled)
+    if (i < 0 || i >= MAX_KEYS)
         return NULL;
-    return keys[i];
+    SKey *k = keys[i].load();
+    if (!k || !k->enabled)
+        return NULL;
+    return k;
 }
 
 // Callers may hold an adapter lock: let the socket's own thread close it,
@@ -501,9 +504,11 @@ int dvbapi_send_pmt(SKey *k, int cmd_id, int force) {
     if (cmd_id == CMD_ID_OK_DESCRAMBLING) {
         listmgmt = CLM_ONLY;
         int i;
-        for (i = 0; i < MAX_KEYS; i++)
-            if (keys[i] && i != k->id && keys[i]->enabled)
+        for (i = 0; i < MAX_KEYS; i++) {
+            SKey *o = keys[i].load();
+            if (o && i != k->id && o->enabled)
                 listmgmt = CLM_ADD;
+        }
     }
     memset(buf, 0, sizeof(buf));
     copy32(buf, 0, AOT_CA_PMT);
@@ -812,7 +817,7 @@ int keys_add(int adapter, int pmt_id) {
     SPMT *pmt = get_pmt(pmt_id);
     if (!pmt)
         LOG_AND_RETURN(-1, "%s: PMT %d not found ", __FUNCTION__, pmt_id);
-    SKey *k = find_new_id(keys, MAX_KEYS);
+    SKey *k = find_new_id(keys);
     if (!k)
         LOG_AND_RETURN(-1, "%s: no free key id", __FUNCTION__);
     int i = k->id;
@@ -866,12 +871,14 @@ int keys_del(int i) {
     k->enabled = 0;
     // current key is not disabled
     int j, ek = 0, ed = 0;
-    for (j = 0; j < MAX_KEYS; j++)
-        if (i != j && keys[j] && keys[j]->enabled) {
+    for (j = 0; j < MAX_KEYS; j++) {
+        SKey *o = keys[j].load();
+        if (i != j && o && o->enabled) {
             ek++;
-            if (k->demux_index == keys[j]->demux_index)
+            if (k->demux_index == o->demux_index)
                 ed++;
         }
+    }
     if (!ek) {
         buf[7] = 0xFF;
         msg = "ALL";
@@ -950,8 +957,8 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt, int update) {
     SKey *old = (SKey *)pmt->opaque;
     if (old && old->id >= 0 && old->id < MAX_KEYS) {
         std::lock_guard<SMutex> oldlock(old->mutex);
-        if (old->enabled && keys[old->id] == old && old->pmt_id == pmt->id &&
-            old->adapter == ad->id) {
+        if (old->enabled && keys[old->id].load() == old &&
+            old->pmt_id == pmt->id && old->adapter == ad->id) {
             old->sid = pmt->sid;
             old->pmt_pid = pid;
             old->tsid = ad->transponder_id;
@@ -1110,26 +1117,86 @@ char *get_channel_for_key(int key, char *dest, int max_size) {
 void free_all_keys(void) {
     int i;
     for (i = 0; i < MAX_KEYS; i++) {
-        if (keys[i]) {
-            delete keys[i];
-        }
+        delete keys[i].load();
+        keys[i].store(nullptr);
     }
 }
 
+// Slot readers for the status API; a null slot reads as zero/empty.
+static SKey *get_key_nw(int i) {
+    return (i >= 0 && i < MAX_KEYS) ? keys[i].load() : NULL;
+}
+
+static int get_key_enabled(int i) {
+    SKey *k = get_key_nw(i);
+    return k ? k->enabled.load() : 0;
+}
+
+static int get_key_hops(int i) {
+    SKey *k = get_key_nw(i);
+    return k ? k->hops : 0;
+}
+
+static int get_key_ecmtime(int i) {
+    SKey *k = get_key_nw(i);
+    return k ? k->ecmtime : 0;
+}
+
+static int get_key_pmt(int i) {
+    SKey *k = get_key_nw(i);
+    return k ? k->pmt_pid : 0;
+}
+
+static int get_key_adapter(int i) {
+    SKey *k = get_key_nw(i);
+    return k ? k->adapter : 0;
+}
+
+static char *get_key_cardsystem(int i, char *dest, int max_size) {
+    SKey *k = get_key_nw(i);
+    dest[0] = 0;
+    if (k)
+        _strncpy(dest, (char *)k->cardsystem, max_size - 1);
+    return dest;
+}
+
+static char *get_key_reader(int i, char *dest, int max_size) {
+    SKey *k = get_key_nw(i);
+    dest[0] = 0;
+    if (k)
+        _strncpy(dest, (char *)k->reader, max_size - 1);
+    return dest;
+}
+
+static char *get_key_from(int i, char *dest, int max_size) {
+    SKey *k = get_key_nw(i);
+    dest[0] = 0;
+    if (k)
+        _strncpy(dest, (char *)k->from, max_size - 1);
+    return dest;
+}
+
+static char *get_key_protocol(int i, char *dest, int max_size) {
+    SKey *k = get_key_nw(i);
+    dest[0] = 0;
+    if (k)
+        _strncpy(dest, (char *)k->protocol, max_size - 1);
+    return dest;
+}
+
 _symbols dvbapi_sym[] = {
-    {"key_enabled", VAR_AARRAY_INT8, keys, 1, MAX_KEYS,
-     offsetof(SKey, enabled)},
-    {"key_hops", VAR_AARRAY_INT8, keys, 1, MAX_KEYS, offsetof(SKey, hops)},
-    {"key_ecmtime", VAR_AARRAY_INT, keys, 1, MAX_KEYS, offsetof(SKey, ecmtime)},
-    {"key_pmt", VAR_AARRAY_INT, keys, 1, MAX_KEYS, offsetof(SKey, pmt_pid)},
-    {"key_adapter", VAR_AARRAY_INT, keys, 1, MAX_KEYS, offsetof(SKey, adapter)},
-    {"key_cardsystem", VAR_AARRAY_STRING, keys, 1, MAX_KEYS,
-     offsetof(SKey, cardsystem)},
-    {"key_reader", VAR_AARRAY_STRING, keys, 1, MAX_KEYS,
-     offsetof(SKey, reader)},
-    {"key_from", VAR_AARRAY_STRING, keys, 1, MAX_KEYS, offsetof(SKey, from)},
-    {"key_protocol", VAR_AARRAY_STRING, keys, 1, MAX_KEYS,
-     offsetof(SKey, protocol)},
+    {"key_enabled", VAR_FUNCTION_INT, (void *)&get_key_enabled, 0, MAX_KEYS, 0},
+    {"key_hops", VAR_FUNCTION_INT, (void *)&get_key_hops, 0, MAX_KEYS, 0},
+    {"key_ecmtime", VAR_FUNCTION_INT, (void *)&get_key_ecmtime, 0, MAX_KEYS, 0},
+    {"key_pmt", VAR_FUNCTION_INT, (void *)&get_key_pmt, 0, MAX_KEYS, 0},
+    {"key_adapter", VAR_FUNCTION_INT, (void *)&get_key_adapter, 0, MAX_KEYS, 0},
+    {"key_cardsystem", VAR_FUNCTION_STRING, (void *)&get_key_cardsystem, 0,
+     MAX_KEYS, 0},
+    {"key_reader", VAR_FUNCTION_STRING, (void *)&get_key_reader, 0, MAX_KEYS,
+     0},
+    {"key_from", VAR_FUNCTION_STRING, (void *)&get_key_from, 0, MAX_KEYS, 0},
+    {"key_protocol", VAR_FUNCTION_STRING, (void *)&get_key_protocol, 0,
+     MAX_KEYS, 0},
     {"key_channel", VAR_FUNCTION_STRING, (void *)&get_channel_for_key, 0,
      MAX_KEYS, 0},
 
