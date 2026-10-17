@@ -1312,10 +1312,8 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
         : rejoined ? ", rejoin"
                    : "");
 
-    // First registration always sends; an update sends only when the
-    // built CAPMT changed, decided inside send_capmt. A program back in
-    // its kept place is not forced either: the CAM still runs those
-    // streams, so a forced send would only restart its partners.
+    // Only a new join forces the send; an update or a kept-place rejoin
+    // sends only when the built CAPMT changed, decided in send_capmt.
     if (send_capmt(d, capmt, listmgmt, CA_PMT_CMD_ID_OK_DESCRAMBLING,
                    !update && !rejoined))
         LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "send_capmt failed");

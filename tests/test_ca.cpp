@@ -2288,6 +2288,31 @@ int test_capmt_rejoin_takes_kept_place() {
     return 0;
 }
 
+// A rejoin is not forced but still sends when the CAPMT changed, here
+// its program number, as a fresh CAPMT elsewhere can renumber it.
+int test_capmt_rejoin_sends_when_changed() {
+    packing_cam_open();
+    SCAPMT *c = pcam->dev.capmt;
+    SPMT *p1 = packing_program(0x2a01), *p2 = packing_program(0x2a02);
+    dvbca_process_pmt(&pcam->ad, p1, 0);
+    dvbca_process_pmt(&pcam->ad, p2, 0);
+    read_capmts();
+    dvbca_del_pmt(&pcam->ad, p2);
+    ASSERT_EQUAL(read_capmts(), 0, "the partner leaves lazily");
+
+    c->sid = 0x2a0f;
+    ASSERT_EQUAL(dvbca_process_pmt(&pcam->ad, p2, 0), 0, "rejoin");
+    ASSERT_EQUAL(c->other_id[0], p2->id, "back in its kept place");
+    std::vector<uint8_t> last;
+    ASSERT_EQUAL(read_capmts(&last), 1, "the changed CAPMT is sent once");
+    ASSERT_EQUAL((last[1] << 8 | last[2]), 0x2a0f, "with the new number");
+    ASSERT(capmt_lists_pid(last, p1->stream_pids[0].pid) &&
+               capmt_lists_pid(last, p2->stream_pids[0].pid),
+           "both programs listed");
+    packing_cam_close();
+    return 0;
+}
+
 // CAPMT 0 = {1, 3}, CAPMT 1 = {2}: zapping 3 -> 4 -> 3 -> 4 restarts
 // a resident once; the zaps back return to kept places.
 int test_capmt_zap_back_keeps_places() {
@@ -2368,6 +2393,8 @@ int main() {
               "testing that a rejoin returns to its kept place");
     TEST_FUNC(test_capmt_zap_back_keeps_places(),
               "testing that zapping back and forth keeps kept places");
+    TEST_FUNC(test_capmt_rejoin_sends_when_changed(),
+              "testing that a changed rejoin still sends");
     TEST_FUNC(test_get_authdata_filename(), "testing filename helper function");
     TEST_FUNC(test_capmt_content_hash_masks_version_and_listmgmt(),
               "testing the CAPMT hash masks version and listmgmt");
