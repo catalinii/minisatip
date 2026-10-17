@@ -1042,9 +1042,12 @@ int get_enabled_pmts_for_ca(ca_device_t *d) {
     return enabled_pmts;
 }
 
-SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple) {
+SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple,
+                         int *rejoined) {
     int ca_pos;
     SCAPMT *res = NULL;
+    if (rejoined)
+        *rejoined = 0;
     std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
 
     // check if the PMT is already added (happening on PMT update)
@@ -1071,6 +1074,8 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple) {
                     !memcmp(c->sent_es[place], es, len)) {
                     capmt_place(c, place) = pmt->id;
                     res = c;
+                    if (rejoined)
+                        *rejoined = 1;
                     break;
                 }
         }
@@ -1262,7 +1267,8 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
     for (int i = 0; i < d->max_ca_pmt; i++)
         was_member |= capmt_has_pmt(d->capmt + i, spmt->id);
 
-    SCAPMT *capmt = add_pmt_to_capmt(d, spmt, d->multiple_pmt);
+    int rejoined = 0;
+    SCAPMT *capmt = add_pmt_to_capmt(d, spmt, d->multiple_pmt, &rejoined);
     if (!capmt) {
         restore_ci_link(d, ad, prev_linked);
         LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY,
@@ -1302,11 +1308,16 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
         spmt->adapter, spmt->id, pid, spmt->name, capmt->version, sid,
         capmt->sid, get_enabled_pmts_for_ca(d), listmgmt_str[listmgmt],
         capmt_pmts_str(capmt).c_str(), capmt - d->capmt,
-        update ? ", update" : "");
+        update     ? ", update"
+        : rejoined ? ", rejoin"
+                   : "");
 
     // First registration always sends; an update sends only when the
-    // built CAPMT changed, decided inside send_capmt.
-    if (send_capmt(d, capmt, listmgmt, CA_PMT_CMD_ID_OK_DESCRAMBLING, !update))
+    // built CAPMT changed, decided inside send_capmt. A program back in
+    // its kept place is not forced either: the CAM still runs those
+    // streams, so a forced send would only restart its partners.
+    if (send_capmt(d, capmt, listmgmt, CA_PMT_CMD_ID_OK_DESCRAMBLING,
+                   !update && !rejoined))
         LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "send_capmt failed");
 
     if (d->key[0][0])
