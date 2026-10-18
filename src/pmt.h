@@ -2,7 +2,6 @@
 #define PMT_H
 #include "adapter.h"
 #include "dvb.h"
-#include <array>
 #include <atomic>
 #include <unordered_map>
 #include <vector>
@@ -222,7 +221,7 @@ static inline SPMT *get_pmt(int id) {
     if (id < 0 || id >= npmts)
         //		LOG_AND_RETURN(NULL, "PMT not found for id %d", id);
         return NULL;
-    SPMT *pmt = pmts[id].load();
+    SPMT *pmt = pmts[id];
     if (!pmt || !pmt->enabled)
         return NULL;
     return pmt;
@@ -231,7 +230,7 @@ static inline SPMT *get_pmt(int id) {
 static inline SFilter *get_filter(int id) {
     if (id < 0 || id >= MAX_FILTERS)
         return NULL;
-    SFilter *f = filters[id].load();
+    SFilter *f = filters[id];
     return (f && f->enabled) ? f : NULL;
 }
 int process_pmt(int filter, unsigned char *b, int len, void *opaque);

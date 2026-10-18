@@ -63,12 +63,14 @@ int pmt_process_stream(adapter *ad);
 streams *get_stream(int i) {
     if (i < 0 || i >= MAX_STREAMS)
         return NULL;
-    streams *sid = st[i].load();
+    streams *sid = st[i];
     return (sid && sid->enabled) ? sid : NULL;
 }
 
 streams *get_sid1(int sid, const char *file, int line) {
-    streams *s = (sid >= 0 && sid < MAX_STREAMS) ? st[sid].load() : NULL;
+    streams *s = NULL;
+    if (sid >= 0 && sid < MAX_STREAMS)
+        s = st[sid];
     if (!s || s->enabled == 0) {
         LOG("%s:%d get_sid returns NULL for s_id = %d", file, line, sid);
         return NULL;
@@ -346,10 +348,10 @@ int close_stream_for_socket(sockets *s) {
 
 int close_stream(int i) {
     LOG("closing stream %d", i);
-    if (i < 0 || i >= MAX_STREAMS || !st[i].load())
+    if (i < 0 || i >= MAX_STREAMS || !st[i])
         return 0;
 
-    streams *sid = st[i].load();
+    streams *sid = st[i];
     int ad, rsock_id, type, rtcp_sock, rtcp, st_sock, rsock;
     [[maybe_unused]] int srt_sock; // only read when SRT is enabled
     { // Disable under own lock; never hold it across adapter calls.
@@ -639,7 +641,7 @@ int streams_add() {
 
 int streams_full() {
     for (int i = 0; i < MAX_STREAMS; i++) {
-        streams *sid = st[i].load();
+        streams *sid = st[i];
         if (!sid || !sid->enabled)
             return 0;
     }
@@ -1190,7 +1192,7 @@ int process_dmx(sockets *s) {
     lock.unlock();
 
     for (i = 0; i < MAX_STREAMS; i++) {
-        streams *sid = st[i].load();
+        streams *sid = st[i];
         if (sid && sid->enabled && sid->adapter == ad->id)
             process_packets_for_stream(sid, ad);
     }
@@ -1400,8 +1402,9 @@ void dump_streams() {
 void free_all_streams() {
     int i;
     for (i = 0; i < MAX_STREAMS; i++) {
-        delete st[i].load();
-        st[i].store(nullptr);
+        if (st[i])
+            delete st[i];
+        st[i] = NULL;
     }
 }
 
@@ -1564,25 +1567,26 @@ int get_stream_buffered_size(int s_id) {
         return 0;
     return fifo_used(&s->fifo);
 }
+
 // Slot readers for the status API; a null slot reads as zero/empty.
 static int get_st_enabled(int i) {
     if (i < 0 || i >= MAX_STREAMS)
         return 0;
-    streams *sid = st[i].load();
+    streams *sid = st[i];
     return sid ? sid->enabled.load() : 0;
 }
 
 static int get_st_play(int i) {
     if (i < 0 || i >= MAX_STREAMS)
         return 0;
-    streams *sid = st[i].load();
+    streams *sid = st[i];
     return sid ? sid->do_play : 0;
 }
 
 static int get_st_adapter(int i) {
     if (i < 0 || i >= MAX_STREAMS)
         return 0;
-    streams *sid = st[i].load();
+    streams *sid = st[i];
     return sid ? sid->adapter : 0;
 }
 
@@ -1590,7 +1594,7 @@ static char *get_st_useragent(int i, char *dest, int max_size) {
     dest[0] = 0;
     if (i < 0 || i >= MAX_STREAMS)
         return dest;
-    streams *sid = st[i].load();
+    streams *sid = st[i];
     if (sid)
         _strncpy(dest, sid->useragent, max_size - 1);
     return dest;

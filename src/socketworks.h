@@ -144,7 +144,7 @@ extern std::array<std::atomic<sockets *>, MAX_SOCKS> s;
 static inline sockets *get_sockets(int i) {
     if (i < 0 || i >= MAX_SOCKS)
         return NULL;
-    sockets *ss = s[i].load();
+    sockets *ss = s[i];
     if (!ss || !ss->enabled)
         return NULL;
     return ss;

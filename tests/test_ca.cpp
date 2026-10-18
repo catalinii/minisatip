@@ -1453,9 +1453,9 @@ int test_ca_cmd_watchdog() {
                  "appinfo parsed");
     ASSERT_EQUAL(dev.pending_tag, 0, "appinfo reply disarms");
 
-    ASSERT_EQUAL(
-        ca_write_apdu(&dev.sessions[2], CIPLUS_TAG_OPERATOR_INFO_REQ, NULL, 0),
-        0, "oprf send succeeds");
+    ASSERT_EQUAL(ca_write_apdu(&dev.sessions[2], CIPLUS_TAG_OPERATOR_INFO_REQ,
+                               NULL, 0),
+                 0, "oprf send succeeds");
     ASSERT_EQUAL(dev.pending_tag, CIPLUS_TAG_OPERATOR_INFO_REQ, "oprf arms");
     uint8_t info[] = {0x9F, 0x9C, 0x05, 0x00}; // OPERATOR_INFO, our reply
     ASSERT_EQUAL(ca_read_apdu(&rs, info, sizeof(info)), 0, "oprf parsed");
