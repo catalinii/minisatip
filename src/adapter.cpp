@@ -18,8 +18,10 @@
  *
  */
 
+#include <algorithm>
 #include <fcntl.h>
 #include <poll.h>
+#include <ranges>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -825,17 +827,17 @@ std::string out_of_range_attrs(transponder *tp) {
 
 void adapter_update_threshold(adapter *ad) {
     streams *sid = NULL;
-    int i, threshold = opts.udp_threshold;
+    int threshold = opts.udp_threshold;
     if (ad->sid_cnt == 1 && ad->master_sid >= 0) {
         sid = get_stream(ad->master_sid);
         if (sid && (sid->type == STREAM_RTSP_TCP || sid->type == STREAM_HTTP))
             threshold = opts.tcp_threshold;
     } else if (ad->sid_cnt > 0) {
-        for (i = 0; i < MAX_STREAMS; i++)
-            if ((sid = get_stream(i)))
-                if (sid->type == STREAM_RTSP_UDP)
-                    break;
-        if (i >= MAX_STREAMS)
+        auto live_udp = [](int i) {
+            streams *s = get_stream(i);
+            return s && s->type == STREAM_RTSP_UDP;
+        };
+        if (!std::ranges::any_of(std::views::iota(0, MAX_STREAMS), live_udp))
             threshold = opts.tcp_threshold;
     }
 

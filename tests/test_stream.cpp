@@ -24,6 +24,7 @@
 #include <atomic>
 #include <chrono>
 #include <future>
+#include <ranges>
 #include <string>
 #include <thread>
 
@@ -695,10 +696,10 @@ int test_streams_full() {
     setup_test_env();
     ASSERT(!streams_full(), "streams should not be full initially");
     int ids[MAX_STREAMS];
-    for (int i = 0; i < MAX_STREAMS; i++) {
-        ids[i] = streams_add();
-        ASSERT(ids[i] >= 0, "streams_add failed before MAX_STREAMS");
-        streams *s = get_sid(ids[i]);
+    for (int &id : ids) {
+        id = streams_add();
+        ASSERT(id >= 0, "streams_add failed before MAX_STREAMS");
+        streams *s = get_sid(id);
         s->rtcp = s->rtcp_sock = s->sock = -1;
         s->seq = 0;
     }
@@ -798,7 +799,7 @@ int test_read_http_empty_buffer_ignored() {
 
 int test_read_rtsp_sessions_exhausted_returns_503() {
     setup_test_env();
-    for (int i = 0; i < MAX_STREAMS; i++)
+    for ([[maybe_unused]] auto &slot : st)
         ASSERT(streams_add() >= 0, "streams_add failed before MAX_STREAMS");
     ASSERT(streams_full(), "streams should be full");
 
@@ -853,10 +854,10 @@ int test_read_rtsp_describe_unknown_has_no_public() {
 
 int test_read_rtsp_bogus_session_when_full_returns_454() {
     setup_test_env();
-    for (int i = 0; i < MAX_STREAMS; i++)
+    for ([[maybe_unused]] auto &slot : st)
         ASSERT(streams_add() >= 0, "streams_add failed before MAX_STREAMS");
-    for (int i = 0; i < MAX_STREAMS; i++)
-        get_sid(i)->ssrc = 1000 + i;
+    for (streams *s : st)
+        s->ssrc = 1000 + s->id;
 
     std::string out;
     ASSERT(

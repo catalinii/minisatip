@@ -129,11 +129,9 @@ void del_ca(SCA_op *op) {
                 ad->ca_mask &= ~mask;
             }
         // Per-PMT lock inside tables_clear; no outer lock needed.
-        for (k = 0; k < MAX_PMT; k++) { // delete ca_mask for all the PMTs
-            SPMT *pmt = pmts[k];
+        for (SPMT *pmt : pmts) // delete ca_mask for all the PMTs
             if (pmt && pmt->enabled)
                 tables_clear_pmt_ca_masks(pmt, mask, 0);
-        }
     }
 }
 

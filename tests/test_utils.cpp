@@ -23,6 +23,7 @@
 #include "utils/testing.h"
 #include <atomic>
 #include <fstream>
+#include <ranges>
 #include <string.h>
 #include <string>
 #include <sys/stat.h>
@@ -289,7 +290,8 @@ int test_find_new_id_mt() {
     for (auto &t : th)
         t.join();
     ASSERT(total == N, "all slots claimed exactly once");
-    for (int i = 0; i < N; i++) {
+    // The loop index is the expected id here.
+    for (int i : std::views::iota(0, N)) {
         TestSlot *s = arr[i];
         ASSERT(s && s->id == i, "slot id matches index");
     }
