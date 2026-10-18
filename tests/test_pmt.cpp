@@ -26,6 +26,7 @@
 #include "utils.h"
 #include "utils/testing.h"
 #include "utils/ticks.h"
+#include <algorithm>
 #include <arpa/inet.h>
 #include <atomic>
 #include <ctype.h>
@@ -467,7 +468,6 @@ static int build_pmt(uint8_t *b, int sid, int version, int pcr, uint16_t caid,
 #define PID_GONE 2000
 
 static int check_pat_drop_releases_ca(int adapter_type) {
-    int i;
     uint8_t priv[1] = {0};
     uint8_t pat[64];
     int sids[] = {SID_KEPT};
@@ -475,8 +475,7 @@ static int check_pat_drop_releases_ca(int adapter_type) {
 
     // Earlier tests leave stack SPMTs in pmts[]: detach all, never free,
     // as some entries are not ours.
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -656,8 +655,7 @@ int test_revived_cached_pmt_gets_its_filter() {
 // PMT pid is subscribed starts, else nothing decrypts (FTA).
 int test_pmt_starts_only_with_pmt_pid() {
     int i;
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -735,8 +733,7 @@ static int failing_ca_add_pmt(adapter *ad, SPMT *pmt, int update) {
 int test_retune_handover_same_loop() {
     int i;
     uint8_t priv[1] = {0};
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -840,8 +837,7 @@ static int single_slot_ca_del_pmt(adapter *ad, SPMT *pmt) {
 int test_single_slot_retune_releases_first() {
     int i;
     uint8_t priv[1] = {0};
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -919,8 +915,7 @@ int test_single_slot_retune_releases_first() {
 int test_scan_pmt_only_starts_nothing() {
     int i;
     uint8_t priv[1] = {0};
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -1015,9 +1010,7 @@ int test_active_pmt_list_capped_at_max() {
 // 19.2E 11493H (live S1+S2): A/B share AV 5121/5122 and differ only in a
 // data pid. Replace-zaps follow the PMT pid; add/del hands claims over.
 int test_19e_11493h_zap_flows() {
-    int i;
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -1108,8 +1101,7 @@ int test_19e_11493h_zap_flows() {
 // E/F/G/H share AV and differ in one data pid each, I is disjoint.
 int test_19e_11582h_group_and_disjoint() {
     int i;
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -1212,10 +1204,8 @@ int test_19e_11582h_group_and_disjoint() {
 // 19.2E 11914H Sky DE (live S7): an encrypted zap sends the new PMT to the
 // CA, closes the old one, and teardown closes the last one.
 int test_19e_11914h_ca_send_close() {
-    int i;
     uint8_t priv[1] = {0};
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -1325,8 +1315,7 @@ int test_ci_adapter_pmt_starts() {
 
 int test_sticky_claims_without_parse() {
     int i;
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -1384,8 +1373,7 @@ int test_sticky_claims_without_parse() {
 // Mirror image: an earlier-subscribed newcomer steals by order.
 int test_earlier_newcomer_steals_by_order() {
     int i;
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -1438,8 +1426,7 @@ int test_earlier_newcomer_steals_by_order() {
 // own audio and both stay running.
 int test_steal_splits_partial_overlap() {
     int i;
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -1533,8 +1520,7 @@ int test_pid_order_reset_on_remove() {
 // sid; different sets coexist and split the streams by subscription order.
 int test_d8_shared_pid() {
     int i;
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -1615,8 +1601,7 @@ int test_d8_shared_pid() {
 // claims split the streams, each serving the pids it carries.
 int test_shared_pid_split() {
     int i;
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -1670,12 +1655,9 @@ int test_shared_pid_split() {
 // 30W 12437H: pid 817 carries dozens of PMTs (Meo/Nos). SIDs 1338/6043
 // share all A/V pids with different ECMs; 807 is disjoint. Lowest sid serves.
 int test_30w_shared_pmt_pid() {
-    int i;
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
-    for (i = 0; i < MAX_FILTERS; i++)
-        filters[i] = NULL;
+    std::ranges::fill(filters, nullptr);
 
     adapter ad = {};
     a[0] = &ad;
@@ -1786,10 +1768,8 @@ int test_30w_shared_pmt_pid() {
 // #1129 beIN: PMT 48 (sid 14101) and PMT 52 (sid 14104) share vpid and
 // apid. The subscribed PMT pid decides, never the parsed-first sibling.
 int test_1129_bein_shared_es() {
-    int i;
     uint8_t priv[1] = {0};
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -1849,9 +1829,7 @@ int test_1129_bein_shared_es() {
 // #1129 Stingray: music channels share VPID 108 with different APIDs.
 // NATURE ESCAPE (PMT 1908, APID 208) vs '80'ler (PMT 1922, APID 222).
 int test_1129_stingray_shared_vpid() {
-    int i;
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -1906,8 +1884,7 @@ int test_1129_stingray_shared_vpid() {
 int test_held_pids_without_client_stop_pmt() {
     int i;
     uint8_t priv[1] = {0};
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -1957,8 +1934,7 @@ int test_held_pids_without_client_stop_pmt() {
 // CWs are stored under the PMT they arrived for, with no master hop.
 int test_cw_keyed_by_pmt() {
     int i;
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
     for (i = 0; i < MAX_CW; i++)
         if (cws[i])
@@ -1995,8 +1971,7 @@ int test_cw_keyed_by_pmt() {
 // the next CW: the adapter thread may still read it (cw_in_use).
 int test_send_cw_skips_in_use_slot() {
     int i;
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
     for (i = 0; i < MAX_CW; i++)
         if (cws[i])
@@ -2045,9 +2020,7 @@ int test_send_cw_skips_in_use_slot() {
 // pids=all expands every known PMT pid with the requestor sid, so the
 // subscribed-PMT rule still decrypts as before under claims arbitration.
 int test_pids_all_expands_pmt_pids() {
-    int i;
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -2082,12 +2055,9 @@ int test_pids_all_expands_pmt_pids() {
 // Multi-service PMT pid: two SIDs on pid 60 parse into two PMT objects
 // with their own ES lists, which is what D8 selection arbitrates.
 int test_multi_service_pid_parses_per_sid() {
-    int i;
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
-    for (i = 0; i < MAX_FILTERS; i++)
-        filters[i] = NULL;
+    std::ranges::fill(filters, nullptr);
 
     adapter ad = {};
     a[0] = &ad;
@@ -2133,8 +2103,7 @@ int test_multi_service_pid_parses_per_sid() {
 // parses. process_pmt stops Q at once; P starts on the next pass.
 int test_late_parse_handover() {
     int i;
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -2199,8 +2168,7 @@ int test_late_parse_handover() {
 // Last unsubscribe deletes the pid, but the PMT stays on AV with no rival.
 int test_running_pmt_pid_deleted_on_unsubscribe() {
     int i;
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -2254,10 +2222,8 @@ int test_running_pmt_pid_deleted_on_unsubscribe() {
 
 // Pid leaves and returns, AV stays with no rival: PMT runs, CA sees no churn.
 int test_pmt_pid_remove_readd_no_churn() {
-    int i;
     uint8_t priv[1] = {0};
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -2327,9 +2293,7 @@ int test_pmt_pid_remove_readd_no_churn() {
 // Scenario 1: deleting the PMT pid stops its PMT while the streams stay
 // subscribed; the sibling takes over once its own pid is subscribed.
 int test_pmt_pid_delete_hands_over() {
-    int i;
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -2391,10 +2355,8 @@ int test_pmt_pid_delete_hands_over() {
 // The update_pids tail elects synchronously but never sends: states and
 // claims settle with no demux pass, CAPMTs go out on the loop instead.
 int test_update_pids_tail_elects() {
-    int i;
     uint8_t priv[1] = {0};
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -2470,9 +2432,7 @@ int test_update_pids_tail_elects() {
 // Scenario 2: deleting the streams stops the PMT even though its own pid
 // stays subscribed.
 int test_stream_pid_delete_stops_pmt() {
-    int i;
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -2518,9 +2478,7 @@ int test_stream_pid_delete_stops_pmt() {
 // A PMT version bump with identical content (#1346) keeps the PMT
 // running: no CA delete, claims kept, the CA gets an update re-send.
 int test_pmt_cosmetic_update_keeps_running() {
-    int i;
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -2634,8 +2592,7 @@ static int build_pmt_ca_private(uint8_t *b, int version, int priv_len) {
 
 // An update reuses the CA entries: longer private data must still fit.
 int test_pmt_update_longer_ca_private_data() {
-    for (int i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -2678,8 +2635,7 @@ int test_pmt_update_longer_ca_private_data() {
 // A null/empty CA update on a reused entry is valid input and must
 // not leave stale private data behind.
 int test_pmt_add_caid_null_clears_reused_entry() {
-    for (int i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     int id = pmt_add(0, 100, 48);
@@ -2703,9 +2659,7 @@ int test_pmt_add_caid_null_clears_reused_entry() {
 // removed pids keep stale claims the election ignores, and the CA
 // gets a re-send, no delete.
 int test_pmt_content_update_delta() {
-    int i;
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -2860,9 +2814,7 @@ int test_pmt_content_update_delta() {
 // The CA add call carries update=0 on first registration and update=1
 // on a PMT-update re-send; every version bump re-sends.
 int test_ca_update_flag_distinguishes_resend() {
-    int i;
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -2926,9 +2878,7 @@ int test_ca_update_flag_distinguishes_resend() {
 // A late parse whose streams are stale-held by a later PMT stops
 // it: the holder counts as live, so handover applies as usual.
 int test_handover_stops_stale_holder() {
-    int i;
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -3080,8 +3030,7 @@ static int e2e_drain(int fd, uint8_t *buf, int cap) {
 // sees exactly one UPDATE CAPMT — no NOT_SELECTED + re-ADD.
 int test_pmt_update_e2e_single_capmt_update() {
     int i;
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
     for (i = 0; i < MAX_ADAPTERS; i++)
         a[i] = NULL;
@@ -3255,9 +3204,7 @@ int test_pmt_update_e2e_single_capmt_update() {
 // A re-send the CA rejects with NORETRY (match lost on update)
 // releases the stale registration instead of leaking it.
 int test_resend_rejected_releases_ca() {
-    int i;
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};
@@ -3311,10 +3258,8 @@ int test_resend_rejected_releases_ca() {
 // A CA descriptor shorter than its CAID+PID header is malformed: it
 // must be skipped, not crash the malloc/memcpy below it.
 int test_add_caid_rejects_negative_len() {
-    int i;
     uint8_t priv[1] = {0};
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     int id = pmt_add(0, 100, 48);
@@ -3335,9 +3280,7 @@ int test_add_caid_rejects_negative_len() {
 // A PMT version update with identical content keeps the PMT running
 // with its claims (#1346); stopping here was the glitch.
 int test_version_update_keeps_claims() {
-    int i;
-    for (i = 0; i < MAX_PMT; i++)
-        pmts[i] = NULL;
+    std::ranges::fill(pmts, nullptr);
     npmts = 0;
 
     adapter ad = {};

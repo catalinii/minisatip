@@ -26,6 +26,7 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <poll.h>
+#include <ranges>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -648,7 +649,7 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
 }
 
 int sockets_del(int sock) {
-    int i, so;
+    int so;
     sockets *ss;
     if (sock < 0 || sock >= MAX_SOCKS || !s[sock])
         return 0;
@@ -693,13 +694,12 @@ int sockets_del(int sock) {
     ss->allocated = false;
     lock.unlock();
 
-    for (i = 0; i < MAX_SOCKS; i++) {
-        sockets *slave = s[i];
+    for (sockets *slave : s)
         if (slave && slave->enabled && slave->master == sock) {
-            LOG("Closing slave socket index %d (master sock %d)", i, sock);
-            sockets_del(i);
+            LOG("Closing slave socket index %d (master sock %d)", slave->id,
+                sock);
+            sockets_del(slave->id);
         }
-    }
     return 0;
 }
 #undef DEFAULT_LOG
@@ -733,7 +733,7 @@ int get_thread_index() {
 }
 
 void *select_and_execute(void *arg) {
-    int i, rv, rlen, les, es, pos_len, old_rlen;
+    int rv, rlen, les, es, pos_len, old_rlen;
     unsigned char buf[10240], *pos;
     int err;
     struct pollfd pf[MAX_SOCKS];
@@ -771,24 +771,24 @@ void *select_and_execute(void *arg) {
     while (run_loop) {
         c_time = getTick();
         es = 0;
-        for (i = 0; i < max_sock; i++) {
-            sockets *ps = s[i];
+        for (auto [slot, p] :
+             std::views::zip(s, pf) | std::views::take(max_sock.load())) {
+            sockets *ps = slot;
             if (ps && ps->enabled && ps->tid == tid) {
-                pf[i].fd = ps->sock;
-                pf[i].events = ps->events;
+                p.fd = ps->sock;
+                p.events = ps->events;
 
                 if (fifo_used(&ps->fifo))
-                    pf[i].events |= POLLOUT;
+                    p.events |= POLLOUT;
 
-                pf[i].revents = 0;
+                p.revents = 0;
                 ps->last_poll = c_time;
                 es++;
             } else {
-                pf[i].fd = -1;
-                pf[i].events = pf[i].revents = 0;
+                p.fd = -1;
+                p.events = p.revents = 0;
             }
         }
-        i = -1;
         if (les == 0 && es == 0 && tid != main_tid) {
             LOG("No enabled sockets for Thread ID %lx name %s ... exiting ",
                 tid, thread_info[thread_index].thread_name);
@@ -806,9 +806,10 @@ void *select_and_execute(void *arg) {
                 strerror(errno));
             continue;
         } else if (rv > 0) {
-            while (++i < max_sock) {
-                if ((pf[i].fd >= 0) && pf[i].revents) {
-                    sockets *ss = s[i];
+            for (auto [slot, p] :
+                 std::views::zip(s, pf) | std::views::take(max_sock.load())) {
+                if ((p.fd >= 0) && p.revents) {
+                    sockets *ss = slot;
                     if (!ss)
                         continue;
                     if (!ss->enabled)
@@ -816,29 +817,29 @@ void *select_and_execute(void *arg) {
 
                     c_time = getTick();
                     ss->iteration++;
-                    ss->revents = pf[i].revents;
+                    ss->revents = p.revents;
                     int buffered = fifo_used(&ss->fifo);
 
                     DEBUGM("event on socket index %d handle %d type %d "
                            "buffered %d (poll fd: %d, events: %d, revents: %d)",
-                           i, ss->sock, ss->type, buffered, pf[i].fd,
-                           pf[i].events, pf[i].revents);
+                           ss->id, ss->sock, ss->type, buffered, p.fd, p.events,
+                           p.revents);
 
-                    if ((pf[i].revents & POLLOUT) && buffered) {
+                    if ((p.revents & POLLOUT) && buffered) {
                         LOGM("start flush sock id %d, buffered %d", ss->id,
                              buffered);
                         flush_socket(ss);
 
-                        if ((pf[i].revents & (~POLLOUT)) == 0) {
+                        if ((p.revents & (~POLLOUT)) == 0) {
                             DEBUGM("Sock %d: No Read event, continuing",
                                    ss->id);
                             continue;
                         }
 
-                        pf[i].revents &= ~POLLOUT;
+                        p.revents &= ~POLLOUT;
                     }
 
-                    if (pf[i].revents & POLLOUT) {
+                    if (p.revents & POLLOUT) {
                         ss->events &= ~POLLOUT;
                     }
                     // use the buffer of the master socket, but the FD and the
@@ -954,7 +955,7 @@ void *select_and_execute(void *arg) {
                         LOG("select_and_execute[%d]: %s on socket %d (sid:%d) "
                             "from %s:%d - "
                             "type %s (%d) errno %d",
-                            i, err_str, ss->sock, ss->sid,
+                            ss->id, err_str, ss->sock, ss->sid,
                             get_sockaddr_host(ss->sa, ra, sizeof(ra)),
                             get_sockaddr_port(ss->sa), types[ss->type & 0x7],
                             ss->type, err);
@@ -966,9 +967,9 @@ void *select_and_execute(void *arg) {
                             if (ss->err < 10)
                                 continue;
                         }
-                        sockets_del(i);
+                        sockets_del(ss->id);
 
-                        LOG("Delete socket %d done: sid %d", i, ss->sid);
+                        LOG("Delete socket %d done: sid %d", ss->id, ss->sid);
                         continue;
                     }
 
@@ -980,11 +981,9 @@ void *select_and_execute(void *arg) {
         // out
         c_time = getTick();
         if (rv == 0 || (c_time - lt >= 200)) {
-            sockets *ss;
             lt = c_time;
-            i = -1;
-            while (++i < max_sock) {
-                if ((ss = get_sockets(i)) == NULL || (ss->tid != tid))
+            for (sockets *ss : s | std::views::take(max_sock.load())) {
+                if (!ss || !ss->enabled || ss->tid != tid)
                     continue;
                 if (((ss->timeout_ms > 0) &&
                      (lt - ss->rtime > ss->timeout_ms) &&
@@ -998,10 +997,10 @@ void *select_and_execute(void *arg) {
                         rv = ss->timeout(ss);
                         if (rv) {
                             lock.unlock();
-                            sockets_del(i);
+                            sockets_del(ss->id);
                         }
                     } else
-                        sockets_del(i);
+                        sockets_del(ss->id);
                 }
             }
         }
@@ -1059,12 +1058,10 @@ void set_sockets_rtime(int i, int r) {
 }
 
 int sockets_del_for_sid(int sid) {
-    int i;
-    sockets *ss;
     if (sid < 0)
         return 0;
-    for (i = 0; i < MAX_SOCKS; i++)
-        if ((ss = get_sockets(i)) && ss->sid >= 0 && ss->sid == sid &&
+    for (sockets *ss : s)
+        if (ss && ss->enabled && ss->sid >= 0 && ss->sid == sid &&
             (ss->type == TYPE_RTSP || ss->type == TYPE_RTP ||
              ss->type == TYPE_RTCP)) {
             ss->sid =
@@ -1108,11 +1105,9 @@ void set_socket_buffer(int sid, uint8_t *buf, int len) {
 
 uint64_t get_allocated_memory() {
     uint64_t allocated_memory = 0;
-    for (int i = 0; i < MAX_SOCKS; i++) {
-        sockets *ss = s[i];
+    for (sockets *ss : s)
         if (ss && ss->fifo.size)
             allocated_memory += ss->fifo.size;
-    }
     return allocated_memory;
 }
 
@@ -1121,18 +1116,17 @@ void free_all_adapters();
 void free_all_keys();
 
 void free_all() {
-    int i = 0;
-
-    for (i = MAX_SOCKS - 1; i > 0; i--) {
-        sockets *ss = s[i];
+    for (auto &slot :
+         s | std::views::reverse | std::views::take(MAX_SOCKS - 1)) {
+        sockets *ss = slot;
         if (!ss)
             continue;
         if (ss->enabled)
-            sockets_del(i);
+            sockets_del(ss->id);
         free_fifo(&ss->fifo);
         free(ss->prio_data);
         delete ss;
-        s[i] = NULL;
+        slot = NULL;
     }
     free_all_streams();
     free_all_adapters();

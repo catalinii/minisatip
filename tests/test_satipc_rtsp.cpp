@@ -17,6 +17,7 @@
 #include <fcntl.h>
 #include <linux/dvb/frontend.h>
 #include <netinet/in.h>
+#include <ranges>
 #include <string.h>
 #include <sys/socket.h>
 
@@ -640,10 +641,9 @@ int test_satipc_open_device_cleans_rtsp_on_rtp_failure() {
     ASSERT(rv != 0, "RTP setup must fail on the occupied port");
     ASSERT(ad.fe_sock == -1 && ad.fe == -1,
            "failed open must drop the RTSP socket");
-    for (int i = 0; i < MAX_SOCKS; i++) {
-        sockets *ss = get_sockets(i);
-        ASSERT(!(ss && ss->sid == aid), "failed open must not leak tracking");
-    }
+    for (sockets *ss : s)
+        ASSERT(!(ss && ss->enabled && ss->sid == aid),
+               "failed open must not leak tracking");
 
     close(srv);
     close(block4);
@@ -830,12 +830,13 @@ int test_satipc_open_device_full_table_closes_untracked() {
     const int aid = 4;
     int ids[MAX_SOCKS];
     int n = 0;
-    for (int i = 0; i < MAX_SOCKS; i++) {
+    for (int &dest : ids) {
         int id = sockets_add(SOCK_TIMEOUT, NULL, 60, TYPE_UDP, NULL, NULL,
                              (socket_action)dummy_timeout_action);
         if (id < 0)
             break;
-        ids[n++] = id;
+        dest = id;
+        n++;
     }
     int extra = sockets_add(SOCK_TIMEOUT, NULL, 60, TYPE_UDP, NULL, NULL,
                             (socket_action)dummy_timeout_action);
@@ -883,13 +884,12 @@ int test_satipc_open_device_full_table_closes_untracked() {
     ASSERT(rv != 0, "RTP setup must fail on the occupied port");
     ASSERT(ad.fe == -1, "untracked fd must be released");
     ASSERT(before >= 0 && after == before, "no fd may leak");
-    for (int i = 0; i < MAX_SOCKS; i++) {
-        sockets *ss = get_sockets(i);
-        ASSERT(!(ss && ss->sid == aid), "failed open must not track");
-    }
+    for (sockets *ss : s)
+        ASSERT(!(ss && ss->enabled && ss->sid == aid),
+               "failed open must not track");
 
-    for (int i = 0; i < n; i++)
-        sockets_del(ids[i]);
+    for (int id : ids | std::views::take(n))
+        sockets_del(id);
     close(srv);
     close(block4);
     opts.start_rtp = saved_rtp;

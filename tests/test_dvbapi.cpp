@@ -25,6 +25,7 @@
 
 #include <atomic>
 #include <poll.h>
+#include <ranges>
 #include <stdint.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -46,11 +47,9 @@ int pmt_del(int id);
 
 static int count_enabled_keys() {
     int n = 0;
-    for (int i = 0; i < MAX_KEYS; i++) {
-        SKey *key = keys[i];
+    for (SKey *key : keys)
         if (key && key->enabled)
             n++;
-    }
     return n;
 }
 

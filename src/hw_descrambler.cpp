@@ -17,6 +17,7 @@
 #include <fcntl.h>
 #include <memory>
 #include <mutex>
+#include <ranges>
 #include <string>
 #include <sys/ioctl.h>
 #include <unistd.h>
@@ -392,10 +393,11 @@ static void hw_drop_held_pids(adapter *ad, SPMT *pmt,
                               std::unordered_set<int> &pids) {
     for (auto it = pids.begin(); it != pids.end();) {
         int held = 0;
-        for (int i = 0; i < MAX_PMT && !held; i++) {
-            SPMT *o = get_pmt(i);
+        for (SPMT *o : pmts) {
+            if (held)
+                break;
             adapter *oa;
-            if (!o || o == pmt || o->adapter < 0)
+            if (!o || !o->enabled || o == pmt || o->adapter < 0)
                 continue;
             oa = get_adapter_nw(o->adapter);
             if (!oa || oa->pa != ad->pa)

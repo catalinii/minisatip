@@ -33,6 +33,8 @@
 #include "utils/ticks.h"
 
 #include <algorithm>
+#include <ranges>
+#include <span>
 
 #include <arpa/inet.h>
 #include <ctype.h>
@@ -227,9 +229,7 @@ int get_mask_len(uint8_t *filter, int l) {
 }
 
 void dump_filters(int aid) {
-    int i;
-    for (i = 0; i < nfilters; i++) {
-        SFilter *f = filters[i];
+    for (SFilter *f : filters | std::views::take(nfilters.load()))
         if (f && f->enabled)
             LOG("filter %d A: %d: pid %d, master %d, next %d, flags %d, "
                 "mask_len %d, "
@@ -238,7 +238,6 @@ void dump_filters(int aid) {
                 f->next_filter.load(), f->flags.load(), f->mask_len.load(),
                 f->filter[0], f->filter[1], f->filter[2], f->filter[3],
                 f->mask[0], f->mask[1], f->mask[2], f->mask[3]);
-    }
 }
 
 void reset_filter_data(SFilter *f) {
@@ -277,14 +276,12 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
     f->adapter = aid;
     f->master_filter = fid;
 
-    for (int i = 0; i < nfilters; i++) {
-        SFilter *o = filters[i];
-        if (i != fid && o && o->enabled && o->adapter == aid && o->pid == pid &&
-            o->next_filter == -1) {
+    for (SFilter *o : filters | std::views::take(nfilters.load()))
+        if (o && o->id != fid && o->enabled && o->adapter == aid &&
+            o->pid == pid && o->next_filter == -1) {
             o->next_filter = fid;
             f->master_filter = o->master_filter.load();
         }
-    }
     set_filter_flags_locked(f, flags);
     memcpy(f->filter, filter, sizeof(f->filter));
     memcpy(f->mask, mask, sizeof(f->mask));
@@ -306,20 +303,18 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
 
 // Caller holds filters_mutex.
 int reset_master_filter(int adapter, int pid, int id) {
-    int i, nf = 0;
-    for (i = 0; i < nfilters; i++) {
-        SFilter *f = filters[i];
+    int nf = 0;
+    for (SFilter *f : filters | std::views::take(nfilters.load()))
         if (f && f->enabled && f->adapter == adapter && f->pid == pid) {
             f->master_filter = id;
             nf++;
         }
-    }
     return nf;
 }
 
 int del_filter(int id) {
     SFilter *f;
-    int i, pid;
+    int pid;
     int adapter = -1;
     LOG("deleting filter %d", id);
     if (id < 0 || id >= MAX_FILTERS || !filters[id])
@@ -339,16 +334,14 @@ int del_filter(int id) {
         SFilter *m = get_filter(master_filter);
         if (!m) // double check there is no other filter
         {
-            for (i = 0; i < nfilters; i++) {
-                SFilter *o = filters[i];
-                if (i != id && o && o->enabled && o->adapter == f->adapter &&
-                    o->pid == pid) {
+            for (SFilter *o : filters | std::views::take(nfilters.load()))
+                if (o && o->id != id && o->enabled &&
+                    o->adapter == f->adapter && o->pid == pid) {
                     m = o;
                     LOGM("warning: filter %d was also found for pid %d", m->id,
                          pid);
                     break;
                 }
-            }
             SPid *p = find_pid(f->adapter, pid);
             if (p)
                 p->filter = -1;
@@ -356,22 +349,20 @@ int del_filter(int id) {
         if (m) // reset master_filter for all filters
             reset_master_filter(f->adapter, pid, m->id);
     } else {
-        for (i = 0; i < nfilters; i++) {
-            SFilter *o = filters[i];
+        for (SFilter *o : filters | std::views::take(nfilters.load()))
             if (o && o->enabled && o->adapter == f->adapter && o->pid == pid &&
                 o->next_filter == f->id) {
                 o->next_filter = f->next_filter.load();
                 break;
             }
-        }
     }
-    i = MAX_FILTERS;
-    while (--i >= 0) {
-        SFilter *o = filters[i];
-        if (o && o->enabled)
+    int last = -1;
+    for (SFilter *o : filters | std::views::reverse)
+        if (o && o->enabled) {
+            last = o->id;
             break;
-    }
-    nfilters = i + 1;
+        }
+    nfilters = last + 1;
     f->pid = -1;
     f->allocated = false;
     LOG("deleted filter %d, ad %d, pid %d, max filters %d", id, adapter, pid,
@@ -379,15 +370,12 @@ int del_filter(int id) {
     return 0;
 }
 int get_pid_filter(int aid, int pid) {
-    int i;
-    for (i = 0; i < nfilters; i++) {
-        SFilter *f = filters[i];
+    for (SFilter *f : filters | std::views::take(nfilters.load()))
         if (f && f->enabled && f->adapter == aid && f->pid == pid) {
-            LOGM("found filter %d for pid %d, master %d (max filters %d)", i,
-                 pid, f->master_filter.load(), nfilters.load());
+            LOGM("found filter %d for pid %d, master %d (max filters %d)",
+                 f->id, pid, f->master_filter.load(), nfilters.load());
             return f->master_filter;
         }
-    }
     return -1;
 }
 
@@ -465,13 +453,10 @@ int set_filter_mask(int id, uint8_t *filter, uint8_t *mask) {
 }
 
 void delete_filter_for_adapter(int aid) {
-    int i;
-    for (i = 0; i < nfilters; i++) {
-        SFilter *f = filters[i];
+    for (SFilter *f : filters | std::views::take(nfilters.load()))
         if (f && f->enabled && f->adapter == aid &&
             !(f->flags & FILTER_PERMANENT))
-            del_filter(i);
-    }
+            del_filter(f->id);
     return;
 }
 int match_filter(SFilter *f, unsigned char *b) {
@@ -1025,8 +1010,8 @@ int pmt_decrypt_stream(adapter *ad) {
     }
 
     // decrypt everything that's left
-    for (i = 0; i < pmt_ids; i++) {
-        SPMT *pmt = pmts[pmt_id[i]];
+    for (int id : std::span(pmt_id, pmt_ids)) {
+        SPMT *pmt = pmts[id];
         if (pmt && pmt->blen > 0)
             decrypt_batch(pmt);
         if (pmt && pmt->batch != NULL)
@@ -1716,26 +1701,20 @@ SPMT *get_pmt_for_sid(int aid, int sid) {
 }
 
 SPMT *get_all_pmt_for_sid(int aid, int sid) {
-    int i;
     adapter *ad = get_adapter(aid);
     if (!ad)
         return NULL;
-    for (i = 0; i < npmts; i++) {
-        SPMT *pmt = pmts[i];
+    for (SPMT *pmt : pmts | std::views::take(npmts.load()))
         if (pmt && pmt->enabled && pmt->adapter == aid && pmt->sid == sid)
             return pmt;
-    }
     return NULL;
 }
 
 SPMT *get_pmt_for_sid_pid(int aid, int sid, int pid) {
-    int i;
-    for (i = 0; i < npmts; i++) {
-        SPMT *pmt = pmts[i];
+    for (SPMT *pmt : pmts | std::views::take(npmts.load()))
         if (pmt && pmt->enabled && pmt->adapter == aid && pmt->sid == sid &&
             pmt->pid == pid)
             return pmt;
-    }
     return NULL;
 }
 
@@ -1956,21 +1935,19 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque) {
 
     // A PMT missing from the PAT is never stopped by the election, so
     // retire its CA registration here (cached PMTs hold none).
-    for (i = 0; i < npmts; i++) {
-        SPMT *pmt = pmts[i];
+    for (SPMT *pmt : pmts | std::views::take(npmts.load()))
         if (pmt && pmt->enabled && pmt->adapter == ad->id &&
-            pmt->state != PMT_CACHED && seen_pmts[i] == 0) {
+            pmt->state != PMT_CACHED && seen_pmts[pmt->id] == 0) {
             LOG("Caching PMT %d (%s) and filter %d as it is not "
                 "present in the new PAT",
-                i, pmt->name, pmt->filter);
+                pmt->id, pmt->name, pmt->filter);
             if (ad->type == ADAPTER_CI) {
                 // Do not cache PMTs for CI adapters as they are being
                 // re-generated very often (on channel change)
-                pmt_del(i);
+                pmt_del(pmt->id);
             } else
                 cache_pmt_for_adapter(ad, pmt);
         }
-    }
 
     update_pids(ad->id);
     ad->pat_processed = 1;
@@ -2510,9 +2487,9 @@ char *get_pmt_for_adapter(int aid, char *dest, int max_size) {
 }
 
 void free_all_pmts() {
-    int i, j;
-    for (i = 0; i < MAX_PMT; i++) {
-        SPMT *pmt = pmts[i];
+    int j;
+    for (auto &slot : pmts) {
+        SPMT *pmt = slot;
         if (pmt) {
             // Updates shrink caids while keeping entries: free all slots.
             for (j = 0; j < MAX_CAID; j++) {
@@ -2527,17 +2504,17 @@ void free_all_pmts() {
             pmt->stream_pids.clear();
 
             delete pmt;
-            pmts[i] = NULL;
+            slot = NULL;
         }
     }
 }
 
 void free_filters() {
-    int i;
-    for (i = 0; i < MAX_FILTERS; i++)
-        if (filters[i]) {
-            delete filters[i];
-            filters[i] = NULL;
+    for (auto &slot : filters)
+        if (slot) {
+            SFilter *f = slot;
+            delete f;
+            slot = NULL;
         }
     nfilters = 0;
 }

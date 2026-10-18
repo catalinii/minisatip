@@ -41,6 +41,7 @@
 #include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <ranges>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -503,12 +504,9 @@ int dvbapi_send_pmt(SKey *k, int cmd_id, int force) {
 
     if (cmd_id == CMD_ID_OK_DESCRAMBLING) {
         listmgmt = CLM_ONLY;
-        int i;
-        for (i = 0; i < MAX_KEYS; i++) {
-            SKey *o = keys[i];
-            if (o && i != k->id && o->enabled)
+        for (SKey *o : keys)
+            if (o && o->id != k->id && o->enabled)
                 listmgmt = CLM_ADD;
-        }
     }
     memset(buf, 0, sizeof(buf));
     copy32(buf, 0, AOT_CA_PMT);
@@ -583,14 +581,14 @@ int dvbapi_send_pmt(SKey *k, int cmd_id, int force) {
 }
 
 int dvbapi_close(sockets *s) {
-    int i;
     LOG("requested dvbapi close for sock %d, sock_id %d", s->id, s->sock);
     sock = -1;
     dvbapi_sock = -1;
     dvbapi_is_enabled = 0;
     // keys_del() reaches update_pids() via del_filter(): hold the adapter.
     // Not the key: keys_del() takes it, and may need pmt->mutex first.
-    for (i = 0; i < MAX_KEYS; i++) {
+    // Index-driven: every slot is locked, including empty ones.
+    for (int i : std::views::iota(0, MAX_KEYS)) {
         std::unique_lock<SMutex> ad_lock, klock;
         lock_key_adapter(i, ad_lock, klock);
         if (klock.owns_lock())
@@ -622,10 +620,10 @@ int is_adapter_active() {
 int connect_dvbapi(void *arg) {
     if ((sock > 0) && dvbapi_is_enabled) // already connected
     {
-        int i;
         int64_t ctime = getTick();
 
-        for (i = 0; i < MAX_KEYS; i++) {
+        // Index-driven: every slot is locked, including empty ones.
+        for (int i : std::views::iota(0, MAX_KEYS)) {
             // keys_del() and close_pmt_for_ca() change the key's adapter
             std::unique_lock<SMutex> ad_lock, klock;
             lock_key_adapter(i, ad_lock, klock);
@@ -871,14 +869,12 @@ int keys_del(int i) {
     k->enabled = 0;
     // current key is not disabled
     int j, ek = 0, ed = 0;
-    for (j = 0; j < MAX_KEYS; j++) {
-        SKey *o = keys[j];
-        if (i != j && o && o->enabled) {
+    for (SKey *o : keys)
+        if (o && i != o->id && o->enabled) {
             ek++;
             if (k->demux_index == o->demux_index)
                 ed++;
         }
-    }
     if (!ek) {
         buf[7] = 0xFF;
         msg = "ALL";
@@ -1115,12 +1111,11 @@ char *get_channel_for_key(int key, char *dest, int max_size) {
 }
 
 void free_all_keys(void) {
-    int i;
-    for (i = 0; i < MAX_KEYS; i++) {
-        if (keys[i]) {
-            delete keys[i];
+    for (auto &slot : keys)
+        if (slot) {
+            SKey *k = slot;
+            delete k;
         }
-    }
 }
 
 // Slot readers for the status API; a null slot reads as zero/empty.
