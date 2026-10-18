@@ -236,7 +236,7 @@ struct TestBothSlot {
 int test_find_new_id() {
     std::array<std::atomic<TestSlot *>, 4> arr;
     for (auto &a : arr)
-        a.store(nullptr);
+        a = nullptr;
     TestSlot *s0 = find_new_id(arr);
     ASSERT(s0 && s0->id == 0, "first slot gets id 0");
     ASSERT(s0->allocated.load() && !s0->enabled.load(),
@@ -246,20 +246,22 @@ int test_find_new_id() {
     ASSERT(s1 && s1->id == 1, "second slot gets id 1");
     s1->enabled = true;
     ASSERT(find_new_id(arr)->id == 2, "third slot gets id 2");
-    arr[2].load()->enabled = true;
+    TestSlot *s2 = arr[2];
+    s2->enabled = true;
     ASSERT(find_new_id(arr)->id == 3, "fourth slot gets id 3");
-    arr[3].load()->enabled = true;
+    TestSlot *s3 = arr[3];
+    s3->enabled = true;
     ASSERT(find_new_id(arr) == nullptr, "full array returns nullptr");
-    arr[1].load()->enabled = false;
-    arr[1].load()->allocated = false;
+    s1->enabled = false;
+    s1->allocated = false;
     TestSlot *reuse = find_new_id(arr);
     ASSERT(reuse && reuse->id == 1, "freed slot is reused");
-    ASSERT(reuse == arr[1].load(), "reuse returns the same object");
+    ASSERT(reuse == arr[1], "reuse returns the same object");
     for (auto &a : arr)
-        delete a.load();
+        delete a;
 
     std::array<std::atomic<TestBothSlot *>, 1> barr;
-    barr[0].store(nullptr);
+    barr[0] = nullptr;
     TestBothSlot *bs0 = find_new_id(barr);
     ASSERT(bs0 && bs0->id == 0 && bs0->sid == -1,
            "type with both fields gets id, sid untouched");
@@ -271,7 +273,7 @@ int test_find_new_id_mt() {
     constexpr int N = 64, T = 8;
     std::array<std::atomic<TestSlot *>, N> arr;
     for (auto &a : arr)
-        a.store(nullptr);
+        a = nullptr;
     std::atomic<int> total{0};
     auto worker = [&]() {
         int n = 0;
@@ -287,12 +289,13 @@ int test_find_new_id_mt() {
     for (auto &t : th)
         t.join();
     ASSERT(total == N, "all slots claimed exactly once");
-    for (int i = 0; i < N; i++)
-        ASSERT(arr[i].load() && arr[i].load()->id == i,
-               "slot id matches index");
+    for (int i = 0; i < N; i++) {
+        TestSlot *s = arr[i];
+        ASSERT(s && s->id == i, "slot id matches index");
+    }
     ASSERT(find_new_id(arr) == nullptr, "full stays full");
     for (auto &a : arr)
-        delete a.load();
+        delete a;
     return 0;
 }
 

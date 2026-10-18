@@ -98,7 +98,7 @@ extern char *listmgmt_str[];
 static inline SKey *get_key(int i) {
     if (i < 0 || i >= MAX_KEYS)
         return NULL;
-    SKey *k = keys[i].load();
+    SKey *k = keys[i];
     if (!k || !k->enabled)
         return NULL;
     return k;
@@ -505,7 +505,7 @@ int dvbapi_send_pmt(SKey *k, int cmd_id, int force) {
         listmgmt = CLM_ONLY;
         int i;
         for (i = 0; i < MAX_KEYS; i++) {
-            SKey *o = keys[i].load();
+            SKey *o = keys[i];
             if (o && i != k->id && o->enabled)
                 listmgmt = CLM_ADD;
         }
@@ -872,7 +872,7 @@ int keys_del(int i) {
     // current key is not disabled
     int j, ek = 0, ed = 0;
     for (j = 0; j < MAX_KEYS; j++) {
-        SKey *o = keys[j].load();
+        SKey *o = keys[j];
         if (i != j && o && o->enabled) {
             ek++;
             if (k->demux_index == o->demux_index)
@@ -957,8 +957,8 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt, int update) {
     SKey *old = (SKey *)pmt->opaque;
     if (old && old->id >= 0 && old->id < MAX_KEYS) {
         std::lock_guard<SMutex> oldlock(old->mutex);
-        if (old->enabled && keys[old->id].load() == old &&
-            old->pmt_id == pmt->id && old->adapter == ad->id) {
+        if (old->enabled && keys[old->id] == old && old->pmt_id == pmt->id &&
+            old->adapter == ad->id) {
             old->sid = pmt->sid;
             old->pmt_pid = pid;
             old->tsid = ad->transponder_id;
@@ -1117,14 +1117,17 @@ char *get_channel_for_key(int key, char *dest, int max_size) {
 void free_all_keys(void) {
     int i;
     for (i = 0; i < MAX_KEYS; i++) {
-        delete keys[i].load();
-        keys[i].store(nullptr);
+        if (keys[i]) {
+            delete keys[i];
+        }
     }
 }
 
 // Slot readers for the status API; a null slot reads as zero/empty.
 static SKey *get_key_nw(int i) {
-    return (i >= 0 && i < MAX_KEYS) ? keys[i].load() : NULL;
+    if (i < 0 || i >= MAX_KEYS)
+        return NULL;
+    return keys[i];
 }
 
 static int get_key_enabled(int i) {

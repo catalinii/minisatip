@@ -46,9 +46,11 @@ int pmt_del(int id);
 
 static int count_enabled_keys() {
     int n = 0;
-    for (int i = 0; i < MAX_KEYS; i++)
-        if (keys[i].load() && keys[i].load()->enabled)
+    for (int i = 0; i < MAX_KEYS; i++) {
+        SKey *key = keys[i];
+        if (key && key->enabled)
             n++;
+    }
     return n;
 }
 
@@ -69,7 +71,7 @@ int test_add_pmt_reuses_live_key() {
     pmt.id = 0;
     pmt.sid = 100;
     pmt.pid = 48;
-    pmts[0].store(&pmt);
+    pmts[0] = &pmt;
     npmts = 1;
     int before = count_enabled_keys();
 
@@ -101,7 +103,7 @@ int test_add_pmt_reuses_live_key() {
     sock = saved_sock;
     close(sv[0]);
     close(sv[1]);
-    pmts[0].store(nullptr);
+    pmts[0] = NULL;
     npmts = 0;
     a[0] = NULL;
     return 0;
@@ -135,11 +137,11 @@ int test_icam_mode_only_from_ecms() {
     SKey *k;
 
     pmt.enabled = 1;
-    pmts[0].store(&pmt);
+    pmts[0] = &pmt;
     npmts = 1;
     id = keys_add(0, 0);
     ASSERT(id >= 0, "no key for the PMT");
-    k = keys[id].load();
+    k = keys[id];
     fid_ecm = add_filter(0, 0x1CB6, (void *)send_ecm, k, 0);
     fid_cat = add_filter(0, 0x0001, (void *)send_ecm, k, 0);
     fid_sdt = add_filter(0, 0x0011, (void *)send_ecm, k, 0);
@@ -164,7 +166,7 @@ int test_icam_mode_only_from_ecms() {
 
     dvbapi_is_enabled = 0;
     keys_del(id);
-    pmts[0].store(nullptr);
+    pmts[0] = NULL;
     npmts = 0;
     free_filters();
     return 0;
@@ -178,11 +180,11 @@ int test_channel_falls_back_to_sid() {
 
     pmt.enabled = 1;
     pmt.sid = 1234;
-    pmts[0].store(&pmt);
+    pmts[0] = &pmt;
     npmts = 1;
     id = keys_add(0, 0);
     ASSERT(id >= 0, "no key for the PMT");
-    k = keys[id].load();
+    k = keys[id];
     k->pmt_id = 0;
 
     // No SDT seen: the name is empty so the channel shows the SID
@@ -197,7 +199,7 @@ int test_channel_falls_back_to_sid() {
            "channel must show the SDT name when present");
 
     keys_del(id);
-    pmts[0].store(nullptr);
+    pmts[0] = NULL;
     npmts = 0;
     return 0;
 }
@@ -232,7 +234,7 @@ int test_update_resend_skips_identical_capmt() {
     pmt.id = 0;
     pmt.sid = 100;
     pmt.pid = 48;
-    pmts[0].store(&pmt);
+    pmts[0] = &pmt;
     npmts = 1;
 
     ASSERT(dvbapi_add_pmt(&ad, &pmt, 0) == TABLES_RESULT_OK,
@@ -248,7 +250,8 @@ int test_update_resend_skips_identical_capmt() {
     // A second live key flips this key's list-management ONLY->ADD;
     // framing alone must not force a re-send either.
     int other = keys_add(0, 0);
-    ASSERT(other >= 0 && keys[other].load()->enabled, "no second live key");
+    SKey *other_key = keys[other];
+    ASSERT(other >= 0 && other_key->enabled, "no second live key");
     ASSERT(dvbapi_add_pmt(&ad, &pmt, 1) == TABLES_RESULT_OK,
            "listmgmt-flip re-send failed");
     ASSERT(drain(sv[1]) == 0, "listmgmt flip must write nothing");
@@ -264,7 +267,7 @@ int test_update_resend_skips_identical_capmt() {
     sock = saved_sock;
     close(sv[0]);
     close(sv[1]);
-    pmts[0].store(nullptr);
+    pmts[0] = NULL;
     npmts = 0;
     a[0] = NULL;
     return 0;

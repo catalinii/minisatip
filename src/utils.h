@@ -109,7 +109,7 @@ template <typename T, size_t N>
 T *find_new_id(std::array<std::atomic<T *>, N> &arr) {
     static_assert(requires(T *t) { t->id; });
     for (size_t i = 0; i < N; ++i) {
-        T *cur = arr[i].load();
+        T *cur = arr[i];
         if (!cur) {
             T *fresh = new T();
             fresh->allocated = true;
@@ -118,7 +118,7 @@ T *find_new_id(std::array<std::atomic<T *>, N> &arr) {
             if (arr[i].compare_exchange_strong(cur, fresh))
                 return fresh;
             delete fresh;
-            cur = arr[i].load();
+            cur = arr[i];
             if (!cur)
                 continue;
         }

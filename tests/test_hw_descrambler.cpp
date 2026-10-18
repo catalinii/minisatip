@@ -370,8 +370,7 @@ int main() {
     opts.debug = 255;
     opts.cache_dir = "/tmp";
     std::fill(std::begin(a), std::end(a), nullptr);
-    for (auto &slot : pmts)
-        slot.store(nullptr);
+    std::fill(std::begin(pmts), std::end(pmts), nullptr);
     std::fill(std::begin(cws), std::end(cws), nullptr);
 
     init_hw_descrambler();

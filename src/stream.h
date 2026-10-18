@@ -108,7 +108,7 @@ extern std::array<std::atomic<streams *>, MAX_STREAMS> st;
 static inline streams *get_sid_nw(int i) {
     if (i < 0 || i >= MAX_STREAMS)
         return NULL;
-    streams *sid = st[i].load();
+    streams *sid = st[i];
     return (sid && sid->enabled) ? sid : NULL;
 }
 

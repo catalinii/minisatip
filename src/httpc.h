@@ -28,7 +28,7 @@ extern std::array<std::atomic<Shttp_client *>, MAX_HTTPC> httpc;
 static inline Shttp_client *get_httpc(int i) {
     if (i < 0 || i >= MAX_HTTPC)
         return NULL;
-    Shttp_client *h = httpc[i].load();
+    Shttp_client *h = httpc[i];
     return (h && h->enabled) ? h : NULL;
 }
 
