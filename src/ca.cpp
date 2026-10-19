@@ -1020,7 +1020,8 @@ int send_capmt(ca_device_t *d, SCAPMT *ca, int listmgmt, int reason,
     // send never suppresses the retry.
     if (ca_write_apdu(session, TAG_CA_PMT, capmt, size)) {
         capmt_forget_sent(ca);
-        return 0;
+        LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY, "CA %d: CAPMT write failed",
+                       d->id);
     }
     ca->capmt_hash = capmt_content_hash(capmt, size);
     ca->capmt_hash_valid = 1;
@@ -1225,6 +1226,8 @@ static void restore_ci_link(ca_device_t *d, adapter *ad, int prev_linked) {
     d->linked_adapter = prev_linked;
 }
 
+void remove_pmt_from_device(ca_device_t *d, SPMT *pmt);
+
 int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
     ca_device_t *d = ca_devices[ad->id];
     uint16_t pid, sid;
@@ -1314,9 +1317,15 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
 
     // Only a new join forces the send; an update or a kept-place rejoin
     // sends only when the built CAPMT changed, decided in send_capmt.
-    if (send_capmt(d, capmt, listmgmt, CA_PMT_CMD_ID_OK_DESCRAMBLING,
-                   !update && !rejoined))
-        LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY, "send_capmt failed");
+    int rc = send_capmt(d, capmt, listmgmt, CA_PMT_CMD_ID_OK_DESCRAMBLING,
+                        !update && !rejoined);
+    if (rc) {
+        // A failed add keeps no place, so a channel closed before the
+        // retry leaves nothing behind; a write failure is retried.
+        if (!update)
+            remove_pmt_from_device(d, spmt);
+        LOG_AND_RETURN(rc, "send_capmt failed");
+    }
 
     if (d->key[0][0])
         send_cw(spmt->id, CA_ALGO_AES128_CBC, 0, d->key[0], d->iv[0], 3600,
