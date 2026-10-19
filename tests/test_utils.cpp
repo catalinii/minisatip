@@ -301,11 +301,52 @@ int test_find_new_id_mt() {
     return 0;
 }
 
+int test_find_new_id_churn() {
+    constexpr int N = 8, T = 8, K = 10000;
+    std::array<std::atomic<TestSlot *>, N> arr;
+    for (auto &a : arr)
+        a = nullptr;
+    std::array<std::atomic<bool>, N> held{};
+    std::atomic<int> dups{0}, bad_id{0}, total{0};
+    auto worker = [&]() {
+        for (int k = 0; k < K; k++) {
+            TestSlot *s = nullptr;
+            while (!(s = find_new_id(arr)))
+                std::this_thread::yield();
+            int id = s->id;
+            if (id < 0 || id >= N)
+                bad_id++;
+            else if (held[id].exchange(true))
+                dups++;
+            s->enabled = true;
+            s->enabled = false;
+            // Drop the hold before publishing the release, so a racing
+            // claimer never sees a stale hold.
+            if (id >= 0 && id < N)
+                held[id] = false;
+            s->allocated = false;
+            total++;
+        }
+    };
+    std::vector<std::thread> th;
+    for (int t = 0; t < T; t++)
+        th.emplace_back(worker);
+    for (auto &t : th)
+        t.join();
+    ASSERT(dups == 0, "no slot claimed twice at once");
+    ASSERT(bad_id == 0, "claimed ids stay in range");
+    ASSERT(total == T * K, "all iterations claimed a slot");
+    for (auto &a : arr)
+        delete a;
+    return 0;
+}
+
 int main() {
     opts.log = 255;
     strcpy(thread_info[thread_index].thread_name, "test_utils");
     TEST_FUNC(test_find_new_id(), "testing find_new_id");
     TEST_FUNC(test_find_new_id_mt(), "testing find_new_id mt");
+    TEST_FUNC(test_find_new_id_churn(), "testing find_new_id churn");
     TEST_FUNC(test_mkdir_recursive(), "testing directory creation");
     TEST_FUNC(test_readfile_content_type(), "testing readfile content types");
     TEST_FUNC(test_fifo(), "testing fifo");

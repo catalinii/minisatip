@@ -125,8 +125,9 @@ T *find_new_id(std::array<std::atomic<T *>, N> &arr) {
         bool expected = false;
         if (!cur->enabled.load() &&
             cur->allocated.compare_exchange_strong(expected, true)) {
+            // id is set once at allocation; rewriting it here races
+            // with unlocked x->id readers (TSAN).
             cur->enabled = false;
-            cur->id = (int)i;
             return cur;
         }
     }
