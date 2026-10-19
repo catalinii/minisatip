@@ -2313,6 +2313,25 @@ int test_capmt_changed_rejoin_still_sends() {
     return 0;
 }
 
+// A failed CAPMT write is reported as a retry and keeps no place, so
+// the next PMT pass registers the program from scratch.
+int test_capmt_write_failure_retries() {
+    packing_cam_open();
+    SPMT *p1 = packing_program(0x2b01);
+    int fd = pcam->dev.fd;
+    pcam->dev.fd = -1;
+    ASSERT_EQUAL(dvbca_process_pmt(&pcam->ad, p1, 0), TABLES_RESULT_ERROR_RETRY,
+                 "a failed write asks to retry");
+    ASSERT_EQUAL(capmt_pmt_count(pcam->dev.capmt), 0, "no place is kept");
+
+    pcam->dev.fd = fd;
+    ASSERT_EQUAL(dvbca_process_pmt(&pcam->ad, p1, 0), 0, "the retry");
+    ASSERT_EQUAL(read_capmts(), 1, "sends the CAPMT");
+    ASSERT(capmt_has_pmt(pcam->dev.capmt, p1->id), "and registers it");
+    packing_cam_close();
+    return 0;
+}
+
 // CAPMT 0 = {1, 3}, CAPMT 1 = {2}: zapping 3 -> 4 -> 3 -> 4 restarts
 // a resident once; the zaps back return to kept places.
 int test_capmt_zap_back_keeps_places() {
@@ -2395,6 +2414,8 @@ int main() {
               "testing that zapping back and forth keeps kept places");
     TEST_FUNC(test_capmt_changed_rejoin_still_sends(),
               "testing that a changed rejoin is not suppressed");
+    TEST_FUNC(test_capmt_write_failure_retries(),
+              "testing that a failed CAPMT write is retried");
     TEST_FUNC(test_get_authdata_filename(), "testing filename helper function");
     TEST_FUNC(test_capmt_content_hash_masks_version_and_listmgmt(),
               "testing the CAPMT hash masks version and listmgmt");
