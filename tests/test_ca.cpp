@@ -2288,9 +2288,9 @@ int test_capmt_rejoin_takes_kept_place() {
     return 0;
 }
 
-// A rejoin is not forced but still sends when the CAPMT changed, here
-// its program number, as a fresh CAPMT elsewhere can renumber it.
-int test_capmt_rejoin_sends_when_changed() {
+// Guard against over-suppression, not the fix: a kept-place rejoin whose
+// CAPMT changed (renumbered here) must still send once.
+int test_capmt_changed_rejoin_still_sends() {
     packing_cam_open();
     SCAPMT *c = pcam->dev.capmt;
     SPMT *p1 = packing_program(0x2a01), *p2 = packing_program(0x2a02);
@@ -2393,8 +2393,8 @@ int main() {
               "testing that a rejoin returns to its kept place");
     TEST_FUNC(test_capmt_zap_back_keeps_places(),
               "testing that zapping back and forth keeps kept places");
-    TEST_FUNC(test_capmt_rejoin_sends_when_changed(),
-              "testing that a changed rejoin still sends");
+    TEST_FUNC(test_capmt_changed_rejoin_still_sends(),
+              "testing that a changed rejoin is not suppressed");
     TEST_FUNC(test_get_authdata_filename(), "testing filename helper function");
     TEST_FUNC(test_capmt_content_hash_masks_version_and_listmgmt(),
               "testing the CAPMT hash masks version and listmgmt");
