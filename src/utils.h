@@ -3,6 +3,7 @@
 
 #include "config.h"
 #include "utils/logging/logging.h"
+#include "utils/segmented_pool.h"
 #include <array>
 #include <atomic>
 #include <iostream>
@@ -132,6 +133,60 @@ T *find_new_id(std::array<std::atomic<T *>, N> &arr) {
         }
     }
     return nullptr;
+}
+
+// Claim a free slot lock-free, allocating the object if needed.
+// Sets id to the index; nullptr when full.
+template <typename T, size_t M> T *find_new_id(SegmentedPool<T *, M> &pool) {
+    static_assert(requires(T *t) { t->id; });
+    auto scan = [&](size_t n) -> T * {
+        for (size_t i = 0; i < n; ++i) {
+            T *cur = pool.slot(i).load();
+            if (!cur) {
+                T *fresh = new T();
+                fresh->allocated = true;
+                fresh->enabled = false;
+                fresh->id = (int)i;
+                if (pool.slot(i).compare_exchange_strong(cur, fresh))
+                    return fresh;
+                delete fresh;
+                cur = pool.slot(i).load();
+                if (!cur)
+                    continue;
+            }
+            bool expected = false;
+            if (!cur->enabled.load() &&
+                cur->allocated.compare_exchange_strong(expected, true)) {
+                // id is set once at allocation; rewriting it here races
+                // with unlocked x->id readers (TSAN).
+                cur->enabled = false;
+                return cur;
+            }
+        }
+        return nullptr;
+    };
+    if (T *s = scan(pool.size()))
+        return s;
+    for (;;) {
+        auto idx = pool.reserve();
+        if (!idx)
+            break;
+        if (pool.slot(*idx).load())
+            continue; // Occupied past the scan (manual plant); skip it.
+        T *fresh = new T();
+        fresh->allocated = true;
+        fresh->enabled = false;
+        fresh->id = (int)*idx;
+        T *expect = nullptr;
+        // CAS, not store: a racing scan may claim this slot first.
+        if (pool.slot(*idx).compare_exchange_strong(expect, fresh)) {
+            pool.extend_to(*idx + 1);
+            return fresh;
+        }
+        delete fresh;
+    }
+    // Full: one more scan in case a slot freed mid-claim.
+    return scan(pool.size());
 }
 void join_thread();
 void add_join_thread(pthread_t t);
