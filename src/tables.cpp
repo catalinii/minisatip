@@ -87,7 +87,6 @@ int add_ca(SCA_op *op) {
     init_ca_device(&ca[new_ca]);
     return new_ca;
 }
-extern std::array<std::atomic<SPMT *>, MAX_PMT> pmts;
 // Clear one PMT's tables masks for a CA bit. Takes the PMT lock;
 // nest-safe (recursive) for callers already holding it.
 void tables_clear_pmt_ca_masks(SPMT *pmt, uint64_t mask, int clear_disabled) {

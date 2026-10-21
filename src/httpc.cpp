@@ -25,7 +25,7 @@
 
 #define DEFAULT_LOG LOG_HTTP
 
-std::array<std::atomic<Shttp_client *>, MAX_HTTPC> httpc;
+SegmentedPool<Shttp_client *, HTTPC_BUCKETS> httpc;
 
 int http_client_add() {
 

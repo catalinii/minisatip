@@ -57,10 +57,6 @@
 
 #define DEFAULT_LOG LOG_PMT
 
-extern adapter *a[MAX_ADAPTERS];
-extern std::array<std::atomic<SFilter *>, MAX_FILTERS> filters;
-extern std::array<std::atomic<SPMT *>, MAX_PMT> pmts;
-
 // Forward declarations
 descriptor_t create_descriptor(const uint8_t *data);
 void cache_pmt_for_adapter(adapter *ad, SPMT *pmt);
@@ -89,7 +85,6 @@ uint8_t cw0[] = {0x64, 0xBB, 0x0E, 0x2D, 0x98, 0xAD, 0x8C, 0xD1};
 uint8_t cw1[] = {0x77, 0xC1, 0x1F, 0x57, 0x96, 0xFB, 0xC3, 0x54};
 uint8_t cw_invalid[] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77};
 
-extern adapter *a[MAX_ADAPTERS];
 extern SCW *cws[MAX_CW];
 
 int test_descriptor_equality() {
@@ -134,7 +129,7 @@ int test_descriptor_caid_capid_getters() {
 int test_decrypt() {
     int i, max_len = 1000;
     opts.adapter_buffer = 188 * 1000;
-    a[0] = adapter_alloc();
+    a.publish(0, adapter_alloc());
     a[0]->id = 0;
     a[0]->pids[0].pid = 0xff;
     a[0]->pids[0].flags = 1;
@@ -181,16 +176,16 @@ int test_decrypt() {
     hexdump("adapter buffer ", a[0]->buf, 188);
     free(a[0]->buf);
     delete a[0];
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     delete pmts[0];
-    pmts[0] = NULL;
+    pmts.slot(0).store(nullptr);
     return 0;
 }
 
 int test_wait_pusi() {
     int i, max_len = 3 * 188;
     opts.adapter_buffer = 188 * 1000;
-    a[0] = adapter_alloc();
+    a.publish(0, adapter_alloc());
     a[0]->id = 0;
     a[0]->pids[0].pid = 0xff;
     a[0]->pids[0].flags = 1;
@@ -216,7 +211,7 @@ int test_wait_pusi() {
     ASSERT(wait_pusi(a[0], 3 * 188) == 0, "getItem should not fail");
     free(a[0]->buf);
     delete a[0];
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
@@ -330,10 +325,10 @@ int test_assemble_multi_packet() {
 
 int test_emulate_add_all_pids() {
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     SPMT pmt{};
-    pmts[0] = &pmt;
+    pmts.slot(0).store(&pmt);
     pmt.enabled = 1;
     pmt.adapter = 0;
     opts.emulate_pids_all = 1;
@@ -367,7 +362,6 @@ int test_emulate_add_all_pids() {
 // First PAT after (re)init (pat_processed == 0, every CI channel change):
 // a PMT missing from it must still retire its CA registration.
 
-extern std::atomic<int> npmts;
 extern int process_pat(int filter, unsigned char *b, int len, void *opaque);
 
 static int fake_ca_del_calls;
@@ -475,11 +469,10 @@ static int check_pat_drop_releases_ca(int adapter_type) {
 
     // Earlier tests leave stack SPMTs in pmts[]: detach all, never free,
     // as some entries are not ours.
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     ad.type = adapter_type;
@@ -578,10 +571,10 @@ int test_revived_cached_pmt_gets_its_filter() {
     int pids[] = {PID_KEPT};
 
     for (i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = NULL;
+        a.slot(i).store(nullptr);
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     ad.type = ADAPTER_DVB;
@@ -647,7 +640,7 @@ int test_revived_cached_pmt_gets_its_filter() {
     del_filter(ad.pat_filter);
     free_all_pmts();
     free_filters();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
@@ -655,11 +648,10 @@ int test_revived_cached_pmt_gets_its_filter() {
 // PMT pid is subscribed starts, else nothing decrypts (FTA).
 int test_pmt_starts_only_with_pmt_pid() {
     int i;
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
 
@@ -703,7 +695,7 @@ int test_pmt_starts_only_with_pmt_pid() {
     ASSERT(find_pid(0, 3401)->pmt == bid, "audio claim should be kept");
 
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
@@ -733,11 +725,10 @@ static int failing_ca_add_pmt(adapter *ad, SPMT *pmt, int update) {
 int test_retune_handover_same_loop() {
     int i;
     uint8_t priv[1] = {0};
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
 
@@ -801,7 +792,7 @@ int test_retune_handover_same_loop() {
 
     del_ca(&counting_op);
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
@@ -837,11 +828,10 @@ static int single_slot_ca_del_pmt(adapter *ad, SPMT *pmt) {
 int test_single_slot_retune_releases_first() {
     int i;
     uint8_t priv[1] = {0};
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
 
@@ -906,7 +896,7 @@ int test_single_slot_retune_releases_first() {
 
     del_ca(&single_slot_op);
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
@@ -915,11 +905,10 @@ int test_single_slot_retune_releases_first() {
 int test_scan_pmt_only_starts_nothing() {
     int i;
     uint8_t priv[1] = {0};
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
 
@@ -976,7 +965,7 @@ int test_scan_pmt_only_starts_nothing() {
 
     del_ca(&counting_op);
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
@@ -986,7 +975,7 @@ int test_scan_pmt_only_starts_nothing() {
 // PMT starts.
 int test_active_pmt_list_capped_at_max() {
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     opts.log = 1;
@@ -1002,7 +991,7 @@ int test_active_pmt_list_capped_at_max() {
     ASSERT(ad.active_pmts == MAX_PMT_FOR_ADAPTER,
            "full active list must refuse");
 
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     free_all_pmts();
     return 0;
 }
@@ -1010,11 +999,10 @@ int test_active_pmt_list_capped_at_max() {
 // 19.2E 11493H (live S1+S2): A/B share AV 5121/5122 and differ only in a
 // data pid. Replace-zaps follow the PMT pid; add/del hands claims over.
 int test_19e_11493h_zap_flows() {
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -1093,7 +1081,7 @@ int test_19e_11493h_zap_flows() {
     ASSERT(find_pid(0, 5124)->pmt == -1, "released data has no owner");
 
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
@@ -1101,11 +1089,10 @@ int test_19e_11493h_zap_flows() {
 // E/F/G/H share AV and differ in one data pid each, I is disjoint.
 int test_19e_11582h_group_and_disjoint() {
     int i;
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -1197,7 +1184,7 @@ int test_19e_11582h_group_and_disjoint() {
     ASSERT(find_pid(0, 5261)->pmt == iid, "I keeps its video");
 
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
@@ -1205,11 +1192,10 @@ int test_19e_11582h_group_and_disjoint() {
 // CA, closes the old one, and teardown closes the last one.
 int test_19e_11914h_ca_send_close() {
     uint8_t priv[1] = {0};
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -1271,7 +1257,7 @@ int test_19e_11914h_ca_send_close() {
 
     del_ca(&counting_op);
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
@@ -1282,7 +1268,7 @@ int test_ci_adapter_pmt_starts() {
     free_all_pmts();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     ad.type = ADAPTER_CI;
@@ -1309,17 +1295,16 @@ int test_ci_adapter_pmt_starts() {
                  "the CI adapter's PMT should start");
 
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
 int test_sticky_claims_without_parse() {
     int i;
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
 
@@ -1366,18 +1351,17 @@ int test_sticky_claims_without_parse() {
     ASSERT_EQUAL(pmt_t66->state, PMT_RUNNING, "holder should keep running");
 
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
 // Mirror image: an earlier-subscribed newcomer steals by order.
 int test_earlier_newcomer_steals_by_order() {
     int i;
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
 
@@ -1418,7 +1402,7 @@ int test_earlier_newcomer_steals_by_order() {
     ASSERT(find_pid(0, 3301)->pmt == bid, "video pid should move to B");
 
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
@@ -1426,11 +1410,10 @@ int test_earlier_newcomer_steals_by_order() {
 // own audio and both stay running.
 int test_steal_splits_partial_overlap() {
     int i;
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
 
@@ -1471,14 +1454,14 @@ int test_steal_splits_partial_overlap() {
     ASSERT(find_pid(0, 3402)->pmt == bid, "own audio goes to B");
 
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
 // SPid.order is assigned on subscription and reset on removal.
 int test_pid_order_reset_on_remove() {
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -1512,7 +1495,7 @@ int test_pid_order_reset_on_remove() {
 
     mark_pids_deleted(0, PID_STREAM_ID_UNDEFINED, NULL);
     update_pids(0);
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
@@ -1520,11 +1503,10 @@ int test_pid_order_reset_on_remove() {
 // sid; different sets coexist and split the streams by subscription order.
 int test_d8_shared_pid() {
     int i;
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
 
@@ -1593,7 +1575,7 @@ int test_d8_shared_pid() {
     ASSERT(find_pid(0, 701)->pmt == m1, "shared video should not move");
 
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
@@ -1601,11 +1583,10 @@ int test_d8_shared_pid() {
 // claims split the streams, each serving the pids it carries.
 int test_shared_pid_split() {
     int i;
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
 
@@ -1648,19 +1629,18 @@ int test_shared_pid_split() {
     ASSERT(find_pid(0, 701)->pmt == m1, "shared video should not move");
 
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
 // 30W 12437H: pid 817 carries dozens of PMTs (Meo/Nos). SIDs 1338/6043
 // share all A/V pids with different ECMs; 807 is disjoint. Lowest sid serves.
 int test_30w_shared_pmt_pid() {
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
-    std::ranges::fill(filters, nullptr);
+    pmts.clear();
+    filters.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -1761,7 +1741,7 @@ int test_30w_shared_pmt_pid() {
     del_ca(&fake_ca_op);
     free_all_pmts();
     free_filters();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
@@ -1769,11 +1749,10 @@ int test_30w_shared_pmt_pid() {
 // apid. The subscribed PMT pid decides, never the parsed-first sibling.
 int test_1129_bein_shared_es() {
     uint8_t priv[1] = {0};
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -1822,18 +1801,17 @@ int test_1129_bein_shared_es() {
 
     del_ca(&fake_ca_op);
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
 // #1129 Stingray: music channels share VPID 108 with different APIDs.
 // NATURE ESCAPE (PMT 1908, APID 208) vs '80'ler (PMT 1922, APID 222).
 int test_1129_stingray_shared_vpid() {
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -1875,7 +1853,7 @@ int test_1129_stingray_shared_vpid() {
     ASSERT(find_pid(0, 222)->pmt == eighties, "new APID should be owned");
 
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
@@ -1884,11 +1862,10 @@ int test_1129_stingray_shared_vpid() {
 int test_held_pids_without_client_stop_pmt() {
     int i;
     uint8_t priv[1] = {0};
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -1927,21 +1904,20 @@ int test_held_pids_without_client_stop_pmt() {
 
     del_ca(&fake_ca_op);
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
 // CWs are stored under the PMT they arrived for, with no master hop.
 int test_cw_keyed_by_pmt() {
     int i;
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
     for (i = 0; i < MAX_CW; i++)
         if (cws[i])
             cws[i]->enabled = 0;
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     init_algo();
@@ -1963,7 +1939,7 @@ int test_cw_keyed_by_pmt() {
         if (cws[i])
             cws[i]->enabled = 0;
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
@@ -1971,14 +1947,13 @@ int test_cw_keyed_by_pmt() {
 // the next CW: the adapter thread may still read it (cw_in_use).
 int test_send_cw_skips_in_use_slot() {
     int i;
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
     for (i = 0; i < MAX_CW; i++)
         if (cws[i])
             cws[i]->enabled = 0;
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     init_algo();
@@ -2013,18 +1988,17 @@ int test_send_cw_skips_in_use_slot() {
         if (cws[i])
             cws[i]->enabled = 0;
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
 // pids=all expands every known PMT pid with the requestor sid, so the
 // subscribed-PMT rule still decrypts as before under claims arbitration.
 int test_pids_all_expands_pmt_pids() {
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 1;
@@ -2048,19 +2022,18 @@ int test_pids_all_expands_pmt_pids() {
 
     opts.emulate_pids_all = 0;
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
 // Multi-service PMT pid: two SIDs on pid 60 parse into two PMT objects
 // with their own ES lists, which is what D8 selection arbitrates.
 int test_multi_service_pid_parses_per_sid() {
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
-    std::ranges::fill(filters, nullptr);
+    pmts.clear();
+    filters.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     ad.pids[0].pid = 60;
@@ -2095,7 +2068,7 @@ int test_multi_service_pid_parses_per_sid() {
 
     free_all_pmts();
     free_filters();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
@@ -2103,11 +2076,10 @@ int test_multi_service_pid_parses_per_sid() {
 // parses. process_pmt stops Q at once; P starts on the next pass.
 int test_late_parse_handover() {
     int i;
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
 
@@ -2161,18 +2133,17 @@ int test_late_parse_handover() {
 
     del_filter(fid);
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
 // Last unsubscribe deletes the pid, but the PMT stays on AV with no rival.
 int test_running_pmt_pid_deleted_on_unsubscribe() {
     int i;
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -2216,18 +2187,17 @@ int test_running_pmt_pid_deleted_on_unsubscribe() {
 
     del_filter(fid);
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
 // Pid leaves and returns, AV stays with no rival: PMT runs, CA sees no churn.
 int test_pmt_pid_remove_readd_no_churn() {
     uint8_t priv[1] = {0};
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -2286,18 +2256,17 @@ int test_pmt_pid_remove_readd_no_churn() {
     del_ca(&counting_op);
     del_filter(fid);
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
 // Scenario 1: deleting the PMT pid stops its PMT while the streams stay
 // subscribed; the sibling takes over once its own pid is subscribed.
 int test_pmt_pid_delete_hands_over() {
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -2348,7 +2317,7 @@ int test_pmt_pid_delete_hands_over() {
     del_filter(fa);
     del_filter(fb);
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
@@ -2356,11 +2325,10 @@ int test_pmt_pid_delete_hands_over() {
 // claims settle with no demux pass, CAPMTs go out on the loop instead.
 int test_update_pids_tail_elects() {
     uint8_t priv[1] = {0};
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -2425,18 +2393,17 @@ int test_update_pids_tail_elects() {
     del_filter(fa);
     del_filter(fb);
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
 // Scenario 2: deleting the streams stops the PMT even though its own pid
 // stays subscribed.
 int test_stream_pid_delete_stops_pmt() {
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -2471,18 +2438,17 @@ int test_stream_pid_delete_stops_pmt() {
 
     del_filter(fid);
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
 // A PMT version bump with identical content (#1346) keeps the PMT
 // running: no CA delete, claims kept, the CA gets an update re-send.
 int test_pmt_cosmetic_update_keeps_running() {
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -2561,7 +2527,7 @@ int test_pmt_cosmetic_update_keeps_running() {
     del_ca(&counting_op);
     del_filter(fid);
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
@@ -2592,11 +2558,10 @@ static int build_pmt_ca_private(uint8_t *b, int version, int priv_len) {
 
 // An update reuses the CA entries: longer private data must still fit.
 int test_pmt_update_longer_ca_private_data() {
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -2628,15 +2593,14 @@ int test_pmt_update_longer_ca_private_data() {
 
     del_filter(fid);
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
 // A null/empty CA update on a reused entry is valid input and must
 // not leave stale private data behind.
 int test_pmt_add_caid_null_clears_reused_entry() {
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     int id = pmt_add(0, 100, 48);
     ASSERT(id >= 0, "could not create the PMT");
@@ -2659,11 +2623,10 @@ int test_pmt_add_caid_null_clears_reused_entry() {
 // removed pids keep stale claims the election ignores, and the CA
 // gets a re-send, no delete.
 int test_pmt_content_update_delta() {
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -2807,18 +2770,17 @@ int test_pmt_content_update_delta() {
     del_ca(&counting_op);
     del_filter(fid);
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
 // The CA add call carries update=0 on first registration and update=1
 // on a PMT-update re-send; every version bump re-sends.
 int test_ca_update_flag_distinguishes_resend() {
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -2871,18 +2833,17 @@ int test_ca_update_flag_distinguishes_resend() {
     del_ca(&counting_op);
     del_filter(fid);
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
 // A late parse whose streams are stale-held by a later PMT stops
 // it: the holder counts as live, so handover applies as usual.
 int test_handover_stops_stale_holder() {
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -2939,7 +2900,7 @@ int test_handover_stops_stale_holder() {
 
     del_filter(bfid);
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
@@ -3030,17 +2991,16 @@ static int e2e_drain(int fd, uint8_t *buf, int cap) {
 // sees exactly one UPDATE CAPMT — no NOT_SELECTED + re-ADD.
 int test_pmt_update_e2e_single_capmt_update() {
     int i;
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
     for (i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = NULL;
+        a.slot(i).store(nullptr);
     memset(ddci_devices, 0, sizeof(ddci_devices));
     memset(ca_devices, 0, sizeof(ca_devices));
     channels.clear();
 
     adapter ad = {}, a0 = {};
-    a[8] = &ad;
-    a[0] = &a0;
+    a.publish(8, &ad);
+    a.publish(0, &a0);
     ad.enabled = 1;
     ad.id = 8;
     a0.enabled = 1;
@@ -3194,7 +3154,8 @@ int test_pmt_update_e2e_single_capmt_update() {
     channels.clear();
     ddci_devices[0] = NULL;
     ca_devices[8] = NULL;
-    a[8] = a[0] = NULL;
+    a.slot(8).store(nullptr);
+    a.slot(0).store(nullptr);
     close(sv[0]);
     close(sv[1]);
     opts.enigma = saved_enigma;
@@ -3204,11 +3165,10 @@ int test_pmt_update_e2e_single_capmt_update() {
 // A re-send the CA rejects with NORETRY (match lost on update)
 // releases the stale registration instead of leaking it.
 int test_resend_rejected_releases_ca() {
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -3251,7 +3211,7 @@ int test_resend_rejected_releases_ca() {
 
     del_ca(&failing_op);
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
@@ -3259,8 +3219,7 @@ int test_resend_rejected_releases_ca() {
 // must be skipped, not crash the malloc/memcpy below it.
 int test_add_caid_rejects_negative_len() {
     uint8_t priv[1] = {0};
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     int id = pmt_add(0, 100, 48);
     ASSERT(id >= 0, "could not create the PMT");
@@ -3280,11 +3239,10 @@ int test_add_caid_rejects_negative_len() {
 // A PMT version update with identical content keeps the PMT running
 // with its claims (#1346); stopping here was the glitch.
 int test_version_update_keeps_claims() {
-    std::ranges::fill(pmts, nullptr);
-    npmts = 0;
+    pmts.clear();
 
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -3344,13 +3302,13 @@ int test_version_update_keeps_claims() {
 
     del_filter(fid);
     free_all_pmts();
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
 int test_filter_add_del_mt() {
     adapter ad = {};
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.enabled = 1;
     constexpr int T = 4, K = 8;
     int fids[T][K];
@@ -3379,7 +3337,7 @@ int test_filter_add_del_mt() {
             ASSERT(f && !f->enabled && !f->allocated,
                    "filter reclaimed after del");
         }
-    a[0] = nullptr;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
@@ -3484,5 +3442,7 @@ int main() {
     TEST_FUNC(test_filter_add_del_mt(),
               "testing concurrent filter add and delete")
     fflush(stdout);
+    free_all_pmts();
+    free_filters();
     return 0;
 }

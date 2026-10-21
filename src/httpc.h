@@ -23,7 +23,9 @@ typedef struct struct_http_client {
     int id;
 } Shttp_client;
 
-extern std::array<std::atomic<Shttp_client *>, MAX_HTTPC> httpc;
+constexpr size_t HTTPC_BUCKETS =
+    (MAX_HTTPC + kSegmentBucketSize - 1) / kSegmentBucketSize;
+extern SegmentedPool<Shttp_client *, HTTPC_BUCKETS> httpc;
 
 static inline Shttp_client *get_httpc(int i) {
     if (i < 0 || i >= MAX_HTTPC)

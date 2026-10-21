@@ -395,7 +395,7 @@ fe_delivery_system_t netcv_delsys(int aid, int fd, fe_delivery_system_t *sys) {
 
 std::string netcv_name(int aid, int fd) { return ""; }
 
-void find_netcv_adapter(adapter **a) {
+void find_netcv_adapter() {
     int i, k, n, na;
     netceiver_info_list_t *nc_list;
     adapter *ad;
@@ -480,7 +480,7 @@ void find_netcv_adapter(adapter **a) {
         if (na >= MAX_ADAPTERS)
             break;
         if (!a[na])
-            a[na] = adapter_alloc();
+            a.publish(na, adapter_alloc());
         if (!sn[na])
             sn[na] = (SNetceiver *)malloc(sizeof(SNetceiver));
 

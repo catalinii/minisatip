@@ -56,7 +56,6 @@
 
 #define DEFAULT_LOG LOG_DVBCA
 
-extern std::array<std::atomic<sockets *>, MAX_SOCKS> s;
 int read_fd, id;
 int test_socket_enque_highprio() {
     sockets *ss = s[id];
@@ -438,9 +437,8 @@ extern "C" int getsockopt(int sockfd, int level, int optname, void *optval,
                           socklen_t *optlen) {
     static int (*real_getsockopt)(int, int, int, void *, socklen_t *) = NULL;
     if (!real_getsockopt)
-        real_getsockopt =
-            (int (*)(int, int, int, void *,
-                     socklen_t *))dlsym(RTLD_NEXT, "getsockopt");
+        real_getsockopt = (int (*)(int, int, int, void *, socklen_t *))dlsym(
+            RTLD_NEXT, "getsockopt");
     if (level == SOL_SOCKET && optname == SO_BINDTODEVICE &&
         mock_bind_dev_set) {
         size_t n = strlen(mock_bind_dev) + 1;

@@ -4038,7 +4038,6 @@ SCA_op dvbca = {
 int ca_reconnect(void *arg) {
     int i;
     int64_t now = getTick();
-    extern adapter *a[];
     for (i = 0; i < MAX_ADAPTERS; i++) {
         ca_device_t *c = ca_devices[i];
         adapter *ad;

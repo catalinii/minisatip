@@ -56,7 +56,7 @@
 
 #define DEFAULT_LOG LOG_STREAM
 
-std::array<std::atomic<streams *>, MAX_STREAMS> st;
+SegmentedPool<streams *, STREAMS_BUCKETS> st;
 SMutex bw_mutex;
 extern int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
 int pmt_process_stream(adapter *ad);
@@ -640,6 +640,9 @@ int streams_add() {
 }
 
 int streams_full() {
+    // Iteration covers the live range; unpublished slots count as free.
+    if (st.size() < MAX_STREAMS)
+        return 0;
     for (streams *sid : st)
         if (!sid || !sid->enabled)
             return 0;
@@ -1391,12 +1394,9 @@ void dump_streams() {
 }
 
 void free_all_streams() {
-    for (auto &slot : st) {
-        streams *s = slot;
-        if (s)
-            delete s;
-        slot = NULL;
-    }
+    for (streams *s : st)
+        delete s;
+    st.clear();
 }
 
 int get_session_id(int i) {

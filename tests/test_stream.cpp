@@ -56,7 +56,7 @@ void setup_test_env() {
     free_all(); // Clean all streams, sockets, and adapters
 
     a_count = 1;
-    a[0] = new adapter();
+    a.publish(0, new adapter());
     a[0]->enabled = 1;
     a[0]->id = 0;
     a[0]->master_sid = -1;
@@ -799,7 +799,7 @@ int test_read_http_empty_buffer_ignored() {
 
 int test_read_rtsp_sessions_exhausted_returns_503() {
     setup_test_env();
-    for ([[maybe_unused]] auto &slot : st)
+    for (int i = 0; i < MAX_STREAMS; ++i)
         ASSERT(streams_add() >= 0, "streams_add failed before MAX_STREAMS");
     ASSERT(streams_full(), "streams should be full");
 
@@ -854,7 +854,7 @@ int test_read_rtsp_describe_unknown_has_no_public() {
 
 int test_read_rtsp_bogus_session_when_full_returns_454() {
     setup_test_env();
-    for ([[maybe_unused]] auto &slot : st)
+    for (int i = 0; i < MAX_STREAMS; ++i)
         ASSERT(streams_add() >= 0, "streams_add failed before MAX_STREAMS");
     for (streams *s : st)
         s->ssrc = 1000 + s->id;

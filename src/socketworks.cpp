@@ -48,8 +48,7 @@
 
 #define DEFAULT_LOG LOG_SOCKETWORKS
 
-std::array<std::atomic<sockets *>, MAX_SOCKS> s;
-std::atomic<int> max_sock{0};
+SegmentedPool<sockets *, SOCKS_BUCKETS> s;
 
 // returns the protocol (AF_INET, AF_INET6) or 0 in case of failure
 int fill_sockaddr(USockAddr *serv, char *host, int port, int ipv4_only) {
@@ -617,7 +616,6 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
     ss->type = type & ~(TYPE_NONBLOCK | TYPE_CONNECT);
     ss->rtime = getTick();
     ss->wtime = 0;
-    atomic_max(max_sock, i + 1);
     ss->opaque = ss->opaque2 = ss->opaque3 = NULL;
     ss->buf = NULL;
     ss->lbuf = 0;
@@ -688,7 +686,7 @@ int sockets_del(int sock) {
 
     LOG("sockets_del: sock %d Last open socket is at index %d current_handle "
         "%d",
-        sock, max_sock.load(), so);
+        sock, (int)s.size(), so);
 
     // Free last: teardown above must not overlap a reuse.
     ss->allocated = false;
@@ -771,8 +769,7 @@ void *select_and_execute(void *arg) {
     while (run_loop) {
         c_time = getTick();
         es = 0;
-        for (auto [slot, p] :
-             std::views::zip(s, pf) | std::views::take(max_sock.load())) {
+        for (auto [slot, p] : std::views::zip(s, pf)) {
             sockets *ps = slot;
             if (ps && ps->enabled && ps->tid == tid) {
                 p.fd = ps->sock;
@@ -798,7 +795,7 @@ void *select_and_execute(void *arg) {
 
         // Poll, retrying if we get interrupted with EINTR
         do {
-            rv = poll(pf, max_sock, select_timeout);
+            rv = poll(pf, s.size(), select_timeout);
         } while (rv < 0 && errno == EINTR);
 
         if (rv < 0) {
@@ -806,8 +803,7 @@ void *select_and_execute(void *arg) {
                 strerror(errno));
             continue;
         } else if (rv > 0) {
-            for (auto [slot, p] :
-                 std::views::zip(s, pf) | std::views::take(max_sock.load())) {
+            for (auto [slot, p] : std::views::zip(s, pf)) {
                 if ((p.fd >= 0) && p.revents) {
                     sockets *ss = slot;
                     if (!ss)
@@ -982,7 +978,7 @@ void *select_and_execute(void *arg) {
         c_time = getTick();
         if (rv == 0 || (c_time - lt >= 200)) {
             lt = c_time;
-            for (sockets *ss : s | std::views::take(max_sock.load())) {
+            for (sockets *ss : s) {
                 if (!ss || !ss->enabled || ss->tid != tid)
                     continue;
                 if (((ss->timeout_ms > 0) &&
@@ -1116,9 +1112,9 @@ void free_all_adapters();
 void free_all_keys();
 
 void free_all() {
-    for (auto &slot :
-         s | std::views::reverse | std::views::take(MAX_SOCKS - 1)) {
-        sockets *ss = slot;
+    // Exit-time teardown covers every live slot, including 0.
+    for (int i = (int)s.size() - 1; i >= 0; --i) {
+        sockets *ss = s[i];
         if (!ss)
             continue;
         if (ss->enabled)
@@ -1126,7 +1122,7 @@ void free_all() {
         free_fifo(&ss->fifo);
         free(ss->prio_data);
         delete ss;
-        slot = NULL;
+        s.slot(i).store(NULL);
     }
     free_all_streams();
     free_all_adapters();

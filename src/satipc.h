@@ -90,7 +90,7 @@ typedef struct satip_xml_data {
     int tuners[MAX_DVBAPI_SYSTEMS];
 } Ssatip_xml_data;
 
-void find_satip_adapter(adapter **a);
+void find_satip_adapter();
 int satip_getxml(void *);
 char *init_satip_pointer(int len);
 int satipc_timeout(sockets *s);

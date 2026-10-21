@@ -213,12 +213,15 @@ void init_algo_csa();
 int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
             int64_t expiry, void *opaque);
 
-extern std::atomic<int> npmts;
-extern std::array<std::atomic<SPMT *>, MAX_PMT> pmts;
-extern std::array<std::atomic<SFilter *>, MAX_FILTERS> filters;
+constexpr size_t PMTS_BUCKETS =
+    (MAX_PMT + kSegmentBucketSize - 1) / kSegmentBucketSize;
+constexpr size_t FILTERS_BUCKETS =
+    (MAX_FILTERS + kSegmentBucketSize - 1) / kSegmentBucketSize;
+extern SegmentedPool<SPMT *, PMTS_BUCKETS> pmts;
+extern SegmentedPool<SFilter *, FILTERS_BUCKETS> filters;
 
 static inline SPMT *get_pmt(int id) {
-    if (id < 0 || id >= npmts)
+    if (id < 0 || (size_t)id >= pmts.size())
         //		LOG_AND_RETURN(NULL, "PMT not found for id %d", id);
         return NULL;
     SPMT *pmt = pmts[id];

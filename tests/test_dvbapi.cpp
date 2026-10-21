@@ -33,9 +33,6 @@
 
 #define DEFAULT_LOG LOG_DVBAPI
 
-extern std::array<std::atomic<SPMT *>, MAX_PMT> pmts;
-extern std::array<std::atomic<SKey *>, MAX_KEYS> keys;
-extern adapter *a[MAX_ADAPTERS];
 extern std::atomic<int> dvbapi_is_enabled;
 extern std::atomic<int> sock;
 extern std::atomic<int> dvbapi_sock;
@@ -65,13 +62,12 @@ int test_add_pmt_reuses_live_key() {
 
     ad.enabled = 1;
     ad.id = 0;
-    a[0] = &ad;
+    a.publish(0, &ad);
     pmt.enabled = 1;
     pmt.id = 0;
     pmt.sid = 100;
     pmt.pid = 48;
-    pmts[0] = &pmt;
-    npmts = 1;
+    pmts.publish(0, &pmt);
     int before = count_enabled_keys();
 
     ASSERT(dvbapi_add_pmt(&ad, &pmt, 0) == TABLES_RESULT_OK,
@@ -102,9 +98,8 @@ int test_add_pmt_reuses_live_key() {
     sock = saved_sock;
     close(sv[0]);
     close(sv[1]);
-    pmts[0] = NULL;
-    npmts = 0;
-    a[0] = NULL;
+    pmts.clear();
+    a.slot(0).store(nullptr);
     return 0;
 }
 
@@ -136,8 +131,7 @@ int test_icam_mode_only_from_ecms() {
     SKey *k;
 
     pmt.enabled = 1;
-    pmts[0] = &pmt;
-    npmts = 1;
+    pmts.publish(0, &pmt);
     id = keys_add(0, 0);
     ASSERT(id >= 0, "no key for the PMT");
     k = keys[id];
@@ -165,8 +159,7 @@ int test_icam_mode_only_from_ecms() {
 
     dvbapi_is_enabled = 0;
     keys_del(id);
-    pmts[0] = NULL;
-    npmts = 0;
+    pmts.clear();
     free_filters();
     return 0;
 }
@@ -179,8 +172,7 @@ int test_channel_falls_back_to_sid() {
 
     pmt.enabled = 1;
     pmt.sid = 1234;
-    pmts[0] = &pmt;
-    npmts = 1;
+    pmts.publish(0, &pmt);
     id = keys_add(0, 0);
     ASSERT(id >= 0, "no key for the PMT");
     k = keys[id];
@@ -198,8 +190,7 @@ int test_channel_falls_back_to_sid() {
            "channel must show the SDT name when present");
 
     keys_del(id);
-    pmts[0] = NULL;
-    npmts = 0;
+    pmts.clear();
     return 0;
 }
 
@@ -228,13 +219,12 @@ int test_update_resend_skips_identical_capmt() {
 
     ad.enabled = 1;
     ad.id = 0;
-    a[0] = &ad;
+    a.publish(0, &ad);
     pmt.enabled = 1;
     pmt.id = 0;
     pmt.sid = 100;
     pmt.pid = 48;
-    pmts[0] = &pmt;
-    npmts = 1;
+    pmts.publish(0, &pmt);
 
     ASSERT(dvbapi_add_pmt(&ad, &pmt, 0) == TABLES_RESULT_OK,
            "first add failed");
@@ -266,9 +256,8 @@ int test_update_resend_skips_identical_capmt() {
     sock = saved_sock;
     close(sv[0]);
     close(sv[1]);
-    pmts[0] = NULL;
-    npmts = 0;
-    a[0] = NULL;
+    pmts.clear();
+    a.slot(0).store(nullptr);
     return 0;
 }
 
@@ -284,7 +273,7 @@ int test_descramble_watchdog() {
     dvbapi_is_enabled = 1;
     ad.enabled = 1;
     ad.id = 0;
-    a[0] = &ad;
+    a.publish(0, &ad);
     register_dvbapi();
     int ca_idx = dvbapi_ca;
     uint64_t dvbapi_mask = 1ULL << ca_idx;
@@ -401,7 +390,7 @@ int test_descramble_watchdog() {
     sock = saved_sock;
     close(sv[0]);
     close(sv[1]);
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
@@ -447,5 +436,8 @@ int main() {
     TEST_FUNC(test_descramble_watchdog(),
               "testing the watchdog restarts a stalled PMT for OSCam");
     fflush(stdout);
+    free_all();
+    free_all_pmts();
+    free_filters();
     return 0;
 }

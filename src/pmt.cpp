@@ -60,8 +60,7 @@
 #define DEFAULT_LOG LOG_PMT
 
 uint16_t EMU_PIDS_ALL_ENFORCED_PIDS_LIST[] = {0, 1, 16, 17, 18, 20, 21};
-std::array<std::atomic<SPMT *>, MAX_PMT> pmts;
-std::atomic<int> npmts{0};
+SegmentedPool<SPMT *, PMTS_BUCKETS> pmts;
 
 #define MAX_OPS 10
 _SCW_op ops[MAX_OPS];
@@ -70,16 +69,15 @@ SCW *cws[MAX_CW];
 SMutex cws_mutex;
 int ncws;
 
-std::array<std::atomic<SFilter *>, MAX_FILTERS> filters;
+SegmentedPool<SFilter *, FILTERS_BUCKETS> filters;
 SMutex filters_mutex;
-std::atomic<int> nfilters{0};
 
 const char *listmgmt_str[] = {"CLM_MORE", "CLM_FIRST", "CLM_LAST",
                               "CLM_ONLY", "CLM_ADD",   "CLM_UPDATE"};
 
 static inline SPMT *get_pmt_for_existing_pid(SPid *p) {
     SPMT *pmt = NULL;
-    if (p && p->pmt >= 0 && p->pmt < npmts) {
+    if (p && p->pmt >= 0 && p->pmt < (int)pmts.size()) {
         SPMT *cand = pmts[p->pmt];
         if (cand && cand->enabled)
             pmt = cand;
@@ -229,7 +227,7 @@ int get_mask_len(uint8_t *filter, int l) {
 }
 
 void dump_filters(int aid) {
-    for (SFilter *f : filters | std::views::take(nfilters.load()))
+    for (SFilter *f : filters)
         if (f && f->enabled)
             LOG("filter %d A: %d: pid %d, master %d, next %d, flags %d, "
                 "mask_len %d, "
@@ -276,7 +274,7 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
     f->adapter = aid;
     f->master_filter = fid;
 
-    for (SFilter *o : filters | std::views::take(nfilters.load()))
+    for (SFilter *o : filters)
         if (o && o->id != fid && o->enabled && o->adapter == aid &&
             o->pid == pid && o->next_filter == -1) {
             o->next_filter = fid;
@@ -286,7 +284,6 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
     memcpy(f->filter, filter, sizeof(f->filter));
     memcpy(f->mask, mask, sizeof(f->mask));
     f->mask_len = get_mask_len(f->mask, sizeof(f->mask));
-    atomic_max(nfilters, fid + 1);
 
     SPid *p = find_pid(aid, pid);
     if (p)
@@ -304,7 +301,7 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
 // Caller holds filters_mutex.
 int reset_master_filter(int adapter, int pid, int id) {
     int nf = 0;
-    for (SFilter *f : filters | std::views::take(nfilters.load()))
+    for (SFilter *f : filters)
         if (f && f->enabled && f->adapter == adapter && f->pid == pid) {
             f->master_filter = id;
             nf++;
@@ -334,7 +331,7 @@ int del_filter(int id) {
         SFilter *m = get_filter(master_filter);
         if (!m) // double check there is no other filter
         {
-            for (SFilter *o : filters | std::views::take(nfilters.load()))
+            for (SFilter *o : filters)
                 if (o && o->id != id && o->enabled &&
                     o->adapter == f->adapter && o->pid == pid) {
                     m = o;
@@ -349,7 +346,7 @@ int del_filter(int id) {
         if (m) // reset master_filter for all filters
             reset_master_filter(f->adapter, pid, m->id);
     } else {
-        for (SFilter *o : filters | std::views::take(nfilters.load()))
+        for (SFilter *o : filters)
             if (o && o->enabled && o->adapter == f->adapter && o->pid == pid &&
                 o->next_filter == f->id) {
                 o->next_filter = f->next_filter.load();
@@ -357,23 +354,25 @@ int del_filter(int id) {
             }
     }
     int last = -1;
-    for (SFilter *o : filters | std::views::reverse)
+    for (int j = (int)filters.size() - 1; j >= 0; --j) {
+        SFilter *o = filters[j];
         if (o && o->enabled) {
             last = o->id;
             break;
         }
-    nfilters = last + 1;
+    }
+    filters.shrink_to(last + 1);
     f->pid = -1;
     f->allocated = false;
     LOG("deleted filter %d, ad %d, pid %d, max filters %d", id, adapter, pid,
-        nfilters.load());
+        (int)filters.size());
     return 0;
 }
 int get_pid_filter(int aid, int pid) {
-    for (SFilter *f : filters | std::views::take(nfilters.load()))
+    for (SFilter *f : filters)
         if (f && f->enabled && f->adapter == aid && f->pid == pid) {
             LOGM("found filter %d for pid %d, master %d (max filters %d)",
-                 f->id, pid, f->master_filter.load(), nfilters.load());
+                 f->id, pid, f->master_filter.load(), (int)filters.size());
             return f->master_filter;
         }
     return -1;
@@ -453,7 +452,7 @@ int set_filter_mask(int id, uint8_t *filter, uint8_t *mask) {
 }
 
 void delete_filter_for_adapter(int aid) {
-    for (SFilter *f : filters | std::views::take(nfilters.load()))
+    for (SFilter *f : filters)
         if (f && f->enabled && f->adapter == aid &&
             !(f->flags & FILTER_PERMANENT))
             del_filter(f->id);
@@ -1564,7 +1563,6 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
     pmt->caids = 0;
     pmt->descriptors.clear();
 
-    atomic_max(npmts, i + 1);
     pmt->enabled = 1;
 
     LOG("returning new pmt %d for adapter %d, pmt pid %d, sid %d %04X", i,
@@ -1704,14 +1702,14 @@ SPMT *get_all_pmt_for_sid(int aid, int sid) {
     adapter *ad = get_adapter(aid);
     if (!ad)
         return NULL;
-    for (SPMT *pmt : pmts | std::views::take(npmts.load()))
+    for (SPMT *pmt : pmts)
         if (pmt && pmt->enabled && pmt->adapter == aid && pmt->sid == sid)
             return pmt;
     return NULL;
 }
 
 SPMT *get_pmt_for_sid_pid(int aid, int sid, int pid) {
-    for (SPMT *pmt : pmts | std::views::take(npmts.load()))
+    for (SPMT *pmt : pmts)
         if (pmt && pmt->enabled && pmt->adapter == aid && pmt->sid == sid &&
             pmt->pid == pid)
             return pmt;
@@ -1935,7 +1933,7 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque) {
 
     // A PMT missing from the PAT is never stopped by the election, so
     // retire its CA registration here (cached PMTs hold none).
-    for (SPMT *pmt : pmts | std::views::take(npmts.load()))
+    for (SPMT *pmt : pmts)
         if (pmt && pmt->enabled && pmt->adapter == ad->id &&
             pmt->state != PMT_CACHED && seen_pmts[pmt->id] == 0) {
             LOG("Caching PMT %d (%s) and filter %d as it is not "
@@ -2488,8 +2486,7 @@ char *get_pmt_for_adapter(int aid, char *dest, int max_size) {
 
 void free_all_pmts() {
     int j;
-    for (auto &slot : pmts) {
-        SPMT *pmt = slot;
+    for (SPMT *pmt : pmts) {
         if (pmt) {
             // Updates shrink caids while keeping entries: free all slots.
             for (j = 0; j < MAX_CAID; j++) {
@@ -2504,19 +2501,16 @@ void free_all_pmts() {
             pmt->stream_pids.clear();
 
             delete pmt;
-            slot = NULL;
         }
     }
+    pmts.clear();
 }
 
 void free_filters() {
-    for (auto &slot : filters)
-        if (slot) {
-            SFilter *f = slot;
-            delete f;
-            slot = NULL;
-        }
-    nfilters = 0;
+    // Size may sit below occupied slots after del_filter shrinks.
+    filters.for_each_published(
+        [](std::atomic<SFilter *> &slot) { delete slot.load(); });
+    filters.clear();
 }
 
 int pmt_init() {

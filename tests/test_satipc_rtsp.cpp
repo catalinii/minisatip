@@ -117,7 +117,7 @@ struct RtspFixture {
 
         saved_a = a[0];
         saved_sip = satip[0];
-        a[0] = &ad;
+        a.publish(0, &ad);
         satip[0] = &sip;
 
         rsock.sid = 0;
@@ -129,7 +129,7 @@ struct RtspFixture {
     }
 
     void teardown() {
-        a[0] = saved_a;
+        a.publish(0, saved_a);
         satip[0] = saved_sip;
         if (pipefd[0] >= 0)
             close(pipefd[0]);
@@ -632,10 +632,10 @@ int test_satipc_open_device_cleans_rtsp_on_rtp_failure() {
 
     adapter *saved_a = a[aid];
     satipc *saved_sip = satip[aid];
-    a[aid] = &ad;
+    a.publish(aid, &ad);
     satip[aid] = &sip;
     int rv = satipc_open_device(&ad);
-    a[aid] = saved_a;
+    a.publish(aid, saved_a);
     satip[aid] = saved_sip;
 
     ASSERT(rv != 0, "RTP setup must fail on the occupied port");
@@ -873,12 +873,12 @@ int test_satipc_open_device_full_table_closes_untracked() {
 
     adapter *saved_a = a[aid];
     satipc *saved_sip = satip[aid];
-    a[aid] = &ad;
+    a.publish(aid, &ad);
     satip[aid] = &sip;
     int before = count_open_fds();
     int rv = satipc_open_device(&ad);
     int after = count_open_fds();
-    a[aid] = saved_a;
+    a.publish(aid, saved_a);
     satip[aid] = saved_sip;
 
     ASSERT(rv != 0, "RTP setup must fail on the occupied port");

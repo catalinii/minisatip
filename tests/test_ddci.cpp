@@ -52,13 +52,9 @@
 #define DEFAULT_LOG LOG_DVBCA
 
 extern ddci_device_t *ddci_devices[MAX_ADAPTERS];
-extern adapter *a[MAX_ADAPTERS];
-extern std::array<std::atomic<SPMT *>, MAX_PMT> pmts;
-extern std::atomic<int> npmts;
 extern SCA_op dvbca;
 extern ca_device_t *ca_devices[MAX_ADAPTERS];
 extern std::unordered_map<int, Sddci_channel> channels;
-extern std::array<std::atomic<SFilter *>, MAX_FILTERS> filters;
 
 int pmt_del(int id);
 int del_pmt_mapping_table(ddci_device_t *d, int ad, int pmt);
@@ -96,7 +92,7 @@ SPMT *create_pmt(int ad, int sid, int pid1, int pid2, int caid1, int caid2) {
 void create_adapter(adapter *ad, int id) {
     ad->enabled = 1;
     ad->id = id;
-    a[id] = ad;
+    a.publish(id, ad);
 }
 
 int test_channels() {
@@ -145,7 +141,7 @@ int test_ddci_channel_count() {
 
     // adapters of previous tests lived on their stacks
     for (i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = NULL;
+        a.slot(i).store(nullptr);
     create_adapter(&ad, 8);
     create_adapter(&a0, 0);
     pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
@@ -190,7 +186,8 @@ int test_ddci_channel_count() {
     del_ca(&dvbca);
     ddci_devices[0] = NULL;
     ca_devices[0] = NULL;
-    a[0] = a[8] = NULL;
+    a.slot(0).store(nullptr);
+    a.slot(8).store(nullptr);
     return 0;
 }
 
@@ -210,7 +207,7 @@ int test_update_resend_keeps_slot() {
     int i;
 
     for (i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = NULL;
+        a.slot(i).store(nullptr);
     create_adapter(&ad, 8);
     create_adapter(&a0, 0);
     SPMT *pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
@@ -321,7 +318,8 @@ int test_update_resend_keeps_slot() {
     del_ca(&dvbca);
     ddci_devices[0] = NULL;
     ca_devices[0] = NULL;
-    a[0] = a[8] = NULL;
+    a.slot(0).store(nullptr);
+    a.slot(8).store(nullptr);
     return 0;
 }
 
@@ -334,7 +332,7 @@ int test_ddci_update_version_follows_content() {
     int i;
 
     for (i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = NULL;
+        a.slot(i).store(nullptr);
     create_adapter(&ad, 8);
     create_adapter(&a0, 0);
     SPMT *pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
@@ -388,7 +386,8 @@ int test_ddci_update_version_follows_content() {
     del_ca(&dvbca);
     ddci_devices[0] = NULL;
     ca_devices[0] = NULL;
-    a[0] = a[8] = NULL;
+    a.slot(0).store(nullptr);
+    a.slot(8).store(nullptr);
     return 0;
 }
 
@@ -608,7 +607,7 @@ int test_ddci_process_ts_null_tail() {
     }
 
     SPMT *save = pmts[0];
-    pmts[0] = NULL;
+    pmts.slot(0).store(nullptr);
     add_pid_mapping_table(1, 1000, 0, &d, 0);
     ad.rlen = ad.lbuf - 188;
     set_pid_ts(buf, 1000);
@@ -629,11 +628,13 @@ int test_ddci_process_ts_null_tail() {
         LOG_AND_RETURN(1, "null packet must carry payload only, got %02X",
                        last_iov[3]);
     free_fifo(&d.fifo);
-    pmts[0] = save;
+    pmts.slot(0).store(save);
     _writev = writev;
     channels.clear();
     ddci_devices[0] = NULL;
-    a[0] = a[1] = a[2] = NULL;
+    a.slot(0).store(nullptr);
+    a.slot(1).store(nullptr);
+    a.slot(2).store(nullptr);
     return 0;
 }
 
@@ -661,7 +662,7 @@ int test_ddci_process_ts() {
     }
 
     SPMT *save = pmts[0];
-    pmts[0] = NULL;
+    pmts.slot(0).store(nullptr);
     add_pid_mapping_table(5, 1000, 0, &d, 0);
     add_pid_mapping_table(5, 2000, 0, &d, 0);
     int new_pid = add_pid_mapping_table(1, 1000, 0, &d, 0);
@@ -690,7 +691,7 @@ int test_ddci_process_ts() {
         LOG_AND_RETURN(1, "expected pid 2000 in the adapter buffer, got %d",
                        PID_FROM_TS(ad.buf + 2 * 188));
     free_fifo(&d.fifo);
-    pmts[0] = save;
+    pmts.slot(0).store(save);
     return 0;
 }
 // Two tuners on one CI: stopping the first must not remove pid 0 from the CI
@@ -704,7 +705,7 @@ int test_psi_pids_survive_a_channel_change() {
 
     // earlier tests leave stack adapters and CA devices in the global arrays
     for (i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = NULL;
+        a.slot(i).store(nullptr);
     memset(ca_devices, 0, sizeof(ca_devices));
     channels.clear();
 
@@ -756,9 +757,9 @@ int test_psi_pids_survive_a_channel_change() {
     pmt_del(pmt_b->id);
     free_filters();
     channels.clear();
-    a[2] = NULL;
-    a[4] = NULL;
-    a[8] = NULL;
+    a.slot(2).store(nullptr);
+    a.slot(4).store(nullptr);
+    a.slot(8).store(nullptr);
     return 0;
 }
 
@@ -872,7 +873,7 @@ int test_create_sdt() {
     ASSERT(sdt_free_CA_mode2 != 0, "SDT SID 1 free_CA_mode != 1");
 
     // do not leave the stack adapter behind for later tests
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
@@ -1021,7 +1022,7 @@ int test_create_sdt_with_real_data() {
     ASSERT(d.sdt_ver == 1, "SDT version bumped without changes");
 
     // do not leave the stack adapter behind for later tests
-    a[2] = NULL;
+    a.slot(2).store(nullptr);
     return 0;
 }
 
@@ -1035,7 +1036,7 @@ int test_create_pmt() {
     SFilter f;
     d.id = 0;
     d.enabled = 1;
-    a[0] = 0;
+    a.slot(0).store(nullptr);
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[0] = &d;
     int pid = 1023;
@@ -1048,7 +1049,7 @@ int test_create_pmt() {
     f.pid = pid;
     f.next_filter = -1;
     f.enabled = 1;
-    filters[0] = &f;
+    filters.slot(0).store(&f);
     SPMT *pmt = create_pmt(0, 0x66, pid, 0x55, 0x100, 0x500);
     d.pmt[0].id = pmt->id; // set to pmt 1
     pmt->pid = pid - 1;
@@ -1094,7 +1095,7 @@ int test_create_pmt() {
     SPMT *new_pmt = get_pmt(pmt_add(0, 200, 200));
     ad.id = 0;
     ad.enabled = 1;
-    a[0] = &ad;
+    a.publish(0, &ad);
     ad.pids[0].pid = pid;
     ad.pids[0].flags = 1;
 
@@ -1102,7 +1103,7 @@ int test_create_pmt() {
     ad.active_pmt[0] = pmt->id;
 
     process_pmt(0, psi + 1, psi_len, new_pmt);
-    filters[0] = NULL;
+    filters.slot(0).store(nullptr);
     ASSERT_EQUAL(
         pmt->stream_pids.size(), new_pmt->stream_pids.size(),
         "Number of streampids does not matches between generated PMT and "
@@ -1111,7 +1112,7 @@ int test_create_pmt() {
                  "Number of caids does not matches "
                  "between generated PMT and read PMT");
 
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     return 0;
 }
 
@@ -1124,10 +1125,9 @@ int test_create_pmt_maps_es_ecm_pids() {
     d.enabled = 1;
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[0] = &d;
-    a[0] = NULL;
+    a.slot(0).store(nullptr);
     // free, not just NULL: earlier tests never released their PMTs
     free_all_pmts();
-    npmts = 0;
     ca_devices[0] = NULL;
     ca_devices[1] = NULL;
 
@@ -1185,7 +1185,7 @@ int test_process_cat() {
     f.pid = 1234;
     f.next_filter = -1;
     f.enabled = 1;
-    filters[0] = &f;
+    filters.slot(0).store(&f);
 
     // Process the CAT
     ddci_process_cat(0, cat, sizeof(cat) / sizeof(uint8_t), &d);
@@ -1208,7 +1208,7 @@ int test_process_cat() {
     ASSERT(d.emm_pids.count(MAKE_KEY(0, 49)) > 0, "EMM PID 49 not tracked");
 
     // Reset fixtures
-    filters[0] = NULL;
+    filters.slot(0).store(nullptr);
 
     return 0;
 }
@@ -1225,7 +1225,7 @@ int test_ci_pmt_name_is_refreshed() {
 
     // earlier tests leave stack adapters and CA devices in the global arrays
     for (i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = NULL;
+        a.slot(i).store(nullptr);
     memset(ca_devices, 0, sizeof(ca_devices));
     channels.clear();
 
@@ -1300,7 +1300,7 @@ int test_ddci_add_psi_per_channel_pmt() {
     int i, ia = -1, ib = -1;
 
     for (i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = NULL;
+        a.slot(i).store(nullptr);
     memset(ca_devices, 0, sizeof(ca_devices));
     memset(ddci_devices, 0, sizeof(ddci_devices));
     channels.clear();
@@ -1382,7 +1382,7 @@ int test_channel_change_sends_pat_immediately() {
     int i;
 
     for (i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = NULL;
+        a.slot(i).store(nullptr);
     memset(ca_devices, 0, sizeof(ca_devices));
     channels.clear();
     create_adapter(&ci, 8);
@@ -1460,7 +1460,8 @@ int test_channel_change_sends_pat_immediately() {
     channels.clear();
     ddci_devices[ci.id] = NULL;
     ca_devices[0] = NULL;
-    a[2] = a[8] = NULL;
+    a.slot(2).store(nullptr);
+    a.slot(8).store(nullptr);
     return 0;
 }
 
@@ -1475,7 +1476,7 @@ int test_ddci_full_device_retries() {
 
     // Adapters of previous tests lived on their stacks
     for (i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = NULL;
+        a.slot(i).store(nullptr);
     create_adapter(&ad, 8);
     pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
     pmt1 = create_pmt(8, 700, 701, 702, 0x100, 0x100);
@@ -1521,7 +1522,7 @@ int test_initializing_ddci_does_not_block_others() {
     int i;
 
     for (i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = NULL;
+        a.slot(i).store(nullptr);
     memset(ddci_devices, 0, sizeof(ddci_devices));
     memset(ca_devices, 0, sizeof(ca_devices));
     channels.clear();
@@ -1621,7 +1622,9 @@ int test_initializing_ddci_does_not_block_others() {
     free_filters();
     ddci_devices[0] = ddci_devices[1] = NULL;
     ca_devices[0] = ca_devices[1] = NULL;
-    a[0] = a[1] = a[8] = NULL;
+    a.slot(0).store(nullptr);
+    a.slot(1).store(nullptr);
+    a.slot(8).store(nullptr);
     return 0;
 }
 
@@ -1634,7 +1637,7 @@ int test_ddci_least_used_device() {
     adapter ad = {0}, a0 = {0}, a1 = {0};
 
     for (int i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = NULL;
+        a.slot(i).store(nullptr);
     memset(ddci_devices, 0, sizeof(ddci_devices));
     memset(ca_devices, 0, sizeof(ca_devices));
     channels.clear();
@@ -1699,7 +1702,9 @@ int test_ddci_least_used_device() {
     free_filters();
     ddci_devices[0] = ddci_devices[1] = NULL;
     ca_devices[0] = ca_devices[1] = NULL;
-    a[0] = a[1] = a[8] = NULL;
+    a.slot(0).store(nullptr);
+    a.slot(1).store(nullptr);
+    a.slot(8).store(nullptr);
     return 0;
 }
 
@@ -1743,6 +1748,7 @@ int main() {
     TEST_FUNC(test_ddci_least_used_device(),
               "testing that new channels go to the least used DDCI");
     free_all_pmts();
+    free_filters();
     fflush(stdout);
     return 0;
 }

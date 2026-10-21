@@ -75,7 +75,7 @@ typedef struct ddci_channel {
     char locked;
 } Sddci_channel;
 
-void find_ddci_adapter(adapter **a);
+void find_ddci_adapter();
 void ddci_init();
 int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
                           int force_add_pid);

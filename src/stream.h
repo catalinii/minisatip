@@ -103,7 +103,9 @@ int calculate_bw(sockets *s);
 
 #define get_sid(a) get_sid1(a, __FILE__, __LINE__)
 
-extern std::array<std::atomic<streams *>, MAX_STREAMS> st;
+constexpr size_t STREAMS_BUCKETS =
+    (MAX_STREAMS + kSegmentBucketSize - 1) / kSegmentBucketSize;
+extern SegmentedPool<streams *, STREAMS_BUCKETS> st;
 
 static inline streams *get_sid_nw(int i) {
     if (i < 0 || i >= MAX_STREAMS)
