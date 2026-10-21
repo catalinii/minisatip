@@ -235,35 +235,34 @@ struct TestBothSlot {
 };
 
 int test_find_new_id() {
-    std::array<std::atomic<TestSlot *>, 4> arr;
-    for (auto &a : arr)
-        a = nullptr;
-    TestSlot *s0 = find_new_id(arr);
+    SegmentedPool<TestSlot *, 1> pool; // one bucket holds 64 slots
+    TestSlot *s0 = find_new_id(pool);
     ASSERT(s0 && s0->id == 0, "first slot gets id 0");
     ASSERT(s0->allocated.load() && !s0->enabled.load(),
            "claimed slot is allocated but not enabled");
     s0->enabled = true;
-    TestSlot *s1 = find_new_id(arr);
+    TestSlot *s1 = find_new_id(pool);
     ASSERT(s1 && s1->id == 1, "second slot gets id 1");
     s1->enabled = true;
-    ASSERT(find_new_id(arr)->id == 2, "third slot gets id 2");
-    TestSlot *s2 = arr[2];
+    ASSERT(find_new_id(pool)->id == 2, "third slot gets id 2");
+    TestSlot *s2 = pool[2];
     s2->enabled = true;
-    ASSERT(find_new_id(arr)->id == 3, "fourth slot gets id 3");
-    TestSlot *s3 = arr[3];
-    s3->enabled = true;
-    ASSERT(find_new_id(arr) == nullptr, "full array returns nullptr");
+    for (int i = 3; i < 64; ++i) {
+        TestSlot *s = find_new_id(pool);
+        ASSERT(s && s->id == i, "slot id matches claim order");
+        s->enabled = true;
+    }
+    ASSERT(find_new_id(pool) == nullptr, "full pool returns nullptr");
     s1->enabled = false;
     s1->allocated = false;
-    TestSlot *reuse = find_new_id(arr);
+    TestSlot *reuse = find_new_id(pool);
     ASSERT(reuse && reuse->id == 1, "freed slot is reused");
-    ASSERT(reuse == arr[1], "reuse returns the same object");
-    for (auto &a : arr)
-        delete a;
+    ASSERT(reuse == pool[1], "reuse returns the same object");
+    for (TestSlot *s : pool)
+        delete s;
 
-    std::array<std::atomic<TestBothSlot *>, 1> barr;
-    barr[0] = nullptr;
-    TestBothSlot *bs0 = find_new_id(barr);
+    SegmentedPool<TestBothSlot *, 1> bpool;
+    TestBothSlot *bs0 = find_new_id(bpool);
     ASSERT(bs0 && bs0->id == 0 && bs0->sid == -1,
            "type with both fields gets id, sid untouched");
     delete bs0;
@@ -272,13 +271,11 @@ int test_find_new_id() {
 
 int test_find_new_id_mt() {
     constexpr int N = 64, T = 8;
-    std::array<std::atomic<TestSlot *>, N> arr;
-    for (auto &a : arr)
-        a = nullptr;
+    SegmentedPool<TestSlot *, 1> pool;
     std::atomic<int> total{0};
     auto worker = [&]() {
         int n = 0;
-        while (TestSlot *s = find_new_id(arr)) {
+        while (TestSlot *s = find_new_id(pool)) {
             s->enabled = true;
             n++;
         }
@@ -292,26 +289,24 @@ int test_find_new_id_mt() {
     ASSERT(total == N, "all slots claimed exactly once");
     // The loop index is the expected id here.
     for (int i : std::views::iota(0, N)) {
-        TestSlot *s = arr[i];
+        TestSlot *s = pool[i];
         ASSERT(s && s->id == i, "slot id matches index");
     }
-    ASSERT(find_new_id(arr) == nullptr, "full stays full");
-    for (auto &a : arr)
-        delete a;
+    ASSERT(find_new_id(pool) == nullptr, "full stays full");
+    for (TestSlot *s : pool)
+        delete s;
     return 0;
 }
 
 int test_find_new_id_churn() {
-    constexpr int N = 8, T = 8, K = 10000;
-    std::array<std::atomic<TestSlot *>, N> arr;
-    for (auto &a : arr)
-        a = nullptr;
+    constexpr int N = 64, T = 8, K = 10000;
+    SegmentedPool<TestSlot *, 1> pool;
     std::array<std::atomic<bool>, N> held{};
     std::atomic<int> dups{0}, bad_id{0}, total{0};
     auto worker = [&]() {
         for (int k = 0; k < K; k++) {
             TestSlot *s = nullptr;
-            while (!(s = find_new_id(arr)))
+            while (!(s = find_new_id(pool)))
                 std::this_thread::yield();
             int id = s->id;
             if (id < 0 || id >= N)
@@ -336,8 +331,8 @@ int test_find_new_id_churn() {
     ASSERT(dups == 0, "no slot claimed twice at once");
     ASSERT(bad_id == 0, "claimed ids stay in range");
     ASSERT(total == T * K, "all iterations claimed a slot");
-    for (auto &a : arr)
-        delete a;
+    for (TestSlot *s : pool)
+        delete s;
     return 0;
 }
 

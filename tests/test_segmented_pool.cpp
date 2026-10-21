@@ -1,0 +1,192 @@
+/*
+ * Copyright (C) 2014-2024 Catalin Toda <catalinii@yahoo.com> et al
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
+ * USA
+ *
+ */
+#include "opts.h"
+#include "utils.h"
+#include "utils/segmented_pool.h"
+#include "utils/testing.h"
+#include <algorithm>
+#include <atomic>
+#include <string.h>
+#include <thread>
+#include <vector>
+
+int test_push_and_iterate() {
+    SegmentedPool<int, 16> pool; // 600 pushes cross 10 buckets of 64
+    for (int i = 0; i < 600; ++i) {
+        auto idx = pool.push_back(i);
+        ASSERT(idx.has_value(), "push_back failed before capacity");
+        ASSERT_EQUAL(*idx, (size_t)i, "push_back index mismatch");
+    }
+    ASSERT_EQUAL(pool.size(), 600, "size mismatch after pushes");
+
+    int expect = 0;
+    for (int v : pool) {
+        ASSERT_EQUAL(v, expect, "iteration order mismatch");
+        ++expect;
+    }
+    ASSERT_EQUAL(expect, 600, "iteration count mismatch");
+    return 0;
+}
+
+int test_extend_and_defaults() {
+    SegmentedPool<int *, 2> pool;
+    ASSERT(pool.extend_to(10), "extend_to failed");
+    ASSERT_EQUAL(pool.size(), 10, "size mismatch after extend");
+    for (int *v : pool)
+        ASSERT(v == nullptr, "extended slot is not default");
+    ASSERT(!pool.extend_to(100000), "extend_to over capacity succeeded");
+    return 0;
+}
+
+int test_snapshot_iterator() {
+    SegmentedPool<int, 8> pool;
+    for (int i = 0; i < 300; ++i)
+        pool.push_back(i);
+    auto first = pool.begin(), last = pool.end();
+    for (int i = 300; i < 400; ++i)
+        pool.push_back(i);
+    size_t count = 0;
+    for (auto it = first; it != last; ++it)
+        ++count;
+    ASSERT_EQUAL(count, 300, "iterator did not hold its snapshot");
+    ASSERT_EQUAL(pool.size(), 400, "size mismatch after late pushes");
+    return 0;
+}
+
+int test_overflow() {
+    SegmentedPool<int, 1> pool; // capacity is exactly 64
+    for (int i = 0; i < 64; ++i)
+        ASSERT(pool.push_back(i).has_value(), "push_back failed when filling");
+    ASSERT(!pool.push_back(999).has_value(), "push_back over capacity worked");
+    ASSERT_EQUAL(pool.size(), 64, "size moved past capacity");
+    size_t count = 0;
+    for (int v : pool) {
+        (void)v;
+        ++count;
+    }
+    ASSERT_EQUAL(count, 64, "iteration count mismatch at capacity");
+    return 0;
+}
+
+int test_clear() {
+    SegmentedPool<int, 8> pool;
+    for (int i = 1; i <= 300; ++i)
+        pool.push_back(i);
+    pool.clear();
+    ASSERT_EQUAL(pool.size(), 0, "size is not zero after clear");
+    ASSERT(pool.push_back(7).has_value(), "push_back failed after clear");
+    ASSERT_EQUAL(*pool.begin(), 7, "wrong value after clear");
+    return 0;
+}
+
+int test_shrink_and_published() {
+    SegmentedPool<int, 8> pool;
+    for (int i = 1; i <= 200; ++i)
+        pool.push_back(i);
+    pool.shrink_to(10);
+    ASSERT_EQUAL(pool.size(), 10, "size mismatch after shrink");
+    size_t visits = 0, nonzero = 0;
+    pool.for_each_published([&](std::atomic<int> &s) {
+        ++visits;
+        nonzero += s.load() != 0;
+    });
+    // Four published buckets are visited whole, past the shrink.
+    ASSERT_EQUAL(visits, 256, "for_each_published missed slots");
+    ASSERT_EQUAL(nonzero, 200, "for_each_published missed values");
+    pool.clear();
+    ASSERT_EQUAL(pool.size(), 0, "size is not zero after clear");
+    nonzero = 0;
+    pool.for_each_published(
+        [&](std::atomic<int> &s) { nonzero += s.load() != 0; });
+    ASSERT_EQUAL(nonzero, 0, "clear left values past the shrink");
+    ASSERT(pool.push_back(9).has_value(), "push_back failed after clear");
+    ASSERT_EQUAL(pool[0], 9, "wrong value after clear");
+    return 0;
+}
+
+int test_concurrent_claim() {
+    SegmentedPool<int, 1> pool; // 64 slots claimed via CAS, find_new_id style
+    ASSERT(pool.extend_to(64), "extend_to failed");
+    std::atomic<int> claimed{0};
+    auto claim = [&](int id) {
+        for (std::atomic<int> &s : pool.slots()) {
+            int want = 0;
+            if (s.compare_exchange_strong(want, id))
+                claimed.fetch_add(1, std::memory_order_relaxed);
+        }
+    };
+    std::thread t1(claim, 1), t2(claim, 2), t3(claim, 3), t4(claim, 4);
+    t1.join();
+    t2.join();
+    t3.join();
+    t4.join();
+    ASSERT_EQUAL(claimed.load(), 64, "slot claimed twice or never");
+    for (int v : pool)
+        ASSERT(v >= 1 && v <= 4, "slot left unclaimed");
+    return 0;
+}
+
+int test_concurrent_push_iterate() {
+    SegmentedPool<int, 160> pool;
+    std::atomic<bool> done{false};
+    auto push = [&](int id) {
+        for (int i = 0; i < 2000; ++i)
+            pool.push_back(id * 100000 + i);
+    };
+    auto read = [&]() {
+        while (!done.load()) // stress publication; only counts, never fails
+            for (int v : pool) {
+                (void)v;
+            }
+    };
+    std::thread p1(push, 1), p2(push, 2), p3(push, 3), p4(push, 4);
+    std::thread r1(read), r2(read);
+    p1.join();
+    p2.join();
+    p3.join();
+    p4.join();
+    done.store(true);
+    r1.join();
+    r2.join();
+    ASSERT_EQUAL(pool.size(), 8000, "size mismatch after concurrent pushes");
+
+    std::vector<int> got(pool.begin(), pool.end()), want;
+    for (int id = 1; id <= 4; ++id)
+        for (int i = 0; i < 2000; ++i)
+            want.push_back(id * 100000 + i);
+    std::sort(got.begin(), got.end());
+    std::sort(want.begin(), want.end());
+    ASSERT(got == want, "pushed values lost or duplicated");
+    return 0;
+}
+
+int main() {
+    opts.log = 255;
+    strcpy(thread_info[thread_index].thread_name, "test_segmented_pool");
+    TEST_FUNC(test_push_and_iterate(), "push across buckets and iterate");
+    TEST_FUNC(test_extend_and_defaults(), "extend with default slots");
+    TEST_FUNC(test_snapshot_iterator(), "iterator holds length snapshot");
+    TEST_FUNC(test_overflow(), "push past capacity fails cleanly");
+    TEST_FUNC(test_clear(), "clear resets the pool");
+    TEST_FUNC(test_shrink_and_published(), "shrink keeps teardown covered");
+    TEST_FUNC(test_concurrent_claim(), "concurrent CAS claims");
+    TEST_FUNC(test_concurrent_push_iterate(), "concurrent push and iterate");
+    return 0;
+}
