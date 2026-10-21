@@ -18,7 +18,7 @@
 #undef FEC_3_5
 #undef FEC_9_10
 
-void find_netcv_adapter(adapter **a);
+void find_netcv_adapter();
 
 typedef struct struct_netceiver {
     recv_info_t *ncv_rec; // pointer to libmcli receiver instance

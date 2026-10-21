@@ -96,6 +96,10 @@ typedef struct struct_key {
     int64_t created, stall_start;
 } SKey;
 
+constexpr size_t KEYS_BUCKETS =
+    (MAX_KEYS + kSegmentBucketSize - 1) / kSegmentBucketSize;
+extern SegmentedPool<SKey *, KEYS_BUCKETS> keys;
+
 void init_dvbapi();
 int have_dvbapi();
 int dvbapi_enabled();
@@ -109,6 +113,7 @@ void dvbapi_pid_add(adapter *a, int pid, SPid *cp, int existing);
 void dvbapi_pid_del(adapter *a, int pid, SPid *cp);
 void register_dvbapi();
 void unregister_dvbapi();
+void free_all_keys();
 void dvbapi_descramble_watchdog(adapter *ad);
 void send_client_info(sockets *s);
 void set_algo(SKey *k, int algo, int mode);

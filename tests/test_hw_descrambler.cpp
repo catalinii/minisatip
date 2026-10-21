@@ -17,9 +17,7 @@
 
 #define DEFAULT_LOG LOG_DVBCA
 
-extern adapter *a[MAX_ADAPTERS];
 extern SCW *cws[MAX_CW];
-extern std::array<std::atomic<SPMT *>, MAX_PMT> pmts;
 extern int pmt_del(int id);
 
 // Test Helper: setup mock adapter
@@ -27,7 +25,7 @@ static adapter *setup_mock_adapter(int id, int physical_adapter, int ca_num) {
     if (id < 0 || id >= MAX_ADAPTERS)
         return nullptr;
     if (!a[id]) {
-        a[id] = static_cast<adapter *>(calloc(1, sizeof(adapter)));
+        a.publish(id, static_cast<adapter *>(calloc(1, sizeof(adapter))));
         a[id]->id = id;
         a[id]->pa = physical_adapter;
         a[id]->fn = ca_num;
@@ -39,7 +37,7 @@ static adapter *setup_mock_adapter(int id, int physical_adapter, int ca_num) {
 static void cleanup_mock_adapter(int id) {
     if (id >= 0 && id < MAX_ADAPTERS && a[id]) {
         free(a[id]);
-        a[id] = nullptr;
+        a.slot(id).store(nullptr);
     }
 }
 
@@ -369,8 +367,8 @@ int main() {
     opts.log = 1;
     opts.debug = 255;
     opts.cache_dir = "/tmp";
-    std::fill(std::begin(a), std::end(a), nullptr);
-    std::fill(std::begin(pmts), std::end(pmts), nullptr);
+    a.clear();
+    pmts.clear();
     std::fill(std::begin(cws), std::end(cws), nullptr);
 
     init_hw_descrambler();
@@ -393,5 +391,6 @@ int main() {
     TEST_FUNC(test_hw_ca_update_retarget(),
               "testing hw CA re-send retargets bound pids");
 
+    free_all_pmts();
     return 0;
 }

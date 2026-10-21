@@ -79,7 +79,7 @@ int oscam_version;
 
 uint64_t dvbapi_last_close = 0;
 
-std::array<std::atomic<SKey *>, MAX_KEYS> keys;
+SegmentedPool<SKey *, KEYS_BUCKETS> keys;
 unsigned char read_buffer[8192];
 extern char *listmgmt_str[];
 
@@ -607,7 +607,6 @@ int dvbapi_timeout(sockets *s) {
 }
 
 int is_adapter_active() {
-    extern adapter *a[];
     int i, active_adapters = 0;
     for (i = 0; i < MAX_ADAPTERS; i++)
         if (a[i] && a[i]->enabled) {
@@ -1111,7 +1110,7 @@ char *get_channel_for_key(int key, char *dest, int max_size) {
 }
 
 void free_all_keys(void) {
-    for (auto &slot : keys)
+    for (auto &slot : keys.slots())
         if (slot) {
             SKey *k = slot;
             delete k;

@@ -58,7 +58,7 @@
 #define DEFAULT_LOG LOG_ADAPTER
 
 const int DEFAULT_PIDS[] = {0, 1, 16, 18};
-adapter *a[MAX_ADAPTERS];
+SegmentedPool<adapter *, ADAPTER_BUCKETS> a;
 int a_count;
 char disabled[MAX_ADAPTERS]; // disabled adapters
 int sock_signal;
@@ -71,7 +71,7 @@ SMutex ca_mask_mutex;
 
 int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2, tuner_at, tuner_ac;
 int16_t fe_map[2 * MAX_ADAPTERS];
-void find_dvb_adapter(adapter **a);
+void find_dvb_adapter();
 
 adapter *adapter_alloc() {
     adapter *ad = new adapter();
@@ -154,16 +154,16 @@ void find_adapters() {
     init_find_adapter = 1;
     a_count = 0;
 #ifndef DISABLE_LINUXDVB
-    find_dvb_adapter(a);
+    find_dvb_adapter();
 #endif
 #ifndef DISABLE_SATIPCLIENT
-    find_satip_adapter(a);
+    find_satip_adapter();
 #endif
 #ifndef DISABLE_NETCVCLIENT
-    find_netcv_adapter(a);
+    find_netcv_adapter();
 #endif
 #ifndef DISABLE_DDCI
-    find_ddci_adapter(a);
+    find_ddci_adapter();
 #endif
 }
 
@@ -1598,12 +1598,13 @@ void free_all_adapters() {
 
     for (i = 0; i < MAX_ADAPTERS; i++)
         if (a[i]) {
-            if (a[i]->free)
-                a[i]->free(a[i]);
-            if (a[i]->buf)
-                free(a[i]->buf);
-            delete a[i];
-            a[i] = NULL;
+            adapter *ad = a[i];
+            if (ad->free)
+                ad->free(ad);
+            if (ad->buf)
+                free(ad->buf);
+            delete ad;
+            a.slot(i).store(NULL);
         }
 
 #ifndef DISABLE_NETCVCLIENT
@@ -1657,7 +1658,7 @@ void set_unicable_adapters(char *o, int type) {
             continue;
 
         if (!a[a_id])
-            a[a_id] = adapter_alloc();
+            a.publish(a_id, adapter_alloc());
         ad = a[a_id];
 
         size_t colon_pos = token.find(':');
@@ -1713,7 +1714,7 @@ void set_diseqc_adapters(char *o) {
                 continue;
 
             if (!a[a_id])
-                a[a_id] = adapter_alloc();
+                a.publish(a_id, adapter_alloc());
             ad = a[a_id];
         }
 
@@ -1806,7 +1807,7 @@ void set_absolute_src(char *o) {
             LOG("Setting source %d (src=%d) to adapter %d position %d", src,
                 src + 1, inp, pos + cnt - 1);
             if (!a[inp])
-                a[inp] = adapter_alloc();
+                a.publish(inp, adapter_alloc());
             ad = a[inp];
 
             ad->absolute_table[src] = pos + cnt;
@@ -1834,7 +1835,7 @@ void set_diseqc_multi(char *o) {
                 continue;
 
             if (!a[a_id])
-                a[a_id] = adapter_alloc();
+                a.publish(a_id, adapter_alloc());
             ad = a[a_id];
         }
 
@@ -1875,7 +1876,7 @@ void set_lnb_adapters(char *o) {
                 continue;
 
             if (!a[a_id])
-                a[a_id] = adapter_alloc();
+                a.publish(a_id, adapter_alloc());
             ad = a[a_id];
         }
         size_t colon = token.find(':');
@@ -1941,7 +1942,7 @@ void set_diseqc_timing(char *o) {
                 continue;
 
             if (!a[a_id])
-                a[a_id] = adapter_alloc();
+                a.publish(a_id, adapter_alloc());
             ad = a[a_id];
         }
 
@@ -2036,7 +2037,7 @@ void set_slave_adapters(char *o) {
 
         for (j = a_id; j <= a_id2; j++) {
             if (!a[j])
-                a[j] = adapter_alloc();
+                a.publish(j, adapter_alloc());
 
             ad = a[j];
 
@@ -2046,7 +2047,7 @@ void set_slave_adapters(char *o) {
 
             if (master >= 0 && master < MAX_ADAPTERS) {
                 if (!a[master] && !is_adapter_disabled(master))
-                    a[master] = adapter_alloc();
+                    a.publish(master, adapter_alloc());
 
                 if (a[master] && a[master]->master_source < 0) {
                     a[master]->master_source =
@@ -2097,7 +2098,7 @@ void set_timeout_adapters(char *o) {
 
         for (j = a_id; j <= a_id2; j++) {
             if (!a[j])
-                a[j] = adapter_alloc();
+                a.publish(j, adapter_alloc());
 
             ad = a[j];
             ad->adapter_timeout = timeout * 1000;
@@ -2131,7 +2132,7 @@ void set_adapters_delsys(char *o) {
                  .value_or(SYS_UNDEFINED);
 
         if (!a[a_id])
-            a[a_id] = adapter_alloc();
+            a.publish(a_id, adapter_alloc());
 
         ad = a[a_id];
         ad->sys[0] = ds;
@@ -2171,7 +2172,7 @@ void set_signal_multiplier(char *o) {
                 continue;
 
             if (!a[a_id])
-                a[a_id] = adapter_alloc();
+                a.publish(a_id, adapter_alloc());
             ad = a[a_id];
         }
 
@@ -2409,19 +2410,73 @@ ADAPTER_TP_GETTER(pls_code, pls_code, -1)
 ADAPTER_TP_GETTER(sm, sm, 0)
 ADAPTER_TP_GETTER(gi, gi, GUARD_INTERVAL_AUTO)
 
+// Slot readers for the status API; a null slot reads as zero.
+// Unlike get_adapter_nw, present-but-disabled adapters still read.
+static adapter *get_adapter_slot(int aid) {
+    if (aid < 0 || aid >= MAX_ADAPTERS)
+        return nullptr;
+    return a[aid];
+}
+int get_adapter_enabled(int aid) {
+    adapter *ad = get_adapter_slot(aid);
+    return ad ? ad->enabled : 0;
+}
+int get_adapter_type(int aid) {
+    adapter *ad = get_adapter_slot(aid);
+    return ad ? ad->type : 0;
+}
+int get_adapter_strength(int aid) {
+    adapter *ad = get_adapter_slot(aid);
+    return ad ? ad->strength : 0;
+}
+int get_adapter_snr(int aid) {
+    adapter *ad = get_adapter_slot(aid);
+    return ad ? ad->snr : 0;
+}
+int get_adapter_db(int aid) {
+    adapter *ad = get_adapter_slot(aid);
+    return ad ? ad->db : 0;
+}
+int get_adapter_ber(int aid) {
+    adapter *ad = get_adapter_slot(aid);
+    return ad ? (int)ad->ber : 0;
+}
+// master_sid/sid_cnt are ints read as one byte, as before.
+int get_adapter_master(int aid) {
+    adapter *ad = get_adapter_slot(aid);
+    if (!ad)
+        return 0;
+    return *(uint8_t *)((char *)ad + offsetof(adapter, master_sid));
+}
+int get_adapter_sidcount(int aid) {
+    adapter *ad = get_adapter_slot(aid);
+    if (!ad)
+        return 0;
+    return *(uint8_t *)((char *)ad + offsetof(adapter, sid_cnt));
+}
+int get_adapter_pa(int aid) {
+    adapter *ad = get_adapter_slot(aid);
+    return ad ? ad->pa : 0;
+}
+int get_adapter_fn(int aid) {
+    adapter *ad = get_adapter_slot(aid);
+    return ad ? ad->fn : 0;
+}
+
 _symbols adapters_sym[] = {
-    {"ad_enabled", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS,
-     offsetof(adapter, enabled)},
-    {"ad_type", VAR_AARRAY_INT8, a, 1, MAX_ADAPTERS, offsetof(adapter, type)},
+    {"ad_enabled", VAR_FUNCTION_INT, (void *)&get_adapter_enabled, 0,
+     MAX_ADAPTERS, 0},
+    {"ad_type", VAR_FUNCTION_INT, (void *)&get_adapter_type, 0, MAX_ADAPTERS,
+     0},
     {"ad_pos", VAR_FUNCTION_INT, (void *)&get_adapter_diseqc, 0, MAX_ADAPTERS,
      0},
     {"ad_freq", VAR_FUNCTION_INT, (void *)&get_adapter_freq, 1. / 1000,
      MAX_ADAPTERS, 0},
-    {"ad_strength", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS,
-     offsetof(adapter, strength)},
-    {"ad_snr", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, offsetof(adapter, snr)},
-    {"ad_db", VAR_AARRAY_UINT16, a, 1, MAX_ADAPTERS, offsetof(adapter, db)},
-    {"ad_ber", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, ber)},
+    {"ad_strength", VAR_FUNCTION_INT, (void *)&get_adapter_strength, 0,
+     MAX_ADAPTERS, 0},
+    {"ad_snr", VAR_FUNCTION_INT, (void *)&get_adapter_snr, 0, MAX_ADAPTERS, 0},
+    {"ad_db", VAR_FUNCTION_INT, (void *)&get_adapter_db, 0, MAX_ADAPTERS, 0},
+    {"ad_ber", VAR_FUNCTION_INT, (void *)&get_adapter_ber, 0, MAX_ADAPTERS, 0},
     {"ad_pol", VAR_FUNCTION_INT, (void *)&get_adapter_pol, 0, MAX_ADAPTERS, 0},
     {"ad_sr", VAR_FUNCTION_INT, (void *)&get_adapter_sr, 1. / 1000,
      MAX_ADAPTERS, 0},
@@ -2430,12 +2485,12 @@ _symbols adapters_sym[] = {
     {"ad_stream", VAR_FUNCTION_INT, (void *)&get_adapter_plp_isi, 0,
      MAX_ADAPTERS, 0},
     {"ad_fe", VAR_FUNCTION_INT, (void *)&get_adapter_fe, 0, MAX_ADAPTERS, 0},
-    {"ad_master", VAR_AARRAY_UINT8, a, 1, MAX_ADAPTERS,
-     offsetof(adapter, master_sid)},
-    {"ad_sidcount", VAR_AARRAY_UINT8, a, 1, MAX_ADAPTERS,
-     offsetof(adapter, sid_cnt)},
-    {"ad_phyad", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, pa)},
-    {"ad_phyfd", VAR_AARRAY_INT, a, 1, MAX_ADAPTERS, offsetof(adapter, fn)},
+    {"ad_master", VAR_FUNCTION_INT, (void *)&get_adapter_master, 0,
+     MAX_ADAPTERS, 0},
+    {"ad_sidcount", VAR_FUNCTION_INT, (void *)&get_adapter_sidcount, 0,
+     MAX_ADAPTERS, 0},
+    {"ad_phyad", VAR_FUNCTION_INT, (void *)&get_adapter_pa, 0, MAX_ADAPTERS, 0},
+    {"ad_phyfd", VAR_FUNCTION_INT, (void *)&get_adapter_fn, 0, MAX_ADAPTERS, 0},
     {"ad_sys", VAR_FUNCTION_INT, (void *)&get_adapter_sys, 0, MAX_ADAPTERS, 0},
     {"ad_mtype", VAR_FUNCTION_INT, (void *)&get_adapter_mtype, 0, MAX_ADAPTERS,
      0},

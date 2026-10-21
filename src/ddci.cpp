@@ -56,7 +56,6 @@
 
 extern int dvbca_id;
 extern SCA ca[MAX_CA];
-extern std::array<std::atomic<SPMT *>, MAX_PMT> pmts;
 std::unordered_map<int, Sddci_channel> channels;
 
 #define get_ddci(i)                                                            \
@@ -1618,7 +1617,7 @@ void ddci_free(adapter *ad) {
     save_channels();
 }
 
-void find_ddci_adapter(adapter **a) {
+void find_ddci_adapter() {
     int na = -1;
     char buf[100];
     int cnt;
@@ -1658,7 +1657,7 @@ void find_ddci_adapter(adapter **a) {
                 LOGM("%s: adding %d %d to the list of devices", __FUNCTION__, i,
                      j);
                 if (!a[na])
-                    a[na] = adapter_alloc();
+                    a.publish(na, adapter_alloc());
 
                 ad = a[na];
                 ad->pa = i;

@@ -243,7 +243,7 @@ int test_satipc_reply_empty_buffer_ignored() {
     ad.id = 0;
     ad.enabled = 1;
     sip.enabled = 1;
-    a[0] = &ad;
+    a.publish(0, &ad);
     satip[0] = &sip;
     int id = sockets_add(sp[0], NULL, 0, TYPE_TCP, NULL, NULL, NULL);
     ASSERT(id >= 0, "sockets_add failed");
@@ -258,7 +258,7 @@ int test_satipc_reply_empty_buffer_ignored() {
     ASSERT(s->buf == empty, "empty buffer must leave the socket buffer alone");
     sockets_del(id);
     close(sp[1]);
-    a[0] = saved_a;
+    a.publish(0, saved_a);
     satip[0] = saved_sip;
     return 0;
 }
@@ -329,7 +329,7 @@ int test_satipc_reject_teardown_then_retry() {
     sip.state = SATIP_STATE_PLAY;
     sip.stream_id = 308;
     strcpy(sip.session, "EDCD7C81");
-    a[0] = &ad;
+    a.publish(0, &ad);
     satip[0] = &sip;
 
     s.sid = 0;
@@ -405,7 +405,7 @@ int test_satipc_reject_teardown_then_retry() {
            "454 must not restart while in error");
     ASSERT(!sip.ignore_packets, "no SETUP may follow while in error");
 
-    a[0] = saved_a;
+    a.publish(0, saved_a);
     satip[0] = saved_sip;
     return 0;
 }
@@ -434,5 +434,7 @@ int main() {
     TEST_FUNC(test_satipc_reply_empty_buffer_ignored(),
               "test satipc_reply ignores an empty buffer");
 
+    fflush(stdout);
+    free_all();
     return 0;
 }

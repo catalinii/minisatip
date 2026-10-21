@@ -55,8 +55,6 @@
 
 #define DEFAULT_LOG LOG_PMT
 
-extern adapter *a[MAX_ADAPTERS];
-extern std::array<std::atomic<SPMT *>, MAX_PMT> pmts;
 void remove_pmt_from_device(ca_device_t *d, SPMT *pmt);
 SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple,
                          int *rejoined = NULL);
@@ -888,7 +886,7 @@ int test_close_pmt_after_caid_update() {
     ad.enabled = 1;
     ad.id = 5;
     ad.type = ADAPTER_DVB;
-    a[5] = &ad;
+    a.publish(5, &ad);
 
     int ica = add_ca(&fake_ca_op);
     ASSERT(ica >= 0, "could not register the fake CA");
@@ -920,7 +918,7 @@ int test_close_pmt_after_caid_update() {
 
     pmt_del(id);
     del_ca(&fake_ca_op);
-    a[5] = NULL;
+    a.slot(5).store(nullptr);
     return 0;
 }
 
@@ -1233,7 +1231,7 @@ int test_ca_reconnect_poller() {
     dev.fd = -1;
     adapter *saved_a = a[60];
     ca_device_t *saved_c = ca_devices[60];
-    a[60] = &ad;
+    a.publish(60, &ad);
     ca_devices[60] = &dev;
 
     int64_t next = getTick() + 60000;
@@ -1254,7 +1252,7 @@ int test_ca_reconnect_poller() {
     ASSERT(dev.reconnect_next_try <= getTick() + CA_RECONNECT_INTERVAL_MS,
            "re-arm is one interval out");
 
-    a[60] = saved_a;
+    a.publish(60, saved_a);
     ca_devices[60] = saved_c;
     return 0;
 }
@@ -1454,9 +1452,9 @@ int test_ca_cmd_watchdog() {
                  "appinfo parsed");
     ASSERT_EQUAL(dev.pending_tag, 0, "appinfo reply disarms");
 
-    ASSERT_EQUAL(ca_write_apdu(&dev.sessions[2], CIPLUS_TAG_OPERATOR_INFO_REQ,
-                               NULL, 0),
-                 0, "oprf send succeeds");
+    ASSERT_EQUAL(
+        ca_write_apdu(&dev.sessions[2], CIPLUS_TAG_OPERATOR_INFO_REQ, NULL, 0),
+        0, "oprf send succeeds");
     ASSERT_EQUAL(dev.pending_tag, CIPLUS_TAG_OPERATOR_INFO_REQ, "oprf arms");
     uint8_t info[] = {0x9F, 0x9C, 0x05, 0x00}; // OPERATOR_INFO, our reply
     ASSERT_EQUAL(ca_read_apdu(&rs, info, sizeof(info)), 0, "oprf parsed");
@@ -1884,12 +1882,12 @@ int test_ca_reconnect_success() {
     dev.reconnect_next_try = -1;
     adapter *saved_a = a[68];
     ca_device_t *saved_c = ca_devices[68];
-    a[68] = &ad;
+    a.publish(68, &ad);
     ca_devices[68] = &dev;
     ca_reconnect(NULL);
     ASSERT_EQUAL(dev.reconnect_next_try, 0, "timer cleared on success");
     ASSERT_EQUAL(ad.ca_mask, (int)(1ULL << dvbca_id), "tables bit set");
-    a[68] = saved_a;
+    a.publish(68, saved_a);
     ca_devices[68] = saved_c;
     return 0;
 }
@@ -2053,14 +2051,14 @@ static int packing_cam_open() {
     pcam->ad.id = 3;
     pcam->ad.enabled = 1;
     pcam->next_pid = 0x1000;
-    a[3] = &pcam->ad;
+    a.publish(3, &pcam->ad);
     ca_devices[3] = &dev;
     opts.enigma = 0;
     return 0;
 }
 
 static void packing_cam_close() {
-    a[3] = NULL;
+    a.slot(3).store(nullptr);
     ca_devices[3] = NULL;
     sockets_del(pcam->sock);
     close(pcam->fds[0]);

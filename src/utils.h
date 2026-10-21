@@ -106,37 +106,6 @@ inline void atomic_max(std::atomic<int> &mark, int v) {
 
 // Claim a free slot lock-free, allocating the object if needed.
 // Sets id to the index; nullptr when full.
-template <typename T, size_t N>
-T *find_new_id(std::array<std::atomic<T *>, N> &arr) {
-    static_assert(requires(T *t) { t->id; });
-    for (size_t i = 0; i < N; ++i) {
-        T *cur = arr[i];
-        if (!cur) {
-            T *fresh = new T();
-            fresh->allocated = true;
-            fresh->enabled = false;
-            fresh->id = (int)i;
-            if (arr[i].compare_exchange_strong(cur, fresh))
-                return fresh;
-            delete fresh;
-            cur = arr[i];
-            if (!cur)
-                continue;
-        }
-        bool expected = false;
-        if (!cur->enabled.load() &&
-            cur->allocated.compare_exchange_strong(expected, true)) {
-            // id is set once at allocation; rewriting it here races
-            // with unlocked x->id readers (TSAN).
-            cur->enabled = false;
-            return cur;
-        }
-    }
-    return nullptr;
-}
-
-// Claim a free slot lock-free, allocating the object if needed.
-// Sets id to the index; nullptr when full.
 template <typename T, size_t M> T *find_new_id(SegmentedPool<T *, M> &pool) {
     static_assert(requires(T *t) { t->id; });
     auto scan = [&](size_t n) -> T * {

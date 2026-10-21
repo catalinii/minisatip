@@ -1999,7 +1999,7 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
             if (is_adapter_disabled(i))
                 continue;
             if (!a[i])
-                a[i] = adapter_alloc();
+                a.publish(i, adapter_alloc());
             if (!satip[i]) {
                 satip[i] = new satipc();
             }
@@ -2069,7 +2069,7 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
 }
 
 // [*][~][DELSYS:][FE_ID@][source_ip/]host[:port]
-void find_satip_adapter(adapter **a) {
+void find_satip_adapter() {
     char host[100];
     char source_ip[100];
     int port;

@@ -183,7 +183,9 @@ struct struct_adapter {
     }
 };
 
-extern adapter *a[MAX_ADAPTERS];
+constexpr size_t ADAPTER_BUCKETS =
+    (MAX_ADAPTERS + kSegmentBucketSize - 1) / kSegmentBucketSize;
+extern SegmentedPool<adapter *, ADAPTER_BUCKETS> a;
 extern int16_t fe_map[2 * MAX_ADAPTERS];
 extern int a_count;
 extern char absolute_switch;

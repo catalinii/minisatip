@@ -139,7 +139,9 @@ extern __thread char thread_name[];
 extern __thread pthread_t tid;
 extern __thread int select_timeout;
 
-extern std::array<std::atomic<sockets *>, MAX_SOCKS> s;
+constexpr size_t SOCKS_BUCKETS =
+    (MAX_SOCKS + kSegmentBucketSize - 1) / kSegmentBucketSize;
+extern SegmentedPool<sockets *, SOCKS_BUCKETS> s;
 
 static inline sockets *get_sockets(int i) {
     if (i < 0 || i >= MAX_SOCKS)

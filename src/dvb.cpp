@@ -2370,7 +2370,7 @@ int dvb_close(adapter *a) {
     return 0;
 }
 
-void find_dvb_adapter(adapter **a) {
+void find_dvb_adapter() {
     int na = 0;
     char buf[100];
     int cnt;
@@ -2412,7 +2412,7 @@ void find_dvb_adapter(adapter **a) {
                 LOGM("%s: adding %d %d to the list of devices", __FUNCTION__, i,
                      j);
                 if (!a[na])
-                    a[na] = adapter_alloc();
+                    a.publish(na, adapter_alloc());
 
                 ad = a[na];
                 ad->pa = i;
