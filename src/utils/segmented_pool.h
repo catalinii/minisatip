@@ -55,7 +55,7 @@ class SegmentedPool {
     bool empty() const { return size() == 0; }
 
     // Reserve the next index; nullopt when full. Publish with slot()
-    // or publish(); the slot reads default until then, like a fresh push.
+    // or publish(); the slot reads default until then.
     std::optional<size_t> reserve() {
         size_t index = size_.fetch_add(1, std::memory_order_relaxed);
         if (index >= capacity()) {
@@ -63,15 +63,6 @@ class SegmentedPool {
             size_.fetch_sub(1, std::memory_order_relaxed);
             return std::nullopt;
         }
-        return index;
-    }
-
-    // Reserve a slot and publish v; nullopt when full.
-    std::optional<size_t> push_back(const T &v) {
-        auto index = reserve();
-        if (!index)
-            return std::nullopt;
-        slot(*index).store(v, std::memory_order_release);
         return index;
     }
 
@@ -158,6 +149,23 @@ class SegmentedPool {
         return scan(size());
     }
 
+    // Append make_fresh(index) at the end; nullopt when full.
+    template <typename F>
+    requires std::invocable<F &, size_t> &&
+             std::convertible_to<std::invoke_result_t<F &, size_t>, T>
+    std::optional<size_t> obtain(F &&make_fresh) {
+        auto index = reserve();
+        if (!index)
+            return std::nullopt;
+        slot(*index).store(make_fresh(*index), std::memory_order_release);
+        return index;
+    }
+
+    // Append a value at the end; nullopt when full.
+    std::optional<size_t> obtain(const T &v) {
+        return obtain([&](size_t) { return v; });
+    }
+
     // Load the value at index; writes must use slot() or publish().
     T operator[](size_t index) const { return load(index); }
 
@@ -222,7 +230,7 @@ class SegmentedPool {
 
     iterator begin() const { return {this, 0}; }
     iterator end() const {
-        // Clamp: a failed push_back can transiently overshoot capacity.
+        // Clamp: a failed reserve can transiently overshoot capacity.
         return {this, std::min(size(), capacity())};
     }
 
