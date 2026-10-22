@@ -129,7 +129,7 @@ int test_descriptor_caid_capid_getters() {
 int test_decrypt() {
     int i, max_len = 1000;
     opts.adapter_buffer = 188 * 1000;
-    a.publish(0, adapter_alloc());
+    a[0] = adapter_alloc();
     a[0]->id = 0;
     a[0]->pids[0].pid = 0xff;
     a[0]->pids[0].flags = 1;
@@ -176,7 +176,7 @@ int test_decrypt() {
     hexdump("adapter buffer ", a[0]->buf, 188);
     free(a[0]->buf);
     delete a[0];
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     delete pmts[0];
     pmts.slot(0).store(nullptr);
     return 0;
@@ -185,7 +185,7 @@ int test_decrypt() {
 int test_wait_pusi() {
     int i, max_len = 3 * 188;
     opts.adapter_buffer = 188 * 1000;
-    a.publish(0, adapter_alloc());
+    a[0] = adapter_alloc();
     a[0]->id = 0;
     a[0]->pids[0].pid = 0xff;
     a[0]->pids[0].flags = 1;
@@ -211,7 +211,7 @@ int test_wait_pusi() {
     ASSERT(wait_pusi(a[0], 3 * 188) == 0, "getItem should not fail");
     free(a[0]->buf);
     delete a[0];
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -325,7 +325,7 @@ int test_assemble_multi_packet() {
 
 int test_emulate_add_all_pids() {
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     SPMT pmt{};
     pmts.slot(0).store(&pmt);
@@ -472,7 +472,7 @@ static int check_pat_drop_releases_ca(int adapter_type) {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     ad.type = adapter_type;
@@ -571,10 +571,10 @@ int test_revived_cached_pmt_gets_its_filter() {
     int pids[] = {PID_KEPT};
 
     for (i = 0; i < MAX_ADAPTERS; i++)
-        a.slot(i).store(nullptr);
+        a[i] = nullptr;
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     ad.type = ADAPTER_DVB;
@@ -640,7 +640,7 @@ int test_revived_cached_pmt_gets_its_filter() {
     del_filter(ad.pat_filter);
     free_all_pmts();
     free_filters();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -651,7 +651,7 @@ int test_pmt_starts_only_with_pmt_pid() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
 
@@ -695,7 +695,7 @@ int test_pmt_starts_only_with_pmt_pid() {
     ASSERT(find_pid(0, 3401)->pmt == bid, "audio claim should be kept");
 
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -728,7 +728,7 @@ int test_retune_handover_same_loop() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
 
@@ -792,7 +792,7 @@ int test_retune_handover_same_loop() {
 
     del_ca(&counting_op);
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -831,7 +831,7 @@ int test_single_slot_retune_releases_first() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
 
@@ -896,7 +896,7 @@ int test_single_slot_retune_releases_first() {
 
     del_ca(&single_slot_op);
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -908,7 +908,7 @@ int test_scan_pmt_only_starts_nothing() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
 
@@ -965,7 +965,7 @@ int test_scan_pmt_only_starts_nothing() {
 
     del_ca(&counting_op);
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -975,7 +975,7 @@ int test_scan_pmt_only_starts_nothing() {
 // PMT starts.
 int test_active_pmt_list_capped_at_max() {
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     opts.log = 1;
@@ -991,7 +991,7 @@ int test_active_pmt_list_capped_at_max() {
     ASSERT(ad.active_pmts == MAX_PMT_FOR_ADAPTER,
            "full active list must refuse");
 
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     free_all_pmts();
     return 0;
 }
@@ -1002,7 +1002,7 @@ int test_19e_11493h_zap_flows() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -1081,7 +1081,7 @@ int test_19e_11493h_zap_flows() {
     ASSERT(find_pid(0, 5124)->pmt == -1, "released data has no owner");
 
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -1092,7 +1092,7 @@ int test_19e_11582h_group_and_disjoint() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -1184,7 +1184,7 @@ int test_19e_11582h_group_and_disjoint() {
     ASSERT(find_pid(0, 5261)->pmt == iid, "I keeps its video");
 
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -1195,7 +1195,7 @@ int test_19e_11914h_ca_send_close() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -1257,7 +1257,7 @@ int test_19e_11914h_ca_send_close() {
 
     del_ca(&counting_op);
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -1268,7 +1268,7 @@ int test_ci_adapter_pmt_starts() {
     free_all_pmts();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     ad.type = ADAPTER_CI;
@@ -1295,7 +1295,7 @@ int test_ci_adapter_pmt_starts() {
                  "the CI adapter's PMT should start");
 
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -1304,7 +1304,7 @@ int test_sticky_claims_without_parse() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
 
@@ -1351,7 +1351,7 @@ int test_sticky_claims_without_parse() {
     ASSERT_EQUAL(pmt_t66->state, PMT_RUNNING, "holder should keep running");
 
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -1361,7 +1361,7 @@ int test_earlier_newcomer_steals_by_order() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
 
@@ -1402,7 +1402,7 @@ int test_earlier_newcomer_steals_by_order() {
     ASSERT(find_pid(0, 3301)->pmt == bid, "video pid should move to B");
 
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -1413,7 +1413,7 @@ int test_steal_splits_partial_overlap() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
 
@@ -1454,14 +1454,14 @@ int test_steal_splits_partial_overlap() {
     ASSERT(find_pid(0, 3402)->pmt == bid, "own audio goes to B");
 
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
 // SPid.order is assigned on subscription and reset on removal.
 int test_pid_order_reset_on_remove() {
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -1495,7 +1495,7 @@ int test_pid_order_reset_on_remove() {
 
     mark_pids_deleted(0, PID_STREAM_ID_UNDEFINED, NULL);
     update_pids(0);
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -1506,7 +1506,7 @@ int test_d8_shared_pid() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
 
@@ -1575,7 +1575,7 @@ int test_d8_shared_pid() {
     ASSERT(find_pid(0, 701)->pmt == m1, "shared video should not move");
 
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -1586,7 +1586,7 @@ int test_shared_pid_split() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
 
@@ -1629,7 +1629,7 @@ int test_shared_pid_split() {
     ASSERT(find_pid(0, 701)->pmt == m1, "shared video should not move");
 
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -1640,7 +1640,7 @@ int test_30w_shared_pmt_pid() {
     filters.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -1741,7 +1741,7 @@ int test_30w_shared_pmt_pid() {
     del_ca(&fake_ca_op);
     free_all_pmts();
     free_filters();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -1752,7 +1752,7 @@ int test_1129_bein_shared_es() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -1801,7 +1801,7 @@ int test_1129_bein_shared_es() {
 
     del_ca(&fake_ca_op);
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -1811,7 +1811,7 @@ int test_1129_stingray_shared_vpid() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -1853,7 +1853,7 @@ int test_1129_stingray_shared_vpid() {
     ASSERT(find_pid(0, 222)->pmt == eighties, "new APID should be owned");
 
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -1865,7 +1865,7 @@ int test_held_pids_without_client_stop_pmt() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -1904,7 +1904,7 @@ int test_held_pids_without_client_stop_pmt() {
 
     del_ca(&fake_ca_op);
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -1917,7 +1917,7 @@ int test_cw_keyed_by_pmt() {
             cws[i]->enabled = 0;
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     init_algo();
@@ -1939,7 +1939,7 @@ int test_cw_keyed_by_pmt() {
         if (cws[i])
             cws[i]->enabled = 0;
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -1953,7 +1953,7 @@ int test_send_cw_skips_in_use_slot() {
             cws[i]->enabled = 0;
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     init_algo();
@@ -1988,7 +1988,7 @@ int test_send_cw_skips_in_use_slot() {
         if (cws[i])
             cws[i]->enabled = 0;
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -1998,7 +1998,7 @@ int test_pids_all_expands_pmt_pids() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 1;
@@ -2022,7 +2022,7 @@ int test_pids_all_expands_pmt_pids() {
 
     opts.emulate_pids_all = 0;
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -2033,7 +2033,7 @@ int test_multi_service_pid_parses_per_sid() {
     filters.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     ad.pids[0].pid = 60;
@@ -2068,7 +2068,7 @@ int test_multi_service_pid_parses_per_sid() {
 
     free_all_pmts();
     free_filters();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -2079,7 +2079,7 @@ int test_late_parse_handover() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
 
@@ -2133,7 +2133,7 @@ int test_late_parse_handover() {
 
     del_filter(fid);
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -2143,7 +2143,7 @@ int test_running_pmt_pid_deleted_on_unsubscribe() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -2187,7 +2187,7 @@ int test_running_pmt_pid_deleted_on_unsubscribe() {
 
     del_filter(fid);
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -2197,7 +2197,7 @@ int test_pmt_pid_remove_readd_no_churn() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -2256,7 +2256,7 @@ int test_pmt_pid_remove_readd_no_churn() {
     del_ca(&counting_op);
     del_filter(fid);
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -2266,7 +2266,7 @@ int test_pmt_pid_delete_hands_over() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -2317,7 +2317,7 @@ int test_pmt_pid_delete_hands_over() {
     del_filter(fa);
     del_filter(fb);
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -2328,7 +2328,7 @@ int test_update_pids_tail_elects() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -2393,7 +2393,7 @@ int test_update_pids_tail_elects() {
     del_filter(fa);
     del_filter(fb);
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -2403,7 +2403,7 @@ int test_stream_pid_delete_stops_pmt() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -2438,7 +2438,7 @@ int test_stream_pid_delete_stops_pmt() {
 
     del_filter(fid);
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -2448,7 +2448,7 @@ int test_pmt_cosmetic_update_keeps_running() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -2527,7 +2527,7 @@ int test_pmt_cosmetic_update_keeps_running() {
     del_ca(&counting_op);
     del_filter(fid);
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -2561,7 +2561,7 @@ int test_pmt_update_longer_ca_private_data() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -2593,7 +2593,7 @@ int test_pmt_update_longer_ca_private_data() {
 
     del_filter(fid);
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -2626,7 +2626,7 @@ int test_pmt_content_update_delta() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -2770,7 +2770,7 @@ int test_pmt_content_update_delta() {
     del_ca(&counting_op);
     del_filter(fid);
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -2780,7 +2780,7 @@ int test_ca_update_flag_distinguishes_resend() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -2833,7 +2833,7 @@ int test_ca_update_flag_distinguishes_resend() {
     del_ca(&counting_op);
     del_filter(fid);
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -2843,7 +2843,7 @@ int test_handover_stops_stale_holder() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -2900,7 +2900,7 @@ int test_handover_stops_stale_holder() {
 
     del_filter(bfid);
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -2993,14 +2993,14 @@ int test_pmt_update_e2e_single_capmt_update() {
     int i;
     pmts.clear();
     for (i = 0; i < MAX_ADAPTERS; i++)
-        a.slot(i).store(nullptr);
+        a[i] = nullptr;
     memset(ddci_devices, 0, sizeof(ddci_devices));
     memset(ca_devices, 0, sizeof(ca_devices));
     channels.clear();
 
     adapter ad = {}, a0 = {};
-    a.publish(8, &ad);
-    a.publish(0, &a0);
+    a[8] = &ad;
+    a[0] = &a0;
     ad.enabled = 1;
     ad.id = 8;
     a0.enabled = 1;
@@ -3154,8 +3154,8 @@ int test_pmt_update_e2e_single_capmt_update() {
     channels.clear();
     ddci_devices[0] = NULL;
     ca_devices[8] = NULL;
-    a.slot(8).store(nullptr);
-    a.slot(0).store(nullptr);
+    a[8] = nullptr;
+    a[0] = nullptr;
     close(sv[0]);
     close(sv[1]);
     opts.enigma = saved_enigma;
@@ -3168,7 +3168,7 @@ int test_resend_rejected_releases_ca() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -3211,7 +3211,7 @@ int test_resend_rejected_releases_ca() {
 
     del_ca(&failing_op);
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -3242,7 +3242,7 @@ int test_version_update_keeps_claims() {
     pmts.clear();
 
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
     opts.emulate_pids_all = 0;
@@ -3302,13 +3302,13 @@ int test_version_update_keeps_claims() {
 
     del_filter(fid);
     free_all_pmts();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
 int test_filter_add_del_mt() {
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     constexpr int T = 4, K = 8;
     int fids[T][K];
@@ -3337,7 +3337,7 @@ int test_filter_add_del_mt() {
             ASSERT(f && !f->enabled && !f->allocated,
                    "filter reclaimed after del");
         }
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 

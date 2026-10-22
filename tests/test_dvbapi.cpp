@@ -62,7 +62,7 @@ int test_add_pmt_reuses_live_key() {
 
     ad.enabled = 1;
     ad.id = 0;
-    a.publish(0, &ad);
+    a[0] = &ad;
     pmt.enabled = 1;
     pmt.id = 0;
     pmt.sid = 100;
@@ -99,7 +99,7 @@ int test_add_pmt_reuses_live_key() {
     close(sv[0]);
     close(sv[1]);
     pmts.clear();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -219,7 +219,7 @@ int test_update_resend_skips_identical_capmt() {
 
     ad.enabled = 1;
     ad.id = 0;
-    a.publish(0, &ad);
+    a[0] = &ad;
     pmt.enabled = 1;
     pmt.id = 0;
     pmt.sid = 100;
@@ -257,7 +257,7 @@ int test_update_resend_skips_identical_capmt() {
     close(sv[0]);
     close(sv[1]);
     pmts.clear();
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -273,7 +273,7 @@ int test_descramble_watchdog() {
     dvbapi_is_enabled = 1;
     ad.enabled = 1;
     ad.id = 0;
-    a.publish(0, &ad);
+    a[0] = &ad;
     register_dvbapi();
     int ca_idx = dvbapi_ca;
     uint64_t dvbapi_mask = 1ULL << ca_idx;
@@ -390,7 +390,7 @@ int test_descramble_watchdog() {
     sock = saved_sock;
     close(sv[0]);
     close(sv[1]);
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 

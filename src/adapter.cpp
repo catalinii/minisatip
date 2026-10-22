@@ -58,7 +58,7 @@
 #define DEFAULT_LOG LOG_ADAPTER
 
 const int DEFAULT_PIDS[] = {0, 1, 16, 18};
-SegmentedPool<adapter *, ADAPTER_BUCKETS> a;
+std::array<adapter *, MAX_ADAPTERS> a;
 int a_count;
 char disabled[MAX_ADAPTERS]; // disabled adapters
 int sock_signal;
@@ -1604,7 +1604,7 @@ void free_all_adapters() {
             if (ad->buf)
                 free(ad->buf);
             delete ad;
-            a.slot(i).store(NULL);
+            a[i] = NULL;
         }
 
 #ifndef DISABLE_NETCVCLIENT
@@ -1658,7 +1658,7 @@ void set_unicable_adapters(char *o, int type) {
             continue;
 
         if (!a[a_id])
-            a.publish(a_id, adapter_alloc());
+            a[a_id] = adapter_alloc();
         ad = a[a_id];
 
         size_t colon_pos = token.find(':');
@@ -1714,7 +1714,7 @@ void set_diseqc_adapters(char *o) {
                 continue;
 
             if (!a[a_id])
-                a.publish(a_id, adapter_alloc());
+                a[a_id] = adapter_alloc();
             ad = a[a_id];
         }
 
@@ -1807,7 +1807,7 @@ void set_absolute_src(char *o) {
             LOG("Setting source %d (src=%d) to adapter %d position %d", src,
                 src + 1, inp, pos + cnt - 1);
             if (!a[inp])
-                a.publish(inp, adapter_alloc());
+                a[inp] = adapter_alloc();
             ad = a[inp];
 
             ad->absolute_table[src] = pos + cnt;
@@ -1835,7 +1835,7 @@ void set_diseqc_multi(char *o) {
                 continue;
 
             if (!a[a_id])
-                a.publish(a_id, adapter_alloc());
+                a[a_id] = adapter_alloc();
             ad = a[a_id];
         }
 
@@ -1876,7 +1876,7 @@ void set_lnb_adapters(char *o) {
                 continue;
 
             if (!a[a_id])
-                a.publish(a_id, adapter_alloc());
+                a[a_id] = adapter_alloc();
             ad = a[a_id];
         }
         size_t colon = token.find(':');
@@ -1942,7 +1942,7 @@ void set_diseqc_timing(char *o) {
                 continue;
 
             if (!a[a_id])
-                a.publish(a_id, adapter_alloc());
+                a[a_id] = adapter_alloc();
             ad = a[a_id];
         }
 
@@ -2037,7 +2037,7 @@ void set_slave_adapters(char *o) {
 
         for (j = a_id; j <= a_id2; j++) {
             if (!a[j])
-                a.publish(j, adapter_alloc());
+                a[j] = adapter_alloc();
 
             ad = a[j];
 
@@ -2047,7 +2047,7 @@ void set_slave_adapters(char *o) {
 
             if (master >= 0 && master < MAX_ADAPTERS) {
                 if (!a[master] && !is_adapter_disabled(master))
-                    a.publish(master, adapter_alloc());
+                    a[master] = adapter_alloc();
 
                 if (a[master] && a[master]->master_source < 0) {
                     a[master]->master_source =
@@ -2098,7 +2098,7 @@ void set_timeout_adapters(char *o) {
 
         for (j = a_id; j <= a_id2; j++) {
             if (!a[j])
-                a.publish(j, adapter_alloc());
+                a[j] = adapter_alloc();
 
             ad = a[j];
             ad->adapter_timeout = timeout * 1000;
@@ -2132,7 +2132,7 @@ void set_adapters_delsys(char *o) {
                  .value_or(SYS_UNDEFINED);
 
         if (!a[a_id])
-            a.publish(a_id, adapter_alloc());
+            a[a_id] = adapter_alloc();
 
         ad = a[a_id];
         ad->sys[0] = ds;
@@ -2172,7 +2172,7 @@ void set_signal_multiplier(char *o) {
                 continue;
 
             if (!a[a_id])
-                a.publish(a_id, adapter_alloc());
+                a[a_id] = adapter_alloc();
             ad = a[a_id];
         }
 
