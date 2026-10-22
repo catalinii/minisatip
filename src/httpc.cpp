@@ -29,7 +29,7 @@ SegmentedPool<Shttp_client *, HTTPC_BUCKETS> httpc;
 
 int http_client_add() {
 
-    Shttp_client *h = find_new_id(httpc);
+    Shttp_client *h = httpc.obtain();
     if (!h) {
         LOG_AND_RETURN(-1, "Could not add new http client");
     }
