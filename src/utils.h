@@ -97,13 +97,6 @@ pthread_t start_new_thread(char *name);
 pthread_t get_tid();
 void set_thread_prio(pthread_t tid, int prio);
 
-// Raise an atomic high-water mark; lock-free max update.
-inline void atomic_max(std::atomic<int> &mark, int v) {
-    int cur = mark.load();
-    while (cur < v && !mark.compare_exchange_weak(cur, v)) {
-    }
-}
-
 // Claim a free slot lock-free, allocating the object if needed.
 // Sets id to the index; nullptr when full.
 template <typename T, size_t M> T *find_new_id(SegmentedPool<T *, M> &pool) {
