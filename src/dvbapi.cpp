@@ -814,7 +814,7 @@ int keys_add(int adapter, int pmt_id) {
     SPMT *pmt = get_pmt(pmt_id);
     if (!pmt)
         LOG_AND_RETURN(-1, "%s: PMT %d not found ", __FUNCTION__, pmt_id);
-    SKey *k = find_new_id(keys);
+    SKey *k = keys.obtain();
     if (!k)
         LOG_AND_RETURN(-1, "%s: no free key id", __FUNCTION__);
     int i = k->id;

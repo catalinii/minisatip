@@ -31,7 +31,7 @@ typedef struct struct_streams {
     std::atomic<bool> allocated{false};
     SMutex mutex;
     int sid; // socket - <0 for invalid/not used, 0 for end of the list
-    int id;  // stream index in st[], set by find_new_id
+    int id;  // stream index in st[], set by obtain()
     int adapter;
     USockAddr sa; // remote address - set on accept or recvfrom on udp sockets
     int sock;     // remote tcp socket (http, rtsp)

@@ -3,6 +3,7 @@
 
 #include <array>
 #include <atomic>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -11,6 +12,19 @@
 
 // Fixed bucket size for all pools; capacity is buckets * this.
 inline constexpr size_t kSegmentBucketSize = 64;
+
+// Objects recyclable through obtain(): default-constructible with
+// an id plus atomic enabled/allocated flags.
+template <typename U>
+concept ReusableObject = requires(U *u, bool expected) {
+    requires std::default_initializable<U>;
+    u->id = 0;
+    u->enabled = false;
+    { u->enabled.load() } -> std::convertible_to<bool>;
+    {
+        u->allocated.compare_exchange_strong(expected, true)
+    } -> std::same_as<bool>;
+};
 
 // Lock-free segmented pool: fixed 64-slot buckets published on
 // first touch, atomic high-water length, snapshot iterators.
@@ -43,30 +57,30 @@ class SegmentedPool {
     // Reserve the next index; nullopt when full. Publish with slot()
     // or publish(); the slot reads default until then, like a fresh push.
     std::optional<size_t> reserve() {
-        size_t i = size_.fetch_add(1, std::memory_order_relaxed);
-        if (i >= capacity()) {
+        size_t index = size_.fetch_add(1, std::memory_order_relaxed);
+        if (index >= capacity()) {
             // Paired with our own increment; size stays above live slots.
             size_.fetch_sub(1, std::memory_order_relaxed);
             return std::nullopt;
         }
-        return i;
+        return index;
     }
 
     // Reserve a slot and publish v; nullopt when full.
     std::optional<size_t> push_back(const T &v) {
-        auto i = reserve();
-        if (!i)
+        auto index = reserve();
+        if (!index)
             return std::nullopt;
-        slot(*i).store(v, std::memory_order_release);
-        return i;
+        slot(*index).store(v, std::memory_order_release);
+        return index;
     }
 
-    // Store v at i and cover it with the length; false over capacity.
-    bool publish(size_t i, const T &v) {
-        if (i >= capacity())
+    // Store v at index and cover it with the length; false over capacity.
+    bool publish(size_t index, const T &v) {
+        if (index >= capacity())
             return false;
-        slot(i).store(v, std::memory_order_release);
-        return extend_to(i + 1);
+        slot(index).store(v, std::memory_order_release);
+        return extend_to(index + 1);
     }
 
     // Lower the length to n; slots stay allocated for later regrowth.
@@ -88,20 +102,77 @@ class SegmentedPool {
         return true;
     }
 
-    // Load the value at i; writes must use slot() or publish().
-    T operator[](size_t i) const { return load(i); }
-
-    // Raw slot for CAS-claim loops; publishes its bucket on first touch.
-    std::atomic<T> &slot(size_t i) {
-        Bucket *b = bucket_for(i >> kBucketBits);
-        return b->slots[i & (kBucketSize - 1)];
+    // Claim a free object, reusing a released slot when possible;
+    // nullptr when full. The common entry point for adding objects.
+    T obtain()
+    requires ReusableObject<std::remove_pointer_t<T>>
+    {
+        using U = std::remove_pointer_t<T>;
+        auto scan = [&](size_t n) -> U * {
+            for (size_t index = 0; index < n; ++index) {
+                U *cur = slot(index).load();
+                if (!cur) {
+                    U *fresh = new U();
+                    fresh->allocated = true;
+                    fresh->enabled = false;
+                    fresh->id = (int)index;
+                    if (slot(index).compare_exchange_strong(cur, fresh))
+                        return fresh;
+                    delete fresh;
+                    cur = slot(index).load();
+                    if (!cur)
+                        continue;
+                }
+                bool expected = false;
+                if (!cur->enabled.load() &&
+                    cur->allocated.compare_exchange_strong(expected, true)) {
+                    // id is set once at allocation; rewriting it here races
+                    // with unlocked x->id readers (TSAN).
+                    cur->enabled = false;
+                    return cur;
+                }
+            }
+            return nullptr;
+        };
+        if (U *s = scan(size()))
+            return s;
+        for (;;) {
+            auto index = reserve();
+            if (!index)
+                break;
+            if (slot(*index).load())
+                continue; // Occupied past the scan (manual plant); skip it.
+            U *fresh = new U();
+            fresh->allocated = true;
+            fresh->enabled = false;
+            fresh->id = (int)*index;
+            U *expect = nullptr;
+            // CAS, not store: a racing scan may claim this slot first.
+            if (slot(*index).compare_exchange_strong(expect, fresh)) {
+                extend_to(*index + 1);
+                return fresh;
+            }
+            delete fresh;
+        }
+        // Full: one more scan in case a slot freed mid-claim.
+        return scan(size());
     }
 
-    // Live atomic slots for CAS-claim loops (see find_new_id).
+    // Load the value at index; writes must use slot() or publish().
+    T operator[](size_t index) const { return load(index); }
+
+    // Raw slot for CAS-claim loops; publishes its bucket on first touch.
+    std::atomic<T> &slot(size_t index) {
+        Bucket *b = bucket_for(index >> kBucketBits);
+        return b->slots[index & (kBucketSize - 1)];
+    }
+
+    // Live atomic slots for CAS-claim loops (see obtain()).
     auto slots() {
         return std::views::iota(size_t{0}, std::min(size(), capacity())) |
-               std::views::transform(
-                   [this](size_t i) -> std::atomic<T> & { return slot(i); });
+               std::views::transform([this](size_t index) -> std::atomic<T> & {
+                   return slot(index);
+               });
     }
 
     // Visit every slot in published buckets, past shrinks; for teardown.
@@ -129,23 +200,24 @@ class SegmentedPool {
         using iterator_category = std::forward_iterator_tag;
         iterator() = default;
         // Multi-pass over a length snapshot; each deref reloads the slot.
-        T operator*() const { return pool_->load(i_); }
+        T operator*() const { return pool_->load(index_); }
         iterator &operator++() {
-            ++i_;
+            ++index_;
             return *this;
         }
         iterator operator++(int) {
             iterator c = *this;
-            ++i_;
+            ++index_;
             return c;
         }
-        bool operator==(const iterator &o) const { return i_ == o.i_; }
+        bool operator==(const iterator &o) const { return index_ == o.index_; }
 
       private:
         friend class SegmentedPool;
-        iterator(const SegmentedPool *p, size_t i) : pool_(p), i_(i) {}
+        iterator(const SegmentedPool *p, size_t index)
+            : pool_(p), index_(index) {}
         const SegmentedPool *pool_;
-        size_t i_;
+        size_t index_;
     };
 
     iterator begin() const { return {this, 0}; }
@@ -178,9 +250,10 @@ class SegmentedPool {
         return want;
     }
 
-    T load(size_t i) const {
-        Bucket *b = bucket_for(i >> kBucketBits);
-        return b->slots[i & (kBucketSize - 1)].load(std::memory_order_acquire);
+    T load(size_t index) const {
+        Bucket *b = bucket_for(index >> kBucketBits);
+        return b->slots[index & (kBucketSize - 1)].load(
+            std::memory_order_acquire);
     }
 
     // Mutable: first touch publishes buckets even through const loads.

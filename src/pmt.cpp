@@ -261,7 +261,7 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
         LOG_AND_RETURN(-1, "%s failed, pid %d", __FUNCTION__, pid);
 
     std::lock_guard<SMutex> lock(filters_mutex);
-    SFilter *f = find_new_id(filters);
+    SFilter *f = filters.obtain();
     if (!f)
         LOG_AND_RETURN(-1, "%s failed", __FUNCTION__);
     int fid = f->id;
@@ -1529,7 +1529,7 @@ int pmt_process_stream(adapter *ad) {
 
 int pmt_add(int adapter, int sid, int pmt_pid) {
 
-    SPMT *pmt = find_new_id(pmts);
+    SPMT *pmt = pmts.obtain();
     if (!pmt) {
         LOG_AND_RETURN(-1, "PMT buffer is full, could not add new pmts");
     }

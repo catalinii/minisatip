@@ -593,7 +593,7 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
     if (sock == SOCK_TIMEOUT && t == NULL)
         LOG_AND_RETURN(-1, "sockets_add timeout without timeout function");
 
-    ss = find_new_id(s);
+    ss = s.obtain();
     if (!ss)
         LOG_AND_RETURN(-1, "sockets_add failed for socks %d", sock);
     int i = ss->id;

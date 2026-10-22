@@ -234,48 +234,48 @@ struct TestBothSlot {
     int sid{-1};
 };
 
-int test_find_new_id() {
+int test_obtain() {
     SegmentedPool<TestSlot *, 1> pool; // one bucket holds 64 slots
-    TestSlot *s0 = find_new_id(pool);
+    TestSlot *s0 = pool.obtain();
     ASSERT(s0 && s0->id == 0, "first slot gets id 0");
     ASSERT(s0->allocated.load() && !s0->enabled.load(),
            "claimed slot is allocated but not enabled");
     s0->enabled = true;
-    TestSlot *s1 = find_new_id(pool);
+    TestSlot *s1 = pool.obtain();
     ASSERT(s1 && s1->id == 1, "second slot gets id 1");
     s1->enabled = true;
-    ASSERT(find_new_id(pool)->id == 2, "third slot gets id 2");
+    ASSERT(pool.obtain()->id == 2, "third slot gets id 2");
     TestSlot *s2 = pool[2];
     s2->enabled = true;
     for (int i = 3; i < 64; ++i) {
-        TestSlot *s = find_new_id(pool);
+        TestSlot *s = pool.obtain();
         ASSERT(s && s->id == i, "slot id matches claim order");
         s->enabled = true;
     }
-    ASSERT(find_new_id(pool) == nullptr, "full pool returns nullptr");
+    ASSERT(pool.obtain() == nullptr, "full pool returns nullptr");
     s1->enabled = false;
     s1->allocated = false;
-    TestSlot *reuse = find_new_id(pool);
+    TestSlot *reuse = pool.obtain();
     ASSERT(reuse && reuse->id == 1, "freed slot is reused");
     ASSERT(reuse == pool[1], "reuse returns the same object");
     for (TestSlot *s : pool)
         delete s;
 
     SegmentedPool<TestBothSlot *, 1> bpool;
-    TestBothSlot *bs0 = find_new_id(bpool);
+    TestBothSlot *bs0 = bpool.obtain();
     ASSERT(bs0 && bs0->id == 0 && bs0->sid == -1,
            "type with both fields gets id, sid untouched");
     delete bs0;
     return 0;
 }
 
-int test_find_new_id_mt() {
+int test_obtain_mt() {
     constexpr int N = 64, T = 8;
     SegmentedPool<TestSlot *, 1> pool;
     std::atomic<int> total{0};
     auto worker = [&]() {
         int n = 0;
-        while (TestSlot *s = find_new_id(pool)) {
+        while (TestSlot *s = pool.obtain()) {
             s->enabled = true;
             n++;
         }
@@ -292,13 +292,13 @@ int test_find_new_id_mt() {
         TestSlot *s = pool[i];
         ASSERT(s && s->id == i, "slot id matches index");
     }
-    ASSERT(find_new_id(pool) == nullptr, "full stays full");
+    ASSERT(pool.obtain() == nullptr, "full stays full");
     for (TestSlot *s : pool)
         delete s;
     return 0;
 }
 
-int test_find_new_id_churn() {
+int test_obtain_churn() {
     constexpr int N = 64, T = 8, K = 10000;
     SegmentedPool<TestSlot *, 1> pool;
     std::array<std::atomic<bool>, N> held{};
@@ -306,7 +306,7 @@ int test_find_new_id_churn() {
     auto worker = [&]() {
         for (int k = 0; k < K; k++) {
             TestSlot *s = nullptr;
-            while (!(s = find_new_id(pool)))
+            while (!(s = pool.obtain()))
                 std::this_thread::yield();
             int id = s->id;
             if (id < 0 || id >= N)
@@ -339,9 +339,9 @@ int test_find_new_id_churn() {
 int main() {
     opts.log = 255;
     strcpy(thread_info[thread_index].thread_name, "test_utils");
-    TEST_FUNC(test_find_new_id(), "testing find_new_id");
-    TEST_FUNC(test_find_new_id_mt(), "testing find_new_id mt");
-    TEST_FUNC(test_find_new_id_churn(), "testing find_new_id churn");
+    TEST_FUNC(test_obtain(), "testing obtain");
+    TEST_FUNC(test_obtain_mt(), "testing obtain mt");
+    TEST_FUNC(test_obtain_churn(), "testing obtain churn");
     TEST_FUNC(test_mkdir_recursive(), "testing directory creation");
     TEST_FUNC(test_readfile_content_type(), "testing readfile content types");
     TEST_FUNC(test_fifo(), "testing fifo");

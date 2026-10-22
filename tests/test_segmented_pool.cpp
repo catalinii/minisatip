@@ -122,7 +122,7 @@ int test_shrink_and_published() {
 }
 
 int test_concurrent_claim() {
-    SegmentedPool<int, 1> pool; // 64 slots claimed via CAS, find_new_id style
+    SegmentedPool<int, 1> pool; // 64 slots claimed via CAS, obtain-style
     ASSERT(pool.extend_to(64), "extend_to failed");
     std::atomic<int> claimed{0};
     auto claim = [&](int id) {

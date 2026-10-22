@@ -609,7 +609,7 @@ int decode_transport(sockets *s, std::string_view arg, char *default_rtp,
 }
 
 int streams_add() {
-    streams *ss = find_new_id(st);
+    streams *ss = st.obtain();
     if (!ss)
         LOG_AND_RETURN(-1, "streams_add failed");
     int i = ss->id;
