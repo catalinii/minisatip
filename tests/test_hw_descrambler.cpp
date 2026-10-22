@@ -25,7 +25,7 @@ static adapter *setup_mock_adapter(int id, int physical_adapter, int ca_num) {
     if (id < 0 || id >= MAX_ADAPTERS)
         return nullptr;
     if (!a[id]) {
-        a.publish(id, static_cast<adapter *>(calloc(1, sizeof(adapter))));
+        a[id] = static_cast<adapter *>(calloc(1, sizeof(adapter)));
         a[id]->id = id;
         a[id]->pa = physical_adapter;
         a[id]->fn = ca_num;
@@ -37,7 +37,7 @@ static adapter *setup_mock_adapter(int id, int physical_adapter, int ca_num) {
 static void cleanup_mock_adapter(int id) {
     if (id >= 0 && id < MAX_ADAPTERS && a[id]) {
         free(a[id]);
-        a.slot(id).store(nullptr);
+        a[id] = nullptr;
     }
 }
 
@@ -367,7 +367,7 @@ int main() {
     opts.log = 1;
     opts.debug = 255;
     opts.cache_dir = "/tmp";
-    a.clear();
+    a.fill(nullptr);
     pmts.clear();
     std::fill(std::begin(cws), std::end(cws), nullptr);
 

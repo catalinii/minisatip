@@ -56,7 +56,7 @@ void setup_test_env() {
     free_all(); // Clean all streams, sockets, and adapters
 
     a_count = 1;
-    a.publish(0, new adapter());
+    a[0] = new adapter();
     a[0]->enabled = 1;
     a[0]->id = 0;
     a[0]->master_sid = -1;

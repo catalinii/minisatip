@@ -2412,7 +2412,7 @@ void find_dvb_adapter() {
                 LOGM("%s: adding %d %d to the list of devices", __FUNCTION__, i,
                      j);
                 if (!a[na])
-                    a.publish(na, adapter_alloc());
+                    a[na] = adapter_alloc();
 
                 ad = a[na];
                 ad->pa = i;

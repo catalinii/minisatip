@@ -288,7 +288,7 @@ int test_dvb_lock_recovery_rejects_failed_tunes() {
 
     adapter *saved_adapter = a[0];
     int saved_log = opts.log;
-    a.publish(0, &ad);
+    a[0] = &ad;
     opts.log = 0;
 
     ad.lock_retry_armed = true;
@@ -307,7 +307,7 @@ int test_dvb_lock_recovery_rejects_failed_tunes() {
     bool armed_without_frontend = ad.lock_retry_armed;
 
     opts.log = saved_log;
-    a.publish(0, saved_adapter);
+    a[0] = saved_adapter;
     close(fd);
 
     ASSERT(invalid_frequency_result == -403,
@@ -518,9 +518,9 @@ int test_dvb_signal_v5_fallback() {
 
     // a retune re-probes v5
     adapter *saved = a[0];
-    a.publish(0, &ad);
+    a[0] = &ad;
     dvb_tune(0, &ad.tp);
-    a.publish(0, saved);
+    a[0] = saved;
     ASSERT(ad.new_gs == 0, "a retune must re-probe the signal path");
     dvb_get_signal(&ad);
     ASSERT(ad.new_gs == 1, "v5 must serve again after the retune");

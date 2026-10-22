@@ -480,7 +480,7 @@ void find_netcv_adapter() {
         if (na >= MAX_ADAPTERS)
             break;
         if (!a[na])
-            a.publish(na, adapter_alloc());
+            a[na] = adapter_alloc();
         if (!sn[na])
             sn[na] = (SNetceiver *)malloc(sizeof(SNetceiver));
 

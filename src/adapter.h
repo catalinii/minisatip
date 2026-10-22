@@ -3,6 +3,7 @@
 #include "dvb.h"
 #include "minisatip.h"
 
+#include <array>
 #include <atomic>
 #include <string>
 #include <unordered_set>
@@ -183,9 +184,7 @@ struct struct_adapter {
     }
 };
 
-constexpr size_t ADAPTER_BUCKETS =
-    (MAX_ADAPTERS + kSegmentBucketSize - 1) / kSegmentBucketSize;
-extern SegmentedPool<adapter *, ADAPTER_BUCKETS> a;
+extern std::array<adapter *, MAX_ADAPTERS> a;
 extern int16_t fe_map[2 * MAX_ADAPTERS];
 extern int a_count;
 extern char absolute_switch;

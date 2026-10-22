@@ -1999,7 +1999,7 @@ int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
             if (is_adapter_disabled(i))
                 continue;
             if (!a[i])
-                a.publish(i, adapter_alloc());
+                a[i] = adapter_alloc();
             if (!satip[i]) {
                 satip[i] = new satipc();
             }

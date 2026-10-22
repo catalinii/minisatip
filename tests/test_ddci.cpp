@@ -92,7 +92,7 @@ SPMT *create_pmt(int ad, int sid, int pid1, int pid2, int caid1, int caid2) {
 void create_adapter(adapter *ad, int id) {
     ad->enabled = 1;
     ad->id = id;
-    a.publish(id, ad);
+    a[id] = ad;
 }
 
 int test_channels() {
@@ -141,7 +141,7 @@ int test_ddci_channel_count() {
 
     // adapters of previous tests lived on their stacks
     for (i = 0; i < MAX_ADAPTERS; i++)
-        a.slot(i).store(nullptr);
+        a[i] = nullptr;
     create_adapter(&ad, 8);
     create_adapter(&a0, 0);
     pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
@@ -186,8 +186,8 @@ int test_ddci_channel_count() {
     del_ca(&dvbca);
     ddci_devices[0] = NULL;
     ca_devices[0] = NULL;
-    a.slot(0).store(nullptr);
-    a.slot(8).store(nullptr);
+    a[0] = nullptr;
+    a[8] = nullptr;
     return 0;
 }
 
@@ -207,7 +207,7 @@ int test_update_resend_keeps_slot() {
     int i;
 
     for (i = 0; i < MAX_ADAPTERS; i++)
-        a.slot(i).store(nullptr);
+        a[i] = nullptr;
     create_adapter(&ad, 8);
     create_adapter(&a0, 0);
     SPMT *pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
@@ -318,8 +318,8 @@ int test_update_resend_keeps_slot() {
     del_ca(&dvbca);
     ddci_devices[0] = NULL;
     ca_devices[0] = NULL;
-    a.slot(0).store(nullptr);
-    a.slot(8).store(nullptr);
+    a[0] = nullptr;
+    a[8] = nullptr;
     return 0;
 }
 
@@ -332,7 +332,7 @@ int test_ddci_update_version_follows_content() {
     int i;
 
     for (i = 0; i < MAX_ADAPTERS; i++)
-        a.slot(i).store(nullptr);
+        a[i] = nullptr;
     create_adapter(&ad, 8);
     create_adapter(&a0, 0);
     SPMT *pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
@@ -386,8 +386,8 @@ int test_ddci_update_version_follows_content() {
     del_ca(&dvbca);
     ddci_devices[0] = NULL;
     ca_devices[0] = NULL;
-    a.slot(0).store(nullptr);
-    a.slot(8).store(nullptr);
+    a[0] = nullptr;
+    a[8] = nullptr;
     return 0;
 }
 
@@ -632,9 +632,9 @@ int test_ddci_process_ts_null_tail() {
     _writev = writev;
     channels.clear();
     ddci_devices[0] = NULL;
-    a.slot(0).store(nullptr);
-    a.slot(1).store(nullptr);
-    a.slot(2).store(nullptr);
+    a[0] = nullptr;
+    a[1] = nullptr;
+    a[2] = nullptr;
     return 0;
 }
 
@@ -705,7 +705,7 @@ int test_psi_pids_survive_a_channel_change() {
 
     // earlier tests leave stack adapters and CA devices in the global arrays
     for (i = 0; i < MAX_ADAPTERS; i++)
-        a.slot(i).store(nullptr);
+        a[i] = nullptr;
     memset(ca_devices, 0, sizeof(ca_devices));
     channels.clear();
 
@@ -757,9 +757,9 @@ int test_psi_pids_survive_a_channel_change() {
     pmt_del(pmt_b->id);
     free_filters();
     channels.clear();
-    a.slot(2).store(nullptr);
-    a.slot(4).store(nullptr);
-    a.slot(8).store(nullptr);
+    a[2] = nullptr;
+    a[4] = nullptr;
+    a[8] = nullptr;
     return 0;
 }
 
@@ -873,7 +873,7 @@ int test_create_sdt() {
     ASSERT(sdt_free_CA_mode2 != 0, "SDT SID 1 free_CA_mode != 1");
 
     // do not leave the stack adapter behind for later tests
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -1022,7 +1022,7 @@ int test_create_sdt_with_real_data() {
     ASSERT(d.sdt_ver == 1, "SDT version bumped without changes");
 
     // do not leave the stack adapter behind for later tests
-    a.slot(2).store(nullptr);
+    a[2] = nullptr;
     return 0;
 }
 
@@ -1036,7 +1036,7 @@ int test_create_pmt() {
     SFilter f;
     d.id = 0;
     d.enabled = 1;
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[0] = &d;
     int pid = 1023;
@@ -1095,7 +1095,7 @@ int test_create_pmt() {
     SPMT *new_pmt = get_pmt(pmt_add(0, 200, 200));
     ad.id = 0;
     ad.enabled = 1;
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.pids[0].pid = pid;
     ad.pids[0].flags = 1;
 
@@ -1112,7 +1112,7 @@ int test_create_pmt() {
                  "Number of caids does not matches "
                  "between generated PMT and read PMT");
 
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
@@ -1125,7 +1125,7 @@ int test_create_pmt_maps_es_ecm_pids() {
     d.enabled = 1;
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[0] = &d;
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     // free, not just NULL: earlier tests never released their PMTs
     free_all_pmts();
     ca_devices[0] = NULL;
@@ -1225,7 +1225,7 @@ int test_ci_pmt_name_is_refreshed() {
 
     // earlier tests leave stack adapters and CA devices in the global arrays
     for (i = 0; i < MAX_ADAPTERS; i++)
-        a.slot(i).store(nullptr);
+        a[i] = nullptr;
     memset(ca_devices, 0, sizeof(ca_devices));
     channels.clear();
 
@@ -1300,7 +1300,7 @@ int test_ddci_add_psi_per_channel_pmt() {
     int i, ia = -1, ib = -1;
 
     for (i = 0; i < MAX_ADAPTERS; i++)
-        a.slot(i).store(nullptr);
+        a[i] = nullptr;
     memset(ca_devices, 0, sizeof(ca_devices));
     memset(ddci_devices, 0, sizeof(ddci_devices));
     channels.clear();
@@ -1382,7 +1382,7 @@ int test_channel_change_sends_pat_immediately() {
     int i;
 
     for (i = 0; i < MAX_ADAPTERS; i++)
-        a.slot(i).store(nullptr);
+        a[i] = nullptr;
     memset(ca_devices, 0, sizeof(ca_devices));
     channels.clear();
     create_adapter(&ci, 8);
@@ -1460,8 +1460,8 @@ int test_channel_change_sends_pat_immediately() {
     channels.clear();
     ddci_devices[ci.id] = NULL;
     ca_devices[0] = NULL;
-    a.slot(2).store(nullptr);
-    a.slot(8).store(nullptr);
+    a[2] = nullptr;
+    a[8] = nullptr;
     return 0;
 }
 
@@ -1476,7 +1476,7 @@ int test_ddci_full_device_retries() {
 
     // Adapters of previous tests lived on their stacks
     for (i = 0; i < MAX_ADAPTERS; i++)
-        a.slot(i).store(nullptr);
+        a[i] = nullptr;
     create_adapter(&ad, 8);
     pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
     pmt1 = create_pmt(8, 700, 701, 702, 0x100, 0x100);
@@ -1522,7 +1522,7 @@ int test_initializing_ddci_does_not_block_others() {
     int i;
 
     for (i = 0; i < MAX_ADAPTERS; i++)
-        a.slot(i).store(nullptr);
+        a[i] = nullptr;
     memset(ddci_devices, 0, sizeof(ddci_devices));
     memset(ca_devices, 0, sizeof(ca_devices));
     channels.clear();
@@ -1622,9 +1622,9 @@ int test_initializing_ddci_does_not_block_others() {
     free_filters();
     ddci_devices[0] = ddci_devices[1] = NULL;
     ca_devices[0] = ca_devices[1] = NULL;
-    a.slot(0).store(nullptr);
-    a.slot(1).store(nullptr);
-    a.slot(8).store(nullptr);
+    a[0] = nullptr;
+    a[1] = nullptr;
+    a[8] = nullptr;
     return 0;
 }
 
@@ -1637,7 +1637,7 @@ int test_ddci_least_used_device() {
     adapter ad = {0}, a0 = {0}, a1 = {0};
 
     for (int i = 0; i < MAX_ADAPTERS; i++)
-        a.slot(i).store(nullptr);
+        a[i] = nullptr;
     memset(ddci_devices, 0, sizeof(ddci_devices));
     memset(ca_devices, 0, sizeof(ca_devices));
     channels.clear();
@@ -1702,9 +1702,9 @@ int test_ddci_least_used_device() {
     free_filters();
     ddci_devices[0] = ddci_devices[1] = NULL;
     ca_devices[0] = ca_devices[1] = NULL;
-    a.slot(0).store(nullptr);
-    a.slot(1).store(nullptr);
-    a.slot(8).store(nullptr);
+    a[0] = nullptr;
+    a[1] = nullptr;
+    a[8] = nullptr;
     return 0;
 }
 

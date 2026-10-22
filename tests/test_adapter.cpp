@@ -124,7 +124,7 @@ int test_get_lnb_int_freq_cband() {
 
 int test_update_pids() {
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     for (int i = 0; i < 8; i++) {
         ad.pids[i].flags = i % 4;
@@ -148,7 +148,7 @@ int test_update_pids() {
 // plp/isi and ds come from the client's URL: ten digits must fit.
 int test_describe_adapter_large_plp_ds() {
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     char buf[500];
 
@@ -162,19 +162,19 @@ int test_describe_adapter_large_plp_ds() {
     describe_adapter(-1, 0, buf, sizeof(buf));
     ASSERT(strstr(buf, ",2147483646,2147483647,"), "DVB-C2 ds and plp printed");
 
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
 int test_find_pid_unsorted() {
     for (int i = 0; i < MAX_ADAPTERS; i++) {
-        a.slot(i).store(nullptr);
+        a[i] = nullptr;
     }
 
     // Mid-update_pids state: an INACTIVE slot ahead of a NEW entry. find_pid
     // must still find the entry behind it.
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.id = 0;
     ad.enabled = 1;
     ad.pids[0].flags = PID_STATE_INACTIVE;
@@ -192,7 +192,7 @@ int test_find_pid_unsorted() {
            "find_pid must return NULL for a missing pid");
 
     for (int i = 0; i < MAX_ADAPTERS; i++) {
-        a.slot(i).store(nullptr);
+        a[i] = nullptr;
     }
     return 0;
 }
@@ -212,13 +212,13 @@ static int test_del_filters_fail(adapter *ad, int fd, int pid) {
 
 int test_update_pids_del_filters_error() {
     for (int i = 0; i < MAX_ADAPTERS; i++) {
-        a.slot(i).store(nullptr);
+        a[i] = nullptr;
     }
 
     // Removal failure must always be reported, after cleanup, with no
     // minimum-pid-count gate.
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.id = 0;
     ad.enabled = 1;
     ad.active_pids = 5;
@@ -233,7 +233,7 @@ int test_update_pids_del_filters_error() {
 
     // Same above the minimum pid count: still an error.
     adapter ad2 = {};
-    a.publish(0, &ad2);
+    a[0] = &ad2;
     ad2.id = 0;
     ad2.enabled = 1;
     ad2.active_pids = 20;
@@ -246,20 +246,20 @@ int test_update_pids_del_filters_error() {
            "count");
 
     for (int i = 0; i < MAX_ADAPTERS; i++) {
-        a.slot(i).store(nullptr);
+        a[i] = nullptr;
     }
     return 0;
 }
 
 int test_update_pids_max_pids_floor() {
     for (int i = 0; i < MAX_ADAPTERS; i++) {
-        a.slot(i).store(nullptr);
+        a[i] = nullptr;
     }
 
     // Demux failure below the minimum: max_pids keeps MIN_ADAPTER_PIDS and
     // update_pids errors so the RTSP reply reflects it.
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.id = 0;
     ad.enabled = 1;
     ad.active_pids = 5;
@@ -283,7 +283,7 @@ int test_update_pids_max_pids_floor() {
     // Demux failure at/above the minimum keeps the old behavior: lower the
     // cap (but not below the floor) and succeed so existing streams continue.
     adapter ad2 = {};
-    a.publish(0, &ad2);
+    a[0] = &ad2;
     ad2.id = 0;
     ad2.enabled = 1;
     ad2.active_pids = 20;
@@ -297,7 +297,7 @@ int test_update_pids_max_pids_floor() {
     ASSERT(ad2.max_pids == 19, "max_pids should lower to max_active_pids - 1");
 
     for (int i = 0; i < MAX_ADAPTERS; i++) {
-        a.slot(i).store(nullptr);
+        a[i] = nullptr;
     }
     return 0;
 }
@@ -332,7 +332,7 @@ int test_compare_slave_parameters() {
 
     // Clear global adapter array to ensure clean state
     for (int i = 0; i < MAX_ADAPTERS; i++) {
-        a.slot(i).store(nullptr);
+        a[i] = nullptr;
     }
 
     // 1. ad is NULL
@@ -344,14 +344,14 @@ int test_compare_slave_parameters() {
     master_ad.enabled = 1;
     master_ad.master_source = -1;
     memset(master_ad.used, 0, sizeof(master_ad.used));
-    a.publish(0, &master_ad);
+    a[0] = &master_ad;
 
     // Initialize slave_ad
     slave_ad.id = 1;
     slave_ad.enabled = 1;
     slave_ad.master_source = 0; // slave of master_ad
     memset(slave_ad.used, 0, sizeof(slave_ad.used));
-    a.publish(1, &slave_ad);
+    a[1] = &slave_ad;
 
     transponder tp;
     auto setup_tp = [](transponder &t) {
@@ -504,7 +504,7 @@ int test_compare_slave_parameters() {
 
     // Reset global array
     for (int i = 0; i < MAX_ADAPTERS; i++) {
-        a.slot(i).store(nullptr);
+        a[i] = nullptr;
     }
 
     return 0;
@@ -514,7 +514,7 @@ int test_compare_slave_parameters() {
 // 0..8192 so client values never index the fixed-size pid tables.
 int test_mark_pid_add_bounds() {
     adapter ad = {};
-    a.publish(0, &ad);
+    a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
 
@@ -525,7 +525,7 @@ int test_mark_pid_add_bounds() {
     ASSERT(mark_pid_add(0, 0, 8192) == 0, "pids=all marker must be added");
     ASSERT(find_pid(0, 8192) != NULL, "pids=all marker must be found");
 
-    a.slot(0).store(nullptr);
+    a[0] = nullptr;
     return 0;
 }
 
