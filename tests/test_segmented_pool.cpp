@@ -27,12 +27,21 @@
 #include <thread>
 #include <vector>
 
-int test_obtain_and_iterate() {
+// Value append on reserve()+slot(); production objects use obtain().
+template <size_t M>
+std::optional<size_t> append(SegmentedPool<int, M> &pool, int v) {
+    auto idx = pool.reserve();
+    if (idx)
+        pool.slot(*idx) = v;
+    return idx;
+}
+
+int test_append_and_iterate() {
     SegmentedPool<int, 16> pool; // 600 appends cross 10 buckets of 64
     for (int i = 0; i < 600; ++i) {
-        auto idx = pool.obtain(i);
-        ASSERT(idx.has_value(), "obtain failed before capacity");
-        ASSERT_EQUAL(*idx, (size_t)i, "obtain index mismatch");
+        auto idx = append(pool, i);
+        ASSERT(idx.has_value(), "append failed before capacity");
+        ASSERT_EQUAL(*idx, (size_t)i, "append index mismatch");
     }
     ASSERT_EQUAL(pool.size(), 600, "size mismatch after appends");
 
@@ -42,22 +51,6 @@ int test_obtain_and_iterate() {
         ++expect;
     }
     ASSERT_EQUAL(expect, 600, "iteration count mismatch");
-    return 0;
-}
-
-int test_obtain_factory() {
-    SegmentedPool<int, 4> pool;
-    for (int k = 0; k < 130; ++k) {
-        auto idx = pool.obtain([](size_t index) { return (int)index * 2; });
-        ASSERT(idx.has_value(), "factory obtain failed");
-        ASSERT_EQUAL(*idx, (size_t)k, "factory obtain index mismatch");
-    }
-    int expect = 0;
-    for (int v : pool) {
-        ASSERT_EQUAL(v, expect, "factory value mismatch");
-        expect += 2;
-    }
-    ASSERT_EQUAL(pool.size(), 130, "size mismatch after factory obtains");
     return 0;
 }
 
@@ -74,10 +67,10 @@ int test_extend_and_defaults() {
 int test_snapshot_iterator() {
     SegmentedPool<int, 8> pool;
     for (int i = 0; i < 300; ++i)
-        pool.obtain(i);
+        append(pool, i);
     auto first = pool.begin(), last = pool.end();
     for (int i = 300; i < 400; ++i)
-        pool.obtain(i);
+        append(pool, i);
     size_t count = 0;
     for (auto it = first; it != last; ++it)
         ++count;
@@ -89,8 +82,8 @@ int test_snapshot_iterator() {
 int test_overflow() {
     SegmentedPool<int, 1> pool; // capacity is exactly 64
     for (int i = 0; i < 64; ++i)
-        ASSERT(pool.obtain(i).has_value(), "obtain failed when filling");
-    ASSERT(!pool.obtain(999).has_value(), "obtain over capacity worked");
+        ASSERT(append(pool, i).has_value(), "append failed when filling");
+    ASSERT(!append(pool, 999).has_value(), "append over capacity worked");
     ASSERT_EQUAL(pool.size(), 64, "size moved past capacity");
     size_t count = 0;
     for (int v : pool) {
@@ -104,10 +97,10 @@ int test_overflow() {
 int test_clear() {
     SegmentedPool<int, 8> pool;
     for (int i = 1; i <= 300; ++i)
-        pool.obtain(i);
+        append(pool, i);
     pool.clear();
     ASSERT_EQUAL(pool.size(), 0, "size is not zero after clear");
-    ASSERT(pool.obtain(7).has_value(), "obtain failed after clear");
+    ASSERT(append(pool, 7).has_value(), "append failed after clear");
     ASSERT_EQUAL(*pool.begin(), 7, "wrong value after clear");
     return 0;
 }
@@ -115,13 +108,13 @@ int test_clear() {
 int test_shrink_and_published() {
     SegmentedPool<int, 8> pool;
     for (int i = 1; i <= 200; ++i)
-        pool.obtain(i);
+        append(pool, i);
     pool.shrink_to(10);
     ASSERT_EQUAL(pool.size(), 10, "size mismatch after shrink");
     size_t visits = 0, nonzero = 0;
     pool.for_each_published([&](std::atomic<int> &s) {
         ++visits;
-        nonzero += s.load() != 0;
+        nonzero += s != 0;
     });
     // Four published buckets are visited whole, past the shrink.
     ASSERT_EQUAL(visits, 256, "for_each_published missed slots");
@@ -129,10 +122,9 @@ int test_shrink_and_published() {
     pool.clear();
     ASSERT_EQUAL(pool.size(), 0, "size is not zero after clear");
     nonzero = 0;
-    pool.for_each_published(
-        [&](std::atomic<int> &s) { nonzero += s.load() != 0; });
+    pool.for_each_published([&](std::atomic<int> &s) { nonzero += s != 0; });
     ASSERT_EQUAL(nonzero, 0, "clear left values past the shrink");
-    ASSERT(pool.obtain(9).has_value(), "obtain failed after clear");
+    ASSERT(append(pool, 9).has_value(), "append failed after clear");
     ASSERT_EQUAL(pool[0], 9, "wrong value after clear");
     return 0;
 }
@@ -153,21 +145,21 @@ int test_concurrent_claim() {
     t2.join();
     t3.join();
     t4.join();
-    ASSERT_EQUAL(claimed.load(), 64, "slot claimed twice or never");
+    ASSERT_EQUAL(claimed, 64, "slot claimed twice or never");
     for (int v : pool)
         ASSERT(v >= 1 && v <= 4, "slot left unclaimed");
     return 0;
 }
 
-int test_concurrent_obtain_iterate() {
+int test_concurrent_append_iterate() {
     SegmentedPool<int, 160> pool;
     std::atomic<bool> done{false};
     auto add = [&](int id) {
         for (int i = 0; i < 2000; ++i)
-            pool.obtain(id * 100000 + i);
+            append(pool, id * 100000 + i);
     };
     auto read = [&]() {
-        while (!done.load()) // stress publication; only counts, never fails
+        while (!done) // stress publication; only counts, never fails
             for (int v : pool) {
                 (void)v;
             }
@@ -178,7 +170,7 @@ int test_concurrent_obtain_iterate() {
     p2.join();
     p3.join();
     p4.join();
-    done.store(true);
+    done = true;
     r1.join();
     r2.join();
     ASSERT_EQUAL(pool.size(), 8000, "size mismatch after concurrent appends");
@@ -196,15 +188,14 @@ int test_concurrent_obtain_iterate() {
 int main() {
     opts.log = 255;
     strcpy(thread_info[thread_index].thread_name, "test_segmented_pool");
-    TEST_FUNC(test_obtain_and_iterate(), "obtain across buckets and iterate");
-    TEST_FUNC(test_obtain_factory(), "obtain builds values from the index");
+    TEST_FUNC(test_append_and_iterate(), "append across buckets and iterate");
     TEST_FUNC(test_extend_and_defaults(), "extend with default slots");
     TEST_FUNC(test_snapshot_iterator(), "iterator holds length snapshot");
-    TEST_FUNC(test_overflow(), "obtain past capacity fails cleanly");
+    TEST_FUNC(test_overflow(), "append past capacity fails cleanly");
     TEST_FUNC(test_clear(), "clear resets the pool");
     TEST_FUNC(test_shrink_and_published(), "shrink keeps teardown covered");
     TEST_FUNC(test_concurrent_claim(), "concurrent CAS claims");
-    TEST_FUNC(test_concurrent_obtain_iterate(),
-              "concurrent obtain and iterate");
+    TEST_FUNC(test_concurrent_append_iterate(),
+              "concurrent append and iterate");
     return 0;
 }

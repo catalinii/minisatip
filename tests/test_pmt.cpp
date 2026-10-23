@@ -178,7 +178,7 @@ int test_decrypt() {
     delete a[0];
     a[0] = nullptr;
     delete pmts[0];
-    pmts.slot(0).store(nullptr);
+    pmts.slot(0) = nullptr;
     return 0;
 }
 
@@ -328,7 +328,7 @@ int test_emulate_add_all_pids() {
     a[0] = &ad;
     ad.enabled = 1;
     SPMT pmt{};
-    pmts.slot(0).store(&pmt);
+    pmts.slot(0) = &pmt;
     pmt.enabled = 1;
     pmt.adapter = 0;
     opts.emulate_pids_all = 1;

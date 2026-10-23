@@ -607,7 +607,7 @@ int test_ddci_process_ts_null_tail() {
     }
 
     SPMT *save = pmts[0];
-    pmts.slot(0).store(nullptr);
+    pmts.slot(0) = nullptr;
     add_pid_mapping_table(1, 1000, 0, &d, 0);
     ad.rlen = ad.lbuf - 188;
     set_pid_ts(buf, 1000);
@@ -628,7 +628,7 @@ int test_ddci_process_ts_null_tail() {
         LOG_AND_RETURN(1, "null packet must carry payload only, got %02X",
                        last_iov[3]);
     free_fifo(&d.fifo);
-    pmts.slot(0).store(save);
+    pmts.slot(0) = save;
     _writev = writev;
     channels.clear();
     ddci_devices[0] = NULL;
@@ -662,7 +662,7 @@ int test_ddci_process_ts() {
     }
 
     SPMT *save = pmts[0];
-    pmts.slot(0).store(nullptr);
+    pmts.slot(0) = nullptr;
     add_pid_mapping_table(5, 1000, 0, &d, 0);
     add_pid_mapping_table(5, 2000, 0, &d, 0);
     int new_pid = add_pid_mapping_table(1, 1000, 0, &d, 0);
@@ -691,7 +691,7 @@ int test_ddci_process_ts() {
         LOG_AND_RETURN(1, "expected pid 2000 in the adapter buffer, got %d",
                        PID_FROM_TS(ad.buf + 2 * 188));
     free_fifo(&d.fifo);
-    pmts.slot(0).store(save);
+    pmts.slot(0) = save;
     return 0;
 }
 // Two tuners on one CI: stopping the first must not remove pid 0 from the CI
@@ -1049,7 +1049,7 @@ int test_create_pmt() {
     f.pid = pid;
     f.next_filter = -1;
     f.enabled = 1;
-    filters.slot(0).store(&f);
+    filters.slot(0) = &f;
     SPMT *pmt = create_pmt(0, 0x66, pid, 0x55, 0x100, 0x500);
     d.pmt[0].id = pmt->id; // set to pmt 1
     pmt->pid = pid - 1;
@@ -1103,7 +1103,7 @@ int test_create_pmt() {
     ad.active_pmt[0] = pmt->id;
 
     process_pmt(0, psi + 1, psi_len, new_pmt);
-    filters.slot(0).store(nullptr);
+    filters.slot(0) = nullptr;
     ASSERT_EQUAL(
         pmt->stream_pids.size(), new_pmt->stream_pids.size(),
         "Number of streampids does not matches between generated PMT and "
@@ -1185,7 +1185,7 @@ int test_process_cat() {
     f.pid = 1234;
     f.next_filter = -1;
     f.enabled = 1;
-    filters.slot(0).store(&f);
+    filters.slot(0) = &f;
 
     // Process the CAT
     ddci_process_cat(0, cat, sizeof(cat) / sizeof(uint8_t), &d);
@@ -1208,7 +1208,7 @@ int test_process_cat() {
     ASSERT(d.emm_pids.count(MAKE_KEY(0, 49)) > 0, "EMM PID 49 not tracked");
 
     // Reset fixtures
-    filters.slot(0).store(nullptr);
+    filters.slot(0) = nullptr;
 
     return 0;
 }
