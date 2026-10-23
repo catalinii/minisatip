@@ -99,7 +99,6 @@ find_package(Threads REQUIRED)
 set(MINISATIP_LIBS Threads::Threads)
 if(STDCPPEXP_LIBRARY)
     set(CXX23_DEFAULT ON)
-    list(APPEND MINISATIP_LIBS ${STDCPPEXP_LIBRARY})
 endif()
 
 # Build options
@@ -120,6 +119,10 @@ if(APPLE)
     set(DVBCA OFF)
     set(NETCVCLIENT OFF)
     set(DDCI OFF)
+endif()
+
+if(CXX23 AND STDCPPEXP_LIBRARY)
+    list(APPEND MINISATIP_LIBS ${STDCPPEXP_LIBRARY})
 endif()
 
 # DDCI needs DVBCA symbols and Linux DVB headers
