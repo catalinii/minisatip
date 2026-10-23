@@ -19,11 +19,6 @@ if(EXISTS ${CMAKE_SOURCE_DIR}/.git)
     )
 endif()
 
-if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
-    message(STATUS "Setting build type to 'DEBUG' as default.")
-    set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Choose the build type (Debug, Release, RelWithDebInfo, MinSizeRel)" FORCE)
-endif()
-
 # -DVERSION_STRING wins; without it and without git metadata, as in a
 # release tarball, the version is "unknown"
 if(NOT VERSION_STRING)
@@ -37,6 +32,23 @@ if(NOT VERSION_STRING)
 endif()
 
 project(minisatip VERSION 2.0 LANGUAGES CXX)
+
+# The build type alone decides the optimization: RelWithDebInfo unless one is
+# given, or Debug for -DDEBUG=ON, chosen again when DEBUG changes.
+get_property(MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(NOT MULTI_CONFIG AND (NOT CMAKE_BUILD_TYPE OR
+   "${CMAKE_BUILD_TYPE}" STREQUAL "${MINISATIP_DEFAULT_BUILD_TYPE}"))
+    if(DEBUG)
+        set(DEFAULT_BUILD_TYPE "Debug")
+    else()
+        set(DEFAULT_BUILD_TYPE "RelWithDebInfo")
+    endif()
+    if(NOT "${CMAKE_BUILD_TYPE}" STREQUAL "${DEFAULT_BUILD_TYPE}")
+        message(STATUS "Setting build type to '${DEFAULT_BUILD_TYPE}' as default.")
+    endif()
+    set(MINISATIP_DEFAULT_BUILD_TYPE "${DEFAULT_BUILD_TYPE}" CACHE INTERNAL "")
+    set(CMAKE_BUILD_TYPE "${DEFAULT_BUILD_TYPE}" CACHE STRING "Choose the build type (Debug, Release, RelWithDebInfo, MinSizeRel)" FORCE)
+endif()
 
 set(DVBCSA_DEFAULT OFF)
 set(DVBCA_DEFAULT OFF)
@@ -169,8 +181,6 @@ if(DEBUG)
             -static-liblsan
         )
     endif()
-else()
-    add_compile_options(-O2)
 endif()
 
 # NetCeiver XML2 flags
@@ -385,4 +395,5 @@ if(BUILD_TESTING)
     endforeach()
 endif()
 
-message(STATUS "Version: ${VERSION_STRING}, FLAGS: ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} ${CMAKE_CXX_FLAGS_RELEASE}")
+string(TOUPPER "${CMAKE_BUILD_TYPE}" BUILD_TYPE_UPPER)
+message(STATUS "Version: ${VERSION_STRING}, build type: ${CMAKE_BUILD_TYPE}, FLAGS: ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${BUILD_TYPE_UPPER}}")
