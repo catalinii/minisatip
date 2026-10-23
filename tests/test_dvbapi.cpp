@@ -67,7 +67,8 @@ int test_add_pmt_reuses_live_key() {
     pmt.id = 0;
     pmt.sid = 100;
     pmt.pid = 48;
-    pmts.publish(0, &pmt);
+    pmts.slot(0) = &pmt;
+    pmts.extend_to(1);
     int before = count_enabled_keys();
 
     ASSERT(dvbapi_add_pmt(&ad, &pmt, 0) == TABLES_RESULT_OK,
@@ -131,7 +132,8 @@ int test_icam_mode_only_from_ecms() {
     SKey *k;
 
     pmt.enabled = 1;
-    pmts.publish(0, &pmt);
+    pmts.slot(0) = &pmt;
+    pmts.extend_to(1);
     id = keys_add(0, 0);
     ASSERT(id >= 0, "no key for the PMT");
     k = keys[id];
@@ -172,7 +174,8 @@ int test_channel_falls_back_to_sid() {
 
     pmt.enabled = 1;
     pmt.sid = 1234;
-    pmts.publish(0, &pmt);
+    pmts.slot(0) = &pmt;
+    pmts.extend_to(1);
     id = keys_add(0, 0);
     ASSERT(id >= 0, "no key for the PMT");
     k = keys[id];
@@ -224,7 +227,8 @@ int test_update_resend_skips_identical_capmt() {
     pmt.id = 0;
     pmt.sid = 100;
     pmt.pid = 48;
-    pmts.publish(0, &pmt);
+    pmts.slot(0) = &pmt;
+    pmts.extend_to(1);
 
     ASSERT(dvbapi_add_pmt(&ad, &pmt, 0) == TABLES_RESULT_OK,
            "first add failed");
