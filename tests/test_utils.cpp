@@ -258,14 +258,11 @@ int test_obtain() {
     TestSlot *reuse = pool.obtain();
     ASSERT(reuse && reuse->id == 1, "freed slot is reused");
     ASSERT(reuse == pool[1], "reuse returns the same object");
-    for (TestSlot *s : pool)
-        delete s;
 
     SegmentedPool<TestBothSlot *, 1> bpool;
     TestBothSlot *bs0 = bpool.obtain();
     ASSERT(bs0 && bs0->id == 0 && bs0->sid == -1,
            "type with both fields gets id, sid untouched");
-    delete bs0;
     return 0;
 }
 
@@ -293,8 +290,6 @@ int test_obtain_mt() {
         ASSERT(s && s->id == i, "slot id matches index");
     }
     ASSERT(pool.obtain() == nullptr, "full stays full");
-    for (TestSlot *s : pool)
-        delete s;
     return 0;
 }
 
@@ -331,8 +326,6 @@ int test_obtain_churn() {
     ASSERT(dups == 0, "no slot claimed twice at once");
     ASSERT(bad_id == 0, "claimed ids stay in range");
     ASSERT(total == T * K, "all iterations claimed a slot");
-    for (TestSlot *s : pool)
-        delete s;
     return 0;
 }
 
