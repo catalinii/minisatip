@@ -110,6 +110,7 @@ option(LINUXDVB "Enable Linux DVB support" ON)
 option(DDCI "Enable DDCI support" ${DDCI_DEFAULT})
 option(CXX23 "Enable C++23 features (stacktrace)" ${CXX23_DEFAULT})
 option(DEBUG "Enable debug/sanitizer build" OFF)
+option(DEV_WARNINGS "Strict warnings, treated as errors (development build)" OFF)
 option(SRT "Enable SRT support" ${SRT_DEFAULT})
 option(BUILD_TESTING "Build tests" OFF)
 option(TEST_SANITIZERS "Build tests with AddressSanitizer/LeakSanitizer" ON)
@@ -169,6 +170,20 @@ add_compile_options(
     -fno-omit-frame-pointer
     -Warray-bounds
 )
+
+# The development build: strict warnings, all of them errors
+if(DEV_WARNINGS)
+    add_compile_options(
+        -pedantic-errors
+        -Wextra
+        -Wformat=2
+        -Wconversion
+        -Wsign-conversion
+        -Wshadow
+        -Wnull-dereference
+        -Werror
+    )
+endif()
 
 if(DEBUG)
     add_compile_options(
