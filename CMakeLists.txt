@@ -95,7 +95,8 @@ if(NETCEIVER_LIBRARY AND NETCEIVER_INCLUDE_DIR)
     set(NETCVCLIENT_DEFAULT ON)
 endif()
 
-set(MINISATIP_LIBS pthread)
+find_package(Threads REQUIRED)
+set(MINISATIP_LIBS Threads::Threads)
 if(STDCPPEXP_LIBRARY)
     set(CXX23_DEFAULT ON)
     list(APPEND MINISATIP_LIBS ${STDCPPEXP_LIBRARY})
@@ -291,7 +292,7 @@ if(BUILD_TESTING)
     set(TEST_LIBS
         crypto
         dl
-        pthread
+        Threads::Threads
     )
     if(SRT)
         list(APPEND TEST_LIBS srt)
