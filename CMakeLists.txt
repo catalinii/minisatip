@@ -33,6 +33,7 @@ endif()
 
 project(minisatip VERSION 2.0 LANGUAGES CXX)
 
+include(GNUInstallDirs)
 include(CheckPIESupported)
 
 # The build type alone decides the optimization: RelWithDebInfo unless one is
@@ -286,7 +287,11 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "mips" OR
 endif()
 
 target_link_libraries(minisatip PRIVATE ${MINISATIP_LIBS})
-install(TARGETS minisatip RUNTIME DESTINATION bin)
+install(TARGETS minisatip RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+# The web interface: -R <datadir>/minisatip/html, or <datadir>/minisatip as
+# working directory (-R defaults to html); status.html is executable in git
+install(DIRECTORY html/ DESTINATION ${CMAKE_INSTALL_DATADIR}/minisatip/html
+    FILE_PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
 
 # Testing
 if(BUILD_TESTING)
