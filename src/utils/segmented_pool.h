@@ -43,8 +43,13 @@ class SegmentedPool {
         for (auto &b : buckets_)
             b = nullptr;
     }
-    // Single-threaded teardown: no other thread may access the pool.
+    // Pool owns heap objects: delete survivors, then buckets.
+    // Manual deletes must blank; stack plants must clear first.
     ~SegmentedPool() {
+        if constexpr (std::is_pointer_v<T>) {
+            for_each_published(
+                [](std::atomic<T> &s) { delete static_cast<T>(s); });
+        }
         for (auto &b : buckets_)
             delete static_cast<Bucket *>(b);
     }

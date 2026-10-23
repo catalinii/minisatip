@@ -1115,6 +1115,7 @@ void free_all_keys(void) {
             SKey *k = slot;
             delete k;
         }
+    keys.clear();
 }
 
 // Slot readers for the status API; a null slot reads as zero/empty.
