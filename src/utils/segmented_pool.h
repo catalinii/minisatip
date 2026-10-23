@@ -54,8 +54,8 @@ class SegmentedPool {
     size_t size() const { return size_; }
     bool empty() const { return size() == 0; }
 
-    // Reserve the next index; nullopt when full. Publish with slot()
-    // or publish(); the slot reads default until then.
+    // Reserve the next index; nullopt when full. Publish with slot();
+    // the slot reads default until then.
     std::optional<size_t> reserve() {
         size_t index = size_.fetch_add(1);
         if (index >= capacity()) {
@@ -64,14 +64,6 @@ class SegmentedPool {
             return std::nullopt;
         }
         return index;
-    }
-
-    // Store v at index and cover it with the length; false over capacity.
-    bool publish(size_t index, const T &v) {
-        if (index >= capacity())
-            return false;
-        slot(index) = v;
-        return extend_to(index + 1);
     }
 
     // Lower the length to n; slots stay allocated for later regrowth.
@@ -147,7 +139,7 @@ class SegmentedPool {
         return scan(size());
     }
 
-    // Load the value at index; writes must use slot() or publish().
+    // Load the value at index; write via slot(), covering with extend_to().
     T operator[](size_t index) const { return load(index); }
 
     // Raw slot for CAS-claim loops; publishes its bucket on first touch.
