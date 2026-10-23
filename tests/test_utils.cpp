@@ -238,7 +238,7 @@ int test_obtain() {
     SegmentedPool<TestSlot *, 1> pool; // one bucket holds 64 slots
     TestSlot *s0 = pool.obtain();
     ASSERT(s0 && s0->id == 0, "first slot gets id 0");
-    ASSERT(s0->allocated.load() && !s0->enabled.load(),
+    ASSERT(s0->allocated && !s0->enabled,
            "claimed slot is allocated but not enabled");
     s0->enabled = true;
     TestSlot *s1 = pool.obtain();

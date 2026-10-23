@@ -1122,7 +1122,7 @@ void free_all() {
         free_fifo(&ss->fifo);
         free(ss->prio_data);
         delete ss;
-        s.slot(i).store(NULL);
+        s.slot(i) = NULL;
     }
     free_all_streams();
     free_all_adapters();

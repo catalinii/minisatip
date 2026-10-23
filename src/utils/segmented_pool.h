@@ -20,7 +20,7 @@ concept ReusableObject = requires(U *u, bool expected) {
     requires std::default_initializable<U>;
     u->id = 0;
     u->enabled = false;
-    { u->enabled.load() } -> std::convertible_to<bool>;
+    { u->enabled } -> std::convertible_to<bool>;
     {
         u->allocated.compare_exchange_strong(expected, true)
     } -> std::same_as<bool>;
@@ -41,26 +41,26 @@ class SegmentedPool {
 
     SegmentedPool() {
         for (auto &b : buckets_)
-            b.store(nullptr, std::memory_order_relaxed);
+            b = nullptr;
     }
     // Single-threaded teardown: no other thread may access the pool.
     ~SegmentedPool() {
         for (auto &b : buckets_)
-            delete b.load(std::memory_order_relaxed);
+            delete static_cast<Bucket *>(b);
     }
     SegmentedPool(const SegmentedPool &) = delete;
     SegmentedPool &operator=(const SegmentedPool &) = delete;
 
-    size_t size() const { return size_.load(std::memory_order_acquire); }
+    size_t size() const { return size_; }
     bool empty() const { return size() == 0; }
 
     // Reserve the next index; nullopt when full. Publish with slot()
     // or publish(); the slot reads default until then.
     std::optional<size_t> reserve() {
-        size_t index = size_.fetch_add(1, std::memory_order_relaxed);
+        size_t index = size_.fetch_add(1);
         if (index >= capacity()) {
             // Paired with our own increment; size stays above live slots.
-            size_.fetch_sub(1, std::memory_order_relaxed);
+            size_.fetch_sub(1);
             return std::nullopt;
         }
         return index;
@@ -70,15 +70,14 @@ class SegmentedPool {
     bool publish(size_t index, const T &v) {
         if (index >= capacity())
             return false;
-        slot(index).store(v, std::memory_order_release);
+        slot(index) = v;
         return extend_to(index + 1);
     }
 
     // Lower the length to n; slots stay allocated for later regrowth.
     void shrink_to(size_t n) {
-        size_t cur = size_.load(std::memory_order_relaxed);
-        while (cur > n &&
-               !size_.compare_exchange_weak(cur, n, std::memory_order_relaxed))
+        size_t cur = size_;
+        while (cur > n && !size_.compare_exchange_weak(cur, n))
             ;
     }
 
@@ -86,9 +85,8 @@ class SegmentedPool {
     bool extend_to(size_t n) {
         if (n > capacity())
             return false;
-        size_t cur = size_.load(std::memory_order_relaxed);
-        while (cur < n &&
-               !size_.compare_exchange_weak(cur, n, std::memory_order_relaxed))
+        size_t cur = size_;
+        while (cur < n && !size_.compare_exchange_weak(cur, n))
             ;
         return true;
     }
@@ -101,7 +99,7 @@ class SegmentedPool {
         using U = std::remove_pointer_t<T>;
         auto scan = [&](size_t n) -> U * {
             for (size_t index = 0; index < n; ++index) {
-                U *cur = slot(index).load();
+                U *cur = slot(index);
                 if (!cur) {
                     U *fresh = new U();
                     fresh->allocated = true;
@@ -110,12 +108,12 @@ class SegmentedPool {
                     if (slot(index).compare_exchange_strong(cur, fresh))
                         return fresh;
                     delete fresh;
-                    cur = slot(index).load();
+                    cur = slot(index);
                     if (!cur)
                         continue;
                 }
                 bool expected = false;
-                if (!cur->enabled.load() &&
+                if (!cur->enabled &&
                     cur->allocated.compare_exchange_strong(expected, true)) {
                     // id is set once at allocation; rewriting it here races
                     // with unlocked x->id readers (TSAN).
@@ -131,7 +129,7 @@ class SegmentedPool {
             auto index = reserve();
             if (!index)
                 break;
-            if (slot(*index).load())
+            if (slot(*index))
                 continue; // Occupied past the scan (manual plant); skip it.
             U *fresh = new U();
             fresh->allocated = true;
@@ -147,23 +145,6 @@ class SegmentedPool {
         }
         // Full: one more scan in case a slot freed mid-claim.
         return scan(size());
-    }
-
-    // Append make_fresh(index) at the end; nullopt when full.
-    template <typename F>
-    requires std::invocable<F &, size_t> &&
-             std::convertible_to<std::invoke_result_t<F &, size_t>, T>
-    std::optional<size_t> obtain(F &&make_fresh) {
-        auto index = reserve();
-        if (!index)
-            return std::nullopt;
-        slot(*index).store(make_fresh(*index), std::memory_order_release);
-        return index;
-    }
-
-    // Append a value at the end; nullopt when full.
-    std::optional<size_t> obtain(const T &v) {
-        return obtain([&](size_t) { return v; });
     }
 
     // Load the value at index; writes must use slot() or publish().
@@ -186,7 +167,7 @@ class SegmentedPool {
     // Visit every slot in published buckets, past shrinks; for teardown.
     template <typename F> void for_each_published(F &&f) {
         for (size_t b = 0; b < MaxSegs; ++b) {
-            Bucket *bk = buckets_[b].load(std::memory_order_relaxed);
+            Bucket *bk = buckets_[b];
             if (!bk)
                 continue;
             for (auto &s : bk->slots)
@@ -196,9 +177,8 @@ class SegmentedPool {
 
     // Single-threaded reset: blank all published slots, drop the length.
     void clear() {
-        for_each_published(
-            [](std::atomic<T> &s) { s.store(T{}, std::memory_order_relaxed); });
-        size_.store(0, std::memory_order_relaxed);
+        for_each_published([](std::atomic<T> &s) { s = T{}; });
+        size_ = 0;
     }
 
     class iterator {
@@ -237,22 +217,20 @@ class SegmentedPool {
   private:
     struct Bucket {
         std::array<std::atomic<T>, kBucketSize> slots;
-        // Atomics don't self-init; blank before release publication.
+        // Atomics don't self-init; blank before publication.
         Bucket() {
             for (auto &s : slots)
-                s.store(T{}, std::memory_order_relaxed);
+                s = T{};
         }
     };
 
     Bucket *bucket_for(size_t b) const {
-        Bucket *found = buckets_[b].load(std::memory_order_acquire);
+        Bucket *found = buckets_[b];
         if (found)
             return found;
         Bucket *fresh = new Bucket();
         Bucket *want = nullptr;
-        if (buckets_[b].compare_exchange_strong(want, fresh,
-                                                std::memory_order_acq_rel,
-                                                std::memory_order_acquire))
+        if (buckets_[b].compare_exchange_strong(want, fresh))
             return fresh;
         delete fresh;
         return want;
@@ -260,8 +238,7 @@ class SegmentedPool {
 
     T load(size_t index) const {
         Bucket *b = bucket_for(index >> kBucketBits);
-        return b->slots[index & (kBucketSize - 1)].load(
-            std::memory_order_acquire);
+        return b->slots[index & (kBucketSize - 1)];
     }
 
     // Mutable: first touch publishes buckets even through const loads.

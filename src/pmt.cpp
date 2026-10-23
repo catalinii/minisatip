@@ -2508,8 +2508,10 @@ void free_all_pmts() {
 
 void free_filters() {
     // Size may sit below occupied slots after del_filter shrinks.
-    filters.for_each_published(
-        [](std::atomic<SFilter *> &slot) { delete slot.load(); });
+    filters.for_each_published([](std::atomic<SFilter *> &slot) {
+        SFilter *f = slot;
+        delete f;
+    });
     filters.clear();
 }
 
