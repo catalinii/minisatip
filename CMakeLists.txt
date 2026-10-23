@@ -143,14 +143,17 @@ set(CONFIG_CONTENT "// Auto-generated configuration header\n#ifndef CONFIG_H\n#d
 
 foreach(OPT ${OPTIONS})
     if(NOT ${OPT})
-        string(APPEND CONFIG_CONTENT "#define DISABLE_${OPT}\n")
+        string(APPEND CONFIG_CONTENT "#ifndef DISABLE_${OPT}\n#define DISABLE_${OPT}\n#endif\n")
         message(STATUS "Option ${OPT} disabled")
     endif()
 endforeach()
 
 string(APPEND CONFIG_CONTENT "#ifndef VERSION\n#define VERSION \"${VERSION_STRING}\"\n#endif\n")
 string(APPEND CONFIG_CONTENT "\n#endif // CONFIG_H\n")
-file(WRITE ${CMAKE_BINARY_DIR}/config.h "${CONFIG_CONTENT}")
+# configure_file() only touches config.h when its content changes, so a
+# reconfigure does not rebuild everything
+file(WRITE ${CMAKE_BINARY_DIR}/config.h.tmp "${CONFIG_CONTENT}")
+configure_file(${CMAKE_BINARY_DIR}/config.h.tmp ${CMAKE_BINARY_DIR}/config.h COPYONLY)
 
 # Common compile flags
 add_compile_options(
