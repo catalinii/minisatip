@@ -33,6 +33,8 @@ endif()
 
 project(minisatip VERSION 2.0 LANGUAGES CXX)
 
+include(CheckPIESupported)
+
 # The build type alone decides the optimization: RelWithDebInfo unless one is
 # given, or Debug for -DDEBUG=ON, chosen again when DEBUG changes.
 get_property(MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
@@ -155,7 +157,6 @@ add_compile_options(
     -Wall
     -Wno-date-time
     -Wno-switch
-    -fPIC
     -fno-common
     -fno-omit-frame-pointer
     -Warray-bounds
@@ -181,6 +182,13 @@ if(DEBUG)
             -static-liblsan
         )
     endif()
+endif()
+
+# A position independent executable, not -fPIC code: PIC makes every global
+# call interposable. Static builds stay non-PIE.
+if(NOT STATIC)
+    check_pie_supported()
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
 
 # NetCeiver XML2 flags
@@ -245,26 +253,16 @@ if(NOT APPLE)
     list(APPEND MINISATIP_LIBS rt)
 endif()
 
-# Main library
-add_library(minisatip_lib OBJECT ${MINISATIP_SOURCES})
-target_include_directories(minisatip_lib PUBLIC
-    ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_BINARY_DIR}
-)
-target_compile_options(minisatip_lib PRIVATE -include ${CMAKE_BINARY_DIR}/config.h)
-if(SRT)
-    target_include_directories(minisatip_lib PUBLIC ${SRT_INCLUDE_DIR})
-endif()
-if(STDCPPEXP_LIBRARY)
-    target_link_libraries(minisatip_lib PRIVATE ${STDCPPEXP_LIBRARY})
-endif()
-
 # Main executable
-add_executable(minisatip $<TARGET_OBJECTS:minisatip_lib>)
+add_executable(minisatip ${MINISATIP_SOURCES})
 target_include_directories(minisatip PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_BINARY_DIR}
 )
+target_compile_options(minisatip PRIVATE -include ${CMAKE_BINARY_DIR}/config.h)
+if(SRT)
+    target_include_directories(minisatip PRIVATE ${SRT_INCLUDE_DIR})
+endif()
 set_target_properties(minisatip PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 if(STATIC)
