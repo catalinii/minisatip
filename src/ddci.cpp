@@ -677,6 +677,9 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
         ddci_enigma_route_pvr(d);
 
     update_pids(ad->id);
+    // Loopback TAPs live on the DDCI adapter; hardware DDCI needs none.
+    if (opts.enigma)
+        update_pids(d->id);
     update_pids(d->id);
     rv = TABLES_RESULT_OK;
     dump_mapping_table();
@@ -715,8 +718,11 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
                     d->ver = (d->ver + 1) & 0xF;
                     d->sdt_ver = (d->sdt_ver + 1) & 0xF;
                     d->psi_changed = true;
-                    if (opts.enigma && d->channels == 0)
-                        ddci_enigma_route_none(d);
+                    if (opts.enigma) {
+                        if (d->channels == 0)
+                            ddci_enigma_route_none(d);
+                        update_pids(i);
+                    }
                 }
         }
         return 0;
@@ -742,8 +748,11 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
         d->channels--;
     if (was_registered)
         d->psi_changed = true;
-    if (opts.enigma && was_registered && d->channels == 0)
-        ddci_enigma_route_none(d);
+    if (opts.enigma && was_registered) {
+        if (d->channels == 0)
+            ddci_enigma_route_none(d);
+        update_pids(d->id);
+    }
     LOG("%s: deleting pmt id %d, sid %d (%X), pid %d, ddci %d, name %s, "
         "held a slot %d, running channels %d",
         __FUNCTION__, spmt->id, spmt->sid, spmt->sid, m->ddci_pid, m->ddci,
@@ -1383,8 +1392,11 @@ void ddci_init() // you can search the devices here and fill the ddci_devices,
 int ddci_set_pid(adapter *ad, int pid) {
 #ifndef DISABLE_LINUXDVB
     // Loopback reads real TAPs; hardware DDCI needs no demux filters.
-    if (opts.enigma)
-        return dvb_demux_set_pid(ad, pid);
+    if (opts.enigma) {
+        int rc = dvb_demux_set_pid(ad, pid);
+        LOGM("%s: loopback %d add pid %d -> %d", __FUNCTION__, ad->id, pid, rc);
+        return rc;
+    }
 #endif
     LOGM("%s: ddci %d add pid %d", __FUNCTION__, ad->id, pid);
     return 100;
@@ -1392,8 +1404,11 @@ int ddci_set_pid(adapter *ad, int pid) {
 
 int ddci_del_filters(adapter *ad, int fd, int pid) {
 #ifndef DISABLE_LINUXDVB
-    if (opts.enigma)
-        return dvb_demux_del_filters(ad, fd, pid);
+    if (opts.enigma) {
+        int rc = dvb_demux_del_filters(ad, fd, pid);
+        LOGM("%s: loopback %d del pid %d -> %d", __FUNCTION__, ad->id, pid, rc);
+        return rc;
+    }
 #endif
     LOGM("%s: ddci %d del pid %d", __FUNCTION__, ad->id, pid);
     return 0;
