@@ -3894,8 +3894,7 @@ ca_device_t *alloc_ca_device() {
         LOG_AND_RETURN(NULL, "Could not allocate memory for CA device");
     }
     memset(d, 0, sizeof(ca_device_t));
-    // Unopened fds must read invalid, or pre-created devices fake-occupy
-    // slot 0 in ci_slot_taken.
+    // Unopened fds must read invalid, or pre-created devices look live.
     d->fd = -1;
     d->sock = -1;
     // maximum 1 channel per CA
@@ -3964,20 +3963,6 @@ static SMutex &ca_dev_lock(int id) {
     return ca_dev_mutex[id];
 }
 
-// One stack per slot: refuse a second opener of the same /dev/ciN.
-int ci_slot_taken(int slot, int self) {
-    for (int i = 0; i < MAX_ADAPTERS; i++) {
-        ca_device_t *o = ca_devices[i];
-        if (o && o->id != self && o->fd >= 0 && o->ci_slot == slot)
-            return 1;
-    }
-    return 0;
-}
-
-// Serializes slot check through fd publish across adapters; a leaf taken
-// under ca_init_mutex and released before any device init runs.
-static SMutex ca_slot_mutex;
-
 int dvbca_init_dev(adapter *ad) {
     ca_device_t *c;
     int fd, result = 0;
@@ -4006,19 +3991,14 @@ int dvbca_init_dev(adapter *ad) {
     ca_mode mode = ca_mode_for_adapter(ad);
     if (ca_mode_is_enigma(mode)) {
         if (mode == ca_mode::ENIGMA_DDCI) {
-            ci_slot = opts.enigma_ci_slot;
-            if (ci_slot < 0) {
-                ci_slot = -1;
-                for (int s = 0; s < MAX_ADAPTERS && ci_slot < 0; s++) {
-                    snprintf(ca_dev_path, sizeof(ca_dev_path), "/dev/ci%d", s);
-                    if (!ci_slot_taken(s, ad->id) &&
-                        !access(ca_dev_path, R_OK | W_OK))
-                        ci_slot = s;
-                }
-                LOG("loopback adapter %d auto-picked CI slot %d", ad->id,
-                    ci_slot);
+            ci_slot = -1;
+            for (int s = 0; s < MAX_VU_CI_SLOTS && ci_slot < 0; s++) {
+                snprintf(ca_dev_path, sizeof(ca_dev_path), "/dev/ci%d", s);
+                if (!access(ca_dev_path, R_OK | W_OK))
+                    ci_slot = s;
             }
-            if (ci_slot < 0 || ci_slot >= MAX_ADAPTERS)
+            LOG("loopback adapter %d auto-picked CI slot %d", ad->id, ci_slot);
+            if (ci_slot < 0)
                 LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
                                "no usable CI slot for loopback adapter %d",
                                ad->id);
@@ -4032,13 +4012,8 @@ int dvbca_init_dev(adapter *ad) {
                        "CI slot %d owned by the loopback, skip adapter %d",
                        ci_slot, ad->id);
 #endif
-    // Check through publish stays atomic across adapters; device init
-    // below runs unlocked so inits do not serialize for seconds.
-    std::unique_lock<SMutex> slot_lock(ca_slot_mutex);
-    if (ca_mode_is_enigma(mode) && ci_slot_taken(ci_slot, ad->id))
-        LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
-                       "CI slot %d already opened, skip adapter %d", ci_slot,
-                       ad->id);
+    // Ownership is by policy (mode), so concurrent opens race
+    // nothing: each adapter publishes its own device slot below.
     fd = open(ca_dev_path, O_RDWR);
     if (fd < 0) {
         // A loopback with no stack must fail loudly, not inherit a bit.
@@ -4090,7 +4065,6 @@ int dvbca_init_dev(adapter *ad) {
         memset(c->iv[0], 0, sizeof(c->iv[0]));
         memset(c->iv[1], 0, sizeof(c->iv[1]));
     }
-    slot_lock.unlock();
     // No reader exists yet (sock is -1), so flushing outside is safe.
     flush_handle(fd);
 

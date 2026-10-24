@@ -195,6 +195,9 @@ struct cc_ctrl_data {
 // CI stack owner: live tuner, hardware DDCI, enigma tuner, loopback.
 enum class ca_mode : uint8_t { DVB = 0, DDCI, ENIGMA, ENIGMA_DDCI };
 
+// Vu+ boxes expose at most two CI slots; enigma scans these.
+#define MAX_VU_CI_SLOTS 2
+
 struct ca_device {
     // enabled/fd/sock/state are plain cross-thread ints: writers
     // take the per-device lock, readers tolerate one stale pass.
@@ -254,7 +257,6 @@ void dvbca_init();
 int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
                  int cmd_id, int added_only, int kept = 1,
                  int (*spans)[2] = nullptr);
-int ci_slot_taken(int slot, int self);
 void capmt_forget_sent(SCAPMT *c);
 uint32_t capmt_content_hash(uint8_t *capmt, int len);
 int is_ca_initializing(int i);

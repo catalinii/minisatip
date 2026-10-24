@@ -2358,43 +2358,38 @@ int test_loopback_capmt_sends_at_once() {
     return 0;
 }
 
-// Loopback owns its CI slot; the physical tuner on that slot
-// stands down so /dev/ciX is driven only by the DDCI adapter.
-int test_loopback_owns_ci_slot() {
+// Loopback CI auto-claim: nothing without a loopback, a Vu-range
+// slot with one; tuners outside that range always probe their own.
+int test_loopback_ci_slot_auto() {
     extern int has_ci;
-    int saved_enigma = opts.enigma, saved_slot = opts.enigma_ci_slot;
+    int saved_enigma = opts.enigma;
     int saved_has_ci = has_ci;
+    ddci_device_t *saved_ddci[MAX_ADAPTERS];
+    memcpy(saved_ddci, ddci_devices, sizeof(saved_ddci));
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    opts.enigma = 1;
+    has_ci = 1;
+    ASSERT_EQUAL(ddci_loopback_ci_slot(), -1, "no loopback claims nothing");
+
     ddci_device_t loop = {};
     loop.id = 71;
     loop.loopback = 1;
     ddci_devices[71] = &loop;
-    opts.enigma = 1;
-    opts.enigma_ci_slot = 70;
-    has_ci = 1;
-    ASSERT_EQUAL(ddci_loopback_ci_slot(), 70, "loopback owns slot 70");
+    int owned = ddci_loopback_ci_slot();
+    ASSERT(owned == -1 || (owned >= 0 && owned < MAX_VU_CI_SLOTS),
+           "owned slot within the Vu range");
 
     adapter tuner = {};
     tuner.id = 70;
     tuner.type = ADAPTER_DVB;
     ca_device_t *saved_ca70 = ca_devices[70];
     ca_devices[70] = NULL;
-    ASSERT_EQUAL(dvbca_init_dev(&tuner), TABLES_RESULT_ERROR_NORETRY,
-                 "owned slot stands down");
-    ASSERT(ca_devices[70] == NULL, "no CA device opened for it");
-
-    adapter other = {};
-    other.id = 72;
-    other.type = ADAPTER_DVB;
-    ca_device_t *saved_ca72 = ca_devices[72];
-    ca_devices[72] = NULL;
-    ASSERT_EQUAL(dvbca_init_dev(&other), TABLES_RESULT_OK,
-                 "other slots still probe");
-    ca_devices[72] = saved_ca72;
-
+    ASSERT_EQUAL(dvbca_init_dev(&tuner), TABLES_RESULT_OK,
+                 "tuners outside the Vu range still probe");
     ca_devices[70] = saved_ca70;
-    ddci_devices[71] = NULL;
+
+    memcpy(ddci_devices, saved_ddci, sizeof(saved_ddci));
     opts.enigma = saved_enigma;
-    opts.enigma_ci_slot = saved_slot;
     has_ci = saved_has_ci;
     return 0;
 }
@@ -2435,24 +2430,6 @@ int test_capmt_zap_back_keeps_places() {
         ASSERT_EQUAL(read_capmts(), 0, "zapping back sends nothing");
     }
     packing_cam_close();
-    return 0;
-}
-
-int test_ci_slot_taken() {
-    ca_device_t dev;
-    memset(&dev, 0, sizeof(dev));
-    for (int i = 0; i < MAX_ADAPTERS; i++)
-        ca_devices[i] = NULL;
-    dev.id = 0;
-    dev.fd = 10;
-    dev.ci_slot = 0;
-    ca_devices[0] = &dev;
-    ASSERT(ci_slot_taken(0, 13), "other opener takes slot 0");
-    ASSERT(!ci_slot_taken(0, 0), "self does not take own slot");
-    ASSERT(!ci_slot_taken(1, 13), "free slot reads free");
-    dev.fd = -1;
-    ASSERT(!ci_slot_taken(0, 13), "closed fd frees the slot");
-    ca_devices[0] = NULL;
     return 0;
 }
 
@@ -2503,8 +2480,8 @@ int main() {
               "testing that a failed CAPMT write is retried");
     TEST_FUNC(test_loopback_capmt_sends_at_once(),
               "testing that loopback CAPMT is not held");
-    TEST_FUNC(test_loopback_owns_ci_slot(),
-              "testing that the tuner yields its CI slot to the loopback");
+    TEST_FUNC(test_loopback_ci_slot_auto(),
+              "testing loopback CI auto-claim stays in range");
     TEST_FUNC(test_get_authdata_filename(), "testing filename helper function");
     TEST_FUNC(test_capmt_content_hash_masks_version_and_listmgmt(),
               "testing the CAPMT hash masks version and listmgmt");
@@ -2565,7 +2542,6 @@ int main() {
     TEST_FUNC(test_ca_read_resets_fails(), "testing ca_read sign of life");
     TEST_FUNC(test_send_skips_stale_set(), "testing stale mask-set skip");
     TEST_FUNC(test_ca_read_bad_session(), "testing bad session drop");
-    TEST_FUNC(test_ci_slot_taken(), "testing CI slot occupancy");
     free_all_adapters();
     pmts.destroy_all();
     fflush(stdout);

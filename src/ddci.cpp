@@ -215,10 +215,8 @@ int ddci_loopback_ci_slot() {
             found = 1;
     if (!found)
         return -1;
-    if (opts.enigma_ci_slot >= 0)
-        return opts.enigma_ci_slot;
     char path[32];
-    for (int s = 0; s < MAX_ADAPTERS; s++) {
+    for (int s = 0; s < MAX_VU_CI_SLOTS; s++) {
         snprintf(path, sizeof(path), "/dev/ci%d", s);
         if (!access(path, R_OK | W_OK))
             return s;
@@ -257,12 +255,12 @@ int ddci_pick_free_fn(const int *existing, int nexisting, const int *used,
     return best;
 }
 
-// CI slot feeding this loopback; the option until DVBCA publishes its own.
+// CI slot feeding this loopback, published by DVBCA at open.
 static int ddci_enigma_slot(ddci_device_t *d) {
     if (d && d->id >= 0 && d->id < MAX_ADAPTERS && ca_devices[d->id] &&
         ca_devices[d->id]->fd >= 0)
         return ca_devices[d->id]->ci_slot;
-    return opts.enigma_ci_slot;
+    return -1;
 }
 
 void ddci_enigma_route_pvr(ddci_device_t *d) {
@@ -1871,18 +1869,12 @@ static void ddci_add_enigma_loopback() {
         if (!access(buf, R_OK))
             existing[nexisting++] = fn;
     }
-    int fn = opts.enigma_ddci_demux;
-    if (fn < 0)
-        fn = ddci_pick_free_fn(existing, nexisting, used, nused);
+    // Last hardware demux that no adapter owns.
+    int fn = ddci_pick_free_fn(existing, nexisting, used, nused);
     if (fn < 0) {
         LOG("no free demux for the enigma loopback");
         return;
     }
-    for (int i = 0; i < nused; i++)
-        if (used[i] == fn) {
-            LOG("demux %d is already owned, refusing loopback", fn);
-            return;
-        }
     if (!a[id])
         a[id] = adapter_alloc();
 
