@@ -84,6 +84,7 @@ int ddci_pick_free_fn(const int *existing, int nexisting, const int *used,
 // True when a DDCI device holds this PMT; its device index or -1.
 int ddci_owns_pmt(int pmt_id);
 int ddci_device_for_pmt(int pmt_id);
+int ddci_ca_device_for_pmt(SPMT *pmt);
 // Mapped ddci_pid for (ad,pid), or pid when unmapped.
 int ddci_remap_pid(int ad, int pid);
 // True when this adapter's PMTs loop back on enigma (non-local source).
