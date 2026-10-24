@@ -1498,6 +1498,12 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
         close(write_fd);
         LOG_AND_RETURN(1, "could not open %s: %s", buf, strerror(errno));
     }
+    // Size the TAP buffer like live adapters; the tiny default stalls
+    // the DVR-fed pump with backpressure instead of dropping.
+    if (ioctl(read_fd, DMX_SET_BUFFER_SIZE, opts.dvr_buffer) < 0)
+        LOG("couldn't set TAP buffer size error %d: %s", errno, strerror(errno))
+    else
+        LOG("TAP buffer set to %d bytes", opts.dvr_buffer);
     dvb_set_demux_source(ad);
 
     std::lock_guard<SMutex> lock(d->mutex);
