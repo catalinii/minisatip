@@ -1931,6 +1931,28 @@ int test_ddci_ca_device_for_pmt() {
     return 0;
 }
 
+extern void set_disable(int i, int v);
+
+int test_ddci_pick_free_slot() {
+    adapter ad = {0};
+    for (int i = 0; i < MAX_ADAPTERS; i++) {
+        a[i] = nullptr;
+        set_disable(i, 0);
+    }
+    ASSERT(ddci_pick_free_slot() == 0, "empty table picks slot 0");
+    create_adapter(&ad, 0);
+    ad.type = ADAPTER_DVB;
+    ASSERT(ddci_pick_free_slot() == 1, "occupied slot 0 skipped");
+    set_disable(1, 1);
+    ASSERT(ddci_pick_free_slot() == 2, "disabled slot 1 skipped");
+    ad.type = 0;
+    ASSERT(ddci_pick_free_slot() == 0, "typeless adapter reads free");
+
+    a[0] = nullptr;
+    set_disable(1, 0);
+    return 0;
+}
+
 int test_ddci_enigma_declines_local() {
     SPMT *pmt0;
     ddci_device_t d0 = {};
@@ -2031,6 +2053,7 @@ int main() {
     TEST_FUNC(test_ddci_owns_and_loops(), "testing loopback PMT ownership");
     TEST_FUNC(test_ddci_ca_device_for_pmt(),
               "testing CAPMT device for shadow PMTs");
+    TEST_FUNC(test_ddci_pick_free_slot(), "testing loopback slot selection");
     TEST_FUNC(test_capmt_uses_mapped_pids(),
               "testing CAPMT carries mapped pids on loopback PMTs");
     TEST_FUNC(test_dvbca_loopback_pmt_routing(),

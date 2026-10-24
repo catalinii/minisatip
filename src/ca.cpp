@@ -1218,6 +1218,12 @@ ca_device_t *find_dvbca_for_pmt(SPMT *pmt) {
 
     for (i = 0; i < MAX_ADAPTERS; i++)
         if (ca_devices[i] && ca_devices[i]->state == CA_STATE_INITIALIZED) {
+#ifndef DISABLE_DDCI
+            // Live PMTs must not steal the loopback stack (its tsmux
+            // input moves); a busy single CI correctly finds nothing.
+            if (opts.enigma && ddci_is_loopback(i))
+                continue;
+#endif
             d = ca_devices[i];
             // add_caid_mask writes ad_info under ca_mask_mutex: read
             // it under the same lock so count/caid/mask stay together.
@@ -3881,6 +3887,10 @@ ca_device_t *alloc_ca_device() {
         LOG_AND_RETURN(NULL, "Could not allocate memory for CA device");
     }
     memset(d, 0, sizeof(ca_device_t));
+    // Unopened fds must read invalid, or pre-created devices fake-occupy
+    // slot 0 in ci_slot_taken.
+    d->fd = -1;
+    d->sock = -1;
     // maximum 1 channel per CA
     d->max_ca_pmt = DEFAULT_CA_PMT;
     return d;
@@ -3948,7 +3958,7 @@ static SMutex &ca_dev_lock(int id) {
 }
 
 // One stack per slot: refuse a second opener of the same /dev/ciN.
-static int ci_slot_taken(int slot, int self) {
+int ci_slot_taken(int slot, int self) {
     for (int i = 0; i < MAX_ADAPTERS; i++) {
         ca_device_t *o = ca_devices[i];
         if (o && o->id != self && o->fd >= 0 && o->ci_slot == slot)
@@ -3956,6 +3966,10 @@ static int ci_slot_taken(int slot, int self) {
     }
     return 0;
 }
+
+// Serializes slot check through fd publish across adapters; a leaf taken
+// under ca_init_mutex and released before any device init runs.
+static SMutex ca_slot_mutex;
 
 int dvbca_init_dev(adapter *ad) {
     ca_device_t *c;
@@ -3984,17 +3998,43 @@ int dvbca_init_dev(adapter *ad) {
     int ci_slot = ad->id;
     if (opts.enigma) {
 #ifndef DISABLE_DDCI
-        if (ddci_is_loopback(ad->id))
+        if (ddci_is_loopback(ad->id)) {
             ci_slot = opts.enigma_ci_slot;
+            if (ci_slot < 0) {
+                ci_slot = -1;
+                for (int s = 0; s < MAX_ADAPTERS && ci_slot < 0; s++) {
+                    snprintf(ca_dev_path, sizeof(ca_dev_path), "/dev/ci%d", s);
+                    if (!ci_slot_taken(s, ad->id) &&
+                        !access(ca_dev_path, R_OK | W_OK))
+                        ci_slot = s;
+                }
+                LOG("loopback adapter %d auto-picked CI slot %d", ad->id,
+                    ci_slot);
+            }
+            if (ci_slot < 0 || ci_slot >= MAX_ADAPTERS)
+                LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
+                               "no usable CI slot for loopback adapter %d",
+                               ad->id);
+        }
 #endif
         sprintf(ca_dev_path, "/dev/ci%d", ci_slot);
-        if (ci_slot_taken(ci_slot, ad->id))
-            LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
-                           "CI slot %d already opened, skip adapter %d",
-                           ci_slot, ad->id);
     }
+    // Check through publish stays atomic across adapters; device init
+    // below runs unlocked so inits do not serialize for seconds.
+    std::unique_lock<SMutex> slot_lock(ca_slot_mutex);
+    if (opts.enigma && ci_slot_taken(ci_slot, ad->id))
+        LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
+                       "CI slot %d already opened, skip adapter %d", ci_slot,
+                       ad->id);
     fd = open(ca_dev_path, O_RDWR);
     if (fd < 0) {
+#ifndef DISABLE_DDCI
+        // A loopback with no stack must fail loudly, not inherit a bit.
+        if (opts.enigma && ddci_is_loopback(ad->id))
+            LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
+                           "No CA device for loopback adapter %d: file %s",
+                           ad->id, ca_dev_path);
+#endif
         if (opts.enigma && has_ci) {
             LOG_AND_RETURN(TABLES_RESULT_OK,
                            "No CA device detected on adapter %d: enabling "
@@ -4005,7 +4045,6 @@ int dvbca_init_dev(adapter *ad) {
                        "No CA device detected on adapter %d: file %s", ad->id,
                        ca_dev_path);
     }
-    flush_handle(fd);
     if (!c) {
         c = ca_devices[ad->id] = alloc_ca_device();
         if (!c) {
@@ -4039,6 +4078,9 @@ int dvbca_init_dev(adapter *ad) {
         memset(c->iv[0], 0, sizeof(c->iv[0]));
         memset(c->iv[1], 0, sizeof(c->iv[1]));
     }
+    slot_lock.unlock();
+    // No reader exists yet (sock is -1), so flushing outside is safe.
+    flush_handle(fd);
 
     if (!c->force_ci) {
         if (access("/etc/ssl/certs/root.pem", F_OK) != 0) {
@@ -4150,6 +4192,7 @@ void set_ca_pin(int i, std::string_view pin) {
         ca_devices[i] = alloc_ca_device();
     if (!ca_devices[i])
         return;
+    ca_devices[i]->id = i;
     size_t copy_len = std::min(pin.size(), sizeof(ca_devices[i]->pin_str) - 1);
     memcpy(ca_devices[i]->pin_str, pin.data(), copy_len);
     ca_devices[i]->pin_str[copy_len] = '\0';
@@ -4160,6 +4203,7 @@ void force_ci_adapter(int i) {
         ca_devices[i] = alloc_ca_device();
     if (!ca_devices[i])
         return;
+    ca_devices[i]->id = i;
     ca_devices[i]->force_ci = 1;
 }
 

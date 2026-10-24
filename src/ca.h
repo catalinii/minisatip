@@ -250,6 +250,7 @@ void dvbca_init();
 int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
                  int cmd_id, int added_only, int kept = 1,
                  int (*spans)[2] = nullptr);
+int ci_slot_taken(int slot, int self);
 void capmt_forget_sent(SCAPMT *c);
 uint32_t capmt_content_hash(uint8_t *capmt, int len);
 int is_ca_initializing(int i);

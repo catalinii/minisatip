@@ -439,7 +439,7 @@ Help\n\
 	* eg: -5 1-3,4 \n\
 	- disable passing the CAT to the DDCI device 1,2,3 and 4 \n\
 	--enigma-ci-slot N \n\
-	- /dev/ciN used by the enigma DDCI loopback (default 0) \n\
+	- /dev/ciN used by the enigma DDCI loopback (default -1 = first free) \n\
 	--enigma-ddci-demux N \n\
 	- loopback demux (default -1 = highest free) \n\
 \n\
@@ -671,7 +671,7 @@ void set_options(int argc, char *argv[]) {
     } else {
         opts.cache_dir = "/var/cache/minisatip";
     }
-    opts.enigma_ci_slot = 0;
+    opts.enigma_ci_slot = -1;
     opts.enigma_ddci_demux = -1;
 
     opts.xml_path = DESC_XML;
@@ -943,7 +943,7 @@ void set_options(int argc, char *argv[]) {
             break;
         }
         case ENIGMA_CI_SLOT_OPT: {
-            opts.enigma_ci_slot = parse_int(optarg, 0);
+            opts.enigma_ci_slot = parse_int(optarg, -1);
             break;
         }
         case ENIGMA_DDCI_DEMUX_OPT: {

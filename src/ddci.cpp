@@ -582,7 +582,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
         return TABLES_RESULT_ERROR_NORETRY;
     }
 
-    std::lock_guard<SMutex> lock(d->mutex);
+    std::unique_lock<SMutex> lock(d->mutex);
     int pos = -1, already_registered = 0;
 
     for (i = 0; i < d->max_channels; i++)
@@ -685,13 +685,14 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
     // Idempotent: re-asserts PVR on every add and update.
     if (opts.enigma)
         ddci_enigma_route_pvr(d);
-
+    lock.unlock();
+    // update_pids stops PMTs via dvbca_del_pmt, taking ca_dev_lock;
+    // send_capmt nests this mutex under it, so release ours first.
     update_pids(ad->id);
     // Loopback TAPs live on the DDCI adapter; hardware DDCI needs none.
-    if (opts.enigma)
-        update_pids(d->id);
-    update_pids(d->id);
+    update_pids(ddid);
     rv = TABLES_RESULT_OK;
+    lock.lock();
     dump_mapping_table();
 
     return rv;
@@ -718,22 +719,29 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
             ddci_device_t *d = get_ddci(i);
             if (!d)
                 continue;
-            std::lock_guard<SMutex> lock(d->mutex);
-            for (int j = 0; j < d->max_channels; j++)
-                if (d->pmt[j].id == pmt) {
-                    d->pmt[j].id = -1;
-                    if (d->channels > 0)
-                        d->channels--;
-                    // Same as the mapped path: new PAT/SDT, sent at once
-                    d->ver = (d->ver + 1) & 0xF;
-                    d->sdt_ver = (d->sdt_ver + 1) & 0xF;
-                    d->psi_changed = true;
-                    if (opts.enigma) {
-                        if (d->channels == 0)
-                            ddci_enigma_route_none(d);
-                        update_pids(i);
+            int found = 0, empty = 0;
+            {
+                std::lock_guard<SMutex> lock(d->mutex);
+                for (int j = 0; j < d->max_channels; j++)
+                    if (d->pmt[j].id == pmt) {
+                        d->pmt[j].id = -1;
+                        if (d->channels > 0)
+                            d->channels--;
+                        // Same as the mapped path: new PAT/SDT, sent at once
+                        d->ver = (d->ver + 1) & 0xF;
+                        d->sdt_ver = (d->sdt_ver + 1) & 0xF;
+                        d->psi_changed = true;
+                        found = 1;
                     }
-                }
+                empty = (d->channels == 0);
+            }
+            // update_pids can take ca_dev_lock via dvbca_del_pmt,
+            // the reverse of send_capmt's nesting: run it unlocked.
+            if (found && opts.enigma) {
+                if (empty)
+                    ddci_enigma_route_none(d);
+                update_pids(i);
+            }
         }
         return 0;
     }
@@ -741,7 +749,10 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
     if (!d)
         LOG_AND_RETURN(0, "%s: ddci %d already disabled", __FUNCTION__,
                        m->ddci);
-    std::lock_guard<SMutex> lock(d->mutex);
+    // Snapshot the mapping: update_pids below runs unlocked and a
+    // concurrent delete may erase the entry m points into.
+    int did = d->id, map_ddci = m->ddci, map_ddci_pid = m->ddci_pid;
+    std::unique_lock<SMutex> lock(d->mutex);
     // A removed service changes both PAT and SDT content, so both bump.
     d->ver = (d->ver + 1) & 0xF;
     d->sdt_ver = (d->sdt_ver + 1) & 0xF;
@@ -758,18 +769,19 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
         d->channels--;
     if (was_registered)
         d->psi_changed = true;
-    if (opts.enigma && was_registered) {
-        if (d->channels == 0)
-            ddci_enigma_route_none(d);
-        update_pids(d->id);
-    }
+    // Route NONE while still registered; the mapping is deleted below,
+    // so the only filter update runs after it, unlocked, at the end.
+    if (opts.enigma && was_registered && d->channels == 0)
+        ddci_enigma_route_none(d);
     LOG("%s: deleting pmt id %d, sid %d (%X), pid %d, ddci %d, name %s, "
         "held a slot %d, running channels %d",
-        __FUNCTION__, spmt->id, spmt->sid, spmt->sid, m->ddci_pid, m->ddci,
+        __FUNCTION__, spmt->id, spmt->sid, spmt->sid, map_ddci_pid, map_ddci,
         spmt->name, was_registered, d->channels);
 
     del_pmt_mapping_table(d, ad->id, pmt);
-    update_pids(d->id);
+    lock.unlock();
+    update_pids(did);
+    lock.lock();
     dump_mapping_table();
     return 0;
 }
@@ -1336,7 +1348,7 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
         }
 
         // FPGA-only tail (#1437): torn-tail guard the dvr does not need.
-        if (!opts.enigma) {
+        if (!d->loopback) {
             memset(null_tail, 0xFF, sizeof(null_tail));
             null_tail[0] = 0x47;
             null_tail[1] = 0x1F;
@@ -1402,7 +1414,7 @@ void ddci_init() // you can search the devices here and fill the ddci_devices,
 int ddci_set_pid(adapter *ad, int pid) {
 #ifndef DISABLE_LINUXDVB
     // Loopback reads real TAPs; hardware DDCI needs no demux filters.
-    if (opts.enigma) {
+    if (opts.enigma && ddci_is_loopback(ad->id)) {
         int rc = dvb_demux_set_pid(ad, pid);
         LOGM("%s: loopback %d add pid %d -> %d", __FUNCTION__, ad->id, pid, rc);
         return rc;
@@ -1414,7 +1426,7 @@ int ddci_set_pid(adapter *ad, int pid) {
 
 int ddci_del_filters(adapter *ad, int fd, int pid) {
 #ifndef DISABLE_LINUXDVB
-    if (opts.enigma) {
+    if (opts.enigma && ddci_is_loopback(ad->id)) {
         int rc = dvb_demux_del_filters(ad, fd, pid);
         LOGM("%s: loopback %d del pid %d -> %d", __FUNCTION__, ad->id, pid, rc);
         return rc;
@@ -1484,8 +1496,10 @@ ddci_device_t *ddci_alloc(int id) {
 // Only dvr0 feeds the demuxes (source id minus offset); dvrN>0 is a stub.
 static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
     char buf[100];
-    ad->dmx_source = ddci_dvr_source_offset();
-    int push_dvr = ad->dmx_source - ddci_dvr_source_offset();
+    int dvr_offset = ddci_dvr_source_offset();
+    ad->dmx_source = dvr_offset;
+    // Only dvr0 feeds the demuxes; higher dvrs are stubs on this chip.
+    int push_dvr = ad->dmx_source - dvr_offset;
     if (push_dvr < 0)
         push_dvr = 0;
     snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/dvr%d", ad->pa, push_dvr);
@@ -1514,6 +1528,7 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
     ad->dmx = -1;
     ad->sys[0] = (fe_delivery_system_t)0;
     ad->adapter_timeout = 0;
+    ad->active_demux_pids = 0;
     memset(d->pmt, -1, sizeof(d->pmt));
     d->max_channels = MAX_CHANNELS_ON_CI;
     d->channels = 0;
@@ -1538,7 +1553,9 @@ int ddci_open_device(adapter *ad) {
         return -1;
     }
 #ifndef DISABLE_LINUXDVB
-    if (opts.enigma)
+    // Only the flagged loopback diverts; hardware DDCI opens below.
+    // get_ddci needs enabled, unset this early, so read the flag direct.
+    if (opts.enigma && d && d->loopback)
         return ddci_open_enigma(ad, d);
 #endif
     LOG("DDCI opening [%d] adapter %d and frontend %d", ad->id, ad->pa, ad->fn);
@@ -1809,14 +1826,17 @@ void ddci_free(adapter *ad) {
 }
 
 #ifndef DISABLE_LINUXDVB
+// First slot without an adapter that -e did not disable; -1 if none.
+int ddci_pick_free_slot() {
+    for (int i = 0; i < MAX_ADAPTERS; i++)
+        if ((!a[i] || a[i]->type == 0) && !is_adapter_disabled(i))
+            return i;
+    return -1;
+}
+
 // One loopback on the highest free demux, in the first free enabled slot.
 static void ddci_add_enigma_loopback() {
-    int id = -1;
-    for (int i = 0; i < MAX_ADAPTERS; i++)
-        if ((!a[i] || a[i]->type == 0) && !is_adapter_disabled(i)) {
-            id = i;
-            break;
-        }
+    int id = ddci_pick_free_slot();
     if (id < 0) {
         LOG("no free enabled adapter slot for the enigma loopback, extend -e");
         return;
