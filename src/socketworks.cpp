@@ -702,18 +702,13 @@ int sockets_del(int sock) {
     return 0;
 }
 
-// Exit-path twin of sockets_del on a dying object: close live
-// handles, then free owned buffers. No pool use, no locks.
+// Destruction releases resources only: no close callback,
+// just the fd and owned buffers.
 sockets::~sockets() {
-    if (enabled) {
-        enabled = false;
-        if (close)
-            close(this);
-        int so = sock;
-        sock = -1;
-        if (so >= 0 && close_unix_socket)
-            ::close(so);
-    }
+    int so = sock;
+    sock = -1;
+    if (so >= 0 && close_unix_socket)
+        ::close(so);
     if ((flags & 1) && buf)
         free(buf);
     free_fifo(&fifo);

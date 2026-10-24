@@ -533,7 +533,7 @@ static int dtor_close_cb(void *ss) {
     return 0;
 }
 
-// The destructor runs close, closes the fd, frees buf/prio (LSan).
+// The destructor skips close, closes the fd, frees buf/prio (LSan).
 int test_sockets_destructor() {
     dtor_close_calls = 0;
     int p[2];
@@ -548,7 +548,7 @@ int test_sockets_destructor() {
         s.buf = (unsigned char *)malloc(16);
         s.prio_data = (uint8_t *)malloc(8);
     }
-    ASSERT_EQUAL(dtor_close_calls, 1, "destructor skipped close");
+    ASSERT_EQUAL(dtor_close_calls, 0, "destructor must not run close");
     ASSERT(fcntl(p[0], F_GETFD) == -1, "destructor left the fd open");
     close(p[1]);
     return 0;
