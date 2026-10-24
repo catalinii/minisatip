@@ -86,6 +86,7 @@ int ddci_owns_pmt(int pmt_id);
 int ddci_device_for_pmt(int pmt_id);
 int ddci_ca_device_for_pmt(SPMT *pmt);
 int ddci_pick_free_slot();
+int ddci_model_is_uno4k(const char *path);
 // Mapped ddci_pid for (ad,pid), or pid when unmapped.
 int ddci_remap_pid(int ad, int pid);
 // True when this adapter's PMTs loop back on enigma (non-local source).

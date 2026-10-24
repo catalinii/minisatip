@@ -1834,8 +1834,22 @@ int ddci_pick_free_slot() {
     return -1;
 }
 
+// True when path names a Vu+ Uno 4K (SE); the loopback is blocked
+// elsewhere since only this chip's DVR/CI plumbing is proven.
+int ddci_model_is_uno4k(const char *path) {
+    std::ifstream f(path);
+    std::string model;
+    if (!(f >> model))
+        return 0;
+    return model.rfind("uno4k", 0) == 0;
+}
+
 // One loopback on the highest free demux, in the first free enabled slot.
 static void ddci_add_enigma_loopback() {
+    if (!ddci_model_is_uno4k("/proc/stb/info/vumodel")) {
+        LOG("enigma loopback blocked: not a Vu+ Uno 4K");
+        return;
+    }
     int id = ddci_pick_free_slot();
     if (id < 0) {
         LOG("no free enabled adapter slot for the enigma loopback, extend -e");
