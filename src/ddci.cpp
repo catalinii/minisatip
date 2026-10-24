@@ -1774,13 +1774,22 @@ void ddci_free(adapter *ad) {
 }
 
 #ifndef DISABLE_LINUXDVB
-// One loopback on the highest free demux; na is the next adapter index.
-static int ddci_add_enigma_loopback(int na) {
-    if (na >= MAX_ADAPTERS)
-        return na;
+// One loopback on the highest free demux, in the first free enabled slot.
+static void ddci_add_enigma_loopback() {
+    int id = -1;
+    for (int i = 0; i < MAX_ADAPTERS; i++)
+        if ((!a[i] || a[i]->type == 0) && !is_adapter_disabled(i)) {
+            id = i;
+            break;
+        }
+    if (id < 0) {
+        LOG("no free enabled adapter slot for the enigma loopback, extend -e");
+        return;
+    }
     int used[MAX_ADAPTERS], nused = 0;
     for (int i = 0; i < MAX_ADAPTERS && nused < MAX_ADAPTERS; i++)
-        if (a[i] && !is_adapter_disabled(i) && a[i]->pa == 0 && a[i]->fn >= 0)
+        if (i != id && a[i] && !is_adapter_disabled(i) && a[i]->pa == 0 &&
+            a[i]->fn >= 0)
             used[nused++] = a[i]->fn;
     int existing[64], nexisting = 0;
     char buf[100];
@@ -1792,16 +1801,19 @@ static int ddci_add_enigma_loopback(int na) {
     int fn = opts.enigma_ddci_demux;
     if (fn < 0)
         fn = ddci_pick_free_fn(existing, nexisting, used, nused);
-    if (fn < 0)
-        LOG_AND_RETURN(na, "no free demux for the enigma loopback");
+    if (fn < 0) {
+        LOG("no free demux for the enigma loopback");
+        return;
+    }
     for (int i = 0; i < nused; i++)
-        if (used[i] == fn)
-            LOG_AND_RETURN(na, "demux %d is already owned, refusing loopback",
-                           fn);
-    if (!a[na])
-        a[na] = adapter_alloc();
+        if (used[i] == fn) {
+            LOG("demux %d is already owned, refusing loopback", fn);
+            return;
+        }
+    if (!a[id])
+        a[id] = adapter_alloc();
 
-    adapter *ad = a[na];
+    adapter *ad = a[id];
     ad->pa = 0;
     ad->fn = fn;
     ad->open = ddci_open_device;
@@ -1817,17 +1829,16 @@ static int ddci_add_enigma_loopback(int na) {
     ad->type = ADAPTER_CI;
     ad->drop_encrypted = 0;
     ad->free = ddci_free;
-    ddci_device_t *dd = ddci_devices[na];
+    ddci_device_t *dd = ddci_devices[id];
     if (!dd)
-        dd = ddci_alloc(na);
+        dd = ddci_alloc(id);
     if (dd)
         dd->loopback = 1;
     load_channels();
-    LOG("enigma loopback adapter %d on demux %d", na, fn);
+    LOG("enigma loopback adapter %d on demux %d", id, fn);
 
-    na++;
-    a_count = na;
-    return na;
+    if (id + 1 > a_count)
+        a_count = id + 1;
 }
 #endif
 
@@ -1903,7 +1914,7 @@ void find_ddci_adapter() {
         }
 #ifndef DISABLE_LINUXDVB
     if (opts.enigma)
-        na = ddci_add_enigma_loopback(na);
+        ddci_add_enigma_loopback();
 #endif
     for (; na < MAX_ADAPTERS; na++)
         if (a[na])
