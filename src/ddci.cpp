@@ -247,6 +247,10 @@ void ddci_enigma_route_pvr(ddci_device_t *d) {
     if (!opts.enigma || !d)
         return;
     int slot = ddci_enigma_slot(d);
+    if (slot < 0) {
+        LOG("DDCI %d: no CI slot bound, skipping PVR route", d->id);
+        return;
+    }
     set_ci_input_str(slot, "PVR");
     LOG("DDCI %d: CI slot %d input routed to PVR", d->id, slot);
 }
@@ -255,6 +259,10 @@ void ddci_enigma_route_none(ddci_device_t *d) {
     if (!opts.enigma || !d)
         return;
     int slot = ddci_enigma_slot(d);
+    if (slot < 0) {
+        LOG("DDCI %d: no CI slot bound, skipping NONE route", d->id);
+        return;
+    }
     set_ci_input_str(slot, "NONE");
     LOG("DDCI %d: CI slot %d input routed to NONE", d->id, slot);
 }
@@ -1447,6 +1455,9 @@ int ddci_post_init(adapter *ad) {
         s->action = (socket_action)ddci_read_sec_data;
     if (ad->fe_sock >= 0)
         set_socket_thread(ad->fe_sock, get_socket_thread(ad->sock));
+    // Post CA init: the CI slot is bound, so PVR routes the right input.
+    if (opts.enigma && ddci_is_loopback(ad->id))
+        ddci_enigma_route_pvr(d);
     post_tune(ad);
     if (ddci_id < 0)
         ddci_init();
@@ -1510,8 +1521,6 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
     d->tid = d->ver = d->sdt_ver = d->sdt_data_mask = 0;
     d->enabled = 1;
     ad->enabled = 1;
-    // The slot is ours for the run; close returns it to NONE.
-    ddci_enigma_route_pvr(d);
     LOG("opened enigma loopback %d push dvr%d fd:%d demux fd:%d source:%d",
         ad->id, push_dvr, ad->fe, ad->dvr, ad->dmx_source);
     return 0;
