@@ -163,14 +163,6 @@ class SegmentedPool {
         return b->slots[index & (kBucketSize - 1)];
     }
 
-    // Live atomic slots for CAS-claim loops (see obtain()).
-    auto slots() {
-        return std::views::iota(size_t{0}, std::min(size(), capacity())) |
-               std::views::transform([this](size_t index) -> std::atomic<T> & {
-                   return slot(index);
-               });
-    }
-
     // Visit every slot in published buckets, past shrinks; for teardown.
     template <typename F> void for_each_published(F &&f) {
         for (size_t b = 0; b < MaxSegs; ++b) {
