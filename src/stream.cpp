@@ -26,6 +26,7 @@
 #include "pmt.h"
 #include "socketworks.h"
 #include "srt.h"
+#include <algorithm>
 #include <arpa/inet.h>
 #include <atomic>
 #include <errno.h>
@@ -115,21 +116,20 @@ char *describe_streams(sockets *s, std::string_view req, char *sbuf, int size) {
     }
 
     if (do_all) {
-        for (streams *sid2 : st)
-            if (sid2 && sid2->enabled) {
-                int slen = strlen(sbuf);
-                streams_enabled++;
-                strlcatf(
-                    sbuf, size, slen,
-                    "m=video %d RTP/AVP 33\r\nc=IN IP4 "
-                    "0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 "
-                    "%s\r\na=%s\r\n",
-                    get_sockaddr_port(sid2->sa), sid2->id + 1,
-                    describe_adapter(sid2->id, sid2->adapter, dad, sizeof(dad)),
-                    sid2->do_play ? "sendonly" : "inactive");
-                if (size - slen < 10)
-                    LOG_AND_RETURN(sbuf, "DESCRIBE BUFFER is full");
-            }
+        for (streams *sid2 : st) {
+            int slen = strlen(sbuf);
+            streams_enabled++;
+            strlcatf(
+                sbuf, size, slen,
+                "m=video %d RTP/AVP 33\r\nc=IN IP4 "
+                "0.0.0.0\r\na=control:stream=%d\r\na=fmtp:33 "
+                "%s\r\na=%s\r\n",
+                get_sockaddr_port(sid2->sa), sid2->id + 1,
+                describe_adapter(sid2->id, sid2->adapter, dad, sizeof(dad)),
+                sid2->do_play ? "sendonly" : "inactive");
+            if (size - slen < 10)
+                LOG_AND_RETURN(sbuf, "DESCRIBE BUFFER is full");
+        }
     }
     if (!streams_enabled) {
         int slen = strlen(sbuf);
@@ -589,7 +589,7 @@ int decode_transport(sockets *s, std::string_view arg, char *default_rtp,
             LOG_AND_RETURN(-1, "RTCP sockets_add failed");
 
         for (streams *sid2 : st)
-            if (sid2 && sid2->enabled && sid2->id != sid->sid &&
+            if (sid2->id != sid->sid &&
                 get_sockaddr_port(sid2->sa) == get_sockaddr_port(sid->sa)) {
                 char h1[100], h2[100];
                 get_sockaddr_host(sid->sa, h1, sizeof(h1));
@@ -643,9 +643,12 @@ int streams_full() {
     // Iteration covers the live range; unpublished slots count as free.
     if (st.size() < MAX_STREAMS)
         return 0;
-    for (streams *sid : st)
+    size_t n = std::min(st.size(), st.capacity());
+    for (size_t index = 0; index < n; ++index) {
+        streams *sid = st[index];
         if (!sid || !sid->enabled)
             return 0;
+    }
     return 1;
 }
 
@@ -655,7 +658,7 @@ close_streams_for_adapter(int ad, int except) {
     if (ad < 0)
         return 0;
     for (streams *sid : st)
-        if (sid && sid->enabled && sid->adapter == ad)
+        if (sid->adapter == ad)
             if (except < 0 || except != sid->id)
                 close_stream(sid->id);
     return 0;
@@ -1190,7 +1193,7 @@ int process_dmx(sockets *s) {
     lock.unlock();
 
     for (streams *sid : st)
-        if (sid && sid->enabled && sid->adapter == ad->id)
+        if (sid->adapter == ad->id)
             process_packets_for_stream(sid, ad);
 
     nsecs += getTickUs() - stime;
@@ -1386,11 +1389,10 @@ void dump_streams() {
         return;
     LOG("Dumping streams:");
     for (streams *sid : st)
-        if (sid && sid->enabled)
-            LOG("%d|  a:%d rsock:%d type:%d play:%d remote:%s:%d", sid->id,
-                sid->adapter, sid->rsock, sid->type, sid->do_play,
-                get_stream_rhost(sid->sid, ra, sizeof(ra)),
-                get_stream_rport(sid->sid));
+        LOG("%d|  a:%d rsock:%d type:%d play:%d remote:%s:%d", sid->id,
+            sid->adapter, sid->rsock, sid->type, sid->do_play,
+            get_stream_rhost(sid->sid, ra, sizeof(ra)),
+            get_stream_rport(sid->sid));
 }
 
 int get_session_id(int i) {
@@ -1419,7 +1421,7 @@ int fix_master_sid(int a_id) {
     if (ad->sid_cnt < 1)
         return 0;
     for (streams *sid : st)
-        if (sid && sid->enabled && sid->adapter == a_id) {
+        if (sid->adapter == a_id) {
             LOG("fix master_sid to %d for adapter %d", sid->sid, a_id);
             ad->master_sid = sid->id;
         }
@@ -1428,7 +1430,7 @@ int fix_master_sid(int a_id) {
 
 int find_session_id(int id) {
     for (streams *sid : st)
-        if (sid && sid->enabled && sid->ssrc == id) {
+        if (sid->ssrc == id) {
             sid->rtime = getTick();
             LOG("recovered session id from a closed connection, sid %d , "
                 "id: "
@@ -1458,7 +1460,7 @@ int rtcp_confirm(sockets *s) {
 int get_streams_for_adapter(int aid) {
     int sa = 0;
     for (streams *sid : st)
-        if (sid && sid->enabled && sid->adapter == aid)
+        if (sid->adapter == aid)
             sa++;
     return sa;
 }

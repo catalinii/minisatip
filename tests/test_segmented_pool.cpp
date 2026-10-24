@@ -41,7 +41,7 @@ int test_append_and_iterate() {
     for (int i = 0; i < 600; ++i) {
         auto idx = append(pool, i);
         ASSERT(idx.has_value(), "append failed before capacity");
-        ASSERT_EQUAL(*idx, (size_t)i, "append index mismatch");
+        ASSERT_EQUAL(*idx, static_cast<size_t>(i), "append index mismatch");
     }
     ASSERT_EQUAL(pool.size(), 600, "size mismatch after appends");
 
@@ -214,6 +214,28 @@ int test_destroy_all() {
     return 0;
 }
 
+struct Item {
+    int id = -1;
+    std::atomic<bool> enabled{false};
+    std::atomic<bool> allocated{false};
+};
+
+int test_enabled_iteration() {
+    SegmentedPool<Item *, 1> pool;
+    ASSERT(pool.extend_to(4), "extend_to failed");
+    for (size_t i = 0; i < 4; ++i) {
+        pool.slot(i) = new Item();
+        pool[i]->id = static_cast<int>(i);
+    }
+    pool[1]->enabled = true;
+    pool[3]->enabled = true;
+    std::vector<int> got;
+    for (Item *it : pool)
+        got.push_back(it->id);
+    ASSERT(got == std::vector<int>({1, 3}), "default must skip disabled");
+    return 0;
+}
+
 int main() {
     opts.log = 255;
     strcpy(thread_info[thread_index].thread_name, "test_segmented_pool");
@@ -223,6 +245,7 @@ int main() {
     TEST_FUNC(test_overflow(), "append past capacity fails cleanly");
     TEST_FUNC(test_clear(), "clear resets the pool");
     TEST_FUNC(test_destroy_all(), "destroy_all deletes and blanks");
+    TEST_FUNC(test_enabled_iteration(), "default iteration skips disabled");
     TEST_FUNC(test_shrink_and_published(), "shrink keeps teardown covered");
     TEST_FUNC(test_concurrent_claim(), "concurrent CAS claims");
     TEST_FUNC(test_concurrent_append_iterate(),

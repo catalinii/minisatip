@@ -397,7 +397,7 @@ static void hw_drop_held_pids(adapter *ad, SPMT *pmt,
             if (held)
                 break;
             adapter *oa;
-            if (!o || !o->enabled || o == pmt || o->adapter < 0)
+            if (o == pmt || o->adapter < 0)
                 continue;
             oa = get_adapter_nw(o->adapter);
             if (!oa || oa->pa != ad->pa)

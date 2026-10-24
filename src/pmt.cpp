@@ -228,14 +228,13 @@ int get_mask_len(uint8_t *filter, int l) {
 
 void dump_filters(int aid) {
     for (SFilter *f : filters)
-        if (f && f->enabled)
-            LOG("filter %d A: %d: pid %d, master %d, next %d, flags %d, "
-                "mask_len %d, "
-                "filter -> %02X %02X %02X %02X, mask ->%02X %02X %02X %02x",
-                f->id, f->adapter, f->pid, f->master_filter.load(),
-                f->next_filter.load(), f->flags.load(), f->mask_len.load(),
-                f->filter[0], f->filter[1], f->filter[2], f->filter[3],
-                f->mask[0], f->mask[1], f->mask[2], f->mask[3]);
+        LOG("filter %d A: %d: pid %d, master %d, next %d, flags %d, "
+            "mask_len %d, "
+            "filter -> %02X %02X %02X %02X, mask ->%02X %02X %02X %02x",
+            f->id, f->adapter, f->pid, f->master_filter.load(),
+            f->next_filter.load(), f->flags.load(), f->mask_len.load(),
+            f->filter[0], f->filter[1], f->filter[2], f->filter[3], f->mask[0],
+            f->mask[1], f->mask[2], f->mask[3]);
 }
 
 void reset_filter_data(SFilter *f) {
@@ -275,8 +274,8 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
     f->master_filter = fid;
 
     for (SFilter *o : filters)
-        if (o && o->id != fid && o->enabled && o->adapter == aid &&
-            o->pid == pid && o->next_filter == -1) {
+        if (o->id != fid && o->adapter == aid && o->pid == pid &&
+            o->next_filter == -1) {
             o->next_filter = fid;
             f->master_filter = o->master_filter.load();
         }
@@ -302,7 +301,7 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
 int reset_master_filter(int adapter, int pid, int id) {
     int nf = 0;
     for (SFilter *f : filters)
-        if (f && f->enabled && f->adapter == adapter && f->pid == pid) {
+        if (f->adapter == adapter && f->pid == pid) {
             f->master_filter = id;
             nf++;
         }
@@ -332,8 +331,7 @@ int del_filter(int id) {
         if (!m) // double check there is no other filter
         {
             for (SFilter *o : filters)
-                if (o && o->id != id && o->enabled &&
-                    o->adapter == f->adapter && o->pid == pid) {
+                if (o->id != id && o->adapter == f->adapter && o->pid == pid) {
                     m = o;
                     LOGM("warning: filter %d was also found for pid %d", m->id,
                          pid);
@@ -347,7 +345,7 @@ int del_filter(int id) {
             reset_master_filter(f->adapter, pid, m->id);
     } else {
         for (SFilter *o : filters)
-            if (o && o->enabled && o->adapter == f->adapter && o->pid == pid &&
+            if (o->adapter == f->adapter && o->pid == pid &&
                 o->next_filter == f->id) {
                 o->next_filter = f->next_filter.load();
                 break;
@@ -370,7 +368,7 @@ int del_filter(int id) {
 }
 int get_pid_filter(int aid, int pid) {
     for (SFilter *f : filters)
-        if (f && f->enabled && f->adapter == aid && f->pid == pid) {
+        if (f->adapter == aid && f->pid == pid) {
             LOGM("found filter %d for pid %d, master %d (max filters %d)",
                  f->id, pid, f->master_filter.load(), (int)filters.size());
             return f->master_filter;
@@ -453,8 +451,7 @@ int set_filter_mask(int id, uint8_t *filter, uint8_t *mask) {
 
 void delete_filter_for_adapter(int aid) {
     for (SFilter *f : filters)
-        if (f && f->enabled && f->adapter == aid &&
-            !(f->flags & FILTER_PERMANENT))
+        if (f->adapter == aid && !(f->flags & FILTER_PERMANENT))
             del_filter(f->id);
     return;
 }
@@ -1712,15 +1709,14 @@ SPMT *get_all_pmt_for_sid(int aid, int sid) {
     if (!ad)
         return NULL;
     for (SPMT *pmt : pmts)
-        if (pmt && pmt->enabled && pmt->adapter == aid && pmt->sid == sid)
+        if (pmt->adapter == aid && pmt->sid == sid)
             return pmt;
     return NULL;
 }
 
 SPMT *get_pmt_for_sid_pid(int aid, int sid, int pid) {
     for (SPMT *pmt : pmts)
-        if (pmt && pmt->enabled && pmt->adapter == aid && pmt->sid == sid &&
-            pmt->pid == pid)
+        if (pmt->adapter == aid && pmt->sid == sid && pmt->pid == pid)
             return pmt;
     return NULL;
 }
@@ -1943,8 +1939,8 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque) {
     // A PMT missing from the PAT is never stopped by the election, so
     // retire its CA registration here (cached PMTs hold none).
     for (SPMT *pmt : pmts)
-        if (pmt && pmt->enabled && pmt->adapter == ad->id &&
-            pmt->state != PMT_CACHED && seen_pmts[pmt->id] == 0) {
+        if (pmt->adapter == ad->id && pmt->state != PMT_CACHED &&
+            seen_pmts[pmt->id] == 0) {
             LOG("Caching PMT %d (%s) and filter %d as it is not "
                 "present in the new PAT",
                 pmt->id, pmt->name, pmt->filter);
