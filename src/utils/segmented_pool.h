@@ -1,6 +1,7 @@
 #ifndef SEGMENTED_POOL_H
 #define SEGMENTED_POOL_H
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <concepts>
@@ -111,7 +112,7 @@ class SegmentedPool {
                     U *fresh = new U();
                     fresh->allocated = true;
                     fresh->enabled = false;
-                    fresh->id = (int)index;
+                    fresh->id = static_cast<int>(index);
                     if (slot(index).compare_exchange_strong(cur, fresh))
                         return fresh;
                     delete fresh;
@@ -130,7 +131,8 @@ class SegmentedPool {
             }
             return nullptr;
         };
-        if (U *s = scan(size()))
+        // Clamp: a failing reserve transiently overshoots capacity.
+        if (U *s = scan(std::min(size(), capacity())))
             return s;
         for (;;) {
             auto index = reserve();
@@ -141,7 +143,7 @@ class SegmentedPool {
             U *fresh = new U();
             fresh->allocated = true;
             fresh->enabled = false;
-            fresh->id = (int)*index;
+            fresh->id = static_cast<int>(*index);
             U *expect = nullptr;
             // CAS, not store: a racing scan may claim this slot first.
             if (slot(*index).compare_exchange_strong(expect, fresh)) {
@@ -151,7 +153,7 @@ class SegmentedPool {
             delete fresh;
         }
         // Full: one more scan in case a slot freed mid-claim.
-        return scan(size());
+        return scan(std::min(size(), capacity()));
     }
 
     // Load the value at index; write via slot(), covering with extend_to().
@@ -186,31 +188,44 @@ class SegmentedPool {
         using difference_type = ptrdiff_t;
         using iterator_category = std::forward_iterator_tag;
         iterator() = default;
-        // Multi-pass over a length snapshot; each deref reloads the slot.
+        // Snapshot range over live objects; each deref reloads.
+        // Slots past the snapshot end yield raw, as before.
         T operator*() const { return pool_->load(index_); }
         iterator &operator++() {
             ++index_;
+            skip_to_live();
             return *this;
         }
         iterator operator++(int) {
             iterator c = *this;
-            ++index_;
+            ++(*this);
             return c;
         }
         bool operator==(const iterator &o) const { return index_ == o.index_; }
 
       private:
         friend class SegmentedPool;
-        iterator(const SegmentedPool *p, size_t index)
-            : pool_(p), index_(index) {}
-        const SegmentedPool *pool_;
-        size_t index_;
+        iterator(const SegmentedPool *p, size_t index, size_t end)
+            : pool_(p), index_(index), end_(end) {
+            skip_to_live();
+        }
+        // Advance past slots the default iteration hides.
+        void skip_to_live() {
+            while (index_ < end_ && !SegmentedPool::live(pool_->load(index_)))
+                ++index_;
+        }
+        const SegmentedPool *pool_ = nullptr;
+        size_t index_ = 0, end_ = 0;
     };
 
-    iterator begin() const { return {this, 0}; }
+    iterator begin() const {
+        size_t end = std::min(size(), capacity());
+        return {this, 0, end};
+    }
     iterator end() const {
         // Clamp: a failed reserve can transiently overshoot capacity.
-        return {this, std::min(size(), capacity())};
+        size_t end = std::min(size(), capacity());
+        return {this, end, end};
     }
 
   private:
@@ -238,6 +253,16 @@ class SegmentedPool {
     T load(size_t index) const {
         Bucket *b = bucket_for(index >> kBucketBits);
         return b->slots[index & (kBucketSize - 1)];
+    }
+
+    // Live for default iteration: enabled objects, or every value
+    // when T has no flag (int test pools, raw int* slots).
+    static bool live(T v) {
+        if constexpr (std::is_pointer_v<T> &&
+                      ReusableObject<std::remove_pointer_t<T>>)
+            return v && v->enabled;
+        else
+            return true;
     }
 
     // Mutable: first touch publishes buckets even through const loads.

@@ -505,7 +505,7 @@ int dvbapi_send_pmt(SKey *k, int cmd_id, int force) {
     if (cmd_id == CMD_ID_OK_DESCRAMBLING) {
         listmgmt = CLM_ONLY;
         for (SKey *o : keys)
-            if (o && o->id != k->id && o->enabled)
+            if (o->id != k->id)
                 listmgmt = CLM_ADD;
     }
     memset(buf, 0, sizeof(buf));
@@ -869,7 +869,7 @@ int keys_del(int i) {
     // current key is not disabled
     int j, ek = 0, ed = 0;
     for (SKey *o : keys)
-        if (o && i != o->id && o->enabled) {
+        if (i != o->id) {
             ek++;
             if (k->demux_index == o->demux_index)
                 ed++;

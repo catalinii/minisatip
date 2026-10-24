@@ -17,6 +17,7 @@
  * USA
  *
  */
+#include <algorithm>
 #include <arpa/inet.h>
 #include <atomic>
 #include <errno.h>
@@ -693,7 +694,7 @@ int sockets_del(int sock) {
     lock.unlock();
 
     for (sockets *slave : s)
-        if (slave && slave->enabled && slave->master == sock) {
+        if (slave->master == sock) {
             LOG("Closing slave socket index %d (master sock %d)", slave->id,
                 sock);
             sockets_del(slave->id);
@@ -782,8 +783,12 @@ void *select_and_execute(void *arg) {
     while (run_loop) {
         c_time = getTick();
         es = 0;
-        for (auto [slot, p] : std::views::zip(s, pf)) {
-            sockets *ps = slot;
+        // One snapshot per iteration: fill, poll, and dispatch
+        // share it so growth mid-loop cannot misalign them.
+        size_t n = std::min(s.size(), s.capacity());
+        for (size_t index = 0; index < n; ++index) {
+            sockets *ps = s[index];
+            pollfd &p = pf[index];
             if (ps && ps->enabled && ps->tid == tid) {
                 p.fd = ps->sock;
                 p.events = ps->events;
@@ -808,7 +813,7 @@ void *select_and_execute(void *arg) {
 
         // Poll, retrying if we get interrupted with EINTR
         do {
-            rv = poll(pf, s.size(), select_timeout);
+            rv = poll(pf, n, select_timeout);
         } while (rv < 0 && errno == EINTR);
 
         if (rv < 0) {
@@ -816,9 +821,10 @@ void *select_and_execute(void *arg) {
                 strerror(errno));
             continue;
         } else if (rv > 0) {
-            for (auto [slot, p] : std::views::zip(s, pf)) {
+            for (size_t index = 0; index < n; ++index) {
+                pollfd &p = pf[index];
                 if ((p.fd >= 0) && p.revents) {
-                    sockets *ss = slot;
+                    sockets *ss = s[index];
                     if (!ss)
                         continue;
                     if (!ss->enabled)
@@ -992,7 +998,7 @@ void *select_and_execute(void *arg) {
         if (rv == 0 || (c_time - lt >= 200)) {
             lt = c_time;
             for (sockets *ss : s) {
-                if (!ss || !ss->enabled || ss->tid != tid)
+                if (ss->tid != tid)
                     continue;
                 if (((ss->timeout_ms > 0) &&
                      (lt - ss->rtime > ss->timeout_ms) &&
@@ -1070,7 +1076,7 @@ int sockets_del_for_sid(int sid) {
     if (sid < 0)
         return 0;
     for (sockets *ss : s)
-        if (ss && ss->enabled && ss->sid >= 0 && ss->sid == sid &&
+        if (ss->sid >= 0 && ss->sid == sid &&
             (ss->type == TYPE_RTSP || ss->type == TYPE_RTP ||
              ss->type == TYPE_RTCP)) {
             ss->sid =
@@ -1114,9 +1120,12 @@ void set_socket_buffer(int sid, uint8_t *buf, int len) {
 
 uint64_t get_allocated_memory() {
     uint64_t allocated_memory = 0;
-    for (sockets *ss : s)
+    size_t n = std::min(s.size(), s.capacity());
+    for (size_t index = 0; index < n; ++index) {
+        sockets *ss = s[index];
         if (ss && ss->fifo.size)
             allocated_memory += ss->fifo.size;
+    }
     return allocated_memory;
 }
 

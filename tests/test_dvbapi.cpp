@@ -46,8 +46,7 @@ int pmt_del(int id);
 static int count_enabled_keys() {
     int n = 0;
     for (SKey *key : keys)
-        if (key && key->enabled)
-            n++;
+        n++;
     return n;
 }
 
