@@ -1780,7 +1780,7 @@ static int ddci_add_enigma_loopback(int na) {
         return na;
     int used[MAX_ADAPTERS], nused = 0;
     for (int i = 0; i < MAX_ADAPTERS && nused < MAX_ADAPTERS; i++)
-        if (a[i] && a[i]->pa == 0 && a[i]->fn >= 0)
+        if (a[i] && !is_adapter_disabled(i) && a[i]->pa == 0 && a[i]->fn >= 0)
             used[nused++] = a[i]->fn;
     int existing[64], nexisting = 0;
     char buf[100];
