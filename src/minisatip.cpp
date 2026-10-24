@@ -2020,9 +2020,6 @@ int main(int argc, char *argv[]) {
     join_thread();
     unlink(pid_file);
 #ifndef DISABLE_PMT
-#ifndef DISABLE_TABLES
-    tables_destroy();
-#endif
     pmts.destroy_all();
     filters.destroy_all();
 #endif

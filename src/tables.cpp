@@ -424,13 +424,3 @@ int tables_init() {
 #endif
     return 0;
 }
-
-int tables_destroy() {
-    int i;
-    for (i = 0; i < nca; i++) {
-        SCA_op *op = ca[i].op.load();
-        if (ca[i].enabled && op->ca_close_ca)
-            op->ca_close_ca();
-    }
-    return 0;
-}
