@@ -895,8 +895,8 @@ int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
                   int added_only, int ca_id) {
     int pos = 0;
 #ifndef DISABLE_DDCI
-    // The CAM sees rewritten pids on loopback PMTs; live ones pass through.
-    int remap = opts.enigma && ddci_owns_pmt(pmt->id);
+    // The CAM sees rewritten pids on DDCI-owned PMTs either way.
+    int remap = ddci_owns_pmt(pmt->id);
 #else
     int remap = 0;
 #endif
@@ -1221,7 +1221,7 @@ ca_device_t *find_dvbca_for_pmt(SPMT *pmt) {
 #ifndef DISABLE_DDCI
             // Live PMTs must not steal the loopback stack (its tsmux
             // input moves); a busy single CI correctly finds nothing.
-            if (opts.enigma && ddci_is_loopback(i))
+            if (ddci_is_loopback(i))
                 continue;
 #endif
             d = ca_devices[i];
@@ -1269,36 +1269,26 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
     int prev_linked = -2; // -2: CI was not moved for this call
     SPMT *first = NULL;
 
-    if (opts.enigma) {
-#ifndef DISABLE_DDCI
-        // Loopback PMTs ride the DDCI mapping; the CI stays on PVR input.
-        if (ddci_will_loopback(ad)) {
-            int ddid = ddci_ca_device_for_pmt(spmt);
-            if (ddid < 0)
-                LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY,
-                               "DDCI has not mapped PMT %d yet", spmt->id);
-            d = ca_devices[ddid];
-        } else
-#endif
-        {
-            // enigma allows attaching the CI to the adapter that needs it
-            d = find_dvbca_for_pmt(spmt);
-            if (!d) {
-                if (any_ca_initializing())
-                    return TABLES_RESULT_ERROR_RETRY;
-                else
-                    return TABLES_RESULT_ERROR_NORETRY;
-            }
-
-            prev_linked = d->linked_adapter;
-            // detach the CI from the previous adapter
-            if (d->linked_adapter != ad->id) {
-                set_tuner_input(-1, d->linked_adapter);
-            }
-            set_tuner_input(d->ci_slot, ad->id);
-            set_input_ci(d->ci_slot, ad->id);
-            d->linked_adapter = ad->id;
+    // Live enigma adapters move the CI between tuners; DDCI adapters
+    // drive their own stack exactly like hardware DDCI off-enigma.
+    if (opts.enigma && ad->type == ADAPTER_DVB) {
+        // enigma allows attaching the CI to the adapter that needs it
+        d = find_dvbca_for_pmt(spmt);
+        if (!d) {
+            if (any_ca_initializing())
+                return TABLES_RESULT_ERROR_RETRY;
+            else
+                return TABLES_RESULT_ERROR_NORETRY;
         }
+
+        prev_linked = d->linked_adapter;
+        // detach the CI from the previous adapter
+        if (d->linked_adapter != ad->id) {
+            set_tuner_input(-1, d->linked_adapter);
+        }
+        set_tuner_input(d->ci_slot, ad->id);
+        set_input_ci(d->ci_slot, ad->id);
+        d->linked_adapter = ad->id;
     }
 
     if (!d)

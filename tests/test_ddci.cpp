@@ -1794,7 +1794,7 @@ int test_capmt_uses_mapped_pids() {
     opts.enigma = 0;
     n = CAPMT_add_PMT(out, sizeof(out), pmt, CA_PMT_CMD_ID_OK_DESCRAMBLING, 0,
                       0);
-    ASSERT(((out[1] << 8) | out[2]) == 601, "guard off keeps video pid");
+    ASSERT(((out[1] << 8) | out[2]) == 602, "remap holds without enigma");
 
     ddci_devices[0] = NULL;
     a[0] = nullptr;
@@ -1802,36 +1802,45 @@ int test_capmt_uses_mapped_pids() {
     return 0;
 }
 
-int test_dvbca_loopback_pmt_routing() {
+int test_dvbca_ci_adapter_no_routing() {
+    extern SCA ca[MAX_CA];
     SPMT *pmt0;
-    ddci_device_t d0 = {};
     adapter ad = {0};
-    for (int i = 0; i < MAX_ADAPTERS; i++)
+    ca_device_t dev;
+    memset(&dev, 0, sizeof(dev));
+    for (int i = 0; i < MAX_ADAPTERS; i++) {
         a[i] = nullptr;
+        ca_devices[i] = NULL;
+    }
     create_adapter(&ad, 8);
     pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
-    memset(&d0.pmt, -1, sizeof(d0.pmt));
-    d0.id = 0;
-    d0.enabled = 1;
-    d0.loopback = 1;
-    d0.max_channels = 2;
-    memset(ddci_devices, 0, sizeof(ddci_devices));
-    ddci_devices[0] = &d0;
-    memset(ca_devices, 0, sizeof(ca_devices));
-
+    dev.id = 8;
+    dev.fd = -1;
+    dev.state = CA_STATE_INITIALIZED;
+    dev.linked_adapter = 7;
+    dev.max_ca_pmt = 1;
+    dev.capmt[0].pmt_id = PMT_INVALID;
+    for (int &id : dev.capmt[0].other_id)
+        id = PMT_INVALID;
+    ca_devices[8] = &dev;
+    // Same slot 0 the global dvbca_id points at in tests.
+    int dvbca_id = add_ca(&dvbca);
+    add_caid_mask(dvbca_id, 8, 0x100, 0xFFFF);
     opts.enigma = 1;
-    ad.type = ADAPTER_SATIP;
-    ASSERT(dvbca.ca_add_pmt(&ad, pmt0, 0) == TABLES_RESULT_ERROR_RETRY,
-           "unmapped loopback PMT retries");
-    d0.pmt[0].id = pmt0->id;
-    ASSERT(dvbca.ca_add_pmt(&ad, pmt0, 0) == TABLES_RESULT_ERROR_NORETRY,
-           "mapped PMT without a CA does not retry");
+
+    // CI adapters drive their own stack without moving the tsmux link.
+    ad.type = ADAPTER_CI;
+    dvbca.ca_add_pmt(&ad, pmt0, 0);
+    ASSERT(dev.linked_adapter == 7, "CI adapter does not steal the link");
+
+    // Live adapters still route the CI to their tuner.
     ad.type = ADAPTER_DVB;
-    ASSERT(dvbca.ca_add_pmt(&ad, pmt0, 0) == TABLES_RESULT_ERROR_NORETRY,
-           "live path without a CA does not retry");
+    dvbca.ca_add_pmt(&ad, pmt0, 0);
+    ASSERT(dev.linked_adapter == 8, "live adapter moves the link");
 
     opts.enigma = 0;
-    ddci_devices[0] = NULL;
+    del_ca(&dvbca);
+    ca_devices[8] = NULL;
     a[8] = nullptr;
     return 0;
 }
@@ -1857,7 +1866,7 @@ int test_ddci_remap_pid() {
     ASSERT(ddci_remap_pid(9, 601) == 602, "collided mapping resolves");
     ASSERT(ddci_remap_pid(8, 999) == 999, "unmapped pid passes through");
     opts.enigma = 0;
-    ASSERT(ddci_remap_pid(9, 601) == 601, "guard off passes through");
+    ASSERT(ddci_remap_pid(9, 601) == 602, "remap is platform-neutral");
 
     ddci_devices[0] = NULL;
     a[0] = nullptr;
@@ -1865,7 +1874,7 @@ int test_ddci_remap_pid() {
     return 0;
 }
 
-int test_ddci_owns_and_loops() {
+int test_ddci_owns_pmt() {
     ddci_device_t d0 = {};
     adapter ad = {0};
     for (int i = 0; i < MAX_ADAPTERS; i++)
@@ -1880,54 +1889,16 @@ int test_ddci_owns_and_loops() {
     ddci_devices[0] = &d0;
 
     opts.enigma = 1;
-    ad.type = ADAPTER_SATIP;
     ASSERT(!ddci_owns_pmt(10), "unmapped PMT is not owned");
-    ASSERT(ddci_will_loopback(&ad), "satip loops back with a loopback up");
     d0.pmt[0].id = 10;
     ASSERT(ddci_owns_pmt(10), "registered PMT is owned");
     ASSERT(ddci_device_for_pmt(10) == 0, "owner device resolves");
     ASSERT(ddci_device_for_pmt(11) == -1, "stranger resolves to -1");
-    ad.type = ADAPTER_DVB;
-    ASSERT(!ddci_will_loopback(&ad), "local tuner stays live");
-    d0.loopback = 0;
-    ad.type = ADAPTER_SATIP;
-    ASSERT(!ddci_will_loopback(&ad), "no loopback device, no loopback");
     opts.enigma = 0;
-    ASSERT(!ddci_owns_pmt(10), "guard off owns nothing");
+    ASSERT(ddci_owns_pmt(10), "ownership is platform-neutral");
 
     ddci_devices[0] = NULL;
     a[8] = nullptr;
-    return 0;
-}
-
-int test_ddci_ca_device_for_pmt() {
-    ddci_device_t d0 = {};
-    for (int i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = nullptr;
-    memset(&d0.pmt, -1, sizeof(d0.pmt));
-    memset(ddci_devices, 0, sizeof(ddci_devices));
-    d0.id = 0;
-    d0.enabled = 1;
-    d0.loopback = 1;
-    d0.max_channels = 2;
-    ddci_devices[0] = &d0;
-    opts.enigma = 1;
-
-    SPMT *src = create_pmt(12, 206, 206, 2061, 0x4AFC, 0x100);
-    SPMT *shadow = create_pmt(0, 206, 206, 2061, 0x4AFC, 0x100);
-    SPMT *stranger = create_pmt(7, 300, 300, 3000, 0x100, 0x100);
-    d0.pmt[0].id = src->id;
-    ASSERT(ddci_ca_device_for_pmt(src) == 0, "registered source resolves");
-    ASSERT(ddci_ca_device_for_pmt(shadow) == 0, "shadow resolves to loopback");
-    ASSERT(ddci_ca_device_for_pmt(stranger) == -1, "stranger waits");
-    ASSERT(ddci_ca_device_for_pmt(NULL) == -1, "null waits");
-    d0.loopback = 0;
-    ASSERT(ddci_ca_device_for_pmt(shadow) == -1, "non-loopback waits");
-    opts.enigma = 0;
-    d0.loopback = 1;
-    ASSERT(ddci_ca_device_for_pmt(shadow) == -1, "guard off waits");
-
-    ddci_devices[0] = NULL;
     return 0;
 }
 
@@ -2076,15 +2047,13 @@ int main() {
     TEST_FUNC(test_ddci_enigma_declines_local(),
               "testing enigma loops back non-local PMTs only");
     TEST_FUNC(test_ddci_remap_pid(), "testing ddci pid remap for CAPMT");
-    TEST_FUNC(test_ddci_owns_and_loops(), "testing loopback PMT ownership");
-    TEST_FUNC(test_ddci_ca_device_for_pmt(),
-              "testing CAPMT device for shadow PMTs");
+    TEST_FUNC(test_ddci_owns_pmt(), "testing DDCI PMT ownership");
     TEST_FUNC(test_ddci_pick_free_slot(), "testing loopback slot selection");
     TEST_FUNC(test_ddci_model_is_uno4k(), "testing Uno 4K model gate");
     TEST_FUNC(test_capmt_uses_mapped_pids(),
               "testing CAPMT carries mapped pids on loopback PMTs");
-    TEST_FUNC(test_dvbca_loopback_pmt_routing(),
-              "testing DVBCA waits for the DDCI mapping on loopback");
+    TEST_FUNC(test_dvbca_ci_adapter_no_routing(),
+              "testing CI adapters skip tsmux routing");
     pmts.destroy_all();
     filters.destroy_all();
     fflush(stdout);

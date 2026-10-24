@@ -198,28 +198,14 @@ static int find_registered_ddci(int pmt_id) {
 
 // Device holding this PMT id, or -1; true when any device holds it.
 int ddci_device_for_pmt(int pmt_id) { return find_registered_ddci(pmt_id); }
-int ddci_owns_pmt(int pmt_id) {
-    return opts.enigma && find_registered_ddci(pmt_id) >= 0;
-}
-// DDCI to drive for a CAPMT: the registered owner, or the shadow
-// PMT's own loopback (shadows live on the DDCI, source holds slot).
-int ddci_ca_device_for_pmt(SPMT *pmt) {
-    if (!pmt)
-        return -1;
-    int ddid = find_registered_ddci(pmt->id);
-    if (ddid < 0 && ddci_is_loopback(pmt->adapter))
-        ddid = pmt->adapter;
-    return ddid;
-}
+int ddci_owns_pmt(int pmt_id) { return ddci_device_for_pmt(pmt_id) >= 0; }
 int ddci_is_loopback(int id) {
     ddci_device_t *d = get_ddci(id);
     return opts.enigma && d && d->loopback;
 }
 
-// Mapped ddci_pid for (ad,pid); pid itself when unmapped or off-enigma.
+// Mapped ddci_pid for (ad,pid); pid itself when unmapped.
 int ddci_remap_pid(int ad, int pid) {
-    if (!opts.enigma)
-        return pid;
     for (int i = 0; i < MAX_ADAPTERS; i++) {
         ddci_device_t *d = get_ddci(i);
         if (!d)
@@ -230,16 +216,6 @@ int ddci_remap_pid(int ad, int pid) {
             return it->second.ddci_pid;
     }
     return pid;
-}
-
-// Non-local sources loop back on enigma; local tuners use the live CI path.
-int ddci_will_loopback(adapter *ad) {
-    if (!ad || !opts.enigma || ad->type == ADAPTER_DVB)
-        return 0;
-    for (int i = 0; i < MAX_ADAPTERS; i++)
-        if (ddci_is_loopback(i))
-            return 1;
-    return 0;
 }
 
 // Highest fn in existing[] missing from used[]; -1 when none fits.
@@ -376,6 +352,12 @@ int ddci_close_dev(adapter *ad) {
 SCA_op ddci;
 
 int ddci_close_adapter(adapter *ad) { return 0; }
+
+// Loopback teardown returns the CI input; hardware close stays a no-op.
+static int ddci_close_loopback(adapter *a) {
+    ddci_enigma_route_none(ddci_devices[a->id]);
+    return 0;
+}
 
 extern SMutex ca_mask_mutex;
 
@@ -682,9 +664,6 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
     LOG("DDCI %d: PMT %d %s on slot %d (+%d -%d pids), keeping ddci pids",
         d->id, pmt->id, update ? "update" : "add", pos, mapped, unmapped);
 
-    // Idempotent: re-asserts PVR on every add and update.
-    if (opts.enigma)
-        ddci_enigma_route_pvr(d);
     lock.unlock();
     // update_pids stops PMTs via dvbca_del_pmt, taking ca_dev_lock;
     // send_capmt nests this mutex under it, so release ours first.
@@ -719,7 +698,7 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
             ddci_device_t *d = get_ddci(i);
             if (!d)
                 continue;
-            int found = 0, empty = 0;
+            int found = 0;
             {
                 std::lock_guard<SMutex> lock(d->mutex);
                 for (int j = 0; j < d->max_channels; j++)
@@ -733,15 +712,11 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
                         d->psi_changed = true;
                         found = 1;
                     }
-                empty = (d->channels == 0);
             }
             // update_pids can take ca_dev_lock via dvbca_del_pmt,
             // the reverse of send_capmt's nesting: run it unlocked.
-            if (found && opts.enigma) {
-                if (empty)
-                    ddci_enigma_route_none(d);
+            if (found && opts.enigma)
                 update_pids(i);
-            }
         }
         return 0;
     }
@@ -769,10 +744,6 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
         d->channels--;
     if (was_registered)
         d->psi_changed = true;
-    // Route NONE while still registered; the mapping is deleted below,
-    // so the only filter update runs after it, unlocked, at the end.
-    if (opts.enigma && was_registered && d->channels == 0)
-        ddci_enigma_route_none(d);
     LOG("%s: deleting pmt id %d, sid %d (%X), pid %d, ddci %d, name %s, "
         "held a slot %d, running channels %d",
         __FUNCTION__, spmt->id, spmt->sid, spmt->sid, map_ddci_pid, map_ddci,
@@ -1539,6 +1510,8 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
     d->tid = d->ver = d->sdt_ver = d->sdt_data_mask = 0;
     d->enabled = 1;
     ad->enabled = 1;
+    // The slot is ours for the run; close returns it to NONE.
+    ddci_enigma_route_pvr(d);
     LOG("opened enigma loopback %d push dvr%d fd:%d demux fd:%d source:%d",
         ad->id, push_dvr, ad->fe, ad->dvr, ad->dmx_source);
     return 0;
@@ -1891,7 +1864,7 @@ static void ddci_add_enigma_loopback() {
     ad->delsys = ddci_delsys;
     ad->name = ddci_name;
     ad->post_init = ddci_post_init;
-    ad->close = ddci_close_adapter;
+    ad->close = ddci_close_loopback;
     ad->get_signal = NULL;
     ad->set_pid = ddci_set_pid;
     ad->del_filters = ddci_del_filters;
