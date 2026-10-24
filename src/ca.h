@@ -192,6 +192,9 @@ struct cc_ctrl_data {
     EVP_PKEY *rsa_device_key;
 };
 
+// CI stack owner: live tuner, hardware DDCI, enigma tuner, loopback.
+enum class ca_mode : uint8_t { DVB = 0, DDCI, ENIGMA, ENIGMA_DDCI };
+
 struct ca_device {
     // enabled/fd/sock/state are plain cross-thread ints: writers
     // take the per-device lock, readers tolerate one stale pass.
@@ -200,7 +203,8 @@ struct ca_device {
     int max_ca_pmt, multiple_pmt;
     int fd, sock;
     int id;
-    int ci_slot; // /dev/ciN and tsmux slot, may differ from id
+    int ci_slot;  // /dev/ciN and tsmux slot, may differ from id
+    ca_mode mode; // zero-init DVB; set once at init publish
     int state;
     uint16_t caid[MAX_CAID];
     uint32_t caids;

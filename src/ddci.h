@@ -90,6 +90,8 @@ int ddci_model_is_uno4k(const char *path);
 int ddci_remap_pid(int ad, int pid);
 // True when id is an enabled enigma loopback device.
 int ddci_is_loopback(int id);
+// CI slot owned by the enigma loopback, or -1 when none.
+int ddci_loopback_ci_slot();
 void ddci_enigma_route_pvr(ddci_device_t *d);
 void ddci_enigma_route_none(ddci_device_t *d);
 int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,

@@ -1211,6 +1211,25 @@ int any_ca_initializing() {
     return 0;
 }
 
+// Mode for this adapter: loopback owns ENIGMA_DDCI, any other
+// CI adapter is hardware DDCI, enigma tuners are ENIGMA.
+static ca_mode ca_mode_for_adapter(const adapter *ad) {
+#ifndef DISABLE_DDCI
+    if (ddci_is_loopback(ad->id))
+        return ca_mode::ENIGMA_DDCI;
+#endif
+    if (ad->type == ADAPTER_CI)
+        return ca_mode::DDCI;
+    if (opts.enigma && ad->type == ADAPTER_DVB)
+        return ca_mode::ENIGMA;
+    return ca_mode::DVB;
+}
+
+// Both enigma modes drive /dev/ciN with raw SPDUs.
+static int ca_mode_is_enigma(ca_mode mode) {
+    return mode == ca_mode::ENIGMA || mode == ca_mode::ENIGMA_DDCI;
+}
+
 ca_device_t *find_dvbca_for_pmt(SPMT *pmt) {
     ca_device_t *d;
     extern SCA ca[MAX_CA];
@@ -1218,13 +1237,11 @@ ca_device_t *find_dvbca_for_pmt(SPMT *pmt) {
 
     for (i = 0; i < MAX_ADAPTERS; i++)
         if (ca_devices[i] && ca_devices[i]->state == CA_STATE_INITIALIZED) {
-#ifndef DISABLE_DDCI
+            d = ca_devices[i];
             // Live PMTs must not steal the loopback stack (its tsmux
             // input moves); a busy single CI correctly finds nothing.
-            if (ddci_is_loopback(i))
+            if (d->mode == ca_mode::ENIGMA_DDCI)
                 continue;
-#endif
-            d = ca_devices[i];
             // add_caid_mask writes ad_info under ca_mask_mutex: read
             // it under the same lock so count/caid/mask stay together.
             std::lock_guard<SMutex> lock(ca_mask_mutex);
@@ -1271,7 +1288,7 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
 
     // Live enigma adapters move the CI between tuners; DDCI adapters
     // drive their own stack exactly like hardware DDCI off-enigma.
-    if (opts.enigma && ad->type == ADAPTER_DVB) {
+    if (ca_mode_for_adapter(ad) == ca_mode::ENIGMA) {
         // enigma allows attaching the CI to the adapter that needs it
         d = find_dvbca_for_pmt(spmt);
         if (!d) {
@@ -3216,7 +3233,7 @@ int asn_1_encode(int length, uint8_t *asn_1_array) {
 // to the CA device For dvbca codepath, this wraps the session data into a TPDU
 // and sends it to the device.
 int ca_write_tpdu(ca_device_t *d, int tag, uint8_t *buf, int len) {
-    if (opts.enigma) {
+    if (ca_mode_is_enigma(d->mode)) {
 
         int written;
         do {
@@ -3682,7 +3699,7 @@ int ca_timeout(sockets *s) {
     if (s->sid < 0 || s->sid >= MAX_ADAPTERS || !ca_devices[s->sid])
         return 0;
     d = ca_devices[s->sid];
-    if (!opts.enigma) {
+    if (!ca_mode_is_enigma(d->mode)) {
         int rc;
         if (d->state == CA_STATE_INACTIVE) {
             rc = ca_write_tpdu(d, T_CREATE_TC, NULL, 0);
@@ -3986,9 +4003,9 @@ int dvbca_init_dev(adapter *ad) {
         return TABLES_RESULT_ERROR_NORETRY;
     sprintf(ca_dev_path, "/dev/dvb/adapter%d/ca%d", ad->pa, ad->fn);
     int ci_slot = ad->id;
-    if (opts.enigma) {
-#ifndef DISABLE_DDCI
-        if (ddci_is_loopback(ad->id)) {
+    ca_mode mode = ca_mode_for_adapter(ad);
+    if (ca_mode_is_enigma(mode)) {
+        if (mode == ca_mode::ENIGMA_DDCI) {
             ci_slot = opts.enigma_ci_slot;
             if (ci_slot < 0) {
                 ci_slot = -1;
@@ -4006,26 +4023,30 @@ int dvbca_init_dev(adapter *ad) {
                                "no usable CI slot for loopback adapter %d",
                                ad->id);
         }
-#endif
         sprintf(ca_dev_path, "/dev/ci%d", ci_slot);
     }
+#ifndef DISABLE_DDCI
+    // Loopback owns its CI slot; the enigma tuner stands down.
+    if (mode == ca_mode::ENIGMA && ci_slot == ddci_loopback_ci_slot())
+        LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
+                       "CI slot %d owned by the loopback, skip adapter %d",
+                       ci_slot, ad->id);
+#endif
     // Check through publish stays atomic across adapters; device init
     // below runs unlocked so inits do not serialize for seconds.
     std::unique_lock<SMutex> slot_lock(ca_slot_mutex);
-    if (opts.enigma && ci_slot_taken(ci_slot, ad->id))
+    if (ca_mode_is_enigma(mode) && ci_slot_taken(ci_slot, ad->id))
         LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
                        "CI slot %d already opened, skip adapter %d", ci_slot,
                        ad->id);
     fd = open(ca_dev_path, O_RDWR);
     if (fd < 0) {
-#ifndef DISABLE_DDCI
         // A loopback with no stack must fail loudly, not inherit a bit.
-        if (opts.enigma && ddci_is_loopback(ad->id))
+        if (mode == ca_mode::ENIGMA_DDCI)
             LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
                            "No CA device for loopback adapter %d: file %s",
                            ad->id, ca_dev_path);
-#endif
-        if (opts.enigma && has_ci) {
+        if (ca_mode_is_enigma(mode) && has_ci) {
             LOG_AND_RETURN(TABLES_RESULT_OK,
                            "No CA device detected on adapter %d: enabling "
                            "already registered CAs",
@@ -4051,6 +4072,7 @@ int dvbca_init_dev(adapter *ad) {
         c->fd = fd;
         c->id = ad->id;
         c->ci_slot = ci_slot;
+        c->mode = mode;
         c->state = CA_STATE_INACTIVE;
         c->sock = -1;
         c->pending_tag = 0;
@@ -4079,12 +4101,12 @@ int dvbca_init_dev(adapter *ad) {
     }
 
     // Empty slot: skip the reset storm, the poller retries later.
-    if (!opts.enigma && !ca_slot_present(fd)) {
+    if (!ca_mode_is_enigma(mode) && !ca_slot_present(fd)) {
         LOG("CA %d: no module in slot, deferring init", c->id);
         return ca_init_failed(c);
     }
 
-    if (opts.enigma)
+    if (ca_mode_is_enigma(mode))
         result = ca_init_enigma(c);
     else
         result = ca_init_en50221(c);
