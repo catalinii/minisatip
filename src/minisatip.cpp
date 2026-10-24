@@ -2019,10 +2019,6 @@ int main(int argc, char *argv[]) {
     select_and_execute(NULL);
     join_thread();
     unlink(pid_file);
-#ifndef DISABLE_PMT
-    pmts.destroy_all();
-    filters.destroy_all();
-#endif
     LOG0("Closing...");
 #ifndef DISABLE_SRT
     srt_listener_close();
