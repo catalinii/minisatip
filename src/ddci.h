@@ -60,6 +60,7 @@ typedef struct ddci_device {
     int sdt_data_mask; // channels with real SDT data at last SDT generation
     int16_t pat_cc, sdt_cc, eit_cc;
     char disable_cat;
+    char loopback; // enigma DVR loopback, no sec/ci hardware
     std::unordered_map<int, ddci_mapping_table_t> mapping;
     std::unordered_set<int> emm_pids; // MAKE_KEY(ad,pid), never swept
     SFIFO fifo;
@@ -77,6 +78,20 @@ typedef struct ddci_channel {
 
 void find_ddci_adapter();
 void ddci_init();
+// Highest fn in existing[] not in used[]; -1 when none fits.
+int ddci_pick_free_fn(const int *existing, int nexisting, const int *used,
+                      int nused);
+// True when a DDCI device holds this PMT; its device index or -1.
+int ddci_owns_pmt(int pmt_id);
+int ddci_device_for_pmt(int pmt_id);
+// Mapped ddci_pid for (ad,pid), or pid when unmapped.
+int ddci_remap_pid(int ad, int pid);
+// True when this adapter's PMTs loop back on enigma (non-local source).
+int ddci_will_loopback(adapter *ad);
+// True when id is an enabled enigma loopback device.
+int ddci_is_loopback(int id);
+void ddci_enigma_route_pvr(ddci_device_t *d);
+void ddci_enigma_route_none(ddci_device_t *d);
 int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
                           int force_add_pid);
 int push_ts_to_adapter(ddci_device_t *d, adapter *ad, uint16_t *mapping);
