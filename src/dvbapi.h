@@ -113,7 +113,6 @@ void dvbapi_pid_add(adapter *a, int pid, SPid *cp, int existing);
 void dvbapi_pid_del(adapter *a, int pid, SPid *cp);
 void register_dvbapi();
 void unregister_dvbapi();
-void free_all_keys();
 void dvbapi_descramble_watchdog(adapter *ad);
 void send_client_info(sockets *s);
 void set_algo(SKey *k, int algo, int mode);

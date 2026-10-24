@@ -1109,15 +1109,6 @@ char *get_channel_for_key(int key, char *dest, int max_size) {
     return dest;
 }
 
-void free_all_keys(void) {
-    for (auto &slot : keys.slots())
-        if (slot) {
-            SKey *k = slot;
-            delete k;
-        }
-    keys.clear();
-}
-
 // Slot readers for the status API; a null slot reads as zero/empty.
 static SKey *get_key_nw(int i) {
     if (i < 0 || i >= MAX_KEYS)

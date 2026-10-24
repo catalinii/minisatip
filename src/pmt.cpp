@@ -1620,6 +1620,15 @@ int pmt_del(int id) {
     return 0;
 }
 
+// Frees owned sub-objects: CA entries plus the start maps.
+// batch is stack memory, cw points into the CW pool: untouched.
+SPMT::~SPMT() {
+    for (int j = 0; j < MAX_CAID; j++)
+        delete ca[j];
+    delete global_start;
+    delete local_start;
+}
+
 void cache_pmt_for_adapter(adapter *ad, SPMT *pmt) {
     if (!pmt)
         return;
@@ -2484,51 +2493,11 @@ char *get_pmt_for_adapter(int aid, char *dest, int max_size) {
     return dest;
 }
 
-void free_all_pmts() {
-    int j;
-    for (SPMT *pmt : pmts) {
-        if (pmt) {
-            // Updates shrink caids while keeping entries: free all slots.
-            for (j = 0; j < MAX_CAID; j++) {
-                if (pmt->ca[j]) {
-                    delete pmt->ca[j];
-                    pmt->ca[j] = NULL;
-                }
-            }
-            pmt->caids = 0;
-            pmt->descriptors.clear();
-
-            pmt->stream_pids.clear();
-
-            delete pmt;
-        }
-    }
-    pmts.clear();
-}
-
-void free_filters() {
-    // Size may sit below occupied slots after del_filter shrinks.
-    filters.for_each_published([](std::atomic<SFilter *> &slot) {
-        SFilter *f = slot;
-        delete f;
-    });
-    filters.clear();
-}
-
 int pmt_init() {
     init_algo();
 #ifndef DISABLE_TABLES
     tables_init();
 #endif
-    return 0;
-}
-
-int pmt_destroy() {
-#ifndef DISABLE_TABLES
-    tables_destroy();
-#endif
-    free_all_pmts();
-    free_filters();
     return 0;
 }
 

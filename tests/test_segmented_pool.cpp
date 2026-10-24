@@ -185,6 +185,26 @@ int test_concurrent_append_iterate() {
     return 0;
 }
 
+struct Counted {
+    static inline int alive = 0;
+    Counted() { ++alive; }
+    ~Counted() { --alive; }
+};
+
+int test_destroy_all() {
+    SegmentedPool<Counted *, 2> pool;
+    ASSERT(pool.extend_to(5), "extend_to failed");
+    for (size_t i = 0; i < 5; ++i)
+        pool.slot(i) = new Counted();
+    ASSERT_EQUAL(Counted::alive, 5, "setup mismatch");
+    pool.destroy_all();
+    ASSERT_EQUAL(Counted::alive, 0, "destroy_all leaked elements");
+    ASSERT_EQUAL(pool.size(), 0, "destroy_all left length behind");
+    for (auto &s : pool.slots())
+        ASSERT(!s, "destroy_all left a slot behind");
+    return 0;
+}
+
 int main() {
     opts.log = 255;
     strcpy(thread_info[thread_index].thread_name, "test_segmented_pool");
@@ -193,6 +213,7 @@ int main() {
     TEST_FUNC(test_snapshot_iterator(), "iterator holds length snapshot");
     TEST_FUNC(test_overflow(), "append past capacity fails cleanly");
     TEST_FUNC(test_clear(), "clear resets the pool");
+    TEST_FUNC(test_destroy_all(), "destroy_all deletes and blanks");
     TEST_FUNC(test_shrink_and_published(), "shrink keeps teardown covered");
     TEST_FUNC(test_concurrent_claim(), "concurrent CAS claims");
     TEST_FUNC(test_concurrent_append_iterate(),

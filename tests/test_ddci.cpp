@@ -182,7 +182,7 @@ int test_ddci_channel_count() {
     ASSERT(d0.channels == 0, "expected 0 running channels after delete");
 
     channels.clear();
-    free_filters();
+    filters.destroy_all();
     del_ca(&dvbca);
     ddci_devices[0] = NULL;
     ca_devices[0] = NULL;
@@ -314,7 +314,7 @@ int test_update_resend_keeps_slot() {
     ASSERT(d0.channels == 0, "expected 0 running channels after delete");
 
     channels.clear();
-    free_filters();
+    filters.destroy_all();
     del_ca(&dvbca);
     ddci_devices[0] = NULL;
     ca_devices[0] = NULL;
@@ -382,7 +382,7 @@ int test_ddci_update_version_follows_content() {
 
     ddci_del_pmt(&ad, pmt0);
     channels.clear();
-    free_filters();
+    filters.destroy_all();
     del_ca(&dvbca);
     ddci_devices[0] = NULL;
     ca_devices[0] = NULL;
@@ -497,7 +497,7 @@ int test_add_del_pmt() {
     ec = d0.mapping.size() + d1.mapping.size();
     ASSERT(ec == 0, "No pid should be enabled");
     channels.clear();
-    free_filters();
+    filters.destroy_all();
     return 0;
 }
 
@@ -755,7 +755,7 @@ int test_psi_pids_survive_a_channel_change() {
     del_ca(&dvbca);
     pmt_del(pmt_a->id);
     pmt_del(pmt_b->id);
-    free_filters();
+    filters.destroy_all();
     channels.clear();
     a[2] = nullptr;
     a[4] = nullptr;
@@ -1127,7 +1127,7 @@ int test_create_pmt_maps_es_ecm_pids() {
     ddci_devices[0] = &d;
     a[0] = nullptr;
     // free, not just NULL: earlier tests never released their PMTs
-    free_all_pmts();
+    pmts.destroy_all();
     ca_devices[0] = NULL;
     ca_devices[1] = NULL;
 
@@ -1161,7 +1161,7 @@ int test_create_pmt_maps_es_ecm_pids() {
         es = dd_end;
     }
     ASSERT(found == 1, "expected one ES CA descriptor");
-    free_all_pmts();
+    pmts.destroy_all();
     return 0;
 }
 
@@ -1286,7 +1286,7 @@ int test_ci_pmt_name_is_refreshed() {
     del_ca(&dvbca);
     pmt_del(src->id);
     pmt_del(ci_pmt->id);
-    free_filters();
+    filters.destroy_all();
     return 0;
 }
 
@@ -1359,7 +1359,7 @@ int test_ddci_add_psi_per_channel_pmt() {
     del_ca(&dvbca);
     pmt_del(pmtA->id);
     pmt_del(pmtB->id);
-    free_filters();
+    filters.destroy_all();
     return 0;
 }
 
@@ -1456,7 +1456,7 @@ int test_channel_change_sends_pat_immediately() {
     del_ca(&dvbca);
     pmt_del(pmt0->id);
     pmt_del(pmt1->id);
-    free_filters();
+    filters.destroy_all();
     channels.clear();
     ddci_devices[ci.id] = NULL;
     ca_devices[0] = NULL;
@@ -1619,7 +1619,7 @@ int test_initializing_ddci_does_not_block_others() {
     pmt_del(pmt_both->id);
     pmt_del(pmt_nomatch->id);
     channels.clear();
-    free_filters();
+    filters.destroy_all();
     ddci_devices[0] = ddci_devices[1] = NULL;
     ca_devices[0] = ca_devices[1] = NULL;
     a[0] = nullptr;
@@ -1699,7 +1699,7 @@ int test_ddci_least_used_device() {
     for (auto *p : pmt)
         pmt_del(p->id);
     channels.clear();
-    free_filters();
+    filters.destroy_all();
     ddci_devices[0] = ddci_devices[1] = NULL;
     ca_devices[0] = ca_devices[1] = NULL;
     a[0] = nullptr;
@@ -1747,8 +1747,8 @@ int main() {
               "testing that an initializing DDCI does not block the others");
     TEST_FUNC(test_ddci_least_used_device(),
               "testing that new channels go to the least used DDCI");
-    free_all_pmts();
-    free_filters();
+    pmts.destroy_all();
+    filters.destroy_all();
     fflush(stdout);
     return 0;
 }

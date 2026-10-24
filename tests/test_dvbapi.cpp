@@ -162,7 +162,7 @@ int test_icam_mode_only_from_ecms() {
     dvbapi_is_enabled = 0;
     keys_del(id);
     pmts.clear();
-    free_filters();
+    filters.destroy_all();
     return 0;
 }
 
@@ -441,7 +441,7 @@ int main() {
               "testing the watchdog restarts a stalled PMT for OSCam");
     fflush(stdout);
     free_all();
-    free_all_pmts();
-    free_filters();
+    pmts.destroy_all();
+    filters.destroy_all();
     return 0;
 }

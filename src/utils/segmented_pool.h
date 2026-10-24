@@ -43,14 +43,20 @@ class SegmentedPool {
         for (auto &b : buckets_)
             b = nullptr;
     }
-    // Pool owns heap objects: drop the length, delete survivors,
-    // then buckets. Manual deletes must blank; no stack survivors.
-    ~SegmentedPool() {
+    // Mid-life teardown: length to 0 first, then delete and
+    // blank every published slot. Single-threaded use only.
+    void destroy_all() {
         size_ = 0;
-        if constexpr (std::is_pointer_v<T>) {
-            for_each_published(
-                [](std::atomic<T> &s) { delete static_cast<T>(s); });
-        }
+        for_each_published([](std::atomic<T> &s) {
+            if constexpr (std::is_pointer_v<T>)
+                delete static_cast<T>(s);
+            s = T{};
+        });
+    }
+    // Destruction runs teardown, then releases the buckets.
+    // Manual deletes must blank; no stack survivors.
+    ~SegmentedPool() {
+        destroy_all();
         for (auto &b : buckets_)
             delete static_cast<Bucket *>(b);
     }

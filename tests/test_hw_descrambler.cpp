@@ -391,6 +391,6 @@ int main() {
     TEST_FUNC(test_hw_ca_update_retarget(),
               "testing hw CA re-send retargets bound pids");
 
-    free_all_pmts();
+    pmts.destroy_all();
     return 0;
 }

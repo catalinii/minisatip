@@ -2475,7 +2475,7 @@ int main() {
     TEST_FUNC(test_send_skips_stale_set(), "testing stale mask-set skip");
     TEST_FUNC(test_ca_read_bad_session(), "testing bad session drop");
     free_all(); // releases sockets opened by the enigma test
-    free_all_pmts();
+    pmts.destroy_all();
     fflush(stdout);
     return 0;
 }

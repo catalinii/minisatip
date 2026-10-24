@@ -55,6 +55,12 @@ typedef struct struct_sockets {
     // handles
     int master;
     bool close_unix_socket; // flag to control if unix socket should be closed
+    struct_sockets() = default;
+    ~struct_sockets();
+    struct_sockets(const struct_sockets &) = delete;
+    struct_sockets &operator=(const struct_sockets &) = delete;
+    struct_sockets(struct_sockets &&) = delete;
+    struct_sockets &operator=(struct_sockets &&) = delete;
 } sockets;
 
 #define IPTOS_DSCP_EF 0xb8
