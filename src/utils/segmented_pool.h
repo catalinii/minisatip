@@ -48,9 +48,12 @@ class SegmentedPool {
     void destroy_all() {
         size_ = 0;
         for_each_published([](std::atomic<T> &s) {
-            if constexpr (std::is_pointer_v<T>)
+            if constexpr (std::is_pointer_v<T>) {
                 delete static_cast<T>(s);
-            s = T{};
+                s = nullptr;
+            } else {
+                s = T{};
+            }
         });
     }
     // Destruction runs teardown, then releases the buckets.
