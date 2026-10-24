@@ -704,7 +704,7 @@ int sockets_del(int sock) {
 
 // Destruction releases resources only: no close callback,
 // just the fd and owned buffers.
-sockets::~sockets() {
+struct_sockets::~struct_sockets() {
     int so = sock;
     sock = -1;
     if (so >= 0 && close_unix_socket)

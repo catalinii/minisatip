@@ -1619,7 +1619,7 @@ int pmt_del(int id) {
 
 // Frees owned sub-objects: CA entries plus the start maps.
 // batch is stack memory, cw points into the CW pool: untouched.
-SPMT::~SPMT() {
+struct_pmt::~struct_pmt() {
     for (int j = 0; j < MAX_CAID; j++)
         delete ca[j];
     delete global_start;
