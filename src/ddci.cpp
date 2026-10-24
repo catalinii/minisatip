@@ -1912,11 +1912,12 @@ void find_ddci_adapter() {
 #endif
             }
         }
-#ifndef DISABLE_LINUXDVB
-    if (opts.enigma)
-        ddci_add_enigma_loopback();
-#endif
     for (; na < MAX_ADAPTERS; na++)
         if (a[na])
             a[na]->pa = a[na]->fn = -1;
+#ifndef DISABLE_LINUXDVB
+    // Last: the sweep above must not see the loopback as a stale entry.
+    if (opts.enigma)
+        ddci_add_enigma_loopback();
+#endif
 }
