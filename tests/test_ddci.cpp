@@ -1751,7 +1751,9 @@ int test_ddci_pick_free_fn() {
     return 0;
 }
 
-int test_capmt_uses_mapped_pids() {
+// CAPMT lists the PMT's own pids verbatim: shadows already carry
+// ddci pids, so mappings must not rewrite them a second time.
+int test_capmt_lists_pmt_pids() {
     ddci_device_t d0 = {};
     adapter ad = {0}, a0 = {0};
     for (int i = 0; i < MAX_ADAPTERS; i++)
@@ -1776,25 +1778,19 @@ int test_capmt_uses_mapped_pids() {
     memset(&d0.pmt, -1, sizeof(d0.pmt));
     d0.pmt[0].id = pmt->id;
 
-    opts.enigma = 1;
     uint8_t out[1024];
     int n = CAPMT_add_PMT(out, sizeof(out), pmt, CA_PMT_CMD_ID_OK_DESCRAMBLING,
                           0, 0);
     ASSERT(n == 24, "two entries of 12 bytes");
     ASSERT(out[0] == 2, "video type first");
-    ASSERT(((out[1] << 8) | out[2]) == 602, "video pid remapped");
+    ASSERT(((out[1] << 8) | out[2]) == 601, "video pid verbatim");
     int l1 = (out[3] << 8) | out[4];
     ASSERT(out[5] == CA_PMT_CMD_ID_OK_DESCRAMBLING, "cmd id");
     ASSERT(out[6] == 0x09, "CA descriptor tag");
-    ASSERT(((out[10] << 8) | out[11]) == 257, "ECM pid remapped");
+    ASSERT(((out[10] << 8) | out[11]) == 0x100, "ECM pid verbatim");
     int o2 = 5 + l1;
     ASSERT(out[o2] == 6, "audio type second");
-    ASSERT(((out[o2 + 1] << 8) | out[o2 + 2]) == 603, "audio pid remapped");
-
-    opts.enigma = 0;
-    n = CAPMT_add_PMT(out, sizeof(out), pmt, CA_PMT_CMD_ID_OK_DESCRAMBLING, 0,
-                      0);
-    ASSERT(((out[1] << 8) | out[2]) == 602, "remap holds without enigma");
+    ASSERT(((out[o2 + 1] << 8) | out[o2 + 2]) == 602, "audio pid verbatim");
 
     ddci_devices[0] = NULL;
     a[0] = nullptr;
@@ -1841,63 +1837,6 @@ int test_dvbca_ci_adapter_no_routing() {
     opts.enigma = 0;
     del_ca(&dvbca);
     ca_devices[8] = NULL;
-    a[8] = nullptr;
-    return 0;
-}
-
-int test_ddci_remap_pid() {
-    ddci_device_t d0 = {};
-    adapter ad = {0}, a0 = {0};
-    for (int i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = nullptr;
-    create_adapter(&ad, 8);
-    create_adapter(&a0, 0);
-    memset(ddci_devices, 0, sizeof(ddci_devices));
-    d0.id = 0;
-    d0.enabled = 1;
-    ddci_devices[0] = &d0;
-
-    opts.enigma = 1;
-    ASSERT(add_pid_mapping_table(8, 601, 10, &d0, 0) == 601,
-           "first take keeps pid");
-    ASSERT(add_pid_mapping_table(9, 601, 11, &d0, 0) == 602,
-           "collision moves up");
-    ASSERT(ddci_remap_pid(8, 601) == 601, "own mapping resolves");
-    ASSERT(ddci_remap_pid(9, 601) == 602, "collided mapping resolves");
-    ASSERT(ddci_remap_pid(8, 999) == 999, "unmapped pid passes through");
-    opts.enigma = 0;
-    ASSERT(ddci_remap_pid(9, 601) == 602, "remap is platform-neutral");
-
-    ddci_devices[0] = NULL;
-    a[0] = nullptr;
-    a[8] = nullptr;
-    return 0;
-}
-
-int test_ddci_owns_pmt() {
-    ddci_device_t d0 = {};
-    adapter ad = {0};
-    for (int i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = nullptr;
-    create_adapter(&ad, 8);
-    memset(&d0.pmt, -1, sizeof(d0.pmt));
-    memset(ddci_devices, 0, sizeof(ddci_devices));
-    d0.id = 0;
-    d0.enabled = 1;
-    d0.loopback = 1;
-    d0.max_channels = 2;
-    ddci_devices[0] = &d0;
-
-    opts.enigma = 1;
-    ASSERT(!ddci_owns_pmt(10), "unmapped PMT is not owned");
-    d0.pmt[0].id = 10;
-    ASSERT(ddci_owns_pmt(10), "registered PMT is owned");
-    ASSERT(ddci_device_for_pmt(10) == 0, "owner device resolves");
-    ASSERT(ddci_device_for_pmt(11) == -1, "stranger resolves to -1");
-    opts.enigma = 0;
-    ASSERT(ddci_owns_pmt(10), "ownership is platform-neutral");
-
-    ddci_devices[0] = NULL;
     a[8] = nullptr;
     return 0;
 }
@@ -2046,12 +1985,10 @@ int main() {
               "testing highest-free demux pick for the loopback");
     TEST_FUNC(test_ddci_enigma_declines_local(),
               "testing enigma loops back non-local PMTs only");
-    TEST_FUNC(test_ddci_remap_pid(), "testing ddci pid remap for CAPMT");
-    TEST_FUNC(test_ddci_owns_pmt(), "testing DDCI PMT ownership");
     TEST_FUNC(test_ddci_pick_free_slot(), "testing loopback slot selection");
     TEST_FUNC(test_ddci_model_is_uno4k(), "testing Uno 4K model gate");
-    TEST_FUNC(test_capmt_uses_mapped_pids(),
-              "testing CAPMT carries mapped pids on loopback PMTs");
+    TEST_FUNC(test_capmt_lists_pmt_pids(),
+              "testing CAPMT lists PMT pids verbatim");
     TEST_FUNC(test_dvbca_ci_adapter_no_routing(),
               "testing CI adapters skip tsmux routing");
     pmts.destroy_all();

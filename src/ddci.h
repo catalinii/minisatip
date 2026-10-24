@@ -81,13 +81,8 @@ void ddci_init();
 // Highest fn in existing[] not in used[]; -1 when none fits.
 int ddci_pick_free_fn(const int *existing, int nexisting, const int *used,
                       int nused);
-// True when a DDCI device holds this PMT; its device index or -1.
-int ddci_owns_pmt(int pmt_id);
-int ddci_device_for_pmt(int pmt_id);
 int ddci_pick_free_slot();
 int ddci_model_is_uno4k(const char *path);
-// Mapped ddci_pid for (ad,pid), or pid when unmapped.
-int ddci_remap_pid(int ad, int pid);
 // True when id is an enabled enigma loopback device.
 int ddci_is_loopback(int id);
 // CI slot owned by the enigma loopback, or -1 when none.

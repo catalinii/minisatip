@@ -196,9 +196,6 @@ static int find_registered_ddci(int pmt_id) {
     return -1;
 }
 
-// Device holding this PMT id, or -1; true when any device holds it.
-int ddci_device_for_pmt(int pmt_id) { return find_registered_ddci(pmt_id); }
-int ddci_owns_pmt(int pmt_id) { return ddci_device_for_pmt(pmt_id) >= 0; }
 int ddci_is_loopback(int id) {
     ddci_device_t *d = get_ddci(id);
     return opts.enigma && d && d->loopback;
@@ -222,20 +219,6 @@ int ddci_loopback_ci_slot() {
             return s;
     }
     return -1;
-}
-
-// Mapped ddci_pid for (ad,pid); pid itself when unmapped.
-int ddci_remap_pid(int ad, int pid) {
-    for (int i = 0; i < MAX_ADAPTERS; i++) {
-        ddci_device_t *d = get_ddci(i);
-        if (!d)
-            continue;
-        std::lock_guard<SMutex> lock(d->mutex);
-        auto it = get_pid_mapping(d, ad, pid);
-        if (it != d->mapping.end())
-            return it->second.ddci_pid;
-    }
-    return pid;
 }
 
 // Highest fn in existing[] missing from used[]; -1 when none fits.

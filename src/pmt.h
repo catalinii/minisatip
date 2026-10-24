@@ -276,8 +276,7 @@ void init_algo();
 void update_cw(SPMT *pmt);
 int pmt_decrypt_stream(adapter *ad);
 int wait_pusi(adapter *ad, int len);
-int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf, int buf_len, int sca_id,
-                          int remap_ddci = 0);
+int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf, int buf_len, int sca_id);
 void stop_pmt(SPMT *pmt, adapter *ad);
 int pmt_add_stream_pid(SPMT *pmt, int pid, int type, bool is_audio,
                        bool is_video);
