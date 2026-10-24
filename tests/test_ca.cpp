@@ -873,8 +873,7 @@ static SCA_op fake_ca_op = {.ca_add_pid = NULL,
                             .ca_del_pmt = fake_ca_del_pmt,
                             .ca_init_dev = NULL,
                             .ca_close_dev = NULL,
-                            .ca_ts = NULL,
-                            .ca_close_ca = NULL};
+                            .ca_ts = NULL};
 
 // pmt_add_caid() clears ca_mask to force a re-send. A PMT stopped before that
 // re-send happens must still be released on the CA that holds it (#1442)

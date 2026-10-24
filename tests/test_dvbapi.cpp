@@ -53,7 +53,7 @@ static int count_enabled_keys() {
 // A PMT update re-send reuses the live key, keeping the demux index
 // stable instead of leaking a key per version bump (#1346).
 int test_add_pmt_reuses_live_key() {
-    SPMT pmt = {};
+    SPMT *pmt = new SPMT();
     adapter ad = {};
     int sv[2];
     ASSERT(socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == 0, "no socketpair");
@@ -63,24 +63,23 @@ int test_add_pmt_reuses_live_key() {
     ad.enabled = 1;
     ad.id = 0;
     a[0] = &ad;
-    pmt.enabled = 1;
-    pmt.id = 0;
-    pmt.sid = 100;
-    pmt.pid = 48;
-    pmts.slot(0) = &pmt;
+    pmt->enabled = 1;
+    pmt->id = 0;
+    pmt->sid = 100;
+    pmt->pid = 48;
+    pmts.slot(0) = pmt;
     pmts.extend_to(1);
     int before = count_enabled_keys();
 
-    ASSERT(dvbapi_add_pmt(&ad, &pmt, 0) == TABLES_RESULT_OK,
-           "first add failed");
-    SKey *k = (SKey *)pmt.opaque;
+    ASSERT(dvbapi_add_pmt(&ad, pmt, 0) == TABLES_RESULT_OK, "first add failed");
+    SKey *k = (SKey *)pmt->opaque;
     ASSERT(k && k->enabled, "no live key after add");
     ASSERT_EQUAL(count_enabled_keys(), before + 1, "one key expected");
     int demux = k->demux_index;
 
-    pmt.sid = 200;
-    ASSERT(dvbapi_add_pmt(&ad, &pmt, 1) == TABLES_RESULT_OK, "re-send failed");
-    ASSERT(pmt.opaque == k, "re-send must reuse the live key");
+    pmt->sid = 200;
+    ASSERT(dvbapi_add_pmt(&ad, pmt, 1) == TABLES_RESULT_OK, "re-send failed");
+    ASSERT(pmt->opaque == k, "re-send must reuse the live key");
     ASSERT(k->enabled, "reused key must stay enabled");
     ASSERT_EQUAL(k->demux_index, demux, "demux index must stay stable");
     ASSERT_EQUAL(k->sid, 200, "re-send must refresh the key");
@@ -89,9 +88,9 @@ int test_add_pmt_reuses_live_key() {
     // a dead key must fall through to a fresh allocation, not be reused
     k->ver = 42;
     keys_del(k->id);
-    ASSERT(dvbapi_add_pmt(&ad, &pmt, 0) == TABLES_RESULT_OK, "re-add failed");
+    ASSERT(dvbapi_add_pmt(&ad, pmt, 0) == TABLES_RESULT_OK, "re-add failed");
     ASSERT_EQUAL(count_enabled_keys(), before + 1, "one key expected again");
-    k = (SKey *)pmt.opaque;
+    k = (SKey *)pmt->opaque;
     ASSERT(k && k->enabled, "no live key after re-add");
     ASSERT_EQUAL(k->ver, -1, "re-add must allocate a fresh key");
 
@@ -99,7 +98,7 @@ int test_add_pmt_reuses_live_key() {
     sock = saved_sock;
     close(sv[0]);
     close(sv[1]);
-    pmts.clear();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -126,13 +125,13 @@ int test_icam_mode_only_from_ecms() {
                                   0xE0, 0xCC, 0x11, 0x22, 0x33, 0x44};
     static const uint8_t sdt[] = {0x42, 0xF0, 0x0B, 0x00, 0x01, 0xC1, 0x00,
                                   0x00, 0x00, 0x01, 0xFF, 0x11, 0x22, 0x33};
-    SPMT pmt = {};
+    SPMT *pmt = new SPMT();
     uint8_t ecm[64];
     int id, fid_ecm, fid_cat, fid_sdt, len;
     SKey *k;
 
-    pmt.enabled = 1;
-    pmts.slot(0) = &pmt;
+    pmt->enabled = 1;
+    pmts.slot(0) = pmt;
     pmts.extend_to(1);
     id = keys_add(0, 0);
     ASSERT(id >= 0, "no key for the PMT");
@@ -161,20 +160,20 @@ int test_icam_mode_only_from_ecms() {
 
     dvbapi_is_enabled = 0;
     keys_del(id);
-    pmts.clear();
+    pmts.destroy_all();
     filters.destroy_all();
     return 0;
 }
 
 int test_channel_falls_back_to_sid() {
-    SPMT pmt = {};
+    SPMT *pmt = new SPMT();
     char dest[64];
     int id;
     SKey *k;
 
-    pmt.enabled = 1;
-    pmt.sid = 1234;
-    pmts.slot(0) = &pmt;
+    pmt->enabled = 1;
+    pmt->sid = 1234;
+    pmts.slot(0) = pmt;
     pmts.extend_to(1);
     id = keys_add(0, 0);
     ASSERT(id >= 0, "no key for the PMT");
@@ -187,13 +186,13 @@ int test_channel_falls_back_to_sid() {
            "channel must fall back to the SID without SDT");
 
     // SDT seen: the real name wins over the fallback
-    strcpy(pmt.name, "Test Channel");
+    strcpy(pmt->name, "Test Channel");
     get_channel_for_key(id, dest, sizeof(dest));
     ASSERT(strcmp(dest, "Test Channel") == 0,
            "channel must show the SDT name when present");
 
     keys_del(id);
-    pmts.clear();
+    pmts.destroy_all();
     return 0;
 }
 
@@ -213,7 +212,7 @@ static int drain(int fd) {
 // An update re-send with identical CAPMT content writes nothing to the
 // server; a changed one re-sends (#1346).
 int test_update_resend_skips_identical_capmt() {
-    SPMT pmt = {};
+    SPMT *pmt = new SPMT();
     adapter ad = {};
     int sv[2];
     ASSERT(socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == 0, "no socketpair");
@@ -223,20 +222,19 @@ int test_update_resend_skips_identical_capmt() {
     ad.enabled = 1;
     ad.id = 0;
     a[0] = &ad;
-    pmt.enabled = 1;
-    pmt.id = 0;
-    pmt.sid = 100;
-    pmt.pid = 48;
-    pmts.slot(0) = &pmt;
+    pmt->enabled = 1;
+    pmt->id = 0;
+    pmt->sid = 100;
+    pmt->pid = 48;
+    pmts.slot(0) = pmt;
     pmts.extend_to(1);
 
-    ASSERT(dvbapi_add_pmt(&ad, &pmt, 0) == TABLES_RESULT_OK,
-           "first add failed");
-    SKey *k = (SKey *)pmt.opaque;
+    ASSERT(dvbapi_add_pmt(&ad, pmt, 0) == TABLES_RESULT_OK, "first add failed");
+    SKey *k = (SKey *)pmt->opaque;
     ASSERT(k && k->enabled, "no live key after add");
     ASSERT(drain(sv[1]) > 0, "first add must write the CAPMT");
 
-    ASSERT(dvbapi_add_pmt(&ad, &pmt, 1) == TABLES_RESULT_OK,
+    ASSERT(dvbapi_add_pmt(&ad, pmt, 1) == TABLES_RESULT_OK,
            "identical re-send failed");
     ASSERT(drain(sv[1]) == 0, "identical re-send must write nothing");
 
@@ -245,14 +243,14 @@ int test_update_resend_skips_identical_capmt() {
     int other = keys_add(0, 0);
     SKey *other_key = keys[other];
     ASSERT(other >= 0 && other_key->enabled, "no second live key");
-    ASSERT(dvbapi_add_pmt(&ad, &pmt, 1) == TABLES_RESULT_OK,
+    ASSERT(dvbapi_add_pmt(&ad, pmt, 1) == TABLES_RESULT_OK,
            "listmgmt-flip re-send failed");
     ASSERT(drain(sv[1]) == 0, "listmgmt flip must write nothing");
     keys_del(other);
     drain(sv[1]); // discard teardown bytes before the changed re-send
 
-    pmt.sid = 200;
-    ASSERT(dvbapi_add_pmt(&ad, &pmt, 1) == TABLES_RESULT_OK,
+    pmt->sid = 200;
+    ASSERT(dvbapi_add_pmt(&ad, pmt, 1) == TABLES_RESULT_OK,
            "changed re-send failed");
     ASSERT(drain(sv[1]) > 0, "changed re-send must write the CAPMT");
 
@@ -260,7 +258,7 @@ int test_update_resend_skips_identical_capmt() {
     sock = saved_sock;
     close(sv[0]);
     close(sv[1]);
-    pmts.clear();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }

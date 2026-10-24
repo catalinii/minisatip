@@ -1033,7 +1033,7 @@ int test_create_pmt() {
     adapter ad = {0};
     int16_t cc;
     int psi_len;
-    SFilter f;
+    SFilter *f = new SFilter();
     d.id = 0;
     d.enabled = 1;
     a[0] = nullptr;
@@ -1043,13 +1043,13 @@ int test_create_pmt() {
     int capid = 0x100;
     int dpid = add_pid_mapping_table(0, pid, 0, &d, 0);
     int dcapid = add_pid_mapping_table(0, capid, 0, &d, 0);
-    f.flags = FILTER_CRC;
-    f.id = 0;
-    f.adapter = 0;
-    f.pid = pid;
-    f.next_filter = -1;
-    f.enabled = 1;
-    filters.slot(0) = &f;
+    f->flags = FILTER_CRC;
+    f->id = 0;
+    f->adapter = 0;
+    f->pid = pid;
+    f->next_filter = -1;
+    f->enabled = 1;
+    filters.slot(0) = f;
     SPMT *pmt = create_pmt(0, 0x66, pid, 0x55, 0x100, 0x500);
     d.pmt[0].id = pmt->id; // set to pmt 1
     pmt->pid = pid - 1;
@@ -1064,7 +1064,7 @@ int test_create_pmt() {
     _hexdump("PACK: ", psi, psi_len);
     buffer_to_ts(packet, 188, psi, psi_len, &cc, 0x63);
     _hexdump("TS: ", packet, 188);
-    int len = assemble_packet(&f, packet);
+    int len = assemble_packet(f, packet);
     if (!len) {
         LOG("Assemble packet failed");
         return 1;
@@ -1103,6 +1103,7 @@ int test_create_pmt() {
     ad.active_pmt[0] = pmt->id;
 
     process_pmt(0, psi + 1, psi_len, new_pmt);
+    delete filters[0];
     filters.slot(0) = nullptr;
     ASSERT_EQUAL(
         pmt->stream_pids.size(), new_pmt->stream_pids.size(),
@@ -1178,14 +1179,14 @@ int test_process_cat() {
     d.enabled = 1;
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[0] = &d;
-    SFilter f;
-    f.flags = FILTER_CRC;
-    f.id = 0;
-    f.adapter = 0;
-    f.pid = 1234;
-    f.next_filter = -1;
-    f.enabled = 1;
-    filters.slot(0) = &f;
+    SFilter *f = new SFilter();
+    f->flags = FILTER_CRC;
+    f->id = 0;
+    f->adapter = 0;
+    f->pid = 1234;
+    f->next_filter = -1;
+    f->enabled = 1;
+    filters.slot(0) = f;
 
     // Process the CAT
     ddci_process_cat(0, cat, sizeof(cat) / sizeof(uint8_t), &d);
@@ -1208,6 +1209,7 @@ int test_process_cat() {
     ASSERT(d.emm_pids.count(MAKE_KEY(0, 49)) > 0, "EMM PID 49 not tracked");
 
     // Reset fixtures
+    delete filters[0];
     filters.slot(0) = nullptr;
 
     return 0;

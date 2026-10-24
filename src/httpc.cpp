@@ -25,7 +25,7 @@
 
 #define DEFAULT_LOG LOG_HTTP
 
-SegmentedPool<Shttp_client *, HTTPC_BUCKETS> httpc;
+SegmentedPool<Shttp_client *, HTTPC_BUCKETS, MAX_HTTPC> httpc;
 
 int http_client_add() {
 

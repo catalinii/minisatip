@@ -278,7 +278,6 @@ int ddci_close_dev(adapter *ad) {
 }
 SCA_op ddci;
 
-int ddci_close() { return 0; }
 int ddci_close_adapter(adapter *a) { return 0; }
 
 extern SMutex ca_mask_mutex;
@@ -1273,7 +1272,6 @@ void ddci_init() // you can search the devices here and fill the ddci_devices,
     ddci.ca_close_dev = ddci_close_dev;
     ddci.ca_add_pmt = ddci_process_pmt;
     ddci.ca_del_pmt = ddci_del_pmt;
-    ddci.ca_close_ca = ddci_close;
     ddci.ca_ts = ddci_ts;
 
     ddci_id = add_ca(&ddci);

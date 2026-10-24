@@ -382,7 +382,6 @@ static int fake_ca_del_pmt(adapter *ad, SPMT *pmt) {
 
 static int fake_ca_init_dev(adapter *ad) { return TABLES_RESULT_OK; }
 static int fake_ca_close_dev(adapter *ad) { return TABLES_RESULT_OK; }
-static int fake_ca_close_ca() { return 0; }
 
 static SCA_op fake_ca_op = {.ca_add_pid = NULL,
                             .ca_del_pid = NULL,
@@ -390,8 +389,7 @@ static SCA_op fake_ca_op = {.ca_add_pid = NULL,
                             .ca_del_pmt = fake_ca_del_pmt,
                             .ca_init_dev = fake_ca_init_dev,
                             .ca_close_dev = fake_ca_close_dev,
-                            .ca_ts = NULL,
-                            .ca_close_ca = fake_ca_close_ca};
+                            .ca_ts = NULL};
 
 // Builds a minimal PAT section as process_pat() expects to receive it.
 static int build_pat(uint8_t *b, int tsid, int version, const int *sids,

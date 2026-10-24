@@ -69,7 +69,7 @@ SCW *cws[MAX_CW];
 SMutex cws_mutex;
 int ncws;
 
-SegmentedPool<SFilter *, FILTERS_BUCKETS> filters;
+SegmentedPool<SFilter *, FILTERS_BUCKETS, MAX_FILTERS> filters;
 SMutex filters_mutex;
 
 const char *listmgmt_str[] = {"CLM_MORE", "CLM_FIRST", "CLM_LAST",

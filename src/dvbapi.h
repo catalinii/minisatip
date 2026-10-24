@@ -98,7 +98,7 @@ typedef struct struct_key {
 
 constexpr size_t KEYS_BUCKETS =
     (MAX_KEYS + kSegmentBucketSize - 1) / kSegmentBucketSize;
-extern SegmentedPool<SKey *, KEYS_BUCKETS> keys;
+extern SegmentedPool<SKey *, KEYS_BUCKETS, MAX_KEYS> keys;
 
 void init_dvbapi();
 int have_dvbapi();

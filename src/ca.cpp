@@ -4010,15 +4010,6 @@ int dvbca_close_dev(adapter *ad) {
     return 1;
 }
 
-int dvbca_close() {
-    int i;
-    for (i = 0; i < MAX_ADAPTERS; i++)
-        if (ca_devices[i] && ca_devices[i]->enabled) {
-            sockets_del(ca_devices[i]->sock);
-        }
-    return 0;
-}
-
 int dvbca_add_pid(adapter *ad, SPMT *pmt, int pid) {
     LOG("PMT %d, pid %d was added, invalidating pmt", pmt->id, pid);
     pmt->version = -1;
@@ -4032,7 +4023,6 @@ SCA_op dvbca = {
     .ca_init_dev = dvbca_init_dev,
     .ca_close_dev = dvbca_close_dev,
     .ca_ts = NULL,
-    .ca_close_ca = dvbca_close,
 };
 
 int ca_reconnect(void *arg) {
