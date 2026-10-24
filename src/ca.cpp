@@ -19,6 +19,9 @@ alternative source
 
 #include "adapter.h"
 #include "ca.h"
+#ifndef DISABLE_DDCI
+#include "ddci.h"
+#endif
 #include "dvb.h"
 #include "dvbapi.h"
 #include "minisatip.h"
@@ -891,6 +894,12 @@ void disable_cws_for_all_pmts(ca_device_t *d) {
 int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
                   int added_only, int ca_id) {
     int pos = 0;
+#ifndef DISABLE_DDCI
+    // The CAM sees rewritten pids on loopback PMTs; live ones pass through.
+    int remap = opts.enigma && ddci_owns_pmt(pmt->id);
+#else
+    int remap = 0;
+#endif
     for (const auto &stream_pid : pmt->stream_pids) {
         if (added_only && !find_pid(pmt->adapter, stream_pid.pid)) {
             LOGM("%s: skipping pmt %d (ad %d) pid %d from CAPMT", __FUNCTION__,
@@ -905,7 +914,12 @@ int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
             break;
         }
         capmt[pos++] = stream_pid.type;
-        copy16(capmt, pos, stream_pid.pid);
+        int epid = stream_pid.pid;
+#ifndef DISABLE_DDCI
+        if (remap)
+            epid = ddci_remap_pid(pmt->adapter, epid);
+#endif
+        copy16(capmt, pos, epid);
         pos += 2;
         int pi_len_pos = pos, pi_len = 0;
         capmt[pos++] = 0; // pi_len
@@ -914,7 +928,8 @@ int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
         // append the stream descriptors
         if (pmt->caids) {
             capmt[pos++] = cmd_id;
-            pi_len = pmt_add_ca_descriptor(pmt, capmt + pos, len - pos, ca_id);
+            pi_len = pmt_add_ca_descriptor(pmt, capmt + pos, len - pos, ca_id,
+                                           remap);
             pos += pi_len;
             copy16(capmt, pi_len_pos, pi_len + 1);
         }
@@ -1152,6 +1167,19 @@ void set_input_ci(int ci, int aid) {
     }
 }
 
+void set_ci_input_str(int ci, const char *val) {
+    char filename[100];
+    sprintf(filename, "/proc/stb/tsmux/ci%d_input", ci);
+    LOG("%s: %s -> %s", __FUNCTION__, filename, val);
+    FILE *fp = fopen(filename, "w");
+    if (fp) {
+        fprintf(fp, "%s", val);
+        fclose(fp);
+    } else {
+        LOG("%s open failed, %s", __FUNCTION__, filename);
+    }
+}
+
 void set_tuner_input(int ci, int aid) {
     char filename[100];
     char val[] = "CI0";
@@ -1221,8 +1249,8 @@ static void restore_ci_link(ca_device_t *d, adapter *ad, int prev_linked) {
         d->linked_adapter = -1;
         return;
     }
-    set_tuner_input(d->id, prev_linked);
-    set_input_ci(d->id, prev_linked);
+    set_tuner_input(d->ci_slot, prev_linked);
+    set_input_ci(d->ci_slot, prev_linked);
     d->linked_adapter = prev_linked;
 }
 
@@ -1236,23 +1264,35 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
     SPMT *first = NULL;
 
     if (opts.enigma) {
-        // enigma allows attaching the CI to the adapter that needs it
-        d = find_dvbca_for_pmt(spmt);
-        if (!d) {
-            if (any_ca_initializing())
-                return TABLES_RESULT_ERROR_RETRY;
-            else
-                return TABLES_RESULT_ERROR_NORETRY;
-        }
+#ifndef DISABLE_DDCI
+        // Loopback PMTs ride the DDCI mapping; the CI stays on PVR input.
+        if (ddci_will_loopback(ad)) {
+            int ddid = ddci_device_for_pmt(spmt->id);
+            if (ddid < 0)
+                LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY,
+                               "DDCI has not mapped PMT %d yet", spmt->id);
+            d = ca_devices[ddid];
+        } else
+#endif
+        {
+            // enigma allows attaching the CI to the adapter that needs it
+            d = find_dvbca_for_pmt(spmt);
+            if (!d) {
+                if (any_ca_initializing())
+                    return TABLES_RESULT_ERROR_RETRY;
+                else
+                    return TABLES_RESULT_ERROR_NORETRY;
+            }
 
-        prev_linked = d->linked_adapter;
-        // detach the CI from the previous adapter
-        if (d->linked_adapter != ad->id) {
-            set_tuner_input(-1, d->linked_adapter);
+            prev_linked = d->linked_adapter;
+            // detach the CI from the previous adapter
+            if (d->linked_adapter != ad->id) {
+                set_tuner_input(-1, d->linked_adapter);
+            }
+            set_tuner_input(d->ci_slot, ad->id);
+            set_input_ci(d->ci_slot, ad->id);
+            d->linked_adapter = ad->id;
         }
-        set_tuner_input(d->id, ad->id);
-        set_input_ci(d->id, ad->id);
-        d->linked_adapter = ad->id;
     }
 
     if (!d)
@@ -3907,6 +3947,16 @@ static SMutex &ca_dev_lock(int id) {
     return ca_dev_mutex[id];
 }
 
+// One stack per slot: refuse a second opener of the same /dev/ciN.
+static int ci_slot_taken(int slot, int self) {
+    for (int i = 0; i < MAX_ADAPTERS; i++) {
+        ca_device_t *o = ca_devices[i];
+        if (o && o->id != self && o->fd >= 0 && o->ci_slot == slot)
+            return 1;
+    }
+    return 0;
+}
+
 int dvbca_init_dev(adapter *ad) {
     ca_device_t *c;
     int fd, result = 0;
@@ -3931,8 +3981,17 @@ int dvbca_init_dev(adapter *ad) {
     if (ad->type != ADAPTER_DVB && ad->type != ADAPTER_CI)
         return TABLES_RESULT_ERROR_NORETRY;
     sprintf(ca_dev_path, "/dev/dvb/adapter%d/ca%d", ad->pa, ad->fn);
+    int ci_slot = ad->id;
     if (opts.enigma) {
-        sprintf(ca_dev_path, "/dev/ci%d", ad->id);
+#ifndef DISABLE_DDCI
+        if (ddci_is_loopback(ad->id))
+            ci_slot = opts.enigma_ci_slot;
+#endif
+        sprintf(ca_dev_path, "/dev/ci%d", ci_slot);
+        if (ci_slot_taken(ci_slot, ad->id))
+            LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
+                           "CI slot %d already opened, skip adapter %d",
+                           ci_slot, ad->id);
     }
     fd = open(ca_dev_path, O_RDWR);
     if (fd < 0) {
@@ -3962,6 +4021,7 @@ int dvbca_init_dev(adapter *ad) {
         std::lock_guard<SMutex> lock(ca_dev_lock(ad->id));
         c->fd = fd;
         c->id = ad->id;
+        c->ci_slot = ci_slot;
         c->state = CA_STATE_INACTIVE;
         c->sock = -1;
         c->pending_tag = 0;

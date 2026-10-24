@@ -54,6 +54,8 @@ typedef struct struct_opts {
     float strength_multiplier, snr_multiplier;
     char enigma;
     char hw_descrambler;
+    int enigma_ci_slot;    // /dev/ciN used by the enigma DDCI loopback
+    int enigma_ddci_demux; // its demux, -1 picks the highest free one
 #ifndef DISABLE_SATIPCLIENT
     char *satip_servers;
     char *satip_xml;

@@ -60,6 +60,8 @@ extern std::unordered_map<int, Sddci_channel> channels;
 
 int pmt_del(int id);
 int del_pmt_mapping_table(ddci_device_t *d, int ad, int pmt);
+int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
+                  int added_only, int ca_id);
 
 // Forward declarations
 descriptor_t create_descriptor(const uint8_t *data);
@@ -1737,6 +1739,218 @@ int test_ddci_least_used_device() {
     return 0;
 }
 
+int test_ddci_pick_free_fn() {
+    int existing[] = {0, 1, 2, 5, 12};
+    int used[] = {12, 5};
+    ASSERT(ddci_pick_free_fn(existing, 5, used, 2) == 2, "highest free wins");
+    ASSERT(ddci_pick_free_fn(existing, 5, NULL, 0) == 12,
+           "empty used takes top");
+    int all[] = {0, 1, 2, 5, 12};
+    ASSERT(ddci_pick_free_fn(existing, 5, all, 5) == -1, "all taken gives -1");
+    ASSERT(ddci_pick_free_fn(NULL, 0, used, 2) == -1, "no demux gives -1");
+    return 0;
+}
+
+int test_capmt_uses_mapped_pids() {
+    ddci_device_t d0 = {};
+    adapter ad = {0}, a0 = {0};
+    for (int i = 0; i < MAX_ADAPTERS; i++)
+        a[i] = nullptr;
+    create_adapter(&ad, 8);
+    create_adapter(&a0, 0);
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    d0.id = 0;
+    d0.enabled = 1;
+    d0.max_channels = 2;
+    ddci_devices[0] = &d0;
+    SPMT *pmt = create_pmt(8, 600, 601, 602, 0x100, 0x100);
+
+    add_pid_mapping_table(9, 601, 999, &d0, 0);
+    add_pid_mapping_table(9, 256, 999, &d0, 0);
+    ASSERT(add_pid_mapping_table(8, 601, pmt->id, &d0, 0) == 602,
+           "video collides up");
+    ASSERT(add_pid_mapping_table(8, 602, pmt->id, &d0, 0) == 603,
+           "audio collides up");
+    ASSERT(add_pid_mapping_table(8, 256, pmt->id, &d0, 0) == 257,
+           "ECM collides up");
+    memset(&d0.pmt, -1, sizeof(d0.pmt));
+    d0.pmt[0].id = pmt->id;
+
+    opts.enigma = 1;
+    uint8_t out[1024];
+    int n = CAPMT_add_PMT(out, sizeof(out), pmt, CA_PMT_CMD_ID_OK_DESCRAMBLING,
+                          0, 0);
+    ASSERT(n == 24, "two entries of 12 bytes");
+    ASSERT(out[0] == 2, "video type first");
+    ASSERT(((out[1] << 8) | out[2]) == 602, "video pid remapped");
+    int l1 = (out[3] << 8) | out[4];
+    ASSERT(out[5] == CA_PMT_CMD_ID_OK_DESCRAMBLING, "cmd id");
+    ASSERT(out[6] == 0x09, "CA descriptor tag");
+    ASSERT(((out[10] << 8) | out[11]) == 257, "ECM pid remapped");
+    int o2 = 5 + l1;
+    ASSERT(out[o2] == 6, "audio type second");
+    ASSERT(((out[o2 + 1] << 8) | out[o2 + 2]) == 603, "audio pid remapped");
+
+    opts.enigma = 0;
+    n = CAPMT_add_PMT(out, sizeof(out), pmt, CA_PMT_CMD_ID_OK_DESCRAMBLING, 0,
+                      0);
+    ASSERT(((out[1] << 8) | out[2]) == 601, "guard off keeps video pid");
+
+    ddci_devices[0] = NULL;
+    a[0] = nullptr;
+    a[8] = nullptr;
+    return 0;
+}
+
+int test_dvbca_loopback_pmt_routing() {
+    SPMT *pmt0;
+    ddci_device_t d0 = {};
+    adapter ad = {0};
+    for (int i = 0; i < MAX_ADAPTERS; i++)
+        a[i] = nullptr;
+    create_adapter(&ad, 8);
+    pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
+    memset(&d0.pmt, -1, sizeof(d0.pmt));
+    d0.id = 0;
+    d0.enabled = 1;
+    d0.loopback = 1;
+    d0.max_channels = 2;
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[0] = &d0;
+    memset(ca_devices, 0, sizeof(ca_devices));
+
+    opts.enigma = 1;
+    ad.type = ADAPTER_SATIP;
+    ASSERT(dvbca.ca_add_pmt(&ad, pmt0, 0) == TABLES_RESULT_ERROR_RETRY,
+           "unmapped loopback PMT retries");
+    d0.pmt[0].id = pmt0->id;
+    ASSERT(dvbca.ca_add_pmt(&ad, pmt0, 0) == TABLES_RESULT_ERROR_NORETRY,
+           "mapped PMT without a CA does not retry");
+    ad.type = ADAPTER_DVB;
+    ASSERT(dvbca.ca_add_pmt(&ad, pmt0, 0) == TABLES_RESULT_ERROR_NORETRY,
+           "live path without a CA does not retry");
+
+    opts.enigma = 0;
+    ddci_devices[0] = NULL;
+    a[8] = nullptr;
+    return 0;
+}
+
+int test_ddci_remap_pid() {
+    ddci_device_t d0 = {};
+    adapter ad = {0}, a0 = {0};
+    for (int i = 0; i < MAX_ADAPTERS; i++)
+        a[i] = nullptr;
+    create_adapter(&ad, 8);
+    create_adapter(&a0, 0);
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    d0.id = 0;
+    d0.enabled = 1;
+    ddci_devices[0] = &d0;
+
+    opts.enigma = 1;
+    ASSERT(add_pid_mapping_table(8, 601, 10, &d0, 0) == 601,
+           "first take keeps pid");
+    ASSERT(add_pid_mapping_table(9, 601, 11, &d0, 0) == 602,
+           "collision moves up");
+    ASSERT(ddci_remap_pid(8, 601) == 601, "own mapping resolves");
+    ASSERT(ddci_remap_pid(9, 601) == 602, "collided mapping resolves");
+    ASSERT(ddci_remap_pid(8, 999) == 999, "unmapped pid passes through");
+    opts.enigma = 0;
+    ASSERT(ddci_remap_pid(9, 601) == 601, "guard off passes through");
+
+    ddci_devices[0] = NULL;
+    a[0] = nullptr;
+    a[8] = nullptr;
+    return 0;
+}
+
+int test_ddci_owns_and_loops() {
+    ddci_device_t d0 = {};
+    adapter ad = {0};
+    for (int i = 0; i < MAX_ADAPTERS; i++)
+        a[i] = nullptr;
+    create_adapter(&ad, 8);
+    memset(&d0.pmt, -1, sizeof(d0.pmt));
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    d0.id = 0;
+    d0.enabled = 1;
+    d0.loopback = 1;
+    d0.max_channels = 2;
+    ddci_devices[0] = &d0;
+
+    opts.enigma = 1;
+    ad.type = ADAPTER_SATIP;
+    ASSERT(!ddci_owns_pmt(10), "unmapped PMT is not owned");
+    ASSERT(ddci_will_loopback(&ad), "satip loops back with a loopback up");
+    d0.pmt[0].id = 10;
+    ASSERT(ddci_owns_pmt(10), "registered PMT is owned");
+    ASSERT(ddci_device_for_pmt(10) == 0, "owner device resolves");
+    ASSERT(ddci_device_for_pmt(11) == -1, "stranger resolves to -1");
+    ad.type = ADAPTER_DVB;
+    ASSERT(!ddci_will_loopback(&ad), "local tuner stays live");
+    d0.loopback = 0;
+    ad.type = ADAPTER_SATIP;
+    ASSERT(!ddci_will_loopback(&ad), "no loopback device, no loopback");
+    opts.enigma = 0;
+    ASSERT(!ddci_owns_pmt(10), "guard off owns nothing");
+
+    ddci_devices[0] = NULL;
+    a[8] = nullptr;
+    return 0;
+}
+
+int test_ddci_enigma_declines_local() {
+    SPMT *pmt0;
+    ddci_device_t d0 = {};
+    ca_device_t ca0 = {};
+    adapter ad = {0}, a0 = {0};
+
+    for (int i = 0; i < MAX_ADAPTERS; i++)
+        a[i] = nullptr;
+    create_adapter(&ad, 8);
+    create_adapter(&a0, 0);
+    pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
+    memset(&d0.pmt, -1, sizeof(d0.pmt));
+    d0.id = 0;
+    d0.enabled = 1;
+    d0.loopback = 1;
+    d0.max_channels = 2;
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[0] = &d0;
+
+    ca0.id = 0;
+    ca0.enabled = 1;
+    ca0.state = CA_STATE_INITIALIZED;
+    memset(ca_devices, 0, sizeof(ca_devices));
+    ca_devices[0] = &ca0;
+    int dvbca_id = add_ca(&dvbca);
+    add_caid_mask(dvbca_id, 0, 0x100, 0xFFFF);
+
+    opts.enigma = 1;
+    ad.type = ADAPTER_DVB;
+    ASSERT(ddci_process_pmt(&ad, pmt0, 0) == TABLES_RESULT_ERROR_NORETRY,
+           "local adapter must stay on the live CI path");
+    ASSERT(d0.channels == 0, "declined PMT takes no channel");
+
+    ad.type = ADAPTER_SATIP;
+    ASSERT(ddci_process_pmt(&ad, pmt0, 0) == TABLES_RESULT_OK,
+           "non-local adapter must loop back");
+    ASSERT(d0.channels == 1, "expected 1 running channel");
+    ddci_del_pmt(&ad, pmt0);
+    ASSERT(d0.channels == 0, "expected 0 running channels after delete");
+
+    opts.enigma = 0;
+    channels.clear();
+    filters.destroy_all();
+    del_ca(&dvbca);
+    ddci_devices[0] = NULL;
+    ca_devices[0] = NULL;
+    a[0] = nullptr;
+    a[8] = nullptr;
+    return 0;
+}
+
 int main() {
     opts.log = 65535 ^ LOG_LOCK ^ LOG_UTILS;
     opts.debug = 0;
@@ -1778,6 +1992,16 @@ int main() {
               "testing that an initializing DDCI does not block the others");
     TEST_FUNC(test_ddci_least_used_device(),
               "testing that new channels go to the least used DDCI");
+    TEST_FUNC(test_ddci_pick_free_fn(),
+              "testing highest-free demux pick for the loopback");
+    TEST_FUNC(test_ddci_enigma_declines_local(),
+              "testing enigma loops back non-local PMTs only");
+    TEST_FUNC(test_ddci_remap_pid(), "testing ddci pid remap for CAPMT");
+    TEST_FUNC(test_ddci_owns_and_loops(), "testing loopback PMT ownership");
+    TEST_FUNC(test_capmt_uses_mapped_pids(),
+              "testing CAPMT carries mapped pids on loopback PMTs");
+    TEST_FUNC(test_dvbca_loopback_pmt_routing(),
+              "testing DVBCA waits for the DDCI mapping on loopback");
     pmts.destroy_all();
     filters.destroy_all();
     fflush(stdout);

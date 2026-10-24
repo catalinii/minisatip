@@ -19,6 +19,9 @@
  */
 
 #include "pmt.h"
+#ifndef DISABLE_DDCI
+#include "ddci.h"
+#endif
 #include "adapter.h"
 #include "api/symbols.h"
 #include "api/variables.h"
@@ -2453,7 +2456,8 @@ int pmt_tune(adapter *ad) {
     return 0;
 }
 
-int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf, int buf_len, int ca_id) {
+int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf, int buf_len, int ca_id,
+                          int remap_ddci) {
     int i, len = 0;
     for (i = 0; i < pmt->caids; i++) {
 #ifndef DISABLE_TABLES
@@ -2472,7 +2476,12 @@ int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf, int buf_len, int ca_id) {
         buf[len] = 0x09;
         buf[len + 1] = 0x04 + private_data_len;
         copy16(buf, len + 2, pmt->ca[i]->id);
-        copy16(buf, len + 4, pmt->ca[i]->pid);
+        int ecm_pid = pmt->ca[i]->pid;
+#ifndef DISABLE_DDCI
+        if (remap_ddci)
+            ecm_pid = ddci_remap_pid(pmt->adapter, ecm_pid);
+#endif
+        copy16(buf, len + 4, ecm_pid);
         std::copy_n(pmt->ca[i]->private_data.data(), private_data_len,
                     buf + len + 6);
         len += 6 + private_data_len;

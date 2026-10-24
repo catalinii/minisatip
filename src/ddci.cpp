@@ -45,6 +45,7 @@
 #include "stream.h"
 #include "tables.h"
 #include "utils.h"
+#include <fstream>
 #include <string>
 
 #include "utils/fifo.h"
@@ -193,6 +194,92 @@ static int find_registered_ddci(int pmt_id) {
                 return i;
     }
     return -1;
+}
+
+// Device holding this PMT id, or -1; true when any device holds it.
+int ddci_device_for_pmt(int pmt_id) { return find_registered_ddci(pmt_id); }
+int ddci_owns_pmt(int pmt_id) {
+    return opts.enigma && find_registered_ddci(pmt_id) >= 0;
+}
+int ddci_is_loopback(int id) {
+    ddci_device_t *d = get_ddci(id);
+    return opts.enigma && d && d->loopback;
+}
+
+// Mapped ddci_pid for (ad,pid); pid itself when unmapped or off-enigma.
+int ddci_remap_pid(int ad, int pid) {
+    if (!opts.enigma)
+        return pid;
+    for (int i = 0; i < MAX_ADAPTERS; i++) {
+        ddci_device_t *d = get_ddci(i);
+        if (!d)
+            continue;
+        std::lock_guard<SMutex> lock(d->mutex);
+        auto it = get_pid_mapping(d, ad, pid);
+        if (it != d->mapping.end())
+            return it->second.ddci_pid;
+    }
+    return pid;
+}
+
+// Non-local sources loop back on enigma; local tuners use the live CI path.
+int ddci_will_loopback(adapter *ad) {
+    if (!ad || !opts.enigma || ad->type == ADAPTER_DVB)
+        return 0;
+    for (int i = 0; i < MAX_ADAPTERS; i++)
+        if (ddci_is_loopback(i))
+            return 1;
+    return 0;
+}
+
+// Highest fn in existing[] missing from used[]; -1 when none fits.
+int ddci_pick_free_fn(const int *existing, int nexisting, const int *used,
+                      int nused) {
+    int best = -1;
+    for (int i = 0; i < nexisting; i++) {
+        int fn = existing[i], taken = 0;
+        for (int j = 0; j < nused; j++)
+            if (used[j] == fn) {
+                taken = 1;
+                break;
+            }
+        if (!taken && fn > best)
+            best = fn;
+    }
+    return best;
+}
+
+// CI slot feeding this loopback; the option until DVBCA publishes its own.
+static int ddci_enigma_slot(ddci_device_t *d) {
+    if (d && d->id >= 0 && d->id < MAX_ADAPTERS && ca_devices[d->id] &&
+        ca_devices[d->id]->fd >= 0)
+        return ca_devices[d->id]->ci_slot;
+    return opts.enigma_ci_slot;
+}
+
+void ddci_enigma_route_pvr(ddci_device_t *d) {
+    if (!opts.enigma || !d)
+        return;
+    int slot = ddci_enigma_slot(d);
+    set_ci_input_str(slot, "PVR");
+    LOG("DDCI %d: CI slot %d input routed to PVR", d->id, slot);
+}
+
+void ddci_enigma_route_none(ddci_device_t *d) {
+    if (!opts.enigma || !d)
+        return;
+    int slot = ddci_enigma_slot(d);
+    set_ci_input_str(slot, "NONE");
+    LOG("DDCI %d: CI slot %d input routed to NONE", d->id, slot);
+}
+
+// DVR DMX_SET_SOURCE base; enigma honors the same override file.
+static int ddci_dvr_source_offset() {
+    std::ifstream f("/proc/stb/frontend/dvr_source_offset");
+    int off = 16;
+    if (f >> off)
+        return off;
+    return 16;
 }
 
 // Drop one last-user mapping entry: the DDCI-side pid, its filter,
@@ -436,6 +523,13 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
         return TABLES_RESULT_OK;
     }
 
+    // Local tuners decrypt on the live CI path; only loop back the rest.
+    if (opts.enigma && ad->type == ADAPTER_DVB) {
+        LOG("Skip PMT %d from local adapter %d on enigma, live CI owns it",
+            pmt->id, ad->id);
+        return TABLES_RESULT_ERROR_NORETRY;
+    }
+
     // A PMT update re-sends while registered: reuse its slot even if
     // the first stream pid changed, instead of failing on a full device.
     int registered = find_registered_ddci(pmt->id);
@@ -578,6 +672,10 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
     LOG("DDCI %d: PMT %d %s on slot %d (+%d -%d pids), keeping ddci pids",
         d->id, pmt->id, update ? "update" : "add", pos, mapped, unmapped);
 
+    // Idempotent: re-asserts PVR on every add and update.
+    if (opts.enigma)
+        ddci_enigma_route_pvr(d);
+
     update_pids(ad->id);
     update_pids(d->id);
     rv = TABLES_RESULT_OK;
@@ -617,6 +715,8 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
                     d->ver = (d->ver + 1) & 0xF;
                     d->sdt_ver = (d->sdt_ver + 1) & 0xF;
                     d->psi_changed = true;
+                    if (opts.enigma && d->channels == 0)
+                        ddci_enigma_route_none(d);
                 }
         }
         return 0;
@@ -642,6 +742,8 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
         d->channels--;
     if (was_registered)
         d->psi_changed = true;
+    if (opts.enigma && was_registered && d->channels == 0)
+        ddci_enigma_route_none(d);
     LOG("%s: deleting pmt id %d, sid %d (%X), pid %d, ddci %d, name %s, "
         "held a slot %d, running channels %d",
         __FUNCTION__, spmt->id, spmt->sid, spmt->sid, m->ddci_pid, m->ddci,
@@ -1214,17 +1316,18 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
             iop++;
         }
 
-        // End every write with a null packet: the FPGA reads with 128 byte
-        // granularity, so it takes the torn tail instead of a real one (#1437).
-        memset(null_tail, 0xFF, sizeof(null_tail));
-        null_tail[0] = 0x47;
-        null_tail[1] = 0x1F;
-        null_tail[2] = 0xFF;
-        null_tail[3] = 0x10;
-        io[iop].iov_base = null_tail;
-        io[iop].iov_len = DVB_FRAME;
-        bytes += DVB_FRAME;
-        iop++;
+        // FPGA-only tail (#1437): torn-tail guard the dvr does not need.
+        if (!opts.enigma) {
+            memset(null_tail, 0xFF, sizeof(null_tail));
+            null_tail[0] = 0x47;
+            null_tail[1] = 0x1F;
+            null_tail[2] = 0xFF;
+            null_tail[3] = 0x10;
+            io[iop].iov_base = null_tail;
+            io[iop].iov_len = DVB_FRAME;
+            bytes += DVB_FRAME;
+            iop++;
+        }
 
         DEBUGM("writing %d bytes to DDCI device %d, fd %d, sock %d", bytes,
                d->id, ad2->fe, ad2->fe_sock);
@@ -1278,11 +1381,20 @@ void ddci_init() // you can search the devices here and fill the ddci_devices,
     LOG("Registered DDCI CA %d", ddci_id);
 }
 int ddci_set_pid(adapter *ad, int pid) {
+#ifndef DISABLE_LINUXDVB
+    // Loopback reads real TAPs; hardware DDCI needs no demux filters.
+    if (opts.enigma)
+        return dvb_demux_set_pid(ad, pid);
+#endif
     LOGM("%s: ddci %d add pid %d", __FUNCTION__, ad->id, pid);
     return 100;
 }
 
 int ddci_del_filters(adapter *ad, int fd, int pid) {
+#ifndef DISABLE_LINUXDVB
+    if (opts.enigma)
+        return dvb_demux_del_filters(ad, fd, pid);
+#endif
     LOGM("%s: ddci %d del pid %d", __FUNCTION__, ad->id, pid);
     return 0;
 }
@@ -1342,6 +1454,47 @@ ddci_device_t *ddci_alloc(int id) {
     return d;
 }
 
+#ifndef DISABLE_LINUXDVB
+// Loopback open: push to dvr, read TAPs from demux, source the DVR bus.
+static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
+    char buf[100];
+    snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/dvr%d", ad->pa, ad->fn);
+    int write_fd = open(buf, O_WRONLY | O_NONBLOCK);
+    if (write_fd < 0)
+        LOG_AND_RETURN(1, "could not open %s: %s", buf, strerror(errno));
+    snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/demux%d", ad->pa, ad->fn);
+    int read_fd = open(buf, O_RDWR | O_NONBLOCK);
+    if (read_fd < 0) {
+        close(write_fd);
+        LOG_AND_RETURN(1, "could not open %s: %s", buf, strerror(errno));
+    }
+    ad->dmx_source = ddci_dvr_source_offset();
+    dvb_set_demux_source(ad);
+
+    std::lock_guard<SMutex> lock(d->mutex);
+    ad->fe = write_fd;
+    ad->fe_sock = -1;
+    ad->dvr = read_fd;
+    ad->type = ADAPTER_CI;
+    ad->dmx = -1;
+    ad->sys[0] = (fe_delivery_system_t)0;
+    ad->adapter_timeout = 0;
+    memset(d->pmt, -1, sizeof(d->pmt));
+    d->max_channels = MAX_CHANNELS_ON_CI;
+    d->channels = 0;
+    d->loopback = 1;
+    memset(d->read_index, 0, sizeof(d->read_index));
+    d->last_pat = 0;
+    d->psi_changed = false;
+    d->tid = d->ver = d->sdt_ver = d->sdt_data_mask = 0;
+    d->enabled = 1;
+    ad->enabled = 1;
+    LOG("opened enigma loopback %d dvr:%d demux:%d source:%d", ad->id, ad->fe,
+        ad->dvr, ad->dmx_source);
+    return 0;
+}
+#endif
+
 int ddci_open_device(adapter *ad) {
     char buf[100];
     int read_fd, write_fd;
@@ -1349,6 +1502,10 @@ int ddci_open_device(adapter *ad) {
     if (!d && !(d = ddci_alloc(ad->id))) {
         return -1;
     }
+#ifndef DISABLE_LINUXDVB
+    if (opts.enigma)
+        return ddci_open_enigma(ad, d);
+#endif
     LOG("DDCI opening [%d] adapter %d and frontend %d", ad->id, ad->pa, ad->fn);
     sprintf(buf, "/dev/dvb/adapter%d/sec%d", ad->pa, ad->fn);
 #ifndef DDCI_TEST
@@ -1616,6 +1773,64 @@ void ddci_free(adapter *ad) {
     save_channels();
 }
 
+#ifndef DISABLE_LINUXDVB
+// One loopback on the highest free demux; na is the next adapter index.
+static int ddci_add_enigma_loopback(int na) {
+    if (na >= MAX_ADAPTERS)
+        return na;
+    int used[MAX_ADAPTERS], nused = 0;
+    for (int i = 0; i < MAX_ADAPTERS && nused < MAX_ADAPTERS; i++)
+        if (a[i] && a[i]->pa == 0 && a[i]->fn >= 0)
+            used[nused++] = a[i]->fn;
+    int existing[64], nexisting = 0;
+    char buf[100];
+    for (int fn = 0; fn < 64; fn++) {
+        snprintf(buf, sizeof(buf), "/dev/dvb/adapter0/demux%d", fn);
+        if (!access(buf, R_OK))
+            existing[nexisting++] = fn;
+    }
+    int fn = opts.enigma_ddci_demux;
+    if (fn < 0)
+        fn = ddci_pick_free_fn(existing, nexisting, used, nused);
+    if (fn < 0)
+        LOG_AND_RETURN(na, "no free demux for the enigma loopback");
+    for (int i = 0; i < nused; i++)
+        if (used[i] == fn)
+            LOG_AND_RETURN(na, "demux %d is already owned, refusing loopback",
+                           fn);
+    if (!a[na])
+        a[na] = adapter_alloc();
+
+    adapter *ad = a[na];
+    ad->pa = 0;
+    ad->fn = fn;
+    ad->open = ddci_open_device;
+    ad->commit = NULL;
+    ad->tune = NULL;
+    ad->delsys = ddci_delsys;
+    ad->name = ddci_name;
+    ad->post_init = ddci_post_init;
+    ad->close = ddci_close_adapter;
+    ad->get_signal = NULL;
+    ad->set_pid = ddci_set_pid;
+    ad->del_filters = ddci_del_filters;
+    ad->type = ADAPTER_CI;
+    ad->drop_encrypted = 0;
+    ad->free = ddci_free;
+    ddci_device_t *dd = ddci_devices[na];
+    if (!dd)
+        dd = ddci_alloc(na);
+    if (dd)
+        dd->loopback = 1;
+    load_channels();
+    LOG("enigma loopback adapter %d on demux %d", na, fn);
+
+    na++;
+    a_count = na;
+    return na;
+}
+#endif
+
 void find_ddci_adapter() {
     int na = -1;
     char buf[100];
@@ -1686,6 +1901,10 @@ void find_ddci_adapter() {
 #endif
             }
         }
+#ifndef DISABLE_LINUXDVB
+    if (opts.enigma)
+        na = ddci_add_enigma_loopback(na);
+#endif
     for (; na < MAX_ADAPTERS; na++)
         if (a[na])
             a[na]->pa = a[na]->fn = -1;

@@ -200,6 +200,7 @@ struct ca_device {
     int max_ca_pmt, multiple_pmt;
     int fd, sock;
     int id;
+    int ci_slot; // /dev/ciN and tsmux slot, may differ from id
     int state;
     uint16_t caid[MAX_CAID];
     uint32_t caids;
@@ -242,6 +243,7 @@ struct ca_device {
 
 extern ca_device_t *ca_devices[];
 
+void set_ci_input_str(int ci, const char *val);
 ca_device_t *alloc_ca_device();
 int ca_init(ca_device_t *d);
 void dvbca_init();

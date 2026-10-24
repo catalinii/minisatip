@@ -354,6 +354,10 @@ typedef struct struct_transponder {
 int tune_it_s2(int fd_frontend, transponder *tp);
 
 fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys);
+typedef struct struct_adapter adapter;
+int dvb_demux_set_pid(adapter *a, int i_pid);
+int dvb_demux_del_filters(adapter *ad, int fd, int pid);
+void dvb_set_demux_source(adapter *ad);
 #endif
 int detect_dvb_parameters(std::string_view s, transponder *tp);
 void copy_dvb_parameters(transponder *s, transponder *d);

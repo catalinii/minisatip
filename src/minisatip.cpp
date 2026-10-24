@@ -141,6 +141,8 @@ int rtsp, http, si, si1, ssdp1;
 #define CLIENT_SEND_BUFFER_OPT (LONG_OPT_ONLY_START + 4)
 #define HW_DESCRAMBLER_OPT (LONG_OPT_ONLY_START + 5)
 #define SDT_CHARSET_OPT (LONG_OPT_ONLY_START + 6)
+#define ENIGMA_CI_SLOT_OPT (LONG_OPT_ONLY_START + 7)
+#define ENIGMA_DDCI_DEMUX_OPT (LONG_OPT_ONLY_START + 8)
 
 static const struct option long_options[] = {
     {"adapters", required_argument, NULL, ADAPTERS_OPT},
@@ -193,6 +195,8 @@ static const struct option long_options[] = {
     {"disable-pmt-scan", no_argument, NULL, DISABLE_PMT_SCAN},
 #ifndef DISABLE_DDCI
     {"disable-cat", required_argument, NULL, DISABLE_CAT_OPT},
+    {"enigma-ci-slot", required_argument, NULL, ENIGMA_CI_SLOT_OPT},
+    {"enigma-ddci-demux", required_argument, NULL, ENIGMA_DDCI_DEMUX_OPT},
 #endif
 #ifndef DISABLE_DVBAPI
     {"dvbapi", required_argument, NULL, DVBAPI_OPT},
@@ -434,6 +438,10 @@ Help\n\
 * -5 --disable-cat ADAPTER1,ADAPTER2-ADAPTER4\n\
 	* eg: -5 1-3,4 \n\
 	- disable passing the CAT to the DDCI device 1,2,3 and 4 \n\
+	--enigma-ci-slot N \n\
+	- /dev/ciN used by the enigma DDCI loopback (default 0) \n\
+	--enigma-ddci-demux N \n\
+	- loopback demux (default -1 = highest free) \n\
 \n\
 "
 #endif
@@ -663,6 +671,8 @@ void set_options(int argc, char *argv[]) {
     } else {
         opts.cache_dir = "/var/cache/minisatip";
     }
+    opts.enigma_ci_slot = 0;
+    opts.enigma_ddci_demux = -1;
 
     opts.xml_path = DESC_XML;
     opts.th_priority = -1;
@@ -930,6 +940,14 @@ void set_options(int argc, char *argv[]) {
 #ifndef DISABLE_DDCI
         case DISABLE_CAT_OPT: {
             disable_cat_adapters(optarg);
+            break;
+        }
+        case ENIGMA_CI_SLOT_OPT: {
+            opts.enigma_ci_slot = parse_int(optarg, 0);
+            break;
+        }
+        case ENIGMA_DDCI_DEMUX_OPT: {
+            opts.enigma_ddci_demux = parse_int(optarg, -1);
             break;
         }
 #endif
