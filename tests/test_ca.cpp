@@ -2718,6 +2718,24 @@ int test_mmi_ring_eviction_and_teardown() {
     return 0;
 }
 
+int test_ci_slot_taken() {
+    ca_device_t dev;
+    memset(&dev, 0, sizeof(dev));
+    for (int i = 0; i < MAX_ADAPTERS; i++)
+        ca_devices[i] = NULL;
+    dev.id = 0;
+    dev.fd = 10;
+    dev.ci_slot = 0;
+    ca_devices[0] = &dev;
+    ASSERT(ci_slot_taken(0, 13), "other opener takes slot 0");
+    ASSERT(!ci_slot_taken(0, 0), "self does not take own slot");
+    ASSERT(!ci_slot_taken(1, 13), "free slot reads free");
+    dev.fd = -1;
+    ASSERT(!ci_slot_taken(0, 13), "closed fd frees the slot");
+    ca_devices[0] = NULL;
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -2834,6 +2852,7 @@ int main() {
               "testing MMI menu with invalid text tag is rejected");
     TEST_FUNC(test_mmi_ring_eviction_and_teardown(),
               "testing MMI ring buffer eviction and ca_teardown clear");
+    TEST_FUNC(test_ci_slot_taken(), "testing CI slot occupancy");
     free_all_adapters();
     pmts.destroy_all();
     fflush(stdout);
