@@ -112,7 +112,6 @@ void set_socket_new_buffer(int sid, int len);
 void set_socket_buffer(int sid, unsigned char *buf, int len);
 void sockets_timeout(int i, int t);
 void set_sockets_rtime(int i, int r);
-void free_all();
 void sockets_setread(int i, void *r);
 void sockets_setclose(int i, void *r);
 void set_socket_send_buffer(int sock, int len);

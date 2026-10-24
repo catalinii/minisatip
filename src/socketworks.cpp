@@ -1120,10 +1120,6 @@ uint64_t get_allocated_memory() {
     return allocated_memory;
 }
 
-void free_all_adapters();
-
-void free_all() { free_all_adapters(); }
-
 void set_socket_send_buffer(int sock, int len) {
     int sl;
     int rv = 0;

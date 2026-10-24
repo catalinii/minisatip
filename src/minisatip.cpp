@@ -2024,7 +2024,7 @@ int main(int argc, char *argv[]) {
     srt_listener_close();
     srt_cleanup();
 #endif
-    free_all();
+    free_all_adapters();
     free(opts.command_line);
     LOG0("Exit OK.");
     if (opts.slog)

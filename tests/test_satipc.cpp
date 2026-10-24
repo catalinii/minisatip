@@ -435,6 +435,6 @@ int main() {
               "test satipc_reply ignores an empty buffer");
 
     fflush(stdout);
-    free_all();
+    free_all_adapters();
     return 0;
 }

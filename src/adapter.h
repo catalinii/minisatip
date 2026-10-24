@@ -196,6 +196,7 @@ int getAdaptersCount();
 adapter *adapter_alloc();
 void adapter_resize_buffers();
 int close_adapter(int na);
+void free_all_adapters();
 int get_free_adapter(transponder *tp);
 // Out-of-range attrs when no usable adapter can serve tp, else "" (busy).
 std::string out_of_range_attrs(transponder *tp);
