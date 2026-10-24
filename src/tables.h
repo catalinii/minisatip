@@ -55,7 +55,6 @@ void init_ca_device(SCA *c); //  calls table_init_device for all the devices
 int tables_init_device(adapter *ad);
 int tables_close_device(adapter *ad);
 int tables_init();
-int tables_destroy();
 void tables_add_pid(adapter *ad, SPMT *pmt, int pid);
 void tables_del_pid(adapter *ad, SPMT *pmt, int pid);
 int send_pmt_to_cas(adapter *ad, SPMT *pmt);
