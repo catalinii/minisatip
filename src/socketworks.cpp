@@ -44,9 +44,6 @@
 #include "socketworks.h"
 #include "stream.h"
 #include "utils.h"
-#ifndef DISABLE_DVBAPI
-#include "dvbapi.h"
-#endif
 
 #include "utils/ticks.h"
 
@@ -1135,9 +1132,6 @@ void free_all() {
     s.destroy_all();
     st.destroy_all();
     free_all_adapters();
-#ifndef DISABLE_DVBAPI
-    keys.destroy_all();
-#endif
 }
 
 void set_socket_send_buffer(int sock, int len) {
