@@ -415,6 +415,10 @@ int tables_close_device(adapter *ad) {
 }
 
 int tables_init() {
+#ifndef DISABLE_DDCI
+    // DDCI maps before DVBCA builds CAPMTs, so loopback CAPMTs use mapped pids.
+    ddci_init();
+#endif
 #ifndef DISABLE_DVBCA
     dvbca_init();
 #endif
