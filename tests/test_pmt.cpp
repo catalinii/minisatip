@@ -327,15 +327,15 @@ int test_emulate_add_all_pids() {
     adapter ad = {};
     a[0] = &ad;
     ad.enabled = 1;
-    SPMT pmt{};
-    pmts.slot(0) = &pmt;
-    pmt.enabled = 1;
-    pmt.adapter = 0;
+    SPMT *pmt = new SPMT();
+    pmts.slot(0) = pmt;
+    pmt->enabled = 1;
+    pmt->adapter = 0;
     opts.emulate_pids_all = 1;
     SStreamPid sp{.type = 1, .pid = 100};
-    pmt.stream_pids.push_back(sp);
+    pmt->stream_pids.push_back(sp);
     SStreamPid sp1{.type = 1, .pid = 101};
-    pmt.stream_pids.push_back(sp1);
+    pmt->stream_pids.push_back(sp1);
     ad.active_pmts = 1;
     ad.active_pmt[0] = 0;
     mark_pid_add(0, ad.id, 8192);
@@ -356,6 +356,8 @@ int test_emulate_add_all_pids() {
     ASSERT(p->has_stream(2) && p->has_stream(0) && p->has_stream(1),
            "Expected 3 sids to be set fo pid 101");
     opts.emulate_pids_all = 0;
+    delete pmts[0];
+    pmts.slot(0) = nullptr;
     return 0;
 }
 
