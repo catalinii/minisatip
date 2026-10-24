@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cassert>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
@@ -19,6 +20,8 @@ inline constexpr size_t kSegmentBucketSize = 64;
 template <typename U>
 concept ReusableObject = requires(U *u, bool expected) {
     requires std::default_initializable<U>;
+    requires std::same_as<std::remove_cvref_t<decltype(u->enabled)>,
+                          std::atomic<bool>>;
     u->id = 0;
     u->enabled = false;
     { u->enabled } -> std::convertible_to<bool>;
@@ -27,9 +30,10 @@ concept ReusableObject = requires(U *u, bool expected) {
     } -> std::same_as<bool>;
 };
 
-// Lock-free segmented pool: fixed 64-slot buckets published on
-// first touch, atomic high-water length, snapshot iterators.
-template <typename T, size_t MaxSegs>
+// Segmented pool: fixed 64-slot buckets, atomic length, live
+// iteration. MaxLive caps obtain/reserve below capacity.
+template <typename T, size_t MaxSegs,
+          size_t MaxLive = MaxSegs * kSegmentBucketSize>
 requires std::is_trivially_copyable_v<T>
 class SegmentedPool {
   public:
@@ -37,6 +41,7 @@ class SegmentedPool {
     static constexpr size_t kBucketBits = 6;
     static_assert(kBucketSize == size_t{1} << kBucketBits, "bits match size");
     static_assert(MaxSegs > 0, "pool needs at least one bucket");
+    static_assert(MaxLive <= MaxSegs * kBucketSize, "live cap fits buckets");
 
     static constexpr size_t capacity() { return MaxSegs * kBucketSize; }
 
@@ -70,11 +75,11 @@ class SegmentedPool {
     size_t size() const { return size_; }
     bool empty() const { return size() == 0; }
 
-    // Reserve the next index; nullopt when full. Publish with slot();
-    // the slot reads default until then.
+    // Reserve the next index; nullopt past the live cap. Publish
+    // with slot(); the slot reads default until then.
     std::optional<size_t> reserve() {
         size_t index = size_.fetch_add(1);
-        if (index >= capacity()) {
+        if (index >= MaxLive) {
             // Paired with our own increment; size stays above live slots.
             size_.fetch_sub(1);
             return std::nullopt;
@@ -82,7 +87,8 @@ class SegmentedPool {
         return index;
     }
 
-    // Lower the length to n; slots stay allocated for later regrowth.
+    // Lower the length to n; slots stay allocated for regrowth.
+    // Callers must exclude reserve, or the length can underflow.
     void shrink_to(size_t n) {
         size_t cur = size_;
         while (cur > n && !size_.compare_exchange_weak(cur, n))
@@ -102,7 +108,7 @@ class SegmentedPool {
     // Claim a free object, reusing a released slot when possible;
     // nullptr when full. The common entry point for adding objects.
     T obtain()
-    requires ReusableObject<std::remove_pointer_t<T>>
+    requires(std::is_pointer_v<T> && ReusableObject<std::remove_pointer_t<T>>)
     {
         using U = std::remove_pointer_t<T>;
         auto scan = [&](size_t n) -> U * {
@@ -161,6 +167,7 @@ class SegmentedPool {
 
     // Raw slot for CAS-claim loops; publishes its bucket on first touch.
     std::atomic<T> &slot(size_t index) {
+        assert(index < capacity());
         Bucket *b = bucket_for(index >> kBucketBits);
         return b->slots[index & (kBucketSize - 1)];
     }
@@ -176,7 +183,8 @@ class SegmentedPool {
         }
     }
 
-    // Single-threaded reset: blank all published slots, drop the length.
+    // Detach all slots without deleting; owned pools tear down
+    // with destroy_all instead. Single-threaded use only.
     void clear() {
         for_each_published([](std::atomic<T> &s) { s = T{}; });
         size_ = 0;
@@ -251,6 +259,7 @@ class SegmentedPool {
     }
 
     T load(size_t index) const {
+        assert(index < capacity());
         Bucket *b = bucket_for(index >> kBucketBits);
         return b->slots[index & (kBucketSize - 1)];
     }

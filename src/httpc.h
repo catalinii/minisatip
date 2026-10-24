@@ -25,7 +25,7 @@ typedef struct struct_http_client {
 
 constexpr size_t HTTPC_BUCKETS =
     (MAX_HTTPC + kSegmentBucketSize - 1) / kSegmentBucketSize;
-extern SegmentedPool<Shttp_client *, HTTPC_BUCKETS> httpc;
+extern SegmentedPool<Shttp_client *, HTTPC_BUCKETS, MAX_HTTPC> httpc;
 
 static inline Shttp_client *get_httpc(int i) {
     if (i < 0 || i >= MAX_HTTPC)

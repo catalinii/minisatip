@@ -23,6 +23,7 @@
 #include "utils/testing.h"
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <string.h>
 #include <thread>
 #include <vector>
@@ -236,6 +237,32 @@ int test_enabled_iteration() {
     return 0;
 }
 
+int test_obtain_full_contention() {
+    SegmentedPool<Item *, 1> pool; // 64 slots, driven full
+    for (int i = 0; i < 64; ++i) {
+        Item *it = pool.obtain();
+        ASSERT(it, "setup obtain failed");
+        it->enabled = true;
+    }
+    std::atomic<bool> stop{false};
+    std::atomic<int> fails{0};
+    auto hammer = [&]() {
+        while (!stop) {
+            if (!pool.obtain())
+                fails.fetch_add(1, std::memory_order_relaxed);
+        }
+    };
+    std::thread t1(hammer), t2(hammer), t3(hammer), t4(hammer);
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    stop = true;
+    t1.join();
+    t2.join();
+    t3.join();
+    t4.join();
+    ASSERT(fails > 0, "hammers never ran");
+    return 0;
+}
+
 int main() {
     opts.log = 255;
     strcpy(thread_info[thread_index].thread_name, "test_segmented_pool");
@@ -246,6 +273,8 @@ int main() {
     TEST_FUNC(test_clear(), "clear resets the pool");
     TEST_FUNC(test_destroy_all(), "destroy_all deletes and blanks");
     TEST_FUNC(test_enabled_iteration(), "default iteration skips disabled");
+    TEST_FUNC(test_obtain_full_contention(),
+              "contended obtains on a full pool");
     TEST_FUNC(test_shrink_and_published(), "shrink keeps teardown covered");
     TEST_FUNC(test_concurrent_claim(), "concurrent CAS claims");
     TEST_FUNC(test_concurrent_append_iterate(),

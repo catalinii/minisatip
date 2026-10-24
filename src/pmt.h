@@ -224,7 +224,7 @@ constexpr size_t PMTS_BUCKETS =
 constexpr size_t FILTERS_BUCKETS =
     (MAX_FILTERS + kSegmentBucketSize - 1) / kSegmentBucketSize;
 extern SegmentedPool<SPMT *, PMTS_BUCKETS> pmts;
-extern SegmentedPool<SFilter *, FILTERS_BUCKETS> filters;
+extern SegmentedPool<SFilter *, FILTERS_BUCKETS, MAX_FILTERS> filters;
 
 static inline SPMT *get_pmt(int id) {
     if (id < 0 || (size_t)id >= pmts.size())

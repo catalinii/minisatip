@@ -79,7 +79,7 @@ int oscam_version;
 
 uint64_t dvbapi_last_close = 0;
 
-SegmentedPool<SKey *, KEYS_BUCKETS> keys;
+SegmentedPool<SKey *, KEYS_BUCKETS, MAX_KEYS> keys;
 unsigned char read_buffer[8192];
 extern char *listmgmt_str[];
 
