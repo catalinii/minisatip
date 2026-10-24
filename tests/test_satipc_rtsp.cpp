@@ -934,6 +934,6 @@ int main() {
               "test full table still releases the untracked fd");
 
     fflush(stdout);
-    free_all();
+    free_all_adapters();
     return 0;
 }

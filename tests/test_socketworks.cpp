@@ -17,6 +17,7 @@
  * USA
  *
  */
+#include "adapter.h"
 #include "ddci.h"
 #include "dvb.h"
 #include "minisatip.h"
@@ -582,6 +583,6 @@ int main() {
     TEST_FUNC(test_sockets_destructor(),
               "testing sockets destructor closes and frees");
     fflush(stdout);
-    free_all();
+    free_all_adapters();
     return 0;
 }

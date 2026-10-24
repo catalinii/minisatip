@@ -14,6 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, see <https://www.gnu.org/licenses/>.
  */
+#include "adapter.h"
 #include "dvbapi.h"
 #include "minisatip.h"
 #include "pmt.h"
@@ -440,7 +441,7 @@ int main() {
     TEST_FUNC(test_descramble_watchdog(),
               "testing the watchdog restarts a stalled PMT for OSCam");
     fflush(stdout);
-    free_all();
+    free_all_adapters();
     pmts.destroy_all();
     filters.destroy_all();
     return 0;

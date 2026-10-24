@@ -56,7 +56,7 @@ void setup_test_env() {
     // Clean all streams, sockets, and adapters
     s.destroy_all();
     st.destroy_all();
-    free_all();
+    free_all_adapters();
 
     a_count = 1;
     a[0] = new adapter();
@@ -979,6 +979,6 @@ int main() {
 #endif
 
     fflush(stdout);
-    free_all();
+    free_all_adapters();
     return 0;
 }
