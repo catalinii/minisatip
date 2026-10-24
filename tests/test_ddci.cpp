@@ -1900,6 +1900,37 @@ int test_ddci_owns_and_loops() {
     return 0;
 }
 
+int test_ddci_ca_device_for_pmt() {
+    ddci_device_t d0 = {};
+    for (int i = 0; i < MAX_ADAPTERS; i++)
+        a[i] = nullptr;
+    memset(&d0.pmt, -1, sizeof(d0.pmt));
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    d0.id = 0;
+    d0.enabled = 1;
+    d0.loopback = 1;
+    d0.max_channels = 2;
+    ddci_devices[0] = &d0;
+    opts.enigma = 1;
+
+    SPMT *src = create_pmt(12, 206, 206, 2061, 0x4AFC, 0x100);
+    SPMT *shadow = create_pmt(0, 206, 206, 2061, 0x4AFC, 0x100);
+    SPMT *stranger = create_pmt(7, 300, 300, 3000, 0x100, 0x100);
+    d0.pmt[0].id = src->id;
+    ASSERT(ddci_ca_device_for_pmt(src) == 0, "registered source resolves");
+    ASSERT(ddci_ca_device_for_pmt(shadow) == 0, "shadow resolves to loopback");
+    ASSERT(ddci_ca_device_for_pmt(stranger) == -1, "stranger waits");
+    ASSERT(ddci_ca_device_for_pmt(NULL) == -1, "null waits");
+    d0.loopback = 0;
+    ASSERT(ddci_ca_device_for_pmt(shadow) == -1, "non-loopback waits");
+    opts.enigma = 0;
+    d0.loopback = 1;
+    ASSERT(ddci_ca_device_for_pmt(shadow) == -1, "guard off waits");
+
+    ddci_devices[0] = NULL;
+    return 0;
+}
+
 int test_ddci_enigma_declines_local() {
     SPMT *pmt0;
     ddci_device_t d0 = {};
@@ -1998,6 +2029,8 @@ int main() {
               "testing enigma loops back non-local PMTs only");
     TEST_FUNC(test_ddci_remap_pid(), "testing ddci pid remap for CAPMT");
     TEST_FUNC(test_ddci_owns_and_loops(), "testing loopback PMT ownership");
+    TEST_FUNC(test_ddci_ca_device_for_pmt(),
+              "testing CAPMT device for shadow PMTs");
     TEST_FUNC(test_capmt_uses_mapped_pids(),
               "testing CAPMT carries mapped pids on loopback PMTs");
     TEST_FUNC(test_dvbca_loopback_pmt_routing(),

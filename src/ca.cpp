@@ -1267,7 +1267,7 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
 #ifndef DISABLE_DDCI
         // Loopback PMTs ride the DDCI mapping; the CI stays on PVR input.
         if (ddci_will_loopback(ad)) {
-            int ddid = ddci_device_for_pmt(spmt->id);
+            int ddid = ddci_ca_device_for_pmt(spmt);
             if (ddid < 0)
                 LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY,
                                "DDCI has not mapped PMT %d yet", spmt->id);
