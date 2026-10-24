@@ -1470,10 +1470,15 @@ ddci_device_t *ddci_alloc(int id) {
 }
 
 #ifndef DISABLE_LINUXDVB
-// Loopback open: push to dvr, read TAPs from demux, source the DVR bus.
+// Loopback open: push to the chip playback dvr, TAPs on the free demux.
+// Only dvr0 feeds the demuxes (source id minus offset); dvrN>0 is a stub.
 static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
     char buf[100];
-    snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/dvr%d", ad->pa, ad->fn);
+    ad->dmx_source = ddci_dvr_source_offset();
+    int push_dvr = ad->dmx_source - ddci_dvr_source_offset();
+    if (push_dvr < 0)
+        push_dvr = 0;
+    snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/dvr%d", ad->pa, push_dvr);
     int write_fd = open(buf, O_WRONLY | O_NONBLOCK);
     if (write_fd < 0)
         LOG_AND_RETURN(1, "could not open %s: %s", buf, strerror(errno));
@@ -1483,7 +1488,6 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
         close(write_fd);
         LOG_AND_RETURN(1, "could not open %s: %s", buf, strerror(errno));
     }
-    ad->dmx_source = ddci_dvr_source_offset();
     dvb_set_demux_source(ad);
 
     std::lock_guard<SMutex> lock(d->mutex);
@@ -1504,8 +1508,8 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
     d->tid = d->ver = d->sdt_ver = d->sdt_data_mask = 0;
     d->enabled = 1;
     ad->enabled = 1;
-    LOG("opened enigma loopback %d dvr:%d demux:%d source:%d", ad->id, ad->fe,
-        ad->dvr, ad->dmx_source);
+    LOG("opened enigma loopback %d push dvr%d fd:%d demux fd:%d source:%d",
+        ad->id, push_dvr, ad->fe, ad->dvr, ad->dmx_source);
     return 0;
 }
 #endif
