@@ -204,6 +204,28 @@ int ddci_is_loopback(int id) {
     return opts.enigma && d && d->loopback;
 }
 
+// CI slot the enigma loopback owns; -1 when no loopback.
+// Reads the raw flag so physical tuners yield even before it opens.
+int ddci_loopback_ci_slot() {
+    if (!opts.enigma)
+        return -1;
+    int found = 0;
+    for (int i = 0; i < MAX_ADAPTERS; i++)
+        if (ddci_devices[i] && ddci_devices[i]->loopback)
+            found = 1;
+    if (!found)
+        return -1;
+    if (opts.enigma_ci_slot >= 0)
+        return opts.enigma_ci_slot;
+    char path[32];
+    for (int s = 0; s < MAX_ADAPTERS; s++) {
+        snprintf(path, sizeof(path), "/dev/ci%d", s);
+        if (!access(path, R_OK | W_OK))
+            return s;
+    }
+    return -1;
+}
+
 // Mapped ddci_pid for (ad,pid); pid itself when unmapped.
 int ddci_remap_pid(int ad, int pid) {
     for (int i = 0; i < MAX_ADAPTERS; i++) {
