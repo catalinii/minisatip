@@ -19,11 +19,6 @@ if(EXISTS ${CMAKE_SOURCE_DIR}/.git)
     )
 endif()
 
-if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
-    message(STATUS "Setting build type to 'DEBUG' as default.")
-    set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Choose the build type (Debug, Release, RelWithDebInfo, MinSizeRel)" FORCE)
-endif()
-
 # -DVERSION_STRING wins; without it and without git metadata, as in a
 # release tarball, the version is "unknown"
 if(NOT VERSION_STRING)
@@ -37,6 +32,26 @@ if(NOT VERSION_STRING)
 endif()
 
 project(minisatip VERSION 2.0 LANGUAGES CXX)
+
+include(GNUInstallDirs)
+include(CheckPIESupported)
+
+# The build type alone decides the optimization: RelWithDebInfo unless one is
+# given, or Debug for -DDEBUG=ON, chosen again when DEBUG changes.
+get_property(MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(NOT MULTI_CONFIG AND (NOT CMAKE_BUILD_TYPE OR
+   "${CMAKE_BUILD_TYPE}" STREQUAL "${MINISATIP_DEFAULT_BUILD_TYPE}"))
+    if(DEBUG)
+        set(DEFAULT_BUILD_TYPE "Debug")
+    else()
+        set(DEFAULT_BUILD_TYPE "RelWithDebInfo")
+    endif()
+    if(NOT "${CMAKE_BUILD_TYPE}" STREQUAL "${DEFAULT_BUILD_TYPE}")
+        message(STATUS "Setting build type to '${DEFAULT_BUILD_TYPE}' as default.")
+    endif()
+    set(MINISATIP_DEFAULT_BUILD_TYPE "${DEFAULT_BUILD_TYPE}" CACHE INTERNAL "")
+    set(CMAKE_BUILD_TYPE "${DEFAULT_BUILD_TYPE}" CACHE STRING "Choose the build type (Debug, Release, RelWithDebInfo, MinSizeRel)" FORCE)
+endif()
 
 set(DVBCSA_DEFAULT OFF)
 set(DVBCA_DEFAULT OFF)
@@ -81,10 +96,10 @@ if(NETCEIVER_LIBRARY AND NETCEIVER_INCLUDE_DIR)
     set(NETCVCLIENT_DEFAULT ON)
 endif()
 
-set(MINISATIP_LIBS pthread)
+find_package(Threads REQUIRED)
+set(MINISATIP_LIBS Threads::Threads)
 if(STDCPPEXP_LIBRARY)
     set(CXX23_DEFAULT ON)
-    list(APPEND MINISATIP_LIBS ${STDCPPEXP_LIBRARY})
 endif()
 
 # Build options
@@ -95,6 +110,7 @@ option(LINUXDVB "Enable Linux DVB support" ON)
 option(DDCI "Enable DDCI support" ${DDCI_DEFAULT})
 option(CXX23 "Enable C++23 features (stacktrace)" ${CXX23_DEFAULT})
 option(DEBUG "Enable debug/sanitizer build" OFF)
+option(DEV_WARNINGS "Strict warnings, treated as errors (development build)" OFF)
 option(SRT "Enable SRT support" ${SRT_DEFAULT})
 option(BUILD_TESTING "Build tests" OFF)
 option(TEST_SANITIZERS "Build tests with AddressSanitizer/LeakSanitizer" ON)
@@ -105,6 +121,10 @@ if(APPLE)
     set(DVBCA OFF)
     set(NETCVCLIENT OFF)
     set(DDCI OFF)
+endif()
+
+if(CXX23 AND STDCPPEXP_LIBRARY)
+    list(APPEND MINISATIP_LIBS ${STDCPPEXP_LIBRARY})
 endif()
 
 # DDCI needs DVBCA symbols and Linux DVB headers
@@ -129,25 +149,41 @@ set(CONFIG_CONTENT "// Auto-generated configuration header\n#ifndef CONFIG_H\n#d
 
 foreach(OPT ${OPTIONS})
     if(NOT ${OPT})
-        string(APPEND CONFIG_CONTENT "#define DISABLE_${OPT}\n")
+        string(APPEND CONFIG_CONTENT "#ifndef DISABLE_${OPT}\n#define DISABLE_${OPT}\n#endif\n")
         message(STATUS "Option ${OPT} disabled")
     endif()
 endforeach()
 
 string(APPEND CONFIG_CONTENT "#ifndef VERSION\n#define VERSION \"${VERSION_STRING}\"\n#endif\n")
 string(APPEND CONFIG_CONTENT "\n#endif // CONFIG_H\n")
-file(WRITE ${CMAKE_BINARY_DIR}/config.h "${CONFIG_CONTENT}")
+# configure_file() only touches config.h when its content changes, so a
+# reconfigure does not rebuild everything
+file(WRITE ${CMAKE_BINARY_DIR}/config.h.tmp "${CONFIG_CONTENT}")
+configure_file(${CMAKE_BINARY_DIR}/config.h.tmp ${CMAKE_BINARY_DIR}/config.h COPYONLY)
 
 # Common compile flags
 add_compile_options(
     -Wall
     -Wno-date-time
     -Wno-switch
-    -fPIC
     -fno-common
     -fno-omit-frame-pointer
     -Warray-bounds
 )
+
+# The development build: strict warnings, all of them errors
+if(DEV_WARNINGS)
+    add_compile_options(
+        -pedantic-errors
+        -Wextra
+        -Wformat=2
+        -Wconversion
+        -Wsign-conversion
+        -Wshadow
+        -Wnull-dereference
+        -Werror
+    )
+endif()
 
 if(DEBUG)
     add_compile_options(
@@ -169,8 +205,13 @@ if(DEBUG)
             -static-liblsan
         )
     endif()
-else()
-    add_compile_options(-O2)
+endif()
+
+# A position independent executable, not -fPIC code: PIC makes every global
+# call interposable. Static builds stay non-PIE.
+if(NOT STATIC)
+    check_pie_supported()
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
 
 # NetCeiver XML2 flags
@@ -235,26 +276,16 @@ if(NOT APPLE)
     list(APPEND MINISATIP_LIBS rt)
 endif()
 
-# Main library
-add_library(minisatip_lib OBJECT ${MINISATIP_SOURCES})
-target_include_directories(minisatip_lib PUBLIC
-    ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_BINARY_DIR}
-)
-target_compile_options(minisatip_lib PRIVATE -include ${CMAKE_BINARY_DIR}/config.h)
-if(SRT)
-    target_include_directories(minisatip_lib PUBLIC ${SRT_INCLUDE_DIR})
-endif()
-if(STDCPPEXP_LIBRARY)
-    target_link_libraries(minisatip_lib PRIVATE ${STDCPPEXP_LIBRARY})
-endif()
-
 # Main executable
-add_executable(minisatip $<TARGET_OBJECTS:minisatip_lib>)
+add_executable(minisatip ${MINISATIP_SOURCES})
 target_include_directories(minisatip PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_BINARY_DIR}
 )
+target_compile_options(minisatip PRIVATE -include ${CMAKE_BINARY_DIR}/config.h)
+if(SRT)
+    target_include_directories(minisatip PRIVATE ${SRT_INCLUDE_DIR})
+endif()
 set_target_properties(minisatip PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 if(STATIC)
@@ -271,7 +302,11 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "mips" OR
 endif()
 
 target_link_libraries(minisatip PRIVATE ${MINISATIP_LIBS})
-install(TARGETS minisatip RUNTIME DESTINATION bin)
+install(TARGETS minisatip RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+# The web interface: -R <datadir>/minisatip/html, or <datadir>/minisatip as
+# working directory (-R defaults to html); status.html is executable in git
+install(DIRECTORY html/ DESTINATION ${CMAKE_INSTALL_DATADIR}/minisatip/html
+    FILE_PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
 
 # Testing
 if(BUILD_TESTING)
@@ -280,7 +315,7 @@ if(BUILD_TESTING)
     set(TEST_LIBS
         crypto
         dl
-        pthread
+        Threads::Threads
     )
     if(SRT)
         list(APPEND TEST_LIBS srt)
@@ -386,4 +421,5 @@ if(BUILD_TESTING)
     endforeach()
 endif()
 
-message(STATUS "Version: ${VERSION_STRING}, FLAGS: ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} ${CMAKE_CXX_FLAGS_RELEASE}")
+string(TOUPPER "${CMAKE_BUILD_TYPE}" BUILD_TYPE_UPPER)
+message(STATUS "Version: ${VERSION_STRING}, build type: ${CMAKE_BUILD_TYPE}, FLAGS: ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${BUILD_TYPE_UPPER}}")
