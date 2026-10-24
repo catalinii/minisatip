@@ -1393,12 +1393,6 @@ void dump_streams() {
                 get_stream_rport(sid->sid));
 }
 
-void free_all_streams() {
-    for (streams *s : st)
-        delete s;
-    st.clear();
-}
-
 int get_session_id(int i) {
     streams *sid = get_sid(i);
     if (!sid)

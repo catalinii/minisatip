@@ -42,7 +42,11 @@
 
 #include "minisatip.h"
 #include "socketworks.h"
+#include "stream.h"
 #include "utils.h"
+#ifndef DISABLE_DVBAPI
+#include "dvbapi.h"
+#endif
 
 #include "utils/ticks.h"
 
@@ -700,6 +704,24 @@ int sockets_del(int sock) {
         }
     return 0;
 }
+
+// Exit-path twin of sockets_del on a dying object: close live
+// handles, then free owned buffers. No pool use, no locks.
+sockets::~sockets() {
+    if (enabled) {
+        enabled = false;
+        if (close)
+            close(this);
+        int so = sock;
+        sock = -1;
+        if (so >= 0 && close_unix_socket)
+            ::close(so);
+    }
+    if ((flags & 1) && buf)
+        free(buf);
+    free_fifo(&fifo);
+    free(prio_data);
+}
 #undef DEFAULT_LOG
 #define DEFAULT_LOG LOG_SOCKET
 
@@ -1107,27 +1129,14 @@ uint64_t get_allocated_memory() {
     return allocated_memory;
 }
 
-void free_all_streams();
 void free_all_adapters();
-void free_all_keys();
 
 void free_all() {
-    // Exit-time teardown covers every live slot, including 0.
-    for (int i = (int)s.size() - 1; i >= 0; --i) {
-        sockets *ss = s[i];
-        if (!ss)
-            continue;
-        if (ss->enabled)
-            sockets_del(ss->id);
-        free_fifo(&ss->fifo);
-        free(ss->prio_data);
-        delete ss;
-        s.slot(i) = NULL;
-    }
-    free_all_streams();
+    s.destroy_all();
+    st.destroy_all();
     free_all_adapters();
 #ifndef DISABLE_DVBAPI
-    free_all_keys();
+    keys.destroy_all();
 #endif
 }
 

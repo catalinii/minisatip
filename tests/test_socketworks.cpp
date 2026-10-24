@@ -526,6 +526,34 @@ int test_eof_does_not_dispatch_action() {
     return 0;
 }
 
+static int dtor_close_calls = 0;
+static int dtor_close_cb(void *ss) {
+    (void)ss;
+    ++dtor_close_calls;
+    return 0;
+}
+
+// The destructor runs close, closes the fd, frees buf/prio (LSan).
+int test_sockets_destructor() {
+    dtor_close_calls = 0;
+    int p[2];
+    ASSERT(pipe(p) == 0, "pipe failed");
+    {
+        sockets s = {};
+        s.enabled = true;
+        s.close = dtor_close_cb;
+        s.sock = p[0];
+        s.close_unix_socket = true;
+        s.flags = 1;
+        s.buf = (unsigned char *)malloc(16);
+        s.prio_data = (uint8_t *)malloc(8);
+    }
+    ASSERT_EQUAL(dtor_close_calls, 1, "destructor skipped close");
+    ASSERT(fcntl(p[0], F_GETFD) == -1, "destructor left the fd open");
+    close(p[1]);
+    return 0;
+}
+
 int main() {
     opts.log = 1; // LOG_UTILS | LOG_SOCKET;
     strcpy(thread_info[thread_index].thread_name, "test_socketworks");
@@ -551,6 +579,8 @@ int main() {
 #endif
     TEST_FUNC(test_eof_does_not_dispatch_action(),
               "testing EOF closes the socket without dispatching action");
+    TEST_FUNC(test_sockets_destructor(),
+              "testing sockets destructor closes and frees");
     fflush(stdout);
     free_all();
     return 0;

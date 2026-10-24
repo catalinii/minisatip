@@ -176,6 +176,12 @@ typedef struct struct_pmt {
     int filter;
     int64_t start_time;
     std::unordered_map<uint64_t, int> *global_start, *local_start;
+    struct_pmt() = default;
+    ~struct_pmt();
+    struct_pmt(const struct_pmt &) = delete;
+    struct_pmt &operator=(const struct_pmt &) = delete;
+    struct_pmt(struct_pmt &&) = delete;
+    struct_pmt &operator=(struct_pmt &&) = delete;
 } SPMT;
 
 // filters can be setup for specific pids and masks
@@ -247,7 +253,6 @@ int pmt_init_device(
 // if the call succeds, the PMTs will be sent to that CA for that adapter
 int pmt_close_device(adapter *ad);
 int pmt_init();
-int pmt_destroy();
 void start_pmt(SPMT *pmt, adapter *ad);
 int pmt_init_device(adapter *ad);
 int tables_tune(adapter *ad);
@@ -272,12 +277,10 @@ void update_cw(SPMT *pmt);
 int pmt_decrypt_stream(adapter *ad);
 int wait_pusi(adapter *ad, int len);
 int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf, int buf_len, int sca_id);
-void free_filters();
 void stop_pmt(SPMT *pmt, adapter *ad);
 int pmt_add_stream_pid(SPMT *pmt, int pid, int type, bool is_audio,
                        bool is_video);
 void emulate_add_all_pids(adapter *ad);
 void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid, uint8_t *data,
                   int len);
-void free_all_pmts();
 #endif

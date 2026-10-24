@@ -552,7 +552,7 @@ static int check_pat_drop_releases_ca(int adapter_type) {
 
     del_ca(&fake_ca_op);
     // Only the PMTs created above are left in pmts[] at this point.
-    free_all_pmts();
+    pmts.destroy_all();
     return 0;
 }
 
@@ -638,8 +638,8 @@ int test_revived_cached_pmt_gets_its_filter() {
            "starting the PMT should have enabled its filter");
 
     del_filter(ad.pat_filter);
-    free_all_pmts();
-    free_filters();
+    pmts.destroy_all();
+    filters.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -694,7 +694,7 @@ int test_pmt_starts_only_with_pmt_pid() {
     ASSERT(find_pid(0, 3301)->pmt == bid, "video claim should be kept");
     ASSERT(find_pid(0, 3401)->pmt == bid, "audio claim should be kept");
 
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -791,7 +791,7 @@ int test_retune_handover_same_loop() {
     ASSERT(find_pid(0, 3301)->pmt == bid, "video pid should move to B");
 
     del_ca(&counting_op);
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -895,7 +895,7 @@ int test_single_slot_retune_releases_first() {
            "the release must come before the acquire");
 
     del_ca(&single_slot_op);
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -964,7 +964,7 @@ int test_scan_pmt_only_starts_nothing() {
     ASSERT_EQUAL(pmt_t31->state, PMT_STOPPED, "later PMT should wait");
 
     del_ca(&counting_op);
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -992,7 +992,7 @@ int test_active_pmt_list_capped_at_max() {
            "full active list must refuse");
 
     a[0] = nullptr;
-    free_all_pmts();
+    pmts.destroy_all();
     return 0;
 }
 
@@ -1080,7 +1080,7 @@ int test_19e_11493h_zap_flows() {
     ASSERT(find_pid(0, 5121)->pmt == bid, "video moves to B");
     ASSERT(find_pid(0, 5124)->pmt == -1, "released data has no owner");
 
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -1183,7 +1183,7 @@ int test_19e_11582h_group_and_disjoint() {
     ASSERT_EQUAL(pmt_t56->state, PMT_RUNNING, "disjoint survives");
     ASSERT(find_pid(0, 5261)->pmt == iid, "I keeps its video");
 
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -1256,7 +1256,7 @@ int test_19e_11914h_ca_send_close() {
     ASSERT_EQUAL(fake_ca_last_del_pmt, kid, "closed PMT should be K");
 
     del_ca(&counting_op);
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -1265,7 +1265,7 @@ int test_19e_11914h_ca_send_close() {
 // there, yet its PMT must start so the CA_PMT reaches the CAM.
 int test_ci_adapter_pmt_starts() {
     int i;
-    free_all_pmts();
+    pmts.destroy_all();
 
     adapter ad = {};
     a[0] = &ad;
@@ -1294,7 +1294,7 @@ int test_ci_adapter_pmt_starts() {
     ASSERT_EQUAL(pmt_t61->state, PMT_RUNNING,
                  "the CI adapter's PMT should start");
 
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -1350,7 +1350,7 @@ int test_sticky_claims_without_parse() {
     SPMT *pmt_t66 = pmts[bid];
     ASSERT_EQUAL(pmt_t66->state, PMT_RUNNING, "holder should keep running");
 
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -1401,7 +1401,7 @@ int test_earlier_newcomer_steals_by_order() {
     ASSERT_EQUAL(pmt_t69->state, PMT_STOPPED, "holder should step aside");
     ASSERT(find_pid(0, 3301)->pmt == bid, "video pid should move to B");
 
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -1453,7 +1453,7 @@ int test_steal_splits_partial_overlap() {
     ASSERT(find_pid(0, 3401)->pmt == aid, "own audio stays with A");
     ASSERT(find_pid(0, 3402)->pmt == bid, "own audio goes to B");
 
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -1574,7 +1574,7 @@ int test_d8_shared_pid() {
     ASSERT(pmt_t83->best && pmt_t84->best, "waiter stays in the set");
     ASSERT(find_pid(0, 701)->pmt == m1, "shared video should not move");
 
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -1628,7 +1628,7 @@ int test_shared_pid_split() {
     ASSERT_EQUAL(pmt_t90->state, PMT_RUNNING, "second should stay up");
     ASSERT(find_pid(0, 701)->pmt == m1, "shared video should not move");
 
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -1739,8 +1739,8 @@ int test_30w_shared_pmt_pid() {
     ASSERT_EQUAL(p1338->state, PMT_STOPPED, "1338 should stay down");
 
     del_ca(&fake_ca_op);
-    free_all_pmts();
-    free_filters();
+    pmts.destroy_all();
+    filters.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -1800,7 +1800,7 @@ int test_1129_bein_shared_es() {
     ASSERT(find_pid(0, 3301)->pmt == ticari, "video should move with the zap");
 
     del_ca(&fake_ca_op);
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -1852,7 +1852,7 @@ int test_1129_stingray_shared_vpid() {
     ASSERT(find_pid(0, 108)->pmt == eighties, "VPID should move with zap");
     ASSERT(find_pid(0, 222)->pmt == eighties, "new APID should be owned");
 
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -1903,7 +1903,7 @@ int test_held_pids_without_client_stop_pmt() {
     ASSERT_EQUAL(pmt_t104->ca_mask, 0, "CA registration should be gone");
 
     del_ca(&fake_ca_op);
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -1938,7 +1938,7 @@ int test_cw_keyed_by_pmt() {
     for (i = 0; i < MAX_CW; i++)
         if (cws[i])
             cws[i]->enabled = 0;
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -1987,7 +1987,7 @@ int test_send_cw_skips_in_use_slot() {
     for (i = 0; i < MAX_CW; i++)
         if (cws[i])
             cws[i]->enabled = 0;
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -2021,7 +2021,7 @@ int test_pids_all_expands_pmt_pids() {
     ASSERT_EQUAL(pmt_t105->state, PMT_RUNNING, "PMT should run for pids=all");
 
     opts.emulate_pids_all = 0;
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -2066,8 +2066,8 @@ int test_multi_service_pid_parses_per_sid() {
     ASSERT(p2->stream_pids.size() == 1 && p2->stream_pids[0].pid == 702,
            "sid 200 should carry pid 702");
 
-    free_all_pmts();
-    free_filters();
+    pmts.destroy_all();
+    filters.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -2132,7 +2132,7 @@ int test_late_parse_handover() {
     ASSERT(find_pid(0, 3301)->pmt == p->id, "P should own the video pid");
 
     del_filter(fid);
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -2186,7 +2186,7 @@ int test_running_pmt_pid_deleted_on_unsubscribe() {
     ASSERT_EQUAL(pmt_t112->state, PMT_RUNNING, "PMT should stay running");
 
     del_filter(fid);
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -2255,7 +2255,7 @@ int test_pmt_pid_remove_readd_no_churn() {
 
     del_ca(&counting_op);
     del_filter(fid);
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -2316,7 +2316,7 @@ int test_pmt_pid_delete_hands_over() {
 
     del_filter(fa);
     del_filter(fb);
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -2392,7 +2392,7 @@ int test_update_pids_tail_elects() {
     del_ca(&fake_ca_op);
     del_filter(fa);
     del_filter(fb);
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -2437,7 +2437,7 @@ int test_stream_pid_delete_stops_pmt() {
     ASSERT(pp && pp->flags == PID_STATE_ACTIVE, "PMT pid should remain");
 
     del_filter(fid);
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -2526,7 +2526,7 @@ int test_pmt_cosmetic_update_keeps_running() {
 
     del_ca(&counting_op);
     del_filter(fid);
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -2592,7 +2592,7 @@ int test_pmt_update_longer_ca_private_data() {
     ASSERT(std::equal(priv.begin(), priv.end(), sec + 18), "v2 private data");
 
     del_filter(fid);
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -2615,7 +2615,7 @@ int test_pmt_add_caid_null_clears_reused_entry() {
     pmt_add_caid(pmt, 0x0B00, 0x573, nullptr, 0);
     ASSERT_EQUAL(pmt->ca[0]->private_data.size(), 0, "cleared private data");
 
-    free_all_pmts();
+    pmts.destroy_all();
     return 0;
 }
 
@@ -2769,7 +2769,7 @@ int test_pmt_content_update_delta() {
 
     del_ca(&counting_op);
     del_filter(fid);
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -2832,7 +2832,7 @@ int test_ca_update_flag_distinguishes_resend() {
 
     del_ca(&counting_op);
     del_filter(fid);
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -2899,7 +2899,7 @@ int test_handover_stops_stale_holder() {
     ASSERT_EQUAL(pmt_t183->state, PMT_RUNNING, "A should run on 3302");
 
     del_filter(bfid);
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -3149,8 +3149,8 @@ int test_pmt_update_e2e_single_capmt_update() {
     del_ca(&e2e_dvbca);
     del_ca(&e2e_ddci);
     dvbca_id = saved_dvbca_id;
-    free_filters();
-    free_all_pmts();
+    filters.destroy_all();
+    pmts.destroy_all();
     channels.clear();
     ddci_devices[0] = NULL;
     ca_devices[8] = NULL;
@@ -3210,7 +3210,7 @@ int test_resend_rejected_releases_ca() {
     ASSERT(pmt_t193->disabled_ca_mask != 0, "CA should be disabled");
 
     del_ca(&failing_op);
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -3232,7 +3232,7 @@ int test_add_caid_rejects_negative_len() {
     SPMT *pmt_t196 = pmts[id];
     ASSERT_EQUAL(pmt_t196->caids, 1, "empty private data still registers");
 
-    free_all_pmts();
+    pmts.destroy_all();
     return 0;
 }
 
@@ -3301,7 +3301,7 @@ int test_version_update_keeps_claims() {
     ASSERT(find_pid(0, 3301)->pmt == id, "video claim should stay kept");
 
     del_filter(fid);
-    free_all_pmts();
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -3442,7 +3442,7 @@ int main() {
     TEST_FUNC(test_filter_add_del_mt(),
               "testing concurrent filter add and delete")
     fflush(stdout);
-    free_all_pmts();
-    free_filters();
+    pmts.destroy_all();
+    filters.destroy_all();
     return 0;
 }

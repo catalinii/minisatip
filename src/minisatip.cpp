@@ -2020,7 +2020,11 @@ int main(int argc, char *argv[]) {
     join_thread();
     unlink(pid_file);
 #ifndef DISABLE_PMT
-    pmt_destroy();
+#ifndef DISABLE_TABLES
+    tables_destroy();
+#endif
+    pmts.destroy_all();
+    filters.destroy_all();
 #endif
     LOG0("Closing...");
 #ifndef DISABLE_SRT
