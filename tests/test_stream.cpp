@@ -53,7 +53,10 @@ int mock_set_pid(adapter *ad, int i_pid) {
 int mock_del_filters(adapter *ad, int fd, int pid) { return 0; }
 
 void setup_test_env() {
-    free_all(); // Clean all streams, sockets, and adapters
+    // Clean all streams, sockets, and adapters
+    s.destroy_all();
+    st.destroy_all();
+    free_all();
 
     a_count = 1;
     a[0] = new adapter();

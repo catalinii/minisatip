@@ -42,7 +42,6 @@
 
 #include "minisatip.h"
 #include "socketworks.h"
-#include "stream.h"
 #include "utils.h"
 
 #include "utils/ticks.h"
@@ -1123,11 +1122,7 @@ uint64_t get_allocated_memory() {
 
 void free_all_adapters();
 
-void free_all() {
-    s.destroy_all();
-    st.destroy_all();
-    free_all_adapters();
-}
+void free_all() { free_all_adapters(); }
 
 void set_socket_send_buffer(int sock, int len) {
     int sl;
