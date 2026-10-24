@@ -95,9 +95,9 @@ class SegmentedPool {
             ;
     }
 
-    // Raise the length to n without writing slots; false over capacity.
+    // Raise the length to n without writing slots; false past MaxLive.
     bool extend_to(size_t n) {
-        if (n > capacity())
+        if (n > MaxLive)
             return false;
         size_t cur = size_;
         while (cur < n && !size_.compare_exchange_weak(cur, n))
@@ -137,8 +137,9 @@ class SegmentedPool {
             }
             return nullptr;
         };
-        // Clamp: a failing reserve transiently overshoots capacity.
-        if (U *s = scan(std::min(size(), capacity())))
+        // Clamp past both the live cap and transient reserve
+        // overshoot; obtain must never return an id past MaxLive.
+        if (U *s = scan(std::min(size(), MaxLive)))
             return s;
         for (;;) {
             auto index = reserve();
@@ -159,7 +160,7 @@ class SegmentedPool {
             delete fresh;
         }
         // Full: one more scan in case a slot freed mid-claim.
-        return scan(std::min(size(), capacity()));
+        return scan(std::min(size(), MaxLive));
     }
 
     // Load the value at index; write via slot(), covering with extend_to().
@@ -197,7 +198,7 @@ class SegmentedPool {
         using iterator_category = std::forward_iterator_tag;
         iterator() = default;
         // Snapshot range over live objects; each deref reloads.
-        // Slots past the snapshot end yield raw, as before.
+        // Iteration ends at the begin snapshot even if size changes.
         T operator*() const { return pool_->load(index_); }
         iterator &operator++() {
             ++index_;
@@ -209,7 +210,11 @@ class SegmentedPool {
             ++(*this);
             return c;
         }
-        bool operator==(const iterator &o) const { return index_ == o.index_; }
+        // Exhausted iterators compare equal, so split begin/end
+        // snapshots still terminate instead of running past capacity.
+        bool operator==(const iterator &o) const {
+            return index_ == o.index_ || (index_ >= end_ && o.index_ >= o.end_);
+        }
 
       private:
         friend class SegmentedPool;

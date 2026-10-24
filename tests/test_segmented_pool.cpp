@@ -225,6 +225,8 @@ int test_enabled_iteration() {
     SegmentedPool<Item *, 1> pool;
     ASSERT(pool.extend_to(4), "extend_to failed");
     for (size_t i = 0; i < 4; ++i) {
+        if (i == 2)
+            continue; // null slot: the skip must cover it too
         pool.slot(i) = new Item();
         pool[i]->id = static_cast<int>(i);
     }
@@ -245,10 +247,12 @@ int test_obtain_full_contention() {
         it->enabled = true;
     }
     std::atomic<bool> stop{false};
-    std::atomic<int> fails{0};
+    std::atomic<int> fails{0}, wins{0};
     auto hammer = [&]() {
         while (!stop) {
-            if (!pool.obtain())
+            if (pool.obtain())
+                wins.fetch_add(1, std::memory_order_relaxed);
+            else
                 fails.fetch_add(1, std::memory_order_relaxed);
         }
     };
@@ -260,6 +264,47 @@ int test_obtain_full_contention() {
     t3.join();
     t4.join();
     ASSERT(fails > 0, "hammers never ran");
+    ASSERT_EQUAL(wins, 0, "obtain must never succeed on a full pool");
+    ASSERT_EQUAL(pool.size(), 64, "size must not leak past capacity");
+    return 0;
+}
+
+int test_iterator_split_snapshots() {
+    SegmentedPool<Item *, 1> pool;
+    ASSERT(pool.extend_to(6), "extend_to failed");
+    for (size_t i = 0; i < 6; ++i) {
+        pool.slot(i) = new Item();
+        pool[i]->id = static_cast<int>(i);
+        pool[i]->enabled = i >= 3;
+    }
+    // Growth between begin and end: iteration honors begin's end.
+    auto grown_begin = pool.begin();
+    ASSERT(pool.extend_to(8), "extend_to failed");
+    auto grown_end = pool.end();
+    std::vector<int> grown;
+    for (auto it = grown_begin; it != grown_end; ++it)
+        grown.push_back((*it)->id);
+    ASSERT(grown == std::vector<int>({3, 4, 5}), "growth must not widen");
+    // Shrink between begin and end: must terminate, not run away.
+    auto shrunk_begin = pool.begin();
+    pool.shrink_to(2);
+    auto shrunk_end = pool.end();
+    std::vector<int> shrunk;
+    for (auto it = shrunk_begin; it != shrunk_end; ++it)
+        shrunk.push_back((*it)->id);
+    ASSERT(shrunk == std::vector<int>({3, 4, 5}), "shrink must terminate");
+    return 0;
+}
+
+int test_max_live_cap() {
+    SegmentedPool<Item *, 4, 200> pool;
+    for (int i = 0; i < 200; ++i) {
+        Item *it = pool.obtain();
+        ASSERT(it && it->id < 200, "obtain past the live cap");
+        it->enabled = true;
+    }
+    ASSERT(!pool.obtain(), "obtain must fail at the live cap");
+    ASSERT(!pool.extend_to(201), "extend_to must fail past the live cap");
     return 0;
 }
 
@@ -275,6 +320,8 @@ int main() {
     TEST_FUNC(test_enabled_iteration(), "default iteration skips disabled");
     TEST_FUNC(test_obtain_full_contention(),
               "contended obtains on a full pool");
+    TEST_FUNC(test_iterator_split_snapshots(), "split snapshots terminate");
+    TEST_FUNC(test_max_live_cap(), "obtain and extend honor MaxLive");
     TEST_FUNC(test_shrink_and_published(), "shrink keeps teardown covered");
     TEST_FUNC(test_concurrent_claim(), "concurrent CAS claims");
     TEST_FUNC(test_concurrent_append_iterate(),

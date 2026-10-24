@@ -546,8 +546,8 @@ int test_sockets_destructor() {
         s.sock = p[0];
         s.close_unix_socket = true;
         s.flags = 1;
-        s.buf = (unsigned char *)malloc(16);
-        s.prio_data = (uint8_t *)malloc(8);
+        s.buf = static_cast<unsigned char *>(malloc(16));
+        s.prio_data = static_cast<uint8_t *>(malloc(8));
     }
     ASSERT_EQUAL(dtor_close_calls, 0, "destructor must not run close");
     ASSERT(fcntl(p[0], F_GETFD) == -1, "destructor left the fd open");
