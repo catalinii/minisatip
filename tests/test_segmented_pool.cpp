@@ -202,6 +202,13 @@ int test_destroy_all() {
     ASSERT_EQUAL(pool.size(), 0, "destroy_all left length behind");
     for (auto &s : pool.slots())
         ASSERT(!s, "destroy_all left a slot behind");
+    {
+        SegmentedPool<Counted *, 2> dying;
+        ASSERT(dying.extend_to(3), "extend_to failed");
+        for (size_t i = 0; i < 3; ++i)
+            dying.slot(i) = new Counted();
+    }
+    ASSERT_EQUAL(Counted::alive, 0, "pool destructor leaked elements");
     return 0;
 }
 
