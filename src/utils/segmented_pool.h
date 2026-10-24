@@ -43,9 +43,10 @@ class SegmentedPool {
         for (auto &b : buckets_)
             b = nullptr;
     }
-    // Pool owns heap objects: delete survivors, then buckets.
-    // Manual deletes must blank; stack plants must clear first.
+    // Pool owns heap objects: drop the length, delete survivors,
+    // then buckets. Manual deletes must blank; no stack survivors.
     ~SegmentedPool() {
+        size_ = 0;
         if constexpr (std::is_pointer_v<T>) {
             for_each_published(
                 [](std::atomic<T> &s) { delete static_cast<T>(s); });
