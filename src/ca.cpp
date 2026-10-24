@@ -903,12 +903,6 @@ void disable_cws_for_all_pmts(ca_device_t *d) {
 int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, uint8_t cmd_id,
                   int added_only, int ca_id) {
     int pos = 0;
-#ifndef DISABLE_DDCI
-    // The CAM sees rewritten pids on DDCI-owned PMTs either way.
-    int remap = ddci_owns_pmt(pmt->id);
-#else
-    int remap = 0;
-#endif
     for (const auto &stream_pid : pmt->stream_pids) {
         if (added_only && !find_pid(pmt->adapter, stream_pid.pid)) {
             LOGM("%s: skipping pmt %d (ad %d) pid %d from CAPMT", __FUNCTION__,
@@ -923,12 +917,7 @@ int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, uint8_t cmd_id,
             break;
         }
         capmt[pos++] = stream_pid.type;
-        int epid = stream_pid.pid;
-#ifndef DISABLE_DDCI
-        if (remap)
-            epid = ddci_remap_pid(pmt->adapter, epid);
-#endif
-        copy16(capmt, pos, epid);
+        copy16(capmt, pos, stream_pid.pid);
         pos += 2;
         int pi_len_pos = pos, pi_len = 0;
         capmt[pos++] = 0; // pi_len
@@ -937,8 +926,7 @@ int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, uint8_t cmd_id,
         // append the stream descriptors
         if (pmt->caids) {
             capmt[pos++] = cmd_id;
-            pi_len = pmt_add_ca_descriptor(pmt, capmt + pos, len - pos, ca_id,
-                                           remap);
+            pi_len = pmt_add_ca_descriptor(pmt, capmt + pos, len - pos, ca_id);
             pos += pi_len;
             copy16(capmt, pi_len_pos, pi_len + 1);
         }
