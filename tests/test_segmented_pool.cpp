@@ -134,9 +134,10 @@ int test_concurrent_claim() {
     ASSERT(pool.extend_to(64), "extend_to failed");
     std::atomic<int> claimed{0};
     auto claim = [&](int id) {
-        for (std::atomic<int> &s : pool.slots()) {
+        size_t n = pool.size();
+        for (size_t i = 0; i < n; ++i) {
             int want = 0;
-            if (s.compare_exchange_strong(want, id))
+            if (pool.slot(i).compare_exchange_strong(want, id))
                 claimed.fetch_add(1, std::memory_order_relaxed);
         }
     };
@@ -200,8 +201,9 @@ int test_destroy_all() {
     pool.destroy_all();
     ASSERT_EQUAL(Counted::alive, 0, "destroy_all leaked elements");
     ASSERT_EQUAL(pool.size(), 0, "destroy_all left length behind");
-    for (auto &s : pool.slots())
-        ASSERT(!s, "destroy_all left a slot behind");
+    bool blank = true;
+    pool.for_each_published([&](auto &s) { blank = blank && !s; });
+    ASSERT(blank, "destroy_all left a slot behind");
     {
         SegmentedPool<Counted *, 2> dying;
         ASSERT(dying.extend_to(3), "extend_to failed");
