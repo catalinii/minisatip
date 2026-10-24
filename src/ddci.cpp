@@ -201,6 +201,16 @@ int ddci_device_for_pmt(int pmt_id) { return find_registered_ddci(pmt_id); }
 int ddci_owns_pmt(int pmt_id) {
     return opts.enigma && find_registered_ddci(pmt_id) >= 0;
 }
+// DDCI to drive for a CAPMT: the registered owner, or the shadow
+// PMT's own loopback (shadows live on the DDCI, source holds slot).
+int ddci_ca_device_for_pmt(SPMT *pmt) {
+    if (!pmt)
+        return -1;
+    int ddid = find_registered_ddci(pmt->id);
+    if (ddid < 0 && ddci_is_loopback(pmt->adapter))
+        ddid = pmt->adapter;
+    return ddid;
+}
 int ddci_is_loopback(int id) {
     ddci_device_t *d = get_ddci(id);
     return opts.enigma && d && d->loopback;
