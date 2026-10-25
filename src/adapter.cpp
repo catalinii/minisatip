@@ -2316,11 +2316,12 @@ char *get_all_delsys(int aid, char *dest, int max_size) {
 
 char *get_adapter_name(int aid, char *dest, int max_size) {
     adapter *ad = get_configured_adapter_nw(aid);
+    dest[0] = 0;
     if (!ad)
         return dest;
 
-    _strncpy(dest, const_cast<char *>(ad->adapter_name.data()),
-             ad->adapter_name.length() + 1);
+    _strncpy(dest, ad->adapter_name.c_str(),
+             std::min(max_size, (int)ad->adapter_name.length() + 1));
 
     return dest;
 }
