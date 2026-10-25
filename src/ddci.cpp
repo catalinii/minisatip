@@ -1500,7 +1500,7 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
     // rather than via a throwaway fd.
     if (ioctl(read_fd, DMX_SET_SOURCE, &ad->dmx_source) < 0)
         LOG("DMX_SET_SOURCE failed for loopback %d: %s", ad->id,
-            strerror(errno));
+            strerror(errno))
     else
         LOG("Set DMX_SET_SOURCE for loopback %d to %d", ad->id, ad->dmx_source);
 
