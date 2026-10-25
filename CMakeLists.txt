@@ -217,19 +217,9 @@ if(NOT STATIC)
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
 
-# NetCeiver XML2 flags
+# The imported target brings its headers in as system headers
 if(NETCVCLIENT)
-    execute_process(
-        COMMAND xml2-config --cflags
-        OUTPUT_VARIABLE XML2_CFLAGS
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-        ERROR_QUIET
-        RESULT_VARIABLE XML2_CONFIG_RESULT
-    )
-    if(XML2_CONFIG_RESULT EQUAL 0 AND XML2_CFLAGS)
-        separate_arguments(XML2_CFLAGS_LIST UNIX_COMMAND "${XML2_CFLAGS}")
-        add_compile_options(${XML2_CFLAGS_LIST})
-    endif()
+    find_package(LibXml2 REQUIRED)
 endif()
 
 # Core source and library lists
@@ -266,7 +256,7 @@ if(DVBCA)
 endif()
 if(NETCVCLIENT)
     list(APPEND MINISATIP_SOURCES src/netceiver.cpp)
-    list(APPEND MINISATIP_LIBS ${NETCEIVER_LIBRARY} xml2 lzma z)
+    list(APPEND MINISATIP_LIBS ${NETCEIVER_LIBRARY} LibXml2::LibXml2 lzma z)
 endif()
 if(DDCI)
     list(APPEND MINISATIP_SOURCES src/ddci.cpp)
