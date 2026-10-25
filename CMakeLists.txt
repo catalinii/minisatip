@@ -198,7 +198,10 @@ if(DEBUG)
         -fsanitize=leak
         -fsanitize=undefined
     )
-    if(NOT APPLE)
+    # clang links its sanitizer runtimes statically with one option
+    if(NOT APPLE AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        add_link_options(-static-libsan)
+    elseif(NOT APPLE)
         add_link_options(
             -static-libasan
             -static-libubsan
