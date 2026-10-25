@@ -79,9 +79,9 @@ typedef struct ddci_channel {
 
 void find_ddci_adapter();
 void ddci_init();
-// Highest fn in existing[] not in used[]; -1 when none fits.
-int ddci_pick_free_fn(const int *existing, int nexisting, const int *used,
-                      int nused);
+// First demux/dvr pair with no frontend and no owner; -1 when none.
+int ddci_pick_free_pair(const int *demux, int ndemux, const int *dvr, int ndvr,
+                        const int *fe, int nfe, const int *used, int nused);
 int ddci_pick_free_slot();
 int ddci_model_is_uno4k(const char *path);
 int ddci_model_is_gbquad4k(const char *path);

@@ -1739,15 +1739,23 @@ int test_ddci_least_used_device() {
     return 0;
 }
 
-int test_ddci_pick_free_fn() {
-    int existing[] = {0, 1, 2, 5, 12};
-    int used[] = {12, 5};
-    ASSERT(ddci_pick_free_fn(existing, 5, used, 2) == 2, "highest free wins");
-    ASSERT(ddci_pick_free_fn(existing, 5, NULL, 0) == 12,
-           "empty used takes top");
-    int all[] = {0, 1, 2, 5, 12};
-    ASSERT(ddci_pick_free_fn(existing, 5, all, 5) == -1, "all taken gives -1");
-    ASSERT(ddci_pick_free_fn(NULL, 0, used, 2) == -1, "no demux gives -1");
+int test_ddci_pick_free_pair() {
+    int demux[] = {0, 1, 2, 10, 11, 12};
+    int dvr[] = {0, 1, 2, 10, 11, 12};
+    int fe[] = {0, 1, 2};
+    ASSERT(ddci_pick_free_pair(demux, 6, dvr, 6, fe, 3, NULL, 0) == 10,
+           "first pair without frontend wins");
+    int used[] = {10};
+    ASSERT(ddci_pick_free_pair(demux, 6, dvr, 6, fe, 3, used, 1) == 11,
+           "owned pair skipped for the next");
+    int nodvr[] = {0, 1, 2, 11, 12};
+    ASSERT(ddci_pick_free_pair(demux, 6, nodvr, 5, fe, 3, NULL, 0) == 11,
+           "demux without dvr skipped");
+    int all[] = {10, 11, 12};
+    ASSERT(ddci_pick_free_pair(demux, 6, dvr, 6, fe, 3, all, 3) == -1,
+           "all pairs taken gives -1");
+    ASSERT(ddci_pick_free_pair(NULL, 0, dvr, 6, fe, 3, NULL, 0) == -1,
+           "no demux gives -1");
     return 0;
 }
 
@@ -2039,8 +2047,8 @@ int main() {
               "testing that an initializing DDCI does not block the others");
     TEST_FUNC(test_ddci_least_used_device(),
               "testing that new channels go to the least used DDCI");
-    TEST_FUNC(test_ddci_pick_free_fn(),
-              "testing highest-free demux pick for the loopback");
+    TEST_FUNC(test_ddci_pick_free_pair(),
+              "testing first frontend-less demux/dvr pair pick");
     TEST_FUNC(test_ddci_enigma_local_loops_back(),
               "testing enigma loops back local PMTs on owned slots");
     TEST_FUNC(test_ddci_two_loopbacks_own_distinct_slots(),

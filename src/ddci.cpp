@@ -231,21 +231,25 @@ int ddci_loopback_slot_for(int id) {
     return d->ci_slot;
 }
 
-// Highest fn in existing[] missing from used[]; -1 when none fits.
-int ddci_pick_free_fn(const int *existing, int nexisting, const int *used,
-                      int nused) {
-    int best = -1;
-    for (int i = 0; i < nexisting; i++) {
-        int fn = existing[i], taken = 0;
-        for (int j = 0; j < nused; j++)
-            if (used[j] == fn) {
-                taken = 1;
-                break;
-            }
-        if (!taken && fn > best)
-            best = fn;
+// First N with demuxN+dvrN present, frontendN absent, and N owned by
+// no adapter; -1 when none fits. Arrays list existing indices ascending.
+static bool ddci_list_has(const int *list, int n, int v) {
+    for (int i = 0; i < n; i++)
+        if (list[i] == v)
+            return true;
+    return false;
+}
+
+int ddci_pick_free_pair(const int *demux, int ndemux, const int *dvr, int ndvr,
+                        const int *fe, int nfe, const int *used, int nused) {
+    for (int i = 0; i < ndemux; i++) {
+        int fn = demux[i];
+        if (!ddci_list_has(dvr, ndvr, fn) || ddci_list_has(fe, nfe, fn) ||
+            ddci_list_has(used, nused, fn))
+            continue;
+        return fn;
     }
-    return best;
+    return -1;
 }
 
 // CI slot feeding this loopback, published by DVBCA at open.
@@ -1489,16 +1493,13 @@ ddci_device_t *ddci_alloc(int id) {
 }
 
 #ifndef DISABLE_LINUXDVB
-// Loopback open: push to the playback dvr, TAPs on the free demux.
-// Playback routing is per-model: Uno4K feeds every TAP from dvr0,
-// GBQuad4K pairs each demux with its own dvr.
+// Loopback open: push to the paired dvr, TAPs on the paired demux.
+// Demux and dvr always share the index on both models.
 static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
     char buf[100];
     int dvr_offset = ddci_dvr_source_offset();
     ad->dmx_source = dvr_offset;
-    int push_dvr = 0;
-    if (ddci_model_is_gbquad4k("/proc/stb/info/gbmodel"))
-        push_dvr = ad->fn;
+    int push_dvr = ad->fn;
     snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/dvr%d", ad->pa, push_dvr);
     int write_fd = open(buf, O_WRONLY | O_NONBLOCK);
     if (write_fd < 0)
@@ -1849,7 +1850,7 @@ int ddci_model_is_gbquad4k(const char *path) {
 
 // One loopback on the highest free demux, in the first free enabled slot.
 // False when no slot or demux is left for another loopback.
-static bool ddci_add_one_enigma_loopback() {
+static bool ddci_add_one_enigma_loopback(int slot) {
     int id = ddci_pick_free_slot();
     if (id < 0) {
         LOG("no free enabled adapter slot for the enigma loopback, extend -e");
@@ -1860,17 +1861,24 @@ static bool ddci_add_one_enigma_loopback() {
         if (i != id && a[i] && !is_adapter_disabled(i) && a[i]->pa == 0 &&
             a[i]->fn >= 0)
             used[nused++] = a[i]->fn;
-    int existing[64], nexisting = 0;
+    int demux[64], ndemux = 0, dvr[64], ndvr = 0, fe[64], nfe = 0;
     char buf[100];
     for (int fn = 0; fn < 64; fn++) {
         snprintf(buf, sizeof(buf), "/dev/dvb/adapter0/demux%d", fn);
         if (!access(buf, R_OK))
-            existing[nexisting++] = fn;
+            demux[ndemux++] = fn;
+        snprintf(buf, sizeof(buf), "/dev/dvb/adapter0/dvr%d", fn);
+        if (!access(buf, R_OK | W_OK))
+            dvr[ndvr++] = fn;
+        snprintf(buf, sizeof(buf), "/dev/dvb/adapter0/frontend%d", fn);
+        if (!access(buf, R_OK))
+            fe[nfe++] = fn;
     }
-    // Last hardware demux that no adapter owns.
-    int fn = ddci_pick_free_fn(existing, nexisting, used, nused);
+    // First demux/dvr pair with no frontend behind it.
+    int fn =
+        ddci_pick_free_pair(demux, ndemux, dvr, ndvr, fe, nfe, used, nused);
     if (fn < 0) {
-        LOG("no free demux for the enigma loopback");
+        LOG("no free demux/dvr pair for the enigma loopback");
         return false;
     }
     if (!a[id])
@@ -1897,14 +1905,16 @@ static bool ddci_add_one_enigma_loopback() {
         dd = ddci_alloc(id);
     if (dd) {
         dd->loopback = 1;
-        // Claim once here; later readers use the stored slot.
+        // Claim slot once here; later readers use the stored slot.
+        // Pair N binds ciN, falling back to any free CI when missing.
         dd->ci_slot = -1;
-        for (int s = 0; s < MAX_VU_CI_SLOTS && dd->ci_slot < 0; s++) {
-            if (ddci_loopback_owns_slot(s))
+        for (int k = 0; k < MAX_VU_CI_SLOTS && dd->ci_slot < 0; k++) {
+            int c = (slot + k) % MAX_VU_CI_SLOTS;
+            if (ddci_loopback_owns_slot(c))
                 continue;
-            snprintf(buf, sizeof(buf), "/dev/ci%d", s);
+            snprintf(buf, sizeof(buf), "/dev/ci%d", c);
             if (!access(buf, R_OK | W_OK))
-                dd->ci_slot = s;
+                dd->ci_slot = c;
         }
     }
     load_channels();
@@ -1923,7 +1933,7 @@ static void ddci_add_enigma_loopback() {
         return;
     }
     for (int n = 0; n < MAX_VU_CI_SLOTS; n++)
-        if (!ddci_add_one_enigma_loopback())
+        if (!ddci_add_one_enigma_loopback(n))
             break;
 }
 #endif
