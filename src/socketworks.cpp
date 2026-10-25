@@ -459,9 +459,6 @@ int tcp_connect_src(char *addr, int port, USockAddr *serv, int blocking,
     return sock;
 }
 
-int tcp_connect(char *addr, int port, USockAddr *serv, int blocking) {
-    return tcp_connect_src(addr, port, serv, blocking, NULL);
-}
 int tcp_listen(char *addr, int port, int ipv4_only) {
     USockAddr serv;
     int sock, optval = 1;
@@ -538,8 +535,6 @@ int connect_local_socket(char *file, int blocking) {
     LOG("New LOCAL socket %d connected to %s", sock, file);
     return sock;
 }
-
-int no_action(int s __attribute__((unused))) { return 1; }
 
 int sockets_accept(int socket __attribute__((unused)),
                    void *buf __attribute__((unused)),
@@ -1052,14 +1047,6 @@ void sockets_set_close_handle(int id, bool close_handle) {
     sockets *ss = get_sockets(id);
     if (ss)
         ss->close_unix_socket = close_handle;
-}
-
-void sockets_setbuf(int i, char *buf, int len) {
-    sockets *ss = get_sockets(i);
-    if (ss) {
-        ss->buf = (unsigned char *)buf;
-        ss->lbuf = len;
-    }
 }
 
 void sockets_timeout(int i, int t) {
@@ -1626,15 +1613,6 @@ void set_socket_dscp(int id, int dscp, int prio) {
 #else
     LOG("%s: setsockopt SO_PRIORITY not implemented", __FUNCTION__);
 #endif
-}
-
-void sockets_set_opaque(int id, void *opaque, void *opaque2, void *opaque3) {
-    sockets *s = get_sockets(id);
-    if (s) {
-        s->opaque = opaque;
-        s->opaque2 = opaque2;
-        s->opaque3 = opaque3;
-    }
 }
 
 // does not flush all the buffers before close, but ensures the socket will be

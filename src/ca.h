@@ -253,7 +253,6 @@ uint32_t capmt_content_hash(uint8_t *capmt, int len);
 int is_ca_initializing(int i);
 void set_ca_adapter_pin(char *o);
 void set_ca_adapter_force_ci(char *o);
-char *get_ca_pin(int i);
 void set_ca_channels(char *o);
 int get_ca_multiple_pmt(int i);
 int capmt_has_pmt(const SCAPMT *c, int pmt_id);

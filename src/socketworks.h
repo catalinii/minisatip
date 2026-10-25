@@ -94,7 +94,6 @@ int socket_bind_dev_ok(int sock);
 int udp_bind_connect(char *src, int sport, char *dest, int dport,
                      USockAddr *serv);
 int udp_bind(char *addr, int port, int ipv4_only);
-int tcp_connect(char *addr, int port, USockAddr *serv, int blocking);
 int tcp_connect_src(char *addr, int port, USockAddr *serv, int blocking,
                     char *src);
 char *get_sock_shost(int fd, char *dest, int ld);
@@ -104,7 +103,6 @@ char *get_sockaddr_host(USockAddr s, char *dest, int ld);
 int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
                 socket_action c, socket_action t);
 int sockets_del(int sock);
-int no_action(int s);
 void *select_and_execute(void *arg);
 int fill_sockaddr(USockAddr *serv, char *host, int port, int ipv4_only);
 int sockets_del_for_sid(int sid);
@@ -131,7 +129,6 @@ int flush_socket(sockets *s);
 void set_socket_iteration(int s_id, uint64_t it);
 void set_sockets_sid(int id, int sid);
 void set_socket_dscp(int id, int dscp, int prio);
-void sockets_set_opaque(int id, void *opaque, void *opaque2, void *opaque3);
 void sockets_force_close(int id);
 void sockets_set_master(int slave, int master);
 int copy_iovec_to_fifo(SFIFO *fifo, uint32_t offset, struct iovec *iov,
