@@ -1033,25 +1033,19 @@ static int pid_subscribed(adapter *ad, SPid *p) {
     return spid_has_client_sid(p);
 }
 
-// True when a real client requested the pid: scanner marks, filter
-// holds and DDCI plumbing never count as a request (#1515).
-static int pid_requested_by_client(SPid *p) {
-    return p && p->flags == PID_STATE_ACTIVE && spid_has_client_sid(p);
-}
-
-// Completeness: percent of the PMT's stream and ECM pids present
-// in the client request (#1515). Empty PMTs score zero.
+// Completeness: percent of the PMT's stream and ECM pids carrying
+// a real client sid (scanner marks and DDCI plumbing excluded).
 template <typename Lookup>
 static int pmt_completeness_pct(SPMT *pmt, Lookup pid_of) {
     int total = 0, matched = 0;
     for (const auto &sp : pmt->stream_pids) {
         total++;
-        if (pid_requested_by_client(pid_of(sp.pid)))
+        if (spid_has_client_sid(pid_of(sp.pid)))
             matched++;
     }
     for (int k = 0; k < pmt->caids; k++) {
         total++;
-        if (pid_requested_by_client(pid_of(pmt->ca[k]->pid)))
+        if (spid_has_client_sid(pid_of(pmt->ca[k]->pid)))
             matched++;
     }
     return total ? matched * 100 / total : 0;
