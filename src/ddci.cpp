@@ -212,6 +212,25 @@ int ddci_loopback_ci_slot() {
     return it != std::end(ddci_devices) ? (*it)->ci_slot : -1;
 }
 
+// True when any enigma loopback claimed this CI slot.
+int ddci_loopback_owns_slot(int slot) {
+    if (!opts.enigma || slot < 0)
+        return 0;
+    auto it =
+        std::ranges::find_if(ddci_devices, [slot](const ddci_device_t *d) {
+            return d && d->loopback && d->ci_slot == slot;
+        });
+    return it != std::end(ddci_devices);
+}
+
+// CI slot claimed by loopback id; -1 when it claims none.
+int ddci_loopback_slot_for(int id) {
+    ddci_device_t *d = get_ddci(id);
+    if (!opts.enigma || !d || !d->loopback)
+        return -1;
+    return d->ci_slot;
+}
+
 // Highest fn in existing[] missing from used[]; -1 when none fits.
 int ddci_pick_free_fn(const int *existing, int nexisting, const int *used,
                       int nused) {
@@ -1829,16 +1848,12 @@ int ddci_model_is_gbquad4k(const char *path) {
 }
 
 // One loopback on the highest free demux, in the first free enabled slot.
-static void ddci_add_enigma_loopback() {
-    if (!ddci_model_is_uno4k("/proc/stb/info/vumodel") &&
-        !ddci_model_is_gbquad4k("/proc/stb/info/gbmodel")) {
-        LOG("enigma loopback blocked: unsupported model");
-        return;
-    }
+// False when no slot or demux is left for another loopback.
+static bool ddci_add_one_enigma_loopback() {
     int id = ddci_pick_free_slot();
     if (id < 0) {
         LOG("no free enabled adapter slot for the enigma loopback, extend -e");
-        return;
+        return false;
     }
     int used[MAX_ADAPTERS], nused = 0;
     for (int i = 0; i < MAX_ADAPTERS && nused < MAX_ADAPTERS; i++)
@@ -1856,7 +1871,7 @@ static void ddci_add_enigma_loopback() {
     int fn = ddci_pick_free_fn(existing, nexisting, used, nused);
     if (fn < 0) {
         LOG("no free demux for the enigma loopback");
-        return;
+        return false;
     }
     if (!a[id])
         a[id] = adapter_alloc();
@@ -1885,6 +1900,8 @@ static void ddci_add_enigma_loopback() {
         // Claim once here; later readers use the stored slot.
         dd->ci_slot = -1;
         for (int s = 0; s < MAX_VU_CI_SLOTS && dd->ci_slot < 0; s++) {
+            if (ddci_loopback_owns_slot(s))
+                continue;
             snprintf(buf, sizeof(buf), "/dev/ci%d", s);
             if (!access(buf, R_OK | W_OK))
                 dd->ci_slot = s;
@@ -1895,6 +1912,19 @@ static void ddci_add_enigma_loopback() {
 
     if (id + 1 > a_count)
         a_count = id + 1;
+    return true;
+}
+
+// Up to one loopback per CI slot; stops at the first shortage.
+static void ddci_add_enigma_loopback() {
+    if (!ddci_model_is_uno4k("/proc/stb/info/vumodel") &&
+        !ddci_model_is_gbquad4k("/proc/stb/info/gbmodel")) {
+        LOG("enigma loopback blocked: unsupported model");
+        return;
+    }
+    for (int n = 0; n < MAX_VU_CI_SLOTS; n++)
+        if (!ddci_add_one_enigma_loopback())
+            break;
 }
 #endif
 

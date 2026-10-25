@@ -1963,6 +1963,41 @@ int test_ddci_enigma_local_loops_back() {
     return 0;
 }
 
+int test_ddci_two_loopbacks_own_distinct_slots() {
+    ddci_device_t d0 = {}, d1 = {};
+
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    d0.id = 10;
+    d0.enabled = 1;
+    d0.loopback = 1;
+    d0.ci_slot = 0;
+    d1.id = 11;
+    d1.enabled = 1;
+    d1.loopback = 1;
+    d1.ci_slot = 1;
+    ddci_devices[10] = &d0;
+    ddci_devices[11] = &d1;
+
+    opts.enigma = 1;
+    ASSERT(ddci_loopback_owns_slot(0), "slot 0 owned");
+    ASSERT(ddci_loopback_owns_slot(1), "slot 1 owned");
+    ASSERT(!ddci_loopback_owns_slot(2), "slot 2 free");
+    ASSERT(ddci_loopback_slot_for(10) == 0, "adapter 10 drives slot 0");
+    ASSERT(ddci_loopback_slot_for(11) == 1, "adapter 11 drives slot 1");
+    ASSERT(ddci_loopback_slot_for(8) == -1, "tuner owns no slot");
+    ASSERT(ddci_loopback_ci_slot() == 0, "first claim stays slot 0");
+
+    d0.ci_slot = d1.ci_slot = -1;
+    ASSERT(!ddci_loopback_owns_slot(0), "released slot reads free");
+    ASSERT(ddci_loopback_slot_for(10) == -1, "slotless loopback declines");
+
+    opts.enigma = 0;
+    ASSERT(!ddci_loopback_owns_slot(0), "non-enigma owns nothing");
+    ddci_devices[10] = NULL;
+    ddci_devices[11] = NULL;
+    return 0;
+}
+
 int main() {
     opts.log = 65535 ^ LOG_LOCK ^ LOG_UTILS;
     opts.debug = 0;
@@ -2008,6 +2043,8 @@ int main() {
               "testing highest-free demux pick for the loopback");
     TEST_FUNC(test_ddci_enigma_local_loops_back(),
               "testing enigma loops back local PMTs on owned slots");
+    TEST_FUNC(test_ddci_two_loopbacks_own_distinct_slots(),
+              "testing two loopbacks own distinct CI slots");
     TEST_FUNC(test_ddci_pick_free_slot(), "testing loopback slot selection");
     TEST_FUNC(test_ddci_model_is_uno4k(), "testing Uno 4K model gate");
     TEST_FUNC(test_ddci_model_is_gbquad4k(), "testing GB Quad 4K model gate");

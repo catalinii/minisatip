@@ -3981,7 +3981,7 @@ int dvbca_init_dev(adapter *ad) {
 #ifndef DISABLE_DDCI
         // DDCI owns slot choice; ca drives the claimed device.
         if (mode == ca_mode::ENIGMA_DDCI) {
-            ci_slot = ddci_loopback_ci_slot();
+            ci_slot = ddci_loopback_slot_for(ad->id);
             LOG("loopback adapter %d auto-picked CI slot %d", ad->id, ci_slot);
             if (ci_slot < 0)
                 LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
@@ -3993,7 +3993,7 @@ int dvbca_init_dev(adapter *ad) {
     }
 #ifndef DISABLE_DDCI
     // Loopback owns its CI slot; the enigma tuner stands down.
-    if (mode == ca_mode::ENIGMA && ci_slot == ddci_loopback_ci_slot())
+    if (mode == ca_mode::ENIGMA && ddci_loopback_owns_slot(ci_slot))
         LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
                        "CI slot %d owned by the loopback, skip adapter %d",
                        ci_slot, ad->id);
