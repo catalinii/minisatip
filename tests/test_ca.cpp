@@ -2358,9 +2358,9 @@ int test_loopback_capmt_sends_at_once() {
     return 0;
 }
 
-// Loopback CI auto-claim: nothing without a loopback, a Vu-range
-// slot with one; tuners outside that range always probe their own.
-int test_loopback_ci_slot_auto() {
+// Loopback owns its stored CI slot; the enigma tuner on that slot
+// stands down so /dev/ciX is driven only by the DDCI adapter.
+int test_loopback_owns_ci_slot() {
     extern int has_ci;
     int saved_enigma = opts.enigma;
     int saved_has_ci = has_ci;
@@ -2374,19 +2374,29 @@ int test_loopback_ci_slot_auto() {
     ddci_device_t loop = {};
     loop.id = 71;
     loop.loopback = 1;
+    loop.ci_slot = 1;
     ddci_devices[71] = &loop;
-    int owned = ddci_loopback_ci_slot();
-    ASSERT(owned == -1 || (owned >= 0 && owned < MAX_VU_CI_SLOTS),
-           "owned slot within the Vu range");
+    ASSERT_EQUAL(ddci_loopback_ci_slot(), 1, "stored claim is read");
 
     adapter tuner = {};
-    tuner.id = 70;
+    tuner.id = 1;
     tuner.type = ADAPTER_DVB;
-    ca_device_t *saved_ca70 = ca_devices[70];
-    ca_devices[70] = NULL;
-    ASSERT_EQUAL(dvbca_init_dev(&tuner), TABLES_RESULT_OK,
-                 "tuners outside the Vu range still probe");
-    ca_devices[70] = saved_ca70;
+    ca_device_t *saved_ca1 = ca_devices[1];
+    ca_devices[1] = NULL;
+    ASSERT_EQUAL(dvbca_init_dev(&tuner), TABLES_RESULT_ERROR_NORETRY,
+                 "owned slot stands down");
+    ASSERT(ca_devices[1] == NULL, "no CA device opened for it");
+
+    adapter other = {};
+    other.id = 72;
+    other.type = ADAPTER_DVB;
+    ca_device_t *saved_ca72 = ca_devices[72];
+    ca_devices[72] = NULL;
+    ASSERT_EQUAL(dvbca_init_dev(&other), TABLES_RESULT_OK,
+                 "other slots still probe");
+    ca_devices[72] = saved_ca72;
+
+    ca_devices[1] = saved_ca1;
 
     memcpy(ddci_devices, saved_ddci, sizeof(saved_ddci));
     opts.enigma = saved_enigma;
@@ -2480,8 +2490,8 @@ int main() {
               "testing that a failed CAPMT write is retried");
     TEST_FUNC(test_loopback_capmt_sends_at_once(),
               "testing that loopback CAPMT is not held");
-    TEST_FUNC(test_loopback_ci_slot_auto(),
-              "testing loopback CI auto-claim stays in range");
+    TEST_FUNC(test_loopback_owns_ci_slot(),
+              "testing that the tuner yields its CI slot to the loopback");
     TEST_FUNC(test_get_authdata_filename(), "testing filename helper function");
     TEST_FUNC(test_capmt_content_hash_masks_version_and_listmgmt(),
               "testing the CAPMT hash masks version and listmgmt");

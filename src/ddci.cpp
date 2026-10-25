@@ -201,23 +201,14 @@ int ddci_is_loopback(int id) {
     return opts.enigma && d && d->loopback;
 }
 
-// CI slot the enigma loopback owns; -1 when no loopback.
-// Reads the raw flag so physical tuners yield even before it opens.
+// CI slot the enigma loopback claimed at creation; -1 when none.
+// Stored, so readers never re-scan hardware mid-run.
 int ddci_loopback_ci_slot() {
     if (!opts.enigma)
         return -1;
-    int found = 0;
     for (int i = 0; i < MAX_ADAPTERS; i++)
         if (ddci_devices[i] && ddci_devices[i]->loopback)
-            found = 1;
-    if (!found)
-        return -1;
-    char path[32];
-    for (int s = 0; s < MAX_VU_CI_SLOTS; s++) {
-        snprintf(path, sizeof(path), "/dev/ci%d", s);
-        if (!access(path, R_OK | W_OK))
-            return s;
-    }
+            return ddci_devices[i]->ci_slot;
     return -1;
 }
 
@@ -1473,6 +1464,7 @@ ddci_device_t *ddci_alloc(int id) {
     d = ddci_devices[id] = new ddci_device_t();
     create_fifo(&d->fifo, DDCI_BUFFER);
     d->id = id;
+    d->ci_slot = -1;
     return d;
 }
 
@@ -1880,8 +1872,16 @@ static void ddci_add_enigma_loopback() {
     ddci_device_t *dd = ddci_devices[id];
     if (!dd)
         dd = ddci_alloc(id);
-    if (dd)
+    if (dd) {
         dd->loopback = 1;
+        // Claim once here; later readers use the stored slot.
+        dd->ci_slot = -1;
+        for (int s = 0; s < MAX_VU_CI_SLOTS && dd->ci_slot < 0; s++) {
+            snprintf(buf, sizeof(buf), "/dev/ci%d", s);
+            if (!access(buf, R_OK | W_OK))
+                dd->ci_slot = s;
+        }
+    }
     load_channels();
     LOG("enigma loopback adapter %d on demux %d", id, fn);
 

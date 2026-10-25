@@ -61,6 +61,7 @@ typedef struct ddci_device {
     int16_t pat_cc, sdt_cc, eit_cc;
     char disable_cat;
     char loopback; // enigma DVR loopback, no sec/ci hardware
+    int ci_slot;   // claimed /dev/ciN, -1 until bound
     std::unordered_map<int, ddci_mapping_table_t> mapping;
     std::unordered_set<int> emm_pids; // MAKE_KEY(ad,pid), never swept
     SFIFO fifo;
