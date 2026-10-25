@@ -1799,11 +1799,13 @@ static int check_ecm_selects_service(int first_sid, int second_sid,
 
     auto [b2, l2] = section_1515(second_sid);
     ASSERT(process_pmt(f2, b2, l2, NULL) == 0, "second sid to parse");
-    start_active_pmts(&ad);
-    SPMT *pwinner = get_pmt_for_sid_pid(0, winner_sid, 817);
     int loser_sid = winner_sid == 1338 ? 6043 : 1338;
     SPMT *ploser = get_pmt_for_sid_pid(0, loser_sid, 817);
-    ASSERT(pwinner && ploser, "both sids should own a PMT object");
+    ASSERT(ploser, "loser should own a PMT object");
+    ASSERT_EQUAL(ploser->state, PMT_STOPPED, "handover pins loser at parse");
+    start_active_pmts(&ad);
+    SPMT *pwinner = get_pmt_for_sid_pid(0, winner_sid, 817);
+    ASSERT(pwinner, "winner should own a PMT object");
     ASSERT_EQUAL(pwinner->state, PMT_RUNNING, "expected winner should run");
     ASSERT_EQUAL(ploser->state, PMT_STOPPED, "expected loser should wait");
     ASSERT(find_pid(0, 7472)->pmt == pwinner->id, "winner owns video");
@@ -1895,6 +1897,49 @@ int test_30w_ecm_pid_dynamic_handover() {
     update_pids(0);
     ASSERT_EQUAL(p6043->state, PMT_RUNNING, "no ECM keeps 6043");
     ASSERT_EQUAL(p1338->state, PMT_STOPPED, "no ECM keeps 1338 down");
+
+    pmts.destroy_all();
+    filters.destroy_all();
+    a[0] = nullptr;
+    return 0;
+}
+
+// A NEW (not yet demuxed) ECM pid counts in neither path: the rival
+// takes over only after the pid goes ACTIVE via update_pids.
+int test_new_ecm_ignored_until_active() {
+    pmts.clear();
+    filters.clear();
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    ASSERT(mark_pid_add(0, 0, 817) == 0, "pid 817 should be added");
+    ASSERT(mark_pid_add(0, 0, 7472) == 0, "pid 7472 should be added");
+    ASSERT(mark_pid_add(0, 0, 7473) == 0, "pid 7473 should be added");
+    update_pids(0);
+
+    int f1 = add_filter(0, 817, (void *)process_pmt, NULL, 0);
+    int f2 = add_filter(0, 817, (void *)process_pmt, NULL, 0);
+    ASSERT(f1 >= 0 && f2 >= 0, "need two filters on pid 817");
+    auto [b1, l1] = section_1515(1338);
+    ASSERT(process_pmt(f1, b1, l1, NULL) == 0, "1338 to parse");
+    start_active_pmts(&ad);
+    SPMT *p1338 = get_pmt_for_sid_pid(0, 1338, 817);
+    ASSERT_EQUAL(p1338->state, PMT_RUNNING, "1338 should run alone");
+
+    ASSERT(mark_pid_add(0, 0, 1603) == 0, "pid 1603 stays NEW");
+    auto [b2, l2] = section_1515(6043);
+    ASSERT(process_pmt(f2, b2, l2, NULL) == 0, "6043 to parse");
+    SPMT *p6043 = get_pmt_for_sid_pid(0, 6043, 817);
+    ASSERT_EQUAL(p1338->state, PMT_RUNNING, "NEW ECM must not hand over");
+    ASSERT_EQUAL(p6043->state, PMT_STOPPED, "6043 should wait");
+
+    update_pids(0);
+    ASSERT_EQUAL(p6043->state, PMT_RUNNING, "ACTIVE ECM runs 6043");
+    ASSERT_EQUAL(p1338->state, PMT_STOPPED, "ACTIVE ECM stops 1338");
 
     pmts.destroy_all();
     filters.destroy_all();
@@ -3825,6 +3870,8 @@ int main() {
               "testing #1515 requested ECM selects the service")
     TEST_FUNC(test_30w_ecm_pid_dynamic_handover(),
               "testing #1515 ECM add and remove hands over")
+    TEST_FUNC(test_new_ecm_ignored_until_active(),
+              "testing NEW pid counts in neither path")
     TEST_FUNC(test_order_beats_requested_ecm(),
               "testing order outranks a requested ECM")
     TEST_FUNC(test_completeness_beats_requested_ecm(),

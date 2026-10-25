@@ -1034,7 +1034,7 @@ static int pid_subscribed(adapter *ad, SPid *p) {
 }
 
 // Completeness: percent of the PMT's stream and ECM pids carrying
-// a real client sid (scanner marks and DDCI plumbing excluded).
+// any client sid (adapter-wide union; DDCI plumbing excluded).
 template <typename Lookup>
 static int pmt_completeness_pct(SPMT *pmt, Lookup pid_of) {
     int total = 0, matched = 0;
@@ -1172,7 +1172,12 @@ static int is_pmt_subscribed(adapter *ad, SPMT *pmt) {
 // A newly parsed PMT takes over only owners it outranks (order,
 // then completeness): stop each of them and release their claims.
 static void handover_claims_from_lower_priority(adapter *ad, SPMT *pmt) {
-    auto pid_lookup = [&](int pid) { return find_pid(ad->id, pid); };
+    // ACTIVE-only like the election snapshot, so a NEW pid never
+    // boosts handover pct alone (no stop-then-reclaim transient).
+    auto pid_lookup = [&](int pid) {
+        SPid *p = find_pid(ad->id, pid);
+        return p && p->flags == PID_STATE_ACTIVE ? p : nullptr;
+    };
     SPid *pp = find_pid(ad->id, pmt->pid);
     uint32_t order = (pp && pp->order) ? pp->order : UINT32_MAX;
     int pct = pmt_completeness_pct(pmt, pid_lookup);
