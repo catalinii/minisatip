@@ -1869,6 +1869,20 @@ int test_ddci_model_is_uno4k() {
     return 0;
 }
 
+int test_ddci_model_is_gbquad4k() {
+    const char *p = "/tmp/ddci_gbquad4k_test";
+    write_model_file(p, "gbquad4k\n");
+    ASSERT(ddci_model_is_gbquad4k(p), "gbquad4k passes");
+    write_model_file(p, "gbue4k\n");
+    ASSERT(!ddci_model_is_gbquad4k(p), "gbue4k blocked");
+    write_model_file(p, "\n");
+    ASSERT(!ddci_model_is_gbquad4k(p), "empty blocked");
+    remove(p);
+    ASSERT(!ddci_model_is_gbquad4k(p), "missing blocked");
+
+    return 0;
+}
+
 int test_ddci_pick_free_slot() {
     adapter ad = {0};
     for (int i = 0; i < MAX_ADAPTERS; i++) {
@@ -1987,6 +2001,7 @@ int main() {
               "testing enigma loops back non-local PMTs only");
     TEST_FUNC(test_ddci_pick_free_slot(), "testing loopback slot selection");
     TEST_FUNC(test_ddci_model_is_uno4k(), "testing Uno 4K model gate");
+    TEST_FUNC(test_ddci_model_is_gbquad4k(), "testing GB Quad 4K model gate");
     TEST_FUNC(test_capmt_lists_pmt_pids(),
               "testing CAPMT lists PMT pids verbatim");
     TEST_FUNC(test_dvbca_ci_adapter_no_routing(),

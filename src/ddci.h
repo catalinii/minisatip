@@ -84,6 +84,7 @@ int ddci_pick_free_fn(const int *existing, int nexisting, const int *used,
                       int nused);
 int ddci_pick_free_slot();
 int ddci_model_is_uno4k(const char *path);
+int ddci_model_is_gbquad4k(const char *path);
 // True when id is an enabled enigma loopback device.
 int ddci_is_loopback(int id);
 // CI slot owned by the enigma loopback, or -1 when none.

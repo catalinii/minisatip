@@ -1811,20 +1811,27 @@ int ddci_pick_free_slot() {
     return -1;
 }
 
-// True when path names a Vu+ Uno 4K (SE); the loopback is blocked
-// elsewhere since only this chip's DVR/CI plumbing is proven.
-int ddci_model_is_uno4k(const char *path) {
+// True when path's first word starts with prefix; missing file fails.
+static bool ddci_model_starts_with(const char *path, const char *prefix) {
     std::ifstream f(path);
     std::string model;
-    if (!(f >> model))
-        return 0;
-    return model.rfind("uno4k", 0) == 0;
+    return (f >> model) && model.rfind(prefix, 0) == 0;
+}
+
+// Proven loopback models; both are bcm7252s with the same DVR/CI plumbing.
+int ddci_model_is_uno4k(const char *path) {
+    return ddci_model_starts_with(path, "uno4k");
+}
+
+int ddci_model_is_gbquad4k(const char *path) {
+    return ddci_model_starts_with(path, "gbquad4k");
 }
 
 // One loopback on the highest free demux, in the first free enabled slot.
 static void ddci_add_enigma_loopback() {
-    if (!ddci_model_is_uno4k("/proc/stb/info/vumodel")) {
-        LOG("enigma loopback blocked: not a Vu+ Uno 4K");
+    if (!ddci_model_is_uno4k("/proc/stb/info/vumodel") &&
+        !ddci_model_is_gbquad4k("/proc/stb/info/gbmodel")) {
+        LOG("enigma loopback blocked: unsupported model");
         return;
     }
     int id = ddci_pick_free_slot();
