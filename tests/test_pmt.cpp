@@ -1499,8 +1499,8 @@ int test_pid_order_reset_on_remove() {
     return 0;
 }
 
-// D8: several SIDs on one PMT pid. Identical stream sets run the lowest
-// sid; different sets coexist and split the streams by subscription order.
+// D8: several SIDs on one PMT pid. Identical sets dedupe to the
+// first-listed; different sets coexist and split the streams.
 int test_d8_shared_pid() {
     int i;
     pmts.clear();
@@ -1543,7 +1543,7 @@ int test_d8_shared_pid() {
     SPMT *pmt_t74 = pmts[m2];
     ASSERT_EQUAL(pmt_t74->state, PMT_RUNNING, "second set should run");
     SPMT *pmt_t75 = pmts[m3];
-    ASSERT_EQUAL(pmt_t75->state, PMT_RUNNING, "lowest sid should run");
+    ASSERT_EQUAL(pmt_t75->state, PMT_RUNNING, "first-listed should run");
     SPMT *pmt_t76 = pmts[m4];
     ASSERT_EQUAL(pmt_t76->state, PMT_STOPPED, "duplicate should wait");
     ASSERT(find_pid(0, 701)->pmt == m1, "shared video goes to the first");
@@ -1553,7 +1553,7 @@ int test_d8_shared_pid() {
     ASSERT(pmt_t77->best && pmt_t78->best, "different sets stay in");
     SPMT *pmt_t79 = pmts[m3];
     SPMT *pmt_t80 = pmts[m4];
-    ASSERT(pmt_t79->best && !pmt_t80->best, "only the lowest sid is best");
+    ASSERT(pmt_t79->best && !pmt_t80->best, "only the first-listed is best");
 
     // drop 712: m2 has nothing left to serve and waits, m1 keeps all
     find_pid(0, 712)->sid.clear();
@@ -1634,7 +1634,7 @@ int test_shared_pid_split() {
 }
 
 // 30W 12437H: pid 817 carries dozens of PMTs (Meo/Nos). SIDs 1338/6043
-// share all A/V pids with different ECMs; 807 is disjoint. Lowest sid serves.
+// share all A/V pids with different ECMs; 807 is disjoint. Lowest ECM wins.
 int test_30w_shared_pmt_pid() {
     pmts.clear();
     filters.clear();
@@ -1715,8 +1715,8 @@ int test_30w_shared_pmt_pid() {
     ASSERT(mark_pid_add(0, 0, 8048) == 0, "pid 8048 should be added");
     ASSERT(mark_pid_add(0, 0, 8049) == 0, "pid 8049 should be added");
     update_pids(0);
-    ASSERT_EQUAL(p1338->state, PMT_RUNNING, "lowest sid should run");
-    ASSERT_EQUAL(p6043->state, PMT_STOPPED, "higher sid should wait");
+    ASSERT_EQUAL(p1338->state, PMT_RUNNING, "lowest ECM should run");
+    ASSERT_EQUAL(p6043->state, PMT_STOPPED, "higher ECM should wait");
     ASSERT_EQUAL(p807->state, PMT_RUNNING, "disjoint service should run");
     ASSERT(p6043->best, "waiter stays in the set");
     ASSERT(find_pid(0, 7472)->pmt == p1338->id, "1338 should own video");
@@ -1741,6 +1741,204 @@ int test_30w_shared_pmt_pid() {
     del_ca(&fake_ca_op);
     pmts.destroy_all();
     filters.destroy_all();
+    a[0] = nullptr;
+    return 0;
+}
+
+// Verbatim 30W pid 817 sections for the #1515 scenarios below.
+static uint8_t sec_1515_6043[] = {
+    0x02, 0xB0, 0x2A, 0x17, 0x9B, 0xE9, 0x00, 0x00, 0xFD, 0x30, 0xF0, 0x09,
+    0x09, 0x07, 0x18, 0x14, 0xE6, 0x43, 0x02, 0x52, 0x11, 0x1B, 0xFD, 0x30,
+    0xF0, 0x00, 0x0F, 0xFD, 0x31, 0xF0, 0x0A, 0x0A, 0x04, 0x70, 0x6F, 0x72,
+    0x00, 0x7C, 0x02, 0x00, 0x00, 0x43, 0x9A, 0x7E, 0xD6};
+static uint8_t sec_1515_1338[] = {
+    0x02, 0xB0, 0x2D, 0x05, 0x3A, 0xE9, 0x00, 0x00, 0xFD, 0x30, 0xF0, 0x00,
+    0x0F, 0xFD, 0x31, 0xF0, 0x10, 0x09, 0x04, 0x18, 0x02, 0xE4, 0xCF, 0x0A,
+    0x04, 0x70, 0x6F, 0x72, 0x00, 0x7C, 0x02, 0x00, 0x00, 0x1B, 0xFD, 0x30,
+    0xF0, 0x06, 0x09, 0x04, 0x18, 0x02, 0xE4, 0xCF, 0xDD, 0x41, 0xAD, 0x2C};
+
+static std::pair<uint8_t *, size_t> section_1515(int sid) {
+    if (sid == 6043)
+        return {sec_1515_6043, sizeof(sec_1515_6043)};
+    return {sec_1515_1338, sizeof(sec_1515_1338)};
+}
+
+// One #1515 scenario: subscribe PMT pid + AV + given ECM pids, parse
+// first, elect, parse second, elect, then the winner must run alone.
+static int check_ecm_selects_service(int first_sid, int second_sid,
+                                     const int *ecms, int necms,
+                                     int winner_sid) {
+    pmts.clear();
+    filters.clear();
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    ASSERT(mark_pid_add(0, 0, 817) == 0, "pid 817 should be added");
+    ASSERT(mark_pid_add(0, 0, 7472) == 0, "pid 7472 should be added");
+    ASSERT(mark_pid_add(0, 0, 7473) == 0, "pid 7473 should be added");
+    for (int i = 0; i < necms; i++)
+        ASSERT(mark_pid_add(0, 0, ecms[i]) == 0, "ECM pid should be added");
+    update_pids(0);
+
+    int f1 = add_filter(0, 817, (void *)process_pmt, NULL, 0);
+    int f2 = add_filter(0, 817, (void *)process_pmt, NULL, 0);
+    ASSERT(f1 >= 0 && f2 >= 0, "need two filters on pid 817");
+
+    auto [b1, l1] = section_1515(first_sid);
+    ASSERT(process_pmt(f1, b1, l1, NULL) == 0, "first sid to parse");
+    start_active_pmts(&ad);
+    SPMT *pfirst = get_pmt_for_sid_pid(0, first_sid, 817);
+    ASSERT(pfirst, "first sid should own a PMT object");
+    ASSERT_EQUAL(pfirst->state, PMT_RUNNING, "first parsed runs alone");
+
+    auto [b2, l2] = section_1515(second_sid);
+    ASSERT(process_pmt(f2, b2, l2, NULL) == 0, "second sid to parse");
+    start_active_pmts(&ad);
+    SPMT *pwinner = get_pmt_for_sid_pid(0, winner_sid, 817);
+    int loser_sid = winner_sid == 1338 ? 6043 : 1338;
+    SPMT *ploser = get_pmt_for_sid_pid(0, loser_sid, 817);
+    ASSERT(pwinner && ploser, "both sids should own a PMT object");
+    ASSERT_EQUAL(pwinner->state, PMT_RUNNING, "expected winner should run");
+    ASSERT_EQUAL(ploser->state, PMT_STOPPED, "expected loser should wait");
+    ASSERT(find_pid(0, 7472)->pmt == pwinner->id, "winner owns video");
+    ASSERT(find_pid(0, 7473)->pmt == pwinner->id, "winner owns audio");
+
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pwinner->state, PMT_RUNNING, "winner should stay up");
+    ASSERT_EQUAL(ploser->state, PMT_STOPPED, "loser should stay down");
+
+    pmts.destroy_all();
+    filters.destroy_all();
+    a[0] = nullptr;
+    return 0;
+}
+
+// #1515: 1338/6043 share pid 817 and AV with ECMs 1231/1603. One
+// requested ECM selects its carrier, else the lowest ECM wins.
+int test_30w_ecm_pid_selects_service() {
+    int ecm1603[] = {1603};
+    int ecm1231[] = {1231};
+    int both[] = {1231, 1603};
+    // no ECM: staggered arrival still elects the lowest ECM pid
+    if (check_ecm_selects_service(6043, 1338, NULL, 0, 1338))
+        return 1;
+    if (check_ecm_selects_service(1338, 6043, NULL, 0, 1338))
+        return 1;
+    // one requested ECM selects its carrier, either arrival way
+    if (check_ecm_selects_service(1338, 6043, ecm1603, 1, 6043))
+        return 1;
+    if (check_ecm_selects_service(6043, 1338, ecm1603, 1, 6043))
+        return 1;
+    if (check_ecm_selects_service(6043, 1338, ecm1231, 1, 1338))
+        return 1;
+    if (check_ecm_selects_service(1338, 6043, ecm1231, 1, 1338))
+        return 1;
+    // several requested ECMs fall back exactly like none at all
+    if (check_ecm_selects_service(6043, 1338, both, 2, 1338))
+        return 1;
+    if (check_ecm_selects_service(1338, 6043, both, 2, 1338))
+        return 1;
+    return 0;
+}
+
+// Adding the rival ECM mid-stream hands over without a reparse,
+// removing it hands back; requesting both falls back to lowest ECM.
+int test_30w_ecm_pid_dynamic_handover() {
+    pmts.clear();
+    filters.clear();
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    ASSERT(mark_pid_add(0, 0, 817) == 0, "pid 817 should be added");
+    ASSERT(mark_pid_add(0, 0, 7472) == 0, "pid 7472 should be added");
+    ASSERT(mark_pid_add(0, 0, 7473) == 0, "pid 7473 should be added");
+    update_pids(0);
+
+    int f1 = add_filter(0, 817, (void *)process_pmt, NULL, 0);
+    int f2 = add_filter(0, 817, (void *)process_pmt, NULL, 0);
+    ASSERT(f1 >= 0 && f2 >= 0, "need two filters on pid 817");
+    auto [b1, l1] = section_1515(1338);
+    ASSERT(process_pmt(f1, b1, l1, NULL) == 0, "1338 to parse");
+    auto [b2, l2] = section_1515(6043);
+    ASSERT(process_pmt(f2, b2, l2, NULL) == 0, "6043 to parse");
+    update_pids(0);
+    SPMT *p1338 = get_pmt_for_sid_pid(0, 1338, 817);
+    SPMT *p6043 = get_pmt_for_sid_pid(0, 6043, 817);
+    ASSERT(p1338 && p6043, "both sids should own a PMT object");
+    ASSERT_EQUAL(p1338->state, PMT_RUNNING, "lowest ECM should run first");
+
+    ASSERT(mark_pid_add(0, 0, 1603) == 0, "pid 1603 should be added");
+    update_pids(0);
+    ASSERT_EQUAL(p6043->state, PMT_RUNNING, "adding 1603 runs 6043");
+    ASSERT_EQUAL(p1338->state, PMT_STOPPED, "adding 1603 stops 1338");
+    ASSERT(find_pid(0, 7472)->pmt == p6043->id, "6043 should own video");
+
+    ASSERT(mark_pid_add(0, 0, 1231) == 0, "pid 1231 should be added");
+    update_pids(0);
+    ASSERT_EQUAL(p1338->state, PMT_RUNNING, "both ECMs fall back to 1338");
+    ASSERT_EQUAL(p6043->state, PMT_STOPPED, "both ECMs stop 6043");
+
+    mark_pid_deleted(0, 0, 1231, NULL);
+    update_pids(0);
+    ASSERT_EQUAL(p6043->state, PMT_RUNNING, "only 1603 runs 6043 again");
+    mark_pid_deleted(0, 0, 1603, NULL);
+    update_pids(0);
+    ASSERT_EQUAL(p1338->state, PMT_RUNNING, "no ECM runs 1338 again");
+    ASSERT_EQUAL(p6043->state, PMT_STOPPED, "no ECM stops 6043");
+
+    pmts.destroy_all();
+    filters.destroy_all();
+    a[0] = nullptr;
+    return 0;
+}
+
+// Order outranks a requested ECM: with distinct PMT pids the earlier
+// subscriber wins even when the request names the rival's ECM pid.
+int test_order_beats_requested_ecm() {
+    uint8_t priv[1] = {0};
+    pmts.clear();
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    int aid = pmt_add(0, 14101, 48);
+    int bid = pmt_add(0, 14104, 52);
+    ASSERT(aid >= 0 && bid >= 0, "could not create the PMTs");
+    pmt_add_caid(pmts[aid], 0x0664, 1000, priv, 0);
+    pmt_add_caid(pmts[bid], 0x0664, 2000, priv, 0);
+    for (int id : {aid, bid}) {
+        pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
+        pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
+    }
+    ad.active_pmts = 2;
+    ad.active_pmt[0] = aid;
+    ad.active_pmt[1] = bid;
+
+    // A subscribed first, but the request names B's ECM pid
+    ASSERT(mark_pid_add(0, 0, 48) == 0, "pid 48 should be added");
+    ASSERT(mark_pid_add(0, 0, 52) == 0, "pid 52 should be added");
+    ASSERT(mark_pid_add(0, 0, 3301) == 0, "pid 3301 should be added");
+    ASSERT(mark_pid_add(0, 0, 3401) == 0, "pid 3401 should be added");
+    ASSERT(mark_pid_add(0, 0, 2000) == 0, "pid 2000 should be added");
+    update_pids(0);
+    SPMT *pmt_ord_a = pmts[aid];
+    ASSERT_EQUAL(pmt_ord_a->state, PMT_RUNNING, "earlier order runs");
+    SPMT *pmt_ord_b = pmts[bid];
+    ASSERT_EQUAL(pmt_ord_b->state, PMT_STOPPED, "ECM cannot beat order");
+    ASSERT(find_pid(0, 3301)->pmt == aid, "earlier order owns video");
+
+    pmts.destroy_all();
     a[0] = nullptr;
     return 0;
 }
@@ -3386,6 +3584,12 @@ int main() {
               "testing same-pid different sets split streams")
     TEST_FUNC(test_30w_shared_pmt_pid(),
               "testing 30W pid 817 multi-service election")
+    TEST_FUNC(test_30w_ecm_pid_selects_service(),
+              "testing #1515 requested ECM selects the service")
+    TEST_FUNC(test_30w_ecm_pid_dynamic_handover(),
+              "testing #1515 ECM add and remove hands over")
+    TEST_FUNC(test_order_beats_requested_ecm(),
+              "testing order outranks a requested ECM")
     TEST_FUNC(test_1129_bein_shared_es(),
               "testing #1129 beIN shared streams elect subscribed pid")
     TEST_FUNC(test_19e_11493h_zap_flows(),
