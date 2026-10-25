@@ -198,7 +198,10 @@ if(DEBUG)
         -fsanitize=leak
         -fsanitize=undefined
     )
-    if(NOT APPLE)
+    # clang links its sanitizer runtimes statically with one option
+    if(NOT APPLE AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        add_link_options(-static-libsan)
+    elseif(NOT APPLE)
         add_link_options(
             -static-libasan
             -static-libubsan
@@ -214,19 +217,9 @@ if(NOT STATIC)
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
 
-# NetCeiver XML2 flags
+# The imported target brings its headers in as system headers
 if(NETCVCLIENT)
-    execute_process(
-        COMMAND xml2-config --cflags
-        OUTPUT_VARIABLE XML2_CFLAGS
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-        ERROR_QUIET
-        RESULT_VARIABLE XML2_CONFIG_RESULT
-    )
-    if(XML2_CONFIG_RESULT EQUAL 0 AND XML2_CFLAGS)
-        separate_arguments(XML2_CFLAGS_LIST UNIX_COMMAND "${XML2_CFLAGS}")
-        add_compile_options(${XML2_CFLAGS_LIST})
-    endif()
+    find_package(LibXml2 REQUIRED)
 endif()
 
 # Core source and library lists
@@ -263,7 +256,7 @@ if(DVBCA)
 endif()
 if(NETCVCLIENT)
     list(APPEND MINISATIP_SOURCES src/netceiver.cpp)
-    list(APPEND MINISATIP_LIBS ${NETCEIVER_LIBRARY} xml2 lzma z)
+    list(APPEND MINISATIP_LIBS ${NETCEIVER_LIBRARY} LibXml2::LibXml2 lzma z)
 endif()
 if(DDCI)
     list(APPEND MINISATIP_SOURCES src/ddci.cpp)
@@ -284,7 +277,10 @@ target_include_directories(minisatip PRIVATE
 )
 target_compile_options(minisatip PRIVATE -include ${CMAKE_BINARY_DIR}/config.h)
 if(SRT)
-    target_include_directories(minisatip PRIVATE ${SRT_INCLUDE_DIR})
+    target_include_directories(minisatip SYSTEM PRIVATE ${SRT_INCLUDE_DIR})
+endif()
+if(NETCVCLIENT)
+    target_include_directories(minisatip SYSTEM PRIVATE ${NETCEIVER_INCLUDE_DIR})
 endif()
 set_target_properties(minisatip PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
