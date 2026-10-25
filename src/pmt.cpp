@@ -1033,6 +1033,33 @@ static int pid_subscribed(adapter *ad, SPid *p) {
     return spid_has_client_sid(p);
 }
 
+// Completeness: percent of the PMT's stream and ECM pids carrying
+// any client sid (adapter-wide union; DDCI plumbing excluded).
+template <typename Lookup>
+static int pmt_completeness_pct(SPMT *pmt, Lookup pid_of) {
+    int total = 0, matched = 0;
+    for (const auto &sp : pmt->stream_pids) {
+        total++;
+        if (spid_has_client_sid(pid_of(sp.pid)))
+            matched++;
+    }
+    for (int k = 0; k < pmt->caids; k++) {
+        total++;
+        if (spid_has_client_sid(pid_of(pmt->ca[k]->pid)))
+            matched++;
+    }
+    return total ? matched * 100 / total : 0;
+}
+
+// Election order: earliest subscriber, then highest completeness.
+// Full ties never outrank, the holder keeps its claims (#1515).
+static int choice_outranks(uint32_t order, int pct, uint32_t r_order,
+                           int r_pct) {
+    if (order != r_order)
+        return order < r_order;
+    return pct > r_pct;
+}
+
 // Live AV check for the update path: NEW counts, DELETED does not.
 static int has_live_av(adapter *ad, SPMT *pmt) {
     for (const auto &sp : pmt->stream_pids) {
@@ -1142,11 +1169,18 @@ static int is_pmt_subscribed(adapter *ad, SPMT *pmt) {
     return 0;
 }
 
-// A newly parsed PMT outranks running owners subscribed after it: stop
-// every lower-priority owner of its audio/video pids and release theirs.
+// A newly parsed PMT takes over only owners it outranks (order,
+// then completeness): stop each of them and release their claims.
 static void handover_claims_from_lower_priority(adapter *ad, SPMT *pmt) {
+    // ACTIVE-only like the election snapshot, so a NEW pid never
+    // boosts handover pct alone (no stop-then-reclaim transient).
+    auto pid_lookup = [&](int pid) {
+        SPid *p = find_pid(ad->id, pid);
+        return p && p->flags == PID_STATE_ACTIVE ? p : nullptr;
+    };
     SPid *pp = find_pid(ad->id, pmt->pid);
     uint32_t order = (pp && pp->order) ? pp->order : UINT32_MAX;
+    int pct = pmt_completeness_pct(pmt, pid_lookup);
     for (const auto &sp : pmt->stream_pids) {
         SPid *s = find_pid(ad->id, sp.pid);
         SPMT *old;
@@ -1159,19 +1193,21 @@ static void handover_claims_from_lower_priority(adapter *ad, SPMT *pmt) {
         old = get_pmt(s->pmt);
         if (!old || old == pmt)
             continue;
-        op = find_pid(ad->id, old->pid);
-        old_order = (op && op->order) ? op->order : UINT32_MAX;
-        if (order >= old_order)
-            continue; // equal or earlier subscriber keeps its claims
         if (old->state != PMT_RUNNING && old->state != PMT_STARTING)
             continue;
+        op = find_pid(ad->id, old->pid);
+        old_order = (op && op->order) ? op->order : UINT32_MAX;
+        if (!choice_outranks(order, pct, old_order,
+                             pmt_completeness_pct(old, pid_lookup)))
+            continue; // higher or equal priority keeps its claims
         LOG("PMT %d takes over from lower-priority PMT %d", pmt->id, old->id);
         stop_pmt(old, ad);
         release_pmt_claims(ad, old);
     }
 }
 
-// Earliest subscriber wins each pid; a running PMT without its pid sorts last.
+// Earliest subscriber wins each pid, highest completeness breaks
+// order ties; full ties keep the holder (#1515).
 void pmt_pid_updated_pids(adapter *ad) {
     int i;
     SPid *pids[8193];
@@ -1199,11 +1235,19 @@ void pmt_pid_updated_pids(adapter *ad) {
         ch[nch].order = (pp && pp->order) ? pp->order : UINT32_MAX;
         nch++;
     }
-    // Sort by subscription order, lowest sid on ties, then drop later
-    // members duplicating an earlier member's stream set.
-    std::sort(ch, ch + nch, [](const SPmtChoice &a, const SPmtChoice &b) {
-        return a.order != b.order ? a.order < b.order : a.pmt->sid < b.pmt->sid;
-    });
+    auto pid_lookup = [&](int pid) {
+        return (pid >= 0 && pid < 8193) ? pids[pid] : nullptr;
+    };
+    auto pct_of = [&](SPMT *pmt) {
+        return pmt_completeness_pct(pmt, pid_lookup);
+    };
+    // Sort by order, then completeness, then drop later members
+    // duplicating an earlier stream set (stable keeps ties listed).
+    std::stable_sort(ch, ch + nch,
+                     [&](const SPmtChoice &a, const SPmtChoice &b) {
+                         return choice_outranks(a.order, pct_of(a.pmt), b.order,
+                                                pct_of(b.pmt));
+                     });
     for (i = 0; i < nch; i++) {
         int j;
         if (!ch[i].candidate)
@@ -1234,24 +1278,27 @@ void pmt_pid_updated_pids(adapter *ad) {
     }
 
     // Claim and start the set in the order decided above, so the
-    // earliest subscriber wins free pids deterministically in one pass.
+    // winner takes free pids deterministically in one pass.
     for (i = 0; i < nch; i++) {
         SPMT *pmt = ch[i].pmt;
         if (!ch[i].candidate)
             continue;
+        int pct = pct_of(pmt);
         for (const auto &sp : pmt->stream_pids) {
             SPid *s = pids[sp.pid];
             // Every stream (data included) is marked so the decrypt
             // path finds an owner; only AV pid claims start the PMT.
             if (!s || !pid_subscribed(ad, s) || s->pmt == pmt->id)
                 continue;
-            // Order steals: take over from later-sorted holders only.
+            // Priority steals: take over from lower-sorted holders,
+            // never on a full tie (the holder keeps its claims).
             SPMT *holder = s->pmt >= 0 ? get_pmt(s->pmt) : NULL;
             if (holder) {
                 SPid *hp = pids[holder->pid];
                 uint32_t holder_order =
                     (hp && hp->order) ? hp->order : UINT32_MAX;
-                if (ch[i].order >= holder_order)
+                if (!choice_outranks(ch[i].order, pct, holder_order,
+                                     pct_of(holder)))
                     continue;
                 LOGM("PMT %d steals pid %d from PMT %d", pmt->id, sp.pid,
                      s->pmt);

@@ -1499,8 +1499,8 @@ int test_pid_order_reset_on_remove() {
     return 0;
 }
 
-// D8: several SIDs on one PMT pid. Identical stream sets run the lowest
-// sid; different sets coexist and split the streams by subscription order.
+// D8: several SIDs on one PMT pid. The fuller pid match wins the
+// shared streams outright; identical sets dedupe to the first-listed.
 int test_d8_shared_pid() {
     int i;
     pmts.clear();
@@ -1537,25 +1537,27 @@ int test_d8_shared_pid() {
         ad.pids[i].sid.insert(0);
         ad.pids[i].order = i + 1;
     }
+    // m2 matches the whole request (701+712) while m1 matches only
+    // 701, so completeness elects m2 and m1 waits in the set.
     start_active_pmts(&ad);
     SPMT *pmt_t73 = pmts[m1];
-    ASSERT_EQUAL(pmt_t73->state, PMT_RUNNING, "first set should run");
+    ASSERT_EQUAL(pmt_t73->state, PMT_STOPPED, "partial match should wait");
     SPMT *pmt_t74 = pmts[m2];
-    ASSERT_EQUAL(pmt_t74->state, PMT_RUNNING, "second set should run");
+    ASSERT_EQUAL(pmt_t74->state, PMT_RUNNING, "full match should run");
     SPMT *pmt_t75 = pmts[m3];
-    ASSERT_EQUAL(pmt_t75->state, PMT_RUNNING, "lowest sid should run");
+    ASSERT_EQUAL(pmt_t75->state, PMT_RUNNING, "first-listed should run");
     SPMT *pmt_t76 = pmts[m4];
     ASSERT_EQUAL(pmt_t76->state, PMT_STOPPED, "duplicate should wait");
-    ASSERT(find_pid(0, 701)->pmt == m1, "shared video goes to the first");
+    ASSERT(find_pid(0, 701)->pmt == m2, "shared video goes to the full match");
     ASSERT(find_pid(0, 712)->pmt == m2, "own audio goes to the second");
     SPMT *pmt_t77 = pmts[m1];
     SPMT *pmt_t78 = pmts[m2];
     ASSERT(pmt_t77->best && pmt_t78->best, "different sets stay in");
     SPMT *pmt_t79 = pmts[m3];
     SPMT *pmt_t80 = pmts[m4];
-    ASSERT(pmt_t79->best && !pmt_t80->best, "only the lowest sid is best");
+    ASSERT(pmt_t79->best && !pmt_t80->best, "only the first-listed is best");
 
-    // drop 712: m2 has nothing left to serve and waits, m1 keeps all
+    // drop 712, add 711: now m1 matches fully and takes over from m2
     find_pid(0, 712)->sid.clear();
     find_pid(0, 712)->order = 0;
     ad.pids[6].pid = 711;
@@ -1566,13 +1568,13 @@ int test_d8_shared_pid() {
     ad.pids[6].order = 7;
     start_active_pmts(&ad);
     SPMT *pmt_t81 = pmts[m1];
-    ASSERT_EQUAL(pmt_t81->state, PMT_RUNNING, "m1 should keep running");
+    ASSERT_EQUAL(pmt_t81->state, PMT_RUNNING, "m1 should run now");
     SPMT *pmt_t82 = pmts[m2];
     ASSERT_EQUAL(pmt_t82->state, PMT_STOPPED, "m2 should wait claimless");
     SPMT *pmt_t83 = pmts[m1];
     SPMT *pmt_t84 = pmts[m2];
     ASSERT(pmt_t83->best && pmt_t84->best, "waiter stays in the set");
-    ASSERT(find_pid(0, 701)->pmt == m1, "shared video should not move");
+    ASSERT(find_pid(0, 701)->pmt == m1, "shared video moves to m1");
 
     pmts.destroy_all();
     a[0] = nullptr;
@@ -1633,8 +1635,8 @@ int test_shared_pid_split() {
     return 0;
 }
 
-// 30W 12437H: pid 817 carries dozens of PMTs (Meo/Nos). SIDs 1338/6043
-// share all A/V pids with different ECMs; 807 is disjoint. Lowest sid serves.
+// 30W 12437H: 1338/6043 share pid 817 and AV, 807 is disjoint.
+// Equal completeness ties keep list order, the holder keeps running.
 int test_30w_shared_pmt_pid() {
     pmts.clear();
     filters.clear();
@@ -1715,8 +1717,8 @@ int test_30w_shared_pmt_pid() {
     ASSERT(mark_pid_add(0, 0, 8048) == 0, "pid 8048 should be added");
     ASSERT(mark_pid_add(0, 0, 8049) == 0, "pid 8049 should be added");
     update_pids(0);
-    ASSERT_EQUAL(p1338->state, PMT_RUNNING, "lowest sid should run");
-    ASSERT_EQUAL(p6043->state, PMT_STOPPED, "higher sid should wait");
+    ASSERT_EQUAL(p1338->state, PMT_RUNNING, "first-listed should run");
+    ASSERT_EQUAL(p6043->state, PMT_STOPPED, "twin should wait");
     ASSERT_EQUAL(p807->state, PMT_RUNNING, "disjoint service should run");
     ASSERT(p6043->best, "waiter stays in the set");
     ASSERT(find_pid(0, 7472)->pmt == p1338->id, "1338 should own video");
@@ -1742,6 +1744,484 @@ int test_30w_shared_pmt_pid() {
     pmts.destroy_all();
     filters.destroy_all();
     a[0] = nullptr;
+    return 0;
+}
+
+// Verbatim 30W pid 817 sections for the #1515 scenarios below.
+static uint8_t sec_1515_6043[] = {
+    0x02, 0xB0, 0x2A, 0x17, 0x9B, 0xE9, 0x00, 0x00, 0xFD, 0x30, 0xF0, 0x09,
+    0x09, 0x07, 0x18, 0x14, 0xE6, 0x43, 0x02, 0x52, 0x11, 0x1B, 0xFD, 0x30,
+    0xF0, 0x00, 0x0F, 0xFD, 0x31, 0xF0, 0x0A, 0x0A, 0x04, 0x70, 0x6F, 0x72,
+    0x00, 0x7C, 0x02, 0x00, 0x00, 0x43, 0x9A, 0x7E, 0xD6};
+static uint8_t sec_1515_1338[] = {
+    0x02, 0xB0, 0x2D, 0x05, 0x3A, 0xE9, 0x00, 0x00, 0xFD, 0x30, 0xF0, 0x00,
+    0x0F, 0xFD, 0x31, 0xF0, 0x10, 0x09, 0x04, 0x18, 0x02, 0xE4, 0xCF, 0x0A,
+    0x04, 0x70, 0x6F, 0x72, 0x00, 0x7C, 0x02, 0x00, 0x00, 0x1B, 0xFD, 0x30,
+    0xF0, 0x06, 0x09, 0x04, 0x18, 0x02, 0xE4, 0xCF, 0xDD, 0x41, 0xAD, 0x2C};
+
+static std::pair<uint8_t *, size_t> section_1515(int sid) {
+    if (sid == 6043)
+        return {sec_1515_6043, sizeof(sec_1515_6043)};
+    return {sec_1515_1338, sizeof(sec_1515_1338)};
+}
+
+// One #1515 scenario: subscribe PMT pid + AV + given ECM pids, parse
+// first, elect, parse second, elect, then the winner must run alone.
+static int check_ecm_selects_service(int first_sid, int second_sid,
+                                     const int *ecms, int necms,
+                                     int winner_sid) {
+    pmts.clear();
+    filters.clear();
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    ASSERT(mark_pid_add(0, 0, 817) == 0, "pid 817 should be added");
+    ASSERT(mark_pid_add(0, 0, 7472) == 0, "pid 7472 should be added");
+    ASSERT(mark_pid_add(0, 0, 7473) == 0, "pid 7473 should be added");
+    for (int i = 0; i < necms; i++)
+        ASSERT(mark_pid_add(0, 0, ecms[i]) == 0, "ECM pid should be added");
+    update_pids(0);
+
+    int f1 = add_filter(0, 817, (void *)process_pmt, NULL, 0);
+    int f2 = add_filter(0, 817, (void *)process_pmt, NULL, 0);
+    ASSERT(f1 >= 0 && f2 >= 0, "need two filters on pid 817");
+
+    auto [b1, l1] = section_1515(first_sid);
+    ASSERT(process_pmt(f1, b1, l1, NULL) == 0, "first sid to parse");
+    start_active_pmts(&ad);
+    SPMT *pfirst = get_pmt_for_sid_pid(0, first_sid, 817);
+    ASSERT(pfirst, "first sid should own a PMT object");
+    ASSERT_EQUAL(pfirst->state, PMT_RUNNING, "first parsed runs alone");
+
+    auto [b2, l2] = section_1515(second_sid);
+    ASSERT(process_pmt(f2, b2, l2, NULL) == 0, "second sid to parse");
+    int loser_sid = winner_sid == 1338 ? 6043 : 1338;
+    SPMT *ploser = get_pmt_for_sid_pid(0, loser_sid, 817);
+    ASSERT(ploser, "loser should own a PMT object");
+    ASSERT_EQUAL(ploser->state, PMT_STOPPED, "handover pins loser at parse");
+    start_active_pmts(&ad);
+    SPMT *pwinner = get_pmt_for_sid_pid(0, winner_sid, 817);
+    ASSERT(pwinner, "winner should own a PMT object");
+    ASSERT_EQUAL(pwinner->state, PMT_RUNNING, "expected winner should run");
+    ASSERT_EQUAL(ploser->state, PMT_STOPPED, "expected loser should wait");
+    ASSERT(find_pid(0, 7472)->pmt == pwinner->id, "winner owns video");
+    ASSERT(find_pid(0, 7473)->pmt == pwinner->id, "winner owns audio");
+
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pwinner->state, PMT_RUNNING, "winner should stay up");
+    ASSERT_EQUAL(ploser->state, PMT_STOPPED, "loser should stay down");
+
+    pmts.destroy_all();
+    filters.destroy_all();
+    a[0] = nullptr;
+    return 0;
+}
+
+// #1515: 1338/6043 share pid 817 and AV with ECMs 1231/1603. One
+// requested ECM selects its carrier, else the first-parsed keeps it.
+int test_30w_ecm_pid_selects_service() {
+    int ecm1603[] = {1603};
+    int ecm1231[] = {1231};
+    int both[] = {1231, 1603};
+    // no ECM: completeness ties, the first-parsed keeps running
+    if (check_ecm_selects_service(6043, 1338, NULL, 0, 6043))
+        return 1;
+    if (check_ecm_selects_service(1338, 6043, NULL, 0, 1338))
+        return 1;
+    // one requested ECM selects its carrier, either arrival way
+    if (check_ecm_selects_service(1338, 6043, ecm1603, 1, 6043))
+        return 1;
+    if (check_ecm_selects_service(6043, 1338, ecm1603, 1, 6043))
+        return 1;
+    if (check_ecm_selects_service(6043, 1338, ecm1231, 1, 1338))
+        return 1;
+    if (check_ecm_selects_service(1338, 6043, ecm1231, 1, 1338))
+        return 1;
+    // both ECMs: completeness ties again, the first-parsed keeps it
+    if (check_ecm_selects_service(6043, 1338, both, 2, 6043))
+        return 1;
+    if (check_ecm_selects_service(1338, 6043, both, 2, 1338))
+        return 1;
+    return 0;
+}
+
+// Adding the rival ECM mid-stream hands over without a reparse;
+// requesting both or none ties, and the holder keeps running.
+int test_30w_ecm_pid_dynamic_handover() {
+    pmts.clear();
+    filters.clear();
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    ASSERT(mark_pid_add(0, 0, 817) == 0, "pid 817 should be added");
+    ASSERT(mark_pid_add(0, 0, 7472) == 0, "pid 7472 should be added");
+    ASSERT(mark_pid_add(0, 0, 7473) == 0, "pid 7473 should be added");
+    update_pids(0);
+
+    int f1 = add_filter(0, 817, (void *)process_pmt, NULL, 0);
+    int f2 = add_filter(0, 817, (void *)process_pmt, NULL, 0);
+    ASSERT(f1 >= 0 && f2 >= 0, "need two filters on pid 817");
+    auto [b1, l1] = section_1515(1338);
+    ASSERT(process_pmt(f1, b1, l1, NULL) == 0, "1338 to parse");
+    auto [b2, l2] = section_1515(6043);
+    ASSERT(process_pmt(f2, b2, l2, NULL) == 0, "6043 to parse");
+    update_pids(0);
+    SPMT *p1338 = get_pmt_for_sid_pid(0, 1338, 817);
+    SPMT *p6043 = get_pmt_for_sid_pid(0, 6043, 817);
+    ASSERT(p1338 && p6043, "both sids should own a PMT object");
+    ASSERT_EQUAL(p1338->state, PMT_RUNNING, "first-listed runs first");
+
+    ASSERT(mark_pid_add(0, 0, 1603) == 0, "pid 1603 should be added");
+    update_pids(0);
+    ASSERT_EQUAL(p6043->state, PMT_RUNNING, "adding 1603 runs 6043");
+    ASSERT_EQUAL(p1338->state, PMT_STOPPED, "adding 1603 stops 1338");
+    ASSERT(find_pid(0, 7472)->pmt == p6043->id, "6043 should own video");
+
+    ASSERT(mark_pid_add(0, 0, 1231) == 0, "pid 1231 should be added");
+    update_pids(0);
+    ASSERT_EQUAL(p6043->state, PMT_RUNNING, "both ECMs keep 6043");
+    ASSERT_EQUAL(p1338->state, PMT_STOPPED, "both ECMs keep 1338 down");
+
+    mark_pid_deleted(0, 0, 1231, NULL);
+    update_pids(0);
+    ASSERT_EQUAL(p6043->state, PMT_RUNNING, "only 1603 keeps 6043");
+    mark_pid_deleted(0, 0, 1603, NULL);
+    update_pids(0);
+    ASSERT_EQUAL(p6043->state, PMT_RUNNING, "no ECM keeps 6043");
+    ASSERT_EQUAL(p1338->state, PMT_STOPPED, "no ECM keeps 1338 down");
+
+    pmts.destroy_all();
+    filters.destroy_all();
+    a[0] = nullptr;
+    return 0;
+}
+
+// A NEW (not yet demuxed) ECM pid counts in neither path: the rival
+// takes over only after the pid goes ACTIVE via update_pids.
+int test_new_ecm_ignored_until_active() {
+    pmts.clear();
+    filters.clear();
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    ASSERT(mark_pid_add(0, 0, 817) == 0, "pid 817 should be added");
+    ASSERT(mark_pid_add(0, 0, 7472) == 0, "pid 7472 should be added");
+    ASSERT(mark_pid_add(0, 0, 7473) == 0, "pid 7473 should be added");
+    update_pids(0);
+
+    int f1 = add_filter(0, 817, (void *)process_pmt, NULL, 0);
+    int f2 = add_filter(0, 817, (void *)process_pmt, NULL, 0);
+    ASSERT(f1 >= 0 && f2 >= 0, "need two filters on pid 817");
+    auto [b1, l1] = section_1515(1338);
+    ASSERT(process_pmt(f1, b1, l1, NULL) == 0, "1338 to parse");
+    start_active_pmts(&ad);
+    SPMT *p1338 = get_pmt_for_sid_pid(0, 1338, 817);
+    ASSERT_EQUAL(p1338->state, PMT_RUNNING, "1338 should run alone");
+
+    ASSERT(mark_pid_add(0, 0, 1603) == 0, "pid 1603 stays NEW");
+    auto [b2, l2] = section_1515(6043);
+    ASSERT(process_pmt(f2, b2, l2, NULL) == 0, "6043 to parse");
+    SPMT *p6043 = get_pmt_for_sid_pid(0, 6043, 817);
+    ASSERT_EQUAL(p1338->state, PMT_RUNNING, "NEW ECM must not hand over");
+    ASSERT_EQUAL(p6043->state, PMT_STOPPED, "6043 should wait");
+
+    update_pids(0);
+    ASSERT_EQUAL(p6043->state, PMT_RUNNING, "ACTIVE ECM runs 6043");
+    ASSERT_EQUAL(p1338->state, PMT_STOPPED, "ACTIVE ECM stops 1338");
+
+    pmts.destroy_all();
+    filters.destroy_all();
+    a[0] = nullptr;
+    return 0;
+}
+
+// Order outranks a requested ECM: with distinct PMT pids the earlier
+// subscriber wins even when the request names the rival's ECM pid.
+int test_order_beats_requested_ecm() {
+    uint8_t priv[1] = {0};
+    pmts.clear();
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    int aid = pmt_add(0, 14101, 48);
+    int bid = pmt_add(0, 14104, 52);
+    ASSERT(aid >= 0 && bid >= 0, "could not create the PMTs");
+    pmt_add_caid(pmts[aid], 0x0664, 1000, priv, 0);
+    pmt_add_caid(pmts[bid], 0x0664, 2000, priv, 0);
+    for (int id : {aid, bid}) {
+        pmt_add_stream_pid(pmts[id], 3301, 2, false, true);
+        pmt_add_stream_pid(pmts[id], 3401, 3, true, false);
+    }
+    ad.active_pmts = 2;
+    ad.active_pmt[0] = aid;
+    ad.active_pmt[1] = bid;
+
+    // A subscribed first, but the request names B's ECM pid
+    ASSERT(mark_pid_add(0, 0, 48) == 0, "pid 48 should be added");
+    ASSERT(mark_pid_add(0, 0, 52) == 0, "pid 52 should be added");
+    ASSERT(mark_pid_add(0, 0, 3301) == 0, "pid 3301 should be added");
+    ASSERT(mark_pid_add(0, 0, 3401) == 0, "pid 3401 should be added");
+    ASSERT(mark_pid_add(0, 0, 2000) == 0, "pid 2000 should be added");
+    update_pids(0);
+    SPMT *pmt_ord_a = pmts[aid];
+    ASSERT_EQUAL(pmt_ord_a->state, PMT_RUNNING, "earlier order runs");
+    SPMT *pmt_ord_b = pmts[bid];
+    ASSERT_EQUAL(pmt_ord_b->state, PMT_STOPPED, "ECM cannot beat order");
+    ASSERT(find_pid(0, 3301)->pmt == aid, "earlier order owns video");
+
+    pmts.destroy_all();
+    a[0] = nullptr;
+    return 0;
+}
+
+// Completeness outranks a requested ECM: with the same order the
+// PMT serving more of the request wins over the ECM carrier.
+int test_completeness_beats_requested_ecm() {
+    uint8_t priv[1] = {0};
+    pmts.clear();
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    int aid = pmt_add(0, 100, 60);
+    int bid = pmt_add(0, 200, 60);
+    ASSERT(aid >= 0 && bid >= 0, "could not create the PMTs");
+    pmt_add_stream_pid(pmts[aid], 701, 2, false, true);
+    pmt_add_stream_pid(pmts[aid], 711, 3, true, false);
+    pmt_add_stream_pid(pmts[bid], 701, 2, false, true);
+    pmt_add_stream_pid(pmts[bid], 712, 3, true, false);
+    pmt_add_caid(pmts[bid], 0x0664, 2000, priv, 0);
+    ad.active_pmts = 2;
+    ad.active_pmt[0] = aid;
+    ad.active_pmt[1] = bid;
+
+    // A matches 701+711 fully, B matches 701 plus its ECM 2000
+    ASSERT(mark_pid_add(0, 0, 60) == 0, "pid 60 should be added");
+    ASSERT(mark_pid_add(0, 0, 701) == 0, "pid 701 should be added");
+    ASSERT(mark_pid_add(0, 0, 711) == 0, "pid 711 should be added");
+    ASSERT(mark_pid_add(0, 0, 2000) == 0, "pid 2000 should be added");
+    update_pids(0);
+    SPMT *pmt_cmp_a = pmts[aid];
+    ASSERT_EQUAL(pmt_cmp_a->state, PMT_RUNNING, "full match should run");
+    SPMT *pmt_cmp_b = pmts[bid];
+    ASSERT_EQUAL(pmt_cmp_b->state, PMT_STOPPED, "partial match waits");
+    ASSERT(find_pid(0, 701)->pmt == aid, "full match owns video");
+
+    pmts.destroy_all();
+    a[0] = nullptr;
+    return 0;
+}
+
+// Full pid-817 lineup + parse orders extracted from the four
+// minisatip.N.log attachments of issue #1515 (61 PMTs each).
+struct ReplayPmt {
+    int sid;
+    int nstreams;
+    int16_t spid[5];
+    uint8_t stype[5];
+    int caid;
+    int ecm;
+};
+static const ReplayPmt replay_lineup[] = {
+    {4, 1, {33}, {5}, 0, 0},
+    {5, 1, {34}, {5}, 0, 0},
+    {18, 1, {7962}, {11}, 0, 0},
+    {800, 1, {2048}, {4}, 0, 0},
+    {804, 2, {6610, 6611}, {27, 15}, 6146, 920},
+    {807, 2, {8049, 8048}, {15, 27}, 6146, 1030},
+    {808, 2, {7984, 7985}, {27, 15}, 6146, 921},
+    {809, 2, {8001, 8000}, {15, 27}, 6146, 1025},
+    {815, 3, {8034, 8032, 8033}, {15, 27, 15}, 6146, 1027},
+    {816, 2, {8055, 8054}, {15, 27}, 6146, 1104},
+    {818, 2, {6643, 6644}, {27, 15}, 6146, 1215},
+    {822, 4, {8018, 8019, 8020, 8021}, {27, 4, 4, 6}, 6146, 1029},
+    {826, 2, {6145, 6146}, {27, 15}, 0, 0},
+    {827, 2, {6161, 6162}, {27, 15}, 0, 0},
+    {947, 2, {6560, 6561}, {27, 15}, 6146, 1125},
+    {1298, 2, {7652, 7653}, {27, 15}, 6146, 1197},
+    {1306, 2, {8068, 8069}, {27, 15}, 6146, 1041},
+    {1309, 3, {4704, 4705, 4707}, {27, 15, 6}, 6146, 1259},
+    {1310, 2, {6177, 6178}, {27, 15}, 6146, 2055},
+    {1338, 2, {7473, 7472}, {15, 27}, 6146, 1231},
+    {2525, 2, {4049, 4050}, {27, 4}, 0, 0},
+    {2526, 2, {4052, 4051}, {15, 27}, 6164, 1926},
+    {2527, 2, {4054, 4053}, {15, 27}, 6164, 1927},
+    {2528, 2, {4056, 4055}, {15, 27}, 6164, 1928},
+    {2529, 2, {4058, 4057}, {15, 27}, 6164, 1929},
+    {2530, 4, {4061, 4060, 4071, 4059}, {15, 15, 6, 27}, 6164, 1930},
+    {4702, 3, {6534, 6535, 6541}, {27, 15, 6}, 6146, 927},
+    {4703, 2, {6536, 6537}, {27, 15}, 6146, 928},
+    {4704, 2, {6538, 6539}, {27, 15}, 6146, 929},
+    {4705, 2, {4047, 4048}, {27, 15}, 6146, 2024},
+    {4706, 2, {4050, 4049}, {4, 27}, 0, 0},
+    {4707, 2, {4051, 4052}, {27, 15}, 6146, 2026},
+    {4708, 2, {4054, 4053}, {15, 27}, 6146, 2027},
+    {4709, 2, {4055, 4056}, {27, 15}, 6146, 2028},
+    {4710, 2, {4057, 4058}, {27, 15}, 6146, 2029},
+    {4711, 5, {4059, 4060, 4061, 4071, 4072}, {27, 15, 15, 6, 15}, 6146, 2030},
+    {4712, 1, {4062}, {2}, 0, 0},
+    {4713, 1, {4064}, {15}, 6146, 2032},
+    {4714, 1, {4065}, {15}, 6146, 2033},
+    {4715, 1, {4066}, {15}, 6146, 2034},
+    {4716, 1, {4067}, {15}, 6146, 2035},
+    {4717, 1, {4068}, {15}, 6146, 2036},
+    {4718, 1, {4069}, {15}, 6146, 2037},
+    {4719, 1, {4070}, {15}, 6146, 2038},
+    {6043, 2, {7472, 7473}, {27, 15}, 6164, 1603},
+    {6044, 4, {8018, 8019, 8020, 8021}, {27, 4, 4, 6}, 6164, 1604},
+    {6045, 2, {6560, 6561}, {27, 15}, 6164, 1605},
+    {6046, 2, {6610, 6611}, {27, 15}, 6164, 1606},
+    {6047, 2, {7652, 7653}, {27, 15}, 6164, 1607},
+    {6048, 2, {6643, 6644}, {27, 15}, 6164, 1608},
+    {6049, 2, {7984, 7985}, {27, 15}, 6164, 1609},
+    {6053, 2, {4704, 4705}, {27, 15}, 6164, 1619},
+    {6054, 1, {2048}, {4}, 0, 0},
+    {6056, 2, {6145, 6146}, {27, 15}, 6164, 1621},
+    {6057, 2, {6161, 6162}, {27, 15}, 6164, 1622},
+    {6058, 2, {6177, 6178}, {27, 15}, 6164, 1623},
+    {6085, 3, {6534, 6535, 6541}, {27, 15, 6}, 6164, 1669},
+    {6086, 2, {6536, 6537}, {27, 15}, 6164, 1670},
+    {6087, 2, {6538, 6539}, {27, 15}, 6164, 1671},
+    {6090, 2, {8054, 8055}, {27, 15}, 6164, 1680},
+    {24705, 2, {4048, 4047}, {15, 27}, 6146, 2024},
+};
+static const int replay_order_1[] = {
+    18,   800,  804,  807,   808,  809,  815,  816,  818,  822,  826,
+    827,  947,  1298, 1306,  1309, 1310, 1338, 2525, 2526, 2527, 2528,
+    2529, 2530, 4702, 4703,  4704, 4705, 4706, 4707, 4708, 4709, 4710,
+    4711, 4712, 4713, 4714,  4715, 4716, 4717, 4718, 4719, 6043, 6044,
+    6045, 6046, 6047, 6048,  6049, 6053, 6054, 6056, 6057, 6058, 6085,
+    6086, 6087, 6090, 24705, 4,    5,
+};
+static const int replay_order_2[] = {
+    6043, 6044, 6045, 6046, 6047, 6048,  6049, 6053, 6054, 6056, 6057,
+    6058, 6085, 6086, 6087, 6090, 24705, 4,    5,    18,   800,  804,
+    807,  808,  809,  815,  816,  818,   822,  826,  827,  947,  1298,
+    1306, 1309, 1310, 1338, 2525, 2526,  2527, 2528, 2529, 2530, 4702,
+    4703, 4704, 4705, 4706, 4707, 4708,  4709, 4710, 4711, 4712, 4713,
+    4714, 4715, 4716, 4717, 4718, 4719,
+};
+static const int replay_order_3[] = {
+    1338, 2525, 2526, 2527, 2528, 2529, 2530, 4702, 4703,  4704, 4705,
+    4706, 4707, 4708, 4709, 4710, 4711, 4712, 4713, 4714,  4715, 4716,
+    4717, 4718, 4719, 6043, 6044, 6045, 6046, 6047, 6048,  6049, 6053,
+    6054, 6056, 6057, 6058, 6085, 6086, 6087, 6090, 24705, 4,    5,
+    18,   800,  804,  807,  808,  809,  815,  816,  818,   822,  826,
+    827,  947,  1298, 1306, 1309, 1310,
+};
+static const int replay_order_4[] = {
+    2528, 2529, 2530, 4702, 4703,  4704, 4705, 4706, 4707, 4708, 4709,
+    4710, 4711, 4712, 4713, 4714,  4715, 4716, 4717, 4718, 4719, 6043,
+    6044, 6045, 6046, 6047, 6048,  6049, 6053, 6054, 6056, 6057, 6058,
+    6085, 6086, 6087, 6090, 24705, 4,    5,    18,   800,  804,  807,
+    808,  809,  815,  816,  818,   822,  826,  827,  947,  1298, 1306,
+    1309, 1310, 1338, 2525, 2526,  2527,
+};
+
+// One log replay: subscribe the request, create the 61 PMTs in the
+// log's parse order with an election after each; the winner runs alone.
+static int check_replay_issue_log(const int *order, const int *ecms, int necms,
+                                  int winner_sid) {
+    pmts.clear();
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    ASSERT(mark_pid_add(0, 0, 817) == 0, "pid 817 should be added");
+    ASSERT(mark_pid_add(0, 0, 7472) == 0, "pid 7472 should be added");
+    ASSERT(mark_pid_add(0, 0, 7473) == 0, "pid 7473 should be added");
+    for (int i = 0; i < necms; i++)
+        ASSERT(mark_pid_add(0, 0, ecms[i]) == 0, "ECM pid should be added");
+    update_pids(0);
+
+    for (int i = 0; i < 61; i++) {
+        const ReplayPmt *rp = NULL;
+        for (const auto &cand : replay_lineup)
+            if (cand.sid == order[i])
+                rp = &cand;
+        ASSERT(rp, "replay sid should be in the lineup");
+        int id = pmt_add(0, rp->sid, 817);
+        ASSERT(id >= 0, "replay PMT should be created");
+        for (int k = 0; k < rp->nstreams; k++) {
+            int t = rp->stype[k];
+            bool video = t == 2 || t == 27 || t == 36 || t == 15;
+            bool audio = t == 129 || t == 3 || t == 4 || t == 17;
+            pmt_add_stream_pid(pmts[id], rp->spid[k], t, audio, video);
+        }
+        if (rp->caid)
+            pmt_add_caid(pmts[id], static_cast<uint16_t>(rp->caid),
+                         static_cast<uint16_t>(rp->ecm), nullptr, 0);
+        pmt_add_active_pmt(&ad, id);
+        start_active_pmts(&ad);
+    }
+
+    SPMT *pwinner = get_pmt_for_sid_pid(0, winner_sid, 817);
+    ASSERT(pwinner, "winner should own a PMT object");
+    ASSERT_EQUAL(pwinner->state, PMT_RUNNING, "replay winner should run");
+    ASSERT(find_pid(0, 7472)->pmt == pwinner->id, "winner owns video");
+    ASSERT(find_pid(0, 7473)->pmt == pwinner->id, "winner owns audio");
+    int loser_sid = winner_sid == 1338 ? 6043 : 1338;
+    SPMT *ploser = get_pmt_for_sid_pid(0, loser_sid, 817);
+    ASSERT_EQUAL(ploser->state, PMT_STOPPED, "replay loser should wait");
+    for (SPMT *pmt : pmts)
+        if (pmt->adapter == 0 && pmt->sid != 1338 && pmt->sid != 6043)
+            ASSERT_EQUAL(pmt->state, PMT_STOPPED, "only rivals contend");
+
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pwinner->state, PMT_RUNNING, "winner should stay up");
+
+    pmts.destroy_all();
+    a[0] = nullptr;
+    return 0;
+}
+
+// Replays the four issue logs: full 61-PMT lineup in each log's parse
+// order. One requested ECM selects its carrier; ties keep first-parsed.
+int test_30w_replay_issue_logs() {
+    static const int *orders[] = {replay_order_1, replay_order_2,
+                                  replay_order_3, replay_order_4};
+    int ecm1603[] = {1603};
+    int ecm1231[] = {1231};
+    int both[] = {1231, 1603};
+    for (int o = 0; o < 4; o++) {
+        int first = -1;
+        for (int i = 0; i < 61; i++)
+            if (orders[o][i] == 1338 || orders[o][i] == 6043) {
+                first = orders[o][i];
+                break;
+            }
+        ASSERT(first > 0, "order should hold both rivals");
+        if (check_replay_issue_log(orders[o], NULL, 0, first))
+            return 1;
+        if (check_replay_issue_log(orders[o], ecm1603, 1, 6043))
+            return 1;
+        if (check_replay_issue_log(orders[o], ecm1231, 1, 1338))
+            return 1;
+        if (check_replay_issue_log(orders[o], both, 2, first))
+            return 1;
+    }
     return 0;
 }
 
@@ -3386,6 +3866,18 @@ int main() {
               "testing same-pid different sets split streams")
     TEST_FUNC(test_30w_shared_pmt_pid(),
               "testing 30W pid 817 multi-service election")
+    TEST_FUNC(test_30w_ecm_pid_selects_service(),
+              "testing #1515 requested ECM selects the service")
+    TEST_FUNC(test_30w_ecm_pid_dynamic_handover(),
+              "testing #1515 ECM add and remove hands over")
+    TEST_FUNC(test_new_ecm_ignored_until_active(),
+              "testing NEW pid counts in neither path")
+    TEST_FUNC(test_order_beats_requested_ecm(),
+              "testing order outranks a requested ECM")
+    TEST_FUNC(test_completeness_beats_requested_ecm(),
+              "testing completeness outranks a requested ECM")
+    TEST_FUNC(test_30w_replay_issue_logs(),
+              "testing #1515 replay of the four issue logs")
     TEST_FUNC(test_1129_bein_shared_es(),
               "testing #1129 beIN shared streams elect subscribed pid")
     TEST_FUNC(test_19e_11493h_zap_flows(),
