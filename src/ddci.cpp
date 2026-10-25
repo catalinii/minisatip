@@ -45,6 +45,7 @@
 #include "stream.h"
 #include "tables.h"
 #include "utils.h"
+#include <algorithm>
 #include <fstream>
 #include <string>
 
@@ -206,10 +207,9 @@ int ddci_is_loopback(int id) {
 int ddci_loopback_ci_slot() {
     if (!opts.enigma)
         return -1;
-    for (int i = 0; i < MAX_ADAPTERS; i++)
-        if (ddci_devices[i] && ddci_devices[i]->loopback)
-            return ddci_devices[i]->ci_slot;
-    return -1;
+    auto it = std::ranges::find_if(
+        ddci_devices, [](const ddci_device_t *d) { return d && d->loopback; });
+    return it != std::end(ddci_devices) ? (*it)->ci_slot : -1;
 }
 
 // Highest fn in existing[] missing from used[]; -1 when none fits.
