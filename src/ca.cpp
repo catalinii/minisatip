@@ -3978,19 +3978,17 @@ int dvbca_init_dev(adapter *ad) {
     int ci_slot = ad->id;
     ca_mode mode = ca_mode_for_adapter(ad);
     if (ca_mode_is_enigma(mode)) {
+#ifndef DISABLE_DDCI
+        // DDCI owns slot choice; ca drives the claimed device.
         if (mode == ca_mode::ENIGMA_DDCI) {
-            ci_slot = -1;
-            for (int s = 0; s < MAX_VU_CI_SLOTS && ci_slot < 0; s++) {
-                snprintf(ca_dev_path, sizeof(ca_dev_path), "/dev/ci%d", s);
-                if (!access(ca_dev_path, R_OK | W_OK))
-                    ci_slot = s;
-            }
+            ci_slot = ddci_loopback_ci_slot();
             LOG("loopback adapter %d auto-picked CI slot %d", ad->id, ci_slot);
             if (ci_slot < 0)
                 LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
                                "no usable CI slot for loopback adapter %d",
                                ad->id);
         }
+#endif
         sprintf(ca_dev_path, "/dev/ci%d", ci_slot);
     }
 #ifndef DISABLE_DDCI
