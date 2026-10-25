@@ -517,8 +517,9 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
         return TABLES_RESULT_OK;
     }
 
-    // Local tuners decrypt on the live CI path; only loop back the rest.
-    if (opts.enigma && ad->type == ADAPTER_DVB) {
+    // Local tuners decrypt on the live CI path, unless a loopback owns
+    // a CI slot: then they decrypt through it instead (live CA stands down).
+    if (opts.enigma && ad->type == ADAPTER_DVB && ddci_loopback_ci_slot() < 0) {
         LOG("Skip PMT %d from local adapter %d on enigma, live CI owns it",
             pmt->id, ad->id);
         return TABLES_RESULT_ERROR_NORETRY;

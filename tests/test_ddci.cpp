@@ -1903,7 +1903,7 @@ int test_ddci_pick_free_slot() {
     return 0;
 }
 
-int test_ddci_enigma_declines_local() {
+int test_ddci_enigma_local_loops_back() {
     SPMT *pmt0;
     ddci_device_t d0 = {};
     ca_device_t ca0 = {};
@@ -1918,6 +1918,7 @@ int test_ddci_enigma_declines_local() {
     d0.id = 0;
     d0.enabled = 1;
     d0.loopback = 1;
+    d0.ci_slot = 0;
     d0.max_channels = 2;
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[0] = &d0;
@@ -1932,8 +1933,16 @@ int test_ddci_enigma_declines_local() {
 
     opts.enigma = 1;
     ad.type = ADAPTER_DVB;
+    ASSERT(ddci_process_pmt(&ad, pmt0, 0) == TABLES_RESULT_OK,
+           "local adapter must loop back when a slot is owned");
+    ASSERT(d0.channels == 1, "expected 1 running channel");
+    ddci_del_pmt(&ad, pmt0);
+    ASSERT(d0.channels == 0, "expected 0 running channels after delete");
+
+    // Loopback without a slot: local PMTs stay on the live CI path.
+    d0.ci_slot = -1;
     ASSERT(ddci_process_pmt(&ad, pmt0, 0) == TABLES_RESULT_ERROR_NORETRY,
-           "local adapter must stay on the live CI path");
+           "slotless loopback must decline local PMTs");
     ASSERT(d0.channels == 0, "declined PMT takes no channel");
 
     ad.type = ADAPTER_SATIP;
@@ -1997,8 +2006,8 @@ int main() {
               "testing that new channels go to the least used DDCI");
     TEST_FUNC(test_ddci_pick_free_fn(),
               "testing highest-free demux pick for the loopback");
-    TEST_FUNC(test_ddci_enigma_declines_local(),
-              "testing enigma loops back non-local PMTs only");
+    TEST_FUNC(test_ddci_enigma_local_loops_back(),
+              "testing enigma loops back local PMTs on owned slots");
     TEST_FUNC(test_ddci_pick_free_slot(), "testing loopback slot selection");
     TEST_FUNC(test_ddci_model_is_uno4k(), "testing Uno 4K model gate");
     TEST_FUNC(test_ddci_model_is_gbquad4k(), "testing GB Quad 4K model gate");
