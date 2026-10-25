@@ -4,6 +4,7 @@ Linux DVB on any platform (x86, arm, aarch64, mips, ... ):
 
 Set Top Boxes running OpenATV:
 - VU+
+- GigaBlue
 - Other OS/Hardware combination is possible to be used however may not be well tested.
 - More details here: https://minisatip.org/forum/viewtopic.php?f=5&t=670
 - Latest binaries included in the OpenATV distribution
