@@ -287,7 +287,10 @@ target_include_directories(minisatip PRIVATE
 )
 target_compile_options(minisatip PRIVATE -include ${CMAKE_BINARY_DIR}/config.h)
 if(SRT)
-    target_include_directories(minisatip PRIVATE ${SRT_INCLUDE_DIR})
+    target_include_directories(minisatip SYSTEM PRIVATE ${SRT_INCLUDE_DIR})
+endif()
+if(NETCVCLIENT)
+    target_include_directories(minisatip SYSTEM PRIVATE ${NETCEIVER_INCLUDE_DIR})
 endif()
 set_target_properties(minisatip PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
