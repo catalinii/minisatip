@@ -1986,6 +1986,200 @@ int test_completeness_beats_requested_ecm() {
     return 0;
 }
 
+// Full pid-817 lineup + parse orders extracted from the four
+// minisatip.N.log attachments of issue #1515 (61 PMTs each).
+struct ReplayPmt {
+    int sid;
+    int nstreams;
+    int16_t spid[5];
+    uint8_t stype[5];
+    int caid;
+    int ecm;
+};
+static const ReplayPmt replay_lineup[] = {
+    {4, 1, {33}, {5}, 0, 0},
+    {5, 1, {34}, {5}, 0, 0},
+    {18, 1, {7962}, {11}, 0, 0},
+    {800, 1, {2048}, {4}, 0, 0},
+    {804, 2, {6610, 6611}, {27, 15}, 6146, 920},
+    {807, 2, {8049, 8048}, {15, 27}, 6146, 1030},
+    {808, 2, {7984, 7985}, {27, 15}, 6146, 921},
+    {809, 2, {8001, 8000}, {15, 27}, 6146, 1025},
+    {815, 3, {8034, 8032, 8033}, {15, 27, 15}, 6146, 1027},
+    {816, 2, {8055, 8054}, {15, 27}, 6146, 1104},
+    {818, 2, {6643, 6644}, {27, 15}, 6146, 1215},
+    {822, 4, {8018, 8019, 8020, 8021}, {27, 4, 4, 6}, 6146, 1029},
+    {826, 2, {6145, 6146}, {27, 15}, 0, 0},
+    {827, 2, {6161, 6162}, {27, 15}, 0, 0},
+    {947, 2, {6560, 6561}, {27, 15}, 6146, 1125},
+    {1298, 2, {7652, 7653}, {27, 15}, 6146, 1197},
+    {1306, 2, {8068, 8069}, {27, 15}, 6146, 1041},
+    {1309, 3, {4704, 4705, 4707}, {27, 15, 6}, 6146, 1259},
+    {1310, 2, {6177, 6178}, {27, 15}, 6146, 2055},
+    {1338, 2, {7473, 7472}, {15, 27}, 6146, 1231},
+    {2525, 2, {4049, 4050}, {27, 4}, 0, 0},
+    {2526, 2, {4052, 4051}, {15, 27}, 6164, 1926},
+    {2527, 2, {4054, 4053}, {15, 27}, 6164, 1927},
+    {2528, 2, {4056, 4055}, {15, 27}, 6164, 1928},
+    {2529, 2, {4058, 4057}, {15, 27}, 6164, 1929},
+    {2530, 4, {4061, 4060, 4071, 4059}, {15, 15, 6, 27}, 6164, 1930},
+    {4702, 3, {6534, 6535, 6541}, {27, 15, 6}, 6146, 927},
+    {4703, 2, {6536, 6537}, {27, 15}, 6146, 928},
+    {4704, 2, {6538, 6539}, {27, 15}, 6146, 929},
+    {4705, 2, {4047, 4048}, {27, 15}, 6146, 2024},
+    {4706, 2, {4050, 4049}, {4, 27}, 0, 0},
+    {4707, 2, {4051, 4052}, {27, 15}, 6146, 2026},
+    {4708, 2, {4054, 4053}, {15, 27}, 6146, 2027},
+    {4709, 2, {4055, 4056}, {27, 15}, 6146, 2028},
+    {4710, 2, {4057, 4058}, {27, 15}, 6146, 2029},
+    {4711, 5, {4059, 4060, 4061, 4071, 4072}, {27, 15, 15, 6, 15}, 6146, 2030},
+    {4712, 1, {4062}, {2}, 0, 0},
+    {4713, 1, {4064}, {15}, 6146, 2032},
+    {4714, 1, {4065}, {15}, 6146, 2033},
+    {4715, 1, {4066}, {15}, 6146, 2034},
+    {4716, 1, {4067}, {15}, 6146, 2035},
+    {4717, 1, {4068}, {15}, 6146, 2036},
+    {4718, 1, {4069}, {15}, 6146, 2037},
+    {4719, 1, {4070}, {15}, 6146, 2038},
+    {6043, 2, {7472, 7473}, {27, 15}, 6164, 1603},
+    {6044, 4, {8018, 8019, 8020, 8021}, {27, 4, 4, 6}, 6164, 1604},
+    {6045, 2, {6560, 6561}, {27, 15}, 6164, 1605},
+    {6046, 2, {6610, 6611}, {27, 15}, 6164, 1606},
+    {6047, 2, {7652, 7653}, {27, 15}, 6164, 1607},
+    {6048, 2, {6643, 6644}, {27, 15}, 6164, 1608},
+    {6049, 2, {7984, 7985}, {27, 15}, 6164, 1609},
+    {6053, 2, {4704, 4705}, {27, 15}, 6164, 1619},
+    {6054, 1, {2048}, {4}, 0, 0},
+    {6056, 2, {6145, 6146}, {27, 15}, 6164, 1621},
+    {6057, 2, {6161, 6162}, {27, 15}, 6164, 1622},
+    {6058, 2, {6177, 6178}, {27, 15}, 6164, 1623},
+    {6085, 3, {6534, 6535, 6541}, {27, 15, 6}, 6164, 1669},
+    {6086, 2, {6536, 6537}, {27, 15}, 6164, 1670},
+    {6087, 2, {6538, 6539}, {27, 15}, 6164, 1671},
+    {6090, 2, {8054, 8055}, {27, 15}, 6164, 1680},
+    {24705, 2, {4048, 4047}, {15, 27}, 6146, 2024},
+};
+static const int replay_order_1[] = {
+    18,   800,  804,  807,   808,  809,  815,  816,  818,  822,  826,
+    827,  947,  1298, 1306,  1309, 1310, 1338, 2525, 2526, 2527, 2528,
+    2529, 2530, 4702, 4703,  4704, 4705, 4706, 4707, 4708, 4709, 4710,
+    4711, 4712, 4713, 4714,  4715, 4716, 4717, 4718, 4719, 6043, 6044,
+    6045, 6046, 6047, 6048,  6049, 6053, 6054, 6056, 6057, 6058, 6085,
+    6086, 6087, 6090, 24705, 4,    5,
+};
+static const int replay_order_2[] = {
+    6043, 6044, 6045, 6046, 6047, 6048,  6049, 6053, 6054, 6056, 6057,
+    6058, 6085, 6086, 6087, 6090, 24705, 4,    5,    18,   800,  804,
+    807,  808,  809,  815,  816,  818,   822,  826,  827,  947,  1298,
+    1306, 1309, 1310, 1338, 2525, 2526,  2527, 2528, 2529, 2530, 4702,
+    4703, 4704, 4705, 4706, 4707, 4708,  4709, 4710, 4711, 4712, 4713,
+    4714, 4715, 4716, 4717, 4718, 4719,
+};
+static const int replay_order_3[] = {
+    1338, 2525, 2526, 2527, 2528, 2529, 2530, 4702, 4703,  4704, 4705,
+    4706, 4707, 4708, 4709, 4710, 4711, 4712, 4713, 4714,  4715, 4716,
+    4717, 4718, 4719, 6043, 6044, 6045, 6046, 6047, 6048,  6049, 6053,
+    6054, 6056, 6057, 6058, 6085, 6086, 6087, 6090, 24705, 4,    5,
+    18,   800,  804,  807,  808,  809,  815,  816,  818,   822,  826,
+    827,  947,  1298, 1306, 1309, 1310,
+};
+static const int replay_order_4[] = {
+    2528, 2529, 2530, 4702, 4703,  4704, 4705, 4706, 4707, 4708, 4709,
+    4710, 4711, 4712, 4713, 4714,  4715, 4716, 4717, 4718, 4719, 6043,
+    6044, 6045, 6046, 6047, 6048,  6049, 6053, 6054, 6056, 6057, 6058,
+    6085, 6086, 6087, 6090, 24705, 4,    5,    18,   800,  804,  807,
+    808,  809,  815,  816,  818,   822,  826,  827,  947,  1298, 1306,
+    1309, 1310, 1338, 2525, 2526,  2527,
+};
+
+// One log replay: subscribe the request, create the 61 PMTs in the
+// log's parse order with an election after each; the winner runs alone.
+static int check_replay_issue_log(const int *order, const int *ecms, int necms,
+                                  int winner_sid) {
+    pmts.clear();
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    opts.emulate_pids_all = 0;
+
+    ASSERT(mark_pid_add(0, 0, 817) == 0, "pid 817 should be added");
+    ASSERT(mark_pid_add(0, 0, 7472) == 0, "pid 7472 should be added");
+    ASSERT(mark_pid_add(0, 0, 7473) == 0, "pid 7473 should be added");
+    for (int i = 0; i < necms; i++)
+        ASSERT(mark_pid_add(0, 0, ecms[i]) == 0, "ECM pid should be added");
+    update_pids(0);
+
+    for (int i = 0; i < 61; i++) {
+        const ReplayPmt *rp = NULL;
+        for (const auto &cand : replay_lineup)
+            if (cand.sid == order[i])
+                rp = &cand;
+        ASSERT(rp, "replay sid should be in the lineup");
+        int id = pmt_add(0, rp->sid, 817);
+        ASSERT(id >= 0, "replay PMT should be created");
+        for (int k = 0; k < rp->nstreams; k++) {
+            int t = rp->stype[k];
+            bool video = t == 2 || t == 27 || t == 36 || t == 15;
+            bool audio = t == 129 || t == 3 || t == 4 || t == 17;
+            pmt_add_stream_pid(pmts[id], rp->spid[k], t, audio, video);
+        }
+        if (rp->caid)
+            pmt_add_caid(pmts[id], static_cast<uint16_t>(rp->caid),
+                         static_cast<uint16_t>(rp->ecm), nullptr, 0);
+        pmt_add_active_pmt(&ad, id);
+        start_active_pmts(&ad);
+    }
+
+    SPMT *pwinner = get_pmt_for_sid_pid(0, winner_sid, 817);
+    ASSERT(pwinner, "winner should own a PMT object");
+    ASSERT_EQUAL(pwinner->state, PMT_RUNNING, "replay winner should run");
+    ASSERT(find_pid(0, 7472)->pmt == pwinner->id, "winner owns video");
+    ASSERT(find_pid(0, 7473)->pmt == pwinner->id, "winner owns audio");
+    int loser_sid = winner_sid == 1338 ? 6043 : 1338;
+    SPMT *ploser = get_pmt_for_sid_pid(0, loser_sid, 817);
+    ASSERT_EQUAL(ploser->state, PMT_STOPPED, "replay loser should wait");
+    for (SPMT *pmt : pmts)
+        if (pmt->adapter == 0 && pmt->sid != 1338 && pmt->sid != 6043)
+            ASSERT_EQUAL(pmt->state, PMT_STOPPED, "only rivals contend");
+
+    start_active_pmts(&ad);
+    ASSERT_EQUAL(pwinner->state, PMT_RUNNING, "winner should stay up");
+
+    pmts.destroy_all();
+    a[0] = nullptr;
+    return 0;
+}
+
+// Replays the four issue logs: full 61-PMT lineup in each log's parse
+// order. One requested ECM selects its carrier; ties keep first-parsed.
+int test_30w_replay_issue_logs() {
+    static const int *orders[] = {replay_order_1, replay_order_2,
+                                  replay_order_3, replay_order_4};
+    int ecm1603[] = {1603};
+    int ecm1231[] = {1231};
+    int both[] = {1231, 1603};
+    for (int o = 0; o < 4; o++) {
+        int first = -1;
+        for (int i = 0; i < 61; i++)
+            if (orders[o][i] == 1338 || orders[o][i] == 6043) {
+                first = orders[o][i];
+                break;
+            }
+        ASSERT(first > 0, "order should hold both rivals");
+        if (check_replay_issue_log(orders[o], NULL, 0, first))
+            return 1;
+        if (check_replay_issue_log(orders[o], ecm1603, 1, 6043))
+            return 1;
+        if (check_replay_issue_log(orders[o], ecm1231, 1, 1338))
+            return 1;
+        if (check_replay_issue_log(orders[o], both, 2, first))
+            return 1;
+    }
+    return 0;
+}
+
 // #1129 beIN: PMT 48 (sid 14101) and PMT 52 (sid 14104) share vpid and
 // apid. The subscribed PMT pid decides, never the parsed-first sibling.
 int test_1129_bein_shared_es() {
@@ -3635,6 +3829,8 @@ int main() {
               "testing order outranks a requested ECM")
     TEST_FUNC(test_completeness_beats_requested_ecm(),
               "testing completeness outranks a requested ECM")
+    TEST_FUNC(test_30w_replay_issue_logs(),
+              "testing #1515 replay of the four issue logs")
     TEST_FUNC(test_1129_bein_shared_es(),
               "testing #1129 beIN shared streams elect subscribed pid")
     TEST_FUNC(test_19e_11493h_zap_flows(),
