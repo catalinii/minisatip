@@ -277,7 +277,7 @@ void print_version(int use_log, int print_built_info) {
     if (!use_log)
         puts(buf);
     else
-        LOG0(buf);
+        LOG0("%s", buf);
 
     if (print_built_info) {
         for (i = 0; built_info[i]; i++)

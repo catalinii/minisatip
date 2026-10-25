@@ -385,8 +385,8 @@ int dvbapi_reply(sockets *s) {
                 LOG("dvbapi: invalid DVBAPI_CA_SET_DESCR, key %d parity %d, k "
                     "%p, "
                     "index %d, CW: %02X %02X %02X %02X %02X %02X %02X %02X",
-                    k_id, parity, k, index, cw[0], cw[1], cw[2], cw[3], cw[4],
-                    cw[5], cw[6], cw[7]);
+                    k_id, parity, static_cast<void *>(k), index, cw[0], cw[1],
+                    cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]);
             break;
         }
 

@@ -342,7 +342,7 @@ int start_play(streams *sid, sockets *s) {
 int close_stream_for_socket(sockets *s) {
     streams *sid = get_sid(s->sid);
     LOG("%s: start close_stream_for_socket for id %d %p", __FUNCTION__, s->sid,
-        sid);
+        static_cast<void *>(sid));
     if (sid)
         sid->timeout = 1;
     return 0;

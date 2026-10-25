@@ -1267,30 +1267,6 @@ int mark_pid_add(int sid, int aid, int _pid) {
     return -1;
 }
 
-int mark_pids_add(int sid, int aid, const char *pids) {
-    adapter *ad;
-    int pid;
-
-    ad = get_adapter(aid);
-    if (!ad)
-        return -1;
-
-    if (!pids)
-        return -1;
-    LOG("adding pids to adapter %d, sid %d, pids=%s", aid, sid,
-        pids ? pids : "NULL");
-
-    auto arg = split(pids, ',');
-    for (const auto &pid_sv : arg) {
-        pid = parse_int(pid_sv, -1);
-        if (pid < 0 || pid > 8192)
-            continue;
-        if (mark_pid_add(sid, aid, pid) < 0)
-            return -1;
-    }
-    return 0;
-}
-
 int get_lnb_hiband(transponder *tp, diseqc *diseqc_param) {
     if (tp->pol.value_or(0) > 2 && diseqc_param->lnb_circular > 0)
         return 0;

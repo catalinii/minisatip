@@ -142,7 +142,7 @@ std::string iterable_to_string(const Container &container,
         ptr += __r;                                                            \
         if (ptr >= (int)(size)) {                                              \
             LOG("%s:%d buffer size too small (%d)", __FUNCTION__, __LINE__,    \
-                size);                                                         \
+                (int)(size));                                                  \
             ptr = (size) - 1;                                                  \
         }                                                                      \
     } while (0)

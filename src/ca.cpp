@@ -1307,7 +1307,7 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
     }
 
     LOG("PMT CA %d pmt %d pid %u (%s) ver %u sid %X (%u), enabled_pmts %d, "
-        "%s, PMTS to be send %s, pos %ld%s",
+        "%s, PMTS to be send %s, pos %td%s",
         spmt->adapter, spmt->id, pid, spmt->name, capmt->version, sid,
         capmt->sid, get_enabled_pmts_for_ca(d), listmgmt_str[listmgmt],
         capmt_pmts_str(capmt).c_str(), capmt - d->capmt,
@@ -3348,7 +3348,7 @@ int ca_write_spdu(ca_device_t *d, int session_number, unsigned char tag,
 
     ptr += alen;
 
-    DEBUGM("%s: CA %d, session %d, name %s, write tag %02X, data length %ld",
+    DEBUGM("%s: CA %d, session %d, name %s, write tag %02X, data length %td",
            __FUNCTION__, d->id, session_number,
            session_number > 0 ? d->sessions[session_number - 1].handler.name
                               : "none",
@@ -4082,12 +4082,6 @@ void dvbca_init() // you can search the devices here and fill the
     sockets_timeout(poller_sock, 1000); // try to connect every 1s
     pthread_t tid = start_new_thread((char *)"CA_poll");
     set_socket_thread(poller_sock, tid);
-}
-
-char *get_ca_pin(int i) {
-    if (ca_devices[i])
-        return ca_devices[i]->pin_str;
-    return NULL;
 }
 
 void set_ca_pin(int i, std::string_view pin) {

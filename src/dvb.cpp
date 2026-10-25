@@ -857,7 +857,7 @@ void set_proc_data(int adapter, const char *name, int val) {
         fprintf(fp, "%d", val);
         fclose(fp);
     } else {
-        LOG("setProcData open failed, %s: %m", filename);
+        LOG("setProcData open failed, %s: %s", filename, strerror(errno));
     }
 }
 
@@ -2027,8 +2027,8 @@ void adapt_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
     *snr = (int)snr_new;
     *db = (int)db_new;
 
-    LOGM("adapt_signal adapter %d: strength %d (raw: %lld),"
-         "snr %d (raw: %lld), dB %d (raw: %lld)",
+    LOGM("adapt_signal adapter %d: strength %d (raw: %jd),"
+         "snr %d (raw: %jd), dB %d (raw: %jd)",
          ad->id, *strength, strength_init, *snr, snr_init, *db, db_init);
 }
 

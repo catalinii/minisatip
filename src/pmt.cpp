@@ -406,8 +406,8 @@ static int set_filter_flags_locked(SFilter *f, int flags) {
                                  p);
                 update_pids(f->adapter);
             } else
-                LOGM("pid not found or pid in use by %lu streams",
-                     p ? p->sid.size() : -1);
+                LOGM("pid not found or pid in use by %d streams",
+                     p ? static_cast<int>(p->sid.size()) : -1);
         }
     }
     return 0;
@@ -1688,20 +1688,6 @@ void clear_pmt_for_adapter(int aid) {
     }
     ad->active_pmts = 0;
     return;
-}
-
-SPMT *get_pmt_for_sid(int aid, int sid) {
-    int i;
-    adapter *ad = get_adapter(aid);
-    if (!ad)
-        return NULL;
-    for (i = 0; i < ad->active_pmts; i++) {
-        int p = ad->active_pmt[i];
-        SPMT *pmt = get_pmt(p);
-        if (pmt && pmt->sid == sid)
-            return pmt;
-    }
-    return NULL;
 }
 
 SPMT *get_all_pmt_for_sid(int aid, int sid) {

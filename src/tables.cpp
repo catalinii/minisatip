@@ -68,7 +68,7 @@ int add_ca(SCA_op *op) {
                 break;
         }
     if (i == MAX_CA)
-        LOG_AND_RETURN(0, "No free CA slots for %p", ca);
+        LOG_AND_RETURN(0, "No free CA slots for %p", static_cast<void *>(ca));
     new_ca = i;
 
     // A disconnect leaves op in place, and a reconnect keeps the same op
@@ -345,7 +345,7 @@ int send_pmt_to_cas(adapter *ad, SPMT *pmt) {
             disabled = pmt->disabled_ca_mask;
         }
         LOG("Sending PMT %d to all CAs: ad_ca_mask %X, "
-            "pmt_ca_mask %X, disabled_ca_mask %X",
+            "pmt_ca_mask %jX, disabled_ca_mask %jX",
             pmt->id, ad ? ad->ca_mask.load() : -2, sent, disabled);
         for (i = 0; i < nca; i++)
             if (ca[i].enabled)

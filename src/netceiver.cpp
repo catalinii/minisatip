@@ -335,7 +335,8 @@ int netcv_commit(adapter *ad) {
             break;
 
         default:
-            LOG("netceiver: adapter %d tuning not supported for type %d", sys)
+            LOG("netceiver: adapter %d tuning not supported for type %d",
+                ad->id, sys);
             break;
         }
 
@@ -563,7 +564,7 @@ int handle_ts(unsigned char *buffer, size_t len, void *p) {
 
     /* simple data format check */
     if (buffer[0] != 0x47 || len % 188 != 0) {
-        LOG("netceiver: TS data malformed: buf[0]=0x%02x len=%lu", buffer[0],
+        LOG("netceiver: TS data malformed: buf[0]=0x%02x len=%zu", buffer[0],
             len);
         return len;
     }

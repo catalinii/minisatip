@@ -235,7 +235,7 @@ int satipc_reply(sockets *s) {
 
     if (!is_rtsp_response((char *)s->buf, s->rlen)) {
         set_socket_new_buffer(s->id, 10240);
-        LOG("satipc: RTSP header not complete: %d len %d\n%s", s->id,
+        LOG("satipc: RTSP header not complete: %d len %zu\n%s", s->id,
             strlen((const char *)s->buf), s->buf);
         return 0;
     }
