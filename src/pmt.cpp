@@ -33,7 +33,6 @@
 #include "utils/ticks.h"
 
 #include <algorithm>
-#include <limits>
 #include <ranges>
 #include <span>
 
@@ -1040,56 +1039,31 @@ static int pid_requested_by_client(SPid *p) {
     return p && p->flags == PID_STATE_ACTIVE && spid_has_client_sid(p);
 }
 
-// True when the PMT carries the ECM pid in its CA descriptors.
-static int pmt_carries_ecm(SPMT *pmt, int ecm) {
-    for (int i = 0; i < pmt->caids; i++)
-        if (pmt->ca[i]->pid == ecm)
-            return 1;
-    return 0;
+// Completeness: percent of the PMT's stream and ECM pids present
+// in the client request (#1515). Empty PMTs score zero.
+template <typename Lookup>
+static int pmt_completeness_pct(SPMT *pmt, Lookup pid_of) {
+    int total = 0, matched = 0;
+    for (const auto &sp : pmt->stream_pids) {
+        total++;
+        if (pid_requested_by_client(pid_of(sp.pid)))
+            matched++;
+    }
+    for (int k = 0; k < pmt->caids; k++) {
+        total++;
+        if (pid_requested_by_client(pid_of(pmt->ca[k]->pid)))
+            matched++;
+    }
+    return total ? matched * 100 / total : 0;
 }
 
-// Lowest ECM pid carried, or INT_MAX with no CA entry (sorts last).
-static int pmt_lowest_ecm(SPMT *pmt) {
-    int lowest = std::numeric_limits<int>::max();
-    for (int i = 0; i < pmt->caids; i++)
-        lowest = std::min(lowest, pmt->ca[i]->pid);
-    return lowest;
-}
-
-// Election order: earliest subscriber first, requested ECM next,
-// lowest ECM pid last. Full ties never outrank, holder keeps (#1515).
-static int choice_outranks(char ecm, uint32_t order, int lowest, char r_ecm,
-                           uint32_t r_order, int r_lowest) {
+// Election order: earliest subscriber, then highest completeness.
+// Full ties never outrank, the holder keeps its claims (#1515).
+static int choice_outranks(uint32_t order, int pct, uint32_t r_order,
+                           int r_pct) {
     if (order != r_order)
         return order < r_order;
-    if (ecm != r_ecm)
-        return ecm > r_ecm;
-    return lowest < r_lowest;
-}
-
-// Finds the single client-requested ECM pid across rivals: exactly
-// one requested ECM decides, zero or several fall back to order/sid.
-template <typename Lookup>
-static void scan_requested_ecm(SPMT **rivals, int n, Lookup pid_of,
-                               int *single_ecm, int *ambiguous) {
-    *single_ecm = -1;
-    *ambiguous = 0;
-    for (int i = 0; i < n && !*ambiguous; i++) {
-        SPMT *pmt = rivals[i];
-        if (!pmt)
-            continue;
-        for (int k = 0; k < pmt->caids; k++) {
-            int capid = pmt->ca[k]->pid;
-            if (!pid_requested_by_client(pid_of(capid)))
-                continue;
-            if (*single_ecm < 0)
-                *single_ecm = capid;
-            else if (*single_ecm != capid) {
-                *ambiguous = 1;
-                break;
-            }
-        }
-    }
+    return pct > r_pct;
 }
 
 // Live AV check for the update path: NEW counts, DELETED does not.
@@ -1181,7 +1155,6 @@ static void reset_pmt_ca(SPMT *pmt) { pmt->caids = 0; }
 typedef struct {
     SPMT *pmt;
     char candidate;
-    char ecm; // carries the single requested ECM pid (#1515)
     uint32_t order;
 } SPmtChoice;
 
@@ -1203,24 +1176,12 @@ static int is_pmt_subscribed(adapter *ad, SPMT *pmt) {
 }
 
 // A newly parsed PMT takes over only owners it outranks (order,
-// ECM, lowest ECM): stop each of them and release their AV claims.
+// then completeness): stop each of them and release their claims.
 static void handover_claims_from_lower_priority(adapter *ad, SPMT *pmt) {
-    SPMT *rivals[MAX_PMT_FOR_ADAPTER];
-    int n = 0;
-    for (int i = 0; i < ad->active_pmts && n < MAX_PMT_FOR_ADAPTER; i++) {
-        SPMT *cand = get_pmt(ad->active_pmt[i]);
-        if (cand)
-            rivals[n++] = cand;
-    }
-    int single_ecm, ambiguous;
-    scan_requested_ecm(
-        rivals, n, [&](int capid) { return find_pid(ad->id, capid); },
-        &single_ecm, &ambiguous);
-    char ecm =
-        !ambiguous && single_ecm >= 0 && pmt_carries_ecm(pmt, single_ecm);
+    auto pid_lookup = [&](int pid) { return find_pid(ad->id, pid); };
     SPid *pp = find_pid(ad->id, pmt->pid);
     uint32_t order = (pp && pp->order) ? pp->order : UINT32_MAX;
-    int lowest = pmt_lowest_ecm(pmt);
+    int pct = pmt_completeness_pct(pmt, pid_lookup);
     for (const auto &sp : pmt->stream_pids) {
         SPid *s = find_pid(ad->id, sp.pid);
         SPMT *old;
@@ -1235,12 +1196,10 @@ static void handover_claims_from_lower_priority(adapter *ad, SPMT *pmt) {
             continue;
         if (old->state != PMT_RUNNING && old->state != PMT_STARTING)
             continue;
-        char old_ecm =
-            !ambiguous && single_ecm >= 0 && pmt_carries_ecm(old, single_ecm);
         op = find_pid(ad->id, old->pid);
         old_order = (op && op->order) ? op->order : UINT32_MAX;
-        if (!choice_outranks(ecm, order, lowest, old_ecm, old_order,
-                             pmt_lowest_ecm(old)))
+        if (!choice_outranks(order, pct, old_order,
+                             pmt_completeness_pct(old, pid_lookup)))
             continue; // higher or equal priority keeps its claims
         LOG("PMT %d takes over from lower-priority PMT %d", pmt->id, old->id);
         stop_pmt(old, ad);
@@ -1248,13 +1207,12 @@ static void handover_claims_from_lower_priority(adapter *ad, SPMT *pmt) {
     }
 }
 
-// Earliest subscriber wins each pid, requested ECM breaks order
-// ties, lowest ECM pid breaks the rest; full ties keep holder.
+// Earliest subscriber wins each pid, highest completeness breaks
+// order ties; full ties keep the holder (#1515).
 void pmt_pid_updated_pids(adapter *ad) {
     int i;
     SPid *pids[8193];
     SPmtChoice ch[MAX_PMT_FOR_ADAPTER];
-    SPMT *rivals[MAX_PMT_FOR_ADAPTER];
     int nch = 0;
     memset(pids, 0, sizeof(pids));
 
@@ -1275,29 +1233,22 @@ void pmt_pid_updated_pids(adapter *ad) {
         pp = pids[pmt->pid];
         ch[nch].pmt = pmt;
         ch[nch].candidate = 1;
-        ch[nch].ecm = 0;
         ch[nch].order = (pp && pp->order) ? pp->order : UINT32_MAX;
-        rivals[nch] = pmt;
         nch++;
     }
-    int single_ecm, ambiguous;
-    scan_requested_ecm(
-        rivals, nch,
-        [&](int capid) {
-            return (capid >= 0 && capid < 8193) ? pids[capid] : nullptr;
-        },
-        &single_ecm, &ambiguous);
-    for (i = 0; i < nch; i++)
-        ch[i].ecm = !ambiguous && single_ecm >= 0 &&
-                    pmt_carries_ecm(ch[i].pmt, single_ecm);
-    // Sort by order, requested ECM, lowest ECM pid, then drop
-    // later members duplicating an earlier member's stream set.
-    // Stable: full ties keep active-list order, twins are fungible.
-    std::stable_sort(
-        ch, ch + nch, [](const SPmtChoice &a, const SPmtChoice &b) {
-            return choice_outranks(a.ecm, a.order, pmt_lowest_ecm(a.pmt), b.ecm,
-                                   b.order, pmt_lowest_ecm(b.pmt));
-        });
+    auto pid_lookup = [&](int pid) {
+        return (pid >= 0 && pid < 8193) ? pids[pid] : nullptr;
+    };
+    auto pct_of = [&](SPMT *pmt) {
+        return pmt_completeness_pct(pmt, pid_lookup);
+    };
+    // Sort by order, then completeness, then drop later members
+    // duplicating an earlier stream set (stable keeps ties listed).
+    std::stable_sort(ch, ch + nch,
+                     [&](const SPmtChoice &a, const SPmtChoice &b) {
+                         return choice_outranks(a.order, pct_of(a.pmt), b.order,
+                                                pct_of(b.pmt));
+                     });
     for (i = 0; i < nch; i++) {
         int j;
         if (!ch[i].candidate)
@@ -1333,7 +1284,7 @@ void pmt_pid_updated_pids(adapter *ad) {
         SPMT *pmt = ch[i].pmt;
         if (!ch[i].candidate)
             continue;
-        int lowest = pmt_lowest_ecm(pmt);
+        int pct = pct_of(pmt);
         for (const auto &sp : pmt->stream_pids) {
             SPid *s = pids[sp.pid];
             // Every stream (data included) is marked so the decrypt
@@ -1344,13 +1295,11 @@ void pmt_pid_updated_pids(adapter *ad) {
             // never on a full tie (the holder keeps its claims).
             SPMT *holder = s->pmt >= 0 ? get_pmt(s->pmt) : NULL;
             if (holder) {
-                char holder_ecm = !ambiguous && single_ecm >= 0 &&
-                                  pmt_carries_ecm(holder, single_ecm);
                 SPid *hp = pids[holder->pid];
                 uint32_t holder_order =
                     (hp && hp->order) ? hp->order : UINT32_MAX;
-                if (!choice_outranks(ch[i].ecm, ch[i].order, lowest, holder_ecm,
-                                     holder_order, pmt_lowest_ecm(holder)))
+                if (!choice_outranks(ch[i].order, pct, holder_order,
+                                     pct_of(holder)))
                     continue;
                 LOGM("PMT %d steals pid %d from PMT %d", pmt->id, sp.pid,
                      s->pmt);
