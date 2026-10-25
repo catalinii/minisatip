@@ -1470,16 +1470,16 @@ ddci_device_t *ddci_alloc(int id) {
 }
 
 #ifndef DISABLE_LINUXDVB
-// Loopback open: push to the chip playback dvr, TAPs on the free demux.
-// Only dvr0 feeds the demuxes (source id minus offset); dvrN>0 is a stub.
+// Loopback open: push to the playback dvr, TAPs on the free demux.
+// Playback routing is per-model: Uno4K feeds every TAP from dvr0,
+// GBQuad4K pairs each demux with its own dvr.
 static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
     char buf[100];
     int dvr_offset = ddci_dvr_source_offset();
     ad->dmx_source = dvr_offset;
-    // Only dvr0 feeds the demuxes; higher dvrs are stubs on this chip.
-    int push_dvr = ad->dmx_source - dvr_offset;
-    if (push_dvr < 0)
-        push_dvr = 0;
+    int push_dvr = 0;
+    if (ddci_model_is_gbquad4k("/proc/stb/info/gbmodel"))
+        push_dvr = ad->fn;
     snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/dvr%d", ad->pa, push_dvr);
     int write_fd = open(buf, O_WRONLY | O_NONBLOCK);
     if (write_fd < 0)
