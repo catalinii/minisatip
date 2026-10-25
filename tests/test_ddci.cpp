@@ -52,6 +52,8 @@
 #define DEFAULT_LOG LOG_DVBCA
 
 extern ddci_device_t *ddci_devices[MAX_ADAPTERS];
+extern int ddci_id;
+int ddci_post_init(adapter *ad);
 extern SCA_op dvbca;
 extern ca_device_t *ca_devices[MAX_ADAPTERS];
 extern std::unordered_map<int, Sddci_channel> channels;
@@ -192,6 +194,29 @@ int test_ddci_channel_count() {
 }
 
 // PCR pid carried by the regenerated PMT section for a DDCI slot.
+// No DVR socket: sockets_add() failed, or the adapter thread already
+// deleted it. ddci_post_init() must not dereference it.
+int test_ddci_post_init_without_dvr_socket() {
+    ddci_device_t d = {};
+    adapter ad = {};
+    for (int i = 0; i < MAX_ADAPTERS; i++)
+        a[i] = nullptr;
+    create_adapter(&ad, 0);
+    ad.type = ADAPTER_CI;
+    ad.sock = -1;
+    ad.fe_sock = -1;
+    d.enabled = 1;
+    ddci_devices[0] = &d;
+    int saved_id = ddci_id;
+    ddci_id = 0; // registered already, so ddci_init() stays out of it
+    int rv = ddci_post_init(&ad);
+    ddci_id = saved_id;
+    ddci_devices[0] = NULL;
+    a[0] = nullptr;
+    ASSERT(rv == 0, "ddci_post_init without a DVR socket");
+    return 0;
+}
+
 static int section_pcr_pid(ddci_device_t *d, SPMT *pmt) {
     uint8_t psi[512];
     ddci_create_pmt(d, pmt, psi, sizeof(psi), &d->pmt[0]);
@@ -1720,6 +1745,8 @@ int main() {
     TEST_FUNC(test_add_del_pmt(), "testing adding and removing pmts");
     TEST_FUNC(test_ddci_channel_count(),
               "testing DDCI channel accounting on re-send and delete");
+    TEST_FUNC(test_ddci_post_init_without_dvr_socket(),
+              "testing ddci_post_init without a DVR socket");
     TEST_FUNC(test_update_resend_keeps_slot(),
               "testing update re-send keeps the slot and drops one pid");
     TEST_FUNC(test_ddci_update_version_follows_content(),

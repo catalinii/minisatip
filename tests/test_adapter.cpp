@@ -29,6 +29,8 @@
 #include <unordered_set>
 #include <vector>
 
+char *get_adapter_name(int aid, char *dest, int max_size);
+
 int test_get_lnb_hiband_universal() {
     transponder tp;
     diseqc diseqc_param = {
@@ -163,6 +165,24 @@ int test_describe_adapter_large_plp_ds() {
     ASSERT(strstr(buf, ",2147483646,2147483647,"), "DVB-C2 ds and plp printed");
 
     a[0] = nullptr;
+    return 0;
+}
+
+// At most max_size bytes, and an empty name without an adapter.
+int test_get_adapter_name_bounded() {
+    adapter ad = {};
+    a[0] = &ad;
+    char buf[48];
+    ad.adapter_name = std::string(100, 'x');
+    memset(buf, 'C', sizeof(buf));
+    get_adapter_name(0, buf, 32);
+    ASSERT(strlen(buf) == 31, "name cut to max_size - 1");
+    ASSERT(buf[32] == 'C', "nothing written past max_size");
+
+    a[0] = nullptr;
+    memset(buf, 'C', sizeof(buf));
+    get_adapter_name(0, buf, 32);
+    ASSERT(buf[0] == 0, "no adapter, empty name");
     return 0;
 }
 
@@ -579,6 +599,8 @@ int main() {
     TEST_FUNC(test_update_pids(), "test update_pids and sort_pids");
     TEST_FUNC(test_describe_adapter_large_plp_ds(),
               "test describe_adapter with ten-digit plp and ds");
+    TEST_FUNC(test_get_adapter_name_bounded(),
+              "test get_adapter_name stays within max_size");
     TEST_FUNC(test_find_pid_unsorted(),
               "test find_pid with entries behind INACTIVE slots");
     TEST_FUNC(test_update_pids_max_pids_floor(),
