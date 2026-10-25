@@ -196,7 +196,7 @@ struct cc_ctrl_data {
 enum class ca_mode : uint8_t { DVB = 0, DDCI, ENIGMA, ENIGMA_DDCI };
 
 // Vu+ boxes expose at most two CI slots; enigma scans these.
-#define MAX_VU_CI_SLOTS 2
+constexpr int MAX_VU_CI_SLOTS = 2;
 
 struct ca_device {
     // enabled/fd/sock/state are plain cross-thread ints: writers

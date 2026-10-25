@@ -1214,7 +1214,7 @@ static ca_mode ca_mode_for_adapter(const adapter *ad) {
 }
 
 // Both enigma modes drive /dev/ciN with raw SPDUs.
-static int ca_mode_is_enigma(ca_mode mode) {
+[[nodiscard]] static constexpr bool ca_mode_is_enigma(ca_mode mode) {
     return mode == ca_mode::ENIGMA || mode == ca_mode::ENIGMA_DDCI;
 }
 

@@ -64,6 +64,7 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt);
 extern ca_device_t *ca_devices[MAX_ADAPTERS];
 extern ddci_device_t *ddci_devices[MAX_ADAPTERS];
 extern int dvbca_id;
+extern int has_ci;
 extern SCA ca[];
 extern std::atomic<int> nca;
 int get_active_capmts(ca_device_t *d);
@@ -2361,7 +2362,6 @@ int test_loopback_capmt_sends_at_once() {
 // Loopback owns its stored CI slot; the enigma tuner on that slot
 // stands down so /dev/ciX is driven only by the DDCI adapter.
 int test_loopback_owns_ci_slot() {
-    extern int has_ci;
     int saved_enigma = opts.enigma;
     int saved_has_ci = has_ci;
     ddci_device_t *saved_ddci[MAX_ADAPTERS];
