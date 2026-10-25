@@ -19,9 +19,6 @@
  */
 
 #include "pmt.h"
-#ifndef DISABLE_DDCI
-#include "ddci.h"
-#endif
 #include "adapter.h"
 #include "api/symbols.h"
 #include "api/variables.h"
