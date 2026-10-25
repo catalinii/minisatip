@@ -35,14 +35,14 @@ typedef struct struct_sockets {
     void *opaque, *opaque2, *opaque3;
     int lbuf;
     int rlen;
-    int timeout_ms;
+    std::atomic<int> timeout_ms;
     int id; // socket id
     uint64_t iteration;
     int err;
     int flags; // 1 - buf is allocated dynamically
     int events, revents;
     int64_t last_poll;
-    pthread_t tid;
+    std::atomic<pthread_t> tid;
     int sock_err;
     SFIFO fifo;
     int prio_data_len;

@@ -1681,7 +1681,7 @@ int close_http(sockets *s) {
         "timeout "
         "%d",
         s->sid, sid ? sid->timeout : -1, sid ? sid->type : -1, s->id, s->sock,
-        s->timeout_ms);
+        s->timeout_ms.load());
     if (sid && ((sid->type == STREAM_RTSP_UDP && sid->timeout != 0) ||
                 (sid->type == 0 && sid->timeout != 0)))
         // Do not close rtsp udp as most likely there was no TEARDOWN at this
