@@ -2369,14 +2369,14 @@ int test_loopback_owns_ci_slot() {
     memset(ddci_devices, 0, sizeof(ddci_devices));
     opts.enigma = 1;
     has_ci = 1;
-    ASSERT_EQUAL(ddci_loopback_ci_slot(), -1, "no loopback claims nothing");
+    ASSERT_EQUAL(ddci_loopback_owns_slot(1), 0, "no loopback claims nothing");
 
     ddci_device_t loop = {};
     loop.id = 71;
     loop.loopback = 1;
     loop.ci_slot = 1;
     ddci_devices[71] = &loop;
-    ASSERT_EQUAL(ddci_loopback_ci_slot(), 1, "stored claim is read");
+    ASSERT_EQUAL(ddci_loopback_owns_slot(1), 1, "stored claim is read");
 
     adapter tuner = {};
     tuner.id = 1;
