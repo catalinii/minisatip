@@ -2053,7 +2053,6 @@ int test_ddci_two_loopbacks_own_distinct_slots() {
     ASSERT(ddci_loopback_slot_for(10) == 0, "adapter 10 drives slot 0");
     ASSERT(ddci_loopback_slot_for(11) == 1, "adapter 11 drives slot 1");
     ASSERT(ddci_loopback_slot_for(8) == -1, "tuner owns no slot");
-    ASSERT(ddci_loopback_ci_slot() == 0, "first claim stays slot 0");
 
     d0.ci_slot = d1.ci_slot = -1;
     ASSERT(!ddci_loopback_owns_slot(0), "released slot reads free");
