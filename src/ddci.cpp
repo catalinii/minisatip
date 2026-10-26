@@ -101,7 +101,10 @@ int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
     int ddci_pid = -1;
     ddci_mapping_table_t *m;
     if (!has_pid_mapping(d, ad, pid)) {
-        ddci_pid = find_ddci_pid(d, pid);
+        // Table pids stay fixed: the CAM expects PAT/CAT/TDT on
+        // their pid even when several tuners map them.
+        ddci_pid =
+            (pid == 0 || pid == 1 || pid == 20) ? pid : find_ddci_pid(d, pid);
         m = &d->mapping[MAKE_KEY(ad, pid)];
         m->ad = ad;
         m->pid = pid;
@@ -231,7 +234,7 @@ int ddci_loopback_slot_for(int id) {
     return d->ci_slot;
 }
 
-// First N with demuxN+dvrN present, frontendN absent, and N owned by
+// Last N with demuxN+dvrN present, frontendN absent, and N owned by
 // no adapter; -1 when none fits. Arrays list existing indices ascending.
 static bool ddci_list_has(const int *list, int n, int v) {
     for (int i = 0; i < n; i++)
@@ -242,7 +245,7 @@ static bool ddci_list_has(const int *list, int n, int v) {
 
 int ddci_pick_free_pair(const int *demux, int ndemux, const int *dvr, int ndvr,
                         const int *fe, int nfe, const int *used, int nused) {
-    for (int i = 0; i < ndemux; i++) {
+    for (int i = ndemux - 1; i >= 0; i--) {
         int fn = demux[i];
         if (!ddci_list_has(dvr, ndvr, fn) || ddci_list_has(fe, nfe, fn) ||
             ddci_list_has(used, nused, fn))
@@ -300,7 +303,16 @@ static void release_mapping_entry(ddci_device_t *d, int ad, int pmt,
     int pid = m->pid, ddci_pid = m->ddci_pid;
     SPid *p = find_pid(d->id, ddci_pid);
     LOG("Deleting ad %d pmt %d pid %d ddci_pid %d", ad, pmt, pid, ddci_pid);
-    if (p)
+    // Shared ddci_pid (table pids mapped per tuner): drop the CI
+    // entry only when no other mapping still uses it.
+    bool last = true;
+    for (const auto &u : d->mapping)
+        if (u.second.ddci_pid == ddci_pid &&
+            MAKE_KEY(u.second.ad, u.second.pid) != MAKE_KEY(ad, pid)) {
+            last = false;
+            break;
+        }
+    if (p && last)
         mark_pid_deleted(d->id, DDCI_SID, ddci_pid, NULL);
     if (m->filter_id >= 0)
         del_filter(m->filter_id);
@@ -336,7 +348,7 @@ int del_pmt_mapping_table(ddci_device_t *d, int ad, int pmt) {
 // until their last user is gone. Call with d->mutex held.
 static int unmap_removed_pids(ddci_device_t *d, int ad, SPMT *pmt) {
     auto still_needed = [d, pmt, ad](int pid) {
-        if (pid == pmt->pid || pid == 1 || pid == 20)
+        if (pid == pmt->pid || pid == 0 || pid == 1 || pid == 20)
             return true;
         if (d->emm_pids.count(MAKE_KEY(ad, pid)) > 0)
             return true;
@@ -638,20 +650,22 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
             mapped++;
     };
 
-    // Map mandatory PIDs. Some CAMs need access to the TDT in order to "wake
-    // up", so always map it just in case. Pid 0 comes from post_tune().
-    for (const uint16_t pid : {1, 20}) {
+    // Map mandatory PIDs, PAT included so the CAM sees it like live.
+    // Some CAMs also need the TDT to "wake up", so map it too.
+    for (const uint16_t pid : {0, 1, 20}) {
         if (!has_pid_mapping(d, pmt->adapter, pid)) {
             LOG("Mapping mandatory PID %d to PMT %d on DDCI %d", pid, pmt->id,
                 d->id);
             count_new(pid);
-            add_pid_mapping_table(ad->id, pid, pmt->id, d, 1);
 
             // We need to process the CAT if this is the first time we see it
             if (pid == 1) {
                 d->cat_processed = 0;
             }
         }
+        // Join even when mapped: every PMT must own its mandatory
+        // pids or the first delete releases them globally.
+        add_pid_mapping_table(ad->id, pid, pmt->id, d, 1);
     }
 
     LOG("found DDCI %d for pmt %d, running channels %d, max_channels %d", ddid,
@@ -1408,10 +1422,35 @@ void ddci_init() // you can search the devices here and fill the ddci_devices,
     ddci_id = add_ca(&ddci);
     LOG("Registered DDCI CA %d", ddci_id);
 }
+
+// Release and reopen the dvr for each tune: only the last
+// close drops the stale full device buffer wedging the demux.
+static void ddci_reset_push(adapter *ad) {
+    char buf[100];
+    snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/dvr%d", ad->pa, ad->fn);
+    if (ad->fe >= 0) {
+        close(ad->fe);
+        ad->fe = -1;
+    }
+    int fd = open(buf, O_WRONLY | O_NONBLOCK | O_CLOEXEC);
+    if (fd < 0) {
+        LOG("loopback %d: could not reopen push %s: %s", ad->id, buf,
+            strerror(errno));
+        return;
+    }
+    ad->fe = fd;
+    LOG("loopback %d: push %s released and reopened on fd %d", ad->id, buf,
+        ad->fe);
+}
+
 int ddci_set_pid(adapter *ad, int pid) {
 #ifndef DISABLE_LINUXDVB
     // Loopback reads real TAPs; hardware DDCI needs no demux filters.
     if (opts.enigma && ddci_is_loopback(ad->id)) {
+        // Idle -> active: drop the stale full dvr buffer so the
+        // demux restarts consuming on this tune.
+        if (ad->active_demux_pids <= 0)
+            ddci_reset_push(ad);
         int rc = dvb_demux_set_pid(ad, pid);
         LOGM("%s: loopback %d add pid %d -> %d", __FUNCTION__, ad->id, pid, rc);
         return rc;
@@ -1874,7 +1913,8 @@ static bool ddci_add_one_enigma_loopback(int slot) {
         if (!access(buf, R_OK))
             fe[nfe++] = fn;
     }
-    // First demux/dvr pair with no frontend behind it.
+    // Last pair with no frontend behind it; as loopbacks claim
+    // pairs, later devices fall to the previous eligible one.
     int fn =
         ddci_pick_free_pair(demux, ndemux, dvr, ndvr, fe, nfe, used, nused);
     if (fn < 0) {

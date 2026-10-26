@@ -350,6 +350,61 @@ int test_update_resend_keeps_slot() {
     return 0;
 }
 
+// Mandatory pid 0 (PAT) is mapped so the CAM sees it, and a PMT
+// re-send keeps it like CAT(1) and TDT(20) while dropping pids.
+int test_mandatory_pat_stays_mapped() {
+    ddci_device_t d0 = {};
+    ca_device_t ca0 = {};
+    adapter ad = {0}, a0 = {0};
+    int i;
+
+    for (i = 0; i < MAX_ADAPTERS; i++)
+        a[i] = nullptr;
+    create_adapter(&ad, 8);
+    create_adapter(&a0, 0);
+    SPMT *pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
+    pmt0->pcr_pid = 601;
+    memset(&d0.pmt, -1, sizeof(d0.pmt));
+    d0.id = 0;
+    d0.enabled = 1;
+    d0.max_channels = 1;
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[0] = &d0;
+
+    ca0.id = 0;
+    ca0.enabled = 1;
+    ca0.state = CA_STATE_INITIALIZED;
+    memset(ca_devices, 0, sizeof(ca_devices));
+    ca_devices[0] = &ca0;
+    int dvbca_id = add_ca(&dvbca);
+    add_caid_mask(dvbca_id, 0, 0x100, 0xFFFF);
+
+    ASSERT(ddci_process_pmt(&ad, pmt0, 0) == TABLES_RESULT_OK, "slot expected");
+    ASSERT(get_pid_mapping_allddci(8, 0) != NULL, "PAT should be mapped");
+
+    // the update drops 602: PAT stays, the stream pid goes
+    for (auto it = pmt0->stream_pids.begin(); it != pmt0->stream_pids.end();
+         ++it)
+        if (it->pid == 602) {
+            pmt0->stream_pids.erase(it);
+            break;
+        }
+    ASSERT(ddci_process_pmt(&ad, pmt0, 1) == TABLES_RESULT_OK,
+           "re-send expected to succeed");
+    ASSERT(get_pid_mapping_allddci(8, 0) != NULL, "PAT should stay mapped");
+    ASSERT(get_pid_mapping_allddci(8, 602) == NULL, "602 should be unmapped");
+
+    ddci_del_pmt(&ad, pmt0);
+    channels.clear();
+    filters.destroy_all();
+    del_ca(&dvbca);
+    ddci_devices[0] = NULL;
+    ca_devices[0] = NULL;
+    a[0] = nullptr;
+    a[8] = nullptr;
+    return 0;
+}
+
 // A content-identical update re-send leaves the DDCI PMT version (and
 // bytes) untouched; a changed one bumps the version once (#1346).
 int test_ddci_update_version_follows_content() {
@@ -1743,12 +1798,15 @@ int test_ddci_pick_free_pair() {
     int demux[] = {0, 1, 2, 10, 11, 12};
     int dvr[] = {0, 1, 2, 10, 11, 12};
     int fe[] = {0, 1, 2};
-    ASSERT(ddci_pick_free_pair(demux, 6, dvr, 6, fe, 3, NULL, 0) == 10,
-           "first pair without frontend wins");
-    int used[] = {10};
+    ASSERT(ddci_pick_free_pair(demux, 6, dvr, 6, fe, 3, NULL, 0) == 12,
+           "last pair without frontend wins");
+    int used[] = {12};
     ASSERT(ddci_pick_free_pair(demux, 6, dvr, 6, fe, 3, used, 1) == 11,
            "owned pair skipped for the next");
-    int nodvr[] = {0, 1, 2, 11, 12};
+    int fewith11[] = {0, 1, 2, 11};
+    ASSERT(ddci_pick_free_pair(demux, 6, dvr, 6, fewith11, 4, used, 1) == 10,
+           "pair with frontend never picked");
+    int nodvr[] = {0, 1, 2, 10, 11};
     ASSERT(ddci_pick_free_pair(demux, 6, nodvr, 5, fe, 3, NULL, 0) == 11,
            "demux without dvr skipped");
     int all[] = {10, 11, 12};
@@ -2020,6 +2078,8 @@ int main() {
               "testing ddci_post_init without a DVR socket");
     TEST_FUNC(test_update_resend_keeps_slot(),
               "testing update re-send keeps the slot and drops one pid");
+    TEST_FUNC(test_mandatory_pat_stays_mapped(),
+              "testing mandatory PAT stays mapped across re-sends");
     TEST_FUNC(test_ddci_update_version_follows_content(),
               "testing the DDCI PMT version follows content, not re-sends");
     TEST_FUNC(test_copy_ts_from_ddci(), "testing test_copy_ts_from_ddci");
@@ -2048,7 +2108,7 @@ int main() {
     TEST_FUNC(test_ddci_least_used_device(),
               "testing that new channels go to the least used DDCI");
     TEST_FUNC(test_ddci_pick_free_pair(),
-              "testing first frontend-less demux/dvr pair pick");
+              "testing last frontend-less demux/dvr pair pick");
     TEST_FUNC(test_ddci_enigma_local_loops_back(),
               "testing enigma loops back local PMTs on owned slots");
     TEST_FUNC(test_ddci_two_loopbacks_own_distinct_slots(),
