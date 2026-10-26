@@ -46,6 +46,7 @@
 #include "tables.h"
 #include "utils.h"
 #include <algorithm>
+#include <format>
 #include <fstream>
 #include <string>
 
@@ -1418,21 +1419,20 @@ void ddci_init() // you can search the devices here and fill the ddci_devices,
 // Release and reopen the dvr for each tune: only the last
 // close drops the stale full device buffer wedging the demux.
 static void ddci_reset_push(adapter *ad) {
-    char buf[100];
-    snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/dvr%d", ad->pa, ad->fn);
+    std::string path = std::format("/dev/dvb/adapter{}/dvr{}", ad->pa, ad->fn);
     if (ad->fe >= 0) {
         close(ad->fe);
         ad->fe = -1;
     }
-    int fd = open(buf, O_WRONLY | O_NONBLOCK | O_CLOEXEC);
+    int fd = open(path.c_str(), O_WRONLY | O_NONBLOCK | O_CLOEXEC);
     if (fd < 0) {
-        LOG("loopback %d: could not reopen push %s: %s", ad->id, buf,
+        LOG("loopback %d: could not reopen push %s: %s", ad->id, path.c_str(),
             strerror(errno));
         return;
     }
     ad->fe = fd;
-    LOG("loopback %d: push %s released and reopened on fd %d", ad->id, buf,
-        ad->fe);
+    LOG("loopback %d: push %s released and reopened on fd %d", ad->id,
+        path.c_str(), ad->fe);
 }
 
 int ddci_set_pid(adapter *ad, int pid) {

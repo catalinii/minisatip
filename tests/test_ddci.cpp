@@ -49,6 +49,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <array>
+
 #define DEFAULT_LOG LOG_DVBCA
 
 extern ddci_device_t *ddci_devices[MAX_ADAPTERS];
@@ -356,9 +358,8 @@ int test_mandatory_pat_stays_mapped() {
     ddci_device_t d0 = {};
     ca_device_t ca0 = {};
     adapter ad = {0}, a0 = {0};
-    int i;
 
-    for (i = 0; i < MAX_ADAPTERS; i++)
+    for (int i = 0; i < MAX_ADAPTERS; i++)
         a[i] = nullptr;
     create_adapter(&ad, 8);
     create_adapter(&a0, 0);
@@ -380,26 +381,23 @@ int test_mandatory_pat_stays_mapped() {
     add_caid_mask(dvbca_id, 0, 0x100, 0xFFFF);
 
     ASSERT(ddci_process_pmt(&ad, pmt0, 0) == TABLES_RESULT_OK, "slot expected");
-    ASSERT(get_pid_mapping_allddci(8, 0) != NULL, "PAT should be mapped");
+    ASSERT(get_pid_mapping_allddci(8, 0) != nullptr, "PAT should be mapped");
 
     // the update drops 602: PAT stays, the stream pid goes
-    for (auto it = pmt0->stream_pids.begin(); it != pmt0->stream_pids.end();
-         ++it)
-        if (it->pid == 602) {
-            pmt0->stream_pids.erase(it);
-            break;
-        }
+    std::erase_if(pmt0->stream_pids,
+                  [](const SStreamPid &s) { return s.pid == 602; });
     ASSERT(ddci_process_pmt(&ad, pmt0, 1) == TABLES_RESULT_OK,
            "re-send expected to succeed");
-    ASSERT(get_pid_mapping_allddci(8, 0) != NULL, "PAT should stay mapped");
-    ASSERT(get_pid_mapping_allddci(8, 602) == NULL, "602 should be unmapped");
+    ASSERT(get_pid_mapping_allddci(8, 0) != nullptr, "PAT should stay mapped");
+    ASSERT(get_pid_mapping_allddci(8, 602) == nullptr,
+           "602 should be unmapped");
 
     ddci_del_pmt(&ad, pmt0);
     channels.clear();
     filters.destroy_all();
     del_ca(&dvbca);
-    ddci_devices[0] = NULL;
-    ca_devices[0] = NULL;
+    ddci_devices[0] = nullptr;
+    ca_devices[0] = nullptr;
     a[0] = nullptr;
     a[8] = nullptr;
     return 0;
@@ -1795,25 +1793,27 @@ int test_ddci_least_used_device() {
 }
 
 int test_ddci_pick_free_pair() {
-    int demux[] = {0, 1, 2, 10, 11, 12};
-    int dvr[] = {0, 1, 2, 10, 11, 12};
-    int fe[] = {0, 1, 2};
-    ASSERT(ddci_pick_free_pair(demux, 6, dvr, 6, fe, 3, NULL, 0) == 12,
-           "last pair without frontend wins");
-    int used[] = {12};
-    ASSERT(ddci_pick_free_pair(demux, 6, dvr, 6, fe, 3, used, 1) == 11,
-           "owned pair skipped for the next");
-    int fewith11[] = {0, 1, 2, 11};
-    ASSERT(ddci_pick_free_pair(demux, 6, dvr, 6, fewith11, 4, used, 1) == 10,
+    std::array demux = {0, 1, 2, 10, 11, 12};
+    std::array dvr = {0, 1, 2, 10, 11, 12};
+    std::array fe = {0, 1, 2};
+    auto pick = [&](const auto &dm, const auto &dv, const auto &fe_,
+                    const auto &us) {
+        return ddci_pick_free_pair(dm.data(), dm.size(), dv.data(), dv.size(),
+                                   fe_.data(), fe_.size(), us.data(),
+                                   us.size());
+    };
+    std::array<int, 0> none = {};
+    ASSERT(pick(demux, dvr, fe, none) == 12, "last pair without frontend wins");
+    std::array used = {12};
+    ASSERT(pick(demux, dvr, fe, used) == 11, "owned pair skipped for the next");
+    std::array fewith11 = {0, 1, 2, 11};
+    ASSERT(pick(demux, dvr, fewith11, used) == 10,
            "pair with frontend never picked");
-    int nodvr[] = {0, 1, 2, 10, 11};
-    ASSERT(ddci_pick_free_pair(demux, 6, nodvr, 5, fe, 3, NULL, 0) == 11,
-           "demux without dvr skipped");
-    int all[] = {10, 11, 12};
-    ASSERT(ddci_pick_free_pair(demux, 6, dvr, 6, fe, 3, all, 3) == -1,
-           "all pairs taken gives -1");
-    ASSERT(ddci_pick_free_pair(NULL, 0, dvr, 6, fe, 3, NULL, 0) == -1,
-           "no demux gives -1");
+    std::array nodvr = {0, 1, 2, 10, 11};
+    ASSERT(pick(demux, nodvr, fe, none) == 11, "demux without dvr skipped");
+    std::array all = {10, 11, 12};
+    ASSERT(pick(demux, dvr, fe, all) == -1, "all pairs taken gives -1");
+    ASSERT(pick(none, dvr, fe, none) == -1, "no demux gives -1");
     return 0;
 }
 
