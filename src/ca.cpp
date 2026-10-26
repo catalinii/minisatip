@@ -4159,6 +4159,12 @@ void dvbca_init() // you can search the devices here and fill the
     set_socket_thread(poller_sock, tid);
 }
 
+char *get_ca_pin(int i) {
+    if (ca_devices[i])
+        return ca_devices[i]->pin_str;
+    return NULL;
+}
+
 void set_ca_pin(int i, std::string_view pin) {
     if (!ca_devices[i])
         ca_devices[i] = alloc_ca_device();

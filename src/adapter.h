@@ -206,6 +206,7 @@ void close_adapter_for_stream(int sid, int aid, int close_stream);
 // 0 ok, -2 slave conflict on busy adapter, -1 pid/resource failure.
 int set_adapter_parameters(int aid, int sid, transponder *tp);
 void mark_pids_deleted(int aid, int sid, const char *pids);
+int mark_pids_add(int sid, int aid, const char *pids);
 int mark_pid_add(int sid, int aid, int _pid);
 void mark_pid_deleted(int aid, int sid, int _pid, SPid *p);
 // True when a real client stream (not scanner/filter/DDCI marks) owns the pid.

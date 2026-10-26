@@ -206,6 +206,16 @@ int ddci_is_loopback(int id) {
     return opts.enigma && d && d->loopback;
 }
 
+// CI slot the enigma loopback claimed at creation; -1 when none.
+// Stored, so readers never re-scan hardware mid-run.
+int ddci_loopback_ci_slot() {
+    if (!opts.enigma)
+        return -1;
+    auto it = std::ranges::find_if(
+        ddci_devices, [](const ddci_device_t *d) { return d && d->loopback; });
+    return it != std::end(ddci_devices) ? (*it)->ci_slot : -1;
+}
+
 // True when any enigma loopback claimed this CI slot.
 int ddci_loopback_owns_slot(int slot) {
     if (!opts.enigma || slot < 0)
