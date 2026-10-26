@@ -1561,7 +1561,8 @@ int flush_socket_prio(sockets *s) {
     s->prio_data_len = 0;
 
     if (s->force_close && (fifo_used(&s->fifo) == 0)) {
-        LOGM("SOCK %d: set timeout_ms to 1 from %d", s->id, s->timeout_ms);
+        LOGM("SOCK %d: set timeout_ms to 1 from %d", s->id,
+             s->timeout_ms.load());
         s->timeout_ms = 1;
     }
     return rv;
@@ -1634,7 +1635,7 @@ void sockets_set_master(int slave, int master) {
             slave, master);
         return;
     }
-    s->tid = m->tid;
+    s->tid = m->tid.load();
     s->master = master;
     LOG("sock %d is master for sock %d", s->master, s->id);
 }

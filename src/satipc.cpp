@@ -365,7 +365,7 @@ int satipc_reply(sockets *s) {
 int satipc_close(sockets *s) {
     LOG("satip_close called for adapter %d, socket_id %d, handle %d "
         "timeout %d",
-        s->sid, s->id, s->sock, s->timeout_ms);
+        s->sid, s->id, s->sock, s->timeout_ms.load());
     close_adapter(s->sid);
     return 0;
 }
@@ -573,7 +573,7 @@ int satipc_timeout(sockets *s) {
     LOG("satipc: Sent keep-alive to the satip server %s:%d, adapter %d, "
         "socket_id %d, handle %d, timeout %d",
         ad ? sip->sip : NULL, ad ? sip->sport : 0, s->sid, s->id, s->sock,
-        s->timeout_ms);
+        s->timeout_ms.load());
 
     satipc_send_options(ad);
 
