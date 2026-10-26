@@ -2005,11 +2005,13 @@ int test_ddci_enigma_local_loops_back() {
     ddci_del_pmt(&ad, pmt0);
     ASSERT(d0.channels == 0, "expected 0 running channels after delete");
 
-    // Loopback without a slot: local PMTs stay on the live CI path.
+    // Slot or none: local PMTs are attempted, never blanket-declined.
     d0.ci_slot = -1;
-    ASSERT(ddci_process_pmt(&ad, pmt0, 0) == TABLES_RESULT_ERROR_NORETRY,
-           "slotless loopback must decline local PMTs");
-    ASSERT(d0.channels == 0, "declined PMT takes no channel");
+    ASSERT(ddci_process_pmt(&ad, pmt0, 0) == TABLES_RESULT_OK,
+           "slotless loopback must still attempt local PMTs");
+    ASSERT(d0.channels == 1, "expected 1 running channel");
+    ddci_del_pmt(&ad, pmt0);
+    ASSERT(d0.channels == 0, "expected 0 running channels after delete");
 
     ad.type = ADAPTER_SATIP;
     ASSERT(ddci_process_pmt(&ad, pmt0, 0) == TABLES_RESULT_OK,
@@ -2110,7 +2112,7 @@ int main() {
     TEST_FUNC(test_ddci_pick_free_pair(),
               "testing last frontend-less demux/dvr pair pick");
     TEST_FUNC(test_ddci_enigma_local_loops_back(),
-              "testing enigma loops back local PMTs on owned slots");
+              "testing enigma loops back local PMTs without slot gate");
     TEST_FUNC(test_ddci_two_loopbacks_own_distinct_slots(),
               "testing two loopbacks own distinct CI slots");
     TEST_FUNC(test_ddci_pick_free_slot(), "testing loopback slot selection");
