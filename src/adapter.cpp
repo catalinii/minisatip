@@ -335,6 +335,7 @@ int init_hw(int i) {
     ad->threshold = opts.udp_threshold;
     ad->updating_pids = 0;
     ad->wait_new_stream = 0;
+    ad->drop_buffer = 0;
     ad->pids_updates = 0;
     ad->rtime = getTick();
     adapter_set_dvr(ad);
@@ -1097,7 +1098,7 @@ int tune(int aid, int sid) {
         ad->db = MAX_DB;
         flush_data = 1;
         ad->is_t2mi = 0;
-        set_socket_pos(ad->sock, 0); // flush the existing buffer
+        ad->drop_buffer = 1; // read_dmx() flushes the existing buffer
         ad->rlen = 0;
         if (ad->sid_cnt > 1) // the master changed the frequency
         {

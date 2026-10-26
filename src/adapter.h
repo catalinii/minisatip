@@ -137,6 +137,7 @@ struct struct_adapter {
                     // the buffer
     int pat_processed;
     int wait_new_stream, wait_transponder_id;
+    int drop_buffer; // set by tune(), the DVR socket action empties the buffer
     int threshold;
     int active_pids, max_active_pids, max_pids;
     int active_demux_pids;
