@@ -29,6 +29,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <thread>
+#include <unistd.h>
 #include <unordered_set>
 #include <vector>
 
