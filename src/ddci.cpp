@@ -1863,22 +1863,6 @@ int ddci_pick_free_slot() {
     return -1;
 }
 
-// True when path's first word starts with prefix; missing file fails.
-static bool ddci_model_starts_with(const char *path, const char *prefix) {
-    std::ifstream f(path);
-    std::string model;
-    return (f >> model) && model.rfind(prefix, 0) == 0;
-}
-
-// Proven loopback models; both are bcm7252s with the same DVR/CI plumbing.
-int ddci_model_is_uno4k(const char *path) {
-    return ddci_model_starts_with(path, "uno4k");
-}
-
-int ddci_model_is_gbquad4k(const char *path) {
-    return ddci_model_starts_with(path, "gbquad4k");
-}
-
 // One loopback on the highest free demux, in the first free enabled slot.
 // False when no slot or demux is left for another loopback.
 static bool ddci_add_one_enigma_loopback(int slot) {
@@ -1959,9 +1943,8 @@ static bool ddci_add_one_enigma_loopback(int slot) {
 
 // Up to one loopback per CI slot; stops at the first shortage.
 static void ddci_add_enigma_loopback() {
-    if (!ddci_model_is_uno4k("/proc/stb/info/vumodel") &&
-        !ddci_model_is_gbquad4k("/proc/stb/info/gbmodel")) {
-        LOG("enigma loopback blocked: unsupported model");
+    if (!opts.enigma_loopback) {
+        LOG("enigma loopback disabled, pass --enigma-loopback to enable");
         return;
     }
     for (int n = 0; n < MAX_VU_CI_SLOTS; n++)

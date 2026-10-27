@@ -53,6 +53,7 @@ typedef struct struct_opts {
     int use_demux_device;
     float strength_multiplier, snr_multiplier;
     char enigma;
+    char enigma_loopback;
     char hw_descrambler;
 #ifndef DISABLE_SATIPCLIENT
     char *satip_servers;

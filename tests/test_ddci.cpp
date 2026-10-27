@@ -1909,46 +1909,6 @@ int test_dvbca_ci_adapter_no_routing() {
 
 extern void set_disable(int i, int v);
 
-static void write_model_file(const char *path, const char *model) {
-    FILE *f = fopen(path, "w");
-    if (f) {
-        fputs(model, f);
-        fclose(f);
-    }
-}
-
-int test_ddci_model_is_uno4k() {
-    const char *p = "/tmp/ddci_uno4k_test";
-    write_model_file(p, "uno4kse\n");
-    ASSERT(ddci_model_is_uno4k(p), "uno4kse passes");
-    write_model_file(p, "uno4k\n");
-    ASSERT(ddci_model_is_uno4k(p), "uno4k passes");
-    write_model_file(p, "ultimo4k\n");
-    ASSERT(!ddci_model_is_uno4k(p), "ultimo4k blocked");
-    write_model_file(p, "dm8000\n");
-    ASSERT(!ddci_model_is_uno4k(p), "dm8000 blocked");
-    write_model_file(p, "\n");
-    ASSERT(!ddci_model_is_uno4k(p), "empty blocked");
-    remove(p);
-    ASSERT(!ddci_model_is_uno4k(p), "missing blocked");
-
-    return 0;
-}
-
-int test_ddci_model_is_gbquad4k() {
-    const char *p = "/tmp/ddci_gbquad4k_test";
-    write_model_file(p, "gbquad4k\n");
-    ASSERT(ddci_model_is_gbquad4k(p), "gbquad4k passes");
-    write_model_file(p, "gbue4k\n");
-    ASSERT(!ddci_model_is_gbquad4k(p), "gbue4k blocked");
-    write_model_file(p, "\n");
-    ASSERT(!ddci_model_is_gbquad4k(p), "empty blocked");
-    remove(p);
-    ASSERT(!ddci_model_is_gbquad4k(p), "missing blocked");
-
-    return 0;
-}
-
 int test_ddci_pick_free_slot() {
     adapter ad = {0};
     for (int i = 0; i < MAX_ADAPTERS; i++) {
@@ -2115,8 +2075,6 @@ int main() {
     TEST_FUNC(test_ddci_two_loopbacks_own_distinct_slots(),
               "testing two loopbacks own distinct CI slots");
     TEST_FUNC(test_ddci_pick_free_slot(), "testing loopback slot selection");
-    TEST_FUNC(test_ddci_model_is_uno4k(), "testing Uno 4K model gate");
-    TEST_FUNC(test_ddci_model_is_gbquad4k(), "testing GB Quad 4K model gate");
     TEST_FUNC(test_capmt_lists_pmt_pids(),
               "testing CAPMT lists PMT pids verbatim");
     TEST_FUNC(test_dvbca_ci_adapter_no_routing(),
