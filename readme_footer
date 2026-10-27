@@ -2,6 +2,11 @@
 
 ## How to compile:
 
+Requires a C++23-capable compiler: GCC 13+ or Clang 16+ recommended.
+Older toolchains such as GCC 8.x fail on `<ranges>` (C++20). The optional
+stacktrace support (`-DCXX23`, on by default when `libstdc++exp` is found)
+needs GCC 12.1+; disable it with `-DCXX23=OFF`.
+
 ```bash
 mkdir build
 cd build
