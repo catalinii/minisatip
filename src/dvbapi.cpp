@@ -158,11 +158,10 @@ int get_index_for_filter(SKey *k, int filter) {
 
 int dvbapi_reply(sockets *s) {
     unsigned char *b = s->buf;
-    SKey *k;
     int change_endianness = 0;
     unsigned int op;
     int _pid;
-    int k_id, a_id = 0, pos = 0;
+    int a_id = 0, pos = 0;
     int demux, filter;
 
     if (s->rlen == 0) {
@@ -202,9 +201,9 @@ int dvbapi_reply(sockets *s) {
 
         // SET_FILTER and DMX_STOP change the adapter's pids (update_pids(),
         // del_filter()); the others take just their key lock below.
-        std::unique_lock<SMutex> ad_lock, klock;
+        std::unique_lock<SMutex> ad_lock, key_lock;
         if (op == DVBAPI_DMX_SET_FILTER || op == DVBAPI_DMX_STOP)
-            lock_key_adapter(b[4] - opts.dvbapi_offset, ad_lock, klock);
+            lock_key_adapter(b[4] - opts.dvbapi_offset, ad_lock, key_lock);
 
         switch (op) {
 
@@ -242,7 +241,7 @@ int dvbapi_reply(sockets *s) {
             pos += 65;
             dvbapi_copy16r(_pid, b, 7);
             _pid &= 0x1FFF;
-            k_id = b[4] - opts.dvbapi_offset;
+            int k_id = b[4] - opts.dvbapi_offset;
             k = get_key(k_id);
             a_id = -1;
             demux = b[5];
@@ -313,11 +312,11 @@ int dvbapi_reply(sockets *s) {
         }
         case DVBAPI_DMX_STOP: {
             int i;
-            k_id = b[4] - opts.dvbapi_offset;
+            int k_id = b[4] - opts.dvbapi_offset;
             demux = b[5];
             filter = b[6];
             pos += 9;
-            k = get_key(k_id);
+            SKey *k = get_key(k_id);
             if (!k)
                 break;
             std::lock_guard<SMutex> klock(k->mutex);
@@ -493,13 +492,13 @@ int dvbapi_send_pmt(SKey *k, int cmd_id, int force) {
 
     adapter *ad = get_adapter(k->adapter);
     int demux = 0;
-    int adapter = 0;
+    int adapter_index = 0;
     if (network_mode) {
         demux = k->id + opts.dvbapi_offset;
-        adapter = k->id + opts.dvbapi_offset;
+        adapter_index = k->id + opts.dvbapi_offset;
     } else if (ad) {
         demux = ad->fn;
-        adapter = ad->pa;
+        adapter_index = ad->pa;
     }
 
     if (cmd_id == CMD_ID_OK_DESCRAMBLING) {
@@ -513,13 +512,13 @@ int dvbapi_send_pmt(SKey *k, int cmd_id, int force) {
     copy16(buf, 7, k->sid);
     buf[9] = 1;
     k->demux_index = demux;
-    k->adapter_index = adapter;
+    k->adapter_index = adapter_index;
 
     buf[12] = cmd_id;
 
     copy16(buf, 13, 0x8301); // adapter_device_descriptor, works only in
                              // newer versions (> 11500)
-    buf[15] = adapter;
+    buf[15] = adapter_index;
     copy16(buf, 16, 0x8402); // pmt_pid_descriptor
     copy16(buf, 18, pmt->pid);
 
@@ -567,8 +566,8 @@ int dvbapi_send_pmt(SKey *k, int cmd_id, int force) {
         LOG("Sending pmt %d to dvbapi server for pid %d, Channel ID %04X, key "
             "%d, "
             "adapter %d, demux %d, using socket %d (%s)",
-            k->pmt_id, k->pmt_pid, k->sid, k->id, adapter, demux, sock.load(),
-            listmgmt_str[listmgmt]);
+            k->pmt_id, k->pmt_pid, k->sid, k->id, adapter_index, demux,
+            sock.load(), listmgmt_str[listmgmt]);
         TEST_WRITE(write(sock, buf, len), len);
         // TEST_WRITE closes the socket on short write: baseline the
         // hash only when the bytes went out.
@@ -696,7 +695,7 @@ void send_client_info(sockets *s) {
     memset(buf, 0, sizeof(buf));
     copy32(buf, 0, DVBAPI_CLIENT_INFO);
     copy16(buf, 4, dvbapi_protocol_version) len =
-        sprintf(buf + 7, "%s/%s", app_name, version);
+        sprintf(buf + 7, "%s/%s", app_name, app_version);
     buf[6] = len;
     dvbapi_is_enabled = 1;
     TEST_WRITE(write(s->sock, buf, len + 7), len + 7);
@@ -809,7 +808,7 @@ void set_algo(SKey *k, int algo, int mode) {
 }
 
 // Caller holds pmt->mutex of pmt_id (dvbapi_add_pmt does) for sid/pid.
-int keys_add(int adapter, int pmt_id) {
+int keys_add(int aid, int pmt_id) {
 
     SPMT *pmt = get_pmt(pmt_id);
     if (!pmt)
@@ -823,7 +822,7 @@ int keys_add(int adapter, int pmt_id) {
     k->parity = -1;
     k->sid = pmt->sid;
     k->pmt_id = pmt_id;
-    k->adapter = adapter;
+    k->adapter = aid;
     k->adapter_index = -1;
     k->demux_index = -1;
     k->blen = 0;
@@ -845,8 +844,8 @@ int keys_add(int adapter, int pmt_id) {
     memset(k->demux, -1, sizeof(k->demux));
     k->enabled = 1;
     __sync_add_and_fetch(&enabledKeys, 1);
-    LOG("returning new key %d for adapter %d, pmt %d pid %d sid %04X", i,
-        adapter, pmt->id, pmt->pid, k->sid);
+    LOG("returning new key %d for adapter %d, pmt %d pid %d sid %04X", i, aid,
+        pmt->id, pmt->pid, k->sid);
 
     return i;
 }

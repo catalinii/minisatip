@@ -298,10 +298,10 @@ int add_filter_mask(int aid, int pid, void *callback, void *opaque, int flags,
 }
 
 // Caller holds filters_mutex.
-int reset_master_filter(int adapter, int pid, int id) {
+int reset_master_filter(int aid, int pid, int id) {
     int nf = 0;
     for (SFilter *f : filters)
-        if (f->adapter == adapter && f->pid == pid) {
+        if (f->adapter == aid && f->pid == pid) {
             f->master_filter = id;
             nf++;
         }
@@ -311,7 +311,7 @@ int reset_master_filter(int adapter, int pid, int id) {
 int del_filter(int id) {
     SFilter *f;
     int pid;
-    int adapter = -1;
+    int aid = -1;
     LOG("deleting filter %d", id);
     if (id < 0 || id >= MAX_FILTERS || !filters[id])
         return 0;
@@ -324,7 +324,7 @@ int del_filter(int id) {
     f->enabled = false;
     set_filter_flags_locked(f, 0); // remote all pids if any
     pid = f->pid;
-    adapter = f->adapter;
+    aid = f->adapter;
     if (id == f->master_filter) {
         int master_filter = f->next_filter;
         SFilter *m = get_filter(master_filter);
@@ -362,7 +362,7 @@ int del_filter(int id) {
     filters.shrink_to(last + 1);
     f->pid = -1;
     f->allocated = false;
-    LOG("deleted filter %d, ad %d, pid %d, max filters %d", id, adapter, pid,
+    LOG("deleted filter %d, ad %d, pid %d, max filters %d", id, aid, pid,
         (int)filters.size());
     return 0;
 }
@@ -783,17 +783,17 @@ void update_cw(SPMT *pmt) {
         pmt->update_cw = 1;
     pmt->cw.store(nullptr);
     if (cw) {
-        int64_t ctime = getTick();
+        int64_t now = getTick();
         pmt->cw.store(cw);
 
         if (!cw->set_time)
-            cw->set_time = ctime;
+            cw->set_time = now;
 
         // expire all CWs set before the current CW
         if (validated) {
             for (i = 0; i < ncws; i++)
                 if (cws[i] && cws[i] != cw && cws[i]->enabled &&
-                    cws[i]->expiry > ctime && cws[i]->pmt == pmt->id &&
+                    cws[i]->expiry > now && cws[i]->pmt == pmt->id &&
                     cws[i]->parity == cw->parity && cws[i]->set_time > 0) {
                     cws[i]->expiry = getTick() + 10000;
                     LOG("Expiring CW %d for pmt %d: %s", cws[i]->id, pmt->id,
@@ -1007,7 +1007,7 @@ int pmt_decrypt_stream(adapter *ad) {
 
     // decrypt everything that's left
     for (int id : std::span(pmt_id, pmt_ids)) {
-        SPMT *pmt = pmts[id];
+        pmt = pmts[id];
         if (pmt && pmt->blen > 0)
             decrypt_batch(pmt);
         if (pmt && pmt->batch != NULL)
@@ -1099,19 +1099,19 @@ static int holds_av_claim(adapter *ad, SPid **pids, SPMT *pmt) {
 
 // Duplicates match as multisets on streams and CA descriptors (parse order
 // is unstable); shared AV with different ECMs (30W pid 817) stays distinct.
-static int same_descriptors(const std::vector<descriptor_t> &a,
-                            const std::vector<descriptor_t> &b) {
-    if (a.size() != b.size())
+static int same_descriptors(const std::vector<descriptor_t> &lhs,
+                            const std::vector<descriptor_t> &rhs) {
+    if (lhs.size() != rhs.size())
         return 0;
-    std::vector<char> used(b.size(), 0);
-    for (const auto &da : a) {
+    std::vector<char> used(rhs.size(), 0);
+    for (const auto &da : lhs) {
         size_t j;
-        for (j = 0; j < b.size(); j++)
-            if (!used[j] && da == b[j]) {
+        for (j = 0; j < rhs.size(); j++)
+            if (!used[j] && da == rhs[j]) {
                 used[j] = 1;
                 break;
             }
-        if (j == b.size())
+        if (j == rhs.size())
             return 0;
     }
     return 1;
@@ -1123,20 +1123,20 @@ static int same_stream_pid(const SStreamPid &sa, const SStreamPid &sb) {
            same_descriptors(sa.descriptors, sb.descriptors);
 }
 
-static int same_stream_pids(SPMT *a, SPMT *b) {
-    if (a->stream_pids.size() != b->stream_pids.size())
+static int same_stream_pids(SPMT *lhs, SPMT *rhs) {
+    if (lhs->stream_pids.size() != rhs->stream_pids.size())
         return 0;
-    if (!same_descriptors(a->descriptors, b->descriptors))
+    if (!same_descriptors(lhs->descriptors, rhs->descriptors))
         return 0;
-    std::vector<char> used(b->stream_pids.size(), 0);
-    for (const auto &sa : a->stream_pids) {
+    std::vector<char> used(rhs->stream_pids.size(), 0);
+    for (const auto &sa : lhs->stream_pids) {
         size_t j;
-        for (j = 0; j < b->stream_pids.size(); j++)
-            if (!used[j] && same_stream_pid(sa, b->stream_pids[j])) {
+        for (j = 0; j < rhs->stream_pids.size(); j++)
+            if (!used[j] && same_stream_pid(sa, rhs->stream_pids[j])) {
                 used[j] = 1;
                 break;
             }
-        if (j == b->stream_pids.size())
+        if (j == rhs->stream_pids.size())
             return 0;
     }
     return 1;
@@ -1244,9 +1244,9 @@ void pmt_pid_updated_pids(adapter *ad) {
     // Sort by order, then completeness, then drop later members
     // duplicating an earlier stream set (stable keeps ties listed).
     std::stable_sort(ch, ch + nch,
-                     [&](const SPmtChoice &a, const SPmtChoice &b) {
-                         return choice_outranks(a.order, pct_of(a.pmt), b.order,
-                                                pct_of(b.pmt));
+                     [&](const SPmtChoice &lhs, const SPmtChoice &rhs) {
+                         return choice_outranks(lhs.order, pct_of(lhs.pmt),
+                                                rhs.order, pct_of(rhs.pmt));
                      });
     for (i = 0; i < nch; i++) {
         int j;
@@ -1571,7 +1571,7 @@ int pmt_process_stream(adapter *ad) {
     return 0;
 }
 
-int pmt_add(int adapter, int sid, int pmt_pid) {
+int pmt_add(int aid, int sid, int pmt_pid) {
 
     SPMT *pmt = pmts.obtain();
     if (!pmt) {
@@ -1583,7 +1583,7 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
     pmt->parity = -1;
     pmt->sid = sid;
     pmt->pid = pmt_pid;
-    pmt->adapter = adapter;
+    pmt->adapter = aid;
     pmt->update_cw = 1;
     pmt->blen = 0;
     pmt->last_update_cw = 0;
@@ -1609,8 +1609,8 @@ int pmt_add(int adapter, int sid, int pmt_pid) {
 
     pmt->enabled = 1;
 
-    LOG("returning new pmt %d for adapter %d, pmt pid %d, sid %d %04X", i,
-        adapter, pmt_pid, sid, sid);
+    LOG("returning new pmt %d for adapter %d, pmt pid %d, sid %d %04X", i, aid,
+        pmt_pid, sid, sid);
 
     return i;
 }

@@ -1117,10 +1117,10 @@ int satipc_read(int socket, void *buf, int len, sockets *ss, int *rb) {
 
         // Clear empty unused buffer space (after all it will be removed)
         if (dlen < (int)iov[1].iov_len) {
-            int ss = (188 * (dlen / 188));
-            // memset(iov[1].iov_base + ss, 0xFF, iov[1].iov_len - ss);  //
-            // Not necessary
-            holes[i] = (char *)iov[1].iov_base + ss;
+            int aligned_len = (188 * (dlen / 188));
+            // memset(iov[1].iov_base + aligned_len, 0xFF,
+            //        iov[1].iov_len - aligned_len);  // Not necessary
+            holes[i] = (char *)iov[1].iov_base + aligned_len;
             check_holes = 1;
         }
         *rb += iov[1].iov_len;
@@ -1645,7 +1645,7 @@ int http_request(adapter *ad, char *url, const char *method, int force) {
     ptr = strlen(session);
 
     if (strcmp(method, "OPTIONS") == 0) {
-        strcatf(session, ptr, "\r\nUser-Agent: %s %s", app_name, version);
+        strcatf(session, ptr, "\r\nUser-Agent: %s %s", app_name, app_version);
         sip->last_cmd = RTSP_OPTIONS;
     }
 

@@ -269,7 +269,7 @@ int get_pid_filter(int aid, int pid);
 int assemble_packet(SFilter *f, uint8_t *b);
 void disable_cw(int pmt_id);
 void expire_cw_for_pmt(int pmt_id, int parity, int64_t min_expiry);
-int pmt_add(int adapter, int sid, int pmt_pid);
+int pmt_add(int aid, int sid, int pmt_pid);
 SPMT *get_all_pmt_for_sid(int aid, int sid);
 int test_decrypt_packet(SCW *cw, SPMT_batch *start, int len);
 void init_algo();

@@ -57,7 +57,7 @@
 
 #define DEFAULT_LOG LOG_STREAM
 
-SegmentedPool<streams *, STREAMS_BUCKETS> st;
+SegmentedPool<streams *, STREAMS_BUCKETS> streams_pool;
 SMutex bw_mutex;
 extern int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
 int pmt_process_stream(adapter *ad);
@@ -65,14 +65,14 @@ int pmt_process_stream(adapter *ad);
 streams *get_stream(int i) {
     if (i < 0 || i >= MAX_STREAMS)
         return NULL;
-    streams *sid = st[i];
+    streams *sid = streams_pool[i];
     return (sid && sid->enabled) ? sid : NULL;
 }
 
 streams *get_sid1(int sid, const char *file, int line) {
     streams *s = NULL;
     if (sid >= 0 && sid < MAX_STREAMS)
-        s = st[sid];
+        s = streams_pool[sid];
     if (!s || s->enabled == 0) {
         LOG("%s:%d get_sid returns NULL for s_id = %d", file, line, sid);
         return NULL;
@@ -116,7 +116,7 @@ char *describe_streams(sockets *s, std::string_view req, char *sbuf, int size) {
     }
 
     if (do_all) {
-        for (streams *sid2 : st) {
+        for (streams *sid2 : streams_pool) {
             int slen = strlen(sbuf);
             streams_enabled++;
             strlcatf(
@@ -350,10 +350,10 @@ int close_stream_for_socket(sockets *s) {
 
 int close_stream(int i) {
     LOG("closing stream %d", i);
-    if (i < 0 || i >= MAX_STREAMS || !st[i])
+    if (i < 0 || i >= MAX_STREAMS || !streams_pool[i])
         return 0;
 
-    streams *sid = st[i];
+    streams *sid = streams_pool[i];
     int ad, rsock_id, type, rtcp_sock, rtcp, st_sock, rsock;
     [[maybe_unused]] int srt_sock; // only read when SRT is enabled
     { // Disable under own lock; never hold it across adapter calls.
@@ -588,7 +588,7 @@ int decode_transport(sockets *s, std::string_view arg, char *default_rtp,
                                           NULL)) < 0) // read rtcp
             LOG_AND_RETURN(-1, "RTCP sockets_add failed");
 
-        for (streams *sid2 : st)
+        for (streams *sid2 : streams_pool)
             if (sid2->id != sid->sid &&
                 get_sockaddr_port(sid2->sa) == get_sockaddr_port(sid->sa)) {
                 char h1[100], h2[100];
@@ -609,7 +609,7 @@ int decode_transport(sockets *s, std::string_view arg, char *default_rtp,
 }
 
 int streams_add() {
-    streams *ss = st.obtain();
+    streams *ss = streams_pool.obtain();
     if (!ss)
         LOG_AND_RETURN(-1, "streams_add failed");
     int i = ss->id;
@@ -641,11 +641,11 @@ int streams_add() {
 
 int streams_full() {
     // Iteration covers the live range; unpublished slots count as free.
-    if (st.size() < MAX_STREAMS)
+    if (streams_pool.size() < MAX_STREAMS)
         return 0;
-    size_t n = std::min(st.size(), st.capacity());
+    size_t n = std::min(streams_pool.size(), streams_pool.capacity());
     for (size_t index = 0; index < n; ++index) {
-        streams *sid = st[index];
+        streams *sid = streams_pool[index];
         if (!sid || !sid->enabled)
             return 0;
     }
@@ -657,7 +657,7 @@ int
 close_streams_for_adapter(int ad, int except) {
     if (ad < 0)
         return 0;
-    for (streams *sid : st)
+    for (streams *sid : streams_pool)
         if (sid->adapter == ad)
             if (except < 0 || except != sid->id)
                 close_stream(sid->id);
@@ -727,8 +727,8 @@ int send_rtcp(int s_id, int64_t ctime) {
     ntp = (((unsigned long long)tv.tv_sec + 2208988800ULL) << 32) |
           (((unsigned long long)tv.tv_usec << 32) / 1000000ULL);
 
-    char *a = describe_adapter(s_id, sid->adapter, dad, sizeof(dad));
-    unsigned int la = strlen(a);
+    char *description = describe_adapter(s_id, sid->adapter, dad, sizeof(dad));
+    unsigned int la = strlen(description);
     if (la > sizeof(rtcp_buf) - 78)
         la = sizeof(rtcp_buf) - 80;
     len = la + 16;
@@ -775,7 +775,7 @@ int send_rtcp(int s_id, int64_t ctime) {
     rtcp[64] = 0;
     rtcp[65] = 0;
     copy16(rtcp, 66, la);
-    memcpy(rtcp + 68, a, la + 4);
+    memcpy(rtcp + 68, description, la + 4);
     total_len = len + 52;
     if (sid->type == STREAM_RTSP_UDP)
         rv = sockets_write(sid->rtcp_sock, rtcp, total_len);
@@ -1204,7 +1204,7 @@ int process_dmx(sockets *s) {
 
     lock.unlock();
 
-    for (streams *sid : st)
+    for (streams *sid : streams_pool)
         if (sid->adapter == ad->id)
             process_packets_for_stream(sid, ad);
 
@@ -1402,7 +1402,7 @@ void dump_streams() {
     if (!opts.log)
         return;
     LOG("Dumping streams:");
-    for (streams *sid : st)
+    for (streams *sid : streams_pool)
         LOG("%d|  a:%d rsock:%d type:%d play:%d remote:%s:%d", sid->id,
             sid->adapter, sid->rsock, sid->type, sid->do_play,
             get_stream_rhost(sid->sid, ra, sizeof(ra)),
@@ -1434,7 +1434,7 @@ int fix_master_sid(int a_id) {
         return 0;
     if (ad->sid_cnt < 1)
         return 0;
-    for (streams *sid : st)
+    for (streams *sid : streams_pool)
         if (sid->adapter == a_id) {
             LOG("fix master_sid to %d for adapter %d", sid->sid, a_id);
             ad->master_sid = sid->id;
@@ -1443,7 +1443,7 @@ int fix_master_sid(int a_id) {
 }
 
 int find_session_id(int id) {
-    for (streams *sid : st)
+    for (streams *sid : streams_pool)
         if (sid->ssrc == id) {
             sid->rtime = getTick();
             LOG("recovered session id from a closed connection, sid %d , "
@@ -1473,7 +1473,7 @@ int rtcp_confirm(sockets *s) {
 
 int get_streams_for_adapter(int aid) {
     int sa = 0;
-    for (streams *sid : st)
+    for (streams *sid : streams_pool)
         if (sid->adapter == aid)
             sa++;
     return sa;
@@ -1568,21 +1568,21 @@ int get_stream_buffered_size(int s_id) {
 static int get_st_enabled(int i) {
     if (i < 0 || i >= MAX_STREAMS)
         return 0;
-    streams *sid = st[i];
+    streams *sid = streams_pool[i];
     return sid ? sid->enabled.load() : 0;
 }
 
 static int get_st_play(int i) {
     if (i < 0 || i >= MAX_STREAMS)
         return 0;
-    streams *sid = st[i];
+    streams *sid = streams_pool[i];
     return sid ? sid->do_play : 0;
 }
 
 static int get_st_adapter(int i) {
     if (i < 0 || i >= MAX_STREAMS)
         return 0;
-    streams *sid = st[i];
+    streams *sid = streams_pool[i];
     return sid ? sid->adapter : 0;
 }
 
@@ -1590,7 +1590,7 @@ static char *get_st_useragent(int i, char *dest, int max_size) {
     dest[0] = 0;
     if (i < 0 || i >= MAX_STREAMS)
         return dest;
-    streams *sid = st[i];
+    streams *sid = streams_pool[i];
     if (sid)
         _strncpy(dest, sid->useragent, max_size - 1);
     return dest;

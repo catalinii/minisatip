@@ -278,7 +278,7 @@ int ddci_close_dev(adapter *ad) {
 }
 SCA_op ddci;
 
-int ddci_close_adapter(adapter *a) { return 0; }
+int ddci_close_adapter(adapter *ad) { return 0; }
 
 extern SMutex ca_mask_mutex;
 

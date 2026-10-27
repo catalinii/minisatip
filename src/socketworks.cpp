@@ -49,7 +49,7 @@
 
 #define DEFAULT_LOG LOG_SOCKETWORKS
 
-SegmentedPool<sockets *, SOCKS_BUCKETS> s;
+SegmentedPool<sockets *, SOCKS_BUCKETS> sockets_pool;
 
 // returns the protocol (AF_INET, AF_INET6) or 0 in case of failure
 int fill_sockaddr(USockAddr *serv, char *host, int port, int ipv4_only) {
@@ -555,7 +555,7 @@ int sockets_accept(int socket __attribute__((unused)),
         return 1;
     }
     if (ss->action != NULL) {
-        ss->action(s[ni]);
+        ss->action(sockets_pool[ni]);
     }
     set_linux_socket_timeout(new_sock);
 
@@ -589,7 +589,7 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
     if (sock == SOCK_TIMEOUT && t == NULL)
         LOG_AND_RETURN(-1, "sockets_add timeout without timeout function");
 
-    ss = s.obtain();
+    ss = sockets_pool.obtain();
     if (!ss)
         LOG_AND_RETURN(-1, "sockets_add failed for socks %d", sock);
     int i = ss->id;
@@ -645,10 +645,10 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
 int sockets_del(int sock) {
     int so;
     sockets *ss;
-    if (sock < 0 || sock >= MAX_SOCKS || !s[sock])
+    if (sock < 0 || sock >= MAX_SOCKS || !sockets_pool[sock])
         return 0;
 
-    ss = s[sock];
+    ss = sockets_pool[sock];
     std::unique_lock<SMutex> lock(ss->mutex);
     if (!ss->enabled)
         return 0;
@@ -682,13 +682,13 @@ int sockets_del(int sock) {
 
     LOG("sockets_del: sock %d Last open socket is at index %d current_handle "
         "%d",
-        sock, (int)s.size(), so);
+        sock, (int)sockets_pool.size(), so);
 
     // Free last: teardown above must not overlap a reuse.
     ss->allocated = false;
     lock.unlock();
 
-    for (sockets *slave : s)
+    for (sockets *slave : sockets_pool)
         if (slave->master == sock) {
             LOG("Closing slave socket index %d (master sock %d)", slave->id,
                 sock);
@@ -780,9 +780,9 @@ void *select_and_execute(void *arg) {
         es = 0;
         // One snapshot per iteration: fill, poll, and dispatch
         // share it so growth mid-loop cannot misalign them.
-        size_t n = std::min(s.size(), s.capacity());
+        size_t n = std::min(sockets_pool.size(), sockets_pool.capacity());
         for (size_t index = 0; index < n; ++index) {
-            sockets *ps = s[index];
+            sockets *ps = sockets_pool[index];
             pollfd &p = pf[index];
             if (ps && ps->enabled && ps->tid == tid) {
                 p.fd = ps->sock;
@@ -819,7 +819,7 @@ void *select_and_execute(void *arg) {
             for (size_t index = 0; index < n; ++index) {
                 pollfd &p = pf[index];
                 if ((p.fd >= 0) && p.revents) {
-                    sockets *ss = s[index];
+                    sockets *ss = sockets_pool[index];
                     if (!ss)
                         continue;
                     if (!ss->enabled)
@@ -995,7 +995,7 @@ void *select_and_execute(void *arg) {
         c_time = getTick();
         if (rv == 0 || (c_time - lt >= 200)) {
             lt = c_time;
-            for (sockets *ss : s) {
+            for (sockets *ss : sockets_pool) {
                 if (ss->tid != tid)
                     continue;
                 if (((ss->timeout_ms > 0) &&
@@ -1003,12 +1003,10 @@ void *select_and_execute(void *arg) {
                      (fifo_used(&ss->fifo) == 0)) ||
                     (ss->force_close)) {
                     if (ss->timeout && !ss->force_close) {
-                        int rv;
                         if (ss->sock == SOCK_TIMEOUT)
                             ss->rtime = getTick();
                         std::unique_lock<SMutex> lock(ss->mutex);
-                        rv = ss->timeout(ss);
-                        if (rv) {
+                        if (ss->timeout(ss)) {
                             lock.unlock();
                             sockets_del(ss->id);
                         }
@@ -1065,7 +1063,7 @@ void set_sockets_rtime(int i, int r) {
 int sockets_del_for_sid(int sid) {
     if (sid < 0)
         return 0;
-    for (sockets *ss : s)
+    for (sockets *ss : sockets_pool)
         if (ss->sid >= 0 && ss->sid == sid &&
             (ss->type == TYPE_RTSP || ss->type == TYPE_RTP ||
              ss->type == TYPE_RTCP)) {
@@ -1110,9 +1108,9 @@ void set_socket_buffer(int sid, uint8_t *buf, int len) {
 
 uint64_t get_allocated_memory() {
     uint64_t allocated_memory = 0;
-    size_t n = std::min(s.size(), s.capacity());
+    size_t n = std::min(sockets_pool.size(), sockets_pool.capacity());
     for (size_t index = 0; index < n; ++index) {
-        sockets *ss = s[index];
+        sockets *ss = sockets_pool[index];
         if (ss && ss->fifo.size)
             allocated_memory += ss->fifo.size;
     }

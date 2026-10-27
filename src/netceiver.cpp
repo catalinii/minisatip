@@ -165,9 +165,9 @@ int netcv_commit(adapter *ad) {
         fe_delivery_system_t sys = tp->sys.value_or(SYS_UNDEFINED);
         int freq = tp->freq.value_or(0);
         // Client-controlled: clamp to the map sizes used below.
-        int diseqc = tp->diseqc.value_or(0);
-        if (diseqc < 0 || diseqc > 4)
-            diseqc = 0;
+        int src = tp->diseqc.value_or(0);
+        if (src < 0 || src > 4)
+            src = 0;
         int pol = tp->pol.value_or(0);
         if (pol < 0 || pol > 3)
             pol = 0;
@@ -193,7 +193,7 @@ int netcv_commit(adapter *ad) {
         switch (sys) {
         case SYS_DVBS:
         case SYS_DVBS2: {
-            m_pos = 1800 + map_pos[diseqc];
+            m_pos = 1800 + map_pos[src];
 
             memset(&m_sec, 0, sizeof(recv_sec_t));
             m_sec.voltage = map_pol[pol];
@@ -237,7 +237,7 @@ int netcv_commit(adapter *ad) {
             LOG("netceiver: adapter %d tuning to %d%s pol:%s sr:%d fec:%s "
                 "delsys:%s "
                 "mod:%s",
-                ad->id, freq / 1000, map_posc[diseqc],
+                ad->id, freq / 1000, map_posc[src],
                 fe_pol_map.reverse_lookup(pol).data(), sr / 1000,
                 fe_fec_map.reverse_lookup((fe_code_rate_t)fec).data(),
                 fe_delsys_map.reverse_lookup((fe_delivery_system_t)sys).data(),

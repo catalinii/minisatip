@@ -137,17 +137,16 @@ void sockets_set_flush_enqued_data(int id);
 int sockets_set_handle(int sock_id, int new_handle);
 void sockets_set_close_handle(int id, bool close_handle);
 extern __thread char thread_name[];
-extern __thread pthread_t tid;
 extern __thread int select_timeout;
 
 constexpr size_t SOCKS_BUCKETS =
     (MAX_SOCKS + kSegmentBucketSize - 1) / kSegmentBucketSize;
-extern SegmentedPool<sockets *, SOCKS_BUCKETS> s;
+extern SegmentedPool<sockets *, SOCKS_BUCKETS> sockets_pool;
 
 static inline sockets *get_sockets(int i) {
     if (i < 0 || i >= MAX_SOCKS)
         return NULL;
-    sockets *ss = s[i];
+    sockets *ss = sockets_pool[i];
     if (!ss || !ss->enabled)
         return NULL;
     return ss;

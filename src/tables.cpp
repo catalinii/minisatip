@@ -76,7 +76,7 @@ int add_ca(SCA_op *op) {
         ca[new_ca].op.store(op);
     ca[new_ca].id = new_ca;
     {
-        std::lock_guard<SMutex> lock(ca_mask_mutex);
+        std::lock_guard<SMutex> mask_lock(ca_mask_mutex);
         memset(ca[new_ca].ad_info, 0, sizeof(ca[new_ca].ad_info));
     }
     ca[new_ca].enabled = 1;
