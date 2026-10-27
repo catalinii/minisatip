@@ -1264,6 +1264,28 @@ int push_ts_to_adapter(ddci_device_t *d, adapter *ad, uint16_t *mapping) {
     return 0;
 }
 
+// Release and reopen the dvr: only the last close drops the
+// stale full device buffer wedging the demux. 1 on success.
+static int ddci_reset_push(adapter *ad) {
+    if (!ddci_is_loopback(ad->id))
+        return 0;
+    std::string path = std::format("/dev/dvb/adapter{}/dvr{}", ad->pa, ad->fn);
+    if (ad->fe >= 0) {
+        close(ad->fe);
+        ad->fe = -1;
+    }
+    int fd = open(path.c_str(), O_WRONLY | O_NONBLOCK | O_CLOEXEC);
+    if (fd < 0) {
+        LOG("loopback %d: could not reopen push %s: %s", ad->id, path.c_str(),
+            strerror(errno));
+        return 0;
+    }
+    ad->fe = fd;
+    LOG("loopback %d: push %s released and reopened on fd %d", ad->id,
+        path.c_str(), ad->fe);
+    return 1;
+}
+
 int ddci_process_ts(adapter *ad, ddci_device_t *d) {
     unsigned char *b;
     adapter *ad2 = get_adapter(d->id);
@@ -1357,13 +1379,20 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
         DEBUGM("writing %d bytes to DDCI device %d, fd %d, sock %d", bytes,
                d->id, ad2->fe, ad2->fe_sock);
         int rb = writev(ad2->fe, io, iop);
-        if (rb != bytes)
+        if (rb != bytes) {
             LOG("%s: write incomplete to DDCI %d,fd %d, wrote %d out of %d "
                 "(iop %d%s), "
                 "errno "
                 "%d: %s",
                 __FUNCTION__, ad2->id, ad2->fe, rb, bytes, iop,
                 iop > 1024 ? " > IOV_MAX" : "", errno, strerror(errno));
+            // Wedged input buffer (concurrent join, long tune): flush
+            // it so the demux restarts, at most every 30 s.
+            int64_t now = getTick();
+            if (rb < 0 && now - d->push_reset_tick > 30000 &&
+                ddci_reset_push(ad2))
+                d->push_reset_tick = now;
+        }
     }
     // mark the written TS packets as 8191 (0x1FFF)
     for (i = 0; i < iop; i++) {
@@ -1404,25 +1433,6 @@ void ddci_init() // you can search the devices here and fill the ddci_devices,
 
     ddci_id = add_ca(&ddci);
     LOG("Registered DDCI CA %d", ddci_id);
-}
-
-// Release and reopen the dvr for each tune: only the last
-// close drops the stale full device buffer wedging the demux.
-static void ddci_reset_push(adapter *ad) {
-    std::string path = std::format("/dev/dvb/adapter{}/dvr{}", ad->pa, ad->fn);
-    if (ad->fe >= 0) {
-        close(ad->fe);
-        ad->fe = -1;
-    }
-    int fd = open(path.c_str(), O_WRONLY | O_NONBLOCK | O_CLOEXEC);
-    if (fd < 0) {
-        LOG("loopback %d: could not reopen push %s: %s", ad->id, path.c_str(),
-            strerror(errno));
-        return;
-    }
-    ad->fe = fd;
-    LOG("loopback %d: push %s released and reopened on fd %d", ad->id,
-        path.c_str(), ad->fe);
 }
 
 int ddci_set_pid(adapter *ad, int pid) {

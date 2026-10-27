@@ -62,6 +62,8 @@ typedef struct ddci_device {
     char disable_cat;
     char loopback; // enigma DVR loopback, no sec/ci hardware
     int ci_slot;   // claimed /dev/ciN, -1 until bound
+    // Last dvr flush; EAGAINs reflush past 30 s.
+    int64_t push_reset_tick;
     std::unordered_map<int, ddci_mapping_table_t> mapping;
     std::unordered_set<int> emm_pids; // MAKE_KEY(ad,pid), never swept
     SFIFO fifo;
