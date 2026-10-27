@@ -3829,7 +3829,8 @@ int ca_init_en50221(ca_device_t *d) {
     sockets_timeout(d->sock, 1000);
     sockets_setread(d->sock, (void *)ca_read_tpdu);
     sockets *ss = get_sockets(d->sock);
-    ss->events |= POLLERR;
+    if (ss)
+        ss->events |= POLLERR;
 
     return 0;
 }
