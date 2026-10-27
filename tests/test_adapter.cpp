@@ -20,11 +20,14 @@
 
 #include "adapter.h"
 #include "minisatip.h"
+#include "socketworks.h"
+#include "stream.h"
 #include "utils.h"
 #include "utils/testing.h"
 
 #include <linux/dvb/frontend.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <thread>
 #include <unordered_set>
 #include <vector>
@@ -183,6 +186,51 @@ int test_get_adapter_name_bounded() {
     memset(buf, 'C', sizeof(buf));
     get_adapter_name(0, buf, 32);
     ASSERT(buf[0] == 0, "no adapter, empty name");
+    return 0;
+}
+
+static int tune_ok(int, transponder *) { return 0; }
+
+// The DVR socket belongs to the adapter thread: tune() must not reset its
+// read position, the next read_dmx() drops the old buffer instead.
+int test_tune_flushes_dvr_in_read_dmx() {
+    adapter ad = {};
+    adapter *saved_a = a[0];
+    int sp[2];
+    ASSERT(socketpair(AF_UNIX, SOCK_STREAM, 0, sp) == 0, "socketpair failed");
+    int id = sockets_add(sp[0], NULL, 0, TYPE_DVR, NULL, NULL, NULL);
+    ASSERT(id >= 0, "sockets_add failed");
+    // a PAT of another transponder, so only the flush can drop it
+    static unsigned char buf[2 * DVB_FRAME + 1];
+    memset(buf, 0xFF, sizeof(buf));
+    buf[0] = 0x47;
+    buf[1] = 0x40;
+    buf[2] = 0x00;
+    buf[8] = 0x12;
+    buf[9] = 0x34;
+    set_socket_buffer(id, buf, 2 * DVB_FRAME);
+    sockets *s = get_sockets(id);
+    s->rlen = 2 * DVB_FRAME;
+
+    ad.buf = buf;
+    ad.lbuf = 2 * DVB_FRAME;
+    ad.enabled = 1;
+    ad.sock = id;
+    ad.do_tune = 1;
+    ad.sid_cnt = 1;
+    ad.tune = tune_ok;
+    a[0] = &ad;
+    tune(0, 0);
+    ASSERT_EQUAL(2 * DVB_FRAME, s->rlen, "tune() wrote the DVR socket");
+    read_dmx(s);
+    ASSERT_EQUAL(0, s->rlen, "the buffer from before the tune was kept");
+    ASSERT_EQUAL(0, ad.wait_transponder_id,
+                 "data from before the tune was taken as the new transponder");
+    ASSERT_EQUAL(0, ad.drop_buffer, "the flush was not consumed");
+
+    sockets_del(id);
+    close(sp[1]);
+    a[0] = saved_a;
     return 0;
 }
 
@@ -601,6 +649,8 @@ int main() {
               "test describe_adapter with ten-digit plp and ds");
     TEST_FUNC(test_get_adapter_name_bounded(),
               "test get_adapter_name stays within max_size");
+    TEST_FUNC(test_tune_flushes_dvr_in_read_dmx(),
+              "test tune() leaves the DVR buffer flush to read_dmx()");
     TEST_FUNC(test_find_pid_unsorted(),
               "test find_pid with entries behind INACTIVE slots");
     TEST_FUNC(test_update_pids_max_pids_floor(),

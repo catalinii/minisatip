@@ -1152,13 +1152,6 @@ void set_socket_receive_buffer(int sock, int len) {
         LOG("receive socket buffer size is %d bytes", len);
 }
 
-void set_socket_pos(int sock, int pos) {
-    sockets *ss = get_sockets(sock);
-    if (!ss)
-        return;
-    ss->rlen = pos;
-}
-
 char *get_sock_shost(int fd, char *dest, int ld) {
     USockAddr sin;
     socklen_t len = sizeof(sin);

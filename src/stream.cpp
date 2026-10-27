@@ -1154,6 +1154,16 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
     flush_stream(sid, iov, iiov, rtime);
     return 0;
 }
+// tune() must not take the socket lock, so the flush it asks for happens
+// here, under the socket and the adapter lock
+static int drop_after_tune(adapter *ad, sockets *s) {
+    if (!ad->drop_buffer)
+        return 0;
+    ad->drop_buffer = 0;
+    s->rlen = 0;
+    return 1;
+}
+
 int process_dmx(sockets *s) {
     adapter *ad;
     int64_t stime;
@@ -1169,6 +1179,8 @@ int process_dmx(sockets *s) {
         s->rlen = 0;
         return 0;
     }
+    if (drop_after_tune(ad, s))
+        return 0;
 
     int64_t ms_ago = s->rtime - ad->rtime;
     ad->rtime = s->rtime;
@@ -1232,6 +1244,8 @@ int read_dmx(sockets *s) {
     // tune() and other threads change these fields under the adapter lock;
     // process_dmx() takes it again
     std::unique_lock<SMutex> lock(ad->mutex);
+    if (drop_after_tune(ad, s))
+        return 0;
     threshold = ad->threshold;
 
     if (rtime - ad->rtime > threshold)
