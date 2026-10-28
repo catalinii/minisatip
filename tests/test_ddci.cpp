@@ -629,44 +629,23 @@ int test_copy_ts_from_ddci() {
     return 0;
 }
 
-int is_err = 0;
-int expected_pid = 0;
-int did_write = 0;
-int xwritev(int fd, const struct iovec *io, int len) {
-    unsigned char *b = (unsigned char *)io[0].iov_base;
-    LOGM("called writev with len %d, first pid %d", len, PID_FROM_TS(b));
-    did_write = 1;
-    if (len < 2) {
-        is_err = 1;
-        LOG_AND_RETURN(
-            -1, "writev did not receive proper arguments, expected 2, got %d",
-            len);
-    }
-
-    if (PID_FROM_TS(b) != expected_pid) {
-        is_err = 1;
-        LOG_AND_RETURN(-1,
-                       "writev did not receive proper TS, expected %d, got %d",
-                       expected_pid, PID_FROM_TS(b));
-    }
-    int total = 0;
-    for (int i = 0; i < len; i++)
-        total += io[i].iov_len;
-    return total;
+static size_t bl_have(ddci_device_t *d) {
+    return (size_t)fifo_used(&d->push_backlog);
 }
 
-// the last iovec passed to writev(), captured by xwritev_last
-static int last_iov_len = -1;
-static uint8_t last_iov[188];
-int xwritev_last(int fd, const struct iovec *io, int len) {
-    int i, total = 0;
-    did_write = 1;
-    for (i = 0; i < len; i++)
-        total += io[i].iov_len;
-    last_iov_len = io[len - 1].iov_len;
-    if (last_iov_len == 188)
-        memcpy(last_iov, io[len - 1].iov_base, 188);
-    return total;
+// Bounded pipe read: returns bytes read, never blocks past 5s idle.
+static size_t bl_read_exact(int fd, uint8_t *dst, size_t len) {
+    size_t off = 0;
+    struct pollfd pfd = {fd, POLLIN, 0};
+    while (off < len) {
+        if (poll(&pfd, 1, 5000) <= 0)
+            break;
+        ssize_t r = read(fd, dst + off, len - off);
+        if (r <= 0)
+            break;
+        off += (size_t)r;
+    }
+    return off;
 }
 
 // every write to the CI must end with exactly one null packet, so the
@@ -683,9 +662,13 @@ int test_ddci_process_ts_null_tail() {
     create_fifo(&d.push_backlog, DDCI_PUSH_BACKLOG_MAX);
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[0] = &d;
+    ddci_devices[2] = &d;
     create_adapter(&ad0, 0);
     create_adapter(&ad, 1);
     create_adapter(&ad2, 2);
+    int fds[2];
+    ASSERT(pipe(fds) == 0, "pipe as mock dvr");
+    ad2.fe = fds[1];
     ad.buf = buf;
     ad.lbuf = sizeof(buf);
     for (i = 0; i < ad.lbuf; i += 188) {
@@ -699,27 +682,35 @@ int test_ddci_process_ts_null_tail() {
     ad.rlen = ad.lbuf - 188;
     set_pid_ts(buf, 1000);
     d.read_index[1] = d.read_index[2] = d.fifo.write_index = 188;
-    _writev = (mywritev)&xwritev_last;
-    did_write = 0;
-    last_iov_len = -1;
     ddci_process_ts(&ad, &d);
-    if (!did_write)
-        LOG_AND_RETURN(1, "no writev called");
-    if (last_iov_len != 188)
-        LOG_AND_RETURN(1, "expected a single 188 byte packet last, got %d",
-                       last_iov_len);
-    if (last_iov[0] != 0x47 || PID_FROM_TS(last_iov) != 8191)
+    size_t pushed = bl_have(&d);
+    ASSERT(pushed >= 376, "TS and tail queued");
+    ddci_push_start(&d);
+    int t = 0;
+    while (bl_have(&d) > 0 && t++ < 500)
+        usleep(10000);
+    int drained = (bl_have(&d) == 0);
+    ddci_push_stop(&d);
+    ASSERT(drained, "push drained");
+    std::vector<uint8_t> got(pushed);
+    ASSERT(bl_read_exact(fds[0], got.data(), pushed) == pushed,
+           "pushed bytes readable");
+    uint8_t *last = got.data() + pushed - 188;
+    if (last[0] != 0x47 || PID_FROM_TS(last) != 8191)
         LOG_AND_RETURN(1, "last packet is not a null packet (pid %d)",
-                       PID_FROM_TS(last_iov));
-    if ((last_iov[3] & 0x30) != 0x10)
+                       PID_FROM_TS(last));
+    if ((last[3] & 0x30) != 0x10)
         LOG_AND_RETURN(1, "null packet must carry payload only, got %02X",
-                       last_iov[3]);
+                       last[3]);
+    close(fds[0]);
+    close(fds[1]);
+    ad2.fe = -1;
     free_fifo(&d.fifo);
     free_fifo(&d.push_backlog);
     pmts.slot(0) = save;
-    _writev = writev;
     channels.clear();
     ddci_devices[0] = NULL;
+    ddci_devices[2] = NULL;
     a[0] = nullptr;
     a[1] = nullptr;
     a[2] = nullptr;
@@ -766,22 +757,47 @@ int test_ddci_process_ts() {
     set_pid_ts(fifo + 188, new_pid2);
     set_pid_ts(fifo + 376, new_pid2);
     fifo_push(&d.fifo, fifo, sizeof(fifo));
-    expected_pid = new_pid;
-    _writev = (mywritev)&xwritev;
+    int fds[2];
+    ASSERT(pipe(fds) == 0, "pipe as mock dvr");
+    ad2.fe = fds[1];
+    ddci_devices[2] = &d;
     ddci_process_ts(&ad, &d);
-    if (is_err)
-        LOG_AND_RETURN(1, "is_err is set");
-    if (!did_write)
-        LOG_AND_RETURN(1, "no writev called");
+    size_t pushed = bl_have(&d);
+    ASSERT(pushed > 0, "TS queued for the push");
+    ddci_push_start(&d);
+    int t = 0;
+    while (bl_have(&d) > 0 && t++ < 500)
+        usleep(10000);
+    int drained = (bl_have(&d) == 0);
+    ddci_push_stop(&d);
+    ASSERT(drained, "push drained");
+    std::vector<uint8_t> got(pushed);
+    ASSERT(bl_read_exact(fds[0], got.data(), pushed) == pushed,
+           "pushed bytes readable");
+    // Mapped TS rides the push in adapter order, PSI first.
+    int seen_pid = 0, seen_pid2 = 0;
+    for (size_t k = 0; k + 188 <= pushed; k += 188) {
+        int p = PID_FROM_TS(got.data() + k);
+        if (p == new_pid && !seen_pid2)
+            seen_pid = 1;
+        if (p == new_pid2 && seen_pid)
+            seen_pid2 = 1;
+    }
+    if (!seen_pid || !seen_pid2)
+        LOG_AND_RETURN(1, "pushed TS misses mapped pids in order");
     if (PID_FROM_TS(ad.buf) != 1000)
         LOG_AND_RETURN(1, "expected pid 1000 in the adapter buffer, got %d",
                        PID_FROM_TS(ad.buf));
     if (PID_FROM_TS(ad.buf + 2 * 188) != 2000)
         LOG_AND_RETURN(1, "expected pid 2000 in the adapter buffer, got %d",
                        PID_FROM_TS(ad.buf + 2 * 188));
+    close(fds[0]);
+    close(fds[1]);
+    ad2.fe = -1;
     free_fifo(&d.fifo);
     free_fifo(&d.push_backlog);
     pmts.slot(0) = save;
+    ddci_devices[2] = NULL;
     return 0;
 }
 // Two tuners on one CI: stopping the first must not remove pid 0 from the CI
@@ -1939,16 +1955,11 @@ int test_ddci_pick_free_slot() {
     return 0;
 }
 
-static size_t bl_have(ddci_device_t *d) {
-    return (size_t)fifo_used(&d->push_backlog);
-}
-
 int test_ddci_push_queue_order() {
     ddci_device_t d = {};
     d.id = 2;
     d.enabled = 1;
     d.loopback = 1;
-    d.push_backlog_cap = DDCI_PUSH_BACKLOG_MAX;
     create_fifo(&d.push_backlog, DDCI_PUSH_BACKLOG_MAX);
     uint8_t psi[188], ts1[188], ts2[188];
     memset(psi, 0, sizeof(psi));
@@ -1961,7 +1972,6 @@ int test_ddci_push_queue_order() {
     struct iovec io[2] = {{ts1, sizeof(ts1)}, {ts2, sizeof(ts2)}};
     ASSERT(ddci_push_queue(&d, psi, sizeof(psi), io, 2) == 564, "queues all");
     ASSERT(bl_have(&d) == 564, "backlog holds the queued bytes");
-    ASSERT(d.push_admitted_total == 564, "admitted counts queued bytes");
     // PSI rides first even though the TS arrived in the same call.
     uint8_t out[564];
     void *p = NULL;
@@ -1971,16 +1981,21 @@ int test_ddci_push_queue_order() {
     ASSERT(PID_FROM_TS(out) == 0, "psi first");
     ASSERT(PID_FROM_TS(out + 188) == 1000, "ts order kept");
     ASSERT(PID_FROM_TS(out + 376) == 2000, "ts order kept");
-    // Past the cap the oldest bytes shed, newest survive.
-    d.push_backlog_cap = 376;
-    struct iovec io2[1] = {{ts1, sizeof(ts1)}};
-    ASSERT(ddci_push_queue(&d, NULL, 0, io2, 1) == 188, "queues past the cap");
-    ASSERT(bl_have(&d) == 376, "cap sheds oldest packets");
-    ASSERT(d.push_shed_total == 376, "shed bytes counted");
+    free_fifo(&d.push_backlog);
+    // A full ring sheds oldest, newest survive.
+    create_fifo(&d.push_backlog, 376);
+    ASSERT(ddci_push_queue(&d, psi, sizeof(psi), io, 2) == 564,
+           "overfill queues all");
+    ASSERT(bl_have(&d) == 376, "ring keeps the newest bytes");
     first = fifo_peek(&d.push_backlog, &p, sizeof(out), 0);
+    ASSERT(first == 188, "wrapped head segment");
     memcpy(out, p, first);
-    ASSERT(PID_FROM_TS(out) == 2000, "newest kept first");
-    ASSERT(PID_FROM_TS(out + 188) == 1000, "newest kept in order");
+    void *q = NULL;
+    size_t second = fifo_peek(&d.push_backlog, &q, bl_have(&d) - first, first);
+    ASSERT(second == 188, "wrapped tail segment");
+    memcpy(out + first, q, second);
+    ASSERT(PID_FROM_TS(out) == 1000, "newest kept first");
+    ASSERT(PID_FROM_TS(out + 188) == 2000, "newest kept in order");
     free_fifo(&d.push_backlog);
     return 0;
 }
@@ -1991,7 +2006,6 @@ int test_ddci_push_thread_roundtrip() {
     d.id = 2;
     d.enabled = 1;
     d.loopback = 1;
-    d.push_backlog_cap = DDCI_PUSH_BACKLOG_MAX;
     create_fifo(&d.push_backlog, DDCI_PUSH_BACKLOG_MAX);
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[2] = &d;
@@ -1999,27 +2013,23 @@ int test_ddci_push_thread_roundtrip() {
     int fds[2];
     ASSERT(pipe(fds) == 0, "pipe as mock dvr");
     ad2.fe = fds[1];
-    d.push_stop.store(false);
-    d.push_running.store(true);
-    d.push_thread = std::thread(ddci_push_loop, 2);
+    ddci_push_start(&d);
     uint8_t msg[1024];
     for (size_t i = 0; i < sizeof(msg); i++)
         msg[i] = (uint8_t)(i * 31 + 7);
     struct iovec io[1] = {{msg, sizeof(msg)}};
-    ASSERT(ddci_push_queue(&d, NULL, 0, io, 1) == sizeof(msg), "queued");
+    size_t queued = ddci_push_queue(&d, NULL, 0, io, 1);
     struct pollfd pfd = {fds[0], POLLIN, 0};
-    ASSERT(poll(&pfd, 1, 5000) > 0, "thread writes promptly");
-    uint8_t got[sizeof(msg)];
-    size_t off = 0;
-    while (off < sizeof(got)) {
-        ssize_t r = read(fds[0], got + off, sizeof(got) - off);
-        ASSERT(r > 0, "pipe yields queued bytes");
-        off += (size_t)r;
-    }
-    ASSERT(memcmp(got, msg, sizeof(msg)) == 0, "round trip intact");
-    ASSERT(bl_have(&d) == 0, "backlog drained");
-    ASSERT(d.push_consumed_total == sizeof(msg), "consumed counts writes");
+    int ready = poll(&pfd, 1, 5000);
+    // Join before asserting: a live thread must never see teardown.
     ddci_push_stop(&d);
+    ASSERT(queued == sizeof(msg), "queued");
+    ASSERT(ready > 0, "thread writes promptly");
+    ASSERT(bl_have(&d) == 0, "backlog drained");
+    uint8_t got[sizeof(msg)];
+    ASSERT(bl_read_exact(fds[0], got, sizeof(got)) == sizeof(got),
+           "pipe yields queued bytes");
+    ASSERT(memcmp(got, msg, sizeof(msg)) == 0, "round trip intact");
     ASSERT(!d.push_running.load(), "loop exited");
     ASSERT(!d.push_thread.joinable(), "thread joined");
     ddci_push_stop(&d);
@@ -2038,7 +2048,6 @@ int test_ddci_push_stop_drains() {
     d.id = 2;
     d.enabled = 1;
     d.loopback = 1;
-    d.push_backlog_cap = DDCI_PUSH_BACKLOG_MAX;
     create_fifo(&d.push_backlog, DDCI_PUSH_BACKLOG_MAX);
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[2] = &d;
@@ -2046,23 +2055,18 @@ int test_ddci_push_stop_drains() {
     int fds[2];
     ASSERT(pipe(fds) == 0, "pipe as mock dvr");
     ad2.fe = fds[1];
-    d.push_stop.store(false);
-    d.push_running.store(true);
-    d.push_thread = std::thread(ddci_push_loop, 2);
+    ddci_push_start(&d);
     // Queued bytes drain to the pipe even when nobody reads yet.
     uint8_t msg[2048];
     memset(msg, 0x5A, sizeof(msg));
     struct iovec io[1] = {{msg, sizeof(msg)}};
-    ASSERT(ddci_push_queue(&d, NULL, 0, io, 1) == sizeof(msg), "queued");
+    size_t queued = ddci_push_queue(&d, NULL, 0, io, 1);
     ddci_push_stop(&d);
+    ASSERT(queued == sizeof(msg), "queued");
     ASSERT(bl_have(&d) == 0, "stop drains the backlog");
     uint8_t got[sizeof(msg)];
-    size_t off = 0;
-    while (off < sizeof(got)) {
-        ssize_t r = read(fds[0], got + off, sizeof(got) - off);
-        ASSERT(r > 0, "drained bytes readable");
-        off += (size_t)r;
-    }
+    ASSERT(bl_read_exact(fds[0], got, sizeof(got)) == sizeof(got),
+           "drained bytes readable");
     ASSERT(memcmp(got, msg, sizeof(msg)) == 0, "drained bytes intact");
     close(fds[0]);
     close(fds[1]);
@@ -2073,26 +2077,118 @@ int test_ddci_push_stop_drains() {
     return 0;
 }
 
-// Scripted push fifo: 0 stalls, 1 halves, 2 takes all, capturing bytes.
-static std::vector<uint8_t> bl_capture;
-static int bl_mode;
-int xwritev_scripted(int fd, const struct iovec *io, int len) {
+// Fill a non-blocking pipe until the kernel refuses; returns bytes held.
+static size_t bl_fill_pipe(int wfd) {
+    uint8_t fill[4096];
+    memset(fill, 0xCC, sizeof(fill));
     size_t total = 0;
-    for (int i = 0; i < len; i++)
-        total += io[i].iov_len;
-    if (bl_mode == 0) {
-        errno = EAGAIN;
-        return -1;
+    ssize_t w;
+    while ((w = write(wfd, fill, sizeof(fill))) > 0)
+        total += (size_t)w;
+    if (errno != EAGAIN)
+        LOG_AND_RETURN(0, "pipe fill ended with %d, not EAGAIN", errno);
+    return total;
+}
+
+int test_ddci_push_eagain_waits_for_read() {
+    ddci_device_t d = {};
+    adapter ad2 = {};
+    d.id = 2;
+    d.enabled = 1;
+    d.loopback = 1;
+    create_fifo(&d.push_backlog, DDCI_PUSH_BACKLOG_MAX);
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[2] = &d;
+    create_adapter(&ad2, 2);
+    int fds[2];
+    ASSERT(pipe(fds) == 0, "pipe as mock dvr");
+    int flags = fcntl(fds[1], F_GETFL, 0);
+    ASSERT(fcntl(fds[1], F_SETFL, flags | O_NONBLOCK) == 0, "nonblock push");
+    ad2.fe = fds[1];
+    // One slot like the stb dvr: EAGAIN arrives fast, a read clears it.
+    ASSERT(fcntl(fds[1], F_SETPIPE_SZ, 4096) > 0, "small pipe");
+    size_t held = bl_fill_pipe(fds[1]);
+    ASSERT(held >= 4096, "pipe holds filler");
+    ddci_push_start(&d);
+    uint8_t msg[1024];
+    for (size_t i = 0; i < sizeof(msg); i++)
+        msg[i] = (uint8_t)(i * 31 + 7);
+    struct iovec io[1] = {{msg, sizeof(msg)}};
+    size_t queued = ddci_push_queue(&d, NULL, 0, io, 1);
+    // Full device: nothing moves until a read drains it.
+    usleep(200000);
+    int stalled = (bl_have(&d) == sizeof(msg));
+    // A read drains the device: the same bytes go out on retry.
+    // Drain it whole: a half-freed slot still reads full.
+    size_t drained = 0;
+    uint8_t drain[4096];
+    while (drained < held) {
+        ssize_t r = read(fds[0], drain, sizeof(drain));
+        if (r <= 0)
+            break;
+        drained += (size_t)r;
     }
-    size_t give = bl_mode == 1 ? total / 2 : total;
-    size_t left = give;
-    for (int i = 0; i < len && left > 0; i++) {
-        size_t n = io[i].iov_len < left ? io[i].iov_len : left;
-        const uint8_t *p = (const uint8_t *)io[i].iov_base;
-        bl_capture.insert(bl_capture.end(), p, p + n);
-        left -= n;
-    }
-    return (int)give;
+    ddci_push_note_read(&d);
+    int t = 0;
+    while (bl_have(&d) > 0 && t++ < 500)
+        usleep(10000);
+    int resumed = (bl_have(&d) == 0);
+    // Join before asserting: a live thread must never see teardown.
+    ddci_push_stop(&d);
+    ASSERT(queued == sizeof(msg), "queued");
+    ASSERT(stalled, "EAGAIN stalls the push");
+    ASSERT(drained == held, "read drains device");
+    ASSERT(resumed, "read resumes the push");
+    // Pipe fully drained: only the retried message remains.
+    uint8_t got[sizeof(msg)];
+    ASSERT(bl_read_exact(fds[0], got, sizeof(got)) == sizeof(got),
+           "retried bytes readable");
+    ASSERT(memcmp(got, msg, sizeof(msg)) == 0, "retried bytes intact");
+    close(fds[0]);
+    close(fds[1]);
+    ad2.fe = -1;
+    free_fifo(&d.push_backlog);
+    ddci_devices[2] = NULL;
+    a[2] = nullptr;
+    return 0;
+}
+
+int test_ddci_push_stop_sheds_stall() {
+    ddci_device_t d = {};
+    adapter ad2 = {};
+    d.id = 2;
+    d.enabled = 1;
+    d.loopback = 1;
+    create_fifo(&d.push_backlog, DDCI_PUSH_BACKLOG_MAX);
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[2] = &d;
+    create_adapter(&ad2, 2);
+    int fds[2];
+    ASSERT(pipe(fds) == 0, "pipe as mock dvr");
+    int flags = fcntl(fds[1], F_GETFL, 0);
+    ASSERT(fcntl(fds[1], F_SETFL, flags | O_NONBLOCK) == 0, "nonblock push");
+    ad2.fe = fds[1];
+    // One slot like the stb dvr: the push stalls on the first chunk.
+    ASSERT(fcntl(fds[1], F_SETPIPE_SZ, 4096) > 0, "small pipe");
+    bl_fill_pipe(fds[1]);
+    ddci_push_start(&d);
+    uint8_t msg[1024];
+    memset(msg, 0x5A, sizeof(msg));
+    struct iovec io[1] = {{msg, sizeof(msg)}};
+    size_t queued = ddci_push_queue(&d, NULL, 0, io, 1);
+    usleep(200000);
+    // No read ever comes: stop still joins instead of hanging.
+    ddci_push_stop(&d);
+    ASSERT(queued == sizeof(msg), "queued");
+    ASSERT(!d.push_running.load(), "loop exited on stop");
+    ASSERT(bl_have(&d) == 0, "stop sheds the stalled backlog");
+    close(fds[0]);
+    close(fds[1]);
+    ad2.fe = -1;
+    free_fifo(&d.push_backlog);
+    ddci_devices[2] = NULL;
+    a[2] = nullptr;
+    return 0;
 }
 
 int test_ddci_enigma_local_loops_back() {
@@ -2199,16 +2295,17 @@ int test_ddci_push_fpga() {
     d.id = 2;
     d.enabled = 1;
     d.loopback = 0;
-    d.push_backlog_cap = DDCI_PUSH_BACKLOG_MAX;
     create_fifo(&d.fifo, DDCI_BUFFER);
     create_fifo(&d.push_backlog, DDCI_PUSH_BACKLOG_MAX);
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[0] = &d;
+    ddci_devices[2] = &d;
     create_adapter(&ad0, 0);
     create_adapter(&ad, 1);
     create_adapter(&ad2, 2);
-    ad2.fe = open("/dev/null", O_WRONLY);
-    ASSERT(ad2.fe >= 0, "null push fd");
+    int fds[2];
+    ASSERT(pipe(fds) == 0, "pipe as mock dvr");
+    ad2.fe = fds[1];
     ad.buf = buf;
     ad.lbuf = sizeof(buf);
     for (int i = 0; i < ad.lbuf; i += 188) {
@@ -2222,64 +2319,47 @@ int test_ddci_push_fpga() {
     ad.rlen = ad.lbuf - 188;
     set_pid_ts(buf, 1000);
     d.read_index[1] = d.read_index[2] = d.fifo.write_index = 188;
-    // Pin the clocks: PAT/SDT and stall timers must not fire mid-test.
+    // Pin the clocks: PAT/SDT stay quiet, the queue holds TS and tail.
     d.last_pat = d.last_sdt = getTick();
-    d.push_admitted_tick = getTick();
 
-    mywritev saved_w = _writev;
-    _writev = (mywritev)&xwritev_scripted;
-    // At the cap nothing is offered: fresh bytes wait userside.
-    d.push_admitted_total = DDCI_PUSH_INFLIGHT_MAX;
-    d.push_consumed_total = 0;
-    bl_capture.clear();
-    bl_mode = 2;
+    // FPGA queues like loopback: mapped TS, then the null tail.
     ddci_process_ts(&ad, &d);
-    ASSERT(bl_capture.empty(), "capped push offers nothing");
-    ASSERT(bl_have(&d) == 188, "fresh bytes wait in the backlog");
-    // Consumed bytes reopen the budget: the push resumes in order.
-    d.push_consumed_total = DDCI_PUSH_INFLIGHT_MAX;
-    ddci_process_ts(&ad, &d);
-    ASSERT(bl_have(&d) == 0, "budget drains the backlog");
-    ASSERT(bl_capture.size() == 376, "backlog drains with a fresh tail");
-    ASSERT(PID_FROM_TS(bl_capture.data()) == new_pid, "order kept");
-    // Over-consumed counters saturate: the gate stays open, not wedged.
-    d.push_consumed_total = d.push_admitted_total + 100;
-    set_pid_ts(buf, 1000);
-    bl_capture.clear();
-    ddci_process_ts(&ad, &d);
-    ASSERT(bl_capture.size() == 376, "saturated gate still pushes ts+tail");
-    // Any admission clears a stale reopen block.
-    d.push_reopen_blocked = 1;
-    set_pid_ts(buf, 1000);
-    ddci_process_ts(&ad, &d);
-    ASSERT(d.push_reopen_blocked == 0, "admission unblocks reopen");
+    size_t pushed = bl_have(&d);
+    ASSERT(pushed >= 376, "fpga queues TS and tail");
+    std::vector<uint8_t> expect(pushed);
+    void *p = NULL;
+    ASSERT(fifo_peek(&d.push_backlog, &p, pushed, 0) == pushed,
+           "single-segment peek");
+    memcpy(expect.data(), p, pushed);
+    int seen = 0;
+    for (size_t k = 0; k + 188 <= pushed; k += 188)
+        if (PID_FROM_TS(expect.data() + k) == new_pid)
+            seen = 1;
+    ASSERT(seen, "mapped TS queued");
+    ASSERT(PID_FROM_TS(expect.data() + pushed - 188) == 8191,
+           "null tail queued last");
+    ddci_push_start(&d);
+    int t = 0;
+    while (bl_have(&d) > 0 && t++ < 500)
+        usleep(10000);
+    int drained = (bl_have(&d) == 0);
+    ddci_push_stop(&d);
+    ASSERT(drained, "fpga backlog drains fully");
+    std::vector<uint8_t> got(pushed);
+    ASSERT(bl_read_exact(fds[0], got.data(), pushed) == pushed,
+           "drained bytes readable");
+    ASSERT(memcmp(got.data(), expect.data(), pushed) == 0,
+           "drained bytes intact");
 
-    // FPGA shortfalls backlog TS only (the tail rides fresh each
-    // round) instead of dropping, then drain in order.
-    d.push_backlog.read_index = d.push_backlog.write_index;
-    d.push_admitted_total = d.push_consumed_total = 0;
-    set_pid_ts(buf, 1000);
-    set_pid_ts(buf + 188, 1000);
-    bl_capture.clear();
-    bl_mode = 1;
-    ddci_process_ts(&ad, &d);
-    ASSERT(bl_have(&d) == 94, "fpga shortfall waits in the backlog");
-    bl_mode = 2;
-    ddci_process_ts(&ad, &d);
-    ASSERT(bl_have(&d) == 0, "fpga backlog drains fully");
-    ASSERT(bl_capture.size() == 564, "fpga shortfall drains in full");
-    ASSERT(PID_FROM_TS(bl_capture.data()) == new_pid, "fpga order kept");
-
-    _writev = saved_w;
-    if (ad2.fe >= 0)
-        close(ad2.fe);
+    close(fds[0]);
+    close(fds[1]);
     ad2.fe = -1;
     free_fifo(&d.fifo);
     free_fifo(&d.push_backlog);
     pmts.slot(0) = save;
     ddci_devices[0] = NULL;
+    ddci_devices[2] = NULL;
     a[0] = a[1] = a[2] = nullptr;
-    bl_capture.clear();
     return 0;
 }
 
@@ -2337,7 +2417,11 @@ int main() {
     TEST_FUNC(test_ddci_push_thread_roundtrip(),
               "testing push thread round trip");
     TEST_FUNC(test_ddci_push_stop_drains(), "testing push stop drains");
-    TEST_FUNC(test_ddci_push_fpga(), "testing fpga push gate and shortfall");
+    TEST_FUNC(test_ddci_push_eagain_waits_for_read(),
+              "testing push EAGAIN waits for a read");
+    TEST_FUNC(test_ddci_push_stop_sheds_stall(),
+              "testing push stop sheds a stall");
+    TEST_FUNC(test_ddci_push_fpga(), "testing fpga push queue and drain");
     TEST_FUNC(test_capmt_lists_pmt_pids(),
               "testing CAPMT lists PMT pids verbatim");
     TEST_FUNC(test_dvbca_ci_adapter_no_routing(),
