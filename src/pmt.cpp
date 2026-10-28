@@ -85,6 +85,41 @@ static inline SPMT *get_pmt_for_existing_pid(SPid *p) {
     return pmt;
 }
 
+// Loopback split: the source PMT carries no CWs while its DDCI
+// twin (same SID) does. Borrow the twin's CW for our parity;
+// batches stay local, own CWs always win over borrowed ones.
+static inline void borrow_twin_cw(SPMT *pmt) {
+    if (!pmt || pmt->cw.load())
+        return;
+    int64_t ctime = getTick();
+    int8_t parity = pmt->parity.load();
+    std::lock_guard<SMutex> lock(cws_mutex);
+    for (int i = 0; i < ncws; i++) {
+        SCW *c = cws[i];
+        if (c && c->enabled && c->pmt == pmt->id && ctime <= c->expiry)
+            return;
+    }
+    for (SPMT *q : pmts) {
+        if (!q || !q->enabled || q == pmt || q->sid != pmt->sid)
+            continue;
+        SCW *best = nullptr;
+        for (int i = 0; i < ncws; i++) {
+            SCW *c = cws[i];
+            if (!c || !c->enabled || c->pmt != q->id)
+                continue;
+            if (c->parity != parity || ctime > c->expiry)
+                continue;
+            if (!best || best->time < c->time)
+                best = c;
+        }
+        if (best) {
+            pmt->cw.store(best);
+            pmt->update_cw.store(0);
+            return;
+        }
+    }
+}
+
 static inline int get_adaptation_len(uint8_t *b) {
     int adapt_len = 0;
     if (b[3] & 0x20) {
@@ -919,6 +954,7 @@ int decrypt_batch(SPMT *pmt) {
         return 0;
     }
 
+    borrow_twin_cw(pmt);
     update_cw(pmt);
 
     SCW *cw = pmt->cw.load();

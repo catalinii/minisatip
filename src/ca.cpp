@@ -865,17 +865,18 @@ int get_ca_multiple_pmt(int i) {
 
 void send_cw_to_all_pmts(ca_device_t *d, int parity) {
     int i;
+    int algo = d->cc_version == 1 ? CA_ALGO_DVBCSA : CA_ALGO_AES128_CBC;
     // Same producer bound as everywhere else: slots past
     // max_ca_pmt are always -1 and skipped by the checks below.
     for (i = 0; i < d->max_ca_pmt; i++) {
         if (PMT_ID_IS_VALID(d->capmt[i].pmt_id)) {
-            send_cw(d->capmt[i].pmt_id, CA_ALGO_AES128_CBC, parity,
-                    d->key[parity], d->iv[parity], 3720, NULL);
+            send_cw(d->capmt[i].pmt_id, algo, parity, d->key[parity],
+                    d->iv[parity], 3720, NULL);
         }
         for (int id : d->capmt[i].other_id)
             if (PMT_ID_IS_VALID(id))
-                send_cw(id, CA_ALGO_AES128_CBC, parity, d->key[parity],
-                        d->iv[parity], 3720, NULL);
+                send_cw(id, algo, parity, d->key[parity], d->iv[parity], 3720,
+                        NULL);
     }
 }
 
@@ -1368,12 +1369,12 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
         LOG_AND_RETURN(rc, "send_capmt failed");
     }
 
+    int algo = d->cc_version == 1 ? CA_ALGO_DVBCSA : CA_ALGO_AES128_CBC;
     if (d->key[0][0])
-        send_cw(spmt->id, CA_ALGO_AES128_CBC, 0, d->key[0], d->iv[0], 3600,
+        send_cw(spmt->id, algo, 0, d->key[0], d->iv[0], 3600,
                 NULL); // 1 hour
     if (d->key[1][0])
-        send_cw(spmt->id, CA_ALGO_AES128_CBC, 1, d->key[1], d->iv[1], 3600,
-                NULL);
+        send_cw(spmt->id, algo, 1, d->key[1], d->iv[1], 3600, NULL);
 
     return 0;
 }
@@ -2186,6 +2187,8 @@ static void check_new_key(ca_device_t *d, struct cc_ctrl_data *cc_data) {
     memcpy(d->iv[slot], dec + 16, 16);
     d->parity = slot;
 
+    if (ddci_is_loopback(d->id))
+        ddci_descrambler_key(d->id, slot, dec, dec + 16);
     send_cw_to_all_pmts(d, slot);
 
     /* reset */
@@ -2386,8 +2389,8 @@ static int ci_ccmgr_cc_sac_data_req(ca_session_t *session, const uint8_t *data,
         return 0;
     }
 
-    disable_cws_for_all_pmts(d);
-
+    // Re-auth polls (5,30) carry no keys: keep working CWs until
+    // rotation replaces them, or decrypt dies every 70 seconds.
     copy32r(serial, data, rp);
     LOGM("serial sac data req: %d", serial);
 
@@ -2510,6 +2513,8 @@ by the CICAM */
         d->uri_mask = 1;
     else
         d->uri_mask = 3;
+    // v1 CAMs return CSA content keys, v2 CAMs AES ones.
+    d->cc_version = (resource_id == TS103205_APP_CC_RESOURCEID_THREE) ? 2 : 1;
     return 0;
 }
 static int CIPLUS_APP_CC_handler(ca_session_t *session, int tag, uint8_t *data,
