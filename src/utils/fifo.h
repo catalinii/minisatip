@@ -30,7 +30,7 @@ static inline void fifo_skip_bytes(SFIFO *f, uint32_t len) {
         f->read_index += len;
 }
 
-int fifo_push_force(SFIFO *fifo, void *src, unsigned int len, int force);
+int fifo_push(SFIFO *fifo, void *src, unsigned int len);
 
 uint32_t fifo_pop_offset(SFIFO *fifo, void *dst, unsigned int len,
                          uint64_t *offset);
@@ -40,7 +40,6 @@ uint32_t fifo_peek(SFIFO *fifo, void **dst, unsigned int len,
 uint32_t fifo_peek_32(SFIFO *fifo, uint64_t offset);
 
 #define create_fifo(f, x) _create_fifo(f, x, __FILE__, __LINE__)
-#define fifo_push(a, b, c) fifo_push_force(a, b, c, 0)
 #define fifo_pop(a, b, c) fifo_pop_offset(a, b, c, &((a)->read_index))
 #define create_fifo(f, x) _create_fifo(f, x, __FILE__, __LINE__)
 #endif

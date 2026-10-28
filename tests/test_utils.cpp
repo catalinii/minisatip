@@ -50,11 +50,8 @@ int test_fifo() {
     ASSERT(0 == fifo_pop(&f, buf, sizeof(buf)),
            "Expected 0 bytes to be popped from the fifo");
 
-    // test force writing
     ASSERT(sizeof(buf) == fifo_push(&f, buf, sizeof(buf)),
            "Failed to write record");
-    ASSERT(sizeof(buf) == fifo_push_force(&f, buf, sizeof(buf), 1),
-           "Failed to write record with force");
 
     free_fifo(&f);
 
@@ -66,10 +63,11 @@ int test_fifo() {
     create_fifo(&f2, 10);
     ASSERT(sizeof(buf2) == fifo_push(&f2, buf2, sizeof(buf2)),
            "Failed to fill fifo");
-    ASSERT(0 == fifo_push(&f2, buf3, sizeof(buf3)),
+    ASSERT(-1 == fifo_push(&f2, buf3, sizeof(buf3)),
            "Expected push beyond available space to fail");
-    ASSERT(sizeof(buf3) == fifo_push_force(&f2, buf3, sizeof(buf3), 1),
-           "Failed to force write beyond available space");
+    char buf4[12] = {0};
+    ASSERT(-1 == fifo_push(&f2, buf4, sizeof(buf4)),
+           "Expected push larger than fifo to fail");
 
     free_fifo(&f2);
 
@@ -79,8 +77,8 @@ int test_fifo() {
     memset(&f3, 0, sizeof(f3));
     create_fifo(&f3, 100);
     char in_buf[50] = {0};
-    fifo_push_force(&f3, in_buf, 50, 1); // write_index = 50, read_index = 0
-    uint64_t offset = 30;                // 20 bytes available at offset 30
+    fifo_push(&f3, in_buf, 50); // write_index = 50, read_index = 0
+    uint64_t offset = 30;       // 20 bytes available at offset 30
     char out_buf[50] = {0};
     uint32_t popped = fifo_pop_offset(&f3, out_buf, 50, &offset);
     ASSERT_EQUAL(
