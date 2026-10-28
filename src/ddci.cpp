@@ -1535,7 +1535,13 @@ int ddci_read_sec_data(sockets *s) {
     b = ad->buf;
     int left = 0, rlen = ad->rlen;
 
-    if ((left = fifo_push(&d->fifo, b, rlen)) < 0) {
+    // d->fifo is a ring: readers track their own offsets, so shed
+    // oldest to make room instead of failing the push once full.
+    SFIFO *f = &d->fifo;
+    if (rlen > 0 && (uint64_t)rlen <= f->size &&
+        f->write_index + (uint64_t)rlen > f->read_index + f->size)
+        f->read_index = f->write_index + (uint64_t)rlen - f->size;
+    if ((left = fifo_push(f, b, rlen)) < 0) {
         LOG("dropping %d bytes for ddci_adapter %d", rlen, d->id);
         left = 0;
     }
