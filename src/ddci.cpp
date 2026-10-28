@@ -142,7 +142,6 @@ int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
     if (add_pid) {
         // add the pids to the ddci adapter
         mark_pid_add(DDCI_SID, d->id, ddci_pid);
-        ddci_descrambler_pid(d->id, ddci_pid, 1);
     }
 
     LOG("mapped adapter %d (%d) pid %d (%d) to %d, pmt %d", ad, m->ad, pid,
@@ -307,8 +306,6 @@ static void release_mapping_entry(ddci_device_t *d, int ad, int pmt,
         }
     if (p && last)
         mark_pid_deleted(d->id, DDCI_SID, ddci_pid, NULL);
-    if (last)
-        ddci_descrambler_pid(d->id, ddci_pid, 0);
     if (m->filter_id >= 0)
         del_filter(m->filter_id);
     if (m->pid_added >= 0) {
@@ -388,11 +385,6 @@ int ddci_close_adapter(adapter *ad) { return 0; }
 // Loopback teardown stops the push and returns the CI input.
 static int ddci_close_loopback(adapter *a) {
     ddci_push_stop(ddci_devices[a->id]);
-    ddci_device_t *d = ddci_devices[a->id];
-    if (d && d->desc_fd >= 0) {
-        close(d->desc_fd);
-        d->desc_fd = -1;
-    }
     ddci_enigma_route_none(ddci_devices[a->id]);
     return 0;
 }
@@ -1274,61 +1266,6 @@ int push_ts_to_adapter(ddci_device_t *d, adapter *ad, uint16_t *mapping) {
     return 0;
 }
 
-// E2 descrambler ABI (lib/dvb_ci/descrambler.h): dropped from
-// mainline ca.h, still served by enigma drivers.
-struct ddci_ca_descr_data {
-    unsigned int index;
-    int parity;    // 0 even, 1 odd
-    int data_type; // 0 IV, 1 KEY
-    unsigned int length;
-    uint8_t *data;
-};
-struct ddci_ca_pid {
-    unsigned int pid;
-    int index; // routing flags, -1 disables
-};
-#ifndef CA_SET_DESCR_DATA
-#define CA_SET_DESCR_DATA _IOW('o', 137, struct ddci_ca_descr_data)
-#endif
-#ifndef CA_SET_PID
-#define CA_SET_PID _IOW('o', 135, struct ddci_ca_pid)
-#endif
-
-// Programs one CAM key into hardware; no-op without desc_fd.
-void ddci_descrambler_key(int id, int slot, uint8_t *key, uint8_t *iv) {
-    ddci_device_t *d =
-        (id >= 0 && id < MAX_ADAPTERS) ? ddci_devices[id] : nullptr;
-    if (!d || d->desc_fd < 0)
-        return;
-    int ci = ddci_loopback_slot_for(id);
-    if (ci < 0)
-        return;
-    struct ddci_ca_descr_data dd = {(unsigned)ci, slot, 1, 16, key};
-    if (ioctl(d->desc_fd, CA_SET_DESCR_DATA, &dd))
-        LOG("DDCI %d: HW key program failed: %s", id, strerror(errno));
-    dd.data_type = 0;
-    dd.data = iv;
-    if (ioctl(d->desc_fd, CA_SET_DESCR_DATA, &dd))
-        LOG("DDCI %d: HW IV program failed: %s", id, strerror(errno));
-}
-
-// Routes one ddci pid through the descrambler; E2 flag word.
-void ddci_descrambler_pid(int id, int ddci_pid, int enable) {
-    ddci_device_t *d =
-        (id >= 0 && id < MAX_ADAPTERS) ? ddci_devices[id] : nullptr;
-    if (!d || d->desc_fd < 0 || ddci_pid < 0)
-        return;
-    int ci = ddci_loopback_slot_for(id);
-    if (ci < 0)
-        return;
-    struct ddci_ca_pid p;
-    p.pid = (unsigned)ddci_pid;
-    p.index = 0x80 | (ci ? 0x40 : 0) | (enable ? 0x20 : 0);
-    if (ioctl(d->desc_fd, CA_SET_PID, &p))
-        DEBUGM("DDCI %d: HW pid %d route %d failed: %s", id, ddci_pid, enable,
-               strerror(errno));
-}
-
 // Push loop: blocking writes move the fifo to the dvr in a loop.
 void ddci_push_loop(int id) {
     ddci_device_t *d =
@@ -1696,10 +1633,6 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
     d->psi_changed = false;
     d->tid = d->ver = d->sdt_ver = d->sdt_data_mask = 0;
     d->push_backlog.read_index = d->push_backlog.write_index;
-    // E2 descrambler path: HW keys ride ca{fn}, may not exist.
-    snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/ca%d", ad->pa, ad->fn);
-    d->desc_fd = open(buf, O_RDWR | O_NONBLOCK | O_CLOEXEC);
-    DEBUGM("loopback %d descrambler device %s fd %d", ad->id, buf, d->desc_fd);
     d->enabled = 1;
     ad->enabled = 1;
     LOG("opened enigma loopback %d push dvr%d fd:%d read fd:%d source:%d",

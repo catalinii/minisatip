@@ -82,7 +82,6 @@ typedef struct ddci_device {
     std::condition_variable push_cv;
     std::atomic<bool> push_stop{false};
     std::atomic<bool> push_running{false};
-    int desc_fd = -1; // demux-linked ca device for HW keys, E2 style
     std::unordered_map<int, ddci_mapping_table_t> mapping;
     std::unordered_set<int> emm_pids; // MAKE_KEY(ad,pid), never swept
     SFIFO fifo;
@@ -114,9 +113,6 @@ void ddci_push_stop(ddci_device_t *d);
 // Queues fresh PSI first, then TS; a full ring sheds oldest.
 size_t ddci_push_queue(ddci_device_t *d, uint8_t *psi, size_t psi_len,
                        struct iovec *io, int iop);
-// E2 descrambler path: HW key/IV and pid routing on ca{fn}.
-void ddci_descrambler_key(int id, int slot, uint8_t *key, uint8_t *iv);
-void ddci_descrambler_pid(int id, int ddci_pid, int enable);
 // True when id is an enabled enigma loopback device.
 int ddci_is_loopback(int id);
 // True when any enigma loopback claimed this CI slot.
