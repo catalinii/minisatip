@@ -1342,7 +1342,12 @@ void ddci_push_start(ddci_device_t *d) {
 void ddci_push_stop(ddci_device_t *d) {
     if (!d)
         return;
-    d->push_stop.store(true);
+    // Set stop under the mutex: an unlocked store can land
+    // between the waiter check and block, losing the wakeup.
+    {
+        std::lock_guard<std::mutex> lock(d->push_mutex);
+        d->push_stop.store(true);
+    }
     d->push_cv.notify_one();
     if (d->push_thread.joinable())
         d->push_thread.join();
@@ -1353,15 +1358,18 @@ size_t ddci_push_queue(ddci_device_t *d, uint8_t *psi, size_t psi_len,
                        struct iovec *io, int iop) {
     std::lock_guard<std::mutex> lock(d->push_mutex);
     size_t queued = 0;
-    int pushed;
-    if (psi && psi_len > 0) {
-        pushed = fifo_push(&d->push_backlog, psi, (unsigned)psi_len);
-        queued += pushed > 0 ? (size_t)pushed : 0;
-    }
-    for (int k = 0; k < iop; k++) {
-        pushed = fifo_push(&d->push_backlog, io[k].iov_base,
-                           (unsigned)io[k].iov_len);
-        queued += pushed > 0 ? (size_t)pushed : 0;
+    if (psi && psi_len > 0)
+        queued += (size_t)fifo_push_force(&d->push_backlog, psi,
+                                          (unsigned)psi_len, 1);
+    for (int k = 0; k < iop; k++)
+        queued += (size_t)fifo_push_force(&d->push_backlog, io[k].iov_base,
+                                          (unsigned)io[k].iov_len, 1);
+    // Overwrites land past the ring: drop oldest so used stays in size.
+    SFIFO *f = &d->push_backlog;
+    if (f->write_index - f->read_index > f->size) {
+        LOG("DDCI %d: push ring full, dropped %jd oldest bytes", d->id,
+            f->write_index - f->size - f->read_index);
+        f->read_index = f->write_index - f->size;
     }
     d->push_cv.notify_one();
     return queued;
@@ -1535,16 +1543,8 @@ int ddci_read_sec_data(sockets *s) {
     b = ad->buf;
     int left = 0, rlen = ad->rlen;
 
-    // d->fifo is a ring: readers track their own offsets, so shed
-    // oldest to make room instead of failing the push once full.
-    SFIFO *f = &d->fifo;
-    if (rlen > 0 && (uint64_t)rlen <= f->size &&
-        f->write_index + (uint64_t)rlen > f->read_index + f->size)
-        f->read_index = f->write_index + (uint64_t)rlen - f->size;
-    if ((left = fifo_push(f, b, rlen)) < 0) {
-        LOG("dropping %d bytes for ddci_adapter %d", rlen, d->id);
-        left = 0;
-    }
+    if ((left = fifo_push_force(&d->fifo, b, rlen, 1)) == 0)
+        LOG("dropping %d bytes for ddci_adapter %d", left, d->id);
     DEBUGM("pushed %d bytes to the adapter buffer from %d [write_index %jd]",
            left, rlen, d->fifo.write_index);
     dump_packets("DDCI ->FIFO ", (uint8_t *)d->fifo.data, 188, 0);

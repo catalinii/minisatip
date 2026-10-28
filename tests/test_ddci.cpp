@@ -1982,16 +1982,20 @@ int test_ddci_push_queue_order() {
     ASSERT(PID_FROM_TS(out + 188) == 1000, "ts order kept");
     ASSERT(PID_FROM_TS(out + 376) == 2000, "ts order kept");
     free_fifo(&d.push_backlog);
-    // A full ring drops newest, oldest survive.
+    // A full ring sheds oldest, newest survive.
     create_fifo(&d.push_backlog, 376);
-    ASSERT(ddci_push_queue(&d, psi, sizeof(psi), io, 2) == 376,
-           "overfill queues what fits");
-    ASSERT(bl_have(&d) == 376, "ring keeps the oldest bytes");
+    ASSERT(ddci_push_queue(&d, psi, sizeof(psi), io, 2) == 564,
+           "overfill queues all");
+    ASSERT(bl_have(&d) == 376, "ring keeps the newest bytes");
     first = fifo_peek(&d.push_backlog, &p, sizeof(out), 0);
-    ASSERT(first == 376, "single-segment peek");
+    ASSERT(first == 188, "wrapped head segment");
     memcpy(out, p, first);
-    ASSERT(PID_FROM_TS(out) == 0, "oldest kept first");
-    ASSERT(PID_FROM_TS(out + 188) == 1000, "oldest kept in order");
+    void *q = NULL;
+    size_t second = fifo_peek(&d.push_backlog, &q, bl_have(&d) - first, first);
+    ASSERT(second == 188, "wrapped tail segment");
+    memcpy(out + first, q, second);
+    ASSERT(PID_FROM_TS(out) == 1000, "newest kept first");
+    ASSERT(PID_FROM_TS(out + 188) == 2000, "newest kept in order");
     free_fifo(&d.push_backlog);
     return 0;
 }
