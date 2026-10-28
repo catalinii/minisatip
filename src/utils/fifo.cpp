@@ -52,23 +52,20 @@ void free_fifo(SFIFO *f) {
 }
 
 // push len bytes into the fifo only if there is space available
-// force push allows overwriting data that was not read
-// as it does not account for read index
-size_t fifo_push_force(SFIFO *fifo, void *src, size_t len, int force) {
-    size_t size = fifo->size;
-    size_t available = fifo_available(fifo);
+// returns len pushed, -1 when the bytes cannot be pushed
+int fifo_push(SFIFO *fifo, void *src, unsigned int len) {
+    uint32_t size = fifo->size;
+    uint32_t available = fifo_available(fifo);
 
     if (len > size)
-        return 0;
-    if (!force && (len > available)) {
-        LOG("Not enough space in FIFO created at %s:%d: need %zu, "
-            "available %zu",
+        return -1;
+    if (len > available) {
+        LOG("Not enough space in FIFO created at %s:%d: need %u, "
+            "available %u",
             fifo->file, fifo->line, len, available);
-        return 0;
+        return -1;
     }
-    if ((fifo->read_index > 0) && (len > available))
-        LOG("Overwriting %zu bytes in the FIFO created at %s:%d",
-            len - available, fifo->file, fifo->line);
+
 
     size_t off = fifo->write_index % size;
     size_t l = min(len, size - off);
