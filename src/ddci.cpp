@@ -26,6 +26,7 @@
 #include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <poll.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1264,11 +1265,17 @@ int push_ts_to_adapter(ddci_device_t *d, adapter *ad, uint16_t *mapping) {
     return 0;
 }
 
-// Release and reopen the dvr: only the last close drops the
-// stale full device buffer wedging the demux. 1 on success.
+// Reopen the push fd: the stb dvr latches EAGAIN per-fd and
+// only a fresh fd re-arms POLLOUT. 1 on success.
 static int ddci_reset_push(adapter *ad) {
     if (!ddci_is_loopback(ad->id))
         return 0;
+    // E2 flush hack: ioctl 0 drops stale fifo content, no close needed.
+    if (ad->fe >= 0) {
+        int fr = ioctl(ad->fe, 0);
+        DEBUGM("loopback %d: push flush ioctl(0) -> %d (%s)", ad->id, fr,
+               fr ? strerror(errno) : "ok");
+    }
     std::string path = std::format("/dev/dvb/adapter{}/dvr{}", ad->pa, ad->fn);
     if (ad->fe >= 0) {
         close(ad->fe);
@@ -1284,6 +1291,14 @@ static int ddci_reset_push(adapter *ad) {
     LOG("loopback %d: push %s released and reopened on fd %d", ad->id,
         path.c_str(), ad->fe);
     return 1;
+}
+
+// One push attempt, never waits. Returns admitted bytes.
+int ddci_write_once(int fd, struct iovec *io, int iop) {
+    if (iop <= 0)
+        return 0;
+    int rb = writev(fd, io, iop);
+    return rb > 0 ? rb : 0;
 }
 
 int ddci_process_ts(adapter *ad, ddci_device_t *d) {
@@ -1325,6 +1340,24 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
     // Reset to write index to prevent reading old data from the FIFO
     if (d->read_index[ad->id] == 0)
         d->read_index[ad->id] = d->fifo.write_index;
+
+    // Backlog rides first: oldest push bytes go before fresh packets.
+    // A wrapped ring needs two head segments; both stay ordered.
+    size_t blen = 0;
+    int nbl = 0;
+    if (fifo_used(&d->push_backlog) > 0) {
+        blen = (size_t)fifo_used(&d->push_backlog);
+        io[0].iov_len =
+            fifo_peek(&d->push_backlog, &io[0].iov_base, (unsigned)blen, 0);
+        nbl = 1;
+        if (io[0].iov_len < blen) {
+            io[1].iov_len =
+                fifo_peek(&d->push_backlog, &io[1].iov_base,
+                          (unsigned)(blen - io[0].iov_len), io[0].iov_len);
+            nbl = 2;
+        }
+        iop = nbl;
+    }
 
     // step 1 - fill the IO with TS packets and change the PID as
     // required by mapping table
@@ -1378,24 +1411,138 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
 
         DEBUGM("writing %d bytes to DDCI device %d, fd %d, sock %d", bytes,
                d->id, ad2->fe, ad2->fe_sock);
-        int rb = writev(ad2->fe, io, iop);
-        if (rb != bytes) {
-            LOG("%s: write incomplete to DDCI %d,fd %d, wrote %d out of %d "
-                "(iop %d%s), "
-                "errno "
-                "%d: %s",
-                __FUNCTION__, ad2->id, ad2->fe, rb, bytes, iop,
-                iop > 1024 ? " > IOV_MAX" : "", errno, strerror(errno));
-            // Wedged input buffer (concurrent join, long tune): flush
-            // it so the demux restarts, at most every 30 s.
-            int64_t now = getTick();
-            if (rb < 0 && now - d->push_reset_tick > 30000 &&
-                ddci_reset_push(ad2))
-                d->push_reset_tick = now;
+        // In-flight gate, both paths: offer only the room under the
+        // cap, so bursts wait userside instead of brimming the fifo.
+        uint64_t inflight =
+            d->push_admitted_total > d->push_consumed_total
+                ? d->push_admitted_total - d->push_consumed_total
+                : 0;
+        size_t budget = inflight < DDCI_PUSH_INFLIGHT_MAX
+                            ? DDCI_PUSH_INFLIGHT_MAX - inflight
+                            : 0;
+        size_t limit = budget;
+        if (d->loopback && limit > DDCI_PUSH_CHUNK)
+            limit = DDCI_PUSH_CHUNK;
+        int wiop = iop;
+        size_t cut_len = 0;
+        int cut_idx = -1;
+        size_t acc = 0;
+        for (int k = 0; k < iop && acc < limit; k++) {
+            if (acc + io[k].iov_len > limit) {
+                cut_idx = k;
+                cut_len = io[k].iov_len;
+                io[k].iov_len = limit - acc;
+                wiop = k + 1;
+                break;
+            }
+            acc += io[k].iov_len;
+            wiop = k + 1;
+        }
+        size_t total = blen + (size_t)bytes;
+        size_t attempted = total < limit ? total : limit;
+        size_t gen = (size_t)psi_len + (d->loopback ? 0 : DVB_FRAME);
+        int admitted = 0;
+        if (budget > 0) {
+            if (!d->loopback) {
+                int rb = writev(ad2->fe, io, wiop);
+                admitted = rb > 0 ? rb : 0;
+                if ((size_t)admitted != attempted)
+                    LOG("%s: pushed %d out of %d to DDCI %d,fd %d (iop %d%s): "
+                        "%s",
+                        __FUNCTION__, rb, (int)attempted, ad2->id, ad2->fe, iop,
+                        iop > 1024 ? " > IOV_MAX" : "",
+                        rb < 0 ? strerror(errno) : "short write");
+            } else {
+                struct pollfd pfd = {ad2->fe, POLLOUT, 0};
+                int pr = poll(&pfd, 1, 0);
+                if (pr != 0)
+                    admitted = ddci_write_once(ad2->fe, io, wiop);
+                if (pr != 0 && admitted == 0 && !d->push_reopen_blocked &&
+                    ddci_reset_push(ad2)) {
+                    // Refused despite POLLOUT: the fd latched, retry fresh.
+                    // The flush dropped the counted bytes: rebase the gate.
+                    d->push_consumed_total = d->push_admitted_total;
+                    struct pollfd rpfd = {ad2->fe, POLLOUT, 0};
+                    if (poll(&rpfd, 1, 0) != 0)
+                        admitted = ddci_write_once(ad2->fe, io, wiop);
+                    d->push_reopen_blocked = admitted == 0;
+                }
+                // Log only stalls; healthy pushes stay quiet.
+                if ((pr == 0 && budget > 0) || (size_t)admitted != attempted)
+                    DEBUGM("DDCI %d poll=%d revents=%d admitted=%d", d->id, pr,
+                           pfd.revents, admitted);
+            }
+        }
+        if (cut_idx >= 0)
+            io[cut_idx].iov_len = cut_len;
+        d->push_admitted_total += (uint64_t)admitted;
+        // Generated bytes may never return: settle them at once so
+        // only returnable bytes count towards the in-flight cap.
+        size_t gen_offered =
+            attempted > total - gen ? attempted - (total - gen) : 0;
+        size_t gen_admitted = (size_t)admitted > attempted - gen_offered
+                                  ? (size_t)admitted - (attempted - gen_offered)
+                                  : 0;
+        d->push_consumed_total += (uint64_t)gen_admitted;
+        if (admitted > 0)
+            d->push_reopen_blocked = 0;
+        size_t consumed = (size_t)admitted < blen ? (size_t)admitted : blen;
+        fifo_skip_bytes(&d->push_backlog, (uint32_t)consumed);
+        size_t new_admitted = (size_t)admitted - consumed;
+        // Generated PSI and the null tail ride fresh each round: never
+        // backlog them, or retries would duplicate stale sections.
+        size_t fresh_ts = (size_t)bytes > gen ? (size_t)bytes - gen : 0;
+        size_t append = fresh_ts > new_admitted ? fresh_ts - new_admitted : 0;
+        size_t cap =
+            d->push_backlog_cap ? d->push_backlog_cap : DDCI_PUSH_BACKLOG_MAX;
+        size_t have = (size_t)fifo_used(&d->push_backlog);
+        if (append > 0) {
+            // Shed oldest first so the ring always fits the append.
+            if (have + append > cap) {
+                size_t drop = have + append - cap;
+                if (have < cap)
+                    LOG("DDCI %d: push backlog capped, dropped %zu oldest "
+                        "bytes",
+                        d->id, drop);
+                fifo_skip_bytes(&d->push_backlog, (uint32_t)drop);
+            }
+            size_t skip = new_admitted;
+            int start = blen ? nbl : 0;
+            for (int k = start; k < iop && append > 0; k++) {
+                if (skip >= io[k].iov_len) {
+                    skip -= io[k].iov_len;
+                    continue;
+                }
+                size_t n = io[k].iov_len - skip;
+                if (n > append)
+                    n = append;
+                const uint8_t *p = (const uint8_t *)io[k].iov_base + skip;
+                fifo_push_force(&d->push_backlog, (void *)p, (unsigned)n, 0);
+                append -= n;
+                skip = 0;
+            }
+        }
+        have = (size_t)fifo_used(&d->push_backlog);
+        if (have > 0 || (size_t)admitted != total)
+            DEBUGM("DDCI %d push: admitted %d of %zu, backlog %zu", d->id,
+                   admitted, total, have);
+        // Stalled past DDCI_PUSH_STALL_MS: reopen the push and
+        // rebase the gate so live data resumes. No-op on FPGA.
+        int64_t now = getTick();
+        if (admitted > 0)
+            d->push_admitted_tick = now;
+        else if (have > 0 && now - d->push_admitted_tick > DDCI_PUSH_STALL_MS) {
+            d->push_admitted_tick = now;
+            // The flush dropped the counted bytes: rebase the gate and
+            // keep the fresh backlog so the push resumes with live data.
+            if (ddci_reset_push(ad2)) {
+                d->push_consumed_total = d->push_admitted_total;
+                d->push_reopen_blocked = 0;
+            }
         }
     }
     // mark the written TS packets as 8191 (0x1FFF)
-    for (i = 0; i < iop; i++) {
+    for (i = blen ? nbl : 0; i < iop; i++) {
         uint32_t j;
         for (j = 0; j < io[i].iov_len; j += 188)
             set_pid_ts((uint8_t *)io[i].iov_base + j, 0x1FFF);
@@ -1437,12 +1584,21 @@ void ddci_init() // you can search the devices here and fill the ddci_devices,
 
 int ddci_set_pid(adapter *ad, int pid) {
 #ifndef DISABLE_LINUXDVB
-    // Loopback reads real TAPs; hardware DDCI needs no demux filters.
+    // Loopback reads the real DVR; hardware DDCI needs no demux filters.
     if (opts.enigma && ddci_is_loopback(ad->id)) {
         // Idle -> active: drop the stale full dvr buffer so the
         // demux restarts consuming on this tune.
-        if (ad->active_demux_pids <= 0)
+        if (ad->active_demux_pids <= 0) {
             ddci_reset_push(ad);
+            // Shed the previous tune's backlog and clock with it.
+            if (ddci_device_t *dd = get_ddci(ad->id)) {
+                std::lock_guard<SMutex> lock(dd->mutex);
+                dd->push_backlog.read_index = dd->push_backlog.write_index;
+                dd->push_admitted_tick = getTick();
+                dd->push_consumed_total = dd->push_admitted_total;
+                dd->push_reopen_blocked = 0;
+            }
+        }
         int rc = dvb_demux_set_pid(ad, pid);
         LOGM("%s: loopback %d add pid %d -> %d", __FUNCTION__, ad->id, pid, rc);
         return rc;
@@ -1483,6 +1639,11 @@ int ddci_read_sec_data(sockets *s) {
 
     if ((left = fifo_push_force(&d->fifo, b, rlen, 1)) == 0)
         LOG("dropping %d bytes for ddci_adapter %d", left, d->id);
+    // Read back from the device: this much in-flight is consumed.
+    if (left > 0) {
+        std::lock_guard<SMutex> lock(d->mutex);
+        d->push_consumed_total += (uint64_t)left;
+    }
     DEBUGM("pushed %d bytes to the adapter buffer from %d [write_index %jd]",
            left, rlen, d->fifo.write_index);
     dump_packets("DDCI ->FIFO ", (uint8_t *)d->fifo.data, 188, 0);
@@ -1518,13 +1679,15 @@ ddci_device_t *ddci_alloc(int id) {
 
     d = ddci_devices[id] = new ddci_device_t();
     create_fifo(&d->fifo, DDCI_BUFFER);
+    create_fifo(&d->push_backlog, DDCI_PUSH_BACKLOG_MAX);
     d->id = id;
     d->ci_slot = -1;
+    d->push_backlog_cap = DDCI_PUSH_BACKLOG_MAX;
     return d;
 }
 
 #ifndef DISABLE_LINUXDVB
-// Loopback open: push to the paired dvr, TAPs on the paired demux.
+// Loopback open: push to the paired dvr, read TS back from it.
 // Demux and dvr always share the index on both models.
 static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
     char buf[100];
@@ -1535,18 +1698,25 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
     int write_fd = open(buf, O_WRONLY | O_NONBLOCK);
     if (write_fd < 0)
         LOG_AND_RETURN(1, "could not open %s: %s", buf, strerror(errno));
-    snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/demux%d", ad->pa, ad->fn);
-    int read_fd = open(buf, O_RDWR | O_NONBLOCK);
+    // Read TS from the DVR like live adapters; the demux device only
+    // trickles TS on drivers without demux-level TS output.
+    int use_demux = opts.use_demux_device == USE_DEMUX ||
+                    opts.use_demux_device == USE_PES_FILTERS_AND_DEMUX;
+    if (use_demux)
+        snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/demux%d", ad->pa,
+                 ad->fn);
+    else
+        snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/dvr%d", ad->pa, ad->fn);
+    int read_fd =
+        open(buf, use_demux ? O_RDWR | O_NONBLOCK : O_RDONLY | O_NONBLOCK);
     if (read_fd < 0) {
         close(write_fd);
         LOG_AND_RETURN(1, "could not open %s: %s", buf, strerror(errno));
     }
-    // Size the TAP buffer like live adapters; the tiny default stalls
-    // the DVR-fed pump with backpressure instead of dropping.
     if (ioctl(read_fd, DMX_SET_BUFFER_SIZE, opts.dvr_buffer) < 0)
-        LOG("couldn't set TAP buffer size error %d: %s", errno, strerror(errno))
+        LOG("couldn't set DVR buffer size error %d: %s", errno, strerror(errno))
     else
-        LOG("TAP buffer set to %d bytes", opts.dvr_buffer);
+        LOG("DVR buffer set to %d bytes", opts.dvr_buffer);
     dvb_set_demux_source(ad);
 
     std::lock_guard<SMutex> lock(d->mutex);
@@ -1566,9 +1736,13 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
     d->last_pat = 0;
     d->psi_changed = false;
     d->tid = d->ver = d->sdt_ver = d->sdt_data_mask = 0;
+    d->push_admitted_total = d->push_consumed_total = 0;
+    d->push_admitted_tick = getTick();
+    d->push_backlog.read_index = d->push_backlog.write_index;
+    d->push_reopen_blocked = 0;
     d->enabled = 1;
     ad->enabled = 1;
-    LOG("opened enigma loopback %d push dvr%d fd:%d demux fd:%d source:%d",
+    LOG("opened enigma loopback %d push dvr%d fd:%d read fd:%d source:%d",
         ad->id, push_dvr, ad->fe, ad->dvr, ad->dmx_source);
     return 0;
 }
@@ -1649,6 +1823,10 @@ int ddci_open_device(adapter *ad) {
     d->last_pat = 0;
     d->psi_changed = false;
     d->tid = d->ver = d->sdt_ver = d->sdt_data_mask = 0;
+    d->push_admitted_total = d->push_consumed_total = 0;
+    d->push_admitted_tick = getTick();
+    d->push_backlog.read_index = d->push_backlog.write_index;
+    d->push_reopen_blocked = 0;
     d->enabled = 1;
     ad->enabled = 1;
     LOG("opened DDCI adapter %d fe:%d dvr:%d", ad->id, ad->fe, ad->dvr);

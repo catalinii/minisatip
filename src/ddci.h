@@ -4,13 +4,28 @@
 #include "pmt.h"
 #include "tables.h"
 #include "utils/fifo.h"
+#include <sys/uio.h>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 // Maximum number of PMTs (channels) supported per adapter
 #define MAX_CHANNELS_ON_CI 8
 
 #define DDCI_BUFFER (20000 * 188)
+
+// Cap for unadmitted push bytes; oldest drop past it.
+#define DDCI_PUSH_BACKLOG_MAX (3 * 1024 * 1024)
+
+// Max bytes pushed per call; bigger bursts wedge this driver.
+#define DDCI_PUSH_CHUNK (32 * 1024)
+
+// Nothing admitted for this long: the fd latched, reopen it.
+#define DDCI_PUSH_STALL_MS 5000
+
+// Max admitted-but-unconsumed push bytes; the rest waits userside.
+// Quarter-meg below the 1.5M brim that freezes the demux.
+#define DDCI_PUSH_INFLIGHT_MAX (1280 * 1024)
 
 // Mapping-table key: adapter in the high 16 bits, pid below.
 #define MAKE_KEY(ad, pid) (((ad) << 16) | (pid))
@@ -60,10 +75,15 @@ typedef struct ddci_device {
     int sdt_data_mask; // channels with real SDT data at last SDT generation
     int16_t pat_cc, sdt_cc, eit_cc;
     char disable_cat;
-    char loopback; // enigma DVR loopback, no sec/ci hardware
-    int ci_slot;   // claimed /dev/ciN, -1 until bound
-    // Last dvr flush; EAGAINs reflush past 30 s.
-    int64_t push_reset_tick;
+    char loopback;              // enigma DVR loopback, no sec/ci hardware
+    int ci_slot;                // claimed /dev/ciN, -1 until bound
+    SFIFO push_backlog;         // unadmitted push bytes, oldest first
+    size_t push_backlog_cap;    // max backlog bytes, 0 selects default
+    int64_t push_admitted_tick; // last push admission (ms)
+    // Admitted vs read-back push bytes; the gap caps in flight.
+    uint64_t push_admitted_total;
+    uint64_t push_consumed_total;
+    char push_reopen_blocked; // refused reopen retry: wait for admission
     std::unordered_map<int, ddci_mapping_table_t> mapping;
     std::unordered_set<int> emm_pids; // MAKE_KEY(ad,pid), never swept
     SFIFO fifo;
@@ -86,6 +106,8 @@ int ddci_pick_free_pair(const int *demux, int ndemux, const int *dvr, int ndvr,
                         const int *fe, int nfe, const int *used, int nused);
 
 int ddci_pick_free_slot();
+// One push attempt, never waits. Returns admitted bytes.
+int ddci_write_once(int fd, struct iovec *io, int iop);
 // True when id is an enabled enigma loopback device.
 int ddci_is_loopback(int id);
 // True when any enigma loopback claimed this CI slot.
