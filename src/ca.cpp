@@ -2199,8 +2199,6 @@ static void check_new_key(ca_device_t *d, struct cc_ctrl_data *cc_data) {
     memcpy(d->iv[slot], dec + 16, 16);
     d->parity = slot;
 
-    if (ddci_is_loopback(d->id))
-        ddci_descrambler_key(d->id, slot, dec, dec + 16);
     send_cw_to_all_pmts(d, slot);
 
     /* reset */
