@@ -76,15 +76,13 @@ typedef struct ddci_device {
     char loopback;      // enigma DVR loopback, no sec/ci hardware
     int ci_slot;        // claimed /dev/ciN, -1 until bound
     SFIFO push_backlog; // queued push bytes, oldest first
-    // Push thread: fifo to dvr; EAGAIN waits for a read, then retries.
+    // Push thread: blocking writes move the fifo to the dvr.
     std::thread push_thread;
     std::mutex push_mutex;
     std::condition_variable push_cv;
     std::atomic<bool> push_stop{false};
     std::atomic<bool> push_running{false};
-    std::atomic<bool> push_reopen{false};
-    uint64_t push_read_tick = 0; // reads seen, wakes EAGAIN waits
-    int desc_fd = -1;            // demux-linked ca device for HW keys, E2 style
+    int desc_fd = -1; // demux-linked ca device for HW keys, E2 style
     std::unordered_map<int, ddci_mapping_table_t> mapping;
     std::unordered_set<int> emm_pids; // MAKE_KEY(ad,pid), never swept
     SFIFO fifo;
@@ -111,13 +109,11 @@ int ddci_pick_free_slot();
 void ddci_push_loop(int id);
 // Starts the push thread once; the queue feeds it.
 void ddci_push_start(ddci_device_t *d);
-// Stops the push thread after draining; safe to call twice.
+// Stops the push thread, shedding the backlog; safe to call twice.
 void ddci_push_stop(ddci_device_t *d);
 // Queues fresh PSI first, then TS; a full ring sheds oldest.
 size_t ddci_push_queue(ddci_device_t *d, uint8_t *psi, size_t psi_len,
                        struct iovec *io, int iop);
-// A read drained the device: a push stalled on EAGAIN may retry.
-void ddci_push_note_read(ddci_device_t *d);
 // E2 descrambler path: HW key/IV and pid routing on ca{fn}.
 void ddci_descrambler_key(int id, int slot, uint8_t *key, uint8_t *iv);
 void ddci_descrambler_pid(int id, int ddci_pid, int enable);
