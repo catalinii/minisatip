@@ -1274,10 +1274,6 @@ int push_ts_to_adapter(ddci_device_t *d, adapter *ad, uint16_t *mapping) {
     return 0;
 }
 
-// Reopen the push fd: the stb dvr latches EAGAIN per-fd and
-// only a fresh fd re-arms writes. 1 on success.
-static int ddci_reset_push(adapter *ad);
-
 // E2 descrambler ABI (lib/dvb_ci/descrambler.h): dropped from
 // mainline ca.h, still served by enigma drivers.
 struct ddci_ca_descr_data {
@@ -1334,26 +1330,22 @@ void ddci_descrambler_pid(int id, int ddci_pid, int enable) {
 }
 
 // Push loop: blocking writes move the fifo to the dvr in a loop.
-// EAGAIN waits for a read, then the same bytes are tried again.
 void ddci_push_loop(int id) {
     ddci_device_t *d =
         (id >= 0 && id < MAX_ADAPTERS) ? ddci_devices[id] : nullptr;
     if (!d)
         return;
     uint8_t chunk[DDCI_PUSH_CHUNK];
-    while (true) {
+    for (;;) {
         size_t n = 0;
         {
             std::unique_lock<std::mutex> lock(d->push_mutex);
             d->push_cv.wait(lock, [&] {
                 return d->push_stop.load() || fifo_used(&d->push_backlog) > 0;
             });
-            if (d->push_stop.load() && fifo_used(&d->push_backlog) == 0)
+            if (d->push_stop.load()) {
+                d->push_backlog.read_index = d->push_backlog.write_index;
                 break;
-            if (d->push_reopen.exchange(false)) {
-                adapter *ad = get_adapter_nw(id);
-                if (ad)
-                    ddci_reset_push(ad);
             }
             int have = fifo_used(&d->push_backlog);
             n = have > 0 ? (size_t)have : 0;
@@ -1376,48 +1368,29 @@ void ddci_push_loop(int id) {
             continue;
         adapter *ad = get_adapter_nw(id);
         if (!ad || ad->fe < 0) {
-            // Device gone: shed, the next tune reopens.
+            // Device gone: shed the chunk.
             std::lock_guard<std::mutex> lock(d->push_mutex);
             fifo_skip_bytes(&d->push_backlog, (uint32_t)n);
             continue;
         }
         size_t off = 0;
-        while (off < n) {
+        while (off < n && !d->push_stop.load()) {
             struct iovec wio = {chunk + off, n - off};
             ssize_t w = writev(ad->fe, &wio, 1);
-            if (w > 0) {
+            if (w > 0)
                 off += (size_t)w;
+            else if (w < 0 && (errno == EINTR || errno == EAGAIN ||
+                               errno == EWOULDBLOCK))
                 continue;
-            }
-            if (w < 0 && errno == EINTR)
-                continue;
-            std::unique_lock<std::mutex> lock(d->push_mutex);
-            if (off > 0) // never resend admitted bytes
-                fifo_skip_bytes(&d->push_backlog, (uint32_t)off);
-            if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK) &&
-                !d->push_stop.load()) {
-                // Full dvr drains on read: wait for one, then retry.
-                uint64_t tick = d->push_read_tick;
-                d->push_cv.wait(lock, [&] {
-                    return d->push_stop.load() || d->push_reopen.load() ||
-                           tick != d->push_read_tick;
-                });
-                if (d->push_stop.load()) // nobody reads after close
-                    fifo_skip_bytes(&d->push_backlog, (uint32_t)(n - off));
-            } else {
-                // Stopped or hard error: shed, never poison-loop.
-                DEBUGM("DDCI %d: push shed %zu bytes: %s", d->id, n - off,
-                       w < 0 ? strerror(errno) : "stopped");
-                fifo_skip_bytes(&d->push_backlog, (uint32_t)(n - off));
-            }
-            break; // re-peek whatever is left
+            else
+                break;
         }
-        if (off == n) {
-            std::lock_guard<std::mutex> lock(d->push_mutex);
-            fifo_skip_bytes(&d->push_backlog, (uint32_t)n);
-        }
+        // Written bytes are consumed; the rest sheds on stop or error.
+        std::lock_guard<std::mutex> lock(d->push_mutex);
+        fifo_skip_bytes(&d->push_backlog, (uint32_t)n);
     }
     d->push_running.store(false);
+    DEBUGM("DDCI %d: push loop exited", d->id);
 }
 
 // Starts the push thread once; the queue feeds it.
@@ -1428,7 +1401,7 @@ void ddci_push_start(ddci_device_t *d) {
     d->push_thread = std::thread(ddci_push_loop, d->id);
 }
 
-// Stops the push thread after draining; safe to call twice.
+// Stops the push thread, shedding the backlog; safe to call twice.
 void ddci_push_stop(ddci_device_t *d) {
     if (!d)
         return;
@@ -1436,15 +1409,6 @@ void ddci_push_stop(ddci_device_t *d) {
     d->push_cv.notify_one();
     if (d->push_thread.joinable())
         d->push_thread.join();
-}
-
-// A read drained the device: a push stalled on EAGAIN may retry.
-void ddci_push_note_read(ddci_device_t *d) {
-    if (!d)
-        return;
-    std::lock_guard<std::mutex> lock(d->push_mutex);
-    d->push_read_tick++;
-    d->push_cv.notify_one();
 }
 
 // Queues fresh PSI first, then TS; a full ring sheds oldest.
@@ -1467,28 +1431,6 @@ size_t ddci_push_queue(ddci_device_t *d, uint8_t *psi, size_t psi_len,
     }
     d->push_cv.notify_one();
     return queued;
-}
-
-static int ddci_reset_push(adapter *ad) {
-    if (!ddci_is_loopback(ad->id))
-        return 0;
-    // Fresh fd drops the stale driver buffer and re-arms EAGAIN writes.
-    std::string path = std::format("/dev/dvb/adapter{}/dvr{}", ad->pa, ad->fn);
-    if (ad->fe >= 0) {
-        close(ad->fe);
-        ad->fe = -1;
-    }
-    // Non-blocking: EAGAIN waits for a read, then retries.
-    int fd = open(path.c_str(), O_WRONLY | O_NONBLOCK | O_CLOEXEC);
-    if (fd < 0) {
-        LOG("loopback %d: could not reopen push %s: %s", ad->id, path.c_str(),
-            strerror(errno));
-        return 0;
-    }
-    ad->fe = fd;
-    LOG("loopback %d: push %s released and reopened on fd %d", ad->id,
-        path.c_str(), ad->fe);
-    return 1;
 }
 
 int ddci_process_ts(adapter *ad, ddci_device_t *d) {
@@ -1613,16 +1555,12 @@ int ddci_set_pid(adapter *ad, int pid) {
 #ifndef DISABLE_LINUXDVB
     // Loopback reads the real DVR; hardware DDCI needs no demux filters.
     if (opts.enigma && ddci_is_loopback(ad->id)) {
-        // Idle -> active: drop the stale full dvr buffer so the
-        // demux restarts consuming on this tune.
+        // Idle -> active: shed the previous tune's backlog so the
+        // fresh tune starts clean.
         if (ad->active_demux_pids <= 0) {
-            // The push thread owns the fd: flag the reopen and shed
-            // the previous tune's backlog; the thread resets on wake.
             if (ddci_device_t *dd = get_ddci(ad->id)) {
-                dd->push_reopen.store(true);
                 std::lock_guard<std::mutex> lock(dd->push_mutex);
                 dd->push_backlog.read_index = dd->push_backlog.write_index;
-                dd->push_cv.notify_one();
             }
         }
         int rc = dvb_demux_set_pid(ad, pid);
@@ -1665,9 +1603,6 @@ int ddci_read_sec_data(sockets *s) {
 
     if ((left = fifo_push_force(&d->fifo, b, rlen, 1)) == 0)
         LOG("dropping %d bytes for ddci_adapter %d", left, d->id);
-    // A read drained the device: a push stalled on EAGAIN may retry.
-    if (left > 0)
-        ddci_push_note_read(d);
     DEBUGM("pushed %d bytes to the adapter buffer from %d [write_index %jd]",
            left, rlen, d->fifo.write_index);
     dump_packets("DDCI ->FIFO ", (uint8_t *)d->fifo.data, 188, 0);
@@ -1718,8 +1653,8 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
     ad->dmx_source = dvr_offset;
     int push_dvr = ad->fn;
     snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/dvr%d", ad->pa, push_dvr);
-    // Non-blocking: EAGAIN waits for a read, then retries.
-    int write_fd = open(buf, O_WRONLY | O_NONBLOCK | O_CLOEXEC);
+    // Blocking writes pace the push thread like E2 filepush.
+    int write_fd = open(buf, O_WRONLY | O_CLOEXEC);
     if (write_fd < 0)
         LOG_AND_RETURN(1, "could not open %s: %s", buf, strerror(errno));
     // Read TS from the DVR like live adapters; the demux device only
@@ -1816,9 +1751,7 @@ int ddci_open_device(adapter *ad) {
     int err;
     if ((err = set_linux_socket_nonblock(read_fd)))
         LOG("Failed to set socket %d nonblocking: %d", write_fd, err);
-
-    if ((err = set_linux_socket_nonblock(write_fd)))
-        LOG("Failed to set socket %d nonblocking: %d", write_fd, err);
+    // write_fd stays blocking: the push thread writes in a loop.
 #else
     int fd[2];
     if (pipe(fd) == -1) {

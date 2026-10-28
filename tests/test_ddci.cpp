@@ -2042,41 +2042,6 @@ int test_ddci_push_thread_roundtrip() {
     return 0;
 }
 
-int test_ddci_push_stop_drains() {
-    ddci_device_t d = {};
-    adapter ad2 = {};
-    d.id = 2;
-    d.enabled = 1;
-    d.loopback = 1;
-    create_fifo(&d.push_backlog, DDCI_PUSH_BACKLOG_MAX);
-    memset(ddci_devices, 0, sizeof(ddci_devices));
-    ddci_devices[2] = &d;
-    create_adapter(&ad2, 2);
-    int fds[2];
-    ASSERT(pipe(fds) == 0, "pipe as mock dvr");
-    ad2.fe = fds[1];
-    ddci_push_start(&d);
-    // Queued bytes drain to the pipe even when nobody reads yet.
-    uint8_t msg[2048];
-    memset(msg, 0x5A, sizeof(msg));
-    struct iovec io[1] = {{msg, sizeof(msg)}};
-    size_t queued = ddci_push_queue(&d, NULL, 0, io, 1);
-    ddci_push_stop(&d);
-    ASSERT(queued == sizeof(msg), "queued");
-    ASSERT(bl_have(&d) == 0, "stop drains the backlog");
-    uint8_t got[sizeof(msg)];
-    ASSERT(bl_read_exact(fds[0], got, sizeof(got)) == sizeof(got),
-           "drained bytes readable");
-    ASSERT(memcmp(got, msg, sizeof(msg)) == 0, "drained bytes intact");
-    close(fds[0]);
-    close(fds[1]);
-    ad2.fe = -1;
-    free_fifo(&d.push_backlog);
-    ddci_devices[2] = NULL;
-    a[2] = nullptr;
-    return 0;
-}
-
 // Fill a non-blocking pipe until the kernel refuses; returns bytes held.
 static size_t bl_fill_pipe(int wfd) {
     uint8_t fill[4096];
@@ -2090,7 +2055,7 @@ static size_t bl_fill_pipe(int wfd) {
     return total;
 }
 
-int test_ddci_push_eagain_waits_for_read() {
+int test_ddci_push_eagain_retries() {
     ddci_device_t d = {};
     adapter ad2 = {};
     d.id = 2;
@@ -2106,7 +2071,7 @@ int test_ddci_push_eagain_waits_for_read() {
     ASSERT(fcntl(fds[1], F_SETFL, flags | O_NONBLOCK) == 0, "nonblock push");
     ad2.fe = fds[1];
     // One slot like the stb dvr: EAGAIN arrives fast, a read clears it.
-    ASSERT(fcntl(fds[1], F_SETPIPE_SZ, 4096) > 0, "small pipe");
+    ASSERT(fcntl(fds[1], F_SETPIPE_SZ, 4096) == 4096, "one-slot pipe");
     size_t held = bl_fill_pipe(fds[1]);
     ASSERT(held >= 4096, "pipe holds filler");
     ddci_push_start(&d);
@@ -2115,10 +2080,7 @@ int test_ddci_push_eagain_waits_for_read() {
         msg[i] = (uint8_t)(i * 31 + 7);
     struct iovec io[1] = {{msg, sizeof(msg)}};
     size_t queued = ddci_push_queue(&d, NULL, 0, io, 1);
-    // Full device: nothing moves until a read drains it.
-    usleep(200000);
-    int stalled = (bl_have(&d) == sizeof(msg));
-    // A read drains the device: the same bytes go out on retry.
+    // Full device: the thread retries until a read drains it.
     // Drain it whole: a half-freed slot still reads full.
     size_t drained = 0;
     uint8_t drain[4096];
@@ -2128,7 +2090,6 @@ int test_ddci_push_eagain_waits_for_read() {
             break;
         drained += (size_t)r;
     }
-    ddci_push_note_read(&d);
     int t = 0;
     while (bl_have(&d) > 0 && t++ < 500)
         usleep(10000);
@@ -2136,9 +2097,8 @@ int test_ddci_push_eagain_waits_for_read() {
     // Join before asserting: a live thread must never see teardown.
     ddci_push_stop(&d);
     ASSERT(queued == sizeof(msg), "queued");
-    ASSERT(stalled, "EAGAIN stalls the push");
     ASSERT(drained == held, "read drains device");
-    ASSERT(resumed, "read resumes the push");
+    ASSERT(resumed, "retry pushes after the drain");
     // Pipe fully drained: only the retried message remains.
     uint8_t got[sizeof(msg)];
     ASSERT(bl_read_exact(fds[0], got, sizeof(got)) == sizeof(got),
@@ -2169,7 +2129,7 @@ int test_ddci_push_stop_sheds_stall() {
     ASSERT(fcntl(fds[1], F_SETFL, flags | O_NONBLOCK) == 0, "nonblock push");
     ad2.fe = fds[1];
     // One slot like the stb dvr: the push stalls on the first chunk.
-    ASSERT(fcntl(fds[1], F_SETPIPE_SZ, 4096) > 0, "small pipe");
+    ASSERT(fcntl(fds[1], F_SETPIPE_SZ, 4096) == 4096, "one-slot pipe");
     bl_fill_pipe(fds[1]);
     ddci_push_start(&d);
     uint8_t msg[1024];
@@ -2416,9 +2376,8 @@ int main() {
     TEST_FUNC(test_ddci_push_queue_order(), "testing push queue order");
     TEST_FUNC(test_ddci_push_thread_roundtrip(),
               "testing push thread round trip");
-    TEST_FUNC(test_ddci_push_stop_drains(), "testing push stop drains");
-    TEST_FUNC(test_ddci_push_eagain_waits_for_read(),
-              "testing push EAGAIN waits for a read");
+    TEST_FUNC(test_ddci_push_eagain_retries(),
+              "testing push EAGAIN retries after a drain");
     TEST_FUNC(test_ddci_push_stop_sheds_stall(),
               "testing push stop sheds a stall");
     TEST_FUNC(test_ddci_push_fpga(), "testing fpga push queue and drain");
