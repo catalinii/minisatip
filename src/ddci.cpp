@@ -1472,12 +1472,7 @@ size_t ddci_push_queue(ddci_device_t *d, uint8_t *psi, size_t psi_len,
 static int ddci_reset_push(adapter *ad) {
     if (!ddci_is_loopback(ad->id))
         return 0;
-    // E2 flush hack: ioctl 0 drops stale fifo content, no close needed.
-    if (ad->fe >= 0) {
-        int fr = ioctl(ad->fe, 0);
-        DEBUGM("loopback %d: push flush ioctl(0) -> %d (%s)", ad->id, fr,
-               fr ? strerror(errno) : "ok");
-    }
+    // Fresh fd drops the stale driver buffer and re-arms EAGAIN writes.
     std::string path = std::format("/dev/dvb/adapter{}/dvr{}", ad->pa, ad->fn);
     if (ad->fe >= 0) {
         close(ad->fe);
