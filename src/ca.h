@@ -231,6 +231,7 @@ struct ca_device {
     ca_session_t sessions[MAX_SESSIONS];
 
     int uri_mask;
+    int cc_version; // 1 for CI+ v1 (CSA keys), 2 for v2 (AES keys)
     char force_ci;
     int linked_adapter;
 
