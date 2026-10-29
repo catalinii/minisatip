@@ -27,7 +27,7 @@
 // Ring full this long with no byte written: the CAM stopped
 // draining, reopen the push dvr to shed the stale driver data.
 #define DDCI_PUSH_WEDGE_MS 3000
-// Drain cap: twice a 4K service, smooths bursts for the demux.
+// Drain cap: the demux path wedges above this; the CAM is faster.
 #define DDCI_PUSH_RATE_BPS (2 * 1024 * 1024)
 #define DDCI_PUSH_BURST (8 * 1024)
 
