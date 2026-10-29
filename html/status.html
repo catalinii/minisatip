@@ -523,13 +523,14 @@
 						myTable += "<small>PMT: " + formatCommaSeparated(st_pmt) + "</small><br />";
 				}
 
-				if (ad_type == 4) {
-					// Show PIDs on the adapter level for CI adapters
-					const pids_str = formatPids(state['ad_pids'][i])
-					if (pids_str !== null) {
-						myTable += "<small>Pids: " + formatPids(state['ad_pids'][i]) + "</small><br />";
-					}
-				} else {
+				// Full adapter pid list: requested pids plus the filter pids
+				// (ECM/EMM/PMT/CAT) used internally, e.g. for decryption
+				const ad_pids_str = formatPids(state['ad_pids'][i]);
+				if (ad_pids_str !== null) {
+					myTable += "<small>Pids: " + ad_pids_str + "</small><br />";
+				}
+
+				if (ad_type != 4) {
 					for (var j = 0; j < max_streams; j++) {
 						if (state['st_enabled'][j] == 1 && state['st_adapter'][j] == i) {
 							var st_rh = state['st_rhost'][j] + ":" + state['st_rport'][j] + " (" + state['st_proto'][j] + ")";
@@ -610,6 +611,8 @@
 						myTable += "CHANNEL: " + state['key_channel'][j] + "<br />";
 						myTable += "SYSTEM: " + state['key_cardsystem'][j] + "<br />";
 						myTable += "PMT: " + state['key_pmt'][j] + "<br />";
+						if (state['key_ecmpids'] && state['key_ecmpids'][j])
+							myTable += "ECM: " + formatPids(state['key_ecmpids'][j]) + "<br />";
 						myTable += "ECMTIME: " + state['key_ecmtime'][j] + "<br />";
 						myTable += "READER: " + state['key_reader'][j] + "<br />";
 						myTable += "IP: " + state['key_from'][j] + " (" + state['key_protocol'][j] + ")<br /><br />";
