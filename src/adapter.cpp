@@ -1126,10 +1126,6 @@ int tune(int aid, int sid) {
             return -503;
         }
     }
-    // Loopback re-stream: with no program selected nothing flows, so the
-    // read-driven election never fires. Restart stopped PMTs to re-send.
-    if (rv >= 0)
-        ddci_restream();
     if (flush_data) {
         ad->tune_time = getTick();
         set_socket_iteration(ad->sock, 0);

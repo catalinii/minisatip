@@ -724,6 +724,8 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
     update_pids(ad->id);
     // Loopback TAPs live on the DDCI adapter; hardware DDCI needs none.
     update_pids(ddid);
+    // Mappings rebuilt without reads: restart stopped PMTs to re-send.
+    ddci_restream();
     rv = TABLES_RESULT_OK;
     lock.lock();
     dump_mapping_table();
