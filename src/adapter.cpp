@@ -1084,6 +1084,7 @@ int tune(int aid, int sid) {
 
     std::lock_guard<SMutex> lock(ad->mutex);
 
+    int restream = 0;
     if (sid == ad->master_sid && ad->do_tune) {
         ad->tp.diseqc_param = ad->diseqc_param;
 
@@ -1113,9 +1114,11 @@ int tune(int aid, int sid) {
             }
         }
         post_tune(ad);
-    } else
+    } else {
         LOG("not tuning for sid %d (do_tune=%d, master_sid=%d)", sid,
             ad->do_tune, ad->master_sid);
+        restream = ddci_is_loopback(aid);
+    }
     if (rv < 0)
         mark_pids_deleted(aid, sid, NULL);
     if (update_pids(aid)) {
@@ -1126,6 +1129,9 @@ int tune(int aid, int sid) {
             return -503;
         }
     }
+    // Loopback re-stream: restart stopped PMTs so CAPMTs re-send.
+    if (restream && rv >= 0)
+        ddci_restream(ad);
     if (flush_data) {
         ad->tune_time = getTick();
         set_socket_iteration(ad->sock, 0);

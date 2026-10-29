@@ -389,6 +389,25 @@ static int ddci_close_loopback(adapter *a) {
     return 0;
 }
 
+// Re-stream with no reads: the push died with the mappings, so nothing
+// arrives to drive the election. Re-list stopped PMTs and run it now.
+void ddci_restream(adapter *ad) {
+    ddci_device_t *d = get_ddci(ad->id);
+    if (!d || !d->enabled)
+        return;
+    int found = 0;
+    for (SPMT *pmt : pmts) {
+        if (!pmt || pmt->adapter != ad->id || !pmt->enabled)
+            continue;
+        if (pmt->state != PMT_STOPPED || pmt->version < 0)
+            continue;
+        pmt_add_active_pmt(ad, pmt->id);
+        found = 1;
+    }
+    if (found)
+        start_active_pmts(ad);
+}
+
 extern SMutex ca_mask_mutex;
 
 // Skip initializing DDCIs: their CAM has not confirmed its CA list yet,

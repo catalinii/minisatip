@@ -247,6 +247,8 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque);
 void pmt_pid_del(adapter *ad, int pid);
 void pmt_pid_add(adapter *ad, int pid, int existing);
 void pmt_pid_updated_pids(adapter *ad);
+void start_active_pmts(adapter *ad);
+void pmt_add_active_pmt(adapter *ad, int pmt_id);
 int pmt_init_device(
     adapter *ad); // will call action[CA_INIT_DEVICE] for the adapter if CA is
                   // registered for it in adapter_mask,

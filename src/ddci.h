@@ -138,6 +138,8 @@ void load_channels();
 int ddci_process_pmt(adapter *ad, SPMT *pmt, int update);
 void blacklist_pmt_for_ddci(SPMT *pmt, int ddid);
 int ddci_del_pmt(adapter *ad, SPMT *spmt);
+// Re-stream with no reads: restart stopped PMTs so CAPMTs re-send.
+void ddci_restream(adapter *ad);
 void disable_cat_adapters(char *o);
 void dump_mapping_table();
 #endif
