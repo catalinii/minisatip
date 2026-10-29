@@ -39,6 +39,7 @@ extern std::atomic<int> sock;
 extern std::atomic<int> dvbapi_sock;
 extern std::atomic<int> dvbapi_ca;
 extern char *get_channel_for_key(int key, char *dest, int max_size);
+char *get_key_ecmpids(int key, char *dest, int max_size);
 int dvbapi_add_pmt(adapter *ad, SPMT *pmt, int update);
 void dvbapi_close_socket();
 int pmt_del(int id);
@@ -421,6 +422,38 @@ int test_close_socket_marks_without_deleting() {
     return 0;
 }
 
+// The status API lists a key's live ECM pids once each, skipping
+// freed slots even when they still hold a stale pid (#1521).
+int test_key_ecmpids_lists_live_pids() {
+    SKey *k = keys.obtain();
+    ASSERT(k, "no free key");
+    memset(k->filter_id, -1, sizeof(k->filter_id));
+    k->filter_id[0] = 7;
+    k->pid[0] = 100;
+    k->filter_id[1] = 8;
+    k->pid[1] = 101;
+    k->filter_id[2] = 9;
+    k->pid[2] = 100; // same ECM pid, second filter
+    k->pid[3] = 55;  // stale pid in a freed slot
+    char buf[128];
+
+    ASSERT(get_key_ecmpids(k->id, buf, sizeof(buf)) == buf, "must return dest");
+    ASSERT(strcmp(buf, "100,101") == 0, "live pids listed once each");
+
+    memset(k->filter_id, -1, sizeof(k->filter_id));
+    ASSERT(get_key_ecmpids(k->id, buf, sizeof(buf)) == buf, "must return dest");
+    ASSERT(buf[0] == 0, "no live filters reads empty");
+
+    ASSERT(get_key_ecmpids(-1, buf, sizeof(buf)) == buf, "must return dest");
+    ASSERT(buf[0] == 0, "invalid key reads empty");
+    ASSERT(get_key_ecmpids(MAX_KEYS, buf, sizeof(buf)) == buf,
+           "must return dest");
+    ASSERT(buf[0] == 0, "out of range key reads empty");
+
+    k->allocated = false;
+    return 0;
+}
+
 int main() {
     opts.log = 255;
     opts.debug = 255;
@@ -437,6 +470,8 @@ int main() {
               "testing close marks the socket without deleting it");
     TEST_FUNC(test_descramble_watchdog(),
               "testing the watchdog restarts a stalled PMT for OSCam");
+    TEST_FUNC(test_key_ecmpids_lists_live_pids(),
+              "testing the status API lists a key's live ECM pids");
     fflush(stdout);
     free_all_adapters();
     pmts.destroy_all();

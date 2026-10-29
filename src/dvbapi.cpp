@@ -1136,6 +1136,29 @@ static int get_key_pmt(int i) {
     return k ? k->pmt_pid : 0;
 }
 
+// Live ECM/EMM pids of a key, deduplicated. filter_id is the slot
+// liveness authority; pid[] may hold a stale value after free.
+char *get_key_ecmpids(int i, char *dest, int max_size) {
+    SKey *k = get_key_nw(i);
+    int len = 0;
+    dest[0] = 0;
+    if (!k)
+        return dest;
+    for (int s = 0; s < MAX_KEY_FILTERS; s++) {
+        if (k->filter_id[s] < 0 || k->pid[s] < 0)
+            continue;
+        int dup = 0;
+        for (int t = 0; t < s; t++)
+            if (k->filter_id[t] >= 0 && k->pid[t] == k->pid[s])
+                dup = 1;
+        if (!dup)
+            strlcatf(dest, max_size, len, "%d,", k->pid[s]);
+    }
+    if (len > 0)
+        dest[len - 1] = 0;
+    return dest;
+}
+
 static int get_key_adapter(int i) {
     SKey *k = get_key_nw(i);
     return k ? k->adapter : 0;
@@ -1178,6 +1201,8 @@ _symbols dvbapi_sym[] = {
     {"key_hops", VAR_FUNCTION_INT, (void *)&get_key_hops, 0, MAX_KEYS, 0},
     {"key_ecmtime", VAR_FUNCTION_INT, (void *)&get_key_ecmtime, 0, MAX_KEYS, 0},
     {"key_pmt", VAR_FUNCTION_INT, (void *)&get_key_pmt, 0, MAX_KEYS, 0},
+    {"key_ecmpids", VAR_FUNCTION_STRING, (void *)&get_key_ecmpids, 0, MAX_KEYS,
+     0},
     {"key_adapter", VAR_FUNCTION_INT, (void *)&get_key_adapter, 0, MAX_KEYS, 0},
     {"key_cardsystem", VAR_FUNCTION_STRING, (void *)&get_key_cardsystem, 0,
      MAX_KEYS, 0},
