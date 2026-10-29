@@ -389,35 +389,6 @@ static int ddci_close_loopback(adapter *a) {
     return 0;
 }
 
-// Re-stream with no reads: the push died with the mappings, so nothing
-// arrives to drive the election. Re-list stopped PMTs and run it now.
-void ddci_restream(void) {
-    int touched[MAX_ADAPTERS];
-    int ntouched = 0;
-    for (SPMT *pmt : pmts) {
-        if (!pmt || !pmt->enabled || !ddci_is_loopback(pmt->adapter))
-            continue;
-        if (pmt->state != PMT_STOPPED)
-            continue;
-        adapter *ad = get_adapter(pmt->adapter);
-        if (!ad || !ad->enabled)
-            continue;
-        LOG("ddci_restream: restarting PMT %d on adapter %d", pmt->id, ad->id);
-        pmt_add_active_pmt(ad, pmt->id);
-        int seen = 0;
-        for (int i = 0; i < ntouched; i++)
-            if (touched[i] == ad->id)
-                seen = 1;
-        if (!seen && ntouched < MAX_ADAPTERS)
-            touched[ntouched++] = ad->id;
-    }
-    for (int i = 0; i < ntouched; i++) {
-        adapter *ad = get_adapter(touched[i]);
-        if (ad)
-            start_active_pmts(ad);
-    }
-}
-
 extern SMutex ca_mask_mutex;
 
 // Skip initializing DDCIs: their CAM has not confirmed its CA list yet,
@@ -724,8 +695,6 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
     update_pids(ad->id);
     // Loopback TAPs live on the DDCI adapter; hardware DDCI needs none.
     update_pids(ddid);
-    // Mappings rebuilt without reads: restart stopped PMTs to re-send.
-    ddci_restream();
     rv = TABLES_RESULT_OK;
     lock.lock();
     dump_mapping_table();
@@ -1353,6 +1322,8 @@ void ddci_push_loop(int id) {
             else
                 break;
         }
+        if (off > 0)
+            d->last_push_write.store(getTick(), std::memory_order_relaxed);
         // Written bytes are consumed; the rest sheds on stop or error.
         std::lock_guard<std::mutex> lock(d->push_mutex);
         fifo_skip_bytes(&d->push_backlog, (uint32_t)n);
@@ -1366,7 +1337,41 @@ void ddci_push_start(ddci_device_t *d) {
     if (!d || d->push_running.exchange(true))
         return;
     d->push_stop.store(false);
+    d->last_push_write.store(getTick(), std::memory_order_relaxed);
     d->push_thread = std::thread(ddci_push_loop, d->id);
+}
+
+// Reopens the push dvr, shedding stale driver data a wedged CAM
+// stopped draining; the close unblocks the sleeping writer.
+void ddci_push_reopen(adapter *ad, ddci_device_t *d) {
+    if (!ad || !d || !ddci_is_loopback(d->id))
+        return;
+    {
+        std::lock_guard<std::mutex> lock(d->push_mutex);
+        d->push_stop.store(true);
+    }
+    d->push_cv.notify_one();
+    if (ad->fe >= 0) {
+        close(ad->fe);
+        ad->fe = -1;
+    }
+    if (d->push_thread.joinable())
+        d->push_thread.join();
+    {
+        std::lock_guard<std::mutex> lock(d->push_mutex);
+        d->push_backlog.read_index = d->push_backlog.write_index;
+    }
+    char buf[100];
+    snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/dvr%d", ad->pa, ad->fn);
+    int fd = open(buf, O_WRONLY | O_CLOEXEC);
+    if (fd < 0) {
+        LOG("could not reopen %s: %s", buf, strerror(errno));
+        return;
+    }
+    ad->fe = fd;
+    ddci_enigma_route_pvr(d);
+    ddci_push_start(d);
+    LOG("reopened push dvr %s fd:%d", buf, fd);
 }
 
 // Stops the push thread, shedding the backlog; safe to call twice.
@@ -1387,22 +1392,31 @@ void ddci_push_stop(ddci_device_t *d) {
 // Queues fresh PSI first, then TS; a full ring sheds oldest.
 size_t ddci_push_queue(ddci_device_t *d, uint8_t *psi, size_t psi_len,
                        struct iovec *io, int iop) {
-    std::lock_guard<std::mutex> lock(d->push_mutex);
+    bool wedge = false;
     size_t queued = 0;
-    if (psi && psi_len > 0)
-        queued += (size_t)fifo_push_force(&d->push_backlog, psi,
-                                          (unsigned)psi_len, 1);
-    for (int k = 0; k < iop; k++)
-        queued += (size_t)fifo_push_force(&d->push_backlog, io[k].iov_base,
-                                          (unsigned)io[k].iov_len, 1);
-    // Overwrites land past the ring: drop oldest so used stays in size.
-    SFIFO *f = &d->push_backlog;
-    if (f->write_index - f->read_index > f->size) {
-        LOG("DDCI %d: push ring full, dropped %jd oldest bytes", d->id,
-            f->write_index - f->size - f->read_index);
-        f->read_index = f->write_index - f->size;
+    {
+        std::lock_guard<std::mutex> lock(d->push_mutex);
+        if (psi && psi_len > 0)
+            queued += (size_t)fifo_push_force(&d->push_backlog, psi,
+                                              (unsigned)psi_len, 1);
+        for (int k = 0; k < iop; k++)
+            queued += (size_t)fifo_push_force(&d->push_backlog, io[k].iov_base,
+                                              (unsigned)io[k].iov_len, 1);
+        // Overwrites land past the ring: drop oldest so used stays in size.
+        SFIFO *f = &d->push_backlog;
+        if (f->write_index - f->read_index > f->size) {
+            LOG("DDCI %d: push ring full, dropped %jd oldest bytes", d->id,
+                f->write_index - f->size - f->read_index);
+            f->read_index = f->write_index - f->size;
+            wedge =
+                getTick() - d->last_push_write.load(std::memory_order_relaxed) >
+                DDCI_PUSH_WEDGE_MS;
+        }
+        d->push_cv.notify_one();
     }
-    d->push_cv.notify_one();
+    // Wedged writer, not slow drain: reopen outside the lock.
+    if (wedge)
+        ddci_push_reopen(get_adapter_nw(d->id), d);
     return queued;
 }
 

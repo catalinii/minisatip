@@ -24,6 +24,9 @@
 
 // Max bytes pushed per call; bigger bursts wedge this driver.
 #define DDCI_PUSH_CHUNK (32 * 1024)
+// Ring full this long with no byte written: the CAM stopped
+// draining, reopen the push dvr to shed the stale driver data.
+#define DDCI_PUSH_WEDGE_MS 3000
 
 // Mapping-table key: adapter in the high 16 bits, pid below.
 #define MAKE_KEY(ad, pid) (((ad) << 16) | (pid))
@@ -82,6 +85,7 @@ typedef struct ddci_device {
     std::condition_variable push_cv;
     std::atomic<bool> push_stop{false};
     std::atomic<bool> push_running{false};
+    std::atomic<int64_t> last_push_write{0};
     std::unordered_map<int, ddci_mapping_table_t> mapping;
     std::unordered_set<int> emm_pids; // MAKE_KEY(ad,pid), never swept
     SFIFO fifo;
@@ -110,6 +114,9 @@ void ddci_push_loop(int id);
 void ddci_push_start(ddci_device_t *d);
 // Stops the push thread, shedding the backlog; safe to call twice.
 void ddci_push_stop(ddci_device_t *d);
+// Reopens the push dvr, shedding stale driver data a wedged CAM
+// stopped draining; the close unblocks the sleeping writer.
+void ddci_push_reopen(adapter *ad, ddci_device_t *d);
 // Queues fresh PSI first, then TS; a full ring sheds oldest.
 size_t ddci_push_queue(ddci_device_t *d, uint8_t *psi, size_t psi_len,
                        struct iovec *io, int iop);
@@ -138,8 +145,6 @@ void load_channels();
 int ddci_process_pmt(adapter *ad, SPMT *pmt, int update);
 void blacklist_pmt_for_ddci(SPMT *pmt, int ddid);
 int ddci_del_pmt(adapter *ad, SPMT *spmt);
-// Re-stream with no reads: restart stopped PMTs so CAPMTs re-send.
-void ddci_restream(void);
 void disable_cat_adapters(char *o);
 void dump_mapping_table();
 #endif
