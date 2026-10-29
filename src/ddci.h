@@ -114,8 +114,8 @@ void ddci_push_loop(int id);
 void ddci_push_start(ddci_device_t *d);
 // Stops the push thread, shedding the backlog; safe to call twice.
 void ddci_push_stop(ddci_device_t *d);
-// Reopens the push dvr, shedding stale driver data a wedged CAM
-// stopped draining; no ioctl resets it, only close drops it.
+// Reopens the push dvr: the Stop/Start restarts the CAM pull,
+// which is what drains the stuck buffer; close is the only reset.
 void ddci_push_reopen(adapter *ad, ddci_device_t *d);
 // Queues fresh PSI first, then TS; a full ring sheds oldest.
 size_t ddci_push_queue(ddci_device_t *d, uint8_t *psi, size_t psi_len,

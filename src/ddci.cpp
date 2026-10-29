@@ -1347,8 +1347,8 @@ void ddci_push_start(ddci_device_t *d) {
     d->push_thread = std::thread(ddci_push_loop, d->id);
 }
 
-// Reopens the push dvr, shedding stale driver data a wedged CAM
-// stopped draining; no ioctl resets it, only close drops it.
+// Reopens the push dvr: the Stop/Start restarts the CAM pull,
+// which is what drains the stuck buffer; close is the only reset.
 void ddci_push_reopen(adapter *ad, ddci_device_t *d) {
     if (!ad || !d || !ddci_is_loopback(d->id))
         return;
