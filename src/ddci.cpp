@@ -391,21 +391,30 @@ static int ddci_close_loopback(adapter *a) {
 
 // Re-stream with no reads: the push died with the mappings, so nothing
 // arrives to drive the election. Re-list stopped PMTs and run it now.
-void ddci_restream(adapter *ad) {
-    ddci_device_t *d = get_ddci(ad->id);
-    if (!d || !d->enabled)
-        return;
-    int found = 0;
+void ddci_restream(void) {
+    int touched[MAX_ADAPTERS];
+    int ntouched = 0;
     for (SPMT *pmt : pmts) {
-        if (!pmt || pmt->adapter != ad->id || !pmt->enabled)
+        if (!pmt || !pmt->enabled || !ddci_is_loopback(pmt->adapter))
             continue;
         if (pmt->state != PMT_STOPPED || pmt->version < 0)
             continue;
+        adapter *ad = get_adapter(pmt->adapter);
+        if (!ad || !ad->enabled)
+            continue;
         pmt_add_active_pmt(ad, pmt->id);
-        found = 1;
+        int seen = 0;
+        for (int i = 0; i < ntouched; i++)
+            if (touched[i] == ad->id)
+                seen = 1;
+        if (!seen && ntouched < MAX_ADAPTERS)
+            touched[ntouched++] = ad->id;
     }
-    if (found)
-        start_active_pmts(ad);
+    for (int i = 0; i < ntouched; i++) {
+        adapter *ad = get_adapter(touched[i]);
+        if (ad)
+            start_active_pmts(ad);
+    }
 }
 
 extern SMutex ca_mask_mutex;
