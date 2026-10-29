@@ -23,10 +23,13 @@
 #define DDCI_PUSH_BACKLOG_MAX (3 * 1024 * 1024)
 
 // Max bytes pushed per call; bigger bursts wedge this driver.
-#define DDCI_PUSH_CHUNK (32 * 1024)
+#define DDCI_PUSH_CHUNK (4 * 1024)
 // Ring full this long with no byte written: the CAM stopped
 // draining, reopen the push dvr to shed the stale driver data.
 #define DDCI_PUSH_WEDGE_MS 3000
+// Drain cap: twice a 4K service, smooths bursts for the demux.
+#define DDCI_PUSH_RATE_BPS (2 * 1024 * 1024)
+#define DDCI_PUSH_BURST (8 * 1024)
 
 // Mapping-table key: adapter in the high 16 bits, pid below.
 #define MAKE_KEY(ad, pid) (((ad) << 16) | (pid))
@@ -86,6 +89,9 @@ typedef struct ddci_device {
     std::atomic<bool> push_stop{false};
     std::atomic<bool> push_running{false};
     std::atomic<int64_t> last_push_write{0};
+    // Token bucket, push thread only: smooths the drain rate.
+    int64_t push_tokens{0};
+    std::chrono::steady_clock::time_point push_last;
     std::unordered_map<int, ddci_mapping_table_t> mapping;
     std::unordered_set<int> emm_pids; // MAKE_KEY(ad,pid), never swept
     SFIFO fifo;
