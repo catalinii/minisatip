@@ -10,21 +10,34 @@ needs GCC 12.1+; disable it with `-DCXX23=OFF`.
 ```bash
 mkdir build
 cd build
-cmake ..
-make -j4
+cmake .. -DSTATIC=OFF
+make -j$(nproc)
 ```
 
 To cross compile, use something like (static compilation), considering that `mips-openwrt-linux-musl-gcc` is the gcc executable for that platform:
 
 ```bash
-cmake -B build . -DCMAKE_CXX_COMPILER=arm-linux-gnueabihf-g++ -DNETCVCLIENT=0
+cmake -B build . -DCMAKE_CXX_COMPILER=arm-linux-gnueabihf-g++ -DSTATIC=ON -DNETCVCLIENT=0
 cd build
+make -j$(nproc)
 ```
 
-To compile the application:
+To compile using the Docker container (useful to cross compile):
 
 ```bash
-make
+docker run -it --rm -v ./workspace:/workspace catalinii/minisatip-build-image:latest
+
+cd /workspace/
+git clone https://github.com/catalinii/minisatip.git
+
+cd minisatip/
+cmake -B build . -DCMAKE_CXX_COMPILER=mipsel-linux-gnu-g++ -DCMAKE_CXX_COMPILER_TARGET=mipsel-linux-gnu -DCMAKE_BUILD_TYPE=Release -DSTATIC=ON -DNETCVCLIENT=0 -DSRT=0 -DDVBCSA=0 -DDVBCA=0 -DDDCI=0
+(cd build && make -j$(nproc))
+mipsel-linux-gnu-strip build/minisatip
+cp build/minisatip /workspace/minisatip.mips
+
+cd /workspace/
+rm -rf minisatip
 ```
 
 ## Contributing
