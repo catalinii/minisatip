@@ -397,11 +397,12 @@ void ddci_restream(void) {
     for (SPMT *pmt : pmts) {
         if (!pmt || !pmt->enabled || !ddci_is_loopback(pmt->adapter))
             continue;
-        if (pmt->state != PMT_STOPPED || pmt->version < 0)
+        if (pmt->state != PMT_STOPPED)
             continue;
         adapter *ad = get_adapter(pmt->adapter);
         if (!ad || !ad->enabled)
             continue;
+        LOG("ddci_restream: restarting PMT %d on adapter %d", pmt->id, ad->id);
         pmt_add_active_pmt(ad, pmt->id);
         int seen = 0;
         for (int i = 0; i < ntouched; i++)
