@@ -47,7 +47,6 @@
 #include "tables.h"
 #include "utils.h"
 #include <algorithm>
-#include <format>
 #include <fstream>
 #include <string>
 
@@ -1282,6 +1281,9 @@ void ddci_push_loop(int id) {
                 return d->push_stop.load() || fifo_used(&d->push_backlog) > 0;
             });
             if (d->push_stop.load()) {
+                LOG("DDCI %d: push exit shedding %jd backlog bytes", d->id,
+                    (intmax_t)(d->push_backlog.write_index -
+                               d->push_backlog.read_index));
                 d->push_backlog.read_index = d->push_backlog.write_index;
                 break;
             }
@@ -1325,14 +1327,31 @@ void ddci_push_loop(int id) {
                 struct pollfd pfd = {ad->fe, POLLOUT, 0};
                 poll(&pfd, 1, 50);
                 continue;
-            } else
+            } else {
+                LOG("DDCI %d: push write %s, shedding %jd bytes", d->id,
+                    w == 0 ? "zero" : strerror(errno), (intmax_t)(n - off));
                 break;
+            }
         }
         if (off > 0)
             d->last_push_write.store(getTick(), std::memory_order_relaxed);
         // Written bytes are consumed; the rest sheds on stop or error.
         std::lock_guard<std::mutex> lock(d->push_mutex);
         fifo_skip_bytes(&d->push_backlog, (uint32_t)n);
+        // Token bucket: pace the drain, never exceed the rate.
+        auto now = std::chrono::steady_clock::now();
+        int64_t ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                         now - d->push_last)
+                         .count();
+        d->push_last = now;
+        d->push_tokens += ms * (DDCI_PUSH_RATE_BPS / 1000);
+        if (d->push_tokens > DDCI_PUSH_BURST)
+            d->push_tokens = DDCI_PUSH_BURST;
+        d->push_tokens -= (int64_t)n;
+        while (d->push_tokens < 0 && !d->push_stop.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            d->push_tokens += DDCI_PUSH_RATE_BPS / 1000;
+        }
     }
     d->push_running.store(false);
     DEBUGM("DDCI %d: push loop exited", d->id);
@@ -1344,6 +1363,8 @@ void ddci_push_start(ddci_device_t *d) {
         return;
     d->push_stop.store(false);
     d->last_push_write.store(getTick(), std::memory_order_relaxed);
+    d->push_tokens = DDCI_PUSH_BURST;
+    d->push_last = std::chrono::steady_clock::now();
     d->push_thread = std::thread(ddci_push_loop, d->id);
 }
 
@@ -1365,7 +1386,9 @@ void ddci_push_reopen(adapter *ad, ddci_device_t *d) {
         d->push_thread.join();
     {
         std::lock_guard<std::mutex> lock(d->push_mutex);
-        d->push_backlog.read_index = d->push_backlog.write_index;
+        LOG("DDCI %d: reopen totals pushed=%jd tapped=%jd tick=%jd", d->id,
+            (intmax_t)d->push_backlog.write_index,
+            (intmax_t)d->fifo.write_index, (intmax_t)getTick());
     }
     char buf[100];
     snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/dvr%d", ad->pa, ad->fn);
@@ -1420,6 +1443,11 @@ size_t ddci_push_queue(ddci_device_t *d, uint8_t *psi, size_t psi_len,
         }
         d->push_cv.notify_one();
     }
+    // Early watchdog: a 1s stall means the CAM pull stopped, reopen
+    // before the hang, whether or not the ring is full.
+    if (!wedge &&
+        getTick() - d->last_push_write.load(std::memory_order_relaxed) > 1000)
+        wedge = true;
     // Wedged writer, not slow drain: reopen outside the lock.
     if (wedge)
         ddci_push_reopen(get_adapter_nw(d->id), d);
