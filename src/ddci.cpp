@@ -1266,7 +1266,8 @@ int push_ts_to_adapter(ddci_device_t *d, adapter *ad, uint16_t *mapping) {
     return 0;
 }
 
-// Push loop: blocking writes move the fifo to the dvr in a loop.
+// Push loop: non-blocking writes move the fifo to the dvr,
+// EAGAIN waits 50ms and retries until stop or room.
 void ddci_push_loop(int id) {
     ddci_device_t *d =
         (id >= 0 && id < MAX_ADAPTERS) ? ddci_devices[id] : nullptr;
@@ -1316,10 +1317,15 @@ void ddci_push_loop(int id) {
             ssize_t w = writev(ad->fe, &wio, 1);
             if (w > 0)
                 off += (size_t)w;
-            else if (w < 0 && (errno == EINTR || errno == EAGAIN ||
-                               errno == EWOULDBLOCK))
+            else if (w < 0 && errno == EINTR)
                 continue;
-            else
+            else if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+                // No POLLOUT on these drivers, so the poll is just
+                // a bounded sleep; stop is rechecked after it.
+                struct pollfd pfd = {ad->fe, POLLOUT, 0};
+                poll(&pfd, 1, 50);
+                continue;
+            } else
                 break;
         }
         if (off > 0)
@@ -1342,7 +1348,7 @@ void ddci_push_start(ddci_device_t *d) {
 }
 
 // Reopens the push dvr, shedding stale driver data a wedged CAM
-// stopped draining; the close unblocks the sleeping writer.
+// stopped draining; no ioctl resets it, only close drops it.
 void ddci_push_reopen(adapter *ad, ddci_device_t *d) {
     if (!ad || !d || !ddci_is_loopback(d->id))
         return;
@@ -1363,7 +1369,7 @@ void ddci_push_reopen(adapter *ad, ddci_device_t *d) {
     }
     char buf[100];
     snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/dvr%d", ad->pa, ad->fn);
-    int fd = open(buf, O_WRONLY | O_CLOEXEC);
+    int fd = open(buf, O_WRONLY | O_NONBLOCK | O_CLOEXEC);
     if (fd < 0) {
         LOG("could not reopen %s: %s", buf, strerror(errno));
         return;
@@ -1640,8 +1646,8 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
     ad->dmx_source = dvr_offset;
     int push_dvr = ad->fn;
     snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/dvr%d", ad->pa, push_dvr);
-    // Blocking writes pace the push thread like E2 filepush.
-    int write_fd = open(buf, O_WRONLY | O_CLOEXEC);
+    // Non-blocking: EAGAIN waits below, the wedge detector reopens.
+    int write_fd = open(buf, O_WRONLY | O_NONBLOCK | O_CLOEXEC);
     if (write_fd < 0)
         LOG_AND_RETURN(1, "could not open %s: %s", buf, strerror(errno));
     // Read TS from the DVR like live adapters; the demux device only
