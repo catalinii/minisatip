@@ -79,7 +79,7 @@ typedef struct ddci_device {
     char loopback;      // enigma DVR loopback, no sec/ci hardware
     int ci_slot;        // claimed /dev/ciN, -1 until bound
     SFIFO push_backlog; // queued push bytes, oldest first
-    // Push thread: blocking writes move the fifo to the dvr.
+    // Push thread: non-blocking writes move the fifo to the dvr.
     std::thread push_thread;
     std::mutex push_mutex;
     std::condition_variable push_cv;
@@ -115,7 +115,7 @@ void ddci_push_start(ddci_device_t *d);
 // Stops the push thread, shedding the backlog; safe to call twice.
 void ddci_push_stop(ddci_device_t *d);
 // Reopens the push dvr, shedding stale driver data a wedged CAM
-// stopped draining; the close unblocks the sleeping writer.
+// stopped draining; no ioctl resets it, only close drops it.
 void ddci_push_reopen(adapter *ad, ddci_device_t *d);
 // Queues fresh PSI first, then TS; a full ring sheds oldest.
 size_t ddci_push_queue(ddci_device_t *d, uint8_t *psi, size_t psi_len,
