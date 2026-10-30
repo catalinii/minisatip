@@ -1105,6 +1105,10 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
         int _pid = PID_FROM_TS(b);
         if (!pids[_pid] && !pids[8192])
             continue;
+        // DDCI regenerates PAT, so drop the TAP copy instead of
+        // forwarding two PAT versions to the client.
+        if (ad->type == ADAPTER_CI && _pid == 0)
+            continue;
 
         if (total_len && max_pack && (total_len / DVB_FRAME % max_pack == 0)) {
             rtp_pos += enqueue_rtp_header(sid, iov, iiov, last_rtp_header,

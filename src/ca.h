@@ -192,6 +192,12 @@ struct cc_ctrl_data {
     EVP_PKEY *rsa_device_key;
 };
 
+// CI stack owner: live tuner, hardware DDCI, enigma tuner, loopback.
+enum class ca_mode : uint8_t { DVB = 0, DDCI, ENIGMA, ENIGMA_DDCI };
+
+// Vu+ boxes expose at most two CI slots; enigma scans these.
+constexpr int MAX_VU_CI_SLOTS = 2;
+
 struct ca_device {
     // enabled/fd/sock/state are plain cross-thread ints: writers
     // take the per-device lock, readers tolerate one stale pass.
@@ -200,6 +206,8 @@ struct ca_device {
     int max_ca_pmt, multiple_pmt;
     int fd, sock;
     int id;
+    int ci_slot;  // /dev/ciN and tsmux slot, may differ from id
+    ca_mode mode; // zero-init DVB; set once at init publish
     int state;
     uint16_t caid[MAX_CAID];
     uint32_t caids;
@@ -209,6 +217,7 @@ struct ca_device {
     ca_session_t sessions[MAX_SESSIONS];
 
     int uri_mask;
+    int cc_version; // 1 for CI+ v1 (CSA keys), 2 for v2 (AES keys)
     char force_ci;
     char linked_adapter;
 
@@ -242,6 +251,7 @@ struct ca_device {
 
 extern ca_device_t *ca_devices[];
 
+void set_ci_input_str(int ci, const char *val);
 ca_device_t *alloc_ca_device();
 int ca_init(ca_device_t *d);
 void dvbca_init();
@@ -253,6 +263,7 @@ uint32_t capmt_content_hash(uint8_t *capmt, int len);
 int is_ca_initializing(int i);
 void set_ca_adapter_pin(char *o);
 void set_ca_adapter_force_ci(char *o);
+char *get_ca_pin(int i);
 void set_ca_channels(char *o);
 int get_ca_multiple_pmt(int i);
 int capmt_has_pmt(const SCAPMT *c, int pmt_id);

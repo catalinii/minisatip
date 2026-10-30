@@ -19,6 +19,7 @@
  */
 #include "adapter.h"
 #include "ca.h"
+#include "ddci.h"
 #include "dvb.h"
 #include "minisatip.h"
 #include "socketworks.h"
@@ -61,7 +62,9 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple,
                          int *rejoined = NULL);
 int dvbca_del_pmt(adapter *ad, SPMT *spmt);
 extern ca_device_t *ca_devices[MAX_ADAPTERS];
+extern ddci_device_t *ddci_devices[MAX_ADAPTERS];
 extern int dvbca_id;
+extern int has_ci;
 extern SCA ca[];
 extern std::atomic<int> nca;
 int get_active_capmts(ca_device_t *d);
@@ -1712,9 +1715,11 @@ int test_ca_timeout_branches() {
     dev.fd = -1;
     dev.state = CA_STATE_ACTIVE;
     dev.poll_fails = 0;
+    dev.mode = ca_mode::ENIGMA;
     ASSERT_EQUAL(ca_timeout(&ss), 0, "enigma skips keepalive");
     ASSERT_EQUAL(dev.poll_fails, 0, "enigma counts nothing");
     opts.enigma = saved_enigma;
+    dev.mode = ca_mode::DVB;
 
     dev.state = CA_STATE_INITIALIZED;
     dev.datetime_response_interval = 30000;
@@ -1805,6 +1810,7 @@ int test_ca_open_session_table_full() {
     ca_devices[72] = &dev;
     int saved_enigma = opts.enigma, saved_debug = opts.debug;
     opts.enigma = 1; // SPDUs go to the fd unwrapped
+    dev.mode = ca_mode::ENIGMA;
     opts.debug |= LOG_DVBCA;
 
     unsigned char open_ai[6] = {0x91, 0x04, 0x00, 0x02, 0x00, 0x41};
@@ -1839,6 +1845,7 @@ int test_ca_open_session_unknown_resource() {
     ca_devices[73] = &dev;
     int saved_enigma = opts.enigma;
     opts.enigma = 1; // SPDUs go to the fd unwrapped
+    dev.mode = ca_mode::ENIGMA;
 
     // ST_OPEN_SESSION_REQUEST for TS 103 205 MMI, which has no handler
     unsigned char open_mmi[6] = {0x91, 0x04, 0x00, 0x40, 0x00, 0x81};
@@ -2331,6 +2338,72 @@ int test_capmt_write_failure_retries() {
     return 0;
 }
 
+// Loopback CAPMT sends at once; holding it starves the TAPs
+// and deadlocks the retry, so the CAM never starts.
+int test_loopback_capmt_sends_at_once() {
+    packing_cam_open();
+    ddci_device_t loop = {};
+    loop.id = 3;
+    loop.enabled = 1;
+    loop.loopback = 1;
+    ddci_devices[3] = &loop;
+    int saved_enigma = opts.enigma;
+    opts.enigma = 1;
+    pcam->dev.mode = ca_mode::ENIGMA_DDCI;
+    SPMT *p1 = packing_program(0x2c01);
+    ASSERT_EQUAL(dvbca_process_pmt(&pcam->ad, p1, 0), 0, "loopback join sends");
+    ASSERT_EQUAL(read_capmts(), 1, "CAPMT written at once");
+    opts.enigma = saved_enigma;
+    ddci_devices[3] = NULL;
+    packing_cam_close();
+    return 0;
+}
+
+// Loopback owns its stored CI slot; the enigma tuner on that slot
+// stands down so /dev/ciX is driven only by the DDCI adapter.
+int test_loopback_owns_ci_slot() {
+    int saved_enigma = opts.enigma;
+    int saved_has_ci = has_ci;
+    ddci_device_t *saved_ddci[MAX_ADAPTERS];
+    memcpy(saved_ddci, ddci_devices, sizeof(saved_ddci));
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    opts.enigma = 1;
+    has_ci = 1;
+    ASSERT_EQUAL(ddci_loopback_owns_slot(1), 0, "no loopback claims nothing");
+
+    ddci_device_t loop = {};
+    loop.id = 71;
+    loop.loopback = 1;
+    loop.ci_slot = 1;
+    ddci_devices[71] = &loop;
+    ASSERT_EQUAL(ddci_loopback_owns_slot(1), 1, "stored claim is read");
+
+    adapter tuner = {};
+    tuner.id = 1;
+    tuner.type = ADAPTER_DVB;
+    ca_device_t *saved_ca1 = ca_devices[1];
+    ca_devices[1] = NULL;
+    ASSERT_EQUAL(dvbca_init_dev(&tuner), TABLES_RESULT_ERROR_NORETRY,
+                 "owned slot stands down");
+    ASSERT(ca_devices[1] == NULL, "no CA device opened for it");
+
+    adapter other = {};
+    other.id = 72;
+    other.type = ADAPTER_DVB;
+    ca_device_t *saved_ca72 = ca_devices[72];
+    ca_devices[72] = NULL;
+    ASSERT_EQUAL(dvbca_init_dev(&other), TABLES_RESULT_OK,
+                 "other slots still probe");
+    ca_devices[72] = saved_ca72;
+
+    ca_devices[1] = saved_ca1;
+
+    memcpy(ddci_devices, saved_ddci, sizeof(saved_ddci));
+    opts.enigma = saved_enigma;
+    has_ci = saved_has_ci;
+    return 0;
+}
+
 // CAPMT 0 = {1, 3}, CAPMT 1 = {2}: zapping 3 -> 4 -> 3 -> 4 restarts
 // a resident once; the zaps back return to kept places.
 int test_capmt_zap_back_keeps_places() {
@@ -2415,6 +2488,10 @@ int main() {
               "testing that a changed rejoin is not suppressed");
     TEST_FUNC(test_capmt_write_failure_retries(),
               "testing that a failed CAPMT write is retried");
+    TEST_FUNC(test_loopback_capmt_sends_at_once(),
+              "testing that loopback CAPMT is not held");
+    TEST_FUNC(test_loopback_owns_ci_slot(),
+              "testing that the tuner yields its CI slot to the loopback");
     TEST_FUNC(test_get_authdata_filename(), "testing filename helper function");
     TEST_FUNC(test_capmt_content_hash_masks_version_and_listmgmt(),
               "testing the CAPMT hash masks version and listmgmt");

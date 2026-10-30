@@ -26,6 +26,7 @@
 #include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <poll.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -45,6 +46,8 @@
 #include "stream.h"
 #include "tables.h"
 #include "utils.h"
+#include <algorithm>
+#include <fstream>
 #include <string>
 
 #include "utils/fifo.h"
@@ -99,7 +102,10 @@ int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
     int ddci_pid = -1;
     ddci_mapping_table_t *m;
     if (!has_pid_mapping(d, ad, pid)) {
-        ddci_pid = find_ddci_pid(d, pid);
+        // Table pids stay fixed: the CAM expects PAT/CAT/TDT on
+        // their pid even when several tuners map them.
+        ddci_pid =
+            (pid == 0 || pid == 1 || pid == 20) ? pid : find_ddci_pid(d, pid);
         m = &d->mapping[MAKE_KEY(ad, pid)];
         m->ad = ad;
         m->pid = pid;
@@ -195,6 +201,92 @@ static int find_registered_ddci(int pmt_id) {
     return -1;
 }
 
+int ddci_is_loopback(int id) {
+    ddci_device_t *d = get_ddci(id);
+    return opts.enigma && d && d->loopback;
+}
+
+// True when any enigma loopback claimed this CI slot.
+int ddci_loopback_owns_slot(int slot) {
+    if (!opts.enigma || slot < 0)
+        return 0;
+    auto it =
+        std::ranges::find_if(ddci_devices, [slot](const ddci_device_t *d) {
+            return d && d->loopback && d->ci_slot == slot;
+        });
+    return it != std::end(ddci_devices);
+}
+
+// CI slot claimed by loopback id; -1 when it claims none.
+int ddci_loopback_slot_for(int id) {
+    ddci_device_t *d = get_ddci(id);
+    if (!opts.enigma || !d || !d->loopback)
+        return -1;
+    return d->ci_slot;
+}
+
+// Last N with demuxN+dvrN present, frontendN absent, and N owned by
+// no adapter; -1 when none fits. Arrays list existing indices ascending.
+static bool ddci_list_has(const int *list, int n, int v) {
+    for (int i = 0; i < n; i++)
+        if (list[i] == v)
+            return true;
+    return false;
+}
+
+int ddci_pick_free_pair(const int *demux, int ndemux, const int *dvr, int ndvr,
+                        const int *fe, int nfe, const int *used, int nused) {
+    for (int i = ndemux - 1; i >= 0; i--) {
+        int fn = demux[i];
+        if (!ddci_list_has(dvr, ndvr, fn) || ddci_list_has(fe, nfe, fn) ||
+            ddci_list_has(used, nused, fn))
+            continue;
+        return fn;
+    }
+    return -1;
+}
+
+// CI slot feeding this loopback, published by DVBCA at open.
+static int ddci_enigma_slot(ddci_device_t *d) {
+    if (d && d->id >= 0 && d->id < MAX_ADAPTERS && ca_devices[d->id] &&
+        ca_devices[d->id]->fd >= 0)
+        return ca_devices[d->id]->ci_slot;
+    return -1;
+}
+
+void ddci_enigma_route_pvr(ddci_device_t *d) {
+    if (!opts.enigma || !d)
+        return;
+    int slot = ddci_enigma_slot(d);
+    if (slot < 0) {
+        LOG("DDCI %d: no CI slot bound, skipping PVR route", d->id);
+        return;
+    }
+    set_ci_input_str(slot, "PVR");
+    LOG("DDCI %d: CI slot %d input routed to PVR", d->id, slot);
+}
+
+void ddci_enigma_route_none(ddci_device_t *d) {
+    if (!opts.enigma || !d)
+        return;
+    int slot = ddci_enigma_slot(d);
+    if (slot < 0) {
+        LOG("DDCI %d: no CI slot bound, skipping NONE route", d->id);
+        return;
+    }
+    set_ci_input_str(slot, "NONE");
+    LOG("DDCI %d: CI slot %d input routed to NONE", d->id, slot);
+}
+
+// DVR DMX_SET_SOURCE base; enigma honors the same override file.
+static int ddci_dvr_source_offset() {
+    std::ifstream f("/proc/stb/frontend/dvr_source_offset");
+    int off = 16;
+    if (f >> off)
+        return off;
+    return 16;
+}
+
 // Drop one last-user mapping entry: the DDCI-side pid, its filter,
 // and the source-side pid when DDCI added it.
 static void release_mapping_entry(ddci_device_t *d, int ad, int pmt,
@@ -202,7 +294,16 @@ static void release_mapping_entry(ddci_device_t *d, int ad, int pmt,
     int pid = m->pid, ddci_pid = m->ddci_pid;
     SPid *p = find_pid(d->id, ddci_pid);
     LOG("Deleting ad %d pmt %d pid %d ddci_pid %d", ad, pmt, pid, ddci_pid);
-    if (p)
+    // Shared ddci_pid (table pids mapped per tuner): drop the CI
+    // entry only when no other mapping still uses it.
+    bool last = true;
+    for (const auto &u : d->mapping)
+        if (u.second.ddci_pid == ddci_pid &&
+            MAKE_KEY(u.second.ad, u.second.pid) != MAKE_KEY(ad, pid)) {
+            last = false;
+            break;
+        }
+    if (p && last)
         mark_pid_deleted(d->id, DDCI_SID, ddci_pid, NULL);
     if (m->filter_id >= 0)
         del_filter(m->filter_id);
@@ -238,7 +339,7 @@ int del_pmt_mapping_table(ddci_device_t *d, int ad, int pmt) {
 // until their last user is gone. Call with d->mutex held.
 static int unmap_removed_pids(ddci_device_t *d, int ad, SPMT *pmt) {
     auto still_needed = [d, pmt, ad](int pid) {
-        if (pid == pmt->pid || pid == 1 || pid == 20)
+        if (pid == pmt->pid || pid == 0 || pid == 1 || pid == 20)
             return true;
         if (d->emm_pids.count(MAKE_KEY(ad, pid)) > 0)
             return true;
@@ -279,6 +380,13 @@ int ddci_close_dev(adapter *ad) {
 SCA_op ddci;
 
 int ddci_close_adapter(adapter *ad) { return 0; }
+
+// Loopback teardown stops the push and returns the CI input.
+static int ddci_close_loopback(adapter *a) {
+    ddci_push_stop(ddci_devices[a->id]);
+    ddci_enigma_route_none(ddci_devices[a->id]);
+    return 0;
+}
 
 extern SMutex ca_mask_mutex;
 
@@ -478,7 +586,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
         return TABLES_RESULT_ERROR_NORETRY;
     }
 
-    std::lock_guard<SMutex> lock(d->mutex);
+    std::unique_lock<SMutex> lock(d->mutex);
     int pos = -1, already_registered = 0;
 
     for (i = 0; i < d->max_channels; i++)
@@ -526,20 +634,22 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
             mapped++;
     };
 
-    // Map mandatory PIDs. Some CAMs need access to the TDT in order to "wake
-    // up", so always map it just in case. Pid 0 comes from post_tune().
-    for (const uint16_t pid : {1, 20}) {
+    // Map mandatory PIDs, PAT included so the CAM sees it like live.
+    // Some CAMs also need the TDT to "wake up", so map it too.
+    for (const uint16_t pid : {0, 1, 20}) {
         if (!has_pid_mapping(d, pmt->adapter, pid)) {
             LOG("Mapping mandatory PID %d to PMT %d on DDCI %d", pid, pmt->id,
                 d->id);
             count_new(pid);
-            add_pid_mapping_table(ad->id, pid, pmt->id, d, 1);
 
             // We need to process the CAT if this is the first time we see it
             if (pid == 1) {
                 d->cat_processed = 0;
             }
         }
+        // Join even when mapped: every PMT must own its mandatory
+        // pids or the first delete releases them globally.
+        add_pid_mapping_table(ad->id, pid, pmt->id, d, 1);
     }
 
     LOG("found DDCI %d for pmt %d, running channels %d, max_channels %d", ddid,
@@ -578,9 +688,14 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
     LOG("DDCI %d: PMT %d %s on slot %d (+%d -%d pids), keeping ddci pids",
         d->id, pmt->id, update ? "update" : "add", pos, mapped, unmapped);
 
+    lock.unlock();
+    // update_pids stops PMTs via dvbca_del_pmt, taking ca_dev_lock;
+    // send_capmt nests this mutex under it, so release ours first.
     update_pids(ad->id);
-    update_pids(d->id);
+    // Loopback TAPs live on the DDCI adapter; hardware DDCI needs none.
+    update_pids(ddid);
     rv = TABLES_RESULT_OK;
+    lock.lock();
     dump_mapping_table();
 
     return rv;
@@ -607,17 +722,25 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
             ddci_device_t *d = get_ddci(i);
             if (!d)
                 continue;
-            std::lock_guard<SMutex> lock(d->mutex);
-            for (int j = 0; j < d->max_channels; j++)
-                if (d->pmt[j].id == pmt) {
-                    d->pmt[j].id = -1;
-                    if (d->channels > 0)
-                        d->channels--;
-                    // Same as the mapped path: new PAT/SDT, sent at once
-                    d->ver = (d->ver + 1) & 0xF;
-                    d->sdt_ver = (d->sdt_ver + 1) & 0xF;
-                    d->psi_changed = true;
-                }
+            int found = 0;
+            {
+                std::lock_guard<SMutex> lock(d->mutex);
+                for (int j = 0; j < d->max_channels; j++)
+                    if (d->pmt[j].id == pmt) {
+                        d->pmt[j].id = -1;
+                        if (d->channels > 0)
+                            d->channels--;
+                        // Same as the mapped path: new PAT/SDT, sent at once
+                        d->ver = (d->ver + 1) & 0xF;
+                        d->sdt_ver = (d->sdt_ver + 1) & 0xF;
+                        d->psi_changed = true;
+                        found = 1;
+                    }
+            }
+            // update_pids can take ca_dev_lock via dvbca_del_pmt,
+            // the reverse of send_capmt's nesting: run it unlocked.
+            if (found && opts.enigma)
+                update_pids(i);
         }
         return 0;
     }
@@ -625,7 +748,10 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
     if (!d)
         LOG_AND_RETURN(0, "%s: ddci %d already disabled", __FUNCTION__,
                        m->ddci);
-    std::lock_guard<SMutex> lock(d->mutex);
+    // Snapshot the mapping: update_pids below runs unlocked and a
+    // concurrent delete may erase the entry m points into.
+    int did = d->id, map_ddci = m->ddci, map_ddci_pid = m->ddci_pid;
+    std::unique_lock<SMutex> lock(d->mutex);
     // A removed service changes both PAT and SDT content, so both bump.
     d->ver = (d->ver + 1) & 0xF;
     d->sdt_ver = (d->sdt_ver + 1) & 0xF;
@@ -644,11 +770,13 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
         d->psi_changed = true;
     LOG("%s: deleting pmt id %d, sid %d (%X), pid %d, ddci %d, name %s, "
         "held a slot %d, running channels %d",
-        __FUNCTION__, spmt->id, spmt->sid, spmt->sid, m->ddci_pid, m->ddci,
+        __FUNCTION__, spmt->id, spmt->sid, spmt->sid, map_ddci_pid, map_ddci,
         spmt->name, was_registered, d->channels);
 
     del_pmt_mapping_table(d, ad->id, pmt);
-    update_pids(d->id);
+    lock.unlock();
+    update_pids(did);
+    lock.lock();
     dump_mapping_table();
     return 0;
 }
@@ -1134,14 +1262,231 @@ int push_ts_to_adapter(ddci_device_t *d, adapter *ad, uint16_t *mapping) {
         "fifo %jd",
         popped, i, ad->rlen, ad->lbuf,
         d->fifo.write_index - d->read_index[ad->id]);
+    // Popped bytes prove the CAM drains; log the first flow only.
+    if (popped > 0 && !d->last_tap_tick.load(std::memory_order_relaxed)) {
+        LOG("DDCI %d: tap flowing", d->id);
+        d->last_tap_tick.store(getTick(), std::memory_order_relaxed);
+    }
     return 0;
+}
+
+// Push loop: non-blocking writes move the fifo to the dvr,
+// EAGAIN waits 50ms and retries until stop or room.
+void ddci_push_loop(int id) {
+    ddci_device_t *d =
+        (id >= 0 && id < MAX_ADAPTERS) ? ddci_devices[id] : nullptr;
+    if (!d)
+        return;
+    uint8_t chunk[DDCI_PUSH_CHUNK];
+    for (;;) {
+        size_t n = 0;
+        {
+            std::unique_lock<std::mutex> lock(d->push_mutex);
+            d->push_cv.wait(lock, [&] {
+                return d->push_stop.load() || fifo_used(&d->push_backlog) > 0;
+            });
+            if (d->push_stop.load()) {
+                int64_t left =
+                    d->push_backlog.write_index - d->push_backlog.read_index;
+                if (d->push_shed_on_stop) {
+                    LOG("DDCI %d: push exit shedding %jd backlog bytes", d->id,
+                        (intmax_t)left);
+                    d->push_backlog.read_index = d->push_backlog.write_index;
+                } else {
+                    DEBUGM("DDCI %d: push paused with %jd backlog bytes", d->id,
+                           (intmax_t)left);
+                }
+                break;
+            }
+            int have = fifo_used(&d->push_backlog);
+            n = have > 0 ? (size_t)have : 0;
+            if (n > sizeof(chunk))
+                n = sizeof(chunk);
+            if (n > 0) {
+                void *p = NULL;
+                size_t first = fifo_peek(&d->push_backlog, &p, (unsigned)n, 0);
+                memcpy(chunk, p, first);
+                if (first < n) {
+                    void *q = NULL;
+                    size_t second = fifo_peek(&d->push_backlog, &q,
+                                              (unsigned)(n - first), first);
+                    memcpy(chunk + first, q, second);
+                    n = first + second;
+                }
+            }
+        }
+        if (n == 0)
+            continue;
+        adapter *ad = get_adapter_nw(id);
+        if (!ad || ad->fe < 0) {
+            // Device gone: keep the chunk, the kick reopens below.
+            if (d->push_stop.load())
+                break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            continue;
+        }
+        size_t off = 0;
+        bool fatal = false;
+        while (off < n && !d->push_stop.load()) {
+            struct iovec wio = {chunk + off, n - off};
+            ssize_t w = writev(ad->fe, &wio, 1);
+            if (w > 0)
+                off += (size_t)w;
+            else if (w < 0 && errno == EINTR)
+                continue;
+            else if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+                // Playpump full: brief sleep, retry; XPT reclaim frees room.
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                continue;
+            } else {
+                // Stopped: the kick closed the fd, the chunk stays queued.
+                if (!d->push_stop.load())
+                    LOG("DDCI %d: push write %s, wrote %jd of %jd", d->id,
+                        w == 0 ? "zero" : strerror(errno), (intmax_t)off,
+                        (intmax_t)n);
+                fatal = !d->push_stop.load();
+                break;
+            }
+        }
+        if (off > 0)
+            d->last_push_write.store(getTick(), std::memory_order_relaxed);
+        // Consume only written bytes; the rest stays queued.
+        {
+            std::lock_guard<std::mutex> lock(d->push_mutex);
+            fifo_skip_bytes(&d->push_backlog, (uint32_t)off);
+        }
+        // Fatal error: exit, the kick backstop reopens and restarts.
+        if (fatal)
+            break;
+        // Token bucket: pace the drain, never exceed the rate.
+        auto now = std::chrono::steady_clock::now();
+        int64_t ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                         now - d->push_last)
+                         .count();
+        d->push_last = now;
+        d->push_tokens += ms * (DDCI_PUSH_RATE_BPS / 1000);
+        if (d->push_tokens > DDCI_PUSH_BURST)
+            d->push_tokens = DDCI_PUSH_BURST;
+        d->push_tokens -= (int64_t)n;
+        while (d->push_tokens < 0 && !d->push_stop.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            d->push_tokens += DDCI_PUSH_RATE_BPS / 1000;
+        }
+    }
+    d->push_running.store(false);
+    DEBUGM("DDCI %d: push loop exited", d->id);
+}
+
+// Starts the push thread once; the queue feeds it.
+void ddci_push_start(ddci_device_t *d) {
+    if (!d || d->push_running.exchange(true))
+        return;
+    d->push_stop.store(false);
+    d->last_push_write.store(getTick(), std::memory_order_relaxed);
+    d->push_tokens = DDCI_PUSH_BURST;
+    d->push_last = std::chrono::steady_clock::now();
+    d->push_thread = std::thread(ddci_push_loop, d->id);
+}
+
+// Micro-kick: close/open re-primes a dead CAM pull, backlog kept.
+void ddci_push_kick(adapter *ad, ddci_device_t *d) {
+    if (!ad || !d || !ddci_is_loopback(d->id))
+        return;
+    {
+        std::lock_guard<std::mutex> lock(d->push_mutex);
+        d->push_shed_on_stop = false;
+        d->push_stop.store(true);
+    }
+    d->push_cv.notify_one();
+    // Close first: the writer's next write fails, so it exits.
+    if (ad->fe >= 0) {
+        close(ad->fe);
+        ad->fe = -1;
+    }
+    if (d->push_thread.joinable())
+        d->push_thread.join();
+    {
+        std::lock_guard<std::mutex> lock(d->push_mutex);
+        LOG("DDCI %d: kick totals pushed=%jd tapped=%jd tick=%jd", d->id,
+            (intmax_t)d->push_backlog.write_index,
+            (intmax_t)d->fifo.write_index, (intmax_t)getTick());
+        d->push_shed_on_stop = true;
+    }
+    char buf[100];
+    snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/dvr%d", ad->pa, ad->fn);
+    int fd = open(buf, O_WRONLY | O_CLOEXEC);
+    if (fd < 0) {
+        LOG("could not reopen %s: %s", buf, strerror(errno));
+        return;
+    }
+    ad->fe = fd;
+    ddci_enigma_route_pvr(d);
+    ddci_push_start(d);
+    LOG("kicked push dvr %s fd:%d", buf, fd);
+}
+
+// Stops the push thread, shedding the backlog; safe to call twice.
+void ddci_push_stop(ddci_device_t *d) {
+    if (!d)
+        return;
+    // Set stop under the mutex: an unlocked store can land
+    // between the waiter check and block, losing the wakeup.
+    {
+        std::lock_guard<std::mutex> lock(d->push_mutex);
+        d->push_stop.store(true);
+    }
+    d->push_cv.notify_one();
+    // Close first: the writer's next write fails, so it exits.
+    adapter *ad = get_adapter_nw(d->id);
+    if (ad && ad->fe >= 0) {
+        close(ad->fe);
+        ad->fe = -1;
+    }
+    if (d->push_thread.joinable())
+        d->push_thread.join();
+}
+
+// Queues fresh PSI first, then TS; a full ring sheds oldest.
+size_t ddci_push_queue(ddci_device_t *d, uint8_t *psi, size_t psi_len,
+                       struct iovec *io, int iop) {
+    size_t queued = 0;
+    {
+        std::lock_guard<std::mutex> lock(d->push_mutex);
+        if (psi && psi_len > 0)
+            queued += (size_t)fifo_push_force(&d->push_backlog, psi,
+                                              (unsigned)psi_len, 1);
+        for (int k = 0; k < iop; k++)
+            queued += (size_t)fifo_push_force(&d->push_backlog, io[k].iov_base,
+                                              (unsigned)io[k].iov_len, 1);
+        // Overwrites land past the ring: drop oldest so used stays in size.
+        SFIFO *f = &d->push_backlog;
+        if (f->write_index - f->read_index > f->size) {
+            LOG("DDCI %d: push ring full, dropped %jd oldest bytes", d->id,
+                f->write_index - f->size - f->read_index);
+            f->read_index = f->write_index - f->size;
+        }
+        d->push_cv.notify_one();
+    }
+    // Micro-kick: re-prime a dead CAM pull without shedding.
+    int64_t now = getTick();
+    size_t backlog;
+    {
+        std::lock_guard<std::mutex> lock(d->push_mutex);
+        backlog =
+            (size_t)(d->push_backlog.write_index - d->push_backlog.read_index);
+    }
+    int64_t stall = now - d->last_push_write.load(std::memory_order_relaxed);
+    if (ddci_kick_due(stall, backlog, now - d->last_kick)) {
+        d->last_kick = now;
+        ddci_push_kick(get_adapter_nw(d->id), d);
+    }
+    return queued;
 }
 
 int ddci_process_ts(adapter *ad, ddci_device_t *d) {
     unsigned char *b;
-    adapter *ad2 = get_adapter(d->id);
     int rlen = ad->rlen;
-    int bytes = 0, ec = 0;
+    int ec = 0;
     int iop = 0, iomax = ad->rlen / 188 + 100;
     int pid, dpid, i;
     struct iovec io[iomax];
@@ -1154,9 +1499,6 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
         return 0;
     }
 
-    if (!ad2) {
-        return 0;
-    }
     // step 0 - create ad_dd_pid and dd_ad_pid mapping
     memset(ad_dd_pids, 0, sizeof(ad_dd_pids));
     memset(dd_ad_pids, 0, sizeof(dd_ad_pids));
@@ -1199,43 +1541,24 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
             io[iop].iov_base = b;
             io[iop++].iov_len = DVB_FRAME;
         }
-        bytes += 188;
         DEBUGM("pos %d of %d, mapping pid %d to %d, buf pos %d", iop - 1,
                rlen / 188, pid, dpid, i / 188);
     }
-    // write the TS to the DDCI handle
+    // Queue PSI first, then TS; the FPGA tail stays last (#1437).
+    // The push thread drains the fifo to the dvr from here.
     if (iop > 0) {
         int psi_len = ddci_add_psi(d, psi, sizeof(psi) - 1, ad);
         hexdump("PSI -> ", psi, psi_len);
-        if (psi_len > 0) {
-            io[iop].iov_base = psi;
-            io[iop].iov_len = psi_len;
-            bytes += io[iop].iov_len;
-            iop++;
+        if (!d->loopback) {
+            memset(null_tail, 0xFF, sizeof(null_tail));
+            null_tail[0] = 0x47;
+            null_tail[1] = 0x1F;
+            null_tail[2] = 0xFF;
+            null_tail[3] = 0x10;
+            io[iop].iov_base = null_tail;
+            io[iop++].iov_len = DVB_FRAME;
         }
-
-        // End every write with a null packet: the FPGA reads with 128 byte
-        // granularity, so it takes the torn tail instead of a real one (#1437).
-        memset(null_tail, 0xFF, sizeof(null_tail));
-        null_tail[0] = 0x47;
-        null_tail[1] = 0x1F;
-        null_tail[2] = 0xFF;
-        null_tail[3] = 0x10;
-        io[iop].iov_base = null_tail;
-        io[iop].iov_len = DVB_FRAME;
-        bytes += DVB_FRAME;
-        iop++;
-
-        DEBUGM("writing %d bytes to DDCI device %d, fd %d, sock %d", bytes,
-               d->id, ad2->fe, ad2->fe_sock);
-        int rb = writev(ad2->fe, io, iop);
-        if (rb != bytes)
-            LOG("%s: write incomplete to DDCI %d,fd %d, wrote %d out of %d "
-                "(iop %d%s), "
-                "errno "
-                "%d: %s",
-                __FUNCTION__, ad2->id, ad2->fe, rb, bytes, iop,
-                iop > 1024 ? " > IOV_MAX" : "", errno, strerror(errno));
+        ddci_push_queue(d, psi, (size_t)psi_len, io, iop);
     }
     // mark the written TS packets as 8191 (0x1FFF)
     for (i = 0; i < iop; i++) {
@@ -1277,12 +1600,36 @@ void ddci_init() // you can search the devices here and fill the ddci_devices,
     ddci_id = add_ca(&ddci);
     LOG("Registered DDCI CA %d", ddci_id);
 }
+
 int ddci_set_pid(adapter *ad, int pid) {
+#ifndef DISABLE_LINUXDVB
+    // Loopback reads the real DVR; hardware DDCI needs no demux filters.
+    if (opts.enigma && ddci_is_loopback(ad->id)) {
+        // Idle -> active: shed the previous tune's backlog so the
+        // fresh tune starts clean.
+        if (ad->active_demux_pids <= 0) {
+            if (ddci_device_t *dd = get_ddci(ad->id)) {
+                std::lock_guard<std::mutex> lock(dd->push_mutex);
+                dd->push_backlog.read_index = dd->push_backlog.write_index;
+            }
+        }
+        int rc = dvb_demux_set_pid(ad, pid);
+        LOGM("%s: loopback %d add pid %d -> %d", __FUNCTION__, ad->id, pid, rc);
+        return rc;
+    }
+#endif
     LOGM("%s: ddci %d add pid %d", __FUNCTION__, ad->id, pid);
     return 100;
 }
 
 int ddci_del_filters(adapter *ad, int fd, int pid) {
+#ifndef DISABLE_LINUXDVB
+    if (opts.enigma && ddci_is_loopback(ad->id)) {
+        int rc = dvb_demux_del_filters(ad, fd, pid);
+        LOGM("%s: loopback %d del pid %d -> %d", __FUNCTION__, ad->id, pid, rc);
+        return rc;
+    }
+#endif
     LOGM("%s: ddci %d del pid %d", __FUNCTION__, ad->id, pid);
     return 0;
 }
@@ -1327,6 +1674,9 @@ int ddci_post_init(adapter *ad) {
         s->action = (socket_action)ddci_read_sec_data;
     if (ad->fe_sock >= 0)
         set_socket_thread(ad->fe_sock, get_socket_thread(ad->sock));
+    // Post CA init: the CI slot is bound, so PVR routes the right input.
+    if (opts.enigma && ddci_is_loopback(ad->id))
+        ddci_enigma_route_pvr(d);
     post_tune(ad);
     if (ddci_id < 0)
         ddci_init();
@@ -1338,9 +1688,73 @@ ddci_device_t *ddci_alloc(int id) {
 
     d = ddci_devices[id] = new ddci_device_t();
     create_fifo(&d->fifo, DDCI_BUFFER);
+    create_fifo(&d->push_backlog, DDCI_PUSH_BACKLOG_MAX);
     d->id = id;
+    d->ci_slot = -1;
     return d;
 }
+
+#ifndef DISABLE_LINUXDVB
+// Loopback open: push to the paired dvr, read TS back from it.
+// Demux and dvr always share the index on both models.
+static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
+    char buf[100];
+    int dvr_offset = ddci_dvr_source_offset();
+    ad->dmx_source = dvr_offset;
+    int push_dvr = ad->fn;
+    snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/dvr%d", ad->pa, push_dvr);
+    // The driver never blocks (O_NONBLOCK ignored): a full
+    // playpump returns EAGAIN, retried in the push loop below.
+    int write_fd = open(buf, O_WRONLY | O_CLOEXEC);
+    if (write_fd < 0)
+        LOG_AND_RETURN(1, "could not open %s: %s", buf, strerror(errno));
+    // Read TS from the DVR like live adapters; the demux device only
+    // trickles TS on drivers without demux-level TS output.
+    int use_demux = opts.use_demux_device == USE_DEMUX ||
+                    opts.use_demux_device == USE_PES_FILTERS_AND_DEMUX;
+    if (use_demux)
+        snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/demux%d", ad->pa,
+                 ad->fn);
+    else
+        snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/dvr%d", ad->pa, ad->fn);
+    int read_fd =
+        open(buf, use_demux ? O_RDWR | O_NONBLOCK : O_RDONLY | O_NONBLOCK);
+    if (read_fd < 0) {
+        close(write_fd);
+        LOG_AND_RETURN(1, "could not open %s: %s", buf, strerror(errno));
+    }
+    if (ioctl(read_fd, DMX_SET_BUFFER_SIZE, opts.dvr_buffer) < 0)
+        LOG("couldn't set DVR buffer size error %d: %s", errno, strerror(errno))
+    else
+        LOG("DVR buffer set to %d bytes", opts.dvr_buffer);
+    dvb_set_demux_source(ad);
+
+    std::lock_guard<SMutex> lock(d->mutex);
+    ad->fe = write_fd;
+    ad->fe_sock = -1;
+    ad->dvr = read_fd;
+    ad->type = ADAPTER_CI;
+    ad->dmx = -1;
+    ad->sys[0] = (fe_delivery_system_t)0;
+    ad->adapter_timeout = 0;
+    ad->active_demux_pids = 0;
+    memset(d->pmt, -1, sizeof(d->pmt));
+    d->max_channels = MAX_CHANNELS_ON_CI;
+    d->channels = 0;
+    d->loopback = 1;
+    memset(d->read_index, 0, sizeof(d->read_index));
+    d->last_pat = 0;
+    d->psi_changed = false;
+    d->tid = d->ver = d->sdt_ver = d->sdt_data_mask = 0;
+    d->push_backlog.read_index = d->push_backlog.write_index;
+    d->enabled = 1;
+    ad->enabled = 1;
+    LOG("opened enigma loopback %d push dvr%d fd:%d read fd:%d source:%d",
+        ad->id, push_dvr, ad->fe, ad->dvr, ad->dmx_source);
+    ddci_push_start(d);
+    return 0;
+}
+#endif
 
 int ddci_open_device(adapter *ad) {
     char buf[100];
@@ -1349,6 +1763,12 @@ int ddci_open_device(adapter *ad) {
     if (!d && !(d = ddci_alloc(ad->id))) {
         return -1;
     }
+#ifndef DISABLE_LINUXDVB
+    // Only the flagged loopback diverts; hardware DDCI opens below.
+    // get_ddci needs enabled, unset this early, so read the flag direct.
+    if (opts.enigma && d && d->loopback)
+        return ddci_open_enigma(ad, d);
+#endif
     LOG("DDCI opening [%d] adapter %d and frontend %d", ad->id, ad->pa, ad->fn);
     sprintf(buf, "/dev/dvb/adapter%d/sec%d", ad->pa, ad->fn);
 #ifndef DDCI_TEST
@@ -1378,9 +1798,7 @@ int ddci_open_device(adapter *ad) {
     int err;
     if ((err = set_linux_socket_nonblock(read_fd)))
         LOG("Failed to set socket %d nonblocking: %d", write_fd, err);
-
-    if ((err = set_linux_socket_nonblock(write_fd)))
-        LOG("Failed to set socket %d nonblocking: %d", write_fd, err);
+    // write_fd stays blocking: the push thread writes in a loop.
 #else
     int fd[2];
     if (pipe(fd) == -1) {
@@ -1411,9 +1829,11 @@ int ddci_open_device(adapter *ad) {
     d->last_pat = 0;
     d->psi_changed = false;
     d->tid = d->ver = d->sdt_ver = d->sdt_data_mask = 0;
+    d->push_backlog.read_index = d->push_backlog.write_index;
     d->enabled = 1;
     ad->enabled = 1;
     LOG("opened DDCI adapter %d fe:%d dvr:%d", ad->id, ad->fe, ad->dvr);
+    ddci_push_start(d);
 
     return 0;
 }
@@ -1613,8 +2033,108 @@ void ddci_free(adapter *ad) {
     ddci_device_t *d = ddci_devices[ad->id];
     if (!d)
         return;
+    ddci_push_stop(d);
     save_channels();
 }
+
+#ifndef DISABLE_LINUXDVB
+// First slot without an adapter that -e did not disable; -1 if none.
+int ddci_pick_free_slot() {
+    for (int i = 0; i < MAX_ADAPTERS; i++)
+        if ((!a[i] || a[i]->type == 0) && !is_adapter_disabled(i))
+            return i;
+    return -1;
+}
+
+// One loopback on the highest free demux, in the first free enabled slot.
+// False when no slot or demux is left for another loopback.
+static bool ddci_add_one_enigma_loopback(int slot) {
+    int id = ddci_pick_free_slot();
+    if (id < 0) {
+        LOG("no free enabled adapter slot for the enigma loopback, extend -e");
+        return false;
+    }
+    int used[MAX_ADAPTERS], nused = 0;
+    for (int i = 0; i < MAX_ADAPTERS && nused < MAX_ADAPTERS; i++)
+        if (i != id && a[i] && !is_adapter_disabled(i) && a[i]->pa == 0 &&
+            a[i]->fn >= 0)
+            used[nused++] = a[i]->fn;
+    int demux[64], ndemux = 0, dvr[64], ndvr = 0, fe[64], nfe = 0;
+    char buf[100];
+    for (int fn = 0; fn < 64; fn++) {
+        snprintf(buf, sizeof(buf), "/dev/dvb/adapter0/demux%d", fn);
+        if (!access(buf, R_OK))
+            demux[ndemux++] = fn;
+        snprintf(buf, sizeof(buf), "/dev/dvb/adapter0/dvr%d", fn);
+        if (!access(buf, R_OK | W_OK))
+            dvr[ndvr++] = fn;
+        snprintf(buf, sizeof(buf), "/dev/dvb/adapter0/frontend%d", fn);
+        if (!access(buf, R_OK))
+            fe[nfe++] = fn;
+    }
+    // Last pair with no frontend behind it; as loopbacks claim
+    // pairs, later devices fall to the previous eligible one.
+    int fn =
+        ddci_pick_free_pair(demux, ndemux, dvr, ndvr, fe, nfe, used, nused);
+    if (fn < 0) {
+        LOG("no free demux/dvr pair for the enigma loopback");
+        return false;
+    }
+    if (!a[id])
+        a[id] = adapter_alloc();
+
+    adapter *ad = a[id];
+    ad->pa = 0;
+    ad->fn = fn;
+    ad->open = ddci_open_device;
+    ad->commit = NULL;
+    ad->tune = NULL;
+    ad->delsys = ddci_delsys;
+    ad->name = ddci_name;
+    ad->post_init = ddci_post_init;
+    ad->close = ddci_close_adapter;
+    ad->get_signal = NULL;
+    ad->set_pid = ddci_set_pid;
+    ad->del_filters = ddci_del_filters;
+    ad->type = ADAPTER_CI;
+    ad->drop_encrypted = 0;
+    ad->free = ddci_free;
+    ddci_device_t *dd = ddci_devices[id];
+    if (!dd)
+        dd = ddci_alloc(id);
+    if (dd) {
+        dd->loopback = 1;
+        // Claim slot once here; later readers use the stored slot.
+        // Pair N binds ciN, falling back to any free CI when missing.
+        dd->ci_slot = -1;
+        for (int k = 0; k < MAX_VU_CI_SLOTS && dd->ci_slot < 0; k++) {
+            int c = (slot + k) % MAX_VU_CI_SLOTS;
+            if (ddci_loopback_owns_slot(c))
+                continue;
+            snprintf(buf, sizeof(buf), "/dev/ci%d", c);
+            if (!access(buf, R_OK | W_OK))
+                dd->ci_slot = c;
+        }
+    }
+    load_channels();
+    LOG("enigma loopback adapter %d on demux %d", id, fn);
+
+    if (id + 1 > a_count)
+        a_count = id + 1;
+    return true;
+}
+
+// Up to one loopback per CI slot; stops at the first shortage.
+static void ddci_add_enigma_loopback() {
+    if (!opts.enigma_loopback) {
+        LOG("enigma loopback disabled, pass --enigma-loopback to enable");
+        return;
+    }
+    for (int n = 0; n < MAX_VU_CI_SLOTS; n++)
+        if (!ddci_add_one_enigma_loopback(n))
+            break;
+}
+#endif
 
 void find_ddci_adapter() {
     int na = -1;
@@ -1689,4 +2209,9 @@ void find_ddci_adapter() {
     for (; na < MAX_ADAPTERS; na++)
         if (a[na])
             a[na]->pa = a[na]->fn = -1;
+#ifndef DISABLE_LINUXDVB
+    // Last: the sweep above must not see the loopback as a stale entry.
+    if (opts.enigma)
+        ddci_add_enigma_loopback();
+#endif
 }
