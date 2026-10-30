@@ -1355,9 +1355,19 @@ void ddci_push_loop(int id) {
             std::lock_guard<std::mutex> lock(d->push_mutex);
             fifo_skip_bytes(&d->push_backlog, (uint32_t)off);
         }
-        // Fatal error: exit, the kick backstop reopens and restarts.
-        if (fatal)
+        // Fatal error: loopback exits for the kick to restart
+        // it; hardware pauses and retries, it has no backstop.
+        if (fatal) {
+            if (!d->loopback) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                continue;
+            }
             break;
+        }
+        // Loopback-only pacing: the enigma playpump deadlocks past
+        // 2MB/s; hardware DDCI drains at the card's own rate.
+        if (!d->loopback)
+            continue;
         // Token bucket: pace the drain, never exceed the rate.
         auto now = std::chrono::steady_clock::now();
         int64_t ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -1467,18 +1477,23 @@ size_t ddci_push_queue(ddci_device_t *d, uint8_t *psi, size_t psi_len,
         }
         d->push_cv.notify_one();
     }
-    // Micro-kick: re-prime a dead CAM pull without shedding.
-    int64_t now = getTick();
-    size_t backlog;
-    {
-        std::lock_guard<std::mutex> lock(d->push_mutex);
-        backlog =
-            (size_t)(d->push_backlog.write_index - d->push_backlog.read_index);
-    }
-    int64_t stall = now - d->last_push_write.load(std::memory_order_relaxed);
-    if (ddci_kick_due(stall, backlog, now - d->last_kick)) {
-        d->last_kick = now;
-        ddci_push_kick(get_adapter_nw(d->id), d);
+    // Loopback-only watchdog: only the enigma playpump needs
+    // priming; hardware DDCI has no latch to re-prime.
+    if (d->loopback) {
+        // Micro-kick: re-prime a dead CAM pull without shedding.
+        int64_t now = getTick();
+        size_t backlog;
+        {
+            std::lock_guard<std::mutex> lock(d->push_mutex);
+            backlog = (size_t)(d->push_backlog.write_index -
+                               d->push_backlog.read_index);
+        }
+        int64_t stall =
+            now - d->last_push_write.load(std::memory_order_relaxed);
+        if (ddci_kick_due(stall, backlog, now - d->last_kick)) {
+            d->last_kick = now;
+            ddci_push_kick(get_adapter_nw(d->id), d);
+        }
     }
     return queued;
 }
