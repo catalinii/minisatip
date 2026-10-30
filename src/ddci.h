@@ -19,14 +19,23 @@
 
 #define DDCI_BUFFER (20000 * 188)
 
-// Push ring bytes; a full ring overwrites the oldest.
-#define DDCI_PUSH_BACKLOG_MAX (3 * 1024 * 1024)
+// Push ring bytes; absorbs input while kicks re-prime a dead pull.
+#define DDCI_PUSH_BACKLOG_MAX (12 * 1024 * 1024)
 
 // Max bytes pushed per call; bigger bursts wedge this driver.
 #define DDCI_PUSH_CHUNK (4 * 1024)
-// Ring full this long with no byte written: the CAM stopped
-// draining, reopen the push dvr to shed the stale driver data.
-#define DDCI_PUSH_WEDGE_MS 3000
+// Micro-kick backstop: the blocking writer rides out pauses;
+// a stall this long means a dead pull, re-prime it via close/open.
+#define DDCI_KICK_STALL_MS 10000
+#define DDCI_KICK_BACKLOG (256 * 1024)
+#define DDCI_KICK_MIN_MS 500
+// Kick when the writer stalls or the backlog outruns the drain,
+// at most one kick per DDCI_KICK_MIN_MS.
+inline bool ddci_kick_due(int64_t stall_ms, size_t backlog,
+                          int64_t since_kick_ms) {
+    return since_kick_ms > DDCI_KICK_MIN_MS &&
+           (stall_ms > DDCI_KICK_STALL_MS || backlog > DDCI_KICK_BACKLOG);
+}
 // Drain cap: the demux path wedges above this; the CAM is faster.
 #define DDCI_PUSH_RATE_BPS (2 * 1024 * 1024)
 #define DDCI_PUSH_BURST (8 * 1024)
@@ -89,9 +98,13 @@ typedef struct ddci_device {
     std::atomic<bool> push_stop{false};
     std::atomic<bool> push_running{false};
     std::atomic<int64_t> last_push_write{0};
+    std::atomic<int64_t> last_tap_tick{0};
     // Token bucket, push thread only: smooths the drain rate.
     int64_t push_tokens{0};
     std::chrono::steady_clock::time_point push_last;
+    // Micro-kick clock, adapter thread only; stop sheds unless kicking.
+    int64_t last_kick{0};
+    bool push_shed_on_stop{true};
     std::unordered_map<int, ddci_mapping_table_t> mapping;
     std::unordered_set<int> emm_pids; // MAKE_KEY(ad,pid), never swept
     SFIFO fifo;
@@ -120,9 +133,8 @@ void ddci_push_loop(int id);
 void ddci_push_start(ddci_device_t *d);
 // Stops the push thread, shedding the backlog; safe to call twice.
 void ddci_push_stop(ddci_device_t *d);
-// Reopens the push dvr: the Stop/Start restarts the CAM pull,
-// which is what drains the stuck buffer; close is the only reset.
-void ddci_push_reopen(adapter *ad, ddci_device_t *d);
+// Micro-kick: close/open re-primes a dead CAM pull, backlog kept.
+void ddci_push_kick(adapter *ad, ddci_device_t *d);
 // Queues fresh PSI first, then TS; a full ring sheds oldest.
 size_t ddci_push_queue(ddci_device_t *d, uint8_t *psi, size_t psi_len,
                        struct iovec *io, int iop);

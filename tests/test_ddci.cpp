@@ -2323,6 +2323,18 @@ int test_ddci_push_fpga() {
     return 0;
 }
 
+int test_ddci_push_kick_due() {
+    ASSERT(!ddci_kick_due(0, 0, 600), "healthy writer is not kicked");
+    ASSERT(!ddci_kick_due(10001, 0, 500), "kick inside the min interval waits");
+    ASSERT(ddci_kick_due(10001, 0, 501), "stalled writer is kicked");
+    ASSERT(!ddci_kick_due(10000, 0, 501),
+           "stall at the boundary is not kicked");
+    ASSERT(ddci_kick_due(0, 256 * 1024 + 1, 501), "runaway backlog is kicked");
+    ASSERT(!ddci_kick_due(0, 256 * 1024, 501),
+           "backlog at the boundary is not kicked");
+    return 0;
+}
+
 int main() {
     opts.log = 65535 ^ LOG_LOCK ^ LOG_UTILS;
     opts.debug = 0;
@@ -2380,6 +2392,7 @@ int main() {
               "testing push EAGAIN retries after a drain");
     TEST_FUNC(test_ddci_push_stop_sheds_stall(),
               "testing push stop sheds a stall");
+    TEST_FUNC(test_ddci_push_kick_due(), "testing push micro-kick trigger");
     TEST_FUNC(test_ddci_push_fpga(), "testing fpga push queue and drain");
     TEST_FUNC(test_capmt_lists_pmt_pids(),
               "testing CAPMT lists PMT pids verbatim");

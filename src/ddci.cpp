@@ -1262,6 +1262,11 @@ int push_ts_to_adapter(ddci_device_t *d, adapter *ad, uint16_t *mapping) {
         "fifo %jd",
         popped, i, ad->rlen, ad->lbuf,
         d->fifo.write_index - d->read_index[ad->id]);
+    // Popped bytes prove the CAM drains; log the first flow only.
+    if (popped > 0 && !d->last_tap_tick.load(std::memory_order_relaxed)) {
+        LOG("DDCI %d: tap flowing", d->id);
+        d->last_tap_tick.store(getTick(), std::memory_order_relaxed);
+    }
     return 0;
 }
 
@@ -1281,10 +1286,16 @@ void ddci_push_loop(int id) {
                 return d->push_stop.load() || fifo_used(&d->push_backlog) > 0;
             });
             if (d->push_stop.load()) {
-                LOG("DDCI %d: push exit shedding %jd backlog bytes", d->id,
-                    (intmax_t)(d->push_backlog.write_index -
-                               d->push_backlog.read_index));
-                d->push_backlog.read_index = d->push_backlog.write_index;
+                int64_t left =
+                    d->push_backlog.write_index - d->push_backlog.read_index;
+                if (d->push_shed_on_stop) {
+                    LOG("DDCI %d: push exit shedding %jd backlog bytes", d->id,
+                        (intmax_t)left);
+                    d->push_backlog.read_index = d->push_backlog.write_index;
+                } else {
+                    DEBUGM("DDCI %d: push paused with %jd backlog bytes", d->id,
+                           (intmax_t)left);
+                }
                 break;
             }
             int have = fifo_used(&d->push_backlog);
@@ -1308,12 +1319,14 @@ void ddci_push_loop(int id) {
             continue;
         adapter *ad = get_adapter_nw(id);
         if (!ad || ad->fe < 0) {
-            // Device gone: shed the chunk.
-            std::lock_guard<std::mutex> lock(d->push_mutex);
-            fifo_skip_bytes(&d->push_backlog, (uint32_t)n);
+            // Device gone: keep the chunk, the kick reopens below.
+            if (d->push_stop.load())
+                break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
             continue;
         }
         size_t off = 0;
+        bool fatal = false;
         while (off < n && !d->push_stop.load()) {
             struct iovec wio = {chunk + off, n - off};
             ssize_t w = writev(ad->fe, &wio, 1);
@@ -1322,22 +1335,29 @@ void ddci_push_loop(int id) {
             else if (w < 0 && errno == EINTR)
                 continue;
             else if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-                // No POLLOUT on these drivers, so the poll is just
-                // a bounded sleep; stop is rechecked after it.
-                struct pollfd pfd = {ad->fe, POLLOUT, 0};
-                poll(&pfd, 1, 50);
+                // Blocking fd: EAGAIN is unexpected; brief sleep, retry.
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 continue;
             } else {
-                LOG("DDCI %d: push write %s, shedding %jd bytes", d->id,
-                    w == 0 ? "zero" : strerror(errno), (intmax_t)(n - off));
+                // Stopped: the kick closed the fd, the chunk stays queued.
+                if (!d->push_stop.load())
+                    LOG("DDCI %d: push write %s, wrote %jd of %jd", d->id,
+                        w == 0 ? "zero" : strerror(errno), (intmax_t)off,
+                        (intmax_t)n);
+                fatal = !d->push_stop.load();
                 break;
             }
         }
         if (off > 0)
             d->last_push_write.store(getTick(), std::memory_order_relaxed);
-        // Written bytes are consumed; the rest sheds on stop or error.
-        std::lock_guard<std::mutex> lock(d->push_mutex);
-        fifo_skip_bytes(&d->push_backlog, (uint32_t)n);
+        // Consume only written bytes; the rest stays queued.
+        {
+            std::lock_guard<std::mutex> lock(d->push_mutex);
+            fifo_skip_bytes(&d->push_backlog, (uint32_t)off);
+        }
+        // Fatal error: exit, the kick backstop reopens and restarts.
+        if (fatal)
+            break;
         // Token bucket: pace the drain, never exceed the rate.
         auto now = std::chrono::steady_clock::now();
         int64_t ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -1368,16 +1388,17 @@ void ddci_push_start(ddci_device_t *d) {
     d->push_thread = std::thread(ddci_push_loop, d->id);
 }
 
-// Reopens the push dvr: the Stop/Start restarts the CAM pull,
-// which is what drains the stuck buffer; close is the only reset.
-void ddci_push_reopen(adapter *ad, ddci_device_t *d) {
+// Micro-kick: close/open re-primes a dead CAM pull, backlog kept.
+void ddci_push_kick(adapter *ad, ddci_device_t *d) {
     if (!ad || !d || !ddci_is_loopback(d->id))
         return;
     {
         std::lock_guard<std::mutex> lock(d->push_mutex);
+        d->push_shed_on_stop = false;
         d->push_stop.store(true);
     }
     d->push_cv.notify_one();
+    // Close first: unblocks a writer stuck in a blocking write.
     if (ad->fe >= 0) {
         close(ad->fe);
         ad->fe = -1;
@@ -1386,13 +1407,14 @@ void ddci_push_reopen(adapter *ad, ddci_device_t *d) {
         d->push_thread.join();
     {
         std::lock_guard<std::mutex> lock(d->push_mutex);
-        LOG("DDCI %d: reopen totals pushed=%jd tapped=%jd tick=%jd", d->id,
+        LOG("DDCI %d: kick totals pushed=%jd tapped=%jd tick=%jd", d->id,
             (intmax_t)d->push_backlog.write_index,
             (intmax_t)d->fifo.write_index, (intmax_t)getTick());
+        d->push_shed_on_stop = true;
     }
     char buf[100];
     snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/dvr%d", ad->pa, ad->fn);
-    int fd = open(buf, O_WRONLY | O_NONBLOCK | O_CLOEXEC);
+    int fd = open(buf, O_WRONLY | O_CLOEXEC);
     if (fd < 0) {
         LOG("could not reopen %s: %s", buf, strerror(errno));
         return;
@@ -1400,7 +1422,7 @@ void ddci_push_reopen(adapter *ad, ddci_device_t *d) {
     ad->fe = fd;
     ddci_enigma_route_pvr(d);
     ddci_push_start(d);
-    LOG("reopened push dvr %s fd:%d", buf, fd);
+    LOG("kicked push dvr %s fd:%d", buf, fd);
 }
 
 // Stops the push thread, shedding the backlog; safe to call twice.
@@ -1414,6 +1436,12 @@ void ddci_push_stop(ddci_device_t *d) {
         d->push_stop.store(true);
     }
     d->push_cv.notify_one();
+    // Close first: unblocks a writer stuck in a blocking write.
+    adapter *ad = get_adapter_nw(d->id);
+    if (ad && ad->fe >= 0) {
+        close(ad->fe);
+        ad->fe = -1;
+    }
     if (d->push_thread.joinable())
         d->push_thread.join();
 }
@@ -1421,7 +1449,6 @@ void ddci_push_stop(ddci_device_t *d) {
 // Queues fresh PSI first, then TS; a full ring sheds oldest.
 size_t ddci_push_queue(ddci_device_t *d, uint8_t *psi, size_t psi_len,
                        struct iovec *io, int iop) {
-    bool wedge = false;
     size_t queued = 0;
     {
         std::lock_guard<std::mutex> lock(d->push_mutex);
@@ -1437,20 +1464,22 @@ size_t ddci_push_queue(ddci_device_t *d, uint8_t *psi, size_t psi_len,
             LOG("DDCI %d: push ring full, dropped %jd oldest bytes", d->id,
                 f->write_index - f->size - f->read_index);
             f->read_index = f->write_index - f->size;
-            wedge =
-                getTick() - d->last_push_write.load(std::memory_order_relaxed) >
-                DDCI_PUSH_WEDGE_MS;
         }
         d->push_cv.notify_one();
     }
-    // Early watchdog: a 1s stall means the CAM pull stopped, reopen
-    // before the hang, whether or not the ring is full.
-    if (!wedge &&
-        getTick() - d->last_push_write.load(std::memory_order_relaxed) > 1000)
-        wedge = true;
-    // Wedged writer, not slow drain: reopen outside the lock.
-    if (wedge)
-        ddci_push_reopen(get_adapter_nw(d->id), d);
+    // Micro-kick: re-prime a dead CAM pull without shedding.
+    int64_t now = getTick();
+    size_t backlog;
+    {
+        std::lock_guard<std::mutex> lock(d->push_mutex);
+        backlog =
+            (size_t)(d->push_backlog.write_index - d->push_backlog.read_index);
+    }
+    int64_t stall = now - d->last_push_write.load(std::memory_order_relaxed);
+    if (ddci_kick_due(stall, backlog, now - d->last_kick)) {
+        d->last_kick = now;
+        ddci_push_kick(get_adapter_nw(d->id), d);
+    }
     return queued;
 }
 
@@ -1674,8 +1703,9 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
     ad->dmx_source = dvr_offset;
     int push_dvr = ad->fn;
     snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/dvr%d", ad->pa, push_dvr);
-    // Non-blocking: EAGAIN waits below, the wedge detector reopens.
-    int write_fd = open(buf, O_WRONLY | O_NONBLOCK | O_CLOEXEC);
+    // Blocking like enigma: the writer waits in-kernel for room,
+    // which is what keeps the driver pull engaged.
+    int write_fd = open(buf, O_WRONLY | O_CLOEXEC);
     if (write_fd < 0)
         LOG_AND_RETURN(1, "could not open %s: %s", buf, strerror(errno));
     // Read TS from the DVR like live adapters; the demux device only
