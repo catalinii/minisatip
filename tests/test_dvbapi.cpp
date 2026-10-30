@@ -46,7 +46,7 @@ int pmt_del(int id);
 
 static int count_enabled_keys() {
     int n = 0;
-    for (SKey *key : keys)
+    for ([[maybe_unused]] SKey *key : keys)
         n++;
     return n;
 }
@@ -107,14 +107,14 @@ int test_add_pmt_reuses_live_key() {
 // A VideoGuard ECM in iCAM mode `mode`, which both the fixed offset 0x15 and
 // the low nibble of the last byte carry; mode 0 is a plain CSA ECM.
 static int build_ecm(uint8_t *s, int table, int mode) {
-    int len = 0x20;
+    constexpr int len = 0x20;
     memset(s, 0, len);
-    s[0] = table;
+    s[0] = static_cast<uint8_t>(table);
     s[1] = 0x70;
     s[2] = len - 3;
     s[4] = mode ? s[2] - 4 : 0; // s[2] - s[4] == 4 marks iCAM
-    s[0x15] = mode;
-    s[len - 1] = mode;
+    s[0x15] = static_cast<uint8_t>(mode);
+    s[len - 1] = static_cast<uint8_t>(mode);
     return len;
 }
 
@@ -136,7 +136,7 @@ int test_icam_mode_only_from_ecms() {
     pmts.extend_to(1);
     id = keys_add(0, 0);
     ASSERT(id >= 0, "no key for the PMT");
-    k = keys[id];
+    k = keys[static_cast<size_t>(id)];
     fid_ecm = add_filter(0, 0x1CB6, (void *)send_ecm, k, 0);
     fid_cat = add_filter(0, 0x0001, (void *)send_ecm, k, 0);
     fid_sdt = add_filter(0, 0x0011, (void *)send_ecm, k, 0);
@@ -178,7 +178,7 @@ int test_channel_falls_back_to_sid() {
     pmts.extend_to(1);
     id = keys_add(0, 0);
     ASSERT(id >= 0, "no key for the PMT");
-    k = keys[id];
+    k = keys[static_cast<size_t>(id)];
     k->pmt_id = 0;
 
     // No SDT seen: the name is empty so the channel shows the SID
@@ -202,7 +202,7 @@ static int drain(int fd) {
     int total = 0, n;
     struct pollfd pfd = {fd, POLLIN, 0};
     while (poll(&pfd, 1, 0) > 0) {
-        n = read(fd, buf, sizeof(buf));
+        n = static_cast<int>(read(fd, buf, sizeof(buf)));
         if (n <= 0)
             break;
         total += n;
@@ -242,8 +242,9 @@ int test_update_resend_skips_identical_capmt() {
     // A second live key flips this key's list-management ONLY->ADD;
     // framing alone must not force a re-send either.
     int other = keys_add(0, 0);
-    SKey *other_key = keys[other];
-    ASSERT(other >= 0 && other_key->enabled, "no second live key");
+    ASSERT(other >= 0, "no second key");
+    SKey *other_key = keys[static_cast<size_t>(other)];
+    ASSERT(other_key->enabled, "no second live key");
     ASSERT(dvbapi_add_pmt(&ad, pmt, 1) == TABLES_RESULT_OK,
            "listmgmt-flip re-send failed");
     ASSERT(drain(sv[1]) == 0, "listmgmt flip must write nothing");
@@ -279,7 +280,7 @@ int test_descramble_watchdog() {
     a[0] = &ad;
     register_dvbapi();
     int ca_idx = dvbapi_ca;
-    uint64_t dvbapi_mask = 1ULL << ca_idx;
+    int dvbapi_mask = 1 << ca_idx;
     ASSERT(ad.ca_mask & dvbapi_mask, "dvbapi not on the adapter");
 
     int id = pmt_add(0, 100, 48);

@@ -142,7 +142,7 @@ struct RtspFixture {
 // the adapter, so adapter-level and delta pids agree.
 static void add_pid(RtspFixture &fx, int pid) {
     satipc_set_pid(&fx.ad, pid);
-    fx.ad.pids[fx.pid_slots].pid = pid;
+    fx.ad.pids[fx.pid_slots].pid = static_cast<int16_t>(pid);
     fx.ad.pids[fx.pid_slots].flags = PID_STATE_ACTIVE;
     fx.pid_slots++;
 }
@@ -598,9 +598,9 @@ int test_satipc_open_device_cleans_rtsp_on_rtp_failure() {
     getsockname(srv, (struct sockaddr *)&sa, &len);
     sip.sport = ntohs(sa.sin_port);
 
-    int saved_rtp = opts.start_rtp;
+    auto saved_rtp = opts.start_rtp;
     opts.start_rtp = 5500;
-    int listen_udp = opts.start_rtp + 1000 + aid * 2;
+    auto listen_udp = static_cast<uint16_t>(opts.start_rtp + 1000 + aid * 2);
     // Occupy the RTP port without reuse so the setup bind fails.
     int block4 = socket(AF_INET, SOCK_DGRAM, 0);
     struct sockaddr_in ba = {};
@@ -773,8 +773,8 @@ int test_satipc_abort_srt() {
     ASSERT(sip.srt_sock == SRT_INVALID_SOCK, "srt must invalidate");
     ASSERT(sip.srt_streamid.empty(), "streamid must clear");
     ASSERT(sip.udp_sock == -1 && ad.dvr == -1, "udp/dvr must reset");
-    ASSERT(get_sockets(id) && get_sockets(id)->sock == SOCK_TIMEOUT,
-           "handle must swap");
+    sockets *ss = get_sockets(id);
+    ASSERT(ss && ss->sock == SOCK_TIMEOUT, "handle must swap");
     ASSERT(!srt_socket_is_connected(s), "closed srt must read down");
     SRTSOCKET s2 = srt_create_socket();
     sip.srt_sock = s2;
@@ -852,9 +852,9 @@ int test_satipc_open_device_full_table_closes_untracked() {
         return 1;
     sip.sport = port;
 
-    int saved_rtp = opts.start_rtp;
+    auto saved_rtp = opts.start_rtp;
     opts.start_rtp = 5500;
-    int listen_udp = opts.start_rtp + 1000 + aid * 2;
+    auto listen_udp = static_cast<uint16_t>(opts.start_rtp + 1000 + aid * 2);
     int block4 = socket(AF_INET, SOCK_DGRAM, 0);
     struct sockaddr_in ba = {};
     ba.sin_family = AF_INET;
