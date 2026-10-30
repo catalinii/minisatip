@@ -286,7 +286,7 @@ int test_obtain_mt() {
     ASSERT(total == N, "all slots claimed exactly once");
     // The loop index is the expected id here.
     for (int i : std::views::iota(0, N)) {
-        TestSlot *s = pool[i];
+        TestSlot *s = pool[static_cast<size_t>(i)];
         ASSERT(s && s->id == i, "slot id matches index");
     }
     ASSERT(pool.obtain() == nullptr, "full stays full");
@@ -306,14 +306,14 @@ int test_obtain_churn() {
             int id = s->id;
             if (id < 0 || id >= N)
                 bad_id++;
-            else if (held[id].exchange(true))
+            else if (held[static_cast<size_t>(id)].exchange(true))
                 dups++;
             s->enabled = true;
             s->enabled = false;
             // Drop the hold before publishing the release, so a racing
             // claimer never sees a stale hold.
             if (id >= 0 && id < N)
-                held[id] = false;
+                held[static_cast<size_t>(id)] = false;
             s->allocated = false;
             total++;
         }

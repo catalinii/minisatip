@@ -78,11 +78,15 @@ descriptor_t create_ca_descriptor(uint16_t caid, uint16_t capid) {
 SPMT *create_pmt(int ad, int sid, int pid1, int pid2, int caid1, int caid2) {
     int pmt_id = pmt_add(ad, sid, 1000);
     SPMT *pmt = get_pmt(pmt_id);
+    if (!pmt)
+        return NULL;
     pmt->pid = pmt_id * 1000;
     pmt_add_stream_pid(pmt, pid1, 2, false, true);
     pmt_add_stream_pid(pmt, pid2, 6, true, false);
-    pmt_add_caid(pmt, caid1, caid1, NULL, 0);
-    pmt_add_caid(pmt, caid2, caid2, NULL, 0);
+    pmt_add_caid(pmt, static_cast<uint16_t>(caid1),
+                 static_cast<uint16_t>(caid1), NULL, 0);
+    pmt_add_caid(pmt, static_cast<uint16_t>(caid2),
+                 static_cast<uint16_t>(caid2), NULL, 0);
     // Add a CA descriptor to the second stream PID so we can test that it
     // gets added to the PMT correctly
     pmt->stream_pids[1].descriptors.push_back(
@@ -94,7 +98,7 @@ SPMT *create_pmt(int ad, int sid, int pid1, int pid2, int caid1, int caid2) {
 void create_adapter(adapter *ad, int id) {
     ad->enabled = 1;
     ad->id = id;
-    a[id] = ad;
+    a[static_cast<size_t>(id)] = ad;
 }
 
 int test_channels() {
@@ -139,11 +143,10 @@ int test_ddci_channel_count() {
     ddci_device_t d0 = {};
     ca_device_t ca0 = {};
     adapter ad = {}, a0 = {};
-    int i;
 
     // adapters of previous tests lived on their stacks
-    for (i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = nullptr;
+    for (auto &slot : a)
+        slot = nullptr;
     create_adapter(&ad, 8);
     create_adapter(&a0, 0);
     pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
@@ -199,8 +202,8 @@ int test_ddci_channel_count() {
 int test_ddci_post_init_without_dvr_socket() {
     ddci_device_t d = {};
     adapter ad = {};
-    for (int i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = nullptr;
+    for (auto &slot : a)
+        slot = nullptr;
     create_adapter(&ad, 0);
     ad.type = ADAPTER_CI;
     ad.sock = -1;
@@ -229,10 +232,9 @@ int test_update_resend_keeps_slot() {
     ddci_device_t d0 = {};
     ca_device_t ca0 = {};
     adapter ad = {}, a0 = {};
-    int i;
 
-    for (i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = nullptr;
+    for (auto &slot : a)
+        slot = nullptr;
     create_adapter(&ad, 8);
     create_adapter(&a0, 0);
     SPMT *pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
@@ -354,10 +356,9 @@ int test_ddci_update_version_follows_content() {
     ddci_device_t d0 = {};
     ca_device_t ca0 = {};
     adapter ad = {}, a0 = {};
-    int i;
 
-    for (i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = nullptr;
+    for (auto &slot : a)
+        slot = nullptr;
     create_adapter(&ad, 8);
     create_adapter(&a0, 0);
     SPMT *pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
@@ -381,7 +382,7 @@ int test_ddci_update_version_follows_content() {
     int len = ddci_create_pmt(&d0, pmt0, psi, sizeof(psi), &d0.pmt[0]);
     ASSERT(len > 0, "PMT section expected");
     int ver = d0.pmt[0].ver;
-    memcpy(prev, psi, len);
+    memcpy(prev, psi, static_cast<size_t>(len));
 
     // identical re-send: same version, same bytes
     ASSERT(ddci_process_pmt(&ad, pmt0, 1) == TABLES_RESULT_OK,
@@ -389,7 +390,7 @@ int test_ddci_update_version_follows_content() {
     int len2 = ddci_create_pmt(&d0, pmt0, psi, sizeof(psi), &d0.pmt[0]);
     ASSERT(len2 == len, "identical re-send must not resize the section");
     ASSERT(d0.pmt[0].ver == ver, "identical re-send must keep the version");
-    ASSERT(memcmp(prev, psi, len) == 0,
+    ASSERT(memcmp(prev, psi, static_cast<size_t>(len)) == 0,
            "identical re-send must keep the bytes");
 
     // changed re-send: version bumps exactly once
@@ -519,7 +520,7 @@ int test_add_del_pmt() {
     ddci_del_pmt(&ad, pmt2);
     LOG("Printing mapping table AFTER deleting PMTs");
     dump_mapping_table();
-    ec = d0.mapping.size() + d1.mapping.size();
+    ec = static_cast<int>(d0.mapping.size() + d1.mapping.size());
     ASSERT(ec == 0, "No pid should be enabled");
     channels.clear();
     filters.destroy_all();
@@ -559,7 +560,7 @@ int test_copy_ts_from_ddci() {
     fifo_push(&d.fifo, buf, 188);
     uint16_t mapping[8192];
     memset(mapping, 0, sizeof(mapping));
-    mapping[new_pid] = pid;
+    mapping[new_pid] = static_cast<uint16_t>(pid);
 
     if (push_ts_to_adapter(&d, &ad, mapping))
         LOG_AND_RETURN(1, "could not copy the packet to the adapter");
@@ -574,7 +575,7 @@ int test_copy_ts_from_ddci() {
 int is_err = 0;
 int expected_pid = 0;
 int did_write = 0;
-int xwritev(int fd, const struct iovec *io, int len) {
+ssize_t xwritev(int fd, const struct iovec *io, int len) {
     unsigned char *b = (unsigned char *)io[0].iov_base;
     LOGM("called writev with len %d, first pid %d", len, PID_FROM_TS(b));
     did_write = 1;
@@ -597,12 +598,12 @@ int xwritev(int fd, const struct iovec *io, int len) {
 // the last iovec passed to writev(), captured by xwritev_last
 static int last_iov_len = -1;
 static uint8_t last_iov[188];
-int xwritev_last(int fd, const struct iovec *io, int len) {
+ssize_t xwritev_last(int fd, const struct iovec *io, int len) {
     int i, total = 0;
     did_write = 1;
     for (i = 0; i < len; i++)
-        total += io[i].iov_len;
-    last_iov_len = io[len - 1].iov_len;
+        total += static_cast<int>(io[i].iov_len);
+    last_iov_len = static_cast<int>(io[len - 1].iov_len);
     if (last_iov_len == 188)
         memcpy(last_iov, io[len - 1].iov_base, 188);
     return total;
@@ -637,7 +638,7 @@ int test_ddci_process_ts_null_tail() {
     ad.rlen = ad.lbuf - 188;
     set_pid_ts(buf, 1000);
     d.read_index[1] = d.read_index[2] = d.fifo.write_index = 188;
-    _writev = (mywritev)&xwritev_last;
+    _writev = xwritev_last;
     did_write = 0;
     last_iov_len = -1;
     ddci_process_ts(&ad, &d);
@@ -703,7 +704,7 @@ int test_ddci_process_ts() {
     set_pid_ts(fifo + 376, new_pid2);
     fifo_push(&d.fifo, fifo, sizeof(fifo));
     expected_pid = new_pid;
-    _writev = (mywritev)&xwritev;
+    _writev = xwritev;
     ddci_process_ts(&ad, &d);
     if (is_err)
         LOG_AND_RETURN(1, "is_err is set");
@@ -726,11 +727,10 @@ int test_psi_pids_survive_a_channel_change() {
     ddci_device_t d = {};
     ca_device_t ca0 = {};
     adapter ci = {}, ad_a = {}, ad_b = {};
-    int i;
 
     // earlier tests leave stack adapters and CA devices in the global arrays
-    for (i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = nullptr;
+    for (auto &slot : a)
+        slot = nullptr;
     memset(ca_devices, 0, sizeof(ca_devices));
     channels.clear();
 
@@ -952,14 +952,14 @@ int test_create_sdt_with_real_data() {
     *b++ = 0x48;
     uint8_t *sdlen = b++;
     *b++ = 0x19;
-    *b++ = strlen(prov);
+    *b++ = static_cast<uint8_t>(strlen(prov));
     memcpy(b, prov, strlen(prov));
     b += strlen(prov);
-    *b++ = strlen(name1);
+    *b++ = static_cast<uint8_t>(strlen(name1));
     memcpy(b, name1, strlen(name1));
     b += strlen(name1);
-    *sdlen = b - sdlen - 1;
-    *dlen = b - dlen - 1;
+    *sdlen = static_cast<uint8_t>(b - sdlen - 1);
+    *dlen = static_cast<uint8_t>(b - dlen - 1);
     // service 2: no EIT, running 4, CA 0
     copy16(b, 0, sid2);
     b += 2;
@@ -969,21 +969,21 @@ int test_create_sdt_with_real_data() {
     *b++ = 0x48;
     sdlen = b++;
     *b++ = 0x01;
-    *b++ = strlen(prov);
+    *b++ = static_cast<uint8_t>(strlen(prov));
     memcpy(b, prov, strlen(prov));
     b += strlen(prov);
-    *b++ = strlen(name2);
+    *b++ = static_cast<uint8_t>(strlen(name2));
     memcpy(b, name2, strlen(name2));
     b += strlen(name2);
-    *sdlen = b - sdlen - 1;
-    *dlen = b - dlen - 1;
-    int section_length = b - section_start + 4;
+    *sdlen = static_cast<uint8_t>(b - sdlen - 1);
+    *dlen = static_cast<uint8_t>(b - dlen - 1);
+    int section_length = static_cast<int>(b - section_start + 4);
     *(section_start - 2) |= (section_length >> 8) & 0x0F;
-    *(section_start - 1) = section_length & 0xFF;
-    copy32(b, 0, crc_32(section, b - section));
+    *(section_start - 1) = static_cast<uint8_t>(section_length & 0xFF);
+    copy32(b, 0, crc_32(section, static_cast<int>(b - section)));
     b += 4;
 
-    ASSERT(process_sdt(0, section, b - section, &ad) == 0,
+    ASSERT(process_sdt(0, section, static_cast<int>(b - section), &ad) == 0,
            "process_sdt failed");
 
     SPMT *pmt1 = get_pmt(pmt_id1);
@@ -1032,8 +1032,7 @@ int test_create_sdt_with_real_data() {
     uint8_t packet[188 * 4];
     int16_t cc = 1;
     int ts_len = buffer_to_ts(packet, sizeof(packet), sdt, sdt_len, &cc, 17);
-    SFilter f;
-    memset(&f, 0, sizeof(f));
+    SFilter f{};
     f.flags = FILTER_CRC;
     int off = 0, asm_len = 0;
     while (off < ts_len) {
@@ -1122,7 +1121,7 @@ int test_create_pmt() {
     ad.id = 0;
     ad.enabled = 1;
     a[0] = &ad;
-    ad.pids[0].pid = pid;
+    ad.pids[0].pid = static_cast<int16_t>(pid);
     ad.pids[0].flags = 1;
 
     ad.active_pmts = 1;
@@ -1253,8 +1252,8 @@ int test_ci_pmt_name_is_refreshed() {
     int i;
 
     // earlier tests leave stack adapters and CA devices in the global arrays
-    for (i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = nullptr;
+    for (auto &slot : a)
+        slot = nullptr;
     memset(ca_devices, 0, sizeof(ca_devices));
     channels.clear();
 
@@ -1294,7 +1293,7 @@ int test_ci_pmt_name_is_refreshed() {
     // each channel has its own 100 ms clock and getTick() is only a
     // few ms into a test run, so age them by hand
     for (i = 0; i < d.max_channels; i++)
-        d.pmt[i].last_pmt = getTick() - 1000;
+        d.pmt[i].last_pmt = static_cast<uint64_t>(getTick() - 1000);
     ddci_add_psi(&d, buf, sizeof(buf), &ad);
     ASSERT(ci_pmt->name[0] == 0,
            "the CI-side PMT should stay unnamed while the source is unnamed");
@@ -1304,7 +1303,7 @@ int test_ci_pmt_name_is_refreshed() {
     safe_strncpy(src->provider, "Digital Platform");
 
     for (i = 0; i < d.max_channels; i++)
-        d.pmt[i].last_pmt = getTick() - 1000;
+        d.pmt[i].last_pmt = static_cast<uint64_t>(getTick() - 1000);
     ddci_add_psi(&d, buf, sizeof(buf), &ad);
     ASSERT(!strcmp(ci_pmt->name, "beIN SPORTS 1"),
            "the CI-side PMT should take the name of the source service");
@@ -1328,8 +1327,8 @@ int test_ddci_add_psi_per_channel_pmt() {
     uint8_t buf[4096];
     int i, ia = -1, ib = -1;
 
-    for (i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = nullptr;
+    for (auto &slot : a)
+        slot = nullptr;
     memset(ca_devices, 0, sizeof(ca_devices));
     memset(ddci_devices, 0, sizeof(ddci_devices));
     channels.clear();
@@ -1370,7 +1369,8 @@ int test_ddci_add_psi_per_channel_pmt() {
     // section is actually emitted.
     d.pmt[ia].cc = 5;
     d.pmt[ib].cc = 7;
-    d.pmt[ia].last_pmt = d.pmt[ib].last_pmt = getTick() - 1000;
+    d.pmt[ia].last_pmt = d.pmt[ib].last_pmt =
+        static_cast<uint64_t>(getTick() - 1000);
     ddci_add_psi(&d, buf, sizeof(buf), &adA);
     ASSERT(d.pmt[ia].cc == 6 && d.pmt[ib].cc == 7,
            "A tick emits only the processed adapter's PMT");
@@ -1408,10 +1408,9 @@ int test_channel_change_sends_pat_immediately() {
     ca_device_t ca0 = {};
     adapter ci = {}, ad = {};
     uint8_t buf[8192];
-    int i;
 
-    for (i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = nullptr;
+    for (auto &slot : a)
+        slot = nullptr;
     memset(ca_devices, 0, sizeof(ca_devices));
     channels.clear();
     create_adapter(&ci, 8);
@@ -1501,11 +1500,10 @@ int test_ddci_full_device_retries() {
     ddci_device_t d0 = {};
     ca_device_t ca0 = {};
     adapter ad = {};
-    int i;
 
     // Adapters of previous tests lived on their stacks
-    for (i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = nullptr;
+    for (auto &slot : a)
+        slot = nullptr;
     create_adapter(&ad, 8);
     pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
     pmt1 = create_pmt(8, 700, 701, 702, 0x100, 0x100);
@@ -1548,10 +1546,9 @@ int test_initializing_ddci_does_not_block_others() {
     ddci_device_t d0 = {}, d1 = {};
     ca_device_t ca0 = {}, ca1 = {};
     adapter ad = {}, a0 = {}, a1 = {};
-    int i;
 
-    for (i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = nullptr;
+    for (auto &slot : a)
+        slot = nullptr;
     memset(ddci_devices, 0, sizeof(ddci_devices));
     memset(ca_devices, 0, sizeof(ca_devices));
     channels.clear();
@@ -1665,8 +1662,8 @@ int test_ddci_least_used_device() {
     ca_device_t ca0 = {}, ca1 = {};
     adapter ad = {}, a0 = {}, a1 = {};
 
-    for (int i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = nullptr;
+    for (auto &slot : a)
+        slot = nullptr;
     memset(ddci_devices, 0, sizeof(ddci_devices));
     memset(ca_devices, 0, sizeof(ca_devices));
     channels.clear();

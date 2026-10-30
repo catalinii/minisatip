@@ -287,7 +287,7 @@ int test_dvb_lock_recovery_rejects_failed_tunes() {
     ad.tp = tp;
 
     adapter *saved_adapter = a[0];
-    int saved_log = opts.log;
+    auto saved_log = opts.log;
     a[0] = &ad;
     opts.log = 0;
 
@@ -356,7 +356,7 @@ int test_dvb_lock_recovery_forced_switch_resend() {
     ad.tp.diseqc_param.lnb_switch = 11700000;
     ad.wakeup = count_lock_recovery_wakeup;
     lock_recovery_wakeup_calls = 0;
-    int old_log = opts.log;
+    auto old_log = opts.log;
     opts.log = 0;
 
     setup_switch(&ad, false);
@@ -466,13 +466,14 @@ int test_dvb_signal_v5_fallback() {
     _ioctl = mock_ioctl;
 
     // entries without usable scales still count as v5 (TVH): no v3 attempt
-    mock_fe = {.status = 0,
-               .str_len = 1,
-               .str_scale = 0,
-               .cnr_len = 1,
-               .cnr_scale = 0,
-               .blk_len = 1,
-               .v3_fail = true};
+    mock_fe = {};
+    mock_fe.status = 0;
+    mock_fe.str_len = 1;
+    mock_fe.str_scale = 0;
+    mock_fe.cnr_len = 1;
+    mock_fe.cnr_scale = 0;
+    mock_fe.blk_len = 1;
+    mock_fe.v3_fail = true;
     dvb_get_signal(&ad);
     ASSERT(ad.new_gs == 1, "entries with N/A scales must use the v5 path");
     ASSERT(ad.strength == 0 && ad.snr == 0, "N/A scales read as zero");

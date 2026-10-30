@@ -366,7 +366,7 @@ int test_decode_transport_port_change_no_deadlock() {
     opts.start_rtp = 45500;
     char host[] = "127.0.0.1";
     ASSERT(decode_transport(&rtsp, "RTP/AVP;unicast;client_port=46000-46001",
-                            host, opts.start_rtp) == 0,
+                            host, static_cast<int>(opts.start_rtp)) == 0,
            "first transport failed");
     sockets *rs = get_sockets(sid->rsock_id);
     ASSERT(rs != NULL, "RTP socket not created");
@@ -384,7 +384,7 @@ int test_decode_transport_port_change_no_deadlock() {
     auto f = std::async(std::launch::async, [&] {
         return decode_transport(&rtsp,
                                 "RTP/AVP;unicast;client_port=46002-46003", host,
-                                opts.start_rtp);
+                                static_cast<int>(opts.start_rtp));
     });
     if (f.wait_for(std::chrono::seconds(3)) != std::future_status::ready) {
         LOG("decode_transport deadlocked with the demux thread");
@@ -737,10 +737,15 @@ static int run_rtsp_request(const char *req, std::string &out) {
         return -1;
     }
     sockets *s = get_sockets(id);
+    if (!s) {
+        close(sp[0]);
+        close(sp[1]);
+        return -1;
+    }
     char buf[1024];
     snprintf(buf, sizeof(buf), "%s", req);
     s->buf = (unsigned char *)buf;
-    s->rlen = strlen(buf);
+    s->rlen = static_cast<int>(strlen(buf));
     mywritev saved = _writev;
     captured_rtsp.clear();
     _writev = capture_writev;
@@ -765,6 +770,11 @@ static int run_empty_request(int type, int (*fn)(sockets *), int *flags_after,
         return -1;
     }
     sockets *s = get_sockets(id);
+    if (!s) {
+        close(sp[0]);
+        close(sp[1]);
+        return -1;
+    }
     static unsigned char empty[1] = {0};
     s->buf = empty;
     s->lbuf = sizeof(empty);
@@ -893,7 +903,7 @@ int test_read_rtsp_play_while_busy_returns_503() {
     ASSERT(sid1 != NULL, "first setup_stream returned NULL");
     ASSERT(start_play(sid1, &http1) == 0, "first start_play failed");
 
-    int saved_rtp = opts.start_rtp;
+    auto saved_rtp = opts.start_rtp;
     char *saved_disc = opts.disc_host;
     opts.start_rtp = 45600;
     opts.disc_host = (char *)"127.0.0.1"; // set at startup in production

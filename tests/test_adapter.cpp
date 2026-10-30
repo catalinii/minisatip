@@ -37,8 +37,10 @@ char *get_adapter_name(int aid, char *dest, int max_size);
 
 int test_get_lnb_hiband_universal() {
     transponder tp;
-    diseqc diseqc_param = {
-        .lnb_low = 9750000, .lnb_high = 10600000, .lnb_switch = 11700000};
+    diseqc diseqc_param = {};
+    diseqc_param.lnb_low = 9750000;
+    diseqc_param.lnb_high = 10600000;
+    diseqc_param.lnb_switch = 11700000;
 
     tp.freq = 10778000;
     int hiband = get_lnb_hiband(&tp, &diseqc_param);
@@ -53,8 +55,10 @@ int test_get_lnb_hiband_universal() {
 
 int test_get_lnb_int_freq_universal() {
     transponder tp;
-    diseqc diseqc_param = {
-        .lnb_low = 9750000, .lnb_high = 10600000, .lnb_switch = 11700000};
+    diseqc diseqc_param = {};
+    diseqc_param.lnb_low = 9750000;
+    diseqc_param.lnb_high = 10600000;
+    diseqc_param.lnb_switch = 11700000;
 
     tp.freq = 10778000;
     int freq = get_lnb_int_freq(&tp, &diseqc_param);
@@ -69,11 +73,10 @@ int test_get_lnb_int_freq_universal() {
 
 int test_get_lnb_hiband_kuband() {
     transponder tp;
-    diseqc diseqc_param = {
-        .lnb_low = 10750000,
-        .lnb_high = 0,
-        .lnb_switch = 0,
-    };
+    diseqc diseqc_param = {};
+    diseqc_param.lnb_low = 10750000;
+    diseqc_param.lnb_high = 0;
+    diseqc_param.lnb_switch = 0;
 
     tp.freq = 12267000;
     int hiband = get_lnb_hiband(&tp, &diseqc_param);
@@ -84,11 +87,10 @@ int test_get_lnb_hiband_kuband() {
 
 int test_get_lnb_int_freq_kuband() {
     transponder tp;
-    diseqc diseqc_param = {
-        .lnb_low = 10750000,
-        .lnb_high = 0,
-        .lnb_switch = 0,
-    };
+    diseqc diseqc_param = {};
+    diseqc_param.lnb_low = 10750000;
+    diseqc_param.lnb_high = 0;
+    diseqc_param.lnb_switch = 0;
 
     tp.freq = 12267000;
     int freq = get_lnb_int_freq(&tp, &diseqc_param);
@@ -99,11 +101,10 @@ int test_get_lnb_int_freq_kuband() {
 
 int test_get_lnb_hiband_cband() {
     transponder tp;
-    diseqc diseqc_param = {
-        .lnb_low = 5150000,
-        .lnb_high = 0,
-        .lnb_switch = 0,
-    };
+    diseqc diseqc_param = {};
+    diseqc_param.lnb_low = 5150000;
+    diseqc_param.lnb_high = 0;
+    diseqc_param.lnb_switch = 0;
 
     tp.freq = 3773000;
     int hiband = get_lnb_hiband(&tp, &diseqc_param);
@@ -114,7 +115,10 @@ int test_get_lnb_hiband_cband() {
 
 int test_get_lnb_int_freq_cband() {
     transponder tp;
-    diseqc diseqc_param = {.lnb_low = 5150000, .lnb_high = 0, .lnb_switch = 0};
+    diseqc diseqc_param = {};
+    diseqc_param.lnb_low = 5150000;
+    diseqc_param.lnb_high = 0;
+    diseqc_param.lnb_switch = 0;
 
     tp.freq = 3773000;
     int freq = get_lnb_int_freq(&tp, &diseqc_param);
@@ -133,9 +137,9 @@ int test_update_pids() {
     a[0] = &ad;
     ad.enabled = 1;
     for (int i = 0; i < 8; i++) {
-        ad.pids[i].flags = i % 4;
-        ad.pids[i].pid = i;
-        ad.pids[i].packets = i;
+        ad.pids[i].flags = static_cast<char>(i % 4);
+        ad.pids[i].pid = static_cast<int16_t>(i);
+        ad.pids[i].packets = static_cast<uint32_t>(i);
     }
     update_pids(0);
     ASSERT(ad.pids[0].pid == 5,
@@ -236,9 +240,8 @@ int test_tune_flushes_dvr_in_read_dmx() {
 }
 
 int test_find_pid_unsorted() {
-    for (int i = 0; i < MAX_ADAPTERS; i++) {
-        a[i] = nullptr;
-    }
+    for (auto &slot : a)
+        slot = nullptr;
 
     // Mid-update_pids state: an INACTIVE slot ahead of a NEW entry. find_pid
     // must still find the entry behind it.
@@ -260,9 +263,8 @@ int test_find_pid_unsorted() {
     ASSERT(find_pid(0, 9999) == nullptr,
            "find_pid must return NULL for a missing pid");
 
-    for (int i = 0; i < MAX_ADAPTERS; i++) {
-        a[i] = nullptr;
-    }
+    for (auto &slot : a)
+        slot = nullptr;
     return 0;
 }
 
@@ -280,9 +282,8 @@ static int test_del_filters_fail(adapter *ad, int fd, int pid) {
 }
 
 int test_update_pids_del_filters_error() {
-    for (int i = 0; i < MAX_ADAPTERS; i++) {
-        a[i] = nullptr;
-    }
+    for (auto &slot : a)
+        slot = nullptr;
 
     // Removal failure must always be reported, after cleanup, with no
     // minimum-pid-count gate.
@@ -314,16 +315,14 @@ int test_update_pids_del_filters_error() {
            "update_pids should fail on removal failure regardless of pid "
            "count");
 
-    for (int i = 0; i < MAX_ADAPTERS; i++) {
-        a[i] = nullptr;
-    }
+    for (auto &slot : a)
+        slot = nullptr;
     return 0;
 }
 
 int test_update_pids_max_pids_floor() {
-    for (int i = 0; i < MAX_ADAPTERS; i++) {
-        a[i] = nullptr;
-    }
+    for (auto &slot : a)
+        slot = nullptr;
 
     // Demux failure below the minimum: max_pids keeps MIN_ADAPTER_PIDS and
     // update_pids errors so the RTSP reply reflects it.
@@ -365,9 +364,8 @@ int test_update_pids_max_pids_floor() {
            "minimum pid count");
     ASSERT(ad2.max_pids == 19, "max_pids should lower to max_active_pids - 1");
 
-    for (int i = 0; i < MAX_ADAPTERS; i++) {
-        a[i] = nullptr;
-    }
+    for (auto &slot : a)
+        slot = nullptr;
     return 0;
 }
 
@@ -400,9 +398,8 @@ int test_compare_slave_parameters() {
     adapter slave_ad = {};
 
     // Clear global adapter array to ensure clean state
-    for (int i = 0; i < MAX_ADAPTERS; i++) {
-        a[i] = nullptr;
-    }
+    for (auto &slot : a)
+        slot = nullptr;
 
     // 1. ad is NULL
     ASSERT(compare_slave_parameters(nullptr, nullptr) == 0,
@@ -572,9 +569,8 @@ int test_compare_slave_parameters() {
            "Matching polarization on slave adapter should return 0");
 
     // Reset global array
-    for (int i = 0; i < MAX_ADAPTERS; i++) {
-        a[i] = nullptr;
-    }
+    for (auto &slot : a)
+        slot = nullptr;
 
     return 0;
 }
@@ -604,13 +600,13 @@ int test_next_pid_order_concurrent() {
     adapter ad = {};
     ad.enabled = 1;
     ad.id = 0;
-    const int nthreads = 8, per = 2000;
+    const size_t nthreads = 8, per = 2000;
     std::vector<std::vector<uint32_t>> got(nthreads);
     std::vector<std::thread> th;
-    for (int t = 0; t < nthreads; t++) {
+    for (size_t t = 0; t < nthreads; t++) {
         got[t].resize(per);
-        th.emplace_back([&ad, &got, t, per] {
-            for (int i = 0; i < per; i++)
+        th.emplace_back([&ad, &got, t] {
+            for (size_t i = 0; i < per; i++)
                 got[t][i] = ad.next_pid_order();
         });
     }
@@ -623,7 +619,7 @@ int test_next_pid_order_concurrent() {
             ASSERT(!seen.count(o), "duplicate pid order across threads");
             seen.insert(o);
         }
-    ASSERT(seen.size() == (size_t)nthreads * per, "lost sequence updates");
+    ASSERT(seen.size() == nthreads * per, "lost sequence updates");
     return 0;
 }
 

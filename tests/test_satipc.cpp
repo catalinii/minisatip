@@ -265,7 +265,7 @@ int test_satipc_reply_empty_buffer_ignored() {
 
 static void send_rtsp_reply(sockets *s, char *buf, const char *reply) {
     strcpy(buf, reply);
-    s->rlen = strlen(buf);
+    s->rlen = static_cast<int>(strlen(buf));
     satipc_reply(s);
 }
 

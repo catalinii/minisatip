@@ -107,10 +107,11 @@ int test_create_capmt_not_selected() {
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
     pmt_add_stream_pid(pmt, 0x502, 3, true, false);
 
-    SCAPMT scapmt = {.pmt_id = pmt->id,
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 2,
-                     .sid = 0x1234};
+    SCAPMT scapmt = {};
+    scapmt.pmt_id = pmt_id;
+    scapmt.other_id[0] = scapmt.other_id[1] = PMT_INVALID;
+    scapmt.version = 2;
+    scapmt.sid = 0x1234;
 
     uint8_t capmt[1500];
     int len = create_capmt(&scapmt, CLM_UPDATE, capmt, sizeof(capmt),
@@ -120,7 +121,7 @@ int test_create_capmt_not_selected() {
     hexdump("CAPMT: ", capmt, len);
 
     ASSERT(capmt[0] == CLM_UPDATE, "ca_pmt_list_management incorrect");
-    uint16_t sid = (capmt[1] << 8) | capmt[2];
+    int sid = (capmt[1] << 8) | capmt[2];
     ASSERT(sid == 0x1234, "program_number incorrect");
     ASSERT(capmt[11] == CA_PMT_CMD_ID_NOT_SELECTED,
            "stream PID 1 should be released");
@@ -210,10 +211,11 @@ int test_create_capmt_single_clear() {
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
     pmt_add_stream_pid(pmt, 0x502, 3, true, false);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x1234};
+    SCAPMT scampt = {};
+    scampt.pmt_id = pmt_id;
+    scampt.other_id[0] = scampt.other_id[1] = PMT_INVALID;
+    scampt.version = 1;
+    scampt.sid = 0x1234;
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -223,13 +225,13 @@ int test_create_capmt_single_clear() {
     hexdump("CAPMT: ", capmt, len);
 
     ASSERT(capmt[0] == CLM_ONLY, "ca_pmt_list_management incorrect");
-    uint16_t sid = (capmt[1] << 8) | capmt[2];
+    int sid = (capmt[1] << 8) | capmt[2];
     ASSERT(sid == 0x1234, "program_number incorrect");
     uint8_t version = (capmt[3] & 0x3E) >> 1;
     ASSERT(version == 1, "version incorrect");
     bool current_next_indicator = (capmt[3] & 1) == 1;
     ASSERT(current_next_indicator == true, "current next indicator wrong");
-    uint16_t pi_len = (capmt[4] << 8) | capmt[5];
+    int pi_len = (capmt[4] << 8) | capmt[5];
     ASSERT(pi_len == 0, "program info length incorrect");
     ASSERT(capmt[6] == 2, "stream PID 1 service type incorrect");
     ASSERT(capmt[11] == 3, "stream PID 2 service type incorrect");
@@ -245,10 +247,11 @@ int test_capmt_content_hash_masks_version_and_listmgmt() {
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
     pmt_add_stream_pid(pmt, 0x502, 3, true, false);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x1234};
+    SCAPMT scampt = {};
+    scampt.pmt_id = pmt_id;
+    scampt.other_id[0] = scampt.other_id[1] = PMT_INVALID;
+    scampt.version = 1;
+    scampt.sid = 0x1234;
 
     uint8_t capmt[1500], other[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -260,18 +263,18 @@ int test_capmt_content_hash_masks_version_and_listmgmt() {
     ASSERT(capmt_content_hash(capmt, len) == hash, "hash should be stable");
     ASSERT(capmt[3] == ver_byte, "hash must restore the version byte");
 
-    memcpy(other, capmt, len);
+    memcpy(other, capmt, static_cast<size_t>(len));
     other[3] ^= 0x3E; // version bits only
     ASSERT(capmt_content_hash(other, len) == hash,
            "version-only change must not flip the hash");
     ASSERT(other[3] == (capmt[3] ^ 0x3E), "test setup broken");
 
-    memcpy(other, capmt, len);
+    memcpy(other, capmt, static_cast<size_t>(len));
     other[3] ^= 0x01; // current/next bit is content, not version
     ASSERT(capmt_content_hash(other, len) != hash,
            "non-version bit change must flip the hash");
 
-    memcpy(other, capmt, len);
+    memcpy(other, capmt, static_cast<size_t>(len));
     other[0] ^= 0xFF; // list management
     ASSERT(capmt_content_hash(other, len) == hash,
            "list management change must not flip the hash");
@@ -283,7 +286,7 @@ int test_capmt_content_hash_masks_version_and_listmgmt() {
     ASSERT(capmt_content_hash(other, ulen) == hash,
            "ONLY->UPDATE flip alone must not flip the hash");
 
-    memcpy(other, capmt, len);
+    memcpy(other, capmt, static_cast<size_t>(len));
     other[len - 1] ^= 0xFF; // stream tail
     ASSERT(capmt_content_hash(other, len) != hash,
            "content change must flip the hash");
@@ -298,10 +301,11 @@ int test_create_capmt_single_pmt_scrambled() {
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
     pmt_add_stream_pid(pmt, 0x502, 3, true, false);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x1234};
+    SCAPMT scampt = {};
+    scampt.pmt_id = pmt_id;
+    scampt.other_id[0] = scampt.other_id[1] = PMT_INVALID;
+    scampt.version = 1;
+    scampt.sid = 0x1234;
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -311,13 +315,13 @@ int test_create_capmt_single_pmt_scrambled() {
     hexdump("CAPMT: ", capmt, len);
 
     // Descriptors should have been added on the stream-level, not program level
-    uint16_t pi_len = (capmt[4] << 8) | capmt[5];
+    int pi_len = (capmt[4] << 8) | capmt[5];
     ASSERT(pi_len == 0, "program info length incorrect");
     ASSERT(capmt[6] == 2, "stream PID 1 service type incorrect");
-    uint16_t stream1_es_len = (capmt[9] << 8) | capmt[10];
+    int stream1_es_len = (capmt[9] << 8) | capmt[10];
     ASSERT(stream1_es_len == 7, "stream PID 1 ES info length incorrect");
     ASSERT(capmt[18] == 3, "stream PID 2 service type incorrect");
-    uint16_t stream2_es_len = (capmt[21] << 8) | capmt[22];
+    int stream2_es_len = (capmt[21] << 8) | capmt[22];
     ASSERT(stream2_es_len == 7, "stream PID 1 ES info length incorrect");
 
     return 0;
@@ -396,12 +400,16 @@ int test_create_capmt_three_pmts() {
     for (int i = 0; i < 3; i++) {
         p[i] = pmt_add(0, 0x300 + i, 0x310 + i);
         SPMT *pmt = get_pmt(p[i]);
-        pmt_add_caid(pmt, 0x0664, 0x700 + i, nullptr, 0);
+        pmt_add_caid(pmt, 0x0664, static_cast<uint16_t>(0x700 + i), nullptr, 0);
         pmt_add_stream_pid(pmt, 0x800 + i * 0x10, 2, false, true);
         pmt_add_stream_pid(pmt, 0x801 + i * 0x10, 3, true, false);
     }
-    SCAPMT scapmt = {
-        .pmt_id = p[0], .other_id = {p[1], p[2]}, .version = 1, .sid = 0x1234};
+    SCAPMT scapmt = {};
+    scapmt.pmt_id = p[0];
+    scapmt.other_id[0] = p[1];
+    scapmt.other_id[1] = p[2];
+    scapmt.version = 1;
+    scapmt.sid = 0x1234;
 
     uint8_t capmt[1500];
     int len = create_capmt(&scapmt, CLM_ONLY, capmt, sizeof(capmt),
@@ -430,14 +438,17 @@ int test_create_capmt_multiple_pmt_scrambled() {
 
     pmt_id = pmt_add(0, 0x200, 0x201);
     SPMT *other = get_pmt(pmt_id);
+    ASSERT(other, "PMT not found");
     pmt_add_caid(other, 0x0B01, 0xABC, nullptr, 0);
     pmt_add_stream_pid(other, 0x601, 2, false, true);
     pmt_add_stream_pid(other, 0x602, 3, true, false);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {other->id, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x1234};
+    SCAPMT scampt = {};
+    scampt.pmt_id = pmt->id;
+    scampt.other_id[0] = other->id;
+    scampt.other_id[1] = PMT_INVALID;
+    scampt.version = 1;
+    scampt.sid = 0x1234;
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -447,21 +458,21 @@ int test_create_capmt_multiple_pmt_scrambled() {
     hexdump("CAPMT: ", capmt, len);
 
     // Descriptors should have been added on the stream-level, not program level
-    uint16_t pi_len = (capmt[4] << 8) | capmt[5];
+    int pi_len = (capmt[4] << 8) | capmt[5];
     ASSERT(pi_len == 0, "program info length incorrect");
     ASSERT(capmt[6] == 2, "stream PID 1 service type incorrect");
-    uint16_t stream1_es_len = (capmt[9] << 8) | capmt[10];
+    int stream1_es_len = (capmt[9] << 8) | capmt[10];
     ASSERT(stream1_es_len == 7, "stream PID 1 ES info length incorrect");
     ASSERT(capmt[18] == 3, "stream PID 2 service type incorrect");
-    uint16_t stream2_es_len = (capmt[21] << 8) | capmt[22];
+    int stream2_es_len = (capmt[21] << 8) | capmt[22];
     ASSERT(stream2_es_len == 7, "stream PID 1 ES info length incorrect");
 
     // Stream PIDs from other PMT should be present too
     ASSERT(capmt[30] == 2, "stream PID 3 service type incorrect");
-    uint16_t stream3_es_len = (capmt[33] << 8) | capmt[34];
+    int stream3_es_len = (capmt[33] << 8) | capmt[34];
     ASSERT(stream3_es_len == 7, "stream PID 3 ES info length incorrect");
     ASSERT(capmt[42] == 3, "stream PID 3 service type incorrect");
-    uint16_t stream4_es_len = (capmt[45] << 8) | capmt[46];
+    int stream4_es_len = (capmt[45] << 8) | capmt[46];
     ASSERT(stream4_es_len == 7, "stream PID 4 ES info length incorrect");
     return 0;
 }
@@ -471,10 +482,11 @@ int test_create_capmt_different_listmgmt() {
     SPMT *pmt = get_pmt(pmt_id);
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x1234};
+    SCAPMT scampt = {};
+    scampt.pmt_id = pmt_id;
+    scampt.other_id[0] = scampt.other_id[1] = PMT_INVALID;
+    scampt.version = 1;
+    scampt.sid = 0x1234;
 
     uint8_t capmt[1500];
     int len;
@@ -518,10 +530,11 @@ int test_create_capmt_different_cmd_ids() {
     pmt_add_caid(pmt, 0x0B00, 0x573, nullptr, 0);
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x1234};
+    SCAPMT scampt = {};
+    scampt.pmt_id = pmt_id;
+    scampt.other_id[0] = scampt.other_id[1] = PMT_INVALID;
+    scampt.version = 1;
+    scampt.sid = 0x1234;
 
     uint8_t capmt[1500];
     int len;
@@ -550,10 +563,11 @@ int test_create_capmt_different_cmd_ids() {
 }
 
 int test_create_capmt_invalid_pmt() {
-    SCAPMT scampt = {.pmt_id = 9999, // invalid PMT ID
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x1234};
+    SCAPMT scampt = {};
+    scampt.pmt_id = 9999; // invalid PMT ID
+    scampt.other_id[0] = scampt.other_id[1] = PMT_INVALID;
+    scampt.version = 1;
+    scampt.sid = 0x1234;
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -569,10 +583,11 @@ int test_create_capmt_max_version() {
     SPMT *pmt = get_pmt(pmt_id);
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 15, // max 4-bit version
-                     .sid = 0x1234};
+    SCAPMT scampt = {};
+    scampt.pmt_id = pmt_id;
+    scampt.other_id[0] = scampt.other_id[1] = PMT_INVALID;
+    scampt.version = 15; // max 4-bit version
+    scampt.sid = 0x1234;
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -590,17 +605,18 @@ int test_create_capmt_large_sid() {
     SPMT *pmt = get_pmt(pmt_id);
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0xFFFF}; // max 16-bit SID
+    SCAPMT scampt = {};
+    scampt.pmt_id = pmt_id;
+    scampt.other_id[0] = scampt.other_id[1] = PMT_INVALID;
+    scampt.version = 1;
+    scampt.sid = 0xFFFF; // max 16-bit SID
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
                            CMD_ID_OK_DESCRAMBLING, 0);
 
     ASSERT(len > 0, "create_capmt failed");
-    uint16_t sid = (capmt[1] << 8) | capmt[2];
+    int sid = (capmt[1] << 8) | capmt[2];
     ASSERT(sid == 0xFFFF, "SID should be 0xFFFF");
 
     return 0;
@@ -611,7 +627,8 @@ int test_create_capmt_both_pmt_and_other_with_caids() {
     int pmt_id = pmt_add(0, 0x100, 0x101);
     SPMT *pmt = get_pmt(pmt_id);
     for (int i = 0; i < 8; i++) {
-        pmt_add_caid(pmt, 0x0B00 + i, 0x570 + i, nullptr, 0);
+        pmt_add_caid(pmt, static_cast<uint16_t>(0x0B00 + i),
+                     static_cast<uint16_t>(0x570 + i), nullptr, 0);
     }
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
     pmt_add_stream_pid(pmt, 0x502, 3, true, false);
@@ -619,15 +636,18 @@ int test_create_capmt_both_pmt_and_other_with_caids() {
     int other_pmt_id = pmt_add(0, 0x200, 0x201);
     SPMT *other = get_pmt(other_pmt_id);
     for (int i = 0; i < 8; i++) {
-        pmt_add_caid(other, 0x0C00 + i, 0x670 + i, nullptr, 0);
+        pmt_add_caid(other, static_cast<uint16_t>(0x0C00 + i),
+                     static_cast<uint16_t>(0x670 + i), nullptr, 0);
     }
     pmt_add_stream_pid(other, 0x601, 2, false, true);
     pmt_add_stream_pid(other, 0x602, 3, true, false);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {other->id, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x1234};
+    SCAPMT scampt = {};
+    scampt.pmt_id = pmt->id;
+    scampt.other_id[0] = other->id;
+    scampt.other_id[1] = PMT_INVALID;
+    scampt.version = 1;
+    scampt.sid = 0x1234;
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -641,7 +661,7 @@ int test_create_capmt_both_pmt_and_other_with_caids() {
 
     // Header checks
     ASSERT(capmt[0] == CLM_ONLY, "ca_pmt_list_management incorrect");
-    uint16_t sid = (capmt[1] << 8) | capmt[2];
+    int sid = (capmt[1] << 8) | capmt[2];
     ASSERT(sid == 0x1234, "program_number incorrect");
 
     return 0;
@@ -652,7 +672,8 @@ int test_create_capmt_both_pmt_and_other_many_streams() {
     int pmt_id = pmt_add(0, 0x100, 0x101);
     SPMT *pmt = get_pmt(pmt_id);
     for (int i = 0; i < 10; i++) {
-        pmt_add_caid(pmt, 0x0B00 + i, 0x570 + i, nullptr, 0);
+        pmt_add_caid(pmt, static_cast<uint16_t>(0x0B00 + i),
+                     static_cast<uint16_t>(0x570 + i), nullptr, 0);
     }
     for (int i = 0; i < 8; i++) {
         pmt_add_stream_pid(pmt, 0x500 + i, (i % 2 == 0) ? 2 : 3, (i % 2 == 1),
@@ -662,17 +683,20 @@ int test_create_capmt_both_pmt_and_other_many_streams() {
     int other_pmt_id = pmt_add(0, 0x200, 0x201);
     SPMT *other = get_pmt(other_pmt_id);
     for (int i = 0; i < 10; i++) {
-        pmt_add_caid(other, 0x0C00 + i, 0x670 + i, nullptr, 0);
+        pmt_add_caid(other, static_cast<uint16_t>(0x0C00 + i),
+                     static_cast<uint16_t>(0x670 + i), nullptr, 0);
     }
     for (int i = 0; i < 8; i++) {
         pmt_add_stream_pid(other, 0x600 + i, (i % 2 == 0) ? 2 : 3, (i % 2 == 1),
                            (i % 2 == 0));
     }
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {other->id, PMT_INVALID},
-                     .version = 5,
-                     .sid = 0xABCD};
+    SCAPMT scampt = {};
+    scampt.pmt_id = pmt->id;
+    scampt.other_id[0] = other->id;
+    scampt.other_id[1] = PMT_INVALID;
+    scampt.version = 5;
+    scampt.sid = 0xABCD;
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -694,7 +718,8 @@ int test_create_capmt_size_near_limit() {
     SPMT *pmt = get_pmt(pmt_id);
     // Add 10 CAIDs to primary PMT
     for (int i = 0; i < 10; i++) {
-        pmt_add_caid(pmt, 0x0B00 + i, 0x570 + i, nullptr, 0);
+        pmt_add_caid(pmt, static_cast<uint16_t>(0x0B00 + i),
+                     static_cast<uint16_t>(0x570 + i), nullptr, 0);
     }
     // Add 11 streams to primary PMT
     for (int i = 0; i < 11; i++) {
@@ -706,7 +731,8 @@ int test_create_capmt_size_near_limit() {
     SPMT *other = get_pmt(other_pmt_id);
     // Add 10 CAIDs to other PMT
     for (int i = 0; i < 10; i++) {
-        pmt_add_caid(other, 0x0C00 + i, 0x670 + i, nullptr, 0);
+        pmt_add_caid(other, static_cast<uint16_t>(0x0C00 + i),
+                     static_cast<uint16_t>(0x670 + i), nullptr, 0);
     }
     // Add 11 streams to other PMT
     for (int i = 0; i < 11; i++) {
@@ -714,10 +740,12 @@ int test_create_capmt_size_near_limit() {
                            (i % 2 == 0));
     }
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {other->id, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x9999};
+    SCAPMT scampt = {};
+    scampt.pmt_id = pmt->id;
+    scampt.other_id[0] = other->id;
+    scampt.other_id[1] = PMT_INVALID;
+    scampt.version = 1;
+    scampt.sid = 0x9999;
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -739,14 +767,16 @@ int test_create_capmt_respects_length() {
     uint8_t priv[64];
     memset(priv, 0xAB, sizeof(priv));
     for (int i = 0; i < MAX_CAID; i++)
-        pmt_add_caid(pmt, 0x0B00 + i, 0x570 + i, priv, sizeof(priv));
+        pmt_add_caid(pmt, static_cast<uint16_t>(0x0B00 + i),
+                     static_cast<uint16_t>(0x570 + i), priv, sizeof(priv));
     for (int i = 0; i < 20; i++)
         pmt_add_stream_pid(pmt, 0x500 + i, 2, false, true);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x9999};
+    SCAPMT scampt = {};
+    scampt.pmt_id = pmt->id;
+    scampt.other_id[0] = scampt.other_id[1] = PMT_INVALID;
+    scampt.version = 1;
+    scampt.sid = 0x9999;
     uint8_t capmt[128];
     memset(capmt, 0xAA, sizeof(capmt));
     int len =
@@ -1065,9 +1095,10 @@ int test_ca_teardown_releases_pmts() {
     int second = pmt_add(0, 0x600, 0x601);
     dev.capmt[0].pmt_id = first;
     dev.capmt[0].other_id[0] = second;
-    uint64_t mask = 1ULL << dvbca_id;
+    int mask = 1 << dvbca_id;
     for (int id : {first, second}) {
         SPMT *pmt = get_pmt(id);
+        ASSERT(pmt, "PMT not found");
         pmt->ca_mask = mask | 0x40;
         pmt->ca_registered_mask = mask | 0x40;
         pmt->disabled_ca_mask = mask | 0x40;
@@ -1311,7 +1342,7 @@ int test_ca_cmd_watchdog() {
     memset(&dev, 0, sizeof(dev));
     ca_device_t *saved = ca_devices[65];
     ca_devices[65] = &dev;
-    int saved_enigma = opts.enigma;
+    auto saved_enigma = opts.enigma;
     opts.enigma = 0;
     dev.enabled = 1;
     dev.id = 65;
@@ -1585,6 +1616,7 @@ int test_ca_read_enigma_removal() {
     int id = sockets_add(fds[0], NULL, 63, TYPE_TCP, NULL, NULL, NULL);
     ASSERT(id >= 0, "socket added");
     sockets *ss = get_sockets(id);
+    ASSERT(ss, "socket registered");
     ca_device_t dev;
     memset(&dev, 0, sizeof(dev));
     dev.enabled = 1;
@@ -1667,6 +1699,7 @@ int test_dvbca_init_dev_guards() {
 int test_tables_clear_pmt_ca_masks() {
     int id = pmt_add(0, 0x800, 0x801);
     SPMT *pmt = get_pmt(id);
+    ASSERT(pmt, "PMT not found");
     tables_clear_pmt_ca_masks(NULL, 0x1, 1);
     pmt->ca_mask = 0x41;
     pmt->ca_registered_mask = 0x41;
@@ -1707,7 +1740,7 @@ int test_ca_timeout_branches() {
     close(fds[0]);
     close(fds[1]);
 
-    int saved_enigma = opts.enigma;
+    auto saved_enigma = opts.enigma;
     opts.enigma = 1;
     dev.fd = -1;
     dev.state = CA_STATE_ACTIVE;
@@ -1803,7 +1836,8 @@ int test_ca_open_session_table_full() {
     dev.fd = fds[1];
     ca_device_t *saved = ca_devices[72];
     ca_devices[72] = &dev;
-    int saved_enigma = opts.enigma, saved_debug = opts.debug;
+    auto saved_enigma = opts.enigma;
+    auto saved_debug = opts.debug;
     opts.enigma = 1; // SPDUs go to the fd unwrapped
     opts.debug |= LOG_DVBCA;
 
@@ -1837,7 +1871,7 @@ int test_ca_open_session_unknown_resource() {
     dev.fd = fds[1];
     ca_device_t *saved = ca_devices[73];
     ca_devices[73] = &dev;
-    int saved_enigma = opts.enigma;
+    auto saved_enigma = opts.enigma;
     opts.enigma = 1; // SPDUs go to the fd unwrapped
 
     // ST_OPEN_SESSION_REQUEST for TS 103 205 MMI, which has no handler
@@ -2077,7 +2111,7 @@ static SPMT *packing_program(int sid) {
         pmt_add_stream_pid(pmt, pid, video ? 2 : 3, !video, video);
         for (auto &p : pcam->ad.pids)
             if (p.flags <= PID_STATE_INACTIVE) {
-                p.pid = pid;
+                p.pid = static_cast<int16_t>(pid);
                 p.flags = 1;
                 break;
             }
@@ -2089,7 +2123,7 @@ static SPMT *packing_program(int sid) {
 static int read_capmts(std::vector<uint8_t> *last = nullptr) {
     std::vector<uint8_t> all;
     uint8_t buf[4096];
-    int n;
+    ssize_t n;
     while ((n = read(pcam->fds[0], buf, sizeof(buf))) > 0)
         all.insert(all.end(), buf, buf + n);
     int count = 0;
@@ -2103,7 +2137,7 @@ static int read_capmts(std::vector<uint8_t> *last = nullptr) {
                 len = (len << 8) | all[p++];
         }
         if (last && p + len <= all.size())
-            last->assign(all.begin() + p, all.begin() + p + len);
+            last->assign(all.data() + p, all.data() + p + len);
         count++;
         i = p + len - 1;
     }
@@ -2115,7 +2149,7 @@ static int capmt_lists_pid(const std::vector<uint8_t> &c, int pid) {
     for (size_t i = 6; i + 4 < c.size();) {
         if (((c[i + 1] & 0x1F) << 8 | c[i + 2]) == pid)
             return 1;
-        i += 5 + ((c[i + 3] & 0x0F) << 8 | c[i + 4]);
+        i += 5 + static_cast<size_t>((c[i + 3] & 0x0F) << 8 | c[i + 4]);
     }
     return 0;
 }
