@@ -2325,10 +2325,9 @@ int test_ddci_push_fpga() {
 
 int test_ddci_push_kick_due() {
     ASSERT(!ddci_kick_due(0, 0, 600), "healthy writer is not kicked");
-    ASSERT(!ddci_kick_due(10001, 0, 500), "kick inside the min interval waits");
-    ASSERT(ddci_kick_due(10001, 0, 501), "stalled writer is kicked");
-    ASSERT(!ddci_kick_due(10000, 0, 501),
-           "stall at the boundary is not kicked");
+    ASSERT(!ddci_kick_due(1001, 0, 500), "kick inside the min interval waits");
+    ASSERT(ddci_kick_due(1001, 0, 501), "stalled writer is kicked");
+    ASSERT(!ddci_kick_due(1000, 0, 501), "stall at the boundary is not kicked");
     ASSERT(ddci_kick_due(0, 256 * 1024 + 1, 501), "runaway backlog is kicked");
     ASSERT(!ddci_kick_due(0, 256 * 1024, 501),
            "backlog at the boundary is not kicked");

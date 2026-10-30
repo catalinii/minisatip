@@ -1335,7 +1335,7 @@ void ddci_push_loop(int id) {
             else if (w < 0 && errno == EINTR)
                 continue;
             else if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-                // Blocking fd: EAGAIN is unexpected; brief sleep, retry.
+                // Playpump full: brief sleep, retry; XPT reclaim frees room.
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 continue;
             } else {
@@ -1398,7 +1398,7 @@ void ddci_push_kick(adapter *ad, ddci_device_t *d) {
         d->push_stop.store(true);
     }
     d->push_cv.notify_one();
-    // Close first: unblocks a writer stuck in a blocking write.
+    // Close first: the writer's next write fails, so it exits.
     if (ad->fe >= 0) {
         close(ad->fe);
         ad->fe = -1;
@@ -1436,7 +1436,7 @@ void ddci_push_stop(ddci_device_t *d) {
         d->push_stop.store(true);
     }
     d->push_cv.notify_one();
-    // Close first: unblocks a writer stuck in a blocking write.
+    // Close first: the writer's next write fails, so it exits.
     adapter *ad = get_adapter_nw(d->id);
     if (ad && ad->fe >= 0) {
         close(ad->fe);
@@ -1703,8 +1703,8 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
     ad->dmx_source = dvr_offset;
     int push_dvr = ad->fn;
     snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/dvr%d", ad->pa, push_dvr);
-    // Blocking like enigma: the writer waits in-kernel for room,
-    // which is what keeps the driver pull engaged.
+    // The driver never blocks (O_NONBLOCK ignored): a full
+    // playpump returns EAGAIN, retried in the push loop below.
     int write_fd = open(buf, O_WRONLY | O_CLOEXEC);
     if (write_fd < 0)
         LOG_AND_RETURN(1, "could not open %s: %s", buf, strerror(errno));
