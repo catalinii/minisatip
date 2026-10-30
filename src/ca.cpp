@@ -1138,9 +1138,9 @@ int get_active_capmts(ca_device_t *d) {
     return active;
 }
 
-void set_input_ci(int ci, int adapter) {
+void set_input_ci(int ci, int aid) {
     char filename[100];
-    char val = 'A' + adapter;
+    char val = 'A' + aid;
     sprintf(filename, "/proc/stb/tsmux/ci%d_input", ci);
     LOG("%s: %s -> %c", __FUNCTION__, filename, val);
     FILE *fp = fopen(filename, "w");
@@ -1152,18 +1152,18 @@ void set_input_ci(int ci, int adapter) {
     }
 }
 
-void set_tuner_input(int ci, int adapter) {
+void set_tuner_input(int ci, int aid) {
     char filename[100];
     char val[] = "CI0";
-    if (adapter == -1)
+    if (aid == -1)
         return;
     if (ci == -1) {
-        val[0] = 'A' + adapter;
+        val[0] = 'A' + aid;
         val[1] = 0;
     } else
         val[2] = '0' + ci;
 
-    sprintf(filename, "/proc/stb/tsmux/input%d", adapter);
+    sprintf(filename, "/proc/stb/tsmux/input%d", aid);
     LOG("%s: %s -> %s", __FUNCTION__, filename, val);
     FILE *fp = fopen(filename, "w");
     if (fp) {
@@ -1296,12 +1296,12 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
             capmt->sid = first->sid;
         int i;
         for (i = 0; i < d->max_ca_pmt; i++) {
-            int sid = MAKE_SID_FOR_CA(d->id, i);
+            int slot_sid = MAKE_SID_FOR_CA(d->id, i);
             if (capmt != d->capmt + i) {
-                if (capmt->sid == sid)
+                if (capmt->sid == slot_sid)
                     d->capmt[i].sid = MAKE_SID_FOR_CA(d->id, MAX_CA_PMT);
                 else
-                    d->capmt[i].sid = sid;
+                    d->capmt[i].sid = slot_sid;
             }
         }
     }

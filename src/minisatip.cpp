@@ -74,7 +74,7 @@ struct struct_opts opts;
 
 #define DESC_XML "desc.xml"
 #define PID_NAME "/var/run/%s.pid"
-char version[] = VERSION;
+char app_version[] = VERSION;
 char app_name[] = "minisatip";
 char pid_file[50];
 char public_str[] = "Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN";
@@ -273,7 +273,7 @@ void print_version(int use_log, int print_built_info) {
     int i;
     memset(buf, 0, sizeof(buf));
     sprintf(buf, "%s version %s, compiled on %s %s, with s2api version: %04X",
-            app_name, version, __DATE__, __TIME__, LOGDVBAPIVERSION);
+            app_name, app_version, __DATE__, __TIME__, LOGDVBAPIVERSION);
     if (!use_log)
         puts(buf);
     else
@@ -608,13 +608,13 @@ char *get_command_line_string(int argc, char *argv[]) {
     return dest;
 }
 
-void get_short_opts(char *short_opts, const struct option *long_options) {
+void get_short_opts(char *short_opts, const struct option *long_opts) {
     int i = 0;
-    while (long_options[i].name) {
-        *short_opts++ = long_options[i].val;
-        if (long_options[i].has_arg == required_argument)
+    while (long_opts[i].name) {
+        *short_opts++ = long_opts[i].val;
+        if (long_opts[i].has_arg == required_argument)
             *short_opts++ = ':';
-        else if (long_options[i].has_arg == optional_argument) {
+        else if (long_opts[i].has_arg == optional_argument) {
             *short_opts++ = ':';
             *short_opts++ = ':';
         }
@@ -1304,7 +1304,7 @@ int read_rtsp(sockets *s) {
     if (starts_with_case_insensitive(arg[0], "PLAY") ||
         starts_with_case_insensitive(arg[0], "GET") ||
         starts_with_case_insensitive(arg[0], "SETUP")) {
-        char ra[100];
+        char destination[100];
         int rv;
 
         if (!(sid = get_sid(s->sid))) {
@@ -1355,11 +1355,11 @@ int read_rtsp(sockets *s) {
             s_timeout =
                 ((sid->timeout > 20000) ? sid->timeout : opts.timeout_sec) /
                 1000;
-            get_stream_rhost(sid->sid, ra, sizeof(ra));
+            get_stream_rhost(sid->sid, destination, sizeof(destination));
 
             switch (sid->type) {
             case STREAM_RTSP_UDP:
-                if (atoi(ra) < 224)
+                if (atoi(destination) < 224)
                     snprintf(
                         buf, sizeof(buf),
                         "Transport: "
@@ -1368,7 +1368,7 @@ int read_rtsp(sockets *s) {
                         "d;server_"
                         "port=%d-%d\r\nSession: "
                         "%010d;timeout=%d\r\ncom.ses.streamID: %d",
-                        ra,
+                        destination,
                         get_sock_shost(s->sock, localhost, sizeof(localhost)),
                         get_stream_rport(sid->sid),
                         get_stream_rport(sid->sid) + 1,
@@ -1381,7 +1381,7 @@ int read_rtsp(sockets *s) {
                         "RTP/"
                         "AVP;multicast;destination=%s;port=%d-%d\r\nSession: "
                         "%010d;timeout=%d\r\ncom.ses.streamID: %d",
-                        ra, get_stream_rport(sid->sid),
+                        destination, get_stream_rport(sid->sid),
                         get_stream_rport(sid->sid) + 1, get_session_id(s->sid),
                         s_timeout, sid->sid + 1);
                 break;
@@ -1599,7 +1599,7 @@ int read_http(sockets *s) {
             strcpy(adapters, "DVBS2-0,");
         adapters[strlen(adapters) - 1] = 0;
         snprintf(buf, sizeof(buf), xml, opts.name_app, app_name, opts.name_app,
-                 version, opts.uuid, opts.http_host, adapters,
+                 app_version, opts.uuid, opts.http_host, adapters,
                  opts.playlist ? opts.playlist : "");
         sprintf(headers,
                 "Cache-Control: no-cache\r\nContent-type: "
@@ -1610,32 +1610,32 @@ int read_http(sockets *s) {
     }
 
     if (url_sv == "/state.json") {
-        char *buf = (char *)malloc(JSON_STATE_MAXLEN);
+        char *json = (char *)malloc(JSON_STATE_MAXLEN);
         char *sbuf = (char *)malloc(JSON_STRING_MAXLEN);
         memset(sbuf, 0, JSON_STRING_MAXLEN);
         int len =
-            get_json_state(buf, JSON_STATE_MAXLEN, sbuf, JSON_STRING_MAXLEN);
+            get_json_state(json, JSON_STATE_MAXLEN, sbuf, JSON_STRING_MAXLEN);
         http_response(
             s, 200,
             (char *)("Content-Type: application/json; charset=utf-8\r\n"
                      "Connection: close\r\n"
                      "Access-Control-Allow-Origin: *"),
-            buf, 0, len);
-        free(buf);
+            json, 0, len);
+        free(json);
         free(sbuf);
         return 0;
     }
 
     if (url_sv == "/bandwidth.json") {
-        char *buf = (char *)malloc(JSON_BANDWIDTH_MAXLEN);
-        int len = get_json_bandwidth(buf, JSON_BANDWIDTH_MAXLEN);
+        char *json = (char *)malloc(JSON_BANDWIDTH_MAXLEN);
+        int len = get_json_bandwidth(json, JSON_BANDWIDTH_MAXLEN);
         http_response(
             s, 200,
             (char *)("Content-Type: application/json; charset=utf-8\r\n"
                      "Connection: close\r\n"
                      "Access-Control-Allow-Origin: *"),
-            buf, 0, len);
-        free(buf);
+            json, 0, len);
+        free(json);
         return 0;
     }
 
@@ -1727,7 +1727,7 @@ int ssdp_notify(sockets *s, int alive) {
         strcatf(buf, ptr, "NTS: ssdp:%s\r\n", alive ? "alive" : "byebye");
         if (alive)
             strcatf(buf, ptr, "SERVER: Linux/1.0 UPnP/1.1 %s/%s\r\n",
-                    opts.name_app, version);
+                    opts.name_app, app_version);
         strcatf(buf, ptr, "USN: uuid:%s%s\r\n", opts.uuid, i == 1 ? "" : nt[i]);
         strcatf(buf, ptr, "BOOTID.UPNP.ORG: %d\r\n", opts.bootid);
         strcatf(buf, ptr, "CONFIGID.UPNP.ORG: 0\r\n");
@@ -1810,7 +1810,7 @@ int ssdp_reply(sockets *s) {
             ptr = 0;
             strcatf(buf, ptr, device_id_conflict,
                     opts.bind ? opts.bind : getlocalip(), opts.name_app,
-                    version, opts.device_id);
+                    app_version, opts.device_id);
             LOG("A new device joined the network with the same Device ID:  %s, "
                 "asking to change DEVICEID.SES.COM",
                 get_sockaddr_host(s->sa, ra, sizeof(ra)));
@@ -1850,7 +1850,8 @@ int ssdp_reply(sockets *s) {
 
     ptr = 0;
     strcatf(buf, ptr, reply, get_current_timestamp(), opts.http_host,
-            opts.xml_path, opts.name_app, version, opts.uuid, opts.bootid, did);
+            opts.xml_path, opts.name_app, app_version, opts.uuid, opts.bootid,
+            did);
 
     LOGM("Send Reply SSDP packet (fd: %d) %s:%d, bootid: %d deviceid: %d http: "
          "%s\n%s",
@@ -2146,7 +2147,7 @@ void http_response(sockets *s, int rc, const char *ah, const char *desc,
         strlcatf(resp, sizeof(resp) - 1, lresp, "CSeq: %d\r\n", cseq);
     if (rc != 501)
         strlcatf(resp, sizeof(resp) - 1, lresp, "Server: %s/%s\r\n", app_name,
-                 version);
+                 app_version);
 
     if (ah && ah[0] && rc != 454 && rc != 404)
         strlcatf(resp, sizeof(resp) - 1, lresp, "%s\r\n", ah);
@@ -2195,6 +2196,6 @@ _symbols minisatip_sym[] = {
     {"time_running", VAR_PSTRING, &opts.time_running, 0, 0, 0},
     {"run_user", VAR_INT, &opts.run_user, 1, 0, 0},
     {"run_pid", VAR_INT, &opts.run_pid, 1, 0, 0},
-    {"version", VAR_STRING, &version, 1, 0, 0},
+    {"version", VAR_STRING, &app_version, 1, 0, 0},
     {"command_line", VAR_PSTRING, &opts.command_line, 1, 0, 0},
     {NULL, 0, NULL, 0, 0, 0}};

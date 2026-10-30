@@ -18,11 +18,12 @@
 
 // Evaluates each side once and keeps the values for the log.
 template <typename A, typename B>
-static inline bool assert_equal_values(const A &a, const B &b, intmax_t *va,
-                                       intmax_t *vb) {
-    *va = (intmax_t)a;
-    *vb = (intmax_t)b;
-    return a == b;
+static inline bool assert_equal_values(const A &lhs, const B &rhs,
+                                       intmax_t *lhs_value,
+                                       intmax_t *rhs_value) {
+    *lhs_value = (intmax_t)lhs;
+    *rhs_value = (intmax_t)rhs;
+    return lhs == rhs;
 }
 
 #define ASSERT_EQUAL(v1, v2, msg)                                              \

@@ -380,11 +380,12 @@ int test_capmt_single_star_packs_two() {
     dev.multiple_pmt = 1;
     dev.max_ca_pmt = 1;
 
-    int a = pmt_add(0, 1100, 1100), b = pmt_add(0, 1101, 1101),
-        c = pmt_add(0, 1102, 1102);
-    ASSERT(add_pmt_to_capmt(&dev, get_pmt(a), 1) == dev.capmt, "first PMT");
-    ASSERT(add_pmt_to_capmt(&dev, get_pmt(b), 1) == dev.capmt, "packed PMT");
-    ASSERT(add_pmt_to_capmt(&dev, get_pmt(c), 1) == NULL,
+    int first = pmt_add(0, 1100, 1100), second = pmt_add(0, 1101, 1101),
+        third = pmt_add(0, 1102, 1102);
+    ASSERT(add_pmt_to_capmt(&dev, get_pmt(first), 1) == dev.capmt, "first PMT");
+    ASSERT(add_pmt_to_capmt(&dev, get_pmt(second), 1) == dev.capmt,
+           "packed PMT");
+    ASSERT(add_pmt_to_capmt(&dev, get_pmt(third), 1) == NULL,
            "a third PMT should not fit with a single '*'");
     return 0;
 }

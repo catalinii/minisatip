@@ -31,7 +31,7 @@ typedef struct struct_streams {
     std::atomic<bool> allocated{false};
     SMutex mutex;
     int sid; // socket - <0 for invalid/not used, 0 for end of the list
-    int id;  // stream index in st[], set by obtain()
+    int id;  // stream index in streams_pool[], set by obtain()
     int adapter;
     USockAddr sa; // remote address - set on accept or recvfrom on udp sockets
     int sock;     // remote tcp socket (http, rtsp)
@@ -105,12 +105,12 @@ int calculate_bw(sockets *s);
 
 constexpr size_t STREAMS_BUCKETS =
     (MAX_STREAMS + kSegmentBucketSize - 1) / kSegmentBucketSize;
-extern SegmentedPool<streams *, STREAMS_BUCKETS> st;
+extern SegmentedPool<streams *, STREAMS_BUCKETS> streams_pool;
 
 static inline streams *get_sid_nw(int i) {
     if (i < 0 || i >= MAX_STREAMS)
         return NULL;
-    streams *sid = st[i];
+    streams *sid = streams_pool[i];
     return (sid && sid->enabled) ? sid : NULL;
 }
 

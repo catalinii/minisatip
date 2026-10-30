@@ -812,9 +812,9 @@ uint32_t get_random_uint32() {
     return out;
 }
 
-void _strncpy(char *a, const char *b, int n) {
-    strncpy(a, b, n);
-    a[n - 1] = 0;
+void _strncpy(char *dst, const char *src, int n) {
+    strncpy(dst, src, n);
+    dst[n - 1] = 0;
 }
 
 /**

@@ -54,8 +54,8 @@ int mock_del_filters(adapter *ad, int fd, int pid) { return 0; }
 
 void setup_test_env() {
     // Clean all streams, sockets, and adapters
-    s.destroy_all();
-    st.destroy_all();
+    sockets_pool.destroy_all();
+    streams_pool.destroy_all();
     free_all_adapters();
 
     a_count = 1;
@@ -859,7 +859,7 @@ int test_read_rtsp_bogus_session_when_full_returns_454() {
     setup_test_env();
     for (int i = 0; i < MAX_STREAMS; ++i)
         ASSERT(streams_add() >= 0, "streams_add failed before MAX_STREAMS");
-    for (streams *s : st)
+    for (streams *s : streams_pool)
         s->ssrc = 1000 + s->id;
 
     std::string out;

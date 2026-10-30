@@ -641,7 +641,7 @@ int test_satipc_open_device_cleans_rtsp_on_rtp_failure() {
     ASSERT(rv != 0, "RTP setup must fail on the occupied port");
     ASSERT(ad.fe_sock == -1 && ad.fe == -1,
            "failed open must drop the RTSP socket");
-    for (sockets *ss : s)
+    for (sockets *ss : sockets_pool)
         ASSERT(ss->sid != aid, "failed open must not leak tracking");
 
     close(srv);
@@ -883,7 +883,7 @@ int test_satipc_open_device_full_table_closes_untracked() {
     ASSERT(rv != 0, "RTP setup must fail on the occupied port");
     ASSERT(ad.fe == -1, "untracked fd must be released");
     ASSERT(before >= 0 && after == before, "no fd may leak");
-    for (sockets *ss : s)
+    for (sockets *ss : sockets_pool)
         ASSERT(ss->sid != aid, "failed open must not track");
 
     for (int id : ids | std::views::take(n))

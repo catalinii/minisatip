@@ -40,7 +40,7 @@ int test_get_command_line_string() {
 }
 
 int test_version_var_eval() {
-    ASSERT(version[0] != '\0', "version should not be empty");
+    ASSERT(app_version[0] != '\0', "version should not be empty");
 
     char var[] = "$version$";
     int len = is_var(var);
@@ -50,7 +50,7 @@ int test_version_var_eval() {
     memset(dest, 0, sizeof(dest));
     int nb = var_eval(var, len, dest, sizeof(dest) - 1);
     ASSERT(nb > 0, "var_eval should produce output for $version$");
-    ASSERT(strcmp(dest, version) == 0,
+    ASSERT(strcmp(dest, app_version) == 0,
            "$version$ should expand to the version string");
 
     return 0;

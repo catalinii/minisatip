@@ -216,7 +216,7 @@ int test_wait_pusi() {
 }
 
 int test_assemble_packet_adaptation() {
-    unsigned char packet[] = {
+    unsigned char ts_packet[] = {
         0x47, 0x41, 0x33, 0x3f, 0x68, 0x0,  0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
         0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
         0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
@@ -236,7 +236,7 @@ int test_assemble_packet_adaptation() {
     SFilter f;
     f.id = 0;
     f.flags = FILTER_CRC;
-    int data = assemble_packet(&f, packet);
+    int data = assemble_packet(&f, ts_packet);
     ASSERT_EQUAL(78, data, "asemble_packet failed when using adaptation")
     ASSERT_EQUAL(0x02, f.data[0],
                  "asemble_packet failed when using adaptation on first byte")
@@ -244,7 +244,7 @@ int test_assemble_packet_adaptation() {
 }
 
 int test_assemble_packet() {
-    unsigned char packet[] = {
+    unsigned char ts_packet[] = {
         0x47, 0x46, 0x31, 0x14, 0x0,  0x80, 0x70, 0x78, 0x41, 0x0,  0x2,  0x0,
         0x55, 0x4,  0x8,  0x40, 0x6f, 0x5a, 0x1d, 0xe8, 0x21, 0x5e, 0xda, 0x28,
         0xab, 0xbe, 0xe4, 0xe2, 0x6f, 0x8e, 0xbb, 0x2f, 0x2,  0xa0, 0x91, 0xe6,
@@ -264,7 +264,7 @@ int test_assemble_packet() {
     SFilter f;
     f.id = 0;
     f.flags = 0;
-    int data = assemble_packet(&f, packet);
+    int data = assemble_packet(&f, ts_packet);
     ASSERT_EQUAL(123, data, "asemble_packet failed without adaptation")
     ASSERT_EQUAL(
         0x80, f.data[0],
@@ -3427,16 +3427,16 @@ static int e2e_parse_apdus(uint8_t *b, int len, struct e2e_apdu *out, int max) {
         }
         if (p + 6 > len)
             break;
-        struct e2e_apdu *a = &out[found++];
-        a->listmgmt = b[p];
-        a->cmd = 0;
-        a->npids = 0;
+        struct e2e_apdu *apdu = &out[found++];
+        apdu->listmgmt = b[p];
+        apdu->cmd = 0;
+        apdu->npids = 0;
         int end = p + obj_len, q = p + 6; // skip listmgmt/sid/ver/pilen
-        while (q + 5 <= end && q + 5 <= len && a->npids < 16) {
-            a->pids[a->npids++] = (b[q + 1] << 8) | b[q + 2];
+        while (q + 5 <= end && q + 5 <= len && apdu->npids < 16) {
+            apdu->pids[apdu->npids++] = (b[q + 1] << 8) | b[q + 2];
             int eslen = (b[q + 3] << 8) | b[q + 4];
-            if (!a->cmd && eslen > 0 && q + 5 < len)
-                a->cmd = b[q + 5];
+            if (!apdu->cmd && eslen > 0 && q + 5 < len)
+                apdu->cmd = b[q + 5];
             q += 5 + eslen;
         }
         i = q - 1;
@@ -3444,9 +3444,9 @@ static int e2e_parse_apdus(uint8_t *b, int len, struct e2e_apdu *out, int max) {
     return found;
 }
 
-static int e2e_apdu_has_pid(struct e2e_apdu *a, int pid) {
-    for (int i = 0; i < a->npids; i++)
-        if (a->pids[i] == pid)
+static int e2e_apdu_has_pid(struct e2e_apdu *apdu, int pid) {
+    for (int i = 0; i < apdu->npids; i++)
+        if (apdu->pids[i] == pid)
             return 1;
     return 0;
 }

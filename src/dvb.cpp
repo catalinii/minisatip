@@ -842,15 +842,10 @@ float get_db_snr_map(transponder *tp) {
 
 #ifndef DISABLE_LINUXDVB
 
-struct diseqc_cmd {
-    struct dvb_diseqc_master_cmd cmd;
-    uint32_t wait;
-};
-
 // based on enigma2 fbc.cpp, setProcData
-void set_proc_data(int adapter, const char *name, int val) {
+void set_proc_data(int frontend, const char *name, int val) {
     char filename[100];
-    sprintf(filename, "/proc/stb/frontend/%d/%s", adapter, name);
+    sprintf(filename, "/proc/stb/frontend/%d/%s", frontend, name);
     LOG("setProcData %s -> %d", filename, val);
     FILE *fp = fopen(filename, "w");
     if (fp) {
@@ -883,10 +878,10 @@ void dvb_set_demux_source(adapter *ad) {
 
 // Number of active pids currently using the shared demux fd. Used to decide
 // whether DMX_SET_PES_FILTER recovery is safe (no live pids to disrupt).
-int dvb_demux_shared_pid_count(adapter *a) {
+int dvb_demux_shared_pid_count(adapter *ad) {
     int n = 0;
     for (int i = 0; i < MAX_PIDS; i++)
-        if (a->pids[i].flags == PID_STATE_ACTIVE && a->pids[i].fd == a->dvr)
+        if (ad->pids[i].flags == PID_STATE_ACTIVE && ad->pids[i].fd == ad->dvr)
             n++;
     return n;
 }
@@ -1136,7 +1131,7 @@ int setup_switch(adapter *ad, bool force) {
     int frontend_fd = -1;
     transponder *tp = &ad->tp;
     int hiband = 0;
-    int diseqc = (tp->diseqc.value_or(0) > 0) ? tp->diseqc.value_or(0) - 1 : 0;
+    int pos = (tp->diseqc.value_or(0) > 0) ? tp->diseqc.value_or(0) - 1 : 0;
     int freq = tp->freq.value_or(0);
     int pol = (tp->pol.value_or(-1) - 1) & 1;
     adapter *master = ad;
@@ -1164,18 +1159,18 @@ int setup_switch(adapter *ad, bool force) {
 
     // Send the appropriate commands to setup the LNB/switch
     if (tp->diseqc_param.switch_type == SWITCH_UNICABLE) {
-        freq = send_unicable(ad, frontend_fd, freq / 1000, diseqc, pol, hiband,
+        freq = send_unicable(ad, frontend_fd, freq / 1000, pos, pol, hiband,
                              &tp->diseqc_param);
         hiband = pol = 0; // do not care about polarity and hiband on Unicable
     } else if (tp->diseqc_param.switch_type == SWITCH_JESS) {
-        freq = send_jess(ad, frontend_fd, freq / 1000, diseqc, pol, hiband,
+        freq = send_jess(ad, frontend_fd, freq / 1000, pos, pol, hiband,
                          &tp->diseqc_param);
         hiband = pol = 0; // do not care about polarity and hiband on Unicable
     } else {
         int do_setup_switch = 0;
         int change_par = 0;
         if (ad->old_pol != pol || ad->old_hiband != hiband ||
-            ad->old_diseqc != diseqc)
+            ad->old_diseqc != pos)
             change_par = 1;
 
         if (ad == master && (change_par || force))
@@ -1186,7 +1181,7 @@ int setup_switch(adapter *ad, bool force) {
             change_par = 0;
 
             if (master->old_pol != pol || master->old_hiband != hiband ||
-                master->old_diseqc != diseqc)
+                master->old_diseqc != pos)
                 change_par = 1;
 
             uint8_t old_used_slave =
@@ -1204,19 +1199,18 @@ int setup_switch(adapter *ad, bool force) {
                     "master "
                     "adapter %d: pol %d %d, hiband %d %d, diseqc %d %d ",
                     ad->id, master->id, pol, ad->old_pol, hiband,
-                    ad->old_hiband, diseqc, ad->old_diseqc);
+                    ad->old_hiband, pos, ad->old_diseqc);
                 return -1;
             }
         }
         if (do_setup_switch)
-            send_diseqc(ad, frontend_fd, diseqc,
-                        force || ad->old_diseqc != diseqc, pol, hiband,
-                        &tp->diseqc_param);
+            send_diseqc(ad, frontend_fd, pos, force || ad->old_diseqc != pos,
+                        pol, hiband, &tp->diseqc_param);
         else if (ad == master)
             LOGM("Skip sending diseqc commands since the switch position "
                  "doesn't "
                  "need to be changed: pol %d, hiband %d, switch position %d",
-                 pol, hiband, diseqc)
+                 pol, hiband, pos)
         else
             LOGM("Slave adapter %d not sending switch updates using master %d",
                  ad->id, master->id);
@@ -1225,11 +1219,11 @@ int setup_switch(adapter *ad, bool force) {
     if (ad != master) {
         master->old_pol = pol;
         master->old_hiband = hiband;
-        master->old_diseqc = diseqc;
+        master->old_diseqc = pos;
     }
     ad->old_pol = pol;
     ad->old_hiband = hiband;
-    ad->old_diseqc = diseqc;
+    ad->old_diseqc = pos;
 
     return freq;
 }
@@ -1546,20 +1540,20 @@ int dvb_tune(int aid, transponder *tp) {
     return 0;
 }
 
-int dvb_set_pid(adapter *a, int i_pid) {
+int dvb_set_pid(adapter *ad, int i_pid) {
     char buf[100];
     int fd;
-    int hw, ad;
+    int hw, demux;
     uint64_t ctime = getTick();
 
-    hw = a->pa;
-    ad = a->fn;
+    hw = ad->pa;
+    demux = ad->fn;
     if (i_pid > 8192)
-        LOG_AND_RETURN(-1, "pid %d > 8192 for " DEV_DEMUX, i_pid, hw, ad);
+        LOG_AND_RETURN(-1, "pid %d > 8192 for " DEV_DEMUX, i_pid, hw, demux);
 
-    sprintf(buf, DEV_DEMUX, hw, ad);
+    sprintf(buf, DEV_DEMUX, hw, demux);
     if ((fd = open(buf, O_RDWR | O_NONBLOCK)) < 0) {
-        LOG("Could not open demux device " DEV_DEMUX ": %s ", hw, ad,
+        LOG("Could not open demux device " DEV_DEMUX ": %s ", hw, demux,
             strerror(errno));
         return -1;
     }
@@ -1574,7 +1568,7 @@ int dvb_set_pid(adapter *a, int i_pid) {
     s_filter_params.pes_type = DMX_PES_OTHER;
 
     if (ioctl(fd, DMX_SET_PES_FILTER, &s_filter_params) < 0) {
-        int ep = a->active_pids;
+        int ep = ad->active_pids;
         LOG0("failed setting filter on %s pid %d, errno %d (%s), enabled pids "
              "%d",
              buf, i_pid, errno, strerror(errno), ep);
@@ -1582,10 +1576,10 @@ int dvb_set_pid(adapter *a, int i_pid) {
         return -1;
     }
 
-    LOG("AD %d [dvr %d %d], setting filter on PID %d for fd %d [%jd ms]", a->id,
-        hw, ad, i_pid, fd, getTick() - ctime);
+    LOG("AD %d [dvr %d %d], setting filter on PID %d for fd %d [%jd ms]",
+        ad->id, hw, demux, i_pid, fd, getTick() - ctime);
 
-    SPid *p = find_pid(a->id, i_pid);
+    SPid *p = find_pid(ad->id, i_pid);
     if (p)
         p->sock = -1;
 
@@ -1619,7 +1613,7 @@ int dvb_del_filters(adapter *ad, int fd, int pid) {
 
 // useful on devices where DVR is not used
 
-static int dvb_demux_set_pes_filter(adapter *a, int fd, int i_pid) {
+static int dvb_demux_set_pes_filter(adapter *ad, int fd, int i_pid) {
     struct dmx_pes_filter_params s_filter_params;
 
     memset(&s_filter_params, 0, sizeof(s_filter_params));
@@ -1633,27 +1627,27 @@ static int dvb_demux_set_pes_filter(adapter *a, int fd, int i_pid) {
         LOG0("failed setting filter on fd %d, adapter %d, pid %d, errno %d "
              "(%s), "
              "enabled pids %d",
-             fd, a->id, i_pid, errno, strerror(errno), a->active_pids);
+             fd, ad->id, i_pid, errno, strerror(errno), ad->active_pids);
         return -1;
     }
     return 0;
 }
 
-int dvb_demux_set_pid(adapter *a, int i_pid) {
-    int fd = a->dvr;
+int dvb_demux_set_pid(adapter *ad, int i_pid) {
+    int fd = ad->dvr;
     int64_t ctime = getTick();
 
     if (i_pid > 8192)
-        LOG_AND_RETURN(-1, "pid %d > 8192 for adapter %d", i_pid, a->id);
+        LOG_AND_RETURN(-1, "pid %d > 8192 for adapter %d", i_pid, ad->id);
 
-    if (a->active_demux_pids++ == 0) {
-        if (dvb_demux_set_pes_filter(a, fd, i_pid)) {
-            a->active_demux_pids--;
+    if (ad->active_demux_pids++ == 0) {
+        if (dvb_demux_set_pes_filter(ad, fd, i_pid)) {
+            ad->active_demux_pids--;
             return -1;
         }
         LOG("AD %d [dvr %d %d], setting filter on PID %d for fd %d, active "
             "pids %d",
-            a->id, a->pa, a->fn, i_pid, fd, a->active_pids);
+            ad->id, ad->pa, ad->fn, i_pid, fd, ad->active_pids);
         return fd;
     }
 
@@ -1661,22 +1655,22 @@ int dvb_demux_set_pid(adapter *a, int i_pid) {
     if (ioctl(fd, DMX_ADD_PID, &p) < 0) {
         int err = errno;
         LOG0("failed to add pid %d to fd %d maximum pids %d: errno %d, %s", p,
-             fd, a->active_pids, err, strerror(err));
-        if (err == EINVAL && !dvb_demux_shared_pid_count(a) &&
-            !dvb_demux_set_pes_filter(a, fd, i_pid)) {
+             fd, ad->active_pids, err, strerror(err));
+        if (err == EINVAL && !dvb_demux_shared_pid_count(ad) &&
+            !dvb_demux_set_pes_filter(ad, fd, i_pid)) {
             // Shared demux fd unused by others, so no PES filter exists: the
             // counter disagrees with the driver (stale after reopen); set it.
             LOG("AD %d [demux %d %d], recovered stale demux counter, setting "
                 "filter on PID %d for fd %d",
-                a->id, a->pa, a->fn, i_pid, fd);
-            a->active_demux_pids = 1;
+                ad->id, ad->pa, ad->fn, i_pid, fd);
+            ad->active_demux_pids = 1;
             return fd;
         }
-        a->active_demux_pids--;
+        ad->active_demux_pids--;
         return -1;
     }
     LOG("AD %d [demux %d %d], setting filter on PID %d for fd %d [%jd ms]",
-        a->id, a->pa, a->fn, i_pid, fd, getTick() - ctime);
+        ad->id, ad->pa, ad->fn, i_pid, fd, getTick() - ctime);
 
     return fd;
 }
@@ -1768,20 +1762,20 @@ int dvb_psi_read(int socket, void *buf, int len, sockets *ss, int *rb) {
 }
 // Use DMX_SET_FILTER to add PSI filter
 
-int dvb_set_psi_filter(adapter *a, int i_pid) {
+int dvb_set_psi_filter(adapter *ad, int i_pid) {
     char buf[100];
     int fd;
-    int hw, ad;
+    int hw, demux;
     int64_t ctime = getTick();
 
-    hw = a->pa;
-    ad = a->fn;
+    hw = ad->pa;
+    demux = ad->fn;
     if (i_pid > 8192)
-        LOG_AND_RETURN(-1, "pid %d > 8192 for " DEV_DEMUX, i_pid, hw, ad);
+        LOG_AND_RETURN(-1, "pid %d > 8192 for " DEV_DEMUX, i_pid, hw, demux);
 
-    sprintf(buf, DEV_DEMUX, hw, ad);
+    sprintf(buf, DEV_DEMUX, hw, demux);
     if ((fd = open(buf, O_RDWR | O_NONBLOCK)) < 0) {
-        LOG("Could not open demux device " DEV_DEMUX ": %s ", hw, ad,
+        LOG("Could not open demux device " DEV_DEMUX ": %s ", hw, demux,
             strerror(errno));
         return -1;
     }
@@ -1793,7 +1787,7 @@ int dvb_set_psi_filter(adapter *a, int i_pid) {
     sct.flags = DMX_IMMEDIATE_START;
 
     if (ioctl(fd, DMX_SET_FILTER, &sct) < 0) {
-        int ep = a->active_pids;
+        int ep = ad->active_pids;
         LOG0("%s: failed setting filter on %s pid %d, errno %d (%s), enabled "
              "pids "
              "%d",
@@ -1803,17 +1797,18 @@ int dvb_set_psi_filter(adapter *a, int i_pid) {
     }
 
     LOG("AD %d [demux %d %d], setting PSI filter on PID %d for fd %d [%jd ms]",
-        a->id, hw, ad, i_pid, fd, getTick() - ctime);
+        ad->id, hw, demux, i_pid, fd, getTick() - ctime);
 
-    int sock = sockets_add(fd, NULL, a->id, TYPE_DVR, NULL, NULL, NULL);
+    int sock = sockets_add(fd, NULL, ad->id, TYPE_DVR, NULL, NULL, NULL);
     if (sock < 0) {
-        LOG("Failed to add socket for filter pid %d, adapter %d", i_pid, a->id);
+        LOG("Failed to add socket for filter pid %d, adapter %d", i_pid,
+            ad->id);
         close(fd);
         return -1;
     }
     sockets_setread(sock, (void *)dvb_psi_read);
-    sockets_set_master(sock, a->sock);
-    SPid *p = find_pid(a->id, i_pid);
+    sockets_set_master(sock, ad->sock);
+    SPid *p = find_pid(ad->id, i_pid);
     if (p)
         p->sock = sock;
     else
@@ -1831,13 +1826,13 @@ int dvb_is_psi(adapter *ad, int pid) {
     return 0;
 }
 
-int dvb_set_psi_pes_filter(adapter *a, int i_pid) {
-    if (dvb_is_psi(a, i_pid))
-        return dvb_set_psi_filter(a, i_pid);
+int dvb_set_psi_pes_filter(adapter *ad, int i_pid) {
+    if (dvb_is_psi(ad, i_pid))
+        return dvb_set_psi_filter(ad, i_pid);
     else if (opts.use_demux_device == USE_PES_FILTERS_AND_DVR)
-        return dvb_set_pid(a, i_pid);
+        return dvb_set_pid(ad, i_pid);
     else
-        return dvb_demux_set_pid(a, i_pid);
+        return dvb_demux_set_pid(ad, i_pid);
 }
 
 int dvb_del_psi_filters(adapter *ad, int fd, int pid) {
@@ -2361,12 +2356,12 @@ int dvb_get_signal(adapter *ad) {
     return 0;
 }
 
-int dvb_commit(adapter *a) { return 0; }
+int dvb_commit(adapter *ad) { return 0; }
 
-int dvb_close(adapter *a) {
-    if (a->dmx >= 0)
-        close(a->dmx);
-    a->dmx = -1;
+int dvb_close(adapter *ad) {
+    if (ad->dmx >= 0)
+        close(ad->dmx);
+    ad->dmx = -1;
     return 0;
 }
 

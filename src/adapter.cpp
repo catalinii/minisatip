@@ -328,7 +328,7 @@ int init_hw(int i) {
     ad->new_gs = 0;
     ad->force_close = 0;
     { // keep the writer protocol: ca_mask stores take ca_mask_mutex
-        std::lock_guard<SMutex> lock(ca_mask_mutex);
+        std::lock_guard<SMutex> mask_lock(ca_mask_mutex);
         ad->ca_mask = 0;
     }
     ad->tune_time = 0;
@@ -433,7 +433,7 @@ int close_adapter(int na) {
         pmt_close_device(ad);
 #endif
     {
-        std::lock_guard<SMutex> lock(ca_mask_mutex);
+        std::lock_guard<SMutex> mask_lock(ca_mask_mutex);
         ad->ca_mask = 0;
     }
     ad->fe = -1;
@@ -633,7 +633,7 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
     // Map parameters to concrete hardware values. The LNB switch threshold
     // (hiband) is computed using the master/adapter configuration.
     int pol = (tp->pol.value_or(-1) - 1) & 1;
-    int diseqc = (tp->diseqc.value_or(0) > 0) ? tp->diseqc.value_or(0) - 1 : 0;
+    int pos = (tp->diseqc.value_or(0) > 0) ? tp->diseqc.value_or(0) - 1 : 0;
 
     adapter *master = NULL;
     if (ad->master_source >= 0 && ad->master_source < MAX_ADAPTERS)
@@ -660,7 +660,7 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
                     ad->used[i] = 0;
                     continue;
                 }
-                if (ad2->is_incompatible(pol, hiband, diseqc))
+                if (ad2->is_incompatible(pol, hiband, pos))
                     return 1; // slave parameters conflict with the required
                               // parameters
             }
@@ -668,14 +668,14 @@ int compare_slave_parameters(adapter *ad, transponder *tp) {
 
     // master adapter used by slave adapters
     if (master) {
-        if (master->is_incompatible(pol, hiband, diseqc))
+        if (master->is_incompatible(pol, hiband, pos))
             return 1; // master parameters conflict with the required parameters
     }
     LOGM("%s: adapter %d master %d (pol %d, band %d, diseqc "
          "%d) compatible with freq %d, pol %d band %d diseqc %d",
          __FUNCTION__, ad->id, master ? master->id : ad->master_source,
          ad->old_pol, ad->old_hiband, ad->old_diseqc, tp->freq.value_or(0), pol,
-         hiband.value_or(-1), diseqc);
+         hiband.value_or(-1), pos);
     return 0;
 }
 
@@ -685,10 +685,10 @@ int source_enabled_for_adapter(adapter *ad, transponder *tp) {
     if (tp->sys.value_or(SYS_UNDEFINED) != SYS_DVBS &&
         tp->sys.value_or(SYS_UNDEFINED) != SYS_DVBS2)
         return 1;
-    int diseqc = tp->diseqc.value_or(0);
-    if (diseqc <= 0 || diseqc > MAX_SOURCES)
+    int src = tp->diseqc.value_or(0);
+    if (src <= 0 || src > MAX_SOURCES)
         return 1;
-    return ad->absolute_table[diseqc - 1];
+    return ad->absolute_table[src - 1];
 }
 
 int get_absolute_source_for_adapter(int aid, int src, int sys) {
@@ -2051,7 +2051,6 @@ void set_timeout_adapters(char *o) {
     auto arg = split(sv, ',');
     if (!arg.empty() && !arg[0].empty() && arg[0][0] == '*') {
         opts.adapter_timeout = timeout * 1000;
-        int j;
         for (j = 0; j < MAX_ADAPTERS; j++)
             if (a[j]) {
                 a[j]->adapter_timeout = timeout * 1000;

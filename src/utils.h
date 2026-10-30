@@ -110,7 +110,7 @@ void write_buf_to_file(char *file, uint8_t *buf, int len);
 int mkdir_recursive(const char *path);
 void sleep_msec(uint32_t msec);
 int get_random(unsigned char *dest, int len);
-void _strncpy(char *a, const char *b, int len);
+void _strncpy(char *dst, const char *src, int len);
 int is_rtsp_response(char *buf, int len);
 int is_rtsp_request(char *buf, int len);
 int is_http_request(char *buf, int len);

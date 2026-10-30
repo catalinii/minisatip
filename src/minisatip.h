@@ -11,7 +11,7 @@ char *get_command_line_string(int argc, char *argv[]);
 unsigned int log_module_mask(std::string_view name);
 
 extern char pid_file[];
-extern char app_name[], version[];
+extern char app_name[], app_version[];
 
 #ifndef offsetof
 #define offsetof(st, m) __builtin_offsetof(st, m)

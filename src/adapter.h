@@ -178,10 +178,10 @@ struct struct_adapter {
     int (*close)(adapter *ad);
     void (*free)(adapter *ad);
     bool is_incompatible(int pol, const std::optional<int> &hiband,
-                         int diseqc) const {
+                         int pos) const {
         return pol != old_pol ||
                (hiband.has_value() && *hiband != old_hiband) ||
-               diseqc != old_diseqc;
+               pos != old_diseqc;
     }
 };
 
