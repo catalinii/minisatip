@@ -245,7 +245,7 @@ void adapter_set_dvr(adapter *ad) {
     if (ad->adapter_timeout > 0)
         sockets_timeout(ad->sock, ad->adapter_timeout);
     if (opts.th_priority > 0)
-        set_thread_prio(get_socket_thread(ad->sock), opts.th_priority);
+        set_thread_prio(opts.th_priority);
 }
 
 int init_complete = 0;
@@ -952,7 +952,7 @@ int update_pids(int aid) {
 
     for (i = 0; i < MAX_PIDS; i++)
         if (ad->pids[i].flags == PID_STATE_NEW)
-            pmt_pid_add(ad, ad->pids[i].pid, 0);
+            pmt_pid_add(ad, ad->pids[i].pid);
 #endif
 
     for (i = MAX_PIDS - 1; i >= 0; i--)

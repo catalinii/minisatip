@@ -1987,8 +1987,8 @@ int64_t get_snr_percent(int64_t init_snr) {
 
 // recalculate the values of strength and SNR
 
-void adapt_signal(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
-                  uint16_t *snr, uint16_t *db) {
+void adapt_signal(adapter *ad, uint16_t *strength, uint16_t *snr,
+                  uint16_t *db) {
 
     int64_t strength_init = *strength;
     int64_t strength_new = *strength;
@@ -2316,7 +2316,7 @@ int dvb_get_signal(adapter *ad) {
             get_signal(ad, &status, &ber, &strength, &snr, &dbvalue,
                        &status_valid);
             if (ad->force_tuner_signal != TUNER_FORCE_NO)
-                adapt_signal(ad, &status, &ber, &strength, &snr, &dbvalue);
+                adapt_signal(ad, &strength, &snr, &dbvalue);
         }
     } else {
         if (ad->lock_retry_armed)
@@ -2356,7 +2356,7 @@ int dvb_get_signal(adapter *ad) {
     return 0;
 }
 
-int dvb_commit(adapter *ad) { return 0; }
+int dvb_commit(adapter *) { return 0; }
 
 int dvb_close(adapter *ad) {
     if (ad->dmx >= 0)

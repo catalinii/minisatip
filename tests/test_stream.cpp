@@ -44,13 +44,13 @@ extern "C" int srt_send(SRTSOCKET u, const char *buf, int len) {
 }
 #endif
 
-int mock_adapter_tune(int aid, transponder *tp) { return 0; }
+int mock_adapter_tune(int, transponder *) { return 0; }
 
-int mock_set_pid(adapter *ad, int i_pid) {
+int mock_set_pid(adapter *, int) {
     return 123; // Dummy fd for the demux filter
 }
 
-int mock_del_filters(adapter *ad, int fd, int pid) { return 0; }
+int mock_del_filters(adapter *, int, int) { return 0; }
 
 void setup_test_env() {
     // Clean all streams, sockets, and adapters

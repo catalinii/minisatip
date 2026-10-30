@@ -895,7 +895,7 @@ static int fake_ca_add_pmt(adapter *ad, SPMT *pmt, int update) {
     (void)update;
     return TABLES_RESULT_OK;
 }
-static int fake_ca_del_pmt(adapter *ad, SPMT *pmt) {
+static int fake_ca_del_pmt(adapter *, SPMT *) {
     fake_ca_del_calls++;
     return TABLES_RESULT_OK;
 }

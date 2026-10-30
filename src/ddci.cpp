@@ -268,7 +268,7 @@ static int unmap_removed_pids(ddci_device_t *d, int ad, SPMT *pmt) {
     return to_del.size();
 }
 
-int ddci_init_dev(adapter *ad) { return TABLES_RESULT_OK; }
+int ddci_init_dev(adapter *) { return TABLES_RESULT_OK; }
 
 int ddci_close_dev(adapter *ad) {
     if (ad->fe_sock > 0)
@@ -278,7 +278,7 @@ int ddci_close_dev(adapter *ad) {
 }
 SCA_op ddci;
 
-int ddci_close_adapter(adapter *ad) { return 0; }
+int ddci_close_adapter(adapter *) { return 0; }
 
 extern SMutex ca_mask_mutex;
 
@@ -818,7 +818,7 @@ uint16_t YMDtoMJD(int Y, int M, int D) {
 }
 
 // Based on vdr implementation provided by Klaus Schmidinger
-int ddci_create_eit(ddci_device_t *d, int sid, uint8_t *eit, int version) {
+int ddci_create_eit(int sid, uint8_t *eit, int version) {
     // Make an event that starts one hour in the past
     struct tm tm_r;
     time_t t =
@@ -1087,7 +1087,7 @@ int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len, adapter *ad) {
                     __FUNCTION__, d->pmt[i].id, pmt->adapter, pmt->pid);
 
             // Add an EIT table for each channel
-            psi_len = ddci_create_eit(d, pmt->sid, psi, d->pmt[i].ver);
+            psi_len = ddci_create_eit(pmt->sid, psi, d->pmt[i].ver);
             pos += buffer_to_ts(dst + pos, len - pos, psi, psi_len, &d->eit_cc,
                                 18);
             d->pmt[i].last_pmt = ctime;
@@ -1282,7 +1282,7 @@ int ddci_set_pid(adapter *ad, int pid) {
     return 100;
 }
 
-int ddci_del_filters(adapter *ad, int fd, int pid) {
+int ddci_del_filters(adapter *ad, int, int pid) {
     LOGM("%s: ddci %d del pid %d", __FUNCTION__, ad->id, pid);
     return 0;
 }
@@ -1418,13 +1418,13 @@ int ddci_open_device(adapter *ad) {
     return 0;
 }
 
-fe_delivery_system_t ddci_delsys(int aid, int fd, fe_delivery_system_t *sys) {
+fe_delivery_system_t ddci_delsys(int, int, fe_delivery_system_t *) {
     return (fe_delivery_system_t)0;
 }
 
-std::string ddci_name(int aid, int fd) { return ""; }
+std::string ddci_name(int, int) { return ""; }
 
-int ddci_process_cat(int filter, unsigned char *b, int len, void *opaque) {
+int ddci_process_cat(int filter, unsigned char *b, int, void *opaque) {
     int cat_len = 0, cat_ver = 0, i, k, es_len = 0, add_cat = 1;
     uint16_t caid, capid;
     std::vector<uint16_t> emm_pids;

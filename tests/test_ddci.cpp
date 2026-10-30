@@ -575,7 +575,7 @@ int test_copy_ts_from_ddci() {
 int is_err = 0;
 int expected_pid = 0;
 int did_write = 0;
-ssize_t xwritev(int fd, const struct iovec *io, int len) {
+ssize_t xwritev(int, const struct iovec *io, int len) {
     unsigned char *b = (unsigned char *)io[0].iov_base;
     LOGM("called writev with len %d, first pid %d", len, PID_FROM_TS(b));
     did_write = 1;
@@ -598,7 +598,7 @@ ssize_t xwritev(int fd, const struct iovec *io, int len) {
 // the last iovec passed to writev(), captured by xwritev_last
 static int last_iov_len = -1;
 static uint8_t last_iov[188];
-ssize_t xwritev_last(int fd, const struct iovec *io, int len) {
+ssize_t xwritev_last(int, const struct iovec *io, int len) {
     int i, total = 0;
     did_write = 1;
     for (i = 0; i < len; i++)

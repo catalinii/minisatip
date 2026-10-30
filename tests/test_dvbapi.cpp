@@ -380,7 +380,7 @@ int test_descramble_watchdog() {
     ASSERT(!k3->enabled, "a decrypt in between resets the back-off");
     drain(sv[1]);
 
-    start_pmt(pmt, &ad);
+    start_pmt(pmt);
     ASSERT(!pmt->last_decrypt_ok && !pmt->last_scrambled_pkt,
            "a started PMT has no stamps");
     pmt->last_decrypt_ok = pmt->last_scrambled_pkt = now;

@@ -247,7 +247,8 @@ void print_trace(void) {
 
 extern std::atomic<int> run_loop;
 
-void posix_signal_handler(int sig, siginfo_t *siginfo, ucontext_t *ctx) {
+void posix_signal_handler(int sig, siginfo_t *siginfo,
+                          [[maybe_unused]] ucontext_t *ctx) {
     uint64_t sp = 0, ip = 0;
 
     if (sig == SIGINT || sig == SIGTERM) {
@@ -504,7 +505,7 @@ pthread_t start_new_thread(char *name) {
     return tid;
 }
 
-void set_thread_prio(pthread_t tid, int prio) {
+void set_thread_prio(int prio) {
     int rv;
     struct sched_param param;
     memset(&param, 0, sizeof(struct sched_param));

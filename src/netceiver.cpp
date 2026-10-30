@@ -377,7 +377,7 @@ int netcv_commit(adapter *ad) {
     return 0;
 }
 
-int netcv_tune(int aid, transponder *tp) {
+int netcv_tune(int aid, transponder *) {
     adapter *ad = get_adapter(aid);
     LOG("netceiver: called netcv_tune for adapter %d", ad->id);
     if (!ad)
@@ -390,11 +390,11 @@ int netcv_tune(int aid, transponder *tp) {
     return 0;
 }
 
-fe_delivery_system_t netcv_delsys(int aid, int fd, fe_delivery_system_t *sys) {
+fe_delivery_system_t netcv_delsys(int, int, fe_delivery_system_t *) {
     return SYS_UNDEFINED;
 }
 
-std::string netcv_name(int aid, int fd) { return ""; }
+std::string netcv_name(int, int) { return ""; }
 
 void find_netcv_adapter() {
     int i, k, n, na;

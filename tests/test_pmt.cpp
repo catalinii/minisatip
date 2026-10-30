@@ -387,14 +387,14 @@ static int fake_ca_add_pmt(adapter *ad, SPMT *pmt, int update) {
     return TABLES_RESULT_OK;
 }
 
-static int fake_ca_del_pmt(adapter *ad, SPMT *pmt) {
+static int fake_ca_del_pmt(adapter *, SPMT *pmt) {
     fake_ca_del_calls++;
     fake_ca_last_del_pmt = pmt->id;
     return TABLES_RESULT_OK;
 }
 
-static int fake_ca_init_dev(adapter *ad) { return TABLES_RESULT_OK; }
-static int fake_ca_close_dev(adapter *ad) { return TABLES_RESULT_OK; }
+static int fake_ca_init_dev(adapter *) { return TABLES_RESULT_OK; }
+static int fake_ca_close_dev(adapter *) { return TABLES_RESULT_OK; }
 
 static SCA_op fake_ca_op = {.ca_add_pid = NULL,
                             .ca_del_pid = NULL,

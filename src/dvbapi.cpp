@@ -599,7 +599,7 @@ int dvbapi_close(sockets *s) {
     return 0;
 }
 
-int dvbapi_timeout(sockets *s) {
+int dvbapi_timeout(sockets *) {
     //    if (!enabledKeys)
     //        return 1; // close dvbapi connection
     return 0;
@@ -615,7 +615,7 @@ int is_adapter_active() {
     return active_adapters;
 }
 
-int connect_dvbapi(void *arg) {
+int connect_dvbapi(void *) {
     if ((sock > 0) && dvbapi_is_enabled) // already connected
     {
         int64_t ctime = getTick();
@@ -980,7 +980,7 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt, int update) {
     return 0;
 }
 
-int dvbapi_del_pmt(adapter *ad, SPMT *pmt) {
+int dvbapi_del_pmt(adapter *, SPMT *pmt) {
     std::lock_guard<SMutex> lock(pmt->mutex);
     SKey *k = (SKey *)pmt->opaque;
     if (!k)
@@ -992,7 +992,7 @@ int dvbapi_del_pmt(adapter *ad, SPMT *pmt) {
     return 0;
 }
 
-int dvbapi_init_dev(adapter *ad) {
+int dvbapi_init_dev(adapter *) {
     set_sockets_rtime(poller_sock, 0);
     return TABLES_RESULT_OK;
 }

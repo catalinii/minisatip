@@ -409,8 +409,8 @@ int close_stream(int i) {
     return 0;
 }
 
-static int decode_transport_srt(sockets *s, streams *sid,
-                                std::string_view arg) {
+static int decode_transport_srt([[maybe_unused]] streams *sid,
+                                [[maybe_unused]] std::string_view arg) {
 #ifndef DISABLE_SRT
     if (!srt_listener_is_init())
         LOG_AND_RETURN(-1, "SRT listener not initialized");
@@ -465,7 +465,7 @@ int decode_transport(sockets *s, std::string_view arg, char *default_rtp,
         if (arg.contains("RTP/AVP/SRT")) {
             LOG("Assuming SRT transport for stream sid %d, arg %.*s", sid->sid,
                 (int)arg.size(), arg.data());
-            return decode_transport_srt(s, sid, arg);
+            return decode_transport_srt(sid, arg);
         }
         if (arg.contains("RTP/AVP/TCP")) {
             LOG("Assuming RTSP over TCP for stream sid %d, arg %.*s", sid->sid,

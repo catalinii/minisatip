@@ -120,11 +120,11 @@ satipc *get_satip1(int aid, const char *file, int line) {
             return;                                                            \
     }
 
-int http_request(adapter *ad, char *url, const char *method, int force);
+int http_request(adapter *ad, char *url, const char *method);
 
 int satipc_request(adapter *ad);
 int satipc_send_teardown(adapter *ad, satipc *sip);
-void set_adapter_signal(adapter *ad, char *b, int rlen);
+void set_adapter_signal(adapter *ad, char *b);
 
 void handle_client_capabilities(satipc *sip, char *buf) {
     char *sep = strstr(buf, "minisatip");
@@ -224,7 +224,6 @@ int satipc_handle_play(adapter *ad, satipc *sip) {
 int satipc_reply(sockets *s) {
     if (!s->rlen) // nothing buffered (EOF), nothing to parse
         return 0;
-    int rlen = s->rlen;
     adapter *ad;
     satipc *sip;
     char *sep;
@@ -257,7 +256,7 @@ int satipc_reply(sockets *s) {
     handle_client_capabilities(sip, (char *)s->buf);
 
     if (sip->last_cmd == RTSP_DESCRIBE) {
-        set_adapter_signal(ad, (char *)s->buf, rlen);
+        set_adapter_signal(ad, (char *)s->buf);
     }
 
     sip->expect_reply = false;
@@ -456,7 +455,7 @@ static int satipc_open_srt(adapter *ad, satipc *sip);
 #endif
 
 int satipc_send_options(adapter *ad) {
-    http_request(ad, NULL, (char *)"OPTIONS", 0);
+    http_request(ad, NULL, (char *)"OPTIONS");
     return 0;
 }
 
@@ -581,7 +580,7 @@ int satipc_timeout(sockets *s) {
     return 0;
 }
 
-void set_adapter_signal(adapter *ad, char *b, int rlen) {
+void set_adapter_signal(adapter *ad, char *b) {
     int strength, status, quality;
     char *tun, *signal = NULL;
 
@@ -662,15 +661,15 @@ int satipc_rtcp_reply(sockets *s) {
     }
 
     if (rp && rlen > sm + rp)
-        set_adapter_signal(ad, (char *)b + sm, rp);
+        set_adapter_signal(ad, (char *)b + sm);
     else
-        set_adapter_signal(ad, (char *)b, rlen);
+        set_adapter_signal(ad, (char *)b);
 
     return 0;
 }
 
 #ifndef DISABLE_SRT
-int satipc_srt_read(int socket, void *buf, int len, sockets *ss, int *rb) {
+int satipc_srt_read(int, void *buf, int len, sockets *ss, int *rb) {
     adapter *ad;
     satipc *sip;
     get_ad_and_sipr(ss->sid, 0);
@@ -1171,7 +1170,7 @@ int process_rtsp_tcp(sockets *ss, unsigned char *rtsp, int rtsp_len, void *buf,
     if (rtsp[1] == 1) {
         tmp_char = rtsp[rtsp_len + 4];
         rtsp[rtsp_len + 4] = 0;
-        set_adapter_signal(ad, (char *)rtsp + 4, rtsp_len);
+        set_adapter_signal(ad, (char *)rtsp + 4);
         rtsp[rtsp_len + 4] = tmp_char;
         return 0;
     } else if (rtsp[1] == 0) {
@@ -1598,7 +1597,7 @@ void get_t2_url(adapter *ad, char *url, int url_len) {
 
 #undef FILL
 
-int http_request(adapter *ad, char *url, const char *method, int force) {
+int http_request(adapter *ad, char *url, const char *method) {
     char session[200];
     char buf[2048];
     char sid[40];
@@ -1723,7 +1722,7 @@ int satipc_send_setup(adapter *ad, satipc *sip) {
 
     sip->sent_transport = false;
     strcatf(url, len, "&pids=none");
-    http_request(ad, url, "SETUP", 0);
+    http_request(ad, url, "SETUP");
     return 0;
 }
 
@@ -1804,12 +1803,12 @@ int satipc_send_play(adapter *ad) {
 
     satipc_get_pids(ad, sip, url + len, sizeof(url) - len, use_pids);
     sip->want_tune = false;
-    http_request(ad, url, "PLAY", 0);
+    http_request(ad, url, "PLAY");
     return 0;
 }
 int satipc_send_teardown(adapter *ad, satipc *sip) {
     if (sip->stream_id != -1) {
-        http_request(ad, NULL, "TEARDOWN", 0);
+        http_request(ad, NULL, "TEARDOWN");
     } else
         LOG("Unable to send TEARDOWN for adapter %d (stream_id %d)", ad->id,
             sip->stream_id);
@@ -1826,7 +1825,7 @@ int satipc_send_describe(adapter *ad, satipc *sip) {
 
     sip->num_describe++;
     if (sip->num_describe < 4 && sip->num_describe >= 0)
-        http_request(ad, NULL, "DESCRIBE", 0);
+        http_request(ad, NULL, "DESCRIBE");
     else
         sip->num_describe = 0;
 
@@ -1935,7 +1934,7 @@ int satipc_commit(adapter *ad) {
 
     return satipc_request(ad);
 }
-int satipc_tune(int aid, transponder *tp) {
+int satipc_tune(int aid, transponder *) {
     adapter *ad;
     satipc *sip;
     get_ad_and_sipr(aid, 1);
@@ -1972,11 +1971,11 @@ int satipc_tune(int aid, transponder *tp) {
     return 0;
 }
 
-fe_delivery_system_t satipc_delsys(int aid, int fd, fe_delivery_system_t *sys) {
+fe_delivery_system_t satipc_delsys(int, int, fe_delivery_system_t *) {
     return (fe_delivery_system_t)0;
 }
 
-std::string satipc_name(int aid, int fd) {
+std::string satipc_name(int aid, int) {
     satipc *sip = get_configured_satip(aid);
 
     if (!sip)
@@ -1987,7 +1986,7 @@ std::string satipc_name(int aid, int fd) {
     return ss.str();
 }
 
-void satipc_free(adapter *ad) {}
+void satipc_free(adapter *) {}
 
 int add_satip_server(char *host, int port, int fe, char delsys, char *source_ip,
                      satipc_transport_type transport, int no_pids_all) {
@@ -2289,7 +2288,7 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h) {
     DEBUGM("%s: %s", __FUNCTION__, s->xml);
 }
 
-int satip_getxml(void *x) {
+int satip_getxml(void *) {
     int i;
     if (!opts.satip_xml)
         return 1;
