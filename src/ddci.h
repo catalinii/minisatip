@@ -24,9 +24,9 @@
 
 // Max bytes pushed per call; bigger bursts wedge this driver.
 #define DDCI_PUSH_CHUNK (4 * 1024)
-// Micro-kick backstop: the blocking writer rides out pauses;
-// a stall this long means a dead pull, re-prime it via close/open.
-#define DDCI_KICK_STALL_MS 10000
+// Micro-kick backstop: EAGAIN past this long means the playpump
+// congestion latch is stuck, re-prime it via close/open.
+#define DDCI_KICK_STALL_MS 1000
 #define DDCI_KICK_BACKLOG (256 * 1024)
 #define DDCI_KICK_MIN_MS 500
 // Kick when the writer stalls or the backlog outruns the drain,
@@ -36,7 +36,8 @@ inline bool ddci_kick_due(int64_t stall_ms, size_t backlog,
     return since_kick_ms > DDCI_KICK_MIN_MS &&
            (stall_ms > DDCI_KICK_STALL_MS || backlog > DDCI_KICK_BACKLOG);
 }
-// Drain cap: the demux path wedges above this; the CAM is faster.
+// Drain cap: past 2MB/s the playpump descriptors exhaust inside
+// one 30ms reclaim window and the congestion latch deadlocks.
 #define DDCI_PUSH_RATE_BPS (2 * 1024 * 1024)
 #define DDCI_PUSH_BURST (8 * 1024)
 
@@ -127,7 +128,7 @@ int ddci_pick_free_pair(const int *demux, int ndemux, const int *dvr, int ndvr,
                         const int *fe, int nfe, const int *used, int nused);
 
 int ddci_pick_free_slot();
-// Push loop: blocking writes move the fifo to the dvr in a loop.
+// Push loop: move the fifo to the dvr, retrying EAGAIN for room.
 void ddci_push_loop(int id);
 // Starts the push thread once; the queue feeds it.
 void ddci_push_start(ddci_device_t *d);
