@@ -1434,8 +1434,7 @@ void ddci_push_loop(int id) {
             else if (w < 0 && errno == EINTR)
                 continue;
             else if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-                // Playpump full: brief sleep, retry; XPT reclaim frees room.
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                // Playpump full: tight retry like enigma filepush.
                 continue;
             } else {
                 // Stopped: the kick closed the fd, the chunk stays queued.
