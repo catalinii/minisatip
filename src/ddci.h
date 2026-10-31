@@ -23,8 +23,8 @@
 // Push ring bytes; absorbs input while kicks re-prime a dead pull.
 #define DDCI_PUSH_BACKLOG_MAX (12 * 1024 * 1024)
 
-// Max bytes pushed per call; bigger bursts wedge this driver.
-#define DDCI_PUSH_CHUNK (4 * 1024)
+// Push bytes per call; enigma filepush feeds 188KB a cycle.
+#define DDCI_PUSH_CHUNK (188 * 1024)
 // Micro-kick backstop: EAGAIN past this long means the playpump
 // congestion latch is stuck, re-prime it via close/open.
 #define DDCI_KICK_STALL_MS 1000
