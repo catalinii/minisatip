@@ -1335,6 +1335,32 @@ static int track_stub_cb(ca_session_t *s, int r, uint8_t *b, int l) {
     return 0;
 }
 
+// A CAPMT over 4 KB is written whole
+int test_ca_large_capmt() {
+    ca_device_t dev;
+    memset(&dev, 0, sizeof(dev));
+    int fds[2];
+    ASSERT(pipe(fds) == 0, "pipe for SPDU writes");
+    dev.fd = fds[1];
+    dev.id = 66;
+    dev.mode = ca_mode::ENIGMA; // SPDUs go to dev.fd as they are
+    ca_session_t s{};
+    s.ca = &dev;
+    s.session_number = 1;
+    s.handler.name = "test";
+    std::vector<uint8_t> capmt(6000, 0x5A);
+    ASSERT_EQUAL(ca_write_apdu(&s, TAG_CA_PMT, capmt.data(), capmt.size()), 0,
+                 "large CAPMT written");
+    std::vector<uint8_t> out(8192);
+    ssize_t n = read(fds[0], out.data(), out.size());
+    // SPDU tag and length, session number, APDU tag, 3-byte length
+    ASSERT_EQUAL(n, 1 + 1 + 2 + 3 + 3 + 6000, "whole SPDU written");
+    ASSERT_EQUAL(out[static_cast<size_t>(n) - 1], 0x5A, "CAPMT tail intact");
+    close(fds[0]);
+    close(fds[1]);
+    return 0;
+}
+
 // Command watchdog: an unanswered command resets the CAM.
 int test_ca_cmd_watchdog() {
     ca_device_t dev;
@@ -3098,6 +3124,7 @@ int main() {
     TEST_FUNC(test_ca_keepalive_counts_failures(),
               "testing keepalive failure counting");
     TEST_FUNC(test_ca_cmd_watchdog(), "testing command watchdog");
+    TEST_FUNC(test_ca_large_capmt(), "testing a CAPMT over 4 KB");
     TEST_FUNC(test_ca_read_tpdu_outcomes(), "testing TPDU read outcomes");
     TEST_FUNC(test_ca_read_enigma_removal(), "testing enigma removal close");
     TEST_FUNC(test_dvbca_init_dev_guards(), "testing init device guards");
