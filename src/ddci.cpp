@@ -270,7 +270,7 @@ std::string ddci_tsclk_pick(const std::string &choices) {
 }
 
 // Raises the slot clock to high, saving the prior value;
-// silent no-op where the driver lacks the knob or is there.
+// silent no-op when already high or the knob is missing.
 static void ddci_enigma_set_tsclk(ddci_device_t *d) {
     if (!opts.enigma || !d || d->tsclk_saved[0])
         return;
