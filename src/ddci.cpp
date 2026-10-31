@@ -1422,15 +1422,15 @@ void ddci_push_loop(int id) {
             break;
         }
         // Loopback-only pacing: the enigma playpump deadlocks past
-        // 2MB/s; hardware DDCI drains at the card's own rate.
+        // 4MB/s; hardware DDCI drains at the card's own rate.
         if (!d->loopback)
             continue;
-        // Token bucket: pace the drain, never exceed the rate.
+        // Token bucket: stamp push_last after the sleep, else the
+        // same wait is credited twice and the rate doubles.
         auto now = std::chrono::steady_clock::now();
         int64_t ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                          now - d->push_last)
                          .count();
-        d->push_last = now;
         d->push_tokens += ms * (DDCI_PUSH_RATE_BPS / 1000);
         if (d->push_tokens > DDCI_PUSH_BURST)
             d->push_tokens = DDCI_PUSH_BURST;
@@ -1439,6 +1439,7 @@ void ddci_push_loop(int id) {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
             d->push_tokens += DDCI_PUSH_RATE_BPS / 1000;
         }
+        d->push_last = std::chrono::steady_clock::now();
     }
     d->push_running.store(false);
     DEBUGM("DDCI %d: push loop exited", d->id);

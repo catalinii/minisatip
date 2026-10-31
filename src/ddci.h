@@ -37,9 +37,9 @@ inline bool ddci_kick_due(int64_t stall_ms, size_t backlog,
     return since_kick_ms > DDCI_KICK_MIN_MS &&
            (stall_ms > DDCI_KICK_STALL_MS || backlog > DDCI_KICK_BACKLOG);
 }
-// Drain cap: past 2MB/s the playpump descriptors exhaust inside
+// Drain cap: past 4MB/s the playpump descriptors exhaust inside
 // one 30ms reclaim window and the congestion latch deadlocks.
-#define DDCI_PUSH_RATE_BPS (2 * 1024 * 1024)
+#define DDCI_PUSH_RATE_BPS (4 * 1024 * 1024)
 #define DDCI_PUSH_BURST (8 * 1024)
 
 // Mapping-table key: adapter in the high 16 bits, pid below.
