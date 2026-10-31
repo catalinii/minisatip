@@ -1399,7 +1399,8 @@ void ddci_push_loop(int id) {
             else if (w < 0 && errno == EINTR)
                 continue;
             else if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-                // Playpump full: tight retry like enigma filepush.
+                // Playpump full: 100us backoff, 10x less spin.
+                std::this_thread::sleep_for(std::chrono::microseconds(100));
                 continue;
             } else {
                 // Stopped: the kick closed the fd, the chunk stays queued.
