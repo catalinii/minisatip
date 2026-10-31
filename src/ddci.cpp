@@ -1434,7 +1434,7 @@ void ddci_push_loop(int id) {
             else if (w < 0 && errno == EINTR)
                 continue;
             else if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-                // Playpump full: 100us backoff, 10x less spin.
+                // Playpump full: 100us backoff, 10x faster retry.
                 std::this_thread::sleep_for(std::chrono::microseconds(100));
                 continue;
             } else {
