@@ -1376,7 +1376,7 @@ int socket_enque_highprio(sockets *s, struct iovec *iov, int iovcnt) {
 //   -  0x24 0x01 [len len] 0x80 0xC8
 int find_next_rtsp_header(SFIFO *fifo) {
     uint64_t offset = fifo->read_index;
-    while (offset < fifo->write_index - 8) {
+    while (offset + 8 <= fifo->write_index) {
         if ((((fifo_peek_32(fifo, offset) & 0xFFFF0000) == 0x24000000) &&
              (fifo_peek_32(fifo, offset + 4) & 0xFFFF0000) == 0x80210000))
             return static_cast<int>(offset - fifo->read_index);
