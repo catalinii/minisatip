@@ -640,6 +640,30 @@ int test_dvb_signal_v5_fallback() {
     return 0;
 }
 
+// A multiplier that takes a value past 16 bits saturates
+int test_dvb_signal_multiplier_saturates() {
+    adapter ad = {};
+    ad.fe = 42;
+    ad.enabled = 1;
+    ad.strength_multiplier = 2;
+    ad.snr_multiplier = 2;
+    _ioctl = mock_ioctl;
+    mock_fe = {};
+    mock_fe.status = FE_HAS_LOCK;
+    mock_fe.str_len = 1;
+    mock_fe.cnr_len = 1;
+    mock_fe.blk_len = 1;
+    mock_fe.str_scale = FE_SCALE_RELATIVE;
+    mock_fe.cnr_scale = FE_SCALE_RELATIVE;
+    mock_fe.str_value = 0xC000;
+    mock_fe.snr_value = 0x2000;
+    dvb_get_signal(&ad);
+    _ioctl = ioctl;
+    ASSERT_EQUAL(ad.strength, 255, "strength saturates");
+    ASSERT_EQUAL(ad.snr, 0x40, "snr doubled");
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -669,5 +693,7 @@ int main() {
               "test DVB signal v5 preference with v3 fallback");
     TEST_FUNC(test_dvb_demux_shared_fd_pid_sequence(),
               "test shared demux fd pid sequence");
+    TEST_FUNC(test_dvb_signal_multiplier_saturates(),
+              "test DVB signal multiplier saturates");
     return 0;
 }

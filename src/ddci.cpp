@@ -1955,7 +1955,7 @@ int ddci_read_sec_data(sockets *s) {
         std::lock_guard<SMutex> lock(d->mutex);
         left = fifo_push_force(&d->fifo, b, static_cast<size_t>(rlen), 1);
         if (left == 0) {
-            LOG("dropping %zu bytes for ddci_adapter %d", left, d->id);
+            LOG("dropping %d bytes for ddci_adapter %d", rlen, d->id);
         }
     }
     DEBUGM("pushed %zu bytes to the adapter buffer from %d [write_index %jd]",

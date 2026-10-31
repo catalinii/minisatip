@@ -77,8 +77,8 @@ int snprintf_pointer(char *dest, int max_len, int type, void *p,
         nb = 0;
         break;
     }
-    if (nb > max_len) /* see man 'snprintf' */
-        nb = max_len;
+    if (nb >= max_len) /* truncated, see man 'snprintf' */
+        nb = max_len > 0 ? max_len - 1 : 0;
     return nb;
 }
 
