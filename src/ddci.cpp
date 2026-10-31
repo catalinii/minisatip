@@ -1591,6 +1591,8 @@ size_t ddci_push_queue(ddci_device_t *d, uint8_t *psi, size_t psi_len,
         int64_t stall =
             now - d->last_push_write.load(std::memory_order_relaxed);
         if (ddci_kick_due(stall, backlog, now - d->last_kick)) {
+            LOGM("DDCI %d: kick stall=%jdms backlog=%zuKB", d->id,
+                 (intmax_t)stall, backlog / 1024);
             d->last_kick = now;
             ddci_push_kick(get_adapter_nw(d->id), d);
         }
