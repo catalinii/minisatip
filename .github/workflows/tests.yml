@@ -15,7 +15,7 @@ jobs:
     - name: Install build tools and dependencies
       run: DEBIAN_FRONTEND=noninteractive sudo apt-get -y install build-essential libdvbcsa-dev libssl-dev zlib1g-dev libxml2-dev
     - name: cmake
-      run: mkdir -p build;rm -rf build/*;cmake -B build -DBUILD_TESTING=ON
+      run: mkdir -p build;rm -rf build/*;cmake -B build -DBUILD_TESTING=ON -DDEV_WARNINGS=ON
     - name: make
       run: (cd build && make)
     - name: make test
