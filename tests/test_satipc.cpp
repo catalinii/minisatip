@@ -31,14 +31,16 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-extern void satip_getxml_data(char *data, int len, void *opaque,
-                              Shttp_client *h);
+extern int satip_getxml_data(void *data, int len, void *opaque,
+                             Shttp_client *h);
 extern void satipc_get_pids(adapter *ad, satipc *sip, char *url, int size,
                             int send_pids);
 extern int satipc_reply(sockets *s);
 extern int satip_close_device(adapter *ad);
 extern int satipc_set_pid(adapter *ad, int pid);
 extern int satipc_del_filters(adapter *ad, int fd, int pid);
+extern void set_adapter_signal(adapter *ad, char *b);
+extern void tune_url(adapter *ad, char *url, int url_len);
 
 int test_get_s2_url_multistream_isi() {
     adapter ad = {};
@@ -190,6 +192,33 @@ int test_satip_getxml_data_parsing() {
     ASSERT(s.tuners[SYS_DVBS2] == 4, "Expected 4 tuners for DVBS2");
     ASSERT(s.tuners[SYS_DVBT] == 2, "Expected 2 tuners for DVBT");
 
+    return 0;
+}
+
+// A tuner= string with fewer than three numbers leaves the signal alone
+int test_set_adapter_signal_short_tuner() {
+    adapter ad = {};
+    ad.strength_multiplier = ad.snr_multiplier = 1;
+    ad.strength = 100;
+    ad.snr = 10;
+    char cut[] = "ver=1.0;src=1;tuner=1,200;pids=0";
+    set_adapter_signal(&ad, cut);
+    ASSERT_EQUAL(ad.strength, 100, "strength changed by a short string");
+    ASSERT_EQUAL(ad.snr, 10, "quality changed by a short string");
+    char full[] = "ver=1.0;src=1;tuner=1,200,1,12,10744,h,dvbs2;pids=0";
+    set_adapter_signal(&ad, full);
+    ASSERT_EQUAL(ad.strength, 200, "strength not read");
+    ASSERT_EQUAL(ad.snr, 12, "quality not read");
+    return 0;
+}
+
+// An unknown delivery system gives an empty tune string
+int test_tune_url_unknown_system() {
+    adapter ad = {};
+    char url[100];
+    memset(url, 'x', sizeof(url));
+    tune_url(&ad, url, sizeof(url) - 1);
+    ASSERT_EQUAL(url[0], 0, "tune string not terminated");
     return 0;
 }
 
@@ -470,6 +499,10 @@ int main() {
               "test get_s2_url omits multistream params when unset");
     TEST_FUNC(test_satip_getxml_data_parsing(),
               "test satip_getxml_data parses satipcap delivery systems");
+    TEST_FUNC(test_set_adapter_signal_short_tuner(),
+              "testing a short tuner= string from the server");
+    TEST_FUNC(test_tune_url_unknown_system(),
+              "testing the tune string for an unknown system");
     TEST_FUNC(test_satipc_get_pids_add_and_del(),
               "test satipc_get_pids separates addpids/delpids with '&'");
     TEST_FUNC(test_satip_close_device_defers_sockets(),
