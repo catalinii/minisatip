@@ -784,7 +784,8 @@ int send_rtcp(int s_id, int64_t ctime) {
     rtcp[64] = 0;
     rtcp[65] = 0;
     copy16(rtcp, 66, la);
-    memcpy(rtcp + 68, description, la + 4);
+    memcpy(rtcp + 68, description, la);
+    memset(rtcp + 68 + la, 0, 4); // padding to the next 32-bit word
     total_len = len + 52;
     if (sid->type == STREAM_RTSP_UDP)
         rv = sockets_write(sid->rtcp_sock, rtcp, total_len);

@@ -1435,6 +1435,10 @@ int satipc_set_pid(adapter *ad, int pid) {
             return aid + 100;
         }
     }
+    if (sip->lap >= MAX_PIDS) { // send the whole list instead
+        sip->force_pids = true;
+        return aid + 100;
+    }
     sip->apid[sip->lap] = static_cast<uint16_t>(pid);
     sip->lap++;
     return aid + 100;
@@ -1459,6 +1463,10 @@ int satipc_del_filters(adapter *ad, int fd, int pid) {
                  pid, sip->lap);
             return 0;
         }
+    }
+    if (sip->ldp >= MAX_PIDS) { // send the whole list instead
+        sip->force_pids = true;
+        return 0;
     }
     sip->dpid[sip->ldp] = static_cast<uint16_t>(pid);
     sip->ldp++;

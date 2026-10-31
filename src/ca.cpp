@@ -3804,10 +3804,11 @@ int ca_read_tpdu(int, void *buf, int buf_len, sockets *ss, int *rb) {
             break;
         }
 
-        if (asn_data_length > *rb + buf_len) {
+        // a T_DATA TPDU copies all but its t_c_id byte to buf + *rb
+        if (asn_data_length - 1 > buf_len - *rb) {
             LOG("Received data for CA %d larger than socket buffer (len "
                 "%d)",
-                c->id, *rb + buf_len);
+                c->id, buf_len - *rb);
             break;
         }
 
