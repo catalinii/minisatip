@@ -72,7 +72,8 @@ void dvbaes_set_cw(SCW *cw, SPMT *) {
 
 void dvbaes_decrypt_stream(SCW *cw, SPMT_batch *batch, int batch_len) {
     EVP_CIPHER_CTX *ctx = (EVP_CIPHER_CTX *)cw->key;
-    int i, j, len, out_len;
+    int i, out_len;
+    unsigned int j, len;
 
     if (!ctx)
         return;
@@ -142,13 +143,14 @@ void dvbaes_cbc_decrypt_stream(SCW *cw, SPMT_batch *batch, int batch_len) {
                 len);
             len = sizeof(decryptedtext) / 16 * 16;
         }
-        int new_len = decrypt(cw->key, /*ciphertext*/ batch[i].data, len,
-                              cw->cw, cw->iv, decryptedtext);
+        int new_len =
+            decrypt(cw->key, /*ciphertext*/ batch[i].data,
+                    static_cast<int>(len), cw->cw, cw->iv, decryptedtext);
         if (new_len > (int)batch[i].len)
-            new_len = batch[i].len;
+            new_len = static_cast<int>(batch[i].len);
 
         if (new_len > 0)
-            memcpy(batch[i].data, decryptedtext, new_len);
+            memcpy(batch[i].data, decryptedtext, static_cast<size_t>(new_len));
     }
 }
 

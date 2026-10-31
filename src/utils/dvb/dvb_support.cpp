@@ -39,34 +39,39 @@ static int convert_iso_8859[16] = {-1, 0, 1, 2,  3,  4,  5,  6,
         (*dstlen)--;                                                           \
     }
 
-static inline int encode_utf8(unsigned int c, char *outb, int outleft) {
-    if (c <= 0x7F && outleft >= 1) {
+// Takes the bytes it writes from *outleft
+static inline int encode_utf8(unsigned int c, uint8_t *outb, size_t *outleft) {
+    if (c <= 0x7F && *outleft >= 1) {
         if (c >= 0x20 || c == '\n') {
-            *outb = c;
+            *outb = static_cast<uint8_t>(c);
+            (*outleft)--;
             return 1;
         }
         return 0;
-    } else if (c <= 0x7FF && outleft >= 2) {
+    } else if (c <= 0x7FF && *outleft >= 2) {
         *outb++ = ((c >> 6) & 0x1F) | 0xC0;
         *outb++ = (c & 0x3F) | 0x80;
+        *outleft -= 2;
         return 2;
-    } else if (c <= 0xFFFF && outleft >= 3) {
+    } else if (c <= 0xFFFF && *outleft >= 3) {
         *outb++ = ((c >> 12) & 0x0F) | 0xE0;
         *outb++ = ((c >> 6) & 0x3F) | 0x80;
         *outb++ = (c & 0x3F) | 0x80;
+        *outleft -= 3;
         return 3;
-    } else if (c <= 0x10FFFF && outleft >= 4) {
+    } else if (c <= 0x10FFFF && *outleft >= 4) {
         *outb++ = ((c >> 18) & 0x07) | 0xF0;
         *outb++ = ((c >> 12) & 0x3F) | 0x80;
         *outb++ = ((c >> 6) & 0x3F) | 0x80;
         *outb++ = (c & 0x3F) | 0x80;
+        *outleft -= 4;
         return 4;
     } else {
         return -1;
     }
 }
 
-static inline int64_t conv_utf8(const uint8_t *src, size_t srclen, char *dst,
+static inline int64_t conv_utf8(const uint8_t *src, size_t srclen, uint8_t *dst,
                                 size_t *dstlen) {
     while (srclen > 0 && (*dstlen) > 0) {
         uint_fast8_t c = *src;
@@ -86,7 +91,7 @@ static inline int64_t conv_utf8(const uint8_t *src, size_t srclen, char *dst,
     return 0;
 }
 
-static inline int64_t conv_6937(const uint8_t *src, size_t srclen, char *dst,
+static inline int64_t conv_6937(const uint8_t *src, size_t srclen, uint8_t *dst,
                                 size_t *dstlen) {
     while (srclen > 0 && (*dstlen) > 0) {
         uint_fast8_t c = *src;
@@ -125,12 +130,11 @@ static inline int64_t conv_6937(const uint8_t *src, size_t srclen, char *dst,
                 uc = iso6937_single_byte[c - 0xa0];
             }
             if (uc != 0) {
-                int len = encode_utf8(uc, dst, *dstlen);
+                int len = encode_utf8(uc, dst, dstlen);
                 if (len == -1) {
                     errno = E2BIG;
                     return -1;
                 } else {
-                    (*dstlen) -= len;
                     dst += len;
                 }
             }
@@ -145,12 +149,12 @@ static inline int64_t conv_6937(const uint8_t *src, size_t srclen, char *dst,
     return 0;
 }
 
-static inline int64_t conv_UCS2(const uint8_t *src, size_t srclen, char *dst,
+static inline int64_t conv_UCS2(const uint8_t *src, size_t srclen, uint8_t *dst,
                                 size_t *dstlen) {
     // A dangling byte of an odd length is no character: drop it
-    srclen &= ~1;
+    srclen &= ~size_t{1};
     while (srclen > 0 && (*dstlen) > 0) {
-        uint16_t uc = *src << 8 | *(src + 1);
+        uint16_t uc = static_cast<uint16_t>(*src << 8 | *(src + 1));
         if (uc >= 0xe080 && uc <= 0xe09f) {
             // codes 0xe080 - 0xe09f (control codes) are ignored except CR/LF
             if (uc == 0xe08a) {
@@ -159,12 +163,11 @@ static inline int64_t conv_UCS2(const uint8_t *src, size_t srclen, char *dst,
                 dst++;
             }
         } else {
-            int len = encode_utf8(uc, dst, *dstlen);
+            int len = encode_utf8(uc, dst, dstlen);
             if (len == -1) {
                 errno = E2BIG;
                 return -1;
             } else {
-                (*dstlen) -= len;
                 dst += len;
             }
         }
@@ -179,7 +182,7 @@ static inline int64_t conv_UCS2(const uint8_t *src, size_t srclen, char *dst,
 }
 
 static inline int64_t conv_8859(int conv, const uint8_t *src, size_t srclen,
-                                char *dst, size_t *dstlen) {
+                                uint8_t *dst, size_t *dstlen) {
     uint16_t *table = conv_8859_table[conv];
 
     while (srclen > 0 && (*dstlen) > 0) {
@@ -196,14 +199,13 @@ static inline int64_t conv_8859(int conv, const uint8_t *src, size_t srclen,
         } else {
             // map according to character table, skipping
             // unmapped chars (value 0 in the table)
-            uint_fast16_t uc = table[c - 0xa0];
+            uint16_t uc = table[c - 0xa0];
             if (uc != 0) {
-                int len = encode_utf8(uc, dst, *dstlen);
+                int len = encode_utf8(uc, dst, dstlen);
                 if (len == -1) {
                     errno = E2BIG;
                     return -1;
                 } else {
-                    (*dstlen) -= len;
                     dst += len;
                 }
             }
@@ -219,7 +221,7 @@ static inline int64_t conv_8859(int conv, const uint8_t *src, size_t srclen,
 }
 
 static inline int64_t dvb_convert(int conv, const uint8_t *src, size_t srclen,
-                                  char *dst, size_t *dstlen) {
+                                  uint8_t *dst, size_t *dstlen) {
     switch (conv) {
     case convert_utf8:
         return conv_utf8(src, srclen, dst, dstlen);
@@ -243,6 +245,7 @@ int dvb_get_string(char *dst, size_t dstlen, const uint8_t *src,
                    size_t srclen) {
     int ic = -1;
     size_t len, outlen;
+    uint8_t *out = reinterpret_cast<uint8_t *>(dst);
 
     if (srclen < 1) {
         *dst = 0;
@@ -254,7 +257,7 @@ int dvb_get_string(char *dst, size_t dstlen, const uint8_t *src,
          * DVB charset prefix (conv 0 is the 8859-1 table, same as the
          * Table A.4 path with table byte 1). */
         outlen = dstlen - 1;
-        if (dvb_convert(0, src, srclen, dst, &outlen) == -1)
+        if (dvb_convert(0, src, srclen, out, &outlen) == -1)
             return -1;
         len = dstlen - outlen - 1;
         dst[len] = 0;
@@ -267,13 +270,26 @@ int dvb_get_string(char *dst, size_t dstlen, const uint8_t *src,
         *dst = 0; // empty string (confirmed!)
         return 0;
 
-    case 0x01 ... 0x0b: /* ISO 8859-X */
+    case 0x01:
+    case 0x02:
+    case 0x03:
+    case 0x04:
+    case 0x05:
+    case 0x06:
+    case 0x07:
+    case 0x08:
+    case 0x09:
+    case 0x0a:
+    case 0x0b: /* ISO 8859-X */
         ic = convert_iso_8859[src[0] + 4];
         src++;
         srclen--;
         break;
 
-    case 0x0c ... 0x0f: /* reserved for the future use */
+    case 0x0c:
+    case 0x0d:
+    case 0x0e:
+    case 0x0f: /* reserved for the future use */
         src++;
         srclen--;
         break;
@@ -315,7 +331,15 @@ int dvb_get_string(char *dst, size_t dstlen, const uint8_t *src,
         srclen--;
         break;
 
-    case 0x16 ... 0x1e: /* reserved for the future use */
+    case 0x16:
+    case 0x17:
+    case 0x18:
+    case 0x19:
+    case 0x1a:
+    case 0x1b:
+    case 0x1c:
+    case 0x1d:
+    case 0x1e: /* reserved for the future use */
         src++;
         srclen--;
         break;
@@ -338,7 +362,7 @@ int dvb_get_string(char *dst, size_t dstlen, const uint8_t *src,
 
     outlen = dstlen - 1;
 
-    if (dvb_convert(ic, src, srclen, dst, &outlen) == -1)
+    if (dvb_convert(ic, src, srclen, out, &outlen) == -1)
         return -1;
 
     len = dstlen - outlen - 1;

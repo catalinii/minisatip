@@ -199,9 +199,9 @@ int netcv_commit(adapter *ad) {
             m_sec.voltage = map_pol[pol];
 
             memset(&m_fep, 0, sizeof(struct dvb_frontend_parameters));
-            m_fep.frequency = freq;
+            m_fep.frequency = static_cast<uint32_t>(freq);
             m_fep.inversion = INVERSION_AUTO;
-            m_fep.u.qpsk.symbol_rate = sr;
+            m_fep.u.qpsk.symbol_rate = static_cast<uint32_t>(sr);
 
             if (sys == SYS_DVBS) {
                 m_fep.u.qpsk.fec_inner = fec;
@@ -257,13 +257,13 @@ int netcv_commit(adapter *ad) {
             m_pos = 0xfff; /* not sure, to be tested */
             memset(&m_sec, 0, sizeof(recv_sec_t));
 
-            m_fep.frequency = freq * 1000;
+            m_fep.frequency = static_cast<uint32_t>(freq * 1000);
             m_fep.inversion = INVERSION_AUTO;
             m_fep.u.qam.fec_inner = FEC_NONE;
             /* we enforce qam256 if qpsk is used falsely, e.g. by Elgato SAT>IP
              * app */
             m_fep.u.qam.modulation = mtype == QPSK ? QAM_256 : mtype;
-            m_fep.u.qam.symbol_rate = sr;
+            m_fep.u.qam.symbol_rate = static_cast<uint32_t>(sr);
 
             type = FE_QAM;
 
@@ -276,7 +276,7 @@ int netcv_commit(adapter *ad) {
             break;
 
         case SYS_DVBT:
-            m_fep.frequency = freq * 1000;
+            m_fep.frequency = static_cast<uint32_t>(freq * 1000);
             m_fep.inversion = INVERSION_AUTO;
 
             switch (bw) {
@@ -480,12 +480,10 @@ void find_netcv_adapter() {
 
         if (na >= MAX_ADAPTERS)
             break;
-        if (!a[na])
-            a[na] = adapter_alloc();
+        ad = get_or_alloc_adapter(na);
         if (!sn[na])
             sn[na] = (SNetceiver *)malloc(sizeof(SNetceiver));
 
-        ad = a[na];
         ad->pa = 0;
         ad->fn = 0;
         sn[na]->want_tune = 0;
@@ -544,8 +542,8 @@ void find_netcv_adapter() {
                       // libmcli but will not made available to minisatip
 
     for (; na < MAX_ADAPTERS; na++)
-        if (a[na])
-            a[na]->pa = a[na]->fn = -1;
+        if ((ad = get_adapter_slot(na)))
+            ad->pa = ad->fn = -1;
 }
 
 /*
@@ -560,21 +558,21 @@ int handle_ts(unsigned char *buffer, size_t len, void *p) {
     size_t lw;
 
     if (nc->lp == 0)
-        return len;
+        return static_cast<int>(len);
 
     /* simple data format check */
     if (buffer[0] != 0x47 || len % 188 != 0) {
         LOG("netceiver: TS data malformed: buf[0]=0x%02x len=%zu", buffer[0],
             len);
-        return len;
+        return static_cast<int>(len);
     }
 
     /* write TS data to DVR pipe */
-    lw = write(nc->pwfd, buffer, len);
+    lw = static_cast<size_t>(write(nc->pwfd, buffer, len));
     if (lw != len)
         LOG("netceiver: not all data forwarded (%s)", strerror(errno));
 
-    return len;
+    return static_cast<int>(len);
 }
 
 /* Handle signal status information */

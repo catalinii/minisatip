@@ -40,12 +40,12 @@ typedef struct struct_sockets {
     uint64_t iteration;
     int err;
     int flags; // 1 - buf is allocated dynamically
-    int events, revents;
+    short events, revents; // poll() event masks
     int64_t last_poll;
     std::atomic<pthread_t> tid;
     int sock_err;
     SFIFO fifo;
-    int prio_data_len;
+    size_t prio_data_len;
     uint8_t *prio_data; // http_responses have higher priority
     int flush_enqued_data;
     int overflow;
@@ -85,7 +85,7 @@ typedef struct struct_sockets {
 #define SELECT_TIMEOUT 100
 
 char *getlocalip();
-int get_dev_ip(char *dev, char *buf, int len);
+int get_dev_ip(char *dev, char *buf, socklen_t len);
 int validate_bind_dev(char *dev);
 int resolve_bind_opts();
 char *bind_dev_ip();
@@ -96,10 +96,10 @@ int udp_bind_connect(char *src, int sport, char *dest, int dport,
 int udp_bind(char *addr, int port, int ipv4_only);
 int tcp_connect_src(char *addr, int port, USockAddr *serv, int blocking,
                     char *src);
-char *get_sock_shost(int fd, char *dest, int ld);
+char *get_sock_shost(int fd, char *dest, socklen_t ld);
 int get_sock_sport(int fd);
 int get_sockaddr_port(USockAddr s);
-char *get_sockaddr_host(USockAddr s, char *dest, int ld);
+char *get_sockaddr_host(USockAddr s, char *dest, socklen_t ld);
 int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
                 socket_action c, socket_action t);
 int sockets_del(int sock);
@@ -123,14 +123,14 @@ int set_linux_socket_timeout(int sockfd);
 int socket_enque_highprio(sockets *s, struct iovec *iov, int iovcnt);
 int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt,
                         int high_prio);
-int sockets_write(int sock_id, void *buf, int len);
+int sockets_write(int sock_id, void *buf, size_t len);
 int flush_socket(sockets *s);
 void set_socket_iteration(int s_id, uint64_t it);
 void set_sockets_sid(int id, int sid);
 void set_socket_dscp(int id, int dscp, int prio);
 void sockets_force_close(int id);
 void sockets_set_master(int slave, int master);
-int copy_iovec_to_fifo(SFIFO *fifo, uint32_t offset, struct iovec *iov,
+int copy_iovec_to_fifo(SFIFO *fifo, size_t offset, struct iovec *iov,
                        int iovcnt);
 uint64_t get_allocated_memory();
 void sockets_set_flush_enqued_data(int id);
@@ -146,7 +146,7 @@ extern SegmentedPool<sockets *, SOCKS_BUCKETS> sockets_pool;
 static inline sockets *get_sockets(int i) {
     if (i < 0 || i >= MAX_SOCKS)
         return NULL;
-    sockets *ss = sockets_pool[i];
+    sockets *ss = sockets_pool[static_cast<size_t>(i)];
     if (!ss || !ss->enabled)
         return NULL;
     return ss;

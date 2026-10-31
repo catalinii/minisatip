@@ -83,12 +83,12 @@ typedef struct struct_cw {
     int64_t time, expiry;
     void *key;
     int algo;
-    int16_t pmt;
+    int pmt;
     SCW_op *op;
-    char adapter;
-    char parity;
-    char cw_len;
-    int16_t id;
+    int adapter;
+    int parity;
+    uint8_t cw_len;
+    int id;
     int64_t set_time;
     void *opaque;
 } SCW;
@@ -105,17 +105,15 @@ typedef struct descriptor {
 
     bool is_ca_descriptor() const { return this->type == 0x09; }
 
-    uint16_t get_ca_descriptor_caid() const {
-        return (data[0] * 256) + data[1];
-    }
+    int get_ca_descriptor_caid() const { return (data[0] * 256) + data[1]; }
 
-    uint16_t get_ca_descriptor_capid() const {
+    int get_ca_descriptor_capid() const {
         return (data[2] & 0x1F) * 256 + data[3];
     }
 } descriptor_t;
 
 typedef struct struct_stream_pid {
-    int type;
+    uint8_t type;
     int pid;
     bool is_audio;
     bool is_video;
@@ -142,7 +140,7 @@ typedef struct struct_pmt {
     std::vector<descriptor_t> descriptors;
     std::vector<SStreamPid> stream_pids;
     int id;
-    int blen;
+    size_t blen;
     // ca_mask: the PMT was sent to that CA. pmt_add_caid() clears it to force
     // a re-send when a new CA descriptor shows up.
     //
@@ -152,9 +150,10 @@ typedef struct struct_pmt {
     // read only delays one cycle (see ca_mask_mutex for the same rule).
     int ca_mask, disabled_ca_mask, ca_registered_mask;
     SPMT_batch *batch;
+    std::vector<SPMT_batch> batch_buffer; // storage behind batch
     // Set on the adapter thread, read from send_cw() on dvbapi/ca threads.
     std::atomic<int8_t> parity, update_cw;
-    uint64_t last_update_cw;
+    int64_t last_update_cw;
     // For CA watchdogs: last batch decrypted with a verified CW and last
     // scrambled packet. Owned by the adapter thread.
     int64_t last_decrypt_ok, last_scrambled_pkt;
@@ -165,9 +164,9 @@ typedef struct struct_pmt {
     // Real SDT data for this service, emitted into the generated DDCI SDT.
     // Atomics: written on the owning thread, read holding d->mutex.
     std::atomic<bool> has_sdt{false};
-    std::atomic<int> sdt_service_type{0};
-    std::atomic<int> sdt_running_status{0}, sdt_ca_mode{0};
-    std::atomic<int> sdt_eit_schedule{0}, sdt_eit_pf{0};
+    std::atomic<uint8_t> sdt_service_type{0};
+    std::atomic<uint8_t> sdt_running_status{0}, sdt_ca_mode{0};
+    std::atomic<uint8_t> sdt_eit_schedule{0}, sdt_eit_pf{0};
     std::atomic<int> sdt_tsid{0}, sdt_onid{0};
     void *opaque;
     char state; // PMT state (PMT_STOPPED, PMT_STARTING, PMT_RUNNING,
@@ -204,7 +203,7 @@ typedef struct struct_filter {
     int len;
     std::atomic<int> mask_len{0};
     int pos;
-    char match;
+    bool match;
     filter_function callback;
     unsigned char filter[FILTER_SIZE];
     unsigned char mask[FILTER_SIZE];
@@ -230,7 +229,7 @@ static inline SPMT *get_pmt(int id) {
     if (id < 0 || (size_t)id >= pmts.size())
         //		LOG_AND_RETURN(NULL, "PMT not found for id %d", id);
         return NULL;
-    SPMT *pmt = pmts[id];
+    SPMT *pmt = pmts[static_cast<size_t>(id)];
     if (!pmt || !pmt->enabled)
         return NULL;
     return pmt;
@@ -239,7 +238,7 @@ static inline SPMT *get_pmt(int id) {
 static inline SFilter *get_filter(int id) {
     if (id < 0 || id >= MAX_FILTERS)
         return NULL;
-    SFilter *f = filters[id];
+    SFilter *f = filters[static_cast<size_t>(id)];
     return (f && f->enabled) ? f : NULL;
 }
 int process_pmt(int filter, unsigned char *b, int len, void *opaque);
@@ -271,16 +270,15 @@ void disable_cw(int pmt_id);
 void expire_cw_for_pmt(int pmt_id, int parity, int64_t min_expiry);
 int pmt_add(int aid, int sid, int pmt_pid);
 SPMT *get_all_pmt_for_sid(int aid, int sid);
-int test_decrypt_packet(SCW *cw, SPMT_batch *start, int len);
+int test_decrypt_packet(SCW *cw, SPMT_batch *start, size_t len);
 void init_algo();
 void update_cw(SPMT *pmt);
 int pmt_decrypt_stream(adapter *ad);
 int wait_pusi(adapter *ad, int len);
 int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf, int buf_len, int sca_id);
 void stop_pmt(SPMT *pmt, adapter *ad);
-int pmt_add_stream_pid(SPMT *pmt, int pid, int type, bool is_audio,
-                       bool is_video);
+size_t pmt_add_stream_pid(SPMT *pmt, int pid, uint8_t type, bool is_audio,
+                          bool is_video);
 void emulate_add_all_pids(adapter *ad);
-void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid, uint8_t *data,
-                  int len);
+void pmt_add_caid(SPMT *pmt, int caid, int capid, uint8_t *data, int len);
 #endif

@@ -23,7 +23,7 @@ typedef struct ddci_pmt {
     int16_t cc;
     uint32_t crc;
     // Per-channel PMT emission clock (ms); 0 emits on the next tick.
-    uint64_t last_pmt;
+    int64_t last_pmt;
 } ddci_pmt_t;
 
 // Use a hash table to store mapping_table entries
@@ -35,7 +35,7 @@ typedef struct ddci_mapping_table {
     int pid;
     int ddci_pid;
     int ddci;
-    char rewrite;
+    bool rewrite;
     std::unordered_set<int> pmt;
     int filter_id = -1;
     int pid_added = -1;
@@ -51,7 +51,7 @@ typedef struct ddci_device {
     ddci_pmt_t pmt[MAX_CHANNELS_ON_CI + 1];
     int cat_processed;
     uint64_t read_index[MAX_ADAPTERS]; // read index per adapter
-    uint64_t last_pat, last_sdt;
+    int64_t last_pat, last_sdt;
     bool psi_changed; // channel set changed: send PAT/SDT on the next write
     int tid, ver;
     // SDT section version, split from the PAT ver so SDT-only changes

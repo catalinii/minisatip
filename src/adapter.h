@@ -48,8 +48,8 @@ extern SMutex ca_mask_mutex;
 #define PID_STATE_DELETED 3
 
 typedef struct struct_pid {
-    int16_t pid; // pid for this demux - not used
-    int16_t pmt, filter;
+    int pid; // pid for this demux - not used
+    int pmt, filter;
     char flags;                 // PID_STATE...
     int fd;                     // fd for this demux
     int cc_err, cc_err2;        // counter errors
@@ -57,13 +57,14 @@ typedef struct struct_pid {
                                 // to sort the pids
     int dec_err;                // decrypt errors, continuity counters
     uint8_t is_decrypted;       // Set when first decrypted
-    int16_t cc, cc1, cc2;
+    int cc, cc2;
+    int16_t cc1; // buffer_to_ts() takes an int16_t counter
     int sock; // sock_id
 #ifdef CRC_TS
     uint32_t crc;
     int count;
 #endif
-    std::unordered_set<int16_t> sid;
+    std::unordered_set<int> sid;
     bool has_stream(int id) { return sid.count(id) > 0; }
     // Subscription order: ++pid_order_seq when the first client sid is
     // added, 0 when no client sid is left. Smaller wins PMT contention.
@@ -122,13 +123,13 @@ struct struct_adapter {
     uint16_t db;  // if MAX_DB then no value, else value is dB*10 of the adapter
     float strength_multiplier, // final value: strength * strength_multipler,
         snr_multiplier;        // same for snr
-    char force_tuner_signal;   // Values: TUNER_FORCE_*
+    int force_tuner_signal;    // Values: TUNER_FORCE_*
     float db_snr_map;          // modulation scale value for dB SNR conversion
     uint32_t pid_err, dec_err; // detect pids received but not part of any
                                // stream, decrypt errors
     diseqc diseqc_param;
     int diseqc_multi;
-    int8_t absolute_table[MAX_SOURCES];
+    int absolute_table[MAX_SOURCES];
     int old_diseqc;
     int old_hiband;
     int old_pol;
@@ -142,14 +143,14 @@ struct struct_adapter {
     int active_pids, max_active_pids, max_pids;
     int active_demux_pids;
     int is_t2mi;
-    uint64_t tune_time;
+    int64_t tune_time;
     int lock_retries;        // switch resends in the current no-lock period
     int64_t lock_retry_time; // start of the current retry delay
     bool lock_retry_armed;
     pthread_t thread;
     char thread_name[5];
     char null_packets;
-    char drop_encrypted;
+    int drop_encrypted;
     char failed_adapter; // failed adapters will not be closed due to timeout
                          // nor chosen in get_free_adapters
 #ifndef DISABLE_PMT
@@ -186,7 +187,7 @@ struct struct_adapter {
 };
 
 extern std::array<adapter *, MAX_ADAPTERS> a;
-extern int16_t fe_map[2 * MAX_ADAPTERS];
+extern int fe_map[2 * MAX_ADAPTERS];
 extern int a_count;
 extern char absolute_switch;
 extern char do_dump_pids;
@@ -195,6 +196,8 @@ int init_hw(int i);
 int init_all_hw();
 int getAdaptersCount();
 adapter *adapter_alloc();
+// a[aid] for a valid aid, allocated when missing
+adapter *get_or_alloc_adapter(int aid);
 void adapter_resize_buffers();
 int close_adapter(int na);
 void free_all_adapters();
@@ -216,7 +219,7 @@ void post_tune(adapter *ad);
 SPid *find_pid(int aid, int p);
 adapter *get_adapter1(int aid, const char *file, int line);
 inline adapter *get_configured_adapter_nw(int aid);
-char *describe_adapter(int sid, int aid, char *dad, int ld);
+char *describe_adapter(int sid, int aid, char *dad, size_t ld);
 void dump_pids(int aid);
 void sort_pids(int aid);
 void enable_adapters(char *o);
@@ -252,8 +255,15 @@ int get_absolute_source_for_adapter(int aid, int src, int sys);
 void set_absolute_src(char *o);
 void adapter_commit(adapter *ad);
 #define get_adapter(a) get_adapter1(a, __FILE__, __LINE__)
-#define get_adapter_nw(aid)                                                    \
-    ((aid >= 0 && aid < MAX_ADAPTERS && a[aid] && a[aid]->enabled) ? a[aid]    \
-                                                                   : NULL)
+// a[aid] (nullptr when not allocated), nullptr for an invalid aid
+inline adapter *get_adapter_slot(int aid) {
+    if (aid < 0 || aid >= MAX_ADAPTERS)
+        return nullptr;
+    return a[static_cast<size_t>(aid)];
+}
+inline adapter *get_adapter_nw(int aid) {
+    adapter *ad = get_adapter_slot(aid);
+    return ad && ad->enabled ? ad : nullptr;
+}
 
 #endif

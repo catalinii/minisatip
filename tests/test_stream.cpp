@@ -240,7 +240,7 @@ int test_setup_after_play_new_mux_releases_adapter() {
 
 int test_setup_after_play_other_fe_releases_adapter() {
     setup_test_env();
-    int16_t saved_fe[2 * MAX_ADAPTERS];
+    int saved_fe[2 * MAX_ADAPTERS];
     memcpy(saved_fe, fe_map, sizeof(fe_map));
     memset(fe_map, -1, sizeof(fe_map));
     fe_map[0] = 0;
@@ -366,7 +366,7 @@ int test_decode_transport_port_change_no_deadlock() {
     opts.start_rtp = 45500;
     char host[] = "127.0.0.1";
     ASSERT(decode_transport(&rtsp, "RTP/AVP;unicast;client_port=46000-46001",
-                            host, static_cast<int>(opts.start_rtp)) == 0,
+                            host, opts.start_rtp) == 0,
            "first transport failed");
     sockets *rs = get_sockets(sid->rsock_id);
     ASSERT(rs != NULL, "RTP socket not created");
@@ -384,7 +384,7 @@ int test_decode_transport_port_change_no_deadlock() {
     auto f = std::async(std::launch::async, [&] {
         return decode_transport(&rtsp,
                                 "RTP/AVP;unicast;client_port=46002-46003", host,
-                                static_cast<int>(opts.start_rtp));
+                                opts.start_rtp);
     });
     if (f.wait_for(std::chrono::seconds(3)) != std::future_status::ready) {
         LOG("decode_transport deadlocked with the demux thread");
@@ -533,7 +533,7 @@ int test_start_play_pid_exhaustion_returns_503() {
 int test_start_play_pinned_fe_mismatch_returns_403() {
     setup_test_env();
     // Pin fe=1 to adapter 0, like production init (rest unmapped).
-    int16_t saved_fe[2 * MAX_ADAPTERS];
+    int saved_fe[2 * MAX_ADAPTERS];
     memcpy(saved_fe, fe_map, sizeof(fe_map));
     memset(fe_map, -1, sizeof(fe_map));
     fe_map[0] = 0;
@@ -574,7 +574,7 @@ int test_start_play_unmapped_fe_ignored_when_busy() {
     ASSERT(sid1 != NULL, "first setup_stream returned NULL");
     ASSERT(start_play(sid1, &http1) == 0, "first start_play failed");
 
-    int16_t saved_fe[2 * MAX_ADAPTERS];
+    int saved_fe[2 * MAX_ADAPTERS];
     memcpy(saved_fe, fe_map, sizeof(fe_map));
     memset(fe_map, -1, sizeof(fe_map));
 

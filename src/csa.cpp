@@ -90,8 +90,10 @@ void copy_batch(struct dvbcsa_bs_batch_s *d, SPMT_batch *s, int len) {
 }
 
 void dvbcsa_decrypt_stream(SCW *cw, SPMT_batch *batch, int batch_len) {
-    int batch_size = dvbcsa_bs_batch_size();
-    struct dvbcsa_bs_batch_s b[batch_size + 1];
+    const unsigned int n = dvbcsa_bs_batch_size();
+    std::vector<struct dvbcsa_bs_batch_s> bs(n + 1);
+    int batch_size = static_cast<int>(n);
+    struct dvbcsa_bs_batch_s *b = bs.data();
     int i;
     for (i = 0; i < batch_len; i += batch_size) {
         int len = batch_len - i;

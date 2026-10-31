@@ -236,7 +236,7 @@ int del_pmt_mapping_table(ddci_device_t *d, int ad, int pmt) {
 
 // Unmap this PMT's pids that the update dropped; shared entries stay
 // until their last user is gone. Call with d->mutex held.
-static int unmap_removed_pids(ddci_device_t *d, int ad, SPMT *pmt) {
+static size_t unmap_removed_pids(ddci_device_t *d, int ad, SPMT *pmt) {
     auto still_needed = [d, pmt, ad](int pid) {
         if (pid == pmt->pid || pid == 1 || pid == 20)
             return true;
@@ -307,7 +307,7 @@ int create_channel_for_pmt(Sddci_channel *c, SPMT *pmt) {
                     LOG("DDCI %d CAID %04X and mask %04X matched PMT %d", i,
                         ca[dvbca_id].ad_info[i].caid[j],
                         ca[dvbca_id].ad_info[i].mask[j], pmt->id);
-                    c->ddci[c->ddcis++].ddci = i;
+                    c->ddci[c->ddcis++].ddci = static_cast<uint8_t>(i);
                     c->sid = pmt->sid;
                     safe_strncpy(c->name, pmt->name);
                 }
@@ -528,7 +528,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
 
     // Map mandatory PIDs. Some CAMs need access to the TDT in order to "wake
     // up", so always map it just in case. Pid 0 comes from post_tune().
-    for (const uint16_t pid : {1, 20}) {
+    for (const int pid : {1, 20}) {
         if (!has_pid_mapping(d, pmt->adapter, pid)) {
             LOG("Mapping mandatory PID %d to PMT %d on DDCI %d", pid, pmt->id,
                 d->id);
@@ -573,9 +573,9 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
     // dropped, so removed streams and ECMs stop flowing to the CAM.
     // Runs on first adds too: a no-op then, but it self-heals stale
     // entries a reused PMT id could otherwise inherit.
-    int unmapped = unmap_removed_pids(d, ad->id, pmt);
+    size_t unmapped = unmap_removed_pids(d, ad->id, pmt);
 
-    LOG("DDCI %d: PMT %d %s on slot %d (+%d -%d pids), keeping ddci pids",
+    LOG("DDCI %d: PMT %d %s on slot %d (+%d -%zu pids), keeping ddci pids",
         d->id, pmt->id, update ? "update" : "add", pos, mapped, unmapped);
 
     update_pids(ad->id);
@@ -655,8 +655,8 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
 void set_pid_ts(unsigned char *b, int pid) {
     pid &= 0x1FFF;
     b[1] &= 0xE0;
-    b[1] |= (pid >> 8) & 0x1F;
-    b[2] = pid & 0xFF;
+    b[1] |= static_cast<uint8_t>((pid >> 8) & 0x1F);
+    b[2] = static_cast<uint8_t>(pid & 0xFF);
 }
 
 int ddci_create_pat(ddci_device_t *d, uint8_t *b) {
@@ -668,7 +668,7 @@ int ddci_create_pat(ddci_device_t *d, uint8_t *b) {
     b[2] = 0xb0;
     b[3] = 0; // len
     copy16(b, 4, d->tid);
-    b[6] = 0xC1 | (d->ver << 1);
+    b[6] = static_cast<uint8_t>(0xC1 | (d->ver << 1));
     b[7] = b[8] = 0;
     // Channel ID 0
     b[9] = b[10] = 0;
@@ -691,8 +691,8 @@ int ddci_create_pat(ddci_device_t *d, uint8_t *b) {
         }
     int len1 = len;
     len += 4;
-    b[2] |= (len1 >> 8);
-    b[3] |= (len1 & 0xFF);
+    b[2] |= static_cast<uint8_t>(len1 >> 8);
+    b[3] |= static_cast<uint8_t>(len1 & 0xFF);
     uint32_t crc = crc_32(b + 1, len1 - 1);
     copy32(b, len1, crc);
     LOGM("%s: transponder %d version %d, len %d", __FUNCTION__, d->tid, d->ver,
@@ -706,13 +706,13 @@ int ddci_create_pat(ddci_device_t *d, uint8_t *b) {
 // Write a DVB string: UTF-8 bytes with the 0x15 code-table prefix (names
 // are stored UTF-8, see dvb_get_string), or an empty string. Returns the
 // bytes written.
-static int dvb_put_string(uint8_t *b, const char *s) {
+static size_t dvb_put_string(uint8_t *b, const char *s) {
     size_t len = strlen(s);
     if (!len) {
         *b = 0;
         return 1;
     }
-    *b++ = len + 1;
+    *b++ = static_cast<uint8_t>(len + 1);
     *b++ = 0x15;
     memcpy(b, s, len);
     return len + 2;
@@ -754,7 +754,7 @@ int ddci_create_sdt(ddci_device_t *d, uint8_t *sdt) {
     copy16(b, 0, tsid);
     b += 2;
     // reserved, version_number, current_next_indicator
-    *b++ = 0xC1 | (d->sdt_ver << 1);
+    *b++ = static_cast<uint8_t>(0xC1 | (d->sdt_ver << 1));
     // section_number, last_section_number
     copy16(b, 0, 0);
     b += 2;
@@ -778,13 +778,15 @@ int ddci_create_sdt(ddci_device_t *d, uint8_t *sdt) {
             b += 2;
             // reserved_future_use, EIT_schedule_flag,
             // EIT_present_following_flag
-            *b++ = pmt->has_sdt ? ((pmt->sdt_eit_schedule.load() << 1) |
-                                   pmt->sdt_eit_pf.load())
-                                : 0x00;
+            *b++ = static_cast<uint8_t>(
+                pmt->has_sdt ? ((pmt->sdt_eit_schedule.load() << 1) |
+                                pmt->sdt_eit_pf.load())
+                             : 0x00);
             // running_status, free_CA_mode, descriptors_length
-            uint8_t r = (pmt->has_sdt ? pmt->sdt_running_status.load() : 4)
-                        << 5;
-            r |= (pmt->has_sdt ? pmt->sdt_ca_mode.load() : 1) << 4;
+            uint8_t r = static_cast<uint8_t>(
+                (pmt->has_sdt ? pmt->sdt_running_status.load() : 4) << 5);
+            r |= static_cast<uint8_t>(
+                (pmt->has_sdt ? pmt->sdt_ca_mode.load() : 1) << 4);
             *b++ = r;
             uint8_t *dlen = b++;
             if (pmt->has_sdt) {
@@ -794,27 +796,27 @@ int ddci_create_sdt(ddci_device_t *d, uint8_t *sdt) {
                 *b++ = pmt->sdt_service_type;
                 b += dvb_put_string(b, pmt->provider);
                 b += dvb_put_string(b, pmt->name);
-                *sdlen = b - sdlen - 1;
+                *sdlen = static_cast<uint8_t>(b - sdlen - 1);
             }
-            *dlen = b - dlen - 1;
+            *dlen = static_cast<uint8_t>(b - dlen - 1);
         }
     }
     // calculate section_length (12 bits, descriptors can push it past 255)
-    int section_length = b - section_start + 4;
-    *(section_start - 2) |= (section_length >> 8) & 0x0F;
-    *(section_start - 1) = section_length & 0xFF;
+    ptrdiff_t section_length = b - section_start + 4;
+    *(section_start - 2) |= static_cast<uint8_t>((section_length >> 8) & 0x0F);
+    *(section_start - 1) = static_cast<uint8_t>(section_length & 0xFF);
     // checksum
-    int crc = crc_32(payload_start, b - payload_start);
+    uint32_t crc = crc_32(payload_start, b - payload_start);
     copy32(b, 0, crc);
     b += 4;
 
-    return b - sdt;
+    return static_cast<int>(b - sdt);
 }
 
 uint16_t YMDtoMJD(int Y, int M, int D) {
     int L = (M < 3) ? 1 : 0;
-    return 14956 + D + (int)((Y - L) * 365.25) +
-           (int)((M + 1 + L * 12) * 30.6001);
+    return static_cast<uint16_t>(14956 + D + (int)((Y - L) * 365.25) +
+                                 (int)((M + 1 + L * 12) * 30.6001));
 }
 
 // Based on vdr implementation provided by Klaus Schmidinger
@@ -839,7 +841,7 @@ int ddci_create_eit(int sid, uint8_t *eit, int version) {
     // service_id
     copy16(p, 0, sid);
     p += 2;
-    *p++ = 0xC1 | ((version & 0x0F) << 1);
+    *p++ = static_cast<uint8_t>(0xC1 | ((version & 0x0F) << 1));
     *p++ = 0x00;       // section number
     *p++ = 0x00;       // last section number
     *p++ = 0x00;       // transport stream id
@@ -852,9 +854,9 @@ int ddci_create_eit(int sid, uint8_t *eit, int version) {
     *p++ = 0x01;       // ...
     copy16(p, 0, MJD); // start time
     p += 2;
-    *p++ = tm->tm_hour; // ...
-    *p++ = tm->tm_min;  // ...
-    *p++ = tm->tm_sec;  // ...
+    *p++ = static_cast<uint8_t>(tm->tm_hour); // ...
+    *p++ = static_cast<uint8_t>(tm->tm_min);  // ...
+    *p++ = static_cast<uint8_t>(tm->tm_sec);  // ...
     *p++ = 0x24;        // duration (one day, should cover everything)
     *p++ = 0x00;        // ...
     *p++ = 0x00;        // ...
@@ -871,14 +873,15 @@ int ddci_create_eit(int sid, uint8_t *eit, int version) {
     *p++ = '2';
     *p++ = 0; // ParentalRating
     // fill in lengths:
-    *(SectionStart - 1) = p - SectionStart + 4; // +4 = length of CRC
-    *(DescriptorsStart - 1) = p - DescriptorsStart;
+    *(SectionStart - 1) =
+        static_cast<uint8_t>(p - SectionStart + 4); // +4 = length of CRC
+    *(DescriptorsStart - 1) = static_cast<uint8_t>(p - DescriptorsStart);
     // checksum
-    int crc = crc_32(PayloadStart, p - PayloadStart);
+    uint32_t crc = crc_32(PayloadStart, p - PayloadStart);
     copy32(p, 0, crc);
     p += 4;
 
-    return p - eit;
+    return static_cast<int>(p - eit);
 }
 
 int safe_get_pid_mapping(ddci_device_t *d, int aid, int pid) {
@@ -893,7 +896,7 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
                     ddci_pmt_t *dp) {
     int pid = pmt->pid, pi_len = 0, i;
     uint8_t *b = new_pmt, *start_pmt, *start_pi_len;
-    memset(new_pmt, 0, pmt_size);
+    memset(new_pmt, 0, static_cast<size_t>(pmt_size));
 
     *b++ = 0;
     *b++ = 0x02;
@@ -902,11 +905,11 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
     start_pmt = b;
     copy16(b, 0, pmt->sid);
     b += 2;
-    *b++ = (dp->ver << 1) | 0x01;
-    *b++ = 0;                                  // section number
-    *b++ = 0;                                  // last section number
-    *b++ = 0xE0 | ((dp->pcr_pid >> 8) & 0xFF); // PCR PID
-    *b++ = dp->pcr_pid & 0xFF;                 // PCR PID
+    *b++ = static_cast<uint8_t>((dp->ver << 1) | 0x01);
+    *b++ = 0; // section number
+    *b++ = 0; // last section number
+    *b++ = static_cast<uint8_t>(0xE0 | ((dp->pcr_pid >> 8) & 0xFF)); // PCR PID
+    *b++ = static_cast<uint8_t>(dp->pcr_pid & 0xFF);                 // PCR PID
 
     start_pi_len = b;
 
@@ -919,14 +922,15 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
 
     // Add CA IDs and CA Pids
     for (i = 0; i < pmt->caids; i++) {
-        int private_data_len = pmt->ca[i]->private_data.size();
+        int private_data_len =
+            static_cast<int>(pmt->ca[i]->private_data.size());
         if (b - new_pmt + 10 + private_data_len > pmt_size) {
             LOG("%s: truncating PMT %d program CA list, buffer full",
                 __FUNCTION__, pmt->id);
             break;
         }
         *b++ = 0x09;
-        *b++ = 0x04 + private_data_len;
+        *b++ = static_cast<uint8_t>(0x04 + private_data_len);
         copy16(b, 0, pmt->ca[i]->id);
         copy16(b, 2, safe_get_pid_mapping(d, pmt->adapter, pmt->ca[i]->pid));
         std::copy_n(pmt->ca[i]->private_data.data(), private_data_len, b + 4);
@@ -983,7 +987,7 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
                 b[0] = desc.data[0];
                 b[1] = desc.data[1];
                 b[2] = (desc.data[2] & 0xE0) | ((mapped >> 8) & 0x1F);
-                b[3] = mapped & 0xFF;
+                b[3] = static_cast<uint8_t>(mapped & 0xFF);
                 memcpy(b + 4, desc.data.data() + 4, desc.len - 4);
             } else {
                 memcpy(b, desc.data.data(), desc.len);
@@ -1004,13 +1008,13 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
         LOGM("%s: PMT %d content changed, bumping ver %d -> %d", __FUNCTION__,
              pmt->id, dp->ver, (dp->ver + 1) & 0xF);
         dp->ver = (dp->ver + 1) & 0xF;
-        start_pmt[2] = (dp->ver << 1) | 0x01;
+        start_pmt[2] = static_cast<uint8_t>((dp->ver << 1) | 0x01);
         crc = crc_32(new_pmt + 1, b - new_pmt - 1);
     }
     dp->crc = crc;
     copy32(b, 0, crc);
     b += 4;
-    return b - new_pmt;
+    return static_cast<int>(b - new_pmt);
 }
 
 // Copy the service name to the CI-side PMT, found by sid. The name is only
@@ -1099,12 +1103,12 @@ int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len, adapter *ad) {
 // find a position starting with *ad_pos or at the end of the ad->buf
 int push_ts_to_adapter(ddci_device_t *d, adapter *ad, uint16_t *mapping) {
     int i;
-    int popped = 0;
+    size_t popped = 0;
     for (i = 0; i < ad->lbuf - DVB_FRAME; i += DVB_FRAME) {
         if ((i < ad->rlen) && (PID_FROM_TS(ad->buf + i) != 0x1FFF))
             continue;
-        int len = fifo_pop_offset(&d->fifo, ad->buf + i, DVB_FRAME,
-                                  &d->read_index[ad->id]);
+        size_t len = fifo_pop_offset(&d->fifo, ad->buf + i, DVB_FRAME,
+                                     &d->read_index[ad->id]);
         if (len == 0)
             break;
         popped += len;
@@ -1123,14 +1127,15 @@ int push_ts_to_adapter(ddci_device_t *d, adapter *ad, uint16_t *mapping) {
         set_pid_ts(ad->buf + i, dpid);
         if (i >= ad->rlen)
             ad->rlen = i + DVB_FRAME;
-        DEBUGM(
-            "DDCI %d pid %d -> AD %d pid %d, pos %d, len %d, left %jd [ri %jd]",
-            d->id, pid, ad->id, dpid, i / DVB_FRAME, len,
-            d->fifo.write_index - d->read_index[ad->id], d->read_index[ad->id]);
+        DEBUGM("DDCI %d pid %d -> AD %d pid %d, pos %d, len %zu, left %jd [ri "
+               "%jd]",
+               d->id, pid, ad->id, dpid, i / DVB_FRAME, len,
+               d->fifo.write_index - d->read_index[ad->id],
+               d->read_index[ad->id]);
         dump_packets("DDCI -> AD", ad->buf + i, DVB_FRAME, i);
     }
     DEBUGM(
-        "popped %d bytes from fifo up to index %d, rlen %d, lbuf %d, left in "
+        "popped %zu bytes from fifo up to index %d, rlen %d, lbuf %d, left in "
         "fifo %jd",
         popped, i, ad->rlen, ad->lbuf,
         d->fifo.write_index - d->read_index[ad->id]);
@@ -1144,7 +1149,8 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
     int bytes = 0, ec = 0;
     int iop = 0, iomax = ad->rlen / 188 + 100;
     int pid, dpid, i;
-    struct iovec io[iomax];
+    std::vector<struct iovec> iov(static_cast<size_t>(iomax));
+    struct iovec *io = iov.data();
     unsigned char psi[MAX_CHANNELS_ON_CI * 1500];
     unsigned char null_tail[DVB_FRAME];
     uint16_t ad_dd_pids[8192], dd_ad_pids[8192];
@@ -1162,8 +1168,8 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
     memset(dd_ad_pids, 0, sizeof(dd_ad_pids));
     for (const auto &[key, m] : d->mapping)
         if (m.ad == ad->id && m.rewrite) {
-            ad_dd_pids[m.pid] = m.ddci_pid;
-            dd_ad_pids[m.ddci_pid] = m.pid;
+            ad_dd_pids[m.pid] = static_cast<uint16_t>(m.ddci_pid);
+            dd_ad_pids[m.ddci_pid] = static_cast<uint16_t>(m.pid);
             ec++;
             DEBUGM("Using pid %d in adapter %d as pid %d in DDCI %d", m.pid,
                    ad->id, m.ddci_pid, d->id);
@@ -1209,8 +1215,8 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
         hexdump("PSI -> ", psi, psi_len);
         if (psi_len > 0) {
             io[iop].iov_base = psi;
-            io[iop].iov_len = psi_len;
-            bytes += io[iop].iov_len;
+            io[iop].iov_len = static_cast<size_t>(psi_len);
+            bytes += psi_len;
             iop++;
         }
 
@@ -1228,9 +1234,9 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
 
         DEBUGM("writing %d bytes to DDCI device %d, fd %d, sock %d", bytes,
                d->id, ad2->fe, ad2->fe_sock);
-        int rb = writev(ad2->fe, io, iop);
+        ssize_t rb = writev(ad2->fe, io, iop);
         if (rb != bytes)
-            LOG("%s: write incomplete to DDCI %d,fd %d, wrote %d out of %d "
+            LOG("%s: write incomplete to DDCI %d,fd %d, wrote %zd out of %d "
                 "(iop %d%s), "
                 "errno "
                 "%d: %s",
@@ -1302,11 +1308,13 @@ int ddci_read_sec_data(sockets *s) {
     }
     ddci_device_t *d = get_ddci(s->sid);
     b = ad->buf;
-    int left = 0, rlen = ad->rlen;
+    size_t left = 0;
+    int rlen = ad->rlen;
 
-    if ((left = fifo_push_force(&d->fifo, b, rlen, 1)) == 0)
-        LOG("dropping %d bytes for ddci_adapter %d", left, d->id);
-    DEBUGM("pushed %d bytes to the adapter buffer from %d [write_index %jd]",
+    if ((left = fifo_push_force(&d->fifo, b, static_cast<size_t>(rlen), 1)) ==
+        0)
+        LOG("dropping %zu bytes for ddci_adapter %d", left, d->id);
+    DEBUGM("pushed %zu bytes to the adapter buffer from %d [write_index %jd]",
            left, rlen, d->fifo.write_index);
     dump_packets("DDCI ->FIFO ", (uint8_t *)d->fifo.data, 188, 0);
     dump_packets("SOURCE ", b, 188, 0);
@@ -1426,8 +1434,8 @@ std::string ddci_name(int, int) { return ""; }
 
 int ddci_process_cat(int filter, unsigned char *b, int, void *opaque) {
     int cat_len = 0, cat_ver = 0, i, k, es_len = 0, add_cat = 1;
-    uint16_t caid, capid;
-    std::vector<uint16_t> emm_pids;
+    int caid, capid;
+    std::vector<int> emm_pids;
     ddci_device_t *d = (ddci_device_t *)opaque;
     SFilter *f = get_filter(filter);
     if (!f)
@@ -1569,7 +1577,7 @@ void load_channels() {
         for (const auto &arg_item : arg) {
             int v = parse_int(arg_item, -1);
             if (v != -1) {
-                c->ddci[c->ddcis++].ddci = v;
+                c->ddci[c->ddcis++].ddci = static_cast<uint8_t>(v);
                 strcatf(buf, pos, "%s%d", i ? "," : "", v);
             }
             i++;
@@ -1629,7 +1637,7 @@ void find_ddci_adapter() {
     }
 
     for (i = 0; i < MAX_ADAPTERS; i++)
-        if (a[i])
+        if (get_adapter_slot(i))
             na = i;
     na++;
     LOGM("Starting %s with index %d", __FUNCTION__, na);
@@ -1655,10 +1663,7 @@ void find_ddci_adapter() {
             if (cnt == 2) {
                 LOGM("%s: adding %d %d to the list of devices", __FUNCTION__, i,
                      j);
-                if (!a[na])
-                    a[na] = adapter_alloc();
-
-                ad = a[na];
+                ad = get_or_alloc_adapter(na);
                 ad->pa = i;
                 ad->fn = j;
 
@@ -1687,6 +1692,6 @@ void find_ddci_adapter() {
             }
         }
     for (; na < MAX_ADAPTERS; na++)
-        if (a[na])
-            a[na]->pa = a[na]->fn = -1;
+        if ((ad = get_adapter_slot(na)))
+            ad->pa = ad->fn = -1;
 }

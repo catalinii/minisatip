@@ -210,7 +210,7 @@ struct ca_device {
 
     int uri_mask;
     char force_ci;
-    char linked_adapter;
+    int linked_adapter;
 
     /*
      * CAM module info
@@ -225,7 +225,7 @@ struct ca_device {
     /*
      * CAM date time handling
      */
-    uint64_t datetime_response_interval;
+    int64_t datetime_response_interval;
     int64_t datetime_next_send;
 
     // Reconnect pacing, written only by the CA poller thread.
@@ -245,8 +245,8 @@ extern ca_device_t *ca_devices[];
 ca_device_t *alloc_ca_device();
 int ca_init(ca_device_t *d);
 void dvbca_init();
-int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
-                 int cmd_id, int added_only, int kept = 1,
+int create_capmt(SCAPMT *ca, uint8_t listmgmt, uint8_t *capmt, int capmt_len,
+                 uint8_t cmd_id, int added_only, int kept = 1,
                  int (*spans)[2] = nullptr);
 void capmt_forget_sent(SCAPMT *c);
 uint32_t capmt_content_hash(uint8_t *capmt, int len);
@@ -258,8 +258,8 @@ int get_ca_multiple_pmt(int i);
 int capmt_has_pmt(const SCAPMT *c, int pmt_id);
 int capmt_pmt_count(const SCAPMT *c);
 int get_max_pmt_for_ca(int i);
-void get_authdata_filename(char *dest, size_t len, unsigned int slot,
-                           char *ci_name);
+void get_authdata_filename(char *dest, size_t len, int slot,
+                           const char *ci_name);
 char *get_ca_caids_string(int i, char *dest, int max_len);
 
 // CAM reset policy: reset attempts and ready polls per attempt.

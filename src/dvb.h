@@ -113,6 +113,9 @@ typedef enum fe_guard_interval {
     GUARD_INTERVAL_1_128,
     GUARD_INTERVAL_19_128,
     GUARD_INTERVAL_19_256,
+    GUARD_INTERVAL_PN420,
+    GUARD_INTERVAL_PN595,
+    GUARD_INTERVAL_PN945,
 } fe_guard_interval_t;
 typedef enum fe_spectral_inversion {
     INVERSION_OFF,
@@ -294,7 +297,7 @@ typedef struct diseqc {
     int pin;            // unicable pin code
     int only13v;        // unicable - use 13V voltage only
     int fast;           // don't send diseqc without position change
-    int addr;           // diseqc address (second byte in the sequence)
+    uint8_t addr;       // diseqc address (second byte in the sequence)
     int committed_no;   // committed switch number
     int uncommitted_no; // uncommitted switch number
     /* timing */

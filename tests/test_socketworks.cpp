@@ -68,9 +68,8 @@ int test_socket_enque_highprio() {
     socket_enque_highprio(ss, iov, 2);
     iov[0].iov_base = (void *)"test3";
     socket_enque_highprio(ss, iov, 1);
-    if (strncmp((char *)ss->prio_data, "test1test2test3",
-                static_cast<size_t>(ss->prio_data_len)))
-        LOG_AND_RETURN(1, "expected != the actual result: %s len %d",
+    if (strncmp((char *)ss->prio_data, "test1test2test3", ss->prio_data_len))
+        LOG_AND_RETURN(1, "expected != the actual result: %s len %zu",
                        ss->prio_data, ss->prio_data_len);
     free(ss->prio_data);
     ss->prio_data_len = 0;
@@ -215,13 +214,11 @@ int test_socket_buffering() {
     iov[2].iov_len = 10;
     ss->fifo.read_index = ss->fifo.write_index = 0;
     copy_iovec_to_fifo(&ss->fifo, 0, iov, 3);
-    ASSERT(
-        !memcmp(buf, ss->fifo.data, static_cast<size_t>(fifo_used(&ss->fifo))),
-        "copy_iovec_to_fifo failed with 0 offset");
+    ASSERT(!memcmp(buf, ss->fifo.data, fifo_used(&ss->fifo)),
+           "copy_iovec_to_fifo failed with 0 offset");
     ss->fifo.read_index = ss->fifo.write_index = 0;
     copy_iovec_to_fifo(&ss->fifo, 19, iov, 3);
-    ASSERT(!memcmp(buf + 19, ss->fifo.data,
-                   static_cast<size_t>(fifo_used(&ss->fifo))),
+    ASSERT(!memcmp(buf + 19, ss->fifo.data, fifo_used(&ss->fifo)),
            "copy_iovec_to_fifo failed with custom offset offset");
 
     free_fifo(&ss->fifo);

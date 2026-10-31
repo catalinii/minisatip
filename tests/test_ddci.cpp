@@ -83,10 +83,8 @@ SPMT *create_pmt(int ad, int sid, int pid1, int pid2, int caid1, int caid2) {
     pmt->pid = pmt_id * 1000;
     pmt_add_stream_pid(pmt, pid1, 2, false, true);
     pmt_add_stream_pid(pmt, pid2, 6, true, false);
-    pmt_add_caid(pmt, static_cast<uint16_t>(caid1),
-                 static_cast<uint16_t>(caid1), NULL, 0);
-    pmt_add_caid(pmt, static_cast<uint16_t>(caid2),
-                 static_cast<uint16_t>(caid2), NULL, 0);
+    pmt_add_caid(pmt, caid1, caid1, NULL, 0);
+    pmt_add_caid(pmt, caid2, caid2, NULL, 0);
     // Add a CA descriptor to the second stream PID so we can test that it
     // gets added to the PMT correctly
     pmt->stream_pids[1].descriptors.push_back(
@@ -978,9 +976,9 @@ int test_create_sdt_with_real_data() {
     *sdlen = static_cast<uint8_t>(b - sdlen - 1);
     *dlen = static_cast<uint8_t>(b - dlen - 1);
     int section_length = static_cast<int>(b - section_start + 4);
-    *(section_start - 2) |= (section_length >> 8) & 0x0F;
+    *(section_start - 2) |= static_cast<uint8_t>((section_length >> 8) & 0x0F);
     *(section_start - 1) = static_cast<uint8_t>(section_length & 0xFF);
-    copy32(b, 0, crc_32(section, static_cast<int>(b - section)));
+    copy32(b, 0, crc_32(section, b - section));
     b += 4;
 
     ASSERT(process_sdt(0, section, static_cast<int>(b - section), &ad) == 0,
@@ -1121,7 +1119,7 @@ int test_create_pmt() {
     ad.id = 0;
     ad.enabled = 1;
     a[0] = &ad;
-    ad.pids[0].pid = static_cast<int16_t>(pid);
+    ad.pids[0].pid = pid;
     ad.pids[0].flags = 1;
 
     ad.active_pmts = 1;
@@ -1293,7 +1291,7 @@ int test_ci_pmt_name_is_refreshed() {
     // each channel has its own 100 ms clock and getTick() is only a
     // few ms into a test run, so age them by hand
     for (i = 0; i < d.max_channels; i++)
-        d.pmt[i].last_pmt = static_cast<uint64_t>(getTick() - 1000);
+        d.pmt[i].last_pmt = getTick() - 1000;
     ddci_add_psi(&d, buf, sizeof(buf), &ad);
     ASSERT(ci_pmt->name[0] == 0,
            "the CI-side PMT should stay unnamed while the source is unnamed");
@@ -1303,7 +1301,7 @@ int test_ci_pmt_name_is_refreshed() {
     safe_strncpy(src->provider, "Digital Platform");
 
     for (i = 0; i < d.max_channels; i++)
-        d.pmt[i].last_pmt = static_cast<uint64_t>(getTick() - 1000);
+        d.pmt[i].last_pmt = getTick() - 1000;
     ddci_add_psi(&d, buf, sizeof(buf), &ad);
     ASSERT(!strcmp(ci_pmt->name, "beIN SPORTS 1"),
            "the CI-side PMT should take the name of the source service");
@@ -1369,8 +1367,7 @@ int test_ddci_add_psi_per_channel_pmt() {
     // section is actually emitted.
     d.pmt[ia].cc = 5;
     d.pmt[ib].cc = 7;
-    d.pmt[ia].last_pmt = d.pmt[ib].last_pmt =
-        static_cast<uint64_t>(getTick() - 1000);
+    d.pmt[ia].last_pmt = d.pmt[ib].last_pmt = getTick() - 1000;
     ddci_add_psi(&d, buf, sizeof(buf), &adA);
     ASSERT(d.pmt[ia].cc == 6 && d.pmt[ib].cc == 7,
            "A tick emits only the processed adapter's PMT");

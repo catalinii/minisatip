@@ -23,7 +23,8 @@ typedef struct struct_opts {
     int run_pid;
     char *disc_host; // discover host
     char uuid[UUID_STR_LEN];
-    unsigned int log, debug, slog, start_rtp, http_port;
+    unsigned int log, debug, slog;
+    int start_rtp, http_port;
     int timeout_sec;
     int force_sadapter, force_tadapter, force_cadapter;
     int daemon;
@@ -63,7 +64,7 @@ typedef struct struct_opts {
     const char *xml_path;
     int th_priority;
     int diseqc_fast;
-    int diseqc_addr;
+    uint8_t diseqc_addr;
     int diseqc_committed_no;
     int diseqc_uncommitted_no;
     int diseqc_before_cmd;
@@ -84,8 +85,8 @@ typedef struct struct_opts {
     const char *cache_dir;
 } struct_opts_t;
 
-void parse_dvbapi_opt(char *optarg, struct_opts_t *optz);
-int parse_sdt_charset_opt(const char *optarg);
+void parse_dvbapi_opt(const char *arg, struct_opts_t *optz);
+int parse_sdt_charset_opt(const char *arg);
 
 extern struct_opts_t opts;
 

@@ -64,7 +64,7 @@ typedef struct struct_key {
     int algo;
     unsigned char cw[2][16];
     uint32_t cw_time[2];
-    int key_len;
+    size_t key_len;
     int sid;
     int pmt_pid;
     int64_t last_ecm, last_dmx_stop;
