@@ -95,7 +95,7 @@ int closefile(char *mem, int len);
 
 pthread_t start_new_thread(char *name);
 pthread_t get_tid();
-void set_thread_prio(pthread_t tid, int prio);
+void set_thread_prio(int prio);
 void join_thread();
 void add_join_thread(pthread_t t);
 void join_exited_threads();

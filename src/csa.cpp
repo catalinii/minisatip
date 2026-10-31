@@ -62,11 +62,11 @@ void dvbcsa_create_key(SCW *cw) { cw->key = dvbcsa_bs_key_alloc(); }
 
 void dvbcsa_delete_key(SCW *cw) { dvbcsa_key_free((dvbcsa_key_s *)cw->key); }
 
-void dvbcsa_set_cw(SCW *cw, SPMT *pmt) {
+void dvbcsa_set_cw(SCW *cw, SPMT *) {
     dvbcsa_bs_key_set((unsigned char *)cw->cw, (dvbcsa_bs_key_s *)cw->key);
 }
 
-void dvbcsa_set_cw_icam(SCW *cw, SPMT *pmt) {
+void dvbcsa_set_cw_icam(SCW *cw, SPMT *) {
     unsigned char ecm = cw->opaque ? *(unsigned char *)cw->opaque : 0;
     if (!dvbcsa_bs_key_set_ecm) {
         dvbcsa_bs_key_set((unsigned char *)cw->cw, (dvbcsa_bs_key_s *)cw->key);

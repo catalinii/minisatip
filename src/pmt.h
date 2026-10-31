@@ -245,7 +245,7 @@ static inline SFilter *get_filter(int id) {
 int process_pmt(int filter, unsigned char *b, int len, void *opaque);
 int process_sdt(int filter, unsigned char *sdt, int len, void *opaque);
 void pmt_pid_del(adapter *ad, int pid);
-void pmt_pid_add(adapter *ad, int pid, int existing);
+void pmt_pid_add(adapter *ad, int pid);
 void pmt_pid_updated_pids(adapter *ad);
 int pmt_init_device(
     adapter *ad); // will call action[CA_INIT_DEVICE] for the adapter if CA is
@@ -253,7 +253,7 @@ int pmt_init_device(
 // if the call succeds, the PMTs will be sent to that CA for that adapter
 int pmt_close_device(adapter *ad);
 int pmt_init();
-void start_pmt(SPMT *pmt, adapter *ad);
+void start_pmt(SPMT *pmt);
 int pmt_init_device(adapter *ad);
 int tables_tune(adapter *ad);
 int pmt_tune(adapter *ad);

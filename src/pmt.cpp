@@ -228,13 +228,14 @@ int get_mask_len(uint8_t *filter, int l) {
 
 void dump_filters(int aid) {
     for (SFilter *f : filters)
-        LOG("filter %d A: %d: pid %d, master %d, next %d, flags %d, "
-            "mask_len %d, "
-            "filter -> %02X %02X %02X %02X, mask ->%02X %02X %02X %02x",
-            f->id, f->adapter, f->pid, f->master_filter.load(),
-            f->next_filter.load(), f->flags.load(), f->mask_len.load(),
-            f->filter[0], f->filter[1], f->filter[2], f->filter[3], f->mask[0],
-            f->mask[1], f->mask[2], f->mask[3]);
+        if (f->adapter == aid)
+            LOG("filter %d A: %d: pid %d, master %d, next %d, flags %d, "
+                "mask_len %d, "
+                "filter -> %02X %02X %02X %02X, mask ->%02X %02X %02X %02x",
+                f->id, f->adapter, f->pid, f->master_filter.load(),
+                f->next_filter.load(), f->flags.load(), f->mask_len.load(),
+                f->filter[0], f->filter[1], f->filter[2], f->filter[3],
+                f->mask[0], f->mask[1], f->mask[2], f->mask[3]);
 }
 
 void reset_filter_data(SFilter *f) {
@@ -1322,7 +1323,7 @@ void pmt_pid_updated_pids(adapter *ad) {
         }
 #ifndef DISABLE_TABLES
         if (pmt->state == PMT_STOPPED)
-            start_pmt(pmt, ad);
+            start_pmt(pmt);
         // No CA send here: start_active_pmts sends on the demux pass, so
         // non-demux drivers must call it after electing.
         if (pmt->state == PMT_STARTING)
@@ -1334,7 +1335,6 @@ void pmt_pid_updated_pids(adapter *ad) {
 // Demux-pass driver: re-run the election (parses never call update_pids)
 // then emit CAPMTs; pid batches elect but never send on their own.
 void start_active_pmts(adapter *ad) {
-    int i;
     pmt_pid_updated_pids(ad);
 #ifndef DISABLE_TABLES
     int n;
@@ -1342,7 +1342,7 @@ void start_active_pmts(adapter *ad) {
         std::lock_guard<SMutex> adlock(ad->mutex);
         n = ad->active_pmts;
     }
-    for (i = 0; i < n; i++) {
+    for (int i = 0; i < n; i++) {
         int pmt_id;
         { // Never hold ad->mutex across the PMT lock below.
             std::lock_guard<SMutex> adlock(ad->mutex);
@@ -1522,8 +1522,8 @@ void print_stream_statistics(SPMT *pmt) {
     pmt->local_start->clear();
 }
 #else
-inline void stream_statistics(adapter *ad) {}
-inline void print_stream_statistics(SPMT *pmt) {}
+inline void stream_statistics(adapter *) {}
+inline void print_stream_statistics(SPMT *) {}
 #endif
 
 int pmt_process_stream(adapter *ad) {
@@ -2129,7 +2129,7 @@ int pmt_add_stream_pid(SPMT *pmt, int pid, int type, bool is_audio,
     return pmt->stream_pids.size() - 1;
 }
 
-int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
+int process_pmt(int filter, unsigned char *b, int, void *opaque) {
     int pi_len = 0, isAC3, pmt_len = 0, i, es_len, ver, pcr_pid = 0;
     unsigned char *pmt_b, *pi;
     int pid, spid, stype, sid;
@@ -2279,7 +2279,7 @@ int process_pmt(int filter, unsigned char *b, int len, void *opaque) {
     return 0;
 }
 
-int process_sdt(int filter, unsigned char *sdt, int len, void *opaque) {
+int process_sdt(int, unsigned char *sdt, int, void *opaque) {
     int i, j, tsid, sdt_len, sid, desc_loop_len, desc_len, status;
     SPMT *pmt;
     unsigned char *b;
@@ -2337,7 +2337,7 @@ int process_sdt(int filter, unsigned char *sdt, int len, void *opaque) {
     return 0;
 }
 
-void start_pmt(SPMT *pmt, adapter *ad) {
+void start_pmt(SPMT *pmt) {
     LOGM("starting PMT %d, pid %d, sid %d, filter %d for channel: %s", pmt->id,
          pmt->pid, pmt->sid, pmt->filter, pmt->name);
     pmt->state = PMT_STARTING;
@@ -2349,7 +2349,7 @@ void start_pmt(SPMT *pmt, adapter *ad) {
     set_filter_flags(pmt->filter, FILTER_CRC);
 }
 
-void stop_pmt(SPMT *pmt, adapter *ad) {
+void stop_pmt(SPMT *pmt, [[maybe_unused]] adapter *ad) {
     if (!pmt->state)
         return;
     LOGM("stopping PMT %d pid %d sid %d filter %d for channel %s", pmt->id,
@@ -2363,7 +2363,7 @@ void stop_pmt(SPMT *pmt, adapter *ad) {
     print_stream_statistics(pmt);
 }
 
-void pmt_pid_add(adapter *ad, int pid, int existing) {
+void pmt_pid_add(adapter *ad, int pid) {
     SPid *cp;
     if (!ad)
         return;
@@ -2427,14 +2427,14 @@ void pmt_pid_del(adapter *ad, int pid) {
     }
 }
 
-int pmt_init_device(adapter *ad) {
+int pmt_init_device([[maybe_unused]] adapter *ad) {
 #ifndef DISABLE_TABLES
     tables_init_device(ad);
 #endif
     return 0;
 }
 
-int pmt_close_device(adapter *ad) {
+int pmt_close_device([[maybe_unused]] adapter *ad) {
 #ifndef DISABLE_TABLES
     tables_close_device(ad);
 #endif
@@ -2453,7 +2453,8 @@ int pmt_tune(adapter *ad) {
     return 0;
 }
 
-int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf, int buf_len, int ca_id) {
+int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf, int buf_len,
+                          [[maybe_unused]] int ca_id) {
     int i, len = 0;
     for (i = 0; i < pmt->caids; i++) {
 #ifndef DISABLE_TABLES

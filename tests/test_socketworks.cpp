@@ -138,7 +138,7 @@ int to_write;
 
 // simulates a write to the buffer
 // assumes all data to write is less than the buffer size
-ssize_t writev_test(int rsock, const struct iovec *iov, int iiov) {
+ssize_t writev_test(int, const struct iovec *iov, int iiov) {
     int i;
     int left = to_write;
     int old_pos = buf_pos;

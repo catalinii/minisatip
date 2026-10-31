@@ -61,7 +61,7 @@ void dvbaes_delete_key(SCW *cw) {
     }
 }
 
-void dvbaes_set_cw(SCW *cw, SPMT *pmt) {
+void dvbaes_set_cw(SCW *cw, SPMT *) {
     EVP_CIPHER_CTX *ctx = (EVP_CIPHER_CTX *)cw->key;
     if (!ctx)
         return;
@@ -106,8 +106,8 @@ void dvbaes_cbc_delete_key(SCW *cw) {
     }
 }
 
-void dvbaes_cbc_set_cw(SCW *cw, SPMT *pmt) {}
-void dvbaes_cbc_stop_cw(SCW *cw, SPMT *pmt) {}
+void dvbaes_cbc_set_cw(SCW *, SPMT *) {}
+void dvbaes_cbc_stop_cw(SCW *, SPMT *) {}
 
 int decrypt(void *context, unsigned char *ciphertext, int ciphertext_len,
             unsigned char *key, unsigned char *iv, unsigned char *plaintext) {

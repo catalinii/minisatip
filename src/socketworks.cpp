@@ -1225,13 +1225,13 @@ struct mmsghdr {
 #endif
 
 #if defined(__APPLE__) || defined(__SH4__) || defined(NEEDS_SENDMMSG_SHIM)
-int sendmmsg0(int rsock, struct mmsghdr *msg, int len, int t) {
+int sendmmsg0(int rsock, struct mmsghdr *msg, int len) {
     int i;
     for (i = 0; i < len; i++)
         writev(rsock, msg[i].msg_hdr.msg_iov, msg[i].msg_hdr.msg_iovlen);
     return len;
 }
-#define sendmmsg(a, b, c, d) sendmmsg0(a, b, c, d)
+#define sendmmsg(a, b, c, d) sendmmsg0(a, b, c)
 #endif
 
 int writev_udp(int rsock, struct iovec *iov, int iiov) {

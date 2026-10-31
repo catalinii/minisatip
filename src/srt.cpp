@@ -97,8 +97,7 @@ void srt_pending_return(SRTSOCKET sock, const std::string &streamid) {
 
 // Pre-accept callback function - called by SRT during handshake for each
 // incoming connection
-static int srt_accept_poll(void *opaq, SRTSOCKET ns, int hsversion,
-                           const struct sockaddr *peeraddr,
+static int srt_accept_poll(void *, SRTSOCKET ns, int, const struct sockaddr *,
                            const char *streamid) {
     if (!streamid || streamid[0] == '\0') {
         LOG("SRT accept: empty streamid, rejecting connection");

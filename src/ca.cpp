@@ -492,7 +492,7 @@ int dh_dhph_signature(uint8_t *out, uint8_t *nonce, uint8_t *dhph,
     return RSA_private_encrypt_wrapper(pkey, 0x12e, dest, out);
 }
 
-int verify_cb(int ok, X509_STORE_CTX *ctx) {
+int verify_cb(int, X509_STORE_CTX *ctx) {
     if (X509_STORE_CTX_get_error(ctx) == X509_V_ERR_CERT_NOT_YET_VALID) {
         time_t now = time(NULL);
         struct tm *t = localtime(&now);
@@ -2385,8 +2385,8 @@ static int ci_ccmgr_cc_sac_data_req(ca_session_t *session, const uint8_t *data,
     return ci_ccmgr_cc_sac_send(session, data_cnf_tag, dest, pos);
 }
 
-static void ci_ccmgr_cc_sac_sync_req(ca_session_t *session, const uint8_t *data,
-                                     unsigned int len) {
+static void ci_ccmgr_cc_sac_sync_req(ca_session_t *session,
+                                     const uint8_t *data) {
     int sync_cnf_tag = CIPLUS_TAG_CC_SAC_SYNC_CNF;
     uint8_t dest[64];
     unsigned int serial;
@@ -2407,8 +2407,7 @@ static void ci_ccmgr_cc_sac_sync_req(ca_session_t *session, const uint8_t *data,
     ci_ccmgr_cc_sac_send(session, sync_cnf_tag, dest, pos);
 }
 
-static void ci_ccmgr_cc_sync_req(ca_session_t *session, const uint8_t *data,
-                                 unsigned int len) {
+static void ci_ccmgr_cc_sync_req(ca_session_t *session) {
     const uint8_t status = 0x00; /* OK */
     LOGM("SEND ------------ CC_SYNC_CNF----------- ");
     ca_write_apdu(session, CIPLUS_TAG_CC_SYNC_CNF, &status, 1);
@@ -2487,13 +2486,13 @@ static int CIPLUS_APP_CC_handler(ca_session_t *session, int tag, uint8_t *data,
         ci_ccmgr_cc_data_req(session, data, len);
         break;
     case CIPLUS_TAG_CC_SYNC_REQ: // 05
-        ci_ccmgr_cc_sync_req(session, data, len);
+        ci_ccmgr_cc_sync_req(session);
         break;
     case CIPLUS_TAG_CC_SAC_DATA_REQ: // 07
         ci_ccmgr_cc_sac_data_req(session, data, len);
         break;
     case CIPLUS_TAG_CC_SAC_SYNC_REQ: // 09
-        ci_ccmgr_cc_sac_sync_req(session, data, len);
+        ci_ccmgr_cc_sac_sync_req(session, data);
         break;
     default:
         LOG("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! unknown cc "
@@ -2505,8 +2504,8 @@ static int CIPLUS_APP_CC_handler(ca_session_t *session, int tag, uint8_t *data,
     return 0;
 }
 
-static int CIPLUS_APP_LANG_handler(ca_session_t *session, int tag,
-                                   uint8_t *data, int data_length) {
+static int CIPLUS_APP_LANG_handler(ca_session_t *session, int tag, uint8_t *,
+                                   int) {
     //        if (data_length)
     //                hexdump(data, data_length);
 
@@ -2685,7 +2684,7 @@ static int CIPLUS_APP_OPRF_handler(ca_session_t *session, int tag,
 }
 
 static int CIPLUS_APP_UPGR_handler(ca_session_t *session, int tag,
-                                   uint8_t *data, int data_length) {
+                                   uint8_t *data, int) {
     ca_device_t *d = session->ca;
     const uint8_t answer = 0x00; // 0x00 - mean no upgrade, 0x01 - upgrade,
                                  // 0x02 - ask user by mmi
@@ -2747,19 +2746,18 @@ static int ca_send_datetime(ca_device_t *d) {
     return 0;
 }
 
-int APP_empty(ca_session_t *session, int resource, uint8_t *buffer, int len) {
+int APP_empty(ca_session_t *, int resource, uint8_t *, int) {
     LOG("Got unhandled resource %06X", resource);
     return 0;
 }
 
-static int APP_RM_create(ca_session_t *session, int resource_id) {
+static int APP_RM_create(ca_session_t *session, int) {
     LOG("RM Created");
     ca_write_apdu(session, TAG_PROFILE_ENQUIRY, NULL, 0);
     return 0;
 }
 
-int APP_RM_handler(ca_session_t *session, int resource, uint8_t *buffer,
-                   int len) {
+int APP_RM_handler(ca_session_t *session, int resource, uint8_t *, int) {
     int resource_ids[100], rlen;
     switch (resource) {
     case TAG_PROFILE:
@@ -2833,7 +2831,7 @@ static int CIPLUS_APP_AI_handler(ca_session_t *session, int resource_id,
     return 0;
 }
 
-static int APP_CA_create(ca_session_t *session, int resource_id) {
+static int APP_CA_create(ca_session_t *session, int) {
     ca_write_apdu(session, TAG_CA_INFO_ENQUIRY, NULL, 0);
     return 0;
 }
@@ -2889,7 +2887,7 @@ int APP_CA_handler(ca_session_t *session, int resource, uint8_t *data,
 }
 
 int APP_DateTime_handler(ca_session_t *session, int resource, uint8_t *buffer,
-                         int len) {
+                         int) {
     ca_device_t *d = session->ca;
     switch (resource) {
     case TAG_DATE_TIME_ENQUIRY:
@@ -3019,7 +3017,7 @@ int APP_MMI_handler(ca_session_t *session, int resource, uint8_t *buffer,
     return 0;
 }
 
-static int APP_LANG_create(ca_session_t *session, int resource_id) {
+static int APP_LANG_create(ca_session_t *session, int) {
     uint8_t data_reply_lang[] = {0x65, 0x6e, 0x67};    // eng
     uint8_t data_reply_country[] = {0x55, 0x53, 0x41}; // USA
     LOG("%s: Sending language to the CAM", __FUNCTION__);
@@ -3382,7 +3380,7 @@ int ca_write_apdu(ca_session_t *s, int tag, const void *data, int len) {
 }
 
 // reads a TPDU from the CAM. This is called only on DVBCA path
-int ca_read_tpdu(int socket, void *buf, int buf_len, sockets *ss, int *rb) {
+int ca_read_tpdu(int, void *buf, int buf_len, sockets *ss, int *rb) {
     if (!rb)
         return 0;
     *rb = 0;
@@ -4029,7 +4027,7 @@ int dvbca_close_dev(adapter *ad) {
     return 1;
 }
 
-int dvbca_add_pid(adapter *ad, SPMT *pmt, int pid) {
+int dvbca_add_pid(adapter *, SPMT *pmt, int pid) {
     LOG("PMT %d, pid %d was added, invalidating pmt", pmt->id, pid);
     pmt->version = -1;
     return 0;
@@ -4044,7 +4042,7 @@ SCA_op dvbca = {
     .ca_ts = NULL,
 };
 
-int ca_reconnect(void *arg) {
+int ca_reconnect(void *) {
     int i;
     int64_t now = getTick();
     for (i = 0; i < MAX_ADAPTERS; i++) {
