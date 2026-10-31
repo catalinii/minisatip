@@ -8,6 +8,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
+#include <string>
 #include <sys/uio.h>
 #include <thread>
 #include <unordered_map>
@@ -89,9 +90,10 @@ typedef struct ddci_device {
     int sdt_data_mask; // channels with real SDT data at last SDT generation
     int16_t pat_cc, sdt_cc, eit_cc;
     char disable_cat;
-    char loopback;      // enigma DVR loopback, no sec/ci hardware
-    int ci_slot;        // claimed /dev/ciN, -1 until bound
-    SFIFO push_backlog; // queued push bytes, oldest first
+    char loopback;        // enigma DVR loopback, no sec/ci hardware
+    int ci_slot;          // claimed /dev/ciN, -1 until bound
+    char tsclk_saved[16]; // prior ciN_tsclk, restored on release
+    SFIFO push_backlog;   // queued push bytes, oldest first
     // Push thread: non-blocking writes move the fifo to the dvr.
     std::thread push_thread;
     std::mutex push_mutex;
@@ -147,6 +149,8 @@ int ddci_loopback_owns_slot(int slot);
 int ddci_loopback_slot_for(int id);
 void ddci_enigma_route_pvr(ddci_device_t *d);
 void ddci_enigma_route_none(ddci_device_t *d);
+// Highest tsclk in a choices file; empty when none qualifies.
+std::string ddci_tsclk_pick(const std::string &choices);
 int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
                           int force_add_pid);
 int push_ts_to_adapter(ddci_device_t *d, adapter *ad, uint16_t *mapping);
