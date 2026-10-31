@@ -2323,6 +2323,15 @@ int test_ddci_push_fpga() {
     return 0;
 }
 
+int test_ddci_tsclk_pick() {
+    ASSERT(ddci_tsclk_pick("normal high extra_high\n") == "extra_high",
+           "extra_high wins");
+    ASSERT(ddci_tsclk_pick("normal high\n") == "high", "high wins");
+    ASSERT(ddci_tsclk_pick("normal\n").empty(), "normal offers nothing");
+    ASSERT(ddci_tsclk_pick("").empty(), "empty offers nothing");
+    return 0;
+}
+
 int test_ddci_push_kick_due() {
     ASSERT(!ddci_kick_due(0, 0, 600), "healthy writer is not kicked");
     ASSERT(!ddci_kick_due(1001, 0, 500), "kick inside the min interval waits");
@@ -2392,6 +2401,7 @@ int main() {
     TEST_FUNC(test_ddci_push_stop_sheds_stall(),
               "testing push stop sheds a stall");
     TEST_FUNC(test_ddci_push_kick_due(), "testing push micro-kick trigger");
+    TEST_FUNC(test_ddci_tsclk_pick(), "testing tsclk choice pick");
     TEST_FUNC(test_ddci_push_fpga(), "testing fpga push queue and drain");
     TEST_FUNC(test_capmt_lists_pmt_pids(),
               "testing CAPMT lists PMT pids verbatim");

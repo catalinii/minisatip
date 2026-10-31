@@ -254,6 +254,61 @@ static int ddci_enigma_slot(ddci_device_t *d) {
     return -1;
 }
 
+std::string ddci_tsclk_pick(const std::string &choices) {
+    if (choices.find("extra_high") != std::string::npos)
+        return "extra_high";
+    if (choices.find("high") != std::string::npos)
+        return "high";
+    return "";
+}
+
+// Raises the slot clock to the fastest choice, saving the
+// prior value; silent no-op where the driver lacks the knob.
+static void ddci_enigma_set_tsclk(ddci_device_t *d) {
+    if (!opts.enigma || !d || d->tsclk_saved[0])
+        return;
+    int slot = ddci_enigma_slot(d);
+    if (slot < 0)
+        return;
+    char path[64], cur[64];
+    snprintf(path, sizeof(path), "/proc/stb/tsmux/ci%d_tsclk_choices", slot);
+    std::ifstream ch(path);
+    if (!ch)
+        return;
+    std::string choices((std::istreambuf_iterator<char>(ch)),
+                        std::istreambuf_iterator<char>());
+    std::string best = ddci_tsclk_pick(choices);
+    if (best.empty())
+        return;
+    snprintf(path, sizeof(path), "/proc/stb/tsmux/ci%d_tsclk", slot);
+    std::ifstream cf(path);
+    cur[0] = 0;
+    if (!cf || !cf.getline(cur, sizeof(cur)) || !cur[0])
+        return;
+    snprintf(d->tsclk_saved, sizeof(d->tsclk_saved), "%s", cur);
+    if (best == cur)
+        return;
+    std::ofstream out(path);
+    if (out << best)
+        LOG("DDCI %d: CI slot %d tsclk %s -> %s", d->id, slot, cur,
+            best.c_str());
+}
+
+static void ddci_enigma_restore_tsclk(ddci_device_t *d) {
+    if (!opts.enigma || !d || !d->tsclk_saved[0])
+        return;
+    int slot = ddci_enigma_slot(d);
+    if (slot < 0)
+        return;
+    char path[64];
+    snprintf(path, sizeof(path), "/proc/stb/tsmux/ci%d_tsclk", slot);
+    std::ofstream out(path);
+    if (out << d->tsclk_saved)
+        LOG("DDCI %d: CI slot %d tsclk restored to %s", d->id, slot,
+            d->tsclk_saved);
+    d->tsclk_saved[0] = 0;
+}
+
 void ddci_enigma_route_pvr(ddci_device_t *d) {
     if (!opts.enigma || !d)
         return;
@@ -263,6 +318,7 @@ void ddci_enigma_route_pvr(ddci_device_t *d) {
         return;
     }
     set_ci_input_str(slot, "PVR");
+    ddci_enigma_set_tsclk(d);
     LOG("DDCI %d: CI slot %d input routed to PVR", d->id, slot);
 }
 
@@ -275,6 +331,7 @@ void ddci_enigma_route_none(ddci_device_t *d) {
         return;
     }
     set_ci_input_str(slot, "NONE");
+    ddci_enigma_restore_tsclk(d);
     LOG("DDCI %d: CI slot %d input routed to NONE", d->id, slot);
 }
 
@@ -2049,6 +2106,7 @@ void ddci_free(adapter *ad) {
     if (!d)
         return;
     ddci_push_stop(d);
+    ddci_enigma_restore_tsclk(d);
     save_channels();
 }
 
