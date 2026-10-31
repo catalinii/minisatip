@@ -255,15 +255,22 @@ static int ddci_enigma_slot(ddci_device_t *d) {
 }
 
 std::string ddci_tsclk_pick(const std::string &choices) {
-    if (choices.find("extra_high") != std::string::npos)
-        return "extra_high";
-    if (choices.find("high") != std::string::npos)
-        return "high";
+    // extra_high garbles older CAM TS inputs, so high is max.
+    for (size_t pos = choices.find("high"); pos != std::string::npos;
+         pos = choices.find("high", pos + 1)) {
+        bool left_ok = pos == 0 || choices[pos - 1] == ' ' ||
+                       choices[pos - 1] == '\n' || choices[pos - 1] == '\t';
+        size_t end = pos + 4;
+        bool right_ok = end >= choices.size() || choices[end] == ' ' ||
+                        choices[end] == '\n' || choices[end] == '\t';
+        if (left_ok && right_ok)
+            return "high";
+    }
     return "";
 }
 
-// Raises the slot clock to the fastest choice, saving the
-// prior value; silent no-op where the driver lacks the knob.
+// Raises the slot clock to high, saving the prior value;
+// silent no-op where the driver lacks the knob or is there.
 static void ddci_enigma_set_tsclk(ddci_device_t *d) {
     if (!opts.enigma || !d || d->tsclk_saved[0])
         return;

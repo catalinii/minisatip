@@ -2324,10 +2324,12 @@ int test_ddci_push_fpga() {
 }
 
 int test_ddci_tsclk_pick() {
-    ASSERT(ddci_tsclk_pick("normal high extra_high\n") == "extra_high",
-           "extra_high wins");
+    ASSERT(ddci_tsclk_pick("normal high extra_high\n") == "high",
+           "high wins over extra_high");
     ASSERT(ddci_tsclk_pick("normal high\n") == "high", "high wins");
     ASSERT(ddci_tsclk_pick("normal\n").empty(), "normal offers nothing");
+    ASSERT(ddci_tsclk_pick("normal extra_high\n").empty(),
+           "extra_high alone offers nothing");
     ASSERT(ddci_tsclk_pick("").empty(), "empty offers nothing");
     return 0;
 }
